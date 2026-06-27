@@ -16,7 +16,7 @@ use uuid::Uuid;
 mod accounts;
 mod admins;
 mod audit;
-mod china;
+mod cid;
 mod citizenapp;
 mod citizens;
 mod core;
@@ -24,7 +24,6 @@ mod crypto;
 mod docs;
 mod gov;
 mod indexer;
-mod number;
 mod private;
 mod scope;
 mod subjects;
@@ -43,8 +42,8 @@ pub(crate) use admins::login::{
     build_admin_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
 };
 pub(crate) use admins::model::*;
+pub(crate) use cid::model::*;
 pub(crate) use citizens::model::*;
-pub(crate) use number::model::*;
 
 #[derive(Clone)]
 struct AppState {
@@ -106,17 +105,17 @@ fn citizen_bind_status_text(status: &CitizenBindStatus) -> &'static str {
     }
 }
 
-fn institution_category_text(category: crate::number::InstitutionCategory) -> &'static str {
+fn institution_category_text(category: crate::cid::InstitutionCategory) -> &'static str {
     match category {
-        crate::number::InstitutionCategory::GovInstitution => "GOV_INSTITUTION",
-        crate::number::InstitutionCategory::PrivateInstitution => "PRIVATE_INSTITUTION",
+        crate::cid::InstitutionCategory::GovInstitution => "GOV_INSTITUTION",
+        crate::cid::InstitutionCategory::PrivateInstitution => "PRIVATE_INSTITUTION",
     }
 }
 
-fn institution_category_from_text(category: &str) -> Option<crate::number::InstitutionCategory> {
+fn institution_category_from_text(category: &str) -> Option<crate::cid::InstitutionCategory> {
     match category {
-        "GOV_INSTITUTION" => Some(crate::number::InstitutionCategory::GovInstitution),
-        "PRIVATE_INSTITUTION" => Some(crate::number::InstitutionCategory::PrivateInstitution),
+        "GOV_INSTITUTION" => Some(crate::cid::InstitutionCategory::GovInstitution),
+        "PRIVATE_INSTITUTION" => Some(crate::cid::InstitutionCategory::PrivateInstitution),
         _ => None,
     }
 }
@@ -171,7 +170,7 @@ fn citizen_region_names(
     let Some(province_code) = province_code.map(str::trim).filter(|code| !code.is_empty()) else {
         return (None, None, None);
     };
-    crate::china::area_name_by_codes(province_code, city_code, town_code)
+    crate::cid::china::area_name_by_codes(province_code, city_code, town_code)
         .map(|(province, city, town)| {
             (
                 Some(province.to_string()),
@@ -867,8 +866,8 @@ impl Db {
         inst: &crate::subjects::Institution,
     ) -> Result<(), String> {
         let kind = match inst.category {
-            crate::number::InstitutionCategory::PrivateInstitution => "PRIVATE",
-            crate::number::InstitutionCategory::GovInstitution => "PUBLIC",
+            crate::cid::InstitutionCategory::PrivateInstitution => "PRIVATE",
+            crate::cid::InstitutionCategory::GovInstitution => "PUBLIC",
         };
         let province_code = inst.province_code.clone();
         let city_code = if inst.city_code == "000" || inst.city_code.is_empty() {
@@ -973,7 +972,7 @@ impl Db {
         .map_err(|e| format!("upsert subjects failed: {e}"))?;
 
         match inst.category {
-            crate::number::InstitutionCategory::PrivateInstitution => {
+            crate::cid::InstitutionCategory::PrivateInstitution => {
                 Self::delete_target_rows_outside_scope(
                     conn,
                     "private",
@@ -1018,7 +1017,7 @@ impl Db {
                     .map_err(|e| format!("delete non-private typed row failed: {e}"))?;
                 }
             }
-            crate::number::InstitutionCategory::GovInstitution => {
+            crate::cid::InstitutionCategory::GovInstitution => {
                 Self::delete_target_rows_outside_scope(
                     conn,
                     "gov",
@@ -1151,7 +1150,7 @@ impl Db {
     }
 
     // 中文注释:删除所有不合规 CID 号在各号承载表里的行。判定唯一标准 =
-    // 过不了 `crate::number::validate_cid_number_format`。
+    // 过不了 `crate::cid::validate_cid_number_format`。
     // dry_run 时在事务内删完即回滚,只回报计数,不改库。
     pub(crate) fn purge_legacy_cid_rows(&self, dry_run: bool) -> Result<PurgeReport, String> {
         // 中文注释:号承载表清单,无外键约束,删除顺序无关;主登记表 ids 放最后。
@@ -1178,7 +1177,7 @@ impl Db {
             // 2. 筛旧号:过不了新格式校验的即旧号。
             let legacy: Vec<String> = kind_by_cid
                 .keys()
-                .filter(|cid| crate::number::validate_cid_number_format(cid).is_err())
+                .filter(|cid| crate::cid::validate_cid_number_format(cid).is_err())
                 .cloned()
                 .collect();
             let private_count = legacy
@@ -1233,7 +1232,7 @@ impl Db {
     // 中文注释:扫出"孤儿机构"——subjects 中 town_code 非空、但该
     // (province_code,city_code,town_code) 三元组在行政区划真源 china.sqlite 里不存在
     // (town_code 指向已退役的镇)。判定只走
-    // 进程内内存树(crate::china::town_exists),不在 PG 里 join china 数据(PG 无 towns 表)。
+    // 进程内内存树(crate::cid::china::town_exists),不在 PG 里 join china 数据(PG 无 towns 表)。
     // 白名单:town_code 为空/NULL 的行(市级机构/储委会/部委合法态)永远不是孤儿,直接跳过。
     // 只读扫描,不改库;删除由调用方拿到 cid 列表后逐省级联删。
     pub(crate) fn scan_orphan_institutions(&self) -> Result<Vec<OrphanInstitution>, String> {
@@ -1265,7 +1264,7 @@ impl Db {
                 let category: String = row.get(6);
                 let institution_code: String = row.get(7);
                 // 白名单:空 town_code 已在 SQL 过滤;此处再调 town_exists 内存树判定。
-                if crate::china::town_exists(&province_code, &city_code, &town_code) {
+                if crate::cid::china::town_exists(&province_code, &city_code, &town_code) {
                     continue;
                 }
                 orphans.push(OrphanInstitution {
@@ -2680,13 +2679,10 @@ fn main() {
                 "/api/v1/admin/citizens/legal-representatives",
                 get(citizens::handler::admin_search_legal_representative_citizens),
             )
+            .route("/api/v1/admin/cid/meta", get(cid::admin::admin_cid_meta))
             .route(
-                "/api/v1/admin/number/meta",
-                get(number::admin::admin_number_meta),
-            )
-            .route(
-                "/api/v1/admin/china/cities",
-                get(china::admin::admin_china_cities),
+                "/api/v1/admin/cid/china/cities",
+                get(cid::china::admin::admin_china_cities),
             )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),

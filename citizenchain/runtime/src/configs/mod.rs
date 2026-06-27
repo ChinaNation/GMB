@@ -101,30 +101,30 @@ parameter_types! {
 type SingleBlockMigrations = ();
 
 pub fn is_stake_account(address: &AccountId) -> bool {
-    primitives::china::china_ch::CHINA_CH
+    primitives::cid::china::china_ch::CHINA_CH
         .iter()
         .any(|n| address == &AccountId::new(n.stake_account))
 }
 
 fn is_reserved_fee_account(address: &AccountId) -> bool {
-    primitives::china::china_ch::CHINA_CH
+    primitives::cid::china::china_ch::CHINA_CH
         .iter()
         .any(|n| address == &AccountId::new(n.fee_account))
 }
 
 /// 检查是否为国储会安全基金账户。
 fn is_safety_fund_account(address: &AccountId) -> bool {
-    address == &AccountId::new(primitives::china::china_cb::SAFETY_FUND_ACCOUNT)
+    address == &AccountId::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT)
 }
 
 /// 检查是否为国储会两和基金账户。
 fn is_nrc_he_account(address: &AccountId) -> bool {
-    address == &AccountId::new(primitives::china::china_cb::NRC_HE_ACCOUNT)
+    address == &AccountId::new(primitives::cid::china::china_cb::NRC_HE_ACCOUNT)
 }
 
 /// 检查是否为储委会费用账户（44 个机构的 fee_account）。
 fn is_cb_fee_account(address: &AccountId) -> bool {
-    primitives::china::china_cb::CHINA_CB
+    primitives::cid::china::china_cb::CHINA_CB
         .iter()
         .any(|n| address == &AccountId::new(n.fee_account))
 }
@@ -136,7 +136,7 @@ fn is_reserved_main_account(address: &AccountId) -> bool {
     }
     let mut addr = [0u8; 32];
     addr.copy_from_slice(raw);
-    primitives::china::china_zb::is_reserved_main_account(&addr)
+    primitives::cid::china::china_zb::is_reserved_main_account(&addr)
 }
 
 fn is_stake_multi_address(address: &Address) -> bool {
@@ -297,7 +297,7 @@ pub struct RuntimeNrcAccountProvider;
 impl onchain_transaction::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
     fn nrc_account() -> Option<AccountId> {
         Some(AccountId::new(
-            primitives::china::china_cb::CHINA_CB[0].fee_account,
+            primitives::cid::china::china_cb::CHINA_CB[0].fee_account,
         ))
     }
 }
@@ -308,7 +308,7 @@ impl onchain_transaction::SafetyFundAccountProvider<AccountId>
     for RuntimeSafetyFundAccountProvider
 {
     fn safety_fund_account() -> AccountId {
-        AccountId::new(primitives::china::china_cb::SAFETY_FUND_ACCOUNT)
+        AccountId::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT)
     }
 }
 
@@ -582,7 +582,7 @@ impl organization_manage::AccountValidator<AccountId> for RuntimeAccountValidato
         }
 
         // 中文注释：禁止占用“国储会/省储会”的制度保留交易账户。
-        if primitives::china::china_cb::CHINA_CB
+        if primitives::cid::china::china_cb::CHINA_CB
             .iter()
             .any(|n| account == &AccountId::new(n.main_account))
         {
@@ -590,7 +590,7 @@ impl organization_manage::AccountValidator<AccountId> for RuntimeAccountValidato
         }
 
         // 中文注释：禁止占用“省储行”的制度保留交易账户。
-        if primitives::china::china_ch::CHINA_CH
+        if primitives::cid::china::china_ch::CHINA_CH
             .iter()
             .any(|n| account == &AccountId::new(n.main_account))
         {
@@ -598,7 +598,7 @@ impl organization_manage::AccountValidator<AccountId> for RuntimeAccountValidato
         }
 
         // 中文注释：禁止占用省储行费用账户（BLAKE2-256 派生）。
-        if primitives::china::china_ch::CHINA_CH
+        if primitives::cid::china::china_ch::CHINA_CH
             .iter()
             .any(|n| account == &AccountId::new(n.fee_account))
         {
@@ -664,7 +664,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
         }
 
         // 4. 国储会安全基金账户：只允许安全基金转账
-        if source == &AccountId::new(primitives::china::china_cb::SAFETY_FUND_ACCOUNT) {
+        if source == &AccountId::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT) {
             return matches!(
                 action,
                 institution_asset::InstitutionAssetAction::NrcSafetyFundTransfer
@@ -688,7 +688,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
 impl organization_manage::ReservedAccountGuard<AccountId> for RuntimeReservedAccountGuard {
     fn is_reserved(account: &AccountId) -> bool {
         // 中文注释：禁止占用省储行 stake_account（制度保留账户）。
-        if primitives::china::china_ch::CHINA_CH
+        if primitives::cid::china::china_ch::CHINA_CH
             .iter()
             .any(|n| account == &AccountId::new(n.stake_account))
         {
@@ -696,7 +696,7 @@ impl organization_manage::ReservedAccountGuard<AccountId> for RuntimeReservedAcc
         }
 
         // 中文注释：禁止占用省储行费用账户（BLAKE2-256 派生）。
-        if primitives::china::china_ch::CHINA_CH
+        if primitives::cid::china::china_ch::CHINA_CH
             .iter()
             .any(|n| account == &AccountId::new(n.fee_account))
         {
@@ -1242,9 +1242,9 @@ impl RuntimeAdminAccountQuery {
         // 中文注释：未被 organization-manage 登记的创世账户只可能走创世管理员模块。
         [
             admin_primitives::FRG,
-            primitives::code::NRC,
-            primitives::code::PRC,
-            primitives::code::PRB,
+            primitives::cid::code::NRC,
+            primitives::cid::code::PRC,
+            primitives::cid::code::PRB,
         ]
         .iter()
         .any(|code| Self::is_active_account_admin(*code, account.clone(), who))
@@ -1257,7 +1257,7 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     }
 
     fn active_admin_account_exists(
-        institution_code: primitives::code::InstitutionCode,
+        institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> bool {
         if admin_primitives::is_personal_admin_code(&institution_code) {
@@ -1288,7 +1288,7 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     }
 
     fn is_active_account_admin(
-        institution_code: primitives::code::InstitutionCode,
+        institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
         who: &AccountId,
     ) -> bool {
@@ -1324,7 +1324,7 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     }
 
     fn active_account_admins(
-        institution_code: primitives::code::InstitutionCode,
+        institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> Option<Vec<AccountId>> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
@@ -1355,7 +1355,7 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     }
 
     fn active_account_admins_len(
-        institution_code: primitives::code::InstitutionCode,
+        institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> Option<u32> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
@@ -1386,7 +1386,7 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     }
 
     fn pending_account_exists_for_snapshot(
-        institution_code: primitives::code::InstitutionCode,
+        institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> bool {
         Self::pending_account_admins_len_for_snapshot(institution_code, admin_root_account_id)
@@ -1394,7 +1394,7 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     }
 
     fn is_pending_account_admin_for_snapshot(
-        institution_code: primitives::code::InstitutionCode,
+        institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
         who: &AccountId,
     ) -> bool {
@@ -1430,7 +1430,7 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     }
 
     fn pending_account_admins_for_snapshot(
-        institution_code: primitives::code::InstitutionCode,
+        institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> Option<Vec<AccountId>> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
@@ -1461,7 +1461,7 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     }
 
     fn pending_account_admins_len_for_snapshot(
-        institution_code: primitives::code::InstitutionCode,
+        institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> Option<u32> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
@@ -1492,7 +1492,7 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     }
 
     fn legal_representative(
-        institution_code: primitives::code::InstitutionCode,
+        institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> Option<AccountId> {
         if admin_primitives::is_genesis_admin_code(&institution_code) {
@@ -1671,13 +1671,13 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 
     #[cfg(feature = "runtime-benchmarks")]
     fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
-        let admin = AccountId::new(primitives::china::china_cb::CHINA_CB[0].admins[0]);
+        let admin = AccountId::new(primitives::cid::china::china_cb::CHINA_CB[0].admins[0]);
         Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
     }
 }
 
 pub(crate) fn is_nrc_admin(who: &AccountId) -> bool {
-    let nrc_institution = primitives::china::china_cb::CHINA_CB
+    let nrc_institution = primitives::cid::china::china_cb::CHINA_CB
         .first()
         .map(|n| AccountId::new(n.main_account))
         .expect("NRC main_account must exist");
@@ -1707,14 +1707,14 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureJointProposer {
 
     #[cfg(feature = "runtime-benchmarks")]
     fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
-        let admin = AccountId::new(primitives::china::china_cb::CHINA_CB[0].admins[0]);
+        let admin = AccountId::new(primitives::cid::china::china_cb::CHINA_CB[0].admins[0]);
         Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
     }
 }
 
 /// 国储会和省储会管理员均可发起联合提案（含运行时升级、决议发行等）。
 fn is_joint_proposer(who: &AccountId) -> bool {
-    use primitives::china::china_cb::CHINA_CB;
+    use primitives::cid::china::china_cb::CHINA_CB;
     for (idx, entry) in CHINA_CB.iter().enumerate() {
         let institution = AccountId::new(entry.main_account);
         let institution_code = if idx == 0 {
@@ -2157,7 +2157,7 @@ pub struct RuntimeNrcMainAccountProvider;
 impl onchain_issuance::pallet::NrcMainAccountProvider<AccountId> for RuntimeNrcMainAccountProvider {
     fn nrc_main_account() -> Option<AccountId> {
         // 中文注释:china_cb[0].main_account 是 NRC 治理多签账户,与 fee_account 不同。
-        primitives::china::china_cb::CHINA_CB
+        primitives::cid::china::china_cb::CHINA_CB
             .first()
             .and_then(|n| AccountId::decode(&mut &n.main_account[..]).ok())
     }

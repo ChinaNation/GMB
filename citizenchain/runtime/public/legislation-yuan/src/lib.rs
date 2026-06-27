@@ -27,7 +27,7 @@ pub const PROPOSAL_OBJECT_KIND_LAW_TEXT: u8 = 2;
 pub const CONSTITUTION_SCALE: &[u8] = include_bytes!("constitution.scale");
 
 /// 国家立法院机构码(立法权最高机构,宪法 houses[0])。
-pub const NATIONAL_LEGISLATURE_CODE: primitives::code::InstitutionCode = *b"NLG\0";
+pub const NATIONAL_LEGISLATURE_CODE: primitives::cid::code::InstitutionCode = *b"NLG\0";
 
 /// 不可修改条款 manifest 的最大容量(清单现 8 条,留余量)。
 pub const MAX_IMMUTABLE_ARTICLES: u32 = 32;
@@ -38,8 +38,8 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
-    use primitives::china::china_lf::CHINA_LF;
-    use primitives::code::InstitutionCode;
+    use primitives::cid::china::china_lf::CHINA_LF;
+    use primitives::cid::code::InstitutionCode;
     use primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES;
     use sp_runtime::DispatchError;
     use votingengine::{InternalAdminProvider, LegislationVoteEngine, ProposalExecutionOutcome};

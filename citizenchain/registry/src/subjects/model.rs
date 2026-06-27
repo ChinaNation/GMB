@@ -16,7 +16,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::number::InstitutionCategory;
+use crate::cid::InstitutionCategory;
 use crate::scope::HasProvinceCity;
 
 pub const EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE: &str = "NATIONAL_CITIZEN_EDU_COMMITTEE";

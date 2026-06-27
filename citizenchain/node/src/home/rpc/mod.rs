@@ -2,7 +2,7 @@
 
 use crate::governance::chain_query;
 use crate::shared::{constants::EXPECTED_SS58_PREFIX, rpc};
-use primitives::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_ch::CHINA_CH;
 use serde::Serialize;
 use serde_json::Value;
 use std::hash::Hasher;

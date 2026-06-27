@@ -10,7 +10,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::dispatch::DispatchResult;
-use primitives::code::{
+use primitives::cid::code::{
     is_fixed_governance_code, is_private_legal_code, is_public_legal_code, is_unincorporated_code,
     InstitutionCode, NRC, PMUL, PRB, PRC,
 };

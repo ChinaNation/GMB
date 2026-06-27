@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use primitives::code::{
+use primitives::cid::code::{
     is_personal_code, is_private_legal_code, is_public_legal_code, is_unincorporated_code,
     InstitutionCode, NRC, PRB, PRC,
 };
@@ -103,7 +103,7 @@ fn validate_count(
 mod tests {
     use super::*;
 
-    use primitives::code::{code_bytes, PMUL};
+    use primitives::cid::code::{code_bytes, PMUL};
 
     fn admin(seed: u8) -> String {
         format!("{seed:02x}").repeat(32)

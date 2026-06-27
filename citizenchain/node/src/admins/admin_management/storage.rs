@@ -4,7 +4,7 @@ use super::types::{institution_code_label, kind_label, status_label, AdminAccoun
 use crate::governance::registry;
 use crate::governance::types::OrgType;
 use crate::governance::{chain_query, storage_keys};
-use primitives::code::{
+use primitives::cid::code::{
     is_fixed_governance_code, is_personal_code, is_private_legal_code, is_public_legal_code,
     is_unincorporated_code, InstitutionCode, NRC, PRB, PRC,
 };

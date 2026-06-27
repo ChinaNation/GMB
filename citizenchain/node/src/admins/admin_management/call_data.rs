@@ -1,4 +1,4 @@
-use primitives::code::{
+use primitives::cid::code::{
     fixed_governance_pass_threshold, is_registered_multisig_code, InstitutionCode,
 };
 
@@ -17,7 +17,7 @@ pub fn build_admin_set_change_call_data(
     let encoded_admins = codec::encode_admins(admins)?;
     let new_threshold = admin_change_threshold(institution_code, admins.len())?;
     let admin_pallet = admin_pallet_for_code(institution_code)?;
-    let call_index = if primitives::code::is_personal_code(institution_code) {
+    let call_index = if primitives::cid::code::is_personal_code(institution_code) {
         PROPOSE_PERSONAL_ADMIN_SET_CHANGE_CALL_INDEX
     } else {
         PROPOSE_ADMIN_SET_CHANGE_CALL_INDEX
@@ -59,7 +59,7 @@ pub fn normalize_admins(admins: &[String]) -> Result<Vec<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use primitives::code::{code_bytes, NRC, PMUL};
+    use primitives::cid::code::{code_bytes, NRC, PMUL};
     use primitives::count_const::NRC_INTERNAL_THRESHOLD;
 
     const GENESIS_ADMINS_PALLET_INDEX: u8 = 12;

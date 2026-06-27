@@ -7,7 +7,7 @@
 
 extern crate alloc;
 use alloc::vec::Vec;
-use primitives::code::InstitutionCode;
+use primitives::cid::code::InstitutionCode;
 
 // 中文注释:机构多签与个人多签共用账户校验 trait,单一来源在 primitives::multisig。
 pub use primitives::multisig::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};

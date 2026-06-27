@@ -1,7 +1,7 @@
 // 提案查询：提案列表、详情、投票计数，通过 RPC 读取 VotingEngine 链上存储。
 
 use crate::shared::proposal_business;
-use primitives::code::InstitutionCode;
+use primitives::cid::code::InstitutionCode;
 use serde::Serialize;
 
 use super::{chain_query, signing, storage_keys};
@@ -985,7 +985,7 @@ fn fetch_proposal_ids_by_index(storage_name: &str, key1: &[u8]) -> Result<Vec<u6
 /// 链上第一腿 key 已从 `org: u8`(1 字节)改为 `InstitutionCode`([u8;4]),
 /// `institution_code` 入参是 4 字符机构码字符串(如 "NRC"/"CGOV")。
 pub fn fetch_proposals_by_institution_code(institution_code: &str) -> Result<Vec<u64>, String> {
-    let code = primitives::code::code_bytes(institution_code.trim());
+    let code = primitives::cid::code::code_bytes(institution_code.trim());
     fetch_proposal_ids_by_index("ProposalsByCode", &code)
 }
 

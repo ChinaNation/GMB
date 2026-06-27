@@ -18,7 +18,7 @@ pub async fn build_multisig_transfer_request(
     if !status.running {
         return Err("节点未运行，无法构建签名请求".to_string());
     }
-    let code = primitives::code::code_bytes(&institution_code);
+    let code = primitives::cid::code::code_bytes(&institution_code);
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_propose_transfer_sign_request(
             &pubkey_hex,
@@ -53,7 +53,7 @@ pub async fn submit_multisig_transfer(
     if !status.running {
         return Err("节点未运行，无法提交提案".to_string());
     }
-    let code = primitives::code::code_bytes(&institution_code);
+    let code = primitives::cid::code::code_bytes(&institution_code);
     tauri::async_runtime::spawn_blocking(move || {
         let amount_fen = (amount_yuan * 100.0).round() as u128;
         let beneficiary_bytes = governance::signing::decode_ss58_to_pubkey(&beneficiary_address)?;

@@ -5,7 +5,7 @@
 // - 清算行节点声明、连通性检测、管理员解锁等链下网络能力继续留在
 //   `transaction/offchain_transaction/types.rs`,避免机构多签边界再次散落。
 
-use primitives::code::InstitutionCode;
+use primitives::cid::code::InstitutionCode;
 use serde::{Deserialize, Serialize};
 
 /// 节点桌面"添加清算行"页用的候选机构记录(序列化给 Tauri 前端)。

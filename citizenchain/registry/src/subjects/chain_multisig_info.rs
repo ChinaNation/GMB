@@ -29,7 +29,7 @@ pub(crate) struct AppInstitutionDetail {
     pub(crate) cid_full_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) cid_short_name: Option<String>,
-    pub(crate) category: crate::number::InstitutionCategory,
+    pub(crate) category: crate::cid::InstitutionCategory,
     pub(crate) p1: String,
     pub(crate) province_name: String,
     pub(crate) city_name: String,
@@ -57,7 +57,7 @@ pub(crate) struct AppInstitutionSearchRow {
     pub(crate) cid_number: String,
     pub(crate) cid_full_name: Option<String>,
     pub(crate) cid_short_name: Option<String>,
-    pub(crate) category: crate::number::InstitutionCategory,
+    pub(crate) category: crate::cid::InstitutionCategory,
     pub(crate) province_name: String,
     pub(crate) city_name: String,
 }
@@ -102,10 +102,10 @@ pub(crate) struct AppInstitutionRegistrationInfo {
     pub(crate) credential: AppInstitutionRegistrationCredential,
 }
 
-fn parse_category(value: &str) -> crate::number::InstitutionCategory {
+fn parse_category(value: &str) -> crate::cid::InstitutionCategory {
     match value {
-        "GOV_INSTITUTION" => crate::number::InstitutionCategory::GovInstitution,
-        _ => crate::number::InstitutionCategory::PrivateInstitution,
+        "GOV_INSTITUTION" => crate::cid::InstitutionCategory::GovInstitution,
+        _ => crate::cid::InstitutionCategory::PrivateInstitution,
     }
 }
 

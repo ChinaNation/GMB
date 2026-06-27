@@ -1,6 +1,6 @@
-# number/ — 身份 ID 编码协议
+# cid/ — 身份 ID 编码协议
 
-- 最后更新:2026-06-25
+- 最后更新:2026-06-27
 - 任务卡:
   - `memory/08-tasks/done/20260603-cid-remove-institutions-china-sqlite.md`
   - `memory/08-tasks/done/20260604-cid-core-number-store-refactor.md`
@@ -11,38 +11,38 @@
 
 ## 定位
 
-- 路径:`citizencode/backend/number/`
-- 职责:提供 CID 号生成、解析、格式校验和按机构码派生的分类封装。
+- 路径:`citizenchain/registry/src/cid/`
+- 职责:提供 registry 运行态的 CID 号生成适配、动态种子、数据库查重、行政区 SQLite 查询、管理端元信息接口和按机构码派生的分类封装。
 - 非职责:不维护国家码、省级行政区码、机构码第二真源;不保存市、镇和地址段数据。
 
 国家码、省级行政区码、机构码的唯一常量真源在
-`citizenchain/runtime/primitives/src/code.rs`。`number/code.rs` 只做薄封装并继续服务
-CID 号生成、解析和校验;不得恢复第二份机构码枚举、第二份 `ALL` 码表或
-`label/value/name/code` 泛化字段。
+`citizenchain/runtime/primitives/cid/code.rs`。CID 号解析、校验、核心生成规则和确定性种子协议在
+`citizenchain/runtime/primitives/cid/{number,generator,seed}.rs`。registry 不再保存
+`number/code.rs` 薄封装,不得恢复第二份机构码枚举、第二份 `ALL` 码表或 `label/value/name/code` 泛化字段。
 
-市、镇和地址段数据仍由 `citizencode/backend/china/china.sqlite` 管理。`number::generator`
-生成号码时通过 `crate::china::{province_code_by_name, city_code_by_name}` 取 R5 段;其中
-`province_code_by_name` 最终引用 runtime primitives 的 `ProvinceCodeInfo`。
+市、镇和地址段数据仍由 `citizenchain/registry/src/cid/china/china.sqlite` 管理。`cid::generator`
+生成号码时通过 `crate::cid::china::{province_code_by_name, city_code_by_name}` 取 R5 段,
+再把省码、市码、名称和显式年份传入 runtime primitives 纯协议函数。
 
 ## 模块结构
 
 ```text
-citizencode/backend/number/
+citizenchain/registry/src/cid/
 ├── mod.rs
-├── code.rs
 ├── category.rs
+├── china/
 ├── generator.rs
-├── validator.rs
 ├── model.rs
+├── seed.rs
 └── admin.rs
 ```
 
-- `code.rs`:引用 runtime primitives 的国家/省/机构代码常量和机构码谓词,不保存第二份码表。
+- `china/`:SQLite 行政区运行数据、只读查询和管理端城市接口。
 - `category.rs`:机构分类枚举与分类函数,分类一律由机构码派生。
-- `generator.rs`:CID 号码生成入口 `generate_cid_number`。
-- `validator.rs`:CID 号码格式校验、校验位计算与协议字段拆分。
+- `generator.rs`:registry 发号适配入口 `generate_cid_number`,负责查行政区和当前年份。
+- `seed.rs`:动态 UUID、数据库查重和确定性种子调用入口。
 - `model.rs`:管理端编码元信息 DTO。
-- `admin.rs`:管理端编码元信息接口,路由为 `/api/v1/admin/number/meta`。
+- `admin.rs`:管理端编码元信息接口,路由为 `/api/v1/admin/cid/meta`。
 
 ## 生成规则摘要
 
@@ -78,21 +78,20 @@ citizencode/backend/number/
 
 ## 引用规则
 
-- 编码协议统一通过 `crate::number::*` 引用。
-- 机构码分类、盈利策略、行政层级统一通过 `crate::number::code::*` 引用,其内部必须引用
-  `primitives::code`。
-- 行政区划运行数据统一通过 `crate::china::*` 引用;省级代码不得在 `china` 或 `number` 内手写第二份。
-- 不得恢复 `citizencode/backend/cid_number/`、`citizencode/backend/citizencode/`、`province.rs`、
-  `cities.rs`、`city_codes/*.rs` 或 `number/code.rs`。
+- 编码协议统一通过 `crate::cid::*` 引用。
+- 机构码分类、盈利策略、行政层级统一通过 `crate::cid::code::*` 引用,其内部必须引用
+  `primitives::cid::code`。
+- 行政区划运行数据统一通过 `crate::cid::china::*` 引用;省级代码不得在 `cid/china` 或 registry 其它目录内手写第二份。
+- 不得恢复历史 CID 目录壳、旧 province/cities/city_codes 手写行政区文件、旧 registry number 模块或旧 registry 顶层 china 模块。
 
 ## 验收口径
 
 ```text
 test ! -d citizencode/backend/cid
 test ! -d citizencode/backend/cid_number
-test -d citizencode/backend/number
-test -d citizencode/backend/china
+test -d citizenchain/registry/src/cid
+test -d citizenchain/registry/src/cid/china
 rg "历史主体属性字段|历史身份字段别名" citizencode/backend memory/05-modules/citizencode
-rg "第二份机构码表|第二份省码表" citizencode/backend/number memory/05-modules/citizencode
-cd citizencode/backend && cargo check
+rg "第二份机构码表|第二份省码表" citizenchain/registry/src/cid memory/05-modules/citizencode
+cargo check -p registry --manifest-path citizenchain/Cargo.toml
 ```

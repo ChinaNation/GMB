@@ -3,11 +3,12 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
 pub mod account_derive; // 账户地址派生唯一真源(op_tag/保留名/路由/payload)
-#[path = "../china/mod.rs"]
-pub mod china; // 机构常量
+#[path = "../cid/mod.rs"]
+pub mod cid; // CID 代码常量、号码协议、内置机构常量
 pub mod citizen_const; // 公民发行常量
-pub mod code; // 机构码链上表示 + 治理分类(全链机构分类唯一真源)
 pub mod core_const; // 核心常量
 pub mod count_const; // 投票治理常量
 pub mod fee_policy; // 费率规则常量(链上/链下/投票/分账)

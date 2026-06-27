@@ -164,10 +164,10 @@ citizenapp 是轻节点(smoldot),所有链上读取强制遵守(详见 `memory/0
 
 ## 死规则:行政区/机构代码唯一真源 + code 不可变不复用(ADR-021)
 
-- **常量唯一真源**:国家码、省级行政区码和 CID 机构码只允许维护在 `citizenchain/runtime/primitives/src/code.rs`。国家用 `CountryCode=CN`;省用 `ProvinceCode` 两位大写字母;机构用 `InstitutionCode` 三/四位大写字母。CID `number/` 只引用 primitives,不得恢复第二份机构码表或省码表。
-- **行政区运行数据唯一真源**:市、镇和地址段只有一个入口 = `citizencode/backend/china/`。开发库 `citizencode/backend/china/china.sqlite` 是市镇地址段权威源；生产 `CID_CHINA_DB` 只指向随包只读 SQLite。**任何地方不得独立维护第二套市镇地址段名字**。SQLite 省表必须与 primitives `PROVINCE_CODE_INFOS` 一致,加载时断言。
+- **常量唯一真源**:国家码、省级行政区码和 CID 机构码只允许维护在 `citizenchain/runtime/primitives/cid/code.rs`。国家用 `CountryCode=CN`;省用 `ProvinceCode` 两位大写字母;机构用 `InstitutionCode` 三/四位大写字母。registry 只能通过 `crate::cid` / `primitives::cid` 引用,不得恢复第二份机构码表或省码表。
+- **行政区运行数据唯一真源**:市、镇和地址段只有一个入口 = `citizenchain/registry/src/cid/china/`。开发库 `citizenchain/registry/src/cid/china/china.sqlite` 是市镇地址段权威源；生产 `CID_CHINA_DB` 只指向随包只读 SQLite。**任何地方不得独立维护第二套市镇地址段名字**。SQLite 省表必须与 primitives `PROVINCE_CODE_INFOS` 一致,加载时断言。
 - **发布消费**:市镇地址段变更必须修改开发库并递增 `metadata.admin_division_version`;CID 与 citizenapp 发布包都从开发库派生本地只读快照。国家码、省码、机构码变更属于 runtime primitives 变更,必须走 runtime 二次确认。不得恢复行政区管理 tab,不得恢复 `/api/v1/app/admin-divisions/*`,citizenapp 不联网拉取行政区新版。
-- **目录红线**:不得恢复 `citizencode/backend/china/data/`。`check_code_immutable.py` 和 `china.sqlite` 直接位于 `citizencode/backend/china/`。
+- **目录红线**:不得恢复 `citizenchain/registry/src/cid/china/data/`。`check_code_immutable.py` 和 `china.sqlite` 直接位于 `citizenchain/registry/src/cid/china/`。
 - **code 不可变、不复用**:省 code 固定在 primitives 且不建省 tombstone；市/镇 code 一经派生**永久冻结**。改名只改 `province_name/city_name/town_name` 不改 code;删除的市/镇 code 永久退役进 `city_tombstones` / `town_tombstones`,**绝不再分配**给任何其它行政区。
-- **校验**:`china/store.rs::load_provinces` 加载即断言 SQLite 省表与 primitives 一致、省名和市名全国唯一、(省,市,镇) code 无重复；CI `citizencode/backend/china/check_code_immutable.py` 检查活跃 code 无重复且不得命中 tombstones。
-- **红线**:市镇地址段开发库变更不直接修改 `citizenchain/runtime/`。国家码、省级行政区码、机构码和 `/primitives/china/` 保护机构常量需要变更时,必须走 runtime 升级二次确认。
+- **校验**:`cid/china/store.rs::load_provinces` 加载即断言 SQLite 省表与 primitives 一致、省名和市名全国唯一、(省,市,镇) code 无重复；CI `citizenchain/registry/src/cid/china/check_code_immutable.py` 检查活跃 code 无重复且不得命中 tombstones。
+- **红线**:市镇地址段开发库变更不直接修改 `citizenchain/runtime/`。国家码、省级行政区码、机构码和 `runtime/primitives/cid/china/` 保护机构常量需要变更时,必须走 runtime 升级二次确认。

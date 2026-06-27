@@ -4,7 +4,7 @@
 //! - 本文件只面向"清算行注册机构"的多签创建和机构详情查询。
 //! - 普通注册机构多签、个人多签仍由 citizenapp 操作,不进入节点软件目录。
 
-use primitives::code::code_bytes;
+use primitives::cid::code::code_bytes;
 use tauri::AppHandle;
 
 use super::types::{

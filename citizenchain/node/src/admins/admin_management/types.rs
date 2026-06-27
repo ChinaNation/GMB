@@ -1,4 +1,4 @@
-use primitives::code::{
+use primitives::cid::code::{
     is_fixed_governance_code, is_registered_multisig_code, is_valid_governance_code,
     InstitutionCode,
 };

@@ -9,8 +9,8 @@ use axum::{
 use serde::Serialize;
 
 use crate::admins::login::AdminAuthContext;
-use crate::china::{province_code_by_name, provinces};
-use crate::number::model::{AdminCidCitiesQuery, CidCityItem};
+use crate::cid::china::{province_code_by_name, provinces};
+use crate::cid::model::{AdminCidCitiesQuery, CidCityItem};
 use crate::*;
 
 fn ok<T: Serialize>(data: T) -> axum::response::Response {

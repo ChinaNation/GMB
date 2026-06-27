@@ -28,7 +28,7 @@
     "resources": {
       "resources/registry-bin/": "registry-bin/",
       "resources/postgres/": "postgres/",
-      "resources/china.sqlite": "china.sqlite",
+      "../registry/src/cid/china/china.sqlite": "china.sqlite",
       "resources/registry-frontend/dist/": "registry-frontend/dist/"
     },
     "icon": [

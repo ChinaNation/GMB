@@ -1,4 +1,4 @@
-use primitives::code::{code_bytes, InstitutionCode};
+use primitives::cid::code::{code_bytes, InstitutionCode};
 use tauri::AppHandle;
 
 use crate::{governance::signing::VoteSignRequestResult, home};

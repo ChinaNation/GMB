@@ -1,6 +1,6 @@
 # ADR-025 机构分类统一为 CID 号机构码唯一真源（删 org_code + 链 ORG_xx + subject_property）
 
-- 状态：**全栈代码完成并验证（2026-06-22），2026-06-25 收敛到 runtime primitives `code.rs` 唯一常量真源**，未提交未推送，重新创世 gated 待用户部署。
+- 状态：**全栈代码完成并验证（2026-06-22），2026-06-27 收敛到 runtime primitives `cid/code.rs` 唯一常量真源**，未提交未推送，重新创世 gated 待用户部署。
   - 链端 `cargo test --workspace` ~695 测试 0 失败；node 174；冷钱包 citizenwallet 81/81；热钱包 citizenapp 88 + `flutter analyze` 0；citizencode 后端 76、前端 `tsc` 0。
   - 全产品旧分类残留 grep = 0（链端旧 u8 分类、后端旧分类列、前端旧短码、Dart 旧分类字段）。
 - 关联：[[ADR-021]] 行政区单源 / [[ADR-024]] 账户派生单源（同"单一真源"思想，本 ADR 末尾创世与 ADR-024 Tier 3 合并）；任务卡 `20260622-cid-classification-unify-t3t4.md`
@@ -23,10 +23,10 @@
 **机构分类唯一真源 = CID 号机构码（institution_code，92 码）。** 所有"是不是公权/私权/个人/某档治理机构"一律从机构码派生，绝不另立第二套。
 
 ### 92 码体系（双布局，总长 26 不变）
-- 常量唯一真源 `citizenchain/runtime/primitives/src/code.rs`:
+- 常量唯一真源 `citizenchain/runtime/primitives/cid/code.rs`:
   `CountryCode`、`ProvinceCode`、`InstitutionCode`、`INSTITUTION_CODE_INFOS`、
   `cid_short_name`、盈利策略、行政层级和治理谓词全部在此维护。
-- CID 后端 `citizencode/backend/number/code.rs` 只 re-export / wrap `primitives::code`,继续服务
+- Registry `citizenchain/registry/src/cid/` 只 re-export / wrap `primitives::cid::code`,继续服务
   CID 号生成、解析和校验;不得恢复第二份机构码枚举、第二份 `ALL` 码表或第二份中文标签表。
 - 码段二布局：3 字符码（国家/省部）= `码(3)+盈利位(1,公权恒0)+校验(1,mod-36)`；4 字符码（市/镇/私权/个人）= `码(4)+M1(1)`。靠 seg2 index3 数字/字母分流。K1 主体属性段删除。
 - 国家/省级代码也纳入 `code.rs`:国家为 `CN`,省级行政区为 43 个两位大写 `ProvinceCode`。市镇代码仍由 CID `china.sqlite` 管理。

@@ -18,7 +18,7 @@ pub mod pallet {
 
     // ===== 引入制度常量 =====
     use primitives::{
-        china::china_ch::CHINA_CH, // 固定 43 个省储行多签账户
+        cid::china::china_ch::CHINA_CH, // 固定 43 个省储行多签账户
         core_const::{
             ENABLE_PROVINCIALBANK_INTEREST_DECAY, PROVINCIALBANK_INITIAL_INTEREST_BP,
             PROVINCIALBANK_INTEREST_DECREASE_BP, PROVINCIALBANK_INTEREST_DURATION_YEARS,
@@ -206,7 +206,7 @@ pub mod pallet {
         /// 解析省储行收款地址：只能是 CHINA_CH 中硬编码的该省多签账户，不可覆盖。
         fn resolve_bank_account(
             year: u32,
-            bank: &primitives::china::china_ch::ChinaCh,
+            bank: &primitives::cid::china::china_ch::ChinaCh,
             account_bytes: [u8; 32],
         ) -> Option<T::AccountId> {
             match T::AccountId::decode(&mut &bank.main_account[..]) {

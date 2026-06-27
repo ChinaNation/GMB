@@ -9,11 +9,11 @@ use std::{
 use rusqlite::{Connection, OpenFlags};
 use sha2::{Digest, Sha256};
 
-use primitives::code as chain_code;
+use primitives::cid::code as chain_code;
 
 use super::model::{CityDivision, ProvinceDivision, TownDivision};
 
-const CHINA_DB_DEV_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/china/china.sqlite");
+const CHINA_DB_DEV_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/cid/china/china.sqlite");
 
 static CHINA_DB_PATH: OnceLock<PathBuf> = OnceLock::new();
 static CHINA_SQLITE_HASH_CACHE: OnceLock<String> = OnceLock::new();
@@ -25,7 +25,7 @@ fn leak_text(value: String) -> &'static str {
 
 fn china_db_path() -> &'static Path {
     CHINA_DB_PATH.get_or_init(|| {
-        // 中文注释:行政区以开发库 `registry/src/china/china.sqlite` 为权威源。
+        // 中文注释:行政区以开发库 `registry/src/cid/china/china.sqlite` 为权威源。
         // 生产环境只允许通过 CID_CHINA_DB 指向随包只读 SQLite,不得在运行中复制或改写。
         if let Some(raw) = std::env::var("CID_CHINA_DB")
             .ok()
@@ -42,7 +42,7 @@ fn china_db_path() -> &'static Path {
         exe.parent()
             .and_then(Path::parent)
             .unwrap_or_else(|| Path::new("/opt/registry"))
-            .join("china/china.sqlite")
+            .join("cid/china/china.sqlite")
     })
 }
 

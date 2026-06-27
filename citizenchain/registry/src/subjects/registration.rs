@@ -14,9 +14,9 @@ use chrono::Utc;
 use crate::admins::actions::require_admin_security_grant;
 use crate::admins::login::require_admin_any;
 use crate::admins::operation_auth::AdminActionType;
-use crate::china::{city_code_by_name, province_code_by_name};
-use crate::number::code;
-use crate::number::InstitutionCategory;
+use crate::cid::china::{city_code_by_name, province_code_by_name};
+use crate::cid::code;
+use crate::cid::InstitutionCategory;
 use crate::private::common::resolve_private_type_rule;
 use crate::scope::get_visible_scope;
 use crate::subjects::http::{
@@ -118,7 +118,7 @@ async fn create_institution_inner(
         .map(|rule| rule.institution_code.to_string())
         .unwrap_or_else(|| input.institution.trim().to_string());
     // 机构类别一律由机构码派生。
-    let institution = code::from_str(&institution_code);
+    let institution = code::institution_code_from_str(&institution_code);
     let p1 = private_rule
         .map(|rule| rule.p1.to_string())
         .unwrap_or_else(|| input.p1.as_deref().unwrap_or("").trim().to_string());
@@ -127,12 +127,12 @@ async fn create_institution_inner(
     }
     // 私权机构 = 私法人或非法人(由机构码判定)。
     let is_private = institution
-        .map(|c| code::is_private_legal(&c) || code::is_unincorporated(&c))
+        .map(|c| code::is_private_legal_code(&c) || code::is_unincorporated_code(&c))
         .unwrap_or(false);
     // 教育机构(公私大学/学校)走通用路径、免 private_type;基础教育学校(GSCH/SFSC,初/小/中)
     // 需要 education_type 级别,大学(GUN/SUN)不需要。
     let is_education_institution = institution
-        .map(|c| code::is_education_institution(&c))
+        .map(|c| code::is_education_institution_code(&c))
         .unwrap_or(false);
     let requires_education_level = institution
         .map(|c| code::requires_education_level(&c))
@@ -251,7 +251,7 @@ async fn create_institution_inner(
     // 中文注释:市公安局(CPOL)虽已折叠为普通公权机构,但仍由系统按行政区划自动生成,
     // 不得手动创建,改按机构码判定(分类已不再单列公安局)。
     if institution
-        .map(|c| code::is_city_police(&c))
+        .map(|c| code::is_city_police_code(&c))
         .unwrap_or(false)
     {
         return api_error(
@@ -265,7 +265,7 @@ async fn create_institution_inner(
     // 公权教育机构(大学/学校)走教育流程,不受此限。
     if matches!(category, InstitutionCategory::GovInstitution) && !is_education_institution {
         let needs_federal = institution
-            .map(|c| code::is_three_char(&c))
+            .map(|c| code::is_three_char_code(&c))
             .unwrap_or(false);
         let is_federal_admin = scope.locked_city_name.is_none();
         if needs_federal && !is_federal_admin {
@@ -412,9 +412,9 @@ async fn create_institution_inner(
             return api_error(StatusCode::CONFLICT, 1007, "该机构全称已被使用");
         }
     }
-    // 中文注释:随机 UUID 种子 + 1000 次撞号重试 + 格式校验 收敛在 number::seed,
+    // 中文注释:随机 UUID 种子 + 1000 次撞号重试 + 格式校验 收敛在 cid::seed,
     // 本处只传参 + DB 查重回调(原行为:DB 错误 .ok().flatten() 视为不存在,逐字节保留)。
-    let cid = match crate::number::dynamic_institution_cid(
+    let cid = match crate::cid::dynamic_institution_cid(
         province.as_str(),
         city.as_str(),
         institution_code.as_str(),
@@ -431,13 +431,13 @@ async fn create_institution_inner(
         },
     ) {
         Ok(v) => v,
-        Err(crate::number::SeedCidError::Generate(msg)) => {
+        Err(crate::cid::SeedCidError::Generate(msg)) => {
             return api_error(StatusCode::BAD_REQUEST, 1001, msg);
         }
-        Err(crate::number::SeedCidError::Validate(msg)) => {
+        Err(crate::cid::SeedCidError::Validate(msg)) => {
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg);
         }
-        Err(crate::number::SeedCidError::Exhausted) => {
+        Err(crate::cid::SeedCidError::Exhausted) => {
             return api_error(
                 StatusCode::CONFLICT,
                 1005,

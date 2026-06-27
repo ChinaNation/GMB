@@ -98,10 +98,10 @@
 ## 自动目录
 
 - 国家/省级政府、立法院、司法院、监察院、教育委员会、储备委员会、储备银行读取
-  `citizenchain/runtime/primitives/china/china_*.rs` 常量中的 `cid_number`。
+  `citizenchain/runtime/primitives/cid/china/china_*.rs` 常量中的 `cid_number`。
 - 市级自治政府、市立法会、市司法院、市监察院、市教育委员会按
-  `citizencode/backend/china/china.sqlite` 的行政区划生成。
-- 行政区划唯一真源是 `citizencode/backend/china/`;CID 编码协议目录不再维护省市静态表。
+  `citizenchain/registry/src/cid/china/china.sqlite` 的行政区划生成。
+- 行政区划唯一真源是 `citizenchain/registry/src/cid/china/`;CID 编码协议目录不再维护省市静态表。
 - 市级自动机构对账匹配键只在内存中用于保持原 `cid_number` 不变,不得落库为第二身份。
 - 自动目录写入 `gov.source='GENERATED'`;手动公权机构写入 `MANUAL`。行政区对账清理
   obsolete 时只允许删除 `GENERATED` 派生行及其账户、资料、索引和审计残留,不得删除手工公权机构。

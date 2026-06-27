@@ -4,7 +4,7 @@
 //!
 //! 中文注释:
 //! cid 号结构(4 段,连字符分隔,ASCII 大写字母 + 数字):
-//! ```
+//! ```text
 //! R5(5) - 段二(5) - N9(9) - D4(4)
 //! ```
 //! 段二(核心段)按机构码长度分两种布局,靠**段二 index 3** 字符是数字/字母分流:
@@ -18,8 +18,16 @@
 //! 主体属性(K1)已从号码删除,机构类别一律由机构码自身语义派生。
 //! cid_number 字节上限唯一权威源 = `primitives::core_const::CID_NUMBER_MAX_BYTES`。
 
-use crate::number::code::{self, InstitutionCode, ProfitPolicy};
-use primitives::core_const::CID_NUMBER_MAX_BYTES;
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
+
+use crate::{
+    cid::code::{self, InstitutionCode, ProfitPolicy},
+    core_const::CID_NUMBER_MAX_BYTES,
+};
 
 const CHECKSUM_ALPHABET: &[u8; 36] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -59,12 +67,12 @@ pub(crate) fn checksum_acc(payload: &str) -> usize {
 }
 
 /// 3 字符布局校验位:mod-36,返回 `0-9A-Z` 单字符。
-pub(crate) fn checksum_char_mod36(payload: &str) -> char {
+pub fn checksum_char_mod36(payload: &str) -> char {
     CHECKSUM_ALPHABET[checksum_acc(payload) % 36] as char
 }
 
 /// 4 字符布局 M1:盈利→数字(mod-10),非盈利→字母(mod-26)。
-pub(crate) fn checksum_char_m1(payload: &str, profit: bool) -> char {
+pub fn checksum_char_m1(payload: &str, profit: bool) -> char {
     if profit {
         (b'0' + (checksum_acc(payload) % 10) as u8) as char
     } else {
@@ -133,8 +141,9 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
         let code = &seg2[0..3];
         let profit_char = &seg2[3..4];
         let checksum = seg2_bytes[4] as char;
-        let institution = code::from_str(code).ok_or("cid_number institution code invalid")?;
-        if !code::is_three_char(&institution) {
+        let institution =
+            code::institution_code_from_str(code).ok_or("cid_number institution code invalid")?;
+        if !code::is_three_char_code(&institution) {
             return Err("cid_number 3-char layout code mismatch");
         }
         // 盈利位 0/1,须与机构码盈利策略一致(国家/省部/公立大学非盈利=0;私立大学可变)。
@@ -144,12 +153,13 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
             _ => return Err("cid_number 3-char layout profit must be 0/1"),
         };
         match code::profit_policy(&institution) {
-            ProfitPolicy::NonProfit if profit => {
+            Some(ProfitPolicy::NonProfit) if profit => {
                 return Err("cid_number profit conflicts with code policy")
             }
-            ProfitPolicy::Profit if !profit => {
+            Some(ProfitPolicy::Profit) if !profit => {
                 return Err("cid_number profit conflicts with code policy")
             }
+            None => return Err("cid_number profit policy missing"),
             _ => {}
         }
         let payload = format!(
@@ -164,19 +174,21 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
         // B 布局:4 字符码 + M1。
         let code = &seg2[0..4];
         let m1 = seg2_bytes[4] as char;
-        let institution = code::from_str(code).ok_or("cid_number institution code invalid")?;
-        if code::is_three_char(&institution) {
+        let institution =
+            code::institution_code_from_str(code).ok_or("cid_number institution code invalid")?;
+        if code::is_three_char_code(&institution) {
             return Err("cid_number 4-char layout code mismatch");
         }
         let profit = m1.is_ascii_digit();
         // M1 解出的盈利属性必须与机构码盈利策略一致。
         match code::profit_policy(&institution) {
-            ProfitPolicy::NonProfit if profit => {
+            Some(ProfitPolicy::NonProfit) if profit => {
                 return Err("cid_number profit conflicts with code policy")
             }
-            ProfitPolicy::Profit if !profit => {
+            Some(ProfitPolicy::Profit) if !profit => {
                 return Err("cid_number profit conflicts with code policy")
             }
+            None => return Err("cid_number profit policy missing"),
             _ => {}
         }
         let payload = format!("{}{}{}{}", segments[0], code, segments[2], segments[3]);
@@ -200,14 +212,24 @@ pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::number::generator::{generate_cid_number, GenerateCidInput};
+    use crate::cid::generator::{generate_cid_number, GenerateCidNumberInput};
 
     fn gen(institution: &str, p1: &str, province: &str, city: &str) -> String {
-        generate_cid_number(GenerateCidInput {
+        let province_code = code::province_code_by_name(province)
+            .and_then(|code| code::province_code_text(&code))
+            .expect("test province code");
+        let city_code = match city {
+            "荔湾市" => "001",
+            _ => "001",
+        };
+        generate_cid_number(GenerateCidNumberInput {
             account_pubkey: "0xabcd",
             p1,
+            province_code,
             province_name: province,
+            city_code,
             city_name: city,
+            year: "2026",
             institution,
         })
         .expect("cid should generate")
@@ -248,29 +270,39 @@ mod tests {
     fn all_codes_roundtrip_generate_parse() {
         // 遍历全部 92 码(除不发号的 PMUL):生成→解析必须还原同一机构码且格式校验通过。
         // 确定性覆盖三/四字符两种布局、盈利数字/字母 M1、3 字符盈利位与各档校验。
-        for institution_code in code::ALL {
+        for institution_code in code::ALL_CODES {
             if institution_code == code::PMUL {
                 continue;
             }
-            let number = generate_cid_number(GenerateCidInput {
+            let number = generate_cid_number(GenerateCidNumberInput {
                 account_pubkey: "0xfeed",
                 // 仅 Variable/InheritParent 策略读取;固定策略忽略。取 1 让可变码盈利一致。
                 p1: "1",
+                province_code: "GD",
                 province_name: "广东省",
+                city_code: "001",
                 city_name: "荔湾市",
-                institution: code::as_code(&institution_code),
+                year: "2026",
+                institution: code::institution_code_text(&institution_code)
+                    .expect("institution code text"),
             })
             .unwrap_or_else(|e| {
-                panic!("{} should generate: {e}", code::as_code(&institution_code))
+                panic!(
+                    "{} should generate: {e}",
+                    code::institution_code_text(&institution_code).expect("institution code text")
+                )
             });
             let parts = parse_cid_number_parts(&number).unwrap_or_else(|e| {
-                panic!("{} should parse: {e}", code::as_code(&institution_code))
+                panic!(
+                    "{} should parse: {e}",
+                    code::institution_code_text(&institution_code).expect("institution code text")
+                )
             });
             assert_eq!(
                 parts.institution,
                 institution_code,
                 "roundtrip code mismatch for {}",
-                code::as_code(&institution_code)
+                code::institution_code_text(&institution_code).expect("institution code text")
             );
             assert!(validate_cid_number_format(&number).is_ok());
         }

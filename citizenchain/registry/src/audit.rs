@@ -58,12 +58,12 @@ pub(crate) async fn admin_list_audit_logs(
     let province_code = ctx
         .scope_province_name
         .as_deref()
-        .and_then(crate::china::province_code_by_name);
+        .and_then(crate::cid::china::province_code_by_name);
     let city_code = match (
         ctx.scope_province_name.as_deref(),
         ctx.scope_city_name.as_deref(),
     ) {
-        (Some(province), Some(city)) => crate::china::city_code_by_name(province, city),
+        (Some(province), Some(city)) => crate::cid::china::city_code_by_name(province, city),
         _ => None,
     };
     let result = state.db.with_client(move |conn| {

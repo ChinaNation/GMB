@@ -10,8 +10,8 @@ use crate::pow_const;
 pub const NRC_ADMIN_COUNT: u32 = 19; // 国储会管理员数量
 pub const PRC_ADMIN_COUNT: u32 = 9; // 单个省储会管理员数量
 pub const PRB_ADMIN_COUNT: u32 = 9; // 单个省储行管理员数量
-pub const PRC_COUNT: u32 = (crate::china::china_cb::CHINA_CB.len() - 1) as u32; // 初始省储会数量（总储会-国储会）
-pub const PRB_COUNT: u32 = crate::china::china_ch::CHINA_CH.len() as u32; // 初始省储行数量（来自省储行数组）
+pub const PRC_COUNT: u32 = (crate::cid::china::china_cb::CHINA_CB.len() - 1) as u32; // 初始省储会数量（总储会-国储会）
+pub const PRB_COUNT: u32 = crate::cid::china::china_ch::CHINA_CH.len() as u32; // 初始省储行数量（来自省储行数组）
 
 /// 二、内部投票（只用于内部投票的阈值）
 pub const NRC_INTERNAL_THRESHOLD: u32 = 13; // 国储会内部投票通过阈值

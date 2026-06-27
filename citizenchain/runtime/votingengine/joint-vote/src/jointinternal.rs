@@ -14,8 +14,8 @@ use frame_support::{
 use sp_runtime::traits::{Hash, SaturatedConversion, Saturating};
 use sp_runtime::DispatchError;
 
-use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_ch::CHINA_CH;
 use primitives::count_const::{
     JOINT_VOTE_TOTAL, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
     VOTING_DURATION_BLOCKS,

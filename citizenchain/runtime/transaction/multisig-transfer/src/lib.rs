@@ -16,8 +16,8 @@ use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 
 extern crate alloc;
 
-use primitives::china::china_cb::{CHINA_CB, SAFETY_FUND_ACCOUNT};
-use primitives::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_cb::{CHINA_CB, SAFETY_FUND_ACCOUNT};
+use primitives::cid::china::china_ch::CHINA_CH;
 use votingengine::{
     types::{is_institution_code, InstitutionCode, NRC, PMUL, PRB, PRC},
     InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,

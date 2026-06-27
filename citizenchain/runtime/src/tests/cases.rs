@@ -18,7 +18,7 @@ fn fee_payer_returns_none_for_transfer() {
     use configs::RuntimeFeePayerExtractor;
     use frame_support::BoundedVec;
     use onchain_transaction::CallFeePayer;
-    use primitives::china::china_cb::CHINA_CB;
+    use primitives::cid::china::china_cb::CHINA_CB;
 
     let institution = AccountId::new(CHINA_CB[0].main_account);
     let beneficiary = AccountId::new([99u8; 32]);
@@ -363,7 +363,8 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         >>::fee_kind(&who, &close_call);
         assert_eq!(close_kind, onchain_transaction::FeeChargeKind::VoteFlat);
 
-        let institution = AccountId::new(primitives::china::china_cb::CHINA_CB[0].main_account);
+        let institution =
+            AccountId::new(primitives::cid::china::china_cb::CHINA_CB[0].main_account);
         let transfer_call =
             RuntimeCall::MultisigTransfer(multisig_transfer::pallet::Call::propose_transfer {
                 institution_code: votingengine::types::NRC,
@@ -383,16 +384,16 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
 
 #[test]
 fn multisig_reserved_checker_rejects_stake_and_fee_accounts() {
-    let stake = AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_account);
+    let stake = AccountId::new(primitives::cid::china::china_ch::CHINA_CH[0].stake_account);
     assert!(RuntimeReservedAccountGuard::is_reserved(&stake));
 
-    let fee_account = AccountId::new(primitives::china::china_ch::CHINA_CH[0].fee_account);
+    let fee_account = AccountId::new(primitives::cid::china::china_ch::CHINA_CH[0].fee_account);
     assert!(RuntimeReservedAccountGuard::is_reserved(&fee_account));
 }
 
 #[test]
 fn runtime_call_filter_blocks_force_transfer_from_stake() {
-    let stake = AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_account);
+    let stake = AccountId::new(primitives::cid::china::china_ch::CHINA_CH[0].stake_account);
     let dst = AccountId::new([9u8; 32]);
 
     let blocked_by_id = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
@@ -402,7 +403,7 @@ fn runtime_call_filter_blocks_force_transfer_from_stake() {
     });
     assert!(!RuntimeCallFilter::contains(&blocked_by_id));
 
-    let stake_raw = primitives::china::china_ch::CHINA_CH[0].stake_account;
+    let stake_raw = primitives::cid::china::china_ch::CHINA_CH[0].stake_account;
     let blocked_by_32 = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
         source: sp_runtime::MultiAddress::Address32(stake_raw),
         dest: sp_runtime::MultiAddress::Id(dst.clone()),
@@ -426,7 +427,7 @@ fn runtime_call_filter_blocks_force_transfer_from_stake() {
 
     let blocked_force_unreserve = RuntimeCall::Balances(pallet_balances::Call::force_unreserve {
         who: sp_runtime::MultiAddress::Id(AccountId::new(
-            primitives::china::china_ch::CHINA_CH[0].stake_account,
+            primitives::cid::china::china_ch::CHINA_CH[0].stake_account,
         )),
         amount: 1,
     });
@@ -435,7 +436,7 @@ fn runtime_call_filter_blocks_force_transfer_from_stake() {
     let blocked_force_set_balance =
         RuntimeCall::Balances(pallet_balances::Call::force_set_balance {
             who: sp_runtime::MultiAddress::Id(AccountId::new(
-                primitives::china::china_ch::CHINA_CH[0].stake_account,
+                primitives::cid::china::china_ch::CHINA_CH[0].stake_account,
             )),
             new_free: 1,
         });

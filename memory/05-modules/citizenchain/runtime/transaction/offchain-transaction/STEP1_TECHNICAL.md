@@ -25,7 +25,7 @@ src/
 
 ## 3. 清算行合法性模型
 
-清算行 = `K1=S` 私法人或 `K1=F` 非法人(两者皆私权机构),对应 `citizencode/backend/number/category.rs` 的 `InstitutionCategory::PrivateInstitution`。
+清算行 = `K1=S` 私法人或 `K1=F` 非法人(两者皆私权机构),对应 `citizenchain/registry/src/cid/category.rs` 的 `InstitutionCategory::PrivateInstitution`。
 
 链上**不新增** CID 枚举,而是直接对 `organization-manage::AccountRegisteredCid` 存的 `cid_number` 字符串做 K1 字节匹配。
 

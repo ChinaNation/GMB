@@ -6,7 +6,7 @@ use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_support::{traits::Get, BoundedVec};
 use frame_system::RawOrigin;
-use primitives::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_cb::CHINA_CB;
 use sp_runtime::traits::{CheckedAdd, Hash, SaturatedConversion, Saturating, Zero};
 use sp_std::{vec, vec::Vec};
 

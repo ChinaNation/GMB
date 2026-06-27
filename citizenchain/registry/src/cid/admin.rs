@@ -1,12 +1,12 @@
 use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 
-use crate::china::provinces;
-use crate::number::code as institution_code;
+use crate::cid::china::provinces;
+use crate::cid::code as institution_code;
 use crate::*;
 
-// 中文注释:本文件只保留管理端 CID 编码元信息接口;城市列表由 china::admin 提供。
+// 中文注释:本文件只保留管理端 CID 编码元信息接口;城市列表由 cid::china::admin 提供。
 
-pub(crate) async fn admin_number_meta(
+pub(crate) async fn admin_cid_meta(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
@@ -35,11 +35,13 @@ pub(crate) async fn admin_number_meta(
         data: AdminCidMetaOutput {
             // 机构码选项由 primitives code.rs 单源派生(92 码);
             // 机构类别由机构码派生,不单列。
-            institution_options: institution_code::ALL
+            institution_options: institution_code::ALL_CODES
                 .iter()
                 .map(|c| CidInstitutionCodeItem {
-                    institution_code: institution_code::as_code(c),
-                    cid_short_name: institution_code::cid_short_name(c),
+                    institution_code: institution_code::institution_code_text(c)
+                        .expect("known CID institution code"),
+                    cid_short_name: institution_code::cid_short_name(c)
+                        .expect("known CID institution code"),
                 })
                 .collect(),
             provinces: provinces_rows,

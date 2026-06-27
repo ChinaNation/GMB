@@ -4,7 +4,7 @@ import 'dart:typed_data';
 /// 机构码(CID institution_code)冷钱包端表示与治理分类 = institution_code.dart
 ///
 /// 中文注释(铁律):
-/// 本文件逐字镜像链端 `primitives::code`(同一套 92 码)。链上治理用
+/// 本文件逐字镜像链端 `primitives::cid::code`(同一套 92 码)。链上治理用
 /// 4 字节 `institution_code`([u8;4] 原始码字节,3 字符码右补 `0`)。
 /// 冷钱包离线解码用本文件的纯函数从机构码派生治理分类
 /// (是不是固定治理档 / 个人多签 / 机构账户),绝不另立第二套分类。

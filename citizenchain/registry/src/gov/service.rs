@@ -7,8 +7,8 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use crate::china::{china_sqlite_hash, provinces};
-use crate::number::InstitutionCategory;
+use crate::cid::china::{china_sqlite_hash, provinces};
+use crate::cid::InstitutionCategory;
 use crate::subjects::{
     service::{build_default_accounts_for_codes, default_account_names_for_codes},
     EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
@@ -16,25 +16,25 @@ use crate::subjects::{
 use crate::Db;
 
 #[allow(dead_code)]
-#[path = "../../../runtime/primitives/china/china_cb.rs"]
+#[path = "../../../runtime/primitives/cid/china/china_cb.rs"]
 mod china_cb_constants;
 #[allow(dead_code)]
-#[path = "../../../runtime/primitives/china/china_ch.rs"]
+#[path = "../../../runtime/primitives/cid/china/china_ch.rs"]
 mod china_ch_constants;
 #[allow(dead_code)]
-#[path = "../../../runtime/primitives/china/china_jc.rs"]
+#[path = "../../../runtime/primitives/cid/china/china_jc.rs"]
 mod china_jc_constants;
 #[allow(dead_code)]
-#[path = "../../../runtime/primitives/china/china_jy.rs"]
+#[path = "../../../runtime/primitives/cid/china/china_jy.rs"]
 mod china_jy_constants;
 #[allow(dead_code)]
-#[path = "../../../runtime/primitives/china/china_lf.rs"]
+#[path = "../../../runtime/primitives/cid/china/china_lf.rs"]
 mod china_lf_constants;
 #[allow(dead_code)]
-#[path = "../../../runtime/primitives/china/china_sf.rs"]
+#[path = "../../../runtime/primitives/cid/china/china_sf.rs"]
 mod china_sf_constants;
 #[allow(dead_code)]
-#[path = "../../../runtime/primitives/china/china_zf.rs"]
+#[path = "../../../runtime/primitives/cid/china/china_zf.rs"]
 mod china_zf_constants;
 
 pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v7";
@@ -540,9 +540,9 @@ fn generate_public_security_cid(
     city_name: &str,
     city_code: &str,
 ) -> Option<String> {
-    // 中文注释:公安局(CPOL)种子 `PS-{省码}-{市码}` + 创世无重试,收敛在 number::seed,本处只传参。
+    // 中文注释:公安局(CPOL)种子 `PS-{省码}-{市码}` + 创世无重试,收敛在 cid::seed,本处只传参。
     // exists_fn 恒返 false 等价原行为(创世幂等不查重)。
-    crate::number::public_security_cid::<std::convert::Infallible>(
+    crate::cid::public_security_cid::<std::convert::Infallible>(
         province_code,
         city_code,
         province_name,
@@ -566,7 +566,7 @@ fn build_raw_targets(
 }
 
 fn province_matches_scope(
-    province: &crate::china::model::ProvinceDivision,
+    province: &crate::cid::china::model::ProvinceDivision,
     scope: &OfficialReconcileScope,
 ) -> bool {
     match scope {
@@ -579,7 +579,7 @@ fn province_matches_scope(
 }
 
 fn city_matches_scope(
-    city: &crate::china::model::CityDivision,
+    city: &crate::cid::china::model::CityDivision,
     scope: &OfficialReconcileScope,
 ) -> bool {
     match scope {
@@ -591,7 +591,7 @@ fn city_matches_scope(
 }
 
 fn home_city_matches_scope(
-    city: &crate::china::model::CityDivision,
+    city: &crate::cid::china::model::CityDivision,
     scope: &OfficialReconcileScope,
 ) -> bool {
     match scope {
@@ -735,9 +735,9 @@ fn push_area_template_target(
 ) {
     let cid_short_name = format!("{display_area_name}{}", template.suffix);
     let cid_full_name = format!("{display_area_name}{}", template.full_suffix);
-    // 中文注释:种子约定 + (创世)无重试 收敛在 number::seed,本处只传参。
+    // 中文注释:种子约定 + (创世)无重试 收敛在 cid::seed,本处只传参。
     // 创世幂等故不查重,exists_fn 恒返 false 等价原行为。
-    let Ok(cid_number) = crate::number::official_institution_cid::<std::convert::Infallible>(
+    let Ok(cid_number) = crate::cid::official_institution_cid::<std::convert::Infallible>(
         seed_scope,
         province_code,
         city_code,
@@ -770,7 +770,7 @@ fn push_area_template_target(
 /// 解析常量机构 CID,返回 (省码, 市码, 机构码, 盈利位)。
 /// 机构类别一律由机构码派生,不单独返回。
 fn parse_cid_institution_parts(cid_number: &str) -> Option<(String, String, String, String)> {
-    let parts = crate::number::parse_cid_number_parts(cid_number).ok()?;
+    let parts = crate::cid::parse_cid_number_parts(cid_number).ok()?;
     let province_code = parts.r5.get(0..2)?.to_string();
     let city_code = parts.r5.get(2..5)?.to_string();
     let p1 = if parts.profit { "1" } else { "0" }.to_string();

@@ -6,7 +6,7 @@
 //   `offchain_transaction::endpoint`,避免"节点声明"与"机构多签"混在一起。
 
 use codec::{Decode, Encode};
-use primitives::code::InstitutionCode;
+use primitives::cid::code::InstitutionCode;
 use serde_json::Value;
 use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};

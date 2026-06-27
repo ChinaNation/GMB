@@ -71,8 +71,8 @@ citizencode/frontend/
 - `utils/http.ts` 收到 `401` 必须抛 `AuthExpiredError` 并触发全局退出;其他业务错误抛
   `ApiError`,页面按 `errorCode` 展示,不得返回 `undefined as T`。
 - 登录/会话接口放 `auth/api.ts`;登录态和角色类型放 `auth/types.ts`。
-- 行政区和编码元数据接口放 `china/api.ts`;省市清单走 `/api/v1/admin/china/cities`,
-  编码选项走 `/api/v1/admin/number/meta`。
+- 行政区和编码元数据接口放 `china/api.ts`;省市清单走 `/api/v1/admin/cid/china/cities`,
+  编码选项走 `/api/v1/admin/cid/meta`。
 - `subjects/api.ts` 只保留跨公权/私权共用的数据类型和公共边界;业务 CRUD API
   分别放 `gov/api.ts`、`private/<type>/api.ts`、`education/api.ts`、`accounts/api.ts`、`docs/api.ts`。
   机构与区块链交互继续放 `subjects/chain_multisig_info.ts`。

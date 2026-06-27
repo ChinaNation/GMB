@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 行政区字典数据包生成器(ADR-021 §A2)。
 //
-// 唯一真源 = citizencode/backend/china/china.sqlite。本生成器**直接 dump 三表,零映射**:
+// 唯一真源 = citizenchain/registry/src/cid/china/china.sqlite。本生成器**直接 dump 三表,零映射**:
 // 任何「修正名字」逻辑禁止进此文件——改名只改 china.sqlite,这里纯搬运。
 // 铁律:china.sqlite 行政区 code 不可变不复用(见 memory/07-ai/agent-rules.md)。
 //
@@ -26,7 +26,17 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, '..', 'assets', 'admin_divisions');
-const DEFAULT_DB = resolve(__dirname, '..', '..', 'citizencode', 'backend', 'china', 'china.sqlite');
+const DEFAULT_DB = resolve(
+  __dirname,
+  '..',
+  '..',
+  'citizenchain',
+  'registry',
+  'src',
+  'cid',
+  'china',
+  'china.sqlite',
+);
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);

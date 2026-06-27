@@ -24,9 +24,9 @@ use admin_primitives::{
     is_genesis_admin_code, is_public_admin_code, AdminAccount, AdminAccountKind,
     AdminAccountLifecycle, AdminAccountStatus, AdminSetChangeAction, FRG,
 };
-use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::CHINA_CH;
-use primitives::china::china_zf::CHINA_ZF;
+use primitives::cid::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_zf::CHINA_ZF;
 use votingengine::{
     types::{institution_code_from_cid_number, InstitutionCode},
     InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
@@ -59,12 +59,12 @@ fn expected_admins_len(institution_code: InstitutionCode) -> Option<u32> {
 /// 中文注释:联邦特权直设入口据此识别"联邦注册局"账户,再校验 `who ∈ 其 active admins`。
 /// 单源即 china_zf 常量,与 `genesis_build` 写入 `AdminAccounts` 的口径一致。
 fn federal_registry_account<T: frame_system::Config>() -> Option<T::AccountId> {
-    CHINA_ZF.iter().find_map(|node| {
-        match institution_code_from_cid_number(node.cid_number) {
+    CHINA_ZF.iter().find_map(
+        |node| match institution_code_from_cid_number(node.cid_number) {
             Some(code) if code == FRG => decode_account::<T>(&node.main_account),
             _ => None,
-        }
-    })
+        },
+    )
 }
 
 #[frame_support::pallet]
@@ -192,9 +192,9 @@ pub mod pallet {
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn integrity_test() {
             let required = [
-                admin_primitives::expected_genesis_admins_len(primitives::code::NRC),
-                admin_primitives::expected_genesis_admins_len(primitives::code::PRC),
-                admin_primitives::expected_genesis_admins_len(primitives::code::PRB),
+                admin_primitives::expected_genesis_admins_len(primitives::cid::code::NRC),
+                admin_primitives::expected_genesis_admins_len(primitives::cid::code::PRC),
+                admin_primitives::expected_genesis_admins_len(primitives::cid::code::PRB),
             ]
             .into_iter()
             .flatten()

@@ -1,7 +1,7 @@
 // 链上机构名称注册表（公民钱包签名校验用）。
 //
 // 本文件由 scripts/generate_citizenapp_governance_registry.mjs 自动生成。
-// 中文注释：唯一事实源是 citizenchain/runtime/primitives/china/china_{cb,ch}.rs。
+// 中文注释：唯一事实源是 citizenchain/runtime/primitives/cid/china/china_{cb,ch}.rs。
 // 冷钱包用同一套映射把 cid_number 还原成中英全称/简称，保证交易摘要与解码结果一致。
 
 /// 机构分类（与服务端 OrgType 对齐）。

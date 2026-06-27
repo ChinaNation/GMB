@@ -738,7 +738,7 @@ pub(crate) fn node_institution_identity() -> Result<NodeInstitutionIdentity, Str
     let main_account = parse_sr25519_pubkey_bytes(main_account_raw.as_str()).ok_or_else(|| {
         "CID_RUNTIME_ISSUER_MAIN_ACCOUNT must be a 32-byte account hex".to_string()
     })?;
-    let code = primitives::code::institution_code_from_cid_number(cid_number)
+    let code = primitives::cid::code::institution_code_from_cid_number(cid_number)
         .ok_or_else(|| "CID_RUNTIME_ISSUER_CID_NUMBER has no institution code".to_string())?;
     if code == FRG_CODE {
         Ok(NodeInstitutionIdentity {
@@ -746,8 +746,8 @@ pub(crate) fn node_institution_identity() -> Result<NodeInstitutionIdentity, Str
             main_account,
             is_federal: true,
         })
-    } else if primitives::code::is_public_legal_code(&code)
-        && !primitives::code::is_fixed_governance_code(&code)
+    } else if primitives::cid::code::is_public_legal_code(&code)
+        && !primitives::cid::code::is_fixed_governance_code(&code)
     {
         Ok(NodeInstitutionIdentity {
             pallet: AdminPallet::PublicAdmins,

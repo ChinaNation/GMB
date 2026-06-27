@@ -2,9 +2,11 @@
 //!
 //! 中文注释(铁律):
 //! - 国家码、省级行政区码、机构码只在本文件维护。
-//! - CID 后端 `number/` 继续负责 CID 号生成、解析、校验,但不得再手写第二份机构码表。
-//! - 省级行政区代码来自 `citizencode/backend/china/china.sqlite` 现有 43 省抽离结果;
-//!   市、镇行政区代码仍由 CID 行政区数据按省管理。
+//! - CID 号生成、解析、校验的核心协议在 `citizenchain/runtime/primitives/cid/`。
+//! - registry 只能在 `citizenchain/registry/src/cid/` 做 SQLite 行政区、当前年份、
+//!   UUID 与数据库查重等运行态适配,不得手写第二份机构码表或省码表。
+//! - 省级行政区代码来自 `citizenchain/registry/src/cid/china/china.sqlite` 现有 43 省抽离结果;
+//!   市、镇行政区代码仍由 registry CID 行政区数据按省管理。
 //! - 字段命名必须使用 `country_full_name` / `country_short_name` /
 //!   `province_name` / `cid_short_name`,不得恢复 `name`、`label` 等泛化字段。
 //!

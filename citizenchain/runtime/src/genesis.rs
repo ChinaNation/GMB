@@ -25,8 +25,8 @@ use crate::AccountId;
 use codec::Decode;
 #[cfg(feature = "std")]
 use primitives::{
-    china::china_cb::{CHINA_CB, NRC_HE_ACCOUNT},
-    china::china_ch::CHINA_CH,
+    cid::china::china_cb::{CHINA_CB, NRC_HE_ACCOUNT},
+    cid::china::china_ch::CHINA_CH,
     core_const::SS58_FORMAT,
     genesis::{CITIZENS, COUNTRY, GENESIS_CITIZEN_MAX, GENESIS_ISSUANCE, HE_FUND_ISSUANCE},
 };
@@ -206,7 +206,7 @@ mod tests {
     use super::*;
     use crate::RuntimeGenesisConfig;
     use ed25519_dalek::VerifyingKey;
-    use primitives::china::china_cb::CHINA_CB;
+    use primitives::cid::china::china_cb::CHINA_CB;
     use std::collections::BTreeSet;
 
     #[test]

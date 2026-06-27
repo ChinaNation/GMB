@@ -509,21 +509,20 @@ pub mod pallet {
         ) -> DispatchResult {
             // 1) 机构类型 / 管理员集合(人数、唯一、类型)边界校验。
             Self::validate_admin_set_for_account(kind, institution_code, &admins)?;
-            let bounded: AdminsOf<T> =
-                admins.try_into().map_err(|_| Error::<T>::InvalidAdminsLen)?;
+            let bounded: AdminsOf<T> = admins
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidAdminsLen)?;
             let admins_len = bounded.len() as u32;
             let now = frame_system::Pallet::<T>::block_number();
 
             with_transaction(|| {
                 // 2) 先注册动态阈值(内部按严格过半校验);失败整体回滚。
-                if let Err(err) =
-                    T::InternalVoteEngine::register_active_dynamic_threshold_direct(
-                        institution_code,
-                        institution.clone(),
-                        admins_len,
-                        threshold,
-                    )
-                {
+                if let Err(err) = T::InternalVoteEngine::register_active_dynamic_threshold_direct(
+                    institution_code,
+                    institution.clone(),
+                    admins_len,
+                    threshold,
+                ) {
                     return TransactionOutcome::Rollback(Err(err));
                 }
 

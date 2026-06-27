@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn decode_admin_account_full_layout() {
-        use primitives::code::NRC;
+        use primitives::cid::code::NRC;
         // institution_code(4B = b"NRC\0") + kind(1B=0) + admins Compact 长度(0x04 = 1 项)。
         let mut data = NRC.to_vec();
         data.push(0);

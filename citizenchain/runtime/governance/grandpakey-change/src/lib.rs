@@ -14,7 +14,7 @@ use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use frame_support::{ensure, pallet_prelude::*, traits::StorageVersion, Blake2_128Concat};
 use frame_system::pallet_prelude::*;
-use primitives::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_cb::CHINA_CB;
 use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;

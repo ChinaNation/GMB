@@ -27,8 +27,8 @@ use scale_info::TypeInfo;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 use sp_runtime::{DispatchError, RuntimeDebug};
 
-use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_ch::CHINA_CH;
 use primitives::count_const::VOTING_DURATION_BLOCKS;
 
 use votingengine::{

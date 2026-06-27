@@ -107,7 +107,7 @@ fn run_to_block(n: u64) {
 }
 
 fn provincialbank_account(index: usize) -> AccountId32 {
-    AccountId32::decode(&mut &primitives::china::china_ch::CHINA_CH[index].main_account[..])
+    AccountId32::decode(&mut &primitives::cid::china::china_ch::CHINA_CH[index].main_account[..])
         .expect("main_account must decode")
 }
 

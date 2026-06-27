@@ -18,7 +18,7 @@
 - 链上通信：smoldot PoW 轻节点 + Rust 原生 typed capability（异步 FFI，不阻塞主线程）（`lib/rpc/` + `third_party/smoldot-dart/` + `rust/`）
 - P2P IM 路线：信息 Tab + 钱包账户聊天身份 + 用户自己的私人通信全节点 + 近场无网点对点通信；当前已落地基础模型、信息 Tab、绑定 payload、私人节点传输骨架和 node 端 owner-only mailbox Spike；Android 近场模块规划为 `android/im/`，iOS 近场模块规划为 `ios/im/`
 - 外部接口：HTTP API（由 CID/网关系统提供，仅用于 CID 绑定、管理员目录、公权机构目录等非链上查询场景）
-- 行政区字典：安装包内置 `assets/admin_divisions/`，由 `citizencode/backend/china/china.sqlite` 直接生成；运行中只读本地包，不向 CID 联网更新行政区。
+- 行政区字典：安装包内置 `assets/admin_divisions/`，由 `citizenchain/registry/src/cid/china/china.sqlite` 直接生成；运行中只读本地包，不向 CID 联网更新行政区。
 - 公权机构包：安装包内置 `assets/public_institutions/`，发布期从已通过 `check-gov --strict` 的 CID 真实 HTTP 接口导出；2026-06-19 重新创世版本 1 当前包包含 43 省、248643 条公民端完整公权机构。citizenapp 公民端不按 CID 管理端“公权机构 / 市公安局 / 教育机构”等后台功能 tab 分流或排除。
 
 ### 2.1 Android 打包和正式签名

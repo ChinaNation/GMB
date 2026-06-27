@@ -47,7 +47,7 @@
 - 备库用于容灾与只读核验，故障切换需要明确 SOP。
 - 若 Redis 与应用部署在同一台机器，推荐 `CID_REDIS_URL=redis://127.0.0.1:6379/0`。
 - `CID_CHINA_DB` 是行政区随包只读 SQLite，正式部署固定 `/opt/citizencode/china/china.sqlite`。
-  行政区变更只能来自开发库 `citizencode/backend/china/china.sqlite` 后重新发布安装包。
+  行政区变更只能来自开发库 `citizenchain/registry/src/cid/china/china.sqlite` 后重新发布安装包。
 - 公权机构目录由行政区和模板确定性派生。安装新版行政区后必须先让运行库中的
   `gov.source='GENERATED'` 目录对账到当前 `china.sqlite`,并确认全局 `gov_manifest`
   为 `OK`;手动公权机构 `MANUAL` 不属于自动清理范围。

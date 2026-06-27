@@ -77,7 +77,7 @@ if [ -n "$PG_PREFIX" ]; then
 else
     echo "    [warn] 未找到本机 PostgreSQL(brew install postgresql@16);注册局 Web 仍可起但缺 DB,功能受限。"
 fi
-export CID_CHINA_DB="$CHAIN_ROOT/registry/src/china/china.sqlite"
+export CID_CHINA_DB="$CHAIN_ROOT/registry/src/cid/china/china.sqlite"
 export REGISTRY_FRONTEND_DIST="$CHAIN_ROOT/registry/frontend/dist"
 # 中文注释:本地开发让注册局启动时自动对账公权机构目录(全新内嵌 PG 是空库,
 #   首启需把 40 万+ 公权机构从 china.sqlite 生成进库;首次较慢,之后增量对账很快),

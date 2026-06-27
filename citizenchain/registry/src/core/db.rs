@@ -589,7 +589,7 @@ impl Db {
             )
         })?;
 
-        for province in crate::china::provinces().iter() {
+        for province in crate::cid::china::provinces().iter() {
             Self::create_subject_partitions(conn, province.province_code)?;
         }
         Self::delete_ineligible_citizen_residuals(conn)?;

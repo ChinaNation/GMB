@@ -28,16 +28,16 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 是否匹配当前 `china.sqlite` hash 和目录 hash。目录过期时生产环境直接拒绝启动;本地开发如
 明确设置 `CID_GOV_AUTO_RECONCILE=1`,才允许启动前自动执行一次 `reconcile-gov --changed-only`。
 
-生产部署入口必须在安装新版后端二进制和 `/opt/citizencode/china/china.sqlite` 后、启动 `serve` 前执行
+生产部署入口必须在安装新版后端二进制和 `CID_CHINA_DB` 指向的随包只读 `china.sqlite` 后、启动 `serve` 前执行
 `reconcile-gov --changed-only` 和 `check-gov --strict`。`ensure-gov` 保留为幂等维护命令:
 它检查 `gov_manifest` 与当前目录 hash,已初始化且完整则跳过;缺失、不完整或目录版本变化时
 写入确定性公权机构和公安局。页面列表接口只能读取持久化结果,不得触发全量补数据。
 
 国家码、省级行政区码和 CID 机构码的常量唯一真源是
-`citizenchain/runtime/primitives/src/code.rs`;CID 后端只通过 `primitives::code` 和
-`crate::number::code` 引用,不得在 `number/` 或 `china/` 手写第二份码表。市、镇和地址段开发库
-权威源是 `citizencode/backend/china/china.sqlite`。正式部署时 `CID_CHINA_DB` 固定为
-`/opt/citizencode/china/china.sqlite`,后端只读打开。市镇地址段变更只能修改开发库并重新发布
+`citizenchain/runtime/primitives/cid/code.rs`;CID 后端只通过 `primitives::cid::code` 和
+`crate::cid::code` 引用,不得恢复旧 number 模块或旧顶层 china 模块手写第二份码表。市、镇和地址段开发库
+权威源是 `citizenchain/registry/src/cid/china/china.sqlite`。正式部署时 `CID_CHINA_DB` 固定为
+随包只读 SQLite,后端只读打开。市镇地址段变更只能修改开发库并重新发布
 安装包,不得在 CID 运行中改库或恢复行政区管理 tab。
 
 ## 数据表

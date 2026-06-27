@@ -19,7 +19,6 @@ Write-Host "[prepack] assemble node\resources"
 New-Item -ItemType Directory -Force -Path "$Here\resources\registry-bin", "$Here\resources\registry-frontend", "$Here\resources\postgres" | Out-Null
 # registry 二进制随包(Tauri resources\registry-bin),registry_proc 从资源目录解析。
 Copy-Item "$Root\target\release\registry.exe" "$Here\resources\registry-bin\registry.exe" -Force
-Copy-Item "$Root\registry\src\china\china.sqlite" "$Here\resources\china.sqlite" -Force
 if (Test-Path "$Here\resources\registry-frontend\dist") { Remove-Item -Recurse -Force "$Here\resources\registry-frontend\dist" }
 Copy-Item -Recurse "$Root\registry\frontend\dist" "$Here\resources\registry-frontend\dist"
 

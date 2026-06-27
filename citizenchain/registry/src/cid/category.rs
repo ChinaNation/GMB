@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::number::code::{self, InstitutionCode};
+use crate::cid::code::{self, InstitutionCode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -38,11 +38,11 @@ impl InstitutionCategory {
 ///
 /// 返回 None:机构码不是注册型机构(个人主体 CTZN/NATP/SMTP、个人多签 PMUL)。
 pub fn classify(code: InstitutionCode, _cid_full_name: &str) -> Option<InstitutionCategory> {
-    if code::is_person(&code) || code == code::PMUL {
+    if code::is_person_code(&code) || code == code::PMUL {
         return None;
     }
     // 中文注释:市公安局(CPOL)是公法人,回归普通公权机构,不再单列分类。
-    if code::is_public_legal(&code) || code::is_city_police(&code) {
+    if code::is_public_legal_code(&code) || code::is_city_police_code(&code) {
         Some(InstitutionCategory::GovInstitution)
     } else {
         // 私法人 / 非法人

@@ -8,7 +8,7 @@ fn first_year_should_mint_and_settle() {
         run_to_block(10);
         assert_eq!(LastSettledYear::<Test>::get(), 1);
 
-        let first_bank = &primitives::china::china_ch::CHINA_CH[0];
+        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
         let account = provincialbank_account(0);
         let expected = first_bank.stake_amount * 100u128 / 10_000u128;
         assert_eq!(Balances::free_balance(account), expected);
@@ -32,7 +32,7 @@ fn later_boundary_auto_settles_only_next_unsettled_year() {
 
         assert_eq!(LastSettledYear::<Test>::get(), 1);
 
-        let first_bank = &primitives::china::china_ch::CHINA_CH[0];
+        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
         let account = provincialbank_account(0);
         let year1 = first_bank.stake_amount * 100u128 / 10_000u128;
         assert_eq!(Balances::free_balance(account), year1);
@@ -45,7 +45,7 @@ fn second_year_should_use_decayed_rate() {
         run_to_block(20);
         assert_eq!(LastSettledYear::<Test>::get(), 2);
 
-        let first_bank = &primitives::china::china_ch::CHINA_CH[0];
+        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
         let account = provincialbank_account(0);
         let year1 = first_bank.stake_amount * 100u128 / 10_000u128;
         let year2 = first_bank.stake_amount * 99u128 / 10_000u128;
@@ -118,7 +118,7 @@ fn interest_always_goes_to_hardcoded_multisig_account() {
     new_test_ext().execute_with(|| {
         run_to_block(10);
         // 利息只能发到 CHINA_CH 中硬编码的省储行多签账户
-        let first_bank = &primitives::china::china_ch::CHINA_CH[0];
+        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
         let account = provincialbank_account(0);
         let expected = first_bank.stake_amount * 100u128 / 10_000u128;
         assert_eq!(Balances::free_balance(account), expected);
@@ -209,7 +209,7 @@ fn force_advance_then_settle_resumes() {
         // 自动结算应从第 3 年开始恢复，但单个边界块只结算 1 年。
         ProvincialBankInterest::on_initialize(50);
         assert_eq!(LastSettledYear::<Test>::get(), 3);
-        let first_bank = &primitives::china::china_ch::CHINA_CH[0];
+        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
         let account = provincialbank_account(0);
         // 第 3 年利率为 98 BP。
         let year3 = first_bank.stake_amount * 98u128 / 10_000u128;
@@ -239,7 +239,7 @@ fn year_100_boundary_settles_with_minimum_rate() {
         ProvincialBankInterest::on_initialize(1000);
         assert_eq!(LastSettledYear::<Test>::get(), 100);
 
-        let first_bank = &primitives::china::china_ch::CHINA_CH[0];
+        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
         let account = provincialbank_account(0);
         // 第 100 年利率 = 100 - (100-1)*1 = 1 BP
         let expected = first_bank.stake_amount * 1u128 / 10_000u128;

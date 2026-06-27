@@ -12,7 +12,7 @@ use frame_support::assert_ok;
 use frame_support::traits::{Contains, Currency, EnsureOrigin, FindAuthor};
 use institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use organization_manage::ReservedAccountGuard;
-use primitives::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_cb::CHINA_CB;
 use sp_core::{sr25519, Pair};
 use sp_io::hashing::blake2_256;
 use sp_runtime::{traits::Hash as HashT, traits::IdentifyAccount, BuildStorage, MultiSigner};
@@ -192,15 +192,15 @@ fn build_pop_signature(
 }
 
 fn stake_account() -> AccountId {
-    AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_account)
+    AccountId::new(primitives::cid::china::china_ch::CHINA_CH[0].stake_account)
 }
 
 fn reserved_main_account() -> AccountId {
-    AccountId::new(primitives::china::china_cb::CHINA_CB[1].main_account)
+    AccountId::new(primitives::cid::china::china_cb::CHINA_CB[1].main_account)
 }
 
 fn reserved_fee_account() -> AccountId {
-    AccountId::new(primitives::china::china_ch::CHINA_CH[0].fee_account)
+    AccountId::new(primitives::cid::china::china_ch::CHINA_CH[0].fee_account)
 }
 
 fn ordinary_account() -> AccountId {

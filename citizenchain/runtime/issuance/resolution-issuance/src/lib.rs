@@ -29,7 +29,7 @@ pub mod pallet {
     use codec::Decode;
     use frame_support::{pallet_prelude::*, traits::Currency};
     use frame_system::pallet_prelude::*;
-    use primitives::china::china_cb::CHINA_CB;
+    use primitives::cid::china::china_cb::CHINA_CB;
     #[cfg(feature = "std")]
     use sp_runtime::traits::Zero;
     use sp_std::vec::Vec;

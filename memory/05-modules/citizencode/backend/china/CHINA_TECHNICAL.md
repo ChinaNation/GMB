@@ -11,8 +11,8 @@
 
 ## 定位
 
-- 模块路径:`citizencode/backend/china/`
-- 权威数据:`citizencode/backend/china/china.sqlite`
+- 模块路径:`citizenchain/registry/src/cid/china/`
+- 权威数据:`citizenchain/registry/src/cid/china/china.sqlite`
 - 生产读取:`CID_CHINA_DB=/opt/citizencode/china/china.sqlite`
 - 职责:提供省、市、镇和镇下地址段数据,以及市/镇 tombstones 和只读查询能力。
 
@@ -124,7 +124,7 @@ CitizenApp public_institutions:
 ## 文件结构
 
 ```text
-citizencode/backend/china/
+citizenchain/registry/src/cid/china/
 ├── admin.rs                 # 管理端只读城市列表接口
 ├── check_code_immutable.py  # 行政区、地址段唯一性与 tombstone 校验
 ├── china.sqlite             # 唯一权威源
@@ -136,13 +136,13 @@ citizencode/backend/china/
 ## 验收口径
 
 ```text
-test -f citizencode/backend/china/china.sqlite
-test ! -d citizencode/backend/china/data
-python3 citizencode/backend/china/check_code_immutable.py
-sqlite3 citizencode/backend/china/china.sqlite "select value from metadata where key='admin_division_version'"
-sqlite3 citizencode/backend/china/china.sqlite "select count(*) from address_units"
-sqlite3 citizencode/backend/china/china.sqlite "select count(*) from sqlite_master where type='table' and name='province_tombstones'"
-sqlite3 citizencode/backend/china/china.sqlite "PRAGMA integrity_check"
+test -f citizenchain/registry/src/cid/china/china.sqlite
+test ! -d citizenchain/registry/src/cid/china/data
+python3 citizenchain/registry/src/cid/china/check_code_immutable.py
+sqlite3 citizenchain/registry/src/cid/china/china.sqlite "select value from metadata where key='admin_division_version'"
+sqlite3 citizenchain/registry/src/cid/china/china.sqlite "select count(*) from address_units"
+sqlite3 citizenchain/registry/src/cid/china/china.sqlite "select count(*) from sqlite_master where type='table' and name='province_tombstones'"
+sqlite3 citizenchain/registry/src/cid/china/china.sqlite "PRAGMA integrity_check"
 ```
 
 本轮地址段改造不生成 CitizenApp 公权机构包,不执行公权机构 reconcile。

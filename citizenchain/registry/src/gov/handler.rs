@@ -17,7 +17,7 @@ use axum::{
 };
 
 use crate::admins::login::require_admin_any;
-use crate::china::{city_code_by_name, province_code_by_name};
+use crate::cid::china::{city_code_by_name, province_code_by_name};
 use crate::core::response::ApiResponse;
 use crate::gov::service::{
     check_gov_catalog_db, current_gov_manifest_version, gov_manifest_key, GovTargetKind,

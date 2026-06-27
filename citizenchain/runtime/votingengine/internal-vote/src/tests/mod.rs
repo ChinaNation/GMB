@@ -24,8 +24,8 @@ const PERSONAL_CODE: InstitutionCode = PMUL;
 const PUBLIC_CODE: InstitutionCode = code_bytes("CGOV");
 const PRIVATE_CODE: InstitutionCode = code_bytes("SFLP");
 // joint mode storage 在 joint-vote sub-pallet
-use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_ch::CHINA_CH;
 use sp_runtime::{traits::Hash, traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
 use votingengine::traits::{
     InternalAdminProvider, InternalVoteEngine, InternalVoteResultCallback, JointVoteEngine,

@@ -9,8 +9,8 @@ use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, Zero};
 
-use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_ch::CHINA_CH;
 use votingengine::{
     types::{InstitutionCode, NRC, PRB, PRC},
     InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,

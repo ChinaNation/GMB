@@ -99,9 +99,9 @@ address  = BLAKE2-256(preimage)
 ## 源码位置
 
 - [primitives/src/core_const.rs](../../../../../citizenchain/runtime/primitives/src/core_const.rs) — `GMB` + `OP_*` 常量定义
-- [primitives/china/china_cb.rs](../../../../../citizenchain/runtime/primitives/china/china_cb.rs) — 国储会 + 省储会常量（含 `SAFETY_FUND_ACCOUNT`）
-- [primitives/china/china_ch.rs](../../../../../citizenchain/runtime/primitives/china/china_ch.rs) — 省储行常量（含 `stake_account`）
-- [primitives/china/china_zb.rs](../../../../../citizenchain/runtime/primitives/china/china_zb.rs) — 汇总保留名单 + `is_reserved_main_account()`
+- [primitives/china/china_cb.rs](../../../../../citizenchain/runtime/primitives/cid/china/china_cb.rs) — 国储会 + 省储会常量（含 `SAFETY_FUND_ACCOUNT`）
+- [primitives/china/china_ch.rs](../../../../../citizenchain/runtime/primitives/cid/china/china_ch.rs) — 省储行常量（含 `stake_account`）
+- [primitives/china/china_zb.rs](../../../../../citizenchain/runtime/primitives/cid/china/china_zb.rs) — 汇总保留名单 + `is_reserved_main_account()`
 - [organization-manage](../../../../../citizenchain/runtime/private/organization-manage/src/lib.rs) — 链上 `derive_institution_account(cid_number, role)` + `derive_personal_account(creator, account_name)` + `role_from_account_name` 辅助
 - [scripts/multisig.py](../../../../../scripts/multisig.py) — 统一生成器
 

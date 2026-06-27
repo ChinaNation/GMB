@@ -3,7 +3,7 @@
 use crate::pallet::{AllocationOf, BalanceOf, Config, Error, Pallet};
 use codec::Decode;
 use frame_support::{dispatch::DispatchResult, ensure, BoundedVec};
-use primitives::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_cb::CHINA_CB;
 use sp_runtime::traits::{CheckedAdd, Zero};
 use sp_std::collections::btree_set::BTreeSet;
 

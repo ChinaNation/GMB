@@ -92,4 +92,4 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 - `citizenchain/runtime/transaction/multisig-transfer/src/lib.rs`
   - `propose_safety_fund_transfer`(call_index=1)
   - `try_execute_safety_fund_from_callback`(内部方法,投票通过后由 InternalVoteExecutor 回调触发)
-- `citizenchain/runtime/primitives/china/china_cb.rs` - SAFETY_FUND_ACCOUNT 定义
+- `citizenchain/runtime/primitives/cid/china/china_cb.rs` - SAFETY_FUND_ACCOUNT 定义

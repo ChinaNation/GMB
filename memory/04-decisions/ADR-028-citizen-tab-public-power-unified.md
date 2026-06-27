@@ -16,7 +16,7 @@ CitizenApp 公民 tab 从三子 tab 重构为五子 tab(广场/立法/选举/治
   - 广场 = `VoteView`(全局 NRC/PRC/PRB 提案投票流)。
 - 公权与治理是两套并行实现:两套机构模型(`PublicInstitutionEntity` vs `InstitutionInfo`)、两套详情/账户/管理员页,靠注释保持"看起来一样",改一处要改两处、必然漂移。
 - `institution_code` 已在公权 DTO/entity 上但 UI 从不消费(连 admin 查询都硬编码 `'CGOV'`);治理的静态注册表与 `public_provinces.dart` 互相硬耦合(省名/省码复用)。
-- 机构分类唯一真源 = CID `institution_code`(92 码表,`citizenchain/runtime/primitives/src/code.rs` + 后端 `number/code.rs`),后端 `main.rs` 已按机构码分支分组(立法/司法/监察/储备/行政),但 app 端没用上。
+- 机构分类唯一真源 = CID `institution_code`(92 码表,`citizenchain/runtime/primitives/cid/code.rs` + Registry `cid` 模块),后端 `main.rs` 已按机构码分支分组(立法/司法/监察/储备/行政),但 app 端没用上。
 
 ### 权威依据
 
@@ -80,7 +80,7 @@ CitizenApp 公民 tab 从三子 tab 重构为五子 tab(广场/立法/选举/治
 
 ### 8. 能力层方向(链端,本窗口不实现)
 
-`is_action_allowed(institution_code, action)` 纯函数能力表,落 `primitives::code`,收敛现散落三处的门控(EnsureOrigin / 各 pallet 硬白名单 / 通用 admin 检查);基础动作=对所有 `is_registered_multisig_code` 放行,扩展动作=限定特定码;`手续费划转` 从 NRC/PRB 推广为基础动作。统一详情页"按权限亮入口"依赖此层。
+`is_action_allowed(institution_code, action)` 纯函数能力表,落 `primitives::cid::code`,收敛现散落三处的门控(EnsureOrigin / 各 pallet 硬白名单 / 通用 admin 检查);基础动作=对所有 `is_registered_multisig_code` 放行,扩展动作=限定特定码;`手续费划转` 从 NRC/PRB 推广为基础动作。统一详情页"按权限亮入口"依赖此层。
 
 ### 9. 术语澄清
 

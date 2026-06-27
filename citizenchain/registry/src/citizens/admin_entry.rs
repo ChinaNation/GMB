@@ -81,7 +81,7 @@ pub(crate) async fn admin_create_citizen(
     if cid_number.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "cid_number 不能为空");
     }
-    if crate::number::validate_cid_number_format(cid_number.as_str()).is_err() {
+    if crate::cid::validate_cid_number_format(cid_number.as_str()).is_err() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "cid_number 格式不合法");
     }
 
@@ -116,7 +116,7 @@ pub(crate) async fn admin_create_citizen(
 
     // scope 校验:管理员只能在本省/本市范围内录入(居住地为准)。
     let residence_province_name =
-        match crate::china::province_name_by_code(residence_province_code.as_str()) {
+        match crate::cid::china::province_name_by_code(residence_province_code.as_str()) {
             Some(v) => v,
             None => return api_error(StatusCode::BAD_REQUEST, 1001, "未知的居住地省级代码"),
         };
@@ -131,7 +131,7 @@ pub(crate) async fn admin_create_citizen(
         .filter(|v| !v.is_empty())
         .map(str::to_string);
     if let Some(city_code) = residence_city_code.as_deref() {
-        match crate::china::area_name_by_codes(
+        match crate::cid::china::area_name_by_codes(
             residence_province_code.as_str(),
             Some(city_code),
             None,

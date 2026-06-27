@@ -15,8 +15,8 @@ use codec::Decode;
 use frame_support::pallet_prelude::DispatchResult;
 use sp_runtime::DispatchError;
 
-use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_ch::CHINA_CH;
 use primitives::count_const::{
     JOINT_VOTE_PASS_THRESHOLD, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
 };

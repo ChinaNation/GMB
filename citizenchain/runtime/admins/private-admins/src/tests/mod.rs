@@ -7,7 +7,7 @@ use frame_support::{
     traits::{ConstU32, ConstU64},
 };
 use frame_system as system;
-use primitives::code::code_bytes;
+use primitives::cid::code::code_bytes;
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 
 type Block = frame_system::mocking::MockBlock<Test>;

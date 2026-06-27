@@ -24,7 +24,7 @@ pub(crate) async fn admin_list_citizens(
         .scope_province_name
         .as_deref()
         .and_then(|name| {
-            crate::china::provinces()
+            crate::cid::china::provinces()
                 .iter()
                 .find(|p| p.province_name == name)
         })
@@ -37,7 +37,7 @@ pub(crate) async fn admin_list_citizens(
                 .scope_province_name
                 .as_deref()
                 .and_then(|province_name| {
-                    crate::china::provinces()
+                    crate::cid::china::provinces()
                         .iter()
                         .find(|p| p.province_name == province_name)
                         .and_then(|p| p.cities.iter().find(|c| c.city_name == city_name))
@@ -181,14 +181,14 @@ fn legal_representative_scope_from_create_context(
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "institution is required"))?;
-    let Some(province_code) = crate::china::province_code_by_name(province_name) else {
+    let Some(province_code) = crate::cid::china::province_code_by_name(province_name) else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
             "unknown province_name",
         ));
     };
-    let Some(city_code) = crate::china::city_code_by_name(province_name, city_name) else {
+    let Some(city_code) = crate::cid::china::city_code_by_name(province_name, city_name) else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,

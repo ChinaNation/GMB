@@ -6,7 +6,7 @@ use frame_support::{
     traits::{ConstU32, Hooks},
 };
 use frame_system as system;
-use primitives::china::china_cb::CHINA_CB;
+use primitives::cid::china::china_cb::CHINA_CB;
 use sp_core::{Pair, Void};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::STATUS_EXECUTION_FAILED;

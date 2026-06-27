@@ -1,6 +1,6 @@
 # ADR-021:行政区代码与市镇数据唯一真源
 
-状态:Accepted(2026-06-18),修订(2026-06-25)
+状态:Accepted(2026-06-18),修订(2026-06-27)
 关联:[[ADR-018]](citizenapp 混合模式)、reference_citizenapp_public_institution_bundle、feedback_no_compatibility
 
 ## 背景 / 问题
@@ -8,18 +8,18 @@
 2026-06-25 修订后,行政区分两层真源:
 
 - 国家码、省级行政区码和 CID 机构码的常量唯一真源 =
-  `citizenchain/runtime/primitives/src/code.rs`。
-- 市、镇和地址段运行数据唯一真源入口 = `citizencode/backend/china/`。行政区数据文件只有一份:
+  `citizenchain/runtime/primitives/cid/code.rs`。
+- 市、镇和地址段运行数据唯一真源入口 = `citizenchain/registry/src/cid/china/`。行政区数据文件只有一份:
 
 ```text
-citizencode/backend/china/china.sqlite
+citizenchain/registry/src/cid/china/china.sqlite
 ```
 
 
 当前决策改为:国家/省级代码先固化到 runtime primitives;CID 开发库 SQLite 保留省表并在加载时
 断言与 primitives `PROVINCE_CODE_INFOS` 完全一致,但不再作为省码第二真源。市、镇和地址段仍以
 开发库 SQLite 为准。开发期仍允许重新创世刷新版本 1 基线;重新创世任务只修改
-`citizencode/backend/china/china.sqlite` 时,不生成客户端数据包和公权机构。进入正式发布冻结后,
+`citizenchain/registry/src/cid/china/china.sqlite` 时,不生成客户端数据包和公权机构。进入正式发布冻结后,
 每次市镇地址段变更必须修改开发库 SQLite、递增 `metadata.admin_division_version`,再由发布流程
 生成各系统随包只读数据。国家码、省码或机构码变更属于 runtime primitives 变更,必须单独走
 runtime 二次确认。
@@ -29,8 +29,8 @@ runtime 二次确认。
 
 ## 决策
 
-- 国家码、省级行政区码、CID 机构码只在 `citizenchain/runtime/primitives/src/code.rs` 维护。
-- CID 后端运行时只读 `CID_CHINA_DB` 指向的随包 SQLite。正式部署固定为 `/opt/citizencode/china/china.sqlite`。
+- 国家码、省级行政区码、CID 机构码只在 `citizenchain/runtime/primitives/cid/code.rs` 维护。
+- Registry 运行时只读 `CID_CHINA_DB` 指向的随包 SQLite;桌面端打包资源映射为 `china.sqlite`。
 - CID 后端加载 SQLite 时必须校验 SQLite `provinces` 表与 primitives `PROVINCE_CODE_INFOS`
   的省名、省码、顺序和数量一致。
 - CID 不提供行政区管理 tab,也不提供运行中新增、改名、删除行政区 API。
@@ -40,7 +40,7 @@ runtime 二次确认。
 
 铁律:
 
-- 省 code 固定在 runtime primitives,不维护 `province_tombstones`,不得在 CID `china` 或 `number`
+- 省 code 固定在 runtime primitives,不维护 `province_tombstones`,不得在 Registry `cid/china` 或旧 number
   模块手写第二份省码表。
 - 开发期重新创世基线允许重排市/镇 code 并清空 tombstones。正式发布冻结后,市、镇 code 不可变、不复用;删除的市/镇 code 写入 `city_tombstones` / `town_tombstones` 永久占位。
 - 名称允许在原 code 上修改；不得用新 code 表达同一行政区改名。
@@ -50,7 +50,7 @@ runtime 二次确认。
 
 ## 不触及(红线)
 
-`citizenchain/runtime/`、`runtime/primitives/src/code.rs` 和 `/primitives/china/` 属于链端保护常量;
+`citizenchain/runtime/`、`runtime/primitives/cid/code.rs` 和 `runtime/primitives/cid/china/` 属于链端保护常量;
 国家码、省级行政区码、机构码或保护机构常量变化必须走 runtime 升级和二次确认。CID 市镇地址段
 开发库变更不会自动修改 runtime 常量。
 
@@ -109,19 +109,19 @@ public_institutions bundle:
 
 开发期重新创世只做行政区基线清理时:
 
-1. 修改 `citizencode/backend/china/china.sqlite`。
+1. 修改 `citizenchain/registry/src/cid/china/china.sqlite`。
 2. 开发库变更后递增 `metadata.admin_division_version`。
 3. 重新创世任务才允许清空 city/town tombstones 并重排市镇 code;普通行政区变更不得复用正式发布后的市/镇 code。
-4. 运行 `python3 citizencode/backend/china/check_code_immutable.py` 和 `PRAGMA integrity_check`。
+4. 运行 `python3 citizenchain/registry/src/cid/china/check_code_immutable.py` 和 `PRAGMA integrity_check`。
 
 正式发布完整资产时:
 
-1. 修改 `citizencode/backend/china/china.sqlite`。
+1. 修改 `citizenchain/registry/src/cid/china/china.sqlite`。
 2. 更新 `metadata.admin_division_version` 和 `admin_division_versions`。
-3. 运行 `python3 citizencode/backend/china/check_code_immutable.py`。
+3. 运行 `python3 citizenchain/registry/src/cid/china/check_code_immutable.py`。
 4. 运行 `node citizenapp/tools/generate_admin_division_bundle.mjs` 生成行政区字典包。
-5. 用指向同一 `china.sqlite` 的 CID 后端执行 `citizencode-backend reconcile-gov --changed-only`。
-6. 执行 `citizencode-backend check-gov --strict`,确认 `gov_manifest.china_hash` 等于当前 `china.sqlite` SHA-256,且缺失、错配、缺账户、废弃残留均为 0。
+5. 用指向同一 `china.sqlite` 的 Registry 后端执行 `registry reconcile-gov --changed-only`。
+6. 执行 `registry check-gov --strict`,确认 `gov_manifest.china_hash` 等于当前 `china.sqlite` SHA-256,且缺失、错配、缺账户、废弃残留均为 0。
 7. 运行 `node citizenapp/tools/generate_public_institution_bundle.mjs --version <行政区版本>` 生成公权机构包。
 
 ## 客户端增量同步(citizenapp,2026-06-18)
@@ -140,7 +140,7 @@ citizenapp 无服务端,数据靠 assets 包随版本分发。包版本变了就
 
 ## 单源审查收口
 
-1. 不得恢复 `citizencode/backend/china/data/`。
+1. 不得恢复旧行政区数据目录或旧顶层 china/number 模块。
 2. 不得恢复 CID 行政区管理 tab 或 `/api/v1/app/admin-divisions/*`。
 4. 任何重复洪江旧壳、`龙感湖工业园镇`、`xx管理市` 残留都必须在同一任务中清理。
 

@@ -95,7 +95,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/runtime/` | 链上运行时 | runtime | pallet、runtime 配置和链上规则 |
 | `citizenchain/node/` | 节点桌面端 | node | 原生节点、Tauri 后端和桌面前端 |
 | `citizencode/` | 在线身份系统 | cid | CID 后端、前端和部署配置 |
-| `citizencode/backend/number/` | 身份 ID 编码协议 | number | CID 后端身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
+| `citizenchain/registry/src/cid/` | 身份 ID 编码协议 | number | CID 后端身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
 | `citizenwallet/` | 公民钱包 | citizenwallet | 离线签名、扫码识别和钱包 UI |
 | `citizenapp/` | 公民 | citizenapp | Flutter 客户端、钱包、治理和轻节点能力 |
 | `citizenapp/im/proto/` | citizenapp 信息协议 | citizenapp-im-proto | 公民 IM 外层 Protobuf schema 真源，不放仓库根目录 proto |
@@ -388,8 +388,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizencode/backend/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
 | `citizencode/backend/core/qr/` | QR | core-qr | 后端 QR_V1 协议辅助和统一 sign_request 构造 |
 | `citizencode/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
-| `citizencode/backend/number/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
-| `citizencode/backend/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
+| `citizenchain/registry/src/cid/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
+| `citizenchain/registry/src/cid/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
 | `citizencode/backend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战写操作 |
 | `citizencode/backend/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | CID 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
 | `citizencode/backend/store/` | Store | store | Store 聚合体、省级进程内分片缓存和存储边界模型 |

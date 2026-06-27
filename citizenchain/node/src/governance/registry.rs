@@ -1,7 +1,7 @@
 // 治理机构注册表：直接读取 runtime 常量，避免 node 侧再维护过期地址副本。
 
-use primitives::china::china_cb::{ChinaCb, CHINA_CB, SAFETY_FUND_ACCOUNT};
-use primitives::china::china_ch::{ChinaCh, CHINA_CH};
+use primitives::cid::china::china_cb::{ChinaCb, CHINA_CB, SAFETY_FUND_ACCOUNT};
+use primitives::cid::china::china_ch::{ChinaCh, CHINA_CH};
 
 use super::types::{GovernanceOverview, InstitutionListItem, OrgType};
 

@@ -27,7 +27,6 @@ mkdir -p "$HERE/resources/registry-bin" "$HERE/resources/registry-frontend" "$HE
 # registry 二进制随包(Tauri resources/registry-bin),registry_proc 从资源目录解析(见 node/src/registry_proc)。
 cp "$ROOT/target/release/registry" "$HERE/resources/registry-bin/registry"
 chmod +x "$HERE/resources/registry-bin/registry"
-cp "$ROOT/registry/src/china/china.sqlite" "$HERE/resources/china.sqlite"
 rm -rf "$HERE/resources/registry-frontend/dist"
 cp -R "$ROOT/registry/frontend/dist" "$HERE/resources/registry-frontend/dist"
 
