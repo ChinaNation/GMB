@@ -16,7 +16,7 @@
 3. `node/src/governance/mod.rs`:注册 `pub(crate) mod chain_query;`;`build_chain_query_context` 钉块来源改 `chain_query::fetch_finalized_head`。
 4. `node/src/governance/institution.rs`:删本地 `fetch_finalized_head`(4 份重复之一),`fetch_balance` 改走收口;`fetch_balance_at` 保留(全部调用方均传 Some(finalized hash),C 类)。
 5. `node/src/governance/proposal.rs`:删本地 `fetch_finalized_head`/`fetch_finalized_storage`/`rpc_post`;9 处 A 类全部改经 chain_query(next_proposal_id / active_proposal_ids / proposal_meta / proposal_data_raw / internal_tally / joint_tally / referendum_tally / proposal_display_id / option_bool + keysPaged 反向索引)。
-6. `node/src/governance/admins_change/storage.rs`:1 处 A 类(AdminAccounts)改收口,删本地 rpc_post。
+6. `node/src/admins/admin_management/storage.rs`:1 处 A 类(AdminAccounts)改收口,删本地 rpc_post。
 7. `node/src/governance/organization-manage/chain.rs`:删本地 `fetch_finalized_head`;实勘 3 处 state_getStorage 原本已传 finalized_hash(C 类保留),真正裸读是 `state_getKeysPaged` 翻页循环 1 处——补钉 `fetch_institution_detail` 同一 finalized 快照哈希(不经 chain_query 单页函数,保证 key 列举与 storage 读取钉同一块)。
 8. `node/src/transaction/duoqian_transfer/proposal.rs`:删本地 `fetch_finalized_head`/`fetch_finalized_storage`/`rpc_post`,SafetyFund/Sweep 两处读取改收口(原已 finalized,仅合并实现)。
 9. `node/src/transaction/offchain_transaction/endpoint.rs`:1 处 A 类(ClearingBankNodes)改收口,删本地 rpc_post。

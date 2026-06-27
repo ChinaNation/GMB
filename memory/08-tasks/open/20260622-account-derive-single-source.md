@@ -90,8 +90,8 @@
 - `citizenchain/runtime/primitives/src/core_const.rs:35`(域)/`:40-46`(op_tag)/`:62-82`(保留名+is_forbidden)/`:89-97`(derive_account)
 
 **Rust 路由/拼装（待收敛）**
-- `citizenchain/runtime/governance/organization-manage/src/lib.rs:653-677`(derive_institution_account)/`:689-`(role_from_account_name)；`address.rs`(Role 枚举)
-- `citizenchain/runtime/governance/personal-manage/src/lib.rs:328-341`(derive_personal_account)
+- `citizenchain/runtime/private/organization-manage/src/lib.rs:653-677`(derive_institution_account)/`:689-`(role_from_account_name)；`address.rs`(Role 枚举)
+- `citizenchain/runtime/private/personal-manage/src/lib.rs:328-341`(derive_personal_account)
 - `citizenchain/runtime/primitives/china/mod.rs:15-70`(创世 main/fee 内联)
 - `citizencode/backend/accounts/derive.rs:45-102`(&str 保留名 + 路由，删)
 

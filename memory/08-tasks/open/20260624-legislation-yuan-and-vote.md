@@ -11,7 +11,7 @@
 
 ## 总体架构(两个新 pallet)
 
-- 业务壳 `citizenchain/runtime/governance/legislation-yuan`(pallet_index=27,MODULE_TAG=b"leg-yuan"):法律数据 + 状态机 + 提案入口 + 通过回调 + 查询 API。
+- 业务壳 `citizenchain/runtime/public/legislation-yuan`(pallet_index=27,MODULE_TAG=b"leg-yuan"):法律数据 + 状态机 + 提案入口 + 通过回调 + 查询 API。
 - 投票 sub-pallet `citizenchain/runtime/votingengine/legislation-vote`(pallet_index 暂 28):立法专属投票,复用投票引擎核心共享基础,只本地存计票账本;不改 internal-vote / joint-vote / citizen-vote。
 - 解耦:业务壳 `Config` 注入 `type LegislationVoteEngine`,第1步装 `()`(返 NotConfigured),第2步装 `LegislationVote`。
 
@@ -79,7 +79,7 @@
 
 ## 预计修改目录
 
-- `citizenchain/runtime/governance/legislation-yuan/`(第1步新建,核心)
+- `citizenchain/runtime/public/legislation-yuan/`(第1步新建,核心)
 - `citizenchain/runtime/votingengine/src/traits.rs`(第1步加引擎 trait;第2步加回调装配)
 - `citizenchain/runtime/votingengine/legislation-vote/`(第2步新建)
 - `citizenchain/runtime/primitives/`(不可修改条款常量单一源)
@@ -102,7 +102,7 @@
 
 新增/改动:
 
-- 新建 crate `runtime/governance/legislation-yuan/`:`Cargo.toml` + `src/{lib.rs,types.rs,weights.rs,tests/{mod.rs,cases.rs}}`(executor 逻辑并入 lib.rs,未单建 executor.rs)。
+- 新建 crate `runtime/public/legislation-yuan/`:`Cargo.toml` + `src/{lib.rs,types.rs,weights.rs,tests/{mod.rs,cases.rs}}`(executor 逻辑并入 lib.rs,未单建 executor.rs)。
 - `votingengine/src/traits.rs`:加 `LegislationVoteEngine` trait + `()` 默认(additive,三 sub-pallet 零改)。
 - `primitives/src/count_const.rs`:加 `IMMUTABLE_CONSTITUTION_ARTICLES = [1,2,3,17,19,23,33,41]` 单一源。
 - `primitives/src/genesis.rs`:加 `LegislationApi`(list_laws/law/law_version,返回 Vec<u64> / SCALE 字节)。

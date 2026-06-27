@@ -62,7 +62,7 @@ Clause(款): number, text, text_en                           // 可空
 
 ## 预计修改目录
 
-- `citizenchain/runtime/governance/legislation-yuan/`(模型 + 创世 + constitution.scale;代码+测试)
+- `citizenchain/runtime/public/legislation-yuan/`(模型 + 创世 + constitution.scale;代码+测试)
 - `citizenchain/scripts/`(解析器)
 - `citizenchain/runtime/primitives/src/genesis.rs` + `CitizenConstitution.html`(删 HTML/API + 删文件)
 - `citizenchain/runtime/src/{apis,configs/mod,core/chain_spec}.rs`
