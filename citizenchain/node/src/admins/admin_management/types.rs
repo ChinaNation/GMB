@@ -4,7 +4,7 @@ use primitives::code::{
 };
 use serde::Serialize;
 
-/// `AdminsChange::AdminAccounts` 的桌面端展示状态。
+/// 新 runtime 四类管理员 pallet 的 `AdminAccounts` 桌面端展示状态。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminAccountState {
@@ -48,9 +48,10 @@ pub fn institution_code_label(code: &InstitutionCode) -> String {
 
 pub fn kind_label(kind: u8) -> &'static str {
     match kind {
-        0 => "内置治理机构",
-        1 => "个人多签",
-        2 => "机构账户",
+        0 => "创世管理员",
+        1 => "公权机构",
+        2 => "私权机构",
+        3 => "个人多签",
         _ => "未知账户",
     }
 }

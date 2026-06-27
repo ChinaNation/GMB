@@ -1,17 +1,17 @@
 // 清算行 offchain 网络 DTO 与页面状态机类型。
 //
 // 中文注释:
-// - 机构多签 DTO 已归位到 governance/organization-manage/types.ts。
+// - 机构多签 DTO 已归位到 private/organization-manage/types.ts。
 // - 本文件只保留清算行节点声明、连通性检测、管理员解锁和 offchain 入口状态机。
 
 import type { AdminWalletMatch } from '../../governance/types';
-import type { AccountWithBalance } from '../../governance/organization-manage/types';
+import type { AccountWithBalance } from '../../private/organization-manage/types';
 
 export type {
   AccountWithBalance,
   EligibleClearingBankCandidate,
   InstitutionDetail,
-} from '../../governance/organization-manage/types';
+} from '../../private/organization-manage/types';
 
 export type ClearingBankNodeOnChainInfo = {
   cidNumber: string;

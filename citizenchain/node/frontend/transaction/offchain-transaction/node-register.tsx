@@ -12,8 +12,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { sanitizeError } from '../../core/tauri';
-import { adminsChangeApi } from '../../governance/admins-change/api';
-import { organizationManageApi } from '../../governance/organization-manage/api';
+import { adminsChangeApi } from '../../admins/admin-management/api';
+import { organizationManageApi } from '../../private/organization-manage/api';
 import { hexToSs58 } from '../../shared/ss58';
 import { QrScanner } from '../../shared/qr/QrScanner';
 import type { ActivatedAdmin, AdminWalletMatch, VoteSignRequestResult } from '../../governance/types';

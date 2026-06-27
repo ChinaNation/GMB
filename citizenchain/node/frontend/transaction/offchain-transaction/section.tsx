@@ -10,25 +10,25 @@
 //                                顶部按钮:未声明节点 → declare-node;已声明 → 内联展示节点信息
 //   other-accounts-list          子页:其他账户列表
 //   admin-list                   子页:管理员列表
-//   admin-set-change             子页:复用 governance/admins-change 更换管理员流程
+//   admin-set-change             子页:复用 admins/admin-management 更换管理员流程
 //   create-multisig-institution  创建机构多签 propose_create_institution(冷钱包签 + 提交)
 //   wait-vote                    等待管理员投票通过(轮询 Institutions[cid_number].status === 'Active')
 //   declare-node                 多签 Active 但本机未声明节点 → 填 RPC + 自测 + 签名声明
 
 import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../../core/tauri';
-import { AdminSetChangePage } from '../../governance/admins-change';
-import { adminsChangeApi } from '../../governance/admins-change/api';
-import { organizationManageApi } from '../../governance/organization-manage/api';
-import { ClearingBankAddPage } from '../../governance/organization-manage/add-candidate';
-import { ClearingBankInstitutionDetailPage } from '../../governance/organization-manage/institution-detail';
-import { CreateMultisigInstitutionPage } from '../../governance/organization-manage/create-multisig';
-import { OtherAccountsListPage } from '../../governance/organization-manage/other-accounts';
+import { AdminSetChangePage } from '../../admins/admin-management';
+import { adminsChangeApi } from '../../admins/admin-management/api';
+import { organizationManageApi } from '../../private/organization-manage/api';
+import { ClearingBankAddPage } from '../../private/organization-manage/add-candidate';
+import { ClearingBankInstitutionDetailPage } from '../../private/organization-manage/institution-detail';
+import { CreateMultisigInstitutionPage } from '../../private/organization-manage/create-multisig';
+import { OtherAccountsListPage } from '../../private/organization-manage/other-accounts';
 import type {
   AccountWithBalance,
   EligibleClearingBankCandidate,
   InstitutionDetail,
-} from '../../governance/organization-manage/types';
+} from '../../private/organization-manage/types';
 import { hexToSs58 } from '../../shared/ss58';
 import { offchainApi } from './api';
 import type { ClearingBankView } from './types';

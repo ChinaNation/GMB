@@ -25,6 +25,12 @@
   },
   "bundle": {
     "active": true,
+    "resources": {
+      "resources/registry-bin/": "registry-bin/",
+      "resources/postgres/": "postgres/",
+      "resources/china.sqlite": "china.sqlite",
+      "resources/registry-frontend/dist/": "registry-frontend/dist/"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

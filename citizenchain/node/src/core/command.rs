@@ -58,7 +58,15 @@ pub fn run() -> sc_cli::Result<()> {
     // 中文注释：统一 CLI/chain-spec 序列化时的地址显示前缀，避免默认回落到 42。
     set_default_ss58_version(Ss58AddressFormat::custom(SS58_FORMAT));
 
-    let cli = Cli::from_args();
+    let mut cli = Cli::from_args();
+    let pool_type_explicit =
+        std::env::args().any(|arg| arg == "--pool-type" || arg.starts_with("--pool-type="));
+    if !pool_type_explicit {
+        // 中文注释：当前本链普通节点默认不需要 fork-aware 多视图交易池。
+        // 上游 fork-aware 后台子任务在本链 fresh/普通启动场景会提前结束并触发
+        // `txpool-background` essential task 关闭服务；默认固定为更稳定的 SingleState。
+        cli.run.pool_config.pool_type = sc_cli::TransactionPoolType::SingleState;
+    }
 
     match &cli.subcommand {
         Some(Subcommand::Key(cmd)) => cmd.run(&cli),

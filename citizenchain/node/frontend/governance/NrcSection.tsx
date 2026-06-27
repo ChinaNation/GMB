@@ -1,7 +1,7 @@
 // 国储会顶级 Section：直接渲染国储会机构详情页（单机构，无列表层）。
 // 特权动作：协议升级、开发升级、安全基金转账提案 — 仅国储会管理员可发起。
 import { useState } from 'react';
-import { AdminListPage, AdminSetChangePage } from './admins-change';
+import { AdminListPage, AdminSetChangePage } from '../admins/admin-management';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateMultisigTransferPage } from '../transaction/multisig-transfer/CreateProposalPage';

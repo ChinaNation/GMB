@@ -1,10 +1,8 @@
 // 治理模块入口：注册 Tauri 命令，聚合机构数据。
 
-pub mod admins_change;
 pub(crate) mod balance_watch;
 pub(crate) mod chain_query;
 pub(crate) mod institution;
-pub mod organization_manage;
 pub mod proposal;
 pub(crate) mod registry;
 pub mod runtime_upgrade;

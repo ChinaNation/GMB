@@ -4,7 +4,7 @@ import type {
   InstitutionDetail,
   VoteSignRequestResult,
   VoteSubmitResult,
-} from '../types';
+} from '../../governance/types';
 
 export type {
   ActivateRequestResult,

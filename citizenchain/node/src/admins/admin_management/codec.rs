@@ -1,7 +1,7 @@
 use super::account_id::normalize_pubkey_hex;
 use super::types::AdminAccountDecoded;
 
-/// 解码 `AdminsChange::AdminAccounts` 的完整核心字段。
+/// 解码各管理员 pallet `AdminAccounts` 的完整核心字段。
 ///
 /// 链上布局:
 /// institution_code:[u8;4] + kind:u8 + admins:BoundedVec<AccountId32>

@@ -1,4 +1,4 @@
-// 机构多签管理 DTO,与 Tauri 后端 governance/organization-manage/types.rs 对齐。
+// 机构多签管理 DTO,与 Tauri 后端 private/organization-manage/types.rs 对齐。
 
 export type EligibleClearingBankCandidate = {
   cidNumber: string;

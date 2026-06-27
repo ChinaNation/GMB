@@ -5,7 +5,7 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   plugins: [react()],
-  // 中文注释：白皮书由 scripts/generate-local-docs.mjs 内置进 bundle；
+  // 中文注释：白皮书由 citizenchain/scripts/generate-local-docs.mjs 内置进 bundle;
   // 公民宪法改由链上 runtime API 返回，不再复制仓库 docs/ 静态目录。
   publicDir: false,
   clearScreen: false,

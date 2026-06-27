@@ -1,6 +1,6 @@
 // 省储会顶级 Section：列表（orgType=1）→ 机构详情 两级导航。
 import { useState } from 'react';
-import { AdminListPage, AdminSetChangePage } from './admins-change';
+import { AdminListPage, AdminSetChangePage } from '../admins/admin-management';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';

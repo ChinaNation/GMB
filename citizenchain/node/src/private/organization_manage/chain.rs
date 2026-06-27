@@ -12,7 +12,7 @@ use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};
 use std::time::Duration;
 
-use crate::governance::admins_change::storage as admins_storage;
+use crate::admins::admin_management::storage as admins_storage;
 use crate::governance::chain_query;
 use crate::governance::signing::pubkey_to_ss58;
 use crate::governance::storage_keys;
@@ -255,7 +255,7 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
             (admins, state.admins.len() as u32, inst.threshold)
         }
         _ => {
-            // 创建 Pending 阶段 AdminsChange::AdminAccounts 尚未激活,详情页回退显示创建快照。
+            // 创建 Pending 阶段对应管理员 pallet 的 AdminAccounts 尚未激活,详情页回退显示创建快照。
             let admins = inst
                 .admins
                 .iter()

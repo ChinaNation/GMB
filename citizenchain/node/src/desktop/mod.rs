@@ -11,9 +11,9 @@
 pub(crate) mod node_runner;
 
 use crate::{
-    governance,
+    admins, governance,
     home::{self, cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState},
-    im, mining, other, settings,
+    im, mining, other, private, settings,
     transaction::multisig_transfer,
 };
 use std::sync::Mutex;
@@ -81,14 +81,14 @@ pub fn run_desktop() {
             governance::list_proposals_by_org,
             governance::list_proposals_by_institution,
             governance::list_proposals_by_owner,
-            governance::admins_change::activation::build_activate_admin_request,
-            governance::admins_change::activation::verify_activate_admin,
-            governance::admins_change::activation::get_activated_admins,
-            governance::admins_change::activation::deactivate_admin,
-            governance::admins_change::activation::has_any_activated_admin,
-            governance::admins_change::commands::get_admin_account_state,
-            governance::admins_change::commands::build_admin_set_change_request,
-            governance::admins_change::commands::submit_admin_set_change,
+            admins::admin_management::activation::build_activate_admin_request,
+            admins::admin_management::activation::verify_activate_admin,
+            admins::admin_management::activation::get_activated_admins,
+            admins::admin_management::activation::deactivate_admin,
+            admins::admin_management::activation::has_any_activated_admin,
+            admins::admin_management::commands::get_admin_account_state,
+            admins::admin_management::commands::build_admin_set_change_request,
+            admins::admin_management::commands::submit_admin_set_change,
             governance::build_vote_request,
             governance::build_joint_vote_request,
             multisig_transfer::commands::build_multisig_transfer_request,
@@ -112,7 +112,7 @@ pub fn run_desktop() {
             crate::transaction::onchain_transaction::submit_transfer,
             crate::transaction::onchain_transaction::submit_miner_transfer,
             // ─── 清算行 offchain tab ───
-            governance::organization_manage::commands::search_eligible_clearing_banks,
+            private::organization_manage::commands::search_eligible_clearing_banks,
             crate::transaction::offchain_transaction::commands::query_clearing_bank_node_info,
             crate::transaction::offchain_transaction::commands::query_local_peer_id,
             crate::transaction::offchain_transaction::commands::test_clearing_bank_endpoint_connectivity,
@@ -126,11 +126,11 @@ pub fn run_desktop() {
             crate::transaction::offchain_transaction::settlement::commands::verify_and_decrypt_admin,
             crate::transaction::offchain_transaction::settlement::commands::list_decrypted_admins,
             crate::transaction::offchain_transaction::settlement::commands::lock_decrypted_admin,
-            governance::organization_manage::commands::fetch_clearing_bank_institution_detail,
-            governance::organization_manage::commands::fetch_clearing_bank_institution_proposals,
-            governance::organization_manage::commands::fetch_clearing_bank_institution_registration_info,
-            governance::organization_manage::commands::build_propose_create_institution_request,
-            governance::organization_manage::commands::submit_propose_create_institution
+            private::organization_manage::commands::fetch_clearing_bank_institution_detail,
+            private::organization_manage::commands::fetch_clearing_bank_institution_proposals,
+            private::organization_manage::commands::fetch_clearing_bank_institution_registration_info,
+            private::organization_manage::commands::build_propose_create_institution_request,
+            private::organization_manage::commands::submit_propose_create_institution
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());
@@ -149,6 +149,10 @@ pub fn run_desktop() {
                 })
                 .expect("spawn auto-start-node thread failed");
 
+            // 拉起注册局(registry)子进程:浏览器端管理员经它操作,与桌面节点运维并存。
+            // 经 app 句柄把随包资源(PG/前端/china.sqlite)与数据目录路径用 env 传给 registry。
+            crate::registry_proc::start_registry(app.handle());
+
             Ok(())
         })
         .build(tauri::generate_context!("tauri.conf.json"))
@@ -156,6 +160,8 @@ pub fn run_desktop() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 cleanup_on_exit(app);
+                // 节点退出时一并停掉注册局子进程,避免残留进程占用端口。
+                crate::registry_proc::stop_registry();
             }
         });
 }

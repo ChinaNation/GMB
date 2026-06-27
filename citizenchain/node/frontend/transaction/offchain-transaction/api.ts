@@ -7,7 +7,7 @@ import type {
   DecryptedAdminInfo,
 } from './types';
 
-// 清算行 offchain 网络专用 Tauri API。机构多签命令归 governance/organization-manage/api.ts。
+// 清算行 offchain 网络专用 Tauri API。机构多签命令归 private/organization-manage/api.ts。
 export const offchainApi = {
   queryClearingBankNodeInfo: (cidNumber: string) =>
     invoke<ClearingBankNodeOnChainInfo | null>('query_clearing_bank_node_info', { cidNumber }),

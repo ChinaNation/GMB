@@ -1,7 +1,7 @@
 // 省储行顶级 Section：列表（orgType=2）→ 机构详情 两级导航。
 // 与 PrcSection 同构；唯一差异是 orgTypeFilter=2。省储行同样支持手续费划转提案。
 import { useState } from 'react';
-import { AdminListPage, AdminSetChangePage } from './admins-change';
+import { AdminListPage, AdminSetChangePage } from '../admins/admin-management';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';

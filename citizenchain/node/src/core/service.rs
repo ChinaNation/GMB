@@ -594,6 +594,18 @@ pub fn new_full(
         tracing_execute_block: None,
     })?;
 
+    // 中文注释：普通全节点不会像 GRANDPA voter 那样把交易池交给最终性组件持有。
+    // 这里显式让 TaskManager 持有一个 clone，避免 `new_full` 返回后交易池句柄提前释放，
+    // 导致 txpool-background 认为所有视图已关闭并触发 essential task 自退。
+    let transaction_pool_keepalive = transaction_pool.clone();
+    task_manager.spawn_handle().spawn(
+        "transaction-pool-keepalive",
+        Some("txpool"),
+        futures::future::pending::<()>()
+            .map(move |_| drop(transaction_pool_keepalive))
+            .boxed(),
+    );
+
     // 中文注释：本链制度要求"安装全节点软件即可参与挖矿"，不再依赖 authority 角色开关。
     ensure_powr_key(&keystore)?;
 

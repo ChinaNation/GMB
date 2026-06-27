@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "generate:docs": "node scripts/generate-local-docs.mjs",
+    "generate:docs": "node ../../scripts/generate-local-docs.mjs",
     "predev": "npm run generate:docs",
     "dev": "vite",
     "prebuild": "npm run generate:docs",

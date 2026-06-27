@@ -6,7 +6,7 @@ import { AdminSetDiff } from './AdminSetDiff';
 import { AdminSetEditor } from './AdminSetEditor';
 import { AdminWalletSelector } from './AdminWalletSelector';
 import type { AdminAccountRef, AdminAccountState, VoteSignRequestResult } from './types';
-import type { AdminWalletMatch } from '../types';
+import type { AdminWalletMatch } from '../../governance/types';
 import './styles.css';
 
 type Props = {

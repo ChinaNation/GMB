@@ -1,8 +1,8 @@
-// 管理员激活模块：为 admins-change 账户生成 AccountId 级本地激活凭证。
+// 管理员激活模块：为 admin-management 账户生成 AccountId 级本地激活凭证。
 //
 // 激活流程：
 // 1. 用户点击管理员行的"激活"按钮；
-// 2. 后端读取链上 AdminsChange::AdminAccounts，确认目标 pubkey 是当前 Active 管理员；
+// 2. 后端按机构码读取对应管理员 pallet 的 AdminAccounts，确认目标 pubkey 是当前 Active 管理员；
 // 3. 后端生成 activate_admin_account 签名请求 QR JSON；
 // 4. 用户用 citizenwallet 冷钱包扫码确认并签名；
 // 5. 后端验证签名、payload、链上账户仍一致后，写入本地激活记录；
@@ -30,7 +30,7 @@ use std::{
 };
 use tauri::AppHandle;
 
-use crate::governance::admins_change::storage;
+use crate::admins::admin_management::storage;
 use crate::governance::signing;
 use primitives::sign::{binary_domain_prefix, BINARY_PREFIX_LEN, OP_SIGN_ACTIVATE_ADMIN};
 
@@ -76,7 +76,7 @@ fn activation_sign_sessions() -> &'static Mutex<HashMap<String, ActivationSignSe
 pub struct ActivatedAdmin {
     /// 管理员公钥 hex（不含 0x，小写）。
     pub pubkey_hex: String,
-    /// admins-change 链上账户 AccountId hex（不含 0x，小写）。
+    /// admin-management 链上账户 AccountId hex（不含 0x，小写）。
     pub account_hex: String,
     /// 链上机构码（CID institution_code，[u8;4]）。
     pub institution_code: InstitutionCode,
@@ -92,7 +92,7 @@ pub struct ActivatedAdmin {
 struct StoredActivation {
     /// 管理员公钥 hex（不含 0x，小写）。
     pubkey_hex: String,
-    /// admins-change 链上账户 AccountId hex（不含 0x，小写）。
+    /// admin-management 链上账户 AccountId hex（不含 0x，小写）。
     account_hex: String,
     /// 链上机构码（CID institution_code，[u8;4]）。
     institution_code: InstitutionCode,
@@ -371,7 +371,7 @@ fn activated_admin_from_stored(item: &StoredActivation) -> ActivatedAdmin {
 
 /// 构建管理员激活签名请求 QR JSON（需要节点运行）。
 ///
-/// 验证公钥确实在该 admins-change 账户的链上管理员列表中，
+/// 验证公钥确实在该 admin-management 账户的链上管理员列表中，
 /// 然后生成 QR_V1/k=1 格式的 AccountId 级签名请求。
 #[tauri::command]
 pub async fn build_activate_admin_request(

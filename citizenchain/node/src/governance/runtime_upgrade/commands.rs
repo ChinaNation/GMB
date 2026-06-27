@@ -1,7 +1,8 @@
 use super::{call_data, signing as runtime_signing, types::ProposeUpgradeRequestResult};
 use crate::{
+    admins::admin_management::activation,
+    governance::registry,
     governance::signing::{self, VoteSignRequestResult, VoteSubmitResult},
-    governance::{admins_change::activation, registry},
     home,
 };
 use tauri::AppHandle;

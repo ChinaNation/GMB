@@ -1,5 +1,5 @@
 import { hexToSs58 } from '../../shared/ss58';
-import type { AdminWalletMatch } from '../types';
+import type { AdminWalletMatch } from '../../governance/types';
 
 type Props = {
   wallets: AdminWalletMatch[];

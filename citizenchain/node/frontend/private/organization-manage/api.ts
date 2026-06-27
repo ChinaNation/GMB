@@ -1,5 +1,5 @@
 import { invoke } from '../../core/tauri';
-import type { VoteSignRequestResult, VoteSubmitResult } from '../types';
+import type { VoteSignRequestResult, VoteSubmitResult } from '../../governance/types';
 import type {
   EligibleClearingBankCandidate,
   InitialAccountInputDto,

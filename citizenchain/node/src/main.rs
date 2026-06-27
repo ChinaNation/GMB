@@ -11,6 +11,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![warn(missing_docs)]
 
+mod admins;
 mod core;
 mod desktop;
 mod governance;
@@ -18,6 +19,8 @@ mod home;
 mod im;
 mod mining;
 mod other;
+mod private;
+mod registry_proc;
 mod settings;
 mod shared;
 mod transaction;
