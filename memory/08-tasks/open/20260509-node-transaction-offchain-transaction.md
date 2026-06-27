@@ -20,8 +20,8 @@
 - `citizenchain/node/frontend/offchain/`（搬迁源，全删）
 - `citizenchain/node/frontend/transaction/offchain-transaction/`（新落地）
 - `citizenchain/node/frontend/app/App.tsx`
-- `citizenchain/node/frontend/governance/organization-manage/institution-detail.tsx`
-- `citizenchain/node/frontend/governance/organization-manage/create-multisig.tsx`
+- `citizenchain/node/frontend/private/organization-manage/institution-detail.tsx`
+- `citizenchain/node/frontend/private/organization-manage/create-multisig.tsx`
 
 ## 风险点
 

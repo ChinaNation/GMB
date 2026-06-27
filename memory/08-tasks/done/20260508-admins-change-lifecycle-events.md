@@ -9,8 +9,8 @@
 
 ## 预计修改目录
 
-- `citizenchain/runtime/governance/admins-change/`：修改生命周期事件结构、执行函数和单测；涉及 Rust 代码、测试和注释。
-- `memory/05-modules/citizenchain/runtime/governance/admins-change/`：同步技术文档；涉及文档。
+- `citizenchain/runtime/admins/admin-management/`：修改生命周期事件结构、执行函数和单测；涉及 Rust 代码、测试和注释。
+- `memory/05-modules/citizenchain/runtime/admins/admin-management/`：同步技术文档；涉及文档。
 - `memory/07-ai/unified-protocols.md`：如存在 admins-change 事件协议描述,同步事件字段；涉及统一协议文档。
 - `memory/08-tasks/`：记录执行与验收结果；涉及任务文档。
 

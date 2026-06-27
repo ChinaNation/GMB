@@ -55,19 +55,19 @@
 
 - `citizenchain/runtime/**` 通过独立 WASM CI 产出链上升级 wasm，`citizenchain/node/**` 通过统一 `citizenchain.yml` matrix 构建 Linux / Windows / macOS 桌面安装包
 - 共享 Rust 目录变更时，允许多侧联动执行
-- `cid`、`cpms`、`citizenapp` 分别独立执行
+- `cid`、`citizenapp` 分别独立执行
 - 纯文档、Pages 等目录按各自规则触发
 - 目录路由细则统一记录在 `memory/07-ai/ci-path-routing.md`
 
 ## 5. 本地执行入口
 
-- `bash memory/scripts/analyze-requirement.sh --requirement "..."`
-- `bash memory/scripts/check-startup-acceptance.sh`
-- `bash memory/scripts/architect-entry.sh --requirement "..." --execute`
-- `bash memory/scripts/start-task.sh --requirement "..."`
-- `bash memory/scripts/new-task.sh --module "<模块>" --requirement "..."`
-- `bash memory/scripts/load-context.sh <模块>`
-- `bash memory/scripts/complete-task.sh memory/08-tasks/open/<任务卡>.md "完成摘要"`
+- `bash scripts/analyze-requirement.sh --requirement "..."`
+- `bash scripts/check-startup-acceptance.sh`
+- `bash scripts/architect-entry.sh --requirement "..." --execute`
+- `bash scripts/start-task.sh --requirement "..."`
+- `bash scripts/new-task.sh --module "<模块>" --requirement "..."`
+- `bash scripts/load-context.sh <模块>`
+- `bash scripts/complete-task.sh memory/08-tasks/open/<任务卡>.md "完成摘要"`
 
 ## 6. 当前执行方式
 

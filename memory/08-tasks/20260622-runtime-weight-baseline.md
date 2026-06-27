@@ -17,7 +17,7 @@
 - 已生成 `citizenchain/node/frontend/dist/`，满足 Tauri node 编译前置条件。
 - 已修正 `citizenchain/scripts/benchmark.sh` 的第一阶段 pallet 清单、二进制名称、前端 dist 检查和本地 runtime WASM 参数。
 - 已新增 `citizenchain/scripts/benchmark-weight-template.hbs`，让 benchmark CLI 生成本仓库本地 `WeightInfo` trait / `SubstrateWeight<T>` / `impl WeightInfo for ()` 结构，避免默认模板生成不可编译的外部 crate impl。
-- 已修复 `citizenchain/runtime/governance/organization-manage/src/benchmarks.rs` 在 `runtime-benchmarks` feature 下的编译问题。
+- 已修复 `citizenchain/runtime/private/organization-manage/src/benchmarks.rs` 在 `runtime-benchmarks` feature 下的编译问题。
 - 已修复 `WASM_BUILD_FROM_SOURCE=1` 构建 benchmark runtime WASM 时的 `institution-asset/std` feature 泄漏。
 - 已修复 `cid-system` benchmark 源码：`wasm32v1-none` 下 `vec!` 宏未导入。
 - 已修复 `organization-manage` benchmark 源码：`wasm32v1-none` 下 `Vec` 类型未导入。
@@ -45,7 +45,7 @@
 - `resolution_issuance` → `citizenchain/runtime/issuance/resolution-issuance/src/weights.rs`
 - `cid_system` → `citizenchain/runtime/otherpallet/cid-system/src/weights.rs`
 - `pow_difficulty` → `citizenchain/runtime/otherpallet/pow-difficulty/src/weights.rs`
-- `admins_change` → `citizenchain/runtime/governance/admins-change/src/weights.rs`
+- `admins_change` → `citizenchain/runtime/admins/admin-management/src/weights.rs`
 - `resolution_destro` → `citizenchain/runtime/governance/resolution-destro/src/weights.rs`
 - `grandpakey_change` → `citizenchain/runtime/governance/grandpakey-change/src/weights.rs`
 - `duoqian_transfer` → `citizenchain/runtime/transaction/duoqian-transfer/src/weights.rs`
@@ -72,8 +72,8 @@
 - `citizenchain/scripts/benchmark.sh` 已改为编译并调用 `target/release/citizenchain`。
 - `citizenchain/scripts/benchmark.sh` 已在缺少 `node/frontend/dist` 时自动运行 `npm --prefix node/frontend run build`。
 - `citizenchain/scripts/benchmark.sh` 已开启 `WASM_BUILD_FROM_SOURCE=1`，并向 `benchmark pallet` 传入 `--runtime=<本地生成 wasm>` 与 `--genesis-builder=runtime`。
-- `citizenchain/runtime/governance/organization-manage/src/benchmarks.rs` 已更新 `register_cid_institution` benchmark 调用参数，匹配当前 11 参数接口。
-- `citizenchain/runtime/governance/organization-manage/src/benchmarks.rs` 已清理不再使用的 benchmark helper 和 import，`cargo check -p organization-manage --features runtime-benchmarks` 通过。
+- `citizenchain/runtime/private/organization-manage/src/benchmarks.rs` 已更新 `register_cid_institution` benchmark 调用参数，匹配当前 11 参数接口。
+- `citizenchain/runtime/private/organization-manage/src/benchmarks.rs` 已清理不再使用的 benchmark helper 和 import，`cargo check -p organization-manage --features runtime-benchmarks` 通过。
 
 ### 已解除的阻塞问题
 
@@ -109,7 +109,7 @@ error: cannot find macro `vec` in this scope
 
 ```text
 error[E0425]: cannot find type `Vec` in this scope
---> runtime/governance/organization-manage/src/benchmarks.rs:60:27
+--> runtime/private/organization-manage/src/benchmarks.rs:60:27
 ```
 
 已修复 `organization-manage` 的 `Vec` 导入为 `sp_std::{vec, vec::Vec}`。再次复跑后：
@@ -170,10 +170,10 @@ this function takes 3 arguments but 8 arguments were supplied
 - `citizenchain/runtime/Cargo.toml`：已移除 `runtime-benchmarks` 和 `try-runtime` 中对 `institution-asset/std` 的 WASM 污染接线。
 - `citizenchain/runtime/transaction/institution-asset/Cargo.toml`：已补空的 `runtime-benchmarks` / `try-runtime` feature。
 - `citizenchain/runtime/otherpallet/cid-system/src/benchmarks.rs`：已导入 no_std 可用的 `vec!` 宏，继续推进 benchmark runtime WASM 构建。
-- `citizenchain/runtime/governance/organization-manage/src/benchmarks.rs`：已导入 no_std 可用的 `Vec` 类型，benchmark runtime WASM 构建通过。
+- `citizenchain/runtime/private/organization-manage/src/benchmarks.rs`：已导入 no_std 可用的 `Vec` 类型，benchmark runtime WASM 构建通过。
 - `citizenchain/node/src/core/command.rs`：已补齐 `dev/local/staging` chain spec 别名，避免 benchmark CLI 默认 `dev` 被误当文件路径。
-- `citizenchain/runtime/governance/organization-manage/src/lib.rs`：后续需修正注销关闭 extrinsic 参数类型和 no_std Vec 路径。
-- `citizenchain/runtime/governance/organization-manage/src/close.rs`：后续需同步注销凭证校验、nonce 防重放、scope 写入 `CloseInstitutionAction`。
+- `citizenchain/runtime/private/organization-manage/src/lib.rs`：后续需修正注销关闭 extrinsic 参数类型和 no_std Vec 路径。
+- `citizenchain/runtime/private/organization-manage/src/close.rs`：后续需同步注销凭证校验、nonce 防重放、scope 写入 `CloseInstitutionAction`。
 - `citizenchain/runtime/issuance/resolution-issuance/src/benchmarks.rs`：已为联合投票 benchmark fixture 写入测量块区块号对应的 typed `PendingPopulationSnapshots`。
 - `citizenchain/runtime/governance/runtime-upgrade/src/benchmarks.rs`：已为联合投票 benchmark fixture 写入测量块区块号对应的 typed `PendingPopulationSnapshots`。
 - `citizenchain/runtime/transaction/duoqian-transfer/src/benchmarks.rs`：已把 benchmark 转账金额改为全链统一 ED `111`。
@@ -207,7 +207,7 @@ this function takes 3 arguments but 8 arguments were supplied
 - `WASM_BUILD_FROM_SOURCE=1 cargo build --release --features runtime-benchmarks --bin citizenchain`：修复 `organization-manage` 后再次复跑，通过。
 - `find citizenchain/target/release/wbuild -type f -name '*.compact.compressed.wasm' ! -path '*/frame-storage-access-test-runtime/*'`：确认已生成本地 benchmark runtime WASM。
 - `bash -n citizenchain/scripts/benchmark.sh`：通过。
-- `git diff --check -- citizenchain/runtime/Cargo.toml citizenchain/runtime/transaction/institution-asset/Cargo.toml citizenchain/runtime/otherpallet/cid-system/src/benchmarks.rs citizenchain/runtime/governance/organization-manage/src/benchmarks.rs citizenchain/scripts/benchmark.sh memory/08-tasks/20260622-runtime-weight-baseline.md`：通过。
+- `git diff --check -- citizenchain/runtime/Cargo.toml citizenchain/runtime/transaction/institution-asset/Cargo.toml citizenchain/runtime/otherpallet/cid-system/src/benchmarks.rs citizenchain/runtime/private/organization-manage/src/benchmarks.rs citizenchain/scripts/benchmark.sh memory/08-tasks/20260622-runtime-weight-baseline.md`：通过。
 - `./scripts/benchmark.sh`：第一次全量运行未进入实际采样，因 `dev` chain spec 未识别失败。
 - `./scripts/benchmark.sh pow_difficulty`：修复 chain spec 别名后重新运行，clean wbuild 暴露 `organization-manage` 注销凭证改造残留，未进入实际采样。
 - `./target/release/citizenchain benchmark pallet --runtime=<本地 WASM> --genesis-builder=spec-genesis --pallet=pow_difficulty --steps=2 --repeat=1 --output=/tmp/citizenchain-pow-difficulty-test.rs`：通过，确认 CLI 参数组合可进入真实 benchmark。

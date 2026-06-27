@@ -9,7 +9,7 @@
 ## 改动范围
 
 - `citizenchain/node/src/governance/`：统一冷签 payload、签名验签、extrinsic 构造路径。
-- `citizenchain/node/src/governance/admins_change/`：清理旧 `org` 激活记录格式，不做旧格式兼容。
+- `citizenchain/node/src/admins/admin_management/`：清理旧 `org` 激活记录格式，不做旧格式兼容。
 - `memory/01-architecture/qr/`：记录 QR_V1 生成、签名、验签唯一口径。
 - `memory/05-modules/citizenchain/node/`：记录 node 侧治理签名和激活存储事实。
 

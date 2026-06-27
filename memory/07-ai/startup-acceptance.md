@@ -53,5 +53,5 @@
 
 ## 6. 自动检查入口
 
-- 仓库检查：`bash memory/scripts/check-startup-acceptance.sh --ci`
-- 本地人工检查：`bash memory/scripts/check-startup-acceptance.sh`
+- 仓库检查：`bash scripts/check-startup-acceptance.sh --ci`
+- 本地人工检查：`bash scripts/check-startup-acceptance.sh`

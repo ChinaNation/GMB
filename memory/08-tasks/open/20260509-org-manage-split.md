@@ -23,7 +23,7 @@
 - memory/07-ai/pre-submit-checklist.md
 - memory/07-ai/unified-naming.md
 - memory/07-ai/unified-protocols.md
-- memory/05-modules/citizenchain/runtime/governance/organization-manage/ORGANIZATION_MANAGE_TECHNICAL.md
+- memory/05-modules/citizenchain/runtime/private/organization-manage/ORGANIZATION_MANAGE_TECHNICAL.md
 - memory/05-modules/citizenchain/node/governance/GOVERNANCE_TECHNICAL.md
 - memory/05-modules/citizenchain/node/offchain/NODE_CLEARING_BANK_TECHNICAL.md
 - memory/05-modules/citizenapp/governance/GOVERNANCE_TECHNICAL.md
@@ -52,7 +52,7 @@
 
 - 任务卡已创建
 - 已将 node 后端机构多签目录从 `citizenchain/node/src/offchain/organization_manage/` 迁入 `citizenchain/node/src/governance/organization-manage/`。
-- 已将 node 前端机构多签目录从 `citizenchain/node/frontend/offchain/organization-manage/` 迁入 `citizenchain/node/frontend/governance/organization-manage/`。
+- 已将 node 前端机构多签目录从 `citizenchain/node/frontend/offchain/organization-manage/` 迁入 `citizenchain/node/frontend/private/organization-manage/`。
 - 已将 citizenapp 机构多签目录从 `citizenapp/lib/duoqian/` 迁入 `citizenapp/lib/organization-manage/`，旧 `lib/duoqian/` 物理目录已删除。
 - 已将 citizenapp 机构多签测试目录从 `citizenapp/test/duoqian/` 迁入 `citizenapp/test/organization-manage/`。
 - 已将个人/机构共用的提案详情页迁入 `citizenapp/lib/proposal/shared/duoqian_manage_detail_page.dart`，避免放入机构多签专属目录。

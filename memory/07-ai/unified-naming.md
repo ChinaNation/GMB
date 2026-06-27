@@ -90,13 +90,12 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `memory/08-tasks/open/` | 未完成任务 | open-tasks | 仍需执行、复核或等待确认的任务卡 |
 | `memory/08-tasks/done/` | 已完成任务 | done-tasks | 已完成、已替代或历史保留的任务卡 |
 | `memory/08-tasks/templates/` | 任务模板 | task-templates | 任务卡模板 |
-| `memory/scripts/` | memory 脚本 | memory-scripts | memory 自检和启动协议验收脚本 |
+| `scripts/` | 仓库脚本 | repo-scripts | 仓库级/AI 工作流/CI 工具脚本(含 memory 自检和启动协议验收) |
 | `citizenchain/` | 公民链 | citizenchain | runtime、节点、桌面端和打包 |
 | `citizenchain/runtime/` | 链上运行时 | runtime | pallet、runtime 配置和链上规则 |
 | `citizenchain/node/` | 节点桌面端 | node | 原生节点、Tauri 后端和桌面前端 |
 | `citizencode/` | 在线身份系统 | cid | CID 后端、前端和部署配置 |
 | `citizencode/backend/number/` | 身份 ID 编码协议 | number | CID 后端身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
-| `citizenpassport/` | 离线实名系统 | cpms | CPMS 后端、前端、数据库和部署配置 |
 | `citizenwallet/` | 公民钱包 | citizenwallet | 离线签名、扫码识别和钱包 UI |
 | `citizenapp/` | 公民 | citizenapp | Flutter 客户端、钱包、治理和轻节点能力 |
 | `citizenapp/im/proto/` | citizenapp 信息协议 | citizenapp-im-proto | 公民 IM 外层 Protobuf schema 真源，不放仓库根目录 proto |
@@ -110,7 +109,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/node/src/im/` | 通信节点 IM | node-im | 通信节点密文收件箱、设备绑定、通信端点和 libp2p IM 协议处理模块 |
 | `website/` | 官网 | website | GMB 官网前端工程 |
 | `docs/` | 文库 | docs | 白皮书唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
-| `citizenchain/runtime/governance/legislation-yuan/` | 立法院模块 | legislation-yuan | 公民宪法唯一真源（`law_id=0`、`tier=宪法`，创世注入 `constitution.scale` + 立法投票修订）；所有法律统一章>节>条>款，展示端从链上结构化法律重建 HTML（ADR-027） |
+| `citizenchain/runtime/public/legislation-yuan/` | 立法院模块 | legislation-yuan | 公民宪法唯一真源（`law_id=0`、`tier=宪法`，创世注入 `constitution.scale` + 立法投票修订）；所有法律统一章>节>条>款，展示端从链上结构化法律重建 HTML（ADR-027） |
 | `scripts/` | 脚本 | scripts | 仓库级脚本工具、生成器和自动化脚本 |
 
 ## 5. 当前核心命名登记
@@ -165,36 +164,22 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 业务作用域省名称 | `scope_province_name` | credential / call data | 凭证适用的省级业务作用域 |
 | 业务作用域市名称 | `scope_city_name` | credential / call data | 凭证适用的市级业务作用域 |
 | 已签名交易构造器 | `SignedExtrinsicBuilder` / `signed_extrinsic_builder.dart` | `citizenapp/lib/rpc/` | 统一构造 citizenapp 在线 signed extrinsic，固定执行 immortal era 协议 |
-| 电子护照档案号 | `archive_no` | CPMS ARCHIVE / CID citizens / citizenapp myid | CPMS 签发的公民档案号，三端统一使用完整字段名 |
-| 电子护照护照号 | `passport_no` | CPMS archives / CPMS frontend | CPMS 后端自动生成并印刷在公民护照上的 11 位护照号 |
-| 电子护照公民状态 | `citizen_status` | CPMS ARCHIVE / CID citizens / citizenapp myid | CPMS 公民状态，三端统一使用完整字段名 |
-| 电子护照选举资格 | `voting_eligible` | CPMS ARCHIVE / CID citizens / citizenapp myid | CPMS 选举资格，三端统一使用完整字段名 |
+| 电子护照公民状态 | `citizen_status` | CID citizens / citizenapp myid | 注册局维护的公民状态，三端统一使用完整字段名 |
+| 电子护照选举资格 | `voting_eligible` | CID citizens / citizenapp myid | 注册局维护的选举资格，三端统一使用完整字段名 |
 | 电子护照投票状态 | `vote_status` | CID citizens / citizenapp myid | CID 按 `citizen_status + voting_eligible` 计算出的投票状态，不得和绑定状态混用 |
 | 电子护照身份状态 | `identity_status` | CID citizens / citizenapp myid | CID 按公民状态与有效期计算出的身份ID状态，不得和绑定状态混用 |
-| 电子护照生效日期 | `valid_from` | CPMS ARCHIVE / CID citizens / citizenapp myid | 电子护照有效期开始日期，格式 `YYYY-MM-DD` |
-| 电子护照截止日期 | `valid_until` | CPMS ARCHIVE / CID citizens / citizenapp myid | 电子护照有效期截止日期，格式 `YYYY-MM-DD` |
-| 公民状态更新时间 | `status_updated_at` | CPMS ARCHIVE / CID citizens | CID 内部用于拒绝旧档案码覆盖新状态的秒级时间戳 |
-| 电子护照钱包地址 | `wallet_address` | CPMS ARCHIVE / CID citizens / citizenapp myid | 用户选择用于电子护照绑定的钱包 SS58 地址 |
-| 电子护照钱包公钥 | `wallet_pubkey` | CPMS ARCHIVE / CID citizens / citizenapp myid | `wallet_address` 对应的 32 字节 `0x` hex 公钥 |
-| 电子护照钱包签名算法 | `wallet_sig_alg` | CPMS ARCHIVE / CID citizens / citizenapp myid | 固定 `sr25519` |
+| 电子护照生效日期 | `valid_from` | CID citizens / citizenapp myid | 电子护照有效期开始日期，格式 `YYYY-MM-DD` |
+| 电子护照截止日期 | `valid_until` | CID citizens / citizenapp myid | 电子护照有效期截止日期，格式 `YYYY-MM-DD` |
+| 公民状态更新时间 | `status_updated_at` | CID citizens | CID 内部用于拒绝旧状态覆盖新状态的秒级时间戳 |
+| 电子护照钱包地址 | `wallet_address` | CID citizens / citizenapp myid | 用户选择用于电子护照绑定的钱包 SS58 地址 |
+| 电子护照钱包公钥 | `wallet_pubkey` | CID citizens / citizenapp myid | `wallet_address` 对应的 32 字节 `0x` hex 公钥 |
+| 电子护照钱包签名算法 | `wallet_sig_alg` | CID citizens / citizenapp myid | 固定 `sr25519` |
 | 电子护照身份ID | `cid_number` | CID citizens / citizenapp myid | CID 生成并返回给用户展示的身份ID号码 |
 | 电子护照绑定状态 | `bind_status` | CID citizens / citizenapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
-| CPMS 编号工具 | `number` | `citizenpassport/backend/number/` | CPMS 后端档案号与护照号生成模块 |
-| CPMS 档案生命周期 | `lifecycle` | `citizenpassport/backend/archive/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
-| CPMS 状态导出 | `export` | `citizenpassport/backend/archive/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
-| CPMS 状态导出文件 | `CPMS_STATUS_EXPORT` | CPMS/CID 离线 JSON 文件 | CPMS 给 CID 导入的年度状态与档案号绑定释放凭证 |
-| CPMS 前端鉴权 | `authz` | `citizenpassport/frontend/authz/` | CPMS 前端登录态上下文和路由守卫 |
-| CPMS 前端初始化 | `initialize` | `citizenpassport/frontend/initialize/` | CPMS 前端安装初始化页面、API 和类型 |
-| CPMS 前端登录 | `login` | `citizenpassport/frontend/login/` | CPMS 前端 QR-only 登录页面和 API |
-| CPMS 前端管理员 | `admins` | `citizenpassport/frontend/admins/` | CPMS 前端管理员页面、操作员管理和年度报告导出 |
-| CPMS 前端档案业务 | `archive` | `citizenpassport/frontend/archive/` | CPMS 前端档案创建、查询、编辑、软删除和档案 QR 操作 |
-| CPMS 前端地址 | `address` | `citizenpassport/frontend/address/` | CPMS 前端镇和地址段查询 API 与类型 |
-| 镇下地址段 | `address_unit` | CID china / CPMS archives / CPMS frontend | 镇下面的既有地名地址段，不是行政区，不强制为村或路 |
-| 镇下地址段 ID | `address_unit_id` | CPMS archives / address_units | CPMS 档案选择的地址段稳定 ID |
-| 详细地址输入段 | `address_detail` | CPMS archives / CPMS frontend | 管理员录入的可变详细地址文本，与地址段组合为完整详细地址 |
-| 完整详细地址快照 | `address_full_snapshot` | CPMS archives | 保存时由地址段名称和详细地址输入段组成的只读快照 |
-| CPMS 前端二维码 | `qr` | `citizenpassport/frontend/qr/` | CPMS 前端 QR_V1 解析和浏览器扫码工具 |
-| CPMS 前端通用层 | `common` | `citizenpassport/frontend/common/` | CPMS 前端 HTTP 封装、共享类型和通用组件 |
+| 镇下地址段 | `address_unit` | CID china / citizenapp | 镇下面的既有地名地址段，不是行政区，不强制为村或路 |
+| 镇下地址段 ID | `address_unit_id` | CID citizens / address_units | 公民居住或出生地址段稳定 ID |
+| 详细地址输入段 | `address_detail` | CID citizens | 注册局录入的可变详细地址文本，与地址段组合为完整详细地址 |
+| 完整详细地址快照 | `address_full_snapshot` | CID citizens | 保存时由地址段名称和详细地址输入段组成的只读快照 |
 
 ## 5.1 机构名称字段硬规则
 
@@ -258,7 +243,6 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 | 废弃旧名 | 当前命名 | 类型 | 当前边界 |
 |---|---|---|---|
-| `dangan` / `DANGAN` | `archive` / `ARCHIVE` | CPMS 档案业务目录和文档名 | `citizenpassport/backend/archive/`、`citizenpassport/frontend/archive/`、`memory/01-architecture/citizenpassport/CITIZENPASSPORT_TECHNICAL.md` |
 | `uninorg` | `unincorporated_org` | CID 非法人机构目录名 | `citizencode/backend/subjects/unincorporated_org/` |
 | `backend/institutions` | `backend/subjects` | CID 主体共享目录 | `citizencode/backend/subjects/` |
 | `node/src/offchain` | `node/src/transaction/offchain_transaction` | 节点链下交易后端目录 | `citizenchain/node/src/transaction/offchain_transaction/` |
@@ -358,7 +342,6 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
 | `memory/05-modules/citizenchain/` | 公民链模块文档 | citizenchain-module-docs | citizenchain runtime、node、桌面端模块文档 |
-| `memory/05-modules/citizenpassport/` | CPMS 模块文档 | cpms-module-docs | CPMS 后端、安装和档案模块文档 |
 | `memory/05-modules/citizencode/` | CID 模块文档 | cid-module-docs | CID 后端、前端和业务模块文档 |
 | `memory/05-modules/website/` | 官网模块文档 | website-module-docs | 官网模块文档 |
 | `memory/05-modules/citizenapp/` | citizenapp 模块文档 | citizenapp-module-docs | citizenapp 移动端模块文档 |
@@ -376,7 +359,6 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
 | `memory/05-modules/citizencode/ERROR_CODES.md` | CID 错误码规范 | cid-error-codes | CID HTTP 状态码、稳定业务错误码和前端错误处理规则 |
-| `memory/05-modules/citizenpassport/ERROR_CODES.md` | CPMS 错误码规范 | cpms-error-codes | CPMS 离线系统 HTTP 状态码、稳定业务错误码和前端错误处理规则 |
 
 ## 11. CID 功能目录命名登记
 
@@ -386,7 +368,6 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 |---|---|---|---|
 | `citizencode/backend/core/` | 应用核心 | core | 后端启动、路由、HTTP 响应、HTTP 安全、跨模块核心能力和通用链工具 |
 | `citizencode/backend/citizens/` | 公民 | citizens | 公民身份与资料管理 |
-| `citizencode/backend/citizenpassport/` | CPMS 对接 | cpms | CID 与 CPMS 对接能力 |
 | `citizencode/backend/crypto/` | 密码工具 | crypto | 签名、哈希、密钥和密码学工具 |
 | `citizencode/backend/indexer/` | 索引器 | indexer | 链上或业务索引能力 |
 | `citizencode/backend/gov/` | 公权机构 | gov | 公安局、公权自动目录和公权机构管理接口 |
@@ -422,7 +403,6 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizencode/frontend/auth/` | 认证 | auth | 前端登录和认证流程 |
 | `citizencode/frontend/citizens/` | 公民 | citizens | 公民管理界面 |
 | `citizencode/frontend/core/` | 前端核心 | core | 前端通用组件、共享 UI、扫码账户弹窗、公民钱包签名面板和 QR 工具 |
-| `citizencode/frontend/citizenpassport/` | CPMS 对接 | cpms | CPMS 对接界面 |
 | `citizencode/frontend/hooks/` | Hooks | hooks | 前端共享 hooks |
 | `citizencode/frontend/gov/` | 公权机构 | gov | 公安局和公权机构界面 |
 | `citizencode/frontend/private/` | 私权机构 Shell | private | 省市选择、当前私权类型页面和详情跳转 |
@@ -472,8 +452,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `citizenchain/node/src/governance/organization_manage/` | 机构多签管理后端 | organization-manage | node Tauri 后端机构多签管理命令、CID 凭证、链上机构详情与创建签名请求 |
-| `citizenchain/node/frontend/governance/organization-manage/` | 机构多签管理前端 | organization-manage | node 前端机构多签管理页面、Tauri API 和 DTO |
+| `citizenchain/node/src/private/organization_manage/` | 机构多签管理后端 | organization-manage | node Tauri 后端机构多签管理命令、CID 凭证、链上机构详情与创建签名请求 |
+| `citizenchain/node/frontend/private/organization-manage/` | 机构多签管理前端 | organization-manage | node 前端机构多签管理页面、Tauri API 和 DTO |
 
 ## 13. citizenchain runtime 目录命名登记
 
@@ -481,10 +461,10 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 |---|---|---|---|
 | `citizenchain/runtime/genesis/` | 创世配置 | genesis | 创世状态和初始配置 |
 | `citizenchain/runtime/governance/` | 治理 | governance | 治理类 pallet |
-| `citizenchain/runtime/governance/admins-change/` | 管理员变更 | admins-change | 管理员主体、阈值和管理员变更 pallet |
+| `citizenchain/runtime/admins/admin-management/` | 管理员变更 | admins-change | 管理员主体、阈值和管理员变更 pallet |
 | `citizenchain/runtime/governance/grandpakey-change/` | GRANDPA 密钥变更 | grandpakey-change | GRANDPA authority 变更 pallet |
-| `citizenchain/runtime/governance/organization-manage/` | 机构管理 | organization-manage | 机构多签管理 pallet |
-| `citizenchain/runtime/governance/personal-manage/` | 个人多签管理 | personal-manage | 个人多签管理 pallet |
+| `citizenchain/runtime/private/organization-manage/` | 机构管理 | organization-manage | 机构多签管理 pallet |
+| `citizenchain/runtime/private/personal-manage/` | 个人多签管理 | personal-manage | 个人多签管理 pallet |
 | `citizenchain/runtime/governance/resolution-destro/` | 决议销毁 | resolution-destro | 决议销毁 pallet |
 | `citizenchain/runtime/governance/runtime-upgrade/` | 运行时升级 | runtime-upgrade | runtime 升级治理 pallet |
 | `citizenchain/runtime/issuance/` | 发行 | issuance | 发行类 pallet |

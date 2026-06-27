@@ -10,7 +10,7 @@
 
 ## 预计修改目录
 
-- `citizenchain/runtime/governance/legislation-yuan/`
+- `citizenchain/runtime/public/legislation-yuan/`
   - 用途：补立法院模块最终写入层复校验与对应测试。
   - 边界：只处理宪法守卫相关写入安全，不扩展立法流程、不改投票引擎职责。
   - 类型：runtime 代码与测试，需用户二次确认后修改。
@@ -37,10 +37,10 @@
 
 ## 验收要求
 
-- `cargo test --manifest-path citizenchain/runtime/governance/legislation-yuan/Cargo.toml`
+- `cargo test --manifest-path citizenchain/runtime/public/legislation-yuan/Cargo.toml`
 - `cargo test --manifest-path citizenchain/node/Cargo.toml constitution`
-- `cargo check --manifest-path citizenchain/runtime/governance/legislation-yuan/Cargo.toml --no-default-features`
-- `cargo fmt --manifest-path citizenchain/runtime/governance/legislation-yuan/Cargo.toml --check`
+- `cargo check --manifest-path citizenchain/runtime/public/legislation-yuan/Cargo.toml --no-default-features`
+- `cargo fmt --manifest-path citizenchain/runtime/public/legislation-yuan/Cargo.toml --check`
 - `cargo fmt --manifest-path citizenchain/node/Cargo.toml --check`
 
 ## 进度
@@ -59,8 +59,8 @@
 
 ## 验收结果
 
-- `cargo test --manifest-path citizenchain/runtime/governance/legislation-yuan/Cargo.toml`:23 passed。
+- `cargo test --manifest-path citizenchain/runtime/public/legislation-yuan/Cargo.toml`:23 passed。
 - `cargo test --manifest-path citizenchain/node/Cargo.toml constitution`:21 passed。
-- `cargo check --manifest-path citizenchain/runtime/governance/legislation-yuan/Cargo.toml --no-default-features`:通过。
-- `cargo fmt --manifest-path citizenchain/runtime/governance/legislation-yuan/Cargo.toml --check`:通过。
+- `cargo check --manifest-path citizenchain/runtime/public/legislation-yuan/Cargo.toml --no-default-features`:通过。
+- `cargo fmt --manifest-path citizenchain/runtime/public/legislation-yuan/Cargo.toml --check`:通过。
 - `cargo fmt --manifest-path citizenchain/node/Cargo.toml --check`:通过。

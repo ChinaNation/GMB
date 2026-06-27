@@ -10,7 +10,7 @@
 - `memory/05-modules/`
 - `memory/07-ai/`
 - `memory/08-tasks/`
-- `memory/scripts/`
+- `scripts/`
 
 仓库根目录仅保留入口别名：
 
@@ -30,7 +30,7 @@
 - `memory/05-modules/`
 - `memory/06-quality/`
 - `memory/07-ai/`
-- `memory/scripts/`
+- `scripts/`
 - `memory/AGENTS.md`
 - `memory/CODEX.md`
 - `memory/CLAUDE.md`
@@ -39,4 +39,4 @@
 - `CODEX.md`
 - `CLAUDE.md`
 
-相关门禁由 `.github/scripts/check-ai-guardrails.sh` 负责执行。
+相关门禁由 `scripts/check-ai-guardrails.sh` 负责执行。

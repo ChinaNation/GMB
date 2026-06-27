@@ -18,7 +18,7 @@
 - memory/03-security/security-rules.md
 - memory/07-ai/agent-rules.md
 - memory/07-ai/context-loading-order.md
-- memory/05-modules/citizenchain/runtime/governance/admins-change/ADMINSCHANGE_TECHNICAL.md
+- memory/05-modules/citizenchain/runtime/admins/admin-management/ADMINSCHANGE_TECHNICAL.md
 - memory/05-modules/citizenchain/runtime/governance/voting-engine/VOTINGENGINE_TECHNICAL.md
 - memory/05-modules/citizenchain/runtime/transaction/duoqian-manage/DUOQIAN_TECHNICAL.md
 

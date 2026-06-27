@@ -2,7 +2,7 @@
 
 - 任务编号：20260502-check-admins-voting-api-retry-cleanup
 - 状态：done
-- 所属模块：citizenchain/runtime/governance/admins-change, citizenchain/runtime/governance/voting-engine
+- 所属模块：citizenchain/runtime/admins/admin-management, citizenchain/runtime/governance/voting-engine
 - 当前负责人：Codex
 - 创建时间：2026-05-02
 

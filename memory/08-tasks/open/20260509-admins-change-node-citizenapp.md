@@ -15,7 +15,7 @@
 
 ## 影响范围
 
-- `citizenchain/node/src/governance/admins_change/`
+- `citizenchain/node/src/admins/admin_management/`
 - `citizenchain/node/frontend/governance/admins_change/`
 - `citizenchain/node/src/governance/`
 - `citizenchain/node/src/desktop/`
@@ -54,7 +54,7 @@
 - `npm run build`（`citizenchain/node/frontend`）：通过。
 - `flutter analyze lib/governance/admins-change lib/institution lib/proposal lib/vote lib/duoqian/shared test/governance/admins-change`（`citizenapp`）：通过。
 - `flutter test test/governance/admins-change`（`citizenapp`）：通过。
-- `rustfmt --edition 2021 --check citizenchain/node/src/governance/admins_change/activation.rs citizenchain/node/src/governance/admins_change/mod.rs citizenchain/node/src/governance/mod.rs citizenchain/node/src/desktop/mod.rs citizenchain/node/src/offchain/settlement/admin_unlock.rs`：通过。
+- `rustfmt --edition 2021 --check citizenchain/node/src/admins/admin_management/activation.rs citizenchain/node/src/admins/admin_management/mod.rs citizenchain/node/src/governance/mod.rs citizenchain/node/src/desktop/mod.rs citizenchain/node/src/offchain/settlement/admin_unlock.rs`：通过。
 - `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p node admins_change`：继续编译，但被既有 offchain 问题阻断：
   - `node/src/offchain/duoqian_transfer/mod.rs` 缺失。
   - `node/src/offchain/settlement/packer.rs` 访问 `OffchainLedger.inner` 私有字段。
@@ -66,7 +66,7 @@
 ### 复核结论
 
 - `admins-change` runtime 本体的管理员集合变更入口、执行回调、互斥锁校验、主体状态校验和动态阈值校验已覆盖主要链上安全边界；本次复核未发现 runtime `admins-change` 直接绕过漏洞。
-- node 后端已收口到 `citizenchain/node/src/governance/admins_change/`，node 前端已收口到 `citizenchain/node/frontend/governance/admins_change/`。Rust 模块目录使用下划线是语言约束下的当前实现；如要前端目录统一为短横线，需要另行做命名迁移。
+- node 后端已收口到 `citizenchain/node/src/admins/admin_management/`，node 前端已收口到 `citizenchain/node/frontend/governance/admins_change/`。Rust 模块目录使用下划线是语言约束下的当前实现；如要前端目录统一为短横线，需要另行做命名迁移。
 - citizenapp 已收口到 `citizenapp/lib/governance/admins-change/`，测试已收口到 `citizenapp/test/governance/admins-change/`；历史迁移来源目录已清理，不再作为当前实现入口。
 - 整体功能尚未闭合，主要阻断在冷钱包 QR 解码协议、注册机构账户级管理员主体、node 前端主体选择能力和文档路径漂移。
 
@@ -83,7 +83,7 @@
 
 - `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change`：通过，41 个测试通过。
 - `npx tsc --noEmit`（`citizenchain/node/frontend`）：通过。
-- `rustfmt --edition 2021 --check citizenchain/node/src/governance/admins_change/*.rs`：通过。
+- `rustfmt --edition 2021 --check citizenchain/node/src/admins/admin_management/*.rs`：通过。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/admins-change test/governance/admins-change`（`citizenapp`）：通过。
 - `flutter analyze` / `flutter test` 未进入项目验证阶段，被本机 Flutter SDK 缓存写入权限阻断：`/Users/rhett/flutter/bin/cache/engine.stamp: Operation not permitted`。改用 `dart analyze` 完成静态验证；`dart test` 不适用于该 Flutter 测试集，缺少 `package:test`。
 
@@ -136,7 +136,7 @@
 - 已补充 node 后端单测覆盖 `注册机构归属关系` 拒绝、`PersonalAccount + 非 REN` 拒绝、`InstitutionAccount + PUP/OTH` 允许。
 - 已清理 node / citizenwallet 公民钱包 QR 展示中的旧机构类泛称：`ORG_REN` 显示为“个人多签”。
 - `npx tsc --noEmit`（`citizenchain/node/frontend`）：通过。
-- `rustfmt --edition 2021 --check citizenchain/node/src/governance/admins_change/*.rs citizenchain/node/src/governance/organization-manage/chain.rs citizenchain/node/src/governance/organization-manage/types.rs citizenchain/node/src/governance/runtime_upgrade/commands.rs`：通过。
+- `rustfmt --edition 2021 --check citizenchain/node/src/admins/admin_management/*.rs citizenchain/node/src/governance/organization-manage/chain.rs citizenchain/node/src/governance/organization-manage/types.rs citizenchain/node/src/governance/runtime_upgrade/commands.rs`：通过。
 - `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p node admins_change`：通过，7 个 node admins_change 相关测试通过。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/signer test/signer`（`citizenwallet`）：通过。
 - `flutter test test/signer/payload_decoder_test.dart test/signer/pallet_registry_test.dart`（`citizenwallet`）：本机 Flutter SDK 缓存写权限阻断，报 `/Users/rhett/flutter/bin/cache/engine.stamp: Operation not permitted`；已用 Dart 静态分析覆盖本次冷钱包改动。
