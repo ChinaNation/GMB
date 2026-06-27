@@ -2,7 +2,7 @@
 
 ## 1. 文档目的
 - 固化 `citizenchain` 当前产品级技术基线，作为开发、联调、测试、运维、打包发布的统一参考。
-- 说明 `citizenchain` 在 `GMB` 仓库中的定位，以及与 `CID`、`CPMS`、`citizenapp` 的边界。
+- 说明 `citizenchain` 在 `GMB` 仓库中的定位，以及与 `CID`、`citizenapp` 的边界。
 - 建立产品技术文档与模块技术文档之间的映射关系，避免后续只维护模块文档、不维护产品全局口径。
 
 ## 2. 文档体系定位
@@ -16,6 +16,8 @@
 - `node/`：区块链节点原生程序、桌面节点 UI、内嵌节点管理与打包入口。
 - `runtime/`：链上运行时与统一状态机。
 - `runtime/governance/`：治理类 pallet。
+- `runtime/admins/`：管理员类 pallet。
+- `runtime/private/`：私权类 pallet。
 - `runtime/issuance/`：发行类 pallet。
 - `runtime/transaction/`：交易与手续费类 pallet。
 - `runtime/otherpallet/`：其他链上基础能力 pallet。
@@ -23,7 +25,6 @@
 
 ### 2.3 本文范围外
 - `CID` 的链外网站、签名服务与数据库内部实现。
-- `CPMS` 的离线档案录入与打印系统内部实现。
 - `citizenapp` 的移动端 UI、钱包与登录实现细节。
 - 仓库级 CI/CD、安装器流水线、工具库、白皮书与宣传性文档。
 
@@ -38,7 +39,6 @@
 
 ### 3.2 对外协作边界
 - 对 `CID`：提供绑定、资格校验、人口快照、公民投票凭证等链侧接口承载能力。
-- 对 `CPMS`：不直接集成，只通过 `CID` 间接承接公民身份可信输入。
 - 对 `citizenapp`：提供链上账户、交易、治理、节点状态、奖励与网络可观测能力。
 
 ## 4. 当前目录结构
@@ -46,14 +46,29 @@
 ```text
 citizenchain/
 ├── node/            # 原生节点、桌面端 Rust 后端、React 前端与 Tauri 打包入口
+├── registry/        # 注册局(CID)服务:链下明细 + 鉴权 + 颁发,经节点 RPC 读写链(ADR-029)
 ├── runtime/         # 运行时 wasm 与 runtime API
 │   ├── governance/  # 治理 pallet 与治理文档
+│   ├── admins/      # 管理员 pallet 与管理员文档
+│   ├── private/     # 私权 pallet 与私权文档
 │   ├── issuance/    # 发行 pallet 与发行文档
 │   ├── transaction/ # 交易 pallet 与手续费文档
 │   ├── otherpallet/ # 其他链上基础能力 pallet
 │   └── primitives/  # 运行时共享常量、基础类型与制度数据
 └── scripts/         # 本产品脚本
 ```
+
+### 4.1 注册局子系统(registry，ADR-029）
+
+`citizenchain/registry` 是 workspace 新增成员 crate，承接注册局能力，去中心化为"每市一个市注册局自治节点 + 一个联邦注册局节点"。
+
+- 进程模型：注册局是独立二进制(`registry`)，由节点桌面端启动时拉起为子进程(`node/src/registry_proc`)、退出时一并停掉；registry 经节点 RPC 读写链；对内网托管注册局 HTTP API 与前端。桌面 = 节点运维台，浏览器 = 注册局管理员，并存不冲突。
+- 数据两层：链上最小身份 + 承诺哈希(选择性/绑定触发上链)；链下明细存本市内嵌 PostgreSQL + 本地/NAS 文件仓库(文件哈希上链验真)。
+- 当前进度：
+  - Step0：crate 骨架 + node 拉起子进程的最小贯通（已完成）。
+  - Step1：`citizencode/backend` 全量后端(约 25,662 行,含 accounts/admins/china/citizenapp/citizens/core/citizenpassport/crypto/docs/gov/indexer/number/private/scope/subjects/audit)忠实迁入 `registry/src`，平台层切换为内嵌 PostgreSQL + 节点 RPC + **进程内本地限流(删 Redis)**；省/市 scope 与行政区维度保留；`cargo check -p registry` 0 错误 0 警告（已完成，真实起库端到端验收待 PG 环境）。
+  - Step2：`citizencode/frontend`(Vite5 + React18 + TS)忠实迁入 `registry/frontend`，registry 后端**同源托管 dist + SPA 回退**(`tower-http` ServeDir/ServeFile,静态资源不走限流)；`vite base: './'`;`npm run build` 与 `cargo check -p registry` 均 0 错误 0 警告（已完成）。桌面 `node/frontend` 与浏览器 `registry/frontend` 两套独立前端并存。
+  - 后续：链上管理员供给与扫码登录(Step3)、公民护照直接录入收口(Step4)、打包部署(Step5)，见 `memory/08-tasks/open/20260626-registry-merge-0X-*`。
 
 ## 5. 系统总体架构
 
@@ -128,16 +143,31 @@ citizenchain/
 ## 9. 链上模块分组
 
 ### 9.1 治理模块（`runtime/governance/`）
-- 负责内部投票、联合投票、公民投票、最终性密钥治理、管理员权限治理、运行时升级治理、销毁治理，并为决议发行提供联合投票引擎。
+- 负责内部投票、联合投票、公民投票、最终性密钥治理、运行时升级治理、销毁治理，并为决议发行提供联合投票引擎。
 
 当前模块：
-- `admins-change`
 - `grandpakey-change`
 - `resolution-destro`
 - `runtime-upgrade`
 - `votingengine`
 
-### 9.2 发行模块（`runtime/issuance/`）
+### 9.2 管理员模块（`runtime/admins/`）
+- 负责创世管理员、公权机构管理员、私权机构管理员和个人多签管理员。
+
+当前模块：
+- `admin-primitives`
+- `genesis-admins`
+- `public-admins`
+- `private-admins`
+- `personal-admins`
+
+### 9.3 私权模块（`runtime/private/`）
+- 负责机构多签账户的创建、关闭、资金与生命周期治理；个人多签已归入 `runtime/admins/personal-admins`。
+
+当前模块：
+- `organization-manage`
+
+### 9.4 发行模块（`runtime/issuance/`）
 - 负责公民发行、全节点发行、省储行利息、决议发行完整流程。
 
 当前模块：
@@ -146,17 +176,16 @@ citizenchain/
 - `resolution-issuance`
 - `provincialbank-interest`
 
-### 9.3 交易模块（`runtime/transaction/`）
+### 9.5 交易模块（`runtime/transaction/`）
 - 负责链上交易手续费、链下交易手续费、机构多签交易能力。
 
 当前模块：
-- `organization-manage`
 - `multisig-transfer`
 - `institution-asset`
 - `offchain-transaction`
 - `onchain-transaction`
 
-### 9.4 其他模块（`runtime/otherpallet/`）
+### 9.6 其他模块（`runtime/otherpallet/`）
 - 负责 CID 链上绑定 / 资格校验、PoW 难度调整等基础能力。
 
 当前模块：
@@ -185,7 +214,7 @@ citizenchain/
 
 ### 11.1 需要 runtime 升级的改动
 - `runtime/` 中的状态机、类型、交易校验、runtime API。
-- `runtime/governance/`、`runtime/issuance/`、`runtime/transaction/`、`runtime/otherpallet/` 中被 runtime 直接引用的链上逻辑。
+- `runtime/governance/`、`runtime/admins/`、`runtime/private/`、`runtime/issuance/`、`runtime/transaction/`、`runtime/otherpallet/` 中被 runtime 直接引用的链上逻辑。
 - `runtime/primitives/` 中被 runtime 直接使用、并影响链上行为的常量 / 类型 /编码结构。
 
 ### 11.2 不需要 runtime 升级的改动
@@ -206,11 +235,16 @@ citizenchain/
 ## 12. 产品级模块文档索引
 
 ### 12.1 治理
-- `runtime/governance/admins-change/ADMINSCHANGE_TECHNICAL.md`
 - `runtime/governance/grandpakey-change/GRANDPAKEYCHANGE_TECHNICAL.md`
 - `runtime/governance/resolution-destro/RESOLUTIONDESTRO_TECHNICAL.md`
 - `runtime/governance/runtime-upgrade/RUNTIMEUPGRADE_TECHNICAL.md`
 - `runtime/votingengine/VOTINGENGINE_TECHNICAL.md`
+
+### 12.1.1 管理员
+- `runtime/admins/ADMINS_TECHNICAL.md`
+
+### 12.1.2 私权
+- `runtime/private/organization-manage/ORGANIZATION_MANAGE_TECHNICAL.md`
 
 ### 12.2 发行
 - `runtime/issuance/citizen-issuance/CITIZENISS_TECHNICAL.md`
@@ -219,7 +253,6 @@ citizenchain/
 - `runtime/issuance/provincialbank-interest/PROVINCIALBANK_TECHNICAL.md`
 
 ### 12.3 交易
-- `runtime/governance/organization-manage/ORGANIZATION_MANAGE_TECHNICAL.md`
 - `runtime/transaction/multisig-transfer/MULTISIG_TRANSFER_TECHNICAL.md`
 - `runtime/transaction/institution-asset/INSTITUTION_ASSET_TECHNICAL.md`
 - `runtime/transaction/offchain-transaction/STEP1_TECHNICAL.md`

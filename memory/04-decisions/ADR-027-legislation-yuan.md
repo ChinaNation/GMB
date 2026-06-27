@@ -39,7 +39,7 @@
 
 本设计新增两个 pallet,职责分离(用户拍板 2026-06-24:不动现有三投票模块,新增立法专属投票模块):
 
-#### 1a. 业务壳:`citizenchain/runtime/governance/legislation-yuan`
+#### 1a. 业务壳:`citizenchain/runtime/public/legislation-yuan`
 
 - 与宪法「立法院」、用户命名字面一致;`pallet_index = 27`;`MODULE_TAG = b"leg-yuan"`;对外类型名 `LegislationYuan`。
 - 只承载法律数据:Law/LawVersion storage、状态机、`propose_*`(admin 入口)、Executor(投票通过后按 MODULE_TAG 认领、写新法律版本)、runtime 查询 API、不可修改条款硬拒。
@@ -245,7 +245,7 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
 
 预计涉及目录(实现阶段,非本 ADR 改动):
 
-- `citizenchain/runtime/governance/legislation-yuan/`:新建业务壳 pallet(代码)。
+- `citizenchain/runtime/public/legislation-yuan/`:新建业务壳 pallet(代码)。
 - `citizenchain/runtime/votingengine/legislation-vote/`:新建立法专属投票 sub-pallet(代码,核心)。
 - `citizenchain/runtime/votingengine/`(核心 crate):仅在确需时补共享 trait/类型(如 `LegislationVoteEngine` 注册);internal-vote / joint-vote / citizen-vote 不改。
 - `citizenchain/runtime/src/lib.rs`、`src/configs/`、`src/apis.rs`、`src/tests/`:注册两 pallet、装配 Config、回调路由、法律查询 API、唯一性测试(代码)。

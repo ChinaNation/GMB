@@ -6,7 +6,6 @@
 
 - `citizenchain` 模块文档
 - `cid` 模块文档
-- `cpms` 模块文档
 - `citizenapp` 模块文档
 - `website` 官网模块文档
 
@@ -21,6 +20,5 @@
 
 - `memory/05-modules/citizenchain/`
 - `memory/05-modules/citizencode/`
-- `memory/05-modules/citizenpassport/`
 - `memory/05-modules/citizenapp/`
 - `memory/05-modules/website/`

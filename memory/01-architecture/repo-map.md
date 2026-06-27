@@ -64,7 +64,7 @@ GMB/
 - `memory/06-quality/`：测试、缺陷、变更记录模板和跨端 fixture
 - `memory/07-ai/`：AI 编程系统规则
 - `memory/08-tasks/`：任务卡、执行记录与归档
-- `memory/scripts/`：memory 自检和入口验收脚本
+- `scripts/`：memory 自检和入口验收脚本
 
 以下旧目录不再属于当前结构，不得新建或恢复：
 

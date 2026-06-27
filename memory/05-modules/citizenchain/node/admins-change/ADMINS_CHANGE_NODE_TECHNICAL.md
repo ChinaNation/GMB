@@ -1,6 +1,6 @@
 # node 管理员更换模块技术文档
 
-最新更新：2026-06-23。
+最新更新：2026-06-26。
 
 ## 模块定位
 
@@ -8,20 +8,20 @@
 
 代码目录：
 
-- `/Users/rhett/GMB/citizenchain/node/src/governance/admins_change/`：后端 Tauri 命令、管理员激活、链上 storage 解码、call data 构造、签名提交。
-- `/Users/rhett/GMB/citizenchain/node/frontend/governance/admins-change/`：桌面前端管理员列表、管理员集合编辑、签名二维码流程。
+- `/Users/rhett/GMB/citizenchain/node/src/admins/admin_management/`：后端 Tauri 命令、管理员激活、链上 storage 解码、call data 构造、签名提交。
+- `/Users/rhett/GMB/citizenchain/node/frontend/admins/admin-management/`：桌面前端管理员列表、管理员集合编辑、签名二维码流程。
 
 边界：
 
-- 不属于 `governance/organization-manage`。机构管理只负责机构和机构账户的注册、注销、索引查询；其“换管理员”按钮只作为入口跳转到 `admins_change`。
+- 不属于 `private/organization-manage`。机构管理只负责机构和机构账户的注册、注销、索引查询；其“换管理员”按钮只作为入口跳转到 `admin_management`。
 - 不在 `frontend/governance/` 根目录继续堆管理员更换页面；根目录只保留页面路由入口。
-- 管理员激活/已激活管理员查询的前端 API 只放在 `frontend/governance/admins-change/api.ts`，根 `governance/api.ts` 不再承载这些方法。
-- `storage_keys.rs` 只保留通用哈希与 AccountId 工具，`AdminsChange::AdminAccounts` 专用读取在 `admins_change/storage.rs`。
+- 管理员激活/已激活管理员查询的前端 API 只放在 `frontend/admins/admin-management/api.ts`，根 `governance/api.ts` 不再承载这些方法。
+- `storage_keys.rs` 只保留通用哈希与 AccountId 工具；管理员 `AdminAccounts` 专用读取在 `admins/admin_management/storage.rs`，并按机构码路由到四个管理员 pallet。
 
 ## 后端结构
 
 ```text
-citizenchain/node/src/governance/admins_change/
+citizenchain/node/src/admins/admin_management/
 ├── mod.rs              # 模块导出和边界说明
 ├── activation.rs       # 管理员激活：生成激活签名请求、验证签名、本地加密存储
 ├── types.rs            # AdminAccountState DTO 与标签
@@ -29,7 +29,7 @@ citizenchain/node/src/governance/admins_change/
 ├── codec.rs            # AdminAccount SCALE 解码与 BoundedVec<AccountId32> 编码
 ├── call_data.rs        # propose_admin_set_change call data 构造
 ├── validation.rs       # 桌面端前置校验
-├── storage.rs          # AdminsChange::AdminAccounts storage key 与 RPC 读取
+├── storage.rs          # Personal/Genesis/Public/Private AdminAccounts storage key 与 RPC 读取
 ├── signing.rs          # QR 签名请求构造、签名响应验证、交易提交
 └── commands.rs         # Tauri 命令入口
 ```
@@ -63,15 +63,20 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 链上 call data：
 
 ```text
-[pallet=12][call=0][institution_code:[u8;4]][account_id:48][admins:Compact<Vec<AccountId32>>]
+[pallet][call][institution_code:[u8;4]][account_id:32][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]
 ```
 
-其中 `pallet=12` 对应 runtime `AdminsChange`，`call=0` 对应 `propose_admin_set_change`。
+其中：
+
+- `PMUL` 个人多签 → `PersonalAdmins(7).propose_admin_set_change(3)`。
+- `NRC/PRC/PRB/FRG` 创世管理员 → `GenesisAdmins(12).propose_admin_set_change(0)`。
+- 公权机构 → `PublicAdmins(29).propose_admin_set_change(0)`。
+- 私权/非法人机构 → `PrivateAdmins(30).propose_admin_set_change(0)`。
 
 ## 前端结构
 
 ```text
-citizenchain/node/frontend/governance/admins-change/
+citizenchain/node/frontend/admins/admin-management/
 ├── index.ts
 ├── types.ts
 ├── api.ts
@@ -87,7 +92,7 @@ citizenchain/node/frontend/governance/admins-change/
 页面流程：
 
 1. 治理机构详情页或 `governance/organization-manage` 机构详情页点击“换管理员”。
-2. `AdminSetChangePage` 读取 `AdminsChange::AdminAccounts`。
+2. `AdminSetChangePage` 按机构码读取对应管理员 pallet 的 `AdminAccounts`。
 3. 用户选择已激活管理员钱包，编辑完整的新管理员集合。
 4. 后端构建 `propose_admin_set_change` 签名请求。
 5. 前端展示 QR_V1 二维码，扫码签名响应后提交。
@@ -97,7 +102,7 @@ citizenchain/node/frontend/governance/admins-change/
 
 - `AdminAccountRef.cidNumber`：仅用于 NRC / PRC / PRB 等内置治理机构，必须带固定治理档机构码（`is_fixed_governance_code`）防止错主体。
 - `AdminAccountRef.accountIdHex`：用于个人多签和机构账户，必须带个人多签码（`is_personal_code`，PMUL）或机构账户码（`is_institution_code`）。缺少 `accountIdHex` 时后端直接拒绝动态主体管理员激活和管理员更换。
-- `offchain/organization-manage` 只提供页面入口和主账户 subject 元数据；管理员激活、更换读取、校验、QR 和提交仍全部走 `governance/admins_change`。
+- `offchain/organization-manage` 只提供页面入口和主账户 subject 元数据；管理员激活、更换读取、校验、QR 和提交仍全部走 `admins/admin_management`。
 
 ## 校验规则
 

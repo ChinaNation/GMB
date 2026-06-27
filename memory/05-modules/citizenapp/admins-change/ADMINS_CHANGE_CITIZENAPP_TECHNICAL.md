@@ -1,6 +1,6 @@
 # citizenapp 管理员更换模块技术文档
 
-最新更新：2026-05-10。
+最新更新：2026-06-26。
 
 ## 模块定位
 
@@ -61,37 +61,40 @@ citizenapp/test/governance/admins-change/
    - 内置治理机构：`0x01 Builtin + cidNumber`。
    - 个人多签：`PersonalAccount AccountId + AccountId`。
    - 机构账户：`InstitutionAccount AccountId + AccountId`。
-3. 读取 `AdminsChange::AdminAccounts` 并解码完整 `AdminAccount`。
+3. 按机构码读取 `PersonalAdmins / GenesisAdmins / PublicAdmins / PrivateAdmins` 的 `AdminAccounts` 并解码完整 `AdminAccount`。
 4. 用户选择管理员钱包、编辑完整管理员集合。
 5. `AdminSetValidation` 做端上前置校验，同时校验目标阈值。
-6. `AdminSetChangeCallCodec` 构造 `AdminsChange::propose_admin_set_change` call data。
+6. `AdminSetChangeCallCodec` 按机构码构造对应管理员 pallet 的 `propose_admin_set_change` call data。
 7. `AdminSetChangeService` 通过 `SignedExtrinsicBuilder` 走热钱包或公民钱包签名并提交。
 
 ## 主体身份与查询门面
 
 `/Users/rhett/GMB/citizenapp/lib/governance/admins-change/models/admin_account.dart` 定义 `AdminAccountIdentity`，调用方必须显式传入三类主体之一：
 
-- `governanceInstitution`：治理机构主体，固定治理档机构码（`is_fixed_governance_code`：NRC/PRC/PRB），`kind=0`。
-- `personalAccount`：个人多签主体，个人多签码（`is_personal_code`，PMUL），`kind=2`。
-- `institutionAccount`：机构账户主体，机构账户码（`is_institution_code`：公权或私权法人），`kind=3`。
+- `governanceInstitution`：创世管理员主体，固定治理档机构码或联邦注册局（NRC/PRC/PRB/FRG），`kind=0`。
+- `institutionAccount`：公权机构账户主体，`kind=1`；私权/非法人机构账户主体，`kind=2`。
+- `personalAccount`：个人多签主体，个人多签码（PMUL），`kind=3`。
 
 `/Users/rhett/GMB/citizenapp/lib/governance/admins-change/services/institution_admin_service.dart` 是查询门面，但不接收模糊字符串身份；所有 `fetchAdmins / fetchThreshold / isAdmin / clearCache` 调用都必须传 `AdminAccountIdentity`。按单一字符串混用个人、机构、治理主体的入口不存在。
 
 ## 管理员更换载荷与阈值
 
-当前 `AdminsChange::propose_admin_set_change` 载荷固定为：
+当前管理员更换载荷固定为：
 
 ```text
-[12][0][institution_code:[u8;4]][account_id:48][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]
+[pallet][call][institution_code:[u8;4]][account_id:32][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]
 ```
 
 规则：
 
+- PMUL 个人多签走 `PersonalAdmins(7).propose_admin_set_change(3)`。
+- NRC/PRC/PRB/FRG 创世管理员走 `GenesisAdmins(12).propose_admin_set_change(0)`。
+- 公权机构走 `PublicAdmins(29).propose_admin_set_change(0)`。
+- 私权/非法人机构走 `PrivateAdmins(30).propose_admin_set_change(0)`。
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
-- 内置治理机构不是创建/注册对象，citizenapp 只展示；只有进入“换管理员”提案时才构造管理员更换交易。
-- 内置治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6。
+- 创世固定治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6；FRG 使用动态严格过半阈值。
 - 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
-- 阈值真源不在 `AdminsChange::AdminAccounts`；治理固定阈值来自制度常量，动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存。
+- 阈值真源不在各管理员 `AdminAccounts`；治理固定阈值来自制度常量，动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存。
 - QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与冷钱包 decoder 逐项一致：`institution_code / subject / admins / new_threshold`。
 
 ## 管理员激活

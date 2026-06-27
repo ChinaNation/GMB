@@ -2,7 +2,7 @@
 
 ## 1. 项目定位
 
-GMB 是一套由离线实名、在线身份、链上权限、移动端交互和 AI 驱动研发组成的综合系统。
+GMB 是一套由注册局身份、公民护照、链上权限、移动端交互和 AI 驱动研发组成的综合系统。
 
 系统核心目标是：
 
@@ -13,8 +13,7 @@ GMB 是一套由离线实名、在线身份、链上权限、移动端交互和 
 
 ## 2. 核心组成
 
-- `cpms`：完全离线实名录入、审核、签发系统
-- `cid`：在线身份验证、账户绑定、permit 签发系统
+- `cid`：注册局身份录入、公民护照发放、账户绑定、permit 签发系统
 - `citizenchain`：区块链 runtime、节点程序、节点 UI、桌面安装包
 - `citizenapp`：公民端钱包与业务入口
 - `memory`：AI 永久记忆中心
@@ -37,8 +36,7 @@ GMB 的 AI 开发体系必须满足以下要求：
 - `citizenchain/node` 使用 Rust + Substrate / Polkadot SDK + Tauri + React + TypeScript + Vite
 - `citizenchain/runtime` 使用 Rust + Substrate / Polkadot SDK
 - `citizenapp` 使用 Flutter + Dart，并继续使用 Isar 做端上本地存储
-- `cid` 当前使用 React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL 持久化
-- `cpms` 当前落地代码使用 Rust + Axum + SQLx + PostgreSQL 后端，React + TypeScript + Vite 前端
+- `cid` 当前并入 `citizenchain/registry`，使用 React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL 持久化
 - 区块链使用框架自带数据库
 - 业务系统使用 PostgreSQL
 

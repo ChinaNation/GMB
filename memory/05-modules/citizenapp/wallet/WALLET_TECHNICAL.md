@@ -176,7 +176,7 @@ lib/
 
 ### 4.6 登录签名
 
-CitizenApp 不承担 CID/CPMS 管理员扫码登录职责。管理员登录由 CID/CPMS 页面生成
+CitizenApp 不承担 CID 管理员扫码登录职责。管理员登录由 CID 页面生成
 `QR_V1 k=1,a=1` 登录签名请求,CitizenWallet 公民钱包扫码签名并返回 `k=2`
 签名响应。CitizenApp 钱包模块不生成登录签名请求,也不解析登录签名响应。
 

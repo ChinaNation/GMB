@@ -48,7 +48,7 @@
 - 公民党：占位文本（待接入）
 
 `npm run dev` 与 `npm run build` 都会先执行 `npm run generate:docs`，由
-`scripts/generate-local-docs.mjs` 读取白皮书 Markdown 真源并生成
+`citizenchain/scripts/generate-local-docs.mjs` 读取白皮书 Markdown 真源并生成
 `generated/local-docs.generated.ts`。公民宪法不再进入该 generated 文件，而是由
 node 本地 RPC `constitution_getDocument` 从链上立法院模块读取结构化法律并据原外壳重建 HTML。
 

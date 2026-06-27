@@ -63,7 +63,7 @@ citizenchain node 的链交易冷签路径必须和热钱包路径一样使用 r
 
 ## 4. 登录签名
 
-登录不再有独立 QR kind。CID/CPMS 生成 `k=1,a=1`:
+登录不再有独立 QR kind。CID 生成 `k=1,a=1`:
 
 | 字段 | 规则 |
 |---|---|
@@ -74,13 +74,12 @@ citizenchain node 的链交易冷签路径必须和热钱包路径一样使用 r
 
 系统签名原文使用 `QR_V1|1|i|system|e|system_pubkey_without_0x`。
 
-## 5. CID / CPMS 文本载荷
+## 5. CID 文本载荷
 
 | action | domain / 前缀 | 必须展示 |
 |---:|---|---|
-| 2 | `cid-citizen-bind-v1` | 绑定模式、档案号、公民状态、投票资格、钱包地址 |
+| 2 | `cid-citizen-bind-v1` | 绑定模式、公民状态、投票资格、钱包地址 |
 | 3 | `cid_admin_governance` | 动作类型、注册局、省份、操作者/目标账户 |
-| 4 | `CPMS_ARCHIVE_DELETE_V1` | 档案号、管理员账户、过期时间 |
 
 文本载荷内部的 `payload_hash` 只用于生成方本地 session 或 API 防重放,不进入 QR 签名响应。
 
@@ -89,10 +88,9 @@ citizenchain node 的链交易冷签路径必须和热钱包路径一样使用 r
 1. `a=1` 登录
 2. `a=2` 公民绑定
 3. `a=3` CID 管理员治理/Passkey 更新
-4. `a=4` CPMS 档案删除
-5. `a=5/6` 管理员激活/解密
-6. `a=7` Runtime 32B hash
-7. 所有 `qr-action-registry.md` 登记的链交易 action
+4. `a=5/6` 管理员激活/解密
+5. `a=7` Runtime 32B hash
+6. 所有 `qr-action-registry.md` 登记的链交易 action
 
 ## 7. 应红色拒绝
 

@@ -15,7 +15,6 @@
 citizencode/backend/china/china.sqlite
 ```
 
-此前讨论过“CID 运行库可管理 + citizenapp 在线拉新版 + CPMS 离线导入”的方案。该方案会形成开发库、运行库、客户端包三条数据线,一旦管理员运行中修改或代码升级替换种子,就会出现数据漂移。
 
 当前决策改为:国家/省级代码先固化到 runtime primitives;CID 开发库 SQLite 保留省表并在加载时
 断言与 primitives `PROVINCE_CODE_INFOS` 完全一致,但不再作为省码第二真源。市、镇和地址段仍以
@@ -25,7 +24,6 @@ citizencode/backend/china/china.sqlite
 生成各系统随包只读数据。国家码、省码或机构码变更属于 runtime primitives 变更,必须单独走
 runtime 二次确认。
 
-2026-06-20 起,镇下面第四层不再作为行政区,统一称为地址段。地址段只用于 CPMS 档案地址选择,
 不参与 CID 号生成、公权机构目录或链上治理边界。档案完整地址由“地址段 + 详细地址输入段”
 组成,例如 `多福巷 + 12号院3号楼101室`。
 
@@ -37,7 +35,6 @@ runtime 二次确认。
   的省名、省码、顺序和数量一致。
 - CID 不提供行政区管理 tab,也不提供运行中新增、改名、删除行政区 API。
 - citizenapp 安装包内置 `assets/admin_divisions/` 行政区字典,启动走**版本驱动增量 reconcile**(见下「客户端增量同步」),不向 CID 联网拉行政区新版。
-- CPMS 安装包内置同源 `china.sqlite` 只读快照,运行中不得联网更新行政区。
 - CID 运行库中的自动公权机构必须由同一 `china.sqlite` 对账生成,`gov_manifest` 必须记录当前 SQLite hash 和目录 hash。
 - 公权机构包 `assets/public_institutions/` 必须由对账并通过严格校验后的 CID 真实接口导出,避免旧行政区 code 残留。
 
@@ -105,7 +102,6 @@ gov strict:
   catalog_hash=499c1ee8af974f0a79affe6731883d491052da1767f4a99ae072ff29c1f42ea6
 public_institutions bundle:
   version=1 provinces=43 total=245716 YL=1697
-  CITY_POLICE=2872 CITY_EDU=2872 JY=2873 PUBLIC_SECURITY=2872
   code cross-check bad_count=0
 ```
 
@@ -127,7 +123,6 @@ public_institutions bundle:
 5. 用指向同一 `china.sqlite` 的 CID 后端执行 `citizencode-backend reconcile-gov --changed-only`。
 6. 执行 `citizencode-backend check-gov --strict`,确认 `gov_manifest.china_hash` 等于当前 `china.sqlite` SHA-256,且缺失、错配、缺账户、废弃残留均为 0。
 7. 运行 `node citizenapp/tools/generate_public_institution_bundle.mjs --version <行政区版本>` 生成公权机构包。
-8. CID、citizenapp、CPMS 发布安装包时只携带上述同源快照。
 
 ## 客户端增量同步(citizenapp,2026-06-18)
 
@@ -147,7 +142,6 @@ citizenapp 无服务端,数据靠 assets 包随版本分发。包版本变了就
 
 1. 不得恢复 `citizencode/backend/china/data/`。
 2. 不得恢复 CID 行政区管理 tab 或 `/api/v1/app/admin-divisions/*`。
-3. 不得在 citizenapp/CPMS 内维护第二套行政区名字。
 4. 任何重复洪江旧壳、`龙感湖工业园镇`、`xx管理市` 残留都必须在同一任务中清理。
 
 ## 实现坑（2026-06-23 修复）

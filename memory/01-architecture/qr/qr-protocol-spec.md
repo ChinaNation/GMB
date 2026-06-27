@@ -4,7 +4,6 @@
 - 更新日期:2026-06-23
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:全仓库所有“生成二维码 -> 扫码识别 -> 签名/确认 -> 签名响应验签”的二维码流程
-- 例外:CPMS 安装/档案业务码 `CID_CPMS_V1 / INSTALL / ARCHIVE` 不是签名扫码协议,不并入本文件
 
 ## 1. 设计铁律
 
@@ -43,7 +42,7 @@
 
 | k | 名称 | 类型 | 生成方 | 扫码方 | 注释 |
 |---:|---|---|---|---|---|
-| 1 | `sign_request` | 临时 | CitizenApp / CitizenWallet / CID / CPMS / citizenchain node | 签名方 | 请求扫码方签名 `b.d` |
+| 1 | `sign_request` | 临时 | CitizenApp / CitizenWallet / CID / citizenchain node | 签名方 | 请求扫码方签名 `b.d` |
 | 2 | `sign_response` | 临时 | 签名方 | 请求生成方 | 回传签名结果 |
 | 3 | `user_contact` | 固定 | CitizenApp / CitizenWallet | 需要地址的一方 | 展示钱包地址和联系人名 |
 | 4 | `user_transfer` | 临时 | 收款方 | 付款方 | 收款码,可带金额和备注 |
@@ -80,7 +79,7 @@
 | 场景 | `a` 规则 | 签名字节 |
 |---|---|---|
 | 普通链交易 | `a = (pallet_index << 8) | call_index` | `d` 必须是生成方用当前 runtime 类型构造的 `SignedPayload` SCALE 字节;长度 ≤256B 签原文,>256B 签 `blake2_256(payload)` |
-| 登录 / CID / CPMS 文本载荷 | `a = 1..4` | 签 payload 原文 |
+| 登录 / CID 文本载荷 | `a = 1..3` | 签 payload 原文 |
 | 管理员激活 / 解密 | `a = 5/6` | 签二进制 payload 原文 |
 | Runtime 升级哈希签名 | `a = 7` 或 RuntimeUpgrade 链 action | `d` 必须是同一 runtime `SignedPayload::using_encoded` 得到的 32B signing bytes,签该 32B |
 
@@ -200,7 +199,7 @@ QR_V1|<k>|<i>|<system 或空>|<e 或 0>|<principal>
 |---|---|
 | `k` | 数字扫码流向码 |
 | `i` | 请求 id |
-| `system` | `cid` / `cpms` / 空串 |
+| `system` | `cid` / 空串 |
 | `e` | 过期 unix 秒;无则为 `0` |
 | `principal` | 去掉 `0x` 的小写 hex 公钥 |
 

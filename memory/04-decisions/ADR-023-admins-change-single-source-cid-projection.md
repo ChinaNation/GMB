@@ -27,7 +27,7 @@
 
 ## 2. 真源:链上 AdminAccounts
 
-`admins-change::AdminAccounts`(`citizenchain/runtime/governance/admins-change/src/lib.rs:227`),StorageMap key=机构主账户(32B),value=`AdminAccount { org, kind, admins: BoundedVec, status, threshold, creator, created_at, updated_at }`。`propose_admin_set_change`(call_index=0)一个 call 覆盖 add/remove/replace。链端授权天然防越权:`who ∈ 当前 admins`,CID 不持机构私钥。
+`admins-change::AdminAccounts`(`citizenchain/runtime/admins/admin-management/src/lib.rs:227`),StorageMap key=机构主账户(32B),value=`AdminAccount { org, kind, admins: BoundedVec, status, threshold, creator, created_at, updated_at }`。`propose_admin_set_change`(call_index=0)一个 call 覆盖 add/remove/replace。链端授权天然防越权:`who ∈ 当前 admins`,CID 不持机构私钥。
 
 ## 3. CID 投影:双通道(缺一不可)
 

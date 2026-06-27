@@ -16,10 +16,9 @@
 
 | a | 名称 | payload | 签名字节 | 生成方 | 扫码/签名方 | 注释 |
 |---:|---|---|---|---|---|---|
-| 1 | `login` | `system|system_signature` UTF-8 | 原文 | CID / CPMS | CitizenWallet | 登录签名确认 |
+| 1 | `login` | `system|system_signature` UTF-8 | 原文 | CID | CitizenWallet | 登录签名确认 |
 | 2 | `citizen_bind` | `cid-citizen-bind-v1|...` UTF-8 | 原文 | CID | CitizenApp | 电子护照绑定 |
 | 3 | `cid_admin_action` | `cid_admin_governance` canonical JSON UTF-8 | 原文 | CID | CitizenWallet | 注册局管理员治理/Passkey 更新确认 |
-| 4 | `cpms_archive_delete` | `CPMS_ARCHIVE_DELETE_V1|...` UTF-8 | 原文 | CPMS | CitizenWallet | CPMS 档案软删除 |
 | 5 | `activate_admin_account` | `GMB || 0x18` 二进制 payload | 原文 | citizenchain node / CitizenApp | CitizenWallet | 管理员激活 |
 | 6 | `decrypt_admin` | `GMB || 0x19` 二进制 payload | 原文 | citizenchain node | CitizenWallet | 清算行管理员解密 |
 | 7 | `runtime_upgrade_hash` | 32B WASM hash | 原文 32B | citizenchain node / CitizenApp | CitizenWallet | Runtime 升级哈希直签 |
@@ -37,14 +36,15 @@ a = (pallet_index << 8) | call_index
 | a(hex) | pallet.call | decoder action | payload 展示字段 | 签发方 |
 |---|---|---|---|---|
 | `0x0203` | `Balances.transfer_keep_alive` | `transfer` | `to`, `amount_yuan` | citizenchain node / CitizenApp |
-| `0x0700` | `PersonalManage.propose_create` | `propose_create_personal` | `account_name`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | CitizenApp |
-| `0x0701` | `PersonalManage.propose_close` | `propose_close_personal` | `account`, `beneficiary` | CitizenApp |
-| `0x0702` | `PersonalManage.cleanup_rejected_proposal` | `cleanup_rejected_personal_proposal` | `proposal_id` | CitizenApp |
+| `0x0700` | `PersonalAdmins.propose_create` | `propose_create_personal` | `account_name`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | CitizenApp |
+| `0x0701` | `PersonalAdmins.propose_close` | `propose_close_personal` | `account`, `beneficiary` | CitizenApp |
+| `0x0702` | `PersonalAdmins.cleanup_rejected_proposal` | `cleanup_rejected_personal_proposal` | `proposal_id` | CitizenApp |
+| `0x0703` | `PersonalAdmins.propose_admin_set_change` | `propose_personal_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | CitizenApp |
 | `0x0800` | `ResolutionIssuance.propose_resolution_issuance` | `propose_resolution_issuance` | `reason`, `amount_yuan`, `allocation_count`, `eligible_total`, `province_name`, `signer_pubkey` | citizenchain node / CitizenApp |
 | `0x0903` | `VotingEngine.finalize_proposal` | `finalize_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0904` | `VotingEngine.retry_passed_proposal` | `retry_passed_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0905` | `VotingEngine.cancel_passed_proposal` | `cancel_passed_proposal` | `proposal_id`, `reason` | citizenchain node / CitizenApp |
-| `0x0c00` | `AdminsChange.propose_admin_set_change` | `propose_admin_set_change` | `institution_code`, `account`, `admins` | citizenchain node / CitizenApp |
+| `0x0c00` | `GenesisAdmins.propose_admin_set_change` | `propose_genesis_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
 | `0x0d00` | `RuntimeUpgrade.propose_runtime_upgrade` | `propose_runtime_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0d02` | `RuntimeUpgrade.developer_direct_upgrade` | `developer_direct_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0e00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `institution_code`, `amount_yuan` | CitizenApp |
@@ -53,6 +53,8 @@ a = (pallet_index << 8) | call_index
 | `0x1104` | `OrganizationManage.cleanup_rejected_proposal` | `cleanup_rejected_proposal` | `proposal_id` | CitizenApp |
 | `0x1105` | `OrganizationManage.propose_create_institution` | `propose_create_institution` | `cid_number`, `cid_full_name`, `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | citizenchain node / CitizenApp |
 | `0x1300` | `MultisigTransfer.propose_transfer` | `propose_transfer` | `institution`, `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
+| `0x1d00` | `PublicAdmins.propose_admin_set_change` | `propose_public_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
+| `0x1e00` | `PrivateAdmins.propose_admin_set_change` | `propose_private_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
 | `0x1301` | `MultisigTransfer.propose_safety_fund` | `propose_safety_fund_transfer` | `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
 | `0x1302` | `MultisigTransfer.propose_sweep` | `propose_sweep_to_main` | `institution`, `amount_yuan` | citizenchain node / CitizenApp |
 | `0x1532` | `OffchainTransaction.register_clearing_bank` | `register_clearing_bank` | `cid_number`, `peer_id`, `rpc_domain`, `rpc_port` | citizenchain node |
@@ -81,7 +83,7 @@ a = (pallet_index << 8) | call_index
 | `approve` | 展示“赞成/反对” |
 | `remark` / `reason` / `memo` | 原字符串 |
 | Runtime hash | 展示 `0x<64hex>` |
-| CID/CPMS 管理文本 | 展示动作类型、主体、公钥/账户、过期时间 |
+| CID 管理文本 | 展示动作类型、主体、公钥/账户、过期时间 |
 
 机器校验字段如 nonce、block hash、payload hash、内部 challenge id 不作为普通确认字段展示,但可用于本地 session 校验。
 

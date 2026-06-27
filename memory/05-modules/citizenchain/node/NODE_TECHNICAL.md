@@ -47,6 +47,11 @@
 - 离线或 major sync 时禁止出块，防止本地分叉
 - 非引导节点必须先从网络导入至少 1 个块才允许出块
 
+### 2.4 交易池生命周期
+- CitizenChain 默认把 Substrate 交易池固定为 `SingleState`。当前链不依赖 fork-aware 多视图池；上游 fork-aware 后台子任务在本链 fresh / 普通节点启动场景会提前结束，进而触发 `txpool-background` essential task 关闭服务。
+- 用户显式传入 `--pool-type` 时仍尊重 CLI 参数；生产默认路径不要求用户手工追加参数。
+- `service::new_full` 会让 `TaskManager` 持有交易池 clone，防止交易池句柄在服务组装后被提前释放。
+
 ## 3. RPC 接口
 
 | 方法 | 说明 |

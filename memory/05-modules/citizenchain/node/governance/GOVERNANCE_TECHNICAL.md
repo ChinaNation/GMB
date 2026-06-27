@@ -5,7 +5,6 @@
 ```
 governance/
 ├── mod.rs              # Tauri 命令入口：提案创建、投票、签名请求/提交
-├── admins_change/      # 管理员管理：激活、主体读取、管理员集合变更、签名提交
 ├── organization-manage/# 机构多签管理：CID 凭证、机构详情、创建机构多签签名请求
 ├── runtime_upgrade/    # 协议升级：开发期直升、运行期协议升级业务签名与提交
 ├── signing.rs          # QR 签名协议实现：payload 构建、签名验证、交易提交
@@ -14,6 +13,8 @@ governance/
 ├── storage_keys.rs     # 链上存储 key 构造：twox_128 / blake2b_128 / double_map_key
 └── types.rs            # 共享类型定义
 ```
+
+管理员管理已独立到 `node/src/admins/admin_management/`，不再放在 `node/src/governance/admins_change/`。
 
 ## 核心职责
 
@@ -26,14 +27,14 @@ governance/
 
 前端对应结构：
 - `node/frontend/governance/api.ts`：治理专用 Tauri API
-- `node/frontend/governance/admins-change/`：管理员列表与管理员更换页面
+- `node/frontend/admins/admin-management/`：管理员列表与管理员更换页面
 - `node/frontend/governance/runtime-upgrade/`：协议升级与开发升级页面，只提交业务提案，不实现投票流程
 - `node/frontend/governance/organization_manage/`：机构多签管理页面、API 和 DTO
 - `node/frontend/governance/types.ts`：治理页面 DTO 类型
 - `node/frontend/shared/qr/`：QR 扫码组件与 QR_V1 解析协议，治理前端通过共享层引用，不再把扫码能力放在治理目录内
 - `node/frontend/shared/ss58.ts` / `node/frontend/shared/format.ts`：SS58 地址展示与金额格式化
 
-## admins_change/activation.rs — 管理员激活
+## admins/admin_management/activation.rs — 管理员激活
 
 ### 设计原则
 
@@ -133,7 +134,7 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 
 ## institution.rs — 机构查询
 
-- 管理员列表读取委托到 `admins_change/storage.rs`
+- 管理员列表读取委托到 `admins/admin_management/storage.rs`
 - 内置机构管理员 account_id 使用 `0x01` Builtin kind tag，与 `core_const::account_id_from_cid_number` 字节级一致
 - 解码管理员 AccountId 列表
 - 提供机构全称/简称查询（从 CHINA_CB / CHINA_CH 常量表）
@@ -145,7 +146,7 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 - `account_id_from_cid_number`：内置机构 AccountId 编码（与 runtime primitives 一致）
 - `map_key` / `double_map_key`：完整存储 key 拼接
 
-`AdminsChange::AdminAccounts` 专用 storage key 已收口到 `governance/admins_change/storage.rs`，不得再在通用 `storage_keys.rs` 中新增管理员更换专用读取函数。
+管理员 `AdminAccounts` 专用 storage key 已收口到 `admins/admin_management/storage.rs`，并按 `PersonalAdmins / GenesisAdmins / PublicAdmins / PrivateAdmins` 分流；不得再在通用 `storage_keys.rs` 中新增管理员更换专用读取函数。
 
 ## 依赖关系
 

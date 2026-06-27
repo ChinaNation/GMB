@@ -125,7 +125,7 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
           │
 [chain runtime] ⑨ propose_create_institution:
                   - UsedRegisterNonce[hash(nonce)] 必须 false
-                  - 读取 admins-change::AdminAccounts[issuer_main_account],确认 signer_pubkey 属于该机构 admins
+                  - 按机构码读取对应管理员 pallet 的 AdminAccounts[issuer_main_account],确认 signer_pubkey 属于该机构 admins
                   - 重算 payload hash + sr25519_verify(signature, hash, pubkey)
                   - 通过 → Institutions[cid_number] = Pending,创建投票提案
                   - 失败 → DispatchError,extrinsic 回滚
