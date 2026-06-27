@@ -1,0 +1,66 @@
+[package]
+name = "registry"
+description = "CitizenChain 注册局(CID)服务:链下明细 + 管理员鉴权 + 颁发,经节点 RPC 读写链。"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license = "MIT"
+publish = false
+
+# 中文注释:注册局服务作为独立二进制,由节点桌面端在启动时拉起为子进程。
+[[bin]]
+name = "registry"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Web 服务(沿用 citizencode 后端同款 axum 0.7,便于平移)
+axum = { version = "0.7", features = ["multipart"] }
+# 内网 API HTTPS(Card 05;rcgen 自签 + rustls/ring)
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "signal"] }
+tower-http = { version = "0.6", features = ["cors", "fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+hex = "0.4"
+hex-literal = "0.4"
+base64 = "0.22"
+bs58 = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# 链下库:内嵌 PostgreSQL + 行政区 SQLite 单源(china.sqlite)
+postgres = { version = "0.19", features = ["with-chrono-0_4", "with-serde_json-1"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# 加解密 / 编码 / 哈希
+blake2 = "0.10"
+sha2 = "0.10"
+schnorrkel = "0.11"
+aes-gcm = "0.10"
+hkdf = "0.12"
+zeroize = "1"
+getrandom = "0.2"
+twox-hash = "1"
+parity-scale-codec = "3"
+
+# 链交互:subxt 经节点 RPC 读写链 + reqwest 直连 HTTP RPC
+subxt = { version = "0.43.1", default-features = false, features = ["jsonrpsee", "native"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# 杂项
+libc = "0.2"
+dashmap = "6.1"
+async-trait = "0.1"
+
+# 链上共享原语(随 workspace 统一到 ss58-2027-fix-citizenapp-grandpa 分支的 sp-core)
+sp-core = { workspace = true, default-features = true }
+primitives = { path = "../runtime/primitives" }
