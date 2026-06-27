@@ -1,5 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:convert';
 import 'package:citizenwallet/wallet/mnemonic_cipher.dart';
 
 void main() {
@@ -48,9 +49,10 @@ void main() {
       const mnemonic = 'test mnemonic words here only for testing';
       final encrypted = await MnemonicCipher.encrypt(mnemonic);
 
-      // 篡改密文中的一个字符
-      final tampered =
-          '${encrypted.substring(0, 10)}X${encrypted.substring(11)}';
+      // 中文注释：先解码再翻转认证标签最后一个字节，确保每次都真实篡改。
+      final bytes = base64Decode(encrypted);
+      bytes[bytes.length - 1] ^= 0x01;
+      final tampered = base64Encode(bytes);
       expect(
         () => MnemonicCipher.decrypt(tampered),
         throwsA(isA<FormatException>()),

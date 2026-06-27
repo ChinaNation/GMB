@@ -13,12 +13,15 @@ void main() {
         PalletRegistry.votingEnginePallet,
         PalletRegistry.runtimeUpgradePallet,
         PalletRegistry.resolutionDestroPallet,
-        PalletRegistry.adminsChangePallet,
+        PalletRegistry.personalAdminsPallet,
+        PalletRegistry.genesisAdminsPallet,
+        PalletRegistry.publicAdminsPallet,
+        PalletRegistry.privateAdminsPallet,
         PalletRegistry.grandpaKeyChangePallet,
         PalletRegistry.resolutionIssuancePallet,
         PalletRegistry.offchainTransactionPallet,
       };
-      expect(pallets.length, 10);
+      expect(pallets.length, 13);
     });
 
     test('投票引擎 sub-pallet call_index', () {
@@ -48,20 +51,26 @@ void main() {
       expect(PalletRegistry.proposeSafetyFundCall, 1);
       expect(PalletRegistry.proposeSweepCall, 2);
 
-      // AdminsChange(12): call_index=0 是管理员集合变更，call_index=1 留洞不复用。
+      // Genesis/Public/Private Admins: call_index=0 是管理员集合变更，call_index=1 留洞不复用。
+      expect(PalletRegistry.isAdminSetChangePallet(12), isTrue);
+      expect(PalletRegistry.isAdminSetChangePallet(29), isTrue);
+      expect(PalletRegistry.isAdminSetChangePallet(30), isTrue);
+      expect(PalletRegistry.isAdminSetChangePallet(7), isFalse);
       expect(PalletRegistry.proposeAdminSetChangeCall, 0);
+      expect(PalletRegistry.isPersonalAdminSetChangeCall(7, 3), isTrue);
 
       // OrganizationManage(17): call_index=0/3 留洞不复用
-      // (0 = 单账户机构 propose_create 已废弃; 3 = propose_create_personal 已迁出至 PersonalManage(7))
+      // (0 = 单账户机构 propose_create 已废弃; 3 = propose_create_personal 已迁出至 PersonalAdmins(7))
       expect(PalletRegistry.proposeCloseCall, 1);
       expect(PalletRegistry.registerCidInstitutionCall, 2);
       expect(PalletRegistry.cleanupRejectedProposalCall, 4);
       expect(PalletRegistry.proposeCreateInstitutionCall, 5);
 
-      // PersonalManage(7) B 阶段拆分(2026-05-06):独立命名空间
+      // PersonalAdmins(7):个人多签独立命名空间
       expect(PalletRegistry.proposeCreatePersonalCall, 0);
       expect(PalletRegistry.proposeClosePersonalCall, 1);
       expect(PalletRegistry.cleanupRejectedPersonalProposalCall, 2);
+      expect(PalletRegistry.proposePersonalAdminSetChangeCall, 3);
     });
 
     test('VotingEngine 统一手动重试/取消入口', () {

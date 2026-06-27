@@ -95,9 +95,6 @@ class PayloadDecoder {
   static final _decryptPrefix = Uint8List.fromList(
     [..._gmbPrefix, _opSignDecrypt],
   );
-  static final _cpmsArchiveDeletePrefix = Uint8List.fromList(
-    'CPMS_ARCHIVE_DELETE_V1|'.codeUnits,
-  );
   // 'cid_admin_governance' 是 CID 管理员 payload 的业务域(JSON
   // envelope 的 domain 字段值),不是 signing_message 的哈希签名域 —— 整段 JSON
   // 字节由 sr25519 直接签名,故不并入 op_tag 注册表。
@@ -115,9 +112,6 @@ class PayloadDecoder {
               _activateAdminPrefix.length + 32 + 4 + 1 + 32 + 8 + 16 &&
           _hasPrefix(raw, _activateAdminPrefix)) {
         return _decodeActivateAdminAccount(raw);
-      }
-      if (_hasPrefix(raw, _cpmsArchiveDeletePrefix)) {
-        return _decodeCpmsArchiveDelete(raw);
       }
       // DECRYPT challenge = prefix(4) + cid_number(48) + pubkey(32)
       //   + timestamp(8) + nonce(16) = 108 字节(对齐 node CHALLENGE_TOTAL_LEN)。
@@ -212,7 +206,7 @@ class PayloadDecoder {
       // 凭证尾部带签发机构、签发管理员和业务作用域字段。
       if (palletIndex == PalletRegistry.organizationManagePallet) {
         // call_index=0 留洞不复用(机构多签最少 2 账户,统一走 call_index=5)。
-        // call_index=3 留洞不复用(propose_create_personal 在 PersonalManage(7))。
+        // call_index=3 留洞不复用(propose_create_personal 在 PersonalAdmins(7))。
         if (callIndex == PalletRegistry.proposeCloseCall) {
           // 中文注释:机构 propose_close 携带注销凭证(nonce/签名/签发机构/签发管理员公钥),
           // 比个人多签多 3 个 Vec + 2×32,需专用解码;个人多签仍走 66 字节 _decodeProposeClose。
@@ -230,10 +224,10 @@ class PayloadDecoder {
         }
       }
 
-      // ── PersonalManage(7) ──
+      // ── PersonalAdmins(7) ──
       // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
       // ACTION enum 独立(ACTION_CREATE=0/ACTION_CLOSE=1),与 organization-manage 互不干扰。
-      if (palletIndex == PalletRegistry.personalManagePallet) {
+      if (palletIndex == PalletRegistry.personalAdminsPallet) {
         if (callIndex == PalletRegistry.proposeCreatePersonalCall) {
           return _decodeProposeCreatePersonal(bytes);
         }
@@ -250,6 +244,12 @@ class PayloadDecoder {
             action: 'cleanup_rejected_personal_proposal',
             summaryTemplate: '清理被拒个人多签提案 #{id} 残留',
           );
+        }
+        if (PalletRegistry.isPersonalAdminSetChangeCall(
+          palletIndex,
+          callIndex,
+        )) {
+          return _decodeProposeAdminSetChange(bytes);
         }
       }
 
@@ -269,9 +269,9 @@ class PayloadDecoder {
         }
       }
 
-      // ── AdminsChange(12) ──
+      // ── GenesisAdmins(12) / PublicAdmins(29) / PrivateAdmins(30) ──
       // 管理员集合变更走 propose_admin_set_change；执行统一由 VotingEngine 重试。
-      if (palletIndex == PalletRegistry.adminsChangePallet) {
+      if (PalletRegistry.isAdminSetChangePallet(palletIndex)) {
         if (callIndex == PalletRegistry.proposeAdminSetChangeCall) {
           return _decodeProposeAdminSetChange(bytes);
         }
@@ -463,26 +463,8 @@ class PayloadDecoder {
         return '上传机构文档';
       case 'INSTITUTION_DELETE_DOCUMENT':
         return '删除机构文档';
-      case 'PUBLIC_SECURITY_RECONCILE':
-        return '公安局机构对账';
       case 'CITIZEN_BIND_COMMIT':
         return '确认电子护照绑定';
-      case 'CPMS_STATUS_IMPORT_CONFIRM':
-        return '导入 CPMS 年度报告';
-      case 'CPMS_ISSUE_INSTALL_CODE':
-        return '签发 CPMS 安装码';
-      case 'CPMS_REVOKE_INSTALL_TOKEN':
-        return '作废 CPMS 安装令牌';
-      case 'CPMS_REISSUE_INSTALL_TOKEN':
-        return '重新签发 CPMS 安装码';
-      case 'CPMS_DISABLE_KEYS':
-        return '禁用 CPMS 授权';
-      case 'CPMS_ENABLE_KEYS':
-        return '启用 CPMS 授权';
-      case 'CPMS_REVOKE_KEYS':
-        return '吊销 CPMS 授权';
-      case 'CPMS_DELETE_KEYS':
-        return '删除 CPMS 授权';
       default:
         return actionType;
     }
@@ -700,7 +682,7 @@ class PayloadDecoder {
   //       [[u8;32] signer_pubkey][Vec scope_province_name][Vec scope_city_name][approve:bool]
   //
   // 签发身份必须进 payload,链端 RuntimeCidVoteVerifier 按 issuer_main_account
-  // 读取 admins-change::AdminAccounts.admins 确认 signer_pubkey。
+  // 按机构码读取对应管理员 pallet 的 AdminAccounts.admins 确认 signer_pubkey。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeCastReferendum(Uint8List bytes) {
     // 最小：2 + 8 + 32 + 1(nonce) + 1(sig) + 1(issuer)
@@ -1110,7 +1092,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // PersonalManage(7) / propose_create(0)
+  // PersonalAdmins(7) / propose_create(0)
   // 格式：[7][0][BoundedVec account_name][BoundedVec<AccountId32> admins][u32 regular_threshold][u128 amount]
   // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
   // OrganizationManage(17) call=3 留洞不复用。
@@ -1168,7 +1150,7 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // OrganizationManage(17) / propose_close(1)
-  // PersonalManage(7) / propose_close(1)
+  // PersonalAdmins(7) / propose_close(1)
   // 格式：[17][1][account:32][beneficiary:32]
   // ---------------------------------------------------------------------------
   /// 机构注销 propose_close(OrganizationManage 17.1)。
@@ -1317,14 +1299,19 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // AdminsChange(12) / propose_admin_set_change(0)
-  // 格式：[12][0][institution_code:[u8;4]][account:AccountId32][Compact<N>][admins:N*32][new_threshold:u32_le]
+  // PersonalAdmins(7.3) / GenesisAdmins(12.0) / PublicAdmins(29.0) / PrivateAdmins(30.0)
+  // 格式：[pallet][call][institution_code:[u8;4]][account:AccountId32][Compact<N>][admins:N*32][new_threshold:u32_le]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
     if (bytes.length < 75) return null;
+    final palletIndex = bytes[0];
+    final callIndex = bytes[1];
     var offset = 2;
     final code =
         InstitutionCode.codeToString(bytes.sublist(offset, offset + 4));
+    if (!_validAdminChangePalletForCode(palletIndex, callIndex, code)) {
+      return null;
+    }
     offset += 4;
     final accountBytes = bytes.sublist(offset, offset + 32);
     final accountHex = _bytesToLowerHex(accountBytes);
@@ -1351,9 +1338,10 @@ class PayloadDecoder {
     }
     final thresholdLabel = '$newThreshold/$adminsLen';
     final institutionLabel = InstitutionCode.codeLabel(code);
+    final action = _adminSetChangeActionForPallet(palletIndex);
 
     return DecodedPayload(
-      action: 'propose_admin_set_change',
+      action: action,
       summary:
           '$institutionLabel 管理员集合变更：${_bytesToSs58(accountBytes)} → $adminsLen 人，阈值 $thresholdLabel',
       fields: {
@@ -1617,8 +1605,8 @@ class PayloadDecoder {
     if (titleLenSize == 0) return null;
     offset += titleLenSize;
     if (offset + titleLen > bytes.length) return null;
-    final title =
-        utf8.decode(bytes.sublist(offset, offset + titleLen), allowMalformed: true);
+    final title = utf8.decode(bytes.sublist(offset, offset + titleLen),
+        allowMalformed: true);
     offset += titleLen;
 
     // title_en: Option<BoundedVec<u8>>
@@ -1687,8 +1675,8 @@ class PayloadDecoder {
     if (titleLenSize == 0) return null;
     offset += titleLenSize;
     if (offset + titleLen > bytes.length) return null;
-    final title =
-        utf8.decode(bytes.sublist(offset, offset + titleLen), allowMalformed: true);
+    final title = utf8.decode(bytes.sublist(offset, offset + titleLen),
+        allowMalformed: true);
     offset += titleLen;
 
     offset = _skipOptionBoundedBytes(bytes, offset);
@@ -2262,6 +2250,44 @@ class PayloadDecoder {
     return false;
   }
 
+  static bool _validAdminChangePalletForCode(
+    int palletIndex,
+    int callIndex,
+    String code,
+  ) {
+    if (palletIndex == PalletRegistry.personalAdminsPallet) {
+      return callIndex == PalletRegistry.proposePersonalAdminSetChangeCall &&
+          InstitutionCode.isPersonal(code);
+    }
+    if (palletIndex == PalletRegistry.genesisAdminsPallet) {
+      return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
+          (InstitutionCode.isFixedGovernance(code) || code == 'FRG');
+    }
+    if (palletIndex == PalletRegistry.publicAdminsPallet) {
+      return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
+          InstitutionCode.isPublicLegal(code) &&
+          !InstitutionCode.isFixedGovernance(code) &&
+          code != 'FRG';
+    }
+    if (palletIndex == PalletRegistry.privateAdminsPallet) {
+      return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
+          (InstitutionCode.isPrivateLegal(code) ||
+              InstitutionCode.isUnincorporated(code));
+    }
+    return false;
+  }
+
+  static String _adminSetChangeActionForPallet(int palletIndex) {
+    return switch (palletIndex) {
+      PalletRegistry.personalAdminsPallet =>
+        'propose_personal_admin_set_change',
+      PalletRegistry.genesisAdminsPallet => 'propose_genesis_admin_set_change',
+      PalletRegistry.publicAdminsPallet => 'propose_public_admin_set_change',
+      PalletRegistry.privateAdminsPallet => 'propose_private_admin_set_change',
+      _ => 'propose_unknown_admin_set_change',
+    };
+  }
+
   /// 解码 SCALE Compact<BigInt>，返回 (值, 消耗字节数)。
   static (BigInt?, int) _decodeCompactBigInt(Uint8List bytes, int offset) {
     if (offset >= bytes.length) return (null, 0);
@@ -2316,58 +2342,28 @@ class PayloadDecoder {
 
   /// 激活凭证里的账户 kind 与机构码是否匹配。
   ///
-  /// kind 语义对齐链端 admins-change::AdminAccountKind(SCALE 判别值),
-  /// 逐字保留旧 org→kind 映射(org 0/1/2→0,org 3→1,org 4/5→2):
-  ///   0 = BuiltinInstitution(创世内置固定治理档:国储会/省储会/省储行)
-  ///   1 = PersonalAccount(个人多签 PMUL)
-  ///   2 = InstitutionAccount(organization-manage 注册的机构账户:公权/私权/非法人)
+  /// kind 语义对齐链端 admin-primitives::AdminAccountKind(SCALE 判别值):
+  ///   0 = GenesisInstitution
+  ///   1 = PublicInstitution
+  ///   2 = PrivateInstitution
+  ///   3 = PersonalMultisig
   static bool _activationAccountKindMatchesCode(String code, int kind) {
-    if (InstitutionCode.isFixedGovernance(code)) {
+    if (InstitutionCode.isFixedGovernance(code) || code == 'FRG') {
       return kind == 0;
     }
     if (InstitutionCode.isPersonal(code)) {
+      return kind == 3;
+    }
+    if (InstitutionCode.isPublicLegal(code) &&
+        !InstitutionCode.isFixedGovernance(code) &&
+        code != 'FRG') {
       return kind == 1;
     }
-    if (InstitutionCode.isInstitution(code)) {
+    if (InstitutionCode.isPrivateLegal(code) ||
+        InstitutionCode.isUnincorporated(code)) {
       return kind == 2;
     }
     return false;
-  }
-
-  static DecodedPayload? _decodeCpmsArchiveDelete(Uint8List bytes) {
-    final text = utf8.decode(bytes, allowMalformed: false);
-    final parts = text.split('|');
-    if (parts.length != 6 || parts[0] != 'CPMS_ARCHIVE_DELETE_V1') {
-      return null;
-    }
-    final challengeId = parts[1];
-    final archiveId = parts[2];
-    final archiveNo = parts[3];
-    final adminPubkey = parts[4];
-    final expiresAt = parts[5];
-    final adminAddress = _pubkeyHexToSs58OrRaw(adminPubkey);
-    if (challengeId.isEmpty ||
-        archiveId.isEmpty ||
-        archiveNo.isEmpty ||
-        !adminPubkey.startsWith('0x') ||
-        expiresAt.isEmpty) {
-      return null;
-    }
-    return DecodedPayload(
-      action: 'archive_delete',
-      summary: '确认删除 CPMS 公民档案',
-      fields: {
-        'archive_no': archiveNo,
-        'archive_id': archiveId,
-        'admin_pubkey': adminAddress,
-        'expires_at': expiresAt,
-      },
-      reviewFields: {
-        'archive_no': archiveNo,
-        'admin_pubkey': adminAddress,
-        'expires_at': expiresAt,
-      },
-    );
   }
 
   static bool _hasPrefix(Uint8List bytes, Uint8List prefix) {

@@ -18,21 +18,6 @@ const systems = [
     color: 'gold',
   },
   {
-    name: 'CPMS 护照系统',
-    subtitle: '公民护照管理系统',
-    desc: '离线公民档案与 QR 码签发系统，管理公民护照文档号码（V3格式），生成签名 QR 码用于公民绑定。',
-    features: [
-      '公民档案创建',
-      '签名 QR 码生成',
-      'V3 格式护照号管理',
-      '机构公钥注册 QR',
-      'Sr25519 数字签名',
-      '操作审计追踪',
-    ],
-    tech: 'Rust / Axum / PostgreSQL',
-    color: 'blue',
-  },
-  {
     name: 'CitizenApp',
     subtitle: '公民移动客户端',
     desc: '面向全体公民的移动端应用，集成钱包管理、交易转账、治理投票、QR 码扫描等核心功能。',
@@ -86,8 +71,8 @@ const systems = [
 const workflow = [
   {
     step: '01',
-    title: '公民绑定',
-    desc: 'CitizenChain 发起请求 → CPMS 离线生成签名 QR 码 → CID 扫描验签 → 链上绑定完成',
+    title: '公民护照',
+    desc: '注册局直接录入公民并发护照 → CitizenApp 查询护照状态 → 链上治理读取资格凭证',
   },
   {
     step: '02',
@@ -113,7 +98,7 @@ export default function Ecosystem() {
           <SectionTitle
             subtitle="生态系统"
             title="完整的公民链生态"
-            description="从身份认证到移动钱包，从护照签发到桌面节点，公民区块链构建了完整的生态系统闭环。"
+            description="从身份认证到移动钱包，从注册局护照到桌面节点，公民区块链构建了完整的生态系统闭环。"
           />
         </div>
       </section>
@@ -122,7 +107,7 @@ export default function Ecosystem() {
 
       {/* Systems */}
       <section className="mx-auto max-w-7xl px-6 py-24">
-        <SectionTitle subtitle="核心产品" title="五大核心系统" />
+        <SectionTitle subtitle="核心产品" title="四大核心系统" />
         <div className="grid gap-8 md:grid-cols-2">
           {systems.map((s) => (
             <GlowCard

@@ -20,7 +20,7 @@ const Map<String, String> actionLabels = {
   'propose_transfer': '发起转账提案',
   'propose_safety_fund_transfer': '安全基金转账提案',
   'propose_sweep_to_main': '手续费划转提案',
-  // 个人多签为独立 pallet PersonalManage(7),
+  // 个人多签为独立 pallet PersonalAdmins(7),
   // 'propose_create_personal' 是 decoder 输出 action 字符串,显式区分个人/机构提示文案。
   'propose_create_personal': '创建个人多签',
   'propose_create_institution': '创建机构多签账户',
@@ -28,7 +28,10 @@ const Map<String, String> actionLabels = {
   'propose_close_personal': '关闭个人多签提案',
   'cleanup_rejected_personal_proposal': '清理被拒个人多签提案',
   'propose_destroy': '销毁决议提案',
-  'propose_admin_set_change': '管理员集合变更提案',
+  'propose_personal_admin_set_change': '管理员集合变更提案',
+  'propose_genesis_admin_set_change': '管理员集合变更提案',
+  'propose_public_admin_set_change': '管理员集合变更提案',
+  'propose_private_admin_set_change': '管理员集合变更提案',
   'propose_replace_grandpa_key': 'GRANDPA 密钥提案',
   'propose_resolution_issuance': '决议发行提案',
 

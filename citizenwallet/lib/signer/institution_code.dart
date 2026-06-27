@@ -121,6 +121,10 @@ class InstitutionCode {
   /// 是否为私权法人机构码。
   static bool isPrivateLegal(String code) => _privateLegalCodes.contains(code);
 
+  /// 是否为非法人机构码。
+  static bool isUnincorporated(String code) =>
+      _unincorporatedCodes.contains(code);
+
   /// 是否为机构账户机构码(公权/私权/非法人法人实体,经 organization-manage 注册多签)。
   ///
   /// 个人/个人多签不算机构账户;

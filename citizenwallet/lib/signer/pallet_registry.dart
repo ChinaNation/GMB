@@ -72,7 +72,7 @@ class PalletRegistry {
 
   // ---- OrganizationManage (17) ----
   // call_index=0 留洞不复用。
-  // call_index=3 留洞不复用(propose_create_personal 在 PersonalManage(7))。
+  // call_index=3 留洞不复用(propose_create_personal 在 PersonalAdmins(7))。
   // 机构多签最少 2 账户,统一走 call_index=5。
   static const int organizationManagePallet = 17;
   static const int proposeCloseCall = 1;
@@ -85,25 +85,39 @@ class PalletRegistry {
   /// 机构多签账户创建提案,凭证由 CID 后端按签发机构 admins 真源签发。
   static const int proposeCreateInstitutionCall = 5;
 
-  // ---- PersonalManage (7) ----
+  // ---- PersonalAdmins (7) ----
   // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt",
   // ACTION enum 独立命名空间(ACTION_CREATE=0/ACTION_CLOSE=1)。
   // propose_create(account_name, admins, regular_threshold, amount):
   // admins_len 由 admins 长度派生,regular_threshold 由用户输入且必须严格过半。
-  static const int personalManagePallet = 7;
+  static const int personalAdminsPallet = 7;
   static const int proposeCreatePersonalCall = 0;
   static const int proposeClosePersonalCall = 1;
   static const int cleanupRejectedPersonalProposalCall = 2;
+  static const int proposePersonalAdminSetChangeCall = 3;
 
   // ---- ResolutionDestro (14) ----
   // call_index 1 留洞不复用。
   static const int resolutionDestroPallet = 14;
   static const int proposeDestroyCall = 0;
 
-  // ---- AdminsChange (12) ----
-  // call_index 1 留洞不复用。
-  static const int adminsChangePallet = 12;
+  // ---- 管理员集合变更:GenesisAdmins(12) / PublicAdmins(29) / PrivateAdmins(30) ----
+  // PersonalAdmins(7) 的管理员集合变更使用 call_index=3。
+  static const int genesisAdminsPallet = 12;
+  static const int publicAdminsPallet = 29;
+  static const int privateAdminsPallet = 30;
   static const int proposeAdminSetChangeCall = 0;
+
+  static bool isAdminSetChangePallet(int palletIndex) {
+    return palletIndex == genesisAdminsPallet ||
+        palletIndex == publicAdminsPallet ||
+        palletIndex == privateAdminsPallet;
+  }
+
+  static bool isPersonalAdminSetChangeCall(int palletIndex, int callIndex) {
+    return palletIndex == personalAdminsPallet &&
+        callIndex == proposePersonalAdminSetChangeCall;
+  }
 
   // ---- GrandpaKeyChange (16) ----
   // call_index 1, 2 留洞不复用。

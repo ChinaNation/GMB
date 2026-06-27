@@ -322,20 +322,6 @@ void main() {
       }
     });
 
-    test('decodes archive_delete with SS58 review fields', () {
-      final admin = '0x${List.filled(32, '22').join()}';
-      final payload =
-          'CPMS_ARCHIVE_DELETE_V1|adc_test|archive_internal|ARCHIVE123|$admin|1779984120';
-
-      final decoded = PayloadDecoder.decode(hexOf(utf8.encode(payload)));
-
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'archive_delete');
-      expect(decoded.fields['admin_pubkey'], ss58FromHex(admin));
-      expect(decoded.reviewFields['admin_pubkey'], ss58FromHex(admin));
-      expect(decoded.reviewFields.containsKey('archive_id'), isFalse);
-    });
-
     test('decodes clearing bank register node call', () {
       const cidNumber = 'AH001-SZG1Z-883241719-2026';
       const peerId = '12D3KooWABCDEFG1234567890abcdefghijk';
@@ -608,7 +594,7 @@ void main() {
         [0x13, 0x04], // execute_safety_fund_transfer
         [0x13, 0x05], // execute_sweep_to_main
         [0x0e, 0x01], // execute_destroy
-        [0x0c, 0x01], // AdminsChange call_index=1 留洞不复用
+        [0x0c, 0x01], // GenesisAdmins call_index=1 留洞不复用
         [0x10, 0x01], // execute_replace_grandpa_key
         [0x10, 0x02], // cancel_failed_replace_grandpa_key
       ];
@@ -620,42 +606,64 @@ void main() {
       }
     });
 
-    test('decodes propose_admin_set_change (pallet=12 call=0)', () {
+    test('decodes propose_admin_set_change for all admin pallets', () {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       final admin1 = List<int>.filled(32, 0x11);
       final admin2 = List<int>.filled(32, 0x22);
-      final payload = Uint8List.fromList([
-        0x0c, 0x00,
-        ...InstitutionCode.codeBytes('PMUL'), // institution_code = 个人多签
+      for (final item in [
+        (7, 3, 'PMUL', 'propose_personal_admin_set_change'),
+        (12, 0, 'FRG', 'propose_genesis_admin_set_change'),
+        (29, 0, 'CGOV', 'propose_public_admin_set_change'),
+        (30, 0, 'SFLP', 'propose_private_admin_set_change'),
+      ]) {
+        final payload = Uint8List.fromList([
+          item.$1,
+          item.$2,
+          ...InstitutionCode.codeBytes(item.$3),
+          ...account,
+          0x08, // Compact(2)
+          ...admin1,
+          ...admin2,
+          ...u32Le(2),
+        ]);
+
+        final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+
+        expect(decoded, isNotNull);
+        expect(decoded!.action, item.$4);
+        expect(decoded.fields['institution_code'],
+            InstitutionCode.codeLabel(item.$3));
+        expect(decoded.fields['account'], '0x${hexLower(account)}');
+        expect(
+          decoded.fields['admins'],
+          [
+            '0x${admin1.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+            '0x${admin2.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+          ].join(','),
+        );
+        expect(decoded.reviewFields['new_threshold'], '2/2');
+        expect(decoded.summary, contains('管理员集合变更'));
+      }
+
+      final personalPayload = Uint8List.fromList([
+        0x07,
+        0x00,
+        ...InstitutionCode.codeBytes('PMUL'),
         ...account,
-        0x08, // Compact(2)
+        0x08,
         ...admin1,
         ...admin2,
         ...u32Le(2),
       ]);
-
-      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
-
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_admin_set_change');
-      expect(decoded.fields['institution_code'], '个人多签');
-      expect(decoded.fields['account'], '0x${hexLower(account)}');
-      expect(
-        decoded.fields['admins'],
-        [
-          '0x${admin1.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
-          '0x${admin2.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
-        ].join(','),
-      );
-      expect(decoded.reviewFields['new_threshold'], '2/2');
-      expect(decoded.summary, contains('管理员集合变更'));
+      expect(PayloadDecoder.decode(hexOf(withSigningTail(personalPayload))),
+          isNull);
     });
 
     test('rejects propose_admin_set_change without new_threshold', () {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       final payload = Uint8List.fromList([
-        0x0c,
-        0x00,
+        0x07,
+        0x03,
         ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x08,
@@ -669,8 +677,8 @@ void main() {
     test('rejects propose_admin_set_change with trailing bytes', () {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       final payload = Uint8List.fromList([
-        0x0c,
-        0x00,
+        0x07,
+        0x03,
         ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x08,
@@ -686,7 +694,7 @@ void main() {
     test('rejects propose_admin_set_change below majority threshold', () {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       final payload = Uint8List.fromList([
-        0x0c, 0x00,
+        0x07, 0x03,
         ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x0c, // Compact(3)
@@ -722,7 +730,7 @@ void main() {
         0x47, 0x4D, 0x42, 0x18,
         ...account,
         ...InstitutionCode.codeBytes('CGOV'), // 机构账户码(取代旧 org=5)
-        0x02, // kind = InstitutionAccount
+        0x01, // kind = PublicInstitution
         ...pubkey,
         1, 0, 0, 0, 0, 0, 0, 0, // timestamp u64 LE
         ...List<int>.filled(16, 0),
@@ -747,11 +755,14 @@ void main() {
 
       // 公权机构账户码(CGOV)与私权机构账户码(SFLP)都属注册多签机构账户,
       // codeLabel 返回码字符串本身(非固定治理档/个人多签特化)。
-      for (final code in const ['CGOV', 'SFLP']) {
+      for (final item in const [
+        (0x1d, 'CGOV'),
+        (0x1e, 'SFLP'),
+      ]) {
         final payload = Uint8List.fromList([
-          0x0c,
+          item.$1,
           0x00,
-          ...InstitutionCode.codeBytes(code),
+          ...InstitutionCode.codeBytes(item.$2),
           ...account,
           0x08,
           ...admin1,
@@ -762,7 +773,7 @@ void main() {
         final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
         expect(decoded, isNotNull);
-        expect(decoded!.fields['institution_code'], code);
+        expect(decoded!.fields['institution_code'], item.$2);
         expect(decoded.fields['account'], '0x${hexLower(account)}');
       }
     });
@@ -842,7 +853,7 @@ void main() {
 
     test('decodes personal close action as propose_close_personal', () {
       final payload = Uint8List.fromList([
-        0x07, 0x01, // PersonalManage.propose_close
+        0x07, 0x01, // PersonalAdmins.propose_close
         ...List<int>.filled(32, 0x33),
         ...List<int>.filled(32, 0x44),
       ]);
@@ -1346,8 +1357,7 @@ void main() {
         ...minimalChapters(),
         ...u32Le(5000), // effective_at
       ];
-      final decoded =
-          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_enact_law');
       expect(decoded.fields['title'], '教育法');
@@ -1409,8 +1419,7 @@ void main() {
         ...minimalChapters(),
         ...u32Le(7777),
       ];
-      final decoded =
-          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_amend_law');
       expect(decoded.fields['law_id'], '42');
@@ -1428,8 +1437,7 @@ void main() {
         0x00, // legislature None
         0, // vote_type = Regular(0)
       ];
-      final decoded =
-          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_repeal_law');
       expect(decoded.fields['law_id'], '7');
@@ -1450,13 +1458,13 @@ void main() {
         ...compactVec('某省'), // scope_province_name
         ...compactVec('某市'), // scope_city_name
       ];
-      final decoded =
-          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'prepare_legislation_snapshot');
       expect(decoded.fields['eligible_total'], '123456');
       expect(decoded.fields['issuer_cid_number'], 'NLG0000001');
-      expect(decoded.fields['issuer_main_account'], ss58FromBytes(issuerAccount));
+      expect(
+          decoded.fields['issuer_main_account'], ss58FromBytes(issuerAccount));
       expect(decoded.fields['signer_pubkey'], ss58FromBytes(signerPubkey));
       expect(decoded.fields['scope_province_name'], '某省');
       expect(decoded.fields['scope_city_name'], '某市');
@@ -1464,8 +1472,7 @@ void main() {
 
     test('decodes cast_house_vote (28.1)', () {
       final callData = [28, 1, ...u64Le(99), 0x01];
-      final decoded =
-          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cast_house_vote');
       expect(decoded.fields['proposal_id'], '99');
@@ -1489,8 +1496,7 @@ void main() {
         ...compactVec('深圳'), // scope_city_name
         0x00, // approve = false
       ];
-      final decoded =
-          PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cast_referendum_vote');
       expect(decoded.fields['proposal_id'], '55');
@@ -1499,7 +1505,8 @@ void main() {
       expect(decoded.fields['scope_city_name'], '深圳');
     });
 
-    test('decodes executive_sign (28.3) / override_sign (28.4) / guard_vote (28.5)',
+    test(
+        'decodes executive_sign (28.3) / override_sign (28.4) / guard_vote (28.5)',
         () {
       final exec = PayloadDecoder.decode(
           hexOf(withSigningTail([28, 3, ...u64Le(1), 0x01])));

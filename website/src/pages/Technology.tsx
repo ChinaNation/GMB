@@ -41,7 +41,7 @@ const pallets = [
   {
     name: '投票引擎',
     module: 'votingengine',
-    desc: '三级投票引擎：内部投票、联合投票、公民投票，链上透明计票',
+    desc: '四种投票引擎：内部投票、联合投票、立法投票、选举投票，链上透明计票',
   },
   {
     name: '决议发行',
@@ -50,7 +50,7 @@ const pallets = [
   },
   {
     name: '管理员治理',
-    module: 'admins-change',
+    module: 'admin-management',
     desc: '多签管理员体系，国储 13/19、省储 6/9 签名门槛，保障去中心化决策',
   },
 ]

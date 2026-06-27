@@ -3,32 +3,42 @@ import GlowCard from '../components/GlowCard'
 
 const votingTiers = [
   {
-    tier: '第一级',
+    tier: '内部投票',
     name: '内部投票',
-    scope: '国储会 / 省储会 / 省储行 / 机构多签 / 个人多签',
-    desc: '各级机构内部的管理决策投票，由该机构管理员或董事参与',
-    voters: '机构内管理员',
-    threshold: '多签门槛通过',
+    scope: '各机构 / 机构多签 / 个人多签',
+    desc: '各机构与多签账户内部事项（如内部转账等）的决策投票，由该主体管理员参与',
+    voters: '主体内管理员',
+    threshold: '管理员快照 + 阈值快照，达阈值通过',
     extraTag: '',
     color: 'gold',
   },
   {
-    tier: '第二级',
+    tier: '联合投票',
     name: '联合投票',
-    scope: '国储会 + 全部省储会 + 全部省储行',
-    desc: '涉及全网治理的重大决策，需国储会（19票）、省储会（43票）、省储行（43票）联合投票',
+    scope: '仅治理机构：国储会 + 全部省储会 + 全部省储行',
+    desc: '仅治理机构之间的共同治理事项，需国储会（19票）、省储会（43票）、省储行（43票）联合投票',
     voters: '105 票总计',
     threshold: '全票立即通过',
     extraTag: '非全票则联合公投',
     color: 'gold',
   },
   {
-    tier: '第三级',
-    name: '公民投票',
-    scope: '全体认证公民',
-    desc: '所有经 CID 认证并绑定的公民轻节点均有投票权，实现真正的公民民主',
-    voters: '全体认证公民',
-    threshold: '>50% 通过',
+    tier: '立法投票',
+    name: '立法投票',
+    scope: '立法机构：市自治会 / 市教委会 / 市立法会 / 省·国家参议会众议会 / 国家教委会',
+    desc: '仅立法机构的修法表决，严格按公民宪法的表决类型与阈值，含两院顺序、行政签署与强制公投',
+    voters: '对应立法院成员',
+    threshold: '依宪法表决类型与阈值',
+    extraTag: '回调立法院写入新法律版本',
+    color: 'gold',
+  },
+  {
+    tier: '选举投票',
+    name: '选举投票',
+    scope: '公职人员选举：公民普选 + 公权机构成员互选',
+    desc: '按公民宪法选举各类公职人员，既含公民普选，也含公权机构成员的内部互选',
+    voters: '视职位：全体认证公民 / 特定机构现任成员',
+    threshold: '按职位取选民快照，依宪法阈值通过',
     extraTag: '',
     color: 'gold',
   },
@@ -69,12 +79,12 @@ const rules = [
       </svg>
     ),
     title: 'CID 验证',
-    desc: '公民投票需经 CID 身份认证，确保一人一票，防止重复投票',
+    desc: '选举投票与联合公投需经 CID 身份认证，确保一人一票，防止重复投票',
   },
 ]
 
 const proposalTypes = [
-  { name: '货币增发提案', desc: '经联合投票或公民投票通过后执行公民币增发' },
+  { name: '货币增发提案', desc: '经联合投票通过后执行公民币增发' },
   { name: '货币销毁提案', desc: '经治理投票通过后销毁指定数量的公民币' },
   { name: 'GRANDPA 密钥轮换', desc: '权威节点 GRANDPA 终局性验证密钥的更新与轮换' },
   { name: '管理员变更', desc: '各级储备委员会管理员的增减与替换' },
@@ -94,8 +104,8 @@ export default function Governance() {
         <div className="relative mx-auto max-w-7xl px-6">
           <SectionTitle
             subtitle="治理体系"
-            title="三级民主治理机制"
-            description="从机构内部决策到全体公民投票，三级治理体系确保每一位公民都有权参与国家治理。"
+            title="四种民主投票机制"
+            description="从机构内部事项、治理机构联合决策、立法机构修法到公职人员选举，四种投票确保每一位公民都有权参与国家治理。"
           />
         </div>
       </section>
@@ -104,7 +114,7 @@ export default function Governance() {
 
       {/* Three Tiers */}
       <section className="mx-auto max-w-7xl px-6 py-24">
-        <SectionTitle subtitle="投票层级" title="三级投票体系" />
+        <SectionTitle subtitle="投票分类" title="四种投票体系" />
         <div className="grid gap-8 md:grid-cols-3">
           {votingTiers.map((v) => (
             <GlowCard key={v.name} glow="gold" className="flex flex-col">

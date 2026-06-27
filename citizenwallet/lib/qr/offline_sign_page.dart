@@ -392,8 +392,6 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       'before_hash' => '变更前哈希',
       'after_hash' => '变更后哈希',
       'admin_pubkey' => '管理员账户',
-      'archive_id' => '档案编号',
-      'archive_no' => '档案号',
       'pubkey' => '公钥',
       'bank_main' => '清算行主账户',
       'new_bank' => '新清算行',
