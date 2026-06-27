@@ -33,8 +33,8 @@ use frame_support::{
 
 /// Weight functions for `grandpakey_change`.
 pub trait WeightInfo {
-	/// Storage: `AdminsChange::AdminAccounts` (r:1 w:0)
-	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeAdminAccountQuery::AdminAccounts` (r:1 w:0)
+	/// Proof: `RuntimeAdminAccountQuery::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyChange::CurrentGrandpaKeys` (r:1 w:0)
 	/// Proof: `GrandpaKeyChange::CurrentGrandpaKeys` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyChange::GrandpaKeyOwnerByKey` (r:1 w:0)
@@ -88,8 +88,8 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	/// Storage: `AdminsChange::AdminAccounts` (r:1 w:0)
-	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeAdminAccountQuery::AdminAccounts` (r:1 w:0)
+	/// Proof: `RuntimeAdminAccountQuery::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyChange::CurrentGrandpaKeys` (r:1 w:0)
 	/// Proof: `GrandpaKeyChange::CurrentGrandpaKeys` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyChange::GrandpaKeyOwnerByKey` (r:1 w:0)
@@ -151,8 +151,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
-	/// Storage: `AdminsChange::AdminAccounts` (r:1 w:0)
-	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeAdminAccountQuery::AdminAccounts` (r:1 w:0)
+	/// Proof: `RuntimeAdminAccountQuery::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyChange::CurrentGrandpaKeys` (r:1 w:0)
 	/// Proof: `GrandpaKeyChange::CurrentGrandpaKeys` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyChange::GrandpaKeyOwnerByKey` (r:1 w:0)

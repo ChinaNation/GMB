@@ -130,7 +130,7 @@ pub mod pallet {
 
     /// 注册多签已激活动态阈值:(institution_code, account) -> threshold。
     ///
-    /// 中文注释：一般内部投票只从这里读取动态阈值，不再读取 admins-change。
+    /// 中文注释：一般内部投票只从这里读取动态阈值，不再读取 admins 模块。
     #[pallet::storage]
     pub type ActiveDynamicThresholds<T: Config> = StorageDoubleMap<
         _,
@@ -479,8 +479,9 @@ impl<T: Config> Pallet<T> {
             is_internal_admin::<T>(institution_code, institution.clone(), &who),
             votingengine::Error::<T>::NoPermission
         );
-        let active_threshold = active_internal_threshold::<T>(institution_code, institution.clone())
-            .ok_or(Error::<T>::InvalidInternalCode)?;
+        let active_threshold =
+            active_internal_threshold::<T>(institution_code, institution.clone())
+                .ok_or(Error::<T>::InvalidInternalCode)?;
 
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::internal_stage_duration());
@@ -601,8 +602,9 @@ impl<T: Config> Pallet<T> {
         match InternalProposalRoles::<T>::get(proposal_id) {
             Some(InternalProposalRole::LifecycleCreate) => {
                 let (institution_code, account) = Self::proposal_code_account(proposal_id)?;
-                let threshold = PendingDynamicThresholds::<T>::take(institution_code, account.clone())
-                    .ok_or(Error::<T>::MissingDynamicThreshold)?;
+                let threshold =
+                    PendingDynamicThresholds::<T>::take(institution_code, account.clone())
+                        .ok_or(Error::<T>::MissingDynamicThreshold)?;
                 ActiveDynamicThresholds::<T>::insert(institution_code, account, threshold);
             }
             Some(InternalProposalRole::LifecycleClose) => {
@@ -825,6 +827,22 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
                 Err(err) => TransactionOutcome::Rollback(Err(err)),
             }
         })
+    }
+
+    fn register_active_dynamic_threshold_direct(
+        institution_code: InstitutionCode,
+        institution: T::AccountId,
+        admins_len: u32,
+        threshold: u32,
+    ) -> DispatchResult {
+        // 中文注释:直设阈值只针对注册多签账户(市注册局=公权机构),且必须满足严格过半。
+        ensure!(
+            is_registered_multisig_code(&institution_code),
+            Error::<T>::InvalidInternalCode
+        );
+        Self::ensure_dynamic_threshold(admins_len, threshold)?;
+        ActiveDynamicThresholds::<T>::insert(institution_code, institution, threshold);
+        Ok(())
     }
 
     fn active_dynamic_threshold(

@@ -144,7 +144,7 @@ pub trait InternalVoteEngine<AccountId> {
         ))
     }
 
-    /// 创建管理员集合变更内部投票提案。只允许 admins-change 模块接入。
+    /// 创建管理员集合变更内部投票提案。只允许 admins 模块 模块接入。
     ///
     /// 中文注释：本次投票仍使用当前 active 阈值；`new_threshold` 只表示变更执行成功后
     /// 写入投票引擎的下一阶段动态阈值。
@@ -159,6 +159,22 @@ pub trait InternalVoteEngine<AccountId> {
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other(
             "AdminSetMutationVoteEngineNotConfigured",
+        ))
+    }
+
+    /// 特权直设动态阈值:绕过注册/变更提案,直接写入已激活动态阈值。
+    ///
+    /// 中文注释:仅供 admins 模块在"联邦注册局直设市注册局管理员"(Step3 去中心化鉴权)时
+    /// 同步阈值用。实现方必须按严格过半规则校验 `(admins_len, threshold)` 后写入,
+    /// 失败回滚由调用方事务统一处理。默认未配置。
+    fn register_active_dynamic_threshold_direct(
+        _institution_code: InstitutionCode,
+        _institution: AccountId,
+        _admins_len: u32,
+        _threshold: u32,
+    ) -> DispatchResult {
+        Err(DispatchError::Other(
+            "RegisterActiveDynamicThresholdDirectNotConfigured",
         ))
     }
 
@@ -326,7 +342,7 @@ fn merge_cancel_decision(
 // `TransactionOutcome::Rollback(Err(...))` 协作确保整个状态转换事务回滚。
 //
 // 注:注册 5 个业务模块(multisig_transfer /
-// organization_manage / admins_change / resolution_destro /
+// organization_manage / RuntimeAdminAccountQuery / resolution_destro /
 // grandpakey_change),留 6 元组余量。如未来业务模块增加,补对应元组 impl。
 impl<A: InternalVoteResultCallback> InternalVoteResultCallback for (A,) {
     fn on_internal_vote_finalized(
@@ -614,7 +630,7 @@ pub trait InternalAdminProvider<AccountId> {
     }
 
     /// 获取机构法定代表人(机构首脑,必为该机构 admins 之一;ADR-027 立法签署人)。
-    /// 默认 None(个人账户/无代表人语境);机构由 admins-change 提供并保证 ∈ admins。
+    /// 默认 None(个人账户/无代表人语境);机构由 admins 模块 提供并保证 ∈ admins。
     fn legal_representative(
         _institution_code: InstitutionCode,
         _institution: AccountId,

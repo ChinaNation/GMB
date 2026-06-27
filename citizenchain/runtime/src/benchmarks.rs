@@ -35,20 +35,22 @@ frame_benchmarking::define_benchmarks!(
     [resolution_issuance, ResolutionIssuance]
     [cid_system, CidSystem]
     [pow_difficulty, PowDifficulty]
-    [admins_change, AdminsChange]
+    [genesis_admins, GenesisAdmins]
+    [public_admins, PublicAdmins]
+    [private_admins, PrivateAdmins]
     [resolution_destro, ResolutionDestro]
     [grandpakey_change, GrandpaKeyChange]
     [organization_manage, OrganizationManage]
-    // personal_manage benchmark 用例待 follow-up;当前 benchmarks.rs 是空骨架,
+    // personal_admins benchmark 用例待 follow-up;当前 benchmarks.rs 是空骨架,
     // 不挂载到 list_benchmarks 避免 Benchmarking trait 缺失编译错误。
-    // [personal_manage, PersonalManage]
+    // [personal_admins, PersonalAdmins]
     [multisig_transfer, MultisigTransfer]
     // internal-vote / joint-vote 删除 migration benchmark 后暂无 benchmark fn,
-    // cast / finalize 权重待补;votingengine 引擎核心 + citizen-vote 同样暂无。
+    // cast / finalize 权重待补;votingengine 引擎核心 + election-vote 同样暂无。
     // 无 benchmark fn 的 pallet 不挂载,避免 Benchmarking trait 缺失编译错误。
     // [internal_vote, InternalVote]
     // [joint_vote, JointVote]
     // [votingengine, VotingEngine]
-    // [citizen_vote, CitizenVote]
+    // [election_vote, ElectionVote]
     [runtime_upgrade, RuntimeUpgrade]
 );

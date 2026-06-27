@@ -6,9 +6,9 @@
 //! ## propose origin 校验铁律(ADR-011 v2 第 5.4 / 5.6 节)
 //!
 //! - **业务 5 ACTION**(OAIS/OAMT/OABN/OACL/OATR):propose 入口
-//!   `ensure!(proposer ∈ admins-change::AdminAccounts::get(issuer_account).admins)`
+//!   `ensure!(proposer ∈ admins 模块::AdminAccounts::get(issuer_account).admins)`
 //! - **监管 5 ACTION**(OMFZ/OMUF/OMCF/OMFT/OMFC):propose 入口
-//!   `ensure!(proposer ∈ admins-change::AdminAccounts::get(nrc_main_account).admins)`
+//!   `ensure!(proposer ∈ admins 模块::AdminAccounts::get(nrc_main_account).admins)`
 //!
 //! VotingEngine 自身的 cast 阶段已校验 admin 投票,但 propose 阶段额外 ensure
 //! 防止任意账户消耗 storage 提案位 / 占用投票引擎额度。

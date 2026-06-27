@@ -48,14 +48,16 @@ fn fee_payer_returns_none_for_transfer() {
 #[test]
 fn governance_module_tags_are_globally_unique() {
     use std::collections::HashSet;
-    let tags: [(&str, &[u8]); 9] = [
-        ("admins_change", admins_change::MODULE_TAG),
+    let tags: [(&str, &[u8]); 11] = [
+        ("genesis_admins", genesis_admins::MODULE_TAG),
+        ("public_admins", public_admins::MODULE_TAG),
+        ("private_admins", private_admins::MODULE_TAG),
         ("grandpakey_change", grandpakey_change::MODULE_TAG),
         ("resolution_destro", resolution_destro::MODULE_TAG),
         ("resolution_issuance", resolution_issuance::MODULE_TAG),
         ("runtime_upgrade", runtime_upgrade::MODULE_TAG),
         ("organization_manage", organization_manage::MODULE_TAG),
-        ("personal_manage", personal_manage::MODULE_TAG),
+        ("personal_admins", personal_admins::MODULE_TAG),
         ("multisig_transfer", multisig_transfer::MODULE_TAG),
         ("legislation_yuan", legislation_yuan::MODULE_TAG),
     ];
@@ -317,18 +319,18 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
 
         let account = AccountId::new([77u8; 32]);
         let beneficiary = AccountId::new([78u8; 32]);
-        let admins: personal_manage::pallet::AdminsOf<Runtime> = vec![who.clone(), admin2.clone()]
+        let admins: personal_admins::pallet::AdminsOf<Runtime> = vec![who.clone(), admin2.clone()]
             .try_into()
             .expect("admins should fit");
         // 中文注释：本测试验证提案交易本身按投票统一价，而不是按提案金额套链上费率。
-        let account_name: personal_manage::pallet::AccountNameOf<Runtime> =
+        let account_name: personal_admins::pallet::AccountNameOf<Runtime> =
             b"runtime-test-personal"
                 .to_vec()
                 .try_into()
                 .expect("account_name should fit");
 
         let create_call =
-            RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
+            RuntimeCall::PersonalAdmins(personal_admins::pallet::Call::propose_create {
                 account_name,
                 admins: admins.clone(),
                 regular_threshold: 2,
@@ -544,10 +546,10 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
 
 // CID 凭证签发统一为机构模型:
 // issuer_cid_number + issuer_main_account + signer_pubkey。
-// runtime verifier 必须从 admins-change::AdminAccounts[issuer_main_account].admins
+// runtime verifier 必须从 admins 模块::AdminAccounts[issuer_main_account].admins
 // 校验 signer,再做 sr25519 payload 验签。
 #[test]
-fn runtime_cid_verifiers_admins_change_verify_succeeds() {
+fn runtime_cid_verifiers_runtime_admin_account_query_verify_succeeds() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
         let issuer_cid_number = test_issuer_cid_number();
@@ -858,7 +860,7 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         let bad_origin = RuntimeOrigin::signed(outsider.clone());
         assert!(<EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err());
 
-        admins_change::pallet::AdminAccounts::<Runtime>::remove(&nrc_id);
+        genesis_admins::pallet::AdminAccounts::<Runtime>::remove(&nrc_id);
         assert!(!is_nrc_admin(&nrc_admin));
         assert!(!is_nrc_admin(&outsider));
         assert!(!RuntimeInternalAdminProvider::is_internal_admin(
@@ -870,7 +872,7 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
 }
 
 #[test]
-fn runtime_cid_institution_verifier_admins_change_lookup() {
+fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_admin_pubkey, backup_pair, backup_admin_pubkey, province_bytes) =
             setup_step3_test_admins();

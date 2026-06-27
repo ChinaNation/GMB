@@ -56,7 +56,9 @@ fn second_year_should_use_decayed_rate() {
 #[test]
 fn should_stop_settling_after_duration_years() {
     new_test_ext().execute_with(|| {
-        LastSettledYear::<Test>::put(primitives::core_const::PROVINCIALBANK_INTEREST_DURATION_YEARS);
+        LastSettledYear::<Test>::put(
+            primitives::core_const::PROVINCIALBANK_INTEREST_DURATION_YEARS,
+        );
         let account = provincialbank_account(0);
         assert_eq!(Balances::free_balance(account.clone()), 0);
 

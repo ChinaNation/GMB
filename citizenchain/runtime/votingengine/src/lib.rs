@@ -145,7 +145,7 @@ pub mod pallet {
         type InternalVoteResultCallback: InternalVoteResultCallback;
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
         type InternalAdminsLenProvider: InternalAdminsLenProvider<Self::AccountId>;
-        /// 每个机构最大管理员数量（与 admins-change 一致），用于管理员快照 BoundedVec。
+        /// 每个机构最大管理员数量（与 admins 模块 一致），用于管理员快照 BoundedVec。
         #[pallet::constant]
         type MaxAdminsPerInstitution: Get<u32>;
 

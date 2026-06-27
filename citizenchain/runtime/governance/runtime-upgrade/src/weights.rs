@@ -33,8 +33,8 @@ use frame_support::{
 
 /// Weight functions for `runtime_upgrade`.
 pub trait WeightInfo {
-	/// Storage: `AdminsChange::AdminAccounts` (r:87 w:0)
-	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeAdminAccountQuery::AdminAccounts` (r:87 w:0)
+	/// Proof: `RuntimeAdminAccountQuery::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `JointVote::PendingPopulationSnapshots` (r:1 w:1)
 	/// Proof: `JointVote::PendingPopulationSnapshots` (`max_values`: None, `max_size`: Some(92), added: 2567, mode: `MaxEncodedLen`)
 	/// Storage: `Timestamp::Now` (r:1 w:0)
@@ -80,8 +80,8 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	/// Storage: `AdminsChange::AdminAccounts` (r:87 w:0)
-	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeAdminAccountQuery::AdminAccounts` (r:87 w:0)
+	/// Proof: `RuntimeAdminAccountQuery::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `JointVote::PendingPopulationSnapshots` (r:1 w:1)
 	/// Proof: `JointVote::PendingPopulationSnapshots` (`max_values`: None, `max_size`: Some(92), added: 2567, mode: `MaxEncodedLen`)
 	/// Storage: `Timestamp::Now` (r:1 w:0)
@@ -135,8 +135,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
-	/// Storage: `AdminsChange::AdminAccounts` (r:87 w:0)
-	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeAdminAccountQuery::AdminAccounts` (r:87 w:0)
+	/// Proof: `RuntimeAdminAccountQuery::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `JointVote::PendingPopulationSnapshots` (r:1 w:1)
 	/// Proof: `JointVote::PendingPopulationSnapshots` (`max_values`: None, `max_size`: Some(92), added: 2567, mode: `MaxEncodedLen`)
 	/// Storage: `Timestamp::Now` (r:1 w:0)

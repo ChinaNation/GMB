@@ -18,6 +18,7 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use cid_system::{OnCidBound, OnCidBoundWeight};
     use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
     use frame_support::{
         pallet_prelude::*,
@@ -25,7 +26,6 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use scale_info::TypeInfo;
-    use cid_system::{OnCidBound, OnCidBoundWeight};
     use sp_runtime::traits::{SaturatedConversion, Zero};
     use sp_runtime::RuntimeDebug;
 

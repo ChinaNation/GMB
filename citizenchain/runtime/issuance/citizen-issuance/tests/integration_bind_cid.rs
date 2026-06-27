@@ -3,6 +3,7 @@
 //! 本文件构建包含 cid-system + citizen-issuance 的 mock runtime，
 //! 直接调用 bind_cid extrinsic，验证奖励事件、跳过事件、双重防重与 weight 叠加。
 
+use cid_system::{BindCredential, CidVerifier, CidVoteVerifier};
 use frame_support::{
     derive_impl, parameter_types,
     traits::{ConstU128, ConstU32, VariantCountOf},
@@ -10,7 +11,6 @@ use frame_support::{
 use frame_system::{self as system, EnsureRoot};
 use pallet_balances;
 use primitives::citizen_const::{CITIZEN_ISSUANCE_HIGH_REWARD, CITIZEN_ISSUANCE_MAX_COUNT};
-use cid_system::{BindCredential, CidVerifier, CidVoteVerifier};
 use sp_runtime::{
     traits::{BlakeTwo256, Hash, IdentityLookup, Zero},
     BuildStorage,

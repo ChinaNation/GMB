@@ -502,8 +502,7 @@ fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
 #[test]
 fn proposal_status_transition_state_machine_is_strict() {
     new_test_ext().execute_with(|| {
-        let voting_to_passed =
-            create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let voting_to_passed = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
         assert_noop!(
             VotingEngine::set_status_and_emit(voting_to_passed, STATUS_EXECUTED),
             votingengine::Error::<Test>::InvalidProposalStatus
@@ -537,8 +536,7 @@ fn proposal_status_transition_state_machine_is_strict() {
             votingengine::Error::<Test>::InvalidProposalStatus
         );
 
-        let passed_to_failed =
-            create_internal_proposal_via_engine(nrc_admin(1), NRC, nrc_pid());
+        let passed_to_failed = create_internal_proposal_via_engine(nrc_admin(1), NRC, nrc_pid());
         assert_ok!(VotingEngine::set_status_and_emit(
             passed_to_failed,
             STATUS_PASSED

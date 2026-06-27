@@ -2,7 +2,7 @@
 //!
 //! 本模块只负责 CID 绑定、解绑和公民投票资格消费。凭证签发身份不再由
 //! 本 pallet 维护特殊花名册，而是由 runtime 注入的验签器按
-//! `issuer_main_account -> admins-change::AdminAccounts[issuer_main_account].admins`
+//! `issuer_main_account -> admins 模块::AdminAccounts[issuer_main_account].admins`
 //! 判断 `signer_pubkey` 是否为签发机构管理员。
 
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -171,12 +171,7 @@ pub mod pallet {
         type MaxCredentialSignatureLength: Get<u32>;
 
         /// 中文注释:CID 系统绑定验签器(外部接口桥接点)。
-        type CidVerifier: CidVerifier<
-            Self::AccountId,
-            Self::Hash,
-            NonceOf<Self>,
-            SignatureOf<Self>,
-        >;
+        type CidVerifier: CidVerifier<Self::AccountId, Self::Hash, NonceOf<Self>, SignatureOf<Self>>;
 
         /// 中文注释:公民投票实时验签器。
         type CidVoteVerifier: CidVoteVerifier<

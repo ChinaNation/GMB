@@ -106,28 +106,28 @@ fn registered_account_transfer_executes_when_internal_vote_reaches_threshold() {
         ])
         .expect("admins should fit");
 
-        personal_manage::PersonalAccounts::<Test>::insert(
+        personal_admins::PersonalAccounts::<Test>::insert(
             &personal_account,
-            personal_manage::PersonalAccount {
+            personal_admins::PersonalAccount {
                 creator: registered_account_admin(0),
                 account_name: b"personal"
                     .to_vec()
                     .try_into()
                     .expect("account name should fit"),
                 created_at: 1,
-                status: personal_manage::PersonalStatus::Active,
+                status: personal_admins::PersonalStatus::Active,
             },
         );
-        admins_change::AdminAccounts::<Test>::insert(
+        personal_admins::AdminAccounts::<Test>::insert(
             personal_account.clone(),
-            admins_change::AdminAccount {
+            admin_primitives::AdminAccount {
                 institution_code: PERSONAL_CODE,
-                kind: admins_change::AdminAccountKind::PersonalAccount,
+                kind: admin_primitives::AdminAccountKind::PersonalMultisig,
                 admins,
                 creator: registered_account_admin(0),
                 created_at: 1,
                 updated_at: 1,
-                status: admins_change::AdminAccountStatus::Active,
+                status: admin_primitives::AdminAccountStatus::Active,
             },
         );
         internal_vote::ActiveDynamicThresholds::<Test>::insert(

@@ -1,9 +1,9 @@
 //! 多签治理跨 pallet 共用模块（trait 抽象 + 轻量类型）。
 //!
-//! 由 personal-manage / organization-manage / multisig-transfer 共用，与 Pallet 内部状态无关：
+//! 由 personal-admins / organization-manage / multisig-transfer 共用，与 Pallet 内部状态无关：
 //! - 地址校验 / 资金保护 trait 由 runtime Config 注入实现，便于测试 mock 与生产分离；
 //! - 多签配置类型仅"裸结构 + 无业务逻辑"，避免业务 pallet 互相反向依赖。
-//! 放在 primitives 是为了避免 personal-manage 反向依赖 organization-manage。
+//! 放在 primitives 是为了避免 personal-admins 反向依赖 organization-manage。
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::DecodeWithMemTracking;

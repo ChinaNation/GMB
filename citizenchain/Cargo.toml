@@ -2,18 +2,23 @@
 members = [
     "node",                                  # 链节点程序
     "node/vendor",                           # 本地覆盖的 GRANDPA voter 持久化实现
+    "registry",                              # 注册局(CID)服务:链下明细 + 鉴权 + 颁发(ADR-029)
     "runtime",                               # 链上运行时
     "runtime/primitives",                    # 运行时共享常量与基础类型
 
-    "runtime/governance/admins-change",       # 治理-管理员权限治理模块 pallet
+    "runtime/admins/admin-primitives",        # admins 模组-管理员共用类型与 trait
+    "runtime/admins/genesis-admins",          # admins 模组-创世管理员（国储会/省储会/省储行/联邦注册局）
+    "runtime/admins/public-admins",           # admins 模组-非创世公权机构管理员
+    "runtime/admins/private-admins",          # admins 模组-私权与非法人机构管理员
+    "runtime/admins/personal-admins",         # admins 模组-个人多签管理员
     "runtime/governance/grandpakey-change",         # 治理-GRANDPA 密钥治理模块 pallet
     "runtime/governance/resolution-destro",   # 治理-决议销毁模块 pallet
     "runtime/governance/runtime-upgrade",    # 治理-协议升级模块 pallet
-    "runtime/governance/legislation-yuan",   # 治理-立法院模块 pallet(法律结构化上链,ADR-027)
+    "runtime/public/legislation-yuan",       # 公权模组-立法院模块 pallet(法律结构化上链,ADR-027)
     "runtime/votingengine",    # 投票引擎核心(共用基础设施:Proposals/反向索引/状态机/快照/锁/清理)
     "runtime/votingengine/internal-vote",  # 内部投票 pallet(管理员一人一票)
     "runtime/votingengine/joint-vote",     # 联合投票 pallet(管理员多签 + 全民兜底)
-    "runtime/votingengine/citizen-vote",   # 公民投票 pallet(多模式选举/公投,Phase 3)
+    "runtime/votingengine/election-vote",   # 选举投票 pallet(普选+互选,Phase 3)
     "runtime/votingengine/legislation-vote",  # 立法投票 pallet(立法机构专属:单院/两院/特别案公投,ADR-027)
 
     "runtime/issuance/citizen-issuance", # 发行-公民发行模块 pallet
@@ -27,8 +32,7 @@ members = [
 
     "runtime/transaction/offchain-transaction", # 交易-链下交易手续费模块 pallet
     "runtime/transaction/onchain-transaction",  # 交易-链上交易手续费模块 pallet
-    "runtime/governance/organization-manage",        # 治理-机构管理:承载机构多签注册/创建/关闭生命周期
-    "runtime/governance/personal-manage",        # 治理-个人多签管理:承载用户自定义多签账户的注册/创建/关闭生命周期(无 CID 归属)
+    "runtime/private/organization-manage",        # 私权模组-机构管理:承载机构多签注册/创建/关闭生命周期
     "runtime/transaction/multisig-transfer",     # 交易-机构多签名地址转账模块 pallet
     "runtime/transaction/institution-asset",  # 交易-机构账户资金白名单公共模块
 

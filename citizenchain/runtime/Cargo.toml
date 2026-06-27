@@ -68,18 +68,21 @@ onchain-issuance = { path = "issuance/onchain-issuance", default-features = fals
 cid-system = { path = "otherpallet/cid-system", default-features = false }
 pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
-organization-manage = { path = "governance/organization-manage", default-features = false }
-personal-manage = { path = "governance/personal-manage", default-features = false }
+organization-manage = { path = "private/organization-manage", default-features = false }
+personal-admins = { path = "admins/personal-admins", default-features = false }
 resolution-issuance = { path = "issuance/resolution-issuance", default-features = false }
 votingengine = { path = "votingengine", default-features = false }
 internal-vote = { path = "votingengine/internal-vote", default-features = false }
 joint-vote = { path = "votingengine/joint-vote", default-features = false }
-citizen-vote = { path = "votingengine/citizen-vote", default-features = false }
+election-vote = { path = "votingengine/election-vote", default-features = false }
 legislation-vote = { path = "votingengine/legislation-vote", default-features = false }
-admins-change = { path = "governance/admins-change", default-features = false }
+admin-primitives = { path = "admins/admin-primitives", default-features = false }
+genesis-admins = { path = "admins/genesis-admins", default-features = false }
+public-admins = { path = "admins/public-admins", default-features = false }
+private-admins = { path = "admins/private-admins", default-features = false }
 grandpakey-change = { path = "governance/grandpakey-change", default-features = false }
 runtime-upgrade = { path = "governance/runtime-upgrade", default-features = false }
-legislation-yuan = { path = "governance/legislation-yuan", default-features = false }
+legislation-yuan = { path = "public/legislation-yuan", default-features = false }
 resolution-destro = { path = "governance/resolution-destro", default-features = false }
 multisig-transfer = { path = "transaction/multisig-transfer", default-features = false }
 institution-asset = { path = "transaction/institution-asset", default-features = false }
@@ -112,14 +115,17 @@ std = [
 	"pow-difficulty/std",
 	"onchain-transaction/std",
 	"organization-manage/std",
-	"personal-manage/std",
+	"personal-admins/std",
 	"resolution-issuance/std",
 	"votingengine/std",
 	"internal-vote/std",
 	"joint-vote/std",
-	"citizen-vote/std",
+	"election-vote/std",
 	"legislation-vote/std",
-	"admins-change/std",
+	"admin-primitives/std",
+	"genesis-admins/std",
+	"public-admins/std",
+	"private-admins/std",
 	"grandpakey-change/std",
 	"runtime-upgrade/std",
 	"legislation-yuan/std",
@@ -168,13 +174,15 @@ runtime-benchmarks = [
 	"pow-difficulty/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
 	"organization-manage/runtime-benchmarks",
-	"personal-manage/runtime-benchmarks",
+	"personal-admins/runtime-benchmarks",
 	"resolution-issuance/runtime-benchmarks",
 	"votingengine/runtime-benchmarks",
 	"internal-vote/runtime-benchmarks",
 	"joint-vote/runtime-benchmarks",
-	"citizen-vote/runtime-benchmarks",
-	"admins-change/runtime-benchmarks",
+	"election-vote/runtime-benchmarks",
+	"genesis-admins/runtime-benchmarks",
+	"public-admins/runtime-benchmarks",
+	"private-admins/runtime-benchmarks",
 	"grandpakey-change/runtime-benchmarks",
 	"runtime-upgrade/runtime-benchmarks",
 	"resolution-destro/runtime-benchmarks",
@@ -202,13 +210,15 @@ try-runtime = [
 	"pow-difficulty/try-runtime",
 	"onchain-transaction/try-runtime",
 	"organization-manage/try-runtime",
-	"personal-manage/try-runtime",
+	"personal-admins/try-runtime",
 	"resolution-issuance/try-runtime",
 	"votingengine/try-runtime",
 	"internal-vote/try-runtime",
 	"joint-vote/try-runtime",
-	"citizen-vote/try-runtime",
-	"admins-change/try-runtime",
+	"election-vote/try-runtime",
+	"genesis-admins/try-runtime",
+	"public-admins/try-runtime",
+	"private-admins/try-runtime",
 	"grandpakey-change/try-runtime",
 	"runtime-upgrade/try-runtime",
 	"resolution-destro/try-runtime",

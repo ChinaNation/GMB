@@ -78,7 +78,8 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // 当前 runtime 采用统一模块命名：
-    // admins-change / organization-manage / personal-manage / votingengine /
+    // genesis-admins / public-admins / private-admins / personal-admins /
+    // organization-manage / votingengine /
     // multisig-transfer / offchain-transaction / onchain-transaction / institution-asset。
     spec_version: 1,
     impl_version: 0,
@@ -318,9 +319,9 @@ mod runtime {
     #[runtime::pallet_index(23)]
     pub type JointVote = joint_vote;
 
-    // 公民投票 sub-pallet:多模式选举/公投
+    // 选举投票 sub-pallet:选举公职人员(普选 + 机构成员互选)
     #[runtime::pallet_index(24)]
-    pub type CitizenVote = citizen_vote;
+    pub type ElectionVote = election_vote;
 
     // CID 绑定与资格校验：统一处理绑定、验签、资格查询
     #[runtime::pallet_index(10)]
@@ -330,9 +331,9 @@ mod runtime {
     #[runtime::pallet_index(11)]
     pub type CitizenIssuance = citizen_issuance;
 
-    // 管理员治理模块：本机构管理员更换事项（走内部投票）
+    // 创世管理员模块：国储会、省储会、省储行、联邦注册局管理员。
     #[runtime::pallet_index(12)]
-    pub type AdminsChange = admins_change;
+    pub type GenesisAdmins = genesis_admins;
 
     // 运行时升级治理模块：提案与联合投票通过后触发 set_code。
     #[runtime::pallet_index(13)]
@@ -350,10 +351,10 @@ mod runtime {
     #[runtime::pallet_index(17)]
     pub type OrganizationManage = organization_manage;
 
-    // 个人多签管理模块:用户自定义多签账户的注册/创建/关闭(无 CID 归属,creator+account_name 派生)。
+    // 个人多签管理员模块:用户自定义多签账户的注册/创建/关闭(无 CID 归属,creator+account_name 派生)。
     // pallet_index=7。
     #[runtime::pallet_index(7)]
-    pub type PersonalManage = personal_manage;
+    pub type PersonalAdmins = personal_admins;
 
     // PoW 动态难度调整模块：每 600 块根据实际出块速度自动调整挖矿难度
     #[runtime::pallet_index(18)]
@@ -371,7 +372,7 @@ mod runtime {
     #[runtime::pallet_index(21)]
     pub type OffchainTransaction = offchain_transaction::pallet;
 
-    // 链上发行代币(Plain FT, ADR-011):用户(CID 机构 + personal-manage 多签)发行 GMB 之外的代币。
+    // 链上发行代币(Plain FT, ADR-011):用户(CID 机构 + personal-admins 多签)发行 GMB 之外的代币。
     // 唯一外壳入口,内核挂 pallet_assets;pallet_assets 原生 extrinsic 由 BaseCallFilter 屏蔽。
     // 当前为空壳(任务卡 A/B 未实装),OnchainIssuance 自身 propose_* 也在 RuntimeCallFilter 中 reject。
     #[runtime::pallet_index(25)]
@@ -391,6 +392,14 @@ mod runtime {
     // 投票引擎「头等模式」PROPOSAL_KIND_LEGISLATION,共享核心共享基础,只本地存计票账本。
     #[runtime::pallet_index(28)]
     pub type LegislationVote = legislation_vote;
+
+    // 非创世公权机构管理员模块。
+    #[runtime::pallet_index(29)]
+    pub type PublicAdmins = public_admins;
+
+    // 私权与非法人机构管理员模块。
+    #[runtime::pallet_index(30)]
+    pub type PrivateAdmins = private_admins;
 }
 
 #[cfg(test)]

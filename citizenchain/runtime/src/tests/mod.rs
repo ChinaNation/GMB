@@ -40,22 +40,22 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
     let backup_pair = sr25519::Pair::from_string("//backup1-step3", None).expect("pair");
     let backup_admin_pubkey = backup_pair.public().0;
 
-    let admins: admins_change::pallet::AdminsOf<Runtime> = vec![
+    let admins: genesis_admins::pallet::AdminsOf<Runtime> = vec![
         AccountId::new(main_admin_pubkey),
         AccountId::new(backup_admin_pubkey),
     ]
     .try_into()
     .expect("test admins should fit");
-    admins_change::pallet::AdminAccounts::<Runtime>::insert(
+    genesis_admins::pallet::AdminAccounts::<Runtime>::insert(
         issuer_main_account,
-        admins_change::AdminAccount {
+        admin_primitives::AdminAccount {
             institution_code: votingengine::types::PRC,
-            kind: admins_change::AdminAccountKind::BuiltinInstitution,
+            kind: admin_primitives::AdminAccountKind::GenesisInstitution,
             admins,
             creator: AccountId::new(main_admin_pubkey),
             created_at: Default::default(),
             updated_at: Default::default(),
-            status: admins_change::AdminAccountStatus::Active,
+            status: admin_primitives::AdminAccountStatus::Active,
         },
     );
 

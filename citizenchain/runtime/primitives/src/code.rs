@@ -963,7 +963,7 @@ pub fn fixed_governance_pass_threshold(code: &InstitutionCode) -> Option<u32> {
     }
 }
 
-/// 是否为个人多签账户机构码(PMUL)。管理员来自 personal-manage。
+/// 是否为个人多签账户机构码(PMUL)。管理员来自 personal-admins。
 pub fn is_personal_code(code: &InstitutionCode) -> bool {
     *code == PMUL
 }

@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use super::*;
+use admin_primitives::AdminAccountQuery;
 use codec::Encode;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
@@ -55,10 +56,13 @@ mod runtime {
     pub type MultisigTransfer = super;
 
     #[runtime::pallet_index(5)]
-    pub type AdminsChange = admins_change;
+    pub type PublicAdmins = public_admins;
 
     #[runtime::pallet_index(6)]
-    pub type PersonalManage = personal_manage;
+    pub type PrivateAdmins = private_admins;
+
+    #[runtime::pallet_index(7)]
+    pub type PersonalAdmins = personal_admins;
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -257,12 +261,13 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
+            PMUL => personal_admins::Pallet::<Test>::is_active_account_admin(
+                institution_code,
+                institution,
+                who,
+            ),
             c if is_registered_multisig_code(&c) => {
-                admins_change::Pallet::<Test>::is_active_account_admin(
-                    institution_code,
-                    institution,
-                    who,
-                )
+                TestAdminAccountQuery::is_active_account_admin(institution_code, institution, who)
             }
             _ => false,
         }
@@ -284,8 +289,12 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
+            PMUL => personal_admins::Pallet::<Test>::active_account_admins(
+                institution_code,
+                institution,
+            ),
             c if is_registered_multisig_code(&c) => {
-                admins_change::Pallet::<Test>::active_account_admins(institution_code, institution)
+                TestAdminAccountQuery::active_account_admins(institution_code, institution)
             }
             _ => None,
         }
@@ -304,14 +313,251 @@ impl votingengine::InternalAdminsLenProvider<AccountId32> for TestInternalAdmins
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .and_then(|n| u32::try_from(n.admins.len()).ok()),
+            PMUL => personal_admins::Pallet::<Test>::active_account_admins_len(
+                institution_code,
+                institution,
+            ),
             c if is_registered_multisig_code(&c) => {
-                admins_change::Pallet::<Test>::active_account_admins_len(
-                    institution_code,
-                    institution,
-                )
+                TestAdminAccountQuery::active_account_admins_len(institution_code, institution)
             }
             _ => None,
         }
+    }
+}
+
+pub struct TestAdminAccountQuery;
+impl admin_primitives::AdminAccountQuery<AccountId32> for TestAdminAccountQuery {
+    fn active_admin_account_exists(
+        institution_code: InstitutionCode,
+        admin_root_account_id: AccountId32,
+    ) -> bool {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_admins::Pallet::<Test>::active_admin_account_exists(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_admins::Pallet::<Test>::active_admin_account_exists(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Test>::active_admin_account_exists(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        false
+    }
+
+    fn is_active_account_admin(
+        institution_code: InstitutionCode,
+        admin_root_account_id: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_admins::Pallet::<Test>::is_active_account_admin(
+                institution_code,
+                admin_root_account_id,
+                who,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_admins::Pallet::<Test>::is_active_account_admin(
+                institution_code,
+                admin_root_account_id,
+                who,
+            );
+        }
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Test>::is_active_account_admin(
+                institution_code,
+                admin_root_account_id,
+                who,
+            );
+        }
+        false
+    }
+
+    fn active_account_admins(
+        institution_code: InstitutionCode,
+        admin_root_account_id: AccountId32,
+    ) -> Option<Vec<AccountId32>> {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_admins::Pallet::<Test>::active_account_admins(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_admins::Pallet::<Test>::active_account_admins(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Test>::active_account_admins(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        None
+    }
+
+    fn active_account_admins_len(
+        institution_code: InstitutionCode,
+        admin_root_account_id: AccountId32,
+    ) -> Option<u32> {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_admins::Pallet::<Test>::active_account_admins_len(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_admins::Pallet::<Test>::active_account_admins_len(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Test>::active_account_admins_len(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        None
+    }
+
+    fn pending_account_exists_for_snapshot(
+        institution_code: InstitutionCode,
+        admin_root_account_id: AccountId32,
+    ) -> bool {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_admins::Pallet::<Test>::pending_account_exists_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_admins::Pallet::<Test>::pending_account_exists_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Test>::pending_account_exists_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        false
+    }
+
+    fn is_pending_account_admin_for_snapshot(
+        institution_code: InstitutionCode,
+        admin_root_account_id: AccountId32,
+        who: &AccountId32,
+    ) -> bool {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_admins::Pallet::<Test>::is_pending_account_admin_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+                who,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_admins::Pallet::<Test>::is_pending_account_admin_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+                who,
+            );
+        }
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Test>::is_pending_account_admin_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+                who,
+            );
+        }
+        false
+    }
+
+    fn pending_account_admins_for_snapshot(
+        institution_code: InstitutionCode,
+        admin_root_account_id: AccountId32,
+    ) -> Option<Vec<AccountId32>> {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_admins::Pallet::<Test>::pending_account_admins_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_admins::Pallet::<Test>::pending_account_admins_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Test>::pending_account_admins_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        None
+    }
+
+    fn pending_account_admins_len_for_snapshot(
+        institution_code: InstitutionCode,
+        admin_root_account_id: AccountId32,
+    ) -> Option<u32> {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_admins::Pallet::<Test>::pending_account_admins_len_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_admins::Pallet::<Test>::pending_account_admins_len_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Test>::pending_account_admins_len_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        None
+    }
+
+    fn legal_representative(
+        institution_code: InstitutionCode,
+        admin_root_account_id: AccountId32,
+    ) -> Option<AccountId32> {
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_admins::Pallet::<Test>::legal_representative(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_admins::Pallet::<Test>::legal_representative(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_personal_admin_code(&institution_code) {
+            return personal_admins::Pallet::<Test>::legal_representative(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        None
     }
 }
 
@@ -394,6 +640,9 @@ impl organization_manage::pallet::Config for Test {
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
     type CidInstitutionVerifier = TestCidInstitutionVerifier;
+    type PublicAdminLifecycle = PublicAdmins;
+    type PrivateAdminLifecycle = PrivateAdmins;
+    type AdminAccountQuery = TestAdminAccountQuery;
     type FeeRouter = ();
     type MaxAdmins = ConstU32<10>;
     type MaxCidNumberLength = ConstU32<47>;
@@ -406,16 +655,21 @@ impl organization_manage::pallet::Config for Test {
     type WeightInfo = ();
 }
 
-impl admins_change::Config for Test {
+impl public_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    // 中文注释:与真实 runtime 一致(1989)。联邦注册局创世内置 215 管理员,mock 上限须覆盖。
     type MaxAdminsPerInstitution = ConstU32<1989>;
-    type MaxPersonalAccountAdmins = ConstU32<64>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type WeightInfo = ();
 }
 
-impl personal_manage::pallet::Config for Test {
+impl private_admins::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type MaxAdminsPerInstitution = ConstU32<1989>;
+    type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type WeightInfo = ();
+}
+
+impl personal_admins::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
@@ -425,6 +679,7 @@ impl personal_manage::pallet::Config for Test {
     type InstitutionAsset = TestInstitutionAsset;
     type FeeRouter = ();
     type MaxAccountNameLength = ConstU32<128>;
+    type MaxPersonalAccountAdmins = ConstU32<64>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<111>;
     type WeightInfo = ();
@@ -434,10 +689,10 @@ impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = ();
-    // 中文注释:测试 mock 把个人多签生命周期灌进 personal-manage，
-    // 管理员灌进 admins-change，动态阈值灌进 internal-vote；PersonalQuery 负责合并读取。
+    // 中文注释:测试 mock 把个人多签生命周期和管理员灌进 personal-admins，
+    // 机构管理员灌进 public/private-admins，动态阈值灌进 internal-vote。
     // InstitutionQuery 走 organization-manage,用于覆盖 0x05 InstitutionAccount 账户级主体。
-    type PersonalQuery = personal_manage::Pallet<Test>;
+    type PersonalQuery = personal_admins::Pallet<Test>;
     type InstitutionQuery = organization_manage::Pallet<Test>;
     type WeightInfo = ();
 }
@@ -548,7 +803,7 @@ fn test_account_name() -> organization_manage::AccountNameOf<Test> {
 
 fn insert_active_registered_institution_account(
     account: &AccountId32,
-    admins: admins_change::pallet::AdminsOf<Test>,
+    admins: private_admins::pallet::AdminsOf<Test>,
 ) {
     let cid_number = test_cid_number();
     let account_name = test_account_name();
@@ -591,16 +846,16 @@ fn insert_active_registered_institution_account(
             created_at: 1,
         },
     );
-    admins_change::AdminAccounts::<Test>::insert(
+    private_admins::AdminAccounts::<Test>::insert(
         account.clone(),
-        admins_change::AdminAccount {
+        admin_primitives::AdminAccount {
             institution_code: PRIVATE_CODE,
-            kind: admins_change::AdminAccountKind::InstitutionAccount,
+            kind: admin_primitives::AdminAccountKind::PrivateInstitution,
             admins,
             creator: registered_institution_admin(0),
             created_at: 1,
             updated_at: 1,
-            status: admins_change::AdminAccountStatus::Active,
+            status: admin_primitives::AdminAccountStatus::Active,
         },
     );
     internal_vote::ActiveDynamicThresholds::<Test>::insert(PRIVATE_CODE, account.clone(), 2);
@@ -700,10 +955,6 @@ fn new_test_ext() -> sp_io::TestExternalities {
     }
     .assimilate_storage(&mut storage)
     .expect("balances should assimilate");
-    admins_change::GenesisConfig::<Test>::default()
-        .assimilate_storage(&mut storage)
-        .expect("admins-change genesis should assimilate");
-
     let mut ext: sp_io::TestExternalities = storage.into();
     ext.execute_with(|| {
         // 为 3 种固定治理 org 注入 sr25519 派生 admin。
@@ -720,10 +971,10 @@ fn new_test_ext() -> sp_io::TestExternalities {
         set_extra_admins(NRC, nrc, nrc_accts);
         set_extra_admins(PRC, prc, prc_accts);
         set_extra_admins(PRB, prb, prb_accts);
-        // PERSONAL_CODE/PUBLIC_CODE/PRIVATE_CODE 的 admin 从 admins-change 读；
+        // PERSONAL_CODE/PUBLIC_CODE/PRIVATE_CODE 的 admin 从 personal/public/private-admins 读；
         // 中文注释：动态阈值真源在 internal-vote::ActiveDynamicThresholds。
-        // personal-manage / organization-manage 只保存账户生命周期状态和 org 归属。
-        // 测试需要时显式写入 PersonalAccounts + admins-change AdminAccounts。
+        // personal-admins / organization-manage 只保存账户生命周期状态和 org 归属。
+        // 测试需要时显式写入 PersonalAccounts + 对应管理员表。
         let _ = dq;
     });
     ext

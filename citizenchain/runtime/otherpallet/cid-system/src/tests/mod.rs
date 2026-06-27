@@ -1,7 +1,7 @@
 //! cid-system pallet 测试套件。
 //!
 //! 中文注释:本模块当前只负责 CID 绑定/解绑和公民投票凭证消费。
-//! 签发管理员集合不在本 pallet 内维护,由 runtime verifier 对接 admins-change。
+//! 签发管理员集合不在本 pallet 内维护,由 runtime verifier 对接 admins 模块。
 
 use super::*;
 use frame_support::{derive_impl, parameter_types};
@@ -123,10 +123,7 @@ fn bind_credential(seed: &[u8], bind_nonce: &str, sig: &str) -> CredentialOf<Tes
     BindCredential {
         binding_id: binding_id(seed),
         bind_nonce: nonce(bind_nonce),
-        issuer_cid_number: b"CID-ISSUER"
-            .to_vec()
-            .try_into()
-            .expect("issuer cid fits"),
+        issuer_cid_number: b"CID-ISSUER".to_vec().try_into().expect("issuer cid fits"),
         issuer_main_account: 99,
         signer_pubkey: [7u8; 32],
         scope_province_name: b"liaoning".to_vec().try_into().expect("scope fits"),

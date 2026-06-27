@@ -16,7 +16,7 @@ pub const MAX_DECIMALS: u8 = 18;
 /// 校验发行机构账户地址。
 ///
 /// 中文注释：具体“是否为已注册机构多签、发起人是否为该账户管理员”由 pallet 调用
-/// admins-change / organization-manage 的账户级接口完成；本函数只拒绝空编码。
+/// admins 模块 / organization-manage 的账户级接口完成；本函数只拒绝空编码。
 pub fn ensure_issuer_allowed<AccountId: codec::Encode>(
     issuer_account: &AccountId,
 ) -> Result<(), &'static str> {

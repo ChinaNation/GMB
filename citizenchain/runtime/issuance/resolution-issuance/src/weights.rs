@@ -38,8 +38,8 @@ pub trait WeightInfo {
 	/// Storage: `ResolutionIssuance::AllowedRecipients` (r:1 w:1)
 	/// Proof: `ResolutionIssuance::AllowedRecipients` (`max_values`: Some(1), `max_size`: Some(1377), added: 1872, mode: `MaxEncodedLen`)
 	fn set_allowed_recipients() -> Weight;
-	/// Storage: `AdminsChange::AdminAccounts` (r:87 w:0)
-	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeAdminAccountQuery::AdminAccounts` (r:87 w:0)
+	/// Proof: `RuntimeAdminAccountQuery::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuance::AllowedRecipients` (r:1 w:0)
 	/// Proof: `ResolutionIssuance::AllowedRecipients` (`max_values`: Some(1), `max_size`: Some(1377), added: 1872, mode: `MaxEncodedLen`)
 	/// Storage: `JointVote::PendingPopulationSnapshots` (r:1 w:1)
@@ -105,8 +105,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(2))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
-	/// Storage: `AdminsChange::AdminAccounts` (r:87 w:0)
-	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeAdminAccountQuery::AdminAccounts` (r:87 w:0)
+	/// Proof: `RuntimeAdminAccountQuery::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuance::AllowedRecipients` (r:1 w:0)
 	/// Proof: `ResolutionIssuance::AllowedRecipients` (`max_values`: Some(1), `max_size`: Some(1377), added: 1872, mode: `MaxEncodedLen`)
 	/// Storage: `JointVote::PendingPopulationSnapshots` (r:1 w:1)
@@ -198,8 +198,8 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(2))
 			.saturating_add(RocksDbWeight::get().writes(1))
 	}
-	/// Storage: `AdminsChange::AdminAccounts` (r:87 w:0)
-	/// Proof: `AdminsChange::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `RuntimeAdminAccountQuery::AdminAccounts` (r:87 w:0)
+	/// Proof: `RuntimeAdminAccountQuery::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuance::AllowedRecipients` (r:1 w:0)
 	/// Proof: `ResolutionIssuance::AllowedRecipients` (`max_values`: Some(1), `max_size`: Some(1377), added: 1872, mode: `MaxEncodedLen`)
 	/// Storage: `JointVote::PendingPopulationSnapshots` (r:1 w:1)

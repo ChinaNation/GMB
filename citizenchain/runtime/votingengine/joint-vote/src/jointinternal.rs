@@ -279,9 +279,9 @@ impl<T: Config> Pallet<T> {
                     ) {
                         return TransactionOutcome::Rollback(Err(err));
                     }
-                    if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
-                        id, PRC, prc, false,
-                    ) {
+                    if let Err(err) =
+                        <votingengine::Pallet<T>>::snapshot_institution_admins(id, PRC, prc, false)
+                    {
                         return TransactionOutcome::Rollback(Err(err));
                     }
                 }
@@ -296,9 +296,9 @@ impl<T: Config> Pallet<T> {
                     ) {
                         return TransactionOutcome::Rollback(Err(err));
                     }
-                    if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
-                        id, PRB, prb, false,
-                    ) {
+                    if let Err(err) =
+                        <votingengine::Pallet<T>>::snapshot_institution_admins(id, PRB, prb, false)
+                    {
                         return TransactionOutcome::Rollback(Err(err));
                     }
                 }

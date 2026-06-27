@@ -2,9 +2,9 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
+use cid_system::OnCidBound;
 use codec::Decode;
 use frame_benchmarking::v2::*;
-use cid_system::OnCidBound;
 use sp_runtime::traits::Hash;
 
 use crate::pallet::{AccountRewarded, Config, Pallet, RewardClaimed, RewardedCount};

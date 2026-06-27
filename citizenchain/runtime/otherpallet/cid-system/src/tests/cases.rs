@@ -46,10 +46,7 @@ fn bind_allows_account_rebinding_to_new_binding_id() {
         let first = bind_credential(b"binding-a", "nonce-a", "bind-ok");
         let second = bind_credential(b"binding-b", "nonce-b", "bind-ok");
 
-        assert_ok!(CidSystem::bind_cid(
-            RuntimeOrigin::signed(1),
-            first.clone()
-        ));
+        assert_ok!(CidSystem::bind_cid(RuntimeOrigin::signed(1), first.clone()));
         assert_ok!(CidSystem::bind_cid(
             RuntimeOrigin::signed(1),
             second.clone()
@@ -68,10 +65,7 @@ fn bind_rejects_empty_nonce() {
         let empty_credential = BindCredential {
             binding_id: binding_id(b"id-empty"),
             bind_nonce: Vec::<u8>::new().try_into().expect("empty vec fits"),
-            issuer_cid_number: b"CID-ISSUER"
-                .to_vec()
-                .try_into()
-                .expect("issuer cid fits"),
+            issuer_cid_number: b"CID-ISSUER".to_vec().try_into().expect("issuer cid fits"),
             issuer_main_account: 99,
             signer_pubkey: [7u8; 32],
             scope_province_name: b"liaoning".to_vec().try_into().expect("scope fits"),
@@ -102,10 +96,7 @@ fn bind_rejects_binding_id_owned_by_another_account() {
         let credential_1 = bind_credential(b"shared-id", "nonce-1", "bind-ok");
         let credential_2 = bind_credential(b"shared-id", "nonce-2", "bind-ok");
 
-        assert_ok!(CidSystem::bind_cid(
-            RuntimeOrigin::signed(1),
-            credential_1
-        ));
+        assert_ok!(CidSystem::bind_cid(RuntimeOrigin::signed(1), credential_1));
         assert_noop!(
             CidSystem::bind_cid(RuntimeOrigin::signed(2), credential_2),
             Error::<Test>::BindingIdAlreadyBoundToAnotherAccount
@@ -119,10 +110,7 @@ fn bind_rejects_same_binding_id_already_bound() {
         let credential_1 = bind_credential(b"dup-id", "nonce-dup-1", "bind-ok");
         let credential_2 = bind_credential(b"dup-id", "nonce-dup-2", "bind-ok");
 
-        assert_ok!(CidSystem::bind_cid(
-            RuntimeOrigin::signed(1),
-            credential_1
-        ));
+        assert_ok!(CidSystem::bind_cid(RuntimeOrigin::signed(1), credential_1));
         assert_noop!(
             CidSystem::bind_cid(RuntimeOrigin::signed(1), credential_2),
             Error::<Test>::SameBindingIdAlreadyBound

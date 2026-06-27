@@ -190,7 +190,9 @@ pub mod pallet {
             // 中文注释：force advance 只用于跳过“已经到期但无法修复”的故障年度，
             // 不能越过当前链上时间提前跳过未来尚未到期的年度。
             ensure!(
-                year > current && year <= current_year && year <= PROVINCIALBANK_INTEREST_DURATION_YEARS,
+                year > current
+                    && year <= current_year
+                    && year <= PROVINCIALBANK_INTEREST_DURATION_YEARS,
                 Error::<T>::InvalidYear
             );
             LastSettledYear::<T>::put(year);

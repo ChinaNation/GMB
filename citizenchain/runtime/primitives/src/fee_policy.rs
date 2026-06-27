@@ -35,7 +35,7 @@ pub const ONCHAIN_MIN_FEE: u128 = 10;
 /// 投票 / 治理类 extrinsic 统一费用:**100 FEN = 1 元/次**。
 ///
 /// 适用范围:
-/// - VotingEngine: internal_vote / joint_vote / citizen_vote /
+/// - VotingEngine: internal_vote / joint_vote / election_vote /
 ///   retry_passed_proposal / cancel_passed_proposal
 /// - 各业务 pallet 不涉及金额的 propose_X / cleanup_X / register_X / 管理操作
 ///

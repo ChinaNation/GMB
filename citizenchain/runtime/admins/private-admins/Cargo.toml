@@ -1,0 +1,47 @@
+[package]
+name = "private-admins"  # 私权机构和非法人机构管理员
+edition.workspace = true   # 默认 Rust 版本
+version.workspace = true   # 版本号
+authors.workspace = true   # 作者
+repository.workspace = true  #项目仓库
+license = "MIT"        # 授权协议 MIT
+
+[dependencies]
+codec = { workspace = true }
+scale-info = { workspace = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+frame-benchmarking = { workspace = true, optional = true }
+sp-runtime = { workspace = true }
+sp-io = { workspace = true }
+sp-std = { workspace = true }
+
+primitives = { path = "../../primitives", default-features = false }
+admin-primitives = { path = "../admin-primitives", default-features = false }
+votingengine = { path = "../../votingengine", default-features = false }
+
+[features]
+default = ["std"]
+runtime-benchmarks = [
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "votingengine/runtime-benchmarks",
+]
+try-runtime = []
+std = [
+    "codec/std",
+    "scale-info/std",
+    "frame-benchmarking?/std",
+    "frame-support/std",
+    "frame-system/std",
+    "sp-runtime/std",
+    "sp-io/std",
+    "sp-std/std",
+    "primitives/std",
+    "admin-primitives/std",
+    "votingengine/std",
+]
+
+[dev-dependencies]
+internal-vote = { path = "../../votingengine/internal-vote", default-features = false }
