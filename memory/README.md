@@ -26,7 +26,7 @@
 - `memory/06-quality/`
 - `memory/07-ai/`
 - `memory/08-tasks/`
-- `memory/scripts/`
+- `scripts/`
 
 ## 文档真源规则
 
