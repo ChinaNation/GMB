@@ -1,0 +1,23 @@
+[Unit]
+Description=CitizenPassport Backend Service
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=cpms
+Group=cpms
+WorkingDirectory=/var/lib/citizenpassport
+EnvironmentFile=/etc/citizenpassport/citizenpassport-backend.env
+ExecStart=/opt/citizenpassport/bin/citizenpassport-backend
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/citizenpassport /var/backups/citizenpassport
+
+[Install]
+WantedBy=multi-user.target
