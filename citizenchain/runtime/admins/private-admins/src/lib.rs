@@ -21,7 +21,7 @@ use sp_runtime::DispatchError;
 use sp_std::collections::btree_set::BTreeSet;
 
 use admin_primitives::{
-    is_private_admin_code, AdminAccount, AdminAccountKind, AdminAccountLifecycle,
+    can_store_private_admin_code, AdminAccount, AdminAccountKind, AdminAccountLifecycle,
     AdminAccountStatus, AdminSetChangeAction,
 };
 use votingengine::{
@@ -74,7 +74,7 @@ pub mod pallet {
     pub type AdminAccountOf<T> =
         AdminAccount<AdminsOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
 
-    /// 私权与非法人机构管理员表：只保存私权机构和非法人机构管理员集合。
+    /// 私权机构管理员表：保存私权机构,以及归属私法人的非法人机构管理员集合。
     #[pallet::storage]
     #[pallet::getter(fn admin_account_of)]
     pub type AdminAccounts<T: Config> =
@@ -329,7 +329,7 @@ pub mod pallet {
         ) -> DispatchResult {
             ensure!(
                 kind == AdminAccountKind::PrivateInstitution
-                    && is_private_admin_code(&institution_code),
+                    && can_store_private_admin_code(&institution_code),
                 Error::<T>::InvalidAdminAccountKind
             );
             Ok(())

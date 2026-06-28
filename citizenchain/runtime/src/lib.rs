@@ -397,7 +397,7 @@ mod runtime {
     #[runtime::pallet_index(29)]
     pub type PublicAdmins = public_admins;
 
-    // 私权与非法人机构管理员模块。
+    // 私权机构管理员模块；归属私法人的非法人由上层显式路由到这里。
     #[runtime::pallet_index(30)]
     pub type PrivateAdmins = private_admins;
 }

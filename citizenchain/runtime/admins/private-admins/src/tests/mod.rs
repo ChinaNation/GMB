@@ -123,7 +123,7 @@ fn admins(count: u8) -> Vec<AccountId32> {
 }
 
 #[test]
-fn private_admins_accept_private_and_unincorporated_codes() {
+fn private_admins_accept_private_codes_and_private_owned_unincorporated_codes() {
     new_test_ext().execute_with(|| {
         let root = account(10);
         assert_ok!(PrivateAdmins::do_create_pending_admin_account(

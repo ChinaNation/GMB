@@ -382,8 +382,8 @@ message = blake2_256(SCALE.encode(payload))
 ### 7.1.1 管理员更换手机端协议
 
 - 目录边界：公民端管理员更换只在 `lib/governance/admins-change/` 内实现；机构/个人注册、注销仍归 `organization-manage` / `personal-manage`。
-- 主体规则：`PersonalAccount` 的 institution_code 必须是个人多签码（`is_personal_code`，PMUL），`InstitutionAccount` 的 institution_code 必须是机构账户码（`is_institution_code`，公权或私权法人），`注册机构归属关系` 不能作为管理员更换主体。
-- QR call data：`[pallet][call][institution_code:[u8;4]][account_id:32][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]`；PMUL 走 `7.3`，创世管理员走 `12.0`，公权走 `29.0`，私权/非法人走 `30.0`。
+- 主体规则：`PersonalAccount` 的 institution_code 必须是个人多签码（`is_personal_code`，PMUL），`InstitutionAccount` 的 institution_code 必须是机构账户码（`is_institution_code`，公权法人、私权法人或非法人），`注册机构归属关系` 不能作为管理员更换主体。
+- QR call data：`[pallet][call][institution_code:[u8;4]][account_id:32][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]`；PMUL 走 `7.3`，创世管理员走 `12.0`，公权走 `29.0`，私权走 `30.0`，非法人按所属法人归属走 `29.0` 或 `30.0`。
 - 内置治理机构只读展示固定阈值，不展示输入框；提交管理员更换提案时 `new_threshold` 必须等于制度固定阈值。
 - 个人多签和机构账户展示动态阈值输入框，校验公式为 `threshold * 2 > admins_len && threshold <= admins_len`。
 - QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与 CitizenWallet 公民钱包 decoder 严格一致：`institution_code`、`subject`、`admins`、`new_threshold`，其中 `subject/admins` 均使用 `0x` 小写 hex。

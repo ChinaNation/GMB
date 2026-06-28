@@ -943,11 +943,6 @@ pub fn requires_education_level(code: &InstitutionCode) -> bool {
     text_matches(code, &["GSCH", "SFSC", "JSCH"])
 }
 
-/// 是否市公安局(== CPOL)。
-pub fn is_city_police_code(code: &InstitutionCode) -> bool {
-    *code == *b"CPOL"
-}
-
 /// 是否为固定治理档机构码(国储会/省储会/省储行)。
 pub fn is_fixed_governance_code(code: &InstitutionCode) -> bool {
     matches!(*code, NRC | PRC | PRB)
@@ -971,7 +966,7 @@ pub fn is_personal_code(code: &InstitutionCode) -> bool {
     *code == PMUL
 }
 
-/// 是否为机构账户机构码(公权/私权/非法人实体,经 organization-manage 注册多签)。
+/// 是否为机构账户机构码(公权法人/私权法人/非法人实体)。
 pub fn is_institution_code(code: &InstitutionCode) -> bool {
     !is_fixed_governance_code(code)
         && (is_public_legal_code(code)

@@ -138,11 +138,13 @@ CitizenWallet 公民钱包扫描并生成 `sign_response`,CID 页面再扫描该
 `MANUAL`。行政区删除、改名或 code tombstone 只会清理 `GENERATED` 目录及其
 `subjects/gov/accounts/docs/ids/audit` 派生残留,不得误删手工机构。
 
-## 私权机构与非法人
+## 私权机构登记与非法人归属
 
 私权机构由注册局管理员人工注册。私权入口拆成个体经营、合伙企业、股权公司、股份公司、
 公益组织、注册协会六类;身份 ID 格式不变,后端按 `private_type` 锁定
 `subject_property + institution_code + p1`。
+
+非法人不是私权机构同义词;非法人可隶属公法人或私法人,管理员上链时必须按所属法人归属路由到公权或私权管理员模块。
 
 教育委员会学校机构统一归教育机构入口管理,机构类型使用教育委员会代码 `JY`,不在私权六类 Tab 中出现。
 

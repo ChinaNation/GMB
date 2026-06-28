@@ -1,5 +1,5 @@
 [package]
-name = "private-admins"  # 私权机构和非法人机构管理员
+name = "private-admins"  # 私权机构管理员
 edition.workspace = true   # 默认 Rust 版本
 version.workspace = true   # 版本号
 authors.workspace = true   # 作者

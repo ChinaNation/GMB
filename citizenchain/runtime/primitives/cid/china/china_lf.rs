@@ -11,7 +11,6 @@ pub struct ChinaLf {
     pub cid_number: &'static str,
     pub main_account: [u8; 32],
     pub fee_account: [u8; 32],
-    pub admins: &'static [[u8; 32]],
 }
 
 pub const CHINA_LF: &[ChinaLf] = &[
@@ -23,13 +22,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "ZS001-NLG0H-084852748-2026",
         main_account: hex!("877ed3765a31e9b29a7cefc402f542105a67ed75358c37c2013ea4064b75a073"),
         fee_account: hex!("d60e9160bf500880ed25e0f51b4e2a7e9063cdabb19100d5aca65384ff4e9086"),
-        admins: &[
-            hex!("ba98d5590e86650cbd558af50b7c22a23e4646e4d18ee0d4380fd5e58773270b"),
-            hex!("8a488cfeb9c1e1cfed43ab1317007aec6e1b502c6d4131e8cfc6c9f540da8237"),
-            hex!("0446a12f94787e5a84a761029bb1aba6474fc48f1c49f84ea3a3d37b146e4c32"),
-            hex!("d07a0d07ac5147142c398357d2fd19c4d8749e14fe10a533ccd8a1bc3ea46d11"),
-            hex!("3cc6e99af292e12f70bba49a40637c309e095d9f5fabafea14fb69d36f06dd57"),
-        ],
     },
     ChinaLf {
         cid_full_name: "中枢省联邦立法院",
@@ -39,13 +31,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "ZS001-PLG0T-644733085-2026",
         main_account: hex!("c5f655a92932e2e8b1733cd3520bcf4f91c17a81193401863d8ddf7e6a400ba1"),
         fee_account: hex!("f618142e43631dc5a7f6c4d72a5d5f9fbecad9e6f564bf5197bd0116db84f8a4"),
-        admins: &[
-            hex!("7e5259d0424cf88ad3dbbe0c99e05790e952445a3ab6923d93d70f05d5aa5162"),
-            hex!("babdd20889191c64e9553b63ffd8043bd5b8942201ce61666eeee87d21942b09"),
-            hex!("68a840acb591699690f8471698a846a8f46332423de28364460b2c76bee15821"),
-            hex!("8a009f796a4a04f9b1dff8f280b91bd32f34fa9d7f3a71000bcb9d09f2c45c09"),
-            hex!("5e81eeaa0fadb688d6ce25c69104c3d22a7ff73610b610dcd0e886772f18a574"),
-        ],
     },
     ChinaLf {
         cid_full_name: "岭南省联邦立法院",
@@ -55,13 +40,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "LN001-PLG00-878298183-2026",
         main_account: hex!("f6c3250c406b0da2bfbddc119ddac5a97c22003814c55491198d7fa77f06482b"),
         fee_account: hex!("96b4e81e23c524e5a3487afd1df60d41f75ae5971adc97c3d96306eb88ac85dd"),
-        admins: &[
-            hex!("0245fd4ef08d25ec50635c6e0e1b50bdf723aec6b76195baa176798f6dcec720"),
-            hex!("94107530c899b42a503985fac0f1f06416537ecfed575e81a35727de7f358b2b"),
-            hex!("0c814b7940e6e77e0e3637cc31edd1e5b919883c3c49e6f582ca539d6012c25a"),
-            hex!("f43bd019d1d97eccbc07f37564157770aad1be8e70e9602f03944e2d47f9d952"),
-            hex!("76d378b0b3803503f0c597bca507ccff7d910860ec7d9462c27ea52ffac6cd57"),
-        ],
     },
     ChinaLf {
         cid_full_name: "广东省联邦立法院",
@@ -71,13 +49,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "GD001-PLG0Z-816684820-2026",
         main_account: hex!("58bbdf580083e64c2c7ee387d7719d381496d11ca57378e4be27e062b2512859"),
         fee_account: hex!("c50fc0d707e46670e493a197183ce4fb4f666e6c81c236bb4c56e6199a00fd73"),
-        admins: &[
-            hex!("ce93c51699df6ec7fa3e8770ce9f0a502fd5df05b8dfcec635c4e42b04ad7f01"),
-            hex!("ae51b6c2ae2e5ad33acc1898ea72c394450254ff92bc471929772694f8615343"),
-            hex!("98ae405eba3e0cbda69cd8a4508050acc79e0e56dc882fe73ea864ec984cfa3c"),
-            hex!("7a46edbc5b6a6abd3874efd50d04aa642d6f6ae536b23a36798cd2561de58a09"),
-            hex!("becdee3d31de1a1749625257b5dbee9c5f697ee7286cf47dedbba9cf5567c513"),
-        ],
     },
     ChinaLf {
         cid_full_name: "广西省联邦立法院",
@@ -87,13 +58,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "GX001-PLG0Z-874140992-2026",
         main_account: hex!("c82d64fe28529886622bb21c818c2aff5a7af3bbde13d7729cb90218f2122157"),
         fee_account: hex!("a067b3c1f289d472399424ba59f25f059f54a10c43e3e2ad4671298c41d2cd23"),
-        admins: &[
-            hex!("40ff35dc2afdde79d9e2f41d8e029dd82bcee677975248c223b8d96cf5c6110e"),
-            hex!("5ad25b9ceb70f0c78e20e416a94382f18f3b68b0348d871edefa9d5aab261213"),
-            hex!("ac7ab39eb8f3f160d0cf62defcea3da6db8eb02822d2cfcb05af6dc058e1241b"),
-            hex!("d4ca309ba460ae25477baebde77604595967a896419da40074577860fcc8c47f"),
-            hex!("fadbacaa8fb6f1a8d8a598c9af0a5b8aa6428e14839b2b42310e36f1919ade01"),
-        ],
     },
     ChinaLf {
         cid_full_name: "福建省联邦立法院",
@@ -103,13 +67,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "FJ001-PLG0M-954635732-2026",
         main_account: hex!("e1bba0a47163b463dd28a0a02f97ccd870fc4e1da7e682e0ae37dfdaf317504a"),
         fee_account: hex!("916a87888a43ccc9111a7e7b37863f8aa5b3db8dd804f778f272d3a6af1a2e35"),
-        admins: &[
-            hex!("4eebfbbb8fe61b5ee416742ee16f3b6121c608e9a7c40d1279486e111761b649"),
-            hex!("d4c53b824d03f0366799a27003dea819252d6372695f1db44be752879a26190b"),
-            hex!("aa903f58ec731c95d41873e865e5c57d9f5988b111185a3e4693e07d64881a67"),
-            hex!("405097364fada7515c6a7d2b1934e1033998101ce6f9f138cc61906b9605811b"),
-            hex!("8cc1ed85524195833b75152fba90fb8c710129ba140a75d48c1556c7f2508571"),
-        ],
     },
     ChinaLf {
         cid_full_name: "海南省联邦立法院",
@@ -119,13 +76,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "HN001-PLG0L-044038681-2026",
         main_account: hex!("532c53efbf9feba3cb84628062e6d70e83b06529a1ac527824ab37f5120feb4d"),
         fee_account: hex!("14ed12fe0dd59d7d53668e1146c92bfff7946126b510610b3bbea0d26b5a136b"),
-        admins: &[
-            hex!("02c4b8ec7efaab624e45f363daf7b2a6a280f3efb9b9a498913f66843328d952"),
-            hex!("d242385989f0aff47bc2c96a45721a1a16e9477232a6a7750d647ee74e0bb272"),
-            hex!("3c5b5e43da08fc66027b72c485f2c1df8eae6bce522a677f6ee69fd1ab04f729"),
-            hex!("5c7d0f680048afc92aaf065c402ad3b6f4500eba848bc427f98d3839f5f2f15a"),
-            hex!("c25617bf0f84ed470bfd3975d762a8c428fe9868cb84d2a2c7dd7941f7b2320a"),
-        ],
     },
     ChinaLf {
         cid_full_name: "云南省联邦立法院",
@@ -135,13 +85,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "YN001-PLG0K-654714868-2026",
         main_account: hex!("a7e574aa2ceda9dd9d7f555d041d57c615c1aed7792fbb528be845ed24ae6ae8"),
         fee_account: hex!("43bf47d3ed7ae11e248b32f34f71e7339da8153c2afd217380c5cb37731878cc"),
-        admins: &[
-            hex!("323c69e679987b049c7eaac656e1bbf0acaaa2427075e08a3baa736d69b64301"),
-            hex!("acd1330fe8f909c34a7f7426d1b8036f7a17d83845e8e18c3ee46e36758f4558"),
-            hex!("a2cec455ca07c255a1cd7290f2fea746a0bcf67f22cdada66bfa42a3f4530b1a"),
-            hex!("5c9abe2ad1650b836ef66f1976a02223453ca8f268b2bddfc82eb1d02ea8c91e"),
-            hex!("42476fb4879cef0efc691a0c3b2fad9a4a2776194b9850f9a202891fec3f300b"),
-        ],
     },
     ChinaLf {
         cid_full_name: "贵州省联邦立法院",
@@ -151,13 +94,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "GZ001-PLG0M-276394684-2026",
         main_account: hex!("1a239a514acae82581b2ddf496f312eb6f26765a7c151557fa57e9d113f58b4c"),
         fee_account: hex!("2a37ea111e7da56876d21d25f7102bc96c33af73d1bd6ff3d1760eb8e26b93ef"),
-        admins: &[
-            hex!("4079d74601ba4a9c4bd7b11b89754537e4886ac5012fccedf50afda987450d17"),
-            hex!("bab730ba87cfdc312ca1a1bc2d24cbeb2f51058f62b839f56a6d11d57008f723"),
-            hex!("d6d44f1646bc5f7bb4a1f873bc8495a06dd7d61a37c578a6c5fbe237d5a2fb4e"),
-            hex!("0872dfca8f6f22933e4e18098065d141c2389e7164931f5db8c47f55289c2f05"),
-            hex!("8eeddb9f6ab5ee1815ebf9ac22acfeee950e68ac42324ac0ff157fec814a4b08"),
-        ],
     },
     ChinaLf {
         cid_full_name: "湖南省联邦立法院",
@@ -167,13 +103,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "HU001-PLG0B-382265990-2026",
         main_account: hex!("b38dc351ffa1bc1a7cd15bc0381a0fef734567f192986c94301d09168f689520"),
         fee_account: hex!("b5b55d83bbb5378ca9093b8189df3087022cf1536f41b2247c24255dda4460b7"),
-        admins: &[
-            hex!("28546455364f701c956d5d0ce87b2ff3fe4affee091f7ef96abc14daec6bee43"),
-            hex!("cc18513587d5fc0faf436f608e649e30ebaab9b7ec23daf4c7f2640ce7d3b075"),
-            hex!("1a35dd042beaa402fb64bfe97938ef0c94501f867d5fc459c5683682dc7a8726"),
-            hex!("88e1aef9a039d749f0f20f7356c2d43fb498957fd73589fc936abc0b29e98c74"),
-            hex!("0a80b9752d1773b86612af1aa4a170fbc2a4e3ed183da8c71f2f2ca0cd468310"),
-        ],
     },
     ChinaLf {
         cid_full_name: "江西省联邦立法院",
@@ -183,13 +112,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "JX001-PLG0R-225875733-2026",
         main_account: hex!("97346b6b5b2750b05990c15d69c883a901546fccde8ec2fabc26d8dbe8248b65"),
         fee_account: hex!("a775f44a22800a37d004e939bbde654262e94d5a9c22c938bf5f9a480d9a9b88"),
-        admins: &[
-            hex!("722f27d80ba098b0cac8da40373b9c67eb34cd63f3993457cd7aabdfe6cb8f7c"),
-            hex!("728ec736c99b3c418de62ecc70cdd06a9be67f150b749a19372c9aef5cec643b"),
-            hex!("f894d8456b498e90b9f74ea2f4ac66a7f3a650754d4119eb3997a5a68493df73"),
-            hex!("da120d710685ff38b39f2004da41a5c59388478edb5d3f8c83d2544d343f5755"),
-            hex!("684d83591f8bd2d9f890312f778f765df3681b8203a30181e9f32d884a80ea74"),
-        ],
     },
     ChinaLf {
         cid_full_name: "浙江省联邦立法院",
@@ -199,13 +121,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "ZJ001-PLG0D-978002879-2026",
         main_account: hex!("32b4b144843b2c60b5c4298508873e99577c2243959278bd5dc58ac853f0a8b9"),
         fee_account: hex!("0f3b5ee910d2d1ca158da7621d65ea9bf492bc47a0e700fc66279c1cda2a504e"),
-        admins: &[
-            hex!("aafa0c2a8504952cda206b1b6a9eabc165d435826432b24864a163c7bc742903"),
-            hex!("6ca8f5d4b1b209bd9b89e341b6f432193282e2c477734b1474ecc781d3580b1e"),
-            hex!("069dcd3bb0d65589773540b6f1243c191f936372ee92be4ce5db6bb5873a8776"),
-            hex!("8a40e56f66b24e76484f7a46d45244366b2b46cb355fe12f4a50a7836b273601"),
-            hex!("9cc98e83a5519fc7fb1c59e604b95fbc8e4fd909fd70687312f1d1d7ea26c444"),
-        ],
     },
     ChinaLf {
         cid_full_name: "江苏省联邦立法院",
@@ -215,13 +130,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "JS001-PLG0K-787656153-2026",
         main_account: hex!("c44d13467e5855992ed45c0c7cc9abb6f994d41c7d3951f2416d5905d4a3b98f"),
         fee_account: hex!("96978524232baeef546233aadf8bd2b18156cca91ce2a079528c4802f4f366ba"),
-        admins: &[
-            hex!("f8253af9f7de0432a64f513019bebaaac8f7c4328a72cefd5652297b5d5b557e"),
-            hex!("16077f8372e19be34ffd5b4f93fa39a0d249b3a4ebc1c48c46a49cc26d419939"),
-            hex!("546983e64ecd73bd49cd3c7d5bffb9ee746d4c6b954d1eb775852a02dd571b0c"),
-            hex!("7636148d41bcd556eacf95e04f7305dca2763d5fb89739090be7d496a44e9434"),
-            hex!("24091c0c5f6606b8be016c8863368c7bde03882a2866c697800ae7de5850e444"),
-        ],
     },
     ChinaLf {
         cid_full_name: "山东省联邦立法院",
@@ -231,13 +139,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "SD001-PLG0K-539878832-2026",
         main_account: hex!("18d26eb3d3e682f1747631622bdcf052ab18d8799247c5066817919b451d90cb"),
         fee_account: hex!("b3218f4717be5e31b47156feb28fec91d51ca9e4f4b03a99af77661436756736"),
-        admins: &[
-            hex!("6c9b21a7bc2ed4bae1e5b7c7e4fde221494701432260a3b2d9950977048b5058"),
-            hex!("6231a483e10b89389b8c59b6aba4eb75905c2512cbff6b73567b3dc25c924169"),
-            hex!("7e35298adb10b5d70eced59dccb02de713c7b19d2ee4381c0419bc3a7921840e"),
-            hex!("febf6365f3d84f3c551ed8904f831dfc806663796d21690fd428f9c7ac9ebb79"),
-            hex!("a6a94392a89b8e49e682f39e079c4bd4f1e594f18e3efe198dac4d6e2e053e1a"),
-        ],
     },
     ChinaLf {
         cid_full_name: "山西省联邦立法院",
@@ -247,13 +148,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "SX001-PLG01-117228307-2026",
         main_account: hex!("245b2cad508644ef5f197aca976c1b807d7dca09a586c847b430fbce8c2eaf5d"),
         fee_account: hex!("b2683baf1eed6cf94e8287e29d7deb467dbd58d8f2ee6cf183de35c35e1707fe"),
-        admins: &[
-            hex!("a6f6195c48e3fab0518dc00ac9d0fc47c6adbb27705fe7fbe67b223a171ac635"),
-            hex!("c669cc416720d36f429fb61e275331aa84271508a02d0987e38eac43e02ff84e"),
-            hex!("603b97bd710e387d2ee135097942575e9d7456073da5b73fa15d036a3f466263"),
-            hex!("2c9040d37689e97422d3674873da999eccefcece822e3cff1af9c171213b3b6d"),
-            hex!("d0c27884c4e3f4c7c7353016e6e3a576478511ea7a906af0c59aa68355df8246"),
-        ],
     },
     ChinaLf {
         cid_full_name: "河南省联邦立法院",
@@ -263,13 +157,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "HE001-PLG0U-221059646-2026",
         main_account: hex!("78580120f78f835609fd7c156f5e9b8ff5e97a371a0043f48ef1e1194aacd7ac"),
         fee_account: hex!("babaa8562501f9490890141220d64842e9cd96707c5243721696667930a46398"),
-        admins: &[
-            hex!("a21ef0628cdbb72fa6583faa52a0d6582674ebc22f6215b6516647359226307c"),
-            hex!("5e26f2ad3f7408dc1c81edd0f53a9f25fee2f781a345852840ea75545e14e045"),
-            hex!("36ae28c6922e93fcbaea8d53d2d1ad17e6fb7ef8c783f30b7002401d85d62c1b"),
-            hex!("863ce480136b5baea16e05d6fec41d59c6e52efb1f57724d9ad847641593fb1a"),
-            hex!("006dfa5a317db561c98386e823fbe5183b352d99727dab412ff3c9f149617537"),
-        ],
     },
     ChinaLf {
         cid_full_name: "河北省联邦立法院",
@@ -279,13 +166,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "HB001-PLG0Z-067760814-2026",
         main_account: hex!("054b6c635539820357fe0ccbaa52e8aa5d4c943d62331d585a66cb384a308da1"),
         fee_account: hex!("2064603d381f61a43edce658c7a3fcf04e0652124e828909ae511d3aa1a1de8b"),
-        admins: &[
-            hex!("ea6d1caaa0b57c55ab198fd9f0df9cfaff54bc3b327691d55c8bbc3cbe285206"),
-            hex!("68dca8393538744167e8c86798cf0193febdb8fb544f40c52218cda9d6efb87a"),
-            hex!("3cd2e6de1289c0f04196e7fd8257cc776a5333b006f7a90174a29214c262e154"),
-            hex!("5a1666d952cea612c1da60e6d20745f14248f4cd332ac3cb2ab64460998a4401"),
-            hex!("06bcd84b762a6c0abb600408189a91609e4816f4a31c61279519a69e9c782934"),
-        ],
     },
     ChinaLf {
         cid_full_name: "湖北省联邦立法院",
@@ -295,13 +175,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "HI001-PLG0D-623669499-2026",
         main_account: hex!("7dec1a8cb769f8a0cb1a896d33dc8502e993b5456b56f2f8684503d2a6996014"),
         fee_account: hex!("63ffaf13372d99de6528c9755922ff7411edbf9f0c3afd3c042968a01f201e5e"),
-        admins: &[
-            hex!("fea6470bd031152f9e3576880fdef2c912000f7534b3e852309f0ec5732def09"),
-            hex!("1093c2cbdc2a9f7cc20ef2e0be60bfef861df8f2b1fe6d2125f3e2e78cb39705"),
-            hex!("0c4eff38292d22105b39203f85043d7b62d12bbc7586ef37001b8838d4ff8662"),
-            hex!("c8f1eab4c29546d5a3fdfb321f87c1ac7beae484b9c6c0e27a0facd006af0449"),
-            hex!("1c4ba6eebebfcd1a5d5a21a322cf275ab6ced42c7e95a62cb8b5dc688ff3df1b"),
-        ],
     },
     ChinaLf {
         cid_full_name: "陕西省联邦立法院",
@@ -311,13 +184,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "SI001-PLG0Z-623044953-2026",
         main_account: hex!("85d18c317426181ae1630c23f84271347a465e90eb03f40c1fe858eec0100614"),
         fee_account: hex!("c5032421207c418167739db887ff1fef974ae48bbdeb0c48c6b44f542a5c27db"),
-        admins: &[
-            hex!("e04f29145cad81799393910d5e870ff535a60586ca233700679107148da28767"),
-            hex!("5643badb73c8a5aa046e85b5fd4061343b4cf6c699b3aaec3fcfa1b2711fcc4c"),
-            hex!("ee873e11b88ad5bef56e2e165d7e6eef1d57b53d27bbc58d46c277072cec3b47"),
-            hex!("daefe6f8b4a32f2385518b968cf96e612c3f28d191f272a46c50baff7c760b13"),
-            hex!("4cf259a136840074a107da47db8f90c20d9c78b68292d32148a2d18ad5549134"),
-        ],
     },
     ChinaLf {
         cid_full_name: "重庆省联邦立法院",
@@ -327,13 +193,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "CQ001-PLG0K-047757902-2026",
         main_account: hex!("3b20893fb2a5722ecd5a85efe2a24323549fadf02b44e1065f4b53fd39aee1e3"),
         fee_account: hex!("414932726199b1834f727a431e3fb7d43a0d620005333ee13af70a229157c6bf"),
-        admins: &[
-            hex!("02c962c56b9a0affbc741402322b8fcf3596f902d7ed7f6eddcd2241eb181605"),
-            hex!("3832b00b6b7d695ce0e185f966eee654eb07b1360490126fe9763a706f079f55"),
-            hex!("aee048f8afdf11af27d39e2897aea294ab89a9cd1498910a9ae925c207871479"),
-            hex!("7a4b57e7dada66f186dda6773658b83974b8ebf5ba738ed90c39ae7790cbf822"),
-            hex!("0ad56f17eded5c6602a79bd83143707b4aa59c92fe1018001a9b1848dad30664"),
-        ],
     },
     ChinaLf {
         cid_full_name: "四川省联邦立法院",
@@ -343,13 +202,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "SC001-PLG0T-507781091-2026",
         main_account: hex!("dea1c4b8d9f640b33946f549cc42c4fbc52494cd452270cc47ec633a2499011a"),
         fee_account: hex!("d698d3f4925b86535dcffec3cb0150d2d41d0c2c39f98bac0edde109f88932fd"),
-        admins: &[
-            hex!("b8fe79f7a6d6e62869819b08fe9624e23603b0755c1d6187eed6a00bd7af1044"),
-            hex!("84655b6517e2230eb0fe194187a8213ad9b3d4f227014b645d1fff69f64c442c"),
-            hex!("f6ba6d90eea1e3d4012a2715211971f13f6cf3ebacee91e6e6525d43d38a6146"),
-            hex!("008a06c989202c2bdcbb116beb96cdc0757f9034ca87c7ee855f653c757d9023"),
-            hex!("128d5b407719234414a165a4f33e8997bb570bd35ccbfe17d4635eb5c08c550c"),
-        ],
     },
     ChinaLf {
         cid_full_name: "甘肃省联邦立法院",
@@ -359,13 +211,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "GS001-PLG0S-142928851-2026",
         main_account: hex!("020d0e7c88303cae3a9bc7e2bae12f057e25a42c2d7a9f5a8f75f9d9801dedb8"),
         fee_account: hex!("fc9a3e9ba407919e4b24aac1f32146190db9787ecce6e69c4d4779e9b99b3c36"),
-        admins: &[
-            hex!("c0eae94a68769b5dbd646b82b60a56654f3a3ba93670b115e9ae8d8926e79652"),
-            hex!("b6977165de1e9ea04865ca0b2a846716b2de928a2439d84d08a937b74046902b"),
-            hex!("56590c06a7906dc06f2d57e32204cc4450147982f9ff957cb946bf01112a3a58"),
-            hex!("82c6ff3f12839edf6d46d8795f56e61deee64392ac0e3bbc5bf9b7d42e27490a"),
-            hex!("5a352f77d78f7e6fdd6345972f843766de092f3f92ec977fa47891da3690c734"),
-        ],
     },
     ChinaLf {
         cid_full_name: "北平省联邦立法院",
@@ -375,13 +220,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "BP001-PLG0L-205551286-2026",
         main_account: hex!("59788c4316dbea29e1e0d7a8d10d2dea8cd530e8c648d10b224da4d28bd18eb6"),
         fee_account: hex!("5825b435d4759c0e0b7a261f854e9329d6c39d160a8663916723818375168422"),
-        admins: &[
-            hex!("08f3460969c433e7838977d0d8632a0e94fc7f508b0ce7f6839e6b52a8e83207"),
-            hex!("82e4c811dcb096a81b3e6c273f4843b53b02378da1a675d66774c0a04633b10e"),
-            hex!("7073cdfa3f13a0050275b7b9cb3b3d39daa1a651b3ca797c6b1cb74e0f4c3e20"),
-            hex!("e8402bf8476ca694c1954e8aca300444385de3324d0fe9edad6eccd19fb9062a"),
-            hex!("0016a75475938465e11fa12ebfd0fca439020e0b7aab8beaa4774c694be60d55"),
-        ],
     },
     ChinaLf {
         cid_full_name: "海滨省联邦立法院",
@@ -391,13 +229,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "HA001-PLG0Y-617993406-2026",
         main_account: hex!("02a7cd1fcd33fca60008af22527b6a75857abddf10cd47892d061f17cfbdfb98"),
         fee_account: hex!("b66ea904ff8e4d5a9bd80b81e5c245ecdcb87beb5a6949066f6d432e0796f2b7"),
-        admins: &[
-            hex!("b418980c890c4af4246b9d1d38c5ba030f7809b9fd848b337f01235d8b601761"),
-            hex!("82db88509de26c2a82bd1caf1236c374913d204a5d8b59ed5c52846ed8a5b617"),
-            hex!("04629d12c50b5a7940e5e88c0a39eee1731f507656d35e80c43254b7a748c021"),
-            hex!("16130a5622beb6dfc66783b7afd263f713252d0c09bb3122d7d05eab87e0182d"),
-            hex!("4af829c6b824b320d0546fdd811cc338f13531f45588a990aab82e9d9734356d"),
-        ],
     },
     ChinaLf {
         cid_full_name: "松江省联邦立法院",
@@ -407,13 +238,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "SJ001-PLG0O-021675715-2026",
         main_account: hex!("7e7e368a16c672c1b5dc0530bb0b6f9781d8110fff831c37452a01860325847d"),
         fee_account: hex!("36475e864ba32c0dd5f57a52eba8135d352fd11686a84d5bb4efbd7e312ed0e8"),
-        admins: &[
-            hex!("64d0d039eba1d882b0c749f30f709feee9d55cdb14bf60280ee0714ccb372c55"),
-            hex!("7cc407c2944a1693c9959cc09498f6ee37aa9b5e7ce3a202294227cb756fb419"),
-            hex!("e428014531bcfa2414319ae4a312f5d3cd7142ead99d8cb39f96eba05fe6ac38"),
-            hex!("301d25a4c4bbf46a2237d4553f0c33429b13f5ef3e9dfa41e40208cdb8bec312"),
-            hex!("6cb390123d84e1ff55e60d2eb089ea3d5342275de48bf767999211247fbb815c"),
-        ],
     },
     ChinaLf {
         cid_full_name: "龙江省联邦立法院",
@@ -423,13 +247,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "LJ001-PLG0S-609538144-2026",
         main_account: hex!("1ca81b7faeb650fc1aac2ac1d03620502b3ee917feb8d9116b2351754b86a139"),
         fee_account: hex!("ddb4f087645fe1ceff7747453670570f14a2e8a63cc15eb6dfb852b73b8fef6d"),
-        admins: &[
-            hex!("94b1c8f65968d4eaa001da82c6bef47fd8541530e1c92c756bd6ea2bfe568e15"),
-            hex!("0e83d5948a451f3952af113c80836a9ab5317aa3dea8bf6d69106ec3ee8e9570"),
-            hex!("762f23d6dbe171678633ae8a47b505b04a2ffa4a8323a728cd2f03d290178664"),
-            hex!("72b0be8053430c9c7a20ee151236982350fbe46cbc359da4e2d55b6d81315668"),
-            hex!("5c52959a62b7bf22ff4d51bd15a41537fcc5d64f842b09230c2e5ae3419ac869"),
-        ],
     },
     ChinaLf {
         cid_full_name: "吉林省联邦立法院",
@@ -439,13 +256,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "JL001-PLG0J-625028107-2026",
         main_account: hex!("ba197b0285aa3edb22f123d10e0bb61604fbca070e5e2bc977625943812acc8d"),
         fee_account: hex!("e51072f3bd5096f28d3af235bba176741130971926596af6ffe7aa2923e09c40"),
-        admins: &[
-            hex!("9c7217ac62f5c495788a2685ec64b912fb677fcd0faec82d756097b0cc862751"),
-            hex!("02913086398a559d8e6bafd6eb19b406249251b0064e5389b89925a377eb665e"),
-            hex!("c0f8d5aaea926f591df88ec7f0d741ff26c4adb955742357c5c142901af61460"),
-            hex!("88a8c6b4399ff28faa6a42d4d45eb0ec64a6887aa65937e2dcbcc5b1fae8f31c"),
-            hex!("5885d528966c0126a750bb0a4be0f181248b73669367db230b97fccd0fd00049"),
-        ],
     },
     ChinaLf {
         cid_full_name: "辽宁省联邦立法院",
@@ -455,13 +265,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "LI001-PLG08-050554057-2026",
         main_account: hex!("3ff9ece0f5f7f509b812af28532da4eebca76f3d0108a2413d6a8eb5008b357c"),
         fee_account: hex!("aebc854de7914cedafb182079c3a2a0b5dee61e666f8ae7063f7a50e1090fbcb"),
-        admins: &[
-            hex!("7e13c2a5e571cd99e270708d44bb30bed2f88c9f03b9af17a0d2a1c958361070"),
-            hex!("945b093b823d942af905948b9267e129b6a57d6db84210d071d013efa8b6967b"),
-            hex!("a68daba737b620a6c99f9a7bd03a7c97820fe3539648e05d50112d2447813f78"),
-            hex!("8c433c382081cfda935b0b65ccd8395b29b49e54bda9ad530495539ab4b79360"),
-            hex!("c2159b7a264a17ea5b15d7eaa4db1f07c519187271dda8adbdc6ed2d2304e221"),
-        ],
     },
     ChinaLf {
         cid_full_name: "宁夏省联邦立法院",
@@ -471,13 +274,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "NX001-PLG0B-467590691-2026",
         main_account: hex!("1f738a1b09dcf647993ea91d5c17a7013d7df13ae44997726d03da61b0a87cf9"),
         fee_account: hex!("dee57c890457643fcfd1d39c39ef190a44becd1ea4071b833d715d58846d150f"),
-        admins: &[
-            hex!("10c61e2da66cfe199e333fa9c8049530cc6aba1b23e2db072cdd4e075d385705"),
-            hex!("fef033f7c94be350bae42a889f7008c91fc4f95bb33b46f961b624866356ee6a"),
-            hex!("7cce0c8570bcf71c12fa0580788a0330971ca5ecd7e379d73748d10a45ce2464"),
-            hex!("b001fb3571b2e2e8b2abdb90740377aecfd6da7a2924ce6fd9bdb49f28fdd301"),
-            hex!("52b44102ab9b23ace06638a04f4b2e476daac24f85d91c152a6320f847e8f51d"),
-        ],
     },
     ChinaLf {
         cid_full_name: "青海省联邦立法院",
@@ -487,13 +283,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "QH001-PLG0R-677246229-2026",
         main_account: hex!("2dbe88752c401633f2727682cf5618da69a4ddfef09a347c137bd1f1958d07de"),
         fee_account: hex!("1c0b7ef2f91d7ef049726a9496e9577acd7f95a04aa906ce14f6f96da0b6adb1"),
-        admins: &[
-            hex!("1875206a9b24bfd6f9598e6fbd1ec82f341e0700ac34f7ce3ec10213d773ad6f"),
-            hex!("e812b9d595ade0a73a1ea6baf7a9f17b0bb9257feba41daa92fce0d30276f02d"),
-            hex!("7243b0bda86aef66da53e1952e73972e67235069a495750181c6f2540ec7ec2e"),
-            hex!("002928781463695246e86de92012974921d01f0d222b2e991be210d8c256703f"),
-            hex!("a0253f59440e99dd2eba5362cb9b60d92aba97e180ec1300b439b3091ed96660"),
-        ],
     },
     ChinaLf {
         cid_full_name: "安徽省联邦立法院",
@@ -503,13 +292,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "AH001-PLG0Z-346310047-2026",
         main_account: hex!("993bb4f45acc23210de6f23df92fe57d00b07268bcc3d15a156ec36ec80cf401"),
         fee_account: hex!("f211a9681bf741491af994a7eb40044987fa9ea3389d04f832374c65088e4656"),
-        admins: &[
-            hex!("724f9577bc03477d0c79cb9ec0329eac306722e012027596dbc98a3a70ac0e59"),
-            hex!("0aacb9bdbc77ee2ae3b68a517342a078d6124e12441bc397e164099bb7a63b64"),
-            hex!("684fca5c790a6c8c5dd62d1e0a4374b6a1a8d929ff41ed4e05ae99a5624ef839"),
-            hex!("72abdec0251456f2b5b72d4837070cdb6c2806626f799e9973a72218e0293355"),
-            hex!("ee80d4facdfc4192ca15dcf4ff000050898833ec396ac59f992e48fbfa1c566d"),
-        ],
     },
     ChinaLf {
         cid_full_name: "台湾省联邦立法院",
@@ -519,13 +301,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "TW001-PLG0W-832531085-2026",
         main_account: hex!("3e5eab9106f51cb3b6c3df3f6b1e6a88832a067bbc51edc81d5855b2d231ce4d"),
         fee_account: hex!("5ced39d952d7402e418e484e64d42b18ed3d9b1e7a698da19864c63af5bfc2c8"),
-        admins: &[
-            hex!("b4fd2f51cdd93937ba451d065c941d43e63b049ee5c18834153a14f6c92ae010"),
-            hex!("626c938af863053d74b15dec2ee9c678e68ad9699693e53d18e4979cdf74b95f"),
-            hex!("8a6c231ebef22a1e329dfb1cfb74cead545ba52bd72f4c3be2c75a3612f5de27"),
-            hex!("181b89a6cc7b7cdedb41aedfda80edbb9867d19df2fb92f7820cba06730cef36"),
-            hex!("3c2a73f8d4c50d8ae8772951d7adae6caba904eafbdacda0eb6bfd067f277946"),
-        ],
     },
     ChinaLf {
         cid_full_name: "西藏省联邦立法院",
@@ -535,13 +310,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "XZ001-PLG0G-284065900-2026",
         main_account: hex!("7f71b6474c667fc02a589639e198e968e49cee135a78e60616cdcc3b32d9a416"),
         fee_account: hex!("c5e804d375278341ad5fe221800131d487f797c6733c5d30a073be5f86c9c643"),
-        admins: &[
-            hex!("5c692d8f1a45d0241d9a0bafe41331c3c3deda599ae53eb6b98611216c185040"),
-            hex!("def2eb377c34418dcfb82bc2c40a4ce6be14104aa456a43f8ec5c61406adb204"),
-            hex!("eca06cf2420ba61708d5a11388da0225c23e630104b277665a59c255f6b3ee6c"),
-            hex!("fe300a89b0e42db596ddd25129abcbfee9c329afda4192c7838be5ea74c6623d"),
-            hex!("f8cea4131e158fec2a7c34bfa57cf3fbce7c89024888df9f6ed44141fe299509"),
-        ],
     },
     ChinaLf {
         cid_full_name: "新疆省联邦立法院",
@@ -551,13 +319,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "XJ001-PLG0T-207265599-2026",
         main_account: hex!("19b80bb7c6543155736712d0c629c919cef349e2f30d9fbdc09101d0a1811c69"),
         fee_account: hex!("b46d69392ebfc8c0b092440ddf2f43a87a2b7aaaedb6483ec7dfa83a5200ab61"),
-        admins: &[
-            hex!("683dfc1e3598845398a1a7865b5187c458ace1fb9cf8b9de61e8f831f1b8ab68"),
-            hex!("c4cd7ebbc72eee8ff27737251a56208d9dd8967ed9ae2891780e8710fa44b15a"),
-            hex!("b88f79cf0f4ae9fd64d17c990b258197d610109a607821ee34590f93f07f0059"),
-            hex!("8a9db169cb29c4b340c4f2e6fc176eca883ad25bc4f4849aa3915b5abe823712"),
-            hex!("b42620b09538a95735a2084661e17d6585ca711d46110b23bed902ab7aead03c"),
-        ],
     },
     ChinaLf {
         cid_full_name: "西康省联邦立法院",
@@ -567,13 +328,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "XK001-PLG0L-631421441-2026",
         main_account: hex!("5612ed8184d07d543bc4a01ceacf1cbaa64fea47ca6d11c1777964c1c27acf2f"),
         fee_account: hex!("071a11f6dcf5a5cc802062e24487169014c3c4490c14206a8fa507a7bd3be765"),
-        admins: &[
-            hex!("186358c27a8169dcf4939e231bc831b8bf151c7a7905ea04b124267df729d114"),
-            hex!("e8e44a8c9ec4de9030d76537b4d4d57f2351b053abc7634b6ca51a9f70568265"),
-            hex!("10dad4c51bce8982cf674e22c88943a3e7e78b2ea3a5ffa0d1ffdeb6e2e1310f"),
-            hex!("608af199208169098c120c97afabbcc7d5c907399077c7f3a347e87fecbe8d46"),
-            hex!("66fb4e4e98c69beb4e1de3720d3fe83c65e42de547742eb15631f4ed28cf924f"),
-        ],
     },
     ChinaLf {
         cid_full_name: "阿里省联邦立法院",
@@ -583,13 +337,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "AL001-PLG0I-683617532-2026",
         main_account: hex!("52ce33263a07a1c3424035a1139dd6847a9b0e56f1bd03ecf14ed3c8042d1155"),
         fee_account: hex!("53260c9fb18e6ac2fc083868d6d19dbe736c9904ceea9f91b4f8480a9370b39f"),
-        admins: &[
-            hex!("944f5db0c264f383fe486654fbc78cb7dfbb030e942890cbe518e1c0a249e24d"),
-            hex!("4c62b04851ef2712fada11dfe10113719f67f4c73bf2790c5c43f0713129514a"),
-            hex!("e45e8b8760a47793ee21b5d85f3ed9852cfdd81050602c87743fa3d7473aa434"),
-            hex!("e016e30da9d094f7e2a7c026e0bb512f551dc57a2fc883aeeed71d8cf3903e49"),
-            hex!("1049e61c6dc395e6ea50ba62d650a039cf7f4e8747b01dc6889760f32e78e17c"),
-        ],
     },
     ChinaLf {
         cid_full_name: "葱岭省联邦立法院",
@@ -599,13 +346,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "CL001-PLG05-236388314-2026",
         main_account: hex!("a45bacea19d1ad9dbe7c7e194dd0eebe9af810be89248aaeda1002490e013651"),
         fee_account: hex!("9ec7da51948a78d92d5916c0776e99479ca6d9d742f0da2652d5b584d42c107c"),
-        admins: &[
-            hex!("c0a07ac561b963f5134aa6bb27cdbf025ab0dd5b71ff0ff3d8fd49e306423b41"),
-            hex!("46f1cb081ab098eb13a31d5e7fdf3263c1267170033f626f7752991682cd8b2b"),
-            hex!("98f837440a330f0ac40d4ab35d98262994a25788df2a78a3d477438e7670660e"),
-            hex!("262a126891d737d6698b587e270a36c13d96f470efb0b6c9ff1b95069c326e38"),
-            hex!("e4241f00fc5a3dcf7e8ad8a4730c575205bbb26bc2572d64243b5f8fe3a2462f"),
-        ],
     },
     ChinaLf {
         cid_full_name: "伊犁省联邦立法院",
@@ -615,13 +355,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "YL001-PLG04-396001522-2026",
         main_account: hex!("ce0dd8d649267269753c5951dd7545ae33883bc485c1a6cf24944fcaec85fec9"),
         fee_account: hex!("86805423f89511a96f54fa85909dc55a9c149b0ae468669e17722f35df83222b"),
-        admins: &[
-            hex!("9aa2c7aebed03f1ab12ef93ad041a1ea9c30a5fc755023c5b7de963856a36f43"),
-            hex!("8e4fb3d057a66675bad2c44dec4c65eef18c8fd5fa544a649f8b23dd43d3535a"),
-            hex!("52eb21d19acafe36ec8261f556d1f1c39e937e08ae8d13adef16298637e3fa39"),
-            hex!("eea13f96eec5633ec4d646e8ceaf0140fa3ad67bfa29b811c157d0ae3499113c"),
-            hex!("8404f35e0b8643530d98eda80bf688a3d514b47019547982a8cc5cae48ffa229"),
-        ],
     },
     ChinaLf {
         cid_full_name: "河西省联邦立法院",
@@ -631,13 +364,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "HX001-PLG0T-931966305-2026",
         main_account: hex!("e571d6349f00f8ba7a46bee9e5e4c74a7cab4ff6ba0b907c105940ad20d6ffc7"),
         fee_account: hex!("7d9c5fb52b5de60ce4938685454e2862c664f804da28a9eb587e53aa0e7f8977"),
-        admins: &[
-            hex!("6c6086b3ee73ba96071673bede5a7332664f1363a13cb66d49d6850b6a771e79"),
-            hex!("a464a1d657a2c50139c45f5e028c2bd55db116f47cf6b4ba25039526ea06fe7b"),
-            hex!("4ad729b2d67bd176a6ae451f2f575366d61d652162a92bd9149c4a2ee82d054e"),
-            hex!("7ea3e9c078eee3bd6d9aadbca66b126c757a53ce09401a0a3e018695f45a4e76"),
-            hex!("daa4b4cf17dd3eb3d8366bb01d44e28f199f406b8d10727adaca897cee9ad876"),
-        ],
     },
     ChinaLf {
         cid_full_name: "昆仑省联邦立法院",
@@ -647,13 +373,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "KL001-PLG0S-915429086-2026",
         main_account: hex!("8008971ca42b779b67ef4546191bdd427d05f67b91f96e154df2e44d270918a1"),
         fee_account: hex!("3c08b16c6d21233373971e0cecc413af55c498a21400d6ba412c3b0cb185ef7c"),
-        admins: &[
-            hex!("70bccbbb0c544bdf75f85228a64e9bc1bb0ee3826973483a756cdfbc34a9c461"),
-            hex!("84a925a8681bd3619f8a241a3678579c06964d7391c88c06a23e95abe3b7602c"),
-            hex!("942dec6d98d6ec1c6e5603383e2a234ba4fea5be3a15af2689c4994d71bab415"),
-            hex!("3ed7117fd18fec419a6a70dcbc380ff45c768b8ad3d5f3f844610038afc3f549"),
-            hex!("780916562eebdde9174949ba0fa840608a56f8b8d8048c29c989c21eb975aa5a"),
-        ],
     },
     ChinaLf {
         cid_full_name: "河套省联邦立法院",
@@ -663,13 +382,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "HT001-PLG09-256350263-2026",
         main_account: hex!("bb8e4d190b929f381f2426cb3924c66fd9fb59b680f18a621e7220bad88ad52d"),
         fee_account: hex!("4725b1e21cf48d7d6f666cdb94f303ba1bef1498cade29d0c473885b76070447"),
-        admins: &[
-            hex!("10608370947d6e8a4b7fe973d016c44663d94e3dc4097ae07e03ebd30f83e42e"),
-            hex!("34e9a70712870f6f2057f863c001d02eb4102a163ba86798a12fe935c6461639"),
-            hex!("06a3a966bb9c8483db9eeea278ea736af121a855d4e713d8fc265a884a336c06"),
-            hex!("a2620eaaada825895cc4cfe629122a2a7a38e49676fc91009cbccdaf674bc814"),
-            hex!("e28ca53caf62789d0e372cbdf7a30e1c51341b1086c3d91da184313e5ae4d434"),
-        ],
     },
     ChinaLf {
         cid_full_name: "热河省联邦立法院",
@@ -679,13 +391,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "RH001-PLG05-444333104-2026",
         main_account: hex!("64b26f11e7c4d5c74b2bfa08041f850b0b61eed43c99af9488c4653ef8440247"),
         fee_account: hex!("c306b6d54af94ca7d36c712617f1bb6999d82e9d1dfb296cd44fca518811fde2"),
-        admins: &[
-            hex!("f2829f49a725db88a84a17b9654bc0172c7a68019aa1861668210a1786195358"),
-            hex!("4851e360374e6f7307eab6e0c1bb68ab98b033aa7368021b8a3fad5332dcce22"),
-            hex!("2c3f00377c6708fb5eca487bb8476990a178fdb029e84c5e26e2d0414bbc9536"),
-            hex!("6e185a818e7a691a27f7b442ccb6977a0ad8595ba6e00aedce7a12a22e679a6d"),
-            hex!("08691c0ddb395c5e7cd5df1cd351347814d21991f58807add6c678b1dcd2a663"),
-        ],
     },
     ChinaLf {
         cid_full_name: "兴安省联邦立法院",
@@ -695,13 +400,6 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "XA001-PLG0H-064693399-2026",
         main_account: hex!("7c58afe79f958169c651a92dc76c87ddde6e3b68b49a08ee4649627683a0994b"),
         fee_account: hex!("c90a8d7234b63982189013990a0db4ab5218dd28d6240dcea1719587c6efb209"),
-        admins: &[
-            hex!("d2ca18f91784275d53e83ccc9bce2cf074b2c12485466de685e3f4896e98222f"),
-            hex!("2c5090ca8fa4546b853d5790c62a43bbf328e723a621bf7bd50965d7a782883e"),
-            hex!("d6decc0fdff6e0d4e695cf867ff92d72060bccd4aab1568577a34bc0473d8b01"),
-            hex!("8c3611c5d71fc95d0703454ae6481789e25d3f26067349ec6725edebf6a7ed31"),
-            hex!("a454d537cf715d271beec0362eea19ad15773374c7e5dd769866591be4649169"),
-        ],
     },
     ChinaLf {
         cid_full_name: "合江省联邦立法院",
@@ -711,12 +409,5 @@ pub const CHINA_LF: &[ChinaLf] = &[
         cid_number: "HJ001-PLG09-472199879-2026",
         main_account: hex!("3c9607f8e38699df20e080bf58c98f72edb2eb3ac3156b2b2691113e8627c7e4"),
         fee_account: hex!("2c1bc744192cd71e480bc0c96fa645a269f86f246f74ddb038a9fa97089afaf6"),
-        admins: &[
-            hex!("9c9b4066690ce5ac4412a0292343d68fa99a428327cb7f72753bf2e04c6cae68"),
-            hex!("8c7c3325968054b59e0854ce0f7a5bb5227f20d4e8f4a2159b739d1ee4c3012a"),
-            hex!("de880add2d34ed34695515aa43a7101fa9a0574c0d34a62d869885ea59152a3c"),
-            hex!("00189f8a860327f8a6d23ff6a89c8f4411c6fe7c98f6e9f830041605227aad5d"),
-            hex!("a65723ef98d726bdea0f8ad8c1d173ab0483295cb40f4bd78a9c6643a4c97206"),
-        ],
     },
 ];

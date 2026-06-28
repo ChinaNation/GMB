@@ -141,9 +141,17 @@ fn public_admins_accept_only_non_genesis_public_codes() {
             root
         ));
 
+        assert_ok!(PublicAdmins::do_create_pending_admin_account(
+            account(11),
+            code_bytes("UNIN"),
+            AdminAccountKind::PublicInstitution,
+            admins(2),
+            account(1),
+        ));
+
         assert_noop!(
             PublicAdmins::do_create_pending_admin_account(
-                account(11),
+                account(12),
                 code_bytes("SFLP"),
                 AdminAccountKind::PublicInstitution,
                 admins(3),

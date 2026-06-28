@@ -71,7 +71,8 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 - `PMUL` 个人多签 → `PersonalAdmins(7).propose_admin_set_change(3)`。
 - `NRC/PRC/PRB/FRG` 创世管理员 → `GenesisAdmins(12).propose_admin_set_change(0)`。
 - 公权机构 → `PublicAdmins(29).propose_admin_set_change(0)`。
-- 私权/非法人机构 → `PrivateAdmins(30).propose_admin_set_change(0)`。
+- 私权机构 → `PrivateAdmins(30).propose_admin_set_change(0)`。
+- 非法人机构 → 按所属法人归属路由到 `PublicAdmins(29).propose_admin_set_change(0)` 或 `PrivateAdmins(30).propose_admin_set_change(0)`。
 
 ## 前端结构
 

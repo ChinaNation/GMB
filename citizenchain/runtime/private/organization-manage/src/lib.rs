@@ -17,8 +17,8 @@ pub mod weights;
 mod tests;
 
 use admin_primitives::{
-    is_private_admin_code, is_public_admin_code, AdminAccountKind, AdminAccountLifecycle,
-    AdminAccountQuery,
+    is_private_admin_code, is_public_admin_code, is_unincorporated_admin_code, AdminAccountKind,
+    AdminAccountLifecycle, AdminAccountQuery,
 };
 use codec::{Decode, Encode};
 use frame_support::{
@@ -68,7 +68,7 @@ pub mod pallet {
         /// 公权机构管理员生命周期写入口。
         type PublicAdminLifecycle: AdminAccountLifecycle<Self::AccountId>;
 
-        /// 私权/非法人机构管理员生命周期写入口。
+        /// 私权机构管理员生命周期写入口。
         type PrivateAdminLifecycle: AdminAccountLifecycle<Self::AccountId>;
 
         /// 管理员统一查询入口，由 runtime 路由到公权/私权/创世管理员模块。
@@ -384,7 +384,8 @@ pub mod pallet {
         InvalidAdminsLen,
         /// 管理员数量与列表长度不一致
         AdminsLenMismatch,
-        /// 机构账户管理员机构码只能是公权/私权法人机构码
+        /// 机构账户管理员机构码只能是公权/私权法人机构码。
+        /// 中文注释:非法人必须由 CID 上层按所属法人归属显式路由。
         InvalidInstitutionCode,
         /// 多签账户不存在
         AccountNotFound,
@@ -777,6 +778,11 @@ pub mod pallet {
                     admins.iter().cloned().collect(),
                     creator.clone(),
                 );
+            }
+            if is_unincorporated_admin_code(&institution_code) {
+                // 中文注释:非法人可归属公法人或私法人,仅凭 UNIN/SFGT/SFGP 机构码
+                // 无法判断管理员模块;必须由 CID 上层按所属法人选择 public/private 路由。
+                return Err(Error::<T>::InvalidInstitutionCode.into());
             }
             if is_private_admin_code(&institution_code) {
                 return T::PrivateAdminLifecycle::create_pending_admin_account_for_proposal(

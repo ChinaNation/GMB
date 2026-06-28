@@ -9,7 +9,7 @@ members = [
     "runtime/admins/admin-primitives",        # admins 模组-管理员共用类型与 trait
     "runtime/admins/genesis-admins",          # admins 模组-创世管理员（国储会/省储会/省储行/联邦注册局）
     "runtime/admins/public-admins",           # admins 模组-非创世公权机构管理员
-    "runtime/admins/private-admins",          # admins 模组-私权与非法人机构管理员
+    "runtime/admins/private-admins",          # admins 模组-私权机构管理员
     "runtime/admins/personal-admins",         # admins 模组-个人多签管理员
     "runtime/governance/grandpakey-change",         # 治理-GRANDPA 密钥治理模块 pallet
     "runtime/governance/resolution-destro",   # 治理-决议销毁模块 pallet

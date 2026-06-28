@@ -94,7 +94,7 @@
 
 - 治理机构：`main_account` 预置于 `runtime/primitives/cid/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/cid/china/china_ch.rs`（PRB）中，通过主账户解析逻辑查找。
 - 个人多签账户：`AccountId32` 使用 `AdminAccountKind::PersonalMultisig` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `PersonalAdmins::PersonalAccounts` 校验 Active。
-- 注册型机构账户：`AccountId32` 使用 `AdminAccountKind::PrivateInstitution` 或 `AdminAccountKind::PublicInstitution` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `OrganizationManage::InstitutionAccounts` 校验 Active。
+- 注册型机构账户：`AccountId32` 使用 `AdminAccountKind::PublicInstitution` 或 `AdminAccountKind::PrivateInstitution` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；非法人按所属法人归属选择 public/private 管理员模块，账户状态从 `OrganizationManage::InstitutionAccounts` 校验 Active。
 
 ### 1.3 institution-asset 边界
 

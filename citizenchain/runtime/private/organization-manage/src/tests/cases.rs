@@ -226,7 +226,7 @@ fn register_rejects_empty_required_fields() {
 }
 
 // ============================================================
-// 创建路径(8 个用例)
+// 创建路径(9 个用例)
 // ============================================================
 
 #[test]
@@ -268,6 +268,33 @@ fn propose_create_institution_writes_pending_and_reserves() {
         );
         // 主+费用 共 2_000 入金 + fee = max(2000*0.001, 10) = 10 → reserve 2_010
         assert_eq!(Balances::reserved_balance(&c), 2_000 + 10);
+    });
+}
+
+#[test]
+fn propose_create_rejects_unincorporated_without_parent_routing() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        assert_noop!(
+            OrganizationManage::propose_create_institution(
+                RuntimeOrigin::signed(c),
+                cid_number(b"CID-UNIN-1"),
+                cid_full_name("非法人机构".as_bytes()),
+                typical_accounts(),
+                code_bytes("UNIN"),
+                3,
+                admins_vec(3),
+                2,
+                register_nonce(b"nonce-unin-1"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::InvalidInstitutionCode
+        );
     });
 }
 

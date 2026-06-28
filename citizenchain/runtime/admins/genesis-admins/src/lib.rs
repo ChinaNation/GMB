@@ -26,7 +26,7 @@ use admin_primitives::{
 };
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
-use primitives::cid::china::china_zf::CHINA_ZF;
+use primitives::cid::china::china_zf::{CHINA_ZF, FEDERAL_REGISTRY_ADMINS};
 use votingengine::{
     types::{institution_code_from_cid_number, InstitutionCode},
     InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
@@ -117,10 +117,10 @@ pub mod pallet {
 
     /// 中文注释:创世初始机构封存表（CID 系统根基,永不可注销关闭）。
     ///
-    /// 仅 `build()` 写入 china_cb/ch/zf/sf/jc/jy/lf 的机构主账户(联邦注册局、治理机构、
-    /// 顶层政府/立法/司法/监察/教育);创世后无任何 extrinsic 可改。organization-manage
-    /// 的关闭入口据此硬拒(见 `is_genesis_protected` + `ensure_closeable`)。行政区生成、
-    /// 由 organization-manage 创建出来的机构(市注册局/公安局/公司)不在此表,可正常注销。
+    /// 仅 `build()` 写入国储会、省储会、省储行和联邦注册局主账户;创世后无任何
+    /// extrinsic 可改。organization-manage 的关闭入口据此硬拒(见
+    /// `is_genesis_protected` + `ensure_closeable`)。其他公权、私权、非法人机构
+    /// 不在此表,管理员由各自管理员模块在业务流程中写入。
     #[pallet::storage]
     pub type ProtectedGenesisAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, (), OptionQuery>;
@@ -260,7 +260,11 @@ pub mod pallet {
                 ProtectedGenesisAccounts::<T>::insert(institution.clone(), ());
                 AdminAccounts::<T>::insert(
                     institution,
-                    build_builtin_institution::<T>(node.cid_number, institution_code, node.admins),
+                    build_builtin_institution::<T>(
+                        node.cid_number,
+                        institution_code,
+                        FEDERAL_REGISTRY_ADMINS,
+                    ),
                 );
             }
         }

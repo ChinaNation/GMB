@@ -1284,6 +1284,15 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 admin_root_account_id,
             );
         }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return public_admins::Pallet::<Runtime>::active_admin_account_exists(
+                institution_code,
+                admin_root_account_id.clone(),
+            ) || private_admins::Pallet::<Runtime>::active_admin_account_exists(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
         false
     }
 
@@ -1320,6 +1329,17 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 who,
             );
         }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return public_admins::Pallet::<Runtime>::is_active_account_admin(
+                institution_code,
+                admin_root_account_id.clone(),
+                who,
+            ) || private_admins::Pallet::<Runtime>::is_active_account_admin(
+                institution_code,
+                admin_root_account_id,
+                who,
+            );
+        }
         false
     }
 
@@ -1351,6 +1371,18 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 admin_root_account_id,
             );
         }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return public_admins::Pallet::<Runtime>::active_account_admins(
+                institution_code,
+                admin_root_account_id.clone(),
+            )
+            .or_else(|| {
+                private_admins::Pallet::<Runtime>::active_account_admins(
+                    institution_code,
+                    admin_root_account_id,
+                )
+            });
+        }
         None
     }
 
@@ -1381,6 +1413,18 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 institution_code,
                 admin_root_account_id,
             );
+        }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return public_admins::Pallet::<Runtime>::active_account_admins_len(
+                institution_code,
+                admin_root_account_id.clone(),
+            )
+            .or_else(|| {
+                private_admins::Pallet::<Runtime>::active_account_admins_len(
+                    institution_code,
+                    admin_root_account_id,
+                )
+            });
         }
         None
     }
@@ -1426,6 +1470,17 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 who,
             );
         }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return public_admins::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
+                institution_code,
+                admin_root_account_id.clone(),
+                who,
+            ) || private_admins::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
+                institution_code,
+                admin_root_account_id,
+                who,
+            );
+        }
         false
     }
 
@@ -1456,6 +1511,18 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 institution_code,
                 admin_root_account_id,
             );
+        }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return public_admins::Pallet::<Runtime>::pending_account_admins_for_snapshot(
+                institution_code,
+                admin_root_account_id.clone(),
+            )
+            .or_else(|| {
+                private_admins::Pallet::<Runtime>::pending_account_admins_for_snapshot(
+                    institution_code,
+                    admin_root_account_id,
+                )
+            });
         }
         None
     }
@@ -1488,6 +1555,18 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 admin_root_account_id,
             );
         }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return public_admins::Pallet::<Runtime>::pending_account_admins_len_for_snapshot(
+                institution_code,
+                admin_root_account_id.clone(),
+            )
+            .or_else(|| {
+                private_admins::Pallet::<Runtime>::pending_account_admins_len_for_snapshot(
+                    institution_code,
+                    admin_root_account_id,
+                )
+            });
+        }
         None
     }
 
@@ -1512,6 +1591,18 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 institution_code,
                 admin_root_account_id,
             );
+        }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return public_admins::Pallet::<Runtime>::legal_representative(
+                institution_code,
+                admin_root_account_id.clone(),
+            )
+            .or_else(|| {
+                private_admins::Pallet::<Runtime>::legal_representative(
+                    institution_code,
+                    admin_root_account_id,
+                )
+            });
         }
         None
     }

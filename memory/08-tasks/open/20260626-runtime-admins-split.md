@@ -33,11 +33,12 @@
 - 已将 `organization-manage` 按机构码路由到 `public-admins` / `private-admins`。
 - 已将个人多签链上管理员集合收归 `personal-admins`。
 - 已补齐 `PersonalAdmins(7).propose_admin_set_change(3)`，个人多签管理员更换不再依赖旧单体管理员模块。
-- 已同步 node、CitizenApp、CitizenWallet 的管理员更换 call data / QR action / 离线解码路由：PMUL=7.3，创世=12.0，公权=29.0，私权/非法人=30.0。
+- 已同步 node、CitizenApp、CitizenWallet 的管理员更换 call data / QR action / 离线解码路由：PMUL=7.3，创世=12.0，公权=29.0，私权=30.0；非法人按所属法人归属路由到公权或私权管理员模块。
 - 已将 runtime 统一查询门面改为 `RuntimeAdminAccountQuery`。
 - 已修复节点默认 fork-aware 交易池在 fresh / 普通启动场景下触发 `txpool-background` 自退的问题：默认固定为 `SingleState`，并由 `TaskManager` 持有交易池 clone。
 - 已更新当前技术文档：`ADMINS_TECHNICAL.md`、跨模块矩阵、MODULE_TAG 注册表、`organization-manage`、`multisig-transfer`、`votingengine` 相关说明。
 - 已清理当前 runtime 源码和当前技术文档中的旧管理员模块残留命名。
+- 2026-06-27 runtime 二次确认修复：删除 CPOL 市公安局专用 runtime seed / 分类 helper，CPOL 只保留为普通市级公权机构码；从 `china_zf/china_lf/china_sf/china_jc/china_jy` 移除非创世 `admins` 数组，仅保留 `CHINA_CB`、`CHINA_CH` 和 `FEDERAL_REGISTRY_ADMINS` 作为创世管理员来源；将非法人管理员从私权硬绑定中拆出，查询层同时支持公权归属和私权归属。
 
 ## 当前验证
 

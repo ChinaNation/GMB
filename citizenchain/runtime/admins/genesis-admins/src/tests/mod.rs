@@ -7,7 +7,7 @@ use frame_support::{
     traits::{ConstU32, ConstU64},
 };
 use frame_system as system;
-use primitives::{
+use primitives::cid::{
     china::{china_cb::CHINA_CB, china_ch::CHINA_CH, china_zf::CHINA_ZF},
     code::{code_bytes, NRC},
 };

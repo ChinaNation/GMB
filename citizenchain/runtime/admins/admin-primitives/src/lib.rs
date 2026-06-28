@@ -38,7 +38,10 @@ pub enum AdminAccountKind {
     GenesisInstitution,
     /// 非创世公权机构管理员。
     PublicInstitution,
-    /// 私权机构与非法人机构管理员。
+    /// 私权机构管理员。
+    ///
+    /// 中文注释:非法人不是私权同义词;上层必须按所属法人归属把非法人路由到
+    /// public-admins 或 private-admins。
     PrivateInstitution,
     /// 个人多签管理员。
     PersonalMultisig,
@@ -293,9 +296,26 @@ pub fn is_public_admin_code(code: &InstitutionCode) -> bool {
     is_public_legal_code(code) && !is_genesis_admin_code(code)
 }
 
-/// 判断机构码是否属于私权机构管理员模块。
+/// 判断机构码是否属于私权法人管理员模块。
 pub fn is_private_admin_code(code: &InstitutionCode) -> bool {
-    is_private_legal_code(code) || is_unincorporated_code(code)
+    is_private_legal_code(code)
+}
+
+/// 判断机构码是否属于非法人机构管理员模块候选。
+///
+/// 中文注释:非法人可隶属公法人或私法人;机构码本身不能决定管理员模块。
+pub fn is_unincorporated_admin_code(code: &InstitutionCode) -> bool {
+    is_unincorporated_code(code)
+}
+
+/// 判断机构码能否由公权管理员模块保存。
+pub fn can_store_public_admin_code(code: &InstitutionCode) -> bool {
+    is_public_admin_code(code) || is_unincorporated_admin_code(code)
+}
+
+/// 判断机构码能否由私权管理员模块保存。
+pub fn can_store_private_admin_code(code: &InstitutionCode) -> bool {
+    is_private_admin_code(code) || is_unincorporated_admin_code(code)
 }
 
 /// 判断机构码是否属于个人多签管理员模块。
