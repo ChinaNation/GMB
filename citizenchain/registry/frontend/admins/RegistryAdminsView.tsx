@@ -52,7 +52,7 @@ const centeredConfirmFooter: ModalProps['footer'] = (_originNode, { OkBtn, Cance
   </div>
 );
 
-const ADMIN_LIST_CACHE_VERSION = 'cid-admin-list-v1';
+const ADMIN_LIST_CACHE_VERSION = 'cid-admin-list-v2';
 
 interface CachedAdminListPayload<T> {
   version: string;
@@ -70,8 +70,8 @@ function adminListCacheKey(
     kind,
     auth.admin_account,
     auth.registry_org_code,
-    auth.scope_province_name || 'ALL',
-    auth.scope_city_name || 'ALL',
+    auth.scope_province_name || 'NO_PROVINCE_SCOPE',
+    auth.scope_city_name || 'NO_CITY_SCOPE',
     mode,
   ].join(':');
 }
@@ -231,8 +231,8 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.access_token, mode]);
 
-  // 切换 selectedFederalRegistry 时:
-  //   1. 预加载该机构所属省份的城市列表
+  // 切换省域时:
+  //   1. 预加载该省份的城市列表
   //   2. 重置 sub-tab 到默认(市注册局管理员列表)
   //   3. 重置市注册局管理员列表分页到第 1 页
   useEffect(() => {
@@ -241,23 +241,20 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       setCityRegistryCitiesLoading(false);
       return;
     }
-    if (!selectedFederalRegistry) {
+    const provinceForCities = selectedFederalRegistry?.province_name ?? auth.scope_province_name ?? null;
+    if (!provinceForCities) {
       lastSelectedFederalRegistryKey.current = null;
-      const cachedRows = auth.scope_province_name ? readCachedCidCities(auth.scope_province_name) : null;
-      if (cachedRows) {
-        setCityRegistryCities(cachedRows);
-        setCityRegistryCitiesLoading(false);
-      } else {
-        setCityRegistryCities([]);
-        setCityRegistryCitiesLoading(!!auth.scope_province_name);
-      }
+      setCityRegistryCities([]);
+      setCityRegistryCitiesLoading(false);
       return;
     }
-    const selectedKey = `${selectedFederalRegistry.province_name}:${selectedFederalRegistry.admin_account}`;
+    const selectedKey = selectedFederalRegistry
+      ? `${selectedFederalRegistry.province_name}:${selectedFederalRegistry.admin_account}`
+      : `${provinceForCities}:auth-scope`;
     const isRealProvinceSwitch = lastSelectedFederalRegistryKey.current !== null
       && lastSelectedFederalRegistryKey.current !== selectedKey;
     lastSelectedFederalRegistryKey.current = selectedKey;
-    const cachedRows = readCachedCidCities(selectedFederalRegistry.province_name);
+    const cachedRows = readCachedCidCities(provinceForCities);
     if (cachedRows) {
       setCityRegistryCities(cachedRows);
       setCityRegistryCitiesLoading(false);
@@ -272,7 +269,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     }
     setCityRegistryListPage(1);
     let cancelled = false;
-    loadCachedCidCities(auth, selectedFederalRegistry.province_name)
+    loadCachedCidCities(auth, provinceForCities)
       .then((rows) => {
         if (!cancelled) setCityRegistryCities(rows);
       })
@@ -286,7 +283,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFederalRegistry?.admin_account, auth?.access_token]);
+  }, [selectedFederalRegistry?.admin_account, auth?.access_token, auth?.scope_province_name]);
 
   // ── 联邦注册局机构详情:进入联邦注册局 tab 时加载一次(scope-bypass) ──
   useEffect(() => {

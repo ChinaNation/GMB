@@ -248,18 +248,6 @@ async fn create_institution_inner(
             );
         }
     };
-    // 中文注释:市公安局(CPOL)虽已折叠为普通公权机构,但仍由系统按行政区划自动生成,
-    // 不得手动创建,改按机构码判定(分类已不再单列公安局)。
-    if institution
-        .map(|c| code::is_city_police_code(&c))
-        .unwrap_or(false)
-    {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "市公安局由系统按行政区划自动生成,不得手动创建",
-        );
-    }
     // 中文注释:手动公权机构按管理员注册局角色 + 机构层级开放:
     // 联邦注册局管理员 → 国家/省/部级(3 字符码);市注册局管理员 → 市/镇级(4 字符码)。
     // 公权教育机构(大学/学校)走教育流程,不受此限。

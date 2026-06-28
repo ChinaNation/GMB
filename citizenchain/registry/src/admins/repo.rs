@@ -380,7 +380,10 @@ pub(crate) fn upsert_admin_conn(
         "INSERT INTO admins(admin_id, admin_account, admin_name, registry_org_code, built_in, created_by, created_at, updated_at, city_name)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (admin_account) DO UPDATE SET
-            admin_name = EXCLUDED.admin_name,
+            admin_name = CASE
+                WHEN trim(EXCLUDED.admin_name) <> '' THEN EXCLUDED.admin_name
+                ELSE admins.admin_name
+            END,
             registry_org_code = EXCLUDED.registry_org_code,
             built_in = EXCLUDED.built_in,
             created_by = EXCLUDED.created_by,

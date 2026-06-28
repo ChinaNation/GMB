@@ -1,9 +1,9 @@
 // 中文注释:按表单入口(category)+ subject_property 决定"新增机构"弹窗里哪些字段锁定 + 默认值。
 // private/gov/education 三个新增弹窗共用这一份字段锁定规则,组件分别放在各自业务目录。
 //
-// 手动新增三个入口(普通公权目录由后端自动生成,公安局不可手动建):
+// 手动新增三个入口(普通官方公权目录由后端自动生成,不走手动创建):
 //   PRIVATE_INSTITUTION   私权 tab:按 private_type 锁定主体属性和机构码,创建阶段写入名称
-//   GOV_INSTITUTION       公权 tab:G(市级 CGOV/CLEG/CJUD/CSUP,排除储备体系/CEDU/CPOL/CREG 自动目录代码)机构全称必填 / F(锁非法人组织 UNIN)挂公法人
+//   GOV_INSTITUTION       公权 tab:G(非自动官方目录机构)机构全称必填 / F(锁非法人组织 UNIN)挂公法人
 //   EDUCATION_INSTITUTION 教育 tab:G/S/F;institution_code 不再锁死,按 subject_property×education_type 计算
 //                         (公私大学 GUN/SUN、公私中小学 GSCH/SFSC),F 分校继承本部学校码(GSCH/SFSC)
 //
@@ -163,7 +163,7 @@ export const SCHOOL_EDUCATION_TYPES: EducationType[] = [
 ];
 
 // ── 手动公权机构可选代码:市级公权码(表单强制选市建市级机构);
-//    排除 CEDU(归教育 tab)、CPOL/CREG(确定性自动生成),以及国家/省级与储备体系码。 ──
+//    排除 CEDU(归教育 tab)、市级官方自动目录代码,以及国家/省级与储备体系码。 ──
 const GOV_MANUAL_INSTITUTIONS: ChoiceItem[] = [
   { value: 'CGOV', label: '政府' },
   { value: 'CLEG', label: '立法院' },

@@ -82,7 +82,7 @@ pub struct Institution {
     /// 主体业务状态。机构列表和详情只展示 ACTIVE / REVOKED,不把链上状态混成业务状态。
     #[serde(default = "default_subject_status")]
     pub status: String,
-    /// 机构分类(公安局/公权机构/私权机构)。
+    /// 机构展示分类(公权机构/私权机构)。法律主体类型由机构码和父级属性单独判定。
     pub category: InstitutionCategory,
     /// 盈利属性("0"/"1")。
     pub p1: String,
@@ -95,9 +95,7 @@ pub struct Institution {
     pub town_name: String,
     /// 所属省代码(r5 前 2 字符)。
     pub province_code: String,
-    /// 所属市代码(r5 后 3 字符)。任务卡 6 新增:
-    /// 作为公安局对账的稳定主键,市名改动时保持不变。
-    /// 既有记录在后端启动时由 `backfill_and_reconcile_public_security` 补齐。
+    /// 所属市代码(r5 后 3 字符)。自动公权目录的稳定地域键,市名改动时保持不变。
     #[serde(default)]
     pub city_code: String,
     /// 所属镇代码。只有镇目录机构填写。

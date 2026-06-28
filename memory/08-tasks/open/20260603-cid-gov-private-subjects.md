@@ -35,7 +35,7 @@ CID
 执行记录：
 - 已新增后端 `subjects/gov/private/accounts/docs` 模块边界；`gov` 与前端命名保持一致。
 - 已删除后端旧主体聚合 handler 文件，内部路由归属拆到 `subjects::admin`、`gov::handler`、`private::handler`、`accounts::handler`、`docs::handler`。
-- 已把公权自动目录、公安局对账和宪法常量读取迁到 `backend/gov/service.rs`；`subjects/service.rs` 只保留公共校验和默认账户能力。
+- 已把公权自动目录和宪法常量读取迁到 `citizenchain/registry/src/gov/service.rs`；CPOL 与其它市级公权机构同模板生成，`subjects/service.rs` 只保留公共校验和默认账户能力。
 - 已把清算行资格纯规则迁到 `backend/private/clearing.rs`。
 - 已保留现有 `admins` 权限模块，不新增 `registry_admins`。
 - 已新增目标分区表初始化：`ids / subjects / citizens / gov / private / accounts / docs / audit`，启动阶段一次性创建 `CN + 43` 个省级分区。

@@ -50,7 +50,7 @@ citizencode/backend/
 ├── crypto/                    # sr25519 派生、公钥规范化等低层加密辅助
 ├── china/                     # 中国行政区划 SQLite 真源和省市查询接口
 ├── docs/                      # 机构资料库入口
-├── gov/                       # 公权机构入口,含公安局和普通公权确定性列表路由归属
+├── gov/                       # 公权机构入口,自动公权确定性列表路由归属
 ├── indexer/                   # 链事件解析与索引 worker
 ├── number/                    # 身份 ID 编码协议,SubjectProperty/机构码/生成/校验/admin 编码元信息 DTO
 ├── private/                   # 私权机构入口,按私权目标类型拆分子目录

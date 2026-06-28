@@ -148,8 +148,12 @@ pub(crate) fn creator_admin_name_conn(
     creator_account: &str,
 ) -> Result<String, String> {
     let Some(creator) = repo::get_admin_by_account_conn(conn, creator_account)? else {
-        return Ok(creator_account.to_string());
+        return Ok("未知注册局管理员".to_string());
     };
+    let name = creator.admin_name.trim();
+    if !name.is_empty() {
+        return Ok(name.to_string());
+    }
     let province = if creator.registry_org_code == RegistryOrgCode::FederalRegistry {
         repo::province_scope_for_registry_org_conn(
             conn,

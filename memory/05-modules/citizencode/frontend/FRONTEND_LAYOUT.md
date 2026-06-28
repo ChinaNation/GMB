@@ -135,8 +135,8 @@ citizencode/frontend/
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
 - `china/metaCache.ts` 是 CID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单、公权机构确定性展示列表、教育机构市详情直显的确定性市公民教育委员会列表和机构详情快照，不得缓存普通公民或普通机构精确搜索结果。
 - `core/CityGrid.tsx`、市注册局城市表格和机构新增弹窗读取市清单时必须走 `loadCachedCidCities`；市注册局城市表格和通用城市网格在已有缓存时必须先同步读取 `readCachedCidCities` 直接显示，不得先闪出“暂无城市数据”。市注册局城市表格读取身份ID时必须调用公权机构列表的 `institution_code='CREG'` 后端精确过滤,不得省级拉取前 300 条后前端过滤。机构类 Tab 读取省份元数据时必须走 `loadCachedCidMeta`。
-- `private/PrivateListTable.tsx` 不做普通机构本地分页承载大数据；私权机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`education/EducationListTable.tsx` 分两路读取:市详情空搜索直接显示本市确定性市公民教育委员会,有本地缓存时先显示缓存再后台刷新,有搜索词时按名称或身份ID精确查询法人学校和 F+JY 分支机构。`gov/GovListTable.tsx` 承载公安局确定性列表和公权机构浏览目录(自动目录 + 手动公权机构 + 公权下属非法人),进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
-- 公权机构 tab 手动新增两能力(市公安局页面无新增入口):G 公法人=新公权机构
+- `private/PrivateListTable.tsx` 不做普通机构本地分页承载大数据；私权机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。`education/EducationListTable.tsx` 分两路读取:市详情空搜索直接显示本市确定性市公民教育委员会,有本地缓存时先显示缓存再后台刷新,有搜索词时按名称或身份ID精确查询法人学校和 F+JY 分支机构。`gov/GovListTable.tsx` 承载公权机构浏览目录(自动目录 + 手动公权机构 + 公权下属非法人),进入市详情时直接显示,有缓存时先显示缓存再后台刷新只读查询结果。
+- 公权机构 tab 手动新增两能力:G 公法人=新公权机构
   (代码仅 `ZF/LF/SF/JC`,排除储备体系自动目录代码,机构全称必填同市查重)/ F 非法人=公权下属非法人
   (机构代码锁死中国 `ZG`,不开放他国)。
   普通公权目录仍由后端自动生成,手动公权机构与挂公法人的非法人都进浏览目录。

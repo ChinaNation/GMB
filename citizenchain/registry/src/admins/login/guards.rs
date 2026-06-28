@@ -68,6 +68,14 @@ pub(super) fn admin_auth(
             &admin.admin_account,
             &admin.registry_org_code,
         )?;
+        if scope_province_name
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty()
+        {
+            return Err("http:forbidden:admin province scope missing".to_string());
+        }
         let scope_city_name = if admin.registry_org_code == RegistryOrgCode::CityRegistry
             && !admin.city_name.trim().is_empty()
         {
@@ -116,6 +124,11 @@ pub(super) fn admin_auth(
         Err(err) if err == "http:forbidden:admin not found" => {
             Err(api_error(StatusCode::FORBIDDEN, 2002, "admin not found"))
         }
+        Err(err) if err == "http:forbidden:admin province scope missing" => Err(api_error(
+            StatusCode::FORBIDDEN,
+            2002,
+            "admin province scope missing",
+        )),
         Err(err) => {
             let message = format!("admin auth failed: {err}");
             Err(api_error(

@@ -126,17 +126,17 @@ citizenchain/
 后端独立 chain 业务目录、前端独立 chain 业务目录、前端独立业务 API 目录均已删除。
 CID 前后端都直接以各自根目录为代码根,按业务功能展开。
 
-- `citizencode/backend/main.rs`:后端入口,`Cargo.toml` 显式 `[[bin]] path = "main.rs"`。
-- `citizencode/backend/core/`:跨业务底层工具,含 `chain_*` 通用链工具、HTTP 安全、统一响应与 QR 协议辅助。
-- `citizencode/backend/citizens/`:公民身份业务和公民链交互 `chain_*`。
-- `citizencode/backend/subjects/`:身份主体共享模型、公共详情、非法人能力和机构链端公开查询。
-- `citizencode/backend/gov/`:公权机构和公安局确定性目录入口。
-- `citizencode/backend/private/`:私权机构注册和精确查询入口。
-- `citizencode/backend/accounts/`:机构账户入口。
-- `citizencode/backend/docs/`:机构资料库入口。
+- `citizenchain/registry/src/main.rs`:后端入口,`Cargo.toml` 显式 `[[bin]] path = "main.rs"`。
+- `citizenchain/registry/src/core/`:跨业务底层工具,含 `chain_*` 通用链工具、HTTP 安全、统一响应与 QR 协议辅助。
+- `citizenchain/registry/src/citizens/`:公民身份业务和公民链交互 `chain_*`。
+- `citizenchain/registry/src/subjects/`:身份主体共享模型、公共详情、非法人能力和机构链端公开查询。
+- `citizenchain/registry/src/gov/`:公权机构确定性目录入口,CPOL 与其它市级公权机构同模板生成。
+- `citizenchain/registry/src/private/`:私权机构注册和精确查询入口。
+- `citizenchain/registry/src/accounts/`:机构账户入口。
+- `citizenchain/registry/src/docs/`:机构资料库入口。
 - `citizenchain/registry/src/cid/china/`:中国行政区划 SQLite 真源。
-- `citizenchain/registry/src/cid/`:身份 ID 编码协议、SubjectProperty、机构码、生成和校验。
-- `citizencode/backend/admins/`:联邦注册局机构管理员/市注册局机构管理员治理、Passkey 注册与签名挑战写操作。
+- `citizenchain/registry/src/cid/`:身份 ID 编码协议、机构码、生成和校验。
+- `citizenchain/registry/src/admins/`:联邦注册局机构管理员/市注册局机构管理员治理、Passkey 注册与签名挑战写操作。
 - `citizencode/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
 - `citizencode/frontend/core/`:前端通用组件、共享 UI、扫码签名面板与 QR 工具。
 - `citizencode/frontend/china/`:行政区划元数据 API 与本地缓存。

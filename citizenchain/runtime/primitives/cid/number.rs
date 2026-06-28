@@ -15,7 +15,6 @@
 //! - N9:9 字符,全数字 hash 号
 //! - D4:4 字符,生成年份 YYYY
 //!
-//! 主体属性(K1)已从号码删除,机构类别一律由机构码自身语义派生。
 //! cid_number 字节上限唯一权威源 = `primitives::core_const::CID_NUMBER_MAX_BYTES`。
 
 use alloc::{

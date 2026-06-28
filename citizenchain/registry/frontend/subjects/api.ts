@@ -48,7 +48,7 @@ export interface Institution {
   city_name: string;
   town_name?: string;
   province_code: string;
-  /** 任务卡 6 新增:2 位数字市代码(r5 段后 3 字符),作为公安局对账稳定主键 */
+  /** 2 位数字市代码(r5 段后 3 字符),作为自动公权目录稳定地域键 */
   city_code?: string;
   town_code?: string;
   institution_code: string;
@@ -162,7 +162,7 @@ export interface CreateInstitutionInput {
    * 机构全称。
    * - 私权机构创建时必填,由对应私权类型 tab 锁定身份编码
    * - 法人教育机构(G/S+JY)和手动公权机构(G):**必传**,同步做查重
-   * - 自动公权机构/公安局:不走手动创建接口
+   * - 自动公权机构:不走手动创建接口
   */
   cid_full_name?: string;
   /**

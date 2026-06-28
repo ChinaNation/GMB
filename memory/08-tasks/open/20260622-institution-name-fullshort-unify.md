@@ -118,7 +118,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - 省代码表校验:通过,`memory/07-ai/institution-naming.md` 43 个省代码与 `citizencode/backend/china/china.sqlite` 的 `provinces.code` 全量一致。
 - 后端模板:已统一 `PSN/PRP/CGOV/CEDU/TGOV` 的简称模板,`GOV_TEMPLATE_VERSION` 升级为 `gov-deterministic-v7`。
 - 对账性能修正:省/市 scope 在目标生成阶段生效,`china.sqlite` 哈希改为进程内缓存,避免 `reconcile-gov --changed-only` 逐省重复全量生成和重复哈希。
-- 残留修正:公安局 `CPOL` 保留历史 `PS-{province}-{city}` 确定性种子,避免平移既有公安局 CID 号;清理旧 helper 作用域残留后用当前源码重新编译通过。
+- 残留修正(2026-06-27 修订):公安局 `CPOL` 已废弃历史专用种子,统一并入普通市级公权机构模板;清理旧 helper 作用域残留后用当前源码重新编译通过。
 - `cargo check --manifest-path citizencode/backend/Cargo.toml`:通过。
 - `cargo test --manifest-path citizencode/backend/Cargo.toml gov -- --nocapture`:通过,5 个 gov 相关测试通过。
 - 真实库 `reconcile-gov --changed-only`:通过,`scopes=33 inserted=0 updated=174947 account_inserted=349927 removed=0`。

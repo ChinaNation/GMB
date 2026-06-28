@@ -322,6 +322,9 @@ pub(crate) async fn admin_auth_qr_result(
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
             }
         };
+        if province.as_deref().map(str::trim).unwrap_or("").is_empty() {
+            return api_error(StatusCode::FORBIDDEN, 2002, "admin province scope missing");
+        }
         let scope_city_name = admin.as_ref().and_then(resolve_scope_city_name);
         let cid_short_name = repo::resolve_home_cid_short_name(
             &state.db,

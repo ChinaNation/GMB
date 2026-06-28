@@ -57,30 +57,6 @@ pub fn official_institution_cid<E>(
     Ok(cid)
 }
 
-/// 市公安局(CPOL)CID — 历史确定性种子 `PS-{province_code}-{city_code}`,创世无重试。
-pub fn public_security_cid<E>(
-    province_code: &str,
-    city_code: &str,
-    province_name: &str,
-    city_name: &str,
-    exists_fn: impl Fn(&str) -> Result<bool, E>,
-) -> Result<String, SeedCidError<E>> {
-    let account_seed =
-        primitives::cid::seed::public_security_account_seed(province_code, city_code);
-    let cid = generate_cid_number(GenerateCidInput {
-        account_pubkey: account_seed.as_str(),
-        p1: "0",
-        province_name,
-        city_name,
-        institution: "CPOL",
-    })
-    .map_err(SeedCidError::Generate)?;
-    if exists_fn(&cid).map_err(SeedCidError::Exists)? {
-        return Err(SeedCidError::Exhausted);
-    }
-    Ok(cid)
-}
-
 /// 机构动态注册 CID — 随机 UUIDv4 种子 + 1000 次重试 + 格式校验。
 pub fn dynamic_institution_cid<E>(
     province_name: &str,
@@ -141,11 +117,20 @@ mod tests {
     }
 
     #[test]
-    fn public_security_seed_matches_inline_byte_for_byte() {
-        let from_seed =
-            public_security_cid("GD", "001", "广东省", "荔湾市", never_exists).expect("ps cid");
+    fn city_police_uses_official_city_seed() {
+        let from_seed = official_institution_cid(
+            "CITY",
+            "GD",
+            "001",
+            "",
+            "CPOL",
+            "广东省",
+            "荔湾市",
+            never_exists,
+        )
+        .expect("official city police cid");
         let inline = generate_cid_number(GenerateCidInput {
-            account_pubkey: "PS-GD-001",
+            account_pubkey: "GOV-CITY-GD-001--CPOL",
             p1: "0",
             province_name: "广东省",
             city_name: "荔湾市",

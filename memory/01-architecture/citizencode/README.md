@@ -8,18 +8,18 @@ CID 是注册局运营的身份 ID 系统。系统登记三类主体:
 
 ## 源码边界
 
-- `citizencode/backend/core`:数据库连接、HTTP 安全、运行期维护、二维码等通用能力。
+- `citizenchain/registry/src/core`:数据库连接、HTTP 安全、运行期维护、二维码等通用能力。
 - `citizenchain/registry/src/cid/china`:中国行政区划 SQLite 真源。
 - `citizenchain/registry/src/cid`:身份 ID 编码协议。
-- `citizencode/backend/admins`:注册局机构 admins、登录、Passkey、二次确认和权限上下文。
-- `citizencode/backend/gov`:公权机构和公安局确定性目录。
-- `citizencode/backend/private`:个体经营、合伙企业、股权公司、股份公司、公益组织、注册协会六类私权机构能力。
-- `citizencode/backend/subjects`:主体公共模型、通用注册内核、主体详情和公开查询。
-- `citizencode/backend/citizens`:公民录入、账户绑定、CitizenApp 查询和投票凭证。
-- `citizencode/backend/accounts`:机构账户管理。
-- `citizencode/backend/docs`:机构资料库。
-- `citizencode/backend/audit`:审计查询。
-- `citizencode/backend/indexer`:链上交易索引。
+- `citizenchain/registry/src/admins`:注册局机构 admins、登录、Passkey、二次确认和权限上下文。
+- `citizenchain/registry/src/gov`:公权机构确定性目录,CPOL 与其它市级公权机构同模板生成。
+- `citizenchain/registry/src/private`:个体经营、合伙企业、股权公司、股份公司、公益组织、注册协会六类私权机构能力。
+- `citizenchain/registry/src/subjects`:主体公共模型、通用注册内核、主体详情和公开查询。
+- `citizenchain/registry/src/citizens`:公民录入、账户绑定、CitizenApp 查询和投票凭证。
+- `citizenchain/registry/src/accounts`:机构账户管理。
+- `citizenchain/registry/src/docs`:机构资料库。
+- `citizenchain/registry/src/audit`:审计查询。
+- `citizenchain/registry/src/indexer`:链上交易索引。
 
 前端按同名边界拆分为 `citizencode/frontend/gov`、`citizencode/frontend/private`、`citizencode/frontend/subjects`、`citizencode/frontend/admins` 等目录。功能模块自己的 API 放在所属模块内,通用 HTTP 封装只放 `frontend/utils/http.ts`。
 

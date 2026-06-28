@@ -382,7 +382,7 @@ mod tests {
 
     #[test]
     fn derive_category_rules() {
-        // 主体属性由机构码派生;市公安局(CPOL)已折叠为普通公权机构。
+        // 主体属性由机构码派生;CPOL 与其它市级公权机构同口径。
         assert_eq!(
             derive_category("CPOL", "广州市公民安全局"),
             Some(InstitutionCategory::GovInstitution)

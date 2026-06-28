@@ -1641,7 +1641,7 @@ impl Db {
                 .map_err(|_| "page_size too large".to_string())?;
             let offset_i64 =
                 i64::try_from(offset).map_err(|_| "page offset too large".to_string())?;
-            // 中文注释:公权目录 = 自动生成目录(gov 表,排公安局 CPOL) + 手动公权机构
+            // 中文注释:公权目录 = 自动生成目录(gov 表) + 手动公权机构
             // (category=GOV,无 gov 行,非 JY 学校) + 公权下属非法人(F,父级为公法人)。
             // 父级只按 cid_number 关联(cid 全局唯一,父级不限定本省分区)。
             let rows = conn
@@ -1669,11 +1669,10 @@ impl Db {
 	                             LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
 	                               AND s.status = 'ACTIVE'
-	                               AND (
-	                                    (s.category = 'GOV_INSTITUTION'
-	                                     AND g.cid_number IS NOT NULL
-	                                     AND s.institution_code <> 'CPOL'
-	                                     AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH'))
+		                               AND (
+		                                    (s.category = 'GOV_INSTITUTION'
+		                                     AND g.cid_number IS NOT NULL
+		                                     AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH'))
 	                                    OR (s.category = 'GOV_INSTITUTION'
 	                                        AND g.cid_number IS NULL
 	                                        AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH'))
@@ -2209,7 +2208,7 @@ struct PurgeReport {
 }
 
 // 中文注释:清掉所有不合规 CID 号,再把能确定性
-// 自动重建的公权机构(含公安局)重对账。PRIVATE 私权机构与公民属注册局直接录入,
+// 自动重建的公权机构重对账。PRIVATE 私权机构与公民属注册局直接录入,
 // 删后无法自动重建,需由注册局重新录入。链端不在本命令范围。
 fn run_purge_legacy_cid(state: &AppState, dry_run: bool) {
     let report = state
@@ -2245,7 +2244,7 @@ fn run_purge_legacy_cid(state: &AppState, dry_run: bool) {
             "purge-legacy-cid removed user-created PRIVATE/CITIZEN rows; they must be re-created/re-bound to get new-scheme cid"
         );
     }
-    // 中文注释:build_raw_targets(GovTargetKind::All) 同时含公权机构与公安局,
+    // 中文注释:build_raw_targets(GovTargetKind::All) 返回完整自动公权机构目录,
     // 一次全量重对账即把所有 PUBLIC 主体按新号重建。
     let recon = core::runtime_ops::reconcile_official_institutions_explicit(
         state,

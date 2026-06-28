@@ -113,6 +113,23 @@ pub(crate) fn run_seed_federal_admins(state: &AppState) -> Result<(), String> {
             };
             repo::upsert_admin_conn(conn, &admin, Some(province))?;
         }
+        let row = conn
+            .query_one(
+                "SELECT COUNT(*), COUNT(DISTINCT s.province_name)
+                 FROM federal_registry_scope s
+                 JOIN admins a ON a.admin_id = s.admin_id
+                 WHERE a.registry_org_code = 'FEDERAL_REGISTRY'",
+                &[],
+            )
+            .map_err(|e| format!("verify federal registry scope failed: {e}"))?;
+        let scoped_admins: i64 = row.get(0);
+        let scoped_provinces: i64 = row.get(1);
+        if scoped_admins != expected as i64 || scoped_provinces != FEDERAL_ADMIN_PROVINCES.len() as i64 {
+            return Err(format!(
+                "联邦注册局省域映射不完整: admins={scoped_admins}/{expected}, provinces={scoped_provinces}/{}",
+                FEDERAL_ADMIN_PROVINCES.len()
+            ));
+        }
         Ok(admins.len())
     })?;
 

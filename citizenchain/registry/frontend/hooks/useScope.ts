@@ -74,28 +74,30 @@ export function useScope(auth: AdminAuth | null): VisibleScope {
     }
     switch (auth.registry_org_code) {
       case 'FEDERAL_REGISTRY': {
-        const province_name = auth.scope_province_name || '__FEDERAL_REGISTRY_MISSING_PROVINCE__';
+        const province_name = auth.scope_province_name ?? null;
         return makeScope({
-          provinces: [province_name],
+          provinces: province_name ? [province_name] : [],
           cities: [],
-          canWrite: true,
+          // 中文注释:注册局管理员缺省域是后端投影错误,前端只进入只读错误态,
+          // 不再造伪省名参与查询,避免显示“全国”或空列表。
+          canWrite: !!province_name,
           skipProvinceList: true,
           skipCityList: false,
-          lockedProvinceName:  province_name,
+          lockedProvinceName: province_name,
           lockedCityName: null,
         });
       }
       case 'CITY_REGISTRY': {
-        const province_name = auth.scope_province_name || '__CITY_REGISTRY_MISSING_PROVINCE__';
-        const city_name = auth.scope_city_name || '__CITY_REGISTRY_MISSING_CITY__';
+        const province_name = auth.scope_province_name ?? null;
+        const city_name = auth.scope_city_name ?? null;
         return makeScope({
-          provinces: [province_name],
-          cities: [city_name],
-          canWrite: true,
+          provinces: province_name ? [province_name] : [],
+          cities: city_name ? [city_name] : [],
+          canWrite: !!province_name && !!city_name,
           skipProvinceList: true,
           skipCityList: true,
-          lockedProvinceName:  province_name,
-          lockedCityName:  city_name,
+          lockedProvinceName: province_name,
+          lockedCityName: city_name,
         });
       }
       default:

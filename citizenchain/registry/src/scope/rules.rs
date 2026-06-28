@@ -12,7 +12,7 @@ use crate::admins::model::RegistryOrgCode;
 /// 登录管理员可见的数据范围。
 #[derive(Debug, Clone)]
 pub struct VisibleScope {
-    /// 可见省份列表。当前最少 1 个(本省),保留 Vec 是为了将来扩展跨省视图。
+    /// 可见省份列表。当前最少 1 个(本省),空 vec 表示无可见范围。
     pub provinces: Vec<String>,
     /// 可见城市列表。空 vec 表示"不限市"(FEDERAL_REGISTRY)。
     pub cities: Vec<String>,
@@ -57,9 +57,22 @@ impl VisibleScope {
         }
     }
 
+    /// 空范围。缺省域代表登录投影错误,调用方应优先拒绝请求。
+    pub fn empty() -> Self {
+        Self {
+            provinces: vec![],
+            cities: vec![],
+            can_write: false,
+            skip_province_list: false,
+            skip_city_list: false,
+            locked_province_name: None,
+            locked_city_name: None,
+        }
+    }
+
     /// 判断某省是否在范围内。
     pub fn includes_province(&self, province: &str) -> bool {
-        self.provinces.is_empty() || self.provinces.iter().any(|p| p == province)
+        !self.provinces.is_empty() && self.provinces.iter().any(|p| p == province)
     }
 
     /// 判断某市是否在范围内。city 为空字符串时视为"不限市"。
@@ -70,27 +83,21 @@ impl VisibleScope {
 
 /// 根据登录管理员上下文派生 VisibleScope。
 ///
-/// 中文注释:FederalRegistry 缺 scope_province_name 或 CityRegistry 缺 scope_city_name 时,会
-/// fallback 到最严格的"零范围"(provinces=["<INVALID>"]),这样过滤后返回空列表,
-/// 避免误放行。调用方应当在 require_admin_* 里先校验必要字段。
+/// 中文注释:FederalRegistry 缺 scope_province_name 或 CityRegistry 缺 scope_city_name 时,
+/// 返回空范围,不再制造伪省名参与查询。调用方应当在 require_admin_* 里先校验必要字段。
 pub fn get_visible_scope(ctx: &AdminAuthContext) -> VisibleScope {
     match ctx.registry_org_code {
-        RegistryOrgCode::FederalRegistry => {
-            let province = ctx
-                .scope_province_name
-                .clone()
-                .unwrap_or_else(|| "__FEDERAL_REGISTRY_MISSING_PROVINCE__".to_string());
-            VisibleScope::federal_registry(province)
-        }
+        RegistryOrgCode::FederalRegistry => ctx
+            .scope_province_name
+            .clone()
+            .map(VisibleScope::federal_registry)
+            .unwrap_or_else(VisibleScope::empty),
         RegistryOrgCode::CityRegistry => {
-            let province = ctx
-                .scope_province_name
-                .clone()
-                .unwrap_or_else(|| "__CITY_REGISTRY_MISSING_PROVINCE__".to_string());
-            let city = ctx
-                .scope_city_name
-                .clone()
-                .unwrap_or_else(|| "__CITY_REGISTRY_MISSING_CITY__".to_string());
+            let (Some(province), Some(city)) =
+                (ctx.scope_province_name.clone(), ctx.scope_city_name.clone())
+            else {
+                return VisibleScope::empty();
+            };
             VisibleScope::city_registry(province, city)
         }
     }
@@ -119,5 +126,12 @@ mod tests {
         assert!(!s.includes_city("芜湖市"));
         assert!(s.skip_province_list);
         assert!(s.skip_city_list);
+    }
+
+    #[test]
+    fn empty_scope_does_not_match_any_province() {
+        let s = VisibleScope::empty();
+        assert!(!s.includes_province("安徽省"));
+        assert!(!s.can_write);
     }
 }

@@ -312,8 +312,8 @@ function AppInner() {
               width: 'fit-content'
             }}
           >
-            {/* 中文注释:Tab 顺序 — 首页 → 六类私权机构 → 教育机构 → 公权机构(含市公安局)→ 市注册局 → 联邦注册局。
-                市公安局已折叠为普通公权机构,不再独立成 tab;联邦注册局管理员只见「市注册局 + 联邦注册局」两个 tab。 */}
+            {/* 中文注释:Tab 顺序 — 首页 → 六类私权机构 → 教育机构 → 公权机构 → 市注册局 → 联邦注册局。
+                公权机构只区分注册局/非注册局;联邦注册局管理员只见「市注册局 + 联邦注册局」两个 tab。 */}
             {([
               { key: 'citizens' as const, label: '首页', visible: capabilities.canViewCitizens, onClick: () => switchView('citizens') },
               { key: 'private-sole' as const, label: '个体经营', visible: capabilities.canViewPrivate, onClick: () => switchView('private-sole', { loadCidMeta: true }) },

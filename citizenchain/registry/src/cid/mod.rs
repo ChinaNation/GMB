@@ -14,7 +14,7 @@ pub mod generator;
 pub(crate) mod model;
 pub mod seed;
 
-pub use category::{classify, InstitutionCategory};
+pub use category::{classify, legal_kind, InstitutionCategory, SubjectLegalKind};
 pub use generator::{generate_cid_number, GenerateCidInput};
 pub(crate) use model::*;
 pub use primitives::cid::code;
@@ -24,6 +24,4 @@ pub use primitives::cid::number::{
     CID_NUMBER_SEGMENT_D4_LEN, CID_NUMBER_SEGMENT_K3P1C1_LEN, CID_NUMBER_SEGMENT_N9_LEN,
     CID_NUMBER_SEGMENT_R5_LEN,
 };
-pub use seed::{
-    dynamic_institution_cid, official_institution_cid, public_security_cid, SeedCidError,
-};
+pub use seed::{dynamic_institution_cid, official_institution_cid, SeedCidError};

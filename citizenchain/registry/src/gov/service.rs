@@ -1,4 +1,4 @@
-//! 公权机构自动目录与公安局对账服务。
+//! 公权机构自动目录服务。
 //!
 //! 中文注释:自动生成的公权机构只归 gov 模块维护。编译不写库,serve 只做版本守门;
 //! 部署入口必须先运行 `reconcile-gov --changed-only` 与 `check-gov --strict`。
@@ -100,9 +100,9 @@ pub enum OfficialReconcileScope {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GovTargetKind {
-    /// 全部公权机构目录(政府机构 + 市公安局),不按 category 过滤。
+    /// 全部公权机构目录,不按 category 过滤。
     All,
-    /// 公权机构列表口径(category=GOV_INSTITUTION,含市公安局)。
+    /// 公权机构列表口径(category=GOV_INSTITUTION)。
     Official,
 }
 
@@ -228,6 +228,11 @@ const CITY_TEMPLATES: &[OfficialOrgTemplate] = &[
         institution_code: "CHSC",
         suffix: "国安局",
         full_suffix: "国土安全局",
+    },
+    OfficialOrgTemplate {
+        institution_code: "CPOL",
+        suffix: "公安局",
+        full_suffix: "公民安全局",
     },
     OfficialOrgTemplate {
         institution_code: "CCWF",
@@ -492,66 +497,6 @@ fn official_institution_targets(scope: &OfficialReconcileScope) -> Vec<OfficialI
     targets
 }
 
-fn public_security_targets(scope: &OfficialReconcileScope) -> Vec<OfficialInstitutionTarget> {
-    let mut targets = Vec::new();
-    for province in provinces()
-        .iter()
-        .filter(|province| province_matches_scope(province, scope))
-    {
-        for city in province
-            .cities
-            .iter()
-            .filter(|city| city.city_code != "000")
-            .filter(|city| city_matches_scope(city, scope))
-        {
-            let Some(cid_number) = generate_public_security_cid(
-                province.province_name,
-                province.province_code,
-                city.city_name,
-                city.city_code,
-            ) else {
-                continue;
-            };
-            targets.push(OfficialInstitutionTarget {
-                cid_number,
-                cid_full_name: format!("{}公民安全局", city.city_name),
-                cid_short_name: format!("{}公安局", city.city_name),
-                // 中文注释:市公安局回归普通公权机构,与民生厅/财税局同列,不再单列分类。
-                category: InstitutionCategory::GovInstitution,
-                p1: "0".to_string(),
-                province_name: province.province_name.to_string(),
-                city_name: city.city_name.to_string(),
-                town_name: String::new(),
-                province_code: province.province_code.to_string(),
-                city_code: city.city_code.to_string(),
-                town_code: String::new(),
-                institution_code: "CPOL".to_string(),
-                education_type: None,
-            });
-        }
-    }
-    targets.retain(|target| target_in_scope(target, scope));
-    targets
-}
-
-fn generate_public_security_cid(
-    province_name: &str,
-    province_code: &str,
-    city_name: &str,
-    city_code: &str,
-) -> Option<String> {
-    // 中文注释:公安局(CPOL)种子 `PS-{省码}-{市码}` + 创世无重试,收敛在 cid::seed,本处只传参。
-    // exists_fn 恒返 false 等价原行为(创世幂等不查重)。
-    crate::cid::public_security_cid::<std::convert::Infallible>(
-        province_code,
-        city_code,
-        province_name,
-        city_name,
-        |_| Ok(false),
-    )
-    .ok()
-}
-
 fn build_raw_targets(
     scope: &OfficialReconcileScope,
     kind: GovTargetKind,
@@ -559,8 +504,6 @@ fn build_raw_targets(
     let mut targets = Vec::new();
     if matches!(kind, GovTargetKind::All | GovTargetKind::Official) {
         targets.extend(official_institution_targets(scope));
-        // 中文注释:市公安局已折叠为普通公权机构,与其它直属公权机构同口径生成。
-        targets.extend(public_security_targets(scope));
     }
     targets
 }

@@ -33,6 +33,8 @@ PG 官方二进制来源:https://www.postgresql.org/download/(解压后含 bin/l
 - 数据库两选:① 内嵌私有 PG(`CID_EMBEDDED_PG=1`,registry 自管);② 外部托管 PG(关 `CID_EMBEDDED_PG`,直接给 `DATABASE_URL`;调优参考 `citizenchain/scripts/registry-postgresql.conf.sample`)。
 - **备份/PITR**:`CID_PG_WAL_ARCHIVE_DIR` 指向 NAS → 持续 WAL 归档;`citizenchain/scripts/registry-backup.sh` cron 每日 `pg_basebackup` 全量落 NAS(默认保留 14 份);`citizenchain/scripts/registry-restore.sh` 做 PITR 恢复(可指定 `RECOVERY_TARGET_TIME`)。温备:NAS + 第二台服务器持全量 + WAL,故障切换。
 - 联邦节点**按省管理**:每市自治节点跑自己的 registry+PG;联邦注册局按省给市配管理员(链上,3a/3b)。
+- 联邦注册局管理员省域只来自 `federal_registry_scope` 本地投影;启动服务不得用“全国”或节点环境变量兜底。
+  缺省域代表创世/投影数据错误,登录和会话校验必须失败,避免市注册局 tab 显示全国空列表。
 
 ## 约束(已遵守)
 

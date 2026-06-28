@@ -150,8 +150,8 @@ impl Db {
                 END IF;
              END $$;
              UPDATE admins
-             SET admin_name = admin_account
-             WHERE admin_name IS NULL OR admin_name = '';
+             SET admin_name = ''
+             WHERE admin_name IS NULL OR lower(admin_name) = lower(admin_account);
              ALTER TABLE admins
                 ALTER COLUMN admin_account SET NOT NULL,
                 ALTER COLUMN admin_name SET NOT NULL,

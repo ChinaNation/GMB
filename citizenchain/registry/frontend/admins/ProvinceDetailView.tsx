@@ -115,7 +115,9 @@ export function CityRegistryView({ state }: RegistryViewProps) {
 
   const effectiveProvince = scope.lockedProvinceName;
   const effectiveCity = selectedCity ?? scope.lockedCityName;
-  const cityRegistryAdminsForProvince = selectedFederalRegistry ? cityRegistryAdmins : [];
+  // 中文注释:市注册局管理员列表由后端按登录省域过滤;前端不能再依赖
+  // selectedFederalRegistry 是否自动定位成功,否则会把合法省域误渲染为空列表。
+  const cityRegistryAdminsForProvince = cityRegistryAdmins;
   // 市注册局管理员只读;联邦注册局管理员可增删改(后端按登录省域二次校验)。
   const canEditCityRegistryAdmins = scope.canWrite && auth.registry_org_code === 'FEDERAL_REGISTRY';
 
@@ -133,7 +135,7 @@ export function CityRegistryView({ state }: RegistryViewProps) {
           auth={auth}
           province_name={effectiveProvince ?? ''}
           cities={cityRegistryAdminCities.filter((c) => c.city_code !== '000')}
-          citiesLoading={cityRegistryAdminCitiesLoading || (!selectedFederalRegistry && cityRegistryAdminCities.length === 0)}
+          citiesLoading={cityRegistryAdminCitiesLoading}
           cityRegistryAdmins={cityRegistryAdminsForProvince}
           cityRegistryAdminsLoading={cityRegistryAdminsLoading}
           onSelectCity={setSelectedCity}
