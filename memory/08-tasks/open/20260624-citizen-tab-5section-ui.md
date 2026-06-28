@@ -8,10 +8,10 @@
 
 1. 公民 tab 三子 tab → 五子 tab:`广场 / 立法 / 选举 / 治理 / 公权`。
 2. 公权与治理两套并行实现合并为一套机构模型/详情页/链态服务/目录仓库;子 tab = `institution_code` 过滤视图(ADR-028 决策 2/3)。
-3. 选举走直选提案(Option B):不建选举委员会机构,总统选举由总统府发起,删宪法选举委员会描述;删 `CSLF`/`TSLF`,市/镇自治会改非法人挂政府(ADR-028 决策 4/5)。
+3. 选举走机构自组织提案(Option B):不建选举委员会机构,总统选举由总统府组织,删宪法选举委员会描述;删 `CSLF`/`TSLF`,市/镇自治会改非法人挂政府(ADR-028 决策 4/5)。
    - 选举 ≠ 立法(正交):选举=电选机构管理员/法定代表人,立法=立法律条文;机构不在选举 tab 重复列。
-   - 废除互选,所有机构管理员/法定代表人改公民分行政区层级普选;护宪大法官归国家立法院(NLG)。← 大宪法改写,OUT。
-   - 选举 tab = 选举活动视图(按层级),非机构子集。
+   - 选举保留普选 + 互选:普选按行政区/职位范围组织,互选按机构现任成员快照组织；国家立法院参议员/众议员由各省行政区公民分别在本省省参议会/省众议会现任成员中普选产生。
+   - 选举 tab = 选举活动视图(按层级 + 机构),非机构子集。
 4. 统一详情页规格(ADR-028 决策 6):顶部=简称、右上=关注图标;信息卡=全称/身份ID/主账户/主账户余额/法定代表人/所属地(非法人 +「所属上级法人全称」);机构账户/管理员/提案列表/提案入口(按权限点亮)。
 5. 广场=订阅 + 本地区(CID 省/市)+ 用户管理员机构 三类动态流并集(ADR-028 决策 7)。
 
@@ -23,7 +23,7 @@
 |---|---|---|
 | 广场 | 关注 + 本地区 + 我是管理员 的机构动态流 | 订阅表 ∪ CID 省/市 ∪ `isInstitutionAdmin` |
 | 立法 | 国家/省立法院(含参众议会)、市立法会、国家公民教育委员会 | `NLG,NSN,NRP,PLG,PSN,PRP,CLEG,NED` |
-| 选举 | 选举活动视图:按行政层级(国家/省/市/镇),每条=某机构管理员/法定代表人的选举 | citizen-vote 提案(占位);机构本体在公权浏览 |
+| 选举 | 选举活动视图:按行政层级(国家/省/市/镇)和机构,每条=某职位的一场普选或互选 | election-vote 提案(占位);机构本体在公权浏览 |
 | 治理 | 国储会、省储会、省储行 | `NRC,PRC,PRB` |
 | 公权 | 全部机构(省→市→机构 地理浏览 + 关注组) | 全集(超集) |
 
@@ -70,12 +70,12 @@ citizenapp/lib/citizen/
 - `citizenapp/lib/citizen/public/` —【执行·改】保留地理浏览,`data/` 迁入 `institution/data/`,解除对治理静态注册表耦合。代码 + 残留清理。
 - `citizenapp/lib/citizen/citizen_tab_page.dart` —【执行·改】3→5 tab。代码。
 - `citizenapp/lib/governance/` —【执行·改】删静态烘焙注册表与重复详情页,治理 tab 改读统一目录。代码 + 残留清理。
-- （OUT,后续卡/ADR-027 轨道,触 runtime 二次确认）`citizenchain/runtime/{votingengine/citizen-vote,primitives/src/code.rs,primitives/src/CitizenConstitution.html}`、`citizencode/backend/{subjects,gov,number}`。
+- （OUT,后续卡/ADR-027 轨道,触 runtime 二次确认）`citizenchain/runtime/{votingengine/election-vote,primitives/src/code.rs,primitives/src/CitizenConstitution.html}`、`citizencode/backend/{subjects,gov,number}`。
 
 ## 范围
 
 - IN(本窗口):ADR-028 + 本任务卡 + 上述目录/命名/UI 设计方案。产出=设计评审。
-- OUT(后续):citizen-vote 选举引擎、能力层 `is_action_allowed`、宪法 HTML 改动、后端删 CSLF/TSLF + 自治会 UNIN 注册、CitizenApp 实际编码。每项另立执行任务卡;涉 runtime 先二次确认。
+- OUT(后续):election-vote 选举引擎、能力层 `is_action_allowed`、后端删 CSLF/TSLF + 自治会 UNIN 注册、CitizenApp 实际编码。每项另立执行任务卡;涉 runtime 先二次确认。
 
 ## 验收(本窗口)
 
@@ -84,9 +84,9 @@ citizenapp/lib/citizen/
 ## 整合:立法链端已完成(2026-06-24,另线程)
 
 链端 `legislation-yuan`(pallet 27)+ `legislation-vote`(pallet 28)+ **宪法迁移**已全部完成、测试绿。重大变化:
-- **公民宪法已迁为结构化链上法律**:`CitizenConstitution.html` 已删除;宪法 = `law_id=0, tier=宪法`(`constitution.scale` 创世注入),`ImmutableManifest` 冻结 8 条不可修改条款 `[1,2,3,17,19,23,33,41]`(=「宪法守卫」)。节点展示宪法走 `constitution_getDocument` RAW storage RPC,普通法律浏览可走 `LegislationApi`,不再有 HTML 真源。
+- **公民宪法已迁为结构化链上法律**:`CitizenConstitution.html` 是仓库内创世宪法生成源,宪法 = `law_id=0, tier=宪法`(`constitution.scale` 创世注入),`ImmutableManifest` 冻结 8 条不可修改条款 `[1,2,3,17,19,23,33,41]`(=「宪法守卫」)。节点运行态真源是链上 law_id=0;节点展示宪法走 `constitution_getDocument` RAW storage RPC,普通法律浏览可走 `LegislationApi`。
 - **客户端零实现**:citizenapp/citizenwallet 无任何 pallet 27/28 引用,全是新建。
-- **整合点**:立法 tab = 法律浏览(含宪法 law_id=0)+ 立法机构;统一详情页对立法机构的「提案入口」= `legislation-yuan` propose;**宪法修改 = 对 law_id=0 的 `propose_amend_law`**(经立法投票引擎,特别案→公投),即本 app 立法发起流的一个实例,不再是「另一线程改 HTML」。立法详见 `20260624-legislation-dual-client.md`(其 CitizenApp 部分并入下表 P3–P5,依赖 P1)。
+- **整合点**:立法 tab = 法律浏览(含宪法 law_id=0)+ 立法机构;统一详情页对立法机构的「提案入口」= `legislation-yuan` propose;目标运行态的普通修宪 = 对 law_id=0 的 `propose_amend_law`(经立法投票引擎,特别案→公投),即本 app 立法发起流的一个实例。用户确认的创世宪法基线调整仍更新 HTML 生成源并重生 `constitution.scale`。立法详见 `20260624-legislation-dual-client.md`(其 CitizenApp 部分并入下表 P3–P5,依赖 P1)。
 
 ## 执行分步(整合 ADR-028 + 立法客户端)
 
@@ -103,9 +103,9 @@ citizenapp/lib/citizen/
 | P7 | CitizenApp | 广场重构(关注 + 本地区 + 我是管理员 三类动态流并集) | 依赖 P1 |
 | P8 | CitizenApp | 选举 tab 活动视图骨架 + 统一详情页提案入口结构(基础动作接现有 internal-vote,选举 runtime 未启用前不展示发起入口) | 依赖 P1 |
 | P9 | 后端 CID | 删 CSLF/TSLF 模板 + 市/镇自治会 UNIN 注册 + 可识别标记 + purge + reconcile | 与 P10 协调 |
-| P10 | 链端 Blockchain | 删 CSLF/TSLF 码(92→90)+ 能力层 `is_action_allowed` + sweep 推广 + `citizen-vote` 选举引擎(按层级电选机构管理员/法定代表人) | 二次确认 + 重新创世 |
+| P10 | 链端 Blockchain | 删 CSLF/TSLF 码(92→90)+ 能力层 `is_action_allowed` + sweep 推广 + `election-vote` 选举框架已接入;待接业务规则解释和按职位写回 admins/法定代表人 | 二次确认 + 重新创世 |
 | P11 | CitizenApp | 选举 tab 接选举引擎 + 提案入口接能力层(去占位) | 依赖 P10 |
-| 并行 | 立法发起 | 宪法修改(总统府选总统 + 删选举委员会 + 废互选改分级普选 + 护宪大法官归 NLG)= 对 law_id=0 `propose_amend_law`,经特别案公投;受 ImmutableManifest 冻结条款约束 | 经 P4/P5 落地后可在 app 内发起 |
+| 已完成 | 宪法真源 | 宪法修改(总统府组织总统选举 + 国家立法院参众议员改省行政区公民普选 + 选举法承接细则)已更新 HTML 并重新生成 `constitution.scale` | 后续普通修宪仍按 law_id=0 `propose_amend_law` |
 
 每步 IN 时另立执行任务卡。P1 完整方案见本卡下节。
 

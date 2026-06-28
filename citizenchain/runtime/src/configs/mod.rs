@@ -63,8 +63,8 @@ use sp_version::RuntimeVersion;
 // Local module imports
 use super::{
     AccountId, Address, Assets, Balance, Balances, Block, BlockNumber, CitizenIssuance,
-    GenesisPallet, Hash, InternalVote, JointVote, LegislationVote, LegislationYuan, Nonce,
-    PalletInfo, PrivateAdmins, PublicAdmins, Runtime, RuntimeCall, RuntimeEvent,
+    ElectionVote, GenesisPallet, Hash, InternalVote, JointVote, LegislationVote, LegislationYuan,
+    Nonce, PalletInfo, PrivateAdmins, PublicAdmins, Runtime, RuntimeCall, RuntimeEvent,
     RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System, BLOCK_HASH_COUNT,
     EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
@@ -485,6 +485,8 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // 立法投票 3 个 extrinsic(prepare_population_snapshot / cast_house_vote /
             // cast_referendum_vote)按投票统一价 1 元/次(ADR-027)。
             RuntimeCall::LegislationVote(_) => FeeChargeKind::VoteFlat,
+            // 选举投票创建/投票 extrinsic 按投票统一价 1 元/次。
+            RuntimeCall::ElectionVote(_) => FeeChargeKind::VoteFlat,
             // OnchainIssuance 暴露 10 个 propose_X extrinsic(call_index 0..=4 业务 / 10..=14 监管)。
             // 全部按 VOTE_FLAT_FEE = 1 元/次,与 GMB 其他业务 pallet 的 propose_X 一致。
             // 1000 GMB 创建费走 onchain_issuance::fee::reserve_creation_deposit 内部 reserve(propose_issue 内部完成),
@@ -493,7 +495,6 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // pallet_assets 内核所有原生 extrinsic 已被 RuntimeCallFilter 拦在入口,
             // 永远到不了本路径;此分支仅供编译期 exhaustive 检查。
             RuntimeCall::Assets(_) => FeeChargeKind::Free,
-            // ElectionVote 当前是空骨架(无 extrinsic / 无 RuntimeCall 变体)。
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝,避免"有金额但漏提取"。
             //
             // 不再写 `_ => Unknown` 兜底:补 RuntimeCall::Grandpa 之后所有 pallet 变体已穷尽,
@@ -1987,6 +1988,9 @@ impl votingengine::Config for Runtime {
     type LegislationVoteResultCallback = LegislationYuan;
     type LegislationFinalizer = LegislationVote;
     type LegislationCleanup = LegislationVote;
+    type ElectionVoteResultCallback = ElectionVote;
+    type ElectionFinalizer = ElectionVote;
+    type ElectionCleanup = ElectionVote;
 }
 
 // Sub-pallet Config 注入。共用基础设施 votingengine::Config 已 impl 完;
@@ -2003,6 +2007,9 @@ impl joint_vote::Config for Runtime {
 
 impl election_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type MaxElectionOfficeCodeLen = ConstU32<64>;
+    type MaxElectionCandidates = ConstU32<256>;
+    type MaxElectionVoters = ConstU32<4096>;
 }
 
 impl legislation_vote::Config for Runtime {

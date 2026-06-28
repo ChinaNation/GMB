@@ -75,4 +75,4 @@
 ## 不做(边界)
 
 - 链上 manifest:**已加固**(2026-06-24,见 L3)—— `legislation-yuan` 加只读 `ConstitutionImmutableManifest` storage + `ImmutableManifest` 结构 + `genesis_build` 写入与强断言(动 runtime,经用户二次确认);节点 `verify_manifest` 启动交叉校验。runtime test 16(含 manifest 断言)+ node test 10(含 3 manifest 校验)全过。
-- 立法机构选举体系(citizen-vote 选举→admins 通道)仍是独立待开卡,与本卡无关。
+- 立法机构选举体系(election-vote 选举→admins 通道)仍是独立待开卡,与本卡无关。

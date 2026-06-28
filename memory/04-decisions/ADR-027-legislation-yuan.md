@@ -4,7 +4,7 @@
 
 立法院模块:法律结构化上链 + 修法一律走投票引擎 + 严格按公民宪法表决模型落地。
 
-状态:已接受,大部分已落地(2026-06-24)。立法院业务壳(idx=27)+ 立法投票 sub-pallet(idx=28)+ 宪法迁移(章>节>条>款 统一 + 创世注入 + 节点桌面端 re-point)均已实现验证;**双客户端 CitizenApp/CitizenWallet(另线程卡)与立法机构选举体系(citizen-vote 选举→admins 通道,独立卡)待续**。下文方向与边界已据实现校准。
+状态:已接受,大部分已落地(2026-06-24)。立法院业务壳(idx=27)+ 立法投票 sub-pallet(idx=28)+ 宪法迁移(章>节>条>款 统一 + 创世注入 + 节点桌面端 re-point)均已实现验证;**双客户端 CitizenApp/CitizenWallet(另线程卡)与立法机构选举体系(election-vote 选举→admins 通道,独立卡)待续**。下文方向与边界已据实现校准。
 
 > **重大修订(2026-06-25,用户逐条确认,见 `08-tasks/open/20260625-legislation-signing-5type-revision.md`)**:
 > 1. **删常规案二审**(方案B 彻底删):本轮先改法案 7 条(44/45/73/75/79/81/118),官员任免 19 条另立专案。下文"四种表决/二审"表述以本修订为准。
@@ -47,10 +47,10 @@
 
 #### 1b. 立法专属投票 sub-pallet:`citizenchain/runtime/votingengine/legislation-vote`
 
-- 新增投票引擎 sub-pallet,与 internal-vote / joint-vote / citizen-vote 平级;`pallet_index = 28`(待实现时确认空号);对外类型名 `LegislationVote`。
+- 新增投票引擎 sub-pallet,与 internal-vote / joint-vote / election-vote 平级;`pallet_index = 28`(待实现时确认空号);对外类型名 `LegislationVote`。
 - 定位:立法机构专属投票,承载宪法第十八条四种表决类型 + 两院顺序 + 强制公投,一处集中。
 - `Config: frame_system::Config + votingengine::Config`,复用核心 crate 全部共享基础设施(见第 5 节),只本地保管自己的计票账本。
-- **完全不修改 internal-vote / joint-vote / citizen-vote 三个 sub-pallet 的逻辑**:三者零改动、零回归;citizen-vote 空骨架原样保留供未来公民选举用。
+- **完全不修改 internal-vote / joint-vote / election-vote 三个 sub-pallet 的逻辑**:三者零改动、零回归;election-vote 空骨架原样保留供未来公职人员选举用。
 - **更正(2026-06-24,第2步精读核心后)**:核心 `votingengine` crate 按 `kind`/`stage` 硬编码分发,未知 kind 直接 `Err`。要让立法投票成为头等模式并真正共享核心基础,**第2步必须扩展核心 crate**(新增 `PROPOSAL_KIND_LEGISLATION` + 立法 stage + Config 三关联类型 `LegislationFinalizer`/`LegislationCleanup`/`LegislationVoteResultCallback` + 分发分支),并在所有 `votingengine::Config` 实现补这三类型(测试 mock 装 `()`)。这是 additive 扩展,不改三个 sub-pallet 逻辑,但"纯加 sub-pallet 零核心改动"的说法作废。详见任务卡第2步 2a。
 - legislation-yuan 业务壳通过本 sub-pallet 对外的 Engine trait(如 `LegislationVoteEngine`)创建/绑定投票,投票终态回调写回业务壳 Executor。
 
@@ -144,13 +144,13 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
 - 国家教委会教育类法案:教委会(发起,内部表决) → 参议会(终审,内部表决) → 两院模式两段内部表决。
 - 特别案 + 核心修宪 → 特别案模式:内部阶段(单院=委员;两院=众→参,全员 ≥70% 赞成) + 强制公投阶段(人口快照,国家=全国、省=本省、市=本市,≥70% 参与 + ≥70% 赞成),两阶段都必须通过。
 
-关键:这三种模式(单院 / 两院 / 特别案)全部在 `legislation-vote` 一个 sub-pallet 内实现,复用核心 crate 的提案生命周期、`AdminSnapshot`、人口快照验签 trait、清理、反向索引(第 5 节),只本地写自己的计票账本。现有 internal-vote / joint-vote / citizen-vote 零改动。
+关键:这三种模式(单院 / 两院 / 特别案)全部在 `legislation-vote` 一个 sub-pallet 内实现,复用核心 crate 的提案生命周期、`AdminSnapshot`、人口快照验签 trait、清理、反向索引(第 5 节),只本地写自己的计票账本。现有 internal-vote / joint-vote / election-vote 零改动。
 
 结论(回应"是否只用内部/联合投票"):常规案/重要案/二审只有内部表决(单院一段、两院两段);特别案与核心修宪,宪法第十八条第二款、第十九条强制必须叠加公民投票且通过 → 由 legislation-vote 特别案模式的"内部阶段 + 强制公投阶段"承载。三种档位同壳,不借用也不修改其它投票模块。
 
 ### 5. 新增 legislation-vote sub-pallet(本项目核心,additive 不改存量)
 
-不修改 internal-vote / joint-vote / citizen-vote;新增一个立法专属投票 sub-pallet,把宪法第十八条的表决规则集中实现,复用核心 crate 共享基础。
+不修改 internal-vote / joint-vote / election-vote;新增一个立法专属投票 sub-pallet,把宪法第十八条的表决规则集中实现,复用核心 crate 共享基础。
 
 (A) 复用核心 crate(`votingengine`)共享基础设施(`Config: votingengine::Config`,零拷贝):
 
@@ -167,7 +167,7 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
 - 强制公投计票账本:内部阶段全部通过后强制进入(AND,不是否决救济);门槛 ≥70% 参与 + ≥70% 赞成;作用域全国/省/市;复用核心人口快照验签。
 - 立法专属 Engine trait(如 `LegislationVoteEngine`)+ 终态回调,供 legislation-yuan 业务壳调用与回写。
 
-(C) 与存量关系:internal-vote / joint-vote / citizen-vote 零改动零回归。joint-vote 的三储机构加权模式与本 sub-pallet 各管各的,不存在"两套模式并存于一 pallet"的问题。
+(C) 与存量关系:internal-vote / joint-vote / election-vote 零改动零回归。joint-vote 的三储机构加权模式与本 sub-pallet 各管各的,不存在"两套模式并存于一 pallet"的问题。
 
 ### 6. 修宪特别约束(第十九条)
 
@@ -247,7 +247,7 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
 
 - `citizenchain/runtime/public/legislation-yuan/`:新建业务壳 pallet(代码)。
 - `citizenchain/runtime/votingengine/legislation-vote/`:新建立法专属投票 sub-pallet(代码,核心)。
-- `citizenchain/runtime/votingengine/`(核心 crate):仅在确需时补共享 trait/类型(如 `LegislationVoteEngine` 注册);internal-vote / joint-vote / citizen-vote 不改。
+- `citizenchain/runtime/votingengine/`(核心 crate):仅在确需时补共享 trait/类型(如 `LegislationVoteEngine` 注册);internal-vote / joint-vote / election-vote 不改。
 - `citizenchain/runtime/src/lib.rs`、`src/configs/`、`src/apis.rs`、`src/tests/`:注册两 pallet、装配 Config、回调路由、法律查询 API、唯一性测试(代码)。
 - `citizenchain/runtime/primitives/`:法律数据类型;宪法迁移与旧 html/API 清理(代码 + 残留清理)。
 - `citizenchain/node`:若涉及重新创世 / setCode 发布(构建/部署)。
@@ -267,7 +267,7 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
 
 ## 后续动作(任务卡拆分,待 ADR 定稿后逐张创建)
 
-1. 卡1 新增 legislation-vote sub-pallet(核心,先行):`Config: votingengine::Config` 复用核心共享基础 + 本地 `VoteRule`/立法计票账本 + 单院/两院/特别案三模式 + 强制公投 + `LegislationVoteEngine` trait + 测试;internal-vote / joint-vote / citizen-vote 零改动。
+1. 卡1 新增 legislation-vote sub-pallet(核心,先行):`Config: votingengine::Config` 复用核心共享基础 + 本地 `VoteRule`/立法计票账本 + 单院/两院/特别案三模式 + 强制公投 + `LegislationVoteEngine` trait + 测试;internal-vote / joint-vote / election-vote 零改动。
 2. 卡2 legislation-yuan 业务壳:数据模型 + 状态机 + `propose_*`(admin 入口) + Executor + runtime API + 不可修改条款硬拒;调 legislation-vote。
 3. 卡3 双客户端:CitizenApp(浏览+投票)+ CitizenWallet(decoder+签名,ADR-026 新 op_tag)。
 4. 卡4 宪法迁移:HTML → 结构化条文(中英双语),清理旧 include_str!/API。
@@ -275,10 +275,10 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
 
 ## 已拍板(2026-06-24)
 
-- 新增立法专属投票 sub-pallet `votingengine/legislation-vote`,不修改 internal-vote / joint-vote / citizen-vote;立法投票共享投票引擎核心基础设施,只本地存计票账本。
+- 新增立法专属投票 sub-pallet `votingengine/legislation-vote`,不修改 internal-vote / joint-vote / election-vote;立法投票共享投票引擎核心基础设施,只本地存计票账本。
 - 议员/委员 = 机构 admins,不另建名册;换届走 admins-change。
 - 众议会/参议会 = 两个独立机构;两院法案 = 两段顺序内部表决(众→参)。
-- 特别案/核心修宪 = legislation-vote 特别案模式(内部阶段 + 强制公投),不借用 citizen-vote。
+- 特别案/核心修宪 = legislation-vote 特别案模式(内部阶段 + 强制公投),不借用 election-vote。
 - 提案恒由 admin 发起;市立法会公民联署门槛为现实前置,不做链上联署入口。
 - 投票引擎按宪法完整实现(参与率%/赞成率%/反对率上限%/强制公投)。
 

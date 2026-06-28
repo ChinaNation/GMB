@@ -236,6 +236,9 @@ impl votingengine::Config for Test {
     type LegislationVoteResultCallback = TestLegislationCallback;
     type LegislationFinalizer = LegislationVote;
     type LegislationCleanup = LegislationVote;
+    type ElectionVoteResultCallback = ();
+    type ElectionFinalizer = ();
+    type ElectionCleanup = ();
 }
 
 impl internal_vote::Config for Test {

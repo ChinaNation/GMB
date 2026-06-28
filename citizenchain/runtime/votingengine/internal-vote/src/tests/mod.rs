@@ -112,6 +112,9 @@ impl votingengine::Config for Test {
     type LegislationVoteResultCallback = ();
     type LegislationFinalizer = ();
     type LegislationCleanup = ();
+    type ElectionVoteResultCallback = ();
+    type ElectionFinalizer = ();
+    type ElectionCleanup = ();
 }
 
 impl crate::Config for Test {

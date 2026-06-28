@@ -10,6 +10,8 @@ pub const PROPOSAL_KIND_INTERNAL: u8 = 0;
 pub const PROPOSAL_KIND_JOINT: u8 = 1;
 /// 立法投票 pallet 的提案类型(ADR-027)。立法机构专属:单院/两院内部表决 + 特别案强制公投。
 pub const PROPOSAL_KIND_LEGISLATION: u8 = 2;
+/// 选举投票 pallet 的提案类型。只承载选举流程,职位规则由业务模块/选举法解释后传入快照。
+pub const PROPOSAL_KIND_ELECTION: u8 = 3;
 
 // ──────────────────────────────────────────────────────────────────
 // 机构码治理分类(全链唯一真源 = primitives::cid::code,见铁律)
@@ -51,6 +53,11 @@ pub const STAGE_LEG_OVERRIDE: u8 = 13;
 /// 修宪在现有流程(重要案 总统签署后 / 特别案 公投后)通过后,最后进入护宪大法官表决:
 /// 多数通过(>半数)→ 生效;未获多数或 30 天超时 → 否决(护宪大法官握最终否决权)。
 pub const STAGE_LEG_CONSTITUTION_GUARD: u8 = 14;
+
+/// 选举投票普选阶段(election-vote):公民按行政区/机构范围投票选人。
+pub const STAGE_ELECTION_POPULAR: u8 = 20;
+/// 选举投票互选阶段(election-vote):机构现任成员/管理员在成员快照内互选。
+pub const STAGE_ELECTION_MUTUAL: u8 = 21;
 
 pub const STATUS_VOTING: u8 = 0;
 pub const STATUS_PASSED: u8 = 1;
@@ -268,6 +275,14 @@ pub enum PendingCleanupStage {
     LegislationHouseVotes,
     /// 立法投票公投账本(LegReferendumVotesByBindingId)分块清理。
     LegislationReferendumVotes,
+    /// 选举投票投票账本(ElectionVotesByVoter)分块清理。
+    ElectionVotes,
+    /// 选举投票选民快照(ElectionVoters)分块清理。
+    ElectionVoters,
+    /// 选举投票候选人票数(ElectionCandidateTallies)分块清理。
+    ElectionTallies,
+    /// 选举投票元数据/候选人/结果等小存储清理。
+    ElectionCandidates,
     /// 清理大对象存储（ProposalObject + ProposalObjectMeta）。
     ProposalObject,
     /// 清理业务数据（ProposalData + ProposalMeta）和核心数据（Proposals + Tallies）。

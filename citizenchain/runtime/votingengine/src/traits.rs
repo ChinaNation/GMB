@@ -931,6 +931,98 @@ impl LegislationVoteResultCallback for () {
 }
 
 // ──────────────────────────────────────────────────────────────────
+// 选举投票(election-vote)mode trait
+// 核心 votingengine 按 PROPOSAL_KIND_ELECTION / STAGE_ELECTION_* 分发到这些 trait。
+// 职位、任期、候选来源等规则不放在核心,只由 election-vote 保存运行态快照。
+// ──────────────────────────────────────────────────────────────────
+
+/// 选举投票超时结算入口。election-vote sub-pallet 实现。
+pub trait ElectionProposalFinalizer<BlockNumber, AccountId> {
+    fn finalize_election_popular_timeout(
+        proposal: &crate::Proposal<BlockNumber, AccountId>,
+        proposal_id: u64,
+    ) -> DispatchResult;
+
+    fn finalize_election_mutual_timeout(
+        proposal: &crate::Proposal<BlockNumber, AccountId>,
+        proposal_id: u64,
+    ) -> DispatchResult;
+}
+
+impl<BlockNumber, AccountId> ElectionProposalFinalizer<BlockNumber, AccountId> for () {
+    fn finalize_election_popular_timeout(
+        _proposal: &crate::Proposal<BlockNumber, AccountId>,
+        _proposal_id: u64,
+    ) -> DispatchResult {
+        Err(DispatchError::Other(
+            "ElectionProposalFinalizerNotConfigured",
+        ))
+    }
+
+    fn finalize_election_mutual_timeout(
+        _proposal: &crate::Proposal<BlockNumber, AccountId>,
+        _proposal_id: u64,
+    ) -> DispatchResult {
+        Err(DispatchError::Other(
+            "ElectionProposalFinalizerNotConfigured",
+        ))
+    }
+}
+
+/// election mode 的 chunked cleanup 入口。
+pub trait ElectionCleanupHandler {
+    fn cleanup_election_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
+    fn cleanup_election_voters_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
+    fn cleanup_election_tallies_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
+
+    /// 终态清理:删 election meta / candidates / results 等小 storage。
+    fn cleanup_election_terminal(proposal_id: u64);
+}
+
+impl ElectionCleanupHandler for () {
+    fn cleanup_election_votes_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
+        (0, false)
+    }
+    fn cleanup_election_voters_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
+        (0, false)
+    }
+    fn cleanup_election_tallies_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
+        (0, false)
+    }
+    fn cleanup_election_terminal(_proposal_id: u64) {}
+}
+
+/// 选举投票终态业务回调。
+///
+/// 中文注释：当前 election-vote 自己返回 Executed 表示“当选结果快照已生成”；
+/// 后续 admins/法定代表人接入后,这里可改为真正的结果写入器。
+pub trait ElectionVoteResultCallback {
+    fn on_election_vote_finalized(
+        vote_proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError>;
+
+    fn can_cancel_passed_proposal(
+        _proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        Ok(ProposalCancelDecision::Ignored)
+    }
+
+    fn on_execution_failed_terminal(_proposal_id: u64) -> DispatchResult {
+        Ok(())
+    }
+}
+
+impl ElectionVoteResultCallback for () {
+    fn on_election_vote_finalized(
+        _vote_proposal_id: u64,
+        _approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        Ok(ProposalExecutionOutcome::Ignored)
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────
 // CID 资格 / 凭证 trait
 // votingengine::Config 用作 bound,joint-vote pallet 在 jointreferendum 阶段
 // 调用以判定 CID 持有者投票资格并消耗一次性凭证。

@@ -1,6 +1,6 @@
 //! # 投票引擎 (votingengine)
 //!
-//! 投票基础设施模块，统一承载三类投票流程：
+//! 投票基础设施模块，统一承载多类投票流程：
 //! - **内部投票**（INTERNAL）：机构内部管理员按阈值投票，赞成 ≥ 阈值提前通过，
 //!   剩余票不足达到阈值提前否决，30 天超时兜底否决。
 
@@ -9,6 +9,9 @@
 
 //! - **公民投票**（CITIZEN）：CID 持有者按 >50% 严格多数投票，
 //!   赞成 > 50% 提前通过，反对 ≥ 50% 提前否决，30 天超时按最终票数判定。
+//!
+//! - **选举投票**（ELECTION）：由 election-vote sub-pallet 承载普选/互选选人流程，
+//!   核心只提供提案生命周期、超时结算分发、回调和清理状态机。
 //!
 //! 关键机制：
 //! - **管理员快照锁定**：提案创建时锁定管理员名单，投票期间不受链上管理员更换影响。
@@ -186,6 +189,18 @@ pub mod pallet {
 
         /// 立法投票 mode chunked cleanup 派发,由 legislation-vote pallet 实现。未实装时装 `()`。
         type LegislationCleanup: crate::traits::LegislationCleanupHandler;
+
+        /// 选举投票终态业务回调。当前可接 election-vote 自身生成结果快照,后续接 admins 写入器。
+        type ElectionVoteResultCallback: ElectionVoteResultCallback;
+
+        /// 选举投票 mode 超时结算回调,覆盖普选/互选阶段,由 election-vote pallet 实现。
+        type ElectionFinalizer: crate::traits::ElectionProposalFinalizer<
+            BlockNumberFor<Self>,
+            Self::AccountId,
+        >;
+
+        /// 选举投票 mode chunked cleanup 派发,由 election-vote pallet 实现。
+        type ElectionCleanup: crate::traits::ElectionCleanupHandler;
     }
 
     use crate::weights::WeightInfo;
@@ -667,6 +682,22 @@ pub mod pallet {
                         &proposal, proposal_id
                     )?;
                 }
+                STAGE_ELECTION_POPULAR => {
+                    <T::ElectionFinalizer as crate::traits::ElectionProposalFinalizer<
+                        BlockNumberFor<T>,
+                        T::AccountId,
+                    >>::finalize_election_popular_timeout(
+                        &proposal, proposal_id
+                    )?;
+                }
+                STAGE_ELECTION_MUTUAL => {
+                    <T::ElectionFinalizer as crate::traits::ElectionProposalFinalizer<
+                        BlockNumberFor<T>,
+                        T::AccountId,
+                    >>::finalize_election_mutual_timeout(
+                        &proposal, proposal_id
+                    )?;
+                }
                 _ => return Err(Error::<T>::InvalidProposalStage.into()),
             }
 
@@ -826,6 +857,22 @@ pub mod pallet {
                             BlockNumberFor<T>,
                             T::AccountId,
                         >>::finalize_legislation_guard_timeout(
+                            &proposal, proposal_id
+                        )
+                    }
+                    STAGE_ELECTION_POPULAR => {
+                        <T::ElectionFinalizer as crate::traits::ElectionProposalFinalizer<
+                            BlockNumberFor<T>,
+                            T::AccountId,
+                        >>::finalize_election_popular_timeout(
+                            &proposal, proposal_id
+                        )
+                    }
+                    STAGE_ELECTION_MUTUAL => {
+                        <T::ElectionFinalizer as crate::traits::ElectionProposalFinalizer<
+                            BlockNumberFor<T>,
+                            T::AccountId,
+                        >>::finalize_election_mutual_timeout(
                             &proposal, proposal_id
                         )
                     }
@@ -1033,6 +1080,9 @@ pub mod pallet {
                         approved,
                     )
                 }
+                PROPOSAL_KIND_ELECTION => {
+                    T::ElectionVoteResultCallback::on_election_vote_finalized(proposal_id, approved)
+                }
                 _ => Err(Error::<T>::InvalidProposalKind.into()),
             }
         }
@@ -1047,6 +1097,9 @@ pub mod pallet {
                 }
                 PROPOSAL_KIND_LEGISLATION => {
                     T::LegislationVoteResultCallback::can_cancel_passed_proposal(proposal_id)
+                }
+                PROPOSAL_KIND_ELECTION => {
+                    T::ElectionVoteResultCallback::can_cancel_passed_proposal(proposal_id)
                 }
                 _ => Err(Error::<T>::InvalidProposalKind.into()),
             }?;
@@ -1067,6 +1120,9 @@ pub mod pallet {
                 }
                 PROPOSAL_KIND_LEGISLATION => {
                     T::LegislationVoteResultCallback::on_execution_failed_terminal(proposal_id)
+                }
+                PROPOSAL_KIND_ELECTION => {
+                    T::ElectionVoteResultCallback::on_execution_failed_terminal(proposal_id)
                 }
                 _ => Err(Error::<T>::InvalidProposalKind.into()),
             }
@@ -1684,9 +1740,55 @@ pub mod pallet {
                     let next = if has_remaining {
                         Some(PendingCleanupStage::LegislationReferendumVotes)
                     } else {
-                        Some(PendingCleanupStage::ProposalObject)
+                        Some(PendingCleanupStage::ElectionVotes)
                     };
                     (next, weight)
+                }
+                PendingCleanupStage::ElectionVotes => {
+                    let (removed, has_remaining) =
+                        <T::ElectionCleanup as crate::traits::ElectionCleanupHandler>::cleanup_election_votes_chunk(
+                            proposal_id, cleanup_limit,
+                        );
+                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let next = if has_remaining {
+                        Some(PendingCleanupStage::ElectionVotes)
+                    } else {
+                        Some(PendingCleanupStage::ElectionVoters)
+                    };
+                    (next, weight)
+                }
+                PendingCleanupStage::ElectionVoters => {
+                    let (removed, has_remaining) =
+                        <T::ElectionCleanup as crate::traits::ElectionCleanupHandler>::cleanup_election_voters_chunk(
+                            proposal_id, cleanup_limit,
+                        );
+                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let next = if has_remaining {
+                        Some(PendingCleanupStage::ElectionVoters)
+                    } else {
+                        Some(PendingCleanupStage::ElectionTallies)
+                    };
+                    (next, weight)
+                }
+                PendingCleanupStage::ElectionTallies => {
+                    let (removed, has_remaining) =
+                        <T::ElectionCleanup as crate::traits::ElectionCleanupHandler>::cleanup_election_tallies_chunk(
+                            proposal_id, cleanup_limit,
+                        );
+                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let next = if has_remaining {
+                        Some(PendingCleanupStage::ElectionTallies)
+                    } else {
+                        Some(PendingCleanupStage::ElectionCandidates)
+                    };
+                    (next, weight)
+                }
+                PendingCleanupStage::ElectionCandidates => {
+                    <T::ElectionCleanup as crate::traits::ElectionCleanupHandler>::cleanup_election_terminal(
+                        proposal_id,
+                    );
+                    let weight = db_weight.writes(3);
+                    (Some(PendingCleanupStage::ProposalObject), weight)
                 }
                 PendingCleanupStage::ProposalObject => {
                     ProposalObject::<T>::remove(proposal_id);
@@ -1710,6 +1812,9 @@ pub mod pallet {
                         proposal_id,
                     );
                     <T::LegislationCleanup as crate::traits::LegislationCleanupHandler>::cleanup_legislation_terminal(
+                        proposal_id,
+                    );
+                    <T::ElectionCleanup as crate::traits::ElectionCleanupHandler>::cleanup_election_terminal(
                         proposal_id,
                     );
                     ProposalData::<T>::remove(proposal_id);

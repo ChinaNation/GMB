@@ -2,11 +2,11 @@
 
 > 机构分类唯一真源 = CID 机构码（institution_code），见 [[ADR-025]]。
 
-最新更新：2026-05-11，内部投票阈值职责已全部收回到 `internal-vote`；业务模块只能选择提案语义并提交业务数据，不得传入“本次投票通过阈值”。
+最新更新：2026-06-28，`election-vote` 已接入普选/互选框架；内部投票阈值职责已全部收回到 `internal-vote`，业务模块只能选择提案语义并提交业务数据，不得传入“本次投票通过阈值”。
 
 ## 0. 功能需求
 ### 0.1 统一投票引擎能力
-`votingengine` 必须作为治理基础设施，统一承载内部投票、联合机构投票、公民投票三类流程，并向上层事项模块暴露稳定 trait 能力：
+`votingengine` 必须作为治理基础设施，统一承载内部投票、联合机构投票、联合公投阶段、立法投票和选举投票等流程，并向上层事项模块暴露稳定 trait 能力：
 - `InternalVoteEngine`：创建一般内部投票、生命周期内部投票、注册主体创建投票、管理员变更内部投票；业务模块必须使用语义化 `*_with_data` 接口在同一事务中绑定 owner/data/meta
 - `JointVoteEngine`：创建联合提案；业务模块必须优先使用 `create_joint_proposal_with_data` 在同一事务中绑定 owner/data/meta，且只能传业务摘要或对象，不得传人口快照、联合签名、投票资格或计票材料
 - `InternalVoteResultCallback` / `JointVoteResultCallback`：投票判定后把执行结果以 `ProposalExecutionOutcome` 回传给投票引擎
@@ -46,6 +46,65 @@
 - 公民投票只接收 CID 哈希，不接收链上明文 CID。
 - 赞成票必须“严格大于 50%”才算通过；到期后按同一规则结算。
 
+### 0.4A 选举投票功能需求（框架已接入）
+- `election-vote` 是选举公职人员的专属 sub-pallet，不复用 `joint-vote` 的 yes/no 联合公投语义。
+- 选举分两种模式：普选（公民按行政区/机构范围投票）与互选（机构现任成员在成员快照内投票）。
+- 公民宪法只规定组织主体和职位来源：总统选举由总统府组织；国家立法院参议员/众议员由各省行政区公民分别在本省省参议会/省众议会现任成员中普选产生；院长、主席、参议长、众议长等保留机构内部互选。
+- 具体候选登记、计票、同票处理、补选、递补、重选规则不写死在 `election-vote`，由后续《选举法》通过 `rule_id` / `rule_snapshot` 接入。
+- 当前框架只生成“当选结果 + 任期 + 职位绑定”快照，不直接写 `admins`；后续权限生效必须由 admins / 法定代表人通道消费选举结果。
+- `runtime/primitives` 第一阶段不新增职位/任期常量；总统、议员、院长、主席等职位语义由业务模块或未来选举法模块解释后传入快照。
+
+已修改目录：
+- `citizenchain/runtime/votingengine/election-vote/src/` — 选举投票 sub-pallet 主目录；`popular.rs` 承载普选入口，`mutual.rs` 承载互选入口，`types.rs` 保存本地运行态快照，`tally.rs` 负责多候选/多席位计票，`snapshot.rs` 固化候选人与选民快照，`cleanup.rs` 接分块清理。代码 + 中文注释 + 测试。
+- `citizenchain/runtime/votingengine/src/` — 核心投票引擎；新增 `PROPOSAL_KIND_ELECTION`、`STAGE_ELECTION_POPULAR`、`STAGE_ELECTION_MUTUAL`、选举清理阶段、终态回调 trait、超时结算 trait 和清理 trait。代码 + 残留清理。
+- `citizenchain/runtime/src/configs/` — runtime 装配 `ElectionVote` finalizer/callback/cleanup，并把 `RuntimeCall::ElectionVote` 归入投票统一价。代码。
+- `memory/05-modules/citizenchain/runtime/votingengine/` — 投票引擎技术文档；同步选举投票模式、边界和残留清理说明。文档。
+
+技术架构（带注释）：
+
+```rust
+// election-vote/src/types.rs:选举模式只表达投票来源，不表达业务职位细节。
+pub enum ElectionMode {
+    Popular, // 普选：公民按行政区/机构范围投票。
+    Mutual,  // 互选：机构现任成员在成员快照内投票。
+}
+
+// 创建选举时固化的职位快照。职位含义由业务模块解释,election-vote 不硬编码。
+pub struct ElectionMeta<AccountId, BlockNumber, OfficeCode> {
+    pub mode: ElectionMode,
+    pub organizer_code: InstitutionCode, // 组织机构码。
+    pub organizer: AccountId,            // 组织机构账户。
+    pub target_code: InstitutionCode,    // 当选结果对应机构码。
+    pub target: AccountId,               // 当选结果对应机构账户。
+    pub office_code: OfficeCode,         // 职位编码,由业务模块/选举法解释。
+    pub rule_id: u32,                    // 未来选举法规则编号。
+    pub seat_count: u16,                 // 本次应选席位数。
+    pub term_start: BlockNumber,         // 任期快照起点。
+    pub term_end: BlockNumber,           // 任期快照终点。
+}
+
+// 计票结果只保存当选快照,不直接写 admins。
+pub struct ElectionWinner<AccountId> {
+    pub account: AccountId,
+    pub votes: u32,
+    pub seat_index: u16,
+}
+
+// 核心 votingengine 通过 trait 调 election-vote 做超时结算和清理。
+pub trait ElectionProposalFinalizer<BlockNumber, AccountId> {
+    fn finalize_election_popular_timeout(proposal, proposal_id) -> DispatchResult;
+    fn finalize_election_mutual_timeout(proposal, proposal_id) -> DispatchResult;
+}
+```
+
+当前已实现功能：
+- `create_popular_election`：创建普选提案，固化组织机构、目标机构、职位编码、任期、候选人快照和选民快照。
+- `create_mutual_election`：创建互选提案，使用同一套快照结构但进入互选 stage。
+- `cast_popular_vote` / `cast_mutual_vote`：选民快照内账户一人一票，投给候选人快照内账户。
+- 多候选/多席位计票：按得票数取 `seat_count` 个当选人；最后席位同票或无人得票时拒绝本次结果，等待选举法细化。
+- 自动超时结算：核心 `votingengine` 到期分发到 election finalizer。
+- 终态与清理：选举账本、选民快照、候选人票数、元数据和结果进入统一分块清理状态机。
+
 ### 0.5 状态机与安全需求
 - 提案 ID 必须单调递增且不可溢出覆盖旧提案。
 - 提案状态必须走显式状态机，只允许 `VOTING -> PASSED / REJECTED` 与 `PASSED -> EXECUTED / EXECUTION_FAILED`。
@@ -60,10 +119,12 @@
 - 所有清理入口必须能释放对应提案的计票状态与对象层存储，避免存储长期累积。
 
 ## 1. 模块定位
-`votingengine` 是投票引擎基础模块，统一承载三类投票流程：
+`votingengine` 是投票引擎基础模块，目标统一承载五类投票/投票阶段：
 - 内部投票（`INTERNAL`）
 - 联合机构投票（`JOINT`）
-- 公民投票（`CITIZEN`）
+- 联合公投阶段（`CITIZEN`，用于 yes/no 公民凭证投票）
+- 立法投票（`LEGISLATION`）
+- 选举投票（`ELECTION`）
 
 它通过 trait 为上层治理模块提供标准化能力：
 - `InternalVoteEngine`：创建一般内部投票、生命周期内部投票、注册主体创建投票、管理员变更内部投票
