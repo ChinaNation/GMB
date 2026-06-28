@@ -12,9 +12,9 @@
 - `multisig_transfer_entry.dart`：多签转账入口卡片和页面跳转。
 - `multisig_transfer_proposal_adapter.dart`：给机构页、投票页和账户页使用的列表展示、详情跳转、缓存清理和数据源适配。
 
-提案通用元数据、上下文、缓存放在 `citizenapp/lib/governance/shared/proposal/`；投票引擎共享能力放在 `citizenapp/lib/votingengine/internal-vote/`。多签转账业务详情通过 `ProposalWithDetail.businessDetails` 的不透明键值挂载，键名由本模块定义。
+提案通用元数据、上下文、缓存和前端提案能力注册表放在 `citizenapp/lib/citizen/shared/proposal/` 与 `citizenapp/lib/citizen/proposal/`；投票引擎共享能力放在 `citizenapp/lib/votingengine/internal-vote/`。多签转账业务详情通过 `ProposalWithDetail.businessDetails` 的不透明键值挂载，键名由本模块定义。
 
-`citizenapp/lib/governance/organization-manage/` 不再实现多签转账按钮和跳转；多签账户详情页只允许挂载 `multisig-transfer` 提供的 `MultisigTransferEntryCard`，入口自身逻辑在 `multisig-transfer` 内部。
+`citizenapp/lib/transaction/organization-manage/` 不再实现多签转账按钮和跳转；多签账户详情页只允许挂载 `multisig-transfer` 提供的 `MultisigTransferEntryCard`，入口自身逻辑在 `multisig-transfer` 内部。
 
 `citizenapp/lib/governance/` 和 `citizenapp/lib/citizen/vote/` 只允许调用 `MultisigTransferProposalAdapter` / `MultisigTransferProposalFeed`，不得直接判断 `TransferProposalInfo`、`SafetyFundProposalInfo`、`SweepProposalInfo`，也不得直接打开 `MultisigTransferDetailPage`。
 

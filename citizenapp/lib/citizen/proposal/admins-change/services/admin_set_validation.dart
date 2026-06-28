@@ -81,8 +81,8 @@ class AdminSetValidation {
       return;
     }
     if (kind == 1) {
-      if (!InstitutionCodeLabel.isPublicAdminCode(code)) {
-        throw StateError('公权机构管理员更换必须使用非创世公权机构码');
+      if (!InstitutionCodeLabel.canStorePublicAdminCode(code)) {
+        throw StateError('公权机构管理员更换必须使用非创世公权机构码，或已明确归属公法人的非法人机构码');
       }
       if (count < 2 || count > 1989) {
         throw StateError('公权机构管理员数量必须在 2..=1989 之间');
@@ -90,8 +90,8 @@ class AdminSetValidation {
       return;
     }
     if (kind == 2) {
-      if (!InstitutionCodeLabel.isPrivateAdminCode(code)) {
-        throw StateError('私权机构管理员更换必须使用私权或非法人机构码');
+      if (!InstitutionCodeLabel.canStorePrivateAdminCode(code)) {
+        throw StateError('私权机构管理员更换必须使用私权机构码，或已明确归属私法人的非法人机构码');
       }
       if (count < 2 || count > 1989) {
         throw StateError('私权机构管理员数量必须在 2..=1989 之间');

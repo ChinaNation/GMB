@@ -192,8 +192,9 @@ class InstitutionManageService {
     if (accounts.isEmpty) {
       throw ArgumentError('accounts 不可为空');
     }
-    if (!InstitutionCodeLabel.isInstitution(institutionCode)) {
-      throw ArgumentError('机构账户 institution_code 必须为注册多签机构码(公权/私权/非法人)');
+    if (!InstitutionCodeLabel.isPublicAdminCode(institutionCode) &&
+        !InstitutionCodeLabel.isPrivateAdminCode(institutionCode)) {
+      throw ArgumentError('机构账户 institution_code 必须为公权法人或私权法人机构码');
     }
     if (adminsLen < 2 || adminsLen != admins.length) {
       throw ArgumentError('admins_len 必须 >=2 且等于管理员公钥数量');
@@ -237,7 +238,8 @@ class InstitutionManageService {
       output.write(_u128ToLeBytesStatic(account.amountFen));
     }
 
-    // institution_code: [u8;4]。机构账户只能使用注册多签机构码(公权/私权/非法人)。
+    // institution_code: [u8;4]。OrganizationManage 只直接创建法人机构账户；
+    // 非法人机构必须由 CID 上层明确归属后走对应管理员模块,不得裸码提交。
     output.write(
       Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)),
     );

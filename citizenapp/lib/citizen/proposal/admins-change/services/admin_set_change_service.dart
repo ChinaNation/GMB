@@ -27,6 +27,7 @@ class AdminSetChangeService {
     );
     return AdminSetChangeCallCodec.build(
       institutionCode: account.institutionCode,
+      adminKind: account.kind,
       accountId: AdminAccountIdCodec.fromHex(account.accountHex),
       admins: normalized.admins,
       newThreshold: normalized.threshold,

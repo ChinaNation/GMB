@@ -55,7 +55,8 @@ Widget _wrap(Widget child) => MaterialApp(home: child);
 void main() {
   group('institutionAccountRows(公权派生)', () {
     test('主/费/自定义三行,地址与卡0 派生吻合', () {
-      final rows = institutionAccountRows(Institution.fromPublicEntity(_entity()));
+      final rows =
+          institutionAccountRows(Institution.fromPublicEntity(_entity()));
       expect(rows.map((r) => r.label), ['主账户', '费用账户', '业务专户']);
       expect(rows.first.accountHex,
           hexFromAccountId(deriveInstitutionMainAccountId(_cid)));
@@ -66,8 +67,7 @@ void main() {
     });
   });
 
-  testWidgets('详情页:全称/ID/主账户/余额/法代/所属地 + 账户/提案占位/管理员/提案列表',
-      (tester) async {
+  testWidgets('详情页:全称/ID/主账户/余额/法代/所属地 + 账户/提案占位/管理员/提案列表', (tester) async {
     tester.view.physicalSize = const Size(1200, 3200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -125,7 +125,7 @@ void main() {
     expect(find.text('提案 #7'), findsOneWidget);
   });
 
-  testWidgets('管理员入口点击进入只读管理员列表页', (tester) async {
+  testWidgets('管理员入口点击进入可激活管理员列表页', (tester) async {
     final repo = await buildSeededRepo(
       provinceOrder: const ['LN'],
       institutions: [
@@ -153,7 +153,7 @@ void main() {
     await tester.tap(find.text('管理员'));
     await tester.pumpAndSettle();
     expect(find.text('管理员列表'), findsOneWidget);
-    expect(find.text('0xadminpubkey001'), findsOneWidget);
+    expect(find.textContaining('共 1 位管理员'), findsOneWidget);
   });
 
   testWidgets('订阅按钮切换写入 store', (tester) async {

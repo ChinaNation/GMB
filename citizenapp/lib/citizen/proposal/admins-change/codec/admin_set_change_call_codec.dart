@@ -16,6 +16,7 @@ class AdminSetChangeCallCodec {
 
   static Uint8List build({
     required String institutionCode,
+    required int adminKind,
     required Uint8List accountId,
     required List<String> admins,
     required int newThreshold,
@@ -27,8 +28,8 @@ class AdminSetChangeCallCodec {
       throw ArgumentError('newThreshold 必须大于 0');
     }
     final output = ByteOutput();
-    output.pushByte(palletIndexForCode(institutionCode));
-    output.pushByte(callIndexForCode(institutionCode));
+    output.pushByte(palletIndexForKind(adminKind));
+    output.pushByte(callIndexForKind(adminKind));
     // institution_code: [u8;4]
     output.write(
         Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)));
@@ -63,6 +64,28 @@ class AdminSetChangeCallCodec {
   static int callIndexForCode(String institutionCode) {
     final palletName =
         InstitutionCodeLabel.adminAccountsPalletName(institutionCode);
+    return palletName == 'PersonalAdmins'
+        ? proposePersonalAdminSetChangeCallIndex
+        : proposeAdminSetChangeCallIndex;
+  }
+
+  static int palletIndexForKind(int adminKind) {
+    final palletName = InstitutionCodeLabel.adminAccountsPalletNameForKind(
+      adminKind,
+    );
+    return switch (palletName) {
+      'GenesisAdmins' => genesisAdminsPalletIndex,
+      'PersonalAdmins' => personalAdminsPalletIndex,
+      'PublicAdmins' => publicAdminsPalletIndex,
+      'PrivateAdmins' => privateAdminsPalletIndex,
+      _ => throw ArgumentError('该管理员类型没有管理员更换 call: $adminKind'),
+    };
+  }
+
+  static int callIndexForKind(int adminKind) {
+    final palletName = InstitutionCodeLabel.adminAccountsPalletNameForKind(
+      adminKind,
+    );
     return palletName == 'PersonalAdmins'
         ? proposePersonalAdminSetChangeCallIndex
         : proposeAdminSetChangeCallIndex;

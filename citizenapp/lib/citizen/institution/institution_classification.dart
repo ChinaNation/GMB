@@ -3,7 +3,7 @@
 //
 // 中文注释:
 // - 机构码的底层分类(固定治理 / 公权法人 / 机构账户 / 个人多签)由
-//   `governance/shared/institution_code_label.dart` 提供,本文件只在其上叠加
+//   `citizen/shared/institution_code_label.dart` 提供,本文件只在其上叠加
 //   五子 tab 的「业务分组」,绝不复制码表。
 // - 五子 tab 中:立法/治理/公权 是机构视图(本文件过滤);广场/选举 是活动视图
 //   (非机构子集,见 ADR-028 决策 5/7),不在本文件。

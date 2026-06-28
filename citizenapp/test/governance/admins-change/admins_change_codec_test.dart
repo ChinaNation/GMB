@@ -61,13 +61,14 @@ void main() {
       final accountId = Uint8List.fromList(List<int>.filled(32, 0x11));
       final call = AdminSetChangeCallCodec.build(
         institutionCode: 'NRC',
+        adminKind: 0,
         accountId: accountId,
         admins: ['22' * 32, '33' * 32],
         newThreshold: 13,
       );
 
-      expect(call[0], AdminSetChangeCallCodec.palletIndexForCode('NRC'));
-      expect(call[1], AdminSetChangeCallCodec.callIndexForCode('NRC'));
+      expect(call[0], AdminSetChangeCallCodec.palletIndexForKind(0));
+      expect(call[1], AdminSetChangeCallCodec.callIndexForKind(0));
       expect(call.sublist(2, 6), codeBytes('NRC'));
       expect(call.sublist(6, 38), List<int>.filled(32, 0x11));
       expect(call[38], 0x08);
@@ -76,13 +77,13 @@ void main() {
 
       final personalCall = AdminSetChangeCallCodec.build(
         institutionCode: 'PMUL',
+        adminKind: 3,
         accountId: accountId,
         admins: ['22' * 32, '33' * 32],
         newThreshold: 2,
       );
-      expect(
-          personalCall[0], AdminSetChangeCallCodec.palletIndexForCode('PMUL'));
-      expect(personalCall[1], AdminSetChangeCallCodec.callIndexForCode('PMUL'));
+      expect(personalCall[0], AdminSetChangeCallCodec.palletIndexForKind(3));
+      expect(personalCall[1], AdminSetChangeCallCodec.callIndexForKind(3));
       expect(personalCall.sublist(2, 6), codeBytes('PMUL'));
     });
 
@@ -155,13 +156,13 @@ void main() {
         throwsStateError,
       );
       expect(
-        () => AdminSetValidation.validate(
+        AdminSetValidation.validate(
           account: account(institutionCode: 'UNIN', kind: 1),
           proposerPubkeyHex: 'aa' * 32,
           admins: ['aa' * 32, 'cc' * 32],
           newThreshold: 2,
-        ),
-        throwsStateError,
+        ).admins,
+        ['aa' * 32, 'cc' * 32],
       );
       expect(
         AdminSetValidation.validate(

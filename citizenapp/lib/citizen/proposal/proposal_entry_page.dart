@@ -21,11 +21,10 @@ import 'package:citizenapp/citizen/proposal/transaction/sweep_to_main_page.dart'
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 提案类型选择页(全公权机构统一入口)。
+/// 提案类型选择页(个人多签/创世治理机构/注册机构账户统一入口)。
 ///
-/// 按机构码经 `proposal_registry.kindsForCode(institutionCode)` 渲染可发起提案卡片
-/// (单一真源,不再 `if (orgType == nrc || prc)` 硬判断)。具体发起页在
-/// `citizen/proposal/<type>/`;类B(协议升级/发起立法)点击进展示页。
+/// 中文注释:页面只把当前机构包装成 `ProposalSubject`,具体能发起哪些提案统一交给
+/// `ProposalCapabilityRegistry`。机构码仍参与判断,但只在能力规则层集中使用。
 class ProposalEntryPage extends StatefulWidget {
   const ProposalEntryPage({
     super.key,
@@ -51,8 +50,7 @@ class ProposalEntryPage extends StatefulWidget {
   final bool isActivated;
 
   @override
-  State<ProposalEntryPage> createState() =>
-      _ProposalEntryPageState();
+  State<ProposalEntryPage> createState() => _ProposalEntryPageState();
 }
 
 class _ProposalEntryPageState extends State<ProposalEntryPage> {
@@ -194,7 +192,7 @@ class _ProposalEntryPageState extends State<ProposalEntryPage> {
               ),
             ),
 
-          // ──── 可发起提案(按机构码经 registry 渲染,单一真源) ────
+          // ──── 可发起提案(按主体能力 registry 渲染,单一真源) ────
           _buildSectionTitle('可发起提案'),
           ..._buildProposalCards(proposalActionsEnabled),
         ],
@@ -213,13 +211,19 @@ class _ProposalEntryPageState extends State<ProposalEntryPage> {
     );
   }
 
-  /// 按机构码经 registry 取可发起提案,逐项渲染卡片。
+  ProposalSubject get _subject => ProposalSubject.fromInstitution(
+        institution: widget.institution,
+        institutionCode: widget.institutionCode,
+      );
+
+  /// 按主体能力 registry 取可发起提案,逐项渲染卡片。
   List<Widget> _buildProposalCards(bool enabled) {
-    final kinds = kindsForCode(widget.institutionCode);
+    final capabilities =
+        ProposalCapabilityRegistry.capabilitiesForSubject(_subject);
     final out = <Widget>[];
-    for (final kind in kinds) {
+    for (final capability in capabilities) {
       out.add(const SizedBox(height: 8));
-      out.add(_cardFor(kind, enabled));
+      out.add(_cardFor(capability.kind, enabled));
     }
     if (out.isEmpty) {
       out.add(const Padding(
@@ -236,66 +240,114 @@ class _ProposalEntryPageState extends State<ProposalEntryPage> {
   Widget _cardFor(ProposalKind kind, bool enabled) {
     switch (kind) {
       case ProposalKind.transfer:
-        return _typeCard(Icons.send_outlined, '转账', '从机构主账户向指定地址发起转账提案',
-            AppTheme.primary, enabled, () => _checkAndOpenProposal(context,
+        return _typeCard(
+            Icons.send_outlined,
+            '转账',
+            '从机构主账户向指定地址发起转账提案',
+            AppTheme.primary,
+            enabled,
+            () => _checkAndOpenProposal(
+                context,
                 () => MultisigTransferPage(
                     institution: widget.institution,
                     icon: widget.icon,
                     badgeColor: widget.badgeColor,
                     adminWallets: widget.adminWallets)));
       case ProposalKind.feeTransfer:
-        return _typeCard(Icons.account_balance_wallet_outlined, '手续费划转',
-            '从机构费用账户向本机构主账户划转手续费', AppTheme.info, enabled,
-            () => _checkAndOpenProposal(context,
+        return _typeCard(
+            Icons.account_balance_wallet_outlined,
+            '手续费划转',
+            '从机构费用账户向本机构主账户划转手续费',
+            AppTheme.info,
+            enabled,
+            () => _checkAndOpenProposal(
+                context,
                 () => SweepToMainPage(
                     institution: widget.institution,
                     icon: widget.icon,
                     badgeColor: widget.badgeColor,
                     adminWallets: widget.adminWallets)));
       case ProposalKind.adminsChange:
-        return _typeCard(Icons.swap_horiz, '换管理员', '提议更换本机构管理员',
-            AppTheme.accent, enabled, () => _checkAndOpenProposal(context,
+        return _typeCard(
+            Icons.swap_horiz,
+            '换管理员',
+            '提议更换本机构管理员',
+            AppTheme.accent,
+            enabled,
+            () => _checkAndOpenProposal(
+                context,
                 () => AdminSetChangePage(
                     institution: widget.institution,
                     accountIdentity: AdminAccountIdentity.fromInstitution(
                         widget.institution),
                     adminWallets: widget.adminWallets)));
       case ProposalKind.safetyFundTransfer:
-        return _typeCard(Icons.shield_outlined, '安全基金转账',
-            '从国储会安全基金账户向指定地址发起转账提案', AppTheme.warning, enabled,
-            () => _checkAndOpenProposal(context,
+        return _typeCard(
+            Icons.shield_outlined,
+            '安全基金转账',
+            '从国储会安全基金账户向指定地址发起转账提案',
+            AppTheme.warning,
+            enabled,
+            () => _checkAndOpenProposal(
+                context,
                 () => SafetyFundTransferPage(
                     institution: widget.institution,
                     icon: widget.icon,
                     badgeColor: widget.badgeColor,
                     adminWallets: widget.adminWallets)));
       case ProposalKind.resolutionIssuance:
-        return _typeCard(Icons.account_balance, '决议发行',
+        return _typeCard(
+            Icons.account_balance,
+            '决议发行',
             '发起公民币发行决议,需联合投票:内部投票阶段+联合公投阶段',
-            AppTheme.primaryDark, enabled, () => _checkAndOpenProposal(
+            AppTheme.primaryDark,
+            enabled,
+            () => _checkAndOpenProposal(
                 context, () => const ResolutionIssuancePage()));
       case ProposalKind.resolutionDestroy:
-        return _typeCard(Icons.delete_outline, '决议销毁', '提议销毁机构持有的资产',
-            AppTheme.danger, enabled, () => _checkAndOpenProposal(
+        return _typeCard(
+            Icons.delete_outline,
+            '决议销毁',
+            '提议销毁机构持有的资产',
+            AppTheme.danger,
+            enabled,
+            () => _checkAndOpenProposal(
                 context, () => const ResolutionDestroyPage()));
       case ProposalKind.runtimeUpgrade:
-        return _typeCard(Icons.arrow_upward, '协议升级', '查看协议升级说明及流程',
-            AppTheme.info, enabled, () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) =>
+        return _typeCard(
+            Icons.arrow_upward,
+            '协议升级',
+            '查看协议升级说明及流程',
+            AppTheme.info,
+            enabled,
+            () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) =>
                     RuntimeUpgradePage(adminWallets: widget.adminWallets))));
       case ProposalKind.grandpaKey:
-        return _typeCard(Icons.vpn_key_outlined, '验证密钥',
-            '更换 GRANDPA 共识验证密钥(本机构内部投票)', const Color(0xFF4527A0),
-            enabled, () => _checkAndOpenProposal(
-                context, () => const GrandpaKeyPage()));
+        return _typeCard(
+            Icons.vpn_key_outlined,
+            '验证密钥',
+            '更换 GRANDPA 共识验证密钥(本机构内部投票)',
+            const Color(0xFF4527A0),
+            enabled,
+            () => _checkAndOpenProposal(context, () => const GrandpaKeyPage()));
       case ProposalKind.legislation:
-        return _typeCard(Icons.gavel_outlined, '发起立法',
-            '立法 / 修法 / 废法在电脑节点端发起,本端查看 + 投票', AppTheme.primaryDark,
-            enabled, () => Navigator.of(context).push(MaterialPageRoute(
+        return _typeCard(
+            Icons.gavel_outlined,
+            '发起立法',
+            '立法 / 修法 / 废法在电脑节点端发起,本端查看 + 投票',
+            AppTheme.primaryDark,
+            enabled,
+            () => Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => const LegislationIntroPage())));
       case ProposalKind.election:
-        return _typeCard(Icons.how_to_vote_outlined, '发起选举', '发起选举提案',
-            AppTheme.accent, enabled, () => _checkAndOpenProposal(
+        return _typeCard(
+            Icons.how_to_vote_outlined,
+            '发起选举',
+            '发起选举提案',
+            AppTheme.accent,
+            enabled,
+            () => _checkAndOpenProposal(
                 context, () => const ElectionProposalPage()));
     }
   }

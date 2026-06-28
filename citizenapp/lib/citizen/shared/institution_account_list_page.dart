@@ -1,7 +1,7 @@
 // 多签统一账户列表页(个人 + 机构 混合视图)。
 //
 // 设计要点:
-// - 后端按 governance/personal-manage 与 governance/organization-manage 分开;
+// - 后端按 transaction/personal-manage 与 transaction/organization-manage 分开;
 //   本页只是 UI 编排壳子,并行加载两套数据源,合并按时间倒序展示。
 // - 首屏只读本地 Isar,链上状态刷新和反向发现均转为后台任务;
 //   下拉刷新才强制查链和全量 discovery。
@@ -21,7 +21,8 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import 'package:citizenapp/transaction/organization-manage/institution_account_info_page.dart';
-import 'package:citizenapp/transaction/organization-manage/institution_manage_models.dart' as org_models;
+import 'package:citizenapp/transaction/organization-manage/institution_manage_models.dart'
+    as org_models;
 import 'package:citizenapp/transaction/organization-manage/institution_manage_service.dart';
 import 'package:citizenapp/transaction/organization-manage/institution_multisig_create_page.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_account_create_page.dart';

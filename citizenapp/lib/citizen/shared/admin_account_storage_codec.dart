@@ -16,7 +16,7 @@
 // - [admin-primitives/src/lib.rs::AdminAccountKind]
 //   (Genesis=0 / Public=1 / Private=2 / Personal=3)
 //
-// 中文注释：本文件统一放在 `lib/governance/shared/`，供机构多签、个人多签
+// 中文注释：本文件统一放在 `lib/citizen/shared/`，供机构多签、个人多签
 // 和治理提案展示复用；业务模块不得各自复制管理员账户解码逻辑。
 
 import 'dart:typed_data';

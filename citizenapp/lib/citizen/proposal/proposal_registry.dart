@@ -1,9 +1,13 @@
-// 公权机构「发起提案」注册表——机构码 → 可发起提案种类(单一真源)。
+// 统一「发起提案」能力注册表。
 //
-// 中文注释:proposal_entry_page 按机构码 `kindsForCode(institutionCode)` 渲染提案卡片,
-// 取代原 GovernanceProposalsPage 里散落的 `if (orgType == nrc || prc)` 硬判断。
-// **机构维度一律用机构码,不另建机构类型枚举**(用户铁律 2026-06-25)。仅公权机构。
-// 提案的具体发起页在 `citizen/proposal/<type>/`。
+// 中文注释:
+// - 机构码仍是制度身份输入,但页面不得散落 `NRC/PRC/CREG` 业务判断。
+// - 本文件先把 InstitutionInfo + institution_code 解析为 ProposalSubject,再由规则表
+//   输出可发起提案。这样个人多签、公权机构、私权机构和创世治理机构共用同一入口。
+// - runtime 仍是最终权限边界;这里仅负责端上展示和页面路由。
+
+import 'package:citizenapp/citizen/shared/institution_code_label.dart';
+import 'package:citizenapp/citizen/shared/institution_info.dart';
 
 /// 一种可发起的提案。
 enum ProposalKind {
@@ -19,28 +23,219 @@ enum ProposalKind {
   election, // 发起选举(占位)
 }
 
-/// 各提案种类 → 可发起的机构码集合(单一真源)。
-/// `null` = 全部公权机构通用(转账/手续费/归集/换管理员)。
-const Map<ProposalKind, Set<String>?> _eligibleCodes = {
-  ProposalKind.transfer: null,
-  ProposalKind.feeTransfer: null,
-  ProposalKind.adminsChange: null,
-  ProposalKind.safetyFundTransfer: {'NRC'}, // 仅国储会
-  ProposalKind.resolutionIssuance: {'NRC', 'PRC'}, // 国储会/省储会
-  ProposalKind.resolutionDestroy: {'NRC', 'PRC', 'PRB'}, // 治理三类
-  ProposalKind.runtimeUpgrade: {'NRC', 'PRC'},
-  ProposalKind.grandpaKey: {'NRC', 'PRC'},
-  // 立法发起院:国家众议会/国家教委会/省众议会/市立法会/市自治会/市教委会
-  // (参议会 NSN/PSN、立法院 NLG/PLG 是表决院,不发起)。
-  ProposalKind.legislation: {'NRP', 'NED', 'PRP', 'CLEG', 'CSLF', 'CEDU'},
-  ProposalKind.election: <String>{}, // 选举机构码待定义(空=暂无机构可发起)
-};
+/// 发起提案的主体类型。它不是机构码的替代品,而是对机构码+账户身份的解析结果。
+enum ProposalSubjectType {
+  genesisInstitution,
+  publicInstitution,
+  privateInstitution,
+  unincorporatedInstitution,
+  personalMultisig,
+}
 
-/// 某机构码可发起的提案种类(顺序同 ProposalKind 声明)。
-/// `codes == null` → 通用,任何公权机构可发起;否则机构码命中才可发起。
-List<ProposalKind> kindsForCode(String institutionCode) {
-  return ProposalKind.values.where((kind) {
-    final codes = _eligibleCodes[kind];
-    return codes == null || codes.contains(institutionCode);
-  }).toList(growable: false);
+/// 发起提案主体。
+class ProposalSubject {
+  const ProposalSubject({
+    required this.subjectType,
+    required this.institutionCode,
+    required this.subjectAccountId,
+    required this.adminModule,
+  });
+
+  factory ProposalSubject.fromInstitution({
+    required InstitutionInfo institution,
+    required String institutionCode,
+  }) {
+    final code = institutionCode.toUpperCase();
+    final account = institution.mainAccount;
+    if (isPersonalAccountIdentity(institution.cidNumber) ||
+        InstitutionCodeLabel.isPersonal(code)) {
+      return ProposalSubject(
+        subjectType: ProposalSubjectType.personalMultisig,
+        institutionCode: 'PMUL',
+        subjectAccountId: account,
+        adminModule: 'PersonalAdmins',
+      );
+    }
+    if (InstitutionCodeLabel.isGenesisAdminCode(code)) {
+      return ProposalSubject(
+        subjectType: ProposalSubjectType.genesisInstitution,
+        institutionCode: code,
+        subjectAccountId: account,
+        adminModule: 'GenesisAdmins',
+      );
+    }
+    if (InstitutionCodeLabel.isPublicAdminCode(code)) {
+      return ProposalSubject(
+        subjectType: ProposalSubjectType.publicInstitution,
+        institutionCode: code,
+        subjectAccountId: account,
+        adminModule: 'PublicAdmins',
+      );
+    }
+    if (InstitutionCodeLabel.isPrivateAdminCode(code)) {
+      return ProposalSubject(
+        subjectType: ProposalSubjectType.privateInstitution,
+        institutionCode: code,
+        subjectAccountId: account,
+        adminModule: 'PrivateAdmins',
+      );
+    }
+    if (InstitutionCodeLabel.isUnincorporated(code)) {
+      return ProposalSubject(
+        subjectType: ProposalSubjectType.unincorporatedInstitution,
+        institutionCode: code,
+        subjectAccountId: account,
+        // 非法人机构码本身不能决定 public/private 管理员模块。
+        adminModule: 'Unresolved',
+      );
+    }
+    return ProposalSubject(
+      subjectType: ProposalSubjectType.publicInstitution,
+      institutionCode: code,
+      subjectAccountId: account,
+      adminModule: 'PublicAdmins',
+    );
+  }
+
+  final ProposalSubjectType subjectType;
+  final String institutionCode;
+  final String subjectAccountId;
+  final String adminModule;
+
+  bool get isGenesis => subjectType == ProposalSubjectType.genesisInstitution;
+  bool get isPersonal => subjectType == ProposalSubjectType.personalMultisig;
+  bool get isUnincorporated =>
+      subjectType == ProposalSubjectType.unincorporatedInstitution;
+  bool get hasResolvedAdminModule => adminModule != 'Unresolved';
+}
+
+class ProposalCapability {
+  const ProposalCapability({
+    required this.kind,
+    required this.enabled,
+    required this.pallet,
+    required this.call,
+    required this.voteEngine,
+    required this.allows,
+  });
+
+  final ProposalKind kind;
+  final bool enabled;
+  final String pallet;
+  final String call;
+  final String voteEngine;
+  final bool Function(ProposalSubject subject) allows;
+}
+
+class ProposalCapabilityRegistry {
+  const ProposalCapabilityRegistry._();
+
+  static const Set<String> _jointGovernanceCodes = {'NRC', 'PRC'};
+  static const Set<String> _destroyGovernanceCodes = {'NRC', 'PRC', 'PRB'};
+  static const Set<String> _sweepCodes = {'NRC', 'PRB'};
+  static const Set<String> _legislationProposerCodes = {
+    'NRP',
+    'NED',
+    'PRP',
+    'CLEG',
+    'CSLF',
+    'CEDU',
+  };
+
+  static final List<ProposalCapability> _capabilities = [
+    ProposalCapability(
+      kind: ProposalKind.transfer,
+      enabled: true,
+      pallet: 'MultisigTransfer',
+      call: 'propose_transfer',
+      voteEngine: 'InternalVote',
+      allows: (subject) => true,
+    ),
+    ProposalCapability(
+      kind: ProposalKind.feeTransfer,
+      enabled: true,
+      pallet: 'MultisigTransfer',
+      call: 'propose_sweep_to_main',
+      voteEngine: 'InternalVote',
+      allows: (subject) => _sweepCodes.contains(subject.institutionCode),
+    ),
+    ProposalCapability(
+      kind: ProposalKind.adminsChange,
+      enabled: true,
+      pallet: 'Genesis/Public/Private/PersonalAdmins',
+      call: 'propose_admin_set_change',
+      voteEngine: 'InternalVote',
+      allows: (subject) => subject.hasResolvedAdminModule,
+    ),
+    ProposalCapability(
+      kind: ProposalKind.safetyFundTransfer,
+      enabled: true,
+      pallet: 'MultisigTransfer',
+      call: 'propose_safety_fund_transfer',
+      voteEngine: 'InternalVote',
+      allows: (subject) => subject.institutionCode == 'NRC',
+    ),
+    ProposalCapability(
+      kind: ProposalKind.resolutionIssuance,
+      enabled: true,
+      pallet: 'ResolutionIssuance',
+      call: 'propose_resolution_issuance',
+      voteEngine: 'JointVote',
+      allows: (subject) =>
+          _jointGovernanceCodes.contains(subject.institutionCode),
+    ),
+    ProposalCapability(
+      kind: ProposalKind.resolutionDestroy,
+      enabled: true,
+      pallet: 'ResolutionDestroy',
+      call: 'propose_destroy',
+      voteEngine: 'InternalVote',
+      allows: (subject) =>
+          _destroyGovernanceCodes.contains(subject.institutionCode),
+    ),
+    ProposalCapability(
+      kind: ProposalKind.runtimeUpgrade,
+      enabled: true,
+      pallet: 'RuntimeUpgrade',
+      call: 'propose_runtime_upgrade',
+      voteEngine: 'JointVote',
+      allows: (subject) =>
+          _jointGovernanceCodes.contains(subject.institutionCode),
+    ),
+    ProposalCapability(
+      kind: ProposalKind.grandpaKey,
+      enabled: true,
+      pallet: 'GrandpaKeyChange',
+      call: 'propose_replace_grandpa_key',
+      voteEngine: 'InternalVote',
+      allows: (subject) =>
+          _jointGovernanceCodes.contains(subject.institutionCode),
+    ),
+    ProposalCapability(
+      kind: ProposalKind.legislation,
+      enabled: true,
+      pallet: 'LegislationYuan',
+      call: 'propose_enact_law/propose_amend_law/propose_repeal_law',
+      voteEngine: 'LegislationVote',
+      allows: (subject) =>
+          _legislationProposerCodes.contains(subject.institutionCode),
+    ),
+    ProposalCapability(
+      kind: ProposalKind.election,
+      enabled: false,
+      pallet: 'ElectionVote',
+      call: 'pending',
+      voteEngine: 'ElectionVote',
+      allows: (_) => false,
+    ),
+  ];
+
+  /// 返回主体当前可展示的提案能力。禁用能力不展示,避免产生假入口。
+  static List<ProposalCapability> capabilitiesForSubject(
+    ProposalSubject subject,
+  ) {
+    return _capabilities
+        .where((capability) => capability.enabled && capability.allows(subject))
+        .toList(growable: false);
+  }
 }

@@ -8,7 +8,7 @@
 //   由 [builtinAccounts] 承载(china 创世常量,不可派生),其余机构主/费/自定义账户
 //   一律本地派生(account_derivation,零网络)。
 // - 机构分类(orgType / 是否固定治理 / 是否机构账户)统一从机构码派生,
-//   单一源 = `governance/shared/institution_code_label.dart`,绝不另立第二套。
+//   单一源 = `citizen/shared/institution_code_label.dart`,绝不另立第二套。
 
 import 'dart:typed_data';
 
@@ -90,10 +90,9 @@ class Institution {
       parentCidNumber != null && parentCidNumber!.isNotEmpty;
 
   /// 详情页顶部标题用:简称优先,回退全称(ADR-028 决策 6)。
-  String get displayName =>
-      (cidShortName != null && cidShortName!.isNotEmpty)
-          ? cidShortName!
-          : cidFullName;
+  String get displayName => (cidShortName != null && cidShortName!.isNotEmpty)
+      ? cidShortName!
+      : cidFullName;
 
   /// 主账户 AccountId:固定治理档用 china 固定 hex,其余本地派生(行为保持)。
   Uint8List mainAccountId() {

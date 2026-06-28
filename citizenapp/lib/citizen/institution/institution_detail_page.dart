@@ -31,9 +31,9 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///
 /// 中文注释:公共壳(信息卡/账户/管理员/提案列表/关注)对全部机构统一;按机构类型
 /// dispatch 重型流:
-/// - 固定治理档(NRC/PRC/PRB):提案入口→`ProposalEntryPage`、管理员→`AdminListPage`
-///   (含激活)、提案列表可点→`_openProposalDetail`;治理流全部复用现成可复用页,不重写。
-/// - 其余公权机构:提案入口=占位(待 CID 管理员来源对接)、管理员=只读列表、提案列表只读。
+/// - 固定治理档(NRC/PRC/PRB):提案列表可点→`_openProposalDetail`;
+/// - 其余注册机构:提案列表仍走只读摘要,但发起提案/管理员激活共用统一入口。
+/// 中文注释:提案能力由 `ProposalCapabilityRegistry` 判断,详情页不再散落机构码 if。
 class InstitutionDetailPage extends StatefulWidget {
   const InstitutionDetailPage({
     super.key,
@@ -73,9 +73,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Institution? _inst;
 
-  /// 固定治理档机构的静态注册表项(非治理机构为 null);驱动治理 dispatch。
+  /// 提案/管理员入口使用的链上主体信息。固定治理档来自静态注册表,注册机构账户
+  /// 则由目录机构派生出 `institution-account:<mainAccount>` identity。
   InstitutionInfo? _govInfo;
-  bool get _isGovernance => _govInfo != null;
+  bool get _isGovernance => _inst?.isFixedGovernance ?? false;
 
   bool _loading = true;
 
@@ -132,8 +133,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       setState(() => _loading = false);
       return;
     }
-    // 全公权机构统一开提案入口:治理三类用静态档(含安全基金等专户),其余从机构派生
-    // 主/费账户构造 InstitutionInfo(机构已按权限分号,入口不再门控)。
+    // 全机构统一开提案入口:治理三类用静态档(含安全基金等专户),其余从机构派生
+    // 注册机构账户 identity。是否能发起某类提案交给 ProposalCapabilityRegistry。
     final govInfo = widget.repository.governanceInfo(inst.cidNumber) ??
         _infoFromInstitution(inst);
     final subscribed = pubkey == null
@@ -153,8 +154,11 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     unawaited(_loadDynamics());
   }
 
-  /// 为非治理公权机构从 Institution 派生 InstitutionInfo(主/费账户 + 机构码),
-  /// 供提案入口与 admins-change 复用。治理三类(NRC/PRC/PRB)走静态 governanceInfo。
+  /// 为非治理注册机构从 Institution 派生 InstitutionInfo(主/费账户 + 机构码)。
+  ///
+  /// 中文注释:这里的 `cidNumber` 故意使用 `institution-account:<mainAccount>`,
+  /// 因为转账、管理员更换等链上 call 需要的是被管理账户 identity;真实 CID 仍保留在
+  /// Institution 页面模型中用于展示和目录查询。
   InstitutionInfo _infoFromInstitution(Institution inst) {
     final rows = institutionAccountRows(inst);
     final main = rows.isNotEmpty ? rows.first.accountHex : '';
@@ -164,7 +168,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       cidShortName: inst.displayName,
       cidFullNameEn: inst.cidFullName, // 普通公权机构暂无英文名,中文兜底
       cidShortNameEn: inst.displayName,
-      cidNumber: inst.cidNumber,
+      cidNumber: registeredAccountIdentity(main),
       orgType: inst.orgType,
       accounts: InstitutionAccounts(mainAccount: main, feeAccount: fee),
       adminAccountCode: inst.institutionCode,
@@ -193,11 +197,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       await _loadGovernanceAdminsAndRole(force: force);
       await _loadGovernanceProposals(force: force);
     } else {
+      unawaited(_loadGovernanceAdminsAndRole(force: force));
       await _loadPublicDynamics(inst);
     }
   }
 
-  // ──── 治理路径加载(port 自治理详情页)────
+  // ──── 管理员角色加载(固定治理与注册机构账户共用)────
 
   Future<void> _loadGovernanceAdminsAndRole({bool force = false}) async {
     final identity = _accountIdentity;
@@ -220,11 +225,16 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       final activated = results[2] as List<ActivatedAdmin>;
       final coldPubkeys = await _loadImportedColdPubkeys(admins);
       if (ctx.isAdmin) {
-        ProposalContextResolver.markInstitutionAdmin(govInfo.cidNumber);
+        ProposalContextResolver.markInstitutionAdmin(
+          _inst?.cidNumber ?? govInfo.cidNumber,
+        );
       }
       if (!mounted) return;
+      final shouldUpdateAdmins =
+          _isGovernance || admins.isNotEmpty || _admins.isEmpty;
       setState(() {
-        _admins = admins;
+        if (shouldUpdateAdmins) _admins = admins;
+        _govInfo = ctx.institution ?? govInfo;
         _adminWallets = ctx.adminWallets;
         _importedColdPubkeys = coldPubkeys;
         _activatedPubkeys = activated.map((a) => a.pubkeyHex).toSet();
@@ -259,7 +269,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       final proposals = await _multisigTransferFeed
           .fetchInstitutionVisibleProposals(govInfo, forceRefresh: force);
       final summaries = proposals
-          .map((p) => LocalProposalSummary.fromProposal(p, institution: govInfo))
+          .map(
+              (p) => LocalProposalSummary.fromProposal(p, institution: govInfo))
           .toList(growable: false);
       await ProposalLocalStore.instance.upsertSummaries(summaries);
       await ProposalLocalStore.instance.putInstitutionIndex(
@@ -278,7 +289,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     }
   }
 
-  // ──── 公权路径加载 ────
+  // ──── 注册机构路径加载 ────
 
   Future<void> _loadPublicDynamics(Institution inst) async {
     try {
@@ -448,20 +459,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     );
   }
 
-  // ──── ③ 提案入口(治理 dispatch 现成发起页;公权占位)────
+  // ──── ③ 提案入口(按主体能力统一展示)────
 
   Widget _proposalEntry() {
     return _entryCard(
       icon: Icons.how_to_vote_outlined,
       title: '发起提案',
-      subtitle: _isGovernance ? '转账 / 管理员更换 / …' : '功能开发中（待对接）',
-      onTap: _isGovernance ? _openProposalTypes : _publicProposePlaceholder,
-    );
-  }
-
-  void _publicProposePlaceholder() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('发起提案功能开发中（转账 / 费用划转 / 更换管理员）')),
+      subtitle: _isCurrentUserAdmin ? '转账 / 管理员更换 / …' : '激活管理员后可发起',
+      onTap: _openProposalTypes,
     );
   }
 
@@ -477,7 +482,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     final code = inst.institutionCode;
     if (national.contains(code)) return (tier: LawTier.national, scope: 0);
     if (provincial.contains(code)) {
-      return (tier: LawTier.provincial, scope: int.tryParse(inst.provinceCode) ?? 0);
+      return (
+        tier: LawTier.provincial,
+        scope: int.tryParse(inst.provinceCode) ?? 0
+      );
     }
     if (municipal.contains(code)) {
       return (tier: LawTier.municipal, scope: int.tryParse(inst.cityCode) ?? 0);
@@ -528,7 +536,9 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       icon: Icons.people_outline,
       title: '管理员',
       subtitle: '共 ${_admins.length} 位管理员',
-      onTap: _isGovernance ? _openGovernanceAdminList : _openPublicAdminList,
+      onTap: _accountIdentity != null
+          ? _openGovernanceAdminList
+          : _openPublicAdminList,
     );
   }
 
@@ -585,8 +595,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ...List.generate(_govProposals.length, (i) {
             final s = _govProposals[i];
             return Padding(
-              padding:
-                  EdgeInsets.only(bottom: i < _govProposals.length - 1 ? 10 : 0),
+              padding: EdgeInsets.only(
+                  bottom: i < _govProposals.length - 1 ? 10 : 0),
               child: _govProposalCard(s),
             );
           })

@@ -52,7 +52,7 @@ void main() {
       final callData =
           InstitutionManageService.buildProposeCreateInstitutionCallData(
         cidNumber: 'AH001-SCB0N-202605010-2026',
-        cidFullName: '安徽省储行',
+        cidFullName: '测试股权公司',
         accounts: [
           InstitutionInitialAccountInput(
             accountName: '主账户',
@@ -63,7 +63,7 @@ void main() {
             amountFen: BigInt.from(222),
           ),
         ],
-        institutionCode: 'UNIN',
+        institutionCode: 'SFGQ',
         adminsLen: 2,
         admins: [admin1, admin2],
         threshold: 2,
@@ -80,13 +80,13 @@ void main() {
         0x11,
         0x05,
         ...compactVec('AH001-SCB0N-202605010-2026'),
-        ...compactVec('安徽省储行'),
+        ...compactVec('测试股权公司'),
         (2 << 2) & 0xff,
         ...compactVec('主账户'),
         ...u128Le(BigInt.from(111)),
         ...compactVec('费用账户'),
         ...u128Le(BigInt.from(222)),
-        ...codeBytes('UNIN'),
+        ...codeBytes('SFGQ'),
         ...u32Le(2),
         (2 << 2) & 0xff,
         ...admin1,
@@ -104,6 +104,39 @@ void main() {
       ];
 
       expect(hexOf(callData), hexOf(expected));
+    });
+
+    test('rejects bare unincorporated institution code for create', () {
+      final admin1 = Uint8List.fromList(List<int>.filled(32, 0x11));
+      final admin2 = Uint8List.fromList(List<int>.filled(32, 0x22));
+      final signature = List<int>.filled(64, 0xdd);
+      final issuerMain = List<int>.generate(32, (i) => 0xb0 + (i & 0x0f));
+      final signerPubkey = List<int>.generate(32, (i) => 0xc0 + (i & 0x0f));
+
+      expect(
+        () => InstitutionManageService.buildProposeCreateInstitutionCallData(
+          cidNumber: 'AH001-SCB0N-202605010-2026',
+          cidFullName: '测试非法人机构',
+          accounts: [
+            InstitutionInitialAccountInput(
+              accountName: '主账户',
+              amountFen: BigInt.from(111),
+            ),
+          ],
+          institutionCode: 'UNIN',
+          adminsLen: 2,
+          admins: [admin1, admin2],
+          threshold: 2,
+          registerNonce: 'reg-nonce-001',
+          signatureHex: '0x${hexOf(signature)}',
+          issuerCidNumber: 'CN000-GZF0A-000000001-2026',
+          issuerMainAccountHex: '0x${hexOf(issuerMain)}',
+          signerPubkeyHex: '0x${hexOf(signerPubkey)}',
+          scopeProvinceName: '安徽省',
+          scopeCityName: '合肥市',
+        ),
+        throwsArgumentError,
+      );
     });
   });
 }

@@ -427,11 +427,12 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
 | `citizenapp/lib/citizen/` | 公民 | citizen | citizenapp 底部“公民”Tab 入口、公民投票页和公共页 |
-| `citizenapp/lib/governance/organization-manage/` | 机构多签管理 | organization-manage | citizenapp 机构多签创建、关闭、机构账户入口、机构 storage codec 和 OrganizationManage 链上交互；不得承载 personal-manage 个人主业务 |
-| `citizenapp/lib/governance/personal-manage/` | 个人多签管理 | personal-manage | citizenapp 个人多签创建、关闭、查询、提案历史、待激活和 PersonalManage 链上编解码 |
-| `citizenapp/lib/governance/shared/` | 治理共享 | shared | 治理提案通用模型、上下文、查询、缓存、机构信息和 Subject 解码 |
+| `citizenapp/lib/citizen/proposal/` | 公民提案 | proposal | citizenapp 统一发起提案入口、提案能力表、管理员更换、协议升级和提案详情路由 |
+| `citizenapp/lib/citizen/shared/` | 公民共享 | shared | 公民页共享机构模型、提案模型、上下文、查询、缓存、账户列表和共用详情 |
+| `citizenapp/lib/transaction/organization-manage/` | 机构多签管理 | organization-manage | citizenapp 机构多签创建、关闭、机构账户入口、机构 storage codec 和 OrganizationManage 链上交互；不得承载 personal-manage 个人主业务 |
+| `citizenapp/lib/transaction/personal-manage/` | 个人多签管理 | personal-manage | citizenapp 个人多签创建、关闭、查询、提案历史、待激活和 PersonalManage 链上编解码 |
 | `citizenapp/lib/transaction/multisig-transfer/` | 多签转账 | multisig-transfer | citizenapp 多签转账提案、详情、投票、余额提示和转账入口 |
-| `citizenapp/lib/governance/` | 治理 | governance | 治理提案和投票业务 |
+| `citizenapp/lib/citizen/governance/` | 治理视图 | governance | 公民 Tab 的治理机构视图；不得承载提案业务实现 |
 | `citizenapp/lib/isar/` | 本地数据库 | isar | Isar 本地持久化实体、schema 和数据库入口 |
 | `citizenapp/lib/transaction/offchain-transaction/` | 链下 | offchain | 链下请求和链下业务辅助 |
 | `citizenapp/lib/transaction/onchain-transaction/` | 链上 | onchain | 链上交易和链上状态辅助 |
@@ -461,7 +462,11 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 |---|---|---|---|
 | `citizenchain/runtime/genesis/` | 创世配置 | genesis | 创世状态和初始配置 |
 | `citizenchain/runtime/governance/` | 治理 | governance | 治理类 pallet |
-| `citizenchain/runtime/admins/admin-management/` | 管理员变更 | admins-change | 管理员主体、阈值和管理员变更 pallet |
+| `citizenchain/runtime/admins/admin-primitives/` | 管理员共用类型 | admin-primitives | 管理员共用类型、状态、kind 和生命周期 trait |
+| `citizenchain/runtime/admins/genesis-admins/` | 创世管理员 | genesis-admins | 国储会、省储会、省储行和联邦注册局创世管理员 pallet |
+| `citizenchain/runtime/admins/public-admins/` | 公权管理员 | public-admins | 普通公权机构管理员 pallet |
+| `citizenchain/runtime/admins/private-admins/` | 私权管理员 | private-admins | 普通私权机构管理员 pallet |
+| `citizenchain/runtime/admins/personal-admins/` | 个人多签管理员 | personal-admins | 个人多签管理员与个人多签账户 pallet |
 | `citizenchain/runtime/governance/grandpakey-change/` | GRANDPA 密钥变更 | grandpakey-change | GRANDPA authority 变更 pallet |
 | `citizenchain/runtime/private/organization-manage/` | 机构管理 | organization-manage | 机构多签管理 pallet |
 | `citizenchain/runtime/private/personal-manage/` | 个人多签管理 | personal-manage | 个人多签管理 pallet |

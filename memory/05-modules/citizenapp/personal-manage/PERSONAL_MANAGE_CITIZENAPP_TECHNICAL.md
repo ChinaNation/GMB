@@ -2,7 +2,7 @@
 
 ## 1. 模块定位
 
-`citizenapp/lib/governance/personal-manage/` 是 citizenapp 端个人多签主业务目录，对齐 runtime `citizenchain/runtime/admins/personal-admins/`。
+`citizenapp/lib/transaction/personal-manage/` 是 citizenapp 端个人多签主业务目录，对齐 runtime `citizenchain/runtime/admins/personal-admins/`。
 
 本目录只处理个人多签，不承载机构多签、机构 CID 账户、多签转账业务。
 
@@ -12,7 +12,7 @@
 
 - 个人多签创建页面：`personal_account_create_page.dart`
 - 个人多签关闭页面：`personal_account_close_page.dart`
-- 个人多签列表展示：统一由 `citizenapp/lib/governance/institution_account_list_page.dart` 与机构多签合并展示
+- 个人多签列表展示：统一由 `citizenapp/lib/citizen/shared/institution_account_list_page.dart` 与机构多签合并展示
 - 个人多签账户详情页：`personal_manage_account_info_page.dart`
 - 个人多签反向索引发现服务：`personal_manage_discovery_service.dart`
 - 个人多签管理员激活列表：`personal_admin_list_page.dart`
@@ -25,12 +25,12 @@
 
 ### 不负责
 
-- 机构多签创建、关闭、CID 机构账户查询：继续由 `citizenapp/lib/governance/organization-manage/` 机构路径处理。
-- 多签转账：唯一实现目录仍是 `citizenapp/lib/transaction/multisig-transfer/`。
+- 机构多签创建、关闭、CID 机构账户查询：继续由 `citizenapp/lib/transaction/organization-manage/` 机构路径处理。
+- 多签转账：唯一实现目录仍是 `citizenapp/lib/citizen/proposal/transaction/`。
 - Isar schema 定义：仍在 `citizenapp/lib/isar/`，本模块只使用既有实体。
 - Isar 读写队列：由 `citizenapp/lib/isar/wallet_isar.dart` 统一提供，本模块不得直接打开 DB 实例。
-- 通用投票、签名、RPC：仍使用 `proposal/shared`、`signer`、`rpc` 等共用能力。
-- 个人/机构多签管理提案投票详情页：共用入口位于 `citizenapp/lib/governance/account_manage_detail_page.dart`，本模块只提供 `PersonalAdmins` 解码服务。
+- 通用投票、签名、RPC：仍使用 `citizen/shared/proposal`、`signer`、`rpc` 等共用能力。
+- 个人/机构多签管理提案投票详情页由 `citizen/proposal/transaction` 的提案聚合和各管理模块解码服务共同支撑；本模块只提供 `PersonalAdmins` 解码服务。
 
 ## 3. 链上契约
 
@@ -128,13 +128,13 @@ PersonalAdmins storage：
 
 ## 4. 与 organization-manage 目录关系
 
-`citizenapp/lib/governance/organization-manage/` 不再承载 `PersonalAdmins` 主业务。当前仅保留：
+`citizenapp/lib/transaction/organization-manage/` 不再承载 `PersonalAdmins` 主业务。当前仅保留：
 
 - 机构多签 OrganizationManage 服务与机构 storage codec。
 - `AdminInstitutionCodec` 等跨个人/机构都需要读取的底层 Subject 解码能力。
 
 个人账户详情、反向索引发现、创建、关闭、管理员激活和提案历史均不得回流到 `organization-manage`。
-个人多签列表入口只允许通过 `lib/governance/institution_account_list_page.dart` 统一呈现。
+个人多签列表入口只允许通过 `lib/citizen/shared/institution_account_list_page.dart` 统一呈现。
 `AdminInstitutionCodec` 只属于底层 Subject 解码能力，不承载 `PersonalAdmins` 主业务。
 
 ## 5. 测试

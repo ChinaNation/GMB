@@ -39,6 +39,7 @@
 - 已更新当前技术文档：`ADMINS_TECHNICAL.md`、跨模块矩阵、MODULE_TAG 注册表、`organization-manage`、`multisig-transfer`、`votingengine` 相关说明。
 - 已清理当前 runtime 源码和当前技术文档中的旧管理员模块残留命名。
 - 2026-06-27 runtime 二次确认修复：删除 CPOL 市公安局专用 runtime seed / 分类 helper，CPOL 只保留为普通市级公权机构码；从 `china_zf/china_lf/china_sf/china_jc/china_jy` 移除非创世 `admins` 数组，仅保留 `CHINA_CB`、`CHINA_CH` 和 `FEDERAL_REGISTRY_ADMINS` 作为创世管理员来源；将非法人管理员从私权硬绑定中拆出，查询层同时支持公权归属和私权归属。
+- 2026-06-27 registry 跟随修复：`citizenchain/registry/src/gov/service.rs::federal_registry_admins()` 不再读取已删除的 `ChinaZf.admins` 字段，改为在确认 FRG 条目存在后返回 `FEDERAL_REGISTRY_ADMINS` 独立常量；同步清理 `CHINA_ZF` 仍带 `admins` 字段的旧注释，修复启动脚本构建 registry 时的 `E0609 no field admins` 编译错误。
 
 ## 当前验证
 
@@ -47,6 +48,9 @@ cargo check --manifest-path citizenchain/Cargo.toml -p node
 WASM_BUILD_FROM_SOURCE=1 cargo build --manifest-path citizenchain/Cargo.toml -p citizenchain
 WASM_FILE=/Users/rhett/GMB/citizenchain/target/debug/wbuild/citizenchain/citizenchain.wasm cargo build --manifest-path citizenchain/Cargo.toml -p node
 cargo test --manifest-path citizenchain/Cargo.toml -p genesis-admins -p public-admins -p private-admins -p personal-admins -p organization-manage -p multisig-transfer --lib
+cargo check --manifest-path citizenchain/Cargo.toml -p registry
+cargo build -p registry
+cargo test -p registry seed::
 cd citizenapp && flutter test test/governance/admins-change/admins_change_codec_test.dart test/governance/admins-change/institution_admin_service_test.dart test/governance/organization-manage/multisig_storage_codec_test.dart test/governance/organization-manage/institution_manage_storage_test.dart test/governance/shared/admin_accounts_scan_service_test.dart test/governance/personal-manage/personal_manage_service_test.dart test/governance/personal-manage/personal_manage_storage_codec_test.dart
 cd citizenwallet && flutter test test/signer/pallet_registry_test.dart test/signer/payload_decoder_test.dart test/signer/offline_sign_service_test.dart
 CITIZENCHAIN_HEADLESS=1 citizenchain/target/debug/citizenchain --chain citizenchain-fresh --base-path <tmp> --reserved-only --out-peers 0 --in-peers 0 --in-peers-light 0 --no-mdns --no-telemetry --mining-threads 0 --no-gpu

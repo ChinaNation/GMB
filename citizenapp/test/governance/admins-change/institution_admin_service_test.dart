@@ -99,7 +99,7 @@ void main() {
     return '0x${hexOf(bytes)}';
   }
 
-  test('registered institution account routes to institution-account account',
+  test('private-owned unincorporated account routes by explicit admin kind',
       () async {
     final rpc = FakeChainRpc();
     final service = InstitutionAdminService(chainRpc: rpc);
@@ -108,6 +108,7 @@ void main() {
     final accountKey = '0x${hexOf(AdminAccountIdCodec.adminAccountStorageKey(
       accountId,
       institutionCode: 'UNIN',
+      adminKind: 2,
     ))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
@@ -125,6 +126,7 @@ void main() {
       accountHex: address,
       institutionCode: 'UNIN',
       accountLabel: '机构账户',
+      kind: 2,
     );
     final admins = await service.fetchAdmins(identity);
     final threshold = await service.fetchThreshold(identity);
@@ -217,21 +219,30 @@ void main() {
     expect(personal.kind, 3);
 
     final accountAddress = '55' * 32;
-    final institutionAccount =
-        AdminAccountIdentity.fromInstitution(InstitutionInfo(
-      cidFullName: '机构账户',
-      cidShortName: '机构账户',
-      cidFullNameEn: 'Institution Account',
-      cidShortNameEn: 'Institution Account',
-      cidNumber: registeredAccountIdentity(accountAddress),
-      orgType: OrgType.account,
-      adminAccountCode: 'UNIN',
-      account: accountAddress,
-    ));
     expect(
-        institutionAccount.type, AdminAccountIdentityType.institutionAccount);
-    expect(institutionAccount.institutionCode, 'UNIN');
-    expect(institutionAccount.kind, 2);
+      () => AdminAccountIdentity.fromInstitution(InstitutionInfo(
+        cidFullName: '机构账户',
+        cidShortName: '机构账户',
+        cidFullNameEn: 'Institution Account',
+        cidShortNameEn: 'Institution Account',
+        cidNumber: registeredAccountIdentity(accountAddress),
+        orgType: OrgType.account,
+        adminAccountCode: 'UNIN',
+        account: accountAddress,
+      )),
+      throwsA(isA<ArgumentError>()),
+    );
+
+    final privateOwnedInstitution = AdminAccountIdentity.institutionAccount(
+      accountHex: accountAddress,
+      institutionCode: 'UNIN',
+      accountLabel: '机构账户',
+      kind: 2,
+    );
+    expect(privateOwnedInstitution.type,
+        AdminAccountIdentityType.institutionAccount);
+    expect(privateOwnedInstitution.institutionCode, 'UNIN');
+    expect(privateOwnedInstitution.kind, 2);
 
     final governance =
         AdminAccountIdentity.fromInstitution(const InstitutionInfo(
@@ -258,6 +269,7 @@ void main() {
       accountHex: '88' * 32,
       institutionCode: 'UNIN',
       accountLabel: '机构账户',
+      kind: 2,
     );
     final active = ActivatedAdmin(
       pubkeyHex: 'aa' * 32,

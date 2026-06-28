@@ -92,12 +92,17 @@ class AdminAccountIdentity {
     required String accountHex,
     required String institutionCode,
     required String accountLabel,
+    int? kind,
   }) {
     if (!InstitutionCodeLabel.isInstitution(institutionCode)) {
       throw ArgumentError(
         '机构账户 institutionCode 必须为注册机构码，收到: $institutionCode',
       );
     }
+    final resolvedKind = kind ??
+        _deriveInstitutionKind(
+          institutionCode,
+        );
     final account = AdminAccountIdCodec.normalizeHex(accountHex);
     AdminAccountIdCodec.fromAccountHex(account);
     return AdminAccountIdentity(
@@ -105,9 +110,18 @@ class AdminAccountIdentity {
       identityKey: 'institution-account:$institutionCode:$account',
       accountLabel: accountLabel,
       institutionCode: institutionCode,
-      kind: InstitutionCodeLabel.adminAccountKind(institutionCode),
+      kind: resolvedKind,
       accountHex: account,
     );
+  }
+
+  static int _deriveInstitutionKind(String institutionCode) {
+    if (InstitutionCodeLabel.isUnincorporatedAdminCode(institutionCode)) {
+      throw ArgumentError(
+        '非法人机构码不能自动选择管理员模块，必须显式传入 kind=1(public) 或 kind=2(private)',
+      );
+    }
+    return InstitutionCodeLabel.adminAccountKind(institutionCode);
   }
 
   final AdminAccountIdentityType type;
@@ -173,8 +187,9 @@ class AdminAccountState {
 
   String get kindLabel => switch (kind) {
         0 => '内置治理机构',
-        1 => '个人多签',
-        2 => '机构账户',
+        1 => '公权机构',
+        2 => '私权机构',
+        3 => '个人多签',
         _ => '未知账户',
       };
 

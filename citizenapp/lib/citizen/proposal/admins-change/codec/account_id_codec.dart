@@ -25,12 +25,15 @@ class AdminAccountIdCodec {
   static Uint8List adminAccountStorageKey(
     Uint8List accountId, {
     required String institutionCode,
+    int? adminKind,
   }) {
     if (accountId.length != 32) {
       throw ArgumentError('accountId 必须为 32 字节');
     }
     final palletHash = Hasher.twoxx128.hashString(
-      InstitutionCodeLabel.adminAccountsPalletName(institutionCode),
+      adminKind == null
+          ? InstitutionCodeLabel.adminAccountsPalletName(institutionCode)
+          : InstitutionCodeLabel.adminAccountsPalletNameForKind(adminKind),
     );
     final storageHash = Hasher.twoxx128.hashString('AdminAccounts');
     final keyHash = blake2128Concat(accountId);

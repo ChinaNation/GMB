@@ -60,10 +60,13 @@ class MultisigStorageCodec {
 
   static Uint8List adminAccountKey({
     required String institutionCode,
+    int? adminKind,
     required Uint8List accountId,
   }) {
     return storageMapKey(
-      InstitutionCodeLabel.adminAccountsPalletName(institutionCode),
+      adminKind == null
+          ? InstitutionCodeLabel.adminAccountsPalletName(institutionCode)
+          : InstitutionCodeLabel.adminAccountsPalletNameForKind(adminKind),
       'AdminAccounts',
       accountId,
     );

@@ -71,7 +71,7 @@ void main() {
     required List<int> admin2,
   }) {
     return Uint8List.fromList([
-      ...codeBytes('UNIN'),
+      ...codeBytes('SFGQ'),
       2, // AdminAccountKind::InstitutionAccount
       (2 << 2) & 0xff,
       ...admin1,
@@ -88,7 +88,7 @@ void main() {
       ...compactVec('测试机构'),
       ...List<int>.filled(32, 0x31), // main_account
       ...List<int>.filled(32, 0x32), // fee_account
-      ...codeBytes('UNIN'),
+      ...codeBytes('SFGQ'),
       ...u32Le(2),
       ...u32Le(2),
       (2 << 2) & 0xff,
@@ -114,12 +114,12 @@ void main() {
     final institutionKey =
         '0x${hexOf(MultisigStorageCodec.institutionKey(cidNumber))}';
     final adminKey = '0x${hexOf(MultisigStorageCodec.adminAccountKey(
-      institutionCode: 'UNIN',
+      institutionCode: 'SFGQ',
       accountId: MultisigStorageCodec.accountIdFromAccountHex(address),
     ))}';
     final thresholdKey = '0x${hexOf(MultisigStorageCodec.dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
-      institutionCode: 'UNIN',
+      institutionCode: 'SFGQ',
       accountId: MultisigStorageCodec.accountIdFromAccountHex(
         address,
       ),
@@ -173,13 +173,13 @@ void main() {
     final institutionKey =
         '0x${hexOf(MultisigStorageCodec.institutionKey(cidNumber))}';
     final adminKey = '0x${hexOf(MultisigStorageCodec.adminAccountKey(
-      institutionCode: 'UNIN',
+      institutionCode: 'SFGQ',
       accountId: MultisigStorageCodec.accountIdFromAccountHex(address),
     ))}';
     final activeThresholdKey =
         '0x${hexOf(MultisigStorageCodec.dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
-      institutionCode: 'UNIN',
+      institutionCode: 'SFGQ',
       accountId: MultisigStorageCodec.accountIdFromAccountHex(
         address,
       ),

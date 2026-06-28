@@ -5,7 +5,7 @@
 // 反查 CID 归属后 upsert 到 Isar。扫描、节流、本地钱包读取统一收口在
 // `MultisigDiscoveryCoordinator`,本服务只做后处理。
 //
-// 个人多签后处理见 lib/governance/personal-manage/personal_manage_discovery_service.dart。
+// 个人多签后处理见 lib/transaction/personal-manage/personal_manage_discovery_service.dart。
 
 import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';

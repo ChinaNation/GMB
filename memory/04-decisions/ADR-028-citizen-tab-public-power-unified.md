@@ -11,7 +11,7 @@ CitizenApp 公民 tab 从三子 tab 重构为五子 tab(广场/立法/选举/治
 ### 痛点
 
 - 公民 tab 现为三子 tab `公权 / 广场 / 治理`(`citizenapp/lib/citizen/citizen_tab_page.dart`),其中:
-  - 公权 = `PublicPage`(CID-BFF + Isar 目录,省→市→机构 地理浏览,只读占位:发起提案=占位 snackbar、管理员=待对接)。
+  - 公权 = `PublicPage`(CID-BFF + Isar 目录,省→市→机构 地理浏览,机构详情页接入统一提案主体能力表;管理员激活复用统一管理员列表)。
   - 治理 = `GovernanceListPage`(静态烘焙注册表 `kNationalCouncil/kProvincialCouncils/kProvincialBanks`,账户 hex 写死,链上读 admins/提案/投票/余额)。
   - 广场 = `VoteView`(全局 NRC/PRC/PRB 提案投票流)。
 - 公权与治理是两套并行实现:两套机构模型(`PublicInstitutionEntity` vs `InstitutionInfo`)、两套详情/账户/管理员页,靠注释保持"看起来一样",改一处要改两处、必然漂移。
@@ -72,7 +72,7 @@ CitizenApp 公民 tab 从三子 tab 重构为五子 tab(广场/立法/选举/治
 - 顶部标题 = 机构**简称**;右上角 = 关注图标。
 - 信息卡只显:全称、身份 ID(内含机构码)、主账户、主账户余额、法定代表人、所属地;**非法人加一行「所属上级法人全称」**。
 - 机构账户 = 该机构所有账户;管理员 = 该机构所有管理员列表;提案列表 = 该机构发起的所有提案。
-- 提案入口 = 该机构拥有的提案权限,按 `is_action_allowed(机构码, 动作)` 点亮:基础动作(转账/管理员更换/手续费划转)全机构通用,扩展动作(协议升级/决议销毁/选举…)按机构码限定;引擎未就绪的动作置灰占位。
+- 提案入口 = 该主体拥有的提案权限,由 CitizenApp `ProposalSubject + ProposalCapabilityRegistry` 集中判断。机构码仍参与规则,但页面不得散落 `NRC/PRC/CREG` 判断;基础动作按主体类型和管理员模块路由,治理扩展动作按链端真实能力限定;runtime 未启用的能力不展示,不做假置灰入口。
 
 ### 7. 广场:订阅 + 地区 + 管理员 动态流
 
@@ -80,7 +80,7 @@ CitizenApp 公民 tab 从三子 tab 重构为五子 tab(广场/立法/选举/治
 
 ### 8. 能力层方向(链端,本窗口不实现)
 
-`is_action_allowed(institution_code, action)` 纯函数能力表,落 `primitives::cid::code`,收敛现散落三处的门控(EnsureOrigin / 各 pallet 硬白名单 / 通用 admin 检查);基础动作=对所有 `is_registered_multisig_code` 放行,扩展动作=限定特定码;`手续费划转` 从 NRC/PRB 推广为基础动作。统一详情页"按权限亮入口"依赖此层。
+链端长期方向仍是制度能力表收敛,但 CitizenApp 当前先落前端能力注册表:输入是 `ProposalSubject`(个人多签/创世治理机构/公权机构/私权机构/非法人机构)而不是裸机构码;输出是可展示的提案能力。runtime 仍是最终权限边界,`OffchainTransaction`、`OnchainIssuance`、`ElectionVote` 未启用时前端不得展示可发起入口。非法人机构码本身不能决定 public/private 管理员模块,必须由 CID 注册归属显式路由。
 
 ### 9. 术语澄清
 

@@ -34,12 +34,14 @@ class AdminAccountService {
     return fetchByAccountId(
       AdminAccountIdCodec.fromHex(identity.accountHex),
       institutionCode: identity.institutionCode,
+      adminKind: identity.kind,
     );
   }
 
   Future<AdminAccountState?> fetchByAccountId(
     Uint8List accountId, {
     String? institutionCode,
+    int? adminKind,
   }) async {
     final accountKey = AdminAccountIdCodec.hexEncode(accountId);
     final cached = _cache[accountKey];
@@ -59,6 +61,7 @@ class AdminAccountService {
       accountKey,
       generation,
       institutionCode: institutionCode,
+      adminKind: adminKind,
       fallback: persisted?.state,
     );
     _inFlight[accountKey] = future;
@@ -74,6 +77,7 @@ class AdminAccountService {
     String accountKey,
     int generation, {
     String? institutionCode,
+    int? adminKind,
     AdminAccountState? fallback,
   }) async {
     try {
@@ -82,6 +86,7 @@ class AdminAccountService {
         final key = AdminAccountIdCodec.adminAccountStorageKey(
           accountId,
           institutionCode: institutionCode,
+          adminKind: adminKind,
         );
         final data =
             await _rpc.fetchStorage('0x${AdminAccountIdCodec.hexEncode(key)}');
