@@ -16,7 +16,7 @@ CitizenApp 只使用 `QR_V1`。所有扫码 envelope 顶层字段固定为 `p/k/
 | 4 | `user_transfer` | 生成/扫描收款码 |
 | 5 | `im_node_pairing` | 扫描通信节点配对码 |
 
-CitizenApp 不处理管理员扫码登录。登录签名请求由 CID 页面生成,由 CitizenWallet 公民钱包扫码签名。
+CitizenApp 不处理管理员扫码登录。登录签名请求由 OnChina 页面生成,由 CitizenWallet 公民钱包扫码签名。
 
 ## 2. 签名请求
 

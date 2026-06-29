@@ -2249,7 +2249,7 @@ struct OrphanInstitution {
 // 中文注释:清理孤儿机构 CLI。
 // `purge-orphan-institutions [--dry-run|--apply] [--backup <path>]`,默认 dry-run。
 // 孤儿 = subjects.town_code 非空 + (province_code,city_code,town_code) 不在 china.sqlite 内存树。
-//   - dry-run:只打印孤儿清单(citizencode/town/town_code/category/institution_code/原因)+ 总数,
+//   - dry-run:只打印孤儿清单(onchina/town/town_code/category/institution_code/原因)+ 总数,
 //     供人工核对无一命中冻结常量号(储委会/部委)。
 //   - apply:先把待删行导出到 purge_orphan_backup_<...>.sql(删除唯一回滚保证),
 //     再逐省单事务级联删(accounts→docs→audit→gov|private→ids→subjects)。

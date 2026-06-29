@@ -5,7 +5,7 @@
   - `memory/08-tasks/done/20260501-node-clearing-bank-institution-detail-and-create.md`
   - `memory/08-tasks/done/20260502-node-offchain-duplicate-cleanup.md`
   - `memory/08-tasks/done/20260502-multisig-registration-info-align.md`
-- 承接: `20260501-cid-chain-folder-restructure.md`(CID 端 chain/ 目录重构)
+- 承接: `20260501-cid-chain-folder-restructure.md`(OnChina 端 chain 目录重构)
 
 ## 0. 概览
 
@@ -103,7 +103,7 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
           ▼ ② Institutions[cid_number] = None
           │
           ▼ ③ fetch_clearing_bank_institution_registration_info(cid_number)
-[CID 后端] ──→ ④ app_get_institution_registration_info 内部:
+[OnChina 后端] ──→ ④ app_get_institution_registration_info 内部:
                   - 读机构数据(sharded_store)
                   - 取签发机构主账户和当前签名管理员公钥
                   - 生成 register_nonce = uuid_v4 字符串
@@ -167,5 +167,5 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
 
 ## 8. 变更记录
 
-- 2026-05-01:首次落地。节点 Rust 加 4 个 Tauri 命令 + 5 个 chain/citizencode/signing helper;节点前端新建 4 页 + 状态机重构 + 删 3 个老文件。
+- 2026-05-01:首次落地。节点 Rust 加 4 个 Tauri 命令 + 5 个 chain/onchina/signing helper;节点前端新建 4 页 + 状态机重构 + 删 3 个老文件。
 - 2026-05-02:对齐 CID `registration-info`。创建机构多签注册 payload 收口为 `cid_number / cid_full_name / account_names[]`,移除 `subject_property/sub_type/parent_cid_number` 注册透传,补齐 `signer_pubkey`。

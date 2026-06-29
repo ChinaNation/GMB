@@ -20,8 +20,8 @@ use crate::*;
 // 任何一个 domain 写成 &[u8] 都会导致 message 与链端不一致 → blake2_256 不同
 // → sr25519 verify 失败 → 链端返回 InvalidCidXxxSignature。
 // 历史教训：INSTITUTION_DOMAIN 曾被错误声明为 &[u8]，导致 register_cid_institution
-// 长期 InvalidCidInstitutionSignature。修复见 ADR
-// `04-decisions/citizencode/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
+// 长期 InvalidCidInstitutionSignature。修复见
+// `memory/04-decisions/ADR-005-cid-subxt-0.43-pow-chain-quirks.md`。
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
 static SIGNING_KEY_CACHE: OnceLock<RwLock<Option<CachedSigningKey>>> = OnceLock::new();
 const TRUSTED_PRODUCTION_CHAINS: &[TrustedProductionChain] = &[

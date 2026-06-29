@@ -278,7 +278,7 @@
 - 桌面壳入口统一在 `src/desktop/`，只负责 Tauri 启动、命令注册和进程内节点运行器。
 - 挖矿页后端统一在 `src/mining/`，包含收益看板、资源监控、网络概览、出块记录与 GPU 挖矿。
 - 首页左侧节点状态能力统一在 `src/home/` 与 `frontend/home/`；首页右侧链上交易能力统一在 `src/transaction/onchain_transaction/` 与 `frontend/transaction/onchain-transaction/`。
-- 跨功能复用能力统一在 `src/shared/`，例如 RPC 客户端、keystore、安全路径与 CID 服务地址配置。
+- 跨功能复用能力统一在 `src/shared/`，例如 RPC 客户端、keystore、安全路径与 OnChina 服务地址配置。
 
 前端目录收敛约定：
 - `frontend/app/`：React/Tauri 前端入口，包含 `App.tsx`、`main.tsx` 与全局样式。

@@ -52,14 +52,10 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 当前仓库规则已经明确为：
 
-- `citizencode`
-  - CI：`.github/workflows/citizencode-ci.yml`
-  - `push` / `pull_request`:只编译后端、跑后端测试、构建前端,不构建正式 `.deb`
-  - 手动 `Run workflow`:在 CI 通过后构建并上传 `citizencode.deb`
-- `citizenpassport`
-  - CI：`.github/workflows/citizenpassport-ci.yml`
-  - `push` / `pull_request`:只编译后端、跑后端测试、构建前端
-  - 手动 `Run workflow`:构建并上传正式离线 `.run` 安装包
+- `citizenchain/onchina`
+  - 归属公民链产品 CI 边界，不得恢复独立 旧独立身份系统 CI
+  - `push` / `pull_request`:只允许执行 OnChina 后端编译、后端测试、前端依赖安装和前端构建
+  - 手动发布跟随公民链发布边界，不构建独立身份系统安装包
 - `citizenapp`
   - CI：`.github/workflows/citizenapp-ci.yml`
   - `push` / `pull_request`:只构建 Debug APK 做工程检查,不读取 release keystore
@@ -68,6 +64,8 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   - CI：`.github/workflows/citizenwallet-ci.yml`
   - `push`:只做 Flutter analyze/test 与 Debug APK 检查构建,不读取 release keystore
   - 手动 `Run workflow`:读取同一个 `GMB_APP_KEY`,构建并上传正式 `公民钱包.apk`
+- `website`
+  - 当前暂无专用 GitHub Actions，发布前在本地执行构建并部署静态产物
 
 ## 4. 当前结论
 

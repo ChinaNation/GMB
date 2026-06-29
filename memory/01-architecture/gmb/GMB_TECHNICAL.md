@@ -1,234 +1,184 @@
 # GMB 仓库技术文档（当前实现基线）
 
 ## 1. 文档目的
-- 固化 `GMB` 仓库当前的产品体系、技术边界、跨产品协作关系与维护规则。
+
+- 固化 `GMB` 仓库当前的四产品体系、技术边界、跨产品协作关系与维护规则。
 - 作为仓库级技术总入口，帮助开发、联调、测试、发布时快速判断问题属于哪个产品、哪个模块、哪一类发布动作。
-- 统一 3 类技术文档的职责，避免仓库文档、产品文档、模块文档之间口径冲突。
+- 统一仓库文档、产品文档和模块文档职责，避免口径冲突。
 
-## 2. 技术文档体系
+## 2. 文档体系
 
-### 2.1 三层技术文档
-- 仓库技术文档：描述整个仓库的产品体系、共享协议、跨产品流程、维护规则。
-- 产品技术文档：描述某一个产品的定位、架构、实现基线、发布边界。
-- 模块技术文档：描述某一个功能模块的需求与技术实现，模块文档第 0 部分固定为功能需求。
+仓库技术文档：
 
-### 2.2 当前固定文档命名
-- 仓库技术文档：
-  - `memory/01-architecture/gmb/GMB_TECHNICAL.md`
-- 产品技术文档：
-  - `memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
-  - `memory/01-architecture/citizencode/CID_TECHNICAL.md`
-  - `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`
-- 模块技术文档：
-  - 位于 `memory/05-modules/` 中，按产品和模块目录归档，命名统一为 `*_TECHNICAL.md`
+- `memory/01-architecture/gmb/GMB_TECHNICAL.md`
 
-### 2.3 维护规则
-- 改代码之前先读对应层级文档。
-- 改代码之后必须回写对应层级文档。
-- 改共享协议、共享字段、共享签名串时，必须同步更新所有相关产品文档。
-- 改模块代码时必须补中文注释。
-- 模块文档与产品文档冲突时，以当前代码实现为准，并在本次改动内修正文档。
+产品技术文档：
+
+- `memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
+- `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`
+- `citizenwallet` 产品级架构文档尚未单独建立，新增前必须按仓库新增文件规则单独确认。
+- `website` 产品级架构文档尚未单独建立，新增前必须按仓库新增文件规则单独确认。
+
+公民链内部能力文档：
+
+- `memory/01-architecture/onchina/ONCHINA_TECHNICAL.md`
+
+模块技术文档：
+
+- 位于 `memory/05-modules/` 中，按产品和模块目录归档，命名统一为 `*_TECHNICAL.md`。
 
 ## 3. 仓库总体定位
 
-`GMB` 是一个多产品单仓库（monorepo），围绕“公民区块链 + 注册局身份 + 公民护照 + 移动客户端”构建完整数字主权系统。
+`GMB` 是一个多产品单仓库，围绕“公民链 + 公民 + 公民钱包 + 官方网站”构建完整数字主权系统。
 
-仓库当前包含 3 个核心产品：
-- `citizenchain`：区块链主产品，负责链上状态、共识、治理、发行、交易、节点运行与桌面节点软件。
-- `cid`：注册局身份系统，负责公民护照发放、账户绑定、资格校验、人口快照、公民投票凭证、管理员站点与链侧接口。
-- `citizenapp`：公民，负责钱包、登录签名、治理入口、交易入口与端上状态展示。
+仓库当前只保留四个产品：
 
-## 4. 产品矩阵与职责分工
+- `citizenchain`：公民链，负责链上状态、共识、治理、发行、交易、节点运行、桌面节点软件和 OnChina 内置注册局身份能力。
+- `citizenapp`：公民，负责在线钱包、治理入口、交易入口、轻节点状态和用户端身份展示。
+- `citizenwallet`：公民钱包，负责离线签名、扫码识别、冷钱包确认和签名结果生成。
+- `website`：官方网站，负责 GMB 对外官网静态站点。
+
+OnChina 不是独立产品；它是 `citizenchain/onchina/` 下的公民链内部能力。
+
+## 4. 产品矩阵与职责
 
 ### 4.1 CitizenChain
+
 - 代码目录：`/Users/rhett/GMB/citizenchain`
 - 产品文档：`/Users/rhett/GMB/memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
-- 当前技术栈：
+- 内部 OnChina 文档：`/Users/rhett/GMB/memory/01-architecture/onchina/ONCHINA_TECHNICAL.md`
+- 技术栈：
   - 链节点与 Runtime：Rust + Substrate / Polkadot SDK
   - 桌面节点 UI：Rust + Tauri + React + TypeScript + Vite
+  - OnChina：Rust + Axum + PostgreSQL + React + TypeScript + Vite
 - 核心职责：
   - 链上状态机与共识
   - 治理、发行、交易、资格接入
   - 原生节点程序与桌面节点软件
+  - OnChina 注册局身份、行政区、机构登记、管理后台、公开查询和链侧凭证
 
-### 4.2 CID
-- 代码目录：`/Users/rhett/GMB/cid`
-- 产品文档：`/Users/rhett/GMB/memory/01-architecture/citizencode/CID_TECHNICAL.md`
-- 当前技术栈：
-  - 前端：React + TypeScript + Vite + Ant Design
-  - 后端：Rust + Axum + PostgreSQL
-- 核心职责：
-  - 注册局直接录入公民并发放公民护照
-  - 公民身份绑定与解绑
-  - 公民投票资格与绑定有效性查询
-  - 人口快照与投票凭证签名
-  - 管理员与机构管理
+### 4.2 CitizenApp
 
-### 4.3 CitizenApp
 - 代码目录：`/Users/rhett/GMB/citizenapp`
 - 产品文档：`/Users/rhett/GMB/memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`
-- 当前技术栈：
-  - Flutter + Dart
-  - Secure Storage + Isar
+- 技术栈：Flutter + Dart + Isar + smoldot
 - 核心职责：
-  - 钱包与端上签名
-  - 手机扫码登录
-  - 链上交易入口
-  - 治理入口与用户状态展示
+  - 在线钱包与端上签名
+  - 治理和交易入口
+  - 轻节点链上读取
+  - 公民身份状态展示
+
+### 4.3 CitizenWallet
+
+- 代码目录：`/Users/rhett/GMB/citizenwallet`
+- 产品文档：尚未单独建立，新增前必须单独确认。
+- 技术栈：Flutter + Dart
+- 核心职责：
+  - 离线钱包和冷签名
+  - QR_V1 扫码识别
+  - 中文确认页展示
+  - 签名响应二维码生成
+
+### 4.4 Website
+
+- 代码目录：`/Users/rhett/GMB/website`
+- 产品文档：尚未单独建立，新增前必须单独确认。
+- 技术栈：React + TypeScript + Vite
+- 核心职责：
+  - 官方网站静态页面
+  - 对外展示资料和发布说明入口
 
 ## 5. 跨产品主流程
 
 ### 5.1 公民绑定主流程
-1. `CID` 注册局管理员直接录入公民护照身份。
-2. `CitizenApp` 查询公民护照状态并提交账户绑定签名。
-3. `CID` 验签后写入本地绑定结果。
-4. `citizenchain` 通过凭证或链侧接口承接资格结果。
-5. `citizenapp` 读取绑定状态并展示用户身份能力。
+
+1. OnChina 注册局管理员录入公民电子护照身份。
+2. CitizenApp 查询身份状态并提交账户绑定签名。
+3. OnChina 验签后写入结构化绑定结果。
+4. CitizenChain 通过链侧凭证或公开查询承接资格结果。
+5. CitizenApp 读取绑定状态并展示用户身份能力。
 
 ### 5.2 公民投票主流程
-1. `citizenchain` 创建联合投票 / 公民投票提案。
-2. `CID` 提供人口快照、投票资格校验、投票凭证签名验证。
-3. `citizenapp` 作为公民端入口提交投票签名或交易。
-4. `citizenchain` 在 runtime 中完成投票记账、状态流转与最终结果处理。
 
-### 5.3 管理员扫码登录主流程
-1. `CID` 生成登录 challenge。
-2. `citizenapp` 扫码并完成签名。
-3. `CID` 回收签名响应并完成验签。
-4. 对应管理后台生成会话并授权。
+1. CitizenChain 创建联合投票或公民投票提案。
+2. OnChina 提供人口快照、投票资格校验和投票凭证签名。
+3. CitizenApp 作为公民端入口提交投票签名或交易。
+4. CitizenChain runtime 完成投票记账、状态流转与结果处理。
 
-### 5.4 节点部署与使用主流程
-1. `citizenchain/node` 提供原生节点程序、桌面端 Rust 后端、React 前端与 Tauri 打包入口。
-2. `citizenchain/node` 将节点程序与桌面界面打包为同一个桌面应用。
-3. 用户安装桌面节点软件后可直接启动本地节点。
-4. `citizenapp` 与其他产品通过 RPC、链侧接口或间接服务读取链状态。
+OnChina 不实现投票流程；投票流程统一归属投票引擎。
+
+### 5.3 管理员扫码签名主流程
+
+1. OnChina 生成 `QR_V1 / k=1 sign_request`。
+2. CitizenWallet 扫码、解码、展示中文确认字段并签名。
+3. CitizenWallet 生成 `QR_V1 / k=2 sign_response`。
+4. OnChina 回收签名响应并完成验签或提交前校验。
+
+CitizenApp 不承担管理员登录或冷钱包确认职责。
 
 ## 6. 共享协议与统一口径
 
-### 6.1 登录扫码协议
-- 协议名：`QR_V1`
-- 相关产品：
-  - `citizenapp`
-  - `cid`
-- 要求：
-  - 挑战字段、签名原文、`aud` 口径必须一致
-  - 任一产品改动登录签名请求串，必须同步更新相关产品文档与实现
+### 6.1 QR_V1
 
-### 6.2 区块链地址与链参数口径
+- 扫码协议只有一个：`QR_V1`。
+- 相关产品和能力：CitizenApp、CitizenWallet、CitizenChain node、OnChina。
+- 二维码外层字段、动作码、签名原文、签名响应和中文展示字段必须以 `memory/07-ai/unified-protocols.md` 为唯一登记入口。
+
+### 6.2 链地址与链参数
+
 - 地址编码：`SS58 = 2027`
-- 相关产品：
-  - `citizenchain`
-  - `citizenapp`
-  - `cid`（链侧接口）
-- 要求：
-  - 地址显示、链 ID、Token 展示口径统一
+- 相关产品：CitizenChain、CitizenApp、CitizenWallet、OnChina。
+- 地址显示、genesis hash、链 ID、Token 展示和交易 payload 必须跨端一致。
 
-### 6.3 CID 链侧五项能力口径
+### 6.3 CID 链侧能力
+
+CID 是身份号码和凭证能力，不是独立产品名。链侧能力由 CitizenChain 承接，OnChina 提供数据和凭证来源：
+
 - 机构 CID 登记前置
 - 公民身份绑定凭证
 - 公民投票凭证
 - 联合投票人口快照
-- CID 主备验签账户管理
+- 注册局验签账户和管理员集合管理
 
-这 5 项能力的详细归属在 `memory/01-architecture/citizencode/CID_TECHNICAL.md` 中定义，但其链侧承接能力由 `citizenchain` 负责落地。
-
-## 7. 仓库目录结构与共享层
+## 7. 仓库目录结构
 
 ```text
 GMB/
-├── citizenchain/   # 区块链主产品代码
-├── citizencode/           # 身份识别码系统代码
-├── citizenapp/       # 公民代码
-├── memory/         # AI 编程系统与正式文档真源
-├── scripts/        # 仓库级脚本与生成器
-├── docs/           # 图片、白皮书素材与参考资料
-└── .github/        # CI/CD、脚本、安装包流水线
+├── citizenchain/      # 公民链产品代码，含 runtime、node、OnChina
+├── citizenapp/        # 公民代码
+├── citizenwallet/     # 公民钱包代码
+├── website/           # 官方网站代码
+├── memory/            # AI 编程系统与正式文档真源
+├── scripts/           # 本机私密脚本区，必须被 Git 忽略
+├── docs/              # 展示资料与静态发布资料
+└── .github/           # CI/CD、审查和安装包流水线
 ```
 
-### 7.1 `memory/`
-- 统一承载 AI 编程系统、仓库级文档、产品文档与模块文档。
-- 是正式文档真源，不在产品目录中复制第二份。
-- 任意产品实现变更后，都应优先回写 `memory/` 中的对应文档。
+## 8. 发布边界
 
-### 7.2 `scripts/`
-- 提供仓库级辅助脚本、生成器和身份相关工具
-- `scripts/zhujichi.py` 用于批量生成助记词与公钥清单，当前默认输出为 `vault_without_salt.txt` 纯文本文件
-- 不承载产品主业务逻辑
-
-### 7.3 `docs/`
-- 存放白皮书、图片、参考材料
-- 不是产品运行时代码目录
-
-## 8. 发布边界与升级类型
-
-### 8.1 Runtime 升级
-- 适用产品：`citizenchain`
-- 触发条件：
-  - 修改 runtime
-  - 修改被 runtime 直接依赖的 pallet
-  - 修改被 runtime 直接依赖且影响链上行为的 `primitives`
-- 影响：
-  - 已运行链需要走 runtime 升级流程，或在开发阶段清库重启新链
-
-### 8.2 Native Node / 安装包发布
-- 适用产品：`citizenchain`
-- 触发条件：
-  - 修改 `node/` 原生节点、桌面端后端、前端或 Tauri 配置
-  - 修改安装包脚本、打包流水线
-- 影响：
-  - 一般不要求 runtime 升级
-  - 需要重新发布节点二进制或桌面安装包
-
-### 8.3 Web / Backend 发布
-- 适用产品：
-  - `cid`
-- 触发条件：
-  - API、数据库、前后端管理页、权限逻辑变更
-- 影响：
-  - 需要重新部署服务
-  - 若涉及共享协议，必须同步联调其他产品
-
-### 8.4 Mobile App 发布
-- 适用产品：`citizenapp`
-- 触发条件：
-  - Flutter UI、钱包、签名、扫码流程、端上存储策略变更
-- 影响：
-  - 需要重新打包移动端
-  - 若涉及共享协议，必须与 `CID/citizenchain` 联调
-
-### 8.5 Chain Spec / Genesis 变更
-- 主要发生在 `citizenchain/node` 与 `citizenchain/runtime/src/genesis_config_presets.rs`
-- 这类改动很多时候不是“给现有链做 runtime 升级”，而是：
-  - 重发 chain spec
-  - 启动新链
-  - 开发阶段清库重建链
+- Runtime 升级：修改 `citizenchain/runtime/**` 或被 runtime 直接依赖且影响链上行为的 primitives。
+- Native Node / 桌面安装包：修改 `citizenchain/node/**`、桌面前端、Tauri、打包或发布脚本。
+- OnChina 服务发布：修改 `citizenchain/onchina/src/**`、`citizenchain/onchina/frontend/**`、数据库、权限、扫码或公开接口。
+- Mobile App 发布：修改 `citizenapp/**` 或 `citizenwallet/**`。
+- Website 发布：修改 `website/**`。
+- Chain Spec / Genesis 变更：修改 `citizenchain/node` chainspec 或 genesis preset。
 
 ## 9. 联调与变更控制
 
-### 9.1 必须同步联调的改动
-- 登录扫码协议改动：`citizenapp + cid`
-- 链地址口径 / SS58 / 交易字段改动：`citizenchain + citizenapp + cid`
-- 绑定 / 投票凭证 / 人口快照改动：`citizenchain + cid`
+必须同步联调：
 
-### 9.2 必须同步更新文档的改动
-- 产品边界变化：更新仓库文档 + 对应产品文档
-- 模块职责变化：更新产品文档 + 对应模块文档
-- 共享协议变化：更新仓库文档 + 所有涉及产品文档 + 相关模块文档
+- QR_V1、签名和验签：CitizenWallet + 生成方（CitizenApp、CitizenChain node 或 OnChina）。
+- 链地址、genesis hash、SS58、交易 payload：CitizenChain + CitizenApp + CitizenWallet + OnChina。
+- 绑定、投票凭证、人口快照：CitizenChain + OnChina + CitizenApp。
 
-### 9.3 推荐开发顺序
-1. 先确认改动属于哪个产品。
-2. 再判断是产品级改动还是模块级改动。
-3. 若涉及共享协议，先冻结字段和签名串。
-4. 改代码。
-5. 回写模块文档。
-6. 若边界或共享口径变化，再回写产品文档与仓库文档。
+必须同步更新文档：
 
-## 10. 产品技术文档索引
-- `memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md`
-- `memory/01-architecture/citizencode/CID_TECHNICAL.md`
-- `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`
+- 产品边界变化：更新仓库文档和对应产品文档。
+- 模块职责变化：更新产品文档和对应模块文档。
+- 共享协议变化：更新 `memory/07-ai/unified-protocols.md`、相关产品文档和模块文档。
 
-## 11. 结论性维护要求
-- `memory/01-architecture/gmb/GMB_TECHNICAL.md` 只描述仓库级总览、跨产品协议、发布边界与维护规则。
-- 单个产品的实现细节不在本文件展开到底层代码级别，而应继续下钻到对应产品技术文档。
+## 10. 维护要求
+
+- 不得恢复 旧独立身份系统和旧离线实名系统作为产品目录、产品文档、CI 或部署入口。
+- 不得把 OnChina 写成第五个产品。
 - 任一产品新增或下线时，必须先更新本文件中的产品矩阵、目录结构与文档索引。

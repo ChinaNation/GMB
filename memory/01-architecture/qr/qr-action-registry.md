@@ -16,9 +16,9 @@
 
 | a | 名称 | payload | 签名字节 | 生成方 | 扫码/签名方 | 注释 |
 |---:|---|---|---|---|---|---|
-| 1 | `login` | `system|system_signature` UTF-8 | 原文 | CID | CitizenWallet | 登录签名确认 |
-| 2 | `citizen_bind` | `cid-citizen-bind-v1|...` UTF-8 | 原文 | CID | CitizenApp | 电子护照绑定 |
-| 3 | `cid_admin_action` | `cid_admin_governance` canonical JSON UTF-8 | 原文 | CID | CitizenWallet | 注册局管理员治理冷钱包确认 |
+| 1 | `login` | `system|system_signature` UTF-8 | 原文 | OnChina | CitizenWallet | 登录签名确认 |
+| 2 | `citizen_bind` | `cid-citizen-bind-v1|...` UTF-8 | 原文 | OnChina | CitizenApp | 电子护照绑定 |
+| 3 | `cid_admin_action` | `cid_admin_governance` canonical JSON UTF-8 | 原文 | OnChina | CitizenWallet | 注册局管理员治理冷钱包确认 |
 | 5 | `activate_admin_account` | `GMB || 0x18` 二进制 payload | 原文 | citizenchain node / CitizenApp | CitizenWallet | 管理员激活 |
 | 6 | `decrypt_admin` | `GMB || 0x19` 二进制 payload | 原文 | citizenchain node | CitizenWallet | 清算行管理员解密 |
 | 7 | `runtime_upgrade_hash` | 32B WASM hash | 原文 32B | citizenchain node / CitizenApp | CitizenWallet | Runtime 升级哈希直签 |
@@ -86,7 +86,7 @@ a = (pallet_index << 8) | call_index
 | `approve` | 展示“赞成/反对” |
 | `remark` / `reason` / `memo` | 原字符串 |
 | Runtime hash | 展示 `0x<64hex>` |
-| CID 管理文本 | 展示动作类型、主体、公钥/账户、过期时间 |
+| OnChina 管理文本 | 展示动作类型、主体、公钥/账户、过期时间 |
 
 机器校验字段如 nonce、block hash、payload hash、内部 challenge id 不作为普通确认字段展示,但可用于本地 session 校验。
 

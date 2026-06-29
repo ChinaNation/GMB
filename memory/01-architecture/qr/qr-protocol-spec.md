@@ -199,7 +199,7 @@ QR_V1|<k>|<i>|<system 或空>|<e 或 0>|<principal>
 |---|---|
 | `k` | 数字扫码流向码 |
 | `i` | 请求 id |
-| `system` | `cid` / 空串 |
+| `system` | `cid` / 空串；`cid` 是现有 OnChina 登录签名 payload 常量 |
 | `e` | 过期 unix 秒;无则为 `0` |
 | `principal` | 去掉 `0x` 的小写 hex 公钥 |
 

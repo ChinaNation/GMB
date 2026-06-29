@@ -47,15 +47,14 @@
 - `.github/workflows/claude-on-comment.yml`
 - `.github/workflows/citizenchain-wasm.yml`
 - `.github/workflows/citizenchain.yml`
-- `.github/workflows/citizencode-ci.yml`
-- `.github/workflows/citizenpassport-ci.yml`
 - `.github/workflows/citizenapp-ci.yml`
+- `.github/workflows/citizenwallet-ci.yml`
 
 ## 4. 路径分流执行原则
 
-- `citizenchain/runtime/**` 通过独立 WASM CI 产出链上升级 wasm，`citizenchain/node/**` 通过统一 `citizenchain.yml` matrix 构建 Linux / Windows / macOS 桌面安装包
+- `citizenchain/runtime/**` 通过独立 WASM CI 产出链上升级 wasm，`citizenchain/node/**` 通过统一 `citizenchain.yml` matrix 构建 Linux / Windows / macOS 桌面安装包，`citizenchain/onchina/**` 归属公民链内部能力检查
 - 共享 Rust 目录变更时，允许多侧联动执行
-- `cid`、`citizenapp` 分别独立执行
+- `citizenapp`、`citizenwallet` 分别独立执行
 - 纯文档、Pages 等目录按各自规则触发
 - 目录路由细则统一记录在 `memory/07-ai/ci-path-routing.md`
 

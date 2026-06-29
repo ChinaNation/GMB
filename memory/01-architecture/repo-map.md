@@ -13,8 +13,6 @@ GMB/
   .vscode/
   memory/
   citizenchain/
-  citizencode/
-  citizenpassport/
   citizenwallet/
   citizenapp/
   website/
@@ -34,9 +32,7 @@ GMB/
 - `.githooks/`：仓库级 Git hook 脚本
 - `.vscode/`：共享编辑器设置
 - `memory/`：AI 编程系统、项目长期记忆、产品文档与模块文档真源
-- `citizenchain/`：区块链 runtime、节点程序、节点桌面 UI、打包发布
-- `citizencode/`：在线身份系统
-- `citizenpassport/`：离线实名系统，包含 Rust 后端、React/Vite 前端、数据库迁移和部署脚本
+- `citizenchain/`：公民链产品，包含区块链 runtime、节点程序、节点桌面 UI、打包发布和 OnChina 内置注册局能力
 - `citizenwallet/`：公民钱包，负责离线签名、扫码识别和钱包 UI
 - `citizenapp/`：公民，负责公民端钱包、治理、投票和链上状态展示
 - `website/`：GMB 官网前端工程，当前使用 React + TypeScript + Vite 构建静态站点
@@ -93,6 +89,7 @@ citizenchain/
     otherpallet/
     transaction/
     primitives/
+  onchina/
   packaging/
   docs/
 ```
@@ -107,12 +104,14 @@ citizenchain/
 - `citizenchain/runtime/transaction`
 - `citizenchain/runtime/primitives`
 - `citizenchain/node`
+- `citizenchain/onchina`
 
 其中：
 
 - 四类 runtime 业务目录已经统一收敛到 `citizenchain/runtime/`
 - 原仓库根目录 `primitives/` 已迁入 `citizenchain/runtime/primitives`
 - 原生节点、桌面节点 UI、Tauri 壳与打包入口统一收口到 `citizenchain/node`
+- OnChina 注册局身份、行政区、机构登记、管理后台和链侧凭证能力统一收口到 `citizenchain/onchina`
 - 桌面端 Rust 后端模块已经扁平化到 `citizenchain/node/src/<功能名>`，不再保留 `src/ui` 目录层
 - 历史旧目录 `citizenchain/node` 与独立 `citizenchain/node` 均不再作为当前实现
 
@@ -120,37 +119,35 @@ citizenchain/
 
 当前结构已经完成物理整合，后续新增 桌面节点 Rust 后端功能直接放在 `citizenchain/node/src/<功能名>`，前端功能放在 `citizenchain/node/frontend/<功能名>`；新增 runtime 相关 crate 与文档均直接放在 `citizenchain/runtime/` 下，不再回到旧顶层目录。
 
-## 6b. CID 目录策略
+## 6b. OnChina 目录策略
 
-2026-05-02 起,CID 后端旧源码壳、CID 前端旧源码壳、前端旧 views 壳、
-后端独立 chain 业务目录、前端独立 chain 业务目录、前端独立业务 API 目录均已删除。
-CID 前后端都直接以各自根目录为代码根,按业务功能展开。
+OnChina 是 `citizenchain` 内置能力，不再作为独立产品目录存在。旧后端源码壳、旧前端源码壳、前端旧 views 壳、后端独立 chain 业务目录、前端独立 chain 业务目录、前端独立业务 API 目录均已删除。OnChina 前后端都直接以各自根目录为代码根，按业务功能展开。
 
-- `citizenchain/registry/src/main.rs`:后端入口,`Cargo.toml` 显式 `[[bin]] path = "main.rs"`。
-- `citizenchain/registry/src/core/`:跨业务底层工具,含 `chain_*` 通用链工具、HTTP 安全、统一响应与 QR 协议辅助。
-- `citizenchain/registry/src/citizens/`:公民身份业务和公民链交互 `chain_*`。
-- `citizenchain/registry/src/subjects/`:身份主体共享模型、公共详情、非法人能力和机构链端公开查询。
-- `citizenchain/registry/src/gov/`:公权机构确定性目录入口,CPOL 与其它市级公权机构同模板生成。
-- `citizenchain/registry/src/private/`:私权机构注册和精确查询入口。
-- `citizenchain/registry/src/accounts/`:机构账户入口。
-- `citizenchain/registry/src/docs/`:机构资料库入口。
-- `citizenchain/registry/src/cid/china/`:中国行政区划 SQLite 真源。
-- `citizenchain/registry/src/cid/`:身份 ID 编码协议、机构码、生成和校验。
-- `citizenchain/registry/src/admins/`:联邦注册局机构管理员/市注册局机构管理员治理、冷钱包扫码签名二次确认和权限上下文。
-- `citizencode/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
-- `citizencode/frontend/core/`:前端通用组件、共享 UI、扫码签名面板与 QR 工具。
-- `citizencode/frontend/china/`:行政区划元数据 API 与本地缓存。
-- `citizencode/frontend/subjects/`:主体共享类型、字段标签和 `chain_multisig_info.ts`。
-- `citizencode/frontend/gov/`:公权机构页面入口。
-- `citizencode/frontend/private/`:私权机构页面入口。
-- `citizencode/frontend/accounts/`:机构账户组件。
-- `citizencode/frontend/docs/`:机构资料库组件。
-- `citizencode/frontend/admins/`:联邦注册局机构管理员/市注册局机构管理员页面、API 与冷钱包扫码签名前端流程。
+- `citizenchain/onchina/src/main.rs`:后端入口,`Cargo.toml` 显式 `[[bin]] path = "main.rs"`。
+- `citizenchain/onchina/src/core/`:跨业务底层工具,含 `chain_*` 通用链工具、HTTP 安全、统一响应与 QR 协议辅助。
+- `citizenchain/onchina/src/citizens/`:公民身份业务和公民链交互 `chain_*`。
+- `citizenchain/onchina/src/subjects/`:身份主体共享模型、公共详情、非法人能力和机构链端公开查询。
+- `citizenchain/onchina/src/gov/`:公权机构确定性目录入口,CPOL 与其它市级公权机构同模板生成。
+- `citizenchain/onchina/src/private/`:私权机构注册和精确查询入口。
+- `citizenchain/onchina/src/accounts/`:机构账户入口。
+- `citizenchain/onchina/src/docs/`:机构资料库入口。
+- `citizenchain/onchina/src/cid/china/`:中国行政区划 SQLite 真源。
+- `citizenchain/onchina/src/cid/`:身份 ID 编码协议、机构码、生成和校验。
+- `citizenchain/onchina/src/admins/`:联邦注册局机构管理员/市注册局机构管理员治理、冷钱包扫码签名二次确认和权限上下文。
+- `citizenchain/onchina/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
+- `citizenchain/onchina/frontend/core/`:前端通用组件、共享 UI、扫码签名面板与 QR 工具。
+- `citizenchain/onchina/frontend/china/`:行政区划元数据 API 与本地缓存。
+- `citizenchain/onchina/frontend/subjects/`:主体共享类型、字段标签和 `chain_multisig_info.ts`。
+- `citizenchain/onchina/frontend/gov/`:公权机构页面入口。
+- `citizenchain/onchina/frontend/private/`:私权机构页面入口。
+- `citizenchain/onchina/frontend/accounts/`:机构账户组件。
+- `citizenchain/onchina/frontend/docs/`:机构资料库组件。
+- `citizenchain/onchina/frontend/admins/`:联邦注册局机构管理员/市注册局机构管理员页面、API 与冷钱包扫码签名前端流程。
 
 同名对齐规则:
 
-- 后端链交互文件:`citizencode/backend/<功能模块>/chain_*.rs`
-- 前端链交互文件:`citizencode/frontend/<功能模块>/chain_*`
+- 后端链交互文件:`citizenchain/onchina/src/<功能模块>/chain_*.rs`
+- 前端链交互文件:`citizenchain/onchina/frontend/<功能模块>/chain_*`
 - runtime 辅助目录:`citizenchain/runtime/otherpallet/cid-system/src/sheng_admins/`
 
 ## 7. GitHub Actions 路径分流原则
@@ -171,10 +168,8 @@ GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
   - `.github/workflows/citizenchain-runtime-src.yml`
 - `citizenchain/runtime/transaction`
   - `.github/workflows/citizenchain-runtime-transaction.yml`
-- `citizencode`
-  - `.github/workflows/citizencode-ci.yml`
-- `citizenpassport`
-  - `.github/workflows/citizenpassport-ci.yml`
+- `citizenchain/onchina`
+  - 归属公民链 CI，按 OnChina 后端、前端和链交互变更执行对应本地/CI 检查；不得恢复独立 旧独立身份系统 CI
 - `citizenapp`
   - `.github/workflows/citizenapp-ci.yml`
 - `citizenwallet`
@@ -184,6 +179,6 @@ GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
 
 补充说明：
 
-- `citizencode` 当前没有独立部署 workflow;push / pull_request 只做 CI,手动 `Run workflow` 才构建 `citizencode.deb`
+- OnChina 不再保留独立发布包、独立部署 workflow 或独立产品入口。
 - Pages 只在 `docs/**` 或自身 workflow 变更时触发
 - 共享 Rust 根目录变更允许触发多个 citizenchain workflow，这是保留的安全边界

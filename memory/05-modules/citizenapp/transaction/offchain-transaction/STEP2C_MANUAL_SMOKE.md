@@ -11,10 +11,10 @@
 
 ---
 
-## 0. 前置条件(不在本 SOP 范围内,由运维/CID Agent 准备)
+## 0. 前置条件(不在本 SOP 范围内,由运维/OnChina Agent 准备)
 
 - citizenchain 链已在运行,能通过 WSS 访问
-- CID 后端已部署,`GET /api/v1/app/clearing-banks/search` 可用
+- OnChina 后端已部署,`GET /api/v1/app/clearing-banks/search` 可用
 - 至少 1 家清算行已在 CID 注册 + 链上上链:
   - `main_account`(主账户 SS58)已提交 `register_cid_institution`
   - 至少 1 名管理员签名密钥已通过节点 `offchain_keystore` 加密落盘
@@ -139,7 +139,7 @@ cd /Users/rhett/GMB/citizenapp
 
 ### 先决条件
 
-B 必须先在 CID 系统搜索对应清算行并走完步骤 4 的绑定(否则页面只显示"请先绑定清算行")。
+B 必须先在 OnChina 系统搜索对应清算行并走完步骤 4 的绑定(否则页面只显示"请先绑定清算行")。
 
 实际上 Step 1 同行 MVP:B 绑定的清算行必须与 A 相同;搜 CID 时选同一家。
 
@@ -221,7 +221,7 @@ B 必须先在 CID 系统搜索对应清算行并走完步骤 4 的绑定(否则
 | 现象 | 原因 | 处置 |
 |---|---|---|
 | 扫码付款页 `请先绑定清算行` | `UserBank[A]` 空 / 本地绑定缓存缺失 | 回步骤 4 确认绑定成功;重新进入清算行设置页刷新缓存 |
-| `收款方清算行 ... 未在 CID 系统查到` | QR 的 `bank` 字段与 CID 已注册机构不匹配 | 收款方换绑定 → 重生成 QR |
+| `收款方清算行 ... 未在 OnChina 系统查到` | QR 的 `bank` 字段与 OnChina 已注册机构不匹配 | 收款方换绑定 → 重生成 QR |
 | `收款方清算行尚未声明节点` | 链上 `ClearingBankNodes[bank]` 不存在 | 收款方清算行管理员先在节点端声明清算节点 |
 | `清算行费率未配置(rate_bp=0)` | `L2FeeRateBp[bank_main]` = 0 | 由清算行管理员 `propose_l2_fee_rate(bank, 5)` → 等 7 天或 Root `set_max_l2_fee_rate` 后再提 |
 | 提交后 30 秒过了 packer 无反应 | keystore 密码不对 → `sign_batch` Err 回滚 | 查节点 `[ClearingPacker]` 日志是否有 rollback;重启节点传正确密码 |

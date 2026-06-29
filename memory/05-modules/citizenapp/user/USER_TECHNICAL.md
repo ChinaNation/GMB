@@ -126,7 +126,7 @@
 2. 跳转 `lib/my/myid/MyIdPage`
 3. 电子护照设置、状态同步和现场签名由 `lib/my/myid/` 负责
 4. 页面展示“身份ID / 投票账户 / 状态”，其中“状态”是身份ID状态，不是绑定状态徽标
-5. 现场签名页 `lib/my/myid/myid_sign_page.dart` 扫描 CID 管理端签名请求时，扫码区域必须是
+5. 现场签名页 `lib/my/myid/myid_sign_page.dart` 扫描 OnChina 管理端签名请求时，扫码区域必须是
    固定正方形相机框并带四角提示，不得继续使用整块矩形相机画面。
 
 ### 5.6 通讯录

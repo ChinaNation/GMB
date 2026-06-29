@@ -66,7 +66,7 @@ storage key 布局稳定性 + 不同 bank 不同 key + hex 编解码 roundtrip +
 | 文件 | 变更 |
 |---|---|
 | `lib/transaction/offchain-transaction/rpc/offchain_clearing_rpc.dart` | 追加 `queryUserBank` / `queryFeeRate` / `submitPayment` 3 个方法(WSS over JSON-RPC 的 record 返回值) |
-| `lib/transaction/offchain-transaction/services/clearing_bank_directory.dart` | 新增清算行目录服务:CID 后端搜索候选机构,链上读取 `ClearingBankNodes` 端点、`UserBank` 绑定 |
+| `lib/transaction/offchain-transaction/services/clearing_bank_directory.dart` | 新增清算行目录服务:OnChina 后端搜索候选机构,链上读取 `ClearingBankNodes` 端点、`UserBank` 绑定 |
 | `lib/transaction/offchain-transaction/services/offchain_scan_flow.dart` | 扫码后按收款方 `bank` 查询链上端点,跳转到新付款页;不再依赖固定启动参数配置清算节点 |
 | `lib/transaction/offchain-transaction/pages/clearing_bank_settings_page.dart` | 设置页从占位页变成真实搜索/当前绑定/绑定或切换入口 |
 | `lib/transaction/offchain-transaction/services/clearing_bank_prefs.dart` | 本地缓存从单一 cid 字符串升级为 `ClearingBankBindingSnapshot`,记录 cid、机构名、主/费用账户与节点端点 |
@@ -170,7 +170,7 @@ No issues found!  (全项目)
 | 跨行支付提交到收款方节点后,付款方余额/nonce 不在收款方本地 ledger | **已修复** | node RPC 会读链上 `DepositBalance[payer_bank][payer]` 与 `L3PaymentNonce[payer]`,并叠加本节点 pending 做早拒,不创建付款方 ghost 账户 |
 | `offchain_queryFeeRate` 返回 `rate_bp==0` 时 UI 仅显示错误,用户体验欠缺 | **P3** | 本步先 hard-fail 提示联系运维,后续可引导到"查看清算行详情"页面 |
 | 冷钱包 `isHotWallet==false` 直接 SnackBar 拒绝 | **当前目标状态** | 当前 payload 是 32 字节 signing_hash，冷钱包不能独立还原 PaymentIntent 业务字段，必须拒绝 |
-| CID 地址配置分叉 | **已修复** | 链下扫码支付已统一使用 `CidApiConfig.defaultBaseUrl`;生产固定 `https://cid.crcfrcn.com`,本地开发固定 USB reverse 到 `127.0.0.1:8899` |
+| OnChina 地址配置分叉 | **已修复** | 链下扫码支付已统一使用 `CidApiConfig.defaultBaseUrl`;生产固定 `https://cid.crcfrcn.com`,本地开发固定 USB reverse 到 `127.0.0.1:8899` |
 
 ---
 

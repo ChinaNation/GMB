@@ -29,8 +29,8 @@ Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 
 
 链上 `OffchainTransaction::UserBank[user]` 存的是清算行**主账户** `AccountId32`
 (32 字节),**不是** CID `cid_number` 字符串。但收款 QR 里写的是 `cid_number`
-(付款方用 CID 公开 API 反查主账户做同行校验)。从 `AccountId32` 反查
-`cid_number` 需要 CID 后端配一个 "按主账户 hex 精确查" 端点,CID 公开
+(付款方用 OnChina 公开 API 反查主账户做同行校验)。从 `AccountId32` 反查
+`cid_number` 需要 OnChina 后端配一个 "按主账户 hex 精确查" 端点,OnChina 公开
 `searchClearingBanks` 只支持 keyword 模糊匹配。
 
 **本步务实方案**:`ClearingBankPrefs`(`SharedPreferences` 封装,key:
@@ -41,7 +41,7 @@ Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 
 - **失去缓存的处置**(重装 / 清数据 / CLI 或别机绑定):提示重新从"选择/绑定
   清算行"入口走一遍(即使链上已绑,重走到确认步会同步写回缓存)
 
-**后续升级路径**(Step 3):CID 后端补 `GET /api/v1/app/clearing-banks/by-main-account?address=`
+**后续升级路径**(Step 3):OnChina 后端补 `GET /api/v1/app/clearing-banks/by-main-account?address=`
 后,收款页优先走 RPC 反查,失败再退回缓存。
 
 ---
@@ -154,7 +154,7 @@ All tests passed!  (5 个)
 - **Step 2c-ii-b**:WS 订阅 `PaymentSettled` 事件推送,取代轮询;收到支付时 Toast
   通知 + 动画高亮
 - **冷钱包支付**:必须先改为可独立验证的 PaymentIntent 原文签名协议，再接入 QR 签名
-- **Step 3**:CID 后端补"按主账户反查 cid_number"API,移除本步本地缓存依赖;
+- **Step 3**:OnChina 后端补"按主账户反查 cid_number"API,移除本步本地缓存依赖;
   加历史收款列表(从 `PaymentSettled` 事件构建)
 - **UI 精修**:中央 logo 留白 / 保存到相册 / 分享 / 识别粘贴板
 

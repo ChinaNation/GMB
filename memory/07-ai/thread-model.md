@@ -12,6 +12,6 @@
 ## 2. 推荐实践
 
 - 主线程：由当前承接用户任务的聊天入口承担，负责需求分析、架构决策、边界确认、模块识别和任务调度
-- 工作线程：按需承担 `Blockchain Agent / CID Agent / Mobile Agent` 的专业执行任务
+- 工作线程：按需承担 `Blockchain Agent / OnChina Agent / Mobile Agent / Wallet Agent` 的专业执行任务
 - 结果必须回写到 `memory/`、任务卡、ADR 或变更记录
 - Codex 与 Claude 的线程都必须遵守同一份任务卡、同一份模块边界和同一份安全规则

@@ -58,17 +58,17 @@ citizenchain/
 └── scripts/         # 本产品脚本
 ```
 
-### 4.1 注册局子系统(registry，ADR-029）
+### 4.1 OnChina 注册局子系统
 
-`citizenchain/registry` 是 workspace 新增成员 crate，承接注册局能力，去中心化为"每市一个市注册局自治节点 + 一个联邦注册局节点"。
+`citizenchain/onchina` 是公民链 workspace 成员 crate，承接注册局身份、行政区、机构登记、管理后台和链侧凭证能力，去中心化为"每市一个市注册局自治节点 + 一个联邦注册局节点"。
 
-- 进程模型：注册局是独立二进制(`registry`)，由节点桌面端启动时拉起为子进程(`node/src/registry_proc`)、退出时一并停掉；registry 经节点 RPC 读写链；对内网托管注册局 HTTP API 与前端。桌面 = 节点运维台，浏览器 = 注册局管理员，并存不冲突。
+- 进程模型：OnChina 是公民链内置二进制能力，由节点桌面端启动时按需拉起为子进程、退出时一并停掉；OnChina 经节点 RPC 读写链；对内网托管注册局 HTTP API 与前端。桌面 = 节点运维台，浏览器 = 注册局管理员，并存不冲突。
 - 数据两层：链上最小身份 + 承诺哈希(选择性/绑定触发上链)；链下明细存本市内嵌 PostgreSQL + 本地/NAS 文件仓库(文件哈希上链验真)。
 - 当前进度：
   - Step0：crate 骨架 + node 拉起子进程的最小贯通（已完成）。
-  - Step1：`citizencode/backend` 全量后端(约 25,662 行,含 accounts/admins/china/citizenapp/citizens/core/citizenpassport/crypto/docs/gov/indexer/number/private/scope/subjects/audit)忠实迁入 `registry/src`，平台层切换为内嵌 PostgreSQL + 节点 RPC + **进程内本地限流(删 Redis)**；省/市 scope 与行政区维度保留；`cargo check -p registry` 0 错误 0 警告（已完成，真实起库端到端验收待 PG 环境）。
-  - Step2：`citizencode/frontend`(Vite5 + React18 + TS)忠实迁入 `registry/frontend`，registry 后端**同源托管 dist + SPA 回退**(`tower-http` ServeDir/ServeFile,静态资源不走限流)；`vite base: './'`;`npm run build` 与 `cargo check -p registry` 均 0 错误 0 警告（已完成）。桌面 `node/frontend` 与浏览器 `registry/frontend` 两套独立前端并存。
-  - 后续：链上管理员供给与扫码登录(Step3)、公民护照直接录入收口(Step4)、打包部署(Step5)，见 `memory/08-tasks/open/20260626-registry-merge-0X-*`。
+  - Step1：`citizenchain/onchina/src` 后端完成迁移和收敛，平台层切换为内嵌 PostgreSQL + 节点 RPC + 进程内本地限流；省/市 scope 与行政区维度保留。
+  - Step2：`citizenchain/onchina/frontend` 前端完成迁移和收敛，OnChina 后端同源托管 `dist` + SPA 回退；桌面 `node/frontend` 与浏览器 `onchina/frontend` 两套独立前端并存。
+  - 后续：链上管理员供给与扫码登录、公民护照直接录入收口、打包部署均按 OnChina 当前任务卡推进，不再引用旧注册局迁移任务口径。
 
 ## 5. 系统总体架构
 

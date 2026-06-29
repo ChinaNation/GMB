@@ -112,4 +112,4 @@ address  = BLAKE2-256(preimage)
 
 `OP_INSTITUTION = 0x06` 专供 CID 机构自定义命名账户，`OP_MAIN` / `OP_FEE` 只走 `preimage = ss58 || cid_number`，宪法机构和 CID 登记机构的主/费用账户派生公式一致。`derive_institution_account(cid_number, role)` 与 `role_from_account_name` 是当前辅助接口。保留名 `"主账户"`/`"费用账户"` 强制走 `Role::Main`/`Role::Fee`。任务卡：[20260421-op-institution-role-split](../../../../08-tasks/done/20260421-op-institution-role-split.md)。
 
-链端账户名称字段统一为 `account_name` / `AccountNameOf<T>` / `MaxAccountNameLength` / `EmptyAccountName`，与 CID 后端 `MultisigAccount.account_name` 对齐。任务卡：[20260421-name-to-account-name-rename](../../../../08-tasks/done/20260421-name-to-account-name-rename.md)。
+链端账户名称字段统一为 `account_name` / `AccountNameOf<T>` / `MaxAccountNameLength` / `EmptyAccountName`，与 OnChina 后端 `MultisigAccount.account_name` 对齐。任务卡：[20260421-name-to-account-name-rename](../../../../08-tasks/done/20260421-name-to-account-name-rename.md)。

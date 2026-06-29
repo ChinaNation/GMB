@@ -5,8 +5,8 @@
 这里统一存放：
 
 - `citizenchain` 模块文档
-- `cid` 模块文档
 - `citizenapp` 模块文档
+- `citizenwallet` 模块文档
 - `website` 官网模块文档
 
 ## 规则
@@ -19,6 +19,7 @@
 ## 当前分层
 
 - `memory/05-modules/citizenchain/`
-- `memory/05-modules/citizencode/`
+- `memory/05-modules/citizenchain/onchina/`
 - `memory/05-modules/citizenapp/`
+- `memory/05-modules/citizenwallet/`
 - `memory/05-modules/website/`

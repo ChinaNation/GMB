@@ -78,7 +78,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `memory/00-vision/` | 愿景 | vision | 项目目标、信任边界和长期方向 |
 | `memory/01-architecture/` | 架构 | architecture | 仓库级和产品级架构文档 |
 | `memory/01-architecture/qr/` | QR 扫码协议 | qr-protocol | QR_V1 协议、签名识别、action registry 和 golden fixture 当前详细真源 |
-| `memory/01-architecture/citizencode/` | CID 架构 | cid-architecture | CID 产品架构、技术框架和并发框架文档 |
+| `memory/01-architecture/onchina/` | OnChina 架构 | onchina-architecture | 公民链内置 OnChina 架构、技术框架和并发框架文档 |
 | `memory/03-security/` | 安全 | security | 安全规则、边界和风险要求 |
 | `memory/04-decisions/` | 架构决策 | decisions | ADR 和重要设计决策 |
 | `memory/05-modules/` | 模块文档 | modules | 各产品、各模块技术文档 |
@@ -94,8 +94,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/` | 公民链 | citizenchain | runtime、节点、桌面端和打包 |
 | `citizenchain/runtime/` | 链上运行时 | runtime | pallet、runtime 配置和链上规则 |
 | `citizenchain/node/` | 节点桌面端 | node | 原生节点、Tauri 后端和桌面前端 |
-| `citizencode/` | 在线身份系统 | cid | CID 后端、前端和部署配置 |
-| `citizenchain/registry/src/cid/` | 身份 ID 编码协议 | number | CID 后端身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
+| `citizenchain/onchina/` | OnChina | onchina | 公民链内置注册局身份、行政区、机构登记、管理后台和链侧凭证能力 |
+| `citizenchain/onchina/src/cid/` | 身份 ID 编码协议 | number | OnChina 身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
 | `citizenwallet/` | 公民钱包 | citizenwallet | 离线签名、扫码识别和钱包 UI |
 | `citizenapp/` | 公民 | citizenapp | Flutter 客户端、钱包、治理和轻节点能力 |
 | `citizenapp/im/proto/` | citizenapp 信息协议 | citizenapp-im-proto | 公民 IM 外层 Protobuf schema 真源，不放仓库根目录 proto |
@@ -211,14 +211,14 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 | 含义 | JSON / SQL / Rust | Dart / TypeScript | 使用边界 |
 |---|---|---|---|
-| 注册局管理员姓名 | `admin_name` | `adminName` | CID 后端数据库、管理员 API、CID 前端表单和列表 |
-| 市注册局新增表单管理员姓名 | `city_registry_admin_name` | `cityRegistryAdminName` | CID 前端表单局部字段 |
+| 注册局管理员姓名 | `admin_name` | `adminName` | OnChina 后端数据库、管理员 API、OnChina 前端表单和列表 |
+| 市注册局新增表单管理员姓名 | `city_registry_admin_name` | `cityRegistryAdminName` | OnChina 前端表单局部字段 |
 | 管理员账户选择标签 | `account_label` | `accountLabel` | App 本地管理员账户候选展示,不承载机构名称真源 |
 | 钱包候选标签 | `wallet_label` | `walletLabel` | node 前端钱包选择器展示,不承载机构名称真源 |
 | 权威节点标签 | `authority_node_label` | `authorityNodeLabel` | node 设置页 bootnode/GRANDPA 绑定展示,不是机构全称或简称 |
 | IM 路由显示名 | `route_display_name` | `routeDisplayName` | IM 路由缓存和 protobuf 路由记录,不是通讯录真源 |
-| 行政区省名称 | `province_name` | `provinceName` | CID 行政区 API、App 省份列表、生成物 manifest |
-| 行政区市名称 | `city_name` | `cityName` | CID 行政区 API、App/前端市级选择 |
+| 行政区省名称 | `province_name` | `provinceName` | OnChina 行政区 API、App 省份列表、生成物 manifest |
+| 行政区市名称 | `city_name` | `cityName` | OnChina 行政区 API、App/前端市级选择 |
 | App 行政区内部名称 | `division_name` | `divisionName` | App Isar 行政区缓存内部字段 |
 | App 省级展示名称 | `province_display_name` | `provinceDisplayName` | App 省级入口展示 |
 | 用户联系人姓名 | `contact_name` | `contactName` | `QR_V1/k=3` body、通讯录导入服务 |
@@ -243,8 +243,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 | 废弃旧名 | 当前命名 | 类型 | 当前边界 |
 |---|---|---|---|
-| `uninorg` | `unincorporated_org` | CID 非法人机构目录名 | `citizencode/backend/subjects/unincorporated_org/` |
-| `backend/institutions` | `backend/subjects` | CID 主体共享目录 | `citizencode/backend/subjects/` |
+| `uninorg` | `unincorporated_org` | CID 非法人机构目录名 | `citizenchain/onchina/src/subjects/unincorporated_org/` |
+| `backend/institutions` | `backend/subjects` | CID 主体共享目录 | `citizenchain/onchina/src/subjects/` |
 | `node/src/offchain` | `node/src/transaction/offchain_transaction` | 节点链下交易后端目录 | `citizenchain/node/src/transaction/offchain_transaction/` |
 | `node/frontend/offchain` | `node/frontend/transaction/offchain-transaction` | 节点链下交易前端目录 | `citizenchain/node/frontend/transaction/offchain-transaction/` |
 | `network-overview` | `network_overview` | Rust 后端模块目录 | `citizenchain/node/src/mining/network_overview/` |
@@ -315,10 +315,10 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 禁止新增或恢复以下目录：
 
-- CID 后端源码壳目录。
-- CID 后端独立链业务目录。
-- CID 前端独立链业务目录。
-- CID 前端独立业务 API 目录。
+- OnChina 后端源码壳目录。
+- OnChina 后端独立链业务目录。
+- OnChina 前端独立链业务目录。
+- OnChina 前端独立业务 API 目录。
 - citizenapp 旧大写 Isar 目录。
 
 历史文件或外部工具生成物中已有的，不因此自动修改；新建命名禁止使用。
@@ -342,7 +342,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
 | `memory/05-modules/citizenchain/` | 公民链模块文档 | citizenchain-module-docs | citizenchain runtime、node、桌面端模块文档 |
-| `memory/05-modules/citizencode/` | CID 模块文档 | cid-module-docs | CID 后端、前端和业务模块文档 |
+| `memory/05-modules/citizenchain/onchina/` | OnChina 模块文档 | onchina-module-docs | OnChina 后端、前端和业务模块文档 |
 | `memory/05-modules/website/` | 官网模块文档 | website-module-docs | 官网模块文档 |
 | `memory/05-modules/citizenapp/` | citizenapp 模块文档 | citizenapp-module-docs | citizenapp 移动端模块文档 |
 | `memory/05-modules/citizenapp/governance/` | citizenapp 治理 | citizenapp-governance | 移动端治理流程文档 |
@@ -358,69 +358,69 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `memory/05-modules/citizencode/ERROR_CODES.md` | CID 错误码规范 | cid-error-codes | CID HTTP 状态码、稳定业务错误码和前端错误处理规则 |
+| `memory/05-modules/citizenchain/onchina/DATA_SECURITY_TECHNICAL.md` | OnChina 数据安全规范 | onchina-data-security | OnChina HTTP 状态码、稳定业务错误码、权限、行政区和前端错误处理规则 |
 
-## 11. CID 功能目录命名登记
+## 11. OnChina 功能目录命名登记
 
-### CID 后端目录
-
-| 路径 | 中文名称 | English name | 简介 |
-|---|---|---|---|
-| `citizencode/backend/core/` | 应用核心 | core | 后端启动、路由、HTTP 响应、HTTP 安全、跨模块核心能力和通用链工具 |
-| `citizencode/backend/citizens/` | 公民 | citizens | 公民身份与资料管理 |
-| `citizencode/backend/crypto/` | 密码工具 | crypto | 签名、哈希、密钥和密码学工具 |
-| `citizencode/backend/indexer/` | 索引器 | indexer | 链上或业务索引能力 |
-| `citizencode/backend/gov/` | 公权机构 | gov | 公安局、公权自动目录和公权机构管理接口 |
-| `citizencode/backend/private/` | 私权机构 | private | 六类私权机构路由边界;根层不得恢复总 handler |
-| `citizencode/backend/private/common/` | 私权共用规则 | private-common | 私权类型到主体属性、机构码、盈利属性和法人资格的规则单一来源 |
-| `citizencode/backend/private/sole/` | 个体经营 | sole | 个体经营模型、校验、创建和列表边界 |
-| `citizencode/backend/private/partnership/` | 合伙企业 | partnership | 有限合伙和无限合伙模型、校验、创建和列表边界 |
-| `citizencode/backend/private/company/` | 股权公司 | company | 股权有限公司/有限责任公司模型、校验、创建和列表边界 |
-| `citizencode/backend/private/corporation/` | 股份公司 | corporation | 股份有限公司模型、校验、创建和列表边界 |
-| `citizencode/backend/private/welfare/` | 公益组织 | welfare | 非营利法人模型、校验、创建和列表边界 |
-| `citizencode/backend/private/association/` | 注册协会 | association | 具有法人资格的协会类组织边界 |
-| `citizencode/backend/private/participants/` | 参与人关系 | participants | 负责人、合伙人、股东、成员等通用关系边界 |
-| `citizencode/backend/accounts/` | 机构账户 | accounts | 机构多签账户管理接口 |
-| `citizencode/backend/docs/` | 机构资料库 | docs | 机构资料上传、下载、列表和删除接口 |
-| `citizencode/backend/subjects/` | 身份主体 | subjects | 公权/私权/公民共用主体索引、详情、链端公开查询和非法人能力 |
-| `citizencode/backend/admins/login/` | 管理员登录 | admins-login | 管理端登录、扫码登录、鉴权守卫和签名校验 |
-| `citizencode/backend/admins/model.rs` | 管理员模型 | admins-model | 联邦注册局机构管理员、市注册局机构管理员和管理员列表 DTO |
-| `citizencode/backend/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
-| `citizencode/backend/core/qr/` | QR | core-qr | 后端 QR_V1 协议辅助和统一 sign_request 构造 |
-| `citizencode/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
-| `citizenchain/registry/src/cid/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
-| `citizenchain/registry/src/cid/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
-| `citizencode/backend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战写操作 |
-| `citizencode/backend/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | CID 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
-| `citizencode/backend/store/` | Store | store | Store 聚合体、省级进程内分片缓存和存储边界模型 |
-| `citizencode/backend/tests/` | 测试 | tests | 后端测试 |
-
-### CID 前端目录
+### OnChina 后端目录
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `citizencode/frontend/assets/` | 静态资产 | assets | 图片、字体等前端静态资产 |
-| `citizencode/frontend/auth/` | 认证 | auth | 前端登录和认证流程 |
-| `citizencode/frontend/citizens/` | 公民 | citizens | 公民管理界面 |
-| `citizencode/frontend/core/` | 前端核心 | core | 前端通用组件、共享 UI、扫码账户弹窗、公民钱包签名面板和 QR 工具 |
-| `citizencode/frontend/hooks/` | Hooks | hooks | 前端共享 hooks |
-| `citizencode/frontend/gov/` | 公权机构 | gov | 公安局和公权机构界面 |
-| `citizencode/frontend/private/` | 私权机构 Shell | private | 省市选择、当前私权类型页面和详情跳转 |
-| `citizencode/frontend/private/common/` | 私权机构前端共用 | private-common | 共用 API、列表、创建弹窗和单类型页面壳 |
-| `citizencode/frontend/private/sole/` | 个体经营前端 | sole | 个体经营页面、API 和类型边界 |
-| `citizencode/frontend/private/partnership/` | 合伙企业前端 | partnership | 合伙企业页面、API 和类型边界 |
-| `citizencode/frontend/private/company/` | 股权公司前端 | company | 股权公司页面、API 和类型边界 |
-| `citizencode/frontend/private/corporation/` | 股份公司前端 | corporation | 股份公司页面、API 和类型边界 |
-| `citizencode/frontend/private/welfare/` | 公益组织前端 | welfare | 公益组织页面、API 和类型边界 |
-| `citizencode/frontend/private/association/` | 注册协会前端 | association | 注册协会页面、API 和类型边界 |
-| `citizencode/frontend/accounts/` | 机构账户 | accounts | 机构账户界面 |
-| `citizencode/frontend/docs/` | 机构资料库 | docs | 机构资料库界面 |
-| `citizencode/frontend/subjects/` | 身份主体 | subjects | 主体共享类型、字段标签和链端公开查询封装 |
-| `citizencode/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 QR_V1 工具 |
-| `citizencode/frontend/china/` | 中国行政区划 | china | 前端行政区划元数据 API 和缓存 |
-| `citizencode/frontend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战前端流程 |
-| `citizencode/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
-| `citizencode/frontend/utils/` | 工具 | utils | 前端通用工具；业务 API 不放在这里 |
+| `citizenchain/onchina/src/core/` | 应用核心 | core | 后端启动、路由、HTTP 响应、HTTP 安全、跨模块核心能力和通用链工具 |
+| `citizenchain/onchina/src/citizens/` | 公民 | citizens | 公民身份与资料管理 |
+| `citizenchain/onchina/src/crypto/` | 密码工具 | crypto | 签名、哈希、密钥和密码学工具 |
+| `citizenchain/onchina/src/indexer/` | 索引器 | indexer | 链上或业务索引能力 |
+| `citizenchain/onchina/src/gov/` | 公权机构 | gov | 公安局、公权自动目录和公权机构管理接口 |
+| `citizenchain/onchina/src/private/` | 私权机构 | private | 六类私权机构路由边界;根层不得恢复总 handler |
+| `citizenchain/onchina/src/private/common/` | 私权共用规则 | private-common | 私权类型到主体属性、机构码、盈利属性和法人资格的规则单一来源 |
+| `citizenchain/onchina/src/private/sole/` | 个体经营 | sole | 个体经营模型、校验、创建和列表边界 |
+| `citizenchain/onchina/src/private/partnership/` | 合伙企业 | partnership | 有限合伙和无限合伙模型、校验、创建和列表边界 |
+| `citizenchain/onchina/src/private/company/` | 股权公司 | company | 股权有限公司/有限责任公司模型、校验、创建和列表边界 |
+| `citizenchain/onchina/src/private/corporation/` | 股份公司 | corporation | 股份有限公司模型、校验、创建和列表边界 |
+| `citizenchain/onchina/src/private/welfare/` | 公益组织 | welfare | 非营利法人模型、校验、创建和列表边界 |
+| `citizenchain/onchina/src/private/association/` | 注册协会 | association | 具有法人资格的协会类组织边界 |
+| `citizenchain/onchina/src/private/participants/` | 参与人关系 | participants | 负责人、合伙人、股东、成员等通用关系边界 |
+| `citizenchain/onchina/src/accounts/` | 机构账户 | accounts | 机构多签账户管理接口 |
+| `citizenchain/onchina/src/docs/` | 机构资料库 | docs | 机构资料上传、下载、列表和删除接口 |
+| `citizenchain/onchina/src/subjects/` | 身份主体 | subjects | 公权/私权/公民共用主体索引、详情、链端公开查询和非法人能力 |
+| `citizenchain/onchina/src/admins/login/` | 管理员登录 | admins-login | 管理端登录、扫码登录、鉴权守卫和签名校验 |
+| `citizenchain/onchina/src/admins/model.rs` | 管理员模型 | admins-model | 联邦注册局机构管理员、市注册局机构管理员和管理员列表 DTO |
+| `citizenchain/onchina/src/admins/security_model.rs` | 管理员安全模型 | admins-security-model | Passkey、挑战、grant 等管理员安全状态模型 |
+| `citizenchain/onchina/src/core/qr/` | QR | core-qr | 后端 QR_V1 协议辅助和统一 sign_request 构造 |
+| `citizenchain/onchina/src/scope/` | 权限范围 | scope | 权限范围和访问边界 |
+| `citizenchain/onchina/src/cid/` | 身份 ID 编码协议 | number | 身份号码格式、SubjectProperty、机构码、分类、生成和校验规则 |
+| `citizenchain/onchina/src/cid/china/` | 中国行政区划 | china | SQLite 行政区划真源读取层 |
+| `citizenchain/onchina/src/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战写操作 |
+| `citizenchain/onchina/src/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | OnChina 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
+| `citizenchain/onchina/src/store/` | Store | store | Store 聚合体、省级进程内分片缓存和存储边界模型 |
+| `citizenchain/onchina/src/tests/` | 测试 | tests | 后端测试 |
+
+### OnChina 前端目录
+
+| 路径 | 中文名称 | English name | 简介 |
+|---|---|---|---|
+| `citizenchain/onchina/frontend/assets/` | 静态资产 | assets | 图片、字体等前端静态资产 |
+| `citizenchain/onchina/frontend/auth/` | 认证 | auth | 前端登录和认证流程 |
+| `citizenchain/onchina/frontend/citizens/` | 公民 | citizens | 公民管理界面 |
+| `citizenchain/onchina/frontend/core/` | 前端核心 | core | 前端通用组件、共享 UI、扫码账户弹窗、公民钱包签名面板和 QR 工具 |
+| `citizenchain/onchina/frontend/hooks/` | Hooks | hooks | 前端共享 hooks |
+| `citizenchain/onchina/frontend/gov/` | 公权机构 | gov | 公安局和公权机构界面 |
+| `citizenchain/onchina/frontend/private/` | 私权机构 Shell | private | 省市选择、当前私权类型页面和详情跳转 |
+| `citizenchain/onchina/frontend/private/common/` | 私权机构前端共用 | private-common | 共用 API、列表、创建弹窗和单类型页面壳 |
+| `citizenchain/onchina/frontend/private/sole/` | 个体经营前端 | sole | 个体经营页面、API 和类型边界 |
+| `citizenchain/onchina/frontend/private/partnership/` | 合伙企业前端 | partnership | 合伙企业页面、API 和类型边界 |
+| `citizenchain/onchina/frontend/private/company/` | 股权公司前端 | company | 股权公司页面、API 和类型边界 |
+| `citizenchain/onchina/frontend/private/corporation/` | 股份公司前端 | corporation | 股份公司页面、API 和类型边界 |
+| `citizenchain/onchina/frontend/private/welfare/` | 公益组织前端 | welfare | 公益组织页面、API 和类型边界 |
+| `citizenchain/onchina/frontend/private/association/` | 注册协会前端 | association | 注册协会页面、API 和类型边界 |
+| `citizenchain/onchina/frontend/accounts/` | 机构账户 | accounts | 机构账户界面 |
+| `citizenchain/onchina/frontend/docs/` | 机构资料库 | docs | 机构资料库界面 |
+| `citizenchain/onchina/frontend/subjects/` | 身份主体 | subjects | 主体共享类型、字段标签和链端公开查询封装 |
+| `citizenchain/onchina/frontend/core/qr/` | QR | core-qr | 前端二维码解析和 QR_V1 工具 |
+| `citizenchain/onchina/frontend/china/` | 中国行政区划 | china | 前端行政区划元数据 API 和缓存 |
+| `citizenchain/onchina/frontend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战前端流程 |
+| `citizenchain/onchina/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
+| `citizenchain/onchina/frontend/utils/` | 工具 | utils | 前端通用工具；业务 API 不放在这里 |
 
 ## 12. citizenapp 功能目录命名登记
 
@@ -479,7 +479,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/runtime/issuance/provincialbank-interest/` | 省行利息 | provincialbank-interest | 省行利息 pallet |
 | `citizenchain/runtime/otherpallet/` | 其他 pallet | otherpallet | 非治理、非交易、非发行类 pallet |
 | `citizenchain/runtime/otherpallet/pow-difficulty/` | PoW 难度 | pow-difficulty | PoW 难度 pallet |
-| `citizenchain/runtime/otherpallet/cid-system/` | CID 系统 | cid-system | 链上 CID 系统 pallet |
+| `citizenchain/runtime/otherpallet/cid-system/` | 链上 CID 资格 pallet | cid-system | 链上 CID 绑定与投票资格消费 pallet |
 | `citizenchain/runtime/primitives/` | 运行时基础类型 | primitives | runtime 共享基础类型 |
 | `citizenchain/runtime/src/` | runtime 入口 | runtime-src | runtime 配置、类型和测试入口 |
 | `citizenchain/runtime/transaction/` | 交易 | transaction | 交易类 pallet |

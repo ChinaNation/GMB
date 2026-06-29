@@ -1,0 +1,125 @@
+# OnChina 技术架构
+
+## 1. 定位
+
+OnChina 是公民链内置的注册局身份和链上中国平台能力，负责 CID 号、行政区、注册局管理后台、公民电子护照绑定、机构登记、机构公开查询、人口快照凭证和链侧凭证签发。
+
+OnChina 不是第五个产品。仓库产品只保留：
+
+- 公民 `citizenapp`
+- 公民链 `citizenchain`
+- 公民钱包 `citizenwallet`
+- 官方网站 `website`
+
+## 2. 技术栈
+
+- 后端：Rust + Axum + PostgreSQL
+- 前端：React + TypeScript + Vite + Ant Design
+- 链交互：Substrate RPC、SCALE、统一 QR_V1 扫码签名协议
+- 行政区开发真源：`citizenchain/onchina/src/cid/china/china.sqlite`
+
+## 3. 启动流程
+
+1. 读取 `DATABASE_URL`、`CID_CHINA_DB`、链 RPC 和安全配置。
+2. 初始化 PostgreSQL schema 父表。
+3. 将父表收敛到当前目标字段，新增缺失字段并删除废弃字段。
+4. 校验关键字段存在、废弃字段不存在。
+5. 创建当前目标索引。
+6. 为 `subjects/citizens/gov/private/accounts/docs/audit` 创建 `province_code` 分区。
+7. 读取随包只读行政区 SQLite，并断言 SQLite 省表与 runtime primitives `PROVINCE_CODE_INFOS` 一致。
+8. 初始化内置联邦注册局机构 `admins` 投影。
+9. 启动链上交易索引 worker。
+
+schema 初始化和业务目录初始化必须分离。服务启动只允许做结构收敛、分区创建、内置管理员投影和索引 worker 启动；确定性公权机构目录只能在显式维护命令中生成或对账。
+
+## 4. 行政区和 CID 号真源
+
+- 国家码、省级行政区码和机构码常量唯一真源：`citizenchain/runtime/primitives/cid/code.rs`。
+- 市、镇和地址段开发真源：`citizenchain/onchina/src/cid/china/china.sqlite`。
+- CID 号生成和校验唯一源码目录：`citizenchain/onchina/src/cid/`。
+
+生产环境中 `CID_CHINA_DB` 固定指向随包只读 SQLite。市镇地址段变更只能修改开发库并重新发布安装包，禁止运行期在线编辑行政区。
+
+## 5. 结构化表
+
+- `ids(cid_number, kind, province_code, city_code)`：全局身份 ID 索引。
+- `subjects`：主体公共展示字段，按省分区；机构行保存 `cid_full_name/cid_short_name`、行政区、业务状态、私权分类和法定代表人资料。
+- `citizens`：公民电子护照绑定字段，按省分区。
+- `gov`：公权机构扩展字段，按省分区；自动目录写 `source='GENERATED'`，人工公权机构写 `source='MANUAL'`。
+- `private`：私权机构扩展字段，按省分区；分类字段使用 `private_type/partnership_kind/has_legal_personality`。
+- `accounts`：机构账户，主键按 `(province_code, cid_number, account_name)` 收敛。
+- `docs`：机构资料库元数据，文件本体在磁盘。
+- `audit`：结构化审计记录，按省分区。
+- `admins`、`federal_registry_scope`：注册局机构 `admins` 和联邦管理员省域范围。
+- `admin_login_sign_requests`、`admin_qr_login_results`、`admin_action_challenges`、`admin_security_grants`：登录和扫码签名运行态。
+- `chain_requests`、`chain_nonces`、`tx_records`、`tx_indexer_state`：链路幂等、防重放和索引运行态。
+
+`cid_number` 是唯一且不可变的身份标识。不得新增 `identity_key`、`generation_key` 等第二身份键。
+
+## 6. 高并发策略
+
+OnChina 高并发目标建立在结构化表、组合索引、省分区和省市范围查询之上。
+
+必备原则：
+
+- 后台列表必须在 SQL 层携带 `province_code` / `city_code` 条件。
+- 联邦注册局机构 `admins` 查询本省业务数据时必须带 `province_code`。
+- 市注册局机构 `admins` 查询本市业务数据时必须带 `province_code + city_code`。
+- 页面列表只读持久化结果，禁止同步触发全量对账。
+- 高频公开查询可增加短 TTL 缓存，但缓存不得成为主数据。
+
+必备索引：
+
+- `subjects(province_code, city_code, kind, status, cid_number)`
+- `subjects(province_code, city_code, cid_full_name)`
+- `citizens(province_code, city_code, created_at DESC, id DESC)`
+- `citizens(province_code, city_code, cid_number, wallet_pubkey, wallet_address)`
+- `gov(province_code, city_code, town_code, institution_code)`
+- `private(province_code, city_code, private_type, cid_number)`
+- `accounts(province_code, cid_number)`
+- `docs(province_code, cid_number, uploaded_at DESC)`
+- `audit(province_code, city_code, created_at DESC)`
+- `admins(registry_org_code, city_name)`
+- `admins(lower(admin_account))`
+- `federal_registry_scope(province_name)`
+
+## 7. 管理员和安全
+
+管理员唯一字段统一为 `admins`。OnChina 不恢复独立管理员身份表、授权真源或授权分支。
+
+- 登录态：用于普通读取和低风险操作。
+- `SCAN_SIGN`：用于管理员安全写操作、Passkey 更新、管理员集合变更和链写入二次确认。
+- 扫码请求：统一使用 `QR_V1 / k=1 sign_request`。
+- 签名响应：统一使用 `QR_V1 / k=2 sign_response`。
+
+业务模块只传入动作码、签名原文、摘要和展示字段，不得自己包装二维码协议。
+
+## 8. 前端规则
+
+前端所有用户提示统一走 `citizenchain/onchina/frontend/utils/notice.ts`。业务组件不得直接调用 Ant Design `message.*`、`Modal.confirm`、`Modal.warning` 或浏览器 `alert`。
+
+机构详情页身份字段统一显示为 `身份ID`，不得使用代码框包裹，不得展示 `SubjectProperty 类型` 或机构链上状态。机构链上状态只属于机构账户，允许在账户列表展示。
+
+扫码确认页的左侧分类名必须是中文，右侧内容是用户可核对的值；机器字段不得直接渲染给用户。
+
+## 9. 发布和 CI 边界
+
+OnChina 属于 `citizenchain`。不再保留独立 旧独立身份系统 CI、独立 旧独立身份系统安装包 或独立产品发布入口。
+
+- 修改 `citizenchain/onchina/src/**`：执行 OnChina 后端编译、测试和真实 HTTP 验收。
+- 修改 `citizenchain/onchina/frontend/**`：执行前端 build，并通过真实页面检查关键流程。
+- 涉及 QR、签名、链交易载荷、CID 号格式时：必须同步更新 `memory/07-ai/unified-protocols.md` 和相关端实现。
+
+## 10. 验收口径
+
+涉及 API、数据库、登录、权限、扫码或页面展示的任务，必须使用真实本地服务、真实 PostgreSQL、真实 HTTP 接口或真实页面验收。只通过编译、类型检查或前端 build 不算完成。
+
+最低检查：
+
+```text
+rg "旧独立身份系统名" memory AGENTS.md citizenchain/onchina --glob '!memory/08-tasks/**' --glob '!memory/04-decisions/**'
+cargo check --manifest-path citizenchain/Cargo.toml -p onchina
+npm --prefix citizenchain/onchina/frontend run build
+```
+
+如果工作区存在其它线程的未完成改动，验收必须说明受影响的命令和原因，不得把其它线程的失败混入本任务结论。

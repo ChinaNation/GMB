@@ -10,7 +10,7 @@
 |---|---|---|
 | 中文名 | 热钱包 | 冷钱包(软件形态的硬件钱包) |
 | pubspec name | `citizenapp` | `citizenwallet` |
-| 网络连接 | 连链(smoldot 轻节点) / 连 CID 后端 | **完全离线** |
+| 网络连接 | 连链(smoldot 轻节点) / 连 OnChina 后端 | **完全离线** |
 | 主题 | Light | Dark |
 | 依赖关系 | 不依赖 citizenwallet | 不依赖 citizenapp |
 | 代码共享 | **无** —— 两个独立 Flutter app |
@@ -32,7 +32,7 @@
 | `user_multisig` | ✅ 生成+扫 | ❌ |
 
 **核心结论**:
-- **登录**是 citizenwallet 公民钱包专属能力(CID 后端只认冷钱包签的登录签名响应)
+- **登录**是 citizenwallet 公民钱包专属能力(OnChina 后端只认冷钱包签的登录签名响应)
 - **交易签名**是两端协作(热端发起 → 冷端签名 → 热端广播)
 - **用户码/联系人/收款/多签**是 citizenapp 热钱包专属能力
 
@@ -62,9 +62,9 @@
 
 | 后端 | 生成 | 接收 |
 |---|---|---|
-| `citizencode/backend/admins/login/mod.rs` | `sign_request` | `sign_response` |
+| `citizenchain/onchina/src/admins/login/mod.rs` | `sign_request` | `sign_response` |
 
-cid 前端只是扫码 UI 宿主:
+OnChina 前端只是扫码 UI 宿主:
 - 笔记本浏览器显示 `sign_request` 二维码
 - 手机 citizenwallet 扫码
 - 手机 citizenwallet 展示 `sign_response` 二维码
@@ -75,4 +75,4 @@ cid 前端只是扫码 UI 宿主:
 | 前端 | 消费的 kind | 用途 |
 |---|---|---|
 | `citizenchain/node/frontend` | `user_contact` / `user_transfer` | 治理转账提案收款地址、手续费收款地址、安全基金提案收款地址 |
-| `citizencode/frontend` | `user_contact` / `sign_response` | 管理员账户绑定(扫 citizenapp 用户码)、登录(显示签名请求给 citizenwallet 扫) |
+| `citizenchain/onchina/frontend` | `user_contact` / `sign_response` | 管理员账户绑定(扫 citizenapp 用户码)、登录(显示签名请求给 citizenwallet 扫) |

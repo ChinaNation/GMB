@@ -25,7 +25,7 @@ src/
 
 ## 3. 清算行合法性模型
 
-清算行 = `K1=S` 私法人或 `K1=F` 非法人(两者皆私权机构),对应 `citizenchain/registry/src/cid/category.rs` 的 `InstitutionCategory::PrivateInstitution`。
+清算行 = `K1=S` 私法人或 `K1=F` 非法人(两者皆私权机构),对应 `citizenchain/onchina/src/cid/category.rs` 的 `InstitutionCategory::PrivateInstitution`。
 
 链上**不新增** CID 枚举,而是直接对实体生命周期模块登记的 `cid_number` 字节做 K1 字节匹配。
 
@@ -40,7 +40,7 @@ pub fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
 2. `name` 段等于 `"主账户"`(3 字节 UTF-8 × 3 字 = 9 字节)
 3. K1 ∈ {S, F}
 4. `InstitutionAccounts[(cid_number, "主账户")].status == Active`
-5. `CidAccountQuery::is_clearing_bank_eligible(bank_main)` 通过。2026-05-02 起 CID 系统负责 `eligible-search` 候选筛选,链上不再保存 `subject_property/sub_type/parent_cid_number` 元数据,这里只确认账户属于已注册且 Active 的 CID 机构账户
+5. `CidAccountQuery::is_clearing_bank_eligible(bank_main)` 通过。2026-05-02 起 OnChina 系统负责 `eligible-search` 候选筛选,链上不再保存 `subject_property/sub_type/parent_cid_number` 元数据,这里只确认账户属于已注册且 Active 的 CID 机构账户
 6. `ClearingBankNodes[cid_number]` 已声明,确保用户不能绑定到"合法机构但未加入清算网络"的节点
 
 ## 4. 解耦抽象 `CidAccountQuery`

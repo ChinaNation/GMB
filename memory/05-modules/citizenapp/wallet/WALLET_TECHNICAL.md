@@ -176,7 +176,7 @@ lib/
 
 ### 4.6 登录签名
 
-CitizenApp 不承担 CID 管理员扫码登录职责。管理员登录由 CID 页面生成
+CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 OnChina 页面生成
 `QR_V1 k=1,a=1` 登录签名请求,CitizenWallet 公民钱包扫码签名并返回 `k=2`
 签名响应。CitizenApp 钱包模块不生成登录签名请求,也不解析登录签名响应。
 
@@ -365,7 +365,7 @@ mnemonic
 
 - `ApiClient` 的 `baseUrl` 统一来自 `CidApiConfig.defaultBaseUrl`。
 - 生产版固定访问 `https://cid.crcfrcn.com`。
-- 本地开发版固定访问 `http://127.0.0.1:8899`，必须由 `adb reverse tcp:8899 tcp:8899` 转发到本电脑运行的 CID 后端。
+- 本地开发版固定访问 `http://127.0.0.1:8899`，必须由 `adb reverse tcp:8899 tcp:8899` 转发到本电脑运行的 OnChina 后端。
 - 不允许钱包模块自行读取或拼接 CID API URL，也不允许从本地开发失败自动回退到生产。
 
 ## 13. PQC 抗量子签名升级(设计,待实现)

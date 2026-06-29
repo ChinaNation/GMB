@@ -1,7 +1,7 @@
 // =============================================================================
 // 中文文件头:App.tsx = 路由壳子 + Layout 壳子
 // -----------------------------------------------------------------------------
-// 本文件是 cid-frontend 的顶层路由壳,职责仅限:
+// 本文件是 OnChina 前端的顶层路由壳,职责仅限:
 //   1. 挂 <AuthProvider>(AppOuter)
 //   2. 渲染 Layout / Header / Sider Menu / Content(AppInner)
 //   3. 根据 useAuth().capabilities 决定哪些 Tab 可见
@@ -12,7 +12,7 @@
 //   - 在本文件里写 api 调用 / 表单 / 扫码逻辑
 //
 // 新增业务功能一律下沉到一级业务目录;链交互页面/接口放到所属模块的 chain_* 文件。
-// 详见 memory/05-modules/citizencode/frontend/FRONTEND_LAYOUT.md。
+// 详见 memory/05-modules/citizenchain/onchina/FRONTEND_TECHNICAL.md。
 // =============================================================================
 
 import { useEffect, useState } from 'react';

@@ -63,7 +63,7 @@ GitHub 自动运行：
 - `bash scripts/analyze-requirement.sh --requirement "任务需求"`
 - `bash scripts/architect-entry.sh --requirement "任务需求" --execute`
 - `bash scripts/start-task.sh --requirement "任务需求"`
-- `bash scripts/new-task.sh --module "citizencode/backend" --requirement "任务需求"`
+- `bash scripts/new-task.sh --module "citizenchain/onchina/src" --requirement "任务需求"`
 - `bash scripts/load-context.sh citizenchain/runtime`
 - `bash scripts/complete-task.sh memory/08-tasks/open/<task>.md "完成摘要"`
 
@@ -74,7 +74,7 @@ GitHub 自动运行：
 ```
 
 ```text
-@claude 请重点检查这个 PR 是否突破了 CID、CitizenChain、CitizenApp 的边界。
+@claude 请重点检查这个 PR 是否突破了 OnChina、CitizenChain、CitizenApp、CitizenWallet 的边界。
 ```
 
 ## 4. 遇到问题时的判断顺序
