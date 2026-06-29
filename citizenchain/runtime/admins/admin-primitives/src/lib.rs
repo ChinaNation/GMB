@@ -21,7 +21,7 @@ use sp_runtime::{DispatchError, RuntimeDebug};
 /// 联邦注册局机构码。
 pub const FRG: InstitutionCode = *b"FRG\0";
 
-/// 管理员资料里姓名/职务的最大字节长度(与 organization-manage `MaxAccountNameLength` 一致)。
+/// 管理员资料里姓名/职务的最大字节长度(与实体生命周期模块 `MaxAccountNameLength` 一致)。
 pub const ADMIN_NAME_MAX_BYTES: u32 = 128;
 
 /// 管理员资料里实名 CID 号最大字节长度(与全仓 `CID_NUMBER_MAX_BYTES` 一致)。

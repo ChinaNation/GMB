@@ -68,8 +68,10 @@ onchain-issuance = { path = "issuance/onchain-issuance", default-features = fals
 cid-system = { path = "otherpallet/cid-system", default-features = false }
 pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
-organization-manage = { path = "private/organization-manage", default-features = false }
-personal-manage = { path = "private/personal-manage", default-features = false }
+entity-primitives = { path = "entity/entity-primitives", default-features = false }
+public-manage = { path = "entity/public-manage", default-features = false }
+private-manage = { path = "entity/private-manage", default-features = false }
+personal-manage = { path = "entity/personal-manage", default-features = false }
 personal-admins = { path = "admins/personal-admins", default-features = false }
 resolution-issuance = { path = "issuance/resolution-issuance", default-features = false }
 votingengine = { path = "votingengine", default-features = false }
@@ -115,7 +117,9 @@ std = [
 	"cid-system/std",
 	"pow-difficulty/std",
 	"onchain-transaction/std",
-	"organization-manage/std",
+	"entity-primitives/std",
+	"public-manage/std",
+	"private-manage/std",
 	"personal-manage/std",
 	"personal-admins/std",
 	"resolution-issuance/std",
@@ -175,7 +179,8 @@ runtime-benchmarks = [
 	"cid-system/runtime-benchmarks",
 	"pow-difficulty/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
-	"organization-manage/runtime-benchmarks",
+	"public-manage/runtime-benchmarks",
+	"private-manage/runtime-benchmarks",
 	"personal-manage/runtime-benchmarks",
 	"personal-admins/runtime-benchmarks",
 	"resolution-issuance/runtime-benchmarks",
@@ -212,7 +217,8 @@ try-runtime = [
 	"cid-system/try-runtime",
 	"pow-difficulty/try-runtime",
 	"onchain-transaction/try-runtime",
-	"organization-manage/try-runtime",
+	"public-manage/try-runtime",
+	"private-manage/try-runtime",
 	"personal-manage/try-runtime",
 	"personal-admins/try-runtime",
 	"resolution-issuance/try-runtime",

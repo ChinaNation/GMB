@@ -8,7 +8,7 @@
 //! - 给 runtime / multisig-transfer 提供管理员查询入口。
 //!
 //! 个人多签账户创建、关闭、资金处理和 `PersonalAccounts` 状态只属于
-//! `runtime/private/personal-manage`。
+//! `runtime/entity/personal-manage`。
 
 extern crate alloc;
 

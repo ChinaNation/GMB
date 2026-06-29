@@ -50,7 +50,7 @@ mod runtime {
     pub type InternalVote = internal_vote;
 
     #[runtime::pallet_index(3)]
-    pub type OrganizationManage = organization_manage;
+    pub type PublicManage = public_manage;
 
     #[runtime::pallet_index(4)]
     pub type MultisigTransfer = super;
@@ -94,14 +94,14 @@ impl pallet_balances::Config for Test {
 }
 
 pub struct TestAccountValidator;
-impl organization_manage::AccountValidator<AccountId32> for TestAccountValidator {
+impl public_manage::AccountValidator<AccountId32> for TestAccountValidator {
     fn is_valid(address: &AccountId32) -> bool {
         address != &AccountId32::new([0u8; 32])
     }
 }
 
 pub struct TestReservedAccountChecker;
-impl organization_manage::ReservedAccountGuard<AccountId32> for TestReservedAccountChecker {
+impl public_manage::ReservedAccountGuard<AccountId32> for TestReservedAccountChecker {
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
     }
@@ -109,19 +109,19 @@ impl organization_manage::ReservedAccountGuard<AccountId32> for TestReservedAcco
 
 pub struct TestCidInstitutionVerifier;
 impl
-    organization_manage::CidInstitutionVerifier<
+    public_manage::CidInstitutionVerifier<
         AccountId32,
-        organization_manage::pallet::AccountNameOf<Test>,
-        organization_manage::pallet::RegisterNonceOf<Test>,
-        organization_manage::pallet::RegisterSignatureOf<Test>,
+        public_manage::pallet::AccountNameOf<Test>,
+        public_manage::pallet::RegisterNonceOf<Test>,
+        public_manage::pallet::RegisterSignatureOf<Test>,
     > for TestCidInstitutionVerifier
 {
     fn verify_institution_registration(
         _cid_number: &[u8],
-        cid_full_name: &organization_manage::pallet::AccountNameOf<Test>,
+        cid_full_name: &public_manage::pallet::AccountNameOf<Test>,
         account_names: &[alloc::vec::Vec<u8>],
-        nonce: &organization_manage::pallet::RegisterNonceOf<Test>,
-        signature: &organization_manage::pallet::RegisterSignatureOf<Test>,
+        nonce: &public_manage::pallet::RegisterNonceOf<Test>,
+        signature: &public_manage::pallet::RegisterSignatureOf<Test>,
         _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         signer_pubkey: &[u8; 32],
@@ -141,13 +141,13 @@ impl
         cid_number: &[u8],
         _account_name: &[u8],
         _target_account: &AccountId32,
-        nonce: &organization_manage::pallet::RegisterNonceOf<Test>,
-        signature: &organization_manage::pallet::RegisterSignatureOf<Test>,
+        nonce: &public_manage::pallet::RegisterNonceOf<Test>,
+        signature: &public_manage::pallet::RegisterSignatureOf<Test>,
         _issuer_cid_number: &[u8],
         _issuer_main_account: &AccountId32,
         signer_pubkey: &[u8; 32],
     ) -> bool {
-        scope <= organization_manage::pallet::SCOPE_ACCOUNT
+        scope <= public_manage::pallet::SCOPE_ACCOUNT
             && !cid_number.is_empty()
             && !nonce.is_empty()
             && signer_pubkey != &[0u8; 32]
@@ -570,7 +570,7 @@ thread_local! {
 }
 
 pub struct TestProtectedSourceChecker;
-impl organization_manage::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
+impl public_manage::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
     fn is_protected(address: &AccountId32) -> bool {
         PROTECTED_ACCOUNT.with(|pa| pa.borrow().as_ref() == Some(address))
     }
@@ -637,7 +637,7 @@ impl internal_vote::Config for Test {
     type WeightInfo = ();
 }
 
-impl organization_manage::pallet::Config for Test {
+impl public_manage::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
@@ -646,8 +646,8 @@ impl organization_manage::pallet::Config for Test {
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
     type CidInstitutionVerifier = TestCidInstitutionVerifier;
-    type PublicAdminLifecycle = PublicAdmins;
-    type PrivateAdminLifecycle = PrivateAdmins;
+    type AdminLifecycle = PublicAdmins;
+    type SiblingInstitutionQuery = ();
     type AdminAccountQuery = TestAdminAccountQuery;
     type FeeRouter = ();
     type MaxAdmins = ConstU32<10>;
@@ -702,13 +702,17 @@ impl personal_admins::pallet::Config for Test {
 
 impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type InstitutionAsset = TestInstitutionAsset;
+    type ProtectedSourceChecker = TestProtectedSourceChecker;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = ();
     // 中文注释:测试 mock 把个人多签生命周期灌进 personal-manage，
     // 个人多签管理员灌进 personal-admins，动态阈值灌进 internal-vote。
-    // InstitutionQuery 走 organization-manage,用于覆盖 0x05 InstitutionAccount 账户级主体。
+    // InstitutionQuery 走 public-manage,用于覆盖 0x05 InstitutionAccount 账户级主体。
     type PersonalQuery = personal_manage::Pallet<Test>;
-    type InstitutionQuery = organization_manage::Pallet<Test>;
+    type InstitutionQuery = public_manage::Pallet<Test>;
     type WeightInfo = ();
 }
 
@@ -802,14 +806,14 @@ fn registered_institution_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> 
         .collect()
 }
 
-fn test_cid_number() -> organization_manage::CidNumberOf<Test> {
+fn test_cid_number() -> public_manage::CidNumberOf<Test> {
     b"AH001-SCB0H-202605070-2026"
         .to_vec()
         .try_into()
         .expect("cid number should fit")
 }
 
-fn test_account_name() -> organization_manage::AccountNameOf<Test> {
+fn test_account_name() -> public_manage::AccountNameOf<Test> {
     b"main"
         .to_vec()
         .try_into()
@@ -822,31 +826,31 @@ fn insert_active_registered_institution_account(
 ) {
     let cid_number = test_cid_number();
     let account_name = test_account_name();
-    organization_manage::AccountRegisteredCid::<Test>::insert(
+    public_manage::AccountRegisteredCid::<Test>::insert(
         account,
-        organization_manage::RegisteredInstitution {
+        public_manage::RegisteredInstitution {
             cid_number: cid_number.clone(),
             account_name: account_name.clone(),
         },
     );
-    organization_manage::Institutions::<Test>::insert(
+    public_manage::Institutions::<Test>::insert(
         &cid_number,
-        organization_manage::InstitutionInfo {
+        public_manage::InstitutionInfo {
             // 私权机构名称不上链:链上留空。
             cid_full_name: Default::default(),
             cid_short_name: Default::default(),
             institution_code: PRIVATE_CODE,
             created_at: 1,
-            status: organization_manage::InstitutionLifecycleStatus::Active,
+            status: public_manage::InstitutionLifecycleStatus::Active,
         },
     );
-    organization_manage::InstitutionAccounts::<Test>::insert(
+    public_manage::InstitutionAccounts::<Test>::insert(
         &cid_number,
         &account_name,
-        organization_manage::InstitutionAccountInfo {
+        public_manage::InstitutionAccountInfo {
             address: account.clone(),
             initial_balance: 0,
-            status: organization_manage::InstitutionLifecycleStatus::Active,
+            status: public_manage::InstitutionLifecycleStatus::Active,
             is_default: true,
             created_at: 1,
         },
@@ -993,7 +997,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
         set_extra_admins(PRB, prb, prb_accts);
         // PERSONAL_CODE/PUBLIC_CODE/PRIVATE_CODE 的 admin 从 personal/public/private-admins 读；
         // 中文注释：动态阈值真源在 internal-vote::ActiveDynamicThresholds。
-        // personal-manage / organization-manage 只保存账户生命周期状态和 org 归属。
+        // personal-manage / public-manage 只保存账户生命周期状态和 org 归属。
         // 测试需要时显式写入 PersonalAccounts + 对应管理员表。
         let _ = dq;
     });

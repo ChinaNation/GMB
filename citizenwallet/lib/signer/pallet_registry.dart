@@ -70,19 +70,18 @@ class PalletRegistry {
   static const int proposeRuntimeUpgradeCall = 0;
   static const int developerDirectUpgradeCall = 2;
 
-  // ---- OrganizationManage (17) ----
-  // call_index=0 留洞不复用。
-  // call_index=3 留洞不复用(propose_create_personal 在 PersonalAdmins(7))。
-  // 机构多签最少 2 账户,统一走 call_index=5。
-  static const int organizationManagePallet = 17;
-  static const int proposeCloseCall = 1;
+  // ---- PublicManage (32) / PrivateManage (33) ----
+  // 公权机构与私权机构生命周期分别由两个 pallet 承载。
+  static const int publicManagePallet = 32;
+  static const int privateManagePallet = 33;
+  static const int proposeCloseInstitutionCall = 1;
   static const int registerCidInstitutionCall = 2;
-  static const int cleanupRejectedProposalCall = 4;
+  static const int cleanupRejectedInstitutionProposalCall = 4;
 
-  /// `propose_create_institution(cid_number, cid_full_name, accounts,
-  /// org, admins_len, admins, threshold, register_nonce, signature,
-  /// issuer_cid_number, issuer_main_account, signer_pubkey, scope_*)` —
-  /// 机构多签账户创建提案,凭证由 CID 后端按签发机构 admins 真源签发。
+  /// `propose_create_*_institution(cid_number, cid_full_name, accounts,
+  /// institution_code, admins_len, admins, threshold, register_nonce,
+  /// signature, issuer_cid_number, issuer_main_account, signer_pubkey,
+  /// scope_*)` — 机构多签账户创建提案。
   static const int proposeCreateInstitutionCall = 5;
 
   // ---- PersonalAdmins (7) ----

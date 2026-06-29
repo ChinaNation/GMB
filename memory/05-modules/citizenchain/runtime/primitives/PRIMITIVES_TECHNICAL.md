@@ -85,7 +85,7 @@
 | ONCHAIN_FEE_SAFETY_FUND_PERCENT | 10% | 安全基金 SAFETY_FUND_ACCOUNT |
 
 **5 类交易费用模型**(由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier` 强制):
-- 投票交易费 VoteFlat(`VOTE_FLAT_FEE = 1 元`):VotingEngine 手动重试/取消 + InternalVote/JointVote 投票 + 业务 pallet propose_X / cleanup_X + OrganizationManage::register_cid_institution + ResolutionIssuance::propose_resolution_issuance + ResolutionDestro::propose_destroy + CidSystem + FullnodeIssuance bind/rebind + OnchainIssuance propose_X。
+- 投票交易费 VoteFlat(`VOTE_FLAT_FEE = 1 元`):VotingEngine 手动重试/取消 + InternalVote/JointVote 投票 + 业务 pallet propose_X / cleanup_X + PublicManage/PrivateManage 注册机构 CID + ResolutionIssuance::propose_resolution_issuance + ResolutionDestro::propose_destroy + CidSystem + FullnodeIssuance bind/rebind + OnchainIssuance propose_X。
 - 链上交易费 OnchainAmount(`max(amount × 0.1%, 0.1 元)`):Balances 明确金额调用 + OffchainTransaction deposit/withdraw。治理提案内的真实执行手续费由业务 pallet 在执行阶段按同一公式另行扣取。
 - 链下交易费 OffchainFee:OffchainTransaction::submit_offchain_batch_v2 标记为链下清算费，实际手续费在清算结算阶段按 `OFFCHAIN_*` 转账，不进入链上 80/10/10 分账。
 - 免费 Free:System / Timestamp / ProvincialBankInterest / CitizenIssuance / ResolutionIssuance 维护型调用 / VotingEngine::finalize_proposal / OffchainTransaction::set_max_l2_fee_rate / Assets 编译期兜底。
@@ -109,7 +109,7 @@
 - 内置机构名称统一使用 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段。
 - `builtin_institution_name_digest()` 覆盖全部内置机构名称四字段；修改任一名称字段都必须通过 runtime 升级生效。
 - 具体机构命名规范见 `memory/07-ai/institution-naming.md`。
-- `china_zb.rs` 中的 609 个保留地址由 `organization-manage` 模块在转账时校验，防止抢注机构地址。
+- `china_zb.rs` 中的 609 个保留地址由 `RuntimeReservedAccountGuard` 注入 `public-manage`、`private-manage`、`personal-manage`，在注册和创建账户时统一校验，防止抢注制度地址。
 
 ---
 

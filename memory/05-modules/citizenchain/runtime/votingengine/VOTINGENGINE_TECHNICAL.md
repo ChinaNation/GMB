@@ -528,7 +528,7 @@ cargo test --manifest-path citizenchain/Cargo.toml -p votingengine --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p joint-vote --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p public-admins/private-admins --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p personal-admins --lib
-cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib
+cargo test --manifest-path citizenchain/Cargo.toml -p public-manage -p private-manage --lib
 ```
 
 2026-05-10 联合投票边界收口本地验证：

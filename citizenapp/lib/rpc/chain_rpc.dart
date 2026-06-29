@@ -820,23 +820,24 @@ class ChainRpc {
     final moduleName = switch (moduleIndex) {
       7 => 'PersonalAdmins',
       12 => 'GenesisAdmins',
-      17 => 'OrganizationManage',
       29 => 'PublicAdmins',
       30 => 'PrivateAdmins',
+      32 => 'PublicManage',
+      33 => 'PrivateManage',
       _ => 'Module($moduleIndex)',
     };
     final errorName = switch (moduleIndex) {
       7 => _personalManageErrorName(errorIndex),
       12 => _adminSetChangeErrorName(errorIndex),
-      17 => _organizationManageErrorName(errorIndex),
       29 || 30 => _adminSetChangeErrorName(errorIndex),
+      32 || 33 => _institutionManageErrorName(errorIndex),
       _ => null,
     };
     final hint = switch (moduleIndex) {
       7 => _personalManageErrorHint(errorIndex),
       12 => _adminSetChangeErrorHint(errorIndex),
-      17 => _organizationManageErrorHint(errorIndex),
       29 || 30 => _adminSetChangeErrorHint(errorIndex),
+      32 || 33 => _institutionManageErrorHint(errorIndex),
       _ => null,
     };
     final code = errorName == null
@@ -919,7 +920,7 @@ class ChainRpc {
         _ => null,
       };
 
-  static String? _organizationManageErrorName(int index) => switch (index) {
+  static String? _institutionManageErrorName(int index) => switch (index) {
         0 => 'IncompleteParameters',
         1 => 'InvalidAccount',
         2 => 'AccountReserved',
@@ -956,7 +957,7 @@ class ChainRpc {
         _ => null,
       };
 
-  static String? _organizationManageErrorHint(int index) => switch (index) {
+  static String? _institutionManageErrorHint(int index) => switch (index) {
         3 => '机构账户地址当前已存在',
         5 => '普通提案阈值必须严格过半且不能超过管理员数量',
         6 => '发起钱包余额不足，不能覆盖初始资金和链上手续费',

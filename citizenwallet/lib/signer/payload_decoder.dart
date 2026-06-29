@@ -197,36 +197,50 @@ class PayloadDecoder {
       // SCALE 解析。改走 OfflineSignService.verifyPayload 的"哈希直签例外":
       // 用户在冷钱包屏幕上核对 32 字节哈希后放行。
 
-      // ── OrganizationManage(17) ──
-      // 投票入口统一到 InternalVote::cast(22.0)。本 pallet 承载
-      // propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
-      // register_cid_institution(call=2) 当前不作为冷钱包 action 暴露;
-      // CID 机构注册凭证等待签发机构管理员业务签名流程接入后再恢复。
-      // propose_create_institution(call=5) 由 CitizenApp 在线端构造、走冷钱包扫码签名;
-      // 凭证尾部带签发机构、签发管理员和业务作用域字段。
-      if (palletIndex == PalletRegistry.organizationManagePallet) {
-        // call_index=0 留洞不复用(机构多签最少 2 账户,统一走 call_index=5)。
-        // call_index=3 留洞不复用(propose_create_personal 在 PersonalAdmins(7))。
-        if (callIndex == PalletRegistry.proposeCloseCall) {
+      // ── PublicManage(32) / PrivateManage(33) ──
+      // 公权机构与私权机构生命周期分别由两个 pallet 承载。
+      if (palletIndex == PalletRegistry.publicManagePallet ||
+          palletIndex == PalletRegistry.privateManagePallet) {
+        final isPublic = palletIndex == PalletRegistry.publicManagePallet;
+        final entityLabel = isPublic ? '公权机构' : '私权机构';
+        final createAction = isPublic
+            ? 'propose_create_public_institution'
+            : 'propose_create_private_institution';
+        final closeAction = isPublic
+            ? 'propose_close_public_institution'
+            : 'propose_close_private_institution';
+        final cleanupAction = isPublic
+            ? 'cleanup_rejected_public_proposal'
+            : 'cleanup_rejected_private_proposal';
+        if (callIndex == PalletRegistry.proposeCloseInstitutionCall) {
           // 中文注释:机构 propose_close 携带注销凭证(nonce/签名/签发机构/签发管理员公钥),
           // 比个人多签多 3 个 Vec + 2×32,需专用解码;个人多签仍走 66 字节 _decodeProposeClose。
-          return _decodeProposeCloseInstitution(bytes);
+          return _decodeProposeCloseInstitution(
+            bytes,
+            action: closeAction,
+            entityLabel: entityLabel,
+          );
         }
         if (callIndex == PalletRegistry.proposeCreateInstitutionCall) {
-          return _decodeProposeCreateInstitution(bytes);
+          return _decodeProposeCreateInstitution(
+            bytes,
+            action: createAction,
+            entityLabel: entityLabel,
+          );
         }
-        if (callIndex == PalletRegistry.cleanupRejectedProposalCall) {
+        if (callIndex ==
+            PalletRegistry.cleanupRejectedInstitutionProposalCall) {
           return _decodeProposalIdOnly(
             bytes,
-            action: 'cleanup_rejected_proposal',
-            summaryTemplate: '清理被拒机构提案 #{id} 残留',
+            action: cleanupAction,
+            summaryTemplate: '清理被拒$entityLabel提案 #{id} 残留',
           );
         }
       }
 
       // ── PersonalAdmins(7) ──
       // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
-      // ACTION enum 独立(ACTION_CREATE=0/ACTION_CLOSE=1),与 organization-manage 互不干扰。
+      // ACTION enum 独立(ACTION_CREATE=0/ACTION_CLOSE=1),与实体生命周期模块互不干扰。
       if (palletIndex == PalletRegistry.personalAdminsPallet) {
         if (callIndex == PalletRegistry.proposeCreatePersonalCall) {
           return _decodeProposeCreatePersonal(bytes);
@@ -570,7 +584,7 @@ class PayloadDecoder {
   // 格式：[0x16][0x00][proposal_id:u64_le][approve:bool]
   //
   // 统一入口:所有业务 pallet(admins/resolution_destro/grandpa_key/
-  // organization_manage/multisig_transfer 五路)的管理员投票都走 InternalVote::cast(22.0),
+  // entity_manage/multisig_transfer 五路)的管理员投票都走 InternalVote::cast(22.0),
   // 冷钱包不按业务 pallet 分路解码投票 payload。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeInternalVote(Uint8List bytes) {
@@ -852,10 +866,10 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // OrganizationManage(17) / propose_create_institution(5)
+  // PublicManage(32) / PrivateManage(33) / propose_create_*_institution(5)
   //
   // 链端签名(签发机构 admins 凭证):
-  //   pub fn propose_create_institution(
+  //   pub fn propose_create_*_institution(
   //     origin,
   //     cid_number: CidNumberOf<T>,                 // BoundedVec<u8>
   //     cid_full_name: AccountNameOf<T>,   // BoundedVec<u8>
@@ -878,7 +892,11 @@ class PayloadDecoder {
   // issuer_main_account 的 admins 真源确认 signer_pubkey。
   // 禁止在尾部追加 subject_property/sub_type/parent_cid_number 等多余字段。
   // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeProposeCreateInstitution(Uint8List bytes) {
+  static DecodedPayload? _decodeProposeCreateInstitution(
+    Uint8List bytes, {
+    required String action,
+    required String entityLabel,
+  }) {
     if (bytes.length < 10) return null;
     var offset = 2;
 
@@ -1026,9 +1044,9 @@ class PayloadDecoder {
     fields['scope_city_name'] = scopeCityName;
 
     return DecodedPayload(
-      action: 'propose_create_institution',
+      action: action,
       summary:
-          '创建机构多签账户「$cidFullName」（$adminsLen 管理员，阈值 $threshold，入金 $amountYuan 元）',
+          '创建$entityLabel多签账户「$cidFullName」（$adminsLen 管理员，阈值 $threshold，入金 $amountYuan 元）',
       fields: fields,
     );
   }
@@ -1095,7 +1113,7 @@ class PayloadDecoder {
   // PersonalAdmins(7) / propose_create(0)
   // 格式：[7][0][BoundedVec account_name][BoundedVec<AccountId32> admins][u32 regular_threshold][u128 amount]
   // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
-  // OrganizationManage(17) call=3 留洞不复用。
+  // 机构生命周期模块 call=3 留洞不复用。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreatePersonal(Uint8List bytes) {
     if (bytes.length < 2 + 1 + 1 + 32 * 2 + 16) return null;
@@ -1149,16 +1167,20 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // OrganizationManage(17) / propose_close(1)
+  // PublicManage(32) / PrivateManage(33) / propose_close_*_institution(1)
   // PersonalAdmins(7) / propose_close(1)
   // 格式：[17][1][account:32][beneficiary:32]
   // ---------------------------------------------------------------------------
-  /// 机构注销 propose_close(OrganizationManage 17.1)。
+  /// 机构注销 propose_close。
   /// call_data:[2][account:32][beneficiary:32]
   ///   [register_nonce:Vec][signature:Vec][issuer_cid_number:Vec]
   ///   [issuer_main_account:32][signer_pubkey:32] + 签名尾。
   /// 注销凭证由注册局在 CID 签发,机构管理员冷签上链(见 ADR-023 §6.3)。
-  static DecodedPayload? _decodeProposeCloseInstitution(Uint8List bytes) {
+  static DecodedPayload? _decodeProposeCloseInstitution(
+    Uint8List bytes, {
+    required String action,
+    required String entityLabel,
+  }) {
     var offset = 2;
     if (bytes.length < offset + 64) return null;
     final accountId = bytes.sublist(offset, offset + 32);
@@ -1180,9 +1202,9 @@ class PayloadDecoder {
     final beneficiary =
         Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
     return DecodedPayload(
-      action: 'propose_close_institution',
+      action: action,
       summary:
-          '提案注销机构多签 ${_truncateAddress(account)}(余额转 ${_truncateAddress(beneficiary)})',
+          '提案注销$entityLabel多签 ${_truncateAddress(account)}(余额转 ${_truncateAddress(beneficiary)})',
       fields: {
         'account': account,
         'beneficiary': beneficiary,

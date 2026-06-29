@@ -74,7 +74,7 @@ pub(crate) struct InstitutionChainStatusUpdate {
     pub block_number: i64,
 }
 
-/// 扫描一个区块的事件,挑出 OrganizationManage::InstitutionCreated,产出机构链投影回写项。
+/// 扫描一个区块的事件,挑出 PublicManage/PrivateManage::InstitutionCreated,产出机构链投影回写项。
 /// 与余额索引正交:本路径只翻 chain_status,不写 tx_records。
 pub(crate) fn parse_institution_created_events(
     events: &subxt::events::Events<PolkadotConfig>,
@@ -86,7 +86,7 @@ pub(crate) fn parse_institution_created_events(
             Ok(e) => e,
             Err(_) => continue,
         };
-        if event.pallet_name() != "OrganizationManage"
+        if !matches!(event.pallet_name(), "PublicManage" | "PrivateManage")
             || event.variant_name() != "InstitutionCreated"
         {
             continue;

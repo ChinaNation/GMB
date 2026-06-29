@@ -9,7 +9,8 @@ void main() {
       final pallets = {
         PalletRegistry.balancesPallet,
         PalletRegistry.multisigTransferPallet,
-        PalletRegistry.organizationManagePallet,
+        PalletRegistry.publicManagePallet,
+        PalletRegistry.privateManagePallet,
         PalletRegistry.votingEnginePallet,
         PalletRegistry.runtimeUpgradePallet,
         PalletRegistry.resolutionDestroPallet,
@@ -21,7 +22,7 @@ void main() {
         PalletRegistry.resolutionIssuancePallet,
         PalletRegistry.offchainTransactionPallet,
       };
-      expect(pallets.length, 13);
+      expect(pallets.length, 14);
     });
 
     test('投票引擎 sub-pallet call_index', () {
@@ -59,11 +60,12 @@ void main() {
       expect(PalletRegistry.proposeAdminSetChangeCall, 0);
       expect(PalletRegistry.isPersonalAdminSetChangeCall(7, 3), isTrue);
 
-      // OrganizationManage(17): call_index=0/3 留洞不复用
-      // (0 = 单账户机构 propose_create 已废弃; 3 = propose_create_personal 已迁出至 PersonalAdmins(7))
-      expect(PalletRegistry.proposeCloseCall, 1);
+      // PublicManage(32) / PrivateManage(33):机构生命周期拆分。
+      expect(PalletRegistry.publicManagePallet, 32);
+      expect(PalletRegistry.privateManagePallet, 33);
+      expect(PalletRegistry.proposeCloseInstitutionCall, 1);
       expect(PalletRegistry.registerCidInstitutionCall, 2);
-      expect(PalletRegistry.cleanupRejectedProposalCall, 4);
+      expect(PalletRegistry.cleanupRejectedInstitutionProposalCall, 4);
       expect(PalletRegistry.proposeCreateInstitutionCall, 5);
 
       // PersonalAdmins(7):个人多签独立命名空间

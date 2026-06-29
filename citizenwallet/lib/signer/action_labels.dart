@@ -23,8 +23,10 @@ const Map<String, String> actionLabels = {
   // 个人多签为独立 pallet PersonalAdmins(7),
   // 'propose_create_personal' 是 decoder 输出 action 字符串,显式区分个人/机构提示文案。
   'propose_create_personal': '创建个人多签',
-  'propose_create_institution': '创建机构多签账户',
-  'propose_close_institution': '注销机构多签提案',
+  'propose_create_public_institution': '创建公权机构多签账户',
+  'propose_close_public_institution': '注销公权机构多签提案',
+  'propose_create_private_institution': '创建私权机构多签账户',
+  'propose_close_private_institution': '注销私权机构多签提案',
   'propose_close_personal': '关闭个人多签提案',
   'cleanup_rejected_personal_proposal': '清理被拒个人多签提案',
   'propose_destroy': '销毁决议提案',
@@ -38,8 +40,10 @@ const Map<String, String> actionLabels = {
   // 业务提案幂等入口
   // 手动重试/取消统一显示为 retry_passed_proposal /
   // cancel_passed_proposal(在 votingengine 段已声明)。
-  'cleanup_rejected_proposal': '清理被否决提案',
-  'register_cid_institution': '登记 CID 机构信息',
+  'cleanup_rejected_public_proposal': '清理被否决公权机构提案',
+  'cleanup_rejected_private_proposal': '清理被否决私权机构提案',
+  'register_cid_public_institution': '登记公权机构 CID 信息',
+  'register_cid_private_institution': '登记私权机构 CID 信息',
 
   // 立法院（pallet=27）· 立法/修法/废法发起
   'propose_enact_law': '发起立法',

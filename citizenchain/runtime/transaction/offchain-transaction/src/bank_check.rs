@@ -2,14 +2,14 @@
 //!
 //! 中文注释:
 //! - 清算行(L2)= subject_property 为 S(私法人)或 F(非法人)的私权机构。
-//! - 清算行在 CID 系统注册时生成 cid_number,并在链上 `organization-manage` 注册
+//! - 清算行在 CID 系统注册时生成 cid_number,并在链上实体生命周期模块注册
 //!   主账户 + 费用账户两个多签账户。
 //! - 本模块判定:某个地址能否作为"可被 L3 绑定的清算行主账户"。
 //!
-//! **解耦设计**:bank_check 不直接依赖 `organization-manage`,而是通过
+//! **解耦设计**:bank_check 不直接依赖具体实体生命周期 pallet,而是通过
 //! `CidAccountQuery` trait 抽象机构登记表。runtime 层实现该 trait(内部委托
-//! 给 `organization-manage` 的 Storage),测试层可用 `()` 空实现或 mock,从
-//! 而避免 pallet 之间形成强耦合、tests 需要完整 impl `organization_manage::Config`。
+//! 给 runtime 聚合查询),测试层可用 `()` 空实现或 mock,从
+//! 而避免 pallet 之间形成强耦合。
 
 use frame_support::ensure;
 use sp_std::vec::Vec;
@@ -36,7 +36,7 @@ pub const ACCOUNT_NAME_FEE: &[u8] = "费用账户".as_bytes();
 
 /// 机构登记表查询抽象。
 ///
-/// 运行时由 `organization-manage` 的 `AccountRegisteredCid` / `CidRegisteredAccount` /
+/// 运行时由实体生命周期模块的 `AccountRegisteredCid` / `CidRegisteredAccount` /
 /// `InstitutionAccounts` / `ClearingBankNodes` 等链上索引组合实现。测试可用 `()` 或 mock。
 pub trait CidAccountQuery<AccountId> {
     /// 地址 → (cid_number 字节, account_name 字节)。未登记返回 None。

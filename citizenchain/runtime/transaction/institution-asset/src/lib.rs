@@ -2,7 +2,7 @@
 //!
 //! 本模块不是 pallet，不含 storage 或 extrinsic。
 //! 仅提供 `InstitutionAssetAction` 枚举和 `InstitutionAsset` trait，
-//! 供 `organization-manage`、`personal-admins`、`multisig-transfer`、`offchain-transaction` 复用。
+//! 供实体生命周期、`personal-admins`、`multisig-transfer`、`offchain-transaction` 复用。
 //! 实际放行/拒绝规则由 runtime 的 `RuntimeInstitutionAsset` 实现。
 //!
 //! # Safety

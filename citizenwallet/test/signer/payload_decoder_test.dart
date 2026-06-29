@@ -799,26 +799,25 @@ void main() {
       expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
-    test('decodes cleanup_rejected_proposal (pallet=17 call=4)', () {
-      final payload = buildProposalIdPayload(0x11, 0x04, 500);
+    test('decodes cleanup_rejected_public_proposal (pallet=32 call=4)', () {
+      final payload = buildProposalIdPayload(0x20, 0x04, 500);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'cleanup_rejected_proposal');
+      expect(decoded!.action, 'cleanup_rejected_public_proposal');
       expect(decoded.fields['proposal_id'], '500');
     });
 
-    test('decodes organization close action as propose_close_institution', () {
-      // 机构注销 propose_close(17.1) 携带注册局签发的注销凭证:
+    test('decodes public institution close action', () {
+      // 机构注销 propose_close(32.1) 携带注册局签发的注销凭证:
       // account + beneficiary + register_nonce(Vec) + signature(Vec)
       // + issuer_cid_number(Vec) + issuer_main_account(32) + signer_pubkey(32)。
-      // 链端签名见 organization-manage/src/lib.rs::propose_close(ADR-023 §6.3)。
       final registerNonce = utf8.encode('reg-nonce-001');
       final signature = List<int>.filled(64, 0xDD);
       final issuerCid = utf8.encode('CN000-GZF0A-000000001-2026');
       final issuerMain = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
       final signerPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
       final payload = <int>[
-        0x11, 0x01, // OrganizationManage.propose_close
+        0x20, 0x01, // PublicManage.propose_close_public_institution
         ...List<int>.filled(32, 0x11), // account
         ...List<int>.filled(32, 0x22), // beneficiary
         // register_nonce: Vec<u8>
@@ -837,13 +836,14 @@ void main() {
       ];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_close_institution');
+      expect(decoded!.action, 'propose_close_public_institution');
       expect(decoded.fields.keys.toList(), ['account', 'beneficiary']);
     });
 
-    test('rejects legacy organization close payload without credential', () {
+    test('rejects retired institution lifecycle pallet 17', () {
       final payload = Uint8List.fromList([
-        0x11, 0x01, // OrganizationManage.propose_close
+        0x11,
+        0x01,
         ...List<int>.filled(32, 0x11),
         ...List<int>.filled(32, 0x22),
       ]);
@@ -870,7 +870,7 @@ void main() {
     // 相关回归测试见 citizenwallet/test/signer/offline_sign_service_*_test.dart。
     // -----------------------------------------------------------------------
     // 机构/决议创建 decoder:
-    // - propose_create_institution(17.5):机构多签账户创建提案
+    // - propose_create_public_institution(32.5):公权机构多签账户创建提案
     //   (走 CID 后端签发机构 admins 凭证)
     // - propose_resolution_issuance(8.0):决议发行联合提案
     //   (人口快照由 JointVote 单独准备)
@@ -908,7 +908,7 @@ void main() {
       final scopeProvince = utf8.encode('安徽省');
       final scopeCity = utf8.encode('合肥市');
       final payload = <int>[
-        0x11, 0x05, // pallet=17 call=5
+        0x20, 0x05, // pallet=32 call=5
         // cid_number: Vec<u8>
         (cid.length << 2) & 0xff,
         ...cid,
@@ -967,7 +967,8 @@ void main() {
       return payload;
     }
 
-    test('decodes propose_create_institution (pallet=17 call=5) 含 issuer/scope',
+    test(
+        'decodes propose_create_public_institution (pallet=32 call=5) 含 issuer/scope',
         () {
       final issuerMain = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
       final signerPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
@@ -976,7 +977,7 @@ void main() {
           Uint8List.fromList(buildProposeCreateInstitutionPayload());
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_create_institution');
+      expect(decoded!.action, 'propose_create_public_institution');
       expect(decoded.fields['cid_number'], 'AH001-SCB0N-202605010-2026');
       expect(decoded.fields['cid_full_name'], '安徽省储行');
       expect(decoded.fields['institution_code'], 'CGOV');
@@ -996,7 +997,7 @@ void main() {
       );
     });
 
-    test('propose_create_institution 带多余尾字段时拒绝解码', () {
+    test('propose_create_public_institution 带多余尾字段时拒绝解码', () {
       final payload = Uint8List.fromList(
           buildProposeCreateInstitutionPayload(extraTail: true));
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -1008,7 +1009,7 @@ void main() {
     // CANON 决策2：制度专属保留名（永久质押/安全基金/两和基金）禁止作为机构
     // 自定义账户名，命中即 decodeFailed（红色拒签）。取值逐字对齐链端 primitives。
     for (final forbidden in const ['永久质押', '安全基金', '两和基金']) {
-      test('propose_create_institution 账户名命中保留名「$forbidden」时拒绝解码', () {
+      test('propose_create_public_institution 账户名命中保留名「$forbidden」时拒绝解码', () {
         final payload = Uint8List.fromList(
           buildProposeCreateInstitutionPayload(secondAccountName: forbidden),
         );
@@ -1018,13 +1019,13 @@ void main() {
     }
 
     // 主账户/费用账户是强制默认账户，正常出现在创建凭证里，维持识别。
-    test('propose_create_institution 主账户/费用账户强制默认账户维持识别', () {
+    test('propose_create_public_institution 主账户/费用账户强制默认账户维持识别', () {
       final payload = Uint8List.fromList(
         buildProposeCreateInstitutionPayload(secondAccountName: '费用账户'),
       );
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_create_institution');
+      expect(decoded!.action, 'propose_create_public_institution');
       expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
       expect(decoded.fields['amount_费用账户'], '2.22 GMB');
     });

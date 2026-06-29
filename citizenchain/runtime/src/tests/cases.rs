@@ -48,7 +48,7 @@ fn fee_payer_returns_none_for_transfer() {
 #[test]
 fn governance_module_tags_are_globally_unique() {
     use std::collections::HashSet;
-    let tags: [(&str, &[u8]); 11] = [
+    let tags: [(&str, &[u8]); 12] = [
         ("genesis_admins", genesis_admins::MODULE_TAG),
         ("public_admins", public_admins::MODULE_TAG),
         ("private_admins", private_admins::MODULE_TAG),
@@ -56,7 +56,8 @@ fn governance_module_tags_are_globally_unique() {
         ("resolution_destro", resolution_destro::MODULE_TAG),
         ("resolution_issuance", resolution_issuance::MODULE_TAG),
         ("runtime_upgrade", runtime_upgrade::MODULE_TAG),
-        ("organization_manage", organization_manage::MODULE_TAG),
+        ("public_manage", public_manage::MODULE_TAG),
+        ("private_manage", private_manage::MODULE_TAG),
         ("personal_admins", personal_admins::MODULE_TAG),
         ("multisig_transfer", multisig_transfer::MODULE_TAG),
         ("legislation_yuan", legislation_yuan::MODULE_TAG),
@@ -346,8 +347,8 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         let _ = Balances::deposit_creating(&account, 777);
         // 中文注释:propose_close 已加注销凭证字段(register_nonce/signature/issuer_*/signer_pubkey);
         // 本测试只验证该 Call 走投票统一价分类,凭证值无关,填默认值即可。
-        let close_call =
-            RuntimeCall::OrganizationManage(organization_manage::pallet::Call::propose_close {
+        let close_call = RuntimeCall::PublicManage(
+            public_manage::pallet::Call::propose_close_public_institution {
                 account,
                 beneficiary,
                 register_nonce: Default::default(),
@@ -355,7 +356,8 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
                 issuer_cid_number: Vec::new(),
                 issuer_main_account: AccountId::new([0u8; 32]),
                 signer_pubkey: [0u8; 32],
-            });
+            },
+        );
         let close_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
             AccountId,
             RuntimeCall,
@@ -881,16 +883,15 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
         let issuer_main_account = test_issuer_main_account();
         let scope_city_name = test_scope_city_name();
         let cid_number: &[u8] = b"AH001-GCB07-000000001-2026";
-        let register_nonce: organization_manage::pallet::RegisterNonceOf<Runtime> =
+        let register_nonce: public_manage::pallet::RegisterNonceOf<Runtime> =
             b"register-nonce-ah-1"
                 .to_vec()
                 .try_into()
                 .expect("nonce should fit");
-        let cid_full_name: organization_manage::pallet::AccountNameOf<Runtime> =
-            b"test-institution"
-                .to_vec()
-                .try_into()
-                .expect("cid_full_name should fit");
+        let cid_full_name: public_manage::pallet::AccountNameOf<Runtime> = b"test-institution"
+            .to_vec()
+            .try_into()
+            .expect("cid_full_name should fit");
         let account_names: Vec<Vec<u8>> = vec![b"main-account".to_vec(), b"fee-account".to_vec()];
 
         let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
@@ -910,18 +911,18 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             );
             let msg = blake2_256(&payload.encode());
             let sig = signing_pair.sign(&msg);
-            let bounded: organization_manage::pallet::RegisterSignatureOf<Runtime> =
+            let bounded: public_manage::pallet::RegisterSignatureOf<Runtime> =
                 sig.0.to_vec().try_into().expect("signature should fit");
             bounded
         };
 
         let main_signature = make_signature(&main_pair, &main_admin_pubkey);
         assert!(
-            <RuntimeCidInstitutionVerifier as organization_manage::CidInstitutionVerifier<
+            <RuntimeCidInstitutionVerifier as entity_primitives::CidInstitutionVerifier<
                 AccountId,
-                organization_manage::pallet::AccountNameOf<Runtime>,
-                organization_manage::pallet::RegisterNonceOf<Runtime>,
-                organization_manage::pallet::RegisterSignatureOf<Runtime>,
+                public_manage::pallet::AccountNameOf<Runtime>,
+                public_manage::pallet::RegisterNonceOf<Runtime>,
+                public_manage::pallet::RegisterSignatureOf<Runtime>,
             >>::verify_institution_registration(
                 cid_number,
                 &cid_full_name,
@@ -939,11 +940,11 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
 
         let backup_signature = make_signature(&backup_pair, &backup_admin_pubkey);
         assert!(
-            <RuntimeCidInstitutionVerifier as organization_manage::CidInstitutionVerifier<
+            <RuntimeCidInstitutionVerifier as entity_primitives::CidInstitutionVerifier<
                 AccountId,
-                organization_manage::pallet::AccountNameOf<Runtime>,
-                organization_manage::pallet::RegisterNonceOf<Runtime>,
-                organization_manage::pallet::RegisterSignatureOf<Runtime>,
+                public_manage::pallet::AccountNameOf<Runtime>,
+                public_manage::pallet::RegisterNonceOf<Runtime>,
+                public_manage::pallet::RegisterSignatureOf<Runtime>,
             >>::verify_institution_registration(
                 cid_number,
                 &cid_full_name,
@@ -963,11 +964,11 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
         let outsider_pubkey = outsider_pair.public().0;
         let outsider_signature = make_signature(&outsider_pair, &outsider_pubkey);
         assert!(
-            !<RuntimeCidInstitutionVerifier as organization_manage::CidInstitutionVerifier<
+            !<RuntimeCidInstitutionVerifier as entity_primitives::CidInstitutionVerifier<
                 AccountId,
-                organization_manage::pallet::AccountNameOf<Runtime>,
-                organization_manage::pallet::RegisterNonceOf<Runtime>,
-                organization_manage::pallet::RegisterSignatureOf<Runtime>,
+                public_manage::pallet::AccountNameOf<Runtime>,
+                public_manage::pallet::RegisterNonceOf<Runtime>,
+                public_manage::pallet::RegisterSignatureOf<Runtime>,
             >>::verify_institution_registration(
                 cid_number,
                 &cid_full_name,
@@ -983,14 +984,14 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             "outsider admin pubkey must reject"
         );
 
-        let bad_signature: organization_manage::pallet::RegisterSignatureOf<Runtime> =
+        let bad_signature: public_manage::pallet::RegisterSignatureOf<Runtime> =
             vec![9u8; 64].try_into().expect("signature should fit");
         assert!(
-            !<RuntimeCidInstitutionVerifier as organization_manage::CidInstitutionVerifier<
+            !<RuntimeCidInstitutionVerifier as entity_primitives::CidInstitutionVerifier<
                 AccountId,
-                organization_manage::pallet::AccountNameOf<Runtime>,
-                organization_manage::pallet::RegisterNonceOf<Runtime>,
-                organization_manage::pallet::RegisterSignatureOf<Runtime>,
+                public_manage::pallet::AccountNameOf<Runtime>,
+                public_manage::pallet::RegisterNonceOf<Runtime>,
+                public_manage::pallet::RegisterSignatureOf<Runtime>,
             >>::verify_institution_registration(
                 cid_number,
                 &cid_full_name,

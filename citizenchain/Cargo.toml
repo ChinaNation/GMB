@@ -32,8 +32,10 @@ members = [
 
     "runtime/transaction/offchain-transaction", # 交易-链下交易手续费模块 pallet
     "runtime/transaction/onchain-transaction",  # 交易-链上交易手续费模块 pallet
-    "runtime/private/organization-manage",        # 私权模组-机构管理:承载机构多签注册/创建/关闭生命周期
-    "runtime/private/personal-manage",            # 私权模组-个人多签账户生命周期
+    "runtime/entity/entity-primitives",          # 实体模组-生命周期共用类型与 trait
+    "runtime/entity/public-manage",              # 实体模组-公权机构生命周期
+    "runtime/entity/private-manage",             # 实体模组-私权机构生命周期
+    "runtime/entity/personal-manage",            # 实体模组-个人多签账户生命周期
     "runtime/transaction/multisig-transfer",     # 交易-机构多签名地址转账模块 pallet
     "runtime/transaction/institution-asset",  # 交易-机构账户资金白名单公共模块
 

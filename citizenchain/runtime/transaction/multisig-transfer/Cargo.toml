@@ -19,8 +19,10 @@ sp-io = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
 votingengine = { path = "../../votingengine", default-features = false }
-organization-manage = { path = "../../private/organization-manage", default-features = false }
-personal-manage = { path = "../../private/personal-manage", default-features = false }
+entity-primitives = { path = "../../entity/entity-primitives", default-features = false }
+public-manage = { path = "../../entity/public-manage", default-features = false }
+private-manage = { path = "../../entity/private-manage", default-features = false }
+personal-manage = { path = "../../entity/personal-manage", default-features = false }
 onchain-transaction = { path = "../onchain-transaction", default-features = false }
 institution-asset = { path = "../institution-asset", default-features = false }
 
@@ -38,7 +40,9 @@ std = [
     "sp-io/std",
     "primitives/std",
     "votingengine/std",
-    "organization-manage/std",
+    "entity-primitives/std",
+    "public-manage/std",
+    "private-manage/std",
     "personal-manage/std",
     "onchain-transaction/std",
     "institution-asset/std",

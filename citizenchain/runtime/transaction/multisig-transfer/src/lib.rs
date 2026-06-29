@@ -35,9 +35,8 @@ const SWEEP_OWNER_DATA: &[u8] = b"multisig-transfer:sweep";
 mod benchmarks;
 pub mod weights;
 
-type BalanceOf<T> = <<T as organization_manage::Config>::Currency as Currency<
-    <T as frame_system::Config>::AccountId,
->>::Balance;
+type BalanceOf<T> =
+    <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// 转账动作：记录一次转账提案的完整业务参数。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
@@ -131,19 +130,29 @@ fn builtin_org<T: frame_system::Config>(institution: &T::AccountId) -> Option<In
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
+    use entity_primitives::ProtectedSourceChecker;
     use frame_support::traits::ExistenceRequirement;
     use frame_support::traits::OnUnbalanced;
     use institution_asset::{InstitutionAsset, InstitutionAssetAction};
-    use organization_manage::ProtectedSourceChecker;
     use votingengine::InternalAdminProvider;
     use votingengine::InternalVoteEngine;
 
     #[pallet::config]
-    pub trait Config:
-        frame_system::Config + votingengine::Config + organization_manage::Config
-    {
+    pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// 链上基础货币。
+        type Currency: Currency<Self::AccountId>;
+
+        /// 内部投票引擎。
+        type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
+
+        /// 资金白名单检查器。
+        type InstitutionAsset: institution_asset::InstitutionAsset<Self::AccountId>;
+
+        /// 资金源保护检查器。
+        type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
 
         /// 备注最大长度
         #[pallet::constant]
@@ -151,18 +160,14 @@ pub mod pallet {
 
         /// 手续费分账路由（复用 OnchainFeeRouter）
         type FeeRouter: frame_support::traits::OnUnbalanced<
-            <<Self as organization_manage::Config>::Currency as Currency<
-                Self::AccountId,
-            >>::NegativeImbalance,
+            <<Self as Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
         >;
 
         /// 个人多签账户状态与管理员配置查询,由 personal-manage 聚合 personal-admins 提供。
         type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
 
-        /// 注册机构账户状态与管理员配置查询,由 organization-manage 聚合对应 admins 模块提供。
-        type InstitutionQuery: organization_manage::traits::InstitutionMultisigQuery<
-            Self::AccountId,
-        >;
+        /// 注册机构账户状态与管理员配置查询,由 runtime 聚合 public/private 生命周期模块提供。
+        type InstitutionQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
 
         /// Weight 配置
         type WeightInfo: crate::weights::WeightInfo;
@@ -338,7 +343,7 @@ pub mod pallet {
                 Error::<T>::UnauthorizedAdmin
             );
             ensure!(
-                <T as organization_manage::Config>::InstitutionAsset::can_spend(
+                <T as Config>::InstitutionAsset::can_spend(
                     &institution_account,
                     InstitutionAssetAction::MultisigTransferExecute,
                 ),
@@ -346,7 +351,7 @@ pub mod pallet {
             );
 
             // 转账金额必须 >= ED，防止收款地址不存在时创建失败
-            let ed = <T as organization_manage::Config>::Currency::minimum_balance();
+            let ed = <T as Config>::Currency::minimum_balance();
             ensure!(amount >= ed, Error::<T>::AmountBelowExistentialDeposit);
 
             // 不允许自转账
@@ -357,9 +362,7 @@ pub mod pallet {
 
             // 不允许转到受保护地址（质押地址）
             ensure!(
-                !<T as organization_manage::Config>::ProtectedSourceChecker::is_protected(
-                    &beneficiary,
-                ),
+                !<T as Config>::ProtectedSourceChecker::is_protected(&beneficiary,),
                 Error::<T>::BeneficiaryIsProtectedAddress
             );
 
@@ -372,8 +375,7 @@ pub mod pallet {
             let total = amount
                 .checked_add(&fee)
                 .ok_or(Error::<T>::InsufficientBalance)?;
-            let free =
-                <T as organization_manage::Config>::Currency::free_balance(&institution_account);
+            let free = <T as Config>::Currency::free_balance(&institution_account);
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
@@ -390,7 +392,7 @@ pub mod pallet {
             encoded.extend_from_slice(&action.encode());
             // 中文注释：创建提案时同步写入 owner/data/meta，禁止后续跨模块覆写业务数据。
             let proposal_id =
-                <T as organization_manage::Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
+                <T as Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
                     who.clone(),
                     institution_code,
                     institution.clone(),
@@ -447,7 +449,7 @@ pub mod pallet {
             let safety_fund_account = T::AccountId::decode(&mut &SAFETY_FUND_ACCOUNT[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
             ensure!(
-                <T as organization_manage::Config>::InstitutionAsset::can_spend(
+                <T as Config>::InstitutionAsset::can_spend(
                     &safety_fund_account,
                     InstitutionAssetAction::NrcSafetyFundTransfer,
                 ),
@@ -461,16 +463,15 @@ pub mod pallet {
             let total = amount
                 .checked_add(&fee)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
-            let ed: BalanceOf<T> = <T as organization_manage::Config>::Currency::minimum_balance();
-            let free =
-                <T as organization_manage::Config>::Currency::free_balance(&safety_fund_account);
+            let ed: BalanceOf<T> = <T as Config>::Currency::minimum_balance();
+            let free = <T as Config>::Currency::free_balance(&safety_fund_account);
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
 
             let proposal_id =
-                <T as organization_manage::Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
+                <T as Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
                     who.clone(),
                     NRC,
                     nrc_institution,
@@ -528,7 +529,7 @@ pub mod pallet {
             );
 
             let proposal_id =
-                <T as organization_manage::Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
+                <T as Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
                     who.clone(),
                     institution_code,
                     institution.clone(),
@@ -574,7 +575,7 @@ pub mod pallet {
         fn resolve_institution_account(
             institution: T::AccountId,
         ) -> Result<(InstitutionCode, T::AccountId), Error<T>> {
-            use organization_manage::traits::InstitutionMultisigQuery;
+            use entity_primitives::InstitutionMultisigQuery;
             use personal_manage::traits::PersonalMultisigQuery;
 
             if let Some(actual_org) = builtin_org::<T>(&institution) {
@@ -671,7 +672,7 @@ pub mod pallet {
             let main_account = Self::resolve_main_account(action.institution.clone())?;
 
             ensure!(
-                <T as organization_manage::Config>::InstitutionAsset::can_spend(
+                <T as Config>::InstitutionAsset::can_spend(
                     &fee_account,
                     InstitutionAssetAction::OffchainFeeSweepExecute,
                 ),
@@ -684,8 +685,7 @@ pub mod pallet {
             let tx_fee: BalanceOf<T> = tx_fee_u128.saturated_into();
 
             let fee_balance_u128: u128 =
-                <T as organization_manage::Config>::Currency::free_balance(&fee_account)
-                    .saturated_into();
+                <T as Config>::Currency::free_balance(&fee_account).saturated_into();
             let reserve_u128 = FEE_ADDRESS_MIN_RESERVE_FEN;
 
             // ── 余额检查：amount + tx_fee + reserve ──
@@ -703,7 +703,7 @@ pub mod pallet {
             ensure!(amount_u128 <= cap_u128, Error::<T>::SweepAmountExceedsCap);
 
             // ── 执行划转 ──
-            <T as organization_manage::Config>::Currency::transfer(
+            <T as Config>::Currency::transfer(
                 &fee_account,
                 &main_account,
                 action.amount,
@@ -711,7 +711,7 @@ pub mod pallet {
             )?;
 
             // ── 手续费：从费用账户扣取，通过 FeeRouter 按 80/10/10 分账 ──
-            let fee_imbalance = <T as organization_manage::Config>::Currency::withdraw(
+            let fee_imbalance = <T as Config>::Currency::withdraw(
                 &fee_account,
                 tx_fee,
                 frame_support::traits::WithdrawReasons::FEE,
@@ -720,8 +720,7 @@ pub mod pallet {
             .map_err(|_| Error::<T>::InsufficientFeeReserve)?;
             <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
-            let reserve_left =
-                <T as organization_manage::Config>::Currency::free_balance(&fee_account);
+            let reserve_left = <T as Config>::Currency::free_balance(&fee_account);
 
             Self::deposit_event(Event::SweepToMainExecuted {
                 proposal_id,
@@ -751,7 +750,7 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
 
             ensure!(
-                <T as organization_manage::Config>::InstitutionAsset::can_spend(
+                <T as Config>::InstitutionAsset::can_spend(
                     &safety_fund_account,
                     InstitutionAssetAction::NrcSafetyFundTransfer,
                 ),
@@ -768,16 +767,15 @@ pub mod pallet {
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
 
             // ── 余额检查：amount + fee + ED ──
-            let free =
-                <T as organization_manage::Config>::Currency::free_balance(&safety_fund_account);
-            let ed = <T as organization_manage::Config>::Currency::minimum_balance();
+            let free = <T as Config>::Currency::free_balance(&safety_fund_account);
+            let ed = <T as Config>::Currency::minimum_balance();
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
 
             // ── 执行转账 ──
-            <T as organization_manage::Config>::Currency::transfer(
+            <T as Config>::Currency::transfer(
                 &safety_fund_account,
                 &action.beneficiary,
                 action.amount,
@@ -786,7 +784,7 @@ pub mod pallet {
             .map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
 
             // ── 手续费：从安全基金扣取，通过 FeeRouter 按 80/10/10 分账 ──
-            let fee_imbalance = <T as organization_manage::Config>::Currency::withdraw(
+            let fee_imbalance = <T as Config>::Currency::withdraw(
                 &safety_fund_account,
                 fee,
                 frame_support::traits::WithdrawReasons::FEE,
@@ -830,7 +828,7 @@ pub mod pallet {
             let (_, institution_account) =
                 Self::resolve_institution_account(action.institution.clone())?;
             ensure!(
-                <T as organization_manage::Config>::InstitutionAsset::can_spend(
+                <T as Config>::InstitutionAsset::can_spend(
                     &institution_account,
                     InstitutionAssetAction::MultisigTransferExecute,
                 ),
@@ -847,9 +845,8 @@ pub mod pallet {
                 .ok_or(Error::<T>::InsufficientBalance)?;
 
             // ── 余额检查：需要 total + ED ──
-            let free =
-                <T as organization_manage::Config>::Currency::free_balance(&institution_account);
-            let ed = <T as organization_manage::Config>::Currency::minimum_balance();
+            let free = <T as Config>::Currency::free_balance(&institution_account);
+            let ed = <T as Config>::Currency::minimum_balance();
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
@@ -858,7 +855,7 @@ pub mod pallet {
             // ── 原子执行：手续费扣取 + 转账，任一失败整体回滚 ──
             let exec_result = frame_support::storage::with_transaction(|| {
                 // 先扣手续费
-                let fee_imbalance = match <T as organization_manage::Config>::Currency::withdraw(
+                let fee_imbalance = match <T as Config>::Currency::withdraw(
                     &institution_account,
                     fee,
                     frame_support::traits::WithdrawReasons::FEE,
@@ -874,7 +871,7 @@ pub mod pallet {
                 <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
                 // 再转账
-                match <T as organization_manage::Config>::Currency::transfer(
+                match <T as Config>::Currency::transfer(
                     &institution_account,
                     &action.beneficiary,
                     action.amount,

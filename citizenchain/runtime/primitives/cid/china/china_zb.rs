@@ -1,6 +1,6 @@
 //! 汇总 runtime/primitives/cid/china 目录下所有制度保留地址
 //! （main_account + fee_account + stake_account + SAFETY_FUND_ACCOUNT）。
-//! 用于禁止 organization-manage 抢注这些机构地址。
+//! 用于禁止 public-manage/private-manage 抢注这些机构地址。
 //!
 //! 派生统一走 `primitives::core_const::GMB` + op_tag，由
 //! `scripts/gmb.py` 一次性生成，禁止手改。

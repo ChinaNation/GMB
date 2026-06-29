@@ -45,7 +45,7 @@ echo "==> 使用 benchmark runtime WASM: $RUNTIME_WASM"
 # ── 3. 跑 benchmark ──
 # 中文注释：本清单只包含 benchmark 覆盖当前 WeightInfo 的 pallet。
 # 以下模块当前不得自动覆盖:
-# - organization_manage: benchmarks.rs 只覆盖 1 个方法,weights.rs 有 4 个方法。
+# - public_manage/private_manage: benchmarks.rs 只覆盖 1 个方法,weights.rs 有 4 个方法。
 # - personal_manage / offchain_transaction / votingengine / internal_vote / joint_vote:
 #   benchmark 文件为空或未挂载到 runtime/src/benchmarks.rs。
 # - onchain_issuance:业务仍是 stub,正式权重必须等业务实装后生成。

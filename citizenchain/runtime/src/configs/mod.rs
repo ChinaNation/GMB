@@ -29,6 +29,7 @@ use alloc::vec::Vec;
 use codec::Decode;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use codec::Encode;
+use entity_primitives::InstitutionMultisigQuery;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use frame_support::traits::UnfilteredDispatchable;
 use frame_support::{
@@ -64,9 +65,9 @@ use sp_version::RuntimeVersion;
 use super::{
     AccountId, Address, Assets, Balance, Balances, Block, BlockNumber, CitizenIssuance,
     ElectionVote, GenesisPallet, Hash, InternalVote, JointVote, LegislationVote, LegislationYuan,
-    Nonce, PalletInfo, PrivateAdmins, PublicAdmins, Runtime, RuntimeCall, RuntimeEvent,
-    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System, BLOCK_HASH_COUNT,
-    EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    Nonce, PalletInfo, PrivateAdmins, PrivateManage, PublicAdmins, PublicManage, Runtime,
+    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
+    System, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 #[cfg(not(feature = "runtime-benchmarks"))]
 use super::{ResolutionIssuance, RuntimeUpgrade};
@@ -383,18 +384,26 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             }) => FeeChargeKind::VoteFlat,
             RuntimeCall::PersonalAdmins(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::PersonalManage(_) => FeeChargeKind::VoteFlat,
-            RuntimeCall::OrganizationManage(
-                organization_manage::pallet::Call::propose_create_institution { .. },
+            RuntimeCall::PublicManage(
+                public_manage::pallet::Call::propose_create_public_institution { .. },
             )
-            | RuntimeCall::OrganizationManage(organization_manage::pallet::Call::propose_close {
-                ..
-            }) => FeeChargeKind::VoteFlat,
-            // 中文注释：CID 注册由签名账户提交，不属于系统自动调用，按治理操作固定 1 元。
-            RuntimeCall::OrganizationManage(
-                organization_manage::pallet::Call::register_cid_institution { .. },
-            ) => FeeChargeKind::VoteFlat,
-            // 付费调用交易：多签管理其他操作（cleanup_X 等）按投票统一价 1 元/次
-            RuntimeCall::OrganizationManage(_) => FeeChargeKind::VoteFlat,
+            | RuntimeCall::PublicManage(
+                public_manage::pallet::Call::propose_close_public_institution { .. },
+            )
+            | RuntimeCall::PublicManage(
+                public_manage::pallet::Call::register_cid_public_institution { .. },
+            )
+            | RuntimeCall::PublicManage(_) => FeeChargeKind::VoteFlat,
+            RuntimeCall::PrivateManage(
+                private_manage::pallet::Call::propose_create_private_institution { .. },
+            )
+            | RuntimeCall::PrivateManage(
+                private_manage::pallet::Call::propose_close_private_institution { .. },
+            )
+            | RuntimeCall::PrivateManage(
+                private_manage::pallet::Call::register_cid_private_institution { .. },
+            )
+            | RuntimeCall::PrivateManage(_) => FeeChargeKind::VoteFlat,
             // 免费调用交易：系统内部 / 自动化 / 货币政策类
             RuntimeCall::System(_) => FeeChargeKind::Free,
             RuntimeCall::Timestamp(_) => FeeChargeKind::Free,
@@ -576,7 +585,7 @@ impl fullnode_issuance::Config for Runtime {
 
 pub struct RuntimeAccountValidator;
 
-impl organization_manage::AccountValidator<AccountId> for RuntimeAccountValidator {
+impl primitives::multisig::AccountValidator<AccountId> for RuntimeAccountValidator {
     fn is_valid(account: &AccountId) -> bool {
         // 中文注释：禁止零账户。
         if account == &AccountId::new([0u8; 32]) {
@@ -632,7 +641,7 @@ pub struct RuntimeCidInstitutionVerifier;
 pub struct RuntimeProtectedSourceChecker;
 pub struct RuntimeInstitutionAsset;
 
-impl organization_manage::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
+impl primitives::multisig::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
     fn is_protected(address: &AccountId) -> bool {
         is_stake_account(address)
     }
@@ -687,7 +696,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
     }
 }
 
-impl organization_manage::ReservedAccountGuard<AccountId> for RuntimeReservedAccountGuard {
+impl primitives::multisig::ReservedAccountGuard<AccountId> for RuntimeReservedAccountGuard {
     fn is_reserved(account: &AccountId) -> bool {
         // 中文注释：禁止占用省储行 stake_account（制度保留账户）。
         if primitives::cid::china::china_ch::CHINA_CH
@@ -746,20 +755,20 @@ fn sr25519_signature_from_bytes(signature: &[u8]) -> Option<sr25519::Signature> 
     Some(sr25519::Signature::from_raw(sig_raw))
 }
 
-impl
-    organization_manage::CidInstitutionVerifier<
-        AccountId,
-        organization_manage::pallet::AccountNameOf<Runtime>,
-        organization_manage::pallet::RegisterNonceOf<Runtime>,
-        organization_manage::pallet::RegisterSignatureOf<Runtime>,
-    > for RuntimeCidInstitutionVerifier
+impl<AccountName, NonceBytes, SignatureBytes>
+    entity_primitives::CidInstitutionVerifier<AccountId, AccountName, NonceBytes, SignatureBytes>
+    for RuntimeCidInstitutionVerifier
+where
+    AccountName: AsRef<[u8]>,
+    NonceBytes: AsRef<[u8]>,
+    SignatureBytes: AsRef<[u8]>,
 {
     fn verify_institution_registration(
         cid_number: &[u8],
-        cid_full_name: &organization_manage::pallet::AccountNameOf<Runtime>,
+        cid_full_name: &AccountName,
         account_names: &[Vec<u8>],
-        nonce: &organization_manage::pallet::RegisterNonceOf<Runtime>,
-        signature: &organization_manage::pallet::RegisterSignatureOf<Runtime>,
+        nonce: &NonceBytes,
+        signature: &SignatureBytes,
         issuer_cid_number: &[u8],
         issuer_main_account: &AccountId,
         signer_pubkey: &[u8; 32],
@@ -776,10 +785,10 @@ impl
                 scope_city_name,
             );
             return !cid_number.is_empty()
-                && !cid_full_name.is_empty()
+                && !cid_full_name.as_ref().is_empty()
                 && !account_names.is_empty()
-                && !nonce.is_empty()
-                && !signature.is_empty();
+                && !nonce.as_ref().is_empty()
+                && !signature.as_ref().is_empty();
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
@@ -787,7 +796,7 @@ impl
             let Some(public) = issuer_admin_public(issuer_main_account, signer_pubkey) else {
                 return false;
             };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_ref()) else {
                 return false;
             };
 
@@ -798,9 +807,9 @@ impl
             let payload = (
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 cid_number,
-                cid_full_name.as_slice(),
+                cid_full_name.as_ref(),
                 account_names,
-                nonce.as_slice(),
+                nonce.as_ref(),
                 issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
@@ -821,8 +830,8 @@ impl
         cid_number: &[u8],
         account_name: &[u8],
         target_account: &AccountId,
-        nonce: &organization_manage::pallet::RegisterNonceOf<Runtime>,
-        signature: &organization_manage::pallet::RegisterSignatureOf<Runtime>,
+        nonce: &NonceBytes,
+        signature: &SignatureBytes,
         issuer_cid_number: &[u8],
         issuer_main_account: &AccountId,
         signer_pubkey: &[u8; 32],
@@ -837,7 +846,9 @@ impl
                 issuer_main_account,
                 signer_pubkey,
             );
-            return !cid_number.is_empty() && !nonce.is_empty() && !signature.is_empty();
+            return !cid_number.is_empty()
+                && !nonce.as_ref().is_empty()
+                && !signature.as_ref().is_empty();
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
@@ -845,7 +856,7 @@ impl
             let Some(public) = issuer_admin_public(issuer_main_account, signer_pubkey) else {
                 return false;
             };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_ref()) else {
                 return false;
             };
 
@@ -860,7 +871,7 @@ impl
                 cid_number,
                 account_name,
                 target_account,
-                nonce.as_slice(),
+                nonce.as_ref(),
                 issuer_cid_number,
                 issuer_main_account,
                 signer_pubkey,
@@ -875,12 +886,12 @@ impl
     }
 }
 
-impl organization_manage::Config for Runtime {
+impl public_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
-    type PublicAdminLifecycle = PublicAdmins;
-    type PrivateAdminLifecycle = PrivateAdmins;
+    type AdminLifecycle = PublicAdmins;
+    type SiblingInstitutionQuery = PrivateManage;
     type AdminAccountQuery = RuntimeAdminAccountQuery;
     type AccountValidator = RuntimeAccountValidator;
     type ReservedAccountChecker = RuntimeReservedAccountGuard;
@@ -896,7 +907,31 @@ impl organization_manage::Config for Runtime {
     type MaxInstitutionAccounts = ConstU32<16>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<121>;
-    type WeightInfo = organization_manage::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = public_manage::weights::SubstrateWeight<Runtime>;
+}
+
+impl private_manage::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type InternalVoteEngine = InternalVote;
+    type AdminLifecycle = PrivateAdmins;
+    type SiblingInstitutionQuery = PublicManage;
+    type AdminAccountQuery = RuntimeAdminAccountQuery;
+    type AccountValidator = RuntimeAccountValidator;
+    type ReservedAccountChecker = RuntimeReservedAccountGuard;
+    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
+    type InstitutionAsset = RuntimeInstitutionAsset;
+    type CidInstitutionVerifier = RuntimeCidInstitutionVerifier;
+    type FeeRouter = TransferFeeRouter;
+    type MaxAdmins = MaxAdminsPerInstitution;
+    type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
+    type MaxAccountNameLength = ConstU32<128>;
+    type MaxRegisterNonceLength = ConstU32<64>;
+    type MaxRegisterSignatureLength = ConstU32<64>;
+    type MaxInstitutionAccounts = ConstU32<16>;
+    type MinCreateAmount = ConstU128<111>;
+    type MinCloseBalance = ConstU128<121>;
+    type WeightInfo = private_manage::weights::SubstrateWeight<Runtime>;
 }
 
 impl personal_manage::Config for Runtime {
@@ -1065,7 +1100,7 @@ impl cid_system::Config for Runtime {
     type CidVoteVerifier = RuntimeCidVoteVerifier;
     type OnCidBound = CitizenIssuance;
     // unbind_cid 由 Root 治理 origin 鉴权。
-    // step2b 起结合 organization-manage 凭证体系决定最终 origin 模型（治理多签 / 省级 admin 直签）。
+    // step2b 起结合实体生命周期凭证体系决定最终 origin 模型（治理多签 / 省级 admin 直签）。
     type UnbindOrigin = frame_system::EnsureRoot<AccountId>;
     type WeightInfo = cid_system::weights::SubstrateWeight<Runtime>;
 }
@@ -1231,26 +1266,66 @@ impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runt
 
 impl multisig_transfer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type InternalVoteEngine = InternalVote;
+    type InstitutionAsset = RuntimeInstitutionAsset;
+    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
-    // 多签 admin 配置查询拆给个人生命周期 pallet 与机构生命周期 pallet。
+    // 多签 admin 配置查询拆给个人生命周期 pallet 与 runtime 机构聚合查询。
     // 转账治理时 multisig-transfer 通过 union 调用,先问个人侧、再问机构侧。
     type PersonalQuery = personal_manage::Pallet<Runtime>;
-    type InstitutionQuery = organization_manage::Pallet<Runtime>;
+    type InstitutionQuery = RuntimeInstitutionQuery;
     type WeightInfo = multisig_transfer::weights::SubstrateWeight<Runtime>;
+}
+
+/// 机构生命周期聚合查询。
+///
+/// 下游交易模块只依赖本适配器；runtime 内部按公权、私权顺序查询两个生命周期 pallet。
+pub struct RuntimeInstitutionQuery;
+
+impl entity_primitives::InstitutionMultisigQuery<AccountId> for RuntimeInstitutionQuery {
+    fn lookup_org(addr: &AccountId) -> Option<votingengine::types::InstitutionCode> {
+        public_manage::Pallet::<Runtime>::lookup_org(addr)
+            .or_else(|| private_manage::Pallet::<Runtime>::lookup_org(addr))
+    }
+
+    fn lookup_admin_config(
+        addr: &AccountId,
+    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId>> {
+        public_manage::Pallet::<Runtime>::lookup_admin_config(addr)
+            .or_else(|| private_manage::Pallet::<Runtime>::lookup_admin_config(addr))
+    }
+
+    fn is_active(addr: &AccountId) -> bool {
+        public_manage::Pallet::<Runtime>::is_active(addr)
+            || private_manage::Pallet::<Runtime>::is_active(addr)
+    }
 }
 
 pub struct RuntimeAdminAccountQuery;
 
 impl RuntimeAdminAccountQuery {
+    fn resolve_institution_code_for_account(
+        account: &AccountId,
+    ) -> Option<votingengine::types::InstitutionCode> {
+        public_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account).or_else(
+            || private_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account),
+        )
+    }
+
+    fn resolve_admin_account_for_account(account: &AccountId) -> Option<AccountId> {
+        public_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account).or_else(|| {
+            private_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account)
+        })
+    }
+
     fn is_active_admin_of_account(account: &AccountId, who: &AccountId) -> bool {
-        if let Some(institution_code) =
-            organization_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account)
-        {
+        if let Some(institution_code) = Self::resolve_institution_code_for_account(account) {
             return Self::is_active_account_admin(institution_code, account.clone(), who);
         }
 
-        // 中文注释：未被 organization-manage 登记的创世账户只可能走创世管理员模块。
+        // 中文注释：未被实体生命周期模块登记的创世账户只可能走创世管理员模块。
         [
             admin_primitives::FRG,
             primitives::cid::code::NRC,
@@ -1656,33 +1731,40 @@ impl votingengine::InternalVoteResultCallback for RuntimeAdminVoteExecutor {
 
 /// CID 机构登记表查询实现。
 ///
-/// 委托给 `organization-manage` 的 CID 地址索引和机构账户表；
-/// 管理员校验再统一转给 `admins 模块::AdminAccounts`。
+/// 委托给 runtime 的公权/私权机构生命周期聚合查询；管理员校验再统一转给
+/// `admins` 模块中的管理员真源。
 pub struct MultisigCidAccountQuery;
 
 impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for MultisigCidAccountQuery {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
-        organization_manage::AccountRegisteredCid::<Runtime>::get(addr)
+        public_manage::AccountRegisteredCid::<Runtime>::get(addr)
             .map(|info| (info.cid_number.to_vec(), info.account_name.to_vec()))
+            .or_else(|| {
+                private_manage::AccountRegisteredCid::<Runtime>::get(addr)
+                    .map(|info| (info.cid_number.to_vec(), info.account_name.to_vec()))
+            })
     }
 
     fn find_account(cid_number: &[u8], account_name: &[u8]) -> Option<AccountId> {
-        let id: organization_manage::CidNumberOf<Runtime> = cid_number.to_vec().try_into().ok()?;
-        let an: organization_manage::AccountNameOf<Runtime> =
+        let public_id: public_manage::CidNumberOf<Runtime> = cid_number.to_vec().try_into().ok()?;
+        let public_name: public_manage::AccountNameOf<Runtime> =
             account_name.to_vec().try_into().ok()?;
-        organization_manage::CidRegisteredAccount::<Runtime>::get(&id, &an)
+        if let Some(account) =
+            public_manage::CidRegisteredAccount::<Runtime>::get(&public_id, &public_name)
+        {
+            return Some(account);
+        }
+
+        let private_id: private_manage::CidNumberOf<Runtime> =
+            cid_number.to_vec().try_into().ok()?;
+        let private_name: private_manage::AccountNameOf<Runtime> =
+            account_name.to_vec().try_into().ok()?;
+        private_manage::CidRegisteredAccount::<Runtime>::get(&private_id, &private_name)
     }
 
     fn is_active(addr: &AccountId) -> bool {
-        if let Some(registered) = organization_manage::AccountRegisteredCid::<Runtime>::get(addr) {
-            return matches!(
-                organization_manage::InstitutionAccounts::<Runtime>::get(
-                    &registered.cid_number,
-                    &registered.account_name,
-                )
-                .map(|a| a.status),
-                Some(organization_manage::InstitutionLifecycleStatus::Active)
-            );
+        if RuntimeInstitutionQuery::is_active(addr) {
+            return true;
         }
 
         // 个人多签状态查询走 personal-manage::PersonalAccounts。
@@ -1695,16 +1777,15 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for MultisigCi
     /// 判定 `who` 是否是 `bank` 多签账户的管理员之一。
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
     ///
-    /// 中文注释:机构账户按自身地址作为治理账户,institution_code 来自
-    /// `Institutions[cid].institution_code`;PMUL 只给 personal-admins 使用。
+    /// 中文注释:机构账户按自身地址作为治理账户,institution_code 来自实体生命周期模块；
+    /// PMUL 只给 personal-admins 使用。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
-        let Some(account) =
-            organization_manage::Pallet::<Runtime>::resolve_admin_account_for_account(bank)
+        let Some(account) = RuntimeAdminAccountQuery::resolve_admin_account_for_account(bank)
         else {
             return false;
         };
         let Some(institution_code) =
-            organization_manage::Pallet::<Runtime>::resolve_institution_code_for_account(bank)
+            RuntimeAdminAccountQuery::resolve_institution_code_for_account(bank)
         else {
             return false;
         };
@@ -1715,31 +1796,18 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for MultisigCi
     /// 链上不保存 subject_property/sub_type/parent_cid_number,这里只确认该地址属于已注册且 Active 的
     /// CID 机构账户,避免把 CID 内部机构类型字段重复落到链上。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool {
-        let registered = match organization_manage::AccountRegisteredCid::<Runtime>::get(addr) {
-            Some(info) => info,
-            None => return false,
-        };
-        matches!(
-            organization_manage::InstitutionAccounts::<Runtime>::get(
-                &registered.cid_number,
-                &registered.account_name,
-            )
-            .map(|account| account.status),
-            Some(organization_manage::InstitutionLifecycleStatus::Active)
-        )
+        RuntimeInstitutionQuery::is_active(addr)
     }
 
     /// 判定 `bank` 主账户对应的机构是否
     /// 已声明为清算行节点(链上 `ClearingBankNodes` 存在该 cid_number 记录)。
     fn is_registered_clearing_node(bank: &AccountId) -> bool {
-        let registered = match organization_manage::AccountRegisteredCid::<Runtime>::get(bank) {
-            Some(info) => info,
-            None => return false,
+        let Some((cid_number, _account_name)) = Self::account_info(bank) else {
+            return false;
         };
         // ClearingBankNodes 的 key 是 BoundedVec<u8, ConstU32<64>>,
         // 把 CidNumberOf<Runtime>(BoundedVec<u8, MaxCidNumberLength=CID_NUMBER_MAX_BYTES>) 转换过去
-        let cid_bytes: Vec<u8> = registered.cid_number.to_vec();
-        let key: BoundedVec<u8, ConstU32<64>> = match cid_bytes.try_into() {
+        let key: BoundedVec<u8, ConstU32<64>> = match cid_number.try_into() {
             Ok(b) => b,
             Err(_) => return false,
         };
@@ -1971,14 +2039,18 @@ impl votingengine::Config for Runtime {
     type CidEligibility = RuntimeCidEligibility;
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
-    // 内部投票终态回调注册 6 个槽位;个人多签生命周期和个人多签管理员共用一个 tuple 槽位。
+    // 内部投票终态回调注册 6 个顶层槽位;公权/私权机构生命周期共用一个 tuple 槽位,
+    // 个人多签生命周期和个人多签管理员共用一个 tuple 槽位。
     // 顺序按调用频率降序:transfer / multisig manage 类业务最频繁,
     // grandpa key 替换最稀有放最后(tuple iterate 时命中越早越省 gas)。
     // 每个 Executor 通过 MODULE_TAG 前缀 + 独立存储键互斥认领本模块提案,
     // 非己方提案直接 Ok(()) skip,顺序不影响行为正确性。
     type InternalVoteResultCallback = (
         multisig_transfer::InternalVoteExecutor<Runtime>,
-        organization_manage::InternalVoteExecutor<Runtime>,
+        (
+            public_manage::InternalVoteExecutor<Runtime>,
+            private_manage::InternalVoteExecutor<Runtime>,
+        ),
         (
             personal_manage::InternalVoteExecutor<Runtime>,
             personal_admins::InternalVoteExecutor<Runtime>,

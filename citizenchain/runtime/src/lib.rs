@@ -79,7 +79,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // 当前 runtime 采用统一模块命名：
     // genesis-admins / public-admins / private-admins / personal-admins /
-    // organization-manage / votingengine /
+    // public-manage / private-manage / personal-manage / votingengine /
     // multisig-transfer / offchain-transaction / onchain-transaction / institution-asset。
     spec_version: 1,
     impl_version: 0,
@@ -347,10 +347,6 @@ mod runtime {
     #[runtime::pallet_index(16)]
     pub type GrandpaKeyChange = grandpakey_change;
 
-    // 机构管理模块：机构多签账户的注册/创建/关闭与半数签名校验（注册型多签，非宪法保留主账户）
-    #[runtime::pallet_index(17)]
-    pub type OrganizationManage = organization_manage;
-
     // 个人多签账户生命周期模块:创建/关闭用户自定义多签账户(无 CID 归属,creator+account_name 派生)。
     #[runtime::pallet_index(7)]
     pub type PersonalManage = personal_manage;
@@ -403,6 +399,14 @@ mod runtime {
     // 私权机构管理员模块；归属私法人的非法人由上层显式路由到这里。
     #[runtime::pallet_index(30)]
     pub type PrivateAdmins = private_admins;
+
+    // 公权机构生命周期模块：只负责公权机构 CID 登记、创建、关闭。
+    #[runtime::pallet_index(32)]
+    pub type PublicManage = public_manage;
+
+    // 私权机构生命周期模块：只负责私权机构 CID 登记、创建、关闭。
+    #[runtime::pallet_index(33)]
+    pub type PrivateManage = private_manage;
 }
 
 #[cfg(test)]

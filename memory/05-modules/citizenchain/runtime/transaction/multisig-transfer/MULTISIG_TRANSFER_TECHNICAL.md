@@ -29,8 +29,8 @@
 - `propose_transfer` 的 `institution: AccountId` 不再把 `0x02 注册机构归属关系` 当作可支出主体；`0x02` 只保留给机构归属与检索。
 - 治理机构仍使用 `0x01 BuiltinInstitution`，由静态预置表解析到治理机构 `main_account`。
 - 个人多签直接使用个人多签 `AccountId` 作为资金账户，账户状态由 `personal-manage::PersonalMultisigQuery` 校验；管理员真源由 `personal-admins` 提供。
-- 注册机构具体账户直接使用机构账户 `AccountId` 作为资金账户，账户状态由 `organization-manage::InstitutionMultisigQuery` 校验。
-- 两类注册账户的管理员、阈值和人数都通过查询 trait 读取：个人多签走 `personal-manage` 聚合 `personal-admins`，机构账户走 `organization-manage` 聚合 `public-admins` / `private-admins`；内部投票仍是一人一票一笔链上交易。
+- 注册机构具体账户直接使用机构账户 `AccountId` 作为资金账户，账户状态由 `entity-primitives::InstitutionMultisigQuery` 校验。
+- 两类注册账户的管理员、阈值和人数都通过查询 trait 读取：个人多签走 `personal-manage` 聚合 `personal-admins`，机构账户走 `RuntimeInstitutionQuery` 聚合 `public-manage` / `private-manage`；内部投票仍是一人一票一笔链上交易。
 
 ## 0. 功能需求
 
@@ -46,14 +46,14 @@
 - 覆盖三类来源：
   - 创世预置的治理机构 `main_account`（NRC / PRC / PRB）
   - `personal-manage` 注册并激活的个人多签账户（个人多签资金账户 `AccountId`）
-  - `organization-manage` 注册并激活的机构具体账户（`InstitutionAccount AccountId`）
+  - 实体生命周期模块注册并激活的机构具体账户（`InstitutionAccount AccountId`）
 
 ### 0.2 功能边界
 
 - 本模块处理三类多签账户转账：
   - 创世预置的治理机构（NRC / PRC / PRB）
   - `personal-manage` 注册并处于 Active 状态的个人多签账户（个人多签码 `PMUL`，`is_personal_code`）
-  - `organization-manage` 注册并处于 Active 状态的机构账户（机构账户码 `is_institution_code`）
+  - 实体生命周期模块注册并处于 Active 状态的机构账户（机构账户码 `is_institution_code`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
 - 本模块不负责个人多签账户创建、关闭、清理或管理员集合变更；这些职责分别归属 `personal-manage` 和 `personal-admins`。
@@ -69,7 +69,8 @@
 | --- | --- | --- | --- |
 | `personal-manage` | 个人多签账户生命周期 | 个人多签账户 | `PMUL` 内部投票 |
 | `personal-admins` | 个人多签管理员真源和管理员集合变更 | 个人多签账户管理员集合 | `PMUL` 内部投票 |
-| `organization-manage` | 机构账户注册、创建、关闭 | 注册机构账户 | CID 注册凭证 + 机构账户码内部投票 |
+| `public-manage` | 公权机构生命周期 | 公权机构账户 | CID 注册凭证 + 公权机构码内部投票 |
+| `private-manage` | 私权机构生命周期 | 私权机构账户 | CID 注册凭证 + 私权机构码内部投票 |
 | `multisig-transfer` | 多签资金账户转账 | 治理机构主账户 + Active 个人多签账户 + Active 注册机构账户 | 链上内部投票引擎（逐票投票） |
 
 ### 0.4 与 `resolution-destro` 的关系
@@ -97,7 +98,7 @@
 
 - 治理机构：`main_account` 预置于 `runtime/primitives/cid/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/cid/china/china_ch.rs`（PRB）中，通过主账户解析逻辑查找。
 - 个人多签账户：直接使用 `personal-manage` 派生并激活的个人多签 `AccountId`；账户状态由 `personal_manage::PersonalMultisigQuery` 校验 Active，管理员集合从 `personal-admins` 查询。
-- 注册型机构账户：`AccountId32` 使用 `AdminAccountKind::PublicInstitution` 或 `AdminAccountKind::PrivateInstitution` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；非法人按所属法人归属选择 public/private 管理员模块，账户状态从 `OrganizationManage::InstitutionAccounts` 校验 Active。
+- 注册型机构账户：`AccountId32` 使用 `AdminAccountKind::PublicInstitution` 或 `AdminAccountKind::PrivateInstitution` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；非法人按所属法人归属选择 public/private 管理员模块，账户状态从 `PublicManage::InstitutionAccounts 或 PrivateManage::InstitutionAccounts` 校验 Active。
 
 ### 1.3 institution-asset 边界
 
@@ -127,7 +128,7 @@ pub fn propose_transfer(
 3. `institution` 必须是有效多签资金账户：
    - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
    - 个人多签账户：`personal-manage` 判定账户处于 Active；
-   - 注册型机构账户：`organization-manage` 判定机构账户处于 Active；
+   - 注册型机构账户：RuntimeInstitutionQuery 判定机构账户处于 Active；
    - `0x02 注册机构归属关系` 只用于机构归属/检索，不能作为转账支出主体。
 4. `institution_code` 必须与 `institution` 的实际账户分类匹配。
 5. `proposer` 必须是该多签资金账户的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终委托各 admins 模块）。
@@ -406,7 +407,7 @@ App 可通过 `state_getStorage` 查询上述存储项，展示：
 ```rust
 #[pallet::config]
 pub trait Config:
-        frame_system::Config + votingengine::Config + organization_manage::Config
+        frame_system::Config + votingengine::Config
 {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -416,21 +417,21 @@ pub trait Config:
 
     /// 手续费分账路由（复用 OnchainFeeRouter）
     type FeeRouter: frame_support::traits::OnUnbalanced<
-        <<Self as organization_manage::Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
+        <<Self as Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
     >;
 
     /// 个人多签账户状态与管理员配置查询，由 personal-manage 聚合 personal-admins 提供。
     type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
 
-    /// 注册机构账户状态与管理员配置查询，由 organization-manage 聚合对应 admins 模块提供。
-    type InstitutionQuery: organization_manage::traits::InstitutionMultisigQuery<Self::AccountId>;
+    /// 注册机构账户状态与管理员配置查询，由 runtime 聚合 public-manage / private-manage 提供。
+    type InstitutionQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
 
     /// Weight 配置
     type WeightInfo: crate::weights::WeightInfo;
 }
 ```
 
-说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。个人多签账户的实际 `institution_code` 为 `PMUL`；机构账户的实际 `institution_code` 由 `InstitutionQuery::lookup_org(account)` 返回且必须满足 `is_institution_code`。
+说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由本模块 Config 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。个人多签账户的实际 `institution_code` 为 `PMUL`；机构账户的实际 `institution_code` 由 `InstitutionQuery::lookup_org(account)` 返回且必须满足 `is_institution_code`。
 
 ## 11. Weight 估算
 
@@ -469,7 +470,7 @@ impl multisig_transfer::Config for Runtime {
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
     type PersonalQuery = PersonalManage;
-    type InstitutionQuery = OrganizationManage;
+    type InstitutionQuery = RuntimeInstitutionQuery;
     type WeightInfo = multisig_transfer::weights::SubstrateWeight<Runtime>;
 }
 ```

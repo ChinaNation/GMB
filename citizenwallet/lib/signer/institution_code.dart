@@ -125,7 +125,7 @@ class InstitutionCode {
   static bool isUnincorporated(String code) =>
       _unincorporatedCodes.contains(code);
 
-  /// 是否为机构账户机构码(公权/私权/非法人法人实体,经 organization-manage 注册多签)。
+  /// 是否为机构账户机构码(公权/私权/非法人法人实体,经实体生命周期模块注册多签)。
   ///
   /// 个人/个人多签不算机构账户;
   /// 固定治理档(NRC/PRC/PRB)是 china 内建创世账户,走固定治理路径,也不算机构账户。

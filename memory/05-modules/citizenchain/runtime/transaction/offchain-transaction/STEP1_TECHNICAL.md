@@ -27,7 +27,7 @@ src/
 
 清算行 = `K1=S` 私法人或 `K1=F` 非法人(两者皆私权机构),对应 `citizenchain/registry/src/cid/category.rs` 的 `InstitutionCategory::PrivateInstitution`。
 
-链上**不新增** CID 枚举,而是直接对 `organization-manage::AccountRegisteredCid` 存的 `cid_number` 字符串做 K1 字节匹配。
+链上**不新增** CID 枚举,而是直接对实体生命周期模块登记的 `cid_number` 字节做 K1 字节匹配。
 
 ```rust
 pub fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
@@ -45,7 +45,7 @@ pub fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
 
 ## 4. 解耦抽象 `CidAccountQuery`
 
-`bank_check` 不直接依赖 `organization-manage`,而是通过 trait 抽象:
+`bank_check` 不直接依赖具体实体生命周期 pallet,而是通过 trait 抽象:
 
 ```rust
 pub trait CidAccountQuery<AccountId> {
@@ -60,16 +60,16 @@ pub trait CidAccountQuery<AccountId> {
 // 默认 () 实现返回未登记,供测试用。
 ```
 
-**runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `MultisigCidAccountQuery`):委托给 `organization-manage` / `offchain-transaction` 的链上索引:
-- `AccountRegisteredCid` → `account_info`
-- `CidRegisteredAccount` → `find_account`
-- `InstitutionAccounts` → `is_active` / `is_clearing_bank_eligible`
+**runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `MultisigCidAccountQuery`):按公权机构、私权机构、个人多签三类账户聚合链上索引:
+- `PublicManage::AccountRegisteredCid` / `PrivateManage::AccountRegisteredCid` → `account_info`
+- `PublicManage::CidRegisteredAccount` / `PrivateManage::CidRegisteredAccount` → `find_account`
+- `PublicManage::InstitutionAccounts` / `PrivateManage::InstitutionAccounts` → `is_active` / `is_clearing_bank_eligible`
 - `RuntimeAdminAccountQuery` 管理员查询门面 → `is_admin_of`
 - `ClearingBankNodes` → `is_registered_clearing_node`
 
 **好处**:
-- offchain-transaction 的 Cargo.toml 不新增 organization-manage 依赖
-- pallet 的 `Config` trait 不强制 `T: organization_manage::Config`
+- offchain-transaction 的 Cargo.toml 不新增实体生命周期 pallet 依赖
+- pallet 的 `Config` trait 不强制 `T: public_manage::Config` 或 `T: private_manage::Config`
 - 现有 tests 可直接用 `type CidAccountQuery = ();`,不破坏已有测试
 
 ## 5. L3 PaymentIntent 签名格式
@@ -154,7 +154,7 @@ L2FeeCollect     # Step 2:扫码清算时向 fee_account 收费
 
 | 模块 | 动向 |
 |---|---|
-| `organization-manage` | **不动**(清算行注册复用现有机制) |
+| `public-manage` / `private-manage` | 清算行注册复用实体生命周期登记与账户状态 |
 | `multisig-transfer` | **不动** |
 | `onchain-transaction` | **不动** |
 | `cid-system` | **不动** |

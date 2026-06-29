@@ -40,7 +40,8 @@ frame_benchmarking::define_benchmarks!(
     [private_admins, PrivateAdmins]
     [resolution_destro, ResolutionDestro]
     [grandpakey_change, GrandpaKeyChange]
-    [organization_manage, OrganizationManage]
+    [public_manage, PublicManage]
+    [private_manage, PrivateManage]
     // personal_manage / personal_admins benchmark 用例待 follow-up;当前 benchmarks.rs 是空骨架,
     // 不挂载到 list_benchmarks 避免 Benchmarking trait 缺失编译错误。
     // [personal_admins, PersonalAdmins]

@@ -1,0 +1,18 @@
+[package]
+name = "entity-primitives" # 实体生命周期共用类型与 trait
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+license = "MIT"
+
+[dependencies]
+primitives = { path = "../../primitives", default-features = false }
+sp-std = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+    "primitives/std",
+    "sp-std/std",
+]

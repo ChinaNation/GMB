@@ -49,9 +49,12 @@ a = (pallet_index << 8) | call_index
 | `0x0d02` | `RuntimeUpgrade.developer_direct_upgrade` | `developer_direct_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0e00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `institution_code`, `amount_yuan` | CitizenApp |
 | `0x1000` | `GrandpaKeyChange.propose_replace_grandpa_key` | `propose_replace_grandpa_key` | `institution`, `new_key` | citizenchain node |
-| `0x1101` | `OrganizationManage.propose_close` | `propose_close_institution` | `account`, `beneficiary` | CitizenApp |
-| `0x1104` | `OrganizationManage.cleanup_rejected_proposal` | `cleanup_rejected_proposal` | `proposal_id` | CitizenApp |
-| `0x1105` | `OrganizationManage.propose_create_institution` | `propose_create_institution` | `cid_number`, `cid_full_name`, `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | citizenchain node / CitizenApp |
+| `0x2001` | `PublicManage.propose_close_public_institution` | `propose_close_public_institution` | `account`, `beneficiary` | CitizenApp |
+| `0x2004` | `PublicManage.cleanup_rejected_public_proposal` | `cleanup_rejected_public_proposal` | `proposal_id` | CitizenApp |
+| `0x2005` | `PublicManage.propose_create_public_institution` | `propose_create_public_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
+| `0x2101` | `PrivateManage.propose_close_private_institution` | `propose_close_private_institution` | `account`, `beneficiary` | CitizenApp |
+| `0x2104` | `PrivateManage.cleanup_rejected_private_proposal` | `cleanup_rejected_private_proposal` | `proposal_id` | CitizenApp |
+| `0x2105` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
 | `0x1300` | `MultisigTransfer.propose_transfer` | `propose_transfer` | `institution`, `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
 | `0x1d00` | `PublicAdmins.propose_admin_set_change` | `propose_public_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
 | `0x1e00` | `PrivateAdmins.propose_admin_set_change` | `propose_private_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |

@@ -66,9 +66,12 @@ class QrActions {
   static const int developerDirectUpgrade = 0x0d02;
   static const int resolutionDestroy = 0x0e00;
   static const int grandpaKeyChange = 0x1000;
-  static const int organizationClose = 0x1101;
-  static const int organizationCleanupRejected = 0x1104;
-  static const int organizationCreate = 0x1105;
+  static const int publicInstitutionClose = 0x2001;
+  static const int publicInstitutionCleanupRejected = 0x2004;
+  static const int publicInstitutionCreate = 0x2005;
+  static const int privateInstitutionClose = 0x2101;
+  static const int privateInstitutionCleanupRejected = 0x2104;
+  static const int privateInstitutionCreate = 0x2105;
   static const int multisigTransfer = 0x1300;
   static const int safetyFundTransfer = 0x1301;
   static const int sweepToMain = 0x1302;
@@ -127,9 +130,13 @@ class QrActions {
         'developer_direct_upgrade' => developerDirectUpgrade,
         'propose_destroy' => resolutionDestroy,
         'propose_replace_grandpa_key' => grandpaKeyChange,
-        'propose_close_institution' => organizationClose,
-        'cleanup_rejected_proposal' => organizationCleanupRejected,
-        'propose_create_institution' => organizationCreate,
+        'propose_close_public_institution' => publicInstitutionClose,
+        'cleanup_rejected_public_proposal' => publicInstitutionCleanupRejected,
+        'propose_create_public_institution' => publicInstitutionCreate,
+        'propose_close_private_institution' => privateInstitutionClose,
+        'cleanup_rejected_private_proposal' =>
+          privateInstitutionCleanupRejected,
+        'propose_create_private_institution' => privateInstitutionCreate,
         'propose_transfer' => multisigTransfer,
         'propose_safety_fund_transfer' => safetyFundTransfer,
         'propose_sweep_to_main' => sweepToMain,

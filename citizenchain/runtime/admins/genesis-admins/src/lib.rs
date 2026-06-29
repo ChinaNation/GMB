@@ -129,7 +129,7 @@ pub mod pallet {
     /// 中文注释:创世初始机构封存表（CID 系统根基,永不可注销关闭）。
     ///
     /// 仅 `build()` 写入国储会、省储会、省储行和联邦注册局主账户;创世后无任何
-    /// extrinsic 可改。organization-manage 的关闭入口据此硬拒(见
+    /// extrinsic 可改。实体生命周期模块的关闭入口据此硬拒(见
     /// `is_genesis_protected` + `ensure_closeable`)。其他公权、私权、非法人机构
     /// 不在此表,管理员由各自管理员模块在业务流程中写入。
     #[pallet::storage]
@@ -519,7 +519,7 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         /// 中文注释:账户是否为创世封存的初始机构(CID 系统根基,永不可注销关闭)。
-        /// 供 organization-manage 关闭入口做硬保护;数据由 `build()` 写入 `ProtectedGenesisAccounts`。
+        /// 供实体生命周期关闭入口做硬保护;数据由 `build()` 写入 `ProtectedGenesisAccounts`。
         pub fn is_genesis_protected(account: &T::AccountId) -> bool {
             ProtectedGenesisAccounts::<T>::contains_key(account)
         }

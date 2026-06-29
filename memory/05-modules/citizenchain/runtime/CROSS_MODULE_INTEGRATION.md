@@ -13,8 +13,11 @@
 | `grandpakey-change` | `frame_system`, `votingengine`（通过 InternalVoteEngine） |
 | `resolution-issuance` | `frame_system`, `votingengine`（通过 JointVoteEngine）, `pallet_balances`（通过 Currency） |
 | `runtime-upgrade` | `frame_system`, `votingengine`（通过 JointVoteEngine） |
-| `organization-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait） |
-| `multisig-transfer` | `frame_system`, `votingengine`, `organization-manage`, `personal-admins`（通过 PersonalQuery） |
+| `entity-primitives` | 无 storage；定义实体生命周期共用 trait |
+| `public-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait）, `entity-primitives` |
+| `private-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait）, `entity-primitives` |
+| `personal-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait） |
+| `multisig-transfer` | `frame_system`, `votingengine`, `entity-primitives`, `personal-manage`（通过 PersonalQuery） |
 | `offchain-transaction` | `frame_system`, `votingengine`（通过 InternalVoteEngine） |
 | `cid-system` | `frame_system` |
 | `citizen-issuance` | `frame_system`, `pallet_balances`（通过 Currency） |
@@ -23,30 +26,31 @@
 
 | Trait | 定义 Pallet | Runtime 实现体 | 消费 Pallet |
 |-------|------------|---------------|------------|
-| `InternalVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `organization-manage`, `multisig-transfer`(间接), `genesis-admins`, `public-admins`, `private-admins`, `personal-admins`, `resolution-destro`, `grandpakey-change`, `offchain-transaction` |
+| `InternalVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `genesis-admins`, `public-admins`, `private-admins`, `personal-admins`, `resolution-destro`, `grandpakey-change`, `offchain-transaction` |
 | `JointVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `resolution-issuance`, `runtime-upgrade` |
 | `InternalAdminProvider` | `votingengine` | `RuntimeInternalAdminProvider` | `votingengine` (Config 注入) |
 | `InternalAdminsLenProvider` | `votingengine` | `RuntimeInternalAdminsLenProvider` | `votingengine` (Config 注入) |
-| `InstitutionAsset` | `institution-asset` | `RuntimeInstitutionAsset` | `organization-manage`, `multisig-transfer`(间接), `offchain-transaction` |
+| `InstitutionAsset` | `institution-asset` | `RuntimeInstitutionAsset` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `offchain-transaction` |
 | `NrcAccountProvider` | `onchain-transaction` | `RuntimeNrcAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
 | `SafetyFundAccountProvider` | `onchain-transaction` | `RuntimeSafetyFundAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
-| `FeeRouter` (OnUnbalanced) | `frame_support` trait | `TransferFeeRouter` | `organization-manage`, `multisig-transfer` |
+| `FeeRouter` (OnUnbalanced) | `frame_support` trait | `TransferFeeRouter` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer` |
 | `FeePayerExtractor` (CallFeePayer) | `onchain-transaction` | `RuntimeFeePayerExtractor` | `pallet-transaction-payment` (OnChargeTransaction) |
 | `FeeKindClassifier` (CallFeeKind) | `onchain-transaction` | `RuntimeFeeKindClassifier` | `pallet-transaction-payment` (OnChargeTransaction) |
-| `ProtectedSourceChecker` | `organization-manage` / `offchain-transaction` | `RuntimeProtectedSourceChecker` | `organization-manage`, `offchain-transaction` |
+| `ProtectedSourceChecker` | `entity-primitives` / `offchain-transaction` | `RuntimeProtectedSourceChecker` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `offchain-transaction` |
 | `CidEligibility` | `votingengine` | `RuntimeCidEligibility` (委托 cid-system) | `votingengine` |
 | `PopulationSnapshotVerifier` | `votingengine` | `RuntimePopulationSnapshotVerifier` | `votingengine` |
 | `JointVoteResultCallback` | `votingengine` | `RuntimeJointVoteResultCallback` | `votingengine` (投票通过后回调) |
-| `CidInstitutionVerifier` | `organization-manage` | `RuntimeCidInstitutionVerifier` | `organization-manage` |
+| `CidInstitutionVerifier` | `entity-primitives` | `RuntimeCidInstitutionVerifier` | `public-manage`, `private-manage` |
 | `CidVerifier` / `CidVoteVerifier` | `cid-system` | `RuntimeCidVerifier` / `RuntimeCidVoteVerifier` | `cid-system` |
-| `AdminAccountLifecycle` | `admin-primitives` | `GenesisAdmins` / `PublicAdmins` / `PrivateAdmins` / `PersonalAdmins` | `organization-manage`, `personal-admins` |
-| `AdminAccountQuery` | `admin-primitives` | `RuntimeAdminAccountQuery` | `organization-manage`, `multisig-transfer`, `votingengine`, runtime verifier |
+| `AdminAccountLifecycle` | `admin-primitives` | `GenesisAdmins` / `PublicAdmins` / `PrivateAdmins` / `PersonalAdmins` | `public-manage`, `private-manage`, `personal-manage`, `personal-admins` |
+| `AdminAccountQuery` | `admin-primitives` | `RuntimeAdminAccountQuery` | `public-manage`, `private-manage`, `multisig-transfer`, `votingengine`, runtime verifier |
 
 ## Runtime 级别适配器说明
 
 | 适配器 | 作用 |
 |--------|------|
 | `RuntimeAdminAccountQuery` | 按机构码把管理员查询路由到 `genesis-admins`、`public-admins`、`private-admins`、`personal-admins` |
+| `RuntimeInstitutionQuery` | 按公权/私权机构生命周期模块聚合机构账户状态和管理员快照，供 `multisig-transfer` 使用 |
 | `RuntimeInternalAdminProvider` | 所有内部投票主体统一委托 `RuntimeAdminAccountQuery` 读取管理员 |
 | `RuntimeInternalAdminsLenProvider` | 所有内部投票主体统一委托 `RuntimeAdminAccountQuery` 读取管理员人数 |
 | `RuntimeJointVoteResultCallback` | 按模块路由：先查 `resolution-issuance`，再查 `runtime-upgrade` |
