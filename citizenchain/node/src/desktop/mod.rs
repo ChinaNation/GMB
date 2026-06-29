@@ -149,9 +149,9 @@ pub fn run_desktop() {
                 })
                 .expect("spawn auto-start-node thread failed");
 
-            // 拉起注册局(registry)子进程:浏览器端管理员经它操作,与桌面节点运维并存。
-            // 经 app 句柄把随包资源(PG/前端/china.sqlite)与数据目录路径用 env 传给 registry。
-            crate::registry_proc::start_registry(app.handle());
+            // 拉起 onchina 控制台子进程:浏览器端各机构管理员经它操作,与桌面节点运维并存。
+            // 经 app 句柄把随包资源(PG/前端/china.sqlite)与数据目录路径用 env 传给 onchina。
+            crate::onchina_proc::start_onchina(app.handle());
 
             Ok(())
         })
@@ -160,8 +160,8 @@ pub fn run_desktop() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 cleanup_on_exit(app);
-                // 节点退出时一并停掉注册局子进程,避免残留进程占用端口。
-                crate::registry_proc::stop_registry();
+                // 节点退出时一并停掉 onchina 控制台子进程,避免残留进程占用端口。
+                crate::onchina_proc::stop_onchina();
             }
         });
 }

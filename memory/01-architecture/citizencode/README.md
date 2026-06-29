@@ -11,7 +11,7 @@ CID 是注册局运营的身份 ID 系统。系统登记三类主体:
 - `citizenchain/registry/src/core`:数据库连接、HTTP 安全、运行期维护、二维码等通用能力。
 - `citizenchain/registry/src/cid/china`:中国行政区划 SQLite 真源。
 - `citizenchain/registry/src/cid`:身份 ID 编码协议。
-- `citizenchain/registry/src/admins`:注册局机构 admins、登录、Passkey、二次确认和权限上下文。
+- `citizenchain/registry/src/admins`:注册局机构 admins、登录、冷钱包扫码二次确认和权限上下文。
 - `citizenchain/registry/src/gov`:公权机构确定性目录,CPOL 与其它市级公权机构同模板生成。
 - `citizenchain/registry/src/private`:个体经营、合伙企业、股权公司、股份公司、公益组织、注册协会六类私权机构能力。
 - `citizenchain/registry/src/subjects`:主体公共模型、通用注册内核、主体详情和公开查询。
@@ -41,7 +41,7 @@ CID 是注册局运营的身份 ID 系统。系统登记三类主体:
 - `audit`:审计表,按 `province_code` 省分区。
 - `admins`、`federal_registry_scope`:注册局机构 admins 与权限范围。市注册局机构 admins 范围由 `admins.created_by + city_name` 解析,不再维护第二张市注册局机构管理员范围表。
 - `citizen_bind_challenges`:公民绑定挑战运行态。
-- `admin_*`:登录、会话、Passkey、二次确认运行态。
+- `admin_*`:登录、会话、冷钱包扫码二次确认运行态。
 - `chain_requests`、`chain_nonces`:链路幂等和防重放状态。
 
 废弃快照表和旧机构行表不得保留在目标库中。目标结构只承认上方列出的精简表。
@@ -52,13 +52,13 @@ CID 是注册局运营的身份 ID 系统。系统登记三类主体:
 
 ## 权限与查询
 
-联邦注册局机构 admins 只查询自己省的数据,市注册局机构 admins 只查询自己市的数据。后端必须在 SQL 层携带 `province_code` / `city_code` 条件,不得先取全量再在内存过滤。
+联邦注册局机构 admins 的业务数据只查询自己省的数据;联邦注册局管理员目录是全量只读目录,必须带 `province_name` 列,写操作仍只允许更换自己省的管理员。市注册局机构 admins 只查询自己市的数据。后端必须在 SQL 层携带 `province_code` / `city_code` 条件,不得先取全量再在内存过滤。
 
 公权机构属于确定性目录。列表接口直接从 `subjects/gov/accounts` 读取目标范围数据,不会在页面进入时全量重建。
 
-注册局页面只显示两个管理员目录入口:联邦注册局机构 admins 和市注册局机构 admins。市注册局机构 admins 可以只读查看本人所属省和本人所属市的管理员,但不能新增、编辑或删除管理员。联邦注册局机构 admins 只管理本人所属省范围内的注册局机构 admins。
+注册局页面只显示两个管理员目录入口:联邦注册局机构 admins 和市注册局机构 admins。市注册局机构 admins 可以只读查看本人所属省和本人所属市的管理员,但不能新增、编辑或删除管理员。联邦注册局机构 admins 列表显示全部省份管理员,但写操作只允许同省范围内更换;联邦注册局机构 admins 不允许本地新增或删除。
 
-管理员列表接口必须按登录管理员范围执行 SQL 查询:联邦注册局机构 admins 按 `federal_registry_scope.province_name` 查询,市注册局机构 admins 按联邦注册局机构归属和 `admins.city_name` 查询。不得恢复“查询全部管理员后内存过滤”的实现。
+管理员列表接口必须按登录管理员范围执行 SQL 查询:联邦注册局机构 admins 对联邦管理员返回全量并带 `province_name` 列,对市注册局管理员只返回本省;市注册局机构 admins 按联邦注册局机构归属和 `admins.city_name` 查询。不得在前端用旧登录态里的 `全国` 伪省份参与查询。
 
 ## 前端状态与提示
 
@@ -66,7 +66,7 @@ CID 是注册局运营的身份 ID 系统。系统登记三类主体:
 
 公权机构、公安局、私权机构列表都必须展示连续序号。机构详情页身份字段统一为 `身份ID`,不得使用代码框包裹,不得展示 `SubjectProperty 类型` 或机构链上状态。
 
-CID 前端所有用户提示统一走 `citizencode/frontend/utils/notice.ts`。业务组件不得直接调用 Ant Design 的 `message.*`、`Modal.confirm`、`Modal.warning` 或浏览器 `alert`。提示必须为中文,同一时刻只显示一个提示;WebAuthn、网络错误和后端错误必须在统一入口翻译后再展示。
+CID 前端所有用户提示统一走 `citizencode/frontend/utils/notice.ts`。业务组件不得直接调用 Ant Design 的 `message.*`、`Modal.confirm`、`Modal.warning` 或浏览器 `alert`。提示必须为中文,同一时刻只显示一个提示;网络错误、扫码签名错误和后端错误必须在统一入口翻译后再展示。
 
 ## 自动生成机构
 

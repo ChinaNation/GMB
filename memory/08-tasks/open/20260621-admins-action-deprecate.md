@@ -12,8 +12,8 @@
 
 ## 落地内容
 
-- `citizencode/backend/admins/actions.rs`：`apply_create_federal_registry_conn`/`apply_delete_federal_registry_conn`/`apply_create_city_registry_conn`/`apply_delete_city_registry_conn` 改为生成 QR payload 或返回引导错误;`apply_update_*`（昵称）保留。
-- `citizencode/backend/admins/operation_auth.rs`：`CreateFederalRegistry/DeleteFederalRegistry/CreateCityRegistry/DeleteCityRegistry` 四变体删除或标记 deprecated。
+- `citizencode/backend/admins/actions.rs`：联邦注册局管理员本地新增/删除入口已删除,只保留 `REPLACE_FEDERAL_REGISTRY` 同省更换投影;市注册局管理员增删仍待链上 QR 化;`apply_update_*`（昵称）保留。
+- `citizencode/backend/admins/operation_auth.rs`：`CreateFederalRegistry/DeleteFederalRegistry` 已删除,联邦管理员更换统一登记为 `ReplaceFederalRegistry`;市注册局管理员增删待后续链上 QR 化。
 - `citizencode/frontend`：管理员增删页改"生成 QR → CitizenWallet 扫码冷签 → 等 indexer 同步"。
 - CitizenWallet：确认 `propose_admin_set_change`（AdminsChange call_index=0）有 decoder 分支,无则补。
 

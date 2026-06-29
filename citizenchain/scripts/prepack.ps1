@@ -1,4 +1,4 @@
-# Card 05 打包前置(Windows):把 registry 二进制 + 前端产物 + china.sqlite + PostgreSQL
+# Card 05 打包前置(Windows):把 onchina 二进制 + 前端产物 + china.sqlite + PostgreSQL
 # 官方二进制组装到 node\{binaries,resources}。之后在 node\ 跑 `npm run tauri build` 产安装包。
 #
 # 用法:
@@ -9,18 +9,18 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path "$PSScriptRoot\..").Path          # citizenchain\
 $Here = (Join-Path $Root "node")                        # citizenchain\node
 
-Write-Host "[prepack] build registry (release)"
-Push-Location $Root; cargo build -p registry --release; Pop-Location
+Write-Host "[prepack] build onchina (release)"
+Push-Location $Root; cargo build -p onchina --release; Pop-Location
 
-Write-Host "[prepack] build registry frontend"
-Push-Location "$Root\registry\frontend"; npm ci; npm run build; Pop-Location
+Write-Host "[prepack] build onchina frontend"
+Push-Location "$Root\onchina\frontend"; npm ci; npm run build; Pop-Location
 
 Write-Host "[prepack] assemble node\resources"
-New-Item -ItemType Directory -Force -Path "$Here\resources\registry-bin", "$Here\resources\registry-frontend", "$Here\resources\postgres" | Out-Null
-# registry 二进制随包(Tauri resources\registry-bin),registry_proc 从资源目录解析。
-Copy-Item "$Root\target\release\registry.exe" "$Here\resources\registry-bin\registry.exe" -Force
-if (Test-Path "$Here\resources\registry-frontend\dist") { Remove-Item -Recurse -Force "$Here\resources\registry-frontend\dist" }
-Copy-Item -Recurse "$Root\registry\frontend\dist" "$Here\resources\registry-frontend\dist"
+New-Item -ItemType Directory -Force -Path "$Here\resources\onchina-bin", "$Here\resources\onchina-frontend", "$Here\resources\postgres" | Out-Null
+# onchina 二进制随包(Tauri resources\onchina-bin),onchina_proc 从资源目录解析。
+Copy-Item "$Root\target\release\onchina.exe" "$Here\resources\onchina-bin\onchina.exe" -Force
+if (Test-Path "$Here\resources\onchina-frontend\dist") { Remove-Item -Recurse -Force "$Here\resources\onchina-frontend\dist" }
+Copy-Item -Recurse "$Root\onchina\frontend\dist" "$Here\resources\onchina-frontend\dist"
 
 # PostgreSQL 官方二进制(postgresql.org):CITIZENCHAIN_PG_DIST 指向已解压目录(含 bin\lib\share)。
 if ($env:CITIZENCHAIN_PG_DIST -and (Test-Path "$($env:CITIZENCHAIN_PG_DIST)\bin")) {

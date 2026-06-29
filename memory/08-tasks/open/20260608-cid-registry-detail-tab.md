@@ -7,7 +7,7 @@
 - 「公权机构」列表（GOV_INSTITUTION）不再显示注册局机构（CITY_REGISTRY / FEDERAL_REGISTRY）。
 - 「注册局」tab 两个子 tab 改名：`市注册局机构管理员列表`→`市注册局`，`联邦注册局机构管理员列表`→`联邦注册局`。
 - **市注册局**：联邦注册局机构管理员 城市网格→点市→该市注册局机构详情页（内嵌本市市注册局机构管理员列表，可增删改）；市注册局机构管理员 直接进本市注册局机构详情页（管理员列表只读）。
-- **联邦注册局**：两角色都进全国唯一联邦注册局机构详情页；内嵌联邦注册局机构管理员列表只显示登录管理员本省（逻辑不变）；联邦注册局机构管理员可增删改、市注册局机构管理员只读。
+- **联邦注册局**：两角色都进全国唯一联邦注册局机构详情页；内嵌联邦注册局机构管理员列表显示全部省份并带省份列；联邦注册局机构管理员只允许同省更换和编辑姓名，不允许本地新增或删除；市注册局机构管理员只读。
 - 注册局机构详情页 = 完整机构详情（机构信息+账户列表+资料库+操作记录），管理员列表插在**机构信息卡与账户列表卡之间**。其它普通机构详情页零行为变化。
 - 联邦注册局位于中枢省，现有 scope 校验会 403 拦截外联邦注册局机构管理员 → 后端新增只读接口，仅返回联邦注册局这一个机构、绕过 scope。
 
@@ -28,9 +28,9 @@
 
 - 公权机构列表（任一城市 / 中枢省）不再出现注册局机构。
 - 注册局 tab 两子 tab 改名为 市注册局 / 联邦注册局。
-- 三角色进入路径符合目标表（联邦注册局机构管理员可增删改、市注册局机构管理员只读）。
+- 三角色进入路径符合目标表（联邦注册局机构管理员只能同省更换和编辑姓名、市注册局机构管理员只读）。
 - 注册局机构详情页：管理员列表位于机构信息卡与账户列表卡之间。
-- 联邦注册局：外联邦注册局机构管理员可正常读取机构详情（200），管理员列表仅本省。
+- 联邦注册局：外联邦注册局机构管理员可正常读取机构详情（200），管理员列表全量显示并用省份列区分，写操作只允许本省。
 - 普通机构详情页零行为变化（无管理员列表）。
 - 后端 `cargo check` + `cargo test` 通过；前端 `npm run build`（含 tsc）0 error。
 
@@ -66,11 +66,11 @@
    - `main.rs` 删除上一版多余的 `get_federal_registry_with_accounts` DB 方法。
 2. **注册局子 tab 提升为顶级 tab**（删 `注册局` tab + 两个子 tab）：
    - `auth/AuthContext.tsx`：`canViewSystemSettings` → `canViewCityRegistry` + `canViewFederalRegistry`。
-   - `App.tsx`：ActiveView 改 `city-registry`/`federal-registry`；tab 顺序 …公安局 → **市注册局 → 联邦注册局**；passkey 未绑定按角色强制进对应注册局 tab（联邦→federal-registry，市级→city-registry）；两个 RegistryAdminsView 实例按 viewResetToken 加 key。
+   - `App.tsx`：ActiveView 改 `city-registry`/`federal-registry`；tab 顺序 …公安局 → **市注册局 → 联邦注册局**；联邦注册局详情默认打开“管理员列表”；两个 RegistryAdminsView 实例按 viewResetToken 加 key。
    - `admins/RegistryAdminsView.tsx`：mode 改 `list|city-registry|federal-registry`，effect 按新 mode 分流，dispatch 到 CityRegistryView/FederalRegistryView。
    - `admins/ProvinceDetailView.tsx`：拆成 `CityRegistryView` + `FederalRegistryView`（删 SubTabBar/子 tab）。
    - `admins/RegistryAdminsView.tsx`：旧 `mode="system-settings"` → `mode="city-registry"`。
-3. **管理员列表表头布局**：CityRegistryAdminsView / FederalRegistryAdminSubTab 改为 `Card`，title=「市注册局机构管理员列表 / 联邦注册局机构管理员列表」+ 计数（n/上限）紧随其右，`extra`=新增按钮置于统一行最右；删除原内部表头行 + 去掉标题里的计数括号。
+3. **管理员列表表头布局**：CityRegistryAdminsView / FederalRegistryAdminSubTab 改为 `Card`；联邦注册局机构管理员列表显示全量管理员并新增“省份”列，不再显示人数上限或新增按钮。
 
 ### 迭代二验证
 - 后端 `cargo check` + `cargo test`（52 passed）通过。
@@ -80,7 +80,7 @@
 
 ## 迭代三（2026-06-08，管理员列表表头微调）
 
-1. **FederalRegistryAdminSubTab（联邦注册局）**：title 改「联邦注册局机构管理员列表 · {province}」（中点 `·` 用 `Space align="center"` 垂直居中）；计数「联邦注册局机构管理员：n/5」→「用户数：n/5」移到 `extra` 内、置于「新增联邦注册局机构管理员」按钮左侧。
+1. **FederalRegistryAdminSubTab（联邦注册局）**：2026-06-28 已改为完整管理员目录，不再显示省份后缀、人数上限计数或新增按钮；表格在序号和姓名之间显示省份列，写操作只允许同省更换。
 2. **CityRegistryAdminsView（市注册局）**：title 改回纯「市注册局机构管理员列表」；计数「本市市注册局机构管理员：n/30」→「用户数：n/30」移到 `extra` 内、置于「新增市注册局机构管理员」按钮左侧。
 3. **机构类型显示逻辑问题（item 3，仅答疑未改码）**：「机构类型」= `INSTITUTION_CODE_LABEL[institution_code]` + ` / ` + `ORG_CODE_LABEL[org_code]`，后半段恒为 org_code 细类标签；`公权机构` 是 `PUBLIC_ORG` 通用兜底。联邦注册局显示「政府/公权机构」即因 org_code=PUBLIC_ORG。是否改为「政府/联邦注册局」留待 user 定（方案 B 需补 org_code 映射 + 升 GOV_TEMPLATE_VERSION，副作用会从公权列表隐藏它，除非把 GovListTable 过滤改为只过滤 CITY_REGISTRY）。
 

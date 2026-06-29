@@ -18,7 +18,7 @@
 |---:|---|---|---|---|---|---|
 | 1 | `login` | `system|system_signature` UTF-8 | 原文 | CID | CitizenWallet | 登录签名确认 |
 | 2 | `citizen_bind` | `cid-citizen-bind-v1|...` UTF-8 | 原文 | CID | CitizenApp | 电子护照绑定 |
-| 3 | `cid_admin_action` | `cid_admin_governance` canonical JSON UTF-8 | 原文 | CID | CitizenWallet | 注册局管理员治理/Passkey 更新确认 |
+| 3 | `cid_admin_action` | `cid_admin_governance` canonical JSON UTF-8 | 原文 | CID | CitizenWallet | 注册局管理员治理冷钱包确认 |
 | 5 | `activate_admin_account` | `GMB || 0x18` 二进制 payload | 原文 | citizenchain node / CitizenApp | CitizenWallet | 管理员激活 |
 | 6 | `decrypt_admin` | `GMB || 0x19` 二进制 payload | 原文 | citizenchain node | CitizenWallet | 清算行管理员解密 |
 | 7 | `runtime_upgrade_hash` | 32B WASM hash | 原文 32B | citizenchain node / CitizenApp | CitizenWallet | Runtime 升级哈希直签 |

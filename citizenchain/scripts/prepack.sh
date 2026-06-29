@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Card 05 打包前置(macOS / Linux):把 registry 二进制 + 前端产物 + china.sqlite + PostgreSQL
+# Card 05 打包前置(macOS / Linux):把 onchina 二进制 + 前端产物 + china.sqlite + PostgreSQL
 # 官方二进制组装到 node/{binaries,resources}。之后在 node/ 跑 `npm run tauri build` 产安装包。
 #
 # 用法:
@@ -16,19 +16,19 @@ case "$(uname -s)" in
   *) OS=linux ;;
 esac
 
-echo "[prepack] build registry (release)"
-( cd "$ROOT" && cargo build -p registry --release )
+echo "[prepack] build onchina (release)"
+( cd "$ROOT" && cargo build -p onchina --release )
 
-echo "[prepack] build registry frontend"
-( cd "$ROOT/registry/frontend" && npm ci && npm run build )
+echo "[prepack] build onchina frontend"
+( cd "$ROOT/onchina/frontend" && npm ci && npm run build )
 
 echo "[prepack] assemble node/resources"
-mkdir -p "$HERE/resources/registry-bin" "$HERE/resources/registry-frontend" "$HERE/resources/postgres"
-# registry 二进制随包(Tauri resources/registry-bin),registry_proc 从资源目录解析(见 node/src/registry_proc)。
-cp "$ROOT/target/release/registry" "$HERE/resources/registry-bin/registry"
-chmod +x "$HERE/resources/registry-bin/registry"
-rm -rf "$HERE/resources/registry-frontend/dist"
-cp -R "$ROOT/registry/frontend/dist" "$HERE/resources/registry-frontend/dist"
+mkdir -p "$HERE/resources/onchina-bin" "$HERE/resources/onchina-frontend" "$HERE/resources/postgres"
+# onchina 二进制随包(Tauri resources/onchina-bin),onchina_proc 从资源目录解析(见 node/src/onchina_proc)。
+cp "$ROOT/target/release/onchina" "$HERE/resources/onchina-bin/onchina"
+chmod +x "$HERE/resources/onchina-bin/onchina"
+rm -rf "$HERE/resources/onchina-frontend/dist"
+cp -R "$ROOT/onchina/frontend/dist" "$HERE/resources/onchina-frontend/dist"
 
 # PostgreSQL 官方二进制(postgresql.org):把已解压的 PG 安装目录(含 bin/lib/share)
 # 指向 CITIZENCHAIN_PG_DIST,脚本拷进 resources/postgres/$OS;未提供则告警(安装包将缺内嵌 PG)。

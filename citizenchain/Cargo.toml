@@ -2,7 +2,7 @@
 members = [
     "node",                                  # 链节点程序
     "node/vendor",                           # 本地覆盖的 GRANDPA voter 持久化实现
-    "registry",                              # 注册局(CID)服务:链下明细 + 鉴权 + 颁发(ADR-029)
+    "onchina",                               # onchina 多机构统一控制台:CID 身份 + 链下明细 + 鉴权 + 颁发(ADR-029/030)
     "runtime",                               # 链上运行时
     "runtime/primitives",                    # 运行时共享常量与基础类型
 
@@ -70,7 +70,6 @@ clap       = { version = "4.5.3", features = ["derive"] }
 futures    = { version = "0.3.30", features = ["thread-pool"] }
 futures-timer = { version = "3.0.2" }
 jsonrpsee  = { version = "0.24.2", features = ["server"] }
-arrayvec   = { version = "0.7.6", default-features = false }
 array-bytes = { version = "6.2.2", default-features = false }
 ahash = { version = "0.8.2" }
 assert_matches = { version = "1.5.0" }

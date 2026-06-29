@@ -8,7 +8,6 @@
   - `memory/08-tasks/done/20260502-cid-cleanup残留整改.md`
   - `memory/08-tasks/done/20260502-cid-sheng-backup-admin-ui.md`
   - `memory/08-tasks/open/20260530-cid-admins-module-unify.md`
-  - `memory/08-tasks/open/20260530-cid-province-admin-governance-passkey.md`
   - `memory/08-tasks/done/20260530-cid-admin-permission-step2.md`
   - `memory/08-tasks/done/20260531-cid-admin-ui-closeout.md`
   - `memory/08-tasks/done/20260531-cid-admin-model-no-status.md`
@@ -41,7 +40,7 @@ citizencode/backend/
 ├── main.rs                    # Axum 路由、AppState、StoreHandle 等后端入口
 ├── main_tests.rs              # main.rs 的测试模块
 ├── accounts/                  # 机构账户入口
-├── admins/                    # 注册局机构 admins 治理、安全动作、Passkey 与登录认证
+├── admins/                    # 注册局机构 admins 治理、安全动作与登录认证
 │   └── login/                 # 管理员登录、扫码登录、鉴权守卫、签名校验
 ├── audit.rs                   # 审计日志查询 handler
 ├── citizens/                  # 公民身份模型、查询、直接录入、绑定状态、投票凭证
@@ -84,34 +83,24 @@ citizencode/backend/
   拆分私权类型与参与人关系;公民继续使用 `citizens`;智能人功能当前不上线,不得预建智能人目录或表。
 - 公民 DTO 归 `citizens/model.rs`,编码元信息 DTO 归 `number/model.rs`,不得恢复或塞回 `models/`。
 - HTTP 响应包装归 `core/response.rs`;Store 聚合体归 `store/model.rs`;
-  注册局机构 admins 列表 DTO 归 `admins/model.rs`;管理员 Passkey 和安全挑战模型归
+  注册局机构 admins 列表 DTO 归 `admins/model.rs`;管理员安全挑战模型归
   `admins/security_model.rs`;审计日志行模型归 `audit.rs`。
 - 行政区划唯一真源归 `china/`;不得恢复 `citizencode/`、`province.rs`、`cities.rs`
   或 `city_codes/*.rs` 静态表。
 - 非法人机构能力归 `subjects/unincorporated_org/`;不得放在单侧 `gov/` 或 `private/`。
 - `scope/` 只放权限范围规则,不得放 HTTP handler 或公钥工具。
-- 管理端操作权限类型只允许 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`,统一登记在
+- 管理端操作权限类型只允许 `LOGIN_STATE / SCAN_SIGN`,统一登记在
   `admins/operation_auth.rs`;未登记或类型不匹配的操作必须拒绝。
 - 新增、删除注册局机构管理员不得在列表查询 handler 暴露写入口;
-  必须统一走 `admins/actions.rs` 的 `PASSKEY_CHALLENGE` 治理动作入口。
+  必须统一走 `admins/actions.rs` 的 `SCAN_SIGN` 治理动作入口。
 - 新增市注册局机构管理员必须由 `admins/actions.rs` 调用 `admins/city_registry_admins.rs` 的省市校验和数量统计；
   同一省同一市最多 30 名市注册局机构管理员，市名可能跨省重复，统计时必须带省份。
 - 联邦/市注册局机构管理员姓名修改属于 `LOGIN_STATE`,使用登录态 PATCH handler,但仍必须做省域和注册局机构校验。
 - 市注册局管理员账户属于身份根,`UPDATE_CITY_REGISTRY` 不接收 `admin_account`;修改市注册局管理员
   只允许调整管理员姓名。
-- 联邦注册局机构管理员采用同级模型;新增、删除统一走
-  `CREATE_FEDERAL_REGISTRY / DELETE_FEDERAL_REGISTRY` 安全动作;编辑姓名使用登录态 PATCH handler。
-- 管理员不存在停用状态字段;删除管理员时必须同步清理会话、Passkey、短期挑战和安全 grant。
-- `PASSKEY` 业务写操作必须先在 `admins/actions.rs` 发起安全动作,由 `admins/passkeys.rs`
-  提供 WebAuthn 验证后换取一次性 `x-cid-security-grant`;`PASSKEY_CHALLENGE` 写操作必须再叠加
-  当前管理员冷钱包 sr25519 签名。
-- `admins/passkeys.rs` 的 WebAuthn 配置读取 `CID_PASSKEY_RP_ID`、
-  `CID_PASSKEY_ORIGIN` 和可选 `CID_PASSKEY_ALLOWED_ORIGINS`;未配置时开发默认
-  `localhost / http://localhost:5179`,生产环境 `CID_ENV=prod|production` 启动期强制
-  `cid.crcfrcn.com / https://cid.crcfrcn.com`。
-- Passkey 注册流程固定为 `register/start -> register/confirm -> register/complete`;
-  `start` 只生成 `QR_V1 / sign_request` 公民钱包签名请求,`confirm` 验证 sr25519 签名响应后
-  才生成 WebAuthn creation options,`complete` 完成浏览器凭据 attestation 并替换当前管理员有效 Passkey。
+- 联邦注册局机构管理员采用同级模型;不得本地新增或删除,只能通过
+  `REPLACE_FEDERAL_REGISTRY` 安全动作在同省内更换投影;编辑姓名使用登录态 PATCH handler。
+- 管理员不存在停用状态字段;更换管理员时必须同步清理旧账户会话、短期挑战和安全 grant。
 - 通用 `QR_V1 / sign_request` envelope 构造归 `core/qr/sign_request.rs`;业务模块只传入
   已确定的签名原文、摘要和展示字段,不得在各业务模块复刻二维码协议包装。机器验真字段保留
   `0x` 公钥/哈希,人机展示字段必须转为中文和 SS58 地址。
@@ -125,7 +114,7 @@ citizencode/backend/
   - `store_citizens`:公民记录、绑定运行态和投票缓存。
   - `store_subjects`:机构、账户、机构资料文档。
   - `store_ops`:登录 challenge/session、扫码登录结果、审计、链幂等、回调任务、指标。
-    同时保存管理员 Passkey 注册挑战、写操作挑战和短期安全 grant。
+    同时保存管理员写操作挑战和短期安全 grant。
 - `store/` 内的分片缓存只保留进程内按省访问 API,用于减少 handler 的跨省扫描和锁竞争;
   重启后由模块 Store 快照重新同步。
 - 数据库当前目标结构由 `main.rs` 启动时创建；初始联邦注册局机构管理员唯一真源为

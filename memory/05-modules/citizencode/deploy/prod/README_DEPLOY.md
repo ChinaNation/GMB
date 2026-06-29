@@ -101,19 +101,6 @@ server {
 - 如后续恢复 GitHub Actions 部署,必须新建手动 `workflow_dispatch` 专用 job,不得挂在 push 自动 CI 上。
 - `CID_FRONTEND_API_BASE_URL`：默认 `/api`
 
-### Passkey 生产域名约束
-
-生产 `/etc/citizencode/citizencode.env` 必须固定:
-
-```bash
-CID_ENV=production
-CID_PASSKEY_RP_ID=cid.crcfrcn.com
-CID_PASSKEY_ORIGIN=https://cid.crcfrcn.com
-```
-
-后端启动期会校验生产环境 Passkey 域名,不得把 `localhost`、`127.0.0.1`、
-局域网 IP 或其它 origin 混入生产配置。
-
 ### 自动部署行为
 1. GitHub Actions 构建 `citizencode-backend`
 2. 构建 `frontend/dist`

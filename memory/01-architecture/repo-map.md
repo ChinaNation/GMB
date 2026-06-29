@@ -136,7 +136,7 @@ CID 前后端都直接以各自根目录为代码根,按业务功能展开。
 - `citizenchain/registry/src/docs/`:机构资料库入口。
 - `citizenchain/registry/src/cid/china/`:中国行政区划 SQLite 真源。
 - `citizenchain/registry/src/cid/`:身份 ID 编码协议、机构码、生成和校验。
-- `citizenchain/registry/src/admins/`:联邦注册局机构管理员/市注册局机构管理员治理、Passkey 注册与签名挑战写操作。
+- `citizenchain/registry/src/admins/`:联邦注册局机构管理员/市注册局机构管理员治理、冷钱包扫码签名二次确认和权限上下文。
 - `citizencode/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
 - `citizencode/frontend/core/`:前端通用组件、共享 UI、扫码签名面板与 QR 工具。
 - `citizencode/frontend/china/`:行政区划元数据 API 与本地缓存。
@@ -145,7 +145,7 @@ CID 前后端都直接以各自根目录为代码根,按业务功能展开。
 - `citizencode/frontend/private/`:私权机构页面入口。
 - `citizencode/frontend/accounts/`:机构账户组件。
 - `citizencode/frontend/docs/`:机构资料库组件。
-- `citizencode/frontend/admins/`:联邦注册局机构管理员/市注册局机构管理员页面、API、Passkey 与签名挑战前端流程。
+- `citizencode/frontend/admins/`:联邦注册局机构管理员/市注册局机构管理员页面、API 与冷钱包扫码签名前端流程。
 
 同名对齐规则:
 

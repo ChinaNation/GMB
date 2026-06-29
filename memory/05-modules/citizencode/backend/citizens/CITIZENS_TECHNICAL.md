@@ -42,7 +42,7 @@
 ## 4. 依赖与边界
 
 - 依赖：
-  - `admins::actions::require_admin_security_grant`：确认 `PASSKEY` 写操作已经通过 Passkey。
+  - `admins::actions::require_admin_security_grant`：确认 `SCAN_SIGN` 写操作已经通过冷钱包扫码签名。
   - `login::parse_sr25519_pubkey_bytes`：解析 CitizenApp 钱包公钥。
   - 全局公共能力：鉴权、审计、状态存储。
 - 边界：
@@ -68,7 +68,7 @@
 - 法定代表人候选搜索是机构创建/编辑的辅助查询,按 `subjects` 模块推导出的目标机构 scope 查询正常状态公民:
   普通私法人和挂靠私法人的机构可搜全国;公权机构、公法人教育机构和挂靠公法人的非法人机构按本省/本市收口;国家级/部级/联邦级公权机构可搜全国。
 - 公民列表页仍按管理员省/市 scope 精确查询,不得因为法定代表人全国可选而放大后台公民管理列表权限。
-- 完成绑定和年度报告导入属于 `PASSKEY` 写操作,必须携带 Passkey 换取的一次性
+- 完成绑定和年度报告导入属于 `SCAN_SIGN` 写操作,必须携带冷钱包扫码签名换取的一次性
   `x-cid-security-grant`。
 - 公民录入时必须规范化钱包字段；后续绑定校验必须确认签名响应公钥等于记录中的 `wallet_pubkey`。
 - 生成方本地 session 的 `payload_hash` 必须等于 challenge 原文哈希；二维码响应不得携带 `payload_hash`。

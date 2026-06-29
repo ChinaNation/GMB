@@ -20,7 +20,7 @@ mod im;
 mod mining;
 mod other;
 mod private;
-mod registry_proc;
+mod onchina_proc;
 mod settings;
 mod shared;
 mod transaction;

@@ -87,7 +87,7 @@ citizenchain node 的链交易冷签路径必须和热钱包路径一样使用 r
 
 1. `a=1` 登录
 2. `a=2` 公民绑定
-3. `a=3` CID 管理员治理/Passkey 更新
+3. `a=3` CID 管理员治理冷钱包确认
 4. `a=5/6` 管理员激活/解密
 5. `a=7` Runtime 32B hash
 6. 所有 `qr-action-registry.md` 登记的链交易 action

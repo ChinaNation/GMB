@@ -74,10 +74,9 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 - `admins`:注册局机构管理员账户。
 - `federal_registry_scope`:联邦注册局机构管理员所属省。
 - `admin_sessions`:登录会话。
-- `admin_sign_requests`:签名登录签名请求。
+- `admin_login_sign_requests`:签名登录签名请求。
 - `admin_qr_login_results`:扫码登录结果。
-- `admin_passkeys`、`admin_passkey_challenges`:Passkey 凭据和挑战。
-- `admin_action_challenges`、`admin_security_grants`:高风险操作二次确认。
+- `admin_action_challenges`、`admin_security_grants`:冷钱包扫码签名二次确认。
 
 登录签名请求、二维码结果和会话属于短生命周期安全运行态。清理逻辑必须在 Rust 中先计算明确截止时间,再把时间点传给 SQL 比较;SQL 中不得使用 `$1 - interval '...'` 这类参数参与 interval 运算的写法,避免 PostgreSQL 无法推断绑定参数类型。数据库错误必须展开 PostgreSQL 的 SQLSTATE、message、detail 和 hint,不得只把 `db error` 传到前端或启动日志。
 任何会在持有数据库连接锁时读取 `postgres::Row` 的代码,必须保证 SELECT 字段顺序和 `row.get(index)`
@@ -100,10 +99,10 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 
 管理员唯一真源为机构或个人多签的 `admins`。CID 管理端按登录账户所属注册局机构判定权限:
 
-- `registry_org_code=FEDERAL_REGISTRY`:联邦注册局机构的 admins,只能增删改查所属省数据。
+- `registry_org_code=FEDERAL_REGISTRY`:联邦注册局机构的 admins,能查看全部联邦注册局管理员目录,但只能更换所属省管理员;业务数据仍只能管理所属省。
 - `registry_org_code=CITY_REGISTRY`:市注册局机构的 admins,只能增删改查所属市数据。
 
-所有列表和 CRUD 接口必须把管理员范围转成 SQL 条件。禁止读取全量数据后在 Rust 或前端过滤。
+所有业务列表和 CRUD 接口必须把管理员范围转成 SQL 条件。联邦注册局管理员目录是唯一例外:联邦管理员可以读取全量管理员目录用于显示省份列,写操作仍由后端按 `federal_registry_scope.province_name` 限制同省。
 
 市注册局机构管理员范围不单独建表。管理员记录保存在 `admins`,所属市使用 `admins.city_name`,所属省通过 `admins.created_by` 指向的联邦注册局机构管理员和 `federal_registry_scope` 解析。注册局页面统一显示联邦注册局机构 admins、市注册局机构 admins;市注册局机构 admins 在该页面只读查看本人所属省和所属市的管理员目录,不得显示新增、编辑或删除入口。
 
@@ -116,7 +115,7 @@ schema 初始化和业务目录初始化必须分离。schema 收敛每次启动
 CID 前端提示统一由 `citizencode/frontend/utils/notice.ts` 管理。业务组件只允许调用 `notice.success/error/warning/info/confirm/warningModal`,不得直接调用 Ant Design `message.*`、`Modal.confirm`、`Modal.warning` 或浏览器 `alert`。统一入口负责:
 
 - 同一时刻只显示一个提示。
-- 将 WebAuthn、网络和后端错误翻译为中文。
+- 将扫码签名、网络和后端错误翻译为中文。
 - 将用户取消类错误显示为取消提示或静默,不得展示 W3C 英文原文。
 
 业务组件捕获异常时必须把原始错误对象传给 `notice.error(error, '中文兜底提示')`,不得先取 `error.message` 再传入提示入口。后端 `ApiError.error_code` 和原始 `message` 的翻译只允许在 `notice.ts` 中实现;无法识别的英文错误必须在统一入口降级为中文兜底提示,不得原样显示给用户。

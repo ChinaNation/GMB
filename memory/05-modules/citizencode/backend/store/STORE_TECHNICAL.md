@@ -13,7 +13,7 @@
   - `mod.rs / shard_types.rs / backend.rs`:按省分片的进程内缓存访问 API。
 - 非职责:
   - 不承载管理员权限模型,管理员模型归 `admins/model.rs`。
-  - 不承载管理员 Passkey 和安全挑战模型,这些归 `admins/security_model.rs`。
+  - 不承载管理员安全挑战模型,这些归 `admins/security_model.rs`。
   - 不承载审计日志行模型,审计模型归 `audit.rs`。
   - 不恢复 `models/` facade。
 
