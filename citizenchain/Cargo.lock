@@ -8385,6 +8385,7 @@ dependencies = [
 name = "onchina"
 version = "1.0.0"
 dependencies = [
+ "admin-primitives",
  "aes-gcm",
  "async-trait",
  "axum",
@@ -8394,6 +8395,7 @@ dependencies = [
  "bs58",
  "chrono",
  "dashmap 6.2.1",
+ "frame-support",
  "getrandom 0.2.17",
  "hex",
  "hex-literal",

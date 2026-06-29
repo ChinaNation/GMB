@@ -30,6 +30,8 @@
 
 不同选择决定下面 1/2/4 的形态。**第一轮必须先做需求分析 + 确认意图,再创建子卡执行。**
 
+> **已确认（2026-06-28）**：走 (A) 机制 = 三档鉴权最严档 `PasskeyColdSign`（passkey 二因子 + CitizenWallet 冷签），签名人=注册局管理员本人(origin)、零 op_tag。**数据契约 + 管理员资料上链 + 机构 pallet 精简已拆为前置卡** → [20260628-institution-admin-field-model-onchain](20260628-institution-admin-field-model-onchain.md)。该卡用户已显式授权链端改动（管理员 CID/姓名/职务/任期/来源上链供 CitizenApp 跨机构查看），**本卡 step1「零 runtime 改动」假设在机构/管理员存储范围内被前置卡取代**；本卡 step1 落地时直接对接前置卡定稿的新 storage 契约。
+
 ## 分步（建议顺序;1 是其余的基座）
 
 ### 🔴 1. 链写凭证基座 + 机构/管理员上链录入
@@ -75,7 +77,7 @@
 
 ## 进度
 
-- [ ] 第一轮需求分析 + 确认"上链录入意图"(A/B/C/D)
+- [x] 第一轮需求分析 + 确认"上链录入意图"(A/B/C/D) → A=PasskeyColdSign;数据契约拆前置卡 20260628-institution-admin-field-model-onchain
 - [ ] 1 链写凭证基座 + 机构/管理员上链录入
 - [ ] 2 card 09 admin 泛化
 - [ ] 3 card 10 seed 泛化

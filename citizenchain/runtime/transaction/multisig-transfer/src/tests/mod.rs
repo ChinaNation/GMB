@@ -822,11 +822,6 @@ fn insert_active_registered_institution_account(
 ) {
     let cid_number = test_cid_number();
     let account_name = test_account_name();
-    let institution_admins: organization_manage::pallet::AdminsOf<Test> = admins
-        .clone()
-        .into_inner()
-        .try_into()
-        .expect("institution admins should fit organization-manage MaxAdmins");
     organization_manage::AccountRegisteredCid::<Test>::insert(
         account,
         organization_manage::RegisteredInstitution {
@@ -837,17 +832,12 @@ fn insert_active_registered_institution_account(
     organization_manage::Institutions::<Test>::insert(
         &cid_number,
         organization_manage::InstitutionInfo {
-            cid_full_name: test_account_name(),
-            main_account: account.clone(),
-            fee_account: AccountId32::new([0x67; 32]),
+            // 私权机构名称不上链:链上留空。
+            cid_full_name: Default::default(),
+            cid_short_name: Default::default(),
             institution_code: PRIVATE_CODE,
-            admins_len: institution_admins.len() as u32,
-            threshold: 2,
-            admins: institution_admins,
-            creator: registered_institution_admin(0),
             created_at: 1,
             status: organization_manage::InstitutionLifecycleStatus::Active,
-            account_count: 1,
         },
     );
     organization_manage::InstitutionAccounts::<Test>::insert(
@@ -866,7 +856,22 @@ fn insert_active_registered_institution_account(
         admin_primitives::AdminAccount {
             institution_code: PRIVATE_CODE,
             kind: admin_primitives::AdminAccountKind::PrivateInstitution,
-            admins,
+            // 机构管理员集合存 AdminProfile(测试种子用空 meta、来源 Registry)。
+            admins: admins
+                .iter()
+                .cloned()
+                .map(|account| admin_primitives::AdminProfile {
+                    account,
+                    admin_cid_number: Default::default(),
+                    name: Default::default(),
+                    title: Default::default(),
+                    term_start: 0,
+                    term_end: 0,
+                    source: admin_primitives::AdminSource::Registry,
+                })
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("institution profiles should fit"),
             creator: registered_institution_admin(0),
             created_at: 1,
             updated_at: 1,
@@ -988,7 +993,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
         set_extra_admins(PRB, prb, prb_accts);
         // PERSONAL_CODE/PUBLIC_CODE/PRIVATE_CODE 的 admin 从 personal/public/private-admins 读；
         // 中文注释：动态阈值真源在 internal-vote::ActiveDynamicThresholds。
-        // personal-admins / organization-manage 只保存账户生命周期状态和 org 归属。
+        // personal-manage / organization-manage 只保存账户生命周期状态和 org 归属。
         // 测试需要时显式写入 PersonalAccounts + 对应管理员表。
         let _ = dq;
     });

@@ -52,6 +52,71 @@ fn extract_balance<T>(val: &Value<T>) -> Option<u128> {
     val.as_u128()
 }
 
+/// 从 scale_value::Value 提取变长字节(BoundedVec<u8>/Vec<u8>,如 cid_number)。
+/// 表示为一组 u8 primitive 的 unnamed composite。
+fn extract_var_bytes<T>(val: &Value<T>) -> Option<Vec<u8>> {
+    match &val.value {
+        subxt::ext::scale_value::ValueDef::Composite(composite) => {
+            let mut bytes = Vec::new();
+            for v in composite.values() {
+                bytes.push(v.as_u128()? as u8);
+            }
+            Some(bytes)
+        }
+        _ => None,
+    }
+}
+
+/// 一条机构链投影状态回写(InstitutionCreated 触发,置 ACTIVE_ON_CHAIN)。
+#[derive(Debug, Clone)]
+pub(crate) struct InstitutionChainStatusUpdate {
+    pub cid_number: String,
+    pub block_number: i64,
+}
+
+/// 扫描一个区块的事件,挑出 OrganizationManage::InstitutionCreated,产出机构链投影回写项。
+/// 与余额索引正交:本路径只翻 chain_status,不写 tx_records。
+pub(crate) fn parse_institution_created_events(
+    events: &subxt::events::Events<PolkadotConfig>,
+    block_number: i64,
+) -> Vec<InstitutionChainStatusUpdate> {
+    let mut updates = Vec::new();
+    for event_result in events.iter() {
+        let event = match event_result {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        if event.pallet_name() != "OrganizationManage"
+            || event.variant_name() != "InstitutionCreated"
+        {
+            continue;
+        }
+        let Ok(fields) = event.field_values() else {
+            continue;
+        };
+        // cid_number: BoundedVec<u8>,链端为 UTF-8 数字串。
+        let Some(cid_bytes) = fields.at("cid_number").and_then(extract_var_bytes) else {
+            warn!(
+                block = block_number,
+                "InstitutionCreated 缺 cid_number,跳过回写"
+            );
+            continue;
+        };
+        let Ok(cid_number) = String::from_utf8(cid_bytes) else {
+            warn!(
+                block = block_number,
+                "InstitutionCreated cid_number 非 UTF-8,跳过"
+            );
+            continue;
+        };
+        updates.push(InstitutionChainStatusUpdate {
+            cid_number,
+            block_number,
+        });
+    }
+    updates
+}
+
 /// 将 u128 余额（分）转为 i64。超过 i64::MAX 截断（实际不会发生）。
 fn balance_to_i64(amount: u128) -> i64 {
     amount.min(i64::MAX as u128) as i64

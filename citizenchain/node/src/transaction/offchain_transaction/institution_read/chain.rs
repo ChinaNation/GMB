@@ -1,12 +1,18 @@
-// 清算行注册机构多签的链上查询。
+// 清算行机构身份的链上只读查询。
 //
 // 中文注释:
-// - 本文件只读 `OrganizationManage::Institutions` / `InstitutionAccounts`。
-// - `OffchainTransaction::ClearingBankNodes` 已拆到
-//   `offchain_transaction::endpoint`,避免"节点声明"与"机构多签"混在一起。
+// - 本文件只读链上机构身份事实,供清算行流程展示:机构最小集、各账户余额、管理员集合、动态阈值。
+// - 机构最小集真源 `OrganizationManage::Institutions[cid_number]` 只存身份字段(名称/机构码/创建块/状态);
+//   主账户/费用账户由 `(cid_number, 保留名)` 经 GMB 协议确定性派生,不在链上重复存。
+// - 管理员集合真源在各管理员 pallet 的 `AdminAccounts[main_account]`,动态阈值真源在
+//   `InternalVote::ActiveDynamicThresholds[(institution_code, main_account)]`。
+// - 清算行节点声明 `OffchainTransaction::ClearingBankNodes` 走 `offchain_transaction::endpoint`,
+//   与机构身份只读解耦。
 
 use codec::{Decode, Encode};
+use primitives::account_derive::AccountKind;
 use primitives::cid::code::InstitutionCode;
+use primitives::core_const::SS58_FORMAT;
 use serde_json::Value;
 use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};
@@ -49,34 +55,27 @@ fn encode_cid_key_data(cid_number: &str) -> Result<Vec<u8>, String> {
     Ok(bv.encode())
 }
 
-// ─── 机构详情查询(organization-manage::Institutions / InstitutionAccounts) ──────
+// ─── 机构最小集镜像(organization-manage::Institutions) ──────
 
-/// 链端 `InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName>`
-/// 在节点端的 SCALE 镜像。字段顺序必须与 [`citizenchain/runtime/governance/organization-manage/src/institution/types.rs`]
+/// 链端 `InstitutionInfo<BlockNumber, AccountName>` 在节点端的 SCALE 镜像。
+/// 字段顺序必须与 `runtime/private/organization-manage/src/institution/types.rs::InstitutionInfo`
 /// 严格一致(Encode/Decode 派生按声明顺序)。
 ///
 /// runtime 实例化的具体类型:
-/// - `AdminList = BoundedVec<AccountId32, MaxAdmins>`(MaxAdmins 由 runtime 设)
-/// - `AccountId = AccountId32`
 /// - `BlockNumber = u32`(citizenchain runtime)
 /// - `AccountName = BoundedVec<u8, ConstU32<128>>`
-#[derive(Decode, Encode)]
+#[derive(Decode)]
 struct OnChainInstitution {
     cid_full_name: BoundedVec<u8, ConstU32<128>>,
-    main_account: AccountId32,
-    fee_account: AccountId32,
+    #[allow(dead_code)]
+    cid_short_name: BoundedVec<u8, ConstU32<128>>,
     institution_code: InstitutionCode,
-    admins_len: u32,
-    threshold: u32,
-    admins: BoundedVec<AccountId32, ConstU32<64>>,
-    creator: AccountId32,
     created_at: u32,
     status: OnChainInstitutionStatus,
-    account_count: u32,
 }
 
-/// 与 [`citizenchain/runtime/governance/organization-manage/src/institution/types.rs::InstitutionLifecycleStatus`] 对齐。
-#[derive(Decode, Encode, Clone, Copy, PartialEq, Eq, Debug)]
+/// 与 `InstitutionLifecycleStatus` 对齐。
+#[derive(Decode, Clone, Copy, PartialEq, Eq, Debug)]
 enum OnChainInstitutionStatus {
     Pending,
     Active,
@@ -94,13 +93,70 @@ impl OnChainInstitutionStatus {
 }
 
 /// 链端 `InstitutionAccountInfo<AccountId, Balance, BlockNumber>` 镜像。
-#[derive(Decode, Encode)]
+#[derive(Decode)]
 struct OnChainInstitutionAccount {
     address: AccountId32,
+    #[allow(dead_code)]
     initial_balance: u128,
+    #[allow(dead_code)]
     status: OnChainInstitutionStatus,
     is_default: bool,
+    #[allow(dead_code)]
     created_at: u32,
+}
+
+// ─── 管理员集合镜像(admins pallet::AdminAccounts) ──────
+
+/// 与 `admin-primitives::AdminSource` 对齐(节点只透传计数,不展示来源)。
+#[derive(Decode, Clone, Copy, PartialEq, Eq, Debug)]
+enum OnChainAdminSource {
+    Genesis,
+    Registry,
+    InternalVote,
+    MutualElection,
+    PopularElection,
+}
+
+/// 单管理员资料镜像,与 `admin-primitives::AdminProfile<AccountId>` 字段顺序严格一致。
+///
+/// runtime 实例化的具体类型:`ADMIN_CID_NUMBER_MAX_BYTES`/`ADMIN_NAME_MAX_BYTES` 都按
+/// `BoundedVec<u8, ConstU32<N>>` 编码(Compact 长度前缀 + 字节),节点只取 `account` 字段。
+#[derive(Decode)]
+struct OnChainAdminProfile {
+    account: AccountId32,
+    #[allow(dead_code)]
+    admin_cid_number: Vec<u8>,
+    #[allow(dead_code)]
+    name: Vec<u8>,
+    #[allow(dead_code)]
+    title: Vec<u8>,
+    #[allow(dead_code)]
+    term_start: u32,
+    #[allow(dead_code)]
+    term_end: u32,
+    #[allow(dead_code)]
+    source: OnChainAdminSource,
+}
+
+/// 链端 `AdminAccount<AdminList, AccountId, BlockNumber>` 镜像(genesis/public/private 三档)。
+///
+/// 这三档 `AdminList = BoundedVec<AdminProfile<AccountId>, MaxAdmins>`;
+/// 个人多签档(PersonalAdmins)的 `admins` 是裸 `BoundedVec<AccountId>`,清算行不走该档。
+/// 字段顺序必须与 `admin-primitives::AdminAccount` 严格一致。
+#[derive(Decode)]
+struct OnChainAdminAccount {
+    institution_code: InstitutionCode,
+    #[allow(dead_code)]
+    kind: u8,
+    admins: Vec<OnChainAdminProfile>,
+    #[allow(dead_code)]
+    creator: AccountId32,
+    #[allow(dead_code)]
+    created_at: u32,
+    #[allow(dead_code)]
+    updated_at: u32,
+    #[allow(dead_code)]
+    status: u8,
 }
 
 /// `frame_system::AccountInfo` 头部 16 字节(nonce/consumers/providers/sufficients
@@ -115,12 +171,30 @@ fn format_yuan(min_units: u128) -> String {
     format!("{}.{:02}", yuan, cents)
 }
 
+/// 按 GMB 协议确定性派生机构主账户 32 字节地址。
+fn derive_main_account(cid_number: &str) -> AccountId32 {
+    AccountId32::new(
+        AccountKind::InstitutionMain {
+            cid_number: cid_number.as_bytes(),
+        }
+        .derive(SS58_FORMAT),
+    )
+}
+
+/// 按 GMB 协议确定性派生机构费用账户 32 字节地址。
+fn derive_fee_account(cid_number: &str) -> AccountId32 {
+    AccountId32::new(
+        AccountKind::InstitutionFee {
+            cid_number: cid_number.as_bytes(),
+        }
+        .derive(SS58_FORMAT),
+    )
+}
+
 /// 用 RPC `state_getStorage` 拉单账户的 free 余额(分)。
 /// 不存在 → 返回 0。
 fn fetch_account_free_balance(account: &AccountId32, finalized_hash: &str) -> Result<u128, String> {
-    let mut storage_data = Vec::with_capacity(32);
     let raw: [u8; 32] = (*account).clone().into();
-    storage_data.extend_from_slice(&raw);
     // System.Account 用 Blake2_128Concat 哈希器,key = blake2_128(account) ++ account
     let mut hashed = Vec::with_capacity(48);
     hashed.extend_from_slice(&storage_keys::blake2b_128(&raw));
@@ -161,25 +235,85 @@ fn fetch_account_free_balance(account: &AccountId32, finalized_hash: &str) -> Re
     }
 }
 
-fn admin_hex_to_ss58(admin_hex: &str) -> Option<String> {
-    let clean = admin_hex.strip_prefix("0x").unwrap_or(admin_hex);
-    let raw = hex::decode(clean).ok()?;
-    if raw.len() != 32 {
-        return None;
+/// 读取机构管理员集合(账户 SS58 列表 + 人数)。
+///
+/// 真源 = 机构码对应管理员 pallet 的 `AdminAccounts[main_account]`,值为 `AdminProfile` 列表;
+/// 节点只取每条 profile 的 `account` 映射成 SS58。机构码不匹配视为数据不一致,降级为空集合。
+fn fetch_admin_set(
+    main_account: &AccountId32,
+    institution_code: &InstitutionCode,
+) -> Result<(Vec<String>, u32), String> {
+    let main_bytes: [u8; 32] = (*main_account).clone().into();
+    let storage_key = admins_storage::admin_accounts_key(institution_code, &main_bytes)?;
+    let Some(hex_data) = chain_query::fetch_finalized_storage(&storage_key)? else {
+        return Ok((Vec::new(), 0));
+    };
+    let clean = hex_data.strip_prefix("0x").unwrap_or(&hex_data);
+    let bytes = hex::decode(clean).map_err(|e| format!("AdminAccounts hex 解码失败:{e}"))?;
+    let decoded = OnChainAdminAccount::decode(&mut &bytes[..])
+        .map_err(|e| format!("AdminAccounts SCALE 解码失败:{e}"))?;
+    if &decoded.institution_code != institution_code {
+        return Ok((Vec::new(), 0));
     }
-    let mut bytes = [0u8; 32];
-    bytes.copy_from_slice(&raw);
-    pubkey_to_ss58(&bytes).ok()
+    let admins_ss58 = decoded
+        .admins
+        .iter()
+        .filter_map(|p| {
+            let raw: [u8; 32] = p.account.clone().into();
+            pubkey_to_ss58(&raw).ok()
+        })
+        .collect::<Vec<_>>();
+    let admins_len = decoded.admins.len() as u32;
+    Ok((admins_ss58, admins_len))
+}
+
+/// 读取机构内部投票动态阈值。
+///
+/// 真源 = `InternalVote::ActiveDynamicThresholds[(institution_code, main_account)]`(DoubleMap,
+/// 两层均 Blake2_128Concat);未注册返回 0。
+fn fetch_active_threshold(
+    main_account: &AccountId32,
+    institution_code: &InstitutionCode,
+    finalized_hash: &str,
+) -> Result<u32, String> {
+    let main_bytes: [u8; 32] = (*main_account).clone().into();
+    let key1 = institution_code.encode();
+    let key2 = main_bytes.encode();
+    let key = storage_keys::double_map_key(
+        "InternalVote",
+        "ActiveDynamicThresholds",
+        &key1,
+        &key2,
+    );
+    let result = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![
+            Value::String(key),
+            Value::String(finalized_hash.to_string()),
+        ]),
+    )?;
+    match result {
+        Value::Null => Ok(0),
+        Value::String(hex_data) => {
+            let clean = hex_data.strip_prefix("0x").unwrap_or(&hex_data);
+            let bytes = hex::decode(clean)
+                .map_err(|e| format!("ActiveDynamicThresholds hex 解码失败:{e}"))?;
+            u32::decode(&mut &bytes[..])
+                .map_err(|e| format!("ActiveDynamicThresholds SCALE 解码失败:{e}"))
+        }
+        _ => Err("state_getStorage 返回格式无效".to_string()),
+    }
 }
 
 /// 链上查询某机构的多签信息。返回 `None` = 该 cid_number 尚未创建机构(进入创建流程)。
 ///
 /// 数据来源:
-/// 1. `OrganizationManage::Institutions[cid_number]` 取机构账户
+/// 1. `OrganizationManage::Institutions[cid_number]` 取机构身份最小集
 /// 2. `state_getKeysPaged` + `OrganizationManage::InstitutionAccounts[cid_number, *]` 取账户列表
 /// 3. 每个账户的 `System::Account[address].data.free` 取链上余额
+/// 4. 主/费账户由 GMB 协议派生地址定位;管理员集合取管理员 pallet,阈值取 internal-vote
 pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDetail>, String> {
-    // 中文注释(ADR-017):取一次 finalized 快照,机构详情/账户列表/余额全部钉同一块。
+    // 中文注释(ADR-017):取一次 finalized 快照,机构详情/账户列表/余额/阈值全部钉同一块。
     let finalized_hash = chain_query::fetch_finalized_head()?;
     let key_data = encode_cid_key_data(cid_number)?;
     let key = storage_keys::map_key("OrganizationManage", "Institutions", &key_data);
@@ -200,15 +334,19 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
     let inst = OnChainInstitution::decode(&mut &bytes[..])
         .map_err(|e| format!("Institutions SCALE 解码失败:{e}"))?;
 
+    // 主/费账户地址由 (cid_number, 保留名) 确定性派生(与 InstitutionAccounts 中存储的一致)。
+    let main_account_id = derive_main_account(cid_number);
+    let fee_account_id = derive_fee_account(cid_number);
+    let main_account_hex: [u8; 32] = main_account_id.clone().into();
+    let main_addr_ss58 = pubkey_to_ss58(&main_account_hex).unwrap_or_default();
+    let fee_addr_bytes: [u8; 32] = fee_account_id.clone().into();
+    let fee_addr_ss58 = pubkey_to_ss58(&fee_addr_bytes).unwrap_or_default();
+
     // 拉机构下所有账户(InstitutionAccounts[cid_number, *] 是 DoubleMap)。
-    let accounts = fetch_institution_accounts(cid_number, &inst, &finalized_hash)?;
+    let accounts = fetch_institution_accounts(cid_number, &finalized_hash)?;
+    let account_count = accounts.len() as u32;
 
     // 主账户 / 费用账户 / 其它账户 分类(用 ss58 字符串比对,避免原始字节做 Eq)。
-    let main_addr_bytes: [u8; 32] = inst.main_account.clone().into();
-    let fee_addr_bytes: [u8; 32] = inst.fee_account.clone().into();
-    let admin_account_id = main_addr_bytes;
-    let main_addr_ss58 = pubkey_to_ss58(&main_addr_bytes).unwrap_or_default();
-    let fee_addr_ss58 = pubkey_to_ss58(&fee_addr_bytes).unwrap_or_default();
     let mut main_account: Option<AccountWithBalance> = None;
     let mut fee_account: Option<AccountWithBalance> = None;
     let mut other_accounts: Vec<AccountWithBalance> = Vec::new();
@@ -223,60 +361,44 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
     }
     let main_account = main_account.unwrap_or_else(|| {
         // 容错:如果 InstitutionAccounts 没显式列主账户(理论上不应该),
-        // 就直接用 Institutions.main_account 拉余额拼一条最小记录。
-        let bal = fetch_account_free_balance(&inst.main_account, &finalized_hash).unwrap_or(0);
+        // 就用派生地址拉余额拼一条最小记录。
+        let bal = fetch_account_free_balance(&main_account_id, &finalized_hash).unwrap_or(0);
         AccountWithBalance {
             account_name: "主账户".to_string(),
-            address_ss58: pubkey_to_ss58(&main_addr_bytes).unwrap_or_default(),
+            address_ss58: main_addr_ss58.clone(),
             balance_min_units: bal.to_string(),
             balance_text: format_yuan(bal),
             is_default: true,
         }
     });
     let fee_account = fee_account.unwrap_or_else(|| {
-        let bal = fetch_account_free_balance(&inst.fee_account, &finalized_hash).unwrap_or(0);
+        let bal = fetch_account_free_balance(&fee_account_id, &finalized_hash).unwrap_or(0);
         AccountWithBalance {
             account_name: "费用账户".to_string(),
-            address_ss58: pubkey_to_ss58(&fee_addr_bytes).unwrap_or_default(),
+            address_ss58: fee_addr_ss58.clone(),
             balance_min_units: bal.to_string(),
             balance_text: format_yuan(bal),
             is_default: true,
         }
     });
 
-    let admin_state = admins_storage::fetch_admin_account(&admin_account_id, None)?;
-    let (admins_ss58, admins_len, threshold) = match admin_state {
-        Some(state) if state.institution_code == inst.institution_code => {
-            let admins = state
-                .admins
-                .iter()
-                .filter_map(|a| admin_hex_to_ss58(a))
-                .collect::<Vec<_>>();
-            (admins, state.admins.len() as u32, inst.threshold)
-        }
-        _ => {
-            // 创建 Pending 阶段对应管理员 pallet 的 AdminAccounts 尚未激活,详情页回退显示创建快照。
-            let admins = inst
-                .admins
-                .iter()
-                .filter_map(|a| {
-                    let raw: [u8; 32] = (*a).clone().into();
-                    pubkey_to_ss58(&raw).ok()
-                })
-                .collect::<Vec<_>>();
-            (admins, inst.admins_len, inst.threshold)
-        }
-    };
-    let creator_bytes: [u8; 32] = inst.creator.clone().into();
-    let creator_ss58 = pubkey_to_ss58(&creator_bytes).unwrap_or_default();
+    let (admins_ss58, admins_len) = fetch_admin_set(&main_account_id, &inst.institution_code)?;
+    let threshold =
+        fetch_active_threshold(&main_account_id, &inst.institution_code, &finalized_hash)?;
 
     let cid_full_name = String::from_utf8(inst.cid_full_name.into_inner())
         .map_err(|_| "cid_full_name 非 UTF-8".to_string())?;
+    // 私权机构链上 cid_full_name 为空时回退展示 cid_number,避免详情页标题空白。
+    let cid_full_name = if cid_full_name.trim().is_empty() {
+        cid_number.to_string()
+    } else {
+        cid_full_name
+    };
 
     Ok(Some(InstitutionDetail {
         cid_number: cid_number.to_string(),
         cid_full_name,
-        admin_account_hex: hex::encode(admin_account_id),
+        admin_account_hex: hex::encode(main_account_hex),
         institution_code: inst.institution_code,
         main_account,
         fee_account,
@@ -285,9 +407,8 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
         threshold,
         admins_ss58,
         status: inst.status.label().to_string(),
-        creator_ss58,
         created_at: inst.created_at as u64,
-        account_count: inst.account_count,
+        account_count,
     }))
 }
 
@@ -295,7 +416,6 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
 /// 然后逐个 `state_getStorage` 拉取账户内容并查链上余额。
 fn fetch_institution_accounts(
     cid_number: &str,
-    inst: &OnChainInstitution,
     finalized_hash: &str,
 ) -> Result<Vec<AccountWithBalance>, String> {
     // 第一层 key 哈希器是 Blake2_128Concat,完整 storage key 前缀 =
@@ -354,7 +474,6 @@ fn fetch_institution_accounts(
     for key in keys {
         // 解 account_name:key 末尾段 = blake2_128(name_bytes_compact) ++ name_bytes_compact
         // name_bytes_compact = BoundedVec<u8>::encode = Compact(len) ++ bytes
-        // 我们直接拉 storage 值,然后从 key 反推 account_name(便于和 inst 对账)。
         let value = rpc_post(
             "state_getStorage",
             Value::Array(vec![
@@ -392,8 +511,6 @@ fn fetch_institution_accounts(
         });
     }
 
-    // 给 unused 字段一个明确的 borrow,避免 dead_code 警告(future-proof:inst 字段未来可能用到)
-    let _ = inst;
     Ok(out)
 }
 
@@ -446,7 +563,7 @@ fn decode_account_name_from_key(full_key_hex: &str, cid_prefix_hex: &str) -> Opt
 ///
 /// 当前阶段返回空列表占位。提案存储在 `votingengine::Proposals[id]`,
 /// 按 cid_number 过滤需要扫描全表 + 反查 ProposalMeta.institution_hex,
-/// 实现略显重,放 follow-up 任务卡(本任务卡 §8 风险表)。
+/// 实现略显重,放 follow-up 任务卡。
 ///
 /// 前端 UI 展示"暂无提案"行兜底,未来填充时无需改 UI 结构。
 pub fn fetch_institution_proposals(
@@ -484,5 +601,11 @@ mod tests {
         let s = "a".repeat(97);
         let err = encode_cid_key_data(&s).unwrap_err();
         assert!(err.contains("长度"));
+    }
+
+    #[test]
+    fn main_and_fee_accounts_differ() {
+        let cid = "LN001-NRC0G-944805165-2026";
+        assert_ne!(derive_main_account(cid), derive_fee_account(cid));
     }
 }

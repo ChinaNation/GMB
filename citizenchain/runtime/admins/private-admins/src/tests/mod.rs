@@ -1,7 +1,11 @@
 #![cfg(test)]
 
 use super::*;
-use admin_primitives::{AdminAccountKind, AdminAccountStatus};
+use admin_primitives::{
+    AdminAccountKind, AdminAccountStatus, AdminProfile, AdminSource, ADMIN_CID_NUMBER_MAX_BYTES,
+    ADMIN_NAME_MAX_BYTES,
+};
+use frame_support::BoundedVec;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
     traits::{ConstU32, ConstU64},
@@ -121,8 +125,47 @@ fn account(seed: u8) -> AccountId32 {
     AccountId32::new([seed; 32])
 }
 
-fn admins(count: u8) -> Vec<AccountId32> {
-    (0..count).map(account).collect()
+/// 构造仅账户、空元数据(姓名/职务/任期空)的管理员资料集合。
+fn admins(count: u8) -> Vec<AdminProfile<AccountId32>> {
+    (0..count).map(|i| profile(account(i))).collect()
+}
+
+/// 构造一条空元数据(Registry 来源)的管理员资料。
+fn profile(acc: AccountId32) -> AdminProfile<AccountId32> {
+    AdminProfile {
+        account: acc,
+        admin_cid_number: BoundedVec::new(),
+        name: BoundedVec::new(),
+        title: BoundedVec::new(),
+        term_start: 0,
+        term_end: 0,
+        source: AdminSource::Registry,
+    }
+}
+
+/// 构造带姓名/职务/任期/实名 CID 的管理员资料。
+fn profile_full(
+    acc: AccountId32,
+    cid: &[u8],
+    name: &[u8],
+    title: &[u8],
+    term_start: u32,
+    term_end: u32,
+) -> AdminProfile<AccountId32> {
+    AdminProfile {
+        account: acc,
+        admin_cid_number: BoundedVec::<u8, ConstU32<ADMIN_CID_NUMBER_MAX_BYTES>>::try_from(
+            cid.to_vec(),
+        )
+        .expect("cid fits"),
+        name: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(name.to_vec())
+            .expect("name fits"),
+        title: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(title.to_vec())
+            .expect("title fits"),
+        term_start,
+        term_end,
+        source: AdminSource::MutualElection,
+    }
 }
 
 #[test]
@@ -176,6 +219,39 @@ fn private_admins_activate_and_query_active_admins() {
             PrivateAdmins::active_account_admins_len(code_bytes("JSCH"), root),
             Some(3)
         );
+    });
+}
+
+#[test]
+fn private_admins_store_and_query_admin_profiles() {
+    new_test_ext().execute_with(|| {
+        let root = account(40);
+        let profiles = alloc::vec![
+            profile_full(account(0), b"CID-A", b"Alice", b"Chair", 10, 20),
+            profile_full(account(1), b"CID-B", b"Bob", b"Member", 11, 21),
+        ];
+        assert_ok!(PrivateAdmins::do_create_pending_admin_account(
+            root.clone(),
+            code_bytes("JSCH"),
+            AdminAccountKind::PrivateInstitution,
+            profiles.clone(),
+            account(1),
+        ));
+        assert_ok!(PrivateAdmins::do_activate_admin_account(root.clone()));
+
+        // 账户语义路径仍只返回账户。
+        assert_eq!(
+            PrivateAdmins::active_account_admins(code_bytes("JSCH"), root.clone()),
+            Some(alloc::vec![account(0), account(1)])
+        );
+
+        // 展示路径返回完整资料,全字段往返。
+        let stored = PrivateAdmins::active_account_admin_profiles(code_bytes("JSCH"), root)
+            .expect("profiles present");
+        assert_eq!(stored, profiles);
+        assert_eq!(stored[0].name.to_vec(), b"Alice".to_vec());
+        assert_eq!(stored[1].title.to_vec(), b"Member".to_vec());
+        assert_eq!(stored[1].source, AdminSource::MutualElection);
     });
 }
 

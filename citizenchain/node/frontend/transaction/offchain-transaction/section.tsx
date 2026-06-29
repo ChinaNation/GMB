@@ -1,34 +1,31 @@
-// 清算行 tab 主入口。8 视图状态机驱动添加/管理流程。
+// 清算行 tab 主入口。视图状态机驱动机构查看/节点声明流程。
 //
 // 状态机:
 //   empty                        列表 + ＋添加清算行
-//   add-input-cid               输入 cid_number 自动 debounce 搜索 CID 候选(不再带"查询"按钮)
+//   add-input-cid               输入 cid_number 自动 debounce 搜索 CID 候选(不带"查询"按钮)
 //   check-multisig               链上查 Institutions[cid_number]
 //                                  ├─ 已存在 → institution-detail
-//                                  └─ 不存在 → create-multisig-institution
+//                                  └─ 不存在 → 提示去 onchina 控制台创建机构(节点不承接创建)
 //   institution-detail           机构详情 = 卡片栅格 + 折叠卡片(其他账户 / 管理员) + 节点信息
 //                                顶部按钮:未声明节点 → declare-node;已声明 → 内联展示节点信息
 //   other-accounts-list          子页:其他账户列表
 //   admin-list                   子页:管理员列表
 //   admin-set-change             子页:复用 admins/admin-management 更换管理员流程
-//   create-multisig-institution  创建机构多签 propose_create_institution(冷钱包签 + 提交)
-//   wait-vote                    等待管理员投票通过(轮询 Institutions[cid_number].status === 'Active')
 //   declare-node                 多签 Active 但本机未声明节点 → 填 RPC + 自测 + 签名声明
 
 import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../../core/tauri';
 import { AdminSetChangePage } from '../../admins/admin-management';
 import { adminsChangeApi } from '../../admins/admin-management/api';
-import { organizationManageApi } from '../../private/organization-manage/api';
-import { ClearingBankAddPage } from '../../private/organization-manage/add-candidate';
-import { ClearingBankInstitutionDetailPage } from '../../private/organization-manage/institution-detail';
-import { CreateMultisigInstitutionPage } from '../../private/organization-manage/create-multisig';
-import { OtherAccountsListPage } from '../../private/organization-manage/other-accounts';
+import { institutionReadApi } from './institution/api';
+import { ClearingBankAddPage } from './institution/add-candidate';
+import { ClearingBankInstitutionDetailPage } from './institution/institution-detail';
+import { OtherAccountsListPage } from './institution/other-accounts';
 import type {
   AccountWithBalance,
   EligibleClearingBankCandidate,
   InstitutionDetail,
-} from '../../private/organization-manage/types';
+} from './institution/types';
 import { hexToSs58 } from '../../shared/ss58';
 import { offchainApi } from './api';
 import type { ClearingBankView } from './types';
@@ -57,9 +54,8 @@ function loadKnownCids(): KnownCidEntry[] {
   }
 }
 
-/// 把已确认存在(链上有 Institutions[cid_number] 或刚提交 propose_create_institution
-/// 成功)的机构入条目加入本机已添加列表。**不要**在用户只是选了候选时调本函数,
-/// 否则若链上没有 + 创建流程失败,EmptyView 会显示孤儿卡。
+/// 把已确认链上存在(Institutions[cid_number] 已存在)的机构入条目加入本机已添加列表。
+/// **不要**在用户只是选了候选时调本函数,否则若链上没有,EmptyView 会显示孤儿卡。
 export function saveKnownCid(entry: KnownCidEntry) {
   const list = loadKnownCids().filter((e) => e.cidNumber !== entry.cidNumber);
   list.unshift(entry);
@@ -84,9 +80,8 @@ export function ClearingBankSection() {
   const goAdd = useCallback(() => setView({ kind: 'add-input-cid' }), []);
 
   const goCheckMultisig = useCallback((cidNumber: string, cidFullName: string) => {
-    // 中文注释:**不在此处** saveKnownCid。用户只是选了候选,链上未必存在,
-    // 创建流程也可能立即失败。只有 goInstitutionDetail(链上确认存在)与
-    // create_multisig.tsx 提案上链成功 callback 才能调 saveKnownCid。
+    // 中文注释:**不在此处** saveKnownCid。用户只是选了候选,链上未必存在。
+    // 只有 goInstitutionDetail(链上确认存在)才调 saveKnownCid。
     setView({ kind: 'check-multisig', cidNumber, cidFullName });
   }, []);
 
@@ -145,7 +140,6 @@ export function ClearingBankSection() {
           cidFullName={view.cidFullName}
           onBack={goEmpty}
           onExists={() => goInstitutionDetail(view.cidNumber, view.cidFullName)}
-          onMissing={() => setView({ kind: 'create-multisig-institution', cidNumber: view.cidNumber })}
         />
       )}
 
@@ -207,28 +201,6 @@ export function ClearingBankSection() {
         />
       )}
 
-      {view.kind === 'create-multisig-institution' && (
-        <CreateMultisigInstitutionPage
-          cidNumber={view.cidNumber}
-          coldWallets={[]}
-          onBack={goEmpty}
-          onSubmitted={(cidNumber, cidFullName) =>
-            setView({ kind: 'wait-vote', cidNumber, cidFullName })
-          }
-        />
-      )}
-
-      {view.kind === 'wait-vote' && (
-        <WaitVoteView
-          cidNumber={view.cidNumber}
-          cidFullName={view.cidFullName}
-          onBack={goEmpty}
-          onActivated={() =>
-            setView({ kind: 'declare-node', cidNumber: view.cidNumber, cidFullName: view.cidFullName })
-          }
-        />
-      )}
-
       {view.kind === 'declare-node' && (
         <ClearingBankDeclareNodePage
           cidNumber={view.cidNumber}
@@ -264,7 +236,7 @@ function EmptyView({
       const next: KnownCidEntry[] = [];
       for (const entry of initialKnown) {
         try {
-          const detail = await organizationManageApi.fetchInstitutionDetail(entry.cidNumber);
+          const detail = await institutionReadApi.fetchInstitutionDetail(entry.cidNumber);
           if (detail !== null) {
             next.push(entry); // 链上有(Pending / Active 都保留)
           } else {
@@ -314,31 +286,31 @@ function EmptyView({
   );
 }
 
-// ─── 子组件:链上查机构是否已存在,已存在跳详情,不存在跳创建 ───
+// ─── 子组件:链上查机构是否已存在,已存在跳详情,不存在提示去 onchina 创建 ───
 function CheckMultisigView({
   cidNumber,
   cidFullName,
   onBack,
   onExists,
-  onMissing,
 }: {
   cidNumber: string;
   cidFullName: string;
   onBack: () => void;
   onExists: () => void;
-  onMissing: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    organizationManageApi
+    setMissing(false);
+    institutionReadApi
       .fetchInstitutionDetail(cidNumber)
       .then((detail) => {
         if (cancelled) return;
         if (detail) onExists();
-        else onMissing();
+        else setMissing(true);
       })
       .catch((e) => {
         if (!cancelled) setError(sanitizeError(e));
@@ -346,66 +318,21 @@ function CheckMultisigView({
     return () => {
       cancelled = true;
     };
-  }, [cidNumber, onExists, onMissing]);
+  }, [cidNumber, onExists]);
 
   return (
     <>
       <button className="back-button" onClick={onBack}>← 返回</button>
       {error ? (
         <div className="error">{error}</div>
+      ) : missing ? (
+        <div className="no-data">
+          {cidFullName || cidNumber} 链上尚未创建机构多签。机构创建已迁至 onchina
+          控制台,请由对应机构管理员在 onchina 完成创建并经投票生效后,再回本页声明清算行节点。
+        </div>
       ) : (
         <p>正在判定 {cidFullName || cidNumber} 链上多签状态…</p>
       )}
-    </>
-  );
-}
-
-// ─── 子组件:等其他管理员投票通过 ───
-function WaitVoteView({
-  cidNumber,
-  cidFullName,
-  onBack,
-  onActivated,
-}: {
-  cidNumber: string;
-  cidFullName: string;
-  onBack: () => void;
-  onActivated: () => void;
-}) {
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    const id = setInterval(async () => {
-      if (cancelled) return;
-      try {
-        const detail = await organizationManageApi.fetchInstitutionDetail(cidNumber);
-        if (detail && detail.status === 'Active') {
-          onActivated();
-        }
-      } catch {
-        /* 容忍轮询失败 */
-      }
-      setTick((t) => t + 1);
-    }, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [cidNumber, onActivated]);
-
-  return (
-    <>
-      <button className="back-button" onClick={onBack}>← 返回</button>
-      <div className="admin-list-header">
-        <h2>等待管理员投票通过</h2>
-      </div>
-      <p>
-        机构 {cidFullName} ({cidNumber}) 的创建提案已发起,正在等待其他管理员
-        通过冷钱包投赞成达阈值。投票通过后链上 Institutions[cid_number].status 由
-        Pending 变 Active,本页自动跳转到"声明本机为清算行节点"。
-      </p>
-      <p className="muted">每 5 秒自动检查 1 次链上状态(已检查 {tick} 次)…</p>
     </>
   );
 }

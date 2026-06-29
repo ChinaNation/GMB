@@ -8,6 +8,8 @@ pub(crate) mod chain_multisig_info;
 pub(crate) mod http;
 pub(crate) mod model;
 pub(crate) mod registration;
+/// 中文注释:组装 propose_create_institution 链上参数并编码裸 SCALE call data。
+pub(crate) mod registration_call;
 pub(crate) mod schema;
 pub(crate) mod service;
 pub(crate) mod unincorporated_org;

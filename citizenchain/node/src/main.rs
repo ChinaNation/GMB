@@ -19,7 +19,6 @@ mod home;
 mod im;
 mod mining;
 mod other;
-mod private;
 mod onchina_proc;
 mod settings;
 mod shared;

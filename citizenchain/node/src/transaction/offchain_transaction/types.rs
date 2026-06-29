@@ -2,7 +2,7 @@
 //
 // 中文注释:
 // - 本文件只保留清算行节点声明、连通性检测、管理员解锁等 offchain 网络类型。
-// - 机构多签管理 DTO 已归位到 `governance/organization-manage/types.rs`。
+// - 机构身份只读 DTO 在同模块 `institution_read::types`。
 
 use serde::Serialize;
 

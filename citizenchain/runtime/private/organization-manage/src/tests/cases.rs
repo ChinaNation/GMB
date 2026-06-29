@@ -1,6 +1,6 @@
 use super::*;
 use crate::institution::types::InstitutionLifecycleStatus;
-use frame_support::{assert_noop, assert_ok, traits::Currency, BoundedVec};
+use frame_support::{assert_noop, assert_ok, traits::Currency};
 use primitives::account_derive::{
     AccountKind, RESERVED_NAME_FEE, RESERVED_NAME_HE, RESERVED_NAME_MAIN, RESERVED_NAME_SAFETYFUND,
     RESERVED_NAME_STAKE,
@@ -239,10 +239,11 @@ fn propose_create_institution_writes_pending_and_reserves() {
             RuntimeOrigin::signed(c.clone()),
             cid.clone(),
             cid_full_name("机构甲".as_bytes()),
+            cid_short_name("简称".as_bytes()),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
-            admins_vec(3),
+            admin_profiles_vec(3),
             2,
             register_nonce(b"nonce-cr-1"),
             valid_signature(),
@@ -266,8 +267,75 @@ fn propose_create_institution_writes_pending_and_reserves() {
                 .institution_code,
             code_bytes("SFLP"),
         );
+        // 私权机构名称不上链:链上 cid_full_name / cid_short_name 留空。
+        let stored = pallet::Institutions::<Test>::get(&cid).unwrap();
+        assert!(stored.cid_full_name.is_empty());
+        assert!(stored.cid_short_name.is_empty());
         // 主+费用 共 2_000 入金 + fee = max(2000*0.001, 10) = 10 → reserve 2_010
         assert_eq!(Balances::reserved_balance(&c), 2_000 + 10);
+    });
+}
+
+#[test]
+fn public_institution_stores_full_and_short_name_onchain() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        let cid = cid_number(b"CID-PUB-1");
+
+        assert_ok!(OrganizationManage::propose_create_institution(
+            RuntimeOrigin::signed(c.clone()),
+            cid.clone(),
+            cid_full_name("某市人民政府".as_bytes()),
+            cid_short_name("某市府".as_bytes()),
+            typical_accounts(),
+            code_bytes("CGOV"),
+            3,
+            admin_profiles_vec(3),
+            2,
+            register_nonce(b"nonce-pub-1"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+
+        // 公权机构全称 + 简称上链,供 CitizenApp 全国直读。
+        let stored = pallet::Institutions::<Test>::get(&cid).unwrap();
+        assert_eq!(
+            stored.cid_full_name,
+            cid_full_name("某市人民政府".as_bytes())
+        );
+        assert_eq!(stored.cid_short_name, cid_short_name("某市府".as_bytes()));
+    });
+}
+
+#[test]
+fn public_institution_rejects_empty_short_name() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        assert_noop!(
+            OrganizationManage::propose_create_institution(
+                RuntimeOrigin::signed(c),
+                cid_number(b"CID-PUB-2"),
+                cid_full_name("某市人民政府".as_bytes()),
+                cid_short_name(b""),
+                typical_accounts(),
+                code_bytes("CGOV"),
+                3,
+                admin_profiles_vec(3),
+                2,
+                register_nonce(b"nonce-pub-2"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::EmptyAccountName
+        );
     });
 }
 
@@ -280,10 +348,11 @@ fn propose_create_rejects_unincorporated_without_parent_routing() {
                 RuntimeOrigin::signed(c),
                 cid_number(b"CID-UNIN-1"),
                 cid_full_name("非法人机构".as_bytes()),
+                cid_short_name("简称".as_bytes()),
                 typical_accounts(),
                 code_bytes("UNIN"),
                 3,
-                admins_vec(3),
+                admin_profiles_vec(3),
                 2,
                 register_nonce(b"nonce-unin-1"),
                 valid_signature(),
@@ -309,10 +378,11 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
             RuntimeOrigin::signed(c.clone()),
             cid.clone(),
             cid_full_name("机构乙".as_bytes()),
+            cid_short_name("简称".as_bytes()),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
-            admins_vec(3),
+            admin_profiles_vec(3),
             2,
             register_nonce(b"nonce-cr-2"),
             valid_signature(),
@@ -358,10 +428,11 @@ fn create_rejected_releases_reserve_and_no_storage_residue() {
             RuntimeOrigin::signed(c.clone()),
             cid.clone(),
             cid_full_name("机构丙".as_bytes()),
+            cid_short_name("简称".as_bytes()),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
-            admins_vec(3),
+            admin_profiles_vec(3),
             2,
             register_nonce(b"nonce-cr-3"),
             valid_signature(),
@@ -396,10 +467,11 @@ fn propose_create_rejects_below_create_amount_minimum() {
                 RuntimeOrigin::signed(c),
                 cid_number(b"CID-MIN"),
                 cid_full_name(b"X"),
+                cid_short_name("简称".as_bytes()),
                 bad_accounts,
                 code_bytes("SFLP"),
                 3,
-                admins_vec(3),
+                admin_profiles_vec(3),
                 2,
                 register_nonce(b"nonce-min"),
                 valid_signature(),
@@ -429,10 +501,11 @@ fn propose_create_rejects_duplicate_account_name() {
                 RuntimeOrigin::signed(c),
                 cid_number(b"CID-DUP"),
                 cid_full_name(b"X"),
+                cid_short_name("简称".as_bytes()),
                 dup,
                 code_bytes("SFLP"),
                 3,
-                admins_vec(3),
+                admin_profiles_vec(3),
                 2,
                 register_nonce(b"nonce-dup"),
                 valid_signature(),
@@ -494,10 +567,11 @@ fn propose_create_rejects_reserved_system_account_name() {
                 RuntimeOrigin::signed(c),
                 cid_number(b"CID-RSV"),
                 cid_full_name(b"X"),
+                cid_short_name("简称".as_bytes()),
                 bad,
                 code_bytes("SFLP"),
                 3,
-                admins_vec(3),
+                admin_profiles_vec(3),
                 2,
                 register_nonce(b"nonce-rsv"),
                 valid_signature(),
@@ -522,10 +596,11 @@ fn propose_create_rejects_missing_main_account() {
                 RuntimeOrigin::signed(c),
                 cid_number(b"CID-NM"),
                 cid_full_name(b"X"),
+                cid_short_name("简称".as_bytes()),
                 no_main,
                 code_bytes("SFLP"),
                 3,
-                admins_vec(3),
+                admin_profiles_vec(3),
                 2,
                 register_nonce(b"nonce-nm"),
                 valid_signature(),
@@ -550,10 +625,11 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 RuntimeOrigin::signed(c.clone()),
                 cid_number(b"CID-T1"),
                 cid_full_name(b"X"),
+                cid_short_name("简称".as_bytes()),
                 typical_accounts(),
                 code_bytes("SFLP"),
                 3,
-                admins_vec(3),
+                admin_profiles_vec(3),
                 1,
                 register_nonce(b"nonce-t1"),
                 valid_signature(),
@@ -571,10 +647,11 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 RuntimeOrigin::signed(c),
                 cid_number(b"CID-T2"),
                 cid_full_name(b"X"),
+                cid_short_name("简称".as_bytes()),
                 typical_accounts(),
                 code_bytes("SFLP"),
                 3,
-                admins_vec(3),
+                admin_profiles_vec(3),
                 4,
                 register_nonce(b"nonce-t2"),
                 valid_signature(),
@@ -600,10 +677,11 @@ fn propose_create_rejects_when_institution_already_exists() {
             RuntimeOrigin::signed(c.clone()),
             cid.clone(),
             cid_full_name(b"A"),
+            cid_short_name("简称".as_bytes()),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
-            admins_vec(3),
+            admin_profiles_vec(3),
             2,
             register_nonce(b"nonce-ae1"),
             valid_signature(),
@@ -619,10 +697,11 @@ fn propose_create_rejects_when_institution_already_exists() {
                 RuntimeOrigin::signed(c),
                 cid,
                 cid_full_name(b"B"),
+                cid_short_name("简称".as_bytes()),
                 typical_accounts(),
                 code_bytes("SFLP"),
                 3,
-                admins_vec(3),
+                admin_profiles_vec(3),
                 2,
                 register_nonce(b"nonce-ae2"),
                 valid_signature(),
@@ -654,10 +733,11 @@ fn create_and_activate_institution(
         RuntimeOrigin::signed(c.clone()),
         cid.clone(),
         cid_full_name(b"X"),
+        cid_short_name("简称".as_bytes()),
         typical_accounts(),
         code_bytes("SFLP"),
         admins_len as u32,
-        admins_vec(admins_len),
+        admin_profiles_vec(admins_len),
         admins_len.saturating_add(1) as u32 / 2 + 1, // m-of-n 治理阈值,取一个能通过的
         register_nonce(cid_number_bytes),
         valid_signature(),
@@ -801,10 +881,11 @@ fn cleanup_rejected_proposal_only_after_engine_rejected() {
             RuntimeOrigin::signed(c),
             cid_number(b"CID-CU"),
             cid_full_name(b"X"),
+            cid_short_name("简称".as_bytes()),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
-            admins_vec(3),
+            admin_profiles_vec(3),
             2,
             register_nonce(b"nonce-cu"),
             valid_signature(),
@@ -837,13 +918,13 @@ fn non_admin_cannot_propose_create() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
         // 提案者不在 admins 列表 → PermissionDenied
-        let admins_no_creator =
-            BoundedVec::try_from(vec![admin(1), admin(2), admin(3)]).expect("fits");
+        let admins_no_creator = admin_profiles_from(&[admin(1), admin(2), admin(3)]);
         assert_noop!(
             OrganizationManage::propose_create_institution(
                 RuntimeOrigin::signed(c),
                 cid_number(b"CID-NA"),
                 cid_full_name(b"X"),
+                cid_short_name("简称".as_bytes()),
                 typical_accounts(),
                 code_bytes("SFLP"),
                 3,
@@ -881,6 +962,82 @@ fn existential_deposit_is_preserved_after_close() {
         // 级联注销主+费用账户(AllowDeath 转空),beneficiary 拿到 990+990=1980。
         assert_eq!(Balances::free_balance(&main), 0);
         assert_eq!(Balances::free_balance(&beneficiary_acc), 1980);
+    });
+}
+
+#[test]
+fn created_institution_stores_admin_profiles_and_accounts_path_intact() {
+    new_test_ext().execute_with(|| {
+        let (cid, main) = create_and_activate_institution(b"CID-PROF", 3);
+        let _ = cid;
+
+        // 激活后管理员资料落 private-admins(SFLP=私权);存的是 AdminProfile。
+        let stored = private_admins::AdminAccounts::<Test>::get(main.clone())
+            .expect("private admin account present");
+        assert_eq!(stored.admins.len(), 3);
+        for (i, profile) in stored.admins.iter().enumerate() {
+            assert_eq!(profile.account, admin(i as u8));
+        }
+
+        // 一人一票/多签路径仍读账户:active_account_admins 返回 account 列表。
+        let code = code_bytes("SFLP");
+        let accounts = private_admins::Pallet::<Test>::active_account_admins(code, main.clone())
+            .expect("active accounts present");
+        assert_eq!(accounts, alloc::vec![admin(0), admin(1), admin(2)]);
+    });
+}
+
+fn create_and_activate_institution_with_profiles(
+    cid_number_bytes: &[u8],
+    profiles: pallet::AdminProfilesOf<Test>,
+) -> AccountId32 {
+    let c = creator();
+    let _ = Balances::deposit_creating(&c, SEED_BALANCE);
+    let cid = cid_number(cid_number_bytes);
+    let admins_len = profiles.len() as u8;
+    let admin_accounts: alloc::vec::Vec<AccountId32> =
+        profiles.iter().map(|p| p.account.clone()).collect();
+
+    assert_ok!(OrganizationManage::propose_create_institution(
+        RuntimeOrigin::signed(c.clone()),
+        cid.clone(),
+        cid_full_name(b"X"),
+        cid_short_name("简称".as_bytes()),
+        typical_accounts(),
+        code_bytes("SFLP"),
+        admins_len as u32,
+        profiles,
+        admins_len.saturating_add(1) as u32 / 2 + 1,
+        register_nonce(cid_number_bytes),
+        valid_signature(),
+        province_name(),
+        creator(),
+        signer_pubkey(),
+        province_name(),
+        b"city".to_vec(),
+    ));
+    let pid = last_proposal_id();
+    assert_ok!(cast_yes_votes(
+        &admin_accounts[1..],
+        admins_len.saturating_sub(1) as usize,
+        pid
+    ));
+
+    OrganizationManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
+        .unwrap()
+        .0
+}
+
+#[test]
+fn create_proposal_preserves_admin_profile_metadata_through_scale() {
+    new_test_ext().execute_with(|| {
+        let expected = admin_profiles_with_meta();
+        let main = create_and_activate_institution_with_profiles(b"CID-META", expected.clone());
+        // profile 经 CreateInstitutionAction encode → PendingInstitutionCreate decode → execute
+        // → 私权管理员 pallet 存储:非空 姓名/职务/任期/实名CID/来源 必须逐字段幸存。
+        let stored = private_admins::AdminAccounts::<Test>::get(main)
+            .expect("private admin account present");
+        assert_eq!(stored.admins.to_vec(), expected.to_vec());
     });
 }
 

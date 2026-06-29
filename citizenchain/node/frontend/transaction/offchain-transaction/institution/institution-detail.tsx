@@ -1,17 +1,17 @@
 // 清算行机构详情页(链上 organization-manage::Institutions[cid_number] 已存在时展示)。
 //
 // 风格参考 governance/InstitutionDetailPage 的卡片栅格 + 折叠子页入口,
-// 但数据源全部走 chain/organization-manage,通过 organizationManageApi.fetchInstitutionDetail 获取。
+// 数据源全部走链上 organization-manage,通过 institutionReadApi.fetchInstitutionDetail 获取。
 //
 // 顶部按钮根据本机是否已声明清算行节点切换:
 //   - 未声明 → "声明本机为清算行节点" → declare-node
-//   - 已声明 → "查看节点详情(端点/管理员/操作)" → 传统 detail 页(节点 RPC 端点 + 端点更新/注销)
+//   - 已声明 → 内联展示节点对外端点信息
 
 import { useEffect, useState } from 'react';
-import { sanitizeError } from '../../core/tauri';
-import { offchainApi } from '../../transaction/offchain-transaction/api';
-import type { ClearingBankNodeOnChainInfo } from '../../transaction/offchain-transaction/types';
-import { organizationManageApi } from './api';
+import { sanitizeError } from '../../../core/tauri';
+import { offchainApi } from '../api';
+import type { ClearingBankNodeOnChainInfo } from '../types';
+import { institutionReadApi } from './api';
 import type { InstitutionDetail, InstitutionProposalItem } from './types';
 
 type Props = {
@@ -45,9 +45,9 @@ export function ClearingBankInstitutionDetailPage({
     setLoading(true);
     setError(null);
     Promise.all([
-      organizationManageApi.fetchInstitutionDetail(cidNumber),
+      institutionReadApi.fetchInstitutionDetail(cidNumber),
       offchainApi.queryClearingBankNodeInfo(cidNumber).catch(() => null),
-      organizationManageApi
+      institutionReadApi
         .fetchInstitutionProposals(cidNumber, 0, PROPOSAL_PAGE_SIZE)
         .catch(() => ({ items: [], hasMore: false })),
     ])
@@ -118,7 +118,7 @@ export function ClearingBankInstitutionDetailPage({
         )}
       </div>
 
-      {/* 已声明节点的对外端点信息(只读展示;后续端点更新/注销可作 follow-up) */}
+      {/* 已声明节点的对外端点信息(只读展示) */}
       {nodeInfo && (
         <div className="node-info-panel metric-card">
           <h3>清算行节点(本机已声明)</h3>
@@ -202,7 +202,7 @@ export function ClearingBankInstitutionDetailPage({
         </div>
       </div>
 
-      {/* 发起提案按钮组：管理员更换转入 admins-change，其它提案仍按后续模块接入。 */}
+      {/* 发起提案按钮组:管理员更换转入 admins-change,其它提案按后续模块接入。 */}
       <div className="institution-info-section">
         <h3>发起提案</h3>
         <div className="proposal-type-grid">

@@ -1,17 +1,17 @@
 // 清算行 offchain 网络 DTO 与页面状态机类型。
 //
 // 中文注释:
-// - 机构多签 DTO 已归位到 private/organization-manage/types.ts。
+// - 机构身份只读 DTO 收敛在同目录 institution/types.ts(供清算行结算直读链上机构事实)。
 // - 本文件只保留清算行节点声明、连通性检测、管理员解锁和 offchain 入口状态机。
 
 import type { AdminWalletMatch } from '../../governance/types';
-import type { AccountWithBalance } from '../../private/organization-manage/types';
+import type { AccountWithBalance } from './institution/types';
 
 export type {
   AccountWithBalance,
   EligibleClearingBankCandidate,
   InstitutionDetail,
-} from '../../private/organization-manage/types';
+} from './institution/types';
 
 export type ClearingBankNodeOnChainInfo = {
   cidNumber: string;
@@ -54,13 +54,11 @@ export type DecryptAdminRequestResult = {
  *   add-input-cid               输入 cid_number 或机构名,debounce 自动搜 CID 候选
  *   check-multisig               链上查 Institutions[cid_number]
  *                                  ├─ 已存在 -> institution-detail
- *                                  └─ 不存在 -> create-multisig-institution
+ *                                  └─ 不存在 -> 提示去 onchina 控制台创建机构(节点不承接)
  *   institution-detail           机构详情卡片栅格 + 折叠子页入口 + 节点信息内联
  *   admin-set-change             进入 admins-change 管理员更换流程
  *   other-accounts-list          其他账户列表子页(折叠卡片入口)
  *   admin-list                   管理员列表子页(折叠卡片入口)
- *   create-multisig-institution  创建机构多签 propose_create_institution(冷钱包签 + 提交)
- *   wait-vote                    轮询 status === 'Active'(等其他管理员投票通过)
  *   declare-node                 多签 Active 但未声明节点 -> 填 RPC + 自测 + 签名声明
  */
 export type ClearingBankView =
@@ -75,8 +73,6 @@ export type ClearingBankView =
       adminAccountHex: string;
       adminWallets: AdminWalletMatch[];
     }
-  | { kind: 'create-multisig-institution'; cidNumber: string }
-  | { kind: 'wait-vote'; cidNumber: string; cidFullName: string }
   | { kind: 'declare-node'; cidNumber: string; cidFullName: string }
   | { kind: 'other-accounts-list'; cidNumber: string; otherAccounts: AccountWithBalance[] }
   | { kind: 'admin-list'; cidNumber: string; admins: string[]; threshold: number; adminsLen: number };

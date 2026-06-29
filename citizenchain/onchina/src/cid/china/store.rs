@@ -244,6 +244,26 @@ pub fn area_name_by_codes(
     Some((province.province_name, city.map(|c| c.city_name), town))
 }
 
+/// 按 (province_code, city_code, town_code) 派生省/市/镇名字三元组,缺失返回空串。
+///
+/// 中文注释:行政区名字单一真源是 china.sqlite,subjects 表不再落地名字副本。
+/// 后端在拼装 DTO 时用本函数把 code 反查成名字,DTO JSON 形状保持不变;
+/// 名字查不到(退役/异常 code)按空串处理,绝不另造名字。
+pub fn area_display_names(
+    province_code: &str,
+    city_code: Option<&str>,
+    town_code: Option<&str>,
+) -> (String, String, String) {
+    match area_name_by_codes(province_code, city_code, town_code) {
+        Some((province, city, town)) => (
+            province.to_string(),
+            city.unwrap_or("").to_string(),
+            town.unwrap_or("").to_string(),
+        ),
+        None => (String::new(), String::new(), String::new()),
+    }
+}
+
 pub fn province_name_by_code(province_code: &str) -> Option<&'static str> {
     provinces()
         .iter()

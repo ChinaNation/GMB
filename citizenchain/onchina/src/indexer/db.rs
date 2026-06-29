@@ -64,6 +64,36 @@ pub(crate) fn insert_block_records(
     Ok(())
 }
 
+/// 机构创建上链成功(InstitutionCreated)后,把机构主体 + 其全部账户的链投影状态
+/// 置为 ACTIVE_ON_CHAIN,并回填 chain_tx_hash(区块哈希)/ chain_block_number。
+///
+/// 中文注释:与注销对称的最小回写。indexer 历史只索引余额事件(tx_records),
+/// 不投影机构状态;本函数补齐 InstitutionCreated → chain_status=ACTIVE_ON_CHAIN。
+/// 幂等:重复回写同值无副作用。
+pub(crate) fn apply_institution_created(
+    conn: &mut Client,
+    cid_number: &str,
+    block_number: i64,
+    block_hash_hex: &str,
+) -> Result<(), String> {
+    conn.execute(
+        "UPDATE subjects
+         SET chain_status = 'ACTIVE_ON_CHAIN',
+             chain_tx_hash = $2,
+             chain_block_number = $3,
+             updated_at = now()
+         WHERE cid_number = $1",
+        &[&cid_number, &block_hash_hex, &block_number],
+    )
+    .map_err(|e| format!("write-back subjects chain_status: {e}"))?;
+    conn.execute(
+        "UPDATE accounts SET chain_status = 'ACTIVE_ON_CHAIN' WHERE cid_number = $1",
+        &[&cid_number],
+    )
+    .map_err(|e| format!("write-back accounts chain_status: {e}"))?;
+    Ok(())
+}
+
 /// 查询某地址的交易记录（游标分页）。
 pub(crate) fn query_tx_records(
     conn: &mut Client,

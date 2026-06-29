@@ -22,7 +22,7 @@ use sp_std::collections::btree_set::BTreeSet;
 
 use admin_primitives::{
     can_store_private_admin_code, AdminAccount, AdminAccountKind, AdminAccountLifecycle,
-    AdminAccountStatus, AdminSetChangeAction,
+    AdminAccountStatus, AdminProfile, AdminSetChangeAction,
 };
 use votingengine::{
     types::InstitutionCode, InternalVoteResultCallback, ProposalExecutionOutcome,
@@ -68,11 +68,18 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
+    /// 仅账户的管理员集合(用于纯账户语义的边界 helper)。
     pub type AdminsOf<T> =
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdminsPerInstitution>;
 
+    /// 管理员资料集合(链上真存储:每个管理员一条 `AdminProfile`)。
+    pub type AdminProfilesOf<T> = BoundedVec<
+        AdminProfile<<T as frame_system::Config>::AccountId>,
+        <T as Config>::MaxAdminsPerInstitution,
+    >;
+
     pub type AdminAccountOf<T> =
-        AdminAccount<AdminsOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
+        AdminAccount<AdminProfilesOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
 
     /// 私权机构管理员表：保存私权机构,以及归属私法人的非法人机构管理员集合。
     #[pallet::storage]
@@ -212,7 +219,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             institution_code: InstitutionCode,
             account: T::AccountId,
-            admins: AdminsOf<T>,
+            admins: AdminProfilesOf<T>,
             new_threshold: u32,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -229,16 +236,18 @@ pub mod pallet {
                 Error::<T>::InstitutionCodeMismatch
             );
 
-            // 2) 校验发起人与目标管理员集合合法性。
-            let current_admins = current.admins.clone().into_inner();
+            // 2) 校验发起人与目标管理员集合合法性(账户语义校验取 profile.account)。
+            let current_admins: Vec<T::AccountId> =
+                current.admins.iter().map(|p| p.account.clone()).collect();
+            let new_admins: Vec<T::AccountId> = admins.iter().map(|p| p.account.clone()).collect();
             ensure!(current_admins.contains(&who), Error::<T>::UnauthorizedAdmin);
             Self::validate_admin_set_for_account(
                 current.kind,
                 current.institution_code,
-                admins.as_slice(),
+                new_admins.as_slice(),
             )?;
             ensure!(
-                !Self::same_admin_set(current_admins.as_slice(), admins.as_slice()),
+                !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
             );
             // 3) 在同一个链上事务中创建投票提案、互斥锁和业务数据。
@@ -269,7 +278,7 @@ pub mod pallet {
                     account,
                     proposer: who,
                     old_admins_len: current_admins.len() as u32,
-                    new_admins_len: admins.len() as u32,
+                    new_admins_len: new_admins.len() as u32,
                     new_threshold,
                 });
                 TransactionOutcome::Commit(Ok(()))
@@ -385,16 +394,18 @@ pub mod pallet {
             institution: T::AccountId,
             institution_code: InstitutionCode,
             kind: AdminAccountKind,
-            admins: Vec<T::AccountId>,
+            admins: Vec<AdminProfile<T::AccountId>>,
             creator: T::AccountId,
         ) -> DispatchResult {
             ensure!(
                 !AdminAccounts::<T>::contains_key(institution.clone()),
                 Error::<T>::InstitutionAlreadyExists
             );
-            Self::validate_admin_set_for_account(kind, institution_code, &admins)?;
+            let admin_accounts: Vec<T::AccountId> =
+                admins.iter().map(|p| p.account.clone()).collect();
+            Self::validate_admin_set_for_account(kind, institution_code, &admin_accounts)?;
 
-            let bounded: AdminsOf<T> = admins
+            let bounded: AdminProfilesOf<T> = admins
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidAdminsLen)?;
             let now = frame_system::Pallet::<T>::block_number();
@@ -530,14 +541,30 @@ pub mod pallet {
             ) else {
                 return false;
             };
-            account.admins.iter().any(|admin| admin == who)
+            account.admins.iter().any(|admin| &admin.account == who)
         }
 
-        /// 读取 Active 账户管理员列表。普通业务提案创建和投票快照默认使用此 API。
+        /// 读取 Active 账户管理员账户列表(投票/多签资格语义,取 profile.account)。
+        ///
+        /// 中文注释:普通业务提案创建和投票快照默认使用此 API;返回的是账户而非资料,
+        /// 内部投票一人一票、多签转账、组织管理查配置全部零改动。
         pub fn active_account_admins(
             institution_code: InstitutionCode,
             institution: T::AccountId,
         ) -> Option<Vec<T::AccountId>> {
+            let account = Self::admin_account_with_status(
+                institution_code,
+                institution,
+                AdminAccountStatus::Active,
+            )?;
+            Some(account.admins.iter().map(|p| p.account.clone()).collect())
+        }
+
+        /// 读取 Active 账户管理员完整资料列表(展示路径,含姓名/职务/任期/实名 CID)。
+        pub fn active_account_admin_profiles(
+            institution_code: InstitutionCode,
+            institution: T::AccountId,
+        ) -> Option<Vec<AdminProfile<T::AccountId>>> {
             let account = Self::admin_account_with_status(
                 institution_code,
                 institution,
@@ -617,10 +644,10 @@ pub mod pallet {
             ) else {
                 return false;
             };
-            account.admins.iter().any(|admin| admin == who)
+            account.admins.iter().any(|admin| &admin.account == who)
         }
 
-        /// 读取 Pending 账户管理员列表。仅供投票引擎 Pending 创建入口写快照。
+        /// 读取 Pending 账户管理员账户列表(取 profile.account)。仅供投票引擎 Pending 创建入口写快照。
         pub fn pending_account_admins_for_snapshot(
             institution_code: InstitutionCode,
             institution: T::AccountId,
@@ -630,7 +657,7 @@ pub mod pallet {
                 institution,
                 AdminAccountStatus::Pending,
             )?;
-            Some(account.admins.into_inner())
+            Some(account.admins.iter().map(|p| p.account.clone()).collect())
         }
 
         /// 读取 Pending 账户管理员数量。仅用于创建/激活该账户的快照语义。
@@ -648,7 +675,7 @@ pub mod pallet {
 
         pub(crate) fn try_execute_set_change_from_action(
             proposal_id: u64,
-            action: AdminSetChangeAction<T::AccountId, AdminsOf<T>>,
+            action: AdminSetChangeAction<T::AccountId, AdminProfilesOf<T>>,
         ) -> DispatchResult {
             // 中文注释：执行前同时校验投票引擎元数据与业务 action，避免跨模块误消费。
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
@@ -685,14 +712,17 @@ pub mod pallet {
                 action.admin_root_account_id.clone(),
                 proposal_id,
             )?;
-            let current_admins = account.admins.clone().into_inner();
+            let current_admins: Vec<T::AccountId> =
+                account.admins.iter().map(|p| p.account.clone()).collect();
+            let new_admins: Vec<T::AccountId> =
+                action.admins.iter().map(|p| p.account.clone()).collect();
             Self::validate_admin_set_for_account(
                 account.kind,
                 account.institution_code,
-                action.admins.as_slice(),
+                new_admins.as_slice(),
             )?;
             ensure!(
-                !Self::same_admin_set(current_admins.as_slice(), action.admins.as_slice()),
+                !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
             );
             AdminAccounts::<T>::mutate(action.admin_root_account_id.clone(), |maybe| {
@@ -714,14 +744,16 @@ pub mod pallet {
     }
 }
 
-impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T> {
+impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, AdminProfile<T::AccountId>>
+    for pallet::Pallet<T>
+{
     fn create_pending_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
         institution: T::AccountId,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
-        admins: Vec<T::AccountId>,
+        admins: Vec<AdminProfile<T::AccountId>>,
         creator: T::AccountId,
     ) -> DispatchResult {
         Self::ensure_lifecycle_proposal(
@@ -819,6 +851,13 @@ impl<T: pallet::Config> admin_primitives::AdminAccountQuery<T::AccountId> for pa
         Self::active_account_admins(institution_code, admin_root_account_id)
     }
 
+    fn active_account_admin_profiles(
+        institution_code: InstitutionCode,
+        admin_root_account_id: T::AccountId,
+    ) -> Option<Vec<AdminProfile<T::AccountId>>> {
+        Self::active_account_admin_profiles(institution_code, admin_root_account_id)
+    }
+
     fn active_account_admins_len(
         institution_code: InstitutionCode,
         admin_root_account_id: T::AccountId,
@@ -895,8 +934,9 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         }
 
         // Step 2:解码 action。异常视为数据层问题,回滚投票状态。
-        let action = AdminSetChangeAction::<T::AccountId, AdminsOf<T>>::decode(&mut &raw[..])
-            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+        let action =
+            AdminSetChangeAction::<T::AccountId, pallet::AdminProfilesOf<T>>::decode(&mut &raw[..])
+                .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
         // Step 3:执行替换。管理员集合变更失败属于数据/状态已不匹配，直接交给投票引擎失败终态。
         match pallet::Pallet::<T>::try_execute_set_change_from_action(proposal_id, action) {

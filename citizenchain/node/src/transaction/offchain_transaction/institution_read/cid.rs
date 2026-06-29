@@ -1,12 +1,11 @@
 //! 转发 CID `/api/v1/app/clearing-banks/eligible-search`,把"资格白名单内但可能未激活"
-//! 候选列表给前端"添加清算行"页用。
+//! 候选列表给前端"添加清算行"页用,并拉机构注册凭证供清算行流程展示。
 //!
-//! 机构注册凭证客户端，只服务 organization-manage 业务边界。
 //! 本地 debug 默认查 127.0.0.1,正式 release 默认查 147 服务器。
 //!
 //! ## 反序列化契约
 //!
-//! CID 端响应形态(参见 citizencode/backend/subjects/chain_multisig_info.rs):
+//! CID 端响应形态:
 //! ```json
 //! {
 //!   "code": 0,
@@ -93,8 +92,7 @@ enum CidMultisigChainStatus {
 
 /// 把 CID 端枚举映射成节点 UI 友好的字符串。
 ///
-/// 节点桌面 TS 端([citizenchain/node/frontend/transaction/offchain-transaction/types.ts])期望:
-/// `'Pending' | 'Active' | 'Closed' | 'Failed'`。
+/// 节点桌面 TS 端期望:`'Pending' | 'Active' | 'Closed' | 'Failed'`。
 fn map_chain_status(status: CidMultisigChainStatus) -> &'static str {
     match status {
         CidMultisigChainStatus::NotOnChain => "Pending",
@@ -163,7 +161,7 @@ pub fn search_eligible_clearing_banks(
     Ok(body.data.into_iter().map(into_candidate).collect())
 }
 
-// ─── 拉机构注册信息(链上 propose_create_institution 必备入参) ───────
+// ─── 拉机构注册信息(清算行流程展示用) ───────
 
 /// CID `registration-info` 响应反序列化封装。
 #[derive(Deserialize)]

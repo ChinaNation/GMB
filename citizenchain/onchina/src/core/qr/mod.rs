@@ -5,7 +5,7 @@
 
 mod sign_request;
 
-pub(crate) use sign_request::build_sign_request;
+pub(crate) use sign_request::{build_sign_request, build_sign_request_bytes};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,9 @@ impl QrKind {
 
 pub const ACTION_LOGIN: u16 = 1;
 pub const ACTION_CID_ADMIN: u16 = 3;
+/// 机构上链创建动作:b.d 携带 propose_create_institution 裸 SCALE call data,
+/// 冷钱包解码逐字段核对后冷签 origin。
+pub const ACTION_CID_INSTITUTION_CREATE: u16 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignRequestBody {

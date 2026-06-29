@@ -302,14 +302,21 @@ pub(crate) fn resolve_home_cid_short_name_conn(
         .map_err(|e| format!("query federal registry short name failed: {e}"))?
     } else {
         // 市级机构按本机构码 + 省 + 市定位机构简称。
+        // 中文注释:subjects 已不存行政区名字,按 china.sqlite 把省/市名字派生成 code 再过滤(单源)。
         let (Some(province), Some(city)) = (scope_province_name, scope_city_name) else {
+            return Ok(None);
+        };
+        let (Some(province_code), Some(city_code)) = (
+            crate::cid::china::province_code_by_name(province),
+            crate::cid::china::city_code_by_name(province, city),
+        ) else {
             return Ok(None);
         };
         conn.query_opt(
             "SELECT cid_short_name FROM subjects \
              WHERE institution_code = $1 AND status = 'ACTIVE' \
-               AND province_name = $2 AND city_name = $3 LIMIT 1",
-            &[&institution_code, &province, &city],
+               AND province_code = $2 AND city_code = $3 LIMIT 1",
+            &[&institution_code, &province_code, &city_code],
         )
         .map_err(|e| format!("query institution short name failed: {e}"))?
     };

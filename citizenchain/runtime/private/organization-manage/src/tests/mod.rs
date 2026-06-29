@@ -559,6 +559,10 @@ pub fn cid_full_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
     BoundedVec::try_from(s.to_vec()).expect("cid_full_name fits")
 }
 
+pub fn cid_short_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
+    BoundedVec::try_from(s.to_vec()).expect("cid_short_name fits")
+}
+
 pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
     BoundedVec::try_from(s.to_vec()).expect("account_name fits")
 }
@@ -583,9 +587,66 @@ pub fn province_name() -> alloc::vec::Vec<u8> {
     b"liaoning".to_vec()
 }
 
-pub fn admins_vec(count: u8) -> pallet::AdminsOf<Test> {
-    let v: alloc::vec::Vec<AccountId32> = (0..count).map(|i| admin(i)).collect();
-    BoundedVec::try_from(v).expect("admins fit")
+/// 构造机构创建用的管理员资料集合(account = admin(i),空元数据,来源 Registry)。
+pub fn admin_profiles_vec(count: u8) -> pallet::AdminProfilesOf<Test> {
+    let accounts: alloc::vec::Vec<AccountId32> = (0..count).map(|i| admin(i)).collect();
+    admin_profiles_from(&accounts)
+}
+
+/// 从给定账户列表构造空元数据(来源 Registry)的管理员资料集合。
+pub fn admin_profiles_from(accounts: &[AccountId32]) -> pallet::AdminProfilesOf<Test> {
+    let v: alloc::vec::Vec<admin_primitives::AdminProfile<AccountId32>> = accounts
+        .iter()
+        .cloned()
+        .map(|account| admin_primitives::AdminProfile {
+            account,
+            admin_cid_number: BoundedVec::new(),
+            name: BoundedVec::new(),
+            title: BoundedVec::new(),
+            term_start: 0,
+            term_end: 0,
+            source: admin_primitives::AdminSource::Registry,
+        })
+        .collect();
+    BoundedVec::try_from(v).expect("admin profiles fit")
+}
+
+/// 构造带非空 姓名/职务/任期/实名CID 的管理员资料集合(3 人,末位留空元数据)。
+///
+/// 中文注释:专供验证 profile 经机构创建提案 `CreateInstitutionAction` 的 SCALE 往返不丢字段。
+pub fn admin_profiles_with_meta() -> pallet::AdminProfilesOf<Test> {
+    let mut v: alloc::vec::Vec<admin_primitives::AdminProfile<AccountId32>> =
+        alloc::vec::Vec::new();
+    v.push(admin_primitives::AdminProfile {
+        account: admin(0),
+        admin_cid_number: BoundedVec::try_from(b"LN001-AAAAA-000000001-2026".to_vec())
+            .expect("cid fits"),
+        name: BoundedVec::try_from("张三".as_bytes().to_vec()).expect("name fits"),
+        title: BoundedVec::try_from("董事长".as_bytes().to_vec()).expect("title fits"),
+        term_start: 20_100,
+        term_end: 21_561,
+        source: admin_primitives::AdminSource::MutualElection,
+    });
+    v.push(admin_primitives::AdminProfile {
+        account: admin(1),
+        admin_cid_number: BoundedVec::try_from(b"LN001-BBBBB-000000002-2026".to_vec())
+            .expect("cid fits"),
+        name: BoundedVec::try_from("李四".as_bytes().to_vec()).expect("name fits"),
+        title: BoundedVec::try_from("董事".as_bytes().to_vec()).expect("title fits"),
+        term_start: 20_100,
+        term_end: 21_561,
+        source: admin_primitives::AdminSource::MutualElection,
+    });
+    v.push(admin_primitives::AdminProfile {
+        account: admin(2),
+        admin_cid_number: BoundedVec::new(),
+        name: BoundedVec::new(),
+        title: BoundedVec::new(),
+        term_start: 0,
+        term_end: 0,
+        source: admin_primitives::AdminSource::Registry,
+    });
+    BoundedVec::try_from(v).expect("admin profiles fit")
 }
 
 pub fn account_names_bv(names: &[&[u8]]) -> pallet::InstitutionAccountNamesOf<Test> {

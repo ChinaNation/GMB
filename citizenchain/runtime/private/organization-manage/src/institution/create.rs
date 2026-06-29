@@ -16,8 +16,8 @@ use crate::institution::types::{
     CreateInstitutionAction, InstitutionAccountInfo, InstitutionInfo, InstitutionLifecycleStatus,
 };
 use crate::pallet::{
-    AccountNameOf, AccountRegisteredCid, AdminsOf, CidNumberOf, CidRegisteredAccount, Config,
-    Error, Event, InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet,
+    AccountNameOf, AccountRegisteredCid, AdminProfilesOf, CidNumberOf, CidRegisteredAccount,
+    Config, Error, Event, InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet,
     PendingInstitutionCreate, RegisterNonceOf, RegisterSignatureOf, UsedRegisterNonce,
     ACTION_CREATE_INSTITUTION,
 };
@@ -39,10 +39,11 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     who: T::AccountId,
     cid_number: CidNumberOf<T>,
     cid_full_name: AccountNameOf<T>,
+    cid_short_name: AccountNameOf<T>,
     accounts: InstitutionInitialAccountsOf<T>,
     institution_code: InstitutionCode,
     admins_len: u32,
-    admins: AdminsOf<T>,
+    admins: AdminProfilesOf<T>,
     threshold: u32,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
@@ -57,7 +58,18 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         Error::<T>::ProtectedSource
     );
     ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
-    ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
+    // 名称按主体分档:公权法人机构必须带全称+简称并上链(供 CitizenApp 全国直读);
+    // 私权机构名称落 onchina 本地,链上留空。
+    let is_public_institution = primitives::cid::code::is_public_legal_code(&institution_code);
+    // 中文注释:CID 注册凭证签名覆盖提交的 cid_full_name(验签仍用原值),链上仅按分档决定是否落库,
+    // 故此处 clone 出落库值,原 cid_full_name 保留给下方 verify_institution_registration。
+    let (stored_full_name, stored_short_name) = if is_public_institution {
+        ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
+        ensure!(!cid_short_name.is_empty(), Error::<T>::EmptyAccountName);
+        (cid_full_name.clone(), cid_short_name.clone())
+    } else {
+        (AccountNameOf::<T>::default(), AccountNameOf::<T>::default())
+    };
     ensure!(
         !issuer_cid_number.is_empty(),
         Error::<T>::EmptyIssuerCidNumber
@@ -132,17 +144,11 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         Institutions::<T>::insert(
             &cid_number,
             InstitutionInfo {
-                cid_full_name: cid_full_name.clone(),
-                main_account: main_account.clone(),
-                fee_account: fee_account.clone(),
+                cid_full_name: stored_full_name.clone(),
+                cid_short_name: stored_short_name.clone(),
                 institution_code,
-                admins_len,
-                threshold,
-                admins: admins.clone(),
-                creator: who.clone(),
                 created_at: now,
                 status: InstitutionLifecycleStatus::Pending,
-                account_count: created_accounts.len() as u32,
             },
         );
 
@@ -173,11 +179,14 @@ pub(crate) fn do_propose_create_institution<T: Config>(
 
         // 中文注释:threshold 是账户激活后的动态阈值配置；
         // 本次注册投票的全员通过阈值由投票引擎根据管理员快照生成。
+        // 投票快照只需账户(一人一票),从 profile 抽取 account。
+        let admin_accounts: alloc::vec::Vec<T::AccountId> =
+            admins.iter().map(|p| p.account.clone()).collect();
         let proposal_id = match <T as Config>::InternalVoteEngine::create_registered_account_create_proposal_with_data(
             who.clone(),
             institution_code,
             institution.clone(),
-            admins.iter().cloned().collect(),
+            admin_accounts,
             threshold,
             crate::MODULE_TAG,
             data,
@@ -206,7 +215,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     Pallet::<T>::deposit_event(Event::<T>::InstitutionCreateProposed {
         proposal_id,
         cid_number,
-        cid_full_name,
+        cid_full_name: stored_full_name,
         main_account,
         proposer: who,
         accounts: created_accounts,

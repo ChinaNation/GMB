@@ -276,10 +276,18 @@ fn institution_row_from_pg_row(
     let created_by_role: Option<String> = row.get(17);
     let cid_full_name: Option<String> = row.get(18);
     let cid_short_name: Option<String> = row.get(19);
-    let town: Option<String> = row.get(20);
     let town_code: Option<String> = row.get(21);
     let education_type: Option<String> = row.get(22);
     let status: String = row.get(23);
+    // 中文注释:省/市/镇名字按 code 现场从 china.sqlite 派生,库里不存名字副本(ADR-021)。
+    let province_code: String = row.get(6);
+    let city_code: Option<String> = row.get(7);
+    let town_code_value = town_code.clone().unwrap_or_default();
+    let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
+        province_code.as_str(),
+        city_code.as_deref(),
+        Some(town_code_value.as_str()),
+    );
     let inst = crate::institution::subjects::Institution {
         cid_number: row.get(0),
         cid_full_name,
@@ -287,11 +295,11 @@ fn institution_row_from_pg_row(
         status,
         category,
         p1: row.get(3),
-        province_name: row.get(4),
-        city_name: row.get(5),
-        town_name: town.unwrap_or_default(),
-        province_code: row.get(6),
-        city_code: row.get(7),
+        province_name,
+        city_name,
+        town_name,
+        province_code,
+        city_code: city_code.unwrap_or_default(),
         town_code: town_code.unwrap_or_default(),
         institution_code: row.get(8),
         education_type,
@@ -325,13 +333,21 @@ fn institution_from_subject_row(
         .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
     let cid_full_name: Option<String> = row.get(15);
     let cid_short_name: Option<String> = row.get(16);
-    let town: Option<String> = row.get(17);
     let town_code: Option<String> = row.get(18);
     let education_type: Option<String> = row.get(19);
     let status: String = row.get(20);
     // 中文注释:字段顺序必须与 get_institution_with_accounts 的 SELECT 保持一致;
     // legal_rep_photo_size 是第 27 列,下标为 26,越界会在持有数据库锁时 panic。
     let legal_rep_photo_size_i64: Option<i64> = row.get(26);
+    // 中文注释:省/市/镇名字按 code 现场从 china.sqlite 派生,DTO 仍带名字,库里不存名字副本(ADR-021)。
+    let province_code: String = row.get(6);
+    let city_code: Option<String> = row.get(7);
+    let town_code_value = town_code.clone().unwrap_or_default();
+    let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
+        province_code.as_str(),
+        city_code.as_deref(),
+        Some(town_code_value.as_str()),
+    );
     Ok(crate::institution::subjects::Institution {
         cid_number: row.get(0),
         cid_full_name,
@@ -339,11 +355,11 @@ fn institution_from_subject_row(
         status,
         category,
         p1: row.get(3),
-        province_name: row.get(4),
-        city_name: row.get(5),
-        town_name: town.unwrap_or_default(),
-        province_code: row.get(6),
-        city_code: row.get(7),
+        province_name,
+        city_name,
+        town_name,
+        province_code,
+        city_code: city_code.unwrap_or_default(),
         town_code: town_code.unwrap_or_default(),
         institution_code: row.get(8),
         education_type,
@@ -448,12 +464,12 @@ impl Db {
             let row = conn
                 .query_opt(
                     "SELECT s.cid_number, s.cid_full_name, s.category,
-                            s.p1, s.province_name,
-                            s.city_name, s.province_code, s.city_code, s.institution_code,
+                            s.p1, ''::text AS province_name,
+                            ''::text AS city_name, s.province_code, s.city_code, s.institution_code,
                             s.private_type, s.partnership_kind, s.has_legal_personality,
                             s.parent_cid_number, s.created_by, s.created_at,
                             s.cid_full_name, s.cid_short_name,
-                            COALESCE(s.town_name, ''), COALESCE(s.town_code, ''),
+                            ''::text AS town_name, COALESCE(s.town_code, ''),
                             s.education_type, s.status, s.legal_rep_name, s.legal_rep_cid_number,
 	                            s.legal_rep_photo_path, s.legal_rep_photo_name,
 	                            s.legal_rep_photo_mime, s.legal_rep_photo_size
@@ -897,38 +913,36 @@ impl Db {
         let legal_rep_photo_size = inst
             .legal_rep_photo_size
             .and_then(|v| i64::try_from(v).ok());
+        // 中文注释:行政区名字不入库(china.sqlite 单源),只写 province_code/city_code/town_code。
         conn.execute(
             "INSERT INTO subjects (
-			                cid_number, kind, cid_full_name, cid_short_name,
-			                status, category, p1, province_name, city_name, town_name,
-			                province_code, city_code, town_code, institution_code,
-			                education_type, private_type, partnership_kind, has_legal_personality,
-			                parent_cid_number, legal_rep_name, legal_rep_cid_number,
-			                legal_rep_photo_path, legal_rep_photo_name, legal_rep_photo_mime,
-			                legal_rep_photo_size, created_by, created_at, updated_at
-			             ) VALUES (
-			                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-			                $11, $12, $13, $14, $15, $16, $17, $18, $19,
-			                $20, $21, $22, $23, $24, $25, $26, $27, now()
-		             )
-			             ON CONFLICT (province_code, cid_number) DO UPDATE SET
-			                kind = EXCLUDED.kind,
-	                cid_full_name = EXCLUDED.cid_full_name,
-	                cid_short_name = EXCLUDED.cid_short_name,
-			                status = EXCLUDED.status,
-		                category = EXCLUDED.category,
-	                p1 = EXCLUDED.p1,
-	                province_name = EXCLUDED.province_name,
-	                city_name = EXCLUDED.city_name,
-	                town_name = EXCLUDED.town_name,
-	                province_code = EXCLUDED.province_code,
-	                city_code = EXCLUDED.city_code,
-	                town_code = EXCLUDED.town_code,
-	                institution_code = EXCLUDED.institution_code,
-	                education_type = EXCLUDED.education_type,
-	                private_type = EXCLUDED.private_type,
-	                partnership_kind = EXCLUDED.partnership_kind,
-	                has_legal_personality = EXCLUDED.has_legal_personality,
+                cid_number, kind, cid_full_name, cid_short_name,
+                status, category, p1,
+                province_code, city_code, town_code, institution_code,
+                education_type, private_type, partnership_kind, has_legal_personality,
+                parent_cid_number, legal_rep_name, legal_rep_cid_number,
+                legal_rep_photo_path, legal_rep_photo_name, legal_rep_photo_mime,
+                legal_rep_photo_size, created_by, created_at, updated_at
+             ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                $11, $12, $13, $14, $15, $16, $17, $18, $19,
+                $20, $21, $22, $23, $24, now()
+             )
+             ON CONFLICT (province_code, cid_number) DO UPDATE SET
+                kind = EXCLUDED.kind,
+                cid_full_name = EXCLUDED.cid_full_name,
+                cid_short_name = EXCLUDED.cid_short_name,
+                status = EXCLUDED.status,
+                category = EXCLUDED.category,
+                p1 = EXCLUDED.p1,
+                province_code = EXCLUDED.province_code,
+                city_code = EXCLUDED.city_code,
+                town_code = EXCLUDED.town_code,
+                institution_code = EXCLUDED.institution_code,
+                education_type = EXCLUDED.education_type,
+                private_type = EXCLUDED.private_type,
+                partnership_kind = EXCLUDED.partnership_kind,
+                has_legal_personality = EXCLUDED.has_legal_personality,
                 parent_cid_number = EXCLUDED.parent_cid_number,
                 legal_rep_name = EXCLUDED.legal_rep_name,
                 legal_rep_cid_number = EXCLUDED.legal_rep_cid_number,
@@ -946,9 +960,6 @@ impl Db {
                 &status,
                 &category,
                 &inst.p1,
-                &inst.province_name,
-                &inst.city_name,
-                &inst.town_name,
                 &inst.province_code,
                 &inst.city_code,
                 &inst.town_code,
@@ -1240,7 +1251,7 @@ impl Db {
                 .query(
                     "SELECT province_code, cid_number, kind,
                             COALESCE(city_code, ''), COALESCE(town_code, ''),
-                            COALESCE(town_name, ''), COALESCE(category, ''),
+                            ''::text AS town_name, COALESCE(category, ''),
                             COALESCE(institution_code, '')
                      FROM subjects
                      WHERE town_code IS NOT NULL AND town_code <> ''",
@@ -1462,13 +1473,13 @@ impl Db {
             // 父级允许跨省(私法人全国),故只按 cid_number 关联不限定 province_code。
             let sql = format!(
 		                    "SELECT s.cid_number, s.cid_full_name, s.category,
-			                                    s.p1, s.province_name,
-			                                    s.city_name, s.province_code, s.city_code, s.institution_code,
+			                                    s.p1, ''::text AS province_name,
+			                                    ''::text AS city_name, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_cid_number, s.created_by, s.created_at,
 				                                    COALESCE(ac.account_count, 0),
 				                                    a.admin_name, a.institution_code, s.cid_full_name, s.cid_short_name,
-				                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''),
+				                                    ''::text AS town_name, COALESCE(s.town_code, ''),
 				                                    s.education_type,
 				                                    s.status
 		                             FROM subjects s
@@ -1515,57 +1526,12 @@ impl Db {
                 .map_err(|e| format!("query subjects failed: {e}"))?;
             let mut output = Vec::with_capacity(rows.len());
             for row in rows {
-                let category_text: String = row.get(2);
-                let category = institution_category_from_text(category_text.as_str())
-                    .ok_or_else(|| format!("invalid institution category: {category_text}"))?;
-			                let account_count_i64: i64 = row.get(15);
-			                let created_by_name: Option<String> = row.get(16);
-			                let created_by_role: Option<String> = row.get(17);
-			                let cid_full_name: Option<String> = row.get(18);
-			                let cid_short_name: Option<String> = row.get(19);
-				                let town: Option<String> = row.get(20);
-				                let town_code: Option<String> = row.get(21);
-				                let education_type: Option<String> = row.get(22);
-				                let status: String = row.get(23);
-                let inst = crate::institution::subjects::Institution {
-                    cid_number: row.get(0),
-                    cid_full_name,
-			                    cid_short_name,
-			                    status,
-			                    category,
-		                    p1: row.get(3),
-			                    province_name: row.get(4),
-			                    city_name: row.get(5),
-			                    town_name: town.unwrap_or_default(),
-			                    province_code: row.get(6),
-			                    city_code: row.get(7),
-			                    town_code: town_code.unwrap_or_default(),
-			                    institution_code: row.get(8),
-			                    education_type,
-			                    private_type: row.get(9),
-			                    partnership_kind: row.get(10),
-			                    has_legal_personality: row.get(11),
-		                    parent_cid_number: row.get(12),
-                    legal_rep_name: None,
-                    legal_rep_cid_number: None,
-                    legal_rep_photo_path: None,
-                    legal_rep_photo_name: None,
-                    legal_rep_photo_mime: None,
-                    legal_rep_photo_size: None,
-		                    created_by: row.get(13),
-		                    created_at: row.get(14),
-                };
-                let id = stable_institution_cursor_id(inst.cid_number.as_str());
-                output.push((
-                    institution_row_from_record(
-                        &inst,
-                        usize::try_from(account_count_i64).unwrap_or(0),
-                        created_by_name,
-                        created_by_role,
-                    ),
-                    inst.created_at,
-                    id,
-                ));
+                // 中文注释:列布局与 institution_row_from_pg_row 一致,统一走该 helper(含名字派生)。
+                let created_at: DateTime<Utc> = row.get(14);
+                let cid_number: String = row.get(0);
+                let item = institution_row_from_pg_row(&row)?;
+                let id = stable_institution_cursor_id(cid_number.as_str());
+                output.push((item, created_at, id));
             }
             Ok(page_from_rows(output, page_size))
         })
@@ -1588,13 +1554,13 @@ impl Db {
             let rows = conn
                 .query(
                     "SELECT s.cid_number, s.cid_full_name, s.category,
-                                    s.p1, s.province_name,
-                                    s.city_name, s.province_code, s.city_code, s.institution_code,
+                                    s.p1, ''::text AS province_name,
+                                    ''::text AS city_name, s.province_code, s.city_code, s.institution_code,
                                     s.private_type, s.partnership_kind, s.has_legal_personality,
                                     s.parent_cid_number, s.created_by, s.created_at,
                                     COALESCE(ac.account_count, 0),
                                     a.admin_name, a.institution_code, s.cid_full_name, s.cid_short_name,
-                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''),
+                                    ''::text AS town_name, COALESCE(s.town_code, ''),
                                     s.education_type, s.status
                      FROM subjects s
                      LEFT JOIN (
@@ -1651,13 +1617,13 @@ impl Db {
             let rows = conn
                 .query(
                     "SELECT s.cid_number, s.cid_full_name, s.category,
-			                                    s.p1, s.province_name,
-			                                    s.city_name, s.province_code, s.city_code, s.institution_code,
+			                                    s.p1, ''::text AS province_name,
+			                                    ''::text AS city_name, s.province_code, s.city_code, s.institution_code,
 				                                    s.private_type, s.partnership_kind, s.has_legal_personality,
 				                                    s.parent_cid_number, s.created_by, s.created_at,
 			                                    COALESCE(ac.account_count, 0),
 			                                    a.admin_name, a.institution_code, s.cid_full_name, s.cid_short_name,
-			                                    COALESCE(s.town_name, ''), COALESCE(s.town_code, ''),
+			                                    ''::text AS town_name, COALESCE(s.town_code, ''),
 			                                    s.education_type,
 			                                    s.status
 	                             FROM subjects s

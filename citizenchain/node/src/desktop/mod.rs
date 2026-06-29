@@ -13,7 +13,7 @@ pub(crate) mod node_runner;
 use crate::{
     admins, governance,
     home::{self, cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState},
-    im, mining, other, private, settings,
+    im, mining, other, settings,
     transaction::multisig_transfer,
 };
 use std::sync::Mutex;
@@ -112,7 +112,7 @@ pub fn run_desktop() {
             crate::transaction::onchain_transaction::submit_transfer,
             crate::transaction::onchain_transaction::submit_miner_transfer,
             // ─── 清算行 offchain tab ───
-            private::organization_manage::commands::search_eligible_clearing_banks,
+            crate::transaction::offchain_transaction::institution_read::commands::search_eligible_clearing_banks,
             crate::transaction::offchain_transaction::commands::query_clearing_bank_node_info,
             crate::transaction::offchain_transaction::commands::query_local_peer_id,
             crate::transaction::offchain_transaction::commands::test_clearing_bank_endpoint_connectivity,
@@ -126,11 +126,9 @@ pub fn run_desktop() {
             crate::transaction::offchain_transaction::settlement::commands::verify_and_decrypt_admin,
             crate::transaction::offchain_transaction::settlement::commands::list_decrypted_admins,
             crate::transaction::offchain_transaction::settlement::commands::lock_decrypted_admin,
-            private::organization_manage::commands::fetch_clearing_bank_institution_detail,
-            private::organization_manage::commands::fetch_clearing_bank_institution_proposals,
-            private::organization_manage::commands::fetch_clearing_bank_institution_registration_info,
-            private::organization_manage::commands::build_propose_create_institution_request,
-            private::organization_manage::commands::submit_propose_create_institution
+            crate::transaction::offchain_transaction::institution_read::commands::fetch_clearing_bank_institution_detail,
+            crate::transaction::offchain_transaction::institution_read::commands::fetch_clearing_bank_institution_proposals,
+            crate::transaction::offchain_transaction::institution_read::commands::fetch_clearing_bank_institution_registration_info
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());

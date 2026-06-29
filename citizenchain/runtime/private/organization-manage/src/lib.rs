@@ -18,7 +18,7 @@ mod tests;
 
 use admin_primitives::{
     is_private_admin_code, is_public_admin_code, is_unincorporated_admin_code, AdminAccountKind,
-    AdminAccountLifecycle, AdminAccountQuery,
+    AdminAccountLifecycle, AdminAccountQuery, AdminProfile,
 };
 use codec::{Decode, Encode};
 use frame_support::{
@@ -66,10 +66,16 @@ pub mod pallet {
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         /// 公权机构管理员生命周期写入口。
-        type PublicAdminLifecycle: AdminAccountLifecycle<Self::AccountId>;
+        type PublicAdminLifecycle: AdminAccountLifecycle<
+            Self::AccountId,
+            AdminProfile<Self::AccountId>,
+        >;
 
         /// 私权机构管理员生命周期写入口。
-        type PrivateAdminLifecycle: AdminAccountLifecycle<Self::AccountId>;
+        type PrivateAdminLifecycle: AdminAccountLifecycle<
+            Self::AccountId,
+            AdminProfile<Self::AccountId>,
+        >;
 
         /// 管理员统一查询入口，由 runtime 路由到公权/私权/创世管理员模块。
         type AdminAccountQuery: AdminAccountQuery<Self::AccountId>;
@@ -127,6 +133,10 @@ pub mod pallet {
     pub type AdminsOf<T> =
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdmins>;
 
+    /// 机构管理员资料集合(创建提案携带:每个管理员一条 `AdminProfile`)。
+    pub type AdminProfilesOf<T> =
+        BoundedVec<AdminProfile<<T as frame_system::Config>::AccountId>, <T as Config>::MaxAdmins>;
+
     pub type CidNumberOf<T> = BoundedVec<u8, <T as Config>::MaxCidNumberLength>;
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
     pub type RegisterNonceOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterNonceLength>;
@@ -149,13 +159,8 @@ pub mod pallet {
     /// 机构创建提案中保存的已派生账户列表。
     pub type CreateInstitutionAccountsOf<T> =
         BoundedVec<CreateInstitutionAccountOf<T>, <T as Config>::MaxInstitutionAccounts>;
-    /// 机构级多签信息。
-    pub type InstitutionInfoOf<T> = InstitutionInfo<
-        AdminsOf<T>,
-        <T as frame_system::Config>::AccountId,
-        BlockNumberFor<T>,
-        AccountNameOf<T>,
-    >;
+    /// 机构级信息(链上最小集)。
+    pub type InstitutionInfoOf<T> = InstitutionInfo<BlockNumberFor<T>, AccountNameOf<T>>;
     /// 机构账户信息。
     pub type InstitutionAccountInfoOf<T> = InstitutionAccountInfo<
         <T as frame_system::Config>::AccountId,
@@ -168,7 +173,7 @@ pub mod pallet {
         AccountNameOf<T>,
         <T as frame_system::Config>::AccountId,
         BalanceOf<T>,
-        AdminsOf<T>,
+        AdminProfilesOf<T>,
         CreateInstitutionAccountsOf<T>,
     >;
 
@@ -200,11 +205,11 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 机构级多签信息：key 为 cid_number。
+    /// 机构级信息(链上最小集)：key 为 cid_number。
     ///
-    /// 链上创建的是“机构”，机构下账户只保存地址、初始余额与生命周期状态。
-    /// 管理员长期真源在 admins 模块，动态阈值长期真源在 internal-vote；
-    /// 本表保存机构基本信息和创建快照。
+    /// 只保存全国可见的机构身份事实:名称(仅公权)、机构码、创建块号、生命周期状态。
+    /// 主账户/费用账户由 (cid_number, 保留名) 派生且常驻 InstitutionAccounts,不在此重复;
+    /// 管理员集合长期真源在 admins 模块,动态阈值长期真源在 internal-vote,均不在此存快照。
     #[pallet::storage]
     #[pallet::getter(fn institution_of)]
     pub type Institutions<T: Config> =
@@ -317,7 +322,7 @@ pub mod pallet {
             main_account: T::AccountId,
             proposer: T::AccountId,
             accounts: CreateInstitutionAccountsOf<T>,
-            admins: AdminsOf<T>,
+            admins: AdminProfilesOf<T>,
             institution_code: InstitutionCode,
             admins_len: u32,
             threshold: u32,
@@ -532,10 +537,11 @@ pub mod pallet {
             origin: OriginFor<T>,
             cid_number: CidNumberOf<T>,
             cid_full_name: AccountNameOf<T>,
+            cid_short_name: AccountNameOf<T>,
             accounts: InstitutionInitialAccountsOf<T>,
             institution_code: InstitutionCode,
             admins_len: u32,
-            admins: AdminsOf<T>,
+            admins: AdminProfilesOf<T>,
             threshold: u32,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
@@ -550,6 +556,7 @@ pub mod pallet {
                 who,
                 cid_number,
                 cid_full_name,
+                cid_short_name,
                 accounts,
                 institution_code,
                 admins_len,
@@ -703,7 +710,7 @@ pub mod pallet {
         // derive_personal_account 在 personal-manage::Pallet;
         // organization-manage 的机构地址只走 derive_registered_account。
 
-        pub(crate) fn ensure_unique_admins(admins: &AdminsOf<T>) -> Result<(), DispatchError> {
+        pub(crate) fn ensure_unique_admins(admins: &[T::AccountId]) -> Result<(), DispatchError> {
             let mut seen = BTreeSet::new();
             for admin in admins.iter() {
                 ensure!(seen.insert(admin.clone()), Error::<T>::DuplicateAdmin);
@@ -738,7 +745,7 @@ pub mod pallet {
         pub(crate) fn ensure_admin_config(
             who: &T::AccountId,
             admins_len: u32,
-            admins: &AdminsOf<T>,
+            admins: &AdminProfilesOf<T>,
             threshold: u32,
         ) -> DispatchResult {
             ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
@@ -753,9 +760,12 @@ pub mod pallet {
                     && u64::from(threshold).saturating_mul(2) > u64::from(admins_len),
                 Error::<T>::InvalidThreshold
             );
-            Self::ensure_unique_admins(admins)?;
+            // 账户语义校验取 profile.account:唯一性与发起人在册都按账户判定。
+            let admin_accounts: Vec<T::AccountId> =
+                admins.iter().map(|p| p.account.clone()).collect();
+            Self::ensure_unique_admins(&admin_accounts)?;
             ensure!(
-                admins.iter().any(|admin| admin == who),
+                admin_accounts.iter().any(|admin| admin == who),
                 Error::<T>::PermissionDenied
             );
             Ok(())
@@ -765,7 +775,7 @@ pub mod pallet {
             proposal_id: u64,
             institution_code: InstitutionCode,
             institution_id: T::AccountId,
-            admins: &AdminsOf<T>,
+            admins: &AdminProfilesOf<T>,
             creator: &T::AccountId,
         ) -> DispatchResult {
             if is_public_admin_code(&institution_code) {
@@ -872,8 +882,14 @@ pub mod pallet {
         /// 统一管理机构及其全部账户(创建/注销账户都由这套管理员授权)。
         pub fn resolve_admin_account_for_account(account: &T::AccountId) -> Option<T::AccountId> {
             let registered = AccountRegisteredCid::<T>::get(account)?;
-            let institution = Institutions::<T>::get(&registered.cid_number)?;
-            Some(institution.main_account)
+            // 主账户地址由 (cid_number, 主账户保留名) 确定性派生,与 InstitutionAccounts 中存储的一致;
+            // 机构本身不再重复保存 main_account。
+            let (main_account, _) = Self::derive_registered_account(
+                registered.cid_number.as_slice(),
+                RESERVED_NAME_MAIN,
+            )
+            .ok()?;
+            Some(main_account)
         }
 
         /// 从任意机构账户反查管理员更换机构码。

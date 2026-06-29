@@ -1,10 +1,12 @@
-//! # 机构多签名地址转账模块 (multisig-transfer)
+//! # 多签资金账户转账模块 (multisig-transfer)
 //!
-//! 本模块为治理机构（NRC/PRC/PRB）和注册多签机构提供链上转账治理流程：
+//! 本模块为治理机构(NRC/PRC/PRB)、注册机构多签账户和个人多签账户提供链上转账治理流程：
 //! - 管理员发起转账提案，经内部投票通过后自动执行转账并扣取手续费。
 //! - 自动执行失败时保留提案状态，可通过 `VotingEngine::retry_passed_proposal` 手动重试。
 //! - 余额在提案创建和执行两个时点双重检查，含手续费和 ED 保留。
-//! - 收款地址不能是机构自身，也不能是受保护地址（质押地址）。
+//! - 收款地址不能是转出资金账户自身，也不能是受保护地址(质押地址等)。
+//! - 本模块只处理转账提案与执行；个人多签生命周期归 `personal-manage`，
+//!   个人多签管理员真源归 `personal-admins`。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -41,7 +43,7 @@ type BalanceOf<T> = <<T as organization_manage::Config>::Currency as Currency<
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 #[scale_info(skip_type_params(MaxRemarkLen))]
 pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
-    /// 转出机构多签账户。
+    /// 转出多签资金账户(治理机构主账户、注册机构账户或个人多签账户)。
     pub institution: AccountId,
     /// 收款地址
     pub beneficiary: AccountId,
@@ -73,7 +75,9 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
 /// 投票通过 / 否决回调时统一识别提案发起人。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct SweepAction<AccountId, Balance> {
-    /// 机构多签账户。
+    /// 机构资金账户。
+    ///
+    /// 中文注释：费用账户划转只服务治理机构费用账户，不接入个人多签。
     pub institution: AccountId,
     /// 划转金额
     pub amount: Balance,
@@ -152,10 +156,10 @@ pub mod pallet {
             >>::NegativeImbalance,
         >;
 
-        /// 个人多签账户状态查询,由 personal-manage 实现。
+        /// 个人多签账户状态与管理员配置查询,由 personal-manage 聚合 personal-admins 提供。
         type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
 
-        /// 注册机构账户状态查询,由 organization-manage 实现。
+        /// 注册机构账户状态与管理员配置查询,由 organization-manage 聚合对应 admins 模块提供。
         type InstitutionQuery: organization_manage::traits::InstitutionMultisigQuery<
             Self::AccountId,
         >;
@@ -263,19 +267,19 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 中文注释：机构不属于 NRC/PRC/PRB 且非注册多签机构。
+        /// 中文注释：资金账户不属于 NRC/PRC/PRB、个人多签或注册机构账户。
         InvalidInstitution,
-        /// 中文注释：调用者声明的机构码与机构实际机构码不一致。
+        /// 中文注释：调用者声明的机构码与资金账户实际分类不一致。
         InstitutionCodeMismatch,
-        /// 中文注释：调用者不是该机构的管理员。
+        /// 中文注释：调用者不是该多签资金账户的管理员。
         UnauthorizedAdmin,
-        /// 中文注释：机构资产保护检查未通过（如冻结期间禁止支出）。
+        /// 中文注释：资金账户保护检查未通过（如冻结期间禁止支出）。
         InstitutionSpendNotAllowed,
         /// 中文注释：转账金额不能为零。
         ZeroAmount,
         /// 中文注释：转账金额低于 ED（存在性保证金），收款地址可能无法创建。
         AmountBelowExistentialDeposit,
-        /// 中文注释：不允许转账给机构自身。
+        /// 中文注释：不允许转账给转出资金账户自身。
         SelfTransferNotAllowed,
         /// 中文注释：收款地址是受保护地址（如质押地址），不允许作为收款方。
         BeneficiaryIsProtectedAddress,
@@ -283,7 +287,7 @@ pub mod pallet {
         ProposalActionNotFound,
         /// 中文注释：机构账户地址解码失败。
         InstitutionAccountDecodeFailed,
-        /// 中文注释：机构余额不足（需 amount + fee + ED）。
+        /// 中文注释：资金账户余额不足（需 amount + fee + ED）。
         InsufficientBalance,
         /// 中文注释：提案未达到通过状态，不可执行。
         ProposalNotPassed,
@@ -512,7 +516,7 @@ pub mod pallet {
             let amount_u128: u128 = amount.saturated_into();
             ensure!(amount_u128 > 0, Error::<T>::InvalidSweepAmount);
 
-            // 动态判断机构码类型
+            // 动态判断治理机构码类型。
             let institution_code = Self::resolve_sweep_org(&institution)?;
             ensure!(
                 <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
@@ -606,7 +610,9 @@ pub mod pallet {
             )
         }
 
-        /// 判断机构的机构码类型用于 sweep 提案。
+        /// 判断治理机构码类型用于 sweep 提案。
+        ///
+        /// 中文注释：sweep 只服务治理机构费用账户，不接入个人多签或注册机构账户。
         fn resolve_sweep_org(institution: &T::AccountId) -> Result<InstitutionCode, Error<T>> {
             if CHINA_CB
                 .first()
@@ -624,7 +630,7 @@ pub mod pallet {
             Err(Error::<T>::InvalidInstitution)
         }
 
-        /// 解析机构手续费账户。
+        /// 解析治理机构手续费账户。
         fn resolve_fee_account(institution: &T::AccountId) -> Result<T::AccountId, DispatchError> {
             if CHINA_CB
                 .first()
@@ -642,7 +648,7 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
         }
 
-        /// 解析机构主账户。
+        /// 解析治理机构主账户。
         fn resolve_main_account(institution: T::AccountId) -> Result<T::AccountId, DispatchError> {
             Ok(institution)
         }

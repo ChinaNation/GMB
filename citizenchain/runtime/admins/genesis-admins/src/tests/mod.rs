@@ -1,7 +1,8 @@
 #![cfg(test)]
 
 use super::*;
-use admin_primitives::{AdminAccountKind, AdminAccountStatus};
+use admin_primitives::{AdminAccountKind, AdminAccountStatus, AdminProfile, AdminSource};
+use frame_support::BoundedVec;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
     traits::{ConstU32, ConstU64},
@@ -111,14 +112,16 @@ impl internal_vote::Config for Test {
 /// 中文注释:现有 genesis-admins 单测不覆盖联邦直设入口,故 4 个生命周期方法仅占位返回 Ok;
 /// `set_active_admin_account_direct` 走 trait 默认(未支持)。真实直设路径在 public-admins 单测覆盖。
 pub struct TestPublicLifecycle;
-impl admin_primitives::AdminAccountLifecycle<AccountId32> for TestPublicLifecycle {
+impl admin_primitives::AdminAccountLifecycle<AccountId32, AdminProfile<AccountId32>>
+    for TestPublicLifecycle
+{
     fn create_pending_admin_account_for_proposal(
         _proposal_id: u64,
         _module_tag: &[u8],
         _admin_root_account_id: AccountId32,
         _institution_code: votingengine::types::InstitutionCode,
         _kind: AdminAccountKind,
-        _admins: alloc::vec::Vec<AccountId32>,
+        _admins: alloc::vec::Vec<AdminProfile<AccountId32>>,
         _creator: AccountId32,
     ) -> frame_support::dispatch::DispatchResult {
         Ok(())
@@ -171,8 +174,19 @@ fn account(seed: u8) -> AccountId32 {
     AccountId32::new([seed; 32])
 }
 
-fn admins(count: u8) -> Vec<AccountId32> {
-    (0..count).map(account).collect()
+/// 构造仅账户、空元数据(姓名/职务/任期空)的管理员资料集合。
+fn admins(count: u8) -> Vec<AdminProfile<AccountId32>> {
+    (0..count)
+        .map(|i| AdminProfile {
+            account: account(i),
+            admin_cid_number: BoundedVec::new(),
+            name: BoundedVec::new(),
+            title: BoundedVec::new(),
+            term_start: 0,
+            term_end: 0,
+            source: AdminSource::Genesis,
+        })
+        .collect()
 }
 
 #[test]
@@ -201,6 +215,16 @@ fn genesis_build_only_inserts_genesis_admin_sources() {
             assert_eq!(stored.kind, AdminAccountKind::GenesisInstitution);
             assert_eq!(stored.status, AdminAccountStatus::Active);
             assert!(GenesisAdmins::is_genesis_protected(&account_id));
+            // 创世管理员资料:来源 Genesis,姓名/职务/任期/实名 CID 一律留空。
+            assert!(!stored.admins.is_empty());
+            for profile in stored.admins.iter() {
+                assert_eq!(profile.source, AdminSource::Genesis);
+                assert!(profile.admin_cid_number.is_empty());
+                assert!(profile.name.is_empty());
+                assert!(profile.title.is_empty());
+                assert_eq!(profile.term_start, 0);
+                assert_eq!(profile.term_end, 0);
+            }
         }
     });
 }

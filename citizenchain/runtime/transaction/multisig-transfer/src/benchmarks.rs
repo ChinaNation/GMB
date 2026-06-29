@@ -1,4 +1,7 @@
-//! 机构多签名地址转账模块 Benchmark 定义。
+//! 多签资金账户转账模块 Benchmark 定义。
+//!
+//! 中文注释：本 benchmark 当前覆盖治理机构路径；个人多签与注册机构账户
+//! 通过相同 `propose_transfer` 入口和查询 trait 接入，职责边界不在本文件复刻。
 //!
 //! 所有管理员投票一律通过 `InternalVote::cast`(22.0)。
 //! 本文件只保留 `propose_transfer` benchmark;手动重试统一走

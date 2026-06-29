@@ -40,18 +40,31 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
     let backup_pair = sr25519::Pair::from_string("//backup1-step3", None).expect("pair");
     let backup_admin_pubkey = backup_pair.public().0;
 
-    let admins: genesis_admins::pallet::AdminsOf<Runtime> = vec![
+    let admin_accounts = vec![
         AccountId::new(main_admin_pubkey),
         AccountId::new(backup_admin_pubkey),
-    ]
-    .try_into()
-    .expect("test admins should fit");
+    ];
     genesis_admins::pallet::AdminAccounts::<Runtime>::insert(
         issuer_main_account,
         admin_primitives::AdminAccount {
             institution_code: votingengine::types::PRC,
             kind: admin_primitives::AdminAccountKind::GenesisInstitution,
-            admins,
+            // 创世机构管理员集合存 AdminProfile(来源 Genesis、逐人 meta 暂空)。
+            admins: admin_accounts
+                .iter()
+                .cloned()
+                .map(|account| admin_primitives::AdminProfile {
+                    account,
+                    admin_cid_number: Default::default(),
+                    name: Default::default(),
+                    title: Default::default(),
+                    term_start: 0,
+                    term_end: 0,
+                    source: admin_primitives::AdminSource::Genesis,
+                })
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("test admins should fit"),
             creator: AccountId::new(main_admin_pubkey),
             created_at: Default::default(),
             updated_at: Default::default(),

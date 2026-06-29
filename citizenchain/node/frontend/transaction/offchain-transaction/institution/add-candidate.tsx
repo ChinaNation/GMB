@@ -2,8 +2,8 @@
 // 回车直接选第一个候选,cidNumber 字符串透传,链上判定由 check-multisig 视图统一处理。
 
 import { useEffect, useState } from 'react';
-import { sanitizeError } from '../../core/tauri';
-import { organizationManageApi } from './api';
+import { sanitizeError } from '../../../core/tauri';
+import { institutionReadApi } from './api';
 import type { EligibleClearingBankCandidate } from './types';
 
 type Props = {
@@ -30,7 +30,7 @@ export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownCi
     setError(null);
     const timer = setTimeout(async () => {
       try {
-        const r = await organizationManageApi.searchEligibleClearingBanks(query.trim(), 20);
+        const r = await institutionReadApi.searchEligibleClearingBanks(query.trim(), 20);
         setResults(r);
       } catch (e) {
         setError(sanitizeError(e));

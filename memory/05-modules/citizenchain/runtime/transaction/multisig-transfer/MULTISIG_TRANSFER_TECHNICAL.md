@@ -1,6 +1,6 @@
-# Multisig Transfer Pow 技术文档（机构多签名地址转账模块）
+# Multisig Transfer 技术文档（多签资金账户转账模块）
 
-> 机构分类唯一真源 = CID 机构码（institution_code），见 [[ADR-025]]。
+> 多签资金账户分类唯一真源 = CID 机构码（institution_code），见 [[ADR-025]]。
 
 ## 2026-04-30 · 统一投票引擎状态机改造
 
@@ -17,7 +17,7 @@
 
 | call_index | extrinsic | 说明 |
 |---|---|---|
-| 0 | `propose_transfer` | 发起普通机构转账提案 |
+| 0 | `propose_transfer` | 发起多签资金账户转账提案 |
 | 1 | `propose_safety_fund_transfer` | 发起安全基金转账提案 |
 | 2 | `propose_sweep_to_main` | 发起费用账户划转主账户提案 |
 
@@ -28,9 +28,9 @@
 
 - `propose_transfer` 的 `institution: AccountId` 不再把 `0x02 注册机构归属关系` 当作可支出主体；`0x02` 只保留给机构归属与检索。
 - 治理机构仍使用 `0x01 BuiltinInstitution`，由静态预置表解析到治理机构 `main_account`。
-- 个人多签使用 `PersonalAccount AccountId + AccountId32 + 15B 零填充`，账户状态由 `personal-admins::PersonalMultisigQuery` 校验。
-- 注册机构具体账户使用 `InstitutionAccount AccountId + AccountId32 + 15B 零填充`，账户状态由 `organization-manage::InstitutionMultisigQuery` 校验。
-- 两类注册账户的管理员、阈值和人数都以 `RuntimeAdminAccountQuery` 为读入口；生产 runtime 按机构码路由到 `public-admins`、`private-admins` 或 `personal-admins`，内部投票仍是一人一票一笔链上交易。
+- 个人多签直接使用个人多签 `AccountId` 作为资金账户，账户状态由 `personal-manage::PersonalMultisigQuery` 校验；管理员真源由 `personal-admins` 提供。
+- 注册机构具体账户直接使用机构账户 `AccountId` 作为资金账户，账户状态由 `organization-manage::InstitutionMultisigQuery` 校验。
+- 两类注册账户的管理员、阈值和人数都通过查询 trait 读取：个人多签走 `personal-manage` 聚合 `personal-admins`，机构账户走 `organization-manage` 聚合 `public-admins` / `private-admins`；内部投票仍是一人一票一笔链上交易。
 
 ## 0. 功能需求
 
@@ -38,36 +38,39 @@
 
 `multisig-transfer` 负责多签资金账户通过内部投票引擎发起转账：
 
-- 机构管理员发起转账提案，指定收款地址、金额和备注。
-- 机构管理员通过内部投票引擎逐票投票。
+- 多签资金账户管理员发起转账提案，指定收款地址、金额和备注。
+- 多签资金账户管理员通过内部投票引擎逐票投票。
 - 投票通过后执行转账：从提案绑定的资金账户向收款地址划转资金。
 - 手续费在投票通过后由 pallet 内部从同一个资金账户扣取，通过 `onchain-transaction::calculate_onchain_fee()` 计算。
 - 管理员个人账户不承担任何费用。
 - 覆盖三类来源：
   - 创世预置的治理机构 `main_account`（NRC / PRC / PRB）
-  - `personal-admins` 注册并激活的个人多签账户（`PersonalAccount AccountId`）
+  - `personal-manage` 注册并激活的个人多签账户（个人多签资金账户 `AccountId`）
   - `organization-manage` 注册并激活的机构具体账户（`InstitutionAccount AccountId`）
 
 ### 0.2 功能边界
 
 - 本模块处理三类多签账户转账：
   - 创世预置的治理机构（NRC / PRC / PRB）
-  - `personal-admins` 注册并处于 Active 状态的个人多签账户（个人多签码 `PMUL`，`is_personal_code`）
+  - `personal-manage` 注册并处于 Active 状态的个人多签账户（个人多签码 `PMUL`，`is_personal_code`）
   - `organization-manage` 注册并处于 Active 状态的机构账户（机构账户码 `is_institution_code`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
+- 本模块不负责个人多签账户创建、关闭、清理或管理员集合变更；这些职责分别归属 `personal-manage` 和 `personal-admins`。
 
 补充说明：
 - 只要某类内置机构被本模块的 `institution_code()` / 主账户解析逻辑正式识别，
 - 且对应管理员已接入 runtime 的 `RuntimeInternalAdminProvider`，固定阈值或动态阈值已由投票引擎自身提供，
 - 这类机构就可以直接复用本模块和内部投票引擎发起转账提案，不需要新增转账 pallet。
 
-### 0.3 与 `organization-manage` 的关系
+### 0.3 与多签管理模块的关系
 
 | 模块 | 职责 | 地址类型 | 审批方式 |
 | --- | --- | --- | --- |
-| `organization-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构账户 | `cid` 主签名登记 + 机构账户码（`is_institution_code`）内部投票 |
-| `multisig-transfer` | 多签名地址转账 | 预置治理机构 + 注册型 Active 多签机构 | 链上内部投票引擎（逐票投票） |
+| `personal-manage` | 个人多签账户生命周期 | 个人多签账户 | `PMUL` 内部投票 |
+| `personal-admins` | 个人多签管理员真源和管理员集合变更 | 个人多签账户管理员集合 | `PMUL` 内部投票 |
+| `organization-manage` | 机构账户注册、创建、关闭 | 注册机构账户 | CID 注册凭证 + 机构账户码内部投票 |
+| `multisig-transfer` | 多签资金账户转账 | 治理机构主账户 + Active 个人多签账户 + Active 注册机构账户 | 链上内部投票引擎（逐票投票） |
 
 ### 0.4 与 `resolution-destro` 的关系
 
@@ -93,7 +96,7 @@
 资金账户有三种来源：
 
 - 治理机构：`main_account` 预置于 `runtime/primitives/cid/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/cid/china/china_ch.rs`（PRB）中，通过主账户解析逻辑查找。
-- 个人多签账户：`AccountId32` 使用 `AdminAccountKind::PersonalMultisig` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `PersonalAdmins::PersonalAccounts` 校验 Active。
+- 个人多签账户：直接使用 `personal-manage` 派生并激活的个人多签 `AccountId`；账户状态由 `personal_manage::PersonalMultisigQuery` 校验 Active，管理员集合从 `personal-admins` 查询。
 - 注册型机构账户：`AccountId32` 使用 `AdminAccountKind::PublicInstitution` 或 `AdminAccountKind::PrivateInstitution` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；非法人按所属法人归属选择 public/private 管理员模块，账户状态从 `OrganizationManage::InstitutionAccounts` 校验 Active。
 
 ### 1.3 institution-asset 边界
@@ -110,7 +113,7 @@
 pub fn propose_transfer(
     origin: OriginFor<T>,
     institution_code: [u8; 4],          // CID 机构码（NRC / PRC / PRB / PMUL / 机构账户码）
-    institution: AccountId,   // 机构 pallet id [u8; 48]
+    institution: AccountId,             // 多签资金账户地址
     beneficiary: T::AccountId,          // 收款地址
     amount: BalanceOf<T>,               // 转账金额
     remark: BoundedVec<u8, T::MaxRemarkLen>, // 备注
@@ -121,15 +124,15 @@ pub fn propose_transfer(
 
 1. `origin` 必须是 `signed`，提取 `proposer = ensure_signed(origin)`。
 2. `amount > 0`。
-3. `institution` 必须是有效机构：
+3. `institution` 必须是有效多签资金账户：
    - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
-   - 个人多签账户：能从 `PersonalAccount AccountId` 解码出账户，且对应 `PersonalAdmins::PersonalAccounts` 处于 Active；
-   - 注册型机构账户：能从 `InstitutionAccount AccountId` 解码出账户，且对应 `OrganizationManage::InstitutionAccounts` 处于 Active；
+   - 个人多签账户：`personal-manage` 判定账户处于 Active；
+   - 注册型机构账户：`organization-manage` 判定机构账户处于 Active；
    - `0x02 注册机构归属关系` 只用于机构归属/检索，不能作为转账支出主体。
-4. `institution_code` 必须与 `institution` 的实际机构类型匹配。
-5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终委托 `RuntimeAdminAccountQuery`）。
+4. `institution_code` 必须与 `institution` 的实际账户分类匹配。
+5. `proposer` 必须是该多签资金账户的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终委托各 admins 模块）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
-7. `beneficiary` 不能是机构自身的主账户（不允许自转账）。
+7. `beneficiary` 不能是转出资金账户自身（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_account`、安全基金账户、费用账户等保留地址）。
 9. 转出资金账户的可用余额 >= `amount + fee + ED`（预检含手续费，防止创建必定无法执行的提案）。
 10. 活跃提案数由 `votingengine` 在 `create_internal_proposal_with_data` 中统一检查（全局限额）。
@@ -162,7 +165,7 @@ InternalVote::cast(origin, proposal_id, approve)  // pallet 22.0
 
 ## 3. 存储项
 
-本模块**自身不定义存储项**。所有提案数据统一存储在 `votingengine` 中：
+普通转账提案数据统一存储在 `votingengine` 中；安全基金和费用划转保留本模块本地动作表：
 
 | 存储位置 | Key | Value | 说明 |
 | --- | --- | --- | --- |
@@ -178,7 +181,7 @@ InternalVote::cast(origin, proposal_id, approve)  // pallet 22.0
 ```rust
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
-    pub institution: AccountId,       // 转出机构
+    pub institution: AccountId,                  // 转出多签资金账户
     pub beneficiary: AccountId,                  // 收款地址
     pub amount: Balance,                         // 转账金额
     pub remark: BoundedVec<u8, MaxRemarkLen>,    // 备注
@@ -248,16 +251,16 @@ pub enum Event<T: Config> {
 ```rust
 #[pallet::error]
 pub enum Error<T> {
-    InvalidInstitution,              // 机构不存在
-    InstitutionCodeMismatch,         // institution_code 与机构类型不匹配
-    UnauthorizedAdmin,               // 非该机构管理员(propose 阶段)
+    InvalidInstitution,              // 多签资金账户不存在或未激活
+    InstitutionCodeMismatch,         // institution_code 与资金账户分类不匹配
+    UnauthorizedAdmin,               // 非该多签资金账户管理员(propose 阶段)
     ZeroAmount,                      // 金额为零
     AmountBelowExistentialDeposit,   // 金额低于 ED
     SelfTransferNotAllowed,          // 不能转给自己
     BeneficiaryIsProtectedAddress,   // 收款地址是受保护地址
     ProposalActionNotFound,          // 提案不存在或数据解码失败
-    InstitutionAccountDecodeFailed,  // 机构地址解码失败
-    InsufficientBalance,             // 余额不足(amount + fee + ED)
+    InstitutionAccountDecodeFailed,  // 内置账户地址解码失败
+    InsufficientBalance,             // 资金账户余额不足(amount + fee + ED)
     ProposalNotPassed,               // 提案未通过(retry/cancel 校验由 VotingEngine 承担)
     TransferFailed,                  // 转账执行失败
     // safety_fund / sweep 专有
@@ -281,7 +284,7 @@ pub enum Error<T> {
 
 提案提交和投票交易不是免费交易：
 
-- `MultisigTransfer::propose_transfer / propose_safety_fund_transfer / propose_sweep_to_main` 由签名管理员钱包按转账金额计费（`amount × 0.1%`，最低 0.1 元）。
+- `MultisigTransfer::propose_transfer / propose_safety_fund_transfer / propose_sweep_to_main` 是治理提案交易，由签名管理员钱包按 `VOTE_FLAT_FEE = 1 元` 计费。
 - `InternalVote::cast` 由投票管理员钱包按 `VOTE_FLAT_FEE = 1 元` 计费。
 - 多签资金账户仍需在执行阶段承担实际转账金额、内部手续费和 ED 保留要求。
 
@@ -341,7 +344,7 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
 
 ### 7.3 余额保护
 
-- 使用 `ExistenceRequirement::KeepAlive` 确保转账后机构账户不被 reap（删除）。
+- 使用 `ExistenceRequirement::KeepAlive` 确保转账后资金账户不被 reap（删除）。
 - 执行时校验 `free_balance >= amount + fee + ED`。
 
 ### 7.4 转账 vs 销毁
@@ -416,10 +419,10 @@ pub trait Config:
         <<Self as organization_manage::Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
     >;
 
-    /// 个人多签账户状态查询，由 personal-manage 实现。
+    /// 个人多签账户状态与管理员配置查询，由 personal-manage 聚合 personal-admins 提供。
     type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
 
-    /// 注册机构账户状态查询，由 organization-manage 实现。
+    /// 注册机构账户状态与管理员配置查询，由 organization-manage 聚合对应 admins 模块提供。
     type InstitutionQuery: organization_manage::traits::InstitutionMultisigQuery<Self::AccountId>;
 
     /// Weight 配置
@@ -427,7 +430,7 @@ pub trait Config:
 }
 ```
 
-说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。机构账户提案的实际 institution_code 由 `InstitutionQuery::lookup_institution_code(account)` 返回，必须是机构账户码（`is_institution_code`），传个人多签码（`is_personal_code`）会被 `InstitutionCodeMismatch` 拒绝。
+说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。个人多签账户的实际 `institution_code` 为 `PMUL`；机构账户的实际 `institution_code` 由 `InstitutionQuery::lookup_org(account)` 返回且必须满足 `is_institution_code`。
 
 ## 11. Weight 估算
 
@@ -465,7 +468,7 @@ impl multisig_transfer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
-    type PersonalQuery = PersonalAdmins;
+    type PersonalQuery = PersonalManage;
     type InstitutionQuery = OrganizationManage;
     type WeightInfo = multisig_transfer::weights::SubstrateWeight<Runtime>;
 }

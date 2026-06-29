@@ -341,6 +341,11 @@ impl Db {
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
              );
 
+             -- 中文注释:行政区名字单一真源是 china.sqlite,subjects 只存 province_code/
+             -- city_code/town_code,名字由后端在拼装 DTO 时反查派生(ADR-021)。
+             -- private_type/partnership_kind/has_legal_personality/p1/parent_cid_number 是
+             -- 私权机构明细,单一真源是 private 表;subjects 暂保留这几列作为通用查询/列表展示的
+             -- 冗余镜像(随机构 upsert 同写),后续可下线见 #4 决策。
              CREATE TABLE IF NOT EXISTS subjects (
                 cid_number TEXT NOT NULL,
                 kind TEXT NOT NULL CHECK (kind IN ('CITIZEN', 'PUBLIC', 'PRIVATE')),
@@ -349,9 +354,6 @@ impl Db {
                 status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'REVOKED')),
                 category TEXT,
                 p1 TEXT,
-                province_name TEXT,
-                city_name TEXT,
-                town_name TEXT,
                 province_code TEXT NOT NULL,
                 city_code TEXT,
                 town_code TEXT,
@@ -367,10 +369,48 @@ impl Db {
                 legal_rep_photo_name TEXT,
                 legal_rep_photo_mime TEXT,
                 legal_rep_photo_size BIGINT,
+                legal_representative_account TEXT,
+                issuer_cid_number TEXT,
+                institution_source_type TEXT,
+                register_proposal_id TEXT,
+                chain_status TEXT,
+                chain_tx_hash TEXT,
+                chain_block_number BIGINT,
                 created_by TEXT,
+                updated_by TEXT,
                 created_at TIMESTAMPTZ NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL,
                 PRIMARY KEY (province_code, cid_number)
+             ) PARTITION BY LIST (province_code);
+
+             -- 中文注释:机构管理员「链下私密资料」唯一归属表(ADR-030/A2)。
+             -- 管理员姓名/职务/任期/cid/来源属链上 AdminProfile,**不在本表**;
+             -- 本表只承接链下私密档案(部门/岗位/联系方式/证件照/passkey 绑定等)+ 链投影。
+             -- 按 province_code 省级分区,复合主键 (province_code, cid_number, admin_account)。
+             CREATE TABLE IF NOT EXISTS institution_admins (
+                cid_number TEXT NOT NULL,
+                province_code TEXT NOT NULL,
+                city_code TEXT,
+                admin_account TEXT NOT NULL,
+                admin_department TEXT,
+                admin_job TEXT,
+                admin_contact_phone TEXT,
+                admin_contact_email TEXT,
+                admin_photo_path TEXT,
+                admin_photo_name TEXT,
+                admin_photo_mime TEXT,
+                admin_photo_size BIGINT,
+                admin_passkey_credential_id TEXT,
+                admin_source_id TEXT,
+                admin_profile_status TEXT,
+                admin_profile_updated_at TIMESTAMPTZ,
+                created_by TEXT,
+                chain_status TEXT,
+                chain_tx_hash TEXT,
+                chain_block_number BIGINT,
+                operation_log_id TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (province_code, cid_number, admin_account)
              ) PARTITION BY LIST (province_code);
 
              CREATE TABLE IF NOT EXISTS citizens (
@@ -547,6 +587,40 @@ impl Db {
                 )
             })?;
 
+        // 中文注释:subjects 机构级链投影 + 溯源补列(幂等增列,可重复执行)。
+        conn.batch_execute(
+            "ALTER TABLE subjects
+                ADD COLUMN IF NOT EXISTS updated_by TEXT,
+                ADD COLUMN IF NOT EXISTS issuer_cid_number TEXT,
+                ADD COLUMN IF NOT EXISTS institution_source_type TEXT,
+                ADD COLUMN IF NOT EXISTS register_proposal_id TEXT,
+                ADD COLUMN IF NOT EXISTS legal_representative_account TEXT,
+                ADD COLUMN IF NOT EXISTS chain_status TEXT,
+                ADD COLUMN IF NOT EXISTS chain_tx_hash TEXT,
+                ADD COLUMN IF NOT EXISTS chain_block_number BIGINT;",
+        )
+        .map_err(|e| {
+            format!(
+                "add subjects chain/provenance columns failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+
+        // 中文注释:行政区名字单一真源是 china.sqlite,subjects 不再落地名字副本;
+        // 已有部署里的派生名字列幂等删除(分区父表 DROP 自动级联各省分区)。
+        conn.batch_execute(
+            "ALTER TABLE subjects
+                DROP COLUMN IF EXISTS province_name,
+                DROP COLUMN IF EXISTS city_name,
+                DROP COLUMN IF EXISTS town_name;",
+        )
+        .map_err(|e| {
+            format!(
+                "drop derived geo name columns from subjects failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+
         Self::validate_target_subject_schema(conn)?;
 
         // 中文注释:教育委员会从公权目录迁入教育机构 tab 后,已生成的国家/市公民教育委员会
@@ -578,9 +652,9 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_subjects_town
                 ON subjects (province_code, city_code, town_code, kind, status, cid_number);
              CREATE INDEX IF NOT EXISTS idx_subjects_scope_created
-                ON subjects (category, province_name, city_name, created_at DESC, cid_number DESC);
+                ON subjects (category, province_code, city_code, created_at DESC, cid_number DESC);
              CREATE INDEX IF NOT EXISTS idx_subjects_exact_lookup
-                ON subjects (category, province_name, city_name, cid_number, cid_full_name, cid_short_name);
+                ON subjects (category, province_code, city_code, cid_number, cid_full_name, cid_short_name);
              CREATE INDEX IF NOT EXISTS idx_subjects_legal_rep
                 ON subjects (province_code, legal_rep_cid_number);
              CREATE INDEX IF NOT EXISTS idx_subjects_education
@@ -604,7 +678,11 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_docs_cid
                 ON docs (province_code, cid_number, uploaded_at DESC);
              CREATE INDEX IF NOT EXISTS idx_audit_scope_time
-                ON audit (province_code, city_code, created_at DESC);",
+                ON audit (province_code, city_code, created_at DESC);
+             CREATE INDEX IF NOT EXISTS idx_institution_admins_cid
+                ON institution_admins (province_code, cid_number);
+             CREATE INDEX IF NOT EXISTS idx_institution_admins_account
+                ON institution_admins (province_code, lower(admin_account));",
         )
         .map_err(|e| {
             format!(
@@ -678,6 +756,21 @@ impl Db {
             Self::ensure_column_state(conn, "subjects", column, true)?;
         }
         Self::ensure_column_state(conn, "subjects", "name", false)?;
+        // 中文注释:行政区名字已收口 china.sqlite,subjects 必须无名字副本列。
+        for column in ["province_name", "city_name", "town_name"] {
+            Self::ensure_column_state(conn, "subjects", column, false)?;
+        }
+        // 中文注释:机构级链投影 + 溯源补列必须就位。
+        for column in [
+            "issuer_cid_number",
+            "institution_source_type",
+            "register_proposal_id",
+            "legal_representative_account",
+            "chain_status",
+            "updated_by",
+        ] {
+            Self::ensure_column_state(conn, "subjects", column, true)?;
+        }
         for column in ["private_type", "partnership_kind", "has_legal_personality"] {
             Self::ensure_column_state(conn, "private", column, true)?;
         }

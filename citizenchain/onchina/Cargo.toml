@@ -69,3 +69,7 @@ mdns-sd = "0.20.1"
 
 [dev-dependencies]
 webauthn-authenticator-rs = { version = "0.5.5", features = ["softpasskey"] }
+# 中文注释:仅供 propose_create_institution 编码器交叉校验测试:用链端真实
+# AdminProfile/AdminSource 类型 .encode() 比对,锁死 SCALE 不漂移。
+admin-primitives = { path = "../runtime/admins/admin-primitives" }
+frame-support = { workspace = true, default-features = true }

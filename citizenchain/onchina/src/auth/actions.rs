@@ -99,6 +99,20 @@ pub(crate) struct PrepareAdminActionOutput {
     payload_hash: String,
     auth_type: AdminOperationAuth,
     expires_at: i64,
+    /// 机构上链创建专用:b.d 携带 propose_create_institution 裸 SCALE call data 的 QR_V1/k=1。
+    /// 冷钱包解码逐字段核对后冷签 origin **并由 CitizenWallet 直接提交**;onchina 不提交。
+    /// 仅 InstitutionCreate 动作有值,其余动作为 None。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    institution_create_sign_request: Option<String>,
+}
+
+/// InstitutionCreate prepare 载荷:cid_number + 阈值 + 管理员职务/任期表单。
+#[derive(Debug, Deserialize)]
+struct InstitutionCreatePayload {
+    cid_number: String,
+    threshold: u32,
+    #[serde(default)]
+    admins: Vec<crate::institution::subjects::registration_call::AdminProfileFormInput>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -275,6 +289,24 @@ pub(crate) async fn prepare_admin_action(
         let message = format!("insert admin action failed: {err}");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
     }
+    // ── 机构上链创建:额外产出 b.d=SCALE call data 的 QR(冷钱包冷签 origin + 提交)。
+    //    onchina 不提交 extrinsic。同时把机构/账户链投影置 PENDING_ON_CHAIN。
+    let institution_create_sign_request = if input.action_type == AdminActionType::InstitutionCreate
+    {
+        match build_institution_create_sign_request(
+            &state,
+            action_id.as_str(),
+            now.timestamp(),
+            expires_at.timestamp(),
+            ctx.admin_account.as_str(),
+            &challenge.request_payload,
+        ) {
+            Ok(v) => Some(v),
+            Err(resp) => return resp,
+        }
+    } else {
+        None
+    };
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -285,9 +317,80 @@ pub(crate) async fn prepare_admin_action(
             payload_hash,
             auth_type: preview.auth_type,
             expires_at: expires_at.timestamp(),
+            institution_create_sign_request,
         },
     })
     .into_response()
+}
+
+/// 组装机构上链创建的 QR_V1/k=1 sign_request(b.d=propose_create_institution 裸 SCALE call data)。
+///
+/// 中文注释:同一事务里组装 call data + 置机构/账户链投影 PENDING_ON_CHAIN;
+/// 失败回滚不留半态。call data 含注册局凭证(register_nonce/signature/issuer/scope),
+/// 冷钱包解码逐字段核对后冷签 origin,由 CitizenWallet 提交;onchina 绝不提交。
+fn build_institution_create_sign_request(
+    state: &AppState,
+    action_id: &str,
+    issued_at: i64,
+    expires_at: i64,
+    actor_pubkey: &str,
+    payload: &serde_json::Value,
+) -> Result<String, axum::response::Response> {
+    let input: InstitutionCreatePayload =
+        serde_json::from_value(payload.clone()).map_err(|_| {
+            api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "invalid institution create payload",
+            )
+        })?;
+    let cid_number = input.cid_number.trim().to_string();
+    let call_data = state
+        .db
+        .with_client({
+            let state = state.clone();
+            let cid_number = cid_number.clone();
+            let admins = input.admins.clone();
+            move |conn| {
+                let data = crate::institution::subjects::registration_call::build_create_institution_call_data(
+                    &state,
+                    conn,
+                    cid_number.as_str(),
+                    input.threshold,
+                    &admins,
+                )?;
+                set_institution_chain_status_conn(conn, cid_number.as_str(), "PENDING_ON_CHAIN")?;
+                Ok(data)
+            }
+        })
+        .map_err(admin_action_error)?;
+    crate::core::qr::build_sign_request_bytes(
+        action_id,
+        issued_at,
+        expires_at,
+        actor_pubkey,
+        &call_data,
+        crate::core::qr::ACTION_CID_INSTITUTION_CREATE,
+    )
+}
+
+/// 在已有连接上把机构主体 + 其全部账户的链投影状态置为指定值(创建上链 PENDING/回写复用)。
+fn set_institution_chain_status_conn(
+    conn: &mut Client,
+    cid_number: &str,
+    status: &str,
+) -> Result<(), String> {
+    conn.execute(
+        "UPDATE subjects SET chain_status = $2, updated_at = now() WHERE cid_number = $1",
+        &[&cid_number, &status],
+    )
+    .map_err(|e| format!("update subjects chain_status failed: {e}"))?;
+    conn.execute(
+        "UPDATE accounts SET chain_status = $2 WHERE cid_number = $1",
+        &[&cid_number, &status],
+    )
+    .map_err(|e| format!("update accounts chain_status failed: {e}"))?;
+    Ok(())
 }
 
 pub(crate) async fn commit_admin_action(

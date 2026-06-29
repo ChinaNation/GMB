@@ -679,11 +679,34 @@ const FRG_CODE: [u8; 4] = *b"FRG\0";
 /// `AdminAccountStatus::Active` 的 SCALE 判别式(Pending=0 / Active=1 / Closed=2)。
 const ADMIN_STATUS_ACTIVE: u8 = 1;
 
+/// 链上机构管理员资料解码镜像(对齐 runtime `admin-primitives::AdminProfile`)。
+///
+/// **铁律**:字段顺序与类型必须与 runtime `AdminProfile` 逐字节一致——
+/// `account=[u8;32]` 无前缀;`admin_cid_number`/`name`/`title` 为 `BoundedVec<u8>`,
+/// 与 `Vec<u8>` SCALE 编码相同(Compact 长度 + 字节);`term_start`/`term_end=u32`;
+/// `AdminSource` 枚举 1 字节判别。membership 只取 `account`,资料字段供展示。
+#[derive(Debug, Decode)]
+struct OnChainAdminProfile {
+    account: [u8; 32],
+    #[allow(dead_code)]
+    admin_cid_number: Vec<u8>,
+    #[allow(dead_code)]
+    name: Vec<u8>,
+    #[allow(dead_code)]
+    title: Vec<u8>,
+    #[allow(dead_code)]
+    term_start: u32,
+    #[allow(dead_code)]
+    term_end: u32,
+    #[allow(dead_code)]
+    source: u8,
+}
+
 /// 链上 `AdminAccount` 解码镜像。
 ///
 /// **铁律**:字段顺序与类型必须与 runtime `admin-primitives::AdminAccount` 逐字节一致——
 /// `InstitutionCode=[u8;4]` 无前缀;`AdminAccountKind`/`AdminAccountStatus` 枚举各 1 字节判别;
-/// `BoundedVec<AccountId>` 与 `Vec<[u8;32]>` SCALE 编码相同(Compact 长度 + 元素);
+/// 机构(genesis/public/private)管理员集合为 `BoundedVec<AdminProfile>`(A2);
 /// `BlockNumberFor=u32`。任一字段宽度/顺序漂移都会解码错位 → membership 误判。
 #[derive(Debug, Decode)]
 struct OnChainAdminAccount {
@@ -691,7 +714,7 @@ struct OnChainAdminAccount {
     institution_code: [u8; 4],
     #[allow(dead_code)]
     kind: u8,
-    admins: Vec<[u8; 32]>,
+    admins: Vec<OnChainAdminProfile>,
     #[allow(dead_code)]
     creator: [u8; 32],
     #[allow(dead_code)]
@@ -875,10 +898,11 @@ pub(crate) async fn fetch_active_admins_onchain(
         if decoded.status != ADMIN_STATUS_ACTIVE {
             continue;
         }
+        // membership 只认账户:从 AdminProfile 取 account,资料字段(姓名/职务/任期)不参与登录闸。
         let admins = decoded
             .admins
             .iter()
-            .map(|pk| format!("0x{}", hex::encode(pk)))
+            .map(|profile| format!("0x{}", hex::encode(profile.account)))
             .collect();
         return Ok(Some(admins));
     }
@@ -891,6 +915,47 @@ mod tests {
         deregistration_payload_digest, is_production_mode, parse_hex_hash32,
         trusted_production_chain_by_hash,
     };
+
+    /// 跨真类型对拍:用真 runtime `AdminAccount<Vec<AdminProfile>>` 编码,经 onchina
+    /// `OnChainAdminAccount` 镜像解码,断言取出的 account/status 正确——锁死登录闸读
+    /// A2 后管理员资料形态的字节对齐,任何字段漂移此断言立即红。
+    #[test]
+    fn onchain_admin_account_mirror_matches_runtime_adminprofile() {
+        use admin_primitives::{
+            AdminAccount, AdminAccountKind, AdminAccountStatus, AdminProfile, AdminSource,
+        };
+        use frame_support::BoundedVec;
+        use parity_scale_codec::{Decode, Encode};
+
+        let profile = AdminProfile::<[u8; 32]> {
+            account: [0x42; 32],
+            admin_cid_number: BoundedVec::try_from(b"LN001-AAAAA-000000001-2026".to_vec()).unwrap(),
+            name: BoundedVec::try_from("张三".as_bytes().to_vec()).unwrap(),
+            title: BoundedVec::try_from("局长".as_bytes().to_vec()).unwrap(),
+            term_start: 20_100,
+            term_end: 21_561,
+            source: AdminSource::Registry,
+        };
+        let account = AdminAccount::<Vec<AdminProfile<[u8; 32]>>, [u8; 32], u32> {
+            institution_code: *b"CREG",
+            kind: AdminAccountKind::PublicInstitution,
+            admins: vec![profile],
+            creator: [0x01; 32],
+            created_at: 7,
+            updated_at: 9,
+            status: AdminAccountStatus::Active,
+        };
+        let bytes = account.encode();
+        let decoded = super::OnChainAdminAccount::decode(&mut &bytes[..])
+            .expect("onchina mirror must decode runtime AdminAccount<AdminProfile>");
+        assert_eq!(decoded.institution_code, *b"CREG");
+        assert_eq!(decoded.creator, [0x01; 32]);
+        assert_eq!(decoded.created_at, 7);
+        assert_eq!(decoded.updated_at, 9);
+        assert_eq!(decoded.status, super::ADMIN_STATUS_ACTIVE);
+        assert_eq!(decoded.admins.len(), 1);
+        assert_eq!(decoded.admins[0].account, [0x42; 32]);
+    }
 
     #[test]
     fn deregistration_payload_digest_is_byte_locked() {
@@ -926,34 +991,6 @@ mod tests {
     fn parse_hex_hash32_accepts_prefixed_hash() {
         let parsed = parse_hex_hash32(&format!("0x{}", "11".repeat(32))).unwrap();
         assert_eq!(parsed, [0x11; 32]);
-    }
-
-    #[test]
-    fn onchain_admin_account_decode_is_byte_aligned() {
-        use parity_scale_codec::{Decode, Encode};
-        // 中文注释:按链端 AdminAccount 字段顺序/类型编码一段 golden 字节,
-        // 解码进镜像结构体并校验关键字段——字段宽度/顺序漂移(如 BlockNumber 写成 u64)立即红。
-        let admin_a = [0xAAu8; 32];
-        let admin_b = [0xBBu8; 32];
-        let creator = [0xCCu8; 32];
-        let encoded = (
-            *b"CRG\0",                  // institution_code [u8;4]
-            1u8,                        // AdminAccountKind 判别
-            vec![admin_a, admin_b],     // admins Vec<[u8;32]>(BoundedVec 同编码)
-            creator,                    // creator [u8;32]
-            7u32,                       // created_at BlockNumber=u32
-            9u32,                       // updated_at BlockNumber=u32
-            super::ADMIN_STATUS_ACTIVE, // status = Active(判别 1)
-        )
-            .encode();
-        let decoded = super::OnChainAdminAccount::decode(&mut encoded.as_slice())
-            .expect("decode on-chain admin account");
-        assert_eq!(decoded.institution_code, *b"CRG\0");
-        assert_eq!(decoded.admins, vec![admin_a, admin_b]);
-        assert_eq!(decoded.creator, creator);
-        assert_eq!(decoded.created_at, 7);
-        assert_eq!(decoded.updated_at, 9);
-        assert_eq!(decoded.status, super::ADMIN_STATUS_ACTIVE);
     }
 
     #[test]

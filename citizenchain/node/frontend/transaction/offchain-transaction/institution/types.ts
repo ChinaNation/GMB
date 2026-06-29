@@ -1,13 +1,13 @@
-// 机构多签管理 DTO,与 Tauri 后端 private/organization-manage/types.rs 对齐。
+// 清算行机构身份只读 DTO,与 Tauri 后端 transaction/offchain_transaction/institution_read/types.rs 对齐。
 
 export type EligibleClearingBankCandidate = {
   cidNumber: string;
   cidFullName: string;
-  subjectProperty: string;
+  refProperty: string;
   subType?: string | null;
   parentCidNumber?: string | null;
   parentCidFullName?: string | null;
-  parentSubjectProperty?: string | null;
+  parentRefProperty?: string | null;
   provinceName: string;
   cityName: string;
   /** 主账户当前链上状态:Pending / Active / Closed / Failed。 */
@@ -30,10 +30,10 @@ export type AccountWithBalance = {
 export type InstitutionDetail = {
   cidNumber: string;
   cidFullName: string;
-  /** 管理员更换使用的机构多签 AccountId，清算行当前指向主账户。 */
+  /** 管理员更换使用的机构多签 AccountId,清算行指向主账户。 */
   adminAccountHex: string;
-  /** 管理员更换使用的 org：清算行属于 ORG_OTH。 */
-  org: number;
+  /** 管理员更换使用的机构码(CID institution_code,[u8;4] 序列化为数字数组)。 */
+  institutionCode: number[];
 
   mainAccount: AccountWithBalance;
   feeAccount: AccountWithBalance;
@@ -47,7 +47,6 @@ export type InstitutionDetail = {
 
   /** 机构生命周期:Pending(投票中)/ Active(已生效)/ Closed(已注销)。 */
   status: 'Pending' | 'Active' | 'Closed';
-  creatorSs58: string;
   createdAt: number;
   accountCount: number;
 };
@@ -90,11 +89,4 @@ export type InstitutionRegistrationCredentialResp = {
   /** 签发管理员对凭证 payload 的 sr25519 签名(64 字节 hex)。 */
   signature: string;
   meta?: unknown;
-};
-
-/** 创建机构时单账户的初始资金条目(单位"分"用字符串透传 BigInt)。 */
-export type InitialAccountInputDto = {
-  accountName: string;
-  /** u128 字符串形式,单位"分"。 */
-  amountFen: string;
 };

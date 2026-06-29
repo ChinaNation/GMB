@@ -4,4 +4,5 @@
 //! 两子模块各自保留原职责,跨子模块共享辅助仍走 subjects::http。
 
 pub(crate) mod accounts;
+pub(crate) mod admins;
 pub(crate) mod subjects;

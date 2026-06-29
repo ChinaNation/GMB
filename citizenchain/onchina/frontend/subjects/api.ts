@@ -69,7 +69,23 @@ export interface Institution {
   legal_rep_photo_name?: string | null;
   legal_rep_photo_mime?: string | null;
   legal_rep_photo_size?: number | null;
+  /** 法定代表人派生账户(链上)。 */
+  legal_representative_account?: string | null;
+  /** 机构链投影状态。 */
+  chain_status?: string | null;
+  /** 机构上链交易哈希。 */
+  chain_tx_hash?: string | null;
+  /** 机构上链区块号。 */
+  chain_block_number?: number | null;
+  /** 签发机构身份ID(溯源)。 */
+  issuer_cid_number?: string | null;
+  /** 机构来源类型(溯源)。 */
+  institution_source_type?: string | null;
+  /** 关联注册提案ID(溯源)。 */
+  register_proposal_id?: string | null;
   created_by: string;
+  /** 最近更新人 pubkey。 */
+  updated_by?: string | null;
   created_at: string;
 }
 

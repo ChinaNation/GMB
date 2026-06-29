@@ -4,5 +4,12 @@
 //! `init_current_schema`。所有表从第一版目标结构开始按 `province_code` 省级分区。
 
 pub(crate) const PARTITIONED_TABLES: &[&str] = &[
-    "subjects", "citizens", "gov", "private", "accounts", "docs", "audit",
+    "subjects",
+    "citizens",
+    "gov",
+    "private",
+    "accounts",
+    "docs",
+    "audit",
+    "institution_admins",
 ];

@@ -962,10 +962,9 @@ fn auto_rows_in_scope(
 ) -> Result<
     BTreeMap<
         String,
+        // (cid_full_name, cid_short_name, category, province_code, city_code,
+        //  town_code, institution_code, education_type)
         (
-            String,
-            String,
-            String,
             String,
             String,
             String,
@@ -992,8 +991,7 @@ fn auto_rows_in_scope(
         let rows = conn
             .query(
                 "SELECT s.cid_number, COALESCE(s.cid_full_name, ''),
-                        COALESCE(s.cid_short_name, ''), s.category, s.province_name, s.city_name,
-                        COALESCE(s.town_name, ''), s.province_code, s.city_code,
+                        COALESCE(s.cid_short_name, ''), s.category, s.province_code, s.city_code,
                         COALESCE(s.town_code, ''), s.institution_code,
                         COALESCE(s.education_type, '')
                  FROM subjects s
@@ -1020,9 +1018,6 @@ fn auto_rows_in_scope(
                     row.get(6),
                     row.get(7),
                     row.get(8),
-                    row.get(9),
-                    row.get(10),
-                    row.get(11),
                 ),
             );
         }
@@ -1088,21 +1083,17 @@ pub fn check_gov_catalog_db(
                 cid_full_name,
                 cid_short_name,
                 category,
-                province,
-                city,
-                town,
                 province_code,
                 city_code,
                 town_code,
                 institution_code,
                 education_type,
             )) => {
+                // 中文注释:行政区身份由 province_code/city_code/town_code 唯一确定(china.sqlite 单源),
+                // 名字是派生展示,不参与一致性比对。
                 if cid_full_name != &target.cid_full_name
                     || cid_short_name != &target.cid_short_name
                     || category != category_text(target.category)
-                    || province != &target.province_name
-                    || city != &target.city_name
-                    || town != &target.town_name
                     || province_code != &target.province_code
                     || city_code != &target.city_code
                     || town_code != &target.town_code
@@ -1299,13 +1290,15 @@ fn bulk_write_targets(
         for target in targets {
             if let Some(prev) = seen.insert(target.cid_number.as_str(), target) {
                 collisions.push(format!(
-                    "{}: [{} | {}{} | inst={}] vs [{} | {}{} | inst={}]",
+                    "{}: [{} | {}{}{} | inst={}] vs [{} | {}{}{} | inst={}]",
                     target.cid_number,
                     prev.cid_full_name,
+                    prev.province_name,
                     prev.city_name,
                     prev.town_name,
                     prev.institution_code,
                     target.cid_full_name,
+                    target.province_name,
                     target.city_name,
                     target.town_name,
                     target.institution_code,
@@ -1398,18 +1391,6 @@ fn bulk_write_target_chunk(
         .iter()
         .map(|target| target.p1.clone())
         .collect::<Vec<_>>();
-    let province_names = targets
-        .iter()
-        .map(|target| target.province_name.clone())
-        .collect::<Vec<_>>();
-    let city_names = targets
-        .iter()
-        .map(|target| target.city_name.clone())
-        .collect::<Vec<_>>();
-    let town_names = targets
-        .iter()
-        .map(|target| target.town_name.clone())
-        .collect::<Vec<_>>();
     let institution_codes = targets
         .iter()
         .map(|target| target.institution_code.clone())
@@ -1462,27 +1443,26 @@ fn bulk_write_target_chunk(
         )
     })?;
 
+    // 中文注释:行政区名字不入库(china.sqlite 单源),只灌 province_code/city_code/town_code。
     tx.execute(
         "INSERT INTO subjects (
             cid_number, kind, cid_full_name, cid_short_name,
-            status, category, p1, province_name, city_name, town_name,
+            status, category, p1,
             province_code, city_code, town_code, institution_code,
             education_type, private_type, partnership_kind, has_legal_personality,
             parent_cid_number, created_by, created_at, updated_at
          )
          SELECT
             cid_number, 'PUBLIC', cid_full_name, cid_short_name,
-            'ACTIVE', category, p1, province_name, city_name, town_name,
+            'ACTIVE', category, p1,
             province_code, COALESCE(city_code, ''), COALESCE(town_code, ''), institution_code,
-            education_type, NULL::text, NULL::text, NULL::boolean, NULL::text, $14, now(), now()
+            education_type, NULL::text, NULL::text, NULL::boolean, NULL::text, $11, now(), now()
          FROM unnest(
             $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
-            $6::text[], $7::text[], $8::text[], $9::text[], $10::text[],
-            $11::text[], $12::text[], $13::text[]
+            $6::text[], $7::text[], $8::text[], $9::text[], $10::text[]
          ) AS u(
             cid_number, cid_full_name, cid_short_name, category,
-            p1, province_name, city_name, town_name,
-            institution_code, province_code, city_code, town_code,
+            p1, institution_code, province_code, city_code, town_code,
             education_type
          )
          ON CONFLICT (province_code, cid_number) DO UPDATE SET
@@ -1492,9 +1472,6 @@ fn bulk_write_target_chunk(
             status = EXCLUDED.status,
             category = EXCLUDED.category,
             p1 = EXCLUDED.p1,
-            province_name = EXCLUDED.province_name,
-            city_name = EXCLUDED.city_name,
-            town_name = EXCLUDED.town_name,
             province_code = EXCLUDED.province_code,
             city_code = EXCLUDED.city_code,
             town_code = EXCLUDED.town_code,
@@ -1512,9 +1489,6 @@ fn bulk_write_target_chunk(
             &cid_short_names,
             &categories,
             &p1_values,
-            &province_names,
-            &city_names,
-            &town_names,
             &institution_codes,
             &province_codes,
             &city_codes,

@@ -1,0 +1,97 @@
+//! 机构管理员「链下私密资料」数据模型。
+//!
+//! 中文注释:管理员姓名/职务/任期/cid/来源属链上 AdminProfile(ADR-030/A2),
+//! **不在本模型**。本模型只承接链下私密档案(部门/岗位/联系方式/证件照/passkey 绑定等)
+//! 与链投影字段,落库到 `institution_admins` 省级分区表。
+//!
+//! 复合 key = (province_code, cid_number, admin_account):
+//! - cid_number:管理员所属机构身份 ID;
+//! - admin_account:进链的管理员账户(链上 AdminProfile 主键的一部分)。
+
+#![allow(dead_code)]
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+use crate::scope::HasProvinceCity;
+
+/// 机构管理员链下私密资料(单条 = 一个机构下的一个管理员账户)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstitutionAdmin {
+    /// 所属机构身份 ID。
+    pub cid_number: String,
+    /// 省代码(分区键)。
+    pub province_code: String,
+    /// 市代码。市级及以下机构填写;省/国家级机构可空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub city_code: Option<String>,
+    /// 进链的管理员账户(链上 AdminProfile 主键的一部分)。
+    pub admin_account: String,
+    /// 部门。链下私密档案。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_department: Option<String>,
+    /// 岗位。链下私密档案。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_job: Option<String>,
+    /// 联系电话。链下私密档案。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_contact_phone: Option<String>,
+    /// 联系邮箱。链下私密档案。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_contact_email: Option<String>,
+    /// 证件照服务端存储路径。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_photo_path: Option<String>,
+    /// 证件照原始文件名。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_photo_name: Option<String>,
+    /// 证件照 MIME 类型。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_photo_mime: Option<String>,
+    /// 证件照大小(字节)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_photo_size: Option<u64>,
+    /// 绑定的 WebAuthn passkey 凭证 ID。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_passkey_credential_id: Option<String>,
+    /// 来源单据 ID(链下资料来源追溯)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_source_id: Option<String>,
+    /// 链下资料状态。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_profile_status: Option<String>,
+    /// 链下资料最近更新时间。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admin_profile_updated_at: Option<DateTime<Utc>>,
+    /// 创建人 pubkey。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
+    /// 链投影状态。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_status: Option<String>,
+    /// 链上交易哈希。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_tx_hash: Option<String>,
+    /// 链上区块号。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_block_number: Option<u64>,
+    /// 操作日志 ID(链下操作审计追溯)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_log_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+    /// 派生:所属省名称(由 province_code 经 china.sqlite 反查;库里不存名字)。
+    #[serde(default)]
+    pub province_name: String,
+    /// 派生:所属市名称(由 city_code 经 china.sqlite 反查;库里不存名字)。
+    #[serde(default)]
+    pub city_name: String,
+}
+
+impl HasProvinceCity for InstitutionAdmin {
+    fn province(&self) -> &str {
+        &self.province_name
+    }
+    fn city(&self) -> &str {
+        &self.city_name
+    }
+}

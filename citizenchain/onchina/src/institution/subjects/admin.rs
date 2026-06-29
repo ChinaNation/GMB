@@ -33,9 +33,10 @@ pub(crate) async fn check_cid_full_name(
     headers: HeaderMap,
     axum::extract::Query(params): axum::extract::Query<CheckNameQuery>,
 ) -> impl IntoResponse {
-    if let Err(resp) = require_admin_any(&state, &headers) {
-        return resp;
-    }
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     let cid_full_name = params.cid_full_name.trim().to_string();
     if cid_full_name.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "cid_full_name is required");
@@ -51,15 +52,42 @@ pub(crate) async fn check_cid_full_name(
         if city.is_empty() {
             return api_error(StatusCode::BAD_REQUEST, 1001, "公权机构查重需要 city 参数");
         }
+        // 公权机构"同市同全称"查重:行政区单源 china.sqlite,按 province_code + city_code 比对
+        // (subjects 不再存地名,名称仅在展示层派生)。省级作用域取自当前管理员会话。
+        let province_name = match ctx.scope_province_name.as_deref().map(str::trim) {
+            Some(p) if !p.is_empty() => p.to_string(),
+            _ => return api_error(StatusCode::BAD_REQUEST, 1001, "公权机构查重需要省级作用域"),
+        };
+        let province_code = match crate::cid::china::province_code_by_name(&province_name) {
+            Some(code) => code.to_string(),
+            None => {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "省级作用域无法解析为行政区编码",
+                )
+            }
+        };
+        let city_code = match crate::cid::china::city_code_by_name(&province_name, &city) {
+            Some(code) => code.to_string(),
+            None => {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "city 参数无法解析为行政区编码",
+                )
+            }
+        };
         let cid_full_name = cid_full_name.clone();
         match state.db.with_client(move |conn| {
             let row = conn
                 .query_one(
                     "SELECT EXISTS (
-	                        SELECT 1 FROM subjects
-	                        WHERE kind = 'PUBLIC' AND cid_full_name = $1 AND city_name = $2
-	                     )",
-                    &[&cid_full_name, &city],
+                        SELECT 1 FROM subjects
+                        WHERE kind = 'PUBLIC' AND cid_full_name = $1
+                          AND province_code = $2 AND city_code = $3
+                     )",
+                    &[&cid_full_name, &province_code, &city_code],
                 )
                 .map_err(|e| format!("query city name conflict failed: {e}"))?;
             Ok(row.get(0))
@@ -447,6 +475,15 @@ pub(crate) async fn search_parent_institutions(
     if !scope.includes_province(&province) || !scope.includes_city(&city) {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
     }
+    // 中文注释:subjects 已不存行政区名字,地域预过滤改按 china.sqlite 派生的 code 走单源。
+    let Some(province_code) = crate::cid::china::province_code_by_name(&province) else {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
+    };
+    let Some(city_code) = crate::cid::china::city_code_by_name(&province, &city) else {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "unknown city");
+    };
+    let province_code = province_code.to_string();
+    let city_code = city_code.to_string();
     let parent_property = match query.parent_property.as_deref().map(str::trim) {
         None | Some("") => None,
         Some("S") => Some("S".to_string()),
@@ -460,7 +497,7 @@ pub(crate) async fn search_parent_institutions(
         // 私法人由机构码集合判定,公法人由 category 判定,层级由 institution_code 集合判定。
         let candidate_clause = "(
                   (s.institution_code IN ('GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH')
-                   AND s.province_name = $2 AND s.city_name = $3
+                   AND s.province_code = $2 AND s.city_code = $3
                    AND ((s.institution_code IN ('SFLP', 'SFGQ', 'SFGF', 'SFGY', 'SFAS', 'SUN', 'JUN', 'SFSC', 'JSCH')
                          AND $4::text IS DISTINCT FROM 'G')
                         OR (s.category = 'GOV_INSTITUTION'
@@ -479,18 +516,18 @@ pub(crate) async fn search_parent_institutions(
                            OR (s.institution_code IN (
                                    'PGV','PLG','PJD','PSP','PRC','PRB','PDF','PHS','PCW','PHU','PAG',
                                    'PCM','PFT','PEN','PTR','PSN','PRP')
-                               AND s.province_name = $2)
+                               AND s.province_code = $2)
                            OR (s.institution_code IN (
                                    'CGOV','CLEG','CSUP','CJUD','CEDU','CSLF','CDEF','CHSC','CCWF',
                                    'CHUD','CAGR','CCOM','CFIN','CENR','CTRN','CREG','CPOL',
                                    'TGOV','TCWF','THUD','TAGR','TFIN','TDEF','THSC','TCOM','TENR','TTRN',
                                    'TPOL','TSLF','TSUP','TJUD')
-                               AND s.province_name = $2 AND s.city_name = $3)
+                               AND s.province_code = $2 AND s.city_code = $3)
                       ))
              )";
         let sql = format!(
             "SELECT s.cid_number, s.cid_full_name, s.private_type, s.partnership_kind, s.category,
-                    s.p1, s.province_name, s.city_name, COALESCE(s.town_name, '')
+                    s.p1, s.province_code, s.city_code, COALESCE(s.town_code, '')
              FROM subjects s
              WHERE s.kind IN ('PUBLIC', 'PRIVATE')
                AND s.status = 'ACTIVE'
@@ -503,7 +540,10 @@ pub(crate) async fn search_parent_institutions(
              LIMIT 20"
         );
         let rows = conn
-            .query(sql.as_str(), &[&q, &province, &city, &parent_property])
+            .query(
+                sql.as_str(),
+                &[&q, &province_code, &city_code, &parent_property],
+            )
             .map_err(|e| format!("query parent institutions failed: {e}"))?;
         let mut output = Vec::with_capacity(rows.len());
         for row in rows {
@@ -512,6 +552,15 @@ pub(crate) async fn search_parent_institutions(
             else {
                 continue;
             };
+            // 中文注释:省/市/镇名字按 code 现场从 china.sqlite 派生,DTO 仍带名字。
+            let row_province_code: String = row.get(6);
+            let row_city_code: Option<String> = row.get(7);
+            let row_town_code: String = row.get(8);
+            let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
+                row_province_code.as_str(),
+                row_city_code.as_deref(),
+                Some(row_town_code.as_str()),
+            );
             output.push(ParentInstitutionRow {
                 cid_number: row.get(0),
                 cid_full_name: row.get(1),
@@ -519,9 +568,9 @@ pub(crate) async fn search_parent_institutions(
                 partnership_kind: row.get(3),
                 category,
                 p1: row.get(5),
-                province_name: row.get(6),
-                city_name: row.get(7),
-                town_name: row.get(8),
+                province_name,
+                city_name,
+                town_name,
             });
         }
         Ok(output)

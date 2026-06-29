@@ -8,9 +8,11 @@ import { getCidMeta, listCidCities, type CidCityItem, type CidMetaResult } from 
 
 const CID_META_CACHE_VERSION = 'cid-meta-v3';
 const CID_CITY_CACHE_VERSION = 'cid-cities-v4';
-const OFFICIAL_INSTITUTION_CACHE_VERSION = 'official-institutions-v1';
-const EDUCATION_COMMITTEE_CACHE_VERSION = 'education-committees-v1';
-const INSTITUTION_DETAIL_CACHE_VERSION = 'institution-detail-v1';
+// 中文注释:机构 DTO 新增链投影/溯源字段(B1),缓存形状变更必须 bump 版本号;
+// 版本不匹配时 readCache 自愈清旧缓存,旧端读出全空的问题被规避。
+const OFFICIAL_INSTITUTION_CACHE_VERSION = 'official-institutions-v2';
+const EDUCATION_COMMITTEE_CACHE_VERSION = 'education-committees-v2';
+const INSTITUTION_DETAIL_CACHE_VERSION = 'institution-detail-v2';
 const GOV_MANIFEST_VERSION_KEY = 'cid:gov-manifest-version';
 
 interface CachedPayload<T> {

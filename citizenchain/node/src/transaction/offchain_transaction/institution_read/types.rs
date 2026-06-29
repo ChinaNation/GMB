@@ -1,9 +1,8 @@
-// 机构多签管理 Tauri DTO,与前端 governance/organization-manage/types.ts 对齐。
+// 清算行机构只读查询的 Tauri DTO,与前端 transaction/offchain-transaction/institution/types.ts 对齐。
 //
 // 中文注释:
-// - 本文件只承载 OrganizationManage 机构多签管理相关的输入输出类型。
-// - 清算行节点声明、连通性检测、管理员解锁等链下网络能力继续留在
-//   `transaction/offchain_transaction/types.rs`,避免机构多签边界再次散落。
+// - 本文件承载清算行流程需要的机构身份只读类型:资格候选、账户余额、机构详情、提案分页、CID 注册凭证。
+// - 机构创建(propose_create_institution)已迁出节点,归 onchina 控制台,故本文件不含任何创建输入类型。
 
 use primitives::cid::code::InstitutionCode;
 use serde::{Deserialize, Serialize};
@@ -42,15 +41,16 @@ pub struct AccountWithBalance {
     pub is_default: bool,
 }
 
-/// 机构详情 = `organization-manage::Institutions[cid_number]` + 各账户余额 + 友好标签。
+/// 机构详情 = `organization-manage::Institutions[cid_number]`(机构最小集)
+/// + 派生的主/费账户余额 + 管理员模块管理员集合 + internal-vote 动态阈值。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionDetail {
     pub cid_number: String,
     pub cid_full_name: String,
-    /// 管理员更换使用的机构多签 AccountId。当前清算行以主账户作为机构管理员账户。
+    /// 管理员更换使用的机构多签 AccountId。清算行以主账户作为机构管理员账户。
     pub admin_account_hex: String,
-    /// 管理员更换使用的机构码（CID institution_code，[u8;4]）。清算行属于私权法人机构码。
+    /// 管理员更换使用的机构码(CID institution_code,[u8;4])。清算行属于私权法人机构码。
     pub institution_code: InstitutionCode,
     pub main_account: AccountWithBalance,
     pub fee_account: AccountWithBalance,
@@ -62,7 +62,6 @@ pub struct InstitutionDetail {
     pub admins_ss58: Vec<String>,
     /// 机构生命周期:Pending(投票中)/ Active(已生效)/ Closed(已注销)。
     pub status: String,
-    pub creator_ss58: String,
     pub created_at: u64,
     pub account_count: u32,
 }

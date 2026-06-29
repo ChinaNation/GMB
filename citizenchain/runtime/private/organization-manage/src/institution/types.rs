@@ -46,7 +46,12 @@ pub enum InstitutionLifecycleStatus {
     Closed,
 }
 
-/// 机构信息。管理员更换账户由主账户派生,机构本身只保存归属与展示信息。
+/// 机构信息(链上最小集)。
+///
+/// 链上只保存全国可见的机构身份事实:`cid_number` 作 storage key 已编码省/市/机构码/法人/盈利;
+/// 主账户/费用账户由 `(cid_number, 保留名)` 派生且常驻 `InstitutionAccounts`,故不在此重复存;
+/// 管理员集合与动态阈值的长期真源在 admins 模块与 internal-vote,亦不在此存快照。
+/// 名称按主体分档:公权法人机构上链全称/简称供 CitizenApp 全国直读,私权机构留空(名称落 onchina 本地)。
 #[derive(
     Encode,
     Decode,
@@ -58,20 +63,17 @@ pub enum InstitutionLifecycleStatus {
     PartialEq,
     Eq,
 )]
-#[scale_info(skip_type_params(AdminList))]
-pub struct InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName> {
+pub struct InstitutionInfo<BlockNumber, AccountName> {
+    /// 机构全称:仅公权法人机构上链,私权机构为空。
     pub cid_full_name: AccountName,
-    pub main_account: AccountId,
-    pub fee_account: AccountId,
-    /// 管理员更换使用的机构码：机构账户只能是公权/私权法人机构码。
+    /// 机构简称:仅公权法人机构上链,私权机构为空。
+    pub cid_short_name: AccountName,
+    /// 管理员更换/路由使用的机构码:机构账户只能是公权/私权法人机构码。
     pub institution_code: InstitutionCode,
-    pub admins_len: u32,
-    pub threshold: u32,
-    pub admins: AdminList,
-    pub creator: AccountId,
+    /// 创建提案发起区块号。
     pub created_at: BlockNumber,
+    /// 机构生命周期状态。
     pub status: InstitutionLifecycleStatus,
-    pub account_count: u32,
 }
 
 /// 机构下某个账户名对应的链上账户信息。

@@ -29,6 +29,9 @@ export type PrepareAdminActionOutput = {
   payload_hash: string;
   auth_type: AdminOperationAuth;
   expires_at: number;
+  // 机构上链创建专用:b.d 携带 propose_create_institution 裸 SCALE call data 的 QR_V1/k=1。
+  // 冷钱包解码核对后冷签 origin 并由 CitizenWallet 提交;onchina 不提交。仅 InstitutionCreate 有值。
+  institution_create_sign_request?: string | null;
 };
 
 export type AdminSecurityGrantOutput = {

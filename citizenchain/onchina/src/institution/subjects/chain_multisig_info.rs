@@ -123,7 +123,9 @@ pub(crate) async fn app_search_institutions(
     let rows = match state.db.with_client(move |conn| {
         let rows = conn
             .query(
-                "SELECT cid_number, cid_full_name, cid_short_name, category, province_name, city_name
+                // 中文注释:行政区名字按 code 现场从 china.sqlite 派生,DTO 仍带省/市名字;
+                // 库里只存 province_code/city_code,排序也按 code(同省/市稳定有序)。
+                "SELECT cid_number, cid_full_name, cid_short_name, category, province_code, city_code
                  FROM subjects
                  WHERE kind IN ('PUBLIC', 'PRIVATE')
                    AND status = 'ACTIVE'
@@ -133,7 +135,7 @@ pub(crate) async fn app_search_institutions(
                         OR COALESCE(cid_full_name, '') ILIKE '%' || $1 || '%'
                         OR COALESCE(cid_short_name, '') ILIKE '%' || $1 || '%'
                    )
-                 ORDER BY province_name ASC, city_name ASC, COALESCE(cid_short_name, '') ASC,
+                 ORDER BY province_code ASC, city_code ASC, COALESCE(cid_short_name, '') ASC,
                           COALESCE(cid_full_name, '') ASC, cid_number ASC
                  LIMIT $2",
                 &[&q, &limit],
@@ -141,13 +143,23 @@ pub(crate) async fn app_search_institutions(
             .map_err(|e| format!("search institutions failed: {e}"))?;
         Ok(rows
             .iter()
-            .map(|row| AppInstitutionSearchRow {
-                cid_number: row.get(0),
-                cid_full_name: row.get(1),
-                cid_short_name: row.get(2),
-                category: parse_category(row.get::<_, String>(3).as_str()),
-                province_name: row.get(4),
-                city_name: row.get(5),
+            .map(|row| {
+                let province_code: String = row.get(4);
+                let city_code: Option<String> = row.get(5);
+                let (province_name, city_name, _town_name) =
+                    crate::cid::china::area_display_names(
+                        province_code.as_str(),
+                        city_code.as_deref(),
+                        None,
+                    );
+                AppInstitutionSearchRow {
+                    cid_number: row.get(0),
+                    cid_full_name: row.get(1),
+                    cid_short_name: row.get(2),
+                    category: parse_category(row.get::<_, String>(3).as_str()),
+                    province_name,
+                    city_name,
+                }
             })
             .collect::<Vec<_>>())
     }) {
