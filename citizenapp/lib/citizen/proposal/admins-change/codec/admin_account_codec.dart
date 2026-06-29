@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+import 'package:citizenapp/citizen/shared/admin_profile.dart';
 
 class AdminAccountCodec {
   AdminAccountCodec._();
@@ -16,13 +17,16 @@ class AdminAccountCodec {
     final kind = data[offset++];
     final (count, countLen) = readCompactU32(data, offset);
     offset += countLen;
-    final admins = <String>[];
-    for (var i = 0; i < count; i++) {
-      if (offset + 32 > data.length) return null;
-      admins.add(
-          AdminAccountIdCodec.hexEncode(data.sublist(offset, offset + 32)));
-      offset += 32;
-    }
+    // A2:`AdminAccounts.admins` 为 `Vec<AdminProfile>`(个人多签 kind=3 为裸 `Vec<AccountId>`)。
+    final adminsRead = AdminProfile.decodeAdminsVec(
+      data,
+      offset,
+      count,
+      isPersonal: kind == 3,
+    );
+    if (adminsRead == null) return null;
+    final (profiles, afterAdmins) = adminsRead;
+    offset = afterAdmins;
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     final creatorHex =
         AdminAccountIdCodec.hexEncode(data.sublist(offset, offset + 32));
@@ -36,7 +40,7 @@ class AdminAccountCodec {
       accountHex: AdminAccountIdCodec.hexEncode(accountId),
       institutionCode: institutionCode,
       kind: kind,
-      admins: admins,
+      profiles: profiles,
       // 中文注释：runtime 的各管理员 `AdminAccounts` 已不再保存阈值；
       // 调用方必须从 internal-vote 动态阈值 storage 或治理固定常量补齐。
       threshold: 0,

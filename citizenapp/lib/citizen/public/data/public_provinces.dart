@@ -9,7 +9,7 @@
 // 的 code 一一对应。`publicProvinceNamesSet()` 给单测断言「链上省名集合==字典省名集合」
 // 用,把"逐字对齐"变守卫。
 
-import 'package:citizenapp/transaction/organization-manage/institution_registry.dart';
+import 'package:citizenapp/citizen/institution/governance_registry.dart';
 
 const String _kCouncilSuffix = '公民储备委员会';
 

@@ -3,7 +3,7 @@
 /// 中文注释：
 /// - 内置治理机构静态注册表（`kNationalCouncil`/`kProvincialCouncils`/`kProvincialBanks`）+
 ///   `findInstitutionByAccountId()`/`jointVoteTotal`/`jointVotePassThreshold` 在
-///   `lib/organization-manage/institution_registry.dart`。
+///   `lib/citizen/institution/governance_registry.dart`。
 /// - 治理主体统一为机构多签 AccountId；cid_number 只用于查找机构资料。
 library;
 

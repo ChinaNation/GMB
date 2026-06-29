@@ -1,4 +1,4 @@
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_models.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_models.dart';
 
 /// 多签转账提案详情缓存。
 ///

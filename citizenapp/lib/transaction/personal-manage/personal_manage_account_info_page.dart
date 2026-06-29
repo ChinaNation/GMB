@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_entry.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_entry.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';

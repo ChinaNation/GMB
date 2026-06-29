@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/citizen/proposal/proposal_registry.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
-import 'package:citizenapp/transaction/organization-manage/institution_registry.dart';
+import 'package:citizenapp/citizen/institution/governance_registry.dart';
 
 void main() {
   test('内置机构身份编码为 mainAccount AccountId', () {

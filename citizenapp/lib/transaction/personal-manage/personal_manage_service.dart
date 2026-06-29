@@ -10,7 +10,7 @@ import 'personal_manage_storage_codec.dart';
 /// PersonalAdmins 链上交互服务。
 ///
 /// 只负责个人多签的创建、关闭、查询和 PersonalAdmins ProposalData 解码；
-/// 机构多签继续由 `organization-manage/` 下的 OrganizationManage 服务处理。
+/// 机构多签链访问由 `citizen/institution` 的 InstitutionChainService 处理。
 class PersonalManageService {
   PersonalManageService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 

@@ -13,7 +13,7 @@ import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/public/data/area_path_formatter.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_provinces.dart';
-import 'package:citizenapp/transaction/organization-manage/institution_registry.dart';
+import 'package:citizenapp/citizen/institution/governance_registry.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 

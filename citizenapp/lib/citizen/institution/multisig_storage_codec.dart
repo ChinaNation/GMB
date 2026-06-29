@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:citizenapp/citizen/shared/admin_profile.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
-/// `OrganizationManage::AccountRegisteredCid` 反查结果。
+/// `PublicManage/PrivateManage::AccountRegisteredCid` 反查结果。
 class RegisteredInstitutionRef {
   const RegisteredInstitutionRef({
     required this.cidNumber,
@@ -85,24 +86,29 @@ class MultisigStorageCodec {
     );
   }
 
-  static Uint8List accountRegisteredCidKey(String accountHex) {
+  // 机构身份/账户 storage 已拆 PublicManage(idx32)/PrivateManage(idx33),storage 名不变但
+  // 前缀 twox_128(pallet 名) 随之变;`palletName` 由调用方经 InstitutionPalletRouter 决定
+  // (反查类双查取命中;cid 键贯穿命中 pallet),取代已删的 `OrganizationManage`。
+  static Uint8List accountRegisteredCidKey(
+      String accountHex, String palletName) {
     return storageMapKey(
-      'OrganizationManage',
+      palletName,
       'AccountRegisteredCid',
       hexDecode(accountHex),
     );
   }
 
-  static Uint8List institutionKey(Uint8List cidNumber) {
-    return storageMapKey('OrganizationManage', 'Institutions', cidNumber);
+  static Uint8List institutionKey(Uint8List cidNumber, String palletName) {
+    return storageMapKey(palletName, 'Institutions', cidNumber);
   }
 
   static Uint8List institutionAccountKey(
     Uint8List cidNumber,
     Uint8List accountName,
+    String palletName,
   ) {
     return storageDoubleMapKey(
-      'OrganizationManage',
+      palletName,
       'InstitutionAccounts',
       cidNumber,
       accountName,
@@ -174,15 +180,20 @@ class MultisigStorageCodec {
       data.sublist(offset, offset + 4),
     );
     offset += 4;
-    offset++; // AdminAccountKind
+    final kind = data[offset++]; // AdminAccountKind
     final (count, lenSize) = readCompactU32(data, offset);
     offset += lenSize;
-    final admins = <String>[];
-    for (var i = 0; i < count; i++) {
-      if (offset + 32 > data.length) return null;
-      admins.add(hexEncode(data.sublist(offset, offset + 32)));
-      offset += 32;
-    }
+    // A2:admins 为 `Vec<AdminProfile>`(个人多签 kind=3 裸 `Vec<AccountId>`);本机构账户镜像
+    // 只取账户(数量+account),仍须按 AdminProfile 形态正确解码以拿到正确账户与偏移。
+    final adminsRead = AdminProfile.decodeAdminsVec(
+      data,
+      offset,
+      count,
+      isPersonal: kind == 3,
+    );
+    if (adminsRead == null) return null;
+    final (profiles, afterAdmins) = adminsRead;
+    offset = afterAdmins;
     // 中文注释：分类管理员模块的 AdminAccounts 后续字段是 creator/时间/status，
     // 动态阈值不在这里保存，必须按 institution_code + account 从 InternalVote 查询。
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
@@ -190,55 +201,35 @@ class MultisigStorageCodec {
       institutionCode: code,
       adminsLen: count,
       threshold: null,
-      admins: admins,
+      admins: profiles.map((p) => p.account).toList(growable: false),
       statusByte: 0,
     );
   }
 
   static AdminSnapshot? decodeInstitutionInfo(Uint8List data) {
     var offset = 0;
-    final name = readBoundedBytes(data, offset);
-    if (name == null) return null;
-    offset = name.nextOffset;
-    // 中文注释：必须和 runtime 的 InstitutionInfo 字段顺序保持一致：
-    // cid_full_name -> main_account -> fee_account -> institution_code。
-    if (offset + 32 + 32 + 4 + 4 + 4 > data.length) return null;
-    offset += 32; // main_account
-    offset += 32; // fee_account
+    // A1 精简:InstitutionInfo = cid_full_name + cid_short_name(BoundedVec)
+    //   + institution_code[u8;4] + created_at(u32 BlockNumber) + status(u8)。
+    // 已删 main_account/fee_account/admins/admins_len/threshold/creator。
+    // 本镜像只需 institution_code(供 adminAccountKey 按机构码路由管理员 pallet)。
+    final fullName = readBoundedBytes(data, offset);
+    if (fullName == null) return null;
+    offset = fullName.nextOffset;
+    final shortName = readBoundedBytes(data, offset);
+    if (shortName == null) return null;
+    offset = shortName.nextOffset;
+    if (offset + 4 + 4 + 1 > data.length) return null;
     final code = InstitutionCodeLabel.codeToString(
       data.sublist(offset, offset + 4),
     );
     offset += 4;
-    final adminsLen = readU32Le(data, offset);
-    offset += 4;
-    final threshold = readU32Le(data, offset);
-    offset += 4;
-
-    final (adminLen, lenSize) = readCompactU32(data, offset);
-    offset += lenSize;
-    final admins = <String>[];
-    for (var i = 0; i < adminLen; i++) {
-      if (offset + 32 > data.length) return null;
-      admins.add(hexEncode(data.sublist(offset, offset + 32)));
-      offset += 32;
-    }
-    if (offset + 32 + 4 + 1 > data.length) {
-      return AdminSnapshot(
-        institutionCode: code,
-        adminsLen: adminsLen,
-        threshold: threshold,
-        admins: admins,
-        statusByte: 0,
-      );
-    }
-    offset += 32; // creator
     offset += 4; // created_at: BlockNumber(u32)
     final statusByte = data[offset];
     return AdminSnapshot(
       institutionCode: code,
-      adminsLen: adminsLen,
-      threshold: threshold,
-      admins: admins,
+      adminsLen: 0,
+      threshold: null,
+      admins: const [],
       statusByte: statusByte,
     );
   }

@@ -10,7 +10,7 @@ library;
 
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 
-part 'governance_institution_registry.generated.dart';
+part 'governance_registry.generated.dart';
 
 /// 链上联合投票总票数。
 int get jointVoteTotal =>

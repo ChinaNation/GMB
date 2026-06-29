@@ -1,4 +1,4 @@
-part of 'institution_registry.dart';
+part of 'governance_registry.dart';
 
 // 本文件由 scripts/generate_citizenapp_governance_registry.mjs 自动生成。
 // 中文注释：治理机构中英全称/简称、cid_number 和制度账户来自 runtime primitives；管理员必须动态读取链上 AdminsChange::AdminAccounts。

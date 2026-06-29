@@ -25,12 +25,12 @@
 
 ### 不负责
 
-- 机构多签创建、关闭、CID 机构账户查询：继续由 `citizenapp/lib/transaction/organization-manage/` 机构路径处理。
-- 多签转账：唯一实现目录仍是 `citizenapp/lib/citizen/proposal/transaction/`。
+- 机构身份/账户查询(只读)由 `citizenapp/lib/citizen/institution/` 处理;机构创建/关闭已收归 onchina 控制台+冷钱包。
+- 多签转账:唯一实现目录 `citizenapp/lib/transaction/multisig-transfer/`。
 - Isar schema 定义：仍在 `citizenapp/lib/isar/`，本模块只使用既有实体。
 - Isar 读写队列：由 `citizenapp/lib/isar/wallet_isar.dart` 统一提供，本模块不得直接打开 DB 实例。
 - 通用投票、签名、RPC：仍使用 `citizen/shared/proposal`、`signer`、`rpc` 等共用能力。
-- 个人/机构多签管理提案投票详情页由 `citizen/proposal/transaction` 的提案聚合和各管理模块解码服务共同支撑；本模块只提供 `PersonalAdmins` 解码服务。
+- 个人/机构多签管理提案投票详情页由 `transaction/multisig-transfer` 的提案聚合和各管理模块解码服务共同支撑；本模块只提供 `PersonalAdmins` 解码服务。
 
 ## 3. 链上契约
 
@@ -126,14 +126,14 @@ PersonalAdmins storage：
   - 新增个人多签：副文案“无需身份ID”。
   - 新增机构多签：副文案“需要身份ID”，图标使用建筑/机构类图标。
 
-## 4. 与 organization-manage 目录关系
+## 4. 与 citizen/institution 目录关系
 
-`citizenapp/lib/transaction/organization-manage/` 不再承载 `PersonalAdmins` 主业务。当前仅保留：
+`citizenapp/lib/citizen/institution/` 不承载 `PersonalAdmins` 主业务。它保留:
 
-- 机构多签 OrganizationManage 服务与机构 storage codec。
+- 机构管理 InstitutionChainService(只读)与机构 storage codec(按机构码路由 PublicManage/PrivateManage)。
 - `AdminInstitutionCodec` 等跨个人/机构都需要读取的底层 Subject 解码能力。
 
-个人账户详情、反向索引发现、创建、关闭、管理员激活和提案历史均不得回流到 `organization-manage`。
+个人账户详情、反向索引发现、创建、关闭、管理员激活和提案历史均不得回流到 `citizen/institution`。
 个人多签列表入口只允许通过 `lib/citizen/shared/institution_account_list_page.dart` 统一呈现。
 `AdminInstitutionCodec` 只属于底层 Subject 解码能力，不承载 `PersonalAdmins` 主业务。
 
@@ -152,7 +152,7 @@ PersonalAdmins storage：
 ```bash
 cd citizenapp
 flutter analyze
-flutter test test/organization-manage test/personal-manage
+flutter test test/personal-manage
 ```
 
 2026-05-11 第 1 步验收已执行：

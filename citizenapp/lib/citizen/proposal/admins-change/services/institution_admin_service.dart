@@ -1,14 +1,19 @@
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/admin_account_service.dart';
+import 'package:citizenapp/citizen/shared/admin_profile.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 class InstitutionAdminState {
   const InstitutionAdminState({
     required this.admins,
+    this.profiles = const [],
     this.threshold,
   });
 
   final List<String> admins;
+
+  /// 管理员完整资料(A2:cid/姓名/职务/任期/来源;个人多签仅 account)。
+  final List<AdminProfile> profiles;
   final int? threshold;
 }
 
@@ -26,6 +31,11 @@ class InstitutionAdminService {
     return _accountService.fetchAdmins(identity);
   }
 
+  /// 取管理员完整资料(cid/姓名/职务/任期/来源)。供机构详情管理员展示。
+  Future<List<AdminProfile>> fetchAdminProfiles(AdminAccountIdentity identity) {
+    return _accountService.fetchAdminProfiles(identity);
+  }
+
   Future<int?> fetchThreshold(AdminAccountIdentity identity) {
     return _accountService.fetchThreshold(identity);
   }
@@ -39,6 +49,7 @@ class InstitutionAdminService {
     final account = await _accountService.fetchByIdentity(identity);
     return InstitutionAdminState(
       admins: account?.admins ?? const [],
+      profiles: account?.profiles ?? const [],
       threshold: account?.threshold,
     );
   }

@@ -15,7 +15,7 @@ import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_local_store.dart';
 import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_detail_page.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_proposal_adapter.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
 
 /// 全局治理提案列表:展示 NRC / PRC / PRB 三类机构所有提案,按 ID 倒序。
 ///

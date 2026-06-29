@@ -15,9 +15,9 @@ import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.d
 import 'package:citizenapp/citizen/proposal/admins-change/pages/admin_set_change_page.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_limit_service.dart';
 import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_page.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_page.dart';
-import 'package:citizenapp/citizen/proposal/transaction/safety_fund_transfer_page.dart';
-import 'package:citizenapp/citizen/proposal/transaction/sweep_to_main_page.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_page.dart';
+import 'package:citizenapp/transaction/multisig-transfer/safety_fund_transfer_page.dart';
+import 'package:citizenapp/transaction/multisig-transfer/sweep_to_main_page.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 

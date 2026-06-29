@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
-/// OrganizationManage 关闭机构多签账户提案详情（从链上 ProposalData 解码）。
+/// 公权/私权机构 关闭机构多签账户提案详情（从链上 ProposalData 解码）。
 ///
-/// 链上 SCALE 布局（`org-mgmt` + ACTION_CLOSE = 2 前缀之后）：
+/// 链上 SCALE 布局（`pub-mgmt`/`pri-mgmt` + ACTION_CLOSE = 2 前缀之后）：
 ///   account: AccountId32(32) + beneficiary: AccountId32(32)
 ///   + proposer: AccountId32(32)
 class CloseMultisigProposalInfo {
@@ -56,7 +56,7 @@ enum InstitutionStatus {
 
 /// 多签账户链上信息。
 ///
-/// 机构状态来自 `OrganizationManage::InstitutionAccounts`，
+/// 机构状态来自 `PublicManage/PrivateManage::InstitutionAccounts`，
 /// 管理员来自对应机构管理员 pallet 的 `AdminAccounts`，动态阈值来自 `InternalVote`。
 class InstitutionAccountInfo {
   const InstitutionAccountInfo({

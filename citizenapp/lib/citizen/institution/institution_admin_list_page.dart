@@ -5,6 +5,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart';
 
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/admin_activation_service.dart';
+import 'package:citizenapp/citizen/shared/admin_profile.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
@@ -28,7 +29,9 @@ class AdminListPage extends StatefulWidget {
 
   final InstitutionInfo institution;
   final AdminAccountIdentity accountIdentity;
-  final List<String> admins;
+
+  /// 管理员完整资料(A2:cid/姓名/职务/任期/来源;个人多签仅 account)。
+  final List<AdminProfile> admins;
 
   /// 用户已导入的冷钱包公钥集合（小写 hex，不含 0x）。
   final Set<String> importedColdPubkeys;
@@ -100,12 +103,13 @@ class _AdminListPageState extends State<AdminListPage> {
             )
           else
             ...List.generate(widget.admins.length, (index) {
-              final pubkey = widget.admins[index];
+              final profile = widget.admins[index];
+              final pubkey = profile.account;
               final isImported = widget.importedColdPubkeys.contains(pubkey);
               final isActivated = _activatedPubkeys.contains(pubkey);
               return _AdminTile(
                 index: index + 1,
-                pubkeyHex: pubkey,
+                profile: profile,
                 isImported: isImported,
                 isActivated: isActivated,
                 institution: widget.institution,
@@ -164,7 +168,7 @@ class _AdminListPageState extends State<AdminListPage> {
 class _AdminTile extends StatelessWidget {
   const _AdminTile({
     required this.index,
-    required this.pubkeyHex,
+    required this.profile,
     required this.isImported,
     required this.isActivated,
     required this.institution,
@@ -173,7 +177,12 @@ class _AdminTile extends StatelessWidget {
   });
 
   final int index;
-  final String pubkeyHex;
+
+  /// 管理员资料(account + 实名 cid/姓名/职务/任期/来源)。
+  final AdminProfile profile;
+
+  /// 管理员账户(小写 hex);激活/匹配仍按账户。
+  String get pubkeyHex => profile.account;
 
   /// 用户是否已导入此公钥的冷钱包。
   final bool isImported;
@@ -304,15 +313,77 @@ class _AdminTile extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
-              address,
-              style: TextStyle(
-                fontSize: 12,
-                fontFamily: 'monospace',
-                color:
-                    isActivated ? AppTheme.primaryDark : AppTheme.textSecondary,
-                height: 1.4,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 实名资料行(姓名 + 职务 + 来源);个人多签/创世空 meta 不显示。
+                if (profile.name.isNotEmpty || profile.title.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Wrap(
+                      spacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (profile.name.isNotEmpty)
+                          Text(
+                            profile.name,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryDark,
+                            ),
+                          ),
+                        if (profile.title.isNotEmpty)
+                          Text(
+                            profile.title,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textTertiary,
+                            ),
+                          ),
+                        if (profile.source != AdminProfileSource.unknown)
+                          Text(
+                            profile.source.label,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.accent,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                // 实名锚 CID。
+                if (profile.cidNumber.isNotEmpty)
+                  Text(
+                    '实名 ${profile.cidNumber}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textTertiary,
+                    ),
+                  ),
+                // 任期(有任期才显示)。
+                if (profile.termLabel.isNotEmpty)
+                  Text(
+                    '任期 ${profile.termLabel}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textTertiary,
+                    ),
+                  ),
+                // 账户 SS58。
+                Text(
+                  address,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    color: isActivated
+                        ? AppTheme.primaryDark
+                        : AppTheme.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 6),

@@ -1,5 +1,11 @@
 # 节点桌面清算行 tab 技术说明
 
+> ⚠️ **过时警告(2026-06-29)**:本文描述 B0 重构前的 node 结构。B0 已把机构创建/管理下沉 onchina——
+> 删除了 `node/.../governance/organization_manage/`(含 create-multisig 页与 build/submit_propose_create_institution 命令);
+> node 现仅保留清算行所需的机构**只读**:链上直读在 `node/src/transaction/offchain_transaction/institution_read/`
+> (按机构码路由 `PublicManage(32)`/`PrivateManage(33)` 前缀,取代已删的 `OrganizationManage`),前端在 `offchain-transaction/institution/`。
+> 机构创建/关闭统一走 onchina 控制台 + 冷钱包。本文余下内容待按 B0 + 公私拆分重写。
+
 - 日期: 2026-05-02
 - 任务卡:
   - `memory/08-tasks/done/20260501-node-clearing-bank-institution-detail-and-create.md`

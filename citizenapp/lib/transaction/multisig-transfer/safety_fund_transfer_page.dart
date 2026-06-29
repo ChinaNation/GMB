@@ -1,50 +1,51 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
-import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 
-import 'package:isar_community/isar.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/transaction/personal-manage/personal_proposal_history_service.dart';
-import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_balance_guard.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_service.dart';
-import 'package:citizenapp/transaction/shared/account_balance_snapshot_store.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
-import 'package:citizenapp/rpc/onchain.dart' show OnchainRpc;
 import 'package:citizenapp/qr/qr_protocols.dart';
+import 'package:citizenapp/rpc/chain_rpc.dart';
+import 'package:citizenapp/rpc/onchain.dart' show OnchainRpc;
 import 'package:citizenapp/signer/qr_signer.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_balance_guard.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_service.dart';
+import 'package:citizenapp/transaction/shared/account_balance_snapshot_store.dart';
+import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
+import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 机构转账提案创建页面。
-class MultisigTransferPage extends StatefulWidget {
-  const MultisigTransferPage({
+/// 国储会安全基金转账提案创建页面。
+///
+/// 中文注释：source 锁定为 NRC 安全基金账户(`InstitutionAccounts.safetyFundAccount`),
+/// 仅 NRC 管理员可发起,链端调用 `propose_safety_fund_transfer (call_index=1)`。
+class SafetyFundTransferPage extends StatefulWidget {
+  SafetyFundTransferPage({
     super.key,
     required this.institution,
     required this.icon,
     required this.badgeColor,
     required this.adminWallets,
-  });
+  }) : assert(institution.orgType == OrgType.nrc,
+            'SafetyFundTransferPage 仅支持国储会(NRC)');
 
   final InstitutionInfo institution;
   final IconData icon;
   final Color badgeColor;
 
-  /// 当前用户导入的、属于此机构的管理员钱包列表。
   final List<WalletProfile> adminWallets;
 
   @override
-  State<MultisigTransferPage> createState() => _MultisigTransferPageState();
+  State<SafetyFundTransferPage> createState() => _SafetyFundTransferPageState();
 }
 
-class _MultisigTransferPageState extends State<MultisigTransferPage> {
+class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
   final _beneficiaryController = TextEditingController();
   final _amountController = TextEditingController();
   final _remarkController = TextEditingController();
@@ -52,16 +53,13 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
   bool _loadingBalance = true;
   bool _submitting = false;
   double? _availableBalance;
-
-  /// 中文注释：链上余额刷新失败、当前展示的是本地缓存旧值时置位，
-  /// UI 必须明示"可能已过期"，防止用户拿过期余额提交转账。
-  bool _balanceStale = false;
   double _estimatedFee = 0.0;
   String? _addressError;
   String? _amountError;
   LightClientStatusSnapshot? _chainProgress;
   String? _chainProgressError;
 
+  late final String _safetyFundAccountHex;
   late final String _fromSs58;
   late WalletProfile _selectedWallet;
 
@@ -69,7 +67,13 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
-    _fromSs58 = _accountHexToSs58(widget.institution.mainAccount);
+    final hex = widget.institution.accounts?.safetyFundAccount;
+    if (hex == null) {
+      throw StateError(
+          '国储会 InstitutionAccounts.safetyFundAccount 为空,无法发起安全基金转账');
+    }
+    _safetyFundAccountHex = hex;
+    _fromSs58 = _accountHexToSs58(_safetyFundAccountHex);
     _fetchBalance();
     _amountController.addListener(_onAmountChanged);
   }
@@ -89,7 +93,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
 
   Future<void> _fetchBalance() async {
     final store = AccountBalanceSnapshotStore.instance;
-    final local = await store.read(widget.institution.mainAccount);
+    final local = await store.read(_safetyFundAccountHex);
     if (local != null && mounted) {
       setState(() {
         _availableBalance = local.balanceYuan;
@@ -98,34 +102,28 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
     }
     try {
-      final service = MultisigTransferService();
-      final balance = await service.fetchInstitutionBalance(widget.institution);
+      final balance =
+          await ChainRpc().fetchFinalizedBalance(_safetyFundAccountHex);
       try {
         await store.put(
-          accountHex: widget.institution.mainAccount,
+          accountHex: _safetyFundAccountHex,
           balanceYuan: balance,
         );
-      } catch (e) {
-        // 余额快照写入失败不影响当前链上余额展示，但要留痕便于排查缓存问题。
-        debugPrint('[MultisigTransfer] 余额快照写入失败: $e');
+      } catch (_) {
+        // 余额快照写入失败不影响当前链上余额展示。
       }
       if (!mounted) return;
       setState(() {
         _availableBalance = balance;
         _loadingBalance = false;
-        _balanceStale = false;
       });
-    } catch (e) {
-      // 链上余额查询失败必须留痕；有缓存时继续展示旧值但要标记过期。
-      debugPrint('[MultisigTransfer] 链上余额查询失败: $e');
+    } catch (_) {
       if (!mounted) return;
       if (local == null) {
         setState(() {
           _availableBalance = null;
           _loadingBalance = false;
         });
-      } else {
-        setState(() => _balanceStale = true);
       }
     }
   }
@@ -165,12 +163,11 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       setState(() => _addressError = '地址格式无效');
       return false;
     }
-    // 检查是否与机构地址相同
     final beneficiaryBytes = Keyring().decodeAddress(address);
-    final institutionBytes =
-        Uint8List.fromList(_hexToBytes(widget.institution.mainAccount));
-    if (_bytesEqual(beneficiaryBytes, institutionBytes)) {
-      setState(() => _addressError = '收款地址不能与机构地址相同');
+    final safetyFundBytes =
+        Uint8List.fromList(_hexToBytes(_safetyFundAccountHex));
+    if (_bytesEqual(beneficiaryBytes, safetyFundBytes)) {
+      setState(() => _addressError = '收款地址不能与安全基金账户相同');
       return false;
     }
     setState(() => _addressError = null);
@@ -228,7 +225,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
         await MultisigTransferBalanceGuard.checkAdminWalletBalance(
       wallet: wallet,
       requiredFeeYuan: requiredAdminFee,
-      actionLabel: '发起多签转账提案',
+      actionLabel: '发起安全基金转账提案',
     );
     if (balanceBlockedReason != null) {
       if (!mounted) return;
@@ -241,10 +238,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     setState(() => _submitting = true);
 
     try {
-      // 多签管理员的转账提案签名:
-      // 多签管理员(个人 + 机构)支持冷热钱包双路径,与 personal_account_create_page 对齐;
-      // 治理机构(NRC/PRC/PRB)和区块链软件端管理员才只支持冷钱包(QR)。
-      // 这里多签提案 → 热钱包优先 → 冷钱包 fallback 走 QR。
       WalletManager? hotWalletManager;
       if (wallet.isHotWallet) {
         hotWalletManager = WalletManager();
@@ -256,13 +249,12 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
           return await hotWalletManager.signWithWalletNoAuth(
               wallet.walletIndex, payload);
         }
-        // 冷钱包 QR 签名
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
-          requestId: QrSigner.generateRequestId(prefix: 'propose-'),
+          requestId: QrSigner.generateRequestId(prefix: 'propose-safety-'),
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          action: QrActions.multisigTransfer,
+          action: QrActions.safetyFundTransfer,
         );
         final requestJson = qrSigner.encodeRequest(request);
         if (!mounted) throw Exception('页面已关闭');
@@ -282,8 +274,9 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
 
       final service = MultisigTransferService();
-      final submitResult = await service.submitProposeTransfer(
-        institution: widget.institution,
+      // 中文注释：提案类交易等真正入块并核对事件后才返回，proposalId 来自
+      // 链上 SafetyFundTransferProposed 事件，是业务成功的唯一凭据。
+      final result = await service.submitProposeSafetyFund(
         beneficiaryAddress: _beneficiaryController.text.trim(),
         amountYuan: amountYuan,
         remark: _remarkController.text,
@@ -292,29 +285,15 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
         sign: signCallback,
       );
 
-      // 若是个人多签,写入提案历史 entity(转账提案在多签详情页提案列表展示)。
-      // 本页 institution.orgType 个人/机构都是 OrgType.account,通过 Isar 查
-      // PersonalAccountEntity 命中即视作个人多签。
-      await _maybeRecordPersonalProposal(
-        proposalId: submitResult.proposalId,
-        beneficiary: _beneficiaryController.text.trim(),
-        amountYuan: amountYuan,
-      );
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('提案创建成功')),
+        SnackBar(content: Text('提案已创建（#${result.proposalId}），等待管理员投票')),
       );
       Navigator.of(context).pop(true);
     } on WalletAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message)),
-      );
-    } on FormatException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('提交失败：${e.message}')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -325,42 +304,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       if (mounted) {
         setState(() => _submitting = false);
       }
-    }
-  }
-
-  /// 仅当 [widget.institution] 是个人多签时,把转账提案写入 Isar 历史
-  /// (`PersonalAccountProposalEntity`),让详情页"提案列表"区域立即看到。
-  /// 机构多签的提案历史由其他模块负责,这里 silent skip。
-  Future<void> _maybeRecordPersonalProposal({
-    required int proposalId,
-    required String beneficiary,
-    required double amountYuan,
-  }) async {
-    try {
-      final personal = await WalletIsar.instance.read((isar) {
-        return isar.personalAccountEntitys
-            .filter()
-            .accountEqualTo(widget.institution.mainAccount)
-            .findFirst();
-      });
-      if (personal == null) return; // 非个人多签,跳过
-
-      await PersonalProposalHistoryService().recordOrUpdate(
-        personalAccountHex: widget.institution.mainAccount,
-        proposalId: proposalId,
-        action: PersonalProposalAction.transfer,
-        status: PersonalProposalStatus.voting,
-        yesVotes: 0,
-        noVotes: 0,
-        snapshot: {
-          'beneficiary': beneficiary,
-          'amount_yuan': amountYuan,
-        },
-      );
-    } catch (e) {
-      // 写入失败不阻断主流程(链端已成功)，但本地提案历史会缺该记录，
-      // 必须留痕，否则用户会误以为提案没创建而重复提交。
-      debugPrint('[MultisigTransfer] 本地提案历史写入失败: $e');
     }
   }
 
@@ -380,20 +323,19 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
 
   bool get _canSubmit => !_submitting && _submitBlockedReason == null;
 
-  /// 中文注释：提案页允许用户先填写表单，但链未连上或仍在同步时禁止真正提交。
   String? get _submitBlockedReason {
     final progress = _chainProgress;
     if (progress == null) {
       return _chainProgressError ?? '正在读取区块链状态，请稍后再试';
     }
     if (!progress.hasPeers) {
-      return '轻节点尚未连接到区块链网络，暂不能提交转账提案';
+      return '轻节点尚未连接到区块链网络，暂不能提交安全基金转账提案';
     }
     if (progress.isSyncing) {
-      return '轻节点仍在同步区块头，完成后才能提交转账提案';
+      return '轻节点仍在同步区块头，完成后才能提交安全基金转账提案';
     }
     if (!progress.isUsable) {
-      return _chainProgressError ?? '区块链状态尚未就绪，暂不能提交转账提案';
+      return _chainProgressError ?? '区块链状态尚未就绪，暂不能提交安全基金转账提案';
     }
     return null;
   }
@@ -404,7 +346,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          '发起转账提案',
+          '发起安全基金转账提案',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
@@ -421,23 +363,16 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
             onProgressChanged: _handleChainProgressChanged,
             onErrorChanged: _handleChainProgressErrorChanged,
           ),
-          // ──── 机构信息 ────
           _buildInstitutionHeader(),
           const SizedBox(height: 16),
-
-          // ──── 发起管理员 ────
           _buildLabel('发起管理员'),
           const SizedBox(height: 6),
           _buildAdminSelector(),
           const SizedBox(height: 16),
-
-          // ──── 转出地址（只读） ────
-          _buildLabel('转出地址'),
+          _buildLabel('转出账户（国储会安全基金）'),
           const SizedBox(height: 6),
           _buildReadOnlyField(_fromSs58),
           const SizedBox(height: 16),
-
-          // ──── 收款地址 ────
           _buildLabel('收款地址'),
           const SizedBox(height: 6),
           TextField(
@@ -478,8 +413,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
             style: const TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 16),
-
-          // ──── 转账金额 ────
           _buildLabel('转账金额（元）'),
           const SizedBox(height: 6),
           TextField(
@@ -514,8 +447,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
             style: const TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 12),
-
-          // ──── 预估手续费 ────
           _buildInfoRow(
             '预估手续费',
             _estimatedFee > 0
@@ -523,20 +454,15 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
                 : '--',
           ),
           const SizedBox(height: 8),
-
-          // ──── 可用余额 ────
           _buildInfoRow(
-            '可用余额',
+            '安全基金可用余额',
             _loadingBalance
                 ? '查询中...'
                 : _availableBalance != null
                     ? '${AmountFormat.format(_availableBalance!, symbol: '')} 元'
-                        '${_balanceStale ? '（链上刷新失败，金额可能已过期）' : ''}'
                     : '查询失败',
           ),
           const SizedBox(height: 16),
-
-          // ──── 备注 ────
           _buildLabel('备注（可选）'),
           const SizedBox(height: 6),
           TextField(
@@ -560,8 +486,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
             style: const TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 24),
-
-          // ──── 提交按钮 ────
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -583,7 +507,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
                       ),
                     )
                   : const Text(
-                      '提交转账提案',
+                      '提交安全基金转账提案',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -608,8 +532,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     );
   }
 
-  // ──── 子组件 ────
-
   String _truncateAddress(String address) {
     if (address.length <= 16) return address;
     return '${address.substring(0, 8)}...${address.substring(address.length - 8)}';
@@ -618,7 +540,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
   Widget _buildAdminSelector() {
     final wallets = widget.adminWallets;
     if (wallets.length == 1) {
-      // 只有一个管理员钱包，直接展示
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -646,7 +567,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
         ),
       );
     }
-    // 多个管理员钱包，下拉选择
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
@@ -708,7 +628,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            widget.institution.cidShortName,
+            '${widget.institution.cidShortName}（安全基金）',
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
@@ -716,9 +636,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
             ),
           ),
         ),
-        // 中文注释：个人多签和机构账户共用 OrgType.account；
-        // 这里不显示笼统 badge，避免把个人多签误标成机构账户。
-        // 直接不显示标签,只显示多签账户名(已足够标识)。
       ],
     );
   }
@@ -774,8 +691,6 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     );
   }
 }
-
-// ──── 工具函数 ────
 
 String _toHex(List<int> bytes) {
   const chars = '0123456789abcdef';

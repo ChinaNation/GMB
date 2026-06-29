@@ -373,7 +373,7 @@ class ApiClient {
   /// 查询机构链端注册信息。
   ///
   /// 调用 CID 后端 `GET /api/v1/app/institutions/:cid_number/registration-info`。
-  /// 该接口是 `OrganizationManage.propose_create_institution` 的唯一凭证来源。
+  /// 该接口是 `PublicManage/PrivateManage.propose_create_{public,private}_institution` 的唯一凭证来源。
   Future<InstitutionRegistrationInfoResponse> fetchInstitutionRegistrationInfo(
       String cidNumber) async {
     final trimmed = cidNumber.trim();

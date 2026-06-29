@@ -15,7 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/citizen/shared/institution_manage_detail_page.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_detail_page.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_detail_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 

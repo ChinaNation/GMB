@@ -6,7 +6,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:citizenapp/transaction/organization-manage/institution_discovery_service.dart';
+import 'package:citizenapp/citizen/institution/institution_discovery_service.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_manage_discovery_service.dart';
 import 'package:citizenapp/citizen/shared/admin_accounts_scan_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';

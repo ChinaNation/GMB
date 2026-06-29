@@ -7,6 +7,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:citizenapp/citizen/proposal/admins-change/codec/admin_account_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
+import 'package:citizenapp/citizen/shared/admin_profile.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -130,6 +131,12 @@ class AdminAccountService {
 
   Future<List<String>> fetchAdmins(AdminAccountIdentity identity) async {
     return (await fetchByIdentity(identity))?.admins ?? const [];
+  }
+
+  /// 取管理员**完整资料**(cid/姓名/职务/任期/来源,A2)。供机构详情管理员展示页。
+  Future<List<AdminProfile>> fetchAdminProfiles(
+      AdminAccountIdentity identity) async {
+    return (await fetchByIdentity(identity))?.profiles ?? const [];
   }
 
   Future<int?> fetchThreshold(AdminAccountIdentity identity) async {
@@ -354,7 +361,7 @@ class _PersistedAdminAccount {
           'account_id_hex': state.accountHex,
           'institution_code': state.institutionCode,
           'kind': state.kind,
-          'admins': state.admins,
+          'profiles': state.profiles.map((p) => p.toJson()).toList(),
           'threshold': state.threshold,
           'creator_hex': state.creatorHex,
           'created_at': state.createdAt,
@@ -394,7 +401,7 @@ class _PersistedAdminAccount {
           accountHex: AdminAccountIdCodec.normalizeHex(accountHex),
           institutionCode: institutionCode,
           kind: kind,
-          admins: _stringList(stateRaw['admins']),
+          profiles: _profilesFromRaw(stateRaw),
           threshold: threshold,
           creatorHex: stateRaw['creator_hex']?.toString() ?? '',
           createdAt: createdAt,
@@ -418,6 +425,21 @@ class _PersistedAdminAccount {
     return value
         .map((item) => AdminAccountIdCodec.normalizeHex(item.toString()))
         .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  /// 从缓存还原管理员资料:优先读 'profiles'(A2 完整资料);旧缓存仅 'admins'(账户)
+  /// 时降级为仅账户 AdminProfile(实名等下次链刷新补全)。
+  static List<AdminProfile> _profilesFromRaw(Map<String, dynamic> stateRaw) {
+    final raw = stateRaw['profiles'];
+    if (raw is List) {
+      return raw
+          .whereType<Map>()
+          .map((m) => AdminProfile.fromJson(m.cast<String, dynamic>()))
+          .toList(growable: false);
+    }
+    return _stringList(stateRaw['admins'])
+        .map((a) => AdminProfile(account: a))
         .toList(growable: false);
   }
 }

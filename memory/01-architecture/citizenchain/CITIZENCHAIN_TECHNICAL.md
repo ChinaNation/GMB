@@ -161,12 +161,14 @@ citizenchain/
 - `private-admins`
 - `personal-admins`
 
-### 9.3 私权模块（`runtime/private/`）
-- 负责机构多签账户和个人多签账户的创建、关闭、资金与生命周期治理。
+### 9.3 实体模块（`runtime/entity/`）
+- 负责公权机构、私权机构、个人多签账户的创建、关闭、资金与生命周期治理。
+- 机构管理已按公权/私权拆分两 pallet(取代旧 `organization-manage`)。
 
 当前模块：
-- `organization-manage`
-- `personal-manage`
+- `public-manage`（公权机构生命周期,idx32）
+- `private-manage`（私权机构生命周期,idx33）
+- `personal-manage`（个人多签）
 
 ### 9.4 发行模块（`runtime/issuance/`）
 - 负责公民发行、全节点发行、省储行利息、决议发行完整流程。
@@ -244,8 +246,10 @@ citizenchain/
 ### 12.1.1 管理员
 - `runtime/admins/ADMINS_TECHNICAL.md`
 
-### 12.1.2 私权
-- `runtime/private/organization-manage/ORGANIZATION_MANAGE_TECHNICAL.md`
+### 12.1.2 实体（机构/个人生命周期）
+- `runtime/entity/public-manage/PUBLIC_MANAGE_TECHNICAL.md`
+- `runtime/entity/private-manage/PRIVATE_MANAGE_TECHNICAL.md`
+- `runtime/entity/personal-manage/PERSONAL_MANAGE_TECHNICAL.md`
 
 ### 12.2 发行
 - `runtime/issuance/citizen-issuance/CITIZENISS_TECHNICAL.md`

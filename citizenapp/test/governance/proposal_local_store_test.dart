@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/transaction/organization-manage/institution_registry.dart';
+import 'package:citizenapp/citizen/institution/governance_registry.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_local_store.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';

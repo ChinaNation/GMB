@@ -4,9 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:citizenapp/transaction/organization-manage/institution_manage_models.dart'
+import 'package:citizenapp/citizen/institution/institution_models.dart'
     as org_models;
-import 'package:citizenapp/transaction/organization-manage/institution_manage_service.dart';
+import 'package:citizenapp/citizen/institution/institution_chain_service.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_manage_models.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_manage_service.dart';
 
@@ -19,8 +19,8 @@ import 'package:citizenapp/citizen/shared/proposal/proposal_cache.dart';
 import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_service.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_cache.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_models.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_cache.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_models.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_service.dart';
 
 /// 机构转账提案链上交互服务。
@@ -611,7 +611,7 @@ class MultisigTransferService {
     }
 
     if (uncachedDetailKeys.isNotEmpty) {
-      final manageService = InstitutionManageService(chainRpc: _rpc);
+      final manageService = InstitutionChainService(chainRpc: _rpc);
       final personalManageService = PersonalManageService(chainRpc: _rpc);
       final batchResult = await _rpc.fetchStorageBatch(uncachedDetailKeys);
       for (var i = 0; i < uncachedDetailIds.length; i++) {
@@ -631,7 +631,7 @@ class MultisigTransferService {
           continue;
         }
 
-        // 内部投票提案：先按 PersonalAdmins 解码，再按 OrganizationManage 解码，
+        // 内部投票提案：先按 PersonalAdmins 解码，再按机构管理(公权/私权)解码，
         // 失败后才尝试普通多签转账提案。
         final personalDetail =
             personalManageService.decodePersonalProposalData(id, raw);

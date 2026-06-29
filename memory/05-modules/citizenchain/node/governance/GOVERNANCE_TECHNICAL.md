@@ -5,7 +5,8 @@
 ```
 governance/
 ├── mod.rs              # Tauri 命令入口：提案创建、投票、签名请求/提交
-├── organization-manage/# 机构多签管理：CID 凭证、机构详情、创建机构多签签名请求
+│                       # (B0:机构多签管理已下沉 onchina;清算行机构只读在
+│                       #  transaction/offchain_transaction/institution_read/)
 ├── runtime_upgrade/    # 协议升级：开发期直升、运行期协议升级业务签名与提交
 ├── signing.rs          # QR 签名协议实现：payload 构建、签名验证、交易提交
 ├── proposal.rs         # 提案查询与解码：从链上 storage 读取并解析提案详情
@@ -29,7 +30,7 @@ governance/
 - `node/frontend/governance/api.ts`：治理专用 Tauri API
 - `node/frontend/admins/admin-management/`：管理员列表与管理员更换页面
 - `node/frontend/governance/runtime-upgrade/`：协议升级与开发升级页面，只提交业务提案，不实现投票流程
-- `node/frontend/governance/organization_manage/`：机构多签管理页面、API 和 DTO
+- (B0:`node/frontend/governance/organization_manage/` 机构多签管理页面已删,机构管理下沉 onchina;node 仅保留清算行机构只读 `offchain-transaction/institution/`)
 - `node/frontend/governance/types.ts`：治理页面 DTO 类型
 - `node/frontend/shared/qr/`：QR 扫码组件与 QR_V1 解析协议，治理前端通过共享层引用，不再把扫码能力放在治理目录内
 - `node/frontend/shared/ss58.ts` / `node/frontend/shared/format.ts`：SS58 地址展示与金额格式化

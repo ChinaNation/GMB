@@ -15,7 +15,7 @@ import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 import 'multisig_storage_codec.dart';
-import 'institution_manage_service.dart';
+import 'institution_chain_service.dart';
 
 /// 机构多签后处理统计。
 class DiscoveryStats {
@@ -55,10 +55,10 @@ class DiscoveryStats {
 class InstitutionDiscoveryService {
   InstitutionDiscoveryService({
     ChainRpc? chainRpc,
-    InstitutionManageService? manageService,
-  }) : _manage = manageService ?? InstitutionManageService(chainRpc: chainRpc);
+    InstitutionChainService? manageService,
+  }) : _manage = manageService ?? InstitutionChainService(chainRpc: chainRpc);
 
-  final InstitutionManageService _manage;
+  final InstitutionChainService _manage;
 
   /// 处理一次共享扫描结果:筛出我的机构多签 → 批量反查 CID → upsert Isar + 孤儿校验。
   Future<DiscoveryStats> processScanned(

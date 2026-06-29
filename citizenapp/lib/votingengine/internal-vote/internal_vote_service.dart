@@ -12,7 +12,7 @@ import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_servic
 ///   grandpakey_change / institution_multisig / transaction 业务)的
 ///   管理员一人一票一律走
 ///   `InternalVote::cast(proposal_id, approve)` 一条路径。
-/// - 业务 service(InstitutionManageService 等)
+/// - 业务 service(InstitutionChainService 等)
 ///   只负责发起提案(propose_X)；执行重试统一走 VotingEngine.retry_passed_proposal,
 ///   投票动作统一
 ///   委托本服务,避免多处构造相同的 call。

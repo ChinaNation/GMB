@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_page.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_page.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_limit_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';

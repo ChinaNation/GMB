@@ -1,12 +1,12 @@
 // 多签统一账户列表页(个人 + 机构 混合视图)。
 //
 // 设计要点:
-// - 后端按 transaction/personal-manage 与 transaction/organization-manage 分开;
+// - 个人多签数据源 = transaction/personal-manage;机构链态读 = citizen/institution(机构管理层)。
 //   本页只是 UI 编排壳子,并行加载两套数据源,合并按时间倒序展示。
 // - 首屏只读本地 Isar,链上状态刷新和反向发现均转为后台任务;
 //   下拉刷新才强制查链和全量 discovery。
 // - 反向校验由各自 discovery service 内部完成,本页不涉及。
-// - 右上角 "+" 弹 ActionSheet,2 选项分别进入个人多签/机构多签创建页。
+// - 右上角 "+" 仅进入个人多签创建(机构多签创建已收归 onchina 控制台 + 冷钱包)。
 
 import 'dart:async' show unawaited;
 import 'dart:typed_data';
@@ -20,11 +20,10 @@ import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-import 'package:citizenapp/transaction/organization-manage/institution_account_info_page.dart';
-import 'package:citizenapp/transaction/organization-manage/institution_manage_models.dart'
+import 'package:citizenapp/citizen/institution/institution_account_info_page.dart';
+import 'package:citizenapp/citizen/institution/institution_models.dart'
     as org_models;
-import 'package:citizenapp/transaction/organization-manage/institution_manage_service.dart';
-import 'package:citizenapp/transaction/organization-manage/institution_multisig_create_page.dart';
+import 'package:citizenapp/citizen/institution/institution_chain_service.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_account_create_page.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_manage_account_info_page.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_manage_models.dart';
@@ -87,8 +86,8 @@ class _InstitutionAccountListPageState
   final PersonalManageService _personalManageService = PersonalManageService();
   final PersonalProposalHistoryService _personalProposalHistoryService =
       PersonalProposalHistoryService();
-  final InstitutionManageService _multisigManageService =
-      InstitutionManageService();
+  final InstitutionChainService _multisigManageService =
+      InstitutionChainService();
 
   static const _activeStatusTtl = Duration(minutes: 60);
   static const _inactiveStatusTtl = Duration(minutes: 10);
@@ -430,42 +429,10 @@ class _InstitutionAccountListPageState
     await _readFromIsar();
   }
 
+  /// 创建入口。机构(公权/私权)多签创建已收归 onchina 控制台 + 冷钱包,
+  /// citizenapp 仅保留个人多签自助创建;故此入口直接进个人多签创建,不再弹公权/个人选择。
   Future<void> _openCreateMenu() async {
-    final choice = await showModalBottomSheet<_AccountKind>(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (sheetCtx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.person_outline, color: AppTheme.accent),
-              title: const Text('新增个人多签'),
-              subtitle: const Text('无需身份ID'),
-              onTap: () => Navigator.pop(sheetCtx, _AccountKind.personal),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.account_balance_outlined,
-                  color: AppTheme.info),
-              title: const Text('新增机构多签'),
-              subtitle: const Text('需要身份ID'),
-              onTap: () => Navigator.pop(sheetCtx, _AccountKind.institution),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || choice == null) return;
-    switch (choice) {
-      case _AccountKind.personal:
-        await _openCreatePersonal();
-      case _AccountKind.institution:
-        await _openCreateInstitution();
-    }
+    await _openCreatePersonal();
   }
 
   Future<void> _openCreatePersonal() async {
@@ -481,44 +448,7 @@ class _InstitutionAccountListPageState
     }
   }
 
-  Future<void> _openCreateInstitution() async {
-    final wallets = await WalletManager().getWallets();
-    if (!mounted) return;
-    if (wallets.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先导入钱包')),
-      );
-      return;
-    }
-    final createdAddress = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => InstitutionMultisigCreatePage(
-          institution: const InstitutionInfo(
-            cidFullName: '新建多签机构',
-            cidShortName: '新建多签机构',
-            cidFullNameEn: 'New Multisig Institution',
-            cidShortNameEn: 'New Multisig Institution',
-            cidNumber:
-                'institution-account:0000000000000000000000000000000000000000000000000000000000000000',
-            orgType: OrgType.account,
-            // 设计缺口: 新建机构时尚无 CID 码，占位用空字符串；实际 CID 码在创建完成后
-            // 由 institution_manage_service 从链上读取并写入 Isar。
-            adminAccountCode: '',
-            account:
-                '0000000000000000000000000000000000000000000000000000000000000000',
-          ),
-          adminWallets: wallets,
-        ),
-      ),
-    );
-    if (createdAddress != null) {
-      await _refreshKnownStatuses(
-        force: true,
-        institutionAccounts: {createdAddress},
-      );
-    }
-  }
+  // 机构(公权/私权)多签创建已收归 onchina 控制台 + 冷钱包,citizenapp 不再发起机构创建。
 
   void _onCardTap(_UnifiedItem item) {
     final route = switch (item.kind) {

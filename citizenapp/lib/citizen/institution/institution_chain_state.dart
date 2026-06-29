@@ -14,8 +14,9 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
+import 'package:citizenapp/citizen/shared/admin_profile.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_proposal_adapter.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
 
 /// 机构提案摘要(详情页提案列表用)。
 class InstitutionProposalSummary {
@@ -48,6 +49,9 @@ abstract interface class InstitutionChainState {
   /// 机构主账户管理员公钥列表(按机构码读取 Genesis/Public/Private Admins)。
   Future<List<String>> admins(Institution institution);
 
+  /// 机构主账户管理员**完整资料**(cid/姓名/职务/任期/来源,A2;个人多签仅 account)。
+  Future<List<AdminProfile>> adminProfiles(Institution institution);
+
   /// 该机构当年提案(按 institutionBytes==主账户 id 过滤当年缓存)。
   Future<List<InstitutionProposalSummary>> proposals(Uint8List mainAccountId);
 }
@@ -75,6 +79,11 @@ class LiveInstitutionChainState implements InstitutionChainState {
   @override
   Future<List<String>> admins(Institution institution) {
     return _adminService.fetchAdmins(adminIdentityOf(institution));
+  }
+
+  @override
+  Future<List<AdminProfile>> adminProfiles(Institution institution) {
+    return _adminService.fetchAdminProfiles(adminIdentityOf(institution));
   }
 
   @override

@@ -14,7 +14,7 @@
 - `lib/transaction/shared/local_tx_store.dart`：本地交易记录共用存储
 - `lib/wallet/`：钱包档案、密钥读取、生物识别守卫
 - `lib/signer/` 与 `lib/qr/`：热钱包/公民钱包签名协议与扫码会话
-- `lib/organization-manage/`：机构多签与多签聚合入口
+- `lib/citizen/institution/`:机构管理(只读);多签转账聚合入口在 `lib/transaction/multisig-transfer/`
 - `lib/personal-manage/`：个人多签
 - `lib/transaction/offchain-transaction/`：链下扫码支付与清算行能力
 

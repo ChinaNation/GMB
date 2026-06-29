@@ -2,6 +2,12 @@
 
 > 机构分类唯一真源 = CID 机构码（institution_code），见 [[ADR-025]]。
 
+> ⚠️ **目录已迁移(2026-06-29,本文部分路径过时待重写)**:citizenapp 机构模块按"机构管理 vs 交易业务"重组——
+> ① 机构身份/账户/管理员**只读**链访问 + ADR-028 统一机构模型 = `lib/citizen/institution/`(原 `lib/transaction/organization-manage/` 已删,服务改名 `InstitutionChainService`,storage 前缀经 `InstitutionPalletRouter` 路由 PublicManage(32)/PrivateManage(33),取代 OrganizationManage);
+> ② 多签转账(公私个共用)= `lib/transaction/multisig-transfer/`(原 `lib/citizen/proposal/transaction/`);
+> ③ 机构(公权+私权)创建/关闭已收归 onchina 控制台 + 冷钱包,citizenapp 不再发起;个人多签管理留 `lib/transaction/personal-manage/`。
+> 本文下方出现的 `organization-manage` / `OrganizationManage` / `proposal/transaction` 路径按上述对应关系理解,待按新结构整篇重写。
+
 ## 1. 模块目标
 
 `lib/citizen/` 负责 CitizenApp 底部“公民”Tab 及链上治理能力，覆盖：

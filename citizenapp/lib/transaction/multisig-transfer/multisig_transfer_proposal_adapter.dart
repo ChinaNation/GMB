@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_cache.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_detail_page.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_models.dart';
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_service.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_cache.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_detail_page.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_models.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_service.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:citizenapp/citizen/proposal/transaction/multisig_transfer_entry.dart';
+import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_entry.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -12,13 +12,12 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-import 'institution_multisig_close_page.dart';
-import 'institution_manage_models.dart';
-import 'institution_manage_service.dart';
+import 'institution_models.dart';
+import 'institution_chain_service.dart';
 
 /// 机构多签账户详情页。
 ///
-/// 只展示和处理 OrganizationManage 机构多签。个人多签详情在
+/// 只展示和处理机构多签(公权/私权)。个人多签详情在
 /// `lib/personal-manage/personal_manage_account_info_page.dart`。
 class InstitutionAccountInfoPage extends StatefulWidget {
   const InstitutionAccountInfoPage({
@@ -39,7 +38,7 @@ class InstitutionAccountInfoPage extends StatefulWidget {
 
 class _InstitutionAccountInfoPageState
     extends State<InstitutionAccountInfoPage> {
-  final InstitutionManageService _manageService = InstitutionManageService();
+  final InstitutionChainService _manageService = InstitutionChainService();
   final ChainRpc _rpc = ChainRpc();
 
   InstitutionAccountInfo? _accountInfo;
@@ -52,8 +51,8 @@ class _InstitutionAccountInfoPageState
   @override
   void initState() {
     super.initState();
-    _localStatus =
-        widget.initialLocalStatus ?? InstitutionMultisigLocalState.statusPending;
+    _localStatus = widget.initialLocalStatus ??
+        InstitutionMultisigLocalState.statusPending;
     _admins = _normalizeAdminPubkeys(widget.initialAdminPubkeys);
     _load();
   }
@@ -74,7 +73,8 @@ class _InstitutionAccountInfoPageState
             .filter()
             .accountEqualTo(widget.institution.account)
             .findFirst();
-        final statuses = await InstitutionMultisigLocalState.readStatusSnapshots(
+        final statuses =
+            await InstitutionMultisigLocalState.readStatusSnapshots(
           isar,
           [widget.institution.account],
         );
@@ -136,7 +136,9 @@ class _InstitutionAccountInfoPageState
   }
 
   bool _shouldRefreshBalance() {
-    if (_localStatus != InstitutionMultisigLocalState.statusActive) return false;
+    if (_localStatus != InstitutionMultisigLocalState.statusActive) {
+      return false;
+    }
     if (_balanceYuan == null) return true;
     if (_lastBalanceRefreshAtMillis == null) return true;
     final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
@@ -283,62 +285,6 @@ class _InstitutionAccountInfoPageState
     return h.toLowerCase();
   }
 
-  void _confirmClose() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('关闭机构多签'),
-        content: const Text(
-          '关闭机构多签将发起链上关闭提案，需要其他管理员投票通过后才会真正关闭。\n\n确定要发起关闭吗？',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _openClosePage();
-            },
-            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
-            child: const Text('发起关闭'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openClosePage() async {
-    var wallets = await _getAdminWallets();
-    if (wallets.isEmpty) {
-      await _refreshChainDetail(force: true);
-      wallets = await _getAdminWallets();
-    }
-    if (!mounted || wallets.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请先导入此机构的管理员钱包')),
-        );
-      }
-      return;
-    }
-
-    final closed = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => InstitutionMultisigClosePage(
-          institution: widget.institution,
-          adminWallets: wallets,
-        ),
-      ),
-    );
-    if (closed == true && mounted) {
-      // 中文注释：关闭提案提交后仍需链上投票通过，不能立即删除本地机构记录。
-      Navigator.pop(context);
-    }
-  }
-
   bool get _isClosed =>
       _localStatus == InstitutionMultisigLocalState.statusClosed;
 
@@ -415,18 +361,10 @@ class _InstitutionAccountInfoPageState
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (value) {
-                if (value == 'close') _confirmClose();
+                // 机构多签关闭已收归 onchina 控制台 + 冷钱包,本页不再发起关闭。
                 if (value == 'delete') _confirmDeleteLocal();
               },
               itemBuilder: (_) => [
-                if (_localStatus == InstitutionMultisigLocalState.statusActive)
-                  const PopupMenuItem(
-                    value: 'close',
-                    child: Text(
-                      '关闭机构多签',
-                      style: TextStyle(color: AppTheme.danger),
-                    ),
-                  ),
                 if (_isClosed)
                   const PopupMenuItem(
                     value: 'delete',

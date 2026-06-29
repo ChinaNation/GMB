@@ -1,3 +1,4 @@
+import 'package:citizenapp/citizen/shared/admin_profile.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
@@ -149,7 +150,7 @@ class AdminAccountState {
     required this.accountHex,
     required this.institutionCode,
     required this.kind,
-    required this.admins,
+    required this.profiles,
     required this.threshold,
     required this.creatorHex,
     required this.createdAt,
@@ -162,7 +163,14 @@ class AdminAccountState {
   /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
   final String institutionCode;
   final int kind;
-  final List<String> admins;
+
+  /// 管理员完整资料(A2:链上 AdminProfile;个人多签只有 account)。
+  final List<AdminProfile> profiles;
+
+  /// 管理员账户列表(从 profiles 抽取;向后兼容只需账户的消费方:转账/投票/校验/激活匹配)。
+  List<String> get admins =>
+      profiles.map((p) => p.account).toList(growable: false);
+
   final int threshold;
   final String creatorHex;
   final int createdAt;
@@ -176,7 +184,7 @@ class AdminAccountState {
       accountHex: accountHex,
       institutionCode: institutionCode,
       kind: kind,
-      admins: admins,
+      profiles: profiles,
       threshold: threshold ?? this.threshold,
       creatorHex: creatorHex,
       createdAt: createdAt,

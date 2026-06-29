@@ -27,9 +27,9 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_manage_models.dart'
     as personal_models;
 import 'package:citizenapp/transaction/personal-manage/personal_manage_service.dart';
-import 'package:citizenapp/transaction/organization-manage/institution_manage_models.dart'
+import 'package:citizenapp/citizen/institution/institution_models.dart'
     as org_models;
-import 'package:citizenapp/transaction/organization-manage/institution_manage_service.dart';
+import 'package:citizenapp/citizen/institution/institution_chain_service.dart';
 
 /// 多签管理提案详情页：展示创建/关闭提案信息、投票进度及投票操作。
 class InstitutionManageDetailPage extends StatefulWidget {
@@ -58,7 +58,7 @@ class _InstitutionManageDetailPageState
   final ProposalQueryService _proposalService = ProposalQueryService();
   final ProposalDetailLocalStore _detailStore =
       ProposalDetailLocalStore.instance;
-  final InstitutionManageService _manageService = InstitutionManageService();
+  final InstitutionChainService _manageService = InstitutionChainService();
   final PersonalManageService _personalManageService = PersonalManageService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
   AdminAccountIdentity get _accountIdentity =>

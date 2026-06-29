@@ -51,5 +51,5 @@ CID_BASE_URL=http://新的-onchina-服务地址:8899
 
 | 调用方 | 用途 |
 |---|---|
-| `governance/organization_manage/cid.rs` | 机构注册凭证、清算行候选查询 |
+| `transaction/offchain_transaction/institution_read/` | 清算行机构只读(B0:机构注册凭证已下沉 onchina;node 仅链上直读机构身份) |
 | `offchain/cid.rs` | 清算行资格候选搜索 |

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,7 @@ import 'package:citizenapp/citizen/proposal/admins-change/codec/admin_account_co
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/admin_set_validation.dart';
+import 'package:citizenapp/citizen/shared/admin_profile.dart';
 
 void main() {
   List<int> codeBytes(String code) {
@@ -36,25 +38,67 @@ void main() {
       expect(key.length, 16 + 16 + 16 + 32);
     });
 
-    test('decodes full AdminAccount value', () {
+    // A2 金标:AdminAccounts.admins 为 Vec<AdminProfile>(account + cid + name + title
+    // + term_start + term_end + source),逐字节与链端 admin-primitives::AdminProfile 对齐。
+    List<int> boundedUtf8(String s) {
+      final b = utf8.encode(s);
+      return [b.length << 2, ...b]; // len<64 → 单字节 Compact(mode 0)
+    }
+
+    test('decodes full AdminAccount value with AdminProfile (A2)', () {
       final accountId = AdminAccountIdCodec.fromAccountHex('11' * 32);
       final data = Uint8List.fromList([
-        ...codeBytes('NRC'),
-        0,
-        0x08,
+        ...codeBytes('PRC'), // institution_code
+        1, // kind = PublicInstitution(非个人多签 → Vec<AdminProfile>)
+        0x08, // Compact count = 2
+        // admin 0:实名资料齐全
         ...List<int>.filled(32, 0xaa),
+        ...boundedUtf8('CID-A'),
+        ...boundedUtf8('张三'),
+        ...boundedUtf8('主任'),
+        ...u32Le(100), ...u32Le(200), 1, // term + source=registry(1)
+        // admin 1:空 meta(如创世)
         ...List<int>.filled(32, 0xbb),
+        ...boundedUtf8(''),
+        ...boundedUtf8(''),
+        ...boundedUtf8(''),
+        ...u32Le(0), ...u32Le(0), 0, // source=genesis(0)
+        // trailer:creator + created_at + updated_at + status
         ...List<int>.filled(32, 0xcc),
-        ...u32Le(7),
-        ...u32Le(9),
-        1,
+        ...u32Le(7), ...u32Le(9), 1,
       ]);
 
       final decoded = AdminAccountCodec.decode(accountId, data)!;
-      expect(decoded.admins, ['aa' * 32, 'bb' * 32]);
+      expect(decoded.admins, ['aa' * 32, 'bb' * 32]); // getter 抽 account
+      expect(decoded.profiles.length, 2);
+      expect(decoded.profiles[0].cidNumber, 'CID-A');
+      expect(decoded.profiles[0].name, '张三');
+      expect(decoded.profiles[0].title, '主任');
+      expect(decoded.profiles[0].termStartDay, 100);
+      expect(decoded.profiles[0].termEndDay, 200);
+      expect(decoded.profiles[0].source, AdminProfileSource.registry);
+      expect(decoded.profiles[1].source, AdminProfileSource.genesis);
       expect(decoded.threshold, 0);
       expect(decoded.creatorHex, 'cc' * 32);
       expect(decoded.statusLabel, '已激活');
+    });
+
+    test('decodes personal-multisig AdminAccount as bare accounts (kind=3)',
+        () {
+      final accountId = AdminAccountIdCodec.fromAccountHex('11' * 32);
+      final data = Uint8List.fromList([
+        ...codeBytes('PMUL'),
+        3, // kind = PersonalMultisig → 裸 Vec<AccountId>
+        0x08, // count = 2
+        ...List<int>.filled(32, 0xaa),
+        ...List<int>.filled(32, 0xbb),
+        ...List<int>.filled(32, 0xcc), // creator
+        ...u32Le(7), ...u32Le(9), 1,
+      ]);
+      final decoded = AdminAccountCodec.decode(accountId, data)!;
+      expect(decoded.admins, ['aa' * 32, 'bb' * 32]);
+      expect(decoded.profiles.every((p) => p.cidNumber.isEmpty), isTrue);
+      expect(decoded.creatorHex, 'cc' * 32);
     });
 
     test('builds propose_admin_set_change call data', () {
@@ -92,7 +136,10 @@ void main() {
         accountHex: '11' * 32,
         institutionCode: 'PMUL',
         kind: 3,
-        admins: ['aa' * 32, 'bb' * 32],
+        profiles: [
+          AdminProfile(account: 'aa' * 32),
+          AdminProfile(account: 'bb' * 32)
+        ],
         threshold: 2,
         creatorHex: 'aa' * 32,
         createdAt: 1,
@@ -128,7 +175,10 @@ void main() {
           accountHex: '11' * 32,
           institutionCode: institutionCode,
           kind: kind,
-          admins: ['aa' * 32, 'bb' * 32],
+          profiles: [
+            AdminProfile(account: 'aa' * 32),
+            AdminProfile(account: 'bb' * 32)
+          ],
           threshold: 2,
           creatorHex: 'aa' * 32,
           createdAt: 1,

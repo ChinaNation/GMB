@@ -44,10 +44,10 @@
 | 对象 | 风格 | 示例 |
 |---|---|---|
 | 顶层目录 | lowercase | `memory` |
-| Rust crate 目录 | kebab-case | `organization-manage` |
+| Rust crate 目录 | kebab-case | `public-manage` |
 | Rust 模块 / 文件 | snake_case | `chain_multisig_info.rs` |
 | Dart / TS 文件 | snake_case 或既有框架风格 | `account_manage_service.dart` |
-| 前端功能目录 | kebab-case | `organization-manage` |
+| 前端功能目录 | kebab-case | `personal-manage` |
 | Rust 类型 | PascalCase | `InstitutionAccountInfo` |
 | Dart / TS 类型 | PascalCase | `InstitutionAccountEntry` |
 | 函数 / 方法 | snake_case(Rust) / lowerCamelCase(Dart/TS) | `build_call_data` / `buildCallData` |
@@ -142,7 +142,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | IM 直连 KeyPackage 请求 | `ImDirectKeyPackageFetchRequest` / `ImDirectKeyPackageConsumeRequest` | `citizenchain/node/src/im/keypackage.rs` / `citizenapp/lib/im/transport/` | 显式 PeerId + multiaddr 到对方通信节点的 KeyPackage 拉取和消费请求 |
 | IM 网络请求 | `ImNetworkRequest` / `ImNetworkResponse` | `citizenchain/node/src/im/network.rs` | `/gmb/im/1` request-response 的 Spike 阶段 JSON wire 请求和响应 |
 | Step2D 凭证载荷 fixture | `step2d_credential_payload.json` | `memory/06-quality/fixtures/` | CitizenWallet / CitizenApp 共享的 ADR-008 Step2D SCALE 字节一致性测试数据 |
-| 机构管理 | `organization-manage` | runtime crate / pallet | 机构多签管理 pallet |
+| 公权机构管理 | `public-manage` | runtime crate / pallet | 公权机构生命周期 pallet(idx32) |
+| 私权机构管理 | `private-manage` | runtime crate / pallet | 私权机构生命周期 pallet(idx33) |
 | 个人多签管理 | `personal-manage` | runtime crate / pallet | 个人多签管理 pallet |
 | 管理员变更 | `admins-change` | runtime crate / pallet | 管理员主体、阈值和管理员变更 |
 | 内部投票 | `internal-vote` | runtime crate / pallet | 机构内部治理投票 |
@@ -429,7 +430,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenapp/lib/citizen/` | 公民 | citizen | citizenapp 底部“公民”Tab 入口、公民投票页和公共页 |
 | `citizenapp/lib/citizen/proposal/` | 公民提案 | proposal | citizenapp 统一发起提案入口、提案能力表、管理员更换、协议升级和提案详情路由 |
 | `citizenapp/lib/citizen/shared/` | 公民共享 | shared | 公民页共享机构模型、提案模型、上下文、查询、缓存、账户列表和共用详情 |
-| `citizenapp/lib/transaction/organization-manage/` | 机构多签管理 | organization-manage | citizenapp 机构多签创建、关闭、机构账户入口、机构 storage codec 和 OrganizationManage 链上交互；不得承载 personal-manage 个人主业务 |
+| `citizenapp/lib/citizen/institution/` | 机构管理(机构组织生命周期) | institution | citizenapp 机构身份/账户/管理员**只读**链访问核心(InstitutionChainService + multisig_storage_codec + governance_registry + institution_pallet_router 按机构码路由 PublicManage/PrivateManage)+ 统一机构模型(ADR-028);机构创建/关闭已收归 onchina,不在此 |
+| `citizenapp/lib/transaction/multisig-transfer/` | 多签转账(交易业务) | multisig-transfer | citizenapp 公权/私权/个人**共用**的多签转账交易(从 citizen/proposal/transaction 迁入 transaction 交易域) |
 | `citizenapp/lib/transaction/personal-manage/` | 个人多签管理 | personal-manage | citizenapp 个人多签创建、关闭、查询、提案历史、待激活和 PersonalManage 链上编解码 |
 | `citizenapp/lib/transaction/multisig-transfer/` | 多签转账 | multisig-transfer | citizenapp 多签转账提案、详情、投票、余额提示和转账入口 |
 | `citizenapp/lib/citizen/governance/` | 治理视图 | governance | 公民 Tab 的治理机构视图；不得承载提案业务实现 |
@@ -453,8 +455,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `citizenchain/node/src/private/organization_manage/` | 机构多签管理后端 | organization-manage | node Tauri 后端机构多签管理命令、CID 凭证、链上机构详情与创建签名请求 |
-| `citizenchain/node/frontend/private/organization-manage/` | 机构多签管理前端 | organization-manage | node 前端机构多签管理页面、Tauri API 和 DTO |
+| `citizenchain/node/src/transaction/offchain_transaction/institution_read/` | 清算行机构只读 | institution-read | node 机构身份链上只读(B0:机构创建/管理已下沉 onchina,node 仅保留清算行所需机构读) |
 
 ## 13. citizenchain runtime 目录命名登记
 
@@ -468,8 +469,9 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/runtime/admins/private-admins/` | 私权管理员 | private-admins | 普通私权机构管理员 pallet |
 | `citizenchain/runtime/admins/personal-admins/` | 个人多签管理员 | personal-admins | 个人多签管理员与个人多签账户 pallet |
 | `citizenchain/runtime/governance/grandpakey-change/` | GRANDPA 密钥变更 | grandpakey-change | GRANDPA authority 变更 pallet |
-| `citizenchain/runtime/private/organization-manage/` | 机构管理 | organization-manage | 机构多签管理 pallet |
-| `citizenchain/runtime/private/personal-manage/` | 个人多签管理 | personal-manage | 个人多签管理 pallet |
+| `citizenchain/runtime/entity/public-manage/` | 公权机构管理 | public-manage | 公权机构生命周期 pallet(idx32) |
+| `citizenchain/runtime/entity/private-manage/` | 私权机构管理 | private-manage | 私权机构生命周期 pallet(idx33) |
+| `citizenchain/runtime/entity/personal-manage/` | 个人多签管理 | personal-manage | 个人多签管理 pallet |
 | `citizenchain/runtime/governance/resolution-destro/` | 决议销毁 | resolution-destro | 决议销毁 pallet |
 | `citizenchain/runtime/governance/runtime-upgrade/` | 运行时升级 | runtime-upgrade | runtime 升级治理 pallet |
 | `citizenchain/runtime/issuance/` | 发行 | issuance | 发行类 pallet |

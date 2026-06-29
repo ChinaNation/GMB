@@ -8,7 +8,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
-import 'package:citizenapp/transaction/organization-manage/institution_registry.dart';
+import 'package:citizenapp/citizen/institution/governance_registry.dart';
 import 'package:citizenapp/votingengine/internal-vote/pending_vote_store.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_detail_local_store.dart';
