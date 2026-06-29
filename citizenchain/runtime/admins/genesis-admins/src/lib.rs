@@ -179,7 +179,7 @@ pub mod pallet {
                     account,
                     admin_cid_number: BoundedVec::new(),
                     name: BoundedVec::new(),
-                    title: BoundedVec::new(),
+                    admin_role: BoundedVec::new(),
                     term_start: 0,
                     term_end: 0,
                     source: AdminSource::Genesis,

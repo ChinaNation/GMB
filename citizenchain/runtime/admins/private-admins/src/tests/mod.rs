@@ -136,7 +136,7 @@ fn profile(acc: AccountId32) -> AdminProfile<AccountId32> {
         account: acc,
         admin_cid_number: BoundedVec::new(),
         name: BoundedVec::new(),
-        title: BoundedVec::new(),
+        admin_role: BoundedVec::new(),
         term_start: 0,
         term_end: 0,
         source: AdminSource::Registry,
@@ -148,7 +148,7 @@ fn profile_full(
     acc: AccountId32,
     cid: &[u8],
     name: &[u8],
-    title: &[u8],
+    admin_role: &[u8],
     term_start: u32,
     term_end: u32,
 ) -> AdminProfile<AccountId32> {
@@ -160,7 +160,7 @@ fn profile_full(
         .expect("cid fits"),
         name: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(name.to_vec())
             .expect("name fits"),
-        title: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(title.to_vec())
+        admin_role: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(admin_role.to_vec())
             .expect("title fits"),
         term_start,
         term_end,
@@ -250,7 +250,7 @@ fn private_admins_store_and_query_admin_profiles() {
             .expect("profiles present");
         assert_eq!(stored, profiles);
         assert_eq!(stored[0].name.to_vec(), b"Alice".to_vec());
-        assert_eq!(stored[1].title.to_vec(), b"Member".to_vec());
+        assert_eq!(stored[1].admin_role.to_vec(), b"Member".to_vec());
         assert_eq!(stored[1].source, AdminSource::MutualElection);
     });
 }

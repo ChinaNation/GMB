@@ -24,12 +24,15 @@ pub const FRG: InstitutionCode = *b"FRG\0";
 /// 管理员资料里姓名/职务的最大字节长度(与实体生命周期模块 `MaxAccountNameLength` 一致)。
 pub const ADMIN_NAME_MAX_BYTES: u32 = 128;
 
+/// 护宪大法官职务字面量。护宪成员解析只认本常量,禁止各处手写字符串。
+pub const ADMIN_ROLE_CONSTITUTION_GUARD: &[u8] = "护宪大法官".as_bytes();
+
 /// 管理员资料里实名 CID 号最大字节长度(与全仓 `CID_NUMBER_MAX_BYTES` 一致)。
 pub const ADMIN_CID_NUMBER_MAX_BYTES: u32 = CID_NUMBER_MAX_BYTES;
 
 /// 管理员职务/任期/姓名的来源。
 ///
-/// 中文注释:佐证 `AdminProfile` 的 title/term 由哪条治理路径产生;供 CitizenApp 展示。
+/// 中文注释:佐证 `AdminProfile` 的 admin_role/term 由哪条治理路径产生;供 CitizenApp 展示。
 #[derive(
     Encode,
     Decode,
@@ -78,7 +81,7 @@ pub struct AdminProfile<AccountId> {
     /// 姓名快照,来自注册局-公民列表。
     pub name: BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>,
     /// 对外法定职务。
-    pub title: BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>,
+    pub admin_role: BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>,
     /// 任期开始(天数自纪元;无任期填 0)。
     pub term_start: u32,
     /// 任期结束(天数自纪元;无任期填 0)。

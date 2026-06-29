@@ -38,7 +38,7 @@ void main() {
       expect(key.length, 16 + 16 + 16 + 32);
     });
 
-    // A2 金标:AdminAccounts.admins 为 Vec<AdminProfile>(account + cid + name + title
+    // A2 金标:AdminAccounts.admins 为 Vec<AdminProfile>(account + cid + name + admin_role
     // + term_start + term_end + source),逐字节与链端 admin-primitives::AdminProfile 对齐。
     List<int> boundedUtf8(String s) {
       final b = utf8.encode(s);
@@ -73,7 +73,7 @@ void main() {
       expect(decoded.profiles.length, 2);
       expect(decoded.profiles[0].cidNumber, 'CID-A');
       expect(decoded.profiles[0].name, '张三');
-      expect(decoded.profiles[0].title, '主任');
+      expect(decoded.profiles[0].adminRole, '主任');
       expect(decoded.profiles[0].termStartDay, 100);
       expect(decoded.profiles[0].termEndDay, 200);
       expect(decoded.profiles[0].source, AdminProfileSource.registry);

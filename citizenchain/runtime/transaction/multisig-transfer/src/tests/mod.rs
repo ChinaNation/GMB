@@ -868,7 +868,7 @@ fn insert_active_registered_institution_account(
                     account,
                     admin_cid_number: Default::default(),
                     name: Default::default(),
-                    title: Default::default(),
+                    admin_role: Default::default(),
                     term_start: 0,
                     term_end: 0,
                     source: admin_primitives::AdminSource::Registry,

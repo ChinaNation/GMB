@@ -45,7 +45,7 @@ fn admin_profile_for(
         admin_cid_number: identity.admin_cid_number,
         name: identity.name,
         // 市注册局管理员无对外职务/任期(注册局层);链上留空。
-        title: Vec::new(),
+        admin_role: Vec::new(),
         term_start: 0,
         term_end: 0,
         source: AdminSourceTag::Registry,

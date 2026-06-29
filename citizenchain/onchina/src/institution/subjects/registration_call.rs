@@ -7,7 +7,7 @@
 //! AdminProfile 组装规则(ADR-030/A2):
 //! - `account`:管理员进链账户(institution_admins.admin_account);
 //! - `admin_cid_number` / `name`:来自注册局公民记录(citizens 关联 subjects.cid_full_name);
-//! - `title` / `term_start` / `term_end`:来自创建表单;`source` 固定 `Registry`。
+//! - `admin_role` / `term_start` / `term_end`:来自创建表单;`source` 固定 `Registry`。
 //! 公权机构 `cid_short_name` 取官方简称;私权机构留空(链端按 A1 存空)。
 
 use postgres::Client;
@@ -26,7 +26,7 @@ pub(crate) struct AdminProfileFormInput {
     /// 进链账户(hex 或 SS58),与 institution_admins.admin_account 同源。
     pub account: String,
     #[serde(default)]
-    pub title: Option<String>,
+    pub admin_role: Option<String>,
     /// 任期开始(天数自纪元;无任期填 0)。
     #[serde(default)]
     pub term_start: Option<u32>,
@@ -124,7 +124,7 @@ pub(crate) fn build_create_institution_call_data(
         return Err("http:conflict:at least one account_name is required".to_string());
     }
 
-    // ── 管理员集合(AdminProfile)。account 来自 institution_admins;title/term 来自表单;
+    // ── 管理员集合(AdminProfile)。account 来自 institution_admins;admin_role/term 来自表单;
     //    admin_cid_number/name 联表派生;source 固定 Registry。
     let db_admins =
         crate::institution::admins::repo::list_institution_admins_by_cid_conn(conn, cid_number)?;
@@ -151,8 +151,8 @@ pub(crate) fn build_create_institution_call_data(
             account,
             admin_cid_number: identity.admin_cid_number,
             name: identity.name,
-            title: form
-                .and_then(|f| f.title.clone())
+            admin_role: form
+                .and_then(|f| f.admin_role.clone())
                 .unwrap_or_default()
                 .into_bytes(),
             term_start: form.and_then(|f| f.term_start).unwrap_or(0),

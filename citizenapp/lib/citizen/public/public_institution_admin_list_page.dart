@@ -46,7 +46,7 @@ class PublicInstitutionAdminListPage extends StatelessWidget {
   }
 
   Widget _adminCard(int index, AdminProfile profile) {
-    final hasIdentity = profile.name.isNotEmpty || profile.title.isNotEmpty;
+    final hasIdentity = profile.name.isNotEmpty || profile.adminRole.isNotEmpty;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -88,8 +88,8 @@ class PublicInstitutionAdminListPage extends StatelessWidget {
                                 fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
                                 color: AppTheme.textPrimary)),
-                      if (profile.title.isNotEmpty)
-                        Text(profile.title,
+                      if (profile.adminRole.isNotEmpty)
+                        Text(profile.adminRole,
                             style: const TextStyle(
                                 fontSize: 11, color: AppTheme.textTertiary)),
                       if (profile.source != AdminProfileSource.unknown)

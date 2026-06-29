@@ -682,7 +682,7 @@ const ADMIN_STATUS_ACTIVE: u8 = 1;
 /// 链上机构管理员资料解码镜像(对齐 runtime `admin-primitives::AdminProfile`)。
 ///
 /// **铁律**:字段顺序与类型必须与 runtime `AdminProfile` 逐字节一致——
-/// `account=[u8;32]` 无前缀;`admin_cid_number`/`name`/`title` 为 `BoundedVec<u8>`,
+/// `account=[u8;32]` 无前缀;`admin_cid_number`/`name`/`admin_role` 为 `BoundedVec<u8>`,
 /// 与 `Vec<u8>` SCALE 编码相同(Compact 长度 + 字节);`term_start`/`term_end=u32`;
 /// `AdminSource` 枚举 1 字节判别。membership 只取 `account`,资料字段供展示。
 #[derive(Debug, Decode)]
@@ -693,7 +693,7 @@ struct OnChainAdminProfile {
     #[allow(dead_code)]
     name: Vec<u8>,
     #[allow(dead_code)]
-    title: Vec<u8>,
+    admin_role: Vec<u8>,
     #[allow(dead_code)]
     term_start: u32,
     #[allow(dead_code)]
@@ -931,7 +931,7 @@ mod tests {
             account: [0x42; 32],
             admin_cid_number: BoundedVec::try_from(b"LN001-AAAAA-000000001-2026".to_vec()).unwrap(),
             name: BoundedVec::try_from("张三".as_bytes().to_vec()).unwrap(),
-            title: BoundedVec::try_from("局长".as_bytes().to_vec()).unwrap(),
+            admin_role: BoundedVec::try_from("局长".as_bytes().to_vec()).unwrap(),
             term_start: 20_100,
             term_end: 21_561,
             source: AdminSource::Registry,

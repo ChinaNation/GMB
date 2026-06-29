@@ -52,8 +52,11 @@ pub const PROPOSAL_OBJECT_KIND_LAW_TEXT: u8 = 2;
 /// 单部法律最多院数,单一真源在 `votingengine::types::MAX_LEGISLATION_HOUSES`。
 pub const MAX_HOUSES: u32 = votingengine::types::MAX_LEGISLATION_HOUSES;
 
-/// 护宪大法官最多人数(宪法第20条定 7 人,留余量供荣誉/扩展)。
-pub const MAX_GUARD_MEMBERS: u32 = 16;
+/// 护宪大法官法定人数(宪法第20条):7 人。
+pub const CONSTITUTION_GUARD_MEMBERS: u32 = 7;
+
+/// 修宪终审通过阈值(宪法第21条):4 名及以上护宪大法官赞成。
+pub const CONSTITUTION_GUARD_APPROVAL_THRESHOLD: usize = 4;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -172,13 +175,13 @@ pub mod pallet {
     >;
 
     /// 护宪大法官终审记录(仅修宪 STAGE_LEG_CONSTITUTION_GUARD):proposal_id → [(护宪大法官, 是否赞成)]。
-    /// 去重 + >半数赞成判通过。成员集来自 `InternalAdminProvider::constitution_guard_members`。
+    /// 去重 + 4 名及以上赞成判通过。成员集来自 `InternalAdminProvider::constitution_guard_members`。
     #[pallet::storage]
     pub type LegGuardSigns<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         u64,
-        BoundedVec<(T::AccountId, bool), ConstU32<MAX_GUARD_MEMBERS>>,
+        BoundedVec<(T::AccountId, bool), ConstU32<CONSTITUTION_GUARD_MEMBERS>>,
         ValueQuery,
     >;
 
@@ -287,8 +290,8 @@ pub mod pallet {
         AlreadySigned,
         /// 签署人不是护宪大法官
         NotConstitutionGuard,
-        /// 护宪大法官成员集为空(职务字段未配置)
-        GuardMembersEmpty,
+        /// 护宪大法官成员数不是 7 人或成员重复
+        InvalidGuardMembersLen,
     }
 
     #[pallet::call]
@@ -393,7 +396,7 @@ pub mod pallet {
             Self::do_override_sign(who, proposal_id, approve)
         }
 
-        /// 护宪大法官对修宪提案终审表决(宪法第21条):一人一票,>半数赞成→生效。
+        /// 护宪大法官对修宪提案终审表决(宪法第21条):一人一票,4名及以上赞成→生效。
         #[pallet::call_index(5)]
         #[pallet::weight(<T as Config>::WeightInfo::cast_house_vote())]
         pub fn guard_vote(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
@@ -955,7 +958,7 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    /// 护宪大法官终审表决(仅修宪):一人一票,>半数赞成→生效;多数否决(无法达半数)→否决。
+    /// 护宪大法官终审表决(仅修宪):7 人一人一票,4 名及以上赞成→生效;4 名及以上反对→否决。
     pub fn do_guard_vote(who: T::AccountId, proposal_id: u64, approve: bool) -> DispatchResult {
         let proposal =
             Proposals::<T>::get(proposal_id).ok_or(votingengine::Error::<T>::ProposalNotFound)?;
@@ -969,7 +972,16 @@ impl<T: Config> Pallet<T> {
         );
         let members =
             <T as votingengine::Config>::InternalAdminProvider::constitution_guard_members();
-        ensure!(!members.is_empty(), Error::<T>::GuardMembersEmpty);
+        ensure!(
+            members.len() == CONSTITUTION_GUARD_MEMBERS as usize,
+            Error::<T>::InvalidGuardMembersLen
+        );
+        for (idx, member) in members.iter().enumerate() {
+            ensure!(
+                !members.iter().skip(idx + 1).any(|other| other == member),
+                Error::<T>::InvalidGuardMembersLen
+            );
+        }
         ensure!(
             members.iter().any(|m| m == &who),
             Error::<T>::NotConstitutionGuard
@@ -987,22 +999,21 @@ impl<T: Config> Pallet<T> {
         signs
             .try_push((who, approve))
             .map_err(|_| Error::<T>::AlreadySigned)?;
-        let total = members.len();
         let yes = signs.iter().filter(|(_, a)| *a).count();
         let no = signs.iter().filter(|(_, a)| !*a).count();
         pallet::LegGuardSigns::<T>::insert(proposal_id, signs);
-        if yes * 2 > total {
-            // >半数赞成 → 生效。
+        if yes >= CONSTITUTION_GUARD_APPROVAL_THRESHOLD {
+            // 4 名及以上赞成 → 生效。
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)
-        } else if no * 2 >= total {
-            // 否决票已使半数赞成不可能 → 否决。
+        } else if no >= CONSTITUTION_GUARD_APPROVAL_THRESHOLD {
+            // 4 名及以上反对 → 已不可能达到 4 名赞成,否决。
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
         } else {
             Ok(())
         }
     }
 
-    /// 护宪大法官终审超时:未获多数通过 → 否决。
+    /// 护宪大法官终审超时:未获4名及以上赞成 → 否决。
     pub fn do_finalize_guard_timeout(
         proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
         proposal_id: u64,

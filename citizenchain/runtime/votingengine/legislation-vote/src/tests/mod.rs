@@ -14,6 +14,7 @@ use frame_support::{
 use frame_system as system;
 use primitives::cid::code::InstitutionCode;
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+use std::cell::RefCell;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -68,6 +69,19 @@ pub fn house2() -> AccountId32 {
 /// house1 议员 = 账户 [1..=10];house2 议员 = 账户 [11..=20]。
 pub fn member(idx: u8) -> AccountId32 {
     AccountId32::new([idx; 32])
+}
+
+const DEFAULT_GUARD_MEMBER_IDS: [u8; 7] = [101, 102, 103, 104, 105, 106, 107];
+
+thread_local! {
+    static GUARD_MEMBER_IDS: RefCell<std::vec::Vec<u8>> =
+        RefCell::new(DEFAULT_GUARD_MEMBER_IDS.to_vec());
+}
+
+pub fn set_guard_member_ids(ids: &[u8]) {
+    GUARD_MEMBER_IDS.with(|members| {
+        *members.borrow_mut() = ids.to_vec();
+    });
 }
 
 // 签署机构(ADR-027 修订):行政机构(总统府/省联邦政府/市政府)+ 立法院(两院级,供院长)。
@@ -177,9 +191,9 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             None
         }
     }
-    /// 护宪大法官 7 人 = 账户 [101..=107](测试注入;生产按职务过滤 NJD admins)。
+    /// 护宪大法官默认 7 人 = 账户 [101..=107](测试注入;生产按 NJD admins 的 admin_role 过滤)。
     fn constitution_guard_members() -> sp_runtime::sp_std::vec::Vec<AccountId32> {
-        (101u8..=107).map(member).collect()
+        GUARD_MEMBER_IDS.with(|ids| ids.borrow().iter().copied().map(member).collect())
     }
 }
 
@@ -252,6 +266,7 @@ impl crate::pallet::Config for Test {
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
+    set_guard_member_ids(&DEFAULT_GUARD_MEMBER_IDS);
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("test storage should build");

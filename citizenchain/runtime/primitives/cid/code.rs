@@ -323,6 +323,8 @@ pub const NRC: InstitutionCode = *b"NRC\0";
 pub const PRC: InstitutionCode = *b"PRC\0";
 /// 省公民储备银行(固定治理档)。
 pub const PRB: InstitutionCode = *b"PRB\0";
+/// 国家司法院(护宪大法官归口机构)。
+pub const NJD: InstitutionCode = *b"NJD\0";
 
 /// 个人多签账户(不发号,仅链上/后端分类常量)。
 pub const PMUL: InstitutionCode = *b"PMUL";

@@ -317,7 +317,7 @@ class _AdminTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 实名资料行(姓名 + 职务 + 来源);个人多签/创世空 meta 不显示。
-                if (profile.name.isNotEmpty || profile.title.isNotEmpty)
+                if (profile.name.isNotEmpty || profile.adminRole.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
                     child: Wrap(
@@ -333,9 +333,9 @@ class _AdminTile extends StatelessWidget {
                               color: AppTheme.primaryDark,
                             ),
                           ),
-                        if (profile.title.isNotEmpty)
+                        if (profile.adminRole.isNotEmpty)
                           Text(
-                            profile.title,
+                            profile.adminRole,
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppTheme.textTertiary,

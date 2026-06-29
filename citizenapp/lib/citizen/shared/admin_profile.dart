@@ -32,7 +32,7 @@ class AdminProfile {
     required this.account,
     this.cidNumber = '',
     this.name = '',
-    this.title = '',
+    this.adminRole = '',
     this.termStartDay = 0,
     this.termEndDay = 0,
     this.source = AdminProfileSource.unknown,
@@ -43,7 +43,7 @@ class AdminProfile {
         account: (j['account'] ?? '').toString(),
         cidNumber: (j['cid'] ?? '').toString(),
         name: (j['name'] ?? '').toString(),
-        title: (j['title'] ?? '').toString(),
+        adminRole: (j['admin_role'] ?? '').toString(),
         termStartDay: (j['ts'] as num?)?.toInt() ?? 0,
         termEndDay: (j['te'] as num?)?.toInt() ?? 0,
         source: _sourceFromByte((j['src'] as num?)?.toInt() ?? 5),
@@ -59,7 +59,7 @@ class AdminProfile {
   final String name;
 
   /// 对外法定职务。
-  final String title;
+  final String adminRole;
 
   /// 任期开始(天数自纪元;0=无任期)。
   final int termStartDay;
@@ -72,14 +72,14 @@ class AdminProfile {
 
   /// 是否带实名资料(用于 UI 区分"实名管理员" vs 仅账户的个人多签/创世空 meta)。
   bool get hasIdentity =>
-      cidNumber.isNotEmpty || name.isNotEmpty || title.isNotEmpty;
+      cidNumber.isNotEmpty || name.isNotEmpty || adminRole.isNotEmpty;
 
   /// 持久化缓存序列化(键缩写省空间;source 存枚举序号)。
   Map<String, Object?> toJson() => {
         'account': account,
         'cid': cidNumber,
         'name': name,
-        'title': title,
+        'admin_role': adminRole,
         'ts': termStartDay,
         'te': termEndDay,
         'src': source.index,
@@ -117,7 +117,7 @@ class AdminProfile {
   /// 逐字节对齐链端 `admin-primitives`:
   /// - `isPersonal`(kind==PersonalMultisig=3):每项裸 `AccountId[32]`(无资料);
   /// - 否则每项 `AdminProfile` = `account[32]` + `admin_cid_number`(Compact<len>+UTF8)
-  ///   + `name`(Compact) + `title`(Compact) + `term_start`(u32 LE) + `term_end`(u32 LE)
+  ///   + `name`(Compact) + `admin_role`(Compact) + `term_start`(u32 LE) + `term_end`(u32 LE)
   ///   + `source`(u8)。
   ///
   /// 字节越界返回 null(让调用方按"解码失败"处理)。
@@ -142,9 +142,9 @@ class AdminProfile {
       final name = _readCompactBytes(data, offset);
       if (name == null) return null;
       offset = name.$2;
-      final title = _readCompactBytes(data, offset);
-      if (title == null) return null;
-      offset = title.$2;
+      final adminRole = _readCompactBytes(data, offset);
+      if (adminRole == null) return null;
+      offset = adminRole.$2;
       if (offset + 4 + 4 + 1 > data.length) return null;
       final termStart = _readU32(data, offset);
       offset += 4;
@@ -156,7 +156,7 @@ class AdminProfile {
         account: account,
         cidNumber: utf8.decode(cid.$1, allowMalformed: true),
         name: utf8.decode(name.$1, allowMalformed: true),
-        title: utf8.decode(title.$1, allowMalformed: true),
+        adminRole: utf8.decode(adminRole.$1, allowMalformed: true),
         termStartDay: termStart,
         termEndDay: termEnd,
         source: source,

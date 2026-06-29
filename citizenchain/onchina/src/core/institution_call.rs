@@ -11,7 +11,7 @@
 //! - `issuer_main_account` / `signer_pubkey` / `AdminProfile.account` 是 `[u8;32]` 裸字节;
 //! - 所有 `Vec<u8>` / `BoundedVec<u8>`(cid_number / cid_full_name / cid_short_name /
 //!   register_nonce / signature / issuer_cid_number / scope_*,以及每个 AdminProfile 的
-//!   admin_cid_number / name / title)带 `Compact<u32>` 长度前缀;
+//!   admin_cid_number / name / admin_role)带 `Compact<u32>` 长度前缀;
 //! - `accounts` / `admins` 这类项目列表带 `Compact<u32>` 数量前缀;
 //! - `admins_len` / `threshold` / `term_start` / `term_end` 是 u32 小端;
 //! - `source` 是单字节枚举序号(`AdminSource::Registry` = 1)。
@@ -77,7 +77,7 @@ pub struct AdminProfileArg {
     /// 姓名快照(来自注册局公民记录)。
     pub name: Vec<u8>,
     /// 对外法定职务。
-    pub title: Vec<u8>,
+    pub admin_role: Vec<u8>,
     /// 任期开始(天数自纪元;无任期填 0)。
     pub term_start: u32,
     /// 任期结束(天数自纪元;无任期填 0)。
@@ -114,8 +114,8 @@ fn encode_admin_profile(out: &mut Vec<u8>, profile: &AdminProfileArg) {
     out.extend_from_slice(&profile.admin_cid_number);
     out.extend(Compact(profile.name.len() as u32).encode());
     out.extend_from_slice(&profile.name);
-    out.extend(Compact(profile.title.len() as u32).encode());
-    out.extend_from_slice(&profile.title);
+    out.extend(Compact(profile.admin_role.len() as u32).encode());
+    out.extend_from_slice(&profile.admin_role);
     out.extend(profile.term_start.to_le_bytes()); // u32 小端
     out.extend(profile.term_end.to_le_bytes()); // u32 小端
     out.push(profile.source.index()); // 枚举单字节序号
@@ -276,7 +276,8 @@ mod tests {
             admin_cid_number: BoundedVec::try_from(arg.admin_cid_number.clone())
                 .expect("admin_cid_number within bound"),
             name: BoundedVec::try_from(arg.name.clone()).expect("name within bound"),
-            title: BoundedVec::try_from(arg.title.clone()).expect("title within bound"),
+            admin_role: BoundedVec::try_from(arg.admin_role.clone())
+                .expect("admin_role within bound"),
             term_start: arg.term_start,
             term_end: arg.term_end,
             source: match arg.source {
@@ -294,7 +295,7 @@ mod tests {
             account: [seed; 32],
             admin_cid_number: format!("CID{seed:03}").into_bytes(),
             name: "张三".as_bytes().to_vec(),
-            title: "主任".as_bytes().to_vec(),
+            admin_role: "主任".as_bytes().to_vec(),
             term_start: 19_700 + seed as u32,
             term_end: 28_900 + seed as u32,
             source: AdminSourceTag::Registry,

@@ -24,7 +24,7 @@
 // For more information, please refer to <http://unlicense.org>
 
 // Substrate and Polkadot dependencies
-use admin_primitives::AdminAccountQuery;
+use admin_primitives::{AdminAccountQuery, AdminProfile, ADMIN_ROLE_CONSTITUTION_GUARD};
 use alloc::vec::Vec;
 use codec::Decode;
 #[cfg(not(feature = "runtime-benchmarks"))]
@@ -1472,6 +1472,43 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
         None
     }
 
+    fn active_account_admin_profiles(
+        institution_code: primitives::cid::code::InstitutionCode,
+        admin_root_account_id: AccountId,
+    ) -> Option<Vec<AdminProfile<AccountId>>> {
+        if admin_primitives::is_genesis_admin_code(&institution_code) {
+            return genesis_admins::Pallet::<Runtime>::active_account_admin_profiles(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_public_admin_code(&institution_code) {
+            return public_admins::Pallet::<Runtime>::active_account_admin_profiles(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_private_admin_code(&institution_code) {
+            return private_admins::Pallet::<Runtime>::active_account_admin_profiles(
+                institution_code,
+                admin_root_account_id,
+            );
+        }
+        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
+            return public_admins::Pallet::<Runtime>::active_account_admin_profiles(
+                institution_code,
+                admin_root_account_id.clone(),
+            )
+            .or_else(|| {
+                private_admins::Pallet::<Runtime>::active_account_admin_profiles(
+                    institution_code,
+                    admin_root_account_id,
+                )
+            });
+        }
+        None
+    }
+
     fn active_account_admins_len(
         institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
@@ -2157,6 +2194,24 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
         institution: AccountId,
     ) -> Option<AccountId> {
         RuntimeAdminAccountQuery::legal_representative(institution_code, institution)
+    }
+
+    fn constitution_guard_members() -> Vec<AccountId> {
+        let Some(national_judicial_yuan) =
+            AccountId::decode(&mut &primitives::cid::china::china_sf::CHINA_SF[0].main_account[..])
+                .ok()
+        else {
+            return Vec::new();
+        };
+        RuntimeAdminAccountQuery::active_account_admin_profiles(
+            primitives::cid::code::NJD,
+            national_judicial_yuan,
+        )
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|profile| profile.admin_role.as_slice() == ADMIN_ROLE_CONSTITUTION_GUARD)
+        .map(|profile| profile.account)
+        .collect()
     }
 }
 

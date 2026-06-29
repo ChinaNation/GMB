@@ -181,7 +181,7 @@ fn admins(count: u8) -> Vec<AdminProfile<AccountId32>> {
             account: account(i),
             admin_cid_number: BoundedVec::new(),
             name: BoundedVec::new(),
-            title: BoundedVec::new(),
+            admin_role: BoundedVec::new(),
             term_start: 0,
             term_end: 0,
             source: AdminSource::Genesis,
@@ -221,7 +221,7 @@ fn genesis_build_only_inserts_genesis_admin_sources() {
                 assert_eq!(profile.source, AdminSource::Genesis);
                 assert!(profile.admin_cid_number.is_empty());
                 assert!(profile.name.is_empty());
-                assert!(profile.title.is_empty());
+                assert!(profile.admin_role.is_empty());
                 assert_eq!(profile.term_start, 0);
                 assert_eq!(profile.term_end, 0);
             }

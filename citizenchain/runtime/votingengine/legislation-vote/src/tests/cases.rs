@@ -1,6 +1,7 @@
 //! 立法投票单测:阈值纯函数 + 单院/两院/特别案投票机制。
 
 use super::*;
+use crate::Error;
 use frame_support::{assert_noop, assert_ok, BoundedVec};
 use votingengine::types::{
     legislation_house_decided, legislation_house_final_passed, legislation_referendum_final_passed,
@@ -398,10 +399,10 @@ fn constitution_amend_to_guard() -> u64 {
 }
 
 #[test]
-fn constitution_amend_passes_on_guard_majority() {
+fn constitution_amend_passes_on_four_guard_approvals() {
     new_test_ext().execute_with(|| {
         let pid = constitution_amend_to_guard();
-        // 7 护宪大法官,4 赞成 = >半数 → 生效。
+        // 7 护宪大法官中 4 名及以上赞成 → 生效。
         assert_ok!(guard_vote(member(101), pid, true));
         assert_ok!(guard_vote(member(102), pid, true));
         assert_ok!(guard_vote(member(103), pid, true));
@@ -412,16 +413,60 @@ fn constitution_amend_passes_on_guard_majority() {
 }
 
 #[test]
-fn constitution_amend_rejected_on_guard_majority_against() {
+fn constitution_amend_rejected_on_four_guard_rejections() {
     new_test_ext().execute_with(|| {
         let pid = constitution_amend_to_guard();
         assert_ok!(guard_vote(member(101), pid, false));
         assert_ok!(guard_vote(member(102), pid, false));
         assert_ok!(guard_vote(member(103), pid, false));
         assert_eq!(status(pid), STATUS_VOTING);
-        // 4 否决 → 半数赞成已不可能 → 否决。
+        // 7 人制下 4 名反对 → 已不可能达到 4 名赞成,否决。
         assert_ok!(guard_vote(member(104), pid, false));
         assert_eq!(status(pid), STATUS_REJECTED);
+    });
+}
+
+#[test]
+fn constitution_amend_stays_voting_with_three_guard_approvals() {
+    new_test_ext().execute_with(|| {
+        let pid = constitution_amend_to_guard();
+        assert_ok!(guard_vote(member(101), pid, true));
+        assert_ok!(guard_vote(member(102), pid, true));
+        assert_ok!(guard_vote(member(103), pid, true));
+        assert_eq!(status(pid), STATUS_VOTING);
+    });
+}
+
+#[test]
+fn invalid_guard_member_count_rejected() {
+    new_test_ext().execute_with(|| {
+        let cases: &[&[u8]] = &[
+            &[],
+            &[101, 102, 103, 104, 105, 106],
+            &[101, 102, 103, 104, 105, 106, 107, 108],
+        ];
+        for ids in cases {
+            set_guard_member_ids(ids);
+            let pid = constitution_amend_to_guard();
+            assert_noop!(
+                guard_vote(member(101), pid, true),
+                Error::<Test>::InvalidGuardMembersLen
+            );
+            assert_eq!(status(pid), STATUS_VOTING);
+        }
+    });
+}
+
+#[test]
+fn duplicate_guard_member_list_rejected() {
+    new_test_ext().execute_with(|| {
+        set_guard_member_ids(&[101, 102, 103, 104, 105, 106, 106]);
+        let pid = constitution_amend_to_guard();
+        assert_noop!(
+            guard_vote(member(101), pid, true),
+            Error::<Test>::InvalidGuardMembersLen
+        );
+        assert_eq!(status(pid), STATUS_VOTING);
     });
 }
 
@@ -429,7 +474,7 @@ fn constitution_amend_rejected_on_guard_majority_against() {
 fn constitution_amend_guard_timeout_rejects() {
     new_test_ext().execute_with(|| {
         let pid = constitution_amend_to_guard();
-        // 护宪大法官 30 天未达多数 → 超时否决。
+        // 护宪大法官 30 天未达 4 名及以上赞成 → 超时否决。
         run_to_expiry(pid);
         assert_eq!(status(pid), STATUS_REJECTED);
     });
@@ -440,7 +485,23 @@ fn non_guard_cannot_guard_vote() {
     new_test_ext().execute_with(|| {
         let pid = constitution_amend_to_guard();
         // member(5) 不是护宪大法官。
-        assert!(guard_vote(member(5), pid, true).is_err());
+        assert_noop!(
+            guard_vote(member(5), pid, true),
+            Error::<Test>::NotConstitutionGuard
+        );
+        assert_eq!(status(pid), STATUS_VOTING);
+    });
+}
+
+#[test]
+fn guard_member_cannot_vote_twice() {
+    new_test_ext().execute_with(|| {
+        let pid = constitution_amend_to_guard();
+        assert_ok!(guard_vote(member(101), pid, true));
+        assert_noop!(
+            guard_vote(member(101), pid, false),
+            Error::<Test>::AlreadySigned
+        );
         assert_eq!(status(pid), STATUS_VOTING);
     });
 }
