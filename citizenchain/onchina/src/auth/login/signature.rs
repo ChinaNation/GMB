@@ -4,7 +4,7 @@
 //! `handler.rs` / `qr_login.rs`。
 
 use hex::FromHex;
-use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
+use schnorrkel::{PublicKey as Sr25519PublicKey, Signature as Sr25519Signature, signing_context};
 use sp_core::Pair;
 
 use crate::*;
@@ -150,8 +150,8 @@ pub(crate) fn build_admin_name(
     institution_code: &str,
     _scope_province_name: Option<&str>,
 ) -> String {
-    // 中文注释:联邦注册局默认名不带省份;省份是列表列字段,不是姓名的一部分。
-    if institution_code == "FRG" {
+    // 中文注释:Tier1 创世注册局默认名不带省份;省份是列表列字段,不是姓名的一部分。
+    if crate::core::chain_runtime::is_tier1_registry(institution_code) {
         "联邦注册局管理员".to_string()
     } else {
         "市注册局管理员".to_string()
@@ -165,11 +165,12 @@ pub(crate) fn build_admin_name_from_user(
     // 优先使用 admin_name(真实姓名),空或旧合成名则 fallback 到机构默认名。
     let name = admin.admin_name.trim();
     let old_generated_federal_name =
-        admin.institution_code == "FRG" && is_generated_federal_registry_name(name);
+        crate::core::chain_runtime::is_tier1_registry(&admin.institution_code)
+            && is_generated_federal_registry_name(name);
     if !name.is_empty() && !old_generated_federal_name {
         return name.to_string();
     }
-    if admin.institution_code == "CREG" {
+    if crate::core::chain_runtime::is_subordinate_registry(&admin.institution_code) {
         let city = admin.city_name.trim();
         if !city.is_empty() {
             let suffix = if city.ends_with('市') { "" } else { "市" };
@@ -191,9 +192,11 @@ fn is_generated_federal_registry_name(name: &str) -> bool {
     prefix.ends_with("联邦注册局管理员")
 }
 
-/// 市注册局暴露 scope_city_name;联邦注册局或空字符串一律返回 None。
+/// Tier2 下级注册局暴露 scope_city_name;Tier1 创世注册局或空字符串一律返回 None。
 pub(super) fn resolve_scope_city_name(admin: &AdminUser) -> Option<String> {
-    if admin.institution_code == "CREG" && !admin.city_name.trim().is_empty() {
+    if crate::core::chain_runtime::is_subordinate_registry(&admin.institution_code)
+        && !admin.city_name.trim().is_empty()
+    {
         Some(admin.city_name.clone())
     } else {
         None

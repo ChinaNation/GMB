@@ -4,10 +4,10 @@
 //! 一条 citizen 记录处于 NORMAL 且在有效期内即视为护照已签发。
 
 use axum::{
+    Json,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    Json,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};

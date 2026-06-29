@@ -22,14 +22,24 @@ pub(crate) enum AdminOperationAuth {
     PasskeyColdSign,
 }
 
+/// 管理端动作类型(Tier 中性命名,决策②)。
+///
+/// 中文注释:注册局动作按分层命名——Governing = Tier1 创世注册局自身(本期 = 联邦注册局),
+/// Subordinate = 其供给的 Tier2 下级注册局(本期 = 市注册局)。命名与具体机构码解耦,
+/// 鉴权边界经 `is_tier1_registry` 谓词裁决,不再字面绑定 FRG/CREG。
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminActionType {
-    CreateCityRegistry,
-    UpdateCityRegistry,
-    DeleteCityRegistry,
-    UpdateFederalRegistry,
-    ReplaceFederalRegistry,
+    /// Tier1 创世注册局新增一名 Tier2 下级注册局管理员。
+    CreateSubordinateRegistry,
+    /// Tier1 更新一名 Tier2 下级注册局管理员(元数据)。
+    UpdateSubordinateRegistry,
+    /// Tier1 删除一名 Tier2 下级注册局管理员。
+    DeleteSubordinateRegistry,
+    /// Tier1 更新本档(创世注册局)自身一名管理员(元数据)。
+    UpdateGoverningRegistry,
+    /// Tier1 换届本档(创世注册局)自身一名管理员(经省组投票)。
+    ReplaceGoverningRegistry,
     InstitutionCreate,
     InstitutionUpdate,
     InstitutionCreateAccount,
@@ -45,11 +55,11 @@ pub(crate) enum AdminActionType {
 impl AdminActionType {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
-            Self::CreateCityRegistry => "CREATE_CITY_REGISTRY",
-            Self::UpdateCityRegistry => "UPDATE_CITY_REGISTRY",
-            Self::DeleteCityRegistry => "DELETE_CITY_REGISTRY",
-            Self::UpdateFederalRegistry => "UPDATE_FEDERAL_REGISTRY",
-            Self::ReplaceFederalRegistry => "REPLACE_FEDERAL_REGISTRY",
+            Self::CreateSubordinateRegistry => "CREATE_SUBORDINATE_REGISTRY",
+            Self::UpdateSubordinateRegistry => "UPDATE_SUBORDINATE_REGISTRY",
+            Self::DeleteSubordinateRegistry => "DELETE_SUBORDINATE_REGISTRY",
+            Self::UpdateGoverningRegistry => "UPDATE_GOVERNING_REGISTRY",
+            Self::ReplaceGoverningRegistry => "REPLACE_GOVERNING_REGISTRY",
             Self::InstitutionCreate => "INSTITUTION_CREATE",
             Self::InstitutionUpdate => "INSTITUTION_UPDATE",
             Self::InstitutionCreateAccount => "INSTITUTION_CREATE_ACCOUNT",
@@ -69,13 +79,15 @@ impl AdminActionType {
                 AdminOperationAuth::Session
             }
             // 改注册局管理元数据,重要但不产链上凭证 → passkey 重要档。
-            Self::UpdateCityRegistry | Self::UpdateFederalRegistry => AdminOperationAuth::Passkey,
+            Self::UpdateSubordinateRegistry | Self::UpdateGoverningRegistry => {
+                AdminOperationAuth::Passkey
+            }
             // 产生链上交易/凭证、改 Active 集合或高危治理 → passkey + 冷签特殊档。
             Self::InstitutionCreate
             | Self::InstitutionCreateAccount
-            | Self::CreateCityRegistry
-            | Self::DeleteCityRegistry
-            | Self::ReplaceFederalRegistry
+            | Self::CreateSubordinateRegistry
+            | Self::DeleteSubordinateRegistry
+            | Self::ReplaceGoverningRegistry
             | Self::InstitutionDeleteAccount
             | Self::InstitutionDeregister
             | Self::InstitutionAccountDeregister
@@ -90,26 +102,26 @@ impl AdminActionType {
     pub(crate) fn is_governance(&self) -> bool {
         matches!(
             self,
-            Self::CreateCityRegistry
-                | Self::DeleteCityRegistry
-                | Self::ReplaceFederalRegistry
+            Self::CreateSubordinateRegistry
+                | Self::DeleteSubordinateRegistry
+                | Self::ReplaceGoverningRegistry
                 | Self::InstitutionDeregister
                 | Self::InstitutionAccountDeregister
         )
     }
 
-    /// 是否要求联邦注册局管理员。仅注册局自身管理(增删市注册局、更新/换届联邦注册局)
+    /// 是否要求 Tier1 创世注册局治理能力。注册局自身管理(增删下级注册局、更新/换届本档)
     /// 与机构注销治理(整机构/单账户)归此边界;机构元数据更新与文档上传不在其中——
     /// 任一辖区管理员可对本辖区机构执行,由 `scope` 限定可见域。与鉴权档正交:不依赖
     /// auth_type,故动作在档间迁移不改变此权限边界。
-    pub(crate) fn requires_federal_admin(&self) -> bool {
+    pub(crate) fn requires_governing_capability(&self) -> bool {
         matches!(
             self,
-            Self::CreateCityRegistry
-                | Self::DeleteCityRegistry
-                | Self::ReplaceFederalRegistry
-                | Self::UpdateCityRegistry
-                | Self::UpdateFederalRegistry
+            Self::CreateSubordinateRegistry
+                | Self::DeleteSubordinateRegistry
+                | Self::ReplaceGoverningRegistry
+                | Self::UpdateSubordinateRegistry
+                | Self::UpdateGoverningRegistry
                 | Self::InstitutionDeregister
                 | Self::InstitutionAccountDeregister
         )
@@ -120,11 +132,11 @@ pub(crate) fn parse_action_type(
     action_type: &str,
 ) -> Result<AdminActionType, axum::response::Response> {
     match action_type {
-        "CREATE_CITY_REGISTRY" => Ok(AdminActionType::CreateCityRegistry),
-        "UPDATE_CITY_REGISTRY" => Ok(AdminActionType::UpdateCityRegistry),
-        "DELETE_CITY_REGISTRY" => Ok(AdminActionType::DeleteCityRegistry),
-        "UPDATE_FEDERAL_REGISTRY" => Ok(AdminActionType::UpdateFederalRegistry),
-        "REPLACE_FEDERAL_REGISTRY" => Ok(AdminActionType::ReplaceFederalRegistry),
+        "CREATE_SUBORDINATE_REGISTRY" => Ok(AdminActionType::CreateSubordinateRegistry),
+        "UPDATE_SUBORDINATE_REGISTRY" => Ok(AdminActionType::UpdateSubordinateRegistry),
+        "DELETE_SUBORDINATE_REGISTRY" => Ok(AdminActionType::DeleteSubordinateRegistry),
+        "UPDATE_GOVERNING_REGISTRY" => Ok(AdminActionType::UpdateGoverningRegistry),
+        "REPLACE_GOVERNING_REGISTRY" => Ok(AdminActionType::ReplaceGoverningRegistry),
         "INSTITUTION_CREATE" => Ok(AdminActionType::InstitutionCreate),
         "INSTITUTION_UPDATE" => Ok(AdminActionType::InstitutionUpdate),
         "INSTITUTION_CREATE_ACCOUNT" => Ok(AdminActionType::InstitutionCreateAccount),
@@ -152,11 +164,13 @@ pub(crate) fn ensure_action_role_allowed(
             "admin province scope missing",
         ));
     }
-    if action_type.requires_federal_admin() && ctx.institution_code != "FRG" {
+    if action_type.requires_governing_capability()
+        && !crate::core::chain_runtime::is_tier1_registry(&ctx.institution_code)
+    {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "federal admin required",
+            "governing registry admin required",
         ));
     }
     Ok(())
@@ -187,22 +201,22 @@ mod tests {
     }
 
     #[test]
-    fn federal_admin_boundary_excludes_institution_update_and_upload() {
-        // 机构元数据更新与文档上传由发起管理员的 scope 限定本辖区,不要求联邦注册局管理员。
-        assert!(!AdminActionType::InstitutionUpdate.requires_federal_admin());
-        assert!(!AdminActionType::InstitutionUploadDocument.requires_federal_admin());
-        // 注册局自身管理与机构注销治理仍要求联邦注册局管理员。
-        assert!(AdminActionType::CreateCityRegistry.requires_federal_admin());
-        assert!(AdminActionType::DeleteCityRegistry.requires_federal_admin());
-        assert!(AdminActionType::ReplaceFederalRegistry.requires_federal_admin());
-        assert!(AdminActionType::UpdateCityRegistry.requires_federal_admin());
-        assert!(AdminActionType::UpdateFederalRegistry.requires_federal_admin());
-        assert!(AdminActionType::InstitutionDeregister.requires_federal_admin());
-        assert!(AdminActionType::InstitutionAccountDeregister.requires_federal_admin());
-        // 普通机构特殊操作(建机构/建账户/删账户/删文档)由 scope 收口,不要求联邦。
-        assert!(!AdminActionType::InstitutionCreate.requires_federal_admin());
-        assert!(!AdminActionType::InstitutionCreateAccount.requires_federal_admin());
-        assert!(!AdminActionType::InstitutionDeleteAccount.requires_federal_admin());
-        assert!(!AdminActionType::InstitutionDeleteDocument.requires_federal_admin());
+    fn governing_capability_boundary_excludes_institution_update_and_upload() {
+        // 机构元数据更新与文档上传由发起管理员的 scope 限定本辖区,不要求 Tier1 创世注册局治理能力。
+        assert!(!AdminActionType::InstitutionUpdate.requires_governing_capability());
+        assert!(!AdminActionType::InstitutionUploadDocument.requires_governing_capability());
+        // 注册局自身管理与机构注销治理仍要求 Tier1 创世注册局治理能力。
+        assert!(AdminActionType::CreateSubordinateRegistry.requires_governing_capability());
+        assert!(AdminActionType::DeleteSubordinateRegistry.requires_governing_capability());
+        assert!(AdminActionType::ReplaceGoverningRegistry.requires_governing_capability());
+        assert!(AdminActionType::UpdateSubordinateRegistry.requires_governing_capability());
+        assert!(AdminActionType::UpdateGoverningRegistry.requires_governing_capability());
+        assert!(AdminActionType::InstitutionDeregister.requires_governing_capability());
+        assert!(AdminActionType::InstitutionAccountDeregister.requires_governing_capability());
+        // 普通机构特殊操作(建机构/建账户/删账户/删文档)由 scope 收口,不要求治理能力。
+        assert!(!AdminActionType::InstitutionCreate.requires_governing_capability());
+        assert!(!AdminActionType::InstitutionCreateAccount.requires_governing_capability());
+        assert!(!AdminActionType::InstitutionDeleteAccount.requires_governing_capability());
+        assert!(!AdminActionType::InstitutionDeleteDocument.requires_governing_capability());
     }
 }

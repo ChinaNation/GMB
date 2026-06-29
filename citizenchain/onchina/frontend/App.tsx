@@ -31,6 +31,7 @@ import { GovView } from './gov/GovView';
 import { PrivateShell } from './private/PrivateShell';
 import { EducationView } from './education/EducationView';
 import { RegistryAdminsView } from './admins/RegistryAdminsView';
+import { isTier1Registry } from './platform/registryTier';
 import { CitizensView } from './citizens/CitizensView';
 import type { PrivateType } from './subjects/api';
 import { notice } from './utils/notice';
@@ -165,7 +166,7 @@ function AppInner() {
     if (passkeyRegistered === null) return;
     if (hasInitializedView) return;
     setHasInitializedView(true);
-    const isFederal = auth.institution_code === 'FRG';
+    const isFederal = isTier1Registry(auth.institution_code);
     const adminListTab: ActiveView = isFederal ? 'federal-registry' : 'city-registry';
     if (!passkeyRegistered) {
       setActiveView(adminListTab);

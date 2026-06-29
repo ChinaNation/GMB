@@ -8,10 +8,10 @@
 
 mod store;
 
+use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -22,7 +22,7 @@ use webauthn_rs::prelude::{
 
 use crate::auth::login::require_admin_any;
 use crate::core::response::ApiResponse;
-use crate::{api_error, AppState};
+use crate::{AppState, api_error};
 
 const CEREMONY_TTL_SECONDS: i64 = 300;
 const ASSERTION_TTL_SECONDS: i64 = 120;
@@ -449,8 +449,8 @@ mod tests {
 
     #[test]
     fn passkey_register_and_authenticate_round_trip() {
-        use webauthn_authenticator_rs::softpasskey::SoftPasskey;
         use webauthn_authenticator_rs::WebauthnAuthenticator;
+        use webauthn_authenticator_rs::softpasskey::SoftPasskey;
         use webauthn_rs::prelude::Url;
 
         let webauthn =

@@ -1,5 +1,7 @@
 # 任务卡：P0 止血 — 联邦注册局管理员 seed-federal-admins
 
+> **⚠️ 已退役(2026-06-29)**:本卡的 `seed-federal-admins` CLI + 215 平铺本地播种 + `federal_registry_scope` 表已全部删除。FRG 管理员改「全走链读」链上 `GenesisAdmins::FederalRegistryProvinceGroups[省码]`(每节点单省)。见 [[project_onchina_registry_tier_chainread_2026_06_29]] / 卡 20260629-onchina-09-10-admin-seed-generalization。
+
 - 任务编号：20260621-seed-federal-admins
 - 状态：done
 - 所属模块：citizencode/backend/admins

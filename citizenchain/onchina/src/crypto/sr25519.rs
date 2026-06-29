@@ -6,7 +6,7 @@
 //! 任何状态、不读取环境变量。调用方负责安全处理 seed 字节(zeroize 等)。
 
 use hex::FromHex;
-use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
+use sp_core::{Pair, sr25519::Pair as Sr25519Pair};
 
 /// 把 64 hex 字符的 seed 文本解析成 sr25519 keypair。失败返回错误描述。
 pub(crate) fn try_load_signing_key_from_seed(seed_text: &str) -> Result<Sr25519Pair, String> {

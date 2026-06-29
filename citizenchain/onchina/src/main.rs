@@ -1,9 +1,9 @@
 use axum::{
+    Json, Router,
     http::StatusCode,
     middleware,
     response::IntoResponse,
     routing::{delete, get, patch, post},
-    Json, Router,
 };
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
@@ -1733,8 +1733,6 @@ fn disable_core_dumps() {
 enum BackendCommand {
     Serve,
     EnsureGov,
-    /// 中文注释:从 china_zf 常量播种联邦注册局管理员(离线引导兜底)。
-    SeedFederalAdmins,
     InitGov,
     CheckGov {
         strict: bool,
@@ -1764,7 +1762,6 @@ fn parse_backend_command() -> BackendCommand {
     match command {
         "serve" => BackendCommand::Serve,
         "ensure-gov" => BackendCommand::EnsureGov,
-        "seed-federal-admins" => BackendCommand::SeedFederalAdmins,
         "init-gov" => BackendCommand::InitGov,
         "check-gov" => BackendCommand::CheckGov {
             strict: args.iter().any(|arg| arg == "--strict"),
@@ -1847,7 +1844,7 @@ fn gov_bootstrap_state_summary(state: &GovBootstrapState) -> String {
 }
 
 fn load_gov_bootstrap_state(state: &AppState) -> Result<GovBootstrapState, String> {
-    use crate::domains::gov::service::{gov_manifest_key, GovTargetKind, OfficialReconcileScope};
+    use crate::domains::gov::service::{GovTargetKind, OfficialReconcileScope, gov_manifest_key};
 
     let scope_key = gov_manifest_key(&OfficialReconcileScope::All, GovTargetKind::All);
     state.db.with_client(move |conn| {
@@ -1897,8 +1894,8 @@ fn load_gov_bootstrap_state(state: &AppState) -> Result<GovBootstrapState, Strin
 
 fn run_ensure_gov_command(state: &AppState) -> Result<(), String> {
     use crate::domains::gov::service::{
-        check_gov_catalog_db, upsert_gov_manifest_from_check_db, GovTargetKind,
-        OfficialReconcileScope,
+        GovTargetKind, OfficialReconcileScope, check_gov_catalog_db,
+        upsert_gov_manifest_from_check_db,
     };
 
     let lock_sql = "SELECT pg_advisory_lock(hashtext('cid'), hashtext('ensure-gov'))";
@@ -2015,8 +2012,8 @@ fn run_ensure_gov_command(state: &AppState) -> Result<(), String> {
 
 fn ensure_gov_catalog_current_for_serve(state: &AppState) -> Result<(), String> {
     use crate::domains::gov::service::{
-        check_gov_catalog_db, check_gov_manifest_db, reconcile_changed_gov_catalog_db,
-        GovTargetKind, OfficialReconcileScope,
+        GovTargetKind, OfficialReconcileScope, check_gov_catalog_db, check_gov_manifest_db,
+        reconcile_changed_gov_catalog_db,
     };
 
     let manifest = check_gov_manifest_db(&state.db)?;
@@ -2071,19 +2068,14 @@ fn ensure_gov_catalog_current_for_serve(state: &AppState) -> Result<(), String> 
 
 fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool {
     use crate::domains::gov::service::{
-        check_gov_catalog_db, reconcile_changed_gov_catalog_db, GovTargetKind,
-        OfficialReconcileScope,
+        GovTargetKind, OfficialReconcileScope, check_gov_catalog_db,
+        reconcile_changed_gov_catalog_db,
     };
 
     let (scope, force_row_sync, label) = match command {
         BackendCommand::Serve => return false,
         BackendCommand::EnsureGov => {
             run_ensure_gov_command(state).unwrap_or_else(|e| panic!("ensure-gov failed: {e}"));
-            return true;
-        }
-        BackendCommand::SeedFederalAdmins => {
-            crate::auth::seed::run_seed_federal_admins(state)
-                .unwrap_or_else(|e| panic!("seed-federal-admins failed: {e}"));
             return true;
         }
         BackendCommand::InitGov => (OfficialReconcileScope::All, true, "init-gov"),

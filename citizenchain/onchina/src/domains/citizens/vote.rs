@@ -3,10 +3,10 @@
 //! 公民由注册局直接录入并发护照；App 侧只查询 CID 已落库的结果。
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 
 use crate::crypto::pubkey::ss58_to_pubkey_hex;

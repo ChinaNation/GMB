@@ -1,10 +1,10 @@
 //! 行政区划管理员只读接口。
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    Json,
 };
 use serde::Serialize;
 

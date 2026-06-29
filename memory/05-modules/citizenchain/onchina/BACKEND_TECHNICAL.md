@@ -45,7 +45,7 @@ citizenchain/onchina/src/
 
 - 机构主写入只进入 `subjects/gov/private/accounts/docs`。
 - 公民主写入只进入 `citizens/subjects`。
-- 管理员写入只进入 `admins/federal_registry_scope` 和短生命周期安全运行态表。
+- 管理员写入只进入 `admins`(本地元数据缓存)和短生命周期安全运行态表;成员资格真源在链上(`federal_registry_scope` 表已退役,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
 - 链上状态只属于 `accounts.chain_status`，机构主体本身不保存链上状态。
 - 审计写入统一走结构化审计入口，详情字段只保存事实，不保存 UI 文案。
 

@@ -13,6 +13,7 @@ import {
   writeCachedOfficialInstitutionRows,
 } from '../china/metaCache';
 import { notice } from '../utils/notice';
+import { isSubordinateRegistry } from '../platform/registryTier';
 
 const DETERMINISTIC_PAGE_SIZE = 20;
 
@@ -112,7 +113,7 @@ export const GovListTable: React.FC<Props> = ({
 
   // 市注册局(CREG)已搬进「市注册局」tab,公权机构列表不再展示;
   // 联邦注册局(FRG)是中枢省的国家级机构,按 user 决定保留在公权列表里。
-  const visibleRows = rows.filter((r) => r.institution_code !== 'CREG');
+  const visibleRows = rows.filter((r) => !isSubordinateRegistry(r.institution_code));
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / DETERMINISTIC_PAGE_SIZE));
   const displayRows = visibleRows.slice(
     (deterministicPage - 1) * DETERMINISTIC_PAGE_SIZE,

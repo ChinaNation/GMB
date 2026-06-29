@@ -105,7 +105,7 @@ pub(crate) struct PrepareAdminActionOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     institution_create_sign_request: Option<String>,
     /// 机构管理员集合上链专用:b.d 携带 federal_set_city_registry_admins 裸 SCALE call data。
-    /// 仅 CreateCityRegistry/DeleteCityRegistry 动作有值,其余为 None;onchina 不提交。
+    /// 仅 CreateSubordinateRegistry/DeleteSubordinateRegistry 动作有值,其余为 None;onchina 不提交。
     #[serde(skip_serializing_if = "Option::is_none")]
     admin_set_sign_request: Option<String>,
 }
@@ -310,10 +310,10 @@ pub(crate) async fn prepare_admin_action(
     } else {
         None
     };
-    // ── 市注册局管理员集合上链:CreateCityRegistry 并入新管理员、DeleteCityRegistry 移除,
+    // ── 市注册局管理员集合上链:CreateSubordinateRegistry 并入新管理员、DeleteSubordinateRegistry 移除,
     //    产出 federal_set_city_registry_admins 裸 SCALE call data 的 QR;onchina 不提交。
     let admin_set_sign_request = match input.action_type {
-        AdminActionType::CreateCityRegistry | AdminActionType::DeleteCityRegistry => {
+        AdminActionType::CreateSubordinateRegistry | AdminActionType::DeleteSubordinateRegistry => {
             match build_city_registry_admin_set_sign_request(
                 &state,
                 action_id.as_str(),
@@ -321,13 +321,13 @@ pub(crate) async fn prepare_admin_action(
                 expires_at.timestamp(),
                 ctx.admin_account.as_str(),
                 &challenge.request_payload,
-                input.action_type == AdminActionType::CreateCityRegistry,
+                input.action_type == AdminActionType::CreateSubordinateRegistry,
             ) {
                 Ok(v) => Some(v),
                 Err(resp) => return resp,
             }
         }
-        AdminActionType::ReplaceFederalRegistry => {
+        AdminActionType::ReplaceGoverningRegistry => {
             match build_federal_registry_replace_sign_request(
                 &state,
                 action_id.as_str(),
@@ -335,7 +335,9 @@ pub(crate) async fn prepare_admin_action(
                 expires_at.timestamp(),
                 ctx.admin_account.as_str(),
                 &challenge.request_payload,
-            ) {
+            )
+            .await
+            {
                 Ok(v) => Some(v),
                 Err(resp) => return resp,
             }
@@ -416,10 +418,9 @@ fn build_city_registry_admin_set_sign_request(
             if city_code == "000" {
                 return Err("province placeholder city is not allowed".to_string());
             }
-            // 当前 CREG 管理员集合(进链账户)。
+            // 当前 CREG 管理员集合(进链账户;每节点单省,本地缓存即本省)。
             let (_total, current) = repo::list_city_registry_admins_by_scope_conn(
                 conn,
-                province_name.as_str(),
                 Some(city_name.as_str()),
                 1000,
                 0,
@@ -447,12 +448,12 @@ fn build_city_registry_admin_set_sign_request(
     )
 }
 
-/// 组装联邦注册局替换的 QR_V1/k=1 sign_request。
+/// 组装联邦注册局换届的 QR_V1/k=1 sign_request。
 ///
-/// 中文注释:取目标管理员所属省的 5 人 FRG 管理员组,把 id 对应的旧账户换成新账户,
-/// 编码 genesis `propose_federal_registry_province_admin_set_change`(call 2)。
-/// onchina 不提交;冷钱包提交。
-fn build_federal_registry_replace_sign_request(
+/// 中文注释:本省 5 人 Tier1 创世注册局组的当前集合「全走链读」(决策③)取自链上
+/// `FederalRegistryProvinceGroups[本省省码]`;把 id 对应的旧账户(本地缓存定位)换成新账户,
+/// 编码 genesis `propose_federal_registry_province_admin_set_change`(call 2)。onchina 不提交;冷钱包提交。
+async fn build_federal_registry_replace_sign_request(
     state: &AppState,
     action_id: &str,
     issued_at: i64,
@@ -476,24 +477,37 @@ fn build_federal_registry_replace_sign_request(
         ));
     };
     let id = input.id;
+    // 省 = 本节点省;省码 → 链上本省 5 人组(权威当前集合)。
+    let Some(province_name) = crate::core::chain_runtime::node_scope_province() else {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "admin province scope missing",
+        ));
+    };
+    let Some(province_code) =
+        crate::core::chain_runtime::chain_province_code_by_name(&province_name)
+    else {
+        return Err(api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "node province is not a valid chain province",
+        ));
+    };
+    let current_accounts =
+        crate::core::chain_runtime::fetch_federal_registry_province_admins(province_code)
+            .await
+            .map_err(|err| {
+                tracing::warn!(error = %err, "chain unreachable building federal registry replace");
+                api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable")
+            })?;
+    let tier1_code = crate::core::chain_runtime::TIER1_REGISTRY_CODE.to_string();
     let chain = state
         .db
         .with_client(move |conn| {
-            let old_admin = repo::get_admin_by_id_and_registry_org_conn(conn, id, "FRG")?
+            let old_admin = repo::get_admin_by_id_and_registry_org_conn(conn, id, &tier1_code)?
                 .ok_or_else(|| "federal registry admin not found".to_string())?;
             let old_account = old_admin.admin_account.clone();
-            let province_name = repo::province_scope_for_registry_org_conn(
-                conn,
-                old_account.as_str(),
-                old_admin.institution_code.as_str(),
-            )?
-            .ok_or_else(|| "federal registry admin province missing".to_string())?;
-            let current =
-                repo::list_federal_registry_admins_by_province_conn(conn, Some(&province_name))?;
-            let current_accounts: Vec<String> = current
-                .iter()
-                .map(|(u, _)| u.admin_account.clone())
-                .collect();
             crate::institution::admins::admin_set_call::build_federal_registry_admin_set_call_data(
                 conn,
                 province_name.as_str(),
@@ -666,7 +680,7 @@ pub(crate) async fn commit_admin_action(
     if let Err(resp) = ensure_signer_on_chain_admin(signer_pubkey).await {
         return resp;
     }
-    if action_type == AdminActionType::ReplaceFederalRegistry {
+    if action_type == AdminActionType::ReplaceGoverningRegistry {
         let input: ReplaceFederalRegistryActionPayload =
             match serde_json::from_value(challenge.request_payload.clone()) {
                 Ok(v) => v,
@@ -833,7 +847,7 @@ pub(crate) async fn update_city_registry_login_state(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let action_type = AdminActionType::UpdateCityRegistry;
+    let action_type = AdminActionType::UpdateSubordinateRegistry;
     if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
         return resp;
     }
@@ -872,7 +886,7 @@ pub(crate) async fn update_federal_registry_login_state(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let action_type = AdminActionType::UpdateFederalRegistry;
+    let action_type = AdminActionType::UpdateGoverningRegistry;
     if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
         return resp;
     }
@@ -981,7 +995,7 @@ fn preview_action_conn(
     payload: &serde_json::Value,
 ) -> Result<ActionPreview, String> {
     match action_type {
-        AdminActionType::CreateCityRegistry => {
+        AdminActionType::CreateSubordinateRegistry => {
             let input: CreateCityRegistryAdminInput = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
             let (admin_account, admin_name, city, created_by) =
@@ -1001,10 +1015,10 @@ fn preview_action_conn(
                 auth_type: action_type.auth_type(),
             })
         }
-        AdminActionType::UpdateCityRegistry => {
+        AdminActionType::UpdateSubordinateRegistry => {
             Err("http:bad_request:update city_registry is login state action".to_string())
         }
-        AdminActionType::DeleteCityRegistry => {
+        AdminActionType::DeleteSubordinateRegistry => {
             let input: CityRegistryIdPayload = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
             let city_registry = require_manageable_city_registry_conn(conn, ctx, input.id)?;
@@ -1019,10 +1033,10 @@ fn preview_action_conn(
                 auth_type: action_type.auth_type(),
             })
         }
-        AdminActionType::UpdateFederalRegistry => {
+        AdminActionType::UpdateGoverningRegistry => {
             Err("http:bad_request:update federal admin is login state action".to_string())
         }
-        AdminActionType::ReplaceFederalRegistry => {
+        AdminActionType::ReplaceGoverningRegistry => {
             let input: ReplaceFederalRegistryActionPayload =
                 serde_json::from_value(payload.clone())
                     .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
@@ -1422,19 +1436,19 @@ fn apply_action_conn(
     let action_type = parse_action_type(challenge.action_type.as_str())
         .map_err(|_| "http:bad_request:unknown action_type".to_string())?;
     match action_type {
-        AdminActionType::CreateCityRegistry => {
+        AdminActionType::CreateSubordinateRegistry => {
             let input: CreateCityRegistryAdminInput =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
             apply_create_city_registry_conn(conn, ctx, &input)
         }
-        AdminActionType::DeleteCityRegistry => {
+        AdminActionType::DeleteSubordinateRegistry => {
             let input: CityRegistryIdPayload =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
             apply_delete_city_registry_conn(conn, ctx, &input)
         }
-        AdminActionType::ReplaceFederalRegistry => {
+        AdminActionType::ReplaceGoverningRegistry => {
             let input: ReplaceFederalRegistryActionPayload =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
@@ -1495,7 +1509,7 @@ fn apply_create_city_registry_conn(
         updated_at: Some(now),
         city_name: city,
     };
-    repo::upsert_admin_conn(conn, &row, None)?;
+    repo::upsert_admin_conn(conn, &row)?;
     serde_json::to_value(city_registry_row_from_user_conn(conn, &row)?)
         .map_err(|e| format!("encode city admin failed: {e}"))
 }
@@ -1525,7 +1539,7 @@ fn apply_update_city_registry_conn(
     let mut next = require_manageable_city_registry_conn(conn, ctx, input.id)?;
     next.admin_name = after.admin_name;
     next.updated_at = Some(Utc::now());
-    repo::upsert_admin_conn(conn, &next, None)?;
+    repo::upsert_admin_conn(conn, &next)?;
     let _ = before;
     serde_json::to_value(city_registry_row_from_user_conn(conn, &next)?)
         .map_err(|e| format!("encode city admin failed: {e}"))
@@ -1539,7 +1553,7 @@ fn apply_update_federal_registry_conn(
     let (mut admin, province) = require_manageable_federal_registry_conn(conn, ctx, input.id)?;
     admin.admin_name = validate_admin_name(input.admin_name.as_str())?;
     admin.updated_at = Some(Utc::now());
-    repo::upsert_admin_conn(conn, &admin, Some(province.as_str()))?;
+    repo::upsert_admin_conn(conn, &admin)?;
     federal_registry_row_value(&admin, province)
 }
 
@@ -1558,7 +1572,7 @@ fn apply_replace_federal_registry_conn(
     {
         city_registry.created_by = replacement_account.clone();
         city_registry.updated_at = Some(Utc::now());
-        repo::upsert_admin_conn(conn, &city_registry, None)?;
+        repo::upsert_admin_conn(conn, &city_registry)?;
     }
     admin.admin_account = replacement_account.clone();
     admin.admin_name = String::new();
@@ -1597,7 +1611,7 @@ fn normalize_security_target(target: &str) -> String {
 }
 
 fn duplicate_admin_account_error(institution_code: &str) -> String {
-    if institution_code == "FRG" {
+    if crate::core::chain_runtime::is_tier1_registry(institution_code) {
         "http:conflict:admin admin_account already exists as federal admin"
     } else {
         "http:conflict:admin admin_account already exists as city admin"

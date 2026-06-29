@@ -1,5 +1,5 @@
 // 中文注释:联邦注册局管理员目录 API。
-// 更换联邦注册局管理员走 REPLACE_FEDERAL_REGISTRY 冷钱包扫码签名动作,不走普通 PATCH。
+// 更换联邦注册局管理员走 REPLACE_GOVERNING_REGISTRY 冷钱包扫码签名动作,不走普通 PATCH。
 
 import type { AdminAuth } from '../auth/types';
 import { adminHeaders, request } from '../utils/http';

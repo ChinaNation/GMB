@@ -16,8 +16,6 @@ pub(crate) mod passkey;
 pub(crate) mod repo;
 /// 中文注释:管理员一次性安全授权模型(扫码签名挑战与 grant)。
 pub(crate) mod security_model;
-/// 中文注释:联邦注册局管理员 P0 止血播种(重新创世后/链不可达时从 china_zf 常量恢复登录)。
-pub(crate) mod seed;
 
 pub(crate) use catalog::list_federal_registry_admins;
 pub(crate) use city_registry_admins::list_city_registry_admins;

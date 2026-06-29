@@ -34,7 +34,7 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 - **CID 号 R5**（辅键，省码+市码）：决定数据 scope 与跨地区写边界。节点启动即带自身 `CID_RUNTIME_ISSUER_CID_NUMBER`，码与地区当场解析。
 - **实例覆盖位**（R4 第三层）：同机构码、同层级、跨地区能力可不同。采用「机构码静态模板 ⊕ 链上按 cid 号能力覆盖位」，缺省纯模板；覆盖位本期仅签名占位，配置真源（宪法/治理派生）留后续 ADR。
 - 登录即隔离：节点身份 = 权限边界，复用 `onchain_gate`「signer ∈ 本机构链上 Active 集合」机制。
-- **scope 单一来源 + 边界校验**：非联邦注册局机构的省/市 scope 来自节点 `CID_RUNTIME_SCOPE_*` env，唯一在 `onchain_gate` 的 env→会话签发边界校验其落在 `china.sqlite` 真源内（省存在、市属省），不一致即拒登录（`GateError::Config`，明确报错）。绝不在读路径对该 env 写入的 city_name 反复 fail-closed（会因 env 与 china.sqlite 不逐字一致而每请求锁死合法管理员）。联邦注册局省走 `federal_registry_scope`（china_zf 创世映射）、无市维度。所有机构特殊操作经 `get_visible_scope`/`includes_province`/`includes_city` 统一 fail-closed 闸（含 docs/账户/机构创建，prepare 预检 ⊕ 业务 handler 双层）。
+- **scope 单一来源 + 边界校验**：非联邦注册局机构的省/市 scope 来自节点 `CID_RUNTIME_SCOPE_*` env，唯一在 `onchain_gate` 的 env→会话签发边界校验其落在 `china.sqlite` 真源内（省存在、市属省），不一致即拒登录（`GateError::Config`，明确报错）。绝不在读路径对该 env 写入的 city_name 反复 fail-closed（会因 env 与 china.sqlite 不逐字一致而每请求锁死合法管理员）。联邦注册局(Tier1 创世注册局)每节点单省、省走节点 `CID_RUNTIME_SCOPE_PROVINCE_NAME`(成员资格读链上 `GenesisAdmins::FederalRegistryProvinceGroups[本省省码]`)、无市维度;`federal_registry_scope` 本地省映射表已退役(2026-06-29,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。所有机构特殊操作经 `get_visible_scope`/`includes_province`/`includes_city` 统一 fail-closed 闸（含 docs/账户/机构创建，prepare 预检 ⊕ 业务 handler 双层）。
 
 ### 5. 三档鉴权 + 默认拒绝
 固定三档：`Session`（一般操作）/ `Passkey`（重要操作，WebAuthn）/ `PasskeyColdSign`（特殊操作/链上提案，叠冷签）。每个 action 必穷尽 `match` 标注其一，漏标编译失败；三档之外一律拒绝，无第四档、无 `_ =>` 兜底。

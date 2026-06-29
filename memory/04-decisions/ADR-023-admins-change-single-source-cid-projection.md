@@ -45,8 +45,8 @@
 
 ## 5. Bootstrap 与止血
 
-- **P0 止血(已落地,见 `20260621-seed-federal-admins`)**:`citizencode-backend seed-federal-admins` 直读编译期 china_zf 常量恢复联邦 215 人登录,不依赖链。降级为"重新创世/链不可达"应急位,不是稳态读链路径。
-- **重新创世顺序**:重生 chainspec(含联邦 215 写入 AdminAccounts)→ 起链 → `seed-federal-admins` → `ensure-gov` → 重跑 `generate_public_institution_bundle.mjs`([[feedback_registry_regen_after_genesis]])→ P1 快照接管。
+- **~~P0 止血 seed-federal-admins~~ 已退役(2026-06-29)**:`seed-federal-admins` CLI + 本地 215 平铺播种 + `federal_registry_scope` 表全删;FRG 管理员「全走链读」链上 `GenesisAdmins::FederalRegistryProvinceGroups[省码]`(每节点单省),无本地 china_zf 播种兜底(见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
+- **重新创世顺序(更新)**:重生 chainspec(含 FRG 43 省×5 写入 FederalRegistryProvinceGroups + NRC/PRC/PRB/NJD 写 AdminAccounts)→ 起链 → `ensure-gov` → 重跑 `generate_public_institution_bundle.mjs`([[feedback_registry_regen_after_genesis]])→ FRG 管理员经链上省组直接扫码登录(无需 seed)。
 
 ## 6. 链端:PUP 自治 + 机构注销 close + 创世封存(`20260621-admins-change-builtin-pup-selfgovern`)
 

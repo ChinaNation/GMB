@@ -22,5 +22,5 @@
 pub mod filter;
 pub mod rules;
 
-pub use filter::{filter_by_scope, HasProvinceCity};
+pub use filter::{HasProvinceCity, filter_by_scope};
 pub use rules::get_visible_scope;

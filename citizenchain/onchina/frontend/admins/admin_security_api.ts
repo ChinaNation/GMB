@@ -7,9 +7,9 @@ import type { AdminAuth } from '../auth/types';
 import { ApiError, adminRequest } from '../utils/http';
 
 export type AdminActionType =
-  | 'CREATE_CITY_REGISTRY'
-  | 'DELETE_CITY_REGISTRY'
-  | 'REPLACE_FEDERAL_REGISTRY'
+  | 'CREATE_SUBORDINATE_REGISTRY'
+  | 'DELETE_SUBORDINATE_REGISTRY'
+  | 'REPLACE_GOVERNING_REGISTRY'
   | 'INSTITUTION_CREATE'
   | 'INSTITUTION_UPDATE'
   | 'INSTITUTION_CREATE_ACCOUNT'

@@ -1,6 +1,10 @@
 # 任务卡:onchina card 09(admin 泛化)+ 10(seed 泛化)合并 — rev2
 
-- 状态:方案锁定待执行(rev2 / 2026-06-29,对齐创世机构新模型)
+- 状态:**完成(done,2026-06-29)**。P0-P6 实现 + R4 对抗审计(29 agent)确认无回归。
+  - 验证:`cargo check -p onchina/node` 绿、`cargo test -p onchina` 72 绿、`cargo clippy -p onchina` 无 dead-code、frontend `tsc` 绿;零 `=="FRG"/"CREG"` 字面(后端 chain_runtime 谓词单点 + 前端 registryTier.ts 单点)。
+  - 遗留(out of scope,已开 spawn_task):onchina `AdminOperationAuth` 后端 `PASSKEY_COLD_SIGN` vs 前端冷签流 `=== 'SCAN_SIGN'` 不匹配(pre-existing,3档 vs 2档协议未对齐)。
+  - citizenapp follow-up:`kGenesisInstitutions` 的 FRG 单 mainAccount 条目读空,需按 province_code 读省组。
+  - 落地要点:P0 FRG 省组链读修登录;P1 capability 加 `can_view_own_admins` + 机构类分发;P2 谓词 `is_tier1_registry/is_subordinate_registry` + AdminActionType→Tier 中性名(CreateSubordinateRegistry/UpdateSubordinateRegistry/DeleteSubordinateRegistry/UpdateGoverningRegistry/ReplaceGoverningRegistry,wire 同步)+ `requires_governing_capability`;P3 repo 去 federal_registry_scope JOIN/参数化/省取节点;P4 删 seed.rs + run_seed_federal_admins + FEDERAL_ADMIN_PROVINCES + SeedFederalAdmins CLI + gov/service::federal_registry_admins + db.rs 去 federal_registry_scope/provinces 表;P5 scope/gate/guards/signature 谓词化;P6 前端 registryTier.ts 单点谓词 + capabilityMap 加 canViewOwnAdmins + 4 视图去字面 + wire 同步;FRG 列表+换届 current-set 全走链读 `fetch_federal_registry_province_admins`。
 - 承接:[20260628-onchina-onchain-write-and-followups](20260628-onchina-onchain-write-and-followups.md) item 2/3。**12 立法 web 提案另起窗口线程;R4 在 09/10 完成后做整任务收尾并结束。**
 - 重检来源:本会话 workflow `wc41m2g3b`(链端 genesis_build / onchina / 链端 AdminAccountQuery / citizenapp 四面重映射)。
 

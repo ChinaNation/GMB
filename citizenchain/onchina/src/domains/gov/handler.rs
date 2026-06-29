@@ -10,18 +10,18 @@
 #![allow(dead_code)]
 
 use axum::{
+    Json,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    Json,
 };
 
 use crate::auth::login::require_admin_any;
 use crate::cid::china::{city_code_by_name, province_code_by_name, town_code_by_name};
 use crate::core::response::ApiResponse;
 use crate::domains::gov::service::{
-    check_gov_catalog_db, current_gov_manifest_version, gov_manifest_key, GovTargetKind,
-    OfficialReconcileScope,
+    GovTargetKind, OfficialReconcileScope, check_gov_catalog_db, current_gov_manifest_version,
+    gov_manifest_key,
 };
 use crate::institution::subjects::model::InstitutionListRow;
 use crate::scope::get_visible_scope;

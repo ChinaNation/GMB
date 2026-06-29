@@ -63,7 +63,7 @@ pub(crate) async fn admin_list_citizens(
     ) {
         Ok(v) => v,
         Err(e) if e == "invalid page cursor" => {
-            return api_error(StatusCode::BAD_REQUEST, 1001, "invalid page cursor")
+            return api_error(StatusCode::BAD_REQUEST, 1001, "invalid page cursor");
         }
         Err(e) => {
             tracing::warn!(error = %e, "admin_list_citizens failed");

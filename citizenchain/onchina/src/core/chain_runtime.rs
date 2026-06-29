@@ -818,6 +818,30 @@ pub(crate) fn admin_level_label_for(institution_code: &str) -> Option<String> {
     admin_level_label(&bytes)
 }
 
+/// Tier1 创世注册局机构码(本期 = 联邦注册局)。控制台注册局码单源,谓词与 SQL bind 共用,
+/// 取代散落各处的 `"FRG"` 字面(谓词单点除外)。
+pub(crate) const TIER1_REGISTRY_CODE: &str = "FRG";
+
+/// Tier2 下级注册局机构码(本期 = 市注册局),由 Tier1 供给。控制台注册局码单源,
+/// 取代散落各处的 `"CREG"` 字面。
+pub(crate) const TIER2_REGISTRY_CODE: &str = "CREG";
+
+/// 控制台注册局分层单点谓词:Tier1 = 创世注册局(本期 = 联邦注册局 FRG)。
+///
+/// 中文注释:取代散落各处的 `institution_code == "FRG"` 字面。FRG 的 `admin_level` 虽为
+/// `National`(链端铁律不可改),但其管理员按省分区(每节点单省),故控制台据此谓词
+/// 单点矫正为省级分层 / 治理边界,而非全国。
+pub(crate) fn is_tier1_registry(institution_code: &str) -> bool {
+    institution_code == TIER1_REGISTRY_CODE
+}
+
+/// 控制台注册局分层单点谓词:Tier2 = 下级注册局(本期 = 市注册局 CREG),由 Tier1 供给。
+///
+/// 中文注释:取代散落各处的 `institution_code == "CREG"` 字面。
+pub(crate) fn is_subordinate_registry(institution_code: &str) -> bool {
+    institution_code == TIER2_REGISTRY_CODE
+}
+
 /// 非联邦注册局机构的省/市/镇作用域单一来源——节点 `CID_RUNTIME_SCOPE_*` env。
 ///
 /// 中文注释:节点即本机构,其行政归属由部署方写入这三个 env;登录时在 `onchain_gate`
@@ -967,6 +991,48 @@ pub(crate) async fn fetch_active_admins_onchain(
         return Ok(Some(admins));
     }
     Ok(None)
+}
+
+/// 读取联邦注册局指定省 5 人组的 Active 管理员账户集合(0x 小写 hex)。
+///
+/// 中文注释:Tier1 创世注册局「全走链读」(决策③)。控制台列表 / 换届当前集合都据此从链上
+/// `GenesisAdmins::FederalRegistryProvinceGroups[province_code]` 直读权威集合(键=链上省码 `[u8;2]`);
+/// 省组不存在或非 Active → `Ok(vec![])`。任意调用方按本省省码调用,不依赖节点身份。
+pub(crate) async fn fetch_federal_registry_province_admins(
+    province_code: [u8; 2],
+) -> Result<Vec<String>, String> {
+    let ws_url = super::chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for federal registry group failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let address = dynamic::storage(
+        AdminPallet::GenesisAdmins.pallet_name(),
+        "FederalRegistryProvinceGroups",
+        vec![dynamic::Value::from_bytes(province_code)],
+    );
+    let Some(thunk) = storage
+        .fetch(&address)
+        .await
+        .map_err(|e| format!("fetch federal registry province group failed: {e}"))?
+    else {
+        return Ok(vec![]);
+    };
+    let mut raw = thunk.encoded();
+    let decoded = OnChainAdminAccount::decode(&mut raw)
+        .map_err(|e| format!("decode federal registry province group failed: {e}"))?;
+    if decoded.status != ADMIN_STATUS_ACTIVE {
+        return Ok(vec![]);
+    }
+    Ok(decoded
+        .admins
+        .iter()
+        .map(|profile| format!("0x{}", hex::encode(profile.account)))
+        .collect())
 }
 
 #[cfg(test)]

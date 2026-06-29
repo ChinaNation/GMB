@@ -6,9 +6,9 @@
 #![allow(dead_code)]
 
 use crate::cid::code;
-use crate::cid::{classify, validate_cid_number_format, AdminLevel, InstitutionCategory};
-use crate::institution::subjects::model::{Institution, InstitutionAccount};
+use crate::cid::{AdminLevel, InstitutionCategory, classify, validate_cid_number_format};
 use crate::institution::subjects::MultisigChainStatus;
+use crate::institution::subjects::model::{Institution, InstitutionAccount};
 use primitives::account_derive::is_forbidden_account_name;
 
 // 保留名字面单源 = primitives::account_derive::RESERVED_NAME_*_STR(链端唯一字面)。

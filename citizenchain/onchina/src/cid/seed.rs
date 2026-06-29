@@ -5,7 +5,7 @@
 //! 调用 onchina 生成适配层、执行数据库查重回调和动态机构 UUID 重试。
 
 use crate::cid::{
-    generator::{generate_cid_number, GenerateCidInput},
+    generator::{GenerateCidInput, generate_cid_number},
     validate_cid_number_format,
 };
 

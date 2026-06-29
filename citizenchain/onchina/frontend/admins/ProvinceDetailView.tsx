@@ -11,6 +11,7 @@ import { KeyOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useAuth } from '../hooks/useAuth';
 import { useScope } from '../hooks/useScope';
+import { isTier1Registry, TIER2_REGISTRY_CODE } from '../platform/registryTier';
 import type { AdminAuth } from '../auth/types';
 import type { CidCityItem } from '../china/api';
 import type { CityRegistryAdminRow } from './city_registry_admins_api';
@@ -76,7 +77,7 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
     <GovDetailPage
       auth={auth}
       cidNumber={federalRegistryDetail.institution.cid_number}
-      canWrite={scope.canWrite && auth.institution_code === 'FRG'}
+      canWrite={scope.canWrite && isTier1Registry(auth.institution_code)}
       loadDetail={loadFederalRegistry}
       initialActiveKey="admins"
       adminListSection={selectedFederalRegistry ? (
@@ -121,8 +122,8 @@ export function CityRegistryView({ state }: RegistryViewProps) {
   // 中文注释:市注册局管理员列表由后端按登录省域过滤;前端不能再依赖
   // selectedFederalRegistry 是否自动定位成功,否则会把合法省域误渲染为空列表。
   const cityRegistryAdminsForProvince = cityRegistryAdmins;
-  // 市注册局管理员只读;联邦注册局管理员可增删改(后端按登录省域二次校验)。
-  const canEditCityRegistryAdmins = scope.canWrite && auth.institution_code === 'FRG';
+  // 市注册局管理员只读;Tier1 创世注册局管理员可增删改(后端按登录省域二次校验)。
+  const canEditCityRegistryAdmins = scope.canWrite && isTier1Registry(auth.institution_code);
 
   let body: React.ReactNode;
   if (!effectiveCity) {
@@ -221,7 +222,7 @@ function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cit
     }
     let cancelled = false;
     setRegistryLoading(true);
-    listOfficialInstitutions(auth, { province_name, institution_code: 'CREG', page_size: 300 })
+    listOfficialInstitutions(auth, { province_name, institution_code: TIER2_REGISTRY_CODE, page_size: 300 })
       .then((res) => {
         if (!cancelled) {
           setRegistryRows(res.items);

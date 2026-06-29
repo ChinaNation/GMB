@@ -3,21 +3,21 @@
 //! 中文注释:无限合伙固定为 `F + GP`,有限合伙固定为 `S + LP`;两者都由本模块统一管理合伙人关系。
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::Response,
-    Json,
 };
 use serde::Serialize;
 
-use crate::domains::private::common::{
-    assert_module_spec, lock_input_to_rule, resolve_private_type_rule, PartnershipKind,
-    PrivateModuleSpec, PrivateType,
-};
-use crate::domains::private::participants::{ParticipantRole, PARTNERSHIP_ROLES};
-use crate::institution::subjects::registration::{self, ListInstitutionQuery};
-use crate::institution::subjects::CreateInstitutionInput;
 use crate::AppState;
+use crate::domains::private::common::{
+    PartnershipKind, PrivateModuleSpec, PrivateType, assert_module_spec, lock_input_to_rule,
+    resolve_private_type_rule,
+};
+use crate::domains::private::participants::{PARTNERSHIP_ROLES, ParticipantRole};
+use crate::institution::subjects::CreateInstitutionInput;
+use crate::institution::subjects::registration::{self, ListInstitutionQuery};
 
 /// 合伙企业特有资料边界。
 #[derive(Debug, Clone, Serialize)]

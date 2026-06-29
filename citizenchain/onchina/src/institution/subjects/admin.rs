@@ -4,10 +4,10 @@
 //! `subjects/accounts` 结构化表。
 
 use axum::{
+    Json,
     extract::{Multipart, Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    Json,
 };
 use chrono::Utc;
 use serde::Serialize;
@@ -65,7 +65,7 @@ pub(crate) async fn check_cid_full_name(
                     StatusCode::BAD_REQUEST,
                     1001,
                     "省级作用域无法解析为行政区编码",
-                )
+                );
             }
         };
         let city_code = match crate::cid::china::city_code_by_name(&province_name, &city) {
@@ -75,7 +75,7 @@ pub(crate) async fn check_cid_full_name(
                     StatusCode::BAD_REQUEST,
                     1001,
                     "city 参数无法解析为行政区编码",
-                )
+                );
             }
         };
         let cid_full_name = cid_full_name.clone();

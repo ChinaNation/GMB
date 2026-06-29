@@ -12,10 +12,10 @@ use postgres::Client;
 
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::core::institution_call::{
-    encode_admin_set_call, encode_federal_registry_province_admin_set_call, AdminProfileArg,
-    AdminSetCallArgs, AdminSourceTag, ChainCall, FederalRegistryProvinceAdminSetCallArgs,
-    FEDERAL_SET_CITY_REGISTRY_ADMINS_CALL_INDEX, GENESIS_ADMINS_PALLET_INDEX,
-    PROPOSE_FRG_PROVINCE_ADMIN_SET_CHANGE_CALL_INDEX,
+    AdminProfileArg, AdminSetCallArgs, AdminSourceTag, ChainCall,
+    FEDERAL_SET_CITY_REGISTRY_ADMINS_CALL_INDEX, FederalRegistryProvinceAdminSetCallArgs,
+    GENESIS_ADMINS_PALLET_INDEX, PROPOSE_FRG_PROVINCE_ADMIN_SET_CHANGE_CALL_INDEX,
+    encode_admin_set_call, encode_federal_registry_province_admin_set_call,
 };
 use crate::institution::subjects::registration_call::resolve_admin_identity_conn;
 

@@ -12,6 +12,8 @@ export type RoleCapabilities = {
   canViewFederalRegistryAdmins: boolean;
   canViewCityRegistryAdmins: boolean;
   canCrudCityRegistryAdmins: boolean;
+  /** 只读「本机构管理员」位:非注册局法人可查看本机构链上管理员列表(只读)。 */
+  canViewOwnAdmins: boolean;
   canManageInstitutions: boolean;
   canRegisterInstitutions: boolean;
   canBusinessWrite: boolean;
@@ -28,6 +30,7 @@ export const EMPTY_CAPABILITIES: RoleCapabilities = {
   canViewFederalRegistryAdmins: false,
   canViewCityRegistryAdmins: false,
   canCrudCityRegistryAdmins: false,
+  canViewOwnAdmins: false,
   canManageInstitutions: false,
   canRegisterInstitutions: false,
   canBusinessWrite: false,

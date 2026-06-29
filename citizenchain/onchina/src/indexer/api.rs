@@ -1,14 +1,14 @@
 //! Indexer API 路由：提供钱包交易记录查询接口。
 
 use axum::{
+    Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{api_error, ApiResponse, AppState};
+use crate::{ApiResponse, AppState, api_error};
 
 use super::db;
 

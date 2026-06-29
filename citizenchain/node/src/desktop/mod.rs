@@ -12,7 +12,7 @@ pub(crate) mod node_runner;
 
 use crate::{
     admins, governance,
-    home::{self, cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState},
+    home::{self, AppState, RuntimeState, cleanup_on_exit, cleanup_on_startup},
     im, mining, other, settings,
     transaction::multisig_transfer,
 };

@@ -24,6 +24,7 @@ import { loadCachedCidCities, readCachedCidCities } from '../china/metaCache';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { MAX_CITY_REGISTRY_ADMINS_PER_CITY, sameHexAccount } from './adminUtils';
 import type { AccountScanTarget, RegistryAdminsSharedState } from './adminUtils';
+import { isSubordinateRegistry, isTier1Registry } from '../platform/registryTier';
 import { CityRegistryView, FederalRegistryView } from './ProvinceDetailView';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
 import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
@@ -143,7 +144,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
 
   // 活动省/市:联邦注册局管理员看 selectedFederalRegistry + selectedCity;市注册局管理员锁定本省本市。
   const activeProvince = selectedFederalRegistry?.province_name ?? normalizeScopeProvinceName(auth?.scope_province_name);
-  const activeCity = selectedCity ?? (auth?.institution_code === 'CREG' ? auth?.scope_city_name ?? null : null);
+  const activeCity = selectedCity ?? (isSubordinateRegistry(auth?.institution_code) ? auth?.scope_city_name ?? null : null);
 
   const [addCityRegistryForm] = Form.useForm<{ city_registry_account: string; city_registry_admin_name: string; city_scope_city_name: string }>();
   const [adminActionModal, setAdminActionModal] = useState<AdminActionModalState | null>(null);
@@ -217,9 +218,9 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       // 自动定位到当前登录角色所属省的 FederalRegistry
       if (!selectedFederalRegistry) {
         let target: FederalRegistryAdminRow | null = null;
-        if (auth.institution_code === 'FRG') {
+        if (isTier1Registry(auth.institution_code)) {
           target = rows.find((r) => sameHexAccount(r.admin_account, auth.admin_account)) || null;
-        } else if (auth.institution_code === 'CREG') {
+        } else if (isSubordinateRegistry(auth.institution_code)) {
           const me = ops.find((o) => sameHexAccount(o.admin_account, auth.admin_account));
           if (me) {
             target = rows.find((r) => sameHexAccount(r.admin_account, me.created_by)) || null;
@@ -313,7 +314,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     listOfficialInstitutions(auth, { province_name: activeProvince, city_name: activeCity, page_size: 300 })
       .then((res) => {
         if (cancelled) return;
-        const row = res.items.find((r) => r.institution_code === 'CREG');
+        const row = res.items.find((r) => isSubordinateRegistry(r.institution_code));
         setCityRegistryCid(row?.cid_number ?? null);
       })
       .catch((err) => { if (!cancelled) notice.error(err, '加载市注册局失败'); })
@@ -405,7 +406,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     }
     setAddCityRegistryLoading(true);
     try {
-      const created = await runSecuredAction<CityRegistryAdminRow>('CREATE_CITY_REGISTRY', {
+      const created = await runSecuredAction<CityRegistryAdminRow>('CREATE_SUBORDINATE_REGISTRY', {
         admin_account,
         admin_name,
         city_name: city,
@@ -503,7 +504,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       onOk: async () => {
         setCityRegistryAdminsLoading(true);
         try {
-          await runSecuredAction('DELETE_CITY_REGISTRY', { id: row.id });
+          await runSecuredAction('DELETE_SUBORDINATE_REGISTRY', { id: row.id });
           notice.success('市注册局管理员已删除');
           await refreshCityRegistryAdmins();
         } catch (err) {

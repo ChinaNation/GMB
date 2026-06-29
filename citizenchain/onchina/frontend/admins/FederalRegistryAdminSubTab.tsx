@@ -1,11 +1,12 @@
-// 中文注释:注册局联邦注册局管理员列表。联邦管理员完整展示 43 省管理员,
-// 但更换操作只能在当前登录管理员所属省内执行。
+// 中文注释:注册局联邦注册局管理员列表。每节点单省部署,展示本省 5 人组(链上
+// FederalRegistryProvinceGroups 全走链读);更换操作只能在当前登录管理员所属省内执行。
 
 import { useState } from 'react';
 import { Badge, Button, Card, Form, Input, Modal, Space, Table, Typography } from 'antd';
 import { KeyOutlined, ScanOutlined } from '@ant-design/icons';
 import { useAuth } from '../hooks/useAuth';
 import { normalizeScopeProvinceName } from '../hooks/useScope';
+import { isTier1Registry } from '../platform/registryTier';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../core/ScanAccountModal';
 import { CID_MODAL_Z_INDEX } from '../core/modalStack';
@@ -54,7 +55,7 @@ export function FederalRegistryAdminSubTab({
   const currentProvinceName = normalizeScopeProvinceName(auth?.scope_province_name) || selectedFederalRegistry.province_name;
   const titleProvinceName = currentProvinceName || selectedFederalRegistry.province_name;
   const canManageSameProvince = (row: FederalRegistryAdminRow) =>
-    auth?.institution_code === 'FRG' && row.province_name === currentProvinceName;
+    isTier1Registry(auth?.institution_code) && row.province_name === currentProvinceName;
 
   const openReplaceModal = (row: FederalRegistryAdminRow) => {
     if (!canManageSameProvince(row)) {
@@ -82,7 +83,7 @@ export function FederalRegistryAdminSubTab({
     setReplaceLoading(true);
     const replacingSelf = sameHexAccount(replaceTarget.admin_account, auth?.admin_account);
     try {
-      await runSecuredAction<FederalRegistryAdminRow>('REPLACE_FEDERAL_REGISTRY', {
+      await runSecuredAction<FederalRegistryAdminRow>('REPLACE_GOVERNING_REGISTRY', {
         id: replaceTarget.id,
         admin_account: adminAccount,
       });

@@ -5,8 +5,8 @@
 
 use std::{
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
     },
     thread,
 };
@@ -97,11 +97,7 @@ impl Db {
 
     fn init_current_schema(conn: &mut postgres::Client) -> Result<(), String> {
         conn.batch_execute(
-            "CREATE TABLE IF NOT EXISTS provinces (
-                province_name TEXT PRIMARY KEY
-             );
-
-             -- 中文注释:机构/账户「注册局域注销态」+ 已签发注销凭证(区别于链投影 chain_status）。
+            "-- 中文注释:机构/账户「注册局域注销态」+ 已签发注销凭证(区别于链投影 chain_status）。
              -- 注册局管理员发起注销(冷签特殊档）后写 ISSUED;机构管理员持凭证上链 propose_close,
              -- indexer 收到链上关闭后置 ONCHAIN_CLOSED(投影子项）。见 ADR-023 §6.3。
              CREATE TABLE IF NOT EXISTS institution_deregistrations (
@@ -162,12 +158,8 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_admins_account_lower ON admins(lower(admin_account));
              CREATE INDEX IF NOT EXISTS idx_admins_created_by_lower ON admins(lower(created_by));
 
-             CREATE TABLE IF NOT EXISTS federal_registry_scope (
-                admin_id BIGINT PRIMARY KEY REFERENCES admins(admin_id) ON DELETE CASCADE,
-                province_name TEXT NOT NULL REFERENCES provinces(province_name) ON DELETE RESTRICT
-             );
-             CREATE INDEX IF NOT EXISTS idx_federal_registry_scope_province_name
-                ON federal_registry_scope(province_name);
+             -- 中文注释:`federal_registry_scope` / `provinces` 占位表已退役(决策③)——Tier1 创世注册局
+             -- 省映射不再落本地表,统一取节点 env / 链上 FederalRegistryProvinceGroups,行政区真源为 china.sqlite。
 
              CREATE TABLE IF NOT EXISTS admin_action_challenges (
                 action_id TEXT PRIMARY KEY,

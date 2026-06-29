@@ -4,11 +4,11 @@
 //! `qr_login.rs`,避免普通登录和二维码登录继续堆在同一个文件。
 
 use axum::{
+    Json,
     extract::{Request, State},
     http::{HeaderMap, StatusCode},
     middleware,
     response::{IntoResponse, Response},
-    Json,
 };
 use chrono::{Duration, Utc};
 use uuid::Uuid;
@@ -16,6 +16,7 @@ use uuid::Uuid;
 use crate::auth::repo;
 use crate::*;
 
+use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 use super::guards::{admin_auth, bearer_token};
 use super::model::*;
 use super::onchain_gate;
@@ -23,7 +24,6 @@ use super::signature::{
     build_admin_name_from_user, extract_domain_from_origin, parse_admin_identity_qr,
     resolve_scope_city_name, verify_admin_signature,
 };
-use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 
 pub(crate) async fn require_admin_session_middleware(
     State(state): State<AppState>,
@@ -136,7 +136,9 @@ pub(crate) async fn admin_auth_identify(
             admin_name: build_admin_name_from_user(&admin, province.as_deref()),
             scope_province_name: province,
             scope_city_name,
-            scope_town_name: if admin.institution_code == "FRG" {
+            scope_town_name: if crate::core::chain_runtime::is_tier1_registry(
+                &admin.institution_code,
+            ) {
                 None
             } else {
                 crate::core::chain_runtime::node_scope_town()

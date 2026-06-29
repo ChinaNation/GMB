@@ -11,6 +11,7 @@
 
 import { useMemo } from 'react';
 import type { AdminAuth } from '../auth/types';
+import { isTier1Registry } from '../platform/registryTier';
 
 export interface VisibleScope {
   /** 全国可见(NATIONAL 档);为 true 时写权限不再按 lockedProvinceName 收紧。 */
@@ -192,8 +193,8 @@ function townScope(auth: AdminAuth): VisibleScope {
 export function useScope(auth: AdminAuth | null): VisibleScope {
   return useMemo<VisibleScope>(() => {
     if (!auth) return noAuthScope();
-    // 联邦注册局(FRG)特判:admin_level 虽为 NATIONAL,但管理员按省分区 → 省级范围。
-    if (auth.institution_code === 'FRG') return provinceScope(auth);
+    // Tier1 创世注册局特判:admin_level 虽为 NATIONAL,但管理员按省分区(每节点单省)→ 省级范围。
+    if (isTier1Registry(auth.institution_code)) return provinceScope(auth);
     switch (auth.admin_level) {
       case 'NATIONAL':
         return nationalScope();

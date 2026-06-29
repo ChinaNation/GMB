@@ -50,8 +50,9 @@ pub(super) fn admin_auth(
             return Err("http:unauthorized:invalid access token".to_string());
         };
 
-        let idle_expired = session.institution_code == "CREG"
-            && now > session.last_active_at + Duration::minutes(city_idle_timeout_minutes);
+        let idle_expired =
+            crate::core::chain_runtime::is_subordinate_registry(&session.institution_code)
+                && now > session.last_active_at + Duration::minutes(city_idle_timeout_minutes);
         if now > session.expire_at || idle_expired {
             conn.execute("DELETE FROM admin_sessions WHERE token = $1", &[&token])
                 .map_err(|e| format!("delete expired admin session failed: {e}"))?;
@@ -64,7 +65,7 @@ pub(super) fn admin_auth(
         let admin = repo::get_admin_by_account_conn(conn, &session.admin_account)?
             .ok_or_else(|| "http:forbidden:admin not found".to_string())?;
         let institution_code = admin.institution_code.clone();
-        let is_frg = institution_code == "FRG";
+        let is_frg = crate::core::chain_runtime::is_tier1_registry(&institution_code);
         let admin_level = crate::core::chain_runtime::admin_level_label_for(&institution_code);
 
         // 省/市/镇作用域:与登录签发(onchain_gate)共用 derive_admin_scope_conn 单一来源,口径一致。

@@ -4,8 +4,8 @@
 //! - 验签证明扫码者持有 `signer_pubkey` 私钥后,membership 真源切到**链上 Active 管理员集合**
 //!   (`GenesisAdmins`/`PublicAdmins`/`PrivateAdmins::AdminAccounts`),与直设入口同源;
 //!   本地 admins 表降级为元数据 / 省映射缓存。
-//! - 机构码由本节点链上身份推导;省/市 scope:联邦注册局取本地 `federal_registry_scope` 映射
-//!   (链上不存省映射,锁定决策),其余机构取节点 `CID_RUNTIME_SCOPE_*`。
+//! - 机构码由本节点链上身份推导;省/市 scope 统一取节点 `CID_RUNTIME_SCOPE_*`(每节点单省;
+//!   Tier1 创世注册局省维度同此,`federal_registry_scope` 本地省映射表已退役,决策③)。
 //! - 后台 `revoke_stale_admin_sessions_loop` 周期复查,管理员被链上移除后≤TTL 失效。
 
 use chrono::{DateTime, Duration, Utc};
@@ -88,16 +88,16 @@ pub(super) async fn issue_session_after_onchain_gate(
     }
 
     let institution_code = chain_runtime::institution_code_label(&identity.institution_code);
-    let is_federal_registry = institution_code == "FRG";
+    let is_federal_registry = chain_runtime::is_tier1_registry(&institution_code);
     let node_province = chain_runtime::node_scope_province();
     let node_city = chain_runtime::node_scope_city();
     let node_town = chain_runtime::node_scope_town();
     let pubkey_for_db = normalized.clone();
 
-    // 纵深校验:非联邦注册局机构的省/市/镇作用域来自节点 CID_RUNTIME_SCOPE_* env;在此 env→会话
+    // 纵深校验:非 Tier1 创世注册局机构的省/市/镇作用域来自节点 CID_RUNTIME_SCOPE_* env;在此 env→会话
     // 唯一写入边界核对其落在 china.sqlite 行政区真源内(省存在、市属省、镇属市,逐级要求上级齐备),
-    // 不一致即节点配置错误——拒登录显式暴露,绝不带错位作用域签发会话。联邦注册局省走 china_zf 映射、
-    // 无市镇维度,不在此列。
+    // 不一致即节点配置错误——拒登录显式暴露,绝不带错位作用域签发会话。Tier1 创世注册局省级、无市镇维度,
+    // 其省码已在 node_institution_identity 经 PROVINCE_CODE_INFOS 校验,不在此列。
     if !is_federal_registry {
         if let Some(province) = node_province.as_deref() {
             if crate::cid::china::province_code_by_name(province).is_none() {
@@ -163,16 +163,10 @@ pub(super) async fn issue_session_after_onchain_gate(
                 },
             };
 
-            // 中文注释:联邦注册局管理员省作用域是创世从 china_zf 一次性 bootstrap 进
-            // federal_registry_scope 的降级元数据(链上只存成员资格,不存省映射,锁定决策)。
-            // 这里**只取该映射**,绝不用节点级 CID_RUNTIME_SCOPE_PROVINCE_NAME 兜底——否则会
-            // 静默退化成"全国"。查不到 = 创世 bootstrap 缺失(配置错误),宁可省名为空显式暴露。
-            let province_for_upsert = if is_federal_registry {
-                repo::find_federal_registry_scope_conn(conn, &admin.admin_account)?
-            } else {
-                None
-            };
-            repo::upsert_admin_conn(conn, &admin, province_for_upsert.as_deref())?;
+            // 中文注释:省映射不再随管理员落本地表(federal_registry_scope 已退役,决策③)。
+            // Tier1 创世注册局管理员省作用域统一取节点 env(每节点单省;省码已在
+            // `node_institution_identity` 经 PROVINCE_CODE_INFOS 校验)。本步只维护 admins 缓存本身。
+            repo::upsert_admin_conn(conn, &admin)?;
 
             // 解析 scope:与会话重建(guards)共用 derive_admin_scope_conn 单一来源,口径一致。
             let (scope_province_name, scope_city_name, scope_town_name) =

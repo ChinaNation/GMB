@@ -7,13 +7,13 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use crate::cid::china::{china_sqlite_hash, provinces};
-use crate::cid::InstitutionCategory;
-use crate::institution::subjects::{
-    service::{build_default_accounts_for_codes, default_account_names_for_codes},
-    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
-};
 use crate::Db;
+use crate::cid::InstitutionCategory;
+use crate::cid::china::{china_sqlite_hash, provinces};
+use crate::institution::subjects::{
+    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
+    service::{build_default_accounts_for_codes, default_account_names_for_codes},
+};
 
 #[allow(dead_code)]
 #[path = "../../../../runtime/primitives/cid/china/china_cb.rs"]
@@ -601,17 +601,6 @@ pub fn federal_registry_cid_number() -> Option<&'static str> {
         .iter()
         .find(|item| cid_institution_code_is(item.cid_number, "FRG"))
         .map(|item| item.cid_number)
-}
-
-/// 中文注释:联邦注册局(全国唯一)内置管理员公钥集,取自创世常量 china_zf.rs。
-/// 唯一真源是链上 admins-change::AdminAccounts;本取值器只服务 CID 侧的【链不可达】
-/// 离线引导播种(admins::seed),稳态由 chain_sync 从链投影接管。
-/// CHINA_ZF 只保存政府机构目录与账户,FRG 管理员已拆为 FEDERAL_REGISTRY_ADMINS 独立常量。
-pub(crate) fn federal_registry_admins() -> Option<&'static [[u8; 32]]> {
-    china_zf_constants::CHINA_ZF
-        .iter()
-        .any(|item| cid_institution_code_is(item.cid_number, "FRG"))
-        .then_some(china_zf_constants::FEDERAL_REGISTRY_ADMINS)
 }
 
 fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {

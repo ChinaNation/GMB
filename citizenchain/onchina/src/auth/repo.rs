@@ -5,11 +5,11 @@
 use chrono::{DateTime, Duration, Utc};
 use postgres::Client;
 
+use crate::Db;
 use crate::auth::login::{AdminSession, LoginSignRequest, QrLoginResultRecord};
 use crate::auth::model::AdminUser;
 use crate::auth::security_model::{AdminActionChallenge, AdminSecurityGrant};
 use crate::core::db::postgres_error_text;
-use crate::Db;
 
 fn admin_from_row(row: &postgres::Row) -> Result<AdminUser, String> {
     let id: i64 = row.get(0);
@@ -26,40 +26,11 @@ fn admin_from_row(row: &postgres::Row) -> Result<AdminUser, String> {
     })
 }
 
-pub(crate) fn list_federal_registry_admins_by_province_conn(
-    conn: &mut Client,
-    province_name: Option<&str>,
-) -> Result<Vec<(AdminUser, String)>, String> {
-    let rows = if let Some(province_name) = province_name {
-        conn.query(
-            "SELECT a.admin_id, a.admin_account, a.admin_name, a.institution_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name,
-                    s.province_name
-             FROM admins a
-             JOIN federal_registry_scope s ON s.admin_id = a.admin_id
-             WHERE a.institution_code = 'FRG' AND s.province_name = $1
-             ORDER BY s.province_name ASC, a.built_in DESC, a.admin_id ASC",
-            &[&province_name],
-        )
-    } else {
-        conn.query(
-            "SELECT a.admin_id, a.admin_account, a.admin_name, a.institution_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name,
-                    s.province_name
-             FROM admins a
-             JOIN federal_registry_scope s ON s.admin_id = a.admin_id
-             WHERE a.institution_code = 'FRG'
-             ORDER BY s.province_name ASC, a.built_in DESC, a.admin_id ASC",
-            &[],
-        )
-    }
-    .map_err(|e| format!("query federal registry admins by province failed: {e}"))?;
-    rows.iter()
-        .map(|row| {
-            let admin = admin_from_row(row)?;
-            let province_name: String = row.get(9);
-            Ok((admin, province_name))
-        })
-        .collect()
-}
+// 中文注释:`list_federal_registry_admins_by_province_conn` 已退役。
+// Tier1 创世注册局管理员「全走链读」(决策③):权威集合在链上
+// `GenesisAdmins::FederalRegistryProvinceGroups[本省省码]`,由 `catalog::list_federal_registry_admins`
+// 经 `chain_runtime::fetch_active_admins_onchain` 读取并回填本地缓存;本地不再以 `federal_registry_scope`
+// 表派生省维度(每节点单省,省作用域取节点 env)。
 
 pub(crate) fn get_admin_by_id_and_registry_org_conn(
     conn: &mut Client,
@@ -78,62 +49,55 @@ pub(crate) fn get_admin_by_id_and_registry_org_conn(
     row.as_ref().map(admin_from_row).transpose()
 }
 
+/// Tier2 下级注册局(CREG)管理员列表。
+///
+/// 中文注释:每节点单省部署,本地 `admins` 缓存即本省数据,省维度由部署隐含——不再 JOIN
+/// 已退役的 `federal_registry_scope` 表(决策③),仅按机构码 + 可选市名过滤。
 pub(crate) fn list_city_registry_admins_by_scope_conn(
     conn: &mut Client,
-    province_name: &str,
     city_name: Option<&str>,
     limit: usize,
     offset: usize,
 ) -> Result<(usize, Vec<AdminUser>), String> {
     let limit = i64::try_from(limit).unwrap_or(500);
     let offset = i64::try_from(offset).unwrap_or(0);
+    let code = crate::core::chain_runtime::TIER2_REGISTRY_CODE;
     let (count_row, rows) = if let Some(city_name) = city_name {
         let count_row = conn
             .query_one(
-                "SELECT COUNT(*)
-                 FROM admins a
-                 JOIN admins creator ON lower(creator.admin_account) = lower(a.created_by)
-                 JOIN federal_registry_scope s ON s.admin_id = creator.admin_id
-                 WHERE a.institution_code = 'CREG' AND s.province_name = $1 AND a.city_name = $2",
-                &[&province_name, &city_name],
+                "SELECT COUNT(*) FROM admins
+                 WHERE institution_code = $1 AND city_name = $2",
+                &[&code, &city_name],
             )
             .map_err(|e| format!("count city registry admins by city failed: {e}"))?;
         let rows = conn
             .query(
-                "SELECT a.admin_id, a.admin_account, a.admin_name, a.institution_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name
-                 FROM admins a
-                 JOIN admins creator ON lower(creator.admin_account) = lower(a.created_by)
-                 JOIN federal_registry_scope s ON s.admin_id = creator.admin_id
-                 WHERE a.institution_code = 'CREG' AND s.province_name = $1 AND a.city_name = $2
-                 ORDER BY a.admin_id DESC
+                "SELECT admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name
+                 FROM admins
+                 WHERE institution_code = $1 AND city_name = $2
+                 ORDER BY admin_id DESC
                  LIMIT $3 OFFSET $4",
-                &[&province_name, &city_name, &limit, &offset],
+                &[&code, &city_name, &limit, &offset],
             )
             .map_err(|e| format!("query city registry admins by city failed: {e}"))?;
         (count_row, rows)
     } else {
         let count_row = conn
             .query_one(
-                "SELECT COUNT(*)
-                 FROM admins a
-                 JOIN admins creator ON lower(creator.admin_account) = lower(a.created_by)
-                 JOIN federal_registry_scope s ON s.admin_id = creator.admin_id
-                 WHERE a.institution_code = 'CREG' AND s.province_name = $1",
-                &[&province_name],
+                "SELECT COUNT(*) FROM admins WHERE institution_code = $1",
+                &[&code],
             )
-            .map_err(|e| format!("count city registry admins by province failed: {e}"))?;
+            .map_err(|e| format!("count city registry admins failed: {e}"))?;
         let rows = conn
             .query(
-                "SELECT a.admin_id, a.admin_account, a.admin_name, a.institution_code, a.built_in, a.created_by, a.created_at, a.updated_at, a.city_name
-                 FROM admins a
-                 JOIN admins creator ON lower(creator.admin_account) = lower(a.created_by)
-                 JOIN federal_registry_scope s ON s.admin_id = creator.admin_id
-                 WHERE a.institution_code = 'CREG' AND s.province_name = $1
-                 ORDER BY a.admin_id DESC
+                "SELECT admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name
+                 FROM admins
+                 WHERE institution_code = $1
+                 ORDER BY admin_id DESC
                  LIMIT $2 OFFSET $3",
-                &[&province_name, &limit, &offset],
+                &[&code, &limit, &offset],
             )
-            .map_err(|e| format!("query city registry admins by province failed: {e}"))?;
+            .map_err(|e| format!("query city registry admins failed: {e}"))?;
         (count_row, rows)
     };
     let total: i64 = count_row.get(0);
@@ -147,17 +111,13 @@ pub(crate) fn list_city_registry_admins_by_scope_conn(
 
 pub(crate) fn count_city_registry_admins_by_city_conn(
     conn: &mut Client,
-    province_name: &str,
     city_name: &str,
 ) -> Result<usize, String> {
+    let code = crate::core::chain_runtime::TIER2_REGISTRY_CODE;
     let row = conn
         .query_one(
-            "SELECT COUNT(*)
-             FROM admins a
-             JOIN admins creator ON lower(creator.admin_account) = lower(a.created_by)
-             JOIN federal_registry_scope s ON s.admin_id = creator.admin_id
-             WHERE a.institution_code = 'CREG' AND s.province_name = $1 AND a.city_name = $2",
-            &[&province_name, &city_name],
+            "SELECT COUNT(*) FROM admins WHERE institution_code = $1 AND city_name = $2",
+            &[&code, &city_name],
         )
         .map_err(|e| format!("count city registry admins by city failed: {e}"))?;
     let count: i64 = row.get(0);
@@ -168,13 +128,14 @@ pub(crate) fn list_city_registry_admins_by_creator_conn(
     conn: &mut Client,
     creator_account: &str,
 ) -> Result<Vec<AdminUser>, String> {
+    let code = crate::core::chain_runtime::TIER2_REGISTRY_CODE;
     let rows = conn
         .query(
             "SELECT admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name
              FROM admins
-             WHERE institution_code = 'CREG' AND lower(created_by) = lower($1)
+             WHERE institution_code = $1 AND lower(created_by) = lower($2)
              ORDER BY admin_id ASC",
-            &[&creator_account],
+            &[&code, &creator_account],
         )
         .map_err(|e| format!("query city registry admins by creator failed: {e}"))?;
     rows.iter().map(admin_from_row).collect()
@@ -232,44 +193,33 @@ pub(crate) fn province_scope_for_registry_org(
     })
 }
 
+/// Tier1/Tier2 注册局管理员的省作用域。
+///
+/// 中文注释:每节点单省部署,注册局管理员省作用域即本节点省(节点 `CID_RUNTIME_SCOPE_PROVINCE_NAME`),
+/// 不再查已退役的 `federal_registry_scope` 表(决策③)。参数保留以稳定调用签名。
 pub(crate) fn province_scope_for_registry_org_conn(
-    conn: &mut Client,
-    admin_account: &str,
-    institution_code: &str,
+    _conn: &mut Client,
+    _admin_account: &str,
+    _institution_code: &str,
 ) -> Result<Option<String>, String> {
-    if institution_code == "FRG" {
-        // 联邦注册局管理员的省作用域直接来自 federal_registry_scope 映射。
-        find_federal_registry_scope_conn(conn, admin_account)
-    } else {
-        // 市级管理员的省作用域继承其创建者(本省联邦注册局管理员)的省映射。
-        // 市属省一致性在登录时的 env→会话边界(onchain_gate)校验,不在此读路径硬判,
-        // 避免对节点 env 写入的 city_name 反复 fail-closed 锁死合法管理员。
-        let Some(admin) = get_admin_by_account_conn(conn, admin_account)? else {
-            return Ok(None);
-        };
-        find_federal_registry_scope_conn(conn, admin.created_by.as_str())
-    }
+    Ok(crate::core::chain_runtime::node_scope_province())
 }
 
 /// 派生管理员的省/市/镇作用域。**登录签发(onchain_gate)与会话重建(guards)共用此唯一来源**,
 /// 保证两路口径逐字段一致(避免 login 与后续请求 scope 漂移)。维度按机构行政层级裁剪:
-/// - 省:联邦/市注册局走 federal_registry_scope 映射;其余机构无映射时取节点 env。
-/// - 市:市级/镇级/私权(无层级)取节点 env;省级/全国/联邦注册局无市维度(None)。
+/// - 省:统一取节点 env(每节点单省;Tier1 创世注册局同此,省映射不再走本地表)。
+/// - 市:市级/镇级/私权(无层级)取节点 env;省级/全国/Tier1 创世注册局无市维度(None)。
 /// - 镇:仅镇级取节点 env;其余 None。
 pub(crate) fn derive_admin_scope_conn(
-    conn: &mut Client,
-    admin_account: &str,
+    _conn: &mut Client,
+    _admin_account: &str,
     institution_code: &str,
 ) -> Result<(Option<String>, Option<String>, Option<String>), String> {
-    let is_frg = institution_code == "FRG";
+    let is_tier1 = crate::core::chain_runtime::is_tier1_registry(institution_code);
     let level = crate::core::chain_runtime::admin_level_label_for(institution_code);
-    let province =
-        match province_scope_for_registry_org_conn(conn, admin_account, institution_code)? {
-            Some(p) => Some(p),
-            None if !is_frg => crate::core::chain_runtime::node_scope_province(),
-            None => None,
-        };
-    let city = if !is_frg && matches!(level.as_deref(), Some("CITY") | Some("TOWN") | None) {
+    let province = crate::core::chain_runtime::node_scope_province();
+    // Tier1 创世注册局为省级、无市维度;其余按层级取市(市级/镇级/无层级私权)。
+    let city = if !is_tier1 && matches!(level.as_deref(), Some("CITY") | Some("TOWN") | None) {
         crate::core::chain_runtime::node_scope_city()
     } else {
         None
@@ -292,12 +242,12 @@ pub(crate) fn resolve_home_cid_short_name_conn(
     scope_province_name: Option<&str>,
     scope_city_name: Option<&str>,
 ) -> Result<Option<String>, String> {
-    let row = if institution_code == "FRG" {
-        // 联邦注册局全局唯一,直接取 institution_code='FRG' 的机构简称。
+    let row = if crate::core::chain_runtime::is_tier1_registry(institution_code) {
+        // Tier1 创世注册局全局唯一,直接按机构码取其机构简称。
         conn.query_opt(
             "SELECT cid_short_name FROM subjects \
-             WHERE institution_code = 'FRG' AND status = 'ACTIVE' LIMIT 1",
-            &[],
+             WHERE institution_code = $1 AND status = 'ACTIVE' LIMIT 1",
+            &[&institution_code],
         )
         .map_err(|e| format!("query federal registry short name failed: {e}"))?
     } else {
@@ -342,75 +292,9 @@ pub(crate) fn resolve_home_cid_short_name(
     })
 }
 
-pub(crate) fn find_federal_registry_scope_conn(
-    conn: &mut Client,
-    admin_account: &str,
-) -> Result<Option<String>, String> {
-    let row = conn
-        .query_opt(
-            "SELECT a.admin_id, a.admin_account, s.province_name
-             FROM federal_registry_scope s
-             JOIN admins a ON a.admin_id = s.admin_id
-             WHERE lower(a.admin_account) = lower($1)",
-            &[&admin_account],
-        )
-        .map_err(|e| format!("query federal admin scope failed: {e}"))?;
-    if let Some(row) = row {
-        let id: i64 = row.get(0);
-        let account: String = row.get(1);
-        let province: String = row.get(2);
-        let normalized = province.trim();
-        if !normalized.is_empty() && normalized != "全国" {
-            return Ok(Some(province));
-        }
-        if let Some(repaired) =
-            crate::auth::seed::federal_registry_bootstrap_province_for_account(account.as_str())
-        {
-            repair_federal_registry_scope_conn(conn, id, repaired)?;
-            return Ok(Some(repaired.to_string()));
-        }
-        return Ok(None);
-    }
-    if let Some(repaired) =
-        crate::auth::seed::federal_registry_bootstrap_province_for_account(admin_account)
-    {
-        let row = conn
-            .query_opt(
-                "SELECT admin_id FROM admins WHERE lower(admin_account) = lower($1)",
-                &[&admin_account],
-            )
-            .map_err(|e| format!("query federal admin id for scope repair failed: {e}"))?;
-        if let Some(row) = row {
-            let id: i64 = row.get(0);
-            repair_federal_registry_scope_conn(conn, id, repaired)?;
-            return Ok(Some(repaired.to_string()));
-        }
-    }
-    // 中文注释:非创世常量账户的省份归属只以 postgres federal_registry_scope 为准,无行即 None。
-    Ok(None)
-}
-
-fn repair_federal_registry_scope_conn(
-    conn: &mut Client,
-    admin_id: i64,
-    province_name: &str,
-) -> Result<(), String> {
-    conn.execute(
-        "INSERT INTO provinces(province_name)
-         VALUES ($1)
-         ON CONFLICT (province_name) DO NOTHING",
-        &[&province_name],
-    )
-    .map_err(|e| format!("repair federal admin province failed: {e}"))?;
-    conn.execute(
-        "INSERT INTO federal_registry_scope(admin_id, province_name)
-         VALUES ($1, $2)
-         ON CONFLICT (admin_id) DO UPDATE SET province_name = EXCLUDED.province_name",
-        &[&admin_id, &province_name],
-    )
-    .map_err(|e| format!("repair federal admin scope failed: {e}"))?;
-    Ok(())
-}
+// 中文注释:`find_federal_registry_scope_conn` / `repair_federal_registry_scope_conn` 已退役——
+// `federal_registry_scope` 省映射表连同 `provinces` 占位表一并下线(决策③);Tier1 创世注册局
+// 省作用域改取节点 env(见 `province_scope_for_registry_org_conn` / `derive_admin_scope_conn`)。
 
 pub(crate) fn next_admin_id_conn(conn: &mut Client) -> Result<u64, String> {
     let row = conn
@@ -420,20 +304,11 @@ pub(crate) fn next_admin_id_conn(conn: &mut Client) -> Result<u64, String> {
     Ok(u64::try_from(id).unwrap_or(1))
 }
 
-pub(crate) fn upsert_admin_conn(
-    conn: &mut Client,
-    admin: &AdminUser,
-    province_scope: Option<&str>,
-) -> Result<(), String> {
-    if let Some(scope) = province_scope.map(str::trim).filter(|v| !v.is_empty()) {
-        conn.execute(
-            "INSERT INTO provinces(province_name)
-             VALUES ($1)
-             ON CONFLICT (province_name) DO NOTHING",
-            &[&scope],
-        )
-        .map_err(|e| format!("upsert province failed: {e}"))?;
-    }
+/// 写入 / 更新本地管理员缓存行(`admin_account` 为冲突键,幂等)。
+///
+/// 中文注释:省映射不再随管理员落 `federal_registry_scope`(决策③已退役该表);Tier1 创世注册局
+/// 管理员省作用域统一取节点 env。本函数只维护 `admins` 缓存本身。
+pub(crate) fn upsert_admin_conn(conn: &mut Client, admin: &AdminUser) -> Result<(), String> {
     conn.execute(
         "INSERT INTO admins(admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -460,31 +335,6 @@ pub(crate) fn upsert_admin_conn(
         ],
     )
     .map_err(|e| format!("upsert admin failed: {e}"))?;
-    if admin.institution_code == "FRG" {
-        let Some(scope) = province_scope else {
-            return Err("federal admin province scope missing".to_string());
-        };
-        let row = conn
-            .query_one(
-                "SELECT admin_id FROM admins WHERE lower(admin_account) = lower($1)",
-                &[&admin.admin_account],
-            )
-            .map_err(|e| format!("query federal admin id failed: {e}"))?;
-        let id: i64 = row.get(0);
-        conn.execute(
-            "INSERT INTO provinces(province_name) VALUES ($1)
-             ON CONFLICT (province_name) DO NOTHING",
-            &[&scope],
-        )
-        .map_err(|e| format!("upsert federal admin province failed: {e}"))?;
-        conn.execute(
-            "INSERT INTO federal_registry_scope(admin_id, province_name)
-             VALUES ($1, $2)
-             ON CONFLICT (admin_id) DO UPDATE SET province_name = EXCLUDED.province_name",
-            &[&id, &scope],
-        )
-        .map_err(|e| format!("upsert federal admin scope failed: {e}"))?;
-    }
     Ok(())
 }
 

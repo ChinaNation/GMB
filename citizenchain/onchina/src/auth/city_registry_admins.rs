@@ -3,10 +3,10 @@
 //! 中文注释:联邦注册局管理员/市注册局管理员只通过 admins 结构化表查询同省域市注册局管理员,不做全量内存过滤。
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    Json,
 };
 use postgres::Client;
 
@@ -27,7 +27,7 @@ pub(crate) async fn list_city_registry_admins(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    if ctx.institution_code == "CREG"
+    if crate::core::chain_runtime::is_subordinate_registry(&ctx.institution_code)
         && ctx
             .scope_city_name
             .as_deref()
@@ -49,18 +49,19 @@ pub(crate) async fn list_city_registry_admins(
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
     let offset = query.offset.unwrap_or(0);
     let actor_province_name = ctx.scope_province_name.clone();
-    let actor_city_name = if ctx.institution_code == "CREG" {
-        ctx.scope_city_name.clone()
-    } else {
-        None
-    };
+    let actor_city_name =
+        if crate::core::chain_runtime::is_subordinate_registry(&ctx.institution_code) {
+            ctx.scope_city_name.clone()
+        } else {
+            None
+        };
     let result = state.db.with_client(move |conn| {
-        let province = actor_province_name
+        // 省作用域校验保留(缺省即登录投影错误);列表按机构码 + 市过滤(每节点单省,省隐含)。
+        actor_province_name
             .as_deref()
             .ok_or_else(|| "admin province scope missing".to_string())?;
         let (total, admins) = repo::list_city_registry_admins_by_scope_conn(
             conn,
-            province,
             actor_city_name.as_deref(),
             limit,
             offset,
@@ -153,8 +154,9 @@ pub(crate) fn count_city_registry_admins_in_city_conn(
     province: &str,
     city: &str,
 ) -> Result<usize, String> {
+    let _ = province;
     let city = city.trim();
-    repo::count_city_registry_admins_by_city_conn(conn, province, city)
+    repo::count_city_registry_admins_by_city_conn(conn, city)
 }
 
 pub(crate) fn creator_admin_name_conn(
@@ -164,7 +166,7 @@ pub(crate) fn creator_admin_name_conn(
     let Some(creator) = repo::get_admin_by_account_conn(conn, creator_account)? else {
         return Ok("未知注册局管理员".to_string());
     };
-    let province = if creator.institution_code == "FRG" {
+    let province = if crate::core::chain_runtime::is_tier1_registry(&creator.institution_code) {
         repo::province_scope_for_registry_org_conn(
             conn,
             &creator.admin_account,

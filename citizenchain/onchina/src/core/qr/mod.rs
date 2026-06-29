@@ -7,7 +7,7 @@ mod sign_request;
 
 pub(crate) use sign_request::{build_sign_request, build_sign_request_bytes};
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
 
 pub const QR_V1: &str = "QR_V1";

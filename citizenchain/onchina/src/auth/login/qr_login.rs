@@ -3,10 +3,10 @@
 //! 只承接 QR_V1 登录签名请求生成、手机扫码签名、网页轮询结果;普通登录仍在 `handler.rs`。
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use chrono::{Duration, Utc};
 use tracing::warn;
@@ -16,13 +16,13 @@ use crate::auth::repo;
 use crate::crypto::pubkey::same_admin_account;
 use crate::*;
 
+use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 use super::model::*;
 use super::onchain_gate;
 use super::signature::{
     build_admin_name, build_admin_name_from_user, build_login_qr_system_signature,
     extract_domain_from_origin, resolve_scope_city_name, verify_admin_signature,
 };
-use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 
 pub(crate) async fn admin_auth_qr_sign_request(
     State(state): State<AppState>,
@@ -362,7 +362,9 @@ pub(crate) async fn admin_auth_qr_result(
                         }),
                     scope_province_name: province,
                     scope_city_name,
-                    scope_town_name: if result.institution_code == "FRG" {
+                    scope_town_name: if crate::core::chain_runtime::is_tier1_registry(
+                        &result.institution_code,
+                    ) {
                         None
                     } else {
                         crate::core::chain_runtime::node_scope_town()

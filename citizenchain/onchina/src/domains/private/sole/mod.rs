@@ -3,20 +3,20 @@
 //! 中文注释:个体经营固定为 `F + GT`,无法人资格,负责人完全负责。
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::HeaderMap,
     response::Response,
-    Json,
 };
 use serde::Serialize;
 
+use crate::AppState;
 use crate::domains::private::common::{
-    assert_module_spec, fixed_rule, lock_input_to_rule, PrivateModuleSpec, PrivateType,
+    PrivateModuleSpec, PrivateType, assert_module_spec, fixed_rule, lock_input_to_rule,
 };
 use crate::domains::private::participants::{ParticipantRole, SOLE_ROLES};
-use crate::institution::subjects::registration::{self, ListInstitutionQuery};
 use crate::institution::subjects::CreateInstitutionInput;
-use crate::AppState;
+use crate::institution::subjects::registration::{self, ListInstitutionQuery};
 
 /// 个体经营特有资料边界。
 #[derive(Debug, Clone, Serialize)]
