@@ -6,6 +6,7 @@ import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/institution/institution_accounts.dart';
 import 'package:citizenapp/citizen/institution/institution_accounts_page.dart';
 import 'package:citizenapp/citizen/institution/institution_chain_state.dart';
+import 'package:citizenapp/citizen/institution/institution_classification.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/public_institution_admin_list_page.dart';
 import 'package:citizenapp/citizen/legislation/data/law_models.dart';
@@ -32,7 +33,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///
 /// 中文注释:公共壳(信息卡/账户/管理员/提案列表/关注)对全部机构统一;按机构类型
 /// dispatch 重型流:
-/// - 固定治理档(NRC/PRC/PRB):提案列表可点→`_openProposalDetail`;
+/// - 储备治理三档(NRC/PRC/PRB):提案列表可点→`_openProposalDetail`;
 /// - 其余注册机构:提案列表仍走只读摘要,但发起提案/管理员激活共用统一入口。
 /// 中文注释:提案能力由 `ProposalCapabilityRegistry` 判断,详情页不再散落机构码 if。
 class InstitutionDetailPage extends StatefulWidget {
@@ -77,7 +78,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   /// 提案/管理员入口使用的链上主体信息。固定治理档来自静态注册表,注册机构账户
   /// 则由目录机构派生出 `institution-account:<mainAccount>` identity。
   InstitutionInfo? _govInfo;
-  bool get _isGovernance => _inst?.isFixedGovernance ?? false;
+  bool get _isGovernance =>
+      InstitutionClassification.isGovernance(_inst?.institutionCode ?? '');
 
   bool _loading = true;
 

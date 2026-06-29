@@ -1,12 +1,11 @@
 // 统一机构仓库门面(ADR-028 决策 2)——目录(CID-BFF + Isar)产出统一 [Institution];
-// 为固定治理档(NRC/PRC/PRB)附 china 固定账户(行为保持)。
+// 为创世治理机构附 china 固定账户。
 //
 // 中文注释:
 // - 包装现有 [PublicInstitutionRepository](已是本地优先秒开的目录仓库),逐步替代
-//   公权/治理两套并行数据源。目录已含 NRC/PRC/PRB(NRC×1/PRC×43/PRB×43 已 seed),
-//   故治理身份不再依赖静态注册表。
-// - 静态注册表(kNationalCouncil/…)P1 起只保留「固定治理档账户来源」一职——其
-//   china 固定账户 hex 不可派生,附到对应机构上;注册表的「列表/详情」角色后续删除。
+//   公权/治理两套并行数据源。
+// - 静态表只保留「创世固定账户来源」一职:china 固定账户 hex 不可派生,
+//   必须附到对应机构上;列表仍由目录决定。
 // - 订阅、行政区所属地 join 等读路径直接复用底层 [directory],不另造。
 
 import 'package:citizenapp/citizen/institution/institution.dart';
@@ -24,19 +23,19 @@ class InstitutionRepository {
   /// 底层目录仓库(订阅 / 行政区所属地 join / 后台同步 直接复用)。
   final PublicInstitutionRepository directory;
 
-  /// 固定治理档(NRC/PRC/PRB)按 cidNumber 索引的静态注册表项(构建一次)。
-  /// 用途仅两处:① 取 china 固定账户附到统一机构上;② 治理机构详情页 dispatch
-  /// 到现成治理发起/投票/管理员页时需要 `InstitutionInfo` 入参(P1 复用,不重写)。
+  /// 创世治理机构按 cidNumber 索引的静态账户项(构建一次)。
+  /// 用途:① 取 china 固定账户附到统一机构上;② 发起提案/管理员页需要 `InstitutionInfo`。
   static final Map<String, InstitutionInfo> _governanceInfo = {
     for (final i in <InstitutionInfo>[
       ...kNationalCouncil,
       ...kProvincialCouncils,
       ...kProvincialBanks,
+      ...kGenesisInstitutions,
     ])
       i.cidNumber: i,
   };
 
-  /// 治理机构(NRC/PRC/PRB)的静态注册表项;非治理机构返回 null。
+  /// 创世治理机构的静态账户项;非创世机构返回 null。
   InstitutionInfo? governanceInfo(String cidNumber) =>
       _governanceInfo[cidNumber];
 

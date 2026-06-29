@@ -84,7 +84,7 @@ lib/votingengine/
 
 ### 3.2 枚举与编码
 
-- `institution_code`（CID 机构码，`[u8;4]`）：分类经谓词派生——`is_fixed_governance_code`（固定治理档：`NRC` 国储会 / `PRC` 省储会 / `PRB` 省储行）、`is_personal_code`（`PMUL` 个人多签）、`is_institution_code`（公权或私权法人机构账户码；链上不再区分公权/私权）。
+- `institution_code`（CID 机构码，`[u8;4]`）：分类经谓词派生——`is_fixed_governance_code`（固定治理档：NRC/PRC/PRB/FRG/NJD）、`is_personal_code`（`PMUL` 个人多签）、`is_institution_code`（公权或私权法人机构账户码；链上不再区分公权/私权）。
 - proposal kind：`0 = internal`，`1 = joint`。
 - stage：`0 = internal`，`1 = joint`，`2 = citizen`。
 - status：`0 = voting`，`1 = passed`，`2 = rejected`。
@@ -616,17 +616,17 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 ### 8.1 概述
 
-`organization-manage` 负责 CID 注册机构多签，`personal-manage` 负责个人多签。两者都复用投票引擎的内部投票机制，与治理机构（NRC/PRC/PRB）使用同一套投票、存储、清理基础设施。
+`organization-manage` 负责 CID 注册机构多签，`personal-manage` 负责个人多签。两者都复用投票引擎的内部投票机制，与固定治理档使用同一套投票、存储、清理基础设施。
 
 ### 8.2 机构类型
 
-注册个人账户使用个人多签码（PMUL，`is_personal_code`）；注册机构账户使用机构账户码（`is_institution_code`，公权或私权法人），与固定治理档机构码（`is_fixed_governance_code`，NRC/PRC/PRB）并列。
+注册个人账户使用个人多签码（PMUL，`is_personal_code`）；注册机构账户使用机构账户码（`is_institution_code`，公权或私权法人），与固定治理档机构码（`is_fixed_governance_code`，NRC/PRC/PRB/FRG/NJD）并列。
 
 `AccountId`（48 字节）使用 AdminAccountKind 协议：个人账户为 `PersonalAccount AccountId`，机构账户为 `InstitutionAccount AccountId`，payload 均为账户 `AccountId` 前 32 字节并右填零。
 
 ### 8.3 动态阈值与管理员
 
-| 项目 | 治理机构（NRC/PRC/PRB） | 注册多签账户（REN/PUP/OTH） |
+| 项目 | 固定治理档（NRC/PRC/PRB/FRG/NJD） | 注册多签账户（REN/PUP/OTH） |
 | --- | --- | --- |
 | 管理员来源 | `genesis-admins::AdminAccounts`（创世/治理替换） | `personal-admins / public-admins / private-admins::AdminAccounts`（注册时写入，治理替换后更新） |
 | 阈值来源 | 投票引擎固定制度常量（13/6/6） | `internal-vote::ActiveDynamicThresholds`（注册或管理员变更时写入） |

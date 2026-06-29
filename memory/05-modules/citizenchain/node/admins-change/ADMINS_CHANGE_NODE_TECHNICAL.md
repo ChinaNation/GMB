@@ -69,7 +69,7 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 其中：
 
 - `PMUL` 个人多签 → `PersonalAdmins(7).propose_admin_set_change(3)`。
-- `NRC/PRC/PRB` 创世管理员 → `GenesisAdmins(12).propose_admin_set_change(0)`。
+- `NRC/PRC/PRB/NJD` 创世管理员 → `GenesisAdmins(12).propose_admin_set_change(0)`。
 - `FRG` 联邦注册局管理员 → 不走 node 通用管理员更换；必须走 OnChina 省级 5 人组入口 `GenesisAdmins(12).propose_federal_registry_province_admin_set_change(2)`。
 - 公权机构 → `PublicAdmins(29).propose_admin_set_change(0)`。
 - 私权机构 → `PrivateAdmins(30).propose_admin_set_change(0)`。
@@ -102,7 +102,7 @@ citizenchain/node/frontend/admins/admin-management/
 
 主体引用：
 
-- `AdminAccountRef.cidNumber`：仅用于 NRC / PRC / PRB 等内置治理机构，必须带固定治理档机构码（`is_fixed_governance_code`）防止错主体。
+- `AdminAccountRef.cidNumber`：仅用于 NRC / PRC / PRB / NJD 等内置治理机构，必须带固定治理档机构码（`is_fixed_governance_code`）防止错主体。
 - `AdminAccountRef.accountIdHex`：用于个人多签和机构账户，必须带个人多签码（`is_personal_code`，PMUL）或机构账户码（`is_institution_code`）。缺少 `accountIdHex` 时后端直接拒绝动态主体管理员激活和管理员更换。
 - `offchain/organization-manage` 只提供页面入口和主账户 subject 元数据；管理员激活、更换读取、校验、QR 和提交仍全部走 `admins/admin_management`。
 
@@ -112,7 +112,7 @@ citizenchain/node/frontend/admins/admin-management/
 - 发起签名公钥必须是当前管理员。
 - 新管理员公钥必须为 32 字节 hex，不能重复。
 - 新集合不能与当前集合完全相同。
-- 内置治理机构固定人数：NRC 19，PRC 9，PRB 9。
+- 内置治理机构固定人数：NRC 19，PRC 9，PRB 9，FRG 省级组 5，NJD 13。
 - 联邦注册局管理员更换必须按省级 5 人组治理，不允许 node 通用流程生成 FRG 的 `12.0` call data。
 - `注册机构归属关系` 只用于机构归属、检索、展示和反查，不允许作为管理员更换主体。
 - 个人多签必须使用个人多签码（`is_personal_code`，PMUL），管理员数量：`2..=64`。

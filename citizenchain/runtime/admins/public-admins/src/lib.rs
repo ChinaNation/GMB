@@ -489,7 +489,7 @@ pub mod pallet {
                 account.status == AdminAccountStatus::Active,
                 Error::<T>::AdminAccountNotActive
             );
-            // 中文注释：NRC/PRC/PRB 是制度内置治理账户，生命周期不能被删除。
+            // 中文注释：创世治理账户生命周期不能被删除。
             ensure!(
                 !matches!(account.kind, AdminAccountKind::GenesisInstitution),
                 Error::<T>::BuiltinAdminAccountCannotClose

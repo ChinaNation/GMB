@@ -165,7 +165,7 @@ impl
 
 // ── Provider:仅支持 PMUL(个人多签),其他 institution_code 返回 None/false ──
 //
-// personal-manage 生命周期测试只走个人多签业务,固定治理 (NRC/PRC/PRB) 不参与;
+// personal-manage 生命周期测试只走个人多签业务,储备治理三档不参与;
 // 因此 Provider 只需要从 personal-admins 读 admins / count。
 
 pub struct TestInternalAdminProvider;

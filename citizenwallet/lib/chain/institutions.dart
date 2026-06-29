@@ -14,6 +14,9 @@ enum InstitutionType {
 
   /// 省级公民储备银行。
   prb,
+
+  /// 其它创世治理机构。
+  genesis,
 }
 
 class Institution {
@@ -742,14 +745,36 @@ const List<Institution> kProvincialBanks = [
   ),
 ];
 
-/// 所有机构（87）。按服务端 find_entry 的查找顺序：NRC → PRC → PRB。
+/// 其它创世治理机构（2）。
+const List<Institution> kGenesisInstitutions = [
+  Institution(
+    cidNumber: 'ZS001-FRG07-249474503-2026',
+    cidFullName: '总统府联邦注册局',
+    cidShortName: '联邦注册局',
+    cidFullNameEn: 'Federal Registry Bureau of the Presidential Office',
+    cidShortNameEn: 'Federal Registry Bureau',
+    type: InstitutionType.genesis,
+  ),
+  Institution(
+    cidNumber: 'ZS001-NJD0T-052283563-2026',
+    cidFullName: '中华民族联邦共和国国家司法院',
+    cidShortName: '国家司法院',
+    cidFullNameEn:
+        'National Judicial Yuan of the Federal Republic of the China Nation',
+    cidShortNameEn: 'National Judicial Yuan',
+    type: InstitutionType.genesis,
+  ),
+];
+
+/// 所有机构（89）。按服务端 find_entry 的查找顺序：NRC → PRC → PRB → Genesis。
 final List<Institution> kAllInstitutions = List.unmodifiable([
   ...kNationalCouncils,
   ...kProvincialCouncils,
   ...kProvincialBanks,
+  ...kGenesisInstitutions,
 ]);
 
-/// 根据 cid_number 查找机构中文全称（任意类型：国储会 / 省储会 / 省储行）。
+/// 根据 cid_number 查找机构中文全称。
 ///
 /// 返回 null 表示链上交易含未知机构。若遇到此情况，说明链端常量与公民钱包
 /// 机构注册表未对齐，应重新运行生成器。

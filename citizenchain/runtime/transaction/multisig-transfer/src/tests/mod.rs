@@ -981,7 +981,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
     .expect("balances should assimilate");
     let mut ext: sp_io::TestExternalities = storage.into();
     ext.execute_with(|| {
-        // 为 3 种固定治理 org 注入 sr25519 派生 admin。
+        // 为储备治理三档注入 sr25519 派生 admin。
         // 注入数量必须覆盖 votingengine 的固定制度阈值,保证投票测试走真实状态机。
         // Provider 的 is_internal_admin / get_admin_list 会优先读 thread_local 注入,
         // 未注入时 fallback 到 CHINA_CB / CHINA_CH 硬编码。

@@ -1,7 +1,7 @@
 part of 'governance_registry.dart';
 
 // 本文件由 scripts/generate_citizenapp_governance_registry.mjs 自动生成。
-// 中文注释：治理机构中英全称/简称、cid_number 和制度账户来自 runtime primitives；管理员必须动态读取链上 AdminsChange::AdminAccounts。
+// 中文注释：创世治理机构中英全称/简称、cid_number 和制度账户来自 runtime primitives；管理员必须动态读取链上 AdminAccounts。
 
 /// 国储会（1 个）。
 const List<InstitutionInfo> kNationalCouncil = [
@@ -1319,6 +1319,41 @@ const List<InstitutionInfo> kProvincialBanks = [
           'a2f41e35019070029a4fc5a56b379973d51c48a5dab940a010bdd8e28c4ec434',
       stakeAccount:
           '0ef2de0db2ef2fbd6b077f92eff51fce641809d5bc9017cb31df2f47842daf5e',
+    ),
+  ),
+];
+
+/// 其它 GenesisAdmins 创世机构（不进入治理 tab 联合投票列表）。
+const List<InstitutionInfo> kGenesisInstitutions = [
+  InstitutionInfo(
+    cidFullName: '总统府联邦注册局',
+    cidShortName: '联邦注册局',
+    cidFullNameEn: 'Federal Registry Bureau of the Presidential Office',
+    cidShortNameEn: 'Federal Registry Bureau',
+    cidNumber: 'ZS001-FRG07-249474503-2026',
+    orgType: OrgType.account,
+    adminAccountCode: 'FRG',
+    accounts: InstitutionAccounts(
+      mainAccount:
+          '406246b466028ae3cb89f36b70457478eca4ec224b2ad3f2122e5a0a407e642e',
+      feeAccount:
+          '831af9dc35a112bf5152051d672e84ff803cea53952c199691c7aff246e4cd29',
+    ),
+  ),
+  InstitutionInfo(
+    cidFullName: '中华民族联邦共和国国家司法院',
+    cidShortName: '国家司法院',
+    cidFullNameEn:
+        'National Judicial Yuan of the Federal Republic of the China Nation',
+    cidShortNameEn: 'National Judicial Yuan',
+    cidNumber: 'ZS001-NJD0T-052283563-2026',
+    orgType: OrgType.account,
+    adminAccountCode: 'NJD',
+    accounts: InstitutionAccounts(
+      mainAccount:
+          '87f4690d671daf09b6466443377ddc6d60640d8dea3a1e911f7fdf8da0f2680c',
+      feeAccount:
+          'eeae43b9f99f561836366bdd3fda3f3a4dccf59cf58cd7e45204c4f6b2283c3a',
     ),
   ),
 ];

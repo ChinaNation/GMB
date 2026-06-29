@@ -71,7 +71,7 @@ citizenapp/test/governance/admins-change/
 
 `/Users/rhett/GMB/citizenapp/lib/citizen/proposal/admins-change/models/admin_account.dart` 定义 `AdminAccountIdentity`，调用方必须显式传入三类主体之一：
 
-- `governanceInstitution`：创世管理员主体，固定治理档机构码或联邦注册局（NRC/PRC/PRB/FRG），`kind=0`。
+- `governanceInstitution` / `genesisInstitution`：创世管理员主体，固定治理档机构码（NRC/PRC/PRB/FRG/NJD），`kind=0`。
 - `institutionAccount`：公权机构账户主体，`kind=1`；私权机构账户主体，`kind=2`；非法人机构按所属法人归属选择 `kind=1` 或 `kind=2`。
 - `personalAccount`：个人多签主体，个人多签码（PMUL），`kind=3`。
 
@@ -90,12 +90,12 @@ citizenapp/test/governance/admins-change/
 规则：
 
 - PMUL 个人多签走 `PersonalAdmins(7).propose_admin_set_change(3)`。
-- NRC/PRC/PRB/FRG 创世管理员走 `GenesisAdmins(12).propose_admin_set_change(0)`。
+- NRC/PRC/PRB/NJD 创世管理员走 `GenesisAdmins(12).propose_admin_set_change(0)`；FRG 省级组走 `GenesisAdmins(12).propose_federal_registry_province_admin_set_change(2)`。
 - 公权机构走 `PublicAdmins(29).propose_admin_set_change(0)`。
 - 私权机构走 `PrivateAdmins(30).propose_admin_set_change(0)`。
 - 非法人机构按所属法人归属走 `PublicAdmins(29).propose_admin_set_change(0)` 或 `PrivateAdmins(30).propose_admin_set_change(0)`。
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
-- 创世固定治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6；FRG 使用动态严格过半阈值。
+- 创世固定治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6，NJD=8；FRG 省级组固定为 3/5。
 - 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
 - 阈值真源不在各管理员 `AdminAccounts`；治理固定阈值来自制度常量，动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存。
 - QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与冷钱包 decoder 逐项一致：`institution_code / subject / admins / new_threshold`。

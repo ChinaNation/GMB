@@ -22,8 +22,8 @@ pub const PROPOSAL_KIND_ELECTION: u8 = 3;
 pub use primitives::cid::code::{
     code_bytes, fixed_governance_pass_threshold, institution_code_from_cid_number,
     is_fixed_governance_code, is_institution_code, is_personal_code, is_public_legal_code,
-    is_registered_multisig_code, is_valid_governance_code, InstitutionCode, FRG, NRC, PMUL, PRB,
-    PRC,
+    is_registered_multisig_code, is_valid_governance_code, InstitutionCode, FRG, NJD, NRC, PMUL,
+    PRB, PRC,
 };
 
 /// 内部投票 pallet 的 stage(单阶段提案)。
@@ -52,7 +52,7 @@ pub const STAGE_LEG_SIGN: u8 = 12;
 pub const STAGE_LEG_OVERRIDE: u8 = 13;
 /// 立法投票护宪大法官终审阶段(ADR-027 修订 2026-06-25,宪法第21条):**仅修宪(tier=宪法)**。
 /// 修宪在现有流程(重要案 总统签署后 / 特别案 公投后)通过后,最后进入护宪大法官表决:
-/// 7 名护宪大法官中 4 名及以上赞成 → 生效;未获 4 名及以上赞成或 30 天超时 → 否决。
+/// 5 名护宪大法官中 3 名及以上赞成 → 生效;未获 3 名及以上赞成或 30 天超时 → 否决。
 pub const STAGE_LEG_CONSTITUTION_GUARD: u8 = 14;
 
 /// 选举投票普选阶段(election-vote):公民按行政区/机构范围投票选人。

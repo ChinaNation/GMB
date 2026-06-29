@@ -640,7 +640,7 @@ pub trait InternalAdminProvider<AccountId> {
 
     /// 获取护宪大法官成员集(ADR-027 修订:修宪最终否决,宪法第21条)。
     /// 护宪大法官归口国家司法院,生产按管理员 `admin_role=护宪大法官` 过滤 NJD admins。
-    /// 立法投票模块要求成员数恰好 7 人,并按 4 名及以上赞成判定修宪终审通过。
+    /// 立法投票模块要求成员数恰好 5 人,并按 3 名及以上赞成判定修宪终审通过。
     fn constitution_guard_members() -> sp_std::vec::Vec<AccountId> {
         sp_std::vec::Vec::new()
     }
@@ -846,7 +846,7 @@ pub trait LegislationProposalFinalizer<BlockNumber, AccountId> {
         Ok(())
     }
 
-    /// 护宪大法官终审阶段超时(仅修宪):未获4名及以上赞成 → 法案否决(REJECTED)。
+    /// 护宪大法官终审阶段超时(仅修宪):未获3名及以上赞成 → 法案否决(REJECTED)。
     fn finalize_legislation_guard_timeout(
         _proposal: &crate::Proposal<BlockNumber, AccountId>,
         _proposal_id: u64,

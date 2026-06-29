@@ -13,7 +13,7 @@ use frame_system::pallet_prelude::*;
 use primitives::{
     account_derive::{RESERVED_NAME_FEE, RESERVED_NAME_MAIN},
     cid::{
-        china::{china_cb::CHINA_CB, china_ch::CHINA_CH, china_zf::CHINA_ZF},
+        china::{china_cb::CHINA_CB, china_ch::CHINA_CH, china_sf::CHINA_SF, china_zf::CHINA_ZF},
         code::{
             fixed_governance_pass_threshold, institution_code_from_cid_number, InstitutionCode,
         },
@@ -211,6 +211,25 @@ pub mod pallet {
                 );
             }
             for node in CHINA_CH.iter() {
+                Pallet::<T>::insert_builtin_institution(
+                    node.cid_number,
+                    node.cid_full_name,
+                    node.cid_short_name,
+                    node.main_account,
+                    node.fee_account,
+                );
+            }
+            for node in CHINA_SF.iter() {
+                let Some(institution_code) = institution_code_from_cid_number(node.cid_number)
+                else {
+                    panic!(
+                        "genesis-manage: cid_number {} 机构码解析失败",
+                        node.cid_number
+                    );
+                };
+                if institution_code != admin_primitives::NJD {
+                    continue;
+                }
                 Pallet::<T>::insert_builtin_institution(
                     node.cid_number,
                     node.cid_full_name,

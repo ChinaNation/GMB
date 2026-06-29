@@ -71,7 +71,7 @@ pub fn member(idx: u8) -> AccountId32 {
     AccountId32::new([idx; 32])
 }
 
-const DEFAULT_GUARD_MEMBER_IDS: [u8; 7] = [101, 102, 103, 104, 105, 106, 107];
+const DEFAULT_GUARD_MEMBER_IDS: [u8; 5] = [101, 102, 103, 104, 105];
 
 thread_local! {
     static GUARD_MEMBER_IDS: RefCell<std::vec::Vec<u8>> =
@@ -191,7 +191,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             None
         }
     }
-    /// 护宪大法官默认 7 人 = 账户 [101..=107](测试注入;生产按 NJD admins 的 admin_role 过滤)。
+    /// 护宪大法官默认 5 人 = 账户 [101..=105](测试注入;生产按 NJD admins 的 admin_role 过滤)。
     fn constitution_guard_members() -> sp_runtime::sp_std::vec::Vec<AccountId32> {
         GUARD_MEMBER_IDS.with(|ids| ids.borrow().iter().copied().map(member).collect())
     }

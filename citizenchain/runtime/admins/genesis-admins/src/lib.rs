@@ -23,10 +23,12 @@ use sp_std::collections::btree_set::BTreeSet;
 use admin_primitives::{
     is_genesis_admin_code, is_public_admin_code, AdminAccount, AdminAccountKind,
     AdminAccountLifecycle, AdminAccountStatus, AdminProfile, AdminSetChangeAction, AdminSource,
-    FRG,
+    ADMIN_ROLE_CHIEF_JUSTICE, ADMIN_ROLE_CONSTITUTION_GUARD, ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE,
+    ADMIN_ROLE_JUSTICE, FRG, NJD,
 };
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_sf::{CHINA_SF, NATIONAL_JUDICIAL_YUAN_ADMINS};
 use primitives::cid::{
     china::china_zf::{CHINA_ZF, FEDERAL_REGISTRY_ADMINS},
     code::{ProvinceCode, PROVINCE_CODE_INFOS},
@@ -79,6 +81,16 @@ fn federal_registry_province_group_account<T: frame_system::Config>(
 
 fn expected_admins_len(institution_code: InstitutionCode) -> Option<u32> {
     admin_primitives::expected_genesis_admins_len(institution_code)
+}
+
+fn national_judicial_yuan_admin_role(index: usize) -> Option<&'static [u8]> {
+    match index {
+        0..=4 => Some(ADMIN_ROLE_CONSTITUTION_GUARD),
+        5 => Some(ADMIN_ROLE_CHIEF_JUSTICE),
+        6..=7 => Some(ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE),
+        8..=12 => Some(ADMIN_ROLE_JUSTICE),
+        _ => None,
+    }
 }
 
 /// 联邦注册局机构主账户(创世内置:`CHINA_ZF` 中 FRG 节点的 `main_account`)。
@@ -146,7 +158,7 @@ pub mod pallet {
     pub type AdminAccountOf<T> =
         AdminAccount<AdminProfilesOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
 
-    /// 创世管理员表：只保存国储会、省储会、省储行和联邦注册局管理员集合。
+    /// 创世管理员表：保存国储会、省储会、省储行、国家司法院；联邦注册局拆省级组。
     #[pallet::storage]
     #[pallet::getter(fn admin_account_of)]
     pub type AdminAccounts<T: Config> =
@@ -197,18 +209,43 @@ pub mod pallet {
         institution_code: InstitutionCode,
         raw_admins: &'static [[u8; 32]],
     ) -> AdminAccountOf<T> {
-        // 中文注释:创世机构每个管理员包成 Genesis 来源、空元数据(姓名/职务/任期空)的资料。
+        build_builtin_institution_with_roles::<T, _>(
+            cid_number,
+            institution_code,
+            raw_admins,
+            |_| None,
+        )
+    }
+
+    fn build_builtin_institution_with_roles<T: Config, F>(
+        cid_number: &'static str,
+        institution_code: InstitutionCode,
+        raw_admins: &'static [[u8; 32]],
+        role_for_index: F,
+    ) -> AdminAccountOf<T>
+    where
+        F: Fn(usize) -> Option<&'static [u8]>,
+    {
+        // 中文注释:创世机构每个管理员包成 Genesis 来源资料;NJD 在创世期写入职务。
         let admins: Vec<AdminProfile<T::AccountId>> = raw_admins
             .iter()
-            .map(|raw| {
+            .enumerate()
+            .map(|(index, raw)| {
                 let account = T::AccountId::decode(&mut &raw[..]).unwrap_or_else(|_| {
                     panic!("genesis: cid_number {} 管理员账号 decode 失败", cid_number)
                 });
+                let admin_role = role_for_index(index)
+                    .map(|role| {
+                        role.to_vec().try_into().unwrap_or_else(|_| {
+                            panic!("genesis: cid_number {} 管理员职务过长", cid_number)
+                        })
+                    })
+                    .unwrap_or_else(BoundedVec::new);
                 AdminProfile {
                     account,
                     admin_cid_number: BoundedVec::new(),
                     name: BoundedVec::new(),
-                    admin_role: BoundedVec::new(),
+                    admin_role,
                     term_start: 0,
                     term_end: 0,
                     source: AdminSource::Genesis,
@@ -248,6 +285,7 @@ pub mod pallet {
                 admin_primitives::expected_genesis_admins_len(primitives::cid::code::NRC),
                 admin_primitives::expected_genesis_admins_len(primitives::cid::code::PRC),
                 admin_primitives::expected_genesis_admins_len(primitives::cid::code::PRB),
+                admin_primitives::expected_genesis_admins_len(primitives::cid::code::NJD),
             ]
             .into_iter()
             .flatten()
@@ -298,6 +336,25 @@ pub mod pallet {
             }
             insert_builtin!(CHINA_CB);
             insert_builtin!(CHINA_CH);
+            let njd_node = CHINA_SF
+                .iter()
+                .find(|node| institution_code_from_cid_number(node.cid_number) == Some(NJD))
+                .expect("china_sf must include NJD");
+            let Some(njd_account) = decode_account::<T>(&njd_node.main_account) else {
+                panic!(
+                    "genesis: cid_number {} 主账户 decode 失败",
+                    njd_node.cid_number
+                );
+            };
+            AdminAccounts::<T>::insert(
+                njd_account,
+                build_builtin_institution_with_roles::<T, _>(
+                    njd_node.cid_number,
+                    NJD,
+                    NATIONAL_JUDICIAL_YUAN_ADMINS,
+                    national_judicial_yuan_admin_role,
+                ),
+            );
             // 中文注释：联邦注册局不再写成一个 215 人平铺治理账户。
             // FRG 创世管理员按 `PROVINCE_CODE_INFOS` 顺序切成 43 个省级 5 人组；
             // 每组绑定一个虚拟投票根账户,代码级固定阈值 3/5,用于本省管理员更换。
@@ -666,7 +723,7 @@ pub mod pallet {
                 Error::<T>::InvalidAdminAccountKind
             );
             match expected_admins_len(institution_code) {
-                // 中文注释：国储会、省储会、省储行是制度固定人数。
+                // 中文注释：创世治理机构是制度固定人数。
                 Some(expected) => ensure!(
                     admins_len == expected as usize,
                     Error::<T>::InvalidAdminsLen
@@ -908,7 +965,7 @@ pub mod pallet {
                 account.status == AdminAccountStatus::Active,
                 Error::<T>::AdminAccountNotActive
             );
-            // 中文注释：NRC/PRC/PRB 是制度内置治理账户，生命周期不能被删除。
+            // 中文注释：创世治理账户生命周期不能被删除。
             ensure!(
                 !matches!(account.kind, AdminAccountKind::GenesisInstitution),
                 Error::<T>::BuiltinAdminAccountCannotClose

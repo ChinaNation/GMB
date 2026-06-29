@@ -106,9 +106,13 @@ class InstitutionCodeLabel {
   // 治理策略派生(纯函数，热钱包唯一分类来源)
   // ──────────────────────────────────────────────────────────────────
 
-  /// 是否为固定治理档机构码(国储会/省储会/省储行)。
+  /// 是否为固定治理档机构码(国储会/省储会/省储行/联邦注册局/国家司法院)。
   static bool isFixedGovernance(String code) {
-    return code == 'NRC' || code == 'PRC' || code == 'PRB';
+    return code == 'NRC' ||
+        code == 'PRC' ||
+        code == 'PRB' ||
+        code == 'FRG' ||
+        code == 'NJD';
   }
 
   /// 是否为个人多签账户机构码(PMUL)。
@@ -129,7 +133,7 @@ class InstitutionCodeLabel {
   /// 是否为机构账户机构码(公权/私权/非法人法人实体，经机构管理(public/private-manage)注册多签)。
   ///
   /// 个人/个人多签不算机构账户；
-  /// 固定治理档(NRC/PRC/PRB)是 china 内建创世账户，走固定治理路径，也不算机构账户。
+  /// 固定治理档(NRC/PRC/PRB/FRG/NJD)是 china 内建创世账户，走固定治理路径，也不算机构账户。
   static bool isInstitution(String code) {
     if (isFixedGovernance(code)) return false;
     return isPublicLegal(code) ||
@@ -145,7 +149,7 @@ class InstitutionCodeLabel {
 
   /// 是否归 GenesisAdmins 管理。
   static bool isGenesisAdminCode(String code) {
-    return isFixedGovernance(code) || code == 'FRG';
+    return isFixedGovernance(code);
   }
 
   /// 是否归 PublicAdmins 管理。
@@ -217,6 +221,10 @@ class InstitutionCodeLabel {
         return '省储会';
       case 'PRB':
         return '省储行';
+      case 'FRG':
+        return '联邦注册局';
+      case 'NJD':
+        return '国家司法院';
       case 'PMUL':
         return '个人多签';
       default:

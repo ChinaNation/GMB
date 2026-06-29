@@ -18,7 +18,7 @@ use votingengine::pallet::{
     ProposalsByCode, ProposalsByExpiry, ProposalsByInstitution, ProposalsByOwner, ProposalsByYear,
     YearProposalCounter,
 };
-use votingengine::types::{code_bytes, InstitutionCode, PMUL};
+use votingengine::types::{code_bytes, InstitutionCode, NJD, PMUL};
 // 测试用机构码:个人多签 / 公权法人 / 私权法人,均属"注册多签动态账户"。
 const PERSONAL_CODE: InstitutionCode = PMUL;
 const PUBLIC_CODE: InstitutionCode = code_bytes("CGOV");
@@ -26,6 +26,7 @@ const PRIVATE_CODE: InstitutionCode = code_bytes("SFLP");
 // joint mode storage 在 joint-vote sub-pallet
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_sf::{CHINA_SF, NATIONAL_JUDICIAL_YUAN_ADMINS};
 use sp_runtime::{traits::Hash, traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
 use votingengine::traits::{
     InternalAdminProvider, InternalVoteEngine, InternalVoteResultCallback, JointVoteEngine,
@@ -239,6 +240,15 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
+            NJD => CHINA_SF
+                .first()
+                .filter(|n| AccountId32::new(n.main_account) == institution)
+                .map(|_| {
+                    NATIONAL_JUDICIAL_YUAN_ADMINS
+                        .iter()
+                        .any(|admin| *admin == who_arr)
+                })
+                .unwrap_or(false),
             PERSONAL_CODE | PUBLIC_CODE | PRIVATE_CODE => {
                 institution == registered_account_institution()
                     && [
@@ -266,6 +276,16 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                 .iter()
                 .find(|n| AccountId32::new(n.main_account) == institution)
                 .map(|n| n.admins.iter().copied().map(AccountId32::new).collect()),
+            NJD => CHINA_SF
+                .first()
+                .filter(|n| AccountId32::new(n.main_account) == institution)
+                .map(|_| {
+                    NATIONAL_JUDICIAL_YUAN_ADMINS
+                        .iter()
+                        .copied()
+                        .map(AccountId32::new)
+                        .collect()
+                }),
             PERSONAL_CODE | PUBLIC_CODE | PRIVATE_CODE
                 if institution == registered_account_institution() =>
             {
@@ -513,8 +533,16 @@ fn prb_pid() -> AccountId32 {
     AccountId32::new(CHINA_CH[0].main_account)
 }
 
+fn njd_pid() -> AccountId32 {
+    AccountId32::new(CHINA_SF[0].main_account)
+}
+
 fn nrc_admin(index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CB[0].admins[index])
+}
+
+fn njd_admin(index: usize) -> AccountId32 {
+    AccountId32::new(NATIONAL_JUDICIAL_YUAN_ADMINS[index])
 }
 
 fn all_prc_institutions() -> Vec<(AccountId32, AccountId32)> {

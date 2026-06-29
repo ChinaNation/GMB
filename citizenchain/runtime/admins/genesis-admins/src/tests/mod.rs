@@ -9,8 +9,8 @@ use frame_support::{
 };
 use frame_system as system;
 use primitives::cid::{
-    china::{china_cb::CHINA_CB, china_ch::CHINA_CH, china_zf::CHINA_ZF},
-    code::{code_bytes, ProvinceCode, NRC, PROVINCE_CODE_INFOS},
+    china::{china_cb::CHINA_CB, china_ch::CHINA_CH, china_sf::CHINA_SF, china_zf::CHINA_ZF},
+    code::{code_bytes, ProvinceCode, NJD, NRC, PROVINCE_CODE_INFOS},
 };
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::types::institution_code_from_cid_number;
@@ -241,11 +241,11 @@ fn province_group_account(province_code: ProvinceCode) -> AccountId32 {
 #[test]
 fn genesis_build_only_inserts_genesis_admin_sources() {
     new_test_ext().execute_with(|| {
-        // 中文注释：平铺 AdminAccounts 只写国储会、省储会、省储行；
+        // 中文注释：平铺 AdminAccounts 写国储会、省储会、省储行、国家司法院；
         // 联邦注册局改由 43 个省级 5 人组单独存储。
         assert_eq!(
             AdminAccounts::<Test>::iter().count(),
-            CHINA_CB.len() + CHINA_CH.len()
+            CHINA_CB.len() + CHINA_CH.len() + 1
         );
 
         let nrc_account = AccountId32::new(CHINA_CB[0].main_account);
@@ -267,6 +267,47 @@ fn genesis_build_only_inserts_genesis_admin_sources() {
                 assert_eq!(profile.term_end, 0);
             }
         }
+
+        let njd_account = AccountId32::new(CHINA_SF[0].main_account);
+        let njd = AdminAccounts::<Test>::get(njd_account).expect("NJD genesis account");
+        assert_eq!(njd.institution_code, NJD);
+        assert_eq!(
+            njd.admins.len(),
+            primitives::count_const::NJD_ADMIN_COUNT as usize
+        );
+        assert_eq!(
+            njd.admins
+                .iter()
+                .filter(|profile| profile.admin_role.as_slice()
+                    == admin_primitives::ADMIN_ROLE_CONSTITUTION_GUARD)
+                .count(),
+            5
+        );
+        assert_eq!(
+            njd.admins
+                .iter()
+                .filter(|profile| profile.admin_role.as_slice()
+                    == admin_primitives::ADMIN_ROLE_CHIEF_JUSTICE)
+                .count(),
+            1
+        );
+        assert_eq!(
+            njd.admins
+                .iter()
+                .filter(|profile| profile.admin_role.as_slice()
+                    == admin_primitives::ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE)
+                .count(),
+            2
+        );
+        assert_eq!(
+            njd.admins
+                .iter()
+                .filter(
+                    |profile| profile.admin_role.as_slice() == admin_primitives::ADMIN_ROLE_JUSTICE
+                )
+                .count(),
+            5
+        );
 
         assert_eq!(
             FederalRegistryProvinceGroups::<Test>::iter().count(),
@@ -321,6 +362,18 @@ fn genesis_admins_accept_only_genesis_codes() {
         ));
         assert!(GenesisAdmins::pending_account_exists_for_snapshot(
             NRC, root
+        ));
+
+        let njd_root = account(89);
+        assert_ok!(GenesisAdmins::do_create_pending_admin_account(
+            njd_root.clone(),
+            NJD,
+            AdminAccountKind::GenesisInstitution,
+            admins(13),
+            account(1),
+        ));
+        assert!(GenesisAdmins::pending_account_exists_for_snapshot(
+            NJD, njd_root
         ));
 
         assert_noop!(
@@ -422,6 +475,16 @@ fn fixed_governance_admin_count_is_locked() {
                 NRC,
                 AdminAccountKind::GenesisInstitution,
                 admins(3),
+                account(1),
+            ),
+            Error::<Test>::InvalidAdminsLen
+        );
+        assert_noop!(
+            GenesisAdmins::do_create_pending_admin_account(
+                account(93),
+                NJD,
+                AdminAccountKind::GenesisInstitution,
+                admins(12),
                 account(1),
             ),
             Error::<Test>::InvalidAdminsLen

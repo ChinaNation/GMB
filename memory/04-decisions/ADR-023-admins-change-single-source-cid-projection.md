@@ -3,7 +3,7 @@
 状态:Accepted(2026-06-21)。**本 ADR 是「管理员真源」的唯一架构真源**,取代一切旧的 CID 直写/本地播种叙述。
 关联:[[feedback_no_compatibility]]、[[feedback_pubkey_format_rule]]、[[feedback_chainspec_frozen]]、[[feedback_registry_regen_after_genesis]]、[[project_admin_single_source_admins_change_2026_06_21]]、ADR-008、ADR-015、ADR-017。
 
-> **注(2026-06-22)**:本 ADR §1 描述的 `org`(`ORG_NRC..ORG_OTH` 6 类)分类模型**已被 [[ADR-025]] 取代**。机构分类唯一真源现为 CID 机构码 `institution_code`;ORG_PUP/ORG_OTH 已合并为机构账户码谓词 `is_institution_code`,固定治理档 NRC/PRC/PRB 走 `is_fixed_governance_code`,个人多签(原 ORG_REN)走 `is_personal_code`(PMUL)。下文 `org` 叙述仅作历史决策保留,新开发以 ADR-025 为准。
+> **注(2026-06-22)**:本 ADR §1 描述的 `org`(`ORG_NRC..ORG_OTH` 6 类)分类模型**已被 [[ADR-025]] 取代**。机构分类唯一真源现为 CID 机构码 `institution_code`;ORG_PUP/ORG_OTH 已合并为机构账户码谓词 `is_institution_code`,固定治理档 NRC/PRC/PRB/FRG/NJD 走 `is_fixed_governance_code`,个人多签(原 ORG_REN)走 `is_personal_code`(PMUL)。下文 `org` 叙述仅作历史决策保留,新开发以 ADR-025 为准。
 
 ---
 

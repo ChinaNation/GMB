@@ -331,7 +331,7 @@ mod runtime {
     #[runtime::pallet_index(11)]
     pub type CitizenIssuance = citizen_issuance;
 
-    // 创世管理员模块：国储会、省储会、省储行、联邦注册局管理员。
+    // 创世管理员模块：固定治理档创世管理员。
     #[runtime::pallet_index(12)]
     pub type GenesisAdmins = genesis_admins;
 

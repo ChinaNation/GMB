@@ -608,43 +608,47 @@ void main() {
 
     test('decodes propose_admin_set_change for all admin pallets', () {
       final account = List<int>.generate(32, (i) => 0x80 + i);
-      final admin1 = List<int>.filled(32, 0x11);
-      final admin2 = List<int>.filled(32, 0x22);
       for (final item in [
-        (7, 3, 'PMUL', 'propose_personal_admin_set_change'),
-        (12, 0, 'FRG', 'propose_genesis_admin_set_change'),
-        (29, 0, 'CGOV', 'propose_public_admin_set_change'),
-        (30, 0, 'SFLP', 'propose_private_admin_set_change'),
+        (7, 3, 'PMUL', 2, 2, 'propose_personal_admin_set_change'),
+        (12, 0, 'FRG', 5, 3, 'propose_genesis_admin_set_change'),
+        (12, 0, 'NJD', 13, 8, 'propose_genesis_admin_set_change'),
+        (29, 0, 'CGOV', 2, 2, 'propose_public_admin_set_change'),
+        (30, 0, 'SFLP', 2, 2, 'propose_private_admin_set_change'),
       ]) {
+        final admins = List<List<int>>.generate(
+          item.$4,
+          (i) => List<int>.filled(32, 0x11 + i),
+        );
         final payload = Uint8List.fromList([
           item.$1,
           item.$2,
           ...InstitutionCode.codeBytes(item.$3),
           ...account,
-          0x08, // Compact(2)
-          ...admin1,
-          ...admin2,
-          ...u32Le(2),
+          item.$4 << 2, // Compact(admins.length)
+          for (final admin in admins) ...admin,
+          ...u32Le(item.$5),
         ]);
 
         final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
         expect(decoded, isNotNull);
-        expect(decoded!.action, item.$4);
+        expect(decoded!.action, item.$6);
         expect(decoded.fields['institution_code'],
             InstitutionCode.codeLabel(item.$3));
         expect(decoded.fields['account'], '0x${hexLower(account)}');
         expect(
           decoded.fields['admins'],
-          [
-            '0x${admin1.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
-            '0x${admin2.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
-          ].join(','),
+          admins
+              .map((admin) =>
+                  '0x${admin.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}')
+              .join(','),
         );
-        expect(decoded.reviewFields['new_threshold'], '2/2');
+        expect(decoded.reviewFields['new_threshold'], '${item.$5}/${item.$4}');
         expect(decoded.summary, contains('管理员集合变更'));
       }
 
+      final admin1 = List<int>.filled(32, 0x11);
+      final admin2 = List<int>.filled(32, 0x22);
       final personalPayload = Uint8List.fromList([
         0x07,
         0x00,

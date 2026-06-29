@@ -18,14 +18,20 @@ use primitives::core_const::CID_NUMBER_MAX_BYTES;
 use scale_info::TypeInfo;
 use sp_runtime::{DispatchError, RuntimeDebug};
 
-/// 联邦注册局机构码,唯一真源在 `primitives::cid::code`。
-pub use primitives::cid::code::FRG;
+/// 创世治理机构码,唯一真源在 `primitives::cid::code`。
+pub use primitives::cid::code::{FRG, NJD};
 
 /// 管理员资料里姓名/职务的最大字节长度(与实体生命周期模块 `MaxAccountNameLength` 一致)。
 pub const ADMIN_NAME_MAX_BYTES: u32 = 128;
 
 /// 护宪大法官职务字面量。护宪成员解析只认本常量,禁止各处手写字符串。
 pub const ADMIN_ROLE_CONSTITUTION_GUARD: &[u8] = "护宪大法官".as_bytes();
+/// 首席大法官职务字面量。
+pub const ADMIN_ROLE_CHIEF_JUSTICE: &[u8] = "首席大法官".as_bytes();
+/// 次席大法官职务字面量。
+pub const ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE: &[u8] = "次席大法官".as_bytes();
+/// 大法官职务字面量。
+pub const ADMIN_ROLE_JUSTICE: &[u8] = "大法官".as_bytes();
 
 /// 管理员资料里实名 CID 号最大字节长度(与全仓 `CID_NUMBER_MAX_BYTES` 一致)。
 pub const ADMIN_CID_NUMBER_MAX_BYTES: u32 = CID_NUMBER_MAX_BYTES;
@@ -104,7 +110,7 @@ pub struct AdminProfile<AccountId> {
     Eq,
 )]
 pub enum AdminAccountKind {
-    /// 创世管理员：国储会、省储会、省储行、联邦注册局。
+    /// 创世管理员：国储会、省储会、省储行、联邦注册局、国家司法院。
     GenesisInstitution,
     /// 非创世公权机构管理员。
     PublicInstitution,
@@ -409,13 +415,15 @@ pub fn is_personal_admin_code(code: &InstitutionCode) -> bool {
 /// 中文注释:FRG 的固定人数语义是"单个省级组 5 人",不是全局 215 人平铺账户。
 pub fn expected_genesis_admins_len(code: InstitutionCode) -> Option<u32> {
     use primitives::count_const::{
-        FRG_PROVINCE_GROUP_ADMIN_COUNT, NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT,
+        FRG_PROVINCE_GROUP_ADMIN_COUNT, NJD_ADMIN_COUNT, NRC_ADMIN_COUNT, PRB_ADMIN_COUNT,
+        PRC_ADMIN_COUNT,
     };
     match code {
         NRC => Some(NRC_ADMIN_COUNT),
         PRC => Some(PRC_ADMIN_COUNT),
         PRB => Some(PRB_ADMIN_COUNT),
         FRG => Some(FRG_PROVINCE_GROUP_ADMIN_COUNT),
+        NJD => Some(NJD_ADMIN_COUNT),
         _ => None,
     }
 }

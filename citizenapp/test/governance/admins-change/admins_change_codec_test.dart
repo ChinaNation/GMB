@@ -257,5 +257,71 @@ void main() {
         ['aa' * 32, 'cc' * 32],
       );
     });
+
+    test('validates fixed genesis governance counts and thresholds', () {
+      String key(int byte) => byte.toRadixString(16).padLeft(2, '0') * 32;
+
+      AdminAccountState fixedAccount({
+        required String institutionCode,
+        required int count,
+      }) {
+        return AdminAccountState(
+          accountHex: '11' * 32,
+          institutionCode: institutionCode,
+          kind: 0,
+          profiles: List<AdminProfile>.generate(
+            count,
+            (i) => AdminProfile(account: i == 0 ? 'aa' * 32 : key(0x20 + i)),
+          ),
+          threshold: 1,
+          creatorHex: 'aa' * 32,
+          createdAt: 1,
+          updatedAt: 1,
+          status: 1,
+        );
+      }
+
+      List<String> newAdmins(int count) => [
+            'aa' * 32,
+            for (var i = 1; i < count; i++) key(0x60 + i),
+          ];
+
+      expect(
+        AdminSetValidation.validate(
+          account: fixedAccount(institutionCode: 'FRG', count: 5),
+          proposerPubkeyHex: 'aa' * 32,
+          admins: newAdmins(5),
+          newThreshold: 3,
+        ).threshold,
+        3,
+      );
+      expect(
+        AdminSetValidation.validate(
+          account: fixedAccount(institutionCode: 'NJD', count: 13),
+          proposerPubkeyHex: 'aa' * 32,
+          admins: newAdmins(13),
+          newThreshold: 8,
+        ).threshold,
+        8,
+      );
+      expect(
+        () => AdminSetValidation.validate(
+          account: fixedAccount(institutionCode: 'FRG', count: 5),
+          proposerPubkeyHex: 'aa' * 32,
+          admins: newAdmins(4),
+          newThreshold: 3,
+        ),
+        throwsStateError,
+      );
+      expect(
+        () => AdminSetValidation.validate(
+          account: fixedAccount(institutionCode: 'NJD', count: 13),
+          proposerPubkeyHex: 'aa' * 32,
+          admins: newAdmins(13),
+          newThreshold: 7,
+        ),
+        throwsStateError,
+      );
+    });
   });
 }

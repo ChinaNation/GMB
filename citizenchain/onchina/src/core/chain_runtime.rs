@@ -664,7 +664,7 @@ fn blake2_256(input: &[u8]) -> [u8; 32] {
 // 链上管理员集合读取(去中心化鉴权)
 //
 // 真源:机构 Active 管理员集合落链端三个 pallet 的 `AdminAccounts` storage——
-// `GenesisAdmins`(固定治理档 NRC/PRC/PRB/FRG)、
+// `GenesisAdmins`(固定治理档 NRC/PRC/PRB/FRG/NJD)、
 // `PublicAdmins`(其它公权法人:政府/立法/监察/司法/教育/注册局/公安等)、
 // `PrivateAdmins`(私权法人:股权/股份/有限合伙/公益/协会/私立学校等)。
 // 节点按自身机构码路由到对应 pallet,登录验签后比对该集合放行,
@@ -726,7 +726,7 @@ struct OnChainAdminAccount {
 
 /// 机构 Active 管理员集合所属链上 pallet。
 ///
-/// 机构码决定容器:`GenesisAdmins` 收固定治理档(NRC/PRC/PRB/FRG),
+/// 机构码决定容器:`GenesisAdmins` 收固定治理档(NRC/PRC/PRB/FRG/NJD),
 /// `PublicAdmins` 收其它公权法人,`PrivateAdmins` 收私权法人。
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum AdminPallet {
@@ -760,8 +760,8 @@ pub(crate) struct NodeInstitutionIdentity {
 ///
 /// 镜像链端 `admin-primitives` 路由语义(用 `primitives::cid::code` 分类,不引入 admin-primitives
 /// 重依赖):FRG→创世;其它公权法人→公权;私权法人→私权;非法人按所属法人落公权或私权——
-/// 账户键全局唯一,登录时按 [Public, Private] 顺序探测命中。其它固定治理档(NRC/PRC/PRB,有专属桌面
-/// 前端)与个人主体/个人多签不在控制台范围,返回错误拒绝。
+/// 账户键全局唯一,登录时按 [Public, Private] 顺序探测命中。其它固定治理档有专属治理入口,
+/// 与个人主体/个人多签都不在控制台范围,返回错误拒绝。
 fn console_admin_pallets(code: &[u8; 4]) -> Result<Vec<AdminPallet>, String> {
     use primitives::cid::code::{
         is_fixed_governance_code, is_private_legal_code, is_public_legal_code,

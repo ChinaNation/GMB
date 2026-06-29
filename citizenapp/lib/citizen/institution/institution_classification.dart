@@ -36,7 +36,7 @@ const Set<String> kLegislationCodes = <String>{
   'NED', // 国家公民教育委员会
 };
 
-/// 治理 tab 机构码集合:固定治理档(与 `InstitutionCodeLabel.isFixedGovernance` 同源)。
+/// 治理 tab 机构码集合:仅储备治理三档,不等同于链端全部固定治理档。
 const Set<String> kGovernanceCodes = <String>{'NRC', 'PRC', 'PRB'};
 
 /// 机构分类工具(纯函数,单一源)。

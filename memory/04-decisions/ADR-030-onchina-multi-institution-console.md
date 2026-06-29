@@ -21,7 +21,7 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 
 | 机构类别 | 判定 | 链上 pallet（index） |
 |---|---|---|
-| 联邦注册局 FRG / 固定治理档 NRC/PRC/PRB | `== FRG` 或 `is_fixed_governance_code` | `GenesisAdmins`（12） |
+| 联邦注册局 FRG / 固定治理档 NRC/PRC/PRB/FRG/NJD | `== FRG` 或 `is_fixed_governance_code` | `GenesisAdmins`（12） |
 | 其它公权法人（政府/立法/监察/司法/教育/储委以外公权/注册局/公安等） | `is_public_legal_code` | `PublicAdmins`（29） |
 | 私权法人（股权/股份/有限合伙/公益/协会/私立学校等 SF*） | `is_private_legal_code` | `PrivateAdmins`（30） |
 

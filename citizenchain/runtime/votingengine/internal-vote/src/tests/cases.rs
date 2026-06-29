@@ -809,6 +809,17 @@ fn joint_vote_uses_fixed_governance_threshold_not_provider() {
 }
 
 #[test]
+fn national_judicial_yuan_uses_fixed_internal_threshold() {
+    new_test_ext().execute_with(|| {
+        let proposal_id = create_internal_proposal_via_engine(njd_admin(0), NJD, njd_pid());
+        assert_eq!(
+            InternalThresholdSnapshot::<Test>::get(proposal_id),
+            Some(primitives::count_const::NJD_INTERNAL_THRESHOLD)
+        );
+    });
+}
+
+#[test]
 fn joint_vote_auto_rejects_institution_when_yes_is_no_longer_reachable() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();

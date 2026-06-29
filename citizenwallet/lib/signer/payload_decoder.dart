@@ -2251,8 +2251,7 @@ class PayloadDecoder {
 
   /// 管理员集合变更阈值合法性。
   ///
-  /// 固定治理档机构码走制度常量(国储会 19/13、省储会/省储行 9/6),
-  /// 注册多签账户(个人多签/机构账户)走动态严格过半。逐字保留旧 org 分档语义。
+  /// 固定治理档机构码走制度常量；注册多签账户(个人多签/机构账户)走动态严格过半。
   static bool _validAdminChangeThreshold(
     String code,
     int adminsLen,
@@ -2263,6 +2262,12 @@ class PayloadDecoder {
     }
     if (code == 'PRC' || code == 'PRB') {
       return adminsLen == 9 && threshold == 6;
+    }
+    if (code == 'FRG') {
+      return adminsLen == 5 && threshold == 3;
+    }
+    if (code == 'NJD') {
+      return adminsLen == 13 && threshold == 8;
     }
     if (InstitutionCode.isRegisteredMultisig(code)) {
       return adminsLen >= 2 &&
@@ -2283,13 +2288,12 @@ class PayloadDecoder {
     }
     if (palletIndex == PalletRegistry.genesisAdminsPallet) {
       return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
-          (InstitutionCode.isFixedGovernance(code) || code == 'FRG');
+          InstitutionCode.isFixedGovernance(code);
     }
     if (palletIndex == PalletRegistry.publicAdminsPallet) {
       return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
           InstitutionCode.isPublicLegal(code) &&
-          !InstitutionCode.isFixedGovernance(code) &&
-          code != 'FRG';
+          !InstitutionCode.isFixedGovernance(code);
     }
     if (palletIndex == PalletRegistry.privateAdminsPallet) {
       return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
@@ -2370,15 +2374,14 @@ class PayloadDecoder {
   ///   2 = PrivateInstitution
   ///   3 = PersonalMultisig
   static bool _activationAccountKindMatchesCode(String code, int kind) {
-    if (InstitutionCode.isFixedGovernance(code) || code == 'FRG') {
+    if (InstitutionCode.isFixedGovernance(code)) {
       return kind == 0;
     }
     if (InstitutionCode.isPersonal(code)) {
       return kind == 3;
     }
     if (InstitutionCode.isPublicLegal(code) &&
-        !InstitutionCode.isFixedGovernance(code) &&
-        code != 'FRG') {
+        !InstitutionCode.isFixedGovernance(code)) {
       return kind == 1;
     }
     if (InstitutionCode.isPrivateLegal(code) ||

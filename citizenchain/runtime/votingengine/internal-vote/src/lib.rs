@@ -29,13 +29,15 @@ use sp_runtime::{DispatchError, RuntimeDebug};
 
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
+use primitives::cid::china::china_sf::CHINA_SF;
 use primitives::count_const::{FRG_PROVINCE_GROUP_ADMIN_COUNT, VOTING_DURATION_BLOCKS};
 
 use votingengine::{
     pallet::{AdminSnapshot, Proposals},
     types::{
-        fixed_governance_pass_threshold, is_registered_multisig_code, is_valid_governance_code,
-        InstitutionCode, FRG, NRC, PRB, PRC,
+        fixed_governance_pass_threshold, institution_code_from_cid_number,
+        is_registered_multisig_code, is_valid_governance_code, InstitutionCode, FRG, NJD, NRC, PRB,
+        PRC,
     },
     InternalAdminProvider, InternalProposalMutexKind, Proposal, PROPOSAL_KIND_INTERNAL,
     STAGE_INTERNAL, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
@@ -226,6 +228,12 @@ fn is_valid_internal_institution<T: Config>(
         FRG => <T as votingengine::Config>::InternalAdminProvider::get_admin_list(FRG, institution)
             .map(|admins| admins.len() == FRG_PROVINCE_GROUP_ADMIN_COUNT as usize)
             .unwrap_or(false),
+        NJD => CHINA_SF
+            .iter()
+            .find(|n| institution_code_from_cid_number(n.cid_number) == Some(NJD))
+            .and_then(|n| decode_account::<T>(&n.main_account))
+            .map(|njd| institution == njd)
+            .unwrap_or(false),
         c if is_registered_multisig_code(&c) => {
             <T as votingengine::Config>::InternalAdminProvider::get_admin_list(c, institution)
                 .is_some()
@@ -251,7 +259,7 @@ fn active_internal_threshold<T: Config>(
     institution: T::AccountId,
 ) -> Option<u32> {
     match institution_code {
-        NRC | PRC | PRB | FRG => fixed_governance_pass_threshold(&institution_code),
+        NRC | PRC | PRB | FRG | NJD => fixed_governance_pass_threshold(&institution_code),
         c if is_registered_multisig_code(&c) => ActiveDynamicThresholds::<T>::get(c, institution),
         _ => None,
     }

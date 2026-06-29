@@ -1,6 +1,6 @@
 //! # 多签资金账户转账模块 (multisig-transfer)
 //!
-//! 本模块为治理机构(NRC/PRC/PRB)、注册机构多签账户和个人多签账户提供链上转账治理流程：
+//! 本模块为储备治理三档、注册机构多签账户和个人多签账户提供链上转账治理流程：
 //! - 管理员发起转账提案，经内部投票通过后自动执行转账并扣取手续费。
 //! - 自动执行失败时保留提案状态，可通过 `VotingEngine::retry_passed_proposal` 手动重试。
 //! - 余额在提案创建和执行两个时点双重检查，含手续费和 ED 保留。
@@ -98,7 +98,7 @@ fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], account: &T::Acc
     decode_raw_account::<T>(raw).as_ref() == Some(account)
 }
 
-/// 中文注释：判断内置机构属于 NRC/PRC/PRB；注册多签由链上存储判断。
+/// 中文注释：本资金治理路径只覆盖储备治理三档；注册多签由链上存储判断。
 fn builtin_org<T: frame_system::Config>(institution: &T::AccountId) -> Option<InstitutionCode> {
     if CHINA_CB
         .first()

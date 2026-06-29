@@ -4,10 +4,10 @@
 // 中文注释:
 // - 所有机构本质都是按 CID `institution_code` 分类的公权多签账户,差异只在权责。
 //   本实体是五子 tab(广场/立法/选举/治理/公权)与统一详情页的唯一机构模型。
-// - 身份字段来自目录(CID-BFF + Isar);治理三档(NRC/PRC/PRB)的固定账户 hex
+// - 身份字段来自目录(CID-BFF + Isar);创世治理机构的固定账户 hex
 //   由 [builtinAccounts] 承载(china 创世常量,不可派生),其余机构主/费/自定义账户
 //   一律本地派生(account_derivation,零网络)。
-// - 机构分类(orgType / 是否固定治理 / 是否机构账户)统一从机构码派生,
+// - 机构分类(是否固定治理 / 是否机构账户)统一从机构码派生,
 //   单一源 = `citizen/shared/institution_code_label.dart`,绝不另立第二套。
 
 import 'dart:typed_data';
@@ -63,11 +63,11 @@ class Institution {
   final int accountCount;
   final List<String> customAccountNames;
 
-  /// 固定治理档(NRC/PRC/PRB)的链上固定账户集合(china 创世常量,不可派生)。
-  /// 普通机构为 null —— 账户走本地派生。由仓库在加载固定治理档机构时附加。
+  /// 创世治理机构的链上固定账户集合(china 创世常量,不可派生)。
+  /// 普通机构为 null —— 账户走本地派生。由仓库在加载创世治理机构时附加。
   final InstitutionAccounts? builtinAccounts;
 
-  /// 机构类型(单一源,由机构码派生):NRC/PRC/PRB → 对应固定治理档;其余 → 机构账户。
+  /// 储备治理三档旧 UI 类型;其它机构统一返回 account,真实分类看 institutionCode。
   int get orgType {
     switch (institutionCode) {
       case 'NRC':
@@ -81,7 +81,7 @@ class Institution {
     }
   }
 
-  /// 是否固定治理档(国储会/省储会/省储行)。
+  /// 是否链端固定治理档。
   bool get isFixedGovernance =>
       InstitutionCodeLabel.isFixedGovernance(institutionCode);
 
@@ -94,7 +94,7 @@ class Institution {
       ? cidShortName!
       : cidFullName;
 
-  /// 主账户 AccountId:固定治理档用 china 固定 hex,其余本地派生(行为保持)。
+  /// 主账户 AccountId:创世治理机构用 china 固定 hex,其余本地派生。
   Uint8List mainAccountId() {
     final baked = builtinAccounts?.mainAccount;
     if (baked != null && baked.isNotEmpty) {
@@ -106,7 +106,7 @@ class Institution {
   /// 主账户 hex(32 字节,不含 0x)。
   String get mainAccountHex => hexFromAccountId(mainAccountId());
 
-  /// 附加固定治理档账户集合(仓库加载 NRC/PRC/PRB 时调用)。
+  /// 附加创世固定账户集合。
   Institution withBuiltinAccounts(InstitutionAccounts accounts) => Institution(
         cidNumber: cidNumber,
         cidFullName: cidFullName,
@@ -123,14 +123,14 @@ class Institution {
         builtinAccounts: accounts,
       );
 
-  /// 由治理静态注册表项构造(回退路径:目录未同步到时,治理机构仍可展示)。
+  /// 由创世静态账户项构造(回退路径:目录未同步时仍可展示)。
   /// 地域 code 注册表项不带,留空 → 所属地按目录就绪后回填;账户用 baked 集合。
   factory Institution.fromGovernanceInfo(InstitutionInfo info) {
     final code = switch (info.orgType) {
       OrgType.nrc => 'NRC',
       OrgType.prc => 'PRC',
       OrgType.prb => 'PRB',
-      _ => '',
+      _ => info.adminAccountCode ?? '',
     };
     return Institution(
       cidNumber: info.cidNumber,

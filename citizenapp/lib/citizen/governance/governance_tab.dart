@@ -105,7 +105,7 @@ class _GovernanceTabState extends State<GovernanceTab> {
   late final InstitutionRepository _repo =
       widget.repository ?? InstitutionRepository();
 
-  /// 治理 tab 机构码集合(=固定治理档)。
+  /// 治理 tab 机构码集合(储备治理三档)。
   static const Set<String> _governanceCodes = kGovernanceCodes;
 
   List<Institution> _national = const [];

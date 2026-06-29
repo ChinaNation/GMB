@@ -26,7 +26,7 @@
 - 状态：已完成。
 - `runtime/entity/genesis-manage` 已新增为创世机构本体模块，创世写入 CHINA_CB、CHINA_CH、CHINA_ZF 的创世机构信息、主账户、费用账户和封存索引。
 - `admins/genesis-admins` 继续管理创世管理员；FRG 不再写为 215 人平铺 `AdminAccounts`，改为 43 个省级 5 人组，阈值统一来自代码级固定阈值 `FRG=3`。
-- `primitives` 已把 FRG 纳入 NRC/PRC/PRB 同级固定治理码，`internal-vote` 只接受 FRG 省级 5 人组作为内部投票主体，不允许 FRG 主账户暴露成 215/3 多签配置。
+- `primitives` 已把 FRG 纳入 NRC/PRC/PRB 同级固定治理码；本任务后续又把 NJD 纳入固定治理档。`internal-vote` 只接受 FRG 省级 5 人组作为内部投票主体，不允许 FRG 主账户暴露成 215/3 多签配置。
 - FRG 管理员更换新增 `GenesisAdmins.propose_federal_registry_province_admin_set_change(12.2)`，旧 `12.0` 通用入口对 FRG 明确拒绝。
 - OnChina 的 FRG 管理员更换 QR 改为按管理员所在省读取 5 人组并编码 `0x0c02`。
 - node / CitizenApp 的通用管理员更换编码器均拒绝 FRG，避免继续生成旧 `12.0` call data。

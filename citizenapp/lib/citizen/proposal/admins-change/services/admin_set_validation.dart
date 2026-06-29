@@ -47,11 +47,13 @@ class AdminSetValidation {
     return (adminsLen ~/ 2) + 1;
   }
 
-  /// 固定治理阈值：NRC=13，PRC/PRB=6，其他=null（动态）。
+  /// 固定治理阈值：NRC=13，PRC/PRB=6，FRG=3，NJD=8，其他=null（动态）。
   static int? fixedGovernanceThreshold(String code) {
     return switch (code) {
       'NRC' => 13,
       'PRC' || 'PRB' => 6,
+      'FRG' => 3,
+      'NJD' => 8,
       _ => null,
     };
   }
@@ -69,14 +71,12 @@ class AdminSetValidation {
       final expected = switch (code) {
         'NRC' => 19,
         'PRC' || 'PRB' => 9,
-        'FRG' => null,
+        'FRG' => 5,
+        'NJD' => 13,
         _ => throw StateError('创世管理员 institution_code 无效: $code'),
       };
-      if (expected != null && count != expected) {
+      if (count != expected) {
         throw StateError('创世治理机构管理员数量必须保持 $expected 人');
-      }
-      if (expected == null && (count < 1 || count > 1989)) {
-        throw StateError('联邦注册局管理员数量必须在 1..=1989 之间');
       }
       return;
     }

@@ -399,40 +399,37 @@ fn constitution_amend_to_guard() -> u64 {
 }
 
 #[test]
-fn constitution_amend_passes_on_four_guard_approvals() {
+fn constitution_amend_passes_on_three_guard_approvals() {
     new_test_ext().execute_with(|| {
         let pid = constitution_amend_to_guard();
-        // 7 护宪大法官中 4 名及以上赞成 → 生效。
+        // 5 名护宪大法官中 3 名及以上赞成 → 生效。
         assert_ok!(guard_vote(member(101), pid, true));
         assert_ok!(guard_vote(member(102), pid, true));
-        assert_ok!(guard_vote(member(103), pid, true));
         assert_eq!(status(pid), STATUS_VOTING);
-        assert_ok!(guard_vote(member(104), pid, true));
+        assert_ok!(guard_vote(member(103), pid, true));
         assert_eq!(status(pid), STATUS_EXECUTED);
     });
 }
 
 #[test]
-fn constitution_amend_rejected_on_four_guard_rejections() {
+fn constitution_amend_rejected_on_three_guard_rejections() {
     new_test_ext().execute_with(|| {
         let pid = constitution_amend_to_guard();
         assert_ok!(guard_vote(member(101), pid, false));
         assert_ok!(guard_vote(member(102), pid, false));
-        assert_ok!(guard_vote(member(103), pid, false));
         assert_eq!(status(pid), STATUS_VOTING);
-        // 7 人制下 4 名反对 → 已不可能达到 4 名赞成,否决。
-        assert_ok!(guard_vote(member(104), pid, false));
+        // 5 人制下 3 名反对 → 已不可能达到 3 名赞成,否决。
+        assert_ok!(guard_vote(member(103), pid, false));
         assert_eq!(status(pid), STATUS_REJECTED);
     });
 }
 
 #[test]
-fn constitution_amend_stays_voting_with_three_guard_approvals() {
+fn constitution_amend_stays_voting_with_two_guard_approvals() {
     new_test_ext().execute_with(|| {
         let pid = constitution_amend_to_guard();
         assert_ok!(guard_vote(member(101), pid, true));
         assert_ok!(guard_vote(member(102), pid, true));
-        assert_ok!(guard_vote(member(103), pid, true));
         assert_eq!(status(pid), STATUS_VOTING);
     });
 }
@@ -440,11 +437,7 @@ fn constitution_amend_stays_voting_with_three_guard_approvals() {
 #[test]
 fn invalid_guard_member_count_rejected() {
     new_test_ext().execute_with(|| {
-        let cases: &[&[u8]] = &[
-            &[],
-            &[101, 102, 103, 104, 105, 106],
-            &[101, 102, 103, 104, 105, 106, 107, 108],
-        ];
+        let cases: &[&[u8]] = &[&[], &[101, 102, 103, 104], &[101, 102, 103, 104, 105, 106]];
         for ids in cases {
             set_guard_member_ids(ids);
             let pid = constitution_amend_to_guard();
@@ -460,7 +453,7 @@ fn invalid_guard_member_count_rejected() {
 #[test]
 fn duplicate_guard_member_list_rejected() {
     new_test_ext().execute_with(|| {
-        set_guard_member_ids(&[101, 102, 103, 104, 105, 106, 106]);
+        set_guard_member_ids(&[101, 102, 103, 104, 104]);
         let pid = constitution_amend_to_guard();
         assert_noop!(
             guard_vote(member(101), pid, true),
@@ -474,7 +467,7 @@ fn duplicate_guard_member_list_rejected() {
 fn constitution_amend_guard_timeout_rejects() {
     new_test_ext().execute_with(|| {
         let pid = constitution_amend_to_guard();
-        // 护宪大法官 30 天未达 4 名及以上赞成 → 超时否决。
+        // 护宪大法官 30 天未达 3 名及以上赞成 → 超时否决。
         run_to_expiry(pid);
         assert_eq!(status(pid), STATUS_REJECTED);
     });

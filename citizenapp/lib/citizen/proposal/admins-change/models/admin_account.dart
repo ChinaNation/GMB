@@ -20,6 +20,16 @@ class AdminAccountIdentity {
   });
 
   factory AdminAccountIdentity.fromInstitution(InstitutionInfo institution) {
+    final genesisCode = institution.adminAccountCode?.toUpperCase();
+    if (genesisCode != null &&
+        InstitutionCodeLabel.isGenesisAdminCode(genesisCode)) {
+      return AdminAccountIdentity.genesisInstitution(
+        accountHex: institution.mainAccount,
+        institutionCode: genesisCode,
+        accountLabel: institution.cidShortName,
+      );
+    }
+
     final personal = personalAccountHexFromIdentity(institution.cidNumber);
     if (personal != null) {
       return AdminAccountIdentity.personalAccount(
@@ -45,6 +55,27 @@ class AdminAccountIdentity {
       accountHex: institution.mainAccount,
       orgType: institution.orgType,
       accountLabel: institution.cidShortName,
+    );
+  }
+
+  factory AdminAccountIdentity.genesisInstitution({
+    required String accountHex,
+    required String institutionCode,
+    required String accountLabel,
+  }) {
+    final code = institutionCode.toUpperCase();
+    if (!InstitutionCodeLabel.isGenesisAdminCode(code)) {
+      throw ArgumentError('创世治理机构 institutionCode 无效: $institutionCode');
+    }
+    final account = AdminAccountIdCodec.normalizeHex(accountHex);
+    AdminAccountIdCodec.fromAccountHex(account);
+    return AdminAccountIdentity(
+      type: AdminAccountIdentityType.governanceInstitution,
+      identityKey: 'genesis:$code:$account',
+      accountLabel: accountLabel,
+      institutionCode: code,
+      kind: 0,
+      accountHex: account,
     );
   }
 
@@ -137,7 +168,7 @@ class AdminAccountIdentity {
   final String accountHex;
 
   String get typeLabel => switch (type) {
-        AdminAccountIdentityType.governanceInstitution => '治理机构',
+        AdminAccountIdentityType.governanceInstitution => '创世治理机构',
         AdminAccountIdentityType.personalAccount => '个人多签',
         AdminAccountIdentityType.institutionAccount => '机构账户',
       };
