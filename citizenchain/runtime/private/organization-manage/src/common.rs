@@ -16,7 +16,7 @@ use crate::BalanceOf;
 ///
 /// 机构多签的资金模型:提案创建时 reserve(amount + fee),
 /// 投票通过后 unreserve→划转→withdraw fee。本 helper 集中"金额合法性 + 余额够付"
-/// 的预检查;personal-admins 自持平行实现。
+/// 的预检查;personal-manage 自持平行实现。
 pub(crate) fn ensure_proposer_can_afford<T: Config>(
     who: &T::AccountId,
     amount: BalanceOf<T>,

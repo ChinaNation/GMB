@@ -634,9 +634,9 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | --- | --- | --- | --- |
 | `OrganizationManage::propose_create_institution(..., institution_code, ...)` | 17.5 | 发起 CID 机构多签账户创建提案；机构账户管理员 institution_code 必须为机构账户码（`is_institution_code`） | 投票引擎 |
 | `OrganizationManage::propose_close(account, beneficiary)` | 17.1 | 发起机构多签账户关闭提案 | 投票引擎 |
-| `PersonalAdmins::propose_create(account_name, admins, regular_threshold, amount)` | 7.0 | 发起个人多签账户创建提案；普通阈值用户输入且必须过半，注册阈值固定全员同意 | 投票引擎 |
-| `PersonalAdmins::propose_close(account, beneficiary)` | 7.1 | 发起个人多签账户关闭提案 | 投票引擎 |
-| `PersonalAdmins::propose_admin_set_change(institution_code, account, admins, new_threshold)` | 7.3 | 发起个人多签管理员集合变更提案 | 投票引擎 |
+| `PersonalManage::propose_create(account_name, admins, regular_threshold, amount)` | 7.0 | 发起个人多签账户创建提案；普通阈值用户输入且必须过半，注册阈值固定全员同意 | 投票引擎 |
+| `PersonalManage::propose_close(account, beneficiary)` | 7.1 | 发起个人多签账户关闭提案 | 投票引擎 |
+| `PersonalAdmins::propose_admin_set_change(institution_code, account, admins, new_threshold)` | 31.0 | 发起个人多签管理员集合变更提案 | 投票引擎 |
 | `InternalVote::cast(proposal_id, approve)` | 22.0 | 创建、关闭、转账等内部投票统一入口 | 统一投票入口 |
 
 ### 8.5 创建流程（Pending → Active）

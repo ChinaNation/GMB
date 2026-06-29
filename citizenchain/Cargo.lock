@@ -1761,6 +1761,7 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
  "personal-admins",
+ "personal-manage",
  "pow-difficulty",
  "primitives",
  "private-admins",
@@ -7651,6 +7652,7 @@ dependencies = [
  "pallet-balances",
  "parity-scale-codec",
  "personal-admins",
+ "personal-manage",
  "primitives",
  "private-admins",
  "public-admins",
@@ -9062,11 +9064,31 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "internal-vote",
+ "pallet-balances",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+ "votingengine",
+]
+
+[[package]]
+name = "personal-manage"
+version = "1.0.0"
+dependencies = [
+ "admin-primitives",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
  "institution-asset",
  "internal-vote",
  "onchain-transaction",
  "pallet-balances",
  "parity-scale-codec",
+ "personal-admins",
  "primitives",
  "scale-info",
  "sp-core",

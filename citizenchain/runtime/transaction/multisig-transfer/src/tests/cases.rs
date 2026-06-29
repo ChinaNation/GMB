@@ -106,16 +106,16 @@ fn registered_account_transfer_executes_when_internal_vote_reaches_threshold() {
         ])
         .expect("admins should fit");
 
-        personal_admins::PersonalAccounts::<Test>::insert(
+        personal_manage::PersonalAccounts::<Test>::insert(
             &personal_account,
-            personal_admins::PersonalAccount {
+            personal_manage::PersonalAccount {
                 creator: registered_account_admin(0),
                 account_name: b"personal"
                     .to_vec()
                     .try_into()
                     .expect("account name should fit"),
                 created_at: 1,
-                status: personal_admins::PersonalStatus::Active,
+                status: personal_manage::PersonalStatus::Active,
             },
         );
         personal_admins::AdminAccounts::<Test>::insert(

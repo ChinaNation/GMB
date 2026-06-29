@@ -319,18 +319,18 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
 
         let account = AccountId::new([77u8; 32]);
         let beneficiary = AccountId::new([78u8; 32]);
-        let admins: personal_admins::pallet::AdminsOf<Runtime> = vec![who.clone(), admin2.clone()]
+        let admins: personal_manage::pallet::AdminsOf<Runtime> = vec![who.clone(), admin2.clone()]
             .try_into()
             .expect("admins should fit");
         // 中文注释：本测试验证提案交易本身按投票统一价，而不是按提案金额套链上费率。
-        let account_name: personal_admins::pallet::AccountNameOf<Runtime> =
+        let account_name: personal_manage::pallet::AccountNameOf<Runtime> =
             b"runtime-test-personal"
                 .to_vec()
                 .try_into()
                 .expect("account_name should fit");
 
         let create_call =
-            RuntimeCall::PersonalAdmins(personal_admins::pallet::Call::propose_create {
+            RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
                 account_name,
                 admins: admins.clone(),
                 regular_threshold: 2,

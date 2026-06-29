@@ -62,6 +62,9 @@ mod runtime {
     pub type PrivateAdmins = private_admins;
 
     #[runtime::pallet_index(7)]
+    pub type PersonalManage = personal_manage;
+
+    #[runtime::pallet_index(8)]
     pub type PersonalAdmins = personal_admins;
 }
 
@@ -672,7 +675,7 @@ impl private_admins::Config for Test {
     type WeightInfo = ();
 }
 
-impl personal_admins::pallet::Config for Test {
+impl personal_manage::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
@@ -680,6 +683,8 @@ impl personal_admins::pallet::Config for Test {
     type ReservedAccountChecker = TestReservedAccountChecker;
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
+    type PersonalAdminLifecycle = personal_admins::Pallet<Test>;
+    type PersonalAdminQuery = personal_admins::Pallet<Test>;
     type FeeRouter = ();
     type MaxAccountNameLength = ConstU32<128>;
     type MaxPersonalAccountAdmins = ConstU32<64>;
@@ -688,14 +693,21 @@ impl personal_admins::pallet::Config for Test {
     type WeightInfo = ();
 }
 
+impl personal_admins::pallet::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type MaxPersonalAccountAdmins = ConstU32<64>;
+    type WeightInfo = ();
+}
+
 impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = ();
-    // 中文注释:测试 mock 把个人多签生命周期和管理员灌进 personal-admins，
-    // 机构管理员灌进 public/private-admins，动态阈值灌进 internal-vote。
+    // 中文注释:测试 mock 把个人多签生命周期灌进 personal-manage，
+    // 个人多签管理员灌进 personal-admins，动态阈值灌进 internal-vote。
     // InstitutionQuery 走 organization-manage,用于覆盖 0x05 InstitutionAccount 账户级主体。
-    type PersonalQuery = personal_admins::Pallet<Test>;
+    type PersonalQuery = personal_manage::Pallet<Test>;
     type InstitutionQuery = organization_manage::Pallet<Test>;
     type WeightInfo = ();
 }

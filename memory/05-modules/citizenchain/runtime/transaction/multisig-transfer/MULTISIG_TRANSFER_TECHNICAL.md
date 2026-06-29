@@ -416,8 +416,8 @@ pub trait Config:
         <<Self as organization_manage::Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
     >;
 
-    /// 个人多签账户状态查询，由 personal-admins 实现。
-    type PersonalQuery: personal_admins::traits::PersonalMultisigQuery<Self::AccountId>;
+    /// 个人多签账户状态查询，由 personal-manage 实现。
+    type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
 
     /// 注册机构账户状态查询，由 organization-manage 实现。
     type InstitutionQuery: organization_manage::traits::InstitutionMultisigQuery<Self::AccountId>;

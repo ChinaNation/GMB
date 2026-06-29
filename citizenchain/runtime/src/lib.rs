@@ -351,9 +351,12 @@ mod runtime {
     #[runtime::pallet_index(17)]
     pub type OrganizationManage = organization_manage;
 
-    // 个人多签管理员模块:用户自定义多签账户的注册/创建/关闭(无 CID 归属,creator+account_name 派生)。
-    // pallet_index=7。
+    // 个人多签账户生命周期模块:创建/关闭用户自定义多签账户(无 CID 归属,creator+account_name 派生)。
     #[runtime::pallet_index(7)]
+    pub type PersonalManage = personal_manage;
+
+    // 个人多签管理员模块:只管理个人多签账户的 admins 集合与管理员变更。
+    #[runtime::pallet_index(31)]
     pub type PersonalAdmins = personal_admins;
 
     // PoW 动态难度调整模块：每 600 块根据实际出块速度自动调整挖矿难度
@@ -372,7 +375,7 @@ mod runtime {
     #[runtime::pallet_index(21)]
     pub type OffchainTransaction = offchain_transaction::pallet;
 
-    // 链上发行代币(Plain FT, ADR-011):用户(CID 机构 + personal-admins 多签)发行 GMB 之外的代币。
+    // 链上发行代币(Plain FT, ADR-011):用户(CID 机构 + personal-manage 个人多签账户)发行 GMB 之外的代币。
     // 唯一外壳入口,内核挂 pallet_assets;pallet_assets 原生 extrinsic 由 BaseCallFilter 屏蔽。
     // 当前为空壳(任务卡 A/B 未实装),OnchainIssuance 自身 propose_* 也在 RuntimeCallFilter 中 reject。
     #[runtime::pallet_index(25)]

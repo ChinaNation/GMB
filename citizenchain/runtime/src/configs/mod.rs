@@ -373,15 +373,16 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                 );
                 FeeChargeKind::OnchainAmount(value)
             }
-            // 中文注释：PersonalAdmins 的 propose_create/propose_close 是治理提案交易，
+            // 中文注释：PersonalManage 的 propose_create/propose_close 是治理提案交易，
             // 交易本身固定收 1 元；执行阶段的资金手续费由对应 pallet 内部按金额另行处理。
-            RuntimeCall::PersonalAdmins(personal_admins::pallet::Call::propose_create {
+            RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
                 ..
             })
-            | RuntimeCall::PersonalAdmins(personal_admins::pallet::Call::propose_close {
+            | RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_close {
                 ..
             }) => FeeChargeKind::VoteFlat,
             RuntimeCall::PersonalAdmins(_) => FeeChargeKind::VoteFlat,
+            RuntimeCall::PersonalManage(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::OrganizationManage(
                 organization_manage::pallet::Call::propose_create_institution { .. },
             )
@@ -898,7 +899,7 @@ impl organization_manage::Config for Runtime {
     type WeightInfo = organization_manage::weights::SubstrateWeight<Runtime>;
 }
 
-impl personal_admins::Config for Runtime {
+impl personal_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
@@ -906,11 +907,20 @@ impl personal_admins::Config for Runtime {
     type ReservedAccountChecker = RuntimeReservedAccountGuard;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAsset = RuntimeInstitutionAsset;
+    type PersonalAdminLifecycle = personal_admins::Pallet<Runtime>;
+    type PersonalAdminQuery = personal_admins::Pallet<Runtime>;
     type FeeRouter = TransferFeeRouter;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxPersonalAccountAdmins = MaxPersonalAccountAdmins;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<121>;
+    type WeightInfo = personal_manage::weights::SubstrateWeight<Runtime>;
+}
+
+impl personal_admins::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type InternalVoteEngine = InternalVote;
+    type MaxPersonalAccountAdmins = MaxPersonalAccountAdmins;
     type WeightInfo = personal_admins::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1223,9 +1233,9 @@ impl multisig_transfer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
-    // 多签 admin 配置查询拆给两个独立 pallet。
+    // 多签 admin 配置查询拆给个人生命周期 pallet 与机构生命周期 pallet。
     // 转账治理时 multisig-transfer 通过 union 调用,先问个人侧、再问机构侧。
-    type PersonalQuery = personal_admins::Pallet<Runtime>;
+    type PersonalQuery = personal_manage::Pallet<Runtime>;
     type InstitutionQuery = organization_manage::Pallet<Runtime>;
     type WeightInfo = multisig_transfer::weights::SubstrateWeight<Runtime>;
 }
@@ -1675,10 +1685,10 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for MultisigCi
             );
         }
 
-        // 个人多签状态查询走 personal-admins::PersonalAccounts。
+        // 个人多签状态查询走 personal-manage::PersonalAccounts。
         matches!(
-            personal_admins::PersonalAccounts::<Runtime>::get(addr).map(|a| a.status),
-            Some(personal_admins::PersonalStatus::Active)
+            personal_manage::PersonalAccounts::<Runtime>::get(addr).map(|a| a.status),
+            Some(personal_manage::PersonalStatus::Active)
         )
     }
 
@@ -1961,7 +1971,7 @@ impl votingengine::Config for Runtime {
     type CidEligibility = RuntimeCidEligibility;
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
-    // 内部投票终态回调注册 5 个业务 Executor。
+    // 内部投票终态回调注册 6 个槽位;个人多签生命周期和个人多签管理员共用一个 tuple 槽位。
     // 顺序按调用频率降序:transfer / multisig manage 类业务最频繁,
     // grandpa key 替换最稀有放最后(tuple iterate 时命中越早越省 gas)。
     // 每个 Executor 通过 MODULE_TAG 前缀 + 独立存储键互斥认领本模块提案,
@@ -1969,7 +1979,10 @@ impl votingengine::Config for Runtime {
     type InternalVoteResultCallback = (
         multisig_transfer::InternalVoteExecutor<Runtime>,
         organization_manage::InternalVoteExecutor<Runtime>,
-        personal_admins::InternalVoteExecutor<Runtime>,
+        (
+            personal_manage::InternalVoteExecutor<Runtime>,
+            personal_admins::InternalVoteExecutor<Runtime>,
+        ),
         RuntimeAdminVoteExecutor,
         resolution_destro::InternalVoteExecutor<Runtime>,
         grandpakey_change::InternalVoteExecutor<Runtime>,

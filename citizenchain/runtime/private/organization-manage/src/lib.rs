@@ -242,7 +242,7 @@ pub mod pallet {
 
     /// 机构多签当前进行中的关闭提案 ID（防止并发注销提案）。
     /// 发起 propose_close 时写入，execute_close 成功或执行失败后清除。
-    /// PendingCloseProposal 分两份:个人侧在 personal-admins 自持,
+    /// PendingCloseProposal 分两份:个人侧在 personal-manage 自持,
     /// 机构侧由本表承载,作用域为机构多签账户。
     #[pallet::storage]
     #[pallet::getter(fn institution_pending_close)]
@@ -435,7 +435,7 @@ pub mod pallet {
         DuplicateAccountName,
         /// 机构已经存在
         InstitutionAlreadyExists,
-        /// propose_close 校验:仅机构地址可走本入口(个人地址转 personal-admins)。
+        /// propose_close 校验:仅机构地址可走本入口(个人地址转 personal-manage)。
         NotInstitutionAccount,
         /// 机构账户列表为空
         EmptyInstitutionAccounts,
@@ -568,7 +568,7 @@ pub mod pallet {
         /// 发起"关闭机构多签账户"提案。
         ///
         /// 仅服务于 CID 注册机构地址(`AccountRegisteredCid` 命中);
-        /// 个人多签关闭走 personal-admins::propose_close 入口,
+        /// 个人多签关闭走 personal-manage::propose_close 入口,
         /// 输入个人地址会返回 `Error::NotInstitutionAccount`。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_close())]
@@ -604,7 +604,7 @@ pub mod pallet {
         /// 本模块无法自动收到通知导致的 Pending / InstitutionPendingClose 残留。
         ///
         /// 仅处理 ACTION_CREATE_INSTITUTION 与 ACTION_CLOSE 两类机构提案;
-        /// 个人多签的清理由 personal-admins::cleanup_rejected_proposal 自持。
+        /// 个人多签的清理由 personal-manage::cleanup_rejected_proposal 自持。
         #[pallet::call_index(4)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::cleanup_rejected_proposal())]
         pub fn cleanup_rejected_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
@@ -700,7 +700,7 @@ pub mod pallet {
             matches!(kind, AccountKind::InstitutionMain { .. })
         }
 
-        // derive_personal_account 在 personal-admins::Pallet;
+        // derive_personal_account 在 personal-manage::Pallet;
         // organization-manage 的机构地址只走 derive_registered_account。
 
         pub(crate) fn ensure_unique_admins(admins: &AdminsOf<T>) -> Result<(), DispatchError> {
@@ -866,7 +866,7 @@ pub mod pallet {
 
         /// 从任意机构多签账户反查其管理员账户账户地址。
         ///
-        /// 个人多签由 personal-admins 自持；本函数仅服务机构账户。
+        /// 个人多签由 personal-manage 自持；本函数仅服务机构账户。
         /// 中文注释:管理员属于机构(不属于账户)。任意机构账户(主/费用/自定义)都解析到
         /// 本机构【主账户】——即 admins 模块 里承载该机构唯一管理员集的键。这样机构管理员
         /// 统一管理机构及其全部账户(创建/注销账户都由这套管理员授权)。
@@ -903,7 +903,7 @@ pub mod pallet {
         // 投票回调执行体:
         // - ACTION_CLOSE → crate::close::execute_institution_close_with_finalizer
         // - ACTION_CREATE_INSTITUTION 与 cleanup → crate::institution::execute
-        // (ACTION_CREATE_PERSONAL 在 personal-admins 独立 pallet)
+        // (ACTION_CREATE_PERSONAL 在 personal-manage 独立 pallet)
     }
 }
 
@@ -959,7 +959,7 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
 //   / `close::execute_institution_close_with_finalizer`;执行失败发事件,不回滚投票
 //   (提案保留 PASSED,可用 cleanup_rejected_proposal 或手动重试处理);
 // - `approved = false` → 清理 Pending 存储(InstitutionPendingClose 等),释放地址占用。
-// (ACTION_CREATE_PERSONAL 在 personal-admins::InternalVoteExecutor)
+// (ACTION_CREATE_PERSONAL 在 personal-manage::InternalVoteExecutor)
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {

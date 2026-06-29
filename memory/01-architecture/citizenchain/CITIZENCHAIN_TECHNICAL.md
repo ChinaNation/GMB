@@ -162,10 +162,11 @@ citizenchain/
 - `personal-admins`
 
 ### 9.3 私权模块（`runtime/private/`）
-- 负责机构多签账户的创建、关闭、资金与生命周期治理；个人多签已归入 `runtime/admins/personal-admins`。
+- 负责机构多签账户和个人多签账户的创建、关闭、资金与生命周期治理。
 
 当前模块：
 - `organization-manage`
+- `personal-manage`
 
 ### 9.4 发行模块（`runtime/issuance/`）
 - 负责公民发行、全节点发行、省储行利息、决议发行完整流程。

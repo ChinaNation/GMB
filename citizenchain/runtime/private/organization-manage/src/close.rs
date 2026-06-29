@@ -1,7 +1,7 @@
 //! 机构多签关闭流程实现(call_index=1)。
 //!
 //! 仅服务于已注册的 CID 机构账户(`AccountRegisteredCid.contains_key` 命中);
-//! 个人多签关闭走 personal-admins::propose_close 入口。
+//! 个人多签关闭走 personal-manage::propose_close 入口。
 //!
 //! 业务流程:
 //! 1. 校验地址是机构地址(否则返回 `NotInstitutionAccount`)

@@ -6,38 +6,17 @@
 use frame_support::weights::Weight;
 
 pub trait WeightInfo {
-    fn propose_create() -> Weight;
-    fn propose_close() -> Weight;
-    fn cleanup_rejected_proposal() -> Weight;
     fn propose_admin_set_change() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(core::marker::PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-    fn propose_create() -> Weight {
-        Weight::from_parts(120_000_000, 16_000)
-    }
-    fn propose_close() -> Weight {
-        Weight::from_parts(90_000_000, 12_000)
-    }
-    fn cleanup_rejected_proposal() -> Weight {
-        Weight::from_parts(45_000_000, 8_000)
-    }
     fn propose_admin_set_change() -> Weight {
         Weight::from_parts(120_000_000, 16_000)
     }
 }
 
 impl WeightInfo for () {
-    fn propose_create() -> Weight {
-        Weight::from_parts(120_000_000, 16_000)
-    }
-    fn propose_close() -> Weight {
-        Weight::from_parts(90_000_000, 12_000)
-    }
-    fn cleanup_rejected_proposal() -> Weight {
-        Weight::from_parts(45_000_000, 8_000)
-    }
     fn propose_admin_set_change() -> Weight {
         Weight::from_parts(120_000_000, 16_000)
     }

@@ -1,9 +1,9 @@
-//! 个人多签账户的查询 trait,供 multisig-transfer / runtime config 等下游调用。
+//! 个人多签账户生命周期查询 trait,供 multisig-transfer / runtime config 等下游调用。
 //!
 //! `PersonalMultisigQuery` 与 organization-manage 的 `InstitutionMultisigQuery`
 //! 是平行 trait,multisig-transfer 在转账治理时按"先问 personal、再问 institution"
 //! union 查询,任意机构账户(主/费用/自创)经 organization-manage 路径反查到
-//! admin 配置;个人多签账户经 personal-admins 路径反查。
+//! admin 配置;个人多签账户经 personal-manage 判断账户状态,再经 personal-admins 读取管理员。
 
 use primitives::multisig::MultisigConfigSnapshot;
 

@@ -15,7 +15,7 @@ fn setup_creator_balance() -> AccountId32 {
 }
 
 fn proposed_account(creator: &AccountId32, name: &[u8]) -> AccountId32 {
-    PersonalAdmins::derive_personal_account(creator, name).expect("derive should succeed")
+    PersonalManage::derive_personal_account(creator, name).expect("derive should succeed")
 }
 
 fn create_rejected_event_count(pid: u64) -> usize {
@@ -24,7 +24,7 @@ fn create_rejected_event_count(pid: u64) -> usize {
         .filter(|record| {
             matches!(
                 &record.event,
-                RuntimeEvent::PersonalAdmins(pallet::Event::PersonalCreateRejected {
+                RuntimeEvent::PersonalManage(pallet::Event::PersonalCreateRejected {
                     proposal_id,
                     ..
                 }) if *proposal_id == pid
@@ -39,7 +39,7 @@ fn create_failed_event_count(pid: u64) -> usize {
         .filter(|record| {
             matches!(
                 &record.event,
-                RuntimeEvent::PersonalAdmins(pallet::Event::CreateExecutionFailed {
+                RuntimeEvent::PersonalManage(pallet::Event::CreateExecutionFailed {
                     proposal_id,
                     ..
                 }) if *proposal_id == pid
@@ -54,7 +54,7 @@ fn close_failed_event_count(pid: u64) -> usize {
         .filter(|record| {
             matches!(
                 &record.event,
-                RuntimeEvent::PersonalAdmins(pallet::Event::CloseExecutionFailed {
+                RuntimeEvent::PersonalManage(pallet::Event::CloseExecutionFailed {
                     proposal_id,
                     ..
                 }) if *proposal_id == pid
@@ -84,7 +84,7 @@ fn propose_create_writes_pending_and_reserves_fee() {
         let name = account_name(b"alice-personal");
         let dq = proposed_account(&c, b"alice-personal");
 
-        assert_ok!(PersonalAdmins::propose_create(
+        assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             name.clone(),
             admins.clone(),
@@ -134,7 +134,7 @@ fn create_executes_when_internal_vote_reaches_threshold() {
         let name = account_name(b"alice-personal");
         let dq = proposed_account(&c, b"alice-personal");
 
-        assert_ok!(PersonalAdmins::propose_create(
+        assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             name,
             admins,
@@ -175,7 +175,7 @@ fn create_rejected_cleanup_releases_reserve_and_emits_event() {
         let name = account_name(b"alice-personal");
         let dq = proposed_account(&c, b"alice-personal");
 
-        assert_ok!(PersonalAdmins::propose_create(
+        assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             name,
             admins,
@@ -209,7 +209,7 @@ fn propose_create_rejects_duplicate_personal_account() {
         seed_active_multisig(&dq, &c, &[admin(0), admin(1), admin(2)], 500);
 
         assert_noop!(
-            PersonalAdmins::propose_create(
+            PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
                 account_name(b"alice-personal"),
                 admins_vec(3),
@@ -228,7 +228,7 @@ fn propose_create_stores_regular_threshold_and_uses_all_admin_create_threshold()
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let dq = proposed_account(&c, b"derived-threshold");
-        assert_ok!(PersonalAdmins::propose_create(
+        assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             account_name(b"derived-threshold"),
             admins_vec(3),
@@ -253,7 +253,7 @@ fn two_admin_personal_create_uses_two_of_two_for_regular_and_create_threshold() 
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let dq = proposed_account(&c, b"two-admin");
-        assert_ok!(PersonalAdmins::propose_create(
+        assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c),
             account_name(b"two-admin"),
             admins_vec(2),
@@ -278,7 +278,7 @@ fn sixty_four_admin_personal_create_is_allowed_and_uses_full_create_threshold() 
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let dq = proposed_account(&c, b"sixty-four-admins");
-        assert_ok!(PersonalAdmins::propose_create(
+        assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c),
             account_name(b"sixty-four-admins"),
             admins_vec(64),
@@ -316,7 +316,7 @@ fn propose_create_rejects_duplicate_admins() {
         let dup_admins: pallet::AdminsOf<Test> = BoundedVec::try_from(v).expect("fits");
 
         assert_noop!(
-            PersonalAdmins::propose_create(
+            PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
                 account_name(b"dup"),
                 dup_admins,
@@ -336,7 +336,7 @@ fn propose_create_rejects_below_minimum_amount() {
         let c = setup_creator_balance();
         // MinCreateAmount = 111
         assert_noop!(
-            PersonalAdmins::propose_create(
+            PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
                 account_name(b"too-small"),
                 admins_vec(3),
@@ -356,7 +356,7 @@ fn propose_create_rejects_reserved_and_protected_accounts() {
         set_protected_account(Some(protected));
 
         assert_noop!(
-            PersonalAdmins::propose_create(
+            PersonalManage::propose_create(
                 RuntimeOrigin::signed(c.clone()),
                 account_name(b"protected-target"),
                 admins_vec(3),
@@ -368,7 +368,7 @@ fn propose_create_rejects_reserved_and_protected_accounts() {
 
         set_protected_account(Some(c.clone()));
         assert_noop!(
-            PersonalAdmins::propose_create(
+            PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
                 account_name(b"protected-creator"),
                 admins_vec(3),
@@ -392,7 +392,7 @@ fn propose_close_writes_pending_and_blocks_concurrent() {
 
         let beneficiary_acc = beneficiary();
 
-        assert_ok!(PersonalAdmins::propose_close(
+        assert_ok!(PersonalManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
             dq.clone(),
             beneficiary_acc.clone(),
@@ -403,7 +403,7 @@ fn propose_close_writes_pending_and_blocks_concurrent() {
 
         // 第二次发起应被阻止
         assert_noop!(
-            PersonalAdmins::propose_close(RuntimeOrigin::signed(admin(1)), dq, beneficiary_acc,),
+            PersonalManage::propose_close(RuntimeOrigin::signed(admin(1)), dq, beneficiary_acc,),
             pallet::Error::<Test>::CloseAlreadyPending
         );
     });
@@ -420,7 +420,7 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         seed_active_multisig(&dq, &c, &admins_acc, 1_000);
         let beneficiary_acc = beneficiary();
 
-        assert_ok!(PersonalAdmins::propose_close(
+        assert_ok!(PersonalManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
             dq.clone(),
             beneficiary_acc.clone(),
@@ -439,10 +439,10 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         let account = dq.clone();
         assert!(!pallet::PersonalAccounts::<Test>::contains_key(&dq));
         assert!(!pallet::PendingCloseProposal::<Test>::contains_key(&dq));
-        assert!(pallet::AdminAccounts::<Test>::get(account.clone()).is_none());
+        assert!(personal_admins::AdminAccounts::<Test>::get(account.clone()).is_none());
         assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(PMUL, account).is_none());
 
-        assert_ok!(PersonalAdmins::propose_create(
+        assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c),
             account_name(b"close-active"),
             admins_vec(3),
@@ -464,7 +464,7 @@ fn propose_close_rejects_when_balance_below_minimum() {
         seed_active_multisig(&dq, &c, &admins_acc, 50);
 
         assert_noop!(
-            PersonalAdmins::propose_close(RuntimeOrigin::signed(admin(0)), dq, beneficiary(),),
+            PersonalManage::propose_close(RuntimeOrigin::signed(admin(0)), dq, beneficiary(),),
             pallet::Error::<Test>::CloseBalanceBelowMinimum
         );
     });
@@ -479,7 +479,7 @@ fn propose_close_rejects_reserved_and_protected_beneficiary() {
         seed_active_multisig(&dq, &c, &admins_acc, 1_000);
 
         assert_noop!(
-            PersonalAdmins::propose_close(
+            PersonalManage::propose_close(
                 RuntimeOrigin::signed(admin(0)),
                 dq.clone(),
                 AccountId32::new([0xAA; 32]),
@@ -490,7 +490,7 @@ fn propose_close_rejects_reserved_and_protected_beneficiary() {
         let protected = beneficiary();
         set_protected_account(Some(protected.clone()));
         assert_noop!(
-            PersonalAdmins::propose_close(RuntimeOrigin::signed(admin(0)), dq, protected,),
+            PersonalManage::propose_close(RuntimeOrigin::signed(admin(0)), dq, protected,),
             pallet::Error::<Test>::InvalidBeneficiary
         );
     });
@@ -505,7 +505,7 @@ fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
         let admins = admins_vec(3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
 
-        assert_ok!(PersonalAdmins::propose_create(
+        assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             account_name(b"cleanup-test"),
             admins,
@@ -516,7 +516,7 @@ fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
 
         // STATUS_VOTING 期间禁止 cleanup
         assert_noop!(
-            PersonalAdmins::cleanup_rejected_proposal(RuntimeOrigin::signed(admin(0)), pid,),
+            PersonalManage::cleanup_rejected_proposal(RuntimeOrigin::signed(admin(0)), pid,),
             pallet::Error::<Test>::ProposalNotRejected
         );
 
@@ -526,7 +526,7 @@ fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
 
         // Executor 已经在 callback 里清掉 Pending,这里 cleanup 进来时应继续返回 Ok,
         // 但不能重复发 PersonalCreateRejected。
-        assert_ok!(PersonalAdmins::cleanup_rejected_proposal(
+        assert_ok!(PersonalManage::cleanup_rejected_proposal(
             RuntimeOrigin::signed(admin(0)),
             pid,
         ));
@@ -544,7 +544,7 @@ fn create_execution_failed_terminal_cleans_pending_and_emits_once() {
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(admin).collect();
         let dq = proposed_account(&c, b"exec-fail-create");
 
-        assert_ok!(PersonalAdmins::propose_create(
+        assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             account_name(b"exec-fail-create"),
             admins,
@@ -579,7 +579,7 @@ fn close_execution_failed_terminal_keeps_account_and_clears_pending() {
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         seed_active_multisig(&dq, &c, &admins_acc, 1_000);
 
-        assert_ok!(PersonalAdmins::propose_close(
+        assert_ok!(PersonalManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
             dq.clone(),
             beneficiary(),
@@ -606,7 +606,7 @@ fn propose_close_rejects_when_not_personal_account() {
         let stranger = AccountId32::new([0xCC; 32]);
 
         assert_noop!(
-            PersonalAdmins::propose_close(
+            PersonalManage::propose_close(
                 RuntimeOrigin::signed(admin(0)),
                 stranger,
                 beneficiary(),
@@ -616,41 +616,7 @@ fn propose_close_rejects_when_not_personal_account() {
     });
 }
 
-// ─── 15. 个人多签管理员更换由 personal-admins 自己完成 ────────────────
-
-#[test]
-fn propose_admin_set_change_updates_personal_admins_and_threshold() {
-    new_test_ext().execute_with(|| {
-        let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"change-admins");
-        let old_admins = vec![admin(0), admin(1), admin(2)];
-        seed_active_multisig(&dq, &c, &old_admins, 1_000);
-
-        let new_admins: pallet::AdminsOf<Test> =
-            BoundedVec::try_from(vec![admin(0), admin(3), admin(4), admin(5)]).expect("admins fit");
-        assert_ok!(PersonalAdmins::propose_admin_set_change(
-            RuntimeOrigin::signed(admin(0)),
-            PMUL,
-            dq.clone(),
-            new_admins.clone(),
-            3,
-        ));
-        let pid = last_proposal_id();
-
-        assert_ok!(cast_yes_votes(&old_admins[1..], 2, pid));
-
-        let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
-        assert_eq!(proposal.status, STATUS_EXECUTED);
-        let account = pallet::AdminAccounts::<Test>::get(&dq).expect("admin account");
-        assert_eq!(account.admins, new_admins);
-        assert_eq!(
-            internal_vote::ActiveDynamicThresholds::<Test>::get(PMUL, dq),
-            Some(3)
-        );
-    });
-}
-
-// ─── 16. 非 admin 不能投票 ────────────────────────────────────────────
+// ─── 15. 非 admin 不能投票 ────────────────────────────────────────────
 
 #[test]
 fn non_admin_cannot_propose_or_vote() {
@@ -659,7 +625,7 @@ fn non_admin_cannot_propose_or_vote() {
 
         // 非 admin 提案 propose_create 时,creator 不在 admins 列表 → PermissionDenied
         assert_noop!(
-            PersonalAdmins::propose_create(
+            PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
                 account_name(b"x"),
                 BoundedVec::try_from(vec![admin(1), admin(2), admin(3)]).expect("fits"),
@@ -673,7 +639,7 @@ fn non_admin_cannot_propose_or_vote() {
         let c2 = AccountId32::new([0x77; 32]);
         let _ = Balances::deposit_creating(&c2, SEED_BALANCE);
         let admins = admins_vec(3);
-        assert_ok!(PersonalAdmins::propose_create(
+        assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(admin(0)),
             account_name(b"y"),
             admins,
@@ -700,7 +666,7 @@ fn existential_deposit_is_preserved_after_close() {
         seed_active_multisig(&dq, &c, &admins_acc, 500);
         let beneficiary_acc = beneficiary();
 
-        assert_ok!(PersonalAdmins::propose_close(
+        assert_ok!(PersonalManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
             dq.clone(),
             beneficiary_acc.clone(),
