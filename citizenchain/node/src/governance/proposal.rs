@@ -26,8 +26,10 @@ where
 const TAG_RUNTIME_UPGRADE: &[u8] = b"rt-upg";
 const TAG_RESOLUTION_ISSUANCE: &[u8] = b"res-iss";
 const TAG_RESOLUTION_DESTROY: &[u8] = b"res-dst";
-/// 多签管理提案 TAG — 不属于治理提案，在治理列表中过滤掉。
-const TAG_ORGANIZATION_MANAGE: &[u8] = b"org-mgmt";
+/// 机构管理提案 TAG — 不属于治理提案，在治理列表中过滤掉。
+/// 机构管理已拆分公权/私权两 pallet,各自 MODULE_TAG:public-manage=`pub-mgmt`、private-manage=`pri-mgmt`。
+const TAG_PUBLIC_MANAGE: &[u8] = b"pub-mgmt";
+const TAG_PRIVATE_MANAGE: &[u8] = b"pri-mgmt";
 
 fn institution_account_from_cid(cid_number: &str) -> Result<[u8; 32], String> {
     let entry = super::registry::find_institution(cid_number)
@@ -230,8 +232,9 @@ pub fn fetch_next_proposal_id() -> Result<u64, String> {
     }
 }
 
-/// 检查提案是否为多签管理提案（创建/关闭多签账户），这类提案不在治理列表中显示。
-fn is_organization_manage_proposal(proposal_id: u64) -> bool {
+/// 检查提案是否为机构管理提案（创建/关闭机构多签账户），这类提案不在治理列表中显示。
+/// 机构管理已拆公权/私权两 pallet,命中 `pub-mgmt` 或 `pri-mgmt` 任一前缀即认定。
+fn is_institution_manage_proposal(proposal_id: u64) -> bool {
     let Ok(Some(raw)) = fetch_proposal_data_raw(proposal_id) else {
         return false;
     };
@@ -243,10 +246,11 @@ fn is_organization_manage_proposal(proposal_id: u64) -> bool {
         return false;
     };
     let offset = len_bytes;
-    let tag = TAG_ORGANIZATION_MANAGE;
-    offset + tag.len() <= raw.len()
-        && (vec_len as usize) >= tag.len()
-        && raw[offset..offset + tag.len()] == *tag
+    [TAG_PUBLIC_MANAGE, TAG_PRIVATE_MANAGE].iter().any(|tag| {
+        offset + tag.len() <= raw.len()
+            && (vec_len as usize) >= tag.len()
+            && raw[offset..offset + tag.len()] == **tag
+    })
 }
 
 /// 分页查询提案列表(从 start_id 往前 count 个,按 ID 倒序)。
@@ -264,7 +268,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
         match fetch_proposal_meta(id) {
             Ok(Some(meta)) => {
                 // 中文注释:多签管理提案(创建/关闭多签账户)不在治理列表中显示。
-                if is_organization_manage_proposal(id) {
+                if is_institution_manage_proposal(id) {
                     if id == 0 {
                         break;
                     }
@@ -460,7 +464,7 @@ pub fn fetch_institution_proposal_page(
     let next_idx = from_idx + take_ids.len();
 
     for id in take_ids {
-        if is_organization_manage_proposal(id) {
+        if is_institution_manage_proposal(id) {
             // 防御性过滤：多签管理提案不属于治理机构列表，详情页不展示。
             continue;
         }

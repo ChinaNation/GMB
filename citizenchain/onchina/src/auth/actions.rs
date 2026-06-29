@@ -38,7 +38,7 @@ use crate::*;
 const ADMIN_SECURITY_GRANT_TTL_SECONDS: i64 = 120;
 pub(crate) const ADMIN_SECURITY_GRANT_HEADER: &str = "x-cid-security-grant";
 
-/// 注销作用域(必须与链端 organization-manage 的 SCOPE_INSTITUTION/SCOPE_ACCOUNT 同值)。
+/// 注销作用域(必须与链端 public-manage/private-manage 的 SCOPE_INSTITUTION/SCOPE_ACCOUNT 同值)。
 const SCOPE_INSTITUTION: u8 = 0;
 const SCOPE_ACCOUNT: u8 = 1;
 
@@ -104,6 +104,10 @@ pub(crate) struct PrepareAdminActionOutput {
     /// 仅 InstitutionCreate 动作有值,其余动作为 None。
     #[serde(skip_serializing_if = "Option::is_none")]
     institution_create_sign_request: Option<String>,
+    /// 机构管理员集合上链专用:b.d 携带 federal_set_city_registry_admins 裸 SCALE call data。
+    /// 仅 CreateCityRegistry/DeleteCityRegistry 动作有值,其余为 None;onchina 不提交。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    admin_set_sign_request: Option<String>,
 }
 
 /// InstitutionCreate prepare 载荷:cid_number + 阈值 + 管理员职务/任期表单。
@@ -307,6 +311,38 @@ pub(crate) async fn prepare_admin_action(
     } else {
         None
     };
+    // ── 市注册局管理员集合上链:CreateCityRegistry 并入新管理员、DeleteCityRegistry 移除,
+    //    产出 federal_set_city_registry_admins 裸 SCALE call data 的 QR;onchina 不提交。
+    let admin_set_sign_request = match input.action_type {
+        AdminActionType::CreateCityRegistry | AdminActionType::DeleteCityRegistry => {
+            match build_city_registry_admin_set_sign_request(
+                &state,
+                action_id.as_str(),
+                now.timestamp(),
+                expires_at.timestamp(),
+                ctx.admin_account.as_str(),
+                &challenge.request_payload,
+                input.action_type == AdminActionType::CreateCityRegistry,
+            ) {
+                Ok(v) => Some(v),
+                Err(resp) => return resp,
+            }
+        }
+        AdminActionType::ReplaceFederalRegistry => {
+            match build_federal_registry_replace_sign_request(
+                &state,
+                action_id.as_str(),
+                now.timestamp(),
+                expires_at.timestamp(),
+                ctx.admin_account.as_str(),
+                &challenge.request_payload,
+            ) {
+                Ok(v) => Some(v),
+                Err(resp) => return resp,
+            }
+        }
+        _ => None,
+    };
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -318,9 +354,155 @@ pub(crate) async fn prepare_admin_action(
             auth_type: preview.auth_type,
             expires_at: expires_at.timestamp(),
             institution_create_sign_request,
+            admin_set_sign_request,
         },
     })
     .into_response()
+}
+
+/// 组装市注册局管理员集合上链的 QR_V1/k=1 sign_request(b.d=federal_set_city_registry_admins 裸 SCALE)。
+///
+/// 中文注释:按 created_by 的联邦作用域解析省/市,取该城市当前 CREG 管理员集合,按 add 增/删 delta,
+/// 编码 federal_set call data。onchina 不提交;冷钱包解码核对后冷签 origin 并由 CitizenWallet 提交。
+fn build_city_registry_admin_set_sign_request(
+    state: &AppState,
+    action_id: &str,
+    issued_at: i64,
+    expires_at: i64,
+    actor_pubkey: &str,
+    payload: &serde_json::Value,
+    add: bool,
+) -> Result<String, axum::response::Response> {
+    let input: CreateCityRegistryAdminInput =
+        serde_json::from_value(payload.clone()).map_err(|_| {
+            api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "invalid city registry admin payload",
+            )
+        })?;
+    let Some(new_admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "admin_account format invalid",
+        ));
+    };
+    let created_by = match input.created_by.as_deref().map(str::trim) {
+        None | Some("") => actor_pubkey.to_string(),
+        Some(raw) => match normalize_admin_account(raw) {
+            Some(v) => v,
+            None => {
+                return Err(api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "created_by format invalid",
+                ))
+            }
+        },
+    };
+    let city_name = input.city_name.trim().to_string();
+    let chain = state
+        .db
+        .with_client(move |conn| {
+            // 省:created_by(FRG)的联邦作用域单源;市码:china.sqlite 解析并校验属省。
+            let province_name =
+                repo::province_scope_for_registry_org_conn(conn, created_by.as_str(), "FRG")?
+                    .ok_or_else(|| "cannot resolve province from created_by".to_string())?;
+            let Some(city_code) =
+                crate::cid::china::city_code_by_name(province_name.as_str(), city_name.as_str())
+            else {
+                return Err("city not found in province".to_string());
+            };
+            if city_code == "000" {
+                return Err("province placeholder city is not allowed".to_string());
+            }
+            // 当前 CREG 管理员集合(进链账户)。
+            let (_total, current) = repo::list_city_registry_admins_by_scope_conn(
+                conn,
+                province_name.as_str(),
+                Some(city_name.as_str()),
+                1000,
+                0,
+            )?;
+            let current_accounts: Vec<String> =
+                current.iter().map(|u| u.admin_account.clone()).collect();
+            crate::institution::admins::admin_set_call::build_city_registry_admin_set_call_data(
+                conn,
+                province_name.as_str(),
+                city_name.as_str(),
+                city_code,
+                &current_accounts,
+                new_admin_account.as_str(),
+                add,
+            )
+        })
+        .map_err(admin_action_error)?;
+    crate::core::qr::build_sign_request_bytes(
+        action_id,
+        issued_at,
+        expires_at,
+        actor_pubkey,
+        &chain.call_data,
+        chain.action,
+    )
+}
+
+/// 组装联邦注册局替换的 QR_V1/k=1 sign_request(b.d=propose_admin_set_change 裸 SCALE)。
+///
+/// 中文注释:取全部 FRG 管理员集合,把 id 对应的旧账户换成新账户,编码 genesis
+/// propose_admin_set_change(call 0,FRG 内部投票)。onchina 不提交;冷钱包提交。
+fn build_federal_registry_replace_sign_request(
+    state: &AppState,
+    action_id: &str,
+    issued_at: i64,
+    expires_at: i64,
+    actor_pubkey: &str,
+    payload: &serde_json::Value,
+) -> Result<String, axum::response::Response> {
+    let input: ReplaceFederalRegistryActionPayload = serde_json::from_value(payload.clone())
+        .map_err(|_| {
+            api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "invalid replace federal registry payload",
+            )
+        })?;
+    let Some(new_admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "admin_account format invalid",
+        ));
+    };
+    let id = input.id;
+    let chain = state
+        .db
+        .with_client(move |conn| {
+            let old_admin = repo::get_admin_by_id_and_registry_org_conn(conn, id, "FRG")?
+                .ok_or_else(|| "federal registry admin not found".to_string())?;
+            let old_account = old_admin.admin_account.clone();
+            let current = repo::list_federal_registry_admins_by_province_conn(conn, None)?;
+            let current_accounts: Vec<String> = current
+                .iter()
+                .map(|(u, _)| u.admin_account.clone())
+                .collect();
+            crate::institution::admins::admin_set_call::build_federal_registry_admin_set_call_data(
+                conn,
+                &current_accounts,
+                old_account.as_str(),
+                new_admin_account.as_str(),
+            )
+        })
+        .map_err(admin_action_error)?;
+    crate::core::qr::build_sign_request_bytes(
+        action_id,
+        issued_at,
+        expires_at,
+        actor_pubkey,
+        &chain.call_data,
+        chain.action,
+    )
 }
 
 /// 组装机构上链创建的 QR_V1/k=1 sign_request(b.d=propose_create_institution 裸 SCALE call data)。
@@ -345,7 +527,7 @@ fn build_institution_create_sign_request(
             )
         })?;
     let cid_number = input.cid_number.trim().to_string();
-    let call_data = state
+    let chain = state
         .db
         .with_client({
             let state = state.clone();
@@ -369,8 +551,8 @@ fn build_institution_create_sign_request(
         issued_at,
         expires_at,
         actor_pubkey,
-        &call_data,
-        crate::core::qr::ACTION_CID_INSTITUTION_CREATE,
+        &chain.call_data,
+        chain.action,
     )
 }
 

@@ -1,11 +1,13 @@
 # QR_V1 Action Registry
 
-- 更新日期:2026-06-23
+- 更新日期:2026-06-29
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:`k=1` 签名请求的 `b.a` 数字动作码
 - 依赖:
   - `memory/01-architecture/qr/qr-protocol-spec.md`
   - `citizenchain/runtime/primitives/src/sign.rs`
+  - `citizenchain/onchina/src/core/institution_call.rs`(链交易动作码 `chain_action_code` + 机构/管理员 call 编码器)
+  - `citizenchain/onchina/src/core/qr/mod.rs`(非链动作码常量)
   - `citizenwallet/lib/qr/qr_protocols.dart`
   - `citizenapp/lib/qr/qr_protocols.dart`
   - `citizenwallet/lib/signer/payload_decoder.dart`
@@ -44,7 +46,8 @@ a = (pallet_index << 8) | call_index
 | `0x0903` | `VotingEngine.finalize_proposal` | `finalize_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0904` | `VotingEngine.retry_passed_proposal` | `retry_passed_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0905` | `VotingEngine.cancel_passed_proposal` | `cancel_passed_proposal` | `proposal_id`, `reason` | citizenchain node / CitizenApp |
-| `0x0c00` | `GenesisAdmins.propose_admin_set_change` | `propose_genesis_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
+| `0x0c00` | `GenesisAdmins.propose_admin_set_change` | `propose_genesis_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp / onchina(FRG 替换) |
+| `0x0c01` | `GenesisAdmins.federal_set_city_registry_admins` | `federal_set_city_registry_admins` | `institution_code`, `account`, `admins`, `threshold` | onchina(联邦注册局直设市注册局) |
 | `0x0d00` | `RuntimeUpgrade.propose_runtime_upgrade` | `propose_runtime_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0d02` | `RuntimeUpgrade.developer_direct_upgrade` | `developer_direct_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0e00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `institution_code`, `amount_yuan` | CitizenApp |

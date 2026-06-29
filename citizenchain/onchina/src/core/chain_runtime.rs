@@ -275,8 +275,8 @@ pub(crate) fn build_institution_registration_credential(
 
 /// 中文注释:注销凭证签名 payload 的 blake2_256 摘要(纯函数,便于 golden 测试锁字节)。
 ///
-/// **铁律**:元素顺序与 SCALE 类型必须与链端 `organization-manage` 的
-/// `verify_institution_deregistration`(runtime/src/configs/mod.rs)逐字节一致——
+/// **铁律**:元素顺序与 SCALE 类型必须与链端 `verify_institution_deregistration`
+/// (runtime/src/configs/mod.rs,被 public-manage/private-manage close 消费)逐字节一致——
 /// `[u8;32]`/`&[u8;32]` 无长度前缀、`u8` 1 字节、`&[u8]` 带 Compact 长度前缀。
 /// target_account 与 scope 入签名,杜绝换账户/换范围/换机构重放。
 fn deregistration_payload_digest(

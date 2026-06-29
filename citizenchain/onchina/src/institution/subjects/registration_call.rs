@@ -15,8 +15,8 @@ use uuid::Uuid;
 
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::core::institution_call::{
-    encode_propose_create_institution, AdminProfileArg, AdminSourceTag, InitialAccountArg,
-    ProposeCreateInstitutionArgs,
+    encode_propose_create_institution, AdminProfileArg, AdminSourceTag, ChainCall,
+    InitialAccountArg, ProposeCreateInstitutionArgs,
 };
 use crate::AppState;
 
@@ -36,15 +36,15 @@ pub(crate) struct AdminProfileFormInput {
 }
 
 /// 一个管理员的实名锚信息(admin_cid_number + name),由 DB 联表派生。
-struct AdminIdentity {
-    admin_cid_number: Vec<u8>,
-    name: Vec<u8>,
+pub(crate) struct AdminIdentity {
+    pub(crate) admin_cid_number: Vec<u8>,
+    pub(crate) name: Vec<u8>,
 }
 
 /// 在已有连接上,按管理员进链账户联表派生其实名锚(cid_number + 姓名)。
 /// 链:institution_admins.admin_account → citizens.wallet_pubkey → citizens.cid_number
 /// → subjects(kind='CITIZEN').cid_full_name。查不到则留空(链端接受空 BoundedVec)。
-fn resolve_admin_identity_conn(conn: &mut Client, admin_account: &str) -> AdminIdentity {
+pub(crate) fn resolve_admin_identity_conn(conn: &mut Client, admin_account: &str) -> AdminIdentity {
     let sql = "SELECT c.cid_number, s.cid_full_name
                FROM citizens c
                LEFT JOIN subjects s
@@ -77,7 +77,7 @@ pub(crate) fn build_create_institution_call_data(
     cid_number: &str,
     threshold: u32,
     admin_forms: &[AdminProfileFormInput],
-) -> Result<Vec<u8>, String> {
+) -> Result<ChainCall, String> {
     let cid_number = cid_number.trim();
     if cid_number.is_empty() {
         return Err("http:bad_request:cid_number is required".to_string());

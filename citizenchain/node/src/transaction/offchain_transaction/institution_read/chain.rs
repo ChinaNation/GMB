@@ -2,7 +2,7 @@
 //
 // 中文注释:
 // - 本文件只读链上机构身份事实,供清算行流程展示:机构最小集、各账户余额、管理员集合、动态阈值。
-// - 机构最小集真源 `OrganizationManage::Institutions[cid_number]` 只存身份字段(名称/机构码/创建块/状态);
+// - 机构最小集真源 `PublicManage/PrivateManage::Institutions[cid_number]` 只存身份字段(名称/机构码/创建块/状态);
 //   主账户/费用账户由 `(cid_number, 保留名)` 经 GMB 协议确定性派生,不在链上重复存。
 // - 管理员集合真源在各管理员 pallet 的 `AdminAccounts[main_account]`,动态阈值真源在
 //   `InternalVote::ActiveDynamicThresholds[(institution_code, main_account)]`。
@@ -55,11 +55,11 @@ fn encode_cid_key_data(cid_number: &str) -> Result<Vec<u8>, String> {
     Ok(bv.encode())
 }
 
-// ─── 机构最小集镜像(organization-manage::Institutions) ──────
+// ─── 机构最小集镜像(PublicManage/PrivateManage::Institutions) ──────
 
 /// 链端 `InstitutionInfo<BlockNumber, AccountName>` 在节点端的 SCALE 镜像。
-/// 字段顺序必须与 `runtime/private/organization-manage/src/institution/types.rs::InstitutionInfo`
-/// 严格一致(Encode/Decode 派生按声明顺序)。
+/// 字段顺序必须与 `runtime/entity/{public,private}-manage/src/institution/types.rs::InstitutionInfo`
+/// 严格一致(两 pallet 同形态;Encode/Decode 派生按声明顺序)。
 ///
 /// runtime 实例化的具体类型:
 /// - `BlockNumber = u32`(citizenchain runtime)
@@ -279,12 +279,7 @@ fn fetch_active_threshold(
     let main_bytes: [u8; 32] = (*main_account).clone().into();
     let key1 = institution_code.encode();
     let key2 = main_bytes.encode();
-    let key = storage_keys::double_map_key(
-        "InternalVote",
-        "ActiveDynamicThresholds",
-        &key1,
-        &key2,
-    );
+    let key = storage_keys::double_map_key("InternalVote", "ActiveDynamicThresholds", &key1, &key2);
     let result = rpc_post(
         "state_getStorage",
         Value::Array(vec![
@@ -305,18 +300,33 @@ fn fetch_active_threshold(
     }
 }
 
+/// 机构生命周期 storage 所在 pallet 名:私权法人码→`PrivateManage`,否则→`PublicManage`。
+///
+/// 中文注释:链端机构管理已拆分 `PublicManage`(idx32)/`PrivateManage`(idx33),storage 名
+/// (`Institutions`/`InstitutionAccounts`)不变但前缀(twox_128(pallet 名))随之变;前缀由
+/// cid_number 派生的 institution_code 经 `is_private_legal_code` 路由(与链端单源一致),
+/// 取代已删的 `OrganizationManage`。
+fn institution_manage_pallet(cid_number: &str) -> &'static str {
+    match primitives::cid::code::institution_code_from_cid_number(cid_number) {
+        Some(code) if primitives::cid::code::is_private_legal_code(&code) => "PrivateManage",
+        _ => "PublicManage",
+    }
+}
+
 /// 链上查询某机构的多签信息。返回 `None` = 该 cid_number 尚未创建机构(进入创建流程)。
 ///
 /// 数据来源:
-/// 1. `OrganizationManage::Institutions[cid_number]` 取机构身份最小集
-/// 2. `state_getKeysPaged` + `OrganizationManage::InstitutionAccounts[cid_number, *]` 取账户列表
+/// 1. `PublicManage/PrivateManage::Institutions[cid_number]` 取机构身份最小集(按机构码路由 pallet)
+/// 2. `state_getKeysPaged` + `…::InstitutionAccounts[cid_number, *]` 取账户列表
 /// 3. 每个账户的 `System::Account[address].data.free` 取链上余额
 /// 4. 主/费账户由 GMB 协议派生地址定位;管理员集合取管理员 pallet,阈值取 internal-vote
 pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDetail>, String> {
     // 中文注释(ADR-017):取一次 finalized 快照,机构详情/账户列表/余额/阈值全部钉同一块。
     let finalized_hash = chain_query::fetch_finalized_head()?;
     let key_data = encode_cid_key_data(cid_number)?;
-    let key = storage_keys::map_key("OrganizationManage", "Institutions", &key_data);
+    // 机构生命周期已拆 PublicManage/PrivateManage,按机构码路由 storage 前缀。
+    let manage_pallet = institution_manage_pallet(cid_number);
+    let key = storage_keys::map_key(manage_pallet, "Institutions", &key_data);
     let result = rpc_post(
         "state_getStorage",
         Value::Array(vec![
@@ -343,7 +353,7 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
     let fee_addr_ss58 = pubkey_to_ss58(&fee_addr_bytes).unwrap_or_default();
 
     // 拉机构下所有账户(InstitutionAccounts[cid_number, *] 是 DoubleMap)。
-    let accounts = fetch_institution_accounts(cid_number, &finalized_hash)?;
+    let accounts = fetch_institution_accounts(cid_number, manage_pallet, &finalized_hash)?;
     let account_count = accounts.len() as u32;
 
     // 主账户 / 费用账户 / 其它账户 分类(用 ss58 字符串比对,避免原始字节做 Eq)。
@@ -416,16 +426,17 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
 /// 然后逐个 `state_getStorage` 拉取账户内容并查链上余额。
 fn fetch_institution_accounts(
     cid_number: &str,
+    manage_pallet: &str,
     finalized_hash: &str,
 ) -> Result<Vec<AccountWithBalance>, String> {
     // 第一层 key 哈希器是 Blake2_128Concat,完整 storage key 前缀 =
-    //   twox_128("OrganizationManage") ++ twox_128("InstitutionAccounts")
+    //   twox_128(PublicManage|PrivateManage) ++ twox_128("InstitutionAccounts")
     //   ++ blake2_128(cid_number_bytes) ++ cid_number_bytes(BoundedVec 编码)
     let cid_key = encode_cid_key_data(cid_number)?;
     let mut cid_prefix_data = Vec::with_capacity(16 + cid_key.len());
     cid_prefix_data.extend_from_slice(&storage_keys::blake2b_128(&cid_key));
     cid_prefix_data.extend_from_slice(&cid_key);
-    let pallet = storage_keys::twox_128(b"OrganizationManage");
+    let pallet = storage_keys::twox_128(manage_pallet.as_bytes());
     let storage = storage_keys::twox_128(b"InstitutionAccounts");
     let prefix_hex = format!(
         "0x{}{}{}",

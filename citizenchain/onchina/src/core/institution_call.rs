@@ -3,8 +3,10 @@
 //! 中文注释:onchina 只构造**裸 call data**(pallet/call 前缀 + 15 个参数),
 //! 不拼签名扩展尾、不提交 extrinsic;冷钱包对 origin 冷签后由 CitizenWallet 提交。
 //!
-//! **铁律**:参数顺序与 SCALE 类型必须与链端 `organization-manage`
-//! `propose_create_institution`(pallet index 17, call index 5,A1/A2 后)逐字节一致——
+//! **铁律**:参数顺序与 SCALE 类型必须与链端 `public-manage`/`private-manage`
+//! `propose_create_{public,private}_institution`(call index 5,A1/A2 后)逐字节一致——
+//! 两 pallet call 形态完全相同,仅 pallet 前缀不同(PublicManage=32 / PrivateManage=33),
+//! 由 `institution_code` 经 `is_private_legal_code` 派生(机构管理已拆分公权/私权两 pallet)——
 //! - `institution_code` 是 `[u8;4]` 裸字节,无长度前缀;
 //! - `issuer_main_account` / `signer_pubkey` / `AdminProfile.account` 是 `[u8;32]` 裸字节;
 //! - 所有 `Vec<u8>` / `BoundedVec<u8>`(cid_number / cid_full_name / cid_short_name /
@@ -19,10 +21,24 @@
 
 use parity_scale_codec::{Compact, Encode};
 
-/// OrganizationManage pallet 在 runtime 中的索引。
-pub const ORGANIZATION_MANAGE_PALLET_INDEX: u8 = 17;
-/// `propose_create_institution` 的 call index。
+/// PublicManage pallet 在 runtime construct_runtime 中的索引(公权机构生命周期)。
+pub const PUBLIC_MANAGE_PALLET_INDEX: u8 = 32;
+/// PrivateManage pallet 在 runtime construct_runtime 中的索引(私权机构生命周期)。
+pub const PRIVATE_MANAGE_PALLET_INDEX: u8 = 33;
+/// `propose_create_{public,private}_institution` 的 call index(两 pallet 同为 5)。
 pub const PROPOSE_CREATE_INSTITUTION_CALL_INDEX: u8 = 5;
+
+/// 按机构码派生机构创建调用的目标 pallet 索引:私权法人码→PrivateManage,否则→PublicManage。
+///
+/// 中文注释:与链端 `is_private_legal_code` 单源一致;前缀由 call data 内的 institution_code
+/// 派生,杜绝调用方手填 pallet 索引导致漂移。
+pub fn create_institution_pallet_index(institution_code: &[u8; 4]) -> u8 {
+    if primitives::cid::code::is_private_legal_code(institution_code) {
+        PRIVATE_MANAGE_PALLET_INDEX
+    } else {
+        PUBLIC_MANAGE_PALLET_INDEX
+    }
+}
 
 /// `AdminSource` 枚举序号(必须与 admin-primitives 的变体顺序一致)。
 /// Genesis=0 / Registry=1 / InternalVote=2 / MutualElection=3 / PopularElection=4。
@@ -105,12 +121,31 @@ fn encode_admin_profile(out: &mut Vec<u8>, profile: &AdminProfileArg) {
     out.push(profile.source.index()); // 枚举单字节序号
 }
 
-/// 编码完整 `propose_create_institution` 裸 call data。
+/// QR_V1 链交易动作码:`a = (pallet_index << 8) | call_index`。
 ///
-/// 输出 = `[0x11, 0x05]` + 15 个参数(顺序与链端逐字节一致)。
-pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) -> Vec<u8> {
+/// 中文注释:扫码端(CitizenWallet)按 `b.a` 路由 decoder,链交易统一用本公式
+/// (见 `memory/01-architecture/qr/qr-action-registry.md`「链交易动作码」)。
+/// 禁止再为链交易另发明扁平小整数动作码(会与非链动作码 1..7 冲突)。
+pub const fn chain_action_code(pallet_index: u8, call_index: u8) -> u16 {
+    ((pallet_index as u16) << 8) | (call_index as u16)
+}
+
+/// 一条链上调用的 QR 动作码 + 裸 SCALE call data。
+///
+/// 中文注释:`action`(b.a)与 `call_data`(b.d)由同一 pallet/call 派生,杜绝两者漂移。
+pub struct ChainCall {
+    pub action: u16,
+    pub call_data: Vec<u8>,
+}
+
+/// 编码完整 `propose_create_{public,private}_institution` 裸 call data。
+///
+/// 输出 = `[pallet, 0x05]` + 15 个参数(顺序与链端逐字节一致);pallet 由 institution_code
+/// 经 `create_institution_pallet_index` 派生(公权 32→动作码 0x2005 / 私权 33→0x2105)。
+pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) -> ChainCall {
+    let pallet_index = create_institution_pallet_index(&args.institution_code);
     let mut out = Vec::new();
-    out.push(ORGANIZATION_MANAGE_PALLET_INDEX);
+    out.push(pallet_index);
     out.push(PROPOSE_CREATE_INSTITUTION_CALL_INDEX);
 
     // cid_number: BoundedVec<u8>
@@ -174,7 +209,10 @@ pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) ->
     out.extend(Compact(args.scope_city_name.len() as u32).encode());
     out.extend_from_slice(&args.scope_city_name);
 
-    out
+    ChainCall {
+        action: chain_action_code(pallet_index, PROPOSE_CREATE_INSTITUTION_CALL_INDEX),
+        call_data: out,
+    }
 }
 
 /// Admin pallet 在 runtime construct_runtime 中的索引。
@@ -204,8 +242,9 @@ pub struct AdminSetCallArgs {
 /// 编码管理员集合变更类裸 call data。
 ///
 /// 输出 = `[pallet, call]` + `institution_code[u8;4]` + `account[u8;32]`
-///       + `admins`(Compact<N> + N×AdminProfile) + `threshold`(u32 小端)。
-pub fn encode_admin_set_call(args: &AdminSetCallArgs) -> Vec<u8> {
+///       + `admins`(Compact<N> + N×AdminProfile) + `threshold`(u32 小端);
+/// 动作码 = `(pallet_index<<8)|call_index`(CREG=`0x0c01`,FRG=`0x0c00`)。
+pub fn encode_admin_set_call(args: &AdminSetCallArgs) -> ChainCall {
     let mut out = Vec::new();
     out.push(args.pallet_index);
     out.push(args.call_index);
@@ -216,7 +255,10 @@ pub fn encode_admin_set_call(args: &AdminSetCallArgs) -> Vec<u8> {
         encode_admin_profile(&mut out, profile);
     }
     out.extend(args.threshold.to_le_bytes()); // u32 小端
-    out
+    ChainCall {
+        action: chain_action_code(args.pallet_index, args.call_index),
+        call_data: out,
+    }
 }
 
 #[cfg(test)]
@@ -293,13 +335,23 @@ mod tests {
             admins: vec![sample_admin(1), sample_admin(2)],
             threshold: 2,
         };
-        let manual = encode_admin_set_call(&args);
+        let chain = encode_admin_set_call(&args);
+        let manual = chain.call_data;
         assert_eq!(
             &manual[..2],
             &[
                 GENESIS_ADMINS_PALLET_INDEX,
                 FEDERAL_SET_CITY_REGISTRY_ADMINS_CALL_INDEX
             ]
+        );
+        // 动作码 = (pallet<<8)|call;federal_set = 0x0c01。
+        assert_eq!(chain.action, 0x0c01, "federal_set 动作码必须 = (12<<8)|1");
+        assert_eq!(
+            chain.action,
+            chain_action_code(
+                GENESIS_ADMINS_PALLET_INDEX,
+                FEDERAL_SET_CITY_REGISTRY_ADMINS_CALL_INDEX
+            )
         );
         let real_admins: Vec<AdminProfile<[u8; 32]>> =
             args.admins.iter().map(real_admin_profile).collect();
@@ -375,16 +427,21 @@ mod tests {
             scope_city_name: "北京市".as_bytes().to_vec(),
         };
 
-        let manual = encode_propose_create_institution(&args);
+        let chain = encode_propose_create_institution(&args);
+        let manual = chain.call_data;
 
-        // [0x11, 0x05] 前缀断言。
+        // SFLP 是私权法人码 → PrivateManage(33) call 5,前缀 [33,5]、动作码 0x2105。
         assert_eq!(
             &manual[..2],
             &[
-                ORGANIZATION_MANAGE_PALLET_INDEX,
+                PRIVATE_MANAGE_PALLET_INDEX,
                 PROPOSE_CREATE_INSTITUTION_CALL_INDEX
             ],
-            "pallet/call 前缀必须是 [0x11,0x05]"
+            "私权机构创建前缀必须是 [33,5]"
+        );
+        assert_eq!(
+            chain.action, 0x2105,
+            "私权机构创建动作码必须 = (33<<8)|5 = 0x2105"
         );
 
         // 用链端真实类型按参数顺序逐个 .encode() 拼接出 golden(不含前缀)。
@@ -414,5 +471,25 @@ mod tests {
         golden.extend(args.scope_city_name.encode());
 
         assert_eq!(&manual[2..], &golden[..], "完整参数 SCALE 与链端类型漂移");
+
+        // 公权码分支:同一编码器换公权机构码必须路由到 PublicManage(32) call 5、动作码 0x2005。
+        let mut public_args = args;
+        public_args.institution_code = *b"PRC\0"; // 省公民储备银行(公权法人)
+        assert!(!primitives::cid::code::is_private_legal_code(
+            &public_args.institution_code
+        ));
+        let public_chain = encode_propose_create_institution(&public_args);
+        assert_eq!(
+            &public_chain.call_data[..2],
+            &[
+                PUBLIC_MANAGE_PALLET_INDEX,
+                PROPOSE_CREATE_INSTITUTION_CALL_INDEX
+            ],
+            "公权机构创建前缀必须是 [32,5]"
+        );
+        assert_eq!(
+            public_chain.action, 0x2005,
+            "公权机构创建动作码必须 = (32<<8)|5 = 0x2005"
+        );
     }
 }

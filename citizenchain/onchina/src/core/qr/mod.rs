@@ -28,10 +28,14 @@ impl QrKind {
 }
 
 pub const ACTION_LOGIN: u16 = 1;
+/// 注册局管理员治理文本确认(非链动作,b.d=cid_admin_governance canonical JSON),
+/// 对应 qr-action-registry.md 非链动作码 a=3。
 pub const ACTION_CID_ADMIN: u16 = 3;
-/// 机构上链创建动作:b.d 携带 propose_create_institution 裸 SCALE call data,
-/// 冷钱包解码逐字段核对后冷签 origin。
-pub const ACTION_CID_INSTITUTION_CREATE: u16 = 4;
+
+// 链交易动作码(机构创建/管理员集合)不在此处发明扁平常量:
+// 统一用 `core::institution_call::chain_action_code(pallet,call)` 派生(b.a 与 b.d 同源),
+// 公权机构创建=0x2005、私权机构创建=0x2105、CREG federal_set=0x0c01、FRG propose=0x0c00。
+// 详见 qr-action-registry.md「链交易动作码」。
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignRequestBody {
