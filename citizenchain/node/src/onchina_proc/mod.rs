@@ -1,7 +1,7 @@
 //! 节点桌面端拉起 / 停止 onchina 控制台子进程。
 //!
-//! 形态:onchina 控制台是独立二进制(`onchina` crate)。节点桌面端启动后把它拉起为子进程,
-//! App 退出时统一杀掉,做到"桌面=节点运维台、浏览器=机构管理员控制台"双面并存。
+//! 形态:onchina 控制台是独立二进制(`onchina` crate)。节点桌面端不随启动自动拉起,
+//! 只在设置页二次确认后启动;App 退出时统一杀掉已由本进程拉起的子进程。
 //!
 //! Card 05:onchina 二进制 + PostgreSQL 官方二进制 + 前端产物 + china.sqlite 均随安装包
 //! (Tauri resources)。本模块**不碰 PG**——只把资源/数据路径用环境变量告诉 onchina,
@@ -33,11 +33,7 @@ fn onchina_binary_path(app: &AppHandle) -> Option<PathBuf> {
     }
     let exe = std::env::current_exe().ok()?;
     let dev = exe.parent()?.join(name);
-    if dev.exists() {
-        Some(dev)
-    } else {
-        None
-    }
+    if dev.exists() { Some(dev) } else { None }
 }
 
 /// Unix:随包资源可能丢失可执行位,拉起前补上(best-effort)。
@@ -68,7 +64,7 @@ fn pg_os_subdir() -> &'static str {
 /// 把内嵌 PG / 内网 TLS / 前端产物 / china.sqlite / 链 RPC 的路径用环境变量传给 onchina。
 ///
 /// 中文注释:仅当随包 PostgreSQL 二进制确实存在(打包构建)才开内嵌 PG + HTTPS;
-/// 开发期(cargo build,无随包 PG)保持外部 `DATABASE_URL` + HTTP,不强行内嵌。
+/// 开发期(cargo build,无随包 PG)继承启动脚本中的数据库与 HTTPS 配置,不强行覆盖。
 fn apply_onchina_env(app: &AppHandle, cmd: &mut Command) {
     // 链 RPC = 本机节点(打包/开发都设)。
     let ws_url = format!("ws://127.0.0.1:{}", crate::shared::rpc::current_rpc_port());
@@ -111,24 +107,52 @@ fn apply_data_dir_env(base: &Path, cmd: &mut Command) {
     cmd.env("CID_PG_WAL_ARCHIVE_DIR", base.join("pg-wal-archive"));
 }
 
-/// 启动 onchina 子进程;已在运行则忽略。
-///
-/// 找不到二进制时只打印提示并返回,不影响节点桌面端启动
-/// (开发期先 `cargo build -p onchina` 生成二进制)。
-pub fn start_onchina(app: &AppHandle) {
+/// 清理已经退出的 onchina 子进程句柄,避免状态误判为运行中。
+fn reap_finished_child(child: &mut Option<Child>) {
+    let Some(running) = child.as_mut() else {
+        return;
+    };
+    match running.try_wait() {
+        Ok(None) => {}
+        Ok(Some(status)) => {
+            eprintln!("[onchina] onchina 控制台子进程已退出,status={status}");
+            *child = None;
+        }
+        Err(err) => {
+            eprintln!("[onchina] 检查 onchina 控制台子进程状态失败:{err}");
+            *child = None;
+        }
+    }
+}
+
+/// 返回由本节点桌面端拉起的 onchina 子进程是否仍在运行。
+pub fn is_onchina_running() -> bool {
     let mut guard = match ONCHINA_CHILD.lock() {
         Ok(guard) => guard,
         Err(err) => {
-            eprintln!("[onchina] 获取子进程锁失败: {err}");
-            return;
+            eprintln!("[onchina] 获取子进程锁失败:{err}");
+            return false;
         }
     };
+    reap_finished_child(&mut *guard);
+    guard.is_some()
+}
+
+/// 启动 onchina 子进程;已在运行则直接返回当前状态。
+///
+/// 找不到二进制时返回明确错误,由设置页展示给用户
+/// (开发期先 `cargo build -p onchina` 生成二进制)。
+pub fn start_onchina(app: &AppHandle) -> Result<(), String> {
+    let mut guard = match ONCHINA_CHILD.lock() {
+        Ok(guard) => guard,
+        Err(err) => return Err(format!("获取链上中国平台子进程锁失败:{err}")),
+    };
+    reap_finished_child(&mut *guard);
     if guard.is_some() {
-        return;
+        return Ok(());
     }
     let Some(binary) = onchina_binary_path(app) else {
-        eprintln!("[onchina] 未找到 onchina 二进制,跳过启动(开发期先 cargo build -p onchina)");
-        return;
+        return Err("未找到链上中国平台二进制;开发期请先执行 cargo build -p onchina".to_string());
     };
     let mut cmd = Command::new(&binary);
     apply_onchina_env(app, &mut cmd);
@@ -136,8 +160,9 @@ pub fn start_onchina(app: &AppHandle) {
         Ok(child) => {
             eprintln!("[onchina] 已启动 onchina 控制台子进程 pid={}", child.id());
             *guard = Some(child);
+            Ok(())
         }
-        Err(err) => eprintln!("[onchina] 启动 onchina 控制台子进程失败: {err}"),
+        Err(err) => Err(format!("启动链上中国平台子进程失败:{err}")),
     }
 }
 

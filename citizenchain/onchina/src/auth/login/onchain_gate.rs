@@ -72,11 +72,10 @@ pub(super) async fn issue_session_after_onchain_gate(
     let identity = chain_runtime::node_institution_identity().map_err(GateError::Config)?;
 
     // 2) 读链上 Active 管理员集合(账户不存在/非 Active → 拒绝)。
-    let onchain_admins =
-        chain_runtime::fetch_active_admins_onchain(&identity.admin_pallets, &identity.main_account)
-            .await
-            .map_err(GateError::ChainUnreachable)?
-            .ok_or(GateError::NotOnchainAdmin)?;
+    let onchain_admins = chain_runtime::fetch_active_admins_onchain(&identity)
+        .await
+        .map_err(GateError::ChainUnreachable)?
+        .ok_or(GateError::NotOnchainAdmin)?;
 
     // 3) membership 比对(统一规整成 0x 小写 hex 后逐一比较)。
     let normalized = chain_runtime::normalize_account_pubkey(verified_pubkey)
@@ -243,10 +242,7 @@ pub(crate) async fn revoke_stale_admin_sessions_loop(db: Db) {
 
 async fn revoke_stale_admin_sessions_once(db: &Db) -> Result<(), String> {
     let identity = chain_runtime::node_institution_identity()?;
-    let Some(onchain_admins) =
-        chain_runtime::fetch_active_admins_onchain(&identity.admin_pallets, &identity.main_account)
-            .await?
-    else {
+    let Some(onchain_admins) = chain_runtime::fetch_active_admins_onchain(&identity).await? else {
         // 账户暂不存在(链未就绪/未配),不冒然清退本地会话。
         return Ok(());
     };

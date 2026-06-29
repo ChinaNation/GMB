@@ -1,13 +1,13 @@
 use blake2::{
-    digest::{Update, VariableOutput},
     Blake2bVar,
+    digest::{Update, VariableOutput},
 };
 use parity_scale_codec::{Decode, Encode};
 use primitives::core_const::{GMB, OP_SIGN_DEREGISTER, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE};
 use serde::{Deserialize, Serialize};
-use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
+use sp_core::{Pair, sr25519::Pair as Sr25519Pair};
 use std::sync::{Arc, OnceLock, RwLock};
-use subxt::{dynamic, OnlineClient, PolkadotConfig};
+use subxt::{OnlineClient, PolkadotConfig, dynamic};
 
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::*;
@@ -754,6 +754,12 @@ pub(crate) struct NodeInstitutionIdentity {
     pub(crate) admin_pallets: Vec<AdminPallet>,
     /// 机构主账户(AdminAccounts 键)。
     pub(crate) main_account: [u8; 32],
+    /// 联邦注册局专用:本节点所辖省的链上省码([u8;2]);其它机构为 `None`。
+    ///
+    /// 中文注释:链上 FRG 215 人按 43 省切组,Active 集合落 `GenesisAdmins::FederalRegistryProvinceGroups`
+    /// (键=`ProvinceCode`),**不在** `AdminAccounts`。本字段定位本节点的省组,由
+    /// `CID_RUNTIME_SCOPE_PROVINCE_NAME` 经 `PROVINCE_CODE_INFOS` 映射得出。
+    pub(crate) frg_province_code: Option<[u8; 2]>,
 }
 
 /// 机构码 → 控制台准入的候选 admin pallet。
@@ -835,10 +841,37 @@ fn read_scope_env(key: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+/// 省名 → 链上省码([u8;2]),单源 `primitives::cid::code::PROVINCE_CODE_INFOS`。
+///
+/// 中文注释:此为链上 `ProvinceCode`(FRG 省级组 storage 键),与 china.sqlite 行政区编码
+/// (`crate::cid::china::province_code_by_name`)是两套不同口径,勿混用。
+pub(crate) fn chain_province_code_by_name(province_name: &str) -> Option<[u8; 2]> {
+    let trimmed = province_name.trim();
+    primitives::cid::code::PROVINCE_CODE_INFOS
+        .iter()
+        .find(|info| info.province_name == trimmed)
+        .map(|info| info.province_code)
+}
+
+/// 解析本联邦注册局节点所辖省的链上省码。
+///
+/// 中文注释:FRG 节点必须配 `CID_RUNTIME_SCOPE_PROVINCE_NAME`(链上 FRG 按省切组,
+/// 登录鉴权需定位本省 5 人组);缺失或非有效省名即节点配置错误,fail-closed。
+fn resolve_frg_province_code() -> Result<[u8; 2], String> {
+    let province_name = node_scope_province()
+        .ok_or_else(|| "联邦注册局节点必须设置 CID_RUNTIME_SCOPE_PROVINCE_NAME".to_string())?;
+    chain_province_code_by_name(&province_name).ok_or_else(|| {
+        format!(
+            "CID_RUNTIME_SCOPE_PROVINCE_NAME '{province_name}' 不是有效省名(PROVINCE_CODE_INFOS)"
+        )
+    })
+}
+
 /// 解析本节点所代表的链上机构身份。
 ///
 /// 节点身份单源 = `CID_RUNTIME_ISSUER_CID_NUMBER`(判机构码,路由到对应 admin pallet)
-/// + `CID_RUNTIME_ISSUER_MAIN_ACCOUNT`(机构主账户,即 AdminAccounts 键)。
+/// + `CID_RUNTIME_ISSUER_MAIN_ACCOUNT`(机构主账户,即 AdminAccounts 键);
+/// FRG 另解析本省省码(其 Active 集合落省级组 storage)。
 pub(crate) fn node_institution_identity() -> Result<NodeInstitutionIdentity, String> {
     let cid_number = std::env::var("CID_RUNTIME_ISSUER_CID_NUMBER")
         .map_err(|_| "CID_RUNTIME_ISSUER_CID_NUMBER not set".to_string())?;
@@ -854,21 +887,31 @@ pub(crate) fn node_institution_identity() -> Result<NodeInstitutionIdentity, Str
     let code = primitives::cid::code::institution_code_from_cid_number(cid_number)
         .ok_or_else(|| "CID_RUNTIME_ISSUER_CID_NUMBER has no institution code".to_string())?;
     let admin_pallets = console_admin_pallets(&code)?;
+    let frg_province_code = if code == FRG_CODE {
+        Some(resolve_frg_province_code()?)
+    } else {
+        None
+    };
     Ok(NodeInstitutionIdentity {
         institution_code: code,
         admin_pallets,
         main_account,
+        frg_province_code,
     })
 }
 
-/// 读取某机构账户的链上 Active 管理员公钥集合(0x 小写 hex 列表)。
+/// 读取本节点机构的链上 Active 管理员公钥集合(0x 小写 hex 列表)。
 ///
-/// 按候选 pallet 顺序探测(非法人候选 [Public, Private]):账户主键全局唯一,命中首个存在且
-/// Active 的集合即返回。返回:`Ok(Some(set))`=命中 Active 集合;`Ok(None)`=所有候选都不存在
-/// 或非 Active;`Err`=链不可达或解码失败。读 latest 块(membership 变更治理级稀有,后台扫描持续复查)。
+/// 定位口径按机构分流:
+/// - **联邦注册局(FRG)**:Active 集合落 `GenesisAdmins::FederalRegistryProvinceGroups`
+///   (键=本节点省码 `ProvinceCode`),**不在** `AdminAccounts`——读单一省组。
+/// - **其它机构**:按候选 pallet 顺序探测 `<Pallet>::AdminAccounts`(键=机构主账户,全局唯一),
+///   命中首个存在且 Active 的集合即返回。
+///
+/// 返回:`Ok(Some(set))`=命中 Active 集合;`Ok(None)`=不存在或非 Active;`Err`=链不可达或解码失败。
+/// 读 latest 块(membership 变更治理级稀有,后台扫描持续复查)。
 pub(crate) async fn fetch_active_admins_onchain(
-    pallets: &[AdminPallet],
-    institution_main_account: &[u8; 32],
+    identity: &NodeInstitutionIdentity,
 ) -> Result<Option<Vec<String>>, String> {
     let ws_url = super::chain_url::chain_ws_url()?;
     let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
@@ -879,14 +922,31 @@ pub(crate) async fn fetch_active_admins_onchain(
         .at_latest()
         .await
         .map_err(|e| format!("get latest chain storage failed: {e}"))?;
-    for pallet in pallets {
-        let address = dynamic::storage(
-            pallet.pallet_name(),
-            "AdminAccounts",
-            vec![dynamic::Value::from_bytes(institution_main_account)],
-        );
+
+    // 候选 storage 地址:FRG → 省级组(键=省码);其它 → 各候选 pallet 的 AdminAccounts(键=主账户)。
+    let addresses = if let Some(province_code) = identity.frg_province_code {
+        vec![dynamic::storage(
+            AdminPallet::GenesisAdmins.pallet_name(),
+            "FederalRegistryProvinceGroups",
+            vec![dynamic::Value::from_bytes(province_code)],
+        )]
+    } else {
+        identity
+            .admin_pallets
+            .iter()
+            .map(|pallet| {
+                dynamic::storage(
+                    pallet.pallet_name(),
+                    "AdminAccounts",
+                    vec![dynamic::Value::from_bytes(identity.main_account)],
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+
+    for address in &addresses {
         let Some(thunk) = storage
-            .fetch(&address)
+            .fetch(address)
             .await
             .map_err(|e| format!("fetch on-chain admin account failed: {e}"))?
         else {

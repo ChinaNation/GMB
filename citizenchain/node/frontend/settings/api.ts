@@ -6,6 +6,7 @@ import type {
   GrandpaKey,
   NodeMode,
   NodeModeState,
+  OnChinaPlatformState,
   RewardWallet,
 } from './types';
 
@@ -13,6 +14,8 @@ import type {
 export const settingsApi = {
   getNodeMode: () => invoke<NodeModeState>('get_node_mode'),
   setNodeMode: (mode: NodeMode) => invoke<NodeModeState>('set_node_mode', { mode }),
+  getOnChinaPlatform: () => invoke<OnChinaPlatformState>('get_onchina_platform'),
+  startOnChinaPlatform: () => invoke<OnChinaPlatformState>('start_onchina_platform'),
   getCommunicationNode: () => invoke<CommunicationNodeState>('get_communication_node'),
   setCommunicationNodeEnabled: (enabled: boolean) =>
     invoke<CommunicationNodeState>('set_communication_node_enabled', { enabled }),

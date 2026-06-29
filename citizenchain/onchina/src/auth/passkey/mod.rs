@@ -2,7 +2,7 @@
 //!
 //! 三档鉴权的 Passkey / PasskeyColdSign 档 step-up:管理员先完成 passkey 断言换取一次性
 //! assertion 令牌,提交重要 / 特殊操作时携 `X-Passkey-Assertion` 头消费。
-//! - RP 配置取 env `CID_PASSKEY_RP_ID` / `CID_PASSKEY_ORIGIN`(secure context:localhost 或 TLS)。
+//! - RP 配置取 env `CID_PASSKEY_RP_ID` / `CID_PASSKEY_ORIGIN`,默认固定 onchina.local HTTPS。
 //! - 独立 WebAuthn 协议,绝不复用 QR_V1 / GMB / AdminSignedPayload。
 //! - 断言失败 / RP 未配一律拒,绝不降档到 Session。
 
@@ -47,9 +47,9 @@ fn build_webauthn_from(rp_id: &str, origin: &str) -> Result<Webauthn, String> {
 }
 
 fn build_webauthn() -> Result<Webauthn, String> {
-    let rp_id = std::env::var("CID_PASSKEY_RP_ID").unwrap_or_else(|_| "localhost".to_string());
-    let origin =
-        std::env::var("CID_PASSKEY_ORIGIN").unwrap_or_else(|_| "http://localhost:8964".to_string());
+    let rp_id = std::env::var("CID_PASSKEY_RP_ID").unwrap_or_else(|_| "onchina.local".to_string());
+    let origin = std::env::var("CID_PASSKEY_ORIGIN")
+        .unwrap_or_else(|_| "https://onchina.local:8964".to_string());
     build_webauthn_from(rp_id.trim(), origin.trim())
 }
 
@@ -442,8 +442,8 @@ mod tests {
             "非法 origin 必须 fail-closed"
         );
         assert!(
-            build_webauthn_from("localhost", "http://localhost:8964").is_ok(),
-            "localhost http 默认配置必须合法"
+            build_webauthn_from("onchina.local", "https://onchina.local:8964").is_ok(),
+            "onchina.local HTTPS 默认配置必须合法"
         );
     }
 
@@ -453,8 +453,9 @@ mod tests {
         use webauthn_authenticator_rs::WebauthnAuthenticator;
         use webauthn_rs::prelude::Url;
 
-        let webauthn = build_webauthn_from("localhost", "http://localhost:8964").expect("build");
-        let origin = Url::parse("http://localhost:8964").unwrap();
+        let webauthn =
+            build_webauthn_from("onchina.local", "https://onchina.local:8964").expect("build");
+        let origin = Url::parse("https://onchina.local:8964").unwrap();
         // falsify_uv=true:软认证器提供 UserVerification(配置要求 UV)。
         let mut authenticator = WebauthnAuthenticator::new(SoftPasskey::new(true));
 

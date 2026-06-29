@@ -9,7 +9,7 @@ homepage.workspace = true
 license = "MIT"
 publish = false
 
-# 中文注释:onchina 控制台作为独立二进制,由节点桌面端在启动时拉起为子进程。
+# 中文注释:onchina 控制台作为独立二进制,由节点桌面端设置页二次确认后拉起为子进程。
 [[bin]]
 name = "onchina"
 path = "src/main.rs"
@@ -18,7 +18,7 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-# Web 服务使用 axum 0.7,保持 OnChina HTTP 入口稳定。
+# Web 服务使用 axum 0.7,保持 OnChina HTTPS 入口稳定。
 axum = { version = "0.7", features = ["multipart"] }
 # 内网 API HTTPS(Card 05;rcgen 自签 + rustls/ring)
 axum-server = { version = "0.7", features = ["tls-rustls"] }

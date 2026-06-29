@@ -4,10 +4,10 @@
 //! PasskeyColdSign 档 commit 校验冷钱包签名且 signer 须 ∈ 本机构链上 Active 集合。
 
 use axum::{
+    Json,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    Json,
 };
 use chrono::{Duration, Utc};
 use postgres::Client;
@@ -17,17 +17,17 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::auth::action_sign::{
-    hash_json, payload_hash_for_text, signed_payload_text, verify_citizen_wallet_signature,
-    AdminSignedPayload, ADMIN_ACTION_TTL_SECONDS,
+    ADMIN_ACTION_TTL_SECONDS, AdminSignedPayload, hash_json, payload_hash_for_text,
+    signed_payload_text, verify_citizen_wallet_signature,
 };
 use crate::auth::city_registry_admins::{
-    can_manage_city_registry_conn, city_registry_row_from_user_conn,
-    count_city_registry_admins_in_city_conn, ensure_city_in_creator_province_conn,
-    find_city_registry_by_id_conn, MAX_ADMIN_NAME_CHARS, MAX_CITY_REGISTRY_ADMINS_PER_CITY,
+    MAX_ADMIN_NAME_CHARS, MAX_CITY_REGISTRY_ADMINS_PER_CITY, can_manage_city_registry_conn,
+    city_registry_row_from_user_conn, count_city_registry_admins_in_city_conn,
+    ensure_city_in_creator_province_conn, find_city_registry_by_id_conn,
 };
 use crate::auth::login::AdminAuthContext;
 use crate::auth::operation_auth::{
-    ensure_action_role_allowed, parse_action_type, AdminActionType, AdminOperationAuth,
+    AdminActionType, AdminOperationAuth, ensure_action_role_allowed, parse_action_type,
 };
 use crate::auth::repo;
 use crate::auth::security_model::{AdminActionChallenge, AdminSecurityGrant};
@@ -173,14 +173,13 @@ async fn ensure_pubkey_on_chain_admin(
             "node identity misconfigured",
         )
     })?;
-    let onchain =
-        chain_runtime::fetch_active_admins_onchain(&identity.admin_pallets, &identity.main_account)
-            .await
-            .map_err(|err| {
-                tracing::warn!(error = %err, "chain unreachable during action commit");
-                api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable")
-            })?
-            .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin"))?;
+    let onchain = chain_runtime::fetch_active_admins_onchain(&identity)
+        .await
+        .map_err(|err| {
+            tracing::warn!(error = %err, "chain unreachable during action commit");
+            api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable")
+        })?
+        .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin"))?;
     let normalized = chain_runtime::normalize_account_pubkey(account_pubkey)
         .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 2002, message))?;
     if !onchain

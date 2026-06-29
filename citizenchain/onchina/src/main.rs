@@ -2786,10 +2786,11 @@ fn main() {
     });
 }
 
-/// 中文注释(Card 05):内网 TLS——`CID_ENABLE_TLS` 开则 rcgen 自签 HTTPS,否则 HTTP(开发)。
+/// 中文注释(Card 05):内网 TLS——正式入口固定为 https://onchina.local:8964;
+/// `CID_ENABLE_TLS` 关闭仅保留给底层开发调试。
 async fn serve_console(addr: SocketAddr, app: axum::Router) {
     let service = app.into_make_service_with_connect_info::<SocketAddr>();
-    // 广告 onchina.local mDNS:局域网内可经统一域名访问本节点控制台(best-effort)。
+    // 广告 onchina.local mDNS:局域网内可经统一 HTTPS 域名访问本节点控制台(best-effort)。
     platform::mdns::advertise(addr.port());
     if core::tls::is_enabled() {
         let config = core::tls::load_or_generate_rustls_config()

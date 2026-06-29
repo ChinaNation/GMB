@@ -8,7 +8,9 @@ use std::path::PathBuf;
 
 use axum_server::tls_rustls::RustlsConfig;
 
-/// 是否启用 HTTPS(桌面/生产安装默认开;本地开发可关走 HTTP)。
+const ONCHINA_TLS_HOST: &str = "onchina.local";
+
+/// 是否启用 HTTPS(桌面/生产安装默认开;本地开发脚本同样开启 HTTPS)。
 pub(crate) fn is_enabled() -> bool {
     std::env::var("CID_ENABLE_TLS")
         .ok()
@@ -35,7 +37,7 @@ fn tls_dir() -> PathBuf {
         .join("tls")
 }
 
-/// 加载已有自签证书;无则用 rcgen 生成(localhost + 127.0.0.1 SAN)并持久化。
+/// 加载已有自签证书;无则用 rcgen 生成(onchina.local SAN)并持久化。
 pub(crate) async fn load_or_generate_rustls_config() -> Result<RustlsConfig, String> {
     // 中文注释:rustls 0.23 需要进程级 CryptoProvider;幂等安装 ring 实现。
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -43,19 +45,22 @@ pub(crate) async fn load_or_generate_rustls_config() -> Result<RustlsConfig, Str
     let dir = tls_dir();
     let cert_path = dir.join("onchina-cert.pem");
     let key_path = dir.join("onchina-key.pem");
+    let host_marker_path = dir.join("onchina-cert-host.txt");
+    let cert_host_matches = std::fs::read_to_string(&host_marker_path)
+        .ok()
+        .is_some_and(|value| value.trim() == ONCHINA_TLS_HOST);
 
-    if !(cert_path.is_file() && key_path.is_file()) {
+    if !(cert_path.is_file() && key_path.is_file() && cert_host_matches) {
         std::fs::create_dir_all(&dir).map_err(|e| format!("create tls dir failed: {e}"))?;
-        let certified = rcgen::generate_simple_self_signed(vec![
-            "localhost".to_string(),
-            "127.0.0.1".to_string(),
-        ])
-        .map_err(|e| format!("rcgen self-signed failed: {e}"))?;
+        let certified = rcgen::generate_simple_self_signed(vec![ONCHINA_TLS_HOST.to_string()])
+            .map_err(|e| format!("rcgen self-signed failed: {e}"))?;
         std::fs::write(&cert_path, certified.cert.pem())
             .map_err(|e| format!("write tls cert failed: {e}"))?;
         std::fs::write(&key_path, certified.key_pair.serialize_pem())
             .map_err(|e| format!("write tls key failed: {e}"))?;
-        tracing::info!(dir = %dir.display(), "onchina self-signed TLS cert generated");
+        std::fs::write(&host_marker_path, ONCHINA_TLS_HOST)
+            .map_err(|e| format!("write tls host marker failed: {e}"))?;
+        tracing::info!(dir = %dir.display(), host = ONCHINA_TLS_HOST, "onchina self-signed TLS cert generated");
     }
 
     RustlsConfig::from_pem_file(cert_path, key_path)

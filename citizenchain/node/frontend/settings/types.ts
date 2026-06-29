@@ -38,6 +38,11 @@ export type NodeModeState = {
   options: NodeModeOption[];
 };
 
+export type OnChinaPlatformState = {
+  running: boolean;
+  url: string;
+};
+
 export type CommunicationNodeState = {
   enabled: boolean;
   peerId: string | null;

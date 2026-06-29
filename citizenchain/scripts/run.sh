@@ -2,7 +2,7 @@
 # 正常启动:不清库,用【冻结 SSOT】(node/chainspecs/citizenchain.raw.json)续跑现有链。
 # 要清链并用当前源码现造创世,改用 clean-run.sh。
 #
-# 启动后:节点挖矿 + 托管链上中国平台(统一入口 http://onchina.local:8964;dev 直连 http://127.0.0.1:8964)。
+# 启动后:节点自动挖矿;链上中国平台需在节点设置页手动启动,统一入口 https://onchina.local:8964。
 # 平台登录与节点启动**解耦**:本机构管理员用冷钱包扫码、对链上 Active 管理员集合
 # 鉴权(3b)即可登录;不是本机构管理员就不用管,也没有任何机构权限。
 set -euo pipefail
@@ -34,7 +34,7 @@ mkdir -p "$TARGET_DIR"
 
 # ── onchina 控制台dev 配置 ──
 # 中文注释:启动节点**不需要**任何机构鉴权/身份。这里只让本机能跑起链上中国平台服务:
-#   ① 构建 onchina 二进制(节点同目录,onchina_proc 自动拉起)+ 前端产物;
+#   ① 构建 onchina 二进制(节点同目录,设置页手动启动时由 onchina_proc 拉起)+ 前端产物;
 #   ② DB 用内嵌私有 PG(方案 A):借本机 PostgreSQL 二进制起一个 onchina 专属实例(127.0.0.1)。
 # 本机构的"系统签名钥 / 机构身份"是可选配置(签登录 QR / 签发凭证才需要),非启动前提。
 echo "==> 构建 onchina 二进制 + 前端..."
@@ -56,6 +56,8 @@ else
 fi
 export CID_CHINA_DB="$REPO_ROOT/onchina/src/cid/china/china.sqlite"
 export ONCHINA_FRONTEND_DIST="$REPO_ROOT/onchina/frontend/dist"
+export CID_ENABLE_TLS=1
+export CID_TLS_DIR="$HOME/Library/Application Support/gmb.dev/onchina-tls"
 # 中文注释:本地开发让链上中国平台启动时自动对账公权机构目录(全新内嵌 PG 是空库,
 #   首启需把 40 万+ 公权机构从 china.sqlite 生成进库;首次较慢,之后增量对账很快),
 #   否则启动期"目录落后"守卫会 panic、平台起不来。
@@ -73,7 +75,7 @@ export CID_RUNTIME_ISSUER_MAIN_ACCOUNT="${CID_RUNTIME_ISSUER_MAIN_ACCOUNT:-0x406
 echo "==> 使用本地源码构建 runtime WASM，不下载 GitHub CI WASM..."
 echo "    节点启动产物目录: $TARGET_DIR"
 echo "    开发数据目录: $HOME/Library/Application Support/gmb.dev"
-echo "==> 链上中国平台(统一入口):http://onchina.local:8964   (本机 dev / passkey 测试直连:http://127.0.0.1:8964)"
+echo "==> 链上中国平台:节点设置页点击“启动”后访问 https://onchina.local:8964"
 
 # ── 启动 ──
 cd "$REPO_ROOT/node"

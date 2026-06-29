@@ -151,9 +151,7 @@ pub(crate) fn build_cors_layer() -> CorsLayer {
         .unwrap_or_default();
     let origins = if configured.is_empty() {
         vec![
-            HeaderValue::from_static("http://onchina.local:8964"),
             HeaderValue::from_static("https://onchina.local:8964"),
-            HeaderValue::from_static("http://localhost:8964"),
             HeaderValue::from_static("http://127.0.0.1:5179"),
             HeaderValue::from_static("http://localhost:5179"),
             HeaderValue::from_static("http://127.0.0.1:5173"),

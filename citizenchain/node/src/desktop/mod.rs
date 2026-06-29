@@ -35,6 +35,8 @@ pub fn run_desktop() {
             settings::desktop_update::prepare_desktop_update,
             settings::node_mode::get_node_mode,
             settings::node_mode::set_node_mode,
+            settings::onchina_platform::get_onchina_platform,
+            settings::onchina_platform::start_onchina_platform,
             settings::communication_node::get_communication_node,
             settings::communication_node::set_communication_node_enabled,
             im::commands::get_im_private_node_policy,
@@ -147,10 +149,6 @@ pub fn run_desktop() {
                 })
                 .expect("spawn auto-start-node thread failed");
 
-            // 拉起 onchina 控制台子进程:浏览器端各机构管理员经它操作,与桌面节点运维并存。
-            // 经 app 句柄把随包资源(PG/前端/china.sqlite)与数据目录路径用 env 传给 onchina。
-            crate::onchina_proc::start_onchina(app.handle());
-
             Ok(())
         })
         .build(tauri::generate_context!("tauri.conf.json"))
@@ -158,7 +156,7 @@ pub fn run_desktop() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 cleanup_on_exit(app);
-                // 节点退出时一并停掉 onchina 控制台子进程,避免残留进程占用端口。
+                // 如果用户手动启动过链上中国平台,节点退出时一并停掉子进程。
                 crate::onchina_proc::stop_onchina();
             }
         });

@@ -11,7 +11,7 @@
 #   chain_spec::fresh_genesis_config()(当前源码 genesis_config() 现造),不读冻结 JSON。
 #   fresh genesis 需要 runtime WASM,故 WASM_BUILD_FROM_SOURCE=1 让 build.rs 从源码编 WASM。
 #
-# 启动后:节点挖矿 + 托管链上中国平台(统一入口 http://onchina.local:8964;dev 直连 http://127.0.0.1:8964)。
+# 启动后:节点自动挖矿;链上中国平台需在节点设置页手动启动,统一入口 https://onchina.local:8964。
 #   平台登录与节点启动解耦,本机构管理员冷钱包扫码、对链上 Active 管理员集合鉴权(3b)即可登录。
 #
 # 代价:
@@ -59,7 +59,7 @@ rm -rf "$ONCHINA_PGDATA"
 echo "    已清链(node-key/keystore/tls 保留)"
 
 # ── 3. onchina 控制台 dev 配置 ──
-# 启动节点不需要任何机构鉴权/身份;此处仅让本机能跑起链上中国平台(内嵌 PG + 前端 + china.sqlite)。
+# 启动节点不需要任何机构鉴权/身份;此处仅准备链上中国平台手动启动所需资源(内嵌 PG + 前端 + china.sqlite)。
 echo "==> 构建 onchina 二进制 + 前端..."
 ( cd "$CHAIN_ROOT" && cargo build -p onchina )
 echo "==> 构建链上中国平台前端产物..."
@@ -79,6 +79,8 @@ else
 fi
 export CID_CHINA_DB="$CHAIN_ROOT/onchina/src/cid/china/china.sqlite"
 export ONCHINA_FRONTEND_DIST="$CHAIN_ROOT/onchina/frontend/dist"
+export CID_ENABLE_TLS=1
+export CID_TLS_DIR="$APP_DATA_DIR/onchina-tls"
 # 中文注释:本地开发让链上中国平台启动时自动对账公权机构目录(全新内嵌 PG 是空库,
 #   首启需把 40 万+ 公权机构从 china.sqlite 生成进库;首次较慢,之后增量对账很快),
 #   否则启动期"目录落后"守卫会 panic、平台起不来。
@@ -94,7 +96,7 @@ export CID_RUNTIME_ISSUER_CID_NUMBER="${CID_RUNTIME_ISSUER_CID_NUMBER:-ZS001-FRG
 export CID_RUNTIME_ISSUER_MAIN_ACCOUNT="${CID_RUNTIME_ISSUER_MAIN_ACCOUNT:-0x406246b466028ae3cb89f36b70457478eca4ec224b2ad3f2122e5a0a407e642e}"
 echo "==> 播种联邦注册局管理员省映射(仅 clean-run 空库引导)..."
 ( cd "$CHAIN_ROOT" && cargo run -p onchina -- seed-federal-admins )
-echo "==> 链上中国平台(统一入口):http://onchina.local:8964   (本机 dev / passkey 测试直连:http://127.0.0.1:8964)"
+echo "==> 链上中国平台:节点设置页点击“启动”后访问 https://onchina.local:8964"
 
 # ── 4. 用当前源码现造创世启动(不走冻结 SSOT)──
 unset WASM_FILE
