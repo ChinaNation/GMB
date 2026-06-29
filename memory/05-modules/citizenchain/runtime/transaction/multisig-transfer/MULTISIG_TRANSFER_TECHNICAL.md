@@ -30,7 +30,7 @@
 - 治理机构仍使用 `0x01 BuiltinInstitution`，由静态预置表解析到治理机构 `main_account`。
 - 个人多签直接使用个人多签 `AccountId` 作为资金账户，账户状态由 `personal-manage::PersonalMultisigQuery` 校验；管理员真源由 `personal-admins` 提供。
 - 注册机构具体账户直接使用机构账户 `AccountId` 作为资金账户，账户状态由 `entity-primitives::InstitutionMultisigQuery` 校验。
-- 两类注册账户的管理员、阈值和人数都通过查询 trait 读取：个人多签走 `personal-manage` 聚合 `personal-admins`，机构账户走 `RuntimeInstitutionQuery` 聚合 `public-manage` / `private-manage`；内部投票仍是一人一票一笔链上交易。
+- 两类注册账户的管理员、阈值和人数都通过查询 trait 读取：个人多签走 `personal-manage` 聚合 `personal-admins`，机构账户走 `RuntimeInstitutionQuery` 聚合 `genesis-manage` / `public-manage` / `private-manage`；内部投票仍是一人一票一笔链上交易。
 
 ## 0. 功能需求
 
@@ -55,6 +55,7 @@
   - `personal-manage` 注册并处于 Active 状态的个人多签账户（个人多签码 `PMUL`，`is_personal_code`）
   - 实体生命周期模块注册并处于 Active 状态的机构账户（机构账户码 `is_institution_code`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
+- 联邦注册局 `FRG` 虽属于固定治理码，但其主账户只做身份/特权校验，不暴露 `215/3` 多签配置；FRG 管理员更换只走省级 5 人组内部投票。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
 - 本模块不负责个人多签账户创建、关闭、清理或管理员集合变更；这些职责分别归属 `personal-manage` 和 `personal-admins`。
 
@@ -423,7 +424,7 @@ pub trait Config:
     /// 个人多签账户状态与管理员配置查询，由 personal-manage 聚合 personal-admins 提供。
     type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
 
-    /// 注册机构账户状态与管理员配置查询，由 runtime 聚合 public-manage / private-manage 提供。
+    /// 注册机构账户状态与管理员配置查询，由 runtime 聚合 genesis-manage / public-manage / private-manage 提供。
     type InstitutionQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
 
     /// Weight 配置

@@ -217,12 +217,10 @@ pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) ->
 
 /// Admin pallet 在 runtime construct_runtime 中的索引。
 pub const GENESIS_ADMINS_PALLET_INDEX: u8 = 12;
-pub const PUBLIC_ADMINS_PALLET_INDEX: u8 = 29;
-pub const PRIVATE_ADMINS_PALLET_INDEX: u8 = 30;
 /// `federal_set_city_registry_admins` 的 call index(genesis pallet,联邦特权直设)。
 pub const FEDERAL_SET_CITY_REGISTRY_ADMINS_CALL_INDEX: u8 = 1;
-/// `propose_admin_set_change` 的 call index(genesis/public/private 均为 0)。
-pub const PROPOSE_ADMIN_SET_CHANGE_CALL_INDEX: u8 = 0;
+/// `propose_federal_registry_province_admin_set_change` 的 call index。
+pub const PROPOSE_FRG_PROVINCE_ADMIN_SET_CHANGE_CALL_INDEX: u8 = 2;
 
 /// 管理员集合变更类调用参数。
 ///
@@ -235,6 +233,19 @@ pub struct AdminSetCallArgs {
     pub institution_code: [u8; 4],
     /// 机构主账户(= AdminAccounts 键)。
     pub account: [u8; 32],
+    pub admins: Vec<AdminProfileArg>,
+    pub threshold: u32,
+}
+
+/// 联邦注册局省级管理员组更换调用参数。
+///
+/// 中文注释:链端 call 形态为 `(province_code: [u8;2], admins, threshold)`；
+/// 省级组账户由链端按省码派生,因此 call data 不再携带 FRG 主账户或 institution_code。
+#[derive(Debug, Clone)]
+pub struct FederalRegistryProvinceAdminSetCallArgs {
+    pub pallet_index: u8,
+    pub call_index: u8,
+    pub province_code: [u8; 2],
     pub admins: Vec<AdminProfileArg>,
     pub threshold: u32,
 }
@@ -255,6 +266,29 @@ pub fn encode_admin_set_call(args: &AdminSetCallArgs) -> ChainCall {
         encode_admin_profile(&mut out, profile);
     }
     out.extend(args.threshold.to_le_bytes()); // u32 小端
+    ChainCall {
+        action: chain_action_code(args.pallet_index, args.call_index),
+        call_data: out,
+    }
+}
+
+/// 编码联邦注册局省级管理员组更换裸 call data。
+///
+/// 输出 = `[pallet, call]` + `province_code[u8;2]`
+///       + `admins`(Compact<N> + N×AdminProfile) + `threshold`(u32 小端);
+/// 动作码 = `(pallet_index<<8)|call_index`(FRG 省级组=`0x0c02`)。
+pub fn encode_federal_registry_province_admin_set_call(
+    args: &FederalRegistryProvinceAdminSetCallArgs,
+) -> ChainCall {
+    let mut out = Vec::new();
+    out.push(args.pallet_index);
+    out.push(args.call_index);
+    out.extend_from_slice(&args.province_code);
+    out.extend(Compact(args.admins.len() as u32).encode());
+    for profile in &args.admins {
+        encode_admin_profile(&mut out, profile);
+    }
+    out.extend(args.threshold.to_le_bytes());
     ChainCall {
         action: chain_action_code(args.pallet_index, args.call_index),
         call_data: out,
@@ -363,6 +397,39 @@ mod tests {
             args.threshold,
         )
             .encode();
+        assert_eq!(&manual[2..], real.as_slice());
+    }
+
+    /// FRG 省级组更换 call data 必须与链端
+    /// `(ProvinceCode, Vec<AdminProfile>, u32)` tuple `.encode()` 逐字节一致。
+    #[test]
+    fn federal_registry_province_admin_set_call_encoding_matches_runtime_tuple_and_prefix() {
+        let args = FederalRegistryProvinceAdminSetCallArgs {
+            pallet_index: GENESIS_ADMINS_PALLET_INDEX,
+            call_index: PROPOSE_FRG_PROVINCE_ADMIN_SET_CHANGE_CALL_INDEX,
+            province_code: *b"GZ",
+            admins: vec![
+                sample_admin(1),
+                sample_admin(2),
+                sample_admin(3),
+                sample_admin(4),
+                sample_admin(5),
+            ],
+            threshold: 3,
+        };
+        let chain = encode_federal_registry_province_admin_set_call(&args);
+        let manual = chain.call_data;
+        assert_eq!(
+            &manual[..2],
+            &[
+                GENESIS_ADMINS_PALLET_INDEX,
+                PROPOSE_FRG_PROVINCE_ADMIN_SET_CHANGE_CALL_INDEX
+            ]
+        );
+        assert_eq!(chain.action, 0x0c02, "FRG 省级组动作码必须 = (12<<8)|2");
+        let real_admins: Vec<AdminProfile<[u8; 32]>> =
+            args.admins.iter().map(real_admin_profile).collect();
+        let real = (args.province_code, real_admins, args.threshold).encode();
         assert_eq!(&manual[2..], real.as_slice());
     }
 

@@ -22,7 +22,7 @@
 - 注销个人多签/机构多签只能通过生命周期内部投票创建，投票引擎按 Active 管理员快照写入全员通过阈值。
 - 管理员集合变更只能通过管理员变更内部投票创建，并与同一治理主体下的普通活跃提案互斥。
 - 创建提案时必须锁定管理员快照和阈值快照，投票期间不再实时读取主体状态。
-- 国储会、省储会、省储行使用永久固定治理阈值；注册个人账户和注册机构账户使用注册或管理员变更时写入 `internal-vote` 的动态阈值。
+- 国储会、省储会、省储行、联邦注册局使用永久固定治理阈值；其中联邦注册局只允许省级 5 人组作为内部投票主体，固定阈值为 3。注册个人账户和注册机构账户使用注册或管理员变更时写入 `internal-vote` 的动态阈值。
 - 注册个人账户管理员数量范围为 `2..=64`；注册机构账户管理员数量范围为 `2..=1989`。
 - 动态账户普通提案阈值规则：`threshold * 2 > admins_len && threshold <= admins_len`。
 - 动态账户注册创建和注销关闭是生命周期操作，必须全员投票通过，即快照阈值为管理员数量。
@@ -181,7 +181,7 @@ any → unknown
 - `PendingExpiryBucket`：自动结算游标（上块未处理完的过期桶）
 - `InternalVotesByAccount` / `InternalTallies`
 - `AdminSnapshot`：提案创建时锁定的账户管理员名单。写入前拒绝空名单和重复管理员，确保“一管理员一票”语义不被快照数据破坏。
-- `InternalThresholdSnapshot`：内部提案创建时锁定的通过阈值。治理三类机构写入固定制度阈值；注册个人账户/注册机构账户写入 `internal-vote` 保存的动态阈值；注册创建和注销关闭写入全员阈值。
+- `InternalThresholdSnapshot`：内部提案创建时锁定的通过阈值。NRC/PRC/PRB/FRG 写入代码级固定制度阈值；其中 FRG 只允许 5 人省级组写入 3 票阈值。注册个人账户/注册机构账户写入 `internal-vote` 保存的动态阈值；注册创建和注销关闭写入全员阈值。
 - `PendingDynamicThresholds`：注册多签创建提案通过前暂存的动态阈值，key 为 `(institution_code, subject)`。
 - `ActiveDynamicThresholds`：注册多签激活后的动态阈值，key 为 `(institution_code, subject)`。
 - `PendingAdminChangeThresholds`：管理员变更提案通过前暂存的新管理员数量和新动态阈值。
@@ -227,7 +227,7 @@ any → unknown
 1. 一般内部投票通过 `create_general_internal_proposal_with_data` 创建，只接受 Active 管理员主体，使用当前固定阈值或 `ActiveDynamicThresholds`，并登记 `Regular` 锁。
 2. 注册个人多签/机构多签通过 `create_registered_account_create_proposal_with_data` 创建，业务模块提交初始管理员列表和用户填写的动态阈值；投票引擎校验动态阈值、写 `PendingDynamicThresholds`，并把本次注册投票快照阈值写成全员。
 3. 注销个人多签/机构多签通过 `create_lifecycle_internal_proposal_with_data` 创建，只接受 Active 管理员主体，并把本次注销投票快照阈值写成全员。
-4. 管理员集合变更通过 `create_admin_change_internal_proposal_with_data` 创建，只允许 `public-admins/private-admins` 调用；本次投票使用当前 active 阈值，新管理员数量和新动态阈值写入 `PendingAdminChangeThresholds`。
+4. 管理员集合变更通过 `create_admin_change_internal_proposal_with_data` 创建，只允许 admins 模块调用；本次投票使用当前 active 阈值。注册动态多签把新管理员数量和新动态阈值写入 `PendingAdminChangeThresholds`，固定治理机构只校验 `new_threshold` 等于代码级固定阈值，不写动态阈值表。
 5. 创建时写入 `AdminSnapshot` 与 `InternalThresholdSnapshot`，后续投票只认快照。写阈值快照前必须先校验快照管理员人数。
 6. 提案 data/owner/meta 写入完成后，投票引擎在同一事务中自动给发起人记录一票赞成；顺序必须保证业务回调能读到 `ProposalData`。
 7. `do_internal_vote` 由快照内管理员投票，按阈值快照判定是否通过；缺少阈值快照返回 `MissingThresholdSnapshot`，缺少管理员快照返回 `MissingAdminSnapshot`。
@@ -423,10 +423,10 @@ any → unknown
 阈值来源按主体类型硬隔离：
 
 - 联合投票只服务 NRC/PRC/PRB 三类治理机构，机构阈值来自 `NRC_INTERNAL_THRESHOLD`、`PRC_INTERNAL_THRESHOLD`、`PRB_INTERNAL_THRESHOLD` 固定常量。
-- NRC/PRC/PRB 的内部提案创建时也使用固定治理阈值写入 `InternalThresholdSnapshot`。
+- NRC/PRC/PRB/FRG 的内部提案创建时使用固定治理阈值写入 `InternalThresholdSnapshot`；FRG 的固定阈值为 `FRG_INTERNAL_THRESHOLD=3`，且只接受管理员快照长度为 5 的省级组账户。
 - 个人多签码（`is_personal_code`）只用于个人多签，机构账户码（`is_institution_code`）用于机构账户；三类注册账户的普通业务动态阈值由 `internal-vote` 的 `PendingDynamicThresholds / ActiveDynamicThresholds` 保存。
 - 注册创建和注销关闭是生命周期投票，必须写全员通过快照，不允许业务模块传本次投票阈值。
-- 一般内部投票读取固定阈值或 active 动态阈值；管理员变更投票读取当前 active 阈值，新动态阈值只在执行成功后更新 `ActiveDynamicThresholds`。
+- 一般内部投票读取代码级固定阈值或 active 动态阈值；管理员变更投票读取当前 active 阈值，只有注册动态多签的新动态阈值会在执行成功后更新 `ActiveDynamicThresholds`。
 - 动态阈值统一校验公式：`threshold * 2 > admins_len && threshold <= admins_len`，实现时必须转 `u64` 或使用安全乘法避免溢出。
 - 因联合投票阈值是永久制度常量，本模块不新增 `JointThresholdSnapshot`，也不需要存储迁移。
 
@@ -436,7 +436,7 @@ any → unknown
 - `create_general_internal_proposal_with_data`：一般内部投票，读取当前固定/动态阈值。
 - `create_lifecycle_internal_proposal_with_data`：注销生命周期投票，投票引擎写全员阈值。
 - `create_registered_account_create_proposal_with_data`：注册生命周期投票，投票引擎校验并暂存动态阈值，同时写全员阈值。
-- `create_admin_change_internal_proposal_with_data`：管理员变更投票，只允许 `public-admins/private-admins` 路径使用，本次投票用当前阈值，执行成功后应用新动态阈值。
+- `create_admin_change_internal_proposal_with_data`：管理员变更投票，只允许 admins 模块路径使用，本次投票用当前阈值；固定治理机构不写动态阈值，注册动态多签执行成功后应用新动态阈值。
 - `snapshot_institution_admins` 在写 `AdminSnapshot` 前拒绝空管理员列表和重复管理员。
 - 阈值与快照人数不匹配统一返回 `InvalidThresholdSnapshot` 或 `InvalidDynamicThreshold`，不再复用机构类型错误。
 

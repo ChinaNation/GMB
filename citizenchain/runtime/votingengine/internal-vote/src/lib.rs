@@ -29,13 +29,13 @@ use sp_runtime::{DispatchError, RuntimeDebug};
 
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
-use primitives::count_const::VOTING_DURATION_BLOCKS;
+use primitives::count_const::{FRG_PROVINCE_GROUP_ADMIN_COUNT, VOTING_DURATION_BLOCKS};
 
 use votingengine::{
     pallet::{AdminSnapshot, Proposals},
     types::{
         fixed_governance_pass_threshold, is_registered_multisig_code, is_valid_governance_code,
-        InstitutionCode, NRC, PRB, PRC,
+        InstitutionCode, FRG, NRC, PRB, PRC,
     },
     InternalAdminProvider, InternalProposalMutexKind, Proposal, PROPOSAL_KIND_INTERNAL,
     STAGE_INTERNAL, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
@@ -223,6 +223,9 @@ fn is_valid_internal_institution<T: Config>(
             .iter()
             .filter_map(|n| decode_account::<T>(&n.main_account))
             .any(|pid| pid == institution),
+        FRG => <T as votingengine::Config>::InternalAdminProvider::get_admin_list(FRG, institution)
+            .map(|admins| admins.len() == FRG_PROVINCE_GROUP_ADMIN_COUNT as usize)
+            .unwrap_or(false),
         c if is_registered_multisig_code(&c) => {
             <T as votingengine::Config>::InternalAdminProvider::get_admin_list(c, institution)
                 .is_some()
@@ -248,7 +251,7 @@ fn active_internal_threshold<T: Config>(
     institution: T::AccountId,
 ) -> Option<u32> {
     match institution_code {
-        NRC | PRC | PRB => fixed_governance_pass_threshold(&institution_code),
+        NRC | PRC | PRB | FRG => fixed_governance_pass_threshold(&institution_code),
         c if is_registered_multisig_code(&c) => ActiveDynamicThresholds::<T>::get(c, institution),
         _ => None,
     }
@@ -835,7 +838,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         admins_len: u32,
         threshold: u32,
     ) -> DispatchResult {
-        // 中文注释:直设阈值只针对注册多签账户(市注册局=公权机构),且必须满足严格过半。
+        // 中文注释:直设阈值只针对注册动态多签主体；创世治理机构统一走代码级固定阈值。
         ensure!(
             is_registered_multisig_code(&institution_code),
             Error::<T>::InvalidInternalCode

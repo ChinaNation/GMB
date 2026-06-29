@@ -131,6 +131,21 @@ void main() {
       expect(personalCall.sublist(2, 6), codeBytes('PMUL'));
     });
 
+    test('rejects FRG generic admin set change call data', () {
+      final accountId = Uint8List.fromList(List<int>.filled(32, 0x11));
+
+      expect(
+        () => AdminSetChangeCallCodec.build(
+          institutionCode: 'FRG',
+          adminKind: 0,
+          accountId: accountId,
+          admins: ['22' * 32, '33' * 32],
+          newThreshold: 2,
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test('validates proposer and changed admin set', () {
       final account = AdminAccountState(
         accountHex: '11' * 32,

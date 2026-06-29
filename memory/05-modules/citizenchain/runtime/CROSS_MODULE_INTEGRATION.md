@@ -14,6 +14,7 @@
 | `resolution-issuance` | `frame_system`, `votingengine`（通过 JointVoteEngine）, `pallet_balances`（通过 Currency） |
 | `runtime-upgrade` | `frame_system`, `votingengine`（通过 JointVoteEngine） |
 | `entity-primitives` | 无 storage；定义实体生命周期共用 trait |
+| `genesis-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 query trait）, `entity-primitives` |
 | `public-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait）, `entity-primitives` |
 | `private-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait）, `entity-primitives` |
 | `personal-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait） |
@@ -26,7 +27,7 @@
 
 | Trait | 定义 Pallet | Runtime 实现体 | 消费 Pallet |
 |-------|------------|---------------|------------|
-| `InternalVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `genesis-admins`, `public-admins`, `private-admins`, `personal-admins`, `resolution-destro`, `grandpakey-change`, `offchain-transaction` |
+| `InternalVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `genesis-manage`, `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `genesis-admins`, `public-admins`, `private-admins`, `personal-admins`, `resolution-destro`, `grandpakey-change`, `offchain-transaction` |
 | `JointVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `resolution-issuance`, `runtime-upgrade` |
 | `InternalAdminProvider` | `votingengine` | `RuntimeInternalAdminProvider` | `votingengine` (Config 注入) |
 | `InternalAdminsLenProvider` | `votingengine` | `RuntimeInternalAdminsLenProvider` | `votingengine` (Config 注入) |
@@ -49,8 +50,8 @@
 
 | 适配器 | 作用 |
 |--------|------|
-| `RuntimeAdminAccountQuery` | 按机构码把管理员查询路由到 `genesis-admins`、`public-admins`、`private-admins`、`personal-admins` |
-| `RuntimeInstitutionQuery` | 按公权/私权机构生命周期模块聚合机构账户状态和管理员快照，供 `multisig-transfer` 使用 |
+| `RuntimeAdminAccountQuery` | 按机构码把管理员查询路由到 `genesis-admins`、`public-admins`、`private-admins`、`personal-admins`；创世封存保护从 `genesis-manage` 读取 |
+| `RuntimeInstitutionQuery` | 按创世/公权/私权机构生命周期模块聚合机构账户状态和管理员快照，供 `multisig-transfer` 使用 |
 | `RuntimeInternalAdminProvider` | 所有内部投票主体统一委托 `RuntimeAdminAccountQuery` 读取管理员 |
 | `RuntimeInternalAdminsLenProvider` | 所有内部投票主体统一委托 `RuntimeAdminAccountQuery` 读取管理员人数 |
 | `RuntimeJointVoteResultCallback` | 按模块路由：先查 `resolution-issuance`，再查 `runtime-upgrade` |

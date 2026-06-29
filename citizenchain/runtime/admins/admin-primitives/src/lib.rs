@@ -18,8 +18,8 @@ use primitives::core_const::CID_NUMBER_MAX_BYTES;
 use scale_info::TypeInfo;
 use sp_runtime::{DispatchError, RuntimeDebug};
 
-/// 联邦注册局机构码。
-pub const FRG: InstitutionCode = *b"FRG\0";
+/// 联邦注册局机构码,唯一真源在 `primitives::cid::code`。
+pub use primitives::cid::code::FRG;
 
 /// 管理员资料里姓名/职务的最大字节长度(与实体生命周期模块 `MaxAccountNameLength` 一致)。
 pub const ADMIN_NAME_MAX_BYTES: u32 = 128;
@@ -369,7 +369,7 @@ impl<AccountId> AdminAccountQuery<AccountId> for () {
 
 /// 判断机构码是否属于创世管理员模块。
 pub fn is_genesis_admin_code(code: &InstitutionCode) -> bool {
-    is_fixed_governance_code(code) || *code == FRG
+    is_fixed_governance_code(code)
 }
 
 /// 判断机构码是否属于非创世公权机构管理员模块。
@@ -404,13 +404,18 @@ pub fn is_personal_admin_code(code: &InstitutionCode) -> bool {
     *code == PMUL
 }
 
-/// 创世治理机构的固定管理员人数；联邦注册局不锁固定人数。
+/// 创世治理机构的固定管理员人数。
+///
+/// 中文注释:FRG 的固定人数语义是"单个省级组 5 人",不是全局 215 人平铺账户。
 pub fn expected_genesis_admins_len(code: InstitutionCode) -> Option<u32> {
-    use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
+    use primitives::count_const::{
+        FRG_PROVINCE_GROUP_ADMIN_COUNT, NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT,
+    };
     match code {
         NRC => Some(NRC_ADMIN_COUNT),
         PRC => Some(PRC_ADMIN_COUNT),
         PRB => Some(PRB_ADMIN_COUNT),
+        FRG => Some(FRG_PROVINCE_GROUP_ADMIN_COUNT),
         _ => None,
     }
 }

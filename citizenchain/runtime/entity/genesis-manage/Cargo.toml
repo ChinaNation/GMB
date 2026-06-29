@@ -1,0 +1,45 @@
+[package]
+name = "genesis-manage"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+license = "MIT"
+
+[dependencies]
+codec = { workspace = true }
+scale-info = { workspace = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+frame-benchmarking = { workspace = true, optional = true }
+sp-io = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+
+admin-primitives = { path = "../../admins/admin-primitives", default-features = false }
+entity-primitives = { path = "../entity-primitives", default-features = false }
+primitives = { path = "../../primitives", default-features = false }
+votingengine = { path = "../../votingengine", default-features = false }
+
+[features]
+default = ["std"]
+runtime-benchmarks = [
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+]
+try-runtime = []
+std = [
+    "codec/std",
+    "scale-info/std",
+    "frame-benchmarking?/std",
+    "frame-support/std",
+    "frame-system/std",
+    "sp-io/std",
+    "sp-runtime/std",
+    "sp-std/std",
+    "admin-primitives/std",
+    "entity-primitives/std",
+    "primitives/std",
+    "votingengine/std",
+]

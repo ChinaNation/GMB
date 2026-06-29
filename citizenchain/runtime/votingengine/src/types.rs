@@ -22,7 +22,8 @@ pub const PROPOSAL_KIND_ELECTION: u8 = 3;
 pub use primitives::cid::code::{
     code_bytes, fixed_governance_pass_threshold, institution_code_from_cid_number,
     is_fixed_governance_code, is_institution_code, is_personal_code, is_public_legal_code,
-    is_registered_multisig_code, is_valid_governance_code, InstitutionCode, NRC, PMUL, PRB, PRC,
+    is_registered_multisig_code, is_valid_governance_code, InstitutionCode, FRG, NRC, PMUL, PRB,
+    PRC,
 };
 
 /// 内部投票 pallet 的 stage(单阶段提案)。

@@ -78,7 +78,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // 当前 runtime 采用统一模块命名：
-    // genesis-admins / public-admins / private-admins / personal-admins /
+    // genesis-manage / genesis-admins / public-admins / private-admins / personal-admins /
     // public-manage / private-manage / personal-manage / votingengine /
     // multisig-transfer / offchain-transaction / onchain-transaction / institution-asset。
     spec_version: 1,
@@ -407,6 +407,10 @@ mod runtime {
     // 私权机构生命周期模块：只负责私权机构 CID 登记、创建、关闭。
     #[runtime::pallet_index(33)]
     pub type PrivateManage = private_manage;
+
+    // 创世机构生命周期模块：创世机构档案、账户索引与不可注销封存。
+    #[runtime::pallet_index(34)]
+    pub type GenesisManage = genesis_manage;
 }
 
 #[cfg(test)]

@@ -14,6 +14,7 @@
 - 阶段切换仅通过 `OnRuntimeUpgrade` 迁移一次性写入，不设链上调用。
 - 其他模块（难度调整、runtime-upgrade）各自读本模块的链上值。
 - 创世常量在创世区块写入后不再变更。
+- 本模块不保存创世机构档案或创世管理员集合；创世机构本体归 `runtime/entity/genesis-manage`，创世管理员归 `runtime/admins/genesis-admins`。
 
 ## 2. 核心类型
 

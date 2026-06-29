@@ -46,8 +46,9 @@ a = (pallet_index << 8) | call_index
 | `0x0903` | `VotingEngine.finalize_proposal` | `finalize_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0904` | `VotingEngine.retry_passed_proposal` | `retry_passed_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0905` | `VotingEngine.cancel_passed_proposal` | `cancel_passed_proposal` | `proposal_id`, `reason` | citizenchain node / CitizenApp |
-| `0x0c00` | `GenesisAdmins.propose_admin_set_change` | `propose_genesis_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp / onchina(FRG 替换) |
+| `0x0c00` | `GenesisAdmins.propose_admin_set_change` | `propose_genesis_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp(NRC/PRC/PRB) |
 | `0x0c01` | `GenesisAdmins.federal_set_city_registry_admins` | `federal_set_city_registry_admins` | `institution_code`, `account`, `admins`, `threshold` | onchina(联邦注册局直设市注册局) |
+| `0x0c02` | `GenesisAdmins.propose_federal_registry_province_admin_set_change` | `propose_federal_registry_province_admin_set_change` | `province_code`, `admins`, `new_threshold` | onchina(FRG 省级 5 人组替换) |
 | `0x0d00` | `RuntimeUpgrade.propose_runtime_upgrade` | `propose_runtime_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0d02` | `RuntimeUpgrade.developer_direct_upgrade` | `developer_direct_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
 | `0x0e00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `institution_code`, `amount_yuan` | CitizenApp |

@@ -9,8 +9,6 @@ use primitives::cid::code::{
     is_unincorporated_code, InstitutionCode, NRC, PRB, PRC,
 };
 
-const FRG: InstitutionCode = *b"FRG\0";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdminPalletSpec {
     pub pallet_name: &'static str,
@@ -36,7 +34,7 @@ const PRIVATE_ADMINS: AdminPalletSpec = AdminPalletSpec {
 
 /// 按机构码选择新 runtime 管理员 pallet。
 pub fn admin_pallet_for_code(code: &InstitutionCode) -> Result<AdminPalletSpec, String> {
-    if is_fixed_governance_code(code) || *code == FRG {
+    if is_fixed_governance_code(code) {
         return Ok(GENESIS_ADMINS);
     }
     if is_personal_code(code) {

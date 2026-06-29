@@ -323,6 +323,8 @@ pub const NRC: InstitutionCode = *b"NRC\0";
 pub const PRC: InstitutionCode = *b"PRC\0";
 /// 省公民储备银行(固定治理档)。
 pub const PRB: InstitutionCode = *b"PRB\0";
+/// 联邦注册局(固定治理档,按省级 5 人组投票)。
+pub const FRG: InstitutionCode = *b"FRG\0";
 /// 国家司法院(护宪大法官归口机构)。
 pub const NJD: InstitutionCode = *b"NJD\0";
 
@@ -358,7 +360,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
         cid_short_name: "联邦人事局",
     },
     InstitutionCodeInfo {
-        institution_code: *b"FRG\0",
+        institution_code: FRG,
         institution_code_text: "FRG",
         cid_short_name: "联邦注册局",
     },
@@ -945,20 +947,22 @@ pub fn requires_education_level(code: &InstitutionCode) -> bool {
     text_matches(code, &["GSCH", "SFSC", "JSCH"])
 }
 
-/// 是否为固定治理档机构码(国储会/省储会/省储行)。
+/// 是否为固定治理档机构码(国储会/省储会/省储行/联邦注册局)。
 pub fn is_fixed_governance_code(code: &InstitutionCode) -> bool {
-    matches!(*code, NRC | PRC | PRB)
+    matches!(*code, NRC | PRC | PRB | FRG)
 }
 
-/// 固定治理档机构码的制度阈值(国储会 13 / 省储会 6 / 省储行 6)。
+/// 固定治理档机构码的制度阈值(国储会 13 / 省储会 6 / 省储行 6 / 联邦注册局省级组 3)。
 pub fn fixed_governance_pass_threshold(code: &InstitutionCode) -> Option<u32> {
     use crate::count_const::{
-        NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD,
+        FRG_INTERNAL_THRESHOLD, NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD,
+        PRC_INTERNAL_THRESHOLD,
     };
     match *code {
         NRC => Some(NRC_INTERNAL_THRESHOLD),
         PRC => Some(PRC_INTERNAL_THRESHOLD),
         PRB => Some(PRB_INTERNAL_THRESHOLD),
+        FRG => Some(FRG_INTERNAL_THRESHOLD),
         _ => None,
     }
 }
@@ -1041,6 +1045,9 @@ mod tests {
         assert!(is_fixed_governance_code(&NRC));
         assert!(!is_registered_multisig_code(&NRC));
         assert!(is_public_legal_code(&NRC));
+        assert!(is_fixed_governance_code(&FRG));
+        assert!(!is_registered_multisig_code(&FRG));
+        assert!(!is_institution_code(&FRG));
 
         assert!(is_personal_code(&PMUL));
         assert!(is_registered_multisig_code(&PMUL));
@@ -1067,6 +1074,7 @@ mod tests {
         assert_eq!(fixed_governance_pass_threshold(&NRC), Some(13));
         assert_eq!(fixed_governance_pass_threshold(&PRC), Some(6));
         assert_eq!(fixed_governance_pass_threshold(&PRB), Some(6));
+        assert_eq!(fixed_governance_pass_threshold(&FRG), Some(3));
         assert_eq!(fixed_governance_pass_threshold(&PMUL), None);
         assert_eq!(fixed_governance_pass_threshold(b"CGOV"), None);
     }

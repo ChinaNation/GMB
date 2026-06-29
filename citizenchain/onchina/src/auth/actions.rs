@@ -397,7 +397,7 @@ fn build_city_registry_admin_set_sign_request(
                     StatusCode::BAD_REQUEST,
                     1001,
                     "created_by format invalid",
-                ))
+                ));
             }
         },
     };
@@ -448,10 +448,11 @@ fn build_city_registry_admin_set_sign_request(
     )
 }
 
-/// 组装联邦注册局替换的 QR_V1/k=1 sign_request(b.d=propose_admin_set_change 裸 SCALE)。
+/// 组装联邦注册局替换的 QR_V1/k=1 sign_request。
 ///
-/// 中文注释:取全部 FRG 管理员集合,把 id 对应的旧账户换成新账户,编码 genesis
-/// propose_admin_set_change(call 0,FRG 内部投票)。onchina 不提交;冷钱包提交。
+/// 中文注释:取目标管理员所属省的 5 人 FRG 管理员组,把 id 对应的旧账户换成新账户,
+/// 编码 genesis `propose_federal_registry_province_admin_set_change`(call 2)。
+/// onchina 不提交;冷钱包提交。
 fn build_federal_registry_replace_sign_request(
     state: &AppState,
     action_id: &str,
@@ -482,13 +483,21 @@ fn build_federal_registry_replace_sign_request(
             let old_admin = repo::get_admin_by_id_and_registry_org_conn(conn, id, "FRG")?
                 .ok_or_else(|| "federal registry admin not found".to_string())?;
             let old_account = old_admin.admin_account.clone();
-            let current = repo::list_federal_registry_admins_by_province_conn(conn, None)?;
+            let province_name = repo::province_scope_for_registry_org_conn(
+                conn,
+                old_account.as_str(),
+                old_admin.institution_code.as_str(),
+            )?
+            .ok_or_else(|| "federal registry admin province missing".to_string())?;
+            let current =
+                repo::list_federal_registry_admins_by_province_conn(conn, Some(&province_name))?;
             let current_accounts: Vec<String> = current
                 .iter()
                 .map(|(u, _)| u.admin_account.clone())
                 .collect();
             crate::institution::admins::admin_set_call::build_federal_registry_admin_set_call_data(
                 conn,
+                province_name.as_str(),
                 &current_accounts,
                 old_account.as_str(),
                 new_admin_account.as_str(),
@@ -667,7 +676,7 @@ pub(crate) async fn commit_admin_action(
                         StatusCode::BAD_REQUEST,
                         1001,
                         "invalid federal admin replacement payload",
-                    )
+                    );
                 }
             };
         if let Err(resp) = ensure_replace_target_on_chain_admin(&input).await {

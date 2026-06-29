@@ -7,8 +7,8 @@
 ## 边界
 
 - 定义 `EntityKind`，区分公权机构、私权机构、个人多签。
-- 定义 `InstitutionMultisigQuery`，供交易、清算、扫码验签等模块统一查询机构账户状态和管理员快照。
-- 定义 `InstitutionCidQuery`，供 `public-manage` 和 `private-manage` 互查 CID 是否已登记，防止同一 CID 在两个生命周期模块重复写入。
+- 定义 `InstitutionMultisigQuery`，供交易、清算、扫码验签等模块统一查询创世/公权/私权机构账户状态和管理员快照。
+- 定义 `InstitutionCidQuery`，供 `genesis-manage`、`public-manage` 和 `private-manage` 互查 CID 是否已登记，防止同一 CID 在多个生命周期模块重复写入。
 - 定义 `CidInstitutionVerifier`，统一 CID 机构登记、注销凭证验签接口。
 - 复用 `primitives::multisig` 的账户校验、保留地址、保护地址 trait。
 

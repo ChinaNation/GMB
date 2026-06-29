@@ -13,6 +13,7 @@ class AdminSetChangeCallCodec {
   static const int privateAdminsPalletIndex = 30;
   static const int proposeAdminSetChangeCallIndex = 0;
   static const int proposePersonalAdminSetChangeCallIndex = 3;
+  static const String federalRegistryCode = 'FRG';
 
   static Uint8List build({
     required String institutionCode,
@@ -26,6 +27,9 @@ class AdminSetChangeCallCodec {
     }
     if (newThreshold <= 0) {
       throw ArgumentError('newThreshold 必须大于 0');
+    }
+    if (institutionCode == federalRegistryCode) {
+      throw ArgumentError('联邦注册局管理员更换必须走 OnChina 省级 5 人组流程');
     }
     final output = ByteOutput();
     output.pushByte(palletIndexForKind(adminKind));

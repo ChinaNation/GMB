@@ -1,4 +1,4 @@
-//! 组装机构管理员集合变更的链上 `federal_set_city_registry_admins` 裸 SCALE call data。
+//! 组装机构管理员集合变更的链上裸 SCALE call data。
 //!
 //! 中文注释:把市注册局(CREG)某城市的全量管理员集合(当前集合 ± 本次增删)组装成
 //! `AdminProfile` 列表,编码为与链端逐字节对齐的 admin-set call data。
@@ -12,20 +12,21 @@ use postgres::Client;
 
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::core::institution_call::{
-    encode_admin_set_call, AdminProfileArg, AdminSetCallArgs, AdminSourceTag, ChainCall,
+    encode_admin_set_call, encode_federal_registry_province_admin_set_call, AdminProfileArg,
+    AdminSetCallArgs, AdminSourceTag, ChainCall, FederalRegistryProvinceAdminSetCallArgs,
     FEDERAL_SET_CITY_REGISTRY_ADMINS_CALL_INDEX, GENESIS_ADMINS_PALLET_INDEX,
-    PROPOSE_ADMIN_SET_CHANGE_CALL_INDEX,
+    PROPOSE_FRG_PROVINCE_ADMIN_SET_CHANGE_CALL_INDEX,
 };
 use crate::institution::subjects::registration_call::resolve_admin_identity_conn;
 
 /// CREG 机构码(市注册局)。
 const CREG_INSTITUTION_CODE: &[u8; 4] = b"CREG";
-/// FRG 机构码(联邦注册局)。
-const FRG_INSTITUTION_CODE: &[u8; 4] = b"FRG\0";
 /// 官方机构 cid 的城市级种子 scope(与 gov 创世播种同值)。
 const CITY_SEED_SCOPE: &str = "CITY";
 /// CREG 主账户保留名(与链端 `primitives::account_derive` 一致)。
 const MAIN_ACCOUNT_NAME: &str = "主账户";
+const FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE: usize = 5;
+const FEDERAL_REGISTRY_PROVINCE_GROUP_THRESHOLD: u32 = 3;
 
 /// 把 hex 公钥解析成 32 字节裸账户。
 fn account_hex_to_bytes(account_hex: &str) -> Result<[u8; 32], String> {
@@ -126,26 +127,27 @@ pub(crate) fn build_city_registry_admin_set_call_data(
     }))
 }
 
-/// 组装联邦注册局(FRG)「全量管理员集合,old→new 替换」的 `propose_admin_set_change` 裸 call data。
+/// 组装联邦注册局(FRG)省级组「5 人集合,old→new 替换」的裸 call data。
 ///
-/// 中文注释:FRG 在 GenesisAdmins(创世),替换自身管理员走 genesis `propose_admin_set_change`
-/// (call 0,FRG 管理员内部投票),非联邦特权(特权只用于 FRG 向下设 CREG)。
-/// `current_admin_accounts`:当前全部 FRG 管理员进链账户;把 `old` 换成 `new` 后重建全集。
+/// 中文注释:FRG 在链端按省拆成 43 个 5 人组。替换自身管理员走
+/// `propose_federal_registry_province_admin_set_change`(call 2),由目标省 5 人组
+/// 3/5 投票,不再把全联邦注册局 215 人作为一个投票集合。
+/// `current_admin_accounts`:目标省当前 5 个 FRG 管理员进链账户;把 `old` 换成 `new` 后重建全集。
 pub(crate) fn build_federal_registry_admin_set_call_data(
     conn: &mut Client,
+    province_name: &str,
     current_admin_accounts: &[String],
     old_admin_account: &str,
     new_admin_account: &str,
 ) -> Result<ChainCall, String> {
-    let Some(frg_cid) = crate::domains::gov::service::federal_registry_cid_number() else {
-        return Err("FRG cid not found in genesis seed".to_string());
+    let Some(province_code_text) = crate::cid::china::province_code_by_name(province_name) else {
+        return Err(format!("province_code not found for {province_name}"));
     };
-    let Some(main_account_hex) =
-        crate::institution::accounts::derive::derive_account(frg_cid, MAIN_ACCOUNT_NAME)
-    else {
-        return Err(format!("derive FRG main_account failed for {frg_cid}"));
-    };
-    let account = account_hex_to_bytes(main_account_hex.as_str())?;
+    let province_code_bytes = province_code_text.as_bytes();
+    if province_code_bytes.len() != 2 {
+        return Err(format!("invalid province_code for {province_name}"));
+    }
+    let province_code = [province_code_bytes[0], province_code_bytes[1]];
 
     // 全量集合 old→new 替换(去重),确保 new 在集合内。
     let mut target_accounts: Vec<String> = Vec::new();
@@ -171,19 +173,26 @@ pub(crate) fn build_federal_registry_admin_set_call_data(
     if target_accounts.is_empty() {
         return Err("federal registry admin set cannot be empty".to_string());
     }
+    if target_accounts.len() != FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE {
+        return Err(format!(
+            "federal registry province group must contain exactly {} admins",
+            FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE
+        ));
+    }
 
     let mut admins: Vec<AdminProfileArg> = Vec::with_capacity(target_accounts.len());
     for acc in &target_accounts {
         admins.push(admin_profile_for(conn, acc)?);
     }
-    let threshold = (admins.len() as u32) / 2 + 1;
+    let threshold = FEDERAL_REGISTRY_PROVINCE_GROUP_THRESHOLD;
 
-    Ok(encode_admin_set_call(&AdminSetCallArgs {
-        pallet_index: GENESIS_ADMINS_PALLET_INDEX,
-        call_index: PROPOSE_ADMIN_SET_CHANGE_CALL_INDEX,
-        institution_code: *FRG_INSTITUTION_CODE,
-        account,
-        admins,
-        threshold,
-    }))
+    Ok(encode_federal_registry_province_admin_set_call(
+        &FederalRegistryProvinceAdminSetCallArgs {
+            pallet_index: GENESIS_ADMINS_PALLET_INDEX,
+            call_index: PROPOSE_FRG_PROVINCE_ADMIN_SET_CHANGE_CALL_INDEX,
+            province_code,
+            admins,
+            threshold,
+        },
+    ))
 }

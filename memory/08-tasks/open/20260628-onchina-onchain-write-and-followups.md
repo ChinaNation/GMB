@@ -78,8 +78,10 @@
 ## 进度
 
 - [x] 第一轮需求分析 + 确认"上链录入意图"(A/B/C/D) → A=PasskeyColdSign;数据契约拆前置卡 20260628-institution-admin-field-model-onchain
-- [ ] 1 链写凭证基座 + 机构/管理员上链录入
-- [ ] 2 card 09 admin 泛化
-- [ ] 3 card 10 seed 泛化
-- [ ] 4 card 12 governance web 提案
-- [ ] 5 R4 覆盖位真源(单独 ADR)
+- [x] **1 链写凭证基座 + 机构/管理员上链录入(代码完成,2026-06-29 核实)**:经前置卡 B2/B3 落地——`core/institution_call.rs`(propose_create_institution + federal_set_city_registry_admins + propose_admin_set_change SCALE 编码器,chain_action_code 派生 b.a)+ `institution/{subjects/registration_call,admins/admin_set_call}.rs` 组装;`auth/actions.rs` prepare 对 CreateCityRegistry/DeleteCityRegistry 发 `admin_set_sign_request`(federal_set)、ReplaceFederalRegistry 发(propose_admin_set_change)、机构创建发 `institution_create_sign_request`;**onchina 仍零 .tx**(冷钱包提交);C1 CitizenWallet decoder 已对接 0x2005/0x2105/0x0c01。**录入路径全代码就绪**;验收"创建管理员能真正登录"的链上往返待**重新创世**后实跑(D 步)。
+- [ ] 2 card 09 admin 泛化 —— **未做**(核实:src/auth+platform 仍 132 处 FRG/CREG/FederalRegistry/CityRegistry,frontend/admins 3 视图硬编码;待具体机构功能落地)
+- [ ] 3 card 10 seed 泛化 —— **未做**(随 09)
+- [ ] 4 card 12 governance web 提案 —— **未做**(核实:onchina src/frontend 零 legislation extrinsic 构造;立法 web 提案对接 legislation-yuan idx27/legislation-vote idx28 未建)
+- [ ] 5 R4 覆盖位真源(单独 ADR)—— **未做**(capability.rs 仅 FRG/CREG 内置 + 空能力占位)
+
+**逐项核对结论(2026-06-29)**:item 1 = 代码完成(本会话 B2/B3,链上往返待重新创世);**真未做 = 09 admin 泛化 / 10 seed 泛化 / 12 立法 web 提案 / R4 覆盖位 ADR**(共 4 项)。姊妹卡 console-refactor 的 09/10/12 即本卡 2/3/4(同物,延后),其余 01-08/11/13-17 已完工。文档迁移卡 20260629-ai-system-onchina-doc-migration 已完成(onchina arch/module 文档 + checklist/DoD 已建,citizencode 目录已删,07-ai 无旧产品口径残留)。

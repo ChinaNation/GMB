@@ -1,5 +1,5 @@
 use primitives::cid::code::{
-    fixed_governance_pass_threshold, is_registered_multisig_code, InstitutionCode,
+    fixed_governance_pass_threshold, is_registered_multisig_code, InstitutionCode, FRG,
 };
 
 use super::storage::admin_pallet_for_code;
@@ -14,6 +14,9 @@ pub fn build_admin_set_change_call_data(
     account_id: &[u8; 32],
     admins: &[String],
 ) -> Result<Vec<u8>, String> {
+    if *institution_code == FRG {
+        return Err("联邦注册局管理员更换必须走 OnChina 省级 5 人组流程".to_string());
+    }
     let encoded_admins = codec::encode_admins(admins)?;
     let new_threshold = admin_change_threshold(institution_code, admins.len())?;
     let admin_pallet = admin_pallet_for_code(institution_code)?;
@@ -116,5 +119,14 @@ mod tests {
         assert_eq!(&call[2..6], &PMUL);
         assert_eq!(&call[6..38], &[0x55u8; 32]);
         assert_eq!(&call[103..107], &2u32.to_le_bytes());
+    }
+
+    #[test]
+    fn rejects_federal_registry_generic_admin_set_change_call() {
+        let account_id = [0x55u8; 32];
+        let admins = vec!["66".repeat(32), "77".repeat(32)];
+
+        let err = build_admin_set_change_call_data(&FRG, &account_id, &admins).unwrap_err();
+        assert_eq!(err, "联邦注册局管理员更换必须走 OnChina 省级 5 人组流程");
     }
 }

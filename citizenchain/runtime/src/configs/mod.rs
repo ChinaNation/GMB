@@ -1205,6 +1205,14 @@ impl genesis_admins::Config for Runtime {
     type WeightInfo = genesis_admins::weights::SubstrateWeight<Runtime>;
 }
 
+impl genesis_manage::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type AdminAccountQuery = RuntimeAdminAccountQuery;
+    type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
+    type MaxAccountNameLength = ConstU32<128>;
+    type WeightInfo = genesis_manage::weights::SubstrateWeight<Runtime>;
+}
+
 impl public_admins::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
@@ -1286,19 +1294,22 @@ pub struct RuntimeInstitutionQuery;
 
 impl entity_primitives::InstitutionMultisigQuery<AccountId> for RuntimeInstitutionQuery {
     fn lookup_org(addr: &AccountId) -> Option<votingengine::types::InstitutionCode> {
-        public_manage::Pallet::<Runtime>::lookup_org(addr)
+        genesis_manage::Pallet::<Runtime>::lookup_org(addr)
+            .or_else(|| public_manage::Pallet::<Runtime>::lookup_org(addr))
             .or_else(|| private_manage::Pallet::<Runtime>::lookup_org(addr))
     }
 
     fn lookup_admin_config(
         addr: &AccountId,
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId>> {
-        public_manage::Pallet::<Runtime>::lookup_admin_config(addr)
+        genesis_manage::Pallet::<Runtime>::lookup_admin_config(addr)
+            .or_else(|| public_manage::Pallet::<Runtime>::lookup_admin_config(addr))
             .or_else(|| private_manage::Pallet::<Runtime>::lookup_admin_config(addr))
     }
 
     fn is_active(addr: &AccountId) -> bool {
-        public_manage::Pallet::<Runtime>::is_active(addr)
+        genesis_manage::Pallet::<Runtime>::is_active(addr)
+            || public_manage::Pallet::<Runtime>::is_active(addr)
             || private_manage::Pallet::<Runtime>::is_active(addr)
     }
 }
@@ -1309,15 +1320,23 @@ impl RuntimeAdminAccountQuery {
     fn resolve_institution_code_for_account(
         account: &AccountId,
     ) -> Option<votingengine::types::InstitutionCode> {
-        public_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account).or_else(
-            || private_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account),
-        )
+        genesis_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account)
+            .or_else(|| {
+                public_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account)
+            })
+            .or_else(|| {
+                private_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account)
+            })
     }
 
     fn resolve_admin_account_for_account(account: &AccountId) -> Option<AccountId> {
-        public_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account).or_else(|| {
-            private_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account)
-        })
+        genesis_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account)
+            .or_else(|| {
+                public_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account)
+            })
+            .or_else(|| {
+                private_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account)
+            })
     }
 
     fn is_active_admin_of_account(account: &AccountId, who: &AccountId) -> bool {
@@ -1339,7 +1358,7 @@ impl RuntimeAdminAccountQuery {
 
 impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     fn is_genesis_protected(account: &AccountId) -> bool {
-        genesis_admins::Pallet::<Runtime>::is_genesis_protected(account)
+        genesis_manage::Pallet::<Runtime>::is_genesis_protected(account)
     }
 
     fn active_admin_account_exists(

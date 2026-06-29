@@ -69,6 +69,7 @@ cid-system = { path = "otherpallet/cid-system", default-features = false }
 pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
 entity-primitives = { path = "entity/entity-primitives", default-features = false }
+genesis-manage = { path = "entity/genesis-manage", default-features = false }
 public-manage = { path = "entity/public-manage", default-features = false }
 private-manage = { path = "entity/private-manage", default-features = false }
 personal-manage = { path = "entity/personal-manage", default-features = false }
@@ -118,6 +119,7 @@ std = [
 	"pow-difficulty/std",
 	"onchain-transaction/std",
 	"entity-primitives/std",
+	"genesis-manage/std",
 	"public-manage/std",
 	"private-manage/std",
 	"personal-manage/std",
@@ -179,6 +181,7 @@ runtime-benchmarks = [
 	"cid-system/runtime-benchmarks",
 	"pow-difficulty/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
+	"genesis-manage/runtime-benchmarks",
 	"public-manage/runtime-benchmarks",
 	"private-manage/runtime-benchmarks",
 	"personal-manage/runtime-benchmarks",
@@ -217,6 +220,7 @@ try-runtime = [
 	"cid-system/try-runtime",
 	"pow-difficulty/try-runtime",
 	"onchain-transaction/try-runtime",
+	"genesis-manage/try-runtime",
 	"public-manage/try-runtime",
 	"private-manage/try-runtime",
 	"personal-manage/try-runtime",

@@ -1,14 +1,12 @@
 use std::collections::BTreeSet;
 
 use primitives::cid::code::{
-    is_personal_code, is_private_legal_code, is_public_legal_code, is_unincorporated_code,
-    InstitutionCode, NRC, PRB, PRC,
+    is_fixed_governance_code, is_personal_code, is_private_legal_code, is_public_legal_code,
+    is_unincorporated_code, InstitutionCode, FRG, NRC, PRB, PRC,
 };
 
 use super::call_data::normalize_admins;
 use super::types::AdminAccountState;
-
-const FRG: InstitutionCode = *b"FRG\0";
 
 /// 桌面端前置校验。链端仍是最终裁判，这里只提前给用户明确错误。
 pub fn validate_admin_set_change(
@@ -22,6 +20,9 @@ pub fn validate_admin_set_change(
     let proposer = super::account_id::normalize_pubkey_hex(proposer_pubkey_hex)?;
     if !state.admins.iter().any(|admin| admin == &proposer) {
         return Err("当前签名账户不是该账户管理员，不能发起管理员更换".to_string());
+    }
+    if state.institution_code == FRG {
+        return Err("联邦注册局管理员更换必须走 OnChina 省级 5 人组流程".to_string());
     }
 
     let normalized = normalize_admins(admins)?;
@@ -55,20 +56,17 @@ fn validate_count(
                 NRC => Some(NRC_ADMIN_COUNT as usize),
                 PRC => Some(PRC_ADMIN_COUNT as usize),
                 PRB => Some(PRB_ADMIN_COUNT as usize),
-                FRG => None,
+                FRG => return Err("联邦注册局管理员更换必须走 OnChina 省级 5 人组流程".to_string()),
                 _ => return Err("创世管理员机构码无效".to_string()),
             };
             if let Some(expected) = expected {
                 if count != expected {
                     return Err(format!("创世治理机构管理员数量必须保持 {expected} 人"));
                 }
-            } else if !(1..=1989).contains(&count) {
-                return Err("联邦注册局管理员数量必须在 1..=1989 之间".to_string());
             }
         }
         1 => {
-            if !is_public_legal_code(institution_code)
-                || matches!(*institution_code, NRC | PRC | PRB | FRG)
+            if !is_public_legal_code(institution_code) || is_fixed_governance_code(institution_code)
             {
                 return Err("公权机构管理员更换必须使用非创世公权机构码".to_string());
             }
@@ -163,5 +161,14 @@ mod tests {
         let err =
             validate_admin_set_change(&state(1, PMUL, current), &admin(1), &next).unwrap_err();
         assert_eq!(err, "公权机构管理员更换必须使用非创世公权机构码");
+    }
+
+    #[test]
+    fn federal_registry_requires_onchina_province_group_flow() {
+        let current = vec![admin(1), admin(2), admin(3), admin(4), admin(5)];
+        let next = vec![admin(1), admin(2), admin(3), admin(4), admin(6)];
+
+        let err = validate_admin_set_change(&state(0, FRG, current), &admin(1), &next).unwrap_err();
+        assert_eq!(err, "联邦注册局管理员更换必须走 OnChina 省级 5 人组流程");
     }
 }
