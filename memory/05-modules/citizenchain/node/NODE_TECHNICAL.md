@@ -195,9 +195,9 @@
 2026-06-29 起，节点桌面端只在用户手动确认后启动链上中国平台，不再随节点程序启动自动拉起 OnChina 子进程。
 
 - 固定入口：`https://onchina.local:8964`。
-- 设置页入口：`frontend/settings/OnChinaPlatformSection.tsx` 位于“全节点模式”和“通信节点功能”之间，左侧显示“链上中国平台”，中间显示固定入口，右侧显示“启动”按钮。
-- 二次确认：点击“启动”只打开确认弹窗；确认后调用 `start_onchina_platform`，不自动打开浏览器。
-- 后端命令：`src/settings/onchina_platform/mod.rs` 提供 `get_onchina_platform` / `start_onchina_platform`，只返回本进程管理的 OnChina 子进程状态和固定入口。
+- 设置页入口：`frontend/settings/OnChinaPlatformSection.tsx` 位于“全节点模式”和“通信节点功能”之间，左侧显示“链上中国平台”，右侧显示 `未开启` / `已开启` 状态标签，状态标签右侧显示固定入口，最右侧按钮按状态显示“启动”或“关闭”。
+- 二次确认：点击“启动”或“关闭”只打开确认弹窗；确认后调用 `start_onchina_platform` 或 `stop_onchina_platform`，不自动打开浏览器。
+- 后端命令：`src/settings/onchina_platform/mod.rs` 提供 `get_onchina_platform` / `start_onchina_platform` / `stop_onchina_platform`，只返回本进程管理的 OnChina 子进程状态和固定入口。
 - 子进程管理：`src/onchina_proc/mod.rs` 负责解析随包或开发期 `onchina` 二进制、注入链 RPC / 内嵌 PG / TLS / 前端资源环境变量、启动进程、清理已退出句柄和 App 退出时停掉已启动子进程。
 - 默认行为：`src/desktop/mod.rs` 仍自动启动区块链节点和同步守护，但不会自动启动链上中国平台，避免只挖矿节点承担 PostgreSQL、HTTPS 管理后台和浏览器业务入口。
 - HTTPS 入口：OnChina TLS 证书目标主机为 `onchina.local`；旧 `localhost/127.0.0.1` 证书会在下次启动时按主机标记重新生成。
@@ -270,14 +270,14 @@
 | `src/home/process/mod.rs` | 405 | 首页节点生命周期管理，含打开 App 自动启动、首页手动启停、设置保存即重启、锁占用状态和退出清理 |
 | `src/settings/desktop_update.rs` | 15 | 设置页点击更新前的节点停止准备命令 |
 | `src/settings/node-mode/mod.rs` | 230 | 设置页全节点模式后端，当前只允许归档全节点，普通全节点由后端拒绝选择；旧 `communication` 本地值读取时清理回归档 |
-| `src/settings/onchina_platform/mod.rs` | 41 | 设置页链上中国平台后端，返回固定 HTTPS 入口并在用户确认后手动启动 OnChina 子进程 |
+| `src/settings/onchina_platform/mod.rs` | 53 | 设置页链上中国平台后端，返回固定 HTTPS 入口并在用户确认后手动启动 / 停止 OnChina 子进程 |
 | `src/onchina_proc/mod.rs` | 183 | 节点桌面端 OnChina 子进程管理，负责手动启动、运行状态检查、环境变量注入和退出清理 |
 | `src/settings/communication-node/mod.rs` | 265 | 设置页通信节点功能后端，独立读写 `<app_data>/communication-node.json`，生成 IPv4/IPv6 固定配对二维码，不返回 RPC URL |
 | `src/im/` | 10 files | 通信节点 IM 边界模块，当前提供策略、端点、绑定、密文信封、持久化 mailbox、持久化 KeyPackage 池和 `/gmb/im/1` 网络接入；不提供节点 RPC 入口 |
 | `src/governance/runtime_upgrade/` | 5 files | 协议升级 node 后端，含 Tauri 命令、签名请求和 call_data 编码 |
 | `frontend/governance/runtime-upgrade/` | 4 files | 协议升级 node 前端，含协议升级、开发升级和专用 API |
 | `frontend/settings/node-mode/NodeModeSection.tsx` | 85 | 设置页全节点模式选择器，只展示归档/普通两种链数据模式，并将普通全节点置灰禁用 |
-| `frontend/settings/OnChinaPlatformSection.tsx` | 63 | 设置页链上中国平台启动行，展示固定 HTTPS 入口、启动按钮和二次确认弹窗 |
+| `frontend/settings/OnChinaPlatformSection.tsx` | 69 | 设置页链上中国平台启动行，展示状态标签、固定 HTTPS 入口、启动 / 关闭按钮和二次确认弹窗 |
 | `frontend/settings/communication-node/CommunicationNodeSection.tsx` | 126 | 设置页通信节点功能面板，独立开关、状态标签、PeerId/multiaddr 摘要和公民扫码配对二维码 |
 | `src/desktop/node_runner.rs` | 204 | 桌面端进程内节点启动器，含后台线程活跃标记和失败线程 join |
 | `src/home/sync_guard.rs` | 421 | 本机同步守护，检测 raw P2P 已连但 block sync peer 表为空并进入降级状态 |

@@ -16,6 +16,7 @@ export const settingsApi = {
   setNodeMode: (mode: NodeMode) => invoke<NodeModeState>('set_node_mode', { mode }),
   getOnChinaPlatform: () => invoke<OnChinaPlatformState>('get_onchina_platform'),
   startOnChinaPlatform: () => invoke<OnChinaPlatformState>('start_onchina_platform'),
+  stopOnChinaPlatform: () => invoke<OnChinaPlatformState>('stop_onchina_platform'),
   getCommunicationNode: () => invoke<CommunicationNodeState>('get_communication_node'),
   setCommunicationNodeEnabled: (enabled: boolean) =>
     invoke<CommunicationNodeState>('set_communication_node_enabled', { enabled }),

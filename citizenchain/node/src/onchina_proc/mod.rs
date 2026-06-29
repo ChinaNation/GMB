@@ -166,18 +166,26 @@ pub fn start_onchina(app: &AppHandle) -> Result<(), String> {
     }
 }
 
-/// 停止 onchina 子进程(App 退出时调用)。
-pub fn stop_onchina() {
+/// 停止 onchina 子进程;未运行时视为成功。
+pub fn stop_onchina_checked() -> Result<(), String> {
     let mut guard = match ONCHINA_CHILD.lock() {
         Ok(guard) => guard,
-        Err(err) => {
-            eprintln!("[onchina] 获取子进程锁失败: {err}");
-            return;
-        }
+        Err(err) => return Err(format!("获取链上中国平台子进程锁失败:{err}")),
     };
+    reap_finished_child(&mut *guard);
     if let Some(mut child) = guard.take() {
-        let _ = child.kill();
+        child
+            .kill()
+            .map_err(|err| format!("停止链上中国平台子进程失败:{err}"))?;
         let _ = child.wait();
         eprintln!("[onchina] 已停止 onchina 控制台子进程");
+    }
+    Ok(())
+}
+
+/// 停止 onchina 子进程(App 退出时调用)。
+pub fn stop_onchina() {
+    if let Err(err) = stop_onchina_checked() {
+        eprintln!("[onchina] 停止 onchina 控制台子进程失败:{err}");
     }
 }

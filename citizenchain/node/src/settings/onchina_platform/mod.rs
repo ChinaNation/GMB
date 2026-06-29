@@ -41,3 +41,15 @@ pub fn start_onchina_platform(app: AppHandle) -> Result<OnChinaPlatformState, St
     }
     Ok(current_state())
 }
+
+#[tauri::command]
+pub fn stop_onchina_platform(app: AppHandle) -> Result<OnChinaPlatformState, String> {
+    if let Err(err) = security::append_audit_log(&app, "stop_onchina_platform", "attempt") {
+        eprintln!("[审计] stop_onchina_platform attempt 日志写入失败:{err}");
+    }
+    crate::onchina_proc::stop_onchina_checked()?;
+    if let Err(err) = security::append_audit_log(&app, "stop_onchina_platform", "success") {
+        eprintln!("[审计] stop_onchina_platform success 日志写入失败:{err}");
+    }
+    Ok(current_state())
+}

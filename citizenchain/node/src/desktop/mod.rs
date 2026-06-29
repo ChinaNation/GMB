@@ -37,6 +37,7 @@ pub fn run_desktop() {
             settings::node_mode::set_node_mode,
             settings::onchina_platform::get_onchina_platform,
             settings::onchina_platform::start_onchina_platform,
+            settings::onchina_platform::stop_onchina_platform,
             settings::communication_node::get_communication_node,
             settings::communication_node::set_communication_node_enabled,
             im::commands::get_im_private_node_policy,

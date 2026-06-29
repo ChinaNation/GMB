@@ -2862,10 +2862,32 @@ fn cid_error_code(status: StatusCode, message: &str) -> &'static str {
         "access token expired" => "CID_AUTH_ACCESS_TOKEN_EXPIRED",
         "admin disabled" => "CID_AUTH_ADMIN_DISABLED",
         "permission denied" => "CID_AUTH_PERMISSION_DENIED",
-        "challenge not found" | "challenge not found or expired" => "CID_BIND_CHALLENGE_NOT_FOUND",
-        "challenge already consumed" => "CID_BIND_CHALLENGE_CONSUMED",
-        "challenge expired" => "CID_BIND_CHALLENGE_EXPIRED",
-        "challenge wallet mismatch" | "challenge context mismatch" => "CID_BIND_WALLET_MISMATCH",
+        "identity_qr is required" => "CID_LOGIN_IDENTITY_QR_REQUIRED",
+        "admin_account is required" => "CID_LOGIN_ADMIN_ACCOUNT_REQUIRED",
+        "origin is required" => "CID_LOGIN_ORIGIN_REQUIRED",
+        "session_id is required" => "CID_LOGIN_SESSION_REQUIRED",
+        "domain is required" => "CID_LOGIN_DOMAIN_REQUIRED",
+        "challenge_id, origin, session_id, nonce, signature are required" => {
+            "CID_LOGIN_REQUEST_INVALID"
+        }
+        "challenge_id, admin_account, signature are required" => "CID_LOGIN_REQUEST_INVALID",
+        "challenge_id and session_id are required" => "CID_LOGIN_RESULT_PARAM_REQUIRED",
+        "admin not found" => "CID_LOGIN_ADMIN_NOT_FOUND",
+        "admin province scope missing" => "CID_LOGIN_ADMIN_SCOPE_MISSING",
+        "sign request not found" => "CID_LOGIN_CHALLENGE_NOT_FOUND",
+        "sign request already consumed" => "CID_LOGIN_CHALLENGE_CONSUMED",
+        "sign request session mismatch" => "CID_LOGIN_SESSION_MISMATCH",
+        "sign request expired" => "CID_LOGIN_CHALLENGE_EXPIRED",
+        "signer_pubkey must match admin_account" => "CID_LOGIN_SIGNER_MISMATCH",
+        "login signature verify failed" => "CID_LOGIN_SIGNATURE_VERIFY_FAILED",
+        "challenge not found" | "challenge not found or expired" => "CID_LOGIN_CHALLENGE_NOT_FOUND",
+        "challenge already consumed" => "CID_LOGIN_CHALLENGE_CONSUMED",
+        "challenge expired" => "CID_LOGIN_CHALLENGE_EXPIRED",
+        "challenge context mismatch" => "CID_LOGIN_CONTEXT_MISMATCH",
+        "chain unreachable" => "CID_LOGIN_CHAIN_UNREACHABLE",
+        "node identity misconfigured" => "CID_LOGIN_NODE_IDENTITY_MISCONFIGURED",
+        "login persist failed" => "CID_LOGIN_PERSIST_FAILED",
+        "challenge wallet mismatch" => "CID_BIND_WALLET_MISMATCH",
         "signature verify failed" => "CID_BIND_SIGNATURE_VERIFY_FAILED",
         "admin admin_account already exists as federal admin" => {
             "CID_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY"
@@ -2875,8 +2897,23 @@ fn cid_error_code(status: StatusCode, message: &str) -> &'static str {
         }
         "city admin city limit reached" => "CID_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED",
         "replacement admin is not an on-chain admin" => "CID_ADMIN_REPLACEMENT_NOT_ONCHAIN",
-        "not an on-chain admin" => "CID_ADMIN_NOT_ONCHAIN",
+        "not an on-chain admin" => "CID_LOGIN_ADMIN_NOT_ONCHAIN",
         "security grant required" => "CID_ADMIN_SECURITY_GRANT_REQUIRED",
+        _ if message.starts_with("insert qr sign request failed") => {
+            "CID_LOGIN_CHALLENGE_CREATE_FAILED"
+        }
+        _ if message.starts_with("query admin failed") => "CID_LOGIN_ADMIN_QUERY_FAILED",
+        _ if message.starts_with("query admin scope failed") => "CID_LOGIN_ADMIN_QUERY_FAILED",
+        _ if message.starts_with("build login qr signature failed") => {
+            "CID_LOGIN_SYSTEM_SIGN_FAILED"
+        }
+        _ if message.starts_with("complete qr login failed") => "CID_LOGIN_COMPLETE_FAILED",
+        _ if message.starts_with("persist qr login result failed") => {
+            "CID_LOGIN_RESULT_SAVE_FAILED"
+        }
+        _ if message.starts_with("query qr login result failed") => "CID_LOGIN_RESULT_QUERY_FAILED",
+        _ if message.starts_with("insert challenge failed") => "CID_LOGIN_CHALLENGE_CREATE_FAILED",
+        _ if message.starts_with("verify login failed") => "CID_LOGIN_VERIFY_FAILED",
         _ if status == StatusCode::UNAUTHORIZED => "CID_AUTH_UNAUTHORIZED",
         _ if status == StatusCode::FORBIDDEN => "CID_AUTH_FORBIDDEN",
         _ if status == StatusCode::BAD_REQUEST => "CID_REQUEST_INVALID",

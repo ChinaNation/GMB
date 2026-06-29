@@ -75,6 +75,52 @@ OnChina 管理端只承认两类注册局机构登录态：
 
 前端只允许在统一 notice 入口翻译错误。业务组件不得直接显示后端英文错误或浏览器原始异常。
 
+### 6.1 登录错误码
+
+OnChina 管理员登录必须使用登录专用错误码，禁止继续把登录验签错误映射到绑定类 `CID_BIND_*` 口径。
+
+| 错误码 | 中文提示 |
+|---|---|
+| `CID_LOGIN_CAMERA_UNSUPPORTED` | 当前浏览器不支持摄像头扫码，请更换新版浏览器 |
+| `CID_LOGIN_CAMERA_INSECURE_CONTEXT` | 当前页面不是 HTTPS 安全环境，无法使用摄像头 |
+| `CID_LOGIN_CAMERA_PERMISSION_DENIED` | 摄像头权限被拒绝，请在浏览器中允许摄像头权限 |
+| `CID_LOGIN_CAMERA_OPEN_FAILED` | 无法打开摄像头，请检查摄像头权限或设备占用 |
+| `CID_LOGIN_QR_EMPTY` | 请先生成登录二维码 |
+| `CID_LOGIN_QR_PARSE_FAILED` | 签名二维码解析失败，请重新扫码 |
+| `CID_LOGIN_QR_NOT_RESPONSE` | 扫到的不是登录签名响应二维码 |
+| `CID_LOGIN_QR_MISSING_FIELD` | 签名二维码缺少必要字段，请重新扫码 |
+| `CID_LOGIN_QR_BAD_PROTO` | 二维码协议不正确，请使用新版公民钱包扫码 |
+| `CID_LOGIN_QR_BAD_KIND` | 二维码类型不正确，请扫描公民钱包生成的签名响应 |
+| `CID_LOGIN_QR_BAD_PUBKEY` | 签名账户格式无效 |
+| `CID_LOGIN_QR_BAD_SIGNATURE` | 签名格式无效 |
+| `CID_LOGIN_IDENTITY_QR_REQUIRED` | 请先扫描管理员身份二维码 |
+| `CID_LOGIN_ADMIN_ACCOUNT_REQUIRED` | 管理员账户缺失，请重新扫码登录 |
+| `CID_LOGIN_ORIGIN_REQUIRED` | 登录来源缺失，请刷新页面后重试 |
+| `CID_LOGIN_SESSION_REQUIRED` | 登录会话缺失，请刷新页面后重试 |
+| `CID_LOGIN_DOMAIN_REQUIRED` | 登录域名缺失，请使用 `https://onchina.local:8964` 访问 |
+| `CID_LOGIN_ADMIN_NOT_FOUND` | 非管理员禁止登录本系统 |
+| `CID_LOGIN_ADMIN_SCOPE_MISSING` | 管理员省级权限范围缺失，无法登录 |
+| `CID_LOGIN_ADMIN_QUERY_FAILED` | 管理员信息查询失败，请稍后重试 |
+| `CID_LOGIN_SYSTEM_SIGN_FAILED` | 登录二维码签发失败，请检查节点平台配置 |
+| `CID_LOGIN_CHALLENGE_CREATE_FAILED` | 登录请求保存失败，请稍后重试 |
+| `CID_LOGIN_REQUEST_INVALID` | 登录请求内容不完整，请重新扫码 |
+| `CID_LOGIN_RESULT_PARAM_REQUIRED` | 登录轮询参数缺失，请刷新页面后重试 |
+| `CID_LOGIN_CHALLENGE_NOT_FOUND` | 登录二维码不存在或已失效，请重新生成 |
+| `CID_LOGIN_CHALLENGE_CONSUMED` | 登录二维码已使用，请重新生成 |
+| `CID_LOGIN_SESSION_MISMATCH` | 登录会话不匹配，请关闭多余页面后重新生成二维码 |
+| `CID_LOGIN_CHALLENGE_EXPIRED` | 登录二维码已过期，请重新生成 |
+| `CID_LOGIN_SIGNER_MISMATCH` | 签名账户和登录账户不一致 |
+| `CID_LOGIN_CONTEXT_MISMATCH` | 登录上下文不匹配，请重新生成二维码 |
+| `CID_LOGIN_SIGNATURE_VERIFY_FAILED` | 签名验签失败，请重新扫码签名 |
+| `CID_LOGIN_COMPLETE_FAILED` | 登录签名响应处理失败，请查看服务日志 |
+| `CID_LOGIN_RESULT_SAVE_FAILED` | 登录结果保存失败，请稍后重试 |
+| `CID_LOGIN_RESULT_QUERY_FAILED` | 查询登录结果失败，请稍后重试 |
+| `CID_LOGIN_VERIFY_FAILED` | 登录签名校验失败，请重新生成二维码 |
+| `CID_LOGIN_ADMIN_NOT_ONCHAIN` | 当前钱包不是本机构链上有效管理员 |
+| `CID_LOGIN_CHAIN_UNREACHABLE` | 无法连接区块链节点，请确认节点已启动并同步 |
+| `CID_LOGIN_NODE_IDENTITY_MISCONFIGURED` | 节点机构身份配置错误，无法登录 |
+| `CID_LOGIN_PERSIST_FAILED` | 登录会话保存失败，请稍后重试 |
+
 ## 7. 投票职责边界
 
 OnChina 只签发投票引擎已经定义的资格凭证、人口快照或身份凭证。OnChina 不实现投票流程，不处理计票、状态推进、通过/否决判定，也不得内嵌投票引擎逻辑。

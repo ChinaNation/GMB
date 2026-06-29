@@ -292,7 +292,7 @@ pub(crate) async fn admin_auth_verify(
         if !verify_admin_signature(&admin_account, &challenge_text, signature.as_str()) {
             challenge.consumed = false;
             repo::update_login_sign_request_conn(conn, &challenge)?;
-            return Err("http:unprocessable:signature verify failed".to_string());
+            return Err("http:unprocessable:login signature verify failed".to_string());
         }
 
         // 中文注释:membership 真源切到链上集合(见 onchain_gate),此处只回已验签 pubkey。
@@ -317,11 +317,11 @@ pub(crate) async fn admin_auth_verify(
                 "challenge context mismatch",
             );
         }
-        Err(err) if err == "http:unprocessable:signature verify failed" => {
+        Err(err) if err == "http:unprocessable:login signature verify failed" => {
             return api_error(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 2004,
-                "signature verify failed",
+                "login signature verify failed",
             );
         }
         Err(err) => {

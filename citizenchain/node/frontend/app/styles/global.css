@@ -264,7 +264,7 @@ body {
 
 .onchina-platform-row {
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   min-height: 58px;
@@ -281,6 +281,27 @@ body {
   font-size: 14px;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.onchina-platform-status {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.onchina-platform-status.enabled {
+  border-color: rgba(34, 197, 94, 0.45);
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.onchina-platform-status.disabled {
+  color: var(--text-secondary);
+  background: rgba(148, 163, 184, 0.12);
 }
 
 .onchina-platform-url {
@@ -510,7 +531,7 @@ body {
 
 @media (max-width: 720px) {
   .onchina-platform-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
 
   .onchina-platform-url {

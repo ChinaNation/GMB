@@ -196,7 +196,7 @@ pub(crate) async fn admin_auth_qr_complete(
                 signer_pubkey = %verify_pubkey,
                 "qr login signature verify failed"
             );
-            return Err("http:unprocessable:signature verify failed".to_string());
+            return Err("http:unprocessable:login signature verify failed".to_string());
         }
         // 中文注释:membership 真源切到链上集合(见 onchain_gate),此处只消费挑战并回已验签 pubkey。
         challenge.consumed = true;
@@ -226,11 +226,11 @@ pub(crate) async fn admin_auth_qr_complete(
                 "signer_pubkey must match admin_account",
             );
         }
-        Err(err) if err == "http:unprocessable:signature verify failed" => {
+        Err(err) if err == "http:unprocessable:login signature verify failed" => {
             return api_error(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 2004,
-                "signature verify failed",
+                "login signature verify failed",
             );
         }
         Err(err) => {
