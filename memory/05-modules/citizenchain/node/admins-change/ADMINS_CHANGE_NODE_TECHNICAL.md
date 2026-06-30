@@ -1,6 +1,6 @@
 # node 管理员更换模块技术文档
 
-最新更新：2026-06-29。
+最新更新：2026-06-30。
 
 ## 模块定位
 
@@ -16,7 +16,7 @@
 - 不属于 `private/organization-manage`。机构管理只负责机构和机构账户的注册、注销、索引查询；其“换管理员”按钮只作为入口跳转到 `admin_management`。
 - 不在 `frontend/governance/` 根目录继续堆管理员更换页面；根目录只保留页面路由入口。
 - 管理员激活/已激活管理员查询的前端 API 只放在 `frontend/admins/admin-management/api.ts`，根 `governance/api.ts` 不再承载这些方法。
-- `storage_keys.rs` 只保留通用哈希与 AccountId 工具；管理员 `AdminAccounts` 专用读取在 `admins/admin_management/storage.rs`，并按机构码路由到四个管理员 pallet。
+- `storage_keys.rs` 只保留通用哈希与 AccountId 工具；管理员 `AdminAccounts` 专用读取在 `admins/admin_management/storage.rs`，并按机构码路由到三个管理员 pallet。
 
 ## 后端结构
 
@@ -29,7 +29,7 @@ citizenchain/node/src/admins/admin_management/
 ├── codec.rs            # AdminAccount SCALE 解码与 BoundedVec<AccountId32> 编码
 ├── call_data.rs        # propose_admin_set_change call data 构造
 ├── validation.rs       # 桌面端前置校验
-├── storage.rs          # Personal/Genesis/Public/Private AdminAccounts storage key 与 RPC 读取
+├── storage.rs          # Personal/Public/Private AdminAccounts storage key 与 RPC 读取
 ├── signing.rs          # QR 签名请求构造、签名响应验证、交易提交
 └── commands.rs         # Tauri 命令入口
 ```
@@ -69,9 +69,9 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 其中：
 
 - `PMUL` 个人多签 → `PersonalAdmins(7).propose_admin_set_change(3)`。
-- `NRC/PRC/PRB/NJD` 创世管理员 → `GenesisAdmins(12).propose_admin_set_change(0)`。
-- `FRG` 联邦注册局管理员 → 不走 node 通用管理员更换；必须走 OnChina 省级 5 人组入口 `GenesisAdmins(12).propose_federal_registry_province_admin_set_change(2)`。
-- 公权机构 → `PublicAdmins(29).propose_admin_set_change(0)`。
+- `NRC/PRC/PRB/NJD` 固定治理机构 → `PublicAdmins(29).propose_admin_set_change(0)`。
+- `FRG` 联邦注册局管理员 → 不走 node 通用管理员更换；必须走 OnChina 省级 5 人组入口 `PublicAdmins(29).propose_federal_registry_province_admin_set_change(2)`。
+- 普通公权机构 → `PublicAdmins(29).propose_admin_set_change(0)`。
 - 私权机构 → `PrivateAdmins(30).propose_admin_set_change(0)`。
 - 非法人机构 → 按所属法人归属路由到 `PublicAdmins(29).propose_admin_set_change(0)` 或 `PrivateAdmins(30).propose_admin_set_change(0)`。
 

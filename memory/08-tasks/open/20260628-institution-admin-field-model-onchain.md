@@ -9,7 +9,7 @@
 
 ## 所属模块
 
-- 链端 runtime（Blockchain Agent）：`citizenchain/runtime/private/organization-manage`、`citizenchain/runtime/admins/{admin-primitives,genesis-admins,public-admins,private-admins}`（`personal-admins` 不动）。
+- 链端 runtime（Blockchain Agent）：`citizenchain/runtime/private/organization-manage`、`citizenchain/runtime/admins/{admin-primitives,public-admins,private-admins}`（`personal-admins` 不动）。
 - onchina 后端（CID Agent）：`citizenchain/onchina/src/`（postgres schema + repo + DTO + 链写通道）。
 - 客户端：`citizenwallet`（decoder）、`citizenapp`（管理员资料展示）。
 - 协议登记：`memory/07-ai/unified-protocols.md`。

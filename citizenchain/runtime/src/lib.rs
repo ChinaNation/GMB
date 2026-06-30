@@ -78,7 +78,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // 当前 runtime 采用统一模块命名：
-    // genesis-manage / genesis-admins / public-admins / private-admins / personal-admins /
+    // genesis-pallet / public-admins / private-admins / personal-admins /
     // public-manage / private-manage / personal-manage / votingengine /
     // multisig-transfer / offchain-transaction / onchain-transaction / institution-asset。
     spec_version: 1,
@@ -331,10 +331,6 @@ mod runtime {
     #[runtime::pallet_index(11)]
     pub type CitizenIssuance = citizen_issuance;
 
-    // 创世管理员模块：固定治理档创世管理员。
-    #[runtime::pallet_index(12)]
-    pub type GenesisAdmins = genesis_admins;
-
     // 运行时升级治理模块：提案与联合投票通过后触发 set_code。
     #[runtime::pallet_index(13)]
     pub type RuntimeUpgrade = runtime_upgrade;
@@ -392,7 +388,7 @@ mod runtime {
     #[runtime::pallet_index(28)]
     pub type LegislationVote = legislation_vote;
 
-    // 非创世公权机构管理员模块。
+    // 公权机构管理员模块：含创世写入的固定治理机构运行期管理员治理。
     #[runtime::pallet_index(29)]
     pub type PublicAdmins = public_admins;
 
@@ -407,10 +403,6 @@ mod runtime {
     // 私权机构生命周期模块：只负责私权机构 CID 登记、创建、关闭。
     #[runtime::pallet_index(33)]
     pub type PrivateManage = private_manage;
-
-    // 创世机构生命周期模块：创世机构档案、账户索引与不可注销封存。
-    #[runtime::pallet_index(34)]
-    pub type GenesisManage = genesis_manage;
 
     // 地址变更上链模块：只保存地址目录版本、单条地址当前哈希和变更事件。
     #[runtime::pallet_index(35)]

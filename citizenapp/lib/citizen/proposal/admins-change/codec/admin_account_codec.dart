@@ -17,12 +17,12 @@ class AdminAccountCodec {
     final kind = data[offset++];
     final (count, countLen) = readCompactU32(data, offset);
     offset += countLen;
-    // A2:`AdminAccounts.admins` 为 `Vec<AdminProfile>`(个人多签 kind=3 为裸 `Vec<AccountId>`)。
+    // A2:`AdminAccounts.admins` 为 `Vec<AdminProfile>`(个人多签 kind=2 为裸 `Vec<AccountId>`)。
     final adminsRead = AdminProfile.decodeAdminsVec(
       data,
       offset,
       count,
-      isPersonal: kind == 3,
+      isPersonal: kind == 2,
     );
     if (adminsRead == null) return null;
     final (profiles, afterAdmins) = adminsRead;

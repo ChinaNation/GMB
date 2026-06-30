@@ -44,12 +44,12 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
         AccountId::new(main_admin_pubkey),
         AccountId::new(backup_admin_pubkey),
     ];
-    genesis_admins::pallet::AdminAccounts::<Runtime>::insert(
+    public_admins::pallet::AdminAccounts::<Runtime>::insert(
         issuer_main_account,
         admin_primitives::AdminAccount {
             institution_code: votingengine::types::PRC,
-            kind: admin_primitives::AdminAccountKind::GenesisInstitution,
-            // 创世机构管理员集合存 AdminProfile(来源 Genesis、逐人 meta 暂空)。
+            kind: admin_primitives::AdminAccountKind::PublicInstitution,
+            // 固定治理机构管理员集合存 AdminProfile(来源 Genesis、逐人 meta 暂空)。
             admins: admin_accounts
                 .iter()
                 .cloned()

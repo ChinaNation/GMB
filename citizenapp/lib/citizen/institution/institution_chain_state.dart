@@ -2,8 +2,7 @@
 // 与治理侧 admins 读取为一套:按机构主账户读 余额 / 管理员 / 提案,公权治理同路径。
 //
 // 中文注释:
-// - 管理员身份路由按机构码统一:储备治理三档走 governanceInstitution,
-//   其它 GenesisAdmins 创世机构走 genesisInstitution,
+// - 管理员身份路由按机构码统一:固定治理档走 governanceInstitution,
 //   其余注册机构走 institutionAccount 并用**真实机构码**(修复公权侧旧链读路径对所有
 //   公权机构硬编码 'CGOV' 的 bug —— 见 ADR-028 决策 2 / 风险点 5)。
 // - 读取遵守 ADR-018:余额走精确整键批量,提案走当年共享缓存客户端过滤,不长前缀扫描。
@@ -49,7 +48,7 @@ abstract interface class InstitutionChainState {
   /// 批量余额(hex→元);精确整键 + ChainReadCache。
   Future<Map<String, double>> balances(List<String> pubkeyHexes);
 
-  /// 机构主账户管理员公钥列表(按机构码读取 Genesis/Public/Private Admins)。
+  /// 机构主账户管理员公钥列表(按机构码读取 Public/Private/Personal Admins)。
   Future<List<String>> admins(Institution institution);
 
   /// 机构主账户管理员**完整资料**(cid/姓名/职务/任期/来源,A2;个人多签仅 account)。
@@ -110,8 +109,7 @@ class LiveInstitutionChainState implements InstitutionChainState {
 }
 
 /// 机构 → 管理员账户身份(单一路由,机构码决定):
-/// - 储备治理三档(NRC/PRC/PRB)→ governanceInstitution;
-/// - 其它 GenesisAdmins 创世机构 → genesisInstitution;
+/// - 固定治理档(NRC/PRC/PRB/FRG/NJD)→ governanceInstitution;
 /// - 其余注册机构 → institutionAccount(用真实机构码,修复旧 'CGOV' 硬编码)。
 AdminAccountIdentity adminIdentityOf(Institution institution) {
   if (InstitutionClassification.isGovernance(institution.institutionCode)) {
@@ -121,8 +119,8 @@ AdminAccountIdentity adminIdentityOf(Institution institution) {
       accountLabel: institution.cidFullName,
     );
   }
-  if (InstitutionCodeLabel.isGenesisAdminCode(institution.institutionCode)) {
-    return AdminAccountIdentity.genesisInstitution(
+  if (InstitutionCodeLabel.isFixedGovernance(institution.institutionCode)) {
+    return AdminAccountIdentity.fixedGovernanceInstitution(
       accountHex: institution.mainAccountHex,
       institutionCode: institution.institutionCode,
       accountLabel: institution.cidFullName,

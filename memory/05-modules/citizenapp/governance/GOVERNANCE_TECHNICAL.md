@@ -375,7 +375,7 @@ message = blake2_256(SCALE.encode(payload))
 ### 7.1 管理员身份检测流程
 
 1. 用户打开机构详情页，App 先展示本地固定机构信息，再后台并行加载管理员列表和当前钱包信息。
-2. 通过 `state_getStorage` 按机构码查询链上 `PersonalAdmins / GenesisAdmins / PublicAdmins / PrivateAdmins` 的 `AdminAccounts(account_id)` 存储。
+2. 通过 `state_getStorage` 按机构码查询链上 `PersonalAdmins / PublicAdmins / PrivateAdmins` 的 `AdminAccounts(account_id)` 存储；固定治理机构也读 `PublicAdmins`。
 3. Storage key 格式：`twox_128(pallet_name) + twox_128("AdminAccounts") + blake2_128(account_id) + account_id`。
 4. `account_id` 按主体类型派生：创世治理机构为制度账户 AccountId，个人多签与机构账户均使用 32 字节账户 AccountId；注册机构归属关系只用于归属/检索，不进入管理员更换。
 5. 返回 SCALE 编码的 `AdminAccount { institution_code, kind, admins, creator, created_at, updated_at, status }`。
@@ -628,7 +628,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 | 项目 | 固定治理档（NRC/PRC/PRB/FRG/NJD） | 注册多签账户（REN/PUP/OTH） |
 | --- | --- | --- |
-| 管理员来源 | `genesis-admins::AdminAccounts`（创世/治理替换） | `personal-admins / public-admins / private-admins::AdminAccounts`（注册时写入，治理替换后更新） |
+| 管理员来源 | `public-admins::AdminAccounts`（创世写入初始集合，运行期治理替换） | `personal-admins / public-admins / private-admins::AdminAccounts`（注册时写入，治理替换后更新） |
 | 阈值来源 | 投票引擎固定制度常量（13/6/6） | `internal-vote::ActiveDynamicThresholds`（注册或管理员变更时写入） |
 | 管理员存储类型 | `AccountId` | `AccountId` |
 
@@ -740,7 +740,7 @@ PersonalAdmins ProposalData 解码、`PersonalAdmins::PersonalAccounts` storage 
 2026-05-17 起，个人/机构多签创建类交易在入块后统一检查 `System.Events`：
 先解析 `System.ExtrinsicFailed` 的 runtime 模块错误，再确认对应成功事件。
 因此余额不足、管理员主体残留、机构账户索引占用等链上拒绝会显示真实
-`PersonalAdmins / GenesisAdmins / PublicAdmins / PrivateAdmins / OrganizationManage` 错误，不再落到“未找到成功事件”的泛化提示。
+`PersonalAdmins / PublicAdmins / PrivateAdmins / OrganizationManage` 错误，不再落到“未找到成功事件”的泛化提示。
 
 ### 8.9 关键文件
 
@@ -805,7 +805,6 @@ PersonalAdmins ProposalData 解码、`PersonalAdmins::PersonalAccounts` storage 
 - `citizenchain/runtime/votingengine/src/limit.rs`
 - `citizenchain/runtime/issuance/resolution-issuance/src/lib.rs`
 - `citizenchain/runtime/governance/runtime-upgrade/src/lib.rs`
-- `citizenchain/runtime/admins/genesis-admins/src/lib.rs`
 - `citizenchain/runtime/admins/public-admins/src/lib.rs`
 - `citizenchain/runtime/admins/private-admins/src/lib.rs`
 - `citizenchain/runtime/governance/resolution-destro/src/lib.rs`

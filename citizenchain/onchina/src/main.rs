@@ -2559,6 +2559,10 @@ fn main() {
                 get(auth::list_federal_registry_admins),
             )
             .route(
+                "/api/v1/admin/own-institution-admins",
+                get(auth::list_own_institution_admins),
+            )
+            .route(
                 "/api/v1/admin/federal-registry-admins/:id",
                 patch(auth::actions::update_federal_registry_login_state),
             )
@@ -2962,6 +2966,12 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         "challenge expired" => "ONCHINA_LOGIN_CHALLENGE_EXPIRED",
         "challenge context mismatch" => "ONCHINA_LOGIN_CONTEXT_MISMATCH",
         "chain unreachable" => "ONCHINA_LOGIN_CHAIN_UNREACHABLE",
+        "desktop governance institution is not supported by OnChina" => {
+            "ONCHINA_LOGIN_DESKTOP_GOVERNANCE_UNSUPPORTED"
+        }
+        "personal multisig is not supported by OnChina" => {
+            "ONCHINA_LOGIN_PERSONAL_MULTISIG_UNSUPPORTED"
+        }
         "node binding required" => "ONCHINA_LOGIN_NODE_BINDING_REQUIRED",
         "node binding missing" => "ONCHINA_LOGIN_NODE_BINDING_MISSING",
         "node binding invalid" => "ONCHINA_LOGIN_NODE_BINDING_INVALID",

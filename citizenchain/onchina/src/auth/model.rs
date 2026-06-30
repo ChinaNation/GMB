@@ -61,6 +61,20 @@ pub(crate) struct FederalRegistryAdminRow {
     pub(crate) updated_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Serialize)]
+pub(crate) struct OwnInstitutionAdminRow {
+    pub(crate) admin_account: String,
+    pub(crate) admin_name: String,
+    pub(crate) is_self: bool,
+}
+
+#[derive(Serialize)]
+pub(crate) struct OwnInstitutionAdminListOutput {
+    pub(crate) institution_code: String,
+    pub(crate) cid_short_name: Option<String>,
+    pub(crate) rows: Vec<OwnInstitutionAdminRow>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct CreateCityRegistryAdminInput {
     pub(crate) admin_account: String,

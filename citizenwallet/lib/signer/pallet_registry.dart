@@ -100,16 +100,14 @@ class PalletRegistry {
   static const int resolutionDestroPallet = 14;
   static const int proposeDestroyCall = 0;
 
-  // ---- 管理员集合变更:GenesisAdmins(12) / PublicAdmins(29) / PrivateAdmins(30) ----
+  // ---- 管理员集合变更:PublicAdmins(29) / PrivateAdmins(30) ----
   // PersonalAdmins(7) 的管理员集合变更使用 call_index=3。
-  static const int genesisAdminsPallet = 12;
   static const int publicAdminsPallet = 29;
   static const int privateAdminsPallet = 30;
   static const int proposeAdminSetChangeCall = 0;
 
   static bool isAdminSetChangePallet(int palletIndex) {
-    return palletIndex == genesisAdminsPallet ||
-        palletIndex == publicAdminsPallet ||
+    return palletIndex == publicAdminsPallet ||
         palletIndex == privateAdminsPallet;
   }
 

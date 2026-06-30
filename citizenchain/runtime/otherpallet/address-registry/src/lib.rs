@@ -10,7 +10,7 @@ pub use pallet::*;
 /// 地址更新权限抽象。
 ///
 /// 中文注释:FRG/CREG 的省市授权规则由 runtime 统一实现,本 pallet 不直接依赖
-/// genesis-admins/public-manage 的 storage,避免地址模块复制注册局权限细节。
+/// public-admins/public-manage 的 storage,避免地址模块复制注册局权限细节。
 pub trait AddressUpdateAuthority<AccountId> {
     fn can_update_catalog(who: &AccountId, registrar_account: &AccountId) -> bool;
 

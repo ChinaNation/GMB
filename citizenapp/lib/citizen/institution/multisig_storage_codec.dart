@@ -183,13 +183,13 @@ class MultisigStorageCodec {
     final kind = data[offset++]; // AdminAccountKind
     final (count, lenSize) = readCompactU32(data, offset);
     offset += lenSize;
-    // A2:admins 为 `Vec<AdminProfile>`(个人多签 kind=3 裸 `Vec<AccountId>`);本机构账户镜像
+    // A2:admins 为 `Vec<AdminProfile>`(个人多签 kind=2 裸 `Vec<AccountId>`);本机构账户镜像
     // 只取账户(数量+account),仍须按 AdminProfile 形态正确解码以拿到正确账户与偏移。
     final adminsRead = AdminProfile.decodeAdminsVec(
       data,
       offset,
       count,
-      isPersonal: kind == 3,
+      isPersonal: kind == 2,
     );
     if (adminsRead == null) return null;
     final (profiles, afterAdmins) = adminsRead;

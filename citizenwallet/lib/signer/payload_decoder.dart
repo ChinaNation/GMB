@@ -283,7 +283,7 @@ class PayloadDecoder {
         }
       }
 
-      // ── GenesisAdmins(12) / PublicAdmins(29) / PrivateAdmins(30) ──
+      // ── PublicAdmins(29) / PrivateAdmins(30) ──
       // 管理员集合变更走 propose_admin_set_change；执行统一由 VotingEngine 重试。
       if (PalletRegistry.isAdminSetChangePallet(palletIndex)) {
         if (callIndex == PalletRegistry.proposeAdminSetChangeCall) {
@@ -1321,7 +1321,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // PersonalAdmins(7.3) / GenesisAdmins(12.0) / PublicAdmins(29.0) / PrivateAdmins(30.0)
+  // PersonalAdmins(7.3) / PublicAdmins(29.0) / PrivateAdmins(30.0)
   // 格式：[pallet][call][institution_code:[u8;4]][account:AccountId32][Compact<N>][admins:N*32][new_threshold:u32_le]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
@@ -2286,14 +2286,10 @@ class PayloadDecoder {
       return callIndex == PalletRegistry.proposePersonalAdminSetChangeCall &&
           InstitutionCode.isPersonal(code);
     }
-    if (palletIndex == PalletRegistry.genesisAdminsPallet) {
-      return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
-          InstitutionCode.isFixedGovernance(code);
-    }
     if (palletIndex == PalletRegistry.publicAdminsPallet) {
       return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
-          InstitutionCode.isPublicLegal(code) &&
-          !InstitutionCode.isFixedGovernance(code);
+          (InstitutionCode.isPublicLegal(code) ||
+              InstitutionCode.isFixedGovernance(code));
     }
     if (palletIndex == PalletRegistry.privateAdminsPallet) {
       return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
@@ -2307,7 +2303,6 @@ class PayloadDecoder {
     return switch (palletIndex) {
       PalletRegistry.personalAdminsPallet =>
         'propose_personal_admin_set_change',
-      PalletRegistry.genesisAdminsPallet => 'propose_genesis_admin_set_change',
       PalletRegistry.publicAdminsPallet => 'propose_public_admin_set_change',
       PalletRegistry.privateAdminsPallet => 'propose_private_admin_set_change',
       _ => 'propose_unknown_admin_set_change',
@@ -2369,24 +2364,20 @@ class PayloadDecoder {
   /// 激活凭证里的账户 kind 与机构码是否匹配。
   ///
   /// kind 语义对齐链端 admin-primitives::AdminAccountKind(SCALE 判别值):
-  ///   0 = GenesisInstitution
-  ///   1 = PublicInstitution
-  ///   2 = PrivateInstitution
-  ///   3 = PersonalMultisig
+  ///   0 = PublicInstitution
+  ///   1 = PrivateInstitution
+  ///   2 = PersonalMultisig
   static bool _activationAccountKindMatchesCode(String code, int kind) {
-    if (InstitutionCode.isFixedGovernance(code)) {
-      return kind == 0;
-    }
     if (InstitutionCode.isPersonal(code)) {
-      return kind == 3;
+      return kind == 2;
     }
-    if (InstitutionCode.isPublicLegal(code) &&
-        !InstitutionCode.isFixedGovernance(code)) {
-      return kind == 1;
+    if (InstitutionCode.isPublicLegal(code) ||
+        InstitutionCode.isFixedGovernance(code)) {
+      return kind == 0;
     }
     if (InstitutionCode.isPrivateLegal(code) ||
         InstitutionCode.isUnincorporated(code)) {
-      return kind == 2;
+      return kind == 1;
     }
     return false;
   }

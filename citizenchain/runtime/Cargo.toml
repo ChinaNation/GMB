@@ -70,7 +70,6 @@ pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false
 address-registry = { path = "otherpallet/address-registry", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
 entity-primitives = { path = "entity/entity-primitives", default-features = false }
-genesis-manage = { path = "entity/genesis-manage", default-features = false }
 public-manage = { path = "entity/public-manage", default-features = false }
 private-manage = { path = "entity/private-manage", default-features = false }
 personal-manage = { path = "entity/personal-manage", default-features = false }
@@ -82,7 +81,6 @@ joint-vote = { path = "votingengine/joint-vote", default-features = false }
 election-vote = { path = "votingengine/election-vote", default-features = false }
 legislation-vote = { path = "votingengine/legislation-vote", default-features = false }
 admin-primitives = { path = "admins/admin-primitives", default-features = false }
-genesis-admins = { path = "admins/genesis-admins", default-features = false }
 public-admins = { path = "admins/public-admins", default-features = false }
 private-admins = { path = "admins/private-admins", default-features = false }
 grandpakey-change = { path = "governance/grandpakey-change", default-features = false }
@@ -121,7 +119,6 @@ std = [
 	"address-registry/std",
 	"onchain-transaction/std",
 	"entity-primitives/std",
-	"genesis-manage/std",
 	"public-manage/std",
 	"private-manage/std",
 	"personal-manage/std",
@@ -133,7 +130,6 @@ std = [
 	"election-vote/std",
 	"legislation-vote/std",
 	"admin-primitives/std",
-	"genesis-admins/std",
 	"public-admins/std",
 	"private-admins/std",
 	"grandpakey-change/std",
@@ -184,7 +180,6 @@ runtime-benchmarks = [
 	"pow-difficulty/runtime-benchmarks",
 	"address-registry/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
-	"genesis-manage/runtime-benchmarks",
 	"public-manage/runtime-benchmarks",
 	"private-manage/runtime-benchmarks",
 	"personal-manage/runtime-benchmarks",
@@ -194,7 +189,6 @@ runtime-benchmarks = [
 	"internal-vote/runtime-benchmarks",
 	"joint-vote/runtime-benchmarks",
 	"election-vote/runtime-benchmarks",
-	"genesis-admins/runtime-benchmarks",
 	"public-admins/runtime-benchmarks",
 	"private-admins/runtime-benchmarks",
 	"grandpakey-change/runtime-benchmarks",
@@ -224,7 +218,6 @@ try-runtime = [
 	"pow-difficulty/try-runtime",
 	"address-registry/try-runtime",
 	"onchain-transaction/try-runtime",
-	"genesis-manage/try-runtime",
 	"public-manage/try-runtime",
 	"private-manage/try-runtime",
 	"personal-manage/try-runtime",
@@ -234,7 +227,6 @@ try-runtime = [
 	"internal-vote/try-runtime",
 	"joint-vote/try-runtime",
 	"election-vote/try-runtime",
-	"genesis-admins/try-runtime",
 	"public-admins/try-runtime",
 	"private-admins/try-runtime",
 	"grandpakey-change/try-runtime",

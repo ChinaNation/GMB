@@ -1753,8 +1753,6 @@ dependencies = [
  "frame-system-rpc-runtime-api",
  "frame-try-runtime",
  "fullnode-issuance",
- "genesis-admins",
- "genesis-manage",
  "genesis-pallet",
  "grandpakey-change",
  "hex",
@@ -4608,48 +4606,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "genesis-admins"
-version = "1.0.0"
-dependencies = [
- "admin-primitives",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "internal-vote",
- "parity-scale-codec",
- "primitives",
- "scale-info",
- "sp-io",
- "sp-runtime",
- "sp-std",
- "votingengine",
-]
-
-[[package]]
-name = "genesis-manage"
-version = "1.0.0"
-dependencies = [
- "admin-primitives",
- "entity-primitives",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "primitives",
- "scale-info",
- "sp-io",
- "sp-runtime",
- "sp-std",
- "votingengine",
-]
-
-[[package]]
 name = "genesis-pallet"
 version = "1.0.0"
 dependencies = [
+ "admin-primitives",
  "frame-support",
  "frame-system",
  "parity-scale-codec",
+ "primitives",
+ "public-admins",
+ "public-manage",
  "scale-info",
  "sp-api",
  "sp-io",

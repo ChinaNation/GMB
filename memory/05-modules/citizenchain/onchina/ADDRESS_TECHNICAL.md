@@ -37,9 +37,10 @@ citizenchain/onchina/frontend/address/
 
 ## 4. 权限
 
-- 后端按登录态 `scope_province_name / scope_city_name` 转为省市码过滤。
-- FRG 只能访问本省地址。
-- CREG 只能访问本市地址。
+- 后端按登录态 `VisibleScope` 转为省 / 市 / 镇码过滤。
+- FRG 只能访问本节点绑定的省级组地址。
+- CREG 只能访问本节点绑定的市级地址。
+- 未获得 `can_view_institutions` 的普通机构不显示地址库入口，也不得调用地址库管理接口。
 - runtime 会再次校验签名管理员与 `registrar_account` 是否具备本省/本市地址更新权。
 
 ## 5. 链上调用
@@ -68,4 +69,3 @@ npm --prefix citizenchain/onchina/frontend run build
 python3 citizenchain/onchina/src/cid/china/check_code_immutable.py
 sqlite3 citizenchain/onchina/src/cid/china/china.sqlite "PRAGMA integrity_check"
 ```
-

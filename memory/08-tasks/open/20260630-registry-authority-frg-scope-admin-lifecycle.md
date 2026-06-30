@@ -2,7 +2,7 @@
 
 ## 任务目标
 
-- 将 `genesis-manage` / `genesis-admins` 收回为只负责创世机构与创世管理员写入。
+- 将创世机构与创世管理员写入合并到 `genesis/src/institution.rs`，运行期治理统一交回公权/私权/个人管理员模块。
 - 将非创世机构注册、修改、注销，以及初始管理员登记统一归属注册局权力线。
 - 联邦注册局(FRG)管理员可注册管理本省所有非创世机构。
 - 市注册局(CREG)管理员可注册管理本市除市注册局自身以外的所有非创世机构。
@@ -13,7 +13,7 @@
 
 ## 当前问题
 
-- `genesis-admins` 仍暴露运行期注册局特权入口，职责越过创世管理员初始化边界。
+- 旧创世管理员模块曾暴露运行期注册局特权入口，职责越过创世管理员初始化边界；现已删除。
 - `public-manage` / `private-manage` 创建机构时要求交易发起人属于新机构管理员集合，不符合“注册局注册机构”的制度模型。
 - OnChina 已生成链交易二维码字段，但前端仍只展示普通管理动作签名二维码。
 - 机构创建 prepare 顺序错误：创建前没有 `cid_number` / 管理员集合 / 阈值，却尝试生成链交易。
@@ -21,10 +21,8 @@
 
 ## 预计修改目录
 
-- `citizenchain/runtime/admins/genesis-admins/`
-  - 收敛创世管理员模块边界，清理注册局运行期特权桥。
-- `citizenchain/runtime/entity/genesis-manage/`
-  - 核对创世机构模块边界并补充必要注释。
+- `citizenchain/runtime/genesis/`
+  - 在 `src/institution.rs` 中一次性写入创世机构与创世管理员；不提供运行期治理入口。
 - `citizenchain/runtime/entity/public-manage/`
   - 调整公权机构注册授权，从“发起人必须属于目标机构管理员”改为“发起人必须是合法注册局管理员”。
 - `citizenchain/runtime/admins/public-admins/`
@@ -56,10 +54,15 @@
 
 - 2026-06-30 创建任务卡，开始执行。
 - 2026-06-30 runtime 已改为注册局直登模型：`public-manage` / `private-manage` 创建机构时校验注册局权限，交易成功即写入机构、账户和初始管理员 Active；注册局管理员不需要属于目标机构管理员集合，目标机构管理员也不再对初始创建投票。
-- 2026-06-30 `genesis-admins` 已移除市注册局管理员运行期直设入口；市注册局及其初始管理员改由注册局通过机构创建交易一次性写入。
+- 2026-06-30 旧创世管理员模块已移除市注册局管理员运行期直设入口；市注册局及其初始管理员改由注册局通过机构创建交易一次性写入。
 - 2026-06-30 OnChina 创建输入已加入 `admins` + `threshold`；创建接口在本地写入机构、默认账户和初始管理员后，返回 `propose_create_institution` 链交易二维码，链投影置 `PENDING_ON_CHAIN`。
 - 2026-06-30 OnChina 前端创建弹窗已加入初始管理员合集和阈值；FRG 省级管理员在公权创建入口可选择创建本省城市的市注册局，CREG 管理员仍不能创建 CREG。
 - 2026-06-30 清理旧链写残留：移除市注册局管理员直设相关 OnChina 编码和 prepare 输出。
-- 2026-06-30 验证：`cargo test -p public-manage -p private-manage --lib`、`cargo test -p genesis-admins --lib`、`cargo check -p citizenchain`、`cargo check -p onchina`、`cargo test -p onchina`、`npm run build` 通过。
+- 2026-06-30 验证：`cargo test -p public-manage -p private-manage --lib`、`cargo check -p citizenchain`、`cargo check -p onchina`、`cargo test -p onchina`、`npm run build` 通过。
 - 2026-06-30 真实运行态验收：启动 OnChina 前端 preview 并访问 `http://localhost:5179/`，首页和新构建 JS 资源均返回 200；本次未提交真实链交易，真实链交易仍需本地链、OnChina 数据库和 CitizenWallet 联动环境。
-- 2026-06-30 残留清理验收：已清理旧 `genesis-admins` 市注册局管理员直设入口、OnChina 旧 admin-set 编码和创建机构投票执行残留；`git diff --check` 通过。
+- 2026-06-30 残留清理验收：已清理旧创世管理员市注册局管理员直设入口、OnChina 旧 admin-set 编码和创建机构投票执行残留；`git diff --check` 通过。
+- 2026-06-30 最终收口：创世机构与初始管理员写入已合并到 `citizenchain/runtime/genesis/src/institution.rs`；旧创世机构/管理员运行期模块已从 runtime workspace 删除；固定治理机构运行期管理员治理统一归 `public-admins`。
+- 2026-06-30 最终收口：FRG 省级 5 人组 storage、反向索引、管理员更换入口统一归 `PublicAdmins(29.2)`；普通固定治理机构管理员更换归 `PublicAdmins(29.0)`；Node、CitizenApp、CitizenWallet、OnChina 链读路径已同步。
+- 2026-06-30 最终验证：`cargo check -p citizenchain`、`cargo check -p node`、`cargo check -p onchina`、`cargo test -p public-admins --lib`、`cargo test -p public-manage --lib`、`cargo test -p private-admins --lib`、`cargo test -p private-manage --lib`、`cargo test -p onchina`、`cargo test -p node admin_management -- --nocapture`、CitizenApp 目标 `flutter test`、CitizenWallet 目标 `flutter test` 均通过。
+- 2026-06-30 最终残留复扫：旧创世模块名、旧四类管理员 kind 映射、Cargo 依赖残留均为 0；`git diff --check` 通过。
+- 2026-06-30 真实运行态尝试：`CITIZENCHAIN_HEADLESS=1 cargo run -p node -- --chain dev --tmp --no-telemetry --mining-threads 0 --rpc-port 19944 --port 30399` 可完成编译并进入启动，但被既有 dev chainspec 护宪基准缺失拦截，错误为 `ConstitutionLawMissing`；该阻塞不来自本次创世机构/管理员合并逻辑。

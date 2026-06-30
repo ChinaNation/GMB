@@ -15,14 +15,13 @@ void main() {
         PalletRegistry.runtimeUpgradePallet,
         PalletRegistry.resolutionDestroPallet,
         PalletRegistry.personalAdminsPallet,
-        PalletRegistry.genesisAdminsPallet,
         PalletRegistry.publicAdminsPallet,
         PalletRegistry.privateAdminsPallet,
         PalletRegistry.grandpaKeyChangePallet,
         PalletRegistry.resolutionIssuancePallet,
         PalletRegistry.offchainTransactionPallet,
       };
-      expect(pallets.length, 14);
+      expect(pallets.length, 13);
     });
 
     test('投票引擎 sub-pallet call_index', () {
@@ -52,8 +51,8 @@ void main() {
       expect(PalletRegistry.proposeSafetyFundCall, 1);
       expect(PalletRegistry.proposeSweepCall, 2);
 
-      // Genesis/Public/Private Admins: call_index=0 是管理员集合变更，call_index=1 留洞不复用。
-      expect(PalletRegistry.isAdminSetChangePallet(12), isTrue);
+      // Public/Private Admins: call_index=0 是管理员集合变更，call_index=1 留洞不复用。
+      expect(PalletRegistry.isAdminSetChangePallet(12), isFalse);
       expect(PalletRegistry.isAdminSetChangePallet(29), isTrue);
       expect(PalletRegistry.isAdminSetChangePallet(30), isTrue);
       expect(PalletRegistry.isAdminSetChangePallet(7), isFalse);

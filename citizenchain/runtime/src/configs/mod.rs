@@ -440,9 +440,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // 手动重试/取消统一收口至 votingengine::retry_passed_proposal /
             // cancel_passed_proposal(在 RuntimeCall::VotingEngine 分支按 VOTE_FLAT_FEE 处理)。
             // 业务 pallet 的 propose_X / cleanup_X 全部按 VOTE_FLAT_FEE 收费(1 元/次)。
-            RuntimeCall::GenesisAdmins(_)
-            | RuntimeCall::PublicAdmins(_)
-            | RuntimeCall::PrivateAdmins(_) => FeeChargeKind::VoteFlat,
+            RuntimeCall::PublicAdmins(_) | RuntimeCall::PrivateAdmins(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::RuntimeUpgrade(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::GrandpaKeyChange(_) => FeeChargeKind::VoteFlat,
             // 立法院模块 propose_enact_law / propose_amend_law / propose_repeal_law 是治理提案交易,
@@ -806,7 +804,7 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
 
         const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
         if issuer_code == admin_primitives::FRG {
-            let Some(group_province_code) = genesis_admins::FederalRegistryProvinceGroupAccounts::<
+            let Some(group_province_code) = public_admins::FederalRegistryProvinceGroupAccounts::<
                 Runtime,
             >::get(issuer_main_account) else {
                 return false;
@@ -836,7 +834,7 @@ pub struct RuntimeAddressAuthority;
 
 impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAuthority {
     fn can_update_catalog(who: &AccountId, registrar_account: &AccountId) -> bool {
-        if genesis_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
+        if public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
             .is_none()
         {
             return false;
@@ -858,7 +856,7 @@ impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAutho
         }
 
         if let Some(group_province_code) =
-            genesis_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
+            public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
         {
             // 中文注释:FRG 省级组管理员可以更新本省任意地址,不能跨省改地址。
             return group_province_code.as_ref() == province_code;
@@ -1361,22 +1359,6 @@ parameter_types! {
     pub const GrandpaAuthoritySetChangeDelay: u32 = 30;
 }
 
-impl genesis_admins::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
-    type MaxPersonalAccountAdmins = MaxPersonalAccountAdmins;
-    type InternalVoteEngine = InternalVote;
-    type WeightInfo = genesis_admins::weights::SubstrateWeight<Runtime>;
-}
-
-impl genesis_manage::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type AdminAccountQuery = RuntimeAdminAccountQuery;
-    type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
-    type MaxAccountNameLength = ConstU32<128>;
-    type WeightInfo = genesis_manage::weights::SubstrateWeight<Runtime>;
-}
-
 impl public_admins::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
@@ -1458,22 +1440,19 @@ pub struct RuntimeInstitutionQuery;
 
 impl entity_primitives::InstitutionMultisigQuery<AccountId> for RuntimeInstitutionQuery {
     fn lookup_org(addr: &AccountId) -> Option<votingengine::types::InstitutionCode> {
-        genesis_manage::Pallet::<Runtime>::lookup_org(addr)
-            .or_else(|| public_manage::Pallet::<Runtime>::lookup_org(addr))
+        public_manage::Pallet::<Runtime>::lookup_org(addr)
             .or_else(|| private_manage::Pallet::<Runtime>::lookup_org(addr))
     }
 
     fn lookup_admin_config(
         addr: &AccountId,
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId>> {
-        genesis_manage::Pallet::<Runtime>::lookup_admin_config(addr)
-            .or_else(|| public_manage::Pallet::<Runtime>::lookup_admin_config(addr))
+        public_manage::Pallet::<Runtime>::lookup_admin_config(addr)
             .or_else(|| private_manage::Pallet::<Runtime>::lookup_admin_config(addr))
     }
 
     fn is_active(addr: &AccountId) -> bool {
-        genesis_manage::Pallet::<Runtime>::is_active(addr)
-            || public_manage::Pallet::<Runtime>::is_active(addr)
+        public_manage::Pallet::<Runtime>::is_active(addr)
             || private_manage::Pallet::<Runtime>::is_active(addr)
     }
 }
@@ -1484,23 +1463,15 @@ impl RuntimeAdminAccountQuery {
     fn resolve_institution_code_for_account(
         account: &AccountId,
     ) -> Option<votingengine::types::InstitutionCode> {
-        genesis_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account)
-            .or_else(|| {
-                public_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account)
-            })
-            .or_else(|| {
-                private_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account)
-            })
+        public_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account).or_else(
+            || private_manage::Pallet::<Runtime>::resolve_institution_code_for_account(account),
+        )
     }
 
     fn resolve_admin_account_for_account(account: &AccountId) -> Option<AccountId> {
-        genesis_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account)
-            .or_else(|| {
-                public_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account)
-            })
-            .or_else(|| {
-                private_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account)
-            })
+        public_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account).or_else(|| {
+            private_manage::Pallet::<Runtime>::resolve_admin_account_for_account(account)
+        })
     }
 
     fn is_active_admin_of_account(account: &AccountId, who: &AccountId) -> bool {
@@ -1508,12 +1479,13 @@ impl RuntimeAdminAccountQuery {
             return Self::is_active_account_admin(institution_code, account.clone(), who);
         }
 
-        // 中文注释：未被实体生命周期模块登记的创世账户只可能走创世管理员模块。
+        // 中文注释：FRG 省级虚拟组账户不属于机构生命周期账户，只能按固定治理码查公权管理员模块。
         [
             admin_primitives::FRG,
             primitives::cid::code::NRC,
             primitives::cid::code::PRC,
             primitives::cid::code::PRB,
+            primitives::cid::code::NJD,
         ]
         .iter()
         .any(|code| Self::is_active_account_admin(*code, account.clone(), who))
@@ -1522,7 +1494,7 @@ impl RuntimeAdminAccountQuery {
 
 impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     fn is_genesis_protected(account: &AccountId) -> bool {
-        genesis_manage::Pallet::<Runtime>::is_genesis_protected(account)
+        public_manage::Pallet::<Runtime>::is_genesis_protected(account)
     }
 
     fn active_admin_account_exists(
@@ -1531,12 +1503,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     ) -> bool {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::active_admin_account_exists(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_genesis_admin_code(&institution_code) {
-            return genesis_admins::Pallet::<Runtime>::active_admin_account_exists(
                 institution_code,
                 admin_root_account_id,
             );
@@ -1572,13 +1538,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     ) -> bool {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::is_active_account_admin(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        if admin_primitives::is_genesis_admin_code(&institution_code) {
-            return genesis_admins::Pallet::<Runtime>::is_active_account_admin(
                 institution_code,
                 admin_root_account_id,
                 who,
@@ -1622,12 +1581,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 admin_root_account_id,
             );
         }
-        if admin_primitives::is_genesis_admin_code(&institution_code) {
-            return genesis_admins::Pallet::<Runtime>::active_account_admins(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
         if admin_primitives::is_public_admin_code(&institution_code) {
             return public_admins::Pallet::<Runtime>::active_account_admins(
                 institution_code,
@@ -1659,12 +1612,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
         institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> Option<Vec<AdminProfile<AccountId>>> {
-        if admin_primitives::is_genesis_admin_code(&institution_code) {
-            return genesis_admins::Pallet::<Runtime>::active_account_admin_profiles(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
         if admin_primitives::is_public_admin_code(&institution_code) {
             return public_admins::Pallet::<Runtime>::active_account_admin_profiles(
                 institution_code,
@@ -1698,12 +1645,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     ) -> Option<u32> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::active_account_admins_len(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_genesis_admin_code(&institution_code) {
-            return genesis_admins::Pallet::<Runtime>::active_account_admins_len(
                 institution_code,
                 admin_root_account_id,
             );
@@ -1755,13 +1696,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 who,
             );
         }
-        if admin_primitives::is_genesis_admin_code(&institution_code) {
-            return genesis_admins::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
         if admin_primitives::is_public_admin_code(&institution_code) {
             return public_admins::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
                 institution_code,
@@ -1796,12 +1730,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
     ) -> Option<Vec<AccountId>> {
         if admin_primitives::is_personal_admin_code(&institution_code) {
             return personal_admins::Pallet::<Runtime>::pending_account_admins_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_genesis_admin_code(&institution_code) {
-            return genesis_admins::Pallet::<Runtime>::pending_account_admins_for_snapshot(
                 institution_code,
                 admin_root_account_id,
             );
@@ -1843,12 +1771,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 admin_root_account_id,
             );
         }
-        if admin_primitives::is_genesis_admin_code(&institution_code) {
-            return genesis_admins::Pallet::<Runtime>::pending_account_admins_len_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
         if admin_primitives::is_public_admin_code(&institution_code) {
             return public_admins::Pallet::<Runtime>::pending_account_admins_len_for_snapshot(
                 institution_code,
@@ -1880,12 +1802,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
         institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> Option<AccountId> {
-        if admin_primitives::is_genesis_admin_code(&institution_code) {
-            return genesis_admins::Pallet::<Runtime>::legal_representative(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
         if admin_primitives::is_public_admin_code(&institution_code) {
             return public_admins::Pallet::<Runtime>::legal_representative(
                 institution_code,
@@ -1922,10 +1838,6 @@ impl votingengine::InternalVoteResultCallback for RuntimeAdminVoteExecutor {
         approved: bool,
     ) -> Result<votingengine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
         let callbacks = [
-            genesis_admins::InternalVoteExecutor::<Runtime>::on_internal_vote_finalized(
-                proposal_id,
-                approved,
-            )?,
             public_admins::InternalVoteExecutor::<Runtime>::on_internal_vote_finalized(
                 proposal_id,
                 approved,

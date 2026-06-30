@@ -24,6 +24,11 @@ use admin_primitives::{
     can_store_public_admin_code, AdminAccount, AdminAccountKind, AdminAccountLifecycle,
     AdminAccountStatus, AdminProfile, AdminSetChangeAction,
 };
+use primitives::cid::{
+    china::china_zf::CHINA_ZF,
+    code::PROVINCE_CODE_INFOS,
+    code::{institution_code_from_cid_number, ProvinceCode, FRG},
+};
 use votingengine::{
     types::InstitutionCode, InternalVoteResultCallback, ProposalExecutionOutcome,
     PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED,
@@ -42,6 +47,43 @@ pub const MODULE_TAG: &[u8] = b"pub-adm1";
 /// public-admins pallet on-chain storage 版本。
 /// 全新创世口径:创世即终态布局,storage 版本恒为 v1,不承载任何历史迁移。
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+const FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE: usize =
+    primitives::count_const::FRG_PROVINCE_GROUP_ADMIN_COUNT as usize;
+const FEDERAL_REGISTRY_PROVINCE_GROUP_THRESHOLD: u32 =
+    primitives::count_const::FRG_INTERNAL_THRESHOLD;
+const FEDERAL_REGISTRY_PROVINCE_ACCOUNT_PREFIX: &[u8] = b"GMB:FRG-PROVINCE:";
+
+fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
+    T::AccountId::decode(&mut &raw[..]).ok()
+}
+
+/// 联邦注册局省级治理组虚拟账户。
+///
+/// 中文注释:该账户不是机构资金账户,只作为投票引擎的内部投票根账户使用。
+/// 同一省 5 名 FRG 管理员围绕此账户创建管理员更换提案,代码级固定阈值 3/5。
+fn federal_registry_province_group_account<T: frame_system::Config>(
+    province_code: ProvinceCode,
+) -> Option<T::AccountId> {
+    let mut payload = Vec::with_capacity(
+        FEDERAL_REGISTRY_PROVINCE_ACCOUNT_PREFIX
+            .len()
+            .saturating_add(province_code.len()),
+    );
+    payload.extend_from_slice(FEDERAL_REGISTRY_PROVINCE_ACCOUNT_PREFIX);
+    payload.extend_from_slice(&province_code);
+    let raw = sp_io::hashing::blake2_256(&payload);
+    decode_account::<T>(&raw)
+}
+
+/// 联邦注册局机构主账户(创世内置:`CHINA_ZF` 中 FRG 节点的 `main_account`)。
+fn federal_registry_account<T: frame_system::Config>() -> Option<T::AccountId> {
+    CHINA_ZF.iter().find_map(
+        |node| match institution_code_from_cid_number(node.cid_number) {
+            Some(code) if code == FRG => decode_account::<T>(&node.main_account),
+            _ => None,
+        },
+    )
+}
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -81,11 +123,27 @@ pub mod pallet {
     pub type AdminAccountOf<T> =
         AdminAccount<AdminProfilesOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
 
-    /// 公权机构管理员表：保存非创世公权机构,以及归属公法人的非法人机构管理员集合。
+    /// 公权机构管理员表：保存所有公权机构管理员集合。
+    ///
+    /// 中文注释:创世来源只影响初始写入位置,运行期管理员治理统一归本模块。
     #[pallet::storage]
     #[pallet::getter(fn admin_account_of)]
     pub type AdminAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, AdminAccountOf<T>, OptionQuery>;
+
+    /// 联邦注册局省级管理员组：province_code -> 5 人管理员集合。
+    ///
+    /// 中文注释：FRG 总计 215 名管理员按 43 省拆成 43 个 5 人组。
+    /// 每个省级组单独作为内部投票根账户,换本省管理员只由本省 5 人组 3/5 投票。
+    #[pallet::storage]
+    pub type FederalRegistryProvinceGroups<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProvinceCode, AdminAccountOf<T>, OptionQuery>;
+
+    /// 联邦注册局省级管理员组账户反向索引：group_account -> province_code。
+    #[pallet::storage]
+    pub type FederalRegistryProvinceGroupAccounts<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, ProvinceCode, OptionQuery>;
+
     /// 机构法定代表人(机构首脑;ADR-027 立法签署人)。键 = 机构账户,值 = 法定代表人账户。
     ///
     /// 中文注释:必为该机构 Active admins 之一(写入时校验)。未显式设置时,
@@ -176,6 +234,16 @@ pub mod pallet {
             threshold: u32,
             created: bool,
         },
+        /// 联邦注册局省级管理员组更换提案已发起。
+        FederalRegistryProvinceAdminSetChangeProposed {
+            proposal_id: u64,
+            province_code: ProvinceCode,
+            account: T::AccountId,
+            proposer: T::AccountId,
+            old_admins_len: u32,
+            new_admins_len: u32,
+            new_threshold: u32,
+        },
     }
 
     #[pallet::error]
@@ -218,6 +286,10 @@ pub mod pallet {
         DuplicateAdmin,
         /// 管理员账户生命周期写入缺少有效 votingengine 提案作用域
         InvalidAdminAccountLifecycleScope,
+        /// 联邦注册局管理员更换必须走省级 5 人组治理入口
+        FederalRegistryRequiresProvinceGroup,
+        /// 省级代码不存在或没有对应联邦注册局管理员组
+        InvalidProvinceGroup,
     }
 
     #[pallet::call]
@@ -232,6 +304,10 @@ pub mod pallet {
             new_threshold: u32,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            ensure!(
+                institution_code != FRG,
+                Error::<T>::FederalRegistryRequiresProvinceGroup
+            );
 
             // 1) 校验管理员账户已激活且机构码匹配。
             let current =
@@ -293,23 +369,112 @@ pub mod pallet {
                 TransactionOutcome::Commit(Ok(()))
             })
         }
+
+        /// 联邦注册局省级管理员组更换提案。
+        ///
+        /// 中文注释:FRG 管理员按省分成 43 个 5 人组。本入口只允许
+        /// 本省组内管理员发起本省组的管理员更换,投票引擎快照为该省 5 人组,
+        /// 阈值固定严格过半 3/5,不会再让全联邦注册局 215 人一起投票。
+        #[pallet::call_index(2)]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_admin_set_change())]
+        pub fn propose_federal_registry_province_admin_set_change(
+            origin: OriginFor<T>,
+            province_code: ProvinceCode,
+            admins: AdminProfilesOf<T>,
+            new_threshold: u32,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            let group_account = federal_registry_province_group_account::<T>(province_code)
+                .ok_or(Error::<T>::InvalidProvinceGroup)?;
+            let current = FederalRegistryProvinceGroups::<T>::get(province_code)
+                .ok_or(Error::<T>::InvalidProvinceGroup)?;
+            ensure!(
+                current.status == AdminAccountStatus::Active,
+                Error::<T>::AdminAccountNotActive
+            );
+            ensure!(
+                current.institution_code == FRG,
+                Error::<T>::InstitutionCodeMismatch
+            );
+            ensure!(
+                FederalRegistryProvinceGroupAccounts::<T>::get(group_account.clone())
+                    == Some(province_code),
+                Error::<T>::InvalidProvinceGroup
+            );
+
+            let current_admins: Vec<T::AccountId> =
+                current.admins.iter().map(|p| p.account.clone()).collect();
+            let new_admins: Vec<T::AccountId> = admins.iter().map(|p| p.account.clone()).collect();
+            ensure!(current_admins.contains(&who), Error::<T>::UnauthorizedAdmin);
+            Self::validate_federal_registry_province_admin_set(
+                new_admins.as_slice(),
+                new_threshold,
+            )?;
+            ensure!(
+                !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
+                Error::<T>::AdminSetUnchanged
+            );
+
+            with_transaction(|| {
+                let action = AdminSetChangeAction {
+                    admin_root_account_id: group_account.clone(),
+                    admins: admins.clone(),
+                    new_threshold,
+                };
+                let encoded = action.encode();
+                let proposal_id =
+                    match T::InternalVoteEngine::create_admin_change_internal_proposal_with_data(
+                        who.clone(),
+                        FRG,
+                        group_account.clone(),
+                        admins.len() as u32,
+                        new_threshold,
+                        crate::MODULE_TAG,
+                        encoded,
+                    ) {
+                        Ok(proposal_id) => proposal_id,
+                        Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                    };
+
+                Self::deposit_event(Event::<T>::FederalRegistryProvinceAdminSetChangeProposed {
+                    proposal_id,
+                    province_code,
+                    account: group_account,
+                    proposer: who,
+                    old_admins_len: current_admins.len() as u32,
+                    new_admins_len: admins.len() as u32,
+                    new_threshold,
+                });
+                TransactionOutcome::Commit(Ok(()))
+            })
+        }
     }
 
     impl<T: Config> Pallet<T> {
         fn validate_admins_len_for_account(
             kind: AdminAccountKind,
-            _institution_code: InstitutionCode,
+            institution_code: InstitutionCode,
             admins_len: usize,
         ) -> DispatchResult {
             ensure!(
                 kind == AdminAccountKind::PublicInstitution,
                 Error::<T>::InvalidAdminAccountKind
             );
-            ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
-            ensure!(
-                admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
-                Error::<T>::InvalidAdminsLen
-            );
+            match admin_primitives::expected_fixed_governance_admins_len(institution_code) {
+                Some(expected) => {
+                    ensure!(
+                        admins_len == expected as usize,
+                        Error::<T>::InvalidAdminsLen
+                    )
+                }
+                None => {
+                    ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
+                    ensure!(
+                        admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
+                        Error::<T>::InvalidAdminsLen
+                    );
+                }
+            }
             Ok(())
         }
 
@@ -319,7 +484,29 @@ pub mod pallet {
             admins: &[T::AccountId],
         ) -> DispatchResult {
             Self::ensure_account_kind_matches_org(kind, institution_code)?;
+            ensure!(
+                institution_code != FRG,
+                Error::<T>::FederalRegistryRequiresProvinceGroup
+            );
             Self::validate_admins_len_for_account(kind, institution_code, admins.len())?;
+            Self::ensure_unique_admins(admins)?;
+            Ok(())
+        }
+
+        fn validate_federal_registry_province_admin_set(
+            admins: &[T::AccountId],
+            new_threshold: u32,
+        ) -> DispatchResult {
+            // 中文注释：FRG 省级组是制度固定的 5 人治理单元；
+            // 阈值来自代码级固定阈值 FRG=3，不会扩大到 215 人全局投票。
+            ensure!(
+                admins.len() == FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE,
+                Error::<T>::InvalidAdminsLen
+            );
+            ensure!(
+                new_threshold == FEDERAL_REGISTRY_PROVINCE_GROUP_THRESHOLD,
+                Error::<T>::InvalidThreshold
+            );
             Self::ensure_unique_admins(admins)?;
             Ok(())
         }
@@ -351,6 +538,38 @@ pub mod pallet {
                 Error::<T>::InvalidAdminAccountKind
             );
             Ok(())
+        }
+
+        fn aggregate_federal_registry_admin_account() -> Option<AdminAccountOf<T>> {
+            let mut admins: Vec<AdminProfile<T::AccountId>> = Vec::new();
+            for province in PROVINCE_CODE_INFOS.iter() {
+                let group = FederalRegistryProvinceGroups::<T>::get(province.province_code)?;
+                if group.status != AdminAccountStatus::Active || group.institution_code != FRG {
+                    return None;
+                }
+                admins.extend(group.admins.into_iter());
+            }
+            let bounded: AdminProfilesOf<T> = admins.try_into().ok()?;
+            let creator = bounded.first()?.account.clone();
+            Some(AdminAccount {
+                institution_code: FRG,
+                kind: AdminAccountKind::PublicInstitution,
+                admins: bounded,
+                creator,
+                created_at: BlockNumberFor::<T>::default(),
+                updated_at: BlockNumberFor::<T>::default(),
+                status: AdminAccountStatus::Active,
+            })
+        }
+
+        fn account_for_mutation(
+            account: T::AccountId,
+        ) -> Option<(AdminAccountOf<T>, Option<ProvinceCode>)> {
+            if let Some(province_code) = FederalRegistryProvinceGroupAccounts::<T>::get(&account) {
+                let group = FederalRegistryProvinceGroups::<T>::get(province_code)?;
+                return Some((group, Some(province_code)));
+            }
+            AdminAccounts::<T>::get(account).map(|admin_account| (admin_account, None))
         }
 
         pub(crate) fn ensure_lifecycle_proposal(
@@ -489,11 +708,6 @@ pub mod pallet {
                 account.status == AdminAccountStatus::Active,
                 Error::<T>::AdminAccountNotActive
             );
-            // 中文注释：创世治理账户生命周期不能被删除。
-            ensure!(
-                !matches!(account.kind, AdminAccountKind::GenesisInstitution),
-                Error::<T>::BuiltinAdminAccountCannotClose
-            );
             let institution_code = account.institution_code;
             // 中文注释：动态多签注销完成后不保留 Closed 当前状态墓碑；
             // 同名确定性地址可在资金清空后重新走全新的注册流程。
@@ -595,7 +809,20 @@ pub mod pallet {
             institution: T::AccountId,
             status: AdminAccountStatus,
         ) -> Option<AdminAccountOf<T>> {
-            let account = AdminAccounts::<T>::get(institution)?;
+            let account = AdminAccounts::<T>::get(institution.clone()).or_else(|| {
+                if institution_code != FRG {
+                    return None;
+                }
+                if let Some(province_code) =
+                    FederalRegistryProvinceGroupAccounts::<T>::get(&institution)
+                {
+                    return FederalRegistryProvinceGroups::<T>::get(province_code);
+                }
+                if federal_registry_account::<T>() == Some(institution) {
+                    return Self::aggregate_federal_registry_admin_account();
+                }
+                None
+            })?;
             if account.institution_code != institution_code || account.status != status {
                 return None;
             }
@@ -787,8 +1014,9 @@ pub mod pallet {
                 Error::<T>::ProposalNotPassed
             );
 
-            let account = AdminAccounts::<T>::get(action.admin_root_account_id.clone())
-                .ok_or(Error::<T>::InvalidInstitution)?;
+            let (account, province_group) =
+                Self::account_for_mutation(action.admin_root_account_id.clone())
+                    .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 account.status == AdminAccountStatus::Active,
                 Error::<T>::AdminAccountNotActive
@@ -810,21 +1038,37 @@ pub mod pallet {
                 account.admins.iter().map(|p| p.account.clone()).collect();
             let new_admins: Vec<T::AccountId> =
                 action.admins.iter().map(|p| p.account.clone()).collect();
-            Self::validate_admin_set_for_account(
-                account.kind,
-                account.institution_code,
-                new_admins.as_slice(),
-            )?;
+            if province_group.is_some() {
+                Self::validate_federal_registry_province_admin_set(
+                    new_admins.as_slice(),
+                    action.new_threshold,
+                )?;
+            } else {
+                Self::validate_admin_set_for_account(
+                    account.kind,
+                    account.institution_code,
+                    new_admins.as_slice(),
+                )?;
+            }
             ensure!(
                 !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
             );
-            AdminAccounts::<T>::mutate(action.admin_root_account_id.clone(), |maybe| {
-                if let Some(account) = maybe {
-                    account.admins = action.admins.clone();
-                    account.updated_at = frame_system::Pallet::<T>::block_number();
-                }
-            });
+            if let Some(province_code) = province_group {
+                FederalRegistryProvinceGroups::<T>::mutate(province_code, |maybe| {
+                    if let Some(account) = maybe {
+                        account.admins = action.admins.clone();
+                        account.updated_at = frame_system::Pallet::<T>::block_number();
+                    }
+                });
+            } else {
+                AdminAccounts::<T>::mutate(action.admin_root_account_id.clone(), |maybe| {
+                    if let Some(account) = maybe {
+                        account.admins = action.admins.clone();
+                        account.updated_at = frame_system::Pallet::<T>::block_number();
+                    }
+                });
+            }
 
             Self::deposit_event(Event::<T>::AdminSetChanged {
                 proposal_id,

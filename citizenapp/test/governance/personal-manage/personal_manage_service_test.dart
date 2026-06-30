@@ -97,7 +97,7 @@ void main() {
   }) {
     return Uint8List.fromList([
       ...codeBytes('PMUL'),
-      1, // AdminAccountKind::PersonalAccount
+      2, // AdminAccountKind::PersonalMultisig
       (2 << 2) & 0xff,
       ...admin1,
       ...admin2,
@@ -274,13 +274,13 @@ void main() {
       expect(failure.description, contains('余额不足'));
     });
 
-    test('describes stale GenesisAdmins account failure', () {
+    test('describes stale PublicAdmins account failure', () {
       final failure =
-          ChainRpc().findExtrinsicFailureInEvents(extrinsicFailedEvent(12, 11));
+          ChainRpc().findExtrinsicFailureInEvents(extrinsicFailedEvent(29, 11));
 
       expect(failure, isNotNull);
       expect(failure!.description,
-          contains('GenesisAdmins.InstitutionAlreadyExists'));
+          contains('PublicAdmins.InstitutionAlreadyExists'));
       expect(failure.description, contains('当前状态'));
     });
   });

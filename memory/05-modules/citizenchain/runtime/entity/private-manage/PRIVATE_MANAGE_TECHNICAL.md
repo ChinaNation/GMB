@@ -14,12 +14,12 @@
 ## 边界
 
 - 只接受私权机构码。
-- 不写入创世机构；创世机构本体由 `genesis-manage` 在创世时写入。
+- 不写入创世机构；创世机构本体由 `genesis-pallet/src/institution.rs` 在创世时写入 `public-manage`。
 - 管理员生命周期只调用 `private-admins`。
 - CID 重复校验通过 `entity-primitives::InstitutionCidQuery` 查询 `public-manage`。
 - 不承担多签转账，转账只归 `multisig-transfer`。
 - 不承担管理员集合变更，管理员真源只归 `private-admins`。
-- 关闭机构账户时通过 runtime 聚合查询识别 `genesis-manage` 的封存账户，创世机构永不可按普通私权机构关闭。
+- 关闭机构账户时通过 `public-manage` 的封存表识别创世机构，创世机构永不可按普通私权机构关闭。
 
 ## MODULE_TAG
 

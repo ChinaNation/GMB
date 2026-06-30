@@ -2,8 +2,8 @@
 //! 管理员共用原语。
 //!
 //! 中文注释：本 crate 只放管理员共用类型、trait 与分类策略，不放业务 storage，
-//! 也不直接创建任何 pallet。`genesis-admins`、`public-admins`、`private-admins`
-//! 和 `personal-admins` 必须在各自模块内维护自己的管理员状态。
+//! 也不直接创建任何 pallet。`public-admins`、`private-admins` 和
+//! `personal-admins` 必须在各自模块内维护自己的管理员状态。
 
 extern crate alloc;
 
@@ -18,7 +18,7 @@ use primitives::core_const::CID_NUMBER_MAX_BYTES;
 use scale_info::TypeInfo;
 use sp_runtime::{DispatchError, RuntimeDebug};
 
-/// 创世治理机构码,唯一真源在 `primitives::cid::code`。
+/// 固定治理公权机构码,唯一真源在 `primitives::cid::code`。
 pub use primitives::cid::code::{FRG, NJD};
 
 /// 管理员资料里姓名/职务的最大字节长度(与实体生命周期模块 `MaxAccountNameLength` 一致)。
@@ -110,9 +110,7 @@ pub struct AdminProfile<AccountId> {
     Eq,
 )]
 pub enum AdminAccountKind {
-    /// 创世管理员：国储会、省储会、省储行、联邦注册局、国家司法院。
-    GenesisInstitution,
-    /// 非创世公权机构管理员。
+    /// 公权机构管理员；固定治理机构也是公权机构，只是创世写入并采用固定阈值。
     PublicInstitution,
     /// 私权机构管理员。
     ///
@@ -239,7 +237,7 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
 
 /// 管理员集合统一查询口。
 ///
-/// 中文注释：runtime 用一个路由实现把读请求分发到 genesis/public/private/personal
+/// 中文注释：runtime 用一个路由实现把读请求分发到 public/private/personal
 /// 各自 pallet；业务模块只依赖本 trait，不直接依赖某个具体管理员 storage。
 pub trait AdminAccountQuery<AccountId> {
     /// 是否为创世封存机构账户。非创世模块默认返回 false。
@@ -373,14 +371,9 @@ impl<AccountId> AdminAccountQuery<AccountId> for () {
     }
 }
 
-/// 判断机构码是否属于创世管理员模块。
-pub fn is_genesis_admin_code(code: &InstitutionCode) -> bool {
-    is_fixed_governance_code(code)
-}
-
-/// 判断机构码是否属于非创世公权机构管理员模块。
+/// 判断机构码是否属于公权机构管理员模块。
 pub fn is_public_admin_code(code: &InstitutionCode) -> bool {
-    is_public_legal_code(code) && !is_genesis_admin_code(code)
+    is_public_legal_code(code) || is_fixed_governance_code(code)
 }
 
 /// 判断机构码是否属于私权法人管理员模块。
@@ -410,10 +403,10 @@ pub fn is_personal_admin_code(code: &InstitutionCode) -> bool {
     *code == PMUL
 }
 
-/// 创世治理机构的固定管理员人数。
+/// 固定治理公权机构的固定管理员人数。
 ///
 /// 中文注释:FRG 的固定人数语义是"单个省级组 5 人",不是全局 215 人平铺账户。
-pub fn expected_genesis_admins_len(code: InstitutionCode) -> Option<u32> {
+pub fn expected_fixed_governance_admins_len(code: InstitutionCode) -> Option<u32> {
     use primitives::count_const::{
         FRG_PROVINCE_GROUP_ADMIN_COUNT, NJD_ADMIN_COUNT, NRC_ADMIN_COUNT, PRB_ADMIN_COUNT,
         PRC_ADMIN_COUNT,

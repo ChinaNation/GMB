@@ -4,13 +4,14 @@
 // 联邦注册局管理员城市表格→点市进详情;市注册局管理员直接进本市/本省详情。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Form, Input, Modal, Space, Typography } from 'antd';
+import { KeyOutlined } from '@ant-design/icons';
+import { Badge, Button, Card, Form, Input, Modal, Space, Table, Typography } from 'antd';
 import type { ModalProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { normalizeScopeProvinceName } from '../hooks/useScope';
 import type { AdminAuth } from '../auth/types';
 import type { CityRegistryAdminRow } from './city_registry_admins_api';
-import type { FederalRegistryAdminRow } from './api';
+import type { FederalRegistryAdminRow, OwnInstitutionAdminListOutput, OwnInstitutionAdminRow } from './api';
 import type { CidCityItem } from '../china/api';
 import { listCityRegistryAdmins, updateCityRegistryName } from './city_registry_admins_api';
 import {
@@ -19,7 +20,7 @@ import {
   prepareAdminAction,
   type AdminActionType,
 } from './admin_security_api';
-import { listFederalRegistryAdmins } from './api';
+import { listFederalRegistryAdmins, listOwnInstitutionAdmins } from './api';
 import { loadCachedCidCities, readCachedCidCities } from '../china/metaCache';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { MAX_CITY_REGISTRY_ADMINS_PER_CITY, sameHexAccount } from './adminUtils';
@@ -32,6 +33,7 @@ import { CID_MODAL_Z_INDEX } from '../core/modalStack';
 import { notice } from '../utils/notice';
 import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
 import type { InstitutionDetail } from '../subjects/api';
+import { usePasskeyRegistration } from '../auth/passkey/usePasskey';
 
 export interface RegistryAdminsViewProps {
   /// 'city-registry' = 市注册局 tab(城市表格→市注册局机构详情页);
@@ -103,6 +105,72 @@ function writeCachedAdminList<T>(key: string, rows: T[]) {
   } catch {
     // 中文注释:注册局管理员列表缓存只是减少重复转圈,写失败不能影响业务操作。
   }
+}
+
+export function OwnInstitutionAdminsView() {
+  const { auth } = useAuth();
+  const { registered: passkeyRegistered, busy: passkeyBusy, register: doRegisterPasskey } =
+    usePasskeyRegistration();
+  const [data, setData] = useState<OwnInstitutionAdminListOutput | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!auth) {
+      setData(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    listOwnInstitutionAdmins(auth)
+      .then((result) => {
+        if (!cancelled) setData(result);
+      })
+      .catch((err) => {
+        if (!cancelled) notice.error(err, '加载本机构管理员失败');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth?.access_token]);
+
+  return (
+    <Card
+      title={`${data?.cid_short_name || '本机构'}管理员列表`}
+      bordered={false}
+      style={{ background: '#ffffff', borderRadius: 8 }}
+    >
+      <Table<OwnInstitutionAdminRow>
+        rowKey={(row) => row.admin_account}
+        loading={loading}
+        dataSource={data?.rows ?? []}
+        pagination={false}
+        columns={[
+          { title: '序号', width: 80, align: 'center', render: (_v, _row, index) => index + 1 },
+          { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 180 },
+          { title: '账户', dataIndex: 'admin_account', align: 'center', render: (value: string) => tryEncodeSs58(value) },
+          {
+            title: '操作',
+            width: 220,
+            align: 'center',
+            render: (_v: unknown, row) => {
+              const isSelf = row.is_self || sameHexAccount(row.admin_account, auth?.admin_account);
+              if (!isSelf) return null;
+              return (
+                <Badge dot={passkeyRegistered === false} size="small">
+                  <Button size="small" icon={<KeyOutlined />} loading={passkeyBusy} onClick={doRegisterPasskey}>
+                    {passkeyRegistered ? '更新passkey密钥' : '设置passkey密钥'}
+                  </Button>
+                </Badge>
+              );
+            },
+          },
+        ]}
+      />
+    </Card>
+  );
 }
 
 export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {

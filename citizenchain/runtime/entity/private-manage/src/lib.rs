@@ -413,8 +413,8 @@ pub mod pallet {
         ReservedAccountName,
         /// sr25519 签名长度必须恰好为 64 字节
         MalformedSignature,
-        /// 创世初始机构(联邦注册局/治理机构/顶层政府等)永不可注销关闭
-        CannotCloseGenesisInstitution,
+        /// 创世写入的封存公权机构永不可注销关闭
+        CannotCloseProtectedInstitution,
         /// 治理机构(国储会/省储会/省储行)永不可注销关闭
         CannotCloseGovernance,
         /// 注销凭证验签失败

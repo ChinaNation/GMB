@@ -147,14 +147,9 @@ class InstitutionCodeLabel {
     return isPersonal(code) || isInstitution(code);
   }
 
-  /// 是否归 GenesisAdmins 管理。
-  static bool isGenesisAdminCode(String code) {
-    return isFixedGovernance(code);
-  }
-
   /// 是否归 PublicAdmins 管理。
   static bool isPublicAdminCode(String code) {
-    return isPublicLegal(code) && !isGenesisAdminCode(code);
+    return isPublicLegal(code) || isFixedGovernance(code);
   }
 
   /// 是否归 PrivateAdmins 管理。
@@ -180,18 +175,16 @@ class InstitutionCodeLabel {
     return isPrivateAdminCode(code) || isUnincorporatedAdminCode(code);
   }
 
-  /// AdminAccountKind 链上枚举值：0 创世 / 1 公权 / 2 私权 / 3 个人。
+  /// AdminAccountKind 链上枚举值：0 公权 / 1 私权 / 2 个人。
   static int adminAccountKind(String code) {
-    if (isGenesisAdminCode(code)) return 0;
-    if (isPublicAdminCode(code)) return 1;
-    if (isPrivateAdminCode(code)) return 2;
-    if (isPersonal(code)) return 3;
+    if (isPublicAdminCode(code)) return 0;
+    if (isPrivateAdminCode(code)) return 1;
+    if (isPersonal(code)) return 2;
     throw ArgumentError('无法按机构码选择管理员类型: $code');
   }
 
   /// `AdminAccounts` 所属 runtime pallet 名。
   static String adminAccountsPalletName(String code) {
-    if (isGenesisAdminCode(code)) return 'GenesisAdmins';
     if (isPublicAdminCode(code)) return 'PublicAdmins';
     if (isPrivateAdminCode(code)) return 'PrivateAdmins';
     if (isPersonal(code)) return 'PersonalAdmins';
@@ -204,10 +197,9 @@ class InstitutionCodeLabel {
   /// 已经携带了最终模块归属。涉及已注册账户的读取/提交应优先用 kind 路由。
   static String adminAccountsPalletNameForKind(int kind) {
     return switch (kind) {
-      0 => 'GenesisAdmins',
-      1 => 'PublicAdmins',
-      2 => 'PrivateAdmins',
-      3 => 'PersonalAdmins',
+      0 => 'PublicAdmins',
+      1 => 'PrivateAdmins',
+      2 => 'PersonalAdmins',
       _ => throw ArgumentError('无法按管理员类型选择管理员模块: $kind'),
     };
   }

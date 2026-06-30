@@ -7,7 +7,6 @@ import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 class AdminSetChangeCallCodec {
   AdminSetChangeCallCodec._();
 
-  static const int genesisAdminsPalletIndex = 12;
   static const int personalAdminsPalletIndex = 7;
   static const int publicAdminsPalletIndex = 29;
   static const int privateAdminsPalletIndex = 30;
@@ -57,7 +56,6 @@ class AdminSetChangeCallCodec {
     final palletName =
         InstitutionCodeLabel.adminAccountsPalletName(institutionCode);
     return switch (palletName) {
-      'GenesisAdmins' => genesisAdminsPalletIndex,
       'PersonalAdmins' => personalAdminsPalletIndex,
       'PublicAdmins' => publicAdminsPalletIndex,
       'PrivateAdmins' => privateAdminsPalletIndex,
@@ -78,7 +76,6 @@ class AdminSetChangeCallCodec {
       adminKind,
     );
     return switch (palletName) {
-      'GenesisAdmins' => genesisAdminsPalletIndex,
       'PersonalAdmins' => personalAdminsPalletIndex,
       'PublicAdmins' => publicAdminsPalletIndex,
       'PrivateAdmins' => privateAdminsPalletIndex,

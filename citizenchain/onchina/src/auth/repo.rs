@@ -56,7 +56,7 @@ fn binding_from_row(row: &postgres::Row) -> Result<NodeInstitutionBinding, Strin
 
 // 中文注释:`list_federal_registry_admins_by_province_conn` 已退役。
 // Tier1 创世注册局管理员「全走链读」(决策③):权威集合在链上
-// `GenesisAdmins::FederalRegistryProvinceGroups[绑定省码]`,由链上读取并回填本地缓存;
+// `PublicAdmins::FederalRegistryProvinceGroups[绑定省码]`,由链上读取并回填本地缓存;
 // 本地不再以 `federal_registry_scope` 表派生省维度。
 
 pub(crate) fn get_admin_by_id_and_registry_org_conn(
@@ -253,6 +253,16 @@ pub(crate) fn resolve_home_cid_short_name_conn(
             &[&institution_code],
         )
         .map_err(|e| format!("query federal registry short name failed: {e}"))?
+    } else if crate::core::chain_runtime::admin_level_label_for(institution_code).as_deref()
+        == Some("NATIONAL")
+    {
+        // 中文注释:NJD 等全国级机构没有省市作用域,按机构码直接解析本机构简称。
+        conn.query_opt(
+            "SELECT cid_short_name FROM subjects \
+             WHERE institution_code = $1 AND status = 'ACTIVE' LIMIT 1",
+            &[&institution_code],
+        )
+        .map_err(|e| format!("query national institution short name failed: {e}"))?
     } else {
         // 市级机构按本机构码 + 省 + 市定位机构简称。
         // 中文注释:subjects 已不存行政区名字,按 china.sqlite 把省/市名字派生成 code 再过滤(单源)。

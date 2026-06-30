@@ -89,7 +89,7 @@
 预上线重新创世脚本例外：
 
 - [clean-run.sh](../../../../citizenchain/scripts/clean-run.sh) 只用于本机清开发链后按当前源码现造 fresh genesis；runtime WASM 来自当前源码构建，不下载 CI artifact。
-- clean-run 不再执行 `seed-federal-admins`；联邦注册局管理员省映射全走链上 `GenesisAdmins::FederalRegistryProvinceGroups`。
+- clean-run 不再执行 `seed-federal-admins`；联邦注册局管理员省映射全走链上 `PublicAdmins::FederalRegistryProvinceGroups`。
 - 需要真正替换仓库 SSOT 时,唯一入口是 [bake-chainspec.sh](../../../../citizenchain/scripts/bake-chainspec.sh)。
 - `bake-chainspec.sh` 用 `citizenchain-fresh` 入口生成新的 raw chainspec,并保留当前 SSOT 中的 44 个权威节点 bootNodes。
 - fresh raw chainspec 的 genesis `:code` 必须与下载的 CI WASM 字节一致。

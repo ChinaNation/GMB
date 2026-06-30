@@ -819,7 +819,6 @@ class ChainRpc {
   static String _describeRuntimeModuleError(int moduleIndex, int errorIndex) {
     final moduleName = switch (moduleIndex) {
       7 => 'PersonalAdmins',
-      12 => 'GenesisAdmins',
       29 => 'PublicAdmins',
       30 => 'PrivateAdmins',
       32 => 'PublicManage',
@@ -828,7 +827,6 @@ class ChainRpc {
     };
     final errorName = switch (moduleIndex) {
       7 => _personalManageErrorName(errorIndex),
-      12 => _adminSetChangeErrorName(errorIndex),
       29 || 30 => _adminSetChangeErrorName(errorIndex),
       32 || 33 => _institutionManageErrorName(errorIndex),
       _ => null,

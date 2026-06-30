@@ -61,7 +61,7 @@ citizenapp/test/governance/admins-change/
    - 内置治理机构：`0x01 Builtin + cidNumber`。
    - 个人多签：`PersonalAccount AccountId + AccountId`。
    - 机构账户：`InstitutionAccount AccountId + AccountId`。
-3. 按机构码读取 `PersonalAdmins / GenesisAdmins / PublicAdmins / PrivateAdmins` 的 `AdminAccounts` 并解码完整 `AdminAccount`。
+3. 按机构码读取 `PersonalAdmins / PublicAdmins / PrivateAdmins` 的 `AdminAccounts` 并解码完整 `AdminAccount`；固定治理机构也读 `PublicAdmins`。
 4. 用户选择管理员钱包、编辑完整管理员集合。
 5. `AdminSetValidation` 做端上前置校验，同时校验目标阈值。
 6. `AdminSetChangeCallCodec` 按机构码构造对应管理员 pallet 的 `propose_admin_set_change` call data。
@@ -71,13 +71,13 @@ citizenapp/test/governance/admins-change/
 
 `/Users/rhett/GMB/citizenapp/lib/citizen/proposal/admins-change/models/admin_account.dart` 定义 `AdminAccountIdentity`，调用方必须显式传入三类主体之一：
 
-- `governanceInstitution` / `genesisInstitution`：创世管理员主体，固定治理档机构码（NRC/PRC/PRB/FRG/NJD），`kind=0`。
-- `institutionAccount`：公权机构账户主体，`kind=1`；私权机构账户主体，`kind=2`；非法人机构按所属法人归属选择 `kind=1` 或 `kind=2`。
-- `personalAccount`：个人多签主体，个人多签码（PMUL），`kind=3`。
+- `governanceInstitution` / `fixedGovernanceInstitution`：固定治理公权主体，固定治理档机构码（NRC/PRC/PRB/FRG/NJD），`kind=0`。
+- `institutionAccount`：公权机构账户主体，`kind=0`；私权机构账户主体，`kind=1`；非法人机构按所属法人归属选择 `kind=0` 或 `kind=1`。
+- `personalAccount`：个人多签主体，个人多签码（PMUL），`kind=2`。
 
 `/Users/rhett/GMB/citizenapp/lib/citizen/proposal/admins-change/services/institution_admin_service.dart` 是查询门面，但不接收模糊字符串身份；所有 `fetchAdmins / fetchThreshold / isAdmin / clearCache` 调用都必须传 `AdminAccountIdentity`。按单一字符串混用个人、机构、治理主体的入口不存在。
 
-非法人机构码（`SFGT/SFGP/UNIN`）不是私权同义词。调用方必须从 CID 注册归属或链上 `AdminAccount.kind` 显式传入 `kind=1`（公权）或 `kind=2`（私权）；不得只凭机构码自动归入 `PrivateAdmins`。`OrganizationManage.propose_create_institution` 当前只直接创建公权法人或私权法人机构账户，裸非法人创建会被端上和链端拒绝。
+非法人机构码（`SFGT/SFGP/UNIN`）不是私权同义词。调用方必须从 CID 注册归属或链上 `AdminAccount.kind` 显式传入 `kind=0`（公权）或 `kind=1`（私权）；不得只凭机构码自动归入 `PrivateAdmins`。`OrganizationManage.propose_create_institution` 当前只直接创建公权法人或私权法人机构账户，裸非法人创建会被端上和链端拒绝。
 
 ## 管理员更换载荷与阈值
 
@@ -90,12 +90,12 @@ citizenapp/test/governance/admins-change/
 规则：
 
 - PMUL 个人多签走 `PersonalAdmins(7).propose_admin_set_change(3)`。
-- NRC/PRC/PRB/NJD 创世管理员走 `GenesisAdmins(12).propose_admin_set_change(0)`；FRG 省级组走 `GenesisAdmins(12).propose_federal_registry_province_admin_set_change(2)`。
-- 公权机构走 `PublicAdmins(29).propose_admin_set_change(0)`。
+- NRC/PRC/PRB/NJD 固定治理机构走 `PublicAdmins(29).propose_admin_set_change(0)`；FRG 省级组走 `PublicAdmins(29).propose_federal_registry_province_admin_set_change(2)`。
+- 普通公权机构走 `PublicAdmins(29).propose_admin_set_change(0)`。
 - 私权机构走 `PrivateAdmins(30).propose_admin_set_change(0)`。
 - 非法人机构按所属法人归属走 `PublicAdmins(29).propose_admin_set_change(0)` 或 `PrivateAdmins(30).propose_admin_set_change(0)`。
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
-- 创世固定治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6，NJD=8；FRG 省级组固定为 3/5。
+- 固定治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6，NJD=8；FRG 省级组固定为 3/5。
 - 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
 - 阈值真源不在各管理员 `AdminAccounts`；治理固定阈值来自制度常量，动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存。
 - QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与冷钱包 decoder 逐项一致：`institution_code / subject / admins / new_threshold`。

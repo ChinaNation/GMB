@@ -96,7 +96,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     // 这两道是显式纵深防御；创世管理员模块会封存创世内置机构。
     ensure!(
         !T::AdminAccountQuery::is_genesis_protected(&account),
-        Error::<T>::CannotCloseGenesisInstitution
+        Error::<T>::CannotCloseProtectedInstitution
     );
     ensure!(
         !is_fixed_governance_code(&institution_code),

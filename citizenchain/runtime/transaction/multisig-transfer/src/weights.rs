@@ -33,8 +33,8 @@ use frame_support::{
 
 /// Weight functions for `multisig_transfer`.
 pub trait WeightInfo {
-	/// Storage: `GenesisAdmins/PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (r:1 w:0)
-	/// Proof: `GenesisAdmins/PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (r:1 w:0)
+	/// Proof: `PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:0)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Timestamp::Now` (r:1 w:0)
@@ -86,8 +86,8 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	/// Storage: `GenesisAdmins/PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (r:1 w:0)
-	/// Proof: `GenesisAdmins/PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (r:1 w:0)
+	/// Proof: `PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:0)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Timestamp::Now` (r:1 w:0)
@@ -147,8 +147,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
-	/// Storage: `GenesisAdmins/PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (r:1 w:0)
-	/// Proof: `GenesisAdmins/PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
+	/// Storage: `PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (r:1 w:0)
+	/// Proof: `PublicAdmins/PrivateAdmins/PersonalAdmins::AdminAccounts` (`max_values`: None, `max_size`: Some(63744), added: 66219, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:0)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Timestamp::Now` (r:1 w:0)

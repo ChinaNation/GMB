@@ -48,8 +48,7 @@ fn fee_payer_returns_none_for_transfer() {
 #[test]
 fn governance_module_tags_are_globally_unique() {
     use std::collections::HashSet;
-    let tags: [(&str, &[u8]); 12] = [
-        ("genesis_admins", genesis_admins::MODULE_TAG),
+    let tags: [(&str, &[u8]); 11] = [
         ("public_admins", public_admins::MODULE_TAG),
         ("private_admins", private_admins::MODULE_TAG),
         ("grandpakey_change", grandpakey_change::MODULE_TAG),
@@ -863,7 +862,7 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         let bad_origin = RuntimeOrigin::signed(outsider.clone());
         assert!(<EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err());
 
-        genesis_admins::pallet::AdminAccounts::<Runtime>::remove(&nrc_id);
+        public_admins::pallet::AdminAccounts::<Runtime>::remove(&nrc_id);
         assert!(!is_nrc_admin(&nrc_admin));
         assert!(!is_nrc_admin(&outsider));
         assert!(!RuntimeInternalAdminProvider::is_internal_admin(

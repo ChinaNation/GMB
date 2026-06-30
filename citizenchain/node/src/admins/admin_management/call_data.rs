@@ -65,14 +65,12 @@ mod tests {
     use primitives::cid::code::{code_bytes, NRC, PMUL};
     use primitives::count_const::NRC_INTERNAL_THRESHOLD;
 
-    const GENESIS_ADMINS_PALLET_INDEX: u8 = 12;
-
     #[test]
-    fn builds_admin_set_change_call_prefix() {
+    fn builds_fixed_governance_admin_set_change_call_prefix() {
         let account_id = [0x11u8; 32];
         let admins = vec!["22".repeat(32)];
         let call = build_admin_set_change_call_data(&NRC, &account_id, &admins).unwrap();
-        assert_eq!(call[0], GENESIS_ADMINS_PALLET_INDEX);
+        assert_eq!(call[0], 29);
         assert_eq!(call[1], 0);
         // institution_code 4 字节 = b"NRC\0"。
         assert_eq!(&call[2..6], &NRC);

@@ -2,7 +2,7 @@
 //
 // 链上 [AdminAccount<AdminList, AccountId, BlockNumber>] SCALE 字节布局:
 //   institution_code: [u8;4]                      (4B)
-//   kind: AdminAccountKind                         (1B,Enum 0/1/2/3)
+//   kind: AdminAccountKind                         (1B,Enum 0/1/2)
 //   admins: BoundedVec<AccountId, MaxAdmins>       (Compact<u32> + N×AccountId(32B))
 //   creator: AccountId                             (32B)
 //   created_at: BlockNumber(u64)                   (8B)
@@ -14,7 +14,7 @@
 // 链端定义参考:
 // - [admin-primitives/src/lib.rs::AdminAccount]
 // - [admin-primitives/src/lib.rs::AdminAccountKind]
-//   (Genesis=0 / Public=1 / Private=2 / Personal=3)
+//   (Public=0 / Private=1 / Personal=2)
 //
 // 中文注释：本文件统一放在 `lib/citizen/shared/`，供机构多签、个人多签
 // 和治理提案展示复用；业务模块不得各自复制管理员账户解码逻辑。
@@ -34,7 +34,7 @@ class AdminAccountStorageDecoded {
   /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
   final String institutionCode;
 
-  /// 管理员账户类型:0=Genesis / 1=Public / 2=Private / 3=Personal。
+  /// 管理员账户类型:0=Public / 1=Private / 2=Personal。
   final int kind;
 
   /// 管理员公钥 hex 列表(小写,无 0x 前缀,32 字节 = 64 hex 字符)。
@@ -46,10 +46,9 @@ class AdminAccountStorageCodec {
   AdminAccountStorageCodec._();
 
   /// 链端 `AdminAccountKind` 枚举值。
-  static const int kindGenesis = 0;
-  static const int kindPublicInstitution = 1;
-  static const int kindPrivateInstitution = 2;
-  static const int kindPersonal = 3;
+  static const int kindPublicInstitution = 0;
+  static const int kindPrivateInstitution = 1;
+  static const int kindPersonal = 2;
 
   /// 解码 AdminAccount SCALE bytes;格式不符返回 null(容错,不抛异常)。
   static AdminAccountStorageDecoded? tryDecode(Uint8List bytes) {

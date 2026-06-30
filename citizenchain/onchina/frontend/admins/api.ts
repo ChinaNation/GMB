@@ -18,8 +18,27 @@ export type FederalRegistryAdminRow = {
   updated_at?: string | null;
 };
 
+export type OwnInstitutionAdminRow = {
+  admin_account: string;
+  admin_name: string;
+  is_self: boolean;
+};
+
+export type OwnInstitutionAdminListOutput = {
+  institution_code: string;
+  cid_short_name?: string | null;
+  rows: OwnInstitutionAdminRow[];
+};
+
 export async function listFederalRegistryAdmins(auth: AdminAuth): Promise<FederalRegistryAdminRow[]> {
   return request<FederalRegistryAdminRow[]>('/api/v1/admin/federal-registry-admins', {
+    method: 'GET',
+    headers: adminHeaders(auth),
+  });
+}
+
+export async function listOwnInstitutionAdmins(auth: AdminAuth): Promise<OwnInstitutionAdminListOutput> {
+  return request<OwnInstitutionAdminListOutput>('/api/v1/admin/own-institution-admins', {
     method: 'GET',
     headers: adminHeaders(auth),
   });

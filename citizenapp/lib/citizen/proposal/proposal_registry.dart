@@ -25,7 +25,7 @@ enum ProposalKind {
 
 /// 发起提案的主体类型。它不是机构码的替代品,而是对机构码+账户身份的解析结果。
 enum ProposalSubjectType {
-  genesisInstitution,
+  fixedGovernanceInstitution,
   publicInstitution,
   privateInstitution,
   unincorporatedInstitution,
@@ -56,12 +56,12 @@ class ProposalSubject {
         adminModule: 'PersonalAdmins',
       );
     }
-    if (InstitutionCodeLabel.isGenesisAdminCode(code)) {
+    if (InstitutionCodeLabel.isFixedGovernance(code)) {
       return ProposalSubject(
-        subjectType: ProposalSubjectType.genesisInstitution,
+        subjectType: ProposalSubjectType.fixedGovernanceInstitution,
         institutionCode: code,
         subjectAccountId: account,
-        adminModule: 'GenesisAdmins',
+        adminModule: 'PublicAdmins',
       );
     }
     if (InstitutionCodeLabel.isPublicAdminCode(code)) {
@@ -102,7 +102,8 @@ class ProposalSubject {
   final String subjectAccountId;
   final String adminModule;
 
-  bool get isGenesis => subjectType == ProposalSubjectType.genesisInstitution;
+  bool get isFixedGovernance =>
+      subjectType == ProposalSubjectType.fixedGovernanceInstitution;
   bool get isPersonal => subjectType == ProposalSubjectType.personalMultisig;
   bool get isUnincorporated =>
       subjectType == ProposalSubjectType.unincorporatedInstitution;
@@ -162,7 +163,7 @@ class ProposalCapabilityRegistry {
     ProposalCapability(
       kind: ProposalKind.adminsChange,
       enabled: true,
-      pallet: 'Genesis/Public/Private/PersonalAdmins',
+      pallet: 'Public/Private/PersonalAdmins',
       call: 'propose_admin_set_change',
       voteEngine: 'InternalVote',
       allows: (subject) => subject.hasResolvedAdminModule,

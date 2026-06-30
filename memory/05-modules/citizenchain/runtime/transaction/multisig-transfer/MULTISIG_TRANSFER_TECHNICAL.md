@@ -30,7 +30,7 @@
 - 治理机构仍使用 `0x01 BuiltinInstitution`，由静态预置表解析到治理机构 `main_account`。
 - 个人多签直接使用个人多签 `AccountId` 作为资金账户，账户状态由 `personal-manage::PersonalMultisigQuery` 校验；管理员真源由 `personal-admins` 提供。
 - 注册机构具体账户直接使用机构账户 `AccountId` 作为资金账户，账户状态由 `entity-primitives::InstitutionMultisigQuery` 校验。
-- 两类注册账户的管理员、阈值和人数都通过查询 trait 读取：个人多签走 `personal-manage` 聚合 `personal-admins`，机构账户走 `RuntimeInstitutionQuery` 聚合 `genesis-manage` / `public-manage` / `private-manage`；内部投票仍是一人一票一笔链上交易。
+- 两类注册账户的管理员、阈值和人数都通过查询 trait 读取：个人多签走 `personal-manage` 聚合 `personal-admins`，机构账户走 `RuntimeInstitutionQuery` 聚合 `public-manage` / `private-manage`；内部投票仍是一人一票一笔链上交易。
 
 ## 0. 功能需求
 
@@ -424,7 +424,7 @@ pub trait Config:
     /// 个人多签账户状态与管理员配置查询，由 personal-manage 聚合 personal-admins 提供。
     type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
 
-    /// 注册机构账户状态与管理员配置查询，由 runtime 聚合 genesis-manage / public-manage / private-manage 提供。
+    /// 注册机构账户状态与管理员配置查询，由 runtime 聚合 public-manage / private-manage 提供。
     type InstitutionQuery: entity_primitives::InstitutionMultisigQuery<Self::AccountId>;
 
     /// Weight 配置

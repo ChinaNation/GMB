@@ -2,32 +2,35 @@
 
 ## 1. 功能需求
 
-OnChina 后端负责注册局身份、行政区、机构、公民、管理员、扫码签名、公开查询和链侧凭证。它运行在 `citizenchain/onchina/src/`，属于公民链产品内部能力。
+OnChina 后端负责多机构管理员身份、行政区、机构、公民、管理员、扫码签名、公开查询和链侧凭证。它运行在 `citizenchain/onchina/src/`，属于公民链产品内部能力。
 
 ## 2. 当前结构
 
 ```text
 citizenchain/onchina/src/
 ├── main.rs                    # Axum 路由、AppState、StoreHandle 和后端入口
-├── accounts/                  # 机构账户入口
-├── admins/                    # 注册局机构 admins、安全动作和登录认证
+├── auth/                      # 管理员登录、安全动作、passkey 和会话鉴权
 │   └── login/                 # 管理员登录、扫码登录、鉴权守卫和签名校验
-├── audit/                     # 审计日志查询
 ├── cid/                       # CID 号编码、机构码、生成、校验和行政区 SQLite
 │   └── china/                 # 中国行政区划 SQLite 真源
-├── citizens/                  # 公民身份、账户绑定、投票凭证和 CitizenApp 查询
+├── citizenapp/                # CitizenApp 查询和公民侧 BFF
 ├── core/                      # HTTP、安全、运行期工具、chain_* 和 QR 协议辅助
 │   └── qr/                    # QR_V1 协议辅助和统一 sign_request 构造
 ├── crypto/                    # sr25519、公钥规范化和哈希辅助
-├── domains/address/           # 镇下地址库查询和 AddressRegistry call data 构造
-├── docs/                      # 机构资料库入口
-├── gov/                       # 公权机构确定性目录和公权机构接口
+├── domains/                   # 公权、私权、公民、资料库、地址等业务域
+│   ├── address/               # 镇下地址库查询和 AddressRegistry call data 构造
+│   ├── citizens/              # 公民身份、账户绑定和投票凭证
+│   ├── docs/                  # 机构资料库入口
+│   ├── gov/                   # 公权机构确定性目录和公权机构接口
+│   └── private/               # 私权机构入口和六类私权机构子模块
+├── institution/               # 机构账户、机构管理员元数据和主体共享内核
+│   ├── accounts/              # 机构账户入口
+│   ├── admins/                # 本地管理员元数据缓存
+│   └── subjects/              # 主体共享模型、注册内核、详情和非法人能力
 ├── indexer/                   # 链事件解析与索引 worker
-├── private/                   # 私权机构入口和六类私权机构子模块
+├── platform/                  # 控制台能力、mDNS、TLS CA 和平台健康检查
 ├── scope/                     # 省/市可见范围与过滤规则
-├── store/                     # Store 聚合体和结构化存储边界
-├── subjects/                  # 主体共享模型、注册内核、详情和非法人能力
-└── tests/                     # 集成和端到端测试
+└── store/                     # Store 聚合体和结构化存储边界
 ```
 
 ## 3. 目录铁律
@@ -38,14 +41,14 @@ citizenchain/onchina/src/
 - 禁止恢复独立 `chain` 业务目录；链交互只能放在所属业务模块的 `chain_*.rs` 或 `core/chain_*`。
 - 禁止恢复独立 `cid_number`、`models`、`login`、`qr` 等历史目录壳。
 - `scope/` 只放权限范围规则，不放 HTTP handler 或公钥工具。
-- 非法人机构能力统一归 `subjects/unincorporated_org/`，不得放在单侧 `gov/` 或 `private/`。
+- 非法人机构能力统一归 `institution/subjects/unincorporated_org/`，不得放在单侧 `domains/gov/` 或 `domains/private/`。
 
 ## 4. Store 和表边界
 
 后端只承认结构化 PostgreSQL 表为主数据。`store/` 可以封装访问和短期缓存，但不得保存第二份业务主数据。
 
-- 机构主写入只进入 `subjects/gov/private/accounts/docs`。
-- 公民主写入只进入 `citizens/subjects`。
+- 机构主写入只进入 `institution/subjects`、`domains/gov`、`domains/private`、`institution/accounts` 和 `domains/docs`。
+- 公民主写入只进入 `domains/citizens` 和 `institution/subjects`。
 - 管理员写入只进入 `admins`(本地元数据缓存)和短生命周期安全运行态表;成员资格真源在链上(`federal_registry_scope` 表已退役,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
 - 链上状态只属于 `accounts.chain_status`，机构主体本身不保存链上状态。
 - 审计写入统一走结构化审计入口，详情字段只保存事实，不保存 UI 文案。
@@ -54,9 +57,9 @@ citizenchain/onchina/src/
 
 链交互按业务归属放置：
 
-- 机构注册信息凭证、账户列表 DTO 和 handler：`subjects/chain_*.rs`
-- 公民投票凭证：`citizens/chain_*.rs`
-- 联合投票人口快照凭证：`citizens/chain_*.rs`
+- 机构注册信息凭证、账户列表 DTO 和 handler：`institution/subjects/chain_*.rs`
+- 公民投票凭证：`domains/citizens/chain_*.rs`
+- 联合投票人口快照凭证：`domains/citizens/chain_*.rs`
 - 地址变更调用：`domains/address/chain_call.rs`
 - 通用 SCALE、genesis hash、RPC URL 和交易提交辅助：`core/chain_*.rs`
 
@@ -85,7 +88,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 管理员新增、替换、Passkey 更新、节点解绑和链写动作必须使用 `PASSKEY_COLD_SIGN` 二次确认。业务 handler 只负责构造业务动作，二维码协议包装和签名结果识别归 `core/qr/`。
 
-联邦注册局机构 `admins` 不允许本地新增或删除，只允许在同省范围内替换。市注册局机构 `admins` 每省每市最多 30 人，统计必须同时带省和市，不能只按市名统计。
+联邦注册局机构 `admins` 不允许本地新增或删除，只允许在同省范围内替换。市注册局机构 `admins` 每省每市最多 30 人，统计必须同时带省和市，不能只按市名统计。NJD、普通公权机构、私权机构和非法人组织本期只能查看本机构链上 active admin 列表，不能在 OnChina 内维护管理员集合。
 
 ## 9. 控制台能力映射
 
@@ -93,6 +96,9 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 - `FRG` 是 Tier1 创世注册局，能力必须是 `CREG` 的超集：可进入公民、私权、教育、公权机构、市注册局和联邦注册局，并可在本省范围内登记机构、写业务、维护市注册局管理员、维护本省联邦注册局管理员。
 - `CREG` 是 Tier2 下级注册局，保留本市公民/机构/业务写入能力；同时必须能进入“联邦注册局”tab，只读查看本省联邦注册局管理员列表，不得发起联邦注册局管理员编辑或更换。
+- `NJD`、普通公权机构、私权机构和非法人组织只获得 `can_view_own_admins`，只读查看本机构链上 active admin 列表。
+- `NRC`、`PRC`、`PRB` 走节点桌面端，不获得 OnChina 网页能力。
+- `PMUL` 和其它个人主体不获得 OnChina 网页能力。
 - 前端 tab 展示只使用后端下发的 `capabilities`；后端 handler、scope 和链上 active admin 校验仍是安全边界。
 
 ## 10. 验收

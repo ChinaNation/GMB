@@ -34,7 +34,7 @@ void main() {
       );
 
   group('AdminAccountsScanService.filterMine', () {
-    test('按 kind 分流:机构(1/2)与个人(3)互不串味', () {
+    test('按 kind 分流:公权/私权/个人互不串味', () {
       final scan = resultOf([
         acc(
           addr: '01',
@@ -71,7 +71,7 @@ void main() {
 
     test('institution_code 白名单:不在注册机构码集合的机构账户被排除', () {
       final scan = resultOf([
-        acc(addr: '01', institutionCode: 'CGOV', kind: 1, admins: [myWallet]),
+        acc(addr: '01', institutionCode: 'CGOV', kind: 0, admins: [myWallet]),
         acc(addr: '02', institutionCode: 'PRC', kind: 0, admins: [myWallet]),
       ]);
       final result = AdminAccountsScanService.filterMine(
@@ -91,12 +91,12 @@ void main() {
         acc(
             addr: '01',
             institutionCode: 'CGOV',
-            kind: 1,
+            kind: 0,
             admins: [myWallet, otherWallet]),
         acc(
             addr: '02',
             institutionCode: 'UNIN',
-            kind: 2,
+            kind: 1,
             admins: [otherWallet]),
       ]);
       final result = AdminAccountsScanService.filterMine(
@@ -116,7 +116,7 @@ void main() {
         acc(
             addr: '01',
             institutionCode: 'CGOV',
-            kind: 1,
+            kind: 0,
             admins: [secondWallet]),
       ]);
       final result = AdminAccountsScanService.filterMine(
@@ -135,7 +135,7 @@ void main() {
       final result = AdminAccountsScanService.filterMine(
         AdminAccountsScanResult.empty,
         myPubkeysHex: {myWallet},
-        kind: 2,
+        kind: 1,
         codeWhitelist: const {'CGOV', 'UNIN'},
       );
       expect(result, isEmpty);

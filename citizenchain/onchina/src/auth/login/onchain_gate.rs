@@ -23,6 +23,10 @@ use super::signature::build_admin_name_from_user;
 pub(super) enum GateError {
     /// 扫码者不在本机构链上 Active 管理员集合。
     NotOnchainAdmin,
+    /// 扫码者属于国储会/省储会/省储行,这些机构只走节点桌面端。
+    DesktopGovernanceUnsupported,
+    /// 扫码者属于个人多签,不进入机构节点控制台。
+    PersonalMultisigUnsupported,
     /// 链节点不可达 / 读取失败(瞬时,允许重试,绝不降级查本地表)。
     ChainUnreachable(String),
     /// 节点绑定确认请求非法。
@@ -50,6 +54,16 @@ pub(super) fn gate_error_response(err: GateError) -> axum::response::Response {
         GateError::NotOnchainAdmin => {
             api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin")
         }
+        GateError::DesktopGovernanceUnsupported => api_error(
+            StatusCode::FORBIDDEN,
+            2002,
+            chain_runtime::DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED,
+        ),
+        GateError::PersonalMultisigUnsupported => api_error(
+            StatusCode::FORBIDDEN,
+            2002,
+            chain_runtime::PERSONAL_MULTISIG_LOGIN_UNSUPPORTED,
+        ),
         GateError::ChainUnreachable(message) => {
             tracing::warn!(error = %message, "chain unreachable during login gate");
             api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable")
@@ -143,6 +157,21 @@ fn binding_matches_candidate(
     binding.candidate.candidate_id == candidate.candidate_id
 }
 
+async fn find_allowed_memberships_for_login(
+    normalized_pubkey: &str,
+) -> Result<Vec<chain_runtime::ActiveAdminMembership>, GateError> {
+    match chain_runtime::find_active_admin_memberships(normalized_pubkey).await {
+        Ok(memberships) => Ok(memberships),
+        Err(err) if err == chain_runtime::DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED => {
+            Err(GateError::DesktopGovernanceUnsupported)
+        }
+        Err(err) if err == chain_runtime::PERSONAL_MULTISIG_LOGIN_UNSUPPORTED => {
+            Err(GateError::PersonalMultisigUnsupported)
+        }
+        Err(err) => Err(GateError::ChainUnreachable(err)),
+    }
+}
+
 /// 已验签的 pubkey 经链上集合鉴权后,按节点绑定状态返回会话或待绑定候选。
 pub(super) async fn issue_session_after_onchain_gate(
     state: &AppState,
@@ -151,9 +180,7 @@ pub(super) async fn issue_session_after_onchain_gate(
 ) -> Result<GateOutcome, GateError> {
     let normalized = chain_runtime::normalize_account_pubkey(verified_pubkey)
         .ok_or(GateError::NotOnchainAdmin)?;
-    let memberships = chain_runtime::find_active_admin_memberships(normalized.as_str())
-        .await
-        .map_err(GateError::ChainUnreachable)?;
+    let memberships = find_allowed_memberships_for_login(normalized.as_str()).await?;
     if memberships.is_empty() {
         return Err(GateError::NotOnchainAdmin);
     }
@@ -240,9 +267,7 @@ pub(super) async fn confirm_node_binding_after_onchain_gate(
     };
     let normalized = chain_runtime::normalize_account_pubkey(challenge.admin_account.as_str())
         .ok_or(GateError::BindingMismatch)?;
-    let memberships = chain_runtime::find_active_admin_memberships(normalized.as_str())
-        .await
-        .map_err(GateError::ChainUnreachable)?;
+    let memberships = find_allowed_memberships_for_login(normalized.as_str()).await?;
     let fresh_candidates = state
         .db
         .with_client(move |conn| candidates_from_memberships_conn(conn, &memberships))

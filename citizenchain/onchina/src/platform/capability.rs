@@ -7,8 +7,9 @@
 //! 机构类分发(`primitives::cid::code` 单源):
 //! - Tier1 创世注册局(FRG):拥有 Tier2 全部业务能力,并额外管理联邦/市注册局管理员。
 //! - Tier2 下级注册局(CREG,公权子集):录入公民/机构 + 看本市注册局 + 只读本省联邦注册局。
-//! - 其它创世机构(NRC/PRC/PRB/NJD):自治,不归本控制台 → 空能力。
-//! - 其余公权/私权/非法人法人:本期只开只读「本机构管理员」位(`can_view_own_admins`);
+//! - 国家司法院(NJD):可登录控制台,本期只开只读「本机构管理员」位。
+//! - 国储会/省储会/省储行(NRC/PRC/PRB):使用节点桌面端,不归本控制台 → 空能力。
+//! - 其余公权/私权/非法人机构:本期只开只读「本机构管理员」位(`can_view_own_admins`);
 //!   CRUD / 录入等具体功能待各机构功能落地时再开(机制就绪、不越权)。
 //!
 //! serde 字段名用 camelCase,与前端 `platform/capabilityMap.ts` 的 RoleCapabilities 逐字段对齐。
@@ -85,7 +86,7 @@ const SUBORDINATE_REGISTRY: CapabilitySet = CapabilitySet {
     ..EMPTY
 };
 
-// 普通法人(公权/私权/非法人,非注册局):本期只开只读「本机构管理员」位。
+// 普通机构(NJD/公权/私权/非法人,非注册局):本期只开只读「本机构管理员」位。
 const OWN_ADMINS_READONLY: CapabilitySet = CapabilitySet {
     can_view_own_admins: true,
     ..EMPTY
@@ -94,8 +95,8 @@ const OWN_ADMINS_READONLY: CapabilitySet = CapabilitySet {
 /// 机构码文本 → 能力集。按机构类(`primitives::cid::code` 单源)分发,未知/不归控制台返回空能力。
 pub(crate) fn capabilities_for(institution_code: &str) -> CapabilitySet {
     use primitives::cid::code::{
-        institution_code_from_str, is_fixed_governance_code, is_private_legal_code,
-        is_public_legal_code, is_unincorporated_code,
+        institution_code_from_str, is_private_legal_code, is_public_legal_code,
+        is_unincorporated_code, NRC, PRB, PRC,
     };
     // Tier1/Tier2 注册局保留专属能力集,具体能力必须与 runtime 登记权层级同步。
     if crate::core::chain_runtime::is_tier1_registry(institution_code) {
@@ -107,11 +108,11 @@ pub(crate) fn capabilities_for(institution_code: &str) -> CapabilitySet {
     let Some(code) = institution_code_from_str(institution_code) else {
         return EMPTY;
     };
-    // 其它创世机构(NRC/PRC/PRB/NJD)自治,不归本控制台。
-    if is_fixed_governance_code(&code) {
+    // 国储会/省储会/省储行使用节点桌面端,不进入 OnChina 网页控制台。
+    if matches!(code, NRC | PRC | PRB) {
         return EMPTY;
     }
-    // 其余公权/私权/非法人法人:只读本机构管理员位。
+    // NJD 与其余公权/私权/非法人机构:只读本机构管理员位。
     if is_public_legal_code(&code) || is_private_legal_code(&code) || is_unincorporated_code(&code)
     {
         return OWN_ADMINS_READONLY;
@@ -151,5 +152,33 @@ mod tests {
         assert!(federal.can_view_federal_registry);
         assert!(federal.can_view_federal_registry_admins);
         assert!(federal.can_crud_city_registry_admins);
+    }
+
+    #[test]
+    fn national_judicial_yuan_can_view_own_admins_only() {
+        let judicial = capabilities_for("NJD");
+
+        // 中文注释:NJD 可进入 OnChina,但本期只给本机构管理员只读页,不获得注册局业务能力。
+        assert!(judicial.can_view_own_admins);
+        assert!(!judicial.can_view_citizens);
+        assert!(!judicial.can_view_institutions);
+        assert!(!judicial.can_view_city_registry);
+        assert!(!judicial.can_view_federal_registry);
+    }
+
+    #[test]
+    fn reserve_governance_institutions_stay_out_of_onchina() {
+        // 中文注释:国储会/省储会/省储行使用节点桌面端,不能因为同属公权码而拿到网页能力。
+        for code in ["NRC", "PRC", "PRB"] {
+            let capability = capabilities_for(code);
+            assert!(
+                !capability.can_view_own_admins,
+                "{code} must stay desktop-only"
+            );
+            assert!(
+                !capability.can_view_citizens,
+                "{code} must not receive business tabs"
+            );
+        }
     }
 }

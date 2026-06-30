@@ -680,9 +680,8 @@ fn blake2_256(input: &[u8]) -> [u8; 32] {
 // ──────────────────────────────────────────────────────────────────
 // 链上管理员集合读取(去中心化鉴权)
 //
-// 真源:机构 Active 管理员集合落链端三个 pallet 的 `AdminAccounts` storage——
-// `GenesisAdmins`(固定治理档 NRC/PRC/PRB/FRG/NJD)、
-// `PublicAdmins`(其它公权法人:政府/立法/监察/司法/教育/注册局/公安等)、
+// 真源:机构 Active 管理员集合落链端两个机构 pallet 的 `AdminAccounts` storage——
+// `PublicAdmins`(公权法人,含固定治理档 NRC/PRC/PRB/NJD 与 FRG 省级组)、
 // `PrivateAdmins`(私权法人:股权/股份/有限合伙/公益/协会/私立学校等)。
 // 节点按自身机构码路由到对应 pallet,登录验签后比对该集合放行,
 // 本地 admins 表仅作元数据/省映射缓存。个人多签 PMUL 不在控制台范围。
@@ -692,6 +691,12 @@ fn blake2_256(input: &[u8]) -> [u8; 32] {
 /// 中文注释:onchina 不依赖 admin-primitives(避免引入 frame-support 重依赖),
 /// 此处单字面镜像;FRG 为稳定常量,与链端保持一致即可。
 const FRG_CODE: [u8; 4] = *b"FRG\0";
+/// 国家司法院机构码。NJD 虽属固定治理档,但按产品边界进入 OnChina 控制台。
+const NJD_CODE: [u8; 4] = *b"NJD\0";
+pub(crate) const DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED: &str =
+    "desktop governance institution is not supported by OnChina";
+pub(crate) const PERSONAL_MULTISIG_LOGIN_UNSUPPORTED: &str =
+    "personal multisig is not supported by OnChina";
 
 /// `AdminAccountStatus::Active` 的 SCALE 判别式(Pending=0 / Active=1 / Closed=2)。
 const ADMIN_STATUS_ACTIVE: u8 = 1;
@@ -723,7 +728,7 @@ struct OnChainAdminProfile {
 ///
 /// **铁律**:字段顺序与类型必须与 runtime `admin-primitives::AdminAccount` 逐字节一致——
 /// `InstitutionCode=[u8;4]` 无前缀;`AdminAccountKind`/`AdminAccountStatus` 枚举各 1 字节判别;
-/// 机构(genesis/public/private)管理员集合为 `BoundedVec<AdminProfile>`(A2);
+/// 机构(public/private)管理员集合为 `BoundedVec<AdminProfile>`(A2);
 /// `BlockNumberFor=u32`。任一字段宽度/顺序漂移都会解码错位 → membership 误判。
 #[derive(Debug, Decode)]
 struct OnChainAdminAccount {
@@ -743,11 +748,9 @@ struct OnChainAdminAccount {
 
 /// 机构 Active 管理员集合所属链上 pallet。
 ///
-/// 机构码决定容器:`GenesisAdmins` 收固定治理档(NRC/PRC/PRB/FRG/NJD),
-/// `PublicAdmins` 收其它公权法人,`PrivateAdmins` 收私权法人。
+/// 机构码决定容器:`PublicAdmins` 收公权法人和固定治理档,`PrivateAdmins` 收私权法人。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AdminPallet {
-    GenesisAdmins,
     PublicAdmins,
     PrivateAdmins,
 }
@@ -756,7 +759,6 @@ impl AdminPallet {
     /// construct_runtime 中的 pallet 名(subxt dynamic storage 寻址用)。
     fn pallet_name(self) -> &'static str {
         match self {
-            AdminPallet::GenesisAdmins => "GenesisAdmins",
             AdminPallet::PublicAdmins => "PublicAdmins",
             AdminPallet::PrivateAdmins => "PrivateAdmins",
         }
@@ -771,7 +773,7 @@ pub(crate) struct NodeInstitutionIdentity {
     pub(crate) main_account: [u8; 32],
     /// 联邦注册局专用:本节点所辖省的链上省码([u8;2]);其它机构为 `None`。
     ///
-    /// 中文注释:链上 FRG 215 人按 43 省切组,Active 集合落 `GenesisAdmins::FederalRegistryProvinceGroups`
+    /// 中文注释:链上 FRG 215 人按 43 省切组,Active 集合落 `PublicAdmins::FederalRegistryProvinceGroups`
     /// (键=`ProvinceCode`),**不在** `AdminAccounts`。本字段来自绑定候选的链上省组键。
     pub(crate) frg_province_code: Option<[u8; 2]>,
 }
@@ -810,16 +812,22 @@ impl ActiveAdminMembership {
 /// 机构码 → 控制台准入的候选 admin pallet。
 ///
 /// 镜像链端 `admin-primitives` 路由语义(用 `primitives::cid::code` 分类,不引入 admin-primitives
-/// 重依赖):FRG→创世;其它公权法人→公权;私权法人→私权;非法人按所属法人落公权或私权——
-/// 账户键全局唯一,登录时按 [Public, Private] 顺序探测命中。其它固定治理档有专属治理入口,
-/// 与个人主体/个人多签都不在控制台范围,返回错误拒绝。
+/// 重依赖):FRG→公权省级组;NJD/其它公权法人→公权;私权法人→私权;
+/// 非法人按所属法人落公权或私权——账户键全局唯一,登录时按 [Public, Private] 顺序探测命中。
+/// 国储会/省储会/省储行走节点桌面端,个人主体/个人多签都不在控制台范围,返回错误拒绝。
 fn console_admin_pallets(code: &[u8; 4]) -> Result<Vec<AdminPallet>, String> {
     use primitives::cid::code::{
         is_fixed_governance_code, is_private_legal_code, is_public_legal_code,
         is_unincorporated_code,
     };
     if *code == FRG_CODE {
-        return Ok(vec![AdminPallet::GenesisAdmins]);
+        return Ok(vec![AdminPallet::PublicAdmins]);
+    }
+    if *code == NJD_CODE {
+        return Ok(vec![AdminPallet::PublicAdmins]);
+    }
+    if let Some(reason) = console_login_block_reason(code) {
+        return Err(reason.to_string());
     }
     if is_fixed_governance_code(code) {
         return Err("fixed-governance institution is not managed by this console".to_string());
@@ -834,6 +842,17 @@ fn console_admin_pallets(code: &[u8; 4]) -> Result<Vec<AdminPallet>, String> {
         return Ok(vec![AdminPallet::PublicAdmins, AdminPallet::PrivateAdmins]);
     }
     Err("node institution code is not a console-managed institution".to_string())
+}
+
+fn console_login_block_reason(code: &[u8; 4]) -> Option<&'static str> {
+    use primitives::cid::code::{is_personal_code, NRC, PRB, PRC};
+    if matches!(*code, NRC | PRC | PRB) {
+        return Some(DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED);
+    }
+    if is_personal_code(code) {
+        return Some(PERSONAL_MULTISIG_LOGIN_UNSUPPORTED);
+    }
+    None
 }
 
 pub(crate) fn identity_from_binding_parts(
@@ -970,8 +989,9 @@ pub(crate) async fn find_active_admin_memberships(
         .map_err(|e| format!("get latest chain storage failed: {e}"))?;
 
     let mut memberships = Vec::new();
+    let mut blocked_login_reason: Option<&'static str> = None;
     let frg_query = dynamic::storage(
-        AdminPallet::GenesisAdmins.pallet_name(),
+        AdminPallet::PublicAdmins.pallet_name(),
         "FederalRegistryProvinceGroups",
         Vec::<dynamic::Value>::new(),
     );
@@ -1014,7 +1034,8 @@ pub(crate) async fn find_active_admin_memberships(
             if decoded.status != ADMIN_STATUS_ACTIVE || !contains_admin(&decoded, &target) {
                 continue;
             }
-            if console_admin_pallets(&decoded.institution_code).is_err() {
+            if let Some(reason) = console_login_block_reason(&decoded.institution_code) {
+                blocked_login_reason.get_or_insert(reason);
                 continue;
             }
             let allowed = console_admin_pallets(&decoded.institution_code)?;
@@ -1032,13 +1053,18 @@ pub(crate) async fn find_active_admin_memberships(
 
     memberships.sort_by_key(|m| m.candidate_id());
     memberships.dedup_by_key(|m| m.candidate_id());
+    if memberships.is_empty() {
+        if let Some(reason) = blocked_login_reason {
+            return Err(reason.to_string());
+        }
+    }
     Ok(memberships)
 }
 
 /// 读取本节点机构的链上 Active 管理员公钥集合(0x 小写 hex 列表)。
 ///
 /// 定位口径按机构分流:
-/// - **联邦注册局(FRG)**:Active 集合落 `GenesisAdmins::FederalRegistryProvinceGroups`
+/// - **联邦注册局(FRG)**:Active 集合落 `PublicAdmins::FederalRegistryProvinceGroups`
 ///   (键=本节点省码 `ProvinceCode`),**不在** `AdminAccounts`——读单一省组。
 /// - **其它机构**:按候选 pallet 顺序探测 `<Pallet>::AdminAccounts`(键=机构主账户,全局唯一),
 ///   命中首个存在且 Active 的集合即返回。
@@ -1061,7 +1087,7 @@ pub(crate) async fn fetch_active_admins_onchain(
     // 候选 storage 地址:FRG → 省级组(键=省码);其它 → 各候选 pallet 的 AdminAccounts(键=主账户)。
     let addresses = if let Some(province_code) = identity.frg_province_code {
         vec![dynamic::storage(
-            AdminPallet::GenesisAdmins.pallet_name(),
+            AdminPallet::PublicAdmins.pallet_name(),
             "FederalRegistryProvinceGroups",
             vec![dynamic::Value::from_bytes(province_code)],
         )]
@@ -1107,7 +1133,7 @@ pub(crate) async fn fetch_active_admins_onchain(
 /// 读取联邦注册局指定省 5 人组的 Active 管理员账户集合(0x 小写 hex)。
 ///
 /// 中文注释:Tier1 创世注册局「全走链读」(决策③)。控制台列表 / 换届当前集合都据此从链上
-/// `GenesisAdmins::FederalRegistryProvinceGroups[province_code]` 直读权威集合(键=链上省码 `[u8;2]`);
+/// `PublicAdmins::FederalRegistryProvinceGroups[province_code]` 直读权威集合(键=链上省码 `[u8;2]`);
 /// 省组不存在或非 Active → `Ok(vec![])`。任意调用方按本省省码调用,不依赖节点身份。
 pub(crate) async fn fetch_federal_registry_province_admins(
     province_code: [u8; 2],
@@ -1122,7 +1148,7 @@ pub(crate) async fn fetch_federal_registry_province_admins(
         .await
         .map_err(|e| format!("get latest chain storage failed: {e}"))?;
     let address = dynamic::storage(
-        AdminPallet::GenesisAdmins.pallet_name(),
+        AdminPallet::PublicAdmins.pallet_name(),
         "FederalRegistryProvinceGroups",
         vec![dynamic::Value::from_bytes(province_code)],
     );
@@ -1192,6 +1218,36 @@ mod tests {
         assert_eq!(decoded.status, super::ADMIN_STATUS_ACTIVE);
         assert_eq!(decoded.admins.len(), 1);
         assert_eq!(decoded.admins[0].account, [0x42; 32]);
+    }
+
+    #[test]
+    fn console_pallets_allow_njd_and_block_desktop_governance() {
+        assert_eq!(
+            super::console_admin_pallets(b"NJD\0").unwrap(),
+            vec![super::AdminPallet::PublicAdmins]
+        );
+
+        for code in [b"NRC\0", b"PRC\0", b"PRB\0"] {
+            assert_eq!(
+                super::console_admin_pallets(code).unwrap_err(),
+                super::DESKTOP_GOVERNANCE_LOGIN_UNSUPPORTED
+            );
+        }
+    }
+
+    #[test]
+    fn console_pallets_keep_unincorporated_dual_probe_and_personal_rejected() {
+        assert_eq!(
+            super::console_admin_pallets(b"UNIN").unwrap(),
+            vec![
+                super::AdminPallet::PublicAdmins,
+                super::AdminPallet::PrivateAdmins
+            ]
+        );
+        assert_eq!(
+            super::console_admin_pallets(b"PMUL").unwrap_err(),
+            super::PERSONAL_MULTISIG_LOGIN_UNSUPPORTED
+        );
     }
 
     #[test]

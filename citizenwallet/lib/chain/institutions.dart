@@ -15,8 +15,8 @@ enum InstitutionType {
   /// 省级公民储备银行。
   prb,
 
-  /// 其它创世治理机构。
-  genesis,
+  /// 其它固定治理机构。
+  fixedGovernance,
 }
 
 class Institution {
@@ -745,15 +745,15 @@ const List<Institution> kProvincialBanks = [
   ),
 ];
 
-/// 其它创世治理机构（2）。
-const List<Institution> kGenesisInstitutions = [
+/// 其它固定治理机构（2）。
+const List<Institution> kFixedGovernanceInstitutions = [
   Institution(
     cidNumber: 'ZS001-FRG07-249474503-2026',
     cidFullName: '总统府联邦注册局',
     cidShortName: '联邦注册局',
     cidFullNameEn: 'Federal Registry Bureau of the Presidential Office',
     cidShortNameEn: 'Federal Registry Bureau',
-    type: InstitutionType.genesis,
+    type: InstitutionType.fixedGovernance,
   ),
   Institution(
     cidNumber: 'ZS001-NJD0T-052283563-2026',
@@ -762,16 +762,16 @@ const List<Institution> kGenesisInstitutions = [
     cidFullNameEn:
         'National Judicial Yuan of the Federal Republic of the China Nation',
     cidShortNameEn: 'National Judicial Yuan',
-    type: InstitutionType.genesis,
+    type: InstitutionType.fixedGovernance,
   ),
 ];
 
-/// 所有机构（89）。按服务端 find_entry 的查找顺序：NRC → PRC → PRB → Genesis。
+/// 所有机构（89）。按服务端 find_entry 的查找顺序：NRC → PRC → PRB → 固定治理。
 final List<Institution> kAllInstitutions = List.unmodifiable([
   ...kNationalCouncils,
   ...kProvincialCouncils,
   ...kProvincialBanks,
-  ...kGenesisInstitutions,
+  ...kFixedGovernanceInstitutions,
 ]);
 
 /// 根据 cid_number 查找机构中文全称。

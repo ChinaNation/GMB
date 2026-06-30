@@ -1323,8 +1323,8 @@ const List<InstitutionInfo> kProvincialBanks = [
   ),
 ];
 
-/// 其它 GenesisAdmins 创世机构（不进入治理 tab 联合投票列表）。
-const List<InstitutionInfo> kGenesisInstitutions = [
+/// 其它固定治理机构（不进入治理 tab 联合投票列表）。
+const List<InstitutionInfo> kFixedGovernanceInstitutions = [
   InstitutionInfo(
     cidFullName: '总统府联邦注册局',
     cidShortName: '联邦注册局',

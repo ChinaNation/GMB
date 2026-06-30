@@ -147,7 +147,7 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 - `account_id_from_cid_number`：内置机构 AccountId 编码（与 runtime primitives 一致）
 - `map_key` / `double_map_key`：完整存储 key 拼接
 
-管理员 `AdminAccounts` 专用 storage key 已收口到 `admins/admin_management/storage.rs`，并按 `PersonalAdmins / GenesisAdmins / PublicAdmins / PrivateAdmins` 分流；不得再在通用 `storage_keys.rs` 中新增管理员更换专用读取函数。
+管理员 `AdminAccounts` 专用 storage key 已收口到 `admins/admin_management/storage.rs`，并按 `PersonalAdmins / PublicAdmins / PrivateAdmins` 分流；固定治理机构也走 `PublicAdmins`。不得再在通用 `storage_keys.rs` 中新增管理员更换专用读取函数。
 
 ## 依赖关系
 

@@ -4,7 +4,7 @@
 
 - 将 `citizenchain/runtime/admins/` 从旧单体管理员模块拆分为：
   - `admin-primitives/`：管理员共用类型、trait、策略、查询抽象，不放业务 storage。
-  - `genesis-admins/`：创世管理员，限定国储会、省储会、省储行、联邦注册局。
+  - `public-admins/`：公权管理员，包含固定治理机构运行期管理员治理。
   - `public-admins/`：非创世公权机构管理员。
   - `private-admins/`：私权机构管理员。
   - `personal-admins/`：个人多签管理员，包含创建、关闭、清理和管理员集合变更。
@@ -47,7 +47,7 @@
 cargo check --manifest-path citizenchain/Cargo.toml -p node
 WASM_BUILD_FROM_SOURCE=1 cargo build --manifest-path citizenchain/Cargo.toml -p citizenchain
 WASM_FILE=/Users/rhett/GMB/citizenchain/target/debug/wbuild/citizenchain/citizenchain.wasm cargo build --manifest-path citizenchain/Cargo.toml -p node
-cargo test --manifest-path citizenchain/Cargo.toml -p genesis-admins -p public-admins -p private-admins -p personal-admins -p organization-manage -p multisig-transfer --lib
+cargo test --manifest-path citizenchain/Cargo.toml -p public-admins -p private-admins -p personal-admins -p public-manage -p private-manage -p multisig-transfer --lib
 cargo check --manifest-path citizenchain/Cargo.toml -p registry
 cargo build -p registry
 cargo test -p registry seed::

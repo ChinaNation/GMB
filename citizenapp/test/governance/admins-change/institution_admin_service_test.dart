@@ -54,8 +54,8 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
-  // A2:`AdminAccounts.admins` = `Vec<AdminProfile>`(机构 kind≠3:account[32] + cid/name/admin_role
-  // 各 Compact(0) 空 + term_start/term_end u32 + source u8);个人多签 kind==3 仍是裸 `Vec<AccountId>`。
+  // A2:`AdminAccounts.admins` = `Vec<AdminProfile>`(机构 kind≠2:account[32] + cid/name/admin_role
+  // 各 Compact(0) 空 + term_start/term_end u32 + source u8);个人多签 kind==2 仍是裸 `Vec<AccountId>`。
   // 逐字节对齐 lib/citizen/shared/admin_profile.dart::decodeAdminsVec。
   Uint8List adminAccountBytes({
     required String institutionCode,
@@ -63,7 +63,7 @@ void main() {
     required List<int> admin,
   }) {
     final adminEntry = <int>[...admin];
-    if (kind != 3) {
+    if (kind != 2) {
       adminEntry.addAll([
         0x00, // admin_cid_number: Compact(0) 空
         0x00, // name: Compact(0) 空
@@ -122,7 +122,7 @@ void main() {
     final accountKey = '0x${hexOf(AdminAccountIdCodec.adminAccountStorageKey(
       accountId,
       institutionCode: 'UNIN',
-      adminKind: 2,
+      adminKind: 1,
     ))}';
     final thresholdKey = dynamicThresholdKey(
       storageName: 'ActiveDynamicThresholds',
@@ -131,7 +131,7 @@ void main() {
     );
     rpc.responses[accountKey] = adminAccountBytes(
       institutionCode: 'UNIN',
-      kind: 2,
+      kind: 1,
       admin: List<int>.filled(32, 0xaa),
     );
     rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
@@ -140,7 +140,7 @@ void main() {
       accountHex: address,
       institutionCode: 'UNIN',
       accountLabel: '机构账户',
-      kind: 2,
+      kind: 1,
     );
     final admins = await service.fetchAdmins(identity);
     final threshold = await service.fetchThreshold(identity);
@@ -166,7 +166,7 @@ void main() {
     );
     rpc.responses[accountKey] = adminAccountBytes(
       institutionCode: 'PMUL',
-      kind: 3,
+      kind: 2,
       admin: List<int>.filled(32, 0xbb),
     );
     rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
@@ -198,7 +198,7 @@ void main() {
     );
     rpc.responses[accountKey] = adminAccountBytes(
       institutionCode: 'PMUL',
-      kind: 3,
+      kind: 2,
       admin: List<int>.filled(32, 0xdd),
     );
     rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
@@ -230,7 +230,7 @@ void main() {
     ));
     expect(personal.type, AdminAccountIdentityType.personalAccount);
     expect(personal.institutionCode, 'PMUL');
-    expect(personal.kind, 3);
+    expect(personal.kind, 2);
 
     final accountAddress = '55' * 32;
     expect(
@@ -251,12 +251,12 @@ void main() {
       accountHex: accountAddress,
       institutionCode: 'UNIN',
       accountLabel: '机构账户',
-      kind: 2,
+      kind: 1,
     );
     expect(privateOwnedInstitution.type,
         AdminAccountIdentityType.institutionAccount);
     expect(privateOwnedInstitution.institutionCode, 'UNIN');
-    expect(privateOwnedInstitution.kind, 2);
+    expect(privateOwnedInstitution.kind, 1);
 
     final governance =
         AdminAccountIdentity.fromInstitution(const InstitutionInfo(
@@ -283,7 +283,7 @@ void main() {
       accountHex: '88' * 32,
       institutionCode: 'UNIN',
       accountLabel: '机构账户',
-      kind: 2,
+      kind: 1,
     );
     final active = ActivatedAdmin(
       pubkeyHex: 'aa' * 32,

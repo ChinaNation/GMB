@@ -15,10 +15,6 @@ pub struct AdminPalletSpec {
     pub pallet_index: u8,
 }
 
-const GENESIS_ADMINS: AdminPalletSpec = AdminPalletSpec {
-    pallet_name: "GenesisAdmins",
-    pallet_index: 12,
-};
 const PERSONAL_ADMINS: AdminPalletSpec = AdminPalletSpec {
     pallet_name: "PersonalAdmins",
     pallet_index: 7,
@@ -34,13 +30,10 @@ const PRIVATE_ADMINS: AdminPalletSpec = AdminPalletSpec {
 
 /// 按机构码选择新 runtime 管理员 pallet。
 pub fn admin_pallet_for_code(code: &InstitutionCode) -> Result<AdminPalletSpec, String> {
-    if is_fixed_governance_code(code) {
-        return Ok(GENESIS_ADMINS);
-    }
     if is_personal_code(code) {
         return Ok(PERSONAL_ADMINS);
     }
-    if is_public_legal_code(code) {
+    if is_fixed_governance_code(code) || is_public_legal_code(code) {
         return Ok(PUBLIC_ADMINS);
     }
     if is_private_legal_code(code) || is_unincorporated_code(code) {
@@ -52,13 +45,8 @@ pub fn admin_pallet_for_code(code: &InstitutionCode) -> Result<AdminPalletSpec, 
     ))
 }
 
-fn admin_pallet_candidates() -> [AdminPalletSpec; 4] {
-    [
-        GENESIS_ADMINS,
-        PERSONAL_ADMINS,
-        PUBLIC_ADMINS,
-        PRIVATE_ADMINS,
-    ]
+fn admin_pallet_candidates() -> [AdminPalletSpec; 3] {
+    [PERSONAL_ADMINS, PUBLIC_ADMINS, PRIVATE_ADMINS]
 }
 
 fn builtin_governance_code(cid_number: &str) -> Result<InstitutionCode, String> {

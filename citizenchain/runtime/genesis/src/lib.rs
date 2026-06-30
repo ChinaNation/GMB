@@ -5,6 +5,7 @@
 //!    - 出块目标时间（TargetBlockTimeMs）
 //!    - 开发者直升 runtime 开关（DeveloperUpgradeEnabled）
 //! 2. 存储创世常量（创世宣言、国名宣言、创世人口），在创世区块中初始化。
+//! 3. 创世写入内置公权机构和创世公职人员，只写初始 storage，不承载运行期治理。
 //!
 //! # 设计原则
 //! - 纯存储 + getter + trait，不暴露 extrinsic。
@@ -15,6 +16,7 @@
 
 extern crate alloc;
 
+pub mod institution;
 pub mod weights;
 
 pub use pallet::*;
@@ -45,7 +47,11 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::config]
-    pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
+    pub trait Config:
+        frame_system::Config<RuntimeEvent: From<Event<Self>>>
+        + public_manage::Config
+        + public_admins::Config
+    {
         type WeightInfo: crate::weights::WeightInfo;
 
         /// 创世宣言和国名宣言的最大字节长度。
@@ -159,6 +165,7 @@ pub mod pallet {
             CitizensDeclaration::<T>::put(citizens);
             CountryDeclaration::<T>::put(country);
             CitizenMax::<T>::put(self.citizen_max);
+            crate::institution::build::<T>();
         }
     }
 

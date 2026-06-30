@@ -35,7 +35,6 @@ frame_benchmarking::define_benchmarks!(
     [resolution_issuance, ResolutionIssuance]
     [cid_system, CidSystem]
     [pow_difficulty, PowDifficulty]
-    [genesis_admins, GenesisAdmins]
     [public_admins, PublicAdmins]
     [private_admins, PrivateAdmins]
     [resolution_destro, ResolutionDestro]

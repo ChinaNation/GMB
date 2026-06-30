@@ -1,9 +1,8 @@
 // AdminAccountStorageCodec golden test:固定字节 -> 固定解码结果。
 //
-// 覆盖链上四类管理员 pallet `AdminAccounts` 的最小解码路径：
-// - Genesis (kind=0)
-// - Personal (kind=3)
-// - PublicInstitution (kind=1)
+// 覆盖链上三类管理员 pallet `AdminAccounts` 的最小解码路径：
+// - PublicInstitution (kind=0)
+// - Personal (kind=2)
 // - storage key 末 32B AccountId 提取
 
 import 'dart:typed_data';
@@ -22,16 +21,16 @@ void main() {
   }
 
   group('tryDecode', () {
-    test('成功解码 Genesis(0 admins)', () {
+    test('成功解码 PublicInstitution(0 admins)', () {
       // institution_code=NRC, kind=0, admins=Compact(0)=0x00, 后续字段忽略。
       final bytes = Uint8List.fromList([
         ...codeBytes('NRC'),
-        AdminAccountStorageCodec.kindGenesis,
+        AdminAccountStorageCodec.kindPublicInstitution,
         0,
       ]);
       final r = AdminAccountStorageCodec.tryDecode(bytes)!;
       expect(r.institutionCode, 'NRC');
-      expect(r.kind, AdminAccountStorageCodec.kindGenesis);
+      expect(r.kind, AdminAccountStorageCodec.kindPublicInstitution);
       expect(r.adminsHex, isEmpty);
     });
 
@@ -77,7 +76,7 @@ void main() {
     test('admins 数量超过实际字节返回 null', () {
       final bytes = Uint8List.fromList([
         ...codeBytes('NRC'),
-        AdminAccountStorageCodec.kindGenesis,
+        AdminAccountStorageCodec.kindPublicInstitution,
         0x08, // 声明 2 个 admin 但只给 1 个的字节。
         ...List.filled(32, 0xCC),
       ]);

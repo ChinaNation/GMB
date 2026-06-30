@@ -31,7 +31,7 @@ import type { RoleCapabilities } from './auth/AuthContext';
 import { GovView } from './gov/GovView';
 import { PrivateShell } from './private/PrivateShell';
 import { EducationView } from './education/EducationView';
-import { RegistryAdminsView } from './admins/RegistryAdminsView';
+import { OwnInstitutionAdminsView, RegistryAdminsView } from './admins/RegistryAdminsView';
 import { isSubordinateRegistry, isTier1Registry } from './platform/registryTier';
 import { CitizensView } from './citizens/CitizensView';
 import { AddressManageView } from './address/AddressManageView';
@@ -62,6 +62,7 @@ type ActiveView =
   | 'private-association'
   | 'education'
   | 'address'
+  | 'own-admins'
   | 'city-registry'
   | 'federal-registry';
 
@@ -97,6 +98,7 @@ function firstBusinessView(capabilities: RoleCapabilities): ActiveView {
   if (capabilities.canViewEducation) return 'education';
   if (capabilities.canViewCityRegistry) return 'city-registry';
   if (capabilities.canViewFederalRegistry) return 'federal-registry';
+  if (capabilities.canViewOwnAdmins) return 'own-admins';
   return 'citizens';
 }
 
@@ -374,9 +376,9 @@ function AppInner() {
               width: 'fit-content'
             }}
           >
-            {/* 中文注释:Tab 顺序 — 首页 → 六类私权机构 → 教育机构 → 公权机构 → 市注册局 → 联邦注册局。
+            {/* 中文注释:Tab 顺序 — 首页 → 六类私权机构 → 教育机构 → 公权机构 → 本机构管理员 → 市注册局 → 联邦注册局。
                 FRG 能力是 CREG 超集;CREG 可只读本省联邦注册局 tab。未设置 passkey 的注册局
-                管理员只显示自己机构的管理员列表入口,用于先完成本机 passkey 绑定。 */}
+                管理员只显示自己机构的管理员列表入口;普通机构管理员进入本机构管理员页设置 passkey。 */}
             {([
               { key: 'citizens' as const, label: '首页', visible: capabilities.canViewCitizens, onClick: () => switchView('citizens') },
               { key: 'private-sole' as const, label: '个体经营', visible: capabilities.canViewPrivate, onClick: () => switchView('private-sole', { loadCidMeta: true }) },
@@ -399,6 +401,11 @@ function AppInner() {
                 key: 'address' as const, label: '地址库',
                 visible: capabilities.canViewInstitutions,
                 onClick: () => switchView('address')
+              },
+              {
+                key: 'own-admins' as const, label: '本机构管理员',
+                visible: capabilities.canViewOwnAdmins,
+                onClick: () => switchView('own-admins')
               },
               {
                 key: 'city-registry' as const, label: '市注册局',
@@ -447,6 +454,8 @@ function AppInner() {
             <EducationView key={`education-${viewResetToken}`} auth={auth} cidMeta={cidMeta} />
           ) : routedView === 'address' && capabilities.canViewInstitutions && auth ? (
             <AddressManageView key={`address-${viewResetToken}`} auth={auth} />
+          ) : routedView === 'own-admins' && capabilities.canViewOwnAdmins ? (
+            <OwnInstitutionAdminsView key={`own-admins-${viewResetToken}`} />
           ) : routedView === 'city-registry' && capabilities.canViewCityRegistry ? (
             <RegistryAdminsView key={`city-registry-${viewResetToken}`} mode="city-registry" />
           ) : routedView === 'federal-registry' && capabilities.canViewFederalRegistry ? (

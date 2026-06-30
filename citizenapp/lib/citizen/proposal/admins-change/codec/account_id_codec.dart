@@ -49,12 +49,7 @@ class AdminAccountIdCodec {
   }
 
   static List<Uint8List> adminAccountStorageKeys(Uint8List accountId) {
-    return const [
-      'GenesisAdmins',
-      'PersonalAdmins',
-      'PublicAdmins',
-      'PrivateAdmins'
-    ]
+    return const ['PersonalAdmins', 'PublicAdmins', 'PrivateAdmins']
         .map((palletName) =>
             _adminAccountStorageKeyForPallet(accountId, palletName))
         .toList(growable: false);

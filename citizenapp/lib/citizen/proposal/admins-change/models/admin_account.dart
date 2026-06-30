@@ -20,12 +20,12 @@ class AdminAccountIdentity {
   });
 
   factory AdminAccountIdentity.fromInstitution(InstitutionInfo institution) {
-    final genesisCode = institution.adminAccountCode?.toUpperCase();
-    if (genesisCode != null &&
-        InstitutionCodeLabel.isGenesisAdminCode(genesisCode)) {
-      return AdminAccountIdentity.genesisInstitution(
+    final fixedCode = institution.adminAccountCode?.toUpperCase();
+    if (fixedCode != null &&
+        InstitutionCodeLabel.isFixedGovernance(fixedCode)) {
+      return AdminAccountIdentity.fixedGovernanceInstitution(
         accountHex: institution.mainAccount,
-        institutionCode: genesisCode,
+        institutionCode: fixedCode,
         accountLabel: institution.cidShortName,
       );
     }
@@ -58,23 +58,23 @@ class AdminAccountIdentity {
     );
   }
 
-  factory AdminAccountIdentity.genesisInstitution({
+  factory AdminAccountIdentity.fixedGovernanceInstitution({
     required String accountHex,
     required String institutionCode,
     required String accountLabel,
   }) {
     final code = institutionCode.toUpperCase();
-    if (!InstitutionCodeLabel.isGenesisAdminCode(code)) {
-      throw ArgumentError('创世治理机构 institutionCode 无效: $institutionCode');
+    if (!InstitutionCodeLabel.isFixedGovernance(code)) {
+      throw ArgumentError('固定治理机构 institutionCode 无效: $institutionCode');
     }
     final account = AdminAccountIdCodec.normalizeHex(accountHex);
     AdminAccountIdCodec.fromAccountHex(account);
     return AdminAccountIdentity(
       type: AdminAccountIdentityType.governanceInstitution,
-      identityKey: 'genesis:$code:$account',
+      identityKey: 'fixed-governance:$code:$account',
       accountLabel: accountLabel,
       institutionCode: code,
-      kind: 0,
+      kind: InstitutionCodeLabel.adminAccountKind(code),
       accountHex: account,
     );
   }
@@ -99,7 +99,7 @@ class AdminAccountIdentity {
       identityKey: 'governance:$code:$account',
       accountLabel: accountLabel,
       institutionCode: code,
-      kind: 0,
+      kind: InstitutionCodeLabel.adminAccountKind(code),
       accountHex: account,
     );
   }
@@ -150,7 +150,7 @@ class AdminAccountIdentity {
   static int _deriveInstitutionKind(String institutionCode) {
     if (InstitutionCodeLabel.isUnincorporatedAdminCode(institutionCode)) {
       throw ArgumentError(
-        '非法人机构码不能自动选择管理员模块，必须显式传入 kind=1(public) 或 kind=2(private)',
+        '非法人机构码不能自动选择管理员模块，必须显式传入 kind=0(public) 或 kind=1(private)',
       );
     }
     return InstitutionCodeLabel.adminAccountKind(institutionCode);

@@ -30,12 +30,12 @@ class InstitutionRepository {
       ...kNationalCouncil,
       ...kProvincialCouncils,
       ...kProvincialBanks,
-      ...kGenesisInstitutions,
+      ...kFixedGovernanceInstitutions,
     ])
       i.cidNumber: i,
   };
 
-  /// 创世治理机构的静态账户项;非创世机构返回 null。
+  /// 固定治理机构的静态账户项;非固定治理机构返回 null。
   InstitutionInfo? governanceInfo(String cidNumber) =>
       _governanceInfo[cidNumber];
 

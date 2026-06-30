@@ -67,29 +67,29 @@ class AdminSetValidation {
   }
 
   static void _validateCount(int kind, String code, int count) {
-    if (kind == 0) {
+    if (kind == 0 && InstitutionCodeLabel.isFixedGovernance(code)) {
       final expected = switch (code) {
         'NRC' => 19,
         'PRC' || 'PRB' => 9,
         'FRG' => 5,
         'NJD' => 13,
-        _ => throw StateError('创世管理员 institution_code 无效: $code'),
+        _ => throw StateError('固定治理机构 institution_code 无效: $code'),
       };
       if (count != expected) {
-        throw StateError('创世治理机构管理员数量必须保持 $expected 人');
+        throw StateError('固定治理机构管理员数量必须保持 $expected 人');
       }
       return;
     }
-    if (kind == 1) {
+    if (kind == 0) {
       if (!InstitutionCodeLabel.canStorePublicAdminCode(code)) {
-        throw StateError('公权机构管理员更换必须使用非创世公权机构码，或已明确归属公法人的非法人机构码');
+        throw StateError('公权机构管理员更换必须使用公权机构码，或已明确归属公法人的非法人机构码');
       }
       if (count < 2 || count > 1989) {
         throw StateError('公权机构管理员数量必须在 2..=1989 之间');
       }
       return;
     }
-    if (kind == 2) {
+    if (kind == 1) {
       if (!InstitutionCodeLabel.canStorePrivateAdminCode(code)) {
         throw StateError('私权机构管理员更换必须使用私权机构码，或已明确归属私法人的非法人机构码');
       }
@@ -98,7 +98,7 @@ class AdminSetValidation {
       }
       return;
     }
-    if (kind == 3) {
+    if (kind == 2) {
       if (code != 'PMUL') {
         throw StateError('个人多签管理员更换必须使用 PMUL');
       }
@@ -114,16 +114,16 @@ class AdminSetValidation {
     int count,
     int threshold,
   ) {
-    if (kind == 0) {
+    if (kind == 0 && InstitutionCodeLabel.isFixedGovernance(code)) {
       final expected = fixedGovernanceThreshold(code);
       if (expected != null) {
         if (threshold != expected) {
-          throw StateError('创世治理机构固定阈值必须为 $expected');
+          throw StateError('固定治理机构固定阈值必须为 $expected');
         }
         return;
       }
     }
-    if (kind == 0 || kind == 1 || kind == 2 || kind == 3) {
+    if (kind == 0 || kind == 1 || kind == 2) {
       // 中文注释：动态账户阈值只按 runtime 投票引擎公式做端上前置校验；
       // 真正保存和生效仍由 internal-vote 负责。
       if (threshold <= 0 || threshold > count || threshold * 2 <= count) {

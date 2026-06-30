@@ -12,6 +12,7 @@ use frame_support::{
 };
 use frame_system as system;
 use primitives::cid::code::code_bytes;
+use primitives::count_const::NRC_ADMIN_COUNT;
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -169,7 +170,7 @@ fn profile_full(
 }
 
 #[test]
-fn public_admins_accept_only_non_genesis_public_codes() {
+fn public_admins_accept_public_codes_and_reject_private_codes() {
     new_test_ext().execute_with(|| {
         let root = account(10);
         assert_ok!(PublicAdmins::do_create_pending_admin_account(
@@ -270,7 +271,7 @@ fn public_admins_store_and_query_admin_profiles() {
 }
 
 #[test]
-fn public_admins_reject_genesis_codes() {
+fn public_admins_accept_fixed_governance_codes_with_fixed_size() {
     new_test_ext().execute_with(|| {
         assert_noop!(
             PublicAdmins::do_create_pending_admin_account(
@@ -280,7 +281,20 @@ fn public_admins_reject_genesis_codes() {
                 admins(3),
                 account(1),
             ),
-            Error::<Test>::InvalidAdminAccountKind
+            Error::<Test>::InvalidAdminsLen
+        );
+
+        assert_ok!(PublicAdmins::do_create_pending_admin_account(
+            account(31),
+            code_bytes("NRC"),
+            AdminAccountKind::PublicInstitution,
+            admins(NRC_ADMIN_COUNT as u8),
+            account(1),
+        ));
+        assert_ok!(PublicAdmins::do_activate_admin_account(account(31)));
+        assert_eq!(
+            PublicAdmins::active_account_admins_len(code_bytes("NRC"), account(31)),
+            Some(NRC_ADMIN_COUNT)
         );
     });
 }

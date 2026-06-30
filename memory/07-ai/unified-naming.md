@@ -465,8 +465,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/runtime/genesis/` | 创世配置 | genesis | 创世状态和初始配置 |
 | `citizenchain/runtime/governance/` | 治理 | governance | 治理类 pallet |
 | `citizenchain/runtime/admins/admin-primitives/` | 管理员共用类型 | admin-primitives | 管理员共用类型、状态、kind 和生命周期 trait |
-| `citizenchain/runtime/admins/genesis-admins/` | 创世管理员 | genesis-admins | 固定治理档创世管理员 pallet |
-| `citizenchain/runtime/admins/public-admins/` | 公权管理员 | public-admins | 普通公权机构管理员 pallet |
+| `citizenchain/runtime/admins/public-admins/` | 公权管理员 | public-admins | 普通公权机构与固定治理机构管理员 pallet |
 | `citizenchain/runtime/admins/private-admins/` | 私权管理员 | private-admins | 普通私权机构管理员 pallet |
 | `citizenchain/runtime/admins/personal-admins/` | 个人多签管理员 | personal-admins | 个人多签管理员与个人多签账户 pallet |
 | `citizenchain/runtime/governance/grandpakey-change/` | GRANDPA 密钥变更 | grandpakey-change | GRANDPA authority 变更 pallet |

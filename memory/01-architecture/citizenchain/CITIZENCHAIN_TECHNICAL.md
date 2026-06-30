@@ -152,11 +152,10 @@ citizenchain/
 - `votingengine`
 
 ### 9.2 管理员模块（`runtime/admins/`）
-- 负责创世管理员、公权机构管理员、私权机构管理员和个人多签管理员。
+- 负责公权机构管理员、私权机构管理员和个人多签管理员；固定治理机构初始管理员由创世写入，运行期治理归公权管理员模块。
 
 当前模块：
 - `admin-primitives`
-- `genesis-admins`
 - `public-admins`
 - `private-admins`
 - `personal-admins`

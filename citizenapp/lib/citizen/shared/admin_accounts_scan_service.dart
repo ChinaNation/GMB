@@ -30,7 +30,7 @@ class ScannedAdminAccount {
   /// 4 字节机构码字符串（"NRC"/"PRC"/"PRB"/"PMUL"/"CGOV" 等）。
   final String institutionCode;
 
-  /// 管理员账户类型(0=Genesis,1=Public,2=Private,3=Personal)。
+  /// 管理员账户类型(0=Public,1=Private,2=Personal)。
   final int kind;
 
   /// 管理员公钥小写 hex 列表(无 0x,32B = 64 hex)。
@@ -173,12 +173,9 @@ class AdminAccountsScanService {
 
   /// 分类管理员模块 `AdminAccounts` 双 prefix(twox128 || twox128)的 hex 形式。
   List<String> _adminAccountsPrefixHexList() {
-    return const [
-      'GenesisAdmins',
-      'PersonalAdmins',
-      'PublicAdmins',
-      'PrivateAdmins'
-    ].map(_adminAccountsPrefixHex).toList(growable: false);
+    return const ['PersonalAdmins', 'PublicAdmins', 'PrivateAdmins']
+        .map(_adminAccountsPrefixHex)
+        .toList(growable: false);
   }
 
   String _adminAccountsPrefixHex(String palletName) {

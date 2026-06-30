@@ -34,8 +34,8 @@ pub use traits::{
     ProtectedSourceChecker, RegistryAuthority, ReservedAccountGuard,
 };
 use votingengine::{
-    types::InstitutionCode, InternalVoteEngine, InternalVoteResultCallback,
-    ProposalExecutionOutcome, STATUS_REJECTED,
+    types::{fixed_governance_pass_threshold, InstitutionCode},
+    InternalVoteEngine, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_REJECTED,
 };
 
 pub use institution::types::{
@@ -236,6 +236,11 @@ pub mod pallet {
     pub type InstitutionPendingClose<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u64, OptionQuery>;
 
+    /// 创世写入的公权机构账户封存表，命中即不可注销关闭。
+    #[pallet::storage]
+    pub type ProtectedGenesisAccounts<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, (), OptionQuery>;
+
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub _phantom: core::marker::PhantomData<T>,
@@ -413,8 +418,8 @@ pub mod pallet {
         ReservedAccountName,
         /// sr25519 签名长度必须恰好为 64 字节
         MalformedSignature,
-        /// 创世初始机构(联邦注册局/治理机构/顶层政府等)永不可注销关闭
-        CannotCloseGenesisInstitution,
+        /// 创世写入的封存公权机构永不可注销关闭
+        CannotCloseProtectedInstitution,
         /// 治理机构(国储会/省储会/省储行)永不可注销关闭
         CannotCloseGovernance,
         /// 注销凭证验签失败
@@ -751,6 +756,11 @@ pub mod pallet {
             Ok(())
         }
 
+        /// 账户是否属于创世写入的封存公权机构账户。
+        pub fn is_genesis_protected(account: &T::AccountId) -> bool {
+            ProtectedGenesisAccounts::<T>::contains_key(account)
+        }
+
         /// 从任意公权机构多签账户反查其管理员账户账户地址。
         ///
         /// 个人多签由 personal-manage 自持；本函数仅服务机构账户。
@@ -759,14 +769,8 @@ pub mod pallet {
         /// 统一管理机构及其全部账户(创建/注销账户都由这套管理员授权)。
         pub fn resolve_admin_account_for_account(account: &T::AccountId) -> Option<T::AccountId> {
             let registered = AccountRegisteredCid::<T>::get(account)?;
-            // 主账户地址由 (cid_number, 主账户保留名) 确定性派生,与 InstitutionAccounts 中存储的一致;
-            // 机构本身不再重复保存 main_account。
-            let (main_account, _) = Self::derive_registered_account(
-                registered.cid_number.as_slice(),
-                RESERVED_NAME_MAIN,
-            )
-            .ok()?;
-            Some(main_account)
+            let main_name: AccountNameOf<T> = RESERVED_NAME_MAIN.to_vec().try_into().ok()?;
+            CidRegisteredAccount::<T>::get(registered.cid_number, main_name)
         }
 
         /// 从任意机构账户反查管理员更换机构码。
@@ -814,13 +818,20 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
         addr: &T::AccountId,
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<T::AccountId>> {
         let institution_code = Self::lookup_org(addr)?;
+        if institution_code == admin_primitives::FRG {
+            // 中文注释：FRG 固定阈值 3 只属于省级 5 人组内部投票；
+            // 主账户聚合 215 人仅用于身份/特权校验，不作为 215/3 多签配置。
+            return None;
+        }
         let account = pallet::Pallet::<T>::resolve_admin_account_for_account(addr)?;
         let admins =
             T::AdminAccountQuery::active_account_admins(institution_code, account.clone())?;
-        let threshold = <T as Config>::InternalVoteEngine::active_dynamic_threshold(
-            institution_code,
-            account.clone(),
-        )?;
+        let threshold = fixed_governance_pass_threshold(&institution_code).or_else(|| {
+            <T as Config>::InternalVoteEngine::active_dynamic_threshold(
+                institution_code,
+                account.clone(),
+            )
+        })?;
         let admins_len = admins.len() as u32;
         Some(primitives::multisig::MultisigConfigSnapshot {
             admins,

@@ -36,7 +36,7 @@ PG 官方二进制来源:https://www.postgresql.org/download/(解压后含 bin/l
 - **备份/PITR**:`ONCHINA_PG_WAL_ARCHIVE_DIR` 指向 NAS → 持续 WAL 归档;`citizenchain/scripts/onchina-backup.sh` cron 每日 `pg_basebackup` 全量落 NAS(默认保留 14 份);`citizenchain/scripts/onchina-restore.sh` 做 PITR 恢复(可指定 `RECOVERY_TARGET_TIME`)。温备:NAS + 第二台服务器持全量 + WAL,故障切换。
 - 联邦节点**按省管理**:每市自治节点跑自己的 OnChina+PG;联邦注册局按省给市配管理员(链上,3a/3b)。
 - **联邦注册局(FRG)每节点单省部署**(2026-06-29 起):本节点所辖省由首次 active admin 登录后绑定的 FRG 省组确定;
-  管理员成员资格「全走链读」链上 `GenesisAdmins::FederalRegistryProvinceGroups[绑定省码]`(见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
+  管理员成员资格「全走链读」链上 `PublicAdmins::FederalRegistryProvinceGroups[绑定省码]`(见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
   `federal_registry_scope`/`provinces` 本地投影表 + `seed-federal-admins` CLI **已退役**——不再播种、不再以本地表作省映射真源。
   FRG 节点不再要求安装前配置 `ONCHAIN_CREDENTIAL_SCOPE_PROVINCE_NAME`;未绑定时由冷钱包管理员登录后确认本节点省组。
 

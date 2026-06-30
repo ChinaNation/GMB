@@ -18,14 +18,18 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 
 节点程序启动后默认不启动 onchina。用户需要在节点设置页“链上中国平台”行点击“启动”并完成二次确认后，节点桌面端才拉起 onchina 子进程；退出节点程序时一并清理该子进程。设置页只启动服务，不自动打开浏览器。
 
-### 3. 机构范围 = 全部
-服务 `primitives::cid::code` 全部能发号机构。平台启动时不预设机构，管理员冷钱包登录后用 `verified_pubkey` 反查 3 个链上管理员集合容器：
+### 3. 机构范围 = 控制台准入
+服务 `primitives::cid::code` 中可进入网页控制台的机构管理员。平台启动时不预设机构，管理员冷钱包登录后用 `verified_pubkey` 反查链上 active admin 集合；是否能进入 OnChina 由机构码准入表决定。
 
-| 机构类别 | 判定 | 链上 pallet（index） |
+| 机构类别 | 判定 | 链上真源 | OnChina 准入 |
 |---|---|---|
-| 联邦注册局 FRG / 固定治理档 NRC/PRC/PRB/FRG/NJD | `== FRG` 或 `is_fixed_governance_code` | `GenesisAdmins`（12） |
-| 其它公权法人（政府/立法/监察/司法/教育/储委以外公权/注册局/公安等） | `is_public_legal_code` | `PublicAdmins`（29） |
-| 私权法人（股权/股份/有限合伙/公益/协会/私立学校等 SF*） | `is_private_legal_code` | `PrivateAdmins`（30） |
+| 联邦注册局 FRG | `== FRG` | `PublicAdmins::FederalRegistryProvinceGroups`（29） | 可登录，完整注册局能力 |
+| 市注册局 CREG | `== CREG` | `PublicAdmins::AdminAccounts`（29） | 可登录，本市业务能力 + 只读本省联邦注册局 |
+| 国家司法院 NJD | `== NJD` | `PublicAdmins::AdminAccounts`（29） | 可登录，本期只读本机构管理员 |
+| 其它公权法人（政府/立法/监察/司法/教育/公安等） | `is_public_legal_code` | `PublicAdmins::AdminAccounts`（29） | 可登录，本期只读本机构管理员 |
+| 私权法人（股权/股份/有限合伙/公益/协会/私立学校等） | `is_private_legal_code` | `PrivateAdmins::AdminAccounts`（30） | 可登录，本期只读本机构管理员 |
+| 非法人组织 | `is_unincorporated_code` | `PublicAdmins::AdminAccounts` / `PrivateAdmins::AdminAccounts` 双探测 | 可登录，本期只读本机构管理员 |
+| 国储会 / 省储会 / 省储行 | `NRC` / `PRC` / `PRB` | `PublicAdmins::AdminAccounts`（29） | 不登录 OnChina，使用节点桌面端 |
 
 个人多签 PMUL（personal-admins，idx7）**不登录控制台**：无 CID、不跑节点，纯 CitizenApp 客户端功能。
 
@@ -33,10 +37,12 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 
 - 启动只做运行健康检查：`ONCHAIN_WS_URL` 可连接、本地数据库可用、HTTPS 服务可用、平台进程健康接口可达。
 - 冷钱包签名验证后，后端用 `verified_pubkey` 扫描链上 active admin 集合，生成该管理员可登录机构候选。
+- 非 active admin 不能登录；国储会 / 省储会 / 省储行返回桌面端专用错误；个人多签返回个人多签不支持错误。
 - 本节点未绑定机构时：一个候选也必须在页面显示机构信息并二次确认绑定；多个候选由管理员选择一个后确认绑定。
 - 本节点已绑定机构后：后续登录只允许该绑定机构的 active admin；管理员被链上移除后由后台复查清退会话。
 - 本节点解绑 / 换机构：必须由当前本机会话管理员发起 `NODE_BINDING_UNBIND` 安全动作，并由冷钱包签名确认；commit 成功后 active binding 置为 `INACTIVE` 并清退本节点管理员会话。换机构不走影子兼容流程，必须先解绑，再由新机构 active admin 重新扫码登录并确认绑定。
 - 本地 `node_institution_bindings` 只保存“本节点已绑定哪个机构”的结果与缓存展示字段，不是权限真源；权限真源始终是链上 active admin 关系。
+- 登录后 UI 由后端 `capabilities` 单源下发：FRG/CREG 显示注册局业务 tab；NJD、普通公权、私权和非法人组织本期只显示“本机构管理员”只读 tab，并允许管理员在自己的行设置 / 更新 passkey。
 
 ### 5. 权限模型 = CID 码（主）+ CID 号（辅）+ 实例覆盖
 - **CID 码**（主键）：决定可见 tab / 能力基线、`admin_level`（国/省/市/镇）、所属 admin pallet。

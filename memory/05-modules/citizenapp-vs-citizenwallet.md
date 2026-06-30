@@ -45,7 +45,7 @@
 
 2026-06-26 管理员更换交易口径：
 
-- citizenapp 生产管理员更换交易时必须按机构码路由到 `PersonalAdmins(7.3)`、`GenesisAdmins(12.0)`、`PublicAdmins(29.0)` 或 `PrivateAdmins(30.0)`。
+- citizenapp 生产管理员更换交易时必须按机构码路由到 `PersonalAdmins(7.3)`、`PublicAdmins(29.0/29.2)` 或 `PrivateAdmins(30.0)`。
 - 管理员更换载荷固定为 `institution_code / account_id / admins / new_threshold`。
 - citizenwallet 公民钱包只解析上述新载荷；缺少 `new_threshold` 或尾部有多余字节的旧/错载荷直接拒绝。
 - 国储会、省储会、省储行携带固定制度阈值，联邦注册局、个人多签、公权机构和私权机构使用严格过半动态阈值。

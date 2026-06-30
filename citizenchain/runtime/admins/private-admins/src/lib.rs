@@ -489,11 +489,6 @@ pub mod pallet {
                 account.status == AdminAccountStatus::Active,
                 Error::<T>::AdminAccountNotActive
             );
-            // 中文注释：创世治理账户生命周期不能被删除。
-            ensure!(
-                !matches!(account.kind, AdminAccountKind::GenesisInstitution),
-                Error::<T>::BuiltinAdminAccountCannotClose
-            );
             let institution_code = account.institution_code;
             // 中文注释：动态多签注销完成后不保留 Closed 当前状态墓碑；
             // 同名确定性地址可在资金清空后重新走全新的注册流程。

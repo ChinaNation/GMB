@@ -594,7 +594,7 @@ void main() {
         [0x13, 0x04], // execute_safety_fund_transfer
         [0x13, 0x05], // execute_sweep_to_main
         [0x0e, 0x01], // execute_destroy
-        [0x0c, 0x01], // GenesisAdmins call_index=1 留洞不复用
+        [0x0c, 0x01], // pallet 12 已废弃，call_index=1 留洞不复用
         [0x10, 0x01], // execute_replace_grandpa_key
         [0x10, 0x02], // cancel_failed_replace_grandpa_key
       ];
@@ -610,8 +610,8 @@ void main() {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       for (final item in [
         (7, 3, 'PMUL', 2, 2, 'propose_personal_admin_set_change'),
-        (12, 0, 'FRG', 5, 3, 'propose_genesis_admin_set_change'),
-        (12, 0, 'NJD', 13, 8, 'propose_genesis_admin_set_change'),
+        (29, 0, 'FRG', 5, 3, 'propose_public_admin_set_change'),
+        (29, 0, 'NJD', 13, 8, 'propose_public_admin_set_change'),
         (29, 0, 'CGOV', 2, 2, 'propose_public_admin_set_change'),
         (30, 0, 'SFLP', 2, 2, 'propose_private_admin_set_change'),
       ]) {
@@ -734,7 +734,7 @@ void main() {
         0x47, 0x4D, 0x42, 0x18,
         ...account,
         ...InstitutionCode.codeBytes('CGOV'), // 机构账户码(取代旧 org=5)
-        0x01, // kind = PublicInstitution
+        0x00, // kind = PublicInstitution
         ...pubkey,
         1, 0, 0, 0, 0, 0, 0, 0, // timestamp u64 LE
         ...List<int>.filled(16, 0),

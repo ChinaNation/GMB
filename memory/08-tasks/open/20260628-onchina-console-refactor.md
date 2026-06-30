@@ -25,8 +25,13 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 
 ## 链端事实（已核实，决定 R3 可纯在 registry 内交付）
 
-- NRC/PRC/PRB（固定治理档）→ `GenesisAdmins`（idx12，创世内置）。
+- FRG（联邦注册局）→ `PublicAdmins::FederalRegistryProvinceGroups`（idx29，按省组读取）。
+- CREG（市注册局）→ `PublicAdmins::AdminAccounts`（idx29）。
+- NJD（国家司法院）→ `PublicAdmins::AdminAccounts`（idx29），允许登录 OnChina，本期只读“本机构管理员”。
+- NRC/PRC/PRB（国储会 / 省储会 / 省储行）→ 链上属 `PublicAdmins`，但产品边界为节点桌面端，不登录 OnChina 网页控制台。
+- 其它公权机构 → `PublicAdmins::AdminAccounts`（idx29），允许登录 OnChina，本期只读“本机构管理员”。
 - 私权公司 → `PrivateAdmins`（idx30，已真实接线：AdminAccounts + `propose_admin_set_change` 内部投票 + organization-manage `AdminAccountLifecycle`）。
+- 非法人组织 → 按 [PublicAdmins, PrivateAdmins] 顺序双探测，允许登录 OnChina，本期只读“本机构管理员”。
 - PMUL（个人多签）→ `PersonalAdmins`（idx7），**控制台不收**，CitizenApp 客户端功能。
 - 四 pallet 经 `AdminAccountQuery` 统一查询，registry 零链端改动即可服务全机构。
 
@@ -67,7 +72,7 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 
 - 每卡落地后 `cargo build -p registry`（卡 17 后 `-p onchina`）+ 相关单测通过。
 - 三档鉴权穷尽匹配，新增 action 漏标分档则编译失败。
-- `verified_pubkey` 能正确反查 FRG 省组/公权/私权机构候选；PMUL 拒入；未绑定节点必须二次确认绑定，已绑定节点只允许绑定机构 active admin 登录。
+- `verified_pubkey` 能正确反查 FRG 省组、CREG、公权、私权和非法人机构候选；NJD 可登录；NRC/PRC/PRB 返回桌面端专用错误；PMUL 拒入；未绑定节点必须二次确认绑定，已绑定节点只允许绑定机构 active admin 登录。
 - 前后端身份字段对齐，无旧二值缓存读空。
 - 零残留：无 `is_federal`/`RegistryOrgCode`/双角色死分支。
 
@@ -77,6 +82,8 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 - [x] 链端 4 pallet 接线核实
 - [x] 主任务卡创建
 - [x] 01 登录反查 + 节点绑定（chain_runtime.rs：`find_active_admin_memberships(verified_pubkey)` 扫描 FRG 省组/PublicAdmins/PrivateAdmins；auth login：未绑定返回候选，确认后写 active binding；已绑定按绑定机构复查；个人/PMUL拒入）
+- [x] 01-准入口径修正（2026-06-30）：NJD 放行进入 OnChina；NRC/PRC/PRB 改为桌面端专用错误拒入；PMUL 保持个人多签错误拒入；非法人组织按 Public/Private 双探测；普通机构登录后只显示“本机构管理员”只读 tab，管理员只能在自己的行设置 / 更新 passkey。
+- [x] 01-准入口径验收（2026-06-30）：`cargo test --manifest-path citizenchain/Cargo.toml -p onchina` 76 passed；`npm --prefix citizenchain/onchina/frontend run build` 通过；`https://onchina.local:8964` 真实 HTTP 验收因当前本机未启动 OnChina 服务、8964 无监听且 `onchina.local` 不可解析而未完成。
 - [x] 01-补 节点解绑 / 换机构闭环：新增 `NODE_BINDING_UNBIND` 冷签安全动作，当前本机会话管理员 prepare，冷钱包 active admin 签名 commit，成功后 active binding 置 `INACTIVE` 并删除本节点所有管理员 session；换机构必须解绑后重新扫码绑定新机构。
 - [x] 02 身份二值→多值（registry_org_code→institution_code+admin_level）：6 DTO + AdminUser + repo 56处 + db schema(列改名迁移+去CHECK+索引) + onchain_gate + 12 consumer 文件共 160 处；cargo check+test 绿(53 passed)；零残留
 - [x] 03 auth 位移（用户改主意执行）：`git mv src/admins → src/auth`;全库 `crate::admins::`→`crate::auth::`(词边界避开 city_registry_admins,~51 处)+ main.rs `mod admins`→`mod auth` 与 bare `admins::`→`auth::`;58 测试绿

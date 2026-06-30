@@ -1,11 +1,11 @@
-/// 创世治理机构静态账户表 + 联合投票常量 + 反向查找入口。
+/// 固定治理机构静态账户表 + 联合投票常量 + 反向查找入口。
 ///
 /// 中文注释：
 /// - 通用类型 `InstitutionInfo` / `InstitutionAccounts` / `OrgType` + 身份编码工具
 ///   `institutionIdentityToAccountId` / `registeredAccountIdentity` 等在
 ///   `lib/citizen/shared/institution_info.dart`。
 /// - 联合投票只使用国储会/省储会/省储行三类储备治理机构。
-/// - `kGenesisInstitutions` 保存其它 GenesisAdmins 创世机构账户，不进入治理 tab。
+/// - `kFixedGovernanceInstitutions` 保存不进入治理 tab 的其它固定治理机构账户。
 library;
 
 import 'package:citizenapp/citizen/shared/institution_info.dart';
@@ -27,7 +27,7 @@ InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
     ...kNationalCouncil,
     ...kProvincialCouncils,
     ...kProvincialBanks,
-    ...kGenesisInstitutions,
+    ...kFixedGovernanceInstitutions,
   ]) {
     final encoded = institutionIdentityToAccountId(
       inst.cidNumber,

@@ -49,7 +49,7 @@ void main() {
       final accountId = AdminAccountIdCodec.fromAccountHex('11' * 32);
       final data = Uint8List.fromList([
         ...codeBytes('PRC'), // institution_code
-        1, // kind = PublicInstitution(非个人多签 → Vec<AdminProfile>)
+        0, // kind = PublicInstitution(非个人多签 → Vec<AdminProfile>)
         0x08, // Compact count = 2
         // admin 0:实名资料齐全
         ...List<int>.filled(32, 0xaa),
@@ -83,12 +83,12 @@ void main() {
       expect(decoded.statusLabel, '已激活');
     });
 
-    test('decodes personal-multisig AdminAccount as bare accounts (kind=3)',
+    test('decodes personal-multisig AdminAccount as bare accounts (kind=2)',
         () {
       final accountId = AdminAccountIdCodec.fromAccountHex('11' * 32);
       final data = Uint8List.fromList([
         ...codeBytes('PMUL'),
-        3, // kind = PersonalMultisig → 裸 Vec<AccountId>
+        2, // kind = PersonalMultisig → 裸 Vec<AccountId>
         0x08, // count = 2
         ...List<int>.filled(32, 0xaa),
         ...List<int>.filled(32, 0xbb),
@@ -121,13 +121,13 @@ void main() {
 
       final personalCall = AdminSetChangeCallCodec.build(
         institutionCode: 'PMUL',
-        adminKind: 3,
+        adminKind: 2,
         accountId: accountId,
         admins: ['22' * 32, '33' * 32],
         newThreshold: 2,
       );
-      expect(personalCall[0], AdminSetChangeCallCodec.palletIndexForKind(3));
-      expect(personalCall[1], AdminSetChangeCallCodec.callIndexForKind(3));
+      expect(personalCall[0], AdminSetChangeCallCodec.palletIndexForKind(2));
+      expect(personalCall[1], AdminSetChangeCallCodec.callIndexForKind(2));
       expect(personalCall.sublist(2, 6), codeBytes('PMUL'));
     });
 
@@ -150,7 +150,7 @@ void main() {
       final account = AdminAccountState(
         accountHex: '11' * 32,
         institutionCode: 'PMUL',
-        kind: 3,
+        kind: 2,
         profiles: [
           AdminProfile(account: 'aa' * 32),
           AdminProfile(account: 'bb' * 32)
@@ -204,7 +204,7 @@ void main() {
 
       expect(
         () => AdminSetValidation.validate(
-          account: account(institutionCode: 'CGOV', kind: 3),
+          account: account(institutionCode: 'CGOV', kind: 2),
           proposerPubkeyHex: 'aa' * 32,
           admins: ['aa' * 32, 'cc' * 32],
           newThreshold: 2,
@@ -213,7 +213,7 @@ void main() {
       );
       expect(
         () => AdminSetValidation.validate(
-          account: account(institutionCode: 'PMUL', kind: 2),
+          account: account(institutionCode: 'PMUL', kind: 1),
           proposerPubkeyHex: 'aa' * 32,
           admins: ['aa' * 32, 'cc' * 32],
           newThreshold: 2,
@@ -231,7 +231,7 @@ void main() {
       );
       expect(
         AdminSetValidation.validate(
-          account: account(institutionCode: 'CGOV', kind: 1),
+          account: account(institutionCode: 'CGOV', kind: 0),
           proposerPubkeyHex: 'aa' * 32,
           admins: ['aa' * 32, 'cc' * 32],
           newThreshold: 2,
@@ -240,7 +240,7 @@ void main() {
       );
       expect(
         AdminSetValidation.validate(
-          account: account(institutionCode: 'UNIN', kind: 2),
+          account: account(institutionCode: 'UNIN', kind: 1),
           proposerPubkeyHex: 'aa' * 32,
           admins: ['aa' * 32, 'cc' * 32],
           newThreshold: 2,
@@ -249,7 +249,7 @@ void main() {
       );
       expect(
         AdminSetValidation.validate(
-          account: account(institutionCode: 'PMUL', kind: 3),
+          account: account(institutionCode: 'PMUL', kind: 2),
           proposerPubkeyHex: 'aa' * 32,
           admins: ['aa' * 32, 'cc' * 32],
           newThreshold: 2,
@@ -258,7 +258,7 @@ void main() {
       );
     });
 
-    test('validates fixed genesis governance counts and thresholds', () {
+    test('validates fixed governance counts and thresholds', () {
       String key(int byte) => byte.toRadixString(16).padLeft(2, '0') * 32;
 
       AdminAccountState fixedAccount({

@@ -69,7 +69,7 @@ PersonalAdmins storage：
 - `personal_manage_service.dart` 必须使用 `signAndSubmitInBlock()` 等待入块，并从
   `System.Events` 确认 `PersonalAdmins.PersonalAccountProposed(event_index=0)`。
 - 如果入块区块包含 `System.ExtrinsicFailed`，必须优先显示真实模块错误，例如
-  `PersonalAdmins.InsufficientAmount` 或 `GenesisAdmins.InstitutionAlreadyExists`，
+  `PersonalAdmins.InsufficientAmount` 或 `PublicAdmins.InstitutionAlreadyExists`，
   不能只提示“未找到 PersonalAccountProposed 事件”。
 - 本地 `PersonalAccountEntity` 和 `PersonalAccountProposalEntity` 只能在确认事件后写入，
   `proposalId` 必须来自链上事件，不允许预测 `VotingEngine.NextProposalId`。
