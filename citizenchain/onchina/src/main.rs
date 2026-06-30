@@ -94,20 +94,6 @@ fn citizen_status_text(status: &CitizenStatus) -> &'static str {
     }
 }
 
-fn citizen_status_from_text(status: &str) -> CitizenStatus {
-    match status {
-        "NORMAL" => CitizenStatus::Normal,
-        _ => CitizenStatus::Revoked,
-    }
-}
-
-fn citizen_bind_status_text(status: &CitizenBindStatus) -> &'static str {
-    match status {
-        CitizenBindStatus::Pending => "PENDING",
-        CitizenBindStatus::Bound => "BOUND",
-    }
-}
-
 fn institution_category_text(category: crate::cid::InstitutionCategory) -> &'static str {
     match category {
         crate::cid::InstitutionCategory::GovInstitution => "GOV_INSTITUTION",
@@ -190,32 +176,29 @@ fn citizen_region_names(
 
 fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
     let (residence_province_name, residence_city_name, residence_town_name) = citizen_region_names(
-        record
-            .residence_province_code
-            .as_deref()
-            .or(record.province_code.as_deref()),
-        record
-            .residence_city_code
-            .as_deref()
-            .or(record.city_code.as_deref()),
-        record.residence_town_code.as_deref(),
+        Some(record.residence_province_code.as_str()),
+        Some(record.residence_city_code.as_str()),
+        Some(record.residence_town_code.as_str()),
     );
     let (birth_province_name, birth_city_name, birth_town_name) = citizen_region_names(
-        record.birth_province_code.as_deref(),
-        record.birth_city_code.as_deref(),
-        record.birth_town_code.as_deref(),
+        Some(record.birth_province_code.as_str()),
+        Some(record.birth_city_code.as_str()),
+        Some(record.birth_town_code.as_str()),
     );
     CitizenRow {
         id: record.id,
-        wallet_pubkey: record.wallet_pubkey.clone(),
-        wallet_address: record.wallet_address.clone(),
         cid_number: record.cid_number.clone(),
+        passport_no: record.passport_no.clone(),
+        citizen_full_name: record.citizen_full_name.clone(),
+        citizen_sex: record.citizen_sex.clone(),
+        citizen_birth_date: record.citizen_birth_date.clone(),
+        wallet_address: record.wallet_address.clone(),
         citizen_status: record.citizen_status.clone(),
         voting_eligible: record.voting_eligible,
         vote_status: record.computed_vote_status(),
         identity_status: record.computed_identity_status(),
-        valid_from: record.archive_valid_from.clone(),
-        valid_until: record.archive_valid_until.clone(),
+        passport_valid_from: record.passport_valid_from.clone(),
+        passport_valid_until: record.passport_valid_until.clone(),
         status_updated_at: record.status_updated_at,
         residence_province_code: record.residence_province_code.clone(),
         residence_city_code: record.residence_city_code.clone(),
@@ -229,8 +212,10 @@ fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
         birth_province_name,
         birth_city_name,
         birth_town_name,
-        election_scope_level: record.election_scope_level.clone(),
-        bind_status: record.bind_status(),
+        archive_hash: record.archive_hash.clone(),
+        onchain_tx_hash: record.onchain_tx_hash.clone(),
+        onchain_block_number: record.onchain_block_number,
+        onchain_at: record.onchain_at,
     }
 }
 
@@ -532,48 +517,21 @@ impl Db {
         conn: &mut postgres::Client,
         record: &CitizenRecord,
     ) -> Result<(), String> {
-        let Some(cid_number) = record
-            .cid_number
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_string)
-        else {
-            return Ok(());
-        };
-        let province_code = record
-            .province_code
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_string)
-            .unwrap_or_else(|| Self::scope_codes_from_cid(cid_number.as_str()).0);
-        let city_code = record
-            .city_code
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_string)
-            .or_else(|| Self::scope_codes_from_cid(cid_number.as_str()).1)
-            .unwrap_or_else(|| "000".to_string());
+        let cid_number = record.cid_number.trim().to_string();
+        if cid_number.is_empty() {
+            return Err("citizen cid_number is required".to_string());
+        }
+        let province_code = record.province_code.trim().to_string();
+        let city_code = record.city_code.trim().to_string();
+        if province_code.is_empty() || city_code.is_empty() {
+            return Err("citizen province_code/city_code is required".to_string());
+        }
         let status = if matches!(record.computed_identity_status(), CitizenStatus::Normal) {
             "ACTIVE"
         } else {
             "REVOKED"
         };
-        let citizen_status = record
-            .citizen_status
-            .as_ref()
-            .map(citizen_status_text)
-            .unwrap_or("REVOKED");
-        let bind_status = citizen_bind_status_text(&record.bind_status());
-        let election_scope_level = record
-            .election_scope_level
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .unwrap_or("PROVINCE")
-            .to_string();
+        let citizen_status = citizen_status_text(&record.citizen_status);
         let id = i64::try_from(record.id).map_err(|_| "citizen id exceeds i64".to_string())?;
         Self::upsert_target_id_row(
             conn,
@@ -613,20 +571,34 @@ impl Db {
         .map_err(|e| format!("upsert citizen subject failed: {e}"))?;
         conn.execute(
             "INSERT INTO citizens (
-                cid_number, province_code, city_code, id, wallet_pubkey, wallet_address,
-                citizen_status, voting_eligible, valid_from, valid_until, status_updated_at,
-                residence_province_code, residence_city_code, residence_town_code, birth_province_code, birth_city_code,
-                birth_town_code, election_scope_level, bind_status, bound_at, bound_by, created_at
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+                cid_number, passport_no, citizen_full_name, citizen_sex, citizen_birth_date,
+                province_code, city_code, id, wallet_pubkey, wallet_address, wallet_sig_alg,
+                wallet_verified_at, citizen_status, voting_eligible, passport_valid_from,
+                passport_valid_until, status_updated_at, residence_province_code,
+                residence_city_code, residence_town_code, birth_province_code, birth_city_code,
+                birth_town_code, archive_hash, onchain_tx_hash, onchain_block_number, onchain_at,
+                created_by, created_at, updated_by, updated_at
+             ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                $11, $12, $13, $14, $15, $16, $17, $18, $19,
+                $20, $21, $22, $23, $24, $25, $26, $27, $28,
+                $29, $30, $31
+             )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
+                passport_no = EXCLUDED.passport_no,
+                citizen_full_name = EXCLUDED.citizen_full_name,
+                citizen_sex = EXCLUDED.citizen_sex,
+                citizen_birth_date = EXCLUDED.citizen_birth_date,
                 city_code = EXCLUDED.city_code,
                 id = EXCLUDED.id,
                 wallet_pubkey = EXCLUDED.wallet_pubkey,
                 wallet_address = EXCLUDED.wallet_address,
+                wallet_sig_alg = EXCLUDED.wallet_sig_alg,
+                wallet_verified_at = EXCLUDED.wallet_verified_at,
                 citizen_status = EXCLUDED.citizen_status,
                 voting_eligible = EXCLUDED.voting_eligible,
-                valid_from = EXCLUDED.valid_from,
-                valid_until = EXCLUDED.valid_until,
+                passport_valid_from = EXCLUDED.passport_valid_from,
+                passport_valid_until = EXCLUDED.passport_valid_until,
                 status_updated_at = EXCLUDED.status_updated_at,
                 residence_province_code = EXCLUDED.residence_province_code,
                 residence_city_code = EXCLUDED.residence_city_code,
@@ -634,22 +606,29 @@ impl Db {
                 birth_province_code = EXCLUDED.birth_province_code,
                 birth_city_code = EXCLUDED.birth_city_code,
                 birth_town_code = EXCLUDED.birth_town_code,
-                election_scope_level = EXCLUDED.election_scope_level,
-                bind_status = EXCLUDED.bind_status,
-                bound_at = EXCLUDED.bound_at,
-                bound_by = EXCLUDED.bound_by,
-                created_at = EXCLUDED.created_at",
+                archive_hash = EXCLUDED.archive_hash,
+                onchain_tx_hash = EXCLUDED.onchain_tx_hash,
+                onchain_block_number = EXCLUDED.onchain_block_number,
+                onchain_at = EXCLUDED.onchain_at,
+                updated_by = EXCLUDED.updated_by,
+                updated_at = EXCLUDED.updated_at",
             &[
                 &cid_number,
+                &record.passport_no,
+                &record.citizen_full_name,
+                &record.citizen_sex,
+                &record.citizen_birth_date,
                 &province_code,
                 &city_code,
                 &id,
                 &record.wallet_pubkey,
                 &record.wallet_address,
+                &record.wallet_sig_alg,
+                &record.wallet_verified_at,
                 &citizen_status,
                 &record.voting_eligible,
-                &record.archive_valid_from,
-                &record.archive_valid_until,
+                &record.passport_valid_from,
+                &record.passport_valid_until,
                 &record.status_updated_at,
                 &record.residence_province_code,
                 &record.residence_city_code,
@@ -657,14 +636,33 @@ impl Db {
                 &record.birth_province_code,
                 &record.birth_city_code,
                 &record.birth_town_code,
-                &election_scope_level,
-                &bind_status,
-                &record.bound_at,
-                &record.bound_by,
+                &record.archive_hash,
+                &record.onchain_tx_hash,
+                &record.onchain_block_number,
+                &record.onchain_at,
+                &record.created_by,
                 &record.created_at,
+                &record.updated_by,
+                &record.updated_at,
             ],
         )
         .map_err(|e| format!("upsert citizens failed: {e}"))?;
+        conn.execute(
+            "INSERT INTO passport_numbers (passport_no, cid_number, province_code, city_code, created_at)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (passport_no) DO UPDATE SET
+                cid_number = EXCLUDED.cid_number,
+                province_code = EXCLUDED.province_code,
+                city_code = EXCLUDED.city_code",
+            &[
+                &record.passport_no,
+                &cid_number,
+                &province_code,
+                &city_code,
+                &record.created_at,
+            ],
+        )
+        .map_err(|e| format!("upsert passport number failed: {e}"))?;
         Ok(())
     }
 
@@ -745,23 +743,25 @@ impl Db {
                 .map_err(|_| "page_size too large".to_string())?;
             let rows = conn
                 .query(
-                    "SELECT COALESCE(c.id, 0), c.wallet_pubkey, c.wallet_address,
-                                    c.cid_number, c.citizen_status,
-                                    c.voting_eligible, c.valid_from, c.valid_until,
-                                    c.status_updated_at, c.bind_status, c.province_code, c.city_code,
-                                    c.residence_province_code, c.residence_city_code, c.residence_town_code,
-                                    c.birth_province_code, c.birth_city_code, c.birth_town_code,
-                                    c.election_scope_level, c.bound_at, c.bound_by, c.created_at
+                    "SELECT COALESCE(c.id, 0), c.cid_number, c.passport_no, c.citizen_full_name,
+                                    c.citizen_sex, c.citizen_birth_date, c.wallet_pubkey, c.wallet_address,
+                                    c.wallet_sig_alg, c.wallet_verified_at, c.citizen_status, c.voting_eligible,
+                                    c.passport_valid_from, c.passport_valid_until, c.status_updated_at,
+                                    c.province_code, c.city_code, c.residence_province_code, c.residence_city_code,
+                                    c.residence_town_code, c.birth_province_code, c.birth_city_code, c.birth_town_code,
+                                    c.archive_hash, c.onchain_tx_hash, c.onchain_block_number, c.onchain_at,
+                                    c.created_by, c.created_at, c.updated_by, c.updated_at
                              FROM citizens c
                              JOIN subjects s
                                ON s.province_code = c.province_code
                               AND s.cid_number = c.cid_number
                               AND s.kind = 'CITIZEN'
-                             WHERE c.bind_status = 'BOUND'
-                               AND ($1::text IS NULL OR c.province_code = $1)
+                             WHERE ($1::text IS NULL OR c.province_code = $1)
                                AND ($2::text IS NULL OR c.city_code = $2)
                                AND (
                                     c.cid_number = $3
+                                    OR c.passport_no = $3
+                                    OR c.citizen_full_name = $3
                                     OR lower(c.wallet_pubkey) = lower($3)
                                     OR lower(c.wallet_address) = lower($3)
                                )
@@ -785,32 +785,8 @@ impl Db {
             let mut output = Vec::with_capacity(rows.len());
             for row in rows {
                 let id_i64: i64 = row.get(0);
-                let created_at: DateTime<Utc> = row.get(21);
-                let record = CitizenRecord {
-                    id: u64::try_from(id_i64).unwrap_or(0),
-                    wallet_pubkey: row.get(1),
-                    wallet_address: row.get(2),
-                    cid_number: row.get(3),
-                    citizen_status: Some(citizen_status_from_text(
-                        row.get::<_, String>(4).as_str(),
-                    )),
-                    voting_eligible: row.get(5),
-                    archive_valid_from: row.get(6),
-                    archive_valid_until: row.get(7),
-                    status_updated_at: row.get(8),
-                    province_code: row.get(10),
-                    city_code: row.get(11),
-                    residence_province_code: row.get(12),
-                    residence_city_code: row.get(13),
-                    residence_town_code: row.get(14),
-                    birth_province_code: row.get(15),
-                    birth_city_code: row.get(16),
-                    birth_town_code: row.get(17),
-                    election_scope_level: row.get(18),
-                    bound_at: row.get(19),
-                    bound_by: row.get(20),
-                    created_at,
-                };
+                let created_at: DateTime<Utc> = row.get(28);
+                let record = crate::domains::citizens::admin_entry::citizen_record_from_row(&row);
                 output.push((citizen_row_from_record(&record), created_at, id_i64));
             }
             Ok(page_from_rows(output, page_size))
@@ -2681,6 +2657,10 @@ fn main() {
                 get(cid::china::admin::admin_china_cities),
             )
             .route(
+                "/api/v1/admin/cid/china/towns",
+                get(cid::china::admin::admin_china_towns),
+            )
+            .route(
                 "/api/v1/admin/address/names",
                 get(domains::address::handler::list_address_names),
             )
@@ -2722,15 +2702,15 @@ fn main() {
         // domains::citizens::chain_joint_vote 和 domains::citizens::chain_vote。
         // CitizenApp 自有功能(钱包交易索引、电子护照状态查询)继续留 indexer / citizens 模块。
         let app_routes = Router::new()
-            // ── 联合投票:获取公民人数快照凭证 ──
+            // ── 联合投票:查询本地公民人数,链端快照由 citizen-identity 负责 ──
             .route(
                 "/api/v1/app/voters/count",
                 get(domains::citizens::chain_joint_vote::app_voters_count),
             )
-            // ── 公民投票凭证签发 ──
+            // ── 公民投票:提交交易前查询本地档案资格,链端资格由 citizen-identity 负责 ──
             .route(
-                "/api/v1/app/vote/credential",
-                post(domains::citizens::chain_vote::app_vote_credential),
+                "/api/v1/app/vote/eligibility",
+                post(domains::citizens::chain_vote::app_vote_eligibility),
             )
             // ── 钱包交易索引(CitizenApp 自有,与链交互无关) ──
             .route(

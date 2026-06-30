@@ -188,11 +188,11 @@ citizenchain/
 - `onchain-transaction`
 
 ### 9.6 其他模块（`runtime/otherpallet/`）
-- 负责 CID 链上绑定 / 资格校验、PoW 难度调整等基础能力。
+- 负责链上公民身份、人口统计、PoW 难度调整等基础能力。
 
 当前模块：
 - `pow-difficulty`
-- `cid-system`
+- `citizen-identity`
 
 ## 10. 桌面节点软件（`node/`）
 
@@ -266,7 +266,7 @@ citizenchain/
 
 ### 12.4 其他链上模块
 - `runtime/otherpallet/pow-difficulty/POW_DIFFICULTY_TECHNICAL.md`
-- `runtime/otherpallet/cid-system/CID_SYSTEM_TECHNICAL.md`
+- `runtime/otherpallet/citizen-identity/CITIZEN_IDENTITY_TECHNICAL.md`
 
 ### 12.5 桌面节点 UI
 - `memory/05-modules/citizenchain/node/home/HOME_TECHNICAL.md`

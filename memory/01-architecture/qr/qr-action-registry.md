@@ -19,7 +19,7 @@
 | a | 名称 | payload | 签名字节 | 生成方 | 扫码/签名方 | 注释 |
 |---:|---|---|---|---|---|---|
 | 1 | `login` | `system|system_signature` UTF-8 | 原文 | OnChina | CitizenWallet | 登录签名确认 |
-| 2 | `citizen_bind` | `cid-citizen-bind-v1|...` UTF-8 | 原文 | OnChina | CitizenApp | 电子护照绑定 |
+| 2 | `citizen_identity` | `citizen-identity-v1|...` UTF-8 | 原文 | OnChina | CitizenApp | 电子护照身份确认 |
 | 3 | `onchina_admin_action` / `QR_ACTION_ONCHINA_ADMIN` | `onchina_admin_governance` canonical JSON UTF-8 | 原文 | OnChina | CitizenWallet | 链上中国平台管理员治理冷钱包确认 |
 | 5 | `activate_admin_account` | `GMB || 0x18` 二进制 payload | 原文 | citizenchain node / CitizenApp | CitizenWallet | 管理员激活 |
 | 6 | `decrypt_admin` | `GMB || 0x19` 二进制 payload | 原文 | citizenchain node | CitizenWallet | 清算行管理员解密 |

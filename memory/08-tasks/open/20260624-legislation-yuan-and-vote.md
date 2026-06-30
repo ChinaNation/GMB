@@ -46,8 +46,8 @@
 - **所有 `votingengine::Config` 实现(runtime + 各 pallet 测试 mock 约 12 处)补 3 个关联类型;mock 一律装 `()`**(机械)。
 
 ### 2b. 新 sub-pallet `votingengine/legislation-vote`(pallet_index=28)
-- `Config: votingengine::Config`,复用核心 Proposals/allocate_proposal_id/AdminSnapshot/snapshot_institution_admins/schedule_proposal_expiry/set_status_and_emit/register_proposal_data/PopulationSnapshotVerifier/CidEligibility。
-- 本地账本:`LegMeta`(vote_type/mode/houses/current_house/referendum_required/scope)、`LegHouseTally`+`LegHouseVotesByAdmin`、`LegReferendumTally`+`LegReferendumVotesByBindingId`、`UsedSnapshotNonce`+`PendingPopulationSnapshots`。
+- `Config: votingengine::Config`,复用核心 Proposals/allocate_proposal_id/AdminSnapshot/snapshot_institution_admins/schedule_proposal_expiry/set_status_and_emit/register_proposal_data/CitizenIdentityReader。
+- 本地账本:`LegMeta`(vote_type/mode/houses/current_house/referendum_required/scope)、`LegHouseTally`+`LegHouseVotesByAdmin`、`LegReferendumTally`+`LegReferendumVotesByAccount`、`PendingPopulationSnapshots`。
 - 三模式:单院(市)/ 两院顺序(众→参;教委会→参议会)/ 特别案(内部全过→强制公投)。
 - extrinsics:`prepare_population_snapshot`(特别案)/ `cast_house_vote` / `cast_referendum_vote`。
 - trait impl:`LegislationVoteEngine`(create)、`LegislationProposalFinalizer`、`LegislationCleanupHandler`。
@@ -66,7 +66,7 @@
 ### 第2步落地进度
 
 - [x] **Phase A 核心扩展(2026-06-24 完成)**:`votingengine/src/types.rs`(PROPOSAL_KIND_LEGISLATION=2 / STAGE_LEG_HOUSE=10 / STAGE_LEG_REFERENDUM=11 / LEG_VOTE_* + `legislation_house_final_passed`/`legislation_house_decided`/`legislation_referendum_final_passed` 纯函数 + PendingCleanupStage 两阶段);`traits.rs`(LegislationProposalFinalizer / LegislationCleanupHandler / LegislationVoteResultCallback + `()` 默认);`lib.rs`(Config +3 类型 + 两处 finalize 按 stage 加臂 + 三处回调按 kind 加臂 + 清理状态机插 legislation 两阶段 + FinalCleanup 补 cleanup_legislation_terminal);**11 处 `votingengine::Config` 实现(runtime + 10 mock)补 3 类型暂装 `()`**。验收:`cargo check -p votingengine`/`-p citizenchain` 通过,legislation-yuan 14 + grandpakey 17 测试无回归(行为中性,legislation kind 尚未被创建)。
-- [x] **Phase B 新 sub-pallet `votingengine/legislation-vote`(2026-06-24 完成)**:Cargo.toml + src/{lib.rs,weights.rs,tests/}。本地账本 LegMeta/LegHouseTally/LegHouseVotesByAdmin/LegReferendumTally/LegReferendumVotesByBindingId/UsedSnapshotNonce/PendingPopulationSnapshots;三 extrinsic(prepare_population_snapshot/cast_house_vote/cast_referendum_vote);三模式(单院/两院顺序众→参/特别案强制公投);实现 LegislationVoteEngine(create,院携带)+ LegislationProposalFinalizer + LegislationCleanupHandler;MAX_HOUSES 单一源 votingengine。
+- [x] **Phase B 新 sub-pallet `votingengine/legislation-vote`(2026-06-24 完成)**:Cargo.toml + src/{lib.rs,weights.rs,tests/}。本地账本 LegMeta/LegHouseTally/LegHouseVotesByAdmin/LegReferendumTally/LegReferendumVotesByAccount/PendingPopulationSnapshots;三 extrinsic(prepare_population_snapshot/cast_house_vote/cast_referendum_vote);三模式(单院/两院顺序众→参/特别案强制公投);实现 LegislationVoteEngine(create,院携带)+ LegislationProposalFinalizer + LegislationCleanupHandler;MAX_HOUSES 单一源 votingengine。
 - [x] **Phase C legislation-yuan 院携带(2026-06-24 完成)**:Law/LawProposalSummary `owner_body+owner_code` → `houses: HousesOf`(单一真源,houses[0]=发起院);propose_enact_law 入参 houses;ensure_legislator 校验 houses[0];dispatch_to_engine 传 houses;新增 EmptyHouses 错误;加 `impl LegislationVoteResultCallback for Pallet`(回调接 apply_legislation_vote_result);测试 houses() helper。
 - [x] **Phase D runtime 装配(2026-06-24 完成)**:construct_runtime 注册 LegislationVote idx=28;configs `legislation_yuan::Config::LegislationVoteEngine = LegislationVote` + `votingengine::Config` 三类型改接(LegislationVoteResultCallback=LegislationYuan / LegislationFinalizer=LegislationVote / LegislationCleanup=LegislationVote)+ impl legislation_vote::Config;费率 `RuntimeCall::LegislationVote(_) => VoteFlat`;Cargo.toml/workspace/std 注册。
 

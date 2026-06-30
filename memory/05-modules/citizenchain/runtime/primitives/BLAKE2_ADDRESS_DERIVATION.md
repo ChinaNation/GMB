@@ -43,12 +43,12 @@ CID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 | op_tag | 常量名 | 用途 |
 |---|---|---|
-| `0x10` | `OP_SIGN_BIND` | 公民身份绑定签名 |
-| `0x11` | `OP_SIGN_VOTE` | 公民投票签名 |
-| `0x12` | `OP_SIGN_POP` | 人口快照签名 |
-| `0x13` | `OP_SIGN_INST` | CID 机构登记签名 |
-| `0x14` | `OP_SIGN_CREATE` | 注册多签离线聚合创建（预留） |
-| `0x15` | `OP_SIGN_TRANSFER` | 多签转账离线聚合（预留） |
+| `0x10` | `OP_SIGN_CITIZEN_IDENTITY` | 公民身份上链确认签名 |
+| `0x13` | `OP_SIGN_INST` | 机构登记签名 |
+| `0x14` | `OP_SIGN_DEREGISTER` | 机构/账户注销凭证签名 |
+| `0x15` | `OP_SIGN_L3_PAY` | L3 支付签名 |
+| `0x16` | `OP_SIGN_OFFCHAIN_BATCH` | 链下批次结算签名 |
+| `0x17` | `OP_SIGN_L2_ACK` | L2 确认签名 |
 
 ## 设计理由
 

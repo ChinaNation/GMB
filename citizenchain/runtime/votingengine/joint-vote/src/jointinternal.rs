@@ -11,7 +11,7 @@ use frame_support::{
     pallet_prelude::DispatchResult,
     storage::{with_transaction, TransactionOutcome},
 };
-use sp_runtime::traits::{Hash, SaturatedConversion, Saturating};
+use sp_runtime::traits::{SaturatedConversion, Saturating};
 use sp_runtime::DispatchError;
 
 use primitives::cid::china::china_cb::CHINA_CB;
@@ -24,14 +24,14 @@ use primitives::count_const::{
 use votingengine::{
     pallet::{Proposals, ProposalsByExpiry},
     types::{fixed_governance_pass_threshold, InstitutionCode, NRC, PRB, PRC},
-    InternalAdminProvider, InternalProposalMutexKind, PopulationSnapshotVerifier, Proposal,
-    PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
+    CitizenIdentityReader, InternalAdminProvider, InternalProposalMutexKind, PopulationScope,
+    Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
 use super::pallet::{
     Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
     JointVotesByInstitution, Pallet, PendingPopulationSnapshots, PreparedPopulationSnapshot,
-    UsedPopulationSnapshotNonce,
+    ReferendumScopes,
 };
 use super::{decode_account, institution_info, is_joint_unanimous, nrc_account};
 
@@ -148,69 +148,30 @@ impl<T: Config> Pallet<T> {
 
     /// 准备联合投票人口快照。
     ///
-    /// 中文注释：这是投票引擎内部能力。业务模块不再传快照材料，只能在发起联合提案前由管理员调用本入口，让 joint-vote 验签、去重并缓存总人数。
+    /// 中文注释：这是投票引擎内部能力。业务模块不传快照材料，只能在发起联合提案前由管理员调用本入口，让 joint-vote 从链上身份模块读取总人数。
     pub fn do_prepare_population_snapshot(
         who: T::AccountId,
-        eligible_total: u64,
-        snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
-        signature: votingengine::pallet::VoteSignatureOf<T>,
-        issuer_cid_number: &[u8],
-        issuer_main_account: &T::AccountId,
-        signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
+        scope: PopulationScope,
     ) -> DispatchResult {
         let _proposer_institution = resolve_proposer_institution::<T>(&who)
             .ok_or(votingengine::Error::<T>::NoPermission)?;
+        let eligible_total =
+            <T as votingengine::Config>::CitizenIdentityReader::population_count(&scope);
         ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
-        ensure!(
-            !snapshot_nonce.is_empty(),
-            Error::<T>::InvalidPopulationSnapshot
-        );
-        ensure!(!signature.is_empty(), Error::<T>::InvalidPopulationSnapshot);
-        ensure!(
-            !issuer_cid_number.is_empty(),
-            Error::<T>::InvalidPopulationSnapshot
-        );
-        ensure!(
-            !scope_province_name.is_empty(),
-            Error::<T>::InvalidPopulationSnapshot
-        );
-
-        let snapshot_nonce_hash = T::Hashing::hash(snapshot_nonce.as_slice());
-        ensure!(
-            !UsedPopulationSnapshotNonce::<T>::get(snapshot_nonce_hash),
-            Error::<T>::InvalidPopulationSnapshot
-        );
-        ensure!(
-            <T as votingengine::Config>::PopulationSnapshotVerifier::verify_population_snapshot(
-                &who,
-                eligible_total,
-                &snapshot_nonce,
-                &signature,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            ),
-            Error::<T>::InvalidPopulationSnapshot
-        );
 
         let now = <frame_system::Pallet<T>>::block_number();
-        UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
         PendingPopulationSnapshots::<T>::insert(
             &who,
             PreparedPopulationSnapshot {
                 eligible_total,
-                nonce_hash: snapshot_nonce_hash,
+                scope: scope.clone(),
                 prepared_at: now,
             },
         );
         Self::deposit_event(Event::<T>::PopulationSnapshotPrepared {
             who,
             eligible_total,
-            nonce_hash: snapshot_nonce_hash,
+            scope,
         });
         Ok(())
     }
@@ -228,6 +189,7 @@ impl<T: Config> Pallet<T> {
             return Err(Error::<T>::PopulationSnapshotNotCurrent.into());
         }
         let eligible_total = prepared.eligible_total;
+        let referendum_scope = prepared.scope;
         let end = now.saturating_add(Self::joint_stage_duration());
 
         let proposal = Proposal {
@@ -314,6 +276,7 @@ impl<T: Config> Pallet<T> {
 
             PendingPopulationSnapshots::<T>::remove(&who);
             Proposals::<T>::insert(id, proposal);
+            ReferendumScopes::<T>::insert(id, referendum_scope);
             if let Err(err) = <votingengine::Pallet<T>>::schedule_proposal_expiry(id, end) {
                 return TransactionOutcome::Rollback(Err(err));
             }

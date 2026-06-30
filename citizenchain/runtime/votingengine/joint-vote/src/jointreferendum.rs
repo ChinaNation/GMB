@@ -1,41 +1,25 @@
 //! 联合投票 — 联合公投阶段。
 //!
-//! 联合内部投票阶段非全票通过或超时进入此阶段,CID 持有者按 >50% 严格多数投票。
+//! 联合内部投票阶段非全票通过或超时进入此阶段,链上公民身份持有者按 >50% 严格多数投票。
 //!
 //! 业务函数挂在 `super::Pallet<T>` 上,在 super(lib.rs)的 #[pallet::call]
 //! `cast_referendum` extrinsic 与 `JointProposalFinalizer::finalize_jointreferendum_timeout`
 //! trait 实现中被调用。
 //!
-//! `CidEligibility` trait + `VoteCredentialCleanup` struct 在
-//! `votingengine::traits`(用作 `votingengine::Config` 的 type bound)。
-
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 
-use votingengine::{CidEligibility, Proposal, PROPOSAL_KIND_JOINT, STATUS_PASSED};
+use votingengine::{CitizenIdentityReader, Proposal, PROPOSAL_KIND_JOINT, STATUS_PASSED};
 
-use super::pallet::{Config, Error, Event, Pallet, ReferendumTallies, ReferendumVotesByBindingId};
+use super::pallet::{
+    Config, Error, Event, Pallet, ReferendumScopes, ReferendumTallies, ReferendumVotesByAccount,
+};
 use super::{is_jointreferendum_vote_passed, is_jointreferendum_vote_rejected};
 
 impl<T: Config> Pallet<T> {
-    /// 联合公投:由外部身份注册局判定资格,链上去重计票。
-    /// 中文注释:签发身份按机构 admins 验签,作用域名称只参与 payload 防串用。
+    /// 联合公投:直接读取链上公民身份资格,链上按账户去重计票。
     pub fn do_jointreferendum_vote(
         who: T::AccountId,
         proposal_id: u64,
-        binding_id: T::Hash,
-        nonce: votingengine::pallet::VoteNonceOf<T>,
-        signature: votingengine::pallet::VoteSignatureOf<T>,
-        issuer_cid_number: frame_support::BoundedVec<
-            u8,
-            frame_support::pallet_prelude::ConstU32<128>,
-        >,
-        issuer_main_account: T::AccountId,
-        signer_pubkey: [u8; 32],
-        scope_province_name: frame_support::BoundedVec<
-            u8,
-            frame_support::pallet_prelude::ConstU32<64>,
-        >,
-        scope_city_name: frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>>,
         approve: bool,
     ) -> DispatchResult {
         let proposal = <votingengine::Pallet<T>>::ensure_open_proposal(proposal_id)?;
@@ -52,32 +36,19 @@ impl<T: Config> Pallet<T> {
             proposal.citizen_eligible_total > 0,
             Error::<T>::CitizenEligibleTotalNotSet
         );
+        let scope =
+            ReferendumScopes::<T>::get(proposal_id).ok_or(Error::<T>::PopulationScopeMissing)?;
         ensure!(
-            <T as votingengine::Config>::CidEligibility::is_eligible(&binding_id, &who),
-            Error::<T>::CidNotEligible
+            <T as votingengine::Config>::CitizenIdentityReader::can_vote(&who, &scope),
+            Error::<T>::CitizenNotEligible
         );
 
         ensure!(
-            !ReferendumVotesByBindingId::<T>::contains_key(proposal_id, binding_id),
+            !ReferendumVotesByAccount::<T>::contains_key(proposal_id, &who),
             votingengine::Error::<T>::AlreadyVoted
         );
-        ensure!(
-            <T as votingengine::Config>::CidEligibility::verify_and_consume_vote_credential(
-                &binding_id,
-                &who,
-                proposal_id,
-                nonce.as_slice(),
-                signature.as_slice(),
-                issuer_cid_number.as_slice(),
-                &issuer_main_account,
-                &signer_pubkey,
-                scope_province_name.as_slice(),
-                scope_city_name.as_slice(),
-            ),
-            Error::<T>::InvalidCidVoteCredential
-        );
 
-        ReferendumVotesByBindingId::<T>::insert(proposal_id, binding_id, approve);
+        ReferendumVotesByAccount::<T>::insert(proposal_id, &who, approve);
         let tally = ReferendumTallies::<T>::mutate(proposal_id, |tally| {
             if approve {
                 tally.yes = tally.yes.saturating_add(1);
@@ -90,7 +61,6 @@ impl<T: Config> Pallet<T> {
         Self::deposit_event(Event::<T>::ReferendumVoteCast {
             proposal_id,
             who,
-            binding_id,
             approve,
         });
 

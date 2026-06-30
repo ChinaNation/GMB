@@ -154,14 +154,6 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
         );
 
         resolution_issuance::pallet::VotingProposalCount::<Runtime>::put(1u32);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-cid");
-        let nonce_hash = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-nonce");
-        cid_system::pallet::UsedVoteNonce::<Runtime>::insert(
-            proposal_id,
-            (binding_id, nonce_hash),
-            true,
-        );
-
         votingengine::CallbackExecutionScopes::<Runtime>::insert(proposal_id, ());
         assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
             proposal_id,
@@ -174,15 +166,6 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
             resolution_issuance::pallet::VotingProposalCount::<Runtime>::get(),
             0u32
         );
-
-        // 中文注释：自动延迟清理由 votingengine 自身单测覆盖，
-        // 这里仅验证 runtime 包装层能正确透传到 CID 投票凭证清理接口。
-        RuntimeCidEligibility::cleanup_vote_credentials(proposal_id);
-
-        assert!(!cid_system::pallet::UsedVoteNonce::<Runtime>::get(
-            proposal_id,
-            (binding_id, nonce_hash)
-        ));
 
         assert!(resolution_issuance::pallet::Executed::<Runtime>::get(proposal_id).is_some());
         assert_eq!(
@@ -546,307 +529,115 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
     });
 }
 
-// CID 凭证签发统一为机构模型:
-// issuer_cid_number + issuer_main_account + signer_pubkey。
-// runtime verifier 必须从 admins 模块::AdminAccounts[issuer_main_account].admins
-// 校验 signer,再做 sr25519 payload 验签。
+// 公民身份上链统一由 citizen-identity 承载：注册局管理员提交交易，公民钱包签名确认。
 #[test]
-fn runtime_cid_verifiers_runtime_admin_account_query_verify_succeeds() {
+fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
     new_test_ext().execute_with(|| {
-        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let issuer_cid_number = test_issuer_cid_number();
-        let issuer_main_account = test_issuer_main_account();
-        let scope_city_name = test_scope_city_name();
-        let account = AccountId::new([31u8; 32]);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cid-verify");
-
-        let bind_nonce: cid_system::pallet::NonceOf<Runtime> =
-            b"bind-nonce".to_vec().try_into().expect("nonce should fit");
-        let bind_credential = build_bind_credential(
-            &main_pair,
-            &main_admin_pubkey,
-            &province_name,
-            &account,
-            binding_id,
-            &bind_nonce,
+        let (_, registrar, registrar_account) = setup_frg_citizen_identity_admin(b"43");
+        let wallet_pair =
+            sr25519::Pair::from_string("//citizen-wallet-1", None).expect("wallet pair");
+        let wallet_account = AccountId::new(wallet_pair.public().0);
+        let payload = build_voting_identity_payload(
+            wallet_account.clone(),
+            b"CTZN-RUNTIME-0001",
+            b"43",
+            b"4301",
+            b"4301001",
         );
-        assert!(RuntimeCidVerifier::verify(&account, &bind_credential));
+        let signature = sign_citizen_identity_payload(&wallet_pair, &payload);
 
-        let vote_nonce: cid_system::pallet::NonceOf<Runtime> =
-            b"vote-nonce".to_vec().try_into().expect("nonce should fit");
-        let vote_signature = build_vote_signature(
-            &main_pair,
-            &main_admin_pubkey,
-            &province_name,
-            &account,
-            binding_id,
-            9,
-            &vote_nonce,
-        );
-        assert!(RuntimeCidVoteVerifier::verify_vote(
-            &account,
-            binding_id,
-            9,
-            &vote_nonce,
-            &vote_signature,
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &main_admin_pubkey,
-            province_name.as_slice(),
-            scope_city_name.as_slice(),
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(registrar),
+            registrar_account,
+            payload,
+            signature,
         ));
 
-        let pop_nonce: votingengine::pallet::VoteNonceOf<Runtime> =
-            b"pop-nonce".to_vec().try_into().expect("nonce should fit");
-        let pop_signature = build_pop_signature(
-            &main_pair,
-            &main_admin_pubkey,
-            &province_name,
-            &account,
-            123,
-            &pop_nonce,
-        );
         assert!(
-            RuntimePopulationSnapshotVerifier::verify_population_snapshot(
-                &account,
-                123,
-                &pop_nonce,
-                &pop_signature,
-                issuer_cid_number.as_slice(),
-                &issuer_main_account,
-                &main_admin_pubkey,
-                province_name.as_slice(),
-                scope_city_name.as_slice(),
-            )
+            citizen_identity::VotingIdentityByAccount::<Runtime>::contains_key(&wallet_account)
+        );
+        assert_eq!(citizen_identity::CountryVotingCount::<Runtime>::get(), 1);
+    });
+}
+
+#[test]
+fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
+    new_test_ext().execute_with(|| {
+        let (_, registrar, registrar_account) = setup_frg_citizen_identity_admin(b"43");
+        let wallet_pair =
+            sr25519::Pair::from_string("//citizen-wallet-2", None).expect("wallet pair");
+        let wallet_account = AccountId::new(wallet_pair.public().0);
+        let payload = build_voting_identity_payload(
+            wallet_account,
+            b"CTZN-RUNTIME-0002",
+            b"44",
+            b"4401",
+            b"4401001",
+        );
+        let signature = sign_citizen_identity_payload(&wallet_pair, &payload);
+
+        assert_noop!(
+            CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(registrar),
+                registrar_account,
+                payload,
+                signature,
+            ),
+            citizen_identity::Error::<Runtime>::UnauthorizedRegistrar
         );
     });
 }
 
 #[test]
-fn bind_with_main_admin_signature_succeeds() {
+fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
     new_test_ext().execute_with(|| {
-        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let account = AccountId::new([21u8; 32]);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-main");
-        let bind_nonce: cid_system::pallet::NonceOf<Runtime> =
-            b"bind-main-nonce".to_vec().try_into().expect("nonce");
-        let credential = build_bind_credential(
-            &main_pair,
-            &main_admin_pubkey,
-            &province_name,
-            &account,
-            binding_id,
-            &bind_nonce,
+        let (_, registrar, registrar_account) = setup_frg_citizen_identity_admin(b"43");
+        let wallet_pair =
+            sr25519::Pair::from_string("//citizen-wallet-3", None).expect("wallet pair");
+        let wallet_account = AccountId::new(wallet_pair.public().0);
+        let voting = build_voting_identity_payload(
+            wallet_account.clone(),
+            b"CTZN-RUNTIME-0003",
+            b"43",
+            b"4301",
+            b"4301001",
         );
-        assert!(RuntimeCidVerifier::verify(&account, &credential));
-    });
-}
+        let candidate = citizen_identity::CandidateIdentityPayload {
+            voting,
+            birth_province_code: test_area_code(b"43"),
+            birth_city_code: test_area_code(b"4301"),
+            birth_town_code: test_area_code(b"4301001"),
+            citizen_full_name: b"Runtime Citizen"
+                .to_vec()
+                .try_into()
+                .expect("citizen name fits"),
+        };
+        let signature = sign_citizen_identity_payload(&wallet_pair, &candidate);
 
-#[test]
-fn bind_with_backup_admin_signature_succeeds() {
-    new_test_ext().execute_with(|| {
-        let (_, _, backup_pair, backup_admin_pubkey, province_name) = setup_step3_test_admins();
-        let account = AccountId::new([22u8; 32]);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-backup");
-        let bind_nonce: cid_system::pallet::NonceOf<Runtime> =
-            b"bind-backup-nonce".to_vec().try_into().expect("nonce");
-        let credential = build_bind_credential(
-            &backup_pair,
-            &backup_admin_pubkey,
-            &province_name,
-            &account,
-            binding_id,
-            &bind_nonce,
-        );
-        assert!(RuntimeCidVerifier::verify(&account, &credential));
-    });
-}
-
-#[test]
-fn bind_with_admin_not_in_roster_rejected() {
-    new_test_ext().execute_with(|| {
-        let (_, _, _, _, province_name) = setup_step3_test_admins();
-        // 中文注释:签发账户不在 issuer_main_account 的 admins 集合中,必须拒签。
-        let outsider_pair = sr25519::Pair::from_string("//outsider", None).expect("pair");
-        let outsider_admin_pubkey = outsider_pair.public().0;
-        let account = AccountId::new([23u8; 32]);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-outsider");
-        let bind_nonce: cid_system::pallet::NonceOf<Runtime> =
-            b"bind-out-nonce".to_vec().try_into().expect("nonce");
-        let credential = build_bind_credential(
-            &outsider_pair,
-            &outsider_admin_pubkey,
-            &province_name,
-            &account,
-            binding_id,
-            &bind_nonce,
-        );
-        assert!(!RuntimeCidVerifier::verify(&account, &credential));
-    });
-}
-
-#[test]
-fn vote_double_layer_verify_succeeds() {
-    new_test_ext().execute_with(|| {
-        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let issuer_cid_number = test_issuer_cid_number();
-        let issuer_main_account = test_issuer_main_account();
-        let scope_city_name = test_scope_city_name();
-        let account = AccountId::new([24u8; 32]);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-vote");
-        let nonce: cid_system::pallet::NonceOf<Runtime> =
-            b"vote-pass-nonce".to_vec().try_into().expect("nonce");
-        let signature = build_vote_signature(
-            &main_pair,
-            &main_admin_pubkey,
-            &province_name,
-            &account,
-            binding_id,
-            42,
-            &nonce,
-        );
-        assert!(RuntimeCidVoteVerifier::verify_vote(
-            &account,
-            binding_id,
-            42,
-            &nonce,
-            &signature,
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &main_admin_pubkey,
-            province_name.as_slice(),
-            scope_city_name.as_slice(),
-        ));
-    });
-}
-
-#[test]
-fn vote_scope_payload_tamper_rejected() {
-    new_test_ext().execute_with(|| {
-        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let issuer_cid_number = test_issuer_cid_number();
-        let issuer_main_account = test_issuer_main_account();
-        let scope_city_name = test_scope_city_name();
-        let jilin: Vec<u8> = b"jilin".to_vec();
-        let account = AccountId::new([25u8; 32]);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-scope-tamper");
-        let nonce: cid_system::pallet::NonceOf<Runtime> =
-            b"vote-tamper-nonce".to_vec().try_into().expect("nonce");
-        let signature = build_vote_signature(
-            &main_pair,
-            &main_admin_pubkey,
-            &province_name,
-            &account,
-            binding_id,
-            7,
-            &nonce,
-        );
-        assert!(!RuntimeCidVoteVerifier::verify_vote(
-            &account,
-            binding_id,
-            7,
-            &nonce,
-            &signature,
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &main_admin_pubkey,
-            jilin.as_slice(),
-            scope_city_name.as_slice(),
-        ));
-    });
-}
-
-#[test]
-fn population_snapshot_per_province_signature_verifies() {
-    new_test_ext().execute_with(|| {
-        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let issuer_cid_number = test_issuer_cid_number();
-        let issuer_main_account = test_issuer_main_account();
-        let scope_city_name = test_scope_city_name();
-        let who = AccountId::new([26u8; 32]);
-        let pop_nonce: votingengine::pallet::VoteNonceOf<Runtime> =
-            b"pop-pass-nonce".to_vec().try_into().expect("nonce");
-        let signature = build_pop_signature(
-            &main_pair,
-            &main_admin_pubkey,
-            &province_name,
-            &who,
-            500,
-            &pop_nonce,
-        );
-        assert!(
-            RuntimePopulationSnapshotVerifier::verify_population_snapshot(
-                &who,
-                500,
-                &pop_nonce,
-                &signature,
-                issuer_cid_number.as_slice(),
-                &issuer_main_account,
-                &main_admin_pubkey,
-                province_name.as_slice(),
-                scope_city_name.as_slice(),
-            )
-        );
-    });
-}
-
-// RuntimeCidEligibility 的 is_eligible 走 BindingId↔Account 反查;
-// verify_and_consume_vote_credential 走 RuntimeCidVoteVerifier 真实签发机构验签。
-#[test]
-fn runtime_cid_eligibility_binding_and_vote_full_path() {
-    new_test_ext().execute_with(|| {
-        let (main_pair, main_admin_pubkey, _, _, province_name) = setup_step3_test_admins();
-        let issuer_cid_number = test_issuer_cid_number();
-        let issuer_main_account = test_issuer_main_account();
-        let scope_city_name = test_scope_city_name();
-        let who = AccountId::new([41u8; 32]);
-        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cid-wrap");
-        cid_system::pallet::BindingIdToAccount::<Runtime>::insert(binding_id, who.clone());
-        cid_system::pallet::AccountToBindingId::<Runtime>::insert(who.clone(), binding_id);
-
-        assert!(RuntimeCidEligibility::is_eligible(&binding_id, &who));
-        assert!(!RuntimeCidEligibility::is_eligible(
-            &binding_id,
-            &AccountId::new([42u8; 32])
+        assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
+            RuntimeOrigin::signed(registrar),
+            registrar_account,
+            candidate,
+            signature,
         ));
 
-        // 完整链路:wrap 调 verify_and_consume,Bridge 走 cid_system → RuntimeCidVoteVerifier。
-        let nonce: cid_system::pallet::NonceOf<Runtime> =
-            b"wrap-nonce".to_vec().try_into().expect("nonce");
-        let signature = build_vote_signature(
-            &main_pair,
-            &main_admin_pubkey,
-            &province_name,
-            &who,
-            binding_id,
-            88,
-            &nonce,
+        let town_scope = citizen_identity::PopulationScope::Town(
+            test_area_code(b"43"),
+            test_area_code(b"4301"),
+            test_area_code(b"4301001"),
         );
-        assert!(RuntimeCidEligibility::verify_and_consume_vote_credential(
-            &binding_id,
-            &who,
-            88,
-            nonce.as_slice(),
-            signature.as_slice(),
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &main_admin_pubkey,
-            province_name.as_slice(),
-            scope_city_name.as_slice(),
+        assert!(RuntimeCitizenIdentityReader::can_vote(
+            &wallet_account,
+            &town_scope
         ));
-        // 二次同 nonce 必拒(防重放)。
-        assert!(!RuntimeCidEligibility::verify_and_consume_vote_credential(
-            &binding_id,
-            &who,
-            88,
-            nonce.as_slice(),
-            signature.as_slice(),
-            issuer_cid_number.as_slice(),
-            &issuer_main_account,
-            &main_admin_pubkey,
-            province_name.as_slice(),
-            scope_city_name.as_slice(),
+        assert!(RuntimeCitizenIdentityReader::can_be_candidate(
+            &wallet_account,
+            &town_scope
         ));
+        assert_eq!(
+            RuntimeCitizenIdentityReader::population_count(&town_scope),
+            1
+        );
     });
 }
 

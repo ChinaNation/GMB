@@ -356,9 +356,9 @@ mnemonic
 
 ## 11. 治理字段联动要求
 
-- 联合提案必须包含 `eligible_total/snapshot_nonce/signature` 三元组。
-- 公民投票必须包含 `binding_id/nonce/signature` 三元组。
-- 钱包模块负责提供签名账户上下文，不负责生成 CID 凭证签名。
+- 联合提案人口分母由 runtime 按 `PopulationScope` 从链上公民身份读取。
+- 公民投票交易只提交账户签名、提案号和赞反意见。
+- 钱包模块负责提供签名账户上下文，不负责生成投票资格或人口凭证。
 - 钱包模块必须保证"登录签名"和"转账/治理签名"使用不同签名 payload。
 
 ## 12. CID 联调约束

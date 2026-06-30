@@ -49,9 +49,11 @@ class PalletRegistry {
   /// `cast_admin(proposal_id, institution_account, approve)` — 联合投票内部投票阶段。
   static const int jointVoteCall = 0;
 
-  /// `cast_referendum(proposal_id, binding_id, nonce, signature, ...)` —
-  /// 联合公投联合公投阶段(CID 持有者投票)。
+  /// `cast_referendum(proposal_id, approve)` — 联合公投阶段,链上按账户读取公民身份。
   static const int castReferendumCall = 1;
+
+  /// `prepare_joint_population_snapshot(scope)` — 联合公投提案发起前准备链上人口分母。
+  static const int prepareJointPopulationSnapshotCall = 2;
 
   // ---- 业务 pallet:仅承载提案创建与幂等兜底入口 ----
   //

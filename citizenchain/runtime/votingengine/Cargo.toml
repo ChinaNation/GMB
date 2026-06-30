@@ -16,6 +16,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 primitives = { path = "../primitives", default-features = false }
+citizen-identity = { path = "../otherpallet/citizen-identity", default-features = false }
 
 [features]
 default = ["std"]
@@ -28,12 +29,14 @@ std = [
     "sp-runtime/std",
     "sp-std/std",
     "primitives/std",
+    "citizen-identity/std",
 ]
 runtime-benchmarks = [
     "frame-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
+    "citizen-identity/runtime-benchmarks",
 ]
 try-runtime = []
 

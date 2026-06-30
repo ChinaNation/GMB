@@ -7,18 +7,15 @@ use super::*;
 use crate::configs::is_nrc_admin;
 use crate::configs::*;
 use crate::ResolutionDestro;
-use cid_system::{CidVerifier, CidVoteVerifier};
-use frame_support::assert_ok;
 use frame_support::traits::{Contains, Currency, EnsureOrigin, FindAuthor};
+use frame_support::{assert_noop, assert_ok};
 use institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::multisig::ReservedAccountGuard;
 use sp_core::{sr25519, Pair};
 use sp_io::hashing::blake2_256;
 use sp_runtime::{traits::Hash as HashT, traits::IdentifyAccount, BuildStorage, MultiSigner};
-use votingengine::{
-    CidEligibility, InternalAdminProvider, JointVoteResultCallback, PopulationSnapshotVerifier,
-};
+use votingengine::{CitizenIdentityReader, InternalAdminProvider, JointVoteResultCallback};
 
 fn new_test_ext() -> sp_io::TestExternalities {
     let storage = crate::RuntimeGenesisConfig::default()
@@ -93,115 +90,83 @@ fn test_scope_city_name() -> Vec<u8> {
     b"shenyang".to_vec()
 }
 
-fn build_bind_credential(
-    signing_pair: &sr25519::Pair,
-    signer_pubkey: &[u8; 32],
-    scope_province_name: &[u8],
-    account: &AccountId,
-    binding_id: Hash,
-    bind_nonce: &cid_system::pallet::NonceOf<Runtime>,
-) -> cid_system::pallet::CredentialOf<Runtime> {
-    let issuer_cid_number = test_issuer_cid_number();
-    let issuer_main_account = test_issuer_main_account();
-    let scope_city_name = test_scope_city_name();
-    let payload = (
-        primitives::core_const::GMB,
-        primitives::core_const::OP_SIGN_BIND,
-        frame_system::Pallet::<Runtime>::block_hash(0),
-        account,
-        binding_id,
-        bind_nonce.as_slice(),
-        issuer_cid_number.as_slice(),
-        &issuer_main_account,
-        signer_pubkey,
-        scope_province_name,
-        scope_city_name.as_slice(),
-    );
-    let msg = blake2_256(&payload.encode());
-    let sig = signing_pair.sign(&msg);
-    let signature: cid_system::pallet::SignatureOf<Runtime> =
-        sig.0.to_vec().try_into().expect("signature fits");
-    cid_system::BindCredential {
-        binding_id,
-        bind_nonce: bind_nonce.clone(),
-        issuer_cid_number: issuer_cid_number.try_into().expect("issuer cid fits"),
-        issuer_main_account,
-        signer_pubkey: *signer_pubkey,
-        scope_province_name: scope_province_name
-            .to_vec()
-            .try_into()
-            .expect("scope province fits"),
-        scope_city_name: scope_city_name.try_into().expect("scope city fits"),
-        signature,
+fn test_area_code(bytes: &[u8]) -> citizen_identity::AreaCodeBound {
+    bytes.to_vec().try_into().expect("area code fits")
+}
+
+fn test_cid_number(bytes: &[u8]) -> citizen_identity::CidNumberBound {
+    bytes.to_vec().try_into().expect("cid number fits")
+}
+
+fn build_voting_identity_payload(
+    wallet_account: AccountId,
+    cid_number: &[u8],
+    province_code: &[u8],
+    city_code: &[u8],
+    town_code: &[u8],
+) -> citizen_identity::VotingIdentityPayload<AccountId> {
+    citizen_identity::VotingIdentityPayload {
+        cid_number: test_cid_number(cid_number),
+        wallet_account,
+        passport_valid_from: 20260630,
+        passport_valid_until: 20360630,
+        citizen_status: citizen_identity::CitizenStatus::Normal,
+        residence_province_code: test_area_code(province_code),
+        residence_city_code: test_area_code(city_code),
+        residence_town_code: test_area_code(town_code),
     }
 }
 
-fn build_vote_signature(
-    signing_pair: &sr25519::Pair,
-    signer_pubkey: &[u8; 32],
-    scope_province_name: &[u8],
-    account: &AccountId,
-    binding_id: Hash,
-    proposal_id: u64,
-    vote_nonce: &cid_system::pallet::NonceOf<Runtime>,
-) -> cid_system::pallet::SignatureOf<Runtime> {
-    let issuer_cid_number = test_issuer_cid_number();
-    let issuer_main_account = test_issuer_main_account();
-    let scope_city_name = test_scope_city_name();
-    let payload = (
-        primitives::core_const::GMB,
-        primitives::core_const::OP_SIGN_VOTE,
-        frame_system::Pallet::<Runtime>::block_hash(0),
-        account,
-        binding_id,
-        proposal_id,
-        vote_nonce.as_slice(),
-        issuer_cid_number.as_slice(),
-        &issuer_main_account,
-        signer_pubkey,
-        scope_province_name,
-        scope_city_name.as_slice(),
+fn sign_citizen_identity_payload(
+    wallet_pair: &sr25519::Pair,
+    payload: &impl codec::Encode,
+) -> citizen_identity::pallet::SignatureOf<Runtime> {
+    let msg = primitives::sign::signing_message(
+        primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+        &payload.encode(),
     );
-    let msg = blake2_256(&payload.encode());
-    signing_pair
+    wallet_pair
         .sign(&msg)
         .0
         .to_vec()
         .try_into()
-        .expect("signature fits")
+        .expect("citizen identity signature fits")
 }
 
-fn build_pop_signature(
-    signing_pair: &sr25519::Pair,
-    signer_pubkey: &[u8; 32],
-    scope_province_name: &[u8],
-    who: &AccountId,
-    eligible_total: u64,
-    pop_nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
-) -> votingengine::pallet::VoteSignatureOf<Runtime> {
-    let issuer_cid_number = test_issuer_cid_number();
-    let issuer_main_account = test_issuer_main_account();
-    let scope_city_name = test_scope_city_name();
-    let payload = (
-        primitives::core_const::GMB,
-        primitives::core_const::OP_SIGN_POP,
-        frame_system::Pallet::<Runtime>::block_hash(0),
-        who,
-        eligible_total,
-        pop_nonce.as_slice(),
-        issuer_cid_number.as_slice(),
-        &issuer_main_account,
-        signer_pubkey,
-        scope_province_name,
-        scope_city_name.as_slice(),
+fn setup_frg_citizen_identity_admin(province_code: &[u8]) -> (sr25519::Pair, AccountId, AccountId) {
+    let registrar_pair =
+        sr25519::Pair::from_string("//frg-citizen-identity-admin", None).expect("registrar pair");
+    let registrar = AccountId::new(registrar_pair.public().0);
+    let registrar_account = AccountId::new([88u8; 32]);
+    public_admins::pallet::AdminAccounts::<Runtime>::insert(
+        registrar_account.clone(),
+        admin_primitives::AdminAccount {
+            institution_code: admin_primitives::FRG,
+            kind: admin_primitives::AdminAccountKind::PublicInstitution,
+            admins: vec![admin_primitives::AdminProfile {
+                account: registrar.clone(),
+                admin_cid_number: Default::default(),
+                name: Default::default(),
+                admin_role: Default::default(),
+                term_start: 0,
+                term_end: 0,
+                source: admin_primitives::AdminSource::Genesis,
+            }]
+            .try_into()
+            .expect("single registrar admin fits"),
+            creator: registrar.clone(),
+            created_at: Default::default(),
+            updated_at: Default::default(),
+            status: admin_primitives::AdminAccountStatus::Active,
+        },
     );
-    let msg = blake2_256(&payload.encode());
-    signing_pair
-        .sign(&msg)
-        .0
-        .to_vec()
-        .try_into()
-        .expect("signature fits")
+    let province_code: primitives::cid::code::ProvinceCode =
+        province_code.try_into().expect("province code fits");
+    public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::insert(
+        registrar_account.clone(),
+        province_code,
+    );
+    (registrar_pair, registrar, registrar_account)
 }
 
 fn stake_account() -> AccountId {

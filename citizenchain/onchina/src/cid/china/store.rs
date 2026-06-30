@@ -275,13 +275,6 @@ pub fn area_display_names(
     }
 }
 
-pub fn province_name_by_code(province_code: &str) -> Option<&'static str> {
-    provinces()
-        .iter()
-        .find(|p| p.province_code.eq_ignore_ascii_case(province_code))
-        .map(|p| p.province_name)
-}
-
 /// 判定 (省,市,镇) 三元组是否对应当前行政区划真源里的一个活镇。
 ///
 /// 中文注释:孤儿机构清理的唯一判定依据。若机构 `town_code` 指向一个不存在于

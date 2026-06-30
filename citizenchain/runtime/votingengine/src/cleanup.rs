@@ -21,7 +21,7 @@
 //! 2. `on_initialize` → `process_cleanup_queue` → 从队列取出 proposal_id
 //! 3. 释放活跃提案名额 + 删除 core/业务数据 + 注册 `PendingProposalCleanups`
 //! 4. `process_pending_cleanup_steps` 分块清理投票记录与对象层数据
-//!    （InternalVotes → JointVotes → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup）
+//!    （InternalVotes → JointVotes → CitizenVotes → ProposalObject → FinalCleanup）
 
 use crate::pallet::{self, Config};
 use crate::PendingCleanupStage;
@@ -103,7 +103,7 @@ fn trigger_cleanup<T: Config>(proposal_id: u64) -> Weight {
 
     // 2. 注册到分块清理状态机。
     //    所有提案（无论内部/联合）统一从 AdminSnapshots 阶段开始：
-    //    AdminSnapshots → InternalVotes → JointVotes → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup
+    //    AdminSnapshots → InternalVotes → JointVotes → CitizenVotes → ProposalObject → FinalCleanup
     //    如果某阶段没有数据（比如内部提案没有 JointVotes），clear_prefix 返回空结果，
     //    自动跳到下一阶段，不会卡住。最后 FinalCleanup 删除核心数据和业务数据。
     if !pallet::PendingProposalCleanups::<T>::contains_key(proposal_id) {

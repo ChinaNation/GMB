@@ -168,15 +168,14 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 电子护照公民状态 | `citizen_status` | CID citizens / citizenapp myid | 注册局维护的公民状态，三端统一使用完整字段名 |
 | 电子护照选举资格 | `voting_eligible` | CID citizens / citizenapp myid | 注册局维护的选举资格，三端统一使用完整字段名 |
 | 电子护照投票状态 | `vote_status` | CID citizens / citizenapp myid | CID 按 `citizen_status + voting_eligible` 计算出的投票状态，不得和绑定状态混用 |
-| 电子护照身份状态 | `identity_status` | CID citizens / citizenapp myid | CID 按公民状态与有效期计算出的身份ID状态，不得和绑定状态混用 |
-| 电子护照生效日期 | `valid_from` | CID citizens / citizenapp myid | 电子护照有效期开始日期，格式 `YYYY-MM-DD` |
-| 电子护照截止日期 | `valid_until` | CID citizens / citizenapp myid | 电子护照有效期截止日期，格式 `YYYY-MM-DD` |
+| 电子护照身份状态 | `identity_status` | CID citizens / citizenapp myid | CID 按公民状态与护照有效期计算出的身份 CID 状态 |
+| 电子护照生效日期 | `passport_valid_from` | CID citizens / citizenapp myid | 电子护照有效期开始日期，格式 `YYYY-MM-DD` |
+| 电子护照截止日期 | `passport_valid_until` | CID citizens / citizenapp myid | 电子护照有效期截止日期，格式 `YYYY-MM-DD` |
 | 公民状态更新时间 | `status_updated_at` | CID citizens | CID 内部用于拒绝旧状态覆盖新状态的秒级时间戳 |
-| 电子护照钱包地址 | `wallet_address` | CID citizens / citizenapp myid | 用户选择用于电子护照绑定的钱包 SS58 地址 |
-| 电子护照钱包公钥 | `wallet_pubkey` | CID citizens / citizenapp myid | `wallet_address` 对应的 32 字节 `0x` hex 公钥 |
+| 电子护照钱包地址 | `wallet_address` | CID citizens / citizenapp myid | 用户选择用于电子护照的钱包 SS58 地址 |
+| 电子护照钱包公钥 | `wallet_pubkey` | CID citizens / 后端内部 | `wallet_address` 对应的 32 字节 `0x` hex 公钥,不得在普通前端展示 |
 | 电子护照钱包签名算法 | `wallet_sig_alg` | CID citizens / citizenapp myid | 固定 `sr25519` |
-| 电子护照身份ID | `cid_number` | CID citizens / citizenapp myid | CID 生成并返回给用户展示的身份ID号码 |
-| 电子护照绑定状态 | `bind_status` | CID citizens / citizenapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
+| 电子护照身份CID | `cid_number` | CID citizens / citizenapp myid | CID 自动生成并返回给用户展示的身份 CID 号码 |
 | 镇下地址名称编号 | `address_name_code` | OnChina china / AddressRegistry | 同一镇下的地址名称 3 位编号，范围 `001..999` |
 | 镇下地址名称 | `address_name` | OnChina china / AddressRegistry | 镇下村、路、社区、小区等地址名称 |
 | 镇下地址号 | `address_local_no` | OnChina china / AddressRegistry | 同一地址名称下的 4 位地址号，范围 `0001..9999`，可为空 |
@@ -481,7 +480,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/runtime/issuance/provincialbank-interest/` | 省行利息 | provincialbank-interest | 省行利息 pallet |
 | `citizenchain/runtime/otherpallet/` | 其他 pallet | otherpallet | 非治理、非交易、非发行类 pallet |
 | `citizenchain/runtime/otherpallet/pow-difficulty/` | PoW 难度 | pow-difficulty | PoW 难度 pallet |
-| `citizenchain/runtime/otherpallet/cid-system/` | 链上 CID 资格 pallet | cid-system | 链上 CID 绑定与投票资格消费 pallet |
+| `citizenchain/runtime/otherpallet/citizen-identity/` | 链上公民身份 pallet | citizen-identity | 公民投票身份、参选身份、人口统计与投票引擎资格真源 |
 | `citizenchain/runtime/primitives/` | 运行时基础类型 | primitives | runtime 共享基础类型 |
 | `citizenchain/runtime/src/` | runtime 入口 | runtime-src | runtime 配置、类型和测试入口 |
 | `citizenchain/runtime/transaction/` | 交易 | transaction | 交易类 pallet |
@@ -521,6 +520,14 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
 | CID 号码 | `cid_number` | API / call data / storage key | 机构或公民 CID 编号 |
+| 公民护照号 | `passport_no` | OnChina citizens API / SQL | 公民终身唯一护照号,不同于 `cid_number` |
+| 公民姓名 | `citizen_full_name` | OnChina citizens API / SQL | 公民档案中的姓名 |
+| 公民性别 | `citizen_sex` | OnChina citizens API / SQL | 公民档案性别字段,取值 `MALE/FEMALE` |
+| 公民出生日期 | `citizen_birth_date` | OnChina citizens API / SQL | 公民档案出生日期,格式 `YYYY-MM-DD` |
+| 护照有效期起 | `passport_valid_from` | OnChina citizens API / SQL | 当前电子护照有效期开始日期 |
+| 护照有效期止 | `passport_valid_until` | OnChina citizens API / SQL | 当前电子护照有效期截止日期 |
+| 投票账户地址 | `wallet_address` | OnChina citizens API / SQL / frontend | 面向用户展示的 SS58 地址 |
+| 投票账户公钥 | `wallet_pubkey` | OnChina citizens SQL / backend internal | 系统验签和查询使用的内部公钥字段,不得在普通前端展示 |
 | 机构全称 | `cid_full_name` | API / call data / 扫码端解码展示 | 机构全称,可随机构法定名称变更 |
 | 机构简称 | `cid_short_name` | API / call data / 扫码端解码展示 | 机构简称,用于列表和紧凑展示 |
 | 机构英文全称 | `cid_full_name_en` | API / call data / 扫码端解码展示 | 机构英文全称 |

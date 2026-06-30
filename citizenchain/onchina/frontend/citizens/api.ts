@@ -1,39 +1,44 @@
 // 中文注释:公民直接录入 + 列表查询 API。
-// 中文注释:注册局管理员直接录入公民并直接发护照。
+// 注册局管理员提交档案字段,后端自动生成身份 CID、护照号和护照有效期。
 // 通用请求能力只从 utils/http.ts 引入,本文件不承接机构或管理员模块接口。
 
 import type { AdminAuth } from '../auth/types';
 import { adminHeaders, request } from '../utils/http';
 
 export type CitizenState = 'NORMAL' | 'REVOKED';
-export type ElectionScopeLevel = 'PROVINCE' | 'CITY' | 'TOWN';
+export type CitizenSex = 'MALE' | 'FEMALE';
 
 export type CitizenRow = {
   id: number;
-  wallet_pubkey?: string;
-  wallet_address?: string;
-  cid_number?: string;
-  citizen_status?: CitizenState;
+  cid_number: string;
+  passport_no: string;
+  citizen_full_name: string;
+  citizen_sex: CitizenSex;
+  citizen_birth_date: string;
+  wallet_address: string;
+  citizen_status: CitizenState;
   voting_eligible: boolean;
   vote_status: CitizenState;
-  identity_status?: CitizenState;
-  valid_from?: string;
-  valid_until?: string;
+  identity_status: CitizenState;
+  passport_valid_from: string;
+  passport_valid_until: string;
   status_updated_at?: number;
-  residence_province_code?: string;
-  residence_city_code?: string;
-  residence_town_code?: string;
+  residence_province_code: string;
+  residence_city_code: string;
+  residence_town_code: string;
   residence_province_name?: string;
   residence_city_name?: string;
   residence_town_name?: string;
-  birth_province_code?: string;
-  birth_city_code?: string;
-  birth_town_code?: string;
+  birth_province_code: string;
+  birth_city_code: string;
+  birth_town_code: string;
   birth_province_name?: string;
   birth_city_name?: string;
   birth_town_name?: string;
-  election_scope_level?: ElectionScopeLevel;
-  bind_status: 'PENDING' | 'BOUND';
+  archive_hash?: string;
+  onchain_tx_hash?: string;
+  onchain_block_number?: number;
+  onchain_at?: string;
 };
 
 export type PageResult<T> = {
@@ -45,35 +50,38 @@ export type PageResult<T> = {
 
 /** 直接录入公民请求 DTO,字段与后端 admin_create_citizen 对齐。 */
 export type CreateCitizenInput = {
-  cid_number: string;
-  residence_province_code: string;
-  residence_city_code?: string;
-  residence_town_code?: string;
+  citizen_full_name: string;
+  citizen_sex: CitizenSex;
+  citizen_birth_date: string;
+  residence_town_code: string;
   birth_province_code: string;
-  birth_city_code?: string;
-  birth_town_code?: string;
+  birth_city_code: string;
+  birth_town_code: string;
   voting_eligible: boolean;
-  election_scope_level: ElectionScopeLevel;
-  /** YYYY-MM-DD */
-  valid_from: string;
-  /** YYYY-MM-DD */
-  valid_until: string;
-  wallet_pubkey?: string;
-  wallet_address?: string;
+  /** SS58 地址或扫码得到的 0x 公钥;UI 只展示 SS58 地址。 */
+  wallet_account: string;
 };
 
 /** 直接录入公民返回 DTO。 */
 export type CreateCitizenResult = {
   id: number;
   cid_number: string;
+  passport_no: string;
+  citizen_full_name: string;
+  citizen_sex: CitizenSex;
+  citizen_birth_date: string;
   citizen_status: CitizenState;
   voting_eligible: boolean;
-  bind_status: 'PENDING' | 'BOUND';
-  wallet_pubkey?: string;
-  wallet_address?: string;
-  valid_from: string;
-  valid_until: string;
-  election_scope_level: ElectionScopeLevel;
+  wallet_address: string;
+  passport_valid_from: string;
+  passport_valid_until: string;
+  residence_province_code: string;
+  residence_city_code: string;
+  residence_town_code: string;
+  birth_province_code: string;
+  birth_city_code: string;
+  birth_town_code: string;
+  archive_hash?: string;
 };
 
 export interface LegalRepresentativeCitizenSearchContext {
@@ -123,8 +131,7 @@ export async function searchLegalRepresentativeCitizens(
 
 /**
  * 注册局管理员直接录入公民并直接发护照。
- * 中文注释:属 SESSION 操作(仅需有效会话),无需扫码签名授权,直接调用。
- * 成功即「已发护照」(公民 NORMAL + 有效期)。
+ * 成功即本地公民档案、身份 CID、护照号、钱包账户全部落库。
  */
 export async function createCitizen(
   auth: AdminAuth,

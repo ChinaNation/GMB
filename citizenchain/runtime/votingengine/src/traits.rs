@@ -207,36 +207,25 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
     }
 }
 
-/// 中文注释：公民总人口快照验签接口（由 runtime 对接身份注册局）。
-/// 签发身份统一为 `issuer_cid_number + issuer_main_account + signer_pubkey`;
-/// runtime verifier 必须确认 signer 属于签发机构 admins 后再验签。
-pub trait PopulationSnapshotVerifier<AccountId, Nonce, Signature> {
-    fn verify_population_snapshot(
-        who: &AccountId,
-        eligible_total: u64,
-        nonce: &Nonce,
-        signature: &Signature,
-        issuer_cid_number: &[u8],
-        issuer_main_account: &AccountId,
-        signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
-    ) -> bool;
+/// 中文注释：公民身份只读接口。投票引擎只能读链上公民身份模块的资格和人口数，
+/// 不再接收注册局链下签发的人口快照或投票凭证。
+pub trait CitizenIdentityReader<AccountId> {
+    fn can_vote(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool;
+    fn can_be_candidate(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool;
+    fn population_count(scope: &citizen_identity::PopulationScope) -> u64;
 }
 
-impl<AccountId, Nonce, Signature> PopulationSnapshotVerifier<AccountId, Nonce, Signature> for () {
-    fn verify_population_snapshot(
-        _who: &AccountId,
-        _eligible_total: u64,
-        _nonce: &Nonce,
-        _signature: &Signature,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
+impl<AccountId> CitizenIdentityReader<AccountId> for () {
+    fn can_vote(_who: &AccountId, _scope: &citizen_identity::PopulationScope) -> bool {
         false
+    }
+
+    fn can_be_candidate(_who: &AccountId, _scope: &citizen_identity::PopulationScope) -> bool {
+        false
+    }
+
+    fn population_count(_scope: &citizen_identity::PopulationScope) -> u64 {
+        0
     }
 }
 
@@ -779,7 +768,7 @@ impl<BlockNumber, AccountId> JointProposalFinalizer<BlockNumber, AccountId> for 
 /// joint mode 的 chunked cleanup 入口。
 ///
 /// joint storage(JointVotesByAdmin / JointInstitutionTallies / JointVotesByInstitution
-/// / JointTallies / ReferendumVotesByBindingId / ReferendumTallies / UsedPopulationSnapshotNonce)
+/// / JointTallies / ReferendumVotesByAccount / ReferendumTallies / ReferendumScopes)
 /// 住在 joint-vote pallet,votingengine 主 crate 通过本 trait 派发清理。
 pub trait JointCleanupHandler {
     fn cleanup_joint_admin_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
@@ -876,7 +865,7 @@ impl<BlockNumber, AccountId> LegislationProposalFinalizer<BlockNumber, AccountId
 }
 
 /// 立法投票 mode 的 chunked cleanup 入口。
-/// legislation-vote 自有账本(LegHouseVotesByAdmin / LegReferendumVotesByBindingId /
+/// legislation-vote 自有账本(LegHouseVotesByAdmin / LegReferendumVotesByAccount /
 /// LegHouseTally / LegReferendumTally / LegMeta 等)住在 sub-pallet,核心通过本 trait 派发清理。
 pub trait LegislationCleanupHandler {
     fn cleanup_legislation_house_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
@@ -1019,76 +1008,5 @@ impl ElectionVoteResultCallback for () {
         _approved: bool,
     ) -> Result<ProposalExecutionOutcome, DispatchError> {
         Ok(ProposalExecutionOutcome::Ignored)
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────
-// CID 资格 / 凭证 trait
-// votingengine::Config 用作 bound,joint-vote pallet 在 jointreferendum 阶段
-// 调用以判定 CID 持有者投票资格并消耗一次性凭证。
-// ──────────────────────────────────────────────────────────────────
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct VoteCredentialCleanup {
-    pub removed: u32,
-    pub loops: u32,
-    pub has_remaining: bool,
-}
-
-impl VoteCredentialCleanup {
-    pub const fn done() -> Self {
-        Self {
-            removed: 0,
-            loops: 0,
-            has_remaining: false,
-        }
-    }
-}
-
-/// 中文注释：公民投票资格实时验签。签发身份统一从机构 admins 校验。
-pub trait CidEligibility<AccountId, Hash> {
-    fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
-    fn verify_and_consume_vote_credential(
-        binding_id: &Hash,
-        who: &AccountId,
-        proposal_id: u64,
-        nonce: &[u8],
-        signature: &[u8],
-        issuer_cid_number: &[u8],
-        issuer_main_account: &AccountId,
-        signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
-    ) -> bool;
-
-    /// 清理某个联合/公民提案对应的投票凭证防重放状态。
-    fn cleanup_vote_credentials(_proposal_id: u64) {}
-
-    /// 分块清理某个提案维度下的投票凭证。
-    fn cleanup_vote_credentials_chunk(proposal_id: u64, _limit: u32) -> VoteCredentialCleanup {
-        Self::cleanup_vote_credentials(proposal_id);
-        let _ = proposal_id;
-        VoteCredentialCleanup::done()
-    }
-}
-
-impl<AccountId, Hash> CidEligibility<AccountId, Hash> for () {
-    fn is_eligible(_binding_id: &Hash, _who: &AccountId) -> bool {
-        false
-    }
-
-    fn verify_and_consume_vote_credential(
-        _binding_id: &Hash,
-        _who: &AccountId,
-        _proposal_id: u64,
-        _nonce: &[u8],
-        _signature: &[u8],
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        false
     }
 }

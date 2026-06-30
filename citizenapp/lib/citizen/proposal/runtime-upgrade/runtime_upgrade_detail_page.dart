@@ -1131,7 +1131,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     if (_isAdmin && _jointVoteOpen) {
       return _buildVoteButtons();
     }
-    // 联合公投阶段：所有用户显示投票按钮（CID 绑定校验后续完善）
+    // 联合公投阶段：所有用户显示投票按钮（链上公民身份校验后续完善）
     if (_citizenVoteOpen) {
       return _buildCitizenVoteButtons();
     }

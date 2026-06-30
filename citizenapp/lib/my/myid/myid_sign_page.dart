@@ -1,8 +1,8 @@
 // 热钱包扫码签名页。
 //
-// 用户到 CID 现场后：
-// 1. 打开此页，摄像头扫描身份ID系统的 sign_request 二维码
-// 2. 验证 pubkey 与当前绑定钱包一致
+// 用户到链上中国办理现场后：
+// 1. 打开此页，摄像头扫描链上中国平台的 sign_request 二维码
+// 2. 验证 pubkey 与当前电子护照钱包一致
 // 3. 用热钱包私钥签名 payload
 // 4. 构造 sign_response envelope
 // 5. 展示签名响应二维码，等管理端扫描
@@ -67,7 +67,7 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
       if (requestPubkey != expectedPubkey) {
         throw Exception('签名请求中的公钥与当前钱包不一致');
       }
-      _verifyCitizenBindRequest(request);
+      _verifyCitizenArchiveConfirmRequest(request);
 
       // 热钱包签名
       final payloadBytes =
@@ -135,7 +135,7 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: AppTheme.bannerDecoration(AppTheme.info),
           child: const Text(
-            '请扫描身份ID系统的鉴权签名码',
+            '请扫描链上中国平台的鉴权签名码',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppTheme.info, fontWeight: FontWeight.w600),
           ),
@@ -240,18 +240,18 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
     );
   }
 
-  void _verifyCitizenBindRequest(SignRequestEnvelope request) {
+  void _verifyCitizenArchiveConfirmRequest(SignRequestEnvelope request) {
     final body = request.body;
-    if (body.action != QrActions.citizenBind) {
-      throw Exception('只能签名身份ID绑定请求');
+    if (body.action != QrActions.citizenIdentity) {
+      throw Exception('只能签名公民档案确认请求');
     }
-    final decoded = _CitizenBindPayload.decode(body.payloadHex);
+    final decoded = _CitizenArchiveConfirmPayload.decode(body.payloadHex);
     if (decoded.walletPubkey.toLowerCase() != body.pubkeyHex.toLowerCase()) {
-      throw Exception('绑定载荷中的钱包公钥与签名请求不一致');
+      throw Exception('公民档案载荷中的钱包公钥与签名请求不一致');
     }
     if (decoded.walletPubkey.toLowerCase() !=
         '0x${widget.wallet.pubkeyHex}'.toLowerCase()) {
-      throw Exception('绑定载荷中的钱包公钥与当前钱包不一致');
+      throw Exception('公民档案载荷中的钱包公钥与当前钱包不一致');
     }
   }
 }
@@ -293,8 +293,8 @@ List<int> _hexToBytes(String input) {
   return result;
 }
 
-class _CitizenBindPayload {
-  const _CitizenBindPayload({
+class _CitizenArchiveConfirmPayload {
+  const _CitizenArchiveConfirmPayload({
     required this.archiveNo,
     required this.modeLabel,
     required this.votingEligibleLabel,
@@ -308,11 +308,11 @@ class _CitizenBindPayload {
   final String citizenStatusLabel;
   final String walletPubkey;
 
-  static _CitizenBindPayload decode(String payloadHex) {
+  static _CitizenArchiveConfirmPayload decode(String payloadHex) {
     final text = utf8.decode(_hexToBytes(payloadHex), allowMalformed: false);
     final parts = text.split('|');
-    if (parts.length != 11 || parts[0] != 'cid-citizen-bind-v1') {
-      throw Exception('无法独立验证身份ID绑定载荷');
+    if (parts.length != 11 || parts[0] != 'citizen-identity-v1') {
+      throw Exception('无法独立验证公民档案确认载荷');
     }
     final mode = parts[2];
     final archiveNo = parts[3];
@@ -320,11 +320,11 @@ class _CitizenBindPayload {
     final votingEligible = parts[5];
     final walletPubkey = parts[9];
     if (archiveNo.isEmpty || walletPubkey.isEmpty) {
-      throw Exception('身份ID绑定载荷缺少必要字段');
+      throw Exception('公民档案确认载荷缺少必要字段');
     }
-    return _CitizenBindPayload(
+    return _CitizenArchiveConfirmPayload(
       archiveNo: archiveNo,
-      modeLabel: mode == 'replace' ? '更换绑定' : '新增身份ID绑定',
+      modeLabel: mode == 'replace' ? '更换确认' : '新增公民档案确认',
       votingEligibleLabel: votingEligible == 'true' ? '有' : '无',
       citizenStatusLabel: citizenStatus == 'NORMAL' ? '正常' : '注销',
       walletPubkey: walletPubkey.startsWith('0x')

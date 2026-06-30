@@ -183,58 +183,20 @@ impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
     }
 }
 
-pub struct TestCidEligibility;
-impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
-    for TestCidEligibility
-{
-    fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
+pub struct TestCitizenIdentityReader;
+impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
+    fn can_vote(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
     }
 
-    fn verify_and_consume_vote_credential(
-        _binding_id: &<Test as frame_system::Config>::Hash,
-        _who: &AccountId32,
-        _proposal_id: u64,
-        _nonce: &[u8],
-        _signature: &[u8],
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
+    fn can_be_candidate(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
+    }
+
+    fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
+        100
     }
 }
-
-pub struct TestPopulationSnapshotVerifier;
-impl
-    votingengine::PopulationSnapshotVerifier<
-        AccountId32,
-        votingengine::pallet::VoteNonceOf<Test>,
-        votingengine::pallet::VoteSignatureOf<Test>,
-    > for TestPopulationSnapshotVerifier
-{
-    fn verify_population_snapshot(
-        _who: &AccountId32,
-        _eligible_total: u64,
-        _nonce: &votingengine::pallet::VoteNonceOf<Test>,
-        _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        true
-    }
-}
-
-// ── Provider:支持注册多签动态机构账户(PMUL/公权法人/私权法人) ──
-//
-// 机构账户 institution = 注册机构 main AccountId。
-// 测试环境直接读 public-admins / private-admins 的管理员列表。
-// 中文注释：动态阈值由 internal-vote 保存，不再挂在管理员主体上。
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
@@ -469,8 +431,7 @@ impl votingengine::Config for Test {
     type MaxActiveProposals = ConstU32<10>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
     type CleanupKeysPerStep = ConstU32<64>;
-    type CidEligibility = TestCidEligibility;
-    type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
+    type CitizenIdentityReader = TestCitizenIdentityReader;
     type JointVoteResultCallback = ();
     // 接 public-manage 的 InternalVoteExecutor (lib.rs 末尾导出)
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;

@@ -19,7 +19,7 @@ citizenchain/onchina/src/
 ├── crypto/                    # sr25519、公钥规范化和哈希辅助
 ├── domains/                   # 公权、私权、公民、资料库、地址等业务域
 │   ├── address/               # 镇下地址库查询和 AddressRegistry call data 构造
-│   ├── citizens/              # 公民身份、账户绑定和投票凭证
+│   ├── citizens/              # 公民档案、护照号和投票凭证
 │   ├── docs/                  # 机构资料库入口
 │   ├── gov/                   # 公权机构确定性目录和公权机构接口
 │   └── private/               # 私权机构入口和六类私权机构子模块
@@ -48,24 +48,36 @@ citizenchain/onchina/src/
 后端只承认结构化 PostgreSQL 表为主数据。`store/` 可以封装访问和短期缓存，但不得保存第二份业务主数据。
 
 - 机构主写入只进入 `institution/subjects`、`domains/gov`、`domains/private`、`institution/accounts` 和 `domains/docs`。
-- 公民主写入只进入 `domains/citizens` 和 `institution/subjects`。
+- 公民主写入只进入 `domains/citizens`、`subjects`、`citizens`、`passport_numbers` 和 `sequence_counters`。
 - 管理员写入只进入 `admins`(本地元数据缓存)和短生命周期安全运行态表;成员资格真源在链上(`federal_registry_scope` 表已退役,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
 - 链上状态只属于 `accounts.chain_status`，机构主体本身不保存链上状态。
 - 审计写入统一走结构化审计入口，详情字段只保存事实，不保存 UI 文案。
 
-## 5. 链交互边界
+## 5. 公民录入和护照号
+
+- 公民由注册局管理员在 OnChina 一次交易录入,不再由前端手填 `cid_number`。
+- 公民身份 CID 由 `src/cid/generator.rs` 生成,机构代码固定为 `CTZN`,个人码 R5 市段固定为 `000`。
+- 护照号由 `src/domains/citizens/passport_no.rs` 生成,OnChina 自持完整算法。
+- 创建公民必须提交 `wallet_account`;后端接受 SS58 地址或 0x 公钥,数据库内部保存 `wallet_pubkey`,前端和返回 DTO 只展示 `wallet_address`。
+- 出生省市镇必填,字段为 `birth_province_code / birth_city_code / birth_town_code`;创建后不得被普通编辑流程修改。
+- 居住省市来自当前办理注册局登录态,字段为 `residence_province_code / residence_city_code`;前端只选择 `residence_town_code`。
+- 护照有效期自动计算:创建时年满 16 周岁为 10 年,未满 16 周岁为 5 年,字段为 `passport_valid_from / passport_valid_until`。
+- `citizens` 表当前字段只表达公民档案、身份 CID、护照号、钱包地址、出生地、居住地、护照有效期和投票资格。
+- `passport_numbers` 是护照号全局索引表;`passport_number_recycle_pool` 只保存可回收护照号,不得保存旧公民个人资料。
+
+## 6. 链交互边界
 
 链交互按业务归属放置：
 
 - 机构注册信息凭证、账户列表 DTO 和 handler：`institution/subjects/chain_*.rs`
-- 公民投票凭证：`domains/citizens/chain_*.rs`
-- 联合投票人口快照凭证：`domains/citizens/chain_*.rs`
+- 公民投票资格查询：`domains/citizens/chain_vote.rs`
+- 联合投票本地人数查询：`domains/citizens/chain_joint_vote.rs`
 - 地址变更调用：`domains/address/chain_call.rs`
 - 通用 SCALE、genesis hash、RPC URL 和交易提交辅助：`core/chain_*.rs`
 
 业务模块不得新增全局链目录，不得在 handler 内手写 pallet/call 字节或二维码动作码。动作码、payload、签名/验签规则以 `memory/07-ai/unified-protocols.md` 为唯一登记入口。
 
-## 6. HTTPS 和机构 CA
+## 7. HTTPS 和机构 CA
 
 正式入口固定为 `https://onchina.local:8964`。OnChina 启动时在 `ONCHINA_TLS_DIR` 生成并持久化本机构节点私有 CA：
 
@@ -78,19 +90,19 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 未登录公共接口 `/api/v1/platform/ca-certificate` 只返回 CA 公钥证书 PEM，用于员工首次访问时下载并导入浏览器/系统受信任根证书；`/api/v1/platform/ca-certificate/info` 只返回文件名、证书主题、SHA-256 指纹和有效期展示信息。
 
-## 7. 错误码和提示边界
+## 8. 错误码和提示边界
 
-后端统一通过 `ApiError.error_code` 暴露稳定业务错误码。HTTP `401` 只表示管理员登录态无效；公民绑定 challenge 过期、账户不匹配、签名失败等业务错误不得返回 `401`。
+后端统一通过 `ApiError.error_code` 暴露稳定业务错误码。HTTP `401` 只表示管理员登录态无效；公民档案不存在、账户不匹配、签名失败等业务错误不得返回 `401`。
 
 数据库错误必须展开 PostgreSQL SQLSTATE、message、detail 和 hint，禁止只向前端或日志传 `db error`。
 
-## 8. 管理员写操作
+## 9. 管理员写操作
 
 管理员新增、替换、Passkey 更新、节点解绑和链写动作必须使用 `PASSKEY_COLD_SIGN` 二次确认。业务 handler 只负责构造业务动作，二维码协议包装和签名结果识别归 `core/qr/`。
 
 联邦注册局机构 `admins` 不允许本地新增或删除，只允许在同省范围内替换。市注册局机构 `admins` 每省每市最多 30 人，统计必须同时带省和市，不能只按市名统计。NJD、普通公权机构、私权机构和非法人组织本期只能查看本机构链上 active admin 列表，不能在 OnChina 内维护管理员集合。
 
-## 9. 控制台能力映射
+## 10. 控制台能力映射
 
 控制台 tab 能力由 `src/platform/capability.rs` 单源下发给前端。runtime 已经实现 FRG 省级组登记权高于 CREG 本市登记权，OnChina 能力表必须只镜像这个目标状态，不能另行降权：
 
@@ -101,7 +113,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 - `PMUL` 和其它个人主体不获得 OnChina 网页能力。
 - 前端 tab 展示只使用后端下发的 `capabilities`；后端 handler、scope 和链上 active admin 校验仍是安全边界。
 
-## 10. 验收
+## 11. 验收
 
 ```text
 rg "mod chain;|crate::chain|chain::" citizenchain/onchina/src -g '*.rs'

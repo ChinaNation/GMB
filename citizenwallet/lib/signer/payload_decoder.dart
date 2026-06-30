@@ -154,6 +154,9 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.castReferendumCall) {
           return _decodeCastReferendum(bytes);
         }
+        if (callIndex == PalletRegistry.prepareJointPopulationSnapshotCall) {
+          return _decodeJointPopulationSnapshot(bytes);
+        }
       }
 
       // ── VotingEngine(9) · 引擎核心生命周期 extrinsic ──
@@ -364,8 +367,8 @@ class PayloadDecoder {
       }
 
       // ── LegislationVote(28) · 立法专属投票引擎 ──
-      // 院内表决/行政签署/三人会签/护宪终审走 proposal_id+approve;
-      // 特别案公投走 CID 持有者凭证;准备人口快照走签发机构 admins 凭证。
+      // 院内表决/公投/行政签署/三人会签/护宪终审走 proposal_id+approve;
+      // 人口快照只携带作用域,链端直接读取 citizen-identity。
       if (palletIndex == PalletRegistry.legislationVotePallet) {
         if (callIndex == PalletRegistry.prepareLegislationSnapshotCall) {
           return _decodePrepareLegislationSnapshot(bytes);
@@ -689,83 +692,12 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // JointVote(23) / cast_referendum(1)
-  //
-  // 签发机构 admins 凭证。
-  // 格式：[0x17][0x01][proposal_id:u64_le][binding_id:32]
-  //       [Vec nonce][Vec sig][Vec issuer_cid_number][issuer_main_account:32]
-  //       [[u8;32] signer_pubkey][Vec scope_province_name][Vec scope_city_name][approve:bool]
-  //
-  // 签发身份必须进 payload,链端 RuntimeCidVoteVerifier 按 issuer_main_account
-  // 按机构码读取对应管理员 pallet 的 AdminAccounts.admins 确认 signer_pubkey。
+  // 格式：[0x17][0x01][proposal_id:u64_le][approve:bool]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeCastReferendum(Uint8List bytes) {
-    // 最小：2 + 8 + 32 + 1(nonce) + 1(sig) + 1(issuer)
-    //      + 32(issuer account) + 32(signer) + 1(scope province)
-    //      + 1(scope city) + 1(approve) = 112
-    if (bytes.length < 112) return null;
-
+    if (bytes.length < 11 || !_hasValidSigningTail(bytes, 11)) return null;
     final proposalId = _readU64Le(bytes, 2);
-
-    // 逐段解析变长字段，精确定位 approve 偏移量。
-    var offset = 2 + 8 + 32; // 跳过 pallet+call, proposal_id, binding_id
-
-    // Vec<u8> nonce — SCALE Compact 前缀 + nonce 字节
-    final (nonceLen, nonceLenSize) = _decodeCompactU32(bytes, offset);
-    offset += nonceLenSize;
-    if (offset + nonceLen > bytes.length) return null;
-    offset += nonceLen;
-
-    // Vec<u8> sig — SCALE Compact 前缀 + sig 字节
-    final (sigLen, sigLenSize) = _decodeCompactU32(bytes, offset);
-    offset += sigLenSize;
-    if (offset + sigLen > bytes.length) return null;
-    offset += sigLen;
-
-    // Vec<u8> issuer_cid_number
-    final (issuerLen, issuerLenSize) = _decodeCompactU32(bytes, offset);
-    offset += issuerLenSize;
-    if (offset + issuerLen > bytes.length) return null;
-    final issuerCidNumber = utf8.decode(
-      bytes.sublist(offset, offset + issuerLen),
-      allowMalformed: true,
-    );
-    offset += issuerLen;
-
-    // AccountId issuer_main_account
-    if (offset + 32 > bytes.length) return null;
-    final issuerMainAccount = bytes.sublist(offset, offset + 32);
-    offset += 32;
-
-    // [u8; 32] signer_pubkey
-    if (offset + 32 > bytes.length) return null;
-    final signerPubkey = bytes.sublist(offset, offset + 32);
-    offset += 32;
-
-    // Vec<u8> scope_province_name
-    final (scopeProvinceLen, scopeProvinceLenSize) =
-        _decodeCompactU32(bytes, offset);
-    offset += scopeProvinceLenSize;
-    if (offset + scopeProvinceLen > bytes.length) return null;
-    final scopeProvinceName = utf8.decode(
-      bytes.sublist(offset, offset + scopeProvinceLen),
-      allowMalformed: true,
-    );
-    offset += scopeProvinceLen;
-
-    // Vec<u8> scope_city_name
-    final (scopeCityLen, scopeCityLenSize) = _decodeCompactU32(bytes, offset);
-    offset += scopeCityLenSize;
-    if (offset + scopeCityLen > bytes.length) return null;
-    final scopeCityName = utf8.decode(
-      bytes.sublist(offset, offset + scopeCityLen),
-      allowMalformed: true,
-    );
-    offset += scopeCityLen;
-
-    // approve: bool（1 字节）
-    if (offset >= bytes.length) return null;
-    final approve = bytes[offset] != 0;
-    if (!_hasValidSigningTail(bytes, offset + 1)) return null;
+    final approve = bytes[10] != 0;
     final voteText = approve ? '赞成' : '反对';
 
     return DecodedPayload(
@@ -774,12 +706,24 @@ class PayloadDecoder {
       fields: {
         'proposal_id': proposalId.toString(),
         'approve': approve.toString(),
-        'issuer_cid_number': issuerCidNumber,
-        'issuer_main_account': _bytesToSs58(issuerMainAccount),
-        'signer_pubkey': _bytesToSs58(signerPubkey),
-        'scope_province_name': scopeProvinceName,
-        'scope_city_name': scopeCityName,
       },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // JointVote(23) / prepare_joint_population_snapshot(2)
+  // 格式：[0x17][0x02][scope:PopulationScope]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeJointPopulationSnapshot(Uint8List bytes) {
+    final (scopeFields, offset) = _decodePopulationScope(bytes, 2);
+    if (scopeFields == null || !_hasValidSigningTail(bytes, offset)) {
+      return null;
+    }
+
+    return DecodedPayload(
+      action: 'prepare_joint_population_snapshot',
+      summary: '准备联合公投人口快照（${scopeFields['scope_text']}）',
+      fields: scopeFields,
     );
   }
 
@@ -1430,6 +1374,56 @@ class PayloadDecoder {
     return offset;
   }
 
+  /// 解码 runtime `citizen_identity::PopulationScope`。
+  static (Map<String, String>?, int) _decodePopulationScope(
+    Uint8List bytes,
+    int offset,
+  ) {
+    if (offset >= bytes.length) return (null, -1);
+    final tag = bytes[offset];
+    offset += 1;
+
+    final fields = <String, String>{};
+    switch (tag) {
+      case 0:
+        fields['scope_level'] = 'COUNTRY';
+        fields['scope_text'] = '全国';
+        return (fields, offset);
+      case 1:
+        final (province, next) = _readUtf8Vec(bytes, offset);
+        if (province == null) return (null, -1);
+        fields['scope_level'] = 'PROVINCE';
+        fields['scope_province_code'] = province;
+        fields['scope_text'] = '省 $province';
+        return (fields, next);
+      case 2:
+        final (province, afterProvince) = _readUtf8Vec(bytes, offset);
+        if (province == null) return (null, -1);
+        final (city, next) = _readUtf8Vec(bytes, afterProvince);
+        if (city == null) return (null, -1);
+        fields['scope_level'] = 'CITY';
+        fields['scope_province_code'] = province;
+        fields['scope_city_code'] = city;
+        fields['scope_text'] = '市 $province/$city';
+        return (fields, next);
+      case 3:
+        final (province, afterProvince) = _readUtf8Vec(bytes, offset);
+        if (province == null) return (null, -1);
+        final (city, afterCity) = _readUtf8Vec(bytes, afterProvince);
+        if (city == null) return (null, -1);
+        final (town, next) = _readUtf8Vec(bytes, afterCity);
+        if (town == null) return (null, -1);
+        fields['scope_level'] = 'TOWN';
+        fields['scope_province_code'] = province;
+        fields['scope_city_code'] = city;
+        fields['scope_town_code'] = town;
+        fields['scope_text'] = '镇 $province/$city/$town';
+        return (fields, next);
+      default:
+        return (null, -1);
+    }
+  }
+
   /// 跳过 Option<BoundedVec<u8>>(1 tag 字节 + Some 时载荷),返回新 offset;失败返回 -1。
   static int _skipOptionBoundedBytes(Uint8List bytes, int offset) {
     if (offset >= bytes.length) return -1;
@@ -1798,159 +1792,29 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // LegislationVote(28) / prepare_population_snapshot(0)
-  // SCALE: [28][0][eligible_total:u64_le][snapshot_nonce:BoundedVec]
-  //        [signature:BoundedVec][issuer_cid_number:BoundedVec]
-  //        [issuer_main_account:32][signer_pubkey:32]
-  //        [scope_province_name:BoundedVec][scope_city_name:BoundedVec]
-  //
-  // 签发身份必须进 payload,链端按 issuer_main_account 读 admins-change
-  // AdminAccounts.admins 真源确认 signer_pubkey(与联合公投快照同构)。
+  // SCALE: [28][0][scope:PopulationScope]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodePrepareLegislationSnapshot(Uint8List bytes) {
-    // 最小:2 + 8(total) + 1(nonce) + 1(sig) + 1(issuer)
-    //      + 32(issuer account) + 32(signer) + 1(province) + 1(city) = 79
-    if (bytes.length < 79) return null;
-    var offset = 2;
-
-    final eligibleTotal = _readU64Le(bytes, offset);
-    offset += 8;
-
-    // snapshot_nonce / signature — 跳过
-    offset = _skipBoundedBytes(bytes, offset);
-    if (offset < 0) return null;
-    offset = _skipBoundedBytes(bytes, offset);
-    if (offset < 0) return null;
-
-    // issuer_cid_number: BoundedVec<u8>
-    final (issuerLen, issuerLenSize) = _decodeCompactU32(bytes, offset);
-    if (issuerLenSize == 0) return null;
-    offset += issuerLenSize;
-    if (offset + issuerLen > bytes.length) return null;
-    final issuerCidNumber = utf8.decode(
-      bytes.sublist(offset, offset + issuerLen),
-      allowMalformed: true,
-    );
-    offset += issuerLen;
-
-    // issuer_main_account: AccountId32
-    if (offset + 32 > bytes.length) return null;
-    final issuerMainAccount = bytes.sublist(offset, offset + 32);
-    offset += 32;
-
-    // signer_pubkey: [u8;32]
-    if (offset + 32 > bytes.length) return null;
-    final signerPubkey = bytes.sublist(offset, offset + 32);
-    offset += 32;
-
-    // scope_province_name: BoundedVec<u8>
-    final (provinceLen, provinceLenSize) = _decodeCompactU32(bytes, offset);
-    if (provinceLenSize == 0) return null;
-    offset += provinceLenSize;
-    if (offset + provinceLen > bytes.length) return null;
-    final scopeProvinceName = utf8.decode(
-      bytes.sublist(offset, offset + provinceLen),
-      allowMalformed: true,
-    );
-    offset += provinceLen;
-
-    // scope_city_name: BoundedVec<u8>
-    final (cityLen, cityLenSize) = _decodeCompactU32(bytes, offset);
-    if (cityLenSize == 0) return null;
-    offset += cityLenSize;
-    if (offset + cityLen > bytes.length) return null;
-    final scopeCityName = utf8.decode(
-      bytes.sublist(offset, offset + cityLen),
-      allowMalformed: true,
-    );
-    offset += cityLen;
-
-    if (!_hasValidSigningTail(bytes, offset)) return null;
+    final (scopeFields, offset) = _decodePopulationScope(bytes, 2);
+    if (scopeFields == null || !_hasValidSigningTail(bytes, offset)) {
+      return null;
+    }
 
     return DecodedPayload(
       action: 'prepare_legislation_snapshot',
-      summary: '准备立法人口快照（$eligibleTotal 名合格选民）',
-      fields: {
-        'eligible_total': eligibleTotal.toString(),
-        'issuer_cid_number': issuerCidNumber,
-        'issuer_main_account': _bytesToSs58(issuerMainAccount),
-        'signer_pubkey': _bytesToSs58(signerPubkey),
-        'scope_province_name': scopeProvinceName,
-        'scope_city_name': scopeCityName,
-      },
+      summary: '准备立法人口快照（${scopeFields['scope_text']}）',
+      fields: scopeFields,
     );
   }
 
   // ---------------------------------------------------------------------------
   // LegislationVote(28) / cast_referendum_vote(2)
-  // SCALE: [28][2][proposal_id:u64_le][binding_id:32][nonce:BoundedVec]
-  //        [signature:BoundedVec][issuer_cid_number:BoundedVec]
-  //        [issuer_main_account:32][signer_pubkey:32]
-  //        [scope_province_name:BoundedVec][scope_city_name:BoundedVec][approve:bool]
-  //
-  // 特别案强制公民投票:CID 持有者凭证,与 JointVote::cast_referendum 同构。
+  // SCALE: [28][2][proposal_id:u64_le][approve:bool]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeCastLegislationReferendum(Uint8List bytes) {
-    // 最小:2 + 8 + 32 + 1(nonce) + 1(sig) + 1(issuer)
-    //      + 32(issuer account) + 32(signer) + 1(province) + 1(city)
-    //      + 1(approve) = 112
-    if (bytes.length < 112) return null;
-
+    if (bytes.length < 11 || !_hasValidSigningTail(bytes, 11)) return null;
     final proposalId = _readU64Le(bytes, 2);
-    var offset = 2 + 8 + 32; // 跳过 pallet+call, proposal_id, binding_id
-
-    // nonce / signature — 跳过
-    offset = _skipBoundedBytes(bytes, offset);
-    if (offset < 0) return null;
-    offset = _skipBoundedBytes(bytes, offset);
-    if (offset < 0) return null;
-
-    // issuer_cid_number: BoundedVec<u8>
-    final (issuerLen, issuerLenSize) = _decodeCompactU32(bytes, offset);
-    if (issuerLenSize == 0) return null;
-    offset += issuerLenSize;
-    if (offset + issuerLen > bytes.length) return null;
-    final issuerCidNumber = utf8.decode(
-      bytes.sublist(offset, offset + issuerLen),
-      allowMalformed: true,
-    );
-    offset += issuerLen;
-
-    // issuer_main_account: AccountId32
-    if (offset + 32 > bytes.length) return null;
-    final issuerMainAccount = bytes.sublist(offset, offset + 32);
-    offset += 32;
-
-    // signer_pubkey: [u8;32]
-    if (offset + 32 > bytes.length) return null;
-    final signerPubkey = bytes.sublist(offset, offset + 32);
-    offset += 32;
-
-    // scope_province_name: BoundedVec<u8>
-    final (provinceLen, provinceLenSize) = _decodeCompactU32(bytes, offset);
-    if (provinceLenSize == 0) return null;
-    offset += provinceLenSize;
-    if (offset + provinceLen > bytes.length) return null;
-    final scopeProvinceName = utf8.decode(
-      bytes.sublist(offset, offset + provinceLen),
-      allowMalformed: true,
-    );
-    offset += provinceLen;
-
-    // scope_city_name: BoundedVec<u8>
-    final (cityLen, cityLenSize) = _decodeCompactU32(bytes, offset);
-    if (cityLenSize == 0) return null;
-    offset += cityLenSize;
-    if (offset + cityLen > bytes.length) return null;
-    final scopeCityName = utf8.decode(
-      bytes.sublist(offset, offset + cityLen),
-      allowMalformed: true,
-    );
-    offset += cityLen;
-
-    // approve: bool
-    if (offset >= bytes.length) return null;
-    final approve = bytes[offset] != 0;
-    if (!_hasValidSigningTail(bytes, offset + 1)) return null;
+    final approve = bytes[10] != 0;
     final voteText = approve ? '赞成' : '反对';
 
     return DecodedPayload(
@@ -1959,11 +1823,6 @@ class PayloadDecoder {
       fields: {
         'proposal_id': proposalId.toString(),
         'approve': approve.toString(),
-        'issuer_cid_number': issuerCidNumber,
-        'issuer_main_account': _bytesToSs58(issuerMainAccount),
-        'signer_pubkey': _bytesToSs58(signerPubkey),
-        'scope_province_name': scopeProvinceName,
-        'scope_city_name': scopeCityName,
       },
     );
   }

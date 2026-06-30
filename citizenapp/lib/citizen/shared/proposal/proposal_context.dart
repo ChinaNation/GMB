@@ -37,7 +37,7 @@ class ProposalContext {
   /// 是否为管理员。
   bool get isAdmin => role == ProposalRole.admin;
 
-  /// 是否为公民（有 CID 绑定）。
+  /// 是否为公民（有链上公民身份）。
   bool get isCitizen =>
       role == ProposalRole.citizen || role == ProposalRole.admin;
 
@@ -50,7 +50,7 @@ enum ProposalRole {
   /// 管理员：有冷钱包匹配到链上管理员列表。
   admin,
 
-  /// 公民：有 CID 绑定的钱包（暂未实现，预留）。
+  /// 公民：有链上公民身份的钱包（暂未实现，预留）。
   citizen,
 
   /// 查看者：无关联钱包。

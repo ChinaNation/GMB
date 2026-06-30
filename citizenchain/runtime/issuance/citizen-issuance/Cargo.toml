@@ -14,7 +14,7 @@ frame-system = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 pallet-balances = { workspace = true }
 sp-runtime = { workspace = true }
-cid-system = { path = "../../otherpallet/cid-system", default-features = false }
+citizen-identity = { path = "../../otherpallet/citizen-identity", default-features = false }
 
 primitives = { path = "../../primitives", default-features = false }
 
@@ -26,7 +26,7 @@ runtime-benchmarks = [
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",
     "pallet-balances/runtime-benchmarks",
-    "cid-system/runtime-benchmarks",
+    "citizen-identity/runtime-benchmarks",
 ]
 try-runtime = []
 std = [
@@ -37,7 +37,7 @@ std = [
     "frame-system/std",
     "pallet-balances/std",
     "sp-runtime/std",
-    "cid-system/std",
+    "citizen-identity/std",
     "primitives/std",
 ]
 

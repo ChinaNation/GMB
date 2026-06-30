@@ -6,5 +6,5 @@
 ## Benchmark feature 传播规则
 
 - 发行模块启用 `runtime-benchmarks` 时，必须把已使用且已暴露同名 feature 的下游 runtime 依赖一并传播。
-- 当前需要显式传播的下游包括 `pallet-balances`、`votingengine` 和 `cid-system`。
+- 当前需要显式传播的下游包括 `pallet-balances`、`votingengine` 和 `citizen-identity`。
 - `primitives` 当前不暴露 `runtime-benchmarks` feature，发行模块不得引用 `primitives/runtime-benchmarks`。

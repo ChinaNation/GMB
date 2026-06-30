@@ -34,6 +34,15 @@ CID 号格式为 `R5-K3P1C1-N9-D4`。
 
 CID 号生成和校验唯一源码目录为 `citizenchain/onchina/src/cid/`。任何端不得维护第二份号码格式、机构码表或省码表。
 
+### 3.1 公民 CID 和护照号
+
+- 公民 CID 的机构代码固定为 `CTZN`;个人码不携带办理市码,R5 市段固定为 `000`。
+- 公民护照号由 `citizenchain/onchina/src/domains/citizens/passport_no.rs` 生成,格式为省码 2 位 + Crockford Base32 主体 8 位 + 校验位 1 位。
+- 护照号终身唯一;`passport_numbers` 负责全局查重。
+- 护照号资源回收只允许通过 `passport_number_recycle_pool` 回收号码本身,不得保存旧公民姓名、出生地、钱包、公民 CID 或其它个人资料。
+- 公民档案必须有 `wallet_address` 和内部 `wallet_pubkey`;前端、审计展示和普通 DTO 只展示 SS58 地址。
+- 公民选举/被选举范围由出生地、居住地和投票规则共同决定,不在公民档案中保存独立范围字段。
+
 ## 4. 权限范围
 
 OnChina 管理端只承认当前节点 active binding 绑定机构的链上 active admin 登录。登录态必须携带 `institution_code`、`admin_level`、`scope_province_name`、`scope_city_name`、`scope_town_name` 和后端下发的 `capabilities`。
@@ -43,7 +52,7 @@ OnChina 管理端只承认当前节点 active binding 绑定机构的链上 acti
 - FRG：按本节点绑定的省级组限制。
 - CREG：按本节点绑定的市级范围限制。
 - 省 / 市 / 镇级机构：按 `admin_level` 派生的省 / 市 / 镇范围限制。
-- 私权和非法人机构：按本机构绑定身份限制。
+- 私权和非法人机构：按本机构链上身份限制。
 - NJD、普通公权、私权和非法人组织本期只开放“本机构管理员”只读能力，不开放机构登记、账户、资料或地址库写能力。
 - NRC / PRC / PRB 使用节点桌面端，不进入 OnChina 网页控制台。
 - PMUL 和其它个人主体不进入 OnChina 网页控制台。

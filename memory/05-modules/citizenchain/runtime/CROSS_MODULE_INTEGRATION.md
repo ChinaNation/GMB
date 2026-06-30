@@ -19,7 +19,7 @@
 | `personal-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admin-primitives`（通过 lifecycle/query trait） |
 | `multisig-transfer` | `frame_system`, `votingengine`, `entity-primitives`, `personal-manage`（通过 PersonalQuery） |
 | `offchain-transaction` | `frame_system`, `votingengine`（通过 InternalVoteEngine） |
-| `cid-system` | `frame_system` |
+| `citizen-identity` | `frame_system`, `citizen-issuance`（通过回调）, `pallet_balances`（通过签名账户） |
 | `citizen-issuance` | `frame_system`, `pallet_balances`（通过 Currency） |
 
 ## 关键 Trait 提供矩阵
@@ -37,11 +37,11 @@
 | `FeePayerExtractor` (CallFeePayer) | `onchain-transaction` | `RuntimeFeePayerExtractor` | `pallet-transaction-payment` (OnChargeTransaction) |
 | `FeeKindClassifier` (CallFeeKind) | `onchain-transaction` | `RuntimeFeeKindClassifier` | `pallet-transaction-payment` (OnChargeTransaction) |
 | `ProtectedSourceChecker` | `entity-primitives` / `offchain-transaction` | `RuntimeProtectedSourceChecker` | `public-manage`, `private-manage`, `personal-manage`, `multisig-transfer`, `offchain-transaction` |
-| `CidEligibility` | `votingengine` | `RuntimeCidEligibility` (委托 cid-system) | `votingengine` |
-| `PopulationSnapshotVerifier` | `votingengine` | `RuntimePopulationSnapshotVerifier` | `votingengine` |
+| `CitizenIdentityReader` | `votingengine` | `RuntimeCitizenIdentityReader`（委托 `citizen-identity`） | `votingengine` |
 | `JointVoteResultCallback` | `votingengine` | `RuntimeJointVoteResultCallback` | `votingengine` (投票通过后回调) |
 | `CidInstitutionVerifier` | `entity-primitives` | `RuntimeCidInstitutionVerifier` | `public-manage`, `private-manage` |
-| `CidVerifier` / `CidVoteVerifier` | `cid-system` | `RuntimeCidVerifier` / `RuntimeCidVoteVerifier` | `cid-system` |
+| `CitizenIdentityAuthority` | `citizen-identity` | `RuntimeCitizenIdentityAuthority` | `citizen-identity` |
+| `OnVotingIdentityRegistered` | `citizen-identity` | `CitizenIssuance` | `citizen-issuance` |
 | `AdminAccountLifecycle` | `admin-primitives` | `PublicAdmins` / `PrivateAdmins` / `PersonalAdmins` | `public-manage`, `private-manage`, `personal-manage`, `personal-admins` |
 | `AdminAccountQuery` | `admin-primitives` | `RuntimeAdminAccountQuery` | `public-manage`, `private-manage`, `multisig-transfer`, `votingengine`, runtime verifier |
 
@@ -53,6 +53,8 @@
 | `RuntimeInstitutionQuery` | 按公权/私权机构生命周期模块聚合机构账户状态和管理员快照，供 `multisig-transfer` 使用 |
 | `RuntimeInternalAdminProvider` | 所有内部投票主体统一委托 `RuntimeAdminAccountQuery` 读取管理员 |
 | `RuntimeInternalAdminsLenProvider` | 所有内部投票主体统一委托 `RuntimeAdminAccountQuery` 读取管理员人数 |
+| `RuntimeCitizenIdentityReader` | 给投票引擎读取公民投票资格、参选资格和链上人口分母 |
+| `RuntimeCitizenIdentityAuthority` | 给公民身份模块校验注册局权限和公民钱包签名 |
 | `RuntimeJointVoteResultCallback` | 按模块路由：先查 `resolution-issuance`，再查 `runtime-upgrade` |
 | `TransferFeeRouter` | 旧 NegativeImbalance -> Credit 转换 -> `OnchainFeeRouter` 80/10/10 分账 |
 | `RuntimeSafetyFundAccountProvider` | 将安全基金制度常量 `SAFETY_FUND_ACCOUNT` 转为 runtime 账户，避免手续费分账热路径重复 decode |

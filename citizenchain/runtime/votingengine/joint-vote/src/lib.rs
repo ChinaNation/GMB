@@ -21,7 +21,7 @@ use primitives::count_const::{
     JOINT_VOTE_PASS_THRESHOLD, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
 };
 
-use votingengine::Proposal;
+use votingengine::{PopulationScope, Proposal};
 
 pub mod jointinternal;
 pub mod jointreferendum;
@@ -162,21 +162,22 @@ pub mod pallet {
     pub type JointTallies<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU32, ValueQuery>;
 
-    /// 联合公投记录:(proposal_id, CID 绑定哈希) → 赞成/反对。
+    /// 联合公投记录:(proposal_id, 公民钱包账户) → 赞成/反对。
     #[pallet::storage]
-    pub type ReferendumVotesByBindingId<T: Config> =
-        StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, T::Hash, bool, OptionQuery>;
+    pub type ReferendumVotesByAccount<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Blake2_128Concat,
+        T::AccountId,
+        bool,
+        OptionQuery,
+    >;
 
     #[pallet::storage]
     #[pallet::getter(fn referendum_tally)]
     pub type ReferendumTallies<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU64, ValueQuery>;
-
-    /// 总人口快照 nonce 防重放(全局维度)。
-    #[pallet::storage]
-    #[pallet::getter(fn used_population_snapshot_nonce)]
-    pub type UsedPopulationSnapshotNonce<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
     #[derive(
         Encode,
@@ -189,34 +190,39 @@ pub mod pallet {
         PartialEq,
         Eq,
     )]
-    pub struct PreparedPopulationSnapshot<BlockNumber, Hash> {
-        /// 中文注释：联合公投阶段可投票总人数，由投票引擎验签后缓存。
+    pub struct PreparedPopulationSnapshot<BlockNumber> {
+        /// 中文注释：联合公投阶段可投票总人数，由投票引擎从链上公民身份模块读取后缓存。
         pub eligible_total: u64,
-        /// 中文注释：人口快照 nonce 哈希，用于审计和防重放。
-        pub nonce_hash: Hash,
+        /// 中文注释：人口统计作用域，后续公民投票资格按同一作用域读取。
+        pub scope: PopulationScope,
         /// 中文注释：准备快照所在区块。
         pub prepared_at: BlockNumber,
     }
 
-    /// 已验签的人口快照缓存：发起联合提案时由投票引擎消费。
+    /// 已准备的人口快照缓存：发起联合提案时由投票引擎消费。
     #[pallet::storage]
     #[pallet::getter(fn pending_population_snapshot)]
     pub type PendingPopulationSnapshots<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         T::AccountId,
-        PreparedPopulationSnapshot<BlockNumberFor<T>, T::Hash>,
+        PreparedPopulationSnapshot<BlockNumberFor<T>>,
         OptionQuery,
     >;
+
+    /// 联合公投提案的人口作用域：proposal_id → scope。
+    #[pallet::storage]
+    pub type ReferendumScopes<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, PopulationScope, OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 联合投票人口快照已由投票引擎验签并缓存。
+        /// 联合投票人口快照已由投票引擎读取并缓存。
         PopulationSnapshotPrepared {
             who: T::AccountId,
             eligible_total: u64,
-            nonce_hash: T::Hash,
+            scope: PopulationScope,
         },
         /// 联合投票中某机构管理员已投出一票。
         JointAdminVoteCast {
@@ -231,11 +237,10 @@ pub mod pallet {
             institution: T::AccountId,
             approved: bool,
         },
-        /// 联合公投已投出一票(binding_id 为 CID 哈希)。
+        /// 联合公投已投出一票。
         ReferendumVoteCast {
             proposal_id: u64,
             who: T::AccountId,
-            binding_id: T::Hash,
             approve: bool,
         },
     }
@@ -244,16 +249,16 @@ pub mod pallet {
     pub enum Error<T> {
         /// 联合公投总分母未设置(eligible_total == 0)。
         CitizenEligibleTotalNotSet,
-        /// 人口快照参数无效(nonce 为空/已使用/签名验证失败)。
+        /// 人口快照参数无效或作用域没有可投票公民。
         InvalidPopulationSnapshot,
         /// 发起联合提案前尚未准备人口快照。
         PopulationSnapshotNotPrepared,
         /// 人口快照不是当前区块准备的快照,不能代表提案发起时刻的公民分母。
         PopulationSnapshotNotCurrent,
-        /// CID 资格校验未通过(binding_id 未绑定或不匹配)。
-        CidNotEligible,
-        /// CID 投票凭证验签失败或已被消费。
-        InvalidCidVoteCredential,
+        /// 公民身份投票资格校验未通过。
+        CitizenNotEligible,
+        /// 公投作用域缺失。
+        PopulationScopeMissing,
     }
 
     use crate::weights::WeightInfo;
@@ -274,68 +279,31 @@ pub mod pallet {
             Self::do_joint_vote(who, proposal_id, institution, approve)
         }
 
-        /// 联合公投阶段:CID 持有者按 >50% 严格多数投票。
+        /// 联合公投阶段:链上公民身份持有者按 >50% 严格多数投票。
         /// 业务实现挂在 [`super::jointreferendum`]。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as Config>::WeightInfo::cast_referendum())]
         pub fn cast_referendum(
             origin: OriginFor<T>,
             proposal_id: u64,
-            binding_id: T::Hash,
-            nonce: votingengine::pallet::VoteNonceOf<T>,
-            signature: votingengine::pallet::VoteSignatureOf<T>,
-            issuer_cid_number: BoundedVec<u8, ConstU32<128>>,
-            issuer_main_account: T::AccountId,
-            signer_pubkey: [u8; 32],
-            scope_province_name: BoundedVec<u8, ConstU32<64>>,
-            scope_city_name: BoundedVec<u8, ConstU32<64>>,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_jointreferendum_vote(
-                who,
-                proposal_id,
-                binding_id,
-                nonce,
-                signature,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-                approve,
-            )
+            Self::do_jointreferendum_vote(who, proposal_id, approve)
         }
 
         /// 准备联合投票人口快照。
         ///
-        /// 中文注释：人口快照、联合签名、nonce 防重放全部属于投票引擎。
+        /// 中文注释：人口快照由投票引擎从 citizen-identity 链上状态直接读取。
         /// 业务模块只能在随后创建提案时消费已准备快照，不能再透传这些字段。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as Config>::WeightInfo::prepare_joint_population_snapshot())]
         pub fn prepare_joint_population_snapshot(
             origin: OriginFor<T>,
-            eligible_total: u64,
-            snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
-            signature: votingengine::pallet::VoteSignatureOf<T>,
-            issuer_cid_number: BoundedVec<u8, ConstU32<128>>,
-            issuer_main_account: T::AccountId,
-            signer_pubkey: [u8; 32],
-            scope_province_name: BoundedVec<u8, ConstU32<64>>,
-            scope_city_name: BoundedVec<u8, ConstU32<64>>,
+            scope: PopulationScope,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_prepare_population_snapshot(
-                who,
-                eligible_total,
-                snapshot_nonce,
-                signature,
-                issuer_cid_number.as_slice(),
-                &issuer_main_account,
-                &signer_pubkey,
-                scope_province_name.as_slice(),
-                scope_city_name.as_slice(),
-            )
+            Self::do_prepare_population_snapshot(who, scope)
         }
     }
 }
@@ -452,12 +420,13 @@ impl<T: Config> votingengine::traits::JointCleanupHandler for Pallet<T> {
         proposal_id: u64,
         limit: u32,
     ) -> votingengine::traits::CleanupChunkResult {
-        let result = ReferendumVotesByBindingId::<T>::clear_prefix(proposal_id, limit, None);
+        let result = ReferendumVotesByAccount::<T>::clear_prefix(proposal_id, limit, None);
         (result.unique, result.maybe_cursor.is_some())
     }
 
     fn cleanup_joint_terminal(proposal_id: u64) {
         JointTallies::<T>::remove(proposal_id);
         ReferendumTallies::<T>::remove(proposal_id);
+        ReferendumScopes::<T>::remove(proposal_id);
     }
 }

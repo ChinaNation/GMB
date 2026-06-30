@@ -85,22 +85,18 @@ fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 #[test]
-fn on_cid_bound_issues_reward() {
+fn voting_identity_registered_issues_reward() {
     new_test_ext().execute_with(|| {
-        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"cid-a");
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id);
+        let cid_number_hash = notify_voting_identity_registered(1, b"CTZN-0001");
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(RewardedCount::<Test>::get(), 1);
-        assert!(RewardClaimed::<Test>::contains_key(binding_id));
+        assert!(IdentityRewardClaimed::<Test>::contains_key(cid_number_hash));
         assert!(AccountRewarded::<Test>::contains_key(1));
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardIssued {
                 who: 1,
-                binding_id,
+                cid_number_hash,
                 reward: CITIZEN_ISSUANCE_HIGH_REWARD,
             },
         ));
@@ -111,19 +107,14 @@ fn on_cid_bound_issues_reward() {
 fn max_cap_stops_reward() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_MAX_COUNT);
-        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"cid-cap");
-
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id);
+        let cid_number_hash = notify_voting_identity_registered(1, b"CTZN-CAP");
 
         assert_eq!(Balances::free_balance(1), 0);
         assert_eq!(RewardedCount::<Test>::get(), CITIZEN_ISSUANCE_MAX_COUNT);
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
                 who: 1,
-                binding_id,
+                cid_number_hash,
                 reason: SkipReason::MaxCountReached,
             },
         ));
@@ -139,31 +130,26 @@ fn max_count_minus_one_allows_last_reward_then_rejects_next() {
             } else {
                 CITIZEN_ISSUANCE_NORMAL_REWARD
             };
-        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"cid-last-slot");
-        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"cid-over-cap");
 
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_MAX_COUNT.saturating_sub(1));
-
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id_a);
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&2, binding_id_b);
+        let cid_number_hash_a = notify_voting_identity_registered(1, b"CTZN-LAST");
+        let cid_number_hash_b = notify_voting_identity_registered(2, b"CTZN-OVER");
 
         assert_eq!(Balances::free_balance(1), last_reward_amount);
         assert_eq!(Balances::free_balance(2), 0);
         assert_eq!(RewardedCount::<Test>::get(), CITIZEN_ISSUANCE_MAX_COUNT);
-        assert!(RewardClaimed::<Test>::contains_key(binding_id_a));
-        assert!(!RewardClaimed::<Test>::contains_key(binding_id_b));
+        assert!(IdentityRewardClaimed::<Test>::contains_key(
+            cid_number_hash_a
+        ));
+        assert!(!IdentityRewardClaimed::<Test>::contains_key(
+            cid_number_hash_b
+        ));
         assert!(AccountRewarded::<Test>::contains_key(1));
         assert!(!AccountRewarded::<Test>::contains_key(2));
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
                 who: 2,
-                binding_id: binding_id_b,
+                cid_number_hash: cid_number_hash_b,
                 reason: SkipReason::MaxCountReached,
             },
         ));
@@ -171,26 +157,18 @@ fn max_count_minus_one_allows_last_reward_then_rejects_next() {
 }
 
 #[test]
-fn same_cid_only_rewards_once() {
+fn same_citizen_identity_only_rewards_once() {
     new_test_ext().execute_with(|| {
-        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"cid-repeat");
-
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id);
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id);
+        let cid_number_hash = notify_voting_identity_registered(1, b"CTZN-REPEAT");
+        notify_voting_identity_registered(1, b"CTZN-REPEAT");
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(RewardedCount::<Test>::get(), 1);
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
                 who: 1,
-                binding_id,
-                reason: SkipReason::DuplicateBindingId,
+                cid_number_hash,
+                reason: SkipReason::DuplicateCitizenIdentity,
             },
         ));
     });
@@ -199,19 +177,10 @@ fn same_cid_only_rewards_once() {
 #[test]
 fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
     new_test_ext().execute_with(|| {
-        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"cid-tier-a");
-        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"cid-tier-b");
-
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT.saturating_sub(1));
 
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id_a);
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&2, binding_id_b);
+        let cid_number_hash_a = notify_voting_identity_registered(1, b"CTZN-TIER-A");
+        let cid_number_hash_b = notify_voting_identity_registered(2, b"CTZN-TIER-B");
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(Balances::free_balance(2), CITIZEN_ISSUANCE_NORMAL_REWARD);
@@ -233,12 +202,12 @@ fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
             vec![
                 Event::<Test>::CertificationRewardIssued {
                     who: 1,
-                    binding_id: binding_id_a,
+                    cid_number_hash: cid_number_hash_a,
                     reward: CITIZEN_ISSUANCE_HIGH_REWARD,
                 },
                 Event::<Test>::CertificationRewardIssued {
                     who: 2,
-                    binding_id: binding_id_b,
+                    cid_number_hash: cid_number_hash_b,
                     reward: CITIZEN_ISSUANCE_NORMAL_REWARD,
                 },
             ]
@@ -250,12 +219,8 @@ fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
 fn boundary_switches_to_normal_reward_at_high_reward_count() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT);
-        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"cid-boundary");
 
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id);
+        notify_voting_identity_registered(1, b"CTZN-BOUNDARY");
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_NORMAL_REWARD);
         assert_eq!(
@@ -269,18 +234,13 @@ fn boundary_switches_to_normal_reward_at_high_reward_count() {
 fn high_reward_count_minus_one_still_gets_high_reward() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT.saturating_sub(1));
-        let binding_id = <Test as frame_system::Config>::Hashing::hash(b"cid-high-minus-1");
-
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id);
+        let cid_number_hash = notify_voting_identity_registered(1, b"CTZN-HIGH-MINUS-1");
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardIssued {
                 who: 1,
-                binding_id,
+                cid_number_hash,
                 reward: CITIZEN_ISSUANCE_HIGH_REWARD,
             },
         ));
@@ -288,27 +248,22 @@ fn high_reward_count_minus_one_still_gets_high_reward() {
 }
 
 #[test]
-fn same_account_second_cid_is_not_marked_reward_claimed() {
+fn same_account_second_citizen_identity_is_not_marked_reward_claimed() {
     new_test_ext().execute_with(|| {
-        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"cid-claim-a");
-        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"cid-claim-b");
+        let cid_number_hash_a = notify_voting_identity_registered(1, b"CTZN-CLAIM-A");
+        let cid_number_hash_b = notify_voting_identity_registered(1, b"CTZN-CLAIM-B");
 
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id_a);
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id_b);
-
-        assert!(RewardClaimed::<Test>::contains_key(binding_id_a));
-        assert!(!RewardClaimed::<Test>::contains_key(binding_id_b));
+        assert!(IdentityRewardClaimed::<Test>::contains_key(
+            cid_number_hash_a
+        ));
+        assert!(!IdentityRewardClaimed::<Test>::contains_key(
+            cid_number_hash_b
+        ));
         assert!(AccountRewarded::<Test>::contains_key(1));
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
                 who: 1,
-                binding_id: binding_id_b,
+                cid_number_hash: cid_number_hash_b,
                 reason: SkipReason::AccountAlreadyRewarded,
             },
         ));
@@ -316,19 +271,10 @@ fn same_account_second_cid_is_not_marked_reward_claimed() {
 }
 
 #[test]
-fn different_accounts_and_cids_reward_independently() {
+fn different_accounts_and_citizen_identities_reward_independently() {
     new_test_ext().execute_with(|| {
-        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"cid-a-2");
-        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"cid-b-2");
-
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id_a);
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&2, binding_id_b);
+        notify_voting_identity_registered(1, b"CTZN-A-2");
+        notify_voting_identity_registered(2, b"CTZN-B-2");
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(Balances::free_balance(2), CITIZEN_ISSUANCE_HIGH_REWARD);
@@ -337,28 +283,31 @@ fn different_accounts_and_cids_reward_independently() {
 }
 
 #[test]
-fn same_account_different_cids_only_rewards_once() {
+fn same_account_different_citizen_identities_only_rewards_once() {
     new_test_ext().execute_with(|| {
-        let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"cid-acc-a");
-        let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"cid-acc-b");
-
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id_a);
-        <CitizenIssuance as cid_system::OnCidBound<
-            u64,
-            <Test as frame_system::Config>::Hash,
-        >>::on_cid_bound(&1, binding_id_b);
+        notify_voting_identity_registered(1, b"CTZN-ACC-A");
+        let cid_number_hash_b = notify_voting_identity_registered(1, b"CTZN-ACC-B");
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(RewardedCount::<Test>::get(), 1);
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
             Event::<Test>::CertificationRewardSkipped {
                 who: 1,
-                binding_id: binding_id_b,
+                cid_number_hash: cid_number_hash_b,
                 reason: SkipReason::AccountAlreadyRewarded,
             },
         ));
     });
+}
+
+fn notify_voting_identity_registered(
+    who: u64,
+    cid_number: &[u8],
+) -> <Test as frame_system::Config>::Hash {
+    let cid_number_hash = <Test as frame_system::Config>::Hashing::hash(cid_number);
+    <CitizenIssuance as citizen_identity::OnVotingIdentityRegistered<u64>>::on_voting_identity_registered(
+        &who,
+        cid_number,
+    );
+    cid_number_hash
 }

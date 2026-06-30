@@ -85,7 +85,7 @@ B2/B3 实现要点:
 - [~] **D 双客户端**(2026-06-25 核心落地,双端 analyze 0 + CitizenWallet 92 测试;详见 `20260624-legislation-dual-client.md`):CitizenApp 读层补齐(5类VoteType+版本史)+ 类B发起展示页+「发起立法」FAB + 院内/签署/会签/护宪投票服务+查询+表决页(冷钱包QR) + 9 立法 QrActions;CitizenWallet 9 call 解码/标签/两色(零新增op_tag,两色码逐一对齐)。**遗留**:特别案公投(referendum 阶段端到端)未接、vote 页接全局提案列表(kind=2 路由)未做、真机验收待重新创世。原拍板定稿:
   - **立法发起在 CitizenApp 按 B 类实现**:app 内**只投票+查看,不发起**;发起在区块链节点端(node 桌面端,本批不管)。提案分两类——类A(admins-change/organization-manage/personal-manage,app 可提案)、类B(立法/协议升级,只投票查看;点「发起」弹展示页,范式照搬 `runtime_upgrade_page.dart`)。
   - CitizenApp:法律列表/详情/版本史(LegislationApi,已基本就绪)+ 院内投票(cast_house_vote)+ 行政签署(executive_sign)+ 三人会签(override_sign)+ **护宪终审(guard_vote,真机依赖 E2 生产成员)** + 特别案公投(cast_referendum_vote/prepare_population_snapshot)+ 类B 发起展示页。**不做 app 内发起编辑器。**
-  - CitizenWallet:pallet 27/28 注册 + 9 个 call decoder(发起类来自节点端 QR)+ 动作标签 + 两色拒签。**签名零新增 op_tag(2026-06-25 实证)**:cast_house_vote/executive_sign/override_sign/guard_vote=纯 extrinsic 走标准交易签名;cast_referendum_vote/prepare_population_snapshot 复用现有 `OP_SIGN_VOTE=0x11`/`OP_SIGN_POP=0x12`(`configs/mod.rs:1040/1119`)。原母卡「签署类按 ADR-026 新 op_tag」系错误残留,已更正。
+  - CitizenWallet:pallet 27/28 注册 + call decoder(发起类来自节点端 QR)+ 动作标签 + 两色拒签。**签名零新增 op_tag(2026-06-30 更新)**:cast_house_vote/cast_referendum_vote/prepare_population_snapshot/executive_sign/override_sign/guard_vote 全部走标准交易签名;人口快照只展示 `PopulationScope`。
 - [~] **E 收尾**(2026-06-25 重新拆分):
   - **E1+E2 管理员字段扩展 + 护宪成员解析 → 已拆独立卡** `20260625-admin-fields-and-guard-members.md`(用户指定 E1/E2 合并一卡)。admins 从「账户/SS58」扩为 `AdminProfile{account, admin_cid_number, name, admin_role, term_start, term_end, source}`;护宪成员解析=过滤 `NJD` admins 中 `admin_role=护宪大法官` 的 5 人。
   - **E3 重新创世 + 真机 QA → 用户指定本批跳过**,随整套上链统一处理。

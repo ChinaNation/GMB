@@ -271,10 +271,9 @@ pub enum PendingCleanupStage {
     JointInstitutionVotes,
     JointInstitutionTallies,
     CitizenVotes,
-    VoteCredentials,
     /// 立法投票内部表决投票账本(LegHouseVotesByAdmin)分块清理。
     LegislationHouseVotes,
-    /// 立法投票公投账本(LegReferendumVotesByBindingId)分块清理。
+    /// 立法投票公投账本(LegReferendumVotesByAccount)分块清理。
     LegislationReferendumVotes,
     /// 选举投票投票账本(ElectionVotesByVoter)分块清理。
     ElectionVotes,

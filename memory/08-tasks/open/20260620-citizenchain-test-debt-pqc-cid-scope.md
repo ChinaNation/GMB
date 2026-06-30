@@ -9,7 +9,7 @@
 - 创建：2026-06-20
 - 背景：PQC/CID-scope 在途整改把生产签名扩了参，但 `#[cfg(test)]` 测试 mock/调用点没跟上。`cargo check --workspace`(lib) = 0 错误（生产码完整），但 `cargo test --workspace` 60 编译错误、8 个测试 crate 不构建。与 admins 统一无关。
 - 根因签名（生产为准）：
-  - `CidEligibility::verify_and_consume_vote_credential`（votingengine/src/traits.rs）10 参：binding_id/who/proposal_id/nonce/signature/issuer_cid_number/issuer_main_account/signer_pubkey:&[u8;32]/scope_province_name:&[u8]/scope_city_name:&[u8]→bool
+  - 公民投票资格统一由 `CitizenIdentityReader::can_vote(who, scope)` 读取链上公民身份。
   - `verify_population_snapshot` 9 参：who/eligible_total/nonce/signature/issuer_cid_number/issuer_main_account/signer_pubkey/scope_province_name/scope_city_name→bool
   - `propose_create_institution`（organization-manage/src/lib.rs:501）15 参，新增 issuer_cid_number/issuer_main_account/signer_pubkey/scope_province_name/scope_city_name；其它 extrinsic 同理（11/9 参的 close/personal create）
   - 错误变体 `EmptyProvince`→`EmptyScopeProvinceName`

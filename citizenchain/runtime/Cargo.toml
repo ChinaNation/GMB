@@ -65,7 +65,7 @@ provincialbank-interest = { path = "issuance/provincialbank-interest", default-f
 fullnode-issuance = { path = "issuance/fullnode-issuance", default-features = false }
 citizen-issuance = { path = "issuance/citizen-issuance", default-features = false }
 onchain-issuance = { path = "issuance/onchain-issuance", default-features = false }
-cid-system = { path = "otherpallet/cid-system", default-features = false }
+citizen-identity = { path = "otherpallet/citizen-identity", default-features = false }
 pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
 address-registry = { path = "otherpallet/address-registry", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
@@ -114,7 +114,7 @@ std = [
 	"fullnode-issuance/std",
 	"citizen-issuance/std",
 	"onchain-issuance/std",
-	"cid-system/std",
+	"citizen-identity/std",
 	"pow-difficulty/std",
 	"address-registry/std",
 	"onchain-transaction/std",
@@ -176,7 +176,7 @@ runtime-benchmarks = [
 	"fullnode-issuance/runtime-benchmarks",
 	"citizen-issuance/runtime-benchmarks",
 	"onchain-issuance/runtime-benchmarks",
-	"cid-system/runtime-benchmarks",
+	"citizen-identity/runtime-benchmarks",
 	"pow-difficulty/runtime-benchmarks",
 	"address-registry/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
@@ -214,7 +214,7 @@ try-runtime = [
 	"fullnode-issuance/try-runtime",
 	"citizen-issuance/try-runtime",
 	"onchain-issuance/try-runtime",
-	"cid-system/try-runtime",
+	"citizen-identity/try-runtime",
 	"pow-difficulty/try-runtime",
 	"address-registry/try-runtime",
 	"onchain-transaction/try-runtime",

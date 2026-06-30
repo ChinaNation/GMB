@@ -3,7 +3,7 @@ use blake2::{
     Blake2bVar,
 };
 use parity_scale_codec::{Decode, Encode};
-use primitives::core_const::{GMB, OP_SIGN_DEREGISTER, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE};
+use primitives::core_const::{GMB, OP_SIGN_DEREGISTER, OP_SIGN_INST};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -18,10 +18,8 @@ use crate::*;
 //   u8                   →  1 字节
 //   &[u8] / Vec<u8>     →  Compact(N) ++ N 字节，多 1~4 字节长度前缀
 // 任何一个 domain 写成 &[u8] 都会导致 message 与链端不一致 → blake2_256 不同
-// → sr25519 verify 失败 → 链端返回 InvalidCidXxxSignature。
-// 历史教训：INSTITUTION_DOMAIN 曾被错误声明为 &[u8]，导致 register_cid_institution
-// 长期 InvalidCidInstitutionSignature。修复见
-// `memory/04-decisions/ADR-005-cid-subxt-0.43-pow-chain-quirks.md`。
+// → sr25519 verify 失败 → 链端返回对应的签名错误。
+// 历史教训：INSTITUTION_DOMAIN 曾被错误声明为 &[u8]，导致机构注册签名长期无法通过。
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
 static SIGNING_KEY_CACHE: OnceLock<RwLock<Option<CachedSigningKey>>> = OnceLock::new();
 const TRUSTED_PRODUCTION_CHAINS: &[TrustedProductionChain] = &[
@@ -46,40 +44,6 @@ pub(crate) struct RuntimeSignatureMeta {
     pub(crate) key_id: String,
     pub(crate) key_version: String,
     pub(crate) alg: String,
-}
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct RuntimeVoteCredential {
-    pub(crate) genesis_hash: String,
-    pub(crate) who: String,
-    pub(crate) binding_id: String,
-    pub(crate) proposal_id: u64,
-    pub(crate) vote_nonce: String,
-    pub(crate) issuer_cid_number: String,
-    pub(crate) issuer_main_account: String,
-    pub(crate) signer_pubkey: String,
-    pub(crate) scope_province_name: String,
-    pub(crate) scope_city_name: String,
-    pub(crate) signature: String,
-    pub(crate) meta: RuntimeSignatureMeta,
-}
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct RuntimePopulationSnapshotCredential {
-    pub(crate) who: String,
-    pub(crate) eligible_total: u64,
-    pub(crate) snapshot_nonce: String,
-    pub(crate) issuer_cid_number: String,
-    pub(crate) issuer_main_account: String,
-    pub(crate) signer_pubkey: String,
-    pub(crate) scope_province_name: String,
-    pub(crate) scope_city_name: String,
-    pub(crate) signature: String,
-    pub(crate) genesis_hash: String,
-    pub(crate) payload_digest: String,
-    pub(crate) meta: RuntimeSignatureMeta,
 }
 
 #[derive(Debug, Clone)]
@@ -122,98 +86,6 @@ struct RuntimeSigningContext {
     signer_pubkey_hex: String,
     scope_province_name: String,
     scope_city_name: String,
-}
-
-pub(crate) fn build_vote_credential(
-    state: &AppState,
-    account_pubkey: &str,
-    binding_seed: &str,
-    proposal_id: u64,
-    vote_nonce: String,
-) -> Result<RuntimeVoteCredential, String> {
-    if vote_nonce.trim().is_empty() {
-        return Err("vote_nonce is required".to_string());
-    }
-    if binding_seed.trim().is_empty() {
-        return Err("binding seed is required".to_string());
-    }
-    let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
-    let genesis_hash = resolve_chain_genesis_hash()?;
-    let binding_id = blake2_256(binding_seed.as_bytes());
-    let signing_ctx = runtime_signing_context(None, None)?;
-    let payload = (
-        GMB,
-        OP_SIGN_VOTE,
-        genesis_hash,
-        who,
-        binding_id,
-        proposal_id,
-        vote_nonce.as_bytes(),
-        signing_ctx.issuer_cid_number.as_bytes(),
-        &signing_ctx.issuer_main_account,
-        &signing_ctx.signer_pubkey,
-        signing_ctx.scope_province_name.as_bytes(),
-        signing_ctx.scope_city_name.as_bytes(),
-    );
-    let payload_digest = blake2_256(&payload.encode());
-    let signature = sign_runtime_digest(state, &payload_digest)?;
-    Ok(RuntimeVoteCredential {
-        genesis_hash: hex::encode(genesis_hash),
-        who: normalized_who,
-        binding_id: hex::encode(binding_id),
-        proposal_id,
-        vote_nonce,
-        issuer_cid_number: signing_ctx.issuer_cid_number,
-        issuer_main_account: signing_ctx.issuer_main_account_hex,
-        signer_pubkey: signing_ctx.signer_pubkey_hex,
-        scope_province_name: signing_ctx.scope_province_name,
-        scope_city_name: signing_ctx.scope_city_name,
-        signature,
-        meta: runtime_signature_meta(state),
-    })
-}
-
-pub(crate) fn build_population_snapshot_credential(
-    state: &AppState,
-    account_pubkey: &str,
-    eligible_total: u64,
-    snapshot_nonce: String,
-) -> Result<RuntimePopulationSnapshotCredential, String> {
-    if snapshot_nonce.trim().is_empty() {
-        return Err("snapshot_nonce is required".to_string());
-    }
-    let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
-    let genesis_hash = resolve_chain_genesis_hash()?;
-    let signing_ctx = runtime_signing_context(None, None)?;
-    let payload = (
-        GMB,
-        OP_SIGN_POP,
-        genesis_hash,
-        who,
-        eligible_total,
-        snapshot_nonce.as_bytes(),
-        signing_ctx.issuer_cid_number.as_bytes(),
-        &signing_ctx.issuer_main_account,
-        &signing_ctx.signer_pubkey,
-        signing_ctx.scope_province_name.as_bytes(),
-        signing_ctx.scope_city_name.as_bytes(),
-    );
-    let payload_digest = blake2_256(&payload.encode());
-    let signature = sign_runtime_digest(state, &payload_digest)?;
-    Ok(RuntimePopulationSnapshotCredential {
-        who: normalized_who,
-        eligible_total,
-        snapshot_nonce,
-        issuer_cid_number: signing_ctx.issuer_cid_number,
-        issuer_main_account: signing_ctx.issuer_main_account_hex,
-        signer_pubkey: signing_ctx.signer_pubkey_hex,
-        scope_province_name: signing_ctx.scope_province_name,
-        scope_city_name: signing_ctx.scope_city_name,
-        signature,
-        genesis_hash: hex::encode(genesis_hash),
-        payload_digest: hex::encode(payload_digest),
-        meta: runtime_signature_meta(state),
-    })
 }
 
 pub(crate) fn build_institution_registration_credential(
@@ -424,14 +296,6 @@ fn is_production_mode() -> bool {
         .unwrap_or(false)
 }
 
-fn normalize_and_parse_account_id32(account_pubkey: &str) -> Result<(String, [u8; 32]), String> {
-    let normalized = normalize_account_pubkey(account_pubkey)
-        .ok_or_else(|| "account_pubkey is invalid".to_string())?;
-    let who = parse_sr25519_pubkey_bytes(normalized.as_str())
-        .ok_or_else(|| "account_pubkey is invalid".to_string())?;
-    Ok((normalized, who))
-}
-
 pub(crate) fn normalize_account_pubkey(account_pubkey: &str) -> Option<String> {
     if let Some(hex_pubkey) = parse_sr25519_pubkey(account_pubkey) {
         return Some(hex_pubkey);
@@ -628,7 +492,6 @@ fn parse_hex_2(raw: &str) -> Result<[u8; 2], String> {
 fn sign_runtime_digest(_state: &AppState, digest: &[u8; 32]) -> Result<String, String> {
     // OnChina 系统签名密钥直接从环境变量 ONCHINA_SIGNING_SEED_HEX 派生,
     // AppState 不持有 seed,避免长期密钥进入运行态共享状态。
-    // 由 build_vote_credential / build_population_snapshot_credential 调用(全国级签名)。
     let seed_hex = std::env::var("ONCHINA_SIGNING_SEED_HEX")
         .map_err(|_| "ONCHINA_SIGNING_SEED_HEX not set".to_string())?;
     let signing_key = resolve_signing_keypair(seed_hex.as_str())?;

@@ -2,38 +2,40 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/my/myid/myid_api.dart';
 
-/// 电子护照绑定状态（与后端 bind_status 响应对齐）。
-enum MyIdBindStatus { unset, pending, bound }
+/// 本地电子护照档案状态。
+enum MyIdArchiveStatus { unset, pending, registered }
 
 class MyIdState {
   const MyIdState({
-    required this.bindStatus,
+    required this.archiveStatus,
     this.walletAddress,
     this.walletPubkeyHex,
     this.walletIndex,
     this.cidNumber,
+    this.passportNo,
     this.citizenStatus,
     this.votingEligible,
     this.voteStatus,
     this.identityStatus,
-    this.validFrom,
-    this.validUntil,
+    this.passportValidFrom,
+    this.passportValidUntil,
     this.statusUpdatedAt,
     this.isColdWallet = false,
     this.updatedAtMillis,
   });
 
-  final MyIdBindStatus bindStatus;
+  final MyIdArchiveStatus archiveStatus;
   final String? walletAddress;
   final String? walletPubkeyHex;
   final int? walletIndex;
   final String? cidNumber;
+  final String? passportNo;
   final String? citizenStatus;
   final bool? votingEligible;
   final String? voteStatus;
   final String? identityStatus;
-  final String? validFrom;
-  final String? validUntil;
+  final String? passportValidFrom;
+  final String? passportValidUntil;
   final int? statusUpdatedAt;
   final bool isColdWallet;
   final int? updatedAtMillis;
@@ -42,41 +44,43 @@ class MyIdState {
 class MyIdService {
   final MyIdApi _api = MyIdApi();
 
-  static const _kBindStatus = 'myid.bind_status';
+  static const _kArchiveStatus = 'myid.archive_status';
   static const _kAddress = 'myid.wallet_address';
   static const _kPubkeyHex = 'myid.wallet_pubkey_hex';
   static const _kWalletIndex = 'myid.wallet_index';
   static const _kCidNumber = 'myid.cid_number';
+  static const _kPassportNo = 'myid.passport_no';
   static const _kCitizenStatus = 'myid.citizen_status';
   static const _kVotingEligible = 'myid.voting_eligible';
   static const _kVoteStatus = 'myid.vote_status';
   static const _kIdentityStatus = 'myid.identity_status';
-  static const _kValidFrom = 'myid.valid_from';
-  static const _kValidUntil = 'myid.valid_until';
+  static const _kPassportValidFrom = 'myid.passport_valid_from';
+  static const _kPassportValidUntil = 'myid.passport_valid_until';
   static const _kStatusUpdatedAt = 'myid.status_updated_at';
   static const _kIsColdWallet = 'myid.is_cold_wallet';
   static const _kUpdatedAt = 'myid.updated_at';
 
   Future<MyIdState> getState() async {
     final prefs = await SharedPreferences.getInstance();
-    final rawBindStatus = prefs.getString(_kBindStatus) ?? 'unset';
-    final bindStatus = switch (rawBindStatus) {
-      'pending' => MyIdBindStatus.pending,
-      'bound' => MyIdBindStatus.bound,
-      _ => MyIdBindStatus.unset,
+    final rawArchiveStatus = prefs.getString(_kArchiveStatus) ?? 'unset';
+    final archiveStatus = switch (rawArchiveStatus) {
+      'pending' => MyIdArchiveStatus.pending,
+      'registered' => MyIdArchiveStatus.registered,
+      _ => MyIdArchiveStatus.unset,
     };
     return MyIdState(
-      bindStatus: bindStatus,
+      archiveStatus: archiveStatus,
       walletAddress: prefs.getString(_kAddress),
       walletPubkeyHex: prefs.getString(_kPubkeyHex),
       walletIndex: prefs.getInt(_kWalletIndex),
       cidNumber: prefs.getString(_kCidNumber),
+      passportNo: prefs.getString(_kPassportNo),
       citizenStatus: prefs.getString(_kCitizenStatus),
       votingEligible: prefs.getBool(_kVotingEligible),
       voteStatus: prefs.getString(_kVoteStatus),
       identityStatus: prefs.getString(_kIdentityStatus),
-      validFrom: prefs.getString(_kValidFrom),
-      validUntil: prefs.getString(_kValidUntil),
+      passportValidFrom: prefs.getString(_kPassportValidFrom),
+      passportValidUntil: prefs.getString(_kPassportValidUntil),
       statusUpdatedAt: prefs.getInt(_kStatusUpdatedAt),
       isColdWallet: prefs.getBool(_kIsColdWallet) ?? false,
       updatedAtMillis: prefs.getInt(_kUpdatedAt),
@@ -85,7 +89,7 @@ class MyIdService {
 
   /// 选择电子护照使用的钱包。
   ///
-  /// 中文注释：这里仅选择本机电子护照钱包,不联网注册、不写 bound。
+  /// 中文注释：这里仅选择本机电子护照钱包,不联网注册、不写已登记态。
   Future<MyIdState> selectWallet({
     required String walletAddress,
     required String walletPubkeyHex,
@@ -94,7 +98,7 @@ class MyIdService {
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kBindStatus, 'pending');
+    await prefs.setString(_kArchiveStatus, 'pending');
     await prefs.setString(_kAddress, walletAddress);
     await prefs.setString(_kPubkeyHex, walletPubkeyHex.trim());
     await prefs.setInt(_kWalletIndex, walletIndex);
@@ -118,78 +122,58 @@ class MyIdService {
       );
       final prefs = await SharedPreferences.getInstance();
       final now = DateTime.now().millisecondsSinceEpoch;
-      switch (remote.bindStatus) {
-        case 'bound':
-          await prefs.setString(_kBindStatus, 'bound');
-          await _setStringIfPresent(prefs, _kAddress, remote.walletAddress);
-          await _setOptionalString(prefs, _kCidNumber, remote.cidNumber);
-          await _setOptionalString(
-            prefs,
-            _kCitizenStatus,
-            remote.citizenStatus,
-          );
-          await _setOptionalBool(
-            prefs,
-            _kVotingEligible,
-            remote.votingEligible,
-          );
-          await _setOptionalString(prefs, _kVoteStatus, remote.voteStatus);
-          await _setOptionalString(
-            prefs,
-            _kIdentityStatus,
-            remote.identityStatus,
-          );
-          await _setOptionalString(prefs, _kValidFrom, remote.validFrom);
-          await _setOptionalString(prefs, _kValidUntil, remote.validUntil);
-          await _setOptionalInt(
-            prefs,
-            _kStatusUpdatedAt,
-            remote.statusUpdatedAt,
-          );
-        case 'pending':
-          await prefs.setString(_kBindStatus, 'pending');
-          await _setStringIfPresent(prefs, _kAddress, remote.walletAddress);
-          await _setOptionalString(prefs, _kCidNumber, remote.cidNumber);
-          await _setOptionalString(
-            prefs,
-            _kCitizenStatus,
-            remote.citizenStatus,
-          );
-          await _setOptionalBool(
-            prefs,
-            _kVotingEligible,
-            remote.votingEligible,
-          );
-          await _setOptionalString(prefs, _kVoteStatus, remote.voteStatus);
-          await _setOptionalString(
-            prefs,
-            _kIdentityStatus,
-            remote.identityStatus,
-          );
-          await _setOptionalString(prefs, _kValidFrom, remote.validFrom);
-          await _setOptionalString(prefs, _kValidUntil, remote.validUntil);
-          await _setOptionalInt(
-            prefs,
-            _kStatusUpdatedAt,
-            remote.statusUpdatedAt,
-          );
-        default:
-          if (localState.bindStatus == MyIdBindStatus.bound) {
-            // 中文注释：只有曾经由 CID 确认 bound 的状态,才允许远端 unset 清空。
-            await prefs.setString(_kBindStatus, 'unset');
-            await prefs.remove(_kAddress);
-            await prefs.remove(_kPubkeyHex);
-            await prefs.remove(_kWalletIndex);
-            await prefs.remove(_kCidNumber);
-            await prefs.remove(_kCitizenStatus);
-            await prefs.remove(_kVotingEligible);
-            await prefs.remove(_kVoteStatus);
-            await prefs.remove(_kIdentityStatus);
-            await prefs.remove(_kValidFrom);
-            await prefs.remove(_kValidUntil);
-            await prefs.remove(_kStatusUpdatedAt);
-            await prefs.remove(_kIsColdWallet);
-          }
+      if (remote.found) {
+        await prefs.setString(_kArchiveStatus, 'registered');
+        await _setStringIfPresent(prefs, _kAddress, remote.walletAddress);
+        await _setOptionalString(prefs, _kCidNumber, remote.cidNumber);
+        await _setOptionalString(prefs, _kPassportNo, remote.passportNo);
+        await _setOptionalString(
+          prefs,
+          _kCitizenStatus,
+          remote.citizenStatus,
+        );
+        await _setOptionalBool(
+          prefs,
+          _kVotingEligible,
+          remote.votingEligible,
+        );
+        await _setOptionalString(prefs, _kVoteStatus, remote.voteStatus);
+        await _setOptionalString(
+          prefs,
+          _kIdentityStatus,
+          remote.identityStatus,
+        );
+        await _setOptionalString(
+          prefs,
+          _kPassportValidFrom,
+          remote.passportValidFrom,
+        );
+        await _setOptionalString(
+          prefs,
+          _kPassportValidUntil,
+          remote.passportValidUntil,
+        );
+        await _setOptionalInt(
+          prefs,
+          _kStatusUpdatedAt,
+          remote.statusUpdatedAt,
+        );
+      } else if (localState.archiveStatus == MyIdArchiveStatus.registered) {
+        // 中文注释：只有曾经由后端确认有档案的状态,才允许远端未找到时清空。
+        await prefs.setString(_kArchiveStatus, 'unset');
+        await prefs.remove(_kAddress);
+        await prefs.remove(_kPubkeyHex);
+        await prefs.remove(_kWalletIndex);
+        await prefs.remove(_kCidNumber);
+        await prefs.remove(_kPassportNo);
+        await prefs.remove(_kCitizenStatus);
+        await prefs.remove(_kVotingEligible);
+        await prefs.remove(_kVoteStatus);
+        await prefs.remove(_kIdentityStatus);
+        await prefs.remove(_kPassportValidFrom);
+        await prefs.remove(_kPassportValidUntil);
+        await prefs.remove(_kStatusUpdatedAt);
+        await prefs.remove(_kIsColdWallet);
       }
       await prefs.setInt(_kUpdatedAt, now);
       return getState();
@@ -200,20 +184,21 @@ class MyIdService {
     }
   }
 
-  /// 清除本地绑定状态。
+  /// 清除本地电子护照档案状态。
   Future<MyIdState> clear() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kBindStatus);
+    await prefs.remove(_kArchiveStatus);
     await prefs.remove(_kAddress);
     await prefs.remove(_kPubkeyHex);
     await prefs.remove(_kWalletIndex);
     await prefs.remove(_kCidNumber);
+    await prefs.remove(_kPassportNo);
     await prefs.remove(_kCitizenStatus);
     await prefs.remove(_kVotingEligible);
     await prefs.remove(_kVoteStatus);
     await prefs.remove(_kIdentityStatus);
-    await prefs.remove(_kValidFrom);
-    await prefs.remove(_kValidUntil);
+    await prefs.remove(_kPassportValidFrom);
+    await prefs.remove(_kPassportValidUntil);
     await prefs.remove(_kStatusUpdatedAt);
     await prefs.remove(_kIsColdWallet);
     await prefs.remove(_kUpdatedAt);

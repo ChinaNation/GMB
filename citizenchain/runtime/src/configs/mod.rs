@@ -433,8 +433,8 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                 votingengine::pallet::Call::finalize_proposal { .. } => FeeChargeKind::Free,
                 _ => FeeChargeKind::VoteFlat,
             },
-            // CidSystem 全部 6 个 extrinsic(含 bind_cid / unbind_cid 等)按投票统一价 1 元/次。
-            RuntimeCall::CidSystem(_) => FeeChargeKind::VoteFlat,
+            // CitizenIdentity 公民身份登记、更新、撤销和人口快照按投票统一价 1 元/次。
+            RuntimeCall::CitizenIdentity(_) => FeeChargeKind::VoteFlat,
             // FullnodeIssuance bind_reward_wallet / rebind_reward_wallet:1 元/次。
             RuntimeCall::FullnodeIssuance(_) => FeeChargeKind::VoteFlat,
             // 手动重试/取消统一收口至 votingengine::retry_passed_proposal /
@@ -1122,213 +1122,91 @@ impl personal_admins::Config for Runtime {
     type WeightInfo = personal_admins::weights::SubstrateWeight<Runtime>;
 }
 
-// 三处 CID 验签:
-// - `RuntimeCidVerifier`(BindCredential / 公民身份绑定)
-// - `RuntimeCidVoteVerifier`(公民投票凭证)
-// - `RuntimePopulationSnapshotVerifier`(联合提案人口快照)
-// 全部按 `issuer_cid_number + issuer_main_account + signer_pubkey` 校验签发身份;
-// `issuer_main_account` 的管理员真源统一由 runtime 管理员查询路由分发。
-
-pub struct RuntimeCidVerifier;
+pub struct RuntimeCitizenIdentityAuthority;
 
 impl
-    cid_system::CidVerifier<
+    citizen_identity::CitizenIdentityAuthority<
         AccountId,
-        Hash,
-        cid_system::pallet::NonceOf<Runtime>,
-        cid_system::pallet::SignatureOf<Runtime>,
-    > for RuntimeCidVerifier
+        citizen_identity::pallet::SignatureOf<Runtime>,
+    > for RuntimeCitizenIdentityAuthority
 {
-    fn verify(account: &AccountId, credential: &cid_system::pallet::CredentialOf<Runtime>) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (account, credential);
-            return !credential.bind_nonce.is_empty()
-                && !credential.signature.is_empty()
-                && !credential.issuer_cid_number.is_empty()
-                && !credential.scope_province_name.is_empty();
+    fn can_manage_voting_identity(
+        registrar: &AccountId,
+        registrar_account: &AccountId,
+        residence_province_code: &[u8],
+        residence_city_code: &[u8],
+        _level: citizen_identity::CitizenIdentityLevel,
+    ) -> bool {
+        if residence_province_code.is_empty() || residence_city_code.is_empty() {
+            return false;
+        }
+        if !RuntimeAdminAccountQuery::is_active_admin_of_account(registrar_account, registrar) {
+            return false;
         }
 
-        #[cfg(not(feature = "runtime-benchmarks"))]
+        if let Some(group_province_code) =
+            public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
         {
-            let Some(public) =
-                issuer_admin_public(&credential.issuer_main_account, &credential.signer_pubkey)
-            else {
-                return false;
-            };
-            let Some(signature) = sr25519_signature_from_bytes(credential.signature.as_slice())
-            else {
-                return false;
-            };
-
-            // payload 字段(GMB + OP_SIGN_BIND 域头由 signing_message 统一拼接):
-            //   block_hash(0) + account + binding_id + bind_nonce + 签发机构 + 作用域。
-            let payload = (
-                frame_system::Pallet::<Runtime>::block_hash(0),
-                account,
-                credential.binding_id,
-                credential.bind_nonce.as_slice(),
-                credential.issuer_cid_number.as_slice(),
-                &credential.issuer_main_account,
-                &credential.signer_pubkey,
-                credential.scope_province_name.as_slice(),
-                credential.scope_city_name.as_slice(),
-            );
-            let msg = primitives::sign::signing_message(
-                primitives::sign::OP_SIGN_BIND,
-                &payload.encode(),
-            );
-
-            sr25519_verify(&signature, &msg, &public)
+            // 中文注释：FRG 省级组管理员可登记、更新、撤销本省任意公民身份。
+            return group_province_code.as_ref() == residence_province_code;
         }
+
+        const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
+        if RuntimeAdminAccountQuery::resolve_institution_code_for_account(registrar_account)
+            != Some(CITY_REGISTRY_CODE)
+        {
+            return false;
+        }
+        let Some(registered) =
+            public_manage::AccountRegisteredCid::<Runtime>::get(registrar_account)
+        else {
+            return false;
+        };
+        let Some((registry_province_code, registry_city_code)) =
+            cid_scope_codes(registered.cid_number.as_slice())
+        else {
+            return false;
+        };
+        // 中文注释：CREG 管理员只能管理本市公民身份；出生地不参与居住地注册权限。
+        registry_province_code.as_ref() == residence_province_code
+            && registry_city_code.as_ref() == residence_city_code
     }
-}
 
-pub struct RuntimeCidVoteVerifier;
-
-impl
-    cid_system::CidVoteVerifier<
-        AccountId,
-        Hash,
-        cid_system::pallet::NonceOf<Runtime>,
-        cid_system::pallet::SignatureOf<Runtime>,
-    > for RuntimeCidVoteVerifier
-{
-    fn verify_vote(
-        account: &AccountId,
-        binding_id: Hash,
-        proposal_id: u64,
-        nonce: &cid_system::pallet::NonceOf<Runtime>,
-        signature: &cid_system::pallet::SignatureOf<Runtime>,
-        issuer_cid_number: &[u8],
-        issuer_main_account: &AccountId,
-        signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
+    fn verify_citizen_signature(
+        wallet_account: &AccountId,
+        payload: &[u8],
+        signature: &citizen_identity::pallet::SignatureOf<Runtime>,
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            let _ = (
-                account,
-                binding_id,
-                proposal_id,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            );
-            return !nonce.is_empty() && !signature.is_empty();
+            let _ = (wallet_account, payload);
+            return !signature.is_empty();
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            let Some(public) = issuer_admin_public(issuer_main_account, signer_pubkey) else {
+            let Ok(raw_account) = <[u8; 32]>::try_from(wallet_account.as_ref()) else {
                 return false;
             };
             let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
                 return false;
             };
-
-            // payload 字段(GMB + OP_SIGN_VOTE 域头由 signing_message 统一拼接):
-            //   block_hash(0) + account + binding_id + proposal_id + nonce + 签发机构 + 作用域。
-            let payload = (
-                frame_system::Pallet::<Runtime>::block_hash(0),
-                account,
-                binding_id,
-                proposal_id,
-                nonce.as_slice(),
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            );
+            let public = sr25519::Public::from_raw(raw_account);
             let msg = primitives::sign::signing_message(
-                primitives::sign::OP_SIGN_VOTE,
-                &payload.encode(),
+                primitives::sign::OP_SIGN_CITIZEN_IDENTITY,
+                payload,
             );
-
             sr25519_verify(&signature, &msg, &public)
         }
     }
 }
 
-impl cid_system::Config for Runtime {
+impl citizen_identity::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type MaxCredentialNonceLength = ConstU32<64>;
-    // 中文注释：CID 绑定与投票验签统一使用 64 字节原始 sr25519 签名。
-    type MaxCredentialSignatureLength = ConstU32<64>;
-    type CidVerifier = RuntimeCidVerifier;
-    type CidVoteVerifier = RuntimeCidVoteVerifier;
-    type OnCidBound = CitizenIssuance;
-    // unbind_cid 由 Root 治理 origin 鉴权。
-    // step2b 起结合实体生命周期凭证体系决定最终 origin 模型（治理多签 / 省级 admin 直签）。
-    type UnbindOrigin = frame_system::EnsureRoot<AccountId>;
-    type WeightInfo = cid_system::weights::SubstrateWeight<Runtime>;
-}
-
-pub struct RuntimePopulationSnapshotVerifier;
-
-impl
-    votingengine::PopulationSnapshotVerifier<
-        AccountId,
-        votingengine::pallet::VoteNonceOf<Runtime>,
-        votingengine::pallet::VoteSignatureOf<Runtime>,
-    > for RuntimePopulationSnapshotVerifier
-{
-    fn verify_population_snapshot(
-        who: &AccountId,
-        eligible_total: u64,
-        nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
-        signature: &votingengine::pallet::VoteSignatureOf<Runtime>,
-        issuer_cid_number: &[u8],
-        issuer_main_account: &AccountId,
-        signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
-    ) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (
-                who,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            );
-            eligible_total > 0 && !nonce.is_empty() && !signature.is_empty()
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            let Some(public) = issuer_admin_public(issuer_main_account, signer_pubkey) else {
-                return false;
-            };
-            let Some(signature) = sr25519_signature_from_bytes(signature.as_slice()) else {
-                return false;
-            };
-
-            // payload 字段(GMB + OP_SIGN_POP 域头由 signing_message 统一拼接):
-            //   block_hash(0) + who + eligible_total + nonce + 签发机构 + 作用域。
-            let payload = (
-                frame_system::Pallet::<Runtime>::block_hash(0),
-                who,
-                eligible_total,
-                nonce.as_slice(),
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            );
-            let msg =
-                primitives::sign::signing_message(primitives::sign::OP_SIGN_POP, &payload.encode());
-
-            sr25519_verify(&signature, &msg, &public)
-        }
-    }
+    type MaxCitizenSignatureLength = ConstU32<64>;
+    type CitizenIdentityAuthority = RuntimeCitizenIdentityAuthority;
+    type OnVotingIdentityRegistered = CitizenIssuance;
+    type WeightInfo = citizen_identity::weights::SubstrateWeight<Runtime>;
 }
 
 impl citizen_issuance::Config for Runtime {
@@ -2168,8 +2046,7 @@ impl votingengine::Config for Runtime {
     type MaxCleanupQueueBucketLimit = ConstU32<512>;
     type MaxCleanupScheduleOffset = ConstU32<1_024>;
     type CleanupKeysPerStep = ConstU32<256>;
-    type CidEligibility = RuntimeCidEligibility;
-    type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
+    type CitizenIdentityReader = RuntimeCitizenIdentityReader;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
     // 内部投票终态回调注册 6 个顶层槽位;公权/私权机构生命周期共用一个 tuple 槽位,
     // 个人多签生命周期和个人多签管理员共用一个 tuple 槽位。
@@ -2321,105 +2198,25 @@ impl votingengine::InternalAdminsLenProvider<AccountId> for RuntimeInternalAdmin
     }
 }
 
-pub struct RuntimeCidEligibility;
+pub struct RuntimeCitizenIdentityReader;
 
-impl votingengine::CidEligibility<AccountId, Hash> for RuntimeCidEligibility {
-    fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (
-                who,
-                cid_system::pallet::BindingIdToAccount::<Runtime>::get(binding_id),
-            );
-            true
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            <cid_system::Pallet<Runtime> as cid_system::CidEligibilityProvider<
-                AccountId,
-                Hash,
-            >>::is_eligible(binding_id, who)
-        }
-    }
-
-    fn verify_and_consume_vote_credential(
-        binding_id: &Hash,
-        who: &AccountId,
-        proposal_id: u64,
-        nonce: &[u8],
-        signature: &[u8],
-        issuer_cid_number: &[u8],
-        issuer_main_account: &AccountId,
-        signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
-    ) -> bool {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            let _ = (
-                who,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            );
-            if nonce.is_empty() || signature.is_empty() {
-                return false;
-            }
-
-            let nonce_hash = <Runtime as frame_system::Config>::Hashing::hash_of(&nonce);
-            let vote_nonce_key = (binding_id.clone(), nonce_hash);
-            if cid_system::pallet::UsedVoteNonce::<Runtime>::get(
-                proposal_id,
-                vote_nonce_key.clone(),
-            ) {
-                return false;
-            }
-
-            cid_system::pallet::UsedVoteNonce::<Runtime>::insert(proposal_id, vote_nonce_key, true);
-            true
-        }
-
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            <cid_system::Pallet<Runtime> as cid_system::CidEligibilityProvider<
-                AccountId,
-                Hash,
-            >>::verify_and_consume_vote_credential(
-                binding_id,
-                who,
-                proposal_id,
-                nonce,
-                signature,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            )
-        }
-    }
-
-    fn cleanup_vote_credentials(proposal_id: u64) {
-        <cid_system::Pallet<Runtime> as cid_system::CidEligibilityProvider<
+impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityReader {
+    fn can_vote(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool {
+        <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
             AccountId,
-            Hash,
-        >>::cleanup_vote_credentials(proposal_id)
+        >>::can_vote(who, scope)
     }
 
-    fn cleanup_vote_credentials_chunk(
-        proposal_id: u64,
-        limit: u32,
-    ) -> votingengine::VoteCredentialCleanup {
-        let result =
-            cid_system::pallet::UsedVoteNonce::<Runtime>::clear_prefix(proposal_id, limit, None);
-        votingengine::VoteCredentialCleanup {
-            removed: result.unique,
-            loops: result.loops,
-            has_remaining: result.maybe_cursor.is_some(),
-        }
+    fn can_be_candidate(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool {
+        <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
+            AccountId,
+        >>::can_be_candidate(who, scope)
+    }
+
+    fn population_count(scope: &citizen_identity::PopulationScope) -> u64 {
+        <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
+            AccountId,
+        >>::population_count(scope)
     }
 }
 

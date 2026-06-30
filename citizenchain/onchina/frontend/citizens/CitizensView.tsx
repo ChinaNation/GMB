@@ -10,7 +10,6 @@ import {
   listCitizens,
   type CitizenRow,
 } from './api';
-import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { useAuth } from '../hooks/useAuth';
 import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
 import { CitizenCreateModal } from './CitizenCreateModal';
@@ -75,13 +74,6 @@ export function CitizensView() {
   const onSearch = async (values: { keyword: string }) => {
     if (!auth) return;
     let keyword = values.keyword?.trim() || '';
-    if (keyword) {
-      try {
-        keyword = decodeSs58(keyword);
-      } catch {
-        // 非 SS58 格式,保留原值
-      }
-    }
     setSearchKeyword(keyword);
     setCursorStack([]);
     await refreshList(keyword);
@@ -102,7 +94,7 @@ export function CitizensView() {
     await refreshList(searchKeyword, prevCursor, true);
   };
 
-  // 中文注释：录入成功后，用返回的新身份ID自动回填搜索框并查询，让新公民立即显示在列表。
+  // 中文注释：录入成功后，用返回的新身份 CID 自动回填搜索框并查询，让新公民立即显示在列表。
   // 拿不到新号(理论不应发生)时回退到沿用当前关键字刷新。
   const handleCreated = async (createdCid?: string) => {
     const next = createdCid?.trim();
@@ -114,12 +106,6 @@ export function CitizensView() {
       return;
     }
     await refreshList(searchKeyword, null, true);
-  };
-
-  const bindStatusText = (v: string | undefined) => {
-    if (v === 'PENDING') return '待绑定';
-    if (v === 'BOUND') return '已绑定';
-    return v ?? '-';
   };
 
   const statusTag = (status: string | undefined) => (
@@ -143,22 +129,15 @@ export function CitizensView() {
     return `${parts[0]}年${parts[1]}月${parts[2]}日`;
   };
 
-  const electionRangesText = (
-    scope: CitizenRow['election_scope_level'],
-    provinceName?: string,
-    cityName?: string,
-    townName?: string,
-  ) => {
-    const ranges = ['全国选举公民'];
-    if (provinceName?.trim()) ranges.push(`${provinceName}选举公民`);
-    if ((scope === 'CITY' || scope === 'TOWN') && cityName?.trim()) {
-      ranges.push(`${cityName}选举公民`);
-    }
-    if (scope === 'TOWN' && townName?.trim()) {
-      ranges.push(`${townName}选举公民`);
-    }
-    return ranges.join('、');
+  const sexText = (sex?: string) => {
+    if (sex === 'MALE') return '男';
+    if (sex === 'FEMALE') return '女';
+    return '-';
   };
+
+  const areaText = (province?: string, city?: string, town?: string) => (
+    [province, city, town].filter((v) => v?.trim()).join(' / ') || '-'
+  );
 
   const citizenColumns: ColumnsType<CitizenRow> = [
     {
@@ -168,14 +147,26 @@ export function CitizensView() {
       render: (_v: unknown, _r: CitizenRow, idx: number) => idx + 1,
     },
     {
-      title: '投票账户',
-      dataIndex: 'wallet_address',
+      title: '护照号',
+      dataIndex: 'passport_no',
       align: 'center',
       render: (v: string | undefined) => v ?? '-',
     },
     {
-      title: '身份ID',
+      title: '身份CID',
       dataIndex: 'cid_number',
+      align: 'center',
+      render: (v: string | undefined) => v ?? '-',
+    },
+    {
+      title: '姓名',
+      dataIndex: 'citizen_full_name',
+      align: 'center',
+      render: (v: string | undefined) => v ?? '-',
+    },
+    {
+      title: '投票账户',
+      dataIndex: 'wallet_address',
       align: 'center',
       render: (v: string | undefined) => v ?? '-',
     },
@@ -200,7 +191,7 @@ export function CitizensView() {
               <Form.Item name="keyword" style={{ marginBottom: 0 }}>
                 <Input
                   style={{ width: 420 }}
-                  placeholder="请输入身份ID或投票账户检索"
+                  placeholder="护照号/身份CID/投票账户检索"
                   allowClear
                   onPressEnter={() => searchForm.submit()}
                   suffix={
@@ -258,34 +249,32 @@ export function CitizensView() {
       >
         {detailRecord && (
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="身份ID">{detailRecord.cid_number ?? '-'}</Descriptions.Item>
-            <Descriptions.Item label="投票账户">
-              {/* 中文注释:wallet_address 缺失时把公钥转 SS58 兜底,前端不显示裸公钥 */}
-              {detailRecord.wallet_address
-                ?? (detailRecord.wallet_pubkey ? tryEncodeSs58(detailRecord.wallet_pubkey) || '-' : '-')}
-            </Descriptions.Item>
-            <Descriptions.Item label="绑定状态">{bindStatusText(detailRecord.bind_status)}</Descriptions.Item>
+            <Descriptions.Item label="护照号">{detailRecord.passport_no || '-'}</Descriptions.Item>
+            <Descriptions.Item label="身份CID">{detailRecord.cid_number || '-'}</Descriptions.Item>
+            <Descriptions.Item label="姓名">{detailRecord.citizen_full_name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="性别">{sexText(detailRecord.citizen_sex)}</Descriptions.Item>
+            <Descriptions.Item label="出生日期">{formatDate(detailRecord.citizen_birth_date)}</Descriptions.Item>
+            <Descriptions.Item label="投票账户">{detailRecord.wallet_address || '-'}</Descriptions.Item>
             <Descriptions.Item label="选举权利">{detailRecord.voting_eligible ? '有' : '无'}</Descriptions.Item>
             <Descriptions.Item label="公民状态">{citizenStatusText(detailRecord.citizen_status)}</Descriptions.Item>
-            <Descriptions.Item label="投票范围">
-              {electionRangesText(
-                detailRecord.election_scope_level,
+            <Descriptions.Item label="居住地">
+              {areaText(
                 detailRecord.residence_province_name,
                 detailRecord.residence_city_name,
                 detailRecord.residence_town_name,
               )}
             </Descriptions.Item>
-            <Descriptions.Item label="参选范围">
-              {electionRangesText(
-                detailRecord.election_scope_level,
+            <Descriptions.Item label="出生地">
+              {areaText(
                 detailRecord.birth_province_name,
                 detailRecord.birth_city_name,
                 detailRecord.birth_town_name,
               )}
             </Descriptions.Item>
             <Descriptions.Item label="有效期">
-              {formatDateRange(detailRecord.valid_from, detailRecord.valid_until)}
+              {formatDateRange(detailRecord.passport_valid_from, detailRecord.passport_valid_until)}
             </Descriptions.Item>
+            <Descriptions.Item label="档案哈希">{detailRecord.archive_hash || '-'}</Descriptions.Item>
           </Descriptions>
         )}
       </Modal>

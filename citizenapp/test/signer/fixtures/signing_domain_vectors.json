@@ -1,24 +1,12 @@
 {
-  "_comment": "ADR-026 签名协议金标向量 (canonical, Rust 权威源). 仅覆盖 8 个哈希域 op_tag(0x10-0x17), 即真正经 signing_message = blake2_256(GMB || op_tag || scale_payload) 的域. 域 domain=GMB. 治理 5 个 op_tag(0x10-0x14) message_hex 任何时候不得变化(改调原语前后字节一致); 0x15-0x17 三个新折字符串域(L3_PAY/OFFCHAIN_BATCH/L2_ACK)首次跑 SIGN_GOLDEN_UPDATE=1 回填后亦冻结. 二进制前缀域 0x18(ACTIVATE_ADMIN)/0x19(DECRYPT) 签原始可解析字节非 hash, 不在此金标; IM 两个为字符串协议常量非签名 op_tag, 亦不在此. scale_payload_hex 为调用方对业务字段做 SCALE 编码后的固定示例字节, 仅用于跨语言金标对齐, 非真实业务数据. 重生方式: SIGN_GOLDEN_UPDATE=1 cargo test -p primitives --test sign_golden.",
+  "_comment": "ADR-026 签名协议金标向量 (canonical, Rust 权威源). 仅覆盖 6 个哈希域 op_tag(0x10/0x13-0x17), 即真正经 signing_message = blake2_256(GMB || op_tag || scale_payload) 的域. 域 domain=GMB. 所有 message_hex 任何时候不得变化(改调原语前后字节一致). 二进制前缀域 0x18(ACTIVATE_ADMIN)/0x19(DECRYPT) 签原始可解析字节非 hash, 不在此金标; IM 两个为字符串协议常量非签名 op_tag, 亦不在此. scale_payload_hex 为调用方对业务字段做 SCALE 编码后的固定示例字节, 仅用于跨语言金标对齐, 非真实业务数据. 重生方式: SIGN_GOLDEN_UPDATE=1 cargo test -p primitives --test sign_golden.",
   "domain": "GMB",
   "vectors": [
     {
       "message_hex": "19e050b3476dfd7db0aae9d527e205da44b8f9d00e5ddf4f81f4830ab0c00568",
-      "name": "OP_SIGN_BIND",
+      "name": "OP_SIGN_CITIZEN_IDENTITY",
       "op_tag": "0x10",
       "scale_payload_hex": "0102030405060708"
-    },
-    {
-      "message_hex": "3c080f5617b49a8a822d1f3894489a59f82ca31e6ce07db1eb2a966631258abd",
-      "name": "OP_SIGN_VOTE",
-      "op_tag": "0x11",
-      "scale_payload_hex": "1112131415161718"
-    },
-    {
-      "message_hex": "17a61f4f0b9a73bb36ea5089a7ac794147fac9020a58abf0372714b21f5b96b8",
-      "name": "OP_SIGN_POP",
-      "op_tag": "0x12",
-      "scale_payload_hex": "2122232425262728"
     },
     {
       "message_hex": "d33919e352038d7bd62172b0530362fb6ef0da3990e27b56ea9325195fc6b1a6",

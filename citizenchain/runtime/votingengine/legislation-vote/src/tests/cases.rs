@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::Error;
-use frame_support::{assert_noop, assert_ok, BoundedVec};
+use frame_support::{assert_noop, assert_ok};
 use votingengine::types::{
     legislation_house_decided, legislation_house_final_passed, legislation_referendum_final_passed,
     LEG_VOTE_MAJOR, LEG_VOTE_MAJOR_EDU, LEG_VOTE_REGULAR, LEG_VOTE_REGULAR_EDU, LEG_VOTE_SPECIAL,
@@ -287,20 +287,10 @@ fn override_sign_rejected_for_non_signer() {
 // ───────────────── 特别案 → 强制公投 ─────────────────
 
 fn prepare_snapshot(who: AccountId32, eligible_total: u64) {
-    let nonce: votingengine::pallet::VoteNonceOf<Test> =
-        BoundedVec::try_from(vec![1u8, 2, 3, 4]).unwrap();
-    let sig: votingengine::pallet::VoteSignatureOf<Test> =
-        BoundedVec::try_from(vec![9u8, 9, 9, 9]).unwrap();
+    assert_eq!(eligible_total, 100);
     assert_ok!(Lib::do_prepare_population_snapshot(
         who,
-        eligible_total,
-        nonce,
-        sig,
-        b"issuer-cid",
-        &house1(),
-        &[7u8; 32],
-        b"province",
-        b"city",
+        votingengine::PopulationScope::Country,
     ));
 }
 
@@ -335,27 +325,11 @@ fn special_case_advances_to_referendum_then_passes() {
     });
 }
 
-/// 公投投一票(用 binding_id 去重,seed 派生唯一 hash)。
+/// 公投投一票:新链路按投票账户去重,资格由 CitizenIdentityReader 判断。
 fn cast_referendum(pid: u64, seed: u64, approve: bool) {
-    use sp_runtime::traits::Hash as HashT;
-    let binding = <Test as frame_system::Config>::Hashing::hash(&seed.to_le_bytes());
-    let nonce: votingengine::pallet::VoteNonceOf<Test> = BoundedVec::try_from(vec![1u8]).unwrap();
-    let sig: votingengine::pallet::VoteSignatureOf<Test> = BoundedVec::try_from(vec![1u8]).unwrap();
     frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
-            let r = Lib::do_cast_referendum_vote(
-                member((seed % 200) as u8),
-                pid,
-                binding,
-                nonce,
-                sig,
-                BoundedVec::try_from(b"cid".to_vec()).unwrap(),
-                house1(),
-                [7u8; 32],
-                BoundedVec::try_from(b"prov".to_vec()).unwrap(),
-                BoundedVec::try_from(b"city".to_vec()).unwrap(),
-                approve,
-            );
+            let r = Lib::do_cast_referendum_vote(member((seed % 200) as u8), pid, approve);
             match r {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),

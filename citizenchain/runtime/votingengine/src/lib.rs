@@ -7,7 +7,7 @@
 //! - **联合投票**（JOINT）：国储会/省储会/省储行管理员按票权加权投票，
 //!   105 票全票通过直接执行，任一机构反对立即进入联合公投，30 天超时进入联合公投。
 
-//! - **公民投票**（CITIZEN）：CID 持有者按 >50% 严格多数投票，
+//! - **公民投票**（CITIZEN）：链上公民身份持有者按 >50% 严格多数投票，
 //!   赞成 > 50% 提前通过，反对 ≥ 50% 提前否决，30 天超时按最终票数判定。
 //!
 //! - **选举投票**（ELECTION）：由 election-vote sub-pallet 承载普选/互选选人流程，
@@ -42,9 +42,9 @@ pub mod traits;
 pub mod types;
 pub mod weights;
 
+pub use citizen_identity::PopulationScope;
 pub use pallet::*;
 pub use traits::*;
-pub use traits::{CidEligibility, VoteCredentialCleanup};
 pub use types::*;
 
 use frame_support::dispatch::DispatchResult;
@@ -134,12 +134,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxPendingRetryExpirationsPerBlock: Get<u32>;
 
-        type CidEligibility: CidEligibility<Self::AccountId, Self::Hash>;
-        type PopulationSnapshotVerifier: PopulationSnapshotVerifier<
-            Self::AccountId,
-            VoteNonceOf<Self>,
-            VoteSignatureOf<Self>,
-        >;
+        type CitizenIdentityReader: CitizenIdentityReader<Self::AccountId>;
 
         type JointVoteResultCallback: JointVoteResultCallback;
         /// 内部投票终态回调(对称于 `JointVoteResultCallback`)。
@@ -1699,20 +1694,6 @@ pub mod pallet {
                     let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
                     let next = if has_remaining {
                         Some(PendingCleanupStage::CitizenVotes)
-                    } else {
-                        Some(PendingCleanupStage::VoteCredentials)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::VoteCredentials => {
-                    let result = T::CidEligibility::cleanup_vote_credentials_chunk(
-                        proposal_id,
-                        cleanup_limit,
-                    );
-                    let weight =
-                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.removed));
-                    let next = if result.has_remaining {
-                        Some(PendingCleanupStage::VoteCredentials)
                     } else {
                         Some(PendingCleanupStage::LegislationHouseVotes)
                     };

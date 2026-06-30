@@ -5,7 +5,7 @@
 //! 中文注释:System + VotingEngine + InternalVote(供 votingengine 必填 finalizer)+ LegislationVote。
 //! votingengine::Config 把 LegislationFinalizer/LegislationCleanup 接 LegislationVote,
 //! LegislationVoteResultCallback 装 `()`(本 sub-pallet 单测只验投票机制,不验业务写法律)。
-//! TestInternalAdminProvider 定义两院议员名册;公投验签/CID 资格 mock 返回 true。
+//! TestInternalAdminProvider 定义两院议员名册;公投公民资格从测试用 CitizenIdentityReader 返回。
 
 use frame_support::{
     derive_impl,
@@ -102,52 +102,20 @@ pub fn leg_rep() -> AccountId32 {
     AccountId32::new([71u8; 32])
 }
 
-pub struct TestCidEligibility;
-pub struct TestPopulationSnapshotVerifier;
+pub struct TestCitizenIdentityReader;
 pub struct TestInternalAdminProvider;
 
-impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
-    for TestCidEligibility
-{
-    fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
+impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
+    fn can_vote(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
     }
-    fn verify_and_consume_vote_credential(
-        _binding_id: &<Test as frame_system::Config>::Hash,
-        _who: &AccountId32,
-        _proposal_id: u64,
-        _nonce: &[u8],
-        _signature: &[u8],
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        true
-    }
-    fn cleanup_vote_credentials(_proposal_id: u64) {}
-}
 
-impl
-    votingengine::PopulationSnapshotVerifier<
-        AccountId32,
-        votingengine::pallet::VoteNonceOf<Test>,
-        votingengine::pallet::VoteSignatureOf<Test>,
-    > for TestPopulationSnapshotVerifier
-{
-    fn verify_population_snapshot(
-        _who: &AccountId32,
-        _eligible_total: u64,
-        _nonce: &votingengine::pallet::VoteNonceOf<Test>,
-        _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
+    fn can_be_candidate(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
+    }
+
+    fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
+        100
     }
 }
 
@@ -234,8 +202,7 @@ impl votingengine::Config for Test {
     type MaxCleanupQueueBucketLimit = ConstU32<50>;
     type MaxCleanupScheduleOffset = ConstU32<100>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
-    type CidEligibility = TestCidEligibility;
-    type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
+    type CitizenIdentityReader = TestCitizenIdentityReader;
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = ();
     type InternalAdminProvider = TestInternalAdminProvider;

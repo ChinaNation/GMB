@@ -1,9 +1,9 @@
-//! 公民人数快照凭证签发 handler。
+//! 公民人数查询 handler。
 //!
-//! 本接口只服务投票引擎的人口快照凭证流程,业务模块不得直接调用或转发。
+//! 本接口只返回 OnChina 本地公民档案统计,用于 CitizenApp 展示或诊断。
+//! 链端联合投票人口快照由 runtime 从 `citizen-identity` 链上状态按 scope 读取。
 //!
-//! 无 token 鉴权:返回的凭证仅对请求者 `account_pubkey` 有效,链上还会再次验签,
-//! 全局 rate limiter 已防滥用。
+//! 无 token 鉴权:只返回聚合人数,不包含个人档案字段。
 
 use axum::{
     extract::{Query, State},
@@ -12,11 +12,8 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
-use crate::core::chain_runtime::{
-    build_population_snapshot_credential, is_chain_runtime_config_error, normalize_account_pubkey,
-};
+use crate::core::chain_runtime::normalize_account_pubkey;
 use crate::*;
 
 #[derive(Deserialize)]
@@ -27,16 +24,8 @@ pub(crate) struct AppVotersCountQuery {
 
 #[derive(Serialize)]
 struct AppVotersCountOutput {
-    genesis_hash: String,
     eligible_total: u64,
     who: String,
-    snapshot_nonce: String,
-    issuer_cid_number: String,
-    issuer_main_account: String,
-    signer_pubkey: String,
-    scope_province_name: String,
-    scope_city_name: String,
-    signature: String,
 }
 
 /// `GET /api/v1/app/voters/count?account_pubkey=<hex>`
@@ -55,8 +44,7 @@ pub(crate) async fn app_voters_count(
             .query_one(
                 "SELECT COUNT(*)::BIGINT
                  FROM citizens
-                 WHERE bind_status = 'BOUND'
-                   AND citizen_status = 'NORMAL'
+                 WHERE citizen_status = 'NORMAL'
                    AND voting_eligible = true",
                 &[],
             )
@@ -75,23 +63,6 @@ pub(crate) async fn app_voters_count(
         }
     };
 
-    let snapshot = match build_population_snapshot_credential(
-        &state,
-        who.as_str(),
-        eligible_total,
-        Uuid::new_v4().to_string(),
-    ) {
-        Ok(v) => v,
-        Err(message) => {
-            if is_chain_runtime_config_error(message.as_str()) {
-                let detail = format!("链端签发配置未完成: {message}");
-                return api_error(StatusCode::SERVICE_UNAVAILABLE, 1006, detail.as_str());
-            }
-            let detail = format!("snapshot signature sign failed: {message}");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
-        }
-    };
-
     crate::core::runtime_ops::append_audit_log(
         &state,
         "APP_VOTERS_COUNT",
@@ -107,16 +78,8 @@ pub(crate) async fn app_voters_count(
         code: 0,
         message: "ok".to_string(),
         data: AppVotersCountOutput {
-            genesis_hash: snapshot.genesis_hash,
             eligible_total,
-            who: snapshot.who,
-            snapshot_nonce: snapshot.snapshot_nonce,
-            issuer_cid_number: snapshot.issuer_cid_number,
-            issuer_main_account: snapshot.issuer_main_account,
-            signer_pubkey: snapshot.signer_pubkey,
-            scope_province_name: snapshot.scope_province_name,
-            scope_city_name: snapshot.scope_city_name,
-            signature: snapshot.signature,
+            who,
         },
     })
     .into_response()

@@ -187,24 +187,11 @@ void main() {
       expect(decoded.summary, contains('反对'));
     });
 
-    test('decodes cast_referendum (pallet=23 call=1) admins 签发凭证', () {
-      // JointVote.cast_referendum = pallet 23 / call 1(联合公投联合公投)。
-      final issuerCid = utf8.encode('CN000-GZF0A-000000001-2026');
-      final issuerMain = List<int>.generate(32, (i) => 0x90 + (i & 0x0F));
-      final signerPubkey = List<int>.generate(32, (i) => 0xA0 + (i & 0x0F));
-      final scopeProvince = utf8.encode('安徽省');
-      final scopeCity = utf8.encode('合肥市');
+    test('decodes cast_referendum (pallet=23 call=1)', () {
+      // JointVote.cast_referendum = pallet 23 / call 1,链端按账户读取公民身份。
       final payload = Uint8List.fromList([
         0x17, 0x01,
         99, 0, 0, 0, 0, 0, 0, 0, // proposal_id = 99 u64_le
-        ...List.filled(32, 0), // binding_id = 0x00 × 32
-        0, // Vec nonce len = 0
-        0, // Vec sig len = 0
-        issuerCid.length << 2, ...issuerCid,
-        ...issuerMain,
-        ...signerPubkey,
-        scopeProvince.length << 2, ...scopeProvince,
-        scopeCity.length << 2, ...scopeCity,
         1, // approve = true
       ]);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -213,14 +200,22 @@ void main() {
       expect(decoded!.action, 'cast_referendum');
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
-      expect(decoded.fields['issuer_cid_number'], 'CN000-GZF0A-000000001-2026');
-      expect(decoded.fields['issuer_main_account'], ss58FromBytes(issuerMain));
-      expect(decoded.fields['scope_province_name'], '安徽省');
-      expect(decoded.fields['scope_city_name'], '合肥市');
-      expect(
-        decoded.fields['signer_pubkey'],
-        ss58FromBytes(signerPubkey),
-      );
+    });
+
+    test('decodes prepare_joint_population_snapshot (pallet=23 call=2)', () {
+      final payload = Uint8List.fromList([
+        0x17, 0x02,
+        2, // PopulationScope::City
+        ...compactVec('GZ'),
+        ...compactVec('001'),
+      ]);
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'prepare_joint_population_snapshot');
+      expect(decoded.fields['scope_level'], 'CITY');
+      expect(decoded.fields['scope_province_code'], 'GZ');
+      expect(decoded.fields['scope_city_code'], '001');
     });
 
     test('cast_referendum 缺少 issuer/admins 字段时拒绝解码', () {
@@ -1143,8 +1138,8 @@ void main() {
 
     // -----------------------------------------------------------------------
     // ADR-008 step2d 双端字节一致性 fixture:
-    // 三组凭证的 SCALE 字节流由 Python 生成器(链端 codec.encode 等价产出)固化,
-    // 统一真源在 ../memory/06-quality/fixtures/，citizenwallet / citizenapp / 链端 runtime
+    // 当前 fixture 固化公民账户投票交易与发行提案交易,统一真源在
+    // ../memory/06-quality/fixtures/，citizenwallet / citizenapp / 链端 runtime
     // 三处必须产出同一序列。
     // 任何一端编码漂移 → 这里直接断言失败。
     // -----------------------------------------------------------------------
@@ -1162,7 +1157,7 @@ void main() {
       return jsonDecode(raw) as Map<String, dynamic>;
     }
 
-    test('fixture step2d cast_referendum: decoder 解出 issuer/scope 字段', () {
+    test('fixture step2d cast_referendum: decoder 解出账户投票字段', () {
       final fixture = readFixture();
       final caseEntry = (fixture['cases'] as List)
           .firstWhere((e) => e['name'] == 'cast_referendum');
@@ -1177,20 +1172,6 @@ void main() {
       expect(decoded!.action, 'cast_referendum');
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
-      expect(decoded.fields['issuer_cid_number'],
-          (caseEntry['fields'] as Map)['issuer_cid_number']);
-      expect(
-          decoded.fields['issuer_main_account'],
-          ss58FromHex((caseEntry['fields'] as Map)['issuer_main_account_hex']
-              as String));
-      expect(decoded.fields['scope_province_name'],
-          (caseEntry['fields'] as Map)['scope_province_name']);
-      expect(decoded.fields['scope_city_name'],
-          (caseEntry['fields'] as Map)['scope_city_name']);
-      expect(
-          decoded.fields['signer_pubkey'],
-          ss58FromHex(
-              (caseEntry['fields'] as Map)['signer_pubkey_hex'] as String));
     });
 
     // 协议升级 fixture step2d propose_runtime_upgrade decoder 用例已删:同上,SCALE decoder
@@ -1450,29 +1431,20 @@ void main() {
     });
 
     test('decodes prepare_population_snapshot (28.0)', () {
-      final issuerAccount = List<int>.generate(32, (i) => (i + 5) & 0xff);
-      final signerPubkey = List<int>.generate(32, (i) => (i + 9) & 0xff);
       final callData = [
         28, 0,
-        ...u64Le(123456), // eligible_total
-        ...compactVec('nonce-x'), // snapshot_nonce
-        ...compactVec('sig-y'), // signature
-        ...compactVec('NLG0000001'), // issuer_cid_number
-        ...issuerAccount,
-        ...signerPubkey,
-        ...compactVec('某省'), // scope_province_name
-        ...compactVec('某市'), // scope_city_name
+        3, // PopulationScope::Town
+        ...compactVec('GZ'),
+        ...compactVec('001'),
+        ...compactVec('001001'),
       ];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'prepare_legislation_snapshot');
-      expect(decoded.fields['eligible_total'], '123456');
-      expect(decoded.fields['issuer_cid_number'], 'NLG0000001');
-      expect(
-          decoded.fields['issuer_main_account'], ss58FromBytes(issuerAccount));
-      expect(decoded.fields['signer_pubkey'], ss58FromBytes(signerPubkey));
-      expect(decoded.fields['scope_province_name'], '某省');
-      expect(decoded.fields['scope_city_name'], '某市');
+      expect(decoded.fields['scope_level'], 'TOWN');
+      expect(decoded.fields['scope_province_code'], 'GZ');
+      expect(decoded.fields['scope_city_code'], '001');
+      expect(decoded.fields['scope_town_code'], '001001');
     });
 
     test('decodes cast_house_vote (28.1)', () {
@@ -1485,20 +1457,9 @@ void main() {
     });
 
     test('decodes cast_referendum_vote (28.2)', () {
-      final bindingId = List<int>.generate(32, (i) => (i + 2) & 0xff);
-      final issuerAccount = List<int>.generate(32, (i) => (i + 5) & 0xff);
-      final signerPubkey = List<int>.generate(32, (i) => (i + 9) & 0xff);
       final callData = [
         28, 2,
         ...u64Le(55), // proposal_id
-        ...bindingId, // binding_id [u8;32]
-        ...compactVec('nonce-z'), // nonce
-        ...compactVec('sig-w'), // signature
-        ...compactVec('CID12345'), // issuer_cid_number
-        ...issuerAccount,
-        ...signerPubkey,
-        ...compactVec('粤'), // scope_province_name
-        ...compactVec('深圳'), // scope_city_name
         0x00, // approve = false
       ];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
@@ -1506,8 +1467,6 @@ void main() {
       expect(decoded!.action, 'cast_referendum_vote');
       expect(decoded.fields['proposal_id'], '55');
       expect(decoded.fields['approve'], 'false');
-      expect(decoded.fields['issuer_cid_number'], 'CID12345');
-      expect(decoded.fields['scope_city_name'], '深圳');
     });
 
     test(

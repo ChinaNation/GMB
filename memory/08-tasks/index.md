@@ -135,7 +135,6 @@
 - `memory/08-tasks/done/20260328-073618-review-shengbank-interest.md`
 - `memory/08-tasks/done/20260328-095223-review-citizen-issuance.md`
 - `memory/08-tasks/done/20260328-100300-review-pow-difficulty.md`
-- `memory/08-tasks/done/20260328-101548-review-cid-system.md`
 - `memory/08-tasks/done/20260328-112224-review-grandpakey-change.md`
 - `memory/08-tasks/done/20260328-121809-审查-duoqian-manage.md`
 - `memory/08-tasks/done/20260328-123104-review-institution-asset.md`

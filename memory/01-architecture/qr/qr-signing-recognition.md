@@ -78,7 +78,7 @@ citizenchain node 的链交易冷签路径必须和热钱包路径一样使用 r
 
 | action | domain / 前缀 | 必须展示 |
 |---:|---|---|
-| 2 | `cid-citizen-bind-v1` | 绑定模式、公民状态、投票资格、钱包地址 |
+| 2 | `citizen-identity-v1` | 身份模式、公民状态、投票资格、钱包地址 |
 | 3 | `onchina_admin_governance` | 动作类型、注册局、省份、操作者/目标账户 |
 
 文本载荷内部的 `payload_hash` 只用于生成方本地 session 或 API 防重放,不进入 QR 签名响应。

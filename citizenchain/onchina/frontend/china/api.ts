@@ -18,9 +18,15 @@ export type CidCityItem = {
   city_code: string;
 };
 
+export type CidTownItem = {
+  town_name: string;
+  town_code: string;
+};
+
 export type CidMetaResult = {
   institution_options: CidInstitutionCodeItem[];
   provinces: CidProvinceItem[];
+  all_provinces: CidProvinceItem[];
   scoped_province_name?: string | null;
 };
 
@@ -34,6 +40,18 @@ export async function getCidMeta(auth: AdminAuth): Promise<CidMetaResult> {
 export async function listCidCities(auth: AdminAuth, province_name: string): Promise<CidCityItem[]> {
   const q = `?province_name=${encodeURIComponent(province_name)}`;
   return request<CidCityItem[]>(`/api/v1/admin/cid/china/cities${q}`, {
+    method: 'GET',
+    headers: adminHeaders(auth),
+  });
+}
+
+export async function listCidTowns(
+  auth: AdminAuth,
+  province_name: string,
+  city_code: string,
+): Promise<CidTownItem[]> {
+  const params = new URLSearchParams({ province_name, city_code });
+  return request<CidTownItem[]>(`/api/v1/admin/cid/china/towns?${params.toString()}`, {
     method: 'GET',
     headers: adminHeaders(auth),
   });

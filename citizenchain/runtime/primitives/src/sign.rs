@@ -14,7 +14,7 @@
 //! - **② / ③ 本模块 op_tag 签名(哈希域 0x10-0x17 / 二进制前缀域 0x18-0x19)**:**只有以下四类**
 //!   才允许,且必须收敛在本文件:
 //!   1. **第三方背书 / 内嵌凭证**:交易里嵌着「非交易发起人」签的资格证明
-//!      (如公民公投 / 联合投票公投段:公民签①发交易,机构签② CID 凭证 `OP_SIGN_VOTE/POP`)。
+//!      (如注册局提交公民档案上链时,公民钱包对档案 payload 做确认签名)。
 //!   2. **链下支付**(L2/L3 通道 / 批量结算:`OP_SIGN_L3_PAY/OFFCHAIN_BATCH/L2_ACK`)——无交易可签。
 //!   3. **链下 challenge**(解密授权:`OP_SIGN_DECRYPT`)——非交易上下文。
 //!   4. **跨上下文离线证明**(管理员激活:`OP_SIGN_ACTIVATE_ADMIN` 等)。
@@ -37,7 +37,7 @@
 //! ```text
 //! (GMB, op_tag, f1, f2, ...).encode()  ==  GMB || op_tag || (f1, f2, ...).encode()
 //! ```
-//! 因此治理 5 个签名(`OP_SIGN_BIND..=OP_SIGN_DEREGISTER`,0x10-0x14)调
+//! 因此治理/身份签名调
 //! `signing_message(op_tag, (fields).encode())` 与直接 `blake2_256((GMB, op_tag, fields).encode())`
 //! **消息字节逐字节相等**(回归铁证,见 `tests/sign_golden.rs`)。
 //!
@@ -75,8 +75,8 @@ pub const QR_KIND_IM_NODE_PAIRING: u8 = 5;
 
 /// QR_V1 登录签名动作。
 pub const QR_ACTION_LOGIN: u16 = 1;
-/// QR_V1 公民绑定签名动作。
-pub const QR_ACTION_CITIZEN_BIND: u16 = 2;
+/// QR_V1 公民档案上链确认签名动作。
+pub const QR_ACTION_CITIZEN_IDENTITY: u16 = 2;
 /// QR_V1 链上中国平台管理员治理/Passkey 更新签名动作。
 pub const QR_ACTION_ONCHINA_ADMIN: u16 = 3;
 /// QR_V1 管理员激活二进制原始签名动作。
@@ -95,10 +95,10 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 //
 // ## 两类签名域
 //
-// 1. **哈希域**(0x10-0x17,经 [`signing_message`] = `blake2_256(GMB||op_tag||SCALE)`):
-//    - 0x10-0x14 治理/身份签名。
+// 1. **哈希域**(0x10/0x13-0x17,经 [`signing_message`] = `blake2_256(GMB||op_tag||SCALE)`):
+//    - 0x10 公民档案上链确认;0x13-0x14 机构登记/注销。
 //    - 0x15-0x17 L3 支付 / 链下批次结算 / L2 确认。
-//    只有这 8 个(0x10-0x17)经 `signing_message` 入 hash → 才进 [`SIGN_OP_TAGS`] + 金标遍历。
+//    只有这 6 个经 `signing_message` 入 hash → 才进 [`SIGN_OP_TAGS`] + 金标遍历。
 //
 // 2. **二进制前缀域**(0x18/0x19,**不经 hash**,签**原始可解析字节**):
 //    冷钱包对整段 payload 直接 sr25519 签名,node 按字节偏移解析。op_tag 常量仅作
@@ -111,12 +111,8 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 //
 // 0x1A-0x1F 预留。账户地址派生 op_tag(0x00-0x0F)见 `account_derive`,命名空间不重叠。
 
-/// 公民身份绑定。
-pub const OP_SIGN_BIND: u8 = 0x10;
-/// 公民投票。
-pub const OP_SIGN_VOTE: u8 = 0x11;
-/// 人口快照。
-pub const OP_SIGN_POP: u8 = 0x12;
+/// 公民档案上链确认。
+pub const OP_SIGN_CITIZEN_IDENTITY: u8 = 0x10;
 /// CID 机构登记。
 pub const OP_SIGN_INST: u8 = 0x13;
 /// CID 机构/账户注销凭证(注册局签发,链端 close 验签)。
@@ -158,13 +154,11 @@ pub fn binary_domain_prefix(op_tag: u8) -> [u8; BINARY_PREFIX_LEN] {
     prefix
 }
 
-/// 全部**哈希域**签名 op_tag(0x10-0x17,经 [`signing_message`])的注册表,
+/// 全部**哈希域**签名 op_tag(0x10/0x13-0x17,经 [`signing_message`])的注册表,
 /// 供金标遍历与残留扫描。顺序与注册表声明一致;新增哈希域 op_tag 必须同步追加此数组
 /// + 刷新金标。二进制前缀域(0x18/0x19)与 IM 字符串常量**不在此列**。
-pub const SIGN_OP_TAGS: [u8; 8] = [
-    OP_SIGN_BIND,
-    OP_SIGN_VOTE,
-    OP_SIGN_POP,
+pub const SIGN_OP_TAGS: [u8; 6] = [
+    OP_SIGN_CITIZEN_IDENTITY,
     OP_SIGN_INST,
     OP_SIGN_DEREGISTER,
     OP_SIGN_L3_PAY,

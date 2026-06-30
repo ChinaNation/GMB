@@ -1,5 +1,5 @@
 [package]
-name = "cid-system"  # CID 绑定与资格校验模块
+name = "citizen-identity"
 edition.workspace = true
 version.workspace = true
 authors.workspace = true
@@ -15,7 +15,6 @@ frame-benchmarking = { workspace = true, optional = true }
 sp-core = { workspace = true }
 sp-io = { workspace = true }
 sp-runtime = { workspace = true }
-log = { version = "0.4", default-features = false }
 primitives = { path = "../../primitives", default-features = false }
 
 [features]
@@ -35,6 +34,5 @@ std = [
     "sp-core/std",
     "sp-io/std",
     "sp-runtime/std",
-    "log/std",
     "primitives/std",
 ]

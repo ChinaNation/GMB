@@ -47,43 +47,18 @@ class AdminCatalogResponse {
   final List<AdminCatalogEntryResponse> entries;
 }
 
-/// CID 人口快照响应。
+/// 公民人数查询响应。
 ///
-/// CID 人口快照凭证统一使用签发机构模型。
-///
-/// 链端按 issuer_main_account 读取 admins-change 的 admins 真源,确认
-/// signer_pubkey 属于该签发机构管理员后再验签。
-class PopulationSnapshotResponse {
-  const PopulationSnapshotResponse({
-    required this.genesisHash,
+/// 这是 OnChina 本地档案统计,只用于界面提示或诊断;链端投票分母由
+/// runtime `citizen-identity` 按作用域直接读取。
+class VotersCountResponse {
+  const VotersCountResponse({
     required this.eligibleTotal,
-    required this.snapshotNonce,
-    required this.signature,
     required this.who,
-    required this.issuerCidNumber,
-    required this.issuerMainAccount,
-    required this.signerPubkey,
-    required this.scopeProvinceName,
-    required this.scopeCityName,
   });
 
-  final String genesisHash;
   final int eligibleTotal;
-
-  /// 快照 nonce（UTF-8 字符串，直接作为 BoundedVec<u8> 提交）。
-  final String snapshotNonce;
-
-  /// sr25519 签名（hex 编码，提交时需解码为原始字节）。
-  final String signature;
-
-  /// 归一化后的账户公钥 hex。
   final String who;
-
-  final String issuerCidNumber;
-  final String issuerMainAccount;
-  final String signerPubkey;
-  final String scopeProvinceName;
-  final String scopeCityName;
 }
 
 /// CID 机构注册凭证。
@@ -226,11 +201,10 @@ class ApiClient {
     );
   }
 
-  /// 获取公民人口快照（eligible_total + nonce + signature）。
+  /// 获取 OnChina 本地合格公民人数。
   ///
-  /// 用于联合投票提案创建时附带人口证明。
-  Future<PopulationSnapshotResponse> fetchPopulationSnapshot(
-      String accountPubkeyHex) async {
+  /// 链端联合投票人口快照由 runtime 自己从 citizen-identity 读取,这里不生成凭证。
+  Future<VotersCountResponse> fetchVotersCount(String accountPubkeyHex) async {
     final normalized = _normalizePubkeyHex(accountPubkeyHex);
     final uri = Uri.parse(
         '$_baseUrl/api/v1/app/voters/count?account_pubkey=$normalized');
@@ -247,7 +221,7 @@ class ApiClient {
       rethrow;
     }
     if (response.statusCode != 200) {
-      throw Exception('population snapshot failed: ${response.statusCode}');
+      throw Exception('voters count failed: ${response.statusCode}');
     }
 
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
@@ -255,48 +229,18 @@ class ApiClient {
     final message = payload['message']?.toString() ?? 'unknown';
     if (code != 0) {
       throw Exception(
-        'population snapshot rejected: code=$code message=$message',
+        'voters count rejected: code=$code message=$message',
       );
     }
 
     final data = payload['data'];
     if (data is! Map<String, dynamic>) {
-      throw Exception('population snapshot invalid response: missing data');
+      throw Exception('voters count invalid response: missing data');
     }
 
-    final issuerCidNumber =
-        (data['issuer_cid_number']?.toString() ?? '').trim();
-    final issuerMainAccountRaw =
-        (data['issuer_main_account']?.toString() ?? '').trim();
-    final signerPubkeyRaw = (data['signer_pubkey']?.toString() ?? '').trim();
-    final scopeProvinceName =
-        (data['scope_province_name']?.toString() ?? '').trim();
-    final scopeCityName = (data['scope_city_name']?.toString() ?? '').trim();
-    if (issuerCidNumber.isEmpty) {
-      throw Exception('population snapshot 缺少 issuer_cid_number 字段');
-    }
-    if (issuerMainAccountRaw.isEmpty) {
-      throw Exception('population snapshot 缺少 issuer_main_account 字段');
-    }
-    if (signerPubkeyRaw.isEmpty) {
-      throw Exception('population snapshot 缺少 signer_pubkey 字段');
-    }
-    if (scopeProvinceName.isEmpty) {
-      throw Exception('population snapshot 缺少 scope_province_name 字段');
-    }
-
-    return PopulationSnapshotResponse(
+    return VotersCountResponse(
       eligibleTotal: (data['eligible_total'] as num?)?.toInt() ?? 0,
-      snapshotNonce: (data['snapshot_nonce']?.toString() ?? '').trim(),
-      genesisHash: (data['genesis_hash']?.toString() ?? '').trim(),
-      signature: (data['signature']?.toString() ?? '').trim(),
       who: (data['who']?.toString() ?? '').trim(),
-      issuerCidNumber: issuerCidNumber,
-      issuerMainAccount:
-          _normalizePubkeyHex(issuerMainAccountRaw).toLowerCase(),
-      signerPubkey: _normalizePubkeyHex(signerPubkeyRaw).toLowerCase(),
-      scopeProvinceName: scopeProvinceName,
-      scopeCityName: scopeCityName,
     );
   }
 
@@ -508,14 +452,13 @@ class ApiClient {
     );
   }
 
-  /// 从 CID 获取公民投票凭证。
+  /// 查询公民本地投票资格。
   ///
-  /// 公民投票时，App 先从 CID 获取投票资格证明（binding_id + vote_nonce + signature），
-  /// 再将凭证提交到链上。
-  Future<VoteCredentialResponse> fetchVoteCredential(
+  /// 链端投票交易只提交账户与投票意见;真实资格由 runtime `citizen-identity` 判定。
+  Future<VoteEligibilityResponse> fetchVoteEligibility(
       String accountPubkeyHex, int proposalId) async {
     final normalized = _normalizePubkeyHex(accountPubkeyHex);
-    final uri = Uri.parse('$_baseUrl/api/v1/app/vote/credential');
+    final uri = Uri.parse('$_baseUrl/api/v1/app/vote/eligibility');
     final body = jsonEncode({
       'account_pubkey': normalized,
       'proposal_id': proposalId,
@@ -534,7 +477,7 @@ class ApiClient {
       rethrow;
     }
     if (response.statusCode != 200) {
-      throw Exception('vote credential failed: ${response.statusCode}');
+      throw Exception('vote eligibility failed: ${response.statusCode}');
     }
 
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
@@ -542,58 +485,54 @@ class ApiClient {
     final message = payload['message']?.toString() ?? 'unknown';
     if (code != 0) {
       throw Exception(
-        'vote credential rejected: code=$code message=$message',
+        'vote eligibility rejected: code=$code message=$message',
       );
     }
 
     final data = payload['data'];
     if (data is! Map<String, dynamic>) {
-      throw Exception('vote credential invalid response: missing data');
+      throw Exception('vote eligibility invalid response: missing data');
     }
 
-    return VoteCredentialResponse(
-      genesisHash: (data['genesis_hash']?.toString() ?? '').trim(),
+    return VoteEligibilityResponse(
       who: (data['who']?.toString() ?? '').trim(),
-      bindingId: (data['binding_id']?.toString() ?? '').trim(),
       proposalId: (data['proposal_id'] as num?)?.toInt() ?? proposalId,
-      voteNonce: (data['vote_nonce']?.toString() ?? '').trim(),
-      issuerCidNumber: (data['issuer_cid_number']?.toString() ?? '').trim(),
-      issuerMainAccount: _normalizePubkeyHex(
-          (data['issuer_main_account']?.toString() ?? '').trim()),
-      signerPubkey:
-          _normalizePubkeyHex((data['signer_pubkey']?.toString() ?? '').trim()),
-      scopeProvinceName: (data['scope_province_name']?.toString() ?? '').trim(),
-      scopeCityName: (data['scope_city_name']?.toString() ?? '').trim(),
-      signature: (data['signature']?.toString() ?? '').trim(),
+      cidNumber: (data['cid_number']?.toString() ?? '').trim(),
+      citizenStatus: (data['citizen_status']?.toString() ?? '').trim(),
+      identityStatus: (data['identity_status']?.toString() ?? '').trim(),
+      voteStatus: (data['vote_status']?.toString() ?? '').trim(),
+      eligible: data['eligible'] == true,
+      residenceProvinceCode:
+          (data['residence_province_code']?.toString() ?? '').trim(),
+      residenceCityCode: (data['residence_city_code']?.toString() ?? '').trim(),
+      residenceTownCode: (data['residence_town_code']?.toString() ?? '').trim(),
     );
   }
 }
 
-class VoteCredentialResponse {
-  final String genesisHash;
+class VoteEligibilityResponse {
   final String who;
-  final String bindingId;
   final int proposalId;
-  final String voteNonce;
-  final String issuerCidNumber;
-  final String issuerMainAccount;
-  final String signerPubkey;
-  final String scopeProvinceName;
-  final String scopeCityName;
-  final String signature;
+  final String cidNumber;
+  final String citizenStatus;
+  final String identityStatus;
+  final String voteStatus;
+  final bool eligible;
+  final String residenceProvinceCode;
+  final String residenceCityCode;
+  final String residenceTownCode;
 
-  VoteCredentialResponse({
-    required this.genesisHash,
+  VoteEligibilityResponse({
     required this.who,
-    required this.bindingId,
     required this.proposalId,
-    required this.voteNonce,
-    required this.issuerCidNumber,
-    required this.issuerMainAccount,
-    required this.signerPubkey,
-    required this.scopeProvinceName,
-    required this.scopeCityName,
-    required this.signature,
+    required this.cidNumber,
+    required this.citizenStatus,
+    required this.identityStatus,
+    required this.voteStatus,
+    required this.eligible,
+    required this.residenceProvinceCode,
+    required this.residenceCityCode,
+    required this.residenceTownCode,
   });
 }
 

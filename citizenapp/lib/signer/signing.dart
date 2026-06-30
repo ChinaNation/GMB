@@ -24,19 +24,13 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 // 0x10-0x14 治理/身份签名。
 // 0x15-0x1B 业务签名段。
 
-/// 公民身份绑定(对齐 OP_SIGN_BIND)。
-const int kOpSignBind = 0x10;
+/// 公民身份上链确认(对齐 OP_SIGN_CITIZEN_IDENTITY)。
+const int kOpSignCitizenIdentity = 0x10;
 
-/// 公民投票(对齐 OP_SIGN_VOTE)。
-const int kOpSignVote = 0x11;
-
-/// 人口快照(对齐 OP_SIGN_POP)。
-const int kOpSignPop = 0x12;
-
-/// CID 机构登记(对齐 OP_SIGN_INST)。
+/// 机构登记(对齐 OP_SIGN_INST)。
 const int kOpSignInst = 0x13;
 
-/// CID 机构/账户注销凭证(对齐 OP_SIGN_DEREGISTER)。
+/// 机构/账户注销凭证(对齐 OP_SIGN_DEREGISTER)。
 const int kOpSignDeregister = 0x14;
 
 /// L3 支付(对齐 OP_SIGN_L3_PAY)。

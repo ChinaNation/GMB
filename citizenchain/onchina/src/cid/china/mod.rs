@@ -10,6 +10,5 @@ mod store;
 
 pub(crate) use store::{
     area_display_names, area_name_by_codes, china_sqlite_hash, city_code_by_name,
-    province_code_by_name, province_name_by_code, provinces, town_code_by_name, town_exists,
-    with_china_connection,
+    province_code_by_name, provinces, town_code_by_name, town_exists, with_china_connection,
 };

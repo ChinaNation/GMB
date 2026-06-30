@@ -116,57 +116,20 @@ impl institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
     }
 }
 
-pub struct TestCidEligibility;
-impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
-    for TestCidEligibility
-{
-    fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
+pub struct TestCitizenIdentityReader;
+impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
+    fn can_vote(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
     }
 
-    fn verify_and_consume_vote_credential(
-        _binding_id: &<Test as frame_system::Config>::Hash,
-        _who: &AccountId32,
-        _proposal_id: u64,
-        _nonce: &[u8],
-        _signature: &[u8],
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
+    fn can_be_candidate(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
+    }
+
+    fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
+        100
     }
 }
-
-pub struct TestPopulationSnapshotVerifier;
-impl
-    votingengine::PopulationSnapshotVerifier<
-        AccountId32,
-        votingengine::pallet::VoteNonceOf<Test>,
-        votingengine::pallet::VoteSignatureOf<Test>,
-    > for TestPopulationSnapshotVerifier
-{
-    fn verify_population_snapshot(
-        _who: &AccountId32,
-        _eligible_total: u64,
-        _nonce: &votingengine::pallet::VoteNonceOf<Test>,
-        _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        true
-    }
-}
-
-// ── Provider:仅支持 PMUL(个人多签),其他 institution_code 返回 None/false ──
-//
-// personal-manage 生命周期测试只走个人多签业务,储备治理三档不参与;
-// 因此 Provider 只需要从 personal-admins 读 admins / count。
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
@@ -247,8 +210,7 @@ impl votingengine::Config for Test {
     type MaxActiveProposals = ConstU32<10>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
     type CleanupKeysPerStep = ConstU32<64>;
-    type CidEligibility = TestCidEligibility;
-    type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
+    type CitizenIdentityReader = TestCitizenIdentityReader;
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = (
         crate::InternalVoteExecutor<Test>,

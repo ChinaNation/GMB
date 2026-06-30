@@ -33,7 +33,7 @@
 
 - [x] 任务2：创世 cargo test ✅ `cargo test -p citizenchain --lib genesis` **8 passed / 0 failed**（genesis 7 断言 + test_genesis_config_builds；含 NRC/省储行/两和基金 balances.len、总发行量、grandpa 公钥校验）。无需 WASM_FILE。
 - [x] 任务3：3 张 memory 卡 + MEMORY.md 索引已更新为真实态（T3/T4 代码全落地、派生域=GMB 已落地、china_zf 空 admin 已补）。
-- [x] 任务1：`scripts/benchmark.sh` ✅ **11 个 pallet 全回填**（provincialbank_interest/fullnode_issuance/citizen_issuance/resolution_issuance/cid_system/pow_difficulty/admins_change/resolution_destro/grandpakey_change/multisig_transfer/runtime_upgrade），DATE=2026-06-23，本机 MacBook Pro 硬件权重，11 weights.rs 改动 185/185 行。
+- [x] 任务1：`scripts/benchmark.sh` ✅ **11 个 pallet 全回填**（provincialbank_interest/fullnode_issuance/citizen_issuance/resolution_issuance/citizen_identity/pow_difficulty/admins_change/resolution_destro/grandpakey_change/multisig_transfer/runtime_upgrade），DATE=2026-06-23，本机 MacBook Pro 硬件权重，11 weights.rs 改动 185/185 行。
 - [x] 回填后 `cargo check --workspace` 复验 ✅ **0 error**（11.35s，含 node）。三项验收标准全过。
 
 ## 注意

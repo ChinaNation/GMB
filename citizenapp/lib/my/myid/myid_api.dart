@@ -7,28 +7,30 @@ import 'package:citizenapp/cid_api_config.dart';
 
 class MyIdStatusResponse {
   const MyIdStatusResponse({
-    required this.bindStatus,
+    required this.found,
     this.walletAddress,
     this.cidNumber,
+    this.passportNo,
     this.citizenStatus,
     this.votingEligible,
     this.voteStatus,
     this.identityStatus,
-    this.validFrom,
-    this.validUntil,
+    this.passportValidFrom,
+    this.passportValidUntil,
     this.statusUpdatedAt,
   });
 
-  /// "pending" | "bound" | "unset"
-  final String bindStatus;
+  /// 后端已找到当前钱包对应的公民档案。
+  final bool found;
   final String? walletAddress;
   final String? cidNumber;
+  final String? passportNo;
   final String? citizenStatus;
   final bool? votingEligible;
   final String? voteStatus;
   final String? identityStatus;
-  final String? validFrom;
-  final String? validUntil;
+  final String? passportValidFrom;
+  final String? passportValidUntil;
   final int? statusUpdatedAt;
 }
 
@@ -37,7 +39,7 @@ class MyIdApi {
 
   final String _baseUrl;
 
-  /// 查询电子护照绑定状态。
+  /// 查询电子护照状态。
   Future<MyIdStatusResponse> queryMyIdStatus(String walletAddress) async {
     final addr = walletAddress.trim();
     if (addr.isEmpty) {
@@ -73,15 +75,16 @@ class MyIdApi {
     }
 
     return MyIdStatusResponse(
-      bindStatus: (data['bind_status']?.toString() ?? 'unset').trim(),
+      found: _parseBool(data['found']) ?? false,
       walletAddress: data['wallet_address']?.toString(),
       cidNumber: data['cid_number']?.toString(),
+      passportNo: data['passport_no']?.toString(),
       citizenStatus: data['citizen_status']?.toString(),
       votingEligible: _parseBool(data['voting_eligible']),
       voteStatus: data['vote_status']?.toString(),
       identityStatus: data['identity_status']?.toString(),
-      validFrom: data['valid_from']?.toString(),
-      validUntil: data['valid_until']?.toString(),
+      passportValidFrom: data['passport_valid_from']?.toString(),
+      passportValidUntil: data['passport_valid_until']?.toString(),
       statusUpdatedAt: data['status_updated_at'] is int
           ? data['status_updated_at'] as int
           : int.tryParse(data['status_updated_at']?.toString() ?? ''),

@@ -1,16 +1,15 @@
 //! 签名协议金标向量导出/断言测试。
 //!
 //! 唯一权威算法源 = `primitives::sign::signing_message`。本测试是跨语言(Rust ↔ Dart)
-//! 防漂移的金标兜底,同时回归证明治理 5 个 op_tag(0x10-0x14)改调原语后**字节不变**:
+//! 防漂移的金标兜底,同时回归证明哈希域 op_tag 改调原语后**字节不变**:
 //!
 //! - `SIGN_GOLDEN_UPDATE=1`:用 `signing_message` 对每条向量(op_tag + 固定 scale_payload)
 //!   重算 message_hex 并写回 canonical fixture
 //!   (`tests/fixtures/signing_domain_vectors.json`)。
 //! - 默认(未设环境变量):读取 fixture,断言 `signing_message` 结果逐字节 == fixture。
 //!
-//! 治理回归铁律:0x10-0x14 五条向量的 message_hex 任何时候都不得变化(改调原语前后字节一致,
+//! 回归铁律:fixture 中所有向量的 message_hex 任何时候都不得变化(改调原语前后字节一致,
 //! 证明 `(GMB, op_tag, fields).encode()` == `GMB || op_tag || (fields).encode()`)。
-//! 0x15-0x1B 七条是新折的字符串域,首次跑 UPDATE 回填,之后亦冻结。
 //!
 //! CI 守卫:跑 update + `git diff --exit-code` 防 fixture 与算法源漂移。
 

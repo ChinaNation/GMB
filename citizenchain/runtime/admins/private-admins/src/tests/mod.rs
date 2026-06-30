@@ -79,8 +79,7 @@ impl votingengine::Config for Test {
     type ExecutionRetryGraceBlocks = ConstU64<216>;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
-    type CidEligibility = ();
-    type PopulationSnapshotVerifier = ();
+    type CitizenIdentityReader = ();
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = ();
     type InternalAdminProvider = ();

@@ -40,7 +40,7 @@ use votingengine::{
         legislation_house_decided, legislation_house_final_passed,
         legislation_referendum_final_passed, InstitutionCode, LEG_VOTE_SPECIAL,
     },
-    CidEligibility, InternalAdminProvider, InternalProposalMutexKind, PopulationSnapshotVerifier,
+    CitizenIdentityReader, InternalAdminProvider, InternalProposalMutexKind, PopulationScope,
     Proposal, PROPOSAL_KIND_LEGISLATION, STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_HOUSE,
     STAGE_LEG_OVERRIDE, STAGE_LEG_REFERENDUM, STAGE_LEG_SIGN, STATUS_PASSED, STATUS_REJECTED,
     STATUS_VOTING,
@@ -100,6 +100,8 @@ pub mod pallet {
         pub legislature: Option<(InstitutionCode, T::AccountId)>,
         /// 是否修宪(tier=宪法):为真时,现有流程通过后最后进护宪大法官终审(宪法第21条)。
         pub needs_guard: bool,
+        /// 特别案公投作用域。非特别案为 None。
+        pub referendum_scope: Option<PopulationScope>,
     }
 
     /// 已准备的人口快照(特别案公投分母),对标 joint-vote。
@@ -114,9 +116,9 @@ pub mod pallet {
         TypeInfo,
         MaxEncodedLen,
     )]
-    pub struct PreparedSnapshot<BlockNumber, Hash> {
+    pub struct PreparedSnapshot<BlockNumber> {
         pub eligible_total: u64,
-        pub nonce_hash: Hash,
+        pub scope: PopulationScope,
         pub prepared_at: BlockNumber,
     }
 
@@ -158,10 +160,17 @@ pub mod pallet {
     pub type LegReferendumTally<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU64, ValueQuery>;
 
-    /// 公投去重:(proposal_id, binding_id) → 赞成/反对。
+    /// 公投去重:(proposal_id, 公民钱包账户) → 赞成/反对。
     #[pallet::storage]
-    pub type LegReferendumVotesByBindingId<T: Config> =
-        StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, T::Hash, bool, OptionQuery>;
+    pub type LegReferendumVotesByAccount<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Blake2_128Concat,
+        T::AccountId,
+        bool,
+        OptionQuery,
+    >;
 
     /// 三人会签记录(省/国家级 STAGE_LEG_OVERRIDE):proposal_id → [(签署人, 是否赞成)],
     /// 去重 + 集齐 3 个不同身份赞成判通过。签署人 ∈ {院长, 参议长, 众议长} 法定代表人。
@@ -185,18 +194,13 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// 人口快照 nonce 永久去重(防重放)。
-    #[pallet::storage]
-    pub type UsedSnapshotNonce<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
-
     /// 待消费的人口快照:发起人 → 已验签缓存(特别案发起前一区块准备)。
     #[pallet::storage]
     pub type PendingPopulationSnapshots<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         T::AccountId,
-        PreparedSnapshot<BlockNumberFor<T>, T::Hash>,
+        PreparedSnapshot<BlockNumberFor<T>>,
         OptionQuery,
     >;
 
@@ -232,7 +236,7 @@ pub mod pallet {
         PopulationSnapshotPrepared {
             who: T::AccountId,
             eligible_total: u64,
-            nonce_hash: T::Hash,
+            scope: PopulationScope,
         },
         /// 内部全过(非特别案),推进至行政签署阶段。
         LegislationAdvancedToSign { proposal_id: u64 },
@@ -272,14 +276,14 @@ pub mod pallet {
         PopulationSnapshotNotPrepared,
         /// 人口快照非本区块准备(过期)
         PopulationSnapshotNotCurrent,
-        /// 人口快照验签失败或字段非法
+        /// 人口快照作用域没有可投票公民
         InvalidPopulationSnapshot,
         /// 公投分母未设置
         CitizenEligibleTotalNotSet,
-        /// CID 持有者无公投资格
-        CidNotEligible,
-        /// CID 投票凭证非法
-        InvalidCidVoteCredential,
+        /// 公民身份无公投资格
+        CitizenNotEligible,
+        /// 公投作用域缺失
+        PopulationScopeMissing,
         /// 提案不在该阶段(签署/会签 stage 校验)
         NotInExpectedStage,
         /// 签署人不是该机构法定代表人(行政签署)
@@ -299,30 +303,12 @@ pub mod pallet {
         /// 准备特别案公投人口快照(发起特别案提案前一区块由发起人调用)。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::prepare_population_snapshot())]
-        #[allow(clippy::too_many_arguments)]
         pub fn prepare_population_snapshot(
             origin: OriginFor<T>,
-            eligible_total: u64,
-            snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
-            signature: votingengine::pallet::VoteSignatureOf<T>,
-            issuer_cid_number: BoundedVec<u8, ConstU32<128>>,
-            issuer_main_account: T::AccountId,
-            signer_pubkey: [u8; 32],
-            scope_province_name: BoundedVec<u8, ConstU32<64>>,
-            scope_city_name: BoundedVec<u8, ConstU32<64>>,
+            scope: PopulationScope,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_prepare_population_snapshot(
-                who,
-                eligible_total,
-                snapshot_nonce,
-                signature,
-                issuer_cid_number.as_slice(),
-                &issuer_main_account,
-                &signer_pubkey,
-                scope_province_name.as_slice(),
-                scope_city_name.as_slice(),
-            )
+            Self::do_prepare_population_snapshot(who, scope)
         }
 
         /// 立法机构议员/委员对当前院投票(一人一票)。
@@ -337,37 +323,16 @@ pub mod pallet {
             Self::do_cast_house_vote(who, proposal_id, approve)
         }
 
-        /// 公民对特别案公投投票(CID 持有者,链上去重计票)。
+        /// 公民对特别案公投投票(链上公民身份持有者,链上按账户去重计票)。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as Config>::WeightInfo::cast_referendum_vote())]
-        #[allow(clippy::too_many_arguments)]
         pub fn cast_referendum_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
-            binding_id: T::Hash,
-            nonce: votingengine::pallet::VoteNonceOf<T>,
-            signature: votingengine::pallet::VoteSignatureOf<T>,
-            issuer_cid_number: BoundedVec<u8, ConstU32<128>>,
-            issuer_main_account: T::AccountId,
-            signer_pubkey: [u8; 32],
-            scope_province_name: BoundedVec<u8, ConstU32<64>>,
-            scope_city_name: BoundedVec<u8, ConstU32<64>>,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_cast_referendum_vote(
-                who,
-                proposal_id,
-                binding_id,
-                nonce,
-                signature,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-                approve,
-            )
+            Self::do_cast_referendum_vote(who, proposal_id, approve)
         }
 
         /// 行政首长(机构法定代表人:市长/省长/总统)对终审通过的非特别案签署或否决。
@@ -416,69 +381,27 @@ impl<T: Config> Pallet<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
-    /// 准备特别案公投人口快照:验签 + 去重 + 缓存分母。
-    #[allow(clippy::too_many_arguments)]
+    /// 准备特别案公投人口快照:从链上公民身份模块读取并缓存分母。
     pub fn do_prepare_population_snapshot(
         who: T::AccountId,
-        eligible_total: u64,
-        snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
-        signature: votingengine::pallet::VoteSignatureOf<T>,
-        issuer_cid_number: &[u8],
-        issuer_main_account: &T::AccountId,
-        signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        scope_city_name: &[u8],
+        scope: PopulationScope,
     ) -> DispatchResult {
-        use sp_runtime::traits::Hash as HashT;
+        let eligible_total =
+            <T as votingengine::Config>::CitizenIdentityReader::population_count(&scope);
         ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
-        ensure!(
-            !snapshot_nonce.is_empty(),
-            Error::<T>::InvalidPopulationSnapshot
-        );
-        ensure!(!signature.is_empty(), Error::<T>::InvalidPopulationSnapshot);
-        ensure!(
-            !issuer_cid_number.is_empty(),
-            Error::<T>::InvalidPopulationSnapshot
-        );
-        ensure!(
-            !scope_province_name.is_empty(),
-            Error::<T>::InvalidPopulationSnapshot
-        );
-
-        let nonce_hash = <T as frame_system::Config>::Hashing::hash(snapshot_nonce.as_slice());
-        ensure!(
-            !pallet::UsedSnapshotNonce::<T>::get(nonce_hash),
-            Error::<T>::InvalidPopulationSnapshot
-        );
-        ensure!(
-            <T as votingengine::Config>::PopulationSnapshotVerifier::verify_population_snapshot(
-                &who,
-                eligible_total,
-                &snapshot_nonce,
-                &signature,
-                issuer_cid_number,
-                issuer_main_account,
-                signer_pubkey,
-                scope_province_name,
-                scope_city_name,
-            ),
-            Error::<T>::InvalidPopulationSnapshot
-        );
-
         let now = <frame_system::Pallet<T>>::block_number();
-        pallet::UsedSnapshotNonce::<T>::insert(nonce_hash, true);
         pallet::PendingPopulationSnapshots::<T>::insert(
             &who,
             pallet::PreparedSnapshot {
                 eligible_total,
-                nonce_hash,
+                scope: scope.clone(),
                 prepared_at: now,
             },
         );
         Self::deposit_event(pallet::Event::<T>::PopulationSnapshotPrepared {
             who,
             eligible_total,
-            nonce_hash,
+            scope,
         });
         Ok(())
     }
@@ -507,16 +430,16 @@ impl<T: Config> Pallet<T> {
         let referendum_required = vote_type == LEG_VOTE_SPECIAL;
         let now = <frame_system::Pallet<T>>::block_number();
         // 特别案:消费已准备的人口快照作为公投分母。
-        let eligible_total = if referendum_required {
+        let (eligible_total, referendum_scope) = if referendum_required {
             let prepared = pallet::PendingPopulationSnapshots::<T>::get(&who)
                 .ok_or(Error::<T>::PopulationSnapshotNotPrepared)?;
             if prepared.prepared_at != now {
                 pallet::PendingPopulationSnapshots::<T>::remove(&who);
                 return Err(Error::<T>::PopulationSnapshotNotCurrent.into());
             }
-            prepared.eligible_total
+            (prepared.eligible_total, Some(prepared.scope))
         } else {
-            0
+            (0, None)
         };
 
         let end = now.saturating_add(Self::stage_duration());
@@ -570,6 +493,7 @@ impl<T: Config> Pallet<T> {
                     executive,
                     legislature,
                     needs_guard,
+                    referendum_scope,
                 },
             );
             Proposals::<T>::insert(id, proposal);
@@ -1062,19 +986,10 @@ impl<T: Config> Pallet<T> {
         }
     }
 
-    /// 公投投票:CID 资格实时验签 + 链上去重计票(期满计票,本入口不提前判定)。
-    #[allow(clippy::too_many_arguments)]
+    /// 公投投票:读取链上公民身份资格 + 按账户去重计票(期满计票,本入口不提前判定)。
     pub fn do_cast_referendum_vote(
         who: T::AccountId,
         proposal_id: u64,
-        binding_id: T::Hash,
-        nonce: votingengine::pallet::VoteNonceOf<T>,
-        signature: votingengine::pallet::VoteSignatureOf<T>,
-        issuer_cid_number: frame_support::BoundedVec<u8, frame_support::traits::ConstU32<128>>,
-        issuer_main_account: T::AccountId,
-        signer_pubkey: [u8; 32],
-        scope_province_name: frame_support::BoundedVec<u8, frame_support::traits::ConstU32<64>>,
-        scope_city_name: frame_support::BoundedVec<u8, frame_support::traits::ConstU32<64>>,
         approve: bool,
     ) -> DispatchResult {
         let proposal = <votingengine::Pallet<T>>::ensure_open_proposal(proposal_id)?;
@@ -1090,31 +1005,20 @@ impl<T: Config> Pallet<T> {
             proposal.citizen_eligible_total > 0,
             Error::<T>::CitizenEligibleTotalNotSet
         );
+        let meta = pallet::LegMeta::<T>::get(proposal_id).ok_or(Error::<T>::ProposalMetaMissing)?;
+        let scope = meta
+            .referendum_scope
+            .ok_or(Error::<T>::PopulationScopeMissing)?;
         ensure!(
-            <T as votingengine::Config>::CidEligibility::is_eligible(&binding_id, &who),
-            Error::<T>::CidNotEligible
+            <T as votingengine::Config>::CitizenIdentityReader::can_vote(&who, &scope),
+            Error::<T>::CitizenNotEligible
         );
         ensure!(
-            !pallet::LegReferendumVotesByBindingId::<T>::contains_key(proposal_id, binding_id),
+            !pallet::LegReferendumVotesByAccount::<T>::contains_key(proposal_id, &who),
             votingengine::Error::<T>::AlreadyVoted
         );
-        ensure!(
-            <T as votingengine::Config>::CidEligibility::verify_and_consume_vote_credential(
-                &binding_id,
-                &who,
-                proposal_id,
-                nonce.as_slice(),
-                signature.as_slice(),
-                issuer_cid_number.as_slice(),
-                &issuer_main_account,
-                &signer_pubkey,
-                scope_province_name.as_slice(),
-                scope_city_name.as_slice(),
-            ),
-            Error::<T>::InvalidCidVoteCredential
-        );
 
-        pallet::LegReferendumVotesByBindingId::<T>::insert(proposal_id, binding_id, approve);
+        pallet::LegReferendumVotesByAccount::<T>::insert(proposal_id, &who, approve);
         pallet::LegReferendumTally::<T>::mutate(proposal_id, |t| {
             if approve {
                 t.yes = t.yes.saturating_add(1);
@@ -1276,7 +1180,7 @@ impl<T: Config> votingengine::traits::LegislationCleanupHandler for Pallet<T> {
         limit: u32,
     ) -> votingengine::traits::CleanupChunkResult {
         let result =
-            pallet::LegReferendumVotesByBindingId::<T>::clear_prefix(proposal_id, limit, None);
+            pallet::LegReferendumVotesByAccount::<T>::clear_prefix(proposal_id, limit, None);
         (result.unique, result.maybe_cursor.is_some())
     }
 

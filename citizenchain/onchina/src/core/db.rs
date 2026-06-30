@@ -437,29 +437,63 @@ impl Db {
 
              CREATE TABLE IF NOT EXISTS citizens (
                 cid_number TEXT NOT NULL,
+                passport_no TEXT NOT NULL DEFAULT '',
+                citizen_full_name TEXT NOT NULL DEFAULT '',
+                citizen_sex TEXT NOT NULL DEFAULT '',
+                citizen_birth_date TEXT NOT NULL DEFAULT '',
                 province_code TEXT NOT NULL,
                 city_code TEXT NOT NULL,
                 id BIGINT,
-                wallet_pubkey TEXT,
-                wallet_address TEXT,
+                wallet_pubkey TEXT NOT NULL DEFAULT '',
+                wallet_address TEXT NOT NULL DEFAULT '',
+                wallet_sig_alg TEXT NOT NULL DEFAULT 'sr25519',
+                wallet_verified_at TIMESTAMPTZ,
                 citizen_status TEXT NOT NULL,
                 voting_eligible BOOLEAN NOT NULL,
-                valid_from TEXT,
-                valid_until TEXT,
+                passport_valid_from TEXT NOT NULL DEFAULT '',
+                passport_valid_until TEXT NOT NULL DEFAULT '',
                 status_updated_at BIGINT,
-                residence_province_code TEXT,
-                residence_city_code TEXT,
-                residence_town_code TEXT,
-                birth_province_code TEXT,
-                birth_city_code TEXT,
-                birth_town_code TEXT,
-                election_scope_level TEXT NOT NULL DEFAULT 'PROVINCE' CHECK (election_scope_level IN ('PROVINCE', 'CITY', 'TOWN')),
-                bind_status TEXT NOT NULL DEFAULT 'BOUND' CHECK (bind_status IN ('PENDING', 'BOUND')),
-                bound_at TIMESTAMPTZ,
-                bound_by TEXT,
+                residence_province_code TEXT NOT NULL DEFAULT '',
+                residence_city_code TEXT NOT NULL DEFAULT '',
+                residence_town_code TEXT NOT NULL DEFAULT '',
+                birth_province_code TEXT NOT NULL DEFAULT '',
+                birth_city_code TEXT NOT NULL DEFAULT '',
+                birth_town_code TEXT NOT NULL DEFAULT '',
+                archive_hash TEXT,
+                onchain_tx_hash TEXT,
+                onchain_block_number BIGINT,
+                onchain_at TIMESTAMPTZ,
+                created_by TEXT NOT NULL DEFAULT '',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_by TEXT,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 PRIMARY KEY (province_code, cid_number)
              ) PARTITION BY LIST (province_code);
+
+             CREATE TABLE IF NOT EXISTS sequence_counters (
+                seq_key TEXT PRIMARY KEY,
+                next_seq BIGINT NOT NULL
+             );
+
+             CREATE TABLE IF NOT EXISTS passport_numbers (
+                passport_no TEXT PRIMARY KEY,
+                cid_number TEXT NOT NULL UNIQUE,
+                province_code TEXT NOT NULL,
+                city_code TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+
+             CREATE TABLE IF NOT EXISTS passport_number_recycle_pool (
+                pool_id TEXT PRIMARY KEY,
+                passport_no TEXT NOT NULL,
+                source_cid_number TEXT NOT NULL DEFAULT '',
+                deleted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                released_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                used_at TIMESTAMPTZ,
+                used_by_cid_number TEXT
+             );
+             CREATE INDEX IF NOT EXISTS idx_passport_number_recycle_available
+                ON passport_number_recycle_pool (released_at, pool_id) WHERE used_at IS NULL;
 
              CREATE TABLE IF NOT EXISTS gov (
                 cid_number TEXT NOT NULL,
@@ -581,22 +615,99 @@ impl Db {
 
         conn.batch_execute(
             "ALTER TABLE citizens
+                ADD COLUMN IF NOT EXISTS passport_no TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS citizen_full_name TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS citizen_sex TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS citizen_birth_date TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS wallet_sig_alg TEXT NOT NULL DEFAULT 'sr25519',
+                ADD COLUMN IF NOT EXISTS wallet_verified_at TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS passport_valid_from TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS passport_valid_until TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS residence_province_code TEXT,
                 ADD COLUMN IF NOT EXISTS residence_city_code TEXT,
                 ADD COLUMN IF NOT EXISTS residence_town_code TEXT,
                 ADD COLUMN IF NOT EXISTS birth_province_code TEXT,
                 ADD COLUMN IF NOT EXISTS birth_city_code TEXT,
                 ADD COLUMN IF NOT EXISTS birth_town_code TEXT,
-                ADD COLUMN IF NOT EXISTS election_scope_level TEXT NOT NULL DEFAULT 'PROVINCE';
+                ADD COLUMN IF NOT EXISTS archive_hash TEXT,
+                ADD COLUMN IF NOT EXISTS onchain_tx_hash TEXT,
+                ADD COLUMN IF NOT EXISTS onchain_block_number BIGINT,
+                ADD COLUMN IF NOT EXISTS onchain_at TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS updated_by TEXT,
+                ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
              ALTER TABLE citizens
-                DROP CONSTRAINT IF EXISTS citizens_election_scope_level_check;
+                DROP CONSTRAINT IF EXISTS citizens_election_scope_level_check,
+                DROP CONSTRAINT IF EXISTS citizens_bind_status_check;
              ALTER TABLE citizens
-                ADD CONSTRAINT citizens_election_scope_level_check
-                CHECK (election_scope_level IN ('PROVINCE', 'CITY', 'TOWN'));",
+                DROP COLUMN IF EXISTS valid_from,
+                DROP COLUMN IF EXISTS valid_until,
+                DROP COLUMN IF EXISTS election_scope_level,
+                DROP COLUMN IF EXISTS bind_status,
+                DROP COLUMN IF EXISTS bound_at,
+                DROP COLUMN IF EXISTS bound_by;
+             UPDATE citizens
+             SET residence_province_code = COALESCE(NULLIF(residence_province_code, ''), province_code),
+                 residence_city_code = COALESCE(NULLIF(residence_city_code, ''), city_code),
+                 residence_town_code = COALESCE(residence_town_code, ''),
+                 birth_province_code = COALESCE(NULLIF(birth_province_code, ''), province_code),
+                 birth_city_code = COALESCE(NULLIF(birth_city_code, ''), city_code),
+                 birth_town_code = COALESCE(birth_town_code, ''),
+                 wallet_pubkey = COALESCE(wallet_pubkey, ''),
+                 wallet_address = COALESCE(wallet_address, ''),
+                 passport_no = COALESCE(passport_no, ''),
+                 citizen_full_name = COALESCE(citizen_full_name, ''),
+                 citizen_sex = COALESCE(citizen_sex, ''),
+                 citizen_birth_date = COALESCE(citizen_birth_date, ''),
+                 passport_valid_from = COALESCE(passport_valid_from, ''),
+                 passport_valid_until = COALESCE(passport_valid_until, ''),
+                 updated_at = COALESCE(updated_at, created_at, now());
+             ALTER TABLE citizens
+                ALTER COLUMN wallet_pubkey SET NOT NULL,
+                ALTER COLUMN wallet_address SET NOT NULL,
+                ALTER COLUMN residence_province_code SET NOT NULL,
+                ALTER COLUMN residence_city_code SET NOT NULL,
+                ALTER COLUMN residence_town_code SET DEFAULT '',
+                ALTER COLUMN residence_town_code SET NOT NULL,
+                ALTER COLUMN birth_province_code SET NOT NULL,
+                ALTER COLUMN birth_city_code SET NOT NULL,
+                ALTER COLUMN birth_town_code SET DEFAULT '',
+                ALTER COLUMN birth_town_code SET NOT NULL;",
         )
         .map_err(|e| {
             format!(
                 "sync target citizen schema failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+
+        conn.batch_execute(
+            "CREATE TABLE IF NOT EXISTS sequence_counters (
+                seq_key TEXT PRIMARY KEY,
+                next_seq BIGINT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS passport_numbers (
+                passport_no TEXT PRIMARY KEY,
+                cid_number TEXT NOT NULL UNIQUE,
+                province_code TEXT NOT NULL,
+                city_code TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+             CREATE TABLE IF NOT EXISTS passport_number_recycle_pool (
+                pool_id TEXT PRIMARY KEY,
+                passport_no TEXT NOT NULL,
+                source_cid_number TEXT NOT NULL DEFAULT '',
+                deleted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                released_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                used_at TIMESTAMPTZ,
+                used_by_cid_number TEXT
+             );
+             CREATE INDEX IF NOT EXISTS idx_passport_number_recycle_available
+                ON passport_number_recycle_pool (released_at, pool_id) WHERE used_at IS NULL;",
+        )
+        .map_err(|e| {
+            format!(
+                "sync passport number schema failed: {}",
                 postgres_error_text(&e)
             )
         })?;
@@ -686,7 +797,11 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_citizens_province_created
                 ON citizens (province_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_exact_lookup
-                ON citizens (province_code, city_code, cid_number, wallet_pubkey, wallet_address);
+                ON citizens (province_code, city_code, cid_number, passport_no, wallet_pubkey, wallet_address);
+             CREATE INDEX IF NOT EXISTS idx_citizens_passport_no
+                ON citizens (passport_no);
+             CREATE INDEX IF NOT EXISTS idx_citizens_wallet_pubkey
+                ON citizens (lower(wallet_pubkey));
              CREATE INDEX IF NOT EXISTS idx_citizens_residence_scope
                 ON citizens (residence_province_code, residence_city_code, residence_town_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_birth_scope
@@ -797,15 +912,34 @@ impl Db {
             Self::ensure_column_state(conn, "private", column, true)?;
         }
         for column in [
+            "passport_no",
+            "citizen_full_name",
+            "citizen_sex",
+            "citizen_birth_date",
+            "wallet_sig_alg",
+            "passport_valid_from",
+            "passport_valid_until",
             "residence_province_code",
             "residence_city_code",
             "residence_town_code",
             "birth_province_code",
             "birth_city_code",
             "birth_town_code",
-            "election_scope_level",
+            "archive_hash",
+            "created_by",
+            "updated_at",
         ] {
             Self::ensure_column_state(conn, "citizens", column, true)?;
+        }
+        for column in [
+            "valid_from",
+            "valid_until",
+            "election_scope_level",
+            "bind_status",
+            "bound_at",
+            "bound_by",
+        ] {
+            Self::ensure_column_state(conn, "citizens", column, false)?;
         }
         Self::ensure_column_state(conn, "gov", "source", true)?;
         Ok(())

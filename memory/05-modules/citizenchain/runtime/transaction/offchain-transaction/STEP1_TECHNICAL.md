@@ -157,7 +157,7 @@ L2FeeCollect     # Step 2:扫码清算时向 fee_account 收费
 | `public-manage` / `private-manage` | 清算行注册复用实体生命周期登记与账户状态 |
 | `multisig-transfer` | **不动** |
 | `onchain-transaction` | **不动** |
-| `cid-system` | **不动** |
+| `citizen-identity` | **不动** |
 | `institution-asset` | **扩展 4 枚举**(代码改动见上) |
 | `offchain-transaction` 现有省储行清算逻辑 | **不动**,Step 2 替换 |
 

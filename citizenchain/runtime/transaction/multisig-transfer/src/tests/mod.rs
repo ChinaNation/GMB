@@ -155,84 +155,19 @@ impl
     }
 }
 
-pub struct TestCidEligibility;
-impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
-    for TestCidEligibility
-{
-    fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
+pub struct TestCitizenIdentityReader;
+impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
+    fn can_vote(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
     }
 
-    fn verify_and_consume_vote_credential(
-        _binding_id: &<Test as frame_system::Config>::Hash,
-        _who: &AccountId32,
-        _proposal_id: u64,
-        _nonce: &[u8],
-        _signature: &[u8],
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
+    fn can_be_candidate(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
     }
-}
 
-pub struct TestPopulationSnapshotVerifier;
-impl
-    votingengine::PopulationSnapshotVerifier<
-        AccountId32,
-        votingengine::pallet::VoteNonceOf<Test>,
-        votingengine::pallet::VoteSignatureOf<Test>,
-    > for TestPopulationSnapshotVerifier
-{
-    fn verify_population_snapshot(
-        _who: &AccountId32,
-        _eligible_total: u64,
-        _nonce: &votingengine::pallet::VoteNonceOf<Test>,
-        _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        true
+    fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
+        100
     }
-}
-
-// 测试扩展:thread_local 覆盖层提供可签名的测试账户(CHINA_CB/CHINA_CH 硬编码 admin
-// 非真实 sr25519 公钥,无法签名)。
-//   - EXTRA_ADMINS 按 (institution_code, institution AccountId) 注入 sr25519 派生 admin 集合。
-// NRC/PRC/PRB 的内部阈值是 votingengine 固定制度常量,测试必须注入足够管理员并投满该阈值。
-// 若某 (institution_code, institution) 在 thread_local 有注入,优先用;否则 fallback 到硬编码逻辑。
-thread_local! {
-    static EXTRA_ADMINS: core::cell::RefCell<
-        alloc::collections::BTreeMap<(InstitutionCode, AccountId32), alloc::vec::Vec<AccountId32>>,
-    > = core::cell::RefCell::new(alloc::collections::BTreeMap::new());
-}
-
-fn set_extra_admins(
-    institution_code: InstitutionCode,
-    institution: AccountId32,
-    admins: Vec<AccountId32>,
-) {
-    EXTRA_ADMINS.with(|m| {
-        m.borrow_mut()
-            .insert((institution_code, institution), admins);
-    });
-}
-
-fn get_extra_admins(
-    institution_code: InstitutionCode,
-    institution: &AccountId32,
-) -> Option<Vec<AccountId32>> {
-    EXTRA_ADMINS.with(|m| {
-        m.borrow()
-            .get(&(institution_code, institution.clone()))
-            .cloned()
-    })
 }
 
 pub struct TestInternalAdminProvider;
@@ -600,8 +535,7 @@ impl votingengine::Config for Test {
     type MaxActiveProposals = ConstU32<10>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
     type CleanupKeysPerStep = ConstU32<64>;
-    type CidEligibility = TestCidEligibility;
-    type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
+    type CitizenIdentityReader = TestCitizenIdentityReader;
     type JointVoteResultCallback = ();
     // 挂上本模块 Executor,3 组业务提案通过后自动走 callback 执行。
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;

@@ -89,8 +89,6 @@ class ChainRpc {
   }
 
   static final _keyring = Keyring();
-  static final Uint8List _cidMainAccountKey =
-      _buildStorageValueKey('CidSystem', 'CidMainAccount');
 
   // ──── 批量查询 ────
 
@@ -759,32 +757,6 @@ class ChainRpc {
       fen += BigInt.from(data[16 + i]) << (i * 8);
     }
     return fen.toDouble() / 100.0;
-  }
-
-  /// 读取链上当前 CID 主验签公钥（32 字节 AccountId）。
-  ///
-  /// 存储项：`CidSystem::CidMainAccount`，类型为 `Option<AccountId32>`。
-  /// 中文注释(ADR-018 卡⑤)：改走 [fetchStorageBatch],纳入 ChainReadCache 块内
-  /// 缓存。原先的 `_cachedCurrentCidMainPubkeyHex` 永久缓存永不失效,密钥轮换后会
-  /// 读到旧值;块内缓存随换块自然失效,更正确。
-  Future<String?> fetchCurrentCidMainPubkeyHex() async {
-    final keyHex = '0x${_hexEncode(_cidMainAccountKey)}';
-    final batch = await fetchStorageBatch([keyHex]);
-    final data = batch[keyHex];
-    if (data == null || data.isEmpty) {
-      return null;
-    }
-
-    Uint8List pubkeyBytes;
-    if (data.length == 33 && data.first == 0x01) {
-      pubkeyBytes = Uint8List.sublistView(data, 1, 33);
-    } else if (data.length == 32) {
-      pubkeyBytes = data;
-    } else {
-      throw Exception('CidMainAccount 存储格式异常');
-    }
-
-    return '0x${_hexEncode(pubkeyBytes)}';
   }
 
   static (BigInt value, int size) _decodeCompact(Uint8List data, int offset) {

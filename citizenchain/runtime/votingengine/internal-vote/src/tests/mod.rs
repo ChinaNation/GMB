@@ -1,7 +1,5 @@
 use super::*;
-use codec::Encode;
 use core::cell::RefCell;
-use std::collections::BTreeSet;
 
 use frame_support::{
     assert_noop, assert_ok, derive_impl, traits::ConstU32, traits::Hooks, BoundedVec,
@@ -27,16 +25,15 @@ const PRIVATE_CODE: InstitutionCode = code_bytes("SFLP");
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
 use primitives::cid::china::china_sf::{CHINA_SF, NATIONAL_JUDICIAL_YUAN_ADMINS};
-use sp_runtime::{traits::Hash, traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
+use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
 use votingengine::traits::{
     InternalAdminProvider, InternalVoteEngine, InternalVoteResultCallback, JointVoteEngine,
-    JointVoteResultCallback, PopulationSnapshotVerifier,
+    JointVoteResultCallback,
 };
-use votingengine::CidEligibility;
 use votingengine::{
     PendingCleanupStage, Proposal, ProposalExecutionOutcome, VoteCountU32, VoteCountU64,
-    VoteCredentialCleanup, PROPOSAL_KIND_JOINT, STAGE_INTERNAL, STAGE_JOINT, STAGE_REFERENDUM,
-    STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
+    PROPOSAL_KIND_JOINT, STAGE_INTERNAL, STAGE_JOINT, STAGE_REFERENDUM, STATUS_EXECUTED,
+    STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -97,8 +94,7 @@ impl votingengine::Config for Test {
     type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
-    type CidEligibility = TestCidEligibility;
-    type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
+    type CitizenIdentityReader = TestCitizenIdentityReader;
     type JointVoteResultCallback = TestJointVoteResultCallback;
     type InternalVoteResultCallback = TestInternalVoteResultCallback;
     type InternalAdminProvider = TestInternalAdminProvider;
@@ -129,7 +125,7 @@ impl joint_vote::Config for Test {
 }
 
 thread_local! {
-    static USED_VOTE_NONCES: RefCell<BTreeSet<(u64, Vec<u8>, Vec<u8>)>> = RefCell::new(BTreeSet::new());
+    static TEST_POPULATION_COUNT: RefCell<u64> = const { RefCell::new(100) };
 }
 thread_local! {
     static TEST_NOW_SECS: RefCell<u64> = const { RefCell::new(DEFAULT_TEST_NOW_SECS) };
@@ -164,8 +160,7 @@ thread_local! {
     static REGISTERED_ADMIN_LIST_OVERRIDE: RefCell<Option<Vec<AccountId32>>> = const { RefCell::new(None) };
 }
 
-pub struct TestCidEligibility;
-pub struct TestPopulationSnapshotVerifier;
+pub struct TestCitizenIdentityReader;
 pub struct TestJointVoteResultCallback;
 pub struct TestInternalVoteResultCallback;
 pub struct TestInternalAdminProvider;
@@ -340,99 +335,17 @@ impl frame_support::traits::UnixTime for TestTimeProvider {
         TEST_NOW_SECS.with(|secs| core::time::Duration::from_secs(*secs.borrow()))
     }
 }
-impl
-    PopulationSnapshotVerifier<
-        AccountId32,
-        votingengine::pallet::VoteNonceOf<Test>,
-        votingengine::pallet::VoteSignatureOf<Test>,
-    > for TestPopulationSnapshotVerifier
-{
-    fn verify_population_snapshot(
-        _who: &AccountId32,
-        eligible_total: u64,
-        nonce: &votingengine::pallet::VoteNonceOf<Test>,
-        signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        eligible_total > 0
-            && !nonce.is_empty()
-            && signature.as_slice() == b"snapshot-ok"
-            && !scope_province_name.is_empty()
-    }
-}
-
-impl CidEligibility<AccountId32, <Test as frame_system::Config>::Hash> for TestCidEligibility {
-    fn is_eligible(binding_id: &<Test as frame_system::Config>::Hash, who: &AccountId32) -> bool {
-        *binding_id == binding_id_ok() && who == &nrc_admin(0)
+impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
+    fn can_vote(who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
+        who == &nrc_admin(0)
     }
 
-    fn verify_and_consume_vote_credential(
-        binding_id: &<Test as frame_system::Config>::Hash,
-        who: &AccountId32,
-        proposal_id: u64,
-        nonce: &[u8],
-        signature: &[u8],
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        if !Self::is_eligible(binding_id, who)
-            || signature != b"vote-ok"
-            || nonce.is_empty()
-            || scope_province_name.is_empty()
-        {
-            return false;
-        }
-        let key = (proposal_id, binding_id.encode(), nonce.to_vec());
-        USED_VOTE_NONCES.with(|set| {
-            let mut set = set.borrow_mut();
-            if set.contains(&key) {
-                false
-            } else {
-                set.insert(key);
-                true
-            }
-        })
+    fn can_be_candidate(who: &AccountId32, scope: &votingengine::PopulationScope) -> bool {
+        Self::can_vote(who, scope)
     }
 
-    fn cleanup_vote_credentials(proposal_id: u64) {
-        USED_VOTE_NONCES.with(|set| {
-            set.borrow_mut().retain(|(pid, _, _)| *pid != proposal_id);
-        });
-    }
-
-    fn cleanup_vote_credentials_chunk(proposal_id: u64, limit: u32) -> VoteCredentialCleanup {
-        let mut to_remove = Vec::new();
-        USED_VOTE_NONCES.with(|set| {
-            for key in set.borrow().iter() {
-                if key.0 == proposal_id {
-                    to_remove.push(key.clone());
-                    if to_remove.len() >= limit as usize {
-                        break;
-                    }
-                }
-            }
-        });
-
-        let has_remaining = USED_VOTE_NONCES.with(|set| {
-            let mut set = set.borrow_mut();
-            for key in &to_remove {
-                set.remove(key);
-            }
-            set.iter().any(|(pid, _, _)| *pid == proposal_id)
-        });
-
-        VoteCredentialCleanup {
-            removed: to_remove.len() as u32,
-            loops: to_remove.len() as u32,
-            has_remaining,
-        }
+    fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
+        TEST_POPULATION_COUNT.with(|count| *count.borrow())
     }
 }
 
@@ -504,7 +417,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .expect("frame system genesis storage should build");
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
-        USED_VOTE_NONCES.with(|set| set.borrow_mut().clear());
+        TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = 100);
         TEST_NOW_SECS.with(|secs| *secs.borrow_mut() = DEFAULT_TEST_NOW_SECS);
         JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
         JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
@@ -640,100 +553,16 @@ fn submit_joint_vote(
     <joint_vote::Pallet<Test>>::do_joint_vote(who, proposal_id, institution, approve)
 }
 
-fn binding_id_ok() -> <Test as frame_system::Config>::Hash {
-    <Test as frame_system::Config>::Hashing::hash(b"cid-ok")
-}
-
-fn vote_nonce(input: &str) -> votingengine::pallet::VoteNonceOf<Test> {
-    input
-        .as_bytes()
-        .to_vec()
-        .try_into()
-        .expect("nonce should fit")
-}
-
-fn vote_sig_ok() -> votingengine::pallet::VoteSignatureOf<Test> {
-    b"vote-ok"
-        .to_vec()
-        .try_into()
-        .expect("signature should fit")
-}
-
-fn vote_sig_bad() -> votingengine::pallet::VoteSignatureOf<Test> {
-    b"bad".to_vec().try_into().expect("signature should fit")
-}
-
-/// 测试用占位签发作用域和签名公钥,
-/// `TestPopulationSnapshotVerifier` / `TestCidEligibility` 仅做空字段非空检验,
-/// 真实 sr25519 验签覆盖留 runtime 层。
-fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
-    b"liaoning"
-        .to_vec()
-        .try_into()
-        .expect("province_name should fit")
-}
-
-fn signer_pubkey_ok() -> [u8; 32] {
-    [7u8; 32]
-}
-
-fn snapshot_nonce_ok() -> votingengine::pallet::VoteNonceOf<Test> {
-    b"snap-nonce"
-        .to_vec()
-        .try_into()
-        .expect("snapshot nonce should fit")
-}
-
-fn snapshot_sig_ok() -> votingengine::pallet::VoteSignatureOf<Test> {
-    b"snapshot-ok"
-        .to_vec()
-        .try_into()
-        .expect("snapshot signature should fit")
-}
-
-fn issuer_cid_number_ok(
-) -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<128>> {
-    b"CID001"
-        .to_vec()
-        .try_into()
-        .expect("issuer_cid_number should fit")
-}
-
-fn issuer_main_account_ok() -> AccountId32 {
-    AccountId32::new([1u8; 32])
-}
-
-fn city_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
-    b"shenyang"
-        .to_vec()
-        .try_into()
-        .expect("city_name should fit")
-}
-
-fn prepare_population_snapshot_for(
-    who: AccountId32,
-    eligible_total: u64,
-    nonce: votingengine::pallet::VoteNonceOf<Test>,
-) {
+fn prepare_population_snapshot_for(who: AccountId32, eligible_total: u64) {
+    TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = eligible_total);
     assert_ok!(JointVote::prepare_joint_population_snapshot(
         RuntimeOrigin::signed(who),
-        eligible_total,
-        nonce,
-        snapshot_sig_ok(),
-        issuer_cid_number_ok(),
-        issuer_main_account_ok(),
-        signer_pubkey_ok(),
-        province_ok(),
-        city_ok(),
+        votingengine::PopulationScope::Country,
     ));
 }
 
-fn create_joint_proposal_for(
-    who: AccountId32,
-    eligible_total: u64,
-    nonce: votingengine::pallet::VoteNonceOf<Test>,
-) -> u64 {
-    prepare_population_snapshot_for(who.clone(), eligible_total, nonce);
+fn create_joint_proposal_for(who: AccountId32, eligible_total: u64) -> u64 {
+    prepare_population_snapshot_for(who.clone(), eligible_total);
     <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(who)
         .expect("joint proposal should be created")
 }
@@ -756,28 +585,6 @@ fn set_internal_terminal_cleanup_should_fail(should_fail: bool) {
 
 fn set_test_now_secs(secs: u64) {
     TEST_NOW_SECS.with(|value| *value.borrow_mut() = secs);
-}
-
-fn mark_vote_nonce_used(
-    proposal_id: u64,
-    binding_id: <Test as frame_system::Config>::Hash,
-    nonce: &str,
-) {
-    USED_VOTE_NONCES.with(|set| {
-        set.borrow_mut()
-            .insert((proposal_id, binding_id.encode(), nonce.as_bytes().to_vec()));
-    });
-}
-
-fn has_used_vote_nonce(
-    proposal_id: u64,
-    binding_id: <Test as frame_system::Config>::Hash,
-    nonce: &str,
-) -> bool {
-    USED_VOTE_NONCES.with(|set| {
-        set.borrow()
-            .contains(&(proposal_id, binding_id.encode(), nonce.as_bytes().to_vec()))
-    })
 }
 
 fn create_internal_proposal_via_engine(
@@ -874,6 +681,10 @@ fn insert_citizen_proposal(proposal_id: u64, eligible_total: u64, end: u64) {
             end,
             citizen_eligible_total: eligible_total,
         },
+    );
+    joint_vote::ReferendumScopes::<Test>::insert(
+        proposal_id,
+        votingengine::PopulationScope::Country,
     );
 }
 

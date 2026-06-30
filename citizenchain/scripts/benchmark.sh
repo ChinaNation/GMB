@@ -55,7 +55,7 @@ PALLETS=(
     "fullnode_issuance:runtime/issuance/fullnode-issuance/src/weights.rs"
     "citizen_issuance:runtime/issuance/citizen-issuance/src/weights.rs"
     "resolution_issuance:runtime/issuance/resolution-issuance/src/weights.rs"
-    "cid_system:runtime/otherpallet/cid-system/src/weights.rs"
+    "citizen_identity:runtime/otherpallet/citizen-identity/src/weights.rs"
     "pow_difficulty:runtime/otherpallet/pow-difficulty/src/weights.rs"
     "admins_change:runtime/governance/admins-change/src/weights.rs"
     "resolution_destro:runtime/governance/resolution-destro/src/weights.rs"

@@ -27,7 +27,7 @@ type AuditLogEntry = {
 // 后端新增 action 必须同步补这里,未知值回退显示原标识兜底。
 const AUDIT_ACTION_LABEL: Record<string, string> = {
   CITIZEN_CREATE: '注册局录入公民',
-  CITIZEN_BIND: '公民身份ID绑定',
+  CITIZEN_BIND: '历史公民绑定',
   PUBLIC_IDENTITY_SEARCH: '公开身份查询',
   APP_VOTERS_COUNT: 'App 选民人数查询',
   APP_VOTE_CREDENTIAL: 'App 投票凭证签发',

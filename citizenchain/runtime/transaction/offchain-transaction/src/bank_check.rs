@@ -90,7 +90,7 @@ impl<AccountId> CidAccountQuery<AccountId> for () {
 
 /// 判定 CID 编码字符串的 K1 主体属性属于"私权机构"(S 或 F)。
 ///
-/// 直接对目标态 `R5-K3P1C1-N9-D4` 做字节判定,不依赖 cid-system 或 CID 后端。
+/// 直接对目标态 `R5-K3P1C1-N9-D4` 做字节判定,不依赖公民身份模块或 CID 后端。
 fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
     if cid_bytes.len() <= CID_K1_INDEX || cid_bytes.get(CID_R5_SEPARATOR_INDEX) != Some(&b'-') {
         return false;

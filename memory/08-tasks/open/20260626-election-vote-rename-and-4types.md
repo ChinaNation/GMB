@@ -13,7 +13,7 @@
 
 宪法依据（2026-06-28 已按用户确认更新）：公职人员章——普选产生总统、护宪大法官、市立法会委员、市教委会委员、省参议员、省众议员、市/镇自治委员，以及国家立法院参议员/众议员；其中国家立法院参议员由各省行政区公民在本省省参议会现任参议员中普选产生，国家立法院众议员由各省行政区公民在本省省众议会现任众议员中普选产生。互选仍用于机构现任成员内部选举院长、主席、参议长、众议长等职位。故"公民投票"名不副实，改"选举投票"。
 
-边界铁律：核心 votingengine 的 `CitizenVotes` storage / `PendingCleanupStage::CitizenVotes` / CITIZEN kind / CidEligibility / internal-vote 的 citizen_vote_* 测试 = 联合投票的联合公投阶段（公民凭证模式），**不改**；只改独立的 idx24 election-vote pallet（历史 citizen-vote）。
+边界铁律：核心 votingengine 的 `CitizenVotes` storage / `PendingCleanupStage::CitizenVotes` / CITIZEN kind / internal-vote 的 citizen_vote_* 测试 = 联合投票的联合公投阶段（链上公民身份模式），**不改**；只改独立的 idx24 election-vote pallet（历史 citizen-vote）。
 
 所属模块：Blockchain Agent（citizenchain runtime）+ 文档 + 官网
 

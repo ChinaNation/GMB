@@ -21,13 +21,26 @@ pub(crate) struct CidCityItem {
 }
 
 #[derive(Serialize)]
+pub(crate) struct CidTownItem {
+    pub(crate) town_name: String,
+    pub(crate) town_code: String,
+}
+
+#[derive(Serialize)]
 pub(crate) struct AdminCidMetaOutput {
     pub(crate) institution_options: Vec<CidInstitutionCodeItem>,
     pub(crate) provinces: Vec<CidProvinceItem>,
+    pub(crate) all_provinces: Vec<CidProvinceItem>,
     pub(crate) scoped_province_name: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub(crate) struct AdminCidCitiesQuery {
     pub(crate) province_name: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AdminCidTownsQuery {
+    pub(crate) province_name: String,
+    pub(crate) city_code: String,
 }

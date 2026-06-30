@@ -315,7 +315,7 @@ pub(crate) async fn public_identity_search(
 ) -> impl IntoResponse {
     // 查询结果仅含公开信息（CID 码等），无需 token 认证。
     // 全局 rate limiter 已防滥用。
-    // 中文注释:公开查询只返回电子护照绑定后的公开字段。
+    // 中文注释:公开查询只返回公民档案已登记后的公开字段。
     let identity_code = query.identity_code.as_deref().map(str::trim).unwrap_or("");
     let wallet_pubkey = query.wallet_pubkey.as_deref().map(str::trim).unwrap_or("");
     if identity_code.is_empty() && wallet_pubkey.is_empty() {
@@ -336,8 +336,7 @@ pub(crate) async fn public_identity_search(
                 .query_opt(
                     "SELECT cid_number, wallet_pubkey
                      FROM citizens
-                     WHERE bind_status = 'BOUND'
-                       AND (
+                     WHERE (
                             ($1::text <> '' AND cid_number = $1)
                             OR ($2::text <> '' AND lower(wallet_pubkey) = lower($2))
                        )

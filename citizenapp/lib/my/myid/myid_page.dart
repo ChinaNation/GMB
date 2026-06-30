@@ -22,7 +22,7 @@ class MyIdPage extends StatefulWidget {
 class _MyIdPageState extends State<MyIdPage> {
   late final MyIdService _myIdService;
 
-  MyIdState _state = const MyIdState(bindStatus: MyIdBindStatus.unset);
+  MyIdState _state = const MyIdState(archiveStatus: MyIdArchiveStatus.unset);
   bool _submitting = false;
 
   @override
@@ -88,18 +88,18 @@ class _MyIdPageState extends State<MyIdPage> {
   }
 
   String _statusLabel() {
-    return switch (_state.bindStatus) {
-      MyIdBindStatus.unset => '未设置',
-      MyIdBindStatus.pending => '待绑定',
-      MyIdBindStatus.bound => '已绑定',
+    return switch (_state.archiveStatus) {
+      MyIdArchiveStatus.unset => '未设置',
+      MyIdArchiveStatus.pending => '待登记',
+      MyIdArchiveStatus.registered => '已登记',
     };
   }
 
   Color _statusColor() {
-    return switch (_state.bindStatus) {
-      MyIdBindStatus.unset => AppTheme.textTertiary,
-      MyIdBindStatus.pending => AppTheme.warning,
-      MyIdBindStatus.bound => AppTheme.success,
+    return switch (_state.archiveStatus) {
+      MyIdArchiveStatus.unset => AppTheme.textTertiary,
+      MyIdArchiveStatus.pending => AppTheme.warning,
+      MyIdArchiveStatus.registered => AppTheme.success,
     };
   }
 
@@ -123,11 +123,16 @@ class _MyIdPageState extends State<MyIdPage> {
 
   String _identityIdText() {
     final cidNumber = _state.cidNumber?.trim();
-    return cidNumber == null || cidNumber.isEmpty ? '未绑定' : cidNumber;
+    return cidNumber == null || cidNumber.isEmpty ? '未生成' : cidNumber;
+  }
+
+  String _passportNoText() {
+    final passportNo = _state.passportNo?.trim();
+    return passportNo == null || passportNo.isEmpty ? '未生成' : passportNo;
   }
 
   String _identityStatusText() {
-    // 中文注释：identityStatus 是身份ID状态，不是绑定状态；
+    // 中文注释：identityStatus 是身份 CID 状态,不是本机档案状态；
     // 只有 CID 明确返回 NORMAL 才显示正常，其他状态统一按异常展示。
     return _state.identityStatus?.trim().toUpperCase() == 'NORMAL'
         ? '状态：正常'
@@ -135,10 +140,10 @@ class _MyIdPageState extends State<MyIdPage> {
   }
 
   String _validityText() {
-    final validFrom = _formatDate(_state.validFrom);
-    final validUntil = _formatDate(_state.validUntil);
+    final validFrom = _formatDate(_state.passportValidFrom);
+    final validUntil = _formatDate(_state.passportValidUntil);
     if (validFrom == null || validUntil == null) {
-      return '有效期：未绑定';
+      return '有效期：未生成';
     }
     return '有效期：$validFrom-$validUntil';
   }
@@ -208,7 +213,7 @@ class _MyIdPageState extends State<MyIdPage> {
     final walletQrPayload = _walletQrPayload();
     final actionLabel = _state.walletAddress == null
         ? '选择钱包'
-        : _state.bindStatus == MyIdBindStatus.bound
+        : _state.archiveStatus == MyIdArchiveStatus.registered
             ? '更新钱包'
             : '更换钱包';
     final canSign = _state.walletIndex != null &&
@@ -216,8 +221,8 @@ class _MyIdPageState extends State<MyIdPage> {
         (_state.walletAddress?.trim().isNotEmpty ?? false) &&
         (_state.walletPubkeyHex?.trim().isNotEmpty ?? false);
     final hasSelectedWallet = _state.walletAddress?.trim().isNotEmpty ?? false;
-    final showPendingActionRow =
-        hasSelectedWallet && _state.bindStatus != MyIdBindStatus.bound;
+    final showPendingActionRow = hasSelectedWallet &&
+        _state.archiveStatus != MyIdArchiveStatus.registered;
     return Scaffold(
       appBar: AppBar(
         title: const Text('电子护照'),
@@ -263,7 +268,27 @@ class _MyIdPageState extends State<MyIdPage> {
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  '身份ID',
+                  '护照号',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _passportNoText(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: AppTheme.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  '身份 CID',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppTheme.textSecondary,
@@ -283,7 +308,7 @@ class _MyIdPageState extends State<MyIdPage> {
                 ),
                 const SizedBox(height: 14),
                 const Text(
-                  '投票账户',
+                  '投票账户地址',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppTheme.textSecondary,

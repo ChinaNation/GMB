@@ -1,7 +1,7 @@
 //! 注册局直接录入公民 handler。
 //!
-//! 公民由注册局管理员在本省/本市范围内直接录入并直接发护照。
-//! 一条 citizen 记录处于 NORMAL 且在有效期内即视为护照已签发。
+//! 公民由注册局管理员在办理市一次性录入。请求只提交公民档案字段和一个钱包账户;
+//! 身份 CID、护照号、护照有效期由服务端确定性生成并落库。
 
 use axum::{
     extract::State,
@@ -9,46 +9,33 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
+use crate::cid::{generate_cid_number, GenerateCidInput};
 use crate::crypto::pubkey::{pubkey_hex_to_ss58, ss58_to_pubkey_hex};
+use crate::domains::citizens::passport_no::{
+    generate_passport_no_with_retry, is_voting_age_at, passport_valid_from, passport_valid_until,
+    passport_validity_years,
+};
 use crate::*;
 
 /// 直接录入公民请求 DTO。
 ///
-/// 中文注释:档案号概念已删,护照身份即 `cid_number`;wallet 可选,
-/// 有钱包即同时完成钱包绑定,没有则只发护照、绑定态留 PENDING。
+/// 中文注释:居住省市不由前端提交,固定来自当前注册局办理上下文。
+/// `wallet_account` 可传 SS58 地址或 0x 公钥;前端只展示 SS58 地址。
 #[derive(Deserialize)]
 pub(crate) struct AdminCreateCitizenInput {
-    /// 公民身份码(护照身份),由调用方决定;直接作为唯一身份号落库。
-    pub(crate) cid_number: String,
-    /// 居住地行政区(省必填,市/镇可选)。
-    pub(crate) residence_province_code: String,
-    #[serde(default)]
-    pub(crate) residence_city_code: Option<String>,
-    #[serde(default)]
-    pub(crate) residence_town_code: Option<String>,
-    /// 出生地行政区(省必填,市/镇可选)。
+    pub(crate) citizen_full_name: String,
+    pub(crate) citizen_sex: String,
+    pub(crate) citizen_birth_date: String,
+    pub(crate) residence_town_code: String,
     pub(crate) birth_province_code: String,
-    #[serde(default)]
-    pub(crate) birth_city_code: Option<String>,
-    #[serde(default)]
-    pub(crate) birth_town_code: Option<String>,
-    /// 选举资格。
+    pub(crate) birth_city_code: String,
+    pub(crate) birth_town_code: String,
     pub(crate) voting_eligible: bool,
-    /// 选举范围层级(PROVINCE / CITY / TOWN)。
-    pub(crate) election_scope_level: String,
-    /// 护照有效期起,格式固定 YYYY-MM-DD。
-    pub(crate) valid_from: String,
-    /// 护照有效期止,格式固定 YYYY-MM-DD。
-    pub(crate) valid_until: String,
-    /// 可选钱包公钥(0x hex);与 wallet_address 二选一或同时给出。
-    #[serde(default)]
-    pub(crate) wallet_pubkey: Option<String>,
-    /// 可选钱包地址(SS58,prefix=2027)。
-    #[serde(default)]
-    pub(crate) wallet_address: Option<String>,
+    pub(crate) wallet_account: String,
 }
 
 /// 直接录入公民返回 DTO。
@@ -56,14 +43,22 @@ pub(crate) struct AdminCreateCitizenInput {
 pub(crate) struct AdminCreateCitizenOutput {
     pub(crate) id: u64,
     pub(crate) cid_number: String,
+    pub(crate) passport_no: String,
+    pub(crate) citizen_full_name: String,
+    pub(crate) citizen_sex: String,
+    pub(crate) citizen_birth_date: String,
     pub(crate) citizen_status: CitizenStatus,
     pub(crate) voting_eligible: bool,
-    pub(crate) bind_status: CitizenBindStatus,
-    pub(crate) wallet_pubkey: Option<String>,
-    pub(crate) wallet_address: Option<String>,
-    pub(crate) valid_from: String,
-    pub(crate) valid_until: String,
-    pub(crate) election_scope_level: String,
+    pub(crate) wallet_address: String,
+    pub(crate) passport_valid_from: String,
+    pub(crate) passport_valid_until: String,
+    pub(crate) residence_province_code: String,
+    pub(crate) residence_city_code: String,
+    pub(crate) residence_town_code: String,
+    pub(crate) birth_province_code: String,
+    pub(crate) birth_city_code: String,
+    pub(crate) birth_town_code: String,
+    pub(crate) archive_hash: Option<String>,
 }
 
 /// 注册局管理员直接录入公民并直接发护照。
@@ -76,124 +71,140 @@ pub(crate) async fn admin_create_citizen(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-
-    let cid_number = input.cid_number.trim().to_string();
-    if cid_number.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "cid_number 不能为空");
-    }
-    if crate::cid::validate_cid_number_format(cid_number.as_str()).is_err() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "cid_number 格式不合法");
+    if !crate::core::chain_runtime::is_tier1_registry(&ctx.institution_code)
+        && !crate::core::chain_runtime::is_subordinate_registry(&ctx.institution_code)
+    {
+        return api_error(StatusCode::FORBIDDEN, 1003, "只有注册局管理员可以新增公民");
     }
 
-    let residence_province_code = input.residence_province_code.trim().to_string();
-    let birth_province_code = input.birth_province_code.trim().to_string();
-    if residence_province_code.is_empty() || birth_province_code.is_empty() {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "居住地和出生地省级行政区均为必填",
-        );
-    }
-
-    let election_scope_level = input.election_scope_level.trim().to_string();
-    if !matches!(election_scope_level.as_str(), "PROVINCE" | "CITY" | "TOWN") {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "election_scope_level 仅支持 PROVINCE / CITY / TOWN",
-        );
-    }
-
-    let valid_from = input.valid_from.trim().to_string();
-    let valid_until = input.valid_until.trim().to_string();
-    if !is_valid_archive_date(&valid_from) || !is_valid_archive_date(&valid_until) {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "护照有效期格式必须为 YYYY-MM-DD",
-        );
-    }
-
-    // scope 校验:管理员只能在本省/本市范围内录入(居住地为准)。
-    let residence_province_name =
-        match crate::cid::china::province_name_by_code(residence_province_code.as_str()) {
-            Some(v) => v,
-            None => return api_error(StatusCode::BAD_REQUEST, 1001, "未知的居住地省级代码"),
-        };
-    let scope = crate::scope::get_visible_scope(&ctx);
-    if !scope.includes_province(residence_province_name) {
-        return api_error(StatusCode::FORBIDDEN, 1003, "居住地省份超出当前管理员范围");
-    }
-    let residence_city_code = input
-        .residence_city_code
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_string);
-    if let Some(city_code) = residence_city_code.as_deref() {
-        match crate::cid::china::area_name_by_codes(
-            residence_province_code.as_str(),
-            Some(city_code),
-            None,
-        ) {
-            Some((_, Some(city_name), _)) => {
-                if !scope.includes_city(city_name) {
-                    return api_error(StatusCode::FORBIDDEN, 1003, "居住地城市超出当前管理员范围");
-                }
-            }
-            _ => return api_error(StatusCode::BAD_REQUEST, 1001, "未知的居住地城市代码"),
-        }
-    }
-
-    // 钱包可选:给了就规范化校验,决定绑定态。
-    let wallet = match resolve_optional_wallet(
-        input.wallet_address.as_deref(),
-        input.wallet_pubkey.as_deref(),
-    ) {
+    let citizen_full_name = match required_trimmed(&input.citizen_full_name, "citizen_full_name") {
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let citizen_sex = match normalize_citizen_sex(input.citizen_sex.as_str()) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let citizen_birth_date =
+        match parse_required_date(input.citizen_birth_date.as_str(), "citizen_birth_date") {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+    let today = Utc::now().date_naive();
+    if citizen_birth_date > today {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "出生日期不能晚于今天");
+    }
+    if input.voting_eligible && !is_voting_age_at(today, citizen_birth_date) {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "未满16周岁不能设置选举资格");
+    }
+
+    let residence_province_name = match ctx.scope_province_name.as_deref().map(str::trim) {
+        Some(v) if !v.is_empty() => v.to_string(),
+        _ => return api_error(StatusCode::FORBIDDEN, 1003, "当前登录缺少办理省份"),
+    };
+    let residence_city_name = match ctx.scope_city_name.as_deref().map(str::trim) {
+        Some(v) if !v.is_empty() => v.to_string(),
+        _ => return api_error(StatusCode::FORBIDDEN, 1003, "当前登录缺少办理城市"),
+    };
+    let residence_province_code =
+        match crate::cid::china::province_code_by_name(residence_province_name.as_str()) {
+            Some(v) => v.to_string(),
+            None => return api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理省份"),
+        };
+    let residence_city_code = match crate::cid::china::city_code_by_name(
+        residence_province_name.as_str(),
+        residence_city_name.as_str(),
+    ) {
+        Some(v) => v.to_string(),
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理城市"),
+    };
+    let residence_town_code =
+        match required_trimmed(&input.residence_town_code, "residence_town_code") {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+    if !crate::cid::china::town_exists(
+        residence_province_code.as_str(),
+        residence_city_code.as_str(),
+        residence_town_code.as_str(),
+    ) {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "未知的居住镇代码");
+    }
+
+    let birth_province_code =
+        match required_trimmed(&input.birth_province_code, "birth_province_code") {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
+    let birth_city_code = match required_trimmed(&input.birth_city_code, "birth_city_code") {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let birth_town_code = match required_trimmed(&input.birth_town_code, "birth_town_code") {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let Some((birth_province_name, Some(_birth_city_name), Some(_birth_town_name))) =
+        crate::cid::china::area_name_by_codes(
+            birth_province_code.as_str(),
+            Some(birth_city_code.as_str()),
+            Some(birth_town_code.as_str()),
+        )
+    else {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "未知的出生省市镇代码");
+    };
+    if birth_province_name.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "未知的出生省份代码");
+    }
+
+    let wallet = match resolve_wallet_account(input.wallet_account.as_str()) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    match state.db.find_citizen_by_wallet(wallet.pubkey.as_str()) {
+        Ok(Some(_)) => return api_error(StatusCode::CONFLICT, 1005, "该钱包账户已存在公民档案"),
+        Ok(None) => {}
+        Err(err) => {
+            tracing::error!(error = %err, "query citizen wallet duplicate failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "钱包账户查重失败");
+        }
+    }
+
+    let cid_number = match generate_cid_number(GenerateCidInput {
+        account_pubkey: wallet.pubkey.as_str(),
+        p1: "1",
+        province_name: residence_province_name.as_str(),
+        city_name: residence_city_name.as_str(),
+        institution: "CTZN",
+    }) {
+        Ok(v) => v,
+        Err(err) => {
+            let detail = format!("公民身份CID生成失败: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, detail.as_str());
+        }
+    };
+    if crate::cid::validate_cid_number_format(cid_number.as_str()).is_err() {
+        return api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "公民身份CID格式生成失败",
+        );
+    }
 
     let now = Utc::now();
-    let record = CitizenRecord {
-        id: 0, // 由 next_citizen_id 分配,见下。
-        wallet_pubkey: wallet.as_ref().map(|(_, pubkey)| pubkey.clone()),
-        wallet_address: wallet.as_ref().map(|(address, _)| address.clone()),
-        cid_number: Some(cid_number.clone()),
-        citizen_status: Some(CitizenStatus::Normal),
-        voting_eligible: input.voting_eligible,
-        archive_valid_from: Some(valid_from.clone()),
-        archive_valid_until: Some(valid_until.clone()),
-        status_updated_at: Some(now.timestamp()),
-        province_code: Some(residence_province_code.clone()),
-        city_code: residence_city_code.clone(),
-        residence_province_code: Some(residence_province_code.clone()),
-        residence_city_code: residence_city_code.clone(),
-        residence_town_code: input
-            .residence_town_code
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_string),
-        birth_province_code: Some(birth_province_code.clone()),
-        birth_city_code: input
-            .birth_city_code
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_string),
-        birth_town_code: input
-            .birth_town_code
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_string),
-        election_scope_level: Some(election_scope_level.clone()),
-        bound_at: Some(now),
-        bound_by: Some(ctx.admin_account.clone()),
-        created_at: now,
+    let passport_no = match state.db.allocate_passport_no(
+        residence_province_code.as_str(),
+        residence_city_code.as_str(),
+        cid_number.as_str(),
+    ) {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(error = %err, "allocate passport no failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "护照号生成失败");
+        }
     };
-
+    let valid_from = passport_valid_from(now);
+    let valid_until = passport_valid_until(now, passport_validity_years(now, citizen_birth_date));
     let id = match state.db.next_citizen_id() {
         Ok(v) => v,
         Err(err) => {
@@ -201,12 +212,50 @@ pub(crate) async fn admin_create_citizen(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "公民序号分配失败");
         }
     };
-    let record = CitizenRecord { id, ..record };
+
+    let mut record = CitizenRecord {
+        id,
+        cid_number: cid_number.clone(),
+        passport_no: passport_no.clone(),
+        citizen_full_name: citizen_full_name.clone(),
+        citizen_sex: citizen_sex.clone(),
+        citizen_birth_date: citizen_birth_date.format("%Y-%m-%d").to_string(),
+        wallet_pubkey: wallet.pubkey.clone(),
+        wallet_address: wallet.address.clone(),
+        wallet_sig_alg: "sr25519".to_string(),
+        wallet_verified_at: Some(now),
+        citizen_status: CitizenStatus::Normal,
+        voting_eligible: input.voting_eligible,
+        passport_valid_from: valid_from.clone(),
+        passport_valid_until: valid_until.clone(),
+        status_updated_at: Some(now.timestamp()),
+        province_code: residence_province_code.clone(),
+        city_code: residence_city_code.clone(),
+        residence_province_code: residence_province_code.clone(),
+        residence_city_code: residence_city_code.clone(),
+        residence_town_code: residence_town_code.clone(),
+        birth_province_code: birth_province_code.clone(),
+        birth_city_code: birth_city_code.clone(),
+        birth_town_code: birth_town_code.clone(),
+        archive_hash: None,
+        onchain_tx_hash: None,
+        onchain_block_number: None,
+        onchain_at: None,
+        created_by: ctx.admin_account.clone(),
+        created_at: now,
+        updated_by: None,
+        updated_at: now,
+    };
+    record.archive_hash = Some(citizen_archive_hash(&record));
 
     if let Err(err) = state.db.upsert_citizen_row(&record) {
         tracing::error!(error = %err, "citizen row upsert failed");
-        if err.contains("duplicate key") {
-            return api_error(StatusCode::CONFLICT, 1005, "公民身份号已存在");
+        if err.contains("duplicate key") || err.contains("already belongs") {
+            return api_error(
+                StatusCode::CONFLICT,
+                1005,
+                "公民身份、护照号或钱包账户已存在",
+            );
         }
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "公民落库失败");
     }
@@ -217,9 +266,16 @@ pub(crate) async fn admin_create_citizen(
         &ctx.admin_account,
         Some(cid_number.clone()),
         serde_json::json!({
-            "cid_number": cid_number.clone(),
+            "cid_number": cid_number,
+            "passport_no": passport_no,
+            "wallet_address": record.wallet_address,
+            "residence_province_code": residence_province_code,
+            "residence_city_code": residence_city_code,
+            "residence_town_code": residence_town_code,
+            "birth_province_code": birth_province_code,
+            "birth_city_code": birth_city_code,
+            "birth_town_code": birth_town_code,
             "voting_eligible": record.voting_eligible,
-            "bind_status": citizen_bind_status_value(&record.bind_status()),
             "request_id": request_id_from_headers(&headers),
             "actor_ip": actor_ip_from_headers(&headers),
         }),
@@ -227,15 +283,23 @@ pub(crate) async fn admin_create_citizen(
 
     let output = AdminCreateCitizenOutput {
         id: record.id,
-        cid_number,
-        citizen_status: CitizenStatus::Normal,
+        cid_number: record.cid_number,
+        passport_no: record.passport_no,
+        citizen_full_name: record.citizen_full_name,
+        citizen_sex: record.citizen_sex,
+        citizen_birth_date: record.citizen_birth_date,
+        citizen_status: record.citizen_status,
         voting_eligible: record.voting_eligible,
-        bind_status: record.bind_status(),
-        wallet_pubkey: record.wallet_pubkey.clone(),
-        wallet_address: record.wallet_address.clone(),
-        valid_from,
-        valid_until,
-        election_scope_level,
+        wallet_address: record.wallet_address,
+        passport_valid_from: record.passport_valid_from,
+        passport_valid_until: record.passport_valid_until,
+        residence_province_code: record.residence_province_code,
+        residence_city_code: record.residence_city_code,
+        residence_town_code: record.residence_town_code,
+        birth_province_code: record.birth_province_code,
+        birth_city_code: record.birth_city_code,
+        birth_town_code: record.birth_town_code,
+        archive_hash: record.archive_hash,
     };
     Json(ApiResponse {
         code: 0,
@@ -245,62 +309,68 @@ pub(crate) async fn admin_create_citizen(
     .into_response()
 }
 
-fn citizen_bind_status_value(status: &CitizenBindStatus) -> &'static str {
-    match status {
-        CitizenBindStatus::Pending => "PENDING",
-        CitizenBindStatus::Bound => "BOUND",
+struct ResolvedWallet {
+    address: String,
+    pubkey: String,
+}
+
+fn required_trimmed(value: &str, field: &str) -> Result<String, axum::response::Response> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        let detail = format!("{field} 不能为空");
+        return Err(api_error(StatusCode::BAD_REQUEST, 1001, detail.as_str()));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn parse_required_date(value: &str, field: &str) -> Result<NaiveDate, axum::response::Response> {
+    let value = required_trimmed(value, field)?;
+    NaiveDate::parse_from_str(value.as_str(), "%Y-%m-%d").map_err(|_| {
+        let detail = format!("{field} 必须是 YYYY-MM-DD");
+        api_error(StatusCode::BAD_REQUEST, 1001, detail.as_str())
+    })
+}
+
+fn normalize_citizen_sex(value: &str) -> Result<String, axum::response::Response> {
+    let value = required_trimmed(value, "citizen_sex")?;
+    match value.as_str() {
+        "MALE" | "FEMALE" => Ok(value),
+        _ => Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "citizen_sex 仅支持 MALE / FEMALE",
+        )),
     }
 }
 
-fn is_valid_archive_date(value: &str) -> bool {
-    chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
-}
-
-/// 中文注释:钱包可选——两个字段都空则返回 None(护照仍照发,绑定态 PENDING);
-/// 任一字段非空则要求 SS58 地址与公钥可互相规范化推导且一致,否则拒绝。
-#[allow(clippy::type_complexity)]
-fn resolve_optional_wallet(
-    wallet_address: Option<&str>,
-    wallet_pubkey: Option<&str>,
-) -> Result<Option<(String, String)>, axum::response::Response> {
-    let address = wallet_address.map(str::trim).filter(|v| !v.is_empty());
-    let pubkey = wallet_pubkey.map(str::trim).filter(|v| !v.is_empty());
-    match (address, pubkey) {
-        (None, None) => Ok(None),
-        (Some(address), maybe_pubkey) => {
-            let Some(derived_pubkey) = ss58_to_pubkey_hex(address) else {
-                return Err(api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "wallet_address 不是合法 SS58 地址",
-                ));
-            };
-            if let Some(pubkey) = maybe_pubkey {
-                if !same_pubkey_hex(pubkey, &derived_pubkey) {
-                    return Err(api_error(
-                        StatusCode::UNPROCESSABLE_ENTITY,
-                        2004,
-                        "wallet_pubkey 与 wallet_address 不一致",
-                    ));
-                }
-            }
-            let canonical_address = pubkey_hex_to_ss58(&derived_pubkey).unwrap_or_default();
-            Ok(Some((canonical_address, derived_pubkey)))
-        }
-        (None, Some(pubkey)) => {
-            let normalized = normalize_pubkey_hex(pubkey).ok_or_else(|| {
-                api_error(StatusCode::BAD_REQUEST, 1001, "wallet_pubkey 格式不合法")
-            })?;
-            let Some(canonical_address) = pubkey_hex_to_ss58(&normalized) else {
-                return Err(api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "wallet_pubkey 无法推导地址",
-                ));
-            };
-            Ok(Some((canonical_address, normalized)))
-        }
+fn resolve_wallet_account(account: &str) -> Result<ResolvedWallet, axum::response::Response> {
+    let account = account.trim();
+    if account.is_empty() {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "wallet_account 不能为空",
+        ));
     }
+    if let Some(pubkey) = ss58_to_pubkey_hex(account) {
+        let address = pubkey_hex_to_ss58(&pubkey).unwrap_or_else(|| account.to_string());
+        return Ok(ResolvedWallet { address, pubkey });
+    }
+    let Some(pubkey) = normalize_pubkey_hex(account) else {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "wallet_account 不是合法 SS58 地址或 0x 公钥",
+        ));
+    };
+    let Some(address) = pubkey_hex_to_ss58(&pubkey) else {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "wallet_account 无法推导地址",
+        ));
+    };
+    Ok(ResolvedWallet { address, pubkey })
 }
 
 fn normalize_pubkey_hex(pubkey: &str) -> Option<String> {
@@ -308,14 +378,32 @@ fn normalize_pubkey_hex(pubkey: &str) -> Option<String> {
     Some(format!("0x{}", hex::encode(bytes)))
 }
 
-fn same_pubkey_hex(left: &str, right: &str) -> bool {
-    left.trim_start_matches("0x")
-        .eq_ignore_ascii_case(right.trim_start_matches("0x"))
+fn citizen_archive_hash(record: &CitizenRecord) -> String {
+    let value = serde_json::json!({
+        "cid_number": record.cid_number,
+        "passport_no": record.passport_no,
+        "citizen_full_name": record.citizen_full_name,
+        "citizen_sex": record.citizen_sex,
+        "citizen_birth_date": record.citizen_birth_date,
+        "wallet_address": record.wallet_address,
+        "residence_province_code": record.residence_province_code,
+        "residence_city_code": record.residence_city_code,
+        "residence_town_code": record.residence_town_code,
+        "birth_province_code": record.birth_province_code,
+        "birth_city_code": record.birth_city_code,
+        "birth_town_code": record.birth_town_code,
+        "passport_valid_from": record.passport_valid_from,
+        "passport_valid_until": record.passport_valid_until,
+        "voting_eligible": record.voting_eligible,
+    });
+    let mut hasher = Sha256::new();
+    hasher.update(value.to_string().as_bytes());
+    format!("0x{}", hex::encode(hasher.finalize()))
 }
 
 impl Db {
-    /// 按钱包公钥查已绑定公民(vote / chain_vote 的状态查询入口)。
-    pub(crate) fn find_bound_citizen_by_wallet(
+    /// 按钱包公钥查公民档案。钱包必填后,存在即代表该钱包已有档案。
+    pub(crate) fn find_citizen_by_wallet(
         &self,
         wallet_pubkey: &str,
     ) -> Result<Option<CitizenRecord>, String> {
@@ -323,20 +411,36 @@ impl Db {
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
-                    "SELECT COALESCE(id, 0), wallet_pubkey, wallet_address,
-                            cid_number, citizen_status, voting_eligible, valid_from,
-                            valid_until, status_updated_at, province_code, city_code,
-                            residence_province_code, residence_city_code, residence_town_code,
-                            birth_province_code, birth_city_code, birth_town_code, election_scope_level,
-                            bound_at, bound_by, created_at
+                    "SELECT COALESCE(id, 0), cid_number, passport_no, citizen_full_name,
+                            citizen_sex, citizen_birth_date, wallet_pubkey, wallet_address,
+                            wallet_sig_alg, wallet_verified_at, citizen_status, voting_eligible,
+                            passport_valid_from, passport_valid_until, status_updated_at,
+                            province_code, city_code, residence_province_code, residence_city_code,
+                            residence_town_code, birth_province_code, birth_city_code, birth_town_code,
+                            archive_hash, onchain_tx_hash, onchain_block_number, onchain_at,
+                            created_by, created_at, updated_by, updated_at
                      FROM citizens
-                     WHERE lower(wallet_pubkey) = lower($1) AND bind_status = 'BOUND'
+                     WHERE lower(wallet_pubkey) = lower($1)
                      ORDER BY created_at DESC
                      LIMIT 1",
                     &[&wallet_pubkey],
                 )
                 .map_err(|e| format!("query citizen failed: {e}"))?;
             Ok(row.as_ref().map(citizen_record_from_row))
+        })
+    }
+
+    pub(crate) fn allocate_passport_no(
+        &self,
+        province_code: &str,
+        city_code: &str,
+        cid_number: &str,
+    ) -> Result<String, String> {
+        let province_code = province_code.to_string();
+        let city_code = city_code.to_string();
+        let cid_number = cid_number.to_string();
+        self.with_client(move |conn| {
+            generate_passport_no_with_retry(conn, &province_code, &city_code, &cid_number)
         })
     }
 
@@ -359,29 +463,39 @@ fn citizen_status_from_db(status: &str) -> CitizenStatus {
     }
 }
 
-fn citizen_record_from_row(row: &postgres::Row) -> CitizenRecord {
+pub(crate) fn citizen_record_from_row(row: &postgres::Row) -> CitizenRecord {
     let id: i64 = row.get(0);
     CitizenRecord {
         id: u64::try_from(id).unwrap_or(0),
-        wallet_pubkey: row.get(1),
-        wallet_address: row.get(2),
-        cid_number: Some(row.get(3)),
-        citizen_status: Some(citizen_status_from_db(row.get::<_, String>(4).as_str())),
-        voting_eligible: row.get(5),
-        archive_valid_from: row.get(6),
-        archive_valid_until: row.get(7),
-        status_updated_at: row.get(8),
-        province_code: Some(row.get(9)),
-        city_code: row.get(10),
-        residence_province_code: row.get(11),
-        residence_city_code: row.get(12),
-        residence_town_code: row.get(13),
-        birth_province_code: row.get(14),
-        birth_city_code: row.get(15),
-        birth_town_code: row.get(16),
-        election_scope_level: row.get(17),
-        bound_at: row.get(18),
-        bound_by: row.get(19),
-        created_at: row.get(20),
+        cid_number: row.get(1),
+        passport_no: row.get(2),
+        citizen_full_name: row.get(3),
+        citizen_sex: row.get(4),
+        citizen_birth_date: row.get(5),
+        wallet_pubkey: row.get(6),
+        wallet_address: row.get(7),
+        wallet_sig_alg: row.get(8),
+        wallet_verified_at: row.get(9),
+        citizen_status: citizen_status_from_db(row.get::<_, String>(10).as_str()),
+        voting_eligible: row.get(11),
+        passport_valid_from: row.get(12),
+        passport_valid_until: row.get(13),
+        status_updated_at: row.get(14),
+        province_code: row.get(15),
+        city_code: row.get(16),
+        residence_province_code: row.get(17),
+        residence_city_code: row.get(18),
+        residence_town_code: row.get(19),
+        birth_province_code: row.get(20),
+        birth_city_code: row.get(21),
+        birth_town_code: row.get(22),
+        archive_hash: row.get(23),
+        onchain_tx_hash: row.get(24),
+        onchain_block_number: row.get(25),
+        onchain_at: row.get(26),
+        created_by: row.get(27),
+        created_at: row.get(28),
+        updated_by: row.get(29),
+        updated_at: row.get(30),
     }
 }

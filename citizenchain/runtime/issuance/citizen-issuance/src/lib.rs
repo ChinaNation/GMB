@@ -1,9 +1,9 @@
 //! # 公民轻节点认证奖励发行模块 (citizen-issuance)
 //!
-//! 本模块在 CID 绑定成功时，通过 `OnCidBound` 回调自动发放一次性认证奖励。
+//! 本模块在公民投票身份首次登记成功时，通过 `OnVotingIdentityRegistered` 回调自动发放一次性认证奖励。
 //!
 //! ## 核心规则
-//! - 双重防重：按 `binding_id` + 按账户，防止同一身份或同一账户重复领奖。
+//! - 双重防重：按 `cid_number` 哈希 + 按账户，防止同一公民或同一账户重复领奖。
 //! - 阶梯奖励：前 `CITIZEN_ISSUANCE_HIGH_REWARD_COUNT` 人获高额奖励，之后降为常规奖励。
 //! - 总量硬顶：累计发放人数达到 `CITIZEN_ISSUANCE_MAX_COUNT` 后停止发放。
 //! - 本模块不暴露任何 extrinsic，所有触发均来自上游回调。
@@ -18,7 +18,7 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use cid_system::{OnCidBound, OnCidBoundWeight};
+    use citizen_identity::{OnVotingIdentityRegistered, OnVotingIdentityRegisteredWeight};
     use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
     use frame_support::{
         pallet_prelude::*,
@@ -26,7 +26,7 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use scale_info::TypeInfo;
-    use sp_runtime::traits::{SaturatedConversion, Zero};
+    use sp_runtime::traits::{Hash as HashT, SaturatedConversion, Zero};
     use sp_runtime::RuntimeDebug;
 
     use crate::weights::WeightInfo;
@@ -73,8 +73,9 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn reward_claimed)]
-    /// 中文注释：按 binding_id 维度防重，确保同一身份标识不会重复领取奖励。
-    pub type RewardClaimed<T: Config> = StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
+    /// 中文注释：按 cid_number 哈希维度防重，确保同一公民身份不会重复领取奖励。
+    pub type IdentityRewardClaimed<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn account_rewarded)]
@@ -96,11 +97,11 @@ pub mod pallet {
         MaxEncodedLen,
     )]
     pub enum SkipReason {
-        /// 中文注释：同一 binding_id 已经领取过奖励。
-        DuplicateBindingId,
+        /// 中文注释：同一公民身份已经领取过奖励。
+        DuplicateCitizenIdentity,
         /// 中文注释：全局累计发放人数已达上限。
         MaxCountReached,
-        /// 中文注释：该账户已通过其他 CID 领取过奖励，换绑不可再领。
+        /// 中文注释：该账户已通过其他公民身份领取过奖励，不可再领。
         AccountAlreadyRewarded,
         /// 中文注释：奖励常量已由编译期断言锁定为非零；该分支只兜底 Balance 转换异常。
         ZeroRewardConfigured,
@@ -109,16 +110,16 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 中文注释：CID 绑定成功后，认证发行模块执行一次奖励发放。
+        /// 中文注释：公民投票身份首次登记后，认证发行模块执行一次奖励发放。
         CertificationRewardIssued {
             who: T::AccountId,
-            binding_id: T::Hash,
+            cid_number_hash: T::Hash,
             reward: BalanceOf<T>,
         },
         /// 中文注释：奖励因重复、超限等原因被跳过时触发，reason 字段说明具体原因。
         CertificationRewardSkipped {
             who: T::AccountId,
-            binding_id: T::Hash,
+            cid_number_hash: T::Hash,
             reason: SkipReason,
         },
     }
@@ -127,24 +128,24 @@ pub mod pallet {
     #[pallet::error]
     pub enum Error<T> {}
 
-    /// 中文注释：本模块不暴露 extrinsic，奖励发放由 OnCidBound 回调驱动，无需用户直接调用。
+    /// 中文注释：本模块不暴露 extrinsic，奖励发放由公民身份登记回调驱动，无需用户直接调用。
     #[pallet::call]
     impl<T: Config> Pallet<T> {}
 
     impl<T: Config> Pallet<T> {
         /// 调用方在 weight 宏中引用此值。
-        pub fn on_cid_bound_weight() -> Weight {
-            // 中文注释：上游 bind_cid 在申报 weight 时会叠加这里的回调预算。
-            T::WeightInfo::on_cid_bound()
+        pub fn on_voting_identity_registered_weight() -> Weight {
+            // 中文注释：上游 citizen-identity 在申报 weight 时会叠加这里的回调预算。
+            T::WeightInfo::on_voting_identity_registered()
         }
 
         fn try_issue_certification_reward(
             who: &T::AccountId,
-            binding_id: T::Hash,
+            cid_number_hash: T::Hash,
         ) -> Result<BalanceOf<T>, SkipReason> {
-            // 中文注释：先查 binding_id，再查账户，优先返回更贴近业务语义的跳过原因。
-            if RewardClaimed::<T>::contains_key(binding_id) {
-                return Err(SkipReason::DuplicateBindingId);
+            // 中文注释：先查公民身份，再查账户，优先返回更贴近业务语义的跳过原因。
+            if IdentityRewardClaimed::<T>::contains_key(cid_number_hash) {
+                return Err(SkipReason::DuplicateCitizenIdentity);
             }
 
             if AccountRewarded::<T>::contains_key(who) {
@@ -185,28 +186,29 @@ pub mod pallet {
 
             // 中文注释：只有铸币成功进入账本后，才推进累计人数并写入双重防重标记。
             RewardedCount::<T>::put(rewarded_count.saturating_add(1));
-            RewardClaimed::<T>::insert(binding_id, ());
+            IdentityRewardClaimed::<T>::insert(cid_number_hash, ());
             AccountRewarded::<T>::insert(who, ());
 
             Ok(reward)
         }
     }
 
-    /// 中文注释：实现 cid-system 的绑定回调，在 CID 绑定成功后自动尝试发放认证奖励。
-    impl<T: Config> OnCidBound<T::AccountId, T::Hash> for Pallet<T> {
-        fn on_cid_bound(who: &T::AccountId, binding_id: T::Hash) {
-            match Self::try_issue_certification_reward(who, binding_id) {
+    /// 中文注释：实现 citizen-identity 的登记回调，在公民投票身份首次登记后自动尝试发放认证奖励。
+    impl<T: Config> OnVotingIdentityRegistered<T::AccountId> for Pallet<T> {
+        fn on_voting_identity_registered(who: &T::AccountId, cid_number: &[u8]) {
+            let cid_number_hash = T::Hashing::hash(cid_number);
+            match Self::try_issue_certification_reward(who, cid_number_hash) {
                 Ok(reward) => {
                     Self::deposit_event(Event::<T>::CertificationRewardIssued {
                         who: who.clone(),
-                        binding_id,
+                        cid_number_hash,
                         reward,
                     });
                 }
                 Err(reason) => {
                     Self::deposit_event(Event::<T>::CertificationRewardSkipped {
                         who: who.clone(),
-                        binding_id,
+                        cid_number_hash,
                         reason,
                     });
                 }
@@ -214,10 +216,10 @@ pub mod pallet {
         }
     }
 
-    /// 中文注释：向上游提供回调的 weight 预算，供 bind_cid 在申报交易权重时叠加。
-    impl<T: Config> OnCidBoundWeight for Pallet<T> {
-        fn on_cid_bound_weight() -> Weight {
-            Pallet::<T>::on_cid_bound_weight()
+    /// 中文注释：向上游提供回调的 weight 预算，供 citizen-identity 在申报交易权重时叠加。
+    impl<T: Config> OnVotingIdentityRegisteredWeight for Pallet<T> {
+        fn on_voting_identity_registered_weight() -> Weight {
+            Pallet::<T>::on_voting_identity_registered_weight()
         }
     }
 }

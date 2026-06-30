@@ -71,50 +71,18 @@ impl pallet_balances::Config for Test {
     type WeightInfo = ();
 }
 
-pub struct TestCidEligibility;
-impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
-    for TestCidEligibility
-{
-    fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
+pub struct TestCitizenIdentityReader;
+impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
+    fn can_vote(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
     }
 
-    fn verify_and_consume_vote_credential(
-        _binding_id: &<Test as frame_system::Config>::Hash,
-        _who: &AccountId32,
-        _proposal_id: u64,
-        _nonce: &[u8],
-        _signature: &[u8],
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
+    fn can_be_candidate(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
     }
-}
 
-pub struct TestPopulationSnapshotVerifier;
-impl
-    votingengine::PopulationSnapshotVerifier<
-        AccountId32,
-        votingengine::pallet::VoteNonceOf<Test>,
-        votingengine::pallet::VoteSignatureOf<Test>,
-    > for TestPopulationSnapshotVerifier
-{
-    fn verify_population_snapshot(
-        _who: &AccountId32,
-        _eligible_total: u64,
-        _nonce: &votingengine::pallet::VoteNonceOf<Test>,
-        _signature: &votingengine::pallet::VoteSignatureOf<Test>,
-        _issuer_cid_number: &[u8],
-        _issuer_main_account: &AccountId32,
-        _signer_pubkey: &[u8; 32],
-        _scope_province_name: &[u8],
-        _scope_city_name: &[u8],
-    ) -> bool {
-        true
+    fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
+        100
     }
 }
 
@@ -192,8 +160,7 @@ impl votingengine::Config for Test {
     type MaxCleanupQueueBucketLimit = ConstU32<50>;
     type MaxCleanupScheduleOffset = ConstU32<100>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
-    type CidEligibility = TestCidEligibility;
-    type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
+    type CitizenIdentityReader = TestCitizenIdentityReader;
     type JointVoteResultCallback = ();
     // 挂上本模块 Executor,让提案通过后自动触发销毁执行。
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;

@@ -44,4 +44,4 @@ pub const CID_NUMBER_MAX_BYTES: u32 = 32;
 
 // 签名 payload op_tag (0x10-0x1F) — 单一权威源在 `crate::sign`。
 // 此处 re-export 供 `core_const::OP_SIGN_*` 调用路径使用。新增 op_tag 只改 `sign`。
-pub use crate::sign::{OP_SIGN_BIND, OP_SIGN_DEREGISTER, OP_SIGN_INST, OP_SIGN_POP, OP_SIGN_VOTE};
+pub use crate::sign::{OP_SIGN_CITIZEN_IDENTITY, OP_SIGN_DEREGISTER, OP_SIGN_INST};

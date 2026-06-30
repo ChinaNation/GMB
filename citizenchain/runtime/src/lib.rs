@@ -323,9 +323,9 @@ mod runtime {
     #[runtime::pallet_index(24)]
     pub type ElectionVote = election_vote;
 
-    // CID 绑定与资格校验：统一处理绑定、验签、资格查询
+    // 链上公民身份：登记投票身份、参选身份并提供人口快照读取
     #[runtime::pallet_index(10)]
-    pub type CidSystem = cid_system;
+    pub type CitizenIdentity = citizen_identity;
 
     // 公民发行：仅负责认证奖励发放
     #[runtime::pallet_index(11)]

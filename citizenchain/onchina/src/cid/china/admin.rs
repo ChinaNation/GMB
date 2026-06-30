@@ -8,9 +8,8 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::auth::login::AdminAuthContext;
-use crate::cid::china::{province_code_by_name, provinces};
-use crate::cid::model::{AdminCidCitiesQuery, CidCityItem};
+use crate::cid::china::provinces;
+use crate::cid::model::{AdminCidCitiesQuery, AdminCidTownsQuery, CidCityItem, CidTownItem};
 use crate::*;
 
 fn ok<T: Serialize>(data: T) -> axum::response::Response {
@@ -31,32 +30,12 @@ fn trimmed(value: &str, field: &str) -> Result<String, axum::response::Response>
     Ok(value.to_string())
 }
 
-fn ensure_province_scope(
-    ctx: &AdminAuthContext,
-    province_name: &str,
-) -> Result<(), axum::response::Response> {
-    let scope = ctx
-        .scope_province_name
-        .as_deref()
-        .ok_or_else(|| api_error(StatusCode::FORBIDDEN, 1003, "admin province scope missing"))?;
-    if scope != province_name {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "province out of current admin scope",
-        ));
-    }
-    province_code_by_name(province_name)
-        .map(|_| ())
-        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, 1004, "province not found"))
-}
-
 pub(crate) async fn admin_china_cities(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<AdminCidCitiesQuery>,
 ) -> impl IntoResponse {
-    let admin_ctx = match require_admin_any(&state, &headers) {
+    let _admin_ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -64,9 +43,6 @@ pub(crate) async fn admin_china_cities(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    if let Err(resp) = ensure_province_scope(&admin_ctx, &province_name) {
-        return resp;
-    }
     let Some(p) = provinces()
         .iter()
         .find(|p| p.province_name == province_name)
@@ -82,5 +58,47 @@ pub(crate) async fn admin_china_cities(
         })
         .collect();
     rows.sort_by(|a, b| a.city_code.cmp(&b.city_code));
+    ok(rows)
+}
+
+pub(crate) async fn admin_china_towns(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AdminCidTownsQuery>,
+) -> impl IntoResponse {
+    let _admin_ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let province_name = match trimmed(&query.province_name, "province_name") {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let city_code = match trimmed(&query.city_code, "city_code") {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let Some(p) = provinces()
+        .iter()
+        .find(|p| p.province_name == province_name)
+    else {
+        return api_error(StatusCode::NOT_FOUND, 1004, "province not found");
+    };
+    let Some(c) = p
+        .cities
+        .iter()
+        .find(|c| c.city_code.eq_ignore_ascii_case(city_code.as_str()))
+    else {
+        return api_error(StatusCode::NOT_FOUND, 1004, "city not found");
+    };
+    let mut rows: Vec<CidTownItem> = c
+        .towns
+        .iter()
+        .map(|t| CidTownItem {
+            town_name: t.town_name.to_string(),
+            town_code: t.town_code.to_string(),
+        })
+        .collect();
+    rows.sort_by(|a, b| a.town_code.cmp(&b.town_code));
     ok(rows)
 }

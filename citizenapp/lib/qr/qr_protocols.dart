@@ -44,7 +44,7 @@ class QrActions {
   QrActions._();
 
   static const int login = 1;
-  static const int citizenBind = 2;
+  static const int citizenIdentity = 2;
   static const int onchinaAdmin = 3;
   static const int activateAdmin = 5;
   static const int decryptAdmin = 6;
@@ -80,6 +80,7 @@ class QrActions {
   static const int internalVote = 0x1600;
   static const int jointVote = 0x1700;
   static const int castReferendum = 0x1701;
+  static const int prepareJointPopulationSnapshot = 0x1702;
   // 立法(LegislationYuan=27=0x1b 发起类节点端;LegislationVote=28=0x1c 投票/签署类)。
   static const int legislationEnact = 0x1b00;
   static const int legislationAmend = 0x1b01;
@@ -134,6 +135,7 @@ class QrActions {
         'internal_vote' => internalVote,
         'joint_vote' => jointVote,
         'cast_referendum' => castReferendum,
+        'prepare_joint_population_snapshot' => prepareJointPopulationSnapshot,
         'propose_enact_law' => legislationEnact,
         'propose_amend_law' => legislationAmend,
         'propose_repeal_law' => legislationRepeal,
@@ -145,7 +147,7 @@ class QrActions {
         'guard_vote' => legislationGuardVote,
         'activate_admin_account' => activateAdmin,
         'decrypt_admin' => decryptAdmin,
-        'citizen_bind' => citizenBind,
+        'citizen_identity' => citizenIdentity,
         'onchina_admin_action' => onchinaAdmin,
         _ => 0,
       };

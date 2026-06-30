@@ -25,7 +25,7 @@ members = [
     "runtime/issuance/onchain-issuance",         # 发行-链上发行代币(Plain FT, ADR-011) pallet
     "runtime/issuance/resolution-issuance",        # 发行-决议发行完整流程模块 pallet
     "runtime/issuance/provincialbank-interest",   # 发行-省储行利息模块 pallet
-    "runtime/otherpallet/cid-system",          # 其他-CID 绑定与资格校验模块 pallet
+    "runtime/otherpallet/citizen-identity",    # 其他-链上公民身份模块 pallet
     "runtime/otherpallet/pow-difficulty",   # 其他-PoW 动态难度调整模块 pallet
     "runtime/otherpallet/address-registry",   # 其他-地址变更上链模块 pallet
     "runtime/genesis",                           # 创世模块 pallet

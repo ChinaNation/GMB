@@ -15,6 +15,13 @@ pub(crate) async fn admin_cid_meta(
         Err(resp) => return resp,
     };
     let scoped = admin_ctx.scope_province_name.clone();
+    let mut all_provinces: Vec<CidProvinceItem> = provinces()
+        .iter()
+        .map(|p| CidProvinceItem {
+            province_name: p.province_name.to_string(),
+            province_code: p.province_code.to_string(),
+        })
+        .collect();
     let mut provinces_rows: Vec<CidProvinceItem> = provinces()
         .iter()
         .filter(|p| {
@@ -29,6 +36,7 @@ pub(crate) async fn admin_cid_meta(
         })
         .collect();
     provinces_rows.sort_by(|a, b| a.province_code.cmp(&b.province_code));
+    all_provinces.sort_by(|a, b| a.province_code.cmp(&b.province_code));
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -45,6 +53,7 @@ pub(crate) async fn admin_cid_meta(
                 })
                 .collect(),
             provinces: provinces_rows,
+            all_provinces,
             scoped_province_name: scoped,
         },
     })

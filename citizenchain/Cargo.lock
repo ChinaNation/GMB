@@ -1682,22 +1682,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cid-system"
-version = "1.0.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "log",
- "parity-scale-codec",
- "primitives",
- "scale-info",
- "sp-core",
- "sp-io",
- "sp-runtime",
-]
-
-[[package]]
 name = "cipher"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1718,10 +1702,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "citizen-identity"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+]
+
+[[package]]
 name = "citizen-issuance"
 version = "1.0.0"
 dependencies = [
- "cid-system",
+ "citizen-identity",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -1739,7 +1738,7 @@ version = "1.0.0"
 dependencies = [
  "address-registry",
  "admin-primitives",
- "cid-system",
+ "citizen-identity",
  "citizen-issuance",
  "ed25519-dalek",
  "election-vote",
@@ -10099,7 +10098,6 @@ name = "private-manage"
 version = "1.0.0"
 dependencies = [
  "admin-primitives",
- "cid-system",
  "entity-primitives",
  "frame-benchmarking",
  "frame-support",
@@ -10438,7 +10436,6 @@ name = "public-manage"
 version = "1.0.0"
 dependencies = [
  "admin-primitives",
- "cid-system",
  "entity-primitives",
  "frame-benchmarking",
  "frame-support",
@@ -16522,6 +16519,7 @@ checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 name = "votingengine"
 version = "1.0.0"
 dependencies = [
+ "citizen-identity",
  "frame-benchmarking",
  "frame-support",
  "frame-system",

@@ -43,4 +43,4 @@
 - `flutter test test/governance/runtime-upgrade/runtime_upgrade_service_test.dart`：通过。
 - `flutter analyze lib/signer test/signer/payload_decoder_test.dart`：通过。
 - `flutter test test/signer/payload_decoder_test.dart`：通过。
-- 残留扫描：未发现 `状态升级`、`fetchPopulationSnapshot`、`submitProposeRuntimeUpgrade`、`buildProposeRuntimeUpgradeCallForTest` 等发起提案残留。
+- 残留扫描：未发现 `状态升级`、`fetchVotersCount`、`submitProposeRuntimeUpgrade`、`buildProposeRuntimeUpgradeCallForTest` 等发起提案残留。

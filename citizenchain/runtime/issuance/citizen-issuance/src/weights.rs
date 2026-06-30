@@ -33,28 +33,28 @@ use frame_support::{
 
 /// Weight functions for `citizen_issuance`.
 pub trait WeightInfo {
-	/// Storage: `CitizenIssuance::RewardClaimed` (r:1 w:1)
-	/// Proof: `CitizenIssuance::RewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `CitizenIssuance::IdentityRewardClaimed` (r:1 w:1)
+	/// Proof: `CitizenIssuance::IdentityRewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::AccountRewarded` (r:1 w:1)
 	/// Proof: `CitizenIssuance::AccountRewarded` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::RewardedCount` (r:1 w:1)
 	/// Proof: `CitizenIssuance::RewardedCount` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	fn on_cid_bound() -> Weight;
+	fn on_voting_identity_registered() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	/// Storage: `CitizenIssuance::RewardClaimed` (r:1 w:1)
-	/// Proof: `CitizenIssuance::RewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `CitizenIssuance::IdentityRewardClaimed` (r:1 w:1)
+	/// Proof: `CitizenIssuance::IdentityRewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::AccountRewarded` (r:1 w:1)
 	/// Proof: `CitizenIssuance::AccountRewarded` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::RewardedCount` (r:1 w:1)
 	/// Proof: `CitizenIssuance::RewardedCount` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	fn on_cid_bound() -> Weight {
+	fn on_voting_identity_registered() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `81`
 		//  Estimated: `3593`
@@ -67,15 +67,15 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
-	/// Storage: `CitizenIssuance::RewardClaimed` (r:1 w:1)
-	/// Proof: `CitizenIssuance::RewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Storage: `CitizenIssuance::IdentityRewardClaimed` (r:1 w:1)
+	/// Proof: `CitizenIssuance::IdentityRewardClaimed` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::AccountRewarded` (r:1 w:1)
 	/// Proof: `CitizenIssuance::AccountRewarded` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `CitizenIssuance::RewardedCount` (r:1 w:1)
 	/// Proof: `CitizenIssuance::RewardedCount` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	fn on_cid_bound() -> Weight {
+	fn on_voting_identity_registered() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `81`
 		//  Estimated: `3593`
