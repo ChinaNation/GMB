@@ -438,7 +438,8 @@ impl Db {
              CREATE TABLE IF NOT EXISTS citizens (
                 cid_number TEXT NOT NULL,
                 passport_no TEXT NOT NULL DEFAULT '',
-                citizen_full_name TEXT NOT NULL DEFAULT '',
+                citizen_family_name TEXT NOT NULL DEFAULT '',
+                citizen_given_name TEXT NOT NULL DEFAULT '',
                 citizen_sex TEXT NOT NULL DEFAULT '',
                 citizen_birth_date TEXT NOT NULL DEFAULT '',
                 province_code TEXT NOT NULL,
@@ -614,9 +615,10 @@ impl Db {
         })?;
 
         conn.batch_execute(
-            "ALTER TABLE citizens
+             "ALTER TABLE citizens
                 ADD COLUMN IF NOT EXISTS passport_no TEXT NOT NULL DEFAULT '',
-                ADD COLUMN IF NOT EXISTS citizen_full_name TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS citizen_family_name TEXT NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS citizen_given_name TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS citizen_sex TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS citizen_birth_date TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS wallet_sig_alg TEXT NOT NULL DEFAULT 'sr25519',
@@ -645,7 +647,8 @@ impl Db {
                 DROP COLUMN IF EXISTS election_scope_level,
                 DROP COLUMN IF EXISTS bind_status,
                 DROP COLUMN IF EXISTS bound_at,
-                DROP COLUMN IF EXISTS bound_by;
+                DROP COLUMN IF EXISTS bound_by,
+                DROP COLUMN IF EXISTS citizen_full_name;
              UPDATE citizens
              SET residence_province_code = COALESCE(NULLIF(residence_province_code, ''), province_code),
                  residence_city_code = COALESCE(NULLIF(residence_city_code, ''), city_code),
@@ -656,7 +659,8 @@ impl Db {
                  wallet_pubkey = COALESCE(wallet_pubkey, ''),
                  wallet_address = COALESCE(wallet_address, ''),
                  passport_no = COALESCE(passport_no, ''),
-                 citizen_full_name = COALESCE(citizen_full_name, ''),
+                 citizen_family_name = COALESCE(citizen_family_name, ''),
+                 citizen_given_name = COALESCE(citizen_given_name, ''),
                  citizen_sex = COALESCE(citizen_sex, ''),
                  citizen_birth_date = COALESCE(citizen_birth_date, ''),
                  passport_valid_from = COALESCE(passport_valid_from, ''),
@@ -913,7 +917,8 @@ impl Db {
         }
         for column in [
             "passport_no",
-            "citizen_full_name",
+            "citizen_family_name",
+            "citizen_given_name",
             "citizen_sex",
             "citizen_birth_date",
             "wallet_sig_alg",
@@ -938,6 +943,7 @@ impl Db {
             "bind_status",
             "bound_at",
             "bound_by",
+            "citizen_full_name",
         ] {
             Self::ensure_column_state(conn, "citizens", column, false)?;
         }

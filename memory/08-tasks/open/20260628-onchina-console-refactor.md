@@ -84,6 +84,7 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 - [x] 01 登录反查 + 节点绑定（chain_runtime.rs：`find_active_admin_memberships(verified_pubkey)` 扫描 FRG 省组/PublicAdmins/PrivateAdmins；auth login：未绑定返回候选，确认后写 active binding；已绑定按绑定机构复查；个人/PMUL拒入）
 - [x] 01-准入口径修正（2026-06-30）：NJD 放行进入 OnChina；NRC/PRC/PRB 改为桌面端专用错误拒入；PMUL 保持个人多签错误拒入；非法人组织按 Public/Private 双探测；普通机构登录后只显示“本机构管理员”只读 tab，管理员只能在自己的行设置 / 更新 passkey。
 - [x] 01-准入口径验收（2026-06-30）：`cargo test --manifest-path citizenchain/Cargo.toml -p onchina` 76 passed；`npm --prefix citizenchain/onchina/frontend run build` 通过；`https://onchina.local:8964` 真实 HTTP 验收因当前本机未启动 OnChina 服务、8964 无监听且 `onchina.local` 不可解析而未完成。
+- [x] 04-CA 提示收口（2026-06-30）：登录页和登录后后台仅在当前页面不是可信 HTTPS 安全上下文时显示机构 CA 下载提示；`https:` + `window.isSecureContext=true` 时隐藏提示；公民入口 tab 文案从“首页”改为“公民”。
 - [x] 01-补 节点解绑 / 换机构闭环：新增 `NODE_BINDING_UNBIND` 冷签安全动作，当前本机会话管理员 prepare，冷钱包 active admin 签名 commit，成功后 active binding 置 `INACTIVE` 并删除本节点所有管理员 session；换机构必须解绑后重新扫码绑定新机构。
 - [x] 02 身份二值→多值（registry_org_code→institution_code+admin_level）：6 DTO + AdminUser + repo 56处 + db schema(列改名迁移+去CHECK+索引) + onchain_gate + 12 consumer 文件共 160 处；cargo check+test 绿(53 passed)；零残留
 - [x] 03 auth 位移（用户改主意执行）：`git mv src/admins → src/auth`;全库 `crate::admins::`→`crate::auth::`(词边界避开 city_registry_admins,~51 处)+ main.rs `mod admins`→`mod auth` 与 bare `admins::`→`auth::`;58 测试绿

@@ -1,7 +1,7 @@
 // 中文注释:注册局顶层视图 —— activeView === 'citizens' 分支。
 // 包含:citizen 列表 + 搜索栏 + 表格 + 直接录入公民弹窗。
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Card, Descriptions, Form, Input, Modal, Space, Table, Tag } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 
@@ -11,13 +11,34 @@ import {
   type CitizenRow,
 } from './api';
 import { useAuth } from '../hooks/useAuth';
+import { useScope } from '../hooks/useScope';
 import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
+import { CityGrid } from '../core/CityGrid';
 import { CitizenCreateModal } from './CitizenCreateModal';
 import { notice } from '../utils/notice';
 
+function makeCitizenName(row: Pick<CitizenRow, 'citizen_family_name' | 'citizen_given_name'>) {
+  return `${row.citizen_family_name ?? ''}${row.citizen_given_name ?? ''}`.trim() || '-';
+}
+
+function makeCenteredTitle(center: ReactNode, back?: () => void) {
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', minHeight: 32 }}>
+      {back && (
+        <Button type="link" style={{ paddingLeft: 0 }} onClick={back}>
+          ← 返回
+        </Button>
+      )}
+      <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+        {center}
+      </span>
+    </div>
+  );
+}
 
 export function CitizensView() {
   const { auth, capabilities } = useAuth();
+  const scope = useScope(auth);
   const [searchForm] = Form.useForm<{ keyword: string }>();
   const [rows, setRows] = useState<CitizenRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,9 +49,14 @@ export function CitizensView() {
   // 直接录入弹窗控制
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailRecord, setDetailRecord] = useState<CitizenRow | null>(null);
+  const [selectedCity, setSelectedCity] = useState<string | null>(null);
+
+  const activeProvinceName = scope.lockedProvinceName;
+  const activeCityName = selectedCity ?? (scope.skipCityList ? scope.lockedCityName : null);
+  const canUseCitizenList = Boolean(auth && activeProvinceName && activeCityName);
 
   const refreshList = async (keyword: string, cursor?: string | null, silent?: boolean) => {
-    if (!auth) return;
+    if (!auth || !activeProvinceName || !activeCityName) return;
     const exact = keyword.trim();
     if (!exact) {
       setRows([]);
@@ -39,7 +65,7 @@ export function CitizensView() {
     }
     setLoading(true);
     try {
-      const raw = await listCitizens(auth, exact, cursor);
+      const raw = await listCitizens(auth, exact, activeProvinceName, activeCityName, cursor);
       const list = raw.items;
       setRows(list);
       setNextCursor(raw.next_cursor ?? null);
@@ -66,10 +92,21 @@ export function CitizensView() {
       setNextCursor(null);
       setCursorStack([]);
       setCreateModalOpen(false);
+      setSelectedCity(null);
       return;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth]);
+
+  useEffect(() => {
+    setRows([]);
+    setSearchKeyword('');
+    setNextCursor(null);
+    setCursorStack([]);
+    setDetailRecord(null);
+    setCreateModalOpen(false);
+    searchForm.resetFields();
+  }, [activeProvinceName, activeCityName, searchForm]);
 
   const onSearch = async (values: { keyword: string }) => {
     if (!auth) return;
@@ -160,9 +197,8 @@ export function CitizensView() {
     },
     {
       title: '姓名',
-      dataIndex: 'citizen_full_name',
       align: 'center',
-      render: (v: string | undefined) => v ?? '-',
+      render: (_v: unknown, row) => makeCitizenName(row),
     },
     {
       title: '投票账户',
@@ -178,10 +214,29 @@ export function CitizensView() {
       render: (v: string | undefined) => statusTag(v),
     },
   ];
+
+  if (auth && activeProvinceName && !activeCityName) {
+    return (
+      <Card
+        title={makeCenteredTitle(activeProvinceName)}
+        bordered={false}
+        style={glassCardStyle}
+        headStyle={glassCardHeadStyle}
+      >
+        <CityGrid auth={auth} province_name={activeProvinceName} onPick={(cityName) => setSelectedCity(cityName)} />
+      </Card>
+    );
+  }
+
   return (
     <>
       <Card
-        title={'公民身份列表'}
+        title={makeCenteredTitle(
+          activeProvinceName && activeCityName
+            ? `${activeProvinceName} · ${activeCityName} · 公民身份列表`
+            : '公民身份列表',
+          selectedCity ? () => setSelectedCity(null) : undefined,
+        )}
         bordered={false}
         style={glassCardStyle}
         headStyle={glassCardHeadStyle}
@@ -193,6 +248,7 @@ export function CitizensView() {
                   style={{ width: 420 }}
                   placeholder="护照号/身份CID/投票账户检索"
                   allowClear
+                  disabled={!canUseCitizenList}
                   onPressEnter={() => searchForm.submit()}
                   suffix={
                     <SearchOutlined
@@ -204,7 +260,11 @@ export function CitizensView() {
               </Form.Item>
               {capabilities.canBusinessWrite && (
                 <Form.Item style={{ marginBottom: 0 }}>
-                  <Button type="primary" onClick={() => setCreateModalOpen(true)}>
+                  <Button
+                    type="primary"
+                    disabled={!canUseCitizenList}
+                    onClick={() => setCreateModalOpen(true)}
+                  >
                     新增公民
                   </Button>
                 </Form.Item>
@@ -251,7 +311,7 @@ export function CitizensView() {
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label="护照号">{detailRecord.passport_no || '-'}</Descriptions.Item>
             <Descriptions.Item label="身份CID">{detailRecord.cid_number || '-'}</Descriptions.Item>
-            <Descriptions.Item label="姓名">{detailRecord.citizen_full_name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="姓名">{makeCitizenName(detailRecord)}</Descriptions.Item>
             <Descriptions.Item label="性别">{sexText(detailRecord.citizen_sex)}</Descriptions.Item>
             <Descriptions.Item label="出生日期">{formatDate(detailRecord.citizen_birth_date)}</Descriptions.Item>
             <Descriptions.Item label="投票账户">{detailRecord.wallet_address || '-'}</Descriptions.Item>
@@ -283,6 +343,8 @@ export function CitizensView() {
         <CitizenCreateModal
           auth={auth}
           open={createModalOpen}
+          residenceProvinceName={activeProvinceName}
+          residenceCityName={activeCityName}
           onClose={() => setCreateModalOpen(false)}
           onCreated={handleCreated}
         />

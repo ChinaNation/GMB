@@ -35,7 +35,7 @@ OnChina 以 PostgreSQL 结构化表作为唯一持久化真源。进程内缓存
 
 - `ids`：全局唯一 CID 号索引。
 - `subjects`：公民、公权机构、私权机构公共主体表，按 `province_code` 分区。
-- `citizens`：公民档案、身份 CID、护照号、钱包地址和电子护照有效期，按 `province_code` 分区。
+- `citizens`：公民档案、姓、名、身份 CID、护照号、钱包地址、居住地、出生地和电子护照有效期，按 `province_code` 分区。
 - `gov`：公权机构扩展表，按 `province_code` 分区。
 - `private`：私权机构扩展表，按 `province_code` 分区。
 - `accounts`：机构账户表，按 `province_code` 分区。

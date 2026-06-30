@@ -55,12 +55,14 @@ citizenchain/onchina/src/
 
 ## 5. 公民录入和护照号
 
-- 公民由注册局管理员在 OnChina 一次交易录入,不再由前端手填 `cid_number`。
+- 公民由注册局管理员在 OnChina 当前办理城市下一次交易录入,不再由前端手填 `cid_number`。
+- 联邦注册局管理员必须先选择分管省内城市后才能录入公民;市注册局管理员直接锁定本市。
+- 公民姓名拆为 `citizen_family_name` 和 `citizen_given_name`;展示姓名时由前端按中文顺序组合,数据库不保留姓名单字段。
 - 公民身份 CID 由 `src/cid/generator.rs` 生成,机构代码固定为 `CTZN`,个人码 R5 市段固定为 `000`。
 - 护照号由 `src/domains/citizens/passport_no.rs` 生成,OnChina 自持完整算法。
 - 创建公民必须提交 `wallet_account`;后端接受 SS58 地址或 0x 公钥,数据库内部保存 `wallet_pubkey`,前端和返回 DTO 只展示 `wallet_address`。
 - 出生省市镇必填,字段为 `birth_province_code / birth_city_code / birth_town_code`;创建后不得被普通编辑流程修改。
-- 居住省市来自当前办理注册局登录态,字段为 `residence_province_code / residence_city_code`;前端只选择 `residence_town_code`。
+- 居住省市来自当前办理城市上下文,字段为 `residence_province_code / residence_city_code`;前端只选择 `residence_town_code`。
 - 护照有效期自动计算:创建时年满 16 周岁为 10 年,未满 16 周岁为 5 年,字段为 `passport_valid_from / passport_valid_until`。
 - `citizens` 表当前字段只表达公民档案、身份 CID、护照号、钱包地址、出生地、居住地、护照有效期和投票资格。
 - `passport_numbers` 是护照号全局索引表;`passport_number_recycle_pool` 只保存可回收护照号,不得保存旧公民个人资料。

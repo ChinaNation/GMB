@@ -521,7 +521,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 |---|---|---|---|
 | CID 号码 | `cid_number` | API / call data / storage key | 机构或公民 CID 编号 |
 | 公民护照号 | `passport_no` | OnChina citizens API / SQL | 公民终身唯一护照号,不同于 `cid_number` |
-| 公民姓名 | `citizen_full_name` | OnChina citizens API / SQL | 公民档案中的姓名 |
+| 公民姓 | `citizen_family_name` | OnChina citizens API / SQL | 公民档案中的姓 |
+| 公民名 | `citizen_given_name` | OnChina citizens API / SQL | 公民档案中的名 |
 | 公民性别 | `citizen_sex` | OnChina citizens API / SQL | 公民档案性别字段,取值 `MALE/FEMALE` |
 | 公民出生日期 | `citizen_birth_date` | OnChina citizens API / SQL | 公民档案出生日期,格式 `YYYY-MM-DD` |
 | 护照有效期起 | `passport_valid_from` | OnChina citizens API / SQL | 当前电子护照有效期开始日期 |

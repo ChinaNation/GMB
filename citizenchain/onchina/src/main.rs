@@ -189,7 +189,8 @@ fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
         id: record.id,
         cid_number: record.cid_number.clone(),
         passport_no: record.passport_no.clone(),
-        citizen_full_name: record.citizen_full_name.clone(),
+        citizen_family_name: record.citizen_family_name.clone(),
+        citizen_given_name: record.citizen_given_name.clone(),
         citizen_sex: record.citizen_sex.clone(),
         citizen_birth_date: record.citizen_birth_date.clone(),
         wallet_address: record.wallet_address.clone(),
@@ -571,8 +572,9 @@ impl Db {
         .map_err(|e| format!("upsert citizen subject failed: {e}"))?;
         conn.execute(
             "INSERT INTO citizens (
-                cid_number, passport_no, citizen_full_name, citizen_sex, citizen_birth_date,
-                province_code, city_code, id, wallet_pubkey, wallet_address, wallet_sig_alg,
+                cid_number, passport_no, citizen_family_name, citizen_given_name,
+                citizen_sex, citizen_birth_date, province_code, city_code, id,
+                wallet_pubkey, wallet_address, wallet_sig_alg,
                 wallet_verified_at, citizen_status, voting_eligible, passport_valid_from,
                 passport_valid_until, status_updated_at, residence_province_code,
                 residence_city_code, residence_town_code, birth_province_code, birth_city_code,
@@ -582,11 +584,12 @@ impl Db {
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15, $16, $17, $18, $19,
                 $20, $21, $22, $23, $24, $25, $26, $27, $28,
-                $29, $30, $31
+                $29, $30, $31, $32
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 passport_no = EXCLUDED.passport_no,
-                citizen_full_name = EXCLUDED.citizen_full_name,
+                citizen_family_name = EXCLUDED.citizen_family_name,
+                citizen_given_name = EXCLUDED.citizen_given_name,
                 citizen_sex = EXCLUDED.citizen_sex,
                 citizen_birth_date = EXCLUDED.citizen_birth_date,
                 city_code = EXCLUDED.city_code,
@@ -615,7 +618,8 @@ impl Db {
             &[
                 &cid_number,
                 &record.passport_no,
-                &record.citizen_full_name,
+                &record.citizen_family_name,
+                &record.citizen_given_name,
                 &record.citizen_sex,
                 &record.citizen_birth_date,
                 &province_code,
@@ -743,8 +747,9 @@ impl Db {
                 .map_err(|_| "page_size too large".to_string())?;
             let rows = conn
                 .query(
-                    "SELECT COALESCE(c.id, 0), c.cid_number, c.passport_no, c.citizen_full_name,
-                                    c.citizen_sex, c.citizen_birth_date, c.wallet_pubkey, c.wallet_address,
+                    "SELECT COALESCE(c.id, 0), c.cid_number, c.passport_no, c.citizen_family_name,
+                                    c.citizen_given_name, c.citizen_sex, c.citizen_birth_date,
+                                    c.wallet_pubkey, c.wallet_address,
                                     c.wallet_sig_alg, c.wallet_verified_at, c.citizen_status, c.voting_eligible,
                                     c.passport_valid_from, c.passport_valid_until, c.status_updated_at,
                                     c.province_code, c.city_code, c.residence_province_code, c.residence_city_code,
@@ -761,7 +766,9 @@ impl Db {
                                AND (
                                     c.cid_number = $3
                                     OR c.passport_no = $3
-                                    OR c.citizen_full_name = $3
+                                    OR c.citizen_family_name || c.citizen_given_name = $3
+                                    OR c.citizen_family_name = $3
+                                    OR c.citizen_given_name = $3
                                     OR lower(c.wallet_pubkey) = lower($3)
                                     OR lower(c.wallet_address) = lower($3)
                                )
@@ -785,7 +792,7 @@ impl Db {
             let mut output = Vec::with_capacity(rows.len());
             for row in rows {
                 let id_i64: i64 = row.get(0);
-                let created_at: DateTime<Utc> = row.get(28);
+                let created_at: DateTime<Utc> = row.get(29);
                 let record = crate::domains::citizens::admin_entry::citizen_record_from_row(&row);
                 output.push((citizen_row_from_record(&record), created_at, id_i64));
             }

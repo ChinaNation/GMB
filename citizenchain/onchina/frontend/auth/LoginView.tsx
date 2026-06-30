@@ -28,14 +28,22 @@ function createSessionId(): string {
 
 const CA_CERTIFICATE_URL = '/api/v1/platform/ca-certificate';
 
+function shouldShowOrganizationCaNotice(): boolean {
+  if (typeof window === 'undefined') return false;
+  // 中文注释:浏览器不开放读取系统根证书库;前端只能用当前页面是否为可信 HTTPS
+  // 安全上下文判断证书安装结果。证书被信任后登录页和后台页都不再显示 CA 提示。
+  return !(window.location.protocol === 'https:' && window.isSecureContext);
+}
+
 export function OrganizationCaNotice({ compact = false }: { compact?: boolean }) {
-  const isTrustedPage = typeof window === 'undefined' ? true : window.isSecureContext;
+  if (!shouldShowOrganizationCaNotice()) return null;
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
   return (
     <Alert
-      type={isTrustedPage ? 'info' : 'warning'}
+      type="warning"
       showIcon
       style={{ marginBottom: compact ? 16 : 24, borderRadius: 8 }}
-      message={isTrustedPage ? '机构 CA 证书' : '当前浏览器尚未信任本节点证书'}
+      message={isHttps ? '当前浏览器尚未信任本节点证书' : '当前页面不是 HTTPS 安全环境'}
       description={
         <Space direction={compact ? 'horizontal' : 'vertical'} size={8} wrap style={{ width: '100%' }}>
           <Typography.Text>

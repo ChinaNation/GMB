@@ -20,30 +20,11 @@ pub(crate) async fn admin_list_citizens(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let scope_province_code = auth_ctx
-        .scope_province_name
-        .as_deref()
-        .and_then(|name| {
-            crate::cid::china::provinces()
-                .iter()
-                .find(|p| p.province_name == name)
-        })
-        .map(|p| p.province_code.to_string());
-    let scope_city_code = auth_ctx
-        .scope_city_name
-        .as_deref()
-        .and_then(|city_name| {
-            auth_ctx
-                .scope_province_name
-                .as_deref()
-                .and_then(|province_name| {
-                    crate::cid::china::provinces()
-                        .iter()
-                        .find(|p| p.province_name == province_name)
-                        .and_then(|p| p.cities.iter().find(|c| c.city_name == city_name))
-                })
-        })
-        .map(|c| c.city_code.to_string());
+    let (scope_province_code, scope_city_code) =
+        match resolve_citizen_query_scope(&auth_ctx, &query) {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
 
     let keyword = query.keyword.unwrap_or_default();
     let page_size = query.page_size.or(query.limit).unwrap_or(50).clamp(1, 100);
@@ -81,6 +62,71 @@ pub(crate) async fn admin_list_citizens(
         data: page,
     })
     .into_response()
+}
+
+fn resolve_citizen_query_scope(
+    auth_ctx: &crate::auth::login::AdminAuthContext,
+    query: &CitizensQuery,
+) -> Result<(Option<String>, Option<String>), axum::response::Response> {
+    let scope = crate::scope::get_visible_scope(auth_ctx);
+    if !scope.can_write {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "当前登录无公民办理权限",
+        ));
+    }
+    let province_name = query
+        .province_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+        .or_else(|| scope.locked_province_name.clone())
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "province_name is required"))?;
+    let city_name = query
+        .city_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+        .or_else(|| scope.locked_city_name.clone())
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "city_name is required"))?;
+    if !scope.includes_province(province_name.as_str()) {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "province_name out of current admin scope",
+        ));
+    }
+    if !scope.includes_city(city_name.as_str()) {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "city_name out of current admin scope",
+        ));
+    }
+    let Some(province) = crate::cid::china::provinces()
+        .iter()
+        .find(|p| p.province_name == province_name)
+    else {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "unknown province_name",
+        ));
+    };
+    let Some(city) = province.cities.iter().find(|c| c.city_name == city_name) else {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "unknown city_name",
+        ));
+    };
+    Ok((
+        Some(province.province_code.to_string()),
+        Some(city.city_code.to_string()),
+    ))
 }
 
 #[derive(Debug, serde::Deserialize)]

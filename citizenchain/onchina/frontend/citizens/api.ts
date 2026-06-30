@@ -12,7 +12,8 @@ export type CitizenRow = {
   id: number;
   cid_number: string;
   passport_no: string;
-  citizen_full_name: string;
+  citizen_family_name: string;
+  citizen_given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: string;
   wallet_address: string;
@@ -50,9 +51,12 @@ export type PageResult<T> = {
 
 /** 直接录入公民请求 DTO,字段与后端 admin_create_citizen 对齐。 */
 export type CreateCitizenInput = {
-  citizen_full_name: string;
+  citizen_family_name: string;
+  citizen_given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: string;
+  residence_province_name: string;
+  residence_city_name: string;
   residence_town_code: string;
   birth_province_code: string;
   birth_city_code: string;
@@ -67,7 +71,8 @@ export type CreateCitizenResult = {
   id: number;
   cid_number: string;
   passport_no: string;
-  citizen_full_name: string;
+  citizen_family_name: string;
+  citizen_given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: string;
   citizen_status: CitizenState;
@@ -97,11 +102,15 @@ export interface LegalRepresentativeCitizenSearchContext {
 export async function listCitizens(
   auth: AdminAuth,
   keyword: string,
+  provinceName: string,
+  cityName: string,
   cursor?: string | null,
   pageSize = 50,
 ): Promise<PageResult<CitizenRow>> {
   const params = new URLSearchParams({
     keyword,
+    province_name: provinceName,
+    city_name: cityName,
     page_size: String(pageSize),
   });
   if (cursor) params.set('cursor', cursor);

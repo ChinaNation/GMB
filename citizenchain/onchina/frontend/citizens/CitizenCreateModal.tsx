@@ -2,10 +2,12 @@
 // 注册局管理员填表后,后端一次性生成身份 CID、护照号和护照有效期。
 
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, DatePicker, Form, Input, Modal, Select, Switch, Typography } from 'antd';
+import { Alert, Button, DatePicker, Form, Input, Modal, Select, Switch } from 'antd';
+import { ScanOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 
 import type { AdminAuth } from '../auth/types';
+import { ScanAccountModal } from '../core/ScanAccountModal';
 import { createCitizen, type CitizenSex, type CreateCitizenInput } from './api';
 import {
   getCidMeta,
@@ -20,6 +22,8 @@ import { notice } from '../utils/notice';
 interface Props {
   auth: AdminAuth | null;
   open: boolean;
+  residenceProvinceName: string | null;
+  residenceCityName: string | null;
   onClose: () => void;
   /** 录入成功后回填新身份 CID 并刷新列表。 */
   onCreated: (cidNumber: string) => Promise<void> | void;
@@ -28,7 +32,8 @@ interface Props {
 const DATE_FORMAT = 'YYYY-MM-DD';
 
 interface FormValues {
-  citizen_full_name: string;
+  citizen_family_name: string;
+  citizen_given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: Dayjs;
   residence_town_code: string;
@@ -55,9 +60,17 @@ function ageAtToday(birth?: Dayjs): number | null {
   return age;
 }
 
-export function CitizenCreateModal({ auth, open, onClose, onCreated }: Props) {
+export function CitizenCreateModal({
+  auth,
+  open,
+  residenceProvinceName,
+  residenceCityName,
+  onClose,
+  onCreated,
+}: Props) {
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [birthProvinces, setBirthProvinces] = useState<CidProvinceItem[]>([]);
   const [birthCities, setBirthCities] = useState<CidCityItem[]>([]);
   const [birthTowns, setBirthTowns] = useState<CidTownItem[]>([]);
@@ -68,28 +81,27 @@ export function CitizenCreateModal({ auth, open, onClose, onCreated }: Props) {
   const birthDate = Form.useWatch('citizen_birth_date', form);
   const age = useMemo(() => ageAtToday(birthDate), [birthDate]);
   const autoValidityYears = age === null ? null : age >= 16 ? 10 : 5;
-  const scopeReady = Boolean(auth?.scope_province_name && auth?.scope_city_name);
+  const scopeReady = Boolean(auth && residenceProvinceName && residenceCityName);
 
   useEffect(() => {
     if (!open || !auth) return;
     form.resetFields();
+    setScanOpen(false);
     setBirthCities([]);
     setBirthTowns([]);
     setResidenceTowns([]);
     getCidMeta(auth)
       .then(async (meta) => {
         setBirthProvinces(meta.all_provinces?.length ? meta.all_provinces : meta.provinces);
-        const scopeProvince = auth.scope_province_name?.trim();
-        const scopeCity = auth.scope_city_name?.trim();
-        if (!scopeProvince || !scopeCity) return;
-        const cities = await listCidCities(auth, scopeProvince);
-        const currentCity = cities.find((city) => city.city_name === scopeCity);
+        if (!residenceProvinceName || !residenceCityName) return;
+        const cities = await listCidCities(auth, residenceProvinceName);
+        const currentCity = cities.find((city) => city.city_name === residenceCityName);
         if (!currentCity) return;
-        const towns = await listCidTowns(auth, scopeProvince, currentCity.city_code);
+        const towns = await listCidTowns(auth, residenceProvinceName, currentCity.city_code);
         setResidenceTowns(towns);
       })
       .catch((err) => notice.error(err, '行政区加载失败'));
-  }, [open, auth, form]);
+  }, [open, auth, residenceProvinceName, residenceCityName, form]);
 
   useEffect(() => {
     if (!auth || !birthProvinceCode) {
@@ -139,9 +151,12 @@ export function CitizenCreateModal({ auth, open, onClose, onCreated }: Props) {
       return;
     }
     const payload: CreateCitizenInput = {
-      citizen_full_name: trimRequired(values.citizen_full_name),
+      citizen_family_name: trimRequired(values.citizen_family_name),
+      citizen_given_name: trimRequired(values.citizen_given_name),
       citizen_sex: values.citizen_sex,
       citizen_birth_date: values.citizen_birth_date.format(DATE_FORMAT),
+      residence_province_name: residenceProvinceName!,
+      residence_city_name: residenceCityName!,
       residence_town_code: values.residence_town_code,
       birth_province_code: values.birth_province_code,
       birth_city_code: values.birth_city_code,
@@ -189,7 +204,7 @@ export function CitizenCreateModal({ auth, open, onClose, onCreated }: Props) {
           type="warning"
           showIcon
           style={{ marginBottom: 16 }}
-          message="当前登录未绑定办理城市，不能新增公民"
+          message="请先选择办理城市后再新增公民"
         />
       )}
       <Form
@@ -200,12 +215,22 @@ export function CitizenCreateModal({ auth, open, onClose, onCreated }: Props) {
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 16 }}>
           <Form.Item
-            label="姓名"
-            name="citizen_full_name"
-            rules={[{ required: true, message: '请输入姓名' }]}
+            label="姓"
+            name="citizen_family_name"
+            rules={[{ required: true, message: '请输入姓' }]}
           >
-            <Input placeholder="姓名" allowClear />
+            <Input placeholder="姓" allowClear />
           </Form.Item>
+          <Form.Item
+            label="名"
+            name="citizen_given_name"
+            rules={[{ required: true, message: '请输入名' }]}
+          >
+            <Input placeholder="名" allowClear />
+          </Form.Item>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 16 }}>
           <Form.Item
             label="性别"
             name="citizen_sex"
@@ -238,12 +263,12 @@ export function CitizenCreateModal({ auth, open, onClose, onCreated }: Props) {
           </Form.Item>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 16 }}>
-          <Form.Item label="办理省市">
-            <Input
-              readOnly
-              value={[auth?.scope_province_name, auth?.scope_city_name].filter(Boolean).join(' / ')}
-            />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', columnGap: 16 }}>
+          <Form.Item label="居住省">
+            <Input readOnly value={residenceProvinceName ?? ''} />
+          </Form.Item>
+          <Form.Item label="居住市">
+            <Input readOnly value={residenceCityName ?? ''} />
           </Form.Item>
           <Form.Item
             label="居住镇"
@@ -309,16 +334,34 @@ export function CitizenCreateModal({ auth, open, onClose, onCreated }: Props) {
           name="wallet_account"
           rules={[{ required: true, message: '请输入或扫码填入投票账户' }]}
         >
-          <Input placeholder="SS58 地址" allowClear />
+          <Input
+            placeholder="请输入公民钱包 SS58 地址"
+            allowClear
+            suffix={
+              <Button
+                htmlType="button"
+                type="text"
+                size="small"
+                icon={<ScanOutlined />}
+                title="扫码识别用户码"
+                onClick={() => setScanOpen(true)}
+              />
+            }
+          />
         </Form.Item>
-
         <Form.Item label="选举资格" name="voting_eligible" valuePropName="checked">
           <Switch checkedChildren="有" unCheckedChildren="无" disabled={age !== null && age < 16} />
         </Form.Item>
-        <Typography.Text type="secondary">
-          {age !== null && age < 16 ? '未满16周岁，选举资格自动为无。' : ''}
-        </Typography.Text>
       </Form>
+
+      <ScanAccountModal
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onResolved={(address) => {
+          form.setFieldsValue({ wallet_account: address });
+          setScanOpen(false);
+        }}
+      />
     </Modal>
   );
 }
