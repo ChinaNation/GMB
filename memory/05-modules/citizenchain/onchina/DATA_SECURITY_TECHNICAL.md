@@ -9,14 +9,17 @@
 - 开发真源：`citizenchain/onchina/src/cid/china/china.sqlite`
 - 生产读取：`ONCHINA_CHINA_DB` 指向随包只读 SQLite
 - 省级常量：`citizenchain/runtime/primitives/cid/code.rs`
-- 市镇地址段：只能通过开发库变更并重新发布安装包
+- 镇下完整地址：`addresses` 单表保存当前有效地址；开发库随安装包发布，链上 `AddressRegistry` 记录单条地址变更事实和当前哈希
 
 加载时必须校验：
 
 - SQLite 省表与 runtime primitives 省码一致。
 - 省名和市名全国唯一。
 - `(province_code, city_code, town_code)` 不重复。
-- 删除的市/镇 code 永久进入 tombstones，禁止复用。
+- 镇下地址使用 `address_name_code(3位) + address_local_no(4位)` 模型。
+- 旧地址结构、墓碑表和变更日志表必须清除。
+- 地址库只保存当前有效数据,不保留旧地址历史。
+- 地址链上变更只同步对应的地址名称或完整地址，不全量上链地址库。
 
 ## 3. CID 号
 

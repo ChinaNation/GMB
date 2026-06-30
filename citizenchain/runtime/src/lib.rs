@@ -411,6 +411,10 @@ mod runtime {
     // 创世机构生命周期模块：创世机构档案、账户索引与不可注销封存。
     #[runtime::pallet_index(34)]
     pub type GenesisManage = genesis_manage;
+
+    // 地址变更上链模块：只保存地址目录版本、单条地址当前哈希和变更事件。
+    #[runtime::pallet_index(35)]
+    pub type AddressRegistry = address_registry;
 }
 
 #[cfg(test)]

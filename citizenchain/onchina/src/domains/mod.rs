@@ -3,6 +3,7 @@
 //! 中文注释:面向不同主体类别的业务 handler 同属「业务域」,聚合于此;各子模块保留原职责,
 //! 机构作用域校验统一走 institution::subjects::http。
 
+pub(crate) mod address;
 pub(crate) mod citizens;
 pub(crate) mod docs;
 pub(crate) mod gov;

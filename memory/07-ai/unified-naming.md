@@ -177,10 +177,11 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 电子护照钱包签名算法 | `wallet_sig_alg` | CID citizens / citizenapp myid | 固定 `sr25519` |
 | 电子护照身份ID | `cid_number` | CID citizens / citizenapp myid | CID 生成并返回给用户展示的身份ID号码 |
 | 电子护照绑定状态 | `bind_status` | CID citizens / citizenapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
-| 镇下地址段 | `address_unit` | CID china / citizenapp | 镇下面的既有地名地址段，不是行政区，不强制为村或路 |
-| 镇下地址段 ID | `address_unit_id` | CID citizens / address_units | 公民居住或出生地址段稳定 ID |
-| 详细地址输入段 | `address_detail` | CID citizens | 注册局录入的可变详细地址文本，与地址段组合为完整详细地址 |
-| 完整详细地址快照 | `address_full_snapshot` | CID citizens | 保存时由地址段名称和详细地址输入段组成的只读快照 |
+| 镇下地址名称编号 | `address_name_code` | OnChina china / AddressRegistry | 同一镇下的地址名称 3 位编号，范围 `001..999` |
+| 镇下地址名称 | `address_name` | OnChina china / AddressRegistry | 镇下村、路、社区、小区等地址名称 |
+| 镇下地址号 | `address_local_no` | OnChina china / AddressRegistry | 同一地址名称下的 4 位地址号，范围 `0001..9999`，可为空 |
+| 详细地址输入段 | `address_detail` | OnChina china / AddressRegistry / citizens | 房间、楼层、附属说明等详细地址文本，可为空 |
+| 完整详细地址快照 | `address_full_snapshot` | CID citizens | 保存时由省、市、镇、地址名称、地址号和详细地址组成的只读快照 |
 
 ## 5.1 机构名称字段硬规则
 

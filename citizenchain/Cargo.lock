@@ -31,6 +31,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "address-registry"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1724,6 +1737,7 @@ dependencies = [
 name = "citizenchain"
 version = "1.0.0"
 dependencies = [
+ "address-registry",
  "admin-primitives",
  "cid-system",
  "citizen-issuance",

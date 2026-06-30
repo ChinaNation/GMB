@@ -27,12 +27,14 @@ import { getPasskeyStatus } from './auth/passkey/passkeyClient';
 import type { CidMetaResult } from './china/api';
 import { loadCachedCidMeta } from './china/metaCache';
 import { LoginView, OrganizationCaNotice } from './auth/LoginView';
+import type { RoleCapabilities } from './auth/AuthContext';
 import { GovView } from './gov/GovView';
 import { PrivateShell } from './private/PrivateShell';
 import { EducationView } from './education/EducationView';
 import { RegistryAdminsView } from './admins/RegistryAdminsView';
-import { isTier1Registry } from './platform/registryTier';
+import { isSubordinateRegistry, isTier1Registry } from './platform/registryTier';
 import { CitizensView } from './citizens/CitizensView';
+import { AddressManageView } from './address/AddressManageView';
 import type { PrivateType } from './subjects/api';
 import { notice } from './utils/notice';
 
@@ -59,6 +61,7 @@ type ActiveView =
   | 'private-welfare'
   | 'private-association'
   | 'education'
+  | 'address'
   | 'city-registry'
   | 'federal-registry';
 
@@ -79,6 +82,22 @@ function privateTypeForView(view: ActiveView): PrivateType | null {
     default:
       return null;
   }
+}
+
+function registryAdminListView(institutionCode: string | null | undefined): ActiveView | null {
+  if (isTier1Registry(institutionCode)) return 'federal-registry';
+  if (isSubordinateRegistry(institutionCode)) return 'city-registry';
+  return null;
+}
+
+function firstBusinessView(capabilities: RoleCapabilities): ActiveView {
+  if (capabilities.canViewCitizens) return 'citizens';
+  if (capabilities.canViewInstitutions) return 'gov';
+  if (capabilities.canViewPrivate) return 'private-sole';
+  if (capabilities.canViewEducation) return 'education';
+  if (capabilities.canViewCityRegistry) return 'city-registry';
+  if (capabilities.canViewFederalRegistry) return 'federal-registry';
+  return 'citizens';
 }
 
 function AppInner() {
@@ -158,7 +177,8 @@ function AppInner() {
     };
   }, [auth?.admin_account]);
 
-  // 中文注释:按机构码决定默认落地 tab——联邦注册局默认进「联邦注册局」,市注册局默认进首页。
+  // 中文注释:按 passkey 状态决定默认落地 tab。未设置 passkey 的注册局管理员先落到
+  // 自己机构的管理员列表;已设置后进入首个业务 tab,FRG/CREG 的完整 tab 由后端能力表控制。
   // 未注册 passkey 的管理员默认改进自己机构的管理员列表(看到自己那行红点去设置密钥)。
   // 依赖机构码 + passkey 状态,会话内状态稳定后不再覆盖用户手动切换。
   useEffect(() => {
@@ -166,18 +186,19 @@ function AppInner() {
     if (passkeyRegistered === null) return;
     if (hasInitializedView) return;
     setHasInitializedView(true);
-    const isFederal = isTier1Registry(auth.institution_code);
-    const adminListTab: ActiveView = isFederal ? 'federal-registry' : 'city-registry';
+    const adminListTab = registryAdminListView(auth.institution_code);
     if (!passkeyRegistered) {
-      setActiveView(adminListTab);
+      setActiveView(adminListTab ?? firstBusinessView(capabilities));
       return;
     }
-    setActiveView(isFederal ? 'federal-registry' : 'citizens');
-  }, [auth?.institution_code, passkeyRegistered, hasInitializedView]);
+    setActiveView(firstBusinessView(capabilities));
+  }, [auth?.institution_code, capabilities, passkeyRegistered, hasInitializedView]);
 
   const routedView: ActiveView = activeView;
   const routedPrivateType = privateTypeForView(routedView);
   const headerAdminIdentity = resolveHeaderAdminIdentity(auth);
+  const passkeyLockedRegistryView =
+    auth && passkeyRegistered === false ? registryAdminListView(auth.institution_code) : null;
 
   const onLogout = () => {
     // best-effort 通知后端销毁 session,不阻塞前端退出
@@ -354,7 +375,8 @@ function AppInner() {
             }}
           >
             {/* 中文注释:Tab 顺序 — 首页 → 六类私权机构 → 教育机构 → 公权机构 → 市注册局 → 联邦注册局。
-                公权机构只区分注册局/非注册局;联邦注册局管理员只见「市注册局 + 联邦注册局」两个 tab。 */}
+                FRG 能力是 CREG 超集;CREG 可只读本省联邦注册局 tab。未设置 passkey 的注册局
+                管理员只显示自己机构的管理员列表入口,用于先完成本机 passkey 绑定。 */}
             {([
               { key: 'citizens' as const, label: '首页', visible: capabilities.canViewCitizens, onClick: () => switchView('citizens') },
               { key: 'private-sole' as const, label: '个体经营', visible: capabilities.canViewPrivate, onClick: () => switchView('private-sole', { loadCidMeta: true }) },
@@ -374,6 +396,11 @@ function AppInner() {
                 onClick: () => switchView('gov', { loadCidMeta: true })
               },
               {
+                key: 'address' as const, label: '地址库',
+                visible: capabilities.canViewInstitutions,
+                onClick: () => switchView('address')
+              },
+              {
                 key: 'city-registry' as const, label: '市注册局',
                 visible: capabilities.canViewCityRegistry,
                 onClick: () => switchView('city-registry')
@@ -384,7 +411,7 @@ function AppInner() {
                 onClick: () => switchView('federal-registry')
               }
             ] as const)
-              .filter((tab) => tab.visible)
+              .filter((tab) => tab.visible && (!passkeyLockedRegistryView || tab.key === passkeyLockedRegistryView))
               .map((tab) => (
                 <button
                   key={tab.key}
@@ -418,6 +445,8 @@ function AppInner() {
             />
           ) : routedView === 'education' && capabilities.canViewEducation && auth ? (
             <EducationView key={`education-${viewResetToken}`} auth={auth} cidMeta={cidMeta} />
+          ) : routedView === 'address' && capabilities.canViewInstitutions && auth ? (
+            <AddressManageView key={`address-${viewResetToken}`} auth={auth} />
           ) : routedView === 'city-registry' && capabilities.canViewCityRegistry ? (
             <RegistryAdminsView key={`city-registry-${viewResetToken}`} mode="city-registry" />
           ) : routedView === 'federal-registry' && capabilities.canViewFederalRegistry ? (

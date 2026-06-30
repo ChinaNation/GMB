@@ -2,8 +2,8 @@
 
 /// 镇行政区划。
 ///
-/// 中文注释:CID 公权机构名录需要覆盖到镇目录。镇下面是地址段,
-/// 只保存在 `china.sqlite` 的 `address_units` 中,不作为公权机构目录范围。
+/// 中文注释:CID 公权机构名录只覆盖到镇目录。镇下面的完整地址保存在
+/// `china.sqlite.addresses` 中,不参与公权机构目录和 CID 行政区编码。
 #[derive(Debug)]
 pub struct TownDivision {
     pub town_name: &'static str,

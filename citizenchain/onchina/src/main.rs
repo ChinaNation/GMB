@@ -2676,6 +2676,18 @@ fn main() {
                 "/api/v1/admin/cid/china/cities",
                 get(cid::china::admin::admin_china_cities),
             )
+            .route(
+                "/api/v1/admin/address/names",
+                get(domains::address::handler::list_address_names),
+            )
+            .route(
+                "/api/v1/admin/address/items",
+                get(domains::address::handler::list_addresses),
+            )
+            .route(
+                "/api/v1/admin/address/chain-call",
+                post(domains::address::handler::prepare_chain_call),
+            )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
                 auth::login::require_admin_session_middleware,

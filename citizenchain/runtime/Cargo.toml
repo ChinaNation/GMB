@@ -67,6 +67,7 @@ citizen-issuance = { path = "issuance/citizen-issuance", default-features = fals
 onchain-issuance = { path = "issuance/onchain-issuance", default-features = false }
 cid-system = { path = "otherpallet/cid-system", default-features = false }
 pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
+address-registry = { path = "otherpallet/address-registry", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
 entity-primitives = { path = "entity/entity-primitives", default-features = false }
 genesis-manage = { path = "entity/genesis-manage", default-features = false }
@@ -117,6 +118,7 @@ std = [
 	"onchain-issuance/std",
 	"cid-system/std",
 	"pow-difficulty/std",
+	"address-registry/std",
 	"onchain-transaction/std",
 	"entity-primitives/std",
 	"genesis-manage/std",
@@ -180,6 +182,7 @@ runtime-benchmarks = [
 	"onchain-issuance/runtime-benchmarks",
 	"cid-system/runtime-benchmarks",
 	"pow-difficulty/runtime-benchmarks",
+	"address-registry/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
 	"genesis-manage/runtime-benchmarks",
 	"public-manage/runtime-benchmarks",
@@ -219,6 +222,7 @@ try-runtime = [
 	"onchain-issuance/try-runtime",
 	"cid-system/try-runtime",
 	"pow-difficulty/try-runtime",
+	"address-registry/try-runtime",
 	"onchain-transaction/try-runtime",
 	"genesis-manage/try-runtime",
 	"public-manage/try-runtime",

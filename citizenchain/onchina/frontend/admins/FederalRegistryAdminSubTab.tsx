@@ -1,9 +1,10 @@
 // 中文注释:注册局联邦注册局管理员列表。每节点单省部署,展示本省 5 人组(链上
-// FederalRegistryProvinceGroups 全走链读);更换操作只能在当前登录管理员所属省内执行。
+// FederalRegistryProvinceGroups 全走链读);FRG 可在本省组内操作,CREG 只能只读查看本省组。
 
 import { useState } from 'react';
 import { Badge, Button, Card, Form, Input, Modal, Space, Table, Typography } from 'antd';
 import { KeyOutlined, ScanOutlined } from '@ant-design/icons';
+import type { ColumnsType } from 'antd/es/table';
 import { useAuth } from '../hooks/useAuth';
 import { normalizeScopeProvinceName } from '../hooks/useScope';
 import { isTier1Registry } from '../platform/registryTier';
@@ -54,8 +55,9 @@ export function FederalRegistryAdminSubTab({
 
   const currentProvinceName = normalizeScopeProvinceName(auth?.scope_province_name) || selectedFederalRegistry.province_name;
   const titleProvinceName = currentProvinceName || selectedFederalRegistry.province_name;
+  const canOperateFederalRegistry = isTier1Registry(auth?.institution_code);
   const canManageSameProvince = (row: FederalRegistryAdminRow) =>
-    isTier1Registry(auth?.institution_code) && row.province_name === currentProvinceName;
+    canOperateFederalRegistry && row.province_name === currentProvinceName;
 
   const openReplaceModal = (row: FederalRegistryAdminRow) => {
     if (!canManageSameProvince(row)) {
@@ -156,6 +158,48 @@ export function FederalRegistryAdminSubTab({
     });
   };
 
+  const columns: ColumnsType<FederalRegistryAdminRow> = [
+    { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => index + 1 },
+    { title: '省份', dataIndex: 'province_name', align: 'center', width: 120 },
+    { title: '姓名', align: 'center', width: 160, render: (_v, row) => federalAdminDisplayName(row) },
+    { title: '账户', dataIndex: 'admin_account', align: 'center', render: (value: string) => tryEncodeSs58(value) },
+  ];
+
+  if (canOperateFederalRegistry) {
+    columns.push({
+      title: '操作',
+      width: 320,
+      align: 'center',
+      render: (_value, row) => {
+        const canManage = canManageSameProvince(row);
+        const isSelf = sameHexAccount(row.admin_account, auth?.admin_account);
+        return (
+          <Space>
+            <Button size="small" disabled={!canManage} onClick={() => editFederalRegistry(row)}>
+              编辑
+            </Button>
+            <Button size="small" disabled={!canManage} onClick={() => openReplaceModal(row)}>
+              更换
+            </Button>
+            {/* passkey 登录密钥 self-only:只能为当前登录管理员自己注册本机认证器。 */}
+            {isSelf ? (
+              <Badge dot={passkeyRegistered === false} size="small">
+                <Button
+                  size="small"
+                  icon={<KeyOutlined />}
+                  loading={passkeyBusy}
+                  onClick={doRegisterPasskey}
+                >
+                  {passkeyRegistered ? '更新passkey密钥' : '设置passkey密钥'}
+                </Button>
+              </Badge>
+            ) : null}
+          </Space>
+        );
+      },
+    });
+  }
+
   return (
     <>
       <Card
@@ -178,44 +222,7 @@ export function FederalRegistryAdminSubTab({
         loading={federalRegistryAdminsLoading}
         dataSource={federalRegistryAdmins}
         pagination={false}
-        columns={[
-          { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => index + 1 },
-          { title: '省份', dataIndex: 'province_name', align: 'center', width: 120 },
-          { title: '姓名', align: 'center', width: 160, render: (_v, row) => federalAdminDisplayName(row) },
-          { title: '账户', dataIndex: 'admin_account', align: 'center', render: (value: string) => tryEncodeSs58(value) },
-          {
-            title: '操作',
-            width: 320,
-            align: 'center',
-            render: (_value, row) => {
-              const canManage = canManageSameProvince(row);
-              const isSelf = sameHexAccount(row.admin_account, auth?.admin_account);
-              return (
-                <Space>
-                  <Button size="small" disabled={!canManage} onClick={() => editFederalRegistry(row)}>
-                    编辑
-                  </Button>
-                  <Button size="small" disabled={!canManage} onClick={() => openReplaceModal(row)}>
-                    更换
-                  </Button>
-                  {/* passkey 登录密钥 self-only:只能为当前登录管理员自己注册本机认证器。 */}
-                  {isSelf ? (
-                    <Badge dot={passkeyRegistered === false} size="small">
-                      <Button
-                        size="small"
-                        icon={<KeyOutlined />}
-                        loading={passkeyBusy}
-                        onClick={doRegisterPasskey}
-                      >
-                        {passkeyRegistered ? '更新passkey密钥' : '设置passkey密钥'}
-                      </Button>
-                    </Badge>
-                  ) : null}
-                </Space>
-              );
-            },
-          },
-        ]}
+        columns={columns}
       />
       </Card>
 

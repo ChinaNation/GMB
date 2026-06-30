@@ -51,6 +51,17 @@ fn open_china_db() -> Connection {
         .expect("open read-only china sqlite database")
 }
 
+/// 使用只读 SQLite 连接执行查询。
+///
+/// 中文注释:业务模块需要读取 `china.sqlite` 时只能通过本闭包入口,不得复制数据库路径推导逻辑,
+/// 也不得用可写模式打开随包行政区数据库。
+pub(crate) fn with_china_connection<T>(
+    f: impl FnOnce(&Connection) -> Result<T, String>,
+) -> Result<T, String> {
+    let conn = open_china_db();
+    f(&conn)
+}
+
 /// 返回当前行政区划 SQLite 文件哈希。
 ///
 /// 中文注释:该哈希只用于部署期确定性目录完整性校验。运行时只读打开数据库,

@@ -57,6 +57,9 @@
 - 已修复 macOS 证书兼容性：旧 rcgen 超长期默认有效期证书会因缺少新策略标记自动重建；CA 有效期固定到 2036-01-01，服务证书每次启动重签且有效期 397 天以内。
 - 已将登录签名响应、挑战、链上管理员鉴权等错误映射为 `ONCHINA_LOGIN_*` 错误码，并在前端 notice 中补齐中文提示。
 - 已完成 OnChina 平台环境变量与错误码命名清理：平台本地配置统一用 `ONCHINA_*`，链连接与链上凭证配置统一用 `ONCHAIN_*` / `ONCHAIN_CREDENTIAL_*`，登录、鉴权、绑定、管理员和通用 API 错误码统一用 `ONCHINA_*`。
+- 已修正 OnChina 控制台能力映射：FRG 按 runtime 目标状态作为 CREG 能力超集，CREG 保留本市业务能力并新增“联邦注册局”tab 的本省只读查看能力。
+- 已修正前端注册局 passkey 入口：未设置 passkey 的 FRG/CREG 管理员只显示自己机构管理员列表入口；设置完成后按后端能力表显示完整业务 tab。
+- 已修正联邦注册局管理员列表：FRG 进入时显示本省编辑/更换/passkey 操作，CREG 进入时只显示本省联邦注册局管理员只读表格，不显示操作列。
 - 已更新 `run.sh` / `clean-run.sh`，本地开发脚本准备 HTTPS 环境但仍要求在设置页手动启动平台。
 - 已同步更新架构文档、节点技术文档、ADR-030 和部署形态文档。
 
@@ -67,11 +70,14 @@
 - `npm --prefix citizenchain/onchina/frontend run build`：命名清理后再次通过，并刷新 `dist/assets/index-*.js`，旧错误码构建产物残留清零。
 - `npm --prefix citizenchain/onchina/frontend run build`：机构 CA 下载提示和 passkey 安全上下文修复后通过，并刷新 `dist/assets/index-*.js`。
 - `npm --prefix citizenchain/onchina/frontend run build`：登录后后台顶部证书提示修复后通过，并刷新 `dist/assets/index-*.js`。
+- `npm --prefix citizenchain/onchina/frontend run build`：FRG/CREG 能力映射、passkey 入口和 CREG 联邦注册局只读 tab 修复后通过，并刷新 `dist/assets/index-*.js`。
 - `npm --prefix citizenchain/node/frontend run build`：命名清理后再次通过。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina -p node`：命名清理后通过。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina`：机构 CA TLS 和公开证书接口修复后通过。
 - `cargo build --manifest-path citizenchain/Cargo.toml -p onchina`：机构 CA TLS 和公开证书接口修复后通过。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina`：macOS 证书有效期修复后通过。
+- `cargo check --manifest-path citizenchain/Cargo.toml -p onchina`：FRG/CREG 控制台能力映射修复后通过。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p onchina platform::capability -- --nocapture`：通过，2 个能力映射单测通过，锁定 FRG 为 CREG 超集、CREG 可只读联邦注册局 tab 且无注册局维护写权。
 - `cargo build --manifest-path citizenchain/Cargo.toml -p onchina`：macOS 证书有效期修复后通过。
 - 临时端口运行态验收：以 `ONCHINA_BIND_ADDR=127.0.0.1:8979`、独立 `/tmp/onchina-cert-policy-*` TLS/PG 目录启动新构建的 `target/debug/onchina serve`；生成的 CA 为 `2026-01-01` 到 `2036-01-01`，服务证书为启动日前一天到 397 天后，策略标记为 `onchina-ca-v2-ca2036-server397d`。
 - macOS 证书兼容验收：`/api/v1/platform/ca-certificate/info` 返回的 SHA-256 与下载 CA 证书 DER 指纹一致；`openssl verify -CAfile onchina-org-root-ca.crt onchina-server.crt` 返回 `OK`；验收后已停止临时服务并清理 `/tmp/onchina-cert-policy-*`。
@@ -83,6 +89,7 @@
 - `node --check citizenapp/tools/generate_admin_division_bundle.mjs && node --check citizenapp/tools/generate_public_institution_bundle.mjs`：通过。
 - 临时端口运行态验收：以新 `ONCHINA_*` / `ONCHAIN_*` 环境变量启动 `citizenchain/target/debug/onchina serve`，内嵌 PG 初始化成功，`curl -k https://127.0.0.1:8974/api/v1/health` 返回 `status=UP`；验收后已停止服务并删除 `/tmp/onchina-codex-env-clean-*`。
 - 目标残留扫描：旧链 WS 环境变量、旧平台环境变量、旧登录/鉴权/绑定/API 错误码、旧节点身份误配置提示均为 0 命中；`citizenchain/runtime/` 无本次 diff。
+- 权限残留扫描：旧 FRG/CREG 控制台降权描述在当前代码和记忆文档中为 0 命中。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p node`：通过。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina`：通过。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p onchina login -- --nocapture`：通过，当前筛选下 0 个测试执行、72 个测试被过滤，编译与测试入口通过。

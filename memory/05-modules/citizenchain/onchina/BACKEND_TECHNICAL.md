@@ -19,6 +19,7 @@ citizenchain/onchina/src/
 ├── core/                      # HTTP、安全、运行期工具、chain_* 和 QR 协议辅助
 │   └── qr/                    # QR_V1 协议辅助和统一 sign_request 构造
 ├── crypto/                    # sr25519、公钥规范化和哈希辅助
+├── domains/address/           # 镇下地址库查询和 AddressRegistry call data 构造
 ├── docs/                      # 机构资料库入口
 ├── gov/                       # 公权机构确定性目录和公权机构接口
 ├── indexer/                   # 链事件解析与索引 worker
@@ -56,6 +57,7 @@ citizenchain/onchina/src/
 - 机构注册信息凭证、账户列表 DTO 和 handler：`subjects/chain_*.rs`
 - 公民投票凭证：`citizens/chain_*.rs`
 - 联合投票人口快照凭证：`citizens/chain_*.rs`
+- 地址变更调用：`domains/address/chain_call.rs`
 - 通用 SCALE、genesis hash、RPC URL 和交易提交辅助：`core/chain_*.rs`
 
 业务模块不得新增全局链目录，不得在 handler 内手写 pallet/call 字节或二维码动作码。动作码、payload、签名/验签规则以 `memory/07-ai/unified-protocols.md` 为唯一登记入口。
@@ -85,7 +87,15 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 联邦注册局机构 `admins` 不允许本地新增或删除，只允许在同省范围内替换。市注册局机构 `admins` 每省每市最多 30 人，统计必须同时带省和市，不能只按市名统计。
 
-## 9. 验收
+## 9. 控制台能力映射
+
+控制台 tab 能力由 `src/platform/capability.rs` 单源下发给前端。runtime 已经实现 FRG 省级组登记权高于 CREG 本市登记权，OnChina 能力表必须只镜像这个目标状态，不能另行降权：
+
+- `FRG` 是 Tier1 创世注册局，能力必须是 `CREG` 的超集：可进入公民、私权、教育、公权机构、市注册局和联邦注册局，并可在本省范围内登记机构、写业务、维护市注册局管理员、维护本省联邦注册局管理员。
+- `CREG` 是 Tier2 下级注册局，保留本市公民/机构/业务写入能力；同时必须能进入“联邦注册局”tab，只读查看本省联邦注册局管理员列表，不得发起联邦注册局管理员编辑或更换。
+- 前端 tab 展示只使用后端下发的 `capabilities`；后端 handler、scope 和链上 active admin 校验仍是安全边界。
+
+## 10. 验收
 
 ```text
 rg "mod chain;|crate::chain|chain::" citizenchain/onchina/src -g '*.rs'

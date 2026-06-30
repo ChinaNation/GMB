@@ -5,8 +5,8 @@
 //! 不构成安全边界(后端始终对越权独立拒绝)。
 //!
 //! 机构类分发(`primitives::cid::code` 单源):
-//! - Tier1 创世注册局(FRG):管「联邦 + 市注册局」两 tab,可 CRUD 市注册局管理员。
-//! - Tier2 下级注册局(CREG,公权子集):录入公民/机构 + 看本市注册局。
+//! - Tier1 创世注册局(FRG):拥有 Tier2 全部业务能力,并额外管理联邦/市注册局管理员。
+//! - Tier2 下级注册局(CREG,公权子集):录入公民/机构 + 看本市注册局 + 只读本省联邦注册局。
 //! - 其它创世机构(NRC/PRC/PRB/NJD):自治,不归本控制台 → 空能力。
 //! - 其余公权/私权/非法人法人:本期只开只读「本机构管理员」位(`can_view_own_admins`);
 //!   CRUD / 录入等具体功能待各机构功能落地时再开(机制就绪、不越权)。
@@ -50,27 +50,38 @@ const EMPTY: CapabilitySet = CapabilitySet {
     can_view_federal_registry: false,
 };
 
-// Tier1 创世注册局(FRG):管「联邦注册局 + 市注册局」两个 tab,可 CRUD 市注册局管理员;不录入公民/机构。
+// Tier1 创世注册局(FRG):是 CREG 的省级上游,能力必须是 Tier2 业务能力的超集。
+// 中文注释:链上 runtime 已限制 FRG 只能按本省省级组登记本省 CID;这里仅声明控制台可见能力。
 const TIER1_REGISTRY: CapabilitySet = CapabilitySet {
+    can_view_citizens: true,
+    can_view_institutions: true,
+    can_view_private: true,
+    can_view_education: true,
     can_view_federal_registry_admins: true,
     can_view_city_registry_admins: true,
     can_crud_city_registry_admins: true,
+    can_manage_institutions: true,
+    can_register_institutions: true,
+    can_business_write: true,
     can_view_city_registry: true,
     can_view_federal_registry: true,
     ..EMPTY
 };
 
-// Tier2 下级注册局(CREG):录入公民/私权/教育/公权机构 + 看本市市注册局;不可见联邦 tab。
+// Tier2 下级注册局(CREG):录入公民/私权/教育/公权机构 + 看本市市注册局;
+// 同时只读本省联邦注册局管理员列表,不得发起联邦注册局管理员操作。
 const SUBORDINATE_REGISTRY: CapabilitySet = CapabilitySet {
     can_view_citizens: true,
     can_view_institutions: true,
     can_view_private: true,
     can_view_education: true,
+    can_view_federal_registry_admins: true,
     can_view_city_registry_admins: true,
     can_manage_institutions: true,
     can_register_institutions: true,
     can_business_write: true,
     can_view_city_registry: true,
+    can_view_federal_registry: true,
     ..EMPTY
 };
 
@@ -86,7 +97,7 @@ pub(crate) fn capabilities_for(institution_code: &str) -> CapabilitySet {
         institution_code_from_str, is_fixed_governance_code, is_private_legal_code,
         is_public_legal_code, is_unincorporated_code,
     };
-    // Tier1/Tier2 注册局保留专属能力集(行为零变)。
+    // Tier1/Tier2 注册局保留专属能力集,具体能力必须与 runtime 登记权层级同步。
     if crate::core::chain_runtime::is_tier1_registry(institution_code) {
         return TIER1_REGISTRY;
     }
@@ -106,4 +117,39 @@ pub(crate) fn capabilities_for(institution_code: &str) -> CapabilitySet {
         return OWN_ADMINS_READONLY;
     }
     EMPTY
+}
+
+#[cfg(test)]
+mod tests {
+    use super::capabilities_for;
+
+    #[test]
+    fn tier1_registry_keeps_subordinate_registry_business_superset() {
+        let federal = capabilities_for("FRG");
+        let city = capabilities_for("CREG");
+
+        // 中文注释:FRG 是 CREG 的省级上游,业务 tab 能力必须覆盖 CREG。
+        assert!(federal.can_view_citizens && city.can_view_citizens);
+        assert!(federal.can_view_institutions && city.can_view_institutions);
+        assert!(federal.can_view_private && city.can_view_private);
+        assert!(federal.can_view_education && city.can_view_education);
+        assert!(federal.can_manage_institutions && city.can_manage_institutions);
+        assert!(federal.can_register_institutions && city.can_register_institutions);
+        assert!(federal.can_business_write && city.can_business_write);
+        assert!(federal.can_view_city_registry && city.can_view_city_registry);
+    }
+
+    #[test]
+    fn subordinate_registry_can_read_federal_registry_without_registry_crud_flags() {
+        let federal = capabilities_for("FRG");
+        let city = capabilities_for("CREG");
+
+        // 中文注释:CREG 必须能进入联邦注册局 tab 只读本省管理员;注册局维护类写权只留给 FRG。
+        assert!(city.can_view_federal_registry);
+        assert!(city.can_view_federal_registry_admins);
+        assert!(!city.can_crud_city_registry_admins);
+        assert!(federal.can_view_federal_registry);
+        assert!(federal.can_view_federal_registry_admins);
+        assert!(federal.can_crud_city_registry_admins);
+    }
 }

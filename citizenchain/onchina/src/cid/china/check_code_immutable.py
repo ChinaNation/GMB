@@ -5,10 +5,10 @@
 
 断言:
   1. provinces/cities/towns 表无重复 code —— code 是稳定外键,重复=反查歧义。
-  2. 省名、市名全国唯一;省 code 固定,不建省级 tombstone。
-  3. 没有 live 市/镇占用 tombstones 里已退役的 code —— 退役 code 永不复用。
-  4. 删除市/镇只进入 tombstones,后续不得重新分配同一 code。
-  5. 镇下地址段不属于行政区,但同一镇下名称与 address_unit_id 必须唯一。
+  2. 省名、市名全国唯一;省/市/镇不维护墓碑表,只保存当前有效数据。
+  3. 镇下完整地址统一使用 addresses 单表,旧 address_units/source_code/raw_name 结构必须清除。
+  4. addresses 的 address_name_code 为三位数字,同镇下 code 与 address_name 必须一一对应。
+  5. address_local_no 可为空;非空时必须为四位数字。
 
 退出码非 0 即失败,可挂 pre-commit / CI。
 用法: python3 check_code_immutable.py [--db <path>]
@@ -64,73 +64,76 @@ def main() -> int:
     if dup_city_names:
         fail.append(f"cities 全国重复 name {len(dup_city_names)} 组,例:{dup_city_names[:5]}")
 
-    has_province_tomb = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='province_tombstones'"
-    ).fetchone()
-    if has_province_tomb:
-        fail.append("province_tombstones 表不应存在:省级 code 固定,不维护省级 tombstone")
+    old_tables = {
+        row[0]
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
+    forbidden_tables = {
+        "address_units",
+        "province_tombstones",
+        "city_tombstones",
+        "town_tombstones",
+        "admin_division_change_log",
+        "admin_division_versions",
+        "".join(("vill", "ages")),
+    }
+    stale_tables = sorted(old_tables.intersection(forbidden_tables))
+    if stale_tables:
+        fail.append(f"旧地址/墓碑/变更表必须清除:{stale_tables}")
 
-    has_city_tomb = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='city_tombstones'"
-    ).fetchone()
-    if has_city_tomb:
-        reused = conn.execute(
-            "SELECT c.province_code, c.code, c.name FROM cities c JOIN city_tombstones tb "
-            "ON c.province_code=tb.province_code AND c.code=tb.code"
-        ).fetchall()
-        if reused:
-            fail.append(f"复用了已退役市 code {len(reused)} 条,例:{reused[:5]}")
-
-    has_tomb = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='town_tombstones'"
-    ).fetchone()
-    if has_tomb:
-        reused = conn.execute(
-            "SELECT t.province_code, t.city_code, t.code, t.name "
-            "FROM towns t JOIN town_tombstones tb "
-            "ON t.province_code=tb.province_code AND t.city_code=tb.city_code AND t.code=tb.code"
-        ).fetchall()
-        if reused:
-            fail.append(f"复用了已退役 code {len(reused)} 条,例:{reused[:5]}")
-
-    forbidden_old_fourth_table = "".join(("vill", "ages"))
-    old_fourth_tables = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    ).fetchall()
-    if any(name == forbidden_old_fourth_table for (name,) in old_fourth_tables):
-        fail.append("旧第四层表不应存在:镇下第四层已统一为 address_units 地址段")
-
-    has_address_units = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='address_units'"
-    ).fetchone()
-    if not has_address_units:
-        fail.append("address_units 表缺失:镇下地址段数据不可用")
+    has_addresses = "addresses" in old_tables
+    if not has_addresses:
+        fail.append("addresses 表缺失:镇下完整地址数据不可用")
     else:
-        dup_unit_ids = conn.execute(
-            "SELECT address_unit_id, COUNT(*) c FROM address_units "
-            "GROUP BY address_unit_id HAVING c > 1"
-        ).fetchall()
-        if dup_unit_ids:
-            fail.append(
-                f"address_units 重复 address_unit_id {len(dup_unit_ids)} 组,例:{dup_unit_ids[:5]}"
-            )
+        address_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(addresses)").fetchall()
+        }
+        stale_columns = sorted(
+            address_columns.intersection({"address_unit_id", "raw_name", "source_code"})
+        )
+        if stale_columns:
+            fail.append(f"addresses 仍含旧字段:{stale_columns}")
 
-        dup_unit_names = conn.execute(
-            "SELECT province_code, city_code, town_code, name, COUNT(*) c "
-            "FROM address_units GROUP BY province_code, city_code, town_code, name HAVING c > 1"
+        bad_name_codes = conn.execute(
+            "SELECT province_code, city_code, town_code, address_name_code "
+            "FROM addresses "
+            "WHERE length(address_name_code) <> 3 "
+            "OR address_name_code NOT GLOB '[0-9][0-9][0-9]' "
+            "OR address_name_code = '000' "
+            "LIMIT 5"
         ).fetchall()
-        if dup_unit_names:
-            fail.append(
-                f"同一镇下地址段重名 {len(dup_unit_names)} 组,例:{dup_unit_names[:5]}"
-            )
+        if bad_name_codes:
+            fail.append(f"address_name_code 必须为 001-999,例:{bad_name_codes[:5]}")
 
-        org_tail_rows = conn.execute(
-            "SELECT province_code, city_code, town_code, name FROM address_units "
-            "WHERE name LIKE '%居委会%' OR name LIKE '%居民委员会%' OR name LIKE '%村委会%' "
-            "OR name LIKE '%村民委员会%' OR name LIKE '%委员会%' LIMIT 5"
+        bad_local_numbers = conn.execute(
+            "SELECT province_code, city_code, town_code, address_name_code, address_local_no "
+            "FROM addresses "
+            "WHERE address_local_no <> '' "
+            "AND (length(address_local_no) <> 4 "
+            "OR address_local_no NOT GLOB '[0-9][0-9][0-9][0-9]' "
+            "OR address_local_no = '0000') "
+            "LIMIT 5"
         ).fetchall()
-        if org_tail_rows:
-            fail.append(f"地址段仍含基层组织尾词,例:{org_tail_rows[:5]}")
+        if bad_local_numbers:
+            fail.append(f"address_local_no 非空时必须为 0001-9999,例:{bad_local_numbers[:5]}")
+
+        code_to_many_names = conn.execute(
+            "SELECT province_code, city_code, town_code, address_name_code, COUNT(DISTINCT address_name) c "
+            "FROM addresses "
+            "GROUP BY province_code, city_code, town_code, address_name_code "
+            "HAVING c > 1 LIMIT 5"
+        ).fetchall()
+        if code_to_many_names:
+            fail.append(f"同镇 address_name_code 对应多个 address_name,例:{code_to_many_names[:5]}")
+
+        name_to_many_codes = conn.execute(
+            "SELECT province_code, city_code, town_code, address_name, COUNT(DISTINCT address_name_code) c "
+            "FROM addresses "
+            "GROUP BY province_code, city_code, town_code, address_name "
+            "HAVING c > 1 LIMIT 5"
+        ).fetchall()
+        if name_to_many_codes:
+            fail.append(f"同镇 address_name 对应多个 address_name_code,例:{name_to_many_codes[:5]}")
 
     conn.close()
 
@@ -139,7 +142,7 @@ def main() -> int:
         for f in fail:
             print("  -", f, file=sys.stderr)
         return 1
-    print("行政区 code 不可变校验 PASS(省/市唯一,市/镇 code 无重复,地址段唯一且无组织尾词残留)。")
+    print("行政区 code 与 3+4 完整地址校验 PASS。")
     return 0
 
 

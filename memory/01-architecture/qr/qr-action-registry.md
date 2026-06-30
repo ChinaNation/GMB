@@ -59,6 +59,11 @@ a = (pallet_index << 8) | call_index
 | `0x2101` | `PrivateManage.propose_close_private_institution` | `propose_close_private_institution` | `account`, `beneficiary` | CitizenApp |
 | `0x2104` | `PrivateManage.cleanup_rejected_private_proposal` | `cleanup_rejected_private_proposal` | `proposal_id` | CitizenApp |
 | `0x2105` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
+| `0x2300` | `AddressRegistry.set_catalog_version` | `set_address_catalog_version` | `registrar_account`, `catalog_version`, `catalog_hash` | onchina |
+| `0x2301` | `AddressRegistry.set_address_name` | `set_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_name` | onchina |
+| `0x2302` | `AddressRegistry.remove_address_name` | `remove_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code` | onchina |
+| `0x2303` | `AddressRegistry.set_address` | `set_address` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_local_no`, `address_detail` | onchina |
+| `0x2304` | `AddressRegistry.remove_address` | `remove_address` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_local_no`, `address_detail` | onchina |
 | `0x1300` | `MultisigTransfer.propose_transfer` | `propose_transfer` | `institution`, `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
 | `0x1d00` | `PublicAdmins.propose_admin_set_change` | `propose_public_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
 | `0x1e00` | `PrivateAdmins.propose_admin_set_change` | `propose_private_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |

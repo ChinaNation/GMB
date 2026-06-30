@@ -12,6 +12,7 @@ citizenchain/onchina/frontend/
 ├── auth/                      # 登录、AuthContext、登录态类型和 api.ts
 ├── admins/                    # 联邦/市注册局机构 admins 页面和扫码签名前端流程
 ├── accounts/                  # 机构账户组件
+├── address/                   # 地址库查询和地址链写 call data 生成页面
 ├── china/                     # 行政区划元数据 API 与本地缓存
 ├── citizens/                  # 公民电子护照管理界面
 ├── core/                      # 通用组件、共享 UI、扫码签名面板和 QR 工具
@@ -76,7 +77,16 @@ passkey 客户端在调用 `navigator.credentials.create/get` 前必须检查 `w
 
 CitizenApp 不承担管理员登录 QR 职责。前端文案不得引导用户使用 CitizenApp 处理管理员登录签名请求。
 
-## 8. 验收
+## 8. 注册局 Tab 权限
+
+前端只按后端会话下发的 `capabilities` 渲染 tab，不在组件内重新推导业务权限。注册局目标状态如下：
+
+- `FRG` 登录且已设置 passkey 后显示完整业务 tab，包含首页、私权机构、教育机构、公权机构、市注册局和联邦注册局。
+- `CREG` 登录且已设置 passkey 后也显示联邦注册局 tab，但该 tab 只能展示本省联邦注册局管理员列表，不能显示编辑、更换等操作入口。
+- 注册局管理员未设置 passkey 时，只显示自己机构的管理员列表入口，用于先完成本机 passkey 设置；设置完成后再显示完整业务 tab。
+- 联邦注册局管理员列表的操作列只允许 `FRG` 看到；`CREG` 进入同一 tab 时必须是只读表格。
+
+## 9. 验收
 
 ```text
 npm --prefix citizenchain/onchina/frontend run build

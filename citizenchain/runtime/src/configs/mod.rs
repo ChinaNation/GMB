@@ -404,6 +404,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                 private_manage::pallet::Call::register_cid_private_institution { .. },
             )
             | RuntimeCall::PrivateManage(_) => FeeChargeKind::VoteFlat,
+            RuntimeCall::AddressRegistry(_) => FeeChargeKind::VoteFlat,
             // 免费调用交易：系统内部 / 自动化 / 货币政策类
             RuntimeCall::System(_) => FeeChargeKind::Free,
             RuntimeCall::Timestamp(_) => FeeChargeKind::Free,
@@ -787,7 +788,8 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
             return false;
         }
 
-        let Some((target_province_code, target_city_code)) = cid_scope_codes(target_cid_number) else {
+        let Some((target_province_code, target_city_code)) = cid_scope_codes(target_cid_number)
+        else {
             return false;
         };
         let Ok(scope_province_name) = core::str::from_utf8(scope_province_name) else {
@@ -804,11 +806,9 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
 
         const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
         if issuer_code == admin_primitives::FRG {
-            let Some(group_province_code) =
-                genesis_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(
-                    issuer_main_account,
-                )
-            else {
+            let Some(group_province_code) = genesis_admins::FederalRegistryProvinceGroupAccounts::<
+                Runtime,
+            >::get(issuer_main_account) else {
                 return false;
             };
             // 中文注释:FRG 省级组只能登记本省 CID;FRG 主账户聚合 215 人不携带省码,不得用于登记。
@@ -824,11 +824,76 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
                 return false;
             };
             // 中文注释:CREG 只能登记本市非 CREG 机构;市归属由 CID R5 直接校验。
-            return issuer_province_code == target_province_code && issuer_city_code == target_city_code;
+            return issuer_province_code == target_province_code
+                && issuer_city_code == target_city_code;
         }
 
         false
     }
+}
+
+pub struct RuntimeAddressAuthority;
+
+impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAuthority {
+    fn can_update_catalog(who: &AccountId, registrar_account: &AccountId) -> bool {
+        if genesis_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
+            .is_none()
+        {
+            return false;
+        }
+        RuntimeAdminAccountQuery::is_active_admin_of_account(registrar_account, who)
+    }
+
+    fn can_update_address(
+        who: &AccountId,
+        registrar_account: &AccountId,
+        province_code: &[u8],
+        city_code: &[u8],
+    ) -> bool {
+        if province_code.is_empty() || city_code.is_empty() {
+            return false;
+        }
+        if !RuntimeAdminAccountQuery::is_active_admin_of_account(registrar_account, who) {
+            return false;
+        }
+
+        if let Some(group_province_code) =
+            genesis_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
+        {
+            // 中文注释:FRG 省级组管理员可以更新本省任意地址,不能跨省改地址。
+            return group_province_code.as_ref() == province_code;
+        }
+
+        const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
+        if RuntimeAdminAccountQuery::resolve_institution_code_for_account(registrar_account)
+            != Some(CITY_REGISTRY_CODE)
+        {
+            return false;
+        }
+        let Some(registered) =
+            public_manage::AccountRegisteredCid::<Runtime>::get(registrar_account)
+        else {
+            return false;
+        };
+        let Some((issuer_province_code, issuer_city_code)) =
+            cid_scope_codes(registered.cid_number.as_slice())
+        else {
+            return false;
+        };
+        // 中文注释:CREG 管理员只能更新本市地址。镇以下地址名称与完整地址仍走本市注册局。
+        issuer_province_code.as_ref() == province_code && issuer_city_code.as_ref() == city_code
+    }
+}
+
+impl address_registry::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type AddressAuthority = RuntimeAddressAuthority;
+    type MaxCodeLen = ConstU32<16>;
+    type MaxVersionLen = ConstU32<32>;
+    type MaxAddressNameCodeLen = ConstU32<3>;
+    type MaxAddressLocalNoLen = ConstU32<4>;
+    type MaxAddressNameLen = ConstU32<96>;
+    type MaxAddressDetailLen = ConstU32<128>;
 }
 
 #[cfg(not(feature = "runtime-benchmarks"))]

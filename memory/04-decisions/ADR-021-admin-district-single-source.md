@@ -1,6 +1,6 @@
 # ADR-021:行政区代码与市镇数据唯一真源
 
-状态:Accepted(2026-06-18),修订(2026-06-27)
+状态:Accepted(2026-06-18),修订(2026-06-30)
 关联:[[ADR-018]](citizenapp 混合模式)、reference_citizenapp_public_institution_bundle、feedback_no_compatibility
 
 ## 背景 / 问题
@@ -16,16 +16,14 @@ citizenchain/onchina/src/cid/china/china.sqlite
 ```
 
 
-当前决策改为:国家/省级代码先固化到 runtime primitives;CID 开发库 SQLite 保留省表并在加载时
-断言与 primitives `PROVINCE_CODE_INFOS` 完全一致,但不再作为省码第二真源。市、镇和地址段仍以
-开发库 SQLite 为准。开发期仍允许重新创世刷新版本 1 基线;重新创世任务只修改
-`citizenchain/onchina/src/cid/china/china.sqlite` 时,不生成客户端数据包和公权机构。进入正式发布冻结后,
-每次市镇地址段变更必须修改开发库 SQLite、递增 `metadata.admin_division_version`,再由发布流程
-生成各系统随包只读数据。国家码、省码或机构码变更属于 runtime primitives 变更,必须单独走
-runtime 二次确认。
+当前决策改为:国家/省级代码先固化到 runtime primitives;OnChina 开发库 SQLite 保留省表并在加载时
+断言与 primitives `PROVINCE_CODE_INFOS` 完全一致,但不再作为省码第二真源。市、镇和镇下地址仍以
+开发库 SQLite 为准。开发库随安装包发布,运行态只读打开。链上 `AddressRegistry` 只记录地址库版本、
+单条地址当前哈希和地址变更事件,不全量保存地址库。国家码、省码或机构码变更属于 runtime primitives
+变更,必须单独走 runtime 二次确认。
 
-不参与 CID 号生成、公权机构目录或链上治理边界。档案完整地址由“地址段 + 详细地址输入段”
-组成,例如 `多福巷 + 12号院3号楼101室`。
+不参与 CID 号生成、公权机构目录或链上治理边界。档案完整地址由
+`省 + 市 + 镇 + address_name + address_local_no + address_detail` 组成。
 
 ## 决策
 
@@ -34,19 +32,21 @@ runtime 二次确认。
 - OnChina 后端加载 SQLite 时必须校验 SQLite `provinces` 表与 primitives `PROVINCE_CODE_INFOS`
   的省名、省码、顺序和数量一致。
 - CID 不提供行政区管理 tab,也不提供运行中新增、改名、删除行政区 API。
-- citizenapp 安装包内置 `assets/admin_divisions/` 行政区字典,启动走**版本驱动增量 reconcile**(见下「客户端增量同步」),不向 CID 联网拉行政区新版。
+- citizenapp 安装包内置 `assets/admin_divisions/` 行政区字典,启动走版本驱动 reconcile(见下「客户端同步」),不向 OnChina 联网拉行政区新版。
 - CID 运行库中的自动公权机构必须由同一 `china.sqlite` 对账生成,`gov_manifest` 必须记录当前 SQLite hash 和目录 hash。
 - 公权机构包 `assets/public_institutions/` 必须由对账并通过严格校验后的 CID 真实接口导出,避免旧行政区 code 残留。
+- 镇下地址只通过 `addresses` 单表保存当前有效数据。链上变更以 `AddressRegistry` 事件为同步事实,每次只更新对应地址名称或完整地址。
 
 铁律:
 
 - 省 code 固定在 runtime primitives,不维护 `province_tombstones`,不得在 OnChina `cid/china` 或旧 number
   模块手写第二份省码表。
-- 开发期重新创世基线允许重排市/镇 code 并清空 tombstones。正式发布冻结后,市、镇 code 不可变、不复用;删除的市/镇 code 写入 `city_tombstones` / `town_tombstones` 永久占位。
+- 市、镇 code 按当前创世基线确定。地址库不保留旧数据、旧表、墓碑或变更日志。
 - 名称允许在原 code 上修改；不得用新 code 表达同一行政区改名。
 - 省名和市名必须全国唯一。
-- 镇下地址段不是行政区 code,但 `address_unit_id` 必须唯一,同一镇下地址段名称必须唯一。
-- 地址段名称保留当地地址名,`社区`、`村`、`路`、`巷`、`生活区` 等可以作为地址段;不得保留 `居委会`、`居民委员会`、`村委会`、`村民委员会`、`委员会`、`办事处`、`管理处`、`管委会` 等组织或管理机构词,也不得强制补固定后缀。
+- 镇下 `address_name_code` 在同一镇内按 `001..999` 编号;`address_local_no` 在同一 `address_name_code`
+  下按 `0001..9999` 编号,可为空;`address_detail` 可为空。
+- 地址名称保留当地地址名,`社区`、`村`、`路`、`巷`、`生活区` 等可以作为地址名称。
 
 ## 不触及(红线)
 
@@ -57,17 +57,12 @@ runtime 二次确认。
 ## 当前行政区版本
 
 ```text
-version:   1
+version:   v1.0.0
 provinces: 43
 cities:    2872
-towns:     39227
-address_units: 598655
-source_code_filled: 598655
-official_source_codes: 535084
-local_source_codes:    63571
-sha256:    c477cb5a300eac9f56d53beaef235617a6fc64584a0f1cffd8c85b2537840bbb
-city_tombstones: 0
-town_tombstones: 0
+towns:     39087
+addresses: 598654
+sha256:    54709a0c1935a59593c690c4547c8b6fa1140de8ebec642ef5c7daacb6012a5f
 ```
 
 本版本收口:
@@ -85,7 +80,7 @@ town_tombstones: 0
 - 海南儋州区域收敛为 `儋州市`、`兰洋市`、`白马井市`、`新州市` 四个市。
 - 本轮已清理已确认的截断名、`县市` 后缀名、跨省错挂名、重复壳和伪镇,并按重新创世重排市镇 code。最终审计发现的 42 个镇级伪行政区已删除,同步删除其下 235 条地址段;镇级伪行政区关键词命中归零。
 - 重新创世后,开发库审计记录中的旧省命名残留已清理;2026-06-20 已按当前 `china.sqlite` 重新生成 citizenapp 行政区包、执行 CID 公权机构运行库对账和 strict check,并通过当前 CID 真实公开接口重新生成 citizenapp 公权机构包。
-- 镇下第四层已迁移为 `address_units`;其中 535084 条补齐 2023 统计局镜像来源码和原始基层组织名,系统名保留地址段核心,例如 `xx办事处社区 -> xx社区`、`xx管委会路 -> xx路`。2026-06-20 已删除无公开源且无镇/地址段的原金门市,补齐 10 个非港澳台空地址段市,并为 160 个高置信市补齐 19226 条 `source_code/raw_name`;随后按用户确认合并原 `HN/006 天涯市` 到崖州市,并补齐崖州区 33 条来源码。剩余无法高置信绑定官方统计局来源的地址段已补入本地稳定来源码 `LOCAL-省市镇-地址段ID`,已有地址段 `source_code` 空值归零。最终审计已重排福建、海南删除/合并后的市 code 空洞,删除 42 个镇级伪行政区及其下 235 条地址段,清理 154 条地址段名称中的组织或管理机构词,将 568 条 `xx虚拟路` 归一为 `xx`,并删除 3 条纯 `虚拟路` 及其中 2 个功能区壳镇。随后对纯功能词地址段做二次收口:46 条原始名含 `社区` 的 `开发区/新区/农场/工业园` 等地址段恢复为 `xx社区`,26 条 `LOCAL-*` 来源的 `xx虚拟路` 合成占位地址段删除,同步删除因此空掉的 24 个镇并重排受影响市的镇 code。`raw_name` 保留原始来源名称用于审计,不作为前端展示名。当前 `FJ/043` 为 `石狮市`,当前 `HN/006` 为 `崖州市`;`LN/001`、`LN/002`、`LN/003`、`LN/004` 与 5 个台湾同名自建市当前无地址段行,按港澳台豁免不产生地址段来源码。
+- 镇下地址已统一迁移为 `addresses` 单表,字段为 `province_code/city_code/town_code/address_name_code/address_name/address_local_no/address_detail/sort_order`。旧镇下地址表、旧来源字段、墓碑和变更日志表均已清除。
 
 当前发布验收:
 
@@ -110,19 +105,17 @@ public_institutions bundle:
 开发期重新创世只做行政区基线清理时:
 
 1. 修改 `citizenchain/onchina/src/cid/china/china.sqlite`。
-2. 开发库变更后递增 `metadata.admin_division_version`。
-3. 重新创世任务才允许清空 city/town tombstones 并重排市镇 code;普通行政区变更不得复用正式发布后的市/镇 code。
-4. 运行 `python3 citizenchain/onchina/src/cid/china/check_code_immutable.py` 和 `PRAGMA integrity_check`。
+2. 更新地址库版本常量或相关发布说明。
+3. 运行 `python3 citizenchain/onchina/src/cid/china/check_code_immutable.py` 和 `PRAGMA integrity_check`。
 
 正式发布完整资产时:
 
 1. 修改 `citizenchain/onchina/src/cid/china/china.sqlite`。
-2. 更新 `metadata.admin_division_version` 和 `admin_division_versions`。
-3. 运行 `python3 citizenchain/onchina/src/cid/china/check_code_immutable.py`。
-4. 运行 `node citizenapp/tools/generate_admin_division_bundle.mjs` 生成行政区字典包。
-5. 用指向同一 `china.sqlite` 的 OnChina 后端执行 `onchina reconcile-gov --changed-only`。
-6. 执行 `onchina check-gov --strict`,确认 `gov_manifest.china_hash` 等于当前 `china.sqlite` SHA-256,且缺失、错配、缺账户、废弃残留均为 0。
-7. 运行 `node citizenapp/tools/generate_public_institution_bundle.mjs --version <行政区版本>` 生成公权机构包。
+2. 运行 `python3 citizenchain/onchina/src/cid/china/check_code_immutable.py`。
+3. 运行 `node citizenapp/tools/generate_admin_division_bundle.mjs` 生成行政区字典包。
+4. 用指向同一 `china.sqlite` 的 OnChina 后端执行 `onchina reconcile-gov --changed-only`。
+5. 执行 `onchina check-gov --strict`,确认 `gov_manifest.china_hash` 等于当前 `china.sqlite` SHA-256,且缺失、错配、缺账户、废弃残留均为 0。
+6. 运行 `node citizenapp/tools/generate_public_institution_bundle.mjs --version <行政区版本>` 生成公权机构包。
 
 ## 客户端增量同步(citizenapp,2026-06-18)
 

@@ -9,7 +9,7 @@
 - 重检来源:本会话 workflow `wc41m2g3b`(链端 genesis_build / onchina / 链端 AdminAccountQuery / citizenapp 四面重映射)。
 
 ## 锁定决策
-1. **只做去硬编码**:P1-P6 全做,能力保守——加中性 `can_view_own_admins`(只读)+ 机构类分发 + Tier 谓词;FRG/CREG 行为零变(除 P0 修复);非注册局机构仅开只读位。
+1. **只做去硬编码**:P1-P6 全做,当时能力口径保守——加中性 `can_view_own_admins`(只读)+ 机构类分发 + Tier 谓词;本阶段不扩大 FRG/CREG 控制台能力(除 P0 修复);非注册局机构仅开只读位。当前 FRG/CREG 能力目标以后续 OnChina 控制台能力映射文档为准。
 2. **AdminActionType 改 Tier 中性名**(零残留,onchina 内部协议破坏式改 + 前端 action code 同步)。
 3. **退役本地 seed/表,FRG 管理员 + 省映射全走链读**(2026-06-29 新决策):删 onchina `run_seed_federal_admins` 的 215 平铺播种 + `FEDERAL_ADMIN_PROVINCES[43]` 中文省名数组;`federal_registry_scope` 不再作授权/省映射真源;FRG 省映射从链上 `FederalRegistryProvinceGroupAccounts` 派生。
 
