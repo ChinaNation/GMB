@@ -45,7 +45,7 @@ class QrActions {
 
   static const int login = 1;
   static const int citizenBind = 2;
-  static const int cidAdmin = 3;
+  static const int onchinaAdmin = 3;
   static const int activateAdmin = 5;
   static const int decryptAdmin = 6;
   static const int runtimeUpgradeHash = 7;
@@ -148,7 +148,7 @@ class QrActions {
         'activate_admin_account' => activateAdmin,
         'decrypt_admin' => decryptAdmin,
         'citizen_bind' => citizenBind,
-        'cid_admin_action' => cidAdmin,
+        'onchina_admin_action' => onchinaAdmin,
         _ => 0,
       };
 }

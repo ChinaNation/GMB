@@ -180,7 +180,7 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 创世初始机构封存表：CID 系统根基，永不可注销关闭。
+    /// 创世初始机构封存表：身份注册局根基，永不可注销关闭。
     #[pallet::storage]
     pub type ProtectedGenesisAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, (), OptionQuery>;

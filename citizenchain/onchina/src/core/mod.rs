@@ -9,7 +9,7 @@ pub(crate) mod embedded_pg;
 pub(crate) mod http_security;
 /// 中文注释:propose_create_institution 裸 SCALE call data 编码器(onchina 唯一真源)。
 pub(crate) mod institution_call;
-/// 中文注释:QR_V1 协议和 CID 管理端签名二维码构造。
+/// 中文注释:QR_V1 协议和链上中国平台签名二维码构造。
 #[allow(dead_code)]
 pub(crate) mod qr;
 /// 中文注释:HTTP API 通用响应、分页和健康检查输出模型。

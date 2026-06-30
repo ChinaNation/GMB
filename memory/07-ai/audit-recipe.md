@@ -59,7 +59,7 @@
 
 | 时间 | 误判 | 真相 |
 |---|---|---|
-| 2026-05-07 PR-C v1 | 「ClearingBank 整套删除」 | 清算行属于链上组织治理概念;CID 身份系统不得保留清算行相关入口 |
+| 2026-05-07 PR-C v1 | 「ClearingBank 整套删除」 | 清算行属于链上组织治理概念;身份 ID 能力不得保留清算行相关入口 |
 | 2026-05-07 PR-C v1 | 「SafetyFund / Sweep UI 删除」 | multisig-transfer extrinsic 真实存在,**保留** |
 | 2026-05-07 PR-C v1 | 「ADR-010 时间逆序」 | "A 阶段(2026-05-04)前的派生协议" + ADR 日期 2026-05-06 是合理的 post-fact 文档,无逆序 |
 | 2026-05-07 PR-C v1 | 「PR-A 范围里 [9, 0] 投票 call_data」 | **真 bug**(audit 漏检) — sub-pallet 拆分后 InternalVote 在 22.0 而非 9.0,PR-B 顺手修复 |

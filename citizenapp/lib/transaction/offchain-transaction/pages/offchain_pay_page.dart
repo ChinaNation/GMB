@@ -124,7 +124,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         final match = search.items.firstWhere(
           (b) => b.cidNumber == widget.recipientBankCidNumber,
           orElse: () => throw Exception(
-              '收款方清算行 ${widget.recipientBankCidNumber} 未在 CID 系统查到'),
+              '收款方清算行 ${widget.recipientBankCidNumber} 未在身份注册局查到'),
         );
         final recHex = match.mainAccount;
         if (recHex == null || recHex.isEmpty) {

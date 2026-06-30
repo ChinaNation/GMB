@@ -28,7 +28,7 @@
 | GMB_IM_NODE_PAIRING_V1 | IM 节点配对 | node + dart（2） |
 | GMB_IM_WALLET_BINDING_V1 | IM 钱包绑定 | node + dart×2（3） |
 
-另：冷钱包 `'cid_admin_governance'`（非 GMB_ 格式 QR 域，命名不统一，待并入或正名）。
+另：冷钱包 `'onchina_admin_governance'` 是链上中国平台管理员 QR 治理域,不属于 `GMB_` 格式签名域,由 QR 协议文档单独约束。
 
 病根同 isForbidden 漂移：同域多份 copy，改一处忘改另一处 = 创世后**验签静默失败**。
 
@@ -59,7 +59,7 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
 - `primitives::sign` 持 `signing_message` + 全部 `OP_SIGN_*`；删 7 个字符串域常量（batch_item/ledger/packer/signer/rpc/activation/admin_unlock/communication-node/im::binding）。
 - runtime/node/backend 全 import 调用；删本地 concat。
 - Dart（citizenapp + citizenwallet）手写镜像，靠**金标向量**（signing_message(op_tag,payload)→hash）逐字节断言对齐，CI sync 防漂移（类比 account_derive 金标）。
-- 冷钱包 `cid_admin_governance` QR 域评估并入/正名。
+- 冷钱包 `onchina_admin_governance` QR 域已正名为链上中国平台管理员治理域,保持 QR 协议文档单源。
 
 ## 范围 / 破坏性
 - 破坏式：7 协议签名字节变 → runtime 验签 + node 签/验 + backend + 热钱包(L3_PAY) + 冷钱包(ACTIVATE_ADMIN/DECRYPT) 必须**锁步**。

@@ -1,6 +1,6 @@
 //! 管理端操作权限三档分级。
 //!
-//! 所有 CID 管理端操作归入 Session / Passkey / PasskeyColdSign 三档之一,三档之外一律拒绝:
+//! 所有链上中国平台操作归入 Session / Passkey / PasskeyColdSign 三档之一,三档之外一律拒绝:
 //! - Session         一般操作:仅需有效会话(会话已是链上已证管理员)。
 //! - Passkey         重要操作:会话 + WebAuthn passkey 断言。
 //! - PasskeyColdSign 特殊操作:会话 + WebAuthn passkey 断言 + 冷钱包扫码签名。

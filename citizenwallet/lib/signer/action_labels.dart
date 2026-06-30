@@ -72,5 +72,5 @@ const Map<String, String> actionLabels = {
   'register_clearing_bank': '声明清算行节点',
   'update_clearing_bank_endpoint': '更新清算行端点',
   'unregister_clearing_bank': '注销清算行节点',
-  'cid_admin_action': 'CID 管理员治理',
+  'onchina_admin_action': '链上中国平台管理员治理',
 };

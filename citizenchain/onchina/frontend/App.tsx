@@ -284,7 +284,7 @@ function AppInner() {
                 letterSpacing: 4, marginTop: 2
               }}
             >
-              身份识别码系统
+              链上中国平台
             </Typography.Text>
           </div>
         </div>

@@ -263,11 +263,11 @@ void main() {
       expect(PayloadDecoder.decode('0x02'), isNull);
     });
 
-    test('decodes cid_admin_action with SS58 review fields', () {
+    test('decodes onchina_admin_action with SS58 review fields', () {
       final actor = '0x${List.filled(32, '11').join()}';
       final target = '0x${List.filled(32, '22').join()}';
       final payload = jsonEncode({
-        'domain': 'cid_admin_governance',
+        'domain': 'onchina_admin_governance',
         'qr_proto': 'QR_V1',
         'action_id': 'admin-action-test',
         'action_type': 'PASSKEY_REGISTER',
@@ -283,7 +283,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hexOf(utf8.encode(payload)));
 
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'cid_admin_action');
+      expect(decoded!.action, 'onchina_admin_action');
       expect(decoded.fields['action_type'], '更新 Passkey');
       expect(decoded.reviewFields['actor_province_name'], '广东省');
       expect(decoded.reviewFields['actor_pubkey'], ss58FromHex(actor));
@@ -291,7 +291,7 @@ void main() {
       expect(decoded.reviewFields.containsKey('payload_hash'), isFalse);
     });
 
-    test('decodes cid admin action labels', () {
+    test('decodes onchina admin action labels', () {
       final actor = '0x${List.filled(32, '11').join()}';
       final target = '0x${List.filled(32, '22').join()}';
       final cases = {
@@ -302,7 +302,7 @@ void main() {
 
       for (final entry in cases.entries) {
         final payload = jsonEncode({
-          'domain': 'cid_admin_governance',
+          'domain': 'onchina_admin_governance',
           'qr_proto': 'QR_V1',
           'action_id': 'admin-action-${entry.key}',
           'action_type': entry.key,

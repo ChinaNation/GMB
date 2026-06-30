@@ -77,8 +77,8 @@ pub const QR_KIND_IM_NODE_PAIRING: u8 = 5;
 pub const QR_ACTION_LOGIN: u16 = 1;
 /// QR_V1 公民绑定签名动作。
 pub const QR_ACTION_CITIZEN_BIND: u16 = 2;
-/// QR_V1 CID 管理员治理/Passkey 更新签名动作。
-pub const QR_ACTION_CID_ADMIN: u16 = 3;
+/// QR_V1 链上中国平台管理员治理/Passkey 更新签名动作。
+pub const QR_ACTION_ONCHINA_ADMIN: u16 = 3;
 /// QR_V1 管理员激活二进制原始签名动作。
 pub const QR_ACTION_ACTIVATE_ADMIN: u16 = 5;
 /// QR_V1 清算行管理员解密二进制原始签名动作。

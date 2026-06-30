@@ -439,9 +439,9 @@ pub mod pallet {
 
         /// CID 注册信息凭证批量登记机构账户地址。
         ///
-        /// 中文注释:本入口与 CID `/registration-info` 对齐,业务字段只接收
+        /// 中文注释:本入口与身份注册局 `/registration-info` 对齐,业务字段只接收
         /// `cid_number / cid_full_name / account_names[]`。机构类型、企业类型、
-        /// 所属法人关系只由 CID 系统用于候选资格判断,不再进入链上注册 payload。
+        /// 所属法人关系只由身份注册局用于候选资格判断,不再进入链上注册 payload。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::register_cid_public_institution())]
         pub fn register_cid_public_institution(

@@ -199,7 +199,7 @@ pub(crate) async fn delete_account(
         return api_error(
             StatusCode::CONFLICT,
             1007,
-            "账户仍在链上或处于上链中,不能在 CID 系统删除",
+            "账户仍在链上或处于上链中,不能在身份注册局删除",
         );
     }
     let grant_payload = serde_json::json!({

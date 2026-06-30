@@ -114,6 +114,6 @@ pub struct InstitutionRegistrationCredentialResp {
     pub scope_city_name: String,
     /// 签发管理员对凭证 payload 的 sr25519 签名(64 字节 hex)。
     pub signature: String,
-    /// CID 端附带的审计元信息,节点只透传展示/排查,不参与链上注册编码。
+    /// 身份注册局端附带的审计元信息,节点只透传展示/排查,不参与链上注册编码。
     pub meta: serde_json::Value,
 }

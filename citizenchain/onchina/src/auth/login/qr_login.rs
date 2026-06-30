@@ -24,6 +24,8 @@ use super::signature::{
 };
 use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 
+const LOGIN_QR_SYSTEM: &str = "onchina";
+
 pub(crate) async fn admin_auth_qr_sign_request(
     State(state): State<AppState>,
     Json(input): Json<AdminQrSignRequestInput>,
@@ -56,19 +58,19 @@ pub(crate) async fn admin_auth_qr_sign_request(
         crate::core::qr::QR_V1,
         crate::core::qr::QrKind::SignResponse.code(),
         challenge_id,
-        "cid",
+        LOGIN_QR_SYSTEM,
         expire_at.timestamp()
     );
     let (sys_pubkey, sys_sig) = match build_login_qr_system_signature(
         &state,
-        "cid",
+        LOGIN_QR_SYSTEM,
         challenge_id.as_str(),
         now.timestamp(),
         expire_at.timestamp(),
     ) {
         Ok(v) => v,
         Err(err) => {
-            warn!(error = %err, "build cid login qr system signature failed");
+            warn!(error = %err, "build onchina login qr system signature failed");
             return api_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 5001,
@@ -80,7 +82,7 @@ pub(crate) async fn admin_auth_qr_sign_request(
         challenge_id.clone(),
         now.timestamp(),
         expire_at.timestamp(),
-        crate::core::qr::login_request_body("cid", &sys_pubkey, &sys_sig),
+        crate::core::qr::login_request_body(LOGIN_QR_SYSTEM, &sys_pubkey, &sys_sig),
     ))
     .unwrap_or_default();
 
@@ -185,7 +187,7 @@ pub(crate) async fn admin_auth_qr_complete(
         let verify_message = crate::core::qr::build_signature_message(
             crate::core::qr::QrKind::SignResponse,
             challenge_id.as_str(),
-            Some("cid"),
+            Some(LOGIN_QR_SYSTEM),
             Some(challenge_expire_at),
             &verify_pubkey,
         );

@@ -173,7 +173,7 @@ pub(crate) async fn admin_auth_challenge(
     let challenge_id = Uuid::new_v4().to_string();
     let nonce = Uuid::new_v4().to_string();
     let challenge_text = format!(
-        "cid-login|pubkey={}|origin={}|domain={}|session_id={}|nonce={}|iat={}|exp={}",
+        "onchina-login|pubkey={}|origin={}|domain={}|session_id={}|nonce={}|iat={}|exp={}",
         input.admin_account,
         origin,
         derived_domain,

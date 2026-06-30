@@ -95,16 +95,16 @@ class PayloadDecoder {
   static final _decryptPrefix = Uint8List.fromList(
     [..._gmbPrefix, _opSignDecrypt],
   );
-  // 'cid_admin_governance' 是 CID 管理员 payload 的业务域(JSON
+  // 'onchina_admin_governance' 是链上中国平台管理员 payload 的业务域(JSON
   // envelope 的 domain 字段值),不是 signing_message 的哈希签名域 —— 整段 JSON
   // 字节由 sr25519 直接签名,故不并入 op_tag 注册表。
-  static const String _cidAdminActionDomain = 'cid_admin_governance';
+  static const String _onchinaAdminActionDomain = 'onchina_admin_governance';
 
   static DecodedPayload? decode(String payloadHex) {
     // 先尝试解码非链上交易：管理员激活 / 清算行管理员解密 challenge。
     try {
       final raw = _hexToBytes(payloadHex);
-      final adminAction = _decodeCidAdminAction(raw);
+      final adminAction = _decodeOnchinaAdminAction(raw);
       if (adminAction != null) {
         return adminAction;
       }
@@ -409,12 +409,12 @@ class PayloadDecoder {
     }
   }
 
-  static DecodedPayload? _decodeCidAdminAction(Uint8List raw) {
+  static DecodedPayload? _decodeOnchinaAdminAction(Uint8List raw) {
     try {
       final text = utf8.decode(raw);
       final value = jsonDecode(text);
       if (value is! Map<String, dynamic>) return null;
-      if (value['domain'] != _cidAdminActionDomain) return null;
+      if (value['domain'] != _onchinaAdminActionDomain) return null;
       if (value['qr_proto'] != 'QR_V1') return null;
       final actionType = value['action_type'];
       final province = value['actor_province_name'];
@@ -433,10 +433,10 @@ class PayloadDecoder {
       final actorAddress = _pubkeyHexToSs58OrRaw(actorPubkey);
       final targetAddress = _pubkeyHexToSs58OrRaw(target);
       return DecodedPayload(
-        action: 'cid_admin_action',
-        summary: 'CID 管理员治理',
+        action: 'onchina_admin_action',
+        summary: '链上中国平台管理员治理',
         fields: <String, String>{
-          'action_type': _cidAdminActionLabel(actionType),
+          'action_type': _onchinaAdminActionLabel(actionType),
           'actor_province_name': province,
           'actor_pubkey': actorAddress,
           'target': targetAddress,
@@ -444,7 +444,7 @@ class PayloadDecoder {
           'after_hash': afterHash,
         },
         reviewFields: <String, String>{
-          'action_type': _cidAdminActionLabel(actionType),
+          'action_type': _onchinaAdminActionLabel(actionType),
           'actor_province_name': province,
           'actor_pubkey': actorAddress,
           'target': targetAddress,
@@ -455,7 +455,7 @@ class PayloadDecoder {
     }
   }
 
-  static String _cidAdminActionLabel(String actionType) {
+  static String _onchinaAdminActionLabel(String actionType) {
     switch (actionType) {
       case 'PASSKEY_REGISTER':
         return '更新 Passkey';

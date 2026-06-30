@@ -177,7 +177,7 @@ struct InstitutionRegistrationInfoEnvelope {
 /// 调 OnChina `GET /api/v1/app/institutions/:cid_number/registration-info` 拉链上注册专用信息。
 ///
 /// 中文注释:这里刻意不调用普通机构详情接口。普通详情可用于展示,但不能证明
-/// "机构名称 + 账户名称列表"确实由 CID 系统签发给链上注册流程。
+/// "机构名称 + 账户名称列表"确实由身份注册局签发给链上注册流程。
 pub fn fetch_institution_registration_info(
     cid_number: &str,
 ) -> Result<InstitutionRegistrationInfoResp, String> {

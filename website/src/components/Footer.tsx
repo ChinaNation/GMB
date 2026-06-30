@@ -35,7 +35,7 @@ export default function Footer() {
           <div>
             <h4 className="mb-4 text-sm font-semibold tracking-wider text-gold-400">生态系统</h4>
             <ul className="space-y-2 text-sm">
-              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">CID 身份系统</Link></li>
+              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">链上中国平台</Link></li>
               <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">CitizenApp 移动端</Link></li>
               <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">全节点网络</Link></li>
             </ul>

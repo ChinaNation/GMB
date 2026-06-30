@@ -18,8 +18,8 @@ typedef LoginSignResponseEnvelope = QrEnvelope<SignResponseBody>;
 /// 展示用辅助:从登录签名请求中获取人可读系统名。
 String loginSystemDisplayName(LoginSignRequestEnvelope c) {
   switch (_loginData(c).system.toLowerCase()) {
-    case 'cid':
-      return 'CID 身份系统';
+    case 'onchina':
+      return '链上中国平台';
     default:
       return _loginData(c).system.toUpperCase();
   }
@@ -69,7 +69,7 @@ LoginSignRequestEnvelope parseLoginSignRequest(String raw) {
   );
 }
 
-/// 验证系统签名(确认 QR 确实由 CID 后端签发)。
+/// 验证系统签名(确认 QR 确实由链上中国平台后端签发)。
 bool verifySystemSignature(LoginSignRequestEnvelope c) {
   final data = _loginData(c);
   final message = buildSignatureMessage(
@@ -130,7 +130,7 @@ class _LoginRequestData {
 _LoginRequestData _loginData(LoginSignRequestEnvelope c) {
   final text = utf8.decode(c.body.payloadBytes, allowMalformed: false);
   final parts = text.split('|');
-  if (parts.length != 2 || parts[0] != 'cid') {
+  if (parts.length != 2 || parts[0] != 'onchina') {
     throw const LoginQrException('登录二维码载荷无效');
   }
   if (!parts[1].startsWith('0x')) {

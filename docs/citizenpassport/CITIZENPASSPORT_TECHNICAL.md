@@ -145,7 +145,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 首个需要导出的年度从 `system_install.initialized_at` 所在年份开始，新装 CPMS 不补导安装前历史年度。
 - 年度报告导出按钮始终从当前最新档案数据重新生成报告；同一年度重复导出会覆盖 `cpms_status_exports` 中该年度记录，不返回旧 JSON。
 - UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的年度报告，操作员登录和已有会话会被锁定，直到管理员完成补导。
-- CPMS 不判断 CID 是否收到文件，也不禁用安装码；CID 逾期禁用 CPMS 授权由 CID 系统单独实现。
+- CPMS 不判断 CID 是否收到文件，也不禁用安装码；CID 逾期禁用 CPMS 授权由身份注册局单独实现。
 - `GET /api/v1/archives/status-export/state` 返回系统设置页按钮状态、角标状态和操作员锁定状态。
 - `GET /api/v1/archives/status-export` 生成或返回最早未导出年度的已签名报告。
 - `citizen_binding_records` 导出当前仍有钱包绑定的档案快照：`archive_no / wallet_address / wallet_pubkey / wallet_sig_alg / wallet_bound_at / citizen_status / voting_eligible / status_updated_at`；导出时再次按公民状态和 16 周岁年龄线计算有效选举资格，不把未成年档案导出为有选举资格。

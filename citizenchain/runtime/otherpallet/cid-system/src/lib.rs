@@ -55,7 +55,7 @@ pub struct BindCredential<AccountId, Hash, Nonce, Signature> {
     pub signature: Signature,
 }
 
-/// 中文注释:CID 系统绑定验签接口,由 Runtime 注入具体实现。
+/// 中文注释:身份注册局绑定验签接口,由 Runtime 注入具体实现。
 pub trait CidVerifier<AccountId, Hash, Nonce, Signature> {
     fn verify(
         account: &AccountId,
@@ -170,7 +170,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCredentialSignatureLength: Get<u32>;
 
-        /// 中文注释:CID 系统绑定验签器(外部接口桥接点)。
+        /// 中文注释:身份注册局绑定验签器(外部接口桥接点)。
         type CidVerifier: CidVerifier<Self::AccountId, Self::Hash, NonceOf<Self>, SignatureOf<Self>>;
 
         /// 中文注释:公民投票实时验签器。
@@ -263,7 +263,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 中文注释:使用 CID 系统签发的绑定消息把钱包和 binding_id 绑定。
+        /// 中文注释:使用身份注册局签发的绑定消息把钱包和 binding_id 绑定。
         #[pallet::call_index(0)]
         #[pallet::weight(
             T::WeightInfo::bind_cid()

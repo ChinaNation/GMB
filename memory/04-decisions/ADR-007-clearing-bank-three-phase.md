@@ -17,7 +17,7 @@
 
 把清算行体系实现拆为 **3 个独立阶段**，每阶段独立可发布、可验收：
 
-### Step 1：CID 端（本任务卡 20260424-step1-cid-clearing-bank-eligibility）
+### Step 1：身份注册局端（本任务卡 20260424-step1-cid-clearing-bank-eligibility）
 
 **只动 citizencode/backend + citizencode/frontend**：
 - 资格白名单判定函数：`is_clearing_bank_eligible(inst, parent) -> bool`
@@ -107,7 +107,7 @@
 - 新增"节点信息"长卡片：peer_id / rpc_domain:rpc_port / 注册管理员 + 端点更新/注销入口
 - 提交 register_clearing_bank 前**强制桌面节点连通性自测**
 
-#### 2.4 CID 端 Step 2 末尾联动
+#### 2.4 身份注册局端 Step 2 末尾联动
 
 - `citizencode/backend/subjects/chain_multisig_info.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
   - `AND cid_number IN (SELECT cid_number FROM clearing_bank_nodes_cache)`

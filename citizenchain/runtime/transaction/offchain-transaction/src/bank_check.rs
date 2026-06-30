@@ -2,7 +2,7 @@
 //!
 //! 中文注释:
 //! - 清算行(L2)= subject_property 为 S(私法人)或 F(非法人)的私权机构。
-//! - 清算行在 CID 系统注册时生成 cid_number,并在链上实体生命周期模块注册
+//! - 清算行在身份注册局注册时生成 cid_number,并在链上实体生命周期模块注册
 //!   主账户 + 费用账户两个多签账户。
 //! - 本模块判定:某个地址能否作为"可被 L3 绑定的清算行主账户"。
 //!
@@ -25,7 +25,7 @@ pub const CID_K1_INDEX: usize = 6;
 /// 新版 CID 字符串第一段 R5 后的分隔符位置。
 pub const CID_R5_SEPARATOR_INDEX: usize = 5;
 
-/// 清算行"主账户"名称(字节形式,与 CID 系统生成时逐字节一致)。
+/// 清算行"主账户"名称(字节形式,与身份注册局生成时逐字节一致)。
 pub const ACCOUNT_NAME_MAIN: &[u8] = "主账户".as_bytes();
 /// 清算行"费用账户"名称。
 pub const ACCOUNT_NAME_FEE: &[u8] = "费用账户".as_bytes();
@@ -50,7 +50,7 @@ pub trait CidAccountQuery<AccountId> {
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool;
     /// 清算行资格白名单判定。
     ///
-    /// CID 系统在 eligible-search / registration-info 入口负责判断"私法人股份公司
+    /// 身份注册局在 eligible-search / registration-info 入口负责判断"私法人股份公司
     /// 或其下属非法人"资格;链上不再保存机构类型和所属法人元数据。
     ///
     /// 实现层只确认地址属于已注册且 Active 的 CID 机构账户,保持 bank_check 解耦。
@@ -109,7 +109,7 @@ fn subject_property_is_private_institution(cid_bytes: &[u8]) -> bool {
 /// 2. `account_name` 段等于 "主账户"
 /// 3. K1 ∈ {S, F}(字节级主体属性判定)
 /// 4. 对应 `InstitutionAccounts.status == Active`
-/// 5. **资格白名单**:由 CID 系统在候选/注册信息接口筛选;链上通过
+/// 5. **资格白名单**:由身份注册局在候选/注册信息接口筛选;链上通过
 ///    `CidAccountQuery::is_clearing_bank_eligible` 只确认该 CID 机构账户已 Active
 /// 6. **节点已声明**:`cid_number ∈ ClearingBankNodes`,确保该机构已加入清算网络
 ///    (用户不能绑定到"机构合法但未声明清算行节点"的机构)

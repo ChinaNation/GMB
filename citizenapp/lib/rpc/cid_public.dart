@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-/// 扫码支付清算体系 Step 1 新增:CID 系统**公开**API 客户端。
+/// 扫码支付清算体系 Step 1 新增:身份注册局**公开**API 客户端。
 ///
 /// 中文注释:
 /// - 对接 citizencode-backend 的 `GET /api/v1/app/clearing-banks/search` 端点

@@ -17,7 +17,7 @@ use super::pallet::{Config, Error, Event, Pallet, ReferendumTallies, ReferendumV
 use super::{is_jointreferendum_vote_passed, is_jointreferendum_vote_rejected};
 
 impl<T: Config> Pallet<T> {
-    /// 联合公投:由外部 CID 系统判定资格,链上去重计票。
+    /// 联合公投:由外部身份注册局判定资格,链上去重计票。
     /// 中文注释:签发身份按机构 admins 验签,作用域名称只参与 payload 防串用。
     pub fn do_jointreferendum_vote(
         who: T::AccountId,

@@ -898,7 +898,7 @@ where
                 return false;
             };
 
-            // 中文注释：这里必须和 CID 端 `/registration-info` 的签名 payload 严格一致。
+            // 中文注释：这里必须和身份注册局 `/registration-info` 的签名 payload 严格一致。
             // payload 字段(GMB + OP_SIGN_INST 域头由 signing_message 统一拼接):
             // genesis_hash + cid_number + cid_full_name + account_names[] + nonce
             // + 签发机构 + 作用域。
@@ -958,7 +958,7 @@ where
                 return false;
             };
 
-            // 中文注释:必须与 CID 端注销凭证签发 payload 严格一致。
+            // 中文注释:必须与身份注册局注销凭证签发 payload 严格一致。
             // payload 字段(GMB + OP_SIGN_DEREGISTER 域头由 signing_message 统一拼接):
             // genesis_hash + scope + cid_number + account_name + target_account
             // + nonce + 签发机构 + 签发管理员公钥。scope 与 target_account 入签名,
@@ -1947,7 +1947,7 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for MultisigCi
         RuntimeAdminAccountQuery::is_active_account_admin(institution_code, account, who)
     }
 
-    /// 清算行资格由 CID 系统的 eligible-search 负责筛选。
+    /// 清算行资格由身份注册局 eligible-search 负责筛选。
     /// 链上不保存 subject_property/sub_type/parent_cid_number,这里只确认该地址属于已注册且 Active 的
     /// CID 机构账户,避免把 CID 内部机构类型字段重复落到链上。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool {

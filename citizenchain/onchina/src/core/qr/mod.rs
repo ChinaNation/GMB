@@ -28,9 +28,9 @@ impl QrKind {
 }
 
 pub const ACTION_LOGIN: u16 = 1;
-/// 注册局管理员治理文本确认(非链动作,b.d=cid_admin_governance canonical JSON),
+/// 注册局管理员治理文本确认(非链动作,b.d=onchina_admin_governance canonical JSON),
 /// 对应 qr-action-registry.md 非链动作码 a=3。
-pub const ACTION_CID_ADMIN: u16 = 3;
+pub const ACTION_ONCHINA_ADMIN: u16 = 3;
 
 // 链交易动作码(机构创建/管理员集合)不在此处发明扁平常量:
 // 统一用 `core::institution_call::chain_action_code(pallet,call)` 派生(b.a 与 b.d 同源),
@@ -39,7 +39,7 @@ pub const ACTION_CID_ADMIN: u16 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignRequestBody {
-    /// a:动作码。登录=1,公民绑定=2,CID 管理员动作=3。
+    /// a:动作码。登录=1,公民绑定=2,链上中国平台管理员动作=3。
     #[serde(rename = "a")]
     pub action: u16,
     /// g:签名算法。1 固定为 sr25519。

@@ -3,8 +3,8 @@ import GlowCard from '../components/GlowCard'
 
 const systems = [
   {
-    name: 'CID 身份系统',
-    subtitle: '身份识别码系统',
+    name: '链上中国平台',
+    subtitle: '注册局业务平台',
     desc: '中央身份绑定与验证系统，将公民身份一对一映射到区块链公钥，管理投票资格与公民快照。',
     features: [
       'Sr25519 挑战-响应认证',

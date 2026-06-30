@@ -250,7 +250,7 @@ pub(crate) async fn prepare_admin_action(
     let (payload_text, payload_hash, sign_request) =
         if preview.auth_type == AdminOperationAuth::PasskeyColdSign {
             let payload_text = signed_payload_text(AdminSignedPayload {
-                domain: "cid_admin_governance",
+                domain: "onchina_admin_governance",
                 qr_proto: crate::core::qr::QR_V1,
                 action_id: action_id.as_str(),
                 action_type: input.action_type.as_str(),
@@ -269,7 +269,7 @@ pub(crate) async fn prepare_admin_action(
                 expires_at.timestamp(),
                 ctx.admin_account.as_str(),
                 payload_text.as_str(),
-                crate::core::qr::ACTION_CID_ADMIN,
+                crate::core::qr::ACTION_ONCHINA_ADMIN,
             ) {
                 Ok(v) => v,
                 Err(resp) => return resp,

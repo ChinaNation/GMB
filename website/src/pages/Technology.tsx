@@ -24,14 +24,14 @@ const pallets = [
     desc: '44 个权威节点参与 GRANDPA 终局性投票，确保区块不可回滚',
   },
   {
-    name: 'CID 身份认证',
+    name: '身份 ID 认证',
     module: 'cid-system',
     desc: '链上公民身份绑定与验证，一人一链上身份，保障投票资格',
   },
   {
     name: '公民发行',
     module: 'citizen-issuance',
-    desc: '经 CID 认证的公民轻节点获得公民币发行，按节点认证数量线性释放',
+    desc: '经身份 ID 认证的公民轻节点获得公民币发行，按节点认证数量线性释放',
   },
   {
     name: '全节点发行',
@@ -65,8 +65,8 @@ const topNodeTypes = [
   {
     type: '轻节点',
     count: '无限',
-    desc: '公民用户运行的轻客户端（CitizenApp），经 CID 认证后可参与链上投票',
-    features: ['CID 认证', '转账交易', '公民投票'],
+    desc: '公民用户运行的轻客户端（CitizenApp），经身份 ID 认证后可参与链上投票',
+    features: ['身份 ID 认证', '转账交易', '公民投票'],
   },
 ]
 

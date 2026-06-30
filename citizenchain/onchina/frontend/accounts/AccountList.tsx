@@ -109,7 +109,7 @@ export const AccountList: React.FC<Props> = ({
               canDeleteRow ? (
                 <Popconfirm
                   title={`确认删除账户 "${row.account_name}"?`}
-                  description="仅删除 CID 系统中的账户名称记录,不触发链上操作"
+                  description="仅删除身份注册局中的账户名称记录,不触发链上操作"
                   onConfirm={() => onDelete(row.account_name)}
                   okText="删除"
                   okButtonProps={{ danger: true }}

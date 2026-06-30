@@ -207,7 +207,7 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
     }
 }
 
-/// 中文注释：公民总人口快照验签接口（由 runtime 对接 CID 系统）。
+/// 中文注释：公民总人口快照验签接口（由 runtime 对接身份注册局）。
 /// 签发身份统一为 `issuer_cid_number + issuer_main_account + signer_pubkey`;
 /// runtime verifier 必须确认 signer 属于签发机构 admins 后再验签。
 pub trait PopulationSnapshotVerifier<AccountId, Nonce, Signature> {
