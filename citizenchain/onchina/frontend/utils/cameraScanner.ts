@@ -34,6 +34,15 @@ export function startCameraScanner(
   let stream: MediaStream | null = null;
   let timer: number | undefined;
 
+  if (!window.isSecureContext) {
+    onError('当前浏览器尚未信任本节点证书，请先在登录页下载并安装机构 CA 证书');
+    return () => {};
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    onError('当前浏览器不支持摄像头扫码，请使用新版 Chrome 或 Edge');
+    return () => {};
+  }
+
   let detector: BarcodeDetectorLike;
   try {
     detector = createQrDetector('当前浏览器不支持摄像头扫码');

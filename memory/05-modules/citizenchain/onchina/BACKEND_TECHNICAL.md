@@ -60,24 +60,39 @@ citizenchain/onchina/src/
 
 业务模块不得新增全局链目录，不得在 handler 内手写 pallet/call 字节或二维码动作码。动作码、payload、签名/验签规则以 `memory/07-ai/unified-protocols.md` 为唯一登记入口。
 
-## 6. 错误码和提示边界
+## 6. HTTPS 和机构 CA
+
+正式入口固定为 `https://onchina.local:8964`。OnChina 启动时在 `ONCHINA_TLS_DIR` 生成并持久化本机构节点私有 CA：
+
+- `onchina-org-root-ca.crt`：员工浏览器可下载和安装的 CA 公钥证书。
+- `onchina-org-root-ca.key`：仅保存在节点服务器本地的 CA 私钥，禁止通过 HTTP、日志或前端接口暴露。
+- `onchina-server.crt` / `onchina-server.key`：由本机构 CA 签发的 `onchina.local` 服务证书。
+- `onchina-cert-profile.txt`：证书策略标记；旧超长期默认有效期证书没有该标记，下次启动必须自动重建。
+
+CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前 CA 重新签发，有效期 397 天以内，避免 macOS / Safari / Chrome 拒绝超长 TLS 服务证书。
+
+未登录公共接口 `/api/v1/platform/ca-certificate` 只返回 CA 公钥证书 PEM，用于员工首次访问时下载并导入浏览器/系统受信任根证书；`/api/v1/platform/ca-certificate/info` 只返回文件名、证书主题、SHA-256 指纹和有效期展示信息。
+
+## 7. 错误码和提示边界
 
 后端统一通过 `ApiError.error_code` 暴露稳定业务错误码。HTTP `401` 只表示管理员登录态无效；公民绑定 challenge 过期、账户不匹配、签名失败等业务错误不得返回 `401`。
 
 数据库错误必须展开 PostgreSQL SQLSTATE、message、detail 和 hint，禁止只向前端或日志传 `db error`。
 
-## 7. 管理员写操作
+## 8. 管理员写操作
 
 管理员新增、替换、Passkey 更新、节点解绑和链写动作必须使用 `PASSKEY_COLD_SIGN` 二次确认。业务 handler 只负责构造业务动作，二维码协议包装和签名结果识别归 `core/qr/`。
 
 联邦注册局机构 `admins` 不允许本地新增或删除，只允许在同省范围内替换。市注册局机构 `admins` 每省每市最多 30 人，统计必须同时带省和市，不能只按市名统计。
 
-## 8. 验收
+## 9. 验收
 
 ```text
 rg "mod chain;|crate::chain|chain::" citizenchain/onchina/src -g '*.rs'
 cargo check --manifest-path citizenchain/Cargo.toml -p onchina
 curl -kfsS https://onchina.local:8964/api/v1/health
+curl -kfsS https://onchina.local:8964/api/v1/platform/ca-certificate/info
+curl -kfsS -o /tmp/onchina-org-root-ca.crt https://onchina.local:8964/api/v1/platform/ca-certificate
 curl -ksS -i https://onchina.local:8964/api/v1/admin/auth/check -H "authorization: Bearer <token>"
 ```
 

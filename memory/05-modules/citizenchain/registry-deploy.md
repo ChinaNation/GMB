@@ -19,14 +19,14 @@ PG 官方二进制来源:https://www.postgresql.org/download/(解压后含 bin/l
 
 - 节点 `desktop` setup 不启动 OnChina；用户在设置页“链上中国平台”行点击“启动”并二次确认后，`start_onchina_platform` 调用 `onchina_proc::start_onchina(app)`。
 - `onchina_proc` 用 env 把资源/数据路径告诉 OnChina(`ONCHINA_PG_BIN_DIR`/`ONCHINA_PG_DATA_DIR`/`ONCHINA_PG_PORT`/`ONCHINA_TLS_DIR`/`ONCHINA_PG_WAL_ARCHIVE_DIR`/`ONCHINA_FRONTEND_DIST`/`ONCHINA_CHINA_DB`/`ONCHAIN_WS_URL`/`ONCHINA_EMBEDDED_PG=1`/`ONCHINA_ENABLE_TLS=1`)。
-- OnChina 启动:`embedded_pg::ensure_started()`(首启 initdb→起 postgres@127.0.0.1:私有端口→建 onchina 库→自拼 DATABASE_URL)→ schema 幂等建 → `tls`(rcgen 自签 HTTPS,主机 `onchina.local`)→ 服务。
+- OnChina 启动:`embedded_pg::ensure_started()`(首启 initdb→起 postgres@127.0.0.1:私有端口→建 onchina 库→自拼 DATABASE_URL)→ schema 幂等建 → `tls`(机构私有 CA 签发 HTTPS,主机 `onchina.local`)→ 服务。
 - 退出:node 停子进程信号 → OnChina 收 SIGTERM/Ctrl-C → `embedded_pg::stop()` → 退出。node **不碰 PG**。
 - 开发期(无随包 PG)继承 `run.sh` / `clean-run.sh` 注入的外部 PostgreSQL 二进制、数据目录、前端产物和 HTTPS 配置。
 
 ## 内网 TLS + 扫码鉴权
 
 - OnChina 内网 API 固定入口为 `https://onchina.local:8964`，服务监听 `0.0.0.0:8964` 并通过 mDNS 广告 `onchina.local`。
-- OnChina 内网 API 走 HTTPS(rcgen 自签,证书持久化 `ONCHINA_TLS_DIR`);证书 SAN 为 `onchina.local`。
+- OnChina 内网 API 走 HTTPS(机构私有 CA 签发,证书持久化 `ONCHINA_TLS_DIR`);CA 有效期到 2036-01-01,服务证书每次启动重签且有效期 397 天以内,证书 SAN 为 `onchina.local`。
 - 身份认证 = 扫码签名(3b 链上 Active 管理员集合鉴权),TLS 只负责传输加密。与 node 的 libp2p WSS 证书相互独立。
 
 ## 大市机房形态(如香港:800万公民/500万公司/百管理员)

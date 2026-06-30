@@ -76,8 +76,43 @@ function toDescriptors(
   }));
 }
 
+function ensurePasskeyAvailable() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    throw new Error("当前环境不支持 passkey");
+  }
+  if (!window.isSecureContext) {
+    throw new Error("当前浏览器尚未信任本节点证书，请先在登录页下载并安装机构 CA 证书");
+  }
+  if (!("PublicKeyCredential" in window) || !navigator.credentials) {
+    throw new Error("当前浏览器不支持 passkey，请使用新版 Chrome 或 Edge");
+  }
+}
+
+function passkeyBrowserError(error: unknown, fallback: string): Error {
+  if (!(error instanceof DOMException)) {
+    return error instanceof Error ? error : new Error(fallback);
+  }
+  if (error.name === "NotAllowedError") {
+    return new Error("passkey 操作被取消，或当前浏览器尚未信任本节点证书");
+  }
+  if (error.name === "SecurityError") {
+    return new Error("当前页面不是浏览器信任的安全页面，请先安装机构 CA 证书后重新打开浏览器");
+  }
+  if (error.name === "NotSupportedError") {
+    return new Error("当前浏览器不支持 passkey，请使用新版 Chrome 或 Edge");
+  }
+  if (error.name === "InvalidStateError") {
+    return new Error("当前管理员已注册过 passkey，可直接更新或使用已有密钥");
+  }
+  if (error.name === "AbortError") {
+    return new Error("passkey 操作已取消");
+  }
+  return new Error(error.message || fallback);
+}
+
 /** 注册一个新的 passkey 到当前管理员账户。 */
 export async function registerPasskey(auth: AdminAuth): Promise<void> {
+  ensurePasskeyAvailable();
   const begin = await adminRequest<PasskeyBeginResponse<ServerCreationOptions>>(
     "/api/v1/admin/auth/passkey/register/begin",
     auth,
@@ -98,9 +133,14 @@ export async function registerPasskey(auth: AdminAuth): Promise<void> {
     authenticatorSelection: pk.authenticatorSelection,
     attestation: pk.attestation,
   };
-  const credential = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential | null;
+  let credential: PublicKeyCredential | null;
+  try {
+    credential = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential | null;
+  } catch (error) {
+    throw passkeyBrowserError(error, "passkey 注册失败");
+  }
   if (!credential) {
-    throw new Error("passkey registration cancelled");
+    throw new Error("passkey 注册已取消");
   }
   const response = credential.response as AuthenticatorAttestationResponse;
   const body = {
@@ -125,6 +165,7 @@ export async function registerPasskey(auth: AdminAuth): Promise<void> {
 
 /** 完成一次 passkey 断言,返回一次性 assertion_id(作为 X-Passkey-Assertion 头)。 */
 export async function assertPasskey(auth: AdminAuth): Promise<string> {
+  ensurePasskeyAvailable();
   const begin = await adminRequest<PasskeyBeginResponse<ServerRequestOptions>>(
     "/api/v1/admin/auth/passkey/assert/begin",
     auth,
@@ -138,9 +179,14 @@ export async function assertPasskey(auth: AdminAuth): Promise<string> {
     allowCredentials: toDescriptors(pk.allowCredentials),
     userVerification: pk.userVerification,
   };
-  const credential = (await navigator.credentials.get({ publicKey })) as PublicKeyCredential | null;
+  let credential: PublicKeyCredential | null;
+  try {
+    credential = (await navigator.credentials.get({ publicKey })) as PublicKeyCredential | null;
+  } catch (error) {
+    throw passkeyBrowserError(error, "passkey 验证失败");
+  }
   if (!credential) {
-    throw new Error("passkey assertion cancelled");
+    throw new Error("passkey 验证已取消");
   }
   const response = credential.response as AuthenticatorAssertionResponse;
   const body = {

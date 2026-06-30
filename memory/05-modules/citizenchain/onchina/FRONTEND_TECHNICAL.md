@@ -54,7 +54,19 @@ citizenchain/onchina/frontend/
 
 业务组件捕获异常时必须把原始错误对象传给 notice 入口，不得先取 `error.message` 再传入。
 
-## 6. 扫码签名
+`NotAllowedError` 是浏览器通用取消/拒绝错误，不得在 notice 全局层直接翻译成摄像头权限错误。摄像头扫码、passkey/WebAuthn 等浏览器能力必须在各自客户端封装中给出具体中文原因。
+
+## 6. 首次 HTTPS 信任
+
+登录页和已登录后台必须都提供机构 CA 证书下载入口，指向 `/api/v1/platform/ca-certificate`。未信任本节点证书时，页面应明确提示先安装机构 CA 证书并重开浏览器；安装完成前不得把 passkey 失败误提示为摄像头权限问题。
+
+macOS 导入机构 CA 时必须提示导入“系统”钥匙串并将证书设为“始终信任”；如出现 `-25294`，先在钥匙串中删除同名旧证书，再下载当前节点的新 CA 证书重新导入。
+
+passkey 客户端在调用 `navigator.credentials.create/get` 前必须检查 `window.isSecureContext`、`PublicKeyCredential` 和 `navigator.credentials`，并分别提示“证书未信任 / 浏览器不支持 / 用户取消”。
+
+摄像头扫码客户端在调用 `getUserMedia` 前必须检查 HTTPS 安全上下文和 `navigator.mediaDevices.getUserMedia`，避免把证书未信任误判成摄像头权限被拒绝。
+
+## 7. 扫码签名
 
 管理员扫码登录、Passkey 更新、管理员集合变更和链写动作统一使用 `QR_V1`。
 
@@ -64,11 +76,12 @@ citizenchain/onchina/frontend/
 
 CitizenApp 不承担管理员登录 QR 职责。前端文案不得引导用户使用 CitizenApp 处理管理员登录签名请求。
 
-## 7. 验收
+## 8. 验收
 
 ```text
 npm --prefix citizenchain/onchina/frontend run build
 rg "旧独立身份系统名" citizenchain/onchina/frontend --glob '!node_modules/**' --glob '!dist/**'
+rg "NotAllowedError.*摄像头" citizenchain/onchina/frontend --glob '!node_modules/**' --glob '!dist/**'
 ```
 
 涉及登录、权限、扫码或页面展示的变更，必须启动真实本地服务并检查真实页面；只通过 `npm run build` 不算完成。

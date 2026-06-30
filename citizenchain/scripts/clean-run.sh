@@ -92,8 +92,7 @@ export ONCHINA_GOV_AUTO_RECONCILE=1
 export ONCHINA_SIGNING_SEED_HEX="${ONCHINA_SIGNING_SEED_HEX:-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd}"
 export ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER="${ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER:-ZS001-FRG07-249474503-2026}"
 export ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT="${ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT:-0x406246b466028ae3cb89f36b70457478eca4ec224b2ad3f2122e5a0a407e642e}"
-echo "==> 播种联邦注册局管理员省映射(仅 clean-run 空库引导)..."
-( cd "$CHAIN_ROOT" && cargo run -p onchina -- seed-federal-admins )
+echo "==> 联邦注册局管理员省映射:全走链读,不再执行本地 seed"
 echo "==> 链上中国平台:节点设置页点击“启动”后访问 https://onchina.local:8964"
 
 # ── 4. 用当前源码现造创世启动(不走冻结 SSOT)──

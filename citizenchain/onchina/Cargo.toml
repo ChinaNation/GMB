@@ -20,10 +20,11 @@ workspace = true
 [dependencies]
 # Web 服务使用 axum 0.7,保持 OnChina HTTPS 入口稳定。
 axum = { version = "0.7", features = ["multipart"] }
-# 内网 API HTTPS(Card 05;rcgen 自签 + rustls/ring)
+# 内网 API HTTPS(Card 05;机构私有 CA 签发 + rustls/ring)
 axum-server = { version = "0.7", features = ["tls-rustls"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
+time = "0.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "signal"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 serde = { version = "1", features = ["derive"] }

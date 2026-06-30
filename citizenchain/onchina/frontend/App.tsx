@@ -26,7 +26,7 @@ import { adminLogout, checkAdminAuth } from './auth/api';
 import { getPasskeyStatus } from './auth/passkey/passkeyClient';
 import type { CidMetaResult } from './china/api';
 import { loadCachedCidMeta } from './china/metaCache';
-import { LoginView } from './auth/LoginView';
+import { LoginView, OrganizationCaNotice } from './auth/LoginView';
 import { GovView } from './gov/GovView';
 import { PrivateShell } from './private/PrivateShell';
 import { EducationView } from './education/EducationView';
@@ -344,6 +344,7 @@ function AppInner() {
         </Content>
       ) : (
         <Content style={{ position: 'relative', zIndex: 1, padding: '16px 24px 24px' }}>
+          <OrganizationCaNotice compact />
           <div
             style={{
               display: 'flex', gap: 6, marginBottom: 20, padding: '8px 12px',

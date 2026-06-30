@@ -1,5 +1,5 @@
 use axum::{
-    http::StatusCode,
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     middleware,
     response::IntoResponse,
     routing::{delete, get, patch, post},
@@ -44,6 +44,14 @@ pub(crate) use domains::citizens::model::*;
 struct AppState {
     db: Db,
     rate_limiter: Arc<LocalRateLimiter>,
+}
+
+#[derive(Serialize)]
+struct OrganizationCaCertificateInfoView {
+    filename: &'static str,
+    sha256: String,
+    subject: &'static str,
+    valid_until: String,
 }
 
 #[derive(Clone, Copy)]
@@ -2680,6 +2688,14 @@ fn main() {
             // 健康检查走专用 `/api/v1/health`;否则浏览器访问注册局只会看到健康 JSON。
             .route("/api/v1/health", get(health))
             .route(
+                "/api/v1/platform/ca-certificate",
+                get(organization_ca_certificate),
+            )
+            .route(
+                "/api/v1/platform/ca-certificate/info",
+                get(organization_ca_certificate_info),
+            )
+            .route(
                 "/api/v1/public/identity/search",
                 get(domains::citizens::handler::public_identity_search),
             );
@@ -2806,6 +2822,59 @@ async fn serve_console(addr: SocketAddr, app: axum::Router) {
     }
 }
 
+/// 下载本机构节点私有 CA 公钥证书。
+///
+/// 中文注释:该接口必须保持未登录可访问,否则员工首次访问不可信 HTTPS 时无法先下载证书。
+/// 只返回 CA 公钥证书 PEM;CA 私钥只落在服务器本地 `ONCHINA_TLS_DIR`。
+async fn organization_ca_certificate() -> impl IntoResponse {
+    match core::tls::organization_ca_certificate_pem() {
+        Ok(pem) => {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/x-x509-ca-cert"),
+            );
+            headers.insert(
+                header::CONTENT_DISPOSITION,
+                HeaderValue::from_static("attachment; filename=\"onchina-org-root-ca.crt\""),
+            );
+            (headers, pem).into_response()
+        }
+        Err(err) => {
+            warn!(error = %err, "onchina CA certificate download failed");
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1500,
+                "onchina ca certificate unavailable",
+            )
+        }
+    }
+}
+
+async fn organization_ca_certificate_info() -> impl IntoResponse {
+    match core::tls::organization_ca_certificate_info() {
+        Ok(info) => Json(ApiResponse {
+            code: 0,
+            message: "ok".to_string(),
+            data: OrganizationCaCertificateInfoView {
+                filename: info.filename,
+                sha256: info.sha256,
+                subject: info.subject,
+                valid_until: info.valid_until,
+            },
+        })
+        .into_response(),
+        Err(err) => {
+            warn!(error = %err, "onchina CA certificate info failed");
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1500,
+                "onchina ca certificate unavailable",
+            )
+        }
+    }
+}
+
 /// 退出信号:Ctrl-C 全平台;Unix 额外捕获 SIGTERM(node 停子进程默认信号)。
 async fn shutdown_signal() {
     let ctrl_c = async {
@@ -2903,6 +2972,7 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         "login persist failed" => "ONCHINA_LOGIN_PERSIST_FAILED",
         "challenge wallet mismatch" => "ONCHINA_BIND_WALLET_MISMATCH",
         "signature verify failed" => "ONCHINA_BIND_SIGNATURE_VERIFY_FAILED",
+        "onchina ca certificate unavailable" => "ONCHINA_TLS_CA_UNAVAILABLE",
         "admin admin_account already exists as federal admin" => {
             "ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY"
         }

@@ -19,7 +19,7 @@
 
 ## 风险点
 
-- 其他电脑首次访问自签 HTTPS 仍可能需要信任证书；本任务只统一服务入口和证书域名。
+- 其他电脑首次访问机构私有 CA 签发的 HTTPS 时，需要在浏览器中下载并安装本节点 CA 公钥证书。
 - 不能恢复 HTTP 作为正式入口。
 - 不能让 OnChina 随节点默认启动，避免只挖矿节点承担不必要服务。
 
@@ -28,7 +28,7 @@
 1. 移除桌面端启动时自动拉起 OnChina。
 2. 新增 OnChina 平台状态查询与手动启动命令。
 3. 设置页新增链上中国平台启动行、状态标签、启动 / 关闭按钮和二次确认。
-4. OnChina TLS 证书覆盖 `onchina.local`。
+4. OnChina 首启生成机构私有 CA，并用该 CA 签发 `onchina.local` 服务证书。
 5. 拆分登录错误码映射，前端按错误码显示中文提示。
 6. 更新文档、完善中文注释、清理旧 HTTP 文案残留。
 
@@ -50,7 +50,11 @@
 - 已把设置页状态改为真实健康状态：`已开启` 只代表 OnChina 进程存活且健康接口返回 `UP`，不再把“刚点启动/仅有进程句柄”误判为已开启。
 - 已补齐节点解绑 / 换机构安全闭环：`NODE_BINDING_UNBIND` 复用现有管理员安全动作 prepare/commit，要求本机会话管理员 + 冷钱包 active admin 签名确认；commit 后停用 active binding 并清退管理员会话。
 - 已修正前端管理员安全动作鉴权档映射：从旧两档字符串改为后端真实三档 `SESSION / PASSKEY / PASSKEY_COLD_SIGN`，避免冷签动作被前端旧字符串误拒。
-- 已将 OnChina 自签 TLS 目标主机收敛为 `onchina.local`，并用 `onchina-cert-host.txt` 标记触发旧证书再生成。
+- 已将 OnChina TLS 目标收敛为机构私有 CA 模式：本节点生成 `onchina-org-root-ca.crt/.key`，服务证书固定覆盖 `onchina.local`，并用 `onchina-cert-host.txt` 标记触发旧证书再生成。
+- 已新增未登录可访问的机构 CA 下载接口 `/api/v1/platform/ca-certificate` 与信息接口 `/api/v1/platform/ca-certificate/info`，员工可在 OnChina 登录页直接下载 CA 公钥证书，CA 私钥不通过 HTTP 暴露。
+- 已在 OnChina 登录页增加机构 CA 证书安装提示；未受信任 HTTPS 环境下，摄像头扫码和 passkey 均提示先安装机构 CA，不再误报为单纯摄像头权限问题。
+- 已将机构 CA 证书安装提示同步扩展到登录后的后台顶部，避免自动恢复登录态或已登录用户看不到下载证书入口。
+- 已修复 macOS 证书兼容性：旧 rcgen 超长期默认有效期证书会因缺少新策略标记自动重建；CA 有效期固定到 2036-01-01，服务证书每次启动重签且有效期 397 天以内。
 - 已将登录签名响应、挑战、链上管理员鉴权等错误映射为 `ONCHINA_LOGIN_*` 错误码，并在前端 notice 中补齐中文提示。
 - 已完成 OnChina 平台环境变量与错误码命名清理：平台本地配置统一用 `ONCHINA_*`，链连接与链上凭证配置统一用 `ONCHAIN_*` / `ONCHAIN_CREDENTIAL_*`，登录、鉴权、绑定、管理员和通用 API 错误码统一用 `ONCHINA_*`。
 - 已更新 `run.sh` / `clean-run.sh`，本地开发脚本准备 HTTPS 环境但仍要求在设置页手动启动平台。
@@ -61,8 +65,20 @@
 - `npm --prefix citizenchain/node/frontend run build`：通过。
 - `npm --prefix citizenchain/onchina/frontend run build`：在只包含本窗口 `notice.ts` 改动的临时干净 worktree 中通过，并刷新 OnChina 前端打包产物。
 - `npm --prefix citizenchain/onchina/frontend run build`：命名清理后再次通过，并刷新 `dist/assets/index-*.js`，旧错误码构建产物残留清零。
+- `npm --prefix citizenchain/onchina/frontend run build`：机构 CA 下载提示和 passkey 安全上下文修复后通过，并刷新 `dist/assets/index-*.js`。
+- `npm --prefix citizenchain/onchina/frontend run build`：登录后后台顶部证书提示修复后通过，并刷新 `dist/assets/index-*.js`。
 - `npm --prefix citizenchain/node/frontend run build`：命名清理后再次通过。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina -p node`：命名清理后通过。
+- `cargo check --manifest-path citizenchain/Cargo.toml -p onchina`：机构 CA TLS 和公开证书接口修复后通过。
+- `cargo build --manifest-path citizenchain/Cargo.toml -p onchina`：机构 CA TLS 和公开证书接口修复后通过。
+- `cargo check --manifest-path citizenchain/Cargo.toml -p onchina`：macOS 证书有效期修复后通过。
+- `cargo build --manifest-path citizenchain/Cargo.toml -p onchina`：macOS 证书有效期修复后通过。
+- 临时端口运行态验收：以 `ONCHINA_BIND_ADDR=127.0.0.1:8979`、独立 `/tmp/onchina-cert-policy-*` TLS/PG 目录启动新构建的 `target/debug/onchina serve`；生成的 CA 为 `2026-01-01` 到 `2036-01-01`，服务证书为启动日前一天到 397 天后，策略标记为 `onchina-ca-v2-ca2036-server397d`。
+- macOS 证书兼容验收：`/api/v1/platform/ca-certificate/info` 返回的 SHA-256 与下载 CA 证书 DER 指纹一致；`openssl verify -CAfile onchina-org-root-ca.crt onchina-server.crt` 返回 `OK`；验收后已停止临时服务并清理 `/tmp/onchina-cert-policy-*`。
+- 临时端口运行态验收：以 `ONCHINA_BIND_ADDR=127.0.0.1:8976`、`ONCHINA_ENABLE_TLS=1`、独立 `/tmp/onchina-ca-verify-*` TLS/PG 目录启动新构建的 `target/debug/onchina serve`，`curl -k https://127.0.0.1:8976/api/v1/health` 返回 `status=UP`。
+- 机构 CA 接口运行态验收：`/api/v1/platform/ca-certificate/info` 返回 `filename=onchina-org-root-ca.crt` 和证书 DER SHA-256；`/api/v1/platform/ca-certificate` 返回 `content-type=application/x-x509-ca-cert`、`content-disposition=attachment; filename="onchina-org-root-ca.crt"`；下载证书 DER SHA-256 与服务端信息一致。
+- TLS 证书链验收：`openssl verify -CAfile onchina-org-root-ca.crt onchina-server.crt` 返回 `OK`，服务证书 SAN 为 `DNS:onchina.local`；验收后已停止临时服务并删除 `/tmp/onchina-ca-verify-*`、下载证书和 header 临时文件。
+- 残留扫描：旧 TLS 文件名、旧单证书表述、旧摄像头/取消混合提示均为 0 命中；`citizenchain/runtime/` 无本次 diff。
 - `cargo build --manifest-path citizenchain/Cargo.toml -p onchina`：命名清理后通过，已生成新 debug 二进制用于运行态验收。
 - `node --check citizenapp/tools/generate_admin_division_bundle.mjs && node --check citizenapp/tools/generate_public_institution_bundle.mjs`：通过。
 - 临时端口运行态验收：以新 `ONCHINA_*` / `ONCHAIN_*` 环境变量启动 `citizenchain/target/debug/onchina serve`，内嵌 PG 初始化成功，`curl -k https://127.0.0.1:8974/api/v1/health` 返回 `status=UP`；验收后已停止服务并删除 `/tmp/onchina-codex-env-clean-*`。

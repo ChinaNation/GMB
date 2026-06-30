@@ -17,5 +17,5 @@ pub(crate) mod response;
 pub(crate) mod runtime_ops;
 /// 中文注释:敏感字符串封装,只服务密码学代码短暂读取。
 pub(crate) mod secret;
-/// 中文注释:onchina 内网 API 自签 TLS(Card 05;rcgen 自签 + rustls)。
+/// 中文注释:onchina 内网 API 机构私有 CA TLS(Card 05;rcgen CA 签发 + rustls)。
 pub(crate) mod tls;

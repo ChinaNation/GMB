@@ -106,7 +106,7 @@ function isGenericForbiddenText(message: string): boolean {
 }
 
 function domExceptionText(error: DOMException, fallback: string): string {
-  if (error.name === 'NotAllowedError') return '摄像头权限被拒绝或操作已取消';
+  if (error.name === 'NotAllowedError') return '浏览器拒绝该操作或操作已取消';
   if (error.name === 'AbortError') return '操作已取消';
   if (error.name === 'SecurityError') return '当前页面不允许该操作';
   if (error.name === 'NotSupportedError') return '当前浏览器不支持该操作';
@@ -128,6 +128,7 @@ function translateErrorCode(code: string): string | null {
     ONCHINA_RESOURCE_EXPIRED: '请求已过期，请重新操作',
     ONCHINA_RATE_LIMITED: '请求过于频繁，请稍后重试',
     ONCHINA_SERVICE_UNAVAILABLE: '服务暂不可用，请稍后重试',
+    ONCHINA_TLS_CA_UNAVAILABLE: '机构 CA 证书暂不可用，请确认链上中国平台已正常启动',
     ONCHINA_LOGIN_CAMERA_UNSUPPORTED: '当前浏览器不支持摄像头扫码，请更换新版浏览器',
     ONCHINA_LOGIN_CAMERA_INSECURE_CONTEXT: '当前页面不是 HTTPS 安全环境，无法使用摄像头',
     ONCHINA_LOGIN_CAMERA_PERMISSION_DENIED: '摄像头权限被拒绝，请在浏览器中允许摄像头权限',

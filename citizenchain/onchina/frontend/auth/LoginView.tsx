@@ -3,8 +3,8 @@
 // 登录成功后通过 useAuth().setAuth 写入全局,App.tsx 只负责在 !auth 时渲染 <LoginView />。
 
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Modal, Radio, Space, Typography } from 'antd';
-import { QrcodeOutlined } from '@ant-design/icons';
+import { Alert, Button, Modal, Radio, Space, Typography } from 'antd';
+import { DownloadOutlined, QrcodeOutlined } from '@ant-design/icons';
 import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth } from '../utils/storedAuth';
 import { parseSignedLoginPayload } from '../utils/parseSignedPayload';
@@ -24,6 +24,41 @@ function createSessionId(): string {
     return crypto.randomUUID();
   }
   return `sid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+const CA_CERTIFICATE_URL = '/api/v1/platform/ca-certificate';
+
+export function OrganizationCaNotice({ compact = false }: { compact?: boolean }) {
+  const isTrustedPage = typeof window === 'undefined' ? true : window.isSecureContext;
+  return (
+    <Alert
+      type={isTrustedPage ? 'info' : 'warning'}
+      showIcon
+      style={{ marginBottom: compact ? 16 : 24, borderRadius: 8 }}
+      message={isTrustedPage ? '机构 CA 证书' : '当前浏览器尚未信任本节点证书'}
+      description={
+        <Space direction={compact ? 'horizontal' : 'vertical'} size={8} wrap style={{ width: '100%' }}>
+          <Typography.Text>
+            初次使用请先下载并安装本机构节点 CA 证书，安装完成后关闭并重新打开浏览器，再使用摄像头扫码和 passkey。
+          </Typography.Text>
+          {!compact ? (
+            <Typography.Text type="secondary">
+              Windows 选择“受信任的根证书颁发机构”；macOS 在“钥匙串访问”中将证书设为“始终信任”。如出现 -25294，先删除同名旧证书后重新导入。
+            </Typography.Text>
+          ) : null}
+          <Button
+            type="primary"
+            size="small"
+            icon={<DownloadOutlined />}
+            href={CA_CERTIFICATE_URL}
+            style={{ width: 'fit-content' }}
+          >
+            下载机构 CA 证书
+          </Button>
+        </Space>
+      }
+    />
+  );
 }
 
 export function LoginView() {
@@ -214,6 +249,7 @@ export function LoginView() {
 
       {/* 登录内容区域 */}
       <div style={{ padding: '32px 36px 36px' }}>
+        <OrganizationCaNotice />
         <CitizenSignaturePanel
           qrTitle="登录二维码"
           qrValue={pendingQrLogin?.login_qr_payload}

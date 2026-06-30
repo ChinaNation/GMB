@@ -81,6 +81,7 @@ OnChina 管理员登录必须使用登录专用错误码，禁止继续把登录
 
 | 错误码 | 中文提示 |
 |---|---|
+| `ONCHINA_TLS_CA_UNAVAILABLE` | 机构 CA 证书暂不可用，请确认链上中国平台已正常启动 |
 | `ONCHINA_LOGIN_CAMERA_UNSUPPORTED` | 当前浏览器不支持摄像头扫码，请更换新版浏览器 |
 | `ONCHINA_LOGIN_CAMERA_INSECURE_CONTEXT` | 当前页面不是 HTTPS 安全环境，无法使用摄像头 |
 | `ONCHINA_LOGIN_CAMERA_PERMISSION_DENIED` | 摄像头权限被拒绝，请在浏览器中允许摄像头权限 |
