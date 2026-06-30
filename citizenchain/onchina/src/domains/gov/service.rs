@@ -7,13 +7,13 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use crate::Db;
-use crate::cid::InstitutionCategory;
 use crate::cid::china::{china_sqlite_hash, provinces};
+use crate::cid::InstitutionCategory;
 use crate::institution::subjects::{
-    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
     service::{build_default_accounts_for_codes, default_account_names_for_codes},
+    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
 };
+use crate::Db;
 
 #[allow(dead_code)]
 #[path = "../../../../runtime/primitives/cid/china/china_cb.rs"]

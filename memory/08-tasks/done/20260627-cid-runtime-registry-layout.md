@@ -23,7 +23,7 @@
 - `citizenchain/registry/src/cid/`:registry CID 唯一目录,涉及代码与 SQLite LFS 文件。
 - `citizenchain/registry/src/`:移除旧 china/number 顶层模块引用,涉及代码。
 - `.gitattributes`:更新 `china.sqlite` LFS 路径,涉及配置。
-- `citizenchain/scripts/`:更新本地 CID_CHINA_DB 路径,涉及开发脚本。
+- `citizenchain/scripts/`:更新本地 ONCHINA_CHINA_DB 路径,涉及开发脚本。
 - `memory/`:清理旧 `number/`、顶层 `china/`、`primitives/src/code.rs` 文档残留,涉及文档。
 
 ## 验收要求

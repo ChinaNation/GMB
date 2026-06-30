@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  // 中文注释:registry 后端同源托管 dist,base 用相对路径以适配任意内网挂载路径。
+  // 中文注释:OnChina 后端同源托管 dist,base 用相对路径以适配任意内网挂载路径。
   base: './',
   plugins: [react()],
   server: {
@@ -11,8 +11,9 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8899',
-        changeOrigin: true
+        target: 'https://onchina.local:8964',
+        changeOrigin: true,
+        secure: false
       }
     }
   },
@@ -22,8 +23,9 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8899',
-        changeOrigin: true
+        target: 'https://onchina.local:8964',
+        changeOrigin: true,
+        secure: false
       }
     }
   }

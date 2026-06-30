@@ -3,20 +3,20 @@
 //! 中文注释:公益组织固定为 `S + GY`,具有法人资格且非营利,由成员、理事和监事构成。
 
 use axum::{
-    Json,
     extract::{Query, State},
     http::HeaderMap,
     response::Response,
+    Json,
 };
 use serde::Serialize;
 
-use crate::AppState;
 use crate::domains::private::common::{
-    PrivateModuleSpec, PrivateType, assert_module_spec, fixed_rule, lock_input_to_rule,
+    assert_module_spec, fixed_rule, lock_input_to_rule, PrivateModuleSpec, PrivateType,
 };
 use crate::domains::private::participants::WELFARE_ROLES;
-use crate::institution::subjects::CreateInstitutionInput;
 use crate::institution::subjects::registration::{self, ListInstitutionQuery};
+use crate::institution::subjects::CreateInstitutionInput;
+use crate::AppState;
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct WelfareProfile {

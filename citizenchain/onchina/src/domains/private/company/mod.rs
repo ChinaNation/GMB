@@ -3,20 +3,20 @@
 //! 中文注释:股权公司固定为 `S + GQ`,具有法人资格,由股东和出资关系构成。
 
 use axum::{
-    Json,
     extract::{Query, State},
     http::HeaderMap,
     response::Response,
+    Json,
 };
 use serde::Serialize;
 
-use crate::AppState;
 use crate::domains::private::common::{
-    PrivateModuleSpec, PrivateType, assert_module_spec, fixed_rule, lock_input_to_rule,
+    assert_module_spec, fixed_rule, lock_input_to_rule, PrivateModuleSpec, PrivateType,
 };
-use crate::domains::private::participants::{COMPANY_ROLES, ParticipantRole};
-use crate::institution::subjects::CreateInstitutionInput;
+use crate::domains::private::participants::{ParticipantRole, COMPANY_ROLES};
 use crate::institution::subjects::registration::{self, ListInstitutionQuery};
+use crate::institution::subjects::CreateInstitutionInput;
+use crate::AppState;
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct CompanyProfile {

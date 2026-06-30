@@ -4,27 +4,27 @@
 //! `private/<type>/` 六类模块传入固定类型规则,不得再由一个 private 总 handler 吞掉。
 
 use axum::{
-    Json,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
+    Json,
 };
 use chrono::Utc;
 
 use crate::auth::actions::require_admin_security_grant;
 use crate::auth::login::require_admin_any;
 use crate::auth::operation_auth::AdminActionType;
-use crate::cid::InstitutionCategory;
 use crate::cid::china::{city_code_by_name, province_code_by_name};
 use crate::cid::code;
+use crate::cid::InstitutionCategory;
 use crate::domains::private::common::resolve_private_type_rule;
 use crate::institution::subjects::http::{
-    MAX_CITY_CHARS, MAX_PROVINCE_CHARS, extract_city_code, extract_province_code,
-    insert_default_accounts_best_effort, service_error_to_response,
+    extract_city_code, extract_province_code, insert_default_accounts_best_effort,
+    service_error_to_response, MAX_CITY_CHARS, MAX_PROVINCE_CHARS,
 };
 use crate::institution::subjects::model::{
-    CreateInstitutionInput, CreateInstitutionOutput, Institution, InstitutionListFilter,
-    InstitutionListRow, is_education_school_type,
+    is_education_school_type, CreateInstitutionInput, CreateInstitutionOutput, Institution,
+    InstitutionListFilter, InstitutionListRow,
 };
 use crate::institution::subjects::service::{
     derive_category, resolve_legal_representative_scope_for_codes, validate_cid_full_name,

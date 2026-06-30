@@ -49,9 +49,9 @@ citizenchain（打包、部署文档）
 ## 进度
 
 - [x] 任务卡创建
-- [x] **内嵌 PostgreSQL(registry 自管)**:`registry/src/core/embedded_pg.rs` —— ensure_started(首启 initdb→起 postgres@127.0.0.1:CID_PG_PORT→建 registry 库→自拼 DATABASE_URL)/stop;`CID_EMBEDDED_PG` 开关(桌面内嵌 / 大市外部托管两形态);WAL 归档配 `CID_PG_WAL_ARCHIVE_DIR`(PITR)。
+- [x] **内嵌 PostgreSQL(registry 自管)**:`registry/src/core/embedded_pg.rs` —— ensure_started(首启 initdb→起 postgres@127.0.0.1:ONCHINA_PG_PORT→建 registry 库→自拼 DATABASE_URL)/stop;`ONCHINA_EMBEDDED_PG` 开关(桌面内嵌 / 大市外部托管两形态);WAL 归档配 `ONCHINA_PG_WAL_ARCHIVE_DIR`(PITR)。
 - [x] **main.rs 接线**:启动期 ensure_started 取 DATABASE_URL;退出信号(Ctrl-C/SIGTERM)优雅停 PG;serve 抽 `serve_registry`(TLS 分支)。
-- [x] **内网 TLS**:`registry/src/core/tls.rs` —— rcgen 自签(localhost+127.0.0.1 SAN)持久化 `CID_TLS_DIR`,axum-server+rustls(ring)起 HTTPS,`CID_ENABLE_TLS` 开关;Cargo 加 axum-server/rustls/rcgen。
+- [x] **内网 TLS**:`registry/src/core/tls.rs` —— rcgen 自签(localhost+127.0.0.1 SAN)持久化 `ONCHINA_TLS_DIR`,axum-server+rustls(ring)起 HTTPS,`ONCHINA_ENABLE_TLS` 开关;Cargo 加 axum-server/rustls/rcgen。
 - [x] **node 端 env 传递**:`node/src/registry_proc/mod.rs` —— start_registry(app) 经 Tauri resource_dir/app_data_dir 解析路径,只当随包 PG 存在才开内嵌+HTTPS(dev 退化外部 PG+HTTP);registry 二进制从 `resources/registry-bin/` 解析(unix 补可执行位)+ exe 同目录兜底;desktop 调用点传 app.handle()。
 - [x] **打包配置**:`node/tauri.conf.json` 加 `resources`(registry-bin/postgres/china.sqlite/registry-frontend/dist);占位 + `node/resources/.gitignore`(真产物不入库,dev 构建路径存在);`citizenchain/scripts/prepack.{sh,ps1}`(build registry+前端、拷 china.sqlite、官方 PG 二进制 CITIZENCHAIN_PG_DIST 组装)。
 - [x] **备份/PITR**:`citizenchain/scripts/registry-{backup.sh,restore.sh,postgresql.conf.sample}`(每日 pg_basebackup 全量到 NAS + WAL 持续归档 + PITR 恢复 + 大市调优模板)。

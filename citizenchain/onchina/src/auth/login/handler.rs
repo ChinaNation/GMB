@@ -4,11 +4,11 @@
 //! `qr_login.rs`,避免普通登录和二维码登录继续堆在同一个文件。
 
 use axum::{
-    Json,
     extract::{Request, State},
     http::{HeaderMap, StatusCode},
     middleware,
     response::{IntoResponse, Response},
+    Json,
 };
 use chrono::{Duration, Utc};
 use uuid::Uuid;
@@ -16,14 +16,14 @@ use uuid::Uuid;
 use crate::auth::repo;
 use crate::*;
 
-use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 use super::guards::{admin_auth, bearer_token};
 use super::model::*;
 use super::onchain_gate;
 use super::signature::{
     build_admin_name_from_user, extract_domain_from_origin, parse_admin_identity_qr,
-    resolve_scope_city_name, verify_admin_signature,
+    verify_admin_signature,
 };
+use super::LOGIN_SIGN_REQUEST_TTL_SECONDS;
 
 pub(crate) async fn require_admin_session_middleware(
     State(state): State<AppState>,
@@ -102,11 +102,15 @@ pub(crate) async fn admin_auth_identify(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    let province = match repo::province_scope_for_registry_org(
-        &state.db,
-        &admin.admin_account,
-        &admin.institution_code,
-    ) {
+    let admin_account_for_scope = admin.admin_account.clone();
+    let institution_code_for_scope = admin.institution_code.clone();
+    let (province, scope_city_name, scope_town_name) = match state.db.with_client(move |conn| {
+        repo::derive_admin_scope_conn(
+            conn,
+            admin_account_for_scope.as_str(),
+            institution_code_for_scope.as_str(),
+        )
+    }) {
         Ok(v) => v,
         Err(err) => {
             let message = format!("query admin scope failed: {err}");
@@ -116,7 +120,6 @@ pub(crate) async fn admin_auth_identify(
     if province.as_deref().map(str::trim).unwrap_or("").is_empty() {
         return api_error(StatusCode::FORBIDDEN, 2002, "admin province scope missing");
     }
-    let scope_city_name = resolve_scope_city_name(&admin);
     let cid_short_name = repo::resolve_home_cid_short_name(
         &state.db,
         &admin.institution_code,
@@ -136,13 +139,7 @@ pub(crate) async fn admin_auth_identify(
             admin_name: build_admin_name_from_user(&admin, province.as_deref()),
             scope_province_name: province,
             scope_city_name,
-            scope_town_name: if crate::core::chain_runtime::is_tier1_registry(
-                &admin.institution_code,
-            ) {
-                None
-            } else {
-                crate::core::chain_runtime::node_scope_town()
-            },
+            scope_town_name,
             cid_short_name,
         },
     })
@@ -186,14 +183,6 @@ pub(crate) async fn admin_auth_challenge(
         expire_at.timestamp()
     );
 
-    match repo::get_admin_by_account(&state.db, input.admin_account.as_str()) {
-        Ok(Some(_)) => {}
-        Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "admin not found"),
-        Err(err) => {
-            let message = format!("query admin failed: {err}");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
-        }
-    }
     if let Err(err) = repo::insert_login_sign_request(
         &state.db,
         &LoginSignRequest {
@@ -333,12 +322,49 @@ pub(crate) async fn admin_auth_verify(
     };
 
     // 链上集合鉴权 + 落本地元数据 + 签发会话。
-    let (access_token, expire_at, admin) =
+    let outcome =
         match onchain_gate::issue_session_after_onchain_gate(&state, &verified_pubkey, now).await {
             Ok(v) => v,
             Err(err) => return onchain_gate::gate_error_response(err),
         };
+    let onchain_gate::GateOutcome::Session {
+        access_token,
+        expire_at,
+        admin,
+    } = outcome
+    else {
+        return api_error(StatusCode::CONFLICT, 1007, "node binding required");
+    };
 
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: AdminVerifyOutput {
+            access_token,
+            expire_at: expire_at.timestamp(),
+            admin,
+        },
+    })
+    .into_response()
+}
+
+pub(crate) async fn admin_auth_confirm_node_binding(
+    State(state): State<AppState>,
+    Json(input): Json<NodeBindingConfirmInput>,
+) -> impl IntoResponse {
+    let now = Utc::now();
+    let (access_token, expire_at, admin) =
+        match onchain_gate::confirm_node_binding_after_onchain_gate(
+            &state,
+            input.binding_challenge_id.as_str(),
+            input.candidate_id.as_str(),
+            now,
+        )
+        .await
+        {
+            Ok(v) => v,
+            Err(err) => return onchain_gate::gate_error_response(err),
+        };
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),

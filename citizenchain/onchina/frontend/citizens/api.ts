@@ -123,7 +123,7 @@ export async function searchLegalRepresentativeCitizens(
 
 /**
  * 注册局管理员直接录入公民并直接发护照。
- * 中文注释:属 LOGIN_STATE 操作(仅需有效会话),无需扫码签名授权,直接调用。
+ * 中文注释:属 SESSION 操作(仅需有效会话),无需扫码签名授权,直接调用。
  * 成功即「已发护照」(公民 NORMAL + 有效期)。
  */
 export async function createCitizen(

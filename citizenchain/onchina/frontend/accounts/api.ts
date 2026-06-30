@@ -13,7 +13,7 @@ const SECURITY_GRANT_HEADER = 'x-cid-security-grant';
 
 export type { CreateAccountOutput, InstitutionAccount, MultisigChainStatus } from '../subjects/api';
 
-// 中文注释:新增机构账户属 SCAN_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
+// 中文注释:新增机构账户属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
 export async function createAccount(
   auth: AdminAuth,
   cidNumber: string,

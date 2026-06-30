@@ -18,12 +18,12 @@
 - `load_runtime_state` 解密后 `_snapshot` 立即丢弃
 - `persist_runtime_state` 写入的只是 `{version: 2}` 空壳
 - 代码注释已明确："runtime_meta 现在只作为'运行态元信息占位'，不再恢复任何主私钥/主公钥状态"
-- 但 `CID_RUNTIME_META_KEY` 仍是启动期 `required_env`，导致缺失即 panic→destructor 二次 panic→abort
+- 但 `ONCHAIN_CREDENTIAL_META_KEY` 仍是启动期 `required_env`，导致缺失即 panic→destructor 二次 panic→abort
 
 ## 目标
 
 完全删除 `runtime_meta` 相关代码、env 变量、部署脚本和数据库表，
-让 cid backend 启动不再依赖 `CID_RUNTIME_META_KEY`。
+让 cid backend 启动不再依赖 `ONCHAIN_CREDENTIAL_META_KEY`。
 
 ## 改动范围
 
@@ -34,7 +34,7 @@
 - `backend/src/main_tests.rs`：删相关 `set_var` 与 `PersistedRuntimeMeta` 测试
 
 ### 部署 / 文档
-- `deploy/prod/scripts/install_citizencode_app.sh`：删 `CID_RUNTIME_META_KEY` 默认值与必需变量校验
+- `deploy/prod/scripts/install_citizencode_app.sh`：删 `ONCHAIN_CREDENTIAL_META_KEY` 默认值与必需变量校验
 - `.env.dev.local` / `.env.example` / 任何文档里残留的该变量
 
 ### 数据库
@@ -44,7 +44,7 @@
 ## 验收
 
 1. `cargo check` / `cargo build` 通过
-2. `bash cid-run.sh` 在不设置 `CID_RUNTIME_META_KEY` 的情况下启动成功
+2. `bash cid-run.sh` 在不设置 `ONCHAIN_CREDENTIAL_META_KEY` 的情况下启动成功
 3. `grep -r runtime_meta citizencode/` 仅剩 migration 文件
 4. 回写 `memory/MEMORY.md` 一条 feedback，避免被恢复
 

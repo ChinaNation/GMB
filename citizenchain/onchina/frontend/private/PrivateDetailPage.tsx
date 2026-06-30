@@ -76,7 +76,7 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, 
     payload: unknown,
   ): Promise<AdminSecurityGrantOutput> => {
     const prepared = await prepareAdminAction(auth, actionType, payload);
-    if (prepared.auth_type !== 'SCAN_SIGN' || !prepared.sign_request) {
+    if (prepared.auth_type !== 'PASSKEY_COLD_SIGN' || !prepared.sign_request) {
       throw new Error('该操作缺少公民钱包签名请求');
     }
     return new Promise<AdminSecurityGrantOutput>((resolve, reject) => {

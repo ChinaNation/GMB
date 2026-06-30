@@ -19,7 +19,7 @@
 
 1. **添加清算行**:输入 CID → 链上判定多签是否存在 → 已存在显示详情 / 不存在进创建流程
 2. **机构详情**:展示链上 `organization-manage::Institutions[cid_number]` 全部信息 + 折叠卡片入口(其他账户/管理员)+ 节点声明状态 + 提案列表
-3. **创建机构多签**:拉 CID `registration-info` → 按 CID 返回的账户名称配置初始资金 + 管理员 + 阈值 → 冷钱包签 `propose_create_institution` extrinsic → 等其他管理员投票通过 → 进节点声明流程
+3. **创建机构多签**:拉 OnChina `registration-info` → 按 OnChina 返回的账户名称配置初始资金 + 管理员 + 阈值 → 冷钱包签 `propose_create_institution` extrinsic → 等其他管理员投票通过 → 进节点声明流程
 
 ## 1. 状态机(`offchain/section.tsx`)
 

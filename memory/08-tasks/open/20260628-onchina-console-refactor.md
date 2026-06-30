@@ -2,7 +2,7 @@
 
 ## 任务需求
 
-把 registry 后端从"联邦/市注册局双角色"重构为全机构统一控制台（onchina）：节点身份机构码化、三档鉴权（Session/Passkey/PasskeyColdSign）+ 默认拒绝、能力模型（CID 码主 + CID 号辅 + 实例覆盖）、web 端复杂提案、统一入口 `onchina.local:8964`，最后目录/crate 改名。
+把 registry 后端从"联邦/市注册局双角色"重构为全机构统一控制台（onchina）：平台启动不预设机构，管理员冷钱包登录后用 `verified_pubkey` 反查链上 active admin 所属机构，首次二次确认后本节点绑定唯一机构；后续只允许该绑定机构 active admin 登录。同步保持三档鉴权（Session/Passkey/PasskeyColdSign）+ 默认拒绝、能力模型（CID 码主 + CID 号辅 + 实例覆盖）、web 端复杂提案、统一入口 `https://onchina.local:8964`。
 
 ## 所属模块
 
@@ -37,7 +37,7 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 ## 分步卡
 
 ### Phase 0 · 平台地基（全局阻塞前置）
-- **01** 节点身份多值化：`chain_runtime::node_institution_identity` 从 `is_federal:bool` 扩展为机构码 + admin_level + 省码 + 市码 + scope_level；`AdminPallet` 补 `PrivateAdmins`；机构码→3 pallet 路由（FRG/固定治理→Genesis、公权→Public、私权→Private）。文件：`src/core/chain_runtime.rs`。依赖：无。风险：高。
+- **01** 登录反查 + 节点绑定：`chain_runtime` 从 `verified_pubkey` 扫描链上 active admin 集合生成候选机构；`onchain_gate` 首次登录返回绑定候选，确认后写 `node_institution_bindings`；后续登录按 active binding 复查 signer ∈ 本机构 active admin；解绑 / 换机构通过 `NODE_BINDING_UNBIND` 冷签动作先停用 active binding，再重新登录绑定。文件：`src/core/chain_runtime.rs`、`src/auth/login/*`、`src/auth/repo.rs`、`src/auth/actions.rs`。依赖：无。风险：高。
 - **02** `AdminAuthContext` 扩展多值字段 + 审计改写全部 `registry_org_code` 访问点（约 123 处 / 18 文件）+ DTO 同步。文件：`src/admins/login/{model,onchain_gate}.rs`、`src/admins/model.rs`。依赖：01。风险：高。
 
 ### Phase 1 · auth 主线
@@ -67,7 +67,7 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 
 - 每卡落地后 `cargo build -p registry`（卡 17 后 `-p onchina`）+ 相关单测通过。
 - 三档鉴权穷尽匹配，新增 action 漏标分档则编译失败。
-- 节点身份能正确路由 FRG/固定治理/公权/私权四类到对应 pallet；PMUL 拒入。
+- `verified_pubkey` 能正确反查 FRG 省组/公权/私权机构候选；PMUL 拒入；未绑定节点必须二次确认绑定，已绑定节点只允许绑定机构 active admin 登录。
 - 前后端身份字段对齐，无旧二值缓存读空。
 - 零残留：无 `is_federal`/`RegistryOrgCode`/双角色死分支。
 
@@ -76,14 +76,15 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 - [x] 需求分析 + 方案设计 + ADR-030
 - [x] 链端 4 pallet 接线核实
 - [x] 主任务卡创建
-- [x] 01 节点身份多值化（chain_runtime.rs：NodeInstitutionIdentity={机构码,候选pallet,主账户}；准入路由：固定治理档NRC/PRC/PRB拒入、FRG→Genesis、公权→Public、私权→Private、非法人→[Public,Private]探测、个人/PMUL拒入；fetch 候选探测）
+- [x] 01 登录反查 + 节点绑定（chain_runtime.rs：`find_active_admin_memberships(verified_pubkey)` 扫描 FRG 省组/PublicAdmins/PrivateAdmins；auth login：未绑定返回候选，确认后写 active binding；已绑定按绑定机构复查；个人/PMUL拒入）
+- [x] 01-补 节点解绑 / 换机构闭环：新增 `NODE_BINDING_UNBIND` 冷签安全动作，当前本机会话管理员 prepare，冷钱包 active admin 签名 commit，成功后 active binding 置 `INACTIVE` 并删除本节点所有管理员 session；换机构必须解绑后重新扫码绑定新机构。
 - [x] 02 身份二值→多值（registry_org_code→institution_code+admin_level）：6 DTO + AdminUser + repo 56处 + db schema(列改名迁移+去CHECK+索引) + onchain_gate + 12 consumer 文件共 160 处；cargo check+test 绿(53 passed)；零残留
 - [x] 03 auth 位移（用户改主意执行）：`git mv src/admins → src/auth`;全库 `crate::admins::`→`crate::auth::`(词边界避开 city_registry_admins,~51 处)+ main.rs `mod admins`→`mod auth` 与 bare `admins::`→`auth::`;58 测试绿
-- [x] 04 统一入口 + mDNS（当前统一入口固定为 https://onchina.local:8964；main.rs 绑定 0.0.0.0:8964；platform/mdns.rs 用 mdns-sd 广告 _onchina._tcp.local 主机名 onchina.local:8964[best-effort,不再提供主机名覆盖]；CORS 默认 origins 保留 https://onchina.local:8964 和前端开发端口；部署 env：LAN 用 onchina.local 须 CID_ENABLE_TLS=on + CID_PASSKEY_RP_ID=onchina.local + CID_PASSKEY_ORIGIN=https://onchina.local:8964[WebAuthn secure context]）
+- [x] 04 统一入口 + mDNS（当前统一入口固定为 https://onchina.local:8964；main.rs 绑定 0.0.0.0:8964；platform/mdns.rs 用 mdns-sd 广告 _onchina._tcp.local 主机名 onchina.local:8964[best-effort,不再提供主机名覆盖]；CORS 默认 origins 保留 https://onchina.local:8964 和前端开发端口；部署 env：LAN 用 onchina.local 须 ONCHINA_ENABLE_TLS=on + ONCHINA_PASSKEY_RP_ID=onchina.local + ONCHINA_PASSKEY_ORIGIN=https://onchina.local:8964[WebAuthn secure context]）
 - [x] 05 三档鉴权 + 默认拒绝（AdminOperationAuth{Session,Passkey,PasskeyColdSign}；auth_type 穷尽 match；is_session；新增三档守卫单测；Session/PasskeyColdSign=原 LoginState/ScanSign 行为保留，Passkey 档保留待 06 接通，无安全空窗；cargo test 54 passed；档名注释全现在时化）
 - [x] 06 passkey 模块（webauthn-rs v0.5.5；3 表[credentials/ceremonies/assertions]+admins/passkey 模块[register/assert begin·finish 4 端点]+require_passkey_assertion 一次性令牌；三档强制：prepare 仅 PasskeyColdSign、commit 流+UpdateX handler 消费断言；UpdateX 提升 Passkey；FRG 门禁解耦为 requires_federal_admin 保行为；fail-closed 不降档；前端 passkeyClient.ts[原生 navigator.credentials+base64url]；cargo test 57 passed 含 SoftPasskey 全流程往返；frontend tsc 绿）
 - [x] 07 institution 位移（用户改主意执行）：`accounts/`+`subjects/` git mv 嵌入新 `institution/`(新 institution/mod.rs 声明两 pub(crate) 子模块);`crate::accounts::`→`crate::institution::accounts::`、`crate::subjects::`→`crate::institution::subjects::`(~87 处)+ main.rs 合并 mod;58 测试绿
-- [x] 08 scope 多档化（用户执行 08→09→10→12 路径）：`VisibleScope` 重写为五档(全国/省/市/镇/私权自机构) + 镇维度 + `nationwide` 标志;`get_visible_scope` 按 `admin_level` 派生,**FRG 先于 admin_level 特判为省级**(FRG 码属 NATIONAL 但管理员按省分区);新 `chain_runtime::node_scope_{province,city,town}` 共享 env 来源;**新 `repo::derive_admin_scope_conn` 作 onchain_gate 签发与 guards 重建唯一来源**(口径一致 + 按层级只填该档维度);onchain_gate 镇校验(`CID_RUNTIME_SCOPE_TOWN_NAME`∈china.sqlite);ctx+3 DTO 加 `scope_town_name`;6 处机构 scope 检查加 `includes_town`;8 个 get_visible_scope 单测。**对抗式验证 sound(high)×4**。**镇档语义**:记录无镇维度(town 空,手动创建机构 town_code 恒空)= 不限镇对镇级可见,只排除明确属其他镇的对账机构(includes_town + B SQL 一致 lenient)。**公民不按镇**(A 撤销:公民省/市级精度,镇非其 scope 轴)。
+- [x] 08 scope 多档化（用户执行 08→09→10→12 路径）：`VisibleScope` 重写为五档(全国/省/市/镇/私权自机构) + 镇维度 + `nationwide` 标志;`get_visible_scope` 按 `admin_level` 派生,**FRG 先于 admin_level 特判为省级**(FRG 码属 NATIONAL 但管理员按省分区);`repo::derive_admin_scope_conn` 改为从 active binding 取省/市/镇,不再读取节点 `ONCHAIN_CREDENTIAL_SCOPE_*`;ctx+3 DTO 加 `scope_town_name`;6 处机构 scope 检查加 `includes_town`;8 个 get_visible_scope 单测。**镇档语义**:记录无镇维度(town 空,手动创建机构 town_code 恒空)= 不限镇对镇级可见,只排除明确属其他镇的对账机构(includes_town + B SQL 一致 lenient)。**公民不按镇**(A 撤销:公民省/市级精度,镇非其 scope 轴)。
 - [x] 09 admin 泛化(**完成 2026-06-29**,见 [20260629-onchina-09-10-admin-seed-generalization](20260629-onchina-09-10-admin-seed-generalization.md)):Tier 谓词单点 + AdminActionType→Tier 中性名 + capability can_view_own_admins;零 FRG/CREG 字面。
 - [x] 10 seed 泛化(**完成 2026-06-29**,re-scope 为退役):删 seed.rs/run_seed_federal_admins/federal_registry_scope 表;FRG 全走链读 FederalRegistryProvinceGroups(每节点单省)。
 - [x] 08-补 B/C/D（card 08 收尾,对抗式验证 sound×4）：**B** gov 公权机构列表按镇过滤(`list_official_institutions_scope` 加 town_code 入参 + SQL `$7` lenient;handler 串 locked_town/town_code;query DTO 加 town_name);**C** 前端 useScope 泛化为 admin_level 五档(删 FRG/CREG 硬编码,镜像后端)+ `scope_town_name`(types/api/3 构造点)+ storedAuth v4→v5;**D** `search_parent_institutions` 补 scope 管辖校验(原丢弃 ctx,任一管理员可跨省/市搜父机构=预存越权洞)。68 测试 + node + tsc 绿
@@ -103,7 +104,7 @@ card 06/14 审查发现 8(App.tsx 默认跳转覆盖手动切 tab→hasInitializ
 - **[HIGH] 发现 5 城市管理员被锁死不能更新机构/上传文档**:✅ 从 `operation_auth.rs::requires_federal_admin` 删 `InstitutionUpdate | InstitutionUploadDocument` + 边界守卫单测。验证 **sound(high)**:两 handler(subjects/admin.rs:224 update_institution、docs/handler.rs:209 upload_document 经 ensure_institution_visible_to_admin)各自从会话 scope(非请求体)做省/市校验,删联邦门禁不开跨省洞;两动作 Session 档,通用 prepare/commit 拒 Session 档无旁路。
 - **[HIGH] 发现 1 challenge/grant 查询缺 admin 先验隔离**:✅ `get_action_challenge_conn`/`get_security_grant_conn` 加 `actor_account` 入参 + `AND lower(actor_account)=lower($2)`;3 callsite(actions.rs commit×2 + require_admin_security_grant)全传 ctx.admin_account。验证 **sound(high)**:DB 层 + app 层(same_admin_account)双隔离,纯防御加固不破合法流。
 - **[MEDIUM] 发现 3 prepare 缺目标机构管辖预检**:✅ preview_action_conn 加两预检——`precheck_institution_target_scope_conn`(CreateAccount/DeleteAccount/DeleteDocument:按 target 取号→get_institution_with_accounts_conn→includes_province/city)+ `precheck_institution_create_scope`(InstitutionCreate:逐字段镜像 create_institution_inner 的 locked_province/city,仅拒非空且不等于锁定值,留空交 handler 回填,绝不更严)。完备性评审独立确认与真 handler 等价、无越权洞。**更正**:先前误判"docs handler 无 scope",实则 docs 经 `ensure_institution_visible_to_admin`(subjects/http.rs)校验,发现 3 是纵深防御非堵活洞。
-- **[HIGH→改正] 发现 6 CREG city 属省校验**:初版在 `province_scope_for_registry_org_conn` 读路径硬 fail-closed→**对抗式验证判 FLAWED**:`issue_session_after_onchain_gate`(onchain_gate.rs:121)每次登录用裸 `CID_RUNTIME_SCOPE_CITY_NAME` env 覆写 city_name 且从不校验,节点 env 城市名与 china.sqlite 不逐字一致(如"三山"vs"三山市")会每请求 403 锁死合法管理员。✅ **改正**:撤销读时校验,移到 onchain_gate 的 env→会话写入边界——非 FRG 登录时校验 node_province/node_city ∈ china.sqlite(province_code_by_name + city_code_by_name),不一致 `GateError::Config` 拒登录(明确报错,非每请求锁死)。
+- **[HIGH→改正] 节点预配置机构模型退役**:初版把节点 env 机构身份作为登录边界,导致安装节点时必须提前知道省/市/机构。✅ **改正**:登录签名通过后由 `verified_pubkey` 反查链上 active admin 所属机构;未绑定节点返回候选并二次确认绑定;绑定后本节点只允许该机构 active admin 登录;scope 从 active binding 派生,不再由节点 env 预填。
 
 **完备性评审附带 LOW(已修)**:`ensure_institution_visible_to_admin`(subjects/http.rs)原 fail-open(scope 字段 None 时放行,今不可达但与全仓 fail-closed 不一致)→改用 `get_visible_scope`/`includes_*` 统一 fail-closed。
 

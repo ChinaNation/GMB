@@ -12,7 +12,7 @@ const ONCHINA_TLS_HOST: &str = "onchina.local";
 
 /// 是否启用 HTTPS(桌面/生产安装默认开;本地开发脚本同样开启 HTTPS)。
 pub(crate) fn is_enabled() -> bool {
-    std::env::var("CID_ENABLE_TLS")
+    std::env::var("ONCHINA_ENABLE_TLS")
         .ok()
         .map(|v| {
             let v = v.trim().to_ascii_lowercase();
@@ -21,9 +21,9 @@ pub(crate) fn is_enabled() -> bool {
         .unwrap_or(false)
 }
 
-/// 证书持久化目录:`CID_TLS_DIR`(node 传 `base_path/onchina-tls`);兜底 exe 同目录 `tls`。
+/// 证书持久化目录:`ONCHINA_TLS_DIR`(node 传 `base_path/onchina-tls`);兜底 exe 同目录 `tls`。
 fn tls_dir() -> PathBuf {
-    if let Some(dir) = std::env::var("CID_TLS_DIR")
+    if let Some(dir) = std::env::var("ONCHINA_TLS_DIR")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())

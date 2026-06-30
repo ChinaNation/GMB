@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { sanitizeError } from '../core/tauri';
 import { settingsApi as api } from './api';
 import type { OnChinaPlatformState } from './types';
@@ -15,8 +15,22 @@ export function OnChinaPlatformSection({ platform, onUpdated }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const running = platform?.running ?? false;
+  const status = platform?.status ?? 'stopped';
+  const statusLabel = platform?.statusLabel ?? '未开启';
   const url = platform?.url ?? fallbackUrl;
   const actionText = running ? '关闭' : '启动';
+
+  useEffect(() => {
+    if (status !== 'starting') return;
+    const timer = window.setInterval(async () => {
+      try {
+        onUpdated(await api.getOnChinaPlatform());
+      } catch {
+        // 设置页轮询只刷新状态;单次失败不打断用户当前操作。
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [onUpdated, status]);
 
   const confirmAction = async () => {
     if (!pendingAction) return;
@@ -39,8 +53,8 @@ export function OnChinaPlatformSection({ platform, onUpdated }: Props) {
     <section className="section settings-onchina-platform-section">
       <div className="onchina-platform-row">
         <span className="onchina-platform-label">链上中国平台</span>
-        <span className={`onchina-platform-status ${running ? 'enabled' : 'disabled'}`}>
-          {running ? '已开启' : '未开启'}
+        <span className={`onchina-platform-status ${status}`}>
+          {statusLabel}
         </span>
         <span className="onchina-platform-url">{url}</span>
         <button
@@ -52,6 +66,9 @@ export function OnChinaPlatformSection({ platform, onUpdated }: Props) {
           {saving ? '处理中' : actionText}
         </button>
       </div>
+      {platform?.detail && status !== 'enabled' ? (
+        <p className="section-inline-error">{platform.detail}</p>
+      ) : null}
       {error ? <p className="section-inline-error">{error}</p> : null}
       {pendingAction ? (
         <div className="communication-node-confirm-mask" onClick={() => !saving && setPendingAction(null)}>

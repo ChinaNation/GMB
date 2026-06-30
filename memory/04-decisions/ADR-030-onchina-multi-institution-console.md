@@ -6,7 +6,7 @@
 
 ## 背景
 
-registry 后端最初只服务联邦注册局 + 市注册局两类管理员（前端 `registry_org_code` 二值枚举、后端 `node_institution_identity` 仅放行 FRG/公权两类）。随着立法院、监察院、政府、储备、私权公司等机构都要在电脑端登录发起提案，需要一套统一控制台：同一套软件、同一登录入口，按机构身份显示不同子 tab、不同权限。
+registry 后端最初只服务联邦注册局 + 市注册局两类管理员（前端 `registry_org_code` 二值枚举、后端曾以本机节点机构身份预判登录边界）。随着立法院、监察院、政府、储备、私权公司等机构都要在电脑端登录发起提案，需要一套统一控制台：同一套软件、同一登录入口，按链上管理员所属机构显示不同子 tab、不同权限。
 
 ## 决策
 
@@ -19,7 +19,7 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 节点程序启动后默认不启动 onchina。用户需要在节点设置页“链上中国平台”行点击“启动”并完成二次确认后，节点桌面端才拉起 onchina 子进程；退出节点程序时一并清理该子进程。设置页只启动服务，不自动打开浏览器。
 
 ### 3. 机构范围 = 全部
-服务 `primitives::cid::code` 全部能发号机构。节点身份按机构码路由到 3 个链上管理员集合容器：
+服务 `primitives::cid::code` 全部能发号机构。平台启动时不预设机构，管理员冷钱包登录后用 `verified_pubkey` 反查 3 个链上管理员集合容器：
 
 | 机构类别 | 判定 | 链上 pallet（index） |
 |---|---|---|
@@ -29,24 +29,33 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 
 个人多签 PMUL（personal-admins，idx7）**不登录控制台**：无 CID、不跑节点，纯 CitizenApp 客户端功能。
 
-### 4. 权限模型 = CID 码（主）+ CID 号（辅）+ 实例覆盖
-- **CID 码**（主键）：决定可见 tab / 能力基线、`admin_level`（国/省/市/镇）、所属 admin pallet。
-- **CID 号 R5**（辅键，省码+市码）：决定数据 scope 与跨地区写边界。节点启动即带自身 `CID_RUNTIME_ISSUER_CID_NUMBER`，码与地区当场解析。
-- **实例覆盖位**（R4 第三层）：同机构码、同层级、跨地区能力可不同。采用「机构码静态模板 ⊕ 链上按 cid 号能力覆盖位」，缺省纯模板；覆盖位本期仅签名占位，配置真源（宪法/治理派生）留后续 ADR。
-- 登录即隔离：节点身份 = 权限边界，复用 `onchain_gate`「signer ∈ 本机构链上 Active 集合」机制。
-- **scope 单一来源 + 边界校验**：非联邦注册局机构的省/市 scope 来自节点 `CID_RUNTIME_SCOPE_*` env，唯一在 `onchain_gate` 的 env→会话签发边界校验其落在 `china.sqlite` 真源内（省存在、市属省），不一致即拒登录（`GateError::Config`，明确报错）。绝不在读路径对该 env 写入的 city_name 反复 fail-closed（会因 env 与 china.sqlite 不逐字一致而每请求锁死合法管理员）。联邦注册局(Tier1 创世注册局)每节点单省、省走节点 `CID_RUNTIME_SCOPE_PROVINCE_NAME`(成员资格读链上 `GenesisAdmins::FederalRegistryProvinceGroups[本省省码]`)、无市维度;`federal_registry_scope` 本地省映射表已退役(2026-06-29,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。所有机构特殊操作经 `get_visible_scope`/`includes_province`/`includes_city` 统一 fail-closed 闸（含 docs/账户/机构创建，prepare 预检 ⊕ 业务 handler 双层）。
+### 4. 登录绑定与权限模型
 
-### 5. 三档鉴权 + 默认拒绝
+- 启动只做运行健康检查：`ONCHAIN_WS_URL` 可连接、本地数据库可用、HTTPS 服务可用、平台进程健康接口可达。
+- 冷钱包签名验证后，后端用 `verified_pubkey` 扫描链上 active admin 集合，生成该管理员可登录机构候选。
+- 本节点未绑定机构时：一个候选也必须在页面显示机构信息并二次确认绑定；多个候选由管理员选择一个后确认绑定。
+- 本节点已绑定机构后：后续登录只允许该绑定机构的 active admin；管理员被链上移除后由后台复查清退会话。
+- 本节点解绑 / 换机构：必须由当前本机会话管理员发起 `NODE_BINDING_UNBIND` 安全动作，并由冷钱包签名确认；commit 成功后 active binding 置为 `INACTIVE` 并清退本节点管理员会话。换机构不走影子兼容流程，必须先解绑，再由新机构 active admin 重新扫码登录并确认绑定。
+- 本地 `node_institution_bindings` 只保存“本节点已绑定哪个机构”的结果与缓存展示字段，不是权限真源；权限真源始终是链上 active admin 关系。
+
+### 5. 权限模型 = CID 码（主）+ CID 号（辅）+ 实例覆盖
+- **CID 码**（主键）：决定可见 tab / 能力基线、`admin_level`（国/省/市/镇）、所属 admin pallet。
+- **CID 号 R5**（辅键，省码+市码）：决定数据 scope 与跨地区写边界。CID 号与作用域来自登录绑定机构的链上/本地投影候选，不再由节点启动前预填。
+- **实例覆盖位**（R4 第三层）：同机构码、同层级、跨地区能力可不同。采用「机构码静态模板 ⊕ 链上按 cid 号能力覆盖位」，缺省纯模板；覆盖位本期仅签名占位，配置真源（宪法/治理派生）留后续 ADR。
+- 登录即隔离：本节点 active binding = 会话机构边界；每次登录和冷签 step-up 都复查 signer 是否仍属于该机构链上 Active 集合。
+- **scope 单一来源 + 边界校验**：省/市/镇 scope 来自本节点 active binding 的机构候选；候选优先由链上管理员集合命中，再用本地 `subjects/accounts` 投影补齐 CID、全称、简称和行政区。所有机构特殊操作经 `get_visible_scope`/`includes_province`/`includes_city` 统一 fail-closed 闸（含 docs/账户/机构创建，prepare 预检 ⊕ 业务 handler 双层）。
+
+### 6. 三档鉴权 + 默认拒绝
 固定三档：`Session`（一般操作）/ `Passkey`（重要操作，WebAuthn）/ `PasskeyColdSign`（特殊操作/链上提案，叠冷签）。每个 action 必穷尽 `match` 标注其一，漏标编译失败；三档之外一律拒绝，无第四档、无 `_ =>` 兜底。
 
-### 6. Web 端复杂提案
+### 7. Web 端复杂提案
 onchina web 端承接复杂提案（立法投票等），走 `PasskeyColdSign`：web 构造 extrinsic → 冷钱包扫码签 → 提交链，复用 legislation-yuan（idx27）/legislation-vote（idx28），链端零改动。移动端本期不动。
 
-### 7. 改名边界
+### 8. 改名边界
 目录/crate `registry → onchina` 触及 registry 以外 9 个文件（workspace Cargo.toml、node/registry_proc、tauri.conf.json、scripts/{prepack,run,clean-run}.sh + env 改名）。功能改造（卡 01–16）全部锁在 `citizenchain/registry/` 内；改名作为独立最后一步（卡 17），外部文件一次性平移。
 
 ## 不碰清单
-签名协议 `QR_V1`、签名域 `GMB`、`primitives/cid/code.rs` 机构码表、`china.sqlite`、链上 pallet/事件名/index、`CID_*` 身份 env、移动端 CitizenApp/CitizenWallet。
+签名协议 `QR_V1`、签名域 `GMB`、`primitives/cid/code.rs` 机构码表、`china.sqlite`、链上 pallet/事件名/index、链写凭证签名 env、移动端 CitizenApp/CitizenWallet。
 
 ## 影响
 - 落地任务卡：[20260628-onchina-console-refactor](../08-tasks/open/20260628-onchina-console-refactor.md)（17 张分步卡）。

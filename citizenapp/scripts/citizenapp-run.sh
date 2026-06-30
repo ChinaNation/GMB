@@ -12,7 +12,7 @@ cd "$APP_ROOT"
 CID_DEV_USB_PORT=8899
 
 # 构造 dart-define 参数
-DART_DEFINES=(--dart-define=CITIZENAPP_CID_ENV=dev_usb)
+DART_DEFINES=(--dart-define=CITIZENAPP_ONCHINA_ENV=dev_usb)
 ANDROID_TARGET_PLATFORMS=(--target-platform android-arm,android-arm64)
 echo "[启动模式] smoldot 轻节点"
 
@@ -73,11 +73,11 @@ flutter clean
 echo "==> 获取依赖..."
 flutter pub get
 
-# ── CID 本地开发路径：只允许 Android USB adb reverse ──
+# ── OnChina 本地开发路径：只允许 Android USB adb reverse ──
 # 中文注释：开发版 App 内部固定访问 http://127.0.0.1:8899；该地址必须由
-# adb reverse 转发到本机 CID 后端，禁止改走局域网 IP 或其他自定义 URL。
+# adb reverse 转发到本机 OnChina 后端，禁止改走局域网 IP 或其他自定义 URL。
 if [[ "$DEVICE_LINE" != "android" ]]; then
-  echo "错误：citizenapp 本地开发访问 CID 只支持 Android USB adb reverse。"
+  echo "错误：citizenapp 本地开发访问 OnChina 只支持 Android USB adb reverse。"
   exit 1
 fi
 ADB_BIN="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"

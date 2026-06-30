@@ -1,4 +1,4 @@
-# CID 联邦注册局机构管理员治理冷钱包扫码签名任务卡
+# OnChina 联邦注册局机构管理员治理冷钱包扫码签名任务卡
 
 ## 任务目标
 
@@ -7,7 +7,7 @@
 ## 固定约束
 
 - 全仓库只允许 `QR_V1` 一个二维码协议。
-- 不新增 `CID_ADMIN_ACTION_V1` 或其它协议。
+- 不新增 `ONCHINA_ADMIN_ACTION_V1` 或其它协议。
 - 不做旧 signer 兼容，不迁移旧 seed，不读取旧路径。
 - 不使用的代码、注释、文档必须清理。
 
@@ -27,6 +27,6 @@
 - 2026-05-31：市注册局机构管理员直接写接口改为只读列表 + 安全动作提交；联邦注册局机构管理员改为同级模型。
 - 2026-05-30：清理联邦注册局机构管理员云端代签源码与旧路由。
 - 2026-05-30：前端管理员目录接入公民钱包签名二维码和签名响应扫描。
-- 2026-05-30：citizenwallet 公民钱包 decoder 支持 `cid_admin_governance` JSON 载荷，继续使用 `QR_V1 / sign_request`。
-- 2026-05-30：更新 CID、QR、前后端目录文档并清理旧管理员目录文档残留。
-- 2026-06-28：管理员操作权限已收敛为 `LOGIN_STATE / SCAN_SIGN`;联邦注册局本地新增/删除废弃,更换统一走 `REPLACE_FEDERAL_REGISTRY`。
+- 2026-05-30：citizenwallet 公民钱包 decoder 支持 OnChina 管理员治理 JSON 载荷，继续使用 `QR_V1 / sign_request`。
+- 2026-05-30：更新 OnChina、QR、前后端目录文档并清理旧管理员目录文档残留。
+- 2026-06-28：管理员操作权限已收敛为 `SESSION / PASSKEY / PASSKEY_COLD_SIGN`;联邦注册局本地新增/删除废弃,更换统一走 `REPLACE_FEDERAL_REGISTRY`。

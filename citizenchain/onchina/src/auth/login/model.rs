@@ -34,6 +34,39 @@ pub(crate) struct AdminSession {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct AdminInstitutionCandidate {
+    pub(crate) candidate_id: String,
+    pub(crate) institution_code: String,
+    pub(crate) admin_level: Option<String>,
+    pub(crate) institution_cid_number: Option<String>,
+    pub(crate) institution_main_account: Option<String>,
+    pub(crate) frg_province_code: Option<String>,
+    pub(crate) cid_full_name: Option<String>,
+    pub(crate) cid_short_name: Option<String>,
+    pub(crate) scope_province_name: Option<String>,
+    pub(crate) scope_city_name: Option<String>,
+    pub(crate) scope_town_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct NodeInstitutionBinding {
+    pub(crate) binding_id: String,
+    pub(crate) candidate: AdminInstitutionCandidate,
+    pub(crate) bound_admin_pubkey: String,
+    pub(crate) bound_at: DateTime<Utc>,
+    pub(crate) status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct NodeBindingChallenge {
+    pub(crate) binding_challenge_id: String,
+    pub(crate) admin_account: String,
+    pub(crate) candidates: Vec<AdminInstitutionCandidate>,
+    pub(crate) expire_at: DateTime<Utc>,
+    pub(crate) consumed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct QrLoginResultRecord {
     pub(crate) session_id: String,
     pub(crate) access_token: String,
@@ -156,6 +189,28 @@ pub(crate) struct AdminQrResultOutput {
     pub(crate) access_token: Option<String>,
     pub(crate) expire_at: Option<i64>,
     pub(crate) admin: Option<AdminIdentifyOutput>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct NodeBindingConfirmInput {
+    pub(crate) binding_challenge_id: String,
+    pub(crate) candidate_id: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct NodeBindingRequiredOutput {
+    pub(crate) binding_challenge_id: String,
+    pub(crate) admin_account: String,
+    pub(crate) candidates: Vec<AdminInstitutionCandidate>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct AdminLoginCompleteOutput {
+    pub(crate) status: String,
+    pub(crate) access_token: Option<String>,
+    pub(crate) expire_at: Option<i64>,
+    pub(crate) admin: Option<AdminIdentifyOutput>,
+    pub(crate) binding: Option<NodeBindingRequiredOutput>,
 }
 
 #[derive(Deserialize)]

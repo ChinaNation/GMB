@@ -21,6 +21,6 @@
 - `FederalAdminsView` 表格必须显示"签名密钥状态"列(Tag),`signing_pubkey` 为 None 显示未初始化,有值显示已激活 + Tooltip 完整 pubkey
 
 ## 运维
-- 唯一新增的部署要求:**确保 `CID_SIGNING_SEED_HEX` 环境变量正确**(已有机制),不需要任何新 env
+- 唯一新增的部署要求:**确保 `ONCHINA_SIGNING_SEED_HEX` 环境变量正确**(已有机制),不需要任何新 env
 - CID MAIN 轮换是高风险操作,执行前先备份 PG `admins` 表,失败可恢复
 - 后端重启后所有省 signer 清零,需要 43 省各自重新扫码登录才能恢复业务推链

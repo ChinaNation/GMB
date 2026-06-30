@@ -4,10 +4,10 @@
 //! PasskeyColdSign 档 commit 校验冷钱包签名且 signer 须 ∈ 本机构链上 Active 集合。
 
 use axum::{
-    Json,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
+    Json,
 };
 use chrono::{Duration, Utc};
 use postgres::Client;
@@ -17,17 +17,17 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::auth::action_sign::{
-    ADMIN_ACTION_TTL_SECONDS, AdminSignedPayload, hash_json, payload_hash_for_text,
-    signed_payload_text, verify_citizen_wallet_signature,
+    hash_json, payload_hash_for_text, signed_payload_text, verify_citizen_wallet_signature,
+    AdminSignedPayload, ADMIN_ACTION_TTL_SECONDS,
 };
 use crate::auth::city_registry_admins::{
-    MAX_ADMIN_NAME_CHARS, MAX_CITY_REGISTRY_ADMINS_PER_CITY, can_manage_city_registry_conn,
-    city_registry_row_from_user_conn, count_city_registry_admins_in_city_conn,
-    ensure_city_in_creator_province_conn, find_city_registry_by_id_conn,
+    can_manage_city_registry_conn, city_registry_row_from_user_conn,
+    count_city_registry_admins_in_city_conn, ensure_city_in_creator_province_conn,
+    find_city_registry_by_id_conn, MAX_ADMIN_NAME_CHARS, MAX_CITY_REGISTRY_ADMINS_PER_CITY,
 };
 use crate::auth::login::AdminAuthContext;
 use crate::auth::operation_auth::{
-    AdminActionType, AdminOperationAuth, ensure_action_role_allowed, parse_action_type,
+    ensure_action_role_allowed, parse_action_type, AdminActionType, AdminOperationAuth,
 };
 use crate::auth::repo;
 use crate::auth::security_model::{AdminActionChallenge, AdminSecurityGrant};
@@ -161,16 +161,37 @@ struct ActionPreview {
 
 /// 校验账号 ∈ 本机构链上 Active 管理员集合(冷签 step-up 与替换目标校验共用)。
 async fn ensure_pubkey_on_chain_admin(
+    db: &Db,
     account_pubkey: &str,
     message: &'static str,
 ) -> Result<(), axum::response::Response> {
     use crate::core::chain_runtime;
-    let identity = chain_runtime::node_institution_identity().map_err(|err| {
-        tracing::error!(error = %err, "node institution identity misconfigured");
+    let binding = repo::active_node_binding(db).map_err(|err| {
+        tracing::error!(error = %err, "query node binding failed");
         api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             5001,
-            "node identity misconfigured",
+            "node binding query failed",
+        )
+    })?;
+    let Some(binding) = binding else {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            2002,
+            "node binding missing",
+        ));
+    };
+    let identity = chain_runtime::identity_from_binding_parts(
+        &binding.candidate.institution_code,
+        binding.candidate.institution_main_account.as_deref(),
+        binding.candidate.frg_province_code.as_deref(),
+    )
+    .map_err(|err| {
+        tracing::error!(error = %err, "node binding is invalid");
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "node binding invalid",
         )
     })?;
     let onchain = chain_runtime::fetch_active_admins_onchain(&identity)
@@ -192,14 +213,19 @@ async fn ensure_pubkey_on_chain_admin(
 }
 
 /// 校验扫码签名 signer ∈ 本机构链上 Active 管理员集合(冷签 step-up,与登录同源)。
-async fn ensure_signer_on_chain_admin(signer_pubkey: &str) -> Result<(), axum::response::Response> {
-    ensure_pubkey_on_chain_admin(signer_pubkey, "not an on-chain admin").await
+async fn ensure_signer_on_chain_admin(
+    db: &Db,
+    signer_pubkey: &str,
+) -> Result<(), axum::response::Response> {
+    ensure_pubkey_on_chain_admin(db, signer_pubkey, "not an on-chain admin").await
 }
 
 async fn ensure_replace_target_on_chain_admin(
+    db: &Db,
     input: &ReplaceFederalRegistryActionPayload,
 ) -> Result<(), axum::response::Response> {
     ensure_pubkey_on_chain_admin(
+        db,
         input.admin_account.as_str(),
         "replacement admin is not an on-chain admin",
     )
@@ -477,8 +503,20 @@ async fn build_federal_registry_replace_sign_request(
         ));
     };
     let id = input.id;
-    // 省 = 本节点省;省码 → 链上本省 5 人组(权威当前集合)。
-    let Some(province_name) = crate::core::chain_runtime::node_scope_province() else {
+    // 省 = 本节点绑定机构省;省码 → 链上本省 5 人组(权威当前集合)。
+    let province_name = match repo::active_node_binding(&state.db) {
+        Ok(Some(binding)) => binding.candidate.scope_province_name,
+        Ok(None) => None,
+        Err(err) => {
+            let message = format!("query node binding failed: {err}");
+            return Err(api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                message.as_str(),
+            ));
+        }
+    };
+    let Some(province_name) = province_name else {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
@@ -677,7 +715,7 @@ pub(crate) async fn commit_admin_action(
     ) {
         return resp;
     }
-    if let Err(resp) = ensure_signer_on_chain_admin(signer_pubkey).await {
+    if let Err(resp) = ensure_signer_on_chain_admin(&state.db, signer_pubkey).await {
         return resp;
     }
     if action_type == AdminActionType::ReplaceGoverningRegistry {
@@ -692,7 +730,7 @@ pub(crate) async fn commit_admin_action(
                     );
                 }
             };
-        if let Err(resp) = ensure_replace_target_on_chain_admin(&input).await {
+        if let Err(resp) = ensure_replace_target_on_chain_admin(&state.db, &input).await {
             return resp;
         }
     }
@@ -1063,6 +1101,7 @@ fn preview_action_conn(
                 auth_type: action_type.auth_type(),
             })
         }
+        AdminActionType::NodeBindingUnbind => preview_node_binding_unbind_conn(conn, action_type),
         AdminActionType::InstitutionCreate => {
             precheck_institution_create_scope(ctx, payload)?;
             preview_security_action(action_type, payload)
@@ -1483,11 +1522,54 @@ fn apply_action_conn(
                 "deregister_nonce": nonce,
             }))
         }
+        AdminActionType::NodeBindingUnbind => apply_node_binding_unbind_conn(conn),
         _ => Err(
             "http:bad_request:business action cannot be applied by admin governance endpoint"
                 .to_string(),
         ),
     }
+}
+
+fn preview_node_binding_unbind_conn(
+    conn: &mut Client,
+    action_type: &AdminActionType,
+) -> Result<ActionPreview, String> {
+    let Some(binding) = repo::get_active_node_binding_conn(conn)? else {
+        return Err("http:conflict:node binding missing".to_string());
+    };
+    let binding_id = binding.binding_id.clone();
+    let candidate_id = binding.candidate.candidate_id.clone();
+    let institution_code = binding.candidate.institution_code.clone();
+    let after = json!({
+        "unbind": true,
+        "binding_id": binding_id,
+        "candidate_id": candidate_id,
+        "institution_code": institution_code,
+    });
+    Ok(ActionPreview {
+        before_hash: hash_serialized(&binding),
+        after_hash: hash_json(&after),
+        target: binding.candidate.candidate_id,
+        auth_type: action_type.auth_type(),
+    })
+}
+
+fn apply_node_binding_unbind_conn(conn: &mut Client) -> Result<serde_json::Value, String> {
+    let Some(binding) = repo::get_active_node_binding_conn(conn)? else {
+        return Err("http:conflict:node binding missing".to_string());
+    };
+    let changed = repo::deactivate_active_node_binding_conn(conn)?;
+    if changed == 0 {
+        return Err("http:conflict:node binding already inactive".to_string());
+    }
+    let removed_sessions = repo::delete_all_admin_sessions_conn(conn)?;
+    Ok(json!({
+        "binding_id": binding.binding_id,
+        "candidate_id": binding.candidate.candidate_id,
+        "institution_code": binding.candidate.institution_code,
+        "status": "INACTIVE",
+        "removed_sessions": removed_sessions,
+    }))
 }
 
 fn apply_create_city_registry_conn(

@@ -11,7 +11,7 @@
 //! - 地域规则:见 [`parent_locality_rule`](父级是学校/大学 → 分校同市);
 //! - 盈利属性继承:见 [`inherited_p1`]。
 
-use crate::cid::{AdminLevel, code};
+use crate::cid::{code, AdminLevel};
 
 pub(crate) fn requires_parent(institution_code: &str) -> bool {
     // 个体经营(SFGT)/无限合伙(SFGP)是独立非法人;只有非法人组织(UNIN)必须挂靠法人父级。
@@ -158,36 +158,30 @@ mod tests {
 
     #[test]
     fn locality_violation_checks_province_and_city() {
-        assert!(
-            locality_violation(
-                ParentLocalityRule::Nationwide,
-                "广东",
-                "广州",
-                "安徽",
-                "合肥"
-            )
-            .is_none()
-        );
-        assert!(
-            locality_violation(
-                ParentLocalityRule::SameProvince,
-                "广东",
-                "广州",
-                "广东",
-                "深圳"
-            )
-            .is_none()
-        );
-        assert!(
-            locality_violation(
-                ParentLocalityRule::SameProvince,
-                "广东",
-                "广州",
-                "安徽",
-                "合肥"
-            )
-            .is_some()
-        );
+        assert!(locality_violation(
+            ParentLocalityRule::Nationwide,
+            "广东",
+            "广州",
+            "安徽",
+            "合肥"
+        )
+        .is_none());
+        assert!(locality_violation(
+            ParentLocalityRule::SameProvince,
+            "广东",
+            "广州",
+            "广东",
+            "深圳"
+        )
+        .is_none());
+        assert!(locality_violation(
+            ParentLocalityRule::SameProvince,
+            "广东",
+            "广州",
+            "安徽",
+            "合肥"
+        )
+        .is_some());
         assert!(
             locality_violation(ParentLocalityRule::SameCity, "广东", "广州", "广东", "广州")
                 .is_none()

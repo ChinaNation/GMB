@@ -57,6 +57,34 @@ export type AdminVerifyResult = {
   admin: AdminIdentifyResult;
 };
 
+export type AdminInstitutionCandidate = {
+  candidate_id: string;
+  institution_code: string;
+  admin_level?: string | null;
+  institution_cid_number?: string | null;
+  institution_main_account?: string | null;
+  frg_province_code?: string | null;
+  cid_full_name?: string | null;
+  cid_short_name?: string | null;
+  scope_province_name?: string | null;
+  scope_city_name?: string | null;
+  scope_town_name?: string | null;
+};
+
+export type NodeBindingRequired = {
+  binding_challenge_id: string;
+  admin_account: string;
+  candidates: AdminInstitutionCandidate[];
+};
+
+export type AdminLoginCompleteResult = {
+  status: 'SUCCESS' | 'BINDING_REQUIRED';
+  access_token?: string;
+  expire_at?: number;
+  admin?: AdminIdentifyResult;
+  binding?: NodeBindingRequired;
+};
+
 export type AdminQrLoginStatus = {
   status: 'PENDING' | 'SUCCESS' | 'EXPIRED';
   message: string;
@@ -112,8 +140,19 @@ export async function completeAdminQrLogin(input: {
   admin_account: string;
   signer_pubkey?: string;
   signature: string;
-}): Promise<string> {
-  return request<string>('/api/v1/admin/auth/qr/complete', {
+}): Promise<AdminLoginCompleteResult> {
+  return request<AdminLoginCompleteResult>('/api/v1/admin/auth/qr/complete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function confirmNodeBinding(input: {
+  binding_challenge_id: string;
+  candidate_id: string;
+}): Promise<AdminVerifyResult> {
+  return request<AdminVerifyResult>('/api/v1/admin/auth/node-binding/confirm', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),

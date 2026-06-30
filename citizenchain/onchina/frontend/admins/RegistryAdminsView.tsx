@@ -329,7 +329,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     try {
       const prepared = await prepareAdminAction(auth, actionType, payload);
       const signRequest = prepared.sign_request;
-      if (prepared.auth_type !== 'SCAN_SIGN' || !signRequest) {
+      if (prepared.auth_type !== 'PASSKEY_COLD_SIGN' || !signRequest) {
         throw new Error('该治理操作缺少公民钱包签名请求');
       }
       return await new Promise<T>((resolve, reject) => {

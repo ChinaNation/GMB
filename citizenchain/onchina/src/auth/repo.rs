@@ -5,11 +5,14 @@
 use chrono::{DateTime, Duration, Utc};
 use postgres::Client;
 
-use crate::Db;
-use crate::auth::login::{AdminSession, LoginSignRequest, QrLoginResultRecord};
+use crate::auth::login::{
+    AdminInstitutionCandidate, AdminSession, LoginSignRequest, NodeBindingChallenge,
+    NodeInstitutionBinding, QrLoginResultRecord,
+};
 use crate::auth::model::AdminUser;
 use crate::auth::security_model::{AdminActionChallenge, AdminSecurityGrant};
 use crate::core::db::postgres_error_text;
+use crate::Db;
 
 fn admin_from_row(row: &postgres::Row) -> Result<AdminUser, String> {
     let id: i64 = row.get(0);
@@ -26,11 +29,35 @@ fn admin_from_row(row: &postgres::Row) -> Result<AdminUser, String> {
     })
 }
 
+fn binding_from_row(row: &postgres::Row) -> Result<NodeInstitutionBinding, String> {
+    let binding_id: String = row.get(0);
+    let institution_code: String = row.get(2);
+    let candidate = AdminInstitutionCandidate {
+        candidate_id: row.get(1),
+        institution_code: institution_code.clone(),
+        admin_level: crate::core::chain_runtime::admin_level_label_for(&institution_code),
+        institution_cid_number: row.get(4),
+        institution_main_account: row.get(5),
+        frg_province_code: row.get(6),
+        cid_full_name: row.get(7),
+        cid_short_name: row.get(8),
+        scope_province_name: row.get(9),
+        scope_city_name: row.get(10),
+        scope_town_name: row.get(11),
+    };
+    Ok(NodeInstitutionBinding {
+        binding_id,
+        candidate,
+        bound_admin_pubkey: row.get(12),
+        bound_at: row.get(13),
+        status: row.get(14),
+    })
+}
+
 // 中文注释:`list_federal_registry_admins_by_province_conn` 已退役。
 // Tier1 创世注册局管理员「全走链读」(决策③):权威集合在链上
-// `GenesisAdmins::FederalRegistryProvinceGroups[本省省码]`,由 `catalog::list_federal_registry_admins`
-// 经 `chain_runtime::fetch_active_admins_onchain` 读取并回填本地缓存;本地不再以 `federal_registry_scope`
-// 表派生省维度(每节点单省,省作用域取节点 env)。
+// `GenesisAdmins::FederalRegistryProvinceGroups[绑定省码]`,由链上读取并回填本地缓存;
+// 本地不再以 `federal_registry_scope` 表派生省维度。
 
 pub(crate) fn get_admin_by_id_and_registry_org_conn(
     conn: &mut Client,
@@ -177,59 +204,35 @@ pub(crate) fn resolve_admin_account_key_conn(
     Ok(row.map(|r| r.get(0)))
 }
 
-pub(crate) fn province_scope_for_registry_org(
-    db: &Db,
-    admin_account: &str,
-    institution_code: &str,
-) -> Result<Option<String>, String> {
-    let admin_account = admin_account.trim().to_string();
-    let institution_code = institution_code.to_string();
-    db.with_client(move |conn| {
-        province_scope_for_registry_org_conn(
-            conn,
-            admin_account.as_str(),
-            institution_code.as_str(),
-        )
-    })
-}
-
 /// Tier1/Tier2 注册局管理员的省作用域。
 ///
-/// 中文注释:每节点单省部署,注册局管理员省作用域即本节点省(节点 `CID_RUNTIME_SCOPE_PROVINCE_NAME`),
-/// 不再查已退役的 `federal_registry_scope` 表(决策③)。参数保留以稳定调用签名。
+/// 中文注释:节点机构身份由首次链上 active admin 登录后绑定,省作用域取 active 绑定,
+/// 不再读取节点 `ONCHAIN_CREDENTIAL_SCOPE_*` 环境变量。
 pub(crate) fn province_scope_for_registry_org_conn(
-    _conn: &mut Client,
+    conn: &mut Client,
     _admin_account: &str,
     _institution_code: &str,
 ) -> Result<Option<String>, String> {
-    Ok(crate::core::chain_runtime::node_scope_province())
+    Ok(get_active_node_binding_conn(conn)?
+        .and_then(|binding| binding.candidate.scope_province_name))
 }
 
 /// 派生管理员的省/市/镇作用域。**登录签发(onchain_gate)与会话重建(guards)共用此唯一来源**,
 /// 保证两路口径逐字段一致(避免 login 与后续请求 scope 漂移)。维度按机构行政层级裁剪:
-/// - 省:统一取节点 env(每节点单省;Tier1 创世注册局同此,省映射不再走本地表)。
-/// - 市:市级/镇级/私权(无层级)取节点 env;省级/全国/Tier1 创世注册局无市维度(None)。
-/// - 镇:仅镇级取节点 env;其余 None。
+/// - 省/市/镇:统一取本节点 active 绑定,绑定来自链上 active admin 反查后的二次确认。
 pub(crate) fn derive_admin_scope_conn(
-    _conn: &mut Client,
+    conn: &mut Client,
     _admin_account: &str,
-    institution_code: &str,
+    _institution_code: &str,
 ) -> Result<(Option<String>, Option<String>, Option<String>), String> {
-    let is_tier1 = crate::core::chain_runtime::is_tier1_registry(institution_code);
-    let level = crate::core::chain_runtime::admin_level_label_for(institution_code);
-    let province = crate::core::chain_runtime::node_scope_province();
-    // Tier1 创世注册局为省级、无市维度;其余按层级取市(市级/镇级/无层级私权)。
-    let city = if !is_tier1 && matches!(level.as_deref(), Some("CITY") | Some("TOWN") | None) {
-        crate::core::chain_runtime::node_scope_city()
-    } else {
-        None
+    let Some(binding) = get_active_node_binding_conn(conn)? else {
+        return Ok((None, None, None));
     };
-    let town = if level.as_deref() == Some("TOWN") {
-        crate::core::chain_runtime::node_scope_town()
-    } else {
-        None
-    };
-    Ok((province, city, town))
+    Ok((
+        binding.candidate.scope_province_name,
+        binding.candidate.scope_city_name,
+        binding.candidate.scope_town_name,
+    ))
 }
 
 /// 中文注释:解析当前管理员所属机构的 cid_short_name 单一字段。
@@ -292,9 +295,212 @@ pub(crate) fn resolve_home_cid_short_name(
     })
 }
 
+pub(crate) fn resolve_binding_candidate_metadata_conn(
+    conn: &mut Client,
+    institution_main_account: &str,
+) -> Result<
+    Option<(
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+        String,
+        String,
+    )>,
+    String,
+> {
+    let row = conn
+        .query_opt(
+            "SELECT s.cid_number, s.cid_full_name, s.cid_short_name,
+                    s.province_code, COALESCE(s.city_code, ''), COALESCE(s.town_code, '')
+             FROM accounts a
+             JOIN subjects s
+               ON s.province_code = a.province_code
+              AND s.cid_number = a.cid_number
+             WHERE lower(a.account) = lower($1)
+               AND s.status = 'ACTIVE'
+             ORDER BY s.updated_at DESC
+             LIMIT 1",
+            &[&institution_main_account],
+        )
+        .map_err(|e| {
+            format!(
+                "query binding candidate metadata failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+    Ok(row.map(|r| (r.get(0), r.get(1), r.get(2), r.get(3), r.get(4), r.get(5))))
+}
+
+pub(crate) fn get_active_node_binding_conn(
+    conn: &mut Client,
+) -> Result<Option<NodeInstitutionBinding>, String> {
+    let row = conn
+        .query_opt(
+            "SELECT binding_id, candidate_id, institution_code, NULL::TEXT AS admin_level,
+                    institution_cid_number, institution_main_account, frg_province_code,
+                    cid_full_name, cid_short_name, scope_province_name, scope_city_name,
+                    scope_town_name, bound_admin_pubkey, bound_at, status
+             FROM node_institution_bindings
+             WHERE status = 'ACTIVE'
+             ORDER BY bound_at DESC
+             LIMIT 1",
+            &[],
+        )
+        .map_err(|e| {
+            format!(
+                "query active node binding failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+    row.as_ref().map(binding_from_row).transpose()
+}
+
+pub(crate) fn active_node_binding(db: &Db) -> Result<Option<NodeInstitutionBinding>, String> {
+    db.with_client(get_active_node_binding_conn)
+}
+
+pub(crate) fn upsert_active_node_binding_conn(
+    conn: &mut Client,
+    binding: &NodeInstitutionBinding,
+) -> Result<(), String> {
+    conn.execute(
+        "UPDATE node_institution_bindings
+         SET status = 'INACTIVE'
+         WHERE status = 'ACTIVE'",
+        &[],
+    )
+    .map_err(|e| {
+        format!(
+            "deactivate old node binding failed: {}",
+            postgres_error_text(&e)
+        )
+    })?;
+    conn.execute(
+        "INSERT INTO node_institution_bindings (
+            binding_id, candidate_id, institution_code, institution_cid_number,
+            institution_main_account, frg_province_code, cid_full_name, cid_short_name,
+            scope_province_name, scope_city_name, scope_town_name, bound_admin_pubkey,
+            bound_at, status
+         )
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
+        &[
+            &binding.binding_id,
+            &binding.candidate.candidate_id,
+            &binding.candidate.institution_code,
+            &binding.candidate.institution_cid_number,
+            &binding.candidate.institution_main_account,
+            &binding.candidate.frg_province_code,
+            &binding.candidate.cid_full_name,
+            &binding.candidate.cid_short_name,
+            &binding.candidate.scope_province_name,
+            &binding.candidate.scope_city_name,
+            &binding.candidate.scope_town_name,
+            &binding.bound_admin_pubkey,
+            &binding.bound_at,
+            &binding.status,
+        ],
+    )
+    .map_err(|e| format!("insert node binding failed: {}", postgres_error_text(&e)))?;
+    Ok(())
+}
+
+pub(crate) fn deactivate_active_node_binding_conn(conn: &mut Client) -> Result<u64, String> {
+    let changed = conn
+        .execute(
+            "UPDATE node_institution_bindings
+             SET status = 'INACTIVE'
+             WHERE status = 'ACTIVE'",
+            &[],
+        )
+        .map_err(|e| {
+            format!(
+                "deactivate active node binding failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+    Ok(changed)
+}
+
+pub(crate) fn insert_node_binding_challenge_conn(
+    conn: &mut Client,
+    challenge: &NodeBindingChallenge,
+) -> Result<(), String> {
+    let payload = serde_json::to_value(challenge)
+        .map_err(|e| format!("encode node binding challenge failed: {e}"))?;
+    conn.execute(
+        "INSERT INTO node_binding_challenges(
+            binding_challenge_id, admin_account, expires_at, consumed, payload
+         )
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (binding_challenge_id) DO UPDATE SET
+            admin_account = EXCLUDED.admin_account,
+            expires_at = EXCLUDED.expires_at,
+            consumed = EXCLUDED.consumed,
+            payload = EXCLUDED.payload",
+        &[
+            &challenge.binding_challenge_id,
+            &challenge.admin_account,
+            &challenge.expire_at,
+            &challenge.consumed,
+            &payload,
+        ],
+    )
+    .map_err(|e| {
+        format!(
+            "insert node binding challenge failed: {}",
+            postgres_error_text(&e)
+        )
+    })?;
+    Ok(())
+}
+
+pub(crate) fn get_node_binding_challenge_conn(
+    conn: &mut Client,
+    binding_challenge_id: &str,
+) -> Result<Option<NodeBindingChallenge>, String> {
+    let row = conn
+        .query_opt(
+            "SELECT payload FROM node_binding_challenges WHERE binding_challenge_id = $1",
+            &[&binding_challenge_id],
+        )
+        .map_err(|e| {
+            format!(
+                "query node binding challenge failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+    row.map(|r| serde_json::from_value::<NodeBindingChallenge>(r.get(0)))
+        .transpose()
+        .map_err(|e| format!("decode node binding challenge failed: {e}"))
+}
+
+pub(crate) fn consume_node_binding_challenge_conn(
+    conn: &mut Client,
+    challenge: &NodeBindingChallenge,
+) -> Result<(), String> {
+    let mut consumed = challenge.clone();
+    consumed.consumed = true;
+    let payload = serde_json::to_value(&consumed)
+        .map_err(|e| format!("encode consumed node binding challenge failed: {e}"))?;
+    conn.execute(
+        "UPDATE node_binding_challenges
+         SET consumed = true, payload = $2
+         WHERE binding_challenge_id = $1",
+        &[&challenge.binding_challenge_id, &payload],
+    )
+    .map_err(|e| {
+        format!(
+            "consume node binding challenge failed: {}",
+            postgres_error_text(&e)
+        )
+    })?;
+    Ok(())
+}
+
 // 中文注释:`find_federal_registry_scope_conn` / `repair_federal_registry_scope_conn` 已退役——
 // `federal_registry_scope` 省映射表连同 `provinces` 占位表一并下线(决策③);Tier1 创世注册局
-// 省作用域改取节点 env(见 `province_scope_for_registry_org_conn` / `derive_admin_scope_conn`)。
+// 省作用域改取节点 active binding(见 `province_scope_for_registry_org_conn` / `derive_admin_scope_conn`)。
 
 pub(crate) fn next_admin_id_conn(conn: &mut Client) -> Result<u64, String> {
     let row = conn
@@ -306,8 +512,8 @@ pub(crate) fn next_admin_id_conn(conn: &mut Client) -> Result<u64, String> {
 
 /// 写入 / 更新本地管理员缓存行(`admin_account` 为冲突键,幂等)。
 ///
-/// 中文注释:省映射不再随管理员落 `federal_registry_scope`(决策③已退役该表);Tier1 创世注册局
-/// 管理员省作用域统一取节点 env。本函数只维护 `admins` 缓存本身。
+/// 中文注释:管理员成员资格与节点机构归属以链上 active 集合 + 本节点 active binding 为准。
+/// 本函数只维护 `admins` 登录元数据缓存本身。
 pub(crate) fn upsert_admin_conn(conn: &mut Client, admin: &AdminUser) -> Result<(), String> {
     conn.execute(
         "INSERT INTO admins(admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name)
@@ -358,6 +564,11 @@ pub(crate) fn delete_admin_runtime_state_conn(
     )
     .map_err(|e| format!("delete admin security grants failed: {e}"))?;
     Ok(())
+}
+
+pub(crate) fn delete_all_admin_sessions_conn(conn: &mut Client) -> Result<u64, String> {
+    conn.execute("DELETE FROM admin_sessions", &[])
+        .map_err(|e| format!("delete all admin sessions failed: {e}"))
 }
 
 pub(crate) fn cleanup_security_state_conn(
@@ -513,6 +724,18 @@ pub(crate) fn cleanup_login_state_conn(
     .map_err(|e| {
         format!(
             "cleanup qr login results failed: {}",
+            postgres_error_text(&e)
+        )
+    })?;
+    conn.execute(
+        "DELETE FROM node_binding_challenges
+         WHERE expires_at < $1
+            OR (consumed = true AND expires_at < $2)",
+        &[&stale_login_before, &consumed_login_before],
+    )
+    .map_err(|e| {
+        format!(
+            "cleanup node binding challenges failed: {}",
             postgres_error_text(&e)
         )
     })?;

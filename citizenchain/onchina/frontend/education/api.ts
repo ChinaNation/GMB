@@ -43,7 +43,7 @@ export async function checkCidFullName(
   );
 }
 
-// 中文注释:创建教育机构属 SCAN_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
+// 中文注释:创建教育机构属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
 export async function createInstitution(
   auth: AdminAuth,
   input: CreateInstitutionInput,

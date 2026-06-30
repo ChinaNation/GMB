@@ -9,8 +9,8 @@
 
 use std::path::PathBuf;
 use std::sync::{
-    Arc,
     atomic::{AtomicBool, Ordering},
+    Arc,
 };
 use std::thread::JoinHandle;
 use std::time::Duration;

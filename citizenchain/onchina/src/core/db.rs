@@ -1,12 +1,12 @@
-//! 中文注释:CID 结构化数据库入口。
+//! 中文注释:OnChina 结构化数据库入口。
 //!
 //! 本模块只负责 PostgreSQL 连接池、当前 schema 初始化和短事务封装。
 //! 业务主数据必须落到各模块自己的结构化表,不得再恢复旧快照表。
 
 use std::{
     sync::{
-        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
     },
     thread,
 };
@@ -36,7 +36,7 @@ pub(crate) struct Db {
 impl Db {
     pub(crate) fn from_database_url(database_url: &str) -> Result<Self, String> {
         let db_url = database_url.to_string();
-        let pool_size = std::env::var("CID_PG_POOL_SIZE")
+        let pool_size = std::env::var("ONCHINA_PG_POOL_SIZE")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|v| *v > 0)
@@ -158,8 +158,8 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_admins_account_lower ON admins(lower(admin_account));
              CREATE INDEX IF NOT EXISTS idx_admins_created_by_lower ON admins(lower(created_by));
 
-             -- 中文注释:`federal_registry_scope` / `provinces` 占位表已退役(决策③)——Tier1 创世注册局
-             -- 省映射不再落本地表,统一取节点 env / 链上 FederalRegistryProvinceGroups,行政区真源为 china.sqlite。
+             -- 中文注释:`federal_registry_scope` / `provinces` 占位表已退役(决策③)——节点机构
+             -- 归属由 active admin 首次登录绑定,行政区真源为 china.sqlite。
 
              CREATE TABLE IF NOT EXISTS admin_action_challenges (
                 action_id TEXT PRIMARY KEY,
@@ -193,6 +193,36 @@ impl Db {
              );
              CREATE INDEX IF NOT EXISTS idx_admin_login_sign_requests_expires
                 ON admin_login_sign_requests(expires_at);
+
+             -- 中文注释:本节点首次由链上 active admin 确认后绑定唯一机构;链上管理员关系仍是真源。
+             CREATE TABLE IF NOT EXISTS node_institution_bindings (
+                binding_id TEXT PRIMARY KEY,
+                candidate_id TEXT NOT NULL,
+                institution_code TEXT NOT NULL,
+                institution_cid_number TEXT,
+                institution_main_account TEXT,
+                frg_province_code TEXT,
+                cid_full_name TEXT,
+                cid_short_name TEXT,
+                scope_province_name TEXT,
+                scope_city_name TEXT,
+                scope_town_name TEXT,
+                bound_admin_pubkey TEXT NOT NULL,
+                bound_at TIMESTAMPTZ NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE'))
+             );
+             CREATE UNIQUE INDEX IF NOT EXISTS idx_node_binding_one_active
+                ON node_institution_bindings ((status)) WHERE status = 'ACTIVE';
+
+             CREATE TABLE IF NOT EXISTS node_binding_challenges (
+                binding_challenge_id TEXT PRIMARY KEY,
+                admin_account TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                consumed BOOLEAN NOT NULL DEFAULT FALSE,
+                payload JSONB NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS idx_node_binding_challenges_expires
+                ON node_binding_challenges(expires_at);
 
              CREATE TABLE IF NOT EXISTS admin_qr_login_results (
                 challenge_id TEXT PRIMARY KEY,

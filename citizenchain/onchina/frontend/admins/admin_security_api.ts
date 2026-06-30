@@ -1,7 +1,6 @@
 // 中文注释:管理员安全动作 API。
-// 管理端权限统一为 LOGIN_STATE / SCAN_SIGN 两类:
-//   - LOGIN_STATE:仅需有效会话(会话已是链上已证管理员),无需 commit,各业务 handler 直接执行。
-//   - SCAN_SIGN:会话 + 冷钱包扫码签名(prepare 拿 sign_request → 扫签名响应 → commit 提交 signer_pubkey/signature/payload_hash)。
+// 管理端权限统一为 SESSION / PASSKEY / PASSKEY_COLD_SIGN 三档。
+// PASSKEY_COLD_SIGN 动作走 prepare → 冷钱包扫码签名 → commit。
 
 import type { AdminAuth } from '../auth/types';
 import { ApiError, adminRequest } from '../utils/http';
@@ -17,9 +16,10 @@ export type AdminActionType =
   | 'INSTITUTION_DEREGISTER'
   | 'INSTITUTION_ACCOUNT_DEREGISTER'
   | 'INSTITUTION_UPLOAD_DOCUMENT'
-  | 'INSTITUTION_DELETE_DOCUMENT';
+  | 'INSTITUTION_DELETE_DOCUMENT'
+  | 'NODE_BINDING_UNBIND';
 
-export type AdminOperationAuth = 'LOGIN_STATE' | 'SCAN_SIGN';
+export type AdminOperationAuth = 'SESSION' | 'PASSKEY' | 'PASSKEY_COLD_SIGN';
 export type RegistryOrgCodeTarget = 'FEDERAL_REGISTRY' | 'CITY_REGISTRY';
 
 export type PrepareAdminActionOutput = {
@@ -47,20 +47,20 @@ export function formatAdminCreateError(error: unknown, targetRegistryOrgCode: Re
     return error instanceof Error ? error.message : fallback;
   }
   // 中文注释:管理员新增失败统一按稳定 error_code 显示,不解析后端 message。
-  if (error.errorCode === 'CID_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY') {
+  if (error.errorCode === 'ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY') {
     return targetRegistryOrgCode === 'FEDERAL_REGISTRY'
       ? '该账户已是联邦注册局管理员，不能作为新账户使用'
       : '该账户已是联邦注册局管理员，不能新增为市注册局管理员';
   }
-  if (error.errorCode === 'CID_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY') {
+  if (error.errorCode === 'ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY') {
     return targetRegistryOrgCode === 'FEDERAL_REGISTRY'
       ? '该账户已是市注册局管理员，不能作为联邦注册局管理员新账户'
       : '该账户已是市注册局管理员，不能重复新增';
   }
-  if (error.errorCode === 'CID_ADMIN_REPLACEMENT_NOT_ONCHAIN') {
+  if (error.errorCode === 'ONCHINA_ADMIN_REPLACEMENT_NOT_ONCHAIN') {
     return '新账户还不是链上有效管理员，不能完成更换';
   }
-  if (error.errorCode === 'CID_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED') {
+  if (error.errorCode === 'ONCHINA_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED') {
     return '本市市注册局管理员已满 30 人，不能继续新增';
   }
   return error.message || fallback;
@@ -78,7 +78,7 @@ export async function prepareAdminAction(
   });
 }
 
-// 中文注释:SCAN_SIGN commit 只携带冷钱包扫码签名字段。
+// 中文注释:PASSKEY_COLD_SIGN commit 只携带冷钱包扫码签名字段。
 export async function commitAdminAction<T>(
   auth: AdminAuth,
   input: {
@@ -95,14 +95,14 @@ export async function commitAdminAction<T>(
   });
 }
 
-// 中文注释:组件提供的「扫码签名」回调:给定已 prepare 的 SCAN_SIGN 动作,
+// 中文注释:组件提供的「扫码签名」回调:给定已 prepare 的 PASSKEY_COLD_SIGN 动作,
 // 弹出公民钱包二维码并扫描签名响应,解析出 signer_pubkey/signature 回传。
 export type ScanSignResolver = (
   prepared: PrepareAdminActionOutput,
 ) => Promise<{ signer_pubkey: string; signature: string }>;
 
-// 中文注释:统一的 SCAN_SIGN 安全授权:prepare → 组件扫码签名 → commit 取回一次性 grant。
-// LOGIN_STATE 动作不走这里(无 commit,业务 handler 仅凭会话执行)。
+// 中文注释:统一的 PASSKEY_COLD_SIGN 安全授权:prepare → 组件扫码签名 → commit 取回一次性 grant。
+// SESSION 动作不走这里(无 commit,业务 handler 仅凭会话执行)。
 export async function createScanSignSecurityGrant(
   auth: AdminAuth,
   actionType: AdminActionType,
@@ -110,7 +110,7 @@ export async function createScanSignSecurityGrant(
   signWithScan: ScanSignResolver,
 ): Promise<AdminSecurityGrantOutput> {
   const prepared = await prepareAdminAction(auth, actionType, payload);
-  if (prepared.auth_type !== 'SCAN_SIGN' || !prepared.sign_request) {
+  if (prepared.auth_type !== 'PASSKEY_COLD_SIGN' || !prepared.sign_request) {
     throw new Error('该操作缺少公民钱包扫码签名请求');
   }
   const { signer_pubkey, signature } = await signWithScan(prepared);

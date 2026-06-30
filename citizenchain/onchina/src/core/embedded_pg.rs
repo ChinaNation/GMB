@@ -5,7 +5,7 @@
 //! 建 `onchina` 库,返回 `DATABASE_URL`;退出期 `pg_ctl stop`。node 不碰 PG,只用 env 告诉
 //! onchina 二进制目录/数据目录/端口(见 `node/src/onchina_proc`)。
 //!
-//! 两种部署:① 桌面/小市内嵌(`CID_EMBEDDED_PG=1`,本模块);② 大市外部托管 PG(直接给
+//! 两种部署:① 桌面/小市内嵌(`ONCHINA_EMBEDDED_PG=1`,本模块);② 大市外部托管 PG(直接给
 //! `DATABASE_URL`,不启用本模块)。
 
 use std::path::{Path, PathBuf};
@@ -23,7 +23,7 @@ const READY_INTERVAL: Duration = Duration::from_millis(500);
 
 /// 是否启用内嵌 PG(桌面安装默认开;大市外部托管 PG 时关)。
 pub(crate) fn is_enabled() -> bool {
-    std::env::var("CID_EMBEDDED_PG")
+    std::env::var("ONCHINA_EMBEDDED_PG")
         .ok()
         .map(|v| {
             let v = v.trim().to_ascii_lowercase();
@@ -33,17 +33,17 @@ pub(crate) fn is_enabled() -> bool {
 }
 
 fn pg_port() -> String {
-    std::env::var("CID_PG_PORT")
+    std::env::var("ONCHINA_PG_PORT")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| DEFAULT_PG_PORT.to_string())
 }
 
-/// PG 二进制目录:`CID_PG_BIN_DIR`(node 从 Tauri resource 解析后传入);
+/// PG 二进制目录:`ONCHINA_PG_BIN_DIR`(node 从 Tauri resource 解析后传入);
 /// 兜底用 onchina 可执行文件同目录(开发期 `cargo build` 后手动放置或软链)。
 fn pg_bin_dir() -> PathBuf {
-    if let Some(dir) = std::env::var("CID_PG_BIN_DIR")
+    if let Some(dir) = std::env::var("ONCHINA_PG_BIN_DIR")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -56,9 +56,9 @@ fn pg_bin_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-/// PG 数据目录:`CID_PG_DATA_DIR`(node 传 `base_path/pgdata`);兜底 exe 同目录 `pgdata`。
+/// PG 数据目录:`ONCHINA_PG_DATA_DIR`(node 传 `base_path/pgdata`);兜底 exe 同目录 `pgdata`。
 fn pg_data_dir() -> PathBuf {
-    if let Some(dir) = std::env::var("CID_PG_DATA_DIR")
+    if let Some(dir) = std::env::var("ONCHINA_PG_DATA_DIR")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -187,13 +187,13 @@ fn is_running(data_dir: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// 首启写入归档/WAL 配置:配了 `CID_PG_WAL_ARCHIVE_DIR`(NAS 路径)则开 PITR 归档,否则关。
+/// 首启写入归档/WAL 配置:配了 `ONCHINA_PG_WAL_ARCHIVE_DIR`(NAS 路径)则开 PITR 归档,否则关。
 fn configure_postgresql_conf(data_dir: &Path) -> Result<(), String> {
     use std::io::Write;
     let conf = data_dir.join("postgresql.conf");
     let mut extra =
         String::from("\n# ── onchina 内嵌实例(Card 05)──\nlisten_addresses = '127.0.0.1'\n");
-    if let Some(archive_dir) = std::env::var("CID_PG_WAL_ARCHIVE_DIR")
+    if let Some(archive_dir) = std::env::var("ONCHINA_PG_WAL_ARCHIVE_DIR")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -210,7 +210,7 @@ fn configure_postgresql_conf(data_dir: &Path) -> Result<(), String> {
         extra.push_str(&format!("archive_command = '{cmd}'\n"));
     } else {
         extra.push_str(
-            "# WAL 归档未配置(CID_PG_WAL_ARCHIVE_DIR 未设);PITR 关闭。\narchive_mode = off\n",
+            "# WAL 归档未配置(ONCHINA_PG_WAL_ARCHIVE_DIR 未设);PITR 关闭。\narchive_mode = off\n",
         );
     }
     let mut f = std::fs::OpenOptions::new()

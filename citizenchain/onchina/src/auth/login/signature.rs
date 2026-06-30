@@ -4,7 +4,7 @@
 //! `handler.rs` / `qr_login.rs`。
 
 use hex::FromHex;
-use schnorrkel::{PublicKey as Sr25519PublicKey, Signature as Sr25519Signature, signing_context};
+use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
 use sp_core::Pair;
 
 use crate::*;
@@ -54,10 +54,10 @@ pub(super) fn build_login_qr_system_signature(
     issued_at: i64,
     expires_at: i64,
 ) -> Result<(String, String), String> {
-    // 登录二维码的"系统签名"由 CID main signer(全局唯一)产出。
-    // signer 是 CID 系统签名密钥(CID_SIGNING_SEED_HEX 派生),与联邦注册局管理员/市注册局管理员公民钱包无关。
-    let main_seed_hex = std::env::var("CID_SIGNING_SEED_HEX")
-        .map_err(|_| "CID_SIGNING_SEED_HEX not set".to_string())?;
+    // 登录二维码的"系统签名"由 OnChina 平台系统签名密钥产出。
+    // 它只签平台挑战,不代表任何机构管理员,也不代替管理员冷钱包签名。
+    let main_seed_hex = std::env::var("ONCHINA_SIGNING_SEED_HEX")
+        .map_err(|_| "ONCHINA_SIGNING_SEED_HEX not set".to_string())?;
     let signer = crate::crypto::sr25519::try_load_signing_key_from_seed(main_seed_hex.as_str())?;
     let sys_pubkey = format!("0x{}", hex::encode(signer.public().0));
     let _ = state; // 签名走 env + crypto helper,不取自 state
@@ -190,15 +190,4 @@ fn is_generated_federal_registry_name(name: &str) -> bool {
     }
     let prefix = &name[..name.len() - 1];
     prefix.ends_with("联邦注册局管理员")
-}
-
-/// Tier2 下级注册局暴露 scope_city_name;Tier1 创世注册局或空字符串一律返回 None。
-pub(super) fn resolve_scope_city_name(admin: &AdminUser) -> Option<String> {
-    if crate::core::chain_runtime::is_subordinate_registry(&admin.institution_code)
-        && !admin.city_name.trim().is_empty()
-    {
-        Some(admin.city_name.clone())
-    } else {
-        None
-    }
 }

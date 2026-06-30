@@ -33,7 +33,11 @@ fn onchina_binary_path(app: &AppHandle) -> Option<PathBuf> {
     }
     let exe = std::env::current_exe().ok()?;
     let dev = exe.parent()?.join(name);
-    if dev.exists() { Some(dev) } else { None }
+    if dev.exists() {
+        Some(dev)
+    } else {
+        None
+    }
 }
 
 /// Unix:随包资源可能丢失可执行位,拉起前补上(best-effort)。
@@ -68,7 +72,7 @@ fn pg_os_subdir() -> &'static str {
 fn apply_onchina_env(app: &AppHandle, cmd: &mut Command) {
     // 链 RPC = 本机节点(打包/开发都设)。
     let ws_url = format!("ws://127.0.0.1:{}", crate::shared::rpc::current_rpc_port());
-    cmd.env("CID_CHAIN_WS_URL", ws_url);
+    cmd.env("ONCHAIN_WS_URL", ws_url);
 
     // 中文注释:只有**打包形态**(随包 PostgreSQL 官方二进制存在)才用随包资源路径覆盖
     // china.sqlite / 前端产物 / 内嵌 PG / TLS;开发期(cargo tauri dev,无随包 PG)这些全
@@ -86,14 +90,14 @@ fn apply_onchina_env(app: &AppHandle, cmd: &mut Command) {
     if !initdb.exists() {
         return;
     }
-    cmd.env("CID_CHINA_DB", res.join("china.sqlite"));
+    cmd.env("ONCHINA_CHINA_DB", res.join("china.sqlite"));
     cmd.env(
         "ONCHINA_FRONTEND_DIST",
         res.join("onchina-frontend").join("dist"),
     );
-    cmd.env("CID_EMBEDDED_PG", "1");
-    cmd.env("CID_ENABLE_TLS", "1");
-    cmd.env("CID_PG_BIN_DIR", &pg_bin_dir);
+    cmd.env("ONCHINA_EMBEDDED_PG", "1");
+    cmd.env("ONCHINA_ENABLE_TLS", "1");
+    cmd.env("ONCHINA_PG_BIN_DIR", &pg_bin_dir);
     if let Ok(base) = crate::shared::security::app_data_dir(app) {
         apply_data_dir_env(&base, cmd);
     }
@@ -101,10 +105,10 @@ fn apply_onchina_env(app: &AppHandle, cmd: &mut Command) {
 
 /// 数据目录派生的环境变量:PG 数据目录 / TLS 证书目录 / WAL 归档目录(与节点数据同根)。
 fn apply_data_dir_env(base: &Path, cmd: &mut Command) {
-    cmd.env("CID_PG_DATA_DIR", base.join("pgdata"));
-    cmd.env("CID_TLS_DIR", base.join("onchina-tls"));
-    // 默认本地 WAL 归档;大市部署由运维把 CID_PG_WAL_ARCHIVE_DIR 指向 NAS(见 citizenchain/scripts/onchina-{backup,restore}.sh)。
-    cmd.env("CID_PG_WAL_ARCHIVE_DIR", base.join("pg-wal-archive"));
+    cmd.env("ONCHINA_PG_DATA_DIR", base.join("pgdata"));
+    cmd.env("ONCHINA_TLS_DIR", base.join("onchina-tls"));
+    // 默认本地 WAL 归档;大市部署由运维把 ONCHINA_PG_WAL_ARCHIVE_DIR 指向 NAS(见 citizenchain/scripts/onchina-{backup,restore}.sh)。
+    cmd.env("ONCHINA_PG_WAL_ARCHIVE_DIR", base.join("pg-wal-archive"));
 }
 
 /// 清理已经退出的 onchina 子进程句柄,避免状态误判为运行中。

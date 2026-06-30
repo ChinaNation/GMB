@@ -13,12 +13,12 @@
 use postgres::Client;
 use uuid::Uuid;
 
-use crate::AppState;
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::core::institution_call::{
-    AdminProfileArg, AdminSourceTag, ChainCall, InitialAccountArg, ProposeCreateInstitutionArgs,
-    encode_propose_create_institution,
+    encode_propose_create_institution, AdminProfileArg, AdminSourceTag, ChainCall,
+    InitialAccountArg, ProposeCreateInstitutionArgs,
 };
+use crate::AppState;
 
 /// 创建表单里每个管理员的职务/任期补充(account 与链下 institution_admins 对齐)。
 #[derive(Debug, Clone, serde::Deserialize)]

@@ -3,16 +3,17 @@
 // 登录成功后通过 useAuth().setAuth 写入全局,App.tsx 只负责在 !auth 时渲染 <LoginView />。
 
 import { useCallback, useEffect, useState } from 'react';
-import { Typography } from 'antd';
+import { Button, Modal, Radio, Space, Typography } from 'antd';
 import { QrcodeOutlined } from '@ant-design/icons';
 import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth } from '../utils/storedAuth';
 import { parseSignedLoginPayload } from '../utils/parseSignedPayload';
 import { CitizenSignaturePanel } from '../core/CitizenSignaturePanel';
 import type { AdminAuth } from './types';
-import type { AdminQrSignRequestResult } from './api';
+import type { AdminIdentifyResult, AdminQrSignRequestResult, NodeBindingRequired } from './api';
 import {
   completeAdminQrLogin,
+  confirmNodeBinding,
   createAdminQrSignRequest,
   queryAdminQrLoginResult,
 } from './api';
@@ -28,8 +29,32 @@ function createSessionId(): string {
 export function LoginView() {
   const { auth, setAuth } = useAuth();
   const [pendingQrLogin, setPendingQrLogin] = useState<AdminQrSignRequestResult | null>(null);
+  const [pendingBinding, setPendingBinding] = useState<NodeBindingRequired | null>(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [challengeLoading, setChallengeLoading] = useState(false);
   const [scanSubmitting, setScanSubmitting] = useState(false);
+  const [bindingSubmitting, setBindingSubmitting] = useState(false);
+
+  const finishLogin = useCallback((accessToken: string, admin: AdminIdentifyResult) => {
+    const nextAuth: AdminAuth = {
+      access_token: accessToken,
+      admin_account: admin.admin_account,
+      institution_code: admin.institution_code,
+      admin_level: admin.admin_level ?? null,
+      capabilities: admin.capabilities,
+      admin_name: admin.admin_name,
+      scope_province_name: admin.scope_province_name ?? null,
+      scope_city_name: admin.scope_city_name ?? null,
+      scope_town_name: admin.scope_town_name ?? null,
+      cid_short_name: admin.cid_short_name ?? null,
+    };
+    setAuth(nextAuth);
+    writeStoredAuth(nextAuth);
+    setPendingQrLogin(null);
+    setPendingBinding(null);
+    setSelectedCandidateId('');
+    notice.success('登录成功');
+  }, [setAuth]);
 
   const onCreateQrLogin = async () => {
     setChallengeLoading(true);
@@ -58,34 +83,29 @@ export function LoginView() {
     setScanSubmitting(true);
     try {
       const payload = parseSignedLoginPayload(raw, pendingQrLogin.challenge_id);
-      await completeAdminQrLogin({
+      const completion = await completeAdminQrLogin({
         challenge_id: payload.challenge_id,
         session_id: payload.session_id || pendingQrLogin.session_id,
         admin_account: payload.admin_account,
         signer_pubkey: payload.signer_pubkey,
         signature: payload.signature,
       });
+      if (completion.status === 'BINDING_REQUIRED' && completion.binding) {
+        setPendingBinding(completion.binding);
+        setSelectedCandidateId(completion.binding.candidates[0]?.candidate_id ?? '');
+        notice.success('请选择本节点绑定机构');
+        return;
+      }
+      if (completion.status === 'SUCCESS' && completion.access_token && completion.admin) {
+        finishLogin(completion.access_token, completion.admin);
+        return;
+      }
       const status = await queryAdminQrLoginResult(
         pendingQrLogin.challenge_id,
         pendingQrLogin.session_id,
       );
       if (status.status === 'SUCCESS' && status.access_token && status.admin) {
-        const nextAuth: AdminAuth = {
-          access_token: status.access_token,
-          admin_account: status.admin.admin_account,
-          institution_code: status.admin.institution_code,
-          admin_level: status.admin.admin_level ?? null,
-          capabilities: status.admin.capabilities,
-          admin_name: status.admin.admin_name,
-          scope_province_name: status.admin.scope_province_name ?? null,
-          scope_city_name: status.admin.scope_city_name ?? null,
-          scope_town_name: status.admin.scope_town_name ?? null,
-          cid_short_name: status.admin.cid_short_name ?? null,
-        };
-        setAuth(nextAuth);
-        writeStoredAuth(nextAuth);
-        setPendingQrLogin(null);
-        notice.success('登录成功');
+        finishLogin(status.access_token, status.admin);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
@@ -97,7 +117,23 @@ export function LoginView() {
     } finally {
       setScanSubmitting(false);
     }
-  }, [pendingQrLogin, setAuth]);
+  }, [finishLogin, pendingQrLogin]);
+
+  const onConfirmBinding = async () => {
+    if (!pendingBinding || !selectedCandidateId) return;
+    setBindingSubmitting(true);
+    try {
+      const result = await confirmNodeBinding({
+        binding_challenge_id: pendingBinding.binding_challenge_id,
+        candidate_id: selectedCandidateId,
+      });
+      finishLogin(result.access_token, result.admin);
+    } catch (err) {
+      notice.error(err, '绑定机构失败');
+    } finally {
+      setBindingSubmitting(false);
+    }
+  };
 
   // QR 后台轮询 effect
   useEffect(() => {
@@ -117,22 +153,7 @@ export function LoginView() {
           return;
         }
         if (status.status === 'SUCCESS' && status.access_token && status.admin) {
-          const nextAuth: AdminAuth = {
-            access_token: status.access_token,
-            admin_account: status.admin.admin_account,
-            institution_code: status.admin.institution_code,
-            admin_level: status.admin.admin_level ?? null,
-            capabilities: status.admin.capabilities,
-            admin_name: status.admin.admin_name,
-            scope_province_name: status.admin.scope_province_name ?? null,
-            scope_city_name: status.admin.scope_city_name ?? null,
-            scope_town_name: status.admin.scope_town_name ?? null,
-            cid_short_name: status.admin.cid_short_name ?? null,
-          };
-          setAuth(nextAuth);
-          writeStoredAuth(nextAuth);
-          setPendingQrLogin(null);
-          notice.success('登录成功');
+          finishLogin(status.access_token, status.admin);
         }
       } catch {
         // keep polling
@@ -142,7 +163,7 @@ export function LoginView() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [auth, pendingQrLogin, setAuth]);
+  }, [auth, finishLogin, pendingQrLogin]);
 
   return (
     <div
@@ -196,7 +217,7 @@ export function LoginView() {
         <CitizenSignaturePanel
           qrTitle="登录二维码"
           qrValue={pendingQrLogin?.login_qr_payload}
-          qrPlaceholderValue="CID_LOGIN_PENDING"
+          qrPlaceholderValue="ONCHINA_LOGIN_PENDING"
           qrHint={
             pendingQrLogin
               ? `有效期至 ${new Date(pendingQrLogin.expire_at * 1000).toLocaleTimeString()}`
@@ -211,6 +232,53 @@ export function LoginView() {
           onDetected={onCompleteSignedLogin}
           onScannerError={(msg) => notice.error(msg)}
         />
+        <Modal
+          title="绑定本节点机构"
+          open={!!pendingBinding}
+          onCancel={() => !bindingSubmitting && setPendingBinding(null)}
+          footer={[
+            <Button key="cancel" disabled={bindingSubmitting} onClick={() => setPendingBinding(null)}>
+              取消
+            </Button>,
+            <Button
+              key="confirm"
+              type="primary"
+              loading={bindingSubmitting}
+              disabled={!selectedCandidateId}
+              onClick={onConfirmBinding}
+            >
+              确认绑定
+            </Button>,
+          ]}
+        >
+          <Radio.Group
+            value={selectedCandidateId}
+            onChange={(event) => setSelectedCandidateId(event.target.value)}
+            style={{ width: '100%' }}
+          >
+            <Space direction="vertical" style={{ width: '100%' }}>
+              {pendingBinding?.candidates.map((candidate) => {
+                const title = candidate.cid_short_name || candidate.cid_full_name || candidate.institution_code;
+                const scope = [candidate.scope_province_name, candidate.scope_city_name, candidate.scope_town_name]
+                  .filter(Boolean)
+                  .join(' / ');
+                return (
+                  <Radio key={candidate.candidate_id} value={candidate.candidate_id}>
+                    <div>
+                      <Typography.Text strong>{title}</Typography.Text>
+                      <br />
+                      <Typography.Text type="secondary">
+                        {candidate.institution_code}
+                        {candidate.institution_cid_number ? ` · ${candidate.institution_cid_number}` : ''}
+                        {scope ? ` · ${scope}` : ''}
+                      </Typography.Text>
+                    </div>
+                  </Radio>
+                );
+              })}
+            </Space>
+          </Radio.Group>
+        </Modal>
       </div>
     </div>
   );

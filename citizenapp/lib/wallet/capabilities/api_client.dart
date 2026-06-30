@@ -302,7 +302,7 @@ class ApiClient {
 
   /// 查询机构下所有多签账户。
   ///
-  /// 调用 CID 后端 `GET /api/v1/app/institutions/:cid_number/accounts`，
+  /// 调用 OnChina 后端 `GET /api/v1/app/institutions/:cid_number/accounts`，
   /// 返回机构全称/简称 + 账户列表（account_name / account / chain_status）。
   Future<InstitutionAccountsResponse> fetchInstitutionAccounts(
       String cidNumber) async {
@@ -353,7 +353,7 @@ class ApiClient {
         accounts.add(InstitutionAccountEntry(
           accountName: (m['account_name']?.toString() ?? '').trim(),
           account: m['account']?.toString(),
-          // 中文注释:CID 后端公开接口返回 SCREAMING_SNAKE_CASE；
+          // 中文注释:OnChina 后端公开接口返回 SCREAMING_SNAKE_CASE；
           // 这里兼容旧口径 Pending/Confirmed/Failed，统一折叠成同一套状态。
           chainStatus: InstitutionAccountEntry.normalizeChainStatus(
             m['chain_status']?.toString(),
@@ -372,7 +372,7 @@ class ApiClient {
 
   /// 查询机构链端注册信息。
   ///
-  /// 调用 CID 后端 `GET /api/v1/app/institutions/:cid_number/registration-info`。
+  /// 调用 OnChina 后端 `GET /api/v1/app/institutions/:cid_number/registration-info`。
   /// 该接口是 `PublicManage/PrivateManage.propose_create_{public,private}_institution` 的唯一凭证来源。
   Future<InstitutionRegistrationInfoResponse> fetchInstitutionRegistrationInfo(
       String cidNumber) async {

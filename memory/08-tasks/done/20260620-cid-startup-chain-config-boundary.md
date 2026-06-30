@@ -6,7 +6,7 @@ CID 是由联邦注册局运维的中心化独立系统,部署后应先能启动
 
 ## 问题现状
 
-- `citizencode-backend` 启动入口强制读取 `CID_RUNTIME_ISSUER_CID_NUMBER`、`CID_RUNTIME_ISSUER_MAIN_ACCOUNT`、`CID_RUNTIME_SIGNER_PUBKEY`。
+- `citizencode-backend` 启动入口强制读取 `ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER`、`ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT`、`ONCHAIN_CREDENTIAL_SIGNER_PUBKEY`。
 - 本地 `.env.dev.local` 未配置这些链端签发身份时,`./cid-run.sh` 在 `ensure-gov` 阶段直接 panic。
 - 部署文档和安装模板没有清楚区分 CID 基础启动必填项与链交互启用项。
 
@@ -28,13 +28,13 @@ CID 是由联邦注册局运维的中心化独立系统,部署后应先能启动
 
 ## 验收标准
 
-- 未配置 `CID_RUNTIME_ISSUER_*` 时,`./cid-run.sh` 不再因启动入口 panic。
+- 未配置 `ONCHAIN_CREDENTIAL_ISSUER_*` 时,`./cid-run.sh` 不再因启动入口 panic。
 - 普通 CID 后端健康检查能通过。
 - 未配置链签发身份时,链交互接口返回配置未完成错误,普通 CID 本地功能不受影响。
 
 ## 完成记录
 
-- 已移除 `main.rs` 启动入口对 `CID_RUNTIME_ISSUER_*` / `CID_RUNTIME_SIGNER_PUBKEY` 的强制校验。
+- 已移除 `main.rs` 启动入口对 `ONCHAIN_CREDENTIAL_ISSUER_*` / `ONCHAIN_CREDENTIAL_SIGNER_PUBKEY` 的强制校验。
 - 已将链端签发配置缺失错误收口到链交互接口 503 响应。
 - 已补齐管理员、CPMS、主体分区表旧字段到目标字段的启动期幂等收敛。
 - 已更新生产部署模板和部署说明,明确链配置不阻断 CID 基础站点启动。

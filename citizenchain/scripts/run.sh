@@ -13,8 +13,8 @@ cleanup() {
     pkill -f "citizenchain" 2>/dev/null || true
     pkill -f "target/debug/onchina" 2>/dev/null || true
     lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
-    if [ -n "${CID_PG_BIN_DIR:-}" ] && [ -n "${CID_PG_DATA_DIR:-}" ] && [ -d "${CID_PG_DATA_DIR:-}" ]; then
-        "$CID_PG_BIN_DIR/pg_ctl" stop -D "$CID_PG_DATA_DIR" -m fast >/dev/null 2>&1 || true
+    if [ -n "${ONCHINA_PG_BIN_DIR:-}" ] && [ -n "${ONCHINA_PG_DATA_DIR:-}" ] && [ -d "${ONCHINA_PG_DATA_DIR:-}" ]; then
+        "$ONCHINA_PG_BIN_DIR/pg_ctl" stop -D "$ONCHINA_PG_DATA_DIR" -m fast >/dev/null 2>&1 || true
     fi
     sleep 1
     echo "    已关闭"
@@ -46,31 +46,29 @@ for v in postgresql@17 postgresql@16 postgresql@15 postgresql; do
     if p="$(brew --prefix "$v" 2>/dev/null)" && [ -x "$p/bin/initdb" ]; then PG_PREFIX="$p"; break; fi
 done
 if [ -n "$PG_PREFIX" ]; then
-    export CID_EMBEDDED_PG=1
-    export CID_PG_BIN_DIR="$PG_PREFIX/bin"
-    export CID_PG_PORT="${CID_PG_PORT:-5433}"
-    export CID_PG_DATA_DIR="$HOME/Library/Application Support/gmb.dev/onchina-pgdata"
-    echo "    内嵌私有 PG:$CID_PG_BIN_DIR(端口 $CID_PG_PORT)"
+    export ONCHINA_EMBEDDED_PG=1
+    export ONCHINA_PG_BIN_DIR="$PG_PREFIX/bin"
+    export ONCHINA_PG_PORT="${ONCHINA_PG_PORT:-5433}"
+    export ONCHINA_PG_DATA_DIR="$HOME/Library/Application Support/gmb.dev/onchina-pgdata"
+    echo "    内嵌私有 PG:$ONCHINA_PG_BIN_DIR(端口 $ONCHINA_PG_PORT)"
 else
     echo "    [warn] 未找到本机 PostgreSQL(brew install postgresql@16);链上中国平台仍可起但缺 DB,功能受限。"
 fi
-export CID_CHINA_DB="$REPO_ROOT/onchina/src/cid/china/china.sqlite"
+export ONCHINA_CHINA_DB="$REPO_ROOT/onchina/src/cid/china/china.sqlite"
 export ONCHINA_FRONTEND_DIST="$REPO_ROOT/onchina/frontend/dist"
-export CID_ENABLE_TLS=1
-export CID_TLS_DIR="$HOME/Library/Application Support/gmb.dev/onchina-tls"
+export ONCHINA_ENABLE_TLS=1
+export ONCHINA_TLS_DIR="$HOME/Library/Application Support/gmb.dev/onchina-tls"
 # 中文注释:本地开发让链上中国平台启动时自动对账公权机构目录(全新内嵌 PG 是空库,
 #   首启需把 40 万+ 公权机构从 china.sqlite 生成进库;首次较慢,之后增量对账很快),
 #   否则启动期"目录落后"守卫会 panic、平台起不来。
-export CID_GOV_AUTO_RECONCILE=1
+export ONCHINA_GOV_AUTO_RECONCILE=1
 
-# ── dev 机构身份(让"生成登录二维码"和"扫码登录"在本地可用)──
-# 中文注释:以下是"本机构"的可选配置——签登录二维码挑战(系统签名钥)+ 登录闸读哪个机构的
-#   链上 Active 管理员集合(机构身份)。**不是节点启动前提**(节点/平台没有它们也能起,只是登录
-#   不可用)。dev 取固定测试值,绝不上正式。身份取联邦注册局(FRG):其管理员集合创世内置,
-#   clean-run 重新创世后即在链上,登录闸有集合可读。
-export CID_SIGNING_SEED_HEX="${CID_SIGNING_SEED_HEX:-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd}"
-export CID_RUNTIME_ISSUER_CID_NUMBER="${CID_RUNTIME_ISSUER_CID_NUMBER:-ZS001-FRG07-249474503-2026}"
-export CID_RUNTIME_ISSUER_MAIN_ACCOUNT="${CID_RUNTIME_ISSUER_MAIN_ACCOUNT:-0x406246b466028ae3cb89f36b70457478eca4ec224b2ad3f2122e5a0a407e642e}"
+# ── dev 平台签名与链上凭证签发配置(本地测试值)──
+# 中文注释:这些变量只让本地能签登录 QR 挑战和链上凭证;节点启动、平台启动、
+#   以及管理员所属机构判断都不依赖它们。机构归属由管理员冷钱包登录后链上反查并绑定。
+export ONCHINA_SIGNING_SEED_HEX="${ONCHINA_SIGNING_SEED_HEX:-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd}"
+export ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER="${ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER:-ZS001-FRG07-249474503-2026}"
+export ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT="${ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT:-0x406246b466028ae3cb89f36b70457478eca4ec224b2ad3f2122e5a0a407e642e}"
 
 echo "==> 使用本地源码构建 runtime WASM，不下载 GitHub CI WASM..."
 echo "    节点启动产物目录: $TARGET_DIR"

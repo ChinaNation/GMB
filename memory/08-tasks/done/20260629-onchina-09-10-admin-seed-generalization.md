@@ -21,7 +21,7 @@
 
 ## 🔴 P0(新发现,先修):FRG 登录在新链上已断
 - `fetch_active_admins_onchain` 对所有 pallet 读 `AdminAccounts[main_account]`;FRG 链上已无此键 → 恒 None → `onchain_gate` `NotOnchainAdmin` → FRG 管理员全部登不进。onchina 全仓零 `FederalRegistryProvinceGroups` 读码。
-- **修复**:① 新增镜像读 `GenesisAdmins::FederalRegistryProvinceGroups[province_code]`(value 同 `OnChainAdminAccount`);② `node_institution_identity` 为 FRG 解析 province_code(由 `CID_RUNTIME_SCOPE_PROVINCE_NAME` → `primitives::cid::code::PROVINCE_CODE_INFOS` 映射);③ `fetch_active_admins_onchain` 对 FRG 分流到省组读,非 FRG 仍读 AdminAccounts。
+- **修复**:① 新增镜像读 `GenesisAdmins::FederalRegistryProvinceGroups[province_code]`(value 同 `OnChainAdminAccount`);② `node_institution_identity` 为 FRG 解析 province_code(由 `ONCHAIN_CREDENTIAL_SCOPE_PROVINCE_NAME` → `primitives::cid::code::PROVINCE_CODE_INFOS` 映射);③ `fetch_active_admins_onchain` 对 FRG 分流到省组读,非 FRG 仍读 AdminAccounts。
 - **关联**:citizenapp `kGenesisInstitutions` 的 FRG 单 mainAccount 条目同样读空 → 列 citizenapp 侧 follow-up(不在本卡)。
 
 ## 现状根因(已核实)

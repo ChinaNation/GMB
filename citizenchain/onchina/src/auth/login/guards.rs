@@ -27,7 +27,7 @@ pub(super) fn admin_auth(
     };
 
     let now = Utc::now();
-    let city_idle_timeout_minutes = std::env::var("CID_ADMIN_IDLE_TIMEOUT_MINUTES")
+    let city_idle_timeout_minutes = std::env::var("ONCHINA_ADMIN_IDLE_TIMEOUT_MINUTES")
         .ok()
         .and_then(|v| v.parse::<i64>().ok())
         .filter(|v| *v > 0)

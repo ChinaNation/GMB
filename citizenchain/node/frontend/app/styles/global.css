@@ -299,9 +299,21 @@ body {
   background: rgba(34, 197, 94, 0.14);
 }
 
-.onchina-platform-status.disabled {
+.onchina-platform-status.stopped {
   color: var(--text-secondary);
   background: rgba(148, 163, 184, 0.12);
+}
+
+.onchina-platform-status.starting {
+  border-color: rgba(234, 179, 8, 0.45);
+  color: #fde68a;
+  background: rgba(234, 179, 8, 0.14);
+}
+
+.onchina-platform-status.error {
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.14);
 }
 
 .onchina-platform-url {

@@ -195,9 +195,9 @@
 2026-06-29 起，节点桌面端只在用户手动确认后启动链上中国平台，不再随节点程序启动自动拉起 OnChina 子进程。
 
 - 固定入口：`https://onchina.local:8964`。
-- 设置页入口：`frontend/settings/OnChinaPlatformSection.tsx` 位于“全节点模式”和“通信节点功能”之间，左侧显示“链上中国平台”，右侧显示 `未开启` / `已开启` 状态标签，状态标签右侧显示固定入口，最右侧按钮按状态显示“启动”或“关闭”。
+- 设置页入口：`frontend/settings/OnChinaPlatformSection.tsx` 位于“全节点模式”和“通信节点功能”之间，左侧显示“链上中国平台”，右侧显示 `未开启` / `启动中` / `已开启` 状态标签，状态标签右侧显示固定入口，最右侧按钮按进程状态显示“启动”或“关闭”。
 - 二次确认：点击“启动”或“关闭”只打开确认弹窗；确认后调用 `start_onchina_platform` 或 `stop_onchina_platform`，不自动打开浏览器。
-- 后端命令：`src/settings/onchina_platform/mod.rs` 提供 `get_onchina_platform` / `start_onchina_platform` / `stop_onchina_platform`，只返回本进程管理的 OnChina 子进程状态和固定入口。
+- 后端命令：`src/settings/onchina_platform/mod.rs` 提供 `get_onchina_platform` / `start_onchina_platform` / `stop_onchina_platform`，只返回本进程管理的 OnChina 子进程状态、`/api/v1/health` 真实健康结果和固定入口；只有健康接口返回 `UP` 才显示 `已开启`。
 - 子进程管理：`src/onchina_proc/mod.rs` 负责解析随包或开发期 `onchina` 二进制、注入链 RPC / 内嵌 PG / TLS / 前端资源环境变量、启动进程、清理已退出句柄和 App 退出时停掉已启动子进程。
 - 默认行为：`src/desktop/mod.rs` 仍自动启动区块链节点和同步守护，但不会自动启动链上中国平台，避免只挖矿节点承担 PostgreSQL、HTTPS 管理后台和浏览器业务入口。
 - HTTPS 入口：OnChina TLS 证书目标主机为 `onchina.local`；旧 `localhost/127.0.0.1` 证书会在下次启动时按主机标记重新生成。

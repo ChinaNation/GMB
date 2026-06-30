@@ -14,14 +14,14 @@ pub mod generator;
 pub(crate) mod model;
 pub mod seed;
 
-pub use category::{InstitutionCategory, SubjectLegalKind, classify, legal_kind};
-pub use generator::{GenerateCidInput, generate_cid_number};
+pub use category::{classify, legal_kind, InstitutionCategory, SubjectLegalKind};
+pub use generator::{generate_cid_number, GenerateCidInput};
 pub(crate) use model::*;
 pub use primitives::cid::code;
 pub use primitives::cid::code::{AdminLevel, InstitutionCode};
 pub use primitives::cid::number::{
-    CID_NUMBER_SEGMENT_COUNT, CID_NUMBER_SEGMENT_D4_LEN, CID_NUMBER_SEGMENT_K3P1C1_LEN,
-    CID_NUMBER_SEGMENT_N9_LEN, CID_NUMBER_SEGMENT_R5_LEN, CidNumberParts, parse_cid_number_parts,
-    validate_cid_number_format,
+    parse_cid_number_parts, validate_cid_number_format, CidNumberParts, CID_NUMBER_SEGMENT_COUNT,
+    CID_NUMBER_SEGMENT_D4_LEN, CID_NUMBER_SEGMENT_K3P1C1_LEN, CID_NUMBER_SEGMENT_N9_LEN,
+    CID_NUMBER_SEGMENT_R5_LEN,
 };
-pub use seed::{SeedCidError, dynamic_institution_cid, official_institution_cid};
+pub use seed::{dynamic_institution_cid, official_institution_cid, SeedCidError};

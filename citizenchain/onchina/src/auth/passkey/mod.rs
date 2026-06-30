@@ -2,16 +2,16 @@
 //!
 //! 三档鉴权的 Passkey / PasskeyColdSign 档 step-up:管理员先完成 passkey 断言换取一次性
 //! assertion 令牌,提交重要 / 特殊操作时携 `X-Passkey-Assertion` 头消费。
-//! - RP 配置取 env `CID_PASSKEY_RP_ID` / `CID_PASSKEY_ORIGIN`,默认固定 onchina.local HTTPS。
+//! - RP 配置取 env `ONCHINA_PASSKEY_RP_ID` / `ONCHINA_PASSKEY_ORIGIN`,默认固定 onchina.local HTTPS。
 //! - 独立 WebAuthn 协议,绝不复用 QR_V1 / GMB / AdminSignedPayload。
 //! - 断言失败 / RP 未配一律拒,绝不降档到 Session。
 
 mod store;
 
-use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::Json;
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -22,7 +22,7 @@ use webauthn_rs::prelude::{
 
 use crate::auth::login::require_admin_any;
 use crate::core::response::ApiResponse;
-use crate::{AppState, api_error};
+use crate::{api_error, AppState};
 
 const CEREMONY_TTL_SECONDS: i64 = 300;
 const ASSERTION_TTL_SECONDS: i64 = 120;
@@ -38,7 +38,7 @@ const PASSKEY_USER_NS: Uuid = Uuid::from_bytes([
 /// 从 env 构造 WebAuthn(RP id / origin);未配或非法 → Err(fail-closed)。
 fn build_webauthn_from(rp_id: &str, origin: &str) -> Result<Webauthn, String> {
     let rp_origin = Url::parse(origin.trim())
-        .map_err(|e| format!("invalid CID_PASSKEY_ORIGIN `{origin}`: {e}"))?;
+        .map_err(|e| format!("invalid ONCHINA_PASSKEY_ORIGIN `{origin}`: {e}"))?;
     WebauthnBuilder::new(rp_id.trim(), &rp_origin)
         .map_err(|e| format!("webauthn rp config invalid: {e}"))?
         .rp_name("onchina")
@@ -47,8 +47,9 @@ fn build_webauthn_from(rp_id: &str, origin: &str) -> Result<Webauthn, String> {
 }
 
 fn build_webauthn() -> Result<Webauthn, String> {
-    let rp_id = std::env::var("CID_PASSKEY_RP_ID").unwrap_or_else(|_| "onchina.local".to_string());
-    let origin = std::env::var("CID_PASSKEY_ORIGIN")
+    let rp_id =
+        std::env::var("ONCHINA_PASSKEY_RP_ID").unwrap_or_else(|_| "onchina.local".to_string());
+    let origin = std::env::var("ONCHINA_PASSKEY_ORIGIN")
         .unwrap_or_else(|_| "https://onchina.local:8964".to_string());
     build_webauthn_from(rp_id.trim(), origin.trim())
 }
@@ -449,8 +450,8 @@ mod tests {
 
     #[test]
     fn passkey_register_and_authenticate_round_trip() {
-        use webauthn_authenticator_rs::WebauthnAuthenticator;
         use webauthn_authenticator_rs::softpasskey::SoftPasskey;
+        use webauthn_authenticator_rs::WebauthnAuthenticator;
         use webauthn_rs::prelude::Url;
 
         let webauthn =

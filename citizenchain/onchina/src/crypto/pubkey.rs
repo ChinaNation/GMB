@@ -53,7 +53,7 @@ pub(crate) fn pubkey_hex_to_ss58(pubkey_hex: &str) -> Option<String> {
     if pubkey_bytes.len() != 32 {
         return None;
     }
-    use blake2::{Blake2bVar, digest::VariableOutput};
+    use blake2::{digest::VariableOutput, Blake2bVar};
     let prefix: u16 = 2027;
     let first = ((prefix & 0b0000_0000_1111_1100) as u8) >> 2 | 0b01000000;
     let second = (prefix >> 8) as u8 | ((prefix & 0b0000_0000_0000_0011) as u8) << 6;

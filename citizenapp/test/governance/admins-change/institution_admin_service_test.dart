@@ -54,20 +54,34 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
+  // A2:`AdminAccounts.admins` = `Vec<AdminProfile>`(机构 kind≠3:account[32] + cid/name/admin_role
+  // 各 Compact(0) 空 + term_start/term_end u32 + source u8);个人多签 kind==3 仍是裸 `Vec<AccountId>`。
+  // 逐字节对齐 lib/citizen/shared/admin_profile.dart::decodeAdminsVec。
   Uint8List adminAccountBytes({
     required String institutionCode,
     required int kind,
     required List<int> admin,
   }) {
+    final adminEntry = <int>[...admin];
+    if (kind != 3) {
+      adminEntry.addAll([
+        0x00, // admin_cid_number: Compact(0) 空
+        0x00, // name: Compact(0) 空
+        0x00, // admin_role: Compact(0) 空
+        ...u32Le(0), // term_start
+        ...u32Le(0), // term_end
+        0x00, // source: Genesis(0)
+      ]);
+    }
     return Uint8List.fromList([
       ...codeBytes(institutionCode),
       kind,
-      (1 << 2) & 0xff,
-      ...admin,
-      ...List<int>.filled(32, 0xcc),
-      ...u32Le(1),
-      ...u32Le(2),
-      1,
+      (1 << 2) & 0xff, // admins Vec: Compact(1)
+      ...adminEntry,
+      ...List<int>.filled(32, 0xcc), // creator
+      ...u32Le(1), // created_at
+      ...u32Le(2), // updated_at
+      1, // status: Active
     ]);
   }
 

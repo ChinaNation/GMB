@@ -68,7 +68,7 @@ citizenchain/onchina/src/
 
 ## 7. 管理员写操作
 
-管理员新增、替换、Passkey 更新和链写动作必须使用 `SCAN_SIGN` 二次确认。业务 handler 只负责构造业务动作，二维码协议包装和签名结果识别归 `core/qr/`。
+管理员新增、替换、Passkey 更新、节点解绑和链写动作必须使用 `PASSKEY_COLD_SIGN` 二次确认。业务 handler 只负责构造业务动作，二维码协议包装和签名结果识别归 `core/qr/`。
 
 联邦注册局机构 `admins` 不允许本地新增或删除，只允许在同省范围内替换。市注册局机构 `admins` 每省每市最多 30 人，统计必须同时带省和市，不能只按市名统计。
 
@@ -77,8 +77,8 @@ citizenchain/onchina/src/
 ```text
 rg "mod chain;|crate::chain|chain::" citizenchain/onchina/src -g '*.rs'
 cargo check --manifest-path citizenchain/Cargo.toml -p onchina
-curl -fsS http://127.0.0.1:8899/api/v1/health
-curl -sS -i http://127.0.0.1:8899/api/v1/admin/auth/check -H "authorization: Bearer <token>"
+curl -kfsS https://onchina.local:8964/api/v1/health
+curl -ksS -i https://onchina.local:8964/api/v1/admin/auth/check -H "authorization: Bearer <token>"
 ```
 
 涉及数据库、登录、管理员列表、机构详情和扫码签名的变更必须跑真实 HTTP 接口。只通过 `cargo check` 不能证明连接池、SQL 字段顺序和扫码验签流程正确。

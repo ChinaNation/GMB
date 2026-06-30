@@ -104,7 +104,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
     payload: unknown,
   ): Promise<AdminSecurityGrantOutput> => {
     const prepared = await prepareAdminAction(auth, actionType, payload);
-    if (prepared.auth_type !== 'SCAN_SIGN' || !prepared.sign_request) {
+    if (prepared.auth_type !== 'PASSKEY_COLD_SIGN' || !prepared.sign_request) {
       throw new Error('该操作缺少公民钱包签名请求');
     }
     return new Promise<AdminSecurityGrantOutput>((resolve, reject) => {
@@ -166,7 +166,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
     }
   };
 
-  // 中文注释:注册局注销整个机构——走 SCAN_SIGN 最严档,后端校验通过后签发注销凭证
+  // 中文注释:注册局注销整个机构——走 PASSKEY_COLD_SIGN 最严档,后端校验通过后签发注销凭证
   // (整机构 scope);机构管理员再拉 /deregistration-info 构造 propose_close 上链(见 ADR-023 §6.3)。
   // 创世/治理机构由后端 is_genesis_protected/org 闸权威拒,前端按 created_by 隐藏入口。
   const onDeregisterInstitution = async () => {

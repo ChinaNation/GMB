@@ -41,7 +41,8 @@ OnChina 以 PostgreSQL 结构化表作为唯一持久化真源。进程内缓存
 - `accounts`：机构账户表，按 `province_code` 分区。
 - `docs`：机构资料库元数据表，按 `province_code` 分区。
 - `audit`：审计表，按 `province_code` 分区。
-- `admins`：注册局/机构管理员本地元数据缓存(`federal_registry_scope` 已退役;FRG 省维度取节点 env / 链上 `FederalRegistryProvinceGroups`,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
+- `admins`：机构管理员本地元数据缓存；成员资格真源是链上 active admin 集合。
+- `node_institution_bindings`：本节点首次登录确认后的机构绑定结果；限制本节点后续登录机构，不作为权限真源；解绑 / 换机构通过 `NODE_BINDING_UNBIND` 冷签安全动作停用 active binding 后重新绑定。
 - `admin_*`、`citizen_bind_challenges`：登录、会话、扫码签名和绑定挑战运行态。
 - `chain_requests`、`chain_nonces`、`tx_records`、`tx_indexer_state`：链路幂等、防重放和索引运行态。
 

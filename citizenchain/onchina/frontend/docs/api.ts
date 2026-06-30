@@ -27,7 +27,7 @@ export async function listDocuments(
   );
 }
 
-// 中文注释:上传资料属 LOGIN_STATE 操作(仅需有效会话),无需扫码签名授权,直接调用。
+// 中文注释:上传资料属 SESSION 操作(仅需有效会话),无需扫码签名授权,直接调用。
 export async function uploadDocument(
   auth: AdminAuth,
   cidNumber: string,

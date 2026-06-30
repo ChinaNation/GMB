@@ -5,7 +5,7 @@
 
 use crate::{
     api_error,
-    core::qr::{QR_V1, bytes_to_b64, pubkey_hex_to_b64},
+    core::qr::{bytes_to_b64, pubkey_hex_to_b64, QR_V1},
 };
 use axum::http::StatusCode;
 

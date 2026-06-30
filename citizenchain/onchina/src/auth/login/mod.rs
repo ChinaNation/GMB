@@ -14,10 +14,13 @@ const LOGIN_SIGN_REQUEST_TTL_SECONDS: i64 = 90;
 
 pub(crate) use guards::require_admin_any;
 pub(crate) use handler::{
-    admin_auth_challenge, admin_auth_check, admin_auth_identify, admin_auth_verify, admin_logout,
-    require_admin_session_middleware,
+    admin_auth_challenge, admin_auth_check, admin_auth_confirm_node_binding, admin_auth_identify,
+    admin_auth_verify, admin_logout, require_admin_session_middleware,
 };
-pub(crate) use model::{AdminAuthContext, AdminSession, LoginSignRequest, QrLoginResultRecord};
+pub(crate) use model::{
+    AdminAuthContext, AdminInstitutionCandidate, AdminSession, LoginSignRequest,
+    NodeBindingChallenge, NodeInstitutionBinding, QrLoginResultRecord,
+};
 pub(crate) use onchain_gate::revoke_stale_admin_sessions_loop;
 pub(crate) use qr_login::{
     admin_auth_qr_complete, admin_auth_qr_result, admin_auth_qr_sign_request,

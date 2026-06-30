@@ -1,29 +1,26 @@
-//! 节点桌面端访问 CID 服务的统一配置。
+//! 节点桌面端访问 OnChina 服务的统一配置。
 //!
 //! 约定：
-//! - 显式传入 `CID_BASE_URL` 时永远优先使用；
-//! - 本地开发 debug 构建默认连接本机 CID，方便和本地后端联调；
-//! - 正式 release 构建默认连接 147 服务器上的 CID 正式服务。
+//! - 显式传入 `ONCHINA_BASE_URL` 时永远优先使用；
+//! - 未显式配置时固定连接局域网统一入口 `https://onchina.local:8964`。
 
-const CID_BASE_URL_ENV: &str = "CID_BASE_URL";
-const DEV_CID_BASE_URL: &str = "http://127.0.0.1:8899";
-const PROD_CID_BASE_URL: &str = "http://147.224.14.117:8899";
+const ONCHINA_BASE_URL_ENV: &str = "ONCHINA_BASE_URL";
+const DEFAULT_ONCHINA_BASE_URL: &str = "https://onchina.local:8964";
 
-fn default_cid_base_url() -> &'static str {
-    if cfg!(debug_assertions) {
-        DEV_CID_BASE_URL
-    } else {
-        PROD_CID_BASE_URL
-    }
-}
-
-/// 返回节点桌面端调用 CID HTTP API 使用的基地址。
+/// 返回节点桌面端调用 OnChina HTTP API 使用的基地址。
 ///
 /// 末尾斜杠会被清理，调用方可以稳定拼接 `/api/...` 路径。
-pub(crate) fn cid_base_url() -> String {
-    std::env::var(CID_BASE_URL_ENV)
+pub(crate) fn onchina_base_url() -> String {
+    std::env::var(ONCHINA_BASE_URL_ENV)
         .ok()
         .map(|value| value.trim().trim_end_matches('/').to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| default_cid_base_url().to_string())
+        .unwrap_or_else(|| DEFAULT_ONCHINA_BASE_URL.to_string())
+}
+
+/// 本机 OnChina 默认使用自签证书;节点桌面端只在固定本地入口上放宽证书校验。
+pub(crate) fn accepts_local_self_signed_tls(base_url: &str) -> bool {
+    base_url.starts_with("https://onchina.local:")
+        || base_url.starts_with("https://127.0.0.1:")
+        || base_url.starts_with("https://localhost:")
 }

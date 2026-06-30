@@ -1,9 +1,9 @@
 use axum::{
-    Json,
     extract::{ConnectInfo, Request, State},
-    http::{HeaderMap, HeaderValue, Method, StatusCode, header::HeaderName},
+    http::{header::HeaderName, HeaderMap, HeaderValue, Method, StatusCode},
     middleware,
     response::{IntoResponse, Response},
+    Json,
 };
 use chrono::Utc;
 use std::{
@@ -24,7 +24,7 @@ const RATE_LIMIT_WINDOW_MS: i64 = 60_000;
 
 /// 进程内滑动窗口限流器。
 ///
-/// 去中心化后注册局是每市单机服务,限流落本地内存即可,无需外部 Redis。
+/// 去中心化后 OnChina 是每节点本地服务,限流落本地内存即可,无需外部 Redis。
 /// 按 actor 哈希分桶,窗口内记录命中时间戳,超过 `limit_per_min` 即拒绝。
 #[derive(Default)]
 pub(crate) struct LocalRateLimiter {
@@ -66,7 +66,7 @@ pub(crate) async fn global_rate_limit_middleware(
     next: middleware::Next,
 ) -> Response {
     let now = Utc::now();
-    let limit_per_min = std::env::var("CID_RATE_LIMIT_PER_MIN")
+    let limit_per_min = std::env::var("ONCHINA_RATE_LIMIT_PER_MIN")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(120);
@@ -100,19 +100,19 @@ pub(crate) fn optional_env(key: &str) -> Option<String> {
 }
 
 pub(crate) fn build_cors_layer() -> CorsLayer {
-    let env_mode = optional_env("CID_ENV")
+    let env_mode = optional_env("ONCHINA_ENV")
         .or_else(|| optional_env("ENV"))
         .unwrap_or_else(|| "dev".to_string())
         .to_ascii_lowercase();
     let is_prod = env_mode == "prod" || env_mode == "production";
-    let allow_any_in_prod = env_flag_enabled("CID_ALLOW_CORS_ANY_IN_PROD");
-    let allow_all = std::env::var("CID_CORS_ALLOWED_ORIGINS")
+    let allow_any_in_prod = env_flag_enabled("ONCHINA_ALLOW_CORS_ANY_IN_PROD");
+    let allow_all = std::env::var("ONCHINA_CORS_ALLOWED_ORIGINS")
         .ok()
         .map(|v| v.trim().to_string())
         .is_some_and(|v| v == "*");
     if allow_all {
         if is_prod && !allow_any_in_prod {
-            panic!("CID_CORS_ALLOWED_ORIGINS='*' is forbidden in production");
+            panic!("ONCHINA_CORS_ALLOWED_ORIGINS='*' is forbidden in production");
         }
         return CorsLayer::new()
             .allow_origin(Any)
@@ -138,7 +138,7 @@ pub(crate) fn build_cors_layer() -> CorsLayer {
             ]);
     }
 
-    let configured = std::env::var("CID_CORS_ALLOWED_ORIGINS")
+    let configured = std::env::var("ONCHINA_CORS_ALLOWED_ORIGINS")
         .ok()
         .map(|raw| {
             raw.split(',')
@@ -236,7 +236,7 @@ pub(crate) fn require_public_search_auth(
             "public search auth required",
         ));
     }
-    let Some(expected) = optional_env("CID_PUBLIC_SEARCH_TOKEN") else {
+    let Some(expected) = optional_env("ONCHINA_PUBLIC_SEARCH_TOKEN") else {
         return Err(api_error(
             StatusCode::SERVICE_UNAVAILABLE,
             1004,

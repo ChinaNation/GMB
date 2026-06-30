@@ -3,10 +3,10 @@
 //! 中文注释:启动只初始化必要结构化数据,
 //! 大型确定性目录只在显式命令或接口中对账。
 
-use crate::AppState;
 use crate::domains::gov::service::{
-    GovTargetKind, OfficialReconcileReport, OfficialReconcileScope, reconcile_gov_catalog_db,
+    reconcile_gov_catalog_db, GovTargetKind, OfficialReconcileReport, OfficialReconcileScope,
 };
+use crate::AppState;
 
 pub(crate) fn reconcile_official_institutions_explicit(
     state: &AppState,

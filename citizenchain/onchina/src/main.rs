@@ -1,9 +1,9 @@
 use axum::{
-    Json, Router,
     http::StatusCode,
     middleware,
     response::IntoResponse,
     routing::{delete, get, patch, post},
+    Json, Router,
 };
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
@@ -1687,9 +1687,9 @@ impl Db {
 }
 
 fn resolve_backend_bind_addr() -> Result<SocketAddr, String> {
-    let raw = std::env::var("CID_BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8964".to_string());
+    let raw = std::env::var("ONCHINA_BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8964".to_string());
     raw.parse::<SocketAddr>()
-        .map_err(|e| format!("invalid CID_BIND_ADDR `{raw}`: {e}"))
+        .map_err(|e| format!("invalid ONCHINA_BIND_ADDR `{raw}`: {e}"))
 }
 
 fn database_url_targets_local_host_only(database_url: &str) -> Result<bool, String> {
@@ -1844,7 +1844,7 @@ fn gov_bootstrap_state_summary(state: &GovBootstrapState) -> String {
 }
 
 fn load_gov_bootstrap_state(state: &AppState) -> Result<GovBootstrapState, String> {
-    use crate::domains::gov::service::{GovTargetKind, OfficialReconcileScope, gov_manifest_key};
+    use crate::domains::gov::service::{gov_manifest_key, GovTargetKind, OfficialReconcileScope};
 
     let scope_key = gov_manifest_key(&OfficialReconcileScope::All, GovTargetKind::All);
     state.db.with_client(move |conn| {
@@ -1894,8 +1894,8 @@ fn load_gov_bootstrap_state(state: &AppState) -> Result<GovBootstrapState, Strin
 
 fn run_ensure_gov_command(state: &AppState) -> Result<(), String> {
     use crate::domains::gov::service::{
-        GovTargetKind, OfficialReconcileScope, check_gov_catalog_db,
-        upsert_gov_manifest_from_check_db,
+        check_gov_catalog_db, upsert_gov_manifest_from_check_db, GovTargetKind,
+        OfficialReconcileScope,
     };
 
     let lock_sql = "SELECT pg_advisory_lock(hashtext('cid'), hashtext('ensure-gov'))";
@@ -2012,8 +2012,8 @@ fn run_ensure_gov_command(state: &AppState) -> Result<(), String> {
 
 fn ensure_gov_catalog_current_for_serve(state: &AppState) -> Result<(), String> {
     use crate::domains::gov::service::{
-        GovTargetKind, OfficialReconcileScope, check_gov_catalog_db, check_gov_manifest_db,
-        reconcile_changed_gov_catalog_db,
+        check_gov_catalog_db, check_gov_manifest_db, reconcile_changed_gov_catalog_db,
+        GovTargetKind, OfficialReconcileScope,
     };
 
     let manifest = check_gov_manifest_db(&state.db)?;
@@ -2035,9 +2035,9 @@ fn ensure_gov_catalog_current_for_serve(state: &AppState) -> Result<(), String> 
         manifest_status = ?manifest.manifest_status,
         "cid gov directory manifest is stale"
     );
-    if !env_flag_enabled("CID_GOV_AUTO_RECONCILE") {
+    if !env_flag_enabled("ONCHINA_GOV_AUTO_RECONCILE") {
         return Err(
-            "CID 公权机构目录已落后于当前 china.sqlite；请先执行 `onchina reconcile-gov --changed-only` 和 `onchina check-gov --strict`，或在本地开发显式设置 CID_GOV_AUTO_RECONCILE=1 后再启动。"
+            "CID 公权机构目录已落后于当前 china.sqlite；请先执行 `onchina reconcile-gov --changed-only` 和 `onchina check-gov --strict`，或在本地开发显式设置 ONCHINA_GOV_AUTO_RECONCILE=1 后再启动。"
                 .to_string(),
         );
     }
@@ -2068,8 +2068,8 @@ fn ensure_gov_catalog_current_for_serve(state: &AppState) -> Result<(), String> 
 
 fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool {
     use crate::domains::gov::service::{
-        GovTargetKind, OfficialReconcileScope, check_gov_catalog_db,
-        reconcile_changed_gov_catalog_db,
+        check_gov_catalog_db, reconcile_changed_gov_catalog_db, GovTargetKind,
+        OfficialReconcileScope,
     };
 
     let (scope, force_row_sync, label) = match command {
@@ -2361,14 +2361,14 @@ fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: O
 }
 
 fn chain_genesis_source_configured() -> bool {
-    std::env::var("CID_CHAIN_GENESIS_HASH")
+    std::env::var("ONCHAIN_GENESIS_HASH")
         .ok()
         .map(|v| !v.trim().is_empty())
         .unwrap_or(false)
         || core::chain_url::chain_ws_url().is_ok()
 }
 
-// 中文注释:链节点是 CID 的外部联调依赖,不能阻塞后端和管理员基础服务启动。
+// 中文注释:链节点是 OnChina 的外部联调依赖,不能阻塞后端和管理员基础服务启动。
 async fn cache_chain_genesis_hash_until_ready() {
     let mut retry_secs = 2u64;
     loop {
@@ -2381,7 +2381,7 @@ async fn cache_chain_genesis_hash_until_ready() {
                 warn!(
                     error = %err,
                     retry_in = retry_secs,
-                    "chain genesis hash unavailable; cid backend continues without chain"
+                    "chain genesis hash unavailable; onchina backend continues without chain"
                 );
             }
         }
@@ -2399,19 +2399,17 @@ fn main() {
     disable_core_dumps();
     let command = parse_backend_command();
 
-    // 中文注释:`CID_SIGNING_SEED_HEX` 是「该市注册局系统签名钥」的**可选**配置,
-    // 不是节点/服务启动前提——任何区块链节点都可起来 + 托管注册局 Web;只有被指定为
-    // 本市注册局的节点才配它(用于签登录 QR 挑战、签发人口快照/机构注册凭证)。配了就
-    // 校验格式(catch 配置错误),没配则跳过:节点照常起、注册局照常服务,登录/签发凭证
-    // 等需要它的操作才按需报缺失。鉴权真源是链上 Active 管理员集合(扫码登录,见 3b)。
-    if let Ok(seed_hex) = std::env::var("CID_SIGNING_SEED_HEX") {
+    // 中文注释:`ONCHINA_SIGNING_SEED_HEX` 是链上中国平台系统签名钥的**可选**配置,
+    // 不是节点/服务启动前提。任何区块链节点都可启动 OnChina;需要签登录 QR 挑战、
+    // 人口快照或机构注册凭证的操作才按需读取它。鉴权真源是链上 Active 管理员集合。
+    if let Ok(seed_hex) = std::env::var("ONCHINA_SIGNING_SEED_HEX") {
         if !seed_hex.trim().is_empty() {
             crypto::sr25519::try_load_signing_key_from_seed(seed_hex.as_str())
-                .unwrap_or_else(|e| panic!("invalid CID_SIGNING_SEED_HEX: {e}"));
+                .unwrap_or_else(|e| panic!("invalid ONCHINA_SIGNING_SEED_HEX: {e}"));
         }
     }
     // 中文注释(Card 05):桌面/小市内嵌私有 PostgreSQL——onchina 自管 initdb/起停,
-    // 自拼本机 DATABASE_URL;大市外部托管 PG 时关 CID_EMBEDDED_PG,直接给 DATABASE_URL。
+    // 自拼本机 DATABASE_URL;大市外部托管 PG 时关 ONCHINA_EMBEDDED_PG,直接给 DATABASE_URL。
     let database_url = if core::embedded_pg::is_enabled() {
         core::embedded_pg::ensure_started()
             .unwrap_or_else(|e| panic!("embedded postgres start failed: {e}"))
@@ -2426,9 +2424,9 @@ fn main() {
     }
     let db_is_local = database_url_targets_local_host_only(database_url.as_str())
         .unwrap_or_else(|e| panic!("{e}"));
-    if !db_is_local && !env_flag_enabled("CID_ALLOW_REMOTE_DB_WITHOUT_TLS") {
+    if !db_is_local && !env_flag_enabled("ONCHINA_ALLOW_REMOTE_DB_WITHOUT_TLS") {
         panic!(
-            "DATABASE_URL points to non-local host, but sync postgres client is running in NoTls mode; set CID_ALLOW_REMOTE_DB_WITHOUT_TLS=true only if transport is protected externally"
+            "DATABASE_URL points to non-local host, but sync postgres client is running in NoTls mode; set ONCHINA_ALLOW_REMOTE_DB_WITHOUT_TLS=true only if transport is protected externally"
         );
     }
     let db = Db::from_database_url(database_url.as_str()).expect("init database");
@@ -2464,7 +2462,7 @@ fn main() {
         if chain_genesis_source_configured() {
             tokio::spawn(cache_chain_genesis_hash_until_ready());
         } else {
-            warn!("chain genesis hash source not configured; cid backend continues without chain");
+            warn!("chain genesis hash source not configured; onchina backend continues without chain");
         }
         // 中文注释:链上集合鉴权(3b)——后台周期复查,清退已不在链上 Active 集合的管理员会话。
         if core::chain_url::chain_ws_url().is_ok() {
@@ -2505,6 +2503,10 @@ fn main() {
             .route(
                 "/api/v1/admin/auth/qr/result",
                 get(auth::login::admin_auth_qr_result),
+            )
+            .route(
+                "/api/v1/admin/auth/node-binding/confirm",
+                post(auth::login::admin_auth_confirm_node_binding),
             );
 
         let admin_routes = Router::new()
@@ -2764,7 +2766,7 @@ fn main() {
         // 管理员成员资格仍以链上 Active 集合为准,本地只允许同省更换投影。
 
         // 本地手机联调时必须监听到与 App 可访问的一致地址，避免只绑定回环导致超时。
-        let addr = resolve_backend_bind_addr().expect("resolve cid backend bind address");
+        let addr = resolve_backend_bind_addr().expect("resolve onchina backend bind address");
 
         // 中文注释(Card 05):收退出信号(Ctrl-C / node 停子进程 SIGTERM)→ 优雅停内嵌 PG → 退出。
         // 内嵌关闭时无操作;daemon 化的 postgres 即便被强杀也会在下次 ensure_started 复用。
@@ -2779,7 +2781,7 @@ fn main() {
 }
 
 /// 中文注释(Card 05):内网 TLS——正式入口固定为 https://onchina.local:8964;
-/// `CID_ENABLE_TLS` 关闭仅保留给底层开发调试。
+/// `ONCHINA_ENABLE_TLS` 关闭仅保留给底层开发调试。
 async fn serve_console(addr: SocketAddr, app: axum::Router) {
     let service = app.into_make_service_with_connect_info::<SocketAddr>();
     // 广告 onchina.local mDNS:局域网内可经统一 HTTPS 域名访问本节点控制台(best-effort)。
@@ -2792,15 +2794,15 @@ async fn serve_console(addr: SocketAddr, app: axum::Router) {
         axum_server::bind_rustls(addr, config)
             .serve(service)
             .await
-            .expect("run cid backend https server");
+            .expect("run onchina backend https server");
     } else {
         info!("onchina console listening on http://{}", addr);
         let listener = tokio::net::TcpListener::bind(addr)
             .await
-            .expect("bind cid backend listener");
+            .expect("bind onchina backend listener");
         axum::serve(listener, service)
             .await
-            .expect("run cid backend server");
+            .expect("run onchina backend server");
     }
 }
 
@@ -2838,7 +2840,7 @@ fn api_error(status: StatusCode, code: u32, message: &str) -> axum::response::Re
         status,
         Json(ApiError {
             code,
-            error_code: cid_error_code(status, message),
+            error_code: onchina_error_code(status, message),
             message: message.to_string(),
             trace_id: Uuid::new_v4().to_string(),
         }),
@@ -2846,75 +2848,99 @@ fn api_error(status: StatusCode, code: u32, message: &str) -> axum::response::Re
         .into_response()
 }
 
-fn cid_error_code(status: StatusCode, message: &str) -> &'static str {
+fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
     // 中文注释:HTTP 状态表达协议层含义,稳定 error_code 表达业务语义;前端不得解析 message。
     match message {
-        "missing bearer token" => "CID_AUTH_MISSING_TOKEN",
-        "invalid access token" => "CID_AUTH_INVALID_ACCESS_TOKEN",
-        "access token expired" => "CID_AUTH_ACCESS_TOKEN_EXPIRED",
-        "admin disabled" => "CID_AUTH_ADMIN_DISABLED",
-        "permission denied" => "CID_AUTH_PERMISSION_DENIED",
-        "identity_qr is required" => "CID_LOGIN_IDENTITY_QR_REQUIRED",
-        "admin_account is required" => "CID_LOGIN_ADMIN_ACCOUNT_REQUIRED",
-        "origin is required" => "CID_LOGIN_ORIGIN_REQUIRED",
-        "session_id is required" => "CID_LOGIN_SESSION_REQUIRED",
-        "domain is required" => "CID_LOGIN_DOMAIN_REQUIRED",
+        "missing bearer token" => "ONCHINA_AUTH_MISSING_TOKEN",
+        "invalid access token" => "ONCHINA_AUTH_INVALID_ACCESS_TOKEN",
+        "access token expired" => "ONCHINA_AUTH_ACCESS_TOKEN_EXPIRED",
+        "admin disabled" => "ONCHINA_AUTH_ADMIN_DISABLED",
+        "permission denied" => "ONCHINA_AUTH_PERMISSION_DENIED",
+        "identity_qr is required" => "ONCHINA_LOGIN_IDENTITY_QR_REQUIRED",
+        "admin_account is required" => "ONCHINA_LOGIN_ADMIN_ACCOUNT_REQUIRED",
+        "origin is required" => "ONCHINA_LOGIN_ORIGIN_REQUIRED",
+        "session_id is required" => "ONCHINA_LOGIN_SESSION_REQUIRED",
+        "domain is required" => "ONCHINA_LOGIN_DOMAIN_REQUIRED",
         "challenge_id, origin, session_id, nonce, signature are required" => {
-            "CID_LOGIN_REQUEST_INVALID"
+            "ONCHINA_LOGIN_REQUEST_INVALID"
         }
-        "challenge_id, admin_account, signature are required" => "CID_LOGIN_REQUEST_INVALID",
-        "challenge_id and session_id are required" => "CID_LOGIN_RESULT_PARAM_REQUIRED",
-        "admin not found" => "CID_LOGIN_ADMIN_NOT_FOUND",
-        "admin province scope missing" => "CID_LOGIN_ADMIN_SCOPE_MISSING",
-        "sign request not found" => "CID_LOGIN_CHALLENGE_NOT_FOUND",
-        "sign request already consumed" => "CID_LOGIN_CHALLENGE_CONSUMED",
-        "sign request session mismatch" => "CID_LOGIN_SESSION_MISMATCH",
-        "sign request expired" => "CID_LOGIN_CHALLENGE_EXPIRED",
-        "signer_pubkey must match admin_account" => "CID_LOGIN_SIGNER_MISMATCH",
-        "login signature verify failed" => "CID_LOGIN_SIGNATURE_VERIFY_FAILED",
-        "challenge not found" | "challenge not found or expired" => "CID_LOGIN_CHALLENGE_NOT_FOUND",
-        "challenge already consumed" => "CID_LOGIN_CHALLENGE_CONSUMED",
-        "challenge expired" => "CID_LOGIN_CHALLENGE_EXPIRED",
-        "challenge context mismatch" => "CID_LOGIN_CONTEXT_MISMATCH",
-        "chain unreachable" => "CID_LOGIN_CHAIN_UNREACHABLE",
-        "node identity misconfigured" => "CID_LOGIN_NODE_IDENTITY_MISCONFIGURED",
-        "login persist failed" => "CID_LOGIN_PERSIST_FAILED",
-        "challenge wallet mismatch" => "CID_BIND_WALLET_MISMATCH",
-        "signature verify failed" => "CID_BIND_SIGNATURE_VERIFY_FAILED",
+        "challenge_id, admin_account, signature are required" => "ONCHINA_LOGIN_REQUEST_INVALID",
+        "challenge_id and session_id are required" => "ONCHINA_LOGIN_RESULT_PARAM_REQUIRED",
+        "admin not found" => "ONCHINA_LOGIN_ADMIN_NOT_FOUND",
+        "admin province scope missing" => "ONCHINA_LOGIN_ADMIN_SCOPE_MISSING",
+        "sign request not found" => "ONCHINA_LOGIN_CHALLENGE_NOT_FOUND",
+        "sign request already consumed" => "ONCHINA_LOGIN_CHALLENGE_CONSUMED",
+        "sign request session mismatch" => "ONCHINA_LOGIN_SESSION_MISMATCH",
+        "sign request expired" => "ONCHINA_LOGIN_CHALLENGE_EXPIRED",
+        "signer_pubkey must match admin_account" => "ONCHINA_LOGIN_SIGNER_MISMATCH",
+        "login signature verify failed" => "ONCHINA_LOGIN_SIGNATURE_VERIFY_FAILED",
+        "challenge not found" | "challenge not found or expired" => {
+            "ONCHINA_LOGIN_CHALLENGE_NOT_FOUND"
+        }
+        "challenge already consumed" => "ONCHINA_LOGIN_CHALLENGE_CONSUMED",
+        "challenge expired" => "ONCHINA_LOGIN_CHALLENGE_EXPIRED",
+        "challenge context mismatch" => "ONCHINA_LOGIN_CONTEXT_MISMATCH",
+        "chain unreachable" => "ONCHINA_LOGIN_CHAIN_UNREACHABLE",
+        "node binding required" => "ONCHINA_LOGIN_NODE_BINDING_REQUIRED",
+        "node binding missing" => "ONCHINA_LOGIN_NODE_BINDING_MISSING",
+        "node binding invalid" => "ONCHINA_LOGIN_NODE_BINDING_INVALID",
+        "node binding query failed" => "ONCHINA_LOGIN_NODE_BINDING_QUERY_FAILED",
+        "node binding already inactive" => "ONCHINA_LOGIN_NODE_BINDING_ALREADY_INACTIVE",
+        "node binding challenge not found" => "ONCHINA_LOGIN_NODE_BINDING_CHALLENGE_NOT_FOUND",
+        "node binding challenge already consumed" => {
+            "ONCHINA_LOGIN_NODE_BINDING_CHALLENGE_CONSUMED"
+        }
+        "node binding challenge expired" => "ONCHINA_LOGIN_NODE_BINDING_CHALLENGE_EXPIRED",
+        "binding_challenge_id and candidate_id are required" => {
+            "ONCHINA_LOGIN_NODE_BINDING_REQUEST_INVALID"
+        }
+        "selected institution candidate not found" => {
+            "ONCHINA_LOGIN_NODE_BINDING_CANDIDATE_NOT_FOUND"
+        }
+        "admin no longer belongs to selected institution" => {
+            "ONCHINA_LOGIN_NODE_BINDING_ADMIN_MISMATCH"
+        }
+        "login persist failed" => "ONCHINA_LOGIN_PERSIST_FAILED",
+        "challenge wallet mismatch" => "ONCHINA_BIND_WALLET_MISMATCH",
+        "signature verify failed" => "ONCHINA_BIND_SIGNATURE_VERIFY_FAILED",
         "admin admin_account already exists as federal admin" => {
-            "CID_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY"
+            "ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY"
         }
         "admin admin_account already exists as city admin" => {
-            "CID_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY"
+            "ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY"
         }
-        "city admin city limit reached" => "CID_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED",
-        "replacement admin is not an on-chain admin" => "CID_ADMIN_REPLACEMENT_NOT_ONCHAIN",
-        "not an on-chain admin" => "CID_LOGIN_ADMIN_NOT_ONCHAIN",
-        "security grant required" => "CID_ADMIN_SECURITY_GRANT_REQUIRED",
+        "city admin city limit reached" => "ONCHINA_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED",
+        "replacement admin is not an on-chain admin" => "ONCHINA_ADMIN_REPLACEMENT_NOT_ONCHAIN",
+        "not an on-chain admin" => "ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN",
+        "security grant required" => "ONCHINA_ADMIN_SECURITY_GRANT_REQUIRED",
         _ if message.starts_with("insert qr sign request failed") => {
-            "CID_LOGIN_CHALLENGE_CREATE_FAILED"
+            "ONCHINA_LOGIN_CHALLENGE_CREATE_FAILED"
         }
-        _ if message.starts_with("query admin failed") => "CID_LOGIN_ADMIN_QUERY_FAILED",
-        _ if message.starts_with("query admin scope failed") => "CID_LOGIN_ADMIN_QUERY_FAILED",
+        _ if message.starts_with("query admin failed") => "ONCHINA_LOGIN_ADMIN_QUERY_FAILED",
+        _ if message.starts_with("query admin scope failed") => "ONCHINA_LOGIN_ADMIN_QUERY_FAILED",
         _ if message.starts_with("build login qr signature failed") => {
-            "CID_LOGIN_SYSTEM_SIGN_FAILED"
+            "ONCHINA_LOGIN_SYSTEM_SIGN_FAILED"
         }
-        _ if message.starts_with("complete qr login failed") => "CID_LOGIN_COMPLETE_FAILED",
+        _ if message.starts_with("complete qr login failed") => "ONCHINA_LOGIN_COMPLETE_FAILED",
         _ if message.starts_with("persist qr login result failed") => {
-            "CID_LOGIN_RESULT_SAVE_FAILED"
+            "ONCHINA_LOGIN_RESULT_SAVE_FAILED"
         }
-        _ if message.starts_with("query qr login result failed") => "CID_LOGIN_RESULT_QUERY_FAILED",
-        _ if message.starts_with("insert challenge failed") => "CID_LOGIN_CHALLENGE_CREATE_FAILED",
-        _ if message.starts_with("verify login failed") => "CID_LOGIN_VERIFY_FAILED",
-        _ if status == StatusCode::UNAUTHORIZED => "CID_AUTH_UNAUTHORIZED",
-        _ if status == StatusCode::FORBIDDEN => "CID_AUTH_FORBIDDEN",
-        _ if status == StatusCode::BAD_REQUEST => "CID_REQUEST_INVALID",
-        _ if status == StatusCode::NOT_FOUND => "CID_RESOURCE_NOT_FOUND",
-        _ if status == StatusCode::CONFLICT => "CID_RESOURCE_CONFLICT",
-        _ if status == StatusCode::GONE => "CID_RESOURCE_EXPIRED",
-        _ if status == StatusCode::UNPROCESSABLE_ENTITY => "CID_BUSINESS_VALIDATION_FAILED",
-        _ if status == StatusCode::TOO_MANY_REQUESTS => "CID_RATE_LIMITED",
-        _ if status == StatusCode::SERVICE_UNAVAILABLE => "CID_SERVICE_UNAVAILABLE",
-        _ => "CID_INTERNAL_ERROR",
+        _ if message.starts_with("query qr login result failed") => {
+            "ONCHINA_LOGIN_RESULT_QUERY_FAILED"
+        }
+        _ if message.starts_with("insert challenge failed") => {
+            "ONCHINA_LOGIN_CHALLENGE_CREATE_FAILED"
+        }
+        _ if message.starts_with("verify login failed") => "ONCHINA_LOGIN_VERIFY_FAILED",
+        _ if status == StatusCode::UNAUTHORIZED => "ONCHINA_AUTH_UNAUTHORIZED",
+        _ if status == StatusCode::FORBIDDEN => "ONCHINA_AUTH_FORBIDDEN",
+        _ if status == StatusCode::BAD_REQUEST => "ONCHINA_REQUEST_INVALID",
+        _ if status == StatusCode::NOT_FOUND => "ONCHINA_RESOURCE_NOT_FOUND",
+        _ if status == StatusCode::CONFLICT => "ONCHINA_RESOURCE_CONFLICT",
+        _ if status == StatusCode::GONE => "ONCHINA_RESOURCE_EXPIRED",
+        _ if status == StatusCode::UNPROCESSABLE_ENTITY => "ONCHINA_BUSINESS_VALIDATION_FAILED",
+        _ if status == StatusCode::TOO_MANY_REQUESTS => "ONCHINA_RATE_LIMITED",
+        _ if status == StatusCode::SERVICE_UNAVAILABLE => "ONCHINA_SERVICE_UNAVAILABLE",
+        _ => "ONCHINA_INTERNAL_ERROR",
     }
 }

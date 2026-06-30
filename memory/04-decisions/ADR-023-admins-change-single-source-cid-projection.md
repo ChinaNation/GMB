@@ -23,7 +23,7 @@
   - 普通机构:由市/联邦注册局创建并设初始管理员 → 之后机构自治。
 - **省份/城市 scope = 纯 CID 元数据,不上链**。链上联邦注册局就一个扁平账户、不带省份;"每省 5 人"只是 CID 用于管辖过滤(联邦看本省、市看本市),顺序源自 china_zf 注释。
 - **registry_org_code(FEDERAL/CITY)是 CID 标签**(管理员挂在联邦注册局还是某市注册局),不是链上概念。
-- **冷签**:所有管理员变更走 CitizenWallet QR_V1 冷签;`CID_SIGNING_SEED_HEX` 只是凭证签名密钥,**绝不代签**机构管理员动作。
+- **冷签**:所有管理员变更走 CitizenWallet QR_V1 冷签;`ONCHINA_SIGNING_SEED_HEX` 只是凭证签名密钥,**绝不代签**机构管理员动作。
 
 ## 2. 真源:链上 AdminAccounts
 

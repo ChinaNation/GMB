@@ -26,8 +26,8 @@ fn leak_text(value: String) -> &'static str {
 fn china_db_path() -> &'static Path {
     CHINA_DB_PATH.get_or_init(|| {
         // 中文注释:行政区以开发库 `onchina/src/cid/china/china.sqlite` 为权威源。
-        // 生产环境只允许通过 CID_CHINA_DB 指向随包只读 SQLite,不得在运行中复制或改写。
-        if let Some(raw) = std::env::var("CID_CHINA_DB")
+        // 生产环境只允许通过 ONCHINA_CHINA_DB 指向随包只读 SQLite,不得在运行中复制或改写。
+        if let Some(raw) = std::env::var("ONCHINA_CHINA_DB")
             .ok()
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
@@ -38,7 +38,7 @@ fn china_db_path() -> &'static Path {
         if dev.exists() {
             return dev;
         }
-        let exe = std::env::current_exe().expect("resolve cid backend executable path");
+        let exe = std::env::current_exe().expect("resolve onchina backend executable path");
         exe.parent()
             .and_then(Path::parent)
             .unwrap_or_else(|| Path::new("/opt/onchina"))
@@ -199,7 +199,7 @@ pub fn city_code_by_name(province_name: &str, city_name: &str) -> Option<&'stati
 }
 
 /// 中文注释:按 (省名,市名,镇名) 反查镇代码,返回 None 即该镇不在真源内。
-/// 登录时 onchain_gate 用它校验节点 `CID_RUNTIME_SCOPE_TOWN_NAME` 是否落在本市真镇上。
+/// 机构创建与作用域校验使用它确认镇名是否落在 china.sqlite 真源内。
 pub fn town_code_by_name(
     province_name: &str,
     city_name: &str,

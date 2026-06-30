@@ -50,6 +50,8 @@ pub(crate) enum AdminActionType {
     InstitutionAccountDeregister,
     InstitutionUploadDocument,
     InstitutionDeleteDocument,
+    /// 本节点解除当前机构绑定;解绑后必须重新扫码登录并绑定机构。
+    NodeBindingUnbind,
 }
 
 impl AdminActionType {
@@ -68,6 +70,7 @@ impl AdminActionType {
             Self::InstitutionAccountDeregister => "INSTITUTION_ACCOUNT_DEREGISTER",
             Self::InstitutionUploadDocument => "INSTITUTION_UPLOAD_DOCUMENT",
             Self::InstitutionDeleteDocument => "INSTITUTION_DELETE_DOCUMENT",
+            Self::NodeBindingUnbind => "NODE_BINDING_UNBIND",
         }
     }
 
@@ -91,7 +94,8 @@ impl AdminActionType {
             | Self::InstitutionDeleteAccount
             | Self::InstitutionDeregister
             | Self::InstitutionAccountDeregister
-            | Self::InstitutionDeleteDocument => AdminOperationAuth::PasskeyColdSign,
+            | Self::InstitutionDeleteDocument
+            | Self::NodeBindingUnbind => AdminOperationAuth::PasskeyColdSign,
         }
     }
 
@@ -107,6 +111,7 @@ impl AdminActionType {
                 | Self::ReplaceGoverningRegistry
                 | Self::InstitutionDeregister
                 | Self::InstitutionAccountDeregister
+                | Self::NodeBindingUnbind
         )
     }
 
@@ -145,6 +150,7 @@ pub(crate) fn parse_action_type(
         "INSTITUTION_ACCOUNT_DEREGISTER" => Ok(AdminActionType::InstitutionAccountDeregister),
         "INSTITUTION_UPLOAD_DOCUMENT" => Ok(AdminActionType::InstitutionUploadDocument),
         "INSTITUTION_DELETE_DOCUMENT" => Ok(AdminActionType::InstitutionDeleteDocument),
+        "NODE_BINDING_UNBIND" => Ok(AdminActionType::NodeBindingUnbind),
         _ => Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
@@ -218,5 +224,6 @@ mod tests {
         assert!(!AdminActionType::InstitutionCreateAccount.requires_governing_capability());
         assert!(!AdminActionType::InstitutionDeleteAccount.requires_governing_capability());
         assert!(!AdminActionType::InstitutionDeleteDocument.requires_governing_capability());
+        assert!(!AdminActionType::NodeBindingUnbind.requires_governing_capability());
     }
 }

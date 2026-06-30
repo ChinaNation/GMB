@@ -1,11 +1,8 @@
 //! 登录链上集合鉴权 + 会话签发(QR 登录与挑战登录共用)。
 //!
 //! 中文注释(去中心化鉴权):
-//! - 验签证明扫码者持有 `signer_pubkey` 私钥后,membership 真源切到**链上 Active 管理员集合**
-//!   (`GenesisAdmins`/`PublicAdmins`/`PrivateAdmins::AdminAccounts`),与直设入口同源;
-//!   本地 admins 表降级为元数据 / 省映射缓存。
-//! - 机构码由本节点链上身份推导;省/市 scope 统一取节点 `CID_RUNTIME_SCOPE_*`(每节点单省;
-//!   Tier1 创世注册局省维度同此,`federal_registry_scope` 本地省映射表已退役,决策③)。
+//! - 验签证明扫码者持有 `signer_pubkey` 私钥后,membership 真源切到**链上 Active 管理员集合**。
+//! - 平台启动不预设机构;首次登录从 `verified_pubkey` 反查候选机构,二次确认后本节点绑定唯一机构。
 //! - 后台 `revoke_stale_admin_sessions_loop` 周期复查,管理员被链上移除后≤TTL 失效。
 
 use chrono::{DateTime, Duration, Utc};
@@ -16,7 +13,10 @@ use crate::core::chain_runtime;
 use crate::crypto::pubkey::same_admin_account;
 use crate::*;
 
-use super::model::{AdminIdentifyOutput, AdminSession};
+use super::model::{
+    AdminIdentifyOutput, AdminInstitutionCandidate, AdminSession, NodeBindingChallenge,
+    NodeBindingRequiredOutput, NodeInstitutionBinding,
+};
 use super::signature::build_admin_name_from_user;
 
 /// 链上集合鉴权失败分类(映射 HTTP 状态)。
@@ -25,10 +25,23 @@ pub(super) enum GateError {
     NotOnchainAdmin,
     /// 链节点不可达 / 读取失败(瞬时,允许重试,绝不降级查本地表)。
     ChainUnreachable(String),
-    /// 节点机构身份环境变量缺失或非法。
-    Config(String),
+    /// 节点绑定确认请求非法。
+    BindingInvalid(String),
+    /// 节点绑定确认已过期。
+    BindingExpired,
+    /// 当前管理员不再属于待绑定机构。
+    BindingMismatch,
     /// 本地元数据 / 会话落库失败。
     Db(String),
+}
+
+pub(super) enum GateOutcome {
+    Session {
+        access_token: String,
+        expire_at: DateTime<Utc>,
+        admin: AdminIdentifyOutput,
+    },
+    BindingRequired(NodeBindingRequiredOutput),
 }
 
 pub(super) fn gate_error_response(err: GateError) -> axum::response::Response {
@@ -41,14 +54,17 @@ pub(super) fn gate_error_response(err: GateError) -> axum::response::Response {
             tracing::warn!(error = %message, "chain unreachable during login gate");
             api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable")
         }
-        GateError::Config(message) => {
-            tracing::error!(error = %message, "node institution identity misconfigured");
-            api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "node identity misconfigured",
-            )
+        GateError::BindingInvalid(message) => {
+            api_error(StatusCode::BAD_REQUEST, 1001, message.as_str())
         }
+        GateError::BindingExpired => {
+            api_error(StatusCode::GONE, 1007, "node binding challenge expired")
+        }
+        GateError::BindingMismatch => api_error(
+            StatusCode::FORBIDDEN,
+            2002,
+            "admin no longer belongs to selected institution",
+        ),
         GateError::Db(message) => {
             tracing::error!(error = %message, "login gate db error");
             api_error(
@@ -60,79 +76,215 @@ pub(super) fn gate_error_response(err: GateError) -> axum::response::Response {
     }
 }
 
-/// 已验签的 pubkey 经链上集合鉴权后落本地元数据并签发会话。
-///
-/// 返回 `(access_token, expire_at, AdminIdentifyOutput)`;调用方按各自登录流(QR / 挑战)回包。
+fn candidate_from_membership_conn(
+    conn: &mut postgres::Client,
+    membership: &chain_runtime::ActiveAdminMembership,
+) -> Result<AdminInstitutionCandidate, String> {
+    let institution_code = chain_runtime::institution_code_label(&membership.institution_code);
+    let mut candidate = AdminInstitutionCandidate {
+        candidate_id: membership.candidate_id(),
+        institution_code: institution_code.clone(),
+        admin_level: chain_runtime::admin_level_label_for(&institution_code),
+        institution_cid_number: None,
+        institution_main_account: membership.main_account_hex(),
+        frg_province_code: membership.frg_province_code_hex(),
+        cid_full_name: None,
+        cid_short_name: None,
+        scope_province_name: None,
+        scope_city_name: None,
+        scope_town_name: None,
+    };
+
+    if let Some(province_code) = membership.frg_province_code {
+        candidate.scope_province_name = chain_runtime::chain_province_name_by_code(province_code);
+        return Ok(candidate);
+    }
+
+    if let Some(main_account) = candidate.institution_main_account.as_deref() {
+        if let Some((
+            cid_number,
+            cid_full_name,
+            cid_short_name,
+            province_code,
+            city_code,
+            town_code,
+        )) = repo::resolve_binding_candidate_metadata_conn(conn, main_account)?
+        {
+            let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
+                province_code.as_str(),
+                Some(city_code.as_str()),
+                Some(town_code.as_str()),
+            );
+            candidate.institution_cid_number = Some(cid_number);
+            candidate.cid_full_name = cid_full_name;
+            candidate.cid_short_name = cid_short_name;
+            candidate.scope_province_name = (!province_name.is_empty()).then_some(province_name);
+            candidate.scope_city_name = (!city_name.is_empty()).then_some(city_name);
+            candidate.scope_town_name = (!town_name.is_empty()).then_some(town_name);
+        }
+    }
+    Ok(candidate)
+}
+
+fn candidates_from_memberships_conn(
+    conn: &mut postgres::Client,
+    memberships: &[chain_runtime::ActiveAdminMembership],
+) -> Result<Vec<AdminInstitutionCandidate>, String> {
+    memberships
+        .iter()
+        .map(|membership| candidate_from_membership_conn(conn, membership))
+        .collect()
+}
+
+fn binding_matches_candidate(
+    binding: &NodeInstitutionBinding,
+    candidate: &AdminInstitutionCandidate,
+) -> bool {
+    binding.candidate.candidate_id == candidate.candidate_id
+}
+
+/// 已验签的 pubkey 经链上集合鉴权后,按节点绑定状态返回会话或待绑定候选。
 pub(super) async fn issue_session_after_onchain_gate(
     state: &AppState,
     verified_pubkey: &str,
     now: DateTime<Utc>,
-) -> Result<(String, DateTime<Utc>, AdminIdentifyOutput), GateError> {
-    // 1) 本节点链上机构身份。
-    let identity = chain_runtime::node_institution_identity().map_err(GateError::Config)?;
-
-    // 2) 读链上 Active 管理员集合(账户不存在/非 Active → 拒绝)。
-    let onchain_admins = chain_runtime::fetch_active_admins_onchain(&identity)
-        .await
-        .map_err(GateError::ChainUnreachable)?
-        .ok_or(GateError::NotOnchainAdmin)?;
-
-    // 3) membership 比对(统一规整成 0x 小写 hex 后逐一比较)。
+) -> Result<GateOutcome, GateError> {
     let normalized = chain_runtime::normalize_account_pubkey(verified_pubkey)
         .ok_or(GateError::NotOnchainAdmin)?;
-    if !onchain_admins
-        .iter()
-        .any(|admin| same_admin_account(admin, normalized.as_str()))
-    {
+    let memberships = chain_runtime::find_active_admin_memberships(normalized.as_str())
+        .await
+        .map_err(GateError::ChainUnreachable)?;
+    if memberships.is_empty() {
         return Err(GateError::NotOnchainAdmin);
     }
 
-    let institution_code = chain_runtime::institution_code_label(&identity.institution_code);
-    let is_federal_registry = chain_runtime::is_tier1_registry(&institution_code);
-    let node_province = chain_runtime::node_scope_province();
-    let node_city = chain_runtime::node_scope_city();
-    let node_town = chain_runtime::node_scope_town();
-    let pubkey_for_db = normalized.clone();
+    let candidates = state
+        .db
+        .with_client(move |conn| candidates_from_memberships_conn(conn, &memberships))
+        .map_err(GateError::Db)?;
+    let Some(binding) = repo::active_node_binding(&state.db).map_err(GateError::Db)? else {
+        let binding_challenge_id = Uuid::new_v4().to_string();
+        let challenge = NodeBindingChallenge {
+            binding_challenge_id: binding_challenge_id.clone(),
+            admin_account: normalized,
+            candidates: candidates.clone(),
+            expire_at: now + Duration::minutes(10),
+            consumed: false,
+        };
+        state
+            .db
+            .with_client(move |conn| repo::insert_node_binding_challenge_conn(conn, &challenge))
+            .map_err(GateError::Db)?;
+        return Ok(GateOutcome::BindingRequired(NodeBindingRequiredOutput {
+            binding_challenge_id,
+            admin_account: verified_pubkey.to_string(),
+            candidates,
+        }));
+    };
+    let Some(candidate) = candidates
+        .iter()
+        .find(|candidate| binding_matches_candidate(&binding, candidate))
+        .cloned()
+    else {
+        return Err(GateError::NotOnchainAdmin);
+    };
+    let (access_token, expire_at, admin) =
+        issue_session_for_candidate(state, normalized.as_str(), &candidate, now)
+            .await
+            .map_err(|err| err)?;
+    Ok(GateOutcome::Session {
+        access_token,
+        expire_at,
+        admin,
+    })
+}
 
-    // 纵深校验:非 Tier1 创世注册局机构的省/市/镇作用域来自节点 CID_RUNTIME_SCOPE_* env;在此 env→会话
-    // 唯一写入边界核对其落在 china.sqlite 行政区真源内(省存在、市属省、镇属市,逐级要求上级齐备),
-    // 不一致即节点配置错误——拒登录显式暴露,绝不带错位作用域签发会话。Tier1 创世注册局省级、无市镇维度,
-    // 其省码已在 node_institution_identity 经 PROVINCE_CODE_INFOS 校验,不在此列。
-    if !is_federal_registry {
-        if let Some(province) = node_province.as_deref() {
-            if crate::cid::china::province_code_by_name(province).is_none() {
-                return Err(GateError::Config(format!(
-                    "CID_RUNTIME_SCOPE_PROVINCE_NAME '{province}' not found in china.sqlite"
-                )));
-            }
-            if let Some(city) = node_city.as_deref() {
-                if crate::cid::china::city_code_by_name(province, city).is_none() {
-                    return Err(GateError::Config(format!(
-                        "CID_RUNTIME_SCOPE_CITY_NAME '{city}' not within province '{province}' in china.sqlite"
-                    )));
-                }
-                if let Some(town) = node_town.as_deref() {
-                    if crate::cid::china::town_code_by_name(province, city, town).is_none() {
-                        return Err(GateError::Config(format!(
-                            "CID_RUNTIME_SCOPE_TOWN_NAME '{town}' not within '{province}/{city}' in china.sqlite"
-                        )));
-                    }
-                }
-            } else if node_town.is_some() {
-                return Err(GateError::Config(
-                    "CID_RUNTIME_SCOPE_TOWN_NAME set without CID_RUNTIME_SCOPE_CITY_NAME"
-                        .to_string(),
-                ));
-            }
-        } else if node_city.is_some() || node_town.is_some() {
-            return Err(GateError::Config(
-                "CID_RUNTIME_SCOPE_CITY_NAME/TOWN_NAME set without CID_RUNTIME_SCOPE_PROVINCE_NAME"
-                    .to_string(),
-            ));
-        }
+pub(super) async fn confirm_node_binding_after_onchain_gate(
+    state: &AppState,
+    binding_challenge_id: &str,
+    candidate_id: &str,
+    now: DateTime<Utc>,
+) -> Result<(String, DateTime<Utc>, AdminIdentifyOutput), GateError> {
+    let binding_challenge_id = binding_challenge_id.trim().to_string();
+    let candidate_id = candidate_id.trim().to_string();
+    if binding_challenge_id.is_empty() || candidate_id.is_empty() {
+        return Err(GateError::BindingInvalid(
+            "binding_challenge_id and candidate_id are required".to_string(),
+        ));
     }
+    let challenge = state
+        .db
+        .with_client(move |conn| {
+            repo::cleanup_login_state_conn(conn, now)?;
+            repo::get_node_binding_challenge_conn(conn, binding_challenge_id.as_str())
+        })
+        .map_err(GateError::Db)?
+        .ok_or_else(|| GateError::BindingInvalid("node binding challenge not found".to_string()))?;
+    if challenge.consumed {
+        return Err(GateError::BindingInvalid(
+            "node binding challenge already consumed".to_string(),
+        ));
+    }
+    if now > challenge.expire_at {
+        return Err(GateError::BindingExpired);
+    }
+    let Some(selected) = challenge
+        .candidates
+        .iter()
+        .find(|candidate| candidate.candidate_id == candidate_id)
+        .cloned()
+    else {
+        return Err(GateError::BindingInvalid(
+            "selected institution candidate not found".to_string(),
+        ));
+    };
+    let normalized = chain_runtime::normalize_account_pubkey(challenge.admin_account.as_str())
+        .ok_or(GateError::BindingMismatch)?;
+    let memberships = chain_runtime::find_active_admin_memberships(normalized.as_str())
+        .await
+        .map_err(GateError::ChainUnreachable)?;
+    let fresh_candidates = state
+        .db
+        .with_client(move |conn| candidates_from_memberships_conn(conn, &memberships))
+        .map_err(GateError::Db)?;
+    let Some(fresh_selected) = fresh_candidates
+        .into_iter()
+        .find(|candidate| candidate.candidate_id == selected.candidate_id)
+    else {
+        return Err(GateError::BindingMismatch);
+    };
+    let binding = NodeInstitutionBinding {
+        binding_id: Uuid::new_v4().to_string(),
+        candidate: fresh_selected.clone(),
+        bound_admin_pubkey: normalized.clone(),
+        bound_at: now,
+        status: "ACTIVE".to_string(),
+    };
+    let challenge_for_consume = challenge.clone();
+    let binding_for_db = binding.clone();
+    state
+        .db
+        .with_client(move |conn| {
+            repo::upsert_active_node_binding_conn(conn, &binding_for_db)?;
+            repo::consume_node_binding_challenge_conn(conn, &challenge_for_consume)?;
+            Ok(())
+        })
+        .map_err(GateError::Db)?;
+    issue_session_for_candidate(state, normalized.as_str(), &fresh_selected, now).await
+}
 
-    // 4) 落本地元数据 + 签发会话(单事务)。
+async fn issue_session_for_candidate(
+    state: &AppState,
+    verified_pubkey: &str,
+    candidate: &AdminInstitutionCandidate,
+    now: DateTime<Utc>,
+) -> Result<(String, DateTime<Utc>, AdminIdentifyOutput), GateError> {
+    let institution_code = candidate.institution_code.clone();
+    let scope_province_name = candidate.scope_province_name.clone();
+    let scope_city_name = candidate.scope_city_name.clone();
+    let scope_town_name = candidate.scope_town_name.clone();
+    let cid_short_name = candidate.cid_short_name.clone();
+    let pubkey_for_db = verified_pubkey.to_string();
     let result = state
         .db
         .with_client(move |conn| {
@@ -142,11 +294,7 @@ pub(super) async fn issue_session_after_onchain_gate(
                 Some(mut current) => {
                     // 链上身份与本地登记冲突时,以链上机构码为准(去中心化真源)。
                     current.institution_code = institution_code.clone();
-                    if !is_federal_registry {
-                        if let Some(city) = node_city.clone() {
-                            current.city_name = city;
-                        }
-                    }
+                    current.city_name = scope_city_name.clone().unwrap_or_default();
                     current.updated_at = Some(now);
                     current
                 }
@@ -159,25 +307,23 @@ pub(super) async fn issue_session_after_onchain_gate(
                     created_by: pubkey_for_db.clone(),
                     created_at: now,
                     updated_at: Some(now),
-                    city_name: node_city.clone().unwrap_or_default(),
+                    city_name: scope_city_name.clone().unwrap_or_default(),
                 },
             };
 
-            // 中文注释:省映射不再随管理员落本地表(federal_registry_scope 已退役,决策③)。
-            // Tier1 创世注册局管理员省作用域统一取节点 env(每节点单省;省码已在
-            // `node_institution_identity` 经 PROVINCE_CODE_INFOS 校验)。本步只维护 admins 缓存本身。
+            // 中文注释:节点机构归属已由 active binding 承载;admins 只缓存登录管理员元数据。
             repo::upsert_admin_conn(conn, &admin)?;
-
-            // 解析 scope:与会话重建(guards)共用 derive_admin_scope_conn 单一来源,口径一致。
-            let (scope_province_name, scope_city_name, scope_town_name) =
-                repo::derive_admin_scope_conn(conn, &admin.admin_account, &admin.institution_code)?;
             let admin_name = build_admin_name_from_user(&admin, scope_province_name.as_deref());
-            let cid_short_name = repo::resolve_home_cid_short_name_conn(
-                conn,
-                &admin.institution_code,
-                scope_province_name.as_deref(),
-                scope_city_name.as_deref(),
-            )?;
+            let cid_short_name = cid_short_name.or_else(|| {
+                repo::resolve_home_cid_short_name_conn(
+                    conn,
+                    &admin.institution_code,
+                    scope_province_name.as_deref(),
+                    scope_city_name.as_deref(),
+                )
+                .ok()
+                .flatten()
+            });
 
             let access_token = Uuid::new_v4().to_string();
             let expire_at = now + Duration::hours(8);
@@ -217,10 +363,10 @@ pub(super) async fn issue_session_after_onchain_gate(
 
 /// 后台周期复查:把已不在本机构链上 Active 集合的管理员的会话清退。
 ///
-/// 中文注释:管理员"失效即时生效"靠此扫描(默认 45s,`CID_ADMIN_ONCHAIN_REVOKE_SECONDS` 可调)。
+/// 中文注释:管理员"失效即时生效"靠此扫描(默认 45s,`ONCHINA_ADMIN_ONCHAIN_REVOKE_SECONDS` 可调)。
 /// 链不可达时跳过本轮(绝不因瞬时断链批量清退);账户不存在(None)亦跳过(链未就绪保守处理)。
 pub(crate) async fn revoke_stale_admin_sessions_loop(db: Db) {
-    let interval_secs = std::env::var("CID_ADMIN_ONCHAIN_REVOKE_SECONDS")
+    let interval_secs = std::env::var("ONCHINA_ADMIN_ONCHAIN_REVOKE_SECONDS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .filter(|v| *v > 0)
@@ -235,12 +381,19 @@ pub(crate) async fn revoke_stale_admin_sessions_loop(db: Db) {
 }
 
 async fn revoke_stale_admin_sessions_once(db: &Db) -> Result<(), String> {
-    let identity = chain_runtime::node_institution_identity()?;
+    let Some(binding) = repo::active_node_binding(db)? else {
+        return Ok(());
+    };
+    let identity = chain_runtime::identity_from_binding_parts(
+        &binding.candidate.institution_code,
+        binding.candidate.institution_main_account.as_deref(),
+        binding.candidate.frg_province_code.as_deref(),
+    )?;
     let Some(onchain_admins) = chain_runtime::fetch_active_admins_onchain(&identity).await? else {
         // 账户暂不存在(链未就绪/未配),不冒然清退本地会话。
         return Ok(());
     };
-    let institution_code = chain_runtime::institution_code_label(&identity.institution_code);
+    let institution_code = binding.candidate.institution_code.clone();
     db.with_client(move |conn| {
         let accounts = repo::list_session_admin_accounts_conn(conn, &institution_code)?;
         for account in accounts {

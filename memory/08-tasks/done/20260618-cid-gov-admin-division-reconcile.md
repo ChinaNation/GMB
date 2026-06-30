@@ -33,7 +33,7 @@
   - `GENERATED`:行政区和模板确定性派生的公权机构/公安局,允许对账更新或删除。
   - `MANUAL`:管理员手动创建的公权机构,行政区对账不得当作 obsolete 删除。
 - 2026-06-18：`ensure-gov` 改为先执行目录校验和 manifest 校验;目录完整但 manifest 过期时只修复 manifest,目录缺失/错配/缺账户/obsolete 时执行对账。
-- 2026-06-18：`serve` 启动前校验全局 `gov_manifest`;生产目录过期直接拒绝启动,本地显式设置 `CID_GOV_AUTO_RECONCILE=1` 才允许启动前自动对账。
+- 2026-06-18：`serve` 启动前校验全局 `gov_manifest`;生产目录过期直接拒绝启动,本地显式设置 `ONCHINA_GOV_AUTO_RECONCILE=1` 才允许启动前自动对账。
 - 2026-06-18：`reconcile-gov --changed-only` 增加全局 `all:all` manifest 刷新。省级对账后若全局仍不一致,自动执行一次全局对账。
 - 2026-06-18：生产安装脚本在 systemd 重启前强制执行:
   - `citizencode-backend reconcile-gov --changed-only`
@@ -50,7 +50,7 @@
   - `管理市` subjects 残留 `0`
   - `gov.source='GENERATED'` 总数 `249413`,`MANUAL` 总数 `0`
   - `gov_manifest all:all` hash 与当前 `china.sqlite` SHA-256 一致,`status=OK`
-- 2026-06-18：真实启动验收:`CID_BIND_ADDR=127.0.0.1:0 citizencode-backend serve`
+- 2026-06-18：真实启动验收:`ONCHINA_BIND_ADDR=127.0.0.1:0 citizencode-backend serve`
   启动通过,日志确认 `cid gov directory manifest matches current china sqlite` 并进入监听。
 - 2026-06-18：文档和注释已同步更新:
   - ADR-021 发布流程改为“对账 + strict 校验 + 导出公权机构包”
@@ -63,6 +63,6 @@
 - `cd citizencode/backend && cargo fmt && cargo check` 通过。
 - `cd citizencode/backend && cargo test` 通过:65 passed。
 - `python3 citizencode/backend/china/check_code_immutable.py` 通过。
-- `CID_BIND_ADDR=127.0.0.1:0 ./target/debug/citizencode-backend serve` 通过 manifest 守卫并进入监听,随后手动停止验收进程。
+- `ONCHINA_BIND_ADDR=127.0.0.1:0 ./target/debug/citizencode-backend serve` 通过 manifest 守卫并进入监听,随后手动停止验收进程。
 - `git diff --check` 通过。
 - `git diff --name-only -- citizenchain/runtime citizenchain/primitives/china` 无输出,本任务未触碰链端 runtime/primitives。

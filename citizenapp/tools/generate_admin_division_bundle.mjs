@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 行政区字典数据包生成器(ADR-021 §A2)。
 //
-// 唯一真源 = citizenchain/registry/src/cid/china/china.sqlite。本生成器**直接 dump 三表,零映射**:
+// 唯一真源 = citizenchain/onchina/src/cid/china/china.sqlite。本生成器**直接 dump 三表,零映射**:
 // 任何「修正名字」逻辑禁止进此文件——改名只改 china.sqlite,这里纯搬运。
 // 铁律:china.sqlite 行政区 code 不可变不复用(见 memory/07-ai/agent-rules.md)。
 //
@@ -31,7 +31,7 @@ const DEFAULT_DB = resolve(
   '..',
   '..',
   'citizenchain',
-  'registry',
+  'onchina',
   'src',
   'cid',
   'china',

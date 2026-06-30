@@ -1,13 +1,13 @@
 //! QR_V1 统一二维码协议 envelope。
 //!
 //! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`。
-//! 本模块只保留 CID 后端需要的紧凑签名请求/响应结构。
+//! 本模块只保留 OnChina 后端需要的紧凑签名请求/响应结构。
 
 mod sign_request;
 
 pub(crate) use sign_request::{build_sign_request, build_sign_request_bytes};
 
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
 
 pub const QR_V1: &str = "QR_V1";

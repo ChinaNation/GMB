@@ -40,7 +40,10 @@ export type NodeModeState = {
 
 export type OnChinaPlatformState = {
   running: boolean;
+  status: 'stopped' | 'starting' | 'enabled' | 'error';
+  statusLabel: string;
   url: string;
+  detail?: string | null;
 };
 
 export type CommunicationNodeState = {

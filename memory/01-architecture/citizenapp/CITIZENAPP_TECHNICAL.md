@@ -557,12 +557,12 @@ App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 
 ## 10. CID 连接路径
 
-citizenapp 访问 CID 只保留两条路径，路径由 `CITIZENAPP_CID_ENV` 选择：
+citizenapp 访问 CID 只保留两条路径，路径由 `CITIZENAPP_ONCHINA_ENV` 选择：
 
 ```bash
 # 生产路径：不传该参数时默认也是 prod
 flutter build apk --release \
-  --dart-define=CITIZENAPP_CID_ENV=prod
+  --dart-define=CITIZENAPP_ONCHINA_ENV=prod
 
 # 本地开发路径：必须使用脚本建立 USB 转发
 cd /Users/rhett/GMB/citizenapp
@@ -571,7 +571,7 @@ cd /Users/rhett/GMB/citizenapp
 
 - `prod`：固定访问 `https://cid.crcfrcn.com`。
 - `dev_usb`：固定访问 `http://127.0.0.1:8899`，由 `adb reverse tcp:8899 tcp:8899` 转发到本电脑运行的 OnChina 后端。
-- `./scripts/citizenapp-run.sh` 只注入 `--dart-define=CITIZENAPP_CID_ENV=dev_usb`，并且必须成功建立 `adb reverse tcp:8899 tcp:8899`。
+- `./scripts/citizenapp-run.sh` 只注入 `--dart-define=CITIZENAPP_ONCHINA_ENV=dev_usb`，并且必须成功建立 `adb reverse tcp:8899 tcp:8899`。
 - 禁止保留或新增任意 CID API URL 注入、旧端口默认值、手机直连电脑局域网地址、生产失败回退开发、开发失败回退生产等第三路径。
 
 ## 11. 关联模块文档
