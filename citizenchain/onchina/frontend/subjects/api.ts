@@ -164,6 +164,17 @@ export interface LegalRepresentativePhoto {
   file_size: number;
 }
 
+export interface CreateInstitutionAdminInput {
+  /** 机构初始管理员进链账户。注册局创建机构时一次性提交。 */
+  admin_account: string;
+  /** 对外法定职务,写入链上 AdminProfile。 */
+  admin_role?: string;
+  /** 任期开始(天数自纪元;无任期填 0)。 */
+  term_start?: number;
+  /** 任期结束(天数自纪元;无任期填 0)。 */
+  term_end?: number;
+}
+
 // ─── 请求 DTO ─────────────────────────────────────────────────
 
 export interface CreateInstitutionInput {
@@ -194,6 +205,8 @@ export interface CreateInstitutionInput {
   legal_rep_photo_name?: string;
   legal_rep_photo_mime?: string;
   legal_rep_photo_size?: number;
+  threshold: number;
+  admins: CreateInstitutionAdminInput[];
 }
 
 export interface CreateInstitutionOutput {
@@ -201,6 +214,8 @@ export interface CreateInstitutionOutput {
   /** 创建成功后的机构全称。 */
   cid_full_name: string | null;
   category: InstitutionCategory;
+  /** 机构上链创建专用 QR_V1/k=1。 */
+  institution_create_sign_request: string;
 }
 
 /** 机构详情页可编辑字段。私权类型创建后不可改。 */

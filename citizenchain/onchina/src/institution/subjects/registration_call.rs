@@ -18,22 +18,11 @@ use crate::core::institution_call::{
     encode_propose_create_institution, AdminProfileArg, AdminSourceTag, ChainCall,
     InitialAccountArg, ProposeCreateInstitutionArgs,
 };
+use crate::institution::subjects::model::CreateInstitutionAdminInput;
 use crate::AppState;
 
-/// 创建表单里每个管理员的职务/任期补充(account 与链下 institution_admins 对齐)。
-#[derive(Debug, Clone, serde::Deserialize)]
-pub(crate) struct AdminProfileFormInput {
-    /// 进链账户(hex 或 SS58),与 institution_admins.admin_account 同源。
-    pub account: String,
-    #[serde(default)]
-    pub admin_role: Option<String>,
-    /// 任期开始(天数自纪元;无任期填 0)。
-    #[serde(default)]
-    pub term_start: Option<u32>,
-    /// 任期结束(天数自纪元;无任期填 0)。
-    #[serde(default)]
-    pub term_end: Option<u32>,
-}
+/// 默认初始余额(分)。链端 MinCreateAmount=111,这里按最小值构造注册交易。
+const DEFAULT_INITIAL_ACCOUNT_AMOUNT_FEN: u128 = 111;
 
 /// 一个管理员的实名锚信息(admin_cid_number + name),由 DB 联表派生。
 pub(crate) struct AdminIdentity {
@@ -76,14 +65,14 @@ pub(crate) fn build_create_institution_call_data(
     conn: &mut Client,
     cid_number: &str,
     threshold: u32,
-    admin_forms: &[AdminProfileFormInput],
+    admin_forms: &[CreateInstitutionAdminInput],
 ) -> Result<ChainCall, String> {
     let cid_number = cid_number.trim();
     if cid_number.is_empty() {
         return Err("http:bad_request:cid_number is required".to_string());
     }
 
-    // ── 机构 + 账户(账户名进链 name;初始余额恒 0,链端无 amount>0 约束)。
+    // ── 机构 + 账户(账户名进链 name;初始余额按链端 MinCreateAmount 最小值构造)。
     let Some((inst, accounts)) = crate::Db::get_institution_with_accounts_conn(conn, cid_number)?
     else {
         return Err("http:not_found:institution not found".to_string());
@@ -117,7 +106,7 @@ pub(crate) fn build_create_institution_call_data(
         .filter(|a| !a.account_name.trim().is_empty())
         .map(|a| InitialAccountArg {
             account_name: a.account_name.trim().to_string(),
-            amount: 0,
+            amount: DEFAULT_INITIAL_ACCOUNT_AMOUNT_FEN,
         })
         .collect();
     if account_args.is_empty() {
@@ -145,7 +134,7 @@ pub(crate) fn build_create_institution_call_data(
             .ok_or_else(|| "http:bad_request:admin_account format invalid".to_string())?;
         let form = admin_forms
             .iter()
-            .find(|f| accounts_match(f.account.as_str(), admin.admin_account.as_str()));
+            .find(|f| accounts_match(f.admin_account.as_str(), admin.admin_account.as_str()));
         let identity = resolve_admin_identity_conn(conn, admin.admin_account.as_str());
         admin_args.push(AdminProfileArg {
             account,

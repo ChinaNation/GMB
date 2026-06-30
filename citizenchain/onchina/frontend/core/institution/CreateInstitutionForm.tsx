@@ -8,8 +8,8 @@
 //       搜索范围由后端按地域规则预过滤(分校→本市学校本部;公权→本市市级/本省省级/国家级)
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { AutoComplete, Button, Col, Form, Input, Modal, Row, Select, Spin, Upload } from 'antd';
-import { SearchOutlined, UploadOutlined } from '@ant-design/icons';
+import { AutoComplete, Button, Col, Form, Input, InputNumber, Modal, QRCode, Row, Select, Spin, Typography, Upload } from 'antd';
+import { DeleteOutlined, PlusOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../../auth/types';
 import type { CidCityItem } from '../../china/api';
 import { loadCachedCidCities } from '../../china/metaCache';
@@ -60,6 +60,13 @@ interface FormValues {
   legal_rep_photo_name: string;
   legal_rep_photo_mime: string;
   legal_rep_photo_size?: number;
+  threshold: number;
+  admins: {
+    admin_account: string;
+    admin_role?: string;
+    term_start?: number;
+    term_end?: number;
+  }[];
 }
 
 type CheckCidFullName = (
@@ -118,6 +125,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const locks = locksForCategory(category);
   const [form] = Form.useForm<FormValues>();
   const { signWithScan, scanSignModal } = useScanSignGrant('机构创建签名确认');
+  const [createdResult, setCreatedResult] = useState<CreateInstitutionOutput | null>(null);
   const [cities, setCities] = useState<CidCityItem[]>([]);
   const [citiesLoading, setCitiesLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -147,6 +155,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const isF = currentSubjectProperty === 'F';
   const requiresParent = isF && !isPrivate;
   const showEducationType = isEducation && !isF;
+  const watchedAdmins = Form.useWatch('admins', form) as FormValues['admins'] | undefined;
 
   // 中文注释:私权目标态创建阶段直接写入全称;教育学校和手动公权机构也在弹窗内查重。
   const collectNameInModal = isPrivate || isEducation || (isGov && !isF);
@@ -170,6 +179,15 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     }
     return institutionChoicesFor(category, currentSubjectProperty);
   }, [category, currentSubjectProperty, privateRule, isEducation, watchedEducationType]);
+  const visibleInstChoices = useMemo(() => {
+    if (isGov && currentSubjectProperty === 'G' && lockedCityName === null) {
+      const hasCityRegistry = instChoices.some((item) => item.value === 'CREG');
+      return hasCityRegistry
+        ? instChoices
+        : [...instChoices, { value: 'CREG', label: '市注册局' }];
+    }
+    return instChoices.filter((item) => item.value !== 'CREG');
+  }, [currentSubjectProperty, instChoices, isGov, lockedCityName]);
   const p1Locks = useMemo(() => {
     if (privateRule) {
       return {
@@ -221,6 +239,11 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       legal_rep_photo_name: '',
       legal_rep_photo_mime: '',
       legal_rep_photo_size: undefined,
+      threshold: 2,
+      admins: [
+        { admin_account: '', admin_role: '管理员' },
+        { admin_account: '', admin_role: '管理员' },
+      ],
     });
     setLegalRepOptions([]);
     setPhotoName('');
@@ -477,6 +500,23 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     const institutionCode = isEducation
       ? computeEducationInstitutionCode(values.subject_property.trim(), values.education_type)
       : values.institution.trim();
+    const admins = (values.admins ?? [])
+      .map((admin) => ({
+        admin_account: admin.admin_account.trim(),
+        admin_role: admin.admin_role?.trim() || undefined,
+        term_start: admin.term_start,
+        term_end: admin.term_end,
+      }))
+      .filter((admin) => admin.admin_account);
+    const minThreshold = Math.floor(admins.length / 2) + 1;
+    if (admins.length < 2) {
+      notice.warning('请至少填写 2 名初始管理员');
+      return;
+    }
+    if (!values.threshold || values.threshold < minThreshold || values.threshold > admins.length) {
+      notice.warning(`管理员阈值必须在 ${minThreshold} 到 ${admins.length} 之间`);
+      return;
+    }
     setSubmitting(true);
     try {
       const result = await createInstitution(auth, {
@@ -500,17 +540,19 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         legal_rep_photo_name: values.legal_rep_photo_name,
         legal_rep_photo_mime: values.legal_rep_photo_mime,
         legal_rep_photo_size: values.legal_rep_photo_size,
+        threshold: values.threshold,
+        admins,
       }, signWithScan);
       if (isPrivate && privateType) {
-        notice.success(`${PRIVATE_TYPE_LABEL[privateType]}已创建:${result.cid_number}`);
+        notice.success(`${PRIVATE_TYPE_LABEL[privateType]}已生成上链交易:${result.cid_number}`);
       } else if (isEducation) {
-        notice.success(`学校机构已创建:${result.cid_number}`);
+        notice.success(`学校机构已生成上链交易:${result.cid_number}`);
       } else if (collectNameInModal) {
-        notice.success(`公权机构已创建:${result.cid_number}`);
+        notice.success(`公权机构已生成上链交易:${result.cid_number}`);
       } else {
-        notice.success(`身份ID 已生成:${result.cid_number}`);
+        notice.success(`身份ID 已生成上链交易:${result.cid_number}`);
       }
-      onCreated(result);
+      setCreatedResult(result);
     } catch (err) {
       const raw = err instanceof Error ? err.message : '创建机构失败';
       if (raw.includes('本省') && raw.includes('未在线')) {
@@ -527,8 +569,16 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   };
 
   const subjectPropertyDisabled = isPrivate || subjectPropertyChoices.length === 1;
-  const instDisabled = instChoices.length === 1;
+  const instDisabled = visibleInstChoices.length === 1;
   const cidFullNameCheckPassed = !collectNameInModal || cidFullNameAvailable === true;
+  const adminsCount = watchedAdmins?.length ?? 0;
+  const minThreshold = Math.floor(adminsCount / 2) + 1;
+  const closeChainModal = () => {
+    if (!createdResult) return;
+    const result = createdResult;
+    setCreatedResult(null);
+    onCreated(result);
+  };
 
   return (
     <>
@@ -632,7 +682,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item label="机构" name="institution" rules={[{ required: true }]}>
-              <Select options={instChoices} disabled={instDisabled} />
+              <Select options={visibleInstChoices} disabled={instDisabled} />
             </Form.Item>
           </Col>
           {showEducationType && (
@@ -808,12 +858,92 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         <Form.Item name="legal_rep_photo_name" hidden><Input /></Form.Item>
         <Form.Item name="legal_rep_photo_mime" hidden><Input /></Form.Item>
         <Form.Item name="legal_rep_photo_size" hidden><Input type="number" /></Form.Item>
+        <Form.List name="admins">
+          {(fields, { add, remove }) => (
+            <div style={{ marginTop: 8 }}>
+              <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+                初始管理员
+              </Typography.Text>
+              {fields.map((field, index) => (
+                <Row gutter={8} key={field.key} align="top">
+                  <Col span={13}>
+                    <Form.Item
+                      {...field}
+                      label={index === 0 ? '管理员账户' : undefined}
+                      name={[field.name, 'admin_account']}
+                      rules={[{ required: true, message: '请输入管理员账户' }]}
+                    >
+                      <Input placeholder="0x 公钥或 SS58 地址" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={7}>
+                    <Form.Item
+                      {...field}
+                      label={index === 0 ? '职务' : undefined}
+                      name={[field.name, 'admin_role']}
+                    >
+                      <Input placeholder="管理员" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={4}>
+                    <Button
+                      danger
+                      icon={<DeleteOutlined />}
+                      disabled={fields.length <= 2}
+                      onClick={() => remove(field.name)}
+                      style={{ marginTop: index === 0 ? 30 : 0, width: '100%' }}
+                    />
+                  </Col>
+                </Row>
+              ))}
+              <Button icon={<PlusOutlined />} onClick={() => add({ admin_account: '', admin_role: '管理员' })}>
+                管理员
+              </Button>
+            </div>
+          )}
+        </Form.List>
+        <Form.Item
+          label="管理员阈值"
+          name="threshold"
+          rules={[
+            { required: true, message: '请输入管理员阈值' },
+            {
+              validator: (_, value) => {
+                if (!value || value < minThreshold || value > Math.max(adminsCount, 1)) {
+                  return Promise.reject(new Error(`阈值必须在 ${minThreshold} 到 ${Math.max(adminsCount, 1)} 之间`));
+                }
+                return Promise.resolve();
+              },
+            },
+          ]}
+        >
+          <InputNumber min={minThreshold} max={Math.max(adminsCount, 1)} style={{ width: '100%' }} />
+        </Form.Item>
         {!collectNameInModal && (
           <div style={{ color: '#888', fontSize: 12, marginTop: -8 }}>
             提示:本步骤仅生成身份ID。生成后请在详情页设置机构全称等信息。
           </div>
         )}
       </Form>
+    </Modal>
+    <Modal
+      title="机构上链交易"
+      open={!!createdResult}
+      onCancel={closeChainModal}
+      footer={[
+        <Button key="done" type="primary" onClick={closeChainModal}>
+          已提交链上交易
+        </Button>,
+      ]}
+      destroyOnClose
+      width={420}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <QRCode value={createdResult?.institution_create_sign_request ?? 'CID_INSTITUTION_CREATE_PENDING'} size={260} />
+        <Typography.Text type="secondary" style={{ textAlign: 'center' }}>
+          使用当前注册局管理员的公民钱包扫码签名并提交
+        </Typography.Text>
+      </div>
     </Modal>
     {scanSignModal}
     </>

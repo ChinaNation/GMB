@@ -135,54 +135,11 @@ impl internal_vote::Config for Test {
     type WeightInfo = ();
 }
 
-/// 测试桩:公权机构管理员生命周期写入口。
-///
-/// 中文注释:现有 genesis-admins 单测不覆盖联邦直设入口,故 4 个生命周期方法仅占位返回 Ok;
-/// `set_active_admin_account_direct` 走 trait 默认(未支持)。真实直设路径在 public-admins 单测覆盖。
-pub struct TestPublicLifecycle;
-impl admin_primitives::AdminAccountLifecycle<AccountId32, AdminProfile<AccountId32>>
-    for TestPublicLifecycle
-{
-    fn create_pending_admin_account_for_proposal(
-        _proposal_id: u64,
-        _module_tag: &[u8],
-        _admin_root_account_id: AccountId32,
-        _institution_code: votingengine::types::InstitutionCode,
-        _kind: AdminAccountKind,
-        _admins: alloc::vec::Vec<AdminProfile<AccountId32>>,
-        _creator: AccountId32,
-    ) -> frame_support::dispatch::DispatchResult {
-        Ok(())
-    }
-    fn activate_admin_account_for_proposal(
-        _proposal_id: u64,
-        _module_tag: &[u8],
-        _admin_root_account_id: AccountId32,
-    ) -> frame_support::dispatch::DispatchResult {
-        Ok(())
-    }
-    fn remove_pending_admin_account_for_proposal(
-        _proposal_id: u64,
-        _module_tag: &[u8],
-        _admin_root_account_id: AccountId32,
-    ) -> frame_support::dispatch::DispatchResult {
-        Ok(())
-    }
-    fn close_admin_account_for_proposal(
-        _proposal_id: u64,
-        _module_tag: &[u8],
-        _admin_root_account_id: AccountId32,
-    ) -> frame_support::dispatch::DispatchResult {
-        Ok(())
-    }
-}
-
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxPersonalAccountAdmins = ConstU32<64>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
-    type PublicAdminLifecycle = TestPublicLifecycle;
     type WeightInfo = ();
 }
 

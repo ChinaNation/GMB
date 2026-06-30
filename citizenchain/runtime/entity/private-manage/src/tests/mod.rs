@@ -165,6 +165,24 @@ impl
     }
 }
 
+/// 注册局权限 mock:本测试包只验证 private-manage 的生命周期行为,真实 FRG/CREG
+/// 省市边界由 runtime 配置层测试覆盖。
+pub struct TestRegistryAuthority;
+impl crate::traits::RegistryAuthority<AccountId32> for TestRegistryAuthority {
+    fn can_register_institution(
+        _registrar: &AccountId32,
+        _issuer_cid_number: &[u8],
+        _issuer_main_account: &AccountId32,
+        _signer_pubkey: &[u8; 32],
+        target_cid_number: &[u8],
+        _target_institution_code: InstitutionCode,
+        scope_province_name: &[u8],
+        _scope_city_name: &[u8],
+    ) -> bool {
+        !target_cid_number.is_empty() && !scope_province_name.is_empty()
+    }
+}
+
 pub struct TestCidEligibility;
 impl votingengine::CidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
     for TestCidEligibility
@@ -512,6 +530,7 @@ impl pallet::Config for Test {
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
     type CidInstitutionVerifier = TestCidInstitutionVerifier;
+    type RegistryAuthority = TestRegistryAuthority;
     type AdminLifecycle = PrivateAdmins;
     type SiblingInstitutionQuery = ();
     type AdminAccountQuery = TestAdminAccountQuery;
@@ -613,7 +632,7 @@ pub fn admin_profiles_from(accounts: &[AccountId32]) -> pallet::AdminProfilesOf<
 
 /// 构造带非空 姓名/职务/任期/实名CID 的管理员资料集合(3 人,末位留空元数据)。
 ///
-/// 中文注释:专供验证 profile 经机构创建提案 `CreateInstitutionAction` 的 SCALE 往返不丢字段。
+/// 中文注释:专供验证注册局创建机构时直写的管理员 profile 不丢字段。
 pub fn admin_profiles_with_meta() -> pallet::AdminProfilesOf<Test> {
     let mut v: alloc::vec::Vec<admin_primitives::AdminProfile<AccountId32>> =
         alloc::vec::Vec::new();

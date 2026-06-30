@@ -38,9 +38,9 @@ pub struct RegisteredInstitution<CidNumber, AccountName> {
     Eq,
 )]
 pub enum InstitutionLifecycleStatus {
-    /// 创建提案投票中，资金已从创建者账户 reserve。
+    /// 投票型生命周期处理中。机构注册创建不使用该状态。
     Pending,
-    /// 投票通过，初始资金已划入机构账户。
+    /// 机构已上链激活，初始资金已划入机构账户。
     Active,
     /// 机构已注销。当前第1步暂不开放机构整体注销，只预留状态语义。
     Closed,
@@ -70,7 +70,7 @@ pub struct InstitutionInfo<BlockNumber, AccountName> {
     pub cid_short_name: AccountName,
     /// 管理员更换/路由使用的机构码:机构账户只能是公权/私权法人机构码。
     pub institution_code: InstitutionCode,
-    /// 创建提案发起区块号。
+    /// 机构注册创建区块号。
     pub created_at: BlockNumber,
     /// 机构生命周期状态。
     pub status: InstitutionLifecycleStatus,
@@ -123,7 +123,7 @@ pub struct InstitutionInitialAccount<AccountName, Balance> {
     pub amount: Balance,
 }
 
-/// 写入提案业务数据的账户项，保存已经派生好的地址，避免执行阶段重新解释账户名。
+/// 机构注册交易的账户项，保存已经派生好的地址，避免重复解释账户名。
 #[derive(
     Encode,
     Decode,
@@ -140,41 +140,4 @@ pub struct CreateInstitutionAccount<AccountName, AccountId, Balance> {
     pub address: AccountId,
     pub amount: Balance,
     pub is_default: bool,
-}
-
-/// 机构创建提案业务数据。
-#[derive(
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    Clone,
-    RuntimeDebug,
-    TypeInfo,
-    MaxEncodedLen,
-    PartialEq,
-    Eq,
-)]
-#[scale_info(skip_type_params(AdminList, AccountList))]
-pub struct CreateInstitutionAction<
-    CidNumber,
-    AccountName,
-    AccountId,
-    Balance,
-    AdminList,
-    AccountList,
-> {
-    pub cid_number: CidNumber,
-    pub cid_full_name: AccountName,
-    pub main_account: AccountId,
-    pub fee_account: AccountId,
-    pub proposer: AccountId,
-    /// 创建阶段写入 pending admin account 的机构账户机构码。
-    pub institution_code: InstitutionCode,
-    pub admins_len: u32,
-    pub threshold: u32,
-    pub admins: AdminList,
-    pub accounts: AccountList,
-    pub initial_total: Balance,
-    pub fee: Balance,
-    pub reserve_total: Balance,
 }

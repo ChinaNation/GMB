@@ -215,13 +215,13 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
         admin_root_account_id: AccountId,
     ) -> DispatchResult;
 
-    /// 特权直设入口:原子写入 Active 管理员账户(创建或更新)并注册动态阈值,**绕过内部投票**。
+    /// 注册局直设入口:原子写入 Active 管理员账户(创建或更新)并注册动态阈值,**绕过内部投票**。
     ///
-    /// 中文注释:仅供 Step3 去中心化鉴权的"联邦注册局给市注册局直接供给/更换管理员"场景。
-    /// 调用方负责上层授权校验(who ∈ 联邦注册局 active admins);本 trait 实现方负责:
+    /// 中文注释:仅供注册局注册机构时同步写入目标机构管理员集合;不是机构自改管理员的治理入口。
+    /// 调用方负责上层注册局授权校验;本 trait 实现方负责:
     /// ① 写 Active `AdminAccount`(账户不存在则创建,存在则更新 admins);
     /// ② 把 `threshold` 同步注册进 votingengine 动态阈值(否则该账户后续内部投票阈值缺失);
-    /// ③ 维护任何反向索引。默认实现不支持,只有 public-admins 接入。
+    /// ③ 维护任何反向索引。默认实现不支持,public-admins/private-admins 按机构类型接入。
     fn set_active_admin_account_direct(
         _module_tag: &[u8],
         _admin_root_account_id: AccountId,

@@ -99,24 +99,6 @@ pub(crate) struct PrepareAdminActionOutput {
     payload_hash: String,
     auth_type: AdminOperationAuth,
     expires_at: i64,
-    /// 机构上链创建专用:b.d 携带 propose_create_institution 裸 SCALE call data 的 QR_V1/k=1。
-    /// 冷钱包解码逐字段核对后冷签 origin **并由 CitizenWallet 直接提交**;onchina 不提交。
-    /// 仅 InstitutionCreate 动作有值,其余动作为 None。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    institution_create_sign_request: Option<String>,
-    /// 机构管理员集合上链专用:b.d 携带 federal_set_city_registry_admins 裸 SCALE call data。
-    /// 仅 CreateSubordinateRegistry/DeleteSubordinateRegistry 动作有值,其余为 None;onchina 不提交。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    admin_set_sign_request: Option<String>,
-}
-
-/// InstitutionCreate prepare 载荷:cid_number + 阈值 + 管理员职务/任期表单。
-#[derive(Debug, Deserialize)]
-struct InstitutionCreatePayload {
-    cid_number: String,
-    threshold: u32,
-    #[serde(default)]
-    admins: Vec<crate::institution::subjects::registration_call::AdminProfileFormInput>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -318,58 +300,6 @@ pub(crate) async fn prepare_admin_action(
         let message = format!("insert admin action failed: {err}");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
     }
-    // ── 机构上链创建:额外产出 b.d=SCALE call data 的 QR(冷钱包冷签 origin + 提交)。
-    //    onchina 不提交 extrinsic。同时把机构/账户链投影置 PENDING_ON_CHAIN。
-    let institution_create_sign_request = if input.action_type == AdminActionType::InstitutionCreate
-    {
-        match build_institution_create_sign_request(
-            &state,
-            action_id.as_str(),
-            now.timestamp(),
-            expires_at.timestamp(),
-            ctx.admin_account.as_str(),
-            &challenge.request_payload,
-        ) {
-            Ok(v) => Some(v),
-            Err(resp) => return resp,
-        }
-    } else {
-        None
-    };
-    // ── 市注册局管理员集合上链:CreateSubordinateRegistry 并入新管理员、DeleteSubordinateRegistry 移除,
-    //    产出 federal_set_city_registry_admins 裸 SCALE call data 的 QR;onchina 不提交。
-    let admin_set_sign_request = match input.action_type {
-        AdminActionType::CreateSubordinateRegistry | AdminActionType::DeleteSubordinateRegistry => {
-            match build_city_registry_admin_set_sign_request(
-                &state,
-                action_id.as_str(),
-                now.timestamp(),
-                expires_at.timestamp(),
-                ctx.admin_account.as_str(),
-                &challenge.request_payload,
-                input.action_type == AdminActionType::CreateSubordinateRegistry,
-            ) {
-                Ok(v) => Some(v),
-                Err(resp) => return resp,
-            }
-        }
-        AdminActionType::ReplaceGoverningRegistry => {
-            match build_federal_registry_replace_sign_request(
-                &state,
-                action_id.as_str(),
-                now.timestamp(),
-                expires_at.timestamp(),
-                ctx.admin_account.as_str(),
-                &challenge.request_payload,
-            )
-            .await
-            {
-                Ok(v) => Some(v),
-                Err(resp) => return resp,
-            }
-        }
-        _ => None,
-    };
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -380,259 +310,9 @@ pub(crate) async fn prepare_admin_action(
             payload_hash,
             auth_type: preview.auth_type,
             expires_at: expires_at.timestamp(),
-            institution_create_sign_request,
-            admin_set_sign_request,
         },
     })
     .into_response()
-}
-
-/// 组装市注册局管理员集合上链的 QR_V1/k=1 sign_request(b.d=federal_set_city_registry_admins 裸 SCALE)。
-///
-/// 中文注释:按 created_by 的联邦作用域解析省/市,取该城市当前 CREG 管理员集合,按 add 增/删 delta,
-/// 编码 federal_set call data。onchina 不提交;冷钱包解码核对后冷签 origin 并由 CitizenWallet 提交。
-fn build_city_registry_admin_set_sign_request(
-    state: &AppState,
-    action_id: &str,
-    issued_at: i64,
-    expires_at: i64,
-    actor_pubkey: &str,
-    payload: &serde_json::Value,
-    add: bool,
-) -> Result<String, axum::response::Response> {
-    let input: CreateCityRegistryAdminInput =
-        serde_json::from_value(payload.clone()).map_err(|_| {
-            api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "invalid city registry admin payload",
-            )
-        })?;
-    let Some(new_admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "admin_account format invalid",
-        ));
-    };
-    let created_by = match input.created_by.as_deref().map(str::trim) {
-        None | Some("") => actor_pubkey.to_string(),
-        Some(raw) => match normalize_admin_account(raw) {
-            Some(v) => v,
-            None => {
-                return Err(api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "created_by format invalid",
-                ));
-            }
-        },
-    };
-    let city_name = input.city_name.trim().to_string();
-    let chain = state
-        .db
-        .with_client(move |conn| {
-            // 省:created_by(FRG)的联邦作用域单源;市码:china.sqlite 解析并校验属省。
-            let province_name =
-                repo::province_scope_for_registry_org_conn(conn, created_by.as_str(), "FRG")?
-                    .ok_or_else(|| "cannot resolve province from created_by".to_string())?;
-            let Some(city_code) =
-                crate::cid::china::city_code_by_name(province_name.as_str(), city_name.as_str())
-            else {
-                return Err("city not found in province".to_string());
-            };
-            if city_code == "000" {
-                return Err("province placeholder city is not allowed".to_string());
-            }
-            // 当前 CREG 管理员集合(进链账户;每节点单省,本地缓存即本省)。
-            let (_total, current) = repo::list_city_registry_admins_by_scope_conn(
-                conn,
-                Some(city_name.as_str()),
-                1000,
-                0,
-            )?;
-            let current_accounts: Vec<String> =
-                current.iter().map(|u| u.admin_account.clone()).collect();
-            crate::institution::admins::admin_set_call::build_city_registry_admin_set_call_data(
-                conn,
-                province_name.as_str(),
-                city_name.as_str(),
-                city_code,
-                &current_accounts,
-                new_admin_account.as_str(),
-                add,
-            )
-        })
-        .map_err(admin_action_error)?;
-    crate::core::qr::build_sign_request_bytes(
-        action_id,
-        issued_at,
-        expires_at,
-        actor_pubkey,
-        &chain.call_data,
-        chain.action,
-    )
-}
-
-/// 组装联邦注册局换届的 QR_V1/k=1 sign_request。
-///
-/// 中文注释:本省 5 人 Tier1 创世注册局组的当前集合「全走链读」(决策③)取自链上
-/// `FederalRegistryProvinceGroups[本省省码]`;把 id 对应的旧账户(本地缓存定位)换成新账户,
-/// 编码 genesis `propose_federal_registry_province_admin_set_change`(call 2)。onchina 不提交;冷钱包提交。
-async fn build_federal_registry_replace_sign_request(
-    state: &AppState,
-    action_id: &str,
-    issued_at: i64,
-    expires_at: i64,
-    actor_pubkey: &str,
-    payload: &serde_json::Value,
-) -> Result<String, axum::response::Response> {
-    let input: ReplaceFederalRegistryActionPayload = serde_json::from_value(payload.clone())
-        .map_err(|_| {
-            api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "invalid replace federal registry payload",
-            )
-        })?;
-    let Some(new_admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "admin_account format invalid",
-        ));
-    };
-    let id = input.id;
-    // 省 = 本节点绑定机构省;省码 → 链上本省 5 人组(权威当前集合)。
-    let province_name = match repo::active_node_binding(&state.db) {
-        Ok(Some(binding)) => binding.candidate.scope_province_name,
-        Ok(None) => None,
-        Err(err) => {
-            let message = format!("query node binding failed: {err}");
-            return Err(api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                message.as_str(),
-            ));
-        }
-    };
-    let Some(province_name) = province_name else {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "admin province scope missing",
-        ));
-    };
-    let Some(province_code) =
-        crate::core::chain_runtime::chain_province_code_by_name(&province_name)
-    else {
-        return Err(api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "node province is not a valid chain province",
-        ));
-    };
-    let current_accounts =
-        crate::core::chain_runtime::fetch_federal_registry_province_admins(province_code)
-            .await
-            .map_err(|err| {
-                tracing::warn!(error = %err, "chain unreachable building federal registry replace");
-                api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable")
-            })?;
-    let tier1_code = crate::core::chain_runtime::TIER1_REGISTRY_CODE.to_string();
-    let chain = state
-        .db
-        .with_client(move |conn| {
-            let old_admin = repo::get_admin_by_id_and_registry_org_conn(conn, id, &tier1_code)?
-                .ok_or_else(|| "federal registry admin not found".to_string())?;
-            let old_account = old_admin.admin_account.clone();
-            crate::institution::admins::admin_set_call::build_federal_registry_admin_set_call_data(
-                conn,
-                province_name.as_str(),
-                &current_accounts,
-                old_account.as_str(),
-                new_admin_account.as_str(),
-            )
-        })
-        .map_err(admin_action_error)?;
-    crate::core::qr::build_sign_request_bytes(
-        action_id,
-        issued_at,
-        expires_at,
-        actor_pubkey,
-        &chain.call_data,
-        chain.action,
-    )
-}
-
-/// 组装机构上链创建的 QR_V1/k=1 sign_request(b.d=propose_create_institution 裸 SCALE call data)。
-///
-/// 中文注释:同一事务里组装 call data + 置机构/账户链投影 PENDING_ON_CHAIN;
-/// 失败回滚不留半态。call data 含注册局凭证(register_nonce/signature/issuer/scope),
-/// 冷钱包解码逐字段核对后冷签 origin,由 CitizenWallet 提交;onchina 绝不提交。
-fn build_institution_create_sign_request(
-    state: &AppState,
-    action_id: &str,
-    issued_at: i64,
-    expires_at: i64,
-    actor_pubkey: &str,
-    payload: &serde_json::Value,
-) -> Result<String, axum::response::Response> {
-    let input: InstitutionCreatePayload =
-        serde_json::from_value(payload.clone()).map_err(|_| {
-            api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "invalid institution create payload",
-            )
-        })?;
-    let cid_number = input.cid_number.trim().to_string();
-    let chain = state
-        .db
-        .with_client({
-            let state = state.clone();
-            let cid_number = cid_number.clone();
-            let admins = input.admins.clone();
-            move |conn| {
-                let data = crate::institution::subjects::registration_call::build_create_institution_call_data(
-                    &state,
-                    conn,
-                    cid_number.as_str(),
-                    input.threshold,
-                    &admins,
-                )?;
-                set_institution_chain_status_conn(conn, cid_number.as_str(), "PENDING_ON_CHAIN")?;
-                Ok(data)
-            }
-        })
-        .map_err(admin_action_error)?;
-    crate::core::qr::build_sign_request_bytes(
-        action_id,
-        issued_at,
-        expires_at,
-        actor_pubkey,
-        &chain.call_data,
-        chain.action,
-    )
-}
-
-/// 在已有连接上把机构主体 + 其全部账户的链投影状态置为指定值(创建上链 PENDING/回写复用)。
-fn set_institution_chain_status_conn(
-    conn: &mut Client,
-    cid_number: &str,
-    status: &str,
-) -> Result<(), String> {
-    conn.execute(
-        "UPDATE subjects SET chain_status = $2, updated_at = now() WHERE cid_number = $1",
-        &[&cid_number, &status],
-    )
-    .map_err(|e| format!("update subjects chain_status failed: {e}"))?;
-    conn.execute(
-        "UPDATE accounts SET chain_status = $2 WHERE cid_number = $1",
-        &[&cid_number, &status],
-    )
-    .map_err(|e| format!("update accounts chain_status failed: {e}"))?;
-    Ok(())
 }
 
 pub(crate) async fn commit_admin_action(
@@ -1167,6 +847,42 @@ fn precheck_institution_create_scope(
         payload.get("town_name").and_then(|v| v.as_str()),
         "town",
     )?;
+    let admins = payload
+        .get("admins")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "http:bad_request:admins is required".to_string())?;
+    if admins.len() < 2 {
+        return Err(
+            "http:bad_request:institution admins must contain at least two accounts".to_string(),
+        );
+    }
+    let threshold = payload
+        .get("threshold")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| "http:bad_request:threshold is required".to_string())?;
+    let admins_len = admins.len() as u64;
+    if threshold < admins_len / 2 + 1 || threshold > admins_len {
+        return Err("http:bad_request:threshold must be strict majority".to_string());
+    }
+    let mut normalized_accounts: Vec<String> = Vec::with_capacity(admins.len());
+    for item in admins {
+        let raw = item
+            .get("admin_account")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .ok_or_else(|| "http:bad_request:admin_account is required".to_string())?;
+        let Some(normalized) = normalize_admin_account(raw) else {
+            return Err("http:bad_request:admin_account format invalid".to_string());
+        };
+        if normalized_accounts
+            .iter()
+            .any(|account| account.eq_ignore_ascii_case(normalized.as_str()))
+        {
+            return Err("http:bad_request:duplicate admin_account".to_string());
+        }
+        normalized_accounts.push(normalized);
+    }
     Ok(())
 }
 

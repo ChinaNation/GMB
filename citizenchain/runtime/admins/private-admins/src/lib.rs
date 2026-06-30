@@ -167,6 +167,15 @@ pub mod pallet {
             account: T::AccountId,
             institution_code: InstitutionCode,
         },
+        /// 注册局直设机构管理员(绕过内部投票,原子写 Active + 注册动态阈值)。
+        AdminAccountRegistryDirectSet {
+            account: T::AccountId,
+            institution_code: InstitutionCode,
+            creator: T::AccountId,
+            admins_len: u32,
+            threshold: u32,
+            created: bool,
+        },
     }
 
     #[pallet::error]
@@ -494,6 +503,87 @@ pub mod pallet {
                 institution_code,
             });
             Ok(())
+        }
+
+        /// 注册局直设:原子写 Active 管理员账户(创建或更新)+ 注册动态阈值。
+        ///
+        /// 中文注释:机构注册交易已经完成注册局权限校验;这里只校验私权机构管理员账户
+        /// 边界,并把管理员集合与动态阈值作为一个链上事务提交。
+        pub(crate) fn do_set_active_admin_account_direct(
+            institution: T::AccountId,
+            institution_code: InstitutionCode,
+            kind: AdminAccountKind,
+            admins: Vec<AdminProfile<T::AccountId>>,
+            threshold: u32,
+            creator: T::AccountId,
+        ) -> DispatchResult {
+            let admin_accounts: Vec<T::AccountId> =
+                admins.iter().map(|p| p.account.clone()).collect();
+            Self::validate_admin_set_for_account(kind, institution_code, &admin_accounts)?;
+            let bounded: AdminProfilesOf<T> = admins
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidAdminsLen)?;
+            let admins_len = bounded.len() as u32;
+            let now = frame_system::Pallet::<T>::block_number();
+
+            with_transaction(|| {
+                if let Err(err) = T::InternalVoteEngine::register_active_dynamic_threshold_direct(
+                    institution_code,
+                    institution.clone(),
+                    admins_len,
+                    threshold,
+                ) {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
+
+                let created = match AdminAccounts::<T>::get(institution.clone()) {
+                    Some(existing) => {
+                        if existing.institution_code != institution_code {
+                            return TransactionOutcome::Rollback(Err(
+                                Error::<T>::InstitutionCodeMismatch.into(),
+                            ));
+                        }
+                        if existing.kind != kind {
+                            return TransactionOutcome::Rollback(Err(
+                                Error::<T>::InvalidAdminAccountKind.into(),
+                            ));
+                        }
+                        AdminAccounts::<T>::mutate(institution.clone(), |maybe| {
+                            if let Some(account) = maybe {
+                                account.admins = bounded.clone();
+                                account.status = AdminAccountStatus::Active;
+                                account.updated_at = now;
+                            }
+                        });
+                        false
+                    }
+                    None => {
+                        AdminAccounts::<T>::insert(
+                            institution.clone(),
+                            AdminAccount {
+                                institution_code,
+                                kind,
+                                admins: bounded.clone(),
+                                creator: creator.clone(),
+                                created_at: now,
+                                updated_at: now,
+                                status: AdminAccountStatus::Active,
+                            },
+                        );
+                        true
+                    }
+                };
+
+                Self::deposit_event(Event::<T>::AdminAccountRegistryDirectSet {
+                    account: institution.clone(),
+                    institution_code,
+                    creator: creator.clone(),
+                    admins_len,
+                    threshold,
+                    created,
+                });
+                TransactionOutcome::Commit(Ok(()))
+            })
         }
 
         fn admin_account_with_status(
@@ -825,6 +915,25 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, AdminProfile<T::Acco
             true,
         )?;
         Self::do_close_admin_account(institution)
+    }
+
+    fn set_active_admin_account_direct(
+        _module_tag: &[u8],
+        admin_root_account_id: T::AccountId,
+        institution_code: InstitutionCode,
+        kind: AdminAccountKind,
+        admins: Vec<AdminProfile<T::AccountId>>,
+        threshold: u32,
+        creator: T::AccountId,
+    ) -> DispatchResult {
+        Self::do_set_active_admin_account_direct(
+            admin_root_account_id,
+            institution_code,
+            kind,
+            admins,
+            threshold,
+            creator,
+        )
     }
 }
 

@@ -7,7 +7,6 @@
 
 pub mod accounts;
 pub mod create;
-pub mod execute;
 pub mod register;
 pub mod types;
 

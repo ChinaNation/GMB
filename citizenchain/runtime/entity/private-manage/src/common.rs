@@ -12,10 +12,9 @@ use sp_runtime::{traits::CheckedAdd, DispatchResult, SaturatedConversion};
 use crate::pallet::{Config, Error};
 use crate::BalanceOf;
 
-/// 校验发起人 free 余额覆盖 amount + fee + ED,返回 (reserve_total = amount + fee, fee)。
+/// 校验发起人 free 余额覆盖 amount + fee + ED,返回 (total_with_fee = amount + fee, fee)。
 ///
-/// 私权机构多签的资金模型:提案创建时 reserve(amount + fee),
-/// 投票通过后 unreserve→划转→withdraw fee。本 helper 集中"金额合法性 + 余额够付"
+/// 私权机构注册的资金模型:交易内直接划转初始余额并扣手续费。本 helper 集中"金额合法性 + 余额够付"
 /// 的预检查;personal-manage 自持平行实现。
 pub(crate) fn ensure_proposer_can_afford<T: Config>(
     who: &T::AccountId,
@@ -24,18 +23,18 @@ pub(crate) fn ensure_proposer_can_afford<T: Config>(
     let amount_u128: u128 = amount.saturated_into();
     let fee_u128 = onchain_transaction::calculate_onchain_fee(amount_u128);
     let fee: BalanceOf<T> = fee_u128.saturated_into();
-    let reserve_total = amount
+    let total_with_fee = amount
         .checked_add(&fee)
         .ok_or(Error::<T>::InsufficientAmount)?;
     let ed = T::Currency::minimum_balance();
-    let required = reserve_total
+    let required = total_with_fee
         .checked_add(&ed)
         .ok_or(Error::<T>::InsufficientAmount)?;
     ensure!(
         T::Currency::free_balance(who) >= required,
         Error::<T>::InsufficientAmount
     );
-    Ok((reserve_total, fee))
+    Ok((total_with_fee, fee))
 }
 
 #[allow(dead_code)]

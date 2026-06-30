@@ -5,5 +5,5 @@
 
 pub use entity_primitives::{
     AccountValidator, CidInstitutionVerifier, InstitutionCidQuery, InstitutionMultisigQuery,
-    ProtectedSourceChecker, ReservedAccountGuard,
+    ProtectedSourceChecker, RegistryAuthority, ReservedAccountGuard,
 };

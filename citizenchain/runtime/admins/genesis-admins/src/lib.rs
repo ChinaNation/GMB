@@ -21,10 +21,9 @@ use sp_runtime::{traits::Zero, DispatchError};
 use sp_std::collections::btree_set::BTreeSet;
 
 use admin_primitives::{
-    is_genesis_admin_code, is_public_admin_code, AdminAccount, AdminAccountKind,
-    AdminAccountLifecycle, AdminAccountStatus, AdminProfile, AdminSetChangeAction, AdminSource,
-    ADMIN_ROLE_CHIEF_JUSTICE, ADMIN_ROLE_CONSTITUTION_GUARD, ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE,
-    ADMIN_ROLE_JUSTICE, FRG, NJD,
+    is_genesis_admin_code, AdminAccount, AdminAccountKind, AdminAccountLifecycle,
+    AdminAccountStatus, AdminProfile, AdminSetChangeAction, AdminSource, ADMIN_ROLE_CHIEF_JUSTICE,
+    ADMIN_ROLE_CONSTITUTION_GUARD, ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE, ADMIN_ROLE_JUSTICE, FRG, NJD,
 };
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
@@ -95,8 +94,8 @@ fn national_judicial_yuan_admin_role(index: usize) -> Option<&'static [u8]> {
 
 /// 联邦注册局机构主账户(创世内置:`CHINA_ZF` 中 FRG 节点的 `main_account`)。
 ///
-/// 中文注释:联邦特权直设入口据此识别"联邦注册局"账户,再校验 `who ∈ 其 active admins`。
-/// 单源即 china_zf 常量,与 `genesis_build` 写入 `AdminAccounts` 的口径一致。
+/// 中文注释:该账户本身不保存可投票管理员列表;读侧把它映射为 43 个省级联邦注册局
+/// 管理员组的聚合快照,供权限查询使用。
 fn federal_registry_account<T: frame_system::Config>() -> Option<T::AccountId> {
     CHINA_ZF.iter().find_map(
         |node| match institution_code_from_cid_number(node.cid_number) {
@@ -127,15 +126,6 @@ pub mod pallet {
 
         /// 中文注释：内部投票引擎（返回真实 proposal_id，避免外部猜测 next_proposal_id）。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
-
-        /// 公权机构(市注册局)管理员生命周期写入口。
-        ///
-        /// 中文注释:联邦注册局给市注册局直设/更换管理员时,经此 trait 走 public-admins
-        /// 的特权直设入口(`set_active_admin_account_direct`),管理员单源仍落 public-admins。
-        type PublicAdminLifecycle: AdminAccountLifecycle<
-            Self::AccountId,
-            AdminProfile<Self::AccountId>,
-        >;
 
         /// 该 pallet 的可配置权重实现。
         type WeightInfo: crate::weights::WeightInfo;
@@ -437,14 +427,6 @@ pub mod pallet {
             account: T::AccountId,
             institution_code: InstitutionCode,
         },
-        /// 联邦注册局直设市注册局管理员集合(绕过内部投票)。
-        FederalCityRegistryAdminsSet {
-            institution_code: InstitutionCode,
-            account: T::AccountId,
-            proposer: T::AccountId,
-            admins_len: u32,
-            threshold: u32,
-        },
         /// 已发起联邦注册局省级管理员组更换提案。
         FederalRegistryProvinceAdminSetChangeProposed {
             proposal_id: u64,
@@ -658,57 +640,6 @@ pub mod pallet {
                 });
                 TransactionOutcome::Commit(Ok(()))
             })
-        }
-
-        /// 联邦注册局直设市注册局管理员集合(绕过内部投票,原子写 Active + 市注册局动态阈值)。
-        ///
-        /// 中文注释:Step3 去中心化鉴权——任一联邦注册局省级组 Active 管理员可直接给
-        /// 某市注册局供给/更换管理员公钥集合;账户不存在则按需创建。
-        /// 城市归属省的强校验仍由 registry/OnChina 携带本地行政区数据完成,链上不重复存市省映射。
-        #[pallet::call_index(1)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_admin_set_change())]
-        pub fn federal_set_city_registry_admins(
-            origin: OriginFor<T>,
-            institution_code: InstitutionCode,
-            account: T::AccountId,
-            admins: AdminProfilesOf<T>,
-            threshold: u32,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            // 1) 目标必须是公权机构(市注册局)码,禁止经此入口改创世/私权账户。
-            ensure!(
-                is_public_admin_code(&institution_code),
-                Error::<T>::InvalidAdminAccountKind
-            );
-
-            // 2) 校验发起人属于联邦注册局 active admins(由 43 个省级组聚合读取)。
-            let frg_account =
-                federal_registry_account::<T>().ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                Self::is_active_account_admin(FRG, frg_account, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
-            // 3) 复用 public-admins 特权直设(原子 Active + 动态阈值,管理员/阈值单源不绕过)。
-            T::PublicAdminLifecycle::set_active_admin_account_direct(
-                crate::MODULE_TAG,
-                account.clone(),
-                institution_code,
-                AdminAccountKind::PublicInstitution,
-                admins.iter().cloned().collect(),
-                threshold,
-                who.clone(),
-            )?;
-
-            Self::deposit_event(Event::<T>::FederalCityRegistryAdminsSet {
-                institution_code,
-                account,
-                proposer: who,
-                admins_len: admins.len() as u32,
-                threshold,
-            });
-            Ok(())
         }
     }
 

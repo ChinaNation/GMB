@@ -637,6 +637,7 @@ impl primitives::multisig::AccountValidator<AccountId> for RuntimeAccountValidat
 
 pub struct RuntimeReservedAccountGuard;
 pub struct RuntimeCidInstitutionVerifier;
+pub struct RuntimeRegistryAuthority;
 
 pub struct RuntimeProtectedSourceChecker;
 pub struct RuntimeInstitutionAsset;
@@ -730,6 +731,103 @@ impl primitives::multisig::ReservedAccountGuard<AccountId> for RuntimeReservedAc
         }
 
         is_reserved_main_account(account)
+    }
+}
+
+fn cid_institution_code(cid_number: &[u8]) -> Option<primitives::cid::code::InstitutionCode> {
+    let text = core::str::from_utf8(cid_number).ok()?;
+    primitives::cid::code::institution_code_from_cid_number(text.trim())
+}
+
+fn cid_scope_codes(cid_number: &[u8]) -> Option<([u8; 2], [u8; 3])> {
+    let text = core::str::from_utf8(cid_number).ok()?;
+    let r5 = text.trim().split('-').next()?;
+    let bytes = r5.as_bytes();
+    if bytes.len() != primitives::cid::number::CID_NUMBER_SEGMENT_R5_LEN {
+        return None;
+    }
+    let mut province_code = [0_u8; 2];
+    let mut city_code = [0_u8; 3];
+    province_code.copy_from_slice(&bytes[..2]);
+    city_code.copy_from_slice(&bytes[2..5]);
+    Some((province_code, city_code))
+}
+
+impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthority {
+    fn can_register_institution(
+        registrar: &AccountId,
+        issuer_cid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        target_cid_number: &[u8],
+        target_institution_code: primitives::cid::code::InstitutionCode,
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
+    ) -> bool {
+        let signer_account = AccountId::new(*signer_pubkey);
+        if registrar != &signer_account {
+            return false;
+        }
+        if !RuntimeAdminAccountQuery::is_active_admin_of_account(
+            issuer_main_account,
+            &signer_account,
+        ) {
+            return false;
+        }
+
+        let Some(issuer_code) = cid_institution_code(issuer_cid_number) else {
+            return false;
+        };
+        let Some(parsed_target_code) = cid_institution_code(target_cid_number) else {
+            return false;
+        };
+        if parsed_target_code != target_institution_code
+            || primitives::cid::code::is_fixed_governance_code(&target_institution_code)
+        {
+            return false;
+        }
+
+        let Some((target_province_code, target_city_code)) = cid_scope_codes(target_cid_number) else {
+            return false;
+        };
+        let Ok(scope_province_name) = core::str::from_utf8(scope_province_name) else {
+            return false;
+        };
+        let Some(scope_province_code) =
+            primitives::cid::code::province_code_by_name(scope_province_name)
+        else {
+            return false;
+        };
+        if scope_province_code != target_province_code {
+            return false;
+        }
+
+        const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
+        if issuer_code == admin_primitives::FRG {
+            let Some(group_province_code) =
+                genesis_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(
+                    issuer_main_account,
+                )
+            else {
+                return false;
+            };
+            // 中文注释:FRG 省级组只能登记本省 CID;FRG 主账户聚合 215 人不携带省码,不得用于登记。
+            return group_province_code == target_province_code;
+        }
+
+        if issuer_code == CITY_REGISTRY_CODE {
+            if target_institution_code == CITY_REGISTRY_CODE || scope_city_name.is_empty() {
+                return false;
+            }
+            let Some((issuer_province_code, issuer_city_code)) = cid_scope_codes(issuer_cid_number)
+            else {
+                return false;
+            };
+            // 中文注释:CREG 只能登记本市非 CREG 机构;市归属由 CID R5 直接校验。
+            return issuer_province_code == target_province_code && issuer_city_code == target_city_code;
+        }
+
+        false
     }
 }
 
@@ -898,6 +996,7 @@ impl public_manage::Config for Runtime {
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAsset = RuntimeInstitutionAsset;
     type CidInstitutionVerifier = RuntimeCidInstitutionVerifier;
+    type RegistryAuthority = RuntimeRegistryAuthority;
     type FeeRouter = TransferFeeRouter;
     type MaxAdmins = MaxAdminsPerInstitution;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
@@ -922,6 +1021,7 @@ impl private_manage::Config for Runtime {
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAsset = RuntimeInstitutionAsset;
     type CidInstitutionVerifier = RuntimeCidInstitutionVerifier;
+    type RegistryAuthority = RuntimeRegistryAuthority;
     type FeeRouter = TransferFeeRouter;
     type MaxAdmins = MaxAdminsPerInstitution;
     type MaxCidNumberLength = ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>;
@@ -1201,7 +1301,6 @@ impl genesis_admins::Config for Runtime {
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type MaxPersonalAccountAdmins = MaxPersonalAccountAdmins;
     type InternalVoteEngine = InternalVote;
-    type PublicAdminLifecycle = PublicAdmins;
     type WeightInfo = genesis_admins::weights::SubstrateWeight<Runtime>;
 }
 

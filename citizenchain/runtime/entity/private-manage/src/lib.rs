@@ -31,7 +31,7 @@ use sp_core::sr25519::Public as Sr25519Public;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 pub use traits::{
     AccountValidator, CidInstitutionVerifier, InstitutionCidQuery, InstitutionMultisigQuery,
-    ProtectedSourceChecker, ReservedAccountGuard,
+    ProtectedSourceChecker, RegistryAuthority, ReservedAccountGuard,
 };
 use votingengine::{
     types::InstitutionCode, InternalVoteEngine, InternalVoteResultCallback,
@@ -39,9 +39,8 @@ use votingengine::{
 };
 
 pub use institution::types::{
-    CloseInstitutionAction, CreateInstitutionAccount, CreateInstitutionAction,
-    InstitutionAccountInfo, InstitutionInfo, InstitutionInitialAccount, InstitutionLifecycleStatus,
-    RegisteredInstitution,
+    CloseInstitutionAction, CreateInstitutionAccount, InstitutionAccountInfo, InstitutionInfo,
+    InstitutionInitialAccount, InstitutionLifecycleStatus, RegisteredInstitution,
 };
 pub use primitives::account_derive::{AccountKind, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
 
@@ -83,6 +82,12 @@ pub mod pallet {
             RegisterNonceOf<Self>,
             RegisterSignatureOf<Self>,
         >;
+        /// 注册局登记授权校验入口。
+        ///
+        /// 中文注释:注册局管理员代创建机构时,origin 是注册局管理员,目标 admins
+        /// 是新机构自己的管理员;二者不能再强制相同。本 trait 负责校验 FRG/CREG
+        /// 对目标 CID 与机构码是否有登记权。
+        type RegistryAuthority: RegistryAuthority<Self::AccountId>;
 
         /// 手续费分账路由（创建入金和注销转出的手续费）
         type FeeRouter: frame_support::traits::OnUnbalanced<
@@ -105,10 +110,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxRegisterSignatureLength: Get<u32>;
 
-        /// 单个机构创建交易最多可携带的账户数量。
+        /// 单个机构注册交易最多可携带的账户数量。
         ///
         /// CID 默认包含主账户和费用账户，用户可新增其他账户；这里限制链上
-        /// 初始入金列表长度，避免机构创建提案业务数据过大。
+        /// 初始入金列表长度，避免机构注册交易过大。
         #[pallet::constant]
         type MaxInstitutionAccounts: Get<u32>;
 
@@ -126,7 +131,7 @@ pub mod pallet {
     pub type AdminsOf<T> =
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdmins>;
 
-    /// 私权机构生命周期员资料集合(创建提案携带:每个管理员一条 `AdminProfile`)。
+    /// 私权机构管理员资料集合(注册交易携带:每个管理员一条 `AdminProfile`)。
     pub type AdminProfilesOf<T> =
         BoundedVec<AdminProfile<<T as frame_system::Config>::AccountId>, <T as Config>::MaxAdmins>;
 
@@ -143,13 +148,13 @@ pub mod pallet {
     /// 机构创建时用户输入的账户初始余额列表。
     pub type InstitutionInitialAccountsOf<T> =
         BoundedVec<InstitutionInitialAccountOf<T>, <T as Config>::MaxInstitutionAccounts>;
-    /// 机构创建提案中保存的已派生账户项。
+    /// 机构注册交易中保存的已派生账户项。
     pub type CreateInstitutionAccountOf<T> = CreateInstitutionAccount<
         AccountNameOf<T>,
         <T as frame_system::Config>::AccountId,
         BalanceOf<T>,
     >;
-    /// 机构创建提案中保存的已派生账户列表。
+    /// 机构注册交易中保存的已派生账户列表。
     pub type CreateInstitutionAccountsOf<T> =
         BoundedVec<CreateInstitutionAccountOf<T>, <T as Config>::MaxInstitutionAccounts>;
     /// 机构级信息(链上最小集)。
@@ -160,16 +165,6 @@ pub mod pallet {
         BalanceOf<T>,
         BlockNumberFor<T>,
     >;
-    /// 机构创建提案业务数据。
-    pub type CreateInstitutionActionOf<T> = CreateInstitutionAction<
-        CidNumberOf<T>,
-        AccountNameOf<T>,
-        <T as frame_system::Config>::AccountId,
-        BalanceOf<T>,
-        AdminProfilesOf<T>,
-        CreateInstitutionAccountsOf<T>,
-    >;
-
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
@@ -220,12 +215,6 @@ pub mod pallet {
         InstitutionAccountInfoOf<T>,
         OptionQuery,
     >;
-
-    /// 正在投票中的机构创建提案，用于通过/拒绝时处理 reserve 资金。
-    #[pallet::storage]
-    #[pallet::getter(fn pending_institution_create)]
-    pub type PendingInstitutionCreate<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, CreateInstitutionActionOf<T>, OptionQuery>;
 
     /// 已消费的机构登记 nonce，防止 proof 重放。
     #[pallet::storage]
@@ -307,43 +296,13 @@ pub mod pallet {
             proposal_id: u64,
             account: T::AccountId,
         },
-        /// 机构级创建提案已发起：创建者资金已 reserve，等待管理员投票。
-        InstitutionCreateProposed {
-            proposal_id: u64,
-            cid_number: CidNumberOf<T>,
-            cid_full_name: AccountNameOf<T>,
-            main_account: T::AccountId,
-            proposer: T::AccountId,
-            accounts: CreateInstitutionAccountsOf<T>,
-            admins: AdminProfilesOf<T>,
-            institution_code: InstitutionCode,
-            admins_len: u32,
-            threshold: u32,
-            initial_total: BalanceOf<T>,
-            reserve_total: BalanceOf<T>,
-            expires_at: BlockNumberFor<T>,
-        },
-        /// 机构创建成功：机构和账户均已激活。
+        /// 机构注册创建成功：机构、账户和管理员集合均已激活。
         InstitutionCreated {
-            proposal_id: u64,
             cid_number: CidNumberOf<T>,
             main_account: T::AccountId,
             account_count: u32,
             initial_total: BalanceOf<T>,
             fee: BalanceOf<T>,
-        },
-        /// 机构创建执行失败：回滚后释放 pending 占用和 reserve 资金。
-        InstitutionCreateExecutionFailed {
-            proposal_id: u64,
-            cid_number: CidNumberOf<T>,
-            main_account: T::AccountId,
-        },
-        /// 机构创建提案被否决或超时清理：释放创建者 reserve 资金。
-        InstitutionCreateRejected {
-            proposal_id: u64,
-            cid_number: CidNumberOf<T>,
-            main_account: T::AccountId,
-            reserve_total: BalanceOf<T>,
         },
         /// CID 机构登记
         CidInstitutionRegistered {
@@ -378,6 +337,8 @@ pub mod pallet {
         CloseBalanceBelowMinimum,
         /// 权限不足
         PermissionDenied,
+        /// 注册局无权登记目标机构
+        RegistryAuthorityDenied,
         /// 管理员数量不合法（必须 >=2）
         InvalidAdminsLen,
         /// 管理员数量与列表长度不一致
@@ -415,8 +376,6 @@ pub mod pallet {
         NonceOverflow,
         /// runtime 配置不合法
         InvalidRuntimeConfig,
-        /// 提案投票引擎错误
-        VoteEngineError,
         /// 提案业务数据未找到
         ProposalActionNotFound,
         /// 转账失败
@@ -441,10 +400,6 @@ pub mod pallet {
         TooManyInstitutionAccounts,
         /// 初始余额累计溢出
         InitialAmountOverflow,
-        /// 创建者资金 reserve 失败
-        ReserveFailed,
-        /// reserve 释放异常
-        ReserveReleaseFailed,
         /// 手续费扣取失败
         FeeWithdrawFailed,
         /// 注销后转账金额低于 ED
@@ -471,7 +426,6 @@ pub mod pallet {
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节。
     /// ACTION = 1 永久保留空位,不复用。
     pub const ACTION_CLOSE: u8 = 2;
-    pub const ACTION_CREATE_INSTITUTION: u8 = 3;
 
     /// 注销凭证作用域:整机构(关主账户=级联关全部账户)/ 单账户(只关该非主账户)。
     pub const SCOPE_INSTITUTION: u8 = 0;
@@ -519,11 +473,11 @@ pub mod pallet {
             )
         }
 
-        /// 发起机构级创建提案。
+        /// 注册创建私权机构。
         ///
         /// 该交易注册的是“机构”而不是单个账户。创建者必须一次性提交主账户、
-        /// 费用账户以及需要初始化的自定义账户余额；交易发起时 reserve 创建者
-        /// 的初始余额合计与手续费，投票通过后再划入机构各账户。
+        /// 费用账户以及需要初始化的自定义账户余额；交易成功即激活机构、账户
+        /// 与管理员集合。
         #[pallet::call_index(5)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_create_private_institution())]
         pub fn propose_create_private_institution(
@@ -599,11 +553,11 @@ pub mod pallet {
         /// 发起"创建个人多签账户"提案（无需 CID 注册）。
         ///
         /// 地址由 `creator + account_name` 派生：
-        /// 清理已被拒绝或超时的创建/关闭提案残留状态(机构侧)。
+        /// 清理已被拒绝或超时的关闭提案残留状态(机构侧)。
         /// 任意签名账户可调用。用于解决投票引擎 on_initialize 超时 reject 后
-        /// 本模块无法自动收到通知导致的 Pending / InstitutionPendingClose 残留。
+        /// 本模块无法自动收到通知导致的 InstitutionPendingClose 残留。
         ///
-        /// 仅处理 ACTION_CREATE_INSTITUTION 与 ACTION_CLOSE 两类机构提案;
+        /// 仅处理 ACTION_CLOSE 机构关闭提案;
         /// 个人多签的清理由 personal-manage::cleanup_rejected_private_proposal 自持。
         #[pallet::call_index(4)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::cleanup_rejected_private_proposal())]
@@ -632,15 +586,6 @@ pub mod pallet {
             );
 
             match action_tag {
-                ACTION_CREATE_INSTITUTION => {
-                    let action = CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
-                        .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-                    crate::institution::execute::cleanup_pending_institution_create::<T>(
-                        proposal_id,
-                        &action,
-                        true,
-                    );
-                }
                 ACTION_CLOSE => {
                     let action =
                         CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
@@ -739,7 +684,6 @@ pub mod pallet {
         }
 
         pub(crate) fn ensure_admin_config(
-            who: &T::AccountId,
             admins_len: u32,
             admins: &AdminProfilesOf<T>,
             threshold: u32,
@@ -756,63 +700,31 @@ pub mod pallet {
                     && u64::from(threshold).saturating_mul(2) > u64::from(admins_len),
                 Error::<T>::InvalidThreshold
             );
-            // 账户语义校验取 profile.account:唯一性与发起人在册都按账户判定。
+            // 账户语义校验取 profile.account:注册局代创建时,发起人是注册局管理员,
+            // 目标 admins 是新机构管理员集合,这里只校验目标集合自身合法。
             let admin_accounts: Vec<T::AccountId> =
                 admins.iter().map(|p| p.account.clone()).collect();
             Self::ensure_unique_admins(&admin_accounts)?;
-            ensure!(
-                admin_accounts.iter().any(|admin| admin == who),
-                Error::<T>::PermissionDenied
-            );
             Ok(())
         }
 
-        pub(crate) fn create_pending_admin_account_for_proposal(
-            proposal_id: u64,
+        pub(crate) fn set_active_admin_account_direct(
             institution_code: InstitutionCode,
             institution_id: T::AccountId,
             admins: &AdminProfilesOf<T>,
+            threshold: u32,
             creator: &T::AccountId,
         ) -> DispatchResult {
             Self::ensure_lifecycle_institution_code(&institution_code)?;
-            T::AdminLifecycle::create_pending_admin_account_for_proposal(
-                proposal_id,
+            T::AdminLifecycle::set_active_admin_account_direct(
                 crate::MODULE_TAG,
                 institution_id,
                 institution_code,
                 AdminAccountKind::PrivateInstitution,
                 admins.iter().cloned().collect(),
+                threshold,
                 creator.clone(),
             )
-        }
-
-        pub(crate) fn activate_admin_account(
-            proposal_id: u64,
-            institution_code: InstitutionCode,
-            institution_id: T::AccountId,
-        ) -> DispatchResult {
-            Self::ensure_lifecycle_institution_code(&institution_code)?;
-            T::AdminLifecycle::activate_admin_account_for_proposal(
-                proposal_id,
-                crate::MODULE_TAG,
-                institution_id,
-            )
-        }
-
-        pub(crate) fn remove_pending_admin_account(
-            proposal_id: u64,
-            institution_code: InstitutionCode,
-            institution_id: T::AccountId,
-        ) {
-            let _ = if Self::ensure_lifecycle_institution_code(&institution_code).is_ok() {
-                T::AdminLifecycle::remove_pending_admin_account_for_proposal(
-                    proposal_id,
-                    crate::MODULE_TAG,
-                    institution_id,
-                )
-            } else {
-                Err(Error::<T>::InvalidInstitutionCode.into())
-            };
         }
 
         pub(crate) fn close_admin_account(
@@ -883,7 +795,6 @@ pub mod pallet {
 
         // 投票回调执行体:
         // - ACTION_CLOSE → crate::close::execute_institution_close_with_finalizer
-        // - ACTION_CREATE_INSTITUTION 与 cleanup → crate::institution::execute
         // (ACTION_CREATE_PERSONAL 在 personal-manage 独立 pallet)
     }
 }
@@ -939,16 +850,14 @@ impl<T: pallet::Config> traits::InstitutionCidQuery<pallet::CidNumberOf<T>> for 
     }
 }
 
-// ──── 投票终态回调:把已通过的多签创建/关闭提案落地到链上 ────
+// ──── 投票终态回调:把已通过的机构关闭提案落地到链上 ────
 //
 // 投票统一由投票引擎承担,提案通过(或否决)经
 // [`votingengine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor(机构侧):
-// - 按 `MODULE_TAG + ACTION_CLOSE / ACTION_CREATE_INSTITUTION` 前缀认领机构提案;
-// - `approved = true` → 分派到 `institution::execute::execute_create_institution_with_finalizer`
-//   / `close::execute_institution_close_with_finalizer`;执行失败发事件,不回滚投票
-//   (提案保留 PASSED,可用 cleanup_rejected_private_proposal 或手动重试处理);
-// - `approved = false` → 清理 Pending 存储(InstitutionPendingClose 等),释放地址占用。
+// - 按 `MODULE_TAG + ACTION_CLOSE` 前缀认领机构关闭提案;
+// - `approved = true` → 分派到 `close::execute_institution_close_with_finalizer`;
+// - `approved = false` → 清理 InstitutionPendingClose,释放地址占用。
 // (ACTION_CREATE_PERSONAL 在 personal-manage::InternalVoteExecutor)
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
@@ -970,30 +879,6 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
 
         if approved {
             match action_byte {
-                ACTION_CREATE_INSTITUTION => {
-                    let action = CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
-                        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                    let exec_result = with_transaction(|| {
-                        match crate::institution::execute::execute_create_institution_with_finalizer::<
-                            T,
-                        >(proposal_id, &action, true)
-                        {
-                            Ok(()) => TransactionOutcome::Commit(Ok(())),
-                            Err(e) => TransactionOutcome::Rollback(Err(e)),
-                        }
-                    });
-                    if exec_result.is_err() {
-                        pallet::Pallet::<T>::deposit_event(
-                            pallet::Event::<T>::InstitutionCreateExecutionFailed {
-                                proposal_id,
-                                cid_number: action.cid_number,
-                                main_account: action.main_account,
-                            },
-                        );
-                        return Ok(ProposalExecutionOutcome::RetryableFailed);
-                    }
-                    return Ok(ProposalExecutionOutcome::Executed);
-                }
                 ACTION_CLOSE => {
                     let action =
                         CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
@@ -1022,19 +907,8 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 _ => return Ok(ProposalExecutionOutcome::Ignored),
             }
         } else {
-            // 否决:清理 Pending 记录释放地址锁定。
+            // 否决:清理关闭 Pending 记录释放地址锁定。
             match action_byte {
-                ACTION_CREATE_INSTITUTION => {
-                    if let Ok(action) =
-                        CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
-                    {
-                        crate::institution::execute::cleanup_pending_institution_create::<T>(
-                            proposal_id,
-                            &action,
-                            true,
-                        );
-                    }
-                }
                 ACTION_CLOSE => {
                     if let Ok(action) =
                         CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
@@ -1059,15 +933,6 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             pallet::Error::<T>::ProposalActionNotFound
         );
         match raw[tag.len()] {
-            ACTION_CREATE_INSTITUTION => {
-                let action = CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
-                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                crate::institution::execute::cleanup_pending_institution_create::<T>(
-                    proposal_id,
-                    &action,
-                    false,
-                );
-            }
             ACTION_CLOSE => {
                 let action =
                     CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])

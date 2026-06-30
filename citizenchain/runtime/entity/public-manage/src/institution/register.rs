@@ -10,7 +10,7 @@
 //! 6. 发射 `CidInstitutionRegistered` 事件
 //!
 //! 不写入 `Institutions` / `InstitutionAccounts` —— 那是 `propose_create_public_institution`
-//! 的职责（投票通过后 reserve→划转→激活）。
+//! 的职责（注册交易成功即划转初始余额并激活）。
 
 extern crate alloc;
 

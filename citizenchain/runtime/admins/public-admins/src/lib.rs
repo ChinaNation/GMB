@@ -167,8 +167,8 @@ pub mod pallet {
             account: T::AccountId,
             institution_code: InstitutionCode,
         },
-        /// 联邦注册局直设市注册局管理员(绕过内部投票,原子写 Active + 注册动态阈值)。
-        AdminAccountFederalDirectSet {
+        /// 注册局直设机构管理员(绕过内部投票,原子写 Active + 注册动态阈值)。
+        AdminAccountRegistryDirectSet {
             account: T::AccountId,
             institution_code: InstitutionCode,
             creator: T::AccountId,
@@ -505,11 +505,11 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 联邦特权直设:原子写 Active 管理员账户(创建或更新)+ 注册动态阈值。
+        /// 注册局直设:原子写 Active 管理员账户(创建或更新)+ 注册动态阈值。
         ///
         /// 中文注释:绕过内部投票,但不绕过单源——管理员落 `AdminAccounts`、阈值落
-        /// votingengine 动态阈值,二者在同一链上事务内原子提交。上层授权(who ∈ 联邦
-        /// 注册局 active admins)由 genesis-admins 特权入口校验,本函数只做机构边界校验。
+        /// votingengine 动态阈值,二者在同一链上事务内原子提交。上层授权由
+        /// public/private-manage 的注册局权限校验承担,本函数只做机构边界校验。
         pub(crate) fn do_set_active_admin_account_direct(
             institution: T::AccountId,
             institution_code: InstitutionCode,
@@ -578,7 +578,7 @@ pub mod pallet {
                     }
                 };
 
-                Self::deposit_event(Event::<T>::AdminAccountFederalDirectSet {
+                Self::deposit_event(Event::<T>::AdminAccountRegistryDirectSet {
                     account: institution.clone(),
                     institution_code,
                     creator: creator.clone(),

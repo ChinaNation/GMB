@@ -139,3 +139,37 @@ impl<AccountId, AccountName, Nonce, Signature>
         false
     }
 }
+
+/// 注册局登记权限抽象。
+///
+/// 中文注释:签名验真只证明某个管理员签过登记凭证;本 trait 额外证明该签发机构
+/// 对目标机构有登记权。public/private manage 只依赖这个抽象,具体 FRG/CREG 省市规则
+/// 由 runtime 统一实现,避免业务 pallet 复制行政区与创世管理员细节。
+pub trait RegistryAuthority<AccountId> {
+    /// 当前 origin 是否可按签发凭证登记目标机构。
+    fn can_register_institution(
+        registrar: &AccountId,
+        issuer_cid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        target_cid_number: &[u8],
+        target_institution_code: InstitutionCode,
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
+    ) -> bool;
+}
+
+impl<AccountId> RegistryAuthority<AccountId> for () {
+    fn can_register_institution(
+        _registrar: &AccountId,
+        _issuer_cid_number: &[u8],
+        _issuer_main_account: &AccountId,
+        _signer_pubkey: &[u8; 32],
+        _target_cid_number: &[u8],
+        _target_institution_code: InstitutionCode,
+        _scope_province_name: &[u8],
+        _scope_city_name: &[u8],
+    ) -> bool {
+        false
+    }
+}

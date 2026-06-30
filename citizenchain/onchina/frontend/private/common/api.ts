@@ -73,6 +73,8 @@ export async function createInstitution(
     legal_rep_name: input.legal_rep_name ?? null,
     legal_rep_cid_number: input.legal_rep_cid_number ?? null,
     legal_rep_photo_path: input.legal_rep_photo_path ?? null,
+    threshold: input.threshold,
+    admins: input.admins,
   };
   const grant = await createScanSignSecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload, signWithScan);
   return adminRequest<CreateInstitutionOutput>(`/api/v1/private/${routeSegment}`, auth, {

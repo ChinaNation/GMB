@@ -17,7 +17,7 @@
 
 - **FRG 在 console 创建 CREG 市注册局管理员只写本地 postgres**:`apply_create_city_registry_conn`(onchina/src/auth/actions.rs:1186)→`repo::upsert_admin_conn`(:1205),**无任何上链动作**。
 - 登录闸 `issue_session_after_onchain_gate`(onchina/src/auth/login/onchain_gate.rs)按**链上 Active 管理员集合**(`fetch_active_admins_onchain`)放行 → **console 创建出来的市注册局管理员实际登不进**(`NotOnchainAdmin`),除非链上 out-of-band 录入。
-- 链上录入 extrinsic 已存在但 onchina 没接:`genesis-admins::federal_set_city_registry_admins`(联邦特权直设,call_index 1)、`admin-management::propose_admin_set_change`,均在 `node/`/`runtime`。
+- 2026-06-30 口径更新：市注册局及其初始管理员不再走创世管理员模块的运行期特权入口；统一由注册局通过机构创建交易一次性写入机构与初始管理员。
 - onchina **唯一**会构造的可上链凭证 = 机构注销 `build_institution_deregistration_credential`(onchina/src/core/chain_runtime.rs:312,由机构客户端冷钱包提交链)——**机构创建/管理员创建都没有这一步**。"构造 extrinsic→冷签→冷钱包提交链"这条凭证通道铺了一半,可复用。
 
 ## 待用户确认的意图（开工第一件事，先问再做）
@@ -36,7 +36,7 @@
 
 ### 🔴 1. 链写凭证基座 + 机构/管理员上链录入
 - 给 onchina 建"构造特定 extrinsic 的 SCALE → 冷签 → 冷钱包提交链 → 状态回写"通道(复用注销凭证模式,SCALE 逐字节与链端对齐,零 runtime 改动)。
-- 接通:① 机构上链注册;② 机构管理员上链录入(FRG 直设 CREG 走 `federal_set_city_registry_admins`;其余机构走对应 pallet/治理)。
+- 接通:① 机构上链注册;② 初始机构管理员随机构创建交易一次性上链；创建后的管理员变更再按各机构自治规则走对应管理员模块/投票引擎。
 - 验收:console 创建的市注册局管理员能真正登录(进链上 Active 集合)。
 
 ### 2. card 09 admin 泛化（前置=1）
@@ -78,7 +78,7 @@
 ## 进度
 
 - [x] 第一轮需求分析 + 确认"上链录入意图"(A/B/C/D) → A=PasskeyColdSign;数据契约拆前置卡 20260628-institution-admin-field-model-onchain
-- [x] **1 链写凭证基座 + 机构/管理员上链录入(代码完成,2026-06-29 核实)**:经前置卡 B2/B3 落地——`core/institution_call.rs`(propose_create_institution + federal_set_city_registry_admins + propose_admin_set_change SCALE 编码器,chain_action_code 派生 b.a)+ `institution/{subjects/registration_call,admins/admin_set_call}.rs` 组装;`auth/actions.rs` prepare 对 CreateCityRegistry/DeleteCityRegistry 发 `admin_set_sign_request`(federal_set)、ReplaceFederalRegistry 发(propose_admin_set_change)、机构创建发 `institution_create_sign_request`;**onchina 仍零 .tx**(冷钱包提交);C1 CitizenWallet decoder 已对接 0x2005/0x2105/0x0c01。**录入路径全代码就绪**;验收"创建管理员能真正登录"的链上往返待**重新创世**后实跑(D 步)。
+- [x] **1 链写凭证基座 + 机构/管理员上链录入(2026-06-30 口径修正)**:`core/institution_call.rs` 只保留 `propose_create_institution` 公私双 pallet 编码；注册局创建机构时在创建输入携带 `admins` + `threshold`，创建接口返回链交易二维码，机构与初始管理员由同一笔链交易写入。市注册局管理员旧直设通道已由 20260630 卡清理；验收"创建管理员能真正登录"仍待重新创世后实跑。
 - [x] **2 card 09 admin 泛化 —— 完成(2026-06-29)**:见 [20260629-onchina-09-10-admin-seed-generalization](20260629-onchina-09-10-admin-seed-generalization.md)。Tier 谓词单点(is_tier1/subordinate_registry + 前端 registryTier.ts)+ AdminActionType→Tier 中性名 + capability 加 can_view_own_admins;零 `=="FRG"/"CREG"` 字面。
 - [x] **3 card 10 seed 泛化 —— 完成(2026-06-29,re-scope 为退役)**:删 seed.rs/run_seed_federal_admins/SeedFederalAdmins CLI/federal_registry_scope+provinces 表;FRG 管理员 + 省映射全走链读 FederalRegistryProvinceGroups(每节点单省);含 P0 修 FRG 登录。
 - [ ] 4 card 12 governance web 提案 —— **未做**(单独窗口线程;核实:onchina src/frontend 零 legislation extrinsic 构造;立法 web 提案对接 legislation-yuan idx27/legislation-vote idx28 未建)

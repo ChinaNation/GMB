@@ -215,6 +215,21 @@ pub const VALID_DOC_TYPES: &[&str] =
 
 // ─── 请求/响应 DTO ──────────────────────────────────────────────
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateInstitutionAdminInput {
+    /// 机构初始管理员进链账户。注册局创建机构时一次性提交,不再由新机构管理员投票确认。
+    pub admin_account: String,
+    /// 对外法定职务,写入链上 AdminProfile。
+    #[serde(default)]
+    pub admin_role: Option<String>,
+    /// 任期开始(天数自纪元;无任期填 0)。
+    #[serde(default)]
+    pub term_start: Option<u32>,
+    /// 任期结束(天数自纪元;无任期填 0)。
+    #[serde(default)]
+    pub term_end: Option<u32>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateInstitutionInput {
     pub p1: Option<String>,
@@ -252,6 +267,11 @@ pub struct CreateInstitutionInput {
     pub legal_rep_photo_mime: Option<String>,
     #[serde(default)]
     pub legal_rep_photo_size: Option<u64>,
+    /// 初始管理员阈值。必须满足严格过半,并且不超过 admins 数量。
+    pub threshold: u32,
+    /// 初始管理员合集。注册局创建机构的同一笔链交易会把这些管理员写成 Active。
+    #[serde(default)]
+    pub admins: Vec<CreateInstitutionAdminInput>,
 }
 
 #[derive(Debug, Serialize)]
@@ -260,6 +280,8 @@ pub struct CreateInstitutionOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cid_full_name: Option<String>,
     pub category: InstitutionCategory,
+    /// 机构上链创建专用 QR_V1/k=1。b.d 是 propose_create_institution 裸 SCALE call data。
+    pub institution_create_sign_request: String,
 }
 
 /// 机构详情页提交的可编辑字段。私权类型由身份 ID 机构码决定,创建后不允许改。

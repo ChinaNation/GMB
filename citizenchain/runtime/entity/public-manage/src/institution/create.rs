@@ -5,7 +5,7 @@
 //! 唯一入口: `do_propose_create_public_institution`(call_index=5)
 //! - 一次创建机构主账户 / 费用账户 / 自定义账户列表
 //! - 凭证带签发机构 CID、签发机构主账户和签发管理员公钥
-//! - 资金模型: 发起时 reserve, 通过后划转, 拒绝后 unreserve
+//! - 资金模型: 注册局交易成功即划转初始余额并激活机构与管理员集合
 
 extern crate alloc;
 
@@ -13,27 +13,29 @@ use crate::institution::accounts::{
     account_names_payload_from_initial_accounts, validate_initial_accounts,
 };
 use crate::institution::types::{
-    CreateInstitutionAction, InstitutionAccountInfo, InstitutionInfo, InstitutionLifecycleStatus,
+    InstitutionAccountInfo, InstitutionInfo, InstitutionLifecycleStatus,
 };
 use crate::pallet::{
     AccountNameOf, AccountRegisteredCid, AdminProfilesOf, CidNumberOf, CidRegisteredAccount,
     Config, Error, Event, InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet,
-    PendingInstitutionCreate, RegisterNonceOf, RegisterSignatureOf, UsedRegisterNonce,
-    ACTION_CREATE_INSTITUTION,
+    RegisterNonceOf, RegisterSignatureOf, UsedRegisterNonce,
 };
-use crate::traits::{CidInstitutionVerifier, InstitutionCidQuery, ProtectedSourceChecker};
+use crate::traits::{
+    CidInstitutionVerifier, InstitutionCidQuery, ProtectedSourceChecker, RegistryAuthority,
+};
 use crate::RegisteredInstitution;
-use codec::Encode;
 use frame_support::{
     ensure,
     storage::{with_transaction, TransactionOutcome},
-    traits::ReservableCurrency,
+    traits::{Currency, ExistenceRequirement, OnUnbalanced, WithdrawReasons},
 };
-use sp_runtime::{traits::Hash, DispatchResult};
+use sp_runtime::{
+    traits::{Hash, Zero},
+    DispatchResult,
+};
 use votingengine::types::InstitutionCode;
-use votingengine::InternalVoteEngine;
 
-/// 机构整体创建提案 (call_index=5)。
+/// 机构注册创建(call_index=5)。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn do_propose_create_public_institution<T: Config>(
     who: T::AccountId,
@@ -78,7 +80,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         !T::SiblingInstitutionQuery::cid_exists(&cid_number),
         Error::<T>::InstitutionAlreadyExists
     );
-    Pallet::<T>::ensure_admin_config(&who, admins_len, &admins, threshold)?;
+    Pallet::<T>::ensure_admin_config(admins_len, &admins, threshold)?;
     Pallet::<T>::ensure_lifecycle_institution_code(&institution_code)?;
 
     let register_nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
@@ -102,38 +104,59 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         ),
         Error::<T>::InvalidCidInstitutionSignature
     );
+    ensure!(
+        T::RegistryAuthority::can_register_institution(
+            &who,
+            issuer_cid_number.as_slice(),
+            &issuer_main_account,
+            &signer_pubkey,
+            cid_number.as_slice(),
+            institution_code,
+            scope_province_name.as_slice(),
+            scope_city_name.as_slice(),
+        ),
+        Error::<T>::RegistryAuthorityDenied
+    );
 
-    let (created_accounts, main_account, fee_account, initial_total) =
+    let (created_accounts, main_account, _fee_account, initial_total) =
         validate_initial_accounts::<T>(&cid_number, &accounts)?;
     // 共用余额预检查 helper:amount + fee + ED 必须够。
-    let (reserve_total, fee) = crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
+    let (_total_with_fee, fee) =
+        crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
     // 中文注释：管理员更换与内部投票直接使用机构主账户。
     let institution = main_account.clone();
-    let action = CreateInstitutionAction {
-        cid_number: cid_number.clone(),
-        cid_full_name: cid_full_name.clone(),
-        main_account: main_account.clone(),
-        fee_account: fee_account.clone(),
-        proposer: who.clone(),
-        institution_code,
-        admins_len,
-        threshold,
-        admins: admins.clone(),
-        accounts: created_accounts.clone(),
-        initial_total,
-        fee,
-        reserve_total,
-    };
-    let mut data = alloc::vec::Vec::from(crate::MODULE_TAG);
-    data.push(ACTION_CREATE_INSTITUTION);
-    data.extend_from_slice(&action.encode());
 
-    let proposal_id = with_transaction(|| {
-        if T::Currency::reserve(&who, reserve_total).is_err() {
-            return TransactionOutcome::Rollback(Err(Error::<T>::ReserveFailed.into()));
+    with_transaction(|| {
+        if !fee.is_zero() {
+            let fee_imbalance = match T::Currency::withdraw(
+                &who,
+                fee,
+                WithdrawReasons::FEE,
+                ExistenceRequirement::KeepAlive,
+            ) {
+                Ok(imbalance) => imbalance,
+                Err(_) => {
+                    return TransactionOutcome::Rollback(Err(Error::<T>::FeeWithdrawFailed.into()))
+                }
+            };
+            T::FeeRouter::on_unbalanced(fee_imbalance);
         }
+
+        for account in created_accounts.iter() {
+            if T::Currency::transfer(
+                &who,
+                &account.address,
+                account.amount,
+                ExistenceRequirement::KeepAlive,
+            )
+            .is_err()
+            {
+                return TransactionOutcome::Rollback(Err(Error::<T>::TransferFailed.into()));
+            }
+        }
+
         Institutions::<T>::insert(
             &cid_number,
             InstitutionInfo {
@@ -141,7 +164,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
                 cid_short_name: stored_short_name.clone(),
                 institution_code,
                 created_at: now,
-                status: InstitutionLifecycleStatus::Pending,
+                status: InstitutionLifecycleStatus::Active,
             },
         );
 
@@ -152,7 +175,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
                 InstitutionAccountInfo {
                     address: account.address.clone(),
                     initial_balance: account.amount,
-                    status: InstitutionLifecycleStatus::Pending,
+                    status: InstitutionLifecycleStatus::Active,
                     is_default: account.is_default,
                     created_at: now,
                 },
@@ -167,58 +190,26 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
             );
         }
 
-        // 机构主账户的管理员配置真源在 admins 模块::AdminAccounts[main_account 账户]；
-        // 动态阈值真源在 internal-vote，multisig-transfer 通过查询 trait 合并读取。
-
-        // 中文注释:threshold 是账户激活后的动态阈值配置；
-        // 本次注册投票的全员通过阈值由投票引擎根据管理员快照生成。
-        // 投票快照只需账户(一人一票),从 profile 抽取 account。
-        let admin_accounts: alloc::vec::Vec<T::AccountId> =
-            admins.iter().map(|p| p.account.clone()).collect();
-        let proposal_id = match <T as Config>::InternalVoteEngine::create_registered_account_create_proposal_with_data(
-            who.clone(),
-            institution_code,
-            institution.clone(),
-            admin_accounts,
-            threshold,
-            crate::MODULE_TAG,
-            data,
-        ) {
-            Ok(proposal_id) => proposal_id,
-            Err(err) => return TransactionOutcome::Rollback(Err(err)),
-        };
-        PendingInstitutionCreate::<T>::insert(proposal_id, &action);
-        UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
-        if let Err(err) = Pallet::<T>::create_pending_admin_account_for_proposal(
-            proposal_id,
+        // 中文注释:注册局创建机构时直接提交目标机构管理员合集;交易成功即写 Active。
+        if let Err(err) = Pallet::<T>::set_active_admin_account_direct(
             institution_code,
             institution.clone(),
             &admins,
+            threshold,
             &who,
         ) {
             return TransactionOutcome::Rollback(Err(err));
         }
-        TransactionOutcome::Commit(Ok(proposal_id))
+        UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
+        TransactionOutcome::Commit(Ok(()))
     })?;
 
-    let expires_at = votingengine::Pallet::<T>::proposals(proposal_id)
-        .map(|p| p.end)
-        .ok_or(Error::<T>::VoteEngineError)?;
-
-    Pallet::<T>::deposit_event(Event::<T>::InstitutionCreateProposed {
-        proposal_id,
+    Pallet::<T>::deposit_event(Event::<T>::InstitutionCreated {
         cid_number,
-        cid_full_name: stored_full_name,
         main_account,
-        proposer: who,
-        accounts: created_accounts,
-        admins: admins,
-        institution_code,
-        admins_len,
-        threshold,
+        account_count: created_accounts.len() as u32,
         initial_total,
-        reserve_total,
-        expires_at,
+        fee,
     });
 
     Ok(())

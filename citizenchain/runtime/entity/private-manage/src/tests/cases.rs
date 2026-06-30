@@ -5,7 +5,7 @@ use primitives::account_derive::{
     AccountKind, RESERVED_NAME_FEE, RESERVED_NAME_HE, RESERVED_NAME_MAIN, RESERVED_NAME_SAFETYFUND,
     RESERVED_NAME_STAKE,
 };
-use votingengine::{STATUS_EXECUTED, STATUS_REJECTED};
+use votingengine::STATUS_EXECUTED;
 
 const SEED_BALANCE: Balance = 100_000;
 const ACCT_AMOUNT: Balance = 1_000;
@@ -226,14 +226,15 @@ fn register_rejects_empty_required_fields() {
 }
 
 // ============================================================
-// 创建路径(9 个用例)
+// 创建路径(8 个用例)
 // ============================================================
 
 #[test]
-fn propose_create_private_institution_writes_pending_and_reserves() {
+fn propose_create_private_institution_registers_active_without_vote() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
         let cid = cid_number(b"CID-CR-1");
+        let proposal_before = votingengine::Pallet::<Test>::next_proposal_id();
 
         assert_ok!(PrivateManage::propose_create_private_institution(
             RuntimeOrigin::signed(c.clone()),
@@ -254,12 +255,14 @@ fn propose_create_private_institution_writes_pending_and_reserves() {
             b"city".to_vec(),
         ));
 
-        let pid = last_proposal_id();
-        assert!(pallet::PendingInstitutionCreate::<Test>::contains_key(pid));
+        assert_eq!(
+            votingengine::Pallet::<Test>::next_proposal_id(),
+            proposal_before
+        );
         assert!(pallet::Institutions::<Test>::contains_key(&cid));
         assert_eq!(
             pallet::Institutions::<Test>::get(&cid).unwrap().status,
-            InstitutionLifecycleStatus::Pending,
+            InstitutionLifecycleStatus::Active,
         );
         assert_eq!(
             pallet::Institutions::<Test>::get(&cid)
@@ -271,8 +274,17 @@ fn propose_create_private_institution_writes_pending_and_reserves() {
         let stored = pallet::Institutions::<Test>::get(&cid).unwrap();
         assert!(stored.cid_full_name.is_empty());
         assert!(stored.cid_short_name.is_empty());
-        // 主+费用 共 2_000 入金 + fee = max(2000*0.001, 10) = 10 → reserve 2_010
-        assert_eq!(Balances::reserved_balance(&c), 2_000 + 10);
+        let main = PrivateManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
+            .unwrap()
+            .0;
+        let admin_account = private_admins::AdminAccounts::<Test>::get(main.clone())
+            .expect("private admin account present");
+        assert_eq!(admin_account.admins.len(), 3);
+        assert_eq!(
+            internal_vote::ActiveDynamicThresholds::<Test>::get(code_bytes("SFLP"), main),
+            Some(2),
+        );
+        assert_eq!(Balances::reserved_balance(&c), 0);
     });
 }
 
@@ -362,11 +374,10 @@ fn propose_create_rejects_unincorporated_without_parent_routing() {
 }
 
 #[test]
-fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
+fn create_directly_funds_initial_accounts() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
         let cid = cid_number(b"CID-CR-2");
-        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
 
         assert_ok!(PrivateManage::propose_create_private_institution(
             RuntimeOrigin::signed(c.clone()),
@@ -386,12 +397,7 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
             province_name(),
             b"city".to_vec(),
         ));
-        let pid = last_proposal_id();
-        assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
 
-        // 执行成功
-        let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal");
-        assert_eq!(proposal.status, STATUS_EXECUTED);
         assert_eq!(
             pallet::Institutions::<Test>::get(&cid).unwrap().status,
             InstitutionLifecycleStatus::Active,
@@ -406,45 +412,6 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
         assert_eq!(Balances::free_balance(&main), ACCT_AMOUNT);
         assert_eq!(Balances::free_balance(&fee_acc), ACCT_AMOUNT);
         assert_eq!(Balances::reserved_balance(&c), 0);
-    });
-}
-
-#[test]
-fn create_rejected_releases_reserve_and_no_storage_residue() {
-    new_test_ext().execute_with(|| {
-        let c = fund_creator();
-        let cid = cid_number(b"CID-CR-3");
-        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
-
-        assert_ok!(PrivateManage::propose_create_private_institution(
-            RuntimeOrigin::signed(c.clone()),
-            cid.clone(),
-            cid_full_name("机构丙".as_bytes()),
-            cid_short_name("简称".as_bytes()),
-            typical_accounts(),
-            code_bytes("SFLP"),
-            3,
-            admin_profiles_vec(3),
-            2,
-            register_nonce(b"nonce-cr-3"),
-            valid_signature(),
-            province_name(),
-            creator(),
-            signer_pubkey(),
-            province_name(),
-            b"city".to_vec(),
-        ));
-        let pid = last_proposal_id();
-
-        // 一票否决,创建提案要求全员通过 → 立刻 REJECTED
-        assert_ok!(cast_no_votes(&admin_accounts[1..], 1, pid));
-
-        let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal");
-        assert_eq!(proposal.status, STATUS_REJECTED);
-
-        assert_eq!(Balances::reserved_balance(&c), 0);
-        assert!(!pallet::Institutions::<Test>::contains_key(&cid));
-        assert!(!pallet::PendingInstitutionCreate::<Test>::contains_key(pid));
     });
 }
 
@@ -717,7 +684,6 @@ fn create_and_activate_institution(
     let c = creator();
     let _ = Balances::deposit_creating(&c, SEED_BALANCE);
     let cid = cid_number(cid_number_bytes);
-    let admin_accounts: alloc::vec::Vec<AccountId32> = (0..admins_len).map(|i| admin(i)).collect();
 
     assert_ok!(PrivateManage::propose_create_private_institution(
         RuntimeOrigin::signed(c.clone()),
@@ -736,12 +702,6 @@ fn create_and_activate_institution(
         signer_pubkey(),
         province_name(),
         b"city".to_vec(),
-    ));
-    let pid = last_proposal_id();
-    assert_ok!(cast_yes_votes(
-        &admin_accounts[1..],
-        admins_len.saturating_sub(1) as usize,
-        pid
     ));
 
     let main = PrivateManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
@@ -864,26 +824,14 @@ fn propose_close_rejects_self_beneficiary() {
 #[test]
 fn cleanup_rejected_private_proposal_only_after_engine_rejected() {
     new_test_ext().execute_with(|| {
-        let c = fund_creator();
+        let (_cid, main) = create_and_activate_institution(b"CID-CU", 3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
 
-        assert_ok!(PrivateManage::propose_create_private_institution(
-            RuntimeOrigin::signed(c),
-            cid_number(b"CID-CU"),
-            cid_full_name(b"X"),
-            cid_short_name("简称".as_bytes()),
-            typical_accounts(),
-            code_bytes("SFLP"),
-            3,
-            admin_profiles_vec(3),
-            2,
-            register_nonce(b"nonce-cu"),
-            valid_signature(),
-            province_name(),
-            creator(),
-            signer_pubkey(),
-            province_name(),
-            b"city".to_vec(),
+        assert_ok!(close_with_cred(
+            RuntimeOrigin::signed(admin(0)),
+            main,
+            beneficiary(),
+            9,
         ));
         let pid = last_proposal_id();
 
@@ -904,32 +852,38 @@ fn cleanup_rejected_private_proposal_only_after_engine_rejected() {
 }
 
 #[test]
-fn non_admin_cannot_propose_create() {
+fn registry_creator_need_not_be_target_admin() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        // 提案者不在 admins 列表 → PermissionDenied
+        let cid = cid_number(b"CID-NA");
+        // 注册局代创建:交易发起人不要求进入新机构 admins 集合。
         let admins_no_creator = admin_profiles_from(&[admin(1), admin(2), admin(3)]);
-        assert_noop!(
-            PrivateManage::propose_create_private_institution(
-                RuntimeOrigin::signed(c),
-                cid_number(b"CID-NA"),
-                cid_full_name(b"X"),
-                cid_short_name("简称".as_bytes()),
-                typical_accounts(),
-                code_bytes("SFLP"),
-                3,
-                admins_no_creator,
-                2,
-                register_nonce(b"nonce-na"),
-                valid_signature(),
-                province_name(),
-                creator(),
-                signer_pubkey(),
-                province_name(),
-                b"city".to_vec(),
-            ),
-            pallet::Error::<Test>::PermissionDenied
-        );
+        assert_ok!(PrivateManage::propose_create_private_institution(
+            RuntimeOrigin::signed(c),
+            cid.clone(),
+            cid_full_name(b"X"),
+            cid_short_name("简称".as_bytes()),
+            typical_accounts(),
+            code_bytes("SFLP"),
+            3,
+            admins_no_creator,
+            2,
+            register_nonce(b"nonce-na"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+        let main = PrivateManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
+            .unwrap()
+            .0;
+        let stored = private_admins::AdminAccounts::<Test>::get(main)
+            .expect("private admin account present");
+        let stored_accounts: alloc::vec::Vec<AccountId32> =
+            stored.admins.iter().map(|p| p.account.clone()).collect();
+        assert_eq!(stored_accounts, alloc::vec![admin(1), admin(2), admin(3)]);
     });
 }
 
@@ -985,8 +939,6 @@ fn create_and_activate_institution_with_profiles(
     let _ = Balances::deposit_creating(&c, SEED_BALANCE);
     let cid = cid_number(cid_number_bytes);
     let admins_len = profiles.len() as u8;
-    let admin_accounts: alloc::vec::Vec<AccountId32> =
-        profiles.iter().map(|p| p.account.clone()).collect();
 
     assert_ok!(PrivateManage::propose_create_private_institution(
         RuntimeOrigin::signed(c.clone()),
@@ -1006,12 +958,6 @@ fn create_and_activate_institution_with_profiles(
         province_name(),
         b"city".to_vec(),
     ));
-    let pid = last_proposal_id();
-    assert_ok!(cast_yes_votes(
-        &admin_accounts[1..],
-        admins_len.saturating_sub(1) as usize,
-        pid
-    ));
 
     PrivateManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
         .unwrap()
@@ -1019,12 +965,11 @@ fn create_and_activate_institution_with_profiles(
 }
 
 #[test]
-fn create_proposal_preserves_admin_profile_metadata_through_scale() {
+fn registry_create_preserves_admin_profile_metadata() {
     new_test_ext().execute_with(|| {
         let expected = admin_profiles_with_meta();
         let main = create_and_activate_institution_with_profiles(b"CID-META", expected.clone());
-        // profile 经 CreateInstitutionAction encode → PendingInstitutionCreate decode → execute
-        // → 私权管理员 pallet 存储:非空 姓名/职务/任期/实名CID/来源 必须逐字段幸存。
+        // 私权管理员 pallet 存储:非空 姓名/职务/任期/实名CID/来源 必须逐字段幸存。
         let stored = private_admins::AdminAccounts::<Test>::get(main)
             .expect("private admin account present");
         assert_eq!(stored.admins.to_vec(), expected.to_vec());
