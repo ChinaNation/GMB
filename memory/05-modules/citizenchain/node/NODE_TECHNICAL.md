@@ -78,22 +78,34 @@
 - 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 把 JSON 字节烤进二进制,启动时 `ChainSpec::from_json_bytes` 反序列化。**不再 `with_genesis_config_patch` 现编创世**
 - 全网一致性保证：任何平台、任何 commit 编出来的 binary,内嵌的都是同一份 JSON 字节 → genesis_hash 全网恒等 → 所有节点 P2P handshake 必通过
 
-冻结流程(只做一次,**永不重做**):
+正式创世冻结流程(只做一次,**永不重做**):
 
-1. 主网在线权威节点上跑 `citizenchain export-chain-spec --chain citizenchain --raw > /tmp/citizenchain.raw.json`
-2. scp 回 `citizenchain/node/chainspecs/citizenchain.raw.json`
-3. git commit 入库
+1. GitHub `CitizenChain WASM` CI 成功后,下载同一提交的 `citizenchain-wasm` artifact。
+2. 取 `citizenchain.compact.compressed.wasm` 作为创世 `:code` 字节源。
+3. 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>`。
+4. 脚本必须通过 `check-constitution-genesis.py --expect-code-file <CI_WASM>` 校验,确认 `:code` 字节等于 CI WASM,公民宪法 `law_id=0`、v1 直接生效且无待生效版。
+5. git commit 入库两份 SSOT:`citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json`。
 
-后续 runtime 升级一律走链上 `setCode`(governance/runtime-upgrade),**绝不**重新 `export-chain-spec` 覆盖这份 JSON。
+后续 runtime 升级一律走链上 `setCode`(governance/runtime-upgrade),**绝不**重新烘焙或覆盖这份 JSON。
 
 预上线重新创世脚本例外：
 
 - [clean-run.sh](../../../../citizenchain/scripts/clean-run.sh) 只用于本机清开发链后按当前源码现造 fresh genesis；runtime WASM 来自当前源码构建，不下载 CI artifact。
 - clean-run 不再执行 `seed-federal-admins`；联邦注册局管理员省映射全走链上 `PublicAdmins::FederalRegistryProvinceGroups`。
-- 需要真正替换仓库 SSOT 时,唯一入口是 [bake-chainspec.sh](../../../../citizenchain/scripts/bake-chainspec.sh)。
+- 正式创世前需要真正替换仓库 SSOT 时,唯一入口是 [bake-chainspec.sh](../../../../citizenchain/scripts/bake-chainspec.sh)。
 - `bake-chainspec.sh` 用 `citizenchain-fresh` 入口生成新的 raw chainspec,并保留当前 SSOT 中的 44 个权威节点 bootNodes。
 - fresh raw chainspec 的 genesis `:code` 必须与下载的 CI WASM 字节一致。
 - 脚本同时写回 `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json`,保证全节点和轻节点使用同一创世。
+
+2026-07-01 正式创世冻结收口:
+
+- GitHub WASM run:`28492547251`,提交 `208ae60d81828d04946239e21b648b8f1ba0c2a0`,artifact `citizenchain-wasm` id `7999877697`。
+- CI WASM `citizenchain.compact.compressed.wasm` sha256:`b6d8c9dcee90df963dcda89c96b18c8f3361d37f31c52686dddda0480195df92`。
+- raw chainspec sha256:`ac54acb5fdad4e21732f8bb0b7724c0435496d3829ca8eb78e23d6838434331c`。
+- `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json` 完全一致。
+- genesis hash:`0x6c88667d43f5a2690f2cb176f5883e051a057db6bee5fa56bc8337becbf23417`。
+- 宪法创世检查通过:`law_id=0`、`tier=Constitution`、`effective_version=1`、`latest_version=1`、`pending_version=None`,不可修改条款 `1,2,3,17,19,24,34,42` manifest 与创世条文摘要一致。
+- 临时全新 base-path 真实节点烟测通过,`constitution_getDocument.source=legislation-raw`。
 
 2026-06-19 预上线重新创世收口:
 

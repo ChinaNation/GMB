@@ -6,7 +6,7 @@
 - 把法律版本状态从旧的版本号减一推导改为显式字段：生效版本、最新版本、待生效版本。
 - 把立法/修法的 `effective_at` 从旧的区块高度口径改为“生效时间戳”，用户发起提案时只选择生效时间。
 - 投票通过后才写入新版本；如果生效时间已到则立即生效，否则进入待生效状态，到时间自动生效。
-- 补齐 chainspec 烘焙脚本和宪法创世检查脚本，但本步骤不生成正式 raw、不推 GitHub、不正式创世。
+- 补齐 chainspec 烘焙脚本和宪法创世检查脚本；代码推送 GitHub 且 WASM CI 成功后，使用 CI WASM 烘焙正式 raw。
 
 ## 修改范围
 
@@ -20,8 +20,8 @@
 
 ## 边界铁律
 
-- 本步骤只做正式创世前的代码、脚本、文档、测试闭环；不提交正式 `citizenchain.raw.json`。
-- 正式 raw 必须等待代码推送 GitHub 且 WASM CI 成功后，用 CI WASM 烘焙。
+- 第 1 阶段只做正式创世前的代码、脚本、文档、测试闭环；正式 raw 的烘焙条件是 GitHub WASM CI 已成功且使用同一 CI WASM。
+- 正式 raw 已在 GitHub WASM CI 成功后用 CI WASM 烘焙；后续链正式上线不得再改创世 raw，runtime 升级一律走链上 `setCode`。
 - 不保留旧的区块高度生效 UI、注释、文档或交易载荷口径。
 - 不恢复第二套宪法真源；链上结构化宪法是唯一真源。
 - 投票流程仍归投票引擎，立法院模块只在投票终态回调后写法律版本。
@@ -33,7 +33,7 @@
 - `cargo test -p onchina --manifest-path citizenchain/onchina/Cargo.toml` 或等效 OnChina 测试通过。
 - CitizenApp 相关 Dart 测试/静态检查能覆盖模型解码改动；如环境限制需记录原因。
 - OnChina 前端类型检查/构建通过，且旧区块高度生效文案残留搜索为 0。
-- 本地临时 raw 可被 `check-constitution-genesis.py` 校验出宪法创世键；正式 raw 不在本步骤写入。
+- 本地临时 raw 可被 `check-constitution-genesis.py` 校验出宪法创世键；正式 raw 必须用同一脚本校验 `:code` 与 CI WASM 字节一致。
 
 ## 进度
 
@@ -44,6 +44,9 @@
 - [x] 补齐 chainspec 脚本和宪法创世校验脚本。
 - [x] 更新文档、完善注释、清理残留。
 - [x] 执行测试和运行态/脚本验收。
+- [x] GitHub `CitizenChain WASM` CI 成功后下载正式 artifact。
+- [x] 用 CI WASM 烘焙正式 `citizenchain.raw.json` 并同步 `citizenapp/assets/chainspec.json`。
+- [x] 重新构建 node 并用全新临时 base-path 完成真实节点烟测。
 
 ## 验收记录
 
@@ -53,4 +56,11 @@
 - `npm run build`（`citizenchain/onchina/frontend`）：通过。
 - `flutter test test/legislation/legislation_codec_test.dart`（`citizenapp`）：5/5 通过。
 - `citizenchain/scripts/bake-chainspec.sh --out citizenchain/target/chainspec/constitution-preview.raw.json`：预览 raw 导出成功，`check-constitution-genesis.py` 校验通过；未覆盖正式 SSOT。
-- `python3 citizenchain/scripts/check-constitution-genesis.py citizenchain/node/chainspecs/citizenchain.raw.json || true`：当前冻结 SSOT 仍缺 `Laws[0]`，符合“正式 raw 等 GitHub WASM CI 后再烘焙”的边界。
+- GitHub `CitizenChain WASM` run `28492547251`：`success`，提交 `208ae60d81828d04946239e21b648b8f1ba0c2a0`，artifact `citizenchain-wasm` id `7999877697`。
+- CI WASM `citizenchain.compact.compressed.wasm` sha256：`b6d8c9dcee90df963dcda89c96b18c8f3361d37f31c52686dddda0480195df92`。
+- `citizenchain/scripts/bake-chainspec.sh --out citizenchain/target/chainspec/final-preview.raw.json --wasm citizenchain/target/ci-wasm/208ae60/citizenchain.compact.compressed.wasm`：预览 raw 导出成功，`:code bytes=832584`，宪法 `law_id=0`、`effective_version=1`、`latest_version=1`、`pending=None`。
+- `citizenchain/scripts/bake-chainspec.sh --finalize --wasm citizenchain/target/ci-wasm/208ae60/citizenchain.compact.compressed.wasm`：正式 raw 已同步到 `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json`。
+- `cmp -s citizenchain/node/chainspecs/citizenchain.raw.json citizenapp/assets/chainspec.json`：两份 SSOT 字节完全一致。
+- 两份正式 chainspec 均通过 `check-constitution-genesis.py --expect-code-file`；raw chainspec sha256：`ac54acb5fdad4e21732f8bb0b7724c0435496d3829ca8eb78e23d6838434331c`。
+- `cargo build --manifest-path citizenchain/Cargo.toml -p node`：通过，重新把正式 raw 烤进 node debug binary。
+- `CITIZENCHAIN_HEADLESS=1 citizenchain/target/debug/citizenchain --chain citizenchain --base-path citizenchain/target/smoke-final-chain --mining-threads 0 ...`：真实节点烟测通过；genesis hash `0x6c88667d43f5a2690f2cb176f5883e051a057db6bee5fa56bc8337becbf23417`，`constitution_getDocument.source=legislation-raw`。

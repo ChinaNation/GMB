@@ -4,7 +4,7 @@
 
 立法院模块:法律结构化上链 + 修法一律走投票引擎 + 严格按公民宪法表决模型落地。
 
-状态:已接受,大部分已落地(2026-06-24)。立法院业务壳(idx=27)+ 立法投票 sub-pallet(idx=28)+ 宪法迁移(章>节>条>款 统一 + 创世注入 + 节点桌面端 re-point)均已实现验证;**双客户端 CitizenApp/CitizenWallet(另线程卡)与立法机构选举体系(election-vote 选举→admins 通道,独立卡)待续**。下文方向与边界已据实现校准。**OnChina 控制台「立法与表决」落地(2026-06-30,见第 10 节 + 卡 `20260630-onchina-legislation-console-framework`)**:法律案全链路(发起/表决/进度)operator 端 + 免登录大屏 display 端已交付;任免案/预算案链下 schema 预留(链端 kind 待另卡)。**正式创世前收口(2026-07-01,卡 `20260701-constitution-genesis-freeze-step1`)**:Law 主记录版本指针改为 `effective_version/latest_version/pending_version`,立法/修法 `effective_at` 改为毫秒时间戳;创世宪法 law_id=0、v1 直接生效且无待生效版;旧 HTML 真源与解析脚本删除,正式 raw 等 GitHub WASM CI 成功后用 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>` 烘焙。
+状态:已接受,大部分已落地(2026-06-24)。立法院业务壳(idx=27)+ 立法投票 sub-pallet(idx=28)+ 宪法迁移(章>节>条>款 统一 + 创世注入 + 节点桌面端 re-point)均已实现验证;**双客户端 CitizenApp/CitizenWallet(另线程卡)与立法机构选举体系(election-vote 选举→admins 通道,独立卡)待续**。下文方向与边界已据实现校准。**OnChina 控制台「立法与表决」落地(2026-06-30,见第 10 节 + 卡 `20260630-onchina-legislation-console-framework`)**:法律案全链路(发起/表决/进度)operator 端 + 免登录大屏 display 端已交付;任免案/预算案链下 schema 预留(链端 kind 待另卡)。**正式创世冻结收口(2026-07-01,卡 `20260701-constitution-genesis-freeze-step1`)**:Law 主记录版本指针改为 `effective_version/latest_version/pending_version`,立法/修法 `effective_at` 改为毫秒时间戳;创世宪法 law_id=0、v1 直接生效且无待生效版;旧 HTML 真源与解析脚本删除;GitHub WASM run `28492547251` 成功后已用 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>` 烘焙正式 raw,genesis hash `0x6c88667d43f5a2690f2cb176f5883e051a057db6bee5fa56bc8337becbf23417`。
 
 > **重大修订(2026-06-25,用户逐条确认,见 `08-tasks/open/20260625-legislation-signing-5type-revision.md`)**:
 > 1. **删常规案二审**(方案B 彻底删):本轮先改法案 7 条(44/45/73/75/79/81/118),官员任免 19 条另立专案。下文"四种表决/二审"表述以本修订为准。
