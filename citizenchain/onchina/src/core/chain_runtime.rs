@@ -575,9 +575,8 @@ struct OnChainAdminProfile {
     account: [u8; 32],
     #[allow(dead_code)]
     admin_cid_number: Vec<u8>,
-    #[allow(dead_code)]
+    // 中文注释:name/admin_role 供大屏只读看板席位展示(fetch_active_admin_profiles_onchain 读取)。
     name: Vec<u8>,
-    #[allow(dead_code)]
     admin_role: Vec<u8>,
     #[allow(dead_code)]
     term_start: u32,
@@ -989,6 +988,83 @@ pub(crate) async fn fetch_active_admins_onchain(
             .map(|profile| format!("0x{}", hex::encode(profile.account)))
             .collect();
         return Ok(Some(admins));
+    }
+    Ok(None)
+}
+
+/// 链上管理员资料只读投影(供大屏看板席位展示;姓名/职务/任期为 UTF-8 有损解码)。
+#[derive(Debug, Clone)]
+pub(crate) struct OnChainAdminProfileView {
+    /// 管理员账户(0x 小写 hex)。
+    pub(crate) account_hex: String,
+    /// 姓名快照(链上 `AdminProfile::name`)。
+    pub(crate) name: String,
+    /// 对外法定职务(链上 `AdminProfile::admin_role`)。
+    pub(crate) title: String,
+}
+
+/// 读取本节点机构的链上 Active 管理员**资料**集合(账户 + 姓名 + 职务 + 任期)。
+///
+/// 中文注释:与 `fetch_active_admins_onchain`(只取账户,用于登录闸)同一 storage 定位口径,
+/// 但保留 `AdminProfile` 的展示字段供大屏席位板呈现。定位分流:FRG→省级组;其它→候选 pallet
+/// 的 `AdminAccounts`(键=机构主账户)。`Ok(Some(set))`=命中 Active 集合;`Ok(None)`=不存在/非 Active。
+pub(crate) async fn fetch_active_admin_profiles_onchain(
+    identity: &NodeInstitutionIdentity,
+) -> Result<Option<Vec<OnChainAdminProfileView>>, String> {
+    let ws_url = super::chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for admin profiles failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+
+    let addresses = if let Some(province_code) = identity.frg_province_code {
+        vec![dynamic::storage(
+            AdminPallet::PublicAdmins.pallet_name(),
+            "FederalRegistryProvinceGroups",
+            vec![dynamic::Value::from_bytes(province_code)],
+        )]
+    } else {
+        identity
+            .admin_pallets
+            .iter()
+            .map(|pallet| {
+                dynamic::storage(
+                    pallet.pallet_name(),
+                    "AdminAccounts",
+                    vec![dynamic::Value::from_bytes(identity.main_account)],
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+
+    for address in &addresses {
+        let Some(thunk) = storage
+            .fetch(address)
+            .await
+            .map_err(|e| format!("fetch on-chain admin profiles failed: {e}"))?
+        else {
+            continue;
+        };
+        let mut raw = thunk.encoded();
+        let decoded = OnChainAdminAccount::decode(&mut raw)
+            .map_err(|e| format!("decode on-chain admin profiles failed: {e}"))?;
+        if decoded.status != ADMIN_STATUS_ACTIVE {
+            continue;
+        }
+        let profiles = decoded
+            .admins
+            .iter()
+            .map(|profile| OnChainAdminProfileView {
+                account_hex: format!("0x{}", hex::encode(profile.account)),
+                name: String::from_utf8_lossy(&profile.name).to_string(),
+                title: String::from_utf8_lossy(&profile.admin_role).to_string(),
+            })
+            .collect();
+        return Ok(Some(profiles));
     }
     Ok(None)
 }

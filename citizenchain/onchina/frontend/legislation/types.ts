@@ -79,10 +79,20 @@ export interface HouseRef {
   accountHex: string;
 }
 
-/** 法律只读视图(Law 主体 + 当前版本全文)。 */
+/** 本机构可发起的提案候选(发起菜单单源自后端 /api/legislation/proposable)。 */
+export interface ProposableCandidate {
+  category: ProposalCategory;
+  tier: number;
+  voteTypes: number[];
+}
+
+/** 法律只读视图(Law 主体 + 办理端展示版本全文)。 */
 export interface LawView {
   lawId: number;
   version: number;
+  effectiveVersion?: number | null;
+  latestVersion: number;
+  pendingVersion?: number | null;
   tier: number;
   scopeCode: number;
   status: number;
@@ -133,4 +143,78 @@ export interface LegProposalState {
   endBlock: number;
   houseTally: VoteTally;
   referendumTally: VoteTally;
+}
+
+// ── 任免案 / 预算案预留类型(Phase 4)──
+// 中文注释:镜像后端 personnel/budget 子域 schema。链端 PROPOSAL_KIND_PERSONNEL/BUDGET 未上线,
+// 当前仅锁 schema;ProposeMenu 仅渲染 category==='law',不 surface 这些类型,发起/表决 UI 待链路上线另卡。
+
+/** 任免动作(对齐后端 PersonnelAction)。 */
+export type PersonnelActionInput = 'appoint' | 'dismiss' | 'replace';
+
+/** 任免职书正文(预留)。 */
+export interface PersonnelDecision {
+  action: PersonnelActionInput;
+  officeInstitutionCode: string;
+  officeTitle: string;
+  officeSeat: number;
+  nomineeCidNumber: string;
+  nomineeName: string;
+  termIndex: number;
+  termYears: number;
+  reason: string;
+}
+
+/** 发起任免案请求体(预留;houses 后端解析,不传前端)。 */
+export interface ProposePersonnelInput {
+  tier: number;
+  scopeCode: number;
+  voteType: number;
+  decision: PersonnelDecision;
+}
+
+/** 预算科目「目」(最末层,唯一携金额;金额单位分,u128 以 string 承载防 JS Number 精度丢失)。 */
+export interface BudgetSubitem {
+  code: string;
+  name: string;
+  revenue: string;
+  expenditure: string;
+}
+
+/** 预算科目「项」(目录 + 目列表)。 */
+export interface BudgetItem {
+  code: string;
+  name: string;
+  subitems: BudgetSubitem[];
+}
+
+/** 预算科目「款」(目录 + 项列表)。 */
+export interface BudgetSection {
+  code: string;
+  name: string;
+  items: BudgetItem[];
+}
+
+/** 预算科目「类」(目录 + 款列表)。 */
+export interface BudgetClass {
+  code: string;
+  name: string;
+  sections: BudgetSection[];
+}
+
+/** 预算总案(预留)。金额单位分,string 承载 u128。 */
+export interface BudgetPlan {
+  budgetEntityCode: string;
+  fiscalYear: number;
+  categories: BudgetClass[];
+  totalRevenue: string;
+  totalExpenditure: string;
+}
+
+/** 发起预算案请求体(预留;houses 后端解析)。 */
+export interface ProposeBudgetInput {
+  tier: number;
+  scopeCode: number;
+  voteType: number;
+  plan: BudgetPlan;
 }

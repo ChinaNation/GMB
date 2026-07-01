@@ -2,7 +2,7 @@
 //!
 //! 中文注释:复用 onchina 既有读链范式——`kv.value.encoded()` 原始字节 → 本地 `#[derive(Decode)]`
 //! 镜像结构解码(见 `core/chain_runtime.rs::OnChainAdminAccount`)。镜像字段顺序锁死链端
-//! `legislation-yuan` 的 `Law`(lib.rs:176)/ `LawVersion`(lib.rs:201);`Tier`/`LawStatus`/`VoteType`
+//! `legislation-yuan` 的 `Law` / `LawVersion`;`Tier`/`LawStatus`/`VoteType`
 //! 作单字节枚举解码为 u8(取值已在 `chain_propose` 交叉校验)。章节复用 `chain_propose::ChapterArg`(同
 //! SCALE 双向 Encode/Decode)。
 //!
@@ -26,7 +26,12 @@ pub struct OnChainLaw {
     pub scope_code: u32,
     /// `BoundedVec<(InstitutionCode[u8;4], AccountId[u8;32])>`。
     pub houses: Vec<([u8; 4], [u8; 32])>,
-    pub current_version: u32,
+    /// 当前真正生效的版本。新法待生效时为 None。
+    pub effective_version: Option<u32>,
+    /// 已写入链上的最新版本。
+    pub latest_version: u32,
+    /// 已通过但未到生效时间的版本。
+    pub pending_version: Option<u32>,
     /// LawStatus 单字节枚举(0 待生效 / 1 生效 / 2 废止)。
     pub status: u8,
 }
@@ -43,8 +48,8 @@ pub struct OnChainLawVersion {
     /// VoteType 单字节枚举。
     pub vote_type: u8,
     pub proposal_id: u64,
-    pub published_at: u32,
-    pub effective_at: u32,
+    pub published_at: u64,
+    pub effective_at: u64,
 }
 
 /// 解码链上 `Law` 原始字节。
@@ -57,11 +62,14 @@ pub fn decode_law_version(bytes: &[u8]) -> Result<OnChainLawVersion, String> {
     OnChainLawVersion::decode(&mut &bytes[..]).map_err(|e| format!("decode LawVersion failed: {e}"))
 }
 
-/// 链上 `Law` + 当前版本 → 展示用 `LawView`(字节→String、账户→0x hex、章节→可读)。
+/// 链上 `Law` + 办理端展示版本 → 展示用 `LawView`(字节→String、账户→0x hex、章节→可读)。
 pub fn build_law_view(law: &OnChainLaw, version: &OnChainLawVersion) -> LawView {
     LawView {
         law_id: law.law_id,
         version: version.version,
+        effective_version: law.effective_version,
+        latest_version: law.latest_version,
+        pending_version: law.pending_version,
         tier: law.tier,
         scope_code: law.scope_code,
         status: law.status,
@@ -82,6 +90,13 @@ pub fn build_law_view(law: &OnChainLaw, version: &OnChainLawVersion) -> LawView 
             .collect(),
         chapters: to_law_chapters(&version.chapters),
     }
+}
+
+/// 办理端默认展示版本:有待生效版时优先展示待生效全文,否则展示当前生效版。
+pub fn operator_display_version(law: &OnChainLaw) -> Option<u32> {
+    law.pending_version
+        .or(law.effective_version)
+        .or_else(|| (law.latest_version > 0).then_some(law.latest_version))
 }
 
 // ──────────────── 账户派生 + subxt 链取数 ────────────────
@@ -252,7 +267,9 @@ mod tests {
         golden.extend(Tier::National.encode());
         golden.extend(100u32.encode());
         golden.extend(houses.encode());
+        golden.extend(Some(3u32).encode());
         golden.extend(3u32.encode());
+        golden.extend(Option::<u32>::None.encode());
         golden.extend(LawStatus::Effective.encode());
 
         let law = decode_law(&golden).expect("decode Law");
@@ -261,7 +278,9 @@ mod tests {
         assert_eq!(law.scope_code, 100);
         assert_eq!(law.houses.len(), 2);
         assert_eq!(law.houses[0].0, *b"NRP\0");
-        assert_eq!(law.current_version, 3);
+        assert_eq!(law.effective_version, Some(3));
+        assert_eq!(law.latest_version, 3);
+        assert_eq!(law.pending_version, None);
         assert_eq!(law.status, 1); // Effective
     }
 
@@ -278,8 +297,8 @@ mod tests {
         golden.extend([9u8; 32].encode());
         golden.extend(VoteType::Major.encode());
         golden.extend(11u64.encode());
-        golden.extend(500u32.encode());
-        golden.extend(1000u32.encode());
+        golden.extend(500u64.encode());
+        golden.extend(1000u64.encode());
 
         let version = decode_law_version(&golden).expect("decode LawVersion");
         assert_eq!(version.version, 2);
@@ -292,10 +311,15 @@ mod tests {
             tier: 1,
             scope_code: 100,
             houses: vec![(*b"NRP\0", [1u8; 32]), (*b"NSN\0", [2u8; 32])],
-            current_version: 2,
+            effective_version: Some(2),
+            latest_version: 2,
+            pending_version: None,
             status: 1,
         };
         let view = build_law_view(&law, &version);
+        assert_eq!(view.effective_version, Some(2));
+        assert_eq!(view.latest_version, 2);
+        assert_eq!(view.pending_version, None);
         assert_eq!(view.title, "道路交通安全法");
         assert_eq!(view.houses.len(), 2);
         assert_eq!(view.houses[0].code, "NRP"); // 去尾 \0

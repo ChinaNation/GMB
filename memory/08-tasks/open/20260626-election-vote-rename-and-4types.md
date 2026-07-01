@@ -8,7 +8,7 @@
   4. 选举投票 election-vote（原 citizen-vote/公民投票）：选举公职人员=普选（公民选）+互选（机构成员互选）
 - 改名 `citizen-vote → election-vote`（crate/目录/标识符/construct_runtime `CitizenVote→ElectionVote` idx24；历史空骨架已接入选举框架，不波及 Dart 端）
 - 白皮书 5.2 + 官网 website（Governance.tsx/Technology.tsx）同步四种投票 + 公民投票→选举投票
-- 修残留：parse_constitution.py OUT 路径 governance/legislation-yuan → public/legislation-yuan
+- 修残留：旧 HTML 解析脚本 OUT 路径 governance/legislation-yuan → public/legislation-yuan
 - 2026-06-28 追加：`election-vote` 已从空骨架接入普选/互选框架，新增候选人/选民快照、投票、计票、超时结算、终态回调和清理状态机。
 
 宪法依据（2026-06-28 已按用户确认更新）：公职人员章——普选产生总统、护宪大法官、市立法会委员、市教委会委员、省参议员、省众议员、市/镇自治委员，以及国家立法院参议员/众议员；其中国家立法院参议员由各省行政区公民在本省省参议会现任参议员中普选产生，国家立法院众议员由各省行政区公民在本省省众议会现任众议员中普选产生。互选仍用于机构现任成员内部选举院长、主席、参议长、众议长等职位。故"公民投票"名不副实，改"选举投票"。
@@ -21,7 +21,7 @@
 - runtime cargo check 绿 + 相关测试过
 - 全仓 citizen-vote/citizen_vote/CitizenVote 改名（联合公投 CitizenVotes 除外）
 - 白皮书 5.2 四种投票 + 官网同步
-- parse_constitution.py 残留修复
+- 旧 HTML 解析脚本 残留修复
 - 文档更新、残留清理
 
 已完成补充：

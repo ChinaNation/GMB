@@ -22,8 +22,8 @@ pub const MODULE_TAG: &[u8] = b"leg-yuan";
 /// 法律全文大对象类型标记(写入 votingengine `ProposalObject`)。
 pub const PROPOSAL_OBJECT_KIND_LAW_TEXT: u8 = 2;
 
-/// 内置公民宪法(章>节>条>款)SCALE 字节,由 `scripts/parse_constitution.py` 从原始 HTML 生成。
-/// 宪法唯一真源 = 本模块链上法律(创世注入);原始 `CitizenConstitution.html` 迁移后已废弃删除。
+/// 内置公民宪法(章>节>条>款)SCALE 创世种子。
+/// 宪法运行态唯一真源 = 本模块链上法律(创世注入为 law_id=0);旧 HTML 真源和解析脚本已删除。
 pub const CONSTITUTION_SCALE: &[u8] = include_bytes!("constitution.scale");
 
 /// 国家立法院机构码(立法权最高机构,宪法 houses[0])。
@@ -37,6 +37,7 @@ pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
     use frame_support::pallet_prelude::*;
+    use frame_support::traits::Time;
     use frame_system::pallet_prelude::*;
     use primitives::cid::china::china_lf::CHINA_LF;
     use primitives::cid::code::InstitutionCode;
@@ -160,7 +161,7 @@ pub mod pallet {
     /// 法律全文章节别名:章 > 节 > 条 > 款。
     pub type ChaptersOf<T> = BoundedVec<Chapter<T>, <T as Config>::MaxChaptersPerLaw>;
 
-    /// 法律主体记录(状态 + 当前版本号 + 归属立法机构)。
+    /// 法律主体记录(状态 + 版本指针 + 归属立法机构)。
     #[derive(
         Encode,
         Decode,
@@ -181,7 +182,12 @@ pub mod pallet {
         /// 归属立法机构院序列(houses[0] = 发起院,其 admins = 现任议员/委员)。
         /// 单院(市立法会)= 1 项;两院(国家/省立法院)= [众议会, 参议会]。
         pub houses: HousesOf<T>,
-        pub current_version: u32,
+        /// 当前真正生效的版本。新法通过但未到生效时间时为 None。
+        pub effective_version: Option<u32>,
+        /// 已写入链上的最新版本。
+        pub latest_version: u32,
+        /// 已通过但未到生效时间的版本。同一法律同一时间只允许一个待生效版本。
+        pub pending_version: Option<u32>,
         pub status: LawStatus,
     }
 
@@ -209,8 +215,10 @@ pub mod pallet {
         pub content_hash: [u8; 32],
         pub vote_type: VoteType,
         pub proposal_id: u64,
-        pub published_at: BlockNumberFor<T>,
-        pub effective_at: BlockNumberFor<T>,
+        /// 发布时间戳(毫秒)。投票通过写入版本时记录链上时间。
+        pub published_at: u64,
+        /// 生效时间戳(毫秒)。未到时间的新版本进入待生效队列。
+        pub effective_at: u64,
     }
 
     /// 提案摘要:序列化后(带 MODULE_TAG 前缀)存入 votingengine `ProposalData`;
@@ -239,11 +247,13 @@ pub mod pallet {
         pub title: TitleOf<T>,
         pub title_en: Option<TitleOf<T>>,
         pub content_hash: [u8; 32],
-        pub effective_at: BlockNumberFor<T>,
+        pub effective_at: u64,
     }
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + votingengine::Config {
+    pub trait Config:
+        frame_system::Config + votingengine::Config + pallet_timestamp::Config<Moment = u64>
+    {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -266,7 +276,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxLawsPerScope: Get<u32>;
         #[pallet::constant]
-        type MaxActivationsPerBlock: Get<u32>;
+        type MaxPendingActivations: Get<u32>;
 
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -315,15 +325,10 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// 生效调度:effective_block → [(law_id, version)]。on_initialize 到点翻 Effective。
+    /// 待生效版本队列。每个区块用链上时间戳扫描,到时间即翻为 Effective。
     #[pallet::storage]
-    pub type PendingActivation<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        BlockNumberFor<T>,
-        BoundedVec<(u64, u32), <T as Config>::MaxActivationsPerBlock>,
-        ValueQuery,
-    >;
+    pub type PendingActivation<T: Config> =
+        StorageValue<_, BoundedVec<(u64, u32), <T as Config>::MaxPendingActivations>, ValueQuery>;
 
     /// 不可修改条款 manifest(创世冻结,无 setter,见 [`ImmutableManifest`])。
     #[pallet::storage]
@@ -386,7 +391,7 @@ pub mod pallet {
                 .expect("constitution title within bound");
             let title_en = BoundedVec::try_from("Citizen Constitution".as_bytes().to_vec())
                 .expect("constitution title_en within bound");
-            let now = frame_system::Pallet::<T>::block_number();
+            let now = 0u64;
             let law_id = NextLawId::<T>::mutate(|n| {
                 let id = *n;
                 *n = n.saturating_add(1);
@@ -411,7 +416,9 @@ pub mod pallet {
                 tier: Tier::Constitution,
                 scope_code: 0,
                 houses: self.constitution_houses.clone(),
-                current_version: version,
+                effective_version: Some(version),
+                latest_version: version,
+                pending_version: None,
                 status: LawStatus::Effective,
             };
             Laws::<T>::insert(law_id, law);
@@ -475,20 +482,37 @@ pub mod pallet {
         ProposalPayloadInvalid,
         /// 该 (tier, scope) 下法律数量超上限
         TooManyLawsInScope,
-        /// 同一生效区块的待激活法律数量超上限
+        /// 待生效版本队列超上限
         TooManyActivations,
     }
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        /// 到生效区块把对应法律版本从 Pending 翻为 Effective。
-        fn on_initialize(now: BlockNumberFor<T>) -> Weight {
-            let due = PendingActivation::<T>::take(now);
-            let n = due.len() as u64;
-            for (law_id, version) in due.into_iter() {
-                Self::set_effective(law_id, version);
+        /// 用链上时间戳扫描待生效队列,到时间后自动切换生效版本。
+        fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
+            let now_ms = Self::now_ms();
+            let pending = PendingActivation::<T>::take();
+            let mut remain = BoundedVec::<(u64, u32), <T as Config>::MaxPendingActivations>::new();
+            let mut activated = 0u64;
+            let mut retained = 0u64;
+            for (law_id, version) in pending.into_iter() {
+                let should_activate = LawVersions::<T>::get(law_id, version)
+                    .map(|v| v.effective_at <= now_ms)
+                    .unwrap_or(false);
+                if should_activate {
+                    Self::set_effective(law_id, version);
+                    activated = activated.saturating_add(1);
+                } else if remain.try_push((law_id, version)).is_ok() {
+                    retained = retained.saturating_add(1);
+                }
             }
-            T::DbWeight::get().reads_writes(n.saturating_add(1), n.saturating_add(1))
+            if !remain.is_empty() {
+                PendingActivation::<T>::put(remain);
+            }
+            T::DbWeight::get().reads_writes(
+                activated.saturating_add(retained).saturating_add(2),
+                activated.saturating_add(2),
+            )
         }
     }
 
@@ -510,7 +534,7 @@ pub mod pallet {
             title: TitleOf<T>,
             title_en: Option<TitleOf<T>>,
             chapters: ChaptersOf<T>,
-            effective_at: BlockNumberFor<T>,
+            effective_at: u64,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             // 宪法唯一真源 = 创世注入的 law_id=0,立法入口永不能新立第二部宪法(ADR-027 §6.1)。
@@ -568,7 +592,7 @@ pub mod pallet {
             title: TitleOf<T>,
             title_en: Option<TitleOf<T>>,
             chapters: ChaptersOf<T>,
-            effective_at: BlockNumberFor<T>,
+            effective_at: u64,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             ensure!(!title.is_empty(), Error::<T>::EmptyTitle);
@@ -578,10 +602,9 @@ pub mod pallet {
                 law.status != LawStatus::Repealed,
                 Error::<T>::LawAlreadyRepealed
             );
-            // 至多一个待生效修订:有未生效版本时不得再修(P3)。保证 current_version 始终
-            // 至多领先生效版本一版,使「current_version-1 = 现行生效版」恒成立、激活不被新版本顶掉。
+            // 至多一个待生效版本:有未生效版本时不得再修,避免新版本互相覆盖。
             ensure!(
-                law.status != LawStatus::Pending,
+                law.pending_version.is_none(),
                 Error::<T>::AmendmentAlreadyPending
             );
             Self::ensure_legislator(&proposer_body, &who)?;
@@ -594,7 +617,10 @@ pub mod pallet {
                 &legislature,
             )?;
             if law.tier == Tier::Constitution {
-                Self::ensure_immutable_preserved(law_id, law.current_version, &chapters)?;
+                let effective_version = law
+                    .effective_version
+                    .ok_or(Error::<T>::LawVersionNotFound)?;
+                Self::ensure_immutable_preserved(law_id, effective_version, &chapters)?;
             }
 
             let summary = LawProposalSummary::<T> {
@@ -782,14 +808,14 @@ pub mod pallet {
                 .find(|a| a.number == number)
         }
 
-        /// 宪法不可修改条款必须与当前版本逐字保持一致(增/改/删任一即违规)。
+        /// 宪法不可修改条款必须与当前生效版本逐字保持一致(增/改/删任一即违规)。
         /// 遍历 章>节>条 按条号比对。
         fn ensure_immutable_preserved(
             law_id: u64,
-            current_version: u32,
+            base_version: u32,
             new_chapters: &ChaptersOf<T>,
         ) -> DispatchResult {
-            let current = LawVersions::<T>::get(law_id, current_version)
+            let current = LawVersions::<T>::get(law_id, base_version)
                 .ok_or(Error::<T>::LawVersionNotFound)?;
             for &n in IMMUTABLE_CONSTITUTION_ARTICLES.iter() {
                 let cur = Self::find_article(&current.chapters, n);
@@ -836,11 +862,18 @@ pub mod pallet {
             Ok(proposal_id)
         }
 
-        /// 把某法律版本置为生效;若不是当前版本则忽略。
+        /// 当前链上时间戳(毫秒)。法律生效时间统一使用时间戳,不再暴露区块号给业务端。
+        fn now_ms() -> u64 {
+            pallet_timestamp::Pallet::<T>::now()
+        }
+
+        /// 把某法律版本置为生效;若不是待生效版本则忽略。
         fn set_effective(law_id: u64, version: u32) {
             Laws::<T>::mutate(law_id, |maybe| {
                 if let Some(law) = maybe {
-                    if law.current_version == version && law.status == LawStatus::Pending {
+                    if law.pending_version == Some(version) {
+                        law.effective_version = Some(version);
+                        law.pending_version = None;
                         law.status = LawStatus::Effective;
                         Self::deposit_event(Event::<T>::LawEffective { law_id, version });
                     }
@@ -848,17 +881,12 @@ pub mod pallet {
             });
         }
 
-        /// 到点即生效,否则排入 PendingActivation。
-        fn activate_or_schedule(
-            law_id: u64,
-            version: u32,
-            effective_at: BlockNumberFor<T>,
-        ) -> DispatchResult {
-            let now = frame_system::Pallet::<T>::block_number();
-            if effective_at <= now {
+        /// 到时间即生效,否则排入待生效队列。
+        fn activate_or_schedule(law_id: u64, version: u32, effective_at: u64) -> DispatchResult {
+            if effective_at <= Self::now_ms() {
                 Self::set_effective(law_id, version);
             } else {
-                PendingActivation::<T>::try_mutate(effective_at, |v| v.try_push((law_id, version)))
+                PendingActivation::<T>::try_mutate(|v| v.try_push((law_id, version)))
                     .map_err(|_| Error::<T>::TooManyActivations)?;
             }
             Ok(())
@@ -890,14 +918,17 @@ pub mod pallet {
                         Error::<T>::LawAlreadyRepealed
                     );
                     ensure!(
-                        law.status != LawStatus::Pending,
+                        law.pending_version.is_none(),
                         Error::<T>::AmendmentAlreadyPending
                     );
                     Self::ensure_tier_vote_type(law.tier, summary.vote_type)?;
                     if law.tier == Tier::Constitution {
+                        let effective_version = law
+                            .effective_version
+                            .ok_or(Error::<T>::LawVersionNotFound)?;
                         Self::ensure_immutable_preserved(
                             summary.law_id,
-                            law.current_version,
+                            effective_version,
                             chapters,
                         )?;
                     }
@@ -932,7 +963,7 @@ pub mod pallet {
             }
             let summary = Self::load_summary(proposal_id)?;
             let chapters = Self::load_chapters(proposal_id)?;
-            let now = frame_system::Pallet::<T>::block_number();
+            let now = Self::now_ms();
             Self::write_law_version(proposal_id, summary, chapters, now)?;
             Ok(ProposalExecutionOutcome::Executed)
         }
@@ -962,7 +993,7 @@ pub mod pallet {
             proposal_id: u64,
             summary: LawProposalSummary<T>,
             chapters: ChaptersOf<T>,
-            now: BlockNumberFor<T>,
+            now: u64,
         ) -> DispatchResult {
             Self::ensure_write_law_version_allowed(&summary, &chapters)?;
             match summary.action {
@@ -991,7 +1022,9 @@ pub mod pallet {
                         tier: summary.tier,
                         scope_code: summary.scope_code,
                         houses: summary.houses,
-                        current_version: version,
+                        effective_version: None,
+                        latest_version: version,
+                        pending_version: Some(version),
                         status: LawStatus::Pending,
                     };
                     Laws::<T>::insert(law_id, law);
@@ -1004,7 +1037,7 @@ pub mod pallet {
                 }
                 LawAction::Amend => {
                     let mut law = Laws::<T>::get(summary.law_id).ok_or(Error::<T>::LawNotFound)?;
-                    let version = law.current_version.saturating_add(1);
+                    let version = law.latest_version.saturating_add(1);
                     let lv = LawVersion::<T> {
                         law_id: summary.law_id,
                         version,
@@ -1018,7 +1051,8 @@ pub mod pallet {
                         effective_at: summary.effective_at,
                     };
                     LawVersions::<T>::insert(summary.law_id, version, lv);
-                    law.current_version = version;
+                    law.latest_version = version;
+                    law.pending_version = Some(version);
                     law.status = LawStatus::Pending;
                     Laws::<T>::insert(summary.law_id, law);
                     Self::deposit_event(Event::<T>::LawAmended {

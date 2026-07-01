@@ -2633,6 +2633,10 @@ fn main() {
             )
             // 立法与表决:发起/院内表决(返回扫码上链 sign_request)+ 读法律/读提案进度。
             .route(
+                "/api/legislation/proposable",
+                get(domains::legislation::handler::list_proposable),
+            )
+            .route(
                 "/api/legislation/propose",
                 post(domains::legislation::handler::propose_legislation),
             )
@@ -2643,6 +2647,11 @@ fn main() {
             .route(
                 "/api/legislation/laws",
                 get(domains::legislation::handler::list_laws),
+            )
+            // 本节点绑定机构层级/辖区的法律(会话派生 scope);静态段先于 :law_id 匹配。
+            .route(
+                "/api/legislation/laws/mine",
+                get(domains::legislation::handler::list_my_laws),
             )
             .route(
                 "/api/legislation/laws/:law_id",
@@ -2722,6 +2731,11 @@ fn main() {
             .route(
                 "/api/v1/public/identity/search",
                 get(domains::citizens::handler::public_identity_search),
+            )
+            // 立法大屏只读看板(免登录):机构由节点绑定确定,不接受请求参数(fail-closed)。
+            .route(
+                "/api/public/legislation/display/board",
+                get(domains::legislation::display::handler::display_board),
             );
 
         // App routes:CitizenApp 与节点桌面链端 pull 用的统一命名空间。

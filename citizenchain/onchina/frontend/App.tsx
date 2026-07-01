@@ -35,6 +35,7 @@ import { OwnInstitutionAdminsView, RegistryAdminsView } from './admins/RegistryA
 import { isSubordinateRegistry, isTier1Registry } from './platform/registryTier';
 import { CitizensView } from './citizens/CitizensView';
 import { AddressManageView } from './address/AddressManageView';
+import { LegislationView } from './legislation/operator/LegislationView';
 import type { PrivateType } from './subjects/api';
 import { notice } from './utils/notice';
 
@@ -64,7 +65,8 @@ type ActiveView =
   | 'address'
   | 'own-admins'
   | 'city-registry'
-  | 'federal-registry';
+  | 'federal-registry'
+  | 'legislation';
 
 function privateTypeForView(view: ActiveView): PrivateType | null {
   switch (view) {
@@ -98,6 +100,7 @@ function firstBusinessView(capabilities: RoleCapabilities): ActiveView {
   if (capabilities.canViewEducation) return 'education';
   if (capabilities.canViewCityRegistry) return 'city-registry';
   if (capabilities.canViewFederalRegistry) return 'federal-registry';
+  if (capabilities.canViewLegislation) return 'legislation';
   if (capabilities.canViewOwnAdmins) return 'own-admins';
   return 'citizens';
 }
@@ -403,6 +406,11 @@ function AppInner() {
                 onClick: () => switchView('address')
               },
               {
+                key: 'legislation' as const, label: '立法与表决',
+                visible: capabilities.canViewLegislation,
+                onClick: () => switchView('legislation')
+              },
+              {
                 key: 'own-admins' as const, label: '本机构管理员',
                 visible: capabilities.canViewOwnAdmins,
                 onClick: () => switchView('own-admins')
@@ -460,6 +468,8 @@ function AppInner() {
             <RegistryAdminsView key={`city-registry-${viewResetToken}`} mode="city-registry" />
           ) : routedView === 'federal-registry' && capabilities.canViewFederalRegistry ? (
             <RegistryAdminsView key={`federal-registry-${viewResetToken}`} mode="federal-registry" />
+          ) : routedView === 'legislation' && capabilities.canViewLegislation && auth ? (
+            <LegislationView key={`legislation-${viewResetToken}`} auth={auth} />
           ) : (
             <CitizensView />
           )}

@@ -11,9 +11,24 @@
 - `website/src/whitepaper.md`：白皮书正文唯一真源。
 - `README.md`：仓库快速入口中的白皮书/公民宪法真源路径说明。
 - `memory/05-modules/website/WEBSITE_TECHNICAL.md`：官网白皮书维护记录。
+- `citizenchain/scripts/generate-local-docs.mjs`：节点桌面端内置白皮书生成脚本，读取新白皮书真源并兼容 `docs/assets/` 图片资源。
+- `citizenchain/node/frontend/generated/local-docs.generated.ts`：节点桌面端本地白皮书生成物。
+- `memory/05-modules/citizenchain/node/`：节点桌面端白皮书真源路径说明。
+
+## 2026-07-01 补充修复
+
+- 修正白皮书中国储会历史 CID、历史治理账户和历史创世分配口径，改为当前 runtime 的国储会创世 CID、主账户、费用账户、安全基金账户、两和基金账户，以及 19 名国储会创世管理员预置余额口径。
+- 修正创世发行、3.0 发行总览、3.4/5.7.3 公民发行中的泛化表述，明确公民发行由首次链上投票身份登记触发，参选身份升级不重复发行。
+- 修正 runtime 目录树中 `genesis/` 与 `admins/` 的旧模块说明，避免继续暗示存在独立的创世管理员业务模块。
+- 修正注册局章节和实体模组章节中联邦注册局权限表述，明确联邦注册局通过省级 5 人组账户在所辖省份内办理登记业务。
+- 按用户要求，本次不新增联邦注册局、国家司法院 CID/账户表。
 
 ## 验收要求
 
 - 官网构建通过：`npm run build` 已通过。
 - 本地真实页面打开白皮书页：`http://127.0.0.1:4174/whitepaper` 已验证新章节标题渲染，浏览器控制台无 error。
+- 节点桌面端文档生成通过：`npm run generate:docs` 已通过。
+- 节点桌面端前端构建通过：`npm run build` 已通过。
+- 节点桌面端前置开发命令通过：`npm run dev` 已启动到 Vite ready，已手动停止临时 dev server。
 - Git 提交只包含本次白皮书相关改动，不混入其他线程的工作区改动。
+- 补充修复验收：`website` 构建、节点桌面端 `generate:docs` 与前端构建均已通过；国储会历史 CID、历史账户和历史创世分配口径已做残留搜索。

@@ -25,7 +25,7 @@
 2. 数据模型(types.rs):Tier(宪法/国/省/市)、LawStatus(Draft/Voting/Pending/Effective/Superseded)、VoteType(常规/重要/二审/特别)、Article/Clause/Item(条/款/项)、Law、LawVersion(整部全文快照 + content_hash + published_at + effective_at)。
 3. Storage:NextLawId、Laws、LawVersions、LawsByScope(列表索引)、PendingActivation(生效调度)。in-flight 提案载荷沿用 votingengine ProposalData/ProposalObject(对标 runtime-upgrade,不本地存)。
 4. 提案入口 propose_enact_law / propose_amend_law / propose_repeal_law:校验 origin 为 owner_body 机构 admin(走 votingengine InternalAdminProvider)→ 校验 tier/vote_type → 不可修改条款硬拒 → 编码 MODULE_TAG 载荷 → 调 `T::LegislationVoteEngine::create_legislation_proposal`。
-5. 通过回调 executor:按 MODULE_TAG 认领 → approved 写新 LawVersion + current_version+1 + 入 PendingActivation;否决丢弃。拆 `write_law_version` 纯写入 helper 供第1步单测。
+5. 通过回调 executor:按 MODULE_TAG 认领 → approved 写新 LawVersion + effective_version/latest_version/pending_version+1 + 入 PendingActivation;否决丢弃。拆 `write_law_version` 纯写入 helper 供第1步单测。
 6. on_initialize:到 effective_at 把 Pending 翻 Effective,旧版本转 Superseded。
 7. 不可修改条款:`primitives` 单一源 `IMMUTABLE_CONSTITUTION_ARTICLES = [1,2,3,17,19,23,33,41]`;tier=宪法且命中即 reject。
 8. runtime 查询 API(apis.rs):list_laws / get_law / get_law_version。
@@ -94,7 +94,7 @@
 ## 后续(本卡外)
 
 - 双客户端联动卡:CitizenApp(法律列表/详情/版本史/投票 + 调 LegislationApi)+ CitizenWallet(修法/投票二维码 decoder + 签名,ADR-026 新 op_tag)。
-- 宪法迁移卡:CitizenConstitution.html → 结构化条文(tier=宪法),清理 include_str!/citizen_constitution_html() API。
+- 宪法迁移卡:旧宪法 HTML → 结构化条文(tier=宪法),清理 include_str!/旧宪法 HTML API() API。
 - 上链:新增 pallet_index=27/28 随重新创世或 setCode 生效;真实整链端到端验收。
 - 待细化:议员名册若需换届频繁更新,确认 admins-change 路径覆盖立法机构;市立法会公民联署门槛(现实前置)是否需链上辅助。
 

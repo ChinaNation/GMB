@@ -147,7 +147,9 @@ class Law {
     required this.tier,
     required this.scopeCode,
     required this.houses,
-    required this.currentVersion,
+    required this.effectiveVersion,
+    required this.latestVersion,
+    required this.pendingVersion,
     required this.status,
   });
   final int lawId;
@@ -156,8 +158,23 @@ class Law {
   /// 0=全国;否则 china.sqlite 行政区 code(ADR-021)。
   final int scopeCode;
   final List<LawHouse> houses;
-  final int currentVersion;
+
+  /// 当前真正生效的版本。新法通过但未到生效时间时为空。
+  final int? effectiveVersion;
+
+  /// 已写入链上的最新版本。
+  final int latestVersion;
+
+  /// 已通过但未到生效时间的版本。
+  final int? pendingVersion;
+
   final LawStatus status;
+
+  /// 公民端默认阅读版本:优先读生效版;新法尚无生效版时读待生效版。
+  int? get readerVersion =>
+      effectiveVersion ??
+      pendingVersion ??
+      (latestVersion > 0 ? latestVersion : null);
 }
 
 /// 法律某版本正文(链端 `law_version(law_id, version)` 返回)。
@@ -190,7 +207,7 @@ class LawVersion {
   /// 创世宪法为 0。
   final int proposalId;
 
-  /// 块号(经 target_block_time_ms 换算日期)。
+  /// 链上时间戳(毫秒)。
   final int publishedAt;
   final int effectiveAt;
 }

@@ -43,6 +43,9 @@ mod runtime {
     #[runtime::pallet_index(1)]
     pub type VotingEngine = votingengine;
 
+    #[runtime::pallet_index(3)]
+    pub type Timestamp = pallet_timestamp;
+
     #[runtime::pallet_index(99)]
     pub type InternalVote = internal_vote;
 
@@ -55,6 +58,13 @@ impl system::Config for Test {
     type Block = Block;
     type AccountId = AccountId32;
     type Lookup = IdentityLookup<Self::AccountId>;
+}
+
+impl pallet_timestamp::Config for Test {
+    type Moment = u64;
+    type OnTimestampSet = ();
+    type MinimumPeriod = ConstU64<1>;
+    type WeightInfo = ();
 }
 
 // ───────── 测试身份常量 ─────────
@@ -170,7 +180,7 @@ parameter_types! {
     pub const MaxSectionsPerChapter: u32 = 50;
     pub const MaxChaptersPerLaw: u32 = 50;
     pub const MaxLawsPerScope: u32 = 1000;
-    pub const MaxActivationsPerBlock: u32 = 100;
+    pub const MaxPendingActivations: u32 = 100;
 }
 
 impl crate::pallet::Config for Test {
@@ -184,7 +194,7 @@ impl crate::pallet::Config for Test {
     type MaxSectionsPerChapter = MaxSectionsPerChapter;
     type MaxChaptersPerLaw = MaxChaptersPerLaw;
     type MaxLawsPerScope = MaxLawsPerScope;
-    type MaxActivationsPerBlock = MaxActivationsPerBlock;
+    type MaxPendingActivations = MaxPendingActivations;
     type WeightInfo = ();
 }
 
@@ -195,6 +205,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
         System::set_block_number(1);
+        Timestamp::set_timestamp(1_000);
     });
     ext
 }

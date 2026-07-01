@@ -264,3 +264,4 @@
 - `memory/08-tasks/done/20260621-gmb-secret-unification.md`
 - `memory/08-tasks/done/20260621-root-tools-to-scripts.md`
 - `memory/08-tasks/done/20260621-seed-federal-admins.md`
+- `memory/08-tasks/done/20260630-onchina-legislation-console-framework.md`

@@ -15,8 +15,9 @@ use serde::Deserialize;
 
 use super::category::{legislation_role, proposable_candidates, LegislationRole};
 use super::chain_read_proposal;
-use super::law::model::{institution_code_text, ProposeLawInput};
+use super::law::model::{institution_code_text, LawView, ProposeLawInput};
 use super::law::{action, chain_read, service};
+use super::model::ProposalCategory;
 use crate::auth::login::{require_admin_any, AdminAuthContext};
 use crate::cid::china::{city_code_by_name, province_code_by_name};
 use crate::core::response::ApiResponse;
@@ -98,23 +99,103 @@ pub(crate) async fn list_laws(
         Ok(v) => v,
         Err(err) => return api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
     };
-    let mut views = Vec::with_capacity(laws.len());
-    for law in laws {
-        if let Ok(Some(version)) =
-            chain_read::fetch_law_version(law.law_id, law.current_version).await
-        {
-            views.push(chain_read::build_law_view(&law, &version));
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: build_law_views(laws).await,
+    })
+    .into_response()
+}
+
+/// 一条可发起候选(前端发起菜单渲染用)。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProposableCandidateDto {
+    category: ProposalCategory,
+    tier: u8,
+    vote_types: Vec<u8>,
+}
+
+/// GET /api/legislation/proposable —— 本机构可发起的提案候选(category×tier×voteTypes)。
+///
+/// 中文注释:发起菜单单源自后端 `category::proposable_candidates`(参议会/非立法机构返回空);
+/// 前端据此渲染可选立法动作与表决类型,不复刻分类逻辑。
+pub(crate) async fn list_proposable(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let candidates: Vec<ProposableCandidateDto> = proposable_candidates(&ctx.institution_code)
+        .into_iter()
+        .map(|c| ProposableCandidateDto {
+            category: c.category,
+            tier: c.tier,
+            vote_types: c.vote_types,
+        })
+        .collect();
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: candidates,
+    })
+    .into_response()
+}
+
+/// GET /api/legislation/laws/mine —— 本节点绑定机构层级/辖区的全部法律(会话派生 scope,前端不传码)。
+///
+/// 中文注释:国家级并入宪法(tier 0)+ 国家法律(tier 1);省(2)/市(3)按本级 + 本辖区 china scope 码
+/// (与 precheck/resolve 同口径,解掉前端拿不到 scope_code 的问题)。
+pub(crate) async fn list_my_laws(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let Some(admin_tier) = admin_tier(&ctx) else {
+        return api_error(StatusCode::FORBIDDEN, 1003, "admin level missing");
+    };
+    let (scope_code, _, _) = scope_codes(&ctx);
+    let tiers: &[u8] = match admin_tier {
+        1 => &[0, 1], // 宪法 + 国家法律
+        2 => &[2],
+        3 => &[3],
+        _ => &[],
+    };
+    let mut laws: Vec<chain_read::OnChainLaw> = Vec::new();
+    for &tier in tiers {
+        match chain_read::list_laws_by_scope(tier, scope_code).await {
+            Ok(v) => laws.extend(v),
+            Err(err) => return api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
         }
     }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: views,
+        data: build_law_views(laws).await,
     })
     .into_response()
 }
 
-/// GET /api/legislation/laws/:law_id —— 单部法律当前版本全文。
+/// 逐部法律取办理端展示版本 → `LawView` 列表(`list_laws` / `list_my_laws` 共用)。
+async fn build_law_views(laws: Vec<chain_read::OnChainLaw>) -> Vec<LawView> {
+    let mut views = Vec::with_capacity(laws.len());
+    for law in laws {
+        let Some(version_id) = chain_read::operator_display_version(&law) else {
+            continue;
+        };
+        if let Ok(Some(version)) = chain_read::fetch_law_version(law.law_id, version_id).await {
+            views.push(chain_read::build_law_view(&law, &version));
+        }
+    }
+    views
+}
+
+/// GET /api/legislation/laws/:law_id —— 单部法律办理端展示版本全文。
 pub(crate) async fn get_law(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -128,7 +209,10 @@ pub(crate) async fn get_law(
         Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "law not found"),
         Err(err) => return api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
     };
-    let version = match chain_read::fetch_law_version(law.law_id, law.current_version).await {
+    let Some(version_id) = chain_read::operator_display_version(&law) else {
+        return api_error(StatusCode::NOT_FOUND, 1004, "law version not found");
+    };
+    let version = match chain_read::fetch_law_version(law.law_id, version_id).await {
         Ok(Some(v)) => v,
         Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "law version not found"),
         Err(err) => return api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
@@ -175,10 +259,18 @@ pub(crate) async fn propose_legislation(
     let Some(proposer_code) = institution_code_from_str(&ctx.institution_code) else {
         return api_error(StatusCode::FORBIDDEN, 1003, "unknown institution code");
     };
-    // ② 本机构能否发起该 category×tier×vote_type(参议会/非立法机构 → 空 → 拒)。
+    let Some(admin_tier) = admin_tier(&ctx) else {
+        return api_error(StatusCode::FORBIDDEN, 1003, "admin level missing");
+    };
+    // 会话派生 scope_code 覆盖前端(前端拿不到 china scope_code;防越权伪造表决辖区)。
+    let (admin_scope_code, province_code, city_code) = scope_codes(&ctx);
+    let mut input = input;
+    input.scope_code = admin_scope_code;
+    // ② 本机构能否发起该表决类型(参议会/非立法机构无候选 → 拒);层级由 ③ precheck 校验,
+    //    故此处只判 vote_type 成员,放行国家级修宪(tier 0)。
     let can_propose = proposable_candidates(&ctx.institution_code)
         .iter()
-        .any(|c| c.tier == input.tier && c.vote_types.contains(&input.vote_type));
+        .any(|c| c.vote_types.contains(&input.vote_type));
     if !can_propose {
         return api_error(
             StatusCode::FORBIDDEN,
@@ -186,11 +278,7 @@ pub(crate) async fn propose_legislation(
             "institution cannot propose this legislation",
         );
     }
-    // ③ 越权前置(层级/行政区)。
-    let Some(admin_tier) = admin_tier(&ctx) else {
-        return api_error(StatusCode::FORBIDDEN, 1003, "admin level missing");
-    };
-    let (admin_scope_code, province_code, city_code) = scope_codes(&ctx);
+    // ③ 越权前置(层级;scope 经会话派生已一致)。
     if let Err(err) = service::precheck_legislation_scope(
         admin_tier,
         admin_scope_code,

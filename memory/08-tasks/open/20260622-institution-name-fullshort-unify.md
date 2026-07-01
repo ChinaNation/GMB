@@ -125,7 +125,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - 真实库 `check-gov --strict`:通过,`ok=true manifest_current=true target_count=245016 active_count=245016 missing=0 mismatched=0 missing_accounts=0 obsolete=0`。
 - 真实库 SQL 抽样: `PSN/PRP/CGOV/CEDU/TGOV` 的 `cid_full_name = cid_short_name` 均为 0;旧简称尾缀 `参议员议政会/众议员议政会/自治政府/公民教育委员会` 均为 0。
 - 本地 CID HTTP 运行态验证:临时启动 `127.0.0.1:8901`,`/api/v1/app/institutions/search` 返回 `瑶海市公民教育委员会 / 瑶海市教委会`、`明光路镇自治政府 / 明光路镇政府`;`/api/v1/app/public-institutions` 返回 `province_code=AH city_code=001` 与 `CEDU` 的新简称。验证后已关闭临时服务。
-- 白皮书 `docs/《白皮书》.md` 与公民宪法 `citizenchain/runtime/primitives/src/CitizenConstitution.html`:仅扫描待统一项,未修改;需用户二次确认后执行。
+- 白皮书 `docs/《白皮书》.md` 与公民宪法 `citizenchain/runtime/primitives/src/旧宪法 HTML`:仅扫描待统一项,未修改;需用户二次确认后执行。
 
 ## 验收记录(2026-06-22)
 - `cargo test --manifest-path citizencode/backend/Cargo.toml`:通过 71 单元 + 5 integration。

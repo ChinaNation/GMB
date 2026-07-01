@@ -143,11 +143,11 @@
 ```
 |     发行类型    |               发行金额/上限           |          释放/流通状态          |               执行模块/触发                |              账户归属/边界              |
 |:--------------:|:-----------------------------------:|:----------------------------:|:----------------------------------------:|:--------------------------------------:|
-|  创世发行       |  144,349,737,800.00元 (1443.49亿)    |   创世一次性流通               |  创世状态写入                             |  国储会创世配置账户及开发账户              |
+|  创世发行       |  144,349,737,800.00元 (1443.49亿)    |   创世一次性流通               |  创世状态写入                             |  国储会主账户承接余额，19名国储会创世管理员各预置1000万元 |
 |  省储行创立发行  |  144,349,737,800.00元 (1443.49亿)    |   永久质押                    |  创世状态写入+省储行常量                   |  43个省储行无私钥永久质押账户              |
 |  省储行质押利息  |    72,896,617,589.00元 (728.97亿)    |   100年逐年释放               |  provincialbank-interest模块，每87,600块结算一次 |  43个省储行多签治理账户                   |
 |  全节点发行     |    99,989,990,001.00元 (999.89亿)    |   第1至9,999,999块逐块释放      |  fullnode-issuance模块，出块时触发          |  出块矿工账户或其绑定奖励钱包              |
-|  公民发行       | 1,571,981,633,622.00元 (1.57万亿)    |   链上投票身份登记后逐个释放      |  citizen-issuance模块，投票身份登记成功回调触发 |  完成链上公民身份登记的公民账户             |
+|  公民发行       | 1,571,981,633,622.00元 (1.57万亿)    |   首次链上投票身份登记后逐个释放   |  citizen-issuance模块，投票身份登记成功回调触发 |  完成投票身份登记的公民钱包账户，参选身份升级不重复发行 |
 |  两和基金发行    |  195,818,501,966.00元 (1958.18亿)    |   创世一次性流通               |  创世状态HE_FUND_ISSUANCE写入              |  国储会两和基金账户                       |
 |  已确定发行合计  | 2,229,386,218,778.00元 (2.23万亿)    |   按上述规则释放或质押           |  固定发行合计，不含决议发行                  |  不含后续治理决议新增发行                  |
 |  决议发行       |  按单个提案金额执行，受链上限额约束       |   提案通过后一次性执行           |  resolution-issuance模块+联合投票回调       |  仅能发行至链上允许的合法收款账户集合        |
@@ -158,11 +158,11 @@
 ```
 |       Issuance Type        |              Amount / Cap             |              Release / Circulation Status              |                 Execution Module / Trigger                |                 Account Ownership / Boundary                |
 |:--------------------------:|:------------------------------------:|:------------------------------------------------------:|:--------------------------------------------------------:|:----------------------------------------------------------:|
-| Genesis issuance           | 144,349,737,800.00 yuan (144.349 billion) | One-time circulation at genesis | Written into genesis state | Genesis-configured National Citizen Reserve Committee accounts and the development account |
+| Genesis issuance           | 144,349,737,800.00 yuan (144.349 billion) | One-time circulation at genesis | Written into genesis state | The National Citizen Reserve Committee main account receives the balance, and each of the 19 genesis NRC admins receives a preset 10,000,000 yuan |
 | Provincial reserve bank founding issuance | 144,349,737,800.00 yuan (144.349 billion) | Permanently staked | Genesis state plus provincial reserve bank constants | 43 provincial reserve bank staking accounts without private keys |
 | Provincial reserve bank staking interest | 72,896,617,589.00 yuan (72.897 billion) | Released annually over 100 years | provincialbank-interest module, once every 87,600 blocks | 43 provincial reserve bank multisig governance accounts |
 | Full-node issuance         | 99,989,990,001.00 yuan (99.990 billion) | Released block by block from block 1 through block 9,999,999 | fullnode-issuance module, triggered by block production | Block author account or its bound reward wallet |
-| Citizen light-node issuance | 1,571,981,633,622.00 yuan (1.572 trillion) | Released one by one after on-chain citizen identity registration | citizen-issuance module, triggered by successful voting-identity registration callback | Certified citizen light-node accounts |
+| Citizen light-node issuance | 1,571,981,633,622.00 yuan (1.572 trillion) | Released one by one after first on-chain voting-identity registration | citizen-issuance module, triggered by successful voting-identity registration callback | Citizen wallet accounts with completed voting-identity registration; candidate-identity upgrade does not issue again |
 | Reconciliation Fund issuance | 195,818,501,966.00 yuan (195.818 billion) | One-time circulation at genesis | HE_FUND_ISSUANCE written into genesis state | National Citizen Reserve Committee Reconciliation Fund account |
 | Determined issuance total | 2,229,386,218,778.00 yuan (2.229 trillion) | Released or staked under the rules above | Fixed issuance total, excluding resolution issuance | Excludes later issuance added by governance resolution |
 | Resolution issuance        | Executed by proposal amount and constrained by on-chain limits | One-time execution after proposal approval | resolution-issuance module plus joint-vote callback | May issue only to the on-chain allowed recipient set |
@@ -245,14 +245,14 @@
 
 ## 3.0.发行与销毁总览<br><span class="whitepaper-heading-en">3.0. Issuance and Destruction Overview</span>
 
-* 公民币发行分为固定发行和决议发行：固定发行由创世状态、固定常量和链上公民身份登记规则确定；决议发行由公民储备委员会联合会议决议、链上联合投票和发行模块校验共同约束；<br><span class="whitepaper-en">Citizen Coin issuance is divided into fixed issuance and resolution issuance. Fixed issuance is determined by genesis state, fixed constants, and on-chain citizen-identity registration rules. Resolution issuance is constrained jointly by resolution of the Joint Meeting of the Citizen Reserve Committee, on-chain joint voting, and issuance-module validation.</span>
-* 固定发行合计为2,229,386,218,778.00元，其中一部分在创世时流通，一部分永久质押，一部分按区块、年度或链上公民身份登记逐步释放；<br><span class="whitepaper-en">The fixed issuance total is 2,229,386,218,778.00 yuan. Part of it circulates at genesis, part is permanently staked, and part is released progressively by block height, annual settlement, or on-chain citizen-identity registration.</span>
+* 公民币发行分为固定发行和决议发行：固定发行由创世状态、固定常量和链上投票身份登记规则确定；决议发行由公民储备委员会联合会议决议、链上联合投票和发行模块校验共同约束；<br><span class="whitepaper-en">Citizen Coin issuance is divided into fixed issuance and resolution issuance. Fixed issuance is determined by genesis state, fixed constants, and on-chain voting-identity registration rules. Resolution issuance is constrained jointly by resolution of the Joint Meeting of the Citizen Reserve Committee, on-chain joint voting, and issuance-module validation.</span>
+* 固定发行合计为2,229,386,218,778.00元，其中一部分在创世时流通，一部分永久质押，一部分按区块、年度或首次链上投票身份登记逐步释放；<br><span class="whitepaper-en">The fixed issuance total is 2,229,386,218,778.00 yuan. Part of it circulates at genesis, part is permanently staked, and part is released progressively by block height, annual settlement, or first on-chain voting-identity registration.</span>
 * 交易手续费不是新增发行；链上交易手续费按规则分配给全节点、国储会费用账户和安全基金，链下清算手续费由清算网络规则处理；<br><span class="whitepaper-en">Transaction fees are not new issuance. On-chain transaction fees are distributed under the rules to full nodes, the National Citizen Reserve Committee fee account, and the safety fund; off-chain clearing fees are handled under the clearing-network rules.</span>
 * 销毁由对应机构内部投票通过后执行，销毁结果直接减少账户余额和链上总供应量；低于 Existential Deposit (ED) 的账户清理属于账户生命周期规则。<br><span class="whitepaper-en">Destruction executes after approval by the corresponding institution's internal vote, directly reducing the account balance and total on-chain supply. Reaping accounts below the Existential Deposit (ED) belongs to the account lifecycle rule.</span>
 
 ## 3.1.创世发行<br><span class="whitepaper-heading-en">3.1. Genesis Issuance</span>
 
-* 创世发行144,349,737,800.00元数字公民币（1443.49亿元），以中共第7次人口普查数为准，每个中共国人发行100.00元数字公民币，创世状态时国储会即向开发账户支付10000000.00元公民币；<br><span class="whitepaper-en">Genesis issuance is 144,349,737,800.00 yuan of digital Citizen Coins (144.349 billion yuan), based on the CCP's Seventh National Population Census. Each person under CCP rule is issued 100.00 yuan of digital Citizen Coins. At genesis state, the National Citizen Reserve Committee pays 10,000,000.00 Citizen Coins to the development account.</span>
+* 创世发行144,349,737,800.00元数字公民币（1443.49亿元），以中共第7次人口普查数为准，每个中共国人发行100.00元数字公民币；创世状态中，19名国储会创世管理员各预置10,000,000.00元公民币，剩余创世发行余额写入国储会主账户。<br><span class="whitepaper-en">Genesis issuance is 144,349,737,800.00 yuan of digital Citizen Coins (144.349 billion yuan), based on the CCP's Seventh National Population Census. Each person under CCP rule is issued 100.00 yuan of digital Citizen Coins. In genesis state, each of the 19 National Citizen Reserve Committee genesis administrators receives a preset 10,000,000.00 Citizen Coins, and the remaining genesis issuance balance is written to the NRC main account.</span>
 
 ```
 中共第7次人口普查总人口数：1,443,497,378人   ｜    公民币创世发行量：144,349,737,800.00元
@@ -260,14 +260,17 @@
 
 <span class="whitepaper-en">CCP's Seventh National Population Census total population: 1,443,497,378 people | Citizen Coin genesis issuance: 144,349,737,800.00 yuan</span>
 
-* 国储会多签治理账户（公民链）,国储会在公民链上唯一的治理账户，由国储会身份识别码：GFR-LN001-CB0X-944805165-2026派生:<br><span class="whitepaper-en">The National Citizen Reserve Committee multisig governance account on CitizenChain is the National Citizen Reserve Committee's only governance account on CitizenChain. It is derived from the National Citizen Reserve Committee identity identification code: GFR-LN001-CB0X-944805165-2026.</span>
+* 国储会在公民链上的创世身份识别码为 `LN001-NRC0G-944805165-2026`，创世状态写入国储会主账户、费用账户、安全基金账户和两和基金账户；这些账户分别承接治理余额、链上交易费分账、安全基金和两和基金，不再使用旧版国储会身份识别码或旧版单一治理账户口径。<br><span class="whitepaper-en">The National Citizen Reserve Committee genesis identity identification code on CitizenChain is `LN001-NRC0G-944805165-2026`. Genesis state writes the NRC main account, fee account, safety-fund account, and Reconciliation Fund account. These accounts respectively carry governance balance, on-chain fee distribution, the safety fund, and the Reconciliation Fund, and the old NRC identity code and single-governance-account wording are no longer used.</span>
 
 ```
-w5FxV4G57ZQGZCWbVYLAjKYHtwaDGEbf1AGsMgfmr5KXe1KS8
+国储会主账户：w5FeELKL18kHBGrhFpt6F91xuW1GWpr79CQ4fWgwMEzZtm1jU
+国储会费用账户：w5EPSwHc7WfFv4VhiRWochDVCZgftf8Jx5iZmEBhcbwrBZMfU
+安全基金账户：w5GTQvsevT7RNNnr963UDX4Kbm2bBEmjsjSaczhRBJX41UWvM
+两和基金账户：w5DGrDtSJvnxgztNZ8HuYprX4cNFcPCYA6RuTEzVys2Q1bjgi
 ```
 
 * 一个人在社会中享有若干权益的同时，同样应尽若干义务，尽了若干义务的，亦应享受若干权益；创世发行寓意每一个中共国人支付100.00元公民币，以支持“公民建国运动”，使全体中共国人共同建立中华民族联邦共和国。<br><span class="whitepaper-en">While a person enjoys certain rights and interests in society, that person should likewise fulfill certain obligations; and after fulfilling certain obligations, that person should likewise enjoy certain rights and interests. Genesis issuance symbolizes each person under CCP rule paying 100.00 Citizen Coins to support the Citizen Nation-Building Movement, so that all people under CCP rule jointly establish the Federal Republic of the China Nation.</span>
-* 创世发行只在创世状态中写入一次，链进入运行期后不得再次触发创世发行；开发账户支付属于创世状态分配，不是后续可重复调用的发行入口。<br><span class="whitepaper-en">Genesis issuance is written exactly once in genesis state. After the chain enters the operating period, genesis issuance cannot be triggered again. The development-account payment is part of genesis-state allocation and is not a later repeatable issuance entry point.</span>
+* 创世发行只在创世状态中写入一次，链进入运行期后不得再次触发创世发行；国储会主账户余额和19名国储会创世管理员预置余额均属于创世状态分配，不是后续可重复调用的发行入口。<br><span class="whitepaper-en">Genesis issuance is written exactly once in genesis state. After the chain enters the operating period, genesis issuance cannot be triggered again. The NRC main-account balance and the preset balances of the 19 NRC genesis administrators are all part of genesis-state allocation and are not later repeatable issuance entries.</span>
 
 ## 3.2.省储行创立发行与质押利息<br><span class="whitepaper-heading-en">3.2. Provincial Citizen Reserve Bank Founding Issuance and Staking Interest</span>
 
@@ -301,9 +304,9 @@ w5FxV4G57ZQGZCWbVYLAjKYHtwaDGEbf1AGsMgfmr5KXe1KS8
 
 ## 3.4.公民发行<br><span class="whitepaper-heading-en">3.4. Citizen Issuance</span>
 
-* 完成链上公民身份登记的公民，将获得认证奖励，可获得认证奖励的公民总量为1,443,497,378个，前14,436,417个完成登记的公民，每人奖励9999.00元；第14,436,417个之后完成登记的公民，每人奖励999.00元；<br><span class="whitepaper-en">A citizen who completes on-chain citizen-identity registration receives a certification reward. The total number of citizens eligible for certification rewards is 1,443,497,378. Each of the first 14,436,417 registered citizens receives a reward of 9,999.00 yuan; each citizen registered after the 14,436,417th receives a reward of 999.00 yuan.</span>
+* 完成首次链上投票身份登记的公民，将获得认证奖励，可获得认证奖励的公民总量为1,443,497,378个，前14,436,417个完成投票身份登记的公民，每人奖励9999.00元；第14,436,417个之后完成投票身份登记的公民，每人奖励999.00元；参选身份是在投票身份基础上的升级，不重复触发公民发行。<br><span class="whitepaper-en">A citizen who completes first on-chain voting-identity registration receives a certification reward. The total number of citizens eligible for certification rewards is 1,443,497,378. Each of the first 14,436,417 citizens completing voting-identity registration receives a reward of 9,999.00 yuan; each citizen registered after the 14,436,417th receives a reward of 999.00 yuan. Candidate identity is an upgrade on top of voting identity and does not trigger citizen issuance again.</span>
 * 达到公民发行总量后，后续认证的节点无奖励，认证发行奖励以先完成认证优先获得，每个身份识别码仅能获得一次认证奖励，公民发行能让更多的公民参与“公民建国运动”。<br><span class="whitepaper-en">After the citizen issuance cap is reached, later certified nodes receive no rewards. Certification issuance rewards are obtained in priority order by those who complete certification first. Each identity identification code may receive the certification reward only once. Citizen issuance enables more citizens to participate in the Citizen Nation-Building Movement.</span>
-* 公民发行不提供人工补发入口，也不由用户直接调用发行接口；只有链上投票身份登记成功后，公民身份回调才能触发 citizen-issuance 模块执行奖励。<br><span class="whitepaper-en">Citizen issuance provides no manual reissue entry point and is not directly invoked by users. Only after successful on-chain voting-identity registration may the citizen-identity callback trigger the citizen-issuance module to execute the reward.</span>
+* 公民发行不提供人工补发入口，也不由用户直接调用发行接口；只有链上投票身份登记成功后，公民身份回调才能触发 citizen-issuance 模块执行奖励，参选身份升级只补充参选所需字段。<br><span class="whitepaper-en">Citizen issuance provides no manual reissue entry point and is not directly invoked by users. Only after successful on-chain voting-identity registration may the citizen-identity callback trigger the citizen-issuance module to execute the reward; candidate-identity upgrade only adds fields required for candidacy.</span>
 * 同一身份识别码、同一账户均只能获得一次公民发行奖励；达到节点总量上限或重复绑定时，模块只记录跳过结果，不新增发行。<br><span class="whitepaper-en">The same identity identification code and the same account may each receive the citizen issuance reward only once. When the node cap is reached or a repeated binding occurs, the module only records the skipped result and does not create new issuance.</span>
 
 ```
@@ -365,10 +368,10 @@ GMB/
 │   ├── node/                    # 全节点与桌面运维台，负责网络、PoW、GRANDPA、链上中国启动入口
 │   ├── onchina/                 # 链上中国平台，负责注册局业务、法律文库、立法入口、机构和公民管理
 │   └── runtime/                 # 链上 Runtime，负责发行、治理、投票、机构、管理员和链上公民身份
-│         ├── genesis/           # 创世机构、创世管理员、创世状态
+│         ├── genesis/           # 创世期、创世常量、创世内置公权机构与初始管理员写入
 │         ├── votingengine/      # 内部投票、联合投票、立法投票、选举投票
 │         ├── governance/        # 运行期治理、协议升级和治理执行
-│         ├── admins/            # 创世管理员、公权管理员、私权管理员、个人管理员
+│         ├── admins/            # 公权管理员、私权管理员、个人多签管理员
 │         ├── entity/            # 公权机构、私权机构、个人多签等实体生命周期
 │         ├── public/            # 立法院、立法活动、选举活动等公权业务
 │         ├── issuance/          # 创世发行、公民发行、全节点发行、决议发行、省储行利息
@@ -550,13 +553,13 @@ VOTING → PASSED → EXECUTED
 
 ### 5.6.2.私权机构<br><span class="whitepaper-heading-en">5.6.2. Private Institutions</span>
 
-* 私权机构包括个体经营、合伙企业、股权公司、股份公司、公益组织、注册协会和非法人组织等，统一由注册局登记后形成链上机构。<br><span class="whitepaper-en">Private institutions include sole proprietorships, partnerships, equity companies, corporations, welfare organizations, registered associations, and unincorporated organizations. They become on-chain institutions after registry registration.</span>
+* 私权机构包括个体经营、合伙企业、股权公司、股份公司、公益组织、注册协会和非法人组织等，统一由注册局发起登记，并按私权机构实体模块流程形成链上机构。<br><span class="whitepaper-en">Private institutions include sole proprietorships, partnerships, equity companies, corporations, welfare organizations, registered associations, and unincorporated organizations. Registries initiate their registration, and they become on-chain institutions through the private-institution entity-module flow.</span>
 * 私权机构实体模块负责机构码、法人资格、账户派生、状态生命周期和注册局授权校验；创建时同步写入该机构自己的初始管理员集合。<br><span class="whitepaper-en">The private-institution entity module handles institution codes, legal personality, account derivation, lifecycle state, and registry-authority checks. At creation, it writes the institution's own initial administrator set.</span>
 
 ### 5.6.3.公权机构<br><span class="whitepaper-heading-en">5.6.3. Public Institutions</span>
 
 * 公权机构包括联邦注册局、市注册局、法院、立法机构、教育机构和其他政府类机构，创世机构由创世写入，运行期机构由有权限的注册局登记。<br><span class="whitepaper-en">Public institutions include the Federal Registry, City Registries, courts, legislatures, education institutions, and other government institutions. Genesis institutions are written at genesis, while runtime institutions are registered by authorized registries.</span>
-* 联邦注册局可在所辖省份内登记机构，市注册局在本市范围内登记机构；实体模块负责链上机构生命周期，管理员模块负责 active admins，链上中国负责注册局录入和交易生成。<br><span class="whitepaper-en">The Federal Registry may register institutions within its governed provinces, and City Registries may register institutions within their city. Entity modules handle on-chain institution lifecycle, admins modules handle active admins, and OnChina handles registry data entry and transaction generation.</span>
+* 联邦注册局通过省级5人组账户在所辖省份内登记机构，市注册局在本市范围内登记机构；实体模块负责链上机构生命周期，管理员模块负责 active admins，链上中国负责注册局录入和交易生成。<br><span class="whitepaper-en">The Federal Registry registers institutions within its governed provinces through provincial five-person group accounts, and City Registries register institutions within their own city. Entity modules handle on-chain institution lifecycle, admins modules handle active admins, and OnChina handles registry data entry and transaction generation.</span>
 
 ## 5.7.发行模组<br><span class="whitepaper-heading-en">5.7. issuance</span>
 
@@ -579,9 +582,9 @@ VOTING → PASSED → EXECUTED
 
 ### 5.7.3.公民发行<br><span class="whitepaper-heading-en">5.7.3. citizen-issuance</span>
 
-* 完成链上公民身份登记的公民，将获得认证奖励，可获得认证奖励的公民总量为1,443,497,378个，前14,436,417个完成登记的公民，每人奖励9999.00元；第14,436,417个之后完成登记的公民，每人奖励999.00元；<br><span class="whitepaper-en">A citizen who completes on-chain citizen-identity registration receives a certification reward. The total number of citizens eligible for certification rewards is 1,443,497,378. Each of the first 14,436,417 registered citizens receives a reward of 9,999.00 yuan; each citizen registered after the 14,436,417th receives a reward of 999.00 yuan.</span>
+* 完成首次链上投票身份登记的公民，将获得认证奖励，可获得认证奖励的公民总量为1,443,497,378个，前14,436,417个完成投票身份登记的公民，每人奖励9999.00元；第14,436,417个之后完成投票身份登记的公民，每人奖励999.00元；参选身份升级不重复发行。<br><span class="whitepaper-en">A citizen who completes first on-chain voting-identity registration receives a certification reward. The total number of citizens eligible for certification rewards is 1,443,497,378. Each of the first 14,436,417 citizens completing voting-identity registration receives a reward of 9,999.00 yuan; each citizen registered after the 14,436,417th receives a reward of 999.00 yuan. Candidate-identity upgrade does not issue again.</span>
 * 达到公民发行总量后，后续认证的节点无奖励，认证发行奖励以先完成认证优先获得，每个身份识别码仅能获得一次认证奖励；<br><span class="whitepaper-en">After the citizen issuance cap is reached, later certified nodes receive no rewards. Certification issuance rewards are obtained in priority order by those who complete certification first. Each identity identification code may receive the certification reward only once.</span>
-* 公民发行由链上投票身份登记成功后的回调触发；同一身份识别码、同一账户只能获得一次奖励，模块不提供人工补发或治理重写入口。<br><span class="whitepaper-en">Citizen issuance is triggered by the on-chain callback after successful voting-identity registration. The same identity identification code and the same account may each receive the reward only once, and the module provides no manual reissue or governance rewrite entry point.</span>
+* 公民发行由链上投票身份登记成功后的回调触发；同一身份识别码、同一账户只能获得一次奖励，参选身份升级不触发二次奖励，模块不提供人工补发或治理重写入口。<br><span class="whitepaper-en">Citizen issuance is triggered by the on-chain callback after successful voting-identity registration. The same identity identification code and the same account may each receive the reward only once, candidate-identity upgrade does not trigger a second reward, and the module provides no manual reissue or governance rewrite entry point.</span>
 
 ### 5.7.4.决议发行<br><span class="whitepaper-heading-en">5.7.4. resolution-issuance</span>
 
@@ -662,9 +665,9 @@ VOTING → PASSED → EXECUTED
 
 ## 7.2.注册局<br><span class="whitepaper-heading-en">7.2. Registry</span>
 
-* 注册局是链上中国的核心业务角色，包含联邦注册局和市注册局；联邦注册局在所辖省份内办理业务，市注册局在本市范围内办理业务。<br><span class="whitepaper-en">The Registry is the core business role of OnChina and includes the Federal Registry and City Registries. The Federal Registry operates within its governed provinces, while each City Registry operates within its own city.</span>
+* 注册局是链上中国的核心业务角色，包含联邦注册局和市注册局；联邦注册局通过省级5人组账户在所辖省份内办理登记业务，市注册局在本市范围内办理登记业务。<br><span class="whitepaper-en">The Registry is the core business role of OnChina and includes the Federal Registry and City Registries. The Federal Registry handles registration within its governed provinces through provincial five-person group accounts, while each City Registry handles registration within its own city.</span>
 * 公民档案由注册局创建并颁发电子护照；公民选择上链时，链上中国把投票或参选所需的最小字段提交至 `citizen-identity`，并要求公民钱包签名保护档案上链动作。<br><span class="whitepaper-en">Citizen records are created by registries and receive electronic passports. When a citizen chooses on-chain registration, OnChina submits the minimum fields needed for voting or candidacy to `citizen-identity`, requiring CitizenWallet signature to protect the on-chain identity action.</span>
-* 公权机构、教育机构、私权机构和非法人组织均通过注册局注册；注册成功即形成链上机构和初始管理员集合，之后机构按自身规则自治更换管理员。<br><span class="whitepaper-en">Public institutions, education institutions, private institutions, and unincorporated organizations are registered through registries. Successful registration creates the on-chain institution and initial administrator set, after which the institution changes administrators under its own rules.</span>
+* 公权机构、教育机构、私权机构和非法人组织均通过注册局注册；注册局交易写入机构登记信息并提交该机构自己的初始管理员集合，账户预登记、机构激活和管理员写入按对应实体模块与管理员模块的链上流程完成，之后机构按自身规则自治更换管理员。<br><span class="whitepaper-en">Public institutions, education institutions, private institutions, and unincorporated organizations are registered through registries. The registry transaction writes institution-registration information and submits the institution's own initial administrator set; account pre-registration, institution activation, and administrator writes complete through the corresponding entity and admins modules, after which the institution changes administrators under its own rules.</span>
 
 ## 7.3.链上立法<br><span class="whitepaper-heading-en">7.3. On-Chain Legislation</span>
 

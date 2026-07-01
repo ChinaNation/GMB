@@ -42,7 +42,6 @@ const GENESIS_CONSTITUTION_VERSION: u32 = 1;
 /// `Tier{Constitution=0,..}`、`LawStatus{Pending=0,Effective=1,Repealed=2}`)。
 /// 由 legislation-yuan 测试 `enum_discriminants_match_node_guard` 交叉钉死,防漂移。
 const TIER_CONSTITUTION: u8 = 0;
-const LAW_STATUS_PENDING: u8 = 0;
 const LAW_STATUS_REPEALED: u8 = 2;
 
 // ───────── 链上结构镜像 ─────────
@@ -104,7 +103,9 @@ struct MLawHead {
     tier: u8,
     scope_code: u32,
     houses: Vec<([u8; 4], [u8; 32])>,
-    current_version: u32,
+    effective_version: Option<u32>,
+    latest_version: u32,
+    pending_version: Option<u32>,
     status: u8,
 }
 
@@ -151,16 +152,11 @@ fn esc(raw: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-/// 当前**生效中**的版本号(供桌面端展示,避免提前显示待生效版):
-/// `status == Pending` 时现行版 = `current_version - 1`(v1 为创世恒生效,不回退);否则 = `current_version`。
+/// 当前**生效中**的版本号(供桌面端展示,避免提前显示待生效版)。
 pub fn effective_version_of_law(law_scale: &[u8]) -> Result<u32, String> {
     let law = decode_law_head(law_scale).map_err(|e| format!("宪法 Law 解码失败:{e:?}"))?;
-    let v = if law.status == LAW_STATUS_PENDING && law.current_version > 1 {
-        law.current_version - 1
-    } else {
-        law.current_version
-    };
-    Ok(v)
+    law.effective_version
+        .ok_or_else(|| "宪法尚无生效版本".to_string())
 }
 
 /// 把链上结构化宪法 SCALE 字节(`LawVersion` 编码)重建为完整 HTML 文档。
@@ -447,11 +443,26 @@ where
     }
 
     // ── ③ 不可修改条款逐字一致 ──
-    let version_bytes = read_raw(&storage_key::law_version(
-        CONSTITUTION_LAW_ID,
-        law.current_version,
-    ))
-    .ok_or(GuardError::LawVersionMissing)?;
+    // 生效版本必须存在；待生效版本若存在也必须立即接受同一套不可修改条款约束。
+    let effective_version = law.effective_version.ok_or(GuardError::LawVersionMissing)?;
+    check_immutable_version(&read_raw, reference, effective_version)?;
+    if let Some(pending_version) = law.pending_version {
+        check_immutable_version(&read_raw, reference, pending_version)?;
+    }
+    Ok(())
+}
+
+/// 校验指定宪法版本里的不可修改条款是否仍与创世基准逐字一致。
+fn check_immutable_version<F>(
+    read_raw: &F,
+    reference: &ImmutableReference,
+    version: u32,
+) -> Result<(), GuardError>
+where
+    F: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    let version_bytes = read_raw(&storage_key::law_version(CONSTITUTION_LAW_ID, version))
+        .ok_or(GuardError::LawVersionMissing)?;
     let head = MLawVersionHead::decode(&mut &version_bytes[..])
         .map_err(|_| GuardError::VersionDecodeFailed)?;
     for &n in IMMUTABLE_CONSTITUTION_ARTICLES.iter() {
@@ -688,6 +699,8 @@ where
 mod tests {
     use super::*;
 
+    const LAW_STATUS_PENDING: u8 = 0;
+
     // ---- 测试夹具:构造一份 LawVersion 字节(可指定某条文内容)----
     fn article_bytes(number: u32, body: &str) -> MArticle {
         MArticle {
@@ -722,15 +735,17 @@ mod tests {
         [0u8; 32].encode_to(&mut bytes); // content_hash(哑尾)
         0u8.encode_to(&mut bytes); // vote_type
         0u64.encode_to(&mut bytes); // proposal_id
-        0u32.encode_to(&mut bytes); // published_at
-        0u32.encode_to(&mut bytes); // effective_at
+        0u64.encode_to(&mut bytes); // published_at
+        0u64.encode_to(&mut bytes); // effective_at
         bytes
     }
 
-    /// 构造 Law(current_version) 的 SCALE 字节 + 哑尾。
-    /// Law(0) 字节:tier=Constitution、scope=0、给定 houses/current_version/status。
-    fn law_scale_full(
-        current_version: u32,
+    /// 构造 Law 的 SCALE 字节 + 哑尾。
+    /// Law(0) 字节:tier=Constitution、scope=0、给定 houses/显式版本指针/status。
+    fn law_scale_with_versions(
+        effective_version: Option<u32>,
+        latest_version: u32,
+        pending_version: Option<u32>,
         status: u8,
         houses: Vec<([u8; 4], [u8; 32])>,
     ) -> Vec<u8> {
@@ -739,14 +754,38 @@ mod tests {
         TIER_CONSTITUTION.encode_to(&mut bytes); // tier = Constitution(0)
         0u32.encode_to(&mut bytes); // scope_code = 0
         houses.encode_to(&mut bytes); // houses
-        current_version.encode_to(&mut bytes); // current_version
+        effective_version.encode_to(&mut bytes); // effective_version
+        latest_version.encode_to(&mut bytes); // latest_version
+        pending_version.encode_to(&mut bytes); // pending_version
         status.encode_to(&mut bytes); // status
         bytes
     }
 
+    fn law_scale_full(
+        latest_version: u32,
+        status: u8,
+        houses: Vec<([u8; 4], [u8; 32])>,
+    ) -> Vec<u8> {
+        let (effective_version, pending_version) = if status == LAW_STATUS_PENDING {
+            (
+                (latest_version > 1).then_some(latest_version - 1),
+                Some(latest_version),
+            )
+        } else {
+            (Some(latest_version), None)
+        };
+        law_scale_with_versions(
+            effective_version,
+            latest_version,
+            pending_version,
+            status,
+            houses,
+        )
+    }
+
     /// 默认合法 Law(0):Effective、空 houses。
-    fn law_scale(current_version: u32) -> Vec<u8> {
-        law_scale_full(current_version, 1 /* Effective */, Vec::new())
+    fn law_scale(latest_version: u32) -> Vec<u8> {
+        law_scale_full(latest_version, 1 /* Effective */, Vec::new())
     }
 
     fn laws_by_scope_entry(list: Vec<u64>) -> (Vec<u8>, Vec<u8>) {
@@ -760,6 +799,25 @@ mod tests {
             (
                 storage_key::law_version(CONSTITUTION_LAW_ID, version),
                 law_version_scale(version, articles),
+            ),
+            laws_by_scope_entry(vec![CONSTITUTION_LAW_ID]),
+        ]
+    }
+
+    /// 一份合法待生效态:v1 仍生效、v2 待生效。
+    fn valid_pending_state(pending_articles: Vec<MArticle>) -> Vec<(Vec<u8>, Vec<u8>)> {
+        vec![
+            (
+                storage_key::law(CONSTITUTION_LAW_ID),
+                law_scale_with_versions(Some(1), 2, Some(2), LAW_STATUS_PENDING, Vec::new()),
+            ),
+            (
+                storage_key::law_version(CONSTITUTION_LAW_ID, 1),
+                law_version_scale(1, genesis_articles()),
+            ),
+            (
+                storage_key::law_version(CONSTITUTION_LAW_ID, 2),
+                law_version_scale(2, pending_articles),
             ),
             laws_by_scope_entry(vec![CONSTITUTION_LAW_ID]),
         ]
@@ -876,7 +934,7 @@ mod tests {
     #[test]
     fn passes_when_immutable_unchanged_even_if_mutable_changed() {
         let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
-        // 新版本:不可修改条款原样,只改了可变条 5,bump current_version=2。
+        // 新版本:不可修改条款原样,只改了可变条 5,bump latest_version=2。
         let mut arts = amended_articles(immutable_intact);
         arts[IMMUTABLE_CONSTITUTION_ARTICLES.len()] = article_bytes(5, "可变条款已被合法修改");
         let state = valid_current_state(2, arts);
@@ -944,7 +1002,9 @@ mod tests {
         1u8.encode_to(&mut law); // tier = National
         0u32.encode_to(&mut law);
         Vec::<([u8; 4], [u8; 32])>::new().encode_to(&mut law);
+        Some(2u32).encode_to(&mut law);
         2u32.encode_to(&mut law);
+        Option::<u32>::None.encode_to(&mut law);
         1u8.encode_to(&mut law); // Effective
         assert_eq!(
             check_with_override(2, storage_key::law(CONSTITUTION_LAW_ID), law),
@@ -964,11 +1024,9 @@ mod tests {
     #[test]
     fn allows_pending_status_during_amendment() {
         // status=Pending(0) 不应被拒(合法修宪窗口)。
-        let law = law_scale_full(2, LAW_STATUS_PENDING, Vec::new());
-        assert_eq!(
-            check_with_override(2, storage_key::law(CONSTITUTION_LAW_ID), law),
-            Ok(())
-        );
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let state = valid_pending_state(amended_articles(immutable_intact));
+        assert_eq!(check_immutable_articles(reader(state), &reference), Ok(()));
     }
 
     #[test]
@@ -1008,8 +1066,8 @@ mod tests {
     }
 
     #[test]
-    fn effective_version_skips_pending() {
-        // Effective → current;Pending → current-1;v1 不回退。
+    fn effective_version_uses_explicit_pointer() {
+        // Effective 和 Pending 都只读显式 effective_version;新法尚无生效版时返回错误。
         assert_eq!(
             effective_version_of_law(&law_scale_full(3, 1, vec![])).unwrap(),
             3
@@ -1018,9 +1076,9 @@ mod tests {
             effective_version_of_law(&law_scale_full(3, 0, vec![])).unwrap(),
             2
         );
-        assert_eq!(
-            effective_version_of_law(&law_scale_full(1, 0, vec![])).unwrap(),
-            1
+        assert!(
+            effective_version_of_law(&law_scale_full(1, 0, vec![])).is_err(),
+            "新法待生效且尚无 effective_version 时不能再推断"
         );
     }
 

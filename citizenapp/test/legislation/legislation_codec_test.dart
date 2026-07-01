@@ -18,8 +18,10 @@ List<int> _s(String s) {
   return [_c(b.length), ...b];
 }
 
-List<int> _u32(int v) => [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
+List<int> _u32(int v) =>
+    [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
 List<int> _u64(int v) => [...List.generate(8, (k) => (v >> (8 * k)) & 0xff)];
+List<int> _someU32(int v) => [0x01, ..._u32(v)];
 
 void main() {
   test('decodeLawIds: Vec<u64> [0, 5]', () {
@@ -41,7 +43,9 @@ void main() {
       _c(1), // houses len=1
       0x4E, 0x4C, 0x47, 0x00, // NLG\0
       ...List.filled(32, 0xAB), // account
-      ..._u32(1), // current_version
+      ..._someU32(1), // effective_version
+      ..._u32(1), // latest_version
+      0x00, // pending_version=None
       0x01, // status=Effective
     ]);
     final law = decodeLaw(raw);
@@ -51,7 +55,9 @@ void main() {
     expect(law.houses.length, 1);
     expect(law.houses.first.institutionCode, 'NLG');
     expect(law.houses.first.accountHex, 'ab' * 32);
-    expect(law.currentVersion, 1);
+    expect(law.effectiveVersion, 1);
+    expect(law.latestVersion, 1);
+    expect(law.pendingVersion, isNull);
     expect(law.status, LawStatus.effective);
   });
 
@@ -67,7 +73,7 @@ void main() {
     expect(m.isImmutable(2), isFalse);
   });
 
-  test('decodeLawVersion: 章>节>条>款 嵌套树 + 块号/状态', () {
+  test('decodeLawVersion: 章>节>条>款 嵌套树 + 时间戳/状态', () {
     final raw = Uint8List.fromList([
       ..._u64(0), // law_id
       ..._u32(1), // version
@@ -85,8 +91,8 @@ void main() {
       ...List.filled(32, 0), // content_hash
       0x03, // vote_type=Special
       ..._u64(0), // proposal_id
-      ..._u32(10), // published_at
-      ..._u32(20), // effective_at
+      ..._u64(10), // published_at
+      ..._u64(20), // effective_at
     ]);
     final v = decodeLawVersion(raw);
     expect(v.lawId, 0);

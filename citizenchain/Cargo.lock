@@ -6318,6 +6318,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "internal-vote",
+ "pallet-timestamp",
  "parity-scale-codec",
  "primitives",
  "scale-info",

@@ -5,11 +5,11 @@
 
 ## 背景 / 目标
 
-- 公民宪法从「include_str! HTML + CitizenConstitutionApi」改为 legislation-yuan 里 `tier=宪法` 的链上法律(创世注入),宪法**唯一真源 = 立法院模块**。
+- 公民宪法从「include_str! HTML + 旧宪法 runtime API」改为 legislation-yuan 里 `tier=宪法` 的链上法律(创世注入),宪法**唯一真源 = 立法院模块**。
 - **所有法律统一 章>节>条>款 结构**(章/节/条必有、款可空、条正文 body 必填);章节条做目录,条款做正文。
 - 宪法双语,其他法律单语。
 - 节点桌面端「公民宪法」tab 保持现样式,改读结构化宪法。
-- 迁移后删 `CitizenConstitution.html`(无用)。
+- 迁移后删 `旧宪法 HTML`(无用)。
 
 ## 已拍板(2026-06-24)
 
@@ -41,7 +41,7 @@ Clause(款): number, text, text_en                           // 可空
 
 ## Phase 2 — 宪法解析器(citizenchain/scripts/)
 
-- 读 CitizenConstitution.html(class: heading-cn 章/节、article-no 条、body-cn/body-en 条款中英)→ 结构化 LawVersion → SCALE → `constitution.scale`(include_bytes! 进 legislation-yuan)。
+- 读 旧宪法 HTML(class: heading-cn 章/节、article-no 条、body-cn/body-en 条款中英)→ 结构化 LawVersion → SCALE → `constitution.scale`(include_bytes! 进 legislation-yuan)。
 - 校验:解码回结构与 HTML 比对(章节条款 + 中英 + 条号连续 + 8 不可修改条款齐全)。
 
 ## Phase 3 — 创世注入(legislation-yuan genesis)
@@ -56,15 +56,15 @@ Clause(款): number, text, text_en                           // 可空
 
 ## Phase 5 — 清理(禁止兼容 + tools 铁律)
 
-- 删 primitives/genesis.rs HTML include + CitizenConstitutionApi decl、apis.rs impl、**CitizenConstitution.html 文件**、节点旧宪法 HTML 路径。
-- 残留扫描 CitizenConstitution/citizen_constitution_html/constitution_getDocument 零残留(文案保留)。
+- 删 primitives/genesis.rs HTML include + 旧宪法 runtime API decl、apis.rs impl、**旧宪法 HTML 文件**、节点旧宪法 HTML 路径。
+- 残留扫描 CitizenConstitution/旧宪法 HTML API/constitution_getDocument 零残留(文案保留)。
 - tools 收口:现存 tools/ 迁 scripts/ 后删(先核引用,安全迁移)。
 
 ## 预计修改目录
 
 - `citizenchain/runtime/public/legislation-yuan/`(模型 + 创世 + constitution.scale;代码+测试)
 - `citizenchain/scripts/`(解析器)
-- `citizenchain/runtime/primitives/src/genesis.rs` + `CitizenConstitution.html`(删 HTML/API + 删文件)
+- `citizenchain/runtime/primitives/src/genesis.rs` + `旧宪法 HTML`(删 HTML/API + 删文件)
 - `citizenchain/runtime/src/{apis,configs/mod,core/chain_spec}.rs`
 - `citizenchain/node/src/core/rpc.rs` + `src/other/other_tabs/` + `frontend/other/other-tabs/`
 - `memory/`
@@ -78,16 +78,16 @@ Clause(款): number, text, text_en                           // 可空
 ## 进度
 
 - [x] **Phase 1 模型改造(2026-06-24 完成)**:legislation-yuan 全文模型由「扁平 Article」改为 `章(Chapter)>节(Section)>条(Article)>款(Clause)`;Article 加 title_en/body(必填)/body_en,Clause 加 text_en,删 Item;LawVersion.articles→chapters;Config 删 MaxItemsPerClause/MaxArticlesPerLaw,加 MaxChaptersPerLaw/MaxSectionsPerChapter/MaxArticlesPerSection;不可修改条款校验改遍历 chapters>sections>articles 按 number(find_article helper);EmptyArticles→EmptyChapters;configs 常量同步(MaxTextLen 4096→8192);ChaptersOf 别名。验收:cargo test -p legislation-yuan 14 + runtime cargo check(std+no_std)+ legislation-vote 12 无回归;fmt 干净。
-- [x] **Phase 2 解析器(2026-06-24 完成)**:`citizenchain/scripts/parse_constitution.py` 读 HTML(块状 chapter/section/article-block + article-paragraph,EN heading 给阿拉伯条号)→ 章>节>条>款 + 中英双语 → 直出 SCALE(与链端字段序一致,自带 compact 编码)→ `legislation-yuan/src/constitution.scale`(217KB,原 HTML 933KB)。产物:7章/28节/140条/129款,条号连续 1..140,无空 body。验证:Rust 测试 `constitution_scale_decodes_and_is_well_formed` 解码进 ChaptersOf,7章140条+条号连续+body双语+8不可修改条款齐全。
+- [x] **Phase 2 解析器(2026-06-24 完成)**:`citizenchain/scripts/旧 HTML 解析脚本` 读 HTML(块状 chapter/section/article-block + article-paragraph,EN heading 给阿拉伯条号)→ 章>节>条>款 + 中英双语 → 直出 SCALE(与链端字段序一致,自带 compact 编码)→ `legislation-yuan/src/constitution.scale`(217KB,原 HTML 933KB)。产物:7章/28节/140条/129款,条号连续 1..140,无空 body。验证:Rust 测试 `constitution_scale_decodes_and_is_well_formed` 解码进 ChaptersOf,7章140条+条号连续+body双语+8不可修改条款齐全。
 - [x] **Phase 3 创世注入(2026-06-24 完成)**:legislation-yuan `#[pallet::genesis_config]`(constitution_houses,默认 [国家立法院]=china_lf CHINA_LF[0] + NLG 码)+ `genesis_build`(从 CONSTITUTION_SCALE 解码,写 law_id=0 tier=宪法 status=Effective version=1 title=公民宪法/Citizen Constitution);runtime 自动纳入 RuntimeGenesisConfig(default 即注入)。验证:`genesis_seeds_constitution_as_law_zero` 创世后宪法=law_id=0 tier=宪法 7章140条 houses=[国家立法院];legislation-yuan 16测 + runtime cargo check(std+no_std)全绿。
 - [x] **Phase 4 节点 tab re-point(2026-06-24 完成,现样式)**:节点据链上结构化宪法重建 HTML,复用原 CSS 外壳,前端 iframe **零改动**,样式与迁移前一致。
   - 抽原 HTML 表现外壳为节点资源:`node/src/other/other_tabs/constitution_shell.html`(1-521 行:head/style/封面/目录标题,止于 `<div class="toc-list">`,624KB 主要为封面国徽 base64)+ `constitution_shell_suffix.html`(`</main>`+置顶脚本+`</body></html>`)。
-  - 新建 `node/src/other/other_tabs/constitution_render.rs`:`MLawHead`/`MLawVersionHead`/`MChapter/Section/Article/Clause` 镜像(字段序与链端逐字段核对一致,SCALE 顺序解码到 chapters/current_version 即停,尾部字段不镜像);版本号 helper 后续已由 RAW 生效版本推导替换;`render_constitution_html` 据 章>节>条>款 重建 TOC(`toc-item toc-level-{1,2,3}` + 锚点 `#chapter-N/#chapter-N-section-M/#article-K`)+ 正文(`chapter-block/section-block/article-block` + `cn/en heading/body` 类,与原标记逐字一致)+ HTML 转义。
-  - `node/src/core/rpc.rs`:先从旧 `CitizenConstitutionApi` 迁到结构化宪法读取;后续守卫卡已进一步改为 RAW 读 `Laws[0]`→解当前生效版本→`LawVersions[0][v]`→重建 HTML→按内容算 blake2_256,`source` 改 `"legislation-raw"`(不信任可升级 runtime API)。
+  - 新建 `node/src/other/other_tabs/constitution_render.rs`:`MLawHead`/`MLawVersionHead`/`MChapter/Section/Article/Clause` 镜像(字段序与链端逐字段核对一致,SCALE 顺序解码到 chapters/effective_version/latest_version/pending_version 即停,尾部字段不镜像);版本号 helper 后续已由 RAW 生效版本推导替换;`render_constitution_html` 据 章>节>条>款 重建 TOC(`toc-item toc-level-{1,2,3}` + 锚点 `#chapter-N/#chapter-N-section-M/#article-K`)+ 正文(`chapter-block/section-block/article-block` + `cn/en heading/body` 类,与原标记逐字一致)+ HTML 转义。
+  - `node/src/core/rpc.rs`:先从旧 `旧宪法 runtime API` 迁到结构化宪法读取;后续守卫卡已进一步改为 RAW 读 `Laws[0]`→解当前生效版本→`LawVersions[0][v]`→重建 HTML→按内容算 blake2_256,`source` 改 `"legislation-raw"`(不信任可升级 runtime API)。
   - 前端 `RuntimeConstitutionViewer.tsx`/`api.ts`/`types.ts` 与 `other_tabs/mod.rs` **不改**(响应形状 `{html,blake2_256,source}` 不变,`source: string` 非字面量)。
   - 验收:`cargo check -p node` 绿;`constitution_render` 2 单测过(锚点/双语/款/哑尾忽略);fmt 干净。
-- [x] **Phase 5 清理(2026-06-24 完成)**:删 `genesis.rs` `CITIZEN_CONSTITUTION_HTML` 常量 + `CitizenConstitutionApi` decl、`apis.rs` 对应 impl、**`CitizenConstitution.html` 文件**(git rm,933KB);`decl_runtime_apis!` 仅留 `LegislationApi`。残留扫描:`CitizenConstitutionApi`/`citizen_constitution_html`/`citizen_constitution_blake2_256`/`CITIZEN_CONSTITUTION_HTML` **代码零残留**(仅描述性注释保留);`constitution_getDocument` RPC 名保留(现由结构化宪法支撑)。验收:primitives no_std + runtime/node std 编译绿;legislation-yuan 16 + node 2 + primitives 24 测试全过。
-  - 解析器溯源:`parse_constitution.py` 改为「一次性迁移工具」状态说明(产物已入库,输入 HTML 按单一真源已删,需重算先 git 恢复 HTML);章/节标题与款正文改存**完整原文**(目录显示「第一章 总则」、款含「第N款」前缀),number 仅供锚点;删死函数 `strip_en_prefix`。constitution.scale 重生 = 219KB(7章/28节/140条/129款)。
+- [x] **Phase 5 清理(2026-06-24 完成)**:删 `genesis.rs` `CITIZEN_CONSTITUTION_HTML` 常量 + `旧宪法 runtime API` decl、`apis.rs` 对应 impl、**`旧宪法 HTML` 文件**(git rm,933KB);`decl_runtime_apis!` 仅留 `LegislationApi`。残留扫描:`旧宪法 runtime API`/`旧宪法 HTML API`/`citizen_constitution_blake2_256`/`CITIZEN_CONSTITUTION_HTML` **代码零残留**(仅描述性注释保留);`constitution_getDocument` RPC 名保留(现由结构化宪法支撑)。验收:primitives no_std + runtime/node std 编译绿;legislation-yuan 16 + node 2 + primitives 24 测试全过。
+  - 解析器溯源:`旧 HTML 解析脚本` 改为「一次性迁移工具」状态说明(产物已入库,输入 HTML 按单一真源已删,需重算先 git 恢复 HTML);章/节标题与款正文改存**完整原文**(目录显示「第一章 总则」、款含「第N款」前缀),number 仅供锚点;删死函数 `strip_en_prefix`。constitution.scale 重生 = 219KB(7章/28节/140条/129款)。
   - tools 收口:本卡解析器自始置于 `citizenchain/scripts/`(从未建 tools/),无需迁移;其余系统遗留 tools/(whitepaper、citizenapp bundle)不在本卡边界,不动。
   - 文档同步:`README.md`、`memory/07-ai/unified-naming.md`、`OTHER_TABS_TECHNICAL.md` 公民宪法真源指向改为链上立法院模块。
   - **待用户跑**:重新创世后真机 QA —— 节点桌面端宪法 tab 现样式显示(章>节>条 + 中英)、blake2 随内容、CitizenApp 浏览(双客户端卡另线程)。

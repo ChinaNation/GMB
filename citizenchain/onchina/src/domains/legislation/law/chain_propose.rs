@@ -10,7 +10,7 @@
 //! - `legislature` = `Option<(...)>`(0x00 None / 0x01 + 36 字节);
 //! - `title` / `title_en` = `Vec<u8>` / `Option<Vec<u8>>`(`Compact<u32>` 长度前缀);
 //! - `chapters` = 章>节>条>款 嵌套(链端 `BoundedVec` 与 `Vec` 的 SCALE 同布局,由 `ChapterArg` 派生 `Encode`);
-//! - `scope_code` / `effective_at`(BlockNumber=u32)= u32 小端;`law_id` = u64 小端。
+//! - `scope_code` = u32 小端;`effective_at` = 生效时间戳毫秒(u64 小端);`law_id` = u64 小端。
 //!
 //! `tests` 用链端真实 `legislation_yuan::{Tier,VoteType}` 与 codec `.encode()` 逐字节交叉校验,杜绝静默漂移。
 //!
@@ -138,7 +138,7 @@ pub fn encode_propose_enact_law(
     title: &[u8],
     title_en: Option<&[u8]>,
     chapters: &[ChapterArg],
-    effective_at: u32,
+    effective_at: u64,
 ) -> ChainCall {
     let mut out = vec![LEGISLATION_YUAN_PALLET_INDEX, PROPOSE_ENACT_LAW_CALL_INDEX];
     out.push(tier);
@@ -169,7 +169,7 @@ pub fn encode_propose_amend_law(
     title: &[u8],
     title_en: Option<&[u8]>,
     chapters: &[ChapterArg],
-    effective_at: u32,
+    effective_at: u64,
 ) -> ChainCall {
     let mut out = vec![LEGISLATION_YUAN_PALLET_INDEX, PROPOSE_AMEND_LAW_CALL_INDEX];
     out.extend(law_id.to_le_bytes());
@@ -311,7 +311,7 @@ mod tests {
         golden.extend(title.to_vec().encode());
         golden.extend(Some(title_en.to_vec()).encode());
         golden.extend(chapters.encode());
-        golden.extend(1000u32.encode());
+        golden.extend(1000u64.encode());
 
         assert_eq!(
             &chain.call_data[2..],

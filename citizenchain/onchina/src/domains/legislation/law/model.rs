@@ -1,6 +1,6 @@
 //! 法律案 HTTP DTO + 转换为链编码器入参。
 //!
-//! 中文注释:前端提交的法律案请求体 = 章节条款 + 标量(tier/scope_code/vote_type/标题/生效块)。
+//! 中文注释:前端提交的法律案请求体 = 章节条款 + 标量(tier/scope_code/vote_type/标题/生效时间)。
 //! **houses / executive / legislature 由后端按宪法路由 + 链上账户解析,不收前端**(防越权伪造表决院)。
 //! 字段命名对齐链端 `legislation-yuan` 与 CitizenApp `law_models`。
 //!
@@ -79,8 +79,8 @@ pub struct ProposeLawInput {
     pub title_en: Option<String>,
     /// 正文:章>节>条>款(立法/修法携带;废法为空)。
     pub chapters: Vec<LawChapter>,
-    /// 生效块号(立法/修法)。
-    pub effective_at: u32,
+    /// 生效时间戳(毫秒,立法/修法)。
+    pub effective_at: u64,
     /// 修法/废法目标法律 ID;立法(Enact)为 None。
     pub law_id: Option<u64>,
 }
@@ -143,12 +143,18 @@ pub struct HouseRef {
     pub account_hex: String,
 }
 
-/// 法律只读视图(Law 主体 + 当前版本全文,供操作端列表/详情与大屏展示)。
+/// 法律只读视图(Law 主体 + 办理端展示版本全文,供操作端列表/详情与大屏展示)。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LawView {
     pub law_id: u64,
     pub version: u32,
+    /// 当前已生效版本;新法通过但未到生效时间时为空。
+    pub effective_version: Option<u32>,
+    /// 已写入链上的最新版本。
+    pub latest_version: u32,
+    /// 已通过但未到生效时间的版本。
+    pub pending_version: Option<u32>,
     /// 层级(0 宪法 / 1 国家 / 2 省 / 3 市)。
     pub tier: u8,
     pub scope_code: u32,
@@ -161,8 +167,8 @@ pub struct LawView {
     /// 正文哈希(0x hex)。
     pub content_hash: String,
     pub proposal_id: u64,
-    pub published_at: u32,
-    pub effective_at: u32,
+    pub published_at: u64,
+    pub effective_at: u64,
     /// 表决院序列(机构码 + 账户)。
     pub houses: Vec<HouseRef>,
     /// 正文:章>节>条>款。

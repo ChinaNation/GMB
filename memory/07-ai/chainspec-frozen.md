@@ -44,10 +44,10 @@
 
 ## 单一权威源(SSOT)— 2026-06-08 重构
 
-**唯一权威创世 = `citizenchain/node/chainspecs/citizenchain.raw.json`,其 `:code` 永远 = CI WASM。**
+**唯一权威创世 = `citizenchain/node/chainspecs/citizenchain.raw.json`,其 `:code` 永远 = 已通过 GitHub WASM CI 的 WASM。**
 所有消费者从它派生,谁都不再各自造创世:
 
-- 桌面端(`run.sh` / `clean-run.sh`)`include_bytes!` 内嵌该 SSOT;clean-run 只清 db,不再本地现造创世(旧版用本地 WASM 会与线上 CI WASM 分叉)。
+- 桌面端正常启动(`run.sh`)使用该 SSOT;`clean-run.sh` 仅用于本机开发清链 + 当前源码现造创世验证,不得把其输出当作正式主网创世。
 - `citizenapp/assets/chainspec.json` 是 SSOT 的派生副本,创世部分必须逐字节等价。
 - `citizenwallet`(冷签)零创世依赖,只签二维码 payload(genesis hash 在 payload 里)。
 
@@ -61,9 +61,10 @@
 3. **CI**:`.github/workflows/citizenapp-ci.yml` 在 check 和 android job 开头都调用该脚本;
    其 paths 已加 `citizenchain/node/chainspecs/**`,SSOT 变更会触发 citizenapp 重建 + 守卫。
 4. **启动脚本**:`citizenapp/scripts/citizenapp-run.sh` 启动前调用该脚本,不一致直接退出。
-5. **重新创世唯一入口**:`citizenchain/scripts/bake-chainspec.sh`(仅预上线用)——
-   下载 CI WASM → `export-chain-spec --chain citizenchain-fresh --raw` → 断言 `:code`==CI WASM →
-   同时写 SSOT 与 citizenapp 副本,保证两者永远同步。
+5. **重新创世唯一入口**:`citizenchain/scripts/bake-chainspec.sh`(仅预上线/硬分叉用)——
+   等 GitHub WASM CI 成功 → `--finalize --wasm <CI_WASM>` → `export-chain-spec --chain citizenchain-fresh --raw` →
+   `check-constitution-genesis.py` 断言 `:code`==CI WASM、宪法 `law_id=0/v1` 已创世冻结、`LawsByScope[Constitution][0]==[0]` →
+   同时写 SSOT 与 citizenapp 副本,保证两者永远同步。默认无 `--finalize` 只写 `target/chainspec/` 预览文件。
 
 2026-06-19 预上线重新创世收口记录:
 
@@ -74,8 +75,8 @@
 ## 如果真的需要改(预上线重新创世 / 硬分叉流程)
 
 1. 写 ADR 说明理由和影响范围。
-2. runtime 改动 → 推送(commit message 含「重新创世」让 wasm CI 跳过版本守卫,保 spec_version)→ wasm CI 出新 WASM。
-3. 跑 `citizenchain/scripts/bake-chainspec.sh`:用 CI WASM 重新烘焙 SSOT 并同步 citizenapp 副本(脚本内置 `:code`==CI WASM 断言,并保留当前 SSOT 的权威节点 bootNodes)。
+2. runtime 改动 → 推送(commit message 含「重新创世」让 wasm CI 跳过版本守卫,保 spec_version)→ GitHub WASM CI 成功并产出新 WASM。
+3. 跑 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>`:用 CI WASM 重新烘焙 SSOT 并同步 citizenapp 副本(脚本内置 `:code`==CI WASM + 宪法创世冻结断言,并保留当前 SSOT 的权威节点 bootNodes)。
 4. 提交两份 chainspec → 推送(触发 CitizenChain 节点 CI + CitizenApp CI;SSOT 守卫自动通过因两者已同步)。
 5. 所有全节点 `fuwuqi.sh q <ip>` 清数据重部署;所有钱包 / 轻节点 / App 同步发版。
 6. 守卫无需手改常量(已无 `.sha256`);如确有特殊绕过需求,`git commit --no-verify`。

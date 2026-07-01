@@ -1,11 +1,12 @@
 //! 立法院模块第1步单测(engine = `()`)。
 //!
-//! 覆盖:write_law_version 写入/升版/废止、on_initialize 生效调度、
+//! 覆盖:write_law_version 写入/升版/废止、on_initialize 按时间戳生效调度、
 //! 提案校验(非议员拒绝 / 空标题空条文 / 宪法表决类型 / 不可修改条款 / 宪法不可废)、
 //! 合法提案到引擎返回 NotConfigured(确认对接点)。
 
 use super::*;
 use crate::pallet::Error;
+use frame_support::traits::Time;
 use frame_support::{assert_noop, assert_ok, traits::Hooks};
 
 // ───────────────── 执行器写入 / 状态机 ─────────────────
@@ -19,26 +20,40 @@ fn enact_writes_law_and_schedules_future_activation() {
             VoteType::Major,
             b"\xe5\xb8\x82\xe9\x95\xbf\xe9\x80\x89\xe4\xb8\xbe\xe6\xb3\x95",
         );
-        summary.effective_at = 100; // 未来生效
+        summary.effective_at = 2_000; // 未来生效时间戳
         let arts = chapters_of(vec![article(1, b"a"), article(2, b"b")]);
 
-        assert_ok!(Lib::write_law_version(7, summary, arts, 1));
+        assert_ok!(Lib::write_law_version(7, summary, arts, Timestamp::now()));
 
         let law = Laws::<Test>::get(0).expect("law created");
-        assert_eq!(law.current_version, 1);
-        assert_eq!(law.status, LawStatus::Pending); // 未到生效区块
+        assert_eq!(law.effective_version, None);
+        assert_eq!(law.latest_version, 1);
+        assert_eq!(law.pending_version, Some(1));
+        assert_eq!(law.status, LawStatus::Pending); // 未到生效时间
         assert!(LawVersions::<Test>::get(0, 1).is_some());
         assert_eq!(NextLawId::<Test>::get(), 1);
         assert_eq!(Lib::list_laws(Tier::Municipal, 1001), vec![0]);
         assert_eq!(
-            PendingActivation::<Test>::get(100).into_inner(),
+            PendingActivation::<Test>::get().into_inner(),
             vec![(0u64, 1u32)]
         );
 
-        // 到生效区块翻 Effective
-        Lib::on_initialize(100);
-        assert_eq!(Laws::<Test>::get(0).unwrap().status, LawStatus::Effective);
-        assert!(PendingActivation::<Test>::get(100).is_empty());
+        // 未到生效时间时保持待生效。
+        Lib::on_initialize(2);
+        assert_eq!(Laws::<Test>::get(0).unwrap().status, LawStatus::Pending);
+        assert_eq!(
+            PendingActivation::<Test>::get().into_inner(),
+            vec![(0u64, 1u32)]
+        );
+
+        // 到生效时间后自动翻 Effective。
+        Timestamp::set_timestamp(2_000);
+        Lib::on_initialize(3);
+        let law = Laws::<Test>::get(0).unwrap();
+        assert_eq!(law.status, LawStatus::Effective);
+        assert_eq!(law.effective_version, Some(1));
+        assert_eq!(law.pending_version, None);
+        assert!(PendingActivation::<Test>::get().is_empty());
     });
 }
 
@@ -46,14 +61,17 @@ fn enact_writes_law_and_schedules_future_activation() {
 fn enact_with_past_effective_is_immediately_effective() {
     new_test_ext().execute_with(|| {
         let summary = enact_summary(Tier::National, 0, VoteType::Regular, b"law");
-        // effective_at = 0 <= now(1) → 立即生效
+        // effective_at = 0 <= 当前链上时间戳 → 立即生效
         assert_ok!(Lib::write_law_version(
             1,
             summary,
             chapters_of(vec![article(1, b"a")]),
-            1
+            Timestamp::now()
         ));
-        assert_eq!(Laws::<Test>::get(0).unwrap().status, LawStatus::Effective);
+        let law = Laws::<Test>::get(0).unwrap();
+        assert_eq!(law.status, LawStatus::Effective);
+        assert_eq!(law.effective_version, Some(1));
+        assert_eq!(law.pending_version, None);
     });
 }
 
@@ -65,22 +83,24 @@ fn amend_bumps_version_and_resets_pending() {
             1,
             s0,
             chapters_of(vec![article(1, b"a")]),
-            1
+            Timestamp::now()
         ));
 
         let mut s1 = enact_summary(Tier::National, 0, VoteType::Regular, b"law-v2");
         s1.action = LawAction::Amend;
         s1.law_id = 0;
-        s1.effective_at = 50;
+        s1.effective_at = 2_000;
         assert_ok!(Lib::write_law_version(
             2,
             s1,
             chapters_of(vec![article(1, b"a2")]),
-            1
+            Timestamp::now()
         ));
 
         let law = Laws::<Test>::get(0).unwrap();
-        assert_eq!(law.current_version, 2);
+        assert_eq!(law.effective_version, Some(1));
+        assert_eq!(law.latest_version, 2);
+        assert_eq!(law.pending_version, Some(2));
         assert_eq!(law.status, LawStatus::Pending);
         assert!(LawVersions::<Test>::get(0, 2).is_some());
         assert!(LawVersions::<Test>::get(0, 1).is_some()); // 历史保留
@@ -95,7 +115,7 @@ fn repeal_sets_status_repealed() {
             1,
             s0,
             chapters_of(vec![article(1, b"a")]),
-            1
+            Timestamp::now()
         ));
 
         let mut sr = enact_summary(Tier::National, 0, VoteType::Regular, b"");
@@ -251,8 +271,8 @@ fn seed_constitution() {
             content_hash: [0u8; 32],
             vote_type: VoteType::Special,
             proposal_id: 1,
-            published_at: 1,
-            effective_at: 1,
+            published_at: 1_000,
+            effective_at: 1_000,
         },
     );
     Laws::<Test>::insert(
@@ -262,7 +282,9 @@ fn seed_constitution() {
             tier: Tier::Constitution,
             scope_code: 0,
             houses: houses(),
-            current_version: version,
+            effective_version: Some(version),
+            latest_version: version,
+            pending_version: None,
             status: LawStatus::Effective,
         },
     );
@@ -298,8 +320,13 @@ fn rejects_amend_while_pending() {
     // 待生效(Pending)期间不得再次修订(P3:保证至多一个待生效版本)。
     new_test_ext().execute_with(|| {
         let mut summary = enact_summary(Tier::Municipal, 1001, VoteType::Major, b"law");
-        summary.effective_at = 100; // 未来生效 → 写入后 status=Pending
-        assert_ok!(Lib::write_law_version(7, summary, one_chapter(), 1));
+        summary.effective_at = 2_000; // 未来生效 → 写入后 status=Pending
+        assert_ok!(Lib::write_law_version(
+            7,
+            summary,
+            one_chapter(),
+            Timestamp::now()
+        ));
         assert_eq!(Laws::<Test>::get(0).unwrap().status, LawStatus::Pending);
         assert_noop!(
             Lib::propose_amend_law(
@@ -355,11 +382,16 @@ fn write_rejects_amend_constitution_immutable_article_directly() {
 
 #[test]
 fn write_rejects_amend_while_pending_directly() {
-    // Pending 单飞规则在写入层复查,防多个待生效版本破坏 current_version-1 推导。
+    // Pending 单飞规则在写入层复查,防多个待生效版本互相覆盖。
     new_test_ext().execute_with(|| {
         let mut summary = enact_summary(Tier::Municipal, 1001, VoteType::Major, b"law");
-        summary.effective_at = 100;
-        assert_ok!(Lib::write_law_version(7, summary, one_chapter(), 1));
+        summary.effective_at = 2_000;
+        assert_ok!(Lib::write_law_version(
+            7,
+            summary,
+            one_chapter(),
+            Timestamp::now()
+        ));
 
         let mut amend = enact_summary(Tier::Municipal, 1001, VoteType::Major, b"law-v2");
         amend.action = LawAction::Amend;
@@ -524,7 +556,9 @@ fn genesis_seeds_constitution_as_law_zero() {
         let law = Laws::<Test>::get(0).expect("宪法注入为 law 0");
         assert_eq!(law.tier, Tier::Constitution);
         assert_eq!(law.status, LawStatus::Effective);
-        assert_eq!(law.current_version, 1);
+        assert_eq!(law.effective_version, Some(1));
+        assert_eq!(law.latest_version, 1);
+        assert_eq!(law.pending_version, None);
         // 院序列 = [国家立法院]。
         assert_eq!(law.houses.len(), 1);
         let lv = LawVersions::<Test>::get(0, 1).expect("宪法版本 1");

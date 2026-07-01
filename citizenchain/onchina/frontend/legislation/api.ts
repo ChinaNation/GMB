@@ -4,7 +4,17 @@
 
 import type { AdminAuth } from '../auth/types';
 import { adminRequest } from '../utils/http';
-import type { LawView, LegProposalState, ProposeLawInput } from './types';
+import type {
+  LawView,
+  LegProposalState,
+  ProposableCandidate,
+  ProposeLawInput,
+} from './types';
+
+/** GET 本机构可发起的提案候选(category×tier×voteTypes)。 */
+export async function getProposable(auth: AdminAuth): Promise<ProposableCandidate[]> {
+  return adminRequest<ProposableCandidate[]>('/api/legislation/proposable', auth);
+}
 
 /** GET 本级已生效/在册法律列表(按层级 + 行政区码)。 */
 export async function listLaws(
@@ -18,7 +28,12 @@ export async function listLaws(
   );
 }
 
-/** GET 单部法律当前版本全文。 */
+/** GET 本节点绑定机构层级/辖区的法律(会话派生 scope,前端不传码)。 */
+export async function listMyLaws(auth: AdminAuth): Promise<LawView[]> {
+  return adminRequest<LawView[]>('/api/legislation/laws/mine', auth);
+}
+
+/** GET 单部法律办理端展示版本全文。 */
 export async function getLaw(auth: AdminAuth, lawId: number): Promise<LawView> {
   return adminRequest<LawView>(`/api/legislation/laws/${lawId}`, auth);
 }

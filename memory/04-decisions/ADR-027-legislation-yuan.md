@@ -4,7 +4,7 @@
 
 立法院模块:法律结构化上链 + 修法一律走投票引擎 + 严格按公民宪法表决模型落地。
 
-状态:已接受,大部分已落地(2026-06-24)。立法院业务壳(idx=27)+ 立法投票 sub-pallet(idx=28)+ 宪法迁移(章>节>条>款 统一 + 创世注入 + 节点桌面端 re-point)均已实现验证;**双客户端 CitizenApp/CitizenWallet(另线程卡)与立法机构选举体系(election-vote 选举→admins 通道,独立卡)待续**。下文方向与边界已据实现校准。
+状态:已接受,大部分已落地(2026-06-24)。立法院业务壳(idx=27)+ 立法投票 sub-pallet(idx=28)+ 宪法迁移(章>节>条>款 统一 + 创世注入 + 节点桌面端 re-point)均已实现验证;**双客户端 CitizenApp/CitizenWallet(另线程卡)与立法机构选举体系(election-vote 选举→admins 通道,独立卡)待续**。下文方向与边界已据实现校准。**OnChina 控制台「立法与表决」落地(2026-06-30,见第 10 节 + 卡 `20260630-onchina-legislation-console-framework`)**:法律案全链路(发起/表决/进度)operator 端 + 免登录大屏 display 端已交付;任免案/预算案链下 schema 预留(链端 kind 待另卡)。**正式创世前收口(2026-07-01,卡 `20260701-constitution-genesis-freeze-step1`)**:Law 主记录版本指针改为 `effective_version/latest_version/pending_version`,立法/修法 `effective_at` 改为毫秒时间戳;创世宪法 law_id=0、v1 直接生效且无待生效版;旧 HTML 真源与解析脚本删除,正式 raw 等 GitHub WASM CI 成功后用 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>` 烘焙。
 
 > **重大修订(2026-06-25,用户逐条确认,见 `08-tasks/open/20260625-legislation-signing-5type-revision.md`)**:
 > 1. **删常规案二审**(方案B 彻底删):本轮先改法案 7 条(44/45/73/75/79/81/118),官员任免 19 条另立专案。下文"四种表决/二审"表述以本修订为准。
@@ -20,7 +20,7 @@
 
 ### 痛点
 
-- 迁移前,公民宪法是 `citizenchain/runtime/primitives/src/CitizenConstitution.html`(约 933KB),通过 `include_str!` 编进 WASM,只能由 runtime API `citizen_constitution_html()` 只读读取。改一个字 = 重新编译 WASM + setCode 升级,负担极重;当前目标态已迁为 `legislation-yuan` 链上法律 + 节点 RAW 读。
+- 迁移前,公民宪法是 runtime 内嵌旧 HTML 文件(约 933KB),通过 `include_str!` 编进 WASM,只能由旧 runtime API 只读读取。改一个字 = 重新编译 WASM + setCode 升级,负担极重;当前目标态已迁为 `legislation-yuan` 链上法律 + 节点 RAW 读。
 - 除宪法外还有大量普通法律(如「市长选举法」),不可能逐条写进 runtime 代码。
 - 需求:法律以结构化数据上链,可按宪法流程修改,公民在 CitizenApp 上可查看、可投票修改。
 
@@ -92,7 +92,9 @@ Law {
   tier,                 // 宪法/国家/省/市
   scope_code,           // 行政区 code,0 = 全国;省/市用 china.sqlite code(遵守 ADR-021 单源)
   houses,               // 立法机构院结构,提案携带(单院 1 项 / 两院 [众,参])
-  current_version,
+  effective_version,    // 当前真正生效的版本;新法待生效时为空
+  latest_version,       // 已写入链上的最新版本
+  pending_version,      // 已通过但未到生效时间的版本;同一法律最多一个
   status,
 }
 
@@ -105,10 +107,10 @@ LawVersion {
     Article { number, title, title_en?, body, body_en?, clauses: BoundedVec<Clause> }  // body 必填(正文不能空)
     Clause  { number, text, text_en? }   // 款,可空(不是所有条都有款)
   content_hash,          // blake2_256(规范化 SCALE);完整性 + 公投/签名绑定
-  vote_type,             // 通过本版本所用的表决类型(常规/重要/二审/特别)
+  vote_type,             // 通过本版本所用的表决类型(常规/常规教育/重要/重要教育/特别)
   proposal_id,           // 投票引擎提案 ID(可回溯)
-  published_at,          // 发布时间(通过即记)
-  effective_at,          // 生效时间(可晚于发布)
+  published_at,          // 发布时间戳(毫秒,投票通过写入版本时记)
+  effective_at,          // 生效时间戳(毫秒,可晚于发布)
 }
 ```
 
@@ -121,10 +123,12 @@ LawVersion {
 状态机:
 
 ```text
-Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效) → Superseded(被替代)
+提案创建 → 投票中 → 投票通过后写入 LawVersion
+  ├─ effective_at <= 当前链上时间戳:立即写入 effective_version
+  └─ effective_at > 当前链上时间戳:写入 pending_version,到时间后自动切换 effective_version
 ```
 
-`on_initialize` 到 `effective_at` 把 Pending 翻 Effective;新版本生效时旧版本转 Superseded(保留历史可查)。
+历史版本由 `LawVersions[law_id][version]` 保留;当前生效版、最新写入版、待生效版不再靠旧的版本号减一规则推断。
 
 ### 4. 四种表决类型 → 投票引擎映射(第十八条)
 
@@ -194,7 +198,7 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
   **交叉校验**:创世 manifest 清单 == 二进制清单,且逐条摘要 == 创世条文摘要;任一不符 → **节点拒绝启动**(把"清单"从单锚二进制升级为双锚 + 启动一致性闸)。
   改这 8 条的唯一路径 = 改创世(新创世哈希=新链)+ 改节点二进制(硬分叉),即「只能重新创世」。
 
-威胁覆盖:普通 amend→L1 拒;setCode 删 L1 / migration 直写存储 / 改清单常量 / 改 `current_version` 指向篡改版本 /
+威胁覆盖:普通 amend→L1 拒;setCode 删 L1 / migration 直写存储 / 改清单常量 / 改版本指针指向篡改版本 /
 改 pallet 名让 key 落空(fail-safe 拒)→ 全部 L2 拒块。`detect_violation` 自身执行/取数出错时也 fail-closed 拒块,
 不保留未经校验的导入路径。**待用户多节点真机 QA**:构造恶意改第一条的块,验证全网 orphan。
 
@@ -208,23 +212,23 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
   故改为 `verify_imported_state` 从 `params.state_action` 的 `ImportedState` 抽立法院前缀键、**调用 inner 之前**跑全套校验,
   违规/无法抽取 → `KnownBad`(不调用 inner,什么都不落库)。
 - **H3 RPC 改 RAW 读 + 取生效版本**(堵"展示信任可升级 API" + "提前显示 Pending 版"):`constitution_getDocument` 直接
-  `StorageProvider` RAW 读 `Laws[0]`/`LawVersions[0][v]`(不走 runtime API),版本取 `effective_version_of_law`
-  (Pending 回退前一版),`source="legislation-raw"`。
+  `StorageProvider` RAW 读 `Laws[0]`/`LawVersions[0][v]`(不走 runtime API),版本取显式 `effective_version`,
+  `source="legislation-raw"`。
 - **H4 禁止新立第二部宪法**(堵"立法入口造第二部宪法"):`propose_enact_law` 拒 `tier==Constitution`(`CannotEnactConstitution`),宪法只能创世存在。
 - **二次 review 修正三项(P2/P2-P3/P3)**:
   - **P2 fail-closed**:`detect_violation` 自身失败(无法读父状态/执行/取变更)→ 改为 `KnownBad` 拒块(由旧放行口径改为安全优先);
     宪法读/解码/比对本就 fail-closed。
   - **P2/P3 setCode 强制全检**:快路径放行条件加"且未升级 runtime"——delta 含 `:code` 即强制走全量不变式校验。
-  - **P3 至多一个待生效修订**:`propose_amend_law` 拒 `status==Pending`(`AmendmentAlreadyPending`),使 `current_version-1=现行生效版`
-    恒成立、激活不被新版本顶掉(原"连续多个待生效修订"会让 `effective_version` 推断错 + 激活 stranding)。
+  - **P3 至多一个待生效版本**:`propose_amend_law`/写入层拒 `pending_version.is_some()`(`AmendmentAlreadyPending`),
+    避免多个待生效版本互相覆盖;现行生效版直接读 `effective_version`,不再做减一推断。
 - 验收:node 21 单测 + legislation-yuan 23 单测(含禁宪法/判别值/拒重叠 Pending/写入层复校验/warp 预校验纯函数)+ no_std + fmt 全过。
   **待 QA**:H2 warp 多节点真机(提交前抽取 `ImportedState` 的实测,实现风险最高项)+ 双执行 PoW 性能。
 
 ### 7. 宪法迁移(并入本模块)—— 已完成(2026-06-24,卡 `20260624-constitution-migration.md`)
 
 - 宪法纳入本模块,作为 `tier = 宪法` 的最高层级法律,实现「宪法可按条修改(走特别案/重要案)」。
-- 已落地:933KB HTML 经一次性解析器(`citizenchain/scripts/parse_constitution.py`,直出 SCALE)迁成结构化 `章>节>条>款 + 中英双语`,产物 `legislation-yuan/src/constitution.scale`(219KB,7章/28节/140条/129款),创世注入为 `law_id=0 tier=宪法 version=1 status=Effective`。
-- 唯一真源 = 链上立法院模块。`CitizenConstitution.html` 的 `include_str!`、`citizen_constitution_html()`/`CitizenConstitutionApi` 与 HTML 文件本身已按禁止兼容硬规则全删(代码零残留)。
+- 已落地:结构化 `章>节>条>款 + 中英双语` 产物 `legislation-yuan/src/constitution.scale` 作为正式创世种子;创世注入为 `law_id=0 tier=宪法 effective_version=Some(1) latest_version=1 pending_version=None status=Effective`。
+- 唯一真源 = 链上立法院模块。旧 HTML 文件、旧 runtime API 与以 HTML 为输入的解析脚本均已按禁止兼容硬规则删除。
 - 节点桌面端「公民宪法」tab **保持原样式**:`constitution_getDocument` RPC 直接 RAW 读 `LegislationYuan::Laws[0]` 与当前生效版 `LawVersions[0][v]`(不走可升级 runtime API),`node/src/core/constitution.rs` 据链上结构化法律 + 抽出的原 CSS 外壳(单文件 `constitution_shell.html`,含 `<!--CONSTITUTION_TOC-->`/`<!--CONSTITUTION_CONTENT-->` 两占位标记,渲染时替换)重建完整 HTML,前端 iframe 零改动 → 样式与迁移前逐字一致。节点端宪法能力(渲染 + 下述守卫)统一收口此单文件。
 
 ### 8. 上链时机
@@ -240,6 +244,18 @@ Draft(草案) → Voting(投票中) → Pending(待生效) → Effective(生效)
 - CitizenApp:法律列表 / 详情 / 版本史 / 投票页(读 runtime API + 发提案)。
 - CitizenWallet:修法提案二维码 decoder + 签名展示;按 ADR-026 统一签名协议新增 op_tag。
 - 不允许「先改 runtime,双端后补」。
+
+### 10. OnChina 控制台「立法与表决」落地(2026-06-30,卡 `20260630-onchina-legislation-console-framework`)
+
+立法院的**管理端 + 大屏**在 OnChina 控制台落地(链端 `legislation-yuan`/`legislation-vote` 本轮**零改动**,只读核对)。核心决策:
+
+- **提案三分类维度(`ProposalCategory`)**:法律案(Law)/ 任免案(Personnel)/ 预算案(Budget),以提案类型为可扩展维度。
+  - **法律案**:本轮**全链路实现**——发起(章>节>条>款编辑器 + 冷签 QR)→ 院内/两院表决(一人一票冷签)→ 进度(六阶段 + 计票)。后端 `domains/legislation/{law,chain_read_proposal}`,前端 `legislation/operator/law/`。
+  - **任免案 / 预算案**:本轮**仅锁链下 schema**(`personnel/model.rs` = 任免职书;`budget/model.rs` = 类>款>项>目,金额分 u128 字符串出线防 JS 精度丢失)。**链端现状核实:无 `PROPOSAL_KIND_PERSONNEL/BUDGET`、无任免/预算 pallet/extrinsic**(仅 kind 0-3);**禁**借道 `PROPOSAL_KIND_LEGISLATION`(会污染 leg-yuan 回调,该回调只写 `LawVersion`)。发起/表决/读链待链端支持后**另卡**(新增 kind + 业务 pallet + 重新创世,含 runtime 二次确认)。
+- **不改宪法(结论性前提)**:法律提案权宪法只给立法机关;政府的**人事任免**由宪法第 100/106 条直授(提交人事任免职书 → 参议会/立法会常规案表决任免),**预算**由《预算法》(普通法)授权——二者走独立提案类型,非法律案。给政府普通立法提案权才需修宪(不必要)。
+- **operator / display 双路由(契合 ADR-030)**:`operator/`(议员登录鉴权操作端)+ `display/`(大厅大屏**免登录只读**;经 `#/display` 顶层分流,机构由节点绑定 `active_node_binding` 唯一确定、**不接受请求参数**、fail-closed;单飞 + 短 TTL 缓存抑制无鉴权链读放大;逐席投票读 `LegHouseVotesByAdmin` 双 Map 部分键迭代 + `storage_key_suffix::<32>` 还原议员账户)。
+- **onchina 职责边界**:只做「组织提案数据 + 扫码冷签 + 提交 extrinsic + 读链展示」,**绝不计票/推进状态机**(全归投票引擎);读路径 scope fail-closed。
+- **遗留(均有卡/已登记)**:双客户端 CitizenApp/CitizenWallet(卡 `20260624-legislation-dual-client`,端到端 scan+submit)、任免/预算链端(`PROPOSAL_KIND_PERSONNEL/BUDGET` 另卡)、行政签署人登录 + `executive_sign`、议员 admins 灌入(election-vote)、大屏跨院活跃提案可见性细化、前端 ESLint(react-hooks/jsx-a11y)。
 
 ## 影响
 

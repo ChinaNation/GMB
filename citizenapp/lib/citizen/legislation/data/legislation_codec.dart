@@ -125,14 +125,18 @@ Law decodeLaw(Uint8List raw) {
         institutionCode: _codeString(s.bytes(4)),
         accountHex: s.hex(32),
       ));
-  final currentVersion = s.u32();
+  final effectiveVersion = s.option(s.u32);
+  final latestVersion = s.u32();
+  final pendingVersion = s.option(s.u32);
   final status = LawStatus.fromIndex(s.u8());
   return Law(
     lawId: lawId,
     tier: tier,
     scopeCode: scopeCode,
     houses: houses,
-    currentVersion: currentVersion,
+    effectiveVersion: effectiveVersion,
+    latestVersion: latestVersion,
+    pendingVersion: pendingVersion,
     status: status,
   );
 }
@@ -148,8 +152,8 @@ LawVersion decodeLawVersion(Uint8List raw) {
   final contentHash = s.hex(32);
   final voteType = s.u8();
   final proposalId = s.u64();
-  final publishedAt = s.u32();
-  final effectiveAt = s.u32();
+  final publishedAt = s.u64();
+  final effectiveAt = s.u64();
   return LawVersion(
     lawId: lawId,
     version: version,

@@ -249,7 +249,7 @@ where
     // 公民宪法 RPC：直接 RAW 读链上立法院模块存储(law_id=0,tier=宪法)的**当前生效版本**,
     // 据 章>节>条>款 + 中英双语重建为 HTML(复用原 CSS 外壳,样式与迁移前一致)。
     // 故意不走 runtime API —— API 属可升级 runtime,恶意升级可伪造返回;RAW 读的正是 L2 守卫
-    // 所保护的存储。读"生效版本"而非 current_version,避免提前展示修宪待生效版(ADR-027 §6.1)。
+    // 所保护的存储。读显式 effective_version,避免提前展示修宪待生效版(ADR-027 §6.1)。
     {
         let client = client.clone();
         use crate::core::constitution::{self, CONSTITUTION_LAW_ID};
@@ -268,7 +268,7 @@ where
                         })
                 };
 
-            // 1. RAW 读 Law(0),解出当前**生效中**版本号(Pending 时回退到前一版)。
+            // 1. RAW 读 Law(0),解出显式 effective_version。
             let law_bytes =
                 raw(constitution::storage_key::law(CONSTITUTION_LAW_ID))?.ok_or_else(|| {
                     ErrorObject::owned(-1, "链上宪法 Law 不存在(law_id=0)", None::<()>)

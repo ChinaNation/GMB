@@ -8,7 +8,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 /// 某立法机构的法律列表(ADR-028 P3-1)——`list_laws(tier, scope)`。
 ///
 /// 中文注释:由立法机构详情页「法律原文」入口进入;tier/scope 由机构派生。
-/// 列表项标题取当前版本(同一 api 实例缓存,点进阅读器复用不重拉)。
+/// 列表项标题取公民端默认阅读版本(同一 api 实例缓存,点进阅读器复用不重拉)。
 class LawListPage extends StatefulWidget {
   const LawListPage({
     super.key,
@@ -30,7 +30,8 @@ class LawListPage extends StatefulWidget {
 }
 
 class _LawItem {
-  const _LawItem({required this.lawId, required this.title, required this.status});
+  const _LawItem(
+      {required this.lawId, required this.title, required this.status});
   final int lawId;
   final String title;
   final LawStatus status;
@@ -55,7 +56,9 @@ class _LawListPageState extends State<LawListPage> {
       final items = await Future.wait(ids.map((id) async {
         final law = await _api.law(id);
         if (law == null) return null;
-        final v = await _api.lawVersion(id, law.currentVersion);
+        final versionId = law.readerVersion;
+        final v =
+            versionId == null ? null : await _api.lawVersion(id, versionId);
         return _LawItem(
           lawId: id,
           title: (v?.title.isNotEmpty ?? false) ? v!.title : '法律 #$id',
@@ -97,7 +100,8 @@ class _LawListPageState extends State<LawListPage> {
     }
     if (_error != null) {
       return Center(
-        child: Text(_error!, style: const TextStyle(color: AppTheme.textTertiary)),
+        child:
+            Text(_error!, style: const TextStyle(color: AppTheme.textTertiary)),
       );
     }
     if (_items.isEmpty) {
@@ -105,7 +109,8 @@ class _LawListPageState extends State<LawListPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.menu_book_outlined, size: 44, color: AppTheme.textTertiary),
+            Icon(Icons.menu_book_outlined,
+                size: 44, color: AppTheme.textTertiary),
             SizedBox(height: 12),
             Text('该机构暂无立法',
                 style: TextStyle(fontSize: 14, color: AppTheme.textSecondary)),

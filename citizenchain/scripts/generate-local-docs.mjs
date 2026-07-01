@@ -13,7 +13,9 @@ const sources = [
   {
     key: 'whitepaper',
     title: '白皮书',
-    sourcePath: 'docs/《白皮书》.md',
+    sourcePath: 'website/src/whitepaper.md',
+    // 中文注释：白皮书正文迁入官网源码目录后，图片仍沿用 docs/assets 资源目录。
+    assetFallbackRoots: ['docs'],
   }
 ];
 
@@ -33,26 +35,34 @@ function toDataUri(absPath) {
   return `data:${mime};base64,${fs.readFileSync(absPath).toString('base64')}`;
 }
 
-function resolveRelativeAsset(sourceAbs, assetPath) {
+function resolveRelativeAsset(sourceAbs, item, assetPath) {
   if (/^(?:[a-z]+:|#|\/)/i.test(assetPath)) return null;
   const decodedPath = decodeURIComponent(assetPath);
-  return path.resolve(path.dirname(sourceAbs), decodedPath);
+  const primary = path.resolve(path.dirname(sourceAbs), decodedPath);
+  if (fs.existsSync(primary)) return primary;
+
+  for (const fallbackRoot of item.assetFallbackRoots ?? []) {
+    const fallback = path.resolve(repoRoot, fallbackRoot, decodedPath);
+    if (fs.existsSync(fallback)) return fallback;
+  }
+
+  return primary;
 }
 
-function embedLocalImages(markdown, sourceAbs) {
+function embedLocalImages(markdown, sourceAbs, item) {
   const htmlImgPattern = /(<img\b[^>]*\bsrc=["'])([^"']+)(["'][^>]*>)/gi;
   const markdownImgPattern = /(!\[[^\]]*\]\()([^)]+)(\))/g;
 
   // 中文注释：白皮书会被内置进前端 bundle，相对图片必须转成 data URI 才能在桌面端显示。
   return markdown
     .replace(htmlImgPattern, (match, prefix, assetPath, suffix) => {
-      const absAssetPath = resolveRelativeAsset(sourceAbs, assetPath);
+      const absAssetPath = resolveRelativeAsset(sourceAbs, item, assetPath);
       if (!absAssetPath) return match;
       const dataUri = toDataUri(absAssetPath);
       return dataUri ? `${prefix}${dataUri}${suffix}` : match;
     })
     .replace(markdownImgPattern, (match, prefix, assetPath, suffix) => {
-      const absAssetPath = resolveRelativeAsset(sourceAbs, assetPath.trim());
+      const absAssetPath = resolveRelativeAsset(sourceAbs, item, assetPath.trim());
       if (!absAssetPath) return match;
       const dataUri = toDataUri(absAssetPath);
       return dataUri ? `${prefix}${dataUri}${suffix}` : match;
@@ -61,9 +71,11 @@ function embedLocalImages(markdown, sourceAbs) {
 
 const docs = sources.map((item) => {
   const abs = path.resolve(repoRoot, item.sourcePath);
-  const markdown = embedLocalImages(fs.readFileSync(abs, 'utf8'), abs);
+  const markdown = embedLocalImages(fs.readFileSync(abs, 'utf8'), abs, item);
   return {
-    ...item,
+    key: item.key,
+    title: item.title,
+    sourcePath: item.sourcePath,
     markdown,
     sha256: crypto.createHash('sha256').update(markdown).digest('hex'),
   };

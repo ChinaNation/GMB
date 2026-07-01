@@ -1,26 +1,23 @@
 import 'package:flutter/material.dart';
 
-import 'package:citizenapp/citizen/legislation/data/block_clock.dart';
 import 'package:citizenapp/citizen/legislation/data/law_models.dart';
 import 'package:citizenapp/citizen/legislation/data/legislation_api.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
-/// 法律条款项阅读器(ADR-028 P3-1)——宪法与普通法律共用。
+/// 法律条款阅读器(ADR-028 P3-1)——宪法与普通法律共用。
 ///
-/// 中文注释:渲染 章>节>条>款>项;宪法(tier=宪法)对不可修改条款渲染徽章、双语可切;
-/// 顶部显状态 + 生效日期(块号经 [BlockClock] 换算)。读链:law + law_version(当前版本)
-/// + (宪法)immutableManifest。
+/// 中文注释:渲染 章>节>条>款;宪法(tier=宪法)对不可修改条款渲染徽章、双语可切;
+/// 顶部显状态 + 链上生效时间。读链:law + law_version(公民端默认生效版本)
+/// + (宪法)immutableManifest;若存在待生效修订,额外读取待生效版时间用于提示。
 class LawReaderPage extends StatefulWidget {
   const LawReaderPage({
     super.key,
     required this.lawId,
     this.api,
-    this.clock,
   });
 
   final int lawId;
   final LegislationApi? api;
-  final BlockClock? clock;
 
   @override
   State<LawReaderPage> createState() => _LawReaderPageState();
@@ -28,12 +25,12 @@ class LawReaderPage extends StatefulWidget {
 
 class _LawReaderPageState extends State<LawReaderPage> {
   late final LegislationApi _api = widget.api ?? LegislationApi();
-  late final BlockClock _clock = widget.clock ?? BlockClock();
 
   Law? _law;
   LawVersion? _version;
   ImmutableManifest? _manifest;
   String? _effectiveDate;
+  String? _pendingEffectiveDate;
   bool _loading = true;
   String? _error;
   bool _showEn = false;
@@ -62,21 +59,41 @@ class _LawReaderPageState extends State<LawReaderPage> {
         }
         return;
       }
-      final version = await _api.lawVersion(law.lawId, law.currentVersion);
+      final versionId = law.readerVersion;
+      if (versionId == null) {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _error = '该法律暂无可读版本';
+          });
+        }
+        return;
+      }
+      final version = await _api.lawVersion(law.lawId, versionId);
       final manifest = law.tier == LawTier.constitution
           ? await _api.immutableManifest()
           : null;
       String? effDate;
       if (version != null) {
-        effDate = BlockClock.formatDate(await _clock.dateOf(version.effectiveAt));
+        effDate = _formatMillis(version.effectiveAt);
+      }
+      final pendingVersionId = law.pendingVersion;
+      String? pendingDate;
+      if (pendingVersionId != null && pendingVersionId != versionId) {
+        final pendingVersion =
+            await _api.lawVersion(law.lawId, pendingVersionId);
+        pendingDate = pendingVersion == null
+            ? null
+            : _formatMillis(pendingVersion.effectiveAt);
       }
       if (!mounted) return;
       setState(() {
         _law = law;
         _version = version;
-        _selectedVersion = law.currentVersion;
+        _selectedVersion = versionId;
         _manifest = manifest;
         _effectiveDate = effDate;
+        _pendingEffectiveDate = pendingDate;
         // 默认展开第一章,长法律不至于一片空白。
         if (version != null && version.chapters.isNotEmpty) {
           _expanded.add(version.chapters.first.number);
@@ -100,9 +117,7 @@ class _LawReaderPageState extends State<LawReaderPage> {
     setState(() => _loading = true);
     try {
       final v = await _api.lawVersion(law.lawId, version);
-      final effDate = v == null
-          ? null
-          : BlockClock.formatDate(await _clock.dateOf(v.effectiveAt));
+      final effDate = v == null ? null : _formatMillis(v.effectiveAt);
       if (!mounted) return;
       setState(() {
         _version = v;
@@ -110,8 +125,9 @@ class _LawReaderPageState extends State<LawReaderPage> {
         _effectiveDate = effDate;
         _expanded
           ..clear()
-          ..addAll(
-              v != null && v.chapters.isNotEmpty ? [v.chapters.first.number] : const []);
+          ..addAll(v != null && v.chapters.isNotEmpty
+              ? [v.chapters.first.number]
+              : const []);
         _loading = false;
       });
     } on Object {
@@ -124,7 +140,17 @@ class _LawReaderPageState extends State<LawReaderPage> {
     }
   }
 
-  String _t(String zh, String? en) => (_showEn && en != null && en.isNotEmpty) ? en : zh;
+  String _t(String zh, String? en) =>
+      (_showEn && en != null && en.isNotEmpty) ? en : zh;
+
+  String _formatMillis(int ms) {
+    if (ms <= 0) {
+      return '立即';
+    }
+    final date = DateTime.fromMillisecondsSinceEpoch(ms);
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${date.year}-${two(date.month)}-${two(date.day)} ${two(date.hour)}:${two(date.minute)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +182,8 @@ class _LawReaderPageState extends State<LawReaderPage> {
     }
     if (_error != null) {
       return Center(
-        child: Text(_error!, style: const TextStyle(color: AppTheme.textTertiary)),
+        child:
+            Text(_error!, style: const TextStyle(color: AppTheme.textTertiary)),
       );
     }
     final v = _version;
@@ -181,9 +208,12 @@ class _LawReaderPageState extends State<LawReaderPage> {
       LawStatus.pending => AppTheme.primary,
     };
     final dateLabel = switch (law.status) {
-      LawStatus.effective => '生效中',
+      LawStatus.effective => '生效时间 ${_effectiveDate ?? '—'}',
       LawStatus.repealed => '已废止',
-      LawStatus.pending => '将于 ${_effectiveDate ?? '—'} 生效',
+      LawStatus.pending =>
+        law.pendingVersion != null && law.pendingVersion != v.version
+            ? '待生效修订将于 ${_pendingEffectiveDate ?? '—'} 生效'
+            : '将于 ${_effectiveDate ?? '—'} 生效',
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -229,7 +259,7 @@ class _LawReaderPageState extends State<LawReaderPage> {
                     fontSize: 12.5, color: AppTheme.textSecondary)),
           ),
           // 版本史:多版本时可切换查看历史版本。
-          if (law.currentVersion > 1) _versionMenu(law),
+          if (law.latestVersion > 1) _versionMenu(law),
         ],
       ),
     );
@@ -240,15 +270,14 @@ class _LawReaderPageState extends State<LawReaderPage> {
       tooltip: '版本历史',
       onSelected: _changeVersion,
       itemBuilder: (_) => [
-        for (var ver = law.currentVersion; ver >= 1; ver--)
+        for (var ver = law.latestVersion; ver >= 1; ver--)
           PopupMenuItem<int>(
             value: ver,
             child: Text(
-              ver == law.currentVersion ? 'v$ver(当前)' : 'v$ver',
+              _versionLabel(law, ver),
               style: TextStyle(
-                fontWeight: ver == _selectedVersion
-                    ? FontWeight.w700
-                    : FontWeight.w400,
+                fontWeight:
+                    ver == _selectedVersion ? FontWeight.w700 : FontWeight.w400,
               ),
             ),
           ),
@@ -263,6 +292,16 @@ class _LawReaderPageState extends State<LawReaderPage> {
         ],
       ),
     );
+  }
+
+  String _versionLabel(Law law, int version) {
+    if (law.effectiveVersion == version) {
+      return 'v$version(生效)';
+    }
+    if (law.pendingVersion == version) {
+      return 'v$version(待生效)';
+    }
+    return 'v$version';
   }
 
   Widget _chapterTile(LawChapter ch) {
@@ -295,8 +334,7 @@ class _LawReaderPageState extends State<LawReaderPage> {
             ),
           ),
         ),
-        if (expanded)
-          ...ch.sections.map(_sectionTile),
+        if (expanded) ...ch.sections.map(_sectionTile),
         const Divider(height: 1, color: AppTheme.divider),
       ],
     );
