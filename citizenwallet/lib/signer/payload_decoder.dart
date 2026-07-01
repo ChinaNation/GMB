@@ -119,6 +119,10 @@ class PayloadDecoder {
           _hasPrefix(raw, _decryptPrefix)) {
         return _decodeDecryptAdmin(raw);
       }
+      final citizenIdentity = _decodeCitizenIdentityPayload(raw);
+      if (citizenIdentity != null) {
+        return citizenIdentity;
+      }
     } catch (_) {
       // 非 challenge payload，继续正常解码。
     }
@@ -175,6 +179,12 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.cancelPassedProposalCall) {
           return _decodeCancelPassedProposal(bytes);
         }
+      }
+
+      // ── CitizenIdentity(10) · 公民链上投票身份注册 ──
+      if (palletIndex == PalletRegistry.citizenIdentityPallet &&
+          callIndex == PalletRegistry.registerVotingIdentityCall) {
+        return _decodeRegisterVotingIdentity(bytes);
       }
 
       // ── MultisigTransfer(19) ──
@@ -1828,6 +1838,148 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
+  // CitizenIdentity 原始身份载荷。
+  // SCALE: VotingIdentityPayload {
+  //   cid_number, wallet_account, citizen_age_years, valid_from, valid_until,
+  //   citizen_status, residence_province_code, residence_city_code,
+  //   residence_town_code
+  // }
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeCitizenIdentityPayload(Uint8List bytes) {
+    final payload = _readVotingIdentityPayload(bytes, 0);
+    if (payload == null || payload.next != bytes.length) return null;
+    return DecodedPayload(
+      action: 'citizen_identity',
+      summary: '确认公民身份上链：${payload.cidNumber}',
+      fields: payload.fields,
+      reviewFields: payload.reviewFields,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // CitizenIdentity(10) / register_voting_identity(0)
+  // SCALE: [10][0][registrar_account:AccountId32][VotingIdentityPayload]
+  //        [Vec<u8> citizen_signature]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeRegisterVotingIdentity(Uint8List bytes) {
+    if (bytes.length < 2 + 32) return null;
+    var offset = 2;
+    final registrar = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final payload = _readVotingIdentityPayload(bytes, offset);
+    if (payload == null) return null;
+    offset = payload.next;
+
+    final (signatureLen, signatureLenSize) = _decodeCompactU32(bytes, offset);
+    if (signatureLenSize == 0 || signatureLen != 64) return null;
+    offset += signatureLenSize;
+    if (offset + signatureLen > bytes.length) return null;
+    offset += signatureLen;
+    if (!_hasCallDataEnd(bytes, offset)) return null;
+
+    final registrarAddress = _bytesToSs58(registrar);
+    return DecodedPayload(
+      action: 'register_voting_identity',
+      summary: '注册公民链上身份：${payload.cidNumber}',
+      fields: <String, String>{
+        'registrar_account': registrarAddress,
+        ...payload.fields,
+        'citizen_signature_len': signatureLen.toString(),
+      },
+      reviewFields: <String, String>{
+        'registrar_account': registrarAddress,
+        ...payload.reviewFields,
+      },
+    );
+  }
+
+  static ({
+    String cidNumber,
+    String walletAddress,
+    Map<String, String> fields,
+    Map<String, String> reviewFields,
+    int next,
+  })? _readVotingIdentityPayload(Uint8List bytes, int offset) {
+    final (cidNumber, afterCid) = _readUtf8Vec(bytes, offset);
+    if (cidNumber == null || cidNumber.isEmpty || cidNumber.length > 32) {
+      return null;
+    }
+    offset = afterCid;
+    if (offset + 32 + 1 + 4 + 4 + 1 > bytes.length) return null;
+
+    final walletBytes = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final walletAddress = _bytesToSs58(walletBytes);
+
+    final age = bytes[offset];
+    offset += 1;
+    if (age < 16) return null;
+
+    final validFrom = _readU32Le(bytes, offset);
+    offset += 4;
+    final validUntil = _readU32Le(bytes, offset);
+    offset += 4;
+    if (!_isValidDateInt(validFrom) || !_isValidDateInt(validUntil))
+      return null;
+    if (validUntil < validFrom) return null;
+
+    final status = bytes[offset];
+    offset += 1;
+    final statusLabel = switch (status) {
+      0 => 'NORMAL',
+      1 => 'REVOKED',
+      _ => null,
+    };
+    if (statusLabel == null) return null;
+
+    final (provinceCode, afterProvince) = _readUtf8Vec(bytes, offset);
+    if (provinceCode == null ||
+        provinceCode.isEmpty ||
+        provinceCode.length > 16) {
+      return null;
+    }
+    offset = afterProvince;
+    final (cityCode, afterCity) = _readUtf8Vec(bytes, offset);
+    if (cityCode == null || cityCode.isEmpty || cityCode.length > 16) {
+      return null;
+    }
+    offset = afterCity;
+    final (townCode, afterTown) = _readUtf8Vec(bytes, offset);
+    if (townCode == null || townCode.isEmpty || townCode.length > 16) {
+      return null;
+    }
+    offset = afterTown;
+
+    final validRange =
+        '${_formatDateInt(validFrom)} 至 ${_formatDateInt(validUntil)}';
+    final residence = '$provinceCode / $cityCode / $townCode';
+    return (
+      cidNumber: cidNumber,
+      walletAddress: walletAddress,
+      next: offset,
+      fields: <String, String>{
+        'cid_number': cidNumber,
+        'wallet_account': walletAddress,
+        'citizen_age_years': age.toString(),
+        'valid_from': validFrom.toString(),
+        'valid_until': validUntil.toString(),
+        'citizen_status': statusLabel,
+        'residence_province_code': provinceCode,
+        'residence_city_code': cityCode,
+        'residence_town_code': townCode,
+      },
+      reviewFields: <String, String>{
+        'cid_number': cidNumber,
+        'wallet_account': walletAddress,
+        'citizen_age_years': '$age周岁',
+        'valid_range': validRange,
+        'citizen_status': statusLabel == 'NORMAL' ? '正常' : '注销',
+        'residence': residence,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // 通用:只取 proposal_id: u64_le 的兜底执行/取消/清理类 call。
   //
   // 链端若干 `execute_X` / `cancel_failed_X` /
@@ -2020,6 +2172,30 @@ class PayloadDecoder {
       }
     }
     return true;
+  }
+
+  /// OnChina 部分 QR 直接携带裸 call_data；完整 SigningPayload 仍走严格尾部校验。
+  static bool _hasCallDataEnd(Uint8List bytes, int callEnd) {
+    return callEnd == bytes.length || _hasValidSigningTail(bytes, callEnd);
+  }
+
+  static bool _isValidDateInt(int value) {
+    final year = value ~/ 10000;
+    final month = (value ~/ 100) % 100;
+    final day = value % 100;
+    return year >= 1900 &&
+        year <= 9999 &&
+        month >= 1 &&
+        month <= 12 &&
+        day >= 1 &&
+        day <= 31;
+  }
+
+  static String _formatDateInt(int value) {
+    final year = value ~/ 10000;
+    final month = (value ~/ 100) % 100;
+    final day = value % 100;
+    return '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
   }
 
   /// 0x 小写 hex。

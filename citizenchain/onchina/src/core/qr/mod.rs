@@ -28,6 +28,9 @@ impl QrKind {
 }
 
 pub const ACTION_LOGIN: u16 = 1;
+/// 公民链上身份 payload 确认(非链交易,b.d=VotingIdentityPayload SCALE bytes),
+/// 公民钱包对 `signing_message(OP_SIGN_CITIZEN_IDENTITY, b.d)` 签名。
+pub const ACTION_CITIZEN_IDENTITY: u16 = 2;
 /// 注册局管理员治理文本确认(非链动作,b.d=onchina_admin_governance canonical JSON),
 /// 对应 qr-action-registry.md 非链动作码 a=3。
 pub const ACTION_ONCHINA_ADMIN: u16 = 3;

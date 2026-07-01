@@ -60,11 +60,13 @@ citizenchain/onchina/src/
 - 公民姓名拆为 `citizen_family_name` 和 `citizen_given_name`;展示姓名时由前端按中文顺序组合,数据库不保留姓名单字段。
 - 公民身份 CID 由 `src/cid/generator.rs` 生成,机构代码固定为 `CTZN`,个人码 R5 市段固定为 `000`。
 - 护照号由 `src/domains/citizens/passport_no.rs` 生成,OnChina 自持完整算法。
-- 创建公民必须提交 `wallet_account`;后端接受 SS58 地址或 0x 公钥,数据库内部保存 `wallet_pubkey`,前端和返回 DTO 只展示 `wallet_address`。
+- 创建公民不得要求 `wallet_account`;未成年人或暂未开户公民可以先建立本地电子护照档案。
+- 推送链上公民身份时才录入 `wallet_account`;后端接受 SS58 地址或 0x 公钥,解析为内部 `wallet_pubkey` 并要求该钱包对 `VotingIdentityPayload` 签名。
+- 未满 16 周岁不得推送链上公民身份。OnChina 在生成签名二维码前校验年龄,runtime `citizen-identity` 在 `register_voting_identity / update_voting_identity / upgrade_to_candidate_identity` 再次校验 `citizen_age_years >= 16`。
 - 出生省市镇必填,字段为 `birth_province_code / birth_city_code / birth_town_code`;创建后不得被普通编辑流程修改。
 - 居住省市来自当前办理城市上下文,字段为 `residence_province_code / residence_city_code`;前端只选择 `residence_town_code`。
 - 护照有效期自动计算:创建时年满 16 周岁为 10 年,未满 16 周岁为 5 年,字段为 `passport_valid_from / passport_valid_until`。
-- `citizens` 表当前字段只表达公民档案、身份 CID、护照号、钱包地址、出生地、居住地、护照有效期和投票资格。
+- `citizens` 表当前字段只表达公民档案、身份 CID、护照号、可为空的钱包地址、出生地、居住地、护照有效期和投票资格。
 - `passport_numbers` 是护照号全局索引表;`passport_number_recycle_pool` 只保存可回收护照号,不得保存旧公民个人资料。
 
 ## 6. 链交互边界
@@ -73,6 +75,9 @@ citizenchain/onchina/src/
 
 - 机构注册信息凭证、账户列表 DTO 和 handler：`institution/subjects/chain_*.rs`
 - 公民投票资格查询：`domains/citizens/chain_vote.rs`
+- 公民链上身份推送：`domains/citizens/chain_identity.rs`
+  - `POST /api/v1/admin/citizens/:cid_number/onchain/prepare` 生成 `a=2 citizen_identity` 签名请求,由目标公民钱包签名。
+  - `POST /api/v1/admin/citizens/:cid_number/onchain/complete` 验证公民钱包签名,落库钱包绑定,并生成 `0x0a00 register_voting_identity` 注册局管理员链上签名二维码。
 - 联合投票本地人数查询：`domains/citizens/chain_joint_vote.rs`
 - 地址变更调用：`domains/address/chain_call.rs`
 - 通用 SCALE、genesis hash、RPC URL 和交易提交辅助：`core/chain_*.rs`

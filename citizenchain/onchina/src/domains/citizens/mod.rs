@@ -6,6 +6,8 @@
 
 /// 中文注释:注册局直接录入公民并直接发护照入口。
 pub(crate) mod admin_entry;
+/// 中文注释:公民钱包签名与 citizen-identity 上链二维码准备入口。
+pub(crate) mod chain_identity;
 /// 中文注释:公民模块联合投票本地人数查询接口。
 pub(crate) mod chain_joint_vote;
 /// 中文注释:公民投票资格查询接口。

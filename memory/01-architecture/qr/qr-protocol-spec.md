@@ -79,7 +79,9 @@
 | 场景 | `a` 规则 | 签名字节 |
 |---|---|---|
 | 普通链交易 | `a = (pallet_index << 8) | call_index` | `d` 必须是生成方用当前 runtime 类型构造的 `SignedPayload` SCALE 字节;长度 ≤256B 签原文,>256B 签 `blake2_256(payload)` |
-| 登录 / CID 文本载荷 | `a = 1..3` | 签 payload 原文 |
+| 登录 | `a = 1` | 签 payload 原文 |
+| 公民链上身份确认 | `a = 2` | `d` 必须是 `VotingIdentityPayload` SCALE bytes,签 `blake2_256(GMB || 0x10 || d)` |
+| OnChina 管理员治理文本载荷 | `a = 3` | 签 payload 原文 |
 | 管理员激活 / 解密 | `a = 5/6` | 签二进制 payload 原文 |
 | Runtime 升级哈希签名 | `a = 7` 或 RuntimeUpgrade 链 action | `d` 必须是同一 runtime `SignedPayload::using_encoded` 得到的 32B signing bytes,签该 32B |
 

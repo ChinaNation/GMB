@@ -1,6 +1,7 @@
 //! 中文注释:公民电子护照记录与查询 DTO。
 //!
-//! 公民由注册局一次性录入:创建成功即写入身份 CID、护照号和钱包账户。
+//! 公民由注册局先录入本地档案:创建成功即写入身份 CID 与护照号。
+//! 钱包账户只在链上身份推送时绑定,并由该钱包签名确认。
 //! 本模块不再保留旧绑定态或旧选举范围字段;选举/被选举范围由业务投票规则
 //! 结合出生地、居住地行政区计算。
 
@@ -16,8 +17,8 @@ pub(crate) enum CitizenStatus {
 
 /// 公民电子护照记录。
 ///
-/// 中文注释:数据库内部保存 `wallet_pubkey` 供验签和索引使用;前端/公开 DTO
-/// 只展示 `wallet_address`。出生省市镇为创建时锁定字段。
+/// 中文注释:钱包字段为链上推送阶段的可选绑定信息;本地新增儿童或无钱包公民时保持为空。
+/// 已绑定后数据库内部保存 `wallet_pubkey` 供验签和索引使用,前端/公开 DTO 只展示 `wallet_address`。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CitizenRecord {
     pub(crate) id: u64,
@@ -27,9 +28,12 @@ pub(crate) struct CitizenRecord {
     pub(crate) citizen_given_name: String,
     pub(crate) citizen_sex: String,
     pub(crate) citizen_birth_date: String,
-    pub(crate) wallet_pubkey: String,
-    pub(crate) wallet_address: String,
-    pub(crate) wallet_sig_alg: String,
+    #[serde(default)]
+    pub(crate) wallet_pubkey: Option<String>,
+    #[serde(default)]
+    pub(crate) wallet_address: Option<String>,
+    #[serde(default)]
+    pub(crate) wallet_sig_alg: Option<String>,
     pub(crate) wallet_verified_at: Option<DateTime<Utc>>,
     pub(crate) citizen_status: CitizenStatus,
     #[serde(default)]
@@ -129,7 +133,7 @@ pub(crate) struct CitizenRow {
     pub(crate) citizen_given_name: String,
     pub(crate) citizen_sex: String,
     pub(crate) citizen_birth_date: String,
-    pub(crate) wallet_address: String,
+    pub(crate) wallet_address: Option<String>,
     pub(crate) citizen_status: CitizenStatus,
     pub(crate) voting_eligible: bool,
     pub(crate) vote_status: CitizenStatus,
@@ -199,9 +203,9 @@ mod tests {
             citizen_given_name: "试公民".to_string(),
             citizen_sex: "FEMALE".to_string(),
             citizen_birth_date: "2000-01-01".to_string(),
-            wallet_pubkey: "0xabc".to_string(),
-            wallet_address: "5F-test".to_string(),
-            wallet_sig_alg: "sr25519".to_string(),
+            wallet_pubkey: Some("0xabc".to_string()),
+            wallet_address: Some("5F-test".to_string()),
+            wallet_sig_alg: Some("sr25519".to_string()),
             wallet_verified_at: Some(now),
             citizen_status: CitizenStatus::Normal,
             voting_eligible: true,

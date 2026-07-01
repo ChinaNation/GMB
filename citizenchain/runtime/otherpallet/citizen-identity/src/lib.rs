@@ -19,6 +19,7 @@ use sp_runtime::RuntimeDebug;
 pub type CidNumberBound = BoundedVec<u8, ConstU32<32>>;
 pub type AreaCodeBound = BoundedVec<u8, ConstU32<16>>;
 pub type CitizenNameBound = BoundedVec<u8, ConstU32<128>>;
+pub const MIN_ONCHAIN_CITIZEN_AGE_YEARS: u8 = 16;
 
 #[derive(
     Clone,
@@ -76,6 +77,7 @@ pub enum CitizenIdentityLevel {
 pub struct VotingIdentityPayload<AccountId> {
     pub cid_number: CidNumberBound,
     pub wallet_account: AccountId,
+    pub citizen_age_years: u8,
     pub passport_valid_from: u32,
     pub passport_valid_until: u32,
     pub citizen_status: CitizenStatus,
@@ -366,6 +368,7 @@ pub mod pallet {
         InvalidCitizenCode,
         UnauthorizedRegistrar,
         InvalidCitizenSignature,
+        UnderVotingAge,
         CidAlreadyRegisteredToAnotherAccount,
         CidNotFound,
         VotingIdentityNotFound,
@@ -569,6 +572,7 @@ pub mod pallet {
                 &VotingIdentityPayload {
                     cid_number: old.cid_number.clone(),
                     wallet_account: account.clone(),
+                    citizen_age_years: MIN_ONCHAIN_CITIZEN_AGE_YEARS,
                     passport_valid_from: old.passport_valid_from,
                     passport_valid_until: old.passport_valid_until,
                     citizen_status: old.citizen_status,
@@ -634,6 +638,10 @@ pub mod pallet {
             ensure!(
                 payload.passport_valid_from <= payload.passport_valid_until,
                 Error::<T>::InvalidDateRange
+            );
+            ensure!(
+                payload.citizen_age_years >= MIN_ONCHAIN_CITIZEN_AGE_YEARS,
+                Error::<T>::UnderVotingAge
             );
             Ok(())
         }

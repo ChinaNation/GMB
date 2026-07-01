@@ -40,6 +40,8 @@ class QrSigner {
   static const int maxTtlSeconds = 300;
   static const int maxClockSkewSeconds = 30;
   static const int maxPayloadChars = 32768;
+  static const List<int> _gmbPrefix = [0x47, 0x4D, 0x42];
+  static const int _opSignCitizenIdentity = 0x10;
   static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
 
   static String generateRequestId({String prefix = ''}) {
@@ -147,6 +149,9 @@ class QrSigner {
   /// payload <= 256B 时签原文,>256B 时签 blake2_256(payload)。
   static Uint8List signingBytesFor(SignRequestBody body) {
     final payload = body.payloadBytes;
+    if (body.action == QrActions.citizenIdentity) {
+      return _gmbSigningMessage(_opSignCitizenIdentity, payload);
+    }
     if (QrActions.isChainAction(body.action) && payload.length > 256) {
       final digest = Blake2bDigest(digestSize: 32)
         ..update(payload, 0, payload.length);
@@ -155,6 +160,15 @@ class QrSigner {
       return out;
     }
     return payload;
+  }
+
+  static Uint8List _gmbSigningMessage(int opTag, Uint8List payload) {
+    final bytes = Uint8List.fromList([..._gmbPrefix, opTag, ...payload]);
+    final digest = Blake2bDigest(digestSize: 32)
+      ..update(bytes, 0, bytes.length);
+    final out = Uint8List(32);
+    digest.doFinal(out, 0);
+    return out;
   }
 
   void _validateRequestId(String requestId) {

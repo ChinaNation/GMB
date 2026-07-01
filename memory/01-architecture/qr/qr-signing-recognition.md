@@ -41,8 +41,9 @@
 1. 链交易 payload 必须来自生成方的当前 runtime `SignedPayload` SCALE 字节。
 2. 链交易 payload 长度 ≤256B:签 payload 原文。
 3. 链交易 payload 长度 >256B:签 `blake2_256(payload)`。
-4. 非链文本/二进制 payload:签原文。
-5. Runtime hash-only:签同一 runtime `SignedPayload::using_encoded` 得到的 32B signing bytes 原文。
+4. `a=2 citizen_identity`:签 `blake2_256(GMB || 0x10 || VotingIdentityPayload SCALE bytes)`。
+5. 其它非链文本/二进制 payload:签原文。
+6. Runtime hash-only:签同一 runtime `SignedPayload::using_encoded` 得到的 32B signing bytes 原文。
 
 ## 3. k=2 签名响应校验
 
@@ -74,11 +75,11 @@ citizenchain node 的链交易冷签路径必须和热钱包路径一样使用 r
 
 系统签名原文使用 `QR_V1|1|i|system|e|system_pubkey_without_0x`。
 
-## 5. OnChina 文本载荷
+## 5. OnChina 非链载荷
 
 | action | domain / 前缀 | 必须展示 |
 |---:|---|---|
-| 2 | `citizen-identity-v1` | 身份模式、公民状态、投票资格、钱包地址 |
+| 2 | `VotingIdentityPayload` SCALE bytes | 身份CID、钱包地址、年龄、有效期、公民状态、居住地 |
 | 3 | `onchina_admin_governance` | 动作类型、注册局、省份、操作者/目标账户 |
 
 文本载荷内部的 `payload_hash` 只用于生成方本地 session 或 API 防重放,不进入 QR 签名响应。
@@ -86,7 +87,7 @@ citizenchain node 的链交易冷签路径必须和热钱包路径一样使用 r
 ## 6. 应绿色通过
 
 1. `a=1` 登录
-2. `a=2` 公民绑定
+2. `a=2` 公民链上身份确认
 3. `a=3` OnChina 管理员治理冷钱包确认
 4. `a=5/6` 管理员激活/解密
 5. `a=7` Runtime 32B hash

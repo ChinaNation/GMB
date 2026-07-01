@@ -28,7 +28,10 @@ pub(crate) async fn app_myid_status(
     let result = match state.db.find_citizen_by_wallet(&wallet_pubkey) {
         Ok(Some(record)) => MyIdStatusOutput {
             found: true,
-            wallet_address: Some(record.wallet_address.clone()),
+            wallet_address: record
+                .wallet_address
+                .clone()
+                .or_else(|| Some(params.wallet_address.trim().to_string())),
             cid_number: Some(record.cid_number.clone()),
             passport_no: Some(record.passport_no.clone()),
             citizen_status: Some(record.citizen_status.clone()),

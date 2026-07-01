@@ -79,6 +79,18 @@ void main() {
   Uint8List withSigningTail(List<int> callData, {int nonce = 1}) =>
       Uint8List.fromList([...callData, ...signingTail(nonce: nonce)]);
 
+  List<int> citizenIdentityPayloadForTest(List<int> walletBytes) => [
+        ...compactVec('CTZN-430100-0001'),
+        ...walletBytes,
+        18,
+        ...u32Le(20260630),
+        ...u32Le(20360630),
+        0,
+        ...compactVec('43'),
+        ...compactVec('0100'),
+        ...compactVec('001'),
+      ];
+
   List<int> bytesFromHex(String hex) {
     final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
     return List<int>.generate(
@@ -216,6 +228,62 @@ void main() {
       expect(decoded.fields['scope_level'], 'CITY');
       expect(decoded.fields['scope_province_code'], 'GZ');
       expect(decoded.fields['scope_city_code'], '001');
+    });
+
+    test('decodes raw citizen identity payload', () {
+      final wallet = List<int>.generate(32, (i) => i + 1);
+      final payload = citizenIdentityPayloadForTest(wallet);
+      final decoded = PayloadDecoder.decode(hexOf(payload));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'citizen_identity');
+      expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
+      expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
+      expect(decoded.fields['citizen_age_years'], '18');
+      expect(decoded.reviewFields['residence'], '43 / 0100 / 001');
+    });
+
+    test('decodes register_voting_identity raw call data', () {
+      final registrar = List<int>.filled(32, 7);
+      final wallet = List<int>.generate(32, (i) => i + 1);
+      final payload = citizenIdentityPayloadForTest(wallet);
+      final callData = [
+        0x0a,
+        0x00,
+        ...registrar,
+        ...payload,
+        ...compactU32(64),
+        ...List<int>.filled(64, 0xaa),
+      ];
+
+      final decoded = PayloadDecoder.decode(hexOf(callData));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'register_voting_identity');
+      expect(decoded.fields['registrar_account'], ss58FromBytes(registrar));
+      expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
+      expect(decoded.summary, contains('CTZN-430100-0001'));
+    });
+
+    test('decodes register_voting_identity with signing tail', () {
+      final registrar = List<int>.filled(32, 7);
+      final wallet = List<int>.generate(32, (i) => i + 1);
+      final payload = citizenIdentityPayloadForTest(wallet);
+      final callData = [
+        0x0a,
+        0x00,
+        ...registrar,
+        ...payload,
+        ...compactU32(64),
+        ...List<int>.filled(64, 0xaa),
+      ];
+
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'register_voting_identity');
+      expect(
+          decoded.reviewFields['registrar_account'], ss58FromBytes(registrar));
     });
 
     test('cast_referendum 缺少 issuer/admins 字段时拒绝解码', () {

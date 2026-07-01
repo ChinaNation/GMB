@@ -64,6 +64,7 @@ citizenchain/
 
 - 进程模型：OnChina 是公民链内置二进制能力，由节点桌面端设置页“链上中国平台”入口手动拉起为子进程、退出时一并停掉；节点启动后默认不启动 OnChina，避免只挖矿节点承担管理后台服务。OnChina 经节点 RPC 读写链，对内网托管 HTTPS API 与前端，固定入口为 `https://onchina.local:8964`。桌面 = 节点运维台，浏览器 = 机构管理员，并存不冲突。
 - 数据两层：链上最小身份 + 承诺哈希(选择性/绑定触发上链)；链下明细存本市内嵌 PostgreSQL + 本地/NAS 文件仓库(文件哈希上链验真)。
+- 公民档案先本地建档并发电子护照,不要求钱包账户;注册局推送链上投票身份时才录入钱包、要求目标公民钱包签名,并由注册局管理员提交 `CitizenIdentity.register_voting_identity`。
 - 当前进度：
   - Step0：crate 骨架 + node 拉起子进程的最小贯通（已完成）。
   - Step1：`citizenchain/onchina/src` 后端完成迁移和收敛，平台层切换为内嵌 PostgreSQL + 节点 RPC + 进程内本地限流；省/市 scope 与行政区维度保留。
@@ -189,6 +190,7 @@ citizenchain/
 
 ### 9.6 其他模块（`runtime/otherpallet/`）
 - 负责链上公民身份、人口统计、PoW 难度调整等基础能力。
+- `citizen-identity` 是链上公民投票身份和人口快照的真源,`VotingIdentityPayload` 包含 `citizen_age_years`;runtime 必须拒绝未满 16 周岁的链上公民身份注册或更新。
 
 当前模块：
 - `pow-difficulty`

@@ -15,6 +15,8 @@ const Map<String, String> actionLabels = {
   'finalize_proposal': '触发提案执行',
   'retry_passed_proposal': '手动执行已通过提案',
   'cancel_passed_proposal': '取消已通过但不可执行的提案',
+  'citizen_identity': '公民身份上链确认',
+  'register_voting_identity': '注册公民链上身份',
 
   // 业务提案创建（propose_X）
   'propose_transfer': '发起转账提案',

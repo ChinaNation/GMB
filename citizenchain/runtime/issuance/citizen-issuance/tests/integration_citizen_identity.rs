@@ -129,6 +129,7 @@ fn payload(wallet_account: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64>
             .try_into()
             .expect("cid number should fit"),
         wallet_account,
+        citizen_age_years: 18,
         passport_valid_from: 20260630,
         passport_valid_until: 20360630,
         citizen_status: CitizenStatus::Normal,

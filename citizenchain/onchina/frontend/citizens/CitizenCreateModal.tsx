@@ -3,11 +3,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, DatePicker, Form, Input, Modal, Select, Switch } from 'antd';
-import { ScanOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 
 import type { AdminAuth } from '../auth/types';
-import { ScanAccountModal } from '../core/ScanAccountModal';
 import { createCitizen, type CitizenSex, type CreateCitizenInput } from './api';
 import {
   getCidMeta,
@@ -41,7 +39,6 @@ interface FormValues {
   birth_city_code: string;
   birth_town_code: string;
   voting_eligible: boolean;
-  wallet_account: string;
 }
 
 function trimRequired(value?: string): string {
@@ -70,7 +67,6 @@ export function CitizenCreateModal({
 }: Props) {
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
-  const [scanOpen, setScanOpen] = useState(false);
   const [birthProvinces, setBirthProvinces] = useState<CidProvinceItem[]>([]);
   const [birthCities, setBirthCities] = useState<CidCityItem[]>([]);
   const [birthTowns, setBirthTowns] = useState<CidTownItem[]>([]);
@@ -86,7 +82,6 @@ export function CitizenCreateModal({
   useEffect(() => {
     if (!open || !auth) return;
     form.resetFields();
-    setScanOpen(false);
     setBirthCities([]);
     setBirthTowns([]);
     setResidenceTowns([]);
@@ -162,7 +157,6 @@ export function CitizenCreateModal({
       birth_city_code: values.birth_city_code,
       birth_town_code: values.birth_town_code,
       voting_eligible: Boolean(values.voting_eligible),
-      wallet_account: trimRequired(values.wallet_account),
     };
     setSubmitting(true);
     try {
@@ -329,39 +323,10 @@ export function CitizenCreateModal({
           </Form.Item>
         </div>
 
-        <Form.Item
-          label="投票账户"
-          name="wallet_account"
-          rules={[{ required: true, message: '请输入或扫码填入投票账户' }]}
-        >
-          <Input
-            placeholder="请输入公民钱包 SS58 地址"
-            allowClear
-            suffix={
-              <Button
-                htmlType="button"
-                type="text"
-                size="small"
-                icon={<ScanOutlined />}
-                title="扫码识别用户码"
-                onClick={() => setScanOpen(true)}
-              />
-            }
-          />
-        </Form.Item>
         <Form.Item label="选举资格" name="voting_eligible" valuePropName="checked">
           <Switch checkedChildren="有" unCheckedChildren="无" disabled={age !== null && age < 16} />
         </Form.Item>
       </Form>
-
-      <ScanAccountModal
-        open={scanOpen}
-        onClose={() => setScanOpen(false)}
-        onResolved={(address) => {
-          form.setFieldsValue({ wallet_account: address });
-          setScanOpen(false);
-        }}
-      />
     </Modal>
   );
 }

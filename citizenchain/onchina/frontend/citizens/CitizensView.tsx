@@ -2,8 +2,8 @@
 // 包含:citizen 列表 + 搜索栏 + 表格 + 直接录入公民弹窗。
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { Button, Card, Descriptions, Form, Input, Modal, Space, Table, Tag } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { Button, Card, Form, Input, Space, Table, Tag, Typography } from 'antd';
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -15,7 +15,10 @@ import { useScope } from '../hooks/useScope';
 import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
 import { CityGrid } from '../core/CityGrid';
 import { CitizenCreateModal } from './CitizenCreateModal';
+import { CitizenDetailPage } from './CitizenDetailPage';
 import { notice } from '../utils/notice';
+
+const CITIZEN_PAGE_SIZE = 50;
 
 function makeCitizenName(row: Pick<CitizenRow, 'citizen_family_name' | 'citizen_given_name'>) {
   return `${row.citizen_family_name ?? ''}${row.citizen_given_name ?? ''}`.trim() || '-';
@@ -48,7 +51,7 @@ export function CitizensView() {
 
   // 直接录入弹窗控制
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [detailRecord, setDetailRecord] = useState<CitizenRow | null>(null);
+  const [selectedCitizen, setSelectedCitizen] = useState<CitizenRow | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
 
   const activeProvinceName = scope.lockedProvinceName;
@@ -58,18 +61,20 @@ export function CitizensView() {
   const refreshList = async (keyword: string, cursor?: string | null, silent?: boolean) => {
     if (!auth || !activeProvinceName || !activeCityName) return;
     const exact = keyword.trim();
-    if (!exact) {
-      setRows([]);
-      setNextCursor(null);
-      return;
-    }
     setLoading(true);
     try {
-      const raw = await listCitizens(auth, exact, activeProvinceName, activeCityName, cursor);
+      const raw = await listCitizens(
+        auth,
+        exact,
+        activeProvinceName,
+        activeCityName,
+        cursor,
+        CITIZEN_PAGE_SIZE,
+      );
       const list = raw.items;
       setRows(list);
       setNextCursor(raw.next_cursor ?? null);
-      if (list.length === 0) {
+      if (exact && list.length === 0) {
         notice.warningModal({
           title: '查询结果',
           content: '未查询到公民信息',
@@ -92,6 +97,7 @@ export function CitizensView() {
       setNextCursor(null);
       setCursorStack([]);
       setCreateModalOpen(false);
+      setSelectedCitizen(null);
       setSelectedCity(null);
       return;
     }
@@ -103,9 +109,13 @@ export function CitizensView() {
     setSearchKeyword('');
     setNextCursor(null);
     setCursorStack([]);
-    setDetailRecord(null);
+    setSelectedCitizen(null);
     setCreateModalOpen(false);
     searchForm.resetFields();
+    if (auth && activeProvinceName && activeCityName) {
+      void refreshList('', null, true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProvinceName, activeCityName, searchForm]);
 
   const onSearch = async (values: { keyword: string }) => {
@@ -117,13 +127,13 @@ export function CitizensView() {
   };
 
   const onNextPage = async () => {
-    if (!nextCursor || !searchKeyword) return;
+    if (!nextCursor) return;
     setCursorStack((prev) => [...prev, nextCursor]);
     await refreshList(searchKeyword, nextCursor, true);
   };
 
   const onPrevPage = async () => {
-    if (!searchKeyword || cursorStack.length === 0) return;
+    if (cursorStack.length === 0) return;
     const stack = [...cursorStack];
     stack.pop();
     const prevCursor = stack.length > 0 ? stack[stack.length - 1] : null;
@@ -145,35 +155,13 @@ export function CitizensView() {
     await refreshList(searchKeyword, null, true);
   };
 
+  const handleCitizenUpdated = (next: CitizenRow) => {
+    setSelectedCitizen(next);
+    setRows((prev) => prev.map((row) => (row.cid_number === next.cid_number ? next : row)));
+  };
+
   const statusTag = (status: string | undefined) => (
     status === 'NORMAL' ? <Tag color="green">正常</Tag> : <Tag color="red">注销</Tag>
-  );
-
-  const citizenStatusText = (status: string | undefined) => {
-    if (status === 'NORMAL') return '正常';
-    if (status === 'REVOKED') return '注销';
-    return '-';
-  };
-
-  const formatDateRange = (from?: string, until?: string) => {
-    if (!from || !until) return '-';
-    return `${formatDate(from)}-${formatDate(until)}`;
-  };
-
-  const formatDate = (value: string) => {
-    const parts = value.split('-');
-    if (parts.length !== 3) return value;
-    return `${parts[0]}年${parts[1]}月${parts[2]}日`;
-  };
-
-  const sexText = (sex?: string) => {
-    if (sex === 'MALE') return '男';
-    if (sex === 'FEMALE') return '女';
-    return '-';
-  };
-
-  const areaText = (province?: string, city?: string, town?: string) => (
-    [province, city, town].filter((v) => v?.trim()).join(' / ') || '-'
   );
 
   const citizenColumns: ColumnsType<CitizenRow> = [
@@ -181,7 +169,7 @@ export function CitizensView() {
       title: '序号',
       width: 80,
       align: 'center',
-      render: (_v: unknown, _r: CitizenRow, idx: number) => idx + 1,
+      render: (_v: unknown, _r: CitizenRow, idx: number) => cursorStack.length * CITIZEN_PAGE_SIZE + idx + 1,
     },
     {
       title: '护照号',
@@ -204,7 +192,7 @@ export function CitizensView() {
       title: '投票账户',
       dataIndex: 'wallet_address',
       align: 'center',
-      render: (v: string | undefined) => v ?? '-',
+      render: (v: string | null | undefined) => v || '-',
     },
     {
       title: '投票状态',
@@ -214,6 +202,20 @@ export function CitizensView() {
       render: (v: string | undefined) => statusTag(v),
     },
   ];
+
+  if (auth && selectedCitizen) {
+    return (
+      <CitizenDetailPage
+        auth={auth}
+        citizen={selectedCitizen}
+        canWrite={capabilities.canBusinessWrite}
+        provinceName={activeProvinceName}
+        cityName={activeCityName}
+        onBack={() => setSelectedCitizen(null)}
+        onUpdated={handleCitizenUpdated}
+      />
+    );
+  }
 
   if (auth && activeProvinceName && !activeCityName) {
     return (
@@ -232,64 +234,77 @@ export function CitizensView() {
     <>
       <Card
         title={makeCenteredTitle(
-          activeProvinceName && activeCityName
-            ? `${activeProvinceName} · ${activeCityName} · 公民身份列表`
-            : '公民身份列表',
+          activeProvinceName && activeCityName ? `${activeProvinceName} · ${activeCityName}` : '公民身份列表',
           selectedCity ? () => setSelectedCity(null) : undefined,
         )}
         bordered={false}
         style={glassCardStyle}
         headStyle={glassCardHeadStyle}
-        extra={
-          <Space>
-            <Form form={searchForm} layout="inline" onFinish={onSearch}>
-              <Form.Item name="keyword" style={{ marginBottom: 0 }}>
-                <Input
-                  style={{ width: 420 }}
-                  placeholder="护照号/身份CID/投票账户检索"
-                  allowClear
-                  disabled={!canUseCitizenList}
-                  onPressEnter={() => searchForm.submit()}
-                  suffix={
-                    <SearchOutlined
-                      onClick={() => searchForm.submit()}
-                      style={{ color: loading ? '#999' : '#1677ff', cursor: 'pointer' }}
-                    />
-                  }
-                />
-              </Form.Item>
-              {capabilities.canBusinessWrite && (
-                <Form.Item style={{ marginBottom: 0 }}>
-                  <Button
-                    type="primary"
-                    disabled={!canUseCitizenList}
-                    onClick={() => setCreateModalOpen(true)}
-                  >
-                    新增公民
-                  </Button>
-                </Form.Item>
-              )}
-            </Form>
-          </Space>
-        }
       >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 16,
+            marginBottom: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            公民列表
+          </Typography.Title>
+          <Form form={searchForm} layout="inline" onFinish={onSearch} style={{ rowGap: 12 }}>
+            <Form.Item name="keyword" style={{ marginBottom: 0 }}>
+              <Input
+                style={{ width: 420, maxWidth: '72vw' }}
+                placeholder="护照号/身份CID/姓名/投票账户"
+                allowClear
+                disabled={!canUseCitizenList}
+                onPressEnter={() => searchForm.submit()}
+                suffix={
+                  <SearchOutlined
+                    onClick={() => searchForm.submit()}
+                    style={{ color: loading ? '#999' : '#1677ff', cursor: 'pointer' }}
+                  />
+                }
+              />
+            </Form.Item>
+            {capabilities.canBusinessWrite && (
+              <Form.Item style={{ marginBottom: 0 }}>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  disabled={!canUseCitizenList}
+                  onClick={() => setCreateModalOpen(true)}
+                >
+                  新增公民
+                </Button>
+              </Form.Item>
+            )}
+          </Form>
+        </div>
         <Table<CitizenRow>
           rowKey={(r) => `${r.id}`}
           dataSource={rows}
           loading={loading}
           pagination={false}
           columns={citizenColumns}
+          scroll={{ x: 980 }}
           onRow={(record) => ({
             onClick: (event) => {
-              // 中文注释：操作栏是独立交互区，点击绑定按钮时不能再触发行详情弹窗。
+              // 中文注释：行点击进入公民详情页,详情页再承接钱包签名与链上推送。
               const target = event.target as EventTarget | null;
               if (target instanceof Element && target.closest('[data-row-action="true"]')) return;
-              setDetailRecord(record);
+              setSelectedCitizen(record);
             },
             style: { cursor: 'pointer' },
           })}
         />
-        <Space style={{ marginTop: 12 }}>
+        <Space style={{ marginTop: 12, width: '100%', justifyContent: 'flex-end' }}>
+          <Typography.Text type="secondary">
+            第 {cursorStack.length + 1} 页 · 每页 {CITIZEN_PAGE_SIZE} 条
+          </Typography.Text>
           <Button disabled={loading || cursorStack.length === 0} onClick={onPrevPage}>
             上一页
           </Button>
@@ -298,46 +313,6 @@ export function CitizensView() {
           </Button>
         </Space>
       </Card>
-
-      <Modal
-        title="公民信息详情"
-        open={!!detailRecord}
-        footer={null}
-        onCancel={() => setDetailRecord(null)}
-        destroyOnClose
-        width={720}
-      >
-        {detailRecord && (
-          <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="护照号">{detailRecord.passport_no || '-'}</Descriptions.Item>
-            <Descriptions.Item label="身份CID">{detailRecord.cid_number || '-'}</Descriptions.Item>
-            <Descriptions.Item label="姓名">{makeCitizenName(detailRecord)}</Descriptions.Item>
-            <Descriptions.Item label="性别">{sexText(detailRecord.citizen_sex)}</Descriptions.Item>
-            <Descriptions.Item label="出生日期">{formatDate(detailRecord.citizen_birth_date)}</Descriptions.Item>
-            <Descriptions.Item label="投票账户">{detailRecord.wallet_address || '-'}</Descriptions.Item>
-            <Descriptions.Item label="选举权利">{detailRecord.voting_eligible ? '有' : '无'}</Descriptions.Item>
-            <Descriptions.Item label="公民状态">{citizenStatusText(detailRecord.citizen_status)}</Descriptions.Item>
-            <Descriptions.Item label="居住地">
-              {areaText(
-                detailRecord.residence_province_name,
-                detailRecord.residence_city_name,
-                detailRecord.residence_town_name,
-              )}
-            </Descriptions.Item>
-            <Descriptions.Item label="出生地">
-              {areaText(
-                detailRecord.birth_province_name,
-                detailRecord.birth_city_name,
-                detailRecord.birth_town_name,
-              )}
-            </Descriptions.Item>
-            <Descriptions.Item label="有效期">
-              {formatDateRange(detailRecord.passport_valid_from, detailRecord.passport_valid_until)}
-            </Descriptions.Item>
-            <Descriptions.Item label="档案哈希">{detailRecord.archive_hash || '-'}</Descriptions.Item>
-          </Descriptions>
-        )}
-      </Modal>
 
       {capabilities.canBusinessWrite && (
         <CitizenCreateModal

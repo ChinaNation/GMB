@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pointycastle/digests/blake2b.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:citizenwallet/qr/bodies/sign_request_body.dart';
 import 'package:citizenwallet/qr/envelope.dart';
@@ -181,6 +182,26 @@ void main() {
       final h = QrSigner.computePayloadHash('0x0102');
       expect(h.startsWith('0x'), isTrue);
       expect(h.length, 66);
+    });
+  });
+
+  group('QrSigner.signingBytesFor', () {
+    test('公民身份确认使用 GMB OP_SIGN_CITIZEN_IDENTITY 哈希域', () {
+      final body = SignRequestBody.fromHex(
+        action: QrActions.citizenIdentity,
+        pubkeyHex: testPubkeyHex,
+        payloadHex: '0x01020304',
+      );
+      final input = Uint8List.fromList([0x47, 0x4d, 0x42, 0x10, 1, 2, 3, 4]);
+      final digest = Blake2bDigest(digestSize: 32)
+        ..update(input, 0, input.length);
+      final expected = Uint8List(32);
+      digest.doFinal(expected, 0);
+
+      final actual = QrSigner.signingBytesFor(body);
+
+      expect(actual.toList(), expected.toList());
+      expect(actual.toList(), isNot(body.payloadBytes.toList()));
     });
   });
 

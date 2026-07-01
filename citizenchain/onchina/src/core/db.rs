@@ -445,9 +445,9 @@ impl Db {
                 province_code TEXT NOT NULL,
                 city_code TEXT NOT NULL,
                 id BIGINT,
-                wallet_pubkey TEXT NOT NULL DEFAULT '',
-                wallet_address TEXT NOT NULL DEFAULT '',
-                wallet_sig_alg TEXT NOT NULL DEFAULT 'sr25519',
+                wallet_pubkey TEXT,
+                wallet_address TEXT,
+                wallet_sig_alg TEXT,
                 wallet_verified_at TIMESTAMPTZ,
                 citizen_status TEXT NOT NULL,
                 voting_eligible BOOLEAN NOT NULL,
@@ -621,7 +621,7 @@ impl Db {
                 ADD COLUMN IF NOT EXISTS citizen_given_name TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS citizen_sex TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS citizen_birth_date TEXT NOT NULL DEFAULT '',
-                ADD COLUMN IF NOT EXISTS wallet_sig_alg TEXT NOT NULL DEFAULT 'sr25519',
+                ADD COLUMN IF NOT EXISTS wallet_sig_alg TEXT,
                 ADD COLUMN IF NOT EXISTS wallet_verified_at TIMESTAMPTZ,
                 ADD COLUMN IF NOT EXISTS passport_valid_from TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS passport_valid_until TEXT NOT NULL DEFAULT '',
@@ -649,6 +649,13 @@ impl Db {
                 DROP COLUMN IF EXISTS bound_at,
                 DROP COLUMN IF EXISTS bound_by,
                 DROP COLUMN IF EXISTS citizen_full_name;
+             ALTER TABLE citizens
+                ALTER COLUMN wallet_pubkey DROP NOT NULL,
+                ALTER COLUMN wallet_address DROP NOT NULL,
+                ALTER COLUMN wallet_sig_alg DROP NOT NULL,
+                ALTER COLUMN wallet_pubkey DROP DEFAULT,
+                ALTER COLUMN wallet_address DROP DEFAULT,
+                ALTER COLUMN wallet_sig_alg DROP DEFAULT;
              UPDATE citizens
              SET residence_province_code = COALESCE(NULLIF(residence_province_code, ''), province_code),
                  residence_city_code = COALESCE(NULLIF(residence_city_code, ''), city_code),
@@ -656,8 +663,12 @@ impl Db {
                  birth_province_code = COALESCE(NULLIF(birth_province_code, ''), province_code),
                  birth_city_code = COALESCE(NULLIF(birth_city_code, ''), city_code),
                  birth_town_code = COALESCE(birth_town_code, ''),
-                 wallet_pubkey = COALESCE(wallet_pubkey, ''),
-                 wallet_address = COALESCE(wallet_address, ''),
+                 wallet_pubkey = NULLIF(wallet_pubkey, ''),
+                 wallet_address = NULLIF(wallet_address, ''),
+                 wallet_sig_alg = CASE
+                    WHEN NULLIF(wallet_pubkey, '') IS NULL THEN NULL
+                    ELSE COALESCE(NULLIF(wallet_sig_alg, ''), 'sr25519')
+                 END,
                  passport_no = COALESCE(passport_no, ''),
                  citizen_family_name = COALESCE(citizen_family_name, ''),
                  citizen_given_name = COALESCE(citizen_given_name, ''),
@@ -667,8 +678,6 @@ impl Db {
                  passport_valid_until = COALESCE(passport_valid_until, ''),
                  updated_at = COALESCE(updated_at, created_at, now());
              ALTER TABLE citizens
-                ALTER COLUMN wallet_pubkey SET NOT NULL,
-                ALTER COLUMN wallet_address SET NOT NULL,
                 ALTER COLUMN residence_province_code SET NOT NULL,
                 ALTER COLUMN residence_city_code SET NOT NULL,
                 ALTER COLUMN residence_town_code SET DEFAULT '',
@@ -804,8 +813,9 @@ impl Db {
                 ON citizens (province_code, city_code, cid_number, passport_no, wallet_pubkey, wallet_address);
              CREATE INDEX IF NOT EXISTS idx_citizens_passport_no
                 ON citizens (passport_no);
+             DROP INDEX IF EXISTS idx_citizens_wallet_pubkey;
              CREATE INDEX IF NOT EXISTS idx_citizens_wallet_pubkey
-                ON citizens (lower(wallet_pubkey));
+                ON citizens (lower(wallet_pubkey)) WHERE wallet_pubkey IS NOT NULL;
              CREATE INDEX IF NOT EXISTS idx_citizens_residence_scope
                 ON citizens (residence_province_code, residence_city_code, residence_town_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_birth_scope

@@ -16,7 +16,7 @@ export type CitizenRow = {
   citizen_given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: string;
-  wallet_address: string;
+  wallet_address?: string | null;
   citizen_status: CitizenState;
   voting_eligible: boolean;
   vote_status: CitizenState;
@@ -62,8 +62,6 @@ export type CreateCitizenInput = {
   birth_city_code: string;
   birth_town_code: string;
   voting_eligible: boolean;
-  /** SS58 地址或扫码得到的 0x 公钥;UI 只展示 SS58 地址。 */
-  wallet_account: string;
 };
 
 /** 直接录入公民返回 DTO。 */
@@ -77,7 +75,7 @@ export type CreateCitizenResult = {
   citizen_birth_date: string;
   citizen_status: CitizenState;
   voting_eligible: boolean;
-  wallet_address: string;
+  wallet_address?: string | null;
   passport_valid_from: string;
   passport_valid_until: string;
   residence_province_code: string;
@@ -87,6 +85,25 @@ export type CreateCitizenResult = {
   birth_city_code: string;
   birth_town_code: string;
   archive_hash?: string;
+};
+
+export type PrepareCitizenOnchainResult = {
+  cid_number: string;
+  wallet_address: string;
+  wallet_pubkey: string;
+  citizen_age_years: number;
+  payload_hex: string;
+  sign_request: string;
+  expires_at: number;
+};
+
+export type CompleteCitizenOnchainResult = {
+  cid_number: string;
+  wallet_address: string;
+  chain_action: number;
+  call_data_hex: string;
+  citizen_signature: string;
+  citizen_identity_chain_sign_request: string;
 };
 
 export interface LegalRepresentativeCitizenSearchContext {
@@ -139,8 +156,8 @@ export async function searchLegalRepresentativeCitizens(
 }
 
 /**
- * 注册局管理员直接录入公民并直接发护照。
- * 成功即本地公民档案、身份 CID、护照号、钱包账户全部落库。
+ * 注册局管理员直接录入本地公民档案并发护照。
+ * 钱包账户只在后续链上身份推送时录入并由该钱包签名确认。
  */
 export async function createCitizen(
   auth: AdminAuth,
@@ -154,4 +171,41 @@ export async function createCitizen(
     },
     body: JSON.stringify(payload),
   });
+}
+
+export async function prepareCitizenOnchainSignature(
+  auth: AdminAuth,
+  cidNumber: string,
+  walletAccount: string,
+): Promise<PrepareCitizenOnchainResult> {
+  return request<PrepareCitizenOnchainResult>(
+    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/prepare`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...adminHeaders(auth),
+      },
+      body: JSON.stringify({ wallet_account: walletAccount }),
+    },
+  );
+}
+
+export async function completeCitizenOnchainSignature(
+  auth: AdminAuth,
+  cidNumber: string,
+  walletAccount: string,
+  signResponse: string,
+): Promise<CompleteCitizenOnchainResult> {
+  return request<CompleteCitizenOnchainResult>(
+    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/complete`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...adminHeaders(auth),
+      },
+      body: JSON.stringify({ wallet_account: walletAccount, sign_response: signResponse }),
+    },
+  );
 }

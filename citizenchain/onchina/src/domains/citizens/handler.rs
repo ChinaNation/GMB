@@ -35,7 +35,7 @@ pub(crate) async fn admin_list_citizens(
             "offset pagination is not supported",
         );
     }
-    let page = match state.db.list_citizens_exact(
+    let page = match state.db.list_citizens_page(
         keyword.as_str(),
         scope_province_code.as_deref(),
         scope_city_code.as_deref(),

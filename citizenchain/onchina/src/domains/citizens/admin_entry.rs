@@ -1,7 +1,8 @@
 //! 注册局直接录入公民 handler。
 //!
-//! 公民由注册局管理员在办理市一次性录入。请求只提交公民档案字段和一个钱包账户;
+//! 公民由注册局管理员在办理市先录入本地档案。请求只提交公民档案字段;
 //! 身份 CID、护照号、护照有效期由服务端确定性生成并落库。
+//! 钱包账户留到链上身份推送阶段录入,并由该钱包签名确认。
 
 use axum::{
     extract::State,
@@ -23,8 +24,8 @@ use crate::*;
 
 /// 直接录入公民请求 DTO。
 ///
-/// 中文注释:居住省市不由前端提交,固定来自当前注册局办理上下文。
-/// `wallet_account` 可传 SS58 地址或 0x 公钥;前端只展示 SS58 地址。
+/// 中文注释:居住省市由当前注册局办理上下文校验,前端只负责回传当前选择。
+/// 本地建档不得要求钱包账户;儿童或暂未开户公民同样能先发放电子护照。
 #[derive(Deserialize)]
 pub(crate) struct AdminCreateCitizenInput {
     pub(crate) citizen_family_name: String,
@@ -38,7 +39,6 @@ pub(crate) struct AdminCreateCitizenInput {
     pub(crate) birth_city_code: String,
     pub(crate) birth_town_code: String,
     pub(crate) voting_eligible: bool,
-    pub(crate) wallet_account: String,
 }
 
 /// 直接录入公民返回 DTO。
@@ -53,7 +53,7 @@ pub(crate) struct AdminCreateCitizenOutput {
     pub(crate) citizen_birth_date: String,
     pub(crate) citizen_status: CitizenStatus,
     pub(crate) voting_eligible: bool,
-    pub(crate) wallet_address: String,
+    pub(crate) wallet_address: Option<String>,
     pub(crate) passport_valid_from: String,
     pub(crate) passport_valid_until: String,
     pub(crate) residence_province_code: String,
@@ -167,21 +167,20 @@ pub(crate) async fn admin_create_citizen(
         return api_error(StatusCode::BAD_REQUEST, 1001, "未知的出生省份代码");
     }
 
-    let wallet = match resolve_wallet_account(input.wallet_account.as_str()) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    match state.db.find_citizen_by_wallet(wallet.pubkey.as_str()) {
-        Ok(Some(_)) => return api_error(StatusCode::CONFLICT, 1005, "该钱包账户已存在公民档案"),
-        Ok(None) => {}
-        Err(err) => {
-            tracing::error!(error = %err, "query citizen wallet duplicate failed");
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "钱包账户查重失败");
-        }
-    }
-
+    let cid_seed = local_citizen_cid_seed(
+        &citizen_family_name,
+        &citizen_given_name,
+        &citizen_sex,
+        citizen_birth_date,
+        &residence_province_code,
+        &residence_city_code,
+        &residence_town_code,
+        &birth_province_code,
+        &birth_city_code,
+        &birth_town_code,
+    );
     let cid_number = match generate_cid_number(GenerateCidInput {
-        account_pubkey: wallet.pubkey.as_str(),
+        account_pubkey: cid_seed.as_str(),
         p1: "1",
         province_name: residence_province_name.as_str(),
         city_name: residence_city_name.as_str(),
@@ -231,10 +230,10 @@ pub(crate) async fn admin_create_citizen(
         citizen_given_name: citizen_given_name.clone(),
         citizen_sex: citizen_sex.clone(),
         citizen_birth_date: citizen_birth_date.format("%Y-%m-%d").to_string(),
-        wallet_pubkey: wallet.pubkey.clone(),
-        wallet_address: wallet.address.clone(),
-        wallet_sig_alg: "sr25519".to_string(),
-        wallet_verified_at: Some(now),
+        wallet_pubkey: None,
+        wallet_address: None,
+        wallet_sig_alg: None,
+        wallet_verified_at: None,
         citizen_status: CitizenStatus::Normal,
         voting_eligible: input.voting_eligible,
         passport_valid_from: valid_from.clone(),
@@ -262,11 +261,7 @@ pub(crate) async fn admin_create_citizen(
     if let Err(err) = state.db.upsert_citizen_row(&record) {
         tracing::error!(error = %err, "citizen row upsert failed");
         if err.contains("duplicate key") || err.contains("already belongs") {
-            return api_error(
-                StatusCode::CONFLICT,
-                1005,
-                "公民身份、护照号或钱包账户已存在",
-            );
+            return api_error(StatusCode::CONFLICT, 1005, "公民身份或护照号已存在");
         }
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "公民落库失败");
     }
@@ -281,7 +276,6 @@ pub(crate) async fn admin_create_citizen(
             "passport_no": passport_no,
             "citizen_family_name": record.citizen_family_name,
             "citizen_given_name": record.citizen_given_name,
-            "wallet_address": record.wallet_address,
             "residence_province_code": residence_province_code,
             "residence_city_code": residence_city_code,
             "residence_town_code": residence_town_code,
@@ -323,9 +317,9 @@ pub(crate) async fn admin_create_citizen(
     .into_response()
 }
 
-struct ResolvedWallet {
-    address: String,
-    pubkey: String,
+pub(crate) struct ResolvedWallet {
+    pub(crate) address: String,
+    pub(crate) pubkey: String,
 }
 
 fn required_trimmed(value: &str, field: &str) -> Result<String, axum::response::Response> {
@@ -394,7 +388,44 @@ fn resolve_residence_scope(
     Ok((province_name, city_name))
 }
 
-fn resolve_wallet_account(account: &str) -> Result<ResolvedWallet, axum::response::Response> {
+#[allow(clippy::too_many_arguments)]
+fn local_citizen_cid_seed(
+    citizen_family_name: &str,
+    citizen_given_name: &str,
+    citizen_sex: &str,
+    citizen_birth_date: NaiveDate,
+    residence_province_code: &str,
+    residence_city_code: &str,
+    residence_town_code: &str,
+    birth_province_code: &str,
+    birth_city_code: &str,
+    birth_town_code: &str,
+) -> String {
+    // 中文注释:本地建档阶段没有钱包账户,因此 CID 种子只能来自档案自身的稳定字段。
+    // 钱包绑定属于后续链上身份推送,不得回头改变本地身份号。
+    let mut hasher = Sha256::new();
+    let birth_date_text = citizen_birth_date.format("%Y-%m-%d").to_string();
+    for part in [
+        citizen_family_name,
+        citizen_given_name,
+        citizen_sex,
+        birth_date_text.as_str(),
+        residence_province_code,
+        residence_city_code,
+        residence_town_code,
+        birth_province_code,
+        birth_city_code,
+        birth_town_code,
+    ] {
+        hasher.update(part.as_bytes());
+        hasher.update([0]);
+    }
+    format!("citizen-local-0x{}", hex::encode(hasher.finalize()))
+}
+
+pub(crate) fn resolve_wallet_account(
+    account: &str,
+) -> Result<ResolvedWallet, axum::response::Response> {
     let account = account.trim();
     if account.is_empty() {
         return Err(api_error(
@@ -437,7 +468,6 @@ fn citizen_archive_hash(record: &CitizenRecord) -> String {
         "citizen_given_name": record.citizen_given_name,
         "citizen_sex": record.citizen_sex,
         "citizen_birth_date": record.citizen_birth_date,
-        "wallet_address": record.wallet_address,
         "residence_province_code": record.residence_province_code,
         "residence_city_code": record.residence_city_code,
         "residence_town_code": record.residence_town_code,
@@ -454,12 +484,15 @@ fn citizen_archive_hash(record: &CitizenRecord) -> String {
 }
 
 impl Db {
-    /// 按钱包公钥查公民档案。钱包必填后,存在即代表该钱包已有档案。
+    /// 按钱包公钥查公民档案。仅已完成钱包绑定/链上推送准备的公民会命中本查询。
     pub(crate) fn find_citizen_by_wallet(
         &self,
         wallet_pubkey: &str,
     ) -> Result<Option<CitizenRecord>, String> {
         let wallet_pubkey = wallet_pubkey.trim().to_string();
+        if wallet_pubkey.is_empty() {
+            return Ok(None);
+        }
         self.with_client(move |conn| {
             let row = conn
                 .query_opt(
@@ -472,7 +505,8 @@ impl Db {
                             archive_hash, onchain_tx_hash, onchain_block_number, onchain_at,
                             created_by, created_at, updated_by, updated_at
                      FROM citizens
-                     WHERE lower(wallet_pubkey) = lower($1)
+                     WHERE wallet_pubkey IS NOT NULL
+                       AND lower(wallet_pubkey) = lower($1)
                      ORDER BY created_at DESC
                      LIMIT 1",
                     &[&wallet_pubkey],

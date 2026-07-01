@@ -717,7 +717,7 @@ impl Db {
         Ok(())
     }
 
-    pub(crate) fn list_citizens_exact(
+    pub(crate) fn list_citizens_page(
         &self,
         keyword: &str,
         province_code: Option<&str>,
@@ -726,16 +726,6 @@ impl Db {
         page_size: usize,
     ) -> Result<PageResult<CitizenRow>, String> {
         let keyword = keyword.trim();
-        if keyword.is_empty() {
-            return Ok(PageResult {
-                items: Vec::new(),
-                page_size,
-                next_cursor: None,
-                has_more: false,
-                manifest_version: None,
-                catalog_status: None,
-            });
-        }
         let cursor = decode_db_page_cursor(cursor)?;
         let keyword = keyword.to_string();
         let province_code = province_code.map(str::to_string);
@@ -764,13 +754,15 @@ impl Db {
                              WHERE ($1::text IS NULL OR c.province_code = $1)
                                AND ($2::text IS NULL OR c.city_code = $2)
                                AND (
+                                    $3::text = ''
+                                    OR
                                     c.cid_number = $3
                                     OR c.passport_no = $3
                                     OR c.citizen_family_name || c.citizen_given_name = $3
                                     OR c.citizen_family_name = $3
                                     OR c.citizen_given_name = $3
-                                    OR lower(c.wallet_pubkey) = lower($3)
-                                    OR lower(c.wallet_address) = lower($3)
+                                    OR (c.wallet_pubkey IS NOT NULL AND lower(c.wallet_pubkey) = lower($3))
+                                    OR (c.wallet_address IS NOT NULL AND lower(c.wallet_address) = lower($3))
                                )
                                AND (
                                     $4::timestamptz IS NULL
@@ -2657,6 +2649,14 @@ fn main() {
             .route(
                 "/api/v1/admin/citizens/legal-representatives",
                 get(domains::citizens::handler::admin_search_legal_representative_citizens),
+            )
+            .route(
+                "/api/v1/admin/citizens/:cid_number/onchain/prepare",
+                post(domains::citizens::chain_identity::prepare_citizen_onchain_signature),
+            )
+            .route(
+                "/api/v1/admin/citizens/:cid_number/onchain/complete",
+                post(domains::citizens::chain_identity::complete_citizen_onchain_signature),
             )
             .route("/api/v1/admin/cid/meta", get(cid::admin::admin_cid_meta))
             .route(

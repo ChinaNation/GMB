@@ -102,6 +102,7 @@ fn voting_payload(wallet_account: u64, cid_number: &[u8]) -> VotingIdentityPaylo
     VotingIdentityPayload {
         cid_number: cid(cid_number),
         wallet_account,
+        citizen_age_years: 18,
         passport_valid_from: 20260630,
         passport_valid_until: 20360630,
         citizen_status: CitizenStatus::Normal,
@@ -262,6 +263,24 @@ fn invalid_citizen_code_is_rejected() {
                 valid_signature(),
             ),
             Error::<Test>::InvalidCitizenCode
+        );
+    });
+}
+
+#[test]
+fn under_sixteen_cannot_register_onchain_identity() {
+    new_test_ext().execute_with(|| {
+        let mut payload = voting_payload(1, b"CTZN-UNDERAGE");
+        payload.citizen_age_years = 15;
+
+        assert_noop!(
+            CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(100),
+                200,
+                payload,
+                valid_signature(),
+            ),
+            Error::<Test>::UnderVotingAge
         );
     });
 }
