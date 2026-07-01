@@ -24,19 +24,29 @@ const pallets = [
     desc: '44 个权威节点参与 GRANDPA 终局性投票，确保区块不可回滚',
   },
   {
-    name: '身份 ID 认证',
-    module: 'cid-system',
-    desc: '链上公民身份绑定与验证，一人一链上身份，保障投票资格',
+    name: '链上公民身份',
+    module: 'citizen-identity',
+    desc: '保存投票和参选所需的最小身份字段，为选举、公投和人口快照提供可信数据源',
   },
   {
     name: '公民发行',
     module: 'citizen-issuance',
-    desc: '经身份 ID 认证的公民轻节点获得公民币发行，按节点认证数量线性释放',
+    desc: '经链上公民身份登记的公民获得公民币发行，按登记顺序和奖励规则释放',
   },
   {
     name: '全节点发行',
     module: 'fullnode-issuance',
     desc: '全节点通过 PoW 出块获取区块奖励，奖励逐块释放，跨约 1000 万区块',
+  },
+  {
+    name: '立法与法律',
+    module: 'legislation-yuan',
+    desc: '把公民宪法和普通法律以结构化版本上链，承接制定、修改、废止法律的执行结果',
+  },
+  {
+    name: '选举投票',
+    module: 'election-vote',
+    desc: '支持公民普选和公权机构成员互选，读取链上公民身份与职位选民快照',
   },
   {
     name: '投票引擎',
@@ -49,9 +59,9 @@ const pallets = [
     desc: '货币增发提案、联合投票与发行执行统一闭环，需经多级治理审批通过方可落账',
   },
   {
-    name: '管理员治理',
-    module: 'admin-management',
-    desc: '多签管理员体系，国储 13/19、省储 6/9 签名门槛，保障去中心化决策',
+    name: '机构与管理员',
+    module: 'entity / admins',
+    desc: '公权机构、私权机构、个人多签和管理员集合由链上模块统一约束生命周期',
   },
 ]
 
@@ -65,8 +75,8 @@ const topNodeTypes = [
   {
     type: '轻节点',
     count: '无限',
-    desc: '公民用户运行的轻客户端（CitizenApp），经身份 ID 认证后可参与链上投票',
-    features: ['身份 ID 认证', '转账交易', '公民投票'],
+    desc: '公民用户运行的轻客户端（CitizenApp），完成链上公民身份后可参与链上投票',
+    features: ['公民身份', '转账交易', '公民投票'],
   },
 ]
 
@@ -104,7 +114,7 @@ export default function Technology() {
           <SectionTitle
             subtitle="区块链技术"
             title="基于 Substrate 的主权区块链"
-            description="采用 Rust 语言与 Polkadot SDK 构建，PoW + GRANDPA 混合共识，WASM 可升级运行时，打造安全、可扩展、可治理的主权区块链。"
+            description="采用 Rust 语言与 Polkadot SDK 构建，PoW + GRANDPA 混合共识，WASM 可升级运行时，并内置链上中国平台承接注册、立法、选举和机构治理入口。"
           />
         </div>
       </section>
@@ -131,7 +141,7 @@ export default function Technology() {
         <SectionTitle
           subtitle="运行时模块"
           title="链上 Pallet 架构"
-          description="模块化的 WASM 运行时，支持链上无分叉升级，每个 Pallet 负责独立业务逻辑。"
+          description="模块化的 WASM 运行时，支持链上无分叉升级；业务模块提交提案语义，投票、计票和状态推进统一归投票引擎。"
         />
         <div className="grid gap-6 md:grid-cols-2">
           {pallets.map((p) => (

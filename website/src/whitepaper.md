@@ -40,8 +40,9 @@
   <summary>4. 技术架构</summary>
 
   [4.1. 主体架构](#41主体架构)
-  [4.2. 节点](#42节点)
-  [4.3. 运行时](#43运行时)
+  [4.2. 运行时](#42运行时)
+  [4.3. 节点](#43节点)
+  [4.4. 链上中国](#44链上中国)
   </details>
 
 - <details>
@@ -51,8 +52,8 @@
   [5.2. 投票引擎](#52投票引擎)
   [5.3. 治理模组](#53治理模组)
   [5.4. 管理员模组](#54管理员模组)
-  [5.5. 公权模组](#55公权模组)
-  [5.6. 私权模组](#56私权模组)
+  [5.5. 公权与立法模组](#55公权与立法模组)
+  [5.6. 实体与私权模组](#56实体与私权模组)
   [5.7. 发行模组](#57发行模组)
   [5.8. 交易模组](#58交易模组)
   [5.9. 其他模组](#59其他模组)
@@ -62,23 +63,18 @@
   <summary>6. 节点</summary>
 
   [6.1. 桌面端](#61桌面端)
-  [6.2. 注册局](#62注册局)
   </details>
 
 - <details>
-  <summary>7. 公民</summary>
+  <summary>7. 链上中国</summary>
   </details>
 
 - <details>
-  <summary>8. 公民钱包</summary>
+  <summary>8. 公民</summary>
   </details>
 
 - <details>
-  <summary>9. 文库</summary>
-  </details>
-
-- <details>
-  <summary>10. 脚本库</summary>
+  <summary>9. 公民钱包</summary>
   </details>
 
 ****
@@ -107,7 +103,8 @@
 | 公民币                  | Citizen Coin / GMB                            | 公民链原生法定数字货币和治理货币                    |
 | 公民钱包                | CitizenWallet                                 | 离线冷钱包软件                                      |
 | 公民                    | CitizenApp                                    | 公民链轻节点、热钱包、公民投票和去中心化通信软件      |
-| 注册局                  | Registry                                      | 每市自治节点托管的链外系统，内嵌公民身份能力，负责身份 ID、公民身份上链、链上人口统计、公民护照与机构营业执照颁发 |
+| 链上中国平台             | OnChina                                       | 公民链节点内置的本地治理与注册平台，负责管理员登录、公民档案、机构注册、法律文库、立法入口和链上身份提交 |
+| 注册局                  | Registry                                      | 链上中国平台中的注册业务角色，包含联邦注册局和市注册局，用于注册公民、公权机构、私权机构和机构管理员 |
 | 身份识别码               | CID / Identity Identification Code            | 注册局签发的统一身份号码，是公民身份、自然人和机构的身份编号字段 |
 | 清算行                  | clearing bank                                 | 完成链上注册后提供链下支付清算服务的全节点            |
 | 投票资格                | voting eligibility                            | 公民是否可参与投票的资格状态，由注册局根据公民护照状态判定 |
@@ -221,7 +218,7 @@
 
 ## 2.6.轻节点：公民/访客<br><span class="whitepaper-heading-en">2.6. Light Nodes: Citizens / Visitors</span>
 
-* 使用CitizenApp（公民）节点软件并完成链上投票身份登记的即公民轻节点，CID和公民轻节点账户一对一登记，登记完成后可获得投票权，一个CID只能同时对应一个公民账户。<br><span class="whitepaper-en">A light node using the CitizenApp citizen node software and completing on-chain voting-identity registration is a citizen light node. The CID and the citizen light-node account are registered one-to-one. After registration is completed, the node obtains voting rights. One CID may correspond to only one citizen account at a time.</span>
+* 使用 CitizenApp（公民）节点软件并完成链上投票身份登记的即公民轻节点，公民身份识别码与投票钱包账户一对一登记，登记完成后可获得投票权，一个身份识别码只能同时对应一个投票钱包账户。<br><span class="whitepaper-en">A light node using the CitizenApp citizen node software and completing on-chain voting-identity registration is a citizen light node. The citizen identity identification code and voting wallet account are registered one-to-one. After registration is completed, the node obtains voting rights. One identity identification code may correspond to only one voting wallet account at a time.</span>
 * 安装CitizenApp节点软件未绑定的,为访客轻节点，访客轻节点没有投票权，使用第三方钱包的，亦为访客轻节点。<br><span class="whitepaper-en">A CitizenApp node installation that is not bound is a visitor light node. Visitor light nodes have no voting rights. Users of third-party wallets are also visitor light nodes.</span>
 
 ****
@@ -285,7 +282,7 @@ w5FxV4G57ZQGZCWbVYLAjKYHtwaDGEbf1AGsMgfmr5KXe1KS8
 
 ## 3.4.公民发行<br><span class="whitepaper-heading-en">3.4. Citizen Issuance</span>
 
-* 使用身份识别码（CID）完成公民轻节点认证的，将获得认证奖励，可获得认证奖励的节点总量为1,443,497,378个，前14,436,417个认证的公民轻节点，每个认证的节点奖励9999.00元；第14,436,417个之后再认证的公民轻节点，每个认证的节点奖励999.00元；<br><span class="whitepaper-en">A citizen light node that completes certification with an identity identification code (CID) receives a certification reward. The total number of nodes eligible for certification rewards is 1,443,497,378. Each of the first 14,436,417 certified citizen light nodes receives a reward of 9,999.00 yuan; each citizen light node certified after the 14,436,417th receives a reward of 999.00 yuan.</span>
+* 完成链上公民身份登记的公民，将获得认证奖励，可获得认证奖励的公民总量为1,443,497,378个，前14,436,417个完成登记的公民，每人奖励9999.00元；第14,436,417个之后完成登记的公民，每人奖励999.00元；<br><span class="whitepaper-en">A citizen who completes on-chain citizen-identity registration receives a certification reward. The total number of citizens eligible for certification rewards is 1,443,497,378. Each of the first 14,436,417 registered citizens receives a reward of 9,999.00 yuan; each citizen registered after the 14,436,417th receives a reward of 999.00 yuan.</span>
 * 达到公民发行总量后，后续认证的节点无奖励，认证发行奖励以先完成认证优先获得，每个身份识别码仅能获得一次认证奖励，公民发行能让更多的公民参与“公民建国运动”。<br><span class="whitepaper-en">After the citizen issuance cap is reached, later certified nodes receive no rewards. Certification issuance rewards are obtained in priority order by those who complete certification first. Each identity identification code may receive the certification reward only once. Citizen issuance enables more citizens to participate in the Citizen Nation-Building Movement.</span>
 * 公民发行不提供人工补发入口，也不由用户直接调用发行接口；只有链上投票身份登记成功后，公民身份回调才能触发 citizen-issuance 模块执行奖励。<br><span class="whitepaper-en">Citizen issuance provides no manual reissue entry point and is not directly invoked by users. Only after successful on-chain voting-identity registration may the citizen-identity callback trigger the citizen-issuance module to execute the reward.</span>
 * 同一身份识别码、同一账户均只能获得一次公民发行奖励；达到节点总量上限或重复绑定时，模块只记录跳过结果，不新增发行。<br><span class="whitepaper-en">The same identity identification code and the same account may each receive the citizen issuance reward only once. When the node cap is reached or a repeated binding occurs, the module only records the skipped result and does not create new issuance.</span>
@@ -339,83 +336,61 @@ w5FxV4G57ZQGZCWbVYLAjKYHtwaDGEbf1AGsMgfmr5KXe1KS8
 
 ## 4.1.主体架构<br><span class="whitepaper-heading-en">4.1. Core Architecture</span>
 
-* 主体使用Rust语言，采用Substrate框架开发，节点软件使用Tauri框架，手机端使用flutter开发；<br><span class="whitepaper-en">The core system is written in Rust and developed with the Substrate framework. The node software uses the Tauri framework, and the mobile client is developed with Flutter.</span>
-* 采用模块化开发，开发初期就要做好为后期去框架的准备，并符合长期技术演进，为今后重构中国的政府、金融、通信等领域的应用预留扩展。<br><span class="whitepaper-en">The system uses modular development. From the early development stage, it must prepare for later framework removal and align with long-term technical evolution, leaving room for future reconstruction of applications in China's government, finance, communications, and other fields.</span>
+* 主体使用 Rust 语言和 Substrate/Polkadot SDK 构建公民链，节点桌面端使用 Tauri 与 React，链上中国使用 Rust Axum、PostgreSQL 与 React，移动端使用 Flutter；<br><span class="whitepaper-en">The core system uses Rust and Substrate/Polkadot SDK to build CitizenChain. The desktop node uses Tauri and React, OnChina uses Rust Axum, PostgreSQL, and React, and the mobile clients use Flutter.</span>
+* 技术框架由主体架构、运行时、节点、链上中国四部分组成：运行时是链上规则真源，节点负责网络、出块和本地服务，链上中国负责注册、立法入口、法律文库和机构治理操作，公民与公民钱包分别承担联网轻节点和离线签名职责。<br><span class="whitepaper-en">The technical framework consists of core architecture, runtime, node, and OnChina. The runtime is the on-chain source of truth, the node handles networking, block production, and local services, OnChina handles registration, legislative entry points, legal library, and institutional governance operations, while CitizenApp and CitizenWallet handle online light-node functions and offline signing respectively.</span>
 * 主体架构图<br><span class="whitepaper-en">Core architecture diagram:</span>
 
 ```
 GMB/
-├── citizenchain/          # 公民链
-│   ├── node/                # 区块链节点程序（chain_spec、service、cli等）
-│   └── runtime/             # 区块链Runtime（链的统一运行时状态）
-│         ├── genesis/         # 创世模块（负责区分创世期/运行期）
-│         ├── votingengine/    # 投票引擎（内部投票、联合投票、立法投票、选举投票模块）
-│         ├── governance/      # 治理模组（由多个治理子模块组成）
-│         ├── admins/          # 管理员模组（由多个管理员子模块组成）
-│         ├── public/          # 公权模组（由多个公权子模块组成）
-│         ├── private/         # 私权模组（由多个私权子模块组成）
-│         ├── issuance/        # 发行模组（由多个发行子模块组成）
-│         ├── transaction/     # 交易模组（由多个交易子模块组成）
-│         ├── otherpallet/     # 其他模组（由多个其他子模块组成）
-│         ├── primitives/      # 常量库
-│         └── registry/        # 注册局（每市自治节点托管的链外系统，内嵌身份识别码能力，内嵌私有 PostgreSQL）
-│
-├── citizenapp/                # 轻节点软件（热钱包、公民投票、隐私通信、资产管理，iOS、Android）
-├── citizenwallet/             # 冷钱包软件（公民钱包，iOS、Android）
-├── docs/                      # 文库（文档、图片、白皮书、参考资料等；citizenpassport 已归档于此）
-└── scripts/                   # 脚本库（账户生成、Key工具等）
+├── citizenchain/                # 公民链
+│   ├── node/                    # 全节点与桌面运维台，负责网络、PoW、GRANDPA、链上中国启动入口
+│   ├── onchina/                 # 链上中国平台，负责注册局业务、法律文库、立法入口、机构和公民管理
+│   └── runtime/                 # 链上 Runtime，负责发行、治理、投票、机构、管理员和链上公民身份
+│         ├── genesis/           # 创世机构、创世管理员、创世状态
+│         ├── votingengine/      # 内部投票、联合投票、立法投票、选举投票
+│         ├── governance/        # 运行期治理、协议升级和治理执行
+│         ├── admins/            # 创世管理员、公权管理员、私权管理员、个人管理员
+│         ├── entity/            # 公权机构、私权机构、个人多签等实体生命周期
+│         ├── public/            # 立法院、立法活动、选举活动等公权业务
+│         ├── issuance/          # 创世发行、公民发行、全节点发行、决议发行、省储行利息
+│         ├── transaction/       # 链上转账、链下清算、多签转账
+│         ├── otherpallet/       # citizen-identity、pow-difficulty 等链上基础能力
+│         └── primitives/        # 公共常量、类型和创世参数
+├── citizenapp/                  # 公民，热钱包、轻节点、公民投票、通信和支付入口
+├── citizenwallet/               # 公民钱包，离线冷钱包和扫码签名工具
+└── website/                     # 官网与白皮书展示
 ```
 
 <span class="whitepaper-en">English architecture map:</span>
 
 ```
 GMB/
-├── citizenchain/          # CitizenChain
-│   ├── node/                # Blockchain node program, including chain_spec, service, cli, and related code
-│   └── runtime/             # Runtime, the unified on-chain runtime state
-│         ├── genesis/         # Genesis module, responsible for distinguishing genesis period and operating period
-│         ├── votingengine/    # Voting engine, including internal vote, joint vote, and citizen vote modules
-│         ├── governance/      # Governance module group, composed of multiple governance submodules
-│         ├── admins/          # Admins module group, composed of multiple admins submodules
-│         ├── public/          # Public-authority module group, composed of multiple public-authority submodules
-│         ├── private/         # Private-authority module group, composed of multiple private-authority submodules
-│         ├── issuance/        # Issuance module group, composed of multiple issuance submodules
-│         ├── transaction/     # Transaction module group, composed of multiple transaction submodules
-│         ├── otherpallet/     # Other module group, composed of multiple other submodules
-│         ├── primitives/      # Constants library
-│         └── registry/        # Registry, the off-chain system hosted by each city's self-governing node, with embedded identity identification code capability and an embedded private PostgreSQL
-│
-├── citizenapp/                # Light-node software: hot wallet, citizen voting, private communication, and asset management for iOS and Android
-├── citizenwallet/             # Cold-wallet software, CitizenWallet for iOS and Android
-├── docs/                      # Document library: documents, images, whitepaper, and reference materials (the archived citizenpassport lives here)
-└── scripts/                   # Script library: account generation, key tools, and related scripts
+├── citizenchain/                # CitizenChain
+│   ├── node/                    # Full node and desktop operations console
+│   ├── onchina/                 # OnChina platform for registry operations, legal library, legislation entry, institutions, and citizens
+│   └── runtime/                 # On-chain runtime for issuance, governance, voting, entities, admins, and citizen identity
+├── citizenapp/                  # CitizenApp, online light node and hot wallet
+├── citizenwallet/               # CitizenWallet, offline cold wallet and QR signing tool
+└── website/                     # Official website and whitepaper presentation
 ```
 
 ****
-## 4.2.节点<br><span class="whitepaper-heading-en">4.2. Node</span>
+## 4.2.运行时<br><span class="whitepaper-heading-en">4.2. Runtime</span>
 
-### 4.2.1.网络模块<br><span class="whitepaper-heading-en">4.2.1. Network Module</span>
+* 运行时是链上规则真源，统一管理创世状态、发行、治理、管理员、实体注册、立法、选举、投票引擎、链上公民身份和交易清算；<br><span class="whitepaper-en">The runtime is the on-chain source of truth. It manages genesis state, issuance, governance, administrators, entity registration, legislation, elections, voting engine, on-chain citizen identity, and transaction settlement.</span>
+* 投票流程只能由投票引擎处理，业务模块只负责提案语义、数据校验和通过后的执行动作，不得复刻投票、计票或人口快照逻辑；<br><span class="whitepaper-en">Voting flows may only be handled by the voting engine. Business modules are responsible only for proposal semantics, data validation, and post-approval execution actions; they may not duplicate voting, tallying, or population-snapshot logic.</span>
+* `citizen-identity` 是链上公民身份模块，保存投票和参选所需的最小字段，供选举投票、联合公投和人口快照读取。<br><span class="whitepaper-en">`citizen-identity` is the on-chain citizen-identity module. It stores only the minimum fields required for voting and candidacy and is read by election voting, joint referendums, and population snapshots.</span>
 
-* 网络类型：libp2p<br><span class="whitepaper-en">Network type: libp2p.</span>
-* 网络密钥：Ed25519<br><span class="whitepaper-en">Network key: Ed25519.</span>
+## 4.3.节点<br><span class="whitepaper-heading-en">4.3. Node</span>
 
-### 4.2.2.安全模块<br><span class="whitepaper-heading-en">4.2.2. Security Module</span>
+* 节点采用 libp2p 网络、RocksDB 存储、Blake2 哈希、sr25519 链上账户签名和 Ed25519 网络密钥；<br><span class="whitepaper-en">The node uses libp2p networking, RocksDB storage, Blake2 hashing, sr25519 on-chain account signatures, and Ed25519 network keys.</span>
+* 全节点通过 PoW 获得出块权，权威节点通过 GRANDPA 进行最终性投票；44 个权威节点由 1 个国储会权威节点和 43 个省储会权威节点组成；<br><span class="whitepaper-en">Full nodes obtain block-production rights through PoW, while authority nodes vote on finality through GRANDPA. The 44 authority nodes consist of one National Citizen Reserve Committee authority node and 43 Provincial Citizen Reserve Committee authority nodes.</span>
+* 桌面端负责启动、停止和观察本地节点，并在用户确认后启动本机链上中国平台。<br><span class="whitepaper-en">The desktop application starts, stops, and observes the local node, and starts the local OnChina platform only after user confirmation.</span>
 
-* 使用Blake2哈希算法<br><span class="whitepaper-en">Uses the Blake2 hash algorithm.</span>
-* 使用sr25519加密算法<br><span class="whitepaper-en">Uses the sr25519 cryptographic algorithm.</span>
+## 4.4.链上中国<br><span class="whitepaper-heading-en">4.4. OnChina</span>
 
-### 4.2.3.存储模块<br><span class="whitepaper-heading-en">4.2.3. Storage Module</span>
-
-* RocksDB+本机储存<br><span class="whitepaper-en">RocksDB plus local storage.</span>
-
-### 4.2.4.工作量证明<br><span class="whitepaper-heading-en">4.2.4. Proof of Work / PoW</span>
-
-* 全节点使用PoW工作量证明共识获得铸块权，负责链上交易验证并铸块；<br><span class="whitepaper-en">Full nodes obtain block-minting rights through Proof of Work (PoW) consensus and are responsible for on-chain transaction validation and block minting.</span>
-* 权威节点使用GRANDPA确定性最终性验证，由44个权威节点（国储会1个+省储会43个）验证。<br><span class="whitepaper-en">Authority nodes use GRANDPA deterministic finality validation, validated by 44 authority nodes: one National Citizen Reserve Committee node plus 43 Provincial Citizen Reserve Committee nodes.</span>
-
-## 4.3.运行时<br><span class="whitepaper-heading-en">4.3. Runtime</span>
-
-* 链的统一运行时逻辑，联合投票通过可进行协议升级，详见5.3.1.协议升级。<br><span class="whitepaper-en">The runtime is the chain's unified runtime logic. A protocol upgrade may be performed after passage through joint voting. See section 5.3.1, Protocol Upgrade.</span>
+* 链上中国是公民链节点内置的本地治理与注册平台，不是独立信任根；管理员权限以链上 active admins 为准，平台只负责登录鉴权、业务录入、待签交易生成、链上读取和本地档案保存；<br><span class="whitepaper-en">OnChina is the local governance and registration platform embedded in the CitizenChain node. It is not an independent trust root; administrator authority comes from on-chain active admins. The platform handles login authentication, business entry, unsigned transaction generation, on-chain reads, and local record storage.</span>
+* 链上中国承接公民档案、公权机构、私权机构、教育机构、注册局管理员、法律文库和立法入口；涉及投票、计票、选举结果和立法状态推进的流程仍由链上投票引擎负责。<br><span class="whitepaper-en">OnChina handles citizen records, public institutions, private institutions, education institutions, registry administrators, legal library, and legislation entry points. Voting, tallying, election results, and legislative state progression remain the responsibility of the on-chain voting engine.</span>
 
 ****
 # 5.运行时<br><span class="whitepaper-heading-en">5. runtime</span>
@@ -434,7 +409,7 @@ GMB/
 * 联合公投阶段是联合投票的第二阶段，不是选举投票模块；联合公投仅由进入该联合投票提案快照的认证公民参与，超过50%的可投票公民同意则通过，超期或未超过50%则否决；<br><span class="whitepaper-en">The joint referendum stage is the second stage of joint voting, not the election-vote module. A joint referendum is participated in only by certified citizens included in that joint-vote proposal snapshot. Approval by more than 50% of eligible voting citizens passes the proposal; timeout or approval not exceeding 50% rejects it.</span>
 * 立法投票模块仅用于立法机构的修法表决，适用主体为市自治会、市教委会、市立法会、省立法院参议会与众议会、国家立法院参议会与众议会、国家教委会；严格按公民宪法的表决类型与阈值执行，统一承载两院顺序、行政签署与强制公投，投票通过后回调立法院模块写入新法律版本；<br><span class="whitepaper-en">The legislation-vote module is used only for legislative voting on amendments by legislative institutions, applicable to municipal autonomy committees, municipal education committees, municipal legislative councils, provincial Senate and House, the national Senate and House, and the National Education Committee. It strictly follows the vote types and thresholds of the Citizen Constitution and uniformly carries bicameral ordering, executive signing, and mandatory referendums. After a vote passes, it calls back the legislation-yuan module to write the new law version.</span>
 * 选举投票模块是独立模块，用于按公民宪法选举各类公职人员，既包括公民普选，也包括公权机构成员的内部互选；选举投票只读取链上公民身份账户和公民身份哈希，不接收链下身份凭证，同一提案同一公民身份账户只能投一次，选民集视职位而定（普选取链上公民身份快照，互选取特定机构现任成员快照）；<br><span class="whitepaper-en">The election-vote module is an independent module used to elect public officials according to the Citizen Constitution, covering both general citizen elections and internal mutual-elections among the members of public-authority institutions. Election voting reads only on-chain citizen-identity accounts and citizen-identity hashes, does not accept off-chain identity credentials, and the same citizen-identity account may vote only once on the same proposal. The electorate depends on the position: a general election takes an on-chain citizen-identity snapshot, while a mutual-election takes a snapshot of the current members of the specific institution.</span>
-* 投票资格由注册局身份 ID 能力判定，区块链负责在提案期内按快照计票、防重放、防重复投票和保证结果不可篡改。<br><span class="whitepaper-en">Voting eligibility is determined by the Registry identity ID capability. The blockchain is responsible for snapshot-based tallying during the proposal period, replay protection, duplicate-vote prevention, and tamper-proof results.</span>
+* 投票资格由链上 `citizen-identity` 和投票引擎快照共同判定，链上负责在提案期内按快照计票、防重放、防重复投票并保证结果不可篡改。<br><span class="whitepaper-en">Voting eligibility is determined by on-chain `citizen-identity` together with voting-engine snapshots. The chain is responsible for snapshot-based tallying during the proposal period, replay protection, duplicate-vote prevention, and tamper-proof results.</span>
 
 <img src="./assets/whitepaper-reserve-architecture.png" alt="公民储备委员会体系架构图" width="1000">
 
@@ -454,7 +429,8 @@ GMB/
 |:------:|:------------------:|:-----------------:|:------------------------:|
 | Internal-vote module | Internal matters of institutions or multisig accounts | Administrator snapshot plus threshold snapshot; passes when threshold is reached | Business modules submit proposal semantics and data, not thresholds |
 | Joint-vote module | Joint governance matters across the National Citizen Reserve Committee, Provincial Citizen Reserve Committees, and Provincial Citizen Reserve Banks | 105 votes in the institutional joint-vote stage must be unanimous; non-unanimous approval or timeout enters the joint referendum stage | Business modules may not pass population snapshots, voting eligibility, or tallying materials |
-| Citizen-vote module | Independent citizen-vote matters such as public-authority elections | Certified citizens vote; strictly more than 50% approval passes | Must not be mixed with the joint-vote module's joint referendum stage |
+| Legislation-vote module | Legislative voting by legislative institutions | Citizen-Constitution thresholds, bicameral order, executive signing, and mandatory referendum | The legislature business shell creates and binds votes only |
+| Election-vote module | Election of public officials, including general elections and mutual elections | Electorate snapshots by office and constitutional thresholds | Must not be mixed with the joint-vote module's joint referendum stage |
 ```
 
 * 联合投票流程图：
@@ -535,9 +511,9 @@ VOTING → PASSED → EXECUTED
 * admin-management 只维护管理员集合和主体生命周期；固定阈值和动态阈值均由内部投票模块校验、快照和保存。<br><span class="whitepaper-en">admin-management maintains only administrator sets and subject lifecycle. Fixed and dynamic thresholds are validated, snapshotted, and stored by the internal-vote module.</span>
 * 管理员集合变更提案与同一治理主体的普通活跃提案互斥；投票通过后由投票引擎 callback 调用 admin-management 执行管理员集合更新。<br><span class="whitepaper-en">An administrator-set change proposal is mutually exclusive with ordinary active proposals under the same governance subject. After the vote passes, the voting-engine callback invokes admin-management to execute the administrator-set update.</span>
 
-## 5.5.公权模组<br><span class="whitepaper-heading-en">5.5. public</span>
+## 5.5.公权与立法模组<br><span class="whitepaper-heading-en">5.5. public</span>
 
-* 公权模组负责公权立法事务的业务语义、提案数据校验和执行动作；修法一律走投票引擎，公权模组绝不自实现投票、计票或快照。<br><span class="whitepaper-en">The public-authority module group is responsible for the business semantics, proposal-data validation, and execution actions of public legislative affairs. Legislative amendments uniformly go through the voting engine; the public-authority module group never implements voting, tallying, or snapshots on its own.</span>
+* 公权与立法模组负责立法院、立法活动、选举活动等公权业务语义、提案数据校验和执行动作；修法与选举一律走投票引擎，公权业务模组绝不自实现投票、计票或快照。<br><span class="whitepaper-en">The public-authority and legislation module group is responsible for the business semantics, proposal-data validation, and execution actions of the legislature, legislative activities, election activities, and related public-authority affairs. Legislative amendments and elections uniformly go through the voting engine; public-authority business modules never implement voting, tallying, or snapshots on their own.</span>
 
 ### 5.5.1.立法院<br><span class="whitepaper-heading-en">5.5.1. legislation-yuan</span>
 
@@ -545,9 +521,9 @@ VOTING → PASSED → EXECUTED
 * 立法院模块只承载法律数据、版本和状态机，提案由各级立法机构管理员发起，投票通过后由执行器认领并写入新的法律版本；公民宪法不可修改条款一律硬拒；<br><span class="whitepaper-en">The legislation-yuan module carries only law data, versions, and the state machine. Proposals are initiated by administrators of legislative institutions at each level. After a vote passes, the executor claims it and writes the new law version. Immutable clauses of the Citizen Constitution are strictly rejected.</span>
 * 立法表决严格按公民宪法的表决类型与阈值执行，两院顺序、行政签署与强制公投由投票引擎下的立法投票模块统一承载，立法院业务壳只通过其接口创建和绑定投票。<br><span class="whitepaper-en">Legislative voting strictly follows the vote types and thresholds of the Citizen Constitution. Bicameral ordering, executive signing, and mandatory referendums are uniformly carried by the legislation-vote module under the voting engine, while the legislation-yuan business shell only creates and binds votes through its interface.</span>
 
-## 5.6.私权模组<br><span class="whitepaper-heading-en">5.6. private</span>
+## 5.6.实体与私权模组<br><span class="whitepaper-heading-en">5.6. entity / private</span>
 
-* 私权模组负责个人多签账户和机构多签账户的业务语义、提案数据校验和执行动作；投票流程、提案状态机、回调、重试、取消和终态清理均由投票引擎统一管控。<br><span class="whitepaper-en">The private-authority module group is responsible for the business semantics, proposal-data validation, and execution actions of personal multisig accounts and institutional multisig accounts. Voting flow, proposal state machine, callbacks, retry, cancellation, and terminal cleanup are uniformly governed by the voting engine.</span>
+* 实体与私权模组负责公权机构、私权机构、个人多签账户和机构多签账户的生命周期业务语义、提案数据校验和执行动作；投票流程、提案状态机、回调、重试、取消和终态清理均由投票引擎统一管控。<br><span class="whitepaper-en">The entity and private-authority module group is responsible for lifecycle business semantics, proposal-data validation, and execution actions for public institutions, private institutions, personal multisig accounts, and institutional multisig accounts. Voting flow, proposal state machine, callbacks, retry, cancellation, and terminal cleanup are uniformly governed by the voting engine.</span>
 
 ### 5.6.1.个人多签管理<br><span class="whitepaper-heading-en">5.6.1. personal-manage</span>
 
@@ -558,8 +534,8 @@ VOTING → PASSED → EXECUTED
 
 ### 5.6.2.机构多签管理<br><span class="whitepaper-heading-en">5.6.2. organization-manage</span>
 
-* 提交由身份注册局生成的多签账户、多签阈值、多签管理员表并支付链上交易手续费的，可创建机构多签，管理员数量最多1989个，致敬八九；<br><span class="whitepaper-en">An institutional multisig account may be created by submitting the multisig account generated by the identity registry, the multisig threshold, and the multisig administrator table, and by paying the on-chain transaction fee. The maximum number of administrators is 1,989, in commemoration of 1989.</span>
-* 机构多签账户主要用于机构资金管理，其中公权机构账户用于公费支出，公开透明便于审计；注册机构多签的多签账户由身份注册局生成。<br><span class="whitepaper-en">Institutional multisig accounts are mainly used for institutional fund management. Among them, public-authority institution accounts are used for public expenditures, making them open, transparent, and easy to audit. The multisig account used to register an institutional multisig account is generated by the identity registry.</span>
+* 提交由链上中国注册局业务生成的多签账户、多签阈值、多签管理员表并支付链上交易手续费的，可创建机构多签，管理员数量最多1989个，致敬八九；<br><span class="whitepaper-en">An institutional multisig account may be created by submitting the multisig account, multisig threshold, and multisig administrator table generated through OnChina registry business and by paying the on-chain transaction fee. The maximum number of administrators is 1,989, in commemoration of 1989.</span>
+* 机构多签账户主要用于机构资金管理，其中公权机构账户用于公费支出，公开透明便于审计；注册机构多签的多签账户由链上中国注册局业务生成。<br><span class="whitepaper-en">Institutional multisig accounts are mainly used for institutional fund management. Among them, public-authority institution accounts are used for public expenditures, making them open, transparent, and easy to audit. The multisig account used to register an institutional multisig account is generated through OnChina registry business.</span>
 * 机构多签创建和关闭必须走内部投票生命周期流程并全员通过；机构账户激活、关闭、资金划转和索引清理由 organization-manage 执行，投票状态和失败重试由投票引擎统一处理。<br><span class="whitepaper-en">Institutional multisig creation and closure must use the internal-vote lifecycle flow and require unanimous approval. Account activation, closure, fund transfer, and index cleanup are executed by organization-manage, while voting state and failure retry are handled uniformly by the voting engine.</span>
 * 机构多签普通业务使用内部投票动态阈值，业务模块不得自行保存投票阈值、复刻投票流程或直接改写投票引擎提案状态。<br><span class="whitepaper-en">Ordinary institutional multisig business uses the internal-vote dynamic threshold. Business modules may not store voting thresholds, replicate voting flows, or directly rewrite voting-engine proposal status.</span>
 
@@ -584,7 +560,7 @@ VOTING → PASSED → EXECUTED
 
 ### 5.7.3.公民发行<br><span class="whitepaper-heading-en">5.7.3. citizen-issuance</span>
 
-* 使用身份识别码（CID）完成公民轻节点认证的，将获得认证奖励，可获得认证奖励的节点总量为1,443,497,378个，前14,436,417个认证的公民轻节点，每个认证的节点奖励9999.00元；第14,436,417个之后再认证的公民轻节点，每个认证的节点奖励999.00元；<br><span class="whitepaper-en">A citizen light node that completes certification with an identity identification code (CID) receives a certification reward. The total number of nodes eligible for certification rewards is 1,443,497,378. Each of the first 14,436,417 certified citizen light nodes receives a reward of 9,999.00 yuan; each citizen light node certified after the 14,436,417th receives a reward of 999.00 yuan.</span>
+* 完成链上公民身份登记的公民，将获得认证奖励，可获得认证奖励的公民总量为1,443,497,378个，前14,436,417个完成登记的公民，每人奖励9999.00元；第14,436,417个之后完成登记的公民，每人奖励999.00元；<br><span class="whitepaper-en">A citizen who completes on-chain citizen-identity registration receives a certification reward. The total number of citizens eligible for certification rewards is 1,443,497,378. Each of the first 14,436,417 registered citizens receives a reward of 9,999.00 yuan; each citizen registered after the 14,436,417th receives a reward of 999.00 yuan.</span>
 * 达到公民发行总量后，后续认证的节点无奖励，认证发行奖励以先完成认证优先获得，每个身份识别码仅能获得一次认证奖励；<br><span class="whitepaper-en">After the citizen issuance cap is reached, later certified nodes receive no rewards. Certification issuance rewards are obtained in priority order by those who complete certification first. Each identity identification code may receive the certification reward only once.</span>
 * 公民发行由链上投票身份登记成功后的回调触发；同一身份识别码、同一账户只能获得一次奖励，模块不提供人工补发或治理重写入口。<br><span class="whitepaper-en">Citizen issuance is triggered by the on-chain callback after successful voting-identity registration. The same identity identification code and the same account may each receive the reward only once, and the module provides no manual reissue or governance rewrite entry point.</span>
 
@@ -640,23 +616,26 @@ VOTING → PASSED → EXECUTED
 
 ## 6.1.桌面端<br><span class="whitepaper-heading-en">6.1. Desktop</span>
 
-* 公民链桌面端（citizenchain）是矿工端，默认全核挖矿，同时是节点运维台；运行 citizenchain 的即全节点，承担数据归档、去中心化通信和新区块铸造。<br><span class="whitepaper-en">The CitizenChain desktop client (citizenchain) is the miner client. It mines with all cores by default and also serves as the node operations console. Any deployment running citizenchain is a full node, undertaking data archiving, decentralized communication, and the minting of new blocks.</span>
-* 桌面端启动后拉起注册局（registry）子进程，注册局随节点本地运行；运维人员和管理员通过浏览器访问本机注册局，进行公民录入、护照颁发、机构注册和管理员鉴权等操作。<br><span class="whitepaper-en">After startup, the desktop client launches the registry subprocess, and the registry runs locally alongside the node. Operators and administrators access the local registry through a browser to perform citizen entry, passport issuance, institution registration, administrator authentication, and related operations.</span>
+* 公民链桌面端（citizenchain）是全节点和节点运维台；运行 citizenchain 的即全节点，承担区块数据同步、交易验证、PoW 出块、GRANDPA 最终性参与、节点设置和本地服务管理。<br><span class="whitepaper-en">The CitizenChain desktop client is both a full node and an operations console. Any deployment running citizenchain is a full node that handles block-data synchronization, transaction validation, PoW block production, GRANDPA finality participation, node settings, and local service management.</span>
+* 节点不会在普通启动时自动拉起链上中国；链上中国由桌面端设置页手动启动，需用户二次确认，健康检查通过后才允许管理员在浏览器访问。<br><span class="whitepaper-en">The node does not automatically start OnChina during ordinary startup. OnChina is started manually from the desktop settings page, requires user confirmation, and becomes available in the browser only after the health check passes.</span>
+* 节点使用冻结的 raw chainspec 启动主链状态，不提供随意重建创世的运行期入口；首次启动会生成本机 `powr` 出块密钥，初始化完成后复用本机 keystore。<br><span class="whitepaper-en">The node starts from a frozen raw chainspec and does not provide an arbitrary runtime entry for rebuilding genesis. On first startup it generates the local `powr` block-production key and reuses the local keystore after initialization.</span>
 * 桌面端是矿工与节点运维角色，绝不内置钱包私钥或托管用户资产；钱包职能由公民（CitizenApp）热钱包和公民钱包（CitizenWallet）冷钱包承担。<br><span class="whitepaper-en">The desktop client plays the miner and node-operations role and never embeds wallet private keys or custodies user assets. Wallet functions are performed by the CitizenApp hot wallet and the CitizenWallet cold wallet.</span>
 
-## 6.2.注册局<br><span class="whitepaper-heading-en">6.2. Registry</span>
+****
+# 7.链上中国<br><span class="whitepaper-heading-en">7. OnChina</span>
 
-* 注册局（Registry）是每市自治节点托管的链外系统，去中心化部署，每市独立自治运行；注册局负责为公民、自然人、组织机构等签发统一身份 ID，并按公民选择提交链上投票身份或参选身份。如此，可鉴权的统一身份 ID 由注册局提供，让个人可使用实名参与互联网与链上投票。<br><span class="whitepaper-en">The Registry is an off-chain system hosted by each city's self-governing node. It is deployed in a decentralized manner, with each city running independently and autonomously. The Registry is responsible for issuing unified identity IDs to citizens, natural persons, organizations, institutions, and other entities, and submits on-chain voting or candidacy identities according to the citizen's choice. Accordingly, verifiable unified identity IDs are provided by the Registry, enabling individuals to participate in the Internet and on-chain voting under verified real-name identities.</span>
-* 注册局直接录入公民并直接颁发公民护照：公民由本市注册局录入后直接发护照，不再依赖跨机构授信或设备导入；公民护照状态、投票资格和投票账户由注册局统一维护。<br><span class="whitepaper-en">The Registry directly enters citizens and directly issues citizen passports: after a citizen is entered by the city's Registry, the passport is issued directly, no longer relying on cross-institution authorization or device-based import. Citizen passport status, voting eligibility, and the voting account are uniformly maintained by the Registry.</span>
-* 机构营业执照由注册局统一颁发：私法人股份公司及其下属非法人等机构的注册与营业执照签发，均收敛到注册局统一办理。<br><span class="whitepaper-en">Institution business licenses are uniformly issued by the Registry: registration and business-license issuance for institutions such as private legal-person joint-stock companies and their subordinate unincorporated entities are all consolidated into the Registry.</span>
-* 注册局内嵌私有 PostgreSQL 存储明细数据，链下明细数据本地保存；节点对外服务采用内网 TLS 加密。注册局只把可验证身份 ID、投票资格、行政区代码和钱包绑定关系等必要凭证提供给链上，链上只接收账户地址、签名、凭证、哈希和必要状态，不接收完整实名档案。<br><span class="whitepaper-en">The Registry has an embedded private PostgreSQL that stores detailed data, and off-chain detailed data is kept locally. Node services use intranet TLS encryption. The Registry provides only necessary credentials such as verifiable identity IDs, voting eligibility, administrative-region codes, and wallet-binding relationships to the chain. The chain accepts only account addresses, signatures, credentials, hashes, and necessary states, and shall not receive complete real-name records.</span>
-* 注册局鉴权采用扫码签名与链上 Active 管理员集合：管理员使用手机或冷钱包扫码登录，注册局节点比对链上本市 Active 管理员集合后放行；管理员真源在链上管理员集合，注册局不自建独立账号体系。<br><span class="whitepaper-en">Registry authentication uses QR-code signing and the on-chain Active administrator set. Administrators log in by scanning a QR code with a phone or cold wallet, and the Registry node grants access after comparing against the on-chain Active administrator set of that city. The source of truth for administrators is the on-chain administrator set, and the Registry does not build an independent account system of its own.</span>
-* 投票范围按居住地判断：公民默认属于全国和居住省的选举公民；登记到市级精度的，同时属于居住市选举公民；登记到镇级精度的，同时属于居住市和居住镇选举公民。<br><span class="whitepaper-en">Voting scope is determined by residence. A citizen belongs by default to the nationwide electorate and the electorate of the residence province. If registered at city-level precision, the citizen also belongs to the residence-city electorate. If registered at town-level precision, the citizen also belongs to both the residence-city and residence-town electorates.</span>
-* 参选范围按出生地判断：公民默认属于全国和出生省的可参选公民；登记到市级精度的，同时属于出生市可参选公民；登记到镇级精度的，同时属于出生市和出生镇可参选公民。迁居不改变出生地对应的参选范围。<br><span class="whitepaper-en">Candidacy scope is determined by birthplace. A citizen belongs by default to the nationwide candidacy pool and the candidacy pool of the birth province. If registered at city-level precision, the citizen also belongs to the birth-city candidacy pool. If registered at town-level precision, the citizen also belongs to both the birth-city and birth-town candidacy pools. Relocation shall not change the birthplace-based candidacy scope.</span>
-* 注册局只保留真正具备投票权且可被投票引擎使用的公民数据：公民状态被注销、无投票资格或投票账户无效的记录，必须从本市公民集合中删除，不保留影子记录。<br><span class="whitepaper-en">The Registry retains only citizen data that genuinely has voting rights and can be used by the voting engine. Records whose citizen status is revoked, that lack voting eligibility, or that contain invalid voting-account data must be deleted from the city's citizen set, with no shadow record retained.</span>
+* 链上中国是公民链节点内置的本地治理与注册平台，固定由本机节点启动，面向联邦注册局、市注册局和其他具备权限的机构管理员使用；链上中国不托管钱包私钥，管理员通过扫码签名登录。<br><span class="whitepaper-en">OnChina is the local governance and registration platform embedded in CitizenChain nodes. It is started by the local node and is used by administrators of the Federal Registry, City Registries, and other authorized institutions. OnChina does not custody wallet private keys; administrators log in by QR-code signing.</span>
+* 管理员权限以链上 active admins 为唯一真源。联邦注册局管理员可进入所辖省份和城市办理业务，市注册局管理员在本市范围内办理业务；链上中国只做权限读取、业务录入、待签交易生成、链上查询和本地档案保存。<br><span class="whitepaper-en">Administrator authority comes solely from on-chain active admins. Federal Registry administrators may operate within their governed provinces and cities, while City Registry administrators operate within their own city. OnChina only reads permissions, records business data, generates unsigned transactions, reads the chain, and stores local records.</span>
+* 公民档案由注册局创建并颁发电子护照。公民选择上链时，链上中国把投票或参选所需的最小字段提交至 `citizen-identity`；投票身份用于公民投票，参选身份增加出生地和姓名字段，用于被选资格和候选人快照。<br><span class="whitepaper-en">Citizen records are created by registries and receive electronic passports. When a citizen chooses on-chain registration, OnChina submits the minimum fields needed for voting or candidacy to `citizen-identity`: voting identity supports citizen voting, while candidacy identity adds birthplace and name fields for eligibility and candidate snapshots.</span>
+* 公权机构、教育机构、私权机构和非法人组织均通过注册局注册。链上中国按机构类型锁定机构码、法人资格、参与人角色和管理员集合，注册成功即形成链上机构和机构管理员。<br><span class="whitepaper-en">Public institutions, education institutions, private institutions, and unincorporated organizations are registered through registries. OnChina locks institution codes, legal-personality rules, participant roles, and administrator sets by institution type; successful registration creates the on-chain institution and its administrators.</span>
+* 私权机构覆盖个体经营、合伙企业、股权公司、股份公司、公益组织和注册协会，系统按类型区分负责人、合伙人、股东、发起人、成员、董事、监事等角色。<br><span class="whitepaper-en">Private institutions cover sole proprietorships, partnerships, equity companies, corporations, welfare organizations, and registered associations. The system distinguishes roles such as responsible person, partner, shareholder, promoter, member, director, and supervisor according to institution type.</span>
+* 链上中国承接立法入口：立法机构在平台中组织制定、修改和废止法律的提案资料，平台按机构角色生成立法交易 call-data，公民钱包离线签名后提交链上；两院顺序、行政签署、强制公投、计票和状态推进由链上立法投票引擎负责。<br><span class="whitepaper-en">OnChina provides the legislation entry point. Legislative institutions organize materials for enacting, amending, or repealing laws in the platform; the platform generates legislative call-data according to institutional roles, CitizenWallet signs it offline, and the chain receives the transaction. Bicameral order, executive signing, mandatory referendum, tallying, and state progression are handled by the on-chain legislation voting engine.</span>
+* 链上中国承接选举协同：平台维护公民居住地、出生地、护照状态和链上身份提交记录，投票引擎据此读取全国、省、市、镇等人口快照，支持公民普选和公权机构成员互选。<br><span class="whitepaper-en">OnChina supports elections by maintaining residence, birthplace, passport status, and on-chain identity-submission records. The voting engine reads population snapshots at national, provincial, city, and town scopes to support general citizen elections and mutual elections among public-institution members.</span>
+* 法律文库是链上中国的重要展示与检索能力，用于展示公民宪法、已通过法律、待审立法材料和法律版本历史；公民宪法和其他立法的有效版本以链上立法院和立法投票结果为准，平台负责把链上结构化法律重建为可阅读文本。<br><span class="whitepaper-en">The legal library is an important display and search capability of OnChina. It presents the Citizen Constitution, enacted laws, pending legislative materials, and legal-version history. The effective versions of the Citizen Constitution and other laws are determined by the on-chain legislature and legislative voting results, while the platform reconstructs structured on-chain laws into readable text.</span>
+* 链上中国本地使用 PostgreSQL 保存业务明细和审计日志，行政区基础数据来自随节点安装的本地数据库；链上只接收必要账户、签名、状态、哈希、身份字段和交易载荷，不接收完整实名档案。<br><span class="whitepaper-en">OnChina uses local PostgreSQL to store business details and audit logs, and administrative-region base data comes from the local database installed with the node. The chain receives only necessary accounts, signatures, status, hashes, identity fields, and transaction payloads, not complete real-name records.</span>
 
 ****
-# 7.公民<br><span class="whitepaper-heading-en">7. CitizenApp</span>
+# 8.公民<br><span class="whitepaper-heading-en">8. CitizenApp</span>
 
 * 公民（CitizenApp）是公民链轻节点软件，iOS、Android端；公民承担热钱包、链上状态查询、交易提交、公民身份确认、公民投票、治理交互、清算支付和去中心化通信入口职责。<br><span class="whitepaper-en">CitizenApp is CitizenChain light-node software for iOS and Android. It serves as the entry point for the hot wallet, on-chain state queries, transaction submission, citizen identity confirmation, citizen voting, governance interaction, clearing payment, and decentralized communication.</span>
 * 公民提供清算行绑定、充值、提现和扫码支付入口，扫码支付时由公民签署 PaymentIntent 并发送给收款方清算行；<br><span class="whitepaper-en">CitizenApp provides the entry points for clearing-bank binding, deposit, withdrawal, and QR-code payment. During QR-code payment, CitizenApp signs the PaymentIntent and sends it to the recipient-side clearing bank.</span>
@@ -666,19 +645,8 @@ VOTING → PASSED → EXECUTED
 * 公民的安全和隐私边界为：注册局在本市自治节点保存完整实名档案，对外只提供可验证身份、资格、行政区代码和钱包绑定关系等凭证，链上只接收账户地址、签名、凭证、哈希和必要状态，不接收完整实名档案或明文通信内容。<br><span class="whitepaper-en">The security and privacy boundary of CitizenApp is as follows: the Registry stores complete real-name records on each city's self-governing node and externally provides only credentials such as verifiable identities, eligibility, administrative-region codes, and wallet-binding relationships; the chain accepts only account addresses, signatures, credentials, hashes, and necessary states, and shall not receive complete real-name records or plaintext communication content.</span>
 
 ****
-# 8.公民钱包<br><span class="whitepaper-heading-en">8. CitizenWallet</span>
+# 9.公民钱包<br><span class="whitepaper-heading-en">9. CitizenWallet</span>
 
 * 公民钱包（CitizenWallet）是公民链离线冷钱包，iOS、Android端；公民钱包只负责账户创建、账户导入、助记词和私钥本地保存、离线签名、扫码识别签名请求和输出签名结果，不承担轻节点、链上查询、交易广播、治理浏览、即时通信、清算行绑定或投票交互职责。<br><span class="whitepaper-en">CitizenWallet is the offline cold wallet of CitizenChain for iOS and Android. It is responsible only for account creation, account import, local storage of mnemonics and private keys, offline signing, QR-code signing-request recognition, and signing-result output. It does not act as a light node and does not perform on-chain queries, transaction broadcasting, governance browsing, instant messaging, clearing-bank binding, or voting interaction.</span>
 * 公民钱包的二维码签名请求必须展示可被用户理解的账户、收款方、金额、治理动作、登录动作或公民身份确认动作等语义；不得诱导用户签署无法解释的黑盒载荷。签名结果只证明账户私钥对特定载荷授权，不表示公民钱包接管链上执行、资格判断或链下清算流程。<br><span class="whitepaper-en">A CitizenWallet QR-code signing request must display user-understandable semantics such as the account, recipient, amount, governance action, login action, or citizen identity confirmation action. It must not induce the user to sign an opaque payload that cannot be explained. The signing result proves only that the account private key authorized a specific payload; it does not mean that CitizenWallet takes over on-chain execution, eligibility determination, or off-chain clearing flows.</span>
 * 公民钱包当前签名阶段使用现有链上签名体系；后量子签名升级以 ADR-022 为唯一真源，未来通过公民链 runtime 升级和公民钱包、公民客户端升级，在不更换助记词、不更换钱包、不更换账户地址、不改变余额归属的前提下，将账户授权方式在位切换到 ML-DSA-65。账户地址仍以原 AccountId 为身份锚点，签名算法只是账户授权方式。<br><span class="whitepaper-en">CitizenWallet currently uses the existing on-chain signature system. The post-quantum signature upgrade is governed solely by ADR-022. In the future, through a CitizenChain runtime upgrade and upgrades to CitizenWallet and CitizenApp, account authorization shall be switched in place to ML-DSA-65 without changing the mnemonic, wallet, account address, or balance ownership. The account address shall remain anchored by the original AccountId, and the signature algorithm shall serve only as the account authorization method.</span>
-
-****
-# 9.文库<br><span class="whitepaper-heading-en">9. docs</span>
-
-* 常用图片、文档库、白皮书、项目资料等；公民宪法唯一真源位于 runtime primitives；归档的 citizenpassport（公民护照管理系统）历史资料亦存于此。<br><span class="whitepaper-en">Common images, document library, whitepaper, project materials, and related materials. The sole source of truth for the Citizen Constitution is located in runtime primitives. The archived historical materials of citizenpassport (the Citizen Passport Management System) are also kept here.</span>
-
-****
-# 10.脚本库<br><span class="whitepaper-heading-en">10. scripts</span>
-
-* 整个仓库共有 4 个 scripts 文件夹：仓库根 `scripts/`，以及三个软件各自根目录下的 `citizenapp/scripts`、`citizenchain/scripts` 和 `citizenwallet/scripts`。<br><span class="whitepaper-en">The entire repository has four scripts folders: the repository-root `scripts/`, plus `citizenapp/scripts`, `citizenchain/scripts`, and `citizenwallet/scripts` under each of the three software roots.</span>
-* 仓库根 `scripts/` 存放跨软件的通用脚本，例如账户生成、Key 工具，可使用该脚本生成普通的助记词、公私钥对；各软件根目录下的 scripts 仅服务对应软件自身的构建、打包与维护。<br><span class="whitepaper-en">The repository-root `scripts/` holds cross-software general scripts such as account generation and key tools, which may be used to generate ordinary mnemonics and public/private key pairs. The scripts under each software root serve only the build, packaging, and maintenance of that software itself.</span>

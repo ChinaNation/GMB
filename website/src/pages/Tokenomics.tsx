@@ -5,30 +5,44 @@ const allocations = [
   {
     name: '创世发行',
     amount: '1,443.49 亿',
-    percent: 7.10,
+    percent: 6.47,
     desc: '创世发行由国储会账户持有',
     color: 'bg-gold-400',
   },
   {
     name: '省储行创立发行',
     amount: '1,443.49 亿',
-    percent: 7.10,
+    percent: 6.47,
     desc: '永久质押省储行创立发行的公民币，不进入流通',
     color: 'bg-gold-600',
   },
   {
     name: '省储行利息发行',
     amount: '728.97 亿',
-    percent: 3.58,
+    percent: 3.27,
     desc: '省储行利息按质押基数 100 年线性释放',
     color: 'bg-navy-400',
   },
   {
     name: '全节点铸块发行',
-    amount: '999.89 亿',
-    percent: 4.92,
+    amount: '999.90 亿',
+    percent: 4.49,
     desc: 'PoW 出块奖励，逐块释放约 1000 万个区块',
     color: 'bg-navy-300',
+  },
+  {
+    name: '公民发行',
+    amount: '15,719.82 亿',
+    percent: 70.51,
+    desc: '公民完成链上身份登记后按规则领取认证奖励',
+    color: 'bg-gradient-to-r from-gold-300 to-gold-500',
+  },
+  {
+    name: '两和基金发行',
+    amount: '1,958.19 亿',
+    percent: 8.78,
+    desc: '创世一次性写入国储会两和基金账户',
+    color: 'bg-navy-500',
   },
 ]
 
@@ -38,7 +52,7 @@ const economics = [
   { label: '基本单位', value: '元 (Yuan)' },
   { label: '最小单位', value: '分 (Fen)' },
   { label: '精度', value: '1 元 = 100 分' },
-  { label: '流通总量', value: '~1443.49亿 GMB' },
+  { label: '固定发行合计', value: '2.23万亿 GMB' },
   { label: '交易费率', value: '0.1% (最低 0.1 元)' },
   { label: '最小存款', value: '1.11 元' },
 ]
@@ -88,7 +102,7 @@ export default function Tokenomics() {
         <SectionTitle
           subtitle="代币分配"
           title="发行分配方案"
-          description="公民币通过四种渠道发行，确保公平分配与长期可持续性。"
+          description="公民币固定发行合计为 2,229,386,218,778 GMB，不含后续治理决议新增发行。"
         />
 
         <div className="grid gap-6 md:grid-cols-2">
@@ -109,25 +123,6 @@ export default function Tokenomics() {
           ))}
         </div>
 
-        {/* Additional: Citizen Light Node */}
-        <GlowCard glow="gold" className="mt-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">公民发行</h3>
-            <span className="text-2xl font-bold text-gold-400">77.30%</span>
-          </div>
-          <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-gradient-to-r from-gold-300 to-gold-500" style={{ width: '77.30%' }} />
-          </div>
-          <div className="flex flex-col items-start justify-between gap-2 md:flex-row md:items-center">
-            <span className="text-sm text-slate-400">经 CID 认证的公民，按认证数量获得公民币认证奖励，共 1,443,497,378 个名额。</span>
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-white">15,719.81 亿</span>
-              <span className="whitespace-nowrap rounded-full border border-gold-500/30 bg-gold-500/10 px-3 py-1 text-xs font-semibold text-gold-400">
-                按节点认证发放
-              </span>
-            </div>
-          </div>
-        </GlowCard>
       </section>
 
       <div className="mx-auto h-px max-w-7xl bg-gradient-to-r from-transparent via-white/10 to-transparent" />

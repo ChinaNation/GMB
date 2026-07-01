@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
-import whitepaperMarkdown from '../../../docs/《白皮书》.md?raw'
+import whitepaperMarkdown from '../whitepaper.md?raw'
 
-// 白皮书图片改为外链 docs/assets/*，这里用 Vite glob 拿到打包后的 URL，
+// 白皮书正文归入 website/src/whitepaper.md；图片仍通过 Vite glob 打包 docs/assets/*，
 // 渲染前把 markdown 里的 ./assets/<file> 替换成打包 URL（保证线上能加载，
-// 同时 .md 在 GitHub/编辑器里按相对路径预览也正常）。
+// 同时保留现有白皮书图片资源目录）。
 const whitepaperAssetUrls = import.meta.glob('../../../docs/assets/*', {
   eager: true,
   query: '?url',

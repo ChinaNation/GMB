@@ -2,10 +2,10 @@ import { Link } from 'react-router-dom'
 import GlowCard from '../components/GlowCard'
 
 const stats = [
-  { value: '2.03万亿', label: '预计发行总量 (GMB)', suffix: '' },
+  { value: '2.23万亿', label: '固定发行合计 (GMB)', suffix: '' },
   { value: '44', label: '权威节点（国储会+省储会）', suffix: '' },
   { value: '43', label: '权益节点（省储行）', suffix: '' },
-  { value: '12', label: '核心系统模块', suffix: '' },
+  { value: '4', label: '链上投票体系', suffix: '' },
 ]
 
 const features = [
@@ -16,7 +16,7 @@ const features = [
       </svg>
     ),
     title: '主权区块链',
-    desc: '不受任何单一机构控制的去中心化主权区块链网络，保障公民数字货币安全',
+    desc: 'PoW 出块与 GRANDPA 最终性共同维护主权区块链，保障公民币和链上治理规则',
   },
   {
     icon: (
@@ -24,8 +24,8 @@ const features = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
       </svg>
     ),
-    title: '公民治理',
-    desc: '三级投票机制赋予每位公民参与国家治理与决策的权利',
+    title: '链上中国平台',
+    desc: '节点内置注册与治理平台，承接公民档案、机构注册、管理员登录和链上身份提交',
   },
   {
     icon: (
@@ -33,8 +33,8 @@ const features = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M7.864 4.243A7.5 7.5 0 0119.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 004.5 10.5a48.667 48.667 0 00-1.115 10.336M4.095 20.693A7.5 7.5 0 0112 3a7.5 7.5 0 017.905 8.807M12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
       </svg>
     ),
-    title: '链上中国平台',
-    desc: '基于 Sr25519 密码学的公民数字身份绑定与验证体系',
+    title: '立法与法律文库',
+    desc: '公民宪法、普通法律、立法提案和法律版本历史可在链上中国中阅读与追溯',
   },
   {
     icon: (
@@ -43,7 +43,25 @@ const features = [
       </svg>
     ),
     title: '数字法定货币',
-    desc: '基于《公民宪法》的法定数字货币，每一位公民都有权参与治理',
+    desc: '固定发行合计 2,229,386,218,778 GMB，后续决议发行受联合投票和链上限额约束',
+  },
+  {
+    icon: (
+      <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+      </svg>
+    ),
+    title: '选举与投票引擎',
+    desc: '内部投票、联合投票、立法投票、选举投票统一由链上投票引擎管理',
+  },
+  {
+    icon: (
+      <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15l-.75 18H5.25L4.5 3zm4.5 4.5h1.5m3 0H15m-6 4.5h1.5m3 0H15m-6 4.5h1.5m3 0H15" />
+      </svg>
+    ),
+    title: '私权机构注册',
+    desc: '个体经营、合伙企业、股权公司、股份公司、公益组织和注册协会统一注册上链',
   },
 ]
 

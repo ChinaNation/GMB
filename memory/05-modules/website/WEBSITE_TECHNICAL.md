@@ -4,7 +4,9 @@
 
 `website/` 是 GMB 官网前端工程，用于对外展示公民区块链与项目基础信息。
 
-该模块只负责公开官网页面，不承载 CID、CitizenChain 或 CitizenApp 的信任根逻辑。
+该模块只负责公开官网页面和白皮书展示，不承载 CitizenChain、链上中国、CitizenApp 或 CitizenWallet 的信任根逻辑。
+
+白皮书唯一真源位于 `website/src/whitepaper.md`，官网白皮书页通过 Vite raw import 读取该文件；白皮书图片资源继续通过官网构建流程打包展示。
 
 ## 2. 当前技术栈
 
@@ -13,6 +15,7 @@
 - 构建工具：Vite
 - 样式：Tailwind CSS Vite 插件与本地 CSS
 - 生产产物目录：`website/dist/`
+- 白皮书正文：`website/src/whitepaper.md`
 
 ## 3. 本地构建
 
@@ -23,6 +26,8 @@ npm run build
 ```
 
 该命令会先执行 TypeScript 构建检查，再执行 Vite 生产构建。发布前必须确认该命令通过。
+
+白皮书内容、首页发行量、链上中国卖点、技术页和生态页更新后，必须至少访问首页、技术页、生态页、代币经济页和白皮书页确认页面可正常渲染。
 
 ## 4. 线上部署口径
 

@@ -4,14 +4,16 @@ import GlowCard from '../components/GlowCard'
 const systems = [
   {
     name: '链上中国平台',
-    subtitle: '注册局业务平台',
-    desc: '中央身份绑定与验证系统，将公民身份一对一映射到区块链公钥，管理投票资格与公民快照。',
+    subtitle: '本地治理与注册平台',
+    desc: '节点内置的链上中国平台，承接注册局业务、法律文库、立法入口、机构注册、公民档案和链上身份提交。',
     features: [
-      'Sr25519 挑战-响应认证',
-      'QR 码扫描登录',
-      '三级管理员体系',
-      '公民身份快照',
-      '投票资格验证',
+      '链上管理员鉴权',
+      '扫码签名登录',
+      '公民电子护照',
+      '公权机构注册',
+      '私权机构注册',
+      '法律文库展示',
+      '立法入口生成',
       '完整审计日志',
     ],
     tech: 'Rust / Axum / PostgreSQL / React',
@@ -71,18 +73,18 @@ const systems = [
 const workflow = [
   {
     step: '01',
-    title: '公民护照',
-    desc: '注册局直接录入公民并发护照 → CitizenApp 查询护照状态 → 链上治理读取资格凭证',
+    title: '公民上链',
+    desc: '注册局创建公民档案和电子护照 → 公民钱包签名确认 → citizen-identity 写入投票或参选字段',
   },
   {
     step: '02',
-    title: '治理投票',
-    desc: '链上创建提案 → CID 提供选民快照与资格验证 → CitizenApp 移动端投票 → 链上记录与执行',
+    title: '机构注册',
+    desc: '链上中国锁定机构类型和管理员集合 → 注册局提交交易 → 公权、教育、私权机构上链生效',
   },
   {
     step: '03',
-    title: '管理员登录',
-    desc: 'QR 挑战码生成 → 手机端扫描并 Sr25519 签名 → 签名验证通过 → 创建安全会话',
+    title: '立法选举',
+    desc: '法律文库组织资料 → 立法入口生成待签交易 → 投票引擎读取公民快照并推进表决或选举',
   },
 ]
 
@@ -98,7 +100,7 @@ export default function Ecosystem() {
           <SectionTitle
             subtitle="生态系统"
             title="完整的公民链生态"
-            description="从身份认证到移动钱包，从注册局护照到桌面节点，公民区块链构建了完整的生态系统闭环。"
+            description="从链上中国到移动钱包，从法律文库到投票引擎，公民链把注册、立法、选举、机构和资产操作连成完整闭环。"
           />
         </div>
       </section>
@@ -144,7 +146,7 @@ export default function Ecosystem() {
         <SectionTitle
           subtitle="协作流程"
           title="跨产品协作工作流"
-          description="各系统之间通过加密签名与链上验证实现无缝协作。"
+          description="各系统之间通过扫码签名、链上身份和投票引擎实现可信协作。"
         />
         <div className="grid gap-8 md:grid-cols-3">
           {workflow.map((w) => (
