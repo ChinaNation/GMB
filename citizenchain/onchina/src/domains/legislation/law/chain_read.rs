@@ -1,0 +1,321 @@
+//! 法律链读:链上 `Law` / `LawVersion` 的 SCALE 解码镜像 + → 展示 DTO 转换。
+//!
+//! 中文注释:复用 onchina 既有读链范式——`kv.value.encoded()` 原始字节 → 本地 `#[derive(Decode)]`
+//! 镜像结构解码(见 `core/chain_runtime.rs::OnChainAdminAccount`)。镜像字段顺序锁死链端
+//! `legislation-yuan` 的 `Law`(lib.rs:176)/ `LawVersion`(lib.rs:201);`Tier`/`LawStatus`/`VoteType`
+//! 作单字节枚举解码为 u8(取值已在 `chain_propose` 交叉校验)。章节复用 `chain_propose::ChapterArg`(同
+//! SCALE 双向 Encode/Decode)。
+//!
+//! 本增量交付「解码镜像 + round-trip 金标 + DTO 转换」(离线可验证);subxt 取数(`fetch_*`)与
+//! 真实运行态验收随 live 链读步骤接入(需运行态 onchina + 链),故本文件暂不含网络取数。
+//!
+
+use super::chain_propose::ChapterArg;
+use super::model::{house_ref, to_law_chapters, LawView};
+use crate::core::chain_url;
+use crate::core::db::Db;
+use parity_scale_codec::Decode;
+use subxt::{dynamic, OnlineClient, PolkadotConfig};
+
+/// 链上 `Law<T>` 解码镜像(字段顺序锁死 legislation-yuan::Law)。
+#[derive(Debug, Decode)]
+pub struct OnChainLaw {
+    pub law_id: u64,
+    /// Tier 单字节枚举(0 宪法 / 1 国家 / 2 省 / 3 市)。
+    pub tier: u8,
+    pub scope_code: u32,
+    /// `BoundedVec<(InstitutionCode[u8;4], AccountId[u8;32])>`。
+    pub houses: Vec<([u8; 4], [u8; 32])>,
+    pub current_version: u32,
+    /// LawStatus 单字节枚举(0 待生效 / 1 生效 / 2 废止)。
+    pub status: u8,
+}
+
+/// 链上 `LawVersion<T>` 解码镜像(字段顺序锁死 legislation-yuan::LawVersion)。
+#[derive(Debug, Decode)]
+pub struct OnChainLawVersion {
+    pub law_id: u64,
+    pub version: u32,
+    pub title: Vec<u8>,
+    pub title_en: Option<Vec<u8>>,
+    pub chapters: Vec<ChapterArg>,
+    pub content_hash: [u8; 32],
+    /// VoteType 单字节枚举。
+    pub vote_type: u8,
+    pub proposal_id: u64,
+    pub published_at: u32,
+    pub effective_at: u32,
+}
+
+/// 解码链上 `Law` 原始字节。
+pub fn decode_law(bytes: &[u8]) -> Result<OnChainLaw, String> {
+    OnChainLaw::decode(&mut &bytes[..]).map_err(|e| format!("decode Law failed: {e}"))
+}
+
+/// 解码链上 `LawVersion` 原始字节。
+pub fn decode_law_version(bytes: &[u8]) -> Result<OnChainLawVersion, String> {
+    OnChainLawVersion::decode(&mut &bytes[..]).map_err(|e| format!("decode LawVersion failed: {e}"))
+}
+
+/// 链上 `Law` + 当前版本 → 展示用 `LawView`(字节→String、账户→0x hex、章节→可读)。
+pub fn build_law_view(law: &OnChainLaw, version: &OnChainLawVersion) -> LawView {
+    LawView {
+        law_id: law.law_id,
+        version: version.version,
+        tier: law.tier,
+        scope_code: law.scope_code,
+        status: law.status,
+        vote_type: version.vote_type,
+        title: String::from_utf8_lossy(&version.title).into_owned(),
+        title_en: version
+            .title_en
+            .as_ref()
+            .map(|b| String::from_utf8_lossy(b).into_owned()),
+        content_hash: format!("0x{}", hex::encode(version.content_hash)),
+        proposal_id: version.proposal_id,
+        published_at: version.published_at,
+        effective_at: version.effective_at,
+        houses: law
+            .houses
+            .iter()
+            .map(|(code, account)| house_ref(*code, *account))
+            .collect(),
+        chapters: to_law_chapters(&version.chapters),
+    }
+}
+
+// ──────────────── 账户派生 + subxt 链取数 ────────────────
+
+/// 机构主账户派生:cid_number → OP_MAIN 主账户 `[u8;32]`(复用 `institution::accounts::derive`)。
+///
+/// 中文注释:与链端 `primitives::account_derive` 单源一致(SS58=2027 / OP_MAIN / GMB 域)。
+/// `resolve_house_account` 全链路 = 「机构码+scope → cid_number(subjects 表查)→ 本函数派生」;
+/// subjects 查在 handler 组合既有查询,本函数是可离线金标校验的派生原语。
+pub fn derive_house_account(cid_number: &str) -> Option<[u8; 32]> {
+    let hex_addr = crate::institution::accounts::derive::derive_account(cid_number, "主账户")?;
+    let bytes = hex::decode(hex_addr).ok()?;
+    <[u8; 32]>::try_from(bytes.as_slice()).ok()
+}
+
+/// 机构码 + 行政区(china code)→ 主账户:subjects 表查 cid_number → `derive_house_account`。
+///
+/// 中文注释:`institution_code` = 文本码(如 `NRP`);`province_code`/`city_code` = china.sqlite 码
+/// (国家机构两者空,省机构仅省码,市机构省+市)。解不出(未对账/未上链)返回 None,发起层 fail-closed。
+/// 自开连接,故可作 `Fn` 闭包在提案组织里按院逐个解析。
+pub(crate) fn resolve_house_account(
+    db: &Db,
+    institution_code: &str,
+    province_code: &str,
+    city_code: &str,
+) -> Option<[u8; 32]> {
+    let institution_code = institution_code.to_string();
+    let province_code = province_code.to_string();
+    let city_code = city_code.to_string();
+    let cid_number = db
+        .with_client(move |conn| {
+            let row = conn
+                .query_opt(
+                    "SELECT cid_number FROM subjects \
+                     WHERE institution_code = $1 AND province_code = $2 AND city_code = $3 \
+                     LIMIT 1",
+                    &[&institution_code, &province_code, &city_code],
+                )
+                .map_err(|e| format!("query institution cid_number failed: {e}"))?;
+            Ok(row.map(|r| r.get::<_, String>(0)))
+        })
+        .ok()
+        .flatten()?;
+    derive_house_account(&cid_number)
+}
+
+/// 读取链上全部 `Law`(iterate + 镜像 decode,复用 chain_runtime 读链范式)。
+///
+/// 中文注释:ADR-018——整表扫描一次 + 客户端按已解码字段过滤(law_id/tier/scope_code 均在 value 内,
+/// 无需 storage key 反解)。真实运行态验收随本函数接入 handler(Phase 1B-5)时进行。
+async fn fetch_all_laws() -> Result<Vec<OnChainLaw>, String> {
+    let ws_url = chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for laws failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let query = dynamic::storage("LegislationYuan", "Laws", Vec::<dynamic::Value>::new());
+    let mut iter = storage
+        .iter(query)
+        .await
+        .map_err(|e| format!("iterate Laws failed: {e}"))?;
+    let mut laws = Vec::new();
+    while let Some(item) = iter.next().await {
+        let kv = item.map_err(|e| format!("read Law failed: {e}"))?;
+        laws.push(decode_law(kv.value.encoded())?);
+    }
+    Ok(laws)
+}
+
+/// 读取链上全部 `LawVersion`(iterate + 镜像 decode)。
+async fn fetch_all_law_versions() -> Result<Vec<OnChainLawVersion>, String> {
+    let ws_url = chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for law versions failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let query = dynamic::storage(
+        "LegislationYuan",
+        "LawVersions",
+        Vec::<dynamic::Value>::new(),
+    );
+    let mut iter = storage
+        .iter(query)
+        .await
+        .map_err(|e| format!("iterate LawVersions failed: {e}"))?;
+    let mut versions = Vec::new();
+    while let Some(item) = iter.next().await {
+        let kv = item.map_err(|e| format!("read LawVersion failed: {e}"))?;
+        versions.push(decode_law_version(kv.value.encoded())?);
+    }
+    Ok(versions)
+}
+
+/// 按 law_id 取单部法律主体记录。
+pub async fn fetch_law(law_id: u64) -> Result<Option<OnChainLaw>, String> {
+    Ok(fetch_all_laws()
+        .await?
+        .into_iter()
+        .find(|law| law.law_id == law_id))
+}
+
+/// 按层级 + 行政区码列出法律主体(scope 过滤在客户端按已解码字段,符合 ADR-018)。
+pub async fn list_laws_by_scope(tier: u8, scope_code: u32) -> Result<Vec<OnChainLaw>, String> {
+    Ok(fetch_all_laws()
+        .await?
+        .into_iter()
+        .filter(|law| law.tier == tier && law.scope_code == scope_code)
+        .collect())
+}
+
+/// 按 (law_id, version) 取单个法律版本全文。
+pub async fn fetch_law_version(
+    law_id: u64,
+    version: u32,
+) -> Result<Option<OnChainLawVersion>, String> {
+    Ok(fetch_all_law_versions()
+        .await?
+        .into_iter()
+        .find(|v| v.law_id == law_id && v.version == version))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::chain_propose::{ArticleArg, ClauseArg, SectionArg};
+    use super::*;
+    use legislation_yuan::{LawStatus, Tier, VoteType};
+    use parity_scale_codec::Encode;
+
+    fn sample_chapters() -> Vec<ChapterArg> {
+        vec![ChapterArg {
+            number: 1,
+            title: "总则".as_bytes().to_vec(),
+            title_en: Some("General".as_bytes().to_vec()),
+            sections: vec![SectionArg {
+                number: 1,
+                title: "定义".as_bytes().to_vec(),
+                title_en: None,
+                articles: vec![ArticleArg {
+                    number: 1,
+                    title: "第一条".as_bytes().to_vec(),
+                    title_en: None,
+                    body: "正文".as_bytes().to_vec(),
+                    body_en: None,
+                    clauses: vec![ClauseArg {
+                        number: 1,
+                        text: "第一款".as_bytes().to_vec(),
+                        text_en: None,
+                    }],
+                }],
+            }],
+        }]
+    }
+
+    /// 用链端真实 `Tier`/`LawStatus` 编码 golden,onchina 镜像 decode 回读字段一致。
+    #[test]
+    fn law_decodes_from_runtime_encoded_bytes() {
+        let houses: Vec<([u8; 4], [u8; 32])> = vec![(*b"NRP\0", [1u8; 32]), (*b"NSN\0", [2u8; 32])];
+        let mut golden = Vec::new();
+        golden.extend(7u64.encode());
+        golden.extend(Tier::National.encode());
+        golden.extend(100u32.encode());
+        golden.extend(houses.encode());
+        golden.extend(3u32.encode());
+        golden.extend(LawStatus::Effective.encode());
+
+        let law = decode_law(&golden).expect("decode Law");
+        assert_eq!(law.law_id, 7);
+        assert_eq!(law.tier, 1); // National
+        assert_eq!(law.scope_code, 100);
+        assert_eq!(law.houses.len(), 2);
+        assert_eq!(law.houses[0].0, *b"NRP\0");
+        assert_eq!(law.current_version, 3);
+        assert_eq!(law.status, 1); // Effective
+    }
+
+    /// LawVersion 镜像解码 + 组装 LawView(章节字节→String、houses→HouseRef、hash→0x hex)。
+    #[test]
+    fn law_version_decodes_and_builds_view() {
+        let chapters = sample_chapters();
+        let mut golden = Vec::new();
+        golden.extend(7u64.encode());
+        golden.extend(2u32.encode());
+        golden.extend("道路交通安全法".as_bytes().to_vec().encode());
+        golden.extend(Some("Road".as_bytes().to_vec()).encode());
+        golden.extend(chapters.encode());
+        golden.extend([9u8; 32].encode());
+        golden.extend(VoteType::Major.encode());
+        golden.extend(11u64.encode());
+        golden.extend(500u32.encode());
+        golden.extend(1000u32.encode());
+
+        let version = decode_law_version(&golden).expect("decode LawVersion");
+        assert_eq!(version.version, 2);
+        assert_eq!(version.vote_type, 2); // Major
+        assert_eq!(version.chapters.len(), 1);
+        assert_eq!(version.title, "道路交通安全法".as_bytes());
+
+        let law = OnChainLaw {
+            law_id: 7,
+            tier: 1,
+            scope_code: 100,
+            houses: vec![(*b"NRP\0", [1u8; 32]), (*b"NSN\0", [2u8; 32])],
+            current_version: 2,
+            status: 1,
+        };
+        let view = build_law_view(&law, &version);
+        assert_eq!(view.title, "道路交通安全法");
+        assert_eq!(view.houses.len(), 2);
+        assert_eq!(view.houses[0].code, "NRP"); // 去尾 \0
+        assert!(view.content_hash.starts_with("0x"));
+        assert_eq!(view.chapters[0].title, "总则");
+        assert_eq!(
+            view.chapters[0].sections[0].articles[0].clauses[0].text,
+            "第一款"
+        );
+    }
+
+    /// 机构主账户派生须与 `primitives` 金标向量逐字节一致
+    /// (fixtures/account_derive_vectors.json:LN001-NRC0G-944805165-2026 · 主账户)。
+    #[test]
+    fn house_account_derivation_matches_golden_vector() {
+        let account =
+            derive_house_account("LN001-NRC0G-944805165-2026").expect("derive main account");
+        let expected =
+            hex::decode("b38e86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153")
+                .expect("golden hex");
+        assert_eq!(account.to_vec(), expected, "机构主账户派生口径漂移");
+    }
+}

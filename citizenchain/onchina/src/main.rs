@@ -2631,6 +2631,27 @@ fn main() {
                 "/api/v1/institutions/official",
                 get(domains::gov::handler::list_official_institutions),
             )
+            // 立法与表决:发起/院内表决(返回扫码上链 sign_request)+ 读法律/读提案进度。
+            .route(
+                "/api/legislation/propose",
+                post(domains::legislation::handler::propose_legislation),
+            )
+            .route(
+                "/api/legislation/house-vote",
+                post(domains::legislation::handler::cast_house_vote),
+            )
+            .route(
+                "/api/legislation/laws",
+                get(domains::legislation::handler::list_laws),
+            )
+            .route(
+                "/api/legislation/laws/:law_id",
+                get(domains::legislation::handler::get_law),
+            )
+            .route(
+                "/api/legislation/proposals/:proposal_id",
+                get(domains::legislation::handler::get_proposal_state),
+            )
             // 联邦注册局机构详情(只读,绕过 scope,所有联邦注册局管理员可读)
             .route(
                 "/api/v1/institutions/federal-registry",

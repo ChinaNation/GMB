@@ -16,6 +16,8 @@
 
 use serde::Serialize;
 
+use crate::domains::legislation::category::{legislation_role, LegislationRole};
+
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CapabilitySet {
@@ -33,6 +35,18 @@ pub(crate) struct CapabilitySet {
     pub(crate) can_business_write: bool,
     pub(crate) can_view_city_registry: bool,
     pub(crate) can_view_federal_registry: bool,
+    /// 立法:查看立法/提案/大屏(立法机构通用只读位)。
+    pub(crate) can_view_legislation: bool,
+    /// 立法:发起法律案(发起院 / 教委会 / 自治会;参议会无此位)。
+    pub(crate) can_propose_legislation: bool,
+    /// 立法:院内表决(发起院 / 参议会 / 国家教委会;市教委会、市自治会无此位)。
+    pub(crate) can_cast_house_vote: bool,
+    /// 立法:行政签署 / 三人会签 / 护宪终审(行政签署人 / 大法官;另线程接入时置位,本轮恒 false)。
+    pub(crate) can_sign_legislation: bool,
+    /// 立法:发起任免案(政府;Phase 4 接入时置位,本轮恒 false)。
+    pub(crate) can_propose_personnel: bool,
+    /// 立法:发起预算案(政府;Phase 4 接入时置位,本轮恒 false)。
+    pub(crate) can_propose_budget: bool,
 }
 
 const EMPTY: CapabilitySet = CapabilitySet {
@@ -49,6 +63,12 @@ const EMPTY: CapabilitySet = CapabilitySet {
     can_business_write: false,
     can_view_city_registry: false,
     can_view_federal_registry: false,
+    can_view_legislation: false,
+    can_propose_legislation: false,
+    can_cast_house_vote: false,
+    can_sign_legislation: false,
+    can_propose_personnel: false,
+    can_propose_budget: false,
 };
 
 // Tier1 创世注册局(FRG):是 CREG 的省级上游,能力必须是 Tier2 业务能力的超集。
@@ -92,6 +112,24 @@ const OWN_ADMINS_READONLY: CapabilitySet = CapabilitySet {
     ..EMPTY
 };
 
+// 立法机构:在「本机构管理员只读」基础上叠加立法能力。
+// 中文注释:发起/表决两个位由立法角色决定(发起院=发起+表决;参议会=只表决;教委会/自治会=只提案)。
+// 签署/任免/预算位本轮恒 false,分别由行政签署线程与 Phase 4 接入时置位。
+fn legislation_capabilities(role: LegislationRole) -> CapabilitySet {
+    let (can_propose_legislation, can_cast_house_vote) = match role {
+        LegislationRole::ProposerHouse => (true, true),
+        LegislationRole::ReviewHouse => (false, true),
+        LegislationRole::ProposerOnly => (true, false),
+    };
+    CapabilitySet {
+        can_view_own_admins: true,
+        can_view_legislation: true,
+        can_propose_legislation,
+        can_cast_house_vote,
+        ..EMPTY
+    }
+}
+
 /// 机构码文本 → 能力集。按机构类(`primitives::cid::code` 单源)分发,未知/不归控制台返回空能力。
 pub(crate) fn capabilities_for(institution_code: &str) -> CapabilitySet {
     use primitives::cid::code::{
@@ -111,6 +149,10 @@ pub(crate) fn capabilities_for(institution_code: &str) -> CapabilitySet {
     // 国储会/省储会/省储行使用节点桌面端,不进入 OnChina 网页控制台。
     if matches!(code, NRC | PRC | PRB) {
         return EMPTY;
+    }
+    // 立法机构(众议会/参议会/教委会/自治会/市立法会):按立法角色下发立法能力。
+    if let Some(role) = legislation_role(institution_code) {
+        return legislation_capabilities(role);
     }
     // NJD 与其余公权/私权/非法人机构:只读本机构管理员位。
     if is_public_legal_code(&code) || is_private_legal_code(&code) || is_unincorporated_code(&code)
@@ -164,6 +206,31 @@ mod tests {
         assert!(!judicial.can_view_institutions);
         assert!(!judicial.can_view_city_registry);
         assert!(!judicial.can_view_federal_registry);
+    }
+
+    #[test]
+    fn legislative_institutions_get_role_based_legislation_capabilities() {
+        // 发起院(国家众议会):发起 + 院内表决;同时保留本机构管理员只读位。
+        let house = capabilities_for("NRP");
+        assert!(house.can_view_legislation);
+        assert!(house.can_propose_legislation);
+        assert!(house.can_cast_house_vote);
+        assert!(house.can_view_own_admins);
+
+        // 参议会:只表决,无发起权(权力分离硬约束)。
+        let senate = capabilities_for("NSN");
+        assert!(senate.can_cast_house_vote);
+        assert!(!senate.can_propose_legislation);
+
+        // 市教委会:只提案,不参与院内表决(由市立法会表决)。
+        let city_education = capabilities_for("CEDU");
+        assert!(city_education.can_propose_legislation);
+        assert!(!city_education.can_cast_house_vote);
+
+        // 本轮任免/预算/签署位均未接入。
+        assert!(!house.can_propose_personnel);
+        assert!(!house.can_propose_budget);
+        assert!(!house.can_sign_legislation);
     }
 
     #[test]

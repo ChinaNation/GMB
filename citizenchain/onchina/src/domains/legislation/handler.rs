@@ -1,0 +1,263 @@
+//! 立法与表决 HTTP handler(`/api/legislation/*`)。
+//!
+//! 中文注释:发起/表决产出扫码上链 `sign_request`(冷签由 CitizenWallet 提交,onchina 不提交);
+//! 读法律/提案进度直读链。后端强制:① 登录绑定机构(只有该院管理员可达)② 本机构能否发起该
+//! 类型提案(`category::proposable_candidates`)③ 越权前置(`service::precheck_legislation_scope`)。
+//! 能力位是前端渲染门控,后端以此三重边界为准。
+
+use axum::{
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    Json,
+};
+use serde::Deserialize;
+
+use super::category::{legislation_role, proposable_candidates, LegislationRole};
+use super::chain_read_proposal;
+use super::law::model::{institution_code_text, ProposeLawInput};
+use super::law::{action, chain_read, service};
+use crate::auth::login::{require_admin_any, AdminAuthContext};
+use crate::cid::china::{city_code_by_name, province_code_by_name};
+use crate::core::response::ApiResponse;
+use crate::{api_error, AppState};
+use primitives::cid::code::institution_code_from_str;
+
+/// 法律列表查询参数(层级 + 行政区码)。
+#[derive(Debug, Deserialize)]
+pub(crate) struct LawListQuery {
+    pub tier: u8,
+    pub scope_code: u32,
+}
+
+/// 院内表决请求体。
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CastHouseVoteInput {
+    pub proposal_id: u64,
+    pub approve: bool,
+}
+
+/// 管理员层级 → 立法层级(1 国家 / 2 省 / 3 市);非立法层级返回 None。
+fn admin_tier(ctx: &AdminAuthContext) -> Option<u8> {
+    match ctx.admin_level.as_deref() {
+        Some("NATIONAL") => Some(1),
+        Some("PROVINCE") => Some(2),
+        Some("CITY") => Some(3),
+        _ => None,
+    }
+}
+
+/// 从登录上下文派生 (admin_scope_code, province_china_code, city_china_code)。
+///
+/// 中文注释:`admin_scope_code` 与提案 `scope_code` 同口径(china.sqlite 码 u32;国家=0);
+/// province/city china 码供 subjects 查机构账户。解析失败以 `u32::MAX` 兜底 → precheck fail-closed。
+fn scope_codes(ctx: &AdminAuthContext) -> (u32, String, String) {
+    match ctx.admin_level.as_deref() {
+        Some("NATIONAL") => (0, String::new(), String::new()),
+        Some("PROVINCE") => {
+            let province = ctx
+                .scope_province_name
+                .as_deref()
+                .and_then(province_code_by_name)
+                .unwrap_or_default()
+                .to_string();
+            (
+                province.parse().unwrap_or(u32::MAX),
+                province,
+                String::new(),
+            )
+        }
+        Some("CITY") => {
+            let province_name = ctx.scope_province_name.as_deref().unwrap_or_default();
+            let province = province_code_by_name(province_name)
+                .unwrap_or_default()
+                .to_string();
+            let city = ctx
+                .scope_city_name
+                .as_deref()
+                .and_then(|c| city_code_by_name(province_name, c))
+                .unwrap_or_default()
+                .to_string();
+            (city.parse().unwrap_or(u32::MAX), province, city)
+        }
+        _ => (u32::MAX, String::new(), String::new()),
+    }
+}
+
+/// GET /api/legislation/laws?tier=&scope_code= —— 本级已生效/在册法律列表。
+pub(crate) async fn list_laws(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<LawListQuery>,
+) -> impl IntoResponse {
+    if let Err(resp) = require_admin_any(&state, &headers) {
+        return resp;
+    }
+    let laws = match chain_read::list_laws_by_scope(query.tier, query.scope_code).await {
+        Ok(v) => v,
+        Err(err) => return api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
+    };
+    let mut views = Vec::with_capacity(laws.len());
+    for law in laws {
+        if let Ok(Some(version)) =
+            chain_read::fetch_law_version(law.law_id, law.current_version).await
+        {
+            views.push(chain_read::build_law_view(&law, &version));
+        }
+    }
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: views,
+    })
+    .into_response()
+}
+
+/// GET /api/legislation/laws/:law_id —— 单部法律当前版本全文。
+pub(crate) async fn get_law(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(law_id): Path<u64>,
+) -> impl IntoResponse {
+    if let Err(resp) = require_admin_any(&state, &headers) {
+        return resp;
+    }
+    let law = match chain_read::fetch_law(law_id).await {
+        Ok(Some(v)) => v,
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "law not found"),
+        Err(err) => return api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
+    };
+    let version = match chain_read::fetch_law_version(law.law_id, law.current_version).await {
+        Ok(Some(v)) => v,
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "law version not found"),
+        Err(err) => return api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
+    };
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: chain_read::build_law_view(&law, &version),
+    })
+    .into_response()
+}
+
+/// GET /api/legislation/proposals/:proposal_id —— 提案进度只读投影。
+pub(crate) async fn get_proposal_state(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(proposal_id): Path<u64>,
+) -> impl IntoResponse {
+    if let Err(resp) = require_admin_any(&state, &headers) {
+        return resp;
+    }
+    match chain_read_proposal::fetch_proposal_state(proposal_id).await {
+        Ok(Some(state)) => Json(ApiResponse {
+            code: 0,
+            message: "ok".to_string(),
+            data: state,
+        })
+        .into_response(),
+        Ok(None) => api_error(StatusCode::NOT_FOUND, 1004, "proposal not found"),
+        Err(err) => api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
+    }
+}
+
+/// POST /api/legislation/propose —— 发起法律案,返回扫码上链 sign_request。
+pub(crate) async fn propose_legislation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<ProposeLawInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let Some(proposer_code) = institution_code_from_str(&ctx.institution_code) else {
+        return api_error(StatusCode::FORBIDDEN, 1003, "unknown institution code");
+    };
+    // ② 本机构能否发起该 category×tier×vote_type(参议会/非立法机构 → 空 → 拒)。
+    let can_propose = proposable_candidates(&ctx.institution_code)
+        .iter()
+        .any(|c| c.tier == input.tier && c.vote_types.contains(&input.vote_type));
+    if !can_propose {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "institution cannot propose this legislation",
+        );
+    }
+    // ③ 越权前置(层级/行政区)。
+    let Some(admin_tier) = admin_tier(&ctx) else {
+        return api_error(StatusCode::FORBIDDEN, 1003, "admin level missing");
+    };
+    let (admin_scope_code, province_code, city_code) = scope_codes(&ctx);
+    if let Err(err) = service::precheck_legislation_scope(
+        admin_tier,
+        admin_scope_code,
+        input.tier,
+        input.scope_code,
+    ) {
+        return api_error(StatusCode::FORBIDDEN, 1003, err.code());
+    }
+    // houses/executive/legislature 账户按宪法路由 + subjects 逐院解析(闭包自开连接,保持 Fn)。
+    let db_state = state.clone();
+    let resolve_account = move |code: &[u8; 4]| {
+        chain_read::resolve_house_account(
+            &db_state.db,
+            &institution_code_text(code),
+            &province_code,
+            &city_code,
+        )
+    };
+    match action::build_propose_law_sign_request(
+        &input,
+        proposer_code,
+        ctx.admin_account.as_str(),
+        resolve_account,
+    ) {
+        Ok(sign_request) => Json(ApiResponse {
+            code: 0,
+            message: "ok".to_string(),
+            data: sign_request,
+        })
+        .into_response(),
+        Err(resp) => resp,
+    }
+}
+
+/// POST /api/legislation/house-vote —— 院内表决,返回扫码上链 sign_request。
+pub(crate) async fn cast_house_vote(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<CastHouseVoteInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    // 只有能参与院内表决的机构可投:发起院/复议院可投,教委会/自治会(仅提案)不可。
+    let can_vote = matches!(
+        legislation_role(&ctx.institution_code),
+        Some(LegislationRole::ProposerHouse | LegislationRole::ReviewHouse)
+    );
+    if !can_vote {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "institution cannot cast house vote",
+        );
+    }
+    match action::build_house_vote_sign_request(
+        input.proposal_id,
+        input.approve,
+        ctx.admin_account.as_str(),
+    ) {
+        Ok(sign_request) => Json(ApiResponse {
+            code: 0,
+            message: "ok".to_string(),
+            data: sign_request,
+        })
+        .into_response(),
+        Err(resp) => resp,
+    }
+}

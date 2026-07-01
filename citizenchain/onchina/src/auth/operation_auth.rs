@@ -52,6 +52,28 @@ pub(crate) enum AdminActionType {
     InstitutionDeleteDocument,
     /// 本节点解除当前机构绑定;解绑后必须重新扫码登录并绑定机构。
     NodeBindingUnbind,
+    // ───────── 立法与表决(卡 20260630-onchina-legislation-console-framework)─────────
+    // 中文注释:全部产生链上交易(提交 extrinsic / 改提案状态),归 PasskeyColdSign 特殊档。
+    /// 发起立法(新法)法律案。
+    ProposeEnactLaw,
+    /// 发起修法法律案。
+    ProposeAmendLaw,
+    /// 发起废法法律案。
+    ProposeRepealLaw,
+    /// 院内表决(议员/委员对当前院投票)。
+    CastHouseVote,
+    /// 特别案公民投票。
+    CastReferendumVote,
+    /// 行政签署 / 否决(总统/省长/市长;另线程接入)。
+    ExecutiveSign,
+    /// 三人会签救济(院长 + 参议长 + 众议长;另线程接入)。
+    OverrideSign,
+    /// 护宪大法官终审(修宪;另线程接入)。
+    GuardVote,
+    /// 发起任免案(政府;Phase 4 接入)。
+    ProposePersonnel,
+    /// 发起预算案(政府;Phase 4 接入)。
+    ProposeBudget,
 }
 
 impl AdminActionType {
@@ -71,6 +93,16 @@ impl AdminActionType {
             Self::InstitutionUploadDocument => "INSTITUTION_UPLOAD_DOCUMENT",
             Self::InstitutionDeleteDocument => "INSTITUTION_DELETE_DOCUMENT",
             Self::NodeBindingUnbind => "NODE_BINDING_UNBIND",
+            Self::ProposeEnactLaw => "PROPOSE_ENACT_LAW",
+            Self::ProposeAmendLaw => "PROPOSE_AMEND_LAW",
+            Self::ProposeRepealLaw => "PROPOSE_REPEAL_LAW",
+            Self::CastHouseVote => "CAST_HOUSE_VOTE",
+            Self::CastReferendumVote => "CAST_REFERENDUM_VOTE",
+            Self::ExecutiveSign => "EXECUTIVE_SIGN",
+            Self::OverrideSign => "OVERRIDE_SIGN",
+            Self::GuardVote => "GUARD_VOTE",
+            Self::ProposePersonnel => "PROPOSE_PERSONNEL",
+            Self::ProposeBudget => "PROPOSE_BUDGET",
         }
     }
 
@@ -95,7 +127,18 @@ impl AdminActionType {
             | Self::InstitutionDeregister
             | Self::InstitutionAccountDeregister
             | Self::InstitutionDeleteDocument
-            | Self::NodeBindingUnbind => AdminOperationAuth::PasskeyColdSign,
+            | Self::NodeBindingUnbind
+            // 立法与表决:全部产生链上交易,归 PasskeyColdSign 特殊档(冷钱包扫码签名)。
+            | Self::ProposeEnactLaw
+            | Self::ProposeAmendLaw
+            | Self::ProposeRepealLaw
+            | Self::CastHouseVote
+            | Self::CastReferendumVote
+            | Self::ExecutiveSign
+            | Self::OverrideSign
+            | Self::GuardVote
+            | Self::ProposePersonnel
+            | Self::ProposeBudget => AdminOperationAuth::PasskeyColdSign,
         }
     }
 
@@ -151,6 +194,16 @@ pub(crate) fn parse_action_type(
         "INSTITUTION_UPLOAD_DOCUMENT" => Ok(AdminActionType::InstitutionUploadDocument),
         "INSTITUTION_DELETE_DOCUMENT" => Ok(AdminActionType::InstitutionDeleteDocument),
         "NODE_BINDING_UNBIND" => Ok(AdminActionType::NodeBindingUnbind),
+        "PROPOSE_ENACT_LAW" => Ok(AdminActionType::ProposeEnactLaw),
+        "PROPOSE_AMEND_LAW" => Ok(AdminActionType::ProposeAmendLaw),
+        "PROPOSE_REPEAL_LAW" => Ok(AdminActionType::ProposeRepealLaw),
+        "CAST_HOUSE_VOTE" => Ok(AdminActionType::CastHouseVote),
+        "CAST_REFERENDUM_VOTE" => Ok(AdminActionType::CastReferendumVote),
+        "EXECUTIVE_SIGN" => Ok(AdminActionType::ExecutiveSign),
+        "OVERRIDE_SIGN" => Ok(AdminActionType::OverrideSign),
+        "GUARD_VOTE" => Ok(AdminActionType::GuardVote),
+        "PROPOSE_PERSONNEL" => Ok(AdminActionType::ProposePersonnel),
+        "PROPOSE_BUDGET" => Ok(AdminActionType::ProposeBudget),
         _ => Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
@@ -225,5 +278,29 @@ mod tests {
         assert!(!AdminActionType::InstitutionDeleteAccount.requires_governing_capability());
         assert!(!AdminActionType::InstitutionDeleteDocument.requires_governing_capability());
         assert!(!AdminActionType::NodeBindingUnbind.requires_governing_capability());
+    }
+
+    #[test]
+    fn legislation_actions_are_cold_sign_and_round_trip() {
+        // 立法与表决动作全部产链上交易,归 PasskeyColdSign;且不属注册局治理能力边界。
+        let actions = [
+            AdminActionType::ProposeEnactLaw,
+            AdminActionType::ProposeAmendLaw,
+            AdminActionType::ProposeRepealLaw,
+            AdminActionType::CastHouseVote,
+            AdminActionType::CastReferendumVote,
+            AdminActionType::ExecutiveSign,
+            AdminActionType::OverrideSign,
+            AdminActionType::GuardVote,
+            AdminActionType::ProposePersonnel,
+            AdminActionType::ProposeBudget,
+        ];
+        for action in actions {
+            assert_eq!(action.auth_type(), AdminOperationAuth::PasskeyColdSign);
+            assert!(!action.requires_governing_capability());
+            // as_str ↔ parse_action_type 逐字往返一致。
+            let parsed = parse_action_type(action.as_str()).expect("legislation action parses");
+            assert_eq!(parsed, action);
+        }
     }
 }
