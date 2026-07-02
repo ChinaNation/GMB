@@ -160,7 +160,7 @@ class PalletRegistry {
   static const int proposeRepealLawCall = 2;
 
   // ---- LegislationVote (28) · 立法专属投票引擎 ----
-  // 四种表决:院内表决 / 行政签署 / 三人会签 / 护宪终审 / 特别案公投 / 准备人口快照。
+  // 立法投票阶段:院内表决 / 特别案公投 / 行政签署 / 三人会签 / 护宪终审 / 准备人口快照。
   static const int legislationVotePallet = 28;
   static const int prepareLegislationSnapshotCall = 0;
   static const int castHouseVoteCall = 1;

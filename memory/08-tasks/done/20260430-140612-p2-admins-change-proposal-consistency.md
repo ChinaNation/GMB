@@ -47,7 +47,7 @@
   - `proposal.kind == PROPOSAL_KIND_INTERNAL`
   - `proposal.stage == STAGE_INTERNAL`
   - `proposal.account_context == Some(action.institution)`
-  - `proposal.internal_org == Some(subject.org)`
+  - `proposal.internal_code == Some(subject.institution_code)`
 - 已补充执行路径防御测试：
   - 拒绝错误提案 kind / stage
   - 拒绝提案 institution / org 与管理员更换动作不一致

@@ -532,7 +532,7 @@ fn constitution_scale_decodes_and_is_well_formed() {
         assert!(a.body_en.is_some(), "条 {} 英文", a.number);
         assert!(a.title_en.is_some(), "条 {} 标题英文", a.number);
     }
-    // 不可修改条款齐全(第 1/2/3/17/19/23/33/41 条)
+    // 不可修改条款齐全(第 1/2/3/17/19/24/34/42 条)
     for n in primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES {
         assert!(
             articles.iter().any(|a| a.number == n),

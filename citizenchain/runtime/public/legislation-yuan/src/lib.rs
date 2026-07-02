@@ -512,11 +512,11 @@ pub mod pallet {
         EmptyHouses,
         /// 发起人不是该立法机构的现任议员/委员(admins)
         NotLegislator,
-        /// 提案机构/表决类型/院结构/签署机构 不符合宪法路由(第44/45条)
+        /// 提案机构/表决类型/院结构/签署机构不符合宪法路由(第45/46/75/79/100/106条)
         RoutingMismatch,
         /// 宪法修改的表决类型不合法(只能特别案或重要案)
         InvalidVoteTypeForConstitution,
-        /// 命中宪法不可修改条款(第 1/2/3/17/19/23/33/41 条)
+        /// 命中宪法不可修改条款(第 1/2/3/17/19/24/34/42 条)
         ImmutableArticleViolation,
         /// 宪法不可整体废止
         CannotRepealConstitution,
@@ -796,11 +796,11 @@ pub mod pallet {
             code == *b"NED\0" || code == *b"CEDU"
         }
 
-        /// 路由校验(ADR-027 修订,宪法第44/45条):提案机构 ⟺ 表决类型 ⟺ 院结构 ⟺ 签署机构。
+        /// 路由校验(ADR-027,宪法第45/46/75/79/100/106条):提案机构 ⟺ 表决类型 ⟺ 院结构 ⟺ 签署机构。
         /// - 教育类(常规教育/重要教育)⟺ 提案机构是教委会(NED/CEDU);非教育类禁教委会、教委会禁非教育。
         /// - tier ⟺ houses 数:市级单院(1);国家/省/宪法两院(2)。legislature 仅两院携带。
         /// - 两院级:提案机构 = 发起院 houses[0](众议会/教委会本会先表决)。
-        /// - 特别案禁教育类(宪法第44条四款)。
+        /// - 特别案禁教育类(宪法教育提案规则)。
         fn ensure_routing(
             tier: Tier,
             proposer_body: &(InstitutionCode, T::AccountId),

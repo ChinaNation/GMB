@@ -34,8 +34,8 @@ export const governanceApi = {
     invoke<ProposalDisplayMeta | null>('get_proposal_display', { proposalId }),
   listProposalsByInstitutionCode: (institutionCode: string) =>
     invoke<number[]>('list_proposals_by_institution_code', { institutionCode }),
-  listProposalsByInstitution: (cidNumber: string) =>
-    invoke<number[]>('list_proposals_by_institution', { cidNumber }),
+  listProposalsByCid: (cidNumber: string) =>
+    invoke<number[]>('list_proposals_by_cid', { cidNumber }),
   listProposalsByOwner: (moduleTagScaleHex: string) =>
     invoke<number[]>('list_proposals_by_owner', { moduleTagScaleHex }),
   buildVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>

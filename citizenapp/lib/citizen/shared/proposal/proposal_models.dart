@@ -24,7 +24,6 @@ class ProposalMeta {
     required this.kind,
     required this.stage,
     required this.status,
-    this.internalOrg,
     this.internalCode,
     this.institutionBytes,
     this.subjectCidNumbers = const [],
@@ -35,7 +34,6 @@ class ProposalMeta {
   final int kind; // 0=internal, 1=joint
   final int stage; // 0=internal, 1=joint, 2=citizen
   final int status; // 0=voting, 1=passed, 2=rejected
-  final int? internalOrg;
   final String? internalCode;
 
   /// 链上 Proposal.account_context。机构归属真源不看这里,只看 [subjectCidNumbers]。

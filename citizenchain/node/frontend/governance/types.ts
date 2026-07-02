@@ -160,8 +160,9 @@ export type ProposalMeta = {
   kind: number;
   stage: number;
   status: number;
-  internalOrg: number | null;
+  internalCode: string | null;
   institutionHex: string | null;
+  subjectCidNumbers: string[];
 };
 
 export type RuntimeUpgradeDetail = {
@@ -176,6 +177,6 @@ export type ProposalFullInfo = MultisigTransferProposalDetails & {
   runtimeUpgradeDetail: RuntimeUpgradeDetail | null;
   internalTally: VoteTally | null;
   jointTally: VoteTally | null;
-  citizenTally: { yes: number; no: number } | null;
+  referendumTally: { yes: number; no: number } | null;
   cidFullName: string | null;
 };

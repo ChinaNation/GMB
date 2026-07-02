@@ -344,7 +344,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         'meta_kind': meta?.kind,
         'meta_stage': meta?.stage,
         'meta_status': meta?.status,
-        'meta_internal_org': meta?.internalOrg,
+        'meta_internal_code': meta?.internalCode,
+        'meta_subject_cid_numbers': meta?.subjectCidNumbers,
         'meta_institution_bytes_hex': meta?.institutionBytes == null
             ? null
             : _toHex(meta!.institutionBytes!),
@@ -396,7 +397,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       kind: kind,
       stage: stage,
       status: status,
-      internalOrg: _toInt(snapshot.extra['meta_internal_org']),
+      internalCode: snapshot.extra['meta_internal_code']?.toString(),
+      subjectCidNumbers:
+          _toStringList(snapshot.extra['meta_subject_cid_numbers']),
       institutionBytes: institutionHex == null || institutionHex.isEmpty
           ? null
           : Uint8List.fromList(_hexDecode(institutionHex)),
@@ -407,6 +410,13 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     if (value == null) return null;
     if (value is int) return value;
     return int.tryParse(value.toString());
+  }
+
+  List<String> _toStringList(Object? value) {
+    if (value is Iterable) {
+      return value.map((v) => v.toString()).toList(growable: false);
+    }
+    return const [];
   }
 
   bool? _toBool(Object? value) {

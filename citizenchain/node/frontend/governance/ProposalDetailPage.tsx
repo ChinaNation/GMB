@@ -18,17 +18,6 @@ type Props = {
   onBack: () => void;
 };
 
-function institutionHexToCidNumber(hex: string): string {
-  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
-  const bytes: number[] = [];
-  for (let i = 0; i < clean.length; i += 2) {
-    bytes.push(parseInt(clean.substring(i, i + 2), 16));
-  }
-  let end = bytes.length;
-  while (end > 0 && bytes[end - 1] === 0) end--;
-  return new TextDecoder().decode(new Uint8Array(bytes.slice(0, end)));
-}
-
 export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWallets, cidNumber: externalCidNumber, onBack }: Props) {
   const [info, setInfo] = useState<ProposalFullInfo | null>(null);
   const [institution, setInstitution] = useState<InstitutionDetail | null>(null);
@@ -101,8 +90,8 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
       setInfo(d);
       setDisplayMeta(dm ?? null);
       let sid = externalCidNumber;
-      if (!sid && d.meta.institutionHex) {
-        sid = institutionHexToCidNumber(d.meta.institutionHex);
+      if (!sid && d.meta.subjectCidNumbers.length > 0) {
+        sid = d.meta.subjectCidNumbers[0];
         setResolvedCidNumber(sid);
       }
       let wallets = externalAdminWallets;
@@ -200,10 +189,10 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             {displayStatus.label}
           </div>
         </div>
-        {meta.internalOrg != null && (
+        {meta.internalCode && (
           <div className="metric-card">
-            <div className="metric-label">机构类型</div>
-            <div className="metric-value">{orgTypeLabel(meta.internalOrg)}</div>
+            <div className="metric-label">机构码</div>
+            <div className="metric-value">{meta.internalCode}</div>
           </div>
         )}
       </div>
@@ -240,10 +229,10 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         {info.jointTally && (
           <VoteTallyBar title="联合投票" yes={info.jointTally.yes} no={info.jointTally.no} threshold={105} />
         )}
-        {info.citizenTally && (
-          <VoteTallyBar title="公民投票" yes={info.citizenTally.yes} no={info.citizenTally.no} />
+        {info.referendumTally && (
+          <VoteTallyBar title="公民投票" yes={info.referendumTally.yes} no={info.referendumTally.no} />
         )}
-        {!info.internalTally && !info.jointTally && !info.citizenTally && (
+        {!info.internalTally && !info.jointTally && !info.referendumTally && (
           <p className="no-data">暂无投票数据</p>
         )}
       </div>
@@ -335,7 +324,4 @@ function stageLabel(stage: number): string {
 }
 function statusLabel(status: number): string {
   switch (status) { case 0: return '投票中'; case 1: return '已通过'; case 2: return '已否决'; case 3: return '已执行'; case 4: return '执行失败'; default: return '未知'; }
-}
-function orgTypeLabel(orgType: number): string {
-  switch (orgType) { case 0: return '国储会'; case 1: return '省储会'; case 2: return '省储行'; default: return '未知'; }
 }

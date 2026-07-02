@@ -12,7 +12,7 @@ use votingengine::{
     STAGE_LEG_SIGN, STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING,
 };
 
-// ───────────────── 阈值纯函数(宪法第四十四/四十五条精确端点,5 类删二审)─────────────────
+// ───────────────── 阈值纯函数(宪法第45/46条精确端点,五类立法表决)─────────────────
 
 #[test]
 fn house_final_passed_thresholds() {
@@ -56,7 +56,7 @@ fn house_decided_early() {
         legislation_house_decided(LEG_VOTE_REGULAR, 10, 7, 3),
         Some(true)
     );
-    // 反对超限 → 提前否决(常规案反对>40%)。
+    // 结果已无法达到常规案赞成阈值 → 提前否决。
     assert_eq!(
         legislation_house_decided(LEG_VOTE_REGULAR, 10, 0, 5),
         Some(false)
@@ -143,10 +143,10 @@ fn executive_sign_rejected_for_non_representative() {
 }
 
 #[test]
-fn single_house_regular_rejected_when_opposition_exceeds_cap() {
+fn single_house_regular_rejected_when_result_cannot_pass() {
     new_test_ext().execute_with(|| {
         let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
-        // 反对达 5 票(>40% of 10)→ 提前否决。
+        // 剩余赞成票已不足以达到常规案阈值 → 提前否决。
         for i in 1u8..=5 {
             assert_ok!(cast(member(i), pid, false));
         }

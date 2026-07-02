@@ -21,7 +21,7 @@ CitizenApp 公民 tab 从三子 tab 重构为五子 tab(广场/立法/选举/治
 ### 权威依据
 
 - 公民宪法**已迁为结构化链上法律**(ADR-027):`constitution.scale` 是正式创世前的结构化 SCALE 种子,作为 `legislation-yuan` 的 `law_id=0, tier=宪法` 创世注入,`ImmutableManifest` 冻结 8 条不可修改条款。节点运行态真源是链上 law_id=0;节点展示走 `constitution_getDocument` RAW storage RPC,普通法律浏览可走 `LegislationApi`。旧 HTML 文件与解析脚本已删除,不再作为维护源。第八条「一府两会三院」:政府 / 公民教育委员会 / 公民储备委员会 / 立法院 / 司法院 / 监察院,相互无隶属、职权独立。
-- 第十条/四十四条/七十三条/一百一十八条:国家公民教育委员会负责所有教育类法案草案的起草与初审 → 立法职能 → 归立法 tab。
+- 第十条/第四十五条/第四十六条/第七十五条/第七十九条/第一百条:国家公民教育委员会与市公民教育委员会负责教育类法案草案起草、初审或提交 → 立法职能 → 归立法 tab。
 - 第四十四条二款:总统选举由总统府组织,不再设「国家立法院选举委员会」。
 - 第六十条/六十六条:市政府设市公民自治委员会(市自治会)、镇政府设镇公民自治委员会(镇自治会),民选监督机构。
 - ADR-027(立法院模块):立法投票走 `legislation-vote` sub-pallet；选举投票走 `election-vote` sub-pallet,本 ADR 不重复造投票流程。
@@ -38,7 +38,7 @@ CitizenApp 公民 tab 从三子 tab 重构为五子 tab(广场/立法/选举/治
 所有机构本质都是按 `institution_code` 分类的公权多签账户,差异只在权责。合并为:
 - 一套机构模型(合并 `PublicInstitutionEntity` 与 `InstitutionInfo`);
 - 一套目录仓库(CID-BFF + Isar,本地优先秒开,身份与分类唯一来源);
-- 一套链态服务(按机构主账户读 admins/提案/投票/余额);
+- 一套链态服务(按机构 CID 读提案归属,按账户上下文读 admins/投票/余额);
 - 一套详情页(替代现公权/治理两套详情/账户/管理员页);
 - 删除治理静态烘焙注册表 —— 治理改为「目录按 `institution_code ∈ {NRC,PRC,PRB}` 过滤」。
 

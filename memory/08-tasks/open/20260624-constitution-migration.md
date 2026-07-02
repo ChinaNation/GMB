@@ -27,7 +27,7 @@ Section(节): number, title, title_en, articles[]            // 必有
 Article(条): number, title, title_en, body, body_en, clauses[]  // 必有;body 必填
 Clause(款): number, text, text_en                           // 可空
 ```
-- Article.number = 全法连续条号(不可修改条款第1/2/3/17/19/23/33/41条按此校验)。
+- Article.number = 全法连续条号(不可修改条款第1/2/3/17/19/24/34/42条按此校验)。
 
 ## Phase 1 — legislation-yuan 模型改造(链端,runtime 二次确认)
 

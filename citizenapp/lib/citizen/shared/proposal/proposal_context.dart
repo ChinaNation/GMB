@@ -108,7 +108,6 @@ class ProposalContextResolver {
   /// [knownInstitution] 如果调用方已知机构信息（如从机构页面进入），直接传入跳过反查。
   Future<ProposalContext> resolve({
     List<int>? institutionBytes,
-    int? internalOrg,
     String? internalCode,
     InstitutionInfo? knownInstitution,
   }) async {
@@ -188,8 +187,7 @@ class ProposalContextResolver {
   /// 返回 Map<提案索引, ProposalContext>，与传入列表一一对应。
   Future<List<ProposalContext>> resolveBatch(
       List<List<int>?> institutionBytesList,
-      {List<int?>? internalOrgList,
-      List<String?>? internalCodeList,
+      {List<String?>? internalCodeList,
       Map<String, InstitutionInfo> knownInstitutionsByAccountHex =
           const {}}) async {
     final wallets = await _getWallets();

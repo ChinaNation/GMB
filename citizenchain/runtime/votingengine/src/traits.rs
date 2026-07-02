@@ -54,8 +54,8 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
 /// 立法事项(立法/修法/废法)接入立法投票时,统一由投票引擎 legislation-vote 创建提案并返回真实提案 ID。
 ///
 /// 中文注释(ADR-027):业务壳 legislation-yuan 只传"立法语义"——发起机构、机构码、表决类型、
-/// 法律载荷;表决规则(参与率/赞成率/反对率上限)、两院顺序、强制公投、计票与通过判定全部归属
-/// 投票引擎 legislation-vote sub-pallet,业务壳不得自行处理。
+/// 法律载荷;表决规则(参与率/赞成率)、两院顺序、强制公投、行政签署、护宪终审、计票与通过判定
+/// 全部归属投票引擎 legislation-vote sub-pallet,业务壳不得自行处理。
 /// runtime 装配为真实 `LegislationVote`;未实装语境(如其它 pallet 的测试 mock)装 `()` 返回 NotConfigured。
 pub trait LegislationVoteEngine<AccountId> {
     /// 创建立法投票提案。

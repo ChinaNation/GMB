@@ -140,3 +140,24 @@ CID 真源改造验收结果（2026-07-02）：
 - `flutter analyze`：通过。
 - `flutter test test/transaction/multisig-transfer/multisig_transfer_decode_test.dart test/governance/proposal_local_store_test.dart test/citizen/institution/institution_detail_test.dart`：通过。
 - `flutter test --concurrency=1`：通过，303 项测试通过，4 项原生 OpenMLS / smoldot 宿主库相关测试按既有条件跳过。
+
+全仓残留与宪法一致性复查（2026-07-02）：
+- 已再次全仓搜索旧机构主账户提案索引、`internalOrg/internal_org`、`citizenTally`、`ProposalsByInstitution`、`ActiveProposalsByInstitution`、`institutionHexToCidNumber` 等残留；代码与文档中的旧主账户归属口径已清理。
+- Node 治理反向索引命令已从 `list_proposals_by_institution` / `fetch_proposals_by_institution` 改为 `list_proposals_by_cid` / `fetch_proposals_by_cid`；`listProposalsByInstitutionCode` 仅保留机构码分类查询语义。
+- 已清理 CitizenWallet、CitizenApp 和 memory 文档中非 runtime 的旧流程与旧条文号表述。
+- 已按 SCALE 解析当前 `constitution.scale`：共 7 章、141 条；第 19/21/45/46/75/79/100/106 条与当前投票引擎状态机逐项核对。
+- 核对结论：投票引擎逻辑与当前公民宪法规则一致。五类立法表决、常规/重要/特别阈值、特别案公投、总统/省长/市长签署、国家/省级三人会签、市级超时通过、护宪终审多数通过与超时否决均与宪法一致。
+- 用户已二次确认允许修改 `citizenchain/runtime/` 注释；已清理 runtime 注释中的旧条文号、旧流程措辞、旧冻结条款号和过期反对率口径。
+- 已同步清理 memory 历史任务卡中会误导当前目标态的旧条文号、旧冻结条款号和旧流程措辞；总统选举对应宪法第44条为当前有效条文，按现状保留。
+- runtime 与全仓旧关键词复扫确认无命中；任务卡不再复写旧词清单,避免记录文本本身成为残留。
+
+全仓残留与宪法一致性复查验收（2026-07-02）：
+- `cargo test -p legislation-vote -p legislation-yuan --manifest-path citizenchain/Cargo.toml`：通过。
+- `cargo check -p node --manifest-path citizenchain/Cargo.toml`：通过。
+- `npx tsc --noEmit`（`citizenchain/node/frontend`）：通过。
+- `flutter analyze`（`citizenapp`）：通过。
+- `flutter test test/governance/proposal_local_store_test.dart`：通过。
+- `flutter test --concurrency=1`（`citizenapp`）：通过，303 项测试通过，4 项原生 OpenMLS / smoldot 宿主库相关测试按既有条件跳过。
+- `cargo fmt --manifest-path citizenchain/Cargo.toml --package node --check`：通过。
+- `cargo fmt --manifest-path citizenchain/Cargo.toml --package votingengine --package legislation-vote --package legislation-yuan --check`：通过。
+- `git diff --check`：通过。

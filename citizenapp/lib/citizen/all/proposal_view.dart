@@ -348,7 +348,6 @@ class _ProposalViewState extends State<ProposalView> {
     // 批量解析提案上下文
     final contexts = await _contextResolver.resolveBatch(
       proposals.map((p) => p.meta.institutionBytes?.toList()).toList(),
-      internalOrgList: proposals.map((p) => p.meta.internalOrg).toList(),
       internalCodeList: proposals.map((p) => p.meta.internalCode).toList(),
       knownInstitutionsByAccountHex: knownInstitutionsByAccountHex,
     );
@@ -718,7 +717,6 @@ class _ProposalViewState extends State<ProposalView> {
       final proposal = proposals.first;
       final contexts = await _contextResolver.resolveBatch(
         [proposal.meta.institutionBytes?.toList()],
-        internalOrgList: [proposal.meta.internalOrg],
         internalCodeList: [proposal.meta.internalCode],
         knownInstitutionsByAccountHex: _knownInstitutionsByAccountHex,
       );

@@ -113,6 +113,10 @@
 - 2026-07-02：逐条定稿第 11 条；用户确认修改 runtime 宪法真源后，已将第 11 条第 1 款改为公民储备委员会联合会议主席、副主席由国家公民储备委员会委员、省公民储备委员会主席和省公民储备银行行长互选产生，并同步英文。
 - 2026-07-02：逐条定稿第 12 条；用户确认修改 runtime 宪法真源后，已将第 12 条正文、第 1 款、第 2 款、第 3 款改为国家立法院众议会 / 参议会新口径，并将市立法权行权机构改为市公民立法委员会，英文同步更新。
 - 2026-07-02：逐条定稿第 13 条；用户确认修改 runtime 宪法真源后，已将市行政区司法权行权机构由市司法院改为市自治司法院，英文同步更新为 Municipal Self-Governing Judicial Yuan。
+- 2026-07-02：逐条定稿第 14 条；用户确认修改 runtime 宪法真源后，已将市行政区监察权行权机构由市监察院改为市自治监察院，英文同步更新为 Municipal Self-Governing Control Yuan。
+- 2026-07-02：逐条定稿第 16 条；用户确认修改 runtime 宪法真源后，已将第 16 条第 1、2 款中的省市行政区变更表决机构统一为省联邦立法院、市公民立法委员会和临时市公民立法委员会，并同步英文。
+- 2026-07-02：逐条定稿第 18 条；用户确认修改 runtime 宪法真源后，已将第 18 条第 1、2 款统一为省联邦立法院和市公民立法委员会口径，并同步英文。
+- 2026-07-02：逐条定稿第 22 条；用户确认修改 runtime 宪法真源后，已将直接发起违宪审查对象改为总统/副总统、国家立法院参议会参议员、国家立法院众议会众议员、国家司法院院长/副院长、国家监察院院长/副院长、国家监察院三联邦署署长/副署长、国家公民教育委员会委员和国家公民储备委员会委员，并同步英文。
 
 验收结果：
 - `flutter analyze`：通过。
@@ -194,6 +198,18 @@
   - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
 - 2026-07-02 第 13 条逐条定稿验收：
   - 结构化回读 `constitution.scale`：第 13 条已将市行政区司法权行权机构更新为市自治司法院，英文同步更新；文件大小 222258 → 222279 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 14 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 14 条已将市行政区监察权行权机构更新为市自治监察院，英文同步更新；文件大小 222279 → 222300 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 16 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 16 条第 1、2 款已更新为省联邦立法院、市公民立法委员会和临时市公民立法委员会新口径，英文同步更新；文件大小 222300 → 222424 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 18 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 18 条第 1、2 款已更新为省联邦立法院和市公民立法委员会新口径，英文同步更新；文件大小 222424 → 222536 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 22 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 22 条正文已更新为新的违宪审查对象列表，英文同步更新；文件大小 222536 → 222346 字节。
   - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
 
 残留清理：

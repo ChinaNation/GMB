@@ -7,14 +7,14 @@
 状态:已接受,大部分已落地(2026-06-24)。立法院业务壳(idx=27)+ 立法投票 sub-pallet(idx=28)+ 宪法迁移(章>节>条>款 统一 + 创世注入 + 节点桌面端 re-point)均已实现验证;**双客户端 CitizenApp/CitizenWallet(另线程卡)与立法机构选举体系(election-vote 选举→admins 通道,独立卡)待续**。下文方向与边界已据实现校准。**OnChina 控制台「立法与表决」落地(2026-06-30,见第 10 节 + 卡 `20260630-onchina-legislation-console-framework`)**:法律案全链路(发起/表决/进度)operator 端 + 免登录大屏 display 端已交付;任免案/预算案链下 schema 预留(链端 kind 待另卡)。**正式创世冻结收口(2026-07-01,卡 `20260701-constitution-genesis-freeze-step1`)**:Law 主记录版本指针改为 `effective_version/latest_version/pending_version`,立法/修法 `effective_at` 改为毫秒时间戳;创世宪法 law_id=0、v1 直接生效且无待生效版;旧 HTML 真源与解析脚本删除;GitHub WASM run `28492547251` 成功后已用 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>` 烘焙正式 raw,genesis hash `0x6c88667d43f5a2690f2cb176f5883e051a057db6bee5fa56bc8337becbf23417`。
 
 > **重大修订(2026-06-25,用户逐条确认,见 `08-tasks/open/20260625-legislation-signing-5type-revision.md`)**:
-> 1. **删常规案二审**(方案B 彻底删):本轮先改法案 7 条(44/45/73/75/79/81/118),官员任免 19 条另立专案。下文"四种表决/二审"表述以本修订为准。
+> 1. **删除已废弃的重复表决流程**:本轮已改立法表决、教育类法案与签署救济相关条款,官员任免另立专案。正文只保留当前流程口径。
 > 2. **提案类型 4→5 类**:常规案/常规教育案/重要案/重要教育案/特别案(教育属性编进 vote_type,不另设内容分类字段)。`VoteType=Regular/RegularEducation/Major/MajorEducation/Special`(Important→Major)。阈值:常规系 >80%/≥60%、重要系 >90%/≥70%、特别 全员≥70%+公投。
-> 3. **行政签署 + 否决救济**(宪法新增 44/45/73/79 + 122):市立法会通过→市长签署(否决=否决/30天超时=通过,单院无救济);省/国家参议会通过→省长/总统签署(否决或30天超时→退回立法院→院长+参议长+众议长三人会签,全同意生效/任一否决或超时否决);**特别案例外:公投通过即生效,任何人不再签署**。状态机加 `STAGE_LEG_SIGN`/`STAGE_LEG_OVERRIDE`。
+> 3. **行政签署 + 否决救济**(创世正文见第46/100/106条):市立法会通过→市长签署(否决=否决/30天超时=通过,单院无救济);省/国家参议会通过→省长/总统签署(否决或30天超时→退回立法院→院长+参议长+众议长三人会签,全同意生效/任一否决或超时否决);**特别案例外:公投通过即生效,任何人不再签署**。状态机加 `STAGE_LEG_SIGN`/`STAGE_LEG_OVERRIDE`。
 > 4. **提案机构→表决院**:国家众议会/国家教委会/省众议会 本会通过→参议会;市立法会/市教委会/市自治会 委员直接进市立法会单院。提案方≠表决院(市级)。
 > 5. **法定代表人**=机构首脑且为 admin 之一,即各级签署人(总统/省长/市长/院长/参议长/众议长);链上需新增字段。
 > 6. **命名统一**(全工程):市公民立法委员会/市立法会、国家公民教育委员会/国家教委会、市公民教育委员会/市教委会、市公民自治委员会/市自治会、镇公民自治委员会/镇自治会;宪法全称首次出现用全称、其后简称。
-> 7. **条号更正**:四种表决的宪法出处是**第44/45条**(非旧引用的"第18条");修订后为五类。
-> **进度**:**A 宪法修订+重生 scale 已完成**(legislation-yuan 23/23);**B 链端已全部完成**——B1 VoteType 5类/阈值、B2 签署+会签状态机(STAGE_LEG_SIGN/OVERRIDE + executive_sign/override_sign + 30天超时 + 提案携带 executive/legislature)、B3 法定代表人(admins-change LegalRepresentatives + getter/setter)、B4 提案方↔表决院解耦 + ensure_routing(教育类⟺NED/CEDU)+ runtime 装配;验证:整 runtime cargo check 绿 + legislation-vote 20 + legislation-yuan 23 + 回归(votingengine/internal-vote 87/admins-change/grandpakey 17/multisig/organization)全过零回归。**C 命名统一 + 官员任免删二审已完成**(2026-06-25,合批改宪法):任免 19 条删二审(方案A/B)使全宪法 0 处二审/second-review(方案B彻底删完成)、命名首现严格审计修 3 处违规(市/镇自治会+校教委会)、重生 scale 217626 字节、不可修改 8 条逐字节不变、legislation-yuan 23 测试过。**护宪大法官修宪最终否决(2026-06-29,宪法第21条)已完成**:宪法新增第21条(护宪大法官对修宪享最终否决,重要案总统签署后/特别案公投后→4名及以上护宪大法官赞成生效/未获4名及以上赞成或30天超时否决)+ 旧21~140顺延22~141(141条)+ 第19条引用23/33/41→24/34/42(冻结条款创世前重定基准);链端 STAGE_LEG_CONSTITUTION_GUARD + ConstitutionGuardProvider接口(成员=国家司法院 `NJD` admins 中 `admin_role=护宪大法官` 的 7 人)+ guard_vote + needs_guard,护宪守卫改名;验证 legislation-vote 29 + internal-vote 88 + 公权管理员相关回归 + 整runtime cargo check 绿。**统一批已完成(2026-06-25)**:① 第20条第二款删「不隶属于任何机构」(护宪归口国家司法院);② **章节整体重排**新序 总则/政府/教委会/储委会/立法院/司法院/监察院(教委会72-86/储委会87-97/立法院98-113/司法院114-124/监察院125-141),**不可修改8条全在第一章不动、仍1/2/3/17/19/24/34/42逐字节不变**;③ **scale重生219064字节(141条)** + 不可修改常量→[24,34,42] + legislation-yuan测试140→141 + 守卫doc条号。验证:整runtime绿+legislation-yuan 23+legislation-vote 25+primitives 27+独立scale解码(不可修改内容@24/34/42正确)全过。命名公式化名保持现状(用户确认)。**2026-07-02 司法院口径收口**:第20条恢复护宪大法官7人;国家司法院创世公职人员为7名护宪大法官+1名首席大法官+2名次席大法官+5名大法官=15人;护宪终审阈值为4/7,国家司法院固定治理阈值为8/15。**D 双客户端固定治理识别已收口;重新创世真机QA按发布验收批执行**。
+> 7. **条号更正**:创世正文中五类表决出处为**第45/46条**;教育类提案见第75/79条;国家/省签署与三人会签见第100/106条;不再引用旧条号口径。
+> **进度**:**A 宪法修订+重生 scale 已完成**(legislation-yuan 23/23);**B 链端已全部完成**——B1 VoteType 5类/阈值、B2 签署+会签状态机(STAGE_LEG_SIGN/OVERRIDE + executive_sign/override_sign + 30天超时 + 提案携带 executive/legislature)、B3 法定代表人(admins-change LegalRepresentatives + getter/setter)、B4 提案方↔表决院解耦 + ensure_routing(教育类⟺NED/CEDU)+ runtime 装配;验证:整 runtime cargo check 绿 + legislation-vote 20 + legislation-yuan 23 + 回归(votingengine/internal-vote 87/admins-change/grandpakey 17/multisig/organization)全过零回归。**C 命名统一 + 官员任免重复表决流程删除已完成**(2026-06-25,合批改宪法):任免相关条款已删除废弃重复表决流程,全宪法 0 处废弃重复表决流程、命名首现严格审计修 3 处违规(市/镇自治会+校教委会)、重生 scale 217626 字节、不可修改 8 条逐字节不变、legislation-yuan 23 测试过。**护宪大法官修宪最终否决(2026-06-29,宪法第21条)已完成**:宪法新增第21条(护宪大法官对修宪享最终否决,重要案总统签署后/特别案公投后→4名及以上护宪大法官赞成生效/未获4名及以上赞成或30天超时否决)+ 原21~140顺延22~141(141条)+ 第19条冻结条款引用顺延至24/34/42;链端 STAGE_LEG_CONSTITUTION_GUARD + ConstitutionGuardProvider接口(成员=国家司法院 `NJD` admins 中 `admin_role=护宪大法官` 的 7 人)+ guard_vote + needs_guard,护宪守卫改名;验证 legislation-vote 29 + internal-vote 88 + 公权管理员相关回归 + 整runtime cargo check 绿。**统一批已完成(2026-06-25)**:① 第20条第二款删「不隶属于任何机构」(护宪归口国家司法院);② **章节整体重排**新序 总则/政府/教委会/储委会/立法院/司法院/监察院(教委会72-86/储委会87-97/立法院98-113/司法院114-124/监察院125-141),**不可修改8条全在第一章不动、仍1/2/3/17/19/24/34/42逐字节不变**;③ **scale重生219064字节(141条)** + 不可修改常量→[24,34,42] + legislation-yuan测试140→141 + 守卫doc条号。验证:整runtime绿+legislation-yuan 23+legislation-vote 25+primitives 27+独立scale解码(不可修改内容@24/34/42正确)全过。命名公式化名保持现状(用户确认)。**2026-07-02 司法院口径收口**:第20条恢复护宪大法官7人;国家司法院创世公职人员为7名护宪大法官+1名首席大法官+2名次席大法官+5名大法官=15人;护宪终审阈值为4/7,国家司法院固定治理阈值为8/15。**D 双客户端固定治理识别已收口;重新创世真机QA按发布验收批执行**。
 
 ## 背景
 
@@ -26,12 +26,15 @@
 
 ### 宪法依据(权威,本模块严格据此设计)
 
-公民宪法第三章标题即「立法院 / Legislative Yuan」,已把立法体系、表决程序、修宪流程全部写死。本模块不自创规则,只把宪法条文工程化。关键条文:
+公民宪法已把立法体系、五类表决程序、修宪流程与护宪终审全部写死。本模块不自创规则,只把宪法条文工程化。关键条文:
 
 - 第十七条:立法权归属与层级(第一/二/三款)。
-- 第十八条:四种表决程序及阈值(国家/省立法院第一~三款;市立法会第一~三款)。
 - 第十九条:修宪流程与不可修改条款清单。
-- 第三章第一/二/三节:国家立法院、省立法院、市立法会的机构结构与提案/终审权分离。
+- 第二十一条:护宪大法官对修宪提案的最终否决。
+- 第四十五/四十六条:国家/省立法院与市立法会五类表决程序、阈值和市级签署规则。
+- 第七十五/七十九条:国家教委会、市教委会教育类法案起草与表决。
+- 第一百/一百零六条:国家/省立法院行政签署与三人会签救济。
+- 立法院相关章节:国家立法院、省立法院、市立法会的机构结构与提案/终审权分离。
 
 ## 决策
 
@@ -48,13 +51,13 @@
 #### 1b. 立法专属投票 sub-pallet:`citizenchain/runtime/votingengine/legislation-vote`
 
 - 新增投票引擎 sub-pallet,与 internal-vote / joint-vote / election-vote 平级;`pallet_index = 28`(待实现时确认空号);对外类型名 `LegislationVote`。
-- 定位:立法机构专属投票,承载宪法第十八条四种表决类型 + 两院顺序 + 强制公投,一处集中。
+- 定位:立法机构专属投票,承载宪法第四十五/四十六条五类表决类型 + 两院顺序 + 强制公投 + 行政签署/会签救济,一处集中。
 - `Config: frame_system::Config + votingengine::Config`,复用核心 crate 全部共享基础设施(见第 5 节),只本地保管自己的计票账本。
 - **完全不修改 internal-vote / joint-vote / election-vote 三个 sub-pallet 的逻辑**:三者零改动、零回归;election-vote 空骨架原样保留供未来公职人员选举用。
 - **更正(2026-06-24,第2步精读核心后)**:核心 `votingengine` crate 按 `kind`/`stage` 硬编码分发,未知 kind 直接 `Err`。要让立法投票成为头等模式并真正共享核心基础,**第2步必须扩展核心 crate**(新增 `PROPOSAL_KIND_LEGISLATION` + 立法 stage + Config 三关联类型 `LegislationFinalizer`/`LegislationCleanup`/`LegislationVoteResultCallback` + 分发分支),并在所有 `votingengine::Config` 实现补这三类型(测试 mock 装 `()`)。这是 additive 扩展,不改三个 sub-pallet 逻辑,但"纯加 sub-pallet 零核心改动"的说法作废。详见任务卡第2步 2a。
 - legislation-yuan 业务壳通过本 sub-pallet 对外的 Engine trait(如 `LegislationVoteEngine`)创建/绑定投票,投票终态回调写回业务壳 Executor。
 
-### 2. 立法机构权限矩阵(第十七条 / 第三章)
+### 2. 立法机构权限矩阵(第十七条 / 立法院章节)
 
 立法权只属于以下三类机构,其它机构无立法权:
 
@@ -66,7 +69,7 @@
 
 补充:
 
-- 国家教委会不是独立立法机构,是「教育类法案」的起草方,起草并经教委会表决通过后交国家立法院参议会表决(第十八条第三款、第六十一条)。
+- 国家教委会不是独立立法机构,是「教育类法案」的起草方,起草并经教委会表决通过后交国家立法院参议会表决(第十条、第七十五条及第一百条)。
 
 机构与议员建模(用户拍板,2026-06-24):
 
@@ -78,7 +81,7 @@
   - 市立法会(每市) = 单一 institution(admins=委员)
   - 国家教委会 = institution(admins=委员),教育类法案起草方
 - 法案的链上提案恒由对应立法机构的 admin 发起,所有 `propose_*` 入口只认 admin,与其它治理模块一致。
-- 市立法会公民提案门槛(第十八条市立法会第一款:≥1000 该市公民 + ≥5 公民团体联署,或集会单日参与 > 该市人口 10%)是现实世界前置义务——满足时市立法会委员有义务在链上发起提案;链上不做公民联署入口。
+- 市立法会公民提案门槛(≥1000 该市公民 + ≥5 公民团体联署,或集会单日参与 > 该市人口 10%)是现实世界前置义务——满足时市立法会委员有义务在链上发起提案;链上不做公民联署入口。
 
 ### 3. 法律层级与数据模型
 
@@ -130,31 +133,32 @@ LawVersion {
 
 历史版本由 `LawVersions[law_id][version]` 保留;当前生效版、最新写入版、待生效版不再靠旧的版本号减一规则推断。
 
-### 4. 四种表决类型 → 投票引擎映射(第十八条)
+### 4. 五类表决类型 → 投票引擎映射(第四十五/四十六条)
 
-宪法把每个机构的表决固定为四种,条件是「参与率 + 赞成率」,特别案叠加公民投票:
+宪法把立法表决固定为五类,条件是「参与率 + 赞成率」,特别案叠加公民投票:
 
 | 表决类型 | 立法机构内部条件 | 是否叠加公民投票 |
 |---|---|---|
 | 常规案 | > 80% 现任议员/委员参与,≥ 60% 赞成 | 否 |
+| 常规教育案 | > 80% 现任委员参与,≥ 60% 赞成 | 否 |
 | 重要案 | > 90% 参与,≥ 70% 赞成 | 否 |
-| 常规案二审 | 全体参与,≥ 50% 赞成 且 反对 < 20% | 否 |
+| 重要教育案 | > 90% 现任委员参与,≥ 70% 赞成 | 否 |
 | 特别案 | 全体参与,≥ 70% 赞成 | 是,且必须通过(国家级:全国 ≥70% 投票权公民参与 + ≥70% 赞成;省级:本省;市级:本市) |
 
 全部立法表决统一走新 `legislation-vote` sub-pallet,由它按"机构构成 + 表决类型"内部分流(机构=独立 institution、议员=admins):
 
-- 市立法会(单院):常规/重要/二审 → 单院模式,一段内部表决(委员,按 quorum%/approve%/oppose_cap% 计票)。
-- 国家立法院 / 省立法院(两机构 众议会→参议会):常规/重要/二审 → 两院模式,两段顺序内部表决(众议会按表决类型通过 → 参议会按表决类型终审通过),无公投。
-- 国家教委会教育类法案:教委会(发起,内部表决) → 参议会(终审,内部表决) → 两院模式两段内部表决。
+- 市立法会(单院):常规/重要 → 单院模式,一段内部表决(委员,按参与率/赞成率计票)。
+- 国家立法院 / 省立法院(两机构 众议会→参议会):常规/重要 → 两院模式,两段顺序内部表决(众议会按表决类型通过 → 参议会按表决类型终审通过),无公投。
+- 教育类法案:教委会(发起,内部表决) → 对应立法院终审院(国家/省为参议会,市级为市立法会) → 按常规教育案/重要教育案阈值表决。
 - 特别案 + 核心修宪 → 特别案模式:内部阶段(单院=委员;两院=众→参,全员 ≥70% 赞成) + 强制公投阶段(人口快照,国家=全国、省=本省、市=本市,≥70% 参与 + ≥70% 赞成),两阶段都必须通过。
 
 关键:这三种模式(单院 / 两院 / 特别案)全部在 `legislation-vote` 一个 sub-pallet 内实现,复用核心 crate 的提案生命周期、`AdminSnapshot`、人口快照验签 trait、清理、反向索引(第 5 节),只本地写自己的计票账本。现有 internal-vote / joint-vote / election-vote 零改动。
 
-结论(回应"是否只用内部/联合投票"):常规案/重要案/二审只有内部表决(单院一段、两院两段);特别案与核心修宪,宪法第十八条第二款、第十九条强制必须叠加公民投票且通过 → 由 legislation-vote 特别案模式的"内部阶段 + 强制公投阶段"承载。三种档位同壳,不借用也不修改其它投票模块。
+结论(回应"是否只用内部/联合投票"):常规案/常规教育案/重要案/重要教育案只有内部表决(单院一段、两院两段);特别案与核心修宪按宪法第四十五/四十六条、第十九条强制叠加公民投票且通过 → 由 legislation-vote 特别案模式的"内部阶段 + 强制公投阶段"承载。五类档位同壳,不借用也不修改其它投票模块。
 
 ### 5. 新增 legislation-vote sub-pallet(本项目核心,additive 不改存量)
 
-不修改 internal-vote / joint-vote / election-vote;新增一个立法专属投票 sub-pallet,把宪法第十八条的表决规则集中实现,复用核心 crate 共享基础。
+不修改 internal-vote / joint-vote / election-vote;新增一个立法专属投票 sub-pallet,把宪法第四十五/四十六条的表决规则集中实现,复用核心 crate 共享基础。
 
 (A) 复用核心 crate(`votingengine`)共享基础设施(`Config: votingengine::Config`,零拷贝):
 
@@ -165,8 +169,8 @@ LawVersion {
 
 (B) 本 sub-pallet 本地新增(只是计票账本,对标 joint-vote 的 `JointTallies` / `ReferendumTallies` / `UsedPopulationSnapshotNonce`):
 
-- `VoteRule { quorum_pct, approve_pct, oppose_cap_pct: Option, require_referendum, referendum_scope }`,四种表决类型各一组常量。
-- 立法内部表决计票账本:按 `AdminSnapshot` 现任 admins 总数算参与率/赞成率/反对率;二审加反对率上限(< 20%)判定。
+- `VoteType=Regular/RegularEducation/Major/MajorEducation/Special`,五类表决类型与投票引擎 `LEG_VOTE_*` 常量一一对应。
+- 立法内部表决计票账本:按 `AdminSnapshot` 现任 admins 总数算参与率/赞成率;提前否决只做"现有票数已使赞成永不可能达标"的数学短路,不保留额外反对率条件。
 - 两院顺序内部阶段:可配置「机构阶段序列」,单院 = 一段,两院 = 众议会段 → 参议会段,每段独立计票 + 独立阈值。
 - 强制公投计票账本:内部阶段全部通过后强制进入(AND,不是否决救济);门槛 ≥70% 参与 + ≥70% 赞成;作用域全国/省/市;复用核心人口快照验签。
 - 立法专属 Engine trait(如 `LegislationVoteEngine`)+ 终态回调,供 legislation-yuan 业务壳调用与回写。
@@ -283,7 +287,7 @@ LawVersion {
 
 ## 后续动作(任务卡拆分,待 ADR 定稿后逐张创建)
 
-1. 卡1 新增 legislation-vote sub-pallet(核心,先行):`Config: votingengine::Config` 复用核心共享基础 + 本地 `VoteRule`/立法计票账本 + 单院/两院/特别案三模式 + 强制公投 + `LegislationVoteEngine` trait + 测试;internal-vote / joint-vote / election-vote 零改动。
+1. 卡1 新增 legislation-vote sub-pallet(核心,先行):`Config: votingengine::Config` 复用核心共享基础 + 本地五类表决计票账本 + 单院/两院/特别案三模式 + 强制公投 + `LegislationVoteEngine` trait + 测试;internal-vote / joint-vote / election-vote 零改动。
 2. 卡2 legislation-yuan 业务壳:数据模型 + 状态机 + `propose_*`(admin 入口) + Executor + runtime API + 不可修改条款硬拒;调 legislation-vote。
 3. 卡3 双客户端:CitizenApp(浏览+投票)+ CitizenWallet(decoder+签名,ADR-026 新 op_tag)。
 4. 卡4 宪法迁移:HTML → 结构化条文(中英双语),清理旧 include_str!/API。
@@ -296,7 +300,7 @@ LawVersion {
 - 众议会/参议会 = 两个独立机构;两院法案 = 两段顺序内部表决(众→参)。
 - 特别案/核心修宪 = legislation-vote 特别案模式(内部阶段 + 强制公投),不借用 election-vote。
 - 提案恒由 admin 发起;市立法会公民联署门槛为现实前置,不做链上联署入口。
-- 投票引擎按宪法完整实现(参与率%/赞成率%/反对率上限%/强制公投)。
+- 投票引擎按宪法完整实现(参与率%/赞成率%/强制公投/行政签署与会签救济/护宪终审)。
 
 ## 待确认问题(review 时拍板)
 

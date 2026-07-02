@@ -416,21 +416,16 @@ pub async fn list_proposals_by_org(
     .map_err(|e| format!("proposals by org task failed: {e}"))?
 }
 
-/// 反向索引:列出 `ProposalsByInstitution[institution]` 下所有 proposal_id。
+/// 反向索引:列出 `ProposalsByCid[cidNumber]` 下所有 proposal_id。
 #[tauri::command]
-pub async fn list_proposals_by_institution(
-    app: AppHandle,
-    cid_number: String,
-) -> Result<Vec<u64>, String> {
+pub async fn list_proposals_by_cid(app: AppHandle, cid_number: String) -> Result<Vec<u64>, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行,无法查询反向索引".to_string());
     }
-    tauri::async_runtime::spawn_blocking(move || {
-        proposal::fetch_proposals_by_institution(&cid_number)
-    })
-    .await
-    .map_err(|e| format!("proposals by institution task failed: {e}"))?
+    tauri::async_runtime::spawn_blocking(move || proposal::fetch_proposals_by_cid(&cid_number))
+        .await
+        .map_err(|e| format!("proposals by cid task failed: {e}"))?
 }
 
 /// 反向索引:列出 `ProposalsByOwner[module_tag]` 下所有 proposal_id。

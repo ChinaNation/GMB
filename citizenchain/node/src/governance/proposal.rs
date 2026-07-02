@@ -66,8 +66,10 @@ pub struct ProposalMeta {
     /// 仅内部投票:机构码(CID institution_code),序列化为 4 字符展示串。
     #[serde(serialize_with = "serialize_internal_code")]
     pub internal_code: Option<InstitutionCode>,
-    /// 机构多签 AccountId32 hex（不含 0x）。
+    /// 投票/执行账户上下文 AccountId32 hex（不含 0x）,机构身份真源见 `subject_cid_numbers`。
     pub institution_hex: Option<String>,
+    /// 机构类提案关联的机构 CID 列表；个人多签提案为空。
+    pub subject_cid_numbers: Vec<String>,
 }
 
 /// 协议升级提案详情（从 VotingEngine::ProposalData 解码）。
@@ -118,7 +120,7 @@ pub struct ProposalFullInfo {
     pub internal_tally: Option<VoteTally>,
     pub joint_tally: Option<JointVoteTally>,
     pub referendum_tally: Option<ReferendumVoteTally>,
-    /// 关联机构名称（通过 institutionBytes 反查）。
+    /// 关联机构名称（通过 `subject_cid_numbers` 反查）。
     pub cid_full_name: Option<String>,
 }
 
@@ -284,7 +286,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                         status_label: status_label(meta.status).to_string(),
                     },
                 };
-                let cid_full_name = resolve_cid_full_name(meta.institution_hex.as_deref());
+                let cid_full_name = resolve_cid_full_name_by_subjects(&meta.subject_cid_numbers);
                 // 双层 ID v1:展示号从 ProposalDisplayId 反查;查不到 fallback `#id`
                 let display_meta = fetch_proposal_display_id(id).ok().flatten();
 
@@ -363,7 +365,7 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         None
     };
 
-    let cid_full_name = resolve_cid_full_name(meta.institution_hex.as_deref());
+    let cid_full_name = resolve_cid_full_name_by_subjects(&meta.subject_cid_numbers);
 
     Ok(ProposalFullInfo {
         meta,
@@ -435,7 +437,7 @@ fn split_action_into_details(
 
 /// 分页查询指定机构的所有存在提案（从 start_id 往前，按 ID 倒序）。
 ///
-/// 通过机构多签 AccountId 反向索引读取本机构提案。
+/// 通过机构 CID 反向索引读取本机构提案。
 /// 每页最多返回 count 条，has_more 表示是否还有更早的提案。
 pub fn fetch_institution_proposal_page(
     cid_number: &str,
@@ -445,9 +447,9 @@ pub fn fetch_institution_proposal_page(
     let mut items = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
-    // 双层 ID v1:走 ProposalsByInstitution 反向索引,O(本机构提案数),
+    // 双层 ID v1:走 ProposalsByCid 反向索引,O(本机构提案数),
     // 不再扫主键 + 客户端过滤。
-    let mut ids = fetch_proposals_by_institution(cid_number)?;
+    let mut ids = fetch_proposals_by_cid(cid_number)?;
     ids.sort_by(|a, b| b.cmp(a)); // 降序(主键单调,降序即按时间倒序)
 
     // start_id 是上一次翻页返回的最后一个 id - 1。本次取 ids 中 ≤ start_id 的部分。
@@ -478,7 +480,7 @@ pub fn fetch_institution_proposal_page(
                         status_label: status_label(meta.status).to_string(),
                     },
                 };
-                let cid_full_name = resolve_cid_full_name(meta.institution_hex.as_deref());
+                let cid_full_name = resolve_cid_full_name_by_subjects(&meta.subject_cid_numbers);
                 let display_meta = fetch_proposal_display_id(id).ok().flatten();
                 items.push(ProposalListItem {
                     proposal_id: id,
@@ -515,12 +517,8 @@ pub fn fetch_institution_proposal_page(
 
 /// 查询机构的活跃提案 ID 列表。
 pub fn fetch_active_proposal_ids(cid_number: &str) -> Result<Vec<u64>, String> {
-    let institution_account = institution_account_from_cid(cid_number)?;
-    let key = storage_keys::map_key(
-        "VotingEngine",
-        "ActiveProposalsByInstitution",
-        &institution_account,
-    );
+    let subject_key = proposal_subject_institution_cid_key(cid_number)?;
+    let key = storage_keys::map_key("VotingEngine", "ActiveProposalsBySubject", &subject_key);
     // 中文注释(ADR-017):活跃提案索引按 finalized 口径读取,避免 best 漂移漏列。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(Vec::new()),
@@ -721,17 +719,21 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
         None
     };
 
-    // internal_institution: Option<AccountId32>
+    // account_context: Option<AccountId32>
     let institution_hex = if offset < data.len() && data[offset] == 1 {
         offset += 1;
         if offset + 32 <= data.len() {
-            Some(hex::encode(&data[offset..offset + 32]))
+            let value = Some(hex::encode(&data[offset..offset + 32]));
+            offset += 32;
+            value
         } else {
             None
         }
     } else {
+        offset += 1; // skip 0x00 (None)
         None
     };
+    let (subject_cid_numbers, _offset) = decode_subject_cid_numbers(data, offset)?;
 
     Some(ProposalMeta {
         proposal_id,
@@ -740,6 +742,7 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
         status,
         internal_code,
         institution_hex,
+        subject_cid_numbers,
     })
 }
 
@@ -924,6 +927,53 @@ fn read_compact_u32(data: &[u8], offset: usize) -> Result<(u32, usize), String> 
     }
 }
 
+fn encode_compact_u32(value: u32) -> Vec<u8> {
+    if value < (1 << 6) {
+        vec![(value as u8) << 2]
+    } else if value < (1 << 14) {
+        (((value << 2) | 0b01) as u16).to_le_bytes().to_vec()
+    } else {
+        ((value << 2) | 0b10).to_le_bytes().to_vec()
+    }
+}
+
+fn scale_bounded_bytes(raw: &[u8]) -> Vec<u8> {
+    let mut out = encode_compact_u32(raw.len() as u32);
+    out.extend_from_slice(raw);
+    out
+}
+
+fn cid_number_key(cid_number: &str) -> Result<Vec<u8>, String> {
+    let trimmed = cid_number.trim();
+    if trimmed.is_empty() {
+        return Err("机构 CID 不能为空".to_string());
+    }
+    Ok(scale_bounded_bytes(trimmed.as_bytes()))
+}
+
+fn proposal_subject_institution_cid_key(cid_number: &str) -> Result<Vec<u8>, String> {
+    let mut out = vec![0u8]; // ProposalSubject::InstitutionCid(CidNumber)
+    out.extend(cid_number_key(cid_number)?);
+    Ok(out)
+}
+
+fn decode_subject_cid_numbers(data: &[u8], offset: usize) -> Option<(Vec<String>, usize)> {
+    let (count, count_len) = read_compact_u32(data, offset).ok()?;
+    let mut pos = offset + count_len;
+    let mut cids = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        let (len, len_len) = read_compact_u32(data, pos).ok()?;
+        pos += len_len;
+        let end = pos.checked_add(len as usize)?;
+        if end > data.len() {
+            return None;
+        }
+        cids.push(String::from_utf8_lossy(&data[pos..end]).to_string());
+        pos = end;
+    }
+    Some((cids, pos))
+}
+
 // ──── 工具函数 ────
 
 /// 提案展示号格式化(双层 ID v1):
@@ -993,10 +1043,10 @@ pub fn fetch_proposals_by_institution_code(institution_code: &str) -> Result<Vec
     fetch_proposal_ids_by_index("ProposalsByCode", &code)
 }
 
-/// 反向索引:`ProposalsByInstitution[account]` → 本机构多签账户所有 proposal_id。
-pub fn fetch_proposals_by_institution(cid_number: &str) -> Result<Vec<u64>, String> {
-    let institution_account = institution_account_from_cid(cid_number)?;
-    fetch_proposal_ids_by_index("ProposalsByInstitution", &institution_account)
+/// 反向索引:`ProposalsByCid[cid_number]` → 本机构主体所有关联 proposal_id。
+pub fn fetch_proposals_by_cid(cid_number: &str) -> Result<Vec<u64>, String> {
+    let cid_key = cid_number_key(cid_number)?;
+    fetch_proposal_ids_by_index("ProposalsByCid", &cid_key)
 }
 
 /// 反向索引:`ProposalsByOwner[module_tag]` → 该业务模块所有 proposal_id。
@@ -1033,8 +1083,15 @@ fn status_label(status: u8) -> &'static str {
     }
 }
 
-/// 从机构多签 AccountId32 hex 反查机构名称。
-fn resolve_cid_full_name(institution_hex: Option<&str>) -> Option<String> {
+/// 从机构 CID 列表反查第一个可识别的机构名称。
+fn resolve_cid_full_name_by_subjects(subject_cid_numbers: &[String]) -> Option<String> {
+    subject_cid_numbers.iter().find_map(|cid| {
+        super::registry::find_institution(cid).map(|item| item.cid_full_name().to_string())
+    })
+}
+
+/// 从投票/执行账户上下文 AccountId32 hex 反查机构名称。
+fn resolve_cid_full_name_by_account(institution_hex: Option<&str>) -> Option<String> {
     let hex_str = institution_hex?;
     let bytes = hex::decode(hex_str).ok()?;
     if bytes.len() != 32 {
@@ -1055,7 +1112,7 @@ fn fetch_proposal_display(
     let (summary, status, status_label_s) = match action {
         ProposalAction::Business(action) => (
             proposal_business::format_summary(&action, |institution_hex| {
-                resolve_cid_full_name(Some(institution_hex))
+                resolve_cid_full_name_by_account(Some(institution_hex))
             }),
             meta.status,
             status_label(meta.status).to_string(),
@@ -1124,8 +1181,8 @@ fn format_issuance_summary(d: &ResolutionIssuanceDetail) -> String {
 
 fn format_destroy_summary(d: &ResolutionDestroyDetail) -> String {
     let amount: u128 = d.amount_fen.parse().unwrap_or(0);
-    let inst_name =
-        resolve_cid_full_name(Some(&d.institution_hex)).unwrap_or_else(|| "未知机构".to_string());
+    let inst_name = resolve_cid_full_name_by_account(Some(&d.institution_hex))
+        .unwrap_or_else(|| "未知机构".to_string());
     format!(
         "决议销毁 {} 元：{inst_name}",
         signing::format_amount(amount as f64 / 100.0)
@@ -1134,8 +1191,8 @@ fn format_destroy_summary(d: &ResolutionDestroyDetail) -> String {
 
 fn format_fee_rate_summary(d: &FeeRateProposalDetail) -> String {
     let rate_percent = format!("{:.2}%", d.new_rate_bp as f64 / 100.0);
-    let inst_name =
-        resolve_cid_full_name(Some(&d.institution_hex)).unwrap_or_else(|| "未知机构".to_string());
+    let inst_name = resolve_cid_full_name_by_account(Some(&d.institution_hex))
+        .unwrap_or_else(|| "未知机构".to_string());
     format!("费率设置 {rate_percent}：{inst_name}")
 }
 

@@ -82,7 +82,7 @@ pub fn run_desktop() {
             // 双层 ID + 反向索引(spec_version v1)
             governance::get_proposal_display,
             governance::list_proposals_by_org,
-            governance::list_proposals_by_institution,
+            governance::list_proposals_by_cid,
             governance::list_proposals_by_owner,
             admins::admin_management::activation::build_activate_admin_request,
             admins::admin_management::activation::verify_activate_admin,

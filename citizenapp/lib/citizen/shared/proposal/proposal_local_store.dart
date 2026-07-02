@@ -169,7 +169,6 @@ class LocalProposalSummary {
     required this.listSubtitle,
     required this.iconKind,
     required this.updatedAtMillis,
-    this.internalOrg,
     this.internalCode,
     this.institutionBytesHex,
     this.subjectCidNumbers = const [],
@@ -183,7 +182,6 @@ class LocalProposalSummary {
   final int kind;
   final int stage;
   final int status;
-  final int? internalOrg;
   final String? internalCode;
   final String? institutionBytesHex;
   final List<String> subjectCidNumbers;
@@ -211,7 +209,6 @@ class LocalProposalSummary {
         kind: kind,
         stage: stage,
         status: status,
-        internalOrg: internalOrg,
         internalCode: internalCode,
         institutionBytes: _hexToBytes(institutionBytesHex),
         subjectCidNumbers: subjectCidNumbers,
@@ -298,7 +295,6 @@ class LocalProposalSummary {
       kind: meta.kind,
       stage: meta.stage,
       status: meta.status,
-      internalOrg: meta.internalOrg,
       internalCode: meta.internalCode,
       institutionBytesHex: _bytesToHex(meta.institutionBytes),
       subjectCidNumbers: meta.subjectCidNumbers,
@@ -319,7 +315,6 @@ class LocalProposalSummary {
         'kind': kind,
         'stage': stage,
         'status': status,
-        'internal_org': internalOrg,
         'internal_code': internalCode,
         'institution_bytes_hex': institutionBytesHex,
         'subject_cid_numbers': subjectCidNumbers,
@@ -364,7 +359,6 @@ class LocalProposalSummary {
         kind: kind,
         stage: stage,
         status: status,
-        internalOrg: _toInt(decoded['internal_org']),
         internalCode: _toNullableString(decoded['internal_code']),
         institutionBytesHex:
             _toNullableString(decoded['institution_bytes_hex']),

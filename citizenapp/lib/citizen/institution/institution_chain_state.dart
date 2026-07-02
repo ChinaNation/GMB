@@ -1,5 +1,5 @@
 // 统一机构链态读服务(ADR-028 决策 2)——合并公权 `LivePublicInstitutionChainData`
-// 与治理侧 admins 读取为一套:按机构主账户读 余额 / 管理员 / 提案,公权治理同路径。
+// 与治理侧 admins 读取为一套:按机构 CID 过滤提案,按账户上下文读余额 / 管理员。
 //
 // 中文注释:
 // - 管理员身份路由按机构码统一:固定治理档走 governanceInstitution,

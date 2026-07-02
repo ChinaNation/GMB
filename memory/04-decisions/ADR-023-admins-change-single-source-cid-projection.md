@@ -33,7 +33,7 @@
 
 > 决定性事实:创世 `build()`(`lib.rs:306-356`)直写 `AdminAccounts` **零 `deposit_event`**。纯 indexer 永远看不到创世写入 → 必须配启动快照。
 
-- **通道① 启动全量快照**:subxt `storage().at(finalized).iter("AdminsChange","AdminAccounts")` 全量迭代 → 按机构主账户反查 `subjects.org_code` 只投影 FEDERAL/CITY 注册局 → upsert。失败仅 warn 不阻断 serve。
+- **通道① 启动全量快照**:subxt `storage().at(finalized).iter("AdminsChange","AdminAccounts")` 全量迭代 → 以 AdminAccounts key 解析对应机构 CID 元数据,只投影 `registry_org_code=FEDERAL_REGISTRY/CITY_REGISTRY` 的注册局 → upsert。失败仅 warn 不阻断 serve。
 - **通道② indexer 增量**:监听 finalized 的 `AdminSetChanged/AdminAccountActivated/AdminAccountClosed`(事件只含 `admins_len` 不含名单 → 必须按 account 做 storage 点查取最新 admins)→ upsert/删除。
 
 **安全栏(评审阻塞项)**:reconcile 只在快照完整无错才删 + 阈值守卫(联邦 admin<200 放弃删除)+ `federal_registry_scope` CASCADE 走单事务;冲突键统一 `lower(admin_account)` + 0x 小写 hex;高危写动作 commit 前实时点查防窗口期提权;`delete_admin_runtime_state_conn` 包单事务。
