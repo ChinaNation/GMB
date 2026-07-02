@@ -159,6 +159,15 @@
   - `flutter test test/legislation/legislation_codec_test.dart`：通过，6 项测试通过，新增 `decodeLawVersionLabel` 金标。
   - `npm --prefix citizenchain/onchina/frontend run build`：通过；仅 Vite 既有大 chunk 提醒。
   - `git diff --check`：通过。
+- 2026-07-02 冻结 chainspec 重烤验收：
+  - 使用 GitHub Actions `CitizenChain WASM` 成功 run `28563809460` 的 `citizenchain.compact.compressed.wasm` 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm ...`；CI WASM SHA256 为 `bec648d3dfa7d4e8cd96d23c3f6c0d780977932e068b1a1b972bd3906b9cf9ee`。
+  - `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json` 已同步为同一份冻结 SSOT，SHA256 均为 `81c73e0054bc6717f820928f9d552f87e71e014de01bc90755478fb50762b64d`。
+  - `python3 citizenchain/scripts/check-constitution-genesis.py ... --expect-code-file ...`：两份冻结 chainspec 均通过，`:code` 与 CI WASM 一致，宪法 `law_id=0`、`effective_version=1`、`latest_version=1`、`pending=None`，不可修改条款为 `1,2,3,17,19,24,34,42`。
+  - 静态解析两份冻结 chainspec：`LawVersionLabels[0][1] = 创世版 / Genesis Edition`，`LawVersionLabels[0][2]` 不存在。
+  - 静态解析两份冻结 chainspec 内 `LawVersions[0][1]`：旧词 `省级行政区 / 市级行政区 / 镇级行政区 / 各级行政区 / 各级政府 / 国家级荣誉称号 / 由省、市、镇共三级组成 / 护宪大法官7人 / 每个省级行政区可选出3名 / 大学校教委会 / 本省省参议会 / 权责立即失效` 均为 0。
+  - 使用新冻结 chainspec 以 `CITIZENCHAIN_HEADLESS=1` 和仓库外 `/tmp` base-path 启动临时节点，RPC `chain_getBlockHash(0)` 返回 `0x968c7eaf68a5f138fc1eef1dbe0f2b398274216d15d06805dc1d801904cad154`，`state_getStorage(LawVersionLabels[0][1])` 返回 `创世版 / Genesis Edition`。
+  - 临时节点 `constitution_getDocument` 返回 HTML 已包含 `创世版 / Genesis Edition` 和 `不可修改条款 / Immutable Clause`，且不包含 `省级行政区 / 市级行政区 / 镇级行政区 / 护宪大法官7人 / 每个省级行政区可选出3名`。
+  - `git diff --check`：通过。
 
 残留清理：
 - 未新增 Isar schema、未新增业务目录。
