@@ -10,7 +10,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 扫码支付清算体系付款确认页。
 ///
-/// 中文注释:
+///
 /// - 入口:`offchain_scan_flow.dart` 扫商户码成功后跳转过来
 ///   (商户码 `UserTransferBody` 的 `bank` 字段是收款方清算行 `cid_number`)。
 /// - Step 3 范围:同行 / 跨行都提交到**收款方清算行节点**,与 runtime

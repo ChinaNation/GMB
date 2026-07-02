@@ -1,4 +1,4 @@
-// 中文注释:公权机构前端 API。市公安局已折叠为普通公权机构,与自动公权目录同走 gov 模块。
+// 公权机构前端 API。市公安局已折叠为普通公权机构,与自动公权目录同走 gov 模块。
 // 手动新增两能力:公权机构(G,ZF/LF/SF/JC,排除储备体系自动目录代码)+ 公权下属非法人(F,挂公法人);
 // JY 教育机构归 education 模块。
 
@@ -69,7 +69,7 @@ export async function checkCidFullName(
   );
 }
 
-// 中文注释:创建公权机构属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
+// 创建公权机构属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
 export async function createInstitution(
   auth: AdminAuth,
   input: CreateInstitutionInput,
@@ -116,7 +116,7 @@ export async function uploadLegalRepresentativePhoto(
   );
 }
 
-// 中文注释:所属法人搜索(公权入口 parentProperty=G → 本市市级/本省省级/国家级公法人)。
+// 所属法人搜索(公权入口 parentProperty=G → 本市市级/本省省级/国家级公法人)。
 // 后端按 subjects/unincorporated_org 规则预过滤,前端不再兜底过滤。
 export async function searchParentInstitutions(
   auth: AdminAuth,

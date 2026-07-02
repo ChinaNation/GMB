@@ -1,6 +1,6 @@
 //! sr25519 pubkey 规范化与等值比较
 //!
-//! 中文注释:这是跨业务通用的 sr25519 公钥工具,归入 `crypto`。
+//! 这是跨业务通用的 sr25519 公钥工具,归入 `crypto`。
 //! 内部统一 0x 小写 hex,前端展示 SS58(prefix=2027),禁止混用。
 
 use crate::auth::login::{parse_sr25519_pubkey, parse_sr25519_pubkey_bytes};
@@ -32,7 +32,7 @@ fn same_sr25519_pubkey(left: &str, right: &str) -> bool {
 
 /// 从 SS58 地址解出 0x 小写 hex 公钥。
 ///
-/// 中文注释:SS58↔hex 互转是跨业务通用的钱包地址工具,归入 `crypto::pubkey`。
+/// SS58↔hex 互转是跨业务通用的钱包地址工具,归入 `crypto::pubkey`。
 pub(crate) fn ss58_to_pubkey_hex(address: &str) -> Option<String> {
     let decoded = bs58::decode(address.trim()).into_vec().ok()?;
     let prefix_len = if decoded.first().copied().unwrap_or(0) < 64 {

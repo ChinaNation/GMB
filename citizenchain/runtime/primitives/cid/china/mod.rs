@@ -7,7 +7,7 @@ pub mod china_sf;
 pub mod china_zb;
 pub mod china_zf;
 
-/// 中文注释:内置机构名称四元组的 runtime 指纹。
+/// 内置机构名称四元组的 runtime 指纹。
 ///
 /// `china_*.rs` 中的 `cid_full_name/cid_short_name/cid_full_name_en/cid_short_name_en`
 /// 是链上防改锚点:CID 可以修改自己的投影名称,但这些内置机构名称要在链上生效必须随

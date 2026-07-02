@@ -1,6 +1,6 @@
 //! 预算案(政府收支预算)字段 schema —— Phase 4 预留,仅锁数据形。
 //!
-//! 中文注释:四级收支科目 类>款>项>目;**仅「目」(叶子)携金额**,类/款/项 金额由子项汇总
+//! 四级收支科目 类>款>项>目;**仅「目」(叶子)携金额**,类/款/项 金额由子项汇总
 //! (展示/服务层计算,不冗余存储,避免重复计数)。金额单位**分**(`u128`),序列化为**字符串**
 //! (国家级预算约 10^16 分,超 JS `Number` 安全整数 2^53,必须以 string 承载防精度丢失)。
 //! `code` 编码规则(国标 vs 自定义)待定,当前自由文本。camelCase 出线对齐既有 DTO 契约。
@@ -14,7 +14,7 @@ use crate::domains::legislation::model::ProposalCategory;
 
 /// `u128`(分)与 JSON 字符串互转的 serde 适配器。
 ///
-/// 中文注释:预算金额可超 2^53,JSON 数字在 JS 侧会丢精度,故金额一律以字符串出线/入线。
+/// 预算金额可超 2^53,JSON 数字在 JS 侧会丢精度,故金额一律以字符串出线/入线。
 mod fen_string {
     use serde::{Deserialize, Deserializer, Serializer};
 
@@ -91,7 +91,7 @@ pub struct BudgetPlan {
 
 /// 发起预算案请求体。
 ///
-/// 中文注释:表决院(houses)由后端按 `tier` + `scope_code` 解析(立法机关单院),不收前端;
+/// 表决院(houses)由后端按 `tier` + `scope_code` 解析(立法机关单院),不收前端;
 /// `scope_code` 由会话派生覆盖(对齐 `ProposeLawInput` 纪律)。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

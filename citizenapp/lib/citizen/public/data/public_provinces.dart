@@ -1,6 +1,6 @@
 // 公权机构省份导航来源 —— 复用治理省储会的同一行政区(不新建)。
 //
-// 中文注释:省份是固定行政区划(43 省),与机构数据是否加载无关,必须始终全显
+// 省份是固定行政区划(43 省),与机构数据是否加载无关,必须始终全显
 // (对称治理 tab 的 43 省储会编译期常量)。
 //
 // ADR-021 行政区唯一真源:机构记录只存 province/city/town code;省名走链上常量
@@ -84,7 +84,7 @@ String provinceDisplayNameByCode(String code) {
 
 /// 省份**展示名**:去掉末尾"省"字。
 ///
-/// 中文注释:展示一律不带"省"(中枢/岭南/广东);但匹配/查询仍用 code。
+/// 展示一律不带"省"(中枢/岭南/广东);但匹配/查询仍用 code。
 /// 名字与 code 职责分离,不可混用。
 String provinceDisplayName(String fullProvince) => fullProvince.endsWith('省')
     ? fullProvince.substring(0, fullProvince.length - 1)

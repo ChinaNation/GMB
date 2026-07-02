@@ -33,7 +33,7 @@ pub(crate) async fn indexer_worker(db_pool: Db) {
                 info!("indexer loop exited normally, restarting in {backoff_secs}s");
             }
             Err(err) => {
-                // 中文注释:链节点未启动是允许的降级状态,只提示后台索引稍后重试。
+                // 链节点未启动是允许的降级状态,只提示后台索引稍后重试。
                 if err.contains("connect rpc") {
                     warn!(
                         error = %err,

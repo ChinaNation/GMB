@@ -53,7 +53,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
   bool _submitting = false;
   double? _availableBalance;
 
-  /// 中文注释：链上余额刷新失败、当前展示的是本地缓存旧值时置位，
+  /// 链上余额刷新失败、当前展示的是本地缓存旧值时置位，
   /// UI 必须明示"可能已过期"，防止用户拿过期余额提交转账。
   bool _balanceStale = false;
   double _estimatedFee = 0.0;
@@ -380,7 +380,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
 
   bool get _canSubmit => !_submitting && _submitBlockedReason == null;
 
-  /// 中文注释：提案页允许用户先填写表单，但链未连上或仍在同步时禁止真正提交。
+  /// 提案页允许用户先填写表单，但链未连上或仍在同步时禁止真正提交。
   String? get _submitBlockedReason {
     final progress = _chainProgress;
     if (progress == null) {
@@ -716,7 +716,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
             ),
           ),
         ),
-        // 中文注释：个人多签和机构账户共用 OrgType.account；
+        // 个人多签和机构账户共用 OrgType.account；
         // 这里不显示笼统 badge，避免把个人多签误标成机构账户。
         // 直接不显示标签,只显示多签账户名(已足够标识)。
       ],

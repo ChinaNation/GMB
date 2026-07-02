@@ -1,6 +1,6 @@
 //! 行政区只读读取层。
 //!
-//! 中文注释:行政区唯一源是 CID 维护的 `china.sqlite`;CPMS 安装包随附其只读拷贝,
+//! 行政区唯一源是 CID 维护的 `china.sqlite`;CPMS 安装包随附其只读拷贝,
 //! 不在 CPMS 侧保存或维护第二套行政区源。路径优先环境变量 `CPMS_CHINA_DB`,
 //! 默认二进制同目录 `./china.sqlite`,与 `CPMS_FRONTEND_DIR` 的约定一致。
 //!
@@ -35,7 +35,7 @@ pub(crate) struct TownArea {
     pub address_units: Vec<AddressUnitArea>,
 }
 
-/// 单个地址段。中文注释:地址段是镇下面的地名段,不是行政区 code。
+/// 单个地址段,位于镇下面,不是行政区 code。
 pub(crate) struct AddressUnitArea {
     pub id: String,
     pub name: String,
@@ -43,7 +43,6 @@ pub(crate) struct AddressUnitArea {
 
 /// 解析 china.sqlite 路径，三层兜底。
 ///
-/// 中文注释：
 /// 1) 环境变量 `CPMS_CHINA_DB`——生产由 install_host 写入 `/opt/citizenpassport/data/china.sqlite`，
 ///    dev 也可手动覆盖；设了就信任原值（设错即 fail-loud）。
 /// 2) 二进制旁 `<exe_dir>/../data/china.sqlite`——部署自定位（`/opt/citizenpassport/bin` → `/opt/citizenpassport/data`），
@@ -77,7 +76,7 @@ fn open() -> Result<Connection, String> {
         .map_err(|e| format!("open china sqlite {path} failed: {e}"))
 }
 
-/// 读取全国省份。中文注释：出生地选择只读 CPMS 随包的 CID 行政区唯一真源拷贝。
+/// 读取全国省份,只读随包的 CID 行政区真源拷贝。
 pub(crate) fn provinces() -> Result<Vec<ProvinceArea>, String> {
     let conn = open()?;
     let mut stmt = conn

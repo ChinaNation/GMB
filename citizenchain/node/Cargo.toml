@@ -97,7 +97,7 @@ frame-system-rpc-runtime-api = { workspace = true, default-features = true }
 
 # 桌面 GUI（Tauri）
 tauri = { version = "2", features = [] }
-# 中文注释：必须用 ~2.6 而不是 "2"，否则 cargo 会拉到 2.7.0，
+# 必须用 ~2.6 而不是 "2"，否则 cargo 会拉到 2.7.0，
 # 而 frontend/package-lock.json 锁的是 2.6.0，Tauri build 时会因为
 # major/minor 版本不一致直接 fail（"Found version mismatched Tauri packages"）。
 tauri-plugin-dialog = "~2.6"

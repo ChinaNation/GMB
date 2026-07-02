@@ -15,13 +15,13 @@ type CameraQrScannerProps = {
   busy?: boolean;
   size?: number;
   showButton?: boolean;
-  // 中文注释：开启后在统一组件内渲染「上传二维码」入口，与摄像头共用 BarcodeDetector 和 onDetected，
+  // 开启后在统一组件内渲染「上传二维码」入口，与摄像头共用 BarcodeDetector 和 onDetected，
   // 不在页面里另起第二套扫码逻辑；图片只在前端本地解析。
   allowUpload?: boolean;
   uploadLabel?: string;
 };
 
-// 中文注释：CPMS 所有二维码读取统一走摄像头，禁止在页面内分散实现第二套扫码入口。
+// CPMS 所有二维码读取统一走摄像头，禁止在页面内分散实现第二套扫码入口。
 export default function CameraQrScanner({
   active,
   onActiveChange,

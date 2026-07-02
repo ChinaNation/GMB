@@ -57,7 +57,7 @@ class ImMlsWireMessage {
 
   /// 转为 GMB_IM_V1 外层 envelope。
   ///
-  /// 中文注释：OpenMLS wire bytes 和 ratchet tree 都是密文/协议字节，
+  /// OpenMLS wire bytes 和 ratchet tree 都是密文/协议字节，
   /// 节点只负责保存与转发，不解析其中内容。
   ImEnvelope toEnvelope({
     required String envelopeId,

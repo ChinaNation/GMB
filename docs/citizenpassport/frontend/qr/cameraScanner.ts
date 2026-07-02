@@ -85,7 +85,7 @@ export function startCameraScanner(
 /**
  * 从用户上传的图片文件中识别二维码内容。
  *
- * 中文注释：上传二维码与摄像头扫码共用 BarcodeDetector，只产生一份二维码原文，
+ * 上传二维码与摄像头扫码共用 BarcodeDetector，只产生一份二维码原文，
  * 仍交给调用方已有的 onDetected 流程，不新增第二套业务逻辑；图片只在前端本地解析。
  */
 export async function decodeQrImageFile(file: File): Promise<string> {

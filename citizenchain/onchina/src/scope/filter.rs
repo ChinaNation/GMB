@@ -1,6 +1,6 @@
 //! 按 VisibleScope 过滤泛型列表
 //!
-//! 中文注释:凡带 province/city 字段的记录类型都可以 impl `HasProvinceCity`,
+//! 凡带 province/city 字段的记录类型都可以 impl `HasProvinceCity`,
 //! 然后通过 `filter_by_scope(rows, &scope)` 自动过滤。避免每个 list handler
 //! 都手写一遍省/市过滤逻辑。
 

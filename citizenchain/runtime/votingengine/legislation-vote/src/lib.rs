@@ -376,11 +376,7 @@ pub mod pallet {
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────
 // 业务方法
-// ──────────────────────────────────────────────────────────────────
-
 impl<T: Config> Pallet<T> {
     fn stage_duration() -> frame_system::pallet_prelude::BlockNumberFor<T> {
         use sp_runtime::traits::SaturatedConversion;
@@ -501,7 +497,7 @@ impl<T: Config> Pallet<T> {
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            // 中文注释:立法提案可能关联多机构,互斥锁以所有关联 CID 为主体占用。
+            // 立法提案可能关联多机构,互斥锁以所有关联 CID 为主体占用。
             for subject in proposal.subject_keys() {
                 if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                     id,
@@ -1102,11 +1098,7 @@ impl<T: Config> Pallet<T> {
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────
 // trait 实现(供 votingengine 核心 + 业务壳接入)
-// ──────────────────────────────────────────────────────────────────
-
 impl<T: Config> votingengine::LegislationVoteEngine<T::AccountId> for Pallet<T> {
     fn create_legislation_proposal(
         who: T::AccountId,

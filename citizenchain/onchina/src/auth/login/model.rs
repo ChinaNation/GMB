@@ -89,7 +89,7 @@ pub(crate) struct AdminAuthContext {
     pub(crate) scope_city_name: Option<String>,
     /// 镇级机构有值：登记的镇（用于列表按镇过滤、生成时强制锁定）。
     pub(crate) scope_town_name: Option<String>,
-    /// 中文注释:当前管理员所属机构简称,字段名与 subjects.cid_short_name 保持唯一命名。
+    /// 当前管理员所属机构简称,字段名与 subjects.cid_short_name 保持唯一命名。
     pub(crate) cid_short_name: Option<String>,
 }
 

@@ -1,7 +1,7 @@
 //! # 管理员模块 (admins)
 //!
 //! 管理员管理仅 admins 分组可访问。
-//! 中文注释：公民状态变更属于档案业务，允许 admins 与 operators。
+//! 公民状态变更属于档案业务，允许 admins 与 operators。
 
 use axum::{
     extract::{Path, State},
@@ -133,7 +133,7 @@ async fn create_admin(
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
-    // 中文注释：管理员总数上限必须和插入共用锁，避免并发新增突破 5 个。
+    // 管理员总数上限必须和插入共用锁，避免并发新增突破 5 个。
     sqlx::query("LOCK TABLE admin_users IN SHARE ROW EXCLUSIVE MODE")
         .execute(tx.as_mut())
         .await
@@ -321,7 +321,7 @@ async fn delete_admin(
             )
         })?;
 
-    // 中文注释：除初始管理员外，管理员物理删除后只靠审计快照追溯。
+    // 除初始管理员外，管理员物理删除后只靠审计快照追溯。
     sqlx::query(
         "INSERT INTO audit_logs (log_id, operator_user_id, action, target_type, target_id, result, detail, created_at)
          VALUES ($1, $2, 'DELETE_ADMIN', 'ADMIN_USER', $3, 'SUCCESS', $4, $5)",

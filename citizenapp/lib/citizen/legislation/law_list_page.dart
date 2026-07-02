@@ -7,7 +7,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 某立法机构的法律列表(ADR-028 P3-1)——`list_laws(tier, scope)`。
 ///
-/// 中文注释:由立法机构详情页「法律原文」入口进入;tier/scope 由机构派生。
+/// 由立法机构详情页「法律原文」入口进入;tier/scope 由机构派生。
 /// 列表项标题取公民端默认阅读版本(同一 api 实例缓存,点进阅读器复用不重拉)。
 class LawListPage extends StatefulWidget {
   const LawListPage({

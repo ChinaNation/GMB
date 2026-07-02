@@ -378,7 +378,7 @@ where
                     )
                 })?;
 
-            // 中文注释：将 GRANDPA AuthoritySet 编码为 smoldot 要求的完整格式。
+            // 将 GRANDPA AuthoritySet 编码为 smoldot 要求的完整格式。
             // smoldot authority_set 解析器期望：
             //   Vec<(AuthorityId, u64)>    ← authorities（从 Grandpa::Authorities 存储读取）
             //   u64                        ← set_id

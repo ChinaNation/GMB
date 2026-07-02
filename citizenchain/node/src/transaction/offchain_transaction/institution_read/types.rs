@@ -1,6 +1,6 @@
 // 清算行机构只读查询的 Tauri DTO,与前端 transaction/offchain-transaction/institution/types.ts 对齐。
 //
-// 中文注释:
+//
 // - 本文件承载清算行流程需要的机构身份只读类型:资格候选、账户余额、机构详情、提案分页、CID 注册凭证。
 // - 机构创建(propose_create_institution)已迁出节点,归 onchina 控制台,故本文件不含任何创建输入类型。
 

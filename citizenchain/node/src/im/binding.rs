@@ -1,5 +1,7 @@
-use primitives::sign::IM_WALLET_BINDING_DOMAIN;
+use codec::Encode;
+use primitives::sign::{signing_message, OP_SIGN_IM_WALLET_BINDING};
 use serde::{Deserialize, Serialize};
+use sp_core::Pair;
 
 use super::endpoint::ImNodeEndpoint;
 
@@ -22,30 +24,33 @@ pub(crate) struct RegisterImDeviceRequest {
     pub(crate) expires_at_millis: u64,
     /// 防重放 nonce。
     pub(crate) nonce: String,
-    /// 钱包账户对 canonical payload 的签名。
+    /// 钱包账户对 `signing_message(OP_SIGN_IM_WALLET_BINDING, payload)` 的签名。
     pub(crate) wallet_signature: String,
 }
 
 impl RegisterImDeviceRequest {
-    /// 构造稳定签名载荷。
-    pub(crate) fn canonical_payload(&self) -> String {
+    /// 构造稳定 SCALE 签名载荷。
+    pub(crate) fn signing_payload(&self) -> Vec<u8> {
         let endpoints = self
             .node_endpoints
             .iter()
             .map(|endpoint| endpoint.multiaddr.as_str())
-            .collect::<Vec<_>>()
-            .join(",");
-        [
-            IM_WALLET_BINDING_DOMAIN,
+            .collect::<Vec<_>>();
+        (
             self.wallet_account.as_str(),
             self.im_device_id.as_str(),
             self.im_device_pubkey.as_str(),
             self.node_peer_id.as_str(),
-            endpoints.as_str(),
-            &self.expires_at_millis.to_string(),
+            endpoints,
+            self.expires_at_millis,
             self.nonce.as_str(),
-        ]
-        .join("|")
+        )
+            .encode()
+    }
+
+    /// 构造统一哈希域签名消息。
+    pub(crate) fn signing_message(&self) -> [u8; 32] {
+        signing_message(OP_SIGN_IM_WALLET_BINDING, &self.signing_payload())
     }
 
     /// 校验绑定请求的私人节点边界。
@@ -64,6 +69,28 @@ impl RegisterImDeviceRequest {
             if endpoint.peer_id != self.node_peer_id {
                 return Err("IM 绑定端点 PeerId 必须等于 node_peer_id".to_string());
             }
+        }
+        self.verify_wallet_signature()?;
+        Ok(())
+    }
+
+    fn verify_wallet_signature(&self) -> Result<(), String> {
+        let wallet_pubkey =
+            crate::governance::signing::decode_ss58_to_pubkey(&self.wallet_account)?;
+        let signature_hex = self
+            .wallet_signature
+            .strip_prefix("0x")
+            .or_else(|| self.wallet_signature.strip_prefix("0X"))
+            .unwrap_or(&self.wallet_signature);
+        let signature_bytes =
+            hex::decode(signature_hex).map_err(|e| format!("IM 绑定签名 hex 解码失败: {e}"))?;
+        let signature = sp_core::sr25519::Signature::from_raw(
+            <[u8; 64]>::try_from(signature_bytes.as_slice())
+                .map_err(|_| "IM 绑定签名长度必须为 64 字节".to_string())?,
+        );
+        let public = sp_core::sr25519::Public::from_raw(wallet_pubkey);
+        if !sp_core::sr25519::Pair::verify(&signature, &self.signing_message(), &public) {
+            return Err("IM 绑定钱包签名验证失败".to_string());
         }
         Ok(())
     }
@@ -88,13 +115,13 @@ pub(crate) struct ImDeviceBinding {
     pub(crate) nonce: String,
     /// 钱包签名。
     pub(crate) wallet_signature: String,
-    /// 节点返回的 canonical payload，方便公民端调试签名一致性。
-    pub(crate) canonical_payload: String,
+    /// 节点返回的 SCALE 签名载荷 hex，方便公民端调试签名一致性。
+    pub(crate) signing_payload_hex: String,
 }
 
 impl From<RegisterImDeviceRequest> for ImDeviceBinding {
     fn from(request: RegisterImDeviceRequest) -> Self {
-        let canonical_payload = request.canonical_payload();
+        let signing_payload_hex = format!("0x{}", hex::encode(request.signing_payload()));
         Self {
             wallet_account: request.wallet_account,
             im_device_id: request.im_device_id,
@@ -104,7 +131,7 @@ impl From<RegisterImDeviceRequest> for ImDeviceBinding {
             expires_at_millis: request.expires_at_millis,
             nonce: request.nonce,
             wallet_signature: request.wallet_signature,
-            canonical_payload,
+            signing_payload_hex,
         }
     }
 }
@@ -120,11 +147,14 @@ fn require_non_empty(field_name: &str, value: &str) -> Result<(), String> {
 mod tests {
     use super::RegisterImDeviceRequest;
     use crate::im::endpoint::ImNodeEndpoint;
+    use sp_core::{sr25519, Pair};
 
-    #[test]
-    fn binding_payload_is_stable() {
-        let request = RegisterImDeviceRequest {
-            wallet_account: "alice".to_string(),
+    fn signed_request() -> RegisterImDeviceRequest {
+        let pair = sr25519::Pair::from_seed(&[0x42; 32]);
+        let wallet_account = crate::governance::signing::pubkey_to_ss58(pair.public().as_ref())
+            .expect("test public key should encode");
+        let mut request = RegisterImDeviceRequest {
+            wallet_account,
             im_device_id: "alice-phone".to_string(),
             im_device_pubkey: "0xabc".to_string(),
             node_peer_id: "12D3KooWTest".to_string(),
@@ -135,13 +165,30 @@ mod tests {
             .expect("test endpoint should be valid")],
             expires_at_millis: 1_800_000,
             nonce: "nonce-1".to_string(),
-            wallet_signature: "0xsig".to_string(),
+            wallet_signature: String::new(),
         };
+        let signature = pair.sign(&request.signing_message());
+        request.wallet_signature = format!("0x{}", hex::encode(signature.0));
+        request
+    }
 
-        assert_eq!(
-            request.canonical_payload(),
-            "GMB_IM_WALLET_BINDING_V1|alice|alice-phone|0xabc|12D3KooWTest|/ip4/127.0.0.1/tcp/30333/wss/p2p/12D3KooWTest|1800000|nonce-1"
-        );
+    #[test]
+    fn binding_payload_is_scale_and_signature_validates() {
+        let request = signed_request();
+
+        assert!(request.signing_payload().len() > request.wallet_account.len());
         assert!(request.validate().is_ok());
+    }
+
+    #[test]
+    fn rejects_forged_wallet_signature() {
+        let mut request = signed_request();
+        request.wallet_signature = format!("0x{}", "00".repeat(64));
+
+        let err = request
+            .validate()
+            .expect_err("forged signature must be rejected");
+
+        assert!(err.contains("签名验证失败"));
     }
 }

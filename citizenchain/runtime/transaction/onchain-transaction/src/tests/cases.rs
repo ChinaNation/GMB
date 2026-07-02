@@ -408,7 +408,7 @@ fn fee_router_burns_fullnode_share_when_reward_wallet_resolve_fails() {
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 
         TestExistentialDeposit::set(100);
-        // 中文注释：只让全节点奖励钱包保持未创建状态，确保本用例命中 fullnode resolve 失败。
+        // 只让全节点奖励钱包保持未创建状态，确保本用例命中 fullnode resolve 失败。
         let _ = Balances::deposit_creating(&nrc, 100);
         let _ = Balances::deposit_creating(&safety_fund, 100);
         let issuance_before = Balances::total_issuance();
@@ -482,7 +482,7 @@ fn fee_router_burns_nrc_share_when_resolve_fails() {
         let expected_burn = expected_nrc;
 
         TestExistentialDeposit::set(100);
-        // 中文注释：本用例只验证 NRC 新账户低于 ED 时被销毁；
+        // 本用例只验证 NRC 新账户低于 ED 时被销毁；
         // 安全基金账户先置为已存在账户，避免同样低于 ED 的份额也被销毁。
         let safety_fund_initial = 100;
         let _ = Balances::deposit_creating(&safety_fund, safety_fund_initial);
@@ -545,7 +545,7 @@ fn fee_router_burns_safety_fund_share_when_resolve_fails() {
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 
         TestExistentialDeposit::set(100);
-        // 中文注释：全节点钱包与 NRC 账户先置为已存在账户，只让安全基金新账户低于 ED。
+        // 全节点钱包与 NRC 账户先置为已存在账户，只让安全基金新账户低于 ED。
         let _ = Balances::deposit_creating(&reward_wallet, 100);
         let _ = Balances::deposit_creating(&nrc, 100);
         let issuance_before = Balances::total_issuance();

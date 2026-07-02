@@ -22,11 +22,7 @@ class AppLockService {
   static const int maxFailAttempts = 5;
   static const int maxLockCount = 3;
   static const Duration lockDuration = Duration(hours: 24);
-
-  // ---------------------------------------------------------------------------
   // PIN 管理
-  // ---------------------------------------------------------------------------
-
   /// 设置 6 位 PIN。
   static Future<void> setPin(String pin) async {
     final salt = _generateSalt();
@@ -95,11 +91,7 @@ class AppLockService {
     final hash = await _secure.read(key: _keyPinHash);
     return hash != null && hash.isNotEmpty;
   }
-
-  // ---------------------------------------------------------------------------
   // 锁定状态
-  // ---------------------------------------------------------------------------
-
   /// 当前是否处于 24h 锁定期。
   static Future<bool> isLocked() async {
     final lockUntilStr = await _secure.read(key: _keyLockUntil);
@@ -124,11 +116,7 @@ class AppLockService {
 
   /// 当前累计锁定次数。
   static Future<int> getLockCount() async => _readInt(_keyLockCount);
-
-  // ---------------------------------------------------------------------------
   // 数据清空
-  // ---------------------------------------------------------------------------
-
   /// 清空全部应用数据：Isar DB + SecureStorage + SharedPreferences。
   static Future<void> wipeAllData() async {
     // 1. 关闭并删除 Isar 数据库
@@ -145,11 +133,7 @@ class AppLockService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
-
-  // ---------------------------------------------------------------------------
   // 内部工具
-  // ---------------------------------------------------------------------------
-
   static String _generateSalt() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));

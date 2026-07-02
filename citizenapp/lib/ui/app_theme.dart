@@ -5,11 +5,7 @@ import 'package:flutter/material.dart';
 /// 设计语言：翠绿品牌色 + 干净白底 + 柔和阴影，体现公民治理 app 专业、可信赖的气质。
 class AppTheme {
   AppTheme._();
-
-  // ---------------------------------------------------------------------------
   // 色板
-  // ---------------------------------------------------------------------------
-
   /// 背景色系
   static const Color scaffoldBg = Color(0xFFF7F9FC);
   static const Color surfaceWhite = Color(0xFFFFFFFF);
@@ -51,11 +47,7 @@ class AppTheme {
 
   /// 已拒绝 (红)
   static const Color rejected = Color(0xFFEF4444);
-
-  // ---------------------------------------------------------------------------
   // 渐变
-  // ---------------------------------------------------------------------------
-
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [Color(0xFF26A69A), Color(0xFF00796B)],
     begin: Alignment.topLeft,
@@ -73,20 +65,12 @@ class AppTheme {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
-
-  // ---------------------------------------------------------------------------
   // 圆角 & 间距
-  // ---------------------------------------------------------------------------
-
   static const double radiusSm = 8;
   static const double radiusMd = 12;
   static const double radiusLg = 16;
   static const double radiusXl = 24;
-
-  // ---------------------------------------------------------------------------
   // 卡片装饰
-  // ---------------------------------------------------------------------------
-
   static BoxDecoration cardDecoration({
     bool selected = false,
     double radius = radiusMd,
@@ -126,11 +110,7 @@ class AppTheme {
       ],
     );
   }
-
-  // ---------------------------------------------------------------------------
   // 状态提示装饰（用于 banner / 提示条）
-  // ---------------------------------------------------------------------------
-
   static BoxDecoration bannerDecoration(Color color) {
     return BoxDecoration(
       color: color.withAlpha(18),
@@ -138,11 +118,7 @@ class AppTheme {
       border: Border.all(color: color.withAlpha(50)),
     );
   }
-
-  // ---------------------------------------------------------------------------
   // 提案状态颜色
-  // ---------------------------------------------------------------------------
-
   static Color proposalStatusColor(int status) {
     switch (status) {
       case 0:
@@ -159,11 +135,7 @@ class AppTheme {
         return textTertiary;
     }
   }
-
-  // ---------------------------------------------------------------------------
   // ThemeData
-  // ---------------------------------------------------------------------------
-
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,

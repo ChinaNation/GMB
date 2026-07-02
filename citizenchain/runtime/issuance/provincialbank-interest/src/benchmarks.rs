@@ -60,7 +60,7 @@ mod benchmarks {
     #[benchmark]
     fn on_initialize_boundary_noop() {
         let blocks_per_year = T::BlocksPerYear::get();
-        // 中文注释：设置到第 1 年边界且已结算，覆盖“边界块但无待结算年度”的权重。
+        // 设置到第 1 年边界且已结算，覆盖“边界块但无待结算年度”的权重。
         let n: frame_system::pallet_prelude::BlockNumberFor<T> =
             u32::try_from(blocks_per_year.max(1))
                 .unwrap_or(u32::MAX)

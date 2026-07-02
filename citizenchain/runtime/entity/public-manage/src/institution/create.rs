@@ -60,7 +60,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         Error::<T>::ProtectedSource
     );
     ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
-    // 中文注释:public-manage 只管理公权机构,公权机构全称/简称必须上链供 App 直读。
+    // public-manage 只管理公权机构,公权机构全称/简称必须上链供 App 直读。
     ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
     ensure!(!cid_short_name.is_empty(), Error::<T>::EmptyAccountName);
     let (stored_full_name, stored_short_name) = (cid_full_name.clone(), cid_short_name.clone());
@@ -125,7 +125,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
-    // 中文注释：管理员更换与内部投票直接使用机构主账户。
+    // 管理员更换与内部投票直接使用机构主账户。
     let institution = main_account.clone();
 
     with_transaction(|| {
@@ -190,7 +190,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
             );
         }
 
-        // 中文注释:注册局创建机构时直接提交目标机构管理员合集;交易成功即写 Active。
+        // 注册局创建机构时直接提交目标机构管理员合集;交易成功即写 Active。
         if let Err(err) = Pallet::<T>::set_active_admin_account_direct(
             institution_code,
             institution.clone(),

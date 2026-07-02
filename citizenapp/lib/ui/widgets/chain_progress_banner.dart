@@ -118,7 +118,7 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
     final String subtitle;
 
     if (_isFlutterTest) {
-      // 中文注释：widget test 保留提示条结构，但不读取链状态、不创建轮询定时器。
+      // widget test 保留提示条结构，但不读取链状态、不创建轮询定时器。
       // 测试环境没有真实轻节点，继续创建链状态轮询会让 pumpAndSettle 等不到稳定帧。
       color = AppTheme.info;
       icon = Icons.sync_disabled;

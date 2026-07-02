@@ -1,6 +1,6 @@
 // 行政区字典本地存储抽象(ADR-021 行政区唯一真源)。
 //
-// 中文注释:抽象出存储接口,使载入/查询逻辑可用内存 fake 单测,不依赖 Isar 真库;
+// 抽象出存储接口,使载入/查询逻辑可用内存 fake 单测,不依赖 Isar 真库;
 // 生产实现见 isar_admin_division_store.dart。全部本地读写,UI 显示名零链读零现查。
 
 import 'package:citizenapp/isar/wallet_isar.dart';
@@ -31,7 +31,7 @@ abstract interface class AdminDivisionStore {
   /// 某省全部行政区实体(省级 `province|<pc>||` + 市级 `city|<pc>|*` +
   /// 镇级 `town|<pc>|*`)。
   ///
-  /// 中文注释(增量 reconcile 用):按 divisionKey 前缀过滤三段并起来,供 loader
+  /// (增量 reconcile 用):按 divisionKey 前缀过滤三段并起来,供 loader
   /// 逐条比对同 key 内容,只 upsert 真正改名/新增的行,再删除包里已没有的废键。
   Future<List<AdminDivisionEntity>> divisionsOfProvince(String provinceCode);
 
@@ -40,6 +40,6 @@ abstract interface class AdminDivisionStore {
 
   /// 按 divisionKey 批量删(分块,事务内)。
   ///
-  /// 中文注释:reconcile 删掉本省里被删码 / 重排掉的旧行政区,零旧数据残留。
+  /// reconcile 删掉本省里被删码 / 重排掉的旧行政区,零旧数据残留。
   Future<void> deleteByKeys(List<String> divisionKeys);
 }

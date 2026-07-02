@@ -96,7 +96,7 @@ fn build_node_mode_state(selected_mode: NodeMode) -> NodeModeState {
         } else {
             NodeMode::Archive
         },
-        // 中文注释：全节点模式只描述链数据保存方式；IM 通信能力由
+        // 全节点模式只描述链数据保存方式；IM 通信能力由
         // settings::communication_node 的独立开关管理，必须和归档/普通模式分离。
         effective_mode: if selected_mode.enabled() {
             selected_mode
@@ -118,7 +118,7 @@ impl NodeMode {
 
 fn parse_stored_node_mode(value: &str) -> Result<NodeMode, String> {
     match value.trim() {
-        // 中文注释：清理上一版错误保存的 communication 模式；通信能力现在是独立开关。
+        // 清理上一版错误保存的 communication 模式；通信能力现在是独立开关。
         "communication" => Ok(NodeMode::Archive),
         other => NodeMode::from_wire_value(other),
     }

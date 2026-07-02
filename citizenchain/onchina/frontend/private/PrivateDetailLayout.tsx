@@ -1,4 +1,4 @@
-// 中文注释:私权机构详情页布局 — 共享详情壳承载标题、左侧 tab 和右侧业务内容。
+// 私权机构详情页布局 — 共享详情壳承载标题、左侧 tab 和右侧业务内容。
 //
 // 机构信息 tab:
 //   一整块 Card(标题 = 机构信息,编辑/取消/保存按钮在 Card extra 右上角):
@@ -474,7 +474,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
               </Descriptions.Item>
               <Descriptions.Item label="省份">{inst.province_name}</Descriptions.Item>
               <Descriptions.Item label="城市">{inst.city_name}</Descriptions.Item>
-              {/* 中文注释:p1/机构代码是系统编码,前端只显示中文;映射缺失时回退原代码兜底 */}
+              {/* p1/机构代码是系统编码,前端只显示中文;映射缺失时回退原代码兜底 */}
               <Descriptions.Item label="盈利属性">
                 {inst.p1 === '0' ? '非盈利' : '盈利'}
               </Descriptions.Item>

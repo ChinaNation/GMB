@@ -190,7 +190,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
             crate::MODULE_TAG,
             data,
         )?;
-    // 中文注释:提案创建成功后标记 nonce 已用,防同一注销凭证再次发起关闭。
+    // 提案创建成功后标记 nonce 已用,防同一注销凭证再次发起关闭。
     UsedDeregisterNonce::<T>::insert(nonce_hash, true);
     InstitutionPendingClose::<T>::insert(&account, proposal_id);
 
@@ -227,7 +227,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
         AccountRegisteredCid::<T>::get(&action.account).ok_or(Error::<T>::AccountNotFound)?;
     let cid_number = registered.cid_number.clone();
 
-    // 中文注释:整机构注销=该 cid 下全部账户;单账户注销=仅本账户。
+    // 整机构注销=该 cid 下全部账户;单账户注销=仅本账户。
     // 先 collect 再处理,避免边遍历 StorageDoubleMap 边删。
     let targets: alloc::vec::Vec<(crate::pallet::AccountNameOf<T>, T::AccountId)> =
         if action.scope == SCOPE_INSTITUTION {
@@ -253,7 +253,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
         if !bal.is_zero() {
             let fee_u128 = onchain_transaction::calculate_onchain_fee(bal.saturated_into());
             let mut fee: BalanceOf<T> = fee_u128.saturated_into();
-            // 中文注释:扣费后不足 ED 的 dust 子账户整额转出、不收费,避免转账失败留残。
+            // 扣费后不足 ED 的 dust 子账户整额转出、不收费,避免转账失败留残。
             let transfer_amount = match bal.checked_sub(&fee) {
                 Some(rem) if rem >= ed => rem,
                 _ => {
@@ -287,7 +287,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
         AccountRegisteredCid::<T>::remove(addr);
     }
 
-    // 中文注释:整机构注销才关闭机构唯一的 AdminAccount(机构消亡);
+    // 整机构注销才关闭机构唯一的 AdminAccount(机构消亡);
     // 单账户注销保留机构与其管理员。
     if action.scope == SCOPE_INSTITUTION {
         Pallet::<T>::close_admin_account(proposal_id, institution_code, admin_account)?;

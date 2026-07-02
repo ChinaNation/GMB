@@ -39,7 +39,7 @@ export default function App() {
   const checkDesktopUpdate = useCallback(async () => {
     setDesktopUpdateInfo((prev) => ({ ...prev, status: 'checking', error: null }));
     try {
-      // 中文注释：App 打开后只检查 GitHub Release 元数据，不下载、不安装，等待用户在设置页主动点击。
+      // App 打开后只检查 GitHub Release 元数据，不下载、不安装，等待用户在设置页主动点击。
       const update = await check();
       setDesktopUpdate(update);
       setDesktopUpdateInfo({

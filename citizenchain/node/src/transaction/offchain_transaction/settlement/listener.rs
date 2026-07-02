@@ -1,6 +1,6 @@
 //! 链上事件 → 清算行本地账本的同步器。
 //!
-//! 中文注释:
+//!
 //! - 本模块监听 `offchain_transaction` pallet 的事件:
 //!     - `Deposited { user, bank, amount }`     → `ledger.on_deposited`
 //!     - `Withdrawn { user, bank, amount }`     → `ledger.on_withdrawn`

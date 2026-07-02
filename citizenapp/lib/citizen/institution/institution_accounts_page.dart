@@ -7,7 +7,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 统一机构「全部账户」页(ADR-028 决策 2)——替代公权/治理两套账户页。
 ///
-/// 中文注释:账户行由 [institutionAccountRows] 统一构造(固定治理档用 china 固定
+/// 账户行由 [institutionAccountRows] 统一构造(固定治理档用 china 固定
 /// 账户、普通机构本地派生);余额经统一链态服务批量补(ADR-018 R2 精确整键批量)。
 class InstitutionAccountsPage extends StatefulWidget {
   const InstitutionAccountsPage({

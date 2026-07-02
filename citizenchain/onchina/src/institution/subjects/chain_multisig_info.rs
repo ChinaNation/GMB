@@ -1,6 +1,6 @@
 //! 机构信息查询(chain pull)。
 //!
-//! 中文注释:公开只读接口直接查询 `subjects/accounts` 结构化表。
+//! 公开只读接口直接查询 `subjects/accounts` 结构化表。
 
 use axum::{
     extract::{Path, State},
@@ -123,7 +123,7 @@ pub(crate) async fn app_search_institutions(
     let rows = match state.db.with_client(move |conn| {
         let rows = conn
             .query(
-                // 中文注释:行政区名字按 code 现场从 china.sqlite 派生,DTO 仍带省/市名字;
+                // 行政区名字按 code 现场从 china.sqlite 派生,DTO 仍带省/市名字;
                 // 库里只存 province_code/city_code,排序也按 code(同省/市稳定有序)。
                 "SELECT cid_number, cid_full_name, cid_short_name, category, province_code, city_code
                  FROM subjects
@@ -329,7 +329,7 @@ pub(crate) async fn app_get_institution_registration_info(
     .into_response()
 }
 
-/// 中文注释:机构管理员拉取已签发的注销凭证(注册局在 CID 注销动作中签好),
+/// 机构管理员拉取已签发的注销凭证(注册局在 CID 注销动作中签好),
 /// 用于构造 propose_close 上链冷签。签名不在此处生成,只读 institution_deregistrations 的 ISSUED 行。
 pub(crate) async fn app_get_institution_deregistration_info(
     State(state): State<AppState>,

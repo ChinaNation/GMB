@@ -1,6 +1,6 @@
 //! onchina 内网 API 机构私有 CA TLS(Card 05)。
 //!
-//! 中文注释:每个机构节点首启生成自己的私有根 CA,再用该 CA 签发 `onchina.local`
+//! 每个机构节点首启生成自己的私有根 CA,再用该 CA 签发 `onchina.local`
 //! 服务证书。员工电脑只下载并信任 CA 公钥证书;CA 私钥永不通过 HTTP 暴露。
 
 use std::fs;
@@ -264,7 +264,7 @@ pub(crate) fn organization_ca_certificate_info() -> Result<CaCertificateInfo, St
 
 /// 加载已有机构 CA 签发证书;无则生成机构 CA + onchina.local 服务证书。
 pub(crate) async fn load_or_generate_rustls_config() -> Result<RustlsConfig, String> {
-    // 中文注释:rustls 0.23 需要进程级 CryptoProvider;幂等安装 ring 实现。
+    // rustls 0.23 需要进程级 CryptoProvider;幂等安装 ring 实现。
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     ensure_certificate_material(true)?;

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 //! FFI type definitions.
 //!
-//! 中文注释：部分 JSON DTO 保留给 Dart 侧 typed binding，当前 native 导出仍直接解析轻量字段。
+//! 部分 JSON DTO 保留给 Dart 侧 typed binding，当前 native 导出仍直接解析轻量字段。
 
 use serde::{Deserialize, Serialize};
 use std::os::raw::c_char;

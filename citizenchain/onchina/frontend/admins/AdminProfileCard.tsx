@@ -77,7 +77,7 @@ function Field({ label, value }: { label: string; value: string; wide?: boolean 
 export function AdminProfileCard({ profile, index, action, status }: Props) {
   const topAction = action ?? status;
   const accountText = profile.admin_account ? tryEncodeSs58(profile.admin_account) : '';
-  // 中文注释:字段标签固定显示;字段值为空时只保留空值区域,不显示兜底文案。
+  // 字段标签固定显示;字段值为空时只保留空值区域,不显示兜底文案。
   return (
     <div style={{
       display: 'grid',

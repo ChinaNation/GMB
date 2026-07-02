@@ -194,11 +194,7 @@ class _QrSignSessionPageState extends State<QrSignSessionPage> {
     );
   }
 }
-
-// -----------------------------------------------------------------------------
 // 简单扫码页：返回原始扫码字符串，不做协议路由。
-// -----------------------------------------------------------------------------
-
 class _SimpleScanner extends StatefulWidget {
   const _SimpleScanner();
 

@@ -1,5 +1,5 @@
 // 本文件由 citizenchain/scripts/generate-local-docs.mjs 自动生成。
-// 中文注释：本文件只内置白皮书；公民宪法由链上 runtime API 返回。
+// 本文件只内置白皮书；公民宪法由链上 runtime API 返回。
 
 export type LocalDocKey = "whitepaper";
 

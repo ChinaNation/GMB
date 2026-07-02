@@ -1,4 +1,4 @@
-// 中文注释:股份公司前端类型边界。固定 `S + GF`,管理股份和股东关系。
+// 股份公司前端类型边界。固定 `S + GF`,管理股份和股东关系。
 
 import type { PrivateType } from '../../subjects/api';
 

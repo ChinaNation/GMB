@@ -8,7 +8,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 交易 Tab 页面。
 ///
-/// 中文注释：本页只负责交易页入口编排；链上支付主体仍由 onchain 模块渲染，
+/// 本页只负责交易页入口编排；链上支付主体仍由 onchain 模块渲染，
 /// 扫码支付内部业务仍留在链下支付功能域。
 class TransactionTabPage extends StatelessWidget {
   const TransactionTabPage({super.key});

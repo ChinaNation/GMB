@@ -1,6 +1,6 @@
 //! 机构管理员链下私密资料仓储层(CRUD + 按 cid/账户查 + scope 过滤)。
 //!
-//! 中文注释:仓储只读写 `institution_admins` 省级分区表。行政区名字不入库,
+//! 仓储只读写 `institution_admins` 省级分区表。行政区名字不入库,
 //! 读出后由本层按 china.sqlite 派生省/市名字回填,供 scope 过滤与 DTO 展示。
 //! scope 过滤复用统一入口 `scope::get_visible_scope` / `scope::filter_by_scope`。
 
@@ -21,7 +21,7 @@ const SELECT_COLUMNS: &str = "cid_number, province_code, city_code, admin_accoun
 fn row_to_admin(row: &postgres::Row) -> InstitutionAdmin {
     let province_code: String = row.get(1);
     let city_code: Option<String> = row.get(2);
-    // 中文注释:名字按 code 现场派生(单源 china.sqlite),库里不存名字副本。
+    // 名字按 code 现场派生(单源 china.sqlite),库里不存名字副本。
     let (province_name, city_name, _town_name) =
         area_display_names(province_code.as_str(), city_code.as_deref(), None);
     let photo_size: Option<i64> = row.get(11);
@@ -203,7 +203,7 @@ pub(crate) fn delete_institution_admin(
 
 /// 按 cid_number 列出该机构管理员,并按登录管理员可见域(VisibleScope)过滤。
 ///
-/// 中文注释:scope 过滤复用统一入口;记录的省/市名字已在 row_to_admin 里派生回填,
+/// scope 过滤复用统一入口;记录的省/市名字已在 row_to_admin 里派生回填,
 /// 与 `HasProvinceCity` 一致。
 pub(crate) fn list_institution_admins_in_scope(
     db: &Db,

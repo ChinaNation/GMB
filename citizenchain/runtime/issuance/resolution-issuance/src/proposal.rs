@@ -29,7 +29,7 @@ use votingengine::{
     PartialEq,
     Eq,
 )]
-/// 中文注释：单条收款分配项，包含收款账户和分配金额。
+/// 单条收款分配项，包含收款账户和分配金额。
 pub struct RecipientAmount<AccountId, Balance> {
     pub recipient: AccountId,
     pub amount: Balance,
@@ -54,7 +54,7 @@ impl<T: Config> Pallet<T> {
         ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
         Self::validate_proposal_allocations(&total_amount, allocations.as_slice())?;
 
-        // 中文注释：联合投票提案创建、业务数据写入和计数递增必须原子提交；
+        // 联合投票提案创建、业务数据写入和计数递增必须原子提交；
         // 任一步失败都不能留下孤儿提案或错误的 VotingProposalCount。
         with_transaction(|| {
             let data = IssuanceProposalData {
@@ -117,7 +117,7 @@ impl<T: Config> Pallet<T> {
         proposal_id: u64,
         approved: bool,
     ) -> Result<FinalizeOutcome, DispatchError> {
-        // 中文注释：联合投票终结、发行执行和计数递减必须在同一事务里提交；
+        // 联合投票终结、发行执行和计数递减必须在同一事务里提交；
         // votingengine 负责在外层终态转换后统一登记提案清理。
         with_transaction(|| {
             if let Err(err) = Self::ensure_vote_engine_callback_context(proposal_id, approved) {
@@ -134,7 +134,7 @@ impl<T: Config> Pallet<T> {
                 let execute_reason: ReasonOf<T> = match data.reason.clone().try_into() {
                     Ok(v) => v,
                     Err(_) => {
-                        // 中文注释：reason 原本由 ReasonOf<T> 写入 ProposalData；
+                        // reason 原本由 ReasonOf<T> 写入 ProposalData；
                         // 如果回读时超限，说明链上业务数据异常，而不是提案不存在。
                         return TransactionOutcome::Rollback(Err(Error::<T>::ReasonTooLong.into()));
                     }
@@ -173,7 +173,7 @@ impl<T: Config> Pallet<T> {
                     ));
                 }
 
-                // 中文注释：执行失败不保留重试分支；交由回调返回值写入失败终态。
+                // 执行失败不保留重试分支；交由回调返回值写入失败终态。
                 if let Err(err) = Self::decrement_voting_proposal_count() {
                     return TransactionOutcome::Rollback(Err(err));
                 }
@@ -197,7 +197,7 @@ impl<T: Config> Pallet<T> {
     }
 
     fn ensure_vote_engine_callback_context(proposal_id: u64, approved: bool) -> DispatchResult {
-        // 中文注释：决议发行只接受 votingengine 在终态转换事务内发起的回调，
+        // 决议发行只接受 votingengine 在终态转换事务内发起的回调，
         // 不再提供任何 Root 或外部来源可直接触发的手工 finalize 路径。
         ensure!(
             votingengine::pallet::CallbackExecutionScopes::<T>::contains_key(proposal_id),
@@ -243,7 +243,7 @@ impl<T: Config> Pallet<T> {
         recipients: BoundedVec<T::AccountId, T::MaxAllocations>,
     ) -> DispatchResult {
         ensure!(!recipients.is_empty(), Error::<T>::RecipientsNotConfigured);
-        // 中文注释：存在 Voting 中提案时禁止切换收款集合，避免同一提案投票前后口径漂移。
+        // 存在 Voting 中提案时禁止切换收款集合，避免同一提案投票前后口径漂移。
         ensure!(
             VotingProposalCount::<T>::get() == 0,
             Error::<T>::ActiveVotingProposalsExist

@@ -83,7 +83,7 @@ pub mod pallet {
 
     /// 个人多签管理员集合。key 为 personal_account。
     ///
-    /// 中文注释：个人多签不依赖 CID 资料，管理员真源只保存 AccountId 集合。
+    /// 个人多签不依赖 CID 资料，管理员真源只保存 AccountId 集合。
     /// 账户名、创建者和生命周期状态属于 personal-manage。
     #[pallet::storage]
     #[pallet::getter(fn admin_account_of)]
@@ -162,7 +162,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 发起个人多签管理员集合变更提案。
         ///
-        /// 中文注释：本入口只改个人多签管理员集合。个人多签账户创建/关闭
+        /// 本入口只改个人多签管理员集合。个人多签账户创建/关闭
         /// 必须走 personal-manage。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_admin_set_change())]

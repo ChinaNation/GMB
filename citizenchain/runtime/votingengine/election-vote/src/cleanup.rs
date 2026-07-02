@@ -1,6 +1,6 @@
 //! election-vote 存储清理。
 //!
-//! 中文注释：核心 votingengine 只维护清理状态机，具体选票、候选、计票账本
+//! 核心 votingengine 只维护清理状态机，具体选票、候选、计票账本
 //! 住在 election-vote，因此通过 `ElectionCleanupHandler` 派发到这里分块删除。
 
 use crate::pallet::{

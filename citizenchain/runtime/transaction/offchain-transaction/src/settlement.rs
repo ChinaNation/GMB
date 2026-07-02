@@ -1,6 +1,6 @@
 //! 扫码支付清算体系:清算行批次上链 settlement 路径。
 //!
-//! 中文注释:
+//!
 //! - 同行清算(payer_bank == recipient_bank):仅 `DepositBalance` 轧差 + 手续费从主账户到费用账户
 //! - 跨行清算(payer_bank != recipient_bank):
 //!     主账户 → 收款方主账户(本金)

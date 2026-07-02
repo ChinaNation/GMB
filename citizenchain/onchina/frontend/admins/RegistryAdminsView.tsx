@@ -104,7 +104,7 @@ function writeCachedAdminList<T>(key: string, rows: T[]) {
       JSON.stringify({ version: ADMIN_LIST_CACHE_VERSION, rows } satisfies CachedAdminListPayload<T>),
     );
   } catch {
-    // 中文注释:注册局管理员列表缓存只是减少重复转圈,写失败不能影响业务操作。
+    // 注册局管理员列表缓存只是减少重复转圈,写失败不能影响业务操作。
   }
 }
 
@@ -336,7 +336,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       setCityRegistryCities([]);
       setCityRegistryCitiesLoading(true);
     }
-    // 中文注释:首次自动定位当前省时不能覆盖用户刚点击的“联邦注册局管理员列表”。
+    // 首次自动定位当前省时不能覆盖用户刚点击的“联邦注册局管理员列表”。
     // 只有用户真正切换到另一个省时,才把子页签重置回市列表。
     if (isRealProvinceSwitch && adminDetailTabRef.current !== 'federal-registry-admin') {
       setAdminDetailTab('city-registry-admin');

@@ -1,6 +1,6 @@
 //! 运行期启动辅助和显式维护动作。
 //!
-//! 中文注释:启动只初始化必要结构化数据,
+//! 启动只初始化必要结构化数据,
 //! 大型确定性目录只在显式命令或接口中对账。
 
 use crate::domains::gov::service::{
@@ -16,7 +16,7 @@ pub(crate) fn reconcile_official_institutions_explicit(
     reconcile_gov_catalog_db(&state.db, "SYSTEM", scope, GovTargetKind::All)
 }
 
-/// 中文注释:审计日志只存"事实"——detail 是结构化 JSON(键小写蛇形,值存系统原值:
+/// 审计日志只存"事实"——detail 是结构化 JSON(键小写蛇形,值存系统原值:
 /// 代码/布尔/原始字段),不得写展示文案;人话翻译统一归前端操作记录渲染器
 /// (OperationRecords 的键名/值映射),文案改版零后端改动且历史行同样适用。
 #[allow(clippy::too_many_arguments)]

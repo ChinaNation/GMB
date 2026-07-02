@@ -1,6 +1,6 @@
 //! 接 substrate `TransactionPool` 的批次提交器。
 //!
-//! 中文注释:
+//!
 //! - 本文件实现 `packer::BatchSubmitter` trait,把组好的 batch 包进
 //!   `RuntimeCall::OffchainTransaction(submit_offchain_batch_v2 { .. })`
 //!   → `UncheckedExtrinsic` → 扔到节点本地 `TransactionPool`。
@@ -134,7 +134,7 @@ impl BatchSubmitter for PoolBatchSubmitter {
 
 /// 查询链上某账户最新 nonce。
 ///
-/// 中文注释:runtime api 失败时绝不回退 0——nonce=0 会让整批交易被池以
+/// runtime api 失败时绝不回退 0——nonce=0 会让整批交易被池以
 /// Stale 拒掉,而提交方只看到"提交失败"却不知道根因是 nonce 查询失败,
 /// 必须把错误如实上抛。
 fn lookup_nonce(client: &FullClient, account: &AccountId32) -> Result<u32, String> {

@@ -1,6 +1,6 @@
 //! onchina CID 号生成适配层。
 //!
-//! 中文注释:
+//!
 //! CID 号码字节协议在 `primitives::cid::generator`。本文件只负责 onchina 运行态输入:
 //! 从 SQLite 行政区真源解析省/市代码、读取当前年份,再调用 runtime primitives 纯协议。
 

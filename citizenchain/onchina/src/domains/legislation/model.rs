@@ -1,6 +1,6 @@
 //! 立法与表决域数据类型(ADR-027 / 卡 20260630-onchina-legislation-console-framework)。
 //!
-//! 中文注释:本文件放 onchina 侧的提案分类维度与通用枚举,字段/取值与链端
+//! 本文件放 onchina 侧的提案分类维度与通用枚举,字段/取值与链端
 //! `legislation-yuan::types`(Tier / VoteType)、`legislation-vote`(STAGE_LEG_*)逐字段对齐
 //! (全仓字段同名)。提案统一信封读模型(HouseRef / LegProposalState)随 Phase 1 链读落地,
 //! 避免无消费方的悬空结构。
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// 提案类型(可扩展维度)。
 ///
-/// 中文注释:onchina 侧的提案分类维度,决定走哪条提案数据模板与提交链路。
+/// onchina 侧的提案分类维度,决定走哪条提案数据模板与提交链路。
 /// - `Law` 映射链端 `votingengine::PROPOSAL_KIND_LEGISLATION`(本轮实现);
 /// - `Personnel` / `Budget` 为未来链端新增提案种类预留,本轮只定义结构、不接链。
 // Phase 0 落地并单测;Phase 1 起由 `category::proposable_candidates` 与 `law/chain_propose` 消费。
@@ -28,7 +28,7 @@ pub(crate) enum ProposalCategory {
 impl ProposalCategory {
     /// onchina 侧提案类型序号(0 法律 / 1 任免 / 2 预算)。
     ///
-    /// 中文注释:这是 onchina 维度序号,**非**链端 `PROPOSAL_KIND_*`;链端提案种类的映射
+    /// 这是 onchina 维度序号,**非**链端 `PROPOSAL_KIND_*`;链端提案种类的映射
     /// 在提交层(Phase 1+)处理,法律案对应 `PROPOSAL_KIND_LEGISLATION`。
     pub(crate) fn as_u8(&self) -> u8 {
         match self {
@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn proposal_category_serializes_to_snake_case() {
-        // 中文注释:前端 ProposalCategory 联合类型为 'law' | 'personnel' | 'budget',必须逐字一致。
+        // 前端 ProposalCategory 联合类型为 'law' | 'personnel' | 'budget',必须逐字一致。
         assert_eq!(
             serde_json::to_string(&ProposalCategory::Law).unwrap(),
             "\"law\""

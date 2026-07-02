@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-// ============================================================================
 //! 全节点发行：全节点PoW铸块奖励发行制度说明（不可治理）
 //! ============================================================================
 //! 一、制度定位
@@ -48,10 +47,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::SaturatedConversion;
-
-    // ------------------------------------------------------------------------
     // 全节点 PoW 发行制度常量（来自 primitives）
-    // ------------------------------------------------------------------------
     use primitives::pow_const::{
         FULLNODE_BLOCK_REWARD, FULLNODE_REWARD_END_BLOCK, FULLNODE_REWARD_START_BLOCK,
     };
@@ -144,7 +140,7 @@ pub mod pallet {
                 Error::<T>::MinerNeverAuthoredBlock
             );
 
-            // 中文注释：绑定表只决定奖励接收钱包，不改变出块作者身份本身。
+            // 绑定表只决定奖励接收钱包，不改变出块作者身份本身。
             RewardWalletByMiner::<T>::insert(&miner, &wallet);
             Self::deposit_event(Event::<T>::RewardWalletBound { miner, wallet });
             Ok(())
@@ -165,7 +161,7 @@ pub mod pallet {
                 new_wallet != current_wallet,
                 Error::<T>::RewardWalletUnchanged
             );
-            // 中文注释：重绑后仅影响后续区块奖励，历史已经发放的奖励不会被追溯重定向。
+            // 重绑后仅影响后续区块奖励，历史已经发放的奖励不会被追溯重定向。
             RewardWalletByMiner::<T>::insert(&miner, &new_wallet);
             Self::deposit_event(Event::<T>::RewardWalletRebound { miner, new_wallet });
             Ok(())
@@ -198,7 +194,7 @@ pub mod pallet {
         }
 
         fn on_finalize(n: BlockNumberFor<T>) {
-            // 中文注释：区间判断使用 u64，避免把运行时 BlockNumber 强绑定为 u32。
+            // 区间判断使用 u64，避免把运行时 BlockNumber 强绑定为 u32。
             let block_number_u64 = n.saturated_into::<u64>();
 
             // 是否处于全节点 PoW 奖励区间 [1, 9,999,999]
@@ -207,7 +203,7 @@ pub mod pallet {
             {
                 return;
             }
-            // 中文注释：固定奖励区间本身写死在 u32 范围内，进入区间后再转为存储和事件字段。
+            // 固定奖励区间本身写死在 u32 范围内，进入区间后再转为存储和事件字段。
             let block_number: u32 = block_number_u64.saturated_into();
 
             // 从共识 PreRuntime Digest 中获取 PoW 出块作者
@@ -224,7 +220,7 @@ pub mod pallet {
                 } // 理论上不应发生，发生则不发奖励
             };
 
-            // 中文注释：只有共识 digest 证明真实出过块的账户，才允许后续绑定奖励钱包。
+            // 只有共识 digest 证明真实出过块的账户，才允许后续绑定奖励钱包。
             LastAuthoredBlockByMiner::<T>::insert(&author, block_number);
 
             // 已绑定钱包则发到钱包，未绑定则默认发到矿工自身账户。
@@ -232,9 +228,9 @@ pub mod pallet {
                 RewardWalletByMiner::<T>::get(&author).unwrap_or_else(|| author.clone());
 
             // 发放固定的全节点 PoW 铸块奖励
-            // 中文注释：奖励金额完全由制度常量决定，绑定表只决定”发给谁”，不影响”发多少”。
+            // 奖励金额完全由制度常量决定，绑定表只决定”发给谁”，不影响”发多少”。
             let reward: BalanceOf<T> = FULLNODE_BLOCK_REWARD.saturated_into();
-            // 中文注释：deposit_creating 会在钱包尚未建户时自动建户，并同步增加总发行量。
+            // deposit_creating 会在钱包尚未建户时自动建户，并同步增加总发行量。
             let imbalance = T::Currency::deposit_creating(&recipient, reward);
             debug_assert_eq!(
                 imbalance.peek(),

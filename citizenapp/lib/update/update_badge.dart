@@ -3,7 +3,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 更新提醒红点，只表达“当前仍有可安装更新”。
 ///
-/// 中文注释：红点不承担已读状态；是否显示完全由更新检查结果驱动。
+/// 红点不承担已读状态；是否显示完全由更新检查结果驱动。
 class UpdateDotBadge extends StatelessWidget {
   const UpdateDotBadge({
     super.key,

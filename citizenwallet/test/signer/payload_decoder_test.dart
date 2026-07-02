@@ -91,6 +91,17 @@ void main() {
         ...compactVec('001'),
       ];
 
+  List<int> imWalletBindingPayloadForTest(String walletAccount) => [
+        ...compactVec(walletAccount),
+        ...compactVec('phone-1'),
+        ...compactVec('0xabc'),
+        ...compactVec('12D3KooWTest'),
+        ...compactU32(1),
+        ...compactVec('/ip4/127.0.0.1/tcp/30333/wss/p2p/12D3KooWTest'),
+        ...u64Le(1800000),
+        ...compactVec('nonce-1'),
+      ];
+
   List<int> bytesFromHex(String hex) {
     final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
     return List<int>.generate(
@@ -113,6 +124,21 @@ void main() {
   }
 
   group('PayloadDecoder', () {
+    test('decodes IM wallet binding SCALE payload', () {
+      final pair = Keyring.sr25519.fromSeed(Uint8List(32));
+      final walletAccount = ss58FromBytes(pair.bytes());
+      final decoded = PayloadDecoder.decode(
+        hexOf(imWalletBindingPayloadForTest(walletAccount)),
+      );
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'im_wallet_binding');
+      expect(decoded.fields['wallet_account'], walletAccount);
+      expect(decoded.fields['im_device_id'], 'phone-1');
+      expect(decoded.fields['node_peer_id'], '12D3KooWTest');
+      expect(decoded.reviewFields['node_endpoints'], contains('/ip4/'));
+    });
+
     test('decodes transfer_keep_alive (pallet=2 call=3)', () {
       final dest = Keyring.sr25519.fromSeed(Uint8List(32));
       dest.ss58Format = 2027;
@@ -575,8 +601,6 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.fields['amount_yuan'], '2.34 GMB');
     });
-
-    // -----------------------------------------------------------------------
     // Phase 3(2026-04-22)新增:8 个 execute / cleanup / cancel 类 call。
     // 链端签名统一 `fn <name>(origin, proposal_id: u64)`,
     // 冷钱包走通用 _decodeProposalIdOnly 解码器。
@@ -584,8 +608,6 @@ void main() {
     // 所有分支的 fields 按 Registry 统一为
     //   { proposal_id: <decimal string> }
     // 保证节点 Tauri UI / citizenapp 发出的手动兜底 QR 在冷钱包走 🟢 绿色。
-    // -----------------------------------------------------------------------
-
     Uint8List buildProposalIdPayload(int palletIdx, int callIdx, int id) {
       return Uint8List.fromList([
         palletIdx,
@@ -929,20 +951,15 @@ void main() {
       expect(decoded!.action, 'propose_close_personal');
       expect(decoded.fields.keys.toList(), ['account', 'beneficiary']);
     });
-
-    // -----------------------------------------------------------------------
     // 协议升级 propose_runtime_upgrade / developer_direct_upgrade 的 SCALE decoder 已删
     // (call_data 含 600KB+ WASM,塞不进 QR;server 在 QR 里只放 32 字节 blake2
     // 哈希,decoder 路径不可达)。改走 OfflineSignService 的"哈希直签例外"。
     // 相关回归测试见 citizenwallet/test/signer/offline_sign_service_*_test.dart。
-    // -----------------------------------------------------------------------
     // 机构/决议创建 decoder:
     // - propose_create_public_institution(32.5):公权机构多签账户创建提案
     //   (走 CID 后端签发机构 admins 凭证)
     // - propose_resolution_issuance(8.0):决议发行联合提案
     //   (人口快照由 JointVote 单独准备)
-    // -----------------------------------------------------------------------
-
     List<int> buildProposeCreateInstitutionPayload({
       bool extraTail = false,
       String secondAccountName = '费用账户',
@@ -1203,15 +1220,11 @@ void main() {
 
       expect(decoded, isNull);
     });
-
-    // -----------------------------------------------------------------------
     // ADR-008 step2d 双端字节一致性 fixture:
     // 当前 fixture 固化公民账户投票交易与发行提案交易,统一真源在
     // ../memory/06-quality/fixtures/，citizenwallet / citizenapp / 链端 runtime
     // 三处必须产出同一序列。
     // 任何一端编码漂移 → 这里直接断言失败。
-    // -----------------------------------------------------------------------
-
     Map<String, dynamic> readFixture() {
       final candidates = [
         File('../memory/06-quality/fixtures/step2d_credential_payload.json'),
@@ -1294,14 +1307,10 @@ void main() {
       expect(decoded.fields['allocation_count'], '2');
       expect(decoded.fields.containsKey('eligible_total'), isFalse);
     });
-
-    // -----------------------------------------------------------------------
     // 签名扩展尾校验(2026-06-10):真实 QR payload_hex = call_data + 扩展尾。
     // 历史 bug:84080b6a 把多个分支改成"严格到尾"却没算扩展尾,
     // 国储会转账提案等 9 类提案扫码必红。本组用例锁死两端约定:
     // 带合法尾 → 解码成功;裸 call_data / 篡改尾 → null(红色拒签)。
-    // -----------------------------------------------------------------------
-
     List<int> buildNrcTransferCallData() => [
           0x13, 0x00,
           ...InstitutionCode.codeBytes('NRC'), // institution_code = 国储会

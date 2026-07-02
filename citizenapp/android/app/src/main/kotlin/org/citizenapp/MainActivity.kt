@@ -120,7 +120,7 @@ class MainActivity : FlutterFragmentActivity() {
             return
         }
 
-        // 中文注释：通知权限只在用户确认首启说明后申请；拒绝不会阻塞 App 使用。
+        // 通知权限只在用户确认首启说明后申请；拒绝不会阻塞 App 使用。
         pendingNotificationPermissionResult = result
         ActivityCompat.requestPermissions(
             this,
@@ -152,7 +152,7 @@ class MainActivity : FlutterFragmentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !packageManager.canRequestPackageInstalls()
         ) {
-            // 中文注释：Android 8+ 必须由用户授权“允许安装未知应用”，App 不能绕过系统确认。
+            // Android 8+ 必须由用户授权“允许安装未知应用”，App 不能绕过系统确认。
             val intent = Intent(
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:$packageName")

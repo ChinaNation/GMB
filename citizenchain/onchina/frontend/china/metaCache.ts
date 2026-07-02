@@ -1,4 +1,4 @@
-// 中文注释:CID 前端轻量缓存。
+// CID 前端轻量缓存。
 // 只缓存省市代码、确定性机构展示列表和机构详情快照;普通公民/机构精确搜索结果不得放进这里。
 // 教育机构缓存仅限市详情直显的确定性市公民教育委员会,不缓存学校和 F+JY 搜索结果。
 
@@ -8,7 +8,7 @@ import { getCidMeta, listCidCities, type CidCityItem, type CidMetaResult } from 
 
 const CID_META_CACHE_VERSION = 'cid-meta-v3';
 const CID_CITY_CACHE_VERSION = 'cid-cities-v4';
-// 中文注释:机构 DTO 新增链投影/溯源字段(B1),缓存形状变更必须 bump 版本号;
+// 机构 DTO 新增链投影/溯源字段(B1),缓存形状变更必须 bump 版本号;
 // 版本不匹配时 readCache 自愈清旧缓存,旧端读出全空的问题被规避。
 const OFFICIAL_INSTITUTION_CACHE_VERSION = 'official-institutions-v2';
 const EDUCATION_COMMITTEE_CACHE_VERSION = 'education-committees-v2';
@@ -50,7 +50,7 @@ function writeCache<T>(key: string, version: string, data: T) {
   try {
     localStorage.setItem(key, JSON.stringify({ version, data } satisfies CachedPayload<T>));
   } catch {
-    // 中文注释:确定性元数据缓存写入失败不能阻断页面展示。
+    // 确定性元数据缓存写入失败不能阻断页面展示。
   }
 }
 
@@ -72,7 +72,7 @@ export async function loadCachedCidMeta(auth: AdminAuth): Promise<CidMetaResult>
   return next;
 }
 
-// 中文注释:防御字段漂移——缓存里只要存在 city_name/city_code 缺失的项就判脏,弃缓存回源。
+// 防御字段漂移——缓存里只要存在 city_name/city_code 缺失的项就判脏,弃缓存回源。
 // 背景:后端 cities 字段曾从 name/code 改为 city_name/city_code 而缓存版本未 bump,
 // 旧结构缓存静默残留会导致市卡片与注册局列表 join 失败。形状校验让缓存对结构漂移自愈。
 function citiesCacheUsable(rows: CidCityItem[] | null): rows is CidCityItem[] {
@@ -171,7 +171,7 @@ export function writeCachedOfficialInstitutionRows(
       } satisfies InstitutionRowsCachePayload),
     );
   } catch {
-    // 中文注释:公权机构确定性列表缓存只是展示加速,写失败不影响后端权威结果。
+    // 公权机构确定性列表缓存只是展示加速,写失败不影响后端权威结果。
   }
 }
 
@@ -233,7 +233,7 @@ export function writeCachedEducationCommitteeRows(
       } satisfies InstitutionRowsCachePayload),
     );
   } catch {
-    // 中文注释:教育机构确定性市教委缓存只是首屏展示加速,写失败不影响后端权威结果。
+    // 教育机构确定性市教委缓存只是首屏展示加速,写失败不影响后端权威结果。
   }
 }
 

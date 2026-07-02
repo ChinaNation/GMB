@@ -38,6 +38,8 @@ typedef SignResponseEnvelope = QrEnvelope<SignResponseBody>;
 class QrSigner {
   static const int defaultTtlSeconds = 90;
   static const int maxPayloadChars = 32768;
+  static const List<int> _gmbPrefix = [0x47, 0x4D, 0x42];
+  static const int _opSignImWalletBinding = 0x1A;
   static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
 
   /// 生成加密安全的随机 request id。base64url 比 hex 短,可降低二维码密度。
@@ -219,6 +221,11 @@ class QrSigner {
     required int action,
   }) {
     final payload = Uint8List.fromList(_hexToBytes(payloadHex));
+    if (action == QrActions.imWalletBinding) {
+      return Hasher.blake2b256.hash(
+        Uint8List.fromList([..._gmbPrefix, _opSignImWalletBinding, ...payload]),
+      );
+    }
     if (QrActions.isChainAction(action) && payload.length > 256) {
       return Hasher.blake2b256.hash(payload);
     }

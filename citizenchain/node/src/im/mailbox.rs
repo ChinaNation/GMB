@@ -276,12 +276,20 @@ mod tests {
         endpoint::ImNodeEndpoint,
         envelope::{ImEnvelope, SubmitImEnvelopeRequest, GMB_IM_PROTOCOL_VERSION},
     };
+    use sp_core::{sr25519, Pair};
     use std::fs;
 
     fn sample_binding() -> RegisterImDeviceRequest {
-        RegisterImDeviceRequest {
-            wallet_account: "bob".to_string(),
-            im_device_id: "bob-phone".to_string(),
+        sample_binding_for(0x24, "bob-phone")
+    }
+
+    fn sample_binding_for(seed_byte: u8, device_id: &str) -> RegisterImDeviceRequest {
+        let pair = sr25519::Pair::from_seed(&[seed_byte; 32]);
+        let wallet_account = crate::governance::signing::pubkey_to_ss58(pair.public().as_ref())
+            .expect("test public key should encode");
+        let mut request = RegisterImDeviceRequest {
+            wallet_account,
+            im_device_id: device_id.to_string(),
             im_device_pubkey: "0xabc".to_string(),
             node_peer_id: "12D3KooWTest".to_string(),
             node_endpoints: vec![ImNodeEndpoint::checked(
@@ -291,8 +299,11 @@ mod tests {
             .expect("test endpoint should be valid")],
             expires_at_millis: 1_800_000,
             nonce: "nonce-1".to_string(),
-            wallet_signature: "0xsig".to_string(),
-        }
+            wallet_signature: String::new(),
+        };
+        let signature = pair.sign(&request.signing_message());
+        request.wallet_signature = format!("0x{}", hex::encode(signature.0));
+        request
     }
 
     fn sample_envelope(recipient: &str) -> ImEnvelope {
@@ -312,14 +323,16 @@ mod tests {
     #[test]
     fn rejects_unregistered_wallet_mailbox() {
         let mut mailbox = ImMailbox::default();
+        let binding = sample_binding();
+        let account = binding.wallet_account.clone();
         mailbox
-            .register_owner_device(sample_binding())
+            .register_owner_device(binding)
             .expect("wallet device should register");
 
         mailbox
             .submit_envelope(SubmitImEnvelopeRequest {
-                mailbox_owner_chat_account: "bob".to_string(),
-                envelope: sample_envelope("bob"),
+                mailbox_owner_chat_account: account.clone(),
+                envelope: sample_envelope(&account),
             })
             .expect("owner envelope should be stored");
 
@@ -335,42 +348,43 @@ mod tests {
     #[test]
     fn supports_multiple_wallet_accounts_on_one_node() {
         let mut mailbox = ImMailbox::default();
+        let bob_binding = sample_binding();
+        let bob_account = bob_binding.wallet_account.clone();
         mailbox
-            .register_owner_device(sample_binding())
+            .register_owner_device(bob_binding)
             .expect("bob device should register");
-        let mut alice_binding = sample_binding();
-        alice_binding.wallet_account = "alice".to_string();
-        alice_binding.im_device_id = "alice-phone".to_string();
+        let alice_binding = sample_binding_for(0x25, "alice-phone");
+        let alice_account = alice_binding.wallet_account.clone();
         mailbox
             .register_owner_device(alice_binding)
             .expect("alice device should register");
 
         mailbox
             .submit_envelope(SubmitImEnvelopeRequest {
-                mailbox_owner_chat_account: "bob".to_string(),
-                envelope: sample_envelope("bob"),
+                mailbox_owner_chat_account: bob_account.clone(),
+                envelope: sample_envelope(&bob_account),
             })
             .expect("bob envelope should be stored");
         mailbox
             .submit_envelope(SubmitImEnvelopeRequest {
-                mailbox_owner_chat_account: "alice".to_string(),
+                mailbox_owner_chat_account: alice_account.clone(),
                 envelope: ImEnvelope {
                     envelope_id: "env-2".to_string(),
-                    ..sample_envelope("alice")
+                    ..sample_envelope(&alice_account)
                 },
             })
             .expect("alice envelope should be stored");
 
         assert_eq!(
             mailbox
-                .fetch_pending("bob", "bob-phone")
+                .fetch_pending(&bob_account, "bob-phone")
                 .expect("bob device can fetch")
                 .len(),
             1
         );
         assert_eq!(
             mailbox
-                .fetch_pending("alice", "alice-phone")
+                .fetch_pending(&alice_account, "alice-phone")
                 .expect("alice device can fetch")
                 .len(),
             1
@@ -380,26 +394,28 @@ mod tests {
     #[test]
     fn fetch_and_ack_require_authorized_owner_device() {
         let mut mailbox = ImMailbox::default();
+        let binding = sample_binding();
+        let account = binding.wallet_account.clone();
         mailbox
-            .register_owner_device(sample_binding())
+            .register_owner_device(binding)
             .expect("wallet device should register");
         mailbox
             .submit_envelope(SubmitImEnvelopeRequest {
-                mailbox_owner_chat_account: "bob".to_string(),
-                envelope: sample_envelope("bob"),
+                mailbox_owner_chat_account: account.clone(),
+                envelope: sample_envelope(&account),
             })
             .expect("owner envelope should be stored");
 
         let pending = mailbox
-            .fetch_pending("bob", "bob-phone")
+            .fetch_pending(&account, "bob-phone")
             .expect("authorized device can fetch");
         assert_eq!(pending.len(), 1);
 
         mailbox
-            .ack_envelope("bob", "bob-phone", "env-1")
+            .ack_envelope(&account, "bob-phone", "env-1")
             .expect("authorized device can ack");
         assert!(mailbox
-            .fetch_pending("bob", "bob-phone")
+            .fetch_pending(&account, "bob-phone")
             .expect("authorized device can fetch")
             .is_empty());
     }
@@ -414,13 +430,15 @@ mod tests {
         mailbox
             .attach_storage(file_path.clone())
             .expect("storage should attach");
+        let binding = sample_binding();
+        let account = binding.wallet_account.clone();
         mailbox
-            .register_owner_device(sample_binding())
+            .register_owner_device(binding)
             .expect("wallet device should register");
         mailbox
             .submit_envelope(SubmitImEnvelopeRequest {
-                mailbox_owner_chat_account: "bob".to_string(),
-                envelope: sample_envelope("bob"),
+                mailbox_owner_chat_account: account.clone(),
+                envelope: sample_envelope(&account),
             })
             .expect("owner envelope should be stored");
 
@@ -429,12 +447,12 @@ mod tests {
             .attach_storage(file_path.clone())
             .expect("storage should reload");
         let pending = reloaded
-            .fetch_pending("bob", "bob-phone")
+            .fetch_pending(&account, "bob-phone")
             .expect("pending should survive reload");
         assert_eq!(pending.len(), 1);
 
         reloaded
-            .ack_envelope("bob", "bob-phone", "env-1")
+            .ack_envelope(&account, "bob-phone", "env-1")
             .expect("ack should persist");
 
         let mut after_ack_reload = ImMailbox::default();
@@ -442,13 +460,13 @@ mod tests {
             .attach_storage(file_path.clone())
             .expect("storage should reload after ack");
         assert!(after_ack_reload
-            .fetch_pending("bob", "bob-phone")
+            .fetch_pending(&account, "bob-phone")
             .expect("pending should stay empty after ack reload")
             .is_empty());
         let ack = after_ack_reload
             .submit_envelope(SubmitImEnvelopeRequest {
-                mailbox_owner_chat_account: "bob".to_string(),
-                envelope: sample_envelope("bob"),
+                mailbox_owner_chat_account: account.clone(),
+                envelope: sample_envelope(&account),
             })
             .expect("duplicate acked envelope should not requeue");
         assert_eq!(
@@ -456,7 +474,7 @@ mod tests {
             crate::im::envelope::ImEnvelopeState::AcknowledgedByOwner
         );
         assert!(after_ack_reload
-            .fetch_pending("bob", "bob-phone")
+            .fetch_pending(&account, "bob-phone")
             .expect("duplicate acked envelope should stay hidden")
             .is_empty());
 

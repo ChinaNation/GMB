@@ -1,6 +1,6 @@
 //! 主体管理 HTTP handler。
 //!
-//! 中文注释:跨公权/私权共用的主体查名、详情、更新和父机构查询只读写
+//! 跨公权/私权共用的主体查名、详情、更新和父机构查询只读写
 //! `subjects/accounts` 结构化表。
 
 use axum::{
@@ -41,7 +41,7 @@ pub(crate) async fn check_cid_full_name(
     if cid_full_name.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "cid_full_name is required");
     }
-    // 中文注释:公法人/公权机构走"同市同全称"查重;私权机构仍全国查重。
+    // 公法人/公权机构走"同市同全称"查重;私权机构仍全国查重。
     let is_public_legal = params
         .subject_property
         .as_deref()
@@ -311,7 +311,7 @@ pub(crate) async fn update_institution(
                 unincorporated_org::parent_subject_requirement_message(),
             );
         }
-        // 中文注释:改挂与创建同源校验(subjects/unincorporated_org 单一权威源):
+        // 改挂与创建同源校验(subjects/unincorporated_org 单一权威源):
         // 代码一致性(分校⇔学校本部) + 地域规则 + 盈利属性继承,缺一处就有绕过口。
         if let Some(msg) = unincorporated_org::code_consistency_violation(
             existing.institution_code.as_str(),
@@ -475,7 +475,7 @@ pub(crate) async fn search_parent_institutions(
     if !scope.includes_province(&province) || !scope.includes_city(&city) {
         return api_error(StatusCode::FORBIDDEN, 1003, "out of admin scope");
     }
-    // 中文注释:subjects 已不存行政区名字,地域预过滤改按 china.sqlite 派生的 code 走单源。
+    // subjects 已不存行政区名字,地域预过滤改按 china.sqlite 派生的 code 走单源。
     let Some(province_code) = crate::cid::china::province_code_by_name(&province) else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
     };
@@ -491,7 +491,7 @@ pub(crate) async fn search_parent_institutions(
         Some(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "parent_property 仅 S/G"),
     };
     let result = state.db.with_client(move |conn| {
-        // 中文注释:候选父级按非法人规则预过滤(与 unincorporated_org::parent_locality_rule 同源)。
+        // 候选父级按非法人规则预过滤(与 unincorporated_org::parent_locality_rule 同源)。
         // UNIN 是通用从属,可挂任意法人父级(私法人 S / 公法人 G)。地域规则:学校/大学父级 → 同市,
         // 非学校私法人 → 全国,非学校公法人 → 按机构码行政层级。$4 = parent_property 过滤(S/G)。
         // 私法人由机构码集合判定,公法人由 category 判定,层级由 institution_code 集合判定。
@@ -552,7 +552,7 @@ pub(crate) async fn search_parent_institutions(
             else {
                 continue;
             };
-            // 中文注释:省/市/镇名字按 code 现场从 china.sqlite 派生,DTO 仍带名字。
+            // 省/市/镇名字按 code 现场从 china.sqlite 派生,DTO 仍带名字。
             let row_province_code: String = row.get(6);
             let row_city_code: Option<String> = row.get(7);
             let row_town_code: String = row.get(8);

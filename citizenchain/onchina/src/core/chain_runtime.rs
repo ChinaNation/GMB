@@ -17,7 +17,7 @@ use twox_hash::XxHash64;
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::*;
 
-// 中文注释：本文件所有 GMB + OP_SIGN_* 均直接来自
+// 本文件所有 GMB + OP_SIGN_* 均直接来自
 // `primitives::core_const`。SCALE 编码下：
 //   [u8; N] / &[u8; N]  →  N 字节，无长度前缀
 //   u8                   →  1 字节
@@ -28,7 +28,7 @@ use crate::*;
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
 static SIGNING_KEY_CACHE: OnceLock<RwLock<Option<CachedSigningKey>>> = OnceLock::new();
 const TRUSTED_PRODUCTION_CHAINS: &[TrustedProductionChain] = &[
-    // 中文注释：正式链创世哈希在这里做源码级白名单绑定；新增正式链时只允许在此处追加。
+    // 正式链创世哈希在这里做源码级白名单绑定；新增正式链时只允许在此处追加。
     // TrustedProductionChain { name: "mainnet", genesis_hash_hex: "0x<正式链创世哈希>" },
 ];
 
@@ -150,7 +150,7 @@ pub(crate) fn build_institution_registration_credential(
     })
 }
 
-/// 中文注释:注销凭证签名 payload 的 blake2_256 摘要(纯函数,便于 golden 测试锁字节)。
+/// 注销凭证签名 payload 的 blake2_256 摘要(纯函数,便于 golden 测试锁字节)。
 ///
 /// **铁律**:元素顺序与 SCALE 类型必须与链端 `verify_institution_deregistration`
 /// (runtime/src/configs/mod.rs,被 public-manage/private-manage close 消费)逐字节一致——
@@ -183,7 +183,7 @@ fn deregistration_payload_digest(
     blake2_256(&payload.encode())
 }
 
-/// 中文注释:签发机构/账户注销凭证(对称 `build_institution_registration_credential`)。
+/// 签发机构/账户注销凭证(对称 `build_institution_registration_credential`)。
 /// scope=`SCOPE_INSTITUTION`(0,关主账户=注销整机构)/ `SCOPE_ACCOUNT`(1,只关该非主账户)。
 /// 由注册局管理员动作(冷签特殊档)校验通过后调用;机构管理员持此凭证冷签 propose_close。
 pub(crate) fn build_institution_deregistration_credential(
@@ -234,7 +234,7 @@ pub(crate) fn build_institution_deregistration_credential(
 }
 
 fn runtime_signature_meta(_state: &AppState) -> RuntimeSignatureMeta {
-    // 中文注释:metadata 只用于排查签发来源;链上只信任 payload 中的
+    // metadata 只用于排查签发来源;链上只信任 payload 中的
     // issuer_cid_number / issuer_main_account / signer_pubkey。
     RuntimeSignatureMeta {
         key_id: "onchina-admins-v1".to_string(),
@@ -502,7 +502,7 @@ fn decode_account_free_balance_fen(storage_hex: &str) -> Result<Option<String>, 
     if data.len() < 32 {
         return Ok(None);
     }
-    // 中文注释:System.Account AccountInfo 前 16 字节为 nonce/consumers/providers/sufficients,
+    // System.Account AccountInfo 前 16 字节为 nonce/consumers/providers/sufficients,
     // AccountData.free 是随后 16 字节 little-endian u128,单位为分。
     let mut free = [0_u8; 16];
     free.copy_from_slice(&data[16..32]);
@@ -511,7 +511,7 @@ fn decode_account_free_balance_fen(storage_hex: &str) -> Result<Option<String>, 
 
 /// 批量读取账户 finalized free 余额,返回 key 为不带 0x 的小写 hex。
 ///
-/// 中文注释:管理员卡片只展示链上真实余额;查询失败或账户不存在时返回 None,
+/// 管理员卡片只展示链上真实余额;查询失败或账户不存在时返回 None,
 /// 由 UI 保留“余额”标签但不渲染余额值。0 余额是有效值,必须返回 Some("0")。
 pub(crate) async fn fetch_account_balances_onchain(
     account_hexes: &[String],
@@ -717,8 +717,6 @@ fn blake2_256(input: &[u8]) -> [u8; 32] {
         .expect("finalize blake2_256 failed");
     output
 }
-
-// ──────────────────────────────────────────────────────────────────
 // 链上管理员集合读取(去中心化鉴权)
 //
 // 真源:机构 Active 管理员集合落链端两个机构 pallet 的 `AdminAccounts` storage——
@@ -726,10 +724,8 @@ fn blake2_256(input: &[u8]) -> [u8; 32] {
 // `PrivateAdmins`(私权法人:股权/股份/有限合伙/公益/协会/私立学校等)。
 // 节点按自身机构码路由到对应 pallet,登录验签后比对该集合放行,
 // 本地 admins 表仅作元数据/省映射缓存。个人多签 PMUL 不在控制台范围。
-// ──────────────────────────────────────────────────────────────────
-
 /// 联邦注册局机构码,镜像 `admin_primitives::FRG`(`*b"FRG\0"`)。
-/// 中文注释:onchina 不依赖 admin-primitives(避免引入 frame-support 重依赖),
+/// onchina 不依赖 admin-primitives(避免引入 frame-support 重依赖),
 /// 此处单字面镜像;FRG 为稳定常量,与链端保持一致即可。
 const FRG_CODE: [u8; 4] = *b"FRG\0";
 /// 国家司法院机构码。NJD 虽属固定治理档,但按产品边界进入 OnChina 控制台。
@@ -752,7 +748,7 @@ const ADMIN_STATUS_ACTIVE: u8 = 1;
 struct OnChainAdminProfile {
     account: [u8; 32],
     admin_cid_number: Vec<u8>,
-    // 中文注释:name/admin_role 供管理员列表与大屏只读看板席位展示读取。
+    // name/admin_role 供管理员列表与大屏只读看板席位展示读取。
     name: Vec<u8>,
     admin_role: Vec<u8>,
     term_start: u32,
@@ -811,7 +807,7 @@ pub(crate) struct NodeInstitutionIdentity {
     pub(crate) main_account: [u8; 32],
     /// 联邦注册局专用:本节点所辖省的链上省码([u8;2]);其它机构为 `None`。
     ///
-    /// 中文注释:链上 FRG 215 人按 43 省切组,Active 集合落 `PublicAdmins::FederalRegistryProvinceGroups`
+    /// 链上 FRG 215 人按 43 省切组,Active 集合落 `PublicAdmins::FederalRegistryProvinceGroups`
     /// (键=`ProvinceCode`),**不在** `AdminAccounts`。本字段来自绑定候选的链上省组键。
     pub(crate) frg_province_code: Option<[u8; 2]>,
 }
@@ -966,7 +962,7 @@ pub(crate) const TIER2_REGISTRY_CODE: &str = "CREG";
 
 /// 控制台注册局分层单点谓词:Tier1 = 创世注册局(本期 = 联邦注册局 FRG)。
 ///
-/// 中文注释:取代散落各处的 `institution_code == "FRG"` 字面。FRG 的 `admin_level` 虽为
+/// 取代散落各处的 `institution_code == "FRG"` 字面。FRG 的 `admin_level` 虽为
 /// `National`(链端铁律不可改),但其管理员按省分区(每节点单省),故控制台据此谓词
 /// 单点矫正为省级分层 / 治理边界,而非全国。
 pub(crate) fn is_tier1_registry(institution_code: &str) -> bool {
@@ -975,14 +971,14 @@ pub(crate) fn is_tier1_registry(institution_code: &str) -> bool {
 
 /// 控制台注册局分层单点谓词:Tier2 = 下级注册局(本期 = 市注册局 CREG),由 Tier1 供给。
 ///
-/// 中文注释:取代散落各处的 `institution_code == "CREG"` 字面。
+/// 取代散落各处的 `institution_code == "CREG"` 字面。
 pub(crate) fn is_subordinate_registry(institution_code: &str) -> bool {
     institution_code == TIER2_REGISTRY_CODE
 }
 
 /// 省名 → 链上省码([u8;2]),单源 `primitives::cid::code::PROVINCE_CODE_INFOS`。
 ///
-/// 中文注释:此为链上 `ProvinceCode`(FRG 省级组 storage 键),与 china.sqlite 行政区编码
+/// 此为链上 `ProvinceCode`(FRG 省级组 storage 键),与 china.sqlite 行政区编码
 /// (`crate::cid::china::province_code_by_name`)是两套不同口径,勿混用。
 pub(crate) fn chain_province_code_by_name(province_name: &str) -> Option<[u8; 2]> {
     let trimmed = province_name.trim();
@@ -1017,7 +1013,7 @@ fn contains_admin(decoded: &OnChainAdminAccount, target: &[u8; 32]) -> bool {
 
 /// 用冷钱包签名账户反查其所属的链上 active admin 机构集合。
 ///
-/// 中文注释:这是链上中国通用平台的登录真源。平台启动时不再预设机构;
+/// 这是链上中国通用平台的登录真源。平台启动时不再预设机构;
 /// 已验签账户在链上哪些机构的 Active 管理员集合内,就得到哪些可绑定候选。
 /// 当前不改 runtime,先扫描现有 storage;后续若要性能优化,再单独给链端加反向索引。
 pub(crate) async fn find_active_admin_memberships(
@@ -1213,7 +1209,7 @@ fn admin_source_label(source: u8) -> &'static str {
 
 /// 读取本节点机构的链上 Active 管理员**资料**集合(账户 + 姓名 + 职务 + 任期)。
 ///
-/// 中文注释:与 `fetch_active_admins_onchain`(只取账户,用于登录闸)同一 storage 定位口径,
+/// 与 `fetch_active_admins_onchain`(只取账户,用于登录闸)同一 storage 定位口径,
 /// 但保留 `AdminProfile` 的展示字段供大屏席位板呈现。定位分流:FRG→省级组;其它→候选 pallet
 /// 的 `AdminAccounts`(键=机构主账户)。`Ok(Some(set))`=命中 Active 集合;`Ok(None)`=不存在/非 Active。
 pub(crate) async fn fetch_active_admin_profiles_onchain(
@@ -1411,7 +1407,7 @@ mod tests {
 
     #[test]
     fn deregistration_payload_digest_is_byte_locked() {
-        // 中文注释:golden 测试锁死注销凭证 payload 的 SCALE 字节编码。
+        // golden 测试锁死注销凭证 payload 的 SCALE 字节编码。
         // 该摘要口径必须与链端 verify_institution_deregistration(runtime configs)逐字节一致;
         // 任何字段类型/顺序漂移都会改变摘要,此断言立即红。
         let genesis_hash = [0x11u8; 32];

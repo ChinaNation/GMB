@@ -21,7 +21,7 @@ pub trait WeightInfo {
 
 /// 默认 zero weight 实现,仅供 mock runtime / 框架阶段 cargo check 通过。
 ///
-/// 中文注释:实装时换成 `SubstrateWeight<T>` 模式 + benchmarks 自动生成。
+/// 实装时换成 `SubstrateWeight<T>` 模式 + benchmarks 自动生成。
 pub struct ZeroWeight;
 
 impl WeightInfo for ZeroWeight {

@@ -80,7 +80,7 @@ pub mod pallet {
 
         /// 当前框架可直接固化的最大选民快照人数。
         ///
-        /// 中文注释：大规模普选后续应接 CID 凭证/人口快照,不把几万人名单直接塞链上。
+        /// 大规模普选后续应接 CID 凭证/人口快照,不把几万人名单直接塞链上。
         #[pallet::constant]
         type MaxElectionVoters: Get<u32>;
 
@@ -199,7 +199,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 创建普选提案。
         ///
-        /// 中文注释：职位、任期、候选/选民范围由调用方解释并传入快照；
+        /// 职位、任期、候选/选民范围由调用方解释并传入快照；
         /// election-vote 不在这里硬编码总统、议员、任期等业务规则。
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0))]

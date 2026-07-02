@@ -136,7 +136,7 @@ pub fn run_desktop() {
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());
-            // 中文注释：同步守护只读本机 RPC，等待节点启动后再按本机状态自检。
+            // 同步守护只读本机 RPC，等待节点启动后再按本机状态自检。
             home::sync_guard::start_sync_guard(app.handle().clone());
 
             // 自动启动节点。在后台线程跑，避免阻塞 setup 让窗口慢出现。

@@ -1,6 +1,6 @@
 //! 清算行本地 L3 存款缓存账本。
 //!
-//! 中文注释:
+//!
 //! - 权威账本在链上 `offchain_transaction::DepositBalance` /
 //!   `BankTotalDeposits`。本模块只是**缓存**,用于:
 //!     1. citizenapp 查询余额时的快速响应(避免每次落到链上 state 查询)
@@ -66,7 +66,7 @@ pub struct PendingPayment {
 
 /// L3 支付意图的**节点层镜像结构**。
 ///
-/// 中文注释:
+///
 /// - 字段顺序与 runtime 侧 `offchain_transaction::batch_item::PaymentIntent`
 ///   **严格一致**,否则 SCALE 编解码得到的 `signing_hash` 会不匹配,导致链上验签
 ///   失败。
@@ -144,7 +144,7 @@ impl OffchainLedger {
 
     /// 查下一个应提交的 nonce(citizenapp RPC 调用)。
     ///
-    /// 中文注释:跨行收款方节点不会把付款方写入本地 `accounts`,因此这里必须把
+    /// 跨行收款方节点不会把付款方写入本地 `accounts`,因此这里必须把
     /// 已接受的 cross-bank pending 也纳入计算,避免连续两笔跨行支付都拿到同一个
     /// `chain_nonce + 1`。
     pub fn next_nonce(&self, user: &AccountId32) -> u64 {
@@ -359,7 +359,7 @@ impl OffchainLedger {
     ///
     /// [`l2_ack_sig_provider`] 清算行对"我承认这笔意图"的 64 字节签名。
     /// [`accepted_at`] RPC 层生成 ACK 前确定的 UNIX 秒时间戳,本地 pending 与响应共用。
-    /// 中文注释：直接验签入账入口,当前生产路径走链上批次提交。
+    /// 直接验签入账入口,当前生产路径走链上批次提交。
     #[allow(dead_code)]
     pub fn accept_payment(
         &self,
@@ -384,7 +384,7 @@ impl OffchainLedger {
 
     /// 接收支付意图并允许 RPC 层注入链上余额 / nonce。
     ///
-    /// 中文注释:
+    ///
     /// - 本行付款(`intent.payer_bank == my_bank`)继续走本地 `accounts` 缓存,保持
     ///   已有充值/提现/同行扫码的行为。
     /// - 跨行收款(`intent.recipient_bank == my_bank && intent.payer_bank != my_bank`)

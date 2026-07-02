@@ -1,6 +1,6 @@
 // 行政区字典数据包载入 —— 版本驱动增量 reconcile(ADR-021 §A2/A3)。
 //
-// 中文注释:发布期由 `citizenapp/tools/generate_admin_division_bundle.mjs` 直接 dump china.sqlite
+// 发布期由 `citizenapp/tools/generate_admin_division_bundle.mjs` 直接 dump china.sqlite
 // 生成静态数据包。客户端无服务端,数据靠 assets 包分发;包版本变了就增量刷新——
 // 变的换、删的清、没变的不动,零旧数据残留(只读派生数据,无用户数据)。
 // 数据包结构:
@@ -40,7 +40,7 @@ class AdminDivisionBundleLoader {
 
   /// 版本驱动增量 reconcile:包版本变了就增量刷新,变的换、删的清、没变的不动。
   ///
-  /// 中文注释:每次先看省级 ver 表,只 reconcile ver 变了或本地缺游标的省;
+  /// 每次先看省级 ver 表,只 reconcile ver 变了或本地缺游标的省;
   /// 没变的省连分片都不读。全局 version 只作最终完成标记,不能短路省级检查。
   /// manifest 缺省级版本表时视为无效数据包,直接拒绝写库。
   /// 返回是否发生了写入。
@@ -91,7 +91,7 @@ class AdminDivisionBundleLoader {
 
   /// 强制按数据包 reconcile 字典。无数据包时返回 false。
   ///
-  /// 中文注释:首装时逐省 reconcile;只写新增/变更行,并删包内已无的旧键。
+  /// 首装时逐省 reconcile;只写新增/变更行,并删包内已无的旧键。
   Future<bool> loadFromBundle() async {
     final provincesRaw = await _tryLoadString(_provincesPath);
     if (provincesRaw == null) return false;

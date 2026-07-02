@@ -1,6 +1,6 @@
 //! 公权机构自动目录服务。
 //!
-//! 中文注释:自动生成的公权机构只归 gov 模块维护。编译不写库,serve 只做版本守门;
+//! 自动生成的公权机构只归 gov 模块维护。编译不写库,serve 只做版本守门;
 //! 部署入口必须先运行 `reconcile-gov --changed-only` 与 `check-gov --strict`。
 
 use serde::Serialize;
@@ -426,7 +426,7 @@ fn official_institution_targets(scope: &OfficialReconcileScope) -> Vec<OfficialI
         );
     }
     push_extra_national_targets(&mut targets);
-    // 中文注释:省/市对账只生成命中 scope 的行政区目标,避免 changed-only
+    // 省/市对账只生成命中 scope 的行政区目标,避免 changed-only
     // 逐省检查时重复计算全国镇级 CID。
     for province in provinces()
         .iter()
@@ -618,7 +618,7 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
     else {
         return;
     };
-    // 中文注释:5 个总统府联邦局(安全/情报/特勤/人事/注册)已作为创世常量收录于
+    // 5 个总统府联邦局(安全/情报/特勤/人事/注册)已作为创世常量收录于
     // china_zf.rs CHINA_ZF(带 main/fee 账户),由 :375 的常量循环单一 push;
     // 此处不用区划模板重复生成,避免同号双定义触发 reconcile 21000。仅保留两院议会。
     for (institution_code, cid_short_name, cid_full_name) in [
@@ -667,7 +667,7 @@ fn push_area_template_target(
 ) {
     let cid_short_name = format!("{display_area_name}{}", template.suffix);
     let cid_full_name = format!("{display_area_name}{}", template.full_suffix);
-    // 中文注释:种子约定 + (创世)无重试 收敛在 cid::seed,本处只传参。
+    // 种子约定 + (创世)无重试 收敛在 cid::seed,本处只传参。
     // 创世幂等故不查重,exists_fn 恒返 false 等价原行为。
     let Ok(cid_number) = crate::cid::official_institution_cid::<std::convert::Infallible>(
         seed_scope,
@@ -1021,7 +1021,7 @@ fn account_counts(db: &Db, cids: &[String]) -> Result<BTreeMap<String, i64>, Str
     let cids = cids.to_vec();
     db.with_client(move |conn| {
         let mut output = BTreeMap::new();
-        // 中文注释:全量镇目录接近 30 万机构,账户校验按块查,避免超大数组压垮单条 SQL。
+        // 全量镇目录接近 30 万机构,账户校验按块查,避免超大数组压垮单条 SQL。
         for chunk in cids.chunks(10_000) {
             let chunk = chunk.to_vec();
             let rows = conn
@@ -1078,7 +1078,7 @@ pub fn check_gov_catalog_db(
                 institution_code,
                 education_type,
             )) => {
-                // 中文注释:行政区身份由 province_code/city_code/town_code 唯一确定(china.sqlite 单源),
+                // 行政区身份由 province_code/city_code/town_code 唯一确定(china.sqlite 单源),
                 // 名字是派生展示,不参与一致性比对。
                 if cid_full_name != &target.cid_full_name
                     || cid_short_name != &target.cid_short_name
@@ -1183,7 +1183,7 @@ pub fn reconcile_changed_gov_catalog_db(
             )?);
         }
     }
-    // 中文注释:changed-only 以省为单位减少写库范围,但部署守门看的是全局
+    // changed-only 以省为单位减少写库范围,但部署守门看的是全局
     // all:all manifest。省级对账完成后必须刷新全局版本,否则 strict 会误判目录过期。
     let all_check = check_gov_catalog_db(db, OfficialReconcileScope::All, GovTargetKind::All)?;
     if all_check.ok {
@@ -1237,7 +1237,7 @@ fn count_existing_public_targets(db: &Db, target_cids: &[String]) -> Result<usiz
     let target_cids = target_cids.to_vec();
     db.with_client(move |conn| {
         let mut total: usize = 0;
-        // 中文注释:全量公权目录接近 30 万行,统计时也按块传参,避免超大数组触发驱动/数据库错误。
+        // 全量公权目录接近 30 万行,统计时也按块传参,避免超大数组触发驱动/数据库错误。
         for chunk in target_cids.chunks(10_000) {
             let chunk = chunk.to_vec();
             let row = conn
@@ -1269,7 +1269,7 @@ fn bulk_write_targets(
     if targets.is_empty() {
         return Ok(());
     }
-    // 中文注释:号生成若在同一批 targets 内产生重复 cid_number(确定性 N9 碰撞或重复目标),
+    // 号生成若在同一批 targets 内产生重复 cid_number(确定性 N9 碰撞或重复目标),
     // 后续 bulk upsert 会以 21000 cardinality_violation 报错且不带定位信息。这里提前全量探测,
     // 带出碰撞双方机构信息,便于判断是重复目标(同 seed)还是 N9 哈希碰撞(不同 seed)。
     {
@@ -1391,7 +1391,7 @@ fn bulk_write_target_chunk(
     let home_province_codes = vec![None::<String>; targets.len()];
     let home_city_codes = vec![None::<String>; targets.len()];
 
-    // 中文注释:同一 cid 如果曾因行政区划修正落在旧分区,批量清掉旧分区行。
+    // 同一 cid 如果曾因行政区划修正落在旧分区,批量清掉旧分区行。
     for table in ["subjects", "gov", "accounts"] {
         let sql = format!(
             "DELETE FROM {table} t
@@ -1432,7 +1432,7 @@ fn bulk_write_target_chunk(
         )
     })?;
 
-    // 中文注释:行政区名字不入库(china.sqlite 单源),只灌 province_code/city_code/town_code。
+    // 行政区名字不入库(china.sqlite 单源),只灌 province_code/city_code/town_code。
     tx.execute(
         "INSERT INTO subjects (
             cid_number, kind, cid_full_name, cid_short_name,
@@ -1663,7 +1663,7 @@ fn delete_obsolete_generated_targets(db: &Db, cids: &[String]) -> Result<(), Str
             .map_err(|e| format!("begin obsolete generated gov cleanup failed: {e}"))?;
         for chunk in cids.chunks(10_000) {
             let chunk = chunk.to_vec();
-            // 中文注释:obsolete 只来自 gov.source=GENERATED 的确定性目录。行政区 code
+            // obsolete 只来自 gov.source=GENERATED 的确定性目录。行政区 code
             // 删除/合并后,这些行不再是目标目录的一部分,必须连同账户和索引一起清掉。
             tx.execute("DELETE FROM accounts WHERE cid_number = ANY($1)", &[&chunk])
                 .map_err(|e| format!("delete obsolete generated gov accounts failed: {e}"))?;

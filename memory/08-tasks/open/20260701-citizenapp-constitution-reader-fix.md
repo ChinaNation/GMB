@@ -117,6 +117,7 @@
 - 2026-07-02：逐条定稿第 16 条；用户确认修改 runtime 宪法真源后，已将第 16 条第 1、2 款中的省市行政区变更表决机构统一为省联邦立法院、市公民立法委员会和临时市公民立法委员会，并同步英文。
 - 2026-07-02：逐条定稿第 18 条；用户确认修改 runtime 宪法真源后，已将第 18 条第 1、2 款统一为省联邦立法院和市公民立法委员会口径，并同步英文。
 - 2026-07-02：逐条定稿第 22 条；用户确认修改 runtime 宪法真源后，已将直接发起违宪审查对象改为总统/副总统、国家立法院参议会参议员、国家立法院众议会众议员、国家司法院院长/副院长、国家监察院院长/副院长、国家监察院三联邦署署长/副署长、国家公民教育委员会委员和国家公民储备委员会委员，并同步英文。
+- 2026-07-02：逐条定稿第 31 条；用户确认修改 runtime 宪法真源后，已将现役职业军人改为现役军人，并将国家公权机构改为公权机构，英文同步更新。
 
 验收结果：
 - `flutter analyze`：通过。
@@ -210,6 +211,21 @@
   - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
 - 2026-07-02 第 22 条逐条定稿验收：
   - 结构化回读 `constitution.scale`：第 22 条正文已更新为新的违宪审查对象列表，英文同步更新；文件大小 222536 → 222346 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 31 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 31 条已更新为现役军人和公权机构口径，英文同步更新；文件大小 222346 → 222315 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 35 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 35 条正文和第 1 款已将“任意市身份注册局 / 任意市注册局 / 市注册局”更新为“任意身份注册局 / 身份注册局”，英文同步更新为 `Identity Registry Bureau` 口径；文件大小 222315 → 222306 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222306/222306 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：未能执行；当前工作区已有无关修改 `citizenchain/node/Cargo.toml`，且该文件不是有效 UTF-8，导致 Cargo 无法加载 workspace manifest。未修复或回滚该无关文件。
+- 2026-07-02 第 36 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 36 条第 5 款已将“双重授权”机构更新为“市自治司法院和省联邦司法院”，英文同步更新为 `Municipal Self-Governing Judicial Yuan` 和 `Provincial Federal Judicial Yuan`；文件大小 222306 → 222341 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222341/222341 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 43 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 43 条已按用户定稿删除“海外 / 同胞 / 不侵犯他国公民人权的基础上”口径，改为维护“华人、华侨”的人权与利益，英文同步更新；文件大小 222341 → 222153 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222153/222153 字节。
   - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
 
 残留清理：

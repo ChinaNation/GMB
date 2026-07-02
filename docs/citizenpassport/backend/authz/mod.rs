@@ -2,7 +2,7 @@
 //!
 //! 提供 Cookie session 校验和用户分组检查。
 //!
-//! 中文注释：CPMS 只有 admins / operators 两级管理员；
+//! CPMS 只有 admins / operators 两级管理员；
 //! admins 是管理分组，必须能执行所有档案业务操作。
 
 use axum::{
@@ -108,7 +108,7 @@ pub(crate) async fn require_auth(
     }
 
     if expires_at < Utc::now().timestamp() {
-        // 中文注释：所有管理员都按用户分组使用滑动空闲期；管理员 15 分钟，操作员 30 分钟。
+        // 所有管理员都按用户分组使用滑动空闲期；管理员 15 分钟，操作员 30 分钟。
         let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
             .bind(&token)
             .execute(&state.db)

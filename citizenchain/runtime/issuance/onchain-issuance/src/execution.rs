@@ -20,7 +20,7 @@ use crate::pallet::BalanceOf;
 
 /// 创建用户代币(扣 1000 GMB 押金 + 写入 storage + 调 pallet_assets::create)。
 ///
-/// 中文注释:框架阶段占位,业务实装时步骤(callback 通过分支):
+/// 框架阶段占位,业务实装时步骤(callback 通过分支):
 /// 1. `validation::ensure_issuer_allowed` / `ensure_decimals_in_range` / `ensure_class_supported`
 /// 2. 字段过黑名单(`validation::contains_blacklisted_word`)
 /// 3. `fee::release_creation_deposit_to_nrc(proposal_id)` 把 reserve 的押金 transfer 给 NRC fee_account
@@ -65,7 +65,7 @@ pub fn execute_transfer<T: Config>(
 
 /// 关闭资产(调 pallet_assets::start_destroy + 销毁余额 + emit AssetClosed)。
 ///
-/// 中文注释:不退还创建费 1000 GMB(押金已在 issue 通过时 transfer 给 NRC,不属发行方押金性质)。
+/// 不退还创建费 1000 GMB(押金已在 issue 通过时 transfer 给 NRC,不属发行方押金性质)。
 /// ADR-011 v2 8.1 节:必须 with_transaction 包裹,保证 OnchainIssuance::Assets.state 与
 /// pallet_assets::Asset.status 原子同步。
 pub fn execute_close<T: Config>(_proposal: CloseProposal) -> DispatchResult {
@@ -75,7 +75,7 @@ pub fn execute_close<T: Config>(_proposal: CloseProposal) -> DispatchResult {
 
 /// 业务 callback 入口:VotingEngine InternalVote 通过后路由到对应 execute_*。
 ///
-/// 中文注释:实装时按 proposal_data[0..7] = MODULE_TAG, [7..11] = ACTION 解码。
+/// 实装时按 proposal_data[0..7] = MODULE_TAG, [7..11] = ACTION 解码。
 /// propose origin 校验在 propose 阶段(`validate_proposer_origin`)已完成,callback 此处不再校验。
 pub fn dispatch_internal_callback<T: Config>(
     _action: [u8; 4],

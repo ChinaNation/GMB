@@ -6,7 +6,7 @@ const HARD_DELETE_MONTHS: u32 = 100 * 12;
 
 /// 执行已到期注销档案的硬删除。
 ///
-/// 中文注释：详情页删除按钮对应“注销软删除”，`deleted_at` 是 100 年计时起点。
+/// 详情页删除按钮对应“注销软删除”，`deleted_at` 是 100 年计时起点。
 /// 到期后只释放档案号与护照号这一对号码；实名档案行物理删除，最小审计记录不保存实名原文。
 pub(crate) async fn run_due_archive_hard_delete(db: &sqlx::PgPool) -> Result<u64, String> {
     let now_ts = Utc::now().timestamp();

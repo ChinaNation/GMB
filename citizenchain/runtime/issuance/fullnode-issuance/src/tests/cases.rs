@@ -226,7 +226,7 @@ fn miner_can_bind_after_first_authored_block() {
         let wallet = account(105);
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
 
-        // 中文注释：首次出块前没有绑定资格，首次奖励仍进入矿工身份账户。
+        // 首次出块前没有绑定资格，首次奖励仍进入矿工身份账户。
         <FullnodeIssuance as Hooks<u32>>::on_finalize(1);
         assert_eq!(
             Balances::free_balance(miner.clone()),

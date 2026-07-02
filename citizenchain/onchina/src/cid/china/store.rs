@@ -25,7 +25,7 @@ fn leak_text(value: String) -> &'static str {
 
 fn china_db_path() -> &'static Path {
     CHINA_DB_PATH.get_or_init(|| {
-        // 中文注释:行政区以开发库 `onchina/src/cid/china/china.sqlite` 为权威源。
+        // 行政区以开发库 `onchina/src/cid/china/china.sqlite` 为权威源。
         // 生产环境只允许通过 ONCHINA_CHINA_DB 指向随包只读 SQLite,不得在运行中复制或改写。
         if let Some(raw) = std::env::var("ONCHINA_CHINA_DB")
             .ok()
@@ -53,7 +53,7 @@ fn open_china_db() -> Connection {
 
 /// 使用只读 SQLite 连接执行查询。
 ///
-/// 中文注释:业务模块需要读取 `china.sqlite` 时只能通过本闭包入口,不得复制数据库路径推导逻辑,
+/// 业务模块需要读取 `china.sqlite` 时只能通过本闭包入口,不得复制数据库路径推导逻辑,
 /// 也不得用可写模式打开随包行政区数据库。
 pub(crate) fn with_china_connection<T>(
     f: impl FnOnce(&Connection) -> Result<T, String>,
@@ -64,10 +64,10 @@ pub(crate) fn with_china_connection<T>(
 
 /// 返回当前行政区划 SQLite 文件哈希。
 ///
-/// 中文注释:该哈希只用于部署期确定性目录完整性校验。运行时只读打开数据库,
+/// 该哈希只用于部署期确定性目录完整性校验。运行时只读打开数据库,
 /// 不会因为哈希变化自动写库或发布新版本。
 pub fn china_sqlite_hash() -> Result<String, String> {
-    // 中文注释:china_db_path 本身已在进程内固定,部署期完整性哈希也随之缓存,
+    // china_db_path 本身已在进程内固定,部署期完整性哈希也随之缓存,
     // 避免 gov changed-only 逐省检查时重复读取并哈希同一个只读 SQLite 文件。
     if let Some(hash) = CHINA_SQLITE_HASH_CACHE.get() {
         return Ok(hash.clone());
@@ -209,7 +209,7 @@ pub fn city_code_by_name(province_name: &str, city_name: &str) -> Option<&'stati
         .map(|c| c.city_code)
 }
 
-/// 中文注释:按 (省名,市名,镇名) 反查镇代码,返回 None 即该镇不在真源内。
+/// 按 (省名,市名,镇名) 反查镇代码,返回 None 即该镇不在真源内。
 /// 机构创建与作用域校验使用它确认镇名是否落在 china.sqlite 真源内。
 pub fn town_code_by_name(
     province_name: &str,
@@ -226,7 +226,7 @@ pub fn town_code_by_name(
         .map(|t| t.town_code)
 }
 
-/// 中文注释:镇目录详情和后续导入工具需要按代码还原行政区名称,当前查询链路暂未直接调用。
+/// 镇目录详情和后续导入工具需要按代码还原行政区名称,当前查询链路暂未直接调用。
 #[allow(dead_code)]
 pub fn area_name_by_codes(
     province_code: &str,
@@ -257,7 +257,7 @@ pub fn area_name_by_codes(
 
 /// 按 (province_code, city_code, town_code) 派生省/市/镇名字三元组,缺失返回空串。
 ///
-/// 中文注释:行政区名字单一真源是 china.sqlite,subjects 表不再落地名字副本。
+/// 行政区名字单一真源是 china.sqlite,subjects 表不再落地名字副本。
 /// 后端在拼装 DTO 时用本函数把 code 反查成名字,DTO JSON 形状保持不变;
 /// 名字查不到(退役/异常 code)按空串处理,绝不另造名字。
 pub fn area_display_names(
@@ -277,7 +277,7 @@ pub fn area_display_names(
 
 /// 判定 (省,市,镇) 三元组是否对应当前行政区划真源里的一个活镇。
 ///
-/// 中文注释:孤儿机构清理的唯一判定依据。若机构 `town_code` 指向一个不存在于
+/// 孤儿机构清理的唯一判定依据。若机构 `town_code` 指向一个不存在于
 /// china.sqlite 的镇,即视为孤儿。空 `tc` 永远返回 true(市级机构、
 /// 储委会、部委等合法态没有镇维度),由调用方负责跳过空 town_code 行;此处也对空 tc 直接判存在以防误删。
 pub fn town_exists(pc: &str, cc: &str, tc: &str) -> bool {
@@ -326,7 +326,7 @@ mod tests {
     #[test]
     fn town_exists_false_for_retired_town_code() {
         let (pc, cc, _tc) = first_town_triple();
-        // 中文注释:同省同市但镇 code 不存在(模拟退役/被删镇),应判孤儿。
+        // 同省同市但镇 code 不存在(模拟退役/被删镇),应判孤儿。
         assert!(!town_exists(pc, cc, "ZZZ_NOT_A_TOWN"));
     }
 
@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn town_exists_true_for_empty_town_code() {
-        // 中文注释:空镇 code = 市级机构/储委会/部委合法态,永远不是孤儿。
+        // 空镇 code = 市级机构/储委会/部委合法态,永远不是孤儿。
         assert!(town_exists("ZS", "001", ""));
         assert!(town_exists("ZS", "", ""));
         assert!(town_exists("anything", "anything", "   "));

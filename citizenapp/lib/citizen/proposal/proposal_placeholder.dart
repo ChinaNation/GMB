@@ -4,7 +4,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 提案占位页——某提案种类链端/客户端尚未对接时统一展示「开发中」。
 ///
-/// 中文注释:proposal/ 下每种提案一个文件夹;尚未实现的提案(决议发行/决议销毁/
+/// proposal/ 下每种提案一个文件夹;尚未实现的提案(决议发行/决议销毁/
 /// 验证密钥/发起选举)用本占位页,避免空目录,接好后替换为真实发起页。
 class ProposalPlaceholderPage extends StatelessWidget {
   const ProposalPlaceholderPage({

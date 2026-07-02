@@ -37,7 +37,7 @@ mod benchmarks;
 pub mod weights;
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
-/// 中文注释：tag 带 schema 版本号。
+/// tag 带 schema 版本号。
 pub const MODULE_TAG: &[u8] = b"pri-adm1";
 
 /// private-admins pallet on-chain storage 版本。
@@ -58,7 +58,7 @@ pub mod pallet {
         #[pallet::constant]
         /// 单个机构账户管理员最大数量上限（用于 BoundedVec，运行时目标值 1989）
         type MaxAdminsPerInstitution: Get<u32>;
-        /// 中文注释：内部投票引擎（返回真实 proposal_id，避免外部猜测 next_proposal_id）。
+        /// 内部投票引擎（返回真实 proposal_id，避免外部猜测 next_proposal_id）。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         /// 机构账户 → CID 查询入口。机构管理员变更提案必须以 CID 为主体真源。
@@ -92,7 +92,7 @@ pub mod pallet {
         StorageMap<_, Blake2_128Concat, T::AccountId, AdminAccountOf<T>, OptionQuery>;
     /// 机构法定代表人(机构首脑;ADR-027 立法签署人)。键 = 机构账户,值 = 法定代表人账户。
     ///
-    /// 中文注释:必为该机构 Active admins 之一(写入时校验)。未显式设置时,
+    /// 必为该机构 Active admins 之一(写入时校验)。未显式设置时,
     /// `legal_representative()` 回退到 admins[0](创世首位管理员=机构首脑占位),
     /// 由治理(private-admins)显式指定后覆盖。仅治理/签署语境读取。
     #[pallet::storage]
@@ -417,7 +417,7 @@ pub mod pallet {
 
         /// 写入 Pending 管理员账户。
         ///
-        /// 中文注释：生命周期写入只能经 `AdminAccountLifecycle` trait 做提案上下文校验后进入。
+        /// 生命周期写入只能经 `AdminAccountLifecycle` trait 做提案上下文校验后进入。
         pub(crate) fn do_create_pending_admin_account(
             institution: T::AccountId,
             institution_code: InstitutionCode,
@@ -484,7 +484,7 @@ pub mod pallet {
 
         /// 清理尚未激活的 Pending 管理员账户。
         pub(crate) fn do_remove_pending_admin_account(institution: T::AccountId) -> DispatchResult {
-            // 中文注释：Pending 清理必须命中真实账户，避免不存在账户被静默当作清理成功。
+            // Pending 清理必须命中真实账户，避免不存在账户被静默当作清理成功。
             let account = AdminAccounts::<T>::get(institution.clone())
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
@@ -509,7 +509,7 @@ pub mod pallet {
                 Error::<T>::AdminAccountNotActive
             );
             let institution_code = account.institution_code;
-            // 中文注释：动态多签注销完成后不保留 Closed 当前状态墓碑；
+            // 动态多签注销完成后不保留 Closed 当前状态墓碑；
             // 同名确定性地址可在资金清空后重新走全新的注册流程。
             AdminAccounts::<T>::remove(institution.clone());
             Self::deposit_event(Event::<T>::AdminAccountClosed {
@@ -521,7 +521,7 @@ pub mod pallet {
 
         /// 注册局直设:原子写 Active 管理员账户(创建或更新)+ 注册动态阈值。
         ///
-        /// 中文注释:机构注册交易已经完成注册局权限校验;这里只校验私权机构管理员账户
+        /// 机构注册交易已经完成注册局权限校验;这里只校验私权机构管理员账户
         /// 边界,并把管理员集合与动态阈值作为一个链上事务提交。
         pub(crate) fn do_set_active_admin_account_direct(
             institution: T::AccountId,
@@ -609,7 +609,7 @@ pub mod pallet {
             if account.institution_code != institution_code || account.status != status {
                 return None;
             }
-            // 中文注释：读侧也要执行账户类型边界校验，避免升级前写入的旧脏数据
+            // 读侧也要执行账户类型边界校验，避免升级前写入的旧脏数据
             // 继续通过 active/pending 查询 API 被其他业务模块当作有效管理员账户。
             if Self::ensure_account_kind_matches_org(account.kind, account.institution_code)
                 .is_err()
@@ -650,7 +650,7 @@ pub mod pallet {
 
         /// 读取 Active 账户管理员账户列表(投票/多签资格语义,取 profile.account)。
         ///
-        /// 中文注释:普通业务提案创建和投票快照默认使用此 API;返回的是账户而非资料,
+        /// 普通业务提案创建和投票快照默认使用此 API;返回的是账户而非资料,
         /// 内部投票一人一票、多签转账、组织管理查配置全部零改动。
         pub fn active_account_admins(
             institution_code: InstitutionCode,
@@ -679,7 +679,7 @@ pub mod pallet {
 
         /// 读取机构法定代表人(机构首脑;ADR-027 立法签署人)。
         ///
-        /// 中文注释:优先取显式指定的法定代表人(校验仍为 Active admins 之一);
+        /// 优先取显式指定的法定代表人(校验仍为 Active admins 之一);
         /// 未指定则回退到 admins[0](创世首位=机构首脑占位)。Active 账户专用。
         pub fn legal_representative(
             institution_code: InstitutionCode,
@@ -781,7 +781,7 @@ pub mod pallet {
             proposal_id: u64,
             action: AdminSetChangeAction<T::AccountId, AdminProfilesOf<T>>,
         ) -> DispatchResult {
-            // 中文注释：执行前同时校验投票引擎元数据与业务 action，避免跨模块误消费。
+            // 执行前同时校验投票引擎元数据与业务 action，避免跨模块误消费。
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             ensure!(

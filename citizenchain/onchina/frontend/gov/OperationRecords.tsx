@@ -1,4 +1,4 @@
-// 中文注释:机构操作记录共享组件。公权、注册局、教育和私权机构详情页统一复用。
+// 机构操作记录共享组件。公权、注册局、教育和私权机构详情页统一复用。
 
 import React, { useEffect, useState } from 'react';
 import { Card, Table, Typography } from 'antd';
@@ -22,7 +22,7 @@ type AuditLogEntry = {
   created_at: string;
 };
 
-// 中文注释:审计日志操作类型中文映射(代码不上前端)。
+// 审计日志操作类型中文映射(代码不上前端)。
 // 单一来源 = 后端 append_audit_log 各调用点的 action 字面量;
 // 后端新增 action 必须同步补这里,未知值回退显示原标识兜底。
 const AUDIT_ACTION_LABEL: Record<string, string> = {
@@ -46,7 +46,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   EDUCATION_INSTITUTION: '教育机构',
 };
 
-// 中文注释:审计详情"事实字段"的人话翻译(代码不上前端)。
+// 审计详情"事实字段"的人话翻译(代码不上前端)。
 // 后端 detail 只存结构化事实(键小写蛇形,值为系统原值),展示翻译全在这里。
 const AUDIT_DETAIL_KEY_LABEL: Record<string, string> = {
   city: '市',
@@ -174,7 +174,7 @@ export const OperationRecords: React.FC<Props> = ({ auth, cidNumber }) => {
             title: '操作者账户',
             dataIndex: 'actor_account',
             width: 240,
-            // 中文注释:账户给人看时优先转 SS58;完整显示不截断,允许换行。
+            // 账户给人看时优先转 SS58;完整显示不截断,允许换行。
             render: (v: string) => (
               <Typography.Text style={{ fontSize: 12, fontFamily: 'monospace', wordBreak: 'break-all' }}>
                 {tryEncodeSs58(v) || v}

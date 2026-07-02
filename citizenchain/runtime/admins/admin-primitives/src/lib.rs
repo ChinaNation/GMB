@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 //! 管理员共用原语。
 //!
-//! 中文注释：本 crate 只放管理员共用类型、trait 与分类策略，不放业务 storage，
+//! 本 crate 只放管理员共用类型、trait 与分类策略，不放业务 storage，
 //! 也不直接创建任何 pallet。`public-admins`、`private-admins` 和
 //! `personal-admins` 必须在各自模块内维护自己的管理员状态。
 
@@ -38,7 +38,7 @@ pub const ADMIN_CID_NUMBER_MAX_BYTES: u32 = CID_NUMBER_MAX_BYTES;
 
 /// 管理员职务/任期/姓名的来源。
 ///
-/// 中文注释:佐证 `AdminProfile` 的 admin_role/term 由哪条治理路径产生;供 CitizenApp 展示。
+/// 佐证 `AdminProfile` 的 admin_role/term 由哪条治理路径产生;供 CitizenApp 展示。
 #[derive(
     Encode,
     Decode,
@@ -66,7 +66,7 @@ pub enum AdminSource {
 
 /// 单个机构管理员的链上公开资料。
 ///
-/// 中文注释:`account` 是密码学账户(投票/多签资格本身);`admin_cid_number` 是注册局签发、
+/// `account` 是密码学账户(投票/多签资格本身);`admin_cid_number` 是注册局签发、
 /// 与真人一一绑定的实名锚;姓名/职务/任期供 CitizenApp 跨机构展示。私权机构与个人多签不使用本结构。
 #[derive(
     Encode,
@@ -114,7 +114,7 @@ pub enum AdminAccountKind {
     PublicInstitution,
     /// 私权机构管理员。
     ///
-    /// 中文注释:非法人不是私权同义词;上层必须按所属法人归属把非法人路由到
+    /// 非法人不是私权同义词;上层必须按所属法人归属把非法人路由到
     /// public-admins 或 private-admins。
     PrivateInstitution,
     /// 个人多签管理员。
@@ -182,7 +182,7 @@ pub struct AdminSetChangeAction<AccountId, AdminList> {
 
 /// 管理员集合生命周期写入口。
 ///
-/// 中文注释：机构账户创建、注销和个人多签创建、注销等业务 pallet 只能通过此 trait
+/// 机构账户创建、注销和个人多签创建、注销等业务 pallet 只能通过此 trait
 /// 请求管理员模块写入 Pending/Active/Closed，不能直接改各管理员模块 storage。
 pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
     fn create_pending_admin_account_for_proposal(
@@ -215,7 +215,7 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
 
     /// 注册局直设入口:原子写入 Active 管理员账户(创建或更新)并注册动态阈值,**绕过内部投票**。
     ///
-    /// 中文注释:仅供注册局注册机构时同步写入目标机构管理员集合;不是机构自改管理员的治理入口。
+    /// 仅供注册局注册机构时同步写入目标机构管理员集合;不是机构自改管理员的治理入口。
     /// 调用方负责上层注册局授权校验;本 trait 实现方负责:
     /// ① 写 Active `AdminAccount`(账户不存在则创建,存在则更新 admins);
     /// ② 把 `threshold` 同步注册进 votingengine 动态阈值(否则该账户后续内部投票阈值缺失);
@@ -237,7 +237,7 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
 
 /// 管理员集合统一查询口。
 ///
-/// 中文注释：runtime 用一个路由实现把读请求分发到 public/private/personal
+/// runtime 用一个路由实现把读请求分发到 public/private/personal
 /// 各自 pallet；业务模块只依赖本 trait，不直接依赖某个具体管理员 storage。
 pub trait AdminAccountQuery<AccountId> {
     /// 是否为创世封存机构账户。非创世模块默认返回 false。
@@ -263,7 +263,7 @@ pub trait AdminAccountQuery<AccountId> {
 
     /// 读取活跃机构管理员的完整公开资料(姓名/职务/任期/实名 CID)。
     ///
-    /// 中文注释:仅公权/私权机构管理员模块返回资料;个人多签与默认实现返回 None。
+    /// 仅公权/私权机构管理员模块返回资料;个人多签与默认实现返回 None。
     /// 投票/多签资格判定仍用 `active_account_admins`(只取账户),本方法专供展示。
     fn active_account_admin_profiles(
         _institution_code: InstitutionCode,
@@ -383,7 +383,7 @@ pub fn is_private_admin_code(code: &InstitutionCode) -> bool {
 
 /// 判断机构码是否属于非法人机构管理员模块候选。
 ///
-/// 中文注释:非法人可隶属公法人或私法人;机构码本身不能决定管理员模块。
+/// 非法人可隶属公法人或私法人;机构码本身不能决定管理员模块。
 pub fn is_unincorporated_admin_code(code: &InstitutionCode) -> bool {
     is_unincorporated_code(code)
 }
@@ -405,7 +405,7 @@ pub fn is_personal_admin_code(code: &InstitutionCode) -> bool {
 
 /// 固定治理公权机构的固定管理员人数。
 ///
-/// 中文注释:FRG 的固定人数语义是"单个省级组 5 人",不是全局 215 人平铺账户。
+/// FRG 的固定人数语义是"单个省级组 5 人",不是全局 215 人平铺账户。
 pub fn expected_fixed_governance_admins_len(code: InstitutionCode) -> Option<u32> {
     use primitives::count_const::{
         FRG_PROVINCE_GROUP_ADMIN_COUNT, NJD_ADMIN_COUNT, NRC_ADMIN_COUNT, PRB_ADMIN_COUNT,

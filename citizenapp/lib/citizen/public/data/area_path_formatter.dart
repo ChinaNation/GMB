@@ -1,6 +1,6 @@
 // 行政区显示路径拼装(ADR-021 行政区唯一真源)。
 //
-// 中文注释:机构只存 (provinceCode, cityCode, townCode);显示名一律按三元组
+// 机构只存 (provinceCode, cityCode, townCode);显示名一律按三元组
 // 查字典 join。**不在 widget build 里 await**——在 repository 层预 join 成
 // view-model 字段,UI 直接读字符串。
 //

@@ -37,7 +37,7 @@ export function OtherTabsSection({ activeKey }: Props) {
     };
   }, [whitepaperDoc]);
 
-  // 中文注释：白皮书是本地内置文档，不能被 Tauri/RPC 状态阻塞；公民宪法仍由 runtime API 读取。
+  // 白皮书是本地内置文档，不能被 Tauri/RPC 状态阻塞；公民宪法仍由 runtime API 读取。
   if (whitepaperDoc) {
     return (
       <section className="section other-tab-section" key={whitepaperDoc.key}>
@@ -67,7 +67,7 @@ export function OtherTabsSection({ activeKey }: Props) {
     );
   }
 
-  // 中文注释：本地文档以当前 tab 为绑定源，避免字段缺失时误回退到白皮书。
+  // 本地文档以当前 tab 为绑定源，避免字段缺失时误回退到白皮书。
   const localDoc =
     tab.contentType === 'document'
       ? LOCAL_DOCS.find((doc) => doc.key === tab.key)

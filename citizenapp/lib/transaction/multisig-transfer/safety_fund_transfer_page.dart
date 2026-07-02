@@ -23,7 +23,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 国储会安全基金转账提案创建页面。
 ///
-/// 中文注释：source 锁定为 NRC 安全基金账户(`InstitutionAccounts.safetyFundAccount`),
+/// source 锁定为 NRC 安全基金账户(`InstitutionAccounts.safetyFundAccount`),
 /// 仅 NRC 管理员可发起,链端调用 `propose_safety_fund_transfer (call_index=1)`。
 class SafetyFundTransferPage extends StatefulWidget {
   SafetyFundTransferPage({
@@ -274,7 +274,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
 
       final service = MultisigTransferService();
-      // 中文注释：提案类交易等真正入块并核对事件后才返回，proposalId 来自
+      // 提案类交易等真正入块并核对事件后才返回，proposalId 来自
       // 链上 SafetyFundTransferProposed 事件，是业务成功的唯一凭据。
       final result = await service.submitProposeSafetyFund(
         beneficiaryAddress: _beneficiaryController.text.trim(),

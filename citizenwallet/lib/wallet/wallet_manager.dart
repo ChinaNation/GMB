@@ -95,11 +95,7 @@ class WalletManager {
   static const int _ss58Format = ChainConstants.ss58Prefix;
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static final LocalAuthentication _localAuth = LocalAuthentication();
-
-  // ---------------------------------------------------------------------------
   // 查询
-  // ---------------------------------------------------------------------------
-
   Future<List<WalletProfile>> getWallets() async {
     final isar = await WalletIsar.instance.db();
     final rows =
@@ -172,11 +168,7 @@ class WalletManager {
       await isar.walletSettingsEntitys.put(settings);
     });
   }
-
-  // ---------------------------------------------------------------------------
   // 热钱包创建 / 导入
-  // ---------------------------------------------------------------------------
-
   /// 创建新钱包。
   ///
   /// [wordCount] 助记词个数，12（默认）或 24。
@@ -230,11 +222,7 @@ class WalletManager {
       _zeroList(seed);
     }
   }
-
-  // ---------------------------------------------------------------------------
   // 删除
-  // ---------------------------------------------------------------------------
-
   Future<void> deleteWallet(int walletIndex) async {
     final isar = await WalletIsar.instance.db();
     final target = await isar.walletProfileEntitys
@@ -264,11 +252,7 @@ class WalletManager {
       }
     });
   }
-
-  // ---------------------------------------------------------------------------
   // 更新
-  // ---------------------------------------------------------------------------
-
   /// 钱包名称最大字符数。
   static const int maxWalletNameLength = 5;
 
@@ -315,11 +299,7 @@ class WalletManager {
       }
     });
   }
-
-  // ---------------------------------------------------------------------------
   // 签名（seed 不出类）
-  // ---------------------------------------------------------------------------
-
   Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async {
     await _authenticateIfSupported();
     final isar = await WalletIsar.instance.db();
@@ -390,11 +370,7 @@ class WalletManager {
       seedBytes.fillRange(0, seedBytes.length, 0);
     }
   }
-
-  // ---------------------------------------------------------------------------
   // Seed 派生
-  // ---------------------------------------------------------------------------
-
   Future<List<int>> _mnemonicToMiniSecret(String mnemonic) async {
     final entropy =
         bip39m.Mnemonic.fromSentence(mnemonic, bip39m.Language.english).entropy;
@@ -415,11 +391,7 @@ class WalletManager {
       seedBytes.fillRange(0, seedBytes.length, 0);
     }
   }
-
-  // ---------------------------------------------------------------------------
   // Secure Storage
-  // ---------------------------------------------------------------------------
-
   String _seedKey(int walletIndex) => WalletSecureKeys.seedHexV1(walletIndex);
 
   Future<void> _writeSeedHex(int walletIndex, String seedHex) async {
@@ -516,11 +488,7 @@ class WalletManager {
       throw WalletAuthException('认证服务异常：${e.message}，请稍后重试');
     }
   }
-
-  // ---------------------------------------------------------------------------
   // 内部工具
-  // ---------------------------------------------------------------------------
-
   /// 原子化创建热钱包：在同一个事务中分配 walletIndex 并写入数据库。
   Future<WalletProfile> _appendHotWalletAtomic({
     required String address,

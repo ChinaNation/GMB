@@ -1,4 +1,4 @@
-// 中文注释:股权公司前端类型边界。固定 `S + GQ`,管理股东和出资关系。
+// 股权公司前端类型边界。固定 `S + GQ`,管理股东和出资关系。
 
 import type { PrivateType } from '../../subjects/api';
 

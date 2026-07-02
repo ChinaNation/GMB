@@ -4,7 +4,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 底部“广场”Tab 入口。
 ///
-/// 中文注释：当前只提供稳定入口壳，后续广场功能统一放在 `lib/8964/` 下扩展。
+/// 当前只提供稳定入口壳，后续广场功能统一放在 `lib/8964/` 下扩展。
 class SquareTabPage extends StatelessWidget {
   const SquareTabPage({super.key});
 

@@ -1,6 +1,6 @@
 //! 清算行节点对 citizenapp 的 RPC 接口。
 //!
-//! 中文注释:
+//!
 //! - 暴露**只读查询**:余额、下一个 nonce、待上链笔数。
 //! - 启用 `offchain_submit_payment(intent, sig)`(扫码支付入口)
 //!   和 WebSocket 推送(`offchain_subscribe_notifications`)。
@@ -294,7 +294,7 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
 
         // 4. 调 ledger 执行 L3 签名、nonce、余额校验并写入 pending。
         //
-        // 中文注释:收款方主导清算后,跨行支付会提交到收款方清算节点。此时付款方
+        // 收款方主导清算后,跨行支付会提交到收款方清算节点。此时付款方
         // 不属于本地 ledger,必须读取链上权威 `DepositBalance/L3PaymentNonce`
         // 做校验,不能把付款方写成本地 ghost 账户。
         let cross_bank = intent.payer_bank != self.bank_main;

@@ -1,4 +1,4 @@
-// 中文注释:通用「扫码签名」授权 hook。PASSKEY_COLD_SIGN 安全动作(如创建机构/创建账户)
+// 通用「扫码签名」授权 hook。PASSKEY_COLD_SIGN 安全动作(如创建机构/创建账户)
 // 通过它拿到 signWithScan 回调:prepare 后弹出公民钱包二维码,扫描签名响应,
 // 解析出 signer_pubkey/signature 回传给 admin_security_api 的 createScanSignSecurityGrant 去 commit。
 //

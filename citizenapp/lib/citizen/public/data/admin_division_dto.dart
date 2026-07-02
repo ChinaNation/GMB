@@ -1,6 +1,6 @@
 // 行政区字典 DTO + 键工具(ADR-021 行政区唯一真源)。
 //
-// 中文注释:对应 `assets/admin_divisions/` 数据包(china.sqlite 直 dump,零映射):
+// 对应 `assets/admin_divisions/` 数据包(china.sqlite 直 dump,零映射):
 //   provinces.json       = [{code,name}]
 //   cities/<pcode>.json  = [{code,name}]
 //   towns/<pcode>.json   = [{city_code, code, name}]

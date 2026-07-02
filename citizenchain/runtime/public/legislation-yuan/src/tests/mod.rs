@@ -2,7 +2,7 @@
 
 //! 立法院模块第1步单测的 mock runtime。
 //!
-//! 中文注释:legislation-yuan 业务壳通过 `votingengine::Config` 复用投票引擎核心,
+//! legislation-yuan 业务壳通过 `votingengine::Config` 复用投票引擎核心,
 //! 通过自身 `Config::LegislationVoteEngine` 接立法投票引擎(第1步装 `()`)。
 //! mock 里:System + VotingEngine + InternalVote(供引擎 finalizer)+ LegislationYuan,
 //! LegislationVoteEngine 装 `()`,InternalAdminProvider 用 TestInternalAdminProvider。
@@ -100,7 +100,7 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 
 pub struct TestInternalAdminProvider;
 
-/// 中文注释:legislator() 是 owner_body() 的唯一管理员;其它一律不是。
+/// legislator() 是 owner_body() 的唯一管理员;其它一律不是。
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
     fn is_internal_admin(
         _institution_code: InstitutionCode,

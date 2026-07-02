@@ -1,7 +1,7 @@
 // 统一机构实体(ADR-028 决策 2)——合并公权 `PublicInstitutionEntity` 与治理
 // `InstitutionInfo` 两套并行模型为一套。
 //
-// 中文注释:
+//
 // - 所有机构本质都是按 CID `institution_code` 分类的公权多签账户,差异只在权责。
 //   本实体是五子 tab(广场/立法/选举/治理/公权)与统一详情页的唯一机构模型。
 // - 身份字段来自目录(CID-BFF + Isar);创世治理机构的固定账户 hex

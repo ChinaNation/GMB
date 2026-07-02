@@ -1,6 +1,6 @@
 // 公权机构目录数据包载入 —— 版本驱动增量 reconcile(ADR-018 §九 混合模式 ①)。
 //
-// 中文注释:发布期生成的全量目录打进 assets;客户端无服务端,数据靠 assets 包
+// 发布期生成的全量目录打进 assets;客户端无服务端,数据靠 assets 包
 // 分发。包版本变了就增量刷新——变的换、删的清、没变的不动,零旧数据残留
 // (只读派生数据,无用户数据)。数据包结构:
 //   assets/public_institutions/manifest.json = { version, provinces:[{province_name,manifest_version}] }
@@ -49,7 +49,7 @@ class PublicInstitutionBundleLoader {
 
   /// 版本驱动增量 reconcile:包版本变了就增量刷新,变的换、删的清、没变的不动。
   ///
-  /// 中文注释:先 reconcile 行政区字典(机构 join 字典名),再 reconcile 机构。
+  /// 先 reconcile 行政区字典(机构 join 字典名),再 reconcile 机构。
   /// 机构同步只信省级 manifest_version 表;全局 version 只作完成标记,不能短路省级检查。
   /// 变了的省读取 `<省名>.json` 分片后做行级 diff:只 upsert 变化行、只删 absent cid。
   /// manifest 缺省级版本表时视为无效数据包,直接拒绝写库。
@@ -108,7 +108,7 @@ class PublicInstitutionBundleLoader {
 
   /// 强制按数据包 reconcile。无数据包时返回 false。
   ///
-  /// 中文注释:首装时逐省 reconcile;只写新增/变更行,并删包内已无的旧 cid。
+  /// 首装时逐省 reconcile;只写新增/变更行,并删包内已无的旧 cid。
   Future<bool> loadFromBundle() async {
     final manifest = await _readManifest();
     if (manifest == null) return false;

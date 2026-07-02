@@ -8,7 +8,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 某市公权机构列表(ADR-018 §九 卡B)。
 ///
-/// 中文注释:读本地 repo,展示该市全部公权机构简要信息;点进详情页(卡C)。
+/// 读本地 repo,展示该市全部公权机构简要信息;点进详情页(卡C)。
 class CityInstitutionListPage extends StatefulWidget {
   const CityInstitutionListPage({
     super.key,

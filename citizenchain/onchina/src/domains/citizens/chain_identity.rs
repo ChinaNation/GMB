@@ -1,6 +1,6 @@
 //! 公民身份上链准备 handler。
 //!
-//! 中文注释:本模块只处理公民钱包签名与 `citizen-identity` call data 构造。
+//! 本模块只处理公民钱包签名与 `citizen-identity` call data 构造。
 //! 本地建档不要求钱包;只有注册局准备推送链上投票身份时才录入钱包并验签。
 
 use axum::{

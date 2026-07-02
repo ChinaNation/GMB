@@ -1,4 +1,4 @@
-// 中文注释:公民直接录入 + 列表查询 API。
+// 公民直接录入 + 列表查询 API。
 // 注册局管理员提交档案字段,后端自动生成身份 CID、护照号和护照有效期。
 // 通用请求能力只从 utils/http.ts 引入,本文件不承接机构或管理员模块接口。
 
@@ -235,7 +235,7 @@ export async function listCitizenDocuments(
   );
 }
 
-// 中文注释:公民资料库独立于机构资料库,字段名使用 document_type,不复用机构 doc_type。
+// 公民资料库独立于机构资料库,字段名使用 document_type,不复用机构 doc_type。
 export async function uploadCitizenDocument(
   auth: AdminAuth,
   cidNumber: string,

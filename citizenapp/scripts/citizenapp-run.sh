@@ -25,7 +25,7 @@ echo "[启动模式] smoldot 轻节点"
 bash "$SCRIPT_DIR/check-chainspec-frozen.sh"
 
 # ── 启动前 adb 健康自检：只在 adb 真正卡死时才重置，健康时绝不触碰 ──
-# 中文注释：adb server 是 fork-server 常驻守护进程，脱离终端独立运行；一旦被
+# adb server 是 fork-server 常驻守护进程，脱离终端独立运行；一旦被
 # 挂起(^Z)的 adb 客户端把它的连接状态搞坏，后续每次 `adb devices` 都会永久
 # 阻塞，且换终端、重开都无效(守护进程常驻)。
 # 关键：绝不能无条件强杀 adb——`kill -9` 重启会让 USB 设备短暂重新枚举，正常
@@ -47,7 +47,7 @@ echo "==> 清除 Rust 编译缓存..."
 (cd "rust" && ~/.cargo/bin/cargo clean 2>/dev/null || true)
 echo "==> 编译 Rust 原生库..."
 # 检测目标平台：通过 flutter devices 判断。
-# 中文注释：`flutter devices --machine` 内部会调 `adb devices`，万一仍被卡住
+# `flutter devices --machine` 内部会调 `adb devices`，万一仍被卡住
 # (例如本地 adb 异常)，用 perl alarm 包 60s 超时强制结束(macOS 自带 perl，
 # 无 GNU `timeout`)，避免无限阻塞；超时/失败统一回退到 android 判定。
 DEVICE_LINE=$(perl -e 'alarm 60; exec @ARGV' flutter devices --machine 2>/dev/null | python3 -c "
@@ -74,7 +74,7 @@ echo "==> 获取依赖..."
 flutter pub get
 
 # ── OnChina 本地开发路径：只允许 Android USB adb reverse ──
-# 中文注释：开发版 App 内部固定访问 http://127.0.0.1:8899；该地址必须由
+# 开发版 App 内部固定访问 http://127.0.0.1:8899；该地址必须由
 # adb reverse 转发到本机 OnChina 后端，禁止改走局域网 IP 或其他自定义 URL。
 if [[ "$DEVICE_LINE" != "android" ]]; then
   echo "错误：citizenapp 本地开发访问 OnChina 只支持 Android USB adb reverse。"
@@ -128,7 +128,7 @@ sync_android_artifact() {
 }
 
 if [[ "$DEVICE_LINE" == "android" ]]; then
-  # 中文注释：启动脚本固定把本地 APK 产物沉淀到项目根 target/，便于离线安装和回滚。
+  # 启动脚本固定把本地 APK 产物沉淀到项目根 target/，便于离线安装和回滚。
   echo "==> 生成 Android 产物..."
   flutter build apk --debug "${ANDROID_TARGET_PLATFORMS[@]}" "${DART_DEFINES[@]}"
   sync_android_artifact

@@ -1,6 +1,6 @@
 //! 提案类型维度:本节点绑定机构码 → 立法角色 + 可发起的提案候选。
 //!
-//! 中文注释:OnChina 每节点单机构绑定,故「本节点能发起什么」由绑定机构码唯一决定。
+//! OnChina 每节点单机构绑定,故「本节点能发起什么」由绑定机构码唯一决定。
 //! 本文件是立法机构 → 角色/候选的**声明式单源**:能力位下发(`platform/capability.rs`)与
 //! 候选解析共用此处,避免两处各写一份机构分类(全仓单源)。
 //!
@@ -28,7 +28,7 @@ pub(crate) enum LegislationRole {
 
 /// 机构码文本 → 立法角色;非立法机构返回 `None`。
 ///
-/// 中文注释:机构码为各省/市共用文本码(N* 国家 / P* 省 / C* 市),实例按行政区区分,
+/// 机构码为各省/市共用文本码(N* 国家 / P* 省 / C* 市),实例按行政区区分,
 /// 与立法角色无关,故按文本码分类即可。
 pub(crate) fn legislation_role(institution_code: &str) -> Option<LegislationRole> {
     match institution_code {
@@ -41,7 +41,7 @@ pub(crate) fn legislation_role(institution_code: &str) -> Option<LegislationRole
 
 /// 一条可发起候选:提案类型 + 层级 + 该类型下本机构可选的表决类型集合。
 ///
-/// 中文注释:由发起菜单候选 API(`handler::list_proposable`)消费;当前 `category` 恒 `Law`。
+/// 由发起菜单候选 API(`handler::list_proposable`)消费;当前 `category` 恒 `Law`。
 /// 任免案/预算案 schema 已于 Phase 4 锁定(`personnel`/`budget` 子域),但**候选发起**待链端
 /// `PROPOSAL_KIND_PERSONNEL/BUDGET` 上线后经此表达——无链上提交路径前不列候选,避免半桩入口。
 pub(crate) struct ProposableCandidate {
@@ -55,7 +55,7 @@ pub(crate) struct ProposableCandidate {
 
 /// 本节点机构码 → 可发起候选清单。
 ///
-/// 中文注释:参议会(NSN/PSN)无发起权返回空;政府任免/预算案候选(Personnel/Budget)
+/// 参议会(NSN/PSN)无发起权返回空;政府任免/预算案候选(Personnel/Budget)
 /// 待链端 `PROPOSAL_KIND_PERSONNEL/BUDGET` 上线后接入(schema 已于 Phase 4 锁定,但无提交路径前不列候选)。
 /// 最终合法性以链端 `ensure_routing` 为准。Phase 0 落地并单测;Phase 1 起由发起菜单候选 API 消费。
 pub(crate) fn proposable_candidates(institution_code: &str) -> Vec<ProposableCandidate> {

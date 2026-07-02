@@ -2,7 +2,7 @@
 
 //! 机构展示分类 — 由机构码(InstitutionCode)直接派生,供前端按 tab 过滤。
 //!
-//! 中文注释:机构类别一律由机构码判定。分类规则由 `classify(code, cid_full_name)` 决定:
+//! 机构类别一律由机构码判定。分类规则由 `classify(code, cid_full_name)` 决定:
 //!
 //! - GovInstitution     公权机构 tab 桶    公法人机构;
 //! - PrivateInstitution 私权机构 tab 桶    私法人机构,以及父级未知时的非法人初始落位。
@@ -56,7 +56,7 @@ pub fn classify(code: InstitutionCode, _cid_full_name: &str) -> Option<Instituti
     if code::is_public_legal_code(&code) {
         Some(InstitutionCategory::GovInstitution)
     } else {
-        // 中文注释:这里只给无父级上下文的 tab 初始桶;非法人真实归属由父级公/私法人决定。
+        // 这里只给无父级上下文的 tab 初始桶;非法人真实归属由父级公/私法人决定。
         Some(InstitutionCategory::PrivateInstitution)
     }
 }
@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn city_police_is_gov_institution() {
-        // 中文注释:CPOL 由公法人机构码自然归入公权机构,不再单列分类。
+        // CPOL 由公法人机构码自然归入公权机构,不再单列分类。
         assert_eq!(
             classify(*b"CPOL", "广州市公民安全局"),
             Some(InstitutionCategory::GovInstitution)

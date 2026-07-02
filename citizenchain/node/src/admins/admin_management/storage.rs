@@ -120,7 +120,7 @@ pub fn fetch_admin_account_for_code(
     cid_number: Option<String>,
 ) -> Result<Option<AdminAccountState>, String> {
     let storage_key = admin_accounts_key(&institution_code, account_id)?;
-    // 中文注释(ADR-017):管理员账户状态按 finalized 口径读取,禁止 best。
+    // (ADR-017):管理员账户状态按 finalized 口径读取,禁止 best。
     let Some(hex_data) = chain_query::fetch_finalized_storage(&storage_key)? else {
         return Ok(None);
     };

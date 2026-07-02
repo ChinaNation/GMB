@@ -123,7 +123,7 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
-        // 中文注释：发起人已自动赞成，最后一张补票触发自动执行失败路径。
+        // 发起人已自动赞成，最后一张补票触发自动执行失败路径。
         assert_ok!(cast_vote(nrc_admin(12), pid, true));
         assert_eq!(
             votingengine::Pallet::<Test>::proposals(pid)

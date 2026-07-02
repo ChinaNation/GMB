@@ -1,6 +1,6 @@
 //! 立法院模块权重(ADR-027)。
 //!
-//! 中文注释:当前使用固定保守权重占位,后续补 benchmark 派生的真实权重。
+//! 当前使用固定保守权重占位,后续补 benchmark 派生的真实权重。
 
 use frame_support::weights::Weight;
 

@@ -1,6 +1,6 @@
 //! 立法院 `propose_enact/amend/repeal_law` 裸 SCALE call-data 编码器(onchina 侧唯一真源)。
 //!
-//! 中文注释:复用 `core::institution_call` 的「构造裸 call data → origin 冷钱包(CitizenWallet)
+//! 复用 `core::institution_call` 的「构造裸 call data → origin 冷钱包(CitizenWallet)
 //! 冷签 → CitizenWallet 提交链」通道;onchina **不**拼签名扩展尾、**不**提交 extrinsic。
 //!
 //! **铁律**:参数顺序与 SCALE 类型必须与链端 `legislation-yuan`(pallet idx 27)逐字节一致:

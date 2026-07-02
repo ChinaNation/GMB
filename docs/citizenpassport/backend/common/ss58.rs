@@ -18,7 +18,7 @@ pub fn ss58_to_pubkey_hex(address: &str) -> Option<String> {
 
 /// 0x hex 公钥编码为 CitizenChain SS58 地址(prefix=2027)。
 ///
-/// 中文注释：CPMS 管理员表只保存公钥，CitizenWallet 的 sign_request 需要同时带地址和公钥。
+/// CPMS 管理员表只保存公钥，CitizenWallet 的 sign_request 需要同时带地址和公钥。
 pub fn pubkey_hex_to_ss58(pubkey_hex: &str) -> Option<String> {
     let pubkey_bytes = hex::decode(pubkey_hex.trim_start_matches("0x")).ok()?;
     if pubkey_bytes.len() != 32 {

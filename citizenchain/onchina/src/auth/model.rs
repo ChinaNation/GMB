@@ -14,7 +14,7 @@ pub(crate) struct AdminUser {
     pub(crate) admin_name: String,
     /// 所属机构码(3/4 字符文本,如 FRG/CREG/NLG)。
     pub(crate) institution_code: String,
-    /// 中文注释:初始联邦注册局管理员由代码内置,不可删除;代码以外新增管理员为 false。
+    /// 初始联邦注册局管理员由代码内置,不可删除;代码以外新增管理员为 false。
     pub(crate) built_in: bool,
     pub(crate) created_by: String,
     pub(crate) created_at: DateTime<Utc>,
@@ -56,7 +56,7 @@ pub(crate) struct CityRegistryAdminListOutput {
 }
 
 // 联邦注册局管理员对外行(API 序列化)。
-// 中文注释:管理员只有存在/删除,不存在停用状态。
+// 管理员只有存在/删除,不存在停用状态。
 #[derive(Serialize)]
 pub(crate) struct FederalRegistryAdminRow {
     pub(crate) id: u64,

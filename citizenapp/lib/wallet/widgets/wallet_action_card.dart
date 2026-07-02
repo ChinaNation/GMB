@@ -9,7 +9,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 钱包详情页第 2 卡片:3 列等宽布局(充值/提现/零钱包)。
 ///
-/// 中文注释:
+///
 /// - 布局:Row + 3 个 Expanded,三列等宽,spaceAround 分布。
 /// - 充值列 / 提现列:已绑定清算行时进入真实充值 / 提现页;未绑定时提示先绑定。
 /// - 零钱包列:**静态展示**,严格不加 InkWell / GestureDetector / onTap 回调。
@@ -64,7 +64,7 @@ class WalletActionCardState extends State<WalletActionCard> {
   Widget build(BuildContext context) {
     return Container(
       decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
-      // 中文注释:三列布局相对原两列更拥挤,padding 调小避免卡片臃肿。
+      // 三列布局相对原两列更拥挤,padding 调小避免卡片臃肿。
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -140,7 +140,7 @@ class WalletActionCardState extends State<WalletActionCard> {
 
 /// 充值 / 提现两列共用的可点击按钮:圆形图标 + 标签 + 等高占位文本。
 ///
-/// 中文注释:
+///
 /// - 使用 `Material + InkWell` 组合,ripple 限制在 `CircleBorder` 内,不溢出圆圈。
 /// - 底部用一个非断空格 `\u00A0` 占位,保证和零钱包列的 `0.00 元` 行高对齐,
 ///   避免 3 列底部不齐。
@@ -187,7 +187,7 @@ class _ClickableAction extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        // 中文注释:非断空格占位,保证三列底部和零钱包列的 0.00 元对齐。
+        // 非断空格占位,保证三列底部和零钱包列的 0.00 元对齐。
         const Text(
           '\u00A0',
           style: TextStyle(
@@ -202,7 +202,7 @@ class _ClickableAction extends StatelessWidget {
 
 /// 零钱包列:纯静态展示,**禁止**包 InkWell / GestureDetector,不响应任何点击。
 ///
-/// 中文注释:
+///
 /// - 图标用普通 Container + BoxShape.circle,没有 Material 涟漪,也没有 onTap。
 /// - `0.00 元` 是占位,等清算行功能落地后接真实数据。
 class _StaticBalance extends StatelessWidget {

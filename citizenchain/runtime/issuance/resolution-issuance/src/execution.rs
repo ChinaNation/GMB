@@ -19,7 +19,7 @@ impl<T: Config> Pallet<T> {
         total_amount: BalanceOf<T>,
         allocations: &AllocationOf<T>,
     ) -> DispatchResult {
-        // 中文注释：执行发行必须整笔成功或整笔回滚，不能出现部分账户已到账的半状态。
+        // 执行发行必须整笔成功或整笔回滚，不能出现部分账户已到账的半状态。
         with_storage_layer(|| {
             Self::do_execute_inner(proposal_id, reason.as_slice(), total_amount, allocations)
         })
@@ -32,7 +32,7 @@ impl<T: Config> Pallet<T> {
         allocations: &AllocationOf<T>,
     ) -> DispatchResult {
         ensure!(!Paused::<T>::get(), Error::<T>::PalletPaused);
-        // 中文注释：重放判断只认永久标记 EverExecuted；短期 Executed 可清理但不能释放重放窗口。
+        // 重放判断只认永久标记 EverExecuted；短期 Executed 可清理但不能释放重放窗口。
         ensure!(
             !EverExecuted::<T>::contains_key(proposal_id),
             Error::<T>::AlreadyExecuted
@@ -46,7 +46,7 @@ impl<T: Config> Pallet<T> {
 
         let existential_deposit = T::Currency::minimum_balance();
         for item in allocations.iter() {
-            // 中文注释：名单唯一、单笔非零和总额匹配已由共享校验负责；执行层只补 ED。
+            // 名单唯一、单笔非零和总额匹配已由共享校验负责；执行层只补 ED。
             ensure!(
                 item.amount >= existential_deposit,
                 Error::<T>::BelowExistentialDeposit
@@ -72,7 +72,7 @@ impl<T: Config> Pallet<T> {
             ensure!(imbalance.peek() == item.amount, Error::<T>::DepositFailed);
             total_imbalance.subsume(imbalance);
         }
-        // 中文注释：统一 drop 合并后的 imbalance，让 Currency 在这一点完成总发行量记账。
+        // 统一 drop 合并后的 imbalance，让 Currency 在这一点完成总发行量记账。
         drop(total_imbalance);
 
         let current_block = frame_system::Pallet::<T>::block_number();
@@ -94,7 +94,7 @@ impl<T: Config> Pallet<T> {
     }
 
     pub(crate) fn clear_executed_marker(proposal_id: u64) -> DispatchResult {
-        // 中文注释：这里只清理短期展示/排障记录，不允许触碰永久防重放标记 EverExecuted。
+        // 这里只清理短期展示/排障记录，不允许触碰永久防重放标记 EverExecuted。
         ensure!(
             Executed::<T>::contains_key(proposal_id),
             Error::<T>::NotExecuted

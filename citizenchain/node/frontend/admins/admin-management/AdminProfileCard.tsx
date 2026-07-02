@@ -54,7 +54,7 @@ export function AdminProfileCard({
   action,
   status,
 }: Props) {
-  // 中文注释:字段标签固定渲染;字段值为空时只让值区域留空,不隐藏标签。
+  // 字段标签固定渲染;字段值为空时只让值区域留空,不隐藏标签。
   const balanceText = balanceFen != null ? formatBalance(balanceFen) : '';
   const topAction = action ?? status;
   const accountText = profile.account ? hexToSs58(profile.account) : '';

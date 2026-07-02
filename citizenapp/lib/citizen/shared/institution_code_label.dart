@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 /// 机构码(CID institution_code)热钱包端表示与治理分类 = institution_code_label.dart
 ///
-/// 中文注释(铁律):
+/// (铁律):
 /// 本文件逐字镜像冷钱包 `citizenwallet/lib/signer/institution_code.dart`(同一套
 /// 92 码)。链上治理统一使用 4 字节 `institution_code`
 /// ([u8;4] 原始码字节,3 字符码右补 `0`)。热钱包用本
@@ -14,11 +14,7 @@ import 'dart:typed_data';
 ///   NRC → [78,82,67,0]  CGOV → [67,71,79,86]  PMUL → [80,77,85,76]
 class InstitutionCodeLabel {
   const InstitutionCodeLabel._();
-
-  // ──────────────────────────────────────────────────────────────────
   // 治理相关机构码常量(4 字节,3 字符码末位补 0)
-  // ──────────────────────────────────────────────────────────────────
-
   /// 国家公民储备委员会(固定治理档)。"NRC\0"。
   static const List<int> nrc = [78, 82, 67, 0];
 
@@ -30,11 +26,7 @@ class InstitutionCodeLabel {
 
   /// 个人多签账户(不发号，仅链上/后端分类常量)。"PMUL"。
   static const List<int> pmul = [80, 77, 85, 76];
-
-  // ──────────────────────────────────────────────────────────────────
   // 字节 ↔ 字符串
-  // ──────────────────────────────────────────────────────────────────
-
   /// 取前 4 字节，去掉尾部 0 字节，UTF-8 → 大写字符串。
   static String codeToString(List<int> bytes) {
     var end = bytes.length < 4 ? bytes.length : 4;
@@ -56,11 +48,7 @@ class InstitutionCodeLabel {
     }
     return out;
   }
-
-  // ──────────────────────────────────────────────────────────────────
   // 机构码分类清单(与链端 PUBLIC/PRIVATE/UNINCORPORATED 同源)
-  // ──────────────────────────────────────────────────────────────────
-
   /// 公权法人机构码(A 国家级 26 + B 省级 17 + C 市级 17 + D 镇级 14 + 公立大学/学校 2)= 76。
   static const Set<String> _publicLegalCodes = <String>{
     // A 国家级单体(26)
@@ -101,11 +89,7 @@ class InstitutionCodeLabel {
     'SFGP',
     'UNIN',
   };
-
-  // ──────────────────────────────────────────────────────────────────
   // 治理策略派生(纯函数，热钱包唯一分类来源)
-  // ──────────────────────────────────────────────────────────────────
-
   /// 是否为固定治理档机构码(国储会/省储会/省储行/联邦注册局/国家司法院)。
   static bool isFixedGovernance(String code) {
     return code == 'NRC' ||
@@ -154,7 +138,7 @@ class InstitutionCodeLabel {
 
   /// 是否归 PrivateAdmins 管理。
   ///
-  /// 中文注释:非法人不是私权同义词。SFGT/SFGP/UNIN 只能说明是非法人机构码,
+  /// 非法人不是私权同义词。SFGT/SFGP/UNIN 只能说明是非法人机构码,
   /// 不能决定管理员模块;必须由 CID 注册关系按所属公法人/私法人显式路由。
   static bool isPrivateAdminCode(String code) {
     return isPrivateLegal(code);
@@ -193,7 +177,7 @@ class InstitutionCodeLabel {
 
   /// 按链上 AdminAccountKind 选择管理员模块。
   ///
-  /// 中文注释:非法人机构的机构码不能决定 public/private,但链上 AdminAccount.kind
+  /// 非法人机构的机构码不能决定 public/private,但链上 AdminAccount.kind
   /// 已经携带了最终模块归属。涉及已注册账户的读取/提交应优先用 kind 路由。
   static String adminAccountsPalletNameForKind(int kind) {
     return switch (kind) {

@@ -25,7 +25,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     const err = isJson
       ? await res.json().catch(() => ({ message: res.statusText })) as Partial<ApiError>
       : { message: await readNonJsonMessage(res, url) };
-    // 中文注释：登录态由 HttpOnly Cookie 承载；401 只通知认证上下文清理用户镜像，页面去向交给路由判断。
+    // 登录态由 HttpOnly Cookie 承载；401 只通知认证上下文清理用户镜像，页面去向交给路由判断。
     if (res.status === 401) {
       sessionStorage.removeItem('cpms_user');
       window.dispatchEvent(new Event('cpms-auth-expired'));

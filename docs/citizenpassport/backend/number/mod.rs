@@ -31,7 +31,7 @@ pub(crate) struct ArchiveNumbers {
 
 /// 同步生成一对一绑定的档案号与护照号。
 ///
-/// 中文注释：档案号供 CID 绑定使用；护照号印刷在护照上。两个编号在创建档案时
+/// 档案号供 CID 绑定使用；护照号印刷在护照上。两个编号在创建档案时
 /// 同时生成并写入同一条档案记录，后续注销也跟随档案状态一起处理。
 pub(crate) async fn generate_archive_numbers_with_retry(
     conn: &mut sqlx::PgConnection,
@@ -73,7 +73,7 @@ async fn generate_archive_no_with_retry(
             random.as_slice(),
         );
         let checksum = archive_no_checksum(&body);
-        // 中文注释：档案号不携带协议前缀，避免把示例前缀固化成业务含义。
+        // 档案号不携带协议前缀，避免把示例前缀固化成业务含义。
         let archive_no = format!("{}-{}", body, checksum);
 
         let exists: bool =
@@ -192,7 +192,7 @@ async fn claim_recycled_archive_numbers(
     let archive_no: String = row.get("archive_no");
     let passport_no: String = row.get("passport_no");
 
-    // 中文注释：档案号和护照号必须作为一对领取；事务回滚时领取状态同步回滚。
+    // 档案号和护照号必须作为一对领取；事务回滚时领取状态同步回滚。
     let result = sqlx::query(
         "UPDATE archive_number_recycle_pool
          SET used_at = EXTRACT(EPOCH FROM NOW())::BIGINT, used_by_archive_id = $1
@@ -300,7 +300,7 @@ fn passport_city_namespace(
 ) -> Result<u64, (StatusCode, Json<ApiError>)> {
     let city_value = passport_city_value(city_code)?;
     let offset = province_namespace_offset(province_code);
-    // 中文注释：用 0..511 置换把省内唯一 city_code 映射成城市隔离编号；
+    // 用 0..511 置换把省内唯一 city_code 映射成城市隔离编号；
     // 生成结果参与号码空间分割，但护照号明文不直接暴露原始市代码。
     Ok((city_value * PASSPORT_CITY_NAMESPACE_MULTIPLIER + offset) % PASSPORT_CITY_NAMESPACE_COUNT)
 }

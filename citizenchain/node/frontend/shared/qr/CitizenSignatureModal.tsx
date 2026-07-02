@@ -22,7 +22,7 @@ type Props = {
 /**
  * Node 桌面端统一扫码签名弹窗。
  *
- * 中文注释：外层弹窗只处理居中遮罩和关闭行为，签名展示交给
+ * 外层弹窗只处理居中遮罩和关闭行为，签名展示交给
  * CitizenSignaturePanel，业务页面只需要传入二维码内容和扫码回调。
  */
 export function CitizenSignatureModal({

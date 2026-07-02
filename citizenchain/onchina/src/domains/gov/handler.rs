@@ -1,6 +1,6 @@
 //! 公权机构 HTTP handler
 //!
-//! 中文注释:本模块只承载确定性公权机构目录
+//! 本模块只承载确定性公权机构目录
 //! 和公民宪法机构目录;手动机构新增归 private,账户归 accounts,资料库归 docs。
 //!
 //! ## 当前路由表(admin 端,login 中间件)
@@ -82,7 +82,7 @@ pub(crate) struct ListOfficialInstitutionQuery {
 
 /// GET /api/v1/institutions/official
 ///
-/// 中文注释:公权机构目录和公安局一样是确定性列表,进入市详情时直接展示。
+/// 公权机构目录和公安局一样是确定性列表,进入市详情时直接展示。
 /// `q` 只作为已展示列表的过滤条件,不能再作为是否返回数据的前提。
 pub(crate) async fn list_official_institutions(
     State(state): State<AppState>,

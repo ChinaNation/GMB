@@ -220,7 +220,7 @@ fn propose_admin_set_change_updates_personal_admins_and_threshold() {
         ));
         let proposal_id = votingengine::Pallet::<Test>::next_proposal_id().saturating_sub(1);
 
-        // 中文注释：提案创建时发起人 admin(0) 已自动赞成，阈值 2 时只需再补一票。
+        // 提案创建时发起人 admin(0) 已自动赞成，阈值 2 时只需再补一票。
         assert_ok!(internal_vote::Pallet::<Test>::do_internal_vote(
             admin(1),
             proposal_id,

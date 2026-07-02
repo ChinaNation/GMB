@@ -41,7 +41,7 @@ class AdminAccountCodec {
       institutionCode: institutionCode,
       kind: kind,
       profiles: profiles,
-      // 中文注释：runtime 的各管理员 `AdminAccounts` 已不再保存阈值；
+      // runtime 的各管理员 `AdminAccounts` 已不再保存阈值；
       // 调用方必须从 internal-vote 动态阈值 storage 或治理固定常量补齐。
       threshold: 0,
       creatorHex: creatorHex,

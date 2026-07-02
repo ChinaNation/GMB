@@ -1,6 +1,6 @@
 //! 清算行节点"本地账面 ↔ 链上 `BankTotalDeposits` 主账对账"。
 //!
-//! 中文注释:
+//!
 //! - 本模块是清算行节点的**保底监控**。如果 `settlement::listener`
 //!   因进程崩溃 / 滞后 / runtime 事件丢失等原因漏同步,本地 `ledger.accounts[*]
 //!   .confirmed` 之和会悄悄偏离链上 `BankTotalDeposits[my_bank]`。没有监控就

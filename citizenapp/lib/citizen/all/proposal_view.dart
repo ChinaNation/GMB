@@ -48,7 +48,7 @@ class _ProposalViewState extends State<ProposalView> {
   static const int _pageSize = 10;
   static const Duration _newBlockIndexCheckMinInterval = Duration(seconds: 60);
 
-  // 中文注释：提案页默认公共机构集合独立于“治理”子 tab。
+  // 提案页默认公共机构集合独立于“治理”子 tab。
   // 省储会/省储行不默认进入提案流,只有用户订阅对应机构后才展示。
   static const Set<String> _defaultProposalCodes = {
     'NRC',
@@ -101,7 +101,7 @@ class _ProposalViewState extends State<ProposalView> {
     super.initState();
     _scrollController.addListener(_onScroll);
     if (_isFlutterTest) {
-      // 中文注释：App 启动 widget test 只验证首屏结构，不验证隐藏提案页的轻节点订阅。
+      // App 启动 widget test 只验证首屏结构，不验证隐藏提案页的轻节点订阅。
       // 测试环境没有真实 smoldot 链路，继续加载链上提案会让 pumpAndSettle 等不到稳定帧。
       _loading = false;
       return;
@@ -180,7 +180,7 @@ class _ProposalViewState extends State<ProposalView> {
         Map<String, InstitutionInfo> knownInstitutionsByAccountHex,
       })> _loadInstitutionScope() async {
     try {
-      // 中文注释：提案流需要真实机构名称和主账户;本地数据包同步失败时,
+      // 提案流需要真实机构名称和主账户;本地数据包同步失败时,
       // 仍继续按链上机构码过滤,不能让提案列表整体不可用。
       await _institutionRepo.directory.ensureSynced();
     } catch (_) {}

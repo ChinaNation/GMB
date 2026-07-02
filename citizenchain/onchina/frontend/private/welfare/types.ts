@@ -1,4 +1,4 @@
-// 中文注释:公益组织前端类型边界。固定 `S + GY`,非营利法人。
+// 公益组织前端类型边界。固定 `S + GY`,非营利法人。
 
 import type { PrivateType } from '../../subjects/api';
 

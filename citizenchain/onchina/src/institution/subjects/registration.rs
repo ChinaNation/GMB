@@ -1,6 +1,6 @@
 //! 机构注册 HTTP handler。
 //!
-//! 中文注释:本文件只保留跨公权/教育/私权共用的主体注册内核。私权机构入口必须由
+//! 本文件只保留跨公权/教育/私权共用的主体注册内核。私权机构入口必须由
 //! `private/<type>/` 六类模块传入固定类型规则,不得再由一个 private 总 handler 吞掉。
 
 use axum::{
@@ -119,7 +119,7 @@ async fn create_institution_inner(
         }
         None => None,
     };
-    // 中文注释:私权入口一旦传入 private_type,机构码/P1/法人资格由后端规则锁定,不信任前端旧字段。
+    // 私权入口一旦传入 private_type,机构码/P1/法人资格由后端规则锁定,不信任前端旧字段。
     let institution_code = private_rule
         .map(|rule| rule.institution_code.to_string())
         .unwrap_or_else(|| input.institution.trim().to_string());
@@ -224,7 +224,7 @@ async fn create_institution_inner(
         return api_error(StatusCode::BAD_REQUEST, 1001, "province too long");
     }
     let mut city = input.city_name.trim().to_string();
-    // 中文注释:机构创建权限统一由省/市 scope 收口:
+    // 机构创建权限统一由省/市 scope 收口:
     // 联邦注册局机构管理员 locked_province_name=本省且 locked_city_name=None,可在本省任意市创建;
     // 市注册局机构管理员同时锁定省和市,只能创建本市机构。
     if let Some(locked_city_name) = scope.locked_city_name.clone() {
@@ -254,7 +254,7 @@ async fn create_institution_inner(
             );
         }
     };
-    // 中文注释:手动公权机构按管理员注册局角色 + 机构层级开放:
+    // 手动公权机构按管理员注册局角色 + 机构层级开放:
     // 联邦注册局管理员 → 国家/省/部级(3 字符码);市注册局管理员 → 市/镇级(4 字符码)。
     // 公权教育机构(大学/学校)走教育流程,不受此限。
     if matches!(category, InstitutionCategory::GovInstitution) && !is_education_institution {
@@ -410,7 +410,7 @@ async fn create_institution_inner(
             return api_error(StatusCode::CONFLICT, 1007, "该机构全称已被使用");
         }
     }
-    // 中文注释:随机 UUID 种子 + 1000 次撞号重试 + 格式校验 收敛在 cid::seed,
+    // 随机 UUID 种子 + 1000 次撞号重试 + 格式校验 收敛在 cid::seed,
     // 本处只传参 + DB 查重回调(原行为:DB 错误 .ok().flatten() 视为不存在,逐字节保留)。
     let cid = match crate::cid::dynamic_institution_cid(
         province.as_str(),
@@ -733,7 +733,7 @@ async fn list_institutions_inner(
         Err(resp) => return resp,
     };
     let scope = get_visible_scope(&ctx);
-    // 中文注释:本路列表只服务"手动创建机构"(私权/教育/手动公权),其 town_code 在创建时恒空
+    // 本路列表只服务"手动创建机构"(私权/教育/手动公权),其 town_code 在创建时恒空
     // (create_institution 写 town_name/town_code = "")。无镇维度即"不限镇",对镇级管理员同样可见,
     // 故此路只按省/市收口,不做镇过滤(与对账目录路径的 town 过滤不冲突:那条服务带 town_code 的对账机构)。
     // JY 教育机构统一收口教育机构 tab(EDUCATION_INSTITUTION),私权/公权两路列表同步排除,

@@ -72,7 +72,7 @@ class PersonalManageDiscoveryService {
       );
     } catch (e) {
       debugPrint('[PersonalManageDiscovery] 批量反查个人多签元数据失败: $e');
-      // 中文注释:反查整体失败时不做孤儿状态变更,避免把瞬时 RPC 失败误判为注销。
+      // 反查整体失败时不做孤儿状态变更,避免把瞬时 RPC 失败误判为注销。
       return PersonalManageDiscoveryStats(
         subjectsScanned: scan.totalKeys,
         matchedPersonals: mine.length,
@@ -170,7 +170,7 @@ class PersonalManageDiscoveryService {
           .findAll();
       for (final p in stalePersonals) {
         if (!scannedAccounts.contains(p.account)) {
-          // 中文注释：链上注销后仍保留本地账户入口，只把状态标成已注销；
+          // 链上注销后仍保留本地账户入口，只把状态标成已注销；
           // 用户在详情页点“删除”时才真正清空本机数据。
           await PersonalAccountLocalState.putStatusInTxn(
             isar,

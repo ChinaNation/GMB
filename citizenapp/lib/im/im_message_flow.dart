@@ -29,7 +29,7 @@ class ImIncomingProcessResult {
 
 /// 公民 IM 消息收发状态机。
 ///
-/// 中文注释：本类是远程私人通信全节点链路的编排层。它不实现密码学，
+/// 本类是远程私人通信全节点链路的编排层。它不实现密码学，
 /// 只负责把 OpenMLS native、GMB_IM_V1 envelope、本地 Isar 和投递接口串起来。
 class ImMessageFlow {
   const ImMessageFlow({

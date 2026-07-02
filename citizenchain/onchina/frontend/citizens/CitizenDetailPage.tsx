@@ -1,4 +1,4 @@
-// 中文注释:公民详情页承接单个公民档案展示与链上身份推送。
+// 公民详情页承接单个公民档案展示与链上身份推送。
 // 本地建档不要求钱包;只有本页推送链上身份时才录入钱包并要求目标钱包签名。
 
 import { useCallback, useEffect, useMemo, useState } from 'react';

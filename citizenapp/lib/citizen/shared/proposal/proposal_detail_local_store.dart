@@ -5,7 +5,7 @@ import 'package:citizenapp/isar/wallet_isar.dart';
 
 /// 提案详情本地持久化读库。
 ///
-/// 中文注释：这里保存的是详情页首屏展示快照，降低页面进入时对链上 storage
+/// 这里保存的是详情页首屏展示快照，降低页面进入时对链上 storage
 /// 的同步等待；投票、执行和提交前复核仍必须重新读取链上真值。
 class ProposalDetailLocalStore {
   ProposalDetailLocalStore._();

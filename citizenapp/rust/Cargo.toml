@@ -13,7 +13,7 @@ crate-type = ["cdylib", "staticlib"]
 name = "smoldot"
 
 [dependencies]
-# 中文注释：固定引用仓库内收编的 PoW 轻节点快照，禁止再回指根目录临时 smoldot。
+# 固定引用仓库内收编的 PoW 轻节点快照，禁止再回指根目录临时 smoldot。
 smoldot-light = { path = "../smoldot-pow/light-base" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

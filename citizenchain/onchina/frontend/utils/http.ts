@@ -1,4 +1,4 @@
-// 中文注释:前端通用 HTTP 工具。这里只做请求、鉴权头和 401 拦截,
+// 前端通用 HTTP 工具。这里只做请求、鉴权头和 401 拦截,
 // 不放任何业务 API;业务 API 必须放回所属功能模块目录。
 
 import type { AdminAuth } from '../auth/types';
@@ -82,7 +82,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       unauthorizedFired = true;
       onUnauthorized();
     }
-    // 中文注释:401 只代表管理员登录态失效;必须抛错中断业务流程,不能返回 undefined。
+    // 401 只代表管理员登录态失效;必须抛错中断业务流程,不能返回 undefined。
     throw new AuthExpiredError(resp.status, body);
   }
 
@@ -98,7 +98,7 @@ export function adminHeaders(auth: AdminAuth): HeadersInit {
   };
 }
 
-// 中文注释:公开(免登录)端点的取数变体。`request` 本身不带任何鉴权头(adminRequest 才注入 Bearer),
+// 公开(免登录)端点的取数变体。`request` 本身不带任何鉴权头(adminRequest 才注入 Bearer),
 // 故公开读取直接复用同一相对路径 + {code,message,data} 解包逻辑;仅用语义化别名区分调用意图。
 // 大屏只读看板(/api/public/legislation/display/board)经此拉取。
 export const publicRequest = request;

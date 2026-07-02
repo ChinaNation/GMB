@@ -1,4 +1,4 @@
-// 中文注释:公益组织 API。调用 `/api/v1/private/welfare`,不得回退到旧聚合接口。
+// 公益组织 API。调用 `/api/v1/private/welfare`,不得回退到旧聚合接口。
 
 import type { AdminAuth } from '../../auth/types';
 import type {

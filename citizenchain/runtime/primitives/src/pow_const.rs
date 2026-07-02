@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn fullnode_total_issuance_is_consistent() {
-        // 中文注释：全节点发行总量 = 区块奖励 × 发行区块数。
+        // 全节点发行总量 = 区块奖励 × 发行区块数。
         assert_eq!(
             FULLNODE_TOTAL_ISSUANCE,
             FULLNODE_BLOCK_REWARD * FULLNODE_REWARD_BLOCK_COUNT as u128

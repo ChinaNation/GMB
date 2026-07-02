@@ -273,7 +273,7 @@ pub(crate) async fn admin_auth_verify(
             return Err("http:unprocessable:challenge context mismatch".to_string());
         }
 
-        // 中文注释:乐观消费——先标记 consumed 再验签,防止并发请求同时通过 consumed 检查。
+        // 乐观消费——先标记 consumed 再验签,防止并发请求同时通过 consumed 检查。
         // 验签失败时回退 consumed = false。
         challenge.consumed = true;
         let admin_account = challenge.admin_account.clone();
@@ -286,7 +286,7 @@ pub(crate) async fn admin_auth_verify(
             return Err("http:unprocessable:login signature verify failed".to_string());
         }
 
-        // 中文注释:membership 真源切到链上集合(见 onchain_gate),此处只回已验签 pubkey。
+        // membership 真源切到链上集合(见 onchain_gate),此处只回已验签 pubkey。
         Ok(admin_account)
     });
 

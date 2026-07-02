@@ -17,7 +17,7 @@ impl<T: Config> Pallet<T> {
         let expected = crate::pallet::AllowedRecipients::<T>::get();
         ensure!(!expected.is_empty(), Error::<T>::RecipientsNotConfigured);
 
-        // 中文注释：提案收款人集合必须与链上白名单完全一致，既不能少人，也不能多塞账户。
+        // 提案收款人集合必须与链上白名单完全一致，既不能少人，也不能多塞账户。
         let expected_set: BTreeSet<&T::AccountId> = expected.iter().collect();
         ensure!(
             expected_set.len() == expected.len(),
@@ -58,7 +58,7 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    /// 中文注释：新名单必须是旧名单的超集（只允许新增，不允许删除）。
+    /// 新名单必须是旧名单的超集（只允许新增，不允许删除）。
     pub(crate) fn ensure_recipients_only_added(
         new_recipients: &BoundedVec<T::AccountId, T::MaxAllocations>,
     ) -> DispatchResult {
@@ -70,7 +70,7 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    /// 中文注释：所有收款账户必须是 CHINA_CB 省储会地址（跳过索引 0 的 NRC）。
+    /// 所有收款账户必须是 CHINA_CB 省储会地址（跳过索引 0 的 NRC）。
     pub(crate) fn ensure_recipients_in_china_cb(
         recipients: &BoundedVec<T::AccountId, T::MaxAllocations>,
     ) -> DispatchResult {

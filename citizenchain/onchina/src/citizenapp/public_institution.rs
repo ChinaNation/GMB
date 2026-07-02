@@ -30,7 +30,7 @@ use crate::core::response::{ApiResponse, PageResult};
 use crate::*;
 
 /// 公民端完整公权目录过滤。
-/// 中文注释:CitizenApp 公民端“公权机构”必须显示:
+/// CitizenApp 公民端“公权机构”必须显示:
 /// ① CID 自动公权目录(含市级直属公权机构、教育委员会、省储行等);
 /// ② 手动公法人;③ 上级为公法人的非法人。
 /// 参数 $1=province_code、$2=city_code。

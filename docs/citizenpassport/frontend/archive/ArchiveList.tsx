@@ -83,7 +83,7 @@ export default function ArchiveList() {
     listTowns()
       .then(res => {
         const towns = res.data || [];
-        // 中文注释：列表只保存 town_code，市镇列用当前市地址字典映射成镇名称。
+        // 列表只保存 town_code，市镇列用当前市地址字典映射成镇名称。
         setTownNames(Object.fromEntries(towns.map((town: Town) => [town.town_code, town.town_name])));
       })
       .catch(() => setTownNames({}));

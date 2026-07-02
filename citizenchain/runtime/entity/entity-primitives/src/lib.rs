@@ -11,7 +11,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use primitives::cid::code::InstitutionCode;
 
-// 中文注释:机构与个人多签共用的账户合法性、保留地址、保护地址检查 trait
+// 机构与个人多签共用的账户合法性、保留地址、保护地址检查 trait
 // 仍以 primitives::multisig 为唯一真源，entity-primitives 只做实体侧统一出口。
 pub use primitives::multisig::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 
@@ -149,7 +149,7 @@ impl<AccountId, AccountName, Nonce, Signature>
 
 /// 注册局登记权限抽象。
 ///
-/// 中文注释:签名验真只证明某个管理员签过登记凭证;本 trait 额外证明该签发机构
+/// 签名验真只证明某个管理员签过登记凭证;本 trait 额外证明该签发机构
 /// 对目标机构有登记权。public/private manage 只依赖这个抽象,具体 FRG/CREG 省市规则
 /// 由 runtime 统一实现,避免业务 pallet 复制行政区与创世管理员细节。
 pub trait RegistryAuthority<AccountId> {

@@ -37,7 +37,7 @@ std = [
     "primitives/std",
 ]
 runtime-benchmarks = [
-    # 中文注释：决议发行 benchmark 依赖 votingengine 与 balances 的 benchmark 配置，需同步传播。
+    # 决议发行 benchmark 依赖 votingengine 与 balances 的 benchmark 配置，需同步传播。
     "frame-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",

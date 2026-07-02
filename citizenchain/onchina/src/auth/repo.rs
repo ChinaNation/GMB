@@ -1,4 +1,4 @@
-//! 中文注释:管理员结构化表读写。
+//! 管理员结构化表读写。
 //!
 //! 管理员、登录签名请求、会话和安全动作状态全部以数据库表为唯一持久化真源。
 
@@ -54,7 +54,7 @@ fn binding_from_row(row: &postgres::Row) -> Result<NodeInstitutionBinding, Strin
     })
 }
 
-// 中文注释:`list_federal_registry_admins_by_province_conn` 已退役。
+// `list_federal_registry_admins_by_province_conn` 已退役。
 // Tier1 创世注册局管理员「全走链读」(决策③):权威集合在链上
 // `PublicAdmins::FederalRegistryProvinceGroups[绑定省码]`,由链上读取并回填本地缓存;
 // 本地不再以 `federal_registry_scope` 表派生省维度。
@@ -78,7 +78,7 @@ pub(crate) fn get_admin_by_id_and_registry_org_conn(
 
 /// Tier2 下级注册局(CREG)管理员列表。
 ///
-/// 中文注释:每节点单省部署,本地 `admins` 缓存即本省数据,省维度由部署隐含——不再 JOIN
+/// 每节点单省部署,本地 `admins` 缓存即本省数据,省维度由部署隐含——不再 JOIN
 /// 已退役的 `federal_registry_scope` 表(决策③),仅按机构码 + 可选市名过滤。
 pub(crate) fn list_city_registry_admins_by_scope_conn(
     conn: &mut Client,
@@ -206,7 +206,7 @@ pub(crate) fn resolve_admin_account_key_conn(
 
 /// Tier1/Tier2 注册局管理员的省作用域。
 ///
-/// 中文注释:节点机构身份由首次链上 active admin 登录后绑定,省作用域取 active 绑定,
+/// 节点机构身份由首次链上 active admin 登录后绑定,省作用域取 active 绑定,
 /// 不再读取节点 `ONCHAIN_CREDENTIAL_SCOPE_*` 环境变量。
 pub(crate) fn province_scope_for_registry_org_conn(
     conn: &mut Client,
@@ -235,7 +235,7 @@ pub(crate) fn derive_admin_scope_conn(
     ))
 }
 
-/// 中文注释:解析当前管理员所属机构的 cid_short_name 单一字段。
+/// 解析当前管理员所属机构的 cid_short_name 单一字段。
 /// 联邦注册局管理员 → institution_code='FRG' 的全局唯一机构(总统府联邦注册局,简称=联邦注册局);
 /// 市注册局管理员   → institution_code='CREG' AND province_name AND city_name 的本市机构(如 合肥市注册局)。
 /// 无对应行返回 None(前端按空处理,绝不另造名字)。
@@ -256,7 +256,7 @@ pub(crate) fn resolve_home_cid_short_name_conn(
     } else if crate::core::chain_runtime::admin_level_label_for(institution_code).as_deref()
         == Some("NATIONAL")
     {
-        // 中文注释:NJD 等全国级机构没有省市作用域,按机构码直接解析本机构简称。
+        // NJD 等全国级机构没有省市作用域,按机构码直接解析本机构简称。
         conn.query_opt(
             "SELECT cid_short_name FROM subjects \
              WHERE institution_code = $1 AND status = 'ACTIVE' LIMIT 1",
@@ -265,7 +265,7 @@ pub(crate) fn resolve_home_cid_short_name_conn(
         .map_err(|e| format!("query national institution short name failed: {e}"))?
     } else {
         // 市级机构按本机构码 + 省 + 市定位机构简称。
-        // 中文注释:subjects 已不存行政区名字,按 china.sqlite 把省/市名字派生成 code 再过滤(单源)。
+        // subjects 已不存行政区名字,按 china.sqlite 把省/市名字派生成 code 再过滤(单源)。
         let (Some(province), Some(city)) = (scope_province_name, scope_city_name) else {
             return Ok(None);
         };
@@ -508,7 +508,7 @@ pub(crate) fn consume_node_binding_challenge_conn(
     Ok(())
 }
 
-// 中文注释:`find_federal_registry_scope_conn` / `repair_federal_registry_scope_conn` 已退役——
+// `find_federal_registry_scope_conn` / `repair_federal_registry_scope_conn` 已退役——
 // `federal_registry_scope` 省映射表连同 `provinces` 占位表一并下线(决策③);Tier1 创世注册局
 // 省作用域改取节点 active binding(见 `province_scope_for_registry_org_conn` / `derive_admin_scope_conn`)。
 
@@ -522,7 +522,7 @@ pub(crate) fn next_admin_id_conn(conn: &mut Client) -> Result<u64, String> {
 
 /// 写入 / 更新本地管理员缓存行(`admin_account` 为冲突键,幂等)。
 ///
-/// 中文注释:管理员成员资格与节点机构归属以链上 active 集合 + 本节点 active binding 为准。
+/// 管理员成员资格与节点机构归属以链上 active 集合 + 本节点 active binding 为准。
 /// 本函数只维护 `admins` 登录元数据缓存本身。
 pub(crate) fn upsert_admin_conn(conn: &mut Client, admin: &AdminUser) -> Result<(), String> {
     conn.execute(
@@ -611,7 +611,7 @@ pub(crate) fn insert_action_challenge(
     })
 }
 
-/// 中文注释:按 action_id 取挑战,同时以 actor_account 做先验隔离——只能读自己发起的挑战。
+/// 按 action_id 取挑战,同时以 actor_account 做先验隔离——只能读自己发起的挑战。
 /// 非本人 action_id 直接当作不存在(返回 None),不在 DB 层暴露他人挑战。
 pub(crate) fn get_action_challenge_conn(
     conn: &mut Client,
@@ -686,7 +686,7 @@ pub(crate) fn insert_security_grant_conn(
     Ok(())
 }
 
-/// 中文注释:按 grant_id 取冷签授权,同时以 actor_account 做先验隔离——只能读自己持有的授权。
+/// 按 grant_id 取冷签授权,同时以 actor_account 做先验隔离——只能读自己持有的授权。
 /// 非本人 grant_id 直接当作不存在(返回 None),不在 DB 层暴露他人授权。
 pub(crate) fn get_security_grant_conn(
     conn: &mut Client,
@@ -977,7 +977,7 @@ pub(crate) fn get_qr_login_result_conn(
         .map_err(|e| format!("decode qr login result failed: {e}"))
 }
 
-/// 中文注释:已签发注销凭证行(下发 /deregistration-info 用)。
+/// 已签发注销凭证行(下发 /deregistration-info 用)。
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct DeregistrationCredentialRow {
     pub(crate) scope: i16,
@@ -990,7 +990,7 @@ pub(crate) struct DeregistrationCredentialRow {
     pub(crate) signer_pubkey: String,
 }
 
-/// 中文注释:写入注册局域注销态(ISSUED,signature 待 commit 层回填)。
+/// 写入注册局域注销态(ISSUED,signature 待 commit 层回填)。
 /// 同账户已有活跃 ISSUED(唯一索引)或 nonce 重复时返回 conflict。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn insert_deregistration_issued_conn(
@@ -1032,7 +1032,7 @@ pub(crate) fn insert_deregistration_issued_conn(
     Ok(())
 }
 
-/// 中文注释:commit 层签发成功后回填签名 + issuer(issuer 来自 env runtime_signing_context,
+/// commit 层签发成功后回填签名 + issuer(issuer 来自 env runtime_signing_context,
 /// 与签名同源,下发时直读)。
 pub(crate) fn set_deregistration_credential_conn(
     conn: &mut Client,
@@ -1064,7 +1064,7 @@ pub(crate) fn set_deregistration_credential_conn(
     Ok(())
 }
 
-/// 中文注释:签发失败时清掉无签名的 ISSUED 行,保持一致(不留无签名残行)。
+/// 签发失败时清掉无签名的 ISSUED 行,保持一致(不留无签名残行)。
 pub(crate) fn delete_deregistration_by_nonce_conn(
     conn: &mut Client,
     deregister_nonce: &str,
@@ -1077,7 +1077,7 @@ pub(crate) fn delete_deregistration_by_nonce_conn(
     Ok(())
 }
 
-/// 中文注释:取该机构当前已签发(ISSUED 且已回填签名)的注销凭证,供机构管理员下发。
+/// 取该机构当前已签发(ISSUED 且已回填签名)的注销凭证,供机构管理员下发。
 pub(crate) fn get_active_deregistration_by_cid_conn(
     conn: &mut Client,
     cid_number: &str,

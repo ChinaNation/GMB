@@ -170,7 +170,7 @@ pub mod pallet {
     }
 
     // ─── Events ────────────────────────────────────────────────────────────
-    // 中文注释：Events 预留给 on_runtime_upgrade 迁移代码使用（阶段切换时触发）。
+    // Events 预留给 on_runtime_upgrade 迁移代码使用（阶段切换时触发）。
     // 当前迁移未实现，deposit_event 暂未被调用。
 
     #[pallet::event]
@@ -184,7 +184,7 @@ pub mod pallet {
         DeveloperUpgradeToggled { enabled: bool },
     }
 
-    // 中文注释：本 pallet 不暴露 extrinsic。阶段切换仅通过 OnRuntimeUpgrade 迁移执行。
+    // 本 pallet 不暴露 extrinsic。阶段切换仅通过 OnRuntimeUpgrade 迁移执行。
 }
 
 // ─── DeveloperUpgradeCheck 实现 ────────────────────────────────────────────

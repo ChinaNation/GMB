@@ -237,7 +237,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           institutionAdminTally: institutionAdminTally,
         ));
       } catch (_) {
-        // 中文注释：详情快照写入失败不能影响链上最新结果展示。
+        // 详情快照写入失败不能影响链上最新结果展示。
       }
       if (!mounted) return;
       setState(() {
@@ -434,7 +434,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   Uint8List _institutionAccountId(InstitutionInfo institution) {
-    // 中文注释：联合投票 storage 使用机构多签 AccountId，不从 cid_number 派生主体。
+    // 联合投票 storage 使用机构多签 AccountId，不从 cid_number 派生主体。
     return Uint8List.fromList(
       institutionIdentityToAccountId(
         institution.cidNumber,
@@ -535,7 +535,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       );
 
       final pubkey = _normalizeHex(voteWallet.pubkeyHex);
-      // 中文注释：服务层已经确认 runtime JointVote 记录，新流程不再写 pending。
+      // 服务层已经确认 runtime JointVote 记录，新流程不再写 pending。
       // 这里只清除旧版本可能残留的同管理员 pending 记录。
       await PendingVoteStore.instance.remove(
         'runtime_upgrade',
@@ -566,7 +566,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
       _adminService
           .clearCache(AdminAccountIdentity.fromInstitution(institution));
-      // 中文注释：服务层已经等待入块并回读 JointVote storage；这里刷新页面
+      // 服务层已经等待入块并回读 JointVote storage；这里刷新页面
       // 只负责同步最新展示状态，投票成功与否不再由 txHash 判断。
       unawaited(_load(showSpinner: false));
     } on WalletAuthException catch (e) {
@@ -613,7 +613,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   int? _resolvedStatusCode() {
-    // 中文注释：协议升级真实状态只以投票引擎元数据为准。
+    // 协议升级真实状态只以投票引擎元数据为准。
     return _meta?.status;
   }
 
@@ -1266,7 +1266,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   Future<void> _submitCitizenVote(bool approve) async {
-    // 中文注释：联合公投提交依赖链上 cast_referendum extrinsic，入口未开放前只提示状态。
+    // 联合公投提交依赖链上 cast_referendum extrinsic，入口未开放前只提示状态。
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

@@ -1,4 +1,4 @@
-// 中文注释:当前登录管理员的 passkey 注册状态 + 注册动作。
+// 当前登录管理员的 passkey 注册状态 + 注册动作。
 // 供管理员列表操作列「设置/更新 passkey 密钥」按钮(self-only)与红点使用。
 
 import { useCallback, useEffect, useState } from "react";

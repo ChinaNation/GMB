@@ -88,7 +88,7 @@ class _AdminListPageState extends State<AdminListPage> {
       if (!mounted) return;
       setState(() => _balanceByAccount = balances);
     } catch (_) {
-      // 中文注释:余额展示失败不影响管理员激活流程,卡片保留“余额”标签且值为空。
+      // 余额展示失败不影响管理员激活流程,卡片保留“余额”标签且值为空。
       if (mounted) setState(() => _balanceByAccount = const {});
     }
   }

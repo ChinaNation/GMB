@@ -1,6 +1,6 @@
 // 公权机构目录本地存储抽象(ADR-018 §九)。
 //
-// 中文注释:抽象出存储接口,使同步/载入服务的逻辑可用内存 fake 单测,
+// 抽象出存储接口,使同步/载入服务的逻辑可用内存 fake 单测,
 // 不依赖 Isar 真库;生产实现见 isar_public_institution_store.dart。
 // 全部为本地读写,UI 导航零链读零现查。
 
@@ -23,7 +23,7 @@ abstract interface class PublicInstitutionStore {
 
   /// 某省全部市 code(按 cityCode 去重,顺序稳定)。
   ///
-  /// 中文注释(ADR-021):镇 code 全国不唯一,但市 code 在省内唯一;按 code 去重,
+  /// (ADR-021):镇 code 全国不唯一,但市 code 在省内唯一;按 code 去重,
   /// 名字由调用方查字典 join。
   Future<List<String>> listCities(String provinceCode);
 
@@ -38,7 +38,7 @@ abstract interface class PublicInstitutionStore {
 
   /// 按机构码集合取全部机构(跨省扁平;institutionCode 索引 anyOf 查,非全表扫)。
   ///
-  /// 中文注释(ADR-028 P2):五子 tab 的治理/立法等机构视图按 institution_code
+  /// (ADR-028 P2):五子 tab 的治理/立法等机构视图按 institution_code
   /// 过滤统一目录的入口。
   Future<List<PublicInstitutionEntity>> listByInstitutionCodes(
     Set<String> institutionCodes,
@@ -46,7 +46,7 @@ abstract interface class PublicInstitutionStore {
 
   /// 某省内按机构码集合取机构(provinceCode 索引 + institutionCode anyOf)。
   ///
-  /// 中文注释(ADR-028 P3):立法 tab 省导航选某省后,取该省 省立法院/省议会 +
+  /// (ADR-028 P3):立法 tab 省导航选某省后,取该省 省立法院/省议会 +
   /// 全部市的市立法会。
   Future<List<PublicInstitutionEntity>> listByProvinceAndCodes(
     String provinceCode,
@@ -55,7 +55,7 @@ abstract interface class PublicInstitutionStore {
 
   /// 某省(省 code)全部机构实体(按 provinceCode 索引查)。
   ///
-  /// 中文注释(增量 reconcile 用):供 loader 逐条比对同 cid 内容,只 upsert 真正
+  /// (增量 reconcile 用):供 loader 逐条比对同 cid 内容,只 upsert 真正
   /// 改名/新增的行,再删除包里已没有的废 cid,零旧数据残留。
   Future<List<PublicInstitutionEntity>> institutionsOfProvince(
     String provinceCode,

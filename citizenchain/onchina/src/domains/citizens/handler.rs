@@ -1,6 +1,6 @@
 //! 公民列表 / 公开身份查询 handlers
 //!
-//! 中文注释:公民查询能力属于 citizens 模块,不属于权限范围规则。
+//! 公民查询能力属于 citizens 模块,不属于权限范围规则。
 //! 因此本文件承接后台公民列表和公开身份查询入口。
 
 use axum::{
@@ -851,7 +851,7 @@ pub(crate) async fn public_identity_search(
 ) -> impl IntoResponse {
     // 查询结果仅含公开信息（CID 码等），无需 token 认证。
     // 全局 rate limiter 已防滥用。
-    // 中文注释:公开查询只返回公民档案已登记后的公开字段。
+    // 公开查询只返回公民档案已登记后的公开字段。
     let identity_code = query.identity_code.as_deref().map(str::trim).unwrap_or("");
     let wallet_pubkey = query.wallet_pubkey.as_deref().map(str::trim).unwrap_or("");
     if identity_code.is_empty() && wallet_pubkey.is_empty() {

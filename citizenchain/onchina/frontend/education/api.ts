@@ -1,4 +1,4 @@
-// 中文注释:教育机构前端 API。JY 教育机构统一从这里调用后端:
+// 教育机构前端 API。JY 教育机构统一从这里调用后端:
 // 市详情确定性市公民教育委员会直接列表展示,学校和 F+JY 非法人教育机构按精确搜索返回。
 
 import type { AdminAuth } from '../auth/types';
@@ -43,7 +43,7 @@ export async function checkCidFullName(
   );
 }
 
-// 中文注释:创建教育机构属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
+// 创建教育机构属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
 export async function createInstitution(
   auth: AdminAuth,
   input: CreateInstitutionInput,
@@ -90,7 +90,7 @@ export async function uploadLegalRepresentativePhoto(
   );
 }
 
-// 中文注释:所属法人搜索(分校模式 f_institution=JY → 只返回本市学校本部)。
+// 所属法人搜索(分校模式 f_institution=JY → 只返回本市学校本部)。
 // 后端按 subjects/unincorporated_org 规则预过滤,前端不再兜底过滤。
 export async function searchParentInstitutions(
   auth: AdminAuth,

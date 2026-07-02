@@ -1,4 +1,4 @@
-// 中文注释：genesis-pallet 无 extrinsic，WeightInfo 为空实现。
+// genesis-pallet 无 extrinsic，WeightInfo 为空实现。
 
 pub trait WeightInfo {}
 

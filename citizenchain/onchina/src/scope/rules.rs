@@ -1,6 +1,6 @@
 //! 机构作用域规则
 //!
-//! 中文注释:按登录管理员的机构行政层级(admin_level)派生其可见/可操作的数据范围
+//! 按登录管理员的机构行政层级(admin_level)派生其可见/可操作的数据范围
 //! (VisibleScope)。所有 list/CRUD API 都应先派生 scope,再用它过滤数据。
 //!
 //! 五档范围:
@@ -145,7 +145,7 @@ impl VisibleScope {
 
 /// 根据登录管理员上下文派生 VisibleScope。
 ///
-/// 中文注释:Tier1 创世注册局(FRG)的 admin_level 虽为 NATIONAL,但其管理员按省分区
+/// Tier1 创世注册局(FRG)的 admin_level 虽为 NATIONAL,但其管理员按省分区
 /// (每节点单省,省作用域来自节点 env / 链上省组),故先于 admin_level 经 `is_tier1_registry`
 /// 谓词特判为省级范围。其余机构按 admin_level 派生;私权法人/非法人无层级,暂沿用本市范围。
 /// 任一档缺必要 scope 字段返回空范围,不制造伪行政区参与查询。

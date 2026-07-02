@@ -32,7 +32,7 @@ class RuntimeUpgradeService {
 
   /// 提交机构管理员的联合投票。
   ///
-  /// 中文注释：联合投票必须等待入块，并回读 runtime JointVote storage。
+  /// 联合投票必须等待入块，并回读 runtime JointVote storage。
   /// txHash 只代表交易提交，不能代表投票已经生效。
   Future<({String txHash, int usedNonce, String blockHashHex})>
       submitJointVote({
@@ -86,7 +86,7 @@ class RuntimeUpgradeService {
 
   /// 解码 `ProposalData` 的原始 storage value（带 Compact 长度前缀）。
   ///
-  /// 中文注释：分页列表会批量读取 ProposalData，随后在内存里按提案类型解码；
+  /// 分页列表会批量读取 ProposalData，随后在内存里按提案类型解码；
   /// 这里提供公共入口，避免不同页面各自复制一套 runtime 提案解码逻辑。
   RuntimeUpgradeProposalInfo? decodeRuntimeUpgradeStorageValue(
       int proposalId, Uint8List raw) {
@@ -165,7 +165,7 @@ class RuntimeUpgradeService {
 
   /// 批量查询联合投票管理员投票记录。
   ///
-  /// 中文注释：协议升级详情页最多会显示 43 个管理员，必须批量读取
+  /// 协议升级详情页最多会显示 43 个管理员，必须批量读取
   /// `JointVotesByAdmin`，不能逐管理员发起 RPC。
   Future<Map<String, bool?>> fetchJointAdminVotesBatch(
     int proposalId,
@@ -191,7 +191,7 @@ class RuntimeUpgradeService {
   /// 跨提案批量查询联合投票:输入 `{proposalId: (机构account, [pubkeyHex])}`,
   /// 一次链查返回 `{proposalId: {pubkey: vote?}}`。
   ///
-  /// 中文注释(ADR-018 R2):与内部投票同理,广场上多个联合投票提案合并成单次
+  /// (ADR-018 R2):与内部投票同理,广场上多个联合投票提案合并成单次
   /// 分块读取,避免每提案一次 RPC。
   Future<Map<int, Map<String, bool?>>> fetchJointAdminVotesForProposals(
     Map<int, ({Uint8List institutionAccountId, List<String> pubkeysHex})>
@@ -356,7 +356,7 @@ class RuntimeUpgradeService {
       final codeHashBytes = data.sublist(offset, offset + 32);
       offset += 32;
 
-      // 中文注释：协议升级摘要不保存业务状态，避免与投票引擎终态脱节。
+      // 协议升级摘要不保存业务状态，避免与投票引擎终态脱节。
       if (offset != data.length) return null;
 
       final proposerSs58 =

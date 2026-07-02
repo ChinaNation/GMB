@@ -25,11 +25,11 @@ pub mod pallet {
         },
     };
 
-    // 中文注释：自动路径只允许每个年度边界块结算 1 年，避免历史欠账集中压进单块。
+    // 自动路径只允许每个年度边界块结算 1 年，避免历史欠账集中压进单块。
     const AUTO_BACKFILL_MAX_YEARS_PER_BLOCK: u32 = 1;
-    // 中文注释：Root 补结算保留批处理能力，但必须分批执行，避免单笔交易结算 100 年。
+    // Root 补结算保留批处理能力，但必须分批执行，避免单笔交易结算 100 年。
     const MAX_FORCE_SETTLE_YEARS: u32 = 8;
-    // 中文注释：省储行利息制度当前固定启用逐年递减，禁止保留关闭递减的死分支。
+    // 省储行利息制度当前固定启用逐年递减，禁止保留关闭递减的死分支。
     const _: () = assert!(
         ENABLE_PROVINCIALBANK_INTEREST_DECAY,
         "ENABLE_PROVINCIALBANK_INTEREST_DECAY must stay true"
@@ -128,7 +128,7 @@ pub mod pallet {
 
             // 只在“年度边界区块”触发，按年度顺序自动补结算。
             if current_year > last_year && last_year < PROVINCIALBANK_INTEREST_DURATION_YEARS {
-                // 中文注释：自动结算的最坏路径由 benchmark 权重覆盖，不再使用手写读写估算。
+                // 自动结算的最坏路径由 benchmark 权重覆盖，不再使用手写读写估算。
                 let _ = Self::settle_next_years(
                     current_year,
                     AUTO_BACKFILL_MAX_YEARS_PER_BLOCK,
@@ -162,7 +162,7 @@ pub mod pallet {
             max_years: u32,
         ) -> DispatchResultWithPostInfo {
             ensure_root(origin)?;
-            // 中文注释：手动补结算只允许推进有限年数，避免一次交易做过多年度工作。
+            // 手动补结算只允许推进有限年数，避免一次交易做过多年度工作。
             ensure!(
                 max_years > 0 && max_years <= MAX_FORCE_SETTLE_YEARS,
                 Error::<T>::InvalidOperationCount
@@ -176,7 +176,7 @@ pub mod pallet {
                 writes,
                 ops
             );
-            // 中文注释：实际扣重保持使用声明的 benchmark 权重，避免用运行时手写估算低报。
+            // 实际扣重保持使用声明的 benchmark 权重，避免用运行时手写估算低报。
             Ok(().into())
         }
 
@@ -187,7 +187,7 @@ pub mod pallet {
             ensure_root(origin)?;
             let current = Self::last_settled_year();
             let current_year = Self::current_year(frame_system::Pallet::<T>::block_number());
-            // 中文注释：force advance 只用于跳过“已经到期但无法修复”的故障年度，
+            // force advance 只用于跳过“已经到期但无法修复”的故障年度，
             // 不能越过当前链上时间提前跳过未来尚未到期的年度。
             ensure!(
                 year > current
@@ -236,7 +236,7 @@ pub mod pallet {
             let mut ops: u64 = 0;
             let mut iterations: u32 = 0;
             let mut last_year = Self::last_settled_year();
-            // 中文注释：必须按年度顺序逐年推进；只要中间某一年失败，就停止后续年度，
+            // 必须按年度顺序逐年推进；只要中间某一年失败，就停止后续年度，
             // 避免出现“后一年已发、前一年未发”的跨年错位。
             while last_year < current_year
                 && last_year < PROVINCIALBANK_INTEREST_DURATION_YEARS
@@ -286,7 +286,7 @@ pub mod pallet {
             if per_year == 0 {
                 return 0;
             }
-            // 中文注释：第 1 个年度边界块对应 year=1；例如 block=per_year 时开始结算第 1 年。
+            // 第 1 个年度边界块对应 year=1；例如 block=per_year 时开始结算第 1 年。
             (b / per_year) as u32
         }
 
@@ -297,7 +297,7 @@ pub mod pallet {
                 "settlement year must stay inside provincialbank interest duration"
             );
 
-            // 中文注释：第 1 年使用初始利率，从第 2 年开始按固定 BP 递减，最低不会小于 0。
+            // 第 1 年使用初始利率，从第 2 年开始按固定 BP 递减，最低不会小于 0。
             let decay = year
                 .saturating_sub(1)
                 .saturating_mul(PROVINCIALBANK_INTEREST_DECREASE_BP);
@@ -307,7 +307,7 @@ pub mod pallet {
 
         /// 核心铸造逻辑（只针对固定省储行多签账户，不可覆盖）。
         fn mint_interest_for_year(year: u32) -> (u64, u64, u32, u32) {
-            // 中文注释：这里的读写计数只保留给调试日志；真实区块权重以 benchmark 产物为准。
+            // 这里的读写计数只保留给调试日志；真实区块权重以 benchmark 产物为准。
             // 保守估算每家省储行读：
             // - 账户余额读取
             // - 总发行量读取
@@ -345,7 +345,7 @@ pub mod pallet {
                     continue;
                 }
 
-                // 中文注释：利率乘法必须显式检查溢出，避免 saturating_mul 静默铸出异常大额。
+                // 利率乘法必须显式检查溢出，避免 saturating_mul 静默铸出异常大额。
                 let rate: BalanceOf<T> = rate_bp.into();
                 let Some(gross_interest) = principal.checked_mul(&rate) else {
                     Self::deposit_event(Event::<T>::ProvincialBankInterestOverflow {
@@ -368,7 +368,7 @@ pub mod pallet {
                     continue;
                 }
                 if interest < T::Currency::minimum_balance() {
-                    // 中文注释：当前省储行固定 stake_amount 下不会命中这个分支；
+                    // 当前省储行固定 stake_amount 下不会命中这个分支；
                     // 这里保留为防御性兜底，避免未来参数变化时创建 dust 账户。
                     Self::deposit_event(Event::<T>::ProvincialBankInterestBelowED {
                         year,
@@ -385,8 +385,8 @@ pub mod pallet {
                     continue;
                 }
 
-                // 中文注释：若账户被清理或尚未建户，自动重建对应省储行 pallet_account 后再入账。
-                // 中文注释：deposit_creating 返回的 imbalance 在离开作用域时结算，等价于确认增发入账。
+                // 若账户被清理或尚未建户，自动重建对应省储行 pallet_account 后再入账。
+                // deposit_creating 返回的 imbalance 在离开作用域时结算，等价于确认增发入账。
                 let _imbalance = T::Currency::deposit_creating(&account, interest);
                 success_count = success_count.saturating_add(1);
                 writes = writes.saturating_add(2); // deposit_creating: account + total_issuance

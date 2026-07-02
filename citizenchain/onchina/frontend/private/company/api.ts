@@ -1,4 +1,4 @@
-// 中文注释:股权公司 API。调用 `/api/v1/private/company`,不得回退到旧聚合接口。
+// 股权公司 API。调用 `/api/v1/private/company`,不得回退到旧聚合接口。
 
 import type { AdminAuth } from '../../auth/types';
 import type {

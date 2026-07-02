@@ -1,4 +1,4 @@
-// 中文注释:登录与角色相关的前端类型集中放在 auth 模块内。
+// 登录与角色相关的前端类型集中放在 auth 模块内。
 // 管理员按机构码(institution_code)归属机构;能力位 capabilities 由后端会话下发,前端镜像渲染 tab。
 
 import type { RoleCapabilities } from '../platform/capabilityMap';

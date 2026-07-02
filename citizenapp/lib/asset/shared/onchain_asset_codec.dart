@@ -1,6 +1,6 @@
 // 链上发行代币 asset_id 编解码 + AssetMeta SCALE 解码。
 //
-// 中文注释：asset_id 只标识资产本身，治理身份只来自机构多签 AccountId。
+// asset_id 只标识资产本身，治理身份只来自机构多签 AccountId。
 // 发行人/治理主体必须是机构多签 AccountId，AssetMeta 的发行人字段按 AccountId 解码。
 
 import 'dart:typed_data';

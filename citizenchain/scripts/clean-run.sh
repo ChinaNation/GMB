@@ -48,7 +48,7 @@ sleep 1
 echo "    已清理"
 
 # ── 2. 完全删除区块链数据(清链)+ 链上中国平台内嵌 PG 数据(与新创世一致地全新)──
-# 中文注释:只删 db/(区块 + 状态)= 完全清链;node-key(PeerId)、keystore(矿工密钥)、
+# 只删 db/(区块 + 状态)= 完全清链;node-key(PeerId)、keystore(矿工密钥)、
 #   tls/(WSS 证书)是与创世无关的节点身份,保留以免重新生成。
 DB_DIR="$APP_DATA_DIR/chains/citizenchain/db"
 ONCHINA_PGDATA="$APP_DATA_DIR/onchina-pgdata"
@@ -81,13 +81,13 @@ export ONCHINA_CHINA_DB="$CHAIN_ROOT/onchina/src/cid/china/china.sqlite"
 export ONCHINA_FRONTEND_DIST="$CHAIN_ROOT/onchina/frontend/dist"
 export ONCHINA_ENABLE_TLS=1
 export ONCHINA_TLS_DIR="$APP_DATA_DIR/onchina-tls"
-# 中文注释:本地开发让链上中国平台启动时自动对账公权机构目录(全新内嵌 PG 是空库,
+# 本地开发让链上中国平台启动时自动对账公权机构目录(全新内嵌 PG 是空库,
 #   首启需把 40 万+ 公权机构从 china.sqlite 生成进库;首次较慢,之后增量对账很快),
 #   否则启动期"目录落后"守卫会 panic、平台起不来。
 export ONCHINA_GOV_AUTO_RECONCILE=1
 
 # ── dev 平台签名与链上凭证签发配置(本地测试值)──
-# 中文注释:这些变量只让本地能签登录 QR 挑战和链上凭证;节点启动、平台启动、
+# 这些变量只让本地能签登录 QR 挑战和链上凭证;节点启动、平台启动、
 #   以及管理员所属机构判断都不依赖它们。机构归属由管理员冷钱包登录后链上反查并绑定。
 export ONCHINA_SIGNING_SEED_HEX="${ONCHINA_SIGNING_SEED_HEX:-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd}"
 export ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER="${ONCHAIN_CREDENTIAL_ISSUER_CID_NUMBER:-ZS001-FRG07-249474503-2026}"

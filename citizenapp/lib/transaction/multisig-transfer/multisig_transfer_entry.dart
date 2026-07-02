@@ -7,7 +7,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 多签转账入口卡片。
 ///
-/// 中文注释：转账入口按钮、管理员钱包检查和页面跳转都归 `multisig-transfer`
+/// 转账入口按钮、管理员钱包检查和页面跳转都归 `multisig-transfer`
 /// 模块实现，外部页面只负责把当前账户上下文传进来。
 class MultisigTransferEntryCard extends StatelessWidget {
   const MultisigTransferEntryCard({

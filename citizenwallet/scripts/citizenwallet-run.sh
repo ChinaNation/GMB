@@ -57,7 +57,7 @@ sync_android_artifact() {
   fi
 }
 
-# 中文注释：启动脚本固定把本地 APK 产物沉淀到项目根 target/，方便冷钱包设备离线安装和回滚。
+# 启动脚本固定把本地 APK 产物沉淀到项目根 target/，方便冷钱包设备离线安装和回滚。
 echo "==> 生成 Android 产物..."
 flutter build apk --debug
 sync_android_artifact

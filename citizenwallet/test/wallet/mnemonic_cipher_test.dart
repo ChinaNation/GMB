@@ -49,7 +49,7 @@ void main() {
       const mnemonic = 'test mnemonic words here only for testing';
       final encrypted = await MnemonicCipher.encrypt(mnemonic);
 
-      // 中文注释：先解码再翻转认证标签最后一个字节，确保每次都真实篡改。
+      // 先解码再翻转认证标签最后一个字节，确保每次都真实篡改。
       final bytes = base64Decode(encrypted);
       bytes[bytes.length - 1] ^= 0x01;
       final tampered = base64Encode(bytes);

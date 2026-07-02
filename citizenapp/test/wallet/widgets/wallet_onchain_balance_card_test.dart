@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/widgets/wallet_onchain_balance_card.dart';
 
-/// 中文注释:WalletOnchainBalanceCard 基础渲染测试(v4 删刷新按钮)。
+/// WalletOnchainBalanceCard 基础渲染测试(v4 删刷新按钮)。
 ///
 /// 布局变化:
 /// - 删除了卡内刷新按钮(整个 IconButton 体系),改由外层 RefreshIndicator
@@ -55,7 +55,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 中文注释:v4 删除了卡内刷新按钮,整卡应不存在 IconButton。
+    // v4 删除了卡内刷新按钮,整卡应不存在 IconButton。
     expect(find.byType(IconButton), findsNothing);
   });
 
@@ -68,14 +68,14 @@ void main() {
       ),
     );
     await tester.pump();
-    // 中文注释:标题固定在第 1 行,GMB 固定在第 2 行右下角,均需可见。
+    // 标题固定在第 1 行,GMB 固定在第 2 行右下角,均需可见。
     expect(find.text('链上余额'), findsOneWidget);
     expect(find.text('GMB'), findsOneWidget);
   });
 
   testWidgets('GlobalKey<WalletOnchainBalanceCardState> can call refresh',
       (tester) async {
-    // 中文注释:外层下拉刷新通过 GlobalKey 拿到 State 调 refresh(),
+    // 外层下拉刷新通过 GlobalKey 拿到 State 调 refresh(),
     // 这里验证类型系统可用(编译期断言 State 类已公开)+ 调用不抛。
     final key = GlobalKey<WalletOnchainBalanceCardState>();
     await tester.pumpWidget(

@@ -1,6 +1,6 @@
 //! 立法院模块数据类型(ADR-027):法律层级 / 状态 / 表决类型 / 立法动作枚举。
 //!
-//! 中文注释:这里只放与泛型 `T` 无关的纯枚举;带 `BoundedVec` 上限的法律结构体
+//! 这里只放与泛型 `T` 无关的纯枚举;带 `BoundedVec` 上限的法律结构体
 //! (Article / Clause / Item / Law / LawVersion)因依赖 `Config` 常量,定义在 `lib.rs` 的 pallet 模块内。
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
@@ -33,7 +33,7 @@ pub enum Tier {
 
 /// 法律状态机。
 ///
-/// 中文注释:`Voting` 阶段由投票引擎的提案状态承载,不在 Law 上重复表达;
+/// `Voting` 阶段由投票引擎的提案状态承载,不在 Law 上重复表达;
 /// 旧版本被新版本替代后留在 `LawVersions` 历史里,不单独标 Law 状态。
 /// 故 Law 实际可达状态为 Pending(通过待生效)/ Effective(生效)/ Repealed(废止)。
 #[derive(

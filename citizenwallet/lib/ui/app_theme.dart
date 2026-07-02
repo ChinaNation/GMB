@@ -5,11 +5,7 @@ import 'package:flutter/material.dart';
 /// 设计语言：深色底 + 冰蓝渐变高亮，体现冷钱包安全、专业气质。
 class AppTheme {
   AppTheme._();
-
-  // ---------------------------------------------------------------------------
   // 色板
-  // ---------------------------------------------------------------------------
-
   /// 背景色系
   static const Color scaffoldBg = Color(0xFF0D1117);
   static const Color surfaceDark = Color(0xFF161B22);
@@ -39,11 +35,7 @@ class AppTheme {
   static const Color warning = Color(0xFFD29922);
   static const Color danger = Color(0xFFF85149);
   static const Color info = Color(0xFF58A6FF);
-
-  // ---------------------------------------------------------------------------
   // 渐变
-  // ---------------------------------------------------------------------------
-
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [primaryLight, primaryDark],
     begin: Alignment.topLeft,
@@ -61,20 +53,12 @@ class AppTheme {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
-
-  // ---------------------------------------------------------------------------
   // 圆角 & 间距
-  // ---------------------------------------------------------------------------
-
   static const double radiusSm = 8;
   static const double radiusMd = 12;
   static const double radiusLg = 16;
   static const double radiusXl = 24;
-
-  // ---------------------------------------------------------------------------
   // 卡片装饰
-  // ---------------------------------------------------------------------------
-
   static BoxDecoration cardDecoration({
     bool selected = false,
     double radius = radiusMd,
@@ -110,11 +94,7 @@ class AppTheme {
       ],
     );
   }
-
-  // ---------------------------------------------------------------------------
   // 状态提示装饰（用于 banner / 提示条）
-  // ---------------------------------------------------------------------------
-
   static BoxDecoration bannerDecoration(Color color) {
     return BoxDecoration(
       color: color.withAlpha(20),
@@ -122,11 +102,7 @@ class AppTheme {
       border: Border.all(color: color.withAlpha(60)),
     );
   }
-
-  // ---------------------------------------------------------------------------
   // ThemeData
-  // ---------------------------------------------------------------------------
-
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,

@@ -7,7 +7,7 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 
 /// 提案活跃数量限制查询。
 ///
-/// 中文注释：活跃提案上限属于 VotingEngine 的通用规则，因此放在
+/// 活跃提案上限属于 VotingEngine 的通用规则，因此放在
 /// proposal 共享层，避免提案入口依赖具体业务模块。
 class ProposalLimitService {
   ProposalLimitService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();

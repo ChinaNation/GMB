@@ -1,6 +1,6 @@
 //! 法律链读:链上 `Law` / `LawVersion` 的 SCALE 解码镜像 + → 展示 DTO 转换。
 //!
-//! 中文注释:复用 onchina 既有读链范式——`kv.value.encoded()` 原始字节 → 本地 `#[derive(Decode)]`
+//! 复用 onchina 既有读链范式——`kv.value.encoded()` 原始字节 → 本地 `#[derive(Decode)]`
 //! 镜像结构解码(见 `core/chain_runtime.rs::OnChainAdminAccount`)。镜像字段顺序锁死链端
 //! `legislation-yuan` 的 `Law` / `LawVersion`;`Tier`/`LawStatus`/`VoteType`
 //! 作单字节枚举解码为 u8(取值已在 `chain_propose` 交叉校验)。章节复用 `chain_propose::ChapterArg`(同
@@ -144,7 +144,7 @@ pub fn operator_display_version(law: &OnChainLaw) -> Option<u32> {
 
 /// 机构主账户派生:cid_number → OP_MAIN 主账户 `[u8;32]`(复用 `institution::accounts::derive`)。
 ///
-/// 中文注释:与链端 `primitives::account_derive` 单源一致(SS58=2027 / OP_MAIN / GMB 域)。
+/// 与链端 `primitives::account_derive` 单源一致(SS58=2027 / OP_MAIN / GMB 域)。
 /// `resolve_house_account` 全链路 = 「机构码+scope → cid_number(subjects 表查)→ 本函数派生」;
 /// subjects 查在 handler 组合既有查询,本函数是可离线金标校验的派生原语。
 pub fn derive_house_account(cid_number: &str) -> Option<[u8; 32]> {
@@ -155,7 +155,7 @@ pub fn derive_house_account(cid_number: &str) -> Option<[u8; 32]> {
 
 /// 机构码 + 行政区(china code)→ 主账户:subjects 表查 cid_number → `derive_house_account`。
 ///
-/// 中文注释:`institution_code` = 文本码(如 `NRP`);`province_code`/`city_code` = china.sqlite 码
+/// `institution_code` = 文本码(如 `NRP`);`province_code`/`city_code` = china.sqlite 码
 /// (国家机构两者空,省机构仅省码,市机构省+市)。解不出(未对账/未上链)返回 None,发起层 fail-closed。
 /// 自开连接,故可作 `Fn` 闭包在提案组织里按院逐个解析。
 pub(crate) fn resolve_house_account(
@@ -186,7 +186,7 @@ pub(crate) fn resolve_house_account(
 
 /// 读取链上全部 `Law`(iterate + 镜像 decode,复用 chain_runtime 读链范式)。
 ///
-/// 中文注释:ADR-018——整表扫描一次 + 客户端按已解码字段过滤(law_id/tier/scope_code 均在 value 内,
+/// ADR-018——整表扫描一次 + 客户端按已解码字段过滤(law_id/tier/scope_code 均在 value 内,
 /// 无需 storage key 反解)。真实运行态验收随本函数接入 handler(Phase 1B-5)时进行。
 async fn fetch_all_laws() -> Result<Vec<OnChainLaw>, String> {
     let ws_url = chain_url::chain_ws_url()?;

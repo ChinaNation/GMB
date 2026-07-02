@@ -62,7 +62,7 @@ class LegProposalState {
 
 /// 立法投票查询服务(legislation-vote LegMeta/计票/签署账本 + 核心 Proposals 阶段)。
 ///
-/// 中文注释:立法专属投票状态(LegMeta/各 tally/签署记录)集中在本服务,
+/// 立法专属投票状态(LegMeta/各 tally/签署记录)集中在本服务,
 /// 不借用 internal-vote 查询(账本结构不同)。核心 Proposal 阶段/状态读
 /// VotingEngine.Proposals。
 class LegislationVoteQueryService {

@@ -43,7 +43,7 @@ pub(crate) async fn check(
     let key = format!("{scope}:{source}");
     let mut buckets = state.rate_limiter.buckets.lock().await;
 
-    // 中文注释：顺手清理长期未命中的桶，避免单进程内存随误扫 IP 无限增长。
+    // 顺手清理长期未命中的桶，避免单进程内存随误扫 IP 无限增长。
     buckets.retain(|_, bucket| now - bucket.last_seen <= window_seconds * 4);
 
     let bucket = buckets.entry(key).or_insert(RateBucket {
@@ -69,6 +69,6 @@ pub(crate) async fn check(
 }
 
 fn source_key(client_addr: SocketAddr, _headers: &HeaderMap) -> String {
-    // 中文注释：CPMS 默认无反向代理，直接用 TCP 来源 IP；如以后接入可信反代再统一解析代理头。
+    // CPMS 默认无反向代理，直接用 TCP 来源 IP；如以后接入可信反代再统一解析代理头。
     client_addr.ip().to_string()
 }

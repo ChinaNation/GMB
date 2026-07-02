@@ -41,7 +41,7 @@ import UserNotifications
       permissionsChannel.setMethodCallHandler { call, result in
         switch call.method {
         case "requestNotificationPermission":
-          // 中文注释：iOS 通知授权必须由 App 主动发起，拒绝后不阻塞进入主界面。
+          // iOS 通知授权必须由 App 主动发起，拒绝后不阻塞进入主界面。
           UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             DispatchQueue.main.async {
               if let error = error {

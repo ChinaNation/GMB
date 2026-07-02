@@ -1,4 +1,4 @@
-//! 中文注释:公民电子护照记录与查询 DTO。
+//! 公民电子护照记录与查询 DTO。
 //!
 //! 公民由注册局先录入本地档案:创建成功即写入身份 CID 与护照号。
 //! 钱包账户只在链上身份推送时绑定,并由该钱包签名确认。
@@ -17,7 +17,7 @@ pub(crate) enum CitizenStatus {
 
 /// 公民电子护照记录。
 ///
-/// 中文注释:钱包字段为链上推送阶段的可选绑定信息;本地新增儿童或无钱包公民时保持为空。
+/// 钱包字段为链上推送阶段的可选绑定信息;本地新增儿童或无钱包公民时保持为空。
 /// 已绑定后数据库内部保存 `wallet_pubkey` 供验签和索引使用,前端/公开 DTO 只展示 `wallet_address`。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CitizenRecord {
@@ -127,7 +127,7 @@ pub(crate) const CITIZEN_DOCUMENT_TYPES: [&str; 4] =
 
 /// 公民独立资料库文件元数据。
 ///
-/// 中文注释:公民资料库必须独立于机构 docs 表;文件本体存磁盘,
+/// 公民资料库必须独立于机构 docs 表;文件本体存磁盘,
 /// citizen_documents 只保存当前公民资料文件的元数据和内容哈希。
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct CitizenDocument {

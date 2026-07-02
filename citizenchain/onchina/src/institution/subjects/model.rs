@@ -1,6 +1,6 @@
 //! 机构/账户两层数据模型
 //!
-//! 中文注释:链端 `CidRegisteredAccount::<T>(cid_number, name) → account`
+//! 链端 `CidRegisteredAccount::<T>(cid_number, name) → account`
 //! 是 DoubleMap,一个 cid_number 下可挂多个 name,每个 name 派生独立多签账户。
 //! cid 系统这里对应拆两层:
 //!
@@ -26,7 +26,7 @@ pub const EDUCATION_TYPE_PRIMARY_SCHOOL: &str = "PRIMARY_SCHOOL";
 pub const EDUCATION_TYPE_SECONDARY_SCHOOL: &str = "SECONDARY_SCHOOL";
 pub const EDUCATION_TYPE_UNIVERSITY: &str = "UNIVERSITY";
 
-// 中文注释:基础教育级别(初学/小学/中学)。大学是独立机构码(GUN/SUN),不属 education_type 级别。
+// 基础教育级别(初学/小学/中学)。大学是独立机构码(GUN/SUN),不属 education_type 级别。
 pub const EDUCATION_SCHOOL_TYPES: &[&str] = &[
     EDUCATION_TYPE_EARLY_SCHOOL,
     EDUCATION_TYPE_PRIMARY_SCHOOL,
@@ -50,7 +50,7 @@ fn default_subject_status() -> String {
 
 /// 机构账户链上状态。
 ///
-/// 中文注释:账户是否激活只以链上事实为准。CID 创建账户时只是登记
+/// 账户是否激活只以链上事实为准。CID 创建账户时只是登记
 /// `(cid_number, account_name)`,默认 `NotOnChain`;链上机构注册或新增账户成功后,
 /// 由同步接口写成 `ActiveOnChain`;链上注销后写成 `RevokedOnChain`。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -335,7 +335,7 @@ pub struct CreateAccountOutput {
 
 /// /api/v1/institution/list 的列表过滤维度(查询参数,不是存储 category)。
 ///
-/// 中文注释:JY 教育机构统一归教育 tab,私权目标类型归 private tab,公权目录仍承接公权本体
+/// JY 教育机构统一归教育 tab,私权目标类型归 private tab,公权目录仍承接公权本体
 /// 和公权下属非法人:
 /// - `Private`:私权 tab = 目标私权类型,可用 private_type 继续过滤;
 /// - `Gov`:公权 tab = 非 JY 公权机构 + 父级为公法人的非 JY 非法人;

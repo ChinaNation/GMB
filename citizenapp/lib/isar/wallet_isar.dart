@@ -34,7 +34,7 @@ class WalletProfileEntity {
   /// 签名模式：`local`（热钱包）或 `external`（冷钱包）。
   late String signMode;
 
-  /// 中文注释：用户拖拽排序后的稳定顺序。
+  /// 用户拖拽排序后的稳定顺序。
   /// 数值越小越靠前；旧用户首次启动时通过 SharedPreferences flag 一次性
   /// 按 walletIndex 升序填充，保证升级无感（不丢原有顺序）。
   /// 排序时优先按 sortOrder 升序，相同则回退 walletIndex 兜底（保持稳定）。
@@ -100,7 +100,7 @@ class AppKvEntity {
 
 /// 多签账户本地状态快照。
 ///
-/// 中文注释：`status` 负责 UI 展示，`lastSyncAtMillis` 负责判断是否需要
+/// `status` 负责 UI 展示，`lastSyncAtMillis` 负责判断是否需要
 /// 再次查链；两者都复用 AppKvEntity，避免为 TTL 新增 Isar schema。
 class MultisigLocalStatusSnapshot {
   const MultisigLocalStatusSnapshot({
@@ -114,7 +114,7 @@ class MultisigLocalStatusSnapshot {
 
 /// 多签详情页本地持久化快照。
 ///
-/// 中文注释：这不是短期内存缓存，而是详情页首屏可直接使用的本机状态。
+/// 这不是短期内存缓存，而是详情页首屏可直接使用的本机状态。
 /// 链上刷新成功后覆盖写入；链上失败时保留旧值，避免进详情页被 RPC 卡住。
 class MultisigLocalDetailSnapshot {
   const MultisigLocalDetailSnapshot({
@@ -191,7 +191,7 @@ class MultisigLocalDetailSnapshot {
 
 /// 个人多签本地生命周期状态。
 ///
-/// 中文注释：链上注销后账户主体可能已经不存在，但用户本机仍要在账户列表
+/// 链上注销后账户主体可能已经不存在，但用户本机仍要在账户列表
 /// 显示“已注销”，直到用户主动点“删除”清空本地数据。这里复用 AppKvEntity，
 /// 避免把状态散落到多个页面。
 class PersonalAccountLocalState {
@@ -303,7 +303,7 @@ class PersonalAccountLocalState {
 
 /// 机构多签本地生命周期状态。
 ///
-/// 中文注释：机构多签链上关闭后也继续留在本机账户列表，显示“已注销”；
+/// 机构多签链上关闭后也继续留在本机账户列表，显示“已注销”；
 /// 用户主动点详情页右上角“删除”时，才清理本机机构账户记录。
 class InstitutionMultisigLocalState {
   static const statusPending = 'pending';
@@ -531,7 +531,7 @@ class InstitutionEntity {
 
 /// 行政区字典实体(ADR-021 行政区唯一真源)。
 ///
-/// 中文注释:派生自 china.sqlite(经 `assets/admin_divisions/` 静态数据包),是
+/// 派生自 china.sqlite(经 `assets/admin_divisions/` 静态数据包),是
 /// citizenapp 端行政区名字的**唯一真源**——机构记录只存 code,显示名一律按
 /// (level, scopeKey, code) 查本表 join 得到。别处零独立存行政区名字。
 ///
@@ -567,7 +567,7 @@ class AdminDivisionEntity {
 
 /// 公权机构目录本地完整缓存(ADR-018 §九 混合模式)。
 ///
-/// 中文注释:数据来自发布期数据包(基线)+ CID 公开接口增量同步;UI 永远读本表,
+/// 数据来自发布期数据包(基线)+ CID 公开接口增量同步;UI 永远读本表,
 /// 省/市/机构导航零链读零现查。主/费账户本地派生不入库,仅自定义账户名(op_tag=0x06)
 /// 入 [customAccountNames](绝大多数机构为空)。
 @collection
@@ -617,7 +617,7 @@ class PublicInstitutionEntity {
 
 /// 公权机构订阅("关注"分组)。
 ///
-/// 中文注释:按钱包公钥隔离的纯本地决策表;[subscriptionKey] = `pubkeyHex|cidNumber`
+/// 按钱包公钥隔离的纯本地决策表;[subscriptionKey] = `pubkeyHex|cidNumber`
 /// 复合唯一,只有订阅的机构才纳入动态刷新集(详情页卡C),目录浏览不依赖本表。
 @collection
 class PublicInstitutionSubscriptionEntity {
@@ -637,7 +637,7 @@ class PublicInstitutionSubscriptionEntity {
 
 /// IM 会话本地索引。
 ///
-/// 中文注释：聊天明文只允许在公民手机本地保存；通信全节点只保存密文
+/// 聊天明文只允许在公民手机本地保存；通信全节点只保存密文
 /// envelope。本表负责会话列表首屏，不参与链上状态。
 @collection
 class ImConversationEntity {
@@ -667,7 +667,7 @@ class ImConversationEntity {
 
 /// IM 消息本地记录。
 ///
-/// 中文注释：`envelopeBytesHex` 保存完整 GMB_IM_V1 Protobuf bytes，便于重试
+/// `envelopeBytesHex` 保存完整 GMB_IM_V1 Protobuf bytes，便于重试
 /// 和排查；`plaintext` 只写手机本地库，绝不上传私人通信全节点。
 @collection
 class ImMessageEntity {
@@ -698,7 +698,7 @@ class ImMessageEntity {
 
 /// IM 出站队列。
 ///
-/// 中文注释：投递失败时只重试完整 envelope bytes，不重新加密，避免破坏
+/// 投递失败时只重试完整 envelope bytes，不重新加密，避免破坏
 /// MLS 会话状态和消息顺序。
 @collection
 class ImOutboundQueueEntity {
@@ -722,7 +722,7 @@ class ImOutboundQueueEntity {
 
 /// IM 待处理入站 envelope。
 ///
-/// 中文注释：application 早于 Welcome 到达时先落这里；处理 Welcome 后再
+/// application 早于 Welcome 到达时先落这里；处理 Welcome 后再
 /// 重放同会话 pending，避免因为网络乱序丢消息。
 @collection
 class ImPendingInboundEntity {
@@ -743,7 +743,7 @@ class ImPendingInboundEntity {
 
 /// IM 路由缓存记录。
 ///
-/// 中文注释：IM 路由缓存只保存在公民手机本地，用于把联系人钱包地址映射到
+/// IM 路由缓存只保存在公民手机本地，用于把联系人钱包地址映射到
 /// OpenMLS 设备和通信节点端点；用户联系人仍以“我的通讯录”为准。
 @collection
 class ImRouteCacheEntity {
@@ -776,7 +776,7 @@ class LocalTxEntity {
 
   /// 单条钱包流水唯一键。
   ///
-  /// 中文注释：钱包账户由 walletPubkeyHex 唯一，流水记录由 recordKey 唯一。
+  /// 钱包账户由 walletPubkeyHex 唯一，流水记录由 recordKey 唯一。
   /// 区块事件记录使用 `walletPubkeyHex:blockHash:eventIndex`，本机提交记录
   /// 使用 `walletPubkeyHex:pending:txHash`，避免把 txHash 误当成单条流水唯一性。
   @Index(unique: true, replace: true)
@@ -795,7 +795,7 @@ class LocalTxEntity {
 
   /// 该钱包实际余额变化（分），带正负号；正数=增加，负数=减少。
   ///
-  /// 中文注释：Dart int 在不同平台上不适合承载链上 u128，统一用十进制字符串保存。
+  /// Dart int 在不同平台上不适合承载链上 u128，统一用十进制字符串保存。
   late String amountDeltaFen;
 
   /// 转账本金（分），不带正负号。
@@ -848,7 +848,7 @@ class LocalTxEntity {
 
 /// 钱包交易记录本机同步游标。
 ///
-/// 中文注释：citizenapp 不扫描导入前历史。游标只记录该钱包进入本机后，
+/// citizenapp 不扫描导入前历史。游标只记录该钱包进入本机后，
 /// 本机已经同步到哪个 finalized 区块，离线重开时只补这之后的缺口。
 @collection
 class WalletTxSyncCursorEntity {
@@ -887,10 +887,10 @@ class WalletIsar {
     Duration(milliseconds: 5000),
   ];
 
-  /// 中文注释：给低优先级后台任务判断是否让路；前台读写仍应直接排队执行。
+  /// 给低优先级后台任务判断是否让路；前台读写仍应直接排队执行。
   bool get hasActiveOperation => _operationActive;
 
-  /// 中文注释：业务调度层用它识别 MDBX 短暂繁忙，并选择跳过低优先级后台任务。
+  /// 业务调度层用它识别 MDBX 短暂繁忙，并选择跳过低优先级后台任务。
   bool isBusyError(Object error) => _isBusyError(error);
 
   Future<Isar> db() async {
@@ -915,7 +915,7 @@ class WalletIsar {
     }
   }
 
-  /// 中文注释：低端 Android 的 MDBX 在读写窗口重叠时可能短暂返回 EAGAIN。
+  /// 低端 Android 的 MDBX 在读写窗口重叠时可能短暂返回 EAGAIN。
   /// 对这类 busy 错误做小间隔重试，避免交易流水同步或余额刷新把瞬时竞争暴露给 UI。
   Future<T> runWithBusyRetry<T>(Future<T> Function() action) async {
     for (var attempt = 0; attempt <= _busyRetryDelays.length; attempt++) {
@@ -969,7 +969,7 @@ class WalletIsar {
         raw.contains('active transaction');
   }
 
-  /// 中文注释：全 App 共用的 Isar 写事务入口。
+  /// 全 App 共用的 Isar 写事务入口。
   ///
   /// Android 低端机上交易流水同步、余额刷新、多签扫描和钱包导入可能同时读写库，
   /// MDBX 会返回 `MdbxError(11): Try again`。所有业务读写统一排队到这里，
@@ -984,7 +984,7 @@ class WalletIsar {
   Future<Isar> _openAndMigrate() async {
     await ensureTestCoreInitialized();
 
-    // 中文注释：先检查是否已有同名实例打开（Isar 不允许重复打开同名数据库）。
+    // 先检查是否已有同名实例打开（Isar 不允许重复打开同名数据库）。
     // 如果已有实例但 schema 不完整（缺少新增的 collection），关闭后重新打开。
     final existing = Isar.getInstance('citizenapp');
     if (existing != null && existing.isOpen) {
@@ -1072,7 +1072,7 @@ class WalletIsar {
     _operationActive = false;
   }
 
-  /// 中文注释：应用锁触发清空数据时使用，同样走队列等待前序读写结束。
+  /// 应用锁触发清空数据时使用，同样走队列等待前序读写结束。
   Future<void> closeAndDeleteFromDisk() {
     return _enqueue(() async {
       final opening = _opening;
@@ -1170,21 +1170,21 @@ class WalletIsarMigration {
     }
     await isar.writeTxn(() async {
       if (version < 3) {
-        // 中文注释：三段交易状态上线前的本机流水可能已经把 best block
+        // 三段交易状态上线前的本机流水可能已经把 best block
         // 误标为 finalized，且 newHeads/finalized 去重规则不完整。旧记录
         // 不作为账本真源，升级到 v3 时直接清空，从当前本机时刻重新记录。
         await isar.localTxEntitys.clear();
         await isar.walletTxSyncCursorEntitys.clear();
       }
       if (version < 4) {
-        // 中文注释：MultisigInstitutionEntity 改名为 InstitutionEntity（collection
+        // MultisigInstitutionEntity 改名为 InstitutionEntity（collection
         // 名变更），旧 collection 数据仅为本地缓存，丢弃后由反向索引重新发现即可，
         // 无需数据迁移。这里清空新 collection 兜底，避免新旧叠加出现脏数据。
         await isar.institutionEntitys.clear();
         await InstitutionMultisigLocalState.clearAllInTxn(isar);
       }
       if (version < 7) {
-        // 中文注释（ADR-021 行政区唯一真源）：公权机构目录从「存行政区名字」
+        // ADR-021 行政区唯一真源:公权机构目录从「存行政区名字」
         // 改为「只存 province/city/town code」，名字由 AdminDivisionEntity 字典
         // join。公权目录是只读派生数据(无用户数据),旧 name-keyed 行直接清空,
         // 首启从 assets 数据包(已带 code)全量重灌;字典表同步清空待 bundle 重灌。
@@ -1192,7 +1192,7 @@ class WalletIsarMigration {
         await isar.adminDivisionEntitys.clear();
       }
       if (version < 8) {
-        // 中文注释（2026-06-23 修复公权机构市卡片显示 001）：`AdminDivisionEntity`
+        // 2026-06-23:修复公权机构市卡片显示 001;`AdminDivisionEntity`
         // 的 `divisionName`(市名)字段在 bf187d53「统一命名修复」才加入,该提交之前的
         // build 灌进 Isar 的字典 divisionName 为空 → cityNameMap 查到空名 → 市名回退
         // code(001)。而省版本游标(storedProvVers)判定"内容没变"会跳过重灌
@@ -1202,7 +1202,7 @@ class WalletIsarMigration {
         // (改数据结构必 bump 强制刷新版本)。bundle 自身的省级 ver 增量仍照常工作。
         await isar.adminDivisionEntitys.clear();
       }
-      // 中文注释：schema version 以 key 为唯一真源；重复迁移时必须原地更新，
+      // schema version 以 key 为唯一真源；重复迁移时必须原地更新，
       // 不能新建同 key 行，否则 Isar 唯一索引会报错。
       final entity =
           await isar.appKvEntitys.getByKey(_kSchemaVersion) ?? AppKvEntity();

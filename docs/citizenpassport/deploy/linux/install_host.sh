@@ -95,7 +95,7 @@ check_os() {
     echo "ERROR: unsupported Linux distribution"
     exit 1
   fi
-  # 中文注释：安装包只面向 Ubuntu Server 24.04 LTS，避免在未知系统上半安装。
+  # 安装包只面向 Ubuntu Server 24.04 LTS，避免在未知系统上半安装。
   source /etc/os-release
   if [[ "${ID:-}" != "ubuntu" || "${VERSION_ID:-}" != "24.04" ]]; then
     echo "ERROR: this installer requires Ubuntu 24.04 ${CPMS_PACKAGE_ARCH}"
@@ -108,7 +108,7 @@ install_offline_deps() {
   install -d -m 0755 /opt/citizenpassport/offline-debs
   cp -f "${DEBS_DIR}"/*.deb /opt/citizenpassport/offline-debs/
 
-  # 中文注释：这里只使用安装包内置 deb，不执行 apt-get update，不读取外部网络源。
+  # 这里只使用安装包内置 deb，不执行 apt-get update，不读取外部网络源。
   if ! dpkg -i /opt/citizenpassport/offline-debs/*.deb; then
     if ! dpkg --configure -a; then
       echo "ERROR: offline deb dependency closure is incomplete"
@@ -186,7 +186,7 @@ CPMS_MATERIALS_DIR=/var/lib/citizenpassport/materials
 CPMS_COOKIE_SECURE=true
 EOF
   fi
-  # 中文注释：行政区唯一源 china.sqlite 的路径，老安装升级时补齐缺失项。
+  # 行政区唯一源 china.sqlite 的路径，老安装升级时补齐缺失项。
   if ! grep -q '^CPMS_CHINA_DB=' /etc/citizenpassport/citizenpassport-backend.env; then
     echo 'CPMS_CHINA_DB=/opt/citizenpassport/data/china.sqlite' >>/etc/citizenpassport/citizenpassport-backend.env
   fi
@@ -201,7 +201,7 @@ EOF
   su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname='${db_name}'\" | grep -q 1" \
     || su - postgres -c "psql -c \"CREATE DATABASE ${db_name} OWNER ${db_user};\""
 
-  # 中文注释：正式安装不导入 schema.sql；数据库结构唯一入口是后端启动时的 MIGRATOR.run()。
+  # 正式安装不导入 schema.sql；数据库结构唯一入口是后端启动时的 MIGRATOR.run()。
   # 这里仅创建/修正库、schema 和旧安装残留对象的归属，避免 cpms 用户执行 migration 时无权限。
   su - postgres -c "psql -v ON_ERROR_STOP=1 -c \"ALTER DATABASE ${db_name} OWNER TO ${db_user};\""
   su - postgres -c "psql -d ${db_name} -v ON_ERROR_STOP=1" <<SQL
@@ -231,7 +231,7 @@ install_backend() {
   install -d -m 0755 /opt/citizenpassport/docs
   install -d -m 0755 /opt/citizenpassport/frontend
   install -m 0755 "${BIN_SRC}" /opt/citizenpassport/bin/citizenpassport-backend
-  # 中文注释：行政区唯一源只读拷贝，运行时由 CPMS_CHINA_DB 指向此路径。
+  # 行政区唯一源只读拷贝，运行时由 CPMS_CHINA_DB 指向此路径。
   install -m 0644 "${CHINA_DB_SRC}" /opt/citizenpassport/data/china.sqlite
   install -m 0755 "${CERT_SCRIPT_SRC}" /opt/citizenpassport/bin/generate_citizenpassport_certs.sh
   install -m 0644 "${INSTALL_GUIDE_SRC}" /opt/citizenpassport/docs/CitizenPassport安装配置手册.md

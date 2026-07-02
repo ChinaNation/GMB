@@ -192,7 +192,7 @@ class _MultisigTransferDetailPageState
       }
 
       // 并行加载提案快照、提案状态、投票计数、提案详情。
-      // 中文注释：多签转账投票资格和进度必须以提案创建时的快照为准，
+      // 多签转账投票资格和进度必须以提案创建时的快照为准，
       // 不能使用机构当前管理员列表或当前阈值，否则管理员变更后旧提案会显示错误。
       final results = await Future.wait([
         _proposalService.fetchAdminSnapshot(
@@ -214,7 +214,7 @@ class _MultisigTransferDetailPageState
         admins = await _adminService.fetchAdmins(_accountIdentity);
       }
 
-      // 中文注释：管理员投票记录批量读取，避免 43 个管理员产生 43 次 RPC。
+      // 管理员投票记录批量读取，避免 43 个管理员产生 43 次 RPC。
       final votes = await _proposalService.fetchAdminVotesBatch(
         widget.proposalId,
         admins,
@@ -224,7 +224,7 @@ class _MultisigTransferDetailPageState
       // 用 kind 对应的 type key，避免跨类型提案 ID 误判（虽然 ID 全局递增，
       // 但分开归档便于后续清理/迁移）。
       //
-      // 中文注释：nonce 只由 runtime frame_system 管理；这里仅根据投票引擎
+      // nonce 只由 runtime frame_system 管理；这里仅根据投票引擎
       // storage 清理 pending 记录，不再重置或回滚客户端本地 nonce。
       final pendingSummary = await PendingVoteStore.instance.confirmAllDetailed(
         _proposalTypeKey,
@@ -262,7 +262,7 @@ class _MultisigTransferDetailPageState
           detail: detail,
         ));
       } catch (e) {
-        // 中文注释：详情快照写入失败不能影响链上最新结果展示；仅留痕便于排查。
+        // 详情快照写入失败不能影响链上最新结果展示；仅留痕便于排查。
         debugPrint('[MultisigDetail] 详情快照写入失败: $e');
       }
       if (!mounted) return;
@@ -636,7 +636,7 @@ class _MultisigTransferDetailPageState
       debugPrint(
           '[MultisigTransferVote] submit 已入块 txHash=${result.txHash} nonce=${result.usedNonce} block=${result.blockHashHex}');
 
-      // 中文注释：服务层已经确认 runtime 投票记录，新流程不再写 pending。
+      // 服务层已经确认 runtime 投票记录，新流程不再写 pending。
       // 这里只清除旧版本可能残留的同管理员 pending 记录。
       await PendingVoteStore.instance.remove(
         _proposalTypeKey,
@@ -665,7 +665,7 @@ class _MultisigTransferDetailPageState
 
       // 刷新数据
       _adminService.clearCache(_accountIdentity);
-      // 中文注释：服务层已经等待入块并回读 InternalVote storage；这里
+      // 服务层已经等待入块并回读 InternalVote storage；这里
       // 只后台刷新展示状态，不能再把 txHash 当作投票成功依据。
       unawaited(_load(showSpinner: false));
     } catch (e) {

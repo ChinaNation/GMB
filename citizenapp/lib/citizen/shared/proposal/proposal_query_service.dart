@@ -7,7 +7,7 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 
 /// VotingEngine / InternalVote 通用查询服务。
 ///
-/// 中文注释：提案状态、投票计数、快照和 NextProposalId 都是投票引擎
+/// 提案状态、投票计数、快照和 NextProposalId 都是投票引擎
 /// 通用状态，不能借用具体业务 service 暴露给其他模块。
 class ProposalQueryService {
   ProposalQueryService({ChainRpc? chainRpc})
@@ -98,7 +98,7 @@ class ProposalQueryService {
 
   /// 批量查询内部投票管理员记录。
   ///
-  /// 中文注释：详情页和待投票红点通过本方法合并 storage 读取，避免
+  /// 详情页和待投票红点通过本方法合并 storage 读取，避免
   /// 按管理员逐条访问轻节点。
   Future<Map<String, bool?>> fetchAdminVotesBatch(
     int proposalId,

@@ -115,11 +115,7 @@ LoginSignResponseEnvelope buildLoginSignResponse({
     ),
   );
 }
-
-// ---------------------------------------------------------------------------
 // 内部工具
-// ---------------------------------------------------------------------------
-
 class _LoginRequestData {
   const _LoginRequestData({required this.system, required this.sysSig});
 

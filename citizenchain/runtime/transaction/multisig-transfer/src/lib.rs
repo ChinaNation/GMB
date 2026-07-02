@@ -78,7 +78,7 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
 pub struct SweepAction<AccountId, Balance> {
     /// 机构资金账户。
     ///
-    /// 中文注释：费用账户划转只服务治理机构费用账户，不接入个人多签。
+    /// 费用账户划转只服务治理机构费用账户，不接入个人多签。
     pub institution: AccountId,
     /// 划转金额
     pub amount: Balance,
@@ -100,7 +100,7 @@ fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], account: &T::Acc
     decode_raw_account::<T>(raw).as_ref() == Some(account)
 }
 
-/// 中文注释：本资金治理路径只覆盖储备治理三档；注册多签由链上存储判断。
+/// 本资金治理路径只覆盖储备治理三档；注册多签由链上存储判断。
 fn builtin_org<T: frame_system::Config>(institution: &T::AccountId) -> Option<InstitutionCode> {
     if CHINA_CB
         .first()
@@ -291,47 +291,47 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 中文注释：资金账户不属于 NRC/PRC/PRB、个人多签或注册机构账户。
+        /// 资金账户不属于 NRC/PRC/PRB、个人多签或注册机构账户。
         InvalidInstitution,
-        /// 中文注释：调用者声明的机构码与资金账户实际分类不一致。
+        /// 调用者声明的机构码与资金账户实际分类不一致。
         InstitutionCodeMismatch,
-        /// 中文注释：调用者不是该多签资金账户的管理员。
+        /// 调用者不是该多签资金账户的管理员。
         UnauthorizedAdmin,
-        /// 中文注释：资金账户保护检查未通过（如冻结期间禁止支出）。
+        /// 资金账户保护检查未通过（如冻结期间禁止支出）。
         InstitutionSpendNotAllowed,
-        /// 中文注释：转账金额不能为零。
+        /// 转账金额不能为零。
         ZeroAmount,
-        /// 中文注释：转账金额低于 ED（存在性保证金），收款地址可能无法创建。
+        /// 转账金额低于 ED（存在性保证金），收款地址可能无法创建。
         AmountBelowExistentialDeposit,
-        /// 中文注释：不允许转账给转出资金账户自身。
+        /// 不允许转账给转出资金账户自身。
         SelfTransferNotAllowed,
-        /// 中文注释：收款地址是受保护地址（如质押地址），不允许作为收款方。
+        /// 收款地址是受保护地址（如质押地址），不允许作为收款方。
         BeneficiaryIsProtectedAddress,
-        /// 中文注释：提案动作数据未找到或解码失败。
+        /// 提案动作数据未找到或解码失败。
         ProposalActionNotFound,
-        /// 中文注释：机构账户地址解码失败。
+        /// 机构账户地址解码失败。
         InstitutionAccountDecodeFailed,
-        /// 中文注释：资金账户余额不足（需 amount + fee + ED）。
+        /// 资金账户余额不足（需 amount + fee + ED）。
         InsufficientBalance,
-        /// 中文注释：提案未达到通过状态，不可执行。
+        /// 提案未达到通过状态，不可执行。
         ProposalNotPassed,
-        /// 中文注释：链上转账操作失败。
+        /// 链上转账操作失败。
         TransferFailed,
-        /// 中文注释：安全基金提案未找到。
+        /// 安全基金提案未找到。
         SafetyFundProposalNotFound,
-        /// 中文注释：安全基金余额不足。
+        /// 安全基金余额不足。
         SafetyFundInsufficientBalance,
-        /// 中文注释：安全基金提案未通过。
+        /// 安全基金提案未通过。
         SafetyFundProposalNotPassed,
-        /// 中文注释：手续费划转提案未找到。
+        /// 手续费划转提案未找到。
         SweepProposalNotFound,
-        /// 中文注释：手续费划转金额无效。
+        /// 手续费划转金额无效。
         InvalidSweepAmount,
-        /// 中文注释：手续费账户余额不足（需保留最低余额）。
+        /// 手续费账户余额不足（需保留最低余额）。
         InsufficientFeeReserve,
-        /// 中文注释：手续费划转金额超过上限（可用余额的 80%）。
+        /// 手续费划转金额超过上限（可用余额的 80%）。
         SweepAmountExceedsCap,
-        /// 中文注释：手续费划转提案未通过。
+        /// 手续费划转提案未通过。
         SweepProposalNotPassed,
     }
 
@@ -409,7 +409,7 @@ pub mod pallet {
             };
             let mut encoded = sp_runtime::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&action.encode());
-            // 中文注释：创建提案时同步写入 owner/data/meta，禁止后续跨模块覆写业务数据。
+            // 创建提案时同步写入 owner/data/meta，禁止后续跨模块覆写业务数据。
             let proposal_id =
                 <T as Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
                     who.clone(),
@@ -638,7 +638,7 @@ pub mod pallet {
 
         /// 判断治理机构码类型用于 sweep 提案。
         ///
-        /// 中文注释：sweep 只服务治理机构费用账户，不接入个人多签或注册机构账户。
+        /// sweep 只服务治理机构费用账户，不接入个人多签或注册机构账户。
         fn resolve_sweep_org(institution: &T::AccountId) -> Result<InstitutionCode, Error<T>> {
             if CHINA_CB
                 .first()
@@ -1007,7 +1007,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
     }
 
     fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
-        // 中文注释：普通转账仅依赖 ProposalData；安全基金和 sweep 还有独立动作存储，需要终态清理。
+        // 普通转账仅依赖 ProposalData；安全基金和 sweep 还有独立动作存储，需要终态清理。
         SafetyFundProposalActions::<T>::remove(proposal_id);
         SweepProposalActions::<T>::remove(proposal_id);
         Ok(())

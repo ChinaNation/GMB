@@ -1,6 +1,6 @@
 //! 主体 HTTP handler 共享辅助函数。
 //!
-//! 中文注释:这里只放跨公权、私权、账户、资料库和主体详情共用的 HTTP 辅助。
+//! 这里只放跨公权、私权、账户、资料库和主体详情共用的 HTTP 辅助。
 //! 数据读取写入统一走结构化表,不保留旧缓存回填逻辑。
 
 use axum::http::StatusCode;
@@ -49,7 +49,7 @@ pub(crate) fn extract_city_code(cid: &str) -> String {
         .unwrap_or_default()
 }
 
-/// 中文注释:机构可见性闸,与全仓 get_visible_scope/includes_* 同一 fail-closed 语义——
+/// 机构可见性闸,与全仓 get_visible_scope/includes_* 同一 fail-closed 语义——
 /// scope 省/市缺省即空可见域,拒绝任何机构。登录守卫已先拒空 scope 会话,此处为纵深一致性,
 /// 不再因 scope 字段为 None 而 fail-open 放行。
 pub(crate) fn ensure_institution_visible_to_admin(

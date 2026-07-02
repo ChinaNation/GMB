@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 //! 地址变更上链模块。
 //!
-//! 中文注释:本 pallet 不保存完整行政区地址库,只保存当前地址目录版本、当前地址哈希
+//! 本 pallet 不保存完整行政区地址库,只保存当前地址目录版本、当前地址哈希
 //! 和地址变更事件。完整地址库仍由 OnChina 本地 `china.sqlite` 保存,节点通过链上事件
 //! 对单条地址做增删改同步。
 
@@ -9,7 +9,7 @@ pub use pallet::*;
 
 /// 地址更新权限抽象。
 ///
-/// 中文注释:FRG/CREG 的省市授权规则由 runtime 统一实现,本 pallet 不直接依赖
+/// FRG/CREG 的省市授权规则由 runtime 统一实现,本 pallet 不直接依赖
 /// public-admins/public-manage 的 storage,避免地址模块复制注册局权限细节。
 pub trait AddressUpdateAuthority<AccountId> {
     fn can_update_catalog(who: &AccountId, registrar_account: &AccountId) -> bool;

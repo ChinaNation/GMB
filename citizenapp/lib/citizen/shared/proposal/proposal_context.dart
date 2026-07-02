@@ -270,16 +270,12 @@ class ProposalContextResolver {
 
   /// 清除钱包缓存（钱包列表变化时调用）。
   void clearWalletCache() => _wallets = null;
-
-  // ---------------------------------------------------------------------------
   // 内部方法
-  // ---------------------------------------------------------------------------
-
   Future<List<WalletProfile>> _getWallets() async {
     try {
       _wallets ??= await _walletManager.getWallets();
     } catch (e, st) {
-      // 中文注释：治理页的链上内容不能因为本地钱包库短暂繁忙而整体加载失败。
+      // 治理页的链上内容不能因为本地钱包库短暂繁忙而整体加载失败。
       if (!WalletIsar.instance.isBusyError(e)) {
         debugPrint('[ProposalContext] local wallet load failed: $e\n$st');
       }
@@ -350,7 +346,7 @@ class VoteChecker {
 
   /// 跨提案批量计算"哪些提案存在本机未投票的管理员钱包"。
   ///
-  /// 中文注释(ADR-018 R2):列表页原来按提案逐个查投票(P 个提案 = P 次往返);
+  /// (ADR-018 R2):列表页原来按提案逐个查投票(P 个提案 = P 次往返);
   /// 这里把同类提案(内部/联合)的投票 key 各自一次性拼齐批量读取,P 次往返
   /// 降为最多 2 次。只统计 status==0(投票中)且本机有管理员钱包的提案。
   Future<Set<int>> proposalsNeedingVote(List<VoteCheckTarget> targets) async {

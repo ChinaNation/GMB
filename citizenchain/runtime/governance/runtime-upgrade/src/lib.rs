@@ -12,7 +12,7 @@ use votingengine::JointVoteResultCallback;
 pub const MODULE_TAG: &[u8] = b"rt-upg";
 
 pub trait RuntimeCodeExecutor {
-    /// 中文注释：由 Runtime 注入真正的 set_code 执行器，pallet 本身只负责编排治理状态机。
+    /// 由 Runtime 注入真正的 set_code 执行器，pallet 本身只负责编排治理状态机。
     fn execute_runtime_code(code: &[u8]) -> DispatchResult;
 }
 
@@ -127,7 +127,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 国储会或省储会管理员发起 runtime 升级提案，升级流程走联合投票。
-        /// 中文注释：本模块只提交协议升级业务内容；人口快照、联合签名、
+        /// 本模块只提交协议升级业务内容；人口快照、联合签名、
         /// 投票资格和计票流程全部由 votingengine 负责。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_runtime_upgrade())]
@@ -288,7 +288,7 @@ impl<T: pallet::Config> JointVoteResultCallback for pallet::Pallet<T> {
         vote_proposal_id: u64,
         approved: bool,
     ) -> Result<votingengine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
-        // 中文注释：统一使用 voting engine 的 proposal_id，不再需要反查映射。
+        // 统一使用 voting engine 的 proposal_id，不再需要反查映射。
         pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved)
     }
 }

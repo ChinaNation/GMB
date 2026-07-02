@@ -30,7 +30,7 @@ pub const WASM_BINARY_BLOATY: Option<&[u8]> = Some(include_bytes!("{wasm_path_st
         substrate_wasm_builder::WasmBuilder::build_using_defaults();
     } else {
         // ── 普通桌面端打包：不内置 runtime WASM。
-        // 中文注释：现有链运行时从链上状态读取 runtime code，不依赖安装包内置 WASM。
+        // 现有链运行时从链上状态读取 runtime code，不依赖安装包内置 WASM。
         // 只有本地重新创世或 runtime 升级工具才需要通过 WASM_FILE 显式提供 WASM。
         let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
         let dest = std::path::Path::new(&out_dir).join("wasm_binary.rs");

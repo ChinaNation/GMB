@@ -2,7 +2,7 @@ use sqlx::PgPool;
 
 /// CPMS PostgreSQL Store。
 ///
-/// 中文注释:只持有数据库连接池,所有业务数据仍由各模块自己的表承载。
+/// 只持有数据库连接池,所有业务数据仍由各模块自己的表承载。
 #[derive(Clone)]
 pub(crate) struct StoreDb {
     pool: PgPool,
@@ -15,7 +15,7 @@ impl StoreDb {
 
     /// 清理登录和扫码登录短期状态。
     ///
-    /// 中文注释:CPMS 不需要 Redis;离线系统用本机 PostgreSQL 表 + 定时清理即可。
+    /// CPMS 不需要 Redis;离线系统用本机 PostgreSQL 表 + 定时清理即可。
     pub(crate) async fn cleanup_auth_runtime(&self, now_ts: i64) {
         let _ = sqlx::query("DELETE FROM sessions WHERE expires_at < $1")
             .bind(now_ts)

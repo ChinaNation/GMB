@@ -110,7 +110,7 @@ class PersonalManageStorageCodec {
       admins.add(hexEncode(data.sublist(offset, offset + 32)));
       offset += 32;
     }
-    // 中文注释：PersonalAdmins::AdminAccounts 不保存 threshold；
+    // PersonalAdmins::AdminAccounts 不保存 threshold；
     // 后续字段是 creator/created_at/updated_at/status，阈值必须另查 InternalVote。
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     return PersonalManageAdminSnapshot(

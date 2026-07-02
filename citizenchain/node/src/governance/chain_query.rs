@@ -1,6 +1,6 @@
 // 链上状态读取统一收口(ADR-017 全端 finalized 单一口径)。
 //
-// 中文注释(ADR-017 死规则):
+// (ADR-017 死规则):
 // - 除交易提交管线豁免区(governance/signing.rs 的 nonce / runtime version /
 //   genesis / 签名参数块 / dry-run / submit / 提交后 nonce 核对)外,
 //   一切业务与展示层的链上状态读取必须钉 finalized 块哈希,禁止读 best。
@@ -14,7 +14,7 @@ use super::signing;
 
 /// 查询最新 finalized 区块哈希(0x + 64 位十六进制)。
 ///
-/// 中文注释:所有业务读取的钉块来源,禁止改用 chain_getHeader/best 哈希。
+/// 所有业务读取的钉块来源,禁止改用 chain_getHeader/best 哈希。
 pub(crate) fn fetch_finalized_head() -> Result<String, String> {
     let result = signing::rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?;
     match result {
@@ -25,7 +25,7 @@ pub(crate) fn fetch_finalized_head() -> Result<String, String> {
 
 /// 钉 finalized 块读取单条 storage。`None` = 该 storage key 不存在。
 ///
-/// 中文注释(ADR-017):业务读取禁止 best——不带 at 参数的 `state_getStorage`
+/// (ADR-017):业务读取禁止 best——不带 at 参数的 `state_getStorage`
 /// 读的是 best 头,分叉窗口内会看到尚未固化(可能被裁掉)的状态。
 pub(crate) fn fetch_finalized_storage(key: &str) -> Result<Option<String>, String> {
     let finalized_hash = fetch_finalized_head()?;
@@ -45,7 +45,7 @@ pub(crate) fn fetch_finalized_storage(key: &str) -> Result<Option<String>, Strin
 
 /// 钉 finalized 块列举 storage key(单页,最多 `count` 条,`start_key` 翻页)。
 ///
-/// 中文注释(ADR-017):索引扫描同样禁止 best——不带 at 参数的
+/// (ADR-017):索引扫描同样禁止 best——不带 at 参数的
 /// `state_getKeysPaged` 在 best 漂移时会列出半新半旧的 key 集合。
 pub(crate) fn fetch_finalized_keys_paged(
     prefix: &str,

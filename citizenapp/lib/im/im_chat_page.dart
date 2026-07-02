@@ -11,7 +11,7 @@ typedef ImSyncCallback = Future<int> Function();
 
 /// 公民 IM 聊天详情页。
 ///
-/// 中文注释：页面只使用现成聊天 UI 展示和输入，消息真源仍是本地
+/// 页面只使用现成聊天 UI 展示和输入，消息真源仍是本地
 /// [ImIsarStore]，发送和同步由上层注入的 P2P/MLS 状态机完成。
 class ImChatPage extends StatefulWidget {
   ImChatPage({

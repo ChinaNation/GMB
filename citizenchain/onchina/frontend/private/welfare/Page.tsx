@@ -1,4 +1,4 @@
-// 中文注释:公益组织页面。只承接公益组织列表、新增和进入详情。
+// 公益组织页面。只承接公益组织列表、新增和进入详情。
 
 import React from 'react';
 import type { PrivateTypePageProps } from '../common/PrivateTypePage';

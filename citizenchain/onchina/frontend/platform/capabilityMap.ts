@@ -1,4 +1,4 @@
-// 中文注释:控制台能力位类型 + 空能力兜底。
+// 控制台能力位类型 + 空能力兜底。
 //
 // 能力单源在【后端】(registry src/platform/capability.rs),由登录会话下发(auth.capabilities)。
 // 前端只镜像渲染 tab,不在此硬编码权限——render-gating 非安全边界,后端始终对越权独立拒绝。

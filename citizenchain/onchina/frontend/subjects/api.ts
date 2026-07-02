@@ -1,4 +1,4 @@
-// 中文注释：主体共享类型。实际业务 API 必须放在
+// 主体共享类型。实际业务 API 必须放在
 // gov/api.ts、private/<type>/api.ts、accounts/api.ts、docs/api.ts。
 // 铁律:一个 cid_number 下可挂多个 account_name。
 

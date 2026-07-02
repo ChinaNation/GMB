@@ -67,14 +67,14 @@ fn pg_os_subdir() -> &'static str {
 
 /// 把内嵌 PG / 内网 TLS / 前端产物 / china.sqlite / 链 RPC 的路径用环境变量传给 onchina。
 ///
-/// 中文注释:仅当随包 PostgreSQL 二进制确实存在(打包构建)才开内嵌 PG + HTTPS;
+/// 仅当随包 PostgreSQL 二进制确实存在(打包构建)才开内嵌 PG + HTTPS;
 /// 开发期(cargo build,无随包 PG)继承启动脚本中的数据库与 HTTPS 配置,不强行覆盖。
 fn apply_onchina_env(app: &AppHandle, cmd: &mut Command) {
     // 链 RPC = 本机节点(打包/开发都设)。
     let ws_url = format!("ws://127.0.0.1:{}", crate::shared::rpc::current_rpc_port());
     cmd.env("ONCHAIN_WS_URL", ws_url);
 
-    // 中文注释:只有**打包形态**(随包 PostgreSQL 官方二进制存在)才用随包资源路径覆盖
+    // 只有**打包形态**(随包 PostgreSQL 官方二进制存在)才用随包资源路径覆盖
     // china.sqlite / 前端产物 / 内嵌 PG / TLS;开发期(cargo tauri dev,无随包 PG)这些全
     // 由启动脚本 run.sh/clean-run.sh 的环境变量提供,onchina_proc 不覆盖,避免拿占位资源
     // 路径把 dev 配置盖掉。

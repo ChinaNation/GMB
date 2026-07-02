@@ -20,7 +20,7 @@ use crate::{
     AppState,
 };
 
-/// 中文注释：用 CSPRNG 生成 32 字节随机 token，比 UUID 更安全。
+/// 用 CSPRNG 生成 32 字节随机 token，比 UUID 更安全。
 fn generate_secure_token(prefix: &str) -> String {
     let mut buf = [0u8; 32];
     OsRng.fill_bytes(&mut buf);

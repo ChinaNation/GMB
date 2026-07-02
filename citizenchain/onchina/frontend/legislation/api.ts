@@ -1,4 +1,4 @@
-// 中文注释:立法与表决前端 API(对接 onchina /api/legislation/*)。
+// 立法与表决前端 API(对接 onchina /api/legislation/*)。
 // 发起/表决返回扫码上链 sign_request(字符串),由冷签弹窗渲染成 QR 交 CitizenApp/CitizenWallet 提交;
 // 读法律/提案进度直读链投影。通用 http 走 utils/http.ts,本模块不另造请求封装。
 

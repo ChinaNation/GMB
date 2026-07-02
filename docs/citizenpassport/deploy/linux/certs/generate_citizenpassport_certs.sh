@@ -17,7 +17,7 @@ fi
 install -d -m 0750 "${CERT_DIR}"
 
 if [[ ! -f "${ROOT_KEY}" || ! -f "${ROOT_CERT}" ]]; then
-  # 中文注释：离线局域网部署使用本机私有 CA；客户端需信任该根证书。
+  # 离线局域网部署使用本机私有 CA；客户端需信任该根证书。
   openssl genrsa -out "${ROOT_KEY}" 4096
   openssl req -x509 -new -nodes \
     -key "${ROOT_KEY}" \

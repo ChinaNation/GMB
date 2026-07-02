@@ -16,7 +16,7 @@ typedef ImSyncFactory = ImSyncCallback? Function(String peerWalletAddress);
 
 /// 公民“信息”Tab。
 ///
-/// 中文注释：信息页只展示会话列表。联系人添加、联系人详情和转账入口统一归属
+/// 信息页只展示会话列表。联系人添加、联系人详情和转账入口统一归属
 /// “我的通讯录”；通信节点配对归属设置/用户资料流程，不能在信息页暴露工程按钮。
 class ImTabPage extends StatefulWidget {
   ImTabPage({

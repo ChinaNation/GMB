@@ -4,7 +4,7 @@ use crate::cid::china::provinces;
 use crate::cid::code as institution_code;
 use crate::*;
 
-// 中文注释:本文件只保留管理端 CID 编码元信息接口;城市列表由 cid::china::admin 提供。
+// 本文件只保留管理端 CID 编码元信息接口;城市列表由 cid::china::admin 提供。
 
 pub(crate) async fn admin_cid_meta(
     State(state): State<AppState>,

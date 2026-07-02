@@ -98,7 +98,7 @@ pub mod pallet {
 
         type Currency: Currency<Self::AccountId>;
 
-        /// 中文注释：通过统一内部投票引擎创建提案，返回真实 proposal_id。
+        /// 通过统一内部投票引擎创建提案，返回真实 proposal_id。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         /// 该 pallet 的可配置权重实现。
@@ -222,7 +222,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            // 中文注释：PASSED 是可执行/可重试态；终态进入后不允许再执行。
+            // PASSED 是可执行/可重试态；终态进入后不允许再执行。
             ensure!(
                 proposal.status == STATUS_PASSED,
                 Error::<T>::ProposalNotPassed
@@ -230,14 +230,14 @@ pub mod pallet {
 
             let free = T::Currency::free_balance(&action.institution);
             let ed = T::Currency::minimum_balance();
-            // 中文注释：销毁前必须预留 ED，确保机构账户不会因一次销毁被直接 reap。
+            // 销毁前必须预留 ED，确保机构账户不会因一次销毁被直接 reap。
             let required = action
                 .amount
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
             ensure!(free >= required, Error::<T>::InsufficientBalance);
 
-            // 中文注释：slash 会同步减少总发行量，实现链上”销毁”。
+            // slash 会同步减少总发行量，实现链上”销毁”。
             let (_negative_imbalance, remaining) =
                 T::Currency::slash(&action.institution, action.amount);
             ensure!(remaining.is_zero(), Error::<T>::InsufficientBalance);

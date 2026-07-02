@@ -39,7 +39,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
 
     /// 创建提案后原子绑定业务 owner、业务数据和创建区块。
     ///
-    /// 中文注释:业务模块只能通过 `create_*_with_data` 系列入口在创建阶段写入一次。
+    /// 业务模块只能通过 `create_*_with_data` 系列入口在创建阶段写入一次。
     /// 后续生产路径不得再让 caller 自报 `module_tag` 更新 ProposalData。
     pub fn register_proposal_data(
         proposal_id: u64,
@@ -103,7 +103,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
 
     /// 判断提案是否由指定业务模块认领。
     ///
-    /// 中文注释:业务 executor 应优先使用 ProposalOwner 判断归属,ProposalData 只承载
+    /// 业务 executor 应优先使用 ProposalOwner 判断归属,ProposalData 只承载
     /// 业务参数本体,避免再次把 MODULE_TAG 当作数据前缀依赖。
     pub fn is_proposal_owner(proposal_id: u64, module_tag: &[u8]) -> bool {
         let Some(owner) = ProposalOwner::<T>::get(proposal_id) else {

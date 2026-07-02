@@ -462,7 +462,7 @@ fn fullnode_fee_income_fen(total_fee_fen: u128) -> u128 {
     if total_percent == 0 {
         return 0;
     }
-    // 中文注释：与 runtime 的 `Imbalance::ration(80, 20)` 对齐，采用整数向下取整。
+    // 与 runtime 的 `Imbalance::ration(80, 20)` 对齐，采用整数向下取整。
     total_fee_fen.saturating_mul(u128::from(
         primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT,
     )) / u128::from(total_percent)
@@ -685,7 +685,7 @@ fn refresh_cache(
         }
     }
 
-    // 中文注释：挖矿收益、手续费分成、最近出块记录都属于金额展示，
+    // 挖矿收益、手续费分成、最近出块记录都属于金额展示，
     // 只处理 finalized 高度内的区块，避免 best 头回滚时收益数字先变后退。
     let ts_key = timestamp_now_storage_key();
     let target_height = cmp::min(
@@ -711,7 +711,7 @@ fn refresh_cache(
                 .unwrap_or(false);
 
             if is_local_author {
-                // 中文注释：挖矿页要显示“矿工实际到账收益”，
+                // 挖矿页要显示“矿工实际到账收益”，
                 // 未绑定奖励钱包时手续费份额会被销毁，因此这里只在区块当时已绑定时计入 80% 分成。
                 let fee_income_fen = if block.fee_fen == 0 {
                     0

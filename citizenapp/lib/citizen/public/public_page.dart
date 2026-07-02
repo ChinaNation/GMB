@@ -13,7 +13,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 公民-公权 tab:公权机构目录浏览 + 订阅(ADR-018 §九 卡B)。
 ///
-/// 中文注释:左侧导航——「关注」**钉顶固定不滚**,下方 43 省可上下滚动;展示去"省"
+/// 左侧导航——「关注」**钉顶固定不滚**,下方 43 省可上下滚动;展示去"省"
 /// (匹配仍用全名)。右侧按选中项展示:关注=我订阅的机构(跨省扁平);某省=该省市列表
 /// (点市进机构列表)。**读全程本地优先(秒开),在线增量丢后台**,绝不阻塞转圈。
 class PublicPage extends StatefulWidget {
@@ -34,7 +34,7 @@ const String _kFollowGroup = '关注';
 
 /// 市列表行 view-model:cityCode(查询/导航键)+ 预 join 的市名(显示)。
 ///
-/// 中文注释(ADR-021):机构只存 code,市名查字典 join。**不在 widget build 里
+/// (ADR-021):机构只存 code,市名查字典 join。**不在 widget build 里
 /// await**——在 state 层预 join 成此 view-model,UI 直接读 [name]。
 class _CityVm {
   const _CityVm({required this.code, required this.name});
@@ -98,7 +98,7 @@ class _PublicPageState extends State<PublicPage> {
 
   /// 后台增量同步数据包 + 行政区字典,**完成后回刷当前视图**。
   ///
-  /// 中文注释:`ensureSynced` 首装要把 4.2 万条行政区字典灌进 Isar(秒级~十几秒),
+  /// `ensureSynced` 首装要把 4.2 万条行政区字典灌进 Isar(秒级~十几秒),
   /// 期间 `cityNameMap` 查到的是空字典 → 市名回退 code。等灌完后丢弃「字典未就绪时
   /// join 的脏市名缓存」,按当前选中(关注/某省)用就绪字典重新 join,消除持续显示 001。
   Future<void> _syncThenRefresh() async {
@@ -459,7 +459,7 @@ class _ProvinceRail extends StatelessWidget {
 
 /// 机构/市通用行。
 ///
-/// 中文注释:[subtitle] 可空——市卡片只显市名「xx市」时不传副文,
+/// [subtitle] 可空——市卡片只显市名「xx市」时不传副文,
 /// 关注列表项才传所属地副文。
 class _InstitutionTile extends StatelessWidget {
   const _InstitutionTile({

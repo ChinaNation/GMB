@@ -9,7 +9,7 @@ import 'package:citizenapp/rpc/cid_public.dart';
 
 /// 清算行节点链上声明。
 ///
-/// 中文注释:
+///
 /// - 该结构来自链上 `OffchainTransaction::ClearingBankNodes[cid_number]`。
 /// - CID 只提供机构资料;节点端点必须以链上 storage 为准。
 class ClearingBankNodeEndpoint {
@@ -54,7 +54,7 @@ class ClearingBankCandidate {
 
 /// CitizenApp 清算行目录服务。
 ///
-/// 中文注释:
+///
 /// - 搜索入口使用 CID 公开 API。
 /// - 端点入口读取链上 `ClearingBankNodes`,避免继续依赖固定启动参数。
 /// - 用户绑定状态读取链上 `UserBank[user]`,本地缓存只做 UI 快照。
@@ -251,7 +251,7 @@ class _ClearingBankCache {
         await isar.appKvEntitys.putByKey(entity);
       });
     } catch (_) {
-      // 中文注释：清算行 endpoint 缓存失败时继续使用链上结果。
+      // 清算行 endpoint 缓存失败时继续使用链上结果。
     }
   }
 

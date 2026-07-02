@@ -1,6 +1,6 @@
 //! 大屏只读 HTTP 入口(**免登录**):`GET /api/public/legislation/display/board`。
 //!
-//! 中文注释:机构由**节点绑定**(`active_node_binding`)唯一确定,**不接受任何请求参数**——
+//! 机构由**节点绑定**(`active_node_binding`)唯一确定,**不接受任何请求参数**——
 //! 大屏只映射本节点自身(fail-closed:未绑定即 404)。只读、无鉴权、无写面,越权面为零。
 //! 契合 ADR-030 operator/display 路由分离:操作端登录鉴权,大屏公开只读。
 //!

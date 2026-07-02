@@ -158,7 +158,7 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           child: SizedBox(
             width: _scanBoxSize,
             height: _scanBoxSize,
-            // 中文注释：扫码签名页必须是实际正方形相机框，不能再用整块矩形相机画面。
+            // 扫码签名页必须是实际正方形相机框，不能再用整块矩形相机画面。
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Stack(

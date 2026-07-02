@@ -79,13 +79,13 @@ pub mod pallet {
 
         /// 个人多签管理员生命周期写入口。
         ///
-        /// 中文注释：本模块只请求 personal-admins 写 Pending/Active/Closed 管理员账户，
+        /// 本模块只请求 personal-admins 写 Pending/Active/Closed 管理员账户，
         /// 不直接保存或修改个人多签管理员集合。
         type PersonalAdminLifecycle: AdminAccountLifecycle<Self::AccountId>;
 
         /// 个人多签管理员查询入口。
         ///
-        /// 中文注释：个人多签账户状态由本模块保存；管理员集合与人数从 personal-admins 读取。
+        /// 个人多签账户状态由本模块保存；管理员集合与人数从 personal-admins 读取。
         type PersonalAdminQuery: AdminAccountQuery<Self::AccountId>;
 
         /// 手续费分账路由(创建入金和注销转出的手续费)
@@ -134,7 +134,7 @@ pub mod pallet {
 
     /// 个人多签账户配置。key 为 personal_account。
     ///
-    /// 中文注释:本表统一保存 creator/account_name/created_at/status。
+    /// 本表统一保存 creator/account_name/created_at/status。
     /// 管理员集合、管理员数量只允许从 personal-admins 读取；
     /// 普通动态阈值只允许从投票引擎 internal-vote 读取。
     #[pallet::storage]

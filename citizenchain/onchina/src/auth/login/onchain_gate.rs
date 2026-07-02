@@ -1,6 +1,6 @@
 //! 登录链上集合鉴权 + 会话签发(QR 登录与挑战登录共用)。
 //!
-//! 中文注释(去中心化鉴权):
+//! (去中心化鉴权):
 //! - 验签证明扫码者持有 `signer_pubkey` 私钥后,membership 真源切到**链上 Active 管理员集合**。
 //! - 平台启动不预设机构;首次登录从 `verified_pubkey` 反查候选机构,二次确认后本节点绑定唯一机构。
 //! - 后台 `revoke_stale_admin_sessions_loop` 周期复查,管理员被链上移除后≤TTL 失效。
@@ -336,7 +336,7 @@ async fn issue_session_for_candidate(
                 },
             };
 
-            // 中文注释:节点机构归属已由 active binding 承载;admins 只缓存登录管理员元数据。
+            // 节点机构归属已由 active binding 承载;admins 只缓存登录管理员元数据。
             repo::upsert_admin_conn(conn, &admin)?;
             let admin_name = build_admin_name_from_user(&admin, scope_province_name.as_deref());
             let cid_short_name = cid_short_name.or_else(|| {
@@ -388,7 +388,7 @@ async fn issue_session_for_candidate(
 
 /// 后台周期复查:把已不在本机构链上 Active 集合的管理员的会话清退。
 ///
-/// 中文注释:管理员"失效即时生效"靠此扫描(默认 45s,`ONCHINA_ADMIN_ONCHAIN_REVOKE_SECONDS` 可调)。
+/// 管理员"失效即时生效"靠此扫描(默认 45s,`ONCHINA_ADMIN_ONCHAIN_REVOKE_SECONDS` 可调)。
 /// 链不可达时跳过本轮(绝不因瞬时断链批量清退);账户不存在(None)亦跳过(链未就绪保守处理)。
 pub(crate) async fn revoke_stale_admin_sessions_loop(db: Db) {
     let interval_secs = std::env::var("ONCHINA_ADMIN_ONCHAIN_REVOKE_SECONDS")

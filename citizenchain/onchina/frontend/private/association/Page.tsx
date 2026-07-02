@@ -1,4 +1,4 @@
-// 中文注释:注册协会页面。只承接注册协会列表、新增和进入详情。
+// 注册协会页面。只承接注册协会列表、新增和进入详情。
 
 import React from 'react';
 import type { PrivateTypePageProps } from '../common/PrivateTypePage';

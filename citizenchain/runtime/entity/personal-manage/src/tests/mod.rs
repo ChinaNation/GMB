@@ -218,7 +218,7 @@ impl votingengine::Config for Test {
     );
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminsLenProvider = TestInternalAdminsLenProvider;
-    // 中文注释:机构多签上限=1989(同真实 runtime);全链创世测试含联邦注册局 215 管理员,须覆盖。
+    // 机构多签上限=1989(同真实 runtime);全链创世测试含联邦注册局 215 管理员,须覆盖。
     // 个人多签上限是另一项 MaxPersonalAccountAdmins=64,不受此影响。
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxProposalDataLen = ConstU32<1024>;
@@ -373,7 +373,7 @@ pub fn seed_active_multisig(
         },
     );
     // personal-admins 写 Active 管理员账户,让 propose_close 的 is_active_account_admin 通过。
-    // 中文注释：普通业务阈值归 internal-vote 管，不再写入管理员主体。
+    // 普通业务阈值归 internal-vote 管，不再写入管理员主体。
     let account = account.clone();
     let admins_ac: personal_admins::AdminsOf<Test> =
         BoundedVec::try_from(admins.to_vec()).expect("admins fit ac");

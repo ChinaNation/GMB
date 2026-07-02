@@ -1,6 +1,6 @@
 // 清算行机构身份的链上只读查询。
 //
-// 中文注释:
+//
 // - 本文件只读链上机构身份事实,供清算行流程展示:机构最小集、各账户余额、管理员集合、动态阈值。
 // - 机构最小集真源 `PublicManage/PrivateManage::Institutions[cid_number]` 只存身份字段(名称/机构码/创建块/状态);
 //   主账户/费用账户由 `(cid_number, 保留名)` 经 GMB 协议确定性派生,不在链上重复存。
@@ -324,7 +324,7 @@ fn fetch_active_threshold(
 
 /// 机构生命周期 storage 所在 pallet 名:私权法人码→`PrivateManage`,否则→`PublicManage`。
 ///
-/// 中文注释:链端机构管理已拆分 `PublicManage`(idx32)/`PrivateManage`(idx33),storage 名
+/// 链端机构管理已拆分 `PublicManage`(idx32)/`PrivateManage`(idx33),storage 名
 /// (`Institutions`/`InstitutionAccounts`)不变但前缀(twox_128(pallet 名))随之变;前缀由
 /// cid_number 派生的 institution_code 经 `is_private_legal_code` 路由(与链端单源一致),
 /// 取代已删的 `OrganizationManage`。
@@ -343,7 +343,7 @@ fn institution_manage_pallet(cid_number: &str) -> &'static str {
 /// 3. 每个账户的 `System::Account[address].data.free` 取链上余额
 /// 4. 主/费账户由 GMB 协议派生地址定位;管理员集合取管理员 pallet,阈值取 internal-vote
 pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDetail>, String> {
-    // 中文注释(ADR-017):取一次 finalized 快照,机构详情/账户列表/余额/阈值全部钉同一块。
+    // (ADR-017):取一次 finalized 快照,机构详情/账户列表/余额/阈值全部钉同一块。
     let finalized_hash = chain_query::fetch_finalized_head()?;
     let key_data = encode_cid_key_data(cid_number)?;
     // 机构生命周期已拆 PublicManage/PrivateManage,按机构码路由 storage 前缀。
@@ -471,7 +471,7 @@ fn fetch_institution_accounts(
     let mut keys: Vec<String> = Vec::new();
     let mut start_key: Option<String> = None;
     loop {
-        // 中文注释(ADR-017):key 列举与后续 storage 读取必须钉同一个 finalized
+        // (ADR-017):key 列举与后续 storage 读取必须钉同一个 finalized
         // 快照哈希;不带 at 参数 = best,分叉窗口内会列出半新半旧的账户集。
         let result = rpc_post(
             "state_getKeysPaged",
@@ -524,7 +524,7 @@ fn fetch_institution_accounts(
         let acc = match OnChainInstitutionAccount::decode(&mut &bytes[..]) {
             Ok(v) => v,
             Err(e) => {
-                // 中文注释:单条解码失败不应阻止整页;打 stderr 让运维看见,继续下一条。
+                // 单条解码失败不应阻止整页;打 stderr 让运维看见,继续下一条。
                 eprintln!(
                     "[clearing-bank] InstitutionAccounts SCALE decode failed key={} err={}",
                     key, e

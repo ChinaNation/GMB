@@ -19,15 +19,15 @@
 ## 预计修改目录
 
 - `citizencode/backend/`
-  - 中文注释:后端源码根目录;承接原 `src/main.rs` 和所有功能模块目录,代码路径从 `backend/src/...` 改为 `backend/...`。
+  - 后端源码根目录;承接原 `src/main.rs` 和所有功能模块目录,代码路径从 `backend/src/...` 改为 `backend/...`。
 - `citizencode/backend/Cargo.toml`
-  - 中文注释:Rust 构建配置;显式声明二进制入口 `main.rs`,保证删除 `src/main.rs` 后仍可构建。
+  - Rust 构建配置;显式声明二进制入口 `main.rs`,保证删除 `src/main.rs` 后仍可构建。
 - `citizencode/frontend/`
-  - 中文注释:只更新指向后端源码的中文注释或路径说明,不调整前端业务逻辑。
+  - 只更新指向后端源码的中文注释或路径说明,不调整前端业务逻辑。
 - `memory/05-modules/citizencode/`
-  - 中文注释:更新 CID 模块技术文档中的后端路径和目录规则。
+  - 更新 CID 模块技术文档中的后端路径和目录规则。
 - `memory/07-ai/`、`memory/AGENTS.md`
-  - 中文注释:更新 AI 强制规则,禁止恢复旧后端源码壳和独立 `backend/chain/`。
+  - 更新 AI 强制规则,禁止恢复旧后端源码壳和独立 `backend/chain/`。
 
 ## 验收
 

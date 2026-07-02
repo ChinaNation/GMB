@@ -1,6 +1,6 @@
 //! 法律案提案组织:HTTP 请求 + 本节点机构 + 宪法路由 + 链上账户 → 裸 SCALE call-data。
 //!
-//! 中文注释:onchina 只「组织数据 + 调编码器」,不计票、不提交。各机构 `AccountId` 由调用方
+//! onchina 只「组织数据 + 调编码器」,不计票、不提交。各机构 `AccountId` 由调用方
 //! 注入(`resolve_account` 闭包:生产为链读,单测为夹具),保持本层纯函数可测。
 //! 合法性最终裁决在链端 `ensure_routing`;本层 + `precheck_legislation_scope` 只做越权前置拦截(fail-closed)。
 //!
@@ -58,7 +58,7 @@ fn resolve_house(
 
 /// 写入边界 scope 前置校验(fail-closed)。
 ///
-/// 中文注释:`admin_tier` = 管理员层级(1 国家 / 2 省 / 3 市);`admin_scope_code` = 管理员所辖
+/// `admin_tier` = 管理员层级(1 国家 / 2 省 / 3 市);`admin_scope_code` = 管理员所辖
 /// 行政区码(国家 = 0)。规则:国家管理员可发起国家法律(tier 1)与修宪(tier 0);省/市只能发起本级;
 /// 提案行政区码必须等于管理员 scope 码(国家两端均 0)。
 pub fn precheck_legislation_scope(
@@ -84,7 +84,7 @@ pub fn precheck_legislation_scope(
 
 /// 组织一次法律案发起 → 裸 SCALE call-data。
 ///
-/// 中文注释:`proposer_code` = 本节点绑定机构码(发起院 / 教委会 / 自治会);签名人(origin)= 议员本人
+/// `proposer_code` = 本节点绑定机构码(发起院 / 教委会 / 自治会);签名人(origin)= 议员本人
 /// 在冷签层提供。houses/executive/legislature 由宪法路由 + `resolve_account` 解析,前端不传(防越权)。
 pub fn build_propose_law_call(
     input: &ProposeLawInput,

@@ -1,6 +1,6 @@
 // 通用运行时 API(state_call)封装(ADR-028 P3)——非立法专属,任何 runtime API 可复用。
 //
-// 中文注释:轻节点经 JSON-RPC `state_call('<Trait>_<method>', argsHex, blockHash)` 调运行时
+// 轻节点经 JSON-RPC `state_call('<Trait>_<method>', argsHex, blockHash)` 调运行时
 // API。统一**钉 finalized 块哈希**(复用 ChainRpc.fetchFinalizedBlock,ADR-018 读一致),
 // 返回结果 SCALE 字节交各业务 codec 镜像解码。
 

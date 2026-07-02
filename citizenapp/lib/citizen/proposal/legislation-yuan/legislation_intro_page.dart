@@ -4,7 +4,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 立法发起介绍页(类B 提案:只投票 / 查看,不在手机端发起)。
 ///
-/// 中文注释:立法 / 修法 / 废法提案只在电脑节点端(citizenchain 桌面端)发起,
+/// 立法 / 修法 / 废法提案只在电脑节点端(citizenchain 桌面端)发起,
 /// 因为条 / 款结构化编辑不便在手机操作。citizenapp 端只负责说明、查看法律和
 /// 参与院内表决 / 签署 / 会签 / 护宪终审 / 特别案公投。范式同协议升级介绍页。
 class LegislationIntroPage extends StatelessWidget {

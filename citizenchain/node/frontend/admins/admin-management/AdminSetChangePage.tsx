@@ -72,7 +72,7 @@ export function AdminSetChangePage({
       return;
     }
     let cancelled = false;
-    // 中文注释:管理员更换页的新增/移除卡片也必须显示真实链上余额;
+    // 管理员更换页的新增/移除卡片也必须显示真实链上余额;
     // 余额读取失败只影响余额值,不阻断管理员集合编辑。
     api.getAdminAccountBalances(accounts)
       .then((balances) => {
@@ -100,7 +100,7 @@ export function AdminSetChangePage({
       setRequestJson(result.requestJson);
       setSignError(null);
       setTxHash(null);
-      // 中文注释：每次重新生成签名请求都重置二维码有效期倒计时。
+      // 每次重新生成签名请求都重置二维码有效期倒计时。
       setSignFlowVersion((value) => value + 1);
       setStep('sign');
     } catch (e) {

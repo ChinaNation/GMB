@@ -43,7 +43,7 @@ class _AdminAccountDetailPageState extends State<AdminAccountDetailPage> {
       final balances = await ChainRpc().fetchFinalizedBalances(accounts);
       if (mounted) setState(() => _balanceByAccount = balances);
     } catch (_) {
-      // 中文注释:详情页余额失败只让余额值留空,不影响管理员资料展示。
+      // 详情页余额失败只让余额值留空,不影响管理员资料展示。
     }
   }
 

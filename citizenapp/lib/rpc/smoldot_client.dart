@@ -72,7 +72,7 @@ class SmoldotClientManager {
       } catch (e) {
         final msg = e.toString().toLowerCase();
 
-        // 中文注释：轻节点固有的"老区块体不可得"是预期边界情况，
+        // 轻节点固有的"老区块体不可得"是预期边界情况，
         // 不属于"瞬断"也不应降级健康状态；上层钱包流水已改为读
         // 区块事件，不再逐块拉旧区块 body 搜索交易。
         final isLightClientBlockMiss =
@@ -207,7 +207,7 @@ class SmoldotClientManager {
       // 2. 从 assets 加载 citizenchain 链规格文件
       final chainSpecRaw = await rootBundle.loadString('assets/chainspec.json');
 
-      // 中文注释：开发期 USB 桥接 —— 给 chainspec 内存版临时注入一条 localhost
+      // 开发期 USB 桥接 —— 给 chainspec 内存版临时注入一条 localhost
       // bootnode，让手机通过 ADB reverse (`adb reverse tcp:30334 tcp:30334`)
       // 直接 peer 上开发机本地的 citizenchain 诊断节点。
       //
@@ -235,7 +235,7 @@ class SmoldotClientManager {
           );
           debugPrint('[Smoldot] 已从同步缓存恢复轻节点 (${cachedDatabase.length} bytes)');
         } catch (e) {
-          // 中文注释：缓存与当前链状态不兼容时，清掉缓存并回退到无缓存重连，
+          // 缓存与当前链状态不兼容时，清掉缓存并回退到无缓存重连，
           // 避免一次坏缓存把后续所有启动都卡死。
           debugPrint('[Smoldot] 同步缓存失效，清理后重试: $e');
           await _clearCachedDatabase();
@@ -251,7 +251,7 @@ class SmoldotClientManager {
       _healthStatus = ChainHealthStatus.syncing;
       debugPrint('[Smoldot] 轻节点已启动，正在同步区块头...');
 
-      // 中文注释：App 启动后立刻在后台预热同步，后续页面读链只需等待同一个 Future。
+      // App 启动后立刻在后台预热同步，后续页面读链只需等待同一个 Future。
       unawaited(
         ensureSynced(timeout: _defaultSyncTimeout).catchError((Object e) {
           debugPrint('[Smoldot] 后台同步失败: $e');
@@ -288,7 +288,7 @@ class SmoldotClientManager {
     );
   }
 
-  /// 中文注释：开发期 USB 桥接专用。
+  /// 开发期 USB 桥接专用。
   ///
   /// 在内存里给 chainspec 的 bootNodes 数组**前置**一条 localhost bootnode，
   /// 让手机端 smoldot 优先尝试 `/ip4/127.0.0.1/tcp/30334/ws/p2p/<peer>`，
@@ -427,7 +427,7 @@ class SmoldotClientManager {
 
   /// 按 finalized 块哈希钉死的 `state_getKeysPaged`(全 App 反向索引扫描唯一入口)。
   ///
-  /// 中文注释(ADR-017 全端 finalized 单一口径)：
+  /// (ADR-017 全端 finalized 单一口径)：
   /// - legacy keysPaged 不带 hash 参数时，smoldot 在请求入队那一刻钉死 legacy
   ///   服务的 current_best_block——轻节点启动后追块窗口内这是旧块，会返回
   ///   旧状态的空列表且不报任何错误，禁止裸调；
@@ -681,7 +681,7 @@ class SmoldotClientManager {
       String accountIdHex) async {
     _ensureReady();
     await ensureSynced();
-    // 中文注释：金额展示统一走 finalized storage proof，避免 best 头余额先行变动。
+    // 金额展示统一走 finalized storage proof，避免 best 头余额先行变动。
     return _withRetry('getFinalizedSystemAccount',
         () => _chain!.getFinalizedSystemAccount(accountIdHex));
   }

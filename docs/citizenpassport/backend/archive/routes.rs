@@ -1,7 +1,7 @@
 //! # 公民档案业务路由
 //!
 //! 档案创建/查询、投票账户绑定、软删除、ARCHIVE 二维码更新/打印。
-//! 中文注释：档案业务允许 admins 与 operators；系统管理仅限 admins。
+//! 档案业务允许 admins 与 operators；系统管理仅限 admins。
 
 use axum::{
     extract::{ConnectInfo, Path, Query, State},
@@ -76,7 +76,7 @@ struct CreateArchiveData {
 }
 
 #[derive(Deserialize)]
-// 中文注释：档案列表只接受游标分页和索引化精确检索参数；旧的 page/page_size/q 和选择器式字段参数会被拒绝。
+// 档案列表只接受游标分页和索引化精确检索参数；旧的 page/page_size/q 和选择器式字段参数会被拒绝。
 #[serde(deny_unknown_fields)]
 struct ArchiveListQuery {
     limit: Option<usize>,
@@ -98,7 +98,7 @@ struct ArchiveListData {
 }
 
 #[derive(Serialize, Deserialize)]
-// 中文注释：游标绑定稳定排序键，避免百万级档案使用 OFFSET 扫描。
+// 游标绑定稳定排序键，避免百万级档案使用 OFFSET 扫描。
 struct ArchiveListCursor {
     created_at: i64,
     archive_id: String,
@@ -366,7 +366,7 @@ async fn create_archive(
         updated_at: now_ts,
     };
 
-    // 中文注释：号码池领取与档案写入必须同事务完成，避免回收号码被半消费。
+    // 号码池领取与档案写入必须同事务完成，避免回收号码被半消费。
     sqlx::query(
         "INSERT INTO archives (archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date, gender_code, height_cm, passport_no, town_code, address_unit_id, address_unit_name_snapshot, address_detail, address_full_snapshot, birth_province_code, birth_city_code, birth_town_code, election_scope_level, status, citizen_status, voting_eligible, valid_from, valid_until, citizen_status_updated_at, archive_qr_payload, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7::DATE, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23::DATE, $24::DATE, $25, $26, $27, $28)",
@@ -403,7 +403,7 @@ async fn create_archive(
     .await
     .map_err(|_| err(StatusCode::CONFLICT, 3005, "archive_no conflict, retry exhausted"))?;
 
-    // 中文注释：档案列表总数来自统计表；创建档案时和档案写入同事务递增。
+    // 档案列表总数来自统计表；创建档案时和档案写入同事务递增。
     archive::adjust_archive_stats(tx.as_mut(), 1, 0, now_ts).await?;
 
     tx.commit()
@@ -437,7 +437,7 @@ async fn list_archives(
 ) -> Result<Json<ApiResponse<ArchiveListData>>, (StatusCode, Json<ApiError>)> {
     authz::require_archive_admin(&state, &headers).await?;
 
-    // 中文注释：单页上限固定为 100，防止一次请求拖垮市级百万档案列表。
+    // 单页上限固定为 100，防止一次请求拖垮市级百万档案列表。
     let limit = query.limit.unwrap_or(50).clamp(1, 100);
     let cursor = decode_archive_list_cursor(query.cursor.as_deref())?;
     validate_archive_list_query(&query)?;
@@ -488,7 +488,7 @@ async fn list_archives(
 
 fn push_archive_list_filters(qb: &mut QueryBuilder<'_, Postgres>, query: &ArchiveListQuery) {
     if let Some(search) = trimmed_opt(query.search.as_deref()) {
-        // 中文注释：统一输入框只做精确匹配，不做 LIKE；由 PostgreSQL 用各字段索引组合执行。
+        // 统一输入框只做精确匹配，不做 LIKE；由 PostgreSQL 用各字段索引组合执行。
         qb.push(" AND (archive_no = ");
         qb.push_bind(search.to_string());
         qb.push(" OR passport_no = ");
@@ -607,7 +607,7 @@ async fn list_archive_audit_logs(
 ) -> Result<Json<ApiResponse<ArchiveAuditLogData>>, (StatusCode, Json<ApiError>)> {
     authz::require_archive_admin(&state, &headers).await?;
     let archive = fetch_archive_by_id(&state, &archive_id).await?;
-    // 中文注释：历史审计 target_id 可能是档案 ID、档案号或资料 ID，因此按档案 ID 和 detail 中的档案事实共同收口。
+    // 历史审计 target_id 可能是档案 ID、档案号或资料 ID，因此按档案 ID 和 detail 中的档案事实共同收口。
     let rows = sqlx::query(
         "SELECT l.log_id, l.operator_user_id, l.action, l.target_type, l.target_id, l.result, l.detail, l.created_at,
                 a.admin_account
@@ -695,7 +695,7 @@ async fn save_archive_wallet(
         return Err(err(StatusCode::CONFLICT, 3009, "wallet already bound"));
     }
 
-    // 中文注释:CPMS 线下只确认并保存钱包地址;钱包签名验证统一放到 CID 绑定阶段。
+    // CPMS 线下只确认并保存钱包地址;钱包签名验证统一放到 CID 绑定阶段。
     let result = sqlx::query(
         "UPDATE archives
          SET wallet_address=$1, wallet_pubkey=$2, wallet_sig_alg='sr25519',
@@ -1344,7 +1344,7 @@ async fn complete_archive_delete(
         return Err(err(StatusCode::CONFLICT, 3008, "archive already deleted"));
     }
 
-    // 中文注释：注销软删除会从有效档案总数扣减，避免列表页实时 COUNT 百万级档案。
+    // 注销软删除会从有效档案总数扣减，避免列表页实时 COUNT 百万级档案。
     archive::adjust_archive_stats(tx.as_mut(), -1, 1, deleted_at).await?;
 
     sqlx::query(
@@ -1523,7 +1523,7 @@ fn reject_unknown_archive_update_fields(
     if extra_fields.is_empty() {
         return Ok(());
     }
-    // 中文注释：出生日期和出生地同属出生信息，创建后不可通过编辑接口改写。
+    // 出生日期和出生地同属出生信息，创建后不可通过编辑接口改写。
     if extra_fields.keys().any(|field| {
         matches!(
             field.as_str(),
@@ -1550,7 +1550,7 @@ fn build_archive_delete_payload(
     admin_account: &str,
     expire_at: i64,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
-    // 中文注释：CitizenWallet 冷钱包按 0x 32 字节公钥识别 CPMS 删除 payload，不能输出裸 hex。
+    // CitizenWallet 冷钱包按 0x 32 字节公钥识别 CPMS 删除 payload，不能输出裸 hex。
     let admin_account_hex = normalize_pubkey_hex(admin_account).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1573,7 +1573,7 @@ fn build_archive_delete_sign_request(
     payload_hex: &str,
     _archive: &Archive,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
-    // 中文注释：payload 保留真实删除原文；二维码只放动作码、公钥和待签字节。
+    // payload 保留真实删除原文；二维码只放动作码、公钥和待签字节。
     let admin_account_hex = normalize_pubkey_hex(admin_account_pubkey).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1761,7 +1761,7 @@ fn ensure_required_text(value: &str, message: &str) -> Result<(), (StatusCode, J
 }
 
 fn compose_address_full_snapshot(address_unit_name: &str, address_detail: &str) -> String {
-    // 中文注释:镇下地址由“地址段 + 详细地址输入段”组成;这里不拼省市镇,避免和归属字段重复。
+    // 镇下地址由“地址段 + 详细地址输入段”组成;这里不拼省市镇,避免和归属字段重复。
     [address_unit_name.trim(), address_detail.trim()]
         .into_iter()
         .filter(|part| !part.is_empty())

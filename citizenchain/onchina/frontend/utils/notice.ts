@@ -1,4 +1,4 @@
-// 中文注释:CID 前端唯一的用户提示入口。
+// CID 前端唯一的用户提示入口。
 // 所有业务页面都必须通过本文件显示提示,避免英文原始错误、重复提示和连续弹窗。
 
 import { message, Modal } from 'antd';
@@ -88,7 +88,7 @@ function extractMessage(input: unknown, fallback: string): string {
 
 function apiErrorText(error: ApiError, fallback: string): string {
   if (error.status === 401) return '登录已过期，请重新登录';
-  // 中文注释:403 既可能是通用权限不足,也可能是精确的跨省/跨市业务原因。
+  // 403 既可能是通用权限不足,也可能是精确的跨省/跨市业务原因。
   // 后端已返回中文业务原因时优先展示,避免统一映射盖住真实问题。
   if (error.status === 403 && error.message && !isGenericForbiddenText(error.message)) {
     return translateKnownMessage(error.message, fallback);
@@ -208,7 +208,7 @@ function translateKnownMessage(raw: string, fallback: string): string {
   if (lower.includes('create dir failed')) return '目录创建失败';
   if (lower.includes('file not found')) return '文件不存在';
 
-  // 中文注释:最后兜底。用户可见提示不允许裸露后端英文原文。
+  // 最后兜底。用户可见提示不允许裸露后端英文原文。
   if (isPlainEnglishLike(text)) return fallback || '操作失败';
 
   return text || fallback;

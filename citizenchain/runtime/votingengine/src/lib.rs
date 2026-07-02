@@ -88,7 +88,7 @@ pub mod pallet {
 
         /// 每个主体最多允许同时存在的活跃提案数量。
         ///
-        /// 中文注释:机构类主体以 CID 计数,个人多签以账户计数。
+        /// 机构类主体以 CID 计数,个人多签以账户计数。
         #[pallet::constant]
         type MaxActiveProposals: Get<u32>;
 
@@ -246,7 +246,7 @@ pub mod pallet {
 
     /// 回调执行作用域：只在 `set_status_and_emit` 调业务回调期间临时存在。
     ///
-    /// 中文注释：生产业务模块通过回调返回 `ProposalExecutionOutcome`；该作用域保护
+    /// 生产业务模块通过回调返回 `ProposalExecutionOutcome`；该作用域保护
     /// 测试和回调执行入口，避免非回调路径绕过最终事件和互斥锁释放逻辑。
     #[pallet::storage]
     pub type CallbackExecutionScopes<T: Config> =
@@ -296,7 +296,7 @@ pub mod pallet {
 
     /// 提案 owner：proposal_id → 业务模块 MODULE_TAG。
     ///
-    /// 中文注释：ProposalOwner 是投票引擎分发自动执行、手动重试和取消的唯一归属来源。
+    /// ProposalOwner 是投票引擎分发自动执行、手动重试和取消的唯一归属来源。
     /// 业务模块不再只依赖 ProposalData 前缀自认领，避免跨模块覆写后静默跳过。
     #[pallet::storage]
     #[pallet::getter(fn proposal_owner)]
@@ -311,7 +311,7 @@ pub mod pallet {
 
     /// 执行重试 deadline 重排失败后的待处理队列。
     ///
-    /// 中文注释：只要提案仍处于 PASSED + retry state，就必须保留一个可观测入口；
+    /// 只要提案仍处于 PASSED + retry state，就必须保留一个可观测入口；
     /// 不能因为 deadline 桶连续满而丢失后续 on_initialize 处理机会。
     #[pallet::storage]
     pub type PendingExecutionRetryExpirations<T: Config> =
@@ -319,7 +319,7 @@ pub mod pallet {
 
     /// 执行失败终态通知失败后的待处理队列。
     ///
-    /// 中文注释：提案已经进入 EXECUTION_FAILED 终态时，业务模块释放 pending 锁等
+    /// 提案已经进入 EXECUTION_FAILED 终态时，业务模块释放 pending 锁等
     /// 清理通知不能被静默吞掉；失败后保留 proposal_id，后续 on_initialize 有界重试。
     #[pallet::storage]
     pub type PendingTerminalCleanups<T: Config> =
@@ -366,7 +366,7 @@ pub mod pallet {
 
     /// 每个主体的活跃提案 ID 列表（全局管控，不区分提案类型，上限由 Runtime 配置）。
     ///
-    /// 中文注释:机构类主体 key=ProposalSubject::InstitutionCid(cid_number);
+    /// 机构类主体 key=ProposalSubject::InstitutionCid(cid_number);
     /// 个人多签 key=ProposalSubject::PersonalAccount(account)。
     #[pallet::storage]
     #[pallet::getter(fn active_proposals_by_subject)]
@@ -444,106 +444,106 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 中文注释：提案已创建，记录类型、阶段和截止区块。
+        /// 提案已创建，记录类型、阶段和截止区块。
         ProposalCreated {
             proposal_id: u64,
             kind: u8,
             stage: u8,
             end: BlockNumberFor<T>,
         },
-        /// 中文注释：联合投票阶段非全票通过或超时，提案推进到联合公投阶段。
+        /// 联合投票阶段非全票通过或超时，提案推进到联合公投阶段。
         ProposalAdvancedToCitizen {
             proposal_id: u64,
             citizen_end: BlockNumberFor<T>,
             eligible_total: u64,
         },
-        /// 中文注释：投票阶段完成或执行状态变化；PASSED 是执行授权/可重试态，不是终态。
+        /// 投票阶段完成或执行状态变化；PASSED 是执行授权/可重试态，不是终态。
         ProposalFinalized { proposal_id: u64, status: u8 },
-        /// 中文注释：自动执行失败，提案进入 PASSED 可重试态。
+        /// 自动执行失败，提案进入 PASSED 可重试态。
         ProposalExecutionRetryScheduled {
             proposal_id: u64,
             retry_deadline: BlockNumberFor<T>,
         },
-        /// 中文注释：管理员手动执行已尝试。
+        /// 管理员手动执行已尝试。
         ProposalExecutionRetried {
             proposal_id: u64,
             manual_attempts: u8,
             outcome: u8,
         },
-        /// 中文注释：PASSED 可重试提案超过宽限期，转入执行失败终态。
+        /// PASSED 可重试提案超过宽限期，转入执行失败终态。
         ProposalExecutionRetryExpired { proposal_id: u64 },
         /// retry deadline 无法重新登记到 deadline 桶，已进入待处理重试队列。
         ProposalExecutionRetryExpirationQueued {
             proposal_id: u64,
             retry_deadline: BlockNumberFor<T>,
         },
-        /// 中文注释：执行失败终态通知业务模块失败，已进入待处理重试队列。
+        /// 执行失败终态通知业务模块失败，已进入待处理重试队列。
         ProposalTerminalCleanupQueued { proposal_id: u64 },
-        /// 中文注释：待处理的执行失败终态通知已补偿完成。
+        /// 待处理的执行失败终态通知已补偿完成。
         ProposalTerminalCleanupCompleted { proposal_id: u64 },
-        /// 中文注释：管理员取消 PASSED 可重试提案，转入执行失败终态。
+        /// 管理员取消 PASSED 可重试提案，转入执行失败终态。
         ProposalExecutionCancelled { proposal_id: u64 },
     }
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 中文注释：提案不存在或已被清理。
+        /// 提案不存在或已被清理。
         ProposalNotFound,
-        /// 中文注释：提案类型与当前操作不匹配（内部/联合）。
+        /// 提案类型与当前操作不匹配（内部/联合）。
         InvalidProposalKind,
-        /// 中文注释：提案所处阶段与当前操作不匹配（内部/联合/公民）。
+        /// 提案所处阶段与当前操作不匹配（内部/联合/公民）。
         InvalidProposalStage,
-        /// 中文注释：提案状态不允许当前操作（例如已终结的提案不可投票）。
+        /// 提案状态不允许当前操作（例如已终结的提案不可投票）。
         InvalidProposalStatus,
-        /// 中文注释：内部投票管理员快照缺失。
+        /// 内部投票管理员快照缺失。
         MissingAdminSnapshot,
-        /// 中文注释：机构标识不属于任何已知类型（NRC/PRC/PRB/多签）。
+        /// 机构标识不属于任何已知类型（NRC/PRC/PRB/多签）。
         InvalidInstitution,
-        /// 中文注释：调用者无权执行此操作（非管理员或外部 extrinsic 直接调用）。
+        /// 调用者无权执行此操作（非管理员或外部 extrinsic 直接调用）。
         NoPermission,
-        /// 中文注释：投票已截止（当前区块 > end）。
+        /// 投票已截止（当前区块 > end）。
         VoteClosed,
-        /// 中文注释：提案尚未到期，不可手动触发超时结算。
+        /// 提案尚未到期，不可手动触发超时结算。
         VoteNotExpired,
-        /// 中文注释：同一身份已对该提案投过票。
+        /// 同一身份已对该提案投过票。
         AlreadyVoted,
-        /// 中文注释：提案已终结，不可重复结算。
+        /// 提案已终结，不可重复结算。
         ProposalAlreadyFinalized,
-        /// 中文注释:提案主键 u64 单调累加溢出(实质永不发生,1.84×10¹⁹ 上限)。
+        /// 提案主键 u64 单调累加溢出(实质永不发生,1.84×10¹⁹ 上限)。
         ProposalIdOverflow,
-        /// 中文注释:年内累加器 u32 溢出(实质永不发生,42.9 亿/年上限)。
+        /// 年内累加器 u32 溢出(实质永不发生,42.9 亿/年上限)。
         YearCounterOverflow,
-        /// 中文注释：单个到期区块的提案数超出上限。
+        /// 单个到期区块的提案数超出上限。
         TooManyProposalsAtExpiry,
-        /// 中文注释：该机构活跃提案数已达上限（10 个），需等待现有提案完成后再发起。
+        /// 该机构活跃提案数已达上限（10 个），需等待现有提案完成后再发起。
         ActiveProposalLimitReached,
-        /// 中文注释：同一治理账户已有管理员集合变更提案活跃，普通提案需等待其结束。
+        /// 同一治理账户已有管理员集合变更提案活跃，普通提案需等待其结束。
         AdminSetMutationProposalActive,
-        /// 中文注释：同一治理账户已有普通提案活跃，管理员更换需等待普通提案结束。
+        /// 同一治理账户已有普通提案活跃，管理员更换需等待普通提案结束。
         RegularInternalProposalActive,
-        /// 中文注释：内部提案互斥计数溢出。
+        /// 内部提案互斥计数溢出。
         InternalProposalMutexOverflow,
-        /// 中文注释：单个提案持有的互斥锁数量超出上限。
+        /// 单个提案持有的互斥锁数量超出上限。
         TooManyInternalProposalMutexBindings,
-        /// 中文注释：管理员更换提案不是当前治理账户的独占锁 owner。
+        /// 管理员更换提案不是当前治理账户的独占锁 owner。
         InternalProposalMutexOwnerMismatch,
-        /// 中文注释：提案尚未绑定业务 owner。
+        /// 提案尚未绑定业务 owner。
         ProposalOwnerMissing,
-        /// 中文注释：提案 owner 与当前业务模块不匹配。
+        /// 提案 owner 与当前业务模块不匹配。
         ProposalOwnerMismatch,
-        /// 中文注释：提案业务数据已绑定，禁止跨模块覆写。
+        /// 提案业务数据已绑定，禁止跨模块覆写。
         ProposalDataAlreadyRegistered,
-        /// 中文注释：提案不是可手动执行状态。
+        /// 提案不是可手动执行状态。
         ProposalNotRetryable,
-        /// 中文注释：手动执行失败次数已达上限。
+        /// 手动执行失败次数已达上限。
         ManualExecutionAttemptsExceeded,
-        /// 中文注释：手动执行宽限期已过。
+        /// 手动执行宽限期已过。
         ExecutionRetryDeadlinePassed,
-        /// 中文注释：单个区块执行重试超时队列已满。
+        /// 单个区块执行重试超时队列已满。
         TooManyExecutionRetryDeadlines,
-        /// 中文注释：owner 模块没有明确允许取消该 PASSED 重试提案。
+        /// owner 模块没有明确允许取消该 PASSED 重试提案。
         ProposalCancellationNotAllowed,
-        /// 中文注释：终态提案的延迟清理队列连续多个目标区块已满，必须回滚终态写入。
+        /// 终态提案的延迟清理队列连续多个目标区块已满，必须回滚终态写入。
         CleanupQueueFull,
     }
 
@@ -705,7 +705,7 @@ pub mod pallet {
 
         /// 统一手动执行已通过但自动执行失败的提案。
         ///
-        /// 中文注释：业务模块不得再各自暴露 execute_xxx 重试入口；所有手动执行
+        /// 业务模块不得再各自暴露 execute_xxx 重试入口；所有手动执行
         /// 都必须经过投票引擎校验 PASSED 状态、管理员权限、重试次数和宽限期。
         #[pallet::call_index(4)]
         #[pallet::weight(T::WeightInfo::retry_passed_proposal())]
@@ -716,7 +716,7 @@ pub mod pallet {
 
         /// 统一取消已通过但无法继续执行的提案。
         ///
-        /// 中文注释：取消只允许 `PASSED -> EXECUTION_FAILED`，进入执行失败终态后
+        /// 取消只允许 `PASSED -> EXECUTION_FAILED`，进入执行失败终态后
         /// 不再允许重试或再次取消。
         #[pallet::call_index(5)]
         #[pallet::weight(T::WeightInfo::cancel_passed_proposal())]
@@ -733,7 +733,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 把业务模块传入的机构 CID 列表转为链上有界主体集合。
         ///
-        /// 中文注释:CID 是机构类提案归属唯一真源;机构码和账户都不能替代 CID。
+        /// CID 是机构类提案归属唯一真源;机构码和账户都不能替代 CID。
         /// 个人多签没有 CID,调用方应传空列表。
         pub fn bound_subject_cid_numbers(
             subject_cid_numbers: Vec<Vec<u8>>,
@@ -749,12 +749,8 @@ pub mod pallet {
             }
             Ok(out)
         }
-
-        // ──────────────────────────────────────────────────────────
         // sub-pallet 调用的事件 emit helper(do_X 搬到 sub-pallet 后,
         // 仍需要发 votingengine 自己的 lifecycle event)
-        // ──────────────────────────────────────────────────────────
-
         pub fn emit_proposal_created(
             proposal_id: u64,
             kind: u8,
@@ -896,7 +892,7 @@ pub mod pallet {
                     _ => Ok(()),
                 };
                 if finalize_result.is_err() {
-                    // 中文注释：终结失败时必须保留自动重试索引，
+                    // 终结失败时必须保留自动重试索引，
                     // 避免提案状态仍是 Voting，但后续再也不会被 on_initialize 处理。
                     retry_ids.push(proposal_id);
                 }
@@ -1002,7 +998,7 @@ pub mod pallet {
             PendingTerminalCleanups::<T>::remove(proposal_id);
             if status == STATUS_EXECUTION_FAILED {
                 if let Some(proposal) = Proposals::<T>::get(proposal_id) {
-                    // 中文注释：清理登记成功后再通知业务模块释放 pending 锁，
+                    // 清理登记成功后再通知业务模块释放 pending 锁，
                     // 避免先产生业务侧副作用、再发现链上清理无法登记。通知失败
                     // 不再吞掉，而是进入有界重试队列。
                     Self::notify_execution_failed_terminal_or_queue(proposal_id, proposal.kind);
@@ -1242,7 +1238,7 @@ pub mod pallet {
                     if kind == PROPOSAL_KIND_INTERNAL {
                         Self::schedule_execution_retry(proposal_id)
                     } else {
-                        // 中文注释：当前统一 retry/cancel 管理员权限只支持内部提案；
+                        // 当前统一 retry/cancel 管理员权限只支持内部提案；
                         // joint callback 若误返回 RetryableFailed，立即失败终态，避免 PASSED 卡死。
                         Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)
                     }
@@ -1476,7 +1472,7 @@ pub mod pallet {
 
         /// 查询当前是否处于某个提案的业务回调/终态清理作用域。
         ///
-        /// 中文注释：业务 pallet 用它保护敏感生命周期写入，避免普通 runtime 调用绕过投票引擎。
+        /// 业务 pallet 用它保护敏感生命周期写入，避免普通 runtime 调用绕过投票引擎。
         pub fn is_callback_execution_scope(proposal_id: u64) -> bool {
             CallbackExecutionScopes::<T>::contains_key(proposal_id)
         }
@@ -1563,7 +1559,7 @@ pub mod pallet {
                         ))
                     }
                 };
-                // 中文注释：PASSED 是执行授权/可重试态，不再视为终态。
+                // PASSED 是执行授权/可重试态，不再视为终态。
                 // 90 天延迟清理只登记 REJECTED / EXECUTED / EXECUTION_FAILED。
                 if Self::is_terminal_status(final_status) {
                     if let Err(err) = Self::apply_terminal_side_effects(proposal_id, final_status) {
@@ -1584,7 +1580,7 @@ pub mod pallet {
 
         /// 回调专用执行结果写入。
         ///
-        /// 中文注释：仅供单测验证旧回调作用域保护；生产业务回调应直接返回
+        /// 仅供单测验证旧回调作用域保护；生产业务回调应直接返回
         /// `ProposalExecutionOutcome`，由外层 `set_status_and_emit` 统一收口状态、事件和清理。
         #[cfg(test)]
         pub fn set_callback_execution_result(proposal_id: u64, final_status: u8) -> DispatchResult {

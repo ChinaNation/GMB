@@ -206,7 +206,7 @@ fn bench_router_distribution_success(c: &mut Criterion) {
                     System::set_block_number(1);
                     prepare_distribution_state();
 
-                    // 中文注释：直接构造一笔已扣手续费 credit，只测分账热路径。
+                    // 直接构造一笔已扣手续费 credit，只测分账热路径。
                     let credit = Balances::withdraw(
                         &account(2),
                         10_000,

@@ -205,7 +205,7 @@ enum ProposalAction {
     RuntimeUpgrade(Box<RuntimeUpgradeDetail>),
     ResolutionIssuance(Box<ResolutionIssuanceDetail>),
     ResolutionDestroy(Box<ResolutionDestroyDetail>),
-    /// 中文注释：费率提案详情展示结构已保留，链上查询接入前该动作分支暂不构造。
+    /// 费率提案详情展示结构已保留，链上查询接入前该动作分支暂不构造。
     #[allow(dead_code)]
     FeeRate(Box<FeeRateProposalDetail>),
     /// 所有可能数据源都查过仍无命中,展示层回退为"无详情数据"。
@@ -217,7 +217,7 @@ enum ProposalAction {
 /// 查询 NextProposalId（VotingEngine 全局递增 ID）。
 pub fn fetch_next_proposal_id() -> Result<u64, String> {
     let key = storage_keys::value_key("VotingEngine", "NextProposalId");
-    // 中文注释(ADR-017):业务读取统一经 chain_query 钉 finalized,禁止 best。
+    // (ADR-017):业务读取统一经 chain_query 钉 finalized,禁止 best。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(0),
         Some(hex_data) => {
@@ -269,7 +269,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
     while id > min_id {
         match fetch_proposal_meta(id) {
             Ok(Some(meta)) => {
-                // 中文注释:多签管理提案(创建/关闭多签账户)不在治理列表中显示。
+                // 多签管理提案(创建/关闭多签账户)不在治理列表中显示。
                 if is_institution_manage_proposal(id) {
                     if id == 0 {
                         break;
@@ -277,7 +277,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                     id -= 1;
                     continue;
                 }
-                // 中文注释:协议升级摘要只保存展示字段，真实状态统一读取 votingengine。
+                // 协议升级摘要只保存展示字段，真实状态统一读取 votingengine。
                 let display = match fetch_proposal_display(id, &meta) {
                     Ok(v) => v,
                     Err(_) => ProposalDisplayInfo {
@@ -519,7 +519,7 @@ pub fn fetch_institution_proposal_page(
 pub fn fetch_active_proposal_ids(cid_number: &str) -> Result<Vec<u64>, String> {
     let subject_key = proposal_subject_institution_cid_key(cid_number)?;
     let key = storage_keys::map_key("VotingEngine", "ActiveProposalsBySubject", &subject_key);
-    // 中文注释(ADR-017):活跃提案索引按 finalized 口径读取,避免 best 漂移漏列。
+    // (ADR-017):活跃提案索引按 finalized 口径读取,避免 best 漂移漏列。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(Vec::new()),
         Some(hex_data) => {
@@ -533,7 +533,7 @@ pub fn fetch_active_proposal_ids(cid_number: &str) -> Result<Vec<u64>, String> {
 
 fn fetch_proposal_meta(proposal_id: u64) -> Result<Option<ProposalMeta>, String> {
     let key = storage_keys::map_key("VotingEngine", "Proposals", &proposal_id.to_le_bytes());
-    // 中文注释(ADR-017):提案元数据(含 status)按 finalized 口径读取,禁止 best。
+    // (ADR-017):提案元数据(含 status)按 finalized 口径读取,禁止 best。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(None),
         Some(hex_data) => {
@@ -545,7 +545,7 @@ fn fetch_proposal_meta(proposal_id: u64) -> Result<Option<ProposalMeta>, String>
 
 fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> {
     let key = storage_keys::map_key("VotingEngine", "ProposalData", &proposal_id.to_le_bytes());
-    // 中文注释:提案动作里包含金额字段,详情和摘要按 finalized 口径展示。
+    // 提案动作里包含金额字段,详情和摘要按 finalized 口径展示。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(None),
         Some(hex_data) => {
@@ -614,7 +614,7 @@ fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
         "InternalTallies",
         &proposal_id.to_le_bytes(),
     );
-    // 中文注释(ADR-017):投票计数按 finalized 口径读取,禁止 best。
+    // (ADR-017):投票计数按 finalized 口径读取,禁止 best。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(VoteTally { yes: 0, no: 0 }),
         Some(hex_data) => {
@@ -639,7 +639,7 @@ fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
 
 fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
     let key = storage_keys::map_key("JointVote", "JointTallies", &proposal_id.to_le_bytes());
-    // 中文注释(ADR-017):投票计数按 finalized 口径读取,禁止 best。
+    // (ADR-017):投票计数按 finalized 口径读取,禁止 best。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(JointVoteTally { yes: 0, no: 0 }),
         Some(hex_data) => {
@@ -664,7 +664,7 @@ fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
 
 fn fetch_referendum_tally(proposal_id: u64) -> Result<ReferendumVoteTally, String> {
     let key = storage_keys::map_key("JointVote", "ReferendumTallies", &proposal_id.to_le_bytes());
-    // 中文注释(ADR-017):投票计数按 finalized 口径读取,禁止 best。
+    // (ADR-017):投票计数按 finalized 口径读取,禁止 best。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(ReferendumVoteTally { yes: 0, no: 0 }),
         Some(hex_data) => {
@@ -777,7 +777,7 @@ fn decode_runtime_upgrade_action(proposal_id: u64, data: &[u8]) -> Option<Runtim
     let code_hash_hex = hex::encode(&data[offset..offset + 32]);
     offset += 32;
 
-    // 中文注释：协议升级摘要不保存业务状态，真实状态只读 VotingEngine::Proposals.status。
+    // 协议升级摘要不保存业务状态，真实状态只读 VotingEngine::Proposals.status。
     if offset != data.len() {
         return None;
     }
@@ -997,7 +997,7 @@ pub fn fetch_proposal_display_id(proposal_id: u64) -> Result<Option<ProposalDisp
         "ProposalDisplayId",
         &proposal_id.to_le_bytes(),
     );
-    // 中文注释(ADR-017):展示号反查按 finalized 口径读取,禁止 best。
+    // (ADR-017):展示号反查按 finalized 口径读取,禁止 best。
     let hex_value = match chain_query::fetch_finalized_storage(&key)? {
         Some(s) => s,
         None => return Ok(None),
@@ -1016,7 +1016,7 @@ pub fn fetch_proposal_display_id(proposal_id: u64) -> Result<Option<ProposalDisp
 /// 在指定 K1 下的所有 proposal_id。每条 key 末 8 字节 = u64 LE = proposal_id。
 fn fetch_proposal_ids_by_index(storage_name: &str, key1: &[u8]) -> Result<Vec<u64>, String> {
     let prefix = storage_keys::twox64_concat_prefix("VotingEngine", storage_name, key1);
-    // 中文注释(ADR-017):反向索引列举按 finalized 口径,best 漂移会列出半新半旧 key 集。
+    // (ADR-017):反向索引列举按 finalized 口径,best 漂移会列出半新半旧 key 集。
     let keys = chain_query::fetch_finalized_keys_paged(&prefix, 1000, None)?;
     let mut ids = Vec::with_capacity(keys.len());
     for s in &keys {
@@ -1266,7 +1266,7 @@ pub fn fetch_user_vote_status(
 
 /// 查询链上 Option<bool> 存储值。
 fn fetch_option_bool(storage_key: &str) -> Result<Option<bool>, String> {
-    // 中文注释(ADR-017):投票状态按 finalized 口径读取,禁止 best。
+    // (ADR-017):投票状态按 finalized 口径读取,禁止 best。
     match chain_query::fetch_finalized_storage(storage_key)? {
         None => Ok(None),
         Some(hex_data) => {

@@ -1,6 +1,6 @@
 //! 基于 `settlement::keystore::SigningKey` 的批次签名器。
 //!
-//! 中文注释:
+//!
 //! - 本文件实现 `packer::BatchSigner` trait,把 batch 的签名消息转交给清算行
 //!   管理员的 sr25519 私钥。
 //! - `SigningKey` 沿用 `settlement/keystore.rs` 的密钥容器,

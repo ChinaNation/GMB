@@ -49,6 +49,7 @@ class QrActions {
   static const int activateAdmin = 5;
   static const int decryptAdmin = 6;
   static const int runtimeUpgradeHash = 7;
+  static const int imWalletBinding = 8;
 
   static const int balancesTransfer = 0x0203;
   static const int personalCreate = 0x0700;
@@ -163,6 +164,7 @@ class QrActions {
         'guard_vote' => guardVote,
         'activate_admin_account' => activateAdmin,
         'decrypt_admin' => decryptAdmin,
+        'im_wallet_binding' => imWalletBinding,
         'citizen_identity' => citizenIdentity,
         'onchina_admin_action' => onchinaAdmin,
         _ => 0,

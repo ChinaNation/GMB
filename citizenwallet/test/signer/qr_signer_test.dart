@@ -203,6 +203,24 @@ void main() {
       expect(actual.toList(), expected.toList());
       expect(actual.toList(), isNot(body.payloadBytes.toList()));
     });
+
+    test('IM 钱包绑定使用 GMB OP_SIGN_IM_WALLET_BINDING 哈希域', () {
+      final body = SignRequestBody.fromHex(
+        action: QrActions.imWalletBinding,
+        pubkeyHex: testPubkeyHex,
+        payloadHex: '0x01020304',
+      );
+      final input = Uint8List.fromList([0x47, 0x4d, 0x42, 0x1a, 1, 2, 3, 4]);
+      final digest = Blake2bDigest(digestSize: 32)
+        ..update(input, 0, input.length);
+      final expected = Uint8List(32);
+      digest.doFinal(expected, 0);
+
+      final actual = QrSigner.signingBytesFor(body);
+
+      expect(actual.toList(), expected.toList());
+      expect(actual.toList(), isNot(body.payloadBytes.toList()));
+    });
   });
 
   group('QrSigner.verifySr25519Signature', () {

@@ -41,7 +41,7 @@ class SignedExtrinsicTrace {
 /// 和最终 extrinsic body 必须同时使用 `era = 0x00`，且 CheckEra 的 additional
 /// signed hash 必须是创世块哈希。
 ///
-/// 中文注释：nonce 只能来自 runtime `frame_system::Account.nonce`。
+/// nonce 只能来自 runtime `frame_system::Account.nonce`。
 /// 客户端不得缓存、自增、预占或回滚 nonce；每次签名前都实时读取 runtime nonce。
 class SignedExtrinsicBuilder {
   SignedExtrinsicBuilder({
@@ -136,7 +136,7 @@ class SignedExtrinsicBuilder {
 
   /// 签名、提交并等待交易进入区块。
   ///
-  /// 中文注释：提案创建类交易必须用这个入口，避免 txHash 返回后 UI
+  /// 提案创建类交易必须用这个入口，避免 txHash 返回后 UI
   /// 误判成功；真正的业务成功还需要调用方继续核对区块事件。
   Future<({String txHash, int usedNonce, String blockHashHex})>
       signAndSubmitInBlock({

@@ -78,7 +78,7 @@ void main() {
     );
     await tester.pump();
 
-    // 中文注释:个人多签账户列表已经迁入交易页入口，机构多签不在这里展示。
+    // 个人多签账户列表已经迁入交易页入口，机构多签不在这里展示。
     // 链上支付主体字段(收款地址 / 金额 / 签名交易)由 `OnchainPaymentPanel`
     // 在选中钱包后渲染,本测试只校验顶层入口结构。
     expect(find.text('交易'), findsOneWidget);

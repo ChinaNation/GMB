@@ -22,7 +22,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 // ── 签名 payload op_tag 注册表(0x10-0x1F),逐字节对齐 primitives::sign ──
 //
 // 0x10-0x14 治理/身份签名。
-// 0x15-0x1B 业务签名段。
+// 0x15-0x1A 业务签名段。
 
 /// 公民身份上链确认(对齐 OP_SIGN_CITIZEN_IDENTITY)。
 const int kOpSignCitizenIdentity = 0x10;
@@ -48,6 +48,9 @@ const int kOpSignActivateAdmin = 0x18;
 /// 解密授权(对齐 OP_SIGN_DECRYPT)。
 const int kOpSignDecrypt = 0x19;
 
+/// IM 钱包绑定(对齐 OP_SIGN_IM_WALLET_BINDING)。
+const int kOpSignImWalletBinding = 0x1A;
+
 // ── 二进制前缀域(0x18/0x19)──
 //
 // ACTIVATE_ADMIN / DECRYPT 不经 signingMessage 做 blake2 hash:冷钱包对整段
@@ -60,19 +63,9 @@ const int kOpSignDecrypt = 0x19;
 /// 二进制前缀域统一前缀长度 = GMB(3B) + op_tag(1B) = 4(对齐 BINARY_PREFIX_LEN)。
 const int kBinaryPrefixLen = 4;
 
-// ── IM 协议字符串常量(单一权威源,对齐 primitives::sign)──
-//
-// 这两个**不是**签名 op_tag,既不经 signingMessage 做 hash,也不作二进制前缀签名:
-// - kImWalletBindingDomain 是管道分隔 UTF-8 canonical 字符串的首段(钱包对整段
-//   canonical 字符串签名,域是字符串字面,不进 op_tag hash 命名空间)。
-// - kImNodePairingProto 是节点配对 QR body 的协议版本串,不签名。
-// Dart 无法 import Rust,本值是 primitives::sign::IM_WALLET_BINDING_DOMAIN /
-// IM_NODE_PAIRING_PROTO 的镜像,各 IM 模块一律引用本常量,删本地副本。
+// ── IM QR body schema 常量 ──
 
-/// IM 钱包绑定 canonical payload 域首段。
-const String kImWalletBindingDomain = 'GMB_IM_WALLET_BINDING_V1';
-
-/// IM 节点配对 QR body 协议版本串。
+/// IM 节点配对 QR body schema 版本串,不是签名域。
 const String kImNodePairingProto = 'GMB_IM_NODE_PAIRING_V1';
 
 /// 签名域分隔符 GMB(3 字节 ASCII),单源对齐 core_const::GMB。

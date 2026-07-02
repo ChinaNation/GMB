@@ -1,6 +1,6 @@
 //! 清算行 offchain 组件启动接线。
 //!
-//! 中文注释:
+//!
 //! - `service.rs` 负责节点通用启动,本文件负责清算行专属启动。
 //! - 这里统一处理 CLI 参数、密钥解锁、packer/listener/reserve worker spawn。
 

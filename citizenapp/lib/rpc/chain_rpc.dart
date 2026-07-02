@@ -11,7 +11,7 @@ import 'smoldot_client.dart';
 
 /// 交易池观察状态。
 ///
-/// 中文注释：submitExtrinsic 返回 txHash 只代表已提交到 RPC，不能代表已出块。
+/// submitExtrinsic 返回 txHash 只代表已提交到 RPC，不能代表已出块。
 /// 业务页面可订阅这里的状态，把 future/invalid/dropped 等失败原因回显给用户。
 enum TxPoolWatchKind {
   ready,
@@ -94,12 +94,12 @@ class ChainRpc {
 
   /// 批量查询多个 storage key，一次原生调用返回所有结果。
   ///
-  /// 中文注释(ADR-017 全端 finalized 单一口径)：本入口及所有 fetch* 状态
+  /// (ADR-017 全端 finalized 单一口径)：本入口及所有 fetch* 状态
   /// 读取一律返回 finalized 块上的状态——业务/展示读取禁止使用 best，
   /// 平名即 finalized 是全 App 唯一约定。交易构造与提交管线的豁免接口
   /// (nonce/runtime version/genesis/metadata/fetchLatestBlock)另列。
   ///
-  /// 中文注释(ADR-018 §九 / 卡⑤)：所有 finalized 状态读取都汇入本入口,
+  /// (ADR-018 §九 / 卡⑤)：所有 finalized 状态读取都汇入本入口,
   /// 故缓存挂在这里即覆盖余额 / storage / 反查 / 多签扫描全部读取(`ChainReadCache`,
   /// 按 finalizedBlockHash 命名空间,块内复用)。豁免管线走各自原生调用不经本入口,
   /// 结构性免于被缓存;需绝对最新的场景传 [forceFresh]。
@@ -136,7 +136,7 @@ class ChainRpc {
 
   /// 分块批量查询多个 storage key，避免单次请求 payload 过大。
   ///
-  /// 中文注释：多签列表会按 storage 依赖分阶段拼出大量 key；这里统一限制
+  /// 多签列表会按 storage 依赖分阶段拼出大量 key；这里统一限制
   /// 每批大小，让业务层得到批量收益，同时不给 smoldot / 全节点制造尖峰。
   Future<Map<String, Uint8List?>> fetchStorageBatchChunked(
     Iterable<String> storageKeyHexList, {
@@ -161,10 +161,10 @@ class ChainRpc {
 
   /// 查询 runtime `frame_system::Account.nonce` 给出的账户 nonce。
   ///
-  /// 中文注释：CitizenApp 不缓存、不预占、不自增 nonce；每次签名前都
+  /// CitizenApp 不缓存、不预占、不自增 nonce；每次签名前都
   /// 通过原生 runtime call 读取当前 nonce，并把该值交给 signed extrinsic。
   Future<int> fetchNonce(String ss58Address) async {
-    // 中文注释：轻节点模式先在 Dart 侧解出 accountId，再交给原生 runtime call，避免继续依赖 legacy `system_accountNextIndex`。
+    // 轻节点模式先在 Dart 侧解出 accountId，再交给原生 runtime call，避免继续依赖 legacy `system_accountNextIndex`。
     final accountIdHex = '0x${_hexEncode(_keyring.decodeAddress(ss58Address))}';
     final result =
         await SmoldotClientManager.instance.getAccountNextIndex(accountIdHex);
@@ -176,7 +176,7 @@ class ChainRpc {
 
   /// 获取运行时版本（specVersion、transactionVersion）。
   Future<RuntimeVersion> fetchRuntimeVersion() async {
-    // 中文注释：轻节点模式优先走原生 capability，避免业务层继续直接依赖裸 RPC 方法名。
+    // 轻节点模式优先走原生 capability，避免业务层继续直接依赖裸 RPC 方法名。
     final result = await SmoldotClientManager.instance.getRuntimeVersionJson();
     if (result == null) {
       throw StateError('smoldot 轻节点尚未提供运行时版本');
@@ -207,12 +207,12 @@ class ChainRpc {
 
   /// 获取最新(best)区块的哈希和块号。
   ///
-  /// 中文注释(ADR-017 豁免区)：仅限交易/支付凭证构造内部使用(如离线支付
+  /// (ADR-017 豁免区)：仅限交易/支付凭证构造内部使用(如离线支付
   /// payload 携带当前块高)，业务/展示读取禁止调用本方法——那些一律走
   /// finalized 口径。signed extrinsic 构造按 P-SIGN-001 固定 immortal era，
   /// 不得用最新块参与 CheckEra。
   Future<({Uint8List blockHash, int blockNumber})> fetchLatestBlock() async {
-    // 中文注释：轻节点模式直接复用原生状态快照，减少一次 `chain_getHeader` 往返。
+    // 轻节点模式直接复用原生状态快照，减少一次 `chain_getHeader` 往返。
     final snapshot = await SmoldotClientManager.instance.getStatusSnapshot();
     final hashHex = snapshot?.bestBlockHash;
     final blockNumber = snapshot?.bestBlockNumber;
@@ -227,7 +227,7 @@ class ChainRpc {
 
   /// 获取最新 finalized 区块的哈希和块号。
   ///
-  /// 中文注释：钱包交易流水的“已确认”只能来自 finalized 高度；best/latest
+  /// 钱包交易流水的“已确认”只能来自 finalized 高度；best/latest
   /// 只代表当前最优链头，不能用来升级 `finalized` 状态。
   Future<({Uint8List blockHash, int blockNumber})> fetchFinalizedBlock() async {
     final snapshot = await SmoldotClientManager.instance.getStatusSnapshot();
@@ -249,7 +249,7 @@ class ChainRpc {
   Future<RuntimeMetadata> fetchMetadata() async {
     if (_cachedMetadata != null) return _cachedMetadata!;
 
-    // 中文注释：轻节点模式直接读取原生 metadata hex，避免 Dart 层再拼 `state_getMetadata`。
+    // 轻节点模式直接读取原生 metadata hex，避免 Dart 层再拼 `state_getMetadata`。
     final metadataHex = await SmoldotClientManager.instance.getMetadataHex();
     if (metadataHex == null || metadataHex.isEmpty) {
       throw StateError('smoldot 轻节点尚未提供 metadata');
@@ -296,7 +296,7 @@ class ChainRpc {
 
   /// 提交已签名 extrinsic，并阻塞等待交易真正进入区块。
   ///
-  /// 中文注释：提案类交易不能把 txHash 当成功；只有 `inBlock/finalized`
+  /// 提案类交易不能把 txHash 当成功；只有 `inBlock/finalized`
   /// 状态携带区块哈希后，业务层才能继续读取 `System.Events` 核对事件。
   Future<({Uint8List txHash, TxPoolWatchEvent included})>
       submitExtrinsicAndWaitForInBlock(
@@ -374,7 +374,7 @@ class ChainRpc {
 
   /// 后台观察一条交易的交易池状态,**所有状态都打日志**。
   ///
-  /// 中文注释：普通钱包转账需要用 inBlock 回调把本机流水从 pending 升级为
+  /// 普通钱包转账需要用 inBlock 回调把本机流水从 pending 升级为
   /// inBlock，因此监听窗口要覆盖正常出块周期；被拒、已入块或超时都会结束。
   Future<void> _watchTxRejectInBackground(
     String hex,
@@ -576,7 +576,7 @@ class ChainRpc {
   /// 通用 storage 查询：传入完整的 storage key（含 0x 前缀），
   /// 返回 finalized 块上的原始 SCALE 编码字节。key 不存在时返回 null。
   ///
-  /// 中文注释(ADR-017)：业务/展示读取唯一口径 = finalized，禁止 best。
+  /// (ADR-017)：业务/展示读取唯一口径 = finalized，禁止 best。
   Future<Uint8List?> fetchStorage(String storageKeyHex) async {
     final valueHex = await SmoldotClientManager.instance
         .getFinalizedStorageValueHex(storageKeyHex);
@@ -599,7 +599,7 @@ class ChainRpc {
 
   /// 从 `System.Events` 中提取本区块的 `System.ExtrinsicFailed` 模块错误。
   ///
-  /// 中文注释：创建类交易已经入块但业务事件缺失时，必须优先回显真实
+  /// 创建类交易已经入块但业务事件缺失时，必须优先回显真实
   /// DispatchError，不能再把“未找到成功事件”误报成原因。
   ChainExtrinsicFailure? findExtrinsicFailureInEvents(Uint8List data) {
     final (_, countSize) = _decodeCompact(data, 0);
@@ -638,7 +638,7 @@ class ChainRpc {
 
   /// 查询 finalized 块上的链上余额(free，yuan)。账户不存在返回 0.0。
   ///
-  /// 中文注释(ADR-018 卡⑤)：改走 [fetchFinalizedBalances] 单元素路径,与批量
+  /// (ADR-018 卡⑤)：改走 [fetchFinalizedBalances] 单元素路径,与批量
   /// 余额共用 System.Account storage 读 + ChainReadCache 块内缓存;口径仍是 free,
   /// 与原 getFinalizedSystemAccountSnapshot().freeYuan 等价。[forceFresh] 旁路缓存
   /// (转账前余额守卫用,确保拿到最新 finalized 状态)。
@@ -653,7 +653,7 @@ class ChainRpc {
 
   /// 查询链上真实余额 = free + reserved,best 视图。
   ///
-  /// 中文注释:
+  ///
   /// - 对齐 polkadot.js apps 的 total 余额口径;钱包详情页第 3 张卡片展示
   ///   的就是这个值,不能只取 free,否则锁仓 / 质押的 reserved 部分会漏算。
   /// - 走通用 `fetchStorageBatch` 取 `System.Account` 原始 bytes,在 Dart 侧
@@ -679,7 +679,7 @@ class ChainRpc {
 
   /// 从 System.Account 的 SCALE 编码数据中解码 free + reserved 总余额(yuan)。
   ///
-  /// 中文注释:
+  ///
   /// AccountInfo 布局:
   ///   nonce(u32, 4 字节) + consumers(u32, 4 字节) + providers(u32, 4 字节)
   ///   + sufficients(u32, 4 字节) = 16 字节头;

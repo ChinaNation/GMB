@@ -236,7 +236,7 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 1. `finalize_joint_vote` 手工 Root 入口已删除，只保留 votingengine callback。
 
 ## 8. 中文注释覆盖重点
-本模块当前已在以下关键位置补充中文注释：
+本模块当前已在以下关键位置补充注释：
 - `RuntimeCodeExecutor` 职责边界
 - `propose_runtime_upgrade` 与 votingengine 的职责边界
 - 联合投票通过后的执行/失败分叉

@@ -4,7 +4,7 @@
 //! 运行时只启用安装码对应市公安局的镇与镇下地址段数据。
 //! 地址 API 只读，CPMS 不允许保存或维护第二套行政区数据源。
 //!
-//! 中文注释：`china` 子模块是本模块对 CID 行政区源的只读适配，仅服务 address 业务。
+//! `china` 子模块是本模块对 CID 行政区源的只读适配，仅服务 address 业务。
 
 mod china;
 
@@ -147,7 +147,7 @@ async fn replace_city_address(
     conn: &mut sqlx::PgConnection,
     towns: &[china::TownArea],
 ) -> Result<(), String> {
-    // 中文注释：行政区唯一来源是 CID 的 china.sqlite；同步只落当前市运行表，清掉旧城市残留。
+    // 行政区唯一来源是 CID 的 china.sqlite；同步只落当前市运行表，清掉旧城市残留。
     sqlx::query("DELETE FROM address_units")
         .execute(&mut *conn)
         .await

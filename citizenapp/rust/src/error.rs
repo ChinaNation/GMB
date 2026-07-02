@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 //! Error types for smoldot FFI.
 //!
-//! 中文注释：该错误模型保留给 Dart FFI 后续 typed error 映射，当前导出函数仍以 error_out 字符串返回。
+//! 该错误模型保留给 Dart FFI 后续 typed error 映射，当前导出函数仍以 error_out 字符串返回。
 
 use std::fmt;
 

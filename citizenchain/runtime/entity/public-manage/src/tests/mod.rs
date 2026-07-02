@@ -437,7 +437,7 @@ impl votingengine::Config for Test {
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminsLenProvider = TestInternalAdminsLenProvider;
-    // 中文注释:公权机构多签上限=1989(同真实 runtime);全链创世测试含联邦注册局 215 管理员,须覆盖。
+    // 公权机构多签上限=1989(同真实 runtime);全链创世测试含联邦注册局 215 管理员,须覆盖。
     // 个人多签上限是另一项 MaxPersonalAccountAdmins=64,不受此影响。
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxProposalDataLen = ConstU32<2048>;
@@ -593,7 +593,7 @@ pub fn admin_profiles_from(accounts: &[AccountId32]) -> pallet::AdminProfilesOf<
 
 /// 构造带非空 姓名/职务/任期/实名CID 的管理员资料集合(3 人,末位留空元数据)。
 ///
-/// 中文注释:专供验证注册局创建机构时直写的管理员 profile 不丢字段。
+/// 专供验证注册局创建机构时直写的管理员 profile 不丢字段。
 pub fn admin_profiles_with_meta() -> pallet::AdminProfilesOf<Test> {
     let mut v: alloc::vec::Vec<admin_primitives::AdminProfile<AccountId32>> =
         alloc::vec::Vec::new();

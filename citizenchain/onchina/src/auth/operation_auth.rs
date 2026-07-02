@@ -24,7 +24,7 @@ pub(crate) enum AdminOperationAuth {
 
 /// 管理端动作类型(Tier 中性命名,决策②)。
 ///
-/// 中文注释:注册局动作按分层命名——Governing = Tier1 创世注册局自身(本期 = 联邦注册局),
+/// 注册局动作按分层命名——Governing = Tier1 创世注册局自身(本期 = 联邦注册局),
 /// Subordinate = 其供给的 Tier2 下级注册局(本期 = 市注册局)。命名与具体机构码解耦,
 /// 鉴权边界经 `is_tier1_registry` 谓词裁决,不再字面绑定 FRG/CREG。
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -49,7 +49,7 @@ pub(crate) enum AdminActionType {
     /// 本节点解除当前机构绑定;解绑后必须重新扫码登录并绑定机构。
     NodeBindingUnbind,
     // ───────── 立法与表决(卡 20260630-onchina-legislation-console-framework)─────────
-    // 中文注释:全部产生链上交易(提交 extrinsic / 改提案状态),归 PasskeyColdSign 特殊档。
+    // 全部产生链上交易(提交 extrinsic / 改提案状态),归 PasskeyColdSign 特殊档。
     /// 发起立法(新法)法律案。
     ProposeEnactLaw,
     /// 发起修法法律案。

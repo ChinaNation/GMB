@@ -23,7 +23,7 @@ mod number;
 mod qr;
 mod store;
 
-// 中文注释：跨模块共享的响应封装、DTO、helper 统一在 common/（与前端 common/ 对齐）。
+// 跨模块共享的响应封装、DTO、helper 统一在 common/（与前端 common/ 对齐）。
 use common::{ok, ApiResponse};
 
 #[derive(Clone)]
@@ -53,11 +53,11 @@ async fn main() {
         .await
         .expect("CPMS secret encryption config invalid");
 
-    // 中文注释：已初始化实例启动时按安装码所属市重建地址表，避免旧硬编码地址数据残留。
+    // 已初始化实例启动时按安装码所属市重建地址表，避免旧硬编码地址数据残留。
     address::sync_installed_city_address(&db)
         .await
         .expect("sync installed city address failed");
-    // 中文注释：启动时先执行一次到期档案硬删除；软删除未满 100 年的号码不会进入回收池。
+    // 启动时先执行一次到期档案硬删除；软删除未满 100 年的号码不会进入回收池。
     archive::run_due_archive_hard_delete(&db)
         .await
         .expect("run archive hard delete failed");
@@ -93,7 +93,7 @@ async fn main() {
         .parse()
         .expect("invalid CPMS_BIND");
 
-    // 中文注释：后台定时清理过期 session、challenge 和 QR 登录结果，避免 DB 无限膨胀。
+    // 后台定时清理过期 session、challenge 和 QR 登录结果，避免 DB 无限膨胀。
     {
         let store = cleanup_store;
         tokio::spawn(async move {
@@ -154,7 +154,7 @@ async fn security_headers(req: Request<Body>, next: Next) -> Response {
             .and_then(|value| value.to_str().ok())
             .is_some_and(|value| value.starts_with("text/html"));
     if is_api_path && html_fallback {
-        // 中文注释：API 未命中时不能落到前端 index.html，否则前端会把 HTML 当 JSON 解析。
+        // API 未命中时不能落到前端 index.html，否则前端会把 HTML 当 JSON 解析。
         response = common::err(StatusCode::NOT_FOUND, 404, "api route not found").into_response();
     }
     let headers = response.headers_mut();

@@ -194,7 +194,7 @@ class MultisigStorageCodec {
     if (adminsRead == null) return null;
     final (profiles, afterAdmins) = adminsRead;
     offset = afterAdmins;
-    // 中文注释：分类管理员模块的 AdminAccounts 后续字段是 creator/时间/status，
+    // 分类管理员模块的 AdminAccounts 后续字段是 creator/时间/status，
     // 动态阈值不在这里保存，必须按 institution_code + account 从 InternalVote 查询。
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     return AdminSnapshot(

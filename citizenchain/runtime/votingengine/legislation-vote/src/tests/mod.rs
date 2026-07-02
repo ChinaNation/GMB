@@ -2,7 +2,7 @@
 
 //! 立法投票 sub-pallet 单测 mock runtime。
 //!
-//! 中文注释:System + VotingEngine + InternalVote(供 votingengine 必填 finalizer)+ LegislationVote。
+//! System + VotingEngine + InternalVote(供 votingengine 必填 finalizer)+ LegislationVote。
 //! votingengine::Config 把 LegislationFinalizer/LegislationCleanup 接 LegislationVote,
 //! LegislationVoteResultCallback 装 `()`(本 sub-pallet 单测只验投票机制,不验业务写法律)。
 //! TestInternalAdminProvider 定义两院议员名册;公投公民资格从测试用 CitizenIdentityReader 返回。

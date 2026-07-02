@@ -15,7 +15,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 立法提案表决页(LegislationVote sub-pallet)。
 ///
-/// 中文注释:按提案当前阶段渲染对应动作——院内表决 / 行政签署 / 三人会签 /
+/// 按提案当前阶段渲染对应动作——院内表决 / 行政签署 / 三人会签 /
 /// 护宪终审,均为纯 extrinsic(signer=origin),走标准交易签名 + 冷钱包 QR。
 /// 特别案公投(referendum 阶段)走公民 CID 凭证流程(citizen 投票入口),本页只提示。
 /// 发起立法不在手机端(见 legislation_intro_page,类B)。

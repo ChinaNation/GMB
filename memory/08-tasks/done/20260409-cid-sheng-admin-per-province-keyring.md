@@ -438,7 +438,7 @@ pub(crate) struct AdminUser {
     pub(crate) city: String,
 
     // ── 新增字段(仅 FederalAdmin 必填,其他角色 None) ──
-    /// 中文注释:联邦管理员的私钥,AES-256-GCM 加密后 base64 编码。
+    /// 联邦管理员的私钥,AES-256-GCM 加密后 base64 编码。
     #[serde(default)]
     pub(crate) encrypted_privkey: Option<String>,
     /// 链上该 admin_pubkey 当前版本(每次 set_sheng_admin_pubkey extrinsic 成功后递增)

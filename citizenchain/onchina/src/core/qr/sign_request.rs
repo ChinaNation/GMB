@@ -1,6 +1,6 @@
 //! QR_V1/k=1 签名请求构造工具。
 //!
-//! 中文注释:这里只负责把已确定的签名原文包装成统一二维码 envelope;
+//! 这里只负责把已确定的签名原文包装成统一二维码 envelope;
 //! 业务模块仍负责决定签名内容和权限语义。
 
 use crate::{
@@ -29,7 +29,7 @@ pub(crate) fn build_sign_request(
 
 /// 把已确定的待签 payload **裸字节**包装成 QR_V1/k=1 envelope。
 ///
-/// 中文注释:机构上链 call data 是 SCALE 二进制(非 UTF-8 文本),走本入口直接放进 `b.d`。
+/// 机构上链 call data 是 SCALE 二进制(非 UTF-8 文本),走本入口直接放进 `b.d`。
 pub(crate) fn build_sign_request_bytes(
     request_id: &str,
     _issued_at: i64,

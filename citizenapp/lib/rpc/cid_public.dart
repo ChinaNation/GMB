@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 
 /// 扫码支付清算体系 Step 1 新增:身份注册局**公开**API 客户端。
 ///
-/// 中文注释:
+///
 /// - 对接 citizencode-backend 的 `GET /api/v1/app/clearing-banks/search` 端点
 ///   (实现见 `citizencode/backend/subjects/chain_multisig_info.rs` 的清算行公开查询)。
 /// - 该端点**无鉴权**,CitizenApp 在用户绑定清算行前展示列表用。

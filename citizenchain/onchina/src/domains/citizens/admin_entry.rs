@@ -24,7 +24,7 @@ use crate::*;
 
 /// 直接录入公民请求 DTO。
 ///
-/// 中文注释:居住省市由当前注册局办理上下文校验,前端只负责回传当前选择。
+/// 居住省市由当前注册局办理上下文校验,前端只负责回传当前选择。
 /// 本地建档不得要求钱包账户;儿童或暂未开户公民同样能先发放电子护照。
 #[derive(Deserialize)]
 pub(crate) struct AdminCreateCitizenInput {
@@ -392,7 +392,7 @@ fn local_citizen_cid_seed(
     birth_city_code: &str,
     birth_town_code: &str,
 ) -> String {
-    // 中文注释:本地建档阶段没有钱包账户,因此 CID 种子只能来自档案自身的稳定字段。
+    // 本地建档阶段没有钱包账户,因此 CID 种子只能来自档案自身的稳定字段。
     // 钱包绑定属于后续链上身份推送,不得回头改变本地身份号。
     let mut hasher = Sha256::new();
     let birth_date_text = citizen_birth_date.format("%Y-%m-%d").to_string();

@@ -70,7 +70,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             .ok_or(Error::<T>::ProposalIdOverflow)?;
         days %= DAYS_PER_400_YEARS;
 
-        // 中文注释:展示号年份必须按真实 UTC 公历年边界切换,
+        // 展示号年份必须按真实 UTC 公历年边界切换,
         // 不能使用平均年秒数,否则元旦附近会漂移到错误年份段。
         while days >= Self::days_in_year(year) as u64 {
             days -= Self::days_in_year(year) as u64;

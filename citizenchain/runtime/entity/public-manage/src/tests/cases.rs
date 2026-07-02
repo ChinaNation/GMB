@@ -22,11 +22,7 @@ fn typical_accounts() -> pallet::InstitutionInitialAccountsOf<Test> {
         (RESERVED_NAME_FEE, ACCT_AMOUNT),
     ])
 }
-
-// ============================================================
 // CID 登记路径(5 个用例)
-// ============================================================
-
 #[test]
 fn register_cid_public_institution_with_valid_signature_succeeds() {
     new_test_ext().execute_with(|| {
@@ -223,11 +219,7 @@ fn register_rejects_empty_required_fields() {
         );
     });
 }
-
-// ============================================================
 // 创建路径(8 个用例)
-// ============================================================
-
 #[test]
 fn propose_create_public_institution_registers_active_without_vote() {
     new_test_ext().execute_with(|| {
@@ -677,11 +669,7 @@ fn propose_create_rejects_when_institution_already_exists() {
         );
     });
 }
-
-// ============================================================
 // 关闭路径(5 个用例)
-// ============================================================
-
 fn create_and_activate_institution(
     cid_number_bytes: &[u8],
     admins_len: u8,
@@ -821,11 +809,7 @@ fn propose_close_rejects_self_beneficiary() {
         );
     });
 }
-
-// ============================================================
 // Cleanup / 边界(4 个用例)
-// ============================================================
-
 #[test]
 fn cleanup_rejected_public_proposal_only_after_engine_rejected() {
     new_test_ext().execute_with(|| {

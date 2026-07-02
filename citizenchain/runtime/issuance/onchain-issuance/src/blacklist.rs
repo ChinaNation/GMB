@@ -9,7 +9,7 @@ use sp_std::vec::Vec;
 
 /// GenesisConfig 注入的默认黑名单词表。
 ///
-/// 中文注释:四类违禁词(法币 / 锚定 / 权威 / 数字货币),小写规范化,
+/// 四类违禁词(法币 / 锚定 / 权威 / 数字货币),小写规范化,
 /// `validation::contains_blacklisted_word` 在比较前同步小写化字段值。
 /// 中英文混合,英文一律小写;中文不分大小写直接命中。
 pub fn default_blacklist_words() -> Vec<Vec<u8>> {

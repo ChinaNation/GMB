@@ -77,7 +77,7 @@ export const listArchiveMaterials = (id: string) =>
   get<{ items: ArchiveMaterial[] }>(`/api/v1/archives/${id}/materials`);
 
 export const uploadArchiveMaterial = async (id: string, body: FormData) => {
-  // 中文注释：资料上传使用浏览器自动生成 multipart boundary，不能走 JSON HTTP 封装。
+  // 资料上传使用浏览器自动生成 multipart boundary，不能走 JSON HTTP 封装。
   const res = await fetch(`/api/v1/archives/${id}/materials`, {
     method: 'POST',
     body,

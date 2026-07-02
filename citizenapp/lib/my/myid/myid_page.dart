@@ -132,7 +132,7 @@ class _MyIdPageState extends State<MyIdPage> {
   }
 
   String _identityStatusText() {
-    // 中文注释：identityStatus 是身份 CID 状态,不是本机档案状态；
+    // identityStatus 是身份 CID 状态,不是本机档案状态；
     // 只有 CID 明确返回 NORMAL 才显示正常，其他状态统一按异常展示。
     return _state.identityStatus?.trim().toUpperCase() == 'NORMAL'
         ? '状态：正常'
@@ -169,7 +169,7 @@ class _MyIdPageState extends State<MyIdPage> {
     final month = int.tryParse(parts[1]);
     final day = int.tryParse(parts[2]);
     if (year == null || month == null || day == null) return null;
-    // 中文注释：后端返回 YYYY-MM-DD 日期，不按本地时区转换，避免护照日期跨天。
+    // 后端返回 YYYY-MM-DD 日期，不按本地时区转换，避免护照日期跨天。
     return '${year.toString().padLeft(4, '0')}年'
         '${month.toString().padLeft(2, '0')}月'
         '${day.toString().padLeft(2, '0')}日';

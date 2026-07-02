@@ -55,7 +55,7 @@ class MultisigTransferService {
   static const _transferProposedEventIndex = 0;
 
   /// MultisigTransfer::SafetyFundTransferProposed event_index=3。
-  /// 中文注释：Event enum 按声明顺序编号（无显式 codec index），顺序为
+  /// Event enum 按声明顺序编号（无显式 codec index），顺序为
   /// TransferProposed(0)/ExecutionFailed(1)/Executed(2)/SafetyFundTransferProposed(3)/
   /// …/SweepToMainProposed(6)，与 runtime lib.rs 严格一致。
   static const _safetyFundProposedEventIndex = 3;
@@ -88,7 +88,7 @@ class MultisigTransferService {
     final institutionBytes = _institutionAccountId(institution);
     final beneficiaryPubkey =
         _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
-    // 中文注释：InstitutionInfo.mainAccount 是 App 内部 AccountId hex，
+    // InstitutionInfo.mainAccount 是 App 内部 AccountId hex，
     // 不能按 SS58/Base58 解码，否则 hex 中的 0 会被当成非法 Base58 字符。
     final fromPubkey = _accountHexToAccountId(institution.mainAccount, '转出主账户');
     final callData = _buildProposeTransferCall(
@@ -124,7 +124,7 @@ class MultisigTransferService {
 
   /// 提交 propose_safety_fund_transfer extrinsic（安全基金转账提案）。
   ///
-  /// 中文注释：提案创建类交易必须等真正入块并核对事件后才算业务成功
+  /// 提案创建类交易必须等真正入块并核对事件后才算业务成功
   /// （与 submitProposeTransfer 同标准），返回事件中的 proposal_id
   /// 供后续投票跟踪；submit-only 给不出 proposal_id，也无法区分
   /// "已接受"与"已上链"。
@@ -173,7 +173,7 @@ class MultisigTransferService {
 
   /// 提交 propose_sweep_to_main extrinsic（手续费划转提案）。
   ///
-  /// 中文注释：同 submitProposeSafetyFund，提案类必须入块+核对事件。
+  /// 同 submitProposeSafetyFund，提案类必须入块+核对事件。
   Future<({String txHash, int usedNonce, int proposalId, String blockHashHex})>
       submitProposeSweep({
     required InstitutionInfo institution,
@@ -221,7 +221,7 @@ class MultisigTransferService {
 
   /// 查询转出主账户的 finalized 可用余额（元）。
   ///
-  /// 中文注释：治理机构按主账户、费用账户、安全基金、永久质押分别建模，转账提案固定从主账户支出；
+  /// 治理机构按主账户、费用账户、安全基金、永久质押分别建模，转账提案固定从主账户支出；
   /// 个人/注册多签账户通过 InstitutionInfo.mainAccount 继续映射到账户。
   Future<double> fetchInstitutionBalance(InstitutionInfo institution) {
     return _rpc.fetchFinalizedBalance(institution.mainAccount);
@@ -365,7 +365,7 @@ class MultisigTransferService {
 
   /// 查询内部投票阈值快照。
   ///
-  /// 中文注释：个人多签创建提案的创建阈值是提案级快照，
+  /// 个人多签创建提案的创建阈值是提案级快照，
   /// 不能使用 InstitutionInfo.internalThreshold 的多签默认值。
   Future<int?> fetchInternalThresholdSnapshot(int proposalId) async {
     final key = _buildStorageKey(
@@ -380,7 +380,7 @@ class MultisigTransferService {
 
   /// 查询提案创建时锁定的管理员快照。
   ///
-  /// 中文注释：投票资格由 VotingEngine::AdminSnapshot 判定，详情页展示和
+  /// 投票资格由 VotingEngine::AdminSnapshot 判定，详情页展示和
   /// 可投钱包筛选也应优先使用同一份快照，避免当前管理员列表变化影响旧提案。
   Future<List<String>> fetchAdminSnapshot(
     int proposalId,
@@ -504,7 +504,7 @@ class MultisigTransferService {
   /// 返回结果按 ID 倒序。
   Future<List<ProposalWithDetail>> fetchProposalPage(
       int startId, int count) async {
-    // 中文注释:把范围转成显式 ids 列表,然后委派给 _fetchProposalsForIds。
+    // 把范围转成显式 ids 列表,然后委派给 _fetchProposalsForIds。
     final ids = <int>[
       for (var id = startId; id > startId - count && id >= 0; id--) id,
     ];
@@ -570,7 +570,7 @@ class MultisigTransferService {
     }
 
     // 对有 meta 的提案，批量查询 ProposalData（先查缓存）。
-    // 中文注释：联合投票提案不能再走“统一按转账解码”的旧逻辑，
+    // 联合投票提案不能再走“统一按转账解码”的旧逻辑，
     // 否则 runtime 升级这类提案会被漏掉或误判类型。
     final uncachedDetailKeys = <String>[];
     final uncachedDetailIds = <int>[];
@@ -746,7 +746,7 @@ class MultisigTransferService {
 
   /// ADR-018 统一提案查询:按年取当前年全部提案一次。
   ///
-  /// 中文注释:`ProposalsByYear[year]` 是短 key 索引,轻节点可正常前缀扫描;
+  /// `ProposalsByYear[year]` 是短 key 索引,轻节点可正常前缀扫描;
   /// 链端对每个提案无条件写入该索引、终态清理时移除,所以按年取得到的就是
   /// "全部存活提案"。公民-提案 / 机构详情 / 个人多签统一从这一份结果客户端按
   /// 已解码 `subject_cid_numbers` 过滤,替代旧的账户归属过滤。
@@ -788,7 +788,7 @@ class MultisigTransferService {
 
   /// 公民 tab「提案」统一流:默认公共机构码 ∪ 当前钱包订阅机构 CID。
   ///
-  /// 中文注释:默认范围按机构码命中(如 NRC/NLG/PRS),订阅范围必须按机构
+  /// 默认范围按机构码命中(如 NRC/NLG/PRS),订阅范围必须按机构
   /// CID 精确命中,不能按机构码放大,否则会把同类所有省/市机构全部塞进用户提案流。
   List<int> filterCitizenProposalFeedIds(
     List<ProposalWithDetail> all, {
@@ -987,7 +987,7 @@ class MultisigTransferService {
 
   /// 批量查询某提案下多名管理员的投票记录。
   ///
-  /// 中文注释：转账/多签管理详情页展示全管理员投票时走批量读取，
+  /// 转账/多签管理详情页展示全管理员投票时走批量读取，
   /// 避免 43 名管理员造成 43 次 storage RPC。
   Future<Map<String, bool?>> fetchAdminVotesBatch(
     int proposalId,
@@ -1347,7 +1347,7 @@ class MultisigTransferService {
 
   /// 入块后读取 System.Events 核对提案事件并提取 proposal_id。
   ///
-  /// 中文注释：三类提案（转账/安全基金/手续费划转）共用本入口，
+  /// 三类提案（转账/安全基金/手续费划转）共用本入口，
   /// 事件不存在=业务失败，必须抛错而不是静默放过。
   Future<int> _confirmProposalEvent({
     required String blockHashHex,
@@ -1377,7 +1377,7 @@ class MultisigTransferService {
 
   /// 在 System.Events 原始字节中扫描本 pallet 指定事件并提取 proposal_id。
   ///
-  /// 中文注释：三类提案共用扫描骨架，事件字段解码与匹配由 decode 回调完成。
+  /// 三类提案共用扫描骨架，事件字段解码与匹配由 decode 回调完成。
   int? _findProposalIdInEvents(
     Uint8List data, {
     required int eventIndex,
@@ -1426,7 +1426,7 @@ class MultisigTransferService {
     required Uint8List beneficiaryPubkey,
     required BigInt amountFen,
   }) {
-    // 中文注释：TransferProposed 事件字段顺序必须与 runtime Event enum 完全一致。
+    // TransferProposed 事件字段顺序必须与 runtime Event enum 完全一致。
     // 字段：proposal_id(u64) + institution_code([u8;4]) + institution(32B)
     //      + proposer(32B) + from(32B) + beneficiary(32B) + amount(u128)
     //      + remark(Vec) + expires_at(u32) + topics
@@ -1483,7 +1483,7 @@ class MultisigTransferService {
     required Uint8List beneficiaryPubkey,
     required BigInt amountFen,
   }) {
-    // 中文注释：SafetyFundTransferProposed 字段顺序必须与 runtime Event enum
+    // SafetyFundTransferProposed 字段顺序必须与 runtime Event enum
     // 完全一致：proposal_id u64 | proposer 32B | from 32B | beneficiary 32B
     // | amount u128 | remark Compact+bytes | expires_at u32 | topics。
     const fixedBytes = 8 + 32 + 32 + 32 + 16;
@@ -1531,7 +1531,7 @@ class MultisigTransferService {
     required Uint8List toPubkey,
     required BigInt amountFen,
   }) {
-    // 中文注释：SweepToMainProposed 字段顺序必须与 runtime Event enum 完全
+    // SweepToMainProposed 字段顺序必须与 runtime Event enum 完全
     // 一致：proposal_id u64 | institution 32B | proposer 32B | from 32B
     // | to 32B | amount u128 | expires_at u32 | topics（无 remark 字段）。
     const fixedBytes = 8 + 32 + 32 + 32 + 32 + 16 + 4;

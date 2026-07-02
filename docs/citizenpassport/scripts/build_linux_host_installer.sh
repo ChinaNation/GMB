@@ -59,7 +59,7 @@ PAYLOAD_DIR="${OUT_DIR}/payload"
 RUN_FILE="${ROOT_DIR}/dist/${PACKAGE_BASENAME}.run"
 SHA256_FILE="${RUN_FILE}.sha256"
 INSTALL_GUIDE_MD="${ROOT_DIR}/docs/CITIZENPASSPORT_INSTALL_GUIDE.md"
-# 中文注释：行政区唯一源是 CID 维护的 china.sqlite，安装包随附其只读拷贝。
+# 行政区唯一源是 CID 维护的 china.sqlite，安装包随附其只读拷贝。
 CHINA_DB_SRC="${ROOT_DIR}/../citizencode/backend/china/china.sqlite"
 
 collect_offline_debs() {
@@ -72,7 +72,7 @@ collect_offline_debs() {
   mkdir -p "${PAYLOAD_DIR}/debs"
   rm -f "${PAYLOAD_DIR}/debs"/*.deb
 
-  # 中文注释：依赖闭包必须在官方 ubuntu:24.04 容器内解析，不能读取 GitHub runner 主机 apt 源。
+  # 依赖闭包必须在官方 ubuntu:24.04 容器内解析，不能读取 GitHub runner 主机 apt 源。
   docker run --rm --platform "${DOCKER_PLATFORM}" \
     -e CPMS_RUNTIME_PACKAGES="${RUNTIME_PACKAGES[*]}" \
     -e HOST_UID="$(id -u)" \
@@ -167,7 +167,7 @@ HEADER
   (cd "$(dirname "${RUN_FILE}")" && sha256sum "$(basename "${RUN_FILE}")" >"$(basename "${SHA256_FILE}")")
 }
 
-# 中文注释：行政区唯一源是 CID 维护的 china.sqlite；安装包随附其只读拷贝，
+# 行政区唯一源是 CID 维护的 china.sqlite；安装包随附其只读拷贝，
 # CPMS 运行时用 rusqlite 读，不在 CPMS 源码树保存第二套行政区数据。
 echo "[1/8] Build backend release binary"
 cargo build --release --manifest-path "${ROOT_DIR}/backend/Cargo.toml"
@@ -188,7 +188,7 @@ if [[ ! -f "${CHINA_DB_SRC}" ]]; then
   echo "ERROR: missing china administrative-area source at ${CHINA_DB_SRC}"
   exit 1
 fi
-# 中文注释：china.sqlite 走 Git LFS。若以 lfs:false / 未拉 LFS 的方式 checkout，
+# china.sqlite 走 Git LFS。若以 lfs:false / 未拉 LFS 的方式 checkout，
 # 该路径会是一个 ~130 字节的“指针文件”，test -f 仍为真但内容不是数据库。
 # 正向检测 LFS 指针特征(纯 ASCII，跨平台 grep 都稳)，绝不把指针当数据库打进安装包。
 if head -c 64 "${CHINA_DB_SRC}" | grep -qa "git-lfs.github.com"; then

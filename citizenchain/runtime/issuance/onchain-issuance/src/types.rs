@@ -9,7 +9,7 @@ use sp_runtime::RuntimeDebug;
 
 /// 资产种类:第一期只 Plain,Pegged 协议位预留。
 ///
-/// 中文注释:Pegged 路径当前在 `validation::ensure_class_supported` reject,
+/// Pegged 路径当前在 `validation::ensure_class_supported` reject,
 /// 启用时改为接受 + 校验 PegDeclaration。
 #[derive(
     Encode,
@@ -32,7 +32,7 @@ pub enum AssetClass {
 
 /// 资产生命周期状态。
 ///
-/// 中文注释:Active 是默认态;Closed 由发行方 `propose_close` 终态化;
+/// Active 是默认态;Closed 由发行方 `propose_close` 终态化;
 /// ForceClosed 由 NRC 监管 `monitor_force_close` 进入,30 天后自动销毁余额。
 #[derive(
     Encode,
@@ -54,7 +54,7 @@ pub enum AssetState {
 
 /// 用户代币元数据(链端权威 storage)。
 ///
-/// 中文注释：storage key 是 `asset_id`，发行/治理账户是机构多签账户地址。
+/// storage key 是 `asset_id`，发行/治理账户是机构多签账户地址。
 #[derive(
     Encode,
     Decode,
@@ -80,5 +80,5 @@ pub struct OnchainAssetMeta<AccountId> {
 
 /// NRC 监管动作的 reason hash(链下文书 sha256)。
 ///
-/// 中文注释:链端只存 hash 不存文书原文,文书原文走链下司法/听证流程。
+/// 链端只存 hash 不存文书原文,文书原文走链下司法/听证流程。
 pub type MonitorReasonHash = [u8; 32];

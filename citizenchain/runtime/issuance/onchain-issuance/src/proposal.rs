@@ -24,31 +24,19 @@ use frame_support::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 use sp_std::vec::Vec;
-
-// ============================================================================
 // 业务 ACTION(走 InternalVote,机构 admin / personal admin 多签内部执行)
-// ============================================================================
-
 pub const ACTION_ONCHAIN_ASSET_ISSUE: [u8; 4] = *b"OAIS";
 pub const ACTION_ONCHAIN_ASSET_MINT: [u8; 4] = *b"OAMT";
 pub const ACTION_ONCHAIN_ASSET_BURN: [u8; 4] = *b"OABN";
 pub const ACTION_ONCHAIN_ASSET_CLOSE: [u8; 4] = *b"OACL";
 pub const ACTION_ONCHAIN_ASSET_TRANSFER: [u8; 4] = *b"OATR";
-
-// ============================================================================
 // 监管 ACTION(走 JointVote,NRC 治理账户 + 全民兜底)
-// ============================================================================
-
 pub const ACTION_ONCHAIN_ASSET_MONITOR_FREEZE: [u8; 4] = *b"OMFZ";
 pub const ACTION_ONCHAIN_ASSET_MONITOR_UNFREEZE: [u8; 4] = *b"OMUF";
 pub const ACTION_ONCHAIN_ASSET_MONITOR_CONFISCATE: [u8; 4] = *b"OMCF";
 pub const ACTION_ONCHAIN_ASSET_MONITOR_FORCE_TRANSFER: [u8; 4] = *b"OMFT";
 pub const ACTION_ONCHAIN_ASSET_MONITOR_FORCE_CLOSE: [u8; 4] = *b"OMFC";
-
-// ============================================================================
 // 提案体(SCALE 编解码,VotingEngine 透明承载)
-// ============================================================================
-
 /// 创建资产提案体。
 ///
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
@@ -99,11 +87,7 @@ pub struct TransferProposal<AccountId, Balance> {
     pub to: AccountId,
     pub amount: Balance,
 }
-
-// ============================================================================
 // 监管提案体(NRC 调用,JointVote)
-// ============================================================================
-
 /// 监管:冻结 / 解冻持仓。
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo)]
 pub struct MonitorFreezeProposal<AccountId> {

@@ -30,7 +30,7 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {}
 
-    /// 中文注释：手续费份额销毁原因，供链上事件审计和运维聚合。
+    /// 手续费份额销毁原因，供链上事件审计和运维聚合。
     #[derive(
         Clone,
         Copy,
@@ -44,17 +44,17 @@ pub mod pallet {
         MaxEncodedLen,
     )]
     pub enum BurnReason {
-        /// 中文注释：当前区块作者无法从共识 digest 中识别。
+        /// 当前区块作者无法从共识 digest 中识别。
         AuthorMissing,
-        /// 中文注释：区块作者尚未绑定全节点手续费奖励钱包。
+        /// 区块作者尚未绑定全节点手续费奖励钱包。
         WalletUnbound,
-        /// 中文注释：全节点奖励钱包入账失败，剩余 credit 被销毁。
+        /// 全节点奖励钱包入账失败，剩余 credit 被销毁。
         FullnodeResolveFailed,
-        /// 中文注释：国储会手续费账户未配置。
+        /// 国储会手续费账户未配置。
         NrcMissing,
-        /// 中文注释：国储会手续费账户入账失败，剩余 credit 被销毁。
+        /// 国储会手续费账户入账失败，剩余 credit 被销毁。
         NrcResolveFailed,
-        /// 中文注释：安全基金账户入账失败，剩余 credit 被销毁。
+        /// 安全基金账户入账失败，剩余 credit 被销毁。
         SafetyFundResolveFailed,
     }
 
@@ -188,7 +188,7 @@ where
         _fee_with_tip: Self::Balance,
         tip: Self::Balance,
     ) -> Result<Self::LiquidityInfo, TransactionValidityError> {
-        // 中文注释：这里完全忽略 pallet-transaction-payment 传入的 _fee_with_tip，
+        // 这里完全忽略 pallet-transaction-payment 传入的 _fee_with_tip，
         // 改为执行本模块自定义的五类费用模型。
         let fee_with_tip =
             custom_fee_with_tip::<T, Currency, FeeKindExtractor>(who, call, dispatch_info, tip)?;
@@ -197,7 +197,7 @@ where
         }
         let payer = FeePayerExtractor::fee_payer(who, call).unwrap_or_else(|| who.clone());
 
-        // 中文注释：扣费使用 Exact，避免"只扣到一部分也继续执行"。
+        // 扣费使用 Exact，避免"只扣到一部分也继续执行"。
         let credit = Currency::withdraw(
             &payer,
             fee_with_tip,
@@ -207,7 +207,7 @@ where
         )
         .map_err(|_| InvalidTransaction::Payment)?;
 
-        // 中文注释：tip 会单独拆出来，但后续仍和基础费一起交给 Router，
+        // tip 会单独拆出来，但后续仍和基础费一起交给 Router，
         // 这样可以保留 tip 语义，同时复用统一分账路径。
         let (tip_credit, inclusion_fee) = credit.split(tip);
 
@@ -228,7 +228,7 @@ where
         _fee_with_tip: Self::Balance,
         tip: Self::Balance,
     ) -> Result<(), TransactionValidityError> {
-        // 中文注释：预检查与正式扣费保持同一套金额计算逻辑，
+        // 预检查与正式扣费保持同一套金额计算逻辑，
         // 否则容易出现"预检查能过、正式扣费失败"的行为偏差。
         let fee_with_tip =
             custom_fee_with_tip::<T, Currency, FeeKindExtractor>(who, call, dispatch_info, tip)?;
@@ -251,7 +251,7 @@ where
         liquidity_info: Self::LiquidityInfo,
     ) -> Result<(), TransactionValidityError> {
         // PROTOCOL: no post-dispatch refund.
-        // 中文注释：本制度按五类费用模型固定收费，协议上明确"不做执行后退款"。
+        // 本制度按五类费用模型固定收费，协议上明确"不做执行后退款"。
         // `_corrected_fee_with_tip` 和 `_tip` 仅来自 transaction-payment 标准接口，
         // 本实现只对 `withdraw_fee` 已扣出的 credit 做最终分账。
         if let Some((fee_credit, tip_credit)) = liquidity_info {
@@ -302,7 +302,7 @@ where
             "fee distribution constants must sum to 100"
         );
 
-        // 中文注释：制度常量异常时，直接全部销毁，避免错误分配。
+        // 制度常量异常时，直接全部销毁，避免错误分配。
         if total_percent != EXPECTED_FEE_PERCENT_TOTAL {
             log::error!(
                 target: "runtime::onchain_transaction",
@@ -316,7 +316,7 @@ where
             return;
         }
 
-        // 中文注释：先切出全节点份额，再把剩余部分在 NRC 和安全基金之间二次切分，
+        // 先切出全节点份额，再把剩余部分在 NRC 和安全基金之间二次切分，
         // 可以避免三项分账时因为整数除法带来更复杂的舍入误差。
         let (fullnode_credit, remainder) = amount.ration(
             fullnode_percent,
@@ -324,7 +324,7 @@ where
         );
         let (nrc_credit, safety_fund_credit) = remainder.ration(nrc_percent, safety_fund_percent);
 
-        // 中文注释：手续费全节点分成只发给"当前区块作者对应绑定钱包"；未绑定则不分配（自动销毁）。
+        // 手续费全节点分成只发给"当前区块作者对应绑定钱包"；未绑定则不分配（自动销毁）。
         let digest = <frame_system::Pallet<T>>::digest();
         let pre_runtime_digests = digest.logs().iter().filter_map(|d| d.as_pre_runtime());
         match AuthorFinder::find_author(pre_runtime_digests) {
@@ -363,7 +363,7 @@ where
             }
         }
 
-        // 中文注释：国储会手续费账户分成。
+        // 国储会手续费账户分成。
         if let Some(nrc_fee_account) = NrcProvider::nrc_account() {
             if let Err(remaining) = Currency::resolve(&nrc_fee_account, nrc_credit) {
                 let burnt_amount = remaining.peek().saturated_into::<u128>();
@@ -384,7 +384,7 @@ where
             drop(nrc_credit);
         }
 
-        // 中文注释：安全基金账户由 runtime provider 注入，避免每笔手续费分账重复 decode 常量地址。
+        // 安全基金账户由 runtime provider 注入，避免每笔手续费分账重复 decode 常量地址。
         let safety_fund_account = SafetyFundProvider::safety_fund_account();
         if let Err(remaining) = Currency::resolve(&safety_fund_account, safety_fund_credit) {
             let burnt_amount = remaining.peek().saturated_into::<u128>();
@@ -417,17 +417,17 @@ where
     FeeKindExtractor:
         CallFeeKind<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
 {
-    // 中文注释：Runtime 必须把每个调用显式归入五类费用模型；
+    // Runtime 必须把每个调用显式归入五类费用模型；
     // Unknown 直接拒绝，防止新增交易绕过收费制度。
     let base_fee_u128 = match FeeKindExtractor::fee_kind(who, call) {
         FeeChargeKind::VoteFlat => primitives::fee_policy::VOTE_FLAT_FEE,
         FeeChargeKind::OnchainAmount(amount) => {
-            // 中文注释：链上资金交易才按金额套 0.1% 费率。
+            // 链上资金交易才按金额套 0.1% 费率。
             let amount_u128: u128 = amount.saturated_into();
             calculate_onchain_fee(amount_u128)
         }
         FeeChargeKind::OffchainFee(_fee) => {
-            // 中文注释：链下清算手续费已经在 offchain-transaction 结算执行时转账，
+            // 链下清算手续费已经在 offchain-transaction 结算执行时转账，
             // 这里不再进入链上手续费 80/10/10 分账，避免重复扣费和错分账。
             0
         }
@@ -448,15 +448,15 @@ pub fn calculate_onchain_fee(amount: u128) -> u128 {
 }
 
 fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
-    // 中文注释：链上精度为"分"，这里做四舍五入到分。
+    // 链上精度为"分"，这里做四舍五入到分。
     const PERBILL_DENOMINATOR: u128 = 1_000_000_000;
     let parts: u128 = rate.deconstruct() as u128;
     let whole = amount / PERBILL_DENOMINATOR;
     let remainder = amount % PERBILL_DENOMINATOR;
 
-    // 中文注释：先拆成"整分量"和"小数尾量"分别计算，避免 `amount * parts`
+    // 先拆成"整分量"和"小数尾量"分别计算，避免 `amount * parts`
     // 在极大金额下先溢出再饱和，导致费率结果被错误压扁。
-    // 中文注释：按 Perbill 约束 parts 不超过分母，因此 whole * parts <= amount；
+    // 按 Perbill 约束 parts 不超过分母，因此 whole * parts <= amount；
     // 这里仍用饱和乘法防御未来改动破坏该约束。
     let whole_component = whole.saturating_mul(parts);
     let remainder_component =

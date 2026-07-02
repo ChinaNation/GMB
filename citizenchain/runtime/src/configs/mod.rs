@@ -77,7 +77,7 @@ const NORMAL_DISPATCH_RATIO: Perbill =
 
 parameter_types! {
     pub const BlockHashCount: BlockNumber = BLOCK_HASH_COUNT;
-    /// 中文注释：使用 BlockNumber 类型声明重试宽限期，避免与具体 u32 常量类型耦合。
+    /// 使用 BlockNumber 类型声明重试宽限期，避免与具体 u32 常量类型耦合。
     pub const VotingExecutionRetryGraceBlocks: BlockNumber = 21_600;
     pub const Version: RuntimeVersion = VERSION;
 
@@ -96,7 +96,7 @@ parameter_types! {
 ///
 /// This can be a tuple of types, each implementing `OnRuntimeUpgrade`.
 ///
-/// 中文注释:本链全新创世,无历史链上数据需迁移,故为空。
+/// 本链全新创世,无历史链上数据需迁移,故为空。
 /// 将来链上线后如需单块迁移,在此 tuple 挂入 `OnRuntimeUpgrade` 即可。
 #[allow(unused_parens)]
 type SingleBlockMigrations = ();
@@ -173,7 +173,7 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
             }) => false,
             // ADR-011 铁律:pallet_assets 内核所有原生 extrinsic 一律 reject。
             // 业务调用必须经由 OnchainIssuance::propose_* → InternalVote/JointVote callback → 内部 root 调用。
-            // 中文注释:任何外部 extrinsic 直接打到 pallet_assets 全部不入块,
+            // 任何外部 extrinsic 直接打到 pallet_assets 全部不入块,
             // 这是用户代币治理唯一入口铁律的链端兜底。
             RuntimeCall::Assets(_) => false,
             // 未启用模块:onchain-issuance(ADR-011 用户代币,当前为空壳,任务卡 A/B 实装前)
@@ -213,7 +213,7 @@ impl frame_system::Config for Runtime {
     type AccountData = pallet_balances::AccountData<Balance>;
     /// 地址显示编号（SS58 前缀），统一来自 primitives 制度常量。
     type SS58Prefix = SS58Prefix;
-    /// 中文注释：全局调用过滤器，禁止 stake_account 参与 force_* 余额调用，并封禁强制总发行量调整入口。
+    /// 全局调用过滤器，禁止 stake_account 参与 force_* 余额调用，并封禁强制总发行量调整入口。
     type BaseCallFilter = RuntimeCallFilter;
     type MaxConsumers = frame_support::traits::ConstU32<16>;
     type SingleBlockMigrations = SingleBlockMigrations;
@@ -250,7 +250,7 @@ impl pallet_balances::Config for Runtime {
 parameter_types! {
     pub const MaxGrandpaAuthorities: u32 = 64;
     pub const MaxGrandpaNominators: u32 = 0;
-    // 中文注释：保留最近若干 set_id 与会话映射，便于后续接入等值投票追溯/举报能力。
+    // 保留最近若干 set_id 与会话映射，便于后续接入等值投票追溯/举报能力。
     pub const MaxSetIdSessionEntries: u64 = 128;
 }
 
@@ -260,7 +260,7 @@ impl pallet_grandpa::Config for Runtime {
     type MaxAuthorities = MaxGrandpaAuthorities;
     type MaxNominators = MaxGrandpaNominators;
     type MaxSetIdSessionEntries = MaxSetIdSessionEntries;
-    // 中文注释：当前版本不启用链上等值投票惩罚（无 session/historical 证明体系）。
+    // 当前版本不启用链上等值投票惩罚（无 session/historical 证明体系）。
     // 但保留 MaxSetIdSessionEntries 以便后续平滑接入。
     type KeyOwnerProof = Void;
     type EquivocationReportSystem = ();
@@ -374,7 +374,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                 );
                 FeeChargeKind::OnchainAmount(value)
             }
-            // 中文注释：PersonalManage 的 propose_create/propose_close 是治理提案交易，
+            // PersonalManage 的 propose_create/propose_close 是治理提案交易，
             // 交易本身固定收 1 元；执行阶段的资金手续费由对应 pallet 内部按金额另行处理。
             RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
                 ..
@@ -414,7 +414,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // 不走 ChargeTransactionPayment) / note_stalled(Root,本链无 sudo 实际不可达)。
             // 等价证据上报本就属公益保护链稳定运行,统一免费。
             RuntimeCall::Grandpa(_) => FeeChargeKind::Free,
-            // 中文注释：决议发行 / 决议销毁的 propose_X 是治理提案交易，固定 1 元；
+            // 决议发行 / 决议销毁的 propose_X 是治理提案交易，固定 1 元；
             // 维护型 Root / 系统型调用免费。
             RuntimeCall::ResolutionIssuance(ref issuance_call) => match issuance_call {
                 resolution_issuance::pallet::Call::propose_resolution_issuance { .. } => {
@@ -446,7 +446,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // 立法院模块 propose_enact_law / propose_amend_law / propose_repeal_law 是治理提案交易,
             // 固定按投票统一价 1 元/次(ADR-027),与其它治理 pallet 的 propose_X 一致。
             RuntimeCall::LegislationYuan(_) => FeeChargeKind::VoteFlat,
-            // 中文注释：多签转账 propose_X 只是创建治理提案，交易本身固定收 1 元；
+            // 多签转账 propose_X 只是创建治理提案，交易本身固定收 1 元；
             // 真正转账执行时，multisig-transfer 内部再按转出金额 × 0.1% 收链上交易费。
             RuntimeCall::MultisigTransfer(ref dt_call) => match dt_call {
                 multisig_transfer::pallet::Call::propose_transfer { .. }
@@ -467,7 +467,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                     offchain_transaction::pallet::Call::withdraw { amount } => {
                         FeeChargeKind::OnchainAmount(*amount)
                     }
-                    // 中文注释：清算行批次 V2 是链下交易费，结算执行阶段已经把
+                    // 清算行批次 V2 是链下交易费，结算执行阶段已经把
                     // Σ batch[i].fee_amount 转给清算行费用账户，本层只标记类别不二次分账。
                     offchain_transaction::pallet::Call::submit_offchain_batch_v2 {
                         batch, ..
@@ -504,7 +504,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // pallet_assets 内核所有原生 extrinsic 已被 RuntimeCallFilter 拦在入口,
             // 永远到不了本路径;此分支仅供编译期 exhaustive 检查。
             RuntimeCall::Assets(_) => FeeChargeKind::Free,
-            // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝,避免"有金额但漏提取"。
+            // 对 Balances 未覆盖分支按 Unknown 拒绝,避免"有金额但漏提取"。
             //
             // 不再写 `_ => Unknown` 兜底:补 RuntimeCall::Grandpa 之后所有 pallet 变体已穷尽,
             // 将来新增 pallet 若忘记归类会编译期 non-exhaustive match 报错,
@@ -586,12 +586,12 @@ pub struct RuntimeAccountValidator;
 
 impl primitives::multisig::AccountValidator<AccountId> for RuntimeAccountValidator {
     fn is_valid(account: &AccountId) -> bool {
-        // 中文注释：禁止零账户。
+        // 禁止零账户。
         if account == &AccountId::new([0u8; 32]) {
             return false;
         }
 
-        // 中文注释：禁止占用“国储会/省储会”的制度保留交易账户。
+        // 禁止占用“国储会/省储会”的制度保留交易账户。
         if primitives::cid::china::china_cb::CHINA_CB
             .iter()
             .any(|n| account == &AccountId::new(n.main_account))
@@ -599,7 +599,7 @@ impl primitives::multisig::AccountValidator<AccountId> for RuntimeAccountValidat
             return false;
         }
 
-        // 中文注释：禁止占用“省储行”的制度保留交易账户。
+        // 禁止占用“省储行”的制度保留交易账户。
         if primitives::cid::china::china_ch::CHINA_CH
             .iter()
             .any(|n| account == &AccountId::new(n.main_account))
@@ -607,7 +607,7 @@ impl primitives::multisig::AccountValidator<AccountId> for RuntimeAccountValidat
             return false;
         }
 
-        // 中文注释：禁止占用省储行费用账户（BLAKE2-256 派生）。
+        // 禁止占用省储行费用账户（BLAKE2-256 派生）。
         if primitives::cid::china::china_ch::CHINA_CH
             .iter()
             .any(|n| account == &AccountId::new(n.fee_account))
@@ -615,17 +615,17 @@ impl primitives::multisig::AccountValidator<AccountId> for RuntimeAccountValidat
             return false;
         }
 
-        // 中文注释：禁止占用国储会安全基金账户。
+        // 禁止占用国储会安全基金账户。
         if is_safety_fund_account(account) {
             return false;
         }
 
-        // 中文注释：禁止占用国储会两和基金账户。
+        // 禁止占用国储会两和基金账户。
         if is_nrc_he_account(account) {
             return false;
         }
 
-        // 中文注释：禁止占用储委会费用账户（44 个机构）。
+        // 禁止占用储委会费用账户（44 个机构）。
         if is_cb_fee_account(account) {
             return false;
         }
@@ -649,7 +649,7 @@ impl primitives::multisig::ProtectedSourceChecker<AccountId> for RuntimeProtecte
 
 impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset {
     fn can_spend(source: &AccountId, action: institution_asset::InstitutionAssetAction) -> bool {
-        // 中文注释：匹配顺序很重要——更具体的账户类型必须放在更宽泛的类型之前。
+        // 匹配顺序很重要——更具体的账户类型必须放在更宽泛的类型之前。
         // fee_account 同时出现在 CHINA_RESERVED_MAIN_ACCOUNTS 列表中（同由 BLAKE2 派生且统一保留），
         // 如果 is_reserved_main_account 先匹配，fee_account 会被错误地按主账户规则放行。
 
@@ -698,7 +698,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
 
 impl primitives::multisig::ReservedAccountGuard<AccountId> for RuntimeReservedAccountGuard {
     fn is_reserved(account: &AccountId) -> bool {
-        // 中文注释：禁止占用省储行 stake_account（制度保留账户）。
+        // 禁止占用省储行 stake_account（制度保留账户）。
         if primitives::cid::china::china_ch::CHINA_CH
             .iter()
             .any(|n| account == &AccountId::new(n.stake_account))
@@ -706,7 +706,7 @@ impl primitives::multisig::ReservedAccountGuard<AccountId> for RuntimeReservedAc
             return true;
         }
 
-        // 中文注释：禁止占用省储行费用账户（BLAKE2-256 派生）。
+        // 禁止占用省储行费用账户（BLAKE2-256 派生）。
         if primitives::cid::china::china_ch::CHINA_CH
             .iter()
             .any(|n| account == &AccountId::new(n.fee_account))
@@ -714,17 +714,17 @@ impl primitives::multisig::ReservedAccountGuard<AccountId> for RuntimeReservedAc
             return true;
         }
 
-        // 中文注释：禁止占用国储会安全基金账户。
+        // 禁止占用国储会安全基金账户。
         if is_safety_fund_account(account) {
             return true;
         }
 
-        // 中文注释：禁止占用国储会两和基金账户。
+        // 禁止占用国储会两和基金账户。
         if is_nrc_he_account(account) {
             return true;
         }
 
-        // 中文注释：禁止占用储委会费用账户（44 个机构）。
+        // 禁止占用储委会费用账户（44 个机构）。
         if is_cb_fee_account(account) {
             return true;
         }
@@ -809,7 +809,7 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
             >::get(issuer_main_account) else {
                 return false;
             };
-            // 中文注释:FRG 省级组只能登记本省 CID;FRG 主账户聚合 215 人不携带省码,不得用于登记。
+            // FRG 省级组只能登记本省 CID;FRG 主账户聚合 215 人不携带省码,不得用于登记。
             return group_province_code == target_province_code;
         }
 
@@ -821,7 +821,7 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
             else {
                 return false;
             };
-            // 中文注释:CREG 只能登记本市非 CREG 机构;市归属由 CID R5 直接校验。
+            // CREG 只能登记本市非 CREG 机构;市归属由 CID R5 直接校验。
             return issuer_province_code == target_province_code
                 && issuer_city_code == target_city_code;
         }
@@ -858,7 +858,7 @@ impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAutho
         if let Some(group_province_code) =
             public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
         {
-            // 中文注释:FRG 省级组管理员可以更新本省任意地址,不能跨省改地址。
+            // FRG 省级组管理员可以更新本省任意地址,不能跨省改地址。
             return group_province_code.as_ref() == province_code;
         }
 
@@ -878,7 +878,7 @@ impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAutho
         else {
             return false;
         };
-        // 中文注释:CREG 管理员只能更新本市地址。镇以下地址名称与完整地址仍走本市注册局。
+        // CREG 管理员只能更新本市地址。镇以下地址名称与完整地址仍走本市注册局。
         issuer_province_code.as_ref() == province_code && issuer_city_code.as_ref() == city_code
     }
 }
@@ -961,7 +961,7 @@ where
                 return false;
             };
 
-            // 中文注释：这里必须和身份注册局 `/registration-info` 的签名 payload 严格一致。
+            // 这里必须和身份注册局 `/registration-info` 的签名 payload 严格一致。
             // payload 字段(GMB + OP_SIGN_INST 域头由 signing_message 统一拼接):
             // genesis_hash + cid_number + cid_full_name + account_names[] + nonce
             // + 签发机构 + 作用域。
@@ -1021,7 +1021,7 @@ where
                 return false;
             };
 
-            // 中文注释:必须与身份注册局注销凭证签发 payload 严格一致。
+            // 必须与身份注册局注销凭证签发 payload 严格一致。
             // payload 字段(GMB + OP_SIGN_DEREGISTER 域头由 signing_message 统一拼接):
             // genesis_hash + scope + cid_number + account_name + target_account
             // + nonce + 签发机构 + 签发管理员公钥。scope 与 target_account 入签名,
@@ -1147,7 +1147,7 @@ impl
         if let Some(group_province_code) =
             public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
         {
-            // 中文注释：FRG 省级组管理员可登记、更新、撤销本省任意公民身份。
+            // FRG 省级组管理员可登记、更新、撤销本省任意公民身份。
             return group_province_code.as_ref() == residence_province_code;
         }
 
@@ -1167,7 +1167,7 @@ impl
         else {
             return false;
         };
-        // 中文注释：CREG 管理员只能管理本市公民身份；出生地不参与居住地注册权限。
+        // CREG 管理员只能管理本市公民身份；出生地不参与居住地注册权限。
         registry_province_code.as_ref() == residence_province_code
             && registry_city_code.as_ref() == residence_city_code
     }
@@ -1227,7 +1227,7 @@ parameter_types! {
     pub const RuntimeUpgradeMaxCodeSize: u32 = 5 * 1024 * 1024;
     /// 管理员治理：单个注册机构账户管理员上限。
     ///
-    /// 中文注释：物理 BoundedVec 上限必须覆盖机构账户 1989 人场景；个人账户
+    /// 物理 BoundedVec 上限必须覆盖机构账户 1989 人场景；个人账户
     /// 另由 MaxPersonalAccountAdmins 限制为 64。
     pub const MaxAdminsPerInstitution: u32 = 1989;
     /// 管理员治理：单个个人账户管理员上限。
@@ -1364,7 +1364,7 @@ impl RuntimeAdminAccountQuery {
             return Self::is_active_account_admin(institution_code, account.clone(), who);
         }
 
-        // 中文注释：FRG 省级虚拟组账户不属于机构生命周期账户，只能按固定治理码查公权管理员模块。
+        // FRG 省级虚拟组账户不属于机构生命周期账户，只能按固定治理码查公权管理员模块。
         [
             admin_primitives::FRG,
             primitives::cid::code::NRC,
@@ -1741,11 +1741,7 @@ impl votingengine::InternalVoteResultCallback for RuntimeAdminVoteExecutor {
         Ok(votingengine::ProposalExecutionOutcome::Ignored)
     }
 }
-
-// ---------------------------------------------------------------------------
 // 链下交易清算模块配置
-// ---------------------------------------------------------------------------
-
 /// CID 机构登记表查询实现。
 ///
 /// 委托给 runtime 的公权/私权机构生命周期聚合查询；管理员校验再统一转给
@@ -1794,7 +1790,7 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for MultisigCi
     /// 判定 `who` 是否是 `bank` 多签账户的管理员之一。
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
     ///
-    /// 中文注释:机构账户按自身地址作为治理账户,institution_code 来自实体生命周期模块；
+    /// 机构账户按自身地址作为治理账户,institution_code 来自实体生命周期模块；
     /// PMUL 只给 personal-admins 使用。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
         let Some(account) = RuntimeAdminAccountQuery::resolve_admin_account_for_account(bank)
@@ -1869,7 +1865,7 @@ pub(crate) fn is_nrc_admin(who: &AccountId) -> bool {
         .map(|n| AccountId::new(n.main_account))
         .expect("NRC main_account must exist");
 
-    // 中文注释：创世后只信任链上管理员治理模块中的统一账户表。
+    // 创世后只信任链上管理员治理模块中的统一账户表。
     RuntimeAdminAccountQuery::is_active_account_admin(
         votingengine::types::NRC,
         nrc_institution,
@@ -1921,7 +1917,7 @@ impl resolution_issuance::Config for Runtime {
     type Currency = Balances;
     type ProposeOrigin = EnsureJointProposer;
     type RecipientSetOrigin = frame_system::EnsureRoot<AccountId>;
-    // 中文注释：维护入口只允许 root 操作暂停与短期执行记录清理。
+    // 维护入口只允许 root 操作暂停与短期执行记录清理。
     type MaintenanceOrigin = frame_system::EnsureRoot<AccountId>;
     type WeightInfo = resolution_issuance::weights::SubstrateWeight<Runtime>;
     type JointVoteEngine = JointVote;
@@ -1949,7 +1945,7 @@ impl runtime_upgrade::RuntimeCodeExecutor for RuntimeSetCodeExecutor {
     fn execute_runtime_code(code: &[u8]) -> DispatchResult {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            // 中文注释：benchmark 需要衡量治理编排本身的真实路径，
+            // benchmark 需要衡量治理编排本身的真实路径，
             // 但不应真的改写 runtime :code 存储，因此这里使用成功的 no-op 执行器。
             return if code.is_empty() {
                 Err(sp_runtime::DispatchError::Other("empty runtime code"))
@@ -2228,12 +2224,9 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
         >>::population_count(scope)
     }
 }
-
-// =====================================================================
 // pallet_assets 内核接入(ADR-011 第八节)+ OnchainIssuance 外壳配置
-// =====================================================================
 //
-// 中文注释:pallet_assets 是用户代币的内核 storage / 资产记账实现,
+// pallet_assets 是用户代币的内核 storage / 资产记账实现,
 // **所有原生 extrinsic 在 RuntimeCallFilter 中 reject**。
 // 业务调用必须经由 OnchainIssuance::propose_* → InternalVote/JointVote callback →
 // onchain_issuance 内部以 Root 调用 pallet_assets 的内核 API。
@@ -2259,7 +2252,7 @@ impl pallet_assets::Config for Runtime {
     type AssetId = u32;
     type AssetIdParameter = codec::Compact<u32>;
     type Currency = Balances;
-    /// 中文注释:外部 extrinsic 全部被 RuntimeCallFilter reject,这里 origin 设啥不影响实际入口。
+    /// 外部 extrinsic 全部被 RuntimeCallFilter reject,这里 origin 设啥不影响实际入口。
     /// CreateOrigin 接 EnsureSigned 仅为满足 trait Success=AccountId 约束;
     /// ForceOrigin 接 EnsureRoot(Success=())。OnchainIssuance 内部经 fungibles trait
     /// (Create / Mutate)直接调内核 API,不走 extrinsic origin 路径。
@@ -2284,7 +2277,7 @@ impl pallet_assets::Config for Runtime {
 
 /// OnchainIssuance pallet 配置(NRC 账户 / 费用账户语义分离)。
 ///
-/// 中文注释:onchain-issuance 拆为两个独立 trait:
+/// onchain-issuance 拆为两个独立 trait:
 /// - `NrcMainAccountProvider` → 返回 NRC 治理多签账户 main_account(monitor 调用方校验用)
 /// - `NrcFeeAccountProvider`  → 返回 NRC 费用账户 fee_account(创建费收款用)
 /// v1 错误地复用 onchain_transaction::NrcAccountProvider(它返回 fee_account),
@@ -2295,7 +2288,7 @@ pub struct RuntimeNrcMainAccountProvider;
 
 impl onchain_issuance::pallet::NrcMainAccountProvider<AccountId> for RuntimeNrcMainAccountProvider {
     fn nrc_main_account() -> Option<AccountId> {
-        // 中文注释:china_cb[0].main_account 是 NRC 治理多签账户,与 fee_account 不同。
+        // china_cb[0].main_account 是 NRC 治理多签账户,与 fee_account 不同。
         primitives::cid::china::china_cb::CHINA_CB
             .first()
             .and_then(|n| AccountId::decode(&mut &n.main_account[..]).ok())
@@ -2304,7 +2297,7 @@ impl onchain_issuance::pallet::NrcMainAccountProvider<AccountId> for RuntimeNrcM
 
 /// NRC 费用账户(fee_account)— 创建费 1000 GMB 收款用。
 ///
-/// 中文注释:复用既有 `RuntimeNrcAccountProvider`(它实现 onchain_transaction::NrcAccountProvider,
+/// 复用既有 `RuntimeNrcAccountProvider`(它实现 onchain_transaction::NrcAccountProvider,
 /// 也返回 fee_account),通过为同 struct 再实现 onchain_issuance 自己的 trait 完成桥接,语义一致。
 impl onchain_issuance::pallet::NrcFeeAccountProvider<AccountId> for RuntimeNrcAccountProvider {
     fn nrc_fee_account() -> Option<AccountId> {
@@ -2324,7 +2317,7 @@ parameter_types! {
 
 impl onchain_issuance::pallet::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    /// 中文注释:Currency 必须实现 ReservableCurrency(ADR-011 v2 第六节押金机制),
+    /// Currency 必须实现 ReservableCurrency(ADR-011 v2 第六节押金机制),
     /// pallet_balances 默认实现该 trait,直接接 Balances 即可。
     type Currency = Balances;
     /// pallet_assets 内核类型绑定。onchain_issuance 通过该类型调内核 create / mint_into 等内部 API,

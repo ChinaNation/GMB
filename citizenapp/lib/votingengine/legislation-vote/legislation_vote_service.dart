@@ -8,7 +8,7 @@ import 'package:citizenapp/votingengine/legislation-vote/legislation_vote_query_
 
 /// 立法投票/签署提交服务(LegislationVote sub-pallet,pallet_index=28)。
 ///
-/// 中文注释:院内表决/行政签署/三人会签/护宪终审四个动作都是**纯 extrinsic**
+/// 院内表决/行政签署/三人会签/护宪终审四个动作都是**纯 extrinsic**
 /// (signer=origin=动作人本人,零 op_tag),统一走 [SignedExtrinsicBuilder] 标准
 /// 交易签名,范式照搬 internal-vote。提交后必须回读 legislation-vote storage 确认
 /// runtime 已记账,txHash 不代表已执行。特别案公投(referendum/snapshot)带 CID

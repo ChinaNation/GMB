@@ -41,7 +41,7 @@ export function RuntimeConstitutionViewer() {
 
   return (
     <section className="runtime-constitution-shell">
-      {/* 中文注释：runtime 宪法 HTML 只在隔离 iframe 内运行目录脚本，不开放 allow-same-origin。 */}
+      {/* runtime 宪法 HTML 只在隔离 iframe 内运行目录脚本，不开放 allow-same-origin。 */}
       <iframe
         className="runtime-constitution-frame"
         title="公民宪法"

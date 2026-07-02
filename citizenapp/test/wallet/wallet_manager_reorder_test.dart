@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 中文注释:验证 WalletManager.reorderWallets 是否正确写入 sortOrder,
+/// 验证 WalletManager.reorderWallets 是否正确写入 sortOrder,
 /// 并检查 sortBySortOrder().thenByWalletIndex() 排序顺序。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -75,7 +75,7 @@ void main() {
         .setMockMethodCallHandler(localAuthChannel, null);
   });
 
-  /// 中文注释:每个 test 文件结束后必须 close 并删除磁盘 db,
+  /// 每个 test 文件结束后必须 close 并删除磁盘 db,
   /// 否则同物理目录下其他 test 文件的 setUp 在新 isolate 中
   /// 看到的是「未初始化的 _isar 但磁盘有残留」,resetForTest 不会清盘,
   /// _openAndMigrate 会复用残留 → walletIndex 索引被占,后续 test 失败。

@@ -1,6 +1,6 @@
 //! 大屏看板 DTO(camelCase 出线,前端 `legislation/display/types.ts` 逐字镜像)。
 //!
-//! 中文注释:嵌入既有 `LegProposalState`(不重定义),叠加席位与聚合计数。
+//! 嵌入既有 `LegProposalState`(不重定义),叠加席位与聚合计数。
 
 use serde::Serialize;
 

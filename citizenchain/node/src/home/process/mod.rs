@@ -155,7 +155,7 @@ fn start_node_in_process_with_retry(
         ) {
             Ok(handle) => return Ok(handle),
             Err(err) if is_database_lock_error(&err) && attempt < NODE_LOCK_RETRY_LIMIT => {
-                // 中文注释：RocksDB 同进程锁释放偶发滞后，启动失败时只做有限重试，
+                // RocksDB 同进程锁释放偶发滞后，启动失败时只做有限重试，
                 // 失败后把状态标记为 lock_held，避免前端继续误认为是普通停止。
                 thread::sleep(NODE_LOCK_RETRY_DELAY);
             }
@@ -175,7 +175,7 @@ pub(crate) fn cleanup_on_startup(app: &AppHandle) {
 /// 句柄 drop 内部会发送 shutdown 信号 + join 后台线程，
 /// 并等待后台线程退出；若 RocksDB 同进程锁释放滞后，启动路径会转入 lock_held。
 pub(crate) fn cleanup_on_exit(app: &AppHandle) {
-    // 中文注释：先停同步守护，避免退出时守护线程同时触发节点重启。
+    // 先停同步守护，避免退出时守护线程同时触发节点重启。
     super::sync_guard::stop_sync_guard();
     let _lifecycle_guard = lock_node_lifecycle();
     // 先把 handle 取出再 drop，避免在持有 state 锁期间 join 线程。
@@ -262,7 +262,7 @@ fn start_node_with_policy(app: AppHandle, restart_existing: bool) -> Result<Node
 
         // 准备启动参数。
         let base_path = node_data_dir(&app)?;
-        // 中文注释：clean-run 本机重新创世时注入 fresh raw chainspec；普通启动仍用冻结主网 spec。
+        // clean-run 本机重新创世时注入 fresh raw chainspec；普通启动仍用冻结主网 spec。
         let chain_spec = std::env::var("CITIZENCHAIN_CHAIN_SPEC")
             .ok()
             .filter(|value| !value.trim().is_empty());

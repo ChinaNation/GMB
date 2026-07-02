@@ -1,4 +1,4 @@
-// 中文注释:合伙企业前端类型边界。无限合伙=`F+GP`,有限合伙=`S+LP`。
+// 合伙企业前端类型边界。无限合伙=`F+GP`,有限合伙=`S+LP`。
 
 import type { PartnershipKind, PrivateType } from '../../subjects/api';
 

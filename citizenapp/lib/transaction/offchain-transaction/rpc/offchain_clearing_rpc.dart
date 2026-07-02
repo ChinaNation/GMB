@@ -3,7 +3,7 @@ import 'dart:io';
 
 /// 扫码支付清算体系:**清算行节点** JSON-RPC 客户端。
 ///
-/// 中文注释:
+///
 /// - 对接 `citizenchain/node/src/transaction/offchain_transaction/rpc.rs::OffchainClearingRpcImpl`,
 ///   命名空间 `offchain`。
 /// - Step 1 提供 3 个只读方法:`queryBalance` / `queryNextNonce` / `queryPendingCount`。

@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  // 中文注释:OnChina 后端同源托管 dist,base 用相对路径以适配任意内网挂载路径。
+  // OnChina 后端同源托管 dist,base 用相对路径以适配任意内网挂载路径。
   base: './',
   plugins: [react()],
   server: {

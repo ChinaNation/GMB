@@ -152,7 +152,7 @@ fn load_activations(app: &AppHandle) -> Result<Vec<StoredActivation>, String> {
     match serde_json::from_str::<StoredActivations>(&raw) {
         Ok(stored) => Ok(stored.activations),
         Err(e) if is_stale_activation_schema(&raw, &e.to_string()) => {
-            // 中文注释：旧版本地文件使用 org:u8。该字段已废弃，不能在本地做
+            // 旧版本地文件使用 org:u8。该字段已废弃，不能在本地做
             // 兼容映射；直接清空文件，要求用户按当前 institution_code 重新激活。
             if let Err(log_err) = security::append_audit_log(
                 app,

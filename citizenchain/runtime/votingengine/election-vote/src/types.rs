@@ -1,6 +1,6 @@
 //! election-vote 本地类型。
 //!
-//! 中文注释：本文件只保存“本次选举的运行态快照”。总统、院长、任期、
+//! 本文件只保存“本次选举的运行态快照”。总统、院长、任期、
 //! 候选来源等业务规则由发起业务模块或未来选举法模块解释后传入，
 //! election-vote 不把这些规则写成常量真源。
 
@@ -39,7 +39,7 @@ impl ElectionMode {
 
 /// 创建选举时固化的职位快照。
 ///
-/// 中文注释：`office_code` 是业务模块给出的职位编码，例如总统、参议员、
+/// `office_code` 是业务模块给出的职位编码，例如总统、参议员、
 /// 院长等；本 pallet 只保存快照，不解释职位规则。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct ElectionMeta<AccountId, BlockNumber, OfficeCode> {

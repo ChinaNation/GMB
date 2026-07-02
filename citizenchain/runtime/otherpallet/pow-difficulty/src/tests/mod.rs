@@ -76,7 +76,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .expect("frame system genesis storage should build");
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
-        // 中文注释：测试环境下把 genesis-pallet 的出块目标时间
+        // 测试环境下把 genesis-pallet 的出块目标时间
         // 与 pow_const::MILLISECS_PER_BLOCK 对齐，确保难度调整逻辑一致。
         genesis_pallet::TargetBlockTimeMs::<Test>::put(MILLISECS_PER_BLOCK);
     });

@@ -126,7 +126,7 @@ pub async fn get_admin_account_state(
 
 /// 批量读取管理员账户 finalized free 余额。
 ///
-/// 中文注释:管理员卡片只做展示,余额读取必须钉 finalized 块,并且同一批账户共用
+/// 管理员卡片只做展示,余额读取必须钉 finalized 块,并且同一批账户共用
 /// 同一个 finalized hash,避免列表内不同卡片落在不同块高。
 #[tauri::command]
 pub async fn get_admin_account_balances(

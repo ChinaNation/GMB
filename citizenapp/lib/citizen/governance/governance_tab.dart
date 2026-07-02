@@ -42,7 +42,7 @@ List<Institution> applyGovernanceInstitutionOrder(
     }
   }
 
-  // 中文注释：静态注册表未来若有新增机构，本机旧顺序里没有的项必须补回末尾。
+  // 静态注册表未来若有新增机构，本机旧顺序里没有的项必须补回末尾。
   for (final institution in source) {
     if (used.add(institution.cidNumber)) {
       ordered.add(institution);
@@ -347,7 +347,7 @@ class _GovernanceSection extends StatelessWidget {
               if (constraints.maxWidth <= 0) {
                 return const SizedBox.shrink();
               }
-              // 中文注释：国储会虽横跨整行，但高度必须和省储会/省储行网格卡片保持一致。
+              // 国储会虽横跨整行，但高度必须和省储会/省储行网格卡片保持一致。
               const crossAxisCount = 2;
               const crossAxisSpacing = 8.0;
               final childAspectRatio = constraints.maxWidth < 360 ? 2.6 : 2.9;
@@ -555,7 +555,7 @@ class _GovernanceCard extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  // 中文注释：机构卡片不再显示名称左侧图标，只保留名称和右箭头。
+                  // 机构卡片不再显示名称左侧图标，只保留名称和右箭头。
                   child: Text(
                     institution.displayName,
                     maxLines: 2,
@@ -611,7 +611,7 @@ class _GovernanceIconBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(7),
       ),
       child: Center(
-        // 中文注释：省储会/省储行使用指定 SVG 图案；国储会使用 Material 图标。
+        // 省储会/省储行使用指定 SVG 图案；国储会使用 Material 图标。
         child: asset == null
             ? Icon(icon, size: iconSize, color: color)
             : SvgPicture.asset(

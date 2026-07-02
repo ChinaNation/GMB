@@ -1,4 +1,4 @@
-//! 中文注释:敏感字符串封装。
+//! 敏感字符串封装。
 //!
 //! 这里只保存运行时必须短暂持有的密钥文本包装,不承载任何业务主数据。
 
@@ -16,7 +16,7 @@ impl SensitiveSeed {
         Self(value.into())
     }
 
-    /// 中文注释:只允许密码学代码读取原始密钥文本,不得写入日志或错误消息。
+    /// 只允许密码学代码读取原始密钥文本,不得写入日志或错误消息。
     #[must_use = "secret material should only be exposed to crypto code paths"]
     pub(crate) fn expose_secret(&self) -> &str {
         self.0.as_str()

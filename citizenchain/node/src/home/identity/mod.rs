@@ -62,7 +62,7 @@ pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
             None
         }
     };
-    // 中文注释：异常退出的线程句柄在释放 state 锁后 drop，避免状态查询阻塞其它命令。
+    // 异常退出的线程句柄在释放 state 锁后 drop，避免状态查询阻塞其它命令。
     drop(stale_handle);
 
     let (managed_running, state_label) = {

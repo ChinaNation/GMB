@@ -3,7 +3,7 @@ import 'package:citizenapp/isar/wallet_isar.dart';
 
 /// 本机钱包交易流水存储服务。
 ///
-/// 中文注释：这里保存的是“钱包进入本机 App 之后”的余额变化流水。
+/// 这里保存的是“钱包进入本机 App 之后”的余额变化流水。
 /// 链上账户唯一性用 walletPubkeyHex，单条流水唯一性用 recordKey。
 class LocalTxStore {
   static const String statusPending = 'pending';
@@ -91,7 +91,7 @@ class LocalTxStore {
 
   /// 写入本机发起的普通转账记录。
   ///
-  /// 中文注释：交易池和区块事件可能先于页面本地写入返回。这里先查是否
+  /// 交易池和区块事件可能先于页面本地写入返回。这里先查是否
   /// 已有同钱包、同发送方、同接收方、同本金的区块事件记录；若有，直接
   /// 合并手续费、txHash 和 nonce，避免“本金事件 + 本机扣费记录”显示两条。
   static Future<void> upsertLocalSubmitTransfer({
@@ -177,7 +177,7 @@ class LocalTxStore {
 
   /// 写入链上区块转账事件；如能匹配本机发起记录，则更新原记录。
   ///
-  /// 中文注释(ADR-017 全端 finalized 单一口径)：本方法由只扫 finalized 链的
+  /// (ADR-017 全端 finalized 单一口径)：本方法由只扫 finalized 链的
   /// ChainTxMonitor 调用，写入/升级的流水状态恒为 finalized(已确认)。收入
   /// (别人转入)没有本机 pending，只在对应区块 finalized 后用同一个区块事件
   /// 唯一键写入，避免“余额到账但无收入记录”。inBlock 进度态由交易提交
@@ -268,7 +268,7 @@ class LocalTxStore {
         return;
       }
 
-      // 中文注释：本机发起转账会先写 pending，交易池 inBlock 回调可能先把它
+      // 本机发起转账会先写 pending，交易池 inBlock 回调可能先把它
       // 标成 inBlock。链上 Transfer 事件回来后，用同钱包、同收款人、同本金
       // 匹配并改成区块事件唯一键，避免列表里出现重复流水。
       final localSubmit = await _findMatchingLocalSubmitTransferInTxn(
@@ -305,7 +305,7 @@ class LocalTxStore {
 
   /// 交易池回调显示交易已进入区块时，先把本机 pending 记录升级为 inBlock。
   ///
-  /// 中文注释：这里不把它直接改成 finalized；最终确认仍由 finalized 区块事件
+  /// 这里不把它直接改成 finalized；最终确认仍由 finalized 区块事件
   /// 写回，保留回滚边界。
   static Future<void> markLocalSubmitInBlock({
     required String walletPubkeyHex,

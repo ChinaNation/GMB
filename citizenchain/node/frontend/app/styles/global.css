@@ -1421,7 +1421,7 @@ select option:checked {
   background: #12273a;
 }
 
-/* 中文注释：白皮书正式文档必须统一字体，标题、英文、副标题、代码块和表格都继承同一套字体。 */
+/* 白皮书正式文档必须统一字体，标题、英文、副标题、代码块和表格都继承同一套字体。 */
 .local-doc-shell.doc-whitepaper,
 .local-doc-shell.doc-whitepaper .hero h1,
 .local-doc-shell.doc-whitepaper .markdown-body,

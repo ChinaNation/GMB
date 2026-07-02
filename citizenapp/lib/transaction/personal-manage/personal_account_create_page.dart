@@ -183,7 +183,7 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
     return int.tryParse(_thresholdController.text.trim());
   }
 
-  /// 中文注释：管理员数量变化时只把普通阈值拉回合法范围，
+  /// 管理员数量变化时只把普通阈值拉回合法范围，
   /// 不把阈值固定死；用户仍可在最低过半到全员之间自由输入。
   void _syncThresholdInput() {
     final min = _minimumRegularThreshold;
@@ -343,14 +343,14 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
         );
       });
 
-      // 中文注释：只有入块并确认 个人账户创建成功事件 事件后，才写本地
+      // 只有入块并确认 个人账户创建成功事件 事件后，才写本地
       // 创建提案；proposalId 使用链上事件返回值，不能再预测 NextProposalId。
       await PersonalProposalHistoryService().recordOrUpdate(
         personalAccountHex: addrHex,
         proposalId: result.proposalId,
         action: PersonalProposalAction.create,
         status: PersonalProposalStatus.voting,
-        // 中文注释：runtime 投票引擎创建提案后会在同一事务自动给发起人记一票赞成。
+        // runtime 投票引擎创建提案后会在同一事务自动给发起人记一票赞成。
         yesVotes: 1,
         noVotes: 0,
         snapshot: {

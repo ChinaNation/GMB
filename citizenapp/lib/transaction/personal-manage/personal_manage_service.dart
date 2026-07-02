@@ -245,7 +245,7 @@ class PersonalManageService {
 
   /// 批量查询个人多签账户状态。
   ///
-  /// 中文注释：多签列表页不能对每个账户逐个调用 [fetchPersonalAccount]。
+  /// 多签列表页不能对每个账户逐个调用 [fetchPersonalAccount]。
   /// 这里按 storage 依赖分阶段批量读取：先读账户与管理员主体，再批量读动态阈值。
   Future<Map<String, AccountInfo?>> fetchPersonalAccountsBatch(
     Iterable<String> accountHexList, {
@@ -542,7 +542,7 @@ class PersonalManageService {
           if (decoded != null) return decoded;
         }
       } catch (_) {
-        // 中文注释：System.Events 里混有其他 pallet 事件，扫描失败继续尝试后续 offset。
+        // System.Events 里混有其他 pallet 事件，扫描失败继续尝试后续 offset。
       }
     }
     return null;

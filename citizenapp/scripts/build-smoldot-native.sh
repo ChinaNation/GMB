@@ -78,7 +78,7 @@ build_android() {
   cargo build --release --target aarch64-linux-android
   cargo build --release --target armv7-linux-androideabi
 
-  # 中文注释：Android 真机只支持 arm64-v8a 与 armeabi-v7a 两类 ABI，
+  # Android 真机只支持 arm64-v8a 与 armeabi-v7a 两类 ABI，
   # 两份库必须都放入 jniLibs，否则 32 位手机会找不到 libsmoldot.so。
   local arm64_dest="$CITIZENAPP_DIR/android/app/src/main/jniLibs/arm64-v8a"
   local armv7_dest="$CITIZENAPP_DIR/android/app/src/main/jniLibs/armeabi-v7a"

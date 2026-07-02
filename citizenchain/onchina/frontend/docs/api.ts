@@ -1,4 +1,4 @@
-// 中文注释:机构资料库前端 API。资料上传、下载、删除都归 docs 模块。
+// 机构资料库前端 API。资料上传、下载、删除都归 docs 模块。
 
 import type { AdminAuth } from '../auth/types';
 import type { AdminSecurityGrantOutput } from '../admins/admin_security_api';
@@ -27,7 +27,7 @@ export async function listDocuments(
   );
 }
 
-// 中文注释:上传资料属 SESSION 操作(仅需有效会话),无需扫码签名授权,直接调用。
+// 上传资料属 SESSION 操作(仅需有效会话),无需扫码签名授权,直接调用。
 export async function uploadDocument(
   auth: AdminAuth,
   cidNumber: string,

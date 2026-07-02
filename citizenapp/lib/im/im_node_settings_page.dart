@@ -12,7 +12,7 @@ typedef ImNodePairingScanner = Future<String?> Function(BuildContext context);
 
 /// “我的 -> 设置 -> 设置通信节点”页面。
 ///
-/// 中文注释：本页面只负责把公民手机配对到用户自己的电脑通信节点。
+/// 本页面只负责把公民手机配对到用户自己的电脑通信节点。
 /// 它不添加联系人，不进入聊天，不出现在信息 Tab。
 class ImNodeSettingsPage extends StatefulWidget {
   ImNodeSettingsPage({

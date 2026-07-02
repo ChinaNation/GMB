@@ -1,6 +1,6 @@
 //! 法律案 HTTP DTO + 转换为链编码器入参。
 //!
-//! 中文注释:前端提交的法律案请求体 = 章节条款 + 标量(tier/scope_code/vote_type/标题/生效时间)。
+//! 前端提交的法律案请求体 = 章节条款 + 标量(tier/scope_code/vote_type/标题/生效时间)。
 //! **houses / executive / legislature 由后端按宪法路由 + 链上账户解析,不收前端**(防越权伪造表决院)。
 //! 字段命名对齐链端 `legislation-yuan` 与 CitizenApp `law_models`。
 //!

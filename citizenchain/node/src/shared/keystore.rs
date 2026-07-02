@@ -1,6 +1,6 @@
 // 通用 keystore 操作：扫描链目录、写入/删除/检测密钥文件。
 #![allow(unsafe_code)]
-// 中文注释：本模块需要用 openat/renameat/fstatat 等 Unix 原子文件接口保证 keystore 写入安全。
+// 本模块需要用 openat/renameat/fstatat 等 Unix 原子文件接口保证 keystore 写入安全。
 use crate::shared::security;
 use std::{
     ffi::OsString,

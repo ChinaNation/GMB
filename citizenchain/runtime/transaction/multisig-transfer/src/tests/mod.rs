@@ -541,7 +541,7 @@ impl votingengine::Config for Test {
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminsLenProvider = TestInternalAdminsLenProvider;
-    // 中文注释:与真实 runtime 一致(1989)。联邦注册局创世内置 215 管理员,mock 上限须覆盖。
+    // 与真实 runtime 一致(1989)。联邦注册局创世内置 215 管理员,mock 上限须覆盖。
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type MaxProposalDataLen = ConstU32<1024>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
@@ -642,7 +642,7 @@ impl pallet::Config for Test {
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = ();
-    // 中文注释:测试 mock 把个人多签生命周期灌进 personal-manage，
+    // 测试 mock 把个人多签生命周期灌进 personal-manage，
     // 个人多签管理员灌进 personal-admins，动态阈值灌进 internal-vote。
     // InstitutionQuery 走 public-manage,用于覆盖 0x05 InstitutionAccount 账户级主体。
     type PersonalQuery = personal_manage::Pallet<Test>;
@@ -879,7 +879,7 @@ fn prb_pass_pairs() -> Vec<(AccountId32, sr25519::Pair)> {
 /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic,
 /// 让 `pairs` 前 `n` 个成员各投一张赞成票。
 ///
-/// 中文注释：发起人已在创建提案事务中自动赞成，调用方只传剩余补票人。
+/// 发起人已在创建提案事务中自动赞成，调用方只传剩余补票人。
 fn cast_transfer_votes_n(
     pairs: &[(AccountId32, sr25519::Pair)],
     n: usize,
@@ -930,7 +930,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
         set_extra_admins(PRC, prc, prc_accts);
         set_extra_admins(PRB, prb, prb_accts);
         // PERSONAL_CODE/PUBLIC_CODE/PRIVATE_CODE 的 admin 从 personal/public/private-admins 读；
-        // 中文注释：动态阈值真源在 internal-vote::ActiveDynamicThresholds。
+        // 动态阈值真源在 internal-vote::ActiveDynamicThresholds。
         // personal-manage / public-manage 只保存账户生命周期状态和 org 归属。
         // 测试需要时显式写入 PersonalAccounts + 对应管理员表。
         let _ = dq;

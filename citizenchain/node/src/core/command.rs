@@ -39,12 +39,12 @@ impl SubstrateCli for Cli {
 
     fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
         Ok(match id {
-            // 中文注释：Substrate CLI 的 benchmark 默认传入 dev/local/staging 等内置别名。
+            // Substrate CLI 的 benchmark 默认传入 dev/local/staging 等内置别名。
             // CitizenChain 不维护独立临时 dev genesis,这些别名统一落到冻结 chainspec。
             "" | "citizenchain" | "dev" | "local" | "staging" => {
                 Box::new(chain_spec::chain_config()?)
             }
-            // 中文注释：仅供本机 clean-run 重新创世时导出 fresh raw chainspec 使用。
+            // 仅供本机 clean-run 重新创世时导出 fresh raw chainspec 使用。
             "citizenchain-fresh" => Box::new(chain_spec::fresh_genesis_config()?),
             path => Box::new(chain_spec::ChainSpec::from_json_file(
                 std::path::PathBuf::from(path),
@@ -55,14 +55,14 @@ impl SubstrateCli for Cli {
 
 /// Parse and run command line arguments
 pub fn run() -> sc_cli::Result<()> {
-    // 中文注释：统一 CLI/chain-spec 序列化时的地址显示前缀，避免默认回落到 42。
+    // 统一 CLI/chain-spec 序列化时的地址显示前缀，避免默认回落到 42。
     set_default_ss58_version(Ss58AddressFormat::custom(SS58_FORMAT));
 
     let mut cli = Cli::from_args();
     let pool_type_explicit =
         std::env::args().any(|arg| arg == "--pool-type" || arg.starts_with("--pool-type="));
     if !pool_type_explicit {
-        // 中文注释：当前本链普通节点默认不需要 fork-aware 多视图交易池。
+        // 当前本链普通节点默认不需要 fork-aware 多视图交易池。
         // 上游 fork-aware 后台子任务在本链 fresh/普通启动场景会提前结束并触发
         // `txpool-background` essential task 关闭服务；默认固定为更稳定的 SingleState。
         cli.run.pool_config.pool_type = sc_cli::TransactionPoolType::SingleState;

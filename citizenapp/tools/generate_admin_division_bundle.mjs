@@ -80,7 +80,7 @@ function main() {
 
   db.close();
 
-  // 中文注释:先清空分片目录,避免省 code 改名后旧分片继续留在安装包中。
+  // 先清空分片目录,避免省 code 改名后旧分片继续留在安装包中。
   rmSync(join(OUT_DIR, 'cities'), { recursive: true, force: true });
   rmSync(join(OUT_DIR, 'towns'), { recursive: true, force: true });
   mkdirSync(join(OUT_DIR, 'cities'), { recursive: true });

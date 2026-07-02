@@ -27,7 +27,7 @@ mod scope;
 
 #[cfg(test)]
 mod genesis {
-    // 中文注释:CID 测试编译会加载 citizenchain 的 china_ch 常量测试,
+    // CID 测试编译会加载 citizenchain 的 china_ch 常量测试,
     // 该测试只需要创世人口常量来校验省储行人口总和。
     pub const GENESIS_CITIZEN_MAX: u64 = 1_443_497_378;
 }
@@ -273,7 +273,7 @@ fn institution_row_from_pg_row(
     let town_code: Option<String> = row.get(21);
     let education_type: Option<String> = row.get(22);
     let status: String = row.get(23);
-    // 中文注释:省/市/镇名字按 code 现场从 china.sqlite 派生,库里不存名字副本(ADR-021)。
+    // 省/市/镇名字按 code 现场从 china.sqlite 派生,库里不存名字副本(ADR-021)。
     let province_code: String = row.get(6);
     let city_code: Option<String> = row.get(7);
     let town_code_value = town_code.clone().unwrap_or_default();
@@ -330,10 +330,10 @@ fn institution_from_subject_row(
     let town_code: Option<String> = row.get(18);
     let education_type: Option<String> = row.get(19);
     let status: String = row.get(20);
-    // 中文注释:字段顺序必须与 get_institution_with_accounts 的 SELECT 保持一致;
+    // 字段顺序必须与 get_institution_with_accounts 的 SELECT 保持一致;
     // legal_rep_photo_size 是第 27 列,下标为 26,越界会在持有数据库锁时 panic。
     let legal_rep_photo_size_i64: Option<i64> = row.get(26);
-    // 中文注释:省/市/镇名字按 code 现场从 china.sqlite 派生,DTO 仍带名字,库里不存名字副本(ADR-021)。
+    // 省/市/镇名字按 code 现场从 china.sqlite 派生,DTO 仍带名字,库里不存名字副本(ADR-021)。
     let province_code: String = row.get(6);
     let city_code: Option<String> = row.get(7);
     let town_code_value = town_code.clone().unwrap_or_default();
@@ -441,7 +441,7 @@ impl Db {
         self.with_client(move |conn| Self::get_institution_with_accounts_conn(conn, &cid_number))
     }
 
-    /// 中文注释:`get_institution_with_accounts` 的 conn 级版本,供已持有连接的
+    /// `get_institution_with_accounts` 的 conn 级版本,供已持有连接的
     /// 注册局动作派发(admins/actions.rs 注销校验）直接复用,避免嵌套 with_client。
     pub(crate) fn get_institution_with_accounts_conn(
         conn: &mut postgres::Client,
@@ -672,7 +672,7 @@ impl Db {
         province_code: &str,
         city_code: Option<&str>,
     ) -> Result<(), String> {
-        // 中文注释:ids 是 cid_number 全局唯一索引,同号不能在身份大类之间静默改义。
+        // ids 是 cid_number 全局唯一索引,同号不能在身份大类之间静默改义。
         let existing = conn
             .query_opt("SELECT kind FROM ids WHERE cid_number = $1", &[&cid_number])
             .map_err(|e| format!("query target id failed: {e}"))?;
@@ -705,7 +705,7 @@ impl Db {
         cid_number: &str,
         province_code: &str,
     ) -> Result<(), String> {
-        // 中文注释:分区键按行政区划真源修正时,清掉同一 cid 留在原分区的查询行。
+        // 分区键按行政区划真源修正时,清掉同一 cid 留在原分区的查询行。
         let sql = format!("DELETE FROM {table} WHERE cid_number = $1 AND province_code <> $2");
         conn.execute(sql.as_str(), &[&cid_number, &province_code])
             .map_err(|e| format!("delete {table} rows outside scope failed: {e}"))?;
@@ -891,7 +891,7 @@ impl Db {
         let legal_rep_photo_size = inst
             .legal_rep_photo_size
             .and_then(|v| i64::try_from(v).ok());
-        // 中文注释:行政区名字不入库(china.sqlite 单源),只写 province_code/city_code/town_code。
+        // 行政区名字不入库(china.sqlite 单源),只写 province_code/city_code/town_code。
         conn.execute(
             "INSERT INTO subjects (
                 cid_number, kind, cid_full_name, cid_short_name,
@@ -1137,11 +1137,11 @@ impl Db {
         })
     }
 
-    // 中文注释:删除所有不合规 CID 号在各号承载表里的行。判定唯一标准 =
+    // 删除所有不合规 CID 号在各号承载表里的行。判定唯一标准 =
     // 过不了 `crate::cid::validate_cid_number_format`。
     // dry_run 时在事务内删完即回滚,只回报计数,不改库。
     pub(crate) fn purge_legacy_cid_rows(&self, dry_run: bool) -> Result<PurgeReport, String> {
-        // 中文注释:号承载表清单,无外键约束,删除顺序无关;主登记表 ids 放最后。
+        // 号承载表清单,无外键约束,删除顺序无关;主登记表 ids 放最后。
         const CID_TABLES: [&str; 8] = [
             "subjects",
             "citizens",
@@ -1224,7 +1224,7 @@ impl Db {
         })
     }
 
-    // 中文注释:扫出"孤儿机构"——subjects 中 town_code 非空、但该
+    // 扫出"孤儿机构"——subjects 中 town_code 非空、但该
     // (province_code,city_code,town_code) 三元组在行政区划真源 china.sqlite 里不存在
     // (town_code 指向已退役的镇)。判定只走
     // 进程内内存树(crate::cid::china::town_exists),不在 PG 里 join china 数据(PG 无 towns 表)。
@@ -1277,7 +1277,7 @@ impl Db {
         })
     }
 
-    // 中文注释:把待删孤儿行(subjects/gov/private/accounts)文本导出到备份文件,删除唯一回滚保证。
+    // 把待删孤儿行(subjects/gov/private/accounts)文本导出到备份文件,删除唯一回滚保证。
     // 用 COPY ... TO STDOUT 抓 TSV(不依赖 pg_dump 外部进程),每张表一段,带表名分隔头。
     // 仅命中传入 cid 集合内的行(逐省 province_code + cid ANY 过滤),不会导出无关数据。
     fn export_orphan_backup(
@@ -1293,7 +1293,7 @@ impl Db {
                 .map_err(|e| format!("create orphan backup file {backup_path} failed: {e}"))?;
             writeln!(
                 file,
-                "-- cid purge-orphan-institutions backup\n-- 中文注释:删除前导出的待删孤儿行(TSV/COPY 格式),删除唯一回滚保证。"
+                "-- cid purge-orphan-institutions backup\n-- 删除前导出的待删孤儿行(TSV/COPY 格式),删除唯一回滚保证。"
             )
             .map_err(|e| format!("write orphan backup header failed: {e}"))?;
             // 按 (表, 主键关联列) 分别导出;subjects/gov/private/accounts 用 cid_number,
@@ -1331,7 +1331,7 @@ impl Db {
         })
     }
 
-    // 中文注释:逐省单事务级联删孤儿机构。每省一条事务,WHERE province_code=$1 命中子分区,
+    // 逐省单事务级联删孤儿机构。每省一条事务,WHERE province_code=$1 命中子分区,
     // cid_number = ANY($2) 限定本省孤儿集合;禁止跨省一条 SQL。级联删顺序遵守关联依赖:
     // accounts → docs → audit → gov|private → ids → subjects(子承载表先删,主登记表 ids
     // 与父表 subjects 最后)。gov/private 按 subjects.kind 区分(本方法传入已分好的两类 cid)。
@@ -1453,7 +1453,7 @@ impl Db {
             let cursor_created_at = cursor.map(|c| c.created_at);
             let fetch_limit = i64::try_from(page_size.saturating_add(1))
                 .map_err(|_| "page_size too large".to_string())?;
-            // 中文注释:过滤子句来自 InstitutionListFilter 的静态字面量(教育=手动 JY 行,
+            // 过滤子句来自 InstitutionListFilter 的静态字面量(教育=手动 JY 行,
             // 非法人按父级属性分流到公权/私权),无注入面;par 是子句依赖的父级别名,
             // 父级允许跨省(私法人全国),故只按 cid_number 关联不限定 province_code。
             let sql = format!(
@@ -1511,7 +1511,7 @@ impl Db {
                 .map_err(|e| format!("query subjects failed: {e}"))?;
             let mut output = Vec::with_capacity(rows.len());
             for row in rows {
-                // 中文注释:列布局与 institution_row_from_pg_row 一致,统一走该 helper(含名字派生)。
+                // 列布局与 institution_row_from_pg_row 一致,统一走该 helper(含名字派生)。
                 let created_at: DateTime<Utc> = row.get(14);
                 let cid_number: String = row.get(0);
                 let item = institution_row_from_pg_row(&row)?;
@@ -1534,7 +1534,7 @@ impl Db {
             let city_type = crate::institution::subjects::EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE;
             let limit = i64::try_from(page_size.saturating_add(1))
                 .map_err(|_| "page_size too large".to_string())?;
-            // 中文注释:市详情只直接显示本市确定性市公民教育委员会;
+            // 市详情只直接显示本市确定性市公民教育委员会;
             // 国家公民教育委员会不跨市铺开,学校和 F+JY 分支机构仍走精确搜索。
             let rows = conn
                 .query(
@@ -1596,7 +1596,7 @@ impl Db {
                 .map_err(|_| "page_size too large".to_string())?;
             let offset_i64 =
                 i64::try_from(offset).map_err(|_| "page offset too large".to_string())?;
-            // 中文注释:公权目录 = 自动生成目录(gov 表) + 手动公权机构
+            // 公权目录 = 自动生成目录(gov 表) + 手动公权机构
             // (category=GOV,无 gov 行,非 JY 学校) + 公权下属非法人(F,父级为公法人)。
             // 父级只按 cid_number 关联(cid 全局唯一,父级不限定本省分区)。
             let rows = conn
@@ -1777,7 +1777,7 @@ fn parse_backend_command() -> BackendCommand {
             dry_run: args.iter().any(|arg| arg == "--dry-run"),
         },
         "purge-orphan-institutions" => {
-            // 中文注释:默认 dry-run(只回报不删);必须显式 --apply 才落库,--apply 与
+            // 默认 dry-run(只回报不删);必须显式 --apply 才落库,--apply 与
             // --dry-run 同时出现按 dry-run 处理(更安全)。--backup <path> 可覆盖默认备份文件名。
             let apply = args.iter().any(|arg| arg == "--apply");
             let dry_run = !apply || args.iter().any(|arg| arg == "--dry-run");
@@ -1886,7 +1886,7 @@ fn run_ensure_gov_command(state: &AppState) -> Result<(), String> {
     let lock_sql = "SELECT pg_advisory_lock(hashtext('cid'), hashtext('ensure-gov'))";
     let unlock_sql = "SELECT pg_advisory_unlock(hashtext('cid'), hashtext('ensure-gov'))";
 
-    // 中文注释:部署脚本可能被多实例同时执行,PostgreSQL 会话锁保证只有一个进程做目录初始化。
+    // 部署脚本可能被多实例同时执行,PostgreSQL 会话锁保证只有一个进程做目录初始化。
     let database_url =
         std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL is required".to_string())?;
     let mut lock_conn =
@@ -2155,7 +2155,7 @@ struct PurgeReport {
     dry_run: bool,
 }
 
-// 中文注释:清掉所有不合规 CID 号,再把能确定性
+// 清掉所有不合规 CID 号,再把能确定性
 // 自动重建的公权机构重对账。PRIVATE 私权机构与公民属注册局直接录入,
 // 删后无法自动重建,需由注册局重新录入。链端不在本命令范围。
 fn run_purge_legacy_cid(state: &AppState, dry_run: bool) {
@@ -2192,7 +2192,7 @@ fn run_purge_legacy_cid(state: &AppState, dry_run: bool) {
             "purge-legacy-cid removed user-created PRIVATE/CITIZEN rows; they must be re-created/re-bound to get new-scheme cid"
         );
     }
-    // 中文注释:build_raw_targets(GovTargetKind::All) 返回完整自动公权机构目录,
+    // build_raw_targets(GovTargetKind::All) 返回完整自动公权机构目录,
     // 一次全量重对账即把所有 PUBLIC 主体按新号重建。
     let recon = core::runtime_ops::reconcile_official_institutions_explicit(
         state,
@@ -2210,7 +2210,7 @@ fn run_purge_legacy_cid(state: &AppState, dry_run: bool) {
     );
 }
 
-// 中文注释:一条孤儿机构记录(subjects 行 town_code 指向 china.sqlite 已退役/不存在的镇)。
+// 一条孤儿机构记录(subjects 行 town_code 指向 china.sqlite 已退役/不存在的镇)。
 #[derive(Debug, Clone)]
 struct OrphanInstitution {
     province_code: String,
@@ -2223,7 +2223,7 @@ struct OrphanInstitution {
     institution_code: String,
 }
 
-// 中文注释:清理孤儿机构 CLI。
+// 清理孤儿机构 CLI。
 // `purge-orphan-institutions [--dry-run|--apply] [--backup <path>]`,默认 dry-run。
 // 孤儿 = subjects.town_code 非空 + (province_code,city_code,town_code) 不在 china.sqlite 内存树。
 //   - dry-run:只打印孤儿清单(onchina/town/town_code/category/institution_code/原因)+ 总数,
@@ -2273,7 +2273,7 @@ fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: O
         return;
     }
 
-    // 中文注释:按省分组 + 按 kind 拆 gov/private,供逐省事务级联删与备份导出复用。
+    // 按省分组 + 按 kind 拆 gov/private,供逐省事务级联删与备份导出复用。
     let mut gov_by_province: std::collections::BTreeMap<String, Vec<String>> =
         std::collections::BTreeMap::new();
     let mut private_by_province: std::collections::BTreeMap<String, Vec<String>> =
@@ -2353,7 +2353,7 @@ fn chain_genesis_source_configured() -> bool {
         || core::chain_url::chain_ws_url().is_ok()
 }
 
-// 中文注释:链节点是 OnChina 的外部联调依赖,不能阻塞后端和管理员基础服务启动。
+// 链节点是 OnChina 的外部联调依赖,不能阻塞后端和管理员基础服务启动。
 async fn cache_chain_genesis_hash_until_ready() {
     let mut retry_secs = 2u64;
     loop {
@@ -2384,7 +2384,7 @@ fn main() {
     disable_core_dumps();
     let command = parse_backend_command();
 
-    // 中文注释:`ONCHINA_SIGNING_SEED_HEX` 是链上中国平台系统签名钥的**可选**配置,
+    // `ONCHINA_SIGNING_SEED_HEX` 是链上中国平台系统签名钥的**可选**配置,
     // 不是节点/服务启动前提。任何区块链节点都可启动 OnChina;需要签登录 QR 挑战、
     // 人口快照或机构注册凭证的操作才按需读取它。鉴权真源是链上 Active 管理员集合。
     if let Ok(seed_hex) = std::env::var("ONCHINA_SIGNING_SEED_HEX") {
@@ -2393,7 +2393,7 @@ fn main() {
                 .unwrap_or_else(|e| panic!("invalid ONCHINA_SIGNING_SEED_HEX: {e}"));
         }
     }
-    // 中文注释(Card 05):桌面/小市内嵌私有 PostgreSQL——onchina 自管 initdb/起停,
+    // (Card 05):桌面/小市内嵌私有 PostgreSQL——onchina 自管 initdb/起停,
     // 自拼本机 DATABASE_URL;大市外部托管 PG 时关 ONCHINA_EMBEDDED_PG,直接给 DATABASE_URL。
     let database_url = if core::embedded_pg::is_enabled() {
         core::embedded_pg::ensure_started()
@@ -2423,7 +2423,7 @@ fn main() {
     if run_gov_directory_command(&state, command.clone()) {
         return;
     }
-    // 中文注释:普通公权/宪法机构目录是持久化数据,正常启动只读数据库,
+    // 普通公权/宪法机构目录是持久化数据,正常启动只读数据库,
     // 不在健康检查前执行全量生成和逐条 upsert;但必须确认运行库目录来自当前
     // china.sqlite,否则行政区变更后旧公权机构会继续对外服务。
     ensure_gov_catalog_current_for_serve(&state)
@@ -2449,7 +2449,7 @@ fn main() {
         } else {
             warn!("chain genesis hash source not configured; onchina backend continues without chain");
         }
-        // 中文注释:链上集合鉴权(3b)——后台周期复查,清退已不在链上 Active 集合的管理员会话。
+        // 链上集合鉴权(3b)——后台周期复查,清退已不在链上 Active 集合的管理员会话。
         if core::chain_url::chain_ws_url().is_ok() {
             tokio::spawn(auth::login::revoke_stale_admin_sessions_loop(
                 state.db.clone(),
@@ -2535,7 +2535,7 @@ fn main() {
                 "/api/v1/admin/own-institution-admins",
                 get(auth::list_own_institution_admins),
             )
-            // 中文注释:机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
+            // 机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
             // - GET  /api/v1/institution/check-cid-full-name             — cid_full_name 查重
             // - POST /api/v1/institution/create                          — 公权/教育通用机构生成(不上链)
             // - POST /api/v1/private/<type>                              — 六类私权机构专属生成入口
@@ -2597,7 +2597,7 @@ fn main() {
             .route(
                 "/api/v1/institution/:cid_number",
                 get(institution::subjects::admin::get_institution)
-                    // 中文注释:详情页只更新机构资料;私权类型由创建时身份编码锁定,不可在此改。
+                    // 详情页只更新机构资料;私权类型由创建时身份编码锁定,不可在此改。
                     .patch(institution::subjects::admin::update_institution),
             )
             .route(
@@ -2664,7 +2664,7 @@ fn main() {
                 "/api/v1/admin/audit-logs",
                 get(audit::admin_list_audit_logs),
             )
-            // 中文注释:注册局管理员直接录入公民并直接发护照(POST),列表查询走 GET。
+            // 注册局管理员直接录入公民并直接发护照(POST),列表查询走 GET。
             .route(
                 "/api/v1/admin/citizens",
                 get(domains::citizens::handler::admin_list_citizens)
@@ -2724,7 +2724,7 @@ fn main() {
         // 链端 pull 通道全部走 app_routes 命名空间。
 
         let public_routes = Router::new()
-            // 中文注释:根路径 `/` 让给前端 SPA(经 fallback_service 的 ServeDir → index.html),
+            // 根路径 `/` 让给前端 SPA(经 fallback_service 的 ServeDir → index.html),
             // 健康检查走专用 `/api/v1/health`;否则浏览器访问注册局只会看到健康 JSON。
             .route("/api/v1/health", get(health))
             .route(
@@ -2803,7 +2803,7 @@ fn main() {
             );
 
         let app_state = state.clone();
-        // 中文注释:onchina 控制台同源托管管理员前端 dist;未匹配路径回退 index.html(SPA 路由)。
+        // onchina 控制台同源托管管理员前端 dist;未匹配路径回退 index.html(SPA 路由)。
         // 静态服务置于限流层之后,静态资源不走全局限流;dist 路径可由 ONCHINA_FRONTEND_DIST 覆盖。
         let frontend_dist = std::env::var("ONCHINA_FRONTEND_DIST")
             .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/frontend/dist").to_string());
@@ -2823,13 +2823,13 @@ fn main() {
             .fallback_service(frontend_service)
             .with_state(app_state);
 
-        // 中文注释:联邦注册局管理员采用同级模型;省域映射只做 CID 管辖元数据,
+        // 联邦注册局管理员采用同级模型;省域映射只做 CID 管辖元数据,
         // 管理员成员资格仍以链上 Active 集合为准,本地只允许同省更换投影。
 
         // 本地手机联调时必须监听到与 App 可访问的一致地址，避免只绑定回环导致超时。
         let addr = resolve_backend_bind_addr().expect("resolve onchina backend bind address");
 
-        // 中文注释(Card 05):收退出信号(Ctrl-C / node 停子进程 SIGTERM)→ 优雅停内嵌 PG → 退出。
+        // (Card 05):收退出信号(Ctrl-C / node 停子进程 SIGTERM)→ 优雅停内嵌 PG → 退出。
         // 内嵌关闭时无操作;daemon 化的 postgres 即便被强杀也会在下次 ensure_started 复用。
         tokio::spawn(async {
             shutdown_signal().await;
@@ -2841,7 +2841,7 @@ fn main() {
     });
 }
 
-/// 中文注释(Card 05):内网 TLS——正式入口固定为 https://onchina.local:8964;
+/// (Card 05):内网 TLS——正式入口固定为 https://onchina.local:8964;
 /// `ONCHINA_ENABLE_TLS` 关闭仅保留给底层开发调试。
 async fn serve_console(addr: SocketAddr, app: axum::Router) {
     let service = app.into_make_service_with_connect_info::<SocketAddr>();
@@ -2869,7 +2869,7 @@ async fn serve_console(addr: SocketAddr, app: axum::Router) {
 
 /// 下载本机构节点私有 CA 公钥证书。
 ///
-/// 中文注释:该接口必须保持未登录可访问,否则员工首次访问不可信 HTTPS 时无法先下载证书。
+/// 该接口必须保持未登录可访问,否则员工首次访问不可信 HTTPS 时无法先下载证书。
 /// 只返回 CA 公钥证书 PEM;CA 私钥只落在服务器本地 `ONCHINA_TLS_DIR`。
 async fn organization_ca_certificate() -> impl IntoResponse {
     match core::tls::organization_ca_certificate_pem() {
@@ -2963,7 +2963,7 @@ fn api_error(status: StatusCode, code: u32, message: &str) -> axum::response::Re
 }
 
 fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
-    // 中文注释:HTTP 状态表达协议层含义,稳定 error_code 表达业务语义;前端不得解析 message。
+    // HTTP 状态表达协议层含义,稳定 error_code 表达业务语义;前端不得解析 message。
     match message {
         "missing bearer token" => "ONCHINA_AUTH_MISSING_TOKEN",
         "invalid access token" => "ONCHINA_AUTH_INVALID_ACCESS_TOKEN",

@@ -1,12 +1,12 @@
 //! 立法投票 `cast_house_vote` 等裸 SCALE call-data 编码器(pallet idx 28)。
 //!
-//! 中文注释:链端 `legislation-vote` 的 5 个表决/签署 call 形态完全相同——
+//! 链端 `legislation-vote` 的 5 个表决/签署 call 形态完全相同——
 //! `(proposal_id: u64, approve: bool)`(lib.rs:317/329/342/355/367)。
 //! 复用 `core::institution_call` 的「构造裸 call data → 冷签 → CitizenWallet 提交」通道。
 //!
 //! `prepare_population_snapshot`(call 0,参数 `PopulationScope` 枚举)随特别案公投落地时单独增量,本文件不含。
 //!
-//! 中文注释:`cast_house_vote` 已接入 handler;`cast_referendum_vote`/`executive_sign`/`override_sign`/
+//! `cast_house_vote` 已接入 handler;`cast_referendum_vote`/`executive_sign`/`override_sign`/
 //! `guard_vote` 及其 call index 为公投/行政签署/护宪终审流预留(本轮读展示 + 另线程),暂无生产消费方。
 #![allow(dead_code)]
 

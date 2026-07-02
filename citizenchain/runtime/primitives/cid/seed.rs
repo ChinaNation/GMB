@@ -1,6 +1,6 @@
 //! CID 确定性种子协议。
 //!
-//! 中文注释:
+//!
 //! runtime 只保护种子字节格式,不做随机 UUID、数据库查重和撞号重试。
 
 use alloc::{format, string::String};

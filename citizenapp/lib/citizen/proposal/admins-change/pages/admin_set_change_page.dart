@@ -176,7 +176,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
       final balances = await ChainRpc().fetchFinalizedBalances(accounts);
       if (mounted) setState(() => _balanceByAccount = balances);
     } catch (_) {
-      // 中文注释:管理员更换编辑态余额读取失败不影响集合修改,余额值留空。
+      // 管理员更换编辑态余额读取失败不影响集合修改,余额值留空。
       if (mounted) setState(() => _balanceByAccount = const {});
     }
   }

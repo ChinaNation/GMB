@@ -8,7 +8,7 @@ use tauri::AppHandle;
 
 #[tauri::command]
 pub async fn prepare_desktop_update(app: AppHandle) -> Result<(), String> {
-    // 中文注释：downloadAndInstall 会触发安装器和进程重启，安装前先停节点，避免节点数据目录仍被占用。
+    // downloadAndInstall 会触发安装器和进程重启，安装前先停节点，避免节点数据目录仍被占用。
     tauri::async_runtime::spawn_blocking(move || home::stop_node_blocking(app).map(|_| ()))
         .await
         .map_err(|err| format!("prepare desktop update task failed: {err}"))?

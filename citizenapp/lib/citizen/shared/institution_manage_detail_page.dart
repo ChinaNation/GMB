@@ -237,7 +237,7 @@ class _InstitutionManageDetailPageState
           closeInfo: closeInfo,
         ));
       } catch (_) {
-        // 中文注释：详情快照只是首屏加速，写入失败不能影响链上结果展示。
+        // 详情快照只是首屏加速，写入失败不能影响链上结果展示。
       }
       if (!mounted) return;
       debugPrint('[VoteDetail._load] step5: setState');
@@ -581,7 +581,7 @@ class _InstitutionManageDetailPageState
       debugPrint(
           '[VoteDetail] submit 已入块 txHash=${result.txHash} nonce=${result.usedNonce} block=${result.blockHashHex}');
 
-      // 中文注释：服务层已经确认 runtime 投票记录，新流程不再写 pending。
+      // 服务层已经确认 runtime 投票记录，新流程不再写 pending。
       // 这里只清除旧版本可能残留的同管理员 pending 记录。
       await PendingVoteStore.instance.remove(
         'institution_multisig',
@@ -609,7 +609,7 @@ class _InstitutionManageDetailPageState
       );
 
       _adminService.clearCache(_accountIdentity);
-      // 中文注释：服务层已经等待入块并回读 InternalVote storage；这里
+      // 服务层已经等待入块并回读 InternalVote storage；这里
       // 只后台刷新展示状态，不能再把 txHash 当作投票成功依据。
       debugPrint('[VoteDetail] fire-and-forget 调 _load 后台刷新');
       unawaited(_load());

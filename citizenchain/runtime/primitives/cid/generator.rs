@@ -1,6 +1,6 @@
 //! CID 号核心生成协议。
 //!
-//! 中文注释:
+//!
 //! 本模块只接受已经解析好的行政区代码、行政区名称和年份,不读取 SQLite、
 //! 不读取系统时间、不做随机数和数据库查重。registry 负责把运行态输入解析好后
 //! 调用这里,从而让 CID 号码字节协议受到 runtime primitives 保护。
@@ -83,7 +83,7 @@ pub fn generate_cid_number(input: GenerateCidNumberInput<'_>) -> Result<String, 
         return Err("personal multisig (PMUL) has no cid number");
     }
 
-    // 中文注释:盈利属性由机构码策略决定;可变/继承策略读取入参。
+    // 盈利属性由机构码策略决定;可变/继承策略读取入参。
     let profit = match code::profit_policy(&institution_code) {
         Some(ProfitPolicy::NonProfit) => false,
         Some(ProfitPolicy::Profit) => true,
@@ -109,7 +109,7 @@ pub fn generate_cid_number(input: GenerateCidNumberInput<'_>) -> Result<String, 
     let code_str =
         code::institution_code_text(&institution_code).ok_or("institution code text missing")?;
     let r5 = format!("{}{}", input.province_code, city_code);
-    // 中文注释:同 (机构码,省,市,year) 四元组共享 10 亿 n9 桶;registry 用查重重试逃逸碰撞。
+    // 同 (机构码,省,市,year) 四元组共享 10 亿 n9 桶;registry 用查重重试逃逸碰撞。
     let n9 = format!(
         "{:09}",
         (hash_text(&format!(

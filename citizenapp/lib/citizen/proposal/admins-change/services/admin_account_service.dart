@@ -111,7 +111,7 @@ class AdminAccountService {
       final threshold =
           decoded == null ? null : await _resolveThreshold(decoded, accountId);
       final state = decoded?.copyWith(threshold: threshold ?? 0);
-      // 中文注释：管理员账户属于链上动态数据；内存缓存挡住页面短时间重复进入，
+      // 管理员账户属于链上动态数据；内存缓存挡住页面短时间重复进入，
       // AppKv 持久化快照则保障重启后首屏不必同步等待链上 storage。
       if (state != null && generation == _cacheGeneration) {
         _cache[accountKey] = _AdminAccountCacheEntry(state);
@@ -218,7 +218,7 @@ class AdminAccountService {
       });
       _persistedBypassKeys.remove(AdminAccountIdCodec.normalizeHex(accountKey));
     } catch (_) {
-      // 中文注释：管理员账户持久化只是展示加速，写入失败不能阻断链上结果返回。
+      // 管理员账户持久化只是展示加速，写入失败不能阻断链上结果返回。
     }
   }
 

@@ -1,4 +1,4 @@
-// 中文注释:本级法律列表(只读)。会话派生 scope,调 /api/legislation/laws/mine;
+// 本级法律列表(只读)。会话派生 scope,调 /api/legislation/laws/mine;
 // 行点击进详情。无缓存库,沿用 useEffect + useState + 取消标志的取数范式。
 
 import React, { useEffect, useMemo, useState } from "react";

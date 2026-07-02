@@ -1,6 +1,6 @@
 //! 立法冷签动作:组织 `ChainCall` → 构造扫码上链 `sign_request`(复用机构创建同款 `build_sign_request_bytes`)。
 //!
-//! 中文注释:立法提案/院内表决是**链上 extrinsic**(议员 origin 冷签提交),走链交易 QR 路径
+//! 立法提案/院内表决是**链上 extrinsic**(议员 origin 冷签提交),走链交易 QR 路径
 //! (`b.a = chain_action_code(pallet, call)`、`b.d = SCALE call_data`),**不走** `onchina_admin_governance`
 //! 文本 QR 路径,故不经 `auth/actions.rs` 的 prepare/commit 治理流。范式与
 //! `institution::subjects::registration::build_institution_create_sign_request` 完全一致。
@@ -24,7 +24,7 @@ const LEGISLATION_SIGN_TTL_SECONDS: i64 = 120;
 
 /// 立法提案冷签 `sign_request`(actor_pubkey = 发起议员;`resolve_account` 注入机构账户解析)。
 ///
-/// 中文注释:houses/executive/legislature 由宪法路由 + `resolve_account` 解析,前端不传(防越权)。
+/// houses/executive/legislature 由宪法路由 + `resolve_account` 解析,前端不传(防越权)。
 pub(crate) fn build_propose_law_sign_request(
     input: &ProposeLawInput,
     proposer_code: [u8; 4],

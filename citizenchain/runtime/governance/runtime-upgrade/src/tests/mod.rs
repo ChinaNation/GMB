@@ -96,7 +96,7 @@ thread_local! {
 
 pub struct TestJointVoteEngine;
 impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
-    // 中文注释：测试 mock 模拟投票引擎“已准备好投票上下文”的创建入口，
+    // 测试 mock 模拟投票引擎“已准备好投票上下文”的创建入口，
     // runtime-upgrade 测试不再传入人口快照或联合签名材料。
     fn create_joint_proposal(_who: AccountId32) -> Result<u64, DispatchError> {
         NEXT_JOINT_ID.with(|id| {
@@ -333,7 +333,7 @@ fn insert_engine_proposal_with_status(proposal_id: u64, status: u8) {
             subject_cid_numbers: Default::default(),
             start: 0u64,
             end: 100u64,
-            // 中文注释：这是 votingengine::Proposal 的固定字段，非 runtime-upgrade 入参。
+            // 这是 votingengine::Proposal 的固定字段，非 runtime-upgrade 入参。
             citizen_eligible_total: 10,
         },
     );

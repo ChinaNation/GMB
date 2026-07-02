@@ -32,7 +32,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     }
 
     fn ensure_valid_admin_snapshot(admins: &[T::AccountId]) -> DispatchResult {
-        // 中文注释：内部投票一旦创建就只认快照；空快照会导致提案无人可投，
+        // 内部投票一旦创建就只认快照；空快照会导致提案无人可投，
         // 重复管理员会破坏“一管理员一票”的票权语义，所以必须在写快照前拒绝。
         frame_support::ensure!(!admins.is_empty(), Error::<T>::MissingAdminSnapshot);
         for i in 0..admins.len() {

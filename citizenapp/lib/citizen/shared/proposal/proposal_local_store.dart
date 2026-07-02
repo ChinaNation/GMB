@@ -10,7 +10,7 @@ import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_model
 
 /// 提案列表本地持久化读库。
 ///
-/// 中文注释：这里复用 Isar 的 AppKvEntity 保存“展示摘要”和“机构列表索引”，
+/// 这里复用 Isar 的 AppKvEntity 保存“展示摘要”和“机构列表索引”，
 /// 只服务治理机构详情页和公民-提案列表展示；投票、执行、提交前仍必须重查链上真值。
 class ProposalLocalStore {
   ProposalLocalStore._();

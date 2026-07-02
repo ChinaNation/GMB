@@ -39,11 +39,7 @@ use super::{decode_account, institution_info, is_joint_unanimous, nrc_account};
 
 #[cfg(test)]
 use codec::Encode;
-
-// ──────────────────────────────────────────────────────────────────
 // 私有 helper:发起人机构解析 + (institution_code, weight) profile
-// ──────────────────────────────────────────────────────────────────
-
 pub(super) fn institution_profile<T: Config>(id: &T::AccountId) -> Option<(InstitutionCode, u32)> {
     if CHINA_CB
         .first()
@@ -145,11 +141,7 @@ fn joint_subject_cid_numbers<T: Config>() -> Result<ProposalSubjectCidNumbers, D
     }
     <votingengine::Pallet<T>>::bound_subject_cid_numbers(raw)
 }
-
-// ──────────────────────────────────────────────────────────────────
 // 业务方法 — 挂在 super::Pallet<T> 上
-// ──────────────────────────────────────────────────────────────────
-
 impl<T: Config> Pallet<T> {
     pub(super) fn joint_stage_duration() -> frame_system::pallet_prelude::BlockNumberFor<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
@@ -161,7 +153,7 @@ impl<T: Config> Pallet<T> {
 
     /// 准备联合投票人口快照。
     ///
-    /// 中文注释：这是投票引擎内部能力。业务模块不传快照材料，只能在发起联合提案前由管理员调用本入口，让 joint-vote 从链上身份模块读取总人数。
+    /// 这是投票引擎内部能力。业务模块不传快照材料，只能在发起联合提案前由管理员调用本入口，让 joint-vote 从链上身份模块读取总人数。
     pub fn do_prepare_population_snapshot(
         who: T::AccountId,
         scope: PopulationScope,
@@ -230,7 +222,7 @@ impl<T: Config> Pallet<T> {
                 return TransactionOutcome::Rollback(Err(err));
             }
 
-            // 中文注释:联合提案关联全部固定治理机构,互斥锁按机构 CID 而非账户占用。
+            // 联合提案关联全部固定治理机构,互斥锁按机构 CID 而非账户占用。
             for subject in proposal.subject_keys() {
                 if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                     id,

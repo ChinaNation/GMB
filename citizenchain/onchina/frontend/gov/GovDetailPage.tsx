@@ -1,4 +1,4 @@
-// 中文注释:机构详情页(调度器)。各类机构统一使用左侧导航详情布局;
+// 机构详情页(调度器)。各类机构统一使用左侧导航详情布局;
 // 私权机构仍由 PrivateDetailLayout 承接本模块独有编辑逻辑。
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -46,7 +46,7 @@ interface Props {
   loadDetail?: () => Promise<InstitutionDetail>;
   /** 注册局机构详情页:有管理员数据时显示“管理员列表”tab;普通机构不传。 */
   adminListSection?: React.ReactNode;
-  /** 中文注释:注册局管理员进入详情页时可默认打开管理员列表。 */
+  /** 注册局管理员进入详情页时可默认打开管理员列表。 */
   initialActiveKey?: string;
 }
 
@@ -166,7 +166,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
     }
   };
 
-  // 中文注释:注册局注销整个机构——走 PASSKEY_COLD_SIGN 最严档,后端校验通过后签发注销凭证
+  // 注册局注销整个机构——走 PASSKEY_COLD_SIGN 最严档,后端校验通过后签发注销凭证
   // (整机构 scope);机构管理员再拉 /deregistration-info 构造 propose_close 上链(见 ADR-023 §6.3)。
   // 创世/治理机构由后端 is_genesis_protected/org 闸权威拒,前端按 created_by 隐藏入口。
   const onDeregisterInstitution = async () => {

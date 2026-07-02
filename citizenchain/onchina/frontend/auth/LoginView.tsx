@@ -1,4 +1,4 @@
-// 中文注释:独立的登录页组件:渲染未登录态(QR 扫码登录 + 签名请求/响应),
+// 独立的登录页组件:渲染未登录态(QR 扫码登录 + 签名请求/响应),
 // 持有登录相关 state / handler / useEffect / videoRef,
 // 登录成功后通过 useAuth().setAuth 写入全局,App.tsx 只负责在 !auth 时渲染 <LoginView />。
 
@@ -30,7 +30,7 @@ const CA_CERTIFICATE_URL = '/api/v1/platform/ca-certificate';
 
 function shouldShowOrganizationCaNotice(): boolean {
   if (typeof window === 'undefined') return false;
-  // 中文注释:浏览器不开放读取系统根证书库;前端只能用当前页面是否为可信 HTTPS
+  // 浏览器不开放读取系统根证书库;前端只能用当前页面是否为可信 HTTPS
   // 安全上下文判断证书安装结果。证书被信任后登录页和后台页都不再显示 CA 提示。
   return !(window.location.protocol === 'https:' && window.isSecureContext);
 }

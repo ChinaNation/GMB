@@ -20,7 +20,7 @@ use votingengine::JointVoteResultCallback;
 
 /// 模块标识前缀，用于在投票引擎 ProposalData 中识别决议发行提案。
 ///
-/// 中文注释：该值是跨端识别决议发行提案的稳定业务标签。
+/// 该值是跨端识别决议发行提案的稳定业务标签。
 pub const MODULE_TAG: &[u8] = b"res-iss";
 
 #[frame_support::pallet]
@@ -43,7 +43,7 @@ pub mod pallet {
         <T as Config>::MaxAllocations,
     >;
 
-    /// 中文注释：联合投票终结后的业务执行结果，用于回调时告知投票引擎写入最终执行状态。
+    /// 联合投票终结后的业务执行结果，用于回调时告知投票引擎写入最终执行状态。
     pub(crate) enum FinalizeOutcome {
         ApprovedExecutionSucceeded,
         ApprovedExecutionFailed,
@@ -243,7 +243,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 创建“决议发行”联合投票提案。
-        /// 中文注释：本模块只提交决议发行业务内容；人口快照、联合签名、
+        /// 本模块只提交决议发行业务内容；人口快照、联合签名、
         /// 投票资格和计票流程全部由 votingengine 负责。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_resolution_issuance())]

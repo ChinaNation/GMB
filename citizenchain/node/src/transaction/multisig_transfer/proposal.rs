@@ -181,7 +181,7 @@ fn fetch_safety_fund_proposal_action(
         "SafetyFundProposalActions",
         &proposal_id.to_le_bytes(),
     );
-    // 中文注释:多签转账动作的金额展示以 finalized storage 为准(ADR-017 收口)。
+    // 多签转账动作的金额展示以 finalized storage 为准(ADR-017 收口)。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(None),
         Some(hex_data) => {
@@ -222,7 +222,7 @@ fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalD
         "SweepProposalActions",
         &proposal_id.to_le_bytes(),
     );
-    // 中文注释:多签转账动作的金额展示以 finalized storage 为准(ADR-017 收口)。
+    // 多签转账动作的金额展示以 finalized storage 为准(ADR-017 收口)。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(None),
         Some(hex_data) => {

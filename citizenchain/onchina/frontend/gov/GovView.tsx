@@ -1,4 +1,4 @@
-// 中文注释:公权机构页面入口。市公安局已折叠为普通公权机构,统一在公权机构列表展示。
+// 公权机构页面入口。市公安局已折叠为普通公权机构,统一在公权机构列表展示。
 //
 // 视觉完全复用"注册局"的 Card 样式(glassCardStyle / glassCardHeadStyle),
 // 保证横线颜色、毛玻璃底、绿色左竖条与注册局完全一致。
@@ -55,7 +55,7 @@ export const GovView: React.FC<Props> = ({ auth, cidMeta, resetToken = 0 }) => {
   const [committedSearch, setCommittedSearch] = useState('');
 
   useEffect(() => {
-    // 中文注释:顶层 tab 切换必须打断详情页状态,避免停留在旧详情。
+    // 顶层 tab 切换必须打断详情页状态,避免停留在旧详情。
     setSelectedProvince(null);
     setSelectedCity(null);
     setSelectedCidNumber(null);
@@ -86,7 +86,7 @@ export const GovView: React.FC<Props> = ({ auth, cidMeta, resetToken = 0 }) => {
   const effectiveProvince = selectedProvince ?? lockedProvinceName;
   const effectiveCity = selectedCity ?? (scope.skipCityList ? lockedCityName : null);
 
-  // 中文注释:普通公权目录由后端自动生成;手动新增两能力:公权机构(G,ZF/LF/SF/JC)
+  // 普通公权目录由后端自动生成;手动新增两能力:公权机构(G,ZF/LF/SF/JC)
   // 和公权下属非法人(F,挂公法人)。JY 教育机构统一归教育 tab。
   const onSubmitSearch = () => {
     setCommittedSearch(searchInput.trim());

@@ -257,7 +257,7 @@ pub(crate) async fn sync_saved_reward_wallet_inner(app: &AppHandle) -> Result<()
         }
 
         // 查询链上当前绑定状态
-        // 中文注释(ADR-017):绑定状态属于链上状态读取,按 finalized 口径,禁止 best。
+        // (ADR-017):绑定状态属于链上状态读取,按 finalized 口径,禁止 best。
         let storage_key = reward_wallet_storage_key(&miner_bytes);
         let hex_key = format!("0x{}", hex::encode(&storage_key));
         let raw = crate::governance::chain_query::fetch_finalized_storage(&hex_key)?;

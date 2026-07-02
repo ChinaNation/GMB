@@ -5,7 +5,7 @@
 # 正式创世必须在 GitHub WASM CI 成功后执行:
 #   citizenchain/scripts/bake-chainspec.sh --finalize --wasm /path/to/citizenchain.compact.compressed.wasm
 #
-# 中文注释:正式模式会把同一份 raw spec 同步到:
+# 正式模式会把同一份 raw spec 同步到:
 #   1. citizenchain/node/chainspecs/citizenchain.raw.json
 #   2. citizenapp/assets/chainspec.json
 set -euo pipefail

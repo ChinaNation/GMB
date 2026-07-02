@@ -15,7 +15,7 @@ pub const MAX_DECIMALS: u8 = 18;
 
 /// 校验发行机构账户地址。
 ///
-/// 中文注释：具体“是否为已注册机构多签、发起人是否为该账户管理员”由 pallet 调用
+/// 具体“是否为已注册机构多签、发起人是否为该账户管理员”由 pallet 调用
 /// admins 模块 / 实体生命周期模块的账户级接口完成；本函数只拒绝空编码。
 pub fn ensure_issuer_allowed<AccountId: codec::Encode>(
     issuer_account: &AccountId,
@@ -38,7 +38,7 @@ pub fn ensure_decimals_in_range(decimals: u8) -> Result<(), &'static str> {
 
 /// 校验资产 class 是否被第一期支持。
 ///
-/// 中文注释:Pegged 协议位预留,当前一律 reject,避免锚定语义滑入。
+/// Pegged 协议位预留,当前一律 reject,避免锚定语义滑入。
 pub fn ensure_class_supported(class: &AssetClass) -> Result<(), &'static str> {
     match class {
         AssetClass::Plain => Ok(()),
@@ -48,7 +48,7 @@ pub fn ensure_class_supported(class: &AssetClass) -> Result<(), &'static str> {
 
 /// 检查字段是否命中黑名单(忽略大小写,中文直接字节匹配)。
 ///
-/// 中文注释:输入字段先全部 ASCII 小写化,再与黑名单逐词 substring 匹配。
+/// 输入字段先全部 ASCII 小写化,再与黑名单逐词 substring 匹配。
 /// 中文 UTF-8 字节固定,直接匹配。本函数是 O(N×M) 朴素扫描,
 /// 词表规模小(<256 条)+ 字段长度小(<256 字节)下足够,无需 Aho-Corasick。
 pub fn contains_blacklisted_word(field: &[u8], blacklist: &[Vec<u8>]) -> bool {

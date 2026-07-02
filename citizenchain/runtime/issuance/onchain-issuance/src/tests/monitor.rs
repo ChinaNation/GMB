@@ -8,6 +8,6 @@
 
 #[test]
 fn placeholder_monitor_compiles() {
-    // 中文注释:框架阶段占位,业务实装时本测试整体替换为真实监管场景。
+    // 框架阶段占位,业务实装时本测试整体替换为真实监管场景。
     assert!(true);
 }

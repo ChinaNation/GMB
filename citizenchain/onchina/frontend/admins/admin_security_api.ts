@@ -1,4 +1,4 @@
-// 中文注释:管理员安全动作 API。
+// 管理员安全动作 API。
 // 管理端权限统一为 SESSION / PASSKEY / PASSKEY_COLD_SIGN 三档。
 // PASSKEY_COLD_SIGN 动作走 prepare → 冷钱包扫码签名 → commit。
 
@@ -43,7 +43,7 @@ export function formatAdminCreateError(error: unknown, targetRegistryOrgCode: Re
   if (!(error instanceof ApiError)) {
     return error instanceof Error ? error.message : fallback;
   }
-  // 中文注释:管理员新增失败统一按稳定 error_code 显示,不解析后端 message。
+  // 管理员新增失败统一按稳定 error_code 显示,不解析后端 message。
   if (error.errorCode === 'ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY') {
     return targetRegistryOrgCode === 'FEDERAL_REGISTRY'
       ? '该账户已是联邦注册局管理员，不能作为新账户使用'
@@ -75,7 +75,7 @@ export async function prepareAdminAction(
   });
 }
 
-// 中文注释:PASSKEY_COLD_SIGN commit 只携带冷钱包扫码签名字段。
+// PASSKEY_COLD_SIGN commit 只携带冷钱包扫码签名字段。
 export async function commitAdminAction<T>(
   auth: AdminAuth,
   input: {
@@ -92,13 +92,13 @@ export async function commitAdminAction<T>(
   });
 }
 
-// 中文注释:组件提供的「扫码签名」回调:给定已 prepare 的 PASSKEY_COLD_SIGN 动作,
+// 组件提供的「扫码签名」回调:给定已 prepare 的 PASSKEY_COLD_SIGN 动作,
 // 弹出公民钱包二维码并扫描签名响应,解析出 signer_pubkey/signature 回传。
 export type ScanSignResolver = (
   prepared: PrepareAdminActionOutput,
 ) => Promise<{ signer_pubkey: string; signature: string }>;
 
-// 中文注释:统一的 PASSKEY_COLD_SIGN 安全授权:prepare → 组件扫码签名 → commit 取回一次性 grant。
+// 统一的 PASSKEY_COLD_SIGN 安全授权:prepare → 组件扫码签名 → commit 取回一次性 grant。
 // SESSION 动作不走这里(无 commit,业务 handler 仅凭会话执行)。
 export async function createScanSignSecurityGrant(
   auth: AdminAuth,

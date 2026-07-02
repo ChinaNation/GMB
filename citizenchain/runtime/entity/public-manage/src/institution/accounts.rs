@@ -41,7 +41,7 @@ pub(crate) fn account_names_payload_from_initial_accounts<T: Config>(
     Ok(names)
 }
 
-// 中文注释:批量 register 入口用的 account_names_payload_from_names 实现保留在
+// 批量 register 入口用的 account_names_payload_from_names 实现保留在
 // lib.rs 内 `Pallet::<T>::account_names_payload_from_names`(register.rs 直接调),
 // 此处不重复。
 

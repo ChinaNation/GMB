@@ -1,4 +1,4 @@
-// 中文注释:机构新增弹窗共享表单(私权/公权/教育三入口共用)。
+// 机构新增弹窗共享表单(私权/公权/教育三入口共用)。
 // 各入口只传入本模块 API 函数,不在公共组件里越过业务边界。
 //
 // 主体属性统一联动(与后端号码生成器/subjects/unincorporated_org 同源):
@@ -157,7 +157,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const showEducationType = isEducation && !isF;
   const watchedAdmins = Form.useWatch('admins', form) as FormValues['admins'] | undefined;
 
-  // 中文注释:私权目标态创建阶段直接写入全称;教育学校和手动公权机构也在弹窗内查重。
+  // 私权目标态创建阶段直接写入全称;教育学校和手动公权机构也在弹窗内查重。
   const collectNameInModal = isPrivate || isEducation || (isGov && !isF);
   const nameLabel = isEducation ? '学校全称' : '机构全称';
 
@@ -274,7 +274,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const onSubjectPropertyChange = (subject_property: string) => {
     setCurrentSubjectProperty(subject_property);
     setCidFullNameAvailable(null);
-    // 中文注释:切主体属性必须重置所属法人与 p1(F 的 p1 是父级继承值,残留会提交旧值)。
+    // 切主体属性必须重置所属法人与 p1(F 的 p1 是父级继承值,残留会提交旧值)。
     resetParentState();
     setLegalRepOptions([]);
     const nextInstitution = institutionChoicesFor(category, subject_property)[0]?.value;
@@ -381,7 +381,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       notice.warning(`请先输入${nameLabel}`);
       return;
     }
-    // 中文注释:G(公立学校/公权机构)查重是同市同 cid_full_name,S/F 全国查重。
+    // G(公立学校/公权机构)查重是同市同 cid_full_name,S/F 全国查重。
     const isGovName = currentSubjectProperty === 'G';
     if (isGovName) {
       const city_name = (form.getFieldValue('city_name') ?? '').trim();
@@ -612,7 +612,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       destroyOnClose
     >
       <Form form={form} layout="vertical" onFinish={onSubmit}>
-        {/* 中文注释:短选项字段双列排布压低弹窗高度;所属法人/法定代表人身份ID 内容长,保持整行。 */}
+        {/* 短选项字段双列排布压低弹窗高度;所属法人/法定代表人身份ID 内容长,保持整行。 */}
         <Row gutter={16}>
           {isPrivate && privateType === 'PARTNERSHIP' && (
             <Col span={24}>
@@ -665,7 +665,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                 options={cities.map((c) => ({ label: c.city_name, value: c.city_name }))}
                 placeholder="请选择市"
                 onChange={() => {
-                  // 中文注释:G 全称查重按市,所属法人搜索按落位省市;换市后两者都要重来。
+                  // G 全称查重按市,所属法人搜索按落位省市;换市后两者都要重来。
                   if (currentSubjectProperty === 'G' && cidFullNameAvailable !== null) {
                     setCidFullNameAvailable(null);
                   }

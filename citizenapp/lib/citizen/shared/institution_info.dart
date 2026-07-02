@@ -1,6 +1,6 @@
 /// 跨模块共用：机构/多签账户的数据载体类型 + 身份编码工具。
 ///
-/// 中文注释：
+///
 /// - 内置治理机构静态注册表（`kNationalCouncil`/`kProvincialCouncils`/`kProvincialBanks`）+
 ///   `findInstitutionByAccountId()`/`jointVoteTotal`/`jointVotePassThreshold` 在
 ///   `lib/citizen/institution/governance_registry.dart`。
@@ -56,7 +56,7 @@ class OrgType {
 
 /// 治理机构及多签账户的制度账户集合。
 ///
-/// 中文注释：内置治理机构没有笼统的 `account`；链端按主账户、费用账户、
+/// 内置治理机构没有笼统的 `account`；链端按主账户、费用账户、
 /// 国储会安全基金账户、省储行永久质押账户分别建模。个人多签/机构账户只使用主账户。
 class InstitutionAccounts {
   const InstitutionAccounts({
@@ -123,7 +123,7 @@ class InstitutionInfo {
 
   /// 制度账户集合。
   ///
-  /// 中文注释：治理机构使用生成的完整账户集合；个人多签/机构账户使用
+  /// 治理机构使用生成的完整账户集合；个人多签/机构账户使用
   /// 主账户 AccountId作为多签账户。
   final InstitutionAccounts? accounts;
 

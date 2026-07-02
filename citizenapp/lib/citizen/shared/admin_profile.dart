@@ -24,7 +24,7 @@ extension AdminProfileSourceLabel on AdminProfileSource {
 
 /// 机构管理员链上公开资料,镜像链端 `admin-primitives::AdminProfile`。
 ///
-/// 中文注释:`account` 是密码学账户;`cidNumber` 是注册局签发、与真人一一绑定的实名锚;
+/// `account` 是密码学账户;`cidNumber` 是注册局签发、与真人一一绑定的实名锚;
 /// 姓名/职务/任期供 CitizenApp 跨机构展示。**个人多签(PersonalAdmins,kind=2)只有 account**,
 /// 其余字段空(链端 personal-admins 存裸 `Vec<AccountId>`,无 AdminProfile)。
 class AdminProfile {

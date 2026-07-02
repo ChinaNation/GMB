@@ -1019,14 +1019,14 @@ mod tests {
 
     #[test]
     fn citizens_sum_matches_genesis_total() {
-        // 中文注释：43 省储行人口汇总必须与创世人口常量一致。
+        // 43 省储行人口汇总必须与创世人口常量一致。
         let citizens_sum: u64 = CHINA_CH.iter().map(|n| n.citizens_number).sum();
         assert_eq!(citizens_sum, GENESIS_CITIZEN_MAX);
     }
 
     #[test]
     fn stake_sum_matches_population_basis() {
-        // 中文注释：省储行创立发行按"每人 10_000 分"汇总。
+        // 省储行创立发行按"每人 10_000 分"汇总。
         let citizens_sum: u128 = CHINA_CH.iter().map(|n| n.citizens_number as u128).sum();
         let stake_sum: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
         assert_eq!(stake_sum, citizens_sum * 10_000u128);
@@ -1034,7 +1034,7 @@ mod tests {
 
     #[test]
     fn all_china_ch_main_accounts_are_unique() {
-        // 中文注释：43 个省储行的多签账户必须全部唯一，不允许两省共用同一地址。
+        // 43 个省储行的多签账户必须全部唯一，不允许两省共用同一地址。
         let mut addrs: Vec<[u8; 32]> = CHINA_CH.iter().map(|n| n.main_account).collect();
         let total = addrs.len();
         addrs.sort();

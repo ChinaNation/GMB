@@ -56,7 +56,7 @@ class OnchainAssetActions {
   /// 链端铁律:每个用户代币创建一次性 reserve 1000 GMB(= 100_000 FEN)押金,
   /// 提案通过则 transfer 给 NRC fee_account,否决则退还 proposer。
   ///
-  /// 中文注释:用户在 asset_issue_page 发起前必须本地预校验 GMB 余额 ≥ 1000,
+  /// 用户在 asset_issue_page 发起前必须本地预校验 GMB 余额 ≥ 1000,
   /// 避免发起后链端因余额不足 reserve 失败浪费一次提交。
   static const int issueCreationFeeFen = 100000;
 

@@ -22,7 +22,7 @@ pub fn chain_config() -> Result<ChainSpec, String> {
 
 /// 使用当前编译进 node 的 `WASM_BINARY` 生成 fresh genesis chain spec。
 ///
-/// 中文注释：该入口只给 `clean-run.sh` 生成本机重新创世 raw spec 使用。默认启动
+/// 该入口只给 `clean-run.sh` 生成本机重新创世 raw spec 使用。默认启动
 /// 仍走 `chain_config()` 的冻结主网 JSON,避免误改线上 genesis。
 pub fn fresh_genesis_config() -> Result<ChainSpec, String> {
     let wasm = citizenchain::WASM_BINARY.ok_or_else(|| {
@@ -33,7 +33,7 @@ pub fn fresh_genesis_config() -> Result<ChainSpec, String> {
     properties.insert("tokenDecimals".into(), serde_json::json!(2));
     properties.insert("tokenSymbol".into(), serde_json::json!("GMB"));
 
-    // 中文注释:从冻结主网 chainspec 复用 44 个 bootnode 地址,
+    // 从冻结主网 chainspec 复用 44 个 bootnode 地址,
     // 让所有清链后的节点继续通过同一组 DNS/PeerId 互联组网,避免变成孤岛。
     let frozen: serde_json::Value = serde_json::from_slice(CHAIN_SPEC_RAW)
         .map_err(|e| format!("解析冻结 chainspec 失败: {e}"))?;
@@ -50,7 +50,7 @@ pub fn fresh_genesis_config() -> Result<ChainSpec, String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    // 中文注释:WASM runtime 在 no_std 下 `get_preset` 永远返回 None,
+    // WASM runtime 在 no_std 下 `get_preset` 永远返回 None,
     // 不能走 `with_genesis_config_preset_name`。直接调用 runtime crate 的 std 版
     // `genesis_config()` 在 host 端构出完整 JSON,再 `with_genesis_config_patch` 注入。
     let genesis_patch = citizenchain::genesis::genesis_config();

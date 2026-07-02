@@ -1,6 +1,6 @@
 // 行政区字典本地存储 —— Isar 实现(ADR-021 行政区唯一真源)。
 //
-// 中文注释:全国 5 万条(省43/市3185/镇47574),分块写避免巨型事务卡 UI;
+// 全国 5 万条(省43/市3185/镇47574),分块写避免巨型事务卡 UI;
 // 查询走唯一索引 divisionKey / scopeKey,UI 显示名零现查。
 
 import 'package:isar_community/isar.dart';

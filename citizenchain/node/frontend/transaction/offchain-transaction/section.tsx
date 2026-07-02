@@ -80,7 +80,7 @@ export function ClearingBankSection() {
   const goAdd = useCallback(() => setView({ kind: 'add-input-cid' }), []);
 
   const goCheckMultisig = useCallback((cidNumber: string, cidFullName: string) => {
-    // 中文注释:**不在此处** saveKnownCid。用户只是选了候选,链上未必存在。
+    // **不在此处** saveKnownCid。用户只是选了候选,链上未必存在。
     // 只有 goInstitutionDetail(链上确认存在)才调 saveKnownCid。
     setView({ kind: 'check-multisig', cidNumber, cidFullName });
   }, []);
@@ -215,7 +215,7 @@ export function ClearingBankSection() {
 
 // ─── 子组件:空视图 + 已添加列表 ───
 //
-// 中文注释:挂载时自愈本地脏数据 ——— 对每个 knownCid 条目调
+// 挂载时自愈本地脏数据 ——— 对每个 knownCid 条目调
 // fetchInstitutionDetail(cidNumber);链上 None 即从 localStorage 移除。
 //
 // 链查失败(网络/节点未运行)时**保留**条目(避免误删合法记录)。

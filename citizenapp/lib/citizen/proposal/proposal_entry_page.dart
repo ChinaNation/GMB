@@ -23,7 +23,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 提案类型选择页(个人多签/创世治理机构/注册机构账户统一入口)。
 ///
-/// 中文注释:页面只把当前机构包装成 `ProposalSubject`,具体能发起哪些提案统一交给
+/// 页面只把当前机构包装成 `ProposalSubject`,具体能发起哪些提案统一交给
 /// `ProposalCapabilityRegistry`。机构码仍参与判断,但只在能力规则层集中使用。
 class ProposalEntryPage extends StatefulWidget {
   const ProposalEntryPage({

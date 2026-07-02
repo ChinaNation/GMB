@@ -33,7 +33,7 @@ where
 
 /// 阶段 1:propose_issue 时 reserve 1000 GMB,写入 IssueDeposit storage。
 ///
-/// 中文注释:`Currency::reserve` 失败原因仅可能是 issuer 余额不足,链端在 ensure 链上拦截。
+/// `Currency::reserve` 失败原因仅可能是 issuer 余额不足,链端在 ensure 链上拦截。
 /// reserve 后 GMB 仍属 proposer,只是被锁定,直到 callback 决定 release/refund。
 pub fn reserve_creation_deposit<T: Config>(
     proposer: &T::AccountId,
@@ -56,7 +56,7 @@ where
 
 /// 阶段 2:callback 通过时,unreserve 后 transfer 给 NRC fee_account。
 ///
-/// 中文注释:实际净效果 = 押金从 proposer 永久转入 NRC。
+/// 实际净效果 = 押金从 proposer 永久转入 NRC。
 /// 步骤拆为 unreserve + transfer 而非直接 `repatriate_reserved`,
 /// 保证 transfer 失败时余额仍可见(便于审计)。
 pub fn release_creation_deposit_to_nrc<T: Config>(proposal_id: u64) -> DispatchResult

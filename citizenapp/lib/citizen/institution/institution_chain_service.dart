@@ -10,7 +10,7 @@ import 'multisig_storage_codec.dart';
 
 /// 机构链访问只读服务(机构管理 / 生命周期层,公权私权共用)。
 ///
-/// 中文注释:机构创建/关闭已收归 onchina 控制台 + 冷钱包,本服务**只读**:
+/// 机构创建/关闭已收归 onchina 控制台 + 冷钱包,本服务**只读**:
 /// CID 注册状态、机构多签账户身份/账户/管理员/动态阈值、机构管理提案(关闭)解码。
 /// 公权/私权机构 storage 同名(`Institutions`/`InstitutionAccounts`/`AccountRegisteredCid`/
 /// `CidRegisteredAccount`)但前缀随 pallet 名变(PublicManage/PrivateManage);给定账户无法
@@ -104,7 +104,7 @@ class InstitutionChainService {
 
   /// 批量查询机构多签账户状态。
   ///
-  /// 中文注释：机构多签需要先从账户反查 CID 与账户名(双查命中 pallet)，再按命中 pallet
+  /// 机构多签需要先从账户反查 CID 与账户名(双查命中 pallet)，再按命中 pallet
   /// 读取账户主体和机构主体，最后按机构码读管理员主体，所以必须分阶段批量读取。
   Future<Map<String, InstitutionAccountInfo?>> fetchAccountsBatch(
     Iterable<String> accountHexList, {

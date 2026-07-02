@@ -1,6 +1,6 @@
 //! 机构/账户业务校验 + 分类 + 唯一性
 //!
-//! 中文注释:凡是要在 handler 里做的业务级校验(不是简单的格式校验),都放这里。
+//! 凡是要在 handler 里做的业务级校验(不是简单的格式校验),都放这里。
 //! handler 只负责调用 service + 转 HTTP 响应。
 
 #![allow(dead_code)]
@@ -318,7 +318,7 @@ pub fn derive_category(institution_code: &str, cid_full_name: &str) -> Option<In
 
 /// 按机构类型构造默认未上链账户。
 ///
-/// 中文注释:默认账户是机构主体的公共能力,由调用方写入结构化 `accounts` 表。
+/// 默认账户是机构主体的公共能力,由调用方写入结构化 `accounts` 表。
 pub fn build_default_accounts_for_names(
     cid_number: &str,
     actor: &str,

@@ -1,6 +1,6 @@
 //! 立法大屏只读看板(Phase 3)。
 //!
-//! 中文注释:大厅正中大屏免登录只读展示——本节点绑定机构的**议员名册**(链上 Active 管理员)×
+//! 大厅正中大屏免登录只读展示——本节点绑定机构的**议员名册**(链上 Active 管理员)×
 //! **活跃立法提案**(`VotingEngine::ActiveProposalsBySubject`)× **逐席投票**
 //! (`LegislationVote::LegHouseVotesByAdmin`)。机构由节点绑定(`active_node_binding`)确定,
 //! **不接受任何请求参数**——大屏只映射本节点自己,越权面为零(fail-closed)。

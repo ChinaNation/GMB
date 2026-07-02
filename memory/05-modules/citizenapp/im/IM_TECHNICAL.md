@@ -89,14 +89,17 @@ IM 设备身份 = 手机本地独立 OpenMLS 设备密钥
 钱包签名只用于设备授权：
 
 ```text
-GMB_IM_WALLET_BINDING_V1
-| wallet_account
-| im_device_id
-| im_device_pubkey
-| node_peer_id
-| node_endpoints
-| expires_at_millis
-| nonce
+QR_V1 / k=1 / a=8 im_wallet_binding
+b.d = SCALE(
+  wallet_account,
+  im_device_id,
+  im_device_pubkey,
+  node_peer_id,
+  node_endpoints,
+  expires_at_millis,
+  nonce
+)
+signature_message = signing_message(OP_SIGN_IM_WALLET_BINDING, b.d)
 ```
 
 禁止把钱包私钥用于：

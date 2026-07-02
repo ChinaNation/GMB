@@ -124,7 +124,7 @@ class AdminSetValidation {
       }
     }
     if (kind == 0 || kind == 1 || kind == 2) {
-      // 中文注释：动态账户阈值只按 runtime 投票引擎公式做端上前置校验；
+      // 动态账户阈值只按 runtime 投票引擎公式做端上前置校验；
       // 真正保存和生效仍由 internal-vote 负责。
       if (threshold <= 0 || threshold > count || threshold * 2 <= count) {
         throw StateError('动态阈值必须严格过半且不超过管理员数量');

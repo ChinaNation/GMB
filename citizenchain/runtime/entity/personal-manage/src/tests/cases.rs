@@ -553,7 +553,7 @@ fn create_execution_failed_terminal_cleans_pending_and_emits_once() {
         ));
         let pid = last_proposal_id();
 
-        // 中文注释:模拟 fee_policy 在投票期变更后 ProposalData 中记录的快照费更高。
+        // 模拟 fee_policy 在投票期变更后 ProposalData 中记录的快照费更高。
         // execute_create 只能按快照释放 reserve,因此会进入执行失败终态;
         // 终态回调随后必须按同一快照清理 Pending 和 reserve。
         overwrite_create_proposal_fee(pid, CREATE_FEE + 1);

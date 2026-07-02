@@ -1,4 +1,4 @@
-// 中文注释:市注册局管理员 API。
+// 市注册局管理员 API。
 // 市注册局管理员列表、创建、删除都归入 admins 管理员功能目录。
 
 import type { AdminAuth } from '../auth/types';

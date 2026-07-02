@@ -1,4 +1,4 @@
-// 中文注释:前端镜像后端 scope::rules::VisibleScope,按机构行政层级(admin_level)派生可见域。
+// 前端镜像后端 scope::rules::VisibleScope,按机构行政层级(admin_level)派生可见域。
 //
 // 五档(与后端 get_visible_scope 逐档一致):
 //   - 全国(NATIONAL,部委等)        → 不限省/市/镇

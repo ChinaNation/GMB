@@ -1,4 +1,4 @@
-// 中文注释:公民钱包签名弹窗外壳。内容统一交给 CitizenSignaturePanel,
+// 公民钱包签名弹窗外壳。内容统一交给 CitizenSignaturePanel,
 // 避免登录、扫码签名、管理员动作各自维护不同的扫码界面。
 
 import { Modal } from 'antd';

@@ -30,11 +30,11 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 统一机构详情页(ADR-028 决策 2/6)——替代公权 `PublicInstitutionDetailPage`
 /// 与治理 `InstitutionDetailPage` 两套。
 ///
-/// 中文注释:公共壳(信息卡/账户/管理员/提案列表/关注)对全部机构统一;按机构类型
+/// 公共壳(信息卡/账户/管理员/提案列表/关注)对全部机构统一;按机构类型
 /// dispatch 重型流:
 /// - 储备治理三档(NRC/PRC/PRB):提案列表可点→`_openProposalDetail`;
 /// - 其余注册机构:提案列表仍走只读摘要,但发起提案/管理员激活共用统一入口。
-/// 中文注释:提案能力由 `ProposalCapabilityRegistry` 判断,详情页不再散落机构码 if。
+/// 提案能力由 `ProposalCapabilityRegistry` 判断,详情页不再散落机构码 if。
 class InstitutionDetailPage extends StatefulWidget {
   const InstitutionDetailPage({
     super.key,
@@ -159,7 +159,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   /// 为非治理注册机构从 Institution 派生 InstitutionInfo(主/费账户 + 机构码)。
   ///
-  /// 中文注释:这里的 `cidNumber` 故意使用 `institution-account:<mainAccount>`,
+  /// 这里的 `cidNumber` 故意使用 `institution-account:<mainAccount>`,
   /// 因为转账、管理员更换等链上 call 需要的是被管理账户 identity;真实 CID 仍保留在
   /// Institution 页面模型中用于展示和目录查询。
   InstitutionInfo _infoFromInstitution(Institution inst) {

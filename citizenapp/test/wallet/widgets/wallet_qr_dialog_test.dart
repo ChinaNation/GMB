@@ -7,7 +7,7 @@ import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/widgets/wallet_qr_dialog.dart';
 
-/// 中文注释:WalletQrDialog 弹窗验证(v3:副标题已删 / 下载改文字按钮)。
+/// WalletQrDialog 弹窗验证(v3:副标题已删 / 下载改文字按钮)。
 ///
 /// 验证点:
 /// - 弹窗能正常 show,渲染 QrImageView、地址、钱包名、关闭按钮
@@ -75,7 +75,7 @@ void main() {
 
   testWidgets('tapping copy icon does not throw', (tester) async {
     await openDialog(tester);
-    // 中文注释:Clipboard.setData 在 test 环境默认会被 services binding 静默
+    // Clipboard.setData 在 test 环境默认会被 services binding 静默
     // 接管,这里只验证 tap 调用链不会抛异常;不强求 SnackBar 必然渲染,
     // 因为 ScaffoldMessenger 属于 Dialog 外层,SnackBar pump 时序不稳。
     await tester.tap(find.byIcon(Icons.copy));
@@ -87,7 +87,7 @@ void main() {
   testWidgets('tapping download button enters saving flow without throwing',
       (tester) async {
     await openDialog(tester);
-    // 中文注释:SaverGallery 的 MethodChannel 在 test 环境没有 native handler,
+    // SaverGallery 的 MethodChannel 在 test 环境没有 native handler,
     // `saveImage` 内部 try-catch 会把异常包成 SaveResult(false, ...) 返回;
     // 即使某一步抛了,外层 _saveQrToGallery 也有 try-catch 兜底。
     //

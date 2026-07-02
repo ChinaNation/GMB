@@ -23,11 +23,7 @@ class AppLockService {
   static const int maxFailAttempts = 5;
   static const int maxLockCount = 3;
   static const Duration lockDuration = Duration(hours: 24);
-
-  // ---------------------------------------------------------------------------
   // PIN 管理
-  // ---------------------------------------------------------------------------
-
   static Future<void> setPin(String pin) async {
     final salt = _generateSalt();
     final hash = _hash(pin, salt);
@@ -84,11 +80,7 @@ class AppLockService {
     final hash = await _secure.read(key: _keyPinHash);
     return hash != null && hash.isNotEmpty;
   }
-
-  // ---------------------------------------------------------------------------
   // 锁定状态
-  // ---------------------------------------------------------------------------
-
   static Future<bool> isLocked() async {
     final lockUntilStr = await _secure.read(key: _keyLockUntil);
     if (lockUntilStr == null) return false;
@@ -108,11 +100,7 @@ class AppLockService {
 
   static Future<int> getFailCount() async => _readInt(_keyFailCount);
   static Future<int> getLockCount() async => _readInt(_keyLockCount);
-
-  // ---------------------------------------------------------------------------
   // 数据清空
-  // ---------------------------------------------------------------------------
-
   static Future<void> wipeAllData() async {
     // 先清除内存中的加密密钥缓存
     MnemonicCipher.clearCache();
@@ -127,11 +115,7 @@ class AppLockService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
-
-  // ---------------------------------------------------------------------------
   // 内部工具
-  // ---------------------------------------------------------------------------
-
   static String _generateSalt() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));

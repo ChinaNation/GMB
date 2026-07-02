@@ -9,7 +9,7 @@ homepage.workspace = true
 license = "MIT"
 publish = false
 
-# 中文注释:onchina 控制台作为独立二进制,由节点桌面端设置页二次确认后拉起为子进程。
+# onchina 控制台作为独立二进制,由节点桌面端设置页二次确认后拉起为子进程。
 [[bin]]
 name = "onchina"
 path = "src/main.rs"
@@ -70,10 +70,10 @@ mdns-sd = "0.20.1"
 
 [dev-dependencies]
 webauthn-authenticator-rs = { version = "0.5.5", features = ["softpasskey"] }
-# 中文注释:仅供 propose_create_institution 编码器交叉校验测试:用链端真实
+# 仅供 propose_create_institution 编码器交叉校验测试:用链端真实
 # AdminProfile/AdminSource 类型 .encode() 比对,锁死 SCALE 不漂移。
 admin-primitives = { path = "../runtime/admins/admin-primitives" }
-# 中文注释:仅供立法 call-data 编码器交叉校验测试:用链端真实 Tier/VoteType
+# 仅供立法 call-data 编码器交叉校验测试:用链端真实 Tier/VoteType
 # .encode() 比对,锁死 legislation-yuan SCALE 不漂移。
 legislation-yuan = { path = "../runtime/public/legislation-yuan" }
 frame-support = { workspace = true, default-features = true }

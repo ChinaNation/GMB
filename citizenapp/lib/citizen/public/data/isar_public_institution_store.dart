@@ -1,6 +1,6 @@
 // 公权机构目录本地存储 —— Isar 实现(ADR-018 §九)。
 //
-// 中文注释:省份规范顺序与各省版本戳复用 AppKvEntity(不新增 schema);
+// 省份规范顺序与各省版本戳复用 AppKvEntity(不新增 schema);
 // 机构与订阅各自 collection。全部本地读写。
 
 import 'dart:convert';
@@ -40,7 +40,7 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
   }) async {
     if (items.isEmpty) return;
     final now = DateTime.now().millisecondsSinceEpoch;
-    // 中文注释:走唯一索引批量 upsert(putAllByCidNumber),无需逐条 findFirst;
+    // 走唯一索引批量 upsert(putAllByCidNumber),无需逐条 findFirst;
     // 分块成多个小事务,首次灌大包不卡 UI、不撑内存。
     for (var start = 0; start < items.length; start += _upsertChunk) {
       final end = (start + _upsertChunk).clamp(0, items.length);

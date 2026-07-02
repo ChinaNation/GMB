@@ -1,4 +1,4 @@
-// 中文注释:立法提案纯文本标签(层级 / 表决类型),操作端与大屏看板共用的叶子层。
+// 立法提案纯文本标签(层级 / 表决类型),操作端与大屏看板共用的叶子层。
 // 单源自此,shared/ 不向上依赖 operator/;operator/law/labels.tsx 再从这里 re-export。
 // 数值口径对齐链端与 legislation/types.ts。
 

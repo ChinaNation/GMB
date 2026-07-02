@@ -118,7 +118,7 @@ export function CityRegistryView({ state }: RegistryViewProps) {
 
   const effectiveProvince = selectedFederalRegistry?.province_name ?? scope.lockedProvinceName;
   const effectiveCity = selectedCity ?? scope.lockedCityName;
-  // 中文注释:市注册局管理员列表由后端按登录省域过滤;前端不能再依赖
+  // 市注册局管理员列表由后端按登录省域过滤;前端不能再依赖
   // selectedFederalRegistry 是否自动定位成功,否则会把合法省域误渲染为空列表。
   const cityRegistryAdminsForProvince = cityRegistryAdmins;
   // 市注册局管理员只读;Tier1 创世注册局管理员可增删改(后端按登录省域二次校验)。
@@ -194,7 +194,7 @@ function areaText(row: InstitutionListRow | null, province_name: string, city_na
   return [row.province_name, row.city_name, row.town_name].filter(Boolean).join('/') || '-';
 }
 
-// 中文注释:机构名只取 cid_full_name/cid_short_name 单一真源;查无机构行时显示「-」,绝不用 city_name 伪造名字。
+// 机构名只取 cid_full_name/cid_short_name 单一真源;查无机构行时显示「-」,绝不用 city_name 伪造名字。
 function nameText(row: InstitutionListRow | null) {
   return row?.cid_full_name || row?.cid_short_name || '-';
 }
@@ -339,7 +339,7 @@ function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins,
   const { auth } = useAuth();
   const { registered: passkeyRegistered, busy: passkeyBusy, register: doRegisterPasskey } =
     usePasskeyRegistration();
-  // 中文注释:本列表已经按当前市过滤,所以长度就是该市市注册局管理员数量。
+  // 本列表已经按当前市过滤,所以长度就是该市市注册局管理员数量。
   const cityLimitReached = cityRegistryAdmins.length >= MAX_CITY_REGISTRY_ADMINS_PER_CITY;
   return (
     <Card

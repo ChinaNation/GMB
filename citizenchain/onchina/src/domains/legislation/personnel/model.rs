@@ -1,6 +1,6 @@
 //! 任免案(人事任免职书)字段 schema —— Phase 4 预留,仅锁数据形。
 //!
-//! 中文注释:字段规格取自任务卡权威定稿。职位码表(`office` 真源:机构码 + 职务)与升级路径
+//! 字段规格取自任务卡权威定稿。职位码表(`office` 真源:机构码 + 职务)与升级路径
 //! 字段化(`reject_count`/`escalated`,第53/55/57/64条)为**显式待定项**,随任免案链路上线时定,
 //! 本轮以机构码 + 自由文本职务名承载,不引入投机字段。camelCase 出线对齐既有 DTO 契约。
 
@@ -49,7 +49,7 @@ pub struct PersonnelDecision {
 
 /// 发起任免案请求体。
 ///
-/// 中文注释:表决院(houses)由后端按 `tier` + `scope_code` 解析(参议会/市立法会单院),
+/// 表决院(houses)由后端按 `tier` + `scope_code` 解析(参议会/市立法会单院),
 /// 不收前端;`scope_code` 亦由会话派生覆盖,不信前端(对齐 `ProposeLawInput` 纪律)。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

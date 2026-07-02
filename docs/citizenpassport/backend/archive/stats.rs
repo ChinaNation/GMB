@@ -4,7 +4,7 @@ use crate::common::{err, ApiError};
 
 /// 读取当前 CPMS 实例的有效档案总量。
 ///
-/// 中文注释：列表页不再实时 `COUNT(*)`，总量由档案创建/注销事务同步维护。
+/// 列表页不再实时 `COUNT(*)`，总量由档案创建/注销事务同步维护。
 pub(super) async fn load_active_archive_count(
     db: &sqlx::PgPool,
 ) -> Result<i64, (StatusCode, Json<ApiError>)> {

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/bodies/sign_response_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
@@ -190,6 +192,19 @@ void main() {
       expect(h1, h2);
       expect(h1.startsWith('0x'), true);
       expect(h1.length, 66);
+    });
+
+    test('IM wallet binding response verification uses GMB 0x1A hash domain',
+        () {
+      final actual = QrSigner.signingBytesForHex(
+        payloadHex: payload,
+        action: QrActions.imWalletBinding,
+      );
+      final expected = Hasher.blake2b256.hash(
+        Uint8List.fromList([0x47, 0x4d, 0x42, 0x1a, 1, 2, 3, 4]),
+      );
+
+      expect(actual, expected);
     });
   });
 }

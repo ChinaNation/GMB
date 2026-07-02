@@ -140,7 +140,7 @@ fn governance_internal_proposal_snapshots_fixed_threshold_not_provider() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
 
-        // 中文注释：测试 Provider 对治理机构故意返回 1，这里必须仍写入固定治理阈值。
+        // 测试 Provider 对治理机构故意返回 1，这里必须仍写入固定治理阈值。
         assert_eq!(
             InternalThresholdSnapshot::<Test>::get(proposal_id),
             Some(primitives::count_const::NRC_INTERNAL_THRESHOLD)
@@ -713,7 +713,7 @@ fn joint_proposal_rejects_stale_population_snapshot() {
     new_test_ext().execute_with(|| {
         prepare_population_snapshot_for(nrc_admin(0), 10);
 
-        // 中文注释：人口快照只代表准备快照所在区块的公民分母；
+        // 人口快照只代表准备快照所在区块的公民分母；
         // 隔块创建提案必须拒绝并删除过期缓存。
         System::set_block_number(2);
         assert_eq!(
@@ -776,7 +776,7 @@ fn joint_vote_uses_fixed_governance_threshold_not_provider() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
 
-        // 中文注释：测试 Provider 对治理机构故意返回 1；联合投票必须等固定阈值票数才形成机构结果。
+        // 测试 Provider 对治理机构故意返回 1；联合投票必须等固定阈值票数才形成机构结果。
         assert_ok!(submit_joint_vote(
             nrc_admin(0),
             proposal_id,
@@ -1145,7 +1145,7 @@ fn citizen_pass_threshold_function_boundaries_are_correct() {
     assert!(!joint_vote::is_jointreferendum_vote_passed(5, 10));
     assert!(joint_vote::is_jointreferendum_vote_passed(6, 10));
 
-    // 中文注释：极端大数不能因为 u64 乘法饱和把刚过半误判为未通过。
+    // 极端大数不能因为 u64 乘法饱和把刚过半误判为未通过。
     let eligible = u64::MAX;
     assert!(!joint_vote::is_jointreferendum_vote_passed(
         eligible / 2,
@@ -1168,7 +1168,7 @@ fn citizen_reject_threshold_function_boundaries_are_correct() {
     // 反对 6/10 = 60% → 否决
     assert!(joint_vote::is_jointreferendum_vote_rejected(6, 10));
 
-    // 中文注释：极端大数不能因为 u64 乘法饱和把刚过半误判为未否决。
+    // 极端大数不能因为 u64 乘法饱和把刚过半误判为未否决。
     let eligible = u64::MAX;
     assert!(!joint_vote::is_jointreferendum_vote_rejected(
         eligible / 2,
@@ -1639,7 +1639,7 @@ fn delayed_cleanup_chunks_cleanup_across_blocks() {
             joint_vote::ReferendumVotesByAccount::<Test>::insert(proposal_id, account, true);
         }
 
-        // 中文注释：投票通过后由 callback 返回 Executed，终态会注册 90 天后清理。
+        // 投票通过后由 callback 返回 Executed，终态会注册 90 天后清理。
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
             STATUS_PASSED
@@ -1978,7 +1978,7 @@ fn execution_failed_terminal_cleanup_error_is_queued_and_retried() {
         set_internal_terminal_cleanup_should_fail(true);
         let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
 
-        // 中文注释：终态可以成立，但业务侧执行失败清理通知失败时必须留下重试入口。
+        // 终态可以成立，但业务侧执行失败清理通知失败时必须留下重试入口。
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,
             STATUS_PASSED

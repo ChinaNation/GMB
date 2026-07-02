@@ -1,6 +1,6 @@
 //! 清算行节点声明的链上查询。
 //!
-//! 中文注释:
+//!
 //! - `ClearingBankNodes` 属于扫码支付网络准入信息,因此放在
 //!   `offchain_transaction` 下,供节点注册页和网络概览使用。
 //! - 本模块只读取链上声明,不会启动清算 worker;普通全节点可以只读查询,
@@ -62,7 +62,7 @@ pub fn fetch_clearing_bank_node(
     cid_number: &str,
 ) -> Result<Option<ClearingBankNodeOnChainInfo>, String> {
     let key = clearing_bank_nodes_key(cid_number)?;
-    // 中文注释(ADR-017):节点声明属于业务读取,按 finalized 口径,禁止 best。
+    // (ADR-017):节点声明属于业务读取,按 finalized 口径,禁止 best。
     match chain_query::fetch_finalized_storage(&key)? {
         None => Ok(None),
         Some(hex_data) => {

@@ -24,7 +24,7 @@ import 'ui/app_theme.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 中文注释：诊断 — 把所有 framework / widget 静默吞掉的异常都打到 logcat。
+  // 诊断 — 把所有 framework / widget 静默吞掉的异常都打到 logcat。
   // 默认 ErrorWidget 在某些场景下表现为空白方块（白屏），这里换成显眼的红框 + 文字。
   FlutterError.onError = (details) {
     FlutterError.dumpErrorToConsole(details);
@@ -323,7 +323,7 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     _updateController.addListener(_handleUpdateStateChanged);
     _checkRootStatus();
-    // 中文注释：启动后异步检查正式 Release 更新，只更新设置页状态，不阻塞主界面进入。
+    // 启动后异步检查正式 Release 更新，只更新设置页状态，不阻塞主界面进入。
     _updateController.check();
   }
 

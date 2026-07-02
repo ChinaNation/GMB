@@ -1,4 +1,4 @@
-// 中文注释:控制台注册局分层单点谓词(镜像后端 chain_runtime::is_tier1_registry / is_subordinate_registry)。
+// 控制台注册局分层单点谓词(镜像后端 chain_runtime::is_tier1_registry / is_subordinate_registry)。
 //
 // 取代散落各视图的 `institution_code === 'FRG' / 'CREG'` 字面——分层判定收敛到此单点,
 // 与后端机构码单源(TIER1_REGISTRY_CODE / TIER2_REGISTRY_CODE)对齐。前端只做 render-gating,

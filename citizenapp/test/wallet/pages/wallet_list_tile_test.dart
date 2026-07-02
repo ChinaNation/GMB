@@ -4,7 +4,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/wallet_page.dart';
 
-/// 中文注释:WalletListTile v6 渲染契约 ——
+/// WalletListTile v6 渲染契约 ——
 /// - 不渲染「当前」标签(active 概念已废)
 /// - 不渲染扫码按钮(扫码功能彻底移除)
 /// - 钱包图标按冷热配色(热=AppTheme.primaryDark / 冷=AppTheme.info)

@@ -1,4 +1,4 @@
-// 中文注释:合伙企业页面。只承接合伙企业列表、新增和进入详情。
+// 合伙企业页面。只承接合伙企业列表、新增和进入详情。
 
 import React from 'react';
 import type { PrivateTypePageProps } from '../common/PrivateTypePage';

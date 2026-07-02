@@ -203,7 +203,7 @@ async fn upload_material(
         }
     };
 
-    // 中文注释：先落临时文件再改名，避免上传中断时留下可被下载的半成品。
+    // 先落临时文件再改名，避免上传中断时留下可被下载的半成品。
     if tokio::fs::rename(&upload.temp_path, &upload.final_path)
         .await
         .is_err()
@@ -365,7 +365,7 @@ async fn save_upload_field(
     material_id: &str,
     field: &mut axum::extract::multipart::Field<'_>,
 ) -> Result<TempUpload, (StatusCode, Json<ApiError>)> {
-    // 中文注释：上传流边写边算 SHA-256，数据库只保存元数据和摘要，不保存文件正文。
+    // 上传流边写边算 SHA-256，数据库只保存元数据和摘要，不保存文件正文。
     let original_file_name = sanitize_original_file_name(field.file_name().unwrap_or("material"));
     let mime_type = field
         .content_type()
@@ -637,7 +637,7 @@ fn validate_material_mime(
 }
 
 fn material_root() -> PathBuf {
-    // 中文注释：部署可把资料正文放到专用数据盘；默认目录用于本机开发和单机部署。
+    // 部署可把资料正文放到专用数据盘；默认目录用于本机开发和单机部署。
     env::var("CPMS_MATERIALS_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("data/archive-materials"))

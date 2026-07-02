@@ -1,4 +1,4 @@
-//! 中文注释:公民护照号与护照有效期工具。
+//! 公民护照号与护照有效期工具。
 //!
 //! 本文件把归档 CPMS 的护照号算法复制到 OnChina,但不复制旧档案号。
 //! 护照号终身唯一;资源回收只通过 `passport_number_recycle_pool` 提供的
@@ -93,7 +93,7 @@ fn validate_passport_area_codes(province_code: &str, city_code: &str) -> Result<
 fn passport_city_namespace(province_code: &str, city_code: &str) -> Result<u64, String> {
     let city_value = passport_city_value(city_code)?;
     let offset = province_namespace_offset(province_code);
-    // 中文注释:用 0..511 置换把省内唯一 city_code 映射成城市隔离编号,
+    // 用 0..511 置换把省内唯一 city_code 映射成城市隔离编号,
     // 护照号明文不直接暴露原始市代码。
     Ok((city_value * PASSPORT_CITY_NAMESPACE_MULTIPLIER + offset) % PASSPORT_CITY_NAMESPACE_COUNT)
 }

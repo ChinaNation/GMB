@@ -1,4 +1,4 @@
-// 中文注释:私权机构详情页只调度私权布局,不得承载公权机构业务。
+// 私权机构详情页只调度私权布局,不得承载公权机构业务。
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Typography } from 'antd';
@@ -60,7 +60,7 @@ export const PrivateDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, 
         writeCachedInstitutionDetail(detailCacheKey, next);
       })
       .catch(() => {
-        // 中文注释:详情后台刷新失败时保留缓存,避免切页时闪断。
+        // 详情后台刷新失败时保留缓存,避免切页时闪断。
       })
       .finally(() => {
         if (!cached) setLoading(false);

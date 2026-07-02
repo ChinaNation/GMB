@@ -9,7 +9,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 公权机构管理员列表页(只读)。
 ///
-/// 中文注释:**只读展示**链上 PublicAdmins::AdminAccounts 的管理员实名资料(A2:
+/// **只读展示**链上 PublicAdmins::AdminAccounts 的管理员实名资料(A2:
 /// 姓名/职务/任期/来源/实名 CID + 账户 SS58,prefix=2027);不做冷钱包导入/扫码激活
 /// ——那是治理机构 `AdminListPage` 的能力,公权端本期不引入重型桥接。无管理员时显示占位。
 class PublicInstitutionAdminListPage extends StatefulWidget {
@@ -64,7 +64,7 @@ class _PublicInstitutionAdminListPageState
       final balances = await ChainRpc().fetchFinalizedBalances(accounts);
       if (mounted) setState(() => _balanceByAccount = balances);
     } catch (_) {
-      // 中文注释:只读管理员列表的余额失败不影响资料展示。
+      // 只读管理员列表的余额失败不影响资料展示。
       if (mounted) setState(() => _balanceByAccount = const {});
     }
   }

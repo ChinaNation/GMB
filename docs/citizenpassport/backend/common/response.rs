@@ -17,7 +17,7 @@ where
 #[derive(Serialize)]
 pub(crate) struct ApiError {
     code: i32,
-    /// 中文注释:稳定业务错误码供前端判断;数字 code 只保留为内部分类编号。
+    /// 稳定业务错误码供前端判断;数字 code 只保留为内部分类编号。
     error_code: &'static str,
     message: String,
     trace_id: String,
@@ -44,7 +44,7 @@ pub(crate) fn err(status: StatusCode, code: i32, message: &str) -> (StatusCode, 
 }
 
 fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
-    // 中文注释:CPMS 是离线实名系统,错误码只描述本机认证、档案、签发和审计状态。
+    // CPMS 是离线实名系统,错误码只描述本机认证、档案、签发和审计状态。
     match message {
         "missing session cookie" => "CPMS_AUTH_MISSING_SESSION",
         "invalid session" => "CPMS_AUTH_INVALID_SESSION",

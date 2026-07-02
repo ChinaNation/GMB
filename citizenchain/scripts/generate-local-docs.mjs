@@ -14,7 +14,7 @@ const sources = [
     key: 'whitepaper',
     title: '白皮书',
     sourcePath: 'website/src/whitepaper.md',
-    // 中文注释：白皮书正文迁入官网源码目录后，图片仍沿用 docs/assets 资源目录。
+    // 白皮书正文迁入官网源码目录后，图片仍沿用 docs/assets 资源目录。
     assetFallbackRoots: ['docs'],
   }
 ];
@@ -53,7 +53,7 @@ function embedLocalImages(markdown, sourceAbs, item) {
   const htmlImgPattern = /(<img\b[^>]*\bsrc=["'])([^"']+)(["'][^>]*>)/gi;
   const markdownImgPattern = /(!\[[^\]]*\]\()([^)]+)(\))/g;
 
-  // 中文注释：白皮书会被内置进前端 bundle，相对图片必须转成 data URI 才能在桌面端显示。
+  // 白皮书会被内置进前端 bundle，相对图片必须转成 data URI 才能在桌面端显示。
   return markdown
     .replace(htmlImgPattern, (match, prefix, assetPath, suffix) => {
       const absAssetPath = resolveRelativeAsset(sourceAbs, item, assetPath);
@@ -86,7 +86,7 @@ fs.writeFileSync(
   outputPath,
   [
     '// 本文件由 citizenchain/scripts/generate-local-docs.mjs 自动生成。',
-    '// 中文注释：本文件只内置白皮书；公民宪法由链上 runtime API 返回。',
+    '// 本文件只内置白皮书；公民宪法由链上 runtime API 返回。',
     '',
     'export type LocalDocKey = "whitepaper";',
     '',

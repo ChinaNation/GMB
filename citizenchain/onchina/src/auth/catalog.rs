@@ -23,7 +23,7 @@ fn balance_fen(balances: &BTreeMap<String, Option<String>>, account: &str) -> Op
         .flatten()
 }
 
-/// 中文注释:Tier1 创世注册局管理员列表(本省 5 人组,「全走链读」决策③)。
+/// Tier1 创世注册局管理员列表(本省 5 人组,「全走链读」决策③)。
 ///
 /// 权威集合在链上 `PublicAdmins::FederalRegistryProvinceGroups[本省省码]`;本接口直读链上账户,
 /// 回填本地缓存(缺失即补,保证有本地 id 供换届按 id 定位),再以缓存元数据(自定义名/时间戳)
@@ -132,7 +132,7 @@ pub(crate) async fn list_federal_registry_admins(
     .into_response()
 }
 
-/// 中文注释:普通机构只读“本机构管理员”列表。
+/// 普通机构只读“本机构管理员”列表。
 ///
 /// 权威集合仍来自链上 Active 管理员集合;本地 admins 表只补展示姓名,不能决定准入。
 pub(crate) async fn list_own_institution_admins(
@@ -178,7 +178,7 @@ pub(crate) async fn list_own_institution_admins(
             return api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable");
         }
     };
-    // 中文注释:列表展示也做一次链上 active 复查,避免后台清退窗口内的失效管理员继续读取。
+    // 列表展示也做一次链上 active 复查,避免后台清退窗口内的失效管理员继续读取。
     if !chain_profiles
         .iter()
         .any(|profile| same_admin_account(profile.account_hex.as_str(), ctx.admin_account.as_str()))

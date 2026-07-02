@@ -76,7 +76,7 @@ struct ExportRecordsForHash<'a> {
 
 /// 构造 CPMS 离线年度状态导出文件。
 ///
-/// 中文注释：导出文件只给 CID 更新档案号、钱包、公民状态和投票资格绑定事实。
+/// 导出文件只给 CID 更新档案号、钱包、公民状态和投票资格绑定事实。
 /// 姓名、出生日期、地址、护照号等 CPMS 内部实名资料不进入年度报告。
 pub(crate) async fn build_and_record_cpms_status_export(
     state: &AppState,
@@ -456,7 +456,7 @@ fn first_missing_export_year(
 }
 
 fn is_operator_lock_active(now: DateTime<Utc>, pending_export_year: i32) -> bool {
-    // 中文注释：某年度报告在下一年 1 月 10 日后仍未导出时，操作员持续锁定直到补导完成。
+    // 某年度报告在下一年 1 月 10 日后仍未导出时，操作员持续锁定直到补导完成。
     annual_export_lock_start_at(pending_export_year)
         .map(|lock_start| now.timestamp() >= lock_start)
         .unwrap_or(false)

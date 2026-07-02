@@ -9,7 +9,7 @@
     scroll-behavior: smooth;
   }
 
-  /* 中文注释：样式采用正式文书版阅读界面；正文中英文结构不变。 */
+  /* 样式采用正式文书版阅读界面；正文中英文结构不变。 */
   :root {
     --doc-bg: #f6f1e8;
     --doc-bg-2: #eee6da;
@@ -573,7 +573,7 @@
     </section>
   </main>
   <script>
-    // 中文注释：静态 HTML 只负责目录折叠、高亮和回到顶部，不改变正文中英文显示结构。
+    // 静态 HTML 只负责目录折叠、高亮和回到顶部，不改变正文中英文显示结构。
     (() => {
       const tocList = document.querySelector('.toc-list');
       const toTop = document.querySelector('.to-top');
@@ -689,7 +689,7 @@
             setActive(id, false);
             return;
           }
-          // 中文注释：sandbox srcDoc 默认 hash 导航在桌面 WebView 中可能白屏，目录条目统一改为 iframe 内部滚动。
+          // sandbox srcDoc 默认 hash 导航在桌面 WebView 中可能白屏，目录条目统一改为 iframe 内部滚动。
           const target = document.getElementById(id);
           if (target) {
             setActive(id, true);

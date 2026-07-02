@@ -45,7 +45,7 @@ pub struct OffchainKeystore {
 }
 
 impl OffchainKeystore {
-    /// 中文注释：创建密钥管理器，指定存储目录。
+    /// 创建密钥管理器，指定存储目录。
     pub fn new(base_path: &Path) -> Self {
         let dir = base_path.join("offchain");
         Self {
@@ -53,12 +53,12 @@ impl OffchainKeystore {
         }
     }
 
-    /// 中文注释：检查本地是否有加密的签名私钥文件。
+    /// 检查本地是否有加密的签名私钥文件。
     pub fn has_signing_key(&self) -> bool {
         self.file_path.exists()
     }
 
-    /// 中文注释：用节点启动密码加密并保存签名私钥。
+    /// 用节点启动密码加密并保存签名私钥。
     ///
     /// 当前 CLI 启动路径只加载既有密钥；清算行 Tab 完整密钥管理 UI 接入后会调用
     /// 该写入入口。
@@ -108,7 +108,7 @@ impl OffchainKeystore {
         Ok(())
     }
 
-    /// 中文注释：用节点启动密码解密签名私钥到内存。
+    /// 用节点启动密码解密签名私钥到内存。
     pub fn load_signing_key(&self, password: &str) -> Result<SigningKey, String> {
         let data = fs::read(&self.file_path).map_err(|e| format!("读取密钥文件失败：{e}"))?;
 
@@ -145,7 +145,7 @@ impl OffchainKeystore {
         Ok(SigningKey { pair, cid_number })
     }
 
-    /// 中文注释：删除本地加密密钥文件。
+    /// 删除本地加密密钥文件。
     ///
     /// 当前清算行节点没有暴露删除 UI；保留给后续管理员轮换和注销流程使用。
     #[allow(dead_code)]
@@ -157,7 +157,7 @@ impl OffchainKeystore {
     }
 }
 
-/// 中文注释：blake2b-256 哈希（node 端替代 sp_io::hashing）。
+/// blake2b-256 哈希（node 端替代 sp_io::hashing）。
 fn blake2_256(data: &[u8]) -> [u8; 32] {
     let hash = blake2b_simd::Params::new().hash_length(32).hash(data);
     let mut out = [0u8; 32];
@@ -165,7 +165,7 @@ fn blake2_256(data: &[u8]) -> [u8; 32] {
     out
 }
 
-/// 中文注释：密钥派生（password + salt → 32 字节 AES 密钥）。
+/// 密钥派生（password + salt → 32 字节 AES 密钥）。
 fn derive_key(password: &[u8], salt: &[u8]) -> [u8; KEY_LEN] {
     let mut key = [0u8; KEY_LEN];
     let mut state = blake2_256(&[password, salt].concat());
@@ -176,7 +176,7 @@ fn derive_key(password: &[u8], salt: &[u8]) -> [u8; KEY_LEN] {
     key
 }
 
-/// 中文注释：加密封装（当前实现为 XOR + blake2 标签）。
+/// 加密封装（当前实现为 XOR + blake2 标签）。
 #[allow(dead_code)]
 fn encrypt_aes256_gcm(
     key: &[u8; KEY_LEN],
@@ -197,7 +197,7 @@ fn encrypt_aes256_gcm(
     Ok((ciphertext, tag))
 }
 
-/// 中文注释：AES-256-GCM 解密。
+/// AES-256-GCM 解密。
 fn decrypt_aes256_gcm(
     key: &[u8; KEY_LEN],
     nonce: &[u8],

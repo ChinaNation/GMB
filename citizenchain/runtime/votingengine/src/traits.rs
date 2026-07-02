@@ -53,7 +53,7 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
 
 /// 立法事项(立法/修法/废法)接入立法投票时,统一由投票引擎 legislation-vote 创建提案并返回真实提案 ID。
 ///
-/// 中文注释(ADR-027):业务壳 legislation-yuan 只传"立法语义"——发起机构、机构码、表决类型、
+/// (ADR-027):业务壳 legislation-yuan 只传"立法语义"——发起机构、机构码、表决类型、
 /// 法律载荷;表决规则(参与率/赞成率)、两院顺序、强制公投、行政签署、护宪终审、计票与通过判定
 /// 全部归属投票引擎 legislation-vote sub-pallet,业务壳不得自行处理。
 /// runtime 装配为真实 `LegislationVote`;未实装语境(如其它 pallet 的测试 mock)装 `()` 返回 NotConfigured。
@@ -101,7 +101,7 @@ impl<AccountId> LegislationVoteEngine<AccountId> for () {
 
 /// 事项模块接入内部投票时,统一由投票引擎创建提案并返回真实提案 ID。
 ///
-/// 中文注释：业务模块只能选择“提案语义”，不能传入“本次投票通过阈值”。
+/// 业务模块只能选择“提案语义”，不能传入“本次投票通过阈值”。
 /// 阈值读取、快照、计票、自动赞成票与通过/否决判定全部归属投票引擎。
 pub trait InternalVoteEngine<AccountId> {
     /// 创建一般内部投票提案。用于转账、销毁、GRANDPA key 更换等普通业务。
@@ -116,7 +116,7 @@ pub trait InternalVoteEngine<AccountId> {
 
     /// 创建注册/注销生命周期内部投票提案。用于注销个人多签和机构多签。
     ///
-    /// 中文注释：生命周期投票由投票引擎按 active 管理员快照写入全员通过阈值。
+    /// 生命周期投票由投票引擎按 active 管理员快照写入全员通过阈值。
     fn create_lifecycle_internal_proposal_with_data(
         _who: AccountId,
         _institution_code: InstitutionCode,
@@ -149,7 +149,7 @@ pub trait InternalVoteEngine<AccountId> {
 
     /// 创建管理员集合变更内部投票提案。只允许 admins 模块 模块接入。
     ///
-    /// 中文注释：本次投票仍使用当前 active 阈值；`new_threshold` 只表示变更执行成功后
+    /// 本次投票仍使用当前 active 阈值；`new_threshold` 只表示变更执行成功后
     /// 写入投票引擎的下一阶段动态阈值。
     fn create_admin_change_internal_proposal_with_data(
         _who: AccountId,
@@ -168,7 +168,7 @@ pub trait InternalVoteEngine<AccountId> {
 
     /// 特权直设动态阈值:绕过注册/变更提案,直接写入已激活动态阈值。
     ///
-    /// 中文注释:仅供 admins 模块在"联邦注册局直设市注册局管理员"(Step3 去中心化鉴权)时
+    /// 仅供 admins 模块在"联邦注册局直设市注册局管理员"(Step3 去中心化鉴权)时
     /// 同步阈值用。实现方必须按严格过半规则校验 `(admins_len, threshold)` 后写入,
     /// 失败回滚由调用方事务统一处理。默认未配置。
     fn register_active_dynamic_threshold_direct(
@@ -212,7 +212,7 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
     }
 }
 
-/// 中文注释：公民身份只读接口。投票引擎只能读链上公民身份模块的资格和人口数，
+/// 公民身份只读接口。投票引擎只能读链上公民身份模块的资格和人口数，
 /// 不再接收注册局链下签发的人口快照或投票凭证。
 pub trait CitizenIdentityReader<AccountId> {
     fn can_vote(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool;
@@ -589,7 +589,7 @@ impl<
     }
 }
 
-/// 中文注释：内部管理员动态提供器（可由其他治理模块提供最新管理员集合）。
+/// 内部管理员动态提供器（可由其他治理模块提供最新管理员集合）。
 ///
 /// 一致性契约：
 /// - `is_internal_admin(institution_code, institution, who) == true` 时，同一链上状态读取到的
@@ -669,13 +669,9 @@ impl<AccountId> InternalAdminsLenProvider<AccountId> for () {
         None
     }
 }
-
-// ──────────────────────────────────────────────────────────────────
 // 投票引擎核心 → mode pallet 的反向调用 trait
 // votingengine 主 crate 的 finalize / cleanup / on_initialize 路径通过这些
 // trait 派发到对应 mode pallet 的实现。
-// ──────────────────────────────────────────────────────────────────
-
 /// 内部投票超时结算入口,由 internal-vote pallet 实现。
 ///
 /// votingengine 主 crate 的 `finalize_proposal` extrinsic 与 `on_initialize`
@@ -709,7 +705,7 @@ pub type CleanupChunkResult = (u32, bool);
 pub trait InternalCleanupHandler {
     /// 内部提案成功执行后的 mode 侧副作用。
     ///
-    /// 中文注释：internal-vote 在这里激活/删除动态阈值，核心 votingengine 不解析
+    /// internal-vote 在这里激活/删除动态阈值，核心 votingengine 不解析
     /// 业务数据，也不把阈值职责交回业务模块。
     fn on_internal_proposal_executed(_proposal_id: u64) -> DispatchResult {
         Ok(())
@@ -717,7 +713,7 @@ pub trait InternalCleanupHandler {
 
     /// 内部提案进入终态后的 mode 侧清理。
     ///
-    /// 中文注释：注册被拒绝或执行失败时，internal-vote 用此入口清掉 pending 阈值。
+    /// 注册被拒绝或执行失败时，internal-vote 用此入口清掉 pending 阈值。
     fn on_internal_proposal_terminal(_proposal_id: u64, _status: u8) -> DispatchResult {
         Ok(())
     }
@@ -803,13 +799,9 @@ impl JointCleanupHandler for () {
     }
     fn cleanup_joint_terminal(_proposal_id: u64) {}
 }
-
-// ──────────────────────────────────────────────────────────────────
 // 立法投票(legislation-vote)mode trait(ADR-027)
 // 核心 votingengine 按 PROPOSAL_KIND_LEGISLATION / STAGE_LEG_* 分发到这些 trait。
 // 三个投票 sub-pallet(internal/joint/citizen)逻辑零改动。
-// ──────────────────────────────────────────────────────────────────
-
 /// 立法投票超时结算入口。legislation-vote sub-pallet 实现。
 /// 四阶段(ADR-027 修订 2026-06-25):内部表决(STAGE_LEG_HOUSE,单院一段/两院顺序两段)
 /// + 强制公投(STAGE_LEG_REFERENDUM)+ 行政签署(STAGE_LEG_SIGN)+ 三人会签(STAGE_LEG_OVERRIDE)。
@@ -923,13 +915,9 @@ impl LegislationVoteResultCallback for () {
         Ok(ProposalExecutionOutcome::Ignored)
     }
 }
-
-// ──────────────────────────────────────────────────────────────────
 // 选举投票(election-vote)mode trait
 // 核心 votingengine 按 PROPOSAL_KIND_ELECTION / STAGE_ELECTION_* 分发到这些 trait。
 // 职位、任期、候选来源等规则不放在核心,只由 election-vote 保存运行态快照。
-// ──────────────────────────────────────────────────────────────────
-
 /// 选举投票超时结算入口。election-vote sub-pallet 实现。
 pub trait ElectionProposalFinalizer<BlockNumber, AccountId> {
     fn finalize_election_popular_timeout(
@@ -988,7 +976,7 @@ impl ElectionCleanupHandler for () {
 
 /// 选举投票终态业务回调。
 ///
-/// 中文注释：当前 election-vote 自己返回 Executed 表示“当选结果快照已生成”；
+/// 当前 election-vote 自己返回 Executed 表示“当选结果快照已生成”；
 /// 后续 admins/法定代表人接入后,这里可改为真正的结果写入器。
 pub trait ElectionVoteResultCallback {
     fn on_election_vote_finalized(

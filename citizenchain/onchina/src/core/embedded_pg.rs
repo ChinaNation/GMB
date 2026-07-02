@@ -1,6 +1,6 @@
 //! 内嵌私有 PostgreSQL 生命周期(onchina 自管)。
 //!
-//! 中文注释(Card 05):去中心化每市自治节点零依赖——onchina 在启动期把随安装包打进来的
+//! (Card 05):去中心化每市自治节点零依赖——onchina 在启动期把随安装包打进来的
 //! PostgreSQL 二进制拉成**本机私有实例**(127.0.0.1,不对外),首启 `initdb`,起 `postgres`,
 //! 建 `onchina` 库,返回 `DATABASE_URL`;退出期 `pg_ctl stop`。node 不碰 PG,只用 env 告诉
 //! onchina 二进制目录/数据目录/端口(见 `node/src/onchina_proc`)。
@@ -133,7 +133,7 @@ pub(crate) fn ensure_started() -> Result<String, String> {
         let data = data_dir.to_string_lossy().to_string();
         let log = data_dir.join("postgres.log");
         let log_arg = log.to_string_lossy().to_string();
-        // 中文注释:-o 透传 postmaster 选项:私有端口 + 只监听 127.0.0.1。
+        // -o 透传 postmaster 选项:私有端口 + 只监听 127.0.0.1。
         let options = format!("-p {port} -h 127.0.0.1");
         run(
             &pg_tool("pg_ctl"),
@@ -198,7 +198,7 @@ fn configure_postgresql_conf(data_dir: &Path) -> Result<(), String> {
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
     {
-        // 中文注释:每日 pg_basebackup + 持续 WAL 归档到 NAS = PITR(见 citizenchain/scripts/onchina-{backup,restore}.sh)。
+        // 每日 pg_basebackup + 持续 WAL 归档到 NAS = PITR(见 citizenchain/scripts/onchina-{backup,restore}.sh)。
         std::fs::create_dir_all(&archive_dir)
             .map_err(|e| format!("create wal archive dir failed: {e}"))?;
         let cmd = if cfg!(windows) {
@@ -244,7 +244,7 @@ fn ensure_database() -> Result<(), String> {
         .map_err(|e| format!("query onchina database failed: {e}"))?
         .get(0);
     if !exists {
-        // 中文注释:库名为固定常量,无注入风险;CREATE DATABASE 不可在事务内。
+        // 库名为固定常量,无注入风险;CREATE DATABASE 不可在事务内。
         client
             .batch_execute(&format!("CREATE DATABASE \"{PG_DB_NAME}\""))
             .map_err(|e| format!("create onchina database failed: {e}"))?;

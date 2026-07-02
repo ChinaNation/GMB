@@ -15,7 +15,7 @@ pub struct ChinaSf {
 
 /// 国家司法院创世公职人员公钥。
 ///
-/// 中文注释:顺序对应宪法设计的 7 名护宪大法官、1 名首席大法官、2 名次席大法官、5 名大法官。
+/// 顺序对应宪法设计的 7 名护宪大法官、1 名首席大法官、2 名次席大法官、5 名大法官。
 pub const NATIONAL_JUDICIAL_YUAN_ADMINS: &[[u8; 32]] = &[
     hex!("44ad80a3b00e5e40ba8e358da09fff2d3321bc40461b1006e7eefa32412cd003"),
     hex!("32bba94a68b88c0e694f1aa4111bdcb1a71d3a2d1d3560a2f3d1ec6a559f8f1c"),

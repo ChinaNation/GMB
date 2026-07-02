@@ -4,7 +4,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 选举 tab 视图(ADR-028 P2 占位)。
 ///
-/// 中文注释:选举 = 电选各机构管理员/法定代表人的活动视图(按行政层级),走 election-vote
+/// 选举 = 电选各机构管理员/法定代表人的活动视图(按行政层级),走 election-vote
 /// 选举投票引擎(P8/P10,链端 `election-vote` 当前空骨架)。本期仅占位空态,不接任何链路。
 class ElectionTab extends StatelessWidget {
   const ElectionTab({super.key});

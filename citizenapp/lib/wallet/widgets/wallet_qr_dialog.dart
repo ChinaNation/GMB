@@ -13,7 +13,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 钱包收款二维码弹窗。
 ///
-/// 中文注释:
+///
 /// - 职能:在钱包详情页第 2 张身份卡右侧 QR 小图标点击时弹出大二维码,
 ///   内容 = `QR_V1 k=3 { address, contact_name }`(固定码,envelope 顶层无 i/e)。
 /// - 扫码场景由扫码方处理(通讯录、扫码支付、地址栏),不生成多份 QR。
@@ -88,7 +88,7 @@ class _WalletQrDialogContentState extends State<_WalletQrDialogContent> {
 
   /// 把当前二维码区域截图成 PNG,写入相册。
   ///
-  /// 中文注释:
+  ///
   /// - 通过 `_qrKey` 拿到 `RenderRepaintBoundary`,`toImage(pixelRatio: 3.0)`
   ///   生成高分图像。
   /// - `SaverGallery.saveImage` 需要 Uint8List + fileName + skipIfExists。
@@ -174,7 +174,7 @@ class _WalletQrDialogContentState extends State<_WalletQrDialogContent> {
             ),
           ),
           const SizedBox(height: 12),
-          // 中文注释:地址 Stack 居中显示在 QR 正下方,复制图标 Positioned 浮在右侧不抢中心。
+          // 地址 Stack 居中显示在 QR 正下方,复制图标 Positioned 浮在右侧不抢中心。
           Stack(
             alignment: Alignment.center,
             children: [

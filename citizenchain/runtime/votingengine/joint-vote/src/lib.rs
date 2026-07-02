@@ -31,11 +31,7 @@ pub mod weights;
 mod benchmarks;
 
 pub use pallet::*;
-
-// ──────────────────────────────────────────────────────────────────
 // 跨阶段共用纯函数(jointinternal 与 jointreferendum 都引用)
-// ──────────────────────────────────────────────────────────────────
-
 pub(crate) fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
     T::AccountId::decode(&mut &raw[..]).ok()
 }
@@ -95,11 +91,7 @@ pub fn is_jointreferendum_vote_rejected(no_votes: u64, eligible_total: u64) -> b
     }
     (no_votes as u128).saturating_mul(100) >= (eligible_total as u128).saturating_mul(50)
 }
-
-// ──────────────────────────────────────────────────────────────────
 // pallet block(Config / storage / event / error / extrinsic)
-// ──────────────────────────────────────────────────────────────────
-
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
@@ -191,11 +183,11 @@ pub mod pallet {
         Eq,
     )]
     pub struct PreparedPopulationSnapshot<BlockNumber> {
-        /// 中文注释：联合公投阶段可投票总人数，由投票引擎从链上公民身份模块读取后缓存。
+        /// 联合公投阶段可投票总人数，由投票引擎从链上公民身份模块读取后缓存。
         pub eligible_total: u64,
-        /// 中文注释：人口统计作用域，后续公民投票资格按同一作用域读取。
+        /// 人口统计作用域，后续公民投票资格按同一作用域读取。
         pub scope: PopulationScope,
-        /// 中文注释：准备快照所在区块。
+        /// 准备快照所在区块。
         pub prepared_at: BlockNumber,
     }
 
@@ -294,7 +286,7 @@ pub mod pallet {
 
         /// 准备联合投票人口快照。
         ///
-        /// 中文注释：人口快照由投票引擎从 citizen-identity 链上状态直接读取。
+        /// 人口快照由投票引擎从 citizen-identity 链上状态直接读取。
         /// 业务模块只能在随后创建提案时消费已准备快照，不能再透传这些字段。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as Config>::WeightInfo::prepare_joint_population_snapshot())]
@@ -307,11 +299,7 @@ pub mod pallet {
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────
 // trait 实现 — 业务方法住在 jointinternal / jointreferendum 子模块
-// ──────────────────────────────────────────────────────────────────
-
 impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
     fn create_joint_proposal(who: T::AccountId) -> Result<u64, DispatchError> {
         Self::do_create_joint_proposal(who)

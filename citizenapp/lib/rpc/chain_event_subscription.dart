@@ -19,7 +19,7 @@ class ChainEventSubscription {
 
   /// 开始订阅新区块头和 finalized 区块头。
   ///
-  /// 中文注释(ADR-017)：业务流水只由 finalizedHeads 驱动(ChainTxMonitor
+  /// (ADR-017)：业务流水只由 finalizedHeads 驱动(ChainTxMonitor
   /// 只扫 finalized 链)；newHeads 不参与流水状态，仅供交易提交 watch
   /// (豁免区)做 UI 进度提示。返回值用于上层判断是否需要重试订阅。
   bool connect() {
@@ -57,7 +57,7 @@ class ChainEventSubscription {
       final stream = SmoldotClientManager.instance.subscribe(method, []);
       final sub = stream.listen(
         (data) {
-          // 中文注释：解析区块头中的 number 字段（hex 编码）。
+          // 解析区块头中的 number 字段（hex 编码）。
           int? blockNumber;
           if (data is Map) {
             final numHex = data['number'];

@@ -1,6 +1,6 @@
 //! 跨模块共享 DTO（≈ 前端 `common/types.ts`）。
 //!
-//! 中文注释：脱离 crate 根后，字段对子模块不再默认可见，故统一标 `pub(crate)`。
+//! 脱离 crate 根后，字段对子模块不再默认可见，故统一标 `pub(crate)`。
 
 use serde::{Deserialize, Serialize};
 

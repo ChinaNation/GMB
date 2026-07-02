@@ -1,4 +1,4 @@
-// 中文注释:注册局直接录入公民弹窗。
+// 注册局直接录入公民弹窗。
 // 注册局管理员填表后,后端一次性生成身份 CID、护照号和护照有效期。
 
 import { useEffect, useMemo, useState } from 'react';

@@ -1,6 +1,6 @@
 //! 登录会话鉴权守卫。
 //!
-//! 中文注释:会话与管理员身份只读取结构化表。
+//! 会话与管理员身份只读取结构化表。
 //! 业务模块通过 `require_admin_any` 获取认证上下文;
 //! 写操作的冷钱包扫码签名(PasskeyColdSign 档)由 admins::actions 的安全 grant 单独校验。
 
@@ -33,7 +33,7 @@ pub(super) fn admin_auth(
         .filter(|v| *v > 0)
         .unwrap_or(10);
 
-    // 中文注释:清理动作节流到 60 秒一次,避免高频鉴权请求都执行批量删除。
+    // 清理动作节流到 60 秒一次,避免高频鉴权请求都执行批量删除。
     static LAST_CLEANUP: AtomicI64 = AtomicI64::new(0);
     let now_ts = now.timestamp();
     let last = LAST_CLEANUP.load(Ordering::Relaxed);

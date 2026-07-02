@@ -1,6 +1,6 @@
 //! 立法与表决 HTTP handler(`/api/legislation/*`)。
 //!
-//! 中文注释:发起/表决产出扫码上链 `sign_request`(冷签由 CitizenWallet 提交,onchina 不提交);
+//! 发起/表决产出扫码上链 `sign_request`(冷签由 CitizenWallet 提交,onchina 不提交);
 //! 读法律/提案进度直读链。后端强制:① 登录绑定机构(只有该院管理员可达)② 本机构能否发起该
 //! 类型提案(`category::proposable_candidates`)③ 越权前置(`service::precheck_legislation_scope`)。
 //! 能力位是前端渲染门控,后端以此三重边界为准。
@@ -51,7 +51,7 @@ fn admin_tier(ctx: &AdminAuthContext) -> Option<u8> {
 
 /// 从登录上下文派生 (admin_scope_code, province_china_code, city_china_code)。
 ///
-/// 中文注释:`admin_scope_code` 与提案 `scope_code` 同口径(china.sqlite 码 u32;国家=0);
+/// `admin_scope_code` 与提案 `scope_code` 同口径(china.sqlite 码 u32;国家=0);
 /// province/city china 码供 subjects 查机构账户。解析失败以 `u32::MAX` 兜底 → precheck fail-closed。
 fn scope_codes(ctx: &AdminAuthContext) -> (u32, String, String) {
     match ctx.admin_level.as_deref() {
@@ -118,7 +118,7 @@ struct ProposableCandidateDto {
 
 /// GET /api/legislation/proposable —— 本机构可发起的提案候选(category×tier×voteTypes)。
 ///
-/// 中文注释:发起菜单单源自后端 `category::proposable_candidates`(参议会/非立法机构返回空);
+/// 发起菜单单源自后端 `category::proposable_candidates`(参议会/非立法机构返回空);
 /// 前端据此渲染可选立法动作与表决类型,不复刻分类逻辑。
 pub(crate) async fn list_proposable(
     State(state): State<AppState>,
@@ -146,7 +146,7 @@ pub(crate) async fn list_proposable(
 
 /// GET /api/legislation/laws/mine —— 本节点绑定机构层级/辖区的全部法律(会话派生 scope,前端不传码)。
 ///
-/// 中文注释:国家级并入宪法(tier 0)+ 国家法律(tier 1);省(2)/市(3)按本级 + 本辖区 china scope 码
+/// 国家级并入宪法(tier 0)+ 国家法律(tier 1);省(2)/市(3)按本级 + 本辖区 china scope 码
 /// (与 precheck/resolve 同口径,解掉前端拿不到 scope_code 的问题)。
 pub(crate) async fn list_my_laws(
     State(state): State<AppState>,

@@ -115,7 +115,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
       // 仅查本钱包持有的 admin 投票状态(其他人投票状态对 UI 无意义,节省 RPC)。
       final votes = <String, bool?>{};
       if (pid != null) {
-        // 中文注释：本机可能导入多个管理员钱包，用批量 storage 查询避免逐钱包 RPC。
+        // 本机可能导入多个管理员钱包，用批量 storage 查询避免逐钱包 RPC。
         votes.addAll(await _proposalService.fetchAdminVotesBatch(
           pid,
           widget.adminWallets.map((wallet) => wallet.pubkeyHex),

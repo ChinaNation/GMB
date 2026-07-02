@@ -67,20 +67,20 @@ class OnchainPaymentPanel extends StatefulWidget {
   /// 预填收款地址（从通讯录等入口跳转时使用）。
   final String? initialToAddress;
 
-  /// 中文注释：交易 Tab 可在链状态提示下方、链上支付表单上方插入入口。
+  /// 交易 Tab 可在链状态提示下方、链上支付表单上方插入入口。
   /// onchain 模块不直接 import offchain / multisig，跨功能编排留在 ui 层。
   final OnchainPaymentExtraEntriesBuilder? extraEntriesBuilder;
 
-  /// 中文注释：默认打开我的钱包选择页；测试或宿主页面可替换选择流程。
+  /// 默认打开我的钱包选择页；测试或宿主页面可替换选择流程。
   final OnchainWalletPicker? walletPicker;
 
-  /// 中文注释：默认读取当前激活钱包；测试可替换为内存钱包。
+  /// 默认读取当前激活钱包；测试可替换为内存钱包。
   final OnchainCurrentWalletLoader? currentWalletLoader;
 
-  /// 中文注释：默认读取本地流水；测试可替换为内存流水。
+  /// 默认读取本地流水；测试可替换为内存流水。
   final OnchainLocalRecordsLoader? localRecordsLoader;
 
-  /// 中文注释：真机保留延迟刷新兜底；widget test 可关闭，避免残留 Timer。
+  /// 真机保留延迟刷新兜底；widget test 可关闭，避免残留 Timer。
   final bool enableDelayedLocalRecordRefresh;
 
   @override
@@ -126,7 +126,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
 
   Future<void> _bootstrap() async {
     await _reloadWalletAndLocalRecords();
-    // 中文注释：交易流水确认由 ChainTxMonitor 写入，本页只做一次延迟本地刷新；
+    // 交易流水确认由 ChainTxMonitor 写入，本页只做一次延迟本地刷新；
     // 不再发 nonce 轮询确认 RPC，避免增加节点负担。
     if (!widget.enableDelayedLocalRecordRefresh) {
       return;
@@ -139,7 +139,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     }));
   }
 
-  /// 中文注释：从本地 Isar 加载链上转账记录。
+  /// 从本地 Isar 加载链上转账记录。
   Future<void> _loadLocalRecords({WalletProfile? wallet}) async {
     final targetWallet = wallet ?? _currentWallet;
     if (targetWallet == null) {
@@ -156,7 +156,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         targetPubkey,
         limit: 100,
       );
-      // 中文注释：钱包流水不再保存 direction，支出由 amountDeltaFen 的负号判断。
+      // 钱包流水不再保存 direction，支出由 amountDeltaFen 的负号判断。
       final filtered = records
           .where((r) =>
               r.type == 'transfer' && BigInt.parse(r.amountDeltaFen).isNegative)
@@ -273,7 +273,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     );
     if (!mounted || contact == null) return;
     setState(() {
-      // 中文注释：通讯录、二维码和转账输入框统一使用 SS58 地址。
+      // 通讯录、二维码和转账输入框统一使用 SS58 地址。
       _toController.text = contact.address;
     });
   }
@@ -503,7 +503,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         }
         if (mounted) await _loadLocalRecords();
 
-        // 中文注释：本机先展示 pending；交易池 inBlock 回调会升级为已出块，
+        // 本机先展示 pending；交易池 inBlock 回调会升级为已出块，
         // finalized 区块事件再升级为已确认。这里仅兜底延迟刷新本地列表。
         unawaited(_reloadAfterChainEventWindow());
       } catch (e) {

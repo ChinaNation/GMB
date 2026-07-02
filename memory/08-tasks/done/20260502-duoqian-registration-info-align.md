@@ -21,19 +21,19 @@ CID 资格候选查询选择私法人股份公司及其所属非法人,再用注
 ## 预计修改目录
 
 - `citizenchain/runtime/transaction/duoqian-manage/`
-  - 中文注释:收口机构注册 extrinsic 与 storage/action 类型,删除注册 payload 中的机构类型三件套。
+  - 收口机构注册 extrinsic 与 storage/action 类型,删除注册 payload 中的机构类型三件套。
 - `citizenchain/runtime/src/`
-  - 中文注释:清理清算行资格对 DUOQIAN 机构类型元数据的依赖,避免旧链上元数据残留。
+  - 清理清算行资格对 DUOQIAN 机构类型元数据的依赖,避免旧链上元数据残留。
 - `citizenchain/node/src/offchain/duoqian_manage/`
-  - 中文注释:节点 Tauri 后端改读 CID `registration-info`,补齐 `signer_admin_pubkey` 并按账户名列表构造 call_data。
+  - 节点 Tauri 后端改读 CID `registration-info`,补齐 `signer_admin_pubkey` 并按账户名列表构造 call_data。
 - `citizenchain/node/src/offchain/common/`
-  - 中文注释:更新 Tauri 对前端 DTO,删除旧注册字段。
+  - 更新 Tauri 对前端 DTO,删除旧注册字段。
 - `citizenchain/node/frontend/offchain/`
-  - 中文注释:节点前端创建机构多签页改用 `account_names[]`,删除旧参数透传。
+  - 节点前端创建机构多签页改用 `account_names[]`,删除旧参数透传。
 - `memory/05-modules/`
-  - 中文注释:更新 DUOQIAN 与节点清算行技术文档。
+  - 更新 DUOQIAN 与节点清算行技术文档。
 - `memory/08-tasks/`
-  - 中文注释:记录执行、验证与残留清理结果。
+  - 记录执行、验证与残留清理结果。
 
 ## 验收
 

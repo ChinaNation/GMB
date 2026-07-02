@@ -38,7 +38,7 @@ class PendingVoteRecord {
 
   /// 提交时使用的 runtime nonce。
   ///
-  /// 中文注释：该字段只用于日志和问题诊断，不能作为投票成功依据；
+  /// 该字段只用于日志和问题诊断，不能作为投票成功依据；
   /// 投票是否成功必须读取 runtime 投票引擎 storage。
   final int usedNonce;
 
@@ -108,7 +108,7 @@ class PendingVoteStore {
 
   /// 投票 pending 最长确认窗口。
   ///
-  /// 中文注释：GMB 链当前出块可能按分钟级推进，确认窗口必须覆盖多个出块周期。
+  /// GMB 链当前出块可能按分钟级推进，确认窗口必须覆盖多个出块周期。
   /// 超过窗口仍没有 runtime 投票记录，说明这条本地 pending 不能再阻塞
   /// 用户重投，应清掉并显示可重试状态。
   static const _votePendingTimeout = Duration(minutes: 20);
@@ -174,7 +174,7 @@ class PendingVoteStore {
 
   /// 批量检查链上确认状态，并返回完整分类结果。
   ///
-  /// 中文注释：详情页需要知道 lost/confirmed 结果来提示用户；投票结果只读
+  /// 详情页需要知道 lost/confirmed 结果来提示用户；投票结果只读
   /// runtime 投票引擎 storage，不再用 nonce 推断投票成功。
   Future<PendingVoteConfirmSummary> confirmAllDetailed(
     String proposalType,
@@ -193,7 +193,7 @@ class PendingVoteStore {
 
     for (final record in pending) {
       try {
-        // 中文注释：投票是否成功只能以 runtime 投票引擎 storage 为准。
+        // 投票是否成功只能以 runtime 投票引擎 storage 为准。
         // txHash / runtime nonce / 交易池 watch 只能用于诊断，不能直接证明
         // 管理员已经投票。
         final chainVote = await lookup(record);

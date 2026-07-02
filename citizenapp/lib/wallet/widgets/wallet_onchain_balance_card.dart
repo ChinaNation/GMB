@@ -7,7 +7,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 钱包链上余额卡(钱包详情页第 3 张卡)。
 ///
-/// 中文注释:
+///
 /// - RPC 查最新块,字段 = `free + reserved`,与 polkadot.js apps 的 total 口径一致。
 /// - 不再展示卡内刷新按钮,刷新由外层 [WalletDetailPage] 的 RefreshIndicator
 ///   下拉触发,通过 [GlobalKey<WalletOnchainBalanceCardState>] 调 [refresh()]。
@@ -24,7 +24,7 @@ class WalletOnchainBalanceCard extends StatefulWidget {
       WalletOnchainBalanceCardState();
 }
 
-/// 中文注释:State 类公开(去掉下划线)是为了支持外层 [GlobalKey] 引用,
+/// State 类公开(去掉下划线)是为了支持外层 [GlobalKey] 引用,
 /// 下拉刷新时由 [WalletDetailPage] 通过 key 调 [refresh()]。
 class WalletOnchainBalanceCardState extends State<WalletOnchainBalanceCard> {
   final ChainRpc _chainRpc = ChainRpc();
@@ -47,7 +47,7 @@ class WalletOnchainBalanceCardState extends State<WalletOnchainBalanceCard> {
 
   /// 拉取链上 finalized total 余额。
   ///
-  /// 中文注释:公开方法,供外层 [WalletDetailPage] 通过 [GlobalKey] 触发下拉刷新。
+  /// 公开方法,供外层 [WalletDetailPage] 通过 [GlobalKey] 触发下拉刷新。
   Future<void> refresh() async {
     if (_isLoading) return;
     setState(() {

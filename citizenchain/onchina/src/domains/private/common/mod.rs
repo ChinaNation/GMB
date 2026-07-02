@@ -1,6 +1,6 @@
 //! 私权机构类型单一来源。
 //!
-//! 中文注释:这里只定义私权机构的机构码分类。
+//! 这里只定义私权机构的机构码分类。
 //! `ZG/TG` 只服务公民/自然人/智能人等人类主体来源分类,不用于私权机构。
 
 use serde::{Deserialize, Serialize};
@@ -107,7 +107,7 @@ pub(crate) fn lock_input_to_rule(input: &mut CreateInstitutionInput, rule: Priva
     input.partnership_kind = rule.partnership_kind.map(|kind| kind.as_code().to_string());
     input.institution = rule.institution_code.to_string();
     input.p1 = Some(rule.p1.to_string());
-    // 中文注释:六类目标私权机构都是独立主体;非法人个体经营/无限合伙也不挂靠所属法人。
+    // 六类目标私权机构都是独立主体;非法人个体经营/无限合伙也不挂靠所属法人。
     input.parent_cid_number = None;
 }
 

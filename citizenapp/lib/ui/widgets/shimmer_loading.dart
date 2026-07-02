@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_theme.dart';
-
-// ---------------------------------------------------------------------------
 // ShimmerEffect - 为子组件添加从左到右的光泽扫过动画
-// ---------------------------------------------------------------------------
-
 /// 通用 shimmer 包装器。
 ///
 /// 在 [child] 上叠加一个 [LinearGradient] 动画遮罩，模拟骨架屏加载效果。
@@ -69,11 +65,7 @@ class _ShimmerEffectState extends State<ShimmerEffect>
     );
   }
 }
-
-// ---------------------------------------------------------------------------
 // ShimmerBox - 圆角矩形占位块
-// ---------------------------------------------------------------------------
-
 /// 可配置宽高和圆角的灰色占位块，配合 [ShimmerEffect] 使用。
 class ShimmerBox extends StatelessWidget {
   const ShimmerBox({
@@ -99,11 +91,7 @@ class ShimmerBox extends StatelessWidget {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
 // ProposalCardSkeleton - 模拟提案卡片布局的骨架
-// ---------------------------------------------------------------------------
-
 /// 提案卡片骨架屏：左侧图标占位 + 两行文本 + 右侧状态徽章。
 class ProposalCardSkeleton extends StatelessWidget {
   const ProposalCardSkeleton({super.key});
@@ -141,11 +129,7 @@ class ProposalCardSkeleton extends StatelessWidget {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
 // WalletCardSkeleton - 模拟钱包列表卡片的骨架
-// ---------------------------------------------------------------------------
-
 /// 钱包卡片骨架屏：左侧头像占位 + 名称行 + 地址行。
 class WalletCardSkeleton extends StatelessWidget {
   const WalletCardSkeleton({super.key});
@@ -179,11 +163,7 @@ class WalletCardSkeleton extends StatelessWidget {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
 // ListSkeleton - 批量骨架列表
-// ---------------------------------------------------------------------------
-
 /// 将 [itemCount] 个骨架项包裹在 [ShimmerEffect] 中。
 ///
 /// [builder] 用于自定义每个骨架项的 widget（默认无需提供）。

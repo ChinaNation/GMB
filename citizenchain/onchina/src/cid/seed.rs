@@ -1,6 +1,6 @@
 //! onchina CID 种子 + 撞号重试唯一入口。
 //!
-//! 中文注释:
+//!
 //! 确定性 account seed 的字节格式由 `primitives::cid::seed` 保护;本文件只负责
 //! 调用 onchina 生成适配层、执行数据库查重回调和动态机构 UUID 重试。
 

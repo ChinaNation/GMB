@@ -1,4 +1,4 @@
-// 中文注释:注册局顶层视图 —— activeView === 'citizens' 分支。
+// 注册局顶层视图 —— activeView === 'citizens' 分支。
 // 包含:citizen 列表 + 搜索栏 + 表格 + 直接录入公民弹窗。
 
 import { useEffect, useState, type ReactNode } from 'react';
@@ -141,7 +141,7 @@ export function CitizensView() {
     await refreshList(searchKeyword, prevCursor, true);
   };
 
-  // 中文注释：录入成功后，用返回的新身份 CID 自动回填搜索框并查询，让新公民立即显示在列表。
+  // 录入成功后，用返回的新身份 CID 自动回填搜索框并查询，让新公民立即显示在列表。
   // 拿不到新号(理论不应发生)时回退到沿用当前关键字刷新。
   const handleCreated = async (createdCid?: string) => {
     const next = createdCid?.trim();
@@ -293,7 +293,7 @@ export function CitizensView() {
           scroll={{ x: 980 }}
           onRow={(record) => ({
             onClick: (event) => {
-              // 中文注释：行点击进入公民详情页,详情页再承接钱包签名与链上推送。
+              // 行点击进入公民详情页,详情页再承接钱包签名与链上推送。
               const target = event.target as EventTarget | null;
               if (target instanceof Element && target.closest('[data-row-action="true"]')) return;
               setSelectedCitizen(record);

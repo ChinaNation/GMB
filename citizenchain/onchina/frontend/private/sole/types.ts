@@ -1,4 +1,4 @@
-// 中文注释:个体经营前端类型边界。固定 `F + GT`,无法人资格。
+// 个体经营前端类型边界。固定 `F + GT`,无法人资格。
 
 import type { PrivateType } from '../../subjects/api';
 

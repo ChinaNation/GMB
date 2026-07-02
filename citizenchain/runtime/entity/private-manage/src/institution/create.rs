@@ -60,7 +60,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         Error::<T>::ProtectedSource
     );
     ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
-    // 中文注释:private-manage 只管理私权机构;私权机构名称留在注册端业务库,
+    // private-manage 只管理私权机构;私权机构名称留在注册端业务库,
     // 链上只保存 CID 号、账户、管理员与生命周期状态。
     let (stored_full_name, stored_short_name) =
         (AccountNameOf::<T>::default(), AccountNameOf::<T>::default());
@@ -125,7 +125,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
-    // 中文注释：管理员更换与内部投票直接使用机构主账户。
+    // 管理员更换与内部投票直接使用机构主账户。
     let institution = main_account.clone();
 
     with_transaction(|| {
@@ -190,7 +190,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
             );
         }
 
-        // 中文注释:注册局创建机构时直接提交目标机构管理员合集;交易成功即写 Active。
+        // 注册局创建机构时直接提交目标机构管理员合集;交易成功即写 Active。
         if let Err(err) = Pallet::<T>::set_active_admin_account_direct(
             institution_code,
             institution.clone(),

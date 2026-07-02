@@ -1,6 +1,6 @@
 //! 管理员安全动作:会话 + QR_V1 冷钱包扫码签名(PasskeyColdSign 档)。
 //!
-//! 中文注释:管理员治理动作、业务安全授权和短期挑战全部使用结构化表;
+//! 管理员治理动作、业务安全授权和短期挑战全部使用结构化表;
 //! PasskeyColdSign 档 commit 校验冷钱包签名且 signer 须 ∈ 本机构链上 Active 集合。
 
 use axum::{
@@ -49,7 +49,7 @@ struct InstitutionDeregisterInput {
     account_name: Option<String>,
 }
 
-/// 中文注释:注销动作校验通过后解析出的目标(供 apply 写态 + commit 建凭证)。
+/// 注销动作校验通过后解析出的目标(供 apply 写态 + commit 建凭证)。
 struct DeregisterTarget {
     cid_number: String,
     account_name: String,
@@ -394,7 +394,7 @@ pub(crate) async fn commit_admin_action(
             return resp;
         }
     }
-    // 中文注释:闭包 move 会拿走 action_type,克隆一份供注销动作的 commit 后处理用。
+    // 闭包 move 会拿走 action_type,克隆一份供注销动作的 commit 后处理用。
     let action_type_for_credential = action_type.clone();
     let result = state.db.with_client({
         let ctx = ctx.clone();
@@ -692,7 +692,7 @@ fn preview_action_conn(
     }
 }
 
-/// 中文注释:对已存在机构的特殊操作(建/删账户、删机构文档)在 prepare 阶段预检管辖权,
+/// 对已存在机构的特殊操作(建/删账户、删机构文档)在 prepare 阶段预检管辖权,
 /// 与 accounts handler 的 get_visible_scope 校验等价。文档删除流程的业务 handler 自身不含
 /// 省/市校验,此预检即为其唯一管辖权闸:越权管理员拿不到一次性 grant,无法跨省操作他机构。
 fn precheck_institution_target_scope_conn(
@@ -720,7 +720,7 @@ fn precheck_institution_target_scope_conn(
     Ok(())
 }
 
-/// 中文注释:新建机构在 prepare 阶段预检省/市/镇管辖权,与 create_institution_inner 的
+/// 新建机构在 prepare 阶段预检省/市/镇管辖权,与 create_institution_inner 的
 /// locked_province/locked_city 校验逐字段等价:scope 锁定省/市/镇时,申报省/市/镇必须留空或
 /// 等于锁定值(留空交业务 handler 用锁定值回填),不会比 handler 更严而误拒。
 fn precheck_institution_create_scope(
@@ -782,7 +782,7 @@ fn precheck_institution_create_scope(
     Ok(())
 }
 
-/// 中文注释:scope 锁定某行政维度时,申报值必须留空(交 handler 回填)或逐字等于锁定值,
+/// scope 锁定某行政维度时,申报值必须留空(交 handler 回填)或逐字等于锁定值,
 /// 否则视为越权。锁定为 None(该档不限此维度)时不校验。
 fn check_locked_field(
     locked: Option<&str>,
@@ -861,7 +861,7 @@ fn validate_create_city_registry_conn(
     Ok((admin_account, admin_name, city, created_by))
 }
 
-/// 中文注释:机构/账户注销校验。conn 级(查存+管辖+派生),不触签名(签名在 commit 层)。
+/// 机构/账户注销校验。conn 级(查存+管辖+派生),不触签名(签名在 commit 层)。
 /// 创世/治理机构由链端 `is_genesis_protected`/org 闸权威拒;此处 created_by='SYSTEM' 是 CID 侧
 /// 纵深 + UX(不让根基机构进入注销流程）。
 fn validate_institution_deregister_conn(
@@ -1107,7 +1107,7 @@ fn apply_action_conn(
                 &challenge.request_payload,
             )?;
             let nonce = format!("dereg-{}", Uuid::new_v4().simple());
-            // 中文注释:issuer 三字段空占位,commit 层建凭证后回填 signature + issuer(同源)。
+            // issuer 三字段空占位,commit 层建凭证后回填 signature + issuer(同源)。
             repo::insert_deregistration_issued_conn(
                 conn,
                 &target.cid_number,

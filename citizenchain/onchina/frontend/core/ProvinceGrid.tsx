@@ -1,4 +1,4 @@
-// 中文注释:43 省卡片网格 — 纯内容,标题栏由外层 Card 承载。
+// 43 省卡片网格 — 纯内容,标题栏由外层 Card 承载。
 
 import React from 'react';
 import type { CidProvinceItem } from '../china/api';

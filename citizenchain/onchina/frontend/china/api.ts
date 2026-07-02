@@ -1,4 +1,4 @@
-// 中文注释:CID 元数据 API。这里承接省份、城市、机构码等跨页面选择项。
+// CID 元数据 API。这里承接省份、城市、机构码等跨页面选择项。
 
 import { adminHeaders, request } from '../utils/http';
 import type { AdminAuth } from '../auth/types';

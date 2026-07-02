@@ -1,4 +1,4 @@
-// 中文注释:登录、登出、会话校验与二维码登录 API。
+// 登录、登出、会话校验与二维码登录 API。
 // 通用 HTTP 能力在 utils/http.ts;本文件只放 auth 模块自己的后端接口。
 
 import { adminHeaders, request } from '../utils/http';

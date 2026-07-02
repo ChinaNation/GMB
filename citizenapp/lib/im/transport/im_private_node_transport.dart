@@ -65,7 +65,7 @@ class ImPrivateNodeEndpoint {
 
 /// 私人节点传输的密文信封。
 ///
-/// 中文注释：节点端 Spike RPC 仍使用 JSON 包一层路由字段，但
+/// 节点端 Spike RPC 仍使用 JSON 包一层路由字段，但
 /// [encryptedPayload] 已经可以是完整 GMB_IM_V1 Protobuf envelope bytes。
 class ImPrivateNodeEnvelopeDraft {
   const ImPrivateNodeEnvelopeDraft({
@@ -159,7 +159,7 @@ class ImPrivateNodeEnvelopeDraft {
 /// 私人通信全节点传输骨架。
 ///
 /// 手机只连接自己的私人通信全节点；跨用户投递由自己的节点直连对方私人节点。
-/// 中文注释：本类不得使用节点 RPC。手机会离开家庭局域网，后续必须接入
+/// 本类不得使用节点 RPC。手机会离开家庭局域网，后续必须接入
 /// 专用 IM P2P 通道连接自己的通信节点。
 class ImPrivateNodeTransport implements ImTransport {
   const ImPrivateNodeTransport({

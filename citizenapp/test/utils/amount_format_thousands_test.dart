@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 
-/// 中文注释:AmountFormat.formatThousands 边界覆盖。
+/// AmountFormat.formatThousands 边界覆盖。
 void main() {
   group('AmountFormat.formatThousands', () {
     test('零', () {

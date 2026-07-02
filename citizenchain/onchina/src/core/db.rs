@@ -1,4 +1,4 @@
-//! 中文注释:OnChina 结构化数据库入口。
+//! OnChina 结构化数据库入口。
 //!
 //! 本模块只负责 PostgreSQL 连接池、当前 schema 初始化和短事务封装。
 //! 业务主数据必须落到各模块自己的结构化表,不得再恢复旧快照表。
@@ -11,7 +11,7 @@ use std::{
     thread,
 };
 
-/// 中文注释:postgres::Error 在部分数据库错误上只显示 `db error`。
+/// postgres::Error 在部分数据库错误上只显示 `db error`。
 /// 展开 SQLSTATE、message、detail 和 hint,保证启动期和登录链路能看到真实 SQL 原因。
 pub(crate) fn postgres_error_text(err: &postgres::Error) -> String {
     let Some(db_error) = err.as_db_error() else {
@@ -97,7 +97,7 @@ impl Db {
 
     fn init_current_schema(conn: &mut postgres::Client) -> Result<(), String> {
         conn.batch_execute(
-            "-- 中文注释:机构/账户「注册局域注销态」+ 已签发注销凭证(区别于链投影 chain_status）。
+            "-- 机构/账户「注册局域注销态」+ 已签发注销凭证(区别于链投影 chain_status）。
              -- 注册局管理员发起注销(冷签特殊档）后写 ISSUED;机构管理员持凭证上链 propose_close,
              -- indexer 收到链上关闭后置 ONCHAIN_CLOSED(投影子项）。见 ADR-023 §6.3。
              CREATE TABLE IF NOT EXISTS institution_deregistrations (
@@ -158,7 +158,7 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_admins_account_lower ON admins(lower(admin_account));
              CREATE INDEX IF NOT EXISTS idx_admins_created_by_lower ON admins(lower(created_by));
 
-             -- 中文注释:`federal_registry_scope` / `provinces` 占位表已退役(决策③)——节点机构
+             -- `federal_registry_scope` / `provinces` 占位表已退役(决策③)——节点机构
              -- 归属由 active admin 首次登录绑定,行政区真源为 china.sqlite。
 
              CREATE TABLE IF NOT EXISTS admin_action_challenges (
@@ -194,7 +194,7 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_admin_login_sign_requests_expires
                 ON admin_login_sign_requests(expires_at);
 
-             -- 中文注释:本节点首次由链上 active admin 确认后绑定唯一机构;链上管理员关系仍是真源。
+             -- 本节点首次由链上 active admin 确认后绑定唯一机构;链上管理员关系仍是真源。
              CREATE TABLE IF NOT EXISTS node_institution_bindings (
                 binding_id TEXT PRIMARY KEY,
                 candidate_id TEXT NOT NULL,
@@ -363,7 +363,7 @@ impl Db {
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
              );
 
-             -- 中文注释:行政区名字单一真源是 china.sqlite,subjects 只存 province_code/
+             -- 行政区名字单一真源是 china.sqlite,subjects 只存 province_code/
              -- city_code/town_code,名字由后端在拼装 DTO 时反查派生(ADR-021)。
              -- private_type/partnership_kind/has_legal_personality/p1/parent_cid_number 是
              -- 私权机构明细,单一真源是 private 表;subjects 暂保留这几列作为通用查询/列表展示的
@@ -405,7 +405,7 @@ impl Db {
                 PRIMARY KEY (province_code, cid_number)
              ) PARTITION BY LIST (province_code);
 
-             -- 中文注释:机构管理员「链下私密资料」唯一归属表(ADR-030/A2)。
+             -- 机构管理员「链下私密资料」唯一归属表(ADR-030/A2)。
              -- 管理员姓名/职务/任期/cid/来源属链上 AdminProfile,**不在本表**;
              -- 本表只承接链下私密档案(部门/岗位/联系方式/证件照/passkey 绑定等)+ 链投影。
              -- 按 province_code 省级分区,复合主键 (province_code, cid_number, admin_account)。
@@ -571,7 +571,7 @@ impl Db {
                 PRIMARY KEY (province_code, id)
              ) PARTITION BY LIST (province_code);
 
-             -- 中文注释:审计 detail 由自由文本改结构化 JSONB(事实与展示分离,
+             -- 审计 detail 由自由文本改结构化 JSONB(事实与展示分离,
              -- 展示翻译归前端)。旧 TEXT 列存的是写死文案无法结构化,按用户确认
              -- 直接清空重建列类型(开发期运行痕迹,不留旧方案);收敛块幂等。
              DO $$ BEGIN
@@ -745,7 +745,7 @@ impl Db {
                 )
             })?;
 
-        // 中文注释:subjects 机构级链投影 + 溯源补列(幂等增列,可重复执行)。
+        // subjects 机构级链投影 + 溯源补列(幂等增列,可重复执行)。
         conn.batch_execute(
             "ALTER TABLE subjects
                 ADD COLUMN IF NOT EXISTS updated_by TEXT,
@@ -764,7 +764,7 @@ impl Db {
             )
         })?;
 
-        // 中文注释:行政区名字单一真源是 china.sqlite,subjects 不再落地名字副本;
+        // 行政区名字单一真源是 china.sqlite,subjects 不再落地名字副本;
         // 已有部署里的派生名字列幂等删除(分区父表 DROP 自动级联各省分区)。
         conn.batch_execute(
             "ALTER TABLE subjects
@@ -781,7 +781,7 @@ impl Db {
 
         Self::validate_target_subject_schema(conn)?;
 
-        // 中文注释:教育委员会从公权目录迁入教育机构 tab 后,已生成的国家/市公民教育委员会
+        // 教育委员会从公权目录迁入教育机构 tab 后,已生成的国家/市公民教育委员会
         // 需要有稳定业务分类;该分类只用于展示与查询,不参与 cid_number 生成。
         conn.batch_execute(
             "UPDATE subjects
@@ -867,7 +867,7 @@ impl Db {
     }
 
     fn delete_ineligible_citizen_residuals(conn: &mut postgres::Client) -> Result<(), String> {
-        // 中文注释:公民改为注册局直接录入并直接发护照——NORMAL 且在有效期内即已签发护照,
+        // 公民改为注册局直接录入并直接发护照——NORMAL 且在有效期内即已签发护照,
         // 选举资格(voting_eligible)与钱包绑定均为可选项,不再作为是否保留的判据。
         // 这里只清理身份已注销(citizen_status <> 'NORMAL')的历史残留索引行。
         conn.batch_execute(
@@ -912,7 +912,7 @@ impl Db {
         Ok(())
     }
 
-    // 中文注释:把启动期失败提前到清晰的目标状态校验,避免后续索引或业务 SQL 报隐晦字段错误。
+    // 把启动期失败提前到清晰的目标状态校验,避免后续索引或业务 SQL 报隐晦字段错误。
     fn validate_target_subject_schema(conn: &mut postgres::Client) -> Result<(), String> {
         for column in [
             "cid_full_name",
@@ -931,11 +931,11 @@ impl Db {
             Self::ensure_column_state(conn, "subjects", column, true)?;
         }
         Self::ensure_column_state(conn, "subjects", "name", false)?;
-        // 中文注释:行政区名字已收口 china.sqlite,subjects 必须无名字副本列。
+        // 行政区名字已收口 china.sqlite,subjects 必须无名字副本列。
         for column in ["province_name", "city_name", "town_name"] {
             Self::ensure_column_state(conn, "subjects", column, false)?;
         }
-        // 中文注释:机构级链投影 + 溯源补列必须就位。
+        // 机构级链投影 + 溯源补列必须就位。
         for column in [
             "issuer_cid_number",
             "institution_source_type",

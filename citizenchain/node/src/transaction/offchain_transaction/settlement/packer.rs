@@ -1,6 +1,6 @@
 //! 清算行批次打包器。
 //!
-//! 中文注释:
+//!
 //! - 职责:定时从 `OffchainLedger.pending` 取出待上链 `PendingPayment`,
 //!   组装为 `NodeBatchItem` 列表(字段与 runtime `OffchainBatchItemV2` 对齐),
 //!   由 `BatchSigner` 出 batch 签名,`BatchSubmitter` 提交 extrinsic。

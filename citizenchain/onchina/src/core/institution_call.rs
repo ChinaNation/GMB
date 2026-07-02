@@ -1,6 +1,6 @@
 //! `propose_create_institution` SCALE call-data 编码器(onchina 侧唯一真源)。
 //!
-//! 中文注释:onchina 只构造**裸 call data**(pallet/call 前缀 + 15 个参数),
+//! onchina 只构造**裸 call data**(pallet/call 前缀 + 15 个参数),
 //! 不拼签名扩展尾、不提交 extrinsic;冷钱包对 origin 冷签后由 CitizenWallet 提交。
 //!
 //! **铁律**:参数顺序与 SCALE 类型必须与链端 `public-manage`/`private-manage`
@@ -30,7 +30,7 @@ pub const PROPOSE_CREATE_INSTITUTION_CALL_INDEX: u8 = 5;
 
 /// 按机构码派生机构创建调用的目标 pallet 索引:私权法人码→PrivateManage,否则→PublicManage。
 ///
-/// 中文注释:与链端 `is_private_legal_code` 单源一致;前缀由 call data 内的 institution_code
+/// 与链端 `is_private_legal_code` 单源一致;前缀由 call data 内的 institution_code
 /// 派生,杜绝调用方手填 pallet 索引导致漂移。
 pub fn create_institution_pallet_index(institution_code: &[u8; 4]) -> u8 {
     if primitives::cid::code::is_private_legal_code(institution_code) {
@@ -123,7 +123,7 @@ fn encode_admin_profile(out: &mut Vec<u8>, profile: &AdminProfileArg) {
 
 /// QR_V1 链交易动作码:`a = (pallet_index << 8) | call_index`。
 ///
-/// 中文注释:扫码端(CitizenWallet)按 `b.a` 路由 decoder,链交易统一用本公式
+/// 扫码端(CitizenWallet)按 `b.a` 路由 decoder,链交易统一用本公式
 /// (见 `memory/01-architecture/qr/qr-action-registry.md`「链交易动作码」)。
 /// 禁止再为链交易另发明扁平小整数动作码(会与非链动作码 1..7 冲突)。
 pub const fn chain_action_code(pallet_index: u8, call_index: u8) -> u16 {
@@ -132,7 +132,7 @@ pub const fn chain_action_code(pallet_index: u8, call_index: u8) -> u16 {
 
 /// 一条链上调用的 QR 动作码 + 裸 SCALE call data。
 ///
-/// 中文注释:`action`(b.a)与 `call_data`(b.d)由同一 pallet/call 派生,杜绝两者漂移。
+/// `action`(b.a)与 `call_data`(b.d)由同一 pallet/call 派生,杜绝两者漂移。
 pub struct ChainCall {
     pub action: u16,
     pub call_data: Vec<u8>,

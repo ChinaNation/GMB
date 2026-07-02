@@ -84,11 +84,7 @@ class ActivationService {
   /// binary_domain_prefix,金标见 test/signer/fixtures/
   /// binary_prefix_domain_vectors.json。
   static final _activatePrefix = binaryDomainPrefix(kOpSignActivateAdmin);
-
-  // ---------------------------------------------------------------------------
   // 读取
-  // ---------------------------------------------------------------------------
-
   /// 加载所有激活记录。
   Future<List<ActivatedAdmin>> loadAll() async {
     final prefs = await SharedPreferences.getInstance();
@@ -142,11 +138,7 @@ class ActivationService {
     return all
         .any((a) => a.pubkeyHex == pk && _normalize(a.accountHex) == accountId);
   }
-
-  // ---------------------------------------------------------------------------
   // QR 激活流程
-  // ---------------------------------------------------------------------------
-
   /// 构建激活签名请求（用于展示 QR 码）。
   ///
   /// 返回 (SignRequestEnvelope, requestJson),直接传给 QrSignSessionPage。
@@ -217,11 +209,7 @@ class ActivationService {
 
     return activation;
   }
-
-  // ---------------------------------------------------------------------------
   // 取消激活
-  // ---------------------------------------------------------------------------
-
   /// 取消激活。
   Future<void> deactivate(
       String pubkeyHex, AdminAccountIdentity identity) async {
@@ -232,11 +220,7 @@ class ActivationService {
         (a) => a.pubkeyHex == pk && _normalize(a.accountHex) == accountId);
     await _saveAll(all);
   }
-
-  // ---------------------------------------------------------------------------
   // 内部方法
-  // ---------------------------------------------------------------------------
-
   Uint8List _buildActivatePayload(
       AdminAccountIdentity identity, String pubkeyHex) {
     // 格式：prefix(4B = GMB||0x18) + account_id(32B) + institution_code([u8;4])
@@ -262,7 +246,7 @@ class ActivationService {
     final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final bd = ByteData(8)..setUint64(0, timestamp, Endian.little);
     payload.setAll(offset, bd.buffer.asUint8List());
-    // 中文注释：保留 nonce 字段位置；签名验证绑定 account/pubkey/timestamp。
+    // 保留 nonce 字段位置；签名验证绑定 account/pubkey/timestamp。
     return payload;
   }
 

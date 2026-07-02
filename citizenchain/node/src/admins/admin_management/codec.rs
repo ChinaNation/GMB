@@ -7,9 +7,9 @@ use super::types::{source_label, AdminAccountDecoded, AdminProfileInfo};
 /// institution_code:[u8;4] + kind:u8 + admins:BoundedVec<AdminProfile>
 /// + creator:AccountId32 + created_at:u32 + updated_at:u32 + status:u8。
 ///
-/// 中文注释:个人多签(kind=2)仍是裸 `BoundedVec<AccountId32>`；机构管理员
+/// 个人多签(kind=2)仍是裸 `BoundedVec<AccountId32>`；机构管理员
 /// 都是 `AdminProfile`，字段标签由前端固定渲染，空值只留空数据区。
-/// 中文注释:created_at/updated_at 是 BlockNumberFor<T>,citizenchain runtime 配置为 u32。
+/// created_at/updated_at 是 BlockNumberFor<T>,citizenchain runtime 配置为 u32。
 pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> {
     if data.len() < 5 {
         return Err("AdminAccount 数据不足".to_string());

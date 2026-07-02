@@ -9,7 +9,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 绑定**清算行**(L2)确认页。
 ///
-/// 中文注释:
+///
 /// - 清算行(L2)体系唯一绑定页。数据源:CID 搜索结果传入的 `ClearingBankInfo`;
 ///   链上调用 `bind_clearing_bank(bank_main_account)`(call_index 30)。
 /// - 绑定即开户,**无预存、无业务开户费**;链上仅产生付费调用 1 元/次。
@@ -139,7 +139,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
                   wallet.walletIndex, payload),
             );
 
-      // 中文注释:绑定成功后写入完整清算行快照。链上仍是最终权威,本地快照只用于
+      // 绑定成功后写入完整清算行快照。链上仍是最终权威,本地快照只用于
       // 手机端页面展示、充值提现和扫码付款时快速定位清算行节点端点。
       final endpoint = widget.endpoint;
       if (endpoint != null) {

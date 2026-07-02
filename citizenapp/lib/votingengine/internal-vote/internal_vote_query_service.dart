@@ -5,7 +5,7 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 
 /// InternalVote 通用查询服务。
 ///
-/// 中文注释：管理员投票记录属于投票引擎通用状态，不放进具体业务模块，
+/// 管理员投票记录属于投票引擎通用状态，不放进具体业务模块，
 /// 避免 proposal 共享层依赖业务 service。
 class InternalVoteQueryService {
   InternalVoteQueryService({ChainRpc? chainRpc})
@@ -22,7 +22,7 @@ class InternalVoteQueryService {
 
   /// 批量查询管理员投票记录。
   ///
-  /// 中文注释：详情页和红点判断不能再按管理员逐条 RPC；这里统一拼好
+  /// 详情页和红点判断不能再按管理员逐条 RPC；这里统一拼好
   /// `InternalVotesByAccount` storage key 后分块读取。
   Future<Map<String, bool?>> fetchAdminVotesBatch(
     int proposalId,
@@ -46,7 +46,7 @@ class InternalVoteQueryService {
   /// 跨提案批量查询内部投票:输入 `{proposalId: [pubkeyHex]}`,一次链查返回
   /// `{proposalId: {pubkey: vote?}}`。
   ///
-  /// 中文注释(ADR-018 R2):公民-提案列表原来每个提案各发一次批量 RPC(P 个提案
+  /// (ADR-018 R2):公民-提案列表原来每个提案各发一次批量 RPC(P 个提案
   /// = P 次往返),这里把所有 (proposalId, admin) 的 storage key 一次拼齐、单次
   /// 分块读取,P 次往返降为 1 次。
   Future<Map<int, Map<String, bool?>>> fetchAdminVotesForProposals(

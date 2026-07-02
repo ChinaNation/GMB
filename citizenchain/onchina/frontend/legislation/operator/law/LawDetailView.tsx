@@ -1,4 +1,4 @@
-// 中文注释:法律详情(只读)。章>节>条>款 编辑体渲染;宪法双语可切换。
+// 法律详情(只读)。章>节>条>款 编辑体渲染;宪法双语可切换。
 // **零发起入口**——阅读页绝不放发起/修改按钮(feedback_entry_placement_read_vs_action)。
 
 import React, { useEffect, useState } from "react";

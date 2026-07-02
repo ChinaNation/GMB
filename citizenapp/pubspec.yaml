@@ -24,7 +24,7 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   image_picker: ^1.1.2
   crypto: ^3.0.3
-  # 中文注释：切换为仓库内本地 fork，后续 Dart FFI 能力扩展随主仓库一起演进。
+  # 切换为仓库内本地 fork，后续 Dart FFI 能力扩展随主仓库一起演进。
   smoldot:
     path: smoldot-dart
   # isar 3.1 上游已停更且预编译 .so 未 16KB 对齐;改用社区维护分支 isar_community

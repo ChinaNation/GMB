@@ -5,7 +5,7 @@ import 'package:citizenapp/isar/wallet_isar.dart';
 
 /// 账户余额展示快照。
 ///
-/// 中文注释：该快照只用于页面展示，提交交易前的余额校验必须重新读链，
+/// 该快照只用于页面展示，提交交易前的余额校验必须重新读链，
 /// 不能使用这里的缓存值。
 class AccountBalanceSnapshotStore {
   AccountBalanceSnapshotStore._();

@@ -1,4 +1,4 @@
-// 中文注释:注册协会 API。调用 `/api/v1/private/association`,不得回退到旧聚合接口。
+// 注册协会 API。调用 `/api/v1/private/association`,不得回退到旧聚合接口。
 
 import type { AdminAuth } from '../../auth/types';
 import type {

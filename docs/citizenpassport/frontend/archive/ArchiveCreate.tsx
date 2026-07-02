@@ -35,7 +35,7 @@ export default function ArchiveCreate() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // 中文注释：省市只来自 CPMS 安装授权，前端不允许手工指定归属。
+  // 省市只来自 CPMS 安装授权，前端不允许手工指定归属。
   useEffect(() => {
     installStatus().then(res => {
       if (res.data?.province_code) setProvinceCode(res.data.province_code);

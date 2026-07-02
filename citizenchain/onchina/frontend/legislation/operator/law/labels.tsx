@@ -1,4 +1,4 @@
-// 中文注释:法律案语义色状态标签(生效/待生效/废止)。层级/表决类型纯文本标签下沉到
+// 法律案语义色状态标签(生效/待生效/废止)。层级/表决类型纯文本标签下沉到
 // legislation/shared/labels.ts(叶子层,shared/ 不向上依赖 operator/),此处 re-export 保持既有导入点不变。
 
 import React from 'react';

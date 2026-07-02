@@ -1,6 +1,6 @@
 //! 扫码支付清算体系节点层。
 //!
-//! 中文注释:
+//!
 //! - 本目录统一承载 node 层清算行功能,包括清算行管理命令、本地账本、
 //!   对 citizenapp 的 RPC、批次打包器、链上事件监听同步、主账对账。
 //! - 清算行结算依赖的机构身份只读(候选搜索、链上机构详情、管理员集合、动态阈值、CID 注册凭证)
@@ -45,7 +45,7 @@ use self::settlement::reserve::ReserveMonitor;
 
 /// 清算行节点一次性启动时组装的组件集合。
 ///
-/// 中文注释:
+///
 /// - `service.rs` 在检测到节点角色是"清算行"时调 `start_clearing_bank_components`
 ///   拿回本结构,并把 `rpc_impl` 注册到 JSON-RPC 命名空间,`packer` 交给后台
 ///   worker,`event_listener` 订阅链上事件。

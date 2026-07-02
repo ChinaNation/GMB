@@ -115,7 +115,7 @@ impl PowAlgorithm<Block> for SimplePow {
         seal: &sp_consensus_pow::Seal,
         difficulty: Self::Difficulty,
     ) -> Result<bool, sc_consensus_pow::Error<Block>> {
-        // 中文注释：pre_digest 包含矿工 sr25519 公钥，seal 包含 (nonce, 签名)。
+        // pre_digest 包含矿工 sr25519 公钥，seal 包含 (nonce, 签名)。
         // 验证：1) PoW 难度满足  2) 签名证明矿工确实拥有该公钥的私钥。
         let Some(pre_digest) = pre_digest else {
             return Ok(false);
@@ -133,7 +133,7 @@ impl PowAlgorithm<Block> for SimplePow {
             return Ok(false);
         }
 
-        // 中文注释：验证矿工对 pre_hash 的 sr25519 签名，防止冒充他人公钥。
+        // 验证矿工对 pre_hash 的 sr25519 签名，防止冒充他人公钥。
         Ok(sr25519::Pair::verify(
             &signature,
             pre_hash.as_ref(),
@@ -157,7 +157,7 @@ fn hash_meets_difficulty(hash: &[u8; 32], difficulty: U256) -> bool {
     U256::from_big_endian(hash) <= target
 }
 
-/// 中文注释：返回 (pre_digest 编码字节, 矿工公钥)。
+/// 返回 (pre_digest 编码字节, 矿工公钥)。
 /// pre_digest 中存储的是 sr25519 公钥而非 AccountId，配合 seal 中的签名实现密码学绑定。
 fn author_pre_digest(keystore: &sp_keystore::KeystorePtr) -> Option<(Vec<u8>, sr25519::Public)> {
     let keys = keystore.sr25519_public_keys(POW_AUTHOR_KEY_TYPE);
@@ -191,7 +191,7 @@ fn start_cpu_miner<Proof: Send + 'static>(
     // 提交门控，防止"早产块"触发 timestamp inherent 的 future 校验失败。
     // 使用全局 AtomicU64 (LAST_SUBMIT_NS) 存储上次成功提交的时刻（自 epoch 的纳秒数），
     // 避免 Mutex 在 sleep 期间持锁阻塞其他线程。CPU 和 GPU 矿工共享此门控。
-    // 中文注释：出块目标时间从 genesis-pallet Runtime API 读取，替代编译期常量。
+    // 出块目标时间从 genesis-pallet Runtime API 读取，替代编译期常量。
     let min_submit_interval = Duration::from_millis(target_block_time_ms);
     let stride = (num_threads as u64).max(1);
 
@@ -272,7 +272,7 @@ fn start_cpu_miner<Proof: Send + 'static>(
                             break; // nonce 已过期，回外层重新获取 metadata
                         }
 
-                        // 中文注释：签名 pre_hash 证明矿工身份，签名失败则丢弃该 nonce。
+                        // 签名 pre_hash 证明矿工身份，签名失败则丢弃该 nonce。
                         let signature = match keystore.sr25519_sign(
                             POW_AUTHOR_KEY_TYPE,
                             &author_public,
@@ -466,7 +466,7 @@ pub fn new_full(
             .expect("Genesis block exists; qed"),
         &config.chain_spec,
     );
-    // 中文注释：所有节点统一注册 GRANDPA 网络协议，保证协议栈一致，避免协议协商不对称导致连接断开。
+    // 所有节点统一注册 GRANDPA 网络协议，保证协议栈一致，避免协议协商不对称导致连接断开。
     // 权威节点启动 grandpa-voter 消费 notification_service；普通节点启动 grandpa-observer 消费。
     let (grandpa_protocol_config, grandpa_notification_service) =
         sc_consensus_grandpa::grandpa_peers_set_config::<_, NetworkBackend>(
@@ -594,7 +594,7 @@ pub fn new_full(
         tracing_execute_block: None,
     })?;
 
-    // 中文注释：普通全节点不会像 GRANDPA voter 那样把交易池交给最终性组件持有。
+    // 普通全节点不会像 GRANDPA voter 那样把交易池交给最终性组件持有。
     // 这里显式让 TaskManager 持有一个 clone，避免 `new_full` 返回后交易池句柄提前释放，
     // 导致 txpool-background 认为所有视图已关闭并触发 essential task 自退。
     let transaction_pool_keepalive = transaction_pool.clone();
@@ -606,7 +606,7 @@ pub fn new_full(
             .boxed(),
     );
 
-    // 中文注释：本链制度要求"安装全节点软件即可参与挖矿"，不再依赖 authority 角色开关。
+    // 本链制度要求"安装全节点软件即可参与挖矿"，不再依赖 authority 角色开关。
     ensure_powr_key(&keystore)?;
 
     let proposer_factory = sc_basic_authorship::ProposerFactory::new(
@@ -694,7 +694,7 @@ pub fn new_full(
     // 所有矿工线程共享的时间基准，用于无锁提交门控。
     let miner_epoch = Instant::now();
 
-    // 中文注释：从 genesis-pallet 链上存储读取动态出块目标时间，
+    // 从 genesis-pallet 链上存储读取动态出块目标时间，
     // 替代编译期常量 MILLISECS_PER_BLOCK。若 API 调用失败，回退到常量默认值。
     let target_block_time_ms = {
         use sp_blockchain::HeaderBackend;
@@ -742,7 +742,7 @@ pub fn new_full(
 
     if enable_grandpa {
         if has_local_grandpa_authority {
-            // 中文注释：权威节点启动 grandpa-voter，参与最终性投票。
+            // 权威节点启动 grandpa-voter，参与最终性投票。
             let grandpa_config = sc_consensus_grandpa::Config {
                 gossip_duration: Duration::from_millis(333),
                 justification_generation_period: GRANDPA_JUSTIFICATION_PERIOD,
@@ -760,7 +760,7 @@ pub fn new_full(
                 network: network.clone(),
                 sync: Arc::new(sync_service),
                 notification_service: grandpa_notification_service,
-                // 中文注释(ADR-017 出块即固化)：`()` 是官方无约束投票规则，
+                // (ADR-017 出块即固化)：`()` 是官方无约束投票规则，
                 // 允许 GRANDPA 投票到链尾(best)。默认规则集含 BeforeBestBlockBy(2)，
                 // 在"跳空块"链上会让链尾两块永不固化(死水期 finalized 卡在 best−2)；
                 // 全端 finalized 单一口径(ADR-017)依赖本规则放开。
@@ -777,7 +777,7 @@ pub fn new_full(
                 sc_consensus_grandpa::run_grandpa_voter(grandpa_params)?,
             );
         } else {
-            // 中文注释：普通节点启动 grandpa-observer，只接收最终性结果不投票，
+            // 普通节点启动 grandpa-observer，只接收最终性结果不投票，
             // 同时消费 notification_service 避免空接收端导致 EssentialTaskClosed。
             let grandpa_config = sc_consensus_grandpa::Config {
                 gossip_duration: Duration::from_millis(333),

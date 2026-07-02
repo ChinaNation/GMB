@@ -1,4 +1,6 @@
-import 'package:citizenapp/signer/signing.dart' show kImWalletBindingDomain;
+import 'dart:typed_data';
+
+import 'im_binding_payload.dart';
 
 /// 钱包账户与 IM 设备身份的绑定草案。
 ///
@@ -40,24 +42,27 @@ class ImWalletBindingDraft {
   /// 钱包账户对绑定载荷的签名；为空表示尚未完成钱包确认。
   final String? walletSignature;
 
-  /// 构造稳定签名载荷。
-  ///
-  /// IM 钱包绑定**不是**签名 op_tag,为 `|` 拼接 UTF-8 字符串
-  /// (与 node `im/binding.rs` 逐字节一致),非 signing_message 二进制形态。
-  /// 域首段 [kImWalletBindingDomain] 单源对齐 primitives::sign::
-  /// IM_WALLET_BINDING_DOMAIN,详见 im_binding_payload.dart。
-  String canonicalPayload() {
-    return [
-      kImWalletBindingDomain,
-      walletAccount,
-      imDeviceId,
-      imDevicePubkey,
-      communicationNodePeerId,
-      nodeEndpoints.join(','),
-      expiresAt.toUtc().toIso8601String(),
-      nonce,
-    ].join('|');
-  }
+  /// 构造稳定 SCALE 签名载荷。
+  Uint8List signingPayloadBytes() => ImBindingPayload(
+        walletAccount: walletAccount,
+        imDeviceId: imDeviceId,
+        imDevicePubkey: imDevicePubkey,
+        nodePeerId: communicationNodePeerId,
+        nodeEndpoints: nodeEndpoints,
+        expiresAtMillis: expiresAt.toUtc().millisecondsSinceEpoch,
+        nonce: nonce,
+      ).signingPayloadBytes();
+
+  /// SCALE 签名载荷 hex,供 QR_V1 sign_request 的 `b.d` 使用。
+  String signingPayloadHex() => ImBindingPayload(
+        walletAccount: walletAccount,
+        imDeviceId: imDeviceId,
+        imDevicePubkey: imDevicePubkey,
+        nodePeerId: communicationNodePeerId,
+        nodeEndpoints: nodeEndpoints,
+        expiresAtMillis: expiresAt.toUtc().millisecondsSinceEpoch,
+        nonce: nonce,
+      ).signingPayloadHex();
 
   /// 绑定是否已过期。
   bool get isExpired => DateTime.now().isAfter(expiresAt);

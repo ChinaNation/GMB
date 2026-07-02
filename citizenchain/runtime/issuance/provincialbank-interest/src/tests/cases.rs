@@ -26,7 +26,7 @@ fn first_year_should_mint_and_settle() {
 #[test]
 fn later_boundary_auto_settles_only_next_unsettled_year() {
     new_test_ext().execute_with(|| {
-        // 中文注释：直接跳到第 2 年边界时，自动路径也只补下一个未结算年度。
+        // 直接跳到第 2 年边界时，自动路径也只补下一个未结算年度。
         System::set_block_number(20);
         ProvincialBankInterest::on_initialize(20);
 

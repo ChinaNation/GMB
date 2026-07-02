@@ -1,6 +1,6 @@
 //! 机构按行政层级的可见范围过滤
 //!
-//! 中文注释:此模块是所有 list/CRUD API 进行范围过滤的**唯一入口**。
+//! 此模块是所有 list/CRUD API 进行范围过滤的**唯一入口**。
 //! 业务 handler 只需:
 //! 1. `let ctx = require_admin_any(...)?;`
 //! 2. `let scope = scope::get_visible_scope(&ctx);`

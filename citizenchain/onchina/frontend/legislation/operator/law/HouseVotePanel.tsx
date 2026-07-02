@@ -1,4 +1,4 @@
-// 中文注释:院内表决(一人一票)。输入提案 ID + 赞成/反对 → api.castHouseVote → sign_request → 扫码上链弹窗。
+// 院内表决(一人一票)。输入提案 ID + 赞成/反对 → api.castHouseVote → sign_request → 扫码上链弹窗。
 // 只有能参与院内表决的机构(发起院/复议院)可见(canCastHouseVote 门控,后端 role 二次校验)。
 
 import React, { useState } from 'react';

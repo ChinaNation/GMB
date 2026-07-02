@@ -1,4 +1,4 @@
-// 中文注释:私权机构前端共用 API。六类私权机构必须在各自目录的 api.ts 中传入 routeSegment,
+// 私权机构前端共用 API。六类私权机构必须在各自目录的 api.ts 中传入 routeSegment,
 // 本文件只负责封装共用 HTTP、查重、证件照、详情和参与主体共享接口。
 
 import type { AdminAuth } from '../../auth/types';
@@ -52,7 +52,7 @@ export async function checkCidFullName(
   );
 }
 
-// 中文注释:创建机构属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
+// 创建机构属 PASSKEY_COLD_SIGN 操作,需冷钱包扫码签名授权;signWithScan 由创建弹窗注入。
 export async function createInstitution(
   auth: AdminAuth,
   routeSegment: string,
@@ -128,7 +128,7 @@ export async function getInstitution(
   );
 }
 
-// 中文注释:所属法人搜索。后端按 subjects/unincorporated_org 规则预过滤
+// 所属法人搜索。后端按 subjects/unincorporated_org 规则预过滤
 // (分校→本市学校本部;其它 F→私法人全国 ∪ 公法人按层级地域),前端不再兜底过滤。
 export async function searchParentInstitutions(
   auth: AdminAuth,
@@ -146,7 +146,7 @@ export async function searchParentInstitutions(
   );
 }
 
-// 中文注释:更新机构属 SESSION 操作(仅需有效会话),无需扫码签名授权,直接调用。
+// 更新机构属 SESSION 操作(仅需有效会话),无需扫码签名授权,直接调用。
 export async function updateInstitution(
   auth: AdminAuth,
   cidNumber: string,

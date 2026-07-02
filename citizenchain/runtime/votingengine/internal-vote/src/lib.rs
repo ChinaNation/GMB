@@ -55,7 +55,7 @@ mod tests;
 
 /// 内部提案语义分类。
 ///
-/// 中文注释：这是投票引擎内部状态，不是业务模块自定义类型；用于在业务执行成功后
+/// 这是投票引擎内部状态，不是业务模块自定义类型；用于在业务执行成功后
 /// 激活/删除动态阈值，避免业务模块自己维护投票阈值。
 #[derive(Encode, Decode, Clone, Copy, RuntimeDebug, TypeInfo, MaxEncodedLen, PartialEq, Eq)]
 pub enum InternalProposalRole {
@@ -118,7 +118,7 @@ pub mod pallet {
 
     /// 注册多签待激活动态阈值:(institution_code, account) -> threshold。
     ///
-    /// 中文注释：注册提案发起时写入，提案执行成功后移动到 ActiveDynamicThresholds。
+    /// 注册提案发起时写入，提案执行成功后移动到 ActiveDynamicThresholds。
     #[pallet::storage]
     pub type PendingDynamicThresholds<T: Config> = StorageDoubleMap<
         _,
@@ -132,7 +132,7 @@ pub mod pallet {
 
     /// 注册多签已激活动态阈值:(institution_code, account) -> threshold。
     ///
-    /// 中文注释：一般内部投票只从这里读取动态阈值，不再读取 admins 模块。
+    /// 一般内部投票只从这里读取动态阈值，不再读取 admins 模块。
     #[pallet::storage]
     pub type ActiveDynamicThresholds<T: Config> = StorageDoubleMap<
         _,
@@ -197,11 +197,7 @@ pub mod pallet {
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────
 // 内部判定 helper
-// ──────────────────────────────────────────────────────────────────
-
 fn decode_account<T: Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
     T::AccountId::decode(&mut &raw[..]).ok()
 }
@@ -266,18 +262,14 @@ fn active_internal_threshold<T: Config>(
         _ => None,
     }
 }
-
-// ──────────────────────────────────────────────────────────────────
 // 业务方法
-// ──────────────────────────────────────────────────────────────────
-
 impl<T: Config> Pallet<T> {
     fn internal_stage_duration() -> frame_system::pallet_prelude::BlockNumberFor<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
     fn ensure_threshold_within_snapshot(admins_len: u32, threshold: u32) -> DispatchResult {
-        // 中文注释：普通内部提案仍按账户当前阈值投票，但阈值必须能被本次管理员快照实际达成。
+        // 普通内部提案仍按账户当前阈值投票，但阈值必须能被本次管理员快照实际达成。
         ensure!(
             threshold > 0 && threshold <= admins_len,
             Error::<T>::InvalidThresholdSnapshot
@@ -286,7 +278,7 @@ impl<T: Config> Pallet<T> {
     }
 
     fn ensure_all_admin_threshold(admins_len: u32, threshold: u32) -> DispatchResult {
-        // 中文注释：账户链上注册与注销会改变账户生命周期，必须由该账户快照内全体管理员通过。
+        // 账户链上注册与注销会改变账户生命周期，必须由该账户快照内全体管理员通过。
         ensure!(
             admins_len > 0 && threshold == admins_len,
             Error::<T>::InvalidThresholdSnapshot
@@ -295,7 +287,7 @@ impl<T: Config> Pallet<T> {
     }
 
     fn ensure_dynamic_threshold(admins_len: u32, threshold: u32) -> DispatchResult {
-        // 中文注释：动态阈值只允许严格过半，且不得超过管理员总数；统一用 u64 避免乘法溢出。
+        // 动态阈值只允许严格过半，且不得超过管理员总数；统一用 u64 避免乘法溢出。
         ensure!(admins_len >= 2, Error::<T>::InvalidDynamicThreshold);
         ensure!(
             threshold > 0
@@ -622,7 +614,7 @@ impl<T: Config> Pallet<T> {
     ) -> Result<u64, DispatchError> {
         let now = <frame_system::Pallet<T>>::block_number();
         <votingengine::Pallet<T>>::register_proposal_data(proposal_id, module_tag, data, now)?;
-        // 中文注释：发起人签名发起提案后，投票引擎在同一事务自动记一票赞成，
+        // 发起人签名发起提案后，投票引擎在同一事务自动记一票赞成，
         // 用户不需要再发第二笔“同意”交易。
         Self::do_internal_vote(who, proposal_id, true)?;
         Ok(proposal_id)
@@ -767,11 +759,7 @@ impl<T: Config> Pallet<T> {
         <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, votingengine::STATUS_REJECTED)
     }
 }
-
-// ──────────────────────────────────────────────────────────────────
 // trait 实现
-// ──────────────────────────────────────────────────────────────────
-
 impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_general_internal_proposal_with_data(
         who: T::AccountId,
@@ -887,7 +875,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         admins_len: u32,
         threshold: u32,
     ) -> DispatchResult {
-        // 中文注释:直设阈值只针对注册动态多签主体；创世治理机构统一走代码级固定阈值。
+        // 直设阈值只针对注册动态多签主体；创世治理机构统一走代码级固定阈值。
         ensure!(
             is_registered_multisig_code(&institution_code),
             Error::<T>::InvalidInternalCode

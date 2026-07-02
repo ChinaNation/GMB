@@ -7,7 +7,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 链下扫码支付入口流程。
 ///
-/// 中文注释:
+///
 /// - 钱包页 / 交易页只负责放入口按钮,真正的扫码、校验清算行、查询收款方节点
 ///   与跳转付款确认页都收口在 offchain 功能域。
 /// - 扫码结果必须携带 `UserTransferBody.bank`,该字段是收款方清算行 `cid_number`。

@@ -63,13 +63,13 @@ fn json_amount_to_u128(v: &Value) -> Option<u128> {
 // Returns the genesis config presets.
 #[cfg(feature = "std")]
 fn build_genesis() -> Value {
-    // 中文注释：国储会信息统一从常量数组入口读取。
+    // 国储会信息统一从常量数组入口读取。
     let nrc_account = CHINA_CB
         .first()
         .and_then(|n| AccountId::decode(&mut &n.main_account[..]).ok())
         .expect("NRC main_account must decode to AccountId");
 
-    // 中文注释：每位国储会管理员创世预置 1000 万元（单位：分）。
+    // 每位国储会管理员创世预置 1000 万元（单位：分）。
     let admin_each: u128 = 1_000_000_000; // 1000万元 = 10亿分
     let nrc_admins = &CHINA_CB
         .first()
@@ -77,28 +77,28 @@ fn build_genesis() -> Value {
         .admins;
     let admin_total: u128 = admin_each * nrc_admins.len() as u128;
 
-    // 中文注释：国储会多签账户 = 创世发行总量 - 管理员预置总额，总量不变。
+    // 国储会多签账户 = 创世发行总量 - 管理员预置总额，总量不变。
     let mut genesis_balances: Vec<(AccountId, u128)> =
         vec![(nrc_account.clone(), GENESIS_ISSUANCE - admin_total)];
 
-    // 中文注释：19 位管理员各自获得创世余额。
+    // 19 位管理员各自获得创世余额。
     genesis_balances.extend(nrc_admins.iter().map(|key| {
         let account = AccountId::new(*key);
         (account, admin_each)
     }));
 
-    // 中文注释：省储行创立发行在创世时直接预置到各自 stake_account（无私钥永久质押地址）。
+    // 省储行创立发行在创世时直接预置到各自 stake_account（无私钥永久质押地址）。
     genesis_balances.extend(
         CHINA_CH
             .iter()
             .map(|bank| (AccountId::new(bank.stake_account), bank.stake_amount)),
     );
 
-    // 中文注释：两和基金创世一次性发行到国储会两和基金账户（无私钥派生地址 NRC_HE_ACCOUNT），
+    // 两和基金创世一次性发行到国储会两和基金账户（无私钥派生地址 NRC_HE_ACCOUNT），
     // 作为独立增发计入总供应量，国储会通过内部投票管理该基金。
     genesis_balances.push((AccountId::new(NRC_HE_ACCOUNT), HE_FUND_ISSUANCE));
 
-    // 中文注释：创世账户统一输出为链 SS58 地址（前缀 2027）。
+    // 创世账户统一输出为链 SS58 地址（前缀 2027）。
     let balances_json: Vec<Value> = genesis_balances
         .into_iter()
         .map(|(account, amount)| {
@@ -107,7 +107,7 @@ fn build_genesis() -> Value {
         })
         .collect();
 
-    // 中文注释：决议发行合法收款账户改为链上存储初始化，后续可由治理动态更新。
+    // 决议发行合法收款账户改为链上存储初始化，后续可由治理动态更新。
     let issuance_allowed_recipients_json: Vec<Value> = CHINA_CB
         .iter()
         .skip(1)
@@ -118,7 +118,7 @@ fn build_genesis() -> Value {
         })
         .collect();
 
-    // 中文注释：正式链开发期 GRANDPA 只使用国储会（NRC）的第 1 把密钥，单节点即可 finalize。
+    // 正式链开发期 GRANDPA 只使用国储会（NRC）的第 1 把密钥，单节点即可 finalize。
     // 切换到运行期时通过 SwitchToProduction migration 扩展到全部 44 个权威。
     let grandpa_authorities_json: Vec<Value> = vec![json!([
         grandpa_key_to_genesis_ss58(&CHINA_CB[0].grandpa_key),
@@ -151,7 +151,7 @@ fn build_genesis() -> Value {
         }),
     );
 
-    // 中文注释：创世常量写入 genesis-pallet 链上存储。
+    // 创世常量写入 genesis-pallet 链上存储。
     let citizens_bytes: Vec<u8> = CITIZENS.as_bytes().to_vec();
     let country_bytes: Vec<u8> = COUNTRY.as_bytes().to_vec();
     root.insert(
@@ -216,7 +216,7 @@ mod tests {
             .as_array()
             .expect("balances.balances should be an array");
 
-        // 中文注释：创世包含 1 个国储会多签账户 + 19 个 NRC 管理员 + 43 个省储行 stake 质押地址
+        // 创世包含 1 个国储会多签账户 + 19 个 NRC 管理员 + 43 个省储行 stake 质押地址
         // + 1 个国储会两和基金账户。
         let nrc_admins_len = CHINA_CB.first().map(|n| n.admins.len()).unwrap_or(0);
         assert_eq!(balances.len(), 1 + nrc_admins_len + CHINA_CH.len() + 1);
@@ -248,7 +248,7 @@ mod tests {
             })
             .expect("NRC balance entry should exist");
 
-        // 中文注释：创世发行分配到国储会多签账户 = 总发行量 - NRC 管理员预置总额。
+        // 创世发行分配到国储会多签账户 = 总发行量 - NRC 管理员预置总额。
         let admin_each: u128 = 1_000_000_000;
         let nrc_admins_len = CHINA_CB
             .first()
@@ -269,7 +269,7 @@ mod tests {
             .sum();
         let total_provincialbank_stake: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
 
-        // 中文注释：创世总注入 = 创世发行 + 省储行创立发行 + 两和基金发行。
+        // 创世总注入 = 创世发行 + 省储行创立发行 + 两和基金发行。
         assert_eq!(
             total_in_patch,
             GENESIS_ISSUANCE + total_provincialbank_stake + HE_FUND_ISSUANCE

@@ -1,4 +1,4 @@
-// 中文注释:cid 前端登录态 hook。
+// cid 前端登录态 hook。
 // 步 0 起数据源统一到 <AuthProvider> / AuthContext,
 // 本 hook 只是语义糖,返回 { auth, setAuth, logout } 以及 capabilities。
 // 业务子组件继续 import { useAuth } 即可。

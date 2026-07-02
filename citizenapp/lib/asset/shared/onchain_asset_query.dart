@@ -42,7 +42,7 @@ class OnchainAssetMeta {
   final String symbol;
 }
 
-// 中文注释：监管账户由 NRC 全局治理账户决定，AssetMeta 不再逐资产保存监管主体字段。
+// 监管账户由 NRC 全局治理账户决定，AssetMeta 不再逐资产保存监管主体字段。
 
 abstract class OnchainAssetQuery {
   /// 列出指定持币人(SS58)持有的所有资产 + 当前余额。

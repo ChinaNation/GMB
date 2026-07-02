@@ -1,9 +1,5 @@
 use super::*;
-
-// ============================================================================
 // 簇 1:Runtime 整体自检(4 个用例)
-// ============================================================================
-
 #[test]
 fn time_and_currency_constants_are_consistent() {
     assert_eq!(YUAN, 100 * FEN);
@@ -30,7 +26,7 @@ fn fee_payer_returns_none_for_transfer() {
         remark: BoundedVec::default(),
     });
     let signer = AccountId::new([1u8; 32]);
-    // 中文注释：机构转账提案交易本身由提交者按投票统一价付费；
+    // 机构转账提案交易本身由提交者按投票统一价付费；
     // 真正转账手续费在 pallet 执行阶段从机构账户内部扣取，FeePayerExtractor 不代付。
     let payer = RuntimeFeePayerExtractor::fee_payer(&signer, &call);
     assert!(
@@ -86,11 +82,7 @@ fn runtime_version_and_block_types_are_sane() {
     let _opaque_block_id: opaque::BlockId = generic::BlockId::Number(0);
     let _runtime_block_id: BlockId = generic::BlockId::Number(0);
 }
-
-// ============================================================================
 // 簇 2:装配集成测试(18 个用例)
-// ============================================================================
-
 #[test]
 fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
     use codec::Encode;
@@ -259,7 +251,7 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &internal_vote_call);
-        // 中文注释：投票 extrinsic 本身按治理用户操作固定 1 元计费，不再套 0.1%。
+        // 投票 extrinsic 本身按治理用户操作固定 1 元计费，不再套 0.1%。
         assert_eq!(vote_kind, onchain_transaction::FeeChargeKind::VoteFlat);
 
         let nrc_institution = AccountId::new(CHINA_CB[0].main_account);
@@ -306,7 +298,7 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         let admins: personal_manage::pallet::AdminsOf<Runtime> = vec![who.clone(), admin2.clone()]
             .try_into()
             .expect("admins should fit");
-        // 中文注释：本测试验证提案交易本身按投票统一价，而不是按提案金额套链上费率。
+        // 本测试验证提案交易本身按投票统一价，而不是按提案金额套链上费率。
         let account_name: personal_manage::pallet::AccountNameOf<Runtime> =
             b"runtime-test-personal"
                 .to_vec()
@@ -328,7 +320,7 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
         assert_eq!(create_kind, onchain_transaction::FeeChargeKind::VoteFlat);
 
         let _ = Balances::deposit_creating(&account, 777);
-        // 中文注释:propose_close 已加注销凭证字段(register_nonce/signature/issuer_*/signer_pubkey);
+        // propose_close 已加注销凭证字段(register_nonce/signature/issuer_*/signer_pubkey);
         // 本测试只验证该 Call 走投票统一价分类,凭证值无关,填默认值即可。
         let close_call = RuntimeCall::PublicManage(
             public_manage::pallet::Call::propose_close_public_institution {
@@ -430,7 +422,7 @@ fn runtime_call_filter_blocks_force_transfer_from_stake() {
 
 #[test]
 fn pow_digest_author_finds_pow_engine_author() {
-    // 中文注释：pre_digest 现在存储 sr25519 公钥，PowDigestAuthor 解码后派生 AccountId。
+    // pre_digest 现在存储 sr25519 公钥，PowDigestAuthor 解码后派生 AccountId。
     let public = sp_core::sr25519::Public::from_raw([21u8; 32]);
     let expected_account: AccountId = sp_runtime::MultiSigner::from(public).into_account();
     let encoded = public.encode();
@@ -800,11 +792,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
         );
     });
 }
-
-// ============================================================================
 // 簇 3:机构资金白名单允许矩阵(4 个用例)
-// ============================================================================
-
 #[test]
 fn stake_account_is_completely_blocked() {
     let account = stake_account();

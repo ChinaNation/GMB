@@ -51,7 +51,7 @@ pub fn execute_monitor_force_transfer<T: Config>(
 
 /// NRC 监管:整币封禁入调度队列(30 天后由 on_finalize 销毁余额)。
 ///
-/// 中文注释:实装时 `expire_block = current_block + 30 * DAYS`,
+/// 实装时 `expire_block = current_block + 30 * DAYS`,
 /// `ForceCloseSchedule::mutate(expire_block, |list| list.try_push(asset_id))`,
 /// `Assets[asset_id].state = ForceClosed { close_block: expire_block }`(同事务)。
 /// 30 天后 `on_finalize(expire_block)` 取出 list 逐一执行 `pallet_assets::start_destroy`。
@@ -64,7 +64,7 @@ pub fn execute_monitor_force_close<T: Config>(
 
 /// `on_finalize(n)` 处理到期 ForceClose 队列。
 ///
-/// 中文注释:O(1) `take(n)` 取出当前块到期的 asset_id 列表 → 逐一 destroy。
+/// O(1) `take(n)` 取出当前块到期的 asset_id 列表 → 逐一 destroy。
 /// 不扫主 Assets 表。
 pub fn process_force_close_schedule_on_finalize<T: Config>(_block: BlockNumberFor<T>) {
     // TODO: implement business logic

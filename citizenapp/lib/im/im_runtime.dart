@@ -93,7 +93,7 @@ class _ImCommunicationAccount {
 
 /// 公民 IM 运行态编排服务。
 ///
-/// 中文注释：页面层不直接操作 OpenMLS、P2P 通道和 Isar。这个服务负责读取
+/// 页面层不直接操作 OpenMLS、P2P 通道和 Isar。这个服务负责读取
 /// 本机通信节点配置、读取用户资料中的通信账户、建立设备身份，并把聊天发送
 /// /同步接到后续专用 IM P2P 通道。
 class ImRuntime {
@@ -160,7 +160,7 @@ class ImRuntime {
 
   /// 扫描区块链软件通信节点二维码后只保存通信节点信息。
   ///
-  /// 中文注释：配对二维码只绑定用户自己的电脑通信节点；联系人入口仍在
+  /// 配对二维码只绑定用户自己的电脑通信节点；联系人入口仍在
   /// “我的通讯录”，信息 Tab 不承担节点设置。扫码阶段不得连接节点 RPC，
   /// 手机后续通过专用 IM P2P 通道连接自己的通信节点。
   Future<ImPairedNodeConfig> pairCommunicationNode(

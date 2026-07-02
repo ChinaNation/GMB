@@ -1,6 +1,6 @@
 //! 地址变更链上 call data 编码器。
 //!
-//! 中文注释:OnChina 只构造裸 SCALE call data 和 QR 动作码,不在这里提交 extrinsic。
+//! OnChina 只构造裸 SCALE call data 和 QR 动作码,不在这里提交 extrinsic。
 
 use parity_scale_codec::{Compact, Encode};
 

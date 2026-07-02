@@ -1,4 +1,4 @@
-// 中文注释:大屏看板前端类型,camelCase 逐字镜像后端 DTO
+// 大屏看板前端类型,camelCase 逐字镜像后端 DTO
 // (onchina/src/domains/legislation/display/model.rs)。复用 LegProposalState,不重定义。
 
 import type { LegProposalState } from '../types';

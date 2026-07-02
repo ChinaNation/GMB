@@ -1,6 +1,6 @@
 //! 法律案宪法路由:层级 × 是否教育 → houses / executive / legislature 机构码序列(单源)。
 //!
-//! 中文注释:本表只定**机构码**层级路由(宪法第45/46/100/104–108条);各机构 `AccountId`
+//! 本表只定**机构码**层级路由(宪法第45/46/100/104–108条);各机构 `AccountId`
 //! 由 `service` 运行时从链上解析。机构码取自 `primitives::cid::code` 真源:
 //! - 国家众议会 NRP / 国家参议会 NSN / 国家教委会 NED / 国家立法院 NLG / 总统府 PRS;
 //! - 省众议会 PRP / 省参议会 PSN / 省立法院 PLG / 省政府 PGV;
@@ -27,7 +27,7 @@ pub fn vote_type_is_education(vote_type: u8) -> bool {
 
 /// 层级(0 宪法 / 1 国家 / 2 省 / 3 市)+ 是否教育 → 路由。
 ///
-/// 中文注释:宪法案(0)按国家立法院处理(修宪走国家众议会→参议会,非教育);
+/// 宪法案(0)按国家立法院处理(修宪走国家众议会→参议会,非教育);
 /// 省级无教委会,故 (2, true) 返回 None(省教育案不存在);非法组合返回 None。
 pub fn routing_for(tier: u8, is_education: bool) -> Option<LawRouting> {
     match (tier, is_education) {

@@ -1,6 +1,4 @@
-// =============================================================================
 // 中文文件头:App.tsx = 路由壳子 + Layout 壳子
-// -----------------------------------------------------------------------------
 // 本文件是 OnChina 前端的顶层路由壳,职责仅限:
 //   1. 挂 <AuthProvider>(AppOuter)
 //   2. 渲染 Layout / Header / Sider Menu / Content(AppInner)
@@ -13,8 +11,6 @@
 //
 // 新增业务功能一律下沉到一级业务目录;链交互页面/接口放到所属模块的 chain_* 文件。
 // 详见 memory/05-modules/citizenchain/onchina/FRONTEND_TECHNICAL.md。
-// =============================================================================
-
 import { useEffect, useState } from 'react';
 import { QrcodeOutlined } from '@ant-design/icons';
 import { Button, Card, Layout, Typography } from 'antd';
@@ -45,7 +41,7 @@ const { Header, Content } = Layout;
 function resolveHeaderAdminIdentity(auth: AdminAuth | null): { cidShortName: string; adminName: string } {
   if (!auth) return { cidShortName: '', adminName: '' };
   const name = typeof auth.admin_name === 'string' ? auth.admin_name.trim() : '';
-  // 中文注释:左段显示所属机构简称,取自 auth.cid_short_name(= subjects.cid_short_name 单一字段);
+  // 左段显示所属机构简称,取自 auth.cid_short_name(= subjects.cid_short_name 单一字段);
   // 空时(简称未加载)整段留空,不显示伪造名。
   const cidShortName =
     typeof auth.cid_short_name === 'string' ? auth.cid_short_name.trim() : '';
@@ -110,11 +106,11 @@ function AppInner() {
   const [bootstrapping, setBootstrapping] = useState(true);
   const [activeView, setActiveView] = useState<ActiveView>('citizens');
   const [viewResetToken, setViewResetToken] = useState(0);
-  // 中文注释:cidMeta 仍需在 App.tsx 持有,因为机构类 Tab 点击事件要统一拉取省市元数据。
+  // cidMeta 仍需在 App.tsx 持有,因为机构类 Tab 点击事件要统一拉取省市元数据。
   const [cidMeta, setCidMeta] = useState<CidMetaResult | null>(null);
-  // 中文注释:当前管理员是否已注册 passkey(null=未知);驱动登录默认跳转到管理员列表。
+  // 当前管理员是否已注册 passkey(null=未知);驱动登录默认跳转到管理员列表。
   const [passkeyRegistered, setPasskeyRegistered] = useState<boolean | null>(null);
-  // 中文注释:默认落地 tab 只在会话首次确定(机构码 + passkey 状态都就绪)时设置一次,
+  // 默认落地 tab 只在会话首次确定(机构码 + passkey 状态都就绪)时设置一次,
   // 之后 passkey 状态异步到达不再覆盖用户手动切换的 tab。
   const [hasInitializedView, setHasInitializedView] = useState(false);
 
@@ -160,7 +156,7 @@ function AppInner() {
     };
   }, []);
 
-  // 中文注释:登录管理员变化(含登出后重新登录)时重取 passkey 状态并重置默认落地标志。
+  // 登录管理员变化(含登出后重新登录)时重取 passkey 状态并重置默认落地标志。
   useEffect(() => {
     // 管理员变化即重置默认落地标志,让新会话重新决定首屏 tab。
     setHasInitializedView(false);
@@ -182,7 +178,7 @@ function AppInner() {
     };
   }, [auth?.admin_account]);
 
-  // 中文注释:按 passkey 状态决定默认落地 tab。未设置 passkey 的注册局管理员先落到
+  // 按 passkey 状态决定默认落地 tab。未设置 passkey 的注册局管理员先落到
   // 自己机构的管理员列表;已设置后进入首个业务 tab,FRG/CREG 的完整 tab 由后端能力表控制。
   // 未注册 passkey 的管理员默认改进自己机构的管理员列表(看到自己那行红点去设置密钥)。
   // 依赖机构码 + passkey 状态,会话内状态稳定后不再覆盖用户手动切换。
@@ -229,7 +225,7 @@ function AppInner() {
   };
 
   const switchView = async (view: ActiveView, options?: { loadCidMeta?: boolean }) => {
-    // 中文注释:重复点击当前 tab 也要重置子页面,用于从机构详情页回到模块入口。
+    // 重复点击当前 tab 也要重置子页面,用于从机构详情页回到模块入口。
     setActiveView(view);
     setViewResetToken((v) => v + 1);
     if (options?.loadCidMeta) await loadCidMetaForInstitutions();
@@ -379,7 +375,7 @@ function AppInner() {
               width: 'fit-content'
             }}
           >
-            {/* 中文注释:Tab 顺序 — 公民 → 六类私权机构 → 教育机构 → 公权机构 → 本机构管理员 → 市注册局 → 联邦注册局。
+            {/* Tab 顺序 — 公民 → 六类私权机构 → 教育机构 → 公权机构 → 本机构管理员 → 市注册局 → 联邦注册局。
                 FRG 能力是 CREG 超集;CREG 可只读本省联邦注册局 tab。未设置 passkey 的注册局
                 管理员只显示自己机构的管理员列表入口;普通机构管理员进入本机构管理员页设置 passkey。 */}
             {([
@@ -449,7 +445,7 @@ function AppInner() {
           </div>
 
           {routedView === 'gov' && capabilities.canManageInstitutions && auth ? (
-            // 中文注释:市公安局已折叠为普通公权机构,统一在公权机构列表展示,不再有独立分支。
+            // 市公安局已折叠为普通公权机构,统一在公权机构列表展示,不再有独立分支。
             <GovView key={`gov-${viewResetToken}`} auth={auth} cidMeta={cidMeta} resetToken={viewResetToken} />
           ) : routedPrivateType && capabilities.canViewPrivate && auth ? (
             <PrivateShell

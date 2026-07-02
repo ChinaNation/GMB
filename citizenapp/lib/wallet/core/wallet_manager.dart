@@ -41,7 +41,7 @@ class WalletProfile {
   /// 签名模式：`local`（热钱包）或 `external`（冷钱包）。
   final String signMode;
 
-  /// 中文注释：用户拖拽排序后的稳定顺序，数值越小越靠前。
+  /// 用户拖拽排序后的稳定顺序，数值越小越靠前。
   final int sortOrder;
 
   bool get isHotWallet => signMode == 'local';
@@ -97,14 +97,10 @@ class WalletManager {
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static final LocalAuthentication _localAuth = LocalAuthentication();
 
-  /// 中文注释：拖拽排序首次迁移 flag。设置后不再重复填充 sortOrder。
+  /// 拖拽排序首次迁移 flag。设置后不再重复填充 sortOrder。
   static const String _kSortOrderInitialized = 'wallet_sort_order_initialized';
-
-  // ---------------------------------------------------------------------------
   // 查询
-  // ---------------------------------------------------------------------------
-
-  /// 中文注释：钱包列表查询入口。
+  /// 钱包列表查询入口。
   /// - 首次进入会做一次性 sortOrder 迁移（按原 walletIndex 升序填 sortOrder），
   ///   通过 SharedPreferences flag 保证只做一次。
   /// - 排序规则：sortOrder 升序优先，相同则回退 walletIndex 兜底（保证稳定）。
@@ -120,7 +116,7 @@ class WalletManager {
     return rows.map(_toProfile).toList(growable: false);
   }
 
-  /// 中文注释：旧用户首次升级到拖拽排序版的一次性迁移。
+  /// 旧用户首次升级到拖拽排序版的一次性迁移。
   /// - 通过 SharedPreferences flag 幂等保护，只在首次执行时按 walletIndex
   ///   升序把 sortOrder 写成 0..N-1，保留旧顺序。
   /// - 没有钱包也写 flag，避免每次进入都重新检测。
@@ -142,7 +138,7 @@ class WalletManager {
     await prefs.setBool(_kSortOrderInitialized, true);
   }
 
-  /// 中文注释：按传入的 walletIndex 顺序写入新的 sortOrder。
+  /// 按传入的 walletIndex 顺序写入新的 sortOrder。
   /// 在一次 Isar 事务里完成，失败回滚。
   Future<void> reorderWallets(List<int> walletIndexes) async {
     await WalletIsar.instance.writeTxn((isar) async {
@@ -280,11 +276,7 @@ class WalletManager {
 
     return WalletSecret(profile: profile, seedHex: seedHex);
   }
-
-  // ---------------------------------------------------------------------------
   // 热钱包创建 / 导入
-  // ---------------------------------------------------------------------------
-
   /// 创建热钱包：生成助记词 → 派生 seed → 存 seed + 助记词。
   ///
   /// [wordCount] 助记词个数，12（默认）或 24。
@@ -341,11 +333,7 @@ class WalletManager {
     }
     return profile;
   }
-
-  // ---------------------------------------------------------------------------
   // 冷钱包导入
-  // ---------------------------------------------------------------------------
-
   /// 导入冷钱包：接受 SS58 地址或 0x 开头的 hex 公钥 → 解码公钥 → 只存公钥。
   Future<WalletProfile> importColdWallet({required String address}) async {
     final trimmed = address.trim();
@@ -394,18 +382,14 @@ class WalletManager {
     );
     return profile;
   }
-
-  // ---------------------------------------------------------------------------
   // 删除
-  // ---------------------------------------------------------------------------
-
   Future<void> clearWallet() async {
     final wallets = await WalletIsar.instance.read((isar) {
       return isar.walletProfileEntitys.where().findAll();
     });
     await WalletIsar.instance.writeTxn((isar) async {
       await isar.walletProfileEntitys.clear();
-      // 中文注释：钱包被清空时，本机从钱包进入 App 后记录的交易流水也一并清空。
+      // 钱包被清空时，本机从钱包进入 App 后记录的交易流水也一并清空。
       await isar.localTxEntitys.clear();
       await isar.walletTxSyncCursorEntitys.clear();
       final settings = await _getSettingsInTxn(isar);
@@ -442,7 +426,7 @@ class WalletManager {
         throw Exception('未找到钱包');
       }
       await isar.walletProfileEntitys.delete(current.id);
-      // 中文注释：用户明确删除钱包后，本机交易记录周期结束；再次导入同一地址
+      // 用户明确删除钱包后，本机交易记录周期结束；再次导入同一地址
       // 会从新的 finalized 区块重新记录，不保留旧本机流水。
       final pubkey = current.pubkeyHex.toLowerCase().replaceFirst('0x', '');
       await isar.localTxEntitys
@@ -472,11 +456,7 @@ class WalletManager {
       await _deleteMnemonic(walletIndex);
     }
   }
-
-  // ---------------------------------------------------------------------------
   // 更新
-  // ---------------------------------------------------------------------------
-
   Future<void> renameWallet(int walletIndex, String walletName) async {
     await updateWalletDisplay(walletIndex, walletName: walletName);
   }
@@ -529,11 +509,7 @@ class WalletManager {
       await isar.walletProfileEntitys.put(row);
     });
   }
-
-  // ---------------------------------------------------------------------------
   // Seed 派生
-  // ---------------------------------------------------------------------------
-
   /// mnemonic → entropy → PBKDF2 → 64 字节 → 前 32 字节 mini-secret。
   ///
   /// 使用 Substrate 特定的 BIP39 派生（非标准 BIP32），与
@@ -553,11 +529,7 @@ class WalletManager {
     final address = pair.address;
     return _DerivedWallet(address: address, pubkeyHex: pubkeyHex);
   }
-
-  // ---------------------------------------------------------------------------
   // Secure Storage（seed）
-  // ---------------------------------------------------------------------------
-
   String _seedKey(int walletIndex) => WalletSecureKeys.seedHexV1(walletIndex);
 
   Future<void> _writeSeedHex(int walletIndex, String seedHex) async {
@@ -581,11 +553,7 @@ class WalletManager {
     }
     return seedHex;
   }
-
-  // ---------------------------------------------------------------------------
   // 签名（seed 不出类）
-  // ---------------------------------------------------------------------------
-
   /// 使用指定热钱包对 [payload] 进行 sr25519 签名。
   ///
   /// seed 仅在本方法内短暂存在，签名完成后立即清零，不对外暴露。
@@ -630,7 +598,7 @@ class WalletManager {
     try {
       final pair = Keyring.sr25519.fromSeed(seedBytes);
       pair.ss58Format = profile.ss58;
-      // 中文注释：提案页面选中的管理员钱包必须与实际本地签名密钥完全一致，
+      // 提案页面选中的管理员钱包必须与实际本地签名密钥完全一致，
       // 否则会导致人口快照与上链发起人不一致，链上直接拒绝创建提案。
       final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
       if (localPubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
@@ -693,11 +661,7 @@ class WalletManager {
   Future<void> _deleteSeedHex(int walletIndex) async {
     await _secureStorage.delete(key: _seedKey(walletIndex));
   }
-
-  // ---------------------------------------------------------------------------
   // Secure Storage（mnemonic）
-  // ---------------------------------------------------------------------------
-
   String _mnemonicKey(int walletIndex) =>
       WalletSecureKeys.mnemonicV1(walletIndex);
 
@@ -768,11 +732,7 @@ class WalletManager {
       throw WalletAuthException('身份验证不可用：${e.message ?? e.code}');
     }
   }
-
-  // ---------------------------------------------------------------------------
   // 内部工具
-  // ---------------------------------------------------------------------------
-
   /// 检查公钥是否已存在，重复则抛出异常。
   Future<void> _checkDuplicatePubkey(String pubkeyHex) async {
     final normalized = pubkeyHex.toLowerCase();
@@ -903,7 +863,7 @@ class WalletManager {
     return profile;
   }
 
-  /// 中文注释：只能在已经进入写事务时调用；这里绝不再开启嵌套 writeTxn。
+  /// 只能在已经进入写事务时调用；这里绝不再开启嵌套 writeTxn。
   Future<WalletSettingsEntity> _getSettingsInTxn(Isar isar) async {
     final row = await isar.walletSettingsEntitys.get(0);
     if (row != null) {
@@ -933,7 +893,7 @@ class WalletManager {
     return profile;
   }
 
-  /// 中文注释：创建/导入完成后立即复读本地库，防止 UI 已展示助记词但
+  /// 创建/导入完成后立即复读本地库，防止 UI 已展示助记词但
   /// 钱包索引没有真正落库；失败时上层会回滚并提示用户重试。
   Future<void> _verifyWalletPersisted(WalletProfile profile) async {
     final persisted = await getWalletByIndex(profile.walletIndex);

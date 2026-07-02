@@ -1,4 +1,4 @@
-// 中文注释:股权公司页面。只承接股权公司列表、新增和进入详情。
+// 股权公司页面。只承接股权公司列表、新增和进入详情。
 
 import React from 'react';
 import type { PrivateTypePageProps } from '../common/PrivateTypePage';

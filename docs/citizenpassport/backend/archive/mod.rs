@@ -70,9 +70,9 @@ pub(crate) struct ArchiveQrPayload {
 
 #[derive(Serialize)]
 struct GeoSealClaims {
-    /// 中文注释：机构 CID 号只证明本 CPMS 属于哪个市公安局授权安装。
+    /// 机构 CID 号只证明本 CPMS 属于哪个市公安局授权安装。
     cid_number: String,
-    /// 中文注释：居住地/出生地只放行政区代码，不放中文地名，且只在 geo_seal 密文中出现。
+    /// 居住地/出生地只放行政区代码，不放中文地名，且只在 geo_seal 密文中出现。
     residence: GeoSealRegionClaims,
     birthplace: GeoSealRegionClaims,
     election_scope_level: String,
@@ -87,7 +87,7 @@ struct GeoSealRegionClaims {
 
 /// 构造 ARCHIVE 载荷（CID_CPMS_V1）。
 ///
-/// 中文注释：二维码明文字段不放省、市、CPMS 机构号；归属只放入 `geo_seal`，
+/// 二维码明文字段不放省、市、CPMS 机构号；归属只放入 `geo_seal`，
 /// CID 使用安装授权中的 install_secret 才能解开。
 pub(crate) async fn build_archive_qr_payload(
     state: &AppState,
@@ -177,7 +177,7 @@ pub(crate) async fn clear_archive_qr_payload(
     archive_id: &str,
     updated_at: i64,
 ) -> Result<(), (StatusCode, Json<ApiError>)> {
-    // 中文注释：任何会改变 ARCHIVE 真实性的档案资料变更，都统一删除旧档案码，等待“更新”重新签发。
+    // 任何会改变 ARCHIVE 真实性的档案资料变更，都统一删除旧档案码，等待“更新”重新签发。
     sqlx::query(
         "UPDATE archives SET archive_qr_payload = '', updated_at = $1 WHERE archive_id = $2",
     )
@@ -341,7 +341,7 @@ pub(crate) fn effective_voting_eligible(
     default_normal: bool,
     checked_at: i64,
 ) -> bool {
-    // 中文注释：投票资格以公民状态和 16 周岁年龄线共同生效，避免未成年人进入 CID 投票账户。
+    // 投票资格以公民状态和 16 周岁年龄线共同生效，避免未成年人进入 CID 投票账户。
     citizen_status == CITIZEN_STATUS_NORMAL
         && is_voting_age_at(checked_at, birth_date)
         && requested.unwrap_or(default_normal)
@@ -392,7 +392,7 @@ pub(crate) fn archive_valid_until(created_at: i64, years: i32) -> String {
 }
 
 pub(crate) fn archive_validity_years(created_at: i64, birth_date: NaiveDate) -> i32 {
-    // 中文注释：创建档案当天已满 16 周岁签发 10 年有效期，未满 16 周岁签发 5 年。
+    // 创建档案当天已满 16 周岁签发 10 年有效期，未满 16 周岁签发 5 年。
     if is_voting_age_at(created_at, birth_date) {
         10
     } else {

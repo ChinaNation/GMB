@@ -145,12 +145,12 @@ pub(super) fn extract_domain_from_origin(origin: &str) -> Option<String> {
 }
 
 pub(crate) fn build_admin_name(
-    // 中文注释:参数保留以稳定调用签名;显示名不按账号反查。
+    // 参数保留以稳定调用签名;显示名不按账号反查。
     _admin_account: &str,
     institution_code: &str,
     _scope_province_name: Option<&str>,
 ) -> String {
-    // 中文注释:Tier1 创世注册局默认名不带省份;省份是列表列字段,不是姓名的一部分。
+    // Tier1 创世注册局默认名不带省份;省份是列表列字段,不是姓名的一部分。
     if crate::core::chain_runtime::is_tier1_registry(institution_code) {
         "联邦注册局管理员".to_string()
     } else {

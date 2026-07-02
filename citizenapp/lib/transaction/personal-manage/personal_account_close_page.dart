@@ -205,7 +205,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
         proposalId: predictedProposalId,
         action: PersonalProposalAction.close,
         status: PersonalProposalStatus.voting,
-        // 中文注释：发起关闭提案签名成功后，投票引擎已自动记录发起人的赞成票。
+        // 发起关闭提案签名成功后，投票引擎已自动记录发起人的赞成票。
         yesVotes: 1,
         noVotes: 0,
         snapshot: {
@@ -247,7 +247,7 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
 
   bool get _canSubmit => !_submitting && _submitBlockedReason == null;
 
-  /// 中文注释：关闭个人多签会直接动到账户资金，链不同步时不允许继续发起。
+  /// 关闭个人多签会直接动到账户资金，链不同步时不允许继续发起。
   String? get _submitBlockedReason {
     final progress = _chainProgress;
     if (progress == null) {

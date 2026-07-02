@@ -923,7 +923,7 @@ pub unsafe extern "C" fn smoldot_get_system_account(
                     .map_err(|error| error.to_string())?
             };
 
-            // 中文注释：余额/nonce 主路径已经切到原生 storage proof，这里不再回退 legacy `state_getStorage`。
+            // 余额/nonce 主路径已经切到原生 storage proof，这里不再回退 legacy `state_getStorage`。
             let storage_value_hex = native_storage_future
                 .await
                 .map_err(|error| error.to_string())?
@@ -1360,7 +1360,7 @@ pub unsafe extern "C" fn smoldot_get_block_hash_async(
                 json!([block_number]),
             )
             .await?;
-            // 中文注释：轻节点正常情况——finalized 之前的旧区块没在 smoldot
+            // 轻节点正常情况——finalized 之前的旧区块没在 smoldot
             // 缓存里，chain_getBlockHash 返回 null。把 null 当作"未知"返回空串，
             // 由 dart 层判定为 None，绝不抛错（否则 PendingTxReconciler 会
             // 对每个老区块号刷一条 non-string 错误日志，淹没真问题）。

@@ -138,7 +138,7 @@ class _PersonalManageAccountInfoPageState
         _lastBalanceRefreshAtMillis = local.detail?.lastBalanceRefreshAtMillis;
       });
     } catch (_) {
-      // 中文注释：本地读取失败也不能让详情页进入全屏错误；保留入口传入的
+      // 本地读取失败也不能让详情页进入全屏错误；保留入口传入的
       // 名称、地址和状态，用户仍可下拉触发链上强制刷新。
     }
   }
@@ -196,7 +196,7 @@ class _PersonalManageAccountInfoPageState
         _lastBalanceRefreshAtMillis = now;
       });
     } catch (_) {
-      // 中文注释：余额失败只保留本地旧余额；不要影响详情页其他信息。
+      // 余额失败只保留本地旧余额；不要影响详情页其他信息。
     }
   }
 
@@ -263,7 +263,7 @@ class _PersonalManageAccountInfoPageState
         }
       });
     } catch (_) {
-      // 中文注释：链上刷新失败只保留本地详情，不弹进度提示或全屏失败。
+      // 链上刷新失败只保留本地详情，不弹进度提示或全屏失败。
     }
   }
 

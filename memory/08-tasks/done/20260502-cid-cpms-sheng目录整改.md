@@ -16,11 +16,11 @@
 ## 预计修改目录
 
 ```text
-citizencode/backend/citizenpassport/                 # 中文注释:CPMS 系统注册、安装二维码、匿名证书、站点状态治理
-citizencode/frontend/citizenpassport/                # 中文注释:CID 前端的 CPMS 系统管理组件与 API
-citizencode/backend/sheng_admins/         # 中文注释:只保留联邦管理员/市管理员治理与联邦管理员必要链交互
-citizencode/frontend/sheng_admins/        # 中文注释:只保留联邦管理员/市管理员页面和联邦管理员必要链交互
-memory/05-modules/citizencode/            # 中文注释:同步更新模块边界、链交互归属和目录说明
+citizencode/backend/citizenpassport/                 # CPMS 系统注册、安装二维码、匿名证书、站点状态治理
+citizencode/frontend/citizenpassport/                # CID 前端的 CPMS 系统管理组件与 API
+citizencode/backend/sheng_admins/         # 只保留联邦管理员/市管理员治理与联邦管理员必要链交互
+citizencode/frontend/sheng_admins/        # 只保留联邦管理员/市管理员页面和联邦管理员必要链交互
+memory/05-modules/citizencode/            # 同步更新模块边界、链交互归属和目录说明
 ```
 
 ## 边界规则

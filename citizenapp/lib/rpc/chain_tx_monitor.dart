@@ -25,7 +25,7 @@ class _DecodedTransferEvent {
 
 /// 链上交易监控服务（本机增量流水模式）。
 ///
-/// 中文注释(ADR-017 全端 finalized 单一口径)：citizenapp 不查询钱包导入前
+/// (ADR-017 全端 finalized 单一口径)：citizenapp 不查询钱包导入前
 /// 历史，也不让全节点替手机维护交易索引。本服务只按 finalized 游标小步
 /// 同步 System.Events 写入流水——交易状态两态(已提交→已确认)，不再扫
 /// best 链、不再产生"已出块"中间态；本地页面只读 Isar 缓存。
@@ -98,7 +98,7 @@ class ChainTxMonitor {
     _ensureSubscription();
     debugPrint('[TxMonitor] 交易监控已启动，监控 ${_walletAddressByPubkey.length} 个钱包');
 
-    // 中文注释：启动后只补 lastSyncedBlock 之后的缺口；没有游标的钱包
+    // 启动后只补 lastSyncedBlock 之后的缺口；没有游标的钱包
     // 以当前 finalized 区块为起点，不回扫导入前历史。
     unawaited(_syncToLatest());
   }
@@ -167,11 +167,11 @@ class ChainTxMonitor {
     if (blockNumber == null) return;
     switch (event.type) {
       case ChainEventType.newBlock:
-        // 中文注释(ADR-017)：best 头只是链尖竞争中的候选，不作为任何
+        // (ADR-017)：best 头只是链尖竞争中的候选，不作为任何
         // 业务数据来源；流水统一等 finalized 头驱动。
         break;
       case ChainEventType.newFinalizedBlock:
-        // 中文注释(ADR-018 卡⑤)：新 finalized 块=链上状态已更新,立即失效
+        // (ADR-018 卡⑤)：新 finalized 块=链上状态已更新,立即失效
         // ChainReadCache,让换块后的余额/storage 读取拿到最新 finalized 状态。
         ChainReadCache.instance.invalidate();
         await _syncThrough(blockNumber, missingCursorStartsAt: blockNumber - 1);
@@ -244,7 +244,7 @@ class ChainTxMonitor {
     for (var block = startBlock; block <= endBlock; block++) {
       if (!_running || _walletAddressByPubkey.isEmpty) return;
       if (WalletIsar.instance.hasActiveOperation) {
-        // 中文注释：交易流水同步是低优先级后台任务；前台钱包/治理读写繁忙时让路，
+        // 交易流水同步是低优先级后台任务；前台钱包/治理读写繁忙时让路，
         // 游标不推进，下一次新区块或启动补同步会继续补缺口。
         _scheduleSyncRetry();
         return;
@@ -272,7 +272,7 @@ class ChainTxMonitor {
 
   /// 处理一个 finalized 区块的 System.Events。
   ///
-  /// 中文注释：调用方保证 [blockNumber] ≤ finalized 高度，按块哈希钉块读取，
+  /// 调用方保证 [blockNumber] ≤ finalized 高度，按块哈希钉块读取，
   /// 写入的流水状态恒为 finalized(已确认)。
   Future<bool> _processBlock(int blockNumber) async {
     try {
@@ -524,7 +524,7 @@ class ChainTxMonitor {
     int palletIndex, {
     required int eventIndex,
   }) {
-    // 中文注释：metadata 解码正常时不会走到这里；兜底分支只显式跳过
+    // metadata 解码正常时不会走到这里；兜底分支只显式跳过
     // 普通转账前后最常见的定长事件，避免旧版“向前扫描”误命中 payload 字节。
     final oneAccountAndAmount = offset + 48 <= data.length ? offset + 48 : null;
     if (palletIndex == _balancesPallet) {
@@ -566,7 +566,7 @@ class ChainTxMonitor {
         blockHash,
         eventRecordIndex,
       ),
-      // 中文注释(ADR-017)：监控只扫 finalized 链，写入状态恒为"已确认"。
+      // (ADR-017)：监控只扫 finalized 链，写入状态恒为"已确认"。
       status: LocalTxStore.statusFinalized,
       amountDeltaFen: amountDeltaFen,
       transferAmountFen: transferAmountFen,
@@ -583,7 +583,7 @@ class ChainTxMonitor {
       final balance = await _chainRpc.fetchFinalizedBalance(pubkey);
       onBalanceChanged?.call(walletAddress, balance);
     } catch (_) {
-      // 中文注释：交易记录已经落库，余额刷新失败不能把钱包余额误写成 0。
+      // 交易记录已经落库，余额刷新失败不能把钱包余额误写成 0。
       onBalanceChanged?.call(walletAddress, double.nan);
     }
   }

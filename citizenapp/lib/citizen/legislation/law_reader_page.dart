@@ -6,7 +6,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 法律条款阅读器(ADR-028 P3-1)——宪法与普通法律共用。
 ///
-/// 中文注释:渲染 章>节>条>款;宪法(tier=宪法)对不可修改条款渲染徽章、双语可切;
+/// 渲染 章>节>条>款;宪法(tier=宪法)对不可修改条款渲染徽章、双语可切;
 /// 顶部显状态 + 链上生效时间。读链:law + law_version(公民端默认生效版本)
 /// + (宪法)immutableManifest;若存在待生效修订,额外读取待生效版时间用于提示。
 class LawReaderPage extends StatefulWidget {
@@ -713,7 +713,7 @@ class _LawReaderPageState extends State<LawReaderPage> {
           ],
           ...art.clauses.map((c) => Padding(
                 padding: const EdgeInsets.only(top: 6, left: 8),
-                // 中文注释:链上款正文已自带“第一款 / Paragraph 1”前缀,UI 不再二次拼接。
+                // 链上款正文已自带“第一款 / Paragraph 1”前缀,UI 不再二次拼接。
                 child: Text(_t(c.text, c.textEn),
                     style: const TextStyle(
                         fontSize: 13,

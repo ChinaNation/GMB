@@ -7,7 +7,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 扫码支付清算体系 Step 1 新增:**提现** 清算行主账户 → L3 自持账户。
 ///
-/// 中文注释:
+///
 /// - 调链上 `withdraw(amount)`(call_index 32)。
 /// - 链上费按金额 0.1% 最低 0.1 元。
 /// - 可选 `wssUrl`:若提供则查清算行节点本地缓存的余额展示;不提供时只显示输入。

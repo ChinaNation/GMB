@@ -50,7 +50,7 @@ pub fn schedule_cleanup<T: Config>(
     let mut target = base;
     let max_offset = T::MaxCleanupScheduleOffset::get().max(1);
 
-    // 中文注释：只有真实写入 CleanupQueue 后才返回成功，避免终态提案静默失去清理入口。
+    // 只有真实写入 CleanupQueue 后才返回成功，避免终态提案静默失去清理入口。
     for _ in 0..max_offset {
         if pallet::CleanupQueue::<T>::try_mutate(target, |ids| {
             ids.try_push(proposal_id)

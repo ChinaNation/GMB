@@ -1,20 +1,20 @@
-/// 中文注释:敏感动作冷钱包扫码签名工具(PasskeyColdSign 档)。
+/// 敏感动作冷钱包扫码签名工具(PasskeyColdSign 档)。
 pub(crate) mod action_sign;
-/// 中文注释:管理员安全动作入口:注册局管理员治理直接 apply,业务写操作签发一次性 grant。
+/// 管理员安全动作入口:注册局管理员治理直接 apply,业务写操作签发一次性 grant。
 pub(crate) mod actions;
 pub(crate) mod catalog;
 pub(crate) mod city_registry_admins;
-/// 中文注释:管理员登录认证能力,归入 admins 边界。
+/// 管理员登录认证能力,归入 admins 边界。
 pub(crate) mod login;
-/// 中文注释:联邦注册局管理员/市注册局管理员实体、角色和列表 DTO。
+/// 联邦注册局管理员/市注册局管理员实体、角色和列表 DTO。
 pub(crate) mod model;
-/// 中文注释:管理端操作权限分级唯一入口。
+/// 管理端操作权限分级唯一入口。
 pub(crate) mod operation_auth;
-/// 中文注释:WebAuthn passkey 鉴权(Passkey / PasskeyColdSign 档 step-up)。
+/// WebAuthn passkey 鉴权(Passkey / PasskeyColdSign 档 step-up)。
 pub(crate) mod passkey;
-/// 中文注释:管理员结构化表读写，唯一持久化入口。
+/// 管理员结构化表读写，唯一持久化入口。
 pub(crate) mod repo;
-/// 中文注释:管理员一次性安全授权模型(扫码签名挑战与 grant)。
+/// 管理员一次性安全授权模型(扫码签名挑战与 grant)。
 pub(crate) mod security_model;
 
 pub(crate) use catalog::list_federal_registry_admins;

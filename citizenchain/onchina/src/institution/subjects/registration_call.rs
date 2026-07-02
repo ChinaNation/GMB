@@ -1,6 +1,6 @@
 //! 组装 `propose_create_institution` 的链上参数并编码为裸 SCALE call data。
 //!
-//! 中文注释:本模块把链下机构/账户/管理员数据 + 注册局签发凭证,组装成与链端逐字节
+//! 本模块把链下机构/账户/管理员数据 + 注册局签发凭证,组装成与链端逐字节
 //! 对齐的 `ProposeCreateInstitutionArgs`,再交 `core::institution_call` 编码。
 //! onchina 只产 call data,不拼签名扩展尾、不提交 extrinsic。
 //!

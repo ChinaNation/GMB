@@ -1,4 +1,4 @@
-// 中文注释:个体经营页面。只承接个体经营列表、新增和进入详情。
+// 个体经营页面。只承接个体经营列表、新增和进入详情。
 
 import React from 'react';
 import type { PrivateTypePageProps } from '../common/PrivateTypePage';

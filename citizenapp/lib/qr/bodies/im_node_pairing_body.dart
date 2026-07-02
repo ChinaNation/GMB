@@ -3,7 +3,7 @@ import 'package:citizenapp/signer/signing.dart' show kImNodePairingProto;
 
 /// kind = im_node_pairing
 ///
-/// 中文注释：这是公民扫描自己电脑区块链软件通信节点二维码时使用的 body。
+/// 这是公民扫描自己电脑区块链软件通信节点二维码时使用的 body。
 /// 它只保存通信节点配对信息，不添加联系人，不改变聊天账户。
 class ImNodePairingBody implements QrBody {
   const ImNodePairingBody({

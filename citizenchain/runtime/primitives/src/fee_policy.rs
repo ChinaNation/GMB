@@ -12,11 +12,7 @@
 //! 具体每个 extrinsic 归哪一类由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier`决定;新增 extrinsic 必须在该 match 中显式归类。
 
 use sp_runtime::Perbill;
-
-// =====================================================================
 // 链上交易手续费模型(Onchain Fee Model)
-// =====================================================================
-
 /// 链上交易费率:**0.1%**(amount × 1‰)。
 ///
 /// 与 `ONCHAIN_MIN_FEE` 共同决定链上 extrinsic 的实际收费:
@@ -27,11 +23,7 @@ pub const ONCHAIN_FEE_RATE: Perbill = Perbill::from_parts(1_000_000);
 ///
 /// 当 `amount × ONCHAIN_FEE_RATE` 不足 10 FEN 时,按本最低值收取。
 pub const ONCHAIN_MIN_FEE: u128 = 10;
-
-// =====================================================================
 // 投票/治理类统一费用(Vote Flat Fee)
-// =====================================================================
-
 /// 投票 / 治理类 extrinsic 统一费用:**100 FEN = 1 元/次**。
 ///
 /// 适用范围:
@@ -41,11 +33,7 @@ pub const ONCHAIN_MIN_FEE: u128 = 10;
 ///
 /// 详见 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier`。
 pub const VOTE_FLAT_FEE: u128 = 100;
-
-// =====================================================================
 // 链上发行代币(onchain-issuance)创建费
-// =====================================================================
-
 /// 链上发行代币一次性创建费:**100_000 FEN = 1000 元/次**。
 ///
 /// 设计理由:
@@ -53,11 +41,7 @@ pub const VOTE_FLAT_FEE: u128 = 100;
 /// 2. 与 GMB 唯一计费铁律一致(用户代币创建只收 GMB,不按发行量阶梯)
 /// 3. 与发行后 mint/transfer 的 OnchainTx 标准价(0.1% / ≥0.1 元)正交,不重复计费
 pub const ONCHAIN_ASSET_CREATE_FEE: u128 = 100_000;
-
-// =====================================================================
 // 链上手续费分账(Onchain Fee Split)
-// =====================================================================
-
 /// 链上交易手续费铸块全节点分成:**80%**。
 pub const ONCHAIN_FEE_FULLNODE_PERCENT: u32 = 80;
 
@@ -66,11 +50,7 @@ pub const ONCHAIN_FEE_NRC_PERCENT: u32 = 10;
 
 /// 链上交易手续费安全基金账户分成:**10%**。
 pub const ONCHAIN_FEE_SAFETY_FUND_PERCENT: u32 = 10;
-
-// =====================================================================
 // 链下清算行 L2 手续费模型(Offchain Fee Model)
-// =====================================================================
-
 /// 链下交易单笔最小手续费:**1 FEN = 0.01 元**。
 pub const OFFCHAIN_MIN_FEE: u128 = 1;
 
@@ -82,11 +62,7 @@ pub const OFFCHAIN_FEE_RATE_MIN: Perbill = Perbill::from_parts(100_000);
 
 /// 链下清算行个体费率上限:**0.1%**。
 pub const OFFCHAIN_FEE_RATE_MAX: Perbill = Perbill::from_parts(1_000_000);
-
-// =====================================================================
 // 运营类费用乘数(Operational Fee Multiplier)
-// =====================================================================
-
 /// 运营类交易费乘数:**1**(不额外加价)。
 ///
 /// 由 pallet-transaction-payment 引用,用于区分 `Operational` 与 `Normal` dispatch class。

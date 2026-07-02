@@ -31,7 +31,7 @@ const ARCHIVE_SIGN_KEY_ID: &str = "ARCHIVE";
 const INSTALL_SECRET_KEY_ID: &str = "INSTALL_SECRET";
 
 // ── 本机密钥加密存储 ─────────────────────────────────────────────────────
-// 中文注释：使用环境变量 CPMS_KEY_ENCRYPT_SECRET（32 字节 hex）作为主密钥，
+// 使用环境变量 CPMS_KEY_ENCRYPT_SECRET（32 字节 hex）作为主密钥，
 // 对 ARCHIVE 签名私钥和 install_secret 做 AES-GCM 加密后存入 DB；缺失主密钥时拒绝初始化。
 
 fn master_encrypt_key() -> Result<[u8; 32], String> {
@@ -114,7 +114,7 @@ fn decode_32_byte_hex(input: &str) -> Result<[u8; 32], String> {
 #[derive(Clone)]
 pub(crate) struct QrSignKeyRuntime {
     pub(crate) key_id: String,
-    // 中文注释：purpose 是数据库审计字段；运行时只取 ARCHIVE + ACTIVE 的密钥。
+    // purpose 是数据库审计字段；运行时只取 ARCHIVE + ACTIVE 的密钥。
     #[allow(dead_code)]
     pub(crate) purpose: String,
     pub(crate) status: String,
@@ -312,7 +312,7 @@ async fn install_status(
 
 /// 处理 CID 签发的 INSTALL 安装码。
 ///
-/// 中文注释：第 2 步不再生成中间注册码。CPMS 安装时一次性写入
+/// 第 2 步不再生成中间注册码。CPMS 安装时一次性写入
 /// `cid_number / province_name / city_name / install_secret / sig`，同时生成本机 ARCHIVE 签名密钥。
 /// 已初始化实例如需换绑，按当前任务口径直接清库重装，不走旧数据兼容分支。
 async fn initialize_install(
@@ -783,7 +783,7 @@ mod tests {
         }
     }
 
-    /// 中文注释：安装 QR 校验含行政区交叉核对，依赖 CID 维护的 china.sqlite 唯一源。
+    /// 安装 QR 校验含行政区交叉核对，依赖 CID 维护的 china.sqlite 唯一源。
     /// 测试指向其源文件（与 deploy 随附的是同一份），缺失则跳过，不在 CPMS 侧维护第二套源。
     fn point_to_china_source() -> bool {
         let china_db = concat!(

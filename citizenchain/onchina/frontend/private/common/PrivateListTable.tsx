@@ -1,4 +1,4 @@
-// 中文注释:私权机构列表。私权机构必须输入机构全称、简称或 CID 精确搜索,避免跨省全量扫描。
+// 私权机构列表。私权机构必须输入机构全称、简称或 CID 精确搜索,避免跨省全量扫描。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Space, Table, Tag } from 'antd';

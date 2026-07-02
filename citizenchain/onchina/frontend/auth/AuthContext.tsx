@@ -1,4 +1,4 @@
-// 中文注释:cid 前端登录态 + 能力标志的全局 Context。
+// cid 前端登录态 + 能力标志的全局 Context。
 // 能力位由机构码经 platform/capabilityMap 镜像后端权限派生(后端是唯一权限执行者)。
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -8,7 +8,7 @@ import { clearStoredAuth, readStoredAuth, writeStoredAuth } from '../utils/store
 import { notice } from '../utils/notice';
 import { EMPTY_CAPABILITIES, type RoleCapabilities } from '../platform/capabilityMap';
 
-// 中文注释:RoleCapabilities 定义在 platform/capabilityMap;此处 re-export 保持既有引用路径。
+// RoleCapabilities 定义在 platform/capabilityMap;此处 re-export 保持既有引用路径。
 export type { RoleCapabilities };
 
 /** 登录态 → 能力位:直接取后端会话下发的 capabilities(后端单源),未下发则空能力兜底。 */
@@ -32,7 +32,7 @@ export interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [auth, setAuthState] = useState<AdminAuth | null>(() => readStoredAuth());
 
-  // 中文注释:auth 变化时同步 sessionStorage。null 时走 clearStoredAuth。
+  // auth 变化时同步 sessionStorage。null 时走 clearStoredAuth。
   useEffect(() => {
     if (auth) {
       writeStoredAuth(auth);

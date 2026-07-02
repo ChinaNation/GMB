@@ -2,7 +2,7 @@ import 'package:citizenapp/my/util/amount_format.dart';
 
 /// 多签创建金额规则。
 ///
-/// 中文注释：runtime 创建个人/机构多签时会 reserve `amount + fee`，
+/// runtime 创建个人/机构多签时会 reserve `amount + fee`，
 /// 同时要求发起账户保留 ED；App 预校验必须用同一口径，不能只看用户填写
 /// 的初始资金。
 class MultisigCreateAmountRules {

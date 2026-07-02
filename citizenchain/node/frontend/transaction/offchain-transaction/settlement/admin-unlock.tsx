@@ -33,7 +33,7 @@ export function ClearingBankAdminListPage({
       return;
     }
     let cancelled = false;
-    // 中文注释:清算行管理员卡片没有机构详情余额字段,这里统一补 finalized 链上余额。
+    // 清算行管理员卡片没有机构详情余额字段,这里统一补 finalized 链上余额。
     adminsChangeApi.getAdminAccountBalances(accounts)
       .then((balances) => {
         if (!cancelled) setBalanceByAccount(balances);

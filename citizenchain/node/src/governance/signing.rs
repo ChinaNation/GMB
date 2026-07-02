@@ -315,7 +315,7 @@ pub fn build_vote_sign_request(
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
 
-    // 中文注释：链交易签名材料只能由 runtime 类型构造，避免 node 冷签与热钱包
+    // 链交易签名材料只能由 runtime 类型构造，避免 node 冷签与热钱包
     // 交易路径在 TxExtension 或 additional_signed 字节上分叉。
     let (payload, signing_bytes) =
         build_runtime_signing_payloads(&call_data, &genesis_hash, nonce, spec_version, tx_version)?;
@@ -639,7 +639,7 @@ pub fn verify_and_submit(
             //   0x01 00 xx = Err(InvalidTransaction::xxx)
             //   0x01 01 xx = Err(UnknownTransaction::xxx)
             let result_hex = s.strip_prefix("0x").unwrap_or(s);
-            // 中文注释：dry-run 已应答但结果无法解码/为空属于异常应答，此时放行
+            // dry-run 已应答但结果无法解码/为空属于异常应答，此时放行
             // 提交等于放弃校验，必须拒绝；与下方"dry-run RPC 不可用"的可用性
             // 兜底是两回事。
             let result_bytes = hex::decode(result_hex)
@@ -649,7 +649,7 @@ pub fn verify_and_submit(
             }
             if result_bytes[0] != 0x00 {
                 // 外层 Result = Err → TransactionValidityError。
-                // 中文注释：Future/Stale 等交易提交后只会"看似成功永不上链"
+                // Future/Stale 等交易提交后只会"看似成功永不上链"
                 // （Future 进 future 队列且不向 peer 广播），一律拒绝并把
                 // 原因抛给前端，绝不再"继续尝试提交"。
                 let reason = classify_invalid_tx(&result_bytes);
@@ -663,7 +663,7 @@ pub fn verify_and_submit(
             // 0x0000 = Ok(Ok(())) → 可以提交
         }
         Err(e) => {
-            // 中文注释：dry-run RPC 本身不可用（节点未启用 system_dryRun 等）
+            // dry-run RPC 本身不可用（节点未启用 system_dryRun 等）
             // 时保持可用性兜底继续提交，由交易池做最终校验。
             eprintln!("[签名提交] dry-run RPC 失败: {e}");
             eprintln!("[签名提交] 跳过 dry-run 检查，继续提交");
@@ -676,14 +676,14 @@ pub fn verify_and_submit(
         Value::Array(vec![Value::String(extrinsic_hex)]),
     )?;
 
-    // 中文注释：提交结果必须是交易哈希字符串；其它形态说明节点应答异常，
+    // 提交结果必须是交易哈希字符串；其它形态说明节点应答异常，
     // 必须上抛而不是用占位值伪装成功。
     let tx_hash = result
         .as_str()
         .ok_or_else(|| format!("author_submitExtrinsic 返回非字符串: {result}"))?
         .to_string();
 
-    // 中文注释：被交易池接受 ≠ 已上链（nonce 错位时交易进 future 队列，永不
+    // 被交易池接受 ≠ 已上链（nonce 错位时交易进 future 队列，永不
     // 被打包且不广播）。后台延迟核对一次 nonce 是否被消费，只打日志不阻塞。
     spawn_post_submit_audit(pubkey_hex_clean.to_string(), sign_nonce, tx_hash.clone());
 
@@ -692,7 +692,7 @@ pub fn verify_and_submit(
 
 /// 把 dry-run 拒绝结果转成抛给前端的报错文案。
 ///
-/// 中文注释：Future（0x01 0x00 0x02）对用户而言就是"上一笔还没出块"——
+/// Future（0x01 0x00 0x02）对用户而言就是"上一笔还没出块"——
 /// 签名 nonce 排在池中上一笔之后，链上状态尚未消费——给人话提示，
 /// 技术细节留在调用方日志；其余变体保留技术原因便于排查。
 fn dry_run_reject_message(result_bytes: &[u8], raw_hex: &str) -> String {
@@ -727,7 +727,7 @@ fn classify_invalid_tx(result_bytes: &[u8]) -> String {
 
 /// 提交后的后台核对：延迟一个出块周期后检查账户 nonce 是否前进。
 ///
-/// 中文注释：`system_accountNextIndex` 包含就绪队列中的交易——nonce 未前进
+/// `system_accountNextIndex` 包含就绪队列中的交易——nonce 未前进
 /// 说明交易既不在就绪队列也未上链（丢失或卡 future 队列），打告警日志供排查；
 /// 该核对纯观测，不影响提交结果，沿用"submit-only + 后台观察"的既定模式。
 fn spawn_post_submit_audit(pubkey_hex: String, sign_nonce: u32, tx_hash: String) {
@@ -754,7 +754,7 @@ fn spawn_post_submit_audit(pubkey_hex: String, sign_nonce: u32, tx_hash: String)
 
 // ──── RPC 查询 ────
 
-// 中文注释:chain_query(ADR-017 finalized 收口)复用本封装,放宽到 pub(crate)。
+// chain_query(ADR-017 finalized 收口)复用本封装,放宽到 pub(crate)。
 pub(crate) fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     rpc::rpc_post(
         method,
@@ -967,7 +967,7 @@ pub(crate) fn sha256_hash_public(data: &[u8]) -> [u8; 32] {
 
 /// 当前 Unix 秒。
 ///
-/// 中文注释：系统时钟早于 epoch 属于环境故障；静默返回 0 会让 QR 请求一出生
+/// 系统时钟早于 epoch 属于环境故障；静默返回 0 会让 QR 请求一出生
 /// 就过期（issued_at=0），冷钱包只报"协议过期"而毫无线索，必须显式失败。
 pub(crate) fn now_secs() -> Result<u64, String> {
     SystemTime::now()

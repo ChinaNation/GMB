@@ -4,7 +4,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 首次启动权限说明入口。
 ///
-/// 中文注释：该页只解释并申请通知权限；网络权限由系统安装时自动授予，
+/// 该页只解释并申请通知权限；网络权限由系统安装时自动授予，
 /// 相机和相册等敏感权限仍在用户进入扫码、选图、保存二维码时由对应功能申请。
 class AppPermissionGate extends StatefulWidget {
   const AppPermissionGate({

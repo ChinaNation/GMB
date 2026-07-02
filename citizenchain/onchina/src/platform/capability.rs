@@ -72,7 +72,7 @@ const EMPTY: CapabilitySet = CapabilitySet {
 };
 
 // Tier1 创世注册局(FRG):是 CREG 的省级上游,能力必须是 Tier2 业务能力的超集。
-// 中文注释:链上 runtime 已限制 FRG 只能按本省省级组登记本省 CID;这里仅声明控制台可见能力。
+// 链上 runtime 已限制 FRG 只能按本省省级组登记本省 CID;这里仅声明控制台可见能力。
 const TIER1_REGISTRY: CapabilitySet = CapabilitySet {
     can_view_citizens: true,
     can_view_institutions: true,
@@ -113,7 +113,7 @@ const OWN_ADMINS_READONLY: CapabilitySet = CapabilitySet {
 };
 
 // 立法机构:在「本机构管理员只读」基础上叠加立法能力。
-// 中文注释:发起/表决两个位由立法角色决定(发起院=发起+表决;参议会=只表决;教委会/自治会=只提案)。
+// 发起/表决两个位由立法角色决定(发起院=发起+表决;参议会=只表决;教委会/自治会=只提案)。
 // 签署/任免/预算位本轮恒 false,分别由行政签署线程与 Phase 4 接入时置位。
 fn legislation_capabilities(role: LegislationRole) -> CapabilitySet {
     let (can_propose_legislation, can_cast_house_vote) = match role {
@@ -171,7 +171,7 @@ mod tests {
         let federal = capabilities_for("FRG");
         let city = capabilities_for("CREG");
 
-        // 中文注释:FRG 是 CREG 的省级上游,业务 tab 能力必须覆盖 CREG。
+        // FRG 是 CREG 的省级上游,业务 tab 能力必须覆盖 CREG。
         assert!(federal.can_view_citizens && city.can_view_citizens);
         assert!(federal.can_view_institutions && city.can_view_institutions);
         assert!(federal.can_view_private && city.can_view_private);
@@ -187,7 +187,7 @@ mod tests {
         let federal = capabilities_for("FRG");
         let city = capabilities_for("CREG");
 
-        // 中文注释:CREG 必须能进入联邦注册局 tab 只读本省管理员;注册局维护类写权只留给 FRG。
+        // CREG 必须能进入联邦注册局 tab 只读本省管理员;注册局维护类写权只留给 FRG。
         assert!(city.can_view_federal_registry);
         assert!(city.can_view_federal_registry_admins);
         assert!(!city.can_crud_city_registry_admins);
@@ -200,7 +200,7 @@ mod tests {
     fn national_judicial_yuan_can_view_own_admins_only() {
         let judicial = capabilities_for("NJD");
 
-        // 中文注释:NJD 可进入 OnChina,但本期只给本机构管理员只读页,不获得注册局业务能力。
+        // NJD 可进入 OnChina,但本期只给本机构管理员只读页,不获得注册局业务能力。
         assert!(judicial.can_view_own_admins);
         assert!(!judicial.can_view_citizens);
         assert!(!judicial.can_view_institutions);
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn reserve_governance_institutions_stay_out_of_onchina() {
-        // 中文注释:国储会/省储会/省储行使用节点桌面端,不能因为同属公权码而拿到网页能力。
+        // 国储会/省储会/省储行使用节点桌面端,不能因为同属公权码而拿到网页能力。
         for code in ["NRC", "PRC", "PRB"] {
             let capability = capabilities_for(code);
             assert!(

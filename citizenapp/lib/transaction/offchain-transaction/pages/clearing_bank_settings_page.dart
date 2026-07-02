@@ -9,7 +9,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 「设置清算行」真实入口。
 ///
-/// 中文注释:
+///
 /// - CID 负责搜索机构资料;链上 `ClearingBankNodes` 负责确认该机构是否已经声明
 ///   可连接的清算行节点。
 /// - 页面只缓存绑定快照,不把本地缓存当作权威状态;绑定、切换和支付仍以链上校验为准。

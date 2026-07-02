@@ -6,7 +6,7 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-// 中文注释：当前 crate 暂未提供可执行 benchmark。这里不能保留空的
+// 当前 crate 暂未提供可执行 benchmark。这里不能保留空的
 // `#[benchmarks]` 模块，否则 frame-benchmarking 宏会生成非法代码并阻断
 // runtime-benchmarks 构建。正式补齐 offchain-transaction benchmark 时，再恢复
 // `bind_clearing_bank` / `deposit` / `withdraw` / `switch_bank` 等入口。

@@ -243,11 +243,7 @@ class _ScanPageState extends State<ScanPage> {
     );
   }
 }
-
-// -----------------------------------------------------------------------------
 // 扫描框半透明遮罩
-// -----------------------------------------------------------------------------
-
 class _ScanOverlayPainter extends CustomPainter {
   _ScanOverlayPainter({required this.scanBoxSize, this.offsetY = 0});
 
@@ -279,11 +275,7 @@ class _ScanOverlayPainter extends CustomPainter {
   bool shouldRepaint(covariant _ScanOverlayPainter oldDelegate) =>
       oldDelegate.scanBoxSize != scanBoxSize || oldDelegate.offsetY != offsetY;
 }
-
-// -----------------------------------------------------------------------------
 // 扫描框四角装饰线
-// -----------------------------------------------------------------------------
-
 class _ScanCornerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {

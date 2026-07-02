@@ -73,7 +73,7 @@ parameter_types! {
     pub const MaxCitizenSignatureLength: u32 = 64;
 }
 
-/// 中文注释：集成测试只验证模块衔接，授权与签名规则在 runtime 配置单测覆盖。
+/// 集成测试只验证模块衔接，授权与签名规则在 runtime 配置单测覆盖。
 pub struct TestCitizenIdentityAuthority;
 impl CitizenIdentityAuthority<u64, citizen_identity::pallet::SignatureOf<Test>>
     for TestCitizenIdentityAuthority

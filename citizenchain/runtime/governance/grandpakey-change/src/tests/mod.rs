@@ -254,7 +254,7 @@ fn authority_id_from_key(key: [u8; 32]) -> GrandpaAuthorityId {
 }
 
 fn pass_prc_proposal(node_index: usize, proposal_id: u64) {
-    // 中文注释：提案发起人已经由投票引擎自动记一票，这里只补足剩余固定阈值票。
+    // 提案发起人已经由投票引擎自动记一票，这里只补足剩余固定阈值票。
     for admin_index in 1..6 {
         assert_ok!(cast_vote(
             cb_admin(node_index, admin_index),

@@ -49,7 +49,7 @@ export type SignedReceiptPayload = {
   payload_hash?: string;
 };
 
-// 中文注释:解析"挑战签名响应"二维码 payload。
+// 解析"挑战签名响应"二维码 payload。
 // 只接受 QR_V1 envelope(sign_response)。
 // 返回结构供调用方提交后端 verify/commit。
 export function parseSignedReceiptPayload(

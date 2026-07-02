@@ -1,6 +1,6 @@
 //! 提案进度只读投影:链上 votingengine `Proposal` + legislation-vote `LegMeta`/tally → `LegProposalState`。
 //!
-//! 中文注释:onchina 只读链装配只读投影,**绝不计票**(计票/状态推进全归投票引擎)。镜像字段顺序
+//! onchina 只读链装配只读投影,**绝不计票**(计票/状态推进全归投票引擎)。镜像字段顺序
 //! 锁死链端:`votingengine::Proposal`(types.rs:253)、`legislation-vote::LegislationMeta`(lib.rs:88)、
 //! `VoteCountU32/U64`(types.rs:250/258)。`referendum_scope`(Option<PopulationScope>)是 `LegislationMeta`
 //! **末字段**且进度投影不需要,故用**前缀解码镜像**(SCALE decode 只读声明字段、忽略尾部字节),
@@ -16,7 +16,7 @@ use serde::Serialize;
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 
 /// votingengine `Proposal<BlockNumber, AccountId>` 解码镜像(BlockNumber=u32 / AccountId=[u8;32])。
-// 中文注释:部分字段(internal_code/account_context/subject_cid_numbers/citizen_eligible_total)
+// 部分字段(internal_code/account_context/subject_cid_numbers/citizen_eligible_total)
 // 仅为 SCALE 布局对齐,
 // LegProposalState 投影暂不读,保留以锁死解码字段序。
 #[allow(dead_code)]
@@ -40,7 +40,7 @@ pub struct OnChainProposal {
 }
 
 /// legislation-vote `LegislationMeta<T>` **前缀**解码镜像(略 `referendum_scope` 末字段,进度投影不需要)。
-// 中文注释:executive/legislature 仅为 SCALE 布局对齐,LegProposalState 投影暂不读,保留以锁死解码字段序。
+// executive/legislature 仅为 SCALE 布局对齐,LegProposalState 投影暂不读,保留以锁死解码字段序。
 #[allow(dead_code)]
 #[derive(Debug, Decode)]
 pub struct OnChainLegMeta {
@@ -139,7 +139,7 @@ pub fn build_leg_proposal_state(
 
 /// 从某 pallet 的按 proposal_id(u64,Blake2_128Concat)存储项取单条 value 并镜像 decode。
 ///
-/// 中文注释:iterate + `storage_key_suffix::<8>`(u64 key LE 尾部)匹配 proposal_id;proposal 数量少,
+/// iterate + `storage_key_suffix::<8>`(u64 key LE 尾部)匹配 proposal_id;proposal 数量少,
 /// 整表扫描一次即可(符合 ADR-018 短键取一次)。
 async fn fetch_value_by_proposal_id<V: Decode>(
     pallet: &str,

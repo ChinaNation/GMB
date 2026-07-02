@@ -1,6 +1,6 @@
 //! 名册 × 活跃提案 × 逐席投票的聚合装配。
 //!
-//! 中文注释:大屏看板的纯装配层——把链读结果拼成 `DisplayBoard`。计票/阶段判定不在此发生
+//! 大屏看板的纯装配层——把链读结果拼成 `DisplayBoard`。计票/阶段判定不在此发生
 //! (只搬运 `fetch_proposal_state` 的只读投影)。席位投票由本机构名册左连接逐席投票映射得到。
 
 use std::collections::HashMap;
@@ -18,7 +18,7 @@ const PROPOSAL_KIND_LEGISLATION: u8 = 2;
 
 /// 装配本节点机构的大屏看板:名册 + 活跃立法提案(逐席投票)。
 ///
-/// 中文注释:活跃提案来自 `ActiveProposalsBySubject[InstitutionCid(cid_number)]`;逐个取进度投影,
+/// 活跃提案来自 `ActiveProposalsBySubject[InstitutionCid(cid_number)]`;逐个取进度投影,
 /// 非立法提案(无 `LegMeta` → `fetch_proposal_state` 返回 `None`)或已清理者跳过。
 pub(crate) async fn build_display_board(
     identity: &NodeInstitutionIdentity,

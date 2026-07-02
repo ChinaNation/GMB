@@ -9,7 +9,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 /// 统一管理员资料卡片。
 ///
-/// 中文注释：字段标签固定显示；链上资料缺少某个字段值时只留空值，不隐藏
+/// 字段标签固定显示；链上资料缺少某个字段值时只留空值，不隐藏
 /// “姓名 / 职务 / 任期 / 来源 / 身份CID / 账户 / 余额”这些 UI 标签。
 class AdminProfileCard extends StatelessWidget {
   const AdminProfileCard({

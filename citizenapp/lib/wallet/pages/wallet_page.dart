@@ -37,14 +37,14 @@ class MyWalletPage extends StatefulWidget {
   final bool selectForTrade;
   final bool selectForBind;
 
-  /// 中文注释：选择绑定钱包时的用途文案；电子护照复用钱包选择器时传入“电子护照”。
+  /// 选择绑定钱包时的用途文案；电子护照复用钱包选择器时传入“电子护照”。
   final String bindPurposeLabel;
 
   @override
   State<MyWalletPage> createState() => _MyWalletPageState();
 }
 
-/// 中文注释：拖拽排序需要改变列表长度，必须先复制成可变列表；
+/// 拖拽排序需要改变列表长度，必须先复制成可变列表；
 /// `WalletManager.getWallets()` 返回 fixed-length list，不能直接 removeAt/insert。
 @visibleForTesting
 List<WalletProfile> reorderWalletProfiles(
@@ -62,7 +62,7 @@ List<WalletProfile> reorderWalletProfiles(
   return next;
 }
 
-/// 中文注释：本地 Isar/MDBX 繁忙属于钱包数据库问题，不能提示成区块链网络异常。
+/// 本地 Isar/MDBX 繁忙属于钱包数据库问题，不能提示成区块链网络异常。
 bool _isWalletLocalStoreError(Object? error) {
   final raw = error.toString().toLowerCase();
   return raw.contains('isar') ||
@@ -87,7 +87,7 @@ String _walletOperationErrorMessage(Object error) {
 
 final RegExp _coldWalletPubkeyPattern = RegExp(r'^(?:0x)?[0-9a-fA-F]{64}$');
 
-/// 中文注释：导入冷钱包扫码只提取“可作为账户输入”的地址/公钥；
+/// 导入冷钱包扫码只提取“可作为账户输入”的地址/公钥；
 /// 不在这里触发导入，避免用户还没确认就写入本地钱包库。
 @visibleForTesting
 String? extractColdWalletImportAddress(String raw) {
@@ -127,7 +127,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
   final WalletManager _walletService = WalletManager();
   final ChainRpc _chainRpc = ChainRpc();
 
-  /// 中文注释：拖拽要求同步可控的列表，FutureBuilder 异步流不便参与重排，
+  /// 拖拽要求同步可控的列表，FutureBuilder 异步流不便参与重排，
   /// 因此把钱包列表常驻在 state 上，加载完成后再 setState 触发渲染。
   List<WalletProfile>? _wallets;
   bool _walletsLoading = true;
@@ -669,7 +669,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
 /// 整卡 InkWell 点击进入钱包详情；菜单按钮内嵌 PopupMenuButton，
 /// Flutter 默认会拦截 tap 事件，不会冒泡触发整卡 onTap。
 ///
-/// 中文注释:仅供 wallet_page 自己使用,通过 `@visibleForTesting`
+/// 仅供 wallet_page 自己使用,通过 `@visibleForTesting`
 /// 暴露给 widget 测试。其他模块禁止直接引用。
 @visibleForTesting
 class WalletListTile extends StatelessWidget {
@@ -692,7 +692,7 @@ class WalletListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 中文注释:钱包图标按冷热区分配色 —— 热=墨绿主色(链上主用),冷=蓝(离线签名设备调性)。
+    // 钱包图标按冷热区分配色 —— 热=墨绿主色(链上主用),冷=蓝(离线签名设备调性)。
     final isHot = wallet.isHotWallet;
     final iconBg =
         isHot ? AppTheme.primary.withAlpha(20) : AppTheme.info.withAlpha(20);
@@ -803,7 +803,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   List<LocalTxEntity> _recentRecords = const [];
   bool _screenshotGuardActive = false;
 
-  /// 中文注释:外层下拉刷新通过此 key 触发链上余额卡的 refresh()。
+  /// 外层下拉刷新通过此 key 触发链上余额卡的 refresh()。
   final GlobalKey<WalletOnchainBalanceCardState> _balanceCardKey =
       GlobalKey<WalletOnchainBalanceCardState>();
   final GlobalKey<WalletActionCardState> _actionCardKey =
@@ -819,14 +819,14 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         try {
           await _balanceCardKey.currentState?.refresh();
         } catch (_) {
-          // 中文注释:链上余额刷新失败已在卡片内置错误态处理,这里不打断其他刷新
+          // 链上余额刷新失败已在卡片内置错误态处理,这里不打断其他刷新
         }
       }),
       Future(() async {
         try {
           await _actionCardKey.currentState?.refresh();
         } catch (_) {
-          // 中文注释:清算行节点可能暂不可达,动作卡内部会展示节点不可达。
+          // 清算行节点可能暂不可达,动作卡内部会展示节点不可达。
         }
       }),
       _loadRecentRecords(),
@@ -844,16 +844,16 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   void initState() {
     super.initState();
     _loadRecentRecords();
-    // 中文注释：启动链上交易监控（余额变化触发模式）。
+    // 启动链上交易监控（余额变化触发模式）。
     ChainTxMonitor.instance.watchWallet(
       widget.wallet.address,
       widget.wallet.pubkeyHex,
     );
-    // 中文注释：注册余额变动回调，刷新交易记录和余额显示。
+    // 注册余额变动回调，刷新交易记录和余额显示。
     ChainTxMonitor.instance.onBalanceChanged = (address, newBalance) {
       if (mounted && address == widget.wallet.address) {
         _loadRecentRecords();
-        // 中文注释：交易记录落库和余额刷新是两件事；轻节点余额读取失败时
+        // 交易记录落库和余额刷新是两件事；轻节点余额读取失败时
         // ChainTxMonitor 会传 NaN，只刷新记录，不把余额误写成 0。
         if (newBalance.isFinite) {
           _walletService.setWalletBalance(
@@ -882,7 +882,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   Future<void> _onMenuAction(String action) async {
     switch (action) {
       case 'clearing_bank':
-        // 中文注释:跳转「设置清算行」占位页。真实搜索/绑定流程等后续任务卡。
+        // 跳转「设置清算行」占位页。真实搜索/绑定流程等后续任务卡。
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => ClearingBankSettingsPage(wallet: widget.wallet),
@@ -972,7 +972,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   /// 钱包名持久化(纯落盘 + 通信账户昵称双向同步)。
   ///
-  /// 中文注释:
+  ///
   /// - 编辑态和回滚逻辑已搬到 [WalletIdentityCard],这里仅负责落盘 + 同步。
   /// - 调用方(WalletIdentityCard)传进来的 newName 已 trim,但 updateWalletDisplay
   ///   内部再 trim 一次也无副作用,保持签名稳定。
@@ -1055,7 +1055,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 wallet: widget.wallet,
               ),
               const SizedBox(height: 24),
-              // 中文注释：交易记录区块标题进入完整列表，单条记录进入该笔详情。
+              // 交易记录区块标题进入完整列表，单条记录进入该笔详情。
               ..._buildTransactionHistorySection(),
             ],
           ),
@@ -1111,7 +1111,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           final record = _recentRecords[index];
           return Column(
             children: [
-              // 中文注释：标题行进入完整列表；单条最近记录直接进入该笔交易详情。
+              // 标题行进入完整列表；单条最近记录直接进入该笔交易详情。
               LocalTxRecordTile(
                 record: record,
                 onTap: () {

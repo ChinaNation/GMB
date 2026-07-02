@@ -115,11 +115,11 @@ pub mod pallet {
             }
 
             let interval = DIFFICULTY_ADJUSTMENT_INTERVAL;
-            // 中文注释：首个调整块是 interval + 1，因为窗口从 block 1 的时间戳开始计时。
+            // 首个调整块是 interval + 1，因为窗口从 block 1 的时间戳开始计时。
             let is_adjustment_block = block_num > 1 && (block_num - 1) % interval == 0;
 
             if is_adjustment_block {
-                // 中文注释：实际重点在 on_finalize，但 FRAME 只能在 on_initialize 预申报预算。
+                // 实际重点在 on_finalize，但 FRAME 只能在 on_initialize 预申报预算。
                 <T as Config>::WeightInfo::on_initialize_adjustment()
             } else if WindowStartMs::<T>::get().is_none() {
                 <T as Config>::WeightInfo::on_initialize_start_window()
@@ -139,7 +139,7 @@ pub mod pallet {
                 return;
             }
 
-            // 中文注释：拒绝空块。每个区块至少包含 1 个固有交易（timestamp::set），
+            // 拒绝空块。每个区块至少包含 1 个固有交易（timestamp::set），
             // 若 extrinsic 总数 ≤ 1 说明没有用户交易，属于空块。
             // 创世块（block 0）无时间戳注入，已在上方 now_ms == 0 处跳过。
             if block_num > 0 {
@@ -160,15 +160,15 @@ pub mod pallet {
                 // ── 调整块：计算新难度 ────────────────────────────────────────
                 if let Some(start_ms) = WindowStartMs::<T>::get() {
                     let actual_window_ms = now_ms.saturating_sub(start_ms).max(1);
-                    // 中文注释：从 genesis-pallet 链上存储读取动态出块目标时间，
+                    // 从 genesis-pallet 链上存储读取动态出块目标时间，
                     // 替代编译期常量 DIFFICULTY_TARGET_WINDOW_MS。
-                    // 中文注释：.max(1) 防御 genesis-pallet 返回 0 导致 target_window_ms 为 0。
+                    // .max(1) 防御 genesis-pallet 返回 0 导致 target_window_ms 为 0。
                     let target_block_time =
                         genesis_pallet::Pallet::<T>::target_block_time_ms().max(1);
                     let target_window_ms =
                         DIFFICULTY_ADJUSTMENT_INTERVAL as u64 * target_block_time;
                     let old_difficulty = CurrentDifficulty::<T>::get();
-                    // 中文注释：正常情况下 old_difficulty 不会为 0；这里做兜底是为了防止
+                    // 正常情况下 old_difficulty 不会为 0；这里做兜底是为了防止
                     // 迁移错误或脏状态把 clamp 的上下界反转，进而在调整块上触发 panic。
                     let calc_difficulty = old_difficulty.max(1);
 
@@ -179,7 +179,7 @@ pub mod pallet {
                         .saturating_mul(target_window_ms as u128)
                         / actual_window_ms as u128;
 
-                    // 中文注释：单次调整幅度限制按“参与计算的安全难度”夹紧；
+                    // 单次调整幅度限制按“参与计算的安全难度”夹紧；
                     // 即便存储里出现 0，也只会被修复为 >= 1，而不会把链直接打崩。
                     let max_diff = calc_difficulty.saturating_mul(DIFFICULTY_MAX_ADJUST_FACTOR);
                     let min_diff = (calc_difficulty / DIFFICULTY_MIN_ADJUST_FACTOR).max(1);

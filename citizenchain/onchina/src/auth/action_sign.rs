@@ -1,6 +1,6 @@
 //! 管理员敏感动作的冷钱包扫码签名工具(PasskeyColdSign 档)。
 //!
-//! 中文注释:敏感动作 step-up 统一为
+//! 敏感动作 step-up 统一为
 //! "会话(链上已证管理员)+ 冷钱包扫码签名"。本模块只承载扫码签名 payload 构造、
 //! 哈希与验签工具,不含任何设备本地因子。
 
@@ -45,7 +45,7 @@ pub(crate) fn hash_json(value: &serde_json::Value) -> String {
 
 /// 校验冷钱包对动作 payload 的扫码签名。
 ///
-/// 中文注释:① signer 必须等于动作发起人;② 提交摘要与服务端预期摘要一致;
+/// ① signer 必须等于动作发起人;② 提交摘要与服务端预期摘要一致;
 /// ③ sr25519 验签通过。调用方(actions::commit)还会额外校验 signer ∈ 本机构链上 Active 集合。
 pub(crate) fn verify_citizen_wallet_signature(
     expected_actor_account: &str,

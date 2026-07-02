@@ -51,11 +51,11 @@ pub use pallet::*;
 
 /// 模块标识前缀,用于在投票引擎 ProposalData 中识别 onchain-issuance 提案。
 ///
-/// 中文注释:与 ADR-011 第十节固定,跨端识别用户代币业务提案的稳定业务标签。
+/// 与 ADR-011 第十节固定,跨端识别用户代币业务提案的稳定业务标签。
 pub const MODULE_TAG: &[u8] = b"onc-iss";
 
 #[frame_support::pallet]
-// 中文注释:框架阶段 deposit_event 自动生成的 fn 暂未被业务调用,
+// 框架阶段 deposit_event 自动生成的 fn 暂未被业务调用,
 // 后续任务卡 A/B 实装时会消费;先抑制 dead_code 以便整体 cargo check 干净。
 #[allow(dead_code)]
 pub mod pallet {
@@ -73,7 +73,7 @@ pub mod pallet {
 
     /// pallet_assets 内核 AssetId(u32)。
     ///
-    /// 中文注释:onchain-issuance 对外使用 `asset_id`，它只表示资产编号。
+    /// onchain-issuance 对外使用 `asset_id`，它只表示资产编号。
     pub type OnchainAssetId = u32;
 
     #[pallet::config]
@@ -83,7 +83,7 @@ pub mod pallet {
 
         /// GMB 计费货币(创建费 reserve/transfer / 投票统一价等扣款入口)。
         ///
-        /// 中文注释:必须实现 ReservableCurrency 以支持 propose_issue 押金 reserve
+        /// 必须实现 ReservableCurrency 以支持 propose_issue 押金 reserve
         /// (ADR-011 v2 第六节计费机制 — 押金通过/否决时分别 transfer/退还)。
         type Currency: ReservableCurrency<Self::AccountId>;
 
@@ -152,7 +152,7 @@ pub mod pallet {
 
     /// asset_id → 资产元数据。
     ///
-    /// 中文注释:用户代币的唯一权威 storage,记录 issuer / class / decimals / state。
+    /// 用户代币的唯一权威 storage,记录 issuer / class / decimals / state。
     #[pallet::storage]
     #[pallet::getter(fn asset_meta)]
     pub type Assets<T: Config> = StorageMap<
@@ -165,7 +165,7 @@ pub mod pallet {
 
     /// 下一个待分配的 AssetId(u32 自增,从 1 开始)。
     ///
-    /// 中文注释:不复用 pallet_assets 自身的 id 池,onchain-issuance 自管单调递增,
+    /// 不复用 pallet_assets 自身的 id 池,onchain-issuance 自管单调递增,
     /// 简化迁移与审计。close 后的 asset_id 永久标记为 Closed,不复用。
     #[pallet::storage]
     #[pallet::getter(fn next_asset_id)]
@@ -173,7 +173,7 @@ pub mod pallet {
 
     /// 字符串黑名单:`name / symbol / description` 写入前过滤。
     ///
-    /// 中文注释:GenesisConfig 注入默认词表(法币/锚定/权威/数字货币 4 类),
+    /// GenesisConfig 注入默认词表(法币/锚定/权威/数字货币 4 类),
     /// 后续添词/删词走 RuntimeUpgrade 投票,不可 sudo。
     #[pallet::storage]
     #[pallet::getter(fn blacklist)]
@@ -226,7 +226,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            // 中文注释:黑名单初始化,超长词或超过条目上限 silently 跳过(应在编译期保证 fixture 正确)。
+            // 黑名单初始化,超长词或超过条目上限 silently 跳过(应在编译期保证 fixture 正确)。
             let mut bounded: BoundedVec<
                 BoundedVec<u8, T::MaxBlacklistWordLen>,
                 T::MaxBlacklistEntries,

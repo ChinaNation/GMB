@@ -19,7 +19,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 治理机构手续费划转提案创建页面。
 ///
-/// 中文注释：source 锁定为机构 `feeAccount`,destination 固定为机构 `mainAccount`,
+/// source 锁定为机构 `feeAccount`,destination 固定为机构 `mainAccount`,
 /// 链端调用 `propose_sweep_to_main (call_index=2)`,无 beneficiary/remark 入参。
 class SweepToMainPage extends StatefulWidget {
   const SweepToMainPage({
@@ -217,7 +217,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
 
       final service = MultisigTransferService();
-      // 中文注释：提案类交易等真正入块并核对事件后才返回，proposalId 来自
+      // 提案类交易等真正入块并核对事件后才返回，proposalId 来自
       // 链上 SweepToMainProposed 事件，是业务成功的唯一凭据。
       final result = await service.submitProposeSweep(
         institution: widget.institution,

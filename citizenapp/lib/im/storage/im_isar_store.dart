@@ -60,7 +60,7 @@ class ImRouteRecord {
 
 /// 公民 IM 的 Isar 持久化仓库。
 ///
-/// 中文注释：本仓库只保存手机本地状态。节点投递层只拿到完整 Protobuf
+/// 本仓库只保存手机本地状态。节点投递层只拿到完整 Protobuf
 /// envelope bytes，不会接触 [plaintext]。
 class ImIsarStore {
   ImIsarStore({

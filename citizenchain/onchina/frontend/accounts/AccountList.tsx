@@ -1,4 +1,4 @@
-// 中文注释:某机构下的账户列表。
+// 某机构下的账户列表。
 //
 // CID 账户列表只展示链上同步状态,不提供后台手动激活入口。
 // 链上注册/注销由区块链软件完成后同步回 CID。
@@ -58,7 +58,7 @@ export const AccountList: React.FC<Props> = ({
         {
           title: '账户地址',
           dataIndex: 'account',
-          // 中文注释:SS58 地址完整显示不截断(地址是给人核对的),小号等宽字体允许换行
+          // SS58 地址完整显示不截断(地址是给人核对的),小号等宽字体允许换行
           render: (v: string | null) => {
             if (!v) return '-';
             return (

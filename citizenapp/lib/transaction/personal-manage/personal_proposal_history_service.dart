@@ -118,7 +118,7 @@ class PersonalProposalHistoryService {
 
   /// 判断本机是否存在“创建提案仍是 voting，但链上 Proposals[id] 从未存在”的快照。
   ///
-  /// 中文注释：这类记录通常来自旧版本把 txHash 当成功后提前落库；它不是
+  /// 这类记录通常来自旧版本把 txHash 当成功后提前落库；它不是
   /// 正常注销历史，列表页可据此删除本地幽灵多签。
   Future<bool> hasUnchainedVotingCreateProposal(
     String personalAccountHex,

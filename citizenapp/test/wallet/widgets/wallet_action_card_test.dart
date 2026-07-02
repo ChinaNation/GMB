@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 
-/// 中文注释:WalletActionCard 渲染 + SnackBar 行为测试(v2 三列版)。
+/// WalletActionCard 渲染 + SnackBar 行为测试(v2 三列版)。
 ///
 /// 验证点:
 /// - 三列 label:充值 / 提现 / 零钱包 全部渲染。
@@ -62,7 +62,7 @@ void main() {
 
   testWidgets('tapping 充值 asks user to bind clearing bank', (tester) async {
     await pumpCard(tester);
-    // 中文注释:定位图标而非 label,避免点到占位 Text('\u00A0') 或 label 文本
+    // 定位图标而非 label,避免点到占位 Text('\u00A0') 或 label 文本
     // 这些非 InkWell 区域。InkWell 包住图标圆圈,点图标最稳。
     await tester.tap(find.byIcon(Icons.arrow_circle_down_outlined));
     await tester.pump(); // trigger snackbar
@@ -79,7 +79,7 @@ void main() {
   testWidgets('零钱包 column is non-interactive: exactly 2 InkWells in card',
       (tester) async {
     await pumpCard(tester);
-    // 中文注释:整卡只有 2 个 InkWell(充值 + 提现)。零钱包列是静态展示,不包
+    // 整卡只有 2 个 InkWell(充值 + 提现)。零钱包列是静态展示,不包
     // InkWell / GestureDetector / onTap 回调。这条是硬规则。
     expect(
       tester.widgetList(find.byType(InkWell)),

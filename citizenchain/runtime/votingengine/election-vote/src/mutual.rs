@@ -1,6 +1,6 @@
 //! 互选入口。
 //!
-//! 中文注释：互选的选民快照通常来自机构现任成员/admins。当前由调用方传入并冻结，
+//! 互选的选民快照通常来自机构现任成员/admins。当前由调用方传入并冻结，
 //! 后续可接业务 provider 自动生成。
 
 use frame_support::pallet_prelude::DispatchResult;

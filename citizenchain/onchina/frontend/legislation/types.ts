@@ -1,4 +1,4 @@
-// 中文注释:立法与表决前端类型,camelCase 逐字镜像后端 DTO
+// 立法与表决前端类型,camelCase 逐字镜像后端 DTO
 // (onchina/src/domains/legislation/law/model.rs 与 chain_read_proposal.rs);枚举数值与链端对齐。
 
 /** 提案类型(可扩展维度;本轮仅 law 实现,personnel/budget 预留)。 */
@@ -150,7 +150,7 @@ export interface LegProposalState {
 }
 
 // ── 任免案 / 预算案预留类型(Phase 4)──
-// 中文注释:镜像后端 personnel/budget 子域 schema。链端 PROPOSAL_KIND_PERSONNEL/BUDGET 未上线,
+// 镜像后端 personnel/budget 子域 schema。链端 PROPOSAL_KIND_PERSONNEL/BUDGET 未上线,
 // 当前仅锁 schema;ProposeMenu 仅渲染 category==='law',不 surface 这些类型,发起/表决 UI 待链路上线另卡。
 
 /** 任免动作(对齐后端 PersonnelAction)。 */

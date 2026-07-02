@@ -120,7 +120,7 @@ class _InstitutionAccountInfoPageState
         _lastBalanceRefreshAtMillis = local.detail?.lastBalanceRefreshAtMillis;
       });
     } catch (_) {
-      // 中文注释：本地读取失败不阻塞详情页；页面仍展示入口传入的名称和地址。
+      // 本地读取失败不阻塞详情页；页面仍展示入口传入的名称和地址。
     }
   }
 
@@ -179,7 +179,7 @@ class _InstitutionAccountInfoPageState
         _lastBalanceRefreshAtMillis = now;
       });
     } catch (_) {
-      // 中文注释：余额失败只保留本地旧余额；不要影响详情页其他信息。
+      // 余额失败只保留本地旧余额；不要影响详情页其他信息。
     }
   }
 
@@ -247,7 +247,7 @@ class _InstitutionAccountInfoPageState
         }
       });
     } catch (_) {
-      // 中文注释：链上刷新失败只保留本地详情，不弹同步提示也不清空页面。
+      // 链上刷新失败只保留本地详情，不弹同步提示也不清空页面。
     }
   }
 

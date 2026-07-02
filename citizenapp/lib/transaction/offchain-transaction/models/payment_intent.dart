@@ -5,7 +5,7 @@ import 'package:citizenapp/signer/signing.dart';
 
 /// 扫码支付 Step 2c-i:**L3 扫码支付意图**(`NodePaymentIntent`)。
 ///
-/// 中文注释:
+///
 /// - 与 `citizenchain/node/src/transaction/offchain_transaction/ledger.rs::NodePaymentIntent` 字段顺序
 ///   与字节布局**严格一致**,否则 SCALE 编解码跨端不对称、签名消息哈希不匹配、
 ///   节点侧 `sr25519_verify` 必然失败。

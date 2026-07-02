@@ -183,7 +183,7 @@ pub(crate) async fn admin_auth_qr_complete(
         if !same_admin_account(login_pubkey.as_str(), verify_pubkey.as_str()) {
             return Err("http:forbidden:signer_pubkey must match admin_account".to_string());
         }
-        // 中文注释:重建完整签名原文,与 CitizenWallet 端 k=2 登录签名响应规则一致。
+        // 重建完整签名原文,与 CitizenWallet 端 k=2 登录签名响应规则一致。
         let verify_message = crate::core::qr::build_signature_message(
             crate::core::qr::QrKind::SignResponse,
             challenge_id.as_str(),
@@ -200,7 +200,7 @@ pub(crate) async fn admin_auth_qr_complete(
             );
             return Err("http:unprocessable:login signature verify failed".to_string());
         }
-        // 中文注释:membership 真源切到链上集合(见 onchain_gate),此处只消费挑战并回已验签 pubkey。
+        // membership 真源切到链上集合(见 onchain_gate),此处只消费挑战并回已验签 pubkey。
         challenge.consumed = true;
         challenge.admin_account = login_pubkey.clone();
         repo::update_login_sign_request_conn(conn, &challenge)?;

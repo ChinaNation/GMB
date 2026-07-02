@@ -58,13 +58,13 @@ mod tests {
 
     #[test]
     fn genesis_issuance_matches_population() {
-        // 中文注释：创世发行 = 创世人口 × 每人 100 元 × 100 分/元 = 人口 × 10_000。
+        // 创世发行 = 创世人口 × 每人 100 元 × 100 分/元 = 人口 × 10_000。
         assert_eq!(GENESIS_ISSUANCE, GENESIS_CITIZEN_MAX as u128 * 10_000u128);
     }
 
     #[test]
     fn he_fund_issuance_matches_whitepaper() {
-        // 中文注释：两和基金发行 = 195,818,501,966.00 元 × 100 分/元。
+        // 两和基金发行 = 195,818,501,966.00 元 × 100 分/元。
         assert_eq!(HE_FUND_ISSUANCE, 195_818_501_966u128 * 100);
     }
 

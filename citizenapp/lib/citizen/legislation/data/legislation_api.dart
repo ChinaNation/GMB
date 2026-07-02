@@ -1,6 +1,6 @@
 // LegislationApi 客户端(ADR-028 P3)——读链上法律 + 宪法不可修改条款 manifest。
 //
-// 中文注释:`list_laws` 走 runtime API(state_call);`law/law_version` 与
+// `list_laws` 走 runtime API(state_call);`law/law_version` 与
 // `ConstitutionImmutableManifest` 走 finalized storage 精确 key 读取。全部经
 // `legislation_codec` 镜像解码。
 
@@ -244,7 +244,7 @@ class LegislationApi {
         await isar.appKvEntitys.putByKey(row);
       });
     } on Object {
-      // 中文注释：本机快照写入失败不影响链上读取；下次进入最多回到首屏等待。
+      // 本机快照写入失败不影响链上读取；下次进入最多回到首屏等待。
     }
   }
 

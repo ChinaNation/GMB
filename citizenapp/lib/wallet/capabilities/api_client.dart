@@ -63,7 +63,7 @@ class VotersCountResponse {
 
 /// CID 机构注册凭证。
 ///
-/// 中文注释:这些字段只用于链端验签和防重放,不得混入 subject_property/sub_type/parent_cid_number
+/// 这些字段只用于链端验签和防重放,不得混入 subject_property/sub_type/parent_cid_number
 /// 等业务分类字段。
 class InstitutionRegistrationCredential {
   const InstitutionRegistrationCredential({
@@ -297,7 +297,7 @@ class ApiClient {
         accounts.add(InstitutionAccountEntry(
           accountName: (m['account_name']?.toString() ?? '').trim(),
           account: m['account']?.toString(),
-          // 中文注释:OnChina 后端公开接口返回 SCREAMING_SNAKE_CASE；
+          // OnChina 后端公开接口返回 SCREAMING_SNAKE_CASE；
           // 这里兼容旧口径 Pending/Confirmed/Failed，统一折叠成同一套状态。
           chainStatus: InstitutionAccountEntry.normalizeChainStatus(
             m['chain_status']?.toString(),

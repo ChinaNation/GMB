@@ -1,4 +1,4 @@
-// 中文注释:机构多签链交互查询 API。机构创建/机构资料维护仍归属
+// 机构多签链交互查询 API。机构创建/机构资料维护仍归属
 // `frontend/subjects/`;本目录只承载链端 pull CID 信息所需的前端封装。
 
 type ApiEnvelope<T> = {
@@ -39,15 +39,15 @@ export interface InstitutionRegistrationCredential {
 }
 
 export interface InstitutionRegistrationInfo {
-  /** 中文注释:链端注册业务字段 1/3。 */
+  /** 链端注册业务字段 1/3。 */
   cid_number: string;
-  /** 中文注释:链端注册业务字段 2/3。 */
+  /** 链端注册业务字段 2/3。 */
   cid_full_name: string;
-  /** 中文注释:链端注册展示字段,不参与链端验签。 */
+  /** 链端注册展示字段,不参与链端验签。 */
   cid_short_name: string;
-  /** 中文注释:链端注册业务字段 3/3,顺序必须原样交给链端验签。 */
+  /** 链端注册业务字段 3/3,顺序必须原样交给链端验签。 */
   account_names: string[];
-  /** 中文注释:只用于链端验签与防重放,不属于业务注册字段。 */
+  /** 只用于链端验签与防重放,不属于业务注册字段。 */
   credential: InstitutionRegistrationCredential;
 }
 

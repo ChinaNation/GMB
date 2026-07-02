@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/widgets/wallet_identity_card.dart';
 
-/// 中文注释:WalletIdentityCard 渲染 + 钱包名编辑态 + 回调触发测试。
+/// WalletIdentityCard 渲染 + 钱包名编辑态 + 回调触发测试。
 void main() {
   // 选一个长度超过 14 的模拟地址,保证短地址规则生效。
   const wallet = WalletProfile(

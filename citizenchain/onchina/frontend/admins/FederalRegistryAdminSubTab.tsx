@@ -1,4 +1,4 @@
-// 中文注释:注册局联邦注册局管理员列表。每节点单省部署,展示本省 5 人组(链上
+// 注册局联邦注册局管理员列表。每节点单省部署,展示本省 5 人组(链上
 // FederalRegistryProvinceGroups 全走链读);FRG 可在本省组内操作,CREG 只能只读查看本省组。
 
 import { useState } from 'react';
@@ -148,7 +148,7 @@ export function FederalRegistryAdminSubTab({
         type="inner"
         title={
           <Space size={6} align="center">
-            {/* 中文注释:标题保留省份,让联邦注册局管理员明确看到当前所属省。 */}
+            {/* 标题保留省份,让联邦注册局管理员明确看到当前所属省。 */}
             <span>{federalRegistryCidShortName || '联邦注册局'}</span>
             {titleProvinceName ? (
               <>

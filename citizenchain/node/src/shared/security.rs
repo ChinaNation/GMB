@@ -46,7 +46,7 @@ pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
             default_app_data.display()
         )
     })?;
-    // 中文注释：Tauri identifier 只作为应用身份，正式版/开发版数据命名空间统一使用短目录。
+    // Tauri identifier 只作为应用身份，正式版/开发版数据命名空间统一使用短目录。
     let app_data = app_data_parent.join(app_data_dir_name()?);
     fs::create_dir_all(&app_data).map_err(|e| format!("create app data dir failed: {e}"))?;
     #[cfg(unix)]

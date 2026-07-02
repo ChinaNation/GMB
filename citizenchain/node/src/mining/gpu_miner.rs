@@ -225,7 +225,7 @@ pub fn try_start<Proof: Send + 'static>(
     let miner = GpuMiner::try_init(device_index)?;
 
     thread::spawn(move || {
-        // 中文注释：出块目标时间从 genesis-pallet Runtime API 读取，替代编译期常量。
+        // 出块目标时间从 genesis-pallet Runtime API 读取，替代编译期常量。
         let min_submit_interval = Duration::from_millis(target_block_time_ms);
         let batch_size = miner.batch_size;
 
@@ -284,7 +284,7 @@ pub fn try_start<Proof: Send + 'static>(
                             break;
                         }
 
-                        // 中文注释：签名 pre_hash 证明矿工身份，签名失败则丢弃该 nonce。
+                        // 签名 pre_hash 证明矿工身份，签名失败则丢弃该 nonce。
                         let signature = match keystore.sr25519_sign(
                             sp_core::crypto::KeyTypeId(*b"powr"),
                             &author_public,

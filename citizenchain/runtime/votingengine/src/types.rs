@@ -13,13 +13,10 @@ pub const PROPOSAL_KIND_JOINT: u8 = 1;
 pub const PROPOSAL_KIND_LEGISLATION: u8 = 2;
 /// 选举投票 pallet 的提案类型。只承载选举流程,职位规则由业务模块/选举法解释后传入快照。
 pub const PROPOSAL_KIND_ELECTION: u8 = 3;
-
-// ──────────────────────────────────────────────────────────────────
 // 机构码治理分类(全链唯一真源 = primitives::cid::code,见铁律)
 // 治理统一用 CID 机构码 [u8; 4]。
 // 这里整体 re-export,使 internal-vote / joint-vote / 业务 pallet 仍可写
 // `votingengine::types::{InstitutionCode, NRC, fixed_governance_pass_threshold, ...}`。
-// ──────────────────────────────────────────────────────────────────
 pub use primitives::cid::code::{
     code_bytes, fixed_governance_pass_threshold, institution_code_from_cid_number,
     is_fixed_governance_code, is_institution_code, is_personal_code, is_public_legal_code,
@@ -77,12 +74,9 @@ pub const STATUS_REJECTED: u8 = 2;
 pub const STATUS_EXECUTED: u8 = 3;
 /// 投票通过但业务执行失败（终态）。只由投票引擎在重试耗尽、超时或业务永久失败时写入。
 pub const STATUS_EXECUTION_FAILED: u8 = 4;
-
-// ──────────────────────────────────────────────────────────────────
 // 立法表决阈值(公民宪法第45/46条,ADR-027)。全整数运算,按宪法精确取端点。
 // 5 类提案:常规/常规教育/重要/重要教育/特别。教育变体阈值同非教育同级,
 // 仅提案机构与表决院路由不同。投票引擎侧用 u8 表决类型解耦,值与 legislation-yuan::VoteType::as_u8 对齐。
-// ──────────────────────────────────────────────────────────────────
 /// 常规案(>80% 参与,≥60% 赞成)
 pub const LEG_VOTE_REGULAR: u8 = 0;
 /// 常规教育案(教委会;阈值同常规案)
@@ -98,7 +92,7 @@ pub const LEG_VOTE_SPECIAL: u8 = 4;
 pub const MAX_LEGISLATION_HOUSES: u32 = 4;
 
 /// 立法内部表决期满计票:按现任议员/委员快照总数 `total` + 已投 `yes`/`no` 判定是否通过。
-/// 中文注释:"参与表决"= casted = yes+no;赞成率基数为 casted(参与表决者),非 total。
+/// "参与表决"= casted = yes+no;赞成率基数为 casted(参与表决者),非 total。
 pub fn legislation_house_final_passed(vote_type: u8, total: u32, yes: u32, no: u32) -> bool {
     let casted = yes.saturating_add(no);
     if total == 0 || casted == 0 {
@@ -164,7 +158,7 @@ pub fn legislation_referendum_final_passed(eligible: u64, yes: u64, no: u64) -> 
 
 /// 业务模块统一执行结果。
 ///
-/// 中文注释：业务模块只表达“业务动作执行结果”，不再直接改写提案状态。
+/// 业务模块只表达“业务动作执行结果”，不再直接改写提案状态。
 /// 投票引擎根据该结果统一维护 PASSED / EXECUTED / EXECUTION_FAILED 状态。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum ProposalExecutionOutcome {
@@ -180,7 +174,7 @@ pub enum ProposalExecutionOutcome {
 
 /// 业务模块对 `PASSED` 重试提案是否允许管理员提前取消的决策。
 ///
-/// 中文注释：`MODULE_TAG` 只用于路由识别，不能作为权限凭据；因此取消必须由真正
+/// `MODULE_TAG` 只用于路由识别，不能作为权限凭据；因此取消必须由真正
 /// 认领该提案的 callback 显式返回 `Allow`，默认实现一律 `Ignored`。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum ProposalCancelDecision {
@@ -243,7 +237,7 @@ pub struct ExecutionRetryState<BlockNumber> {
     pub last_attempt_at: Option<BlockNumber>,
 }
 
-/// 中文注释：事项模块接入联合投票时，统一由投票引擎创建提案。
+/// 事项模块接入联合投票时，统一由投票引擎创建提案。
 /// 人口快照、联合签名、投票资格和计票数据只允许在 votingengine/joint-vote 内处理。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct Proposal<BlockNumber, AccountId> {

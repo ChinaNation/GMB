@@ -54,7 +54,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {
-            // 中文注释：citizenapp Android 正式支持真实手机常用 ARM ABI；
+            // citizenapp Android 正式支持真实手机常用 ARM ABI；
             // smoldot native 库也只为这两类 ABI 产出，避免 APK 混入未适配 x86。
             abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
         }
@@ -63,7 +63,7 @@ android {
     signingConfigs {
         create("release") {
             if (hasReleaseSigningConfig) {
-                // 中文注释：正式 APK 签名只接受固定 release keystore，保证后续 Android 更新能匹配同一签名证书。
+                // 正式 APK 签名只接受固定 release keystore，保证后续 Android 更新能匹配同一签名证书。
                 storeFile = rootProject.file(releaseStoreFile!!)
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
@@ -80,7 +80,7 @@ android {
 
     packaging {
         jniLibs {
-            // 中文注释：第三方 Flutter 插件可能自带 x86/x86_64 native 库；
+            // 第三方 Flutter 插件可能自带 x86/x86_64 native 库；
             // 当前 citizenapp 不支持 x86 Android，打包阶段直接排除，避免出现半适配 APK。
             excludes.addAll(listOf("lib/x86/**", "lib/x86_64/**"))
         }

@@ -1,6 +1,6 @@
 // 公权机构目录 repo 门面(ADR-018 §九,混合模式)。
 //
-// 中文注释:card B/C 的统一入口。**读全部走本地 store(零链读零网络、秒开)**;
+// card B/C 的统一入口。**读全部走本地 store(零链读零网络、秒开)**;
 // 数据包由 [ensureSynced] 在首启后台版本驱动增量同步(包版本变了就增量刷新:
 // 变的换、删的清、没变的不动);某省的在线增量由 [refreshProvince] 后台跑
 // (TTL 节流 + 失败上抛供 UI 决定提示)。UI 一律先读本地、再后台刷新,绝不阻塞
@@ -89,7 +89,7 @@ class PublicInstitutionRepository {
 
   /// 某省所有市的 `code → 市名` 映射(**一次查询**,供市列表批量 join)。
   ///
-  /// 中文注释(ADR-018 R2 禁 N+1):市列表渲染必须用本方法一次取全省市名,
+  /// (ADR-018 R2 禁 N+1):市列表渲染必须用本方法一次取全省市名,
   /// **禁止**对每个市逐个调 [cityName](那是 N+1,省份市多时会转圈)。
   Future<Map<String, String>> cityNameMap(String provinceCode) async {
     final scope = scopeKeyOf(

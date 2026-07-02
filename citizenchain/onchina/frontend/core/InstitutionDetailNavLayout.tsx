@@ -1,4 +1,4 @@
-// 中文注释:机构详情页共享左侧导航布局。这里只承载 BrixUI 风格 UI,不放业务 API。
+// 机构详情页共享左侧导航布局。这里只承载 BrixUI 风格 UI,不放业务 API。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -28,7 +28,7 @@ interface Props {
   subtitle?: React.ReactNode;
   status?: React.ReactNode;
   headerExtra?: React.ReactNode;
-  /** 中文注释:首屏默认选中的 section（须在 items 内,否则回退首项）。 */
+  /** 首屏默认选中的 section（须在 items 内,否则回退首项）。 */
   initialActiveKey?: string;
 }
 

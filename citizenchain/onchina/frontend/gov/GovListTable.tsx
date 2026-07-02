@@ -1,4 +1,4 @@
-// 中文注释:公权机构列表。确定性目录,进入页面直接显示。
+// 公权机构列表。确定性目录,进入页面直接显示。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Space, Table, Tag, Typography } from 'antd';

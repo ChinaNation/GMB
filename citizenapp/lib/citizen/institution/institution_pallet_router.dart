@@ -2,7 +2,7 @@ import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 /// 机构生命周期 storage 的 pallet 路由(镜像链端 `PublicManage`(idx32)/`PrivateManage`(idx33) 拆分)。
 ///
-/// 中文注释:链端机构身份/账户已拆两 pallet,storage 名(`Institutions` /
+/// 链端机构身份/账户已拆两 pallet,storage 名(`Institutions` /
 /// `InstitutionAccounts` / `AccountRegisteredCid` / `CidRegisteredAccount`)不变,
 /// 但 storage key 前缀 `twox_128(pallet 名)` 随 pallet 名变。端侧读必须按归属选对前缀:
 ///

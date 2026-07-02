@@ -7,7 +7,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 扫码支付清算体系 Step 1 新增:**充值** L3 自持账户 → 清算行主账户。
 ///
-/// 中文注释:
+///
 /// - 调链上 `deposit(amount)`(call_index 31)。
 /// - 链上费按金额 0.1% 最低 0.1 元(链上资金交易,由 `OnchainTxAmountExtractor` 处理)。
 /// - 本步仅支持热钱包;冷钱包必须等充值 payload 可独立展示和验证后再接入。

@@ -66,6 +66,7 @@ const Map<String, String> actionLabels = {
   // 其他
   'activate_admin_account': '管理员激活',
   'decrypt_admin': '解密清算行管理员',
+  'im_wallet_binding': 'IM 钱包绑定',
   'bind_clearing_bank': '绑定清算行',
   'deposit_clearing_bank': '充值到清算行',
   'withdraw_clearing_bank': '从清算行提现',

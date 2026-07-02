@@ -67,7 +67,7 @@ pub(crate) fn insert_block_records(
 /// 机构创建上链成功(InstitutionCreated)后,把机构主体 + 其全部账户的链投影状态
 /// 置为 ACTIVE_ON_CHAIN,并回填 chain_tx_hash(区块哈希)/ chain_block_number。
 ///
-/// 中文注释:与注销对称的最小回写。indexer 历史只索引余额事件(tx_records),
+/// 与注销对称的最小回写。indexer 历史只索引余额事件(tx_records),
 /// 不投影机构状态;本函数补齐 InstitutionCreated → chain_status=ACTIVE_ON_CHAIN。
 /// 幂等:重复回写同值无副作用。
 pub(crate) fn apply_institution_created(

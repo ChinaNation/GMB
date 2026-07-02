@@ -74,7 +74,7 @@ fn ensure_spendable_balance(
     amount_fen: u128,
     fee_fen: u128,
 ) -> Result<(), String> {
-    // 中文注释：桌面端金额显示统一以 finalized 为准；余额不足文案也使用同一口径，
+    // 桌面端金额显示统一以 finalized 为准；余额不足文案也使用同一口径，
     // 真正能否入块仍由 runtime 在交易执行时最终校验。
     let balance_fen =
         institution::fetch_balance(sender_clean)?.ok_or("发送方账户不存在或余额为零")?;
@@ -125,7 +125,7 @@ fn wallet_store_for_frontend(
     app: &tauri::AppHandle,
     mut store: WalletStore,
 ) -> Result<WalletStore, String> {
-    // 中文注释：冷钱包文件只保存用户添加的钱包；矿工热钱包每次从 powr keystore 动态注入。
+    // 冷钱包文件只保存用户添加的钱包；矿工热钱包每次从 powr keystore 动态注入。
     normalize_cold_wallets(&mut store);
 
     let miner_wallet = local_miner_wallet(app)?;
@@ -276,7 +276,7 @@ pub fn build_transfer_request(
 
     let amount_fen = amount_yuan_to_fen(amount_yuan)?;
 
-    // 中文注释：前端预估费和链上实扣费统一复用 runtime 手续费公式。
+    // 前端预估费和链上实扣费统一复用 runtime 手续费公式。
     let fee_fen = calculate_transfer_fee(amount_fen);
     let fee_yuan = fee_fen as f64 / 100.0;
 
@@ -394,7 +394,7 @@ fn submit_miner_transfer_inner(
     let fee_fen = calculate_transfer_fee(amount_fen);
     ensure_spendable_balance(&miner_wallet.pubkey_hex, amount_fen, fee_fen)?;
 
-    // 中文注释：真正的私钥签名只发生在节点 RPC 内部；一次性令牌避免外部本机 RPC 直接花费矿工余额。
+    // 真正的私钥签名只发生在节点 RPC 内部；一次性令牌避免外部本机 RPC 直接花费矿工余额。
     let auth_token = crate::core::rpc::issue_miner_transfer_token()?;
     let result = rpc::rpc_post(
         "transaction_submitMinerTransfer",

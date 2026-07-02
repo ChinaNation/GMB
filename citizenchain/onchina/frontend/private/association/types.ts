@@ -1,4 +1,4 @@
-// 中文注释:注册协会前端类型边界。固定 `S + AS`,具有法人资格。
+// 注册协会前端类型边界。固定 `S + AS`,具有法人资格。
 
 import type { PrivateType } from '../../subjects/api';
 

@@ -1,6 +1,6 @@
 //! 国家码、省级行政区码与 CID 机构码的全仓唯一常量真源。
 //!
-//! 中文注释(铁律):
+//! (铁律):
 //! - 国家码、省级行政区码、机构码只在本文件维护。
 //! - CID 号生成、解析、校验的核心协议在 `citizenchain/runtime/primitives/cid/`。
 //! - registry 只能在 `citizenchain/registry/src/cid/` 做 SQLite 行政区、当前年份、
@@ -312,11 +312,7 @@ pub fn province_name_by_code(code: &ProvinceCode) -> Option<&'static str> {
         .find(|info| info.province_code.eq_ignore_ascii_case(code))
         .map(|info| info.province_name)
 }
-
-// ──────────────────────────────────────────────────────────────────
 // 机构码清单:A-I 九组,分组只用注释表达,不在数据项里另设 group/kind 字段。
-// ──────────────────────────────────────────────────────────────────
-
 /// 国家公民储备委员会(固定治理档)。
 pub const NRC: InstitutionCode = *b"NRC\0";
 /// 省公民储备委员会(固定治理档)。

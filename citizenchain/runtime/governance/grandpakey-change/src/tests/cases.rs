@@ -261,7 +261,7 @@ fn finalized_vote_fatal_fails_when_old_authority_disappeared() {
         ));
         let pid = last_proposal_id();
 
-        // 中文注释：模拟其他治理动作已经把提案绑定的旧 authority 替换掉。
+        // 模拟其他治理动作已经把提案绑定的旧 authority 替换掉。
         assert_ok!(Grandpa::schedule_change(
             vec![
                 (authority_id_from_key(CHINA_CB[0].grandpa_key), 1),
@@ -361,11 +361,7 @@ fn finalized_vote_fatal_fails_when_new_key_collides_after_first_execution() {
         }));
     });
 }
-
-// ========================================================================
 // 补充的错误路径和边界测试
-// ========================================================================
-
 #[test]
 fn propose_rejects_zero_key() {
     new_test_ext().execute_with(|| {

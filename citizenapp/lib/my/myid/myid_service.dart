@@ -89,7 +89,7 @@ class MyIdService {
 
   /// 选择电子护照使用的钱包。
   ///
-  /// 中文注释：这里仅选择本机电子护照钱包,不联网注册、不写已登记态。
+  /// 这里仅选择本机电子护照钱包,不联网注册、不写已登记态。
   Future<MyIdState> selectWallet({
     required String walletAddress,
     required String walletPubkeyHex,
@@ -159,7 +159,7 @@ class MyIdService {
           remote.statusUpdatedAt,
         );
       } else if (localState.archiveStatus == MyIdArchiveStatus.registered) {
-        // 中文注释：只有曾经由后端确认有档案的状态,才允许远端未找到时清空。
+        // 只有曾经由后端确认有档案的状态,才允许远端未找到时清空。
         await prefs.setString(_kArchiveStatus, 'unset');
         await prefs.remove(_kAddress);
         await prefs.remove(_kPubkeyHex);

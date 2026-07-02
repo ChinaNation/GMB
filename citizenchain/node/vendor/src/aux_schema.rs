@@ -516,11 +516,11 @@ pub(crate) fn write_concluded_round<Block: BlockT, B: AuxStore>(
     backend: &B,
     round_data: &CompletedRound<Block>,
 ) -> ClientResult<()> {
-    // 中文注释：`concluded_rounds` 在当前生产恢复路径中未被读取，只会按轮次追加写入 AUX。
+    // `concluded_rounds` 在当前生产恢复路径中未被读取，只会按轮次追加写入 AUX。
     // 这里显式停掉这类持久化，保留必要的覆盖写状态，避免 GRANDPA 节点长期运行时无限膨胀。
     let _ = backend;
     let _ = round_data;
     Ok(())
 }
 
-// 中文注释：测试代码已移除，原始测试见上游 polkadot-sdk。
+// 测试代码已移除，原始测试见上游 polkadot-sdk。

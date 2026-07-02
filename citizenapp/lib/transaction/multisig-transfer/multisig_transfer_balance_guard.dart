@@ -4,7 +4,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 多签转账管理员钱包余额检查。
 ///
-/// 中文注释：runtime 的交易支付扩展会向签名管理员钱包扣费，不能只检查
+/// runtime 的交易支付扩展会向签名管理员钱包扣费，不能只检查
 /// 多签资金账户余额；管理员钱包没钱时，交易会被交易池拒绝或无法出块。
 class MultisigTransferBalanceGuard {
   const MultisigTransferBalanceGuard._();
@@ -20,7 +20,7 @@ class MultisigTransferBalanceGuard {
     ChainRpc? chainRpc,
   }) async {
     final rpc = chainRpc ?? ChainRpc();
-    // 中文注释(ADR-018 卡⑤)：转账前余额守卫必须读最新 finalized 余额,旁路缓存。
+    // (ADR-018 卡⑤)：转账前余额守卫必须读最新 finalized 余额,旁路缓存。
     final balanceYuan =
         await rpc.fetchFinalizedBalance(wallet.pubkeyHex, forceFresh: true);
     if (balanceYuan >= requiredFeeYuan) {

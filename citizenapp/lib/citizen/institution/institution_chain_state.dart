@@ -1,7 +1,7 @@
 // 统一机构链态读服务(ADR-028 决策 2)——合并公权 `LivePublicInstitutionChainData`
 // 与治理侧 admins 读取为一套:按机构 CID 过滤提案,按账户上下文读余额 / 管理员。
 //
-// 中文注释:
+//
 // - 管理员身份路由按机构码统一:固定治理档走 governanceInstitution,
 //   其余注册机构走 institutionAccount 并用**真实机构码**(修复公权侧旧链读路径对所有
 //   公权机构硬编码 'CGOV' 的 bug —— 见 ADR-028 决策 2 / 风险点 5)。

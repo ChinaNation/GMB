@@ -23,21 +23,21 @@
 ## 预计修改目录
 
 - `citizencode/frontend/utils/`
-  - 中文注释:前端通用工具目录;新增 `http.ts`,只放 request/adminRequest/401 拦截等基础 HTTP 能力。
+  - 前端通用工具目录;新增 `http.ts`,只放 request/adminRequest/401 拦截等基础 HTTP 能力。
 - `citizencode/frontend/auth/`
-  - 中文注释:登录与会话目录;新增/调整 `api.ts` 和 `types.ts`,承接登录、登出、鉴权检查、二维码登录 API 与登录态类型。
+  - 登录与会话目录;新增/调整 `api.ts` 和 `types.ts`,承接登录、登出、鉴权检查、二维码登录 API 与登录态类型。
 - `citizencode/frontend/institutions/`
-  - 中文注释:机构前端目录;承接原 `api/institution.ts` 和机构/CPMS 相关 API。
+  - 机构前端目录;承接原 `api/institution.ts` 和机构/CPMS 相关 API。
 - `citizencode/frontend/citizens/`
-  - 中文注释:公民前端目录;承接公民列表、绑定、解绑、推链绑定、CPMS 状态扫码 API。
+  - 公民前端目录;承接公民列表、绑定、解绑、推链绑定、CPMS 状态扫码 API。
 - `citizencode/frontend/sheng_admins/`
-  - 中文注释:联邦管理员前端目录;承接联邦管理员本地业务 API,链交互 API 仍在 `chain_sheng_admins.ts`。
+  - 联邦管理员前端目录;承接联邦管理员本地业务 API,链交互 API 仍在 `chain_sheng_admins.ts`。
 - `citizencode/frontend/shi_admins/`
-  - 中文注释:市管理员前端目录;承接操作员管理 API。
+  - 市管理员前端目录;承接操作员管理 API。
 - 旧全局 API 目录
-  - 中文注释:旧全局 API 目录;已删除,不再作为业务接口入口。
+  - 旧全局 API 目录;已删除,不再作为业务接口入口。
 - `memory/05-modules/citizencode/`、`memory/07-ai/`、`memory/AGENTS.md`
-  - 中文注释:文档和 AI 规则目录;固化“前端 API 跟随功能模块”规则。
+  - 文档和 AI 规则目录;固化“前端 API 跟随功能模块”规则。
 
 ## 验收
 

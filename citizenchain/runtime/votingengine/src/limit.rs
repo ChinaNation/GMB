@@ -31,7 +31,7 @@ pub fn try_add_active_proposal<T: Config>(
 
 /// 尝试为多个主体新增同一个活跃提案。
 ///
-/// 中文注释:多机构提案会关联多个 CID,在创建事务中逐个写入;
+/// 多机构提案会关联多个 CID,在创建事务中逐个写入;
 /// 任一主体达到上限时事务回滚,不会留下部分写入。
 pub fn try_add_active_proposals<T: Config>(
     subjects: sp_std::vec::Vec<ProposalSubject<T::AccountId>>,

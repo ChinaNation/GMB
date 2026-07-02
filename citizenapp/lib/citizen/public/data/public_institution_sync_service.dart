@@ -1,6 +1,6 @@
 // 公权机构目录增量同步(ADR-018 §九 混合模式 ②)。
 //
-// 中文注释:版本(MAX updated_at)无变化则跳过(零拉取);有变化时走 **keyset + since
+// 版本(MAX updated_at)无变化则跳过(零拉取);有变化时走 **keyset + since
 // 增量**——带本地版本 since 去问,后端只回 updated_at 之后变过的行(通常空或几条),
 // keyset 翻页直到无更多,upsert 写回 + 推进版本戳。首次(无本地版本)since=null 即全量。
 // R3:走 CID HTTP,不扫链。

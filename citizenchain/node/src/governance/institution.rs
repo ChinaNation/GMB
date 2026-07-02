@@ -28,7 +28,7 @@ pub fn fetch_admin_profiles(
 
 /// 查询 finalized 块上的账户余额（返回 free 余额，单位为最小精度）。
 pub fn fetch_balance(account_hex: &str) -> Result<Option<u128>, String> {
-    // 中文注释(ADR-017):钉块哈希统一取自 chain_query 收口,业务读取禁止 best。
+    // (ADR-017):钉块哈希统一取自 chain_query 收口,业务读取禁止 best。
     let hash = chain_query::fetch_finalized_head()?;
     fetch_balance_at(account_hex, Some(&hash))
 }

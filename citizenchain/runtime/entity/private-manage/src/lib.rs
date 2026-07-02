@@ -84,7 +84,7 @@ pub mod pallet {
         >;
         /// 注册局登记授权校验入口。
         ///
-        /// 中文注释:注册局管理员代创建机构时,origin 是注册局管理员,目标 admins
+        /// 注册局管理员代创建机构时,origin 是注册局管理员,目标 admins
         /// 是新机构自己的管理员;二者不能再强制相同。本 trait 负责校验 FRG/CREG
         /// 对目标 CID 与机构码是否有登记权。
         type RegistryAuthority: RegistryAuthority<Self::AccountId>;
@@ -139,7 +139,7 @@ pub mod pallet {
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
     pub type RegisterNonceOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterNonceLength>;
     pub type RegisterSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterSignatureLength>;
-    /// 中文注释:注册凭证里的账户名列表,顺序必须与 CID `registration-info` 返回一致。
+    /// 注册凭证里的账户名列表,顺序必须与 CID `registration-info` 返回一致。
     pub type InstitutionAccountNamesOf<T> =
         BoundedVec<AccountNameOf<T>, <T as Config>::MaxInstitutionAccounts>;
     /// 机构创建时用户输入的账户初始余额列表项。
@@ -222,7 +222,7 @@ pub mod pallet {
     pub type UsedRegisterNonce<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
-    /// 中文注释:已用注销凭证 nonce(防同一注销凭证重放/关多账户)。
+    /// 已用注销凭证 nonce(防同一注销凭证重放/关多账户)。
     #[pallet::storage]
     pub type UsedDeregisterNonce<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
@@ -344,7 +344,7 @@ pub mod pallet {
         /// 管理员数量与列表长度不一致
         AdminsLenMismatch,
         /// 机构账户管理员机构码只能是公权/私权法人机构码。
-        /// 中文注释:非法人必须由 CID 上层按所属法人归属显式路由。
+        /// 非法人必须由 CID 上层按所属法人归属显式路由。
         InvalidInstitutionCode,
         /// 多签账户不存在
         AccountNotFound,
@@ -439,7 +439,7 @@ pub mod pallet {
 
         /// CID 注册信息凭证批量登记机构账户地址。
         ///
-        /// 中文注释:本入口与身份注册局 `/registration-info` 对齐,业务字段只接收
+        /// 本入口与身份注册局 `/registration-info` 对齐,业务字段只接收
         /// `cid_number / cid_full_name / account_names[]`。机构类型、企业类型、
         /// 所属法人关系只由身份注册局用于候选资格判断,不再进入链上注册 payload。
         #[pallet::call_index(2)]
@@ -754,7 +754,7 @@ pub mod pallet {
         /// 从任意私权机构多签账户反查其管理员账户账户地址。
         ///
         /// 个人多签由 personal-manage 自持；本函数仅服务机构账户。
-        /// 中文注释:管理员属于机构(不属于账户)。任意机构账户(主/费用/自定义)都解析到
+        /// 管理员属于机构(不属于账户)。任意机构账户(主/费用/自定义)都解析到
         /// 本机构【主账户】——即 admins 模块 里承载该机构唯一管理员集的键。这样私权机构生命周期员
         /// 统一管理机构及其全部账户(创建/注销账户都由这套管理员授权)。
         pub fn resolve_admin_account_for_account(account: &T::AccountId) -> Option<T::AccountId> {
@@ -771,7 +771,7 @@ pub mod pallet {
 
         /// 从任意机构账户反查管理员更换机构码。
         ///
-        /// 中文注释:机构账户必须使用公权/私权法人机构码；PMUL 只属于个人多签。
+        /// 机构账户必须使用公权/私权法人机构码；PMUL 只属于个人多签。
         pub fn resolve_institution_code_for_account(
             account: &T::AccountId,
         ) -> Option<InstitutionCode> {
@@ -781,7 +781,7 @@ pub mod pallet {
 
         // account_names_payload_from_initial_accounts 在 institution::accounts。
 
-        /// 中文注释:把批量 register 入口的 account_names 抽成验签 payload。
+        /// 把批量 register 入口的 account_names 抽成验签 payload。
         pub(crate) fn account_names_payload_from_names(
             account_names: &InstitutionAccountNamesOf<T>,
         ) -> Result<Vec<Vec<u8>>, DispatchError> {

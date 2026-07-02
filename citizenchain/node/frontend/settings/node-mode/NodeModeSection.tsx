@@ -55,7 +55,7 @@ export function NodeModeSection({ nodeMode, onUpdated }: Props) {
                 .filter(Boolean)
                 .join(' ');
 
-              // 中文注释：这里仅选择链数据模式；通信节点功能在独立设置区开启。
+              // 这里仅选择链数据模式；通信节点功能在独立设置区开启。
               return (
                 <button
                   key={option.mode}

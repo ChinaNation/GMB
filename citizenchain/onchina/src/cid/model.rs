@@ -1,4 +1,4 @@
-//! 中文注释:CID 行政区 / 选项元数据 DTO(管理员控制台元信息接口使用)。
+//! CID 行政区 / 选项元数据 DTO(管理员控制台元信息接口使用)。
 
 use serde::{Deserialize, Serialize};
 

@@ -50,7 +50,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
   static const _activeStatusTtl = Duration(minutes: 60);
   static const _inactiveStatusTtl = Duration(minutes: 10);
 
-  // 中文注释：使用新的 fingerprint key，避免旧“个人+机构”扫描记录让个人列表跳过首轮发现。
+  // 使用新的 fingerprint key，避免旧“个人+机构”扫描记录让个人列表跳过首轮发现。
   static const _discoveryWalletFingerprintKey =
       'personal_multisig_discovery_wallet_fingerprint';
 
@@ -65,7 +65,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
     try {
       await _readFromIsar();
     } catch (_) {
-      // 中文注释：本地库异常不阻塞页面进入，用户仍可通过下拉刷新重试。
+      // 本地库异常不阻塞页面进入，用户仍可通过下拉刷新重试。
     }
     if (!mounted) return;
     setState(() => _loading = false);
@@ -144,7 +144,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
         personals.map((p) => p.account),
       );
     } catch (_) {
-      // 中文注释：批量查链失败时保留本地旧状态，不能把网络失败写成已注销。
+      // 批量查链失败时保留本地旧状态，不能把网络失败写成已注销。
       return;
     }
 
@@ -195,14 +195,14 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
           }
         });
       } catch (_) {
-        // 中文注释：单个账户刷新失败只跳过该账户，避免影响整页列表。
+        // 单个账户刷新失败只跳过该账户，避免影响整页列表。
       }
     }
   }
 
   Future<void> _deletePersonalGhost(String personalAccountHex) async {
     await WalletIsar.instance.writeTxn((isar) async {
-      // 中文注释：旧版本曾在 txHash 返回后提前写入本地多签；若链上没有账户
+      // 旧版本曾在 txHash 返回后提前写入本地多签；若链上没有账户
       // 且创建提案也不存在，说明它从未上链，不能展示为“已注销”。
       await isar.personalAccountEntitys
           .where()
@@ -237,7 +237,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
     var anyChanged = false;
     var completed = false;
     try {
-      // 中文注释：这里只做个人多签发现，扫描结果直接交给个人多签服务处理。
+      // 这里只做个人多签发现，扫描结果直接交给个人多签服务处理。
       final scan = await _scanService.scanAll(
         onProgress: (scanned, total, decoded) {
           if (!mounted) return;

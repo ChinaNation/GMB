@@ -1,4 +1,4 @@
-// 中文注释:扫码上链签名弹窗(发起/表决共用)。后端返回的 sign_request 渲染成二维码,
+// 扫码上链签名弹窗(发起/表决共用)。后端返回的 sign_request 渲染成二维码,
 // 由公民钱包扫码冷签并提交上链;onchina 侧到"产出 QR"为止。
 
 import React from 'react';
