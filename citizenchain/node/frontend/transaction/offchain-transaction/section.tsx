@@ -158,7 +158,7 @@ export function ClearingBankSection() {
             setView({
               kind: 'admin-list',
               cidNumber: view.cidNumber,
-              admins: detail.adminsSs58,
+              admins: detail.admins,
               threshold: detail.threshold,
               adminsLen: detail.adminsLen,
             })

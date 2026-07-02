@@ -20,8 +20,8 @@ import { notice } from '../utils/notice';
 interface Props {
   auth: AdminAuth | null;
   open: boolean;
-  residenceProvinceName: string | null;
-  residenceCityName: string | null;
+  provinceName: string | null;
+  cityName: string | null;
   onClose: () => void;
   /** 录入成功后回填新身份 CID 并刷新列表。 */
   onCreated: (cidNumber: string) => Promise<void> | void;
@@ -34,7 +34,7 @@ interface FormValues {
   citizen_given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: Dayjs;
-  residence_town_code: string;
+  town_code: string;
   birth_province_code: string;
   birth_city_code: string;
   birth_town_code: string;
@@ -60,8 +60,8 @@ function ageAtToday(birth?: Dayjs): number | null {
 export function CitizenCreateModal({
   auth,
   open,
-  residenceProvinceName,
-  residenceCityName,
+  provinceName,
+  cityName,
   onClose,
   onCreated,
 }: Props) {
@@ -70,33 +70,33 @@ export function CitizenCreateModal({
   const [birthProvinces, setBirthProvinces] = useState<CidProvinceItem[]>([]);
   const [birthCities, setBirthCities] = useState<CidCityItem[]>([]);
   const [birthTowns, setBirthTowns] = useState<CidTownItem[]>([]);
-  const [residenceTowns, setResidenceTowns] = useState<CidTownItem[]>([]);
+  const [towns, setTowns] = useState<CidTownItem[]>([]);
 
   const birthProvinceCode = Form.useWatch('birth_province_code', form);
   const birthCityCode = Form.useWatch('birth_city_code', form);
   const birthDate = Form.useWatch('citizen_birth_date', form);
   const age = useMemo(() => ageAtToday(birthDate), [birthDate]);
   const autoValidityYears = age === null ? null : age >= 16 ? 10 : 5;
-  const scopeReady = Boolean(auth && residenceProvinceName && residenceCityName);
+  const scopeReady = Boolean(auth && provinceName && cityName);
 
   useEffect(() => {
     if (!open || !auth) return;
     form.resetFields();
     setBirthCities([]);
     setBirthTowns([]);
-    setResidenceTowns([]);
+    setTowns([]);
     getCidMeta(auth)
       .then(async (meta) => {
         setBirthProvinces(meta.all_provinces?.length ? meta.all_provinces : meta.provinces);
-        if (!residenceProvinceName || !residenceCityName) return;
-        const cities = await listCidCities(auth, residenceProvinceName);
-        const currentCity = cities.find((city) => city.city_name === residenceCityName);
+        if (!provinceName || !cityName) return;
+        const cities = await listCidCities(auth, provinceName);
+        const currentCity = cities.find((city) => city.city_name === cityName);
         if (!currentCity) return;
-        const towns = await listCidTowns(auth, residenceProvinceName, currentCity.city_code);
-        setResidenceTowns(towns);
+        const rows = await listCidTowns(auth, provinceName, currentCity.city_code);
+        setTowns(rows);
       })
       .catch((err) => notice.error(err, '行政区加载失败'));
-  }, [open, auth, residenceProvinceName, residenceCityName, form]);
+  }, [open, auth, provinceName, cityName, form]);
 
   useEffect(() => {
     if (!auth || !birthProvinceCode) {
@@ -150,9 +150,9 @@ export function CitizenCreateModal({
       citizen_given_name: trimRequired(values.citizen_given_name),
       citizen_sex: values.citizen_sex,
       citizen_birth_date: values.citizen_birth_date.format(DATE_FORMAT),
-      residence_province_name: residenceProvinceName!,
-      residence_city_name: residenceCityName!,
-      residence_town_code: values.residence_town_code,
+      province_name: provinceName!,
+      city_name: cityName!,
+      town_code: values.town_code,
       birth_province_code: values.birth_province_code,
       birth_city_code: values.birth_city_code,
       birth_town_code: values.birth_town_code,
@@ -259,14 +259,14 @@ export function CitizenCreateModal({
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', columnGap: 16 }}>
           <Form.Item label="居住省">
-            <Input readOnly value={residenceProvinceName ?? ''} />
+            <Input readOnly value={provinceName ?? ''} />
           </Form.Item>
           <Form.Item label="居住市">
-            <Input readOnly value={residenceCityName ?? ''} />
+            <Input readOnly value={cityName ?? ''} />
           </Form.Item>
           <Form.Item
             label="居住镇"
-            name="residence_town_code"
+            name="town_code"
             rules={[{ required: true, message: '请选择居住镇' }]}
           >
             <Select
@@ -274,7 +274,7 @@ export function CitizenCreateModal({
               showSearch
               optionFilterProp="label"
               disabled={!scopeReady}
-              options={residenceTowns.map((town) => ({
+              options={towns.map((town) => ({
                 value: town.town_code,
                 label: town.town_name,
               }))}

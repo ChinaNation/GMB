@@ -1,9 +1,9 @@
-// 共享:分类管理员模块 `AdminAccounts` 全表扫描(机构多签 + 个人多签共用)。
+// 个人多签:分类管理员模块 `PersonalAdmins.AdminAccounts` 扫描。
 //
-// 机构多签与个人多签发现都依赖同一张
-// `AdminAccounts` 反向索引。本服务把"翻页 getKeysPaged +
-// 批量 fetchStorageBatch + 解码 + 提取账户"收敛为一次扫描,产出已解码条目;
-// 各业务模块按 kind/institutionCode 客户端过滤。
+// 个人多签发现依赖链上 `PersonalAdmins.AdminAccounts` 反向索引。本服务把
+// "翻页 getKeysPaged + 批量 fetchStorageBatch + 解码 + 提取账户"收敛为一次扫描,
+// 产出已解码条目。机构账户登记不走 CitizenApp 多签入口,因此这里不再扫描
+// PublicAdmins / PrivateAdmins。
 //
 // 扫描走轻节点 smoldot 的**短前缀整表**(prefix = twox128(pallet) || twox128(storage),
 // 无嵌长 K1)。
@@ -62,7 +62,7 @@ class AdminAccountsScanResult {
   );
 }
 
-/// 分类管理员模块 `AdminAccounts` 单次全表扫描服务(机构/个人多签共用)。
+/// `PersonalAdmins.AdminAccounts` 单次扫描服务。
 class AdminAccountsScanService {
   AdminAccountsScanService({ChainRpc? chainRpc})
       : _rpc = chainRpc ?? ChainRpc();
@@ -151,7 +151,7 @@ class AdminAccountsScanService {
   }
 
   /// 纯函数:从扫描结果里筛出"我的"账户(指定 kind,可选机构码白名单,
-  /// 且管理员集合含本地任一钱包公钥)。供机构/个人多签模块复用,便于单测。
+  /// 且管理员集合含本地任一钱包公钥)。供个人多签发现复用,便于单测。
   static List<ScannedAdminAccount> filterMine(
     AdminAccountsScanResult scan, {
     required Set<String> myPubkeysHex,
@@ -171,9 +171,9 @@ class AdminAccountsScanService {
         .toList(growable: false);
   }
 
-  /// 分类管理员模块 `AdminAccounts` 双 prefix(twox128 || twox128)的 hex 形式。
+  /// `PersonalAdmins.AdminAccounts` 双 prefix(twox128 || twox128)的 hex 形式。
   List<String> _adminAccountsPrefixHexList() {
-    return const ['PersonalAdmins', 'PublicAdmins', 'PrivateAdmins']
+    return const ['PersonalAdmins']
         .map(_adminAccountsPrefixHex)
         .toList(growable: false);
   }

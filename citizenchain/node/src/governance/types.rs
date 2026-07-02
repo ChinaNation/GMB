@@ -25,13 +25,27 @@ impl OrgType {
 }
 
 /// 机构详情，返回给前端的聚合结果。
-/// 管理员信息（公钥 + 链上余额）。
+/// 管理员信息（AdminProfile + 可选链上余额）。
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminInfo {
-    /// 管理员公钥（hex，不含 0x 前缀）。
-    pub pubkey_hex: String,
-    /// 链上余额（分），节点未运行时为 null。
+    /// 管理员密码学账户（hex，不含 0x 前缀）。
+    pub account: String,
+    /// 管理员实名锚:注册局签发的 CID 号。
+    pub admin_cid_number: String,
+    /// 姓名快照。
+    pub name: String,
+    /// 对外法定职务。
+    pub admin_role: String,
+    /// 任期开始(天数自纪元;无任期为 0)。
+    pub term_start: u32,
+    /// 任期结束(天数自纪元;无任期为 0)。
+    pub term_end: u32,
+    /// 职务/任期来源判别值。
+    pub source: u8,
+    /// 来源中文标签；未知来源留空。
+    pub source_label: String,
+    /// 链上余额（分），节点未运行或余额查询失败时为 null。
     pub balance_fen: Option<String>,
 }
 
@@ -56,7 +70,7 @@ pub struct InstitutionDetail {
     pub main_account: String,
     /// 主账户链上余额（分），节点未运行时为 null。
     pub balance_fen: Option<String>,
-    /// 管理员列表（含公钥和链上余额），节点未运行时为空。
+    /// 管理员列表（链上 AdminProfile + 可选余额），节点未运行时为空。
     pub admins: Vec<AdminInfo>,
     /// 内部投票通过阈值。
     pub internal_threshold: u32,

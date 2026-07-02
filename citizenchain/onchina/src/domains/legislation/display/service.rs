@@ -93,8 +93,14 @@ mod tests {
     fn profile(hex_tail: &str, name: &str) -> OnChainAdminProfileView {
         OnChainAdminProfileView {
             account_hex: format!("0x{hex_tail}"),
+            admin_cid_number: String::new(),
             name: name.to_string(),
+            admin_role: "委员".to_string(),
             title: "委员".to_string(),
+            term_start: 0,
+            term_end: 0,
+            source: 255,
+            source_label: String::new(),
         }
     }
 

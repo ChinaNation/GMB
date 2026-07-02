@@ -42,6 +42,7 @@ pub mod pallet {
     use primitives::cid::china::china_lf::CHINA_LF;
     use primitives::cid::code::InstitutionCode;
     use primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES;
+    use primitives::genesis::GENESIS_LAW_VERSION_LABELS;
     use sp_runtime::DispatchError;
     use votingengine::{InternalAdminProvider, LegislationVoteEngine, ProposalExecutionOutcome};
 
@@ -221,6 +222,24 @@ pub mod pallet {
         pub effective_at: u64,
     }
 
+    /// 法律版本展示标签。版本号仍以 `LawVersion.version` 为排序真源;本表只承载特定版本的语义名称。
+    #[derive(
+        Encode,
+        Decode,
+        DecodeWithMemTracking,
+        CloneNoBound,
+        PartialEqNoBound,
+        EqNoBound,
+        RuntimeDebugNoBound,
+        TypeInfo,
+        MaxEncodedLen,
+    )]
+    #[scale_info(skip_type_params(T))]
+    pub struct LawVersionLabel<T: Config> {
+        pub title: TitleOf<T>,
+        pub title_en: Option<TitleOf<T>>,
+    }
+
     /// 提案摘要:序列化后(带 MODULE_TAG 前缀)存入 votingengine `ProposalData`;
     /// 法律全文条文单独写入 `ProposalObject`,通过回调读回组装新版本。
     #[derive(
@@ -310,6 +329,18 @@ pub mod pallet {
         Blake2_128Concat,
         u32,
         LawVersion<T>,
+        OptionQuery,
+    >;
+
+    /// 法律版本语义标签:(law_id, version) → 标签。无标签时展示层继续显示 `v{version}`。
+    #[pallet::storage]
+    pub type LawVersionLabels<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Blake2_128Concat,
+        u32,
+        LawVersionLabel<T>,
         OptionQuery,
     >;
 
@@ -411,6 +442,29 @@ pub mod pallet {
                 effective_at: now,
             };
             LawVersions::<T>::insert(law_id, version, lv);
+            for label in GENESIS_LAW_VERSION_LABELS.iter() {
+                assert_eq!(
+                    label.law_id, law_id,
+                    "创世法律版本标签 law_id 必须匹配创世宪法"
+                );
+                assert_eq!(
+                    label.version, version,
+                    "创世法律版本标签 version 必须匹配创世宪法"
+                );
+                let label_title: TitleOf<T> = BoundedVec::try_from(label.title.as_bytes().to_vec())
+                    .expect("genesis law version label title within bound");
+                let label_title_en: TitleOf<T> =
+                    BoundedVec::try_from(label.title_en.as_bytes().to_vec())
+                        .expect("genesis law version label title_en within bound");
+                LawVersionLabels::<T>::insert(
+                    label.law_id,
+                    label.version,
+                    LawVersionLabel::<T> {
+                        title: label_title,
+                        title_en: Some(label_title_en),
+                    },
+                );
+            }
             let law = Law::<T> {
                 law_id,
                 tier: Tier::Constitution,
@@ -1084,6 +1138,11 @@ pub mod pallet {
         /// 读取法律指定版本。
         pub fn get_law_version(law_id: u64, version: u32) -> Option<LawVersion<T>> {
             LawVersions::<T>::get(law_id, version)
+        }
+
+        /// 读取法律版本展示标签。
+        pub fn get_law_version_label(law_id: u64, version: u32) -> Option<LawVersionLabel<T>> {
+            LawVersionLabels::<T>::get(law_id, version)
         }
 
         /// 列出某层级 + 行政区下的法律 ID。

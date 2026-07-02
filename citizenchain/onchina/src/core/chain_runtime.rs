@@ -6,8 +6,13 @@ use parity_scale_codec::{Decode, Encode};
 use primitives::core_const::{GMB, OP_SIGN_DEREGISTER, OP_SIGN_INST};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
-use std::sync::{Arc, OnceLock, RwLock};
+use std::{
+    collections::BTreeMap,
+    hash::Hasher,
+    sync::{Arc, OnceLock, RwLock},
+};
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
+use twox_hash::XxHash64;
 
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::*;
@@ -367,6 +372,13 @@ struct ChainGetBlockHashResponse {
     error: Option<serde_json::Value>,
 }
 
+#[derive(Deserialize)]
+struct ChainRpcValueResponse {
+    id: u64,
+    result: Option<serde_json::Value>,
+    error: Option<serde_json::Value>,
+}
+
 async fn fetch_chain_genesis_hash_via_http(http_url: &str) -> Result<[u8; 32], String> {
     let client = reqwest::Client::new();
     let response = client
@@ -402,6 +414,172 @@ async fn fetch_chain_genesis_hash_via_ws(ws_url: &str) -> Result<[u8; 32], Strin
         .await
         .map_err(|e| format!("connect chain websocket for genesis hash failed: {e}"))?;
     Ok(client.genesis_hash().0)
+}
+
+async fn fetch_finalized_head_via_http(
+    client: &reqwest::Client,
+    http_url: &str,
+) -> Result<String, String> {
+    let response = client
+        .post(http_url)
+        .json(&serde_json::json!({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "chain_getFinalizedHead",
+            "params": []
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("connect chain http rpc for finalized head failed: {e}"))?;
+    let status = response.status();
+    let payload: ChainGetBlockHashResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("decode chain http rpc finalized head response failed: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("chain http rpc returned status {status}"));
+    }
+    if let Some(error) = payload.error {
+        return Err(format!("chain http rpc returned error: {error}"));
+    }
+    payload
+        .result
+        .ok_or_else(|| "chain http rpc missing finalized head result".to_string())
+}
+
+fn clean_account_hex_key(account_hex: &str) -> String {
+    let trimmed = account_hex.trim();
+    trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed)
+        .to_ascii_lowercase()
+}
+
+fn twox_128(input: &[u8]) -> [u8; 16] {
+    let mut h0 = XxHash64::with_seed(0);
+    h0.write(input);
+    let r0 = h0.finish();
+
+    let mut h1 = XxHash64::with_seed(1);
+    h1.write(input);
+    let r1 = h1.finish();
+
+    let mut out = [0u8; 16];
+    out[..8].copy_from_slice(&r0.to_le_bytes());
+    out[8..].copy_from_slice(&r1.to_le_bytes());
+    out
+}
+
+fn blake2b_128(input: &[u8]) -> [u8; 16] {
+    let mut output = [0_u8; 16];
+    let mut hasher = Blake2bVar::new(16).expect("invalid blake2 output length");
+    hasher.update(input);
+    hasher
+        .finalize_variable(&mut output)
+        .expect("finalize blake2b_128 failed");
+    output
+}
+
+fn system_account_storage_key(account_id: &[u8; 32]) -> String {
+    let pallet_hash = twox_128(b"System");
+    let storage_hash = twox_128(b"Account");
+    let account_hash = blake2b_128(account_id);
+    let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
+    key.extend_from_slice(&pallet_hash);
+    key.extend_from_slice(&storage_hash);
+    key.extend_from_slice(&account_hash);
+    key.extend_from_slice(account_id);
+    format!("0x{}", hex::encode(key))
+}
+
+fn decode_account_free_balance_fen(storage_hex: &str) -> Result<Option<String>, String> {
+    let clean = storage_hex
+        .strip_prefix("0x")
+        .or_else(|| storage_hex.strip_prefix("0X"))
+        .unwrap_or(storage_hex);
+    let data = hex::decode(clean).map_err(|e| format!("decode System.Account hex failed: {e}"))?;
+    if data.len() < 32 {
+        return Ok(None);
+    }
+    // 中文注释:System.Account AccountInfo 前 16 字节为 nonce/consumers/providers/sufficients,
+    // AccountData.free 是随后 16 字节 little-endian u128,单位为分。
+    let mut free = [0_u8; 16];
+    free.copy_from_slice(&data[16..32]);
+    Ok(Some(u128::from_le_bytes(free).to_string()))
+}
+
+/// 批量读取账户 finalized free 余额,返回 key 为不带 0x 的小写 hex。
+///
+/// 中文注释:管理员卡片只展示链上真实余额;查询失败或账户不存在时返回 None,
+/// 由 UI 保留“余额”标签但不渲染余额值。0 余额是有效值,必须返回 Some("0")。
+pub(crate) async fn fetch_account_balances_onchain(
+    account_hexes: &[String],
+) -> Result<BTreeMap<String, Option<String>>, String> {
+    let mut result = BTreeMap::new();
+    let mut unique_accounts: BTreeMap<String, [u8; 32]> = BTreeMap::new();
+    for raw in account_hexes {
+        let key = clean_account_hex_key(raw);
+        result.entry(key.clone()).or_insert(None);
+        if let Some(account) = parse_sr25519_pubkey_bytes(raw) {
+            unique_accounts.insert(key, account);
+        }
+    }
+    if unique_accounts.is_empty() {
+        return Ok(result);
+    }
+
+    let http_url = super::chain_url::chain_http_url()?;
+    let client = reqwest::Client::new();
+    let finalized_hash = fetch_finalized_head_via_http(&client, http_url.as_str()).await?;
+    let mut id_to_account = BTreeMap::new();
+    let requests = unique_accounts
+        .iter()
+        .enumerate()
+        .map(|(index, (account_hex, account_id))| {
+            let id = (index + 1) as u64;
+            id_to_account.insert(id, account_hex.clone());
+            serde_json::json!({
+                "id": id,
+                "jsonrpc": "2.0",
+                "method": "state_getStorage",
+                "params": [system_account_storage_key(account_id), finalized_hash.clone()]
+            })
+        })
+        .collect::<Vec<_>>();
+    let response = client
+        .post(http_url.as_str())
+        .json(&requests)
+        .send()
+        .await
+        .map_err(|e| format!("connect chain http rpc for account balances failed: {e}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("chain http rpc returned status {status}"));
+    }
+    let payload = response
+        .json::<Vec<ChainRpcValueResponse>>()
+        .await
+        .map_err(|e| format!("decode chain http rpc account balance response failed: {e}"))?;
+
+    for item in payload {
+        let Some(account_hex) = id_to_account.get(&item.id) else {
+            continue;
+        };
+        if item.error.is_some() {
+            result.insert(account_hex.clone(), None);
+            continue;
+        }
+        let balance = match item.result {
+            None | Some(serde_json::Value::Null) => None,
+            Some(serde_json::Value::String(storage_hex)) => {
+                decode_account_free_balance_fen(storage_hex.as_str()).unwrap_or(None)
+            }
+            Some(_) => None,
+        };
+        result.insert(account_hex.clone(), balance);
+    }
+    Ok(result)
 }
 
 /// 启动时从区块链 RPC 获取创世哈希并缓存。
@@ -573,16 +751,12 @@ const ADMIN_STATUS_ACTIVE: u8 = 1;
 #[derive(Debug, Decode)]
 struct OnChainAdminProfile {
     account: [u8; 32],
-    #[allow(dead_code)]
     admin_cid_number: Vec<u8>,
-    // 中文注释:name/admin_role 供大屏只读看板席位展示(fetch_active_admin_profiles_onchain 读取)。
+    // 中文注释:name/admin_role 供管理员列表与大屏只读看板席位展示读取。
     name: Vec<u8>,
     admin_role: Vec<u8>,
-    #[allow(dead_code)]
     term_start: u32,
-    #[allow(dead_code)]
     term_end: u32,
-    #[allow(dead_code)]
     source: u8,
 }
 
@@ -997,10 +1171,33 @@ pub(crate) async fn fetch_active_admins_onchain(
 pub(crate) struct OnChainAdminProfileView {
     /// 管理员账户(0x 小写 hex)。
     pub(crate) account_hex: String,
+    /// 管理员实名锚:注册局签发的 CID 号。
+    pub(crate) admin_cid_number: String,
     /// 姓名快照(链上 `AdminProfile::name`)。
     pub(crate) name: String,
     /// 对外法定职务(链上 `AdminProfile::admin_role`)。
+    pub(crate) admin_role: String,
+    /// 旧看板字段名,由 `admin_role` 同步赋值;管理员列表不得使用此字段。
     pub(crate) title: String,
+    /// 任期开始(天数自纪元;无任期为 0)。
+    pub(crate) term_start: u32,
+    /// 任期结束(天数自纪元;无任期为 0)。
+    pub(crate) term_end: u32,
+    /// 职务/任期来源判别值。
+    pub(crate) source: u8,
+    /// 来源中文标签;未知来源留空。
+    pub(crate) source_label: String,
+}
+
+fn admin_source_label(source: u8) -> &'static str {
+    match source {
+        0 => "创世",
+        1 => "注册局",
+        2 => "内部投票",
+        3 => "互选",
+        4 => "普选",
+        _ => "",
+    }
 }
 
 /// 读取本节点机构的链上 Active 管理员**资料**集合(账户 + 姓名 + 职务 + 任期)。
@@ -1060,8 +1257,14 @@ pub(crate) async fn fetch_active_admin_profiles_onchain(
             .iter()
             .map(|profile| OnChainAdminProfileView {
                 account_hex: format!("0x{}", hex::encode(profile.account)),
+                admin_cid_number: String::from_utf8_lossy(&profile.admin_cid_number).to_string(),
                 name: String::from_utf8_lossy(&profile.name).to_string(),
+                admin_role: String::from_utf8_lossy(&profile.admin_role).to_string(),
                 title: String::from_utf8_lossy(&profile.admin_role).to_string(),
+                term_start: profile.term_start,
+                term_end: profile.term_end,
+                source: profile.source,
+                source_label: admin_source_label(profile.source).to_string(),
             })
             .collect();
         return Ok(Some(profiles));
@@ -1069,18 +1272,14 @@ pub(crate) async fn fetch_active_admin_profiles_onchain(
     Ok(None)
 }
 
-/// 读取联邦注册局指定省 5 人组的 Active 管理员账户集合(0x 小写 hex)。
-///
-/// 中文注释:Tier1 创世注册局「全走链读」(决策③)。控制台列表 / 换届当前集合都据此从链上
-/// `PublicAdmins::FederalRegistryProvinceGroups[province_code]` 直读权威集合(键=链上省码 `[u8;2]`);
-/// 省组不存在或非 Active → `Ok(vec![])`。任意调用方按本省省码调用,不依赖节点身份。
-pub(crate) async fn fetch_federal_registry_province_admins(
+/// 读取联邦注册局指定省 5 人组的 Active 管理员完整资料。
+pub(crate) async fn fetch_federal_registry_province_admin_profiles(
     province_code: [u8; 2],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<OnChainAdminProfileView>, String> {
     let ws_url = super::chain_url::chain_ws_url()?;
     let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
         .await
-        .map_err(|e| format!("connect chain ws for federal registry group failed: {e}"))?;
+        .map_err(|e| format!("connect chain ws for federal registry profiles failed: {e}"))?;
     let storage = client
         .storage()
         .at_latest()
@@ -1094,20 +1293,30 @@ pub(crate) async fn fetch_federal_registry_province_admins(
     let Some(thunk) = storage
         .fetch(&address)
         .await
-        .map_err(|e| format!("fetch federal registry province group failed: {e}"))?
+        .map_err(|e| format!("fetch federal registry province profiles failed: {e}"))?
     else {
         return Ok(vec![]);
     };
     let mut raw = thunk.encoded();
     let decoded = OnChainAdminAccount::decode(&mut raw)
-        .map_err(|e| format!("decode federal registry province group failed: {e}"))?;
+        .map_err(|e| format!("decode federal registry province profiles failed: {e}"))?;
     if decoded.status != ADMIN_STATUS_ACTIVE {
         return Ok(vec![]);
     }
     Ok(decoded
         .admins
         .iter()
-        .map(|profile| format!("0x{}", hex::encode(profile.account)))
+        .map(|profile| OnChainAdminProfileView {
+            account_hex: format!("0x{}", hex::encode(profile.account)),
+            admin_cid_number: String::from_utf8_lossy(&profile.admin_cid_number).to_string(),
+            name: String::from_utf8_lossy(&profile.name).to_string(),
+            admin_role: String::from_utf8_lossy(&profile.admin_role).to_string(),
+            title: String::from_utf8_lossy(&profile.admin_role).to_string(),
+            term_start: profile.term_start,
+            term_end: profile.term_end,
+            source: profile.source,
+            source_label: admin_source_label(profile.source).to_string(),
+        })
         .collect())
 }
 

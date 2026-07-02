@@ -48,7 +48,7 @@ citizenchain/onchina/src/
 后端只承认结构化 PostgreSQL 表为主数据。`store/` 可以封装访问和短期缓存，但不得保存第二份业务主数据。
 
 - 机构主写入只进入 `institution/subjects`、`domains/gov`、`domains/private`、`institution/accounts` 和 `domains/docs`。
-- 公民主写入只进入 `domains/citizens`、`subjects`、`citizens`、`passport_numbers` 和 `sequence_counters`。
+- 公民主写入只进入 `domains/citizens`、`subjects`、`citizens`、`citizen_documents`、`passport_numbers` 和 `sequence_counters`。
 - 管理员写入只进入 `admins`(本地元数据缓存)和短生命周期安全运行态表;成员资格真源在链上(`federal_registry_scope` 表已退役,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
 - 链上状态只属于 `accounts.chain_status`，机构主体本身不保存链上状态。
 - 审计写入统一走结构化审计入口，详情字段只保存事实，不保存 UI 文案。
@@ -64,9 +64,10 @@ citizenchain/onchina/src/
 - 推送链上公民身份时才录入 `wallet_account`;后端接受 SS58 地址或 0x 公钥,解析为内部 `wallet_pubkey` 并要求该钱包对 `VotingIdentityPayload` 签名。
 - 未满 16 周岁不得推送链上公民身份。OnChina 在生成签名二维码前校验年龄,runtime `citizen-identity` 在 `register_voting_identity / update_voting_identity / upgrade_to_candidate_identity` 再次校验 `citizen_age_years >= 16`。
 - 出生省市镇必填,字段为 `birth_province_code / birth_city_code / birth_town_code`;创建后不得被普通编辑流程修改。
-- 居住省市来自当前办理城市上下文,字段为 `residence_province_code / residence_city_code`;前端只选择 `residence_town_code`。
+- 居住/办理行政区直接使用链上中国统一行政区字段 `province_code / city_code / town_code`;前端只允许在当前办理城市下选择 `town_code`,不得恢复旧的第二套居住字段。
 - 护照有效期自动计算:创建时年满 16 周岁为 10 年,未满 16 周岁为 5 年,字段为 `passport_valid_from / passport_valid_until`。
 - `citizens` 表当前字段只表达公民档案、身份 CID、护照号、可为空的钱包地址、出生地、居住地、护照有效期和投票资格。
+- 公民资料库独立使用 `citizen_documents` 表和 `/api/v1/admin/citizens/:cid_number/documents` 接口,不得复用机构 `docs` 表或 `domains/docs` 逻辑。资料类型固定为“护照相片 / 出生证明 / 监护人护照 / 其他材料”,文件本体写入磁盘,表内只保存元数据和内容哈希。
 - `passport_numbers` 是护照号全局索引表;`passport_number_recycle_pool` 只保存可回收护照号,不得保存旧公民个人资料。
 
 ## 6. 链交互边界
@@ -80,6 +81,7 @@ citizenchain/onchina/src/
   - `POST /api/v1/admin/citizens/:cid_number/onchain/complete` 验证公民钱包签名,落库钱包绑定,并生成 `0x0a00 register_voting_identity` 注册局管理员链上签名二维码。
 - 联合投票本地人数查询：`domains/citizens/chain_joint_vote.rs`
 - 地址变更调用：`domains/address/chain_call.rs`
+- 立法法律只读链读：`domains/legislation/law/chain_read.rs` 负责读取 `Law`、`LawVersion`、`LawVersionLabels` 和宪法不可修改条款 manifest；`LawView.version_title/version_title_en` 只能来自链上 `LawVersionLabels[(law_id, version)]`。
 - 通用 SCALE、genesis hash、RPC URL 和交易提交辅助：`core/chain_*.rs`
 
 业务模块不得新增全局链目录，不得在 handler 内手写 pallet/call 字节或二维码动作码。动作码、payload、签名/验签规则以 `memory/07-ai/unified-protocols.md` 为唯一登记入口。
@@ -108,6 +110,8 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 管理员新增、替换、Passkey 更新、节点解绑和链写动作必须使用 `PASSKEY_COLD_SIGN` 二次确认。业务 handler 只负责构造业务动作，二维码协议包装和签名结果识别归 `core/qr/`。
 
 联邦注册局机构 `admins` 不允许本地新增或删除，只允许在同省范围内替换。市注册局机构 `admins` 每省每市最多 30 人，统计必须同时带省和市，不能只按市名统计。NJD、普通公权机构、私权机构和非法人组织本期只能查看本机构链上 active admin 列表，不能在 OnChina 内维护管理员集合。
+
+管理员列表 API 的展示字段统一来自链上 `AdminProfile` 投影：`admin_cid_number / name / admin_role / term_start / term_end / source / source_label`。本地 `admins.admin_name` 只用于登录态缓存、创建市注册局管理员和审计历史，不作为联邦注册局、市注册局、本机构管理员列表的展示真源；旧的本地管理员姓名 PATCH 动作和前端入口不得恢复。
 
 ## 10. 控制台能力映射
 

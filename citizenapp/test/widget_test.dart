@@ -77,9 +77,10 @@ void main() {
     // 等待异步锁检查完成并渲染主界面。
     await tester.pumpAndSettle();
 
-    // 中文注释：底部导航第 2 项已从消息改为多签，第 3 项仍叫交易。
-    expect(find.text('多签'), findsWidgets);
+    // 中文注释：底部导航第 2 项已从多签改为广场，个人多签入口迁到交易页。
+    expect(find.text('广场'), findsWidgets);
     expect(find.text('交易'), findsWidgets);
+    expect(find.text('多签'), findsNothing);
     expect(find.text('消息'), findsNothing);
     // app 启动会初始化链 RPC(smoldot);libsmoldot 不可用(纯 Dart CI 无宿主 .so)
     // 则跳过此全量启动冒烟,真机/集成构建照跑(首启权限引导用例不依赖 native,仍跑)。

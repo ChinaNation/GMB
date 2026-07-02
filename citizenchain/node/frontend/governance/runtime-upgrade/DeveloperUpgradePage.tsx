@@ -1,14 +1,13 @@
 // 开发期直升页：国储会任意已激活管理员签名后直接提交 developer_direct_upgrade。
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { QRCodeSVG } from 'qrcode.react';
 import { sanitizeError } from '../../core/tauri';
 import { hexToSs58 } from '../../shared/ss58';
-import { QrScanner } from '../../shared/qr/QrScanner';
+import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { runtimeUpgradeApi as api } from './api';
 import type { AdminWalletMatch, VoteSignRequestResult } from '../types';
 
-type FlowStep = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
+type FlowStep = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
 type Props = {
   adminWallets: AdminWalletMatch[];
@@ -158,20 +157,13 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
       )}
 
       {step === 'qr' && (
-        <div className="vote-signing-body qr-step">
-          <p className="qr-instruction">用 citizenwallet 离线设备扫描此二维码完成签名</p>
-          <div className="qr-container"><QRCodeSVG value={requestJson} size={280} level="L" /></div>
-          <p className="qr-countdown">剩余 <strong>{countdown}</strong> 秒</p>
-          <button className="vote-signing-confirm" onClick={() => setStep('scan')}>已签名，扫描响应</button>
-          <button className="cancel-button" onClick={() => setStep('form')} style={{ marginTop: 8 }}>取消</button>
-        </div>
-      )}
-
-      {step === 'scan' && (
         <div className="vote-signing-body">
-          <p className="qr-instruction">将签名响应二维码对准摄像头</p>
-          <QrScanner onScan={handleScanResult} onError={(e) => { setError(e); setStep('error'); }} />
-          <button className="cancel-button" onClick={() => setStep('qr')}>返回</button>
+          <CitizenSignaturePanel
+            qrValue={requestJson}
+            countdownSeconds={countdown}
+            onScan={handleScanResult}
+            onScanError={(e) => { setError(e); setStep('error'); }}
+          />
         </div>
       )}
 

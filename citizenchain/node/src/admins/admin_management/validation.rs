@@ -18,7 +18,7 @@ pub fn validate_admin_set_change(
         return Err("管理员账户不是已激活状态，不能发起更换".to_string());
     }
     let proposer = super::account_id::normalize_pubkey_hex(proposer_pubkey_hex)?;
-    if !state.admins.iter().any(|admin| admin == &proposer) {
+    if !state.admins.iter().any(|admin| admin.account == proposer) {
         return Err("当前签名账户不是该账户管理员，不能发起管理员更换".to_string());
     }
     if state.institution_code == FRG {
@@ -35,7 +35,11 @@ pub fn validate_admin_set_change(
         }
     }
 
-    let current: BTreeSet<_> = state.admins.iter().cloned().collect();
+    let current: BTreeSet<_> = state
+        .admins
+        .iter()
+        .map(|profile| profile.account.clone())
+        .collect();
     let next: BTreeSet<_> = normalized.iter().cloned().collect();
     if current == next {
         return Err("新管理员集合与当前管理员集合没有变化".to_string());
@@ -104,16 +108,21 @@ fn validate_count(
 mod tests {
     use super::*;
 
+    use crate::admins::admin_management::types::AdminProfileInfo;
     use primitives::cid::code::{code_bytes, PMUL};
 
     fn admin(seed: u8) -> String {
         format!("{seed:02x}").repeat(32)
     }
 
+    fn profile(seed: u8) -> AdminProfileInfo {
+        AdminProfileInfo::account_only(admin(seed))
+    }
+
     fn state(
         kind: u8,
         institution_code: InstitutionCode,
-        admins: Vec<String>,
+        admins: Vec<AdminProfileInfo>,
     ) -> AdminAccountState {
         AdminAccountState {
             account_hex: "11".repeat(32),
@@ -133,7 +142,7 @@ mod tests {
 
     #[test]
     fn personal_account_requires_personal_code() {
-        let current = vec![admin(1), admin(2)];
+        let current = vec![profile(1), profile(2)];
         let next = vec![admin(1), admin(3)];
         // kind=2(个人多签)但机构码是机构账户码 → 拒绝。
         let err =
@@ -144,7 +153,7 @@ mod tests {
 
     #[test]
     fn institution_account_requires_institution_code() {
-        let current = vec![admin(1), admin(2)];
+        let current = vec![profile(1), profile(2)];
         let next = vec![admin(1), admin(3)];
 
         validate_admin_set_change(
@@ -168,7 +177,7 @@ mod tests {
 
     #[test]
     fn federal_registry_requires_onchina_province_group_flow() {
-        let current = vec![admin(1), admin(2), admin(3), admin(4), admin(5)];
+        let current = vec![profile(1), profile(2), profile(3), profile(4), profile(5)];
         let next = vec![admin(1), admin(2), admin(3), admin(4), admin(6)];
 
         let err = validate_admin_set_change(&state(0, FRG, current), &admin(1), &next).unwrap_err();

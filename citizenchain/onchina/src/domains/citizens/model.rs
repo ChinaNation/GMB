@@ -44,9 +44,7 @@ pub(crate) struct CitizenRecord {
     pub(crate) status_updated_at: Option<i64>,
     pub(crate) province_code: String,
     pub(crate) city_code: String,
-    pub(crate) residence_province_code: String,
-    pub(crate) residence_city_code: String,
-    pub(crate) residence_town_code: String,
+    pub(crate) town_code: String,
     pub(crate) birth_province_code: String,
     pub(crate) birth_city_code: String,
     pub(crate) birth_town_code: String,
@@ -124,6 +122,25 @@ pub(crate) struct PublicIdentitySearchOutput {
     pub(crate) wallet_pubkey: Option<String>,
 }
 
+pub(crate) const CITIZEN_DOCUMENT_TYPES: [&str; 4] =
+    ["护照相片", "出生证明", "监护人护照", "其他材料"];
+
+/// 公民独立资料库文件元数据。
+///
+/// 中文注释:公民资料库必须独立于机构 docs 表;文件本体存磁盘,
+/// citizen_documents 只保存当前公民资料文件的元数据和内容哈希。
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct CitizenDocument {
+    pub(crate) id: u64,
+    pub(crate) cid_number: String,
+    pub(crate) file_name: String,
+    pub(crate) document_type: String,
+    pub(crate) file_size: u64,
+    pub(crate) file_hash: String,
+    pub(crate) uploaded_by: String,
+    pub(crate) uploaded_at: DateTime<Utc>,
+}
+
 #[derive(Serialize)]
 pub(crate) struct CitizenRow {
     pub(crate) id: u64,
@@ -141,12 +158,12 @@ pub(crate) struct CitizenRow {
     pub(crate) passport_valid_from: String,
     pub(crate) passport_valid_until: String,
     pub(crate) status_updated_at: Option<i64>,
-    pub(crate) residence_province_code: String,
-    pub(crate) residence_city_code: String,
-    pub(crate) residence_town_code: String,
-    pub(crate) residence_province_name: Option<String>,
-    pub(crate) residence_city_name: Option<String>,
-    pub(crate) residence_town_name: Option<String>,
+    pub(crate) province_code: String,
+    pub(crate) city_code: String,
+    pub(crate) town_code: String,
+    pub(crate) province_name: Option<String>,
+    pub(crate) city_name: Option<String>,
+    pub(crate) town_name: Option<String>,
     pub(crate) birth_province_code: String,
     pub(crate) birth_city_code: String,
     pub(crate) birth_town_code: String,
@@ -180,9 +197,9 @@ pub(crate) struct MyIdStatusOutput {
     pub(crate) passport_valid_from: Option<String>,
     pub(crate) passport_valid_until: Option<String>,
     pub(crate) status_updated_at: Option<i64>,
-    pub(crate) residence_province_code: Option<String>,
-    pub(crate) residence_city_code: Option<String>,
-    pub(crate) residence_town_code: Option<String>,
+    pub(crate) province_code: Option<String>,
+    pub(crate) city_code: Option<String>,
+    pub(crate) town_code: Option<String>,
     pub(crate) birth_province_code: Option<String>,
     pub(crate) birth_city_code: Option<String>,
     pub(crate) birth_town_code: Option<String>,
@@ -214,9 +231,7 @@ mod tests {
             status_updated_at: Some(1_779_580_800),
             province_code: "GD".to_string(),
             city_code: "001".to_string(),
-            residence_province_code: "GD".to_string(),
-            residence_city_code: "001".to_string(),
-            residence_town_code: "001001".to_string(),
+            town_code: "001001".to_string(),
             birth_province_code: "GD".to_string(),
             birth_city_code: "001".to_string(),
             birth_town_code: "001001".to_string(),
@@ -245,9 +260,9 @@ mod tests {
             passport_valid_from: Some("2026-05-24".to_string()),
             passport_valid_until: Some("2036-05-23".to_string()),
             status_updated_at: Some(1_779_580_800),
-            residence_province_code: Some("GD".to_string()),
-            residence_city_code: Some("001".to_string()),
-            residence_town_code: Some("001001".to_string()),
+            province_code: Some("GD".to_string()),
+            city_code: Some("001".to_string()),
+            town_code: Some("001001".to_string()),
             birth_province_code: Some("GD".to_string()),
             birth_city_code: Some("001".to_string()),
             birth_town_code: Some("001001".to_string()),

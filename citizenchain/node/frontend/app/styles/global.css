@@ -2558,43 +2558,12 @@ select option:checked {
   cursor: not-allowed;
 }
 
-/* QR 码显示 */
-
-.qr-step {
-  text-align: center;
-}
+/* 扫码辅助文案 */
 
 .qr-instruction {
   font-size: 13px;
   color: var(--text-secondary);
   margin: 0 0 12px;
-}
-
-.qr-container {
-  display: flex;
-  justify-content: center;
-  padding: 16px;
-  background: #fff;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  margin-bottom: 12px;
-}
-
-.qr-countdown {
-  font-size: 14px;
-  color: var(--text-muted);
-  margin: 0 0 12px;
-}
-
-/* 摄像头扫描 */
-
-.scanner-container {
-  width: 320px;
-  height: 320px;
-  margin: 0 auto 12px;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 2px solid var(--border);
 }
 
 /* ── QrScanner 组件 ── */
@@ -2632,6 +2601,185 @@ select option:checked {
   border: 2px solid rgba(255, 255, 255, 0.7);
   border-radius: 8px;
   box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.3);
+}
+
+/* ── 公民钱包扫码签名统一面板 ── */
+
+.citizen-signature-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.citizen-signature-modal {
+  width: min(860px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 48px));
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-app);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.citizen-signature-modal-head {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.citizen-signature-modal-head h3 {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 17px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.citizen-signature-modal-close {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  grid-column: 3;
+  grid-row: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.citizen-signature-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(300px, 1fr);
+  gap: 16px;
+  padding: 16px;
+}
+
+.citizen-signature-pane {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.citizen-signature-pane-head {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+}
+
+.citizen-signature-pane-head h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.citizen-signature-pane-head p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.citizen-signature-qr-box {
+  display: flex;
+  width: min(100%, 320px);
+  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.citizen-signature-meta {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.citizen-signature-panel .qr-scanner-wrapper {
+  width: min(100%, 320px);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto 4px;
+}
+
+.citizen-signature-status {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  width: min(100%, 320px);
+  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
+  padding: 18px;
+  margin: 0 auto 4px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.citizen-signature-status strong {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.citizen-signature-status p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.citizen-signature-status-success strong {
+  color: #22c55e;
+}
+
+.citizen-signature-status-error strong,
+.citizen-signature-status-error p {
+  color: #f87171;
+}
+
+.vote-signing-modal.signature-flow-modal,
+.transfer-signing-modal.signature-flow-modal {
+  width: min(860px, calc(100vw - 32px));
+}
+
+@media (max-width: 760px) {
+  .citizen-signature-modal-overlay {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .citizen-signature-panel {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* 投票成功 */
@@ -3528,21 +3676,6 @@ select option:checked {
 .transfer-signing-confirm:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* QR 码正方形白色背景 */
-.transfer-qr-box {
-  display: inline-flex;
-  padding: 16px;
-  background: #fff;
-  border-radius: 8px;
-  align-self: center;
-}
-
-.qr-countdown {
-  font-size: 13px;
-  color: var(--text-muted);
-  text-align: center;
 }
 
 .qr-instruction {

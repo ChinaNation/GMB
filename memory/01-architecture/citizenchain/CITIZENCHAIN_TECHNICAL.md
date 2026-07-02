@@ -114,6 +114,8 @@ citizenchain/
 - 交易扩展中显式拒绝 `stake` 账户作为发送方。
 - runtime 当前直接依赖本产品的治理、发行、交易、其他 pallet。
 - 创世配置由 `runtime/src/genesis_config_presets.rs` 提供。
+- 公民宪法创世正文唯一文件为 `runtime/public/legislation-yuan/src/constitution.scale`；该文件是结构化 `章>节>条>款` SCALE 数据，运行态注入为 `law_id=0`，修改必须经 runtime 二次确认并通过 `legislation-yuan` 解码/创世测试。
+- 创世法律版本标签唯一常量在 `runtime/primitives/src/genesis.rs`：`GENESIS_LAW_VERSION_LABELS` 目前固定写入 `(law_id=0, version=1) -> 创世版 / Genesis Edition`；runtime 创世构建把该常量写入 `LegislationYuan.LawVersionLabels`，显示端不得本地推断 `v1=创世版`。
 
 ### 7.3 Runtime 升级边界
 - 改动 `runtime/` 内部逻辑，通常属于 runtime 变更。
@@ -154,6 +156,7 @@ citizenchain/
 
 ### 9.2 管理员模块（`runtime/admins/`）
 - 负责公权机构管理员、私权机构管理员和个人多签管理员；固定治理机构初始管理员由创世写入，运行期治理归公权管理员模块。
+- 公权/私权机构管理员集合的展示真源是链上 `AdminProfile`：`account`、`admin_cid_number`、`name`、`admin_role`、`term_start`、`term_end`、`source`。node、OnChina、CitizenApp 只允许按这组字段投影展示；字段值为空时固定标签仍显示、值留空。个人多签仍只有裸 `AccountId`，仅以 account-only 资料展示。
 
 当前模块：
 - `admin-primitives`
@@ -208,6 +211,7 @@ citizenchain/
 - `node/src/<功能名>` 负责桌面端 Rust 后端能力，不再保留 `node/src/ui` 目录层。
 - `node/frontend/<功能名>` 负责 React 前端页面与交互。
 - `citizenchain/node` 负责启动 / 停止内嵌节点进程，管理 bootnode 地址、奖励地址、GRANDPA 地址、节点名称等本地设置，并展示节点状态、链状态、网络概览、挖矿面板与其他辅助信息。
+- Node 端所有公民钱包离线扫码签名 UI 统一由 `node/frontend/shared/qr/CitizenSignaturePanel.tsx` 和 `CitizenSignatureModal.tsx` 承载：左侧固定“扫码签名”，右侧固定“识别签名”，面板只显示二维码有效期倒计时，不显示内部 request id 或签名账户地址；业务页面只负责构造请求、验签和提交交易。地址扫码填入、通信节点配对等非签名二维码不纳入该组件。
 - 设置页的“全节点模式”当前展示归档全节点和普通全节点：默认归档全节点；普通全节点置灰不可选择；在底层剪裁能力完成前，节点实际仍按归档全节点运行。
 - 设置页在“全节点模式”和“通信节点功能”之间提供“链上中国平台”手动启动行，显示 `未开启` / `启动中` / `已开启` 状态标签、固定入口 `https://onchina.local:8964` 和“启动 / 关闭”按钮；点击后必须二次确认，只启动或停止 OnChina 子进程，不自动打开浏览器；只有 `/api/v1/health` 真实健康检查通过后才显示 `已开启`。
 

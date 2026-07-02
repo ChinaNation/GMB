@@ -1,18 +1,17 @@
 // 管理员列表页：两列网格展示所有管理员，每个管理员一个卡片。
 // 从机构详情页点击"管理员列表"入口卡片进入。
 import { useEffect, useState, useCallback } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import { sanitizeError } from '../../core/tauri';
-import { formatBalance } from '../../shared/format';
-import { hexToSs58 } from '../../shared/ss58';
-import { QrScanner } from '../../shared/qr/QrScanner';
+import { CitizenSignatureModal } from '../../shared/qr/CitizenSignatureModal';
 import { adminsChangeApi as api } from './api';
+import { AdminProfileCard } from './AdminProfileCard';
 import type {
   ActivateRequestResult,
   ActivatedAdmin,
   AdminAccountRef,
   InstitutionDetail,
 } from './types';
+import './styles.css';
 
 type Props = {
   cidNumber: string;
@@ -20,7 +19,7 @@ type Props = {
   onBack: () => void;
 };
 
-type ActivateStep = 'idle' | 'qr' | 'scan' | 'verifying' | 'done' | 'error';
+type ActivateStep = 'idle' | 'qr' | 'verifying' | 'done' | 'error';
 
 export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
@@ -96,6 +95,11 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
     }
   }, [activateRequest, activatePubkey]);
 
+  const closeActivation = useCallback(() => {
+    if (activateStep === 'verifying') return;
+    setActivateStep('idle');
+  }, [activateStep]);
+
   if (loading) {
     return <div className="governance-section"><p>加载中…</p></div>;
   }
@@ -127,82 +131,59 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
       ) : (
         <div className="admin-grid">
           {detail.admins.map((admin, i) => {
-            const pubkey = admin.pubkeyHex;
+            const pubkey = admin.account;
             const isActivated = activatedAdmins.some(
               a => a.pubkeyHex.toLowerCase() === pubkey.toLowerCase()
             );
-            const ss58 = hexToSs58(pubkey);
-            const balanceDisplay = admin.balanceFen != null
-              ? formatBalance(admin.balanceFen)
-              : '—';
             return (
-              <div key={pubkey} className={`metric-card admin-card ${isActivated ? 'admin-card-activated' : ''}`}>
-                <span className="admin-card-index">{i + 1}</span>
-                <code className="admin-card-address">{ss58}</code>
-                <span className="admin-card-balance">｜ {balanceDisplay}</span>
-                <div className="admin-card-actions">
-                  {isActivated ? (
+              <AdminProfileCard
+                key={pubkey}
+                profile={admin}
+                index={i + 1}
+                balanceFen={admin.balanceFen}
+                className={isActivated ? 'admin-card-activated' : ''}
+                action={
+                  isActivated ? (
                     <span className="activated-tag">已激活</span>
                   ) : (
                     <button
                       className="activate-button"
                       onClick={() => startActivation(pubkey)}
                     >激活</button>
-                  )}
-                </div>
-              </div>
+                  )
+                }
+              />
             );
           })}
         </div>
       )}
 
-      {/* 激活签名弹窗 */}
-      {activateStep !== 'idle' && (
-        <div className="modal-overlay" onClick={() => activateStep !== 'verifying' && setActivateStep('idle')}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            {activateStep === 'qr' && activateRequest && (
-              <>
-                <h3>扫码激活管理员</h3>
-                <p>使用 citizenwallet 冷钱包扫描以下二维码完成身份验证</p>
-                <div className="qr-container">
-                  <QRCodeSVG value={activateRequest.requestJson} size={280} level="L" />
-                </div>
-                <p className="countdown">有效时间：{activateCountdown} 秒</p>
-                <button className="primary-button" onClick={() => setActivateStep('scan')}>
-                  已签名，扫描响应
-                </button>
-                <button className="secondary-button" onClick={() => setActivateStep('idle')}>
-                  取消
-                </button>
-              </>
-            )}
-            {activateStep === 'scan' && (
-              <>
-                <h3>扫描签名响应</h3>
-                <QrScanner
-                  onScan={handleActivateScan}
-                  onError={(e) => { setActivateError(e); setActivateStep('error'); }}
-                />
-                <button className="secondary-button" onClick={() => setActivateStep('qr')}>
-                  返回二维码
-                </button>
-              </>
-            )}
-            {activateStep === 'verifying' && (
-              <div className="loading-section"><p>正在验证签名…</p></div>
-            )}
-            {activateStep === 'done' && (
-              <div className="success-section"><p>管理员激活成功</p></div>
-            )}
-            {activateStep === 'error' && (
-              <>
-                <div className="error">{activateError}</div>
-                <button className="secondary-button" onClick={() => setActivateStep('idle')}>关闭</button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <CitizenSignatureModal
+        open={activateStep !== 'idle' && activateRequest != null}
+        title="激活管理员"
+        qrValue={activateRequest?.requestJson ?? ''}
+        countdownSeconds={activateCountdown}
+        status={
+          activateStep === 'verifying'
+            ? 'submitting'
+            : activateStep === 'done'
+              ? 'success'
+              : activateStep === 'error'
+                ? 'error'
+                : 'ready'
+        }
+        statusTitle={
+          activateStep === 'verifying'
+            ? '正在验证管理员签名'
+            : activateStep === 'done'
+              ? '管理员激活成功'
+              : undefined
+        }
+        error={activateError}
+        onScan={handleActivateScan}
+        onScanError={(e) => { setActivateError(e); setActivateStep('error'); }}
+        onCancel={closeActivation}
+      />
 
     </div>
   );

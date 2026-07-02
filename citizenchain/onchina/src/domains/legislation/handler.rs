@@ -184,12 +184,27 @@ pub(crate) async fn list_my_laws(
 /// 逐部法律取办理端展示版本 → `LawView` 列表(`list_laws` / `list_my_laws` 共用)。
 async fn build_law_views(laws: Vec<chain_read::OnChainLaw>) -> Vec<LawView> {
     let mut views = Vec::with_capacity(laws.len());
+    let immutable_article_numbers = if laws.iter().any(|law| law.tier == 0) {
+        chain_read::fetch_immutable_article_numbers()
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     for law in laws {
         let Some(version_id) = chain_read::operator_display_version(&law) else {
             continue;
         };
         if let Ok(Some(version)) = chain_read::fetch_law_version(law.law_id, version_id).await {
-            views.push(chain_read::build_law_view(&law, &version));
+            let version_label = chain_read::fetch_law_version_label(law.law_id, version_id)
+                .await
+                .unwrap_or_default();
+            views.push(chain_read::build_law_view(
+                &law,
+                &version,
+                version_label.as_ref(),
+                &immutable_article_numbers,
+            ));
         }
     }
     views
@@ -217,10 +232,27 @@ pub(crate) async fn get_law(
         Ok(None) => return api_error(StatusCode::NOT_FOUND, 1004, "law version not found"),
         Err(err) => return api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
     };
+    let version_label = match chain_read::fetch_law_version_label(law.law_id, version_id).await {
+        Ok(v) => v,
+        Err(err) => return api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
+    };
+    let immutable_article_numbers = if law.tier == 0 {
+        match chain_read::fetch_immutable_article_numbers().await {
+            Ok(v) => v,
+            Err(err) => return api_error(StatusCode::BAD_GATEWAY, 5002, err.as_str()),
+        }
+    } else {
+        Vec::new()
+    };
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: chain_read::build_law_view(&law, &version),
+        data: chain_read::build_law_view(
+            &law,
+            &version,
+            version_label.as_ref(),
+            &immutable_article_numbers,
+        ),
     })
     .into_response()
 }

@@ -1,10 +1,27 @@
 use axum::{extract::State, http::HeaderMap, http::StatusCode, response::IntoResponse, Json};
 use chrono::Utc;
+use std::collections::BTreeMap;
 
 use crate::auth::repo;
 use crate::core::chain_runtime;
 use crate::crypto::pubkey::same_admin_account;
 use crate::*;
+
+fn balance_lookup_key(account: &str) -> String {
+    let trimmed = account.trim();
+    trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed)
+        .to_ascii_lowercase()
+}
+
+fn balance_fen(balances: &BTreeMap<String, Option<String>>, account: &str) -> Option<String> {
+    balances
+        .get(balance_lookup_key(account).as_str())
+        .cloned()
+        .flatten()
+}
 
 /// 中文注释:Tier1 创世注册局管理员列表(本省 5 人组,「全走链读」决策③)。
 ///
@@ -32,9 +49,9 @@ pub(crate) async fn list_federal_registry_admins(
         let message = format!("province '{province}' is not a valid chain province");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
     };
-    // 全走链读:本省 Tier1 创世注册局 5 人组的权威账户集合。
-    let chain_accounts =
-        match chain_runtime::fetch_federal_registry_province_admins(province_code).await {
+    // 全走链读:本省 Tier1 创世注册局 5 人组的权威资料集合。
+    let chain_profiles =
+        match chain_runtime::fetch_federal_registry_province_admin_profiles(province_code).await {
             Ok(v) => v,
             Err(err) => {
                 tracing::warn!(error = %err, "chain unreachable listing federal registry admins");
@@ -43,9 +60,23 @@ pub(crate) async fn list_federal_registry_admins(
         };
     let now = Utc::now();
     let tier1_code = chain_runtime::TIER1_REGISTRY_CODE.to_string();
+    let balance_accounts = chain_profiles
+        .iter()
+        .map(|profile| profile.account_hex.clone())
+        .collect::<Vec<_>>();
+    let balance_by_account = match chain_runtime::fetch_account_balances_onchain(&balance_accounts)
+        .await
+    {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::warn!(error = %err, "chain balance unavailable listing federal registry admins");
+            BTreeMap::new()
+        }
+    };
     let result = state.db.with_client(move |conn| {
-        let mut rows = Vec::with_capacity(chain_accounts.len());
-        for account in &chain_accounts {
+        let mut rows = Vec::with_capacity(chain_profiles.len());
+        for profile in &chain_profiles {
+            let account = &profile.account_hex;
             // 缓存缺失即补一条 built_in 行(名字空→显示回退),保证有本地 id 供换届定位。
             let admin = match repo::get_admin_by_account_conn(conn, account)? {
                 Some(admin) => admin,
@@ -70,7 +101,15 @@ pub(crate) async fn list_federal_registry_admins(
                 id: admin.id,
                 province_name: province.clone(),
                 admin_account: admin.admin_account,
-                admin_name: federal_registry_display_name(admin.admin_name.as_str()),
+                admin_name: profile.name.clone(),
+                admin_cid_number: profile.admin_cid_number.clone(),
+                name: profile.name.clone(),
+                admin_role: profile.admin_role.clone(),
+                term_start: profile.term_start,
+                term_end: profile.term_end,
+                source: profile.source,
+                source_label: profile.source_label.clone(),
+                balance_fen: balance_fen(&balance_by_account, account),
                 built_in: admin.built_in,
                 created_at: admin.created_at,
                 updated_at: admin.updated_at,
@@ -91,22 +130,6 @@ pub(crate) async fn list_federal_registry_admins(
         data: rows,
     })
     .into_response()
-}
-
-fn federal_registry_display_name(raw: &str) -> String {
-    let name = raw.trim();
-    if name.is_empty() || is_generated_federal_registry_name(name) {
-        return "联邦注册局管理员".to_string();
-    }
-    name.to_string()
-}
-
-fn is_generated_federal_registry_name(name: &str) -> bool {
-    if !matches!(name.chars().last(), Some('1'..='5')) {
-        return false;
-    }
-    let prefix = &name[..name.len() - 1];
-    prefix.ends_with("联邦注册局管理员")
 }
 
 /// 中文注释:普通机构只读“本机构管理员”列表。
@@ -146,8 +169,8 @@ pub(crate) async fn list_own_institution_admins(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    let chain_accounts = match chain_runtime::fetch_active_admins_onchain(&identity).await {
-        Ok(Some(accounts)) => accounts,
+    let chain_profiles = match chain_runtime::fetch_active_admin_profiles_onchain(&identity).await {
+        Ok(Some(profiles)) => profiles,
         Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin"),
         Err(err) => {
             tracing::warn!(error = %err, "chain unreachable listing own institution admins");
@@ -155,43 +178,53 @@ pub(crate) async fn list_own_institution_admins(
         }
     };
     // 中文注释:列表展示也做一次链上 active 复查,避免后台清退窗口内的失效管理员继续读取。
-    if !chain_accounts
+    if !chain_profiles
         .iter()
-        .any(|account| same_admin_account(account.as_str(), ctx.admin_account.as_str()))
+        .any(|profile| same_admin_account(profile.account_hex.as_str(), ctx.admin_account.as_str()))
     {
         return api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin");
     }
     let actor_account = ctx.admin_account.clone();
-    let actor_name = ctx.admin_name.clone();
     let institution_code = ctx.institution_code.clone();
     let cid_short_name = ctx.cid_short_name.clone();
-    let result = state.db.with_client(move |conn| {
-        let mut rows = Vec::with_capacity(chain_accounts.len());
-        for account in chain_accounts {
-            let is_self = same_admin_account(account.as_str(), actor_account.as_str());
-            let cached_name = repo::get_admin_by_account_conn(conn, account.as_str())?
-                .filter(|admin| admin.institution_code == institution_code)
-                .map(|admin| admin.admin_name)
-                .unwrap_or_default();
-            let admin_name = if is_self && !actor_name.trim().is_empty() {
-                actor_name.clone()
-            } else if cached_name.trim().is_empty() {
-                "本机构管理员".to_string()
-            } else {
-                cached_name
-            };
+    let balance_accounts = chain_profiles
+        .iter()
+        .map(|profile| profile.account_hex.clone())
+        .collect::<Vec<_>>();
+    let balance_by_account = match chain_runtime::fetch_account_balances_onchain(&balance_accounts)
+        .await
+    {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::warn!(error = %err, "chain balance unavailable listing own institution admins");
+            BTreeMap::new()
+        }
+    };
+    let result = {
+        let mut rows = Vec::with_capacity(chain_profiles.len());
+        for profile in chain_profiles {
+            let is_self = same_admin_account(profile.account_hex.as_str(), actor_account.as_str());
+            let balance = balance_fen(&balance_by_account, profile.account_hex.as_str());
             rows.push(OwnInstitutionAdminRow {
-                admin_account: account,
-                admin_name,
+                admin_account: profile.account_hex.clone(),
+                admin_name: profile.name.clone(),
+                admin_cid_number: profile.admin_cid_number,
+                name: profile.name,
+                admin_role: profile.admin_role,
+                term_start: profile.term_start,
+                term_end: profile.term_end,
+                source: profile.source,
+                source_label: profile.source_label,
+                balance_fen: balance,
                 is_self,
             });
         }
-        Ok(OwnInstitutionAdminListOutput {
+        Ok::<_, String>(OwnInstitutionAdminListOutput {
             institution_code,
             cid_short_name,
             rows,
         })
-    });
+    };
     let data = match result {
         Ok(v) => v,
         Err(err) => {

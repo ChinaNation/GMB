@@ -284,10 +284,26 @@ where
             .ok_or_else(|| {
                 ErrorObject::owned(-1, format!("链上宪法版本不存在(v{version})"), None::<()>)
             })?;
+            let version_label_bytes = raw(constitution::storage_key::law_version_label(
+                CONSTITUTION_LAW_ID,
+                version,
+            ))?;
 
-            // 3. 重建 HTML 并按内容计算摘要。
-            let html = constitution::render_constitution_html(&version_bytes)
-                .map_err(|e| ErrorObject::owned(-1, e, None::<()>))?;
+            // 3. RAW 读不可修改条款 manifest,用于展示「不可修改条款」徽章。
+            let manifest_bytes = raw(constitution::storage_key::manifest())?.ok_or_else(|| {
+                ErrorObject::owned(-1, "链上宪法不可修改条款 manifest 不存在", None::<()>)
+            })?;
+            let immutable_article_numbers =
+                constitution::immutable_article_numbers(&manifest_bytes)
+                    .map_err(|e| ErrorObject::owned(-1, e, None::<()>))?;
+
+            // 4. 重建 HTML 并按内容计算摘要。
+            let html = constitution::render_constitution_html(
+                &version_bytes,
+                &immutable_article_numbers,
+                version_label_bytes.as_deref(),
+            )
+            .map_err(|e| ErrorObject::owned(-1, e, None::<()>))?;
             let digest = sp_core::blake2_256(html.as_bytes());
 
             Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(serde_json::json!({

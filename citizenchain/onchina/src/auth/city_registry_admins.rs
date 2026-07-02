@@ -9,11 +9,28 @@ use axum::{
     Json,
 };
 use postgres::Client;
+use std::collections::BTreeMap;
 
 use crate::auth::login::build_admin_name_from_user;
 use crate::auth::repo;
 use crate::crypto::pubkey::same_admin_account;
 use crate::*;
+
+fn balance_lookup_key(account: &str) -> String {
+    let trimmed = account.trim();
+    trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed)
+        .to_ascii_lowercase()
+}
+
+fn balance_fen(balances: &BTreeMap<String, Option<String>>, account: &str) -> Option<String> {
+    balances
+        .get(balance_lookup_key(account).as_str())
+        .cloned()
+        .flatten()
+}
 
 pub(crate) const MAX_ADMIN_NAME_CHARS: usize = 200;
 pub(crate) const MAX_CITY_REGISTRY_ADMINS_PER_CITY: usize = 30;
@@ -77,13 +94,32 @@ pub(crate) async fn list_city_registry_admins(
             rows,
         })
     });
-    let data = match result {
+    let mut data = match result {
         Ok(v) => v,
         Err(err) => {
             let message = format!("query city registry admins failed: {err}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
+    let balance_accounts = data
+        .rows
+        .iter()
+        .map(|row| row.admin_account.clone())
+        .collect::<Vec<_>>();
+    let balance_by_account = match crate::core::chain_runtime::fetch_account_balances_onchain(
+        &balance_accounts,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::warn!(error = %err, "chain balance unavailable listing city registry admins");
+            BTreeMap::new()
+        }
+    };
+    for row in &mut data.rows {
+        row.balance_fen = balance_fen(&balance_by_account, row.admin_account.as_str());
+    }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -127,6 +163,14 @@ pub(crate) fn city_registry_row_from_user_conn(
         id: city_registry.id,
         admin_account: city_registry.admin_account.clone(),
         admin_name: city_registry_display_name(city_registry),
+        admin_cid_number: String::new(),
+        name: String::new(),
+        admin_role: String::new(),
+        term_start: 0,
+        term_end: 0,
+        source: u8::MAX,
+        source_label: String::new(),
+        balance_fen: None,
         institution_code: city_registry.institution_code.clone(),
         built_in: city_registry.built_in,
         created_by: city_registry.created_by.clone(),

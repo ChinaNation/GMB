@@ -1,6 +1,6 @@
 // 摄像头 QR 扫描组件。底层由 cameraScanner.ts 统一封装:
 // Chromium WebView 用 BarcodeDetector,WebKit 用 jsqr + canvas。
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { startCameraScanner } from './cameraScanner';
 
 type Props = {
@@ -11,7 +11,13 @@ type Props = {
 export function QrScanner({ onScan, onError }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
-  const [ready, setReady] = useState(false);
+  const onScanRef = useRef(onScan);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+    onErrorRef.current = onError;
+  }, [onScan, onError]);
 
   const stop = useCallback(() => {
     if (cleanupRef.current) {
@@ -28,15 +34,15 @@ export function QrScanner({ onScan, onError }: Props) {
       video,
       (raw) => {
         stop();
-        onScan(raw);
+        onScanRef.current(raw);
       },
-      () => { setReady(true); },
-      (msg) => { onError(msg); },
+      () => {},
+      (msg) => { onErrorRef.current(msg); },
     );
     cleanupRef.current = cleanup;
 
     return () => stop();
-  }, [onScan, onError, stop]);
+  }, [stop]);
 
   return (
     <div className="qr-scanner-wrapper">

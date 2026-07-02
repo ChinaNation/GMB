@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import { sanitizeError } from '../../core/tauri';
-import { QrScanner } from '../../shared/qr/QrScanner';
+import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { transactionApi as api } from './api';
 import { calculateTransferFeeYuan } from './fee';
 import type { ColdWallet, TransferSignRequestResult } from './types';
@@ -14,7 +13,7 @@ type Props = {
   onSuccess: (txHash: string) => void;
 };
 
-type FlowStep = 'confirm' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
+type FlowStep = 'confirm' | 'qr' | 'submit' | 'done' | 'error';
 
 function truncateAddress(addr: string): string {
   if (addr.length <= 14) return addr;
@@ -108,10 +107,10 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
 
   return (
     <div className="transfer-signing-overlay">
-      <div className="transfer-signing-modal">
+      <div className={`transfer-signing-modal ${step === 'qr' ? 'signature-flow-modal' : ''}`}>
         {/* 统一右上角关闭叉 */}
         <div className="transfer-signing-header">
-          <h3>转账签名</h3>
+          <h3>转账</h3>
           <span className="transfer-signing-close" onClick={onClose}>&times;</span>
         </div>
 
@@ -137,7 +136,7 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
               <div className="transfer-signing-row">
                 <span className="transfer-signing-label">签名方式</span>
                 <span className="transfer-signing-value">
-                  {isMinerHotWallet ? '矿工热钱包' : '离线冷钱包'}
+                  {isMinerHotWallet ? '矿工热钱包' : '公民钱包'}
                 </span>
               </div>
             </div>
@@ -168,26 +167,13 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
         )}
 
         {step === 'qr' && (
-          <div className="transfer-signing-body qr-step">
-            <p className="qr-instruction">用离线设备扫描此二维码完成签名</p>
-            <div className="transfer-qr-box">
-              <QRCodeSVG value={requestJson} size={240} level="L" />
-            </div>
-            <p className="qr-countdown">剩余 <strong>{countdown}</strong> 秒</p>
-            <button className="transfer-signing-confirm" onClick={() => setStep('scan')}>
-              已签名，扫描响应
-            </button>
-          </div>
-        )}
-
-        {step === 'scan' && (
           <div className="transfer-signing-body">
-            <p className="qr-instruction">将签名响应二维码对准摄像头</p>
-            <QrScanner
+            <CitizenSignaturePanel
+              qrValue={requestJson}
+              countdownSeconds={countdown}
               onScan={handleScanResult}
-              onError={(e) => { setError(e); setStep('error'); }}
+              onScanError={(e) => { setError(e); setStep('error'); }}
             />
-            <button className="cancel-button" onClick={() => setStep('qr')}>返回</button>
           </div>
         )}
 

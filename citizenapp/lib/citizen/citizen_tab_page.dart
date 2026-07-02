@@ -4,12 +4,12 @@ import 'package:citizenapp/citizen/election/election_tab.dart';
 import 'package:citizenapp/citizen/governance/governance_tab.dart';
 import 'package:citizenapp/citizen/legislation/legislation_tab.dart';
 import 'package:citizenapp/citizen/public/public_page.dart';
-import 'package:citizenapp/citizen/8964/vote_view.dart';
+import 'package:citizenapp/citizen/all/proposal_view.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 底部“公民”Tab 的总入口。
 ///
-/// 仅负责公民域二级导航分发；具体业务分别下沉到 public/vote/governance/institution/proposal。
+/// 仅负责公民域二级导航分发；具体业务分别下沉到 all/legislation/election/governance/public。
 class CitizenTabPage extends StatefulWidget {
   const CitizenTabPage({super.key, this.onPendingVoteCountChanged});
 
@@ -21,7 +21,7 @@ class CitizenTabPage extends StatefulWidget {
 
 class _CitizenTabPageState extends State<CitizenTabPage> {
   int _selectedTab = 0;
-  static const List<String> _tabs = ['广场', '立法', '选举', '治理', '公权'];
+  static const List<String> _tabs = ['提案', '立法', '选举', '治理', '公权'];
 
   @override
   Widget build(BuildContext context) {
@@ -46,8 +46,8 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
 
   Widget _buildTabContent() {
     switch (_selectedTab) {
-      case 0: // 广场:订阅/本地区/我是管理员 机构动态(P7 改造;现为全局提案流)
-        return VoteView(
+      case 0: // 提案:全局治理提案流。
+        return ProposalView(
           onPendingVoteCountChanged: widget.onPendingVoteCountChanged,
         );
       case 1: // 立法(P3 接法律浏览)

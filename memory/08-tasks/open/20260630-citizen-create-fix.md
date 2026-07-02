@@ -41,6 +41,8 @@
 - runtime `citizen-identity` 的 `VotingIdentityPayload` 增加 `citizen_age_years`,注册/更新/候选升级统一拒绝未满 16 周岁。
 - CitizenWallet 增加 `citizen_identity` 哈希域签名和 `register_voting_identity` 解码。
 - QR 协议、OnChina 前后端文档、数据安全文档和公民链总览已同步更新。
+- 公民居住/办理地收敛为 `province_code / city_code / town_code`,出生地继续使用 `birth_province_code / birth_city_code / birth_town_code`;OnChina 前后端和文档不再使用旧的第二套居住字段作为目标字段。
+- 公民详情页底部新增独立资料库,后端使用 `citizen_documents` 分区表和公民资料接口,资料类型固定为“护照相片 / 出生证明 / 监护人护照 / 其他材料”,不复用机构 `docs` 表。
 
 ## 真实验收记录
 
@@ -49,3 +51,5 @@
 - `cargo test --manifest-path citizenchain/Cargo.toml -p citizen-identity under_sixteen_cannot_register_onchain_identity --locked` 通过。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina --locked` 通过。
 - 使用 `/tmp/gmb-onchina-pg-citizen-fix` 临时内嵌 PostgreSQL 启动 OnChina,自动生成公权目录 401364 条,`GET /api/v1/health` 返回 200。
+- 本轮追加修改后,`cargo check --manifest-path citizenchain/Cargo.toml -p onchina --locked` 通过。
+- 本轮追加修改后,`npm --prefix citizenchain/onchina/frontend run build` 通过。

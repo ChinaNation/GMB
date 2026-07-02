@@ -10,15 +10,30 @@ pub const GENESIS_CITIZEN_MAX: u64 = 1_443_497_378; // 中共国第7次人口普
 /// 三、创世发行（单位：分）：144,349,737,800.00 元 = 14_434_973_780_000 分
 pub const GENESIS_ISSUANCE: u128 = 14_434_973_780_000; // 每人100元的创世发行总量，单位为分
 
-/// 三之二、两和基金发行（单位：分）：195,818,501,966.00 元 = 19_581_850_196_600 分。
+/// 四、两和基金发行（单位：分）：195,818,501,966.00 元 = 19_581_850_196_600 分。
 /// 两和基金 = 历史和解与和平建国基金，创世一次性增发到国储会两和基金账户(NRC_HE_ACCOUNT)，
 /// 计入总供应量（独立于创世发行）。金额刻意编码 1958(大跃进)/1850(太平天国)/1966(文革)。
 pub const HE_FUND_ISSUANCE: u128 = 19_581_850_196_600; // 195,818,501,966.00 元
 
+/// 五、创世法律
+/// 创世法律版本标签。普通版本号仍为数字;这里只给需要法律语义名称的创世版本加链上标签。
+pub struct GenesisLawVersionLabel {
+    pub law_id: u64,
+    pub version: u32,
+    pub title: &'static str,
+    pub title_en: &'static str,
+}
+/// 公民宪法创世版本标签真源:`law_id=0, version=1` 显示为“创世版”。
+pub const GENESIS_LAW_VERSION_LABELS: &[GenesisLawVersionLabel] = &[GenesisLawVersionLabel {
+    law_id: 0,
+    version: 1,
+    title: "创世版",
+    title_en: "Genesis Edition",
+}];
+
 use sp_std::vec::Vec;
 
-// 四、立法院模块 Runtime API(ADR-027):供客户端(CitizenApp / 节点桌面端)浏览链上法律。
-//    宪法已迁入 legislation-yuan(law_id=0,tier=宪法),原内置宪法 HTML 真源与 API 已删,
+// 六、立法院模块 Runtime API(ADR-027):供客户端(CitizenApp / 节点桌面端)浏览链上法律。
 //    展示端统一从链上结构化法律重建;返回 SCALE 编码字节,客户端按镜像类型解码,
 //    避免跨 API 边界暴露泛型法律结构。
 sp_api::decl_runtime_apis! {
@@ -31,6 +46,9 @@ sp_api::decl_runtime_apis! {
 
         /// 读取法律指定版本(SCALE 编码 `LawVersion`),不存在返回 None。
         fn law_version(law_id: u64, version: u32) -> Option<Vec<u8>>;
+
+        /// 读取法律版本标签(SCALE 编码 `LawVersionLabel`),不存在返回 None。
+        fn law_version_label(law_id: u64, version: u32) -> Option<Vec<u8>>;
     }
 }
 
@@ -48,5 +66,14 @@ mod tests {
     fn he_fund_issuance_matches_whitepaper() {
         // 中文注释：两和基金发行 = 195,818,501,966.00 元 × 100 分/元。
         assert_eq!(HE_FUND_ISSUANCE, 195_818_501_966u128 * 100);
+    }
+
+    #[test]
+    fn genesis_law_version_label_is_constitution_genesis() {
+        let label = &GENESIS_LAW_VERSION_LABELS[0];
+        assert_eq!(label.law_id, 0);
+        assert_eq!(label.version, 1);
+        assert_eq!(label.title, "创世版");
+        assert_eq!(label.title_en, "Genesis Edition");
     }
 }

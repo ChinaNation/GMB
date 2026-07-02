@@ -1,9 +1,8 @@
 // 个人多签反向索引发现:后处理(ADR-018 §九)。
 //
-// 只负责"后处理":从共享的 AdminAccounts 单次扫描结果(AdminAccountsScanService)
-// 里筛出个人多签(kind=Personal,且管理员含本地钱包),反查发起人 / 账户名后
-// upsert `PersonalAccountEntity`。扫描、节流、本地钱包读取统一收口在
-// `MultisigDiscoveryCoordinator`,本服务只做后处理。
+// 从 AdminAccounts 单次扫描结果(AdminAccountsScanService)里筛出个人多签
+// (kind=Personal,且管理员含本地钱包),反查发起人 / 账户名后 upsert
+// `PersonalAccountEntity`。机构账户登记与展示不走本服务。
 
 import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';
@@ -62,6 +61,7 @@ class PersonalManageDiscoveryService {
       scan,
       myPubkeysHex: myPubkeys,
       kind: AdminAccountStorageCodec.kindPersonal,
+      codeWhitelist: const {'PMUL'},
     );
 
     // 批量反查发起人/账户名(PersonalAccounts 精确整键)。

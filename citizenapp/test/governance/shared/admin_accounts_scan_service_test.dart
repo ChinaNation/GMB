@@ -1,6 +1,6 @@
 // AdminAccountsScanService.filterMine 纯函数单测(ADR-018 §九)。
 //
-// filterMine 是机构/个人多签共用的"按 kind + institution_code 白名单 + 本地钱包"分流逻辑,
+// filterMine 是个人多签发现的"按 kind + 本地钱包"分流逻辑,
 // 纯函数无链依赖。链上扫描路径(getKeysPaged + fetchStorageBatch)受 smoldot
 // 真链依赖,留给端到端校核覆盖。
 
@@ -34,7 +34,7 @@ void main() {
       );
 
   group('AdminAccountsScanService.filterMine', () {
-    test('按 kind 分流:公权/私权/个人互不串味', () {
+    test('按 kind 分流:只保留个人多签', () {
       final scan = resultOf([
         acc(
           addr: '01',
@@ -50,17 +50,6 @@ void main() {
         ),
       ]);
 
-      final institutions = AdminAccountsScanService.filterMine(
-        scan,
-        myPubkeysHex: {myWallet},
-        kinds: const {
-          AdminAccountStorageCodec.kindPublicInstitution,
-          AdminAccountStorageCodec.kindPrivateInstitution,
-        },
-        codeWhitelist: const {'CGOV', 'UNIN'},
-      );
-      expect(institutions.map((e) => e.addrHex), ['01']);
-
       final personals = AdminAccountsScanService.filterMine(
         scan,
         myPubkeysHex: {myWallet},
@@ -69,19 +58,26 @@ void main() {
       expect(personals.map((e) => e.addrHex), ['02']);
     });
 
-    test('institution_code 白名单:不在注册机构码集合的机构账户被排除', () {
+    test('institution_code 白名单:个人多签仍可按 PMUL 过滤', () {
       final scan = resultOf([
-        acc(addr: '01', institutionCode: 'CGOV', kind: 0, admins: [myWallet]),
-        acc(addr: '02', institutionCode: 'PRC', kind: 0, admins: [myWallet]),
+        acc(
+          addr: '01',
+          institutionCode: 'PMUL',
+          kind: AdminAccountStorageCodec.kindPersonal,
+          admins: [myWallet],
+        ),
+        acc(
+          addr: '02',
+          institutionCode: 'XXXX',
+          kind: AdminAccountStorageCodec.kindPersonal,
+          admins: [myWallet],
+        ),
       ]);
       final result = AdminAccountsScanService.filterMine(
         scan,
         myPubkeysHex: {myWallet},
-        kinds: const {
-          AdminAccountStorageCodec.kindPublicInstitution,
-          AdminAccountStorageCodec.kindPrivateInstitution,
-        },
-        codeWhitelist: const {'CGOV', 'UNIN'},
+        kind: AdminAccountStorageCodec.kindPersonal,
+        codeWhitelist: const {'PMUL'},
       );
       expect(result.map((e) => e.addrHex), ['01']);
     });
@@ -90,23 +86,19 @@ void main() {
       final scan = resultOf([
         acc(
             addr: '01',
-            institutionCode: 'CGOV',
-            kind: 0,
+            institutionCode: 'PMUL',
+            kind: AdminAccountStorageCodec.kindPersonal,
             admins: [myWallet, otherWallet]),
         acc(
             addr: '02',
-            institutionCode: 'UNIN',
-            kind: 1,
+            institutionCode: 'PMUL',
+            kind: AdminAccountStorageCodec.kindPersonal,
             admins: [otherWallet]),
       ]);
       final result = AdminAccountsScanService.filterMine(
         scan,
         myPubkeysHex: {myWallet},
-        kinds: const {
-          AdminAccountStorageCodec.kindPublicInstitution,
-          AdminAccountStorageCodec.kindPrivateInstitution,
-        },
-        codeWhitelist: const {'CGOV', 'UNIN'},
+        kind: AdminAccountStorageCodec.kindPersonal,
       );
       expect(result.map((e) => e.addrHex), ['01']);
     });
@@ -115,18 +107,14 @@ void main() {
       final scan = resultOf([
         acc(
             addr: '01',
-            institutionCode: 'CGOV',
-            kind: 0,
+            institutionCode: 'PMUL',
+            kind: AdminAccountStorageCodec.kindPersonal,
             admins: [secondWallet]),
       ]);
       final result = AdminAccountsScanService.filterMine(
         scan,
         myPubkeysHex: {myWallet, secondWallet},
-        kinds: const {
-          AdminAccountStorageCodec.kindPublicInstitution,
-          AdminAccountStorageCodec.kindPrivateInstitution,
-        },
-        codeWhitelist: const {'CGOV', 'UNIN'},
+        kind: AdminAccountStorageCodec.kindPersonal,
       );
       expect(result.map((e) => e.addrHex), ['01']);
     });

@@ -1,9 +1,8 @@
 // 手续费划转提案页面：金额输入 + QR 签名流程。
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import { sanitizeError } from '../../core/tauri';
 import { hexToSs58 } from '../../shared/ss58';
-import { QrScanner } from '../../shared/qr/QrScanner';
+import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { multisigTransferApi as api } from './api';
 import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
@@ -15,7 +14,7 @@ type Props = {
   onSuccess: () => void;
 };
 
-type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
+type Step = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
 export function SweepProposalPage({
   cidNumber, cidFullName, adminWallets, onBack, onSuccess,
@@ -148,19 +147,13 @@ export function SweepProposalPage({
       )}
 
       {step === 'qr' && (
-        <div className="vote-signing-body qr-step">
-          <p className="qr-instruction">用 citizenwallet 离线设备扫描此二维码完成签名</p>
-          <div className="qr-container"><QRCodeSVG value={requestJson} size={280} level="L" /></div>
-          <p className="qr-countdown">剩余 <strong>{countdown}</strong> 秒</p>
-          <button className="vote-signing-confirm" onClick={() => setStep('scan')}>已签名，扫描响应</button>
-        </div>
-      )}
-
-      {step === 'scan' && (
         <div className="vote-signing-body">
-          <p className="qr-instruction">将签名响应二维码对准摄像头</p>
-          <QrScanner onScan={handleScanResult} onError={(e) => { setError(e); setStep('error'); }} />
-          <button className="cancel-button" onClick={() => setStep('qr')}>返回</button>
+          <CitizenSignaturePanel
+            qrValue={requestJson}
+            countdownSeconds={countdown}
+            onScan={handleScanResult}
+            onScanError={(e) => { setError(e); setStep('error'); }}
+          />
         </div>
       )}
 

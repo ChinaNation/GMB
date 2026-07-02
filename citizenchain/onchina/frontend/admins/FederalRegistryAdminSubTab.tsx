@@ -8,14 +8,15 @@ import type { ColumnsType } from 'antd/es/table';
 import { useAuth } from '../hooks/useAuth';
 import { normalizeScopeProvinceName } from '../hooks/useScope';
 import { isTier1Registry } from '../platform/registryTier';
-import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
+import { decodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../core/ScanAccountModal';
 import { CID_MODAL_Z_INDEX } from '../core/modalStack';
-import { updateFederalRegistryName, type FederalRegistryAdminRow } from './api';
+import type { FederalRegistryAdminRow } from './api';
 import { formatAdminCreateError, type AdminActionType } from './admin_security_api';
 import { sameHexAccount } from './adminUtils';
 import { notice } from '../utils/notice';
 import { usePasskeyRegistration } from '../auth/passkey/usePasskey';
+import { AdminProfileCard } from './AdminProfileCard';
 
 interface FederalRegistryAdminSubTabProps {
   selectedFederalRegistry: FederalRegistryAdminRow;
@@ -30,11 +31,6 @@ interface FederalRegistryAdminSubTabProps {
 type ReplaceFormValues = {
   admin_account: string;
 };
-
-function federalAdminDisplayName(row: FederalRegistryAdminRow): string {
-  const name = row.admin_name?.trim();
-  return name || '联邦注册局管理员';
-}
 
 export function FederalRegistryAdminSubTab({
   selectedFederalRegistry,
@@ -105,64 +101,13 @@ export function FederalRegistryAdminSubTab({
     }
   };
 
-  const editFederalRegistry = (row: FederalRegistryAdminRow) => {
-    let nextName = row.admin_name?.trim() || '';
-    notice.confirm({
-      title: <div style={{ textAlign: 'center', width: '100%' }}>编辑联邦注册局管理员</div>,
-      icon: null,
-      centered: true,
-      zIndex: CID_MODAL_Z_INDEX.business,
-      content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <div>
-            <Typography.Text type="secondary">管理员姓名</Typography.Text>
-            <Input
-              defaultValue={row.admin_name}
-              placeholder="请输入管理员姓名"
-              style={{ marginTop: 6 }}
-              onChange={(event) => {
-                nextName = event.target.value;
-              }}
-            />
-          </div>
-          <div>
-            <Typography.Text type="secondary">账户地址</Typography.Text>
-            <Input value={tryEncodeSs58(row.admin_account)} disabled style={{ marginTop: 6 }} />
-          </div>
-        </Space>
-      ),
-      okText: '确认修改',
-      cancelText: '取消',
-      footer: (_originNode, { OkBtn, CancelBtn }) => (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
-          <CancelBtn />
-          <OkBtn />
-        </div>
-      ),
-      onOk: async () => {
-        const adminName = nextName.trim();
-        if (!adminName) {
-          notice.error('请输入管理员姓名');
-          throw new Error('admin_name is required');
-        }
-        try {
-          if (!auth) throw new Error('请先登录');
-          await updateFederalRegistryName(auth, row.id, adminName);
-          notice.success('联邦注册局管理员已更新');
-          await refreshFederalRegistryAdmins();
-        } catch (error) {
-          notice.error(error, '');
-          throw error;
-        }
-      },
-    });
-  };
-
   const columns: ColumnsType<FederalRegistryAdminRow> = [
-    { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => index + 1 },
     { title: '省份', dataIndex: 'province_name', align: 'center', width: 120 },
-    { title: '姓名', align: 'center', width: 160, render: (_v, row) => federalAdminDisplayName(row) },
-    { title: '账户', dataIndex: 'admin_account', align: 'center', render: (value: string) => tryEncodeSs58(value) },
+    {
+      title: '管理员信息',
+      dataIndex: 'admin_account',
+      render: (_v, row, index) => <AdminProfileCard profile={row} index={index + 1} />,
+    },
   ];
 
   if (canOperateFederalRegistry) {
@@ -175,9 +120,6 @@ export function FederalRegistryAdminSubTab({
         const isSelf = sameHexAccount(row.admin_account, auth?.admin_account);
         return (
           <Space>
-            <Button size="small" disabled={!canManage} onClick={() => editFederalRegistry(row)}>
-              编辑
-            </Button>
             <Button size="small" disabled={!canManage} onClick={() => openReplaceModal(row)}>
               更换
             </Button>
@@ -253,13 +195,11 @@ export function FederalRegistryAdminSubTab({
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           {replaceTarget ? (
             <div>
-              <Typography.Text type="secondary">当前管理员</Typography.Text>
-              <div style={{ marginTop: 6 }}>
-                {replaceTarget.province_name} · {federalAdminDisplayName(replaceTarget)}
+              <Typography.Text type="secondary">当前省份</Typography.Text>
+              <div style={{ marginTop: 6, marginBottom: 8 }}>
+                {replaceTarget.province_name}
               </div>
-              <Typography.Text code style={{ wordBreak: 'break-all' }}>
-                {tryEncodeSs58(replaceTarget.admin_account)}
-              </Typography.Text>
+              <AdminProfileCard profile={replaceTarget} />
             </div>
           ) : null}
           <Form form={form} layout="vertical" onFinish={submitReplace}>

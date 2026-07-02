@@ -454,9 +454,7 @@ impl Db {
                 passport_valid_from TEXT NOT NULL DEFAULT '',
                 passport_valid_until TEXT NOT NULL DEFAULT '',
                 status_updated_at BIGINT,
-                residence_province_code TEXT NOT NULL DEFAULT '',
-                residence_city_code TEXT NOT NULL DEFAULT '',
-                residence_town_code TEXT NOT NULL DEFAULT '',
+                town_code TEXT NOT NULL DEFAULT '',
                 birth_province_code TEXT NOT NULL DEFAULT '',
                 birth_city_code TEXT NOT NULL DEFAULT '',
                 birth_town_code TEXT NOT NULL DEFAULT '',
@@ -469,6 +467,21 @@ impl Db {
                 updated_by TEXT,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 PRIMARY KEY (province_code, cid_number)
+             ) PARTITION BY LIST (province_code);
+
+             CREATE TABLE IF NOT EXISTS citizen_documents (
+                id BIGSERIAL,
+                cid_number TEXT NOT NULL,
+                province_code TEXT NOT NULL,
+                city_code TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                document_type TEXT NOT NULL,
+                file_size BIGINT NOT NULL DEFAULT 0,
+                file_path TEXT NOT NULL,
+                file_hash TEXT NOT NULL,
+                uploaded_by TEXT NOT NULL,
+                uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (province_code, id)
              ) PARTITION BY LIST (province_code);
 
              CREATE TABLE IF NOT EXISTS sequence_counters (
@@ -615,7 +628,7 @@ impl Db {
         })?;
 
         conn.batch_execute(
-             "ALTER TABLE citizens
+            "ALTER TABLE citizens
                 ADD COLUMN IF NOT EXISTS passport_no TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS citizen_family_name TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS citizen_given_name TEXT NOT NULL DEFAULT '',
@@ -625,8 +638,7 @@ impl Db {
                 ADD COLUMN IF NOT EXISTS wallet_verified_at TIMESTAMPTZ,
                 ADD COLUMN IF NOT EXISTS passport_valid_from TEXT NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS passport_valid_until TEXT NOT NULL DEFAULT '',
-                ADD COLUMN IF NOT EXISTS residence_province_code TEXT,
-                ADD COLUMN IF NOT EXISTS residence_city_code TEXT,
+                ADD COLUMN IF NOT EXISTS town_code TEXT,
                 ADD COLUMN IF NOT EXISTS residence_town_code TEXT,
                 ADD COLUMN IF NOT EXISTS birth_province_code TEXT,
                 ADD COLUMN IF NOT EXISTS birth_city_code TEXT,
@@ -648,7 +660,9 @@ impl Db {
                 DROP COLUMN IF EXISTS bind_status,
                 DROP COLUMN IF EXISTS bound_at,
                 DROP COLUMN IF EXISTS bound_by,
-                DROP COLUMN IF EXISTS citizen_full_name;
+                DROP COLUMN IF EXISTS citizen_full_name,
+                DROP COLUMN IF EXISTS residence_province_code,
+                DROP COLUMN IF EXISTS residence_city_code;
              ALTER TABLE citizens
                 ALTER COLUMN wallet_pubkey DROP NOT NULL,
                 ALTER COLUMN wallet_address DROP NOT NULL,
@@ -657,10 +671,7 @@ impl Db {
                 ALTER COLUMN wallet_address DROP DEFAULT,
                 ALTER COLUMN wallet_sig_alg DROP DEFAULT;
              UPDATE citizens
-             SET residence_province_code = COALESCE(NULLIF(residence_province_code, ''), province_code),
-                 residence_city_code = COALESCE(NULLIF(residence_city_code, ''), city_code),
-                 residence_town_code = COALESCE(residence_town_code, ''),
-                 birth_province_code = COALESCE(NULLIF(birth_province_code, ''), province_code),
+             SET birth_province_code = COALESCE(NULLIF(birth_province_code, ''), province_code),
                  birth_city_code = COALESCE(NULLIF(birth_city_code, ''), city_code),
                  birth_town_code = COALESCE(birth_town_code, ''),
                  wallet_pubkey = NULLIF(wallet_pubkey, ''),
@@ -674,18 +685,19 @@ impl Db {
                  citizen_given_name = COALESCE(citizen_given_name, ''),
                  citizen_sex = COALESCE(citizen_sex, ''),
                  citizen_birth_date = COALESCE(citizen_birth_date, ''),
+                 town_code = COALESCE(NULLIF(town_code, ''), NULLIF(residence_town_code, ''), ''),
                  passport_valid_from = COALESCE(passport_valid_from, ''),
                  passport_valid_until = COALESCE(passport_valid_until, ''),
                  updated_at = COALESCE(updated_at, created_at, now());
              ALTER TABLE citizens
-                ALTER COLUMN residence_province_code SET NOT NULL,
-                ALTER COLUMN residence_city_code SET NOT NULL,
-                ALTER COLUMN residence_town_code SET DEFAULT '',
-                ALTER COLUMN residence_town_code SET NOT NULL,
+                ALTER COLUMN town_code SET DEFAULT '',
+                ALTER COLUMN town_code SET NOT NULL,
                 ALTER COLUMN birth_province_code SET NOT NULL,
                 ALTER COLUMN birth_city_code SET NOT NULL,
                 ALTER COLUMN birth_town_code SET DEFAULT '',
-                ALTER COLUMN birth_town_code SET NOT NULL;",
+                ALTER COLUMN birth_town_code SET NOT NULL;
+             ALTER TABLE citizens
+                DROP COLUMN IF EXISTS residence_town_code;",
         )
         .map_err(|e| {
             format!(
@@ -816,10 +828,15 @@ impl Db {
              DROP INDEX IF EXISTS idx_citizens_wallet_pubkey;
              CREATE INDEX IF NOT EXISTS idx_citizens_wallet_pubkey
                 ON citizens (lower(wallet_pubkey)) WHERE wallet_pubkey IS NOT NULL;
-             CREATE INDEX IF NOT EXISTS idx_citizens_residence_scope
-                ON citizens (residence_province_code, residence_city_code, residence_town_code, created_at DESC, id DESC);
+             DROP INDEX IF EXISTS idx_citizens_residence_scope;
+             CREATE INDEX IF NOT EXISTS idx_citizens_town_scope
+                ON citizens (province_code, city_code, town_code, created_at DESC, id DESC);
              CREATE INDEX IF NOT EXISTS idx_citizens_birth_scope
                 ON citizens (birth_province_code, birth_city_code, birth_town_code, created_at DESC, id DESC);
+             CREATE INDEX IF NOT EXISTS idx_citizen_documents_cid
+                ON citizen_documents (province_code, cid_number, uploaded_at DESC, id DESC);
+             CREATE INDEX IF NOT EXISTS idx_citizen_documents_type
+                ON citizen_documents (province_code, cid_number, document_type);
              CREATE INDEX IF NOT EXISTS idx_gov_city
                 ON gov (province_code, city_code, institution_code);
              CREATE INDEX IF NOT EXISTS idx_private_city
@@ -872,6 +889,13 @@ impl Db {
                 USING doomed d
                 WHERE i.cid_number = d.cid_number
                   AND i.kind = 'CITIZEN'
+                RETURNING 1
+             ),
+             deleted_citizen_documents AS (
+                DELETE FROM citizen_documents cd
+                USING doomed d
+                WHERE cd.province_code = d.province_code
+                  AND cd.cid_number = d.cid_number
                 RETURNING 1
              )
              DELETE FROM citizens c
@@ -934,9 +958,7 @@ impl Db {
             "wallet_sig_alg",
             "passport_valid_from",
             "passport_valid_until",
-            "residence_province_code",
-            "residence_city_code",
-            "residence_town_code",
+            "town_code",
             "birth_province_code",
             "birth_city_code",
             "birth_town_code",
@@ -954,8 +976,25 @@ impl Db {
             "bound_at",
             "bound_by",
             "citizen_full_name",
+            "residence_province_code",
+            "residence_city_code",
+            "residence_town_code",
         ] {
             Self::ensure_column_state(conn, "citizens", column, false)?;
+        }
+        for column in [
+            "cid_number",
+            "province_code",
+            "city_code",
+            "file_name",
+            "document_type",
+            "file_size",
+            "file_path",
+            "file_hash",
+            "uploaded_by",
+            "uploaded_at",
+        ] {
+            Self::ensure_column_state(conn, "citizen_documents", column, true)?;
         }
         Self::ensure_column_state(conn, "gov", "source", true)?;
         Ok(())

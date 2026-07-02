@@ -303,6 +303,11 @@ impl_runtime_apis! {
         fn law_version(law_id: u64, version: u32) -> Option<Vec<u8>> {
             LegislationYuan::get_law_version(law_id, version).map(|v| codec::Encode::encode(&v))
         }
+
+        fn law_version_label(law_id: u64, version: u32) -> Option<Vec<u8>> {
+            LegislationYuan::get_law_version_label(law_id, version)
+                .map(|v| codec::Encode::encode(&v))
+        }
     }
 
     impl primitives::cid::china::BuiltinInstitutionNameApi<Block> for Runtime {

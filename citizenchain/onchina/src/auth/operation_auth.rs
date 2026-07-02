@@ -32,12 +32,8 @@ pub(crate) enum AdminOperationAuth {
 pub(crate) enum AdminActionType {
     /// Tier1 创世注册局新增一名 Tier2 下级注册局管理员。
     CreateSubordinateRegistry,
-    /// Tier1 更新一名 Tier2 下级注册局管理员(元数据)。
-    UpdateSubordinateRegistry,
     /// Tier1 删除一名 Tier2 下级注册局管理员。
     DeleteSubordinateRegistry,
-    /// Tier1 更新本档(创世注册局)自身一名管理员(元数据)。
-    UpdateGoverningRegistry,
     /// Tier1 换届本档(创世注册局)自身一名管理员(经省组投票)。
     ReplaceGoverningRegistry,
     InstitutionCreate,
@@ -80,9 +76,7 @@ impl AdminActionType {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
             Self::CreateSubordinateRegistry => "CREATE_SUBORDINATE_REGISTRY",
-            Self::UpdateSubordinateRegistry => "UPDATE_SUBORDINATE_REGISTRY",
             Self::DeleteSubordinateRegistry => "DELETE_SUBORDINATE_REGISTRY",
-            Self::UpdateGoverningRegistry => "UPDATE_GOVERNING_REGISTRY",
             Self::ReplaceGoverningRegistry => "REPLACE_GOVERNING_REGISTRY",
             Self::InstitutionCreate => "INSTITUTION_CREATE",
             Self::InstitutionUpdate => "INSTITUTION_UPDATE",
@@ -112,10 +106,6 @@ impl AdminActionType {
             // 纯本地确认 / 元数据更新 → 仅会话。
             Self::InstitutionUpdate | Self::InstitutionUploadDocument => {
                 AdminOperationAuth::Session
-            }
-            // 改注册局管理元数据,重要但不产链上凭证 → passkey 重要档。
-            Self::UpdateSubordinateRegistry | Self::UpdateGoverningRegistry => {
-                AdminOperationAuth::Passkey
             }
             // 产生链上交易/凭证、改 Active 集合或高危治理 → passkey + 冷签特殊档。
             Self::InstitutionCreate
@@ -168,8 +158,6 @@ impl AdminActionType {
             Self::CreateSubordinateRegistry
                 | Self::DeleteSubordinateRegistry
                 | Self::ReplaceGoverningRegistry
-                | Self::UpdateSubordinateRegistry
-                | Self::UpdateGoverningRegistry
                 | Self::InstitutionDeregister
                 | Self::InstitutionAccountDeregister
         )
@@ -181,9 +169,7 @@ pub(crate) fn parse_action_type(
 ) -> Result<AdminActionType, axum::response::Response> {
     match action_type {
         "CREATE_SUBORDINATE_REGISTRY" => Ok(AdminActionType::CreateSubordinateRegistry),
-        "UPDATE_SUBORDINATE_REGISTRY" => Ok(AdminActionType::UpdateSubordinateRegistry),
         "DELETE_SUBORDINATE_REGISTRY" => Ok(AdminActionType::DeleteSubordinateRegistry),
-        "UPDATE_GOVERNING_REGISTRY" => Ok(AdminActionType::UpdateGoverningRegistry),
         "REPLACE_GOVERNING_REGISTRY" => Ok(AdminActionType::ReplaceGoverningRegistry),
         "INSTITUTION_CREATE" => Ok(AdminActionType::InstitutionCreate),
         "INSTITUTION_UPDATE" => Ok(AdminActionType::InstitutionUpdate),
@@ -264,12 +250,10 @@ mod tests {
         // 机构元数据更新与文档上传由发起管理员的 scope 限定本辖区,不要求 Tier1 创世注册局治理能力。
         assert!(!AdminActionType::InstitutionUpdate.requires_governing_capability());
         assert!(!AdminActionType::InstitutionUploadDocument.requires_governing_capability());
-        // 注册局自身管理与机构注销治理仍要求 Tier1 创世注册局治理能力。
+        // 注册局新增/删除下级、换届本档与机构注销治理仍要求 Tier1 创世注册局治理能力。
         assert!(AdminActionType::CreateSubordinateRegistry.requires_governing_capability());
         assert!(AdminActionType::DeleteSubordinateRegistry.requires_governing_capability());
         assert!(AdminActionType::ReplaceGoverningRegistry.requires_governing_capability());
-        assert!(AdminActionType::UpdateSubordinateRegistry.requires_governing_capability());
-        assert!(AdminActionType::UpdateGoverningRegistry.requires_governing_capability());
         assert!(AdminActionType::InstitutionDeregister.requires_governing_capability());
         assert!(AdminActionType::InstitutionAccountDeregister.requires_governing_capability());
         // 普通机构特殊操作(建机构/建账户/删账户/删文档)由 scope 收口,不要求治理能力。

@@ -4,6 +4,55 @@ use primitives::cid::code::{
 };
 use serde::Serialize;
 
+/// 管理员资料来源。判别值与链端 `admin-primitives::AdminSource` 对齐。
+pub fn source_label(source: u8) -> &'static str {
+    match source {
+        0 => "创世",
+        1 => "注册局",
+        2 => "内部投票",
+        3 => "互选",
+        4 => "普选",
+        _ => "",
+    }
+}
+
+/// 链上机构管理员公开资料，逐字段镜像 `admin-primitives::AdminProfile`。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminProfileInfo {
+    /// 管理员密码学账户，hex 不含 0x。
+    pub account: String,
+    /// 管理员实名锚:注册局签发的 CID 号。
+    pub admin_cid_number: String,
+    /// 姓名快照。
+    pub name: String,
+    /// 对外法定职务。
+    pub admin_role: String,
+    /// 任期开始(天数自纪元;无任期为 0)。
+    pub term_start: u32,
+    /// 任期结束(天数自纪元;无任期为 0)。
+    pub term_end: u32,
+    /// 职务/任期来源判别值。
+    pub source: u8,
+    /// 来源中文标签；未知来源留空，前端固定显示字段标签。
+    pub source_label: String,
+}
+
+impl AdminProfileInfo {
+    pub fn account_only(account: String) -> Self {
+        Self {
+            account,
+            admin_cid_number: String::new(),
+            name: String::new(),
+            admin_role: String::new(),
+            term_start: 0,
+            term_end: 0,
+            source: u8::MAX,
+            source_label: String::new(),
+        }
+    }
+}
+
 /// 新 runtime 四类管理员 pallet 的 `AdminAccounts` 桌面端展示状态。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,8 +67,8 @@ pub struct AdminAccountState {
     /// 链上 AdminAccountKind 枚举值。
     pub kind: u8,
     pub kind_label: String,
-    /// 当前管理员公钥，hex 不含 0x。
-    pub admins: Vec<String>,
+    /// 当前管理员资料。机构管理员为链上 AdminProfile；个人多签仅填 account。
+    pub admins: Vec<AdminProfileInfo>,
     pub creator_hex: String,
     pub created_at: u32,
     pub updated_at: u32,
@@ -33,7 +82,7 @@ pub struct AdminAccountState {
 pub struct AdminAccountDecoded {
     pub institution_code: InstitutionCode,
     pub kind: u8,
-    pub admins: Vec<String>,
+    pub admins: Vec<AdminProfileInfo>,
     pub creator_hex: String,
     pub created_at: u32,
     pub updated_at: u32,

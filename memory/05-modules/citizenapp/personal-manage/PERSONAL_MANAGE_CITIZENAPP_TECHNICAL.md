@@ -12,7 +12,7 @@
 
 - 个人多签创建页面：`personal_account_create_page.dart`
 - 个人多签关闭页面：`personal_account_close_page.dart`
-- 个人多签列表展示：统一由 `citizenapp/lib/citizen/shared/institution_account_list_page.dart` 与机构多签合并展示
+- 个人多签列表展示：`personal_account_list_page.dart`
 - 个人多签账户详情页：`personal_manage_account_info_page.dart`
 - 个人多签反向索引发现服务：`personal_manage_discovery_service.dart`
 - 个人多签管理员激活列表：`personal_admin_list_page.dart`
@@ -76,7 +76,8 @@ PersonalAdmins storage：
 
 ## 3.1 citizenapp 本地注销显示规则
 
-- 底部 `多签` Tab 标题显示为“多签”，统一展示个人多签与机构多签。
+- 个人多签列表入口在交易 Tab 的“多签账户”，页面标题显示“多签账户”。
+- 个人多签列表只展示 `PersonalAccountEntity`，不读取、发现、同步或展示任何机构账户。
 - 已注销个人多签账户继续留在账户列表，状态显示“已注销”，不显示金额。
 - 详情页链上明确查不到 `PersonalAdmins::PersonalAccounts` 时，写入本机
   `PersonalAccountLocalState.statusClosed`，页面状态显示“已注销”。
@@ -108,8 +109,9 @@ PersonalAdmins storage：
   返回时才强制刷新当前个人多签。链上失败保留本机快照，不覆盖为已注销。
 - Active 个人多签 60 分钟内不自动重复查链；Pending / Closed 个人多签
   10 分钟内不自动重复查链；用户下拉刷新才强制忽略 TTL。
-- 自动 discovery 只在首次进入多签 Tab 或本机钱包 pubkey fingerprint 变化时触发；
+- 自动 discovery 只在首次进入“多签账户”列表或本机钱包 pubkey fingerprint 变化时触发；
   下拉刷新才强制执行全量 discovery。
+- discovery 只扫描 `PersonalAdmins.AdminAccounts`，并按 `kind=Personal`、`institution_code=PMUL`、本机管理员钱包过滤。
 - 个人多签列表状态刷新使用 `PersonalManageService.fetchPersonalAccountsBatch()`：
   先批量读取 `PersonalAccounts` 与 `PersonalAdmins::AdminAccounts`，再按解码出的
   `institution_code + account_id` 批量读取 `InternalVote.ActiveDynamicThresholds`，缺失时再批量读取
@@ -122,9 +124,7 @@ PersonalAdmins storage：
 - “阈值规则”右侧浅色文案显示“注册须全员同意”。
 - 注销个人多签页面“阈值规则”右侧浅色文案显示“注销须全员同意”。
 - 扫码添加管理员使用 `assets/icons/scan-line.svg`，不使用二维码图标。
-- 账户列表右上角加号弹窗：
-  - 新增个人多签：副文案“无需身份ID”。
-  - 新增机构多签：副文案“需要身份ID”，图标使用建筑/机构类图标。
+- 账户列表右上角加号直接进入 `personal_account_create_page.dart`，不再弹出个人/机构选择。
 
 ## 4. 与 citizen/institution 目录关系
 
@@ -133,8 +133,8 @@ PersonalAdmins storage：
 - 机构管理 InstitutionChainService(只读)与机构 storage codec(按机构码路由 PublicManage/PrivateManage)。
 - `AdminInstitutionCodec` 等跨个人/机构都需要读取的底层 Subject 解码能力。
 
-个人账户详情、反向索引发现、创建、关闭、管理员激活和提案历史均不得回流到 `citizen/institution`。
-个人多签列表入口只允许通过 `lib/citizen/shared/institution_account_list_page.dart` 统一呈现。
+个人账户列表、详情、反向索引发现、创建、关闭、管理员激活和提案历史均不得回流到 `citizen/institution`。
+个人多签列表入口只允许通过交易 Tab 的 `lib/transaction/personal-manage/personal_account_list_page.dart` 呈现。
 `AdminInstitutionCodec` 只属于底层 Subject 解码能力，不承载 `PersonalAdmins` 主业务。
 
 ## 5. 测试

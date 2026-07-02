@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyOutlined } from '@ant-design/icons';
-import { Badge, Button, Card, Form, Input, Modal, Space, Table, Typography } from 'antd';
+import { Badge, Button, Card, Form, Modal, Space, Table, Typography } from 'antd';
 import type { ModalProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { normalizeScopeProvinceName } from '../hooks/useScope';
@@ -13,7 +13,7 @@ import type { AdminAuth } from '../auth/types';
 import type { CityRegistryAdminRow } from './city_registry_admins_api';
 import type { FederalRegistryAdminRow, OwnInstitutionAdminListOutput, OwnInstitutionAdminRow } from './api';
 import type { CidCityItem } from '../china/api';
-import { listCityRegistryAdmins, updateCityRegistryName } from './city_registry_admins_api';
+import { listCityRegistryAdmins } from './city_registry_admins_api';
 import {
   commitAdminAction,
   formatAdminCreateError,
@@ -22,7 +22,7 @@ import {
 } from './admin_security_api';
 import { listFederalRegistryAdmins, listOwnInstitutionAdmins } from './api';
 import { loadCachedCidCities, readCachedCidCities } from '../china/metaCache';
-import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
+import { decodeSs58 } from '../utils/ss58';
 import { MAX_CITY_REGISTRY_ADMINS_PER_CITY, sameHexAccount } from './adminUtils';
 import type { AccountScanTarget, RegistryAdminsSharedState } from './adminUtils';
 import { isSubordinateRegistry, isTier1Registry } from '../platform/registryTier';
@@ -34,6 +34,7 @@ import { notice } from '../utils/notice';
 import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
 import type { InstitutionDetail } from '../subjects/api';
 import { usePasskeyRegistration } from '../auth/passkey/usePasskey';
+import { AdminProfileCard } from './AdminProfileCard';
 
 export interface RegistryAdminsViewProps {
   /// 'city-registry' = 市注册局 tab(城市表格→市注册局机构详情页);
@@ -56,7 +57,7 @@ const centeredConfirmFooter: ModalProps['footer'] = (_originNode, { OkBtn, Cance
   </div>
 );
 
-const ADMIN_LIST_CACHE_VERSION = 'cid-admin-list-v3';
+const ADMIN_LIST_CACHE_VERSION = 'cid-admin-list-v4';
 
 interface CachedAdminListPayload<T> {
   version: string;
@@ -148,9 +149,11 @@ export function OwnInstitutionAdminsView() {
         dataSource={data?.rows ?? []}
         pagination={false}
         columns={[
-          { title: '序号', width: 80, align: 'center', render: (_v, _row, index) => index + 1 },
-          { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 180 },
-          { title: '账户', dataIndex: 'admin_account', align: 'center', render: (value: string) => tryEncodeSs58(value) },
+          {
+            title: '管理员信息',
+            dataIndex: 'admin_account',
+            render: (_value: string, row, index) => <AdminProfileCard profile={row} index={index + 1} />,
+          },
           {
             title: '操作',
             width: 220,
@@ -495,65 +498,8 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     }
   };
 
-  const onUpdateCityRegistry = (row: CityRegistryAdminRow) => {
-    if (!auth) return;
-    let nextName = row.admin_name;
-    const ss58Address = tryEncodeSs58(row.admin_account);
-    notice.confirm({
-      title: <div style={{ textAlign: 'center', width: '100%' }}>编辑市注册局管理员</div>,
-      icon: null,
-      centered: true,
-      zIndex: CID_MODAL_Z_INDEX.business,
-      footer: centeredConfirmFooter,
-      content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <div>
-            <Typography.Text type="secondary">管理员姓名</Typography.Text>
-            <Input
-              defaultValue={row.admin_name}
-              placeholder="请输入管理员姓名"
-              style={{ marginTop: 6 }}
-              onChange={(event) => {
-                nextName = event.target.value;
-              }}
-            />
-          </div>
-          <div>
-            <Typography.Text type="secondary">账户地址</Typography.Text>
-            <Input
-              value={ss58Address}
-              disabled
-              style={{ marginTop: 6 }}
-            />
-          </div>
-        </Space>
-      ),
-      okText: '确认修改',
-      cancelText: '取消',
-      onOk: async () => {
-        const admin_name = nextName.trim();
-        if (!admin_name) {
-          notice.error('请输入管理员姓名');
-          throw new Error('admin_name is required');
-        }
-        setCityRegistryAdminsLoading(true);
-        try {
-          await updateCityRegistryName(auth, row.id, admin_name);
-          notice.success('市注册局管理员信息已更新');
-          await refreshCityRegistryAdmins();
-        } catch (err) {
-          notice.error(err, '更新市注册局管理员信息失败');
-          throw err;
-        } finally {
-          setCityRegistryAdminsLoading(false);
-        }
-      },
-    });
-  };
-
   const onDeleteCityRegistry = (row: CityRegistryAdminRow) => {
     if (!auth) return;
-    const ss58Address = tryEncodeSs58(row.admin_account);
     notice.confirm({
       title: <div style={{ textAlign: 'center', width: '100%' }}>删除市注册局管理员</div>,
       icon: null,
@@ -561,9 +507,9 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       zIndex: CID_MODAL_Z_INDEX.business,
       footer: centeredConfirmFooter,
       content: (
-        <div style={{ textAlign: 'center' }}>
+        <div>
           <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该市注册局管理员?</Typography.Paragraph>
-          <Typography.Text code style={{ wordBreak: 'break-all' }}>{ss58Address}</Typography.Text>
+          <AdminProfileCard profile={row} />
         </div>
       ),
       okText: '确认删除',
@@ -610,7 +556,6 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
     setAccountScanTarget,
     addCityRegistryForm,
     onCreateCityRegistry,
-    onUpdateCityRegistry,
     onDeleteCityRegistry,
     runSecuredAction,
     federalRegistryDetail,

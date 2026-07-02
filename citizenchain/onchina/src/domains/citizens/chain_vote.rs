@@ -32,9 +32,9 @@ struct AppVoteEligibilityOutput {
     identity_status: CitizenStatus,
     vote_status: CitizenStatus,
     eligible: bool,
-    residence_province_code: String,
-    residence_city_code: String,
-    residence_town_code: String,
+    province_code: String,
+    city_code: String,
+    town_code: String,
 }
 
 /// `POST /api/v1/app/vote/eligibility`
@@ -92,9 +92,9 @@ pub(crate) async fn app_vote_eligibility(
             identity_status,
             vote_status,
             eligible,
-            residence_province_code: record.residence_province_code,
-            residence_city_code: record.residence_city_code,
-            residence_town_code: record.residence_town_code,
+            province_code: record.province_code,
+            city_code: record.city_code,
+            town_code: record.town_code,
         },
     })
     .into_response()

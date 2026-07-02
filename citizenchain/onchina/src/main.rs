@@ -2,7 +2,7 @@ use axum::{
     http::{header, HeaderMap, HeaderValue, StatusCode},
     middleware,
     response::IntoResponse,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use base64::Engine as _;
@@ -175,10 +175,10 @@ fn citizen_region_names(
 }
 
 fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
-    let (residence_province_name, residence_city_name, residence_town_name) = citizen_region_names(
-        Some(record.residence_province_code.as_str()),
-        Some(record.residence_city_code.as_str()),
-        Some(record.residence_town_code.as_str()),
+    let (province_name, city_name, town_name) = citizen_region_names(
+        Some(record.province_code.as_str()),
+        Some(record.city_code.as_str()),
+        Some(record.town_code.as_str()),
     );
     let (birth_province_name, birth_city_name, birth_town_name) = citizen_region_names(
         Some(record.birth_province_code.as_str()),
@@ -201,12 +201,12 @@ fn citizen_row_from_record(record: &CitizenRecord) -> CitizenRow {
         passport_valid_from: record.passport_valid_from.clone(),
         passport_valid_until: record.passport_valid_until.clone(),
         status_updated_at: record.status_updated_at,
-        residence_province_code: record.residence_province_code.clone(),
-        residence_city_code: record.residence_city_code.clone(),
-        residence_town_code: record.residence_town_code.clone(),
-        residence_province_name,
-        residence_city_name,
-        residence_town_name,
+        province_code: record.province_code.clone(),
+        city_code: record.city_code.clone(),
+        town_code: record.town_code.clone(),
+        province_name,
+        city_name,
+        town_name,
         birth_province_code: record.birth_province_code.clone(),
         birth_city_code: record.birth_city_code.clone(),
         birth_town_code: record.birth_town_code.clone(),
@@ -576,15 +576,14 @@ impl Db {
                 citizen_sex, citizen_birth_date, province_code, city_code, id,
                 wallet_pubkey, wallet_address, wallet_sig_alg,
                 wallet_verified_at, citizen_status, voting_eligible, passport_valid_from,
-                passport_valid_until, status_updated_at, residence_province_code,
-                residence_city_code, residence_town_code, birth_province_code, birth_city_code,
+                passport_valid_until, status_updated_at, town_code, birth_province_code, birth_city_code,
                 birth_town_code, archive_hash, onchain_tx_hash, onchain_block_number, onchain_at,
                 created_by, created_at, updated_by, updated_at
              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15, $16, $17, $18, $19,
                 $20, $21, $22, $23, $24, $25, $26, $27, $28,
-                $29, $30, $31, $32
+                $29, $30
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 passport_no = EXCLUDED.passport_no,
@@ -603,9 +602,7 @@ impl Db {
                 passport_valid_from = EXCLUDED.passport_valid_from,
                 passport_valid_until = EXCLUDED.passport_valid_until,
                 status_updated_at = EXCLUDED.status_updated_at,
-                residence_province_code = EXCLUDED.residence_province_code,
-                residence_city_code = EXCLUDED.residence_city_code,
-                residence_town_code = EXCLUDED.residence_town_code,
+                town_code = EXCLUDED.town_code,
                 birth_province_code = EXCLUDED.birth_province_code,
                 birth_city_code = EXCLUDED.birth_city_code,
                 birth_town_code = EXCLUDED.birth_town_code,
@@ -634,9 +631,7 @@ impl Db {
                 &record.passport_valid_from,
                 &record.passport_valid_until,
                 &record.status_updated_at,
-                &record.residence_province_code,
-                &record.residence_city_code,
-                &record.residence_town_code,
+                &record.town_code,
                 &record.birth_province_code,
                 &record.birth_city_code,
                 &record.birth_town_code,
@@ -742,8 +737,8 @@ impl Db {
                                     c.wallet_pubkey, c.wallet_address,
                                     c.wallet_sig_alg, c.wallet_verified_at, c.citizen_status, c.voting_eligible,
                                     c.passport_valid_from, c.passport_valid_until, c.status_updated_at,
-                                    c.province_code, c.city_code, c.residence_province_code, c.residence_city_code,
-                                    c.residence_town_code, c.birth_province_code, c.birth_city_code, c.birth_town_code,
+                                    c.province_code, c.city_code, c.town_code,
+                                    c.birth_province_code, c.birth_city_code, c.birth_town_code,
                                     c.archive_hash, c.onchain_tx_hash, c.onchain_block_number, c.onchain_at,
                                     c.created_by, c.created_at, c.updated_by, c.updated_at
                              FROM citizens c
@@ -1147,8 +1142,15 @@ impl Db {
     // dry_run 时在事务内删完即回滚,只回报计数,不改库。
     pub(crate) fn purge_legacy_cid_rows(&self, dry_run: bool) -> Result<PurgeReport, String> {
         // 中文注释:号承载表清单,无外键约束,删除顺序无关;主登记表 ids 放最后。
-        const CID_TABLES: [&str; 7] = [
-            "subjects", "citizens", "gov", "private", "accounts", "docs", "ids",
+        const CID_TABLES: [&str; 8] = [
+            "subjects",
+            "citizens",
+            "citizen_documents",
+            "gov",
+            "private",
+            "accounts",
+            "docs",
+            "ids",
         ];
         self.with_client(move |conn| {
             // 1. 收集号全集与 kind(ids 为准,subjects 补孤儿)。
@@ -2498,10 +2500,6 @@ fn main() {
                 get(auth::list_city_registry_admins),
             )
             .route(
-                "/api/v1/admin/city-registry-admins/:id",
-                patch(auth::actions::update_city_registry_login_state),
-            )
-            .route(
                 "/api/v1/admin/actions/prepare",
                 post(auth::actions::prepare_admin_action),
             )
@@ -2536,10 +2534,6 @@ fn main() {
             .route(
                 "/api/v1/admin/own-institution-admins",
                 get(auth::list_own_institution_admins),
-            )
-            .route(
-                "/api/v1/admin/federal-registry-admins/:id",
-                patch(auth::actions::update_federal_registry_login_state),
             )
             // 中文注释:机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
             // - GET  /api/v1/institution/check-cid-full-name             — cid_full_name 查重
@@ -2679,6 +2673,19 @@ fn main() {
             .route(
                 "/api/v1/admin/citizens/legal-representatives",
                 get(domains::citizens::handler::admin_search_legal_representative_citizens),
+            )
+            .route(
+                "/api/v1/admin/citizens/:cid_number/documents",
+                get(domains::citizens::handler::list_citizen_documents)
+                    .post(domains::citizens::handler::upload_citizen_document),
+            )
+            .route(
+                "/api/v1/admin/citizens/:cid_number/documents/:doc_id/download",
+                get(domains::citizens::handler::download_citizen_document),
+            )
+            .route(
+                "/api/v1/admin/citizens/:cid_number/documents/:doc_id",
+                delete(domains::citizens::handler::delete_citizen_document),
             )
             .route(
                 "/api/v1/admin/citizens/:cid_number/onchain/prepare",

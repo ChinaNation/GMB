@@ -318,8 +318,8 @@ export function CitizensView() {
         <CitizenCreateModal
           auth={auth}
           open={createModalOpen}
-          residenceProvinceName={activeProvinceName}
-          residenceCityName={activeCityName}
+          provinceName={activeProvinceName}
+          cityName={activeCityName}
           onClose={() => setCreateModalOpen(false)}
           onCreated={handleCreated}
         />

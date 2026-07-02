@@ -374,7 +374,7 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
         },
     );
 
-    // 不可修改条款守卫(ADR-027 §7):在 PoW 导入之前逐块校验宪法第 1/2/3/17/19/23/33/41 条
+    // 不可修改条款守卫(ADR-027 §7):在 PoW 导入之前逐块校验宪法第 1/2/3/17/19/24/34/42 条
     // 与创世逐字一致,违者拒块。执法在 runtime 之外,setCode/migration 改不动。
     let guarded_import = crate::core::constitution::ConstitutionGuard::new(
         pow_block_import,

@@ -94,6 +94,13 @@ struct MLawVersionHead {
     chapters: Vec<MChapter>,
 }
 
+/// 链上 `LawVersionLabel` 镜像。版本号排序仍来自 `LawVersion.version`,本结构只负责展示名。
+#[derive(Decode)]
+struct MLawVersionLabel {
+    title: Vec<u8>,
+    title_en: Option<Vec<u8>>,
+}
+
 /// 解码 `Law`(到 status 即停)。houses = `Vec<(InstitutionCode=[u8;4], AccountId=[u8;32])>`,
 /// 与链端 `HousesOf` 一致;tier/status 为枚举变体索引(u8)。守卫据此校验宪法元数据不变式。
 #[derive(Decode)]
@@ -132,6 +139,7 @@ fn find_article<'a>(chapters: &'a [MChapter], number: u32) -> Option<&'a MArticl
 ///   `<!--CONSTITUTION_TOC-->`     → 目录项(`toc-item`)
 ///   `<!--CONSTITUTION_CONTENT-->` → 正文块(章/节/条/款)
 const SHELL: &str = include_str!("constitution_shell.html");
+const VERSION_LABEL_MARKER: &str = "<!--CONSTITUTION_VERSION_LABEL-->";
 const TOC_MARKER: &str = "<!--CONSTITUTION_TOC-->";
 const CONTENT_MARKER: &str = "<!--CONSTITUTION_CONTENT-->";
 
@@ -159,10 +167,28 @@ pub fn effective_version_of_law(law_scale: &[u8]) -> Result<u32, String> {
         .ok_or_else(|| "宪法尚无生效版本".to_string())
 }
 
+/// 解码链上不可修改条款 manifest,供桌面端展示徽章。
+pub fn immutable_article_numbers(manifest_scale: &[u8]) -> Result<Vec<u32>, String> {
+    let manifest = MImmutableManifest::decode(&mut &manifest_scale[..])
+        .map_err(|e| format!("宪法不可修改条款 manifest 解码失败:{e}"))?;
+    Ok(manifest.article_numbers)
+}
+
 /// 把链上结构化宪法 SCALE 字节(`LawVersion` 编码)重建为完整 HTML 文档。
-pub fn render_constitution_html(law_version_scale: &[u8]) -> Result<String, String> {
+pub fn render_constitution_html(
+    law_version_scale: &[u8],
+    immutable_article_numbers: &[u32],
+    law_version_label_scale: Option<&[u8]>,
+) -> Result<String, String> {
     let law = MLawVersionHead::decode(&mut &law_version_scale[..])
         .map_err(|e| format!("宪法 LawVersion 解码失败:{e}"))?;
+    let version_label = law_version_label_scale
+        .map(|raw| {
+            MLawVersionLabel::decode(&mut &raw[..])
+                .map_err(|e| format!("宪法 LawVersionLabel 解码失败:{e}"))
+        })
+        .transpose()?;
+    let version_label_html = render_version_label(law.version, version_label.as_ref());
 
     let mut toc = String::new();
     let mut content = String::new();
@@ -200,6 +226,16 @@ pub fn render_constitution_html(law_version_scale: &[u8]) -> Result<String, Stri
                     esc(&text(&article.title)),
                     esc(&opt_text(&article.title_en)),
                 );
+                let (immutable_badge_cn, immutable_badge_en) = if immutable_article_numbers
+                    .contains(&article.number)
+                {
+                    (
+                            "<span class=\"immutable-badge immutable-badge-cn\">不可修改条款</span>",
+                            "<span class=\"immutable-badge immutable-badge-en\">Immutable Clause</span>",
+                        )
+                } else {
+                    ("", "")
+                };
                 toc.push_str(&format!(
                     "        <a class=\"toc-item toc-level-3\" href=\"#article-{an}\"><span class=\"toc-cn\">{a_cn}</span><span class=\"toc-en\">{a_en}</span></a>\n",
                     an = article.number,
@@ -220,7 +256,7 @@ pub fn render_constitution_html(law_version_scale: &[u8]) -> Result<String, Stri
                 }
 
                 content.push_str(&format!(
-                    "<article id=\"article-{an}\" class=\"block article-block\">\n  <h3 class=\"article-title\">\n    <span class=\"cn heading-cn\">{a_cn}</span>\n    <span class=\"en heading-en\">{a_en}</span>\n  </h3>\n\n{paragraphs}</article>\n\n",
+                    "<article id=\"article-{an}\" class=\"block article-block\">\n  <h3 class=\"article-title\">\n    <span class=\"cn heading-cn\">{a_cn}{immutable_badge_cn}</span>\n    <span class=\"en heading-en\">{a_en}{immutable_badge_en}</span>\n  </h3>\n\n{paragraphs}</article>\n\n",
                     an = article.number,
                 ));
             }
@@ -229,8 +265,36 @@ pub fn render_constitution_html(law_version_scale: &[u8]) -> Result<String, Stri
 
     // 把目录与正文填入外壳两个占位标记 —— 整页结构只在 constitution_shell.html 一处维护。
     Ok(SHELL
+        .replace(VERSION_LABEL_MARKER, &version_label_html)
         .replace(TOC_MARKER, &toc)
         .replace(CONTENT_MARKER, &content))
+}
+
+fn render_version_label(version: u32, label: Option<&MLawVersionLabel>) -> String {
+    let fallback = format!("v{version}");
+    let (cn, en) = if let Some(label) = label {
+        let cn = text(&label.title);
+        let en = opt_text(&label.title_en);
+        (
+            if cn.trim().is_empty() {
+                fallback.clone()
+            } else {
+                cn
+            },
+            if en.trim().is_empty() {
+                fallback.clone()
+            } else {
+                en
+            },
+        )
+    } else {
+        (fallback.clone(), fallback)
+    };
+    format!(
+        "<span class=\"doc-version-cn\">{}</span><span class=\"doc-version-en\">{}</span>",
+        esc(&cn),
+        esc(&en),
+    )
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -272,6 +336,14 @@ pub mod storage_key {
     /// `LegislationYuan::LawVersions[law_id][version]` 的完整存储 key。
     pub fn law_version(law_id: u64, version: u32) -> Vec<u8> {
         let mut k = map_prefix(b"LawVersions");
+        k.extend_from_slice(&blake2_128_concat(&law_id.encode()));
+        k.extend_from_slice(&blake2_128_concat(&version.encode()));
+        k
+    }
+
+    /// `LegislationYuan::LawVersionLabels[law_id][version]` 的完整存储 key。
+    pub fn law_version_label(law_id: u64, version: u32) -> Vec<u8> {
+        let mut k = map_prefix(b"LawVersionLabels");
         k.extend_from_slice(&blake2_128_concat(&law_id.encode()));
         k.extend_from_slice(&blake2_128_concat(&version.encode()));
         k
@@ -740,6 +812,15 @@ mod tests {
         bytes
     }
 
+    fn law_version_label_scale(title: &str, title_en: Option<&str>) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        title.as_bytes().to_vec().encode_to(&mut bytes);
+        title_en
+            .map(|s| s.as_bytes().to_vec())
+            .encode_to(&mut bytes);
+        bytes
+    }
+
     /// 构造 Law 的 SCALE 字节 + 哑尾。
     /// Law(0) 字节:tier=Constitution、scope=0、给定 houses/显式版本指针/status。
     fn law_scale_with_versions(
@@ -866,8 +947,13 @@ mod tests {
             storage_key::law_version(0, 1),
             storage_key::law_version(0, 2)
         );
+        assert_ne!(
+            storage_key::law_version(0, 1),
+            storage_key::law_version_label(0, 1)
+        );
         assert!(storage_key::law(0).starts_with(&storage_key::pallet_prefix()));
         assert!(storage_key::law_version(0, 1).starts_with(&storage_key::pallet_prefix()));
+        assert!(storage_key::law_version_label(0, 1).starts_with(&storage_key::pallet_prefix()));
     }
 
     #[test]
@@ -1128,10 +1214,29 @@ mod tests {
     #[test]
     fn render_rebuilds_expected_anchors() {
         let scale = law_version_scale(1, vec![article_bytes(1, "正文")]);
-        let html = render_constitution_html(&scale).expect("应能重建");
+        let html = render_constitution_html(&scale, &[1], None).expect("应能重建");
         assert!(html.starts_with("<!DOCTYPE html>"));
         assert!(html.trim_end().ends_with("</html>"));
+        assert!(html.contains(
+            "<span class=\"doc-version-cn\">v1</span><span class=\"doc-version-en\">v1</span>"
+        ));
         assert!(html.contains("href=\"#article-1\""));
         assert!(html.contains("id=\"article-1\" class=\"block article-block\""));
+        assert!(html.contains(
+            "<span class=\"cn heading-cn\">第1条<span class=\"immutable-badge immutable-badge-cn\">不可修改条款</span></span>"
+        ));
+        assert!(html.contains(
+            "<span class=\"en heading-en\">Article 1<span class=\"immutable-badge immutable-badge-en\">Immutable Clause</span></span>"
+        ));
+    }
+
+    #[test]
+    fn render_uses_chain_law_version_label() {
+        let scale = law_version_scale(1, vec![article_bytes(1, "正文")]);
+        let label = law_version_label_scale("创世版", Some("Genesis Edition"));
+        let html = render_constitution_html(&scale, &[], Some(&label)).expect("应能重建");
+        assert!(html.contains(
+            "<span class=\"doc-version-cn\">创世版</span><span class=\"doc-version-en\">Genesis Edition</span>"
+        ));
     }
 }

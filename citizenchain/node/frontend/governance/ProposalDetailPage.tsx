@@ -5,9 +5,11 @@ import { sanitizeError } from '../core/tauri';
 import { hexToSs58 } from '../shared/ss58';
 import { MultisigTransferProposalDetailSection } from '../transaction/multisig-transfer/ProposalDetailSection';
 import { adminsChangeApi } from '../admins/admin-management/api';
+import { AdminProfileCard } from '../admins/admin-management/AdminProfileCard';
 import { governanceApi as api } from './api';
 import type { ProposalFullInfo, AdminWalletMatch, UserVoteStatus, InstitutionDetail } from './types';
 import { VoteSigningFlow } from './VoteSigningFlow';
+import '../admins/admin-management/styles.css';
 
 type Props = {
   proposalId: number;
@@ -73,7 +75,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
       setInfo(d);
     } catch (_) {}
     if (curInst && curSid) {
-      const statuses = await fetchVoteStatuses(proposalId, curInst.admins.map(a => a.pubkeyHex), curSid);
+      const statuses = await fetchVoteStatuses(proposalId, curInst.admins.map(a => a.account), curSid);
       // 已确认上链的投票或超时的投票，从 pending 中移除
       setPendingVotes((prev) => {
         const next = new Map(prev);
@@ -115,7 +117,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, walletLabel: '' }));
             setDetectedAdminWallets(wallets);
           }
-          await fetchVoteStatuses(proposalId, inst.admins.map(a => a.pubkeyHex), sid);
+          await fetchVoteStatuses(proposalId, inst.admins.map(a => a.account), sid);
         } catch (_) {}
       }
     };
@@ -252,7 +254,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           <h3>管理员投票状态（{institution.admins.length} 人）</h3>
           <div className="admin-grid">
             {institution.admins.map((admin, i) => {
-              const pubkey = admin.pubkeyHex;
+              const pubkey = admin.account;
               const pk = pubkey.toLowerCase();
               const myWallet = adminWallets.find(w => w.pubkeyHex.toLowerCase() === pk);
               const vs = voteStatuses[pk];
@@ -262,11 +264,14 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
               const canVote = myWallet && meta.status === 0 && !hasVoted && !isPending;
 
               return (
-                <div key={pubkey} className={`metric-card admin-card ${hasVoted ? (voted ? 'admin-card-voted-yes' : 'admin-card-voted-no') : ''}`}>
-                  <span className="admin-card-index">{i + 1}</span>
-                  <code className="admin-card-address">{hexToSs58(pubkey)}</code>
-                  <div className="admin-card-actions">
-                    {canVote ? (
+                <AdminProfileCard
+                  key={pubkey}
+                  profile={admin}
+                  index={i + 1}
+                  balanceFen={admin.balanceFen}
+                  className={hasVoted ? (voted ? 'admin-card-voted-yes' : 'admin-card-voted-no') : ''}
+                  action={
+                    canVote ? (
                       <button className="vote-button-inline" onClick={() => setVotingWallet(myWallet)}>
                         投票
                       </button>
@@ -278,9 +283,9 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
                       </span>
                     ) : (
                       <span className="vote-result-tag vote-none-tag">未投票</span>
-                    )}
-                  </div>
-                </div>
+                    )
+                  }
+                />
               );
             })}
           </div>

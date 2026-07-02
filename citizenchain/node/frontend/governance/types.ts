@@ -71,8 +71,18 @@ export type GovernanceOverview = {
   warning: string | null;
 };
 
-export type AdminInfo = {
-  pubkeyHex: string;
+export type AdminProfileInfo = {
+  account: string;
+  adminCidNumber: string;
+  name: string;
+  adminRole: string;
+  termStart: number;
+  termEnd: number;
+  source: number;
+  sourceLabel: string;
+};
+
+export type AdminInfo = AdminProfileInfo & {
   balanceFen: string | null;
 };
 

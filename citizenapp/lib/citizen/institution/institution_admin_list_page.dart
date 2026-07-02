@@ -1,13 +1,14 @@
-import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:polkadart_keyring/polkadart_keyring.dart';
 
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/admin_activation_service.dart';
 import 'package:citizenapp/citizen/shared/admin_profile.dart';
+import 'package:citizenapp/citizen/shared/admin_profile_card.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
+import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -49,11 +50,47 @@ class AdminListPage extends StatefulWidget {
 
 class _AdminListPageState extends State<AdminListPage> {
   late Set<String> _activatedPubkeys;
+  Map<String, double> _balanceByAccount = const {};
 
   @override
   void initState() {
     super.initState();
     _activatedPubkeys = Set.of(widget.activatedPubkeys);
+    unawaited(_loadBalances());
+  }
+
+  @override
+  void didUpdateWidget(covariant AdminListPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.admins != widget.admins) {
+      unawaited(_loadBalances());
+    }
+  }
+
+  static String _balanceKey(String account) {
+    final trimmed = account.trim();
+    return (trimmed.startsWith('0x') || trimmed.startsWith('0X')
+            ? trimmed.substring(2)
+            : trimmed)
+        .toLowerCase();
+  }
+
+  Future<void> _loadBalances() async {
+    final accounts = {
+      for (final profile in widget.admins) _balanceKey(profile.account),
+    }.where((account) => account.isNotEmpty).toList(growable: false);
+    if (accounts.isEmpty) {
+      if (mounted) setState(() => _balanceByAccount = const {});
+      return;
+    }
+    try {
+      final balances = await ChainRpc().fetchFinalizedBalances(accounts);
+      if (!mounted) return;
+      setState(() => _balanceByAccount = balances);
+    } catch (_) {
+      // 中文注释:余额展示失败不影响管理员激活流程,卡片保留“余额”标签且值为空。
+      if (mounted) setState(() => _balanceByAccount = const {});
+    }
   }
 
   void _onAdminActivated(String pubkeyHex) {
@@ -115,6 +152,7 @@ class _AdminListPageState extends State<AdminListPage> {
                 institution: widget.institution,
                 accountIdentity: widget.accountIdentity,
                 onActivated: () => _onAdminActivated(pubkey),
+                balanceYuan: _balanceByAccount[_balanceKey(pubkey)],
               );
             }),
         ],
@@ -174,6 +212,7 @@ class _AdminTile extends StatelessWidget {
     required this.institution,
     required this.accountIdentity,
     required this.onActivated,
+    required this.balanceYuan,
   });
 
   final int index;
@@ -192,24 +231,7 @@ class _AdminTile extends StatelessWidget {
   final InstitutionInfo institution;
   final AdminAccountIdentity accountIdentity;
   final VoidCallback onActivated;
-
-  String _toSs58() {
-    try {
-      final bytes = _hexToBytes(pubkeyHex);
-      return Keyring().encodeAddress(bytes, 2027);
-    } catch (_) {
-      return '0x$pubkeyHex';
-    }
-  }
-
-  static Uint8List _hexToBytes(String hex) {
-    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
-    final result = Uint8List(clean.length ~/ 2);
-    for (var i = 0; i < result.length; i++) {
-      result[i] = int.parse(clean.substring(i * 2, i * 2 + 2), radix: 16);
-    }
-    return result;
-  }
+  final double? balanceYuan;
 
   Future<void> _startActivation(BuildContext context) async {
     // 检查是否为冷钱包（热钱包不允许激活）
@@ -279,153 +301,64 @@ class _AdminTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final address = _toSs58();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: isActivated
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: AdminProfileCard(
+        profile: profile,
+        index: index,
+        compact: true,
+        balanceYuan: balanceYuan,
+        backgroundColor: isActivated
             ? AppTheme.success.withValues(alpha: 0.06)
             : AppTheme.surfaceMuted,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isActivated
-              ? AppTheme.success.withValues(alpha: 0.3)
-              : AppTheme.border,
-        ),
+        borderColor: isActivated
+            ? AppTheme.success.withValues(alpha: 0.3)
+            : AppTheme.border,
+        trailing: _buildActivationControl(context),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 24,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                '$index',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textTertiary,
-                ),
-              ),
-            ),
+    );
+  }
+
+  Widget? _buildActivationControl(BuildContext context) {
+    // 激活按钮：仅对已导入冷钱包的管理员显示。
+    if (!isImported) return null;
+    if (isActivated) {
+      return Container(
+        height: AdminProfileCard.actionHeight,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppTheme.success.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          '已激活',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppTheme.success,
+            fontWeight: FontWeight.w600,
           ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 实名资料行(姓名 + 职务 + 来源);个人多签/创世空 meta 不显示。
-                if (profile.name.isNotEmpty || profile.adminRole.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: Wrap(
-                      spacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        if (profile.name.isNotEmpty)
-                          Text(
-                            profile.name,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primaryDark,
-                            ),
-                          ),
-                        if (profile.adminRole.isNotEmpty)
-                          Text(
-                            profile.adminRole,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.textTertiary,
-                            ),
-                          ),
-                        if (profile.source != AdminProfileSource.unknown)
-                          Text(
-                            profile.source.label,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.accent,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                // 实名锚 CID。
-                if (profile.cidNumber.isNotEmpty)
-                  Text(
-                    '实名 ${profile.cidNumber}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.textTertiary,
-                    ),
-                  ),
-                // 任期(有任期才显示)。
-                if (profile.termLabel.isNotEmpty)
-                  Text(
-                    '任期 ${profile.termLabel}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.textTertiary,
-                    ),
-                  ),
-                // 账户 SS58。
-                Text(
-                  address,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                    color: isActivated
-                        ? AppTheme.primaryDark
-                        : AppTheme.textSecondary,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
+        ),
+      );
+    }
+    return GestureDetector(
+      onTap: () => _startActivation(context),
+      child: Container(
+        height: AdminProfileCard.actionHeight,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppTheme.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          '激活',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppTheme.primary,
+            fontWeight: FontWeight.w600,
           ),
-          const SizedBox(width: 6),
-          // 激活按钮：仅对已导入冷钱包的管理员显示
-          if (isImported)
-            isActivated
-                ? Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.success.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      '已激活',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.success,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  )
-                : GestureDetector(
-                    onTap: () => _startActivation(context),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        '激活',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-        ],
+        ),
       ),
     );
   }

@@ -30,6 +30,15 @@ pub(crate) struct CityRegistryAdminRow {
     pub(crate) id: u64,
     pub(crate) admin_account: String,
     pub(crate) admin_name: String,
+    pub(crate) admin_cid_number: String,
+    pub(crate) name: String,
+    pub(crate) admin_role: String,
+    pub(crate) term_start: u32,
+    pub(crate) term_end: u32,
+    pub(crate) source: u8,
+    pub(crate) source_label: String,
+    /// 链上 finalized free 余额(分);查询失败或账户不存在时为空。
+    pub(crate) balance_fen: Option<String>,
     pub(crate) institution_code: String,
     pub(crate) built_in: bool,
     pub(crate) created_by: String,
@@ -54,6 +63,15 @@ pub(crate) struct FederalRegistryAdminRow {
     pub(crate) province_name: String,
     pub(crate) admin_account: String,
     pub(crate) admin_name: String,
+    pub(crate) admin_cid_number: String,
+    pub(crate) name: String,
+    pub(crate) admin_role: String,
+    pub(crate) term_start: u32,
+    pub(crate) term_end: u32,
+    pub(crate) source: u8,
+    pub(crate) source_label: String,
+    /// 链上 finalized free 余额(分);查询失败或账户不存在时为空。
+    pub(crate) balance_fen: Option<String>,
     pub(crate) built_in: bool,
     pub(crate) created_at: DateTime<Utc>,
     /// 最近一次更新时间，None 表示从未更新
@@ -65,6 +83,15 @@ pub(crate) struct FederalRegistryAdminRow {
 pub(crate) struct OwnInstitutionAdminRow {
     pub(crate) admin_account: String,
     pub(crate) admin_name: String,
+    pub(crate) admin_cid_number: String,
+    pub(crate) name: String,
+    pub(crate) admin_role: String,
+    pub(crate) term_start: u32,
+    pub(crate) term_end: u32,
+    pub(crate) source: u8,
+    pub(crate) source_label: String,
+    /// 链上 finalized free 余额(分);查询失败或账户不存在时为空。
+    pub(crate) balance_fen: Option<String>,
     pub(crate) is_self: bool,
 }
 

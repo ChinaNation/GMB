@@ -19,6 +19,8 @@ type Props = {
 
 type Step = 'form' | 'sign';
 
+const normalizeAccountHex = (value: string) => value.trim().replace(/^0x/i, '').toLowerCase();
+
 export function AdminSetChangePage({
   accountRef,
   cidFullName,
@@ -39,6 +41,7 @@ export function AdminSetChangePage({
   const [signRequest, setSignRequest] = useState<VoteSignRequestResult | null>(null);
   const [requestJson, setRequestJson] = useState('');
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [balanceByAccount, setBalanceByAccount] = useState<Record<string, string | null>>({});
   const [signFlowVersion, setSignFlowVersion] = useState(0);
   const signRequestRef = useRef<VoteSignRequestResult | null>(null);
   const selectedWalletRef = useRef<AdminWalletMatch | null>(null);
@@ -55,12 +58,33 @@ export function AdminSetChangePage({
     api.getAdminAccountState(accountRef)
       .then((state) => {
         setAccount(state);
-        setAdmins(state?.admins ?? []);
+        setAdmins(state?.admins.map((profile) => profile.account) ?? []);
         setFormError(null);
       })
       .catch((e) => setFormError(sanitizeError(e)))
       .finally(() => setLoading(false));
   }, [accountRef.cidNumber, accountRef.accountHex]);
+
+  useEffect(() => {
+    const accounts = Array.from(new Set(admins.map(normalizeAccountHex).filter(Boolean)));
+    if (accounts.length === 0) {
+      setBalanceByAccount({});
+      return;
+    }
+    let cancelled = false;
+    // 中文注释:管理员更换页的新增/移除卡片也必须显示真实链上余额;
+    // 余额读取失败只影响余额值,不阻断管理员集合编辑。
+    api.getAdminAccountBalances(accounts)
+      .then((balances) => {
+        if (!cancelled) setBalanceByAccount(balances);
+      })
+      .catch(() => {
+        if (!cancelled) setBalanceByAccount({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [admins.join('|')]);
 
   const buildRequest = async () => {
     if (!account || !selectedWallet) return;
@@ -147,8 +171,19 @@ export function AdminSetChangePage({
             disabled={submitting}
             onChange={setSelectedWallet}
           />
-          <AdminSetEditor admins={admins} disabled={submitting} onChange={setAdmins} />
-          <AdminSetDiff currentAdmins={account.admins} admins={admins} />
+          <AdminSetEditor
+            admins={admins}
+            profiles={account.admins}
+            balances={balanceByAccount}
+            disabled={submitting}
+            onChange={setAdmins}
+          />
+          <AdminSetDiff
+            currentAdmins={account.admins.map((profile) => profile.account)}
+            currentProfiles={account.admins}
+            admins={admins}
+            balances={balanceByAccount}
+          />
           <button
             className="vote-signing-confirm"
             disabled={submitting || !selectedWallet || admins.length === 0}
@@ -162,7 +197,6 @@ export function AdminSetChangePage({
       {step === 'sign' && signRequest && (
         <AdminSetChangeSigningFlow
           key={signFlowVersion}
-          request={signRequest}
           requestJson={requestJson}
           submitting={submitting}
           error={signError}

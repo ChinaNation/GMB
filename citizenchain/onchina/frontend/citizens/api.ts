@@ -3,7 +3,7 @@
 // 通用请求能力只从 utils/http.ts 引入,本文件不承接机构或管理员模块接口。
 
 import type { AdminAuth } from '../auth/types';
-import { adminHeaders, request } from '../utils/http';
+import { adminHeaders, adminRequest, request } from '../utils/http';
 
 export type CitizenState = 'NORMAL' | 'REVOKED';
 export type CitizenSex = 'MALE' | 'FEMALE';
@@ -24,12 +24,12 @@ export type CitizenRow = {
   passport_valid_from: string;
   passport_valid_until: string;
   status_updated_at?: number;
-  residence_province_code: string;
-  residence_city_code: string;
-  residence_town_code: string;
-  residence_province_name?: string;
-  residence_city_name?: string;
-  residence_town_name?: string;
+  province_code: string;
+  city_code: string;
+  town_code: string;
+  province_name?: string;
+  city_name?: string;
+  town_name?: string;
   birth_province_code: string;
   birth_city_code: string;
   birth_town_code: string;
@@ -55,9 +55,9 @@ export type CreateCitizenInput = {
   citizen_given_name: string;
   citizen_sex: CitizenSex;
   citizen_birth_date: string;
-  residence_province_name: string;
-  residence_city_name: string;
-  residence_town_code: string;
+  province_name: string;
+  city_name: string;
+  town_code: string;
   birth_province_code: string;
   birth_city_code: string;
   birth_town_code: string;
@@ -78,9 +78,9 @@ export type CreateCitizenResult = {
   wallet_address?: string | null;
   passport_valid_from: string;
   passport_valid_until: string;
-  residence_province_code: string;
-  residence_city_code: string;
-  residence_town_code: string;
+  province_code: string;
+  city_code: string;
+  town_code: string;
   birth_province_code: string;
   birth_city_code: string;
   birth_town_code: string;
@@ -104,6 +104,21 @@ export type CompleteCitizenOnchainResult = {
   call_data_hex: string;
   citizen_signature: string;
   citizen_identity_chain_sign_request: string;
+};
+
+export const CITIZEN_DOCUMENT_TYPES = ['护照相片', '出生证明', '监护人护照', '其他材料'] as const;
+
+export type CitizenDocumentType = (typeof CITIZEN_DOCUMENT_TYPES)[number];
+
+export type CitizenDocument = {
+  id: number;
+  cid_number: string;
+  file_name: string;
+  document_type: CitizenDocumentType;
+  file_size: number;
+  file_hash: string;
+  uploaded_by: string;
+  uploaded_at: string;
 };
 
 export interface LegalRepresentativeCitizenSearchContext {
@@ -207,5 +222,67 @@ export async function completeCitizenOnchainSignature(
       },
       body: JSON.stringify({ wallet_account: walletAccount, sign_response: signResponse }),
     },
+  );
+}
+
+export async function listCitizenDocuments(
+  auth: AdminAuth,
+  cidNumber: string,
+): Promise<CitizenDocument[]> {
+  return adminRequest<CitizenDocument[]>(
+    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/documents`,
+    auth,
+  );
+}
+
+// 中文注释:公民资料库独立于机构资料库,字段名使用 document_type,不复用机构 doc_type。
+export async function uploadCitizenDocument(
+  auth: AdminAuth,
+  cidNumber: string,
+  file: File,
+  documentType: CitizenDocumentType,
+): Promise<CitizenDocument> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('document_type', documentType);
+  return adminRequest<CitizenDocument>(
+    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/documents`,
+    auth,
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
+}
+
+export async function downloadCitizenDocument(
+  auth: AdminAuth,
+  cidNumber: string,
+  docId: number,
+  fileName: string,
+): Promise<void> {
+  const resp = await fetch(
+    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/documents/${docId}/download`,
+    { headers: adminHeaders(auth) },
+  );
+  if (!resp.ok) throw new Error(`下载失败 (${resp.status})`);
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function deleteCitizenDocument(
+  auth: AdminAuth,
+  cidNumber: string,
+  docId: number,
+): Promise<void> {
+  await adminRequest<string>(
+    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/documents/${docId}`,
+    auth,
+    { method: 'DELETE' },
   );
 }

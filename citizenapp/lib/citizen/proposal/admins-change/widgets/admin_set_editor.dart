@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
+import 'package:citizenapp/citizen/shared/admin_profile.dart';
+import 'package:citizenapp/citizen/shared/admin_profile_card.dart';
 
 class AdminSetEditor extends StatefulWidget {
   const AdminSetEditor({
     super.key,
     required this.admins,
+    this.profiles = const [],
+    this.balances = const {},
     required this.onChanged,
   });
 
   final List<String> admins;
+  final List<AdminProfile> profiles;
+  final Map<String, double> balances;
   final ValueChanged<List<String>> onChanged;
 
   @override
@@ -28,6 +33,10 @@ class _AdminSetEditorState extends State<AdminSetEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final profilesByAccount = {
+      for (final profile in widget.profiles)
+        AdminAccountIdCodec.normalizeHex(profile.account): profile,
+    };
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -35,14 +44,26 @@ class _AdminSetEditorState extends State<AdminSetEditor> {
         padding: const EdgeInsets.all(14),
         child: Column(
           children: [
-            for (var i = 0; i < widget.admins.length; i++)
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(child: Text('${i + 1}')),
-                title: Text(_ss58(widget.admins[i]),
-                    overflow: TextOverflow.ellipsis),
+            for (var i = 0; i < widget.admins.length; i++) ...[
+              AdminProfileCard(
+                profile: profilesByAccount[
+                        AdminAccountIdCodec.normalizeHex(widget.admins[i])] ??
+                    AdminProfile(
+                      account: AdminAccountIdCodec.normalizeHex(
+                        widget.admins[i],
+                      ),
+                    ),
+                index: i + 1,
+                compact: true,
+                balanceYuan: widget.balances[
+                    AdminAccountIdCodec.normalizeHex(widget.admins[i])],
                 trailing: IconButton(
+                  constraints: const BoxConstraints.tightFor(
+                    width: AdminProfileCard.actionHeight,
+                    height: AdminProfileCard.actionHeight,
+                  ),
+                  padding: EdgeInsets.zero,
+                  tooltip: '移除',
                   icon: const Icon(Icons.remove_circle_outline),
                   onPressed: () => widget.onChanged([
                     for (final admin in widget.admins)
@@ -50,6 +71,8 @@ class _AdminSetEditorState extends State<AdminSetEditor> {
                   ]),
                 ),
               ),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: [
                 Expanded(
@@ -73,9 +96,5 @@ class _AdminSetEditorState extends State<AdminSetEditor> {
     if (clean.length != 64 || widget.admins.contains(clean)) return;
     widget.onChanged([...widget.admins, clean]);
     _controller.clear();
-  }
-
-  static String _ss58(String hex) {
-    return Keyring().encodeAddress(AdminAccountIdCodec.hexDecode(hex), 2027);
   }
 }

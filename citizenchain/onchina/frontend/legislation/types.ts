@@ -90,6 +90,8 @@ export interface ProposableCandidate {
 export interface LawView {
   lawId: number;
   version: number;
+  versionTitle?: string | null;
+  versionTitleEn?: string | null;
   effectiveVersion?: number | null;
   latestVersion: number;
   pendingVersion?: number | null;
@@ -104,6 +106,8 @@ export interface LawView {
   publishedAt: number;
   effectiveAt: number;
   houses: HouseRef[];
+  /** 宪法不可修改条款号;普通法律为空。 */
+  immutableArticleNumbers: number[];
   chapters: LawChapter[];
 }
 

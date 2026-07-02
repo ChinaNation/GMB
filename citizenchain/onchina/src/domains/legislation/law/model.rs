@@ -149,6 +149,10 @@ pub struct HouseRef {
 pub struct LawView {
     pub law_id: u64,
     pub version: u32,
+    /// 链上版本标签中文名;无标签时前端显示 `v{version}`。
+    pub version_title: Option<String>,
+    /// 链上版本标签英文名;英文展示无标签时前端显示 `v{version}`。
+    pub version_title_en: Option<String>,
     /// 当前已生效版本;新法通过但未到生效时间时为空。
     pub effective_version: Option<u32>,
     /// 已写入链上的最新版本。
@@ -171,6 +175,8 @@ pub struct LawView {
     pub effective_at: u64,
     /// 表决院序列(机构码 + 账户)。
     pub houses: Vec<HouseRef>,
+    /// 宪法不可修改条款号;普通法律为空。
+    pub immutable_article_numbers: Vec<u32>,
     /// 正文:章>节>条>款。
     pub chapters: Vec<LawChapter>,
 }

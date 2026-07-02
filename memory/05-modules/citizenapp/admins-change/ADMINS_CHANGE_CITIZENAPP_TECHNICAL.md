@@ -1,6 +1,6 @@
 # citizenapp 管理员更换模块技术文档
 
-最新更新：2026-06-27。
+最新更新：2026-07-01。
 
 ## 模块定位
 
@@ -107,6 +107,12 @@ citizenapp/test/governance/admins-change/
 激活记录使用 `activated_admins_v3`，只保存 `identityKey / accountIdHex / institutionCode / kind / pubkeyHex / activatedAtMs`，查询和清理都按 `accountIdHex + pubkeyHex` 精确匹配。
 
 激活 QR 与 node 桌面端统一使用 QR_V1 `a=5 activate_admin_account`；payload 前缀为 `GMB || 0x18`，扫码端解码展示字段为 `institution_code / subject / pubkey`。
+
+## 管理员资料展示
+
+- `AdminAccountService` 返回的 `AdminAccountState.profiles` 是管理员展示真源；`admins` 只从 profiles 抽取账户，供签名、权限和投票校验使用。
+- 机构管理员列表、公开机构管理员列表、管理员账户详情、管理员集合编辑器和变更差异卡统一使用 `/Users/rhett/GMB/citizenapp/lib/citizen/shared/admin_profile_card.dart`。
+- UI 固定为顶部“序号/激活状态”、第 1 行“姓名:/职务:”、第 2 行“任期:/来源:”、第 3 行“身份CID:”、第 4 行“账户:”、第 5 行“余额:”；字段值为空时值区域留空，不隐藏标签、不用本地姓名兜底。余额通过 `ChainRpc.fetchFinalizedBalances` 批量读取 finalized `System.Account.free`，0 余额正常显示，查询失败才留空。个人多签只有账户时按 account-only 资料展示。
 
 ## 2026-05-10 修复记录
 

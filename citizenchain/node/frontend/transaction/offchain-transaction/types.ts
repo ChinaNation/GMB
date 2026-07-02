@@ -5,6 +5,7 @@
 // - 本文件只保留清算行节点声明、连通性检测、管理员解锁和 offchain 入口状态机。
 
 import type { AdminWalletMatch } from '../../governance/types';
+import type { AdminProfileInfo } from '../../governance/types';
 import type { AccountWithBalance } from './institution/types';
 
 export type {
@@ -75,4 +76,4 @@ export type ClearingBankView =
     }
   | { kind: 'declare-node'; cidNumber: string; cidFullName: string }
   | { kind: 'other-accounts-list'; cidNumber: string; otherAccounts: AccountWithBalance[] }
-  | { kind: 'admin-list'; cidNumber: string; admins: string[]; threshold: number; adminsLen: number };
+  | { kind: 'admin-list'; cidNumber: string; admins: AdminProfileInfo[]; threshold: number; adminsLen: number };

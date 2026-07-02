@@ -112,4 +112,14 @@ void main() {
     expect(art.body, '正文');
     expect(art.clauses.first.text, '款');
   });
+
+  test('decodeLawVersionLabel: 创世版本标签', () {
+    final raw = Uint8List.fromList([
+      ..._s('创世版'),
+      0x01, ..._s('Genesis Edition'), // title_en=Some
+    ]);
+    final label = decodeLawVersionLabel(raw);
+    expect(label.title, '创世版');
+    expect(label.titleEn, 'Genesis Edition');
+  });
 }

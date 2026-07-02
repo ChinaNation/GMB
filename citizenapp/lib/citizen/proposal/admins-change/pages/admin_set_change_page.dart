@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'package:citizenapp/citizen/proposal/admins-change/widgets/admin_account_
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
+import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -39,6 +41,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
   final _thresholdController = TextEditingController();
   AdminAccountState? _subject;
   List<String> _admins = const [];
+  Map<String, double> _balanceByAccount = const {};
   WalletProfile? _selectedWallet;
   bool _loading = true;
   bool _submitting = false;
@@ -74,6 +77,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
         if (account != null) _syncThresholdInput(account, _admins.length);
         _loading = false;
       });
+      unawaited(_loadBalances(account?.admins ?? const []));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -100,13 +104,20 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
                     _buildWalletSelector(),
                     const SizedBox(height: 12),
                     AdminSetEditor(
-                        admins: _admins,
-                        onChanged: (value) => _setNewAdmins(account, value)),
+                      admins: _admins,
+                      profiles: account.profiles,
+                      balances: _balanceByAccount,
+                      onChanged: (value) => _setNewAdmins(account, value),
+                    ),
                     const SizedBox(height: 12),
                     _buildThresholdCard(account),
                     const SizedBox(height: 12),
                     AdminSetDiffCard(
-                        currentAdmins: account.admins, admins: _admins),
+                      currentAdmins: account.admins,
+                      admins: _admins,
+                      currentProfiles: account.profiles,
+                      balances: _balanceByAccount,
+                    ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(_error!, style: const TextStyle(color: Colors.red)),
@@ -142,6 +153,32 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
       _admins = value;
       _syncThresholdInput(account, value.length);
     });
+    unawaited(_loadBalances(value));
+  }
+
+  static String _balanceKey(String account) {
+    final trimmed = account.trim();
+    return (trimmed.startsWith('0x') || trimmed.startsWith('0X')
+            ? trimmed.substring(2)
+            : trimmed)
+        .toLowerCase();
+  }
+
+  Future<void> _loadBalances(List<String> admins) async {
+    final accounts = {
+      for (final account in admins) _balanceKey(account),
+    }.where((account) => account.isNotEmpty).toList(growable: false);
+    if (accounts.isEmpty) {
+      if (mounted) setState(() => _balanceByAccount = const {});
+      return;
+    }
+    try {
+      final balances = await ChainRpc().fetchFinalizedBalances(accounts);
+      if (mounted) setState(() => _balanceByAccount = balances);
+    } catch (_) {
+      // 中文注释:管理员更换编辑态余额读取失败不影响集合修改,余额值留空。
+      if (mounted) setState(() => _balanceByAccount = const {});
+    }
   }
 
   Widget _buildThresholdCard(AdminAccountState account) {

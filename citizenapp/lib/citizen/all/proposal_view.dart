@@ -17,7 +17,7 @@ import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_deta
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
 
-/// 全局治理提案列表:展示 NRC / PRC / PRB 三类机构所有提案,按 ID 倒序。
+/// 公民 tab「提案」列表:展示 NRC / PRC / PRB 三类机构所有提案,按 ID 倒序。
 ///
 /// **数据源(v1 双层 ID + 反向索引)**:
 /// - `ProposalsByOrg[NRC] ∪ ByOrg[PRC] ∪ ByOrg[PRB]` 取所有治理类提案 ID
@@ -25,8 +25,8 @@ import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_propo
 ///
 /// **分页**:cursor 模式按 `_allIds` 切分,翻页天然不会卡空页。
 /// **新区块订阅**:周期性重 fetch 三 org id 列表,补差异。
-class VoteView extends StatefulWidget {
-  const VoteView({
+class ProposalView extends StatefulWidget {
+  const ProposalView({
     super.key,
     this.onPendingVoteCountChanged,
   });
@@ -35,10 +35,10 @@ class VoteView extends StatefulWidget {
   final ValueChanged<int>? onPendingVoteCountChanged;
 
   @override
-  State<VoteView> createState() => _VoteViewState();
+  State<ProposalView> createState() => _ProposalViewState();
 }
 
-class _VoteViewState extends State<VoteView> {
+class _ProposalViewState extends State<ProposalView> {
   static const int _pageSize = 10;
   static const Duration _newBlockIndexCheckMinInterval = Duration(seconds: 60);
 
@@ -82,7 +82,7 @@ class _VoteViewState extends State<VoteView> {
     super.initState();
     _scrollController.addListener(_onScroll);
     if (_isFlutterTest) {
-      // 中文注释：App 启动 widget test 只验证首屏结构，不验证隐藏广场页的轻节点订阅。
+      // 中文注释：App 启动 widget test 只验证首屏结构，不验证隐藏提案页的轻节点订阅。
       // 测试环境没有真实 smoldot 链路，继续加载链上提案会让 pumpAndSettle 等不到稳定帧。
       _loading = false;
       return;

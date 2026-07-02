@@ -39,3 +39,99 @@
   gap: 6px;
 }
 
+.admin-profile-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-profile-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.admin-profile-card .admin-card-index {
+  display: inline-flex;
+  min-width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(96, 165, 250, 0.14);
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-profile-top-action {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.admin-profile-top-action .activated-tag,
+.admin-profile-top-action .activate-button,
+.admin-profile-top-action .vote-result-tag,
+.admin-profile-top-action .vote-button-inline {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  margin-left: 0;
+}
+
+.admin-profile-fields {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-profile-field-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-profile-field {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px;
+  align-items: start;
+  min-height: 20px;
+}
+
+.admin-profile-field-wide {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.admin-profile-label {
+  color: #93a4b8;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.admin-profile-value {
+  min-height: 18px;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #e5edf6;
+}
+
+.admin-set-card-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.admin-set-diff-list {
+  display: grid;
+  gap: 8px;
+}

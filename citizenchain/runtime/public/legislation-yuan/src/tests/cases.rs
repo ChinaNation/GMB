@@ -563,6 +563,13 @@ fn genesis_seeds_constitution_as_law_zero() {
         assert_eq!(law.houses.len(), 1);
         let lv = LawVersions::<Test>::get(0, 1).expect("宪法版本 1");
         assert_eq!(lv.chapters.len(), 7, "7 章");
+        let label = LawVersionLabels::<Test>::get(0, 1).expect("宪法创世版本标签");
+        assert_eq!(label.title.to_vec(), "创世版".as_bytes().to_vec());
+        assert_eq!(
+            label.title_en.expect("创世版本英文标签").to_vec(),
+            "Genesis Edition".as_bytes().to_vec()
+        );
+        assert!(LawVersionLabels::<Test>::get(0, 2).is_none());
         let articles: usize = lv
             .chapters
             .iter()

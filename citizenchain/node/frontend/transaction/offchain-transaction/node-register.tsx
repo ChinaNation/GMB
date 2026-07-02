@@ -4,18 +4,17 @@
 //   1. 用户填 RPC 域名 + 端口
 //   2. 点"自测连通性",节点桌面端跑 DNS/wss/链ID/PeerId 4 重检查
 //   3. 全部通过才解锁"扫码签名提交"按钮
-//   4. citizenwallet 冷钱包扫请求 QR → 摄像头扫响应 QR → 链上 register_clearing_bank
+//   4. 公民钱包扫请求 QR → 摄像头扫响应 QR → 链上 register_clearing_bank
 //
 // 注:peer_id 由本机 system_localPeerId RPC 拉,用户不可手改(防输错;同时与连通性
 //    自测的远端校验形成闭环——远端必须返回与本字段相同的 PeerId 才放行)。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import { sanitizeError } from '../../core/tauri';
 import { adminsChangeApi } from '../../admins/admin-management/api';
 import { institutionReadApi } from './institution/api';
 import { hexToSs58 } from '../../shared/ss58';
-import { QrScanner } from '../../shared/qr/QrScanner';
+import { CitizenSignatureModal } from '../../shared/qr/CitizenSignatureModal';
 import type { ActivatedAdmin, AdminWalletMatch, VoteSignRequestResult } from '../../governance/types';
 import { offchainApi } from './api';
 import type { ConnectivityTestReport } from './types';
@@ -27,7 +26,7 @@ type Props = {
   onSuccess: () => void;
 };
 
-type Step = 'form' | 'testing' | 'tested' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
+type Step = 'form' | 'testing' | 'tested' | 'qr' | 'submit' | 'done' | 'error';
 
 export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, onSuccess }: Props) {
   const [step, setStep] = useState<Step>('form');
@@ -256,33 +255,15 @@ export function ClearingBankDeclareNodePage({ cidNumber, cidFullName, onBack, on
         </>
       ) : null}
 
-      {step === 'qr' && signRequest && (
-        <div className="modal-overlay" onClick={() => setStep('tested')}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>扫码签名声明清算行节点</h3>
-            <p>使用 citizenwallet 冷钱包扫描以下二维码完成签名</p>
-            <div className="qr-container">
-              <QRCodeSVG value={signRequest.requestJson} size={280} level="L" />
-            </div>
-            <p className="countdown">有效时间:{countdown} 秒</p>
-            <button className="primary-button" onClick={() => setStep('scan')}>已签名,扫描响应</button>
-            <button className="secondary-button" onClick={() => setStep('tested')}>取消</button>
-          </div>
-        </div>
-      )}
-
-      {step === 'scan' && (
-        <div className="modal-overlay" onClick={() => setStep('qr')}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>扫描签名响应</h3>
-            <QrScanner
-              onScan={handleScan}
-              onError={(e) => { setError(e); setStep('error'); }}
-            />
-            <button className="secondary-button" onClick={() => setStep('qr')}>返回二维码</button>
-          </div>
-        </div>
-      )}
+      <CitizenSignatureModal
+        open={step === 'qr' && signRequest != null}
+        title="声明清算行节点"
+        qrValue={signRequest?.requestJson ?? ''}
+        countdownSeconds={countdown}
+        onScan={handleScan}
+        onScanError={(e) => { setError(e); setStep('error'); }}
+        onCancel={() => setStep('tested')}
+      />
 
       {step === 'submit' && (
         <div className="modal-overlay">

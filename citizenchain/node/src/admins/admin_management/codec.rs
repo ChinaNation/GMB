@@ -1,11 +1,14 @@
 use super::account_id::normalize_pubkey_hex;
-use super::types::AdminAccountDecoded;
+use super::types::{source_label, AdminAccountDecoded, AdminProfileInfo};
 
 /// 解码各管理员 pallet `AdminAccounts` 的完整核心字段。
 ///
 /// 链上布局:
-/// institution_code:[u8;4] + kind:u8 + admins:BoundedVec<AccountId32>
+/// institution_code:[u8;4] + kind:u8 + admins:BoundedVec<AdminProfile>
 /// + creator:AccountId32 + created_at:u32 + updated_at:u32 + status:u8。
+///
+/// 中文注释:个人多签(kind=2)仍是裸 `BoundedVec<AccountId32>`；机构管理员
+/// 都是 `AdminProfile`，字段标签由前端固定渲染，空值只留空数据区。
 /// 中文注释:created_at/updated_at 是 BlockNumberFor<T>,citizenchain runtime 配置为 u32。
 pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> {
     if data.len() < 5 {
@@ -24,8 +27,37 @@ pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> 
         if offset + 32 > data.len() {
             return Err("AdminAccount 管理员列表数据不足".to_string());
         }
-        admins.push(hex::encode(&data[offset..offset + 32]));
+        let account = hex::encode(&data[offset..offset + 32]);
         offset += 32;
+        if kind == 2 {
+            admins.push(AdminProfileInfo::account_only(account));
+            continue;
+        }
+        let (admin_cid_number, next) = read_compact_string(data, offset, "admin_cid_number")?;
+        offset = next;
+        let (name, next) = read_compact_string(data, offset, "name")?;
+        offset = next;
+        let (admin_role, next) = read_compact_string(data, offset, "admin_role")?;
+        offset = next;
+        if offset + 4 + 4 + 1 > data.len() {
+            return Err("AdminProfile 任期/来源数据不足".to_string());
+        }
+        let term_start = read_u32_le(data, offset);
+        offset += 4;
+        let term_end = read_u32_le(data, offset);
+        offset += 4;
+        let source = data[offset];
+        offset += 1;
+        admins.push(AdminProfileInfo {
+            account,
+            admin_cid_number,
+            name,
+            admin_role,
+            term_start,
+            term_end,
+            source,
+            source_label: source_label(source).to_string(),
+        });
     }
 
     if offset + 32 > data.len() {
@@ -114,6 +146,20 @@ pub fn read_compact_u32(data: &[u8], offset: usize) -> Result<(u32, usize), Stri
     }
 }
 
+fn read_compact_string(
+    data: &[u8],
+    offset: usize,
+    field_name: &str,
+) -> Result<(String, usize), String> {
+    let (len, len_size) = read_compact_u32(data, offset)?;
+    let start = offset + len_size;
+    let end = start + len as usize;
+    if end > data.len() {
+        return Err(format!("AdminProfile {field_name} 数据不足"));
+    }
+    Ok((String::from_utf8_lossy(&data[start..end]).to_string(), end))
+}
+
 fn read_u32_le(data: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes([
         data[offset],
@@ -142,13 +188,42 @@ mod tests {
         data.push(0);
         data.push(0x04);
         data.extend_from_slice(&[0xaa; 32]);
+        data.extend_from_slice(&encode_compact_u32("CID-001".len() as u32));
+        data.extend_from_slice(b"CID-001");
+        data.extend_from_slice(&encode_compact_u32("张三".len() as u32));
+        data.extend_from_slice("张三".as_bytes());
+        data.extend_from_slice(&encode_compact_u32("委员".len() as u32));
+        data.extend_from_slice("委员".as_bytes());
+        data.extend_from_slice(&7u32.to_le_bytes());
+        data.extend_from_slice(&9u32.to_le_bytes());
+        data.push(0);
         data.extend_from_slice(&[0xbb; 32]);
         data.extend_from_slice(&7u32.to_le_bytes());
         data.extend_from_slice(&9u32.to_le_bytes());
         data.push(1);
         let decoded = decode_admin_account(&data).unwrap();
         assert_eq!(decoded.institution_code, NRC);
-        assert_eq!(decoded.admins, vec!["aa".repeat(32)]);
+        assert_eq!(decoded.admins[0].account, "aa".repeat(32));
+        assert_eq!(decoded.admins[0].admin_cid_number, "CID-001");
+        assert_eq!(decoded.admins[0].name, "张三");
+        assert_eq!(decoded.admins[0].admin_role, "委员");
         assert_eq!(decoded.status, 1);
+    }
+
+    #[test]
+    fn decode_personal_admin_account_keeps_account_only_layout() {
+        use primitives::cid::code::PMUL;
+        let mut data = PMUL.to_vec();
+        data.push(2);
+        data.push(0x04);
+        data.extend_from_slice(&[0xaa; 32]);
+        data.extend_from_slice(&[0xbb; 32]);
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&2u32.to_le_bytes());
+        data.push(1);
+        let decoded = decode_admin_account(&data).unwrap();
+        assert_eq!(decoded.admins[0].account, "aa".repeat(32));
+        assert_eq!(decoded.admins[0].admin_role, "");
+        assert_eq!(decoded.creator_hex, "bb".repeat(32));
     }
 }

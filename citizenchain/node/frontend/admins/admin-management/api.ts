@@ -57,6 +57,8 @@ export const adminsChangeApi = {
   hasAnyActivatedAdmin: () => invoke<boolean>('has_any_activated_admin'),
   getAdminAccountState: (accountRef: AdminAccountRef) =>
     invoke<AdminAccountState | null>('get_admin_account_state', accountRefParams(accountRef)),
+  getAdminAccountBalances: (accountHexes: string[]) =>
+    invoke<Record<string, string | null>>('get_admin_account_balances', { accountHexes }),
   buildAdminSetChangeRequest: (pubkeyHex: string, accountRef: AdminAccountRef, admins: string[]) =>
     invoke<VoteSignRequestResult>('build_admin_set_change_request', {
       pubkeyHex,

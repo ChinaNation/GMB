@@ -156,6 +156,24 @@
     line-height: 1.2;
   }
 
+  .doc-version-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
+    color: var(--doc-subtle);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .doc-version-cn::after {
+    content: "·";
+    margin-left: 8px;
+    color: #b49d82;
+  }
+
   .toc {
     grid-column: 1;
     position: sticky;
@@ -355,6 +373,32 @@
     font-weight: 700;
   }
 
+  .immutable-badge {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin-left: 8px;
+    padding: 2px 6px;
+    border: 1px solid rgba(210, 15, 24, 0.24);
+    border-radius: 8px;
+    background: rgba(210, 15, 24, 0.08);
+    color: var(--doc-accent);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    transform: translateY(-1px);
+  }
+
+  .immutable-badge-cn {
+    font-size: 10px;
+  }
+
+  .immutable-badge-en {
+    color: #9f3a32;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
   .heading-cn,
   .heading-en,
   .body-cn,
@@ -510,6 +554,7 @@
       <div class="title-mark">
         <span class="doc-title-cn">《公民宪法》</span>
         <span class="doc-title-en">CITIZEN CONSTITUTION</span>
+        <span class="doc-version-label"><!--CONSTITUTION_VERSION_LABEL--></span>
       </div>
     </header>
 

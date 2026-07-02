@@ -12,6 +12,14 @@ export type FederalRegistryAdminRow = {
   province_name: string;
   admin_account: string;
   admin_name: string;
+  admin_cid_number: string;
+  name: string;
+  admin_role: string;
+  term_start: number;
+  term_end: number;
+  source: number;
+  source_label: string;
+  balance_fen?: string | null;
   built_in: boolean;
   created_at: string;
   /** 最近一次更新时间,null 表示从未更新。 */
@@ -21,6 +29,14 @@ export type FederalRegistryAdminRow = {
 export type OwnInstitutionAdminRow = {
   admin_account: string;
   admin_name: string;
+  admin_cid_number: string;
+  name: string;
+  admin_role: string;
+  term_start: number;
+  term_end: number;
+  source: number;
+  source_label: string;
+  balance_fen?: string | null;
   is_self: boolean;
 };
 
@@ -41,17 +57,5 @@ export async function listOwnInstitutionAdmins(auth: AdminAuth): Promise<OwnInst
   return request<OwnInstitutionAdminListOutput>('/api/v1/admin/own-institution-admins', {
     method: 'GET',
     headers: adminHeaders(auth),
-  });
-}
-
-export async function updateFederalRegistryName(
-  auth: AdminAuth,
-  id: number,
-  adminName: string,
-): Promise<FederalRegistryAdminRow> {
-  return request<FederalRegistryAdminRow>(`/api/v1/admin/federal-registry-admins/${id}`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json', ...adminHeaders(auth) },
-    body: JSON.stringify({ admin_name: adminName }),
   });
 }

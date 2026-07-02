@@ -274,8 +274,8 @@ impl Db {
                             citizen_given_name, citizen_sex, citizen_birth_date, wallet_pubkey, wallet_address,
                             wallet_sig_alg, wallet_verified_at, citizen_status, voting_eligible,
                             passport_valid_from, passport_valid_until, status_updated_at,
-                            province_code, city_code, residence_province_code, residence_city_code,
-                            residence_town_code, birth_province_code, birth_city_code, birth_town_code,
+                            province_code, city_code, town_code,
+                            birth_province_code, birth_city_code, birth_town_code,
                             archive_hash, onchain_tx_hash, onchain_block_number, onchain_at,
                             created_by, created_at, updated_by, updated_at
                      FROM citizens
@@ -317,12 +317,12 @@ fn ensure_record_in_admin_scope(
 ) -> Result<(), axum::response::Response> {
     let scope = crate::scope::get_visible_scope(ctx);
     let province_name =
-        crate::cid::china::area_name_by_codes(record.residence_province_code.as_str(), None, None)
+        crate::cid::china::area_name_by_codes(record.province_code.as_str(), None, None)
             .map(|(province, _, _)| province.to_string())
             .unwrap_or_default();
     let city_name = crate::cid::china::area_name_by_codes(
-        record.residence_province_code.as_str(),
-        Some(record.residence_city_code.as_str()),
+        record.province_code.as_str(),
+        Some(record.city_code.as_str()),
         None,
     )
     .and_then(|(_, city, _)| city.map(str::to_string))
@@ -415,22 +415,12 @@ fn build_voting_identity_payload(
     out.push(0); // CitizenStatus::Normal
     append_bounded_bytes(
         &mut out,
-        record.residence_province_code.as_bytes(),
+        record.province_code.as_bytes(),
         16,
-        "residence_province_code",
+        "province_code",
     )?;
-    append_bounded_bytes(
-        &mut out,
-        record.residence_city_code.as_bytes(),
-        16,
-        "residence_city_code",
-    )?;
-    append_bounded_bytes(
-        &mut out,
-        record.residence_town_code.as_bytes(),
-        16,
-        "residence_town_code",
-    )?;
+    append_bounded_bytes(&mut out, record.city_code.as_bytes(), 16, "city_code")?;
+    append_bounded_bytes(&mut out, record.town_code.as_bytes(), 16, "town_code")?;
     Ok(VotingIdentityPayloadBytes {
         payload_bytes: out,
         citizen_age_years: age,

@@ -168,6 +168,14 @@ LawVersion decodeLawVersion(Uint8List raw) {
   );
 }
 
+/// 解 `LawVersionLabel`(内层字节)。
+LawVersionLabel decodeLawVersionLabel(Uint8List raw) {
+  final s = _Scale(raw);
+  final title = s.boundedString();
+  final titleEn = s.option(s.boundedString);
+  return LawVersionLabel(title: title, titleEn: titleEn);
+}
+
 /// 解 `ConstitutionImmutableManifest`(StorageValue 原始字节)。
 ImmutableManifest decodeImmutableManifest(Uint8List raw) {
   final s = _Scale(raw);

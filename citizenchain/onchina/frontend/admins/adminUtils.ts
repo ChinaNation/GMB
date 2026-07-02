@@ -49,7 +49,6 @@ export interface RegistryAdminsSharedState {
   addCityRegistryForm: FormInstance<{ city_registry_account: string; city_registry_admin_name: string; city_scope_city_name: string }>;
 
   onCreateCityRegistry: (values: { city_registry_account: string; city_registry_admin_name: string; city_name?: string; created_by?: string }) => Promise<void>;
-  onUpdateCityRegistry: (row: CityRegistryAdminRow) => void;
   onDeleteCityRegistry: (row: CityRegistryAdminRow) => void;
   runSecuredAction: <T = unknown>(actionType: AdminActionType, payload: unknown) => Promise<T>;
 

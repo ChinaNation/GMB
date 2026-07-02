@@ -22,6 +22,12 @@
 - 公民宪法正文唯一真源 = 链上立法院模块（`legislation-yuan`，`law_id=0`、`tier=宪法`，
   ADR-027）；节点通过 RAW storage 读取当前生效版本的结构化法律（章>节>条>款 + 中英双语），
   在 `node/src/core/constitution.rs` 据原 CSS 外壳重建 HTML；修改宪法走立法投票上链，不再发 runtime 升级改 HTML。
+- 节点同时 RAW 读取 `LegislationYuan.ConstitutionImmutableManifest`，只用 manifest 条号给 HTML 条标题追加
+  “不可修改条款 / Immutable Clause”徽章；章、节、条标题和款正文都直接来自链上结构化正文，不在渲染层额外拼接
+  “第 x 章 / 第 x 节 / 第 x 条 / 第 x 款”。
+- 节点 RAW 读取 `LegislationYuan.LawVersionLabels[(law_id, version)]` 显示宪法当前生效版本标签；创世版本显示“创世版 / Genesis Edition”，缺失标签时才回退为 `vN`。
+- 节点宪法 HTML 同屏展示中英文时，不可修改条款徽章必须按语言分开放置：中文“不可修改条款”紧跟中文条标题，英文“Immutable Clause”紧跟英文条标题，禁止把中英文文案塞进同一个徽章。
+- 徽章必须与对应语言条标题行内垂直居中；中文徽章使用更小字号，避免压过“第 x 条”标题。
   （`core/constitution.rs` 统一承载节点端宪法两件事:渲染 + 不可修改条款 L2 共识守卫,见 ADR-027 §6.1。）
 
 ## 3. 数据模型
@@ -37,6 +43,8 @@
   - `html`: 节点据链上结构化宪法（章>节>条>款）重建的完整 HTML（复用原 CSS 外壳，样式与迁移前一致）
   - `blake2_256`: 重建后 HTML 的 blake2_256 摘要
   - `source`: 来源标识，当前固定为 `legislation`
+
+公民宪法 HTML 中的款正文直接显示链上 `Clause.text/text_en`，因为宪法真源已在正文内写入“第一款 / Paragraph 1”等文本；渲染层不得再次拼接款序号。
 
 文档 tab 的本地文档绑定只允许使用 `key`，不再额外维护第二套映射字段，
 避免“tab key 与文档 key 不一致”时错误显示其他文档。

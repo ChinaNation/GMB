@@ -17,6 +17,8 @@ use crate::core::db::Db;
 use parity_scale_codec::Decode;
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 
+const TIER_CONSTITUTION: u8 = 0;
+
 /// 链上 `Law<T>` 解码镜像(字段顺序锁死 legislation-yuan::Law)。
 #[derive(Debug, Decode)]
 pub struct OnChainLaw {
@@ -52,6 +54,21 @@ pub struct OnChainLawVersion {
     pub effective_at: u64,
 }
 
+/// 链上 `LawVersionLabel<T>` 解码镜像。
+#[derive(Debug, Decode)]
+pub struct OnChainLawVersionLabel {
+    pub title: Vec<u8>,
+    pub title_en: Option<Vec<u8>>,
+}
+
+/// 链上 `ConstitutionImmutableManifest` 解码镜像。
+#[derive(Debug, Decode)]
+struct OnChainImmutableManifest {
+    article_numbers: Vec<u32>,
+    #[allow(dead_code)] // 展示端只需要条号,摘要仍由链端和节点守卫校验。
+    article_hashes: Vec<[u8; 32]>,
+}
+
 /// 解码链上 `Law` 原始字节。
 pub fn decode_law(bytes: &[u8]) -> Result<OnChainLaw, String> {
     OnChainLaw::decode(&mut &bytes[..]).map_err(|e| format!("decode Law failed: {e}"))
@@ -62,11 +79,30 @@ pub fn decode_law_version(bytes: &[u8]) -> Result<OnChainLawVersion, String> {
     OnChainLawVersion::decode(&mut &bytes[..]).map_err(|e| format!("decode LawVersion failed: {e}"))
 }
 
+/// 解码链上 `LawVersionLabel` 原始字节。
+pub fn decode_law_version_label(bytes: &[u8]) -> Result<OnChainLawVersionLabel, String> {
+    OnChainLawVersionLabel::decode(&mut &bytes[..])
+        .map_err(|e| format!("decode LawVersionLabel failed: {e}"))
+}
+
 /// 链上 `Law` + 办理端展示版本 → 展示用 `LawView`(字节→String、账户→0x hex、章节→可读)。
-pub fn build_law_view(law: &OnChainLaw, version: &OnChainLawVersion) -> LawView {
+pub fn build_law_view(
+    law: &OnChainLaw,
+    version: &OnChainLawVersion,
+    version_label: Option<&OnChainLawVersionLabel>,
+    immutable_article_numbers: &[u32],
+) -> LawView {
     LawView {
         law_id: law.law_id,
         version: version.version,
+        version_title: version_label
+            .map(|label| String::from_utf8_lossy(&label.title).into_owned()),
+        version_title_en: version_label.and_then(|label| {
+            label
+                .title_en
+                .as_ref()
+                .map(|b| String::from_utf8_lossy(b).into_owned())
+        }),
         effective_version: law.effective_version,
         latest_version: law.latest_version,
         pending_version: law.pending_version,
@@ -88,6 +124,11 @@ pub fn build_law_view(law: &OnChainLaw, version: &OnChainLawVersion) -> LawView 
             .iter()
             .map(|(code, account)| house_ref(*code, *account))
             .collect(),
+        immutable_article_numbers: if law.tier == TIER_CONSTITUTION {
+            immutable_article_numbers.to_vec()
+        } else {
+            Vec::new()
+        },
         chapters: to_law_chapters(&version.chapters),
     }
 }
@@ -198,6 +239,35 @@ async fn fetch_all_law_versions() -> Result<Vec<OnChainLawVersion>, String> {
     Ok(versions)
 }
 
+/// 读取宪法不可修改条款号清单。缺失时返回空,由展示层降级为不显示徽章。
+pub async fn fetch_immutable_article_numbers() -> Result<Vec<u32>, String> {
+    let ws_url = chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for immutable manifest failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let address = dynamic::storage(
+        "LegislationYuan",
+        "ConstitutionImmutableManifest",
+        Vec::<dynamic::Value>::new(),
+    );
+    let Some(thunk) = storage
+        .fetch(&address)
+        .await
+        .map_err(|e| format!("fetch ConstitutionImmutableManifest failed: {e}"))?
+    else {
+        return Ok(Vec::new());
+    };
+    let mut raw = thunk.encoded();
+    let manifest = OnChainImmutableManifest::decode(&mut raw)
+        .map_err(|e| format!("decode ConstitutionImmutableManifest failed: {e}"))?;
+    Ok(manifest.article_numbers)
+}
+
 /// 按 law_id 取单部法律主体记录。
 pub async fn fetch_law(law_id: u64) -> Result<Option<OnChainLaw>, String> {
     Ok(fetch_all_laws()
@@ -224,6 +294,38 @@ pub async fn fetch_law_version(
         .await?
         .into_iter()
         .find(|v| v.law_id == law_id && v.version == version))
+}
+
+/// 按 (law_id, version) 取单个法律版本标签。
+pub async fn fetch_law_version_label(
+    law_id: u64,
+    version: u32,
+) -> Result<Option<OnChainLawVersionLabel>, String> {
+    let ws_url = chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for law version label failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let address = dynamic::storage(
+        "LegislationYuan",
+        "LawVersionLabels",
+        vec![
+            dynamic::Value::u128(law_id as u128),
+            dynamic::Value::u128(version as u128),
+        ],
+    );
+    let Some(thunk) = storage
+        .fetch(&address)
+        .await
+        .map_err(|e| format!("fetch LawVersionLabels failed: {e}"))?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(decode_law_version_label(thunk.encoded())?))
 }
 
 #[cfg(test)]
@@ -306,6 +408,15 @@ mod tests {
         assert_eq!(version.chapters.len(), 1);
         assert_eq!(version.title, "道路交通安全法".as_bytes());
 
+        let label = decode_law_version_label(&{
+            let mut bytes = Vec::new();
+            "创世版".as_bytes().to_vec().encode_to(&mut bytes);
+            Some("Genesis Edition".as_bytes().to_vec()).encode_to(&mut bytes);
+            bytes
+        })
+        .expect("decode LawVersionLabel");
+        assert_eq!(label.title, "创世版".as_bytes());
+
         let law = OnChainLaw {
             law_id: 7,
             tier: 1,
@@ -316,19 +427,27 @@ mod tests {
             pending_version: None,
             status: 1,
         };
-        let view = build_law_view(&law, &version);
+        let view = build_law_view(&law, &version, Some(&label), &[1]);
         assert_eq!(view.effective_version, Some(2));
         assert_eq!(view.latest_version, 2);
         assert_eq!(view.pending_version, None);
+        assert_eq!(view.version_title.as_deref(), Some("创世版"));
+        assert_eq!(view.version_title_en.as_deref(), Some("Genesis Edition"));
         assert_eq!(view.title, "道路交通安全法");
         assert_eq!(view.houses.len(), 2);
         assert_eq!(view.houses[0].code, "NRP"); // 去尾 \0
+        assert!(view.immutable_article_numbers.is_empty());
         assert!(view.content_hash.starts_with("0x"));
         assert_eq!(view.chapters[0].title, "总则");
         assert_eq!(
             view.chapters[0].sections[0].articles[0].clauses[0].text,
             "第一款"
         );
+
+        let constitution_law = OnChainLaw { tier: 0, ..law };
+        let constitution_view = build_law_view(&constitution_law, &version, None, &[1, 2]);
+        assert_eq!(constitution_view.immutable_article_numbers, vec![1, 2]);
+        assert!(constitution_view.version_title.is_none());
     }
 
     /// 机构主账户派生须与 `primitives` 金标向量逐字节一致

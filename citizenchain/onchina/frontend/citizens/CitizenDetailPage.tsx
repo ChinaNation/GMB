@@ -1,15 +1,35 @@
 // 中文注释:公民详情页承接单个公民档案展示与链上身份推送。
 // 本地建档不要求钱包;只有本页推送链上身份时才录入钱包并要求目标钱包签名。
 
-import { useMemo, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Form, Input, Modal, QRCode, Space, Tag, Typography } from 'antd';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Button,
+  Card,
+  Descriptions,
+  Form,
+  Input,
+  Modal,
+  Popconfirm,
+  QRCode,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+  Upload,
+} from 'antd';
 import {
   ArrowLeftOutlined,
   CloudUploadOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
   QrcodeOutlined,
   ScanOutlined,
+  UploadOutlined,
   WalletOutlined,
 } from '@ant-design/icons';
+import type { UploadFile } from 'antd/es/upload/interface';
 
 import type { AdminAuth } from '../auth/types';
 import { glassCardHeadStyle, glassCardStyle } from '../core/cardStyles';
@@ -17,8 +37,15 @@ import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
 import { ScanAccountModal } from '../core/ScanAccountModal';
 import { notice } from '../utils/notice';
 import {
+  CITIZEN_DOCUMENT_TYPES,
   completeCitizenOnchainSignature,
+  deleteCitizenDocument,
+  downloadCitizenDocument,
+  listCitizenDocuments,
   prepareCitizenOnchainSignature,
+  uploadCitizenDocument,
+  type CitizenDocument,
+  type CitizenDocumentType,
   type CitizenRow,
   type CompleteCitizenOnchainResult,
   type PrepareCitizenOnchainResult,
@@ -76,6 +103,20 @@ function areaText(province?: string, city?: string, town?: string) {
   return [province, city, town].filter((v) => v?.trim()).join(' / ') || '-';
 }
 
+function formatFileSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('zh-CN');
+}
+
 function calculateAgeYears(birthDate?: string) {
   if (!birthDate) return null;
   const birth = new Date(`${birthDate}T00:00:00`);
@@ -106,6 +147,10 @@ export function CitizenDetailPage({
   const [prepared, setPrepared] = useState<PrepareCitizenOnchainResult | null>(null);
   const [chainRequest, setChainRequest] = useState<CompleteCitizenOnchainResult | null>(null);
   const [chainModalOpen, setChainModalOpen] = useState(false);
+  const [documents, setDocuments] = useState<CitizenDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentUploading, setDocumentUploading] = useState(false);
+  const [selectedDocumentType, setSelectedDocumentType] = useState<CitizenDocumentType>('其他材料');
 
   const ageYears = useMemo(() => calculateAgeYears(current.citizen_birth_date), [current.citizen_birth_date]);
   const canPushOnchain =
@@ -117,6 +162,18 @@ export function CitizenDetailPage({
     ageYears >= 16;
 
   const titleText = provinceName && cityName ? `${provinceName} · ${cityName}` : '公民详情';
+
+  const loadDocuments = useCallback(() => {
+    setDocumentsLoading(true);
+    listCitizenDocuments(auth, current.cid_number)
+      .then(setDocuments)
+      .catch((err) => notice.error(err, '公民资料库加载失败'))
+      .finally(() => setDocumentsLoading(false));
+  }, [auth, current.cid_number]);
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
 
   const updateWalletAddress = (walletAddress: string) => {
     const next = { ...current, wallet_address: walletAddress };
@@ -173,6 +230,40 @@ export function CitizenDetailPage({
     }
   };
 
+  const uploadDocument = async (file: UploadFile) => {
+    const rawFile = file as unknown as File;
+    if (!rawFile || !rawFile.name) return false;
+    setDocumentUploading(true);
+    try {
+      await uploadCitizenDocument(auth, current.cid_number, rawFile, selectedDocumentType);
+      notice.success('公民资料上传成功');
+      loadDocuments();
+    } catch (err) {
+      notice.error(err, '公民资料上传失败');
+    } finally {
+      setDocumentUploading(false);
+    }
+    return false;
+  };
+
+  const downloadDocument = async (doc: CitizenDocument) => {
+    try {
+      await downloadCitizenDocument(auth, current.cid_number, doc.id, doc.file_name);
+    } catch (err) {
+      notice.error(err, '公民资料下载失败');
+    }
+  };
+
+  const deleteDocument = async (doc: CitizenDocument) => {
+    try {
+      await deleteCitizenDocument(auth, current.cid_number, doc.id);
+      notice.success('公民资料已删除');
+      loadDocuments();
+    } catch (err) {
+      notice.error(err, '公民资料删除失败');
+    }
+  };
+
   return (
     <>
       <Card
@@ -206,11 +297,7 @@ export function CitizenDetailPage({
           <Descriptions.Item label="公民状态">{statusTag(current.citizen_status)}</Descriptions.Item>
           <Descriptions.Item label="投票身份状态">{statusText(current.identity_status)}</Descriptions.Item>
           <Descriptions.Item label="居住地">
-            {areaText(
-              current.residence_province_name,
-              current.residence_city_name,
-              current.residence_town_name,
-            )}
+            {areaText(current.province_name, current.city_name, current.town_name)}
           </Descriptions.Item>
           <Descriptions.Item label="出生地">
             {areaText(current.birth_province_name, current.birth_city_name, current.birth_town_name)}
@@ -282,6 +369,97 @@ export function CitizenDetailPage({
             )}
           </Form>
         </div>
+      </Card>
+
+      <Card
+        title="资料库"
+        bordered={false}
+        style={{ ...glassCardStyle, marginTop: 16 }}
+        headStyle={glassCardHeadStyle}
+        extra={
+          canWrite && (
+            <Space wrap>
+              <Select<CitizenDocumentType>
+                value={selectedDocumentType}
+                onChange={setSelectedDocumentType}
+                style={{ width: 140 }}
+                options={CITIZEN_DOCUMENT_TYPES.map((documentType) => ({
+                  value: documentType,
+                  label: documentType,
+                }))}
+              />
+              <Upload
+                beforeUpload={uploadDocument}
+                showUploadList={false}
+                accept=".pdf,.jpg,.jpeg,.png,.webp"
+              >
+                <Button type="primary" icon={<UploadOutlined />} loading={documentUploading}>
+                  上传资料
+                </Button>
+              </Upload>
+            </Space>
+          )
+        }
+      >
+        <Table<CitizenDocument>
+          rowKey="id"
+          loading={documentsLoading}
+          dataSource={documents}
+          pagination={documents.length > 10 ? { pageSize: 10 } : false}
+          scroll={{ x: 860 }}
+          columns={[
+            { title: '文件名', dataIndex: 'file_name', ellipsis: true },
+            {
+              title: '资料类型',
+              dataIndex: 'document_type',
+              width: 130,
+              render: (value: CitizenDocumentType) => <Tag color="blue">{value}</Tag>,
+            },
+            {
+              title: '大小',
+              dataIndex: 'file_size',
+              width: 100,
+              render: (value: number) => formatFileSize(value),
+            },
+            {
+              title: '上传人',
+              dataIndex: 'uploaded_by',
+              ellipsis: true,
+            },
+            {
+              title: '上传时间',
+              dataIndex: 'uploaded_at',
+              width: 180,
+              render: (value: string) => formatDateTime(value),
+            },
+            {
+              title: '操作',
+              width: 120,
+              align: 'center',
+              render: (_value, row) => (
+                <Space size={4}>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    onClick={() => downloadDocument(row)}
+                  />
+                  {canWrite && (
+                    <Popconfirm
+                      title={`确认删除 "${row.file_name}"?`}
+                      okText="删除"
+                      okButtonProps={{ danger: true }}
+                      cancelText="取消"
+                      onConfirm={() => deleteDocument(row)}
+                    >
+                      <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  )}
+                </Space>
+              ),
+            },
+          ]}
+        />
       </Card>
 
       <ScanAccountModal

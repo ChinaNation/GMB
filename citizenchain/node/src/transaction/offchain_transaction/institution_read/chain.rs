@@ -24,7 +24,9 @@ use crate::governance::signing::pubkey_to_ss58;
 use crate::governance::storage_keys;
 use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
 
-use super::types::{AccountWithBalance, InstitutionDetail, InstitutionProposalPage};
+use super::types::{
+    AccountWithBalance, AdminProfileDisplay, InstitutionDetail, InstitutionProposalPage,
+};
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -115,6 +117,16 @@ enum OnChainAdminSource {
     InternalVote,
     MutualElection,
     PopularElection,
+}
+
+fn admin_source_meta(source: OnChainAdminSource) -> (u8, &'static str) {
+    match source {
+        OnChainAdminSource::Genesis => (0, "创世"),
+        OnChainAdminSource::Registry => (1, "注册局"),
+        OnChainAdminSource::InternalVote => (2, "内部投票"),
+        OnChainAdminSource::MutualElection => (3, "互选"),
+        OnChainAdminSource::PopularElection => (4, "普选"),
+    }
 }
 
 /// 单管理员资料镜像,与 `admin-primitives::AdminProfile<AccountId>` 字段顺序严格一致。
@@ -235,14 +247,14 @@ fn fetch_account_free_balance(account: &AccountId32, finalized_hash: &str) -> Re
     }
 }
 
-/// 读取机构管理员集合(账户 SS58 列表 + 人数)。
+/// 读取机构管理员集合(完整 AdminProfile + 人数)。
 ///
 /// 真源 = 机构码对应管理员 pallet 的 `AdminAccounts[main_account]`,值为 `AdminProfile` 列表;
-/// 节点只取每条 profile 的 `account` 映射成 SS58。机构码不匹配视为数据不一致,降级为空集合。
+/// 机构码不匹配视为数据不一致,降级为空集合。
 fn fetch_admin_set(
     main_account: &AccountId32,
     institution_code: &InstitutionCode,
-) -> Result<(Vec<String>, u32), String> {
+) -> Result<(Vec<AdminProfileDisplay>, u32), String> {
     let main_bytes: [u8; 32] = (*main_account).clone().into();
     let storage_key = admins_storage::admin_accounts_key(institution_code, &main_bytes)?;
     let Some(hex_data) = chain_query::fetch_finalized_storage(&storage_key)? else {
@@ -255,16 +267,26 @@ fn fetch_admin_set(
     if &decoded.institution_code != institution_code {
         return Ok((Vec::new(), 0));
     }
-    let admins_ss58 = decoded
+    let admins = decoded
         .admins
         .iter()
-        .filter_map(|p| {
+        .map(|p| {
             let raw: [u8; 32] = p.account.clone().into();
-            pubkey_to_ss58(&raw).ok()
+            let (source, source_label) = admin_source_meta(p.source);
+            AdminProfileDisplay {
+                account: hex::encode(raw),
+                admin_cid_number: String::from_utf8_lossy(&p.admin_cid_number).to_string(),
+                name: String::from_utf8_lossy(&p.name).to_string(),
+                admin_role: String::from_utf8_lossy(&p.title).to_string(),
+                term_start: p.term_start,
+                term_end: p.term_end,
+                source,
+                source_label: source_label.to_string(),
+            }
         })
         .collect::<Vec<_>>();
     let admins_len = decoded.admins.len() as u32;
-    Ok((admins_ss58, admins_len))
+    Ok((admins, admins_len))
 }
 
 /// 读取机构内部投票动态阈值。
@@ -392,7 +414,7 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
         }
     });
 
-    let (admins_ss58, admins_len) = fetch_admin_set(&main_account_id, &inst.institution_code)?;
+    let (admins, admins_len) = fetch_admin_set(&main_account_id, &inst.institution_code)?;
     let threshold =
         fetch_active_threshold(&main_account_id, &inst.institution_code, &finalized_hash)?;
 
@@ -415,7 +437,7 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
         other_accounts,
         admins_len,
         threshold,
-        admins_ss58,
+        admins,
         status: inst.status.label().to_string(),
         created_at: inst.created_at as u64,
         account_count,

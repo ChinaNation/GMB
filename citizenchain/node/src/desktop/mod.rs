@@ -90,6 +90,7 @@ pub fn run_desktop() {
             admins::admin_management::activation::deactivate_admin,
             admins::admin_management::activation::has_any_activated_admin,
             admins::admin_management::commands::get_admin_account_state,
+            admins::admin_management::commands::get_admin_account_balances,
             admins::admin_management::commands::build_admin_set_change_request,
             admins::admin_management::commands::submit_admin_set_change,
             governance::build_vote_request,

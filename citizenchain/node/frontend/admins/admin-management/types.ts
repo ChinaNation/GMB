@@ -1,6 +1,7 @@
 import type {
   ActivateRequestResult,
   ActivatedAdmin,
+  AdminProfileInfo,
   InstitutionDetail,
   VoteSignRequestResult,
   VoteSubmitResult,
@@ -9,6 +10,7 @@ import type {
 export type {
   ActivateRequestResult,
   ActivatedAdmin,
+  AdminProfileInfo,
   InstitutionDetail,
   VoteSignRequestResult,
   VoteSubmitResult,
@@ -21,7 +23,7 @@ export type AdminAccountState = {
   institutionCodeLabel: string;
   kind: number;
   kindLabel: string;
-  admins: string[];
+  admins: AdminProfileInfo[];
   creatorHex: string;
   createdAt: number;
   updatedAt: number;

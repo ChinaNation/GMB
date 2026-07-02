@@ -69,7 +69,7 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('交易页保留扫码支付入口', (tester) async {
+  testWidgets('交易页显示扫码支付和多签账户入口', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightTheme,
@@ -78,7 +78,7 @@ void main() {
     );
     await tester.pump();
 
-    // 中文注释:多签账户列表已经迁入底部「多签」Tab，交易页只保留交易相关入口。
+    // 中文注释:个人多签账户列表已经迁入交易页入口，机构多签不在这里展示。
     // 链上支付主体字段(收款地址 / 金额 / 签名交易)由 `OnchainPaymentPanel`
     // 在选中钱包后渲染,本测试只校验顶层入口结构。
     expect(find.text('交易'), findsOneWidget);
@@ -86,7 +86,7 @@ void main() {
     expect(find.byTooltip('选择交易钱包'), findsOneWidget);
     expect(find.byType(ChainProgressBanner), findsOneWidget);
     expect(find.text('扫码支付'), findsOneWidget);
-    expect(find.text('多签'), findsNothing);
+    expect(find.text('多签账户'), findsOneWidget);
     expect(find.text('个人多签'), findsNothing);
     expect(find.text('机构多签'), findsNothing);
   });

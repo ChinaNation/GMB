@@ -1,6 +1,8 @@
 use super::account_id;
 use super::codec;
-use super::types::{institution_code_label, kind_label, status_label, AdminAccountState};
+use super::types::{
+    institution_code_label, kind_label, status_label, AdminAccountState, AdminProfileInfo,
+};
 use crate::governance::registry;
 use crate::governance::types::OrgType;
 use crate::governance::{chain_query, storage_keys};
@@ -156,7 +158,9 @@ fn decode_admin_account_state(
     })
 }
 
-pub fn fetch_admins_by_cid_number(cid_number: &str) -> Result<Vec<String>, String> {
+pub fn fetch_admin_profiles_by_cid_number(
+    cid_number: &str,
+) -> Result<Vec<AdminProfileInfo>, String> {
     Ok(fetch_admin_account_by_cid_number(cid_number)?
         .map(|state| state.admins)
         .unwrap_or_default())

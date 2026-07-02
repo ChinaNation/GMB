@@ -1,6 +1,6 @@
 # node 管理员更换模块技术文档
 
-最新更新：2026-06-30。
+最新更新：2026-07-02。
 
 ## 模块定位
 
@@ -9,7 +9,8 @@
 代码目录：
 
 - `/Users/rhett/GMB/citizenchain/node/src/admins/admin_management/`：后端 Tauri 命令、管理员激活、链上 storage 解码、call data 构造、签名提交。
-- `/Users/rhett/GMB/citizenchain/node/frontend/admins/admin-management/`：桌面前端管理员列表、管理员集合编辑、签名二维码流程。
+- `/Users/rhett/GMB/citizenchain/node/frontend/admins/admin-management/`：桌面前端管理员列表、管理员集合编辑、管理员激活和管理员更换入口。
+- `/Users/rhett/GMB/citizenchain/node/frontend/shared/qr/`：桌面前端二维码底座；扫码签名统一由 `CitizenSignaturePanel.tsx` 和 `CitizenSignatureModal.tsx` 展示。
 
 边界：
 
@@ -26,7 +27,7 @@ citizenchain/node/src/admins/admin_management/
 ├── activation.rs       # 管理员激活：生成激活签名请求、验证签名、本地加密存储
 ├── types.rs            # AdminAccountState DTO 与标签
 ├── account_id.rs       # AccountId / 管理员公钥 hex 规范化
-├── codec.rs            # AdminAccount SCALE 解码与 BoundedVec<AccountId32> 编码
+├── codec.rs            # AdminAccount SCALE 解码；机构管理员按 AdminProfile 解码，个人多签按 BoundedVec<AccountId32> 解码
 ├── call_data.rs        # propose_admin_set_change call data 构造
 ├── validation.rs       # 桌面端前置校验
 ├── storage.rs          # Personal/Public/Private AdminAccounts storage key 与 RPC 读取
@@ -83,6 +84,7 @@ citizenchain/node/frontend/admins/admin-management/
 ├── types.ts
 ├── api.ts
 ├── AdminListPage.tsx
+├── AdminProfileCard.tsx
 ├── AdminSetChangePage.tsx
 ├── AdminSetChangeSigningFlow.tsx
 ├── AdminWalletSelector.tsx
@@ -97,8 +99,23 @@ citizenchain/node/frontend/admins/admin-management/
 2. `AdminSetChangePage` 按机构码读取对应管理员 pallet 的 `AdminAccounts`。
 3. 用户选择已激活管理员钱包，编辑完整的新管理员集合。
 4. 后端构建 `propose_admin_set_change` 签名请求。
-5. 前端展示 QR_V1 二维码，扫码签名响应后提交。
+5. 前端使用统一扫码签名面板展示 QR_V1 二维码和摄像头响应扫码框，扫码签名响应后提交。
 6. 成功后返回机构详情页。
+
+扫码签名 UI：
+
+- 所有 Node 端需要公民钱包离线签名的页面必须复用 `frontend/shared/qr/CitizenSignaturePanel.tsx`；需要弹窗承载时复用 `CitizenSignatureModal.tsx`。
+- 统一面板固定为左侧“扫码签名”、右侧“识别签名”，文案统一为“使用 公民钱包 扫描二维码，完成离线签名。”和“识别 公民钱包 生成的签名二维码。”。
+- 面板只展示二维码有效期倒计时，不展示内部 request id 或签名账户地址；识别框下方不放取消按钮，弹窗关闭统一使用右上角关闭按钮。
+- 摄像头扫码器必须在倒计时刷新时保持同一 camera session，不得因 React 回调引用变化反复 stop/start。
+- 组件只负责展示二维码和回传签名响应原文，不解析业务 payload，不提交链上交易。管理员激活、管理员更换、投票、转账、多签提案和 runtime 升级仍由各自页面控制业务状态。
+- 地址扫码填入和通信节点配对二维码不是“签名请求 + 签名响应”流程，不纳入该组件。
+
+管理员资料展示：
+
+- `AdminAccounts.admins` 在公权/私权模块中按链上 `AdminProfile` 解码，返回 `account / admin_cid_number / name / admin_role / term_start / term_end / source`；个人多签仍是 account-only。
+- 前端所有管理员列表、管理员集合编辑、变更差异、治理提案投票状态和清算行管理员解锁都复用 `AdminProfileCard.tsx`。
+- UI 固定为顶部“序号/操作状态”、第 1 行“姓名:/职务:”、第 2 行“任期:/来源:”、第 3 行“身份CID:”、第 4 行“账户:”、第 5 行“余额:”；字段值为空时值区域留空，不隐藏标签。余额真实读取 finalized `System.Account.free`，0 余额正常显示，查询失败才留空，不能替代管理员身份资料。
 
 主体引用：
 

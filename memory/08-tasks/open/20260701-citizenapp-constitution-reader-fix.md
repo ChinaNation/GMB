@@ -1,0 +1,171 @@
+任务需求：
+- 修复公民 App 公民宪法页面的章节标题重复、每次进入转圈、默认展开、节级展开、章标题粘顶和英文显示问题。
+- 修复公民 App、链上中国和节点桌面端公民宪法展示中“款”重复拼接问题，章、节、条、款均以链上结构化正文自带标题 / 正文为唯一展示真源。
+- 将公民宪法不可修改标识统一为中文“不可修改条款”和英文“Immutable Clause”，并在公民 App、链上中国和节点桌面端展示。
+- 按用户指定替换公民宪法真源内“省级行政区 / 市级行政区 / 镇级行政区 / 省级联邦监察院 / 三级 / 各级行政区 / 国家级荣誉称号 / 各级政府”等文字。
+- 宪法内容必须继续以链上 `law_id=0` 为唯一运行态真源；本地只做展示快照，链上有效版本或内容哈希变化时更新。
+
+所属模块：
+- citizenapp
+- citizenchain/node
+- citizenchain/onchina
+- citizenchain/runtime/public/legislation-yuan
+
+输入文档：
+- memory/00-vision/project-goal.md
+- memory/00-vision/trust-boundary.md
+- memory/01-architecture/repo-map.md
+- memory/03-security/security-rules.md
+- memory/07-ai/agent-rules.md
+- memory/07-ai/chat-protocol.md
+- memory/07-ai/workflow.md
+- memory/07-ai/context-loading-order.md
+- memory/07-ai/document-boundaries.md
+- memory/07-ai/definition-of-done.md
+- memory/07-ai/pre-submit-checklist.md
+- memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md
+- memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md
+- memory/01-architecture/onchina/ONCHINA_TECHNICAL.md
+- memory/05-modules/citizenchain/node/other/other-tabs/OTHER_TABS_TECHNICAL.md
+- memory/05-modules/citizenchain/onchina/BACKEND_TECHNICAL.md
+- memory/05-modules/citizenchain/onchina/FRONTEND_TECHNICAL.md
+- memory/07-ai/module-checklists/citizenapp.md
+- memory/07-ai/module-definition-of-done/citizenapp.md
+- memory/07-ai/module-checklists/citizenchain.md
+- memory/07-ai/module-checklists/onchina.md
+- memory/07-ai/module-definition-of-done/onchina.md
+
+必须遵守：
+- `citizenchain/runtime/public/legislation-yuan/src/constitution.scale` 属 runtime 真源内容，修改前必须取得用户在当前任务中的 runtime 二次确认。
+- 不突破 CitizenApp 作为交互入口的模块边界。
+- 不保留旧的重复标题展示逻辑。
+- 不新增未经确认的目录或文件。
+- 关键 Flutter 交互与 Isar 本地缓存逻辑必须补中文注释。
+- 改代码后必须同步更新文档并清理残留。
+
+预计修改目录：
+- `citizenapp/lib/citizen/legislation/`：修复法律阅读页展示、折叠、粘顶和本地快照读取逻辑；涉及代码与残留清理。
+- `citizenapp/lib/isar/`：如需缓存只复用既有 `AppKvEntity`，不新增 schema；涉及代码注释，不新增文件。
+- `citizenchain/node/src/core/`：节点桌面端从链上当前生效宪法版本和不可修改条款 manifest 重建 HTML，去掉 UI 层款前缀并展示“不可修改条款”标识；涉及代码与样式清理。
+- `citizenchain/onchina/src/domains/legislation/`：链上中国法律只读接口补充宪法不可修改条款 manifest 投影；涉及后端 DTO 与链读代码，不新增全局 chain 目录。
+- `citizenchain/onchina/frontend/legislation/`：链上中国法律详情页按链上标题 / 正文直接展示，补充“不可修改条款”标识；涉及前端代码与残留清理。
+- `citizenchain/runtime/public/legislation-yuan/`：等待 runtime 二次确认后，按用户指定替换内置宪法 SCALE 真源文字；涉及 runtime 真源内容。
+- `memory/01-architecture/citizenapp/`：同步记录公民宪法阅读页缓存与展示目标态；涉及文档更新。
+- `memory/01-architecture/onchina/`：同步记录链上中国法律文库展示目标态；涉及文档更新。
+- `memory/05-modules/citizenchain/node/other/other-tabs/`：同步记录节点桌面公民宪法 HTML 展示目标态；涉及文档更新。
+- `memory/08-tasks/open/`：记录本任务执行与验收；涉及任务卡更新。
+
+输出物：
+- 代码
+- 中文注释
+- 测试 / 静态检查结果
+- 文档更新
+- 残留清理记录
+
+验收标准：
+- 公民宪法章、节、条标题不再重复显示编号。
+- 公民宪法款正文不再显示“第 x 款 / Paragraph x”重复前缀。
+- 公民 App、链上中国和节点桌面端均对不可修改条款显示“不可修改条款 / Immutable Clause”标识。
+- 公民宪法首次无本地快照时可转圈等待；已有快照后再次进入直接显示，并在后台按链上版本 / 内容哈希更新。
+- 公民宪法默认不展开章；用户点击右侧按钮后展开。
+- 节与章一样支持展开 / 收起，默认不展开。
+- 下滑后章标题能粘在 AppBar 下方，便于用户收起当前章。
+- 英文模式下，顶部状态、生效时间、版本史和不可修改标识显示为英文。
+- `flutter analyze` 或等效检查通过；如无法完成真实页面验收，必须记录原因。
+- OnChina 前端 build、后端 check 或等效检查通过；如无法完成真实服务页面验收，必须记录原因。
+- 节点桌面端相关 Rust / 前端检查通过；如无法完成真实桌面页面验收，必须记录原因。
+
+执行记录：
+- 已将公民宪法 `law_id=0` 主记录、版本正文和不可修改条款 manifest 的读取收敛为 finalized 链上真源；`law/law_version` 使用 `LegislationYuan.Laws` / `LegislationYuan.LawVersions` 精确 storage key，`list_laws` 仍保留小型 runtime API 查询。
+- 已复用既有 `AppKvEntity` 保存原始 SCALE 展示快照，不新增 Isar schema；本机快照只用于首屏展示，后台按链上有效版本、待生效版本、正文 `contentHash` 和 manifest 核对更新，内容未变时不重复改写。
+- 已移除前端额外拼接“第 x 章 / 第 x 节 / 第 x 条”的展示逻辑，章、节、条标题直接使用链上唯一真源自带标题，仅空标题时使用兜底。
+- 已改为章默认收起、节默认收起，用户只通过右侧按钮展开 / 收起；版本切换时重置展开状态。
+- 已使用 `PinnedHeaderSliver` + `SliverMainAxisGroup` 实现章标题在本章范围内粘顶，滚动后停在 AppBar 下方。
+- 已补齐英文模式文案：顶部 `Constitution · vN`、`Effective at ...`、版本史、投票类型、章节条标题和 `Immutable Clause` 徽章。
+- 已更新 `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md` 的公民宪法阅读页当前实现态。
+- 2026-07-01：用户追加跨端修复需求，要求修复公民 App、链上中国和节点桌面端款前缀重复，并统一不可修改条款标识；同时要求替换公民宪法真源中的指定“级”类文字。
+- 2026-07-01：已确认公民宪法真源 `constitution.scale` 内 133 个款正文全部自带中文“第一款 / 第二款 ...”与英文 `Paragraph ...`，UI 不得再手动拼接款序号。
+- 2026-07-01：公民 App 款正文改为直接显示链上 `Clause.text/textEn`，不可修改条款徽章统一为“不可修改条款 / Immutable Clause”。
+- 2026-07-01：链上中国后端 `LawView` 补充 `immutableArticleNumbers`；宪法从 `ConstitutionImmutableManifest` 投影条号，普通法律保持空数组。
+- 2026-07-01：链上中国法律详情页章、节、条、款改为链上正文优先展示，仅空标题才 fallback；法律编辑弹窗结构定位改为“章序 / 节序 / 条序 / 款序”。
+- 2026-07-01：节点桌面端 `constitution_getDocument` RAW 读取宪法 manifest，HTML 对不可修改条款追加“不可修改条款 / Immutable Clause”徽章，款正文不再额外拼接序号。
+- 2026-07-01：已同步更新 CitizenApp、OnChina 和 node other-tabs 技术文档。
+- 2026-07-01：只读计数确认 runtime 宪法真源内仍有待替换文字：`市级行政区` 34 处、`省级行政区` 33 处、`省级联邦监察院` 1 处、`由省、市、镇共三级组成` 1 处、`各级行政区` 1 处、`镇级行政区` 13 处、`国家级荣誉称号` 1 处、`各级政府` 1 处。`升级军队军人违宪指控` 1 处但用户未给目标替换词，未擅自处理。
+- 2026-07-01：用户已二次确认修改 runtime 宪法真源；已结构化解码并重写 `citizenchain/runtime/public/legislation-yuan/src/constitution.scale`，完成上述指定文字替换，文件大小 224255 → 223994 字节。
+- 2026-07-01：第 23 条“升级军队军人违宪指控”按用户未给替换目标处理，保持不改。
+- 2026-07-01：节点桌面端不可修改条款徽章改为中英文分开放置：中文“不可修改条款”跟随中文条标题，英文“Immutable Clause”跟随英文条标题，不再把中英文塞入同一个徽章。
+- 2026-07-01：链上中国法律详情页不可修改条款徽章改为跟随当前语言条标题显示，中文模式只显示中文徽章，英文模式只显示英文徽章。
+- 2026-07-01：节点桌面端和链上中国不可修改条款徽章已调整为与当前语言条标题行内垂直居中；中文徽章字号下调，避免比“第 x 条”更抢眼。
+- 2026-07-01：“级”字结构化复查结果：公民宪法中文内容仍有 57 个“级”字，分布于第 23 条 1 个、第 129 条 25 个、第 132 条 19 个、第 135 条 12 个；行政区类旧词 `市级行政区 / 省级行政区 / 镇级行政区 / 各级行政区 / 国家级荣誉称号 / 各级政府` 均为 0。
+- 2026-07-01：用户再次二次确认修改 runtime 宪法真源；已结构化重写 `constitution.scale`：第 15 条中文和英文按推荐语句收紧，第 16 条改为行政、教育、储备、立法、司法、监察等公权机构并统一重要案表决，第 20 条护宪大法官从 7 人改为 5 人并同步英文；统一学校公民教育委员会 / 校教委会、本省参议会 / 本省众议会 / 本省公民储备委员会、`职权终止` 等表述，并清理英文 `three levels / at all levels / town-level / national-level / governments at all levels` 残留。
+- 2026-07-01：用户再次二次确认修改 runtime 宪法真源；已结构化重写 `constitution.scale`：第 51 条清理 `所在市市立法会 / 所在市市监察院 / 所在省省监察院`，第 80/81/82/85/86 条将 `初学校教委会` 改为 `初学的校教委会`，第 84/85/86 条将 `该校校教委会` 改为 `该校的校教委会`，第 23 条将 `提请升级军队军人违宪指控为军队军人违宪审查` 改为 `提请将军队军人违宪指控转为军队军人违宪审查` 并同步英文，第 121/139 条改为 `市行政区设市自治司法院，简称市司法院`、`市行政区设市自治监察院，简称市监察院` 并同步英文。
+- 2026-07-01：用户确认最终语言修复并二次确认 runtime 真源修改；已结构化重写 `constitution.scale`：第 7 条第 2 款和第 51 条将 `任何机构任何人` 改为 `任何机构和个人`，第 23 条英文改为 `may petition the Constitution-Guarding Grand Justices to convert ... into constitutional review ...`，第 75 条英文改为 `no government shall have administrative management power over education institutions`。
+- 2026-07-02：用户二次确认修改 runtime 链上版本标签真源；已在 `runtime/primitives/src/genesis.rs` 增加 `GENESIS_LAW_VERSION_LABELS` 常量，固定 `(law_id=0, version=1) -> 创世版 / Genesis Edition`。
+- 2026-07-02：已在 `legislation-yuan` 增加独立 `LawVersionLabel` 结构和 `LawVersionLabels[(law_id, version)]` storage；创世构建写入公民宪法创世版本标签，并用断言保证标签常量必须匹配创世宪法 `law_id=0/version=1`。
+- 2026-07-02：已扩展 `LegislationApi_law_version_label` 查询出口；显示端仍按现有安全边界直接读取 finalized storage，不把 `v1=创世版` 写死在前端。
+- 2026-07-02：公民 App 新增 `LawVersionLabel` SCALE 镜像、链上读取和 `AppKvEntity` 本地快照；阅读页顶部版本徽章、版本史和英文模式均优先显示链上版本标签，无标签版本继续显示 `vN`。
+- 2026-07-02：节点桌面端 `constitution_getDocument` RAW 读取 `LawVersionLabels`，HTML 标题区显示链上版本标签；无标签时回退为 `vN`。
+- 2026-07-02：链上中国后端 `LawView` 增加 `versionTitle/versionTitleEn`，只从链上 `LawVersionLabels` 投影；前端法律列表和详情页优先显示版本标签，无标签时显示 `vN`。
+- 2026-07-02：已同步更新 CitizenApp、CitizenChain、节点 other-tabs、OnChina 后端/前端技术文档，明确版本标签是真源字段，不允许前端硬编码推断。
+
+验收结果：
+- `flutter analyze`：通过。
+- `flutter test test/legislation/legislation_codec_test.dart`：通过。
+- `flutter test -j 1`：通过，305 项测试通过，4 项原生 OpenMLS / smoldot 宿主库相关测试按既有条件跳过。
+- Pixel 8a 真机运行态：安装 debug 包并进入“公民 → 立法 → 公民宪法”，页面显示本地快照 / 链上内容正常；默认章收起；展开第一章后节默认收起；展开第一节后条标题无重复编号且不可修改徽章正常；切换英文后顶部状态、生效时间和徽章均为英文；滚动后当前章标题粘在 AppBar 下方；返回重进 1 秒内直接显示，不再每次进入空白等待。
+- 2026-07-01 本轮跨端追加验收：
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p node render_rebuilds_expected_anchors`：通过。
+  - `cargo check --manifest-path citizenchain/Cargo.toml -p onchina`：通过。
+  - `npm --prefix citizenchain/onchina/frontend run build`：通过；仅 Vite 既有大 chunk 提醒，build 生成的 `dist` hash 产物已恢复/清理，不纳入本任务源代码变更。
+  - `flutter analyze`：通过。
+  - `flutter test test/legislation/legislation_codec_test.dart`：通过。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p onchina law_version_decodes_and_builds_view`：通过。
+  - `git diff --check`：通过。
+- 2026-07-01 runtime 真源与分语言徽章追加验收：
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan`：通过，23 项测试通过。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p node render_rebuilds_expected_anchors`：通过，已断言中文徽章跟随中文条标题、英文徽章跟随英文条标题。
+  - `npm --prefix citizenchain/onchina/frontend run build`：通过；仅 Vite 既有大 chunk 提醒，build 生成的 `dist` hash 产物已恢复/清理。
+  - runtime 真源旧词计数复查：`市级行政区 / 省级行政区 / 省级联邦监察院 / 由省、市、镇共三级组成 / 各级行政区 / 镇级行政区 / 国家级荣誉称号 / 各级政府` 均为 0；`升级军队军人违宪指控` 保持 1。
+  - `git diff --check`：通过。
+- 2026-07-01 徽章对齐追加验收：
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p node render_rebuilds_expected_anchors`：通过。
+  - `npm --prefix citizenchain/onchina/frontend run build`：通过；仅 Vite 既有大 chunk 提醒，build 生成的 `dist` hash 产物已恢复/清理。
+  - 结构化解码 `constitution.scale` 后逐字段扫描中文标题、条正文、款正文：`级` 共 57 个，仅出现在第 23 / 129 / 132 / 135 条。
+- 2026-07-01 本批宪法真源追加验收：
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan`：通过，23 项测试通过。
+  - 结构化回读 `constitution.scale`：7 章、141 条、133 款完整解码；第 20 条仅保留 `护宪大法官5人 / five Constitution-Guarding Grand Justices`。
+  - 残留扫描：`护宪大法官7人 / seven Constitution-Guarding Grand Justices / 大学学校公民教育委员会 / 大学校教委会 / 本省省参议会 / 本省省众议会 / 本省省公民储备委员会 / 权责立即失效 / three levels / at all levels / town-level / national-level / governments at all levels` 均为 0。
+  - “级”字复查：中文内容仍为 57 个，仅分布于第 23 条“升级军队军人违宪指控”和第 129 / 132 / 135 条职级、等级描述；未发现行政区级别残留。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p node render_rebuilds_expected_anchors`：当前被工作区既有管理员管理模块编译错误阻塞，错误集中在 `node/src/admins/admin_management/commands.rs` 的 `signing` 重复导入、`build_admin_set_change_sign_request` / `submit_admin_set_change` 未解析和派生类型推断失败；该文件属于本任务外已有改动，本批宪法真源修改未触碰。
+- 2026-07-01 本批宪法真源第二次追加验收：
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan`：通过，23 项测试通过。
+  - 结构化回读 `constitution.scale`：7 章、141 条、133 款完整解码，英文缺失 0。
+  - 残留扫描：`所在市市立法会 / 所在市市监察院 / 所在省省监察院 / 市市 / 省省 / 初学校教委会 / 该校校教委会 / 该校的校教委会的独立委员 / 提请升级军队军人违宪指控为军队军人违宪审查 / to elevate the allegations of unconstitutionality against military personnel into constitutional review of military personnel / shall establish a Judicial Yuan, abbreviated as a Municipal Judicial Yuan / shall establish a Control Yuan, abbreviated as a Municipal Control Yuan` 均为 0。
+  - 新文本扫描：`所在市的市立法会` 1 处、`所在市的市监察院和所在省的省监察院` 1 处、`初学的校教委会` 6 处、`该校的校教委会` 3 处、`提请将军队军人违宪指控转为军队军人违宪审查` 1 处、`市行政区设市自治司法院，简称市司法院` 1 处、`市行政区设市自治监察院，简称市监察院` 1 处，对应英文设立句各 1 处。
+  - `git diff --check`：通过。
+- 2026-07-01 最终语言修复验收：
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan`：通过，23 项测试通过。
+  - 结构化回读 `constitution.scale`：7 章、141 条、133 款完整解码，英文缺失 0。
+  - 残留扫描：`任何机构任何人 / may petition that the allegations / all governments shall have no administrative management power` 均为 0。
+  - 新文本扫描：`任何机构和个人皆不得` 1 处、`任何机构和个人需要调用` 1 处、`may petition the Constitution-Guarding Grand Justices to convert the allegations` 1 处、`no government shall have administrative management power` 1 处。
+  - `git diff --check`：通过。
+- 2026-07-02 链上版本标签真源验收：
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p primitives genesis_law_version_label_is_constitution_genesis`：通过，已断言创世版本标签常量为 `(law_id=0, version=1, 创世版 / Genesis Edition)`。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan genesis_seeds_constitution_as_law_zero`：通过，已断言 `LawVersionLabels[0][1] = 创世版 / Genesis Edition` 且 `LawVersionLabels[0][2]` 为空。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan`：通过，23 项测试通过。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p onchina law_version_decodes_and_builds_view`：通过，已断言 `LawView.version_title/version_title_en` 投影链上版本标签。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p node render_uses_chain_law_version_label`：通过，已断言节点 HTML 使用链上版本标签显示“创世版 / Genesis Edition”。
+  - `flutter analyze`：通过。
+  - `flutter test test/legislation/legislation_codec_test.dart`：通过，6 项测试通过，新增 `decodeLawVersionLabel` 金标。
+  - `npm --prefix citizenchain/onchina/frontend run build`：通过；仅 Vite 既有大 chunk 提醒。
+  - `git diff --check`：通过。
+
+残留清理：
+- 未新增 Isar schema、未新增业务目录。
+- 已停止真机 debug 运行会话。
+- 已清理 OnChina 前端 build 产生的 `dist` hash 产物，工作区未保留本轮新增生成物。
+- 残留扫描确认公民 App、链上中国法律详情页、节点桌面宪法 HTML 渲染层不再手动拼接款序号；链上中国编辑弹窗结构标签改为“章序 / 节序 / 条序 / 款序”。
+- 残留扫描确认 node 不再存在 `immutable-cn/immutable-en` 混合徽章结构。
+- 本轮 OnChina build 产物已恢复/清理，未保留新的 `dist` hash 文件。
+- 本批 runtime 真源重写未新增目录、未新增代码文件、未保留临时生成物。
+- 本批版本标签改造未新增目录；OnChina 前端 build 产生的 `dist` hash 产物已恢复/删除，工作区未保留本轮生成物。

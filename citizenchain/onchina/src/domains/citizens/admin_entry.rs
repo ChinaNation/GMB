@@ -32,9 +32,9 @@ pub(crate) struct AdminCreateCitizenInput {
     pub(crate) citizen_given_name: String,
     pub(crate) citizen_sex: String,
     pub(crate) citizen_birth_date: String,
-    pub(crate) residence_province_name: String,
-    pub(crate) residence_city_name: String,
-    pub(crate) residence_town_code: String,
+    pub(crate) province_name: String,
+    pub(crate) city_name: String,
+    pub(crate) town_code: String,
     pub(crate) birth_province_code: String,
     pub(crate) birth_city_code: String,
     pub(crate) birth_town_code: String,
@@ -56,9 +56,9 @@ pub(crate) struct AdminCreateCitizenOutput {
     pub(crate) wallet_address: Option<String>,
     pub(crate) passport_valid_from: String,
     pub(crate) passport_valid_until: String,
-    pub(crate) residence_province_code: String,
-    pub(crate) residence_city_code: String,
-    pub(crate) residence_town_code: String,
+    pub(crate) province_code: String,
+    pub(crate) city_code: String,
+    pub(crate) town_code: String,
     pub(crate) birth_province_code: String,
     pub(crate) birth_city_code: String,
     pub(crate) birth_town_code: String,
@@ -108,37 +108,30 @@ pub(crate) async fn admin_create_citizen(
         return api_error(StatusCode::BAD_REQUEST, 1001, "未满16周岁不能设置选举资格");
     }
 
-    let (residence_province_name, residence_city_name) = match resolve_residence_scope(
-        &ctx,
-        &input.residence_province_name,
-        &input.residence_city_name,
-    ) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    let residence_province_code =
-        match crate::cid::china::province_code_by_name(residence_province_name.as_str()) {
-            Some(v) => v.to_string(),
-            None => return api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理省份"),
-        };
-    let residence_city_code = match crate::cid::china::city_code_by_name(
-        residence_province_name.as_str(),
-        residence_city_name.as_str(),
-    ) {
-        Some(v) => v.to_string(),
-        None => return api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理城市"),
-    };
-    let residence_town_code =
-        match required_trimmed(&input.residence_town_code, "residence_town_code") {
+    let (province_name, city_name) =
+        match resolve_citizen_scope(&ctx, &input.province_name, &input.city_name) {
             Ok(v) => v,
             Err(resp) => return resp,
         };
+    let province_code = match crate::cid::china::province_code_by_name(province_name.as_str()) {
+        Some(v) => v.to_string(),
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理省份"),
+    };
+    let city_code =
+        match crate::cid::china::city_code_by_name(province_name.as_str(), city_name.as_str()) {
+            Some(v) => v.to_string(),
+            None => return api_error(StatusCode::BAD_REQUEST, 1001, "未知的办理城市"),
+        };
+    let town_code = match required_trimmed(&input.town_code, "town_code") {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
     if !crate::cid::china::town_exists(
-        residence_province_code.as_str(),
-        residence_city_code.as_str(),
-        residence_town_code.as_str(),
+        province_code.as_str(),
+        city_code.as_str(),
+        town_code.as_str(),
     ) {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "未知的居住镇代码");
+        return api_error(StatusCode::BAD_REQUEST, 1001, "未知的镇代码");
     }
 
     let birth_province_code =
@@ -172,9 +165,9 @@ pub(crate) async fn admin_create_citizen(
         &citizen_given_name,
         &citizen_sex,
         citizen_birth_date,
-        &residence_province_code,
-        &residence_city_code,
-        &residence_town_code,
+        &province_code,
+        &city_code,
+        &town_code,
         &birth_province_code,
         &birth_city_code,
         &birth_town_code,
@@ -182,8 +175,8 @@ pub(crate) async fn admin_create_citizen(
     let cid_number = match generate_cid_number(GenerateCidInput {
         account_pubkey: cid_seed.as_str(),
         p1: "1",
-        province_name: residence_province_name.as_str(),
-        city_name: residence_city_name.as_str(),
+        province_name: province_name.as_str(),
+        city_name: city_name.as_str(),
         institution: "CTZN",
     }) {
         Ok(v) => v,
@@ -202,8 +195,8 @@ pub(crate) async fn admin_create_citizen(
 
     let now = Utc::now();
     let passport_no = match state.db.allocate_passport_no(
-        residence_province_code.as_str(),
-        residence_city_code.as_str(),
+        province_code.as_str(),
+        city_code.as_str(),
         cid_number.as_str(),
     ) {
         Ok(v) => v,
@@ -239,11 +232,9 @@ pub(crate) async fn admin_create_citizen(
         passport_valid_from: valid_from.clone(),
         passport_valid_until: valid_until.clone(),
         status_updated_at: Some(now.timestamp()),
-        province_code: residence_province_code.clone(),
-        city_code: residence_city_code.clone(),
-        residence_province_code: residence_province_code.clone(),
-        residence_city_code: residence_city_code.clone(),
-        residence_town_code: residence_town_code.clone(),
+        province_code: province_code.clone(),
+        city_code: city_code.clone(),
+        town_code: town_code.clone(),
         birth_province_code: birth_province_code.clone(),
         birth_city_code: birth_city_code.clone(),
         birth_town_code: birth_town_code.clone(),
@@ -276,9 +267,9 @@ pub(crate) async fn admin_create_citizen(
             "passport_no": passport_no,
             "citizen_family_name": record.citizen_family_name,
             "citizen_given_name": record.citizen_given_name,
-            "residence_province_code": residence_province_code,
-            "residence_city_code": residence_city_code,
-            "residence_town_code": residence_town_code,
+            "province_code": province_code,
+            "city_code": city_code,
+            "town_code": town_code,
             "birth_province_code": birth_province_code,
             "birth_city_code": birth_city_code,
             "birth_town_code": birth_town_code,
@@ -301,9 +292,9 @@ pub(crate) async fn admin_create_citizen(
         wallet_address: record.wallet_address,
         passport_valid_from: record.passport_valid_from,
         passport_valid_until: record.passport_valid_until,
-        residence_province_code: record.residence_province_code,
-        residence_city_code: record.residence_city_code,
-        residence_town_code: record.residence_town_code,
+        province_code: record.province_code,
+        city_code: record.city_code,
+        town_code: record.town_code,
         birth_province_code: record.birth_province_code,
         birth_city_code: record.birth_city_code,
         birth_town_code: record.birth_town_code,
@@ -351,13 +342,13 @@ fn normalize_citizen_sex(value: &str) -> Result<String, axum::response::Response
     }
 }
 
-fn resolve_residence_scope(
+fn resolve_citizen_scope(
     ctx: &crate::auth::login::AdminAuthContext,
     requested_province_name: &str,
     requested_city_name: &str,
 ) -> Result<(String, String), axum::response::Response> {
-    let province_name = required_trimmed(requested_province_name, "residence_province_name")?;
-    let city_name = required_trimmed(requested_city_name, "residence_city_name")?;
+    let province_name = required_trimmed(requested_province_name, "province_name")?;
+    let city_name = required_trimmed(requested_city_name, "city_name")?;
     let scope = crate::scope::get_visible_scope(ctx);
     if !scope.can_write {
         return Err(api_error(StatusCode::FORBIDDEN, 1003, "当前登录无办理权限"));
@@ -366,14 +357,14 @@ fn resolve_residence_scope(
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "residence_province_name out of current admin scope",
+            "province_name out of current admin scope",
         ));
     }
     if !scope.includes_city(city_name.as_str()) {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "residence_city_name out of current admin scope",
+            "city_name out of current admin scope",
         ));
     }
     let Some(province) = crate::cid::china::provinces()
@@ -394,9 +385,9 @@ fn local_citizen_cid_seed(
     citizen_given_name: &str,
     citizen_sex: &str,
     citizen_birth_date: NaiveDate,
-    residence_province_code: &str,
-    residence_city_code: &str,
-    residence_town_code: &str,
+    province_code: &str,
+    city_code: &str,
+    town_code: &str,
     birth_province_code: &str,
     birth_city_code: &str,
     birth_town_code: &str,
@@ -410,9 +401,9 @@ fn local_citizen_cid_seed(
         citizen_given_name,
         citizen_sex,
         birth_date_text.as_str(),
-        residence_province_code,
-        residence_city_code,
-        residence_town_code,
+        province_code,
+        city_code,
+        town_code,
         birth_province_code,
         birth_city_code,
         birth_town_code,
@@ -468,9 +459,9 @@ fn citizen_archive_hash(record: &CitizenRecord) -> String {
         "citizen_given_name": record.citizen_given_name,
         "citizen_sex": record.citizen_sex,
         "citizen_birth_date": record.citizen_birth_date,
-        "residence_province_code": record.residence_province_code,
-        "residence_city_code": record.residence_city_code,
-        "residence_town_code": record.residence_town_code,
+        "province_code": record.province_code,
+        "city_code": record.city_code,
+        "town_code": record.town_code,
         "birth_province_code": record.birth_province_code,
         "birth_city_code": record.birth_city_code,
         "birth_town_code": record.birth_town_code,
@@ -500,8 +491,8 @@ impl Db {
                             citizen_given_name, citizen_sex, citizen_birth_date, wallet_pubkey, wallet_address,
                             wallet_sig_alg, wallet_verified_at, citizen_status, voting_eligible,
                             passport_valid_from, passport_valid_until, status_updated_at,
-                            province_code, city_code, residence_province_code, residence_city_code,
-                            residence_town_code, birth_province_code, birth_city_code, birth_town_code,
+                            province_code, city_code, town_code,
+                            birth_province_code, birth_city_code, birth_town_code,
                             archive_hash, onchain_tx_hash, onchain_block_number, onchain_at,
                             created_by, created_at, updated_by, updated_at
                      FROM citizens
@@ -570,19 +561,17 @@ pub(crate) fn citizen_record_from_row(row: &postgres::Row) -> CitizenRecord {
         status_updated_at: row.get(15),
         province_code: row.get(16),
         city_code: row.get(17),
-        residence_province_code: row.get(18),
-        residence_city_code: row.get(19),
-        residence_town_code: row.get(20),
-        birth_province_code: row.get(21),
-        birth_city_code: row.get(22),
-        birth_town_code: row.get(23),
-        archive_hash: row.get(24),
-        onchain_tx_hash: row.get(25),
-        onchain_block_number: row.get(26),
-        onchain_at: row.get(27),
-        created_by: row.get(28),
-        created_at: row.get(29),
-        updated_by: row.get(30),
-        updated_at: row.get(31),
+        town_code: row.get(18),
+        birth_province_code: row.get(19),
+        birth_city_code: row.get(20),
+        birth_town_code: row.get(21),
+        archive_hash: row.get(22),
+        onchain_tx_hash: row.get(23),
+        onchain_block_number: row.get(24),
+        onchain_at: row.get(25),
+        created_by: row.get(26),
+        created_at: row.get(27),
+        updated_by: row.get(28),
+        updated_at: row.get(29),
     }
 }

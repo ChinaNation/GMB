@@ -212,6 +212,17 @@ class LawVersion {
   final int effectiveAt;
 }
 
+/// 法律版本展示标签(链端 `LawVersionLabels[(law_id, version)]`)。
+class LawVersionLabel {
+  const LawVersionLabel({required this.title, this.titleEn});
+
+  /// 中文版本名,例如公民宪法 `version=1` 的“创世版”。
+  final String title;
+
+  /// 英文版本名,例如 `Genesis Edition`。
+  final String? titleEn;
+}
+
 /// 宪法不可修改条款 manifest(链端 ConstitutionImmutableManifest)。
 class ImmutableManifest {
   const ImmutableManifest({

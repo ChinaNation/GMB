@@ -1,3 +1,5 @@
+import type { AdminProfileInfo } from '../../../governance/types';
+
 // 清算行机构身份只读 DTO,与 Tauri 后端 transaction/offchain_transaction/institution_read/types.rs 对齐。
 
 export type EligibleClearingBankCandidate = {
@@ -42,8 +44,8 @@ export type InstitutionDetail = {
 
   adminsLen: number;
   threshold: number;
-  /** 管理员公钥 32B 的 SS58 列表。 */
-  adminsSs58: string[];
+  /** 管理员完整公开资料。 */
+  admins: AdminProfileInfo[];
 
   /** 机构生命周期:Pending(投票中)/ Active(已生效)/ Closed(已注销)。 */
   status: 'Pending' | 'Active' | 'Closed';

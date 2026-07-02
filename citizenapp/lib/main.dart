@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:citizenapp/8964/square_tab_page.dart';
 import 'package:citizenapp/citizen/citizen_tab_page.dart';
-import 'package:citizenapp/citizen/shared/institution_account_list_page.dart';
 import 'package:citizenapp/im/im_runtime.dart';
 import 'package:citizenapp/im/im_tab_page.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
@@ -317,7 +317,6 @@ class _AppShellState extends State<AppShell> {
   int _currentIndex = 3;
   int _pendingVoteCount = 0;
   bool _isRooted = false;
-  bool _multisigTabLoaded = false;
 
   @override
   void initState() {
@@ -352,12 +351,9 @@ class _AppShellState extends State<AppShell> {
     }
   });
 
-  // 中文注释：多签列表涉及本地账户发现，等用户真正点击多签 Tab 后再构建。
   List<Widget> get _pages => [
         _citizenPage,
-        _multisigTabLoaded
-            ? const InstitutionAccountListPage()
-            : const SizedBox.shrink(),
+        const SquareTabPage(),
         ImTabPage(runtime: ImRuntime()),
         const TransactionTabPage(),
         ProfilePage(showSettingsUpdateDot: _updateController.state.hasUpdate),
@@ -414,9 +410,6 @@ class _AppShellState extends State<AppShell> {
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
             setState(() {
-              if (index == 1) {
-                _multisigTabLoaded = true;
-              }
               _currentIndex = index;
             });
           },
@@ -436,9 +429,9 @@ class _AppShellState extends State<AppShell> {
                 ),
                 label: '公民'),
             const NavigationDestination(
-              icon: Icon(Icons.account_tree_outlined),
-              selectedIcon: Icon(Icons.account_tree),
-              label: '多签',
+              icon: Icon(Icons.explore_outlined),
+              selectedIcon: Icon(Icons.explore),
+              label: '广场',
             ),
             const NavigationDestination(
               icon: Icon(Icons.chat_bubble_outline_rounded),
@@ -480,126 +473,6 @@ class _AppShellState extends State<AppShell> {
                 label: '我的'),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
-
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  int _selectedTab = 0;
-  static const List<String> _tabs = ['推荐', '视频', '图文'];
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          const SizedBox(height: 10),
-          _StyledTabs(
-            tabs: _tabs,
-            selectedIndex: _selectedTab,
-            onSelected: (index) {
-              setState(() {
-                _selectedTab = index;
-              });
-            },
-          ),
-          const Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.explore_outlined,
-                      size: 48, color: AppTheme.textTertiary),
-                  SizedBox(height: 12),
-                  Text(
-                    '广场页面（开发中）',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 精致的 tab 切换组件。
-class _StyledTabs extends StatelessWidget {
-  const _StyledTabs({
-    required this.tabs,
-    required this.selectedIndex,
-    required this.onSelected,
-  });
-
-  final List<String> tabs;
-  final int selectedIndex;
-  final ValueChanged<int> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 48, vertical: 4),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceMuted,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Row(
-        children: [
-          for (int i = 0; i < tabs.length; i++)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => onSelected(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeInOut,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: i == selectedIndex
-                        ? AppTheme.surfaceWhite
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    boxShadow: i == selectedIndex
-                        ? [
-                            BoxShadow(
-                              color: AppTheme.primary.withAlpha(15),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Text(
-                    tabs[i],
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: i == selectedIndex
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                      color: i == selectedIndex
-                          ? AppTheme.primary
-                          : AppTheme.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

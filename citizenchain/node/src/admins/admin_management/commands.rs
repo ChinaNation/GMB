@@ -1,7 +1,11 @@
 use primitives::cid::code::{code_bytes, InstitutionCode};
+use std::collections::BTreeMap;
 use tauri::AppHandle;
 
-use crate::{governance::signing::VoteSignRequestResult, home};
+use crate::{
+    governance::{chain_query, institution, signing::VoteSignRequestResult},
+    home,
+};
 
 use super::{
     account_id, signing, storage,
@@ -118,6 +122,34 @@ pub async fn get_admin_account_state(
     })
     .await
     .map_err(|e| format!("admin account task failed: {e}"))?
+}
+
+/// 批量读取管理员账户 finalized free 余额。
+///
+/// 中文注释:管理员卡片只做展示,余额读取必须钉 finalized 块,并且同一批账户共用
+/// 同一个 finalized hash,避免列表内不同卡片落在不同块高。
+#[tauri::command]
+pub async fn get_admin_account_balances(
+    app: AppHandle,
+    account_hexes: Vec<String>,
+) -> Result<BTreeMap<String, Option<String>>, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法查询管理员余额".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let block_hash = chain_query::fetch_finalized_head()?;
+        let mut balances = BTreeMap::new();
+        for raw in account_hexes {
+            let clean = account_id::normalize_pubkey_hex(raw.as_str())?;
+            let value = institution::fetch_balance_at(clean.as_str(), Some(block_hash.as_str()))?
+                .map(|fen| fen.to_string());
+            balances.insert(clean, value);
+        }
+        Ok(balances)
+    })
+    .await
+    .map_err(|e| format!("admin balances task failed: {e}"))?
 }
 
 /// 构建管理员更换提案签名请求。

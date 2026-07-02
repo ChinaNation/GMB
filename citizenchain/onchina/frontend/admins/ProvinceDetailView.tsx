@@ -15,13 +15,13 @@ import { isTier1Registry, TIER2_REGISTRY_CODE } from '../platform/registryTier';
 import type { AdminAuth } from '../auth/types';
 import type { CidCityItem } from '../china/api';
 import type { CityRegistryAdminRow } from './city_registry_admins_api';
-import { tryEncodeSs58 } from '../utils/ss58';
 import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
 import { MAX_CITY_REGISTRY_ADMINS_PER_CITY, sameHexAccount } from './adminUtils';
 import type { RegistryAdminsSharedState } from './adminUtils';
 import { usePasskeyRegistration } from '../auth/passkey/usePasskey';
 import { AddCityRegistryAdminModal } from './AddCityRegistryAdminModal';
 import { FederalRegistryAdminSubTab } from './FederalRegistryAdminSubTab';
+import { AdminProfileCard } from './AdminProfileCard';
 import { GovDetailPage } from '../gov/GovDetailPage';
 import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
 import type { InstitutionListRow } from '../subjects/api';
@@ -110,7 +110,6 @@ export function CityRegistryView({ state }: RegistryViewProps) {
     cityRegistryAdminCities,
     cityRegistryAdminCitiesLoading,
     setAddCityRegistryOpen,
-    onUpdateCityRegistry,
     onDeleteCityRegistry,
     cityRegistryCid,
   } = state;
@@ -164,7 +163,6 @@ export function CityRegistryView({ state }: RegistryViewProps) {
             cityRegistryAdminListPage={cityRegistryAdminListPage}
             setCityRegistryListPage={setCityRegistryListPage}
             setAddCityRegistryOpen={setAddCityRegistryOpen}
-            onUpdateCityRegistry={onUpdateCityRegistry}
             onDeleteCityRegistry={onDeleteCityRegistry}
           />
         }
@@ -329,14 +327,13 @@ function CityRegistryListTable({ auth, province_name, cities, citiesLoading, cit
 
 // ── 某市的市注册局管理员列表(显示在市注册局机构详情页的“管理员列表”tab) ──
 
-function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins, cityRegistryAdminsLoading, cityRegistryAdminListPage, setCityRegistryListPage, setAddCityRegistryOpen, onUpdateCityRegistry, onDeleteCityRegistry }: {
+function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins, cityRegistryAdminsLoading, cityRegistryAdminListPage, setCityRegistryListPage, setAddCityRegistryOpen, onDeleteCityRegistry }: {
   canEditCityRegistryAdmins: boolean;
   cityRegistryAdmins: CityRegistryAdminRow[];
   cityRegistryAdminsLoading: boolean;
   cityRegistryAdminListPage: number;
   setCityRegistryListPage: (v: number) => void;
   setAddCityRegistryOpen: (v: boolean) => void;
-  onUpdateCityRegistry: (row: CityRegistryAdminRow) => void;
   onDeleteCityRegistry: (row: CityRegistryAdminRow) => void;
 }) {
   const { auth } = useAuth();
@@ -377,16 +374,22 @@ function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins,
           showTotal: (total) => `共 ${total} 条`,
         }}
         columns={[
-          { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => (cityRegistryAdminListPage - 1) * 10 + index + 1 },
-          { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
-          { title: '账户', dataIndex: 'admin_account', align: 'center', render: (v: string) => tryEncodeSs58(v) },
+          {
+            title: '管理员信息',
+            dataIndex: 'admin_account',
+            render: (_v, row, index) => (
+              <AdminProfileCard
+                profile={row}
+                index={(cityRegistryAdminListPage - 1) * 10 + index + 1}
+              />
+            ),
+          },
           {
             title: '操作', width: 320, align: 'center' as const,
             render: (_v: unknown, row: CityRegistryAdminRow) => {
               const isSelf = sameHexAccount(row.admin_account, auth?.admin_account);
               return (
                 <Space>
-                  {canEditCityRegistryAdmins ? <Button size="small" onClick={() => onUpdateCityRegistry(row)}>编辑</Button> : null}
                   {canEditCityRegistryAdmins ? <Button size="small" danger onClick={() => onDeleteCityRegistry(row)}>删除</Button> : null}
                   {/* passkey 登录密钥 self-only:只能为当前登录管理员自己注册本机认证器。 */}
                   {isSelf ? (

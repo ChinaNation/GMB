@@ -41,6 +41,28 @@ pub struct AccountWithBalance {
     pub is_default: bool,
 }
 
+/// 链上机构管理员公开资料，字段与 `admin-primitives::AdminProfile` 展示语义一致。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminProfileDisplay {
+    /// 管理员密码学账户，hex 不含 0x。
+    pub account: String,
+    /// 管理员实名锚:注册局签发的 CID 号。
+    pub admin_cid_number: String,
+    /// 姓名快照。
+    pub name: String,
+    /// 对外法定职务。
+    pub admin_role: String,
+    /// 任期开始(天数自纪元;无任期为 0)。
+    pub term_start: u32,
+    /// 任期结束(天数自纪元;无任期为 0)。
+    pub term_end: u32,
+    /// 职务/任期来源判别值。
+    pub source: u8,
+    /// 来源中文标签；未知来源留空。
+    pub source_label: String,
+}
+
 /// 机构详情 = `PublicManage/PrivateManage::Institutions[cid_number]`(机构最小集)
 /// + 派生的主/费账户余额 + 管理员模块管理员集合 + internal-vote 动态阈值。
 #[derive(Debug, Clone, Serialize)]
@@ -58,8 +80,8 @@ pub struct InstitutionDetail {
     pub other_accounts: Vec<AccountWithBalance>,
     pub admins_len: u32,
     pub threshold: u32,
-    /// 管理员公钥 32B 的 SS58 列表。
-    pub admins_ss58: Vec<String>,
+    /// 管理员完整公开资料。
+    pub admins: Vec<AdminProfileDisplay>,
     /// 机构生命周期:Pending(投票中)/ Active(已生效)/ Closed(已注销)。
     pub status: String,
     pub created_at: u64,

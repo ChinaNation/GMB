@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
-import { QrScanner } from '../../shared/qr/QrScanner';
-import type { VoteSignRequestResult } from './types';
+import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 
 type Props = {
-  request: VoteSignRequestResult;
   requestJson: string;
   submitting: boolean;
   error: string | null;
@@ -14,10 +11,7 @@ type Props = {
   onDone: () => void;
 };
 
-type Step = 'qr' | 'scan';
-
 export function AdminSetChangeSigningFlow({
-  request,
   requestJson,
   submitting,
   error,
@@ -26,15 +20,15 @@ export function AdminSetChangeSigningFlow({
   onBackToForm,
   onDone,
 }: Props) {
-  const [step, setStep] = useState<Step>('qr');
   const [countdown, setCountdown] = useState(90);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (step !== 'qr' || txHash || error) return;
+    if (txHash || error || submitting) return;
     if (countdown <= 0) return;
     const timer = setTimeout(() => setCountdown((value) => value - 1), 1000);
     return () => clearTimeout(timer);
-  }, [step, countdown, txHash, error]);
+  }, [countdown, txHash, error, submitting]);
 
   if (txHash) {
     return (
@@ -61,24 +55,16 @@ export function AdminSetChangeSigningFlow({
     );
   }
 
-  if (step === 'scan') {
-    return (
-      <div className="vote-signing-body">
-        <p className="qr-instruction">将签名响应二维码对准摄像头</p>
-        <QrScanner onScan={onScan} onError={(_error) => setStep('qr')} />
-        <button className="cancel-button" onClick={() => setStep('qr')}>返回</button>
-      </div>
-    );
-  }
-
   return (
-    <div className="vote-signing-body qr-step">
-      <p className="qr-instruction">用 citizenwallet 离线设备扫描此二维码完成签名</p>
-      <div className="qr-container"><QRCodeSVG value={requestJson} size={280} level="L" /></div>
-      <p className="qr-countdown">剩余 <strong>{countdown}</strong> 秒</p>
-      <code className="tx-hash">请求 ID: {request.requestId}</code>
-      <button className="vote-signing-confirm" onClick={() => setStep('scan')}>已签名，扫描响应</button>
-      <button className="cancel-button" onClick={onBackToForm}>返回修改</button>
+    <div className="vote-signing-body">
+      <CitizenSignaturePanel
+        qrValue={requestJson}
+        countdownSeconds={countdown}
+        status={scanError ? 'error' : 'ready'}
+        error={scanError}
+        onScan={onScan}
+        onScanError={setScanError}
+      />
     </div>
   );
 }

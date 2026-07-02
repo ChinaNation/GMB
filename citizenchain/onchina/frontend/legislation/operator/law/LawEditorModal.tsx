@@ -161,7 +161,7 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
           {chapters.map((chapter, ci) => (
             <div key={ci} style={blockStyle(0)}>
               <Space wrap style={{ width: '100%' }}>
-                <Typography.Text strong>第{chapter.number}章</Typography.Text>
+                <Typography.Text strong>章序 {chapter.number}</Typography.Text>
                 <Input
                   style={{ width: 200 }}
                   placeholder="章名"
@@ -179,7 +179,7 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
               {chapter.sections.map((section, si) => (
                 <div key={si} style={blockStyle(12)}>
                   <Space wrap>
-                    <Typography.Text>第{section.number}节</Typography.Text>
+                    <Typography.Text>节序 {section.number}</Typography.Text>
                     <Input
                       style={{ width: 180 }}
                       placeholder="节名"
@@ -197,7 +197,7 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
                   {section.articles.map((article, ai) => (
                     <div key={ai} style={blockStyle(12)}>
                       <Space wrap>
-                        <Typography.Text>第{article.number}条</Typography.Text>
+                        <Typography.Text>条序 {article.number}</Typography.Text>
                         <Input
                           style={{ width: 160 }}
                           placeholder="条标题"
@@ -221,7 +221,7 @@ export function LawEditorModal({ open, auth, lawAction, tier, voteType, onClose 
                       {article.clauses.map((clause, li) => (
                         <div key={li} style={blockStyle(12)}>
                           <Space style={{ width: '100%' }}>
-                            <Typography.Text type="secondary">第{clause.number}款</Typography.Text>
+                            <Typography.Text type="secondary">款序 {clause.number}</Typography.Text>
                             <Input
                               style={{ width: 360 }}
                               placeholder="款正文"

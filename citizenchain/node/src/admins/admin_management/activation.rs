@@ -402,7 +402,7 @@ pub async fn build_activate_admin_request(
     .await
     .map_err(|e| format!("查询管理员账户失败: {e}"))??;
 
-    if !state.admins.iter().any(|a| *a == pubkey_clean) {
+    if !state.admins.iter().any(|a| a.account == pubkey_clean) {
         return Err("该公钥不在此管理员账户的链上管理员列表中".to_string());
     }
 
@@ -581,7 +581,7 @@ pub async fn verify_activate_admin(
         ));
     }
     validate_activation_account(&state, Some(decoded.institution_code))?;
-    if !state.admins.iter().any(|a| *a == pubkey_clean) {
+    if !state.admins.iter().any(|a| a.account == pubkey_clean) {
         return Err("该公钥不在此管理员账户的链上管理员列表中".to_string());
     }
 
@@ -692,7 +692,10 @@ pub async fn get_activated_admins(
                     }
                     a.institution_code == state.institution_code
                         && a.kind == state.kind
-                        && state.admins.iter().any(|admin| *admin == a.pubkey_hex)
+                        && state
+                            .admins
+                            .iter()
+                            .any(|admin| admin.account == a.pubkey_hex)
                 });
                 if activations.len() != before_len {
                     let _ = save_activations(&app, &activations);

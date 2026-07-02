@@ -4,7 +4,7 @@
 //! PasskeyColdSign 档 commit 校验冷钱包签名且 signer 须 ∈ 本机构链上 Active 集合。
 
 use axum::{
-    extract::{Path, State},
+    extract::State,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
@@ -108,30 +108,9 @@ struct CityRegistryIdPayload {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UpdateCityRegistryActionPayload {
-    id: u64,
-    #[serde(default)]
-    admin_name: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct UpdateFederalRegistryActionPayload {
-    id: u64,
-    admin_name: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 struct ReplaceFederalRegistryActionPayload {
     id: u64,
     admin_account: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct UpdateAdminNameInput {
-    admin_name: String,
 }
 
 struct ActionPreview {
@@ -555,84 +534,6 @@ pub(crate) async fn commit_admin_action(
     .into_response()
 }
 
-pub(crate) async fn update_city_registry_login_state(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<u64>,
-    Json(input): Json<UpdateAdminNameInput>,
-) -> impl IntoResponse {
-    let ctx = match require_admin_any(&state, &headers) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    let action_type = AdminActionType::UpdateSubordinateRegistry;
-    if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
-        return resp;
-    }
-    // Passkey 重要档 step-up:消费 passkey 断言(fail-closed)。
-    if let Err(resp) =
-        crate::auth::passkey::require_passkey_assertion(&state, &headers, &ctx.admin_account)
-    {
-        return resp;
-    }
-    let payload = UpdateCityRegistryActionPayload {
-        id,
-        admin_name: Some(input.admin_name),
-    };
-    let result = state
-        .db
-        .with_client(move |conn| apply_update_city_registry_conn(conn, &ctx, &payload));
-    let data = match result {
-        Ok(v) => v,
-        Err(err) => return admin_action_error(err),
-    };
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data,
-    })
-    .into_response()
-}
-
-pub(crate) async fn update_federal_registry_login_state(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<u64>,
-    Json(input): Json<UpdateAdminNameInput>,
-) -> impl IntoResponse {
-    let ctx = match require_admin_any(&state, &headers) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    let action_type = AdminActionType::UpdateGoverningRegistry;
-    if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
-        return resp;
-    }
-    // Passkey 重要档 step-up:消费 passkey 断言(fail-closed)。
-    if let Err(resp) =
-        crate::auth::passkey::require_passkey_assertion(&state, &headers, &ctx.admin_account)
-    {
-        return resp;
-    }
-    let payload = UpdateFederalRegistryActionPayload {
-        id,
-        admin_name: input.admin_name,
-    };
-    let result = state
-        .db
-        .with_client(move |conn| apply_update_federal_registry_conn(conn, &ctx, &payload));
-    let data = match result {
-        Ok(v) => v,
-        Err(err) => return admin_action_error(err),
-    };
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data,
-    })
-    .into_response()
-}
-
 pub(crate) fn require_admin_security_grant(
     state: &AppState,
     headers: &HeaderMap,
@@ -733,9 +634,6 @@ fn preview_action_conn(
                 auth_type: action_type.auth_type(),
             })
         }
-        AdminActionType::UpdateSubordinateRegistry => {
-            Err("http:bad_request:update city_registry is login state action".to_string())
-        }
         AdminActionType::DeleteSubordinateRegistry => {
             let input: CityRegistryIdPayload = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
@@ -750,9 +648,6 @@ fn preview_action_conn(
                 target: city_registry.admin_account,
                 auth_type: action_type.auth_type(),
             })
-        }
-        AdminActionType::UpdateGoverningRegistry => {
-            Err("http:bad_request:update federal admin is login state action".to_string())
         }
         AdminActionType::ReplaceGoverningRegistry => {
             let input: ReplaceFederalRegistryActionPayload =
@@ -1068,20 +963,6 @@ fn require_manageable_city_registry_conn(
     Ok(city_registry)
 }
 
-fn preview_update_city_registry_conn(
-    conn: &mut Client,
-    ctx: &AdminAuthContext,
-    input: &UpdateCityRegistryActionPayload,
-) -> Result<(CityRegistryAdminRow, CityRegistryAdminRow, String), String> {
-    let mut city_registry = require_manageable_city_registry_conn(conn, ctx, input.id)?;
-    let before = city_registry_row_from_user_conn(conn, &city_registry)?;
-    if let Some(next_name) = input.admin_name.as_deref() {
-        city_registry.admin_name = validate_admin_name(next_name)?;
-    }
-    let after = city_registry_row_from_user_conn(conn, &city_registry)?;
-    Ok((before, after, city_registry.admin_account))
-}
-
 fn validate_replacement_federal_registry_account_conn(
     conn: &mut Client,
     current: &AdminUser,
@@ -1143,6 +1024,14 @@ fn federal_registry_row_value(
         province_name,
         admin_account: admin.admin_account.clone(),
         admin_name: admin.admin_name.clone(),
+        admin_cid_number: String::new(),
+        name: String::new(),
+        admin_role: String::new(),
+        term_start: 0,
+        term_end: 0,
+        source: u8::MAX,
+        source_label: String::new(),
+        balance_fen: None,
         built_in: admin.built_in,
         created_at: admin.created_at,
         updated_at: admin.updated_at,
@@ -1326,33 +1215,6 @@ fn apply_delete_city_registry_conn(
     )
     .map_err(|e| format!("delete city admin failed: {e}"))?;
     Ok(json!({ "deleted": true, "admin_account": admin_account }))
-}
-
-fn apply_update_city_registry_conn(
-    conn: &mut Client,
-    ctx: &AdminAuthContext,
-    input: &UpdateCityRegistryActionPayload,
-) -> Result<serde_json::Value, String> {
-    let (before, after, _) = preview_update_city_registry_conn(conn, ctx, input)?;
-    let mut next = require_manageable_city_registry_conn(conn, ctx, input.id)?;
-    next.admin_name = after.admin_name;
-    next.updated_at = Some(Utc::now());
-    repo::upsert_admin_conn(conn, &next)?;
-    let _ = before;
-    serde_json::to_value(city_registry_row_from_user_conn(conn, &next)?)
-        .map_err(|e| format!("encode city admin failed: {e}"))
-}
-
-fn apply_update_federal_registry_conn(
-    conn: &mut Client,
-    ctx: &AdminAuthContext,
-    input: &UpdateFederalRegistryActionPayload,
-) -> Result<serde_json::Value, String> {
-    let (mut admin, province) = require_manageable_federal_registry_conn(conn, ctx, input.id)?;
-    admin.admin_name = validate_admin_name(input.admin_name.as_str())?;
-    admin.updated_at = Some(Utc::now());
-    repo::upsert_admin_conn(conn, &admin)?;
-    federal_registry_row_value(&admin, province)
 }
 
 fn apply_replace_federal_registry_conn(

@@ -1,12 +1,9 @@
-// 多签统一账户列表页(个人 + 机构 混合视图)。
+// 个人多签账户列表页。
 //
-// 设计要点:
-// - 个人多签数据源 = transaction/personal-manage;机构链态读 = citizen/institution(机构管理层)。
-//   本页只是 UI 编排壳子,并行加载两套数据源,合并按时间倒序展示。
-// - 首屏只读本地 Isar,链上状态刷新和反向发现均转为后台任务;
-//   下拉刷新才强制查链和全量 discovery。
-// - 反向校验由各自 discovery service 内部完成,本页不涉及。
-// - 右上角 "+" 仅进入个人多签创建(机构多签创建已收归 onchina 控制台 + 冷钱包)。
+// 设计边界：
+// - 本页只读取、发现、刷新和展示个人多签账户。
+// - 机构账户由 OnChina 注册局登记，CitizenApp 这里不再发现或展示机构多签。
+// - 入口放在交易 tab，避免把个人自助多签与机构登记流程混在一起。
 
 import 'dart:async' show unawaited;
 import 'dart:typed_data';
@@ -15,84 +12,47 @@ import 'package:flutter/material.dart';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import 'package:citizenapp/citizen/shared/admin_accounts_scan_service.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-import 'package:citizenapp/citizen/institution/institution_account_info_page.dart';
-import 'package:citizenapp/citizen/institution/institution_models.dart'
-    as org_models;
-import 'package:citizenapp/citizen/institution/institution_chain_service.dart';
-import 'package:citizenapp/transaction/personal-manage/personal_account_create_page.dart';
-import 'package:citizenapp/transaction/personal-manage/personal_manage_account_info_page.dart';
-import 'package:citizenapp/transaction/personal-manage/personal_manage_models.dart';
-import 'package:citizenapp/transaction/personal-manage/personal_manage_service.dart';
-import 'package:citizenapp/transaction/personal-manage/personal_proposal_history_service.dart';
-import 'package:citizenapp/citizen/shared/multisig_discovery_coordinator.dart';
+import 'personal_account_create_page.dart';
+import 'personal_manage_account_info_page.dart';
+import 'personal_manage_discovery_service.dart';
+import 'personal_manage_models.dart';
+import 'personal_manage_service.dart';
+import 'personal_proposal_history_service.dart';
 
-enum _AccountKind { personal, institution }
-
-class _UnifiedItem {
-  _UnifiedItem.personal(
-    PersonalAccountEntity item, {
-    required this.localStatus,
-  })  : kind = _AccountKind.personal,
-        displayLabel = item.accountName,
-        account = item.account,
-        addedAtMillis = item.addedAtMillis,
-        discoveredViaAdmin = item.discoveredViaAdmin,
-        matchedAdminsLen = item.matchedAdminPubkeys.length,
-        personal = item,
-        institution = null;
-
-  _UnifiedItem.institution(
-    InstitutionEntity item, {
-    required this.localStatus,
-  })  : kind = _AccountKind.institution,
-        displayLabel = item.accountName,
-        account = item.account,
-        addedAtMillis = item.addedAtMillis,
-        discoveredViaAdmin = item.discoveredViaAdmin,
-        matchedAdminsLen = item.matchedAdminPubkeys.length,
-        personal = null,
-        institution = item;
-
-  final _AccountKind kind;
-  final String displayLabel;
-  final String account;
-  final int addedAtMillis;
-  final bool discoveredViaAdmin;
-  final int matchedAdminsLen;
-  final String? localStatus;
-  final PersonalAccountEntity? personal;
-  final InstitutionEntity? institution;
-}
-
-class InstitutionAccountListPage extends StatefulWidget {
-  const InstitutionAccountListPage({super.key});
+class PersonalAccountListPage extends StatefulWidget {
+  const PersonalAccountListPage({super.key});
 
   @override
-  State<InstitutionAccountListPage> createState() =>
-      _InstitutionAccountListPageState();
+  State<PersonalAccountListPage> createState() =>
+      _PersonalAccountListPageState();
 }
 
-class _InstitutionAccountListPageState
-    extends State<InstitutionAccountListPage> {
-  List<_UnifiedItem> _items = [];
-  bool _loading = true;
-  bool _scanning = false;
-  String? _scanProgress;
+class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
   final PersonalManageService _personalManageService = PersonalManageService();
   final PersonalProposalHistoryService _personalProposalHistoryService =
       PersonalProposalHistoryService();
-  final InstitutionChainService _multisigManageService =
-      InstitutionChainService();
+  final AdminAccountsScanService _scanService = AdminAccountsScanService();
+  final PersonalManageDiscoveryService _discoveryService =
+      PersonalManageDiscoveryService();
+
+  List<PersonalAccountEntity> _items = [];
+  Map<String, String?> _statuses = const {};
+  bool _loading = true;
+  bool _scanning = false;
+  String? _scanProgress;
 
   static const _activeStatusTtl = Duration(minutes: 60);
   static const _inactiveStatusTtl = Duration(minutes: 10);
+
+  // 中文注释：使用新的 fingerprint key，避免旧“个人+机构”扫描记录让个人列表跳过首轮发现。
   static const _discoveryWalletFingerprintKey =
-      'multisig_discovery_wallet_fingerprint';
+      'personal_multisig_discovery_wallet_fingerprint';
 
   @override
   void initState() {
@@ -105,7 +65,7 @@ class _InstitutionAccountListPageState
     try {
       await _readFromIsar();
     } catch (_) {
-      // 本地库异常不阻塞页面进入,空态可继续触发手动刷新。
+      // 中文注释：本地库异常不阻塞页面进入，用户仍可通过下拉刷新重试。
     }
     if (!mounted) return;
     setState(() => _loading = false);
@@ -118,39 +78,20 @@ class _InstitutionAccountListPageState
   Future<void> _readFromIsar() async {
     final snapshot = await WalletIsar.instance.read((isar) async {
       final personals = await isar.personalAccountEntitys.where().findAll();
-      final institutions = await isar.institutionEntitys.where().findAll();
-      final personalStatuses = await PersonalAccountLocalState.readStatuses(
+      final statuses = await PersonalAccountLocalState.readStatuses(
         isar,
         personals.map((p) => p.account),
       );
-      final institutionStatuses =
-          await InstitutionMultisigLocalState.readStatuses(
-        isar,
-        institutions.map((p) => p.account),
-      );
-      return (
-        personals: personals,
-        institutions: institutions,
-        personalStatuses: personalStatuses,
-        institutionStatuses: institutionStatuses,
-      );
+      return (personals: personals, statuses: statuses);
     });
-    final merged = <_UnifiedItem>[
-      ...snapshot.personals.map(
-        (p) => _UnifiedItem.personal(
-          p,
-          localStatus: snapshot.personalStatuses[_normalizeHex(p.account)],
-        ),
-      ),
-      ...snapshot.institutions.map(
-        (p) => _UnifiedItem.institution(
-          p,
-          localStatus: snapshot.institutionStatuses[_normalizeHex(p.account)],
-        ),
-      ),
-    ]..sort((a, b) => b.addedAtMillis.compareTo(a.addedAtMillis));
+
+    final sorted = [...snapshot.personals]
+      ..sort((a, b) => b.addedAtMillis.compareTo(a.addedAtMillis));
     if (!mounted) return;
-    setState(() => _items = merged);
+    setState(() {
+      _items = sorted;
+      _statuses = snapshot.statuses;
+    });
   }
 
   Future<void> _runBackgroundRefresh() async {
@@ -161,52 +102,25 @@ class _InstitutionAccountListPageState
   Future<void> _refreshKnownStatuses({
     bool force = false,
     Set<String>? personalAccounts,
-    Set<String>? institutionAccounts,
   }) async {
     final snapshot = await WalletIsar.instance.read((isar) async {
       final personals = await isar.personalAccountEntitys.where().findAll();
-      final institutions = await isar.institutionEntitys.where().findAll();
-      final personalStatuses =
-          await PersonalAccountLocalState.readStatusSnapshots(
+      final statuses = await PersonalAccountLocalState.readStatusSnapshots(
         isar,
         personals.map((p) => p.account),
       );
-      final institutionStatuses =
-          await InstitutionMultisigLocalState.readStatusSnapshots(
-        isar,
-        institutions.map((p) => p.account),
-      );
-      return (
-        personals: personals,
-        institutions: institutions,
-        personalStatuses: personalStatuses,
-        institutionStatuses: institutionStatuses,
-      );
+      return (personals: personals, statuses: statuses);
     });
 
-    final personalFilter = personalAccounts?.map(_normalizeHex).toSet();
-    final institutionFilter = institutionAccounts?.map(_normalizeHex).toSet();
-    final personalTargets = snapshot.personals.where((item) {
+    final filter = personalAccounts?.map(_normalizeHex).toSet();
+    final targets = snapshot.personals.where((item) {
       final address = _normalizeHex(item.account);
-      if (personalFilter != null && !personalFilter.contains(address)) {
-        return false;
-      }
-      return force || _shouldRefreshStatus(snapshot.personalStatuses[address]);
-    }).toList(growable: false);
-    final institutionTargets = snapshot.institutions.where((item) {
-      final address = _normalizeHex(item.account);
-      if (institutionFilter != null && !institutionFilter.contains(address)) {
-        return false;
-      }
-      return force ||
-          _shouldRefreshStatus(snapshot.institutionStatuses[address]);
+      if (filter != null && !filter.contains(address)) return false;
+      return force || _shouldRefreshStatus(snapshot.statuses[address]);
     }).toList(growable: false);
 
-    if (personalTargets.isEmpty && institutionTargets.isEmpty) return;
-    await Future.wait([
-      _syncPersonalStatuses(personalTargets),
-      _syncInstitutionStatuses(institutionTargets),
-    ]);
+    if (targets.isEmpty) return;
+    await _syncPersonalStatuses(targets);
     await _readFromIsar();
   }
 
@@ -215,8 +129,7 @@ class _InstitutionAccountListPageState
     final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
       snapshot!.lastSyncAtMillis!,
     );
-    final ttl = snapshot.status == PersonalAccountLocalState.statusActive ||
-            snapshot.status == InstitutionMultisigLocalState.statusActive
+    final ttl = snapshot.status == PersonalAccountLocalState.statusActive
         ? _activeStatusTtl
         : _inactiveStatusTtl;
     return DateTime.now().difference(lastSyncAt) >= ttl;
@@ -234,6 +147,7 @@ class _InstitutionAccountListPageState
       // 中文注释：批量查链失败时保留本地旧状态，不能把网络失败写成已注销。
       return;
     }
+
     for (final personal in personals) {
       try {
         final info = infos[_normalizeHex(personal.account)];
@@ -281,7 +195,7 @@ class _InstitutionAccountListPageState
           }
         });
       } catch (_) {
-        // 中文注释：链路异常时不改本地状态，避免把网络失败误判成注销。
+        // 中文注释：单个账户刷新失败只跳过该账户，避免影响整页列表。
       }
     }
   }
@@ -309,93 +223,38 @@ class _InstitutionAccountListPageState
     });
   }
 
-  Future<void> _syncInstitutionStatuses(
-    List<InstitutionEntity> institutions,
-  ) async {
-    if (institutions.isEmpty) return;
-    Map<String, org_models.InstitutionAccountInfo?> infos;
-    try {
-      infos = await _multisigManageService.fetchAccountsBatch(
-        institutions.map((p) => p.account),
-      );
-    } catch (_) {
-      // 中文注释：批量查链失败时保留本地旧状态，不能把网络失败写成已注销。
-      return;
-    }
-    for (final institution in institutions) {
-      try {
-        final info = infos[_normalizeHex(institution.account)];
-        final status = info == null
-            ? InstitutionMultisigLocalState.statusClosed
-            : info.status == org_models.InstitutionStatus.active
-                ? InstitutionMultisigLocalState.statusActive
-                : InstitutionMultisigLocalState.statusPending;
-        await WalletIsar.instance.writeTxn((isar) async {
-          await InstitutionMultisigLocalState.putStatusInTxn(
-            isar,
-            institution.account,
-            status,
-          );
-          if (info == null) {
-            await InstitutionMultisigLocalState.deleteDetailInTxn(
-              isar,
-              institution.account,
-            );
-          } else {
-            final previousDetail =
-                await InstitutionMultisigLocalState.readDetail(
-              isar,
-              institution.account,
-            );
-            await InstitutionMultisigLocalState.putDetailInTxn(
-              isar,
-              institution.account,
-              MultisigLocalDetailSnapshot(
-                status: status,
-                admins: info.admins,
-                threshold: info.threshold,
-                balanceYuan: previousDetail?.balanceYuan,
-                lastBalanceRefreshAtMillis:
-                    previousDetail?.lastBalanceRefreshAtMillis,
-                updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
-                lastChainRefreshAtMillis: DateTime.now().millisecondsSinceEpoch,
-              ),
-            );
-          }
-        });
-      } catch (_) {
-        // 中文注释：网络/轻节点异常不改本地状态，避免把查询失败误判为注销。
-      }
-    }
-  }
-
-  Future<({bool anyChanged, bool completed})> _runBackgroundDiscovery({
-    bool force = false,
-  }) async {
+  Future<({bool anyChanged, bool completed})> _runBackgroundDiscovery() async {
     if (_scanning) return (anyChanged: false, completed: false);
+
+    final myPubkeys = await _currentWalletPubkeys();
+    if (myPubkeys.isEmpty) return (anyChanged: false, completed: true);
+
     setState(() {
       _scanning = true;
-      _scanProgress = '扫描中...';
+      _scanProgress = '扫描个人多签中...';
     });
+
     var anyChanged = false;
     var completed = false;
     try {
-      // 机构多签 + 个人多签共用一次 AdminAccounts 扫描(ADR-018 §九),
-      // 由协调器分发到两类后处理,避免同一张表各扫一遍。
-      final result = await MultisigDiscoveryCoordinator().discoverAll(
-        force: force,
-        onProgress: (s, t, m) {
-          if (mounted) {
-            setState(() {
-              _scanProgress = '多签扫描 $s${t == null ? '' : '/$t'} · 已解码 $m';
-            });
-          }
+      // 中文注释：这里只做个人多签发现，扫描结果直接交给个人多签服务处理。
+      final scan = await _scanService.scanAll(
+        onProgress: (scanned, total, decoded) {
+          if (!mounted) return;
+          setState(() {
+            _scanProgress =
+                '个人多签扫描 $scanned${total == null ? '' : '/$total'} · 已解码 $decoded';
+          });
         },
       );
-      anyChanged = result.anyChanged;
-      completed = result.completed;
+      final stats = await _discoveryService.processScanned(
+        scan,
+        myPubkeys: myPubkeys,
+      );
+      anyChanged = stats.newlyAdded > 0 || stats.orphansRemoved > 0;
+      completed = !stats.partialFailure;
     } catch (e) {
-      debugPrint('[MultisigListPage] discovery 失败: $e');
+      debugPrint('[PersonalAccountListPage] discovery 失败: $e');
     } finally {
       if (anyChanged) {
         await _readFromIsar();
@@ -412,9 +271,10 @@ class _InstitutionAccountListPageState
 
   Future<void> _runDiscoveryIfWalletsChanged() async {
     final fingerprint = await _currentWalletFingerprint();
+    if (fingerprint.isEmpty) return;
     final lastFingerprint = await _readDiscoveryWalletFingerprint();
     if (lastFingerprint == fingerprint) return;
-    final result = await _runBackgroundDiscovery(force: true);
+    final result = await _runBackgroundDiscovery();
     if (result.completed) {
       await _writeDiscoveryWalletFingerprint(fingerprint);
     }
@@ -422,17 +282,11 @@ class _InstitutionAccountListPageState
 
   Future<void> _onPullRefresh() async {
     await _refreshKnownStatuses(force: true);
-    final result = await _runBackgroundDiscovery(force: true);
+    final result = await _runBackgroundDiscovery();
     if (result.completed) {
       await _writeDiscoveryWalletFingerprint(await _currentWalletFingerprint());
     }
     await _readFromIsar();
-  }
-
-  /// 创建入口。机构(公权/私权)多签创建已收归 onchina 控制台 + 冷钱包,
-  /// citizenapp 仅保留个人多签自助创建;故此入口直接进个人多签创建,不再弹公权/个人选择。
-  Future<void> _openCreateMenu() async {
-    await _openCreatePersonal();
   }
 
   Future<void> _openCreatePersonal() async {
@@ -448,62 +302,31 @@ class _InstitutionAccountListPageState
     }
   }
 
-  // 机构(公权/私权)多签创建已收归 onchina 控制台 + 冷钱包,citizenapp 不再发起机构创建。
-
-  void _onCardTap(_UnifiedItem item) {
-    final route = switch (item.kind) {
-      _AccountKind.personal => MaterialPageRoute(
-          builder: (_) => PersonalManageAccountInfoPage(
-            institution: InstitutionInfo(
-              cidFullName: item.displayLabel,
-              cidShortName: item.displayLabel,
-              cidFullNameEn:
-                  'Personal Multisig ${item.account.substring(0, 8)}',
-              cidShortNameEn:
-                  'Personal Multisig ${item.account.substring(0, 8)}',
-              cidNumber: 'personal-account:${item.account}',
-              orgType: OrgType.account,
-              account: item.account,
-            ),
-            initialLocalStatus: item.localStatus,
-            initialAdminPubkeys:
-                item.personal?.matchedAdminPubkeys ?? const <String>[],
+  void _onCardTap(PersonalAccountEntity item) {
+    final localStatus = _statuses[_normalizeHex(item.account)];
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PersonalManageAccountInfoPage(
+          institution: InstitutionInfo(
+            cidFullName: item.accountName,
+            cidShortName: item.accountName,
+            cidFullNameEn: 'Personal Multisig ${item.account.substring(0, 8)}',
+            cidShortNameEn: 'Personal Multisig ${item.account.substring(0, 8)}',
+            cidNumber: 'personal-account:${item.account}',
+            orgType: OrgType.account,
+            account: item.account,
           ),
+          initialLocalStatus: localStatus,
+          initialAdminPubkeys: item.matchedAdminPubkeys,
         ),
-      _AccountKind.institution => MaterialPageRoute(
-          builder: (_) => InstitutionAccountInfoPage(
-            institution: InstitutionInfo(
-              cidFullName: item.displayLabel,
-              cidShortName: item.displayLabel,
-              cidFullNameEn:
-                  'Institution Account ${item.account.substring(0, 8)}',
-              cidShortNameEn:
-                  'Institution Account ${item.account.substring(0, 8)}',
-              cidNumber: registeredAccountIdentity(item.account),
-              orgType: OrgType.account,
-              adminAccountCode: item.institution?.adminAccountCode,
-              account: item.account,
-            ),
-            initialLocalStatus: item.localStatus,
-            initialAdminPubkeys:
-                item.institution?.matchedAdminPubkeys ?? const <String>[],
-          ),
-        ),
-    };
-    Navigator.push(context, route).then((_) {
+      ),
+    ).then((_) {
       if (!mounted) return;
-      switch (item.kind) {
-        case _AccountKind.personal:
-          unawaited(_refreshKnownStatuses(
-            force: true,
-            personalAccounts: {item.account},
-          ));
-        case _AccountKind.institution:
-          unawaited(_refreshKnownStatuses(
-            force: true,
-            institutionAccounts: {item.account},
-          ));
-      }
+      unawaited(_refreshKnownStatuses(
+        force: true,
+        personalAccounts: {item.account},
+      ));
     });
   }
 
@@ -513,7 +336,7 @@ class _InstitutionAccountListPageState
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          '多签',
+          '多签账户',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
@@ -524,8 +347,8 @@ class _InstitutionAccountListPageState
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            tooltip: '新增多签',
-            onPressed: _openCreateMenu,
+            tooltip: '新增个人多签',
+            onPressed: _openCreatePersonal,
           ),
         ],
       ),
@@ -588,7 +411,7 @@ class _InstitutionAccountListPageState
           SizedBox(height: 6),
           Center(
             child: Text(
-              '点击右上角 + 新增个人多签或机构多签;\n你作为管理员参与的多签会自动出现在此',
+              '点击右上角 + 新增个人多签;\n你作为管理员参与的个人多签会自动出现在此',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
             ),
@@ -610,25 +433,21 @@ class _InstitutionAccountListPageState
     );
   }
 
-  Widget _buildCard(_UnifiedItem item) {
-    final ss58 = _hexToSs58(item.account);
-    final isPersonal = item.kind == _AccountKind.personal;
-    final color = isPersonal ? AppTheme.accent : AppTheme.info;
-    final iconData = isPersonal ? Icons.person : Icons.business;
-    final tag = isPersonal ? '个人' : '机构';
-    final isClosed =
-        item.localStatus == PersonalAccountLocalState.statusClosed ||
-            item.localStatus == InstitutionMultisigLocalState.statusClosed;
+  Widget _buildCard(PersonalAccountEntity item) {
+    final ss58 = _accountAddressLabel(item.account);
+    final localStatus = _statuses[_normalizeHex(item.account)];
+    final isClosed = localStatus == PersonalAccountLocalState.statusClosed;
     final subtitleParts = <String>[
       _truncateAddress(ss58),
-      if (item.discoveredViaAdmin) '我作为 ${item.matchedAdminsLen} 位管理员之一参与',
+      if (item.discoveredViaAdmin)
+        '我作为 ${item.matchedAdminPubkeys.length} 位管理员之一参与',
     ];
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: color.withValues(alpha: 0.15)),
+        side: BorderSide(color: AppTheme.accent.withValues(alpha: 0.15)),
       ),
       child: InkWell(
         onTap: () => _onCardTap(item),
@@ -641,10 +460,14 @@ class _InstitutionAccountListPageState
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.08),
+                  color: AppTheme.accent.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(iconData, size: 20, color: color),
+                child: const Icon(
+                  Icons.person,
+                  size: 20,
+                  color: AppTheme.accent,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -657,15 +480,15 @@ class _InstitutionAccountListPageState
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.12),
+                            color: AppTheme.accent.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(
-                            tag,
+                          child: const Text(
+                            '个人',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: color,
+                              color: AppTheme.accent,
                             ),
                           ),
                         ),
@@ -692,7 +515,7 @@ class _InstitutionAccountListPageState
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            item.displayLabel,
+                            item.accountName,
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
@@ -726,6 +549,14 @@ class _InstitutionAccountListPageState
     );
   }
 
+  String _accountAddressLabel(String hex) {
+    try {
+      return _hexToSs58(hex);
+    } catch (_) {
+      return hex;
+    }
+  }
+
   String _hexToSs58(String hex) {
     final h = hex.startsWith('0x') ? hex.substring(2) : hex;
     final bytes = Uint8List(h.length ~/ 2);
@@ -745,12 +576,13 @@ class _InstitutionAccountListPageState
     return h.toLowerCase();
   }
 
-  Future<String> _currentWalletFingerprint() async {
+  Future<Set<String>> _currentWalletPubkeys() async {
     final wallets = await WalletManager().getWallets();
-    final pubkeys = wallets
-        .map((wallet) => _normalizeHex(wallet.pubkeyHex))
-        .toList()
-      ..sort();
+    return wallets.map((wallet) => _normalizeHex(wallet.pubkeyHex)).toSet();
+  }
+
+  Future<String> _currentWalletFingerprint() async {
+    final pubkeys = (await _currentWalletPubkeys()).toList()..sort();
     return pubkeys.join('|');
   }
 

@@ -6,6 +6,7 @@
 pub(crate) const PARTITIONED_TABLES: &[&str] = &[
     "subjects",
     "citizens",
+    "citizen_documents",
     "gov",
     "private",
     "accounts",

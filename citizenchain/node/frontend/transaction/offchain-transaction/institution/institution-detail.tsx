@@ -195,7 +195,7 @@ export function ClearingBankInstitutionDetailPage({
         >
           <div className="admin-entry-left">
             <div className="admin-entry-title">
-              管理员列表（{detail.adminsSs58.length} 人）
+              管理员列表（{detail.admins.length} 人）
             </div>
           </div>
           <span className="admin-entry-arrow">→</span>
