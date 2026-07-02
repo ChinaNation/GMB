@@ -53,3 +53,6 @@
 - 使用 `/tmp/gmb-onchina-pg-citizen-fix` 临时内嵌 PostgreSQL 启动 OnChina,自动生成公权目录 401364 条,`GET /api/v1/health` 返回 200。
 - 本轮追加修改后,`cargo check --manifest-path citizenchain/Cargo.toml -p onchina --locked` 通过。
 - 本轮追加修改后,`npm --prefix citizenchain/onchina/frontend run build` 通过。
+- 本轮追加修改后,使用 `/tmp/gmb-onchina-citizen-docs-pg` 临时内嵌 PostgreSQL 和 `127.0.0.1:18964` 启动 OnChina,`GET /api/v1/health` 返回 200。
+- 临时 CREG 会话下真实调用 `POST /api/v1/admin/citizens` 成功创建公民,返回 `province_code/city_code/town_code` 和 `birth_*` 字段,`wallet_address=null`,列表接口可分页查回该公民且不返回旧居住字段。
+- 临时 CREG 会话下真实调用公民资料库 `GET/POST/download/DELETE /api/v1/admin/citizens/:cid_number/documents` 通过;“出生证明”文件可上传、列表、下载,删除后接口返回空数组、`citizen_documents` 计数为 0 且临时文件无残留。
