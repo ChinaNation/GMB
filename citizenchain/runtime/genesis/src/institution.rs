@@ -189,10 +189,10 @@ fn bounded_role<T: public_admins::Config>(
 
 fn national_judicial_yuan_admin_role(index: usize) -> Option<&'static [u8]> {
     match index {
-        0..=4 => Some(ADMIN_ROLE_CONSTITUTION_GUARD),
-        5 => Some(ADMIN_ROLE_CHIEF_JUSTICE),
-        6..=7 => Some(ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE),
-        8..=12 => Some(ADMIN_ROLE_JUSTICE),
+        0..=6 => Some(ADMIN_ROLE_CONSTITUTION_GUARD),
+        7 => Some(ADMIN_ROLE_CHIEF_JUSTICE),
+        8..=9 => Some(ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE),
+        10..=14 => Some(ADMIN_ROLE_JUSTICE),
         _ => None,
     }
 }

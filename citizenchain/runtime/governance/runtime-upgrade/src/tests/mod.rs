@@ -329,7 +329,8 @@ fn insert_engine_proposal_with_status(proposal_id: u64, status: u8) {
             stage: votingengine::STAGE_JOINT,
             status,
             internal_code: None,
-            internal_institution: None,
+            account_context: None,
+            subject_cid_numbers: Default::default(),
             start: 0u64,
             end: 100u64,
             // 中文注释：这是 votingengine::Proposal 的固定字段，非 runtime-upgrade 入参。

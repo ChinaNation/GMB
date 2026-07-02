@@ -15,8 +15,8 @@
 
 | 访问模式 | 轻节点表现 | 例子 |
 |---|---|---|
-| **精确整键 `fetchStorage(完整key)`** | ✅ 正常(单 key Merkle 证明) | `ActiveProposalsByInstitution[account]`、`InternalVotesByAccount[pid,account]`、`System.Account[account]` 余额 |
-| **keysPaged 前缀扫描,前缀嵌长 K1(32B account / blake2+cid)** | ❌ 返回空(证明拉不全,静默空) | `ProposalsByInstitution[account]`、`CidRegisteredAccount[blake2(cid)+cid]` |
+| **精确整键 `fetchStorage(完整key)`** | ✅ 正常(单 key Merkle 证明) | `ActiveProposalsBySubject[ProposalSubject]`、`InternalVotesByAccount[pid,account]`、`System.Account[account]` 余额 |
+| **keysPaged 前缀扫描,前缀嵌长 K1(ProposalSubject / blake2+cid)** | ❌ 返回空(证明拉不全,静默空) | `ProposalsByCid[cid_number]`、`CidRegisteredAccount[blake2(cid)+cid]` |
 | **keysPaged 短前缀(整表 / ≤2B K1)** | ✅ 正常 | `ProposalsByYear[year]`、`ProposalsByCode[institution_code]`(机构码反向索引,见 [[ADR-025]])、`AdminAccounts` 整表 |
 
 **所以"功能性坏"只有长前缀 keysPaged 这一类(2 处);其余全是"能用但费节点"的负载问题。** 不需要改链端 storage 结构。
@@ -39,9 +39,9 @@
 ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
    → _fetchProposalsForIds(ids)(已全批量:meta+displayId+detail)
    → 共享缓存(TTL 20s)
-   → 广场 filter internalOrg∈{0,1,2} / 机构详情 filter institutionBytes==account ∪ kind==1 / 个人 filter institutionBytes==account
+   → 提案页 filter defaultCodes ∪ subscribedCidNumbers / 机构详情 filter subject_cid_numbers 包含机构 CID / 个人多签 filter PersonalAccount
 ```
-依据:`ProposalsByYear` 链端对每个提案无条件写、终态清理时移除;`ProposalMeta` 已解码 `kind/stage/status/internalOrg/institutionBytes`,客户端过滤零联网。
+依据:`ProposalsByYear` 链端对每个提案无条件写、终态清理时移除;`ProposalMeta` 已解码 `kind/stage/status/internal_code/account_context/subject_cid_numbers`,客户端过滤零联网。
 **载荷:广场(原 3 次 ByOrg)+ 机构详情(原坏的 ByInstitution)+ 个人 → 同周期共用一份缓存 = 1 次按年取 + 1 次批量详情。**
 
 ### 2. `ChainReadCache`(新增,余额/storage 共享缓存,挂在 ChainRpc 层)
@@ -60,7 +60,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 ### A. R1 必改 — 长前缀 keysPaged(功能性坏,2 处)
 | 位置 | 索引 | 改法 |
 |---|---|---|
-| `transaction/multisig-transfer/multisig_transfer_service.dart:290` fetchProposalIdsByInstitution | `ProposalsByInstitution[account]` | 删,机构详情改走 ProposalFeedCache 按年取+过滤(**本次 bug 收口**) |
+| `transaction/multisig-transfer/multisig_transfer_service.dart:290` fetchProposalIdsByInstitution | `ProposalsByCid[cid_number]` | 删,机构详情改走 ProposalFeedCache 按年取+过滤(**本次 bug 收口**) |
 | `governance/organization-manage/institution_manage_service.dart:327` listCidAccounts | `CidRegisteredAccount[blake2(cid)+cid]` | **~~改整表扫~~ 已被 §九 取代**:审计确认此方法为死代码(全仓零调用),且多签账户清单应走 `AccountRegisteredCid` 精确反查而非正向枚举 → **直接删除**,不整表化 |
 
 ### B. R2 必改 — N+1 循环逐条链读(费节点,核心降载)
@@ -99,12 +99,12 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 | `update/app_update_service.dart:92` GitHub release | 低频,加短缓存即可 |
 
 ### 豁免(不改)
-交易提交管线:`fetchNonce`/`fetchRuntimeVersion`/`fetchGenesisHash`/`fetchLatestBlock`/`fetchFinalizedBlock`(提交用)/`submitExtrinsic*`/dry-run;`ChainTxMonitor` finalized 订阅;UI 倒计时 Timer。精确整键 `fetchStorage`(ActiveProposalsByInstitution/InternalTallies/AdminSnapshot/clearing-bank 等)正常,只在被循环调用时归入 B 类批量,本身不动口径。
+交易提交管线:`fetchNonce`/`fetchRuntimeVersion`/`fetchGenesisHash`/`fetchLatestBlock`/`fetchFinalizedBlock`(提交用)/`submitExtrinsic*`/dry-run;`ChainTxMonitor` finalized 订阅;UI 倒计时 Timer。精确整键 `fetchStorage`(ActiveProposalsBySubject/InternalTallies/AdminSnapshot/clearing-bank 等)正常,只在被循环调用时归入 B 类批量,本身不动口径。
 
 ---
 
-## 五、不动链端
-`ProposalsByInstitution` 等反向索引保留在 runtime(桌面端全节点可正常用);仅约束轻节点客户端不查长前缀。纯 Dart 改动,不动 runtime、不重新创世。
+## 五、链端边界
+`ProposalsByCid` 等反向索引保留在 runtime(桌面端全节点可正常用);仅约束轻节点客户端不查长前缀。2026-07-02 起提案归属真源统一为 `subject_cid_numbers`,机构码只做分类,订阅过滤按机构 CID 命中。
 
 ## 六、验证
 1. `flutter analyze` 0 + `flutter test --concurrency=1` 全过;新增 ProposalFeedCache 过滤单测(多机构/多 org/joint 夹具)。

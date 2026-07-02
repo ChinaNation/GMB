@@ -36,3 +36,14 @@ home-node 冗余是 Step 3 把 `home/transaction/` 搬走后的副产物；minin
 - [x] `SettingsSection.tsx` 2 处外部引用改写（`'../../home/home-node/api'` → `'../../home/api'`、`/types`同改）
 - [x] `npx tsc --noEmit` 通过（exit 0）
 - [x] 残留扫描全零（仅一条注释引用后端 `src/mining/dashboard` 是事实陈述，保留）
+
+## 2026-07-02 追加执行：删除挖矿页资源监控
+
+- [x] 删除挖矿页“资源监控”分组下 4 个卡片：CPU 哈希率、GPU 哈希率、内存占用、节点数据大小。
+- [x] 删除 `MiningDashboard.resources` 前端类型字段和默认状态，挖矿页不再读取或展示资源监控数据。
+- [x] 删除后端 dashboard 的资源采样模型、TTL 缓存、进程内存采样、CPU/GPU 哈希率读取和节点数据目录递归统计逻辑。
+- [x] 更新节点挖矿 dashboard 技术文档和节点总技术文档，明确挖矿页不再提供资源监控。
+- [x] 本地节点数据已删除：`~/Library/Application Support/gmb.dev/chains/citizenchain`；未删除链上中国数据库 `registry-pgdata`。
+- [x] 使用冻结 chainspec `citizenchain/node/chainspecs/citizenchain.raw.json` 启动本地节点验证，RPC `chain_getBlockHash(0)` 返回 `0x968c7eaf68a5f138fc1eef1dbe0f2b398274216d15d06805dc1d801904cad154`。
+- [x] 启动日志显示远端 bootnodes 仍在旧 genesis（例如 `0xa353…0043`），与本机冻结创世 `0x968c…d154` 不同，当前不会形成同一网络。
+- [x] 验证通过：`npm --prefix citizenchain/node/frontend run build`、`cargo check --manifest-path citizenchain/Cargo.toml -p node`、`git diff --check`。

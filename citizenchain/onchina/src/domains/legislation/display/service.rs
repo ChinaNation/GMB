@@ -18,7 +18,7 @@ const PROPOSAL_KIND_LEGISLATION: u8 = 2;
 
 /// 装配本节点机构的大屏看板:名册 + 活跃立法提案(逐席投票)。
 ///
-/// 中文注释:活跃提案来自 `ActiveProposalsByInstitution[主账户]`;逐个取进度投影,
+/// 中文注释:活跃提案来自 `ActiveProposalsBySubject[InstitutionCid(cid_number)]`;逐个取进度投影,
 /// 非立法提案(无 `LegMeta` → `fetch_proposal_state` 返回 `None`)或已清理者跳过。
 pub(crate) async fn build_display_board(
     identity: &NodeInstitutionIdentity,
@@ -30,11 +30,15 @@ pub(crate) async fn build_display_board(
         .await?
         .unwrap_or_default();
     // FRG 等非立法机构:`main_account` 为 `[0u8;32]` 哨兵(身份走 frg_province_code 分流),
-    // 无立法提案。跳过对哨兵键的无意义 `ActiveProposalsByInstitution` 点查,活跃提案恒空。
+    // 无立法提案。跳过对省组键的无意义 `ActiveProposalsBySubject` 点查,活跃提案恒空。
     let active_ids = if identity.frg_province_code.is_some() {
         Vec::new()
     } else {
-        fetch_active_proposal_ids(identity.main_account).await?
+        let cid_number = identity
+            .cid_number
+            .as_deref()
+            .ok_or_else(|| "node binding institution_cid_number is required".to_string())?;
+        fetch_active_proposal_ids(cid_number).await?
     };
 
     let mut active_proposals = Vec::new();

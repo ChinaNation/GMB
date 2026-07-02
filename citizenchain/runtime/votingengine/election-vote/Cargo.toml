@@ -16,6 +16,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
+entity-primitives = { path = "../../entity/entity-primitives", default-features = false }
 votingengine = { path = "..", default-features = false }
 
 [features]
@@ -29,6 +30,7 @@ std = [
     "sp-runtime/std",
     "sp-std/std",
     "primitives/std",
+    "entity-primitives/std",
     "votingengine/std",
 ]
 runtime-benchmarks = [

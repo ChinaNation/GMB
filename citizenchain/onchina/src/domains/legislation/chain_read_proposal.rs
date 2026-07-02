@@ -1,7 +1,7 @@
 //! 提案进度只读投影:链上 votingengine `Proposal` + legislation-vote `LegMeta`/tally → `LegProposalState`。
 //!
 //! 中文注释:onchina 只读链装配只读投影,**绝不计票**(计票/状态推进全归投票引擎)。镜像字段顺序
-//! 锁死链端:`votingengine::Proposal`(types.rs:231)、`legislation-vote::LegislationMeta`(lib.rs:88)、
+//! 锁死链端:`votingengine::Proposal`(types.rs:253)、`legislation-vote::LegislationMeta`(lib.rs:88)、
 //! `VoteCountU32/U64`(types.rs:250/258)。`referendum_scope`(Option<PopulationScope>)是 `LegislationMeta`
 //! **末字段**且进度投影不需要,故用**前缀解码镜像**(SCALE decode 只读声明字段、忽略尾部字节),
 //! 无需引入 `PopulationScope` 结构。
@@ -16,7 +16,8 @@ use serde::Serialize;
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 
 /// votingengine `Proposal<BlockNumber, AccountId>` 解码镜像(BlockNumber=u32 / AccountId=[u8;32])。
-// 中文注释:部分字段(internal_code/internal_institution/citizen_eligible_total)仅为 SCALE 布局对齐,
+// 中文注释:部分字段(internal_code/account_context/subject_cid_numbers/citizen_eligible_total)
+// 仅为 SCALE 布局对齐,
 // LegProposalState 投影暂不读,保留以锁死解码字段序。
 #[allow(dead_code)]
 #[derive(Debug, Decode)]
@@ -27,8 +28,12 @@ pub struct OnChainProposal {
     pub stage: u8,
     /// 状态(投票中 / 通过 / 否决)。
     pub status: u8,
+    /// 机构码只用于提案分类/路由,不是机构归属真源。
     pub internal_code: Option<[u8; 4]>,
-    pub internal_institution: Option<[u8; 32]>,
+    /// 投票/执行账户上下文;机构归属真源见 `subject_cid_numbers`。
+    pub account_context: Option<[u8; 32]>,
+    /// 机构归属 CID 列表;多机构关联提案在这里保存所有关联机构 CID。
+    pub subject_cid_numbers: Vec<Vec<u8>>,
     pub start: u32,
     pub end: u32,
     pub citizen_eligible_total: u64,
@@ -218,7 +223,8 @@ mod tests {
         golden.extend(10u8.encode()); // stage = 院内
         golden.extend(0u8.encode()); // status = 投票中
         golden.extend(Some(*b"NRP\0").encode()); // internal_code
-        golden.extend(Option::<[u8; 32]>::None.encode()); // internal_institution
+        golden.extend(Option::<[u8; 32]>::None.encode()); // account_context
+        golden.extend(vec![b"LN001-NRP0G-000000001-2026".to_vec()].encode()); // subject_cid_numbers
         golden.extend(100u32.encode()); // start
         golden.extend(200u32.encode()); // end
         golden.extend(0u64.encode()); // citizen_eligible_total
@@ -227,6 +233,7 @@ mod tests {
         assert_eq!(proposal.kind, 2);
         assert_eq!(proposal.stage, 10);
         assert_eq!(proposal.internal_code, Some(*b"NRP\0"));
+        assert_eq!(proposal.subject_cid_numbers.len(), 1);
         assert_eq!(proposal.start, 100);
     }
 
@@ -262,7 +269,8 @@ mod tests {
             stage: 10,
             status: 0,
             internal_code: None,
-            internal_institution: None,
+            account_context: None,
+            subject_cid_numbers: Vec::new(),
             start: 100,
             end: 200,
             citizen_eligible_total: 0,

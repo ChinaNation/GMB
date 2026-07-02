@@ -3416,6 +3416,7 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 name = "election-vote"
 version = "1.0.0"
 dependencies = [
+ "entity-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -6300,6 +6301,7 @@ checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
 name = "legislation-vote"
 version = "1.0.0"
 dependencies = [
+ "entity-primitives",
  "frame-support",
  "frame-system",
  "internal-vote",
@@ -10082,6 +10084,7 @@ name = "private-admins"
 version = "1.0.0"
 dependencies = [
  "admin-primitives",
+ "entity-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -10420,6 +10423,7 @@ name = "public-admins"
 version = "1.0.0"
 dependencies = [
  "admin-primitives",
+ "entity-primitives",
  "frame-benchmarking",
  "frame-support",
  "frame-system",

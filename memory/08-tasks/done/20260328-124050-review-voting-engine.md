@@ -62,12 +62,12 @@
 ### 已确认问题与改进点
 
 1. 功能需求未严格实现：联合提案没有纳入“每机构活跃提案上限”的统一限制。
-   - 文档和 `ActiveProposalsByInstitution`/`active_proposal_limit.rs` 都写的是“不区分提案类型”
+   - 文档和 `ActiveProposalsBySubject`/`active_proposal_limit.rs` 都写的是“不区分提案类型”
    - 但代码只在 `do_create_internal_proposal` 调用 `try_add_active_proposal`
    - `do_create_joint_proposal` 没有为 NRC 或其他机构占用活跃提案名额，因此联合提案路径可绕过这条统一限制
 
 2. `weights.rs` 明显失真，且存在低估风险。
-   - `create_internal_proposal` 的 weight 只申报了 `NextProposalId + Proposals`，但当前真实路径还会读写 `CurrentProposalYear`、`YearProposalCounter`、`ActiveProposalsByInstitution`、`ProposalsByExpiry`
+   - `create_internal_proposal` 的 weight 只申报了 `NextProposalId + Proposals`，但当前真实路径还会读写 `CurrentProposalYear`、`YearProposalCounter`、`ActiveProposalsBySubject`、`ProposalsByExpiry`
    - `joint_vote` 的 weight 注释没有反映 `JointVotesByAdmin`、`JointInstitutionTallies`、动态管理员/阈值提供器等实际路径
    - `citizen_vote` 仍引用已删除的 `CidSystem::CidToAccount`
    - 当前 weight 不能视为可信

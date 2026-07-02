@@ -440,7 +440,7 @@ pub mod pallet {
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
-                proposal.internal_institution == Some(account),
+                proposal.account_context == Some(account),
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(

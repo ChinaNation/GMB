@@ -79,7 +79,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         Self::register_proposal_indexes(
             proposal_id,
             proposal.internal_code,
-            proposal.internal_institution,
+            proposal.subject_cid_numbers,
             owner,
             display.year,
         );

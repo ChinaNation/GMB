@@ -97,7 +97,7 @@
 - 2026-07-01：链上中国法律详情页不可修改条款徽章改为跟随当前语言条标题显示，中文模式只显示中文徽章，英文模式只显示英文徽章。
 - 2026-07-01：节点桌面端和链上中国不可修改条款徽章已调整为与当前语言条标题行内垂直居中；中文徽章字号下调，避免比“第 x 条”更抢眼。
 - 2026-07-01：“级”字结构化复查结果：公民宪法中文内容仍有 57 个“级”字，分布于第 23 条 1 个、第 129 条 25 个、第 132 条 19 个、第 135 条 12 个；行政区类旧词 `市级行政区 / 省级行政区 / 镇级行政区 / 各级行政区 / 国家级荣誉称号 / 各级政府` 均为 0。
-- 2026-07-01：用户再次二次确认修改 runtime 宪法真源；已结构化重写 `constitution.scale`：第 15 条中文和英文按推荐语句收紧，第 16 条改为行政、教育、储备、立法、司法、监察等公权机构并统一重要案表决，第 20 条护宪大法官从 7 人改为 5 人并同步英文；统一学校公民教育委员会 / 校教委会、本省参议会 / 本省众议会 / 本省公民储备委员会、`职权终止` 等表述，并清理英文 `three levels / at all levels / town-level / national-level / governments at all levels` 残留。
+- 2026-07-01：用户再次二次确认修改 runtime 宪法真源；已结构化重写 `constitution.scale`：第 15 条中文和英文按推荐语句收紧，第 16 条改为行政、教育、储备、立法、司法、监察等公权机构并统一重要案表决，第 20 条当轮按上一版人数口径收口并同步英文；该旧口径已由 2026-07-02 司法院定稿重新调整为七人制；统一学校公民教育委员会 / 校教委会、本省参议会 / 本省众议会 / 本省公民储备委员会、`职权终止` 等表述，并清理英文 `three levels / at all levels / town-level / national-level / governments at all levels` 残留。
 - 2026-07-01：用户再次二次确认修改 runtime 宪法真源；已结构化重写 `constitution.scale`：第 51 条清理 `所在市市立法会 / 所在市市监察院 / 所在省省监察院`，第 80/81/82/85/86 条将 `初学校教委会` 改为 `初学的校教委会`，第 84/85/86 条将 `该校校教委会` 改为 `该校的校教委会`，第 23 条将 `提请升级军队军人违宪指控为军队军人违宪审查` 改为 `提请将军队军人违宪指控转为军队军人违宪审查` 并同步英文，第 121/139 条改为 `市行政区设市自治司法院，简称市司法院`、`市行政区设市自治监察院，简称市监察院` 并同步英文。
 - 2026-07-01：用户确认最终语言修复并二次确认 runtime 真源修改；已结构化重写 `constitution.scale`：第 7 条第 2 款和第 51 条将 `任何机构任何人` 改为 `任何机构和个人`，第 23 条英文改为 `may petition the Constitution-Guarding Grand Justices to convert ... into constitutional review ...`，第 75 条英文改为 `no government shall have administrative management power over education institutions`。
 - 2026-07-02：用户二次确认修改 runtime 链上版本标签真源；已在 `runtime/primitives/src/genesis.rs` 增加 `GENESIS_LAW_VERSION_LABELS` 常量，固定 `(law_id=0, version=1) -> 创世版 / Genesis Edition`。
@@ -107,6 +107,12 @@
 - 2026-07-02：节点桌面端 `constitution_getDocument` RAW 读取 `LawVersionLabels`，HTML 标题区显示链上版本标签；无标签时回退为 `vN`。
 - 2026-07-02：链上中国后端 `LawView` 增加 `versionTitle/versionTitleEn`，只从链上 `LawVersionLabels` 投影；前端法律列表和详情页优先显示版本标签，无标签时显示 `vN`。
 - 2026-07-02：已同步更新 CitizenApp、CitizenChain、节点 other-tabs、OnChina 后端/前端技术文档，明确版本标签是真源字段，不允许前端硬编码推断。
+- 2026-07-02：用户确认司法院 15 人口径并提供第 6/7 组护宪大法官公钥；已结构化重写 `constitution.scale`：第 7 条改为“公共权力 / 公权 / 公权机构”，第 8 条按“一府两会三院”最新组织文本重写，第 20 条定稿为护宪大法官 7 人，第 115 条定稿为 1 名首席大法官 + 2 名次席大法官 + 5 名大法官。
+- 2026-07-02：已同步 runtime、CitizenApp、CitizenWallet 和 memory 文档：国家司法院创世公职人员为 15 人，角色顺序为 7 名护宪大法官、1 名首席大法官、2 名次席大法官、5 名大法官；护宪终审按 4/7 通过或否决，NJD 固定治理阈值保持 8/15。
+- 2026-07-02：逐条定稿第 3 条；用户确认修改 runtime 宪法真源后，已将中文正文 `实现民主共和（民主）` 改为 `实行民主共和（民主）`，英文保持不变。
+- 2026-07-02：逐条定稿第 11 条；用户确认修改 runtime 宪法真源后，已将第 11 条第 1 款改为公民储备委员会联合会议主席、副主席由国家公民储备委员会委员、省公民储备委员会主席和省公民储备银行行长互选产生，并同步英文。
+- 2026-07-02：逐条定稿第 12 条；用户确认修改 runtime 宪法真源后，已将第 12 条正文、第 1 款、第 2 款、第 3 款改为国家立法院众议会 / 参议会新口径，并将市立法权行权机构改为市公民立法委员会，英文同步更新。
+- 2026-07-02：逐条定稿第 13 条；用户确认修改 runtime 宪法真源后，已将市行政区司法权行权机构由市司法院改为市自治司法院，英文同步更新为 Municipal Self-Governing Judicial Yuan。
 
 验收结果：
 - `flutter analyze`：通过。
@@ -133,8 +139,8 @@
   - 结构化解码 `constitution.scale` 后逐字段扫描中文标题、条正文、款正文：`级` 共 57 个，仅出现在第 23 / 129 / 132 / 135 条。
 - 2026-07-01 本批宪法真源追加验收：
   - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan`：通过，23 项测试通过。
-  - 结构化回读 `constitution.scale`：7 章、141 条、133 款完整解码；第 20 条仅保留 `护宪大法官5人 / five Constitution-Guarding Grand Justices`。
-  - 残留扫描：`护宪大法官7人 / seven Constitution-Guarding Grand Justices / 大学学校公民教育委员会 / 大学校教委会 / 本省省参议会 / 本省省众议会 / 本省省公民储备委员会 / 权责立即失效 / three levels / at all levels / town-level / national-level / governments at all levels` 均为 0。
+  - 结构化回读 `constitution.scale`：7 章、141 条、133 款完整解码；该轮第 20 条为上一版人数口径，已由 2026-07-02 司法院定稿改为七人制。
+  - 残留扫描：该轮上一版人数口径验收项已由 2026-07-02 司法院定稿覆盖；其余 `大学学校公民教育委员会 / 大学校教委会 / 本省省参议会 / 本省省众议会 / 本省公民储备委员会 / 权责立即失效 / three levels / at all levels / town-level / national-level / governments at all levels` 均为 0。
   - “级”字复查：中文内容仍为 57 个，仅分布于第 23 条“升级军队军人违宪指控”和第 129 / 132 / 135 条职级、等级描述；未发现行政区级别残留。
   - `cargo test --manifest-path citizenchain/Cargo.toml -p node render_rebuilds_expected_anchors`：当前被工作区既有管理员管理模块编译错误阻塞，错误集中在 `node/src/admins/admin_management/commands.rs` 的 `signing` 重复导入、`build_admin_set_change_sign_request` / `submit_admin_set_change` 未解析和派生类型推断失败；该文件属于本任务外已有改动，本批宪法真源修改未触碰。
 - 2026-07-01 本批宪法真源第二次追加验收：
@@ -164,10 +170,31 @@
   - `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json` 已同步为同一份冻结 SSOT，SHA256 均为 `81c73e0054bc6717f820928f9d552f87e71e014de01bc90755478fb50762b64d`。
   - `python3 citizenchain/scripts/check-constitution-genesis.py ... --expect-code-file ...`：两份冻结 chainspec 均通过，`:code` 与 CI WASM 一致，宪法 `law_id=0`、`effective_version=1`、`latest_version=1`、`pending=None`，不可修改条款为 `1,2,3,17,19,24,34,42`。
   - 静态解析两份冻结 chainspec：`LawVersionLabels[0][1] = 创世版 / Genesis Edition`，`LawVersionLabels[0][2]` 不存在。
-  - 静态解析两份冻结 chainspec 内 `LawVersions[0][1]`：旧词 `省级行政区 / 市级行政区 / 镇级行政区 / 各级行政区 / 各级政府 / 国家级荣誉称号 / 由省、市、镇共三级组成 / 护宪大法官7人 / 每个省级行政区可选出3名 / 大学校教委会 / 本省省参议会 / 权责立即失效` 均为 0。
+  - 静态解析两份冻结 chainspec 内 `LawVersions[0][1]`：旧词 `省级行政区 / 市级行政区 / 镇级行政区 / 各级行政区 / 各级政府 / 国家级荣誉称号 / 由省、市、镇共三级组成 / 每个省级行政区可选出3名 / 大学校教委会 / 本省省参议会 / 权责立即失效` 均为 0。
   - 使用新冻结 chainspec 以 `CITIZENCHAIN_HEADLESS=1` 和仓库外 `/tmp` base-path 启动临时节点，RPC `chain_getBlockHash(0)` 返回 `0x968c7eaf68a5f138fc1eef1dbe0f2b398274216d15d06805dc1d801904cad154`，`state_getStorage(LawVersionLabels[0][1])` 返回 `创世版 / Genesis Edition`。
-  - 临时节点 `constitution_getDocument` 返回 HTML 已包含 `创世版 / Genesis Edition` 和 `不可修改条款 / Immutable Clause`，且不包含 `省级行政区 / 市级行政区 / 镇级行政区 / 护宪大法官7人 / 每个省级行政区可选出3名`。
+  - 临时节点 `constitution_getDocument` 返回 HTML 已包含 `创世版 / Genesis Edition` 和 `不可修改条款 / Immutable Clause`，且不包含 `省级行政区 / 市级行政区 / 镇级行政区 / 每个省级行政区可选出3名`。
   - `git diff --check`：通过。
+- 2026-07-02 司法院定稿验收：
+  - 结构化回读 `constitution.scale`：7 章、28 节、141 条、133 款完整解码；第 7/8/20/115 条均为本轮定稿文本；文件大小 223687 → 222564 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p primitives -p legislation-yuan -p legislation-vote`：通过；`legislation-vote` 29 项、`legislation-yuan` 23 项、`primitives` 39 项及 golden/doc tests 全过。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote national_judicial_yuan_uses_fixed_internal_threshold`：通过，NJD 固定阈值继续取 `NJD_INTERNAL_THRESHOLD=8`。
+  - `flutter test test/governance/admins-change/admins_change_codec_test.dart`：通过，固定治理机构校验接受 NJD 15 人 / 阈值 8。
+  - `flutter test test/signer/payload_decoder_test.dart`：通过，公民钱包解码接受 NJD 15 人 / 阈值 8 并继续拒绝错误固定阈值。
+  - `cargo fmt --manifest-path citizenchain/Cargo.toml --all --check`、双端 `dart format --output=none --set-exit-if-changed ...`、`git diff --check`：通过。
+  - 定向残留扫描：本轮相关范围内未再发现国家司法院上一版人数、上一版固定阈值或上一版护宪终审票数口径；国储会固定阈值与联邦注册局省级组阈值为其他制度常量保留。
+  - 冻结 chainspec 尚未重烤：正式冻结 SSOT 必须等本轮源码对应的 GitHub WASM CI 产物后执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>`；本轮未获得推送/CI 授权，未触碰 GitHub 远端。
+- 2026-07-02 第 3 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 3 条中文正文已包含 `实行民主共和（民主）`，英文保持 `democratic republicanism`。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 11 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 11 条第 1 款已更新为新互选主体，英文同步更新；文件大小 222564 → 222279 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过；编译过程出现 `internal-vote` 未使用导入 warning，来源于本轮未触碰代码，不影响测试。
+- 2026-07-02 第 12 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 12 条正文、第 1 款、第 2 款、第 3 款已更新为国家立法院众议会 / 参议会新口径，英文同步更新；文件大小 222279 → 222258 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 13 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 13 条已将市行政区司法权行权机构更新为市自治司法院，英文同步更新；文件大小 222258 → 222279 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
 
 残留清理：
 - 未新增 Isar schema、未新增业务目录。

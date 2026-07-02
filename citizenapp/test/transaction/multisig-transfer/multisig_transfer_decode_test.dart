@@ -2,13 +2,14 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_service.dart';
 
 /// 批量解码路径（_decodeProposalData）布局回归。
 ///
 /// 2026-06-11 事故:最小长度守卫残留旧 48 字节主体(要求 ≥136),链上真实
 /// propose_transfer payload 为 132 字节(机构已是 32 字节 AccountId32),
-/// 短备注(<16 字节)提案被静默判为不可解码——广场点击进不去详情、
+/// 短备注(<16 字节)提案被静默判为不可解码——提案列表点击进不去详情、
 /// 机构详情列表不显示。本测试用链上抓取的真实字节固化布局。
 void main() {
   Uint8List hexToBytes(String hex) {
@@ -45,7 +46,7 @@ void main() {
     );
 
     expect(decoded, isNotNull,
-        reason: '旧 48 字节主体长度守卫会把短备注提案静默丢弃(广场点不进/机构列表不显示)');
+        reason: '旧 48 字节主体长度守卫会把短备注提案静默丢弃(提案点不进/机构列表不显示)');
     expect(
       decoded!.institutionBytes,
       hexToBytes(
@@ -102,5 +103,66 @@ void main() {
     final raw = Uint8List.fromList([...compactU32(body.length), ...body]);
 
     expect(service.debugDecodeProposalData(3, raw), isNull);
+  });
+
+  test('公民提案流按默认机构码和订阅机构 CID 合并过滤', () {
+    Uint8List account(int seed) => Uint8List.fromList(
+          List<int>.filled(32, seed),
+        );
+
+    ProposalWithDetail proposal(
+      int id, {
+      required String code,
+      required Uint8List institution,
+      List<String> subjectCidNumbers = const [],
+    }) {
+      return ProposalWithDetail(
+        meta: ProposalMeta(
+          proposalId: id,
+          kind: 0,
+          stage: 0,
+          status: 0,
+          internalCode: code,
+          institutionBytes: institution,
+          subjectCidNumbers: subjectCidNumbers,
+        ),
+      );
+    }
+
+    const subscribedCid = 'LN001-CGOVC-000000001-2026';
+    const ignoredSameCodeCid = 'LN001-CGOVC-000000002-2026';
+    final ids = service.filterCitizenProposalFeedIds(
+      [
+        proposal(1, code: 'NRC', institution: account(0x11)),
+        proposal(2, code: 'PRC', institution: account(0x22)),
+        proposal(3, code: 'PRB', institution: account(0x33)),
+        proposal(
+          4,
+          code: 'CGOV',
+          institution: account(0x44),
+          subjectCidNumbers: const [subscribedCid],
+        ),
+        proposal(
+          5,
+          code: 'CGOV',
+          institution: account(0x45),
+          subjectCidNumbers: const [ignoredSameCodeCid],
+        ),
+        proposal(6, code: 'PRS', institution: account(0x66)),
+      ],
+      defaultCodes: const {
+        'NRC',
+        'NLG',
+        'NSN',
+        'NRP',
+        'NED',
+        'NJD',
+        'NSP',
+        'PRS',
+      },
+      subscribedInstitutionCidNumbers: const {subscribedCid},
+    );
+
+    expect(ids, [6, 4, 1]);
   });
 }

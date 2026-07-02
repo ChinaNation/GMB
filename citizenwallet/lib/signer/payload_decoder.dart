@@ -2302,7 +2302,7 @@ class PayloadDecoder {
       return adminsLen == 5 && threshold == 3;
     }
     if (code == 'NJD') {
-      return adminsLen == 13 && threshold == 8;
+      return adminsLen == 15 && threshold == 8;
     }
     if (InstitutionCode.isRegisteredMultisig(code)) {
       return adminsLen >= 2 &&

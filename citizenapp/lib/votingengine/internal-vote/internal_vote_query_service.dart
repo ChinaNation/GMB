@@ -46,7 +46,7 @@ class InternalVoteQueryService {
   /// 跨提案批量查询内部投票:输入 `{proposalId: [pubkeyHex]}`,一次链查返回
   /// `{proposalId: {pubkey: vote?}}`。
   ///
-  /// 中文注释(ADR-018 R2):广场提案列表原来每个提案各发一次批量 RPC(P 个提案
+  /// 中文注释(ADR-018 R2):公民-提案列表原来每个提案各发一次批量 RPC(P 个提案
   /// = P 次往返),这里把所有 (proposalId, admin) 的 storage key 一次拼齐、单次
   /// 分块读取,P 次往返降为 1 次。
   Future<Map<int, Map<String, bool?>>> fetchAdminVotesForProposals(

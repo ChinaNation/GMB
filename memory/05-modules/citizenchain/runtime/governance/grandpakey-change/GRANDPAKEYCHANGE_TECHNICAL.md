@@ -13,7 +13,7 @@
 - 发起人必须是该机构当前内部管理员。
 - `new_key` 不能为零值，必须是有效且非 weak/small-order 的 ed25519 公钥。
 - `new_key` 不能等于该机构当前 GRANDPA 公钥，也不能被其他机构当前占用。
-- 并发控制由 `votingengine` 的 `ActiveProposalsByInstitution` 统一管控（每机构上限 10 个活跃提案），本模块不另设单机构单提案限制。
+- 并发控制由 `votingengine` 的 `ActiveProposalsBySubject` 统一管控（每机构上限 10 个活跃提案），本模块不另设单机构单提案限制。
 - 同一把 `new_key` 若被多个活跃提案占用,第一个执行成功后后续执行会因 `NewKeyAlreadyUsed` 失败,可通过 `VotingEngine::cancel_passed_proposal`(pallet 9.5)清理。
 
 ### 0.3 执行与失败恢复需求
@@ -59,10 +59,10 @@ Runtime 配置位置：
 
 提案数据存储在 `votingengine` 中：
 - 提案动作（`GrandpaKeyReplacementAction`）通过 `create_internal_proposal_with_data` 在创建提案时原子写入，并同步绑定 `ProposalOwner`
-- 机构活跃提案列表由 `ActiveProposalsByInstitution`（上限 10 个）管控
+- 机构活跃提案列表由 `ActiveProposalsBySubject`（上限 10 个）管控
 
 历史存储项（已移除）：
-- `ActiveProposalByInstitution`：已由投票引擎统一管控
+- 单机构活跃提案本地索引：已由投票引擎 `ActiveProposalsBySubject` 统一管控
 - `PendingProposalByNewKey`：已移除，冲突在执行时检测
 - `ProposalActions`：已迁移到投票引擎
 - `ProposalCreatedAt`：已迁移到投票引擎
@@ -83,7 +83,7 @@ Runtime 配置位置：
 - `new_key` 必须是有效且非 weak/small-order 的 ed25519 公钥（`CompressedEdwardsY` + `is_small_order`）
 - `new_key != old_key`
 - `new_key` 不能被其他机构当前占用（反向索引 O(1)）
-- 机构活跃提案数由 `votingengine` 的 `ActiveProposalsByInstitution`（上限 10 个）管控
+- 机构活跃提案数由 `votingengine` 的 `ActiveProposalsBySubject`（上限 10 个）管控
 
 ### 5.2 投票入口(由 InternalVote sub-pallet 承载)
 本模块不提供独立投票 call。投票统一走 `InternalVote::cast(proposal_id, approve)`(pallet 22.0):

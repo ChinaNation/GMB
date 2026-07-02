@@ -15,17 +15,9 @@ export type MiningBlockRecord = {
   author: string;
 };
 
-export type ResourceUsage = {
-  cpuHashrateMhs: number | null;
-  gpuHashrateMhs: number | null;
-  memoryMb: number | null;
-  nodeDataSizeMb: number | null;
-};
-
 export type MiningDashboard = {
   income: MiningIncome;
   records: MiningBlockRecord[];
-  resources: ResourceUsage;
   warning: string | null;
 };
 

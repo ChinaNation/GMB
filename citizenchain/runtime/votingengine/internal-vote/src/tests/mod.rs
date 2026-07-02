@@ -13,7 +13,7 @@ use votingengine::pallet::{
     CleanupQueue, CurrentProposalYear, ExecutionRetryDeadlines, NextProposalId,
     PendingExecutionRetryExpirations, PendingExpiryBucket, PendingProposalCleanups,
     PendingTerminalCleanups, ProposalDisplayId, ProposalExecutionRetryStates, Proposals,
-    ProposalsByCode, ProposalsByExpiry, ProposalsByInstitution, ProposalsByOwner, ProposalsByYear,
+    ProposalsByCid, ProposalsByCode, ProposalsByExpiry, ProposalsByOwner, ProposalsByYear,
     YearProposalCounter,
 };
 use votingengine::types::{code_bytes, InstitutionCode, NJD, PMUL};
@@ -450,6 +450,62 @@ fn njd_pid() -> AccountId32 {
     AccountId32::new(CHINA_SF[0].main_account)
 }
 
+fn subject_cids_for(
+    institution_code: InstitutionCode,
+    institution: &AccountId32,
+) -> sp_std::vec::Vec<sp_std::vec::Vec<u8>> {
+    match institution_code {
+        NRC | PRC => CHINA_CB
+            .iter()
+            .find(|entry| AccountId32::new(entry.main_account) == *institution)
+            .map(|entry| sp_std::vec![entry.cid_number.as_bytes().to_vec()])
+            .unwrap_or_default(),
+        PRB => CHINA_CH
+            .iter()
+            .find(|entry| AccountId32::new(entry.main_account) == *institution)
+            .map(|entry| sp_std::vec![entry.cid_number.as_bytes().to_vec()])
+            .unwrap_or_default(),
+        NJD => CHINA_SF
+            .iter()
+            .find(|entry| AccountId32::new(entry.main_account) == *institution)
+            .map(|entry| sp_std::vec![entry.cid_number.as_bytes().to_vec()])
+            .unwrap_or_default(),
+        PERSONAL_CODE => sp_std::vec::Vec::new(),
+        PUBLIC_CODE => sp_std::vec![b"TEST-PUBLIC-CID".to_vec()],
+        PRIVATE_CODE => sp_std::vec![b"TEST-PRIVATE-CID".to_vec()],
+        _ => sp_std::vec![b"TEST-OTHER-CID".to_vec()],
+    }
+}
+
+fn first_subject_cid_for(
+    institution_code: InstitutionCode,
+    institution: &AccountId32,
+) -> votingengine::types::CidNumber {
+    let raw = subject_cids_for(institution_code, institution)
+        .into_iter()
+        .next()
+        .expect("institution cid should exist");
+    votingengine::Pallet::<Test>::bound_subject_cid_numbers(sp_std::vec![raw])
+        .expect("subject cid should be bounded")
+        .pop()
+        .expect("subject cid should be present")
+}
+
+fn internal_mutex_for(
+    institution_code: InstitutionCode,
+    institution: AccountId32,
+) -> Option<votingengine::InternalProposalMutexState> {
+    let subject = if institution_code == PERSONAL_CODE {
+        votingengine::ProposalSubject::PersonalAccount(institution.clone())
+    } else {
+        votingengine::ProposalSubject::InstitutionCid(first_subject_cid_for(
+            institution_code,
+            &institution,
+        ))
+    };
+    VotingEngine::internal_proposal_mutex(subject)
+}
+
 fn nrc_admin(index: usize) -> AccountId32 {
     AccountId32::new(CHINA_CB[0].admins[index])
 }
@@ -596,6 +652,7 @@ fn create_internal_proposal_via_engine(
         who,
         institution_code,
         institution.clone(),
+        subject_cids_for(institution_code, &institution),
         b"test",
         b"payload".to_vec(),
     )
@@ -611,6 +668,7 @@ fn create_pending_account_proposal_via_engine(
         who,
         institution_code,
         institution.clone(),
+        subject_cids_for(institution_code, &institution),
         sp_std::vec![pending_account_admin(0), pending_account_admin(1)],
         PendingDynamicThresholds::<Test>::get(PERSONAL_CODE, pending_account_institution()).unwrap_or(2),
         b"test",
@@ -634,6 +692,7 @@ fn create_admin_set_mutation_proposal_via_engine(
         who,
         institution_code,
         institution.clone(),
+        subject_cids_for(institution_code, &institution),
         <TestInternalAdminProvider as InternalAdminProvider<AccountId32>>::get_admin_list(
             institution_code,
             institution,
@@ -676,7 +735,8 @@ fn insert_citizen_proposal(proposal_id: u64, eligible_total: u64, end: u64) {
             stage: STAGE_REFERENDUM,
             status: STATUS_VOTING,
             internal_code: None,
-            internal_institution: None,
+            account_context: None,
+            subject_cid_numbers: Default::default(),
             start: System::block_number(),
             end,
             citizen_eligible_total: eligible_total,

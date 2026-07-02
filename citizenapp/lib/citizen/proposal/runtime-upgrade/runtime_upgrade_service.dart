@@ -280,20 +280,21 @@ class RuntimeUpgradeService {
     final stage = data[1];
     final status = data[2];
 
-    // internal_org: Option<u8>
+    // internal_code: Option<[u8;4]>
     var offset = 3;
-    int? internalOrg;
+    String? internalCode;
     if (offset < data.length && data[offset] == 1) {
       offset++;
-      if (offset < data.length) {
-        internalOrg = data[offset];
-        offset++;
+      if (offset + 4 <= data.length) {
+        internalCode =
+            _institutionCodeToString(data.sublist(offset, offset + 4));
+        offset += 4;
       }
     } else {
       offset++; // skip 0x00 (None)
     }
 
-    // internal_institution: Option<AccountId32>
+    // account_context: Option<AccountId32>
     Uint8List? institutionBytes;
     if (offset < data.length && data[offset] == 1) {
       offset++;
@@ -303,14 +304,16 @@ class RuntimeUpgradeService {
         offset += 32;
       }
     }
+    final (subjectCidNumbers, _) = _decodeSubjectCidNumbers(data, offset);
 
     return ProposalMeta(
       proposalId: proposalId,
       kind: kind,
       stage: stage,
       status: status,
-      internalOrg: internalOrg,
+      internalCode: internalCode,
       institutionBytes: institutionBytes,
+      subjectCidNumbers: subjectCidNumbers,
     );
   }
 
@@ -525,6 +528,30 @@ class RuntimeUpgradeService {
   int _decodeU32(Uint8List data, int offset) {
     final bd = ByteData.sublistView(data);
     return bd.getUint32(offset, Endian.little);
+  }
+
+  String _institutionCodeToString(List<int> bytes) {
+    return String.fromCharCodes(bytes.where((b) => b != 0)).toUpperCase();
+  }
+
+  (List<String>, int) _decodeSubjectCidNumbers(Uint8List data, int offset) {
+    if (offset >= data.length) return (const [], offset);
+    final (count, lenSize) = _decodeCompact(data, offset);
+    var cursor = offset + lenSize;
+    final result = <String>[];
+    for (var i = 0; i < count && cursor < data.length; i++) {
+      final (cidLen, cidLenSize) = _decodeCompact(data, cursor);
+      cursor += cidLenSize;
+      if (cursor + cidLen > data.length) {
+        return (List.unmodifiable(result), cursor);
+      }
+      result.add(
+        utf8.decode(data.sublist(cursor, cursor + cidLen),
+            allowMalformed: true),
+      );
+      cursor += cidLen;
+    }
+    return (List.unmodifiable(result), cursor);
   }
 
   /// 解码 SCALE Compact<u32>，返回 (value, bytesConsumed)。

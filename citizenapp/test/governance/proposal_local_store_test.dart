@@ -18,7 +18,7 @@ void main() {
     await WalletIsar.instance.resetForTest();
   });
 
-  test('提案摘要按全局索引持久化读取', () async {
+  test('提案摘要按 ID 持久化读取', () async {
     final summary = LocalProposalSummary.fromProposal(
       ProposalWithDetail(
         meta: ProposalMeta(
@@ -28,6 +28,7 @@ void main() {
           status: 0,
           internalOrg: 0,
           institutionBytes: Uint8List(32),
+          subjectCidNumbers: const ['LN001-NRC0G-000000001-2026'],
           displayMeta: const ProposalDisplayMeta(year: 2026, seqInYear: 3),
         ),
       ),
@@ -35,15 +36,14 @@ void main() {
     );
 
     await ProposalLocalStore.instance.upsertSummaries([summary]);
-    await ProposalLocalStore.instance.putGlobalIndex([12]);
 
-    final page = await ProposalLocalStore.instance.readGlobalPage();
+    final page = await ProposalLocalStore.instance.readSummariesForIds([12]);
 
     expect(page, hasLength(1));
     expect(page.single.proposalId, 12);
     expect(page.single.displayId, '2026000003');
     expect(page.single.cidFullName, nationalCouncil.cidFullName);
-    expect(await ProposalLocalStore.instance.isGlobalIndexFresh(), isTrue);
+    expect(page.single.subjectCidNumbers, ['LN001-NRC0G-000000001-2026']);
   });
 
   test('提案摘要按机构索引持久化读取', () async {

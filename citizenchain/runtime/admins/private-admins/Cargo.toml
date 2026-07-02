@@ -18,6 +18,7 @@ sp-std = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
 admin-primitives = { path = "../admin-primitives", default-features = false }
+entity-primitives = { path = "../../entity/entity-primitives", default-features = false }
 votingengine = { path = "../../votingengine", default-features = false }
 
 [features]
@@ -40,6 +41,7 @@ std = [
     "sp-std/std",
     "primitives/std",
     "admin-primitives/std",
+    "entity-primitives/std",
     "votingengine/std",
 ]
 

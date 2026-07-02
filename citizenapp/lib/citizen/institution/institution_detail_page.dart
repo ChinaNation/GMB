@@ -18,7 +18,6 @@ import 'package:citizenapp/citizen/proposal/proposal_entry_page.dart';
 import 'package:citizenapp/citizen/shared/institution_manage_detail_page.dart';
 import 'package:citizenapp/citizen/institution/institution_admin_list_page.dart';
 import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_detail_page.dart';
-import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/admin_profile.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
@@ -313,8 +312,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       // 保持空。
     }
     try {
-      final mainId = deriveInstitutionMainAccountId(inst.cidNumber);
-      final proposals = await _chainState.proposals(mainId);
+      final proposals = await _chainState.proposals(inst);
       if (mounted) setState(() => _publicProposals = proposals);
     } on Exception {
       // 保持空。

@@ -4,6 +4,7 @@
 //! 内部提案互斥锁结构、执行重试状态、清理阶段枚举等。
 
 use codec::{Decode, Encode, MaxEncodedLen};
+use frame_support::pallet_prelude::{BoundedVec, ConstU32};
 use scale_info::TypeInfo;
 
 pub const PROPOSAL_KIND_INTERNAL: u8 = 0;
@@ -25,6 +26,15 @@ pub use primitives::cid::code::{
     is_registered_multisig_code, is_valid_governance_code, InstitutionCode, FRG, NJD, NRC, PMUL,
     PRB, PRC,
 };
+
+/// 机构 CID 号链上固定上限。所有机构类主体以 CID 作为唯一身份真源。
+pub type CidNumber = BoundedVec<u8, ConstU32<{ primitives::core_const::CID_NUMBER_MAX_BYTES }>>;
+
+/// 单个提案最多关联的机构 CID 数。联合投票需要覆盖 NRC + PRC + PRB 全体机构。
+pub const MAX_PROPOSAL_SUBJECT_CIDS: u32 = 256;
+
+/// 提案关联机构 CID 集合。个人多签没有 CID,该集合必须为空。
+pub type ProposalSubjectCidNumbers = BoundedVec<CidNumber, ConstU32<MAX_PROPOSAL_SUBJECT_CIDS>>;
 
 /// 内部投票 pallet 的 stage(单阶段提案)。
 pub const STAGE_INTERNAL: u8 = 0;
@@ -52,7 +62,7 @@ pub const STAGE_LEG_SIGN: u8 = 12;
 pub const STAGE_LEG_OVERRIDE: u8 = 13;
 /// 立法投票护宪大法官终审阶段(ADR-027 修订 2026-06-25,宪法第21条):**仅修宪(tier=宪法)**。
 /// 修宪在现有流程(重要案 总统签署后 / 特别案 公投后)通过后,最后进入护宪大法官表决:
-/// 5 名护宪大法官中 3 名及以上赞成 → 生效;未获 3 名及以上赞成或 30 天超时 → 否决。
+/// 7 名护宪大法官中 4 名及以上赞成 → 生效;未获 4 名及以上赞成或 30 天超时 → 否决。
 pub const STAGE_LEG_CONSTITUTION_GUARD: u8 = 14;
 
 /// 选举投票普选阶段(election-vote):公民按行政区/机构范围投票选人。
@@ -189,7 +199,16 @@ pub enum InternalProposalMutexKind {
     AdminSetMutationExclusive,
 }
 
-/// 同一治理账户下的互斥状态。
+/// 提案主体键。机构类主体用 CID,个人多签用账户。
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub enum ProposalSubject<AccountId> {
+    /// 机构类主体:公权、私权、非法人组织等全部以 CID 为唯一身份真源。
+    InstitutionCid(CidNumber),
+    /// 个人多签主体:个人多签没有 CID,继续以个人多签账户作为主体。
+    PersonalAccount(AccountId),
+}
+
+/// 同一提案主体下的互斥状态。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct InternalProposalMutexState {
     /// 当前占用管理员集合变更独占锁的提案。
@@ -207,8 +226,7 @@ impl InternalProposalMutexState {
 /// proposal_id 到互斥锁的反向绑定，用于终态/阶段切换时释放锁。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct InternalProposalMutexBinding<AccountId> {
-    pub institution_code: InstitutionCode,
-    pub institution: AccountId,
+    pub subject: ProposalSubject<AccountId>,
     pub kind: InternalProposalMutexKind,
 }
 
@@ -235,16 +253,38 @@ pub struct Proposal<BlockNumber, AccountId> {
     pub stage: u8,
     /// 当前提案状态：投票中/通过/否决
     pub status: u8,
-    /// 仅内部投票使用：机构码（CID institution_code，治理分类唯一真源）
+    /// 仅内部投票使用:机构码。该字段只用于分类、路由和规则判断,不是主体身份真源。
     pub internal_code: Option<InstitutionCode>,
-    /// 仅内部投票使用：多签账户（全链唯一）
-    pub internal_institution: Option<AccountId>,
+    /// 投票/执行账户上下文。机构身份真源见 `subject_cid_numbers`。
+    pub account_context: Option<AccountId>,
+    /// 机构类提案关联的机构 CID 集合。个人多签没有 CID,该集合为空。
+    pub subject_cid_numbers: ProposalSubjectCidNumbers,
     /// 本阶段起始区块
     pub start: BlockNumber,
     /// 本阶段截止区块（超过则超时）
     pub end: BlockNumber,
     /// 联合公投阶段的可投票总人数（由外部资格系统给出）
     pub citizen_eligible_total: u64,
+}
+
+impl<BlockNumber, AccountId: Clone> Proposal<BlockNumber, AccountId> {
+    /// 返回用于活跃上限和互斥锁的提案主体键。
+    pub fn subject_keys(&self) -> sp_std::vec::Vec<ProposalSubject<AccountId>> {
+        if !self.subject_cid_numbers.is_empty() {
+            return self
+                .subject_cid_numbers
+                .iter()
+                .cloned()
+                .map(ProposalSubject::InstitutionCid)
+                .collect();
+        }
+        if self.internal_code == Some(PMUL) {
+            if let Some(account) = self.account_context.clone() {
+                return sp_std::vec![ProposalSubject::PersonalAccount(account)];
+            }
+        }
+        sp_std::vec::Vec::new()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]

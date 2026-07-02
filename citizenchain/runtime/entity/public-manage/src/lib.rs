@@ -810,6 +810,11 @@ pub mod pallet {
 // 机构账户只使用公权/私权法人机构码,不再把机构账户错误塞到 PMUL。
 
 impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for pallet::Pallet<T> {
+    fn lookup_cid(addr: &T::AccountId) -> Option<Vec<u8>> {
+        pallet::AccountRegisteredCid::<T>::get(addr)
+            .map(|registered| registered.cid_number.to_vec())
+    }
+
     fn lookup_org(addr: &T::AccountId) -> Option<InstitutionCode> {
         pallet::Pallet::<T>::resolve_institution_code_for_account(addr)
     }

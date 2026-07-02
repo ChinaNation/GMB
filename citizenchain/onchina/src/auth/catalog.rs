@@ -160,6 +160,7 @@ pub(crate) async fn list_own_institution_admins(
     }
     let identity = match chain_runtime::identity_from_binding_parts(
         &binding.candidate.institution_code,
+        binding.candidate.institution_cid_number.as_deref(),
         binding.candidate.institution_main_account.as_deref(),
         binding.candidate.frg_province_code.as_deref(),
     ) {

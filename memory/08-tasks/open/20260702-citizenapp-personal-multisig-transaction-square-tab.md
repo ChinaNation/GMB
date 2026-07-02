@@ -23,7 +23,7 @@
 - memory/07-ai/module-checklists/citizenapp.md
 - memory/07-ai/module-definition-of-done/citizenapp.md
 
-必须遵守：
+原导航阶段必须遵守：
 - 不修改 `citizenchain/runtime/`。
 - 不保留旧机构多签入口、旧机构多签文案、旧机构多签列表展示或旧机构发现触发路径。
 - 不删除公民 App 内合法的机构目录、机构详情、机构账户业务能力；本任务只清理原“多签”tab 中的机构功能。
@@ -31,6 +31,11 @@
 - 代码必须补中文注释。
 - 改代码后必须更新文档并清理残留。
 - 完成前必须做真实运行态验收；仅编译、分析或单元测试不算完成。
+
+当前轮追加确认（2026-07-02）：
+- 用户已确认执行“机构 CID 作为提案归属唯一真源”的链端 + CitizenApp 改造，本轮允许并要求修改 `citizenchain/runtime/`。
+- 机构码只用于提案分类/路由；机构类提案归属、订阅、活跃限制、互斥锁和反向索引统一按机构 CID。
+- 个人多签没有 CID，仍按个人多签账户 `AccountId` 作为 `ProposalSubject::PersonalAccount`。
 
 预计修改目录：
 - `citizenapp/lib/`：调整底部导航，把原“多签”tab 替换为“广场”tab；待确认后新增未来广场功能目录。
@@ -61,6 +66,15 @@
 - `flutter analyze` 或等效检查通过。
 - 真机或模拟器运行态验证导航、扫码入口、个人多签入口和新增广场 tab 行为符合目标。
 
+追加需求（2026-07-02）：
+- 公民 tab「提案」子 tab 保持单一列表，不增加“默认 / 订阅”切换或分组控件。
+- 提案列表默认显示机构码改为：`NRC/NLG/NSN/NRP/NED/NJD/NSP/PRS`。
+- `PRC/PRB` 不再默认进入提案列表；省储会、省储行只有在当前钱包订阅对应机构时才显示其提案。
+- 其它公权机构提案按当前热钱包订阅机构 CID 精确命中 `subject_cid_numbers`，不按机构码放大到同类全部机构。
+- 链端 `Proposal` 保存机构归属 CID 列表：`subject_cid_numbers`；多机构关联提案写入多个机构 CID。
+- 机构活跃提案索引改为 `ActiveProposalsBySubject`，机构类主体 key 为 `InstitutionCid(cid_number)`，个人多签主体 key 为 `PersonalAccount(account_id)`。
+- 机构提案反向索引改为 `ProposalsByCid`，按机构唯一 CID 反查提案。
+
 执行记录：
 - 已全仓搜索旧多签入口、交易页入口、`citizen/8964`、广场/提案文案和机构发现残留。
 - 已删除底部“多签”tab 挂载，原第 2 个底部 tab 改为“广场”，入口为 `citizenapp/lib/8964/square_tab_page.dart`。
@@ -71,7 +85,7 @@
 - 已将 `AdminAccountsScanService` 收窄为只扫描 `PersonalAdmins.AdminAccounts`；个人发现按 `kind=Personal`、`institution_code=PMUL`、本机管理员钱包过滤。
 - 已更新交易页测试、启动冒烟测试、AdminAccounts 过滤测试。
 - 已同步更新 CitizenApp 架构文档、personal-manage 技术文档和 governance 技术文档。
-- 未修改 `citizenchain/runtime/`；`git status` 中已有 runtime diff 属本任务前工作区既有改动。
+- 原导航阶段未修改 `citizenchain/runtime/`；本轮 CID 真源追加改造已按用户确认修改 runtime。
 
 验收结果：
 - `flutter analyze`：通过。
@@ -103,3 +117,26 @@
   - `公民-广场`
 - 已删除空目录 `citizenapp/lib/citizen/8964`。
 - 已停止 Android 模拟器和运行中的 CitizenApp debug 会话。
+- 已按本轮 CID 方案再次调整 `citizenapp/lib/citizen/all/proposal_view.dart`：公民-提案使用默认 8 个机构码 + 当前钱包订阅机构 CID 合并过滤，保持单一列表，不增加顶部切换。
+- 已扩展 `MultisigTransferService.filterCitizenProposalFeedIds()` 和 `MultisigTransferProposalFeed.fetchCitizenProposalFeedIds()`，默认范围按机构码命中，订阅范围按 `subject_cid_numbers` 中的机构 CID 精确命中并按 proposal_id 倒序去重。
+- 已扩展 `ProposalContextResolver.resolveBatch()` 支持传入 accountHex→InstitutionInfo 映射，避免订阅公权机构和默认国家机构在提案列表/详情中退回“机构账户 xxxx”。
+- 已删除 `ProposalLocalStore` 的全局治理索引 API 和对应测试，公民-提案不再读取/保存 `governance.proposal.index.global`。
+- 已更新 `multisig_transfer_decode_test.dart` 覆盖默认码、订阅 CID、`PRC/PRB` 非默认和同码未订阅不误入。
+- 已更新 CitizenApp 架构文档和 governance 技术文档，清理“公民-提案只按 NRC/PRC/PRB / 广场提案列表 / 全局治理索引是真源”的旧描述。
+
+CID 真源改造执行记录（2026-07-02）：
+- 已修改 `citizenchain/runtime/votingengine`：`Proposal` 新增 `subject_cid_numbers` 与 `account_context`；`ActiveProposalsBySubject`、`InternalProposalMutexes`、`ProposalsByCid` 全部以 `ProposalSubject` / CID 为主体真源。
+- 已修改 internal-vote / joint-vote / legislation-vote / election-vote / admins / manage / governance / multisig-transfer 等链端创建路径：机构类提案必须写入 CID；多机构提案写入多个 CID；个人多签提案写入空 CID 并使用 `PersonalAccount`。
+- 已修改 `entity-primitives::InstitutionMultisigQuery` 增加 `lookup_cid`，runtime 通过公权/私权注册表查机构 CID。
+- 已修改 CitizenApp 提案解码：`ProposalMeta`、本地摘要、运行时升级和多签转账提案解码全部读取 `subject_cid_numbers`。
+- 已修改 CitizenApp 提案列表/机构详情/活跃提案查询：机构详情按 `subject_cid_numbers` 包含本机构 CID 过滤；订阅按 CID 命中；个人多签活跃提案按 `ProposalSubject::PersonalAccount` 查询。
+- 已修改 OnChina 立法大屏只读链路：`Proposal` 镜像解码加入 `subject_cid_numbers`；活跃提案读取改为 `ActiveProposalsBySubject[InstitutionCid(cid_number)]`；节点绑定身份携带 `institution_cid_number`。
+- 已更新 memory 技术文档、ADR 和任务卡，清理旧 storage 名、旧字段名和“订阅按主账户”旧口径。
+
+CID 真源改造验收结果（2026-07-02）：
+- `cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote -p public-admins -p private-admins -p legislation-vote -p election-vote`：通过。
+- `cargo test -p onchina --manifest-path citizenchain/Cargo.toml`：通过，131 项测试通过。
+- `cargo check -p citizenchain --manifest-path citizenchain/Cargo.toml`：通过。
+- `flutter analyze`：通过。
+- `flutter test test/transaction/multisig-transfer/multisig_transfer_decode_test.dart test/governance/proposal_local_store_test.dart test/citizen/institution/institution_detail_test.dart`：通过。
+- `flutter test --concurrency=1`：通过，303 项测试通过，4 项原生 OpenMLS / smoldot 宿主库相关测试按既有条件跳过。

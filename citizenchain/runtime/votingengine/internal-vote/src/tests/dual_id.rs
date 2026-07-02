@@ -21,7 +21,8 @@ fn create_general_internal_proposal_with_data_via_engine(
     <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
         who,
         institution_code,
-        institution,
+        institution.clone(),
+        subject_cids_for(institution_code, &institution),
         module_tag,
         b"payload".to_vec(),
     )
@@ -99,8 +100,11 @@ fn reverse_indexes_populated_after_register_proposal_data() {
 
         // ProposalsByCode
         assert!(ProposalsByCode::<Test>::contains_key(NRC, id));
-        // ProposalsByInstitution
-        assert!(ProposalsByInstitution::<Test>::contains_key(nrc_pid(), id));
+        // ProposalsByCid
+        assert!(ProposalsByCid::<Test>::contains_key(
+            first_subject_cid_for(NRC, &nrc_pid()),
+            id
+        ));
         // ProposalsByYear
         let display = ProposalDisplayId::<Test>::get(id).unwrap();
         assert!(ProposalsByYear::<Test>::contains_key(display.year, id));
@@ -130,7 +134,10 @@ fn final_cleanup_removes_indexes_and_display_id() {
 
         assert!(!ProposalDisplayId::<Test>::contains_key(id));
         assert!(!ProposalsByCode::<Test>::contains_key(NRC, id));
-        assert!(!ProposalsByInstitution::<Test>::contains_key(nrc_pid(), id));
+        assert!(!ProposalsByCid::<Test>::contains_key(
+            first_subject_cid_for(NRC, &nrc_pid()),
+            id
+        ));
         assert!(!ProposalsByYear::<Test>::contains_key(display.year, id));
         assert!(!ProposalsByOwner::<Test>::contains_key(owner, id));
     });

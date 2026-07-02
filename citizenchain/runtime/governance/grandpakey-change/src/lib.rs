@@ -10,6 +10,9 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
+use alloc::vec::Vec;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use frame_support::{ensure, pallet_prelude::*, traits::StorageVersion, Blake2_128Concat};
@@ -51,6 +54,16 @@ fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
     CHINA_CB
         .first()
         .and_then(|n| decode_account::<T>(&n.main_account))
+}
+
+fn account_cid<T: frame_system::Config>(institution: &T::AccountId) -> Option<Vec<u8>> {
+    CHINA_CB.iter().find_map(|entry| {
+        if decode_account::<T>(&entry.main_account).as_ref() == Some(institution) {
+            Some(entry.cid_number.as_bytes().to_vec())
+        } else {
+            None
+        }
+    })
 }
 
 /// 中文注释：判断机构属于 NRC 还是 PRC，不属于任何一类则返回 None。
@@ -248,6 +261,7 @@ pub mod pallet {
                 who.clone(),
                 actual_org,
                 institution.clone(),
+                Vec::from([account_cid::<T>(&institution).ok_or(Error::<T>::InvalidInstitution)?]),
                 crate::MODULE_TAG,
                 encoded,
             )?;

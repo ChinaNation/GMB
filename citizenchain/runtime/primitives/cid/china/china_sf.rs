@@ -15,13 +15,15 @@ pub struct ChinaSf {
 
 /// 国家司法院创世公职人员公钥。
 ///
-/// 中文注释:顺序对应宪法设计的 5 名护宪大法官、1 名首席大法官、2 名次席大法官、5 名大法官。
+/// 中文注释:顺序对应宪法设计的 7 名护宪大法官、1 名首席大法官、2 名次席大法官、5 名大法官。
 pub const NATIONAL_JUDICIAL_YUAN_ADMINS: &[[u8; 32]] = &[
     hex!("44ad80a3b00e5e40ba8e358da09fff2d3321bc40461b1006e7eefa32412cd003"),
     hex!("32bba94a68b88c0e694f1aa4111bdcb1a71d3a2d1d3560a2f3d1ec6a559f8f1c"),
     hex!("ca4c31cb07a6c8e6af201f7027cf99b0887bd33b37e490467e33d41c0561de70"),
     hex!("c8c0bb8a1ac507aa1e9aa38ea96666491c9c4ef1089821382d002a78296f836e"),
     hex!("fe1ac5f3921bf1aba92a2b7b2aaadf1c8969f0a99208b30f9c01bb1153f0ea07"),
+    hex!("9c3e18f575c59236832054469ef0e69f16a1fe6c50b2b580fc7c71853ab71068"),
+    hex!("0c6b4b86d8efbc8f15c62a26f1b063414cdab6aa831dcdede307dac00872462d"),
     hex!("983a95b0823bb416a65dc7dc8fcdbfee510abe8cebadd7de2241e2da28416c23"),
     hex!("bcd108b6110b4e91b6d5f7bbe3108f8329735d60be07d8ce9327b594ca3c033b"),
     hex!("80d6d472cccd7e596acccd1ce506f9e094d74a25f15069bae26474e14ead0457"),

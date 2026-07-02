@@ -27,6 +27,7 @@ class ProposalMeta {
     this.internalOrg,
     this.internalCode,
     this.institutionBytes,
+    this.subjectCidNumbers = const [],
     this.displayMeta,
   });
 
@@ -36,7 +37,12 @@ class ProposalMeta {
   final int status; // 0=voting, 1=passed, 2=rejected
   final int? internalOrg;
   final String? internalCode;
+
+  /// 链上 Proposal.account_context。机构归属真源不看这里,只看 [subjectCidNumbers]。
   final Uint8List? institutionBytes;
+
+  /// 链上 Proposal.subject_cid_numbers。机构类提案归属和订阅过滤统一用 CID。
+  final List<String> subjectCidNumbers;
 
   /// 展示号(双层 ID:主键 `proposalId` 单调,展示号年份+序号通过 `ProposalDisplayId` 反查)。
   /// 列表页 batch fetch 后填充;详情页解码 ProposalMeta 时同步查询。

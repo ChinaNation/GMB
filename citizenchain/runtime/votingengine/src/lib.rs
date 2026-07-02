@@ -86,7 +86,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxInternalProposalMutexBindings: Get<u32>;
 
-        /// 每个机构最多允许同时存在的活跃提案数量。
+        /// 每个主体最多允许同时存在的活跃提案数量。
+        ///
+        /// 中文注释:机构类主体以 CID 计数,个人多签以账户计数。
         #[pallet::constant]
         type MaxActiveProposals: Get<u32>;
 
@@ -362,26 +364,27 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// 每个机构的活跃提案 ID 列表（全局管控，不区分提案类型，上限由 Runtime 配置）。
+    /// 每个主体的活跃提案 ID 列表（全局管控，不区分提案类型，上限由 Runtime 配置）。
+    ///
+    /// 中文注释:机构类主体 key=ProposalSubject::InstitutionCid(cid_number);
+    /// 个人多签 key=ProposalSubject::PersonalAccount(account)。
     #[pallet::storage]
-    #[pallet::getter(fn active_proposals_by_institution)]
-    pub type ActiveProposalsByInstitution<T: Config> = StorageMap<
+    #[pallet::getter(fn active_proposals_by_subject)]
+    pub type ActiveProposalsBySubject<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        T::AccountId,
+        ProposalSubject<T::AccountId>,
         BoundedVec<u64, T::MaxActiveProposals>,
         ValueQuery,
     >;
 
-    /// 同一治理账户的内部提案互斥状态：(institution_code, institution) → 锁状态。
+    /// 同一主体的内部提案互斥状态。
     #[pallet::storage]
     #[pallet::getter(fn internal_proposal_mutex)]
-    pub type InternalProposalMutexes<T: Config> = StorageDoubleMap<
+    pub type InternalProposalMutexes<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        InstitutionCode,
-        Blake2_128Concat,
-        T::AccountId,
+        ProposalSubject<T::AccountId>,
         InternalProposalMutexState,
         OptionQuery,
     >;
@@ -413,11 +416,11 @@ pub mod pallet {
     pub type ProposalsByCode<T: Config> =
         StorageDoubleMap<_, Twox64Concat, InstitutionCode, Twox64Concat, u64, (), OptionQuery>;
 
-    /// 反向索引:institution(48 字节 PalletId) → 该机构所有提案 ID。
-    /// 机构详情页直接迭代该表,不再走"全年扫描 + 客户端过滤"。
+    /// 反向索引:cid_number → 该机构主体所有关联提案 ID。
+    /// 机构详情页和订阅提案流以 CID 为唯一真源。
     #[pallet::storage]
-    pub type ProposalsByInstitution<T: Config> =
-        StorageDoubleMap<_, Twox64Concat, T::AccountId, Twox64Concat, u64, (), OptionQuery>;
+    pub type ProposalsByCid<T: Config> =
+        StorageDoubleMap<_, Twox64Concat, CidNumber, Twox64Concat, u64, (), OptionQuery>;
 
     /// 反向索引:业务模块 MODULE_TAG → 该模块所有提案 ID。
     /// "只看 runtime 升级提案 / 只看决议销毁提案"等视图走该表。
@@ -728,6 +731,25 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// 把业务模块传入的机构 CID 列表转为链上有界主体集合。
+        ///
+        /// 中文注释:CID 是机构类提案归属唯一真源;机构码和账户都不能替代 CID。
+        /// 个人多签没有 CID,调用方应传空列表。
+        pub fn bound_subject_cid_numbers(
+            subject_cid_numbers: Vec<Vec<u8>>,
+        ) -> Result<ProposalSubjectCidNumbers, DispatchError> {
+            let mut out = ProposalSubjectCidNumbers::default();
+            for raw in subject_cid_numbers {
+                ensure!(!raw.is_empty(), Error::<T>::InvalidInstitution);
+                let cid: CidNumber = raw.try_into().map_err(|_| Error::<T>::InvalidInstitution)?;
+                if !out.iter().any(|existing| existing == &cid) {
+                    out.try_push(cid)
+                        .map_err(|_| Error::<T>::InvalidInstitution)?;
+                }
+            }
+            Ok(out)
+        }
+
         // ──────────────────────────────────────────────────────────
         // sub-pallet 调用的事件 emit helper(do_X 搬到 sub-pallet 后,
         // 仍需要发 votingengine 自己的 lifecycle event)
@@ -1048,7 +1070,7 @@ pub mod pallet {
         fn ensure_retry_admin(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
             let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
             let institution = proposal
-                .internal_institution
+                .account_context
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 Self::is_admin_in_snapshot(proposal_id, institution, who),
@@ -1475,38 +1497,45 @@ pub mod pallet {
         /// 更新提案状态，并按统一 executor 结果推进业务执行状态。
         pub fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
             with_transaction(|| {
-                let (kind, stage, institution, should_run_callback) =
-                    match Proposals::<T>::try_mutate(
-                        proposal_id,
-                        |maybe| -> Result<(u8, u8, Option<T::AccountId>, bool), DispatchError> {
-                            let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
-                            let old_status = proposal.status;
-                            Self::ensure_valid_status_transition(old_status, status)?;
-                            let kind = proposal.kind;
-                            let stage = proposal.stage;
-                            let inst = proposal.internal_institution.clone();
-                            proposal.status = status;
-                            if old_status == STATUS_VOTING && status == STATUS_PASSED {
-                                let now = frame_system::Pallet::<T>::block_number();
-                                Self::mark_proposal_passed_at(proposal_id, now);
-                            }
-                            Ok((
-                                kind,
-                                stage,
-                                inst,
-                                old_status == STATUS_VOTING
-                                    && matches!(status, STATUS_PASSED | STATUS_REJECTED),
-                            ))
-                        },
-                    ) {
-                        Ok(v) => v,
-                        Err(err) => return TransactionOutcome::Rollback(Err(err)),
-                    };
+                let (kind, stage, subjects, should_run_callback) = match Proposals::<T>::try_mutate(
+                    proposal_id,
+                    |maybe| -> Result<
+                        (
+                            u8,
+                            u8,
+                            sp_std::vec::Vec<ProposalSubject<T::AccountId>>,
+                            bool,
+                        ),
+                        DispatchError,
+                    > {
+                        let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
+                        let old_status = proposal.status;
+                        Self::ensure_valid_status_transition(old_status, status)?;
+                        let kind = proposal.kind;
+                        let stage = proposal.stage;
+                        let subjects = proposal.subject_keys();
+                        proposal.status = status;
+                        if old_status == STATUS_VOTING && status == STATUS_PASSED {
+                            let now = frame_system::Pallet::<T>::block_number();
+                            Self::mark_proposal_passed_at(proposal_id, now);
+                        }
+                        Ok((
+                            kind,
+                            stage,
+                            subjects,
+                            old_status == STATUS_VOTING
+                                && matches!(status, STATUS_PASSED | STATUS_REJECTED),
+                        ))
+                    },
+                ) {
+                    Ok(v) => v,
+                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                };
 
                 // 提案结束（通过或拒绝），立即释放活跃提案名额
                 if status != STATUS_VOTING {
-                    if let Some(inst) = institution {
-                        limit::remove_active_proposal::<T>(inst, proposal_id);
+                    for subject in subjects {
+                        limit::remove_active_proposal::<T>(subject, proposal_id);
                     }
                 }
 

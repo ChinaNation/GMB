@@ -10,53 +10,29 @@ import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_model
 
 /// 提案列表本地持久化读库。
 ///
-/// 中文注释：这里复用 Isar 的 AppKvEntity 保存“展示摘要”和“列表索引”，
-/// 只服务治理机构列表/广场列表首屏展示；投票、执行、提交前仍必须重查链上真值。
+/// 中文注释：这里复用 Isar 的 AppKvEntity 保存“展示摘要”和“机构列表索引”，
+/// 只服务治理机构详情页和公民-提案列表展示；投票、执行、提交前仍必须重查链上真值。
 class ProposalLocalStore {
   ProposalLocalStore._();
 
   static final ProposalLocalStore instance = ProposalLocalStore._();
 
   static const Duration institutionIndexTtl = Duration(minutes: 5);
-  static const Duration globalIndexTtl = Duration(minutes: 5);
 
   static const String _summaryPrefix = 'governance.proposal.summary.';
   static const String _institutionIndexPrefix =
       'governance.proposal.index.institution.';
-  static const String _globalIndexKey = 'governance.proposal.index.global';
 
   String institutionIndexKey(String cidNumber) =>
       '$_institutionIndexPrefix$cidNumber';
-
-  Future<ProposalLocalIndex?> readGlobalIndex() {
-    return _readIndex(_globalIndexKey);
-  }
 
   Future<ProposalLocalIndex?> readInstitutionIndex(String cidNumber) {
     return _readIndex(institutionIndexKey(cidNumber));
   }
 
-  Future<bool> isGlobalIndexFresh() async {
-    final index = await readGlobalIndex();
-    return index != null && index.isFresh(globalIndexTtl);
-  }
-
   Future<bool> isInstitutionIndexFresh(String cidNumber) async {
     final index = await readInstitutionIndex(cidNumber);
     return index != null && index.isFresh(institutionIndexTtl);
-  }
-
-  Future<List<LocalProposalSummary>> readGlobalPage({
-    int offset = 0,
-    int limit = 10,
-  }) async {
-    final index = await readGlobalIndex();
-    if (index == null || offset >= index.ids.length) {
-      return const [];
-    }
-    final to =
-        offset + limit > index.ids.length ? index.ids.length : offset + limit;
-    return readSummariesForIds(index.ids.sublist(offset, to));
   }
 
   Future<List<LocalProposalSummary>> readInstitutionSummaries(
@@ -82,10 +58,6 @@ class ProposalLocalStore {
       }
       return result;
     });
-  }
-
-  Future<void> putGlobalIndex(List<int> ids) {
-    return _putIndex(_globalIndexKey, ids);
   }
 
   Future<void> putInstitutionIndex(String cidNumber, List<int> ids) {
@@ -200,6 +172,7 @@ class LocalProposalSummary {
     this.internalOrg,
     this.internalCode,
     this.institutionBytesHex,
+    this.subjectCidNumbers = const [],
     this.displayYear,
     this.displaySeqInYear,
     this.institutionCidNumber,
@@ -213,6 +186,7 @@ class LocalProposalSummary {
   final int? internalOrg;
   final String? internalCode;
   final String? institutionBytesHex;
+  final List<String> subjectCidNumbers;
   final int? displayYear;
   final int? displaySeqInYear;
   final String? institutionCidNumber;
@@ -240,6 +214,7 @@ class LocalProposalSummary {
         internalOrg: internalOrg,
         internalCode: internalCode,
         institutionBytes: _hexToBytes(institutionBytesHex),
+        subjectCidNumbers: subjectCidNumbers,
         displayMeta: displayMeta,
       );
 
@@ -326,6 +301,7 @@ class LocalProposalSummary {
       internalOrg: meta.internalOrg,
       internalCode: meta.internalCode,
       institutionBytesHex: _bytesToHex(meta.institutionBytes),
+      subjectCidNumbers: meta.subjectCidNumbers,
       displayYear: meta.displayMeta?.year,
       displaySeqInYear: meta.displayMeta?.seqInYear,
       institutionCidNumber: institution?.cidNumber,
@@ -346,6 +322,7 @@ class LocalProposalSummary {
         'internal_org': internalOrg,
         'internal_code': internalCode,
         'institution_bytes_hex': institutionBytesHex,
+        'subject_cid_numbers': subjectCidNumbers,
         'display_year': displayYear,
         'display_seq_in_year': displaySeqInYear,
         'institution_cid_number': institutionCidNumber,
@@ -391,6 +368,7 @@ class LocalProposalSummary {
         internalCode: _toNullableString(decoded['internal_code']),
         institutionBytesHex:
             _toNullableString(decoded['institution_bytes_hex']),
+        subjectCidNumbers: _toStringList(decoded['subject_cid_numbers']),
         displayYear: _toInt(decoded['display_year']),
         displaySeqInYear: _toInt(decoded['display_seq_in_year']),
         institutionCidNumber:
@@ -471,4 +449,13 @@ String? _toNullableString(Object? value) {
   final text = value?.toString();
   if (text == null || text.isEmpty || text == 'null') return null;
   return text;
+}
+
+List<String> _toStringList(Object? value) {
+  if (value is! List) return const [];
+  return value
+      .map((item) => item?.toString())
+      .whereType<String>()
+      .where((item) => item.isNotEmpty)
+      .toList(growable: false);
 }

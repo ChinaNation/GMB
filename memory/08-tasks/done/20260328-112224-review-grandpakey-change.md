@@ -59,13 +59,13 @@
 ### 已确认问题与改进点
 
 1. 功能需求未严格实现：代码没有落实“同一机构同一时间只允许一个活跃提案”与“同一把 new_key 同一时间只能被一个活跃提案占用”。
-   - `grandpakey-change` 代码里没有 `ActiveProposalByInstitution`、`PendingProposalByNewKey`、`ProposalActions`、`ProposalCreatedAt` 这些文档和 weight 声称存在的本地存储
+   - `grandpakey-change` 代码里没有单机构活跃提案、按新 key 挂起提案、提案动作、创建块这些文档和 weight 声称存在的本地存储
    - 当前真实限制来自 `voting-engine` 的全局活跃提案上限：每机构最多 10 个，而不是 1 个
    - `new_key` 只检查“当前是否已被其他机构使用”，不检查“是否已被其他活跃提案预占用”
    - 结果是：同机构可并行提出多个换钥提案，不同机构也可同时提出同一个未来 `new_key`，冲突会拖到执行阶段才暴露
 
 2. `weights.rs` 明显失真，仍引用代码里不存在的存储与旧调用模型：
-   - `ActiveProposalByInstitution`
+   - 单机构活跃提案本地索引
    - `PendingProposalByNewKey`
    - `ProposalActions`
    - `ProposalCreatedAt`

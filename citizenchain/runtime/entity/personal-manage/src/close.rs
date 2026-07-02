@@ -117,6 +117,7 @@ pub(crate) fn do_propose_close<T: Config>(
             who.clone(),
             institution_code,
             institution,
+            alloc::vec::Vec::new(),
             crate::MODULE_TAG,
             data,
         )?;

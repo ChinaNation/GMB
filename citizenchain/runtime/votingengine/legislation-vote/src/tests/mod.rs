@@ -71,7 +71,7 @@ pub fn member(idx: u8) -> AccountId32 {
     AccountId32::new([idx; 32])
 }
 
-const DEFAULT_GUARD_MEMBER_IDS: [u8; 5] = [101, 102, 103, 104, 105];
+const DEFAULT_GUARD_MEMBER_IDS: [u8; 7] = [101, 102, 103, 104, 105, 106, 107];
 
 thread_local! {
     static GUARD_MEMBER_IDS: RefCell<std::vec::Vec<u8>> =
@@ -159,7 +159,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             None
         }
     }
-    /// 护宪大法官默认 5 人 = 账户 [101..=105](测试注入;生产按 NJD admins 的 admin_role 过滤)。
+    /// 护宪大法官默认 7 人 = 账户 [101..=107](测试注入;生产按 NJD admins 的 admin_role 过滤)。
     fn constitution_guard_members() -> sp_runtime::sp_std::vec::Vec<AccountId32> {
         GUARD_MEMBER_IDS.with(|ids| ids.borrow().iter().copied().map(member).collect())
     }
@@ -169,6 +169,30 @@ pub struct TestTimeProvider;
 impl frame_support::traits::UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
         core::time::Duration::from_secs(1_782_864_000)
+    }
+}
+
+pub struct TestInstitutionQuery;
+impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
+    fn lookup_cid(addr: &AccountId32) -> Option<std::vec::Vec<u8>> {
+        let mut cid = b"TEST-LEG-".to_vec();
+        let bytes: &[u8] = addr.as_ref();
+        cid.extend_from_slice(&bytes[..4]);
+        Some(cid)
+    }
+
+    fn lookup_org(_addr: &AccountId32) -> Option<InstitutionCode> {
+        None
+    }
+
+    fn lookup_admin_config(
+        _addr: &AccountId32,
+    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId32>> {
+        None
+    }
+
+    fn is_active(_addr: &AccountId32) -> bool {
+        true
     }
 }
 
@@ -229,6 +253,7 @@ impl internal_vote::Config for Test {
 
 impl crate::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionQuery = TestInstitutionQuery;
     type WeightInfo = ();
 }
 

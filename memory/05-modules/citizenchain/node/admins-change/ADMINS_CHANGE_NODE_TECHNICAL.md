@@ -129,7 +129,7 @@ citizenchain/node/frontend/admins/admin-management/
 - 发起签名公钥必须是当前管理员。
 - 新管理员公钥必须为 32 字节 hex，不能重复。
 - 新集合不能与当前集合完全相同。
-- 内置治理机构固定人数：NRC 19，PRC 9，PRB 9，FRG 省级组 5，NJD 13。
+- 内置治理机构固定人数：NRC 19，PRC 9，PRB 9，FRG 省级组 5，NJD 15；NJD 固定阈值 8/15。
 - 联邦注册局管理员更换必须按省级 5 人组治理，不允许 node 通用流程生成 FRG 的 `12.0` call data。
 - `注册机构归属关系` 只用于机构归属、检索、展示和反查，不允许作为管理员更换主体。
 - 个人多签必须使用个人多签码（`is_personal_code`，PMUL），管理员数量：`2..=64`。

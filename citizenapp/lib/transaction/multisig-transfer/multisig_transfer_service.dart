@@ -274,10 +274,9 @@ class MultisigTransferService {
     return result;
   }
 
-  // 提案查询统一走按年取 + 客户端过滤:org 过滤(filterGovernanceIds)、
-  // institution 过滤(filterInstitutionVisible)。`ProposalsByInstitution`
-  // 是嵌 32 字节 account 的长前缀扫描,轻节点静默返回空,故不直接用。
-  // `ProposalsByYear`(短 key)是唯一的反向索引入口。
+  // 提案查询统一走按年取 + 客户端过滤:code 过滤(filterGovernanceIds)、
+  // CID 过滤(filterInstitutionVisible)。链端归属真源是 Proposal.subject_cid_numbers,
+  // `ProposalsByYear` 是全量短 key 入口,列表页只从已解码 CID 集合筛选。
 
   /// 通用反向索引迭代器。
   ///
@@ -326,15 +325,15 @@ class MultisigTransferService {
     return ids;
   }
 
-  /// 每个机构最多同时 10 个活跃提案（全局，不区分提案类型）。
+  /// 每个机构 CID 主体最多同时 10 个活跃提案（全局，不区分提案类型）。
   static const maxActiveProposalsPerInstitution = 10;
 
-  /// 查询机构活跃的提案 ID 列表（从 VotingEngine 全局存储读取）。
+  /// 查询机构 CID 主体活跃的提案 ID 列表（从 VotingEngine 全局存储读取）。
   Future<List<int>> fetchActiveProposalIds(InstitutionInfo institution) async {
     final key = _buildStorageKey(
       'VotingEngine',
-      'ActiveProposalsByInstitution',
-      _institutionAccountId(institution),
+      'ActiveProposalsBySubject',
+      _proposalSubjectInstitutionCidKey(institution.cidNumber),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null || data.isEmpty) return const [];
@@ -422,7 +421,7 @@ class MultisigTransferService {
     return data[2];
   }
 
-  /// 查询提案完整元数据（status + institution bytes）。
+  /// 查询提案完整元数据（status + account_context + subject_cid_numbers）。
   /// 返回 null 表示提案不存在。
   Future<ProposalMeta?> fetchProposalMeta(int proposalId) async {
     final key = _buildStorageKey(
@@ -453,7 +452,7 @@ class MultisigTransferService {
       offset++; // skip 0x00 (None)
     }
 
-    // internal_institution: Option<AccountId32>
+    // account_context: Option<AccountId32>
     Uint8List? institutionBytes;
     if (offset < data.length && data[offset] == 1) {
       offset++;
@@ -463,6 +462,7 @@ class MultisigTransferService {
         offset += 32;
       }
     }
+    final (subjectCidNumbers, _) = _decodeSubjectCidNumbers(data, offset);
 
     // 双层 ID v1:同时查 ProposalDisplayId 反查表(失败不阻塞,fallback null)
     ProposalDisplayMeta? displayMeta;
@@ -481,6 +481,7 @@ class MultisigTransferService {
       status: status,
       internalCode: internalCode,
       institutionBytes: institutionBytes,
+      subjectCidNumbers: subjectCidNumbers,
       displayMeta: displayMeta,
     );
   }
@@ -559,6 +560,7 @@ class MultisigTransferService {
             status: meta.status,
             internalCode: meta.internalCode,
             institutionBytes: meta.institutionBytes,
+            subjectCidNumbers: meta.subjectCidNumbers,
             displayMeta: dm,
           );
           cachedMetas[id] = patched;
@@ -746,8 +748,8 @@ class MultisigTransferService {
   ///
   /// 中文注释:`ProposalsByYear[year]` 是短 key 索引,轻节点可正常前缀扫描;
   /// 链端对每个提案无条件写入该索引、终态清理时移除,所以按年取得到的就是
-  /// "全部存活提案"。广场 / 机构详情 / 个人多签统一从这一份结果客户端按
-  /// 已解码字段过滤,替代会在轻节点静默返回空的 `ProposalsByInstitution[account]`
+  /// "全部存活提案"。公民-提案 / 机构详情 / 个人多签统一从这一份结果客户端按
+  /// 已解码 `subject_cid_numbers` 过滤,替代旧的账户归属过滤。
   /// 长前缀扫描,并让多页面共用一次查询(见 ProposalFeedCache,降全节点负载)。
   Future<List<ProposalWithDetail>> fetchCurrentYearProposals() async {
     final currentYear = await _resolveCurrentYear();
@@ -757,17 +759,14 @@ class MultisigTransferService {
   }
 
   /// 从当前年提案全集过滤出指定机构页可见的提案(纯客户端,不联网):
-  /// 本机构内部提案(`internal_institution == 机构 AccountId`)∪ 全部联合投票
-  /// (`kind == 1`,runtime 升级 / 决议在所有机构页可见)。
+  /// 本机构关联提案(`subject_cid_numbers` 包含机构 CID)。
   List<ProposalWithDetail> filterInstitutionVisible(
     List<ProposalWithDetail> all,
     InstitutionInfo institution,
   ) {
-    final account = _institutionAccountId(institution);
+    final cidNumber = institution.cidNumber;
     final visible = all.where((p) {
-      final inst = p.meta.institutionBytes;
-      final mine = inst != null && _bytesEqual(inst, account);
-      return mine || p.meta.kind == 1;
+      return p.meta.subjectCidNumbers.contains(cidNumber);
     }).toList();
     visible.sort((a, b) => b.meta.proposalId.compareTo(a.meta.proposalId));
     return visible;
@@ -782,6 +781,37 @@ class MultisigTransferService {
         .where((p) =>
             p.meta.internalCode != null && codes.contains(p.meta.internalCode))
         .map((p) => p.meta.proposalId)
+        .toList();
+    ids.sort((a, b) => b.compareTo(a));
+    return ids;
+  }
+
+  /// 公民 tab「提案」统一流:默认公共机构码 ∪ 当前钱包订阅机构 CID。
+  ///
+  /// 中文注释:默认范围按机构码命中(如 NRC/NLG/PRS),订阅范围必须按机构
+  /// CID 精确命中,不能按机构码放大,否则会把同类所有省/市机构全部塞进用户提案流。
+  List<int> filterCitizenProposalFeedIds(
+    List<ProposalWithDetail> all, {
+    required Set<String> defaultCodes,
+    required Set<String> subscribedInstitutionCidNumbers,
+  }) {
+    final normalizedDefaultCodes =
+        defaultCodes.map((code) => code.toUpperCase()).toSet();
+    final normalizedSubscribedCidNumbers = subscribedInstitutionCidNumbers
+        .map((cid) => cid.trim())
+        .where((cid) => cid.isNotEmpty)
+        .toSet();
+    final ids = all
+        .where((p) {
+          final code = p.meta.internalCode?.toUpperCase();
+          if (code != null && normalizedDefaultCodes.contains(code)) {
+            return true;
+          }
+          return p.meta.subjectCidNumbers
+              .any(normalizedSubscribedCidNumbers.contains);
+        })
+        .map((p) => p.meta.proposalId)
+        .toSet()
         .toList();
     ids.sort((a, b) => b.compareTo(a));
     return ids;
@@ -864,8 +894,10 @@ class MultisigTransferService {
       if (offset + 32 <= data.length) {
         institutionBytes =
             Uint8List.fromList(data.sublist(offset, offset + 32));
+        offset += 32;
       }
     }
+    final (subjectCidNumbers, _) = _decodeSubjectCidNumbers(data, offset);
 
     return ProposalMeta(
       proposalId: proposalId,
@@ -874,6 +906,7 @@ class MultisigTransferService {
       status: status,
       internalCode: internalCode,
       institutionBytes: institutionBytes,
+      subjectCidNumbers: subjectCidNumbers,
     );
   }
 
@@ -1675,6 +1708,34 @@ class MultisigTransferService {
         mainAccount: mainAccount,
       ),
     );
+  }
+
+  /// VotingEngine ProposalSubject::InstitutionCid(cid_number) 的 SCALE key。
+  Uint8List _proposalSubjectInstitutionCidKey(String cidNumber) {
+    final cidBytes = Uint8List.fromList(utf8.encode(cidNumber));
+    final output = ByteOutput();
+    output.pushByte(0); // enum variant 0 = InstitutionCid
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(cidBytes.length)));
+    output.write(cidBytes);
+    return output.toBytes();
+  }
+
+  (List<String>, int) _decodeSubjectCidNumbers(Uint8List data, int offset) {
+    if (offset >= data.length) return (const [], offset);
+    final (count, lenSize) = _decodeCompact(data, offset);
+    var cursor = offset + lenSize;
+    final result = <String>[];
+    for (var i = 0; i < count && cursor < data.length; i++) {
+      final (cidLen, cidLenSize) = _decodeCompact(data, cursor);
+      cursor += cidLenSize;
+      if (cidLen < 0 || cursor + cidLen > data.length) {
+        return (List.unmodifiable(result), cursor);
+      }
+      final cidBytes = data.sublist(cursor, cursor + cidLen);
+      result.add(utf8.decode(cidBytes, allowMalformed: true));
+      cursor += cidLen;
+    }
+    return (List.unmodifiable(result), cursor);
   }
 
   /// 将 BigInt 编码为 u128 little-endian（16 字节）。

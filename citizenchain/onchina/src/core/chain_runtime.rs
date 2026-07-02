@@ -805,6 +805,8 @@ impl AdminPallet {
 pub(crate) struct NodeInstitutionIdentity {
     /// 本机构 Active 管理员集合的候选 pallet;非法人为 [Public, Private] 按序探测。
     pub(crate) admin_pallets: Vec<AdminPallet>,
+    /// 本机构 CID 号。提案归属/订阅统一按 CID,机构码只用于分类。
+    pub(crate) cid_number: Option<String>,
     /// 机构主账户(AdminAccounts 键)。
     pub(crate) main_account: [u8; 32],
     /// 联邦注册局专用:本节点所辖省的链上省码([u8;2]);其它机构为 `None`。
@@ -893,6 +895,7 @@ fn console_login_block_reason(code: &[u8; 4]) -> Option<&'static str> {
 
 pub(crate) fn identity_from_binding_parts(
     institution_code: &str,
+    institution_cid_number: Option<&str>,
     institution_main_account: Option<&str>,
     frg_province_code: Option<&str>,
 ) -> Result<NodeInstitutionIdentity, String> {
@@ -911,8 +914,16 @@ pub(crate) fn identity_from_binding_parts(
         parse_sr25519_pubkey_bytes(raw)
             .ok_or_else(|| "binding institution_main_account must be 32-byte hex".to_string())?
     };
+    let cid_number = institution_cid_number
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+    if frg_code.is_none() && cid_number.is_none() {
+        return Err("binding institution_cid_number is required".to_string());
+    }
     Ok(NodeInstitutionIdentity {
         admin_pallets,
+        cid_number,
         main_account,
         frg_province_code: frg_code,
     })

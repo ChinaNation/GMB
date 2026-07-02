@@ -2,8 +2,8 @@
 //!
 //! 链上 4 张反向索引让客户端按"分类"O(分类内规模)迭代提案,不用扫全表:
 //! - **`ProposalsByCode[institution_code][id]`** — 按 CID 机构码(固定治理档 / PMUL / 公权法人 / 私权法人)反查
-//! - **`ProposalsByInstitution[account][id]`** — 按多签账户反查
-//!   (如某省储行所有提案、某个多签账户所有提案)
+//! - **`ProposalsByCid[cid_number][id]`** — 按机构唯一 CID 反查
+//!   (如某省储行、某公司、某银行的所有关联提案)
 //! - **`ProposalsByOwner[module_tag][id]`** — 按业务模块 MODULE_TAG 反查
 //!   (如"只看 runtime 升级提案"、"只看决议销毁提案")
 //! - **`ProposalsByYear[year][id]`** — 按创建年份反查(历史归档视图)
@@ -14,10 +14,10 @@
 use frame_support::pallet_prelude::BoundedVec;
 
 use crate::pallet::{
-    self, ProposalDisplayId, ProposalOwner, Proposals, ProposalsByCode, ProposalsByInstitution,
+    self, ProposalDisplayId, ProposalOwner, Proposals, ProposalsByCid, ProposalsByCode,
     ProposalsByOwner, ProposalsByYear,
 };
-use crate::types::InstitutionCode;
+use crate::types::{InstitutionCode, ProposalSubjectCidNumbers};
 impl<T: pallet::Config> pallet::Pallet<T> {
     /// 写入四张反向索引。
     ///
@@ -27,15 +27,15 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub fn register_proposal_indexes(
         proposal_id: u64,
         institution_code: Option<InstitutionCode>,
-        institution: Option<T::AccountId>,
+        subject_cid_numbers: ProposalSubjectCidNumbers,
         module_tag: BoundedVec<u8, T::MaxModuleTagLen>,
         year: u16,
     ) {
         if let Some(institution_code) = institution_code {
             ProposalsByCode::<T>::insert(institution_code, proposal_id, ());
         }
-        if let Some(inst) = institution {
-            ProposalsByInstitution::<T>::insert(inst, proposal_id, ());
+        for cid_number in subject_cid_numbers {
+            ProposalsByCid::<T>::insert(cid_number, proposal_id, ());
         }
         ProposalsByOwner::<T>::insert(module_tag, proposal_id, ());
         ProposalsByYear::<T>::insert(year, proposal_id, ());
@@ -44,7 +44,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// 释放该提案在 4 张反向索引中的所有条目 + ProposalDisplayId。
     ///
     /// 由清理路径(`cleanup` / 90 天保留期)调用。需要从 `Proposals` /
-    /// `ProposalOwner` / `ProposalDisplayId` 反查 (institution_code, institution, owner, year),
+    /// `ProposalOwner` / `ProposalDisplayId` 反查 (institution_code, subject CID, owner, year),
     /// 顺序无关紧要,所有 4 张索引 + 展示号表一次清干净。
     ///
     /// **必须在 `Proposals[id]` / `ProposalOwner[id]` / `ProposalDisplayId[id]`
@@ -54,8 +54,8 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             if let Some(institution_code) = proposal.internal_code {
                 ProposalsByCode::<T>::remove(institution_code, proposal_id);
             }
-            if let Some(inst) = proposal.internal_institution {
-                ProposalsByInstitution::<T>::remove(inst, proposal_id);
+            for cid_number in proposal.subject_cid_numbers {
+                ProposalsByCid::<T>::remove(cid_number, proposal_id);
             }
         }
         if let Some(owner) = ProposalOwner::<T>::get(proposal_id) {

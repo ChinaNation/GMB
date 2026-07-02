@@ -72,7 +72,7 @@ class AdminSetValidation {
         'NRC' => 19,
         'PRC' || 'PRB' => 9,
         'FRG' => 5,
-        'NJD' => 13,
+        'NJD' => 15,
         _ => throw StateError('固定治理机构 institution_code 无效: $code'),
       };
       if (count != expected) {

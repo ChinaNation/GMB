@@ -60,6 +60,30 @@ impl frame_support::traits::UnixTime for TestTimeProvider {
     }
 }
 
+pub struct TestInstitutionQuery;
+impl entity_primitives::InstitutionMultisigQuery<AccountId32> for TestInstitutionQuery {
+    fn lookup_cid(addr: &AccountId32) -> Option<std::vec::Vec<u8>> {
+        let mut cid = b"TEST-PRI-".to_vec();
+        let bytes: &[u8] = addr.as_ref();
+        cid.extend_from_slice(&bytes[..4]);
+        Some(cid)
+    }
+
+    fn lookup_org(_addr: &AccountId32) -> Option<InstitutionCode> {
+        None
+    }
+
+    fn lookup_admin_config(
+        _addr: &AccountId32,
+    ) -> Option<primitives::multisig::MultisigConfigSnapshot<AccountId32>> {
+        None
+    }
+
+    fn is_active(_addr: &AccountId32) -> bool {
+        true
+    }
+}
+
 impl votingengine::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxVoteNonceLength = ConstU32<64>;
@@ -108,6 +132,7 @@ impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type InstitutionQuery = TestInstitutionQuery;
     type WeightInfo = ();
 }
 

@@ -31,6 +31,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use entity_primitives::InstitutionMultisigQuery;
     use frame_support::ensure;
     use frame_support::{
         pallet_prelude::*,
@@ -82,6 +83,9 @@ pub mod pallet {
         /// 中文注释：大规模普选后续应接 CID 凭证/人口快照,不把几万人名单直接塞链上。
         #[pallet::constant]
         type MaxElectionVoters: Get<u32>;
+
+        /// 机构账户 → CID 查询入口。选举提案用 CID 记录组织机构和目标机构。
+        type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
     }
 
     #[pallet::pallet]
@@ -187,6 +191,8 @@ pub mod pallet {
         VoterNotInSnapshot,
         /// 候选人不在候选快照内。
         CandidateNotInSnapshot,
+        /// 组织机构或目标机构无法解析到唯一 CID。
+        InvalidInstitutionCid,
     }
 
     #[pallet::call]
@@ -296,6 +302,28 @@ pub mod pallet {
             (VOTING_DURATION_BLOCKS as u64).saturated_into()
         }
 
+        fn push_subject_cid(
+            raw: &mut Vec<Vec<u8>>,
+            account: &T::AccountId,
+        ) -> Result<(), DispatchError> {
+            let cid = T::InstitutionQuery::lookup_cid(account)
+                .ok_or(Error::<T>::InvalidInstitutionCid)?;
+            if !raw.iter().any(|existing| existing == &cid) {
+                raw.push(cid);
+            }
+            Ok(())
+        }
+
+        fn resolve_subject_cid_numbers(
+            organizer: &T::AccountId,
+            target: &T::AccountId,
+        ) -> Result<votingengine::types::ProposalSubjectCidNumbers, DispatchError> {
+            let mut raw = Vec::new();
+            Self::push_subject_cid(&mut raw, organizer)?;
+            Self::push_subject_cid(&mut raw, target)?;
+            votingengine::Pallet::<T>::bound_subject_cid_numbers(raw)
+        }
+
         #[allow(clippy::too_many_arguments)]
         pub(crate) fn do_create_election(
             who: T::AccountId,
@@ -334,12 +362,14 @@ pub mod pallet {
             let now = frame_system::Pallet::<T>::block_number();
             let end = now.saturating_add(Self::stage_duration());
             let stage = mode.stage();
+            let subject_cid_numbers = Self::resolve_subject_cid_numbers(&organizer, &target)?;
             let proposal = votingengine::Proposal {
                 kind: votingengine::PROPOSAL_KIND_ELECTION,
                 stage,
                 status: votingengine::STATUS_VOTING,
                 internal_code: Some(target_code),
-                internal_institution: Some(target.clone()),
+                account_context: Some(target.clone()),
+                subject_cid_numbers,
                 start: now,
                 end,
                 citizen_eligible_total: bounded_voters.len() as u64,
@@ -363,7 +393,7 @@ pub mod pallet {
                     Err(err) => return TransactionOutcome::Rollback(Err(err)),
                 };
                 if let Err(err) =
-                    votingengine::limit::try_add_active_proposal::<T>(target.clone(), id)
+                    votingengine::limit::try_add_active_proposals::<T>(proposal.subject_keys(), id)
                 {
                     return TransactionOutcome::Rollback(Err(err));
                 }

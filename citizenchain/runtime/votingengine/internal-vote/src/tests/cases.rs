@@ -83,6 +83,7 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
                 outsider,
                 NRC,
                 nrc_pid(),
+                subject_cids_for(NRC, &nrc_pid()),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -94,6 +95,7 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
                 prc_admin(0),
                 NRC,
                 nrc_pid(),
+                subject_cids_for(NRC, &nrc_pid()),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -124,6 +126,7 @@ fn active_internal_proposal_rejects_pending_account() {
                 pending_account_admin(0),
                 PERSONAL_CODE,
                 pending_account_institution(),
+                subject_cids_for(PERSONAL_CODE, &pending_account_institution()),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -212,6 +215,7 @@ fn pending_account_provider_threshold_requires_all_admins() {
                 pending_account_admin(0),
                 PERSONAL_CODE,
                 pending_account_institution(),
+                subject_cids_for(PERSONAL_CODE, &pending_account_institution()),
                 sp_std::vec![pending_account_admin(0), pending_account_admin(1)],
                 1,
                 b"test",
@@ -230,6 +234,7 @@ fn pending_account_snapshot_data_requires_all_admins() {
                 pending_account_admin(0),
                 PERSONAL_CODE,
                 pending_account_institution(),
+                subject_cids_for(PERSONAL_CODE, &pending_account_institution()),
                 sp_std::vec![pending_account_admin(0), pending_account_admin(1)],
                 1,
                 b"test",
@@ -248,6 +253,7 @@ fn explicit_threshold_proposal_requires_all_snapshot_admins() {
                 registered_account_admin(0),
                 PERSONAL_CODE,
                 registered_account_institution(),
+                subject_cids_for(PERSONAL_CODE, &registered_account_institution()),
                 b"close",
                 b"payload".to_vec(),
             )
@@ -266,6 +272,7 @@ fn registered_account_threshold_must_not_exceed_snapshot_size() {
                 registered_account_admin(0),
                 PERSONAL_CODE,
                 registered_account_institution(),
+                subject_cids_for(PERSONAL_CODE, &registered_account_institution()),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -284,6 +291,7 @@ fn admin_set_mutation_threshold_must_not_exceed_snapshot_size() {
                 registered_account_admin(0),
                 PERSONAL_CODE,
                 registered_account_institution(),
+                subject_cids_for(PERSONAL_CODE, &registered_account_institution()),
                 3,
                 2,
                 b"test",
@@ -398,7 +406,7 @@ fn admin_set_mutation_mutex_blocks_same_subject_regular_proposal() {
         let proposal_id =
             create_admin_set_mutation_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
         let state =
-            VotingEngine::internal_proposal_mutex(NRC, nrc_pid()).expect("mutex should exist");
+            internal_mutex_for(NRC, nrc_pid()).expect("mutex should exist");
         assert_eq!(state.admin_set_mutation_proposal, Some(proposal_id));
 
         assert_noop!(
@@ -406,6 +414,7 @@ fn admin_set_mutation_mutex_blocks_same_subject_regular_proposal() {
                 nrc_admin(1),
                 NRC,
                 nrc_pid(),
+                subject_cids_for(NRC, &nrc_pid()),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -422,7 +431,7 @@ fn regular_mutex_blocks_same_subject_admin_set_mutation() {
             NRC,
             nrc_pid(),
         );
-        let state = VotingEngine::internal_proposal_mutex(NRC, nrc_pid())
+        let state = internal_mutex_for(NRC, nrc_pid())
             .expect("mutex should exist");
         assert_eq!(state.regular_active_count, 1);
         assert_eq!(state.admin_set_mutation_proposal, None);
@@ -432,6 +441,7 @@ fn regular_mutex_blocks_same_subject_admin_set_mutation() {
                 nrc_admin(1),
                 NRC,
                 nrc_pid(),
+                subject_cids_for(NRC, &nrc_pid()),
                 primitives::count_const::NRC_ADMIN_COUNT,
                 primitives::count_const::NRC_INTERNAL_THRESHOLD,
                 b"test",
@@ -456,8 +466,7 @@ fn regular_internal_proposals_can_coexist_under_same_subject() {
         let second = create_internal_proposal_via_engine(nrc_admin(1), NRC, nrc_pid());
 
         assert_ne!(first, second);
-        let state =
-            VotingEngine::internal_proposal_mutex(NRC, nrc_pid()).expect("mutex should exist");
+        let state = internal_mutex_for(NRC, nrc_pid()).expect("mutex should exist");
         assert_eq!(state.regular_active_count, 2);
         assert_eq!(state.admin_set_mutation_proposal, None);
     });
@@ -479,12 +488,13 @@ fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
                 .status,
             STATUS_PASSED
         );
-        assert!(VotingEngine::internal_proposal_mutex(NRC, nrc_pid()).is_some());
+        assert!(internal_mutex_for(NRC, nrc_pid()).is_some());
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
                 nrc_admin(1),
                 NRC,
                 nrc_pid(),
+                subject_cids_for(NRC, &nrc_pid()),
                 b"test",
                 b"payload".to_vec(),
             ),
@@ -495,7 +505,7 @@ fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
             proposal_id,
             STATUS_EXECUTION_FAILED
         ));
-        assert!(VotingEngine::internal_proposal_mutex(NRC, nrc_pid()).is_none());
+        assert!(internal_mutex_for(NRC, nrc_pid()).is_none());
     });
 }
 
@@ -830,16 +840,17 @@ fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
         let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
 
         assert!(
-            VotingEngine::internal_proposal_mutex(NRC, nrc_pid()).is_some()
+            internal_mutex_for(NRC, nrc_pid()).is_some()
         );
         assert!(
-            VotingEngine::internal_proposal_mutex(PRC, prc_pid()).is_some()
+            internal_mutex_for(PRC, prc_pid()).is_some()
         );
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
                 nrc_admin(1),
                 NRC,
                 nrc_pid(),
+                subject_cids_for(NRC, &nrc_pid()),
                 primitives::count_const::NRC_ADMIN_COUNT,
                 primitives::count_const::NRC_INTERNAL_THRESHOLD,
                 b"test",
@@ -856,10 +867,10 @@ fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
             STAGE_REFERENDUM
         );
         assert!(
-            VotingEngine::internal_proposal_mutex(NRC, nrc_pid()).is_none()
+            internal_mutex_for(NRC, nrc_pid()).is_none()
         );
         assert!(
-            VotingEngine::internal_proposal_mutex(PRC, prc_pid()).is_none()
+            internal_mutex_for(PRC, prc_pid()).is_none()
         );
 
         assert_ok!(
@@ -867,6 +878,7 @@ fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
                 nrc_admin(1),
                 NRC,
                 nrc_pid(),
+                subject_cids_for(NRC, &nrc_pid()),
                 primitives::count_const::NRC_ADMIN_COUNT,
                 primitives::count_const::NRC_INTERNAL_THRESHOLD,
                 b"test",
@@ -2066,7 +2078,8 @@ fn internal_vote_rejects_wrong_stage_joint_proposal() {
                 stage: STAGE_JOINT,
                 status: STATUS_VOTING,
                 internal_code: None,
-                internal_institution: None,
+                account_context: None,
+                subject_cid_numbers: Default::default(),
                 start: now,
                 end: now + 100,
                 citizen_eligible_total: 0,

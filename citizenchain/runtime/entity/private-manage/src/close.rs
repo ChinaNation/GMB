@@ -186,6 +186,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
             who.clone(),
             institution_code,
             admin_account,
+            alloc::vec![registered.cid_number.to_vec()],
             crate::MODULE_TAG,
             data,
         )?;

@@ -23,7 +23,9 @@ use primitives::count_const::{
 
 use votingengine::{
     pallet::{Proposals, ProposalsByExpiry},
-    types::{fixed_governance_pass_threshold, InstitutionCode, NRC, PRB, PRC},
+    types::{
+        fixed_governance_pass_threshold, InstitutionCode, ProposalSubjectCidNumbers, NRC, PRB, PRC,
+    },
     CitizenIdentityReader, InternalAdminProvider, InternalProposalMutexKind, PopulationScope,
     Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
@@ -133,6 +135,17 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<T::Acco
     }
 }
 
+fn joint_subject_cid_numbers<T: Config>() -> Result<ProposalSubjectCidNumbers, DispatchError> {
+    let mut raw = sp_runtime::sp_std::vec::Vec::new();
+    for entry in CHINA_CB.iter() {
+        raw.push(entry.cid_number.as_bytes().to_vec());
+    }
+    for entry in CHINA_CH.iter() {
+        raw.push(entry.cid_number.as_bytes().to_vec());
+    }
+    <votingengine::Pallet<T>>::bound_subject_cid_numbers(raw)
+}
+
 // ──────────────────────────────────────────────────────────────────
 // 业务方法 — 挂在 super::Pallet<T> 上
 // ──────────────────────────────────────────────────────────────────
@@ -191,13 +204,15 @@ impl<T: Config> Pallet<T> {
         let eligible_total = prepared.eligible_total;
         let referendum_scope = prepared.scope;
         let end = now.saturating_add(Self::joint_stage_duration());
+        let subject_cid_numbers = joint_subject_cid_numbers::<T>()?;
 
         let proposal = Proposal {
             kind: PROPOSAL_KIND_JOINT,
             stage: STAGE_JOINT,
             status: votingengine::STATUS_VOTING,
             internal_code: None,
-            internal_institution: Some(proposer_institution.clone()),
+            account_context: Some(proposer_institution.clone()),
+            subject_cid_numbers,
             start: now,
             end,
             citizen_eligible_total: eligible_total,
@@ -210,21 +225,24 @@ impl<T: Config> Pallet<T> {
             };
 
             if let Err(err) =
-                votingengine::limit::try_add_active_proposal::<T>(proposer_institution.clone(), id)
+                votingengine::limit::try_add_active_proposals::<T>(proposal.subject_keys(), id)
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
 
-            // 锁定所有参与机构(NRC + 43 PRC + 43 PRB)的管理员快照。
-            if let Some(nrc) = nrc_account::<T>() {
+            // 中文注释:联合提案关联全部固定治理机构,互斥锁按机构 CID 而非账户占用。
+            for subject in proposal.subject_keys() {
                 if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                     id,
-                    NRC,
-                    nrc.clone(),
+                    subject,
                     InternalProposalMutexKind::Regular,
                 ) {
                     return TransactionOutcome::Rollback(Err(err));
                 }
+            }
+
+            // 锁定所有参与机构(NRC + 43 PRC + 43 PRB)的管理员快照。
+            if let Some(nrc) = nrc_account::<T>() {
                 if let Err(err) =
                     <votingengine::Pallet<T>>::snapshot_institution_admins(id, NRC, nrc, false)
                 {
@@ -233,14 +251,6 @@ impl<T: Config> Pallet<T> {
             }
             for entry in CHINA_CB.iter().skip(1) {
                 if let Some(prc) = decode_account::<T>(&entry.main_account) {
-                    if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
-                        id,
-                        PRC,
-                        prc.clone(),
-                        InternalProposalMutexKind::Regular,
-                    ) {
-                        return TransactionOutcome::Rollback(Err(err));
-                    }
                     if let Err(err) =
                         <votingengine::Pallet<T>>::snapshot_institution_admins(id, PRC, prc, false)
                     {
@@ -250,14 +260,6 @@ impl<T: Config> Pallet<T> {
             }
             for entry in CHINA_CH.iter() {
                 if let Some(prb) = decode_account::<T>(&entry.main_account) {
-                    if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
-                        id,
-                        PRB,
-                        prb.clone(),
-                        InternalProposalMutexKind::Regular,
-                    ) {
-                        return TransactionOutcome::Rollback(Err(err));
-                    }
                     if let Err(err) =
                         <votingengine::Pallet<T>>::snapshot_institution_admins(id, PRB, prb, false)
                     {

@@ -297,9 +297,9 @@ void main() {
       );
       expect(
         AdminSetValidation.validate(
-          account: fixedAccount(institutionCode: 'NJD', count: 13),
+          account: fixedAccount(institutionCode: 'NJD', count: 15),
           proposerPubkeyHex: 'aa' * 32,
-          admins: newAdmins(13),
+          admins: newAdmins(15),
           newThreshold: 8,
         ).threshold,
         8,
@@ -315,9 +315,9 @@ void main() {
       );
       expect(
         () => AdminSetValidation.validate(
-          account: fixedAccount(institutionCode: 'NJD', count: 13),
+          account: fixedAccount(institutionCode: 'NJD', count: 15),
           proposerPubkeyHex: 'aa' * 32,
-          admins: newAdmins(13),
+          admins: newAdmins(15),
           newThreshold: 7,
         ),
         throwsStateError,

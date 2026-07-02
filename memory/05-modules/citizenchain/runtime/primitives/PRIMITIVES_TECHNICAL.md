@@ -96,6 +96,7 @@
 |------|-----|------|
 | NRC_ADMIN_COUNT | 19 | 国储会管理员 |
 | PRC_ADMIN_COUNT / PRB_ADMIN_COUNT | 9 | 省储会/省储行管理员 |
+| NJD_ADMIN_COUNT | 15 | 国家司法院创世公职人员：7 名护宪大法官 + 1 名首席大法官 + 2 名次席大法官 + 5 名大法官 |
 | JOINT_VOTE_TOTAL | 105 | 19 + 43 + 43 |
 | JOINT_VOTE_PASS_THRESHOLD | 105 | 全票通过立即执行 |
 | VOTING_DURATION_BLOCKS | 7,200 | 投票到期区块数（240 × 30 天） |

@@ -35,9 +35,9 @@ use primitives::count_const::{FRG_PROVINCE_GROUP_ADMIN_COUNT, VOTING_DURATION_BL
 use votingengine::{
     pallet::{AdminSnapshot, Proposals},
     types::{
-        fixed_governance_pass_threshold, institution_code_from_cid_number,
-        is_registered_multisig_code, is_valid_governance_code, InstitutionCode, FRG, NJD, NRC, PRB,
-        PRC,
+        fixed_governance_pass_threshold, institution_code_from_cid_number, is_personal_code,
+        is_registered_multisig_code, is_valid_governance_code, InstitutionCode,
+        ProposalSubjectCidNumbers, FRG, NJD, NRC, PRB, PRC,
     },
     InternalAdminProvider, InternalProposalMutexKind, Proposal, PROPOSAL_KIND_INTERNAL,
     STAGE_INTERNAL, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
@@ -206,36 +206,38 @@ fn decode_account<T: Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
     T::AccountId::decode(&mut &raw[..]).ok()
 }
 
-fn is_valid_internal_institution<T: Config>(
+fn is_valid_account_context<T: Config>(
     institution_code: InstitutionCode,
-    institution: T::AccountId,
+    account_context: T::AccountId,
 ) -> bool {
     match institution_code {
         NRC => CHINA_CB
             .first()
             .and_then(|n| decode_account::<T>(&n.main_account))
-            .map(|nrc| institution == nrc)
+            .map(|nrc| account_context == nrc)
             .unwrap_or(false),
         PRC => CHINA_CB
             .iter()
             .skip(1)
             .filter_map(|n| decode_account::<T>(&n.main_account))
-            .any(|pid| pid == institution),
+            .any(|pid| pid == account_context),
         PRB => CHINA_CH
             .iter()
             .filter_map(|n| decode_account::<T>(&n.main_account))
-            .any(|pid| pid == institution),
-        FRG => <T as votingengine::Config>::InternalAdminProvider::get_admin_list(FRG, institution)
-            .map(|admins| admins.len() == FRG_PROVINCE_GROUP_ADMIN_COUNT as usize)
-            .unwrap_or(false),
+            .any(|pid| pid == account_context),
+        FRG => {
+            <T as votingengine::Config>::InternalAdminProvider::get_admin_list(FRG, account_context)
+                .map(|admins| admins.len() == FRG_PROVINCE_GROUP_ADMIN_COUNT as usize)
+                .unwrap_or(false)
+        }
         NJD => CHINA_SF
             .iter()
             .find(|n| institution_code_from_cid_number(n.cid_number) == Some(NJD))
             .and_then(|n| decode_account::<T>(&n.main_account))
-            .map(|njd| institution == njd)
+            .map(|njd| account_context == njd)
             .unwrap_or(false),
         c if is_registered_multisig_code(&c) => {
-            <T as votingengine::Config>::InternalAdminProvider::get_admin_list(c, institution)
+            <T as votingengine::Config>::InternalAdminProvider::get_admin_list(c, account_context)
                 .is_some()
         }
         _ => false,
@@ -304,6 +306,25 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
+    fn bound_and_validate_subject_cids(
+        institution_code: InstitutionCode,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
+    ) -> Result<ProposalSubjectCidNumbers, DispatchError> {
+        let bounded = <votingengine::Pallet<T>>::bound_subject_cid_numbers(subject_cid_numbers)?;
+        if is_personal_code(&institution_code) {
+            ensure!(
+                bounded.is_empty(),
+                votingengine::Error::<T>::InvalidInstitution
+            );
+        } else {
+            ensure!(
+                !bounded.is_empty(),
+                votingengine::Error::<T>::InvalidInstitution
+            );
+        }
+        Ok(bounded)
+    }
+
     fn snapshot_admins_len_or_missing(
         proposal_id: u64,
         institution: T::AccountId,
@@ -316,6 +337,7 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         institution: T::AccountId,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         admins: sp_std::vec::Vec<T::AccountId>,
         dynamic_threshold: u32,
     ) -> Result<u64, DispatchError> {
@@ -351,12 +373,15 @@ impl<T: Config> Pallet<T> {
 
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::internal_stage_duration());
+        let subject_cid_numbers =
+            Self::bound_and_validate_subject_cids(institution_code, subject_cid_numbers)?;
         let proposal = Proposal {
             kind: PROPOSAL_KIND_INTERNAL,
             stage: STAGE_INTERNAL,
             status: votingengine::STATUS_VOTING,
             internal_code: Some(institution_code),
-            internal_institution: Some(institution.clone()),
+            account_context: Some(institution.clone()),
+            subject_cid_numbers,
             start: now,
             end,
             citizen_eligible_total: 0,
@@ -367,18 +392,18 @@ impl<T: Config> Pallet<T> {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
-            if let Err(err) =
-                votingengine::limit::try_add_active_proposal::<T>(institution.clone(), id)
-            {
+            let subjects = proposal.subject_keys();
+            if let Err(err) = votingengine::limit::try_add_active_proposals::<T>(subjects, id) {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
-                id,
-                institution_code,
-                institution.clone(),
-                InternalProposalMutexKind::Regular,
-            ) {
-                return TransactionOutcome::Rollback(Err(err));
+            for subject in proposal.subject_keys() {
+                if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
+                    id,
+                    subject,
+                    InternalProposalMutexKind::Regular,
+                ) {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
             }
 
             AdminSnapshot::<T>::insert(id, institution.clone(), bounded_admins);
@@ -403,11 +428,13 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         institution: T::AccountId,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
     ) -> Result<u64, DispatchError> {
         Self::do_create_active_account_internal_proposal(
             who,
             institution_code,
             institution.clone(),
+            subject_cid_numbers,
             InternalProposalMutexKind::Regular,
             InternalProposalRole::General,
             None,
@@ -418,6 +445,7 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         institution: T::AccountId,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
     ) -> Result<u64, DispatchError> {
         ensure!(
             is_registered_multisig_code(&institution_code),
@@ -427,6 +455,7 @@ impl<T: Config> Pallet<T> {
             who,
             institution_code,
             institution,
+            subject_cid_numbers,
             InternalProposalMutexKind::Regular,
             InternalProposalRole::LifecycleClose,
             Some(true),
@@ -437,6 +466,7 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         institution: T::AccountId,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         new_admins_len: u32,
         new_threshold: u32,
     ) -> Result<u64, DispatchError> {
@@ -452,6 +482,7 @@ impl<T: Config> Pallet<T> {
             who,
             institution_code,
             institution.clone(),
+            subject_cid_numbers,
             InternalProposalMutexKind::AdminSetMutationExclusive,
             InternalProposalRole::AdminChange,
             Some(false),
@@ -474,6 +505,7 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         institution: T::AccountId,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         mutex_kind: InternalProposalMutexKind,
         role: InternalProposalRole,
         force_all_admin_threshold: Option<bool>,
@@ -483,7 +515,7 @@ impl<T: Config> Pallet<T> {
             Error::<T>::InvalidInternalCode
         );
         ensure!(
-            is_valid_internal_institution::<T>(institution_code, institution.clone()),
+            is_valid_account_context::<T>(institution_code, institution.clone()),
             votingengine::Error::<T>::InvalidInstitution
         );
         ensure!(
@@ -496,13 +528,16 @@ impl<T: Config> Pallet<T> {
 
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::internal_stage_duration());
+        let subject_cid_numbers =
+            Self::bound_and_validate_subject_cids(institution_code, subject_cid_numbers)?;
 
         let proposal = Proposal {
             kind: PROPOSAL_KIND_INTERNAL,
             stage: STAGE_INTERNAL,
             status: votingengine::STATUS_VOTING,
             internal_code: Some(institution_code),
-            internal_institution: Some(institution.clone()),
+            account_context: Some(institution.clone()),
+            subject_cid_numbers,
             start: now,
             end,
             citizen_eligible_total: 0,
@@ -514,18 +549,16 @@ impl<T: Config> Pallet<T> {
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
 
-            if let Err(err) =
-                votingengine::limit::try_add_active_proposal::<T>(institution.clone(), id)
-            {
+            let subjects = proposal.subject_keys();
+            if let Err(err) = votingengine::limit::try_add_active_proposals::<T>(subjects, id) {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
-                id,
-                institution_code,
-                institution.clone(),
-                mutex_kind,
-            ) {
-                return TransactionOutcome::Rollback(Err(err));
+            for subject in proposal.subject_keys() {
+                if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
+                    id, subject, mutex_kind,
+                ) {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
             }
 
             if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
@@ -604,7 +637,7 @@ impl<T: Config> Pallet<T> {
             .internal_code
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
         let account = proposal
-            .internal_institution
+            .account_context
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
         Ok((institution_code, account))
     }
@@ -674,7 +707,7 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::AlreadyVoted
         );
         let institution = proposal
-            .internal_institution
+            .account_context
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
         ensure!(
             <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, institution.clone(), &who),
@@ -744,6 +777,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         institution: T::AccountId,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -752,6 +786,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
                 who.clone(),
                 institution_code,
                 institution,
+                subject_cid_numbers,
             ) {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
@@ -767,6 +802,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         institution: T::AccountId,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -775,6 +811,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
                 who.clone(),
                 institution_code,
                 institution,
+                subject_cid_numbers,
             ) {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
@@ -790,6 +827,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         institution: T::AccountId,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         admins: sp_std::vec::Vec<T::AccountId>,
         dynamic_threshold: u32,
         module_tag: &[u8],
@@ -800,6 +838,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
                 who.clone(),
                 institution_code,
                 institution,
+                subject_cid_numbers,
                 admins,
                 dynamic_threshold,
             ) {
@@ -817,6 +856,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         who: T::AccountId,
         institution_code: InstitutionCode,
         institution: T::AccountId,
+        subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
         new_admins_len: u32,
         new_threshold: u32,
         module_tag: &[u8],
@@ -827,6 +867,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
                 who.clone(),
                 institution_code,
                 institution,
+                subject_cid_numbers,
                 new_admins_len,
                 new_threshold,
             ) {

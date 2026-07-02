@@ -18,6 +18,8 @@ use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 
 extern crate alloc;
 
+use alloc::{vec, vec::Vec};
+
 use primitives::cid::china::china_cb::{CHINA_CB, SAFETY_FUND_ACCOUNT};
 use primitives::cid::china::china_ch::CHINA_CH;
 use votingengine::{
@@ -124,6 +126,23 @@ fn builtin_org<T: frame_system::Config>(institution: &T::AccountId) -> Option<In
     }
 
     None
+}
+
+fn builtin_cid<T: frame_system::Config>(institution: &T::AccountId) -> Option<Vec<u8>> {
+    if let Some(node) = CHINA_CB
+        .iter()
+        .find(|n| raw_account_matches::<T>(&n.main_account, institution))
+    {
+        return Some(node.cid_number.as_bytes().to_vec());
+    }
+    CHINA_CH
+        .iter()
+        .find(|n| raw_account_matches::<T>(&n.main_account, institution))
+        .map(|node| node.cid_number.as_bytes().to_vec())
+}
+
+fn nrc_cid() -> Vec<u8> {
+    CHINA_CB[0].cid_number.as_bytes().to_vec()
 }
 
 #[frame_support::pallet]
@@ -332,7 +351,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
-            let (actual_org, institution_account) =
+            let (actual_org, institution_account, subject_cid_numbers) =
                 Self::resolve_institution_account(institution.clone())?;
             ensure!(
                 actual_org == institution_code,
@@ -396,6 +415,7 @@ pub mod pallet {
                     who.clone(),
                     institution_code,
                     institution.clone(),
+                    subject_cid_numbers,
                     crate::MODULE_TAG,
                     encoded,
                 )?;
@@ -475,6 +495,7 @@ pub mod pallet {
                     who.clone(),
                     NRC,
                     nrc_institution,
+                    vec![nrc_cid()],
                     crate::MODULE_TAG,
                     sp_runtime::Vec::from(SAFETY_FUND_OWNER_DATA),
                 )?;
@@ -533,6 +554,7 @@ pub mod pallet {
                     who.clone(),
                     institution_code,
                     institution.clone(),
+                    vec![Self::resolve_sweep_cid(&institution)?],
                     crate::MODULE_TAG,
                     sp_runtime::Vec::from(SWEEP_OWNER_DATA),
                 )?;
@@ -574,16 +596,17 @@ pub mod pallet {
 
         fn resolve_institution_account(
             institution: T::AccountId,
-        ) -> Result<(InstitutionCode, T::AccountId), Error<T>> {
+        ) -> Result<(InstitutionCode, T::AccountId, Vec<Vec<u8>>), Error<T>> {
             use entity_primitives::InstitutionMultisigQuery;
             use personal_manage::traits::PersonalMultisigQuery;
 
             if let Some(actual_org) = builtin_org::<T>(&institution) {
-                return Ok((actual_org, institution));
+                let cid = builtin_cid::<T>(&institution).ok_or(Error::<T>::InvalidInstitution)?;
+                return Ok((actual_org, institution, vec![cid]));
             }
 
             if <T as Config>::PersonalQuery::is_active(&institution) {
-                return Ok((PMUL, institution));
+                return Ok((PMUL, institution, Vec::new()));
             }
 
             ensure!(
@@ -596,7 +619,9 @@ pub mod pallet {
                 is_institution_code(&institution_code),
                 Error::<T>::InvalidInstitution
             );
-            Ok((institution_code, institution))
+            let cid = <T as Config>::InstitutionQuery::lookup_cid(&institution)
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            Ok((institution_code, institution, vec![cid]))
         }
 
         fn is_internal_admin(
@@ -629,6 +654,11 @@ pub mod pallet {
                 return Ok(PRB);
             }
             Err(Error::<T>::InvalidInstitution)
+        }
+
+        /// 解析治理机构 CID。手续费划转属于机构主体,不是费用账户主体。
+        fn resolve_sweep_cid(institution: &T::AccountId) -> Result<Vec<u8>, Error<T>> {
+            builtin_cid::<T>(institution).ok_or(Error::<T>::InvalidInstitution)
         }
 
         /// 解析治理机构手续费账户。
@@ -825,7 +855,7 @@ pub mod pallet {
                 &mut &raw[tag.len()..],
             )
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-            let (_, institution_account) =
+            let (_, institution_account, _) =
                 Self::resolve_institution_account(action.institution.clone())?;
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(

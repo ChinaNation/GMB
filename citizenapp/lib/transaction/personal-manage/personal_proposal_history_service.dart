@@ -1,7 +1,7 @@
 // 个人多签提案历史聚合服务(req 5)。
 //
 // 双轨制数据源:
-// 1. 链上 `votingengine.ActiveProposalsByInstitution[personal_account || zeros(16)]`
+// 1. 链上 `votingengine.ActiveProposalsBySubject[PersonalAccount(personal_account)]`
 //    返回当前活跃(STATUS_VOTING)的提案 ID 列表。
 // 2. 本机 Isar `PersonalAccountProposalEntity` 永久保留所有历史快照,覆盖
 //    链上 90 天后已清理的终态提案。
@@ -94,7 +94,7 @@ class PersonalProposalHistoryService {
   /// 容错:链上失败仅回退 Isar;Isar 失败仅回退链上;两者都失败返回空列表。
   ///
   /// 状态新鲜度策略:
-  /// 1. 链上 ActiveProposalsByInstitution 同步活跃提案到 Isar(防其他设备漏记)
+  /// 1. 链上 ActiveProposalsBySubject 同步活跃提案到 Isar(防其他设备漏记)
   /// 2. **额外**:遍历 Isar 中本机已知 status='voting' 的 entity,挨个查链上
   ///    Proposals[id] 拿最新 status + tally。这步必须独立于 active 列表,
   ///    因为提案一旦终态(passed/executed/rejected)就从 active 列表移除,
@@ -254,8 +254,8 @@ class PersonalProposalHistoryService {
       final accountId = _personalAccountToAccountId(personalAccountHex);
       final key = _buildStorageKey(
         'VotingEngine',
-        'ActiveProposalsByInstitution',
-        accountId,
+        'ActiveProposalsBySubject',
+        _proposalSubjectPersonalAccountKey(accountId),
       );
       final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
       if (data == null || data.isEmpty) return const [];
@@ -270,6 +270,13 @@ class PersonalProposalHistoryService {
     } catch (_) {
       return const [];
     }
+  }
+
+  Uint8List _proposalSubjectPersonalAccountKey(Uint8List accountId) {
+    final result = Uint8List(1 + accountId.length);
+    result[0] = 1; // ProposalSubject::PersonalAccount
+    result.setAll(1, accountId);
+    return result;
   }
 
   Future<void> _syncActiveProposalToIsar(

@@ -166,7 +166,7 @@ pub struct DestroyAction<Balance> {
 注:本模块不暴露独立 execute wrapper extrinsic,手动重试走 `VotingEngine::retry_passed_proposal`(pallet 9.4),权重由投票引擎统一计入。
 
 注意：
-- 当前 `weights.rs` 仍是在旧代码上生成，包含已删除存储项（ProposalActions、ActiveProposalByInstitution、ProposalCreatedAt、ProposalPassedAt）的 proof 注释。权重数值为过估（安全），但不精确。
+- 当前 `weights.rs` 仍是在旧代码上生成，包含已删除的提案动作、单机构活跃提案、创建块、通过块等 proof 注释。权重数值为过估（安全），但不精确。
 - 2026-04-05 复查时已确认 `resolution-destro` 自身 benchmark 夹具可编译，且不再把 `proposal_id` 写死为 `0`。
 - 若本地直接拿标准 CI WASM 构建的节点跑 benchmark，会因为 runtime blob 不带 benchmarking runtime api 而失败；要重生成正式 `weights.rs`，需要使用带 benchmark api 的 runtime blob（例如专门的 benchmark 构建，而不是默认 CI 运行时产物）。
 

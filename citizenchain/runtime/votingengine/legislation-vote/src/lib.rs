@@ -24,6 +24,7 @@ mod tests;
 
 pub use pallet::*;
 
+use entity_primitives::InstitutionMultisigQuery;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
@@ -38,7 +39,8 @@ use votingengine::{
     pallet::{Proposals, ProposalsByExpiry},
     types::{
         legislation_house_decided, legislation_house_final_passed,
-        legislation_referendum_final_passed, InstitutionCode, LEG_VOTE_SPECIAL,
+        legislation_referendum_final_passed, InstitutionCode, ProposalSubjectCidNumbers,
+        LEG_VOTE_SPECIAL,
     },
     CitizenIdentityReader, InternalAdminProvider, InternalProposalMutexKind, PopulationScope,
     Proposal, PROPOSAL_KIND_LEGISLATION, STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_HOUSE,
@@ -52,11 +54,11 @@ pub const PROPOSAL_OBJECT_KIND_LAW_TEXT: u8 = 2;
 /// 单部法律最多院数,单一真源在 `votingengine::types::MAX_LEGISLATION_HOUSES`。
 pub const MAX_HOUSES: u32 = votingengine::types::MAX_LEGISLATION_HOUSES;
 
-/// 护宪大法官法定人数(宪法第20条):5 人。
-pub const CONSTITUTION_GUARD_MEMBERS: u32 = 5;
+/// 护宪大法官法定人数(宪法第20条):7 人。
+pub const CONSTITUTION_GUARD_MEMBERS: u32 = 7;
 
-/// 修宪终审通过阈值(宪法第21条):3 名及以上护宪大法官赞成。
-pub const CONSTITUTION_GUARD_APPROVAL_THRESHOLD: usize = 3;
+/// 修宪终审通过阈值(宪法第21条):7 人多数通过,即 4 名及以上护宪大法官赞成。
+pub const CONSTITUTION_GUARD_APPROVAL_THRESHOLD: usize = 4;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -126,6 +128,8 @@ pub mod pallet {
     pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        /// 机构账户 → CID 查询入口。立法提案用 CID 记录所有关联机构主体。
+        type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
         type WeightInfo: crate::weights::WeightInfo;
     }
 
@@ -184,7 +188,7 @@ pub mod pallet {
     >;
 
     /// 护宪大法官终审记录(仅修宪 STAGE_LEG_CONSTITUTION_GUARD):proposal_id → [(护宪大法官, 是否赞成)]。
-    /// 去重 + 3 名及以上赞成判通过。成员集来自 `InternalAdminProvider::constitution_guard_members`。
+    /// 去重 + 4 名及以上赞成判通过。成员集来自 `InternalAdminProvider::constitution_guard_members`。
     #[pallet::storage]
     pub type LegGuardSigns<T: Config> = StorageMap<
         _,
@@ -294,8 +298,10 @@ pub mod pallet {
         AlreadySigned,
         /// 签署人不是护宪大法官
         NotConstitutionGuard,
-        /// 护宪大法官成员数不是 5 人或成员重复
+        /// 护宪大法官成员数不是 7 人或成员重复
         InvalidGuardMembersLen,
+        /// 机构账户无法解析到唯一 CID。
+        InvalidInstitutionCid,
     }
 
     #[pallet::call]
@@ -361,7 +367,7 @@ pub mod pallet {
             Self::do_override_sign(who, proposal_id, approve)
         }
 
-        /// 护宪大法官对修宪提案终审表决(宪法第21条):一人一票,3名及以上赞成→生效。
+        /// 护宪大法官对修宪提案终审表决(宪法第21条):一人一票,4名及以上赞成→生效。
         #[pallet::call_index(5)]
         #[pallet::weight(<T as Config>::WeightInfo::cast_house_vote())]
         pub fn guard_vote(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
@@ -379,6 +385,34 @@ impl<T: Config> Pallet<T> {
     fn stage_duration() -> frame_system::pallet_prelude::BlockNumberFor<T> {
         use sp_runtime::traits::SaturatedConversion;
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
+    }
+
+    fn push_subject_cid(
+        raw: &mut sp_runtime::sp_std::vec::Vec<sp_runtime::sp_std::vec::Vec<u8>>,
+        account: &T::AccountId,
+    ) -> DispatchResult {
+        let cid =
+            T::InstitutionQuery::lookup_cid(account).ok_or(Error::<T>::InvalidInstitutionCid)?;
+        if !raw.iter().any(|existing| existing == &cid) {
+            raw.push(cid);
+        }
+        Ok(())
+    }
+
+    fn resolve_subject_cid_numbers(
+        houses: &sp_runtime::sp_std::vec::Vec<(InstitutionCode, T::AccountId)>,
+        executive: &(InstitutionCode, T::AccountId),
+        legislature: &Option<(InstitutionCode, T::AccountId)>,
+    ) -> Result<ProposalSubjectCidNumbers, DispatchError> {
+        let mut raw = sp_runtime::sp_std::vec::Vec::new();
+        for (_, account) in houses.iter() {
+            Self::push_subject_cid(&mut raw, account)?;
+        }
+        Self::push_subject_cid(&mut raw, &executive.1)?;
+        if let Some((_, account)) = legislature.as_ref() {
+            Self::push_subject_cid(&mut raw, account)?;
+        }
+        <votingengine::Pallet<T>>::bound_subject_cid_numbers(raw)
     }
 
     /// 准备特别案公投人口快照:从链上公民身份模块读取并缓存分母。
@@ -423,6 +457,8 @@ impl<T: Config> Pallet<T> {
             .try_into()
             .map_err(|_| Error::<T>::InvalidHouses)?;
         let (first_code, first_account) = houses[0].clone();
+        let subject_cid_numbers =
+            Self::resolve_subject_cid_numbers(&houses, &executive, &legislature)?;
         // ADR-027 修订:提案方与表决院解耦——发起人资格由 legislation-yuan 对 proposer_body 校验,
         // 本层只锁定 houses[0](表决院)管理员快照;发起人若属表决院则自动赞成一票(国家/省两院),
         // 市级 市自治会/市教委会 委员提案时发起人不在表决院,不自动投票(市立法会从零计票)。
@@ -448,7 +484,8 @@ impl<T: Config> Pallet<T> {
             stage: STAGE_LEG_HOUSE,
             status: STATUS_VOTING,
             internal_code: Some(first_code),
-            internal_institution: Some(first_account.clone()),
+            account_context: Some(first_account.clone()),
+            subject_cid_numbers,
             start: now,
             end,
             citizen_eligible_total: eligible_total,
@@ -460,17 +497,19 @@ impl<T: Config> Pallet<T> {
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
             if let Err(err) =
-                votingengine::limit::try_add_active_proposal::<T>(first_account.clone(), id)
+                votingengine::limit::try_add_active_proposals::<T>(proposal.subject_keys(), id)
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
-                id,
-                first_code,
-                first_account.clone(),
-                InternalProposalMutexKind::Regular,
-            ) {
-                return TransactionOutcome::Rollback(Err(err));
+            // 中文注释:立法提案可能关联多机构,互斥锁以所有关联 CID 为主体占用。
+            for subject in proposal.subject_keys() {
+                if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
+                    id,
+                    subject,
+                    InternalProposalMutexKind::Regular,
+                ) {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
             }
             if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
                 id,
@@ -604,7 +643,7 @@ impl<T: Config> Pallet<T> {
                                 .ok_or(votingengine::Error::<T>::ProposalNotFound)?;
                             let old = p.end;
                             p.internal_code = Some(next_code);
-                            p.internal_institution = Some(next_account.clone());
+                            p.account_context = Some(next_account.clone());
                             p.start = now;
                             p.end = end;
                             Ok(old)
@@ -882,7 +921,7 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    /// 护宪大法官终审表决(仅修宪):5 人一人一票,3 名及以上赞成→生效;3 名及以上反对→否决。
+    /// 护宪大法官终审表决(仅修宪):7 人一人一票,4 名及以上赞成→生效;4 名及以上反对→否决。
     pub fn do_guard_vote(who: T::AccountId, proposal_id: u64, approve: bool) -> DispatchResult {
         let proposal =
             Proposals::<T>::get(proposal_id).ok_or(votingengine::Error::<T>::ProposalNotFound)?;
@@ -927,17 +966,17 @@ impl<T: Config> Pallet<T> {
         let no = signs.iter().filter(|(_, a)| !*a).count();
         pallet::LegGuardSigns::<T>::insert(proposal_id, signs);
         if yes >= CONSTITUTION_GUARD_APPROVAL_THRESHOLD {
-            // 3 名及以上赞成 → 生效。
+            // 7 人多数通过:4 名及以上赞成 → 生效。
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)
         } else if no >= CONSTITUTION_GUARD_APPROVAL_THRESHOLD {
-            // 3 名及以上反对 → 已不可能达到 3 名赞成,否决。
+            // 4 名及以上反对 → 已不可能达到 4 名赞成,否决。
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
         } else {
             Ok(())
         }
     }
 
-    /// 护宪大法官终审超时:未获3名及以上赞成 → 否决。
+    /// 护宪大法官终审超时:未获4名及以上赞成 → 否决。
     pub fn do_finalize_guard_timeout(
         proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
         proposal_id: u64,

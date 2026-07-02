@@ -159,7 +159,7 @@ class MultisigTransferProposalFeed {
   static final Map<String, int> _balanceFetchTokens = {};
   static int _nextFetchToken = 0;
 
-  // ADR-018 统一提案查询:当前年全部提案的进程内共享缓存。广场 / 机构详情 /
+  // ADR-018 统一提案查询:当前年全部提案的进程内共享缓存。公民-提案 / 机构详情 /
   // 个人多签同一刷新周期共用同一份,把"每页各自查链"降为"全应用取一次"。
   static _TimedValue<List<ProposalWithDetail>>? _yearProposalsCache;
   static Future<List<ProposalWithDetail>>? _yearProposalsInFlight;
@@ -199,7 +199,7 @@ class MultisigTransferProposalFeed {
   }
 
   /// ADR-018 统一提案查询入口:当前年全部提案,进程内共享缓存(TTL 20s)。
-  /// 广场 / 机构详情 / 个人多签同周期复用同一份,避免各页面重复查链。
+  /// 公民-提案 / 机构详情 / 个人多签同周期复用同一份,避免各页面重复查链。
   Future<List<ProposalWithDetail>> currentYearProposals({
     bool forceRefresh = false,
   }) {
@@ -232,7 +232,21 @@ class MultisigTransferProposalFeed {
     return _service.filterInstitutionVisible(all, institution);
   }
 
-  /// 广场治理提案 id:从共享年缓存按机构码过滤,替代 3 次 `ProposalsByOrg` 查询。
+  /// 公民 tab「提案」统一流 id:默认公共机构码 + 当前钱包订阅机构 CID。
+  Future<List<int>> fetchCitizenProposalFeedIds({
+    required Set<String> defaultCodes,
+    required Set<String> subscribedInstitutionCidNumbers,
+    bool forceRefresh = false,
+  }) async {
+    final all = await currentYearProposals(forceRefresh: forceRefresh);
+    return _service.filterCitizenProposalFeedIds(
+      all,
+      defaultCodes: defaultCodes,
+      subscribedInstitutionCidNumbers: subscribedInstitutionCidNumbers,
+    );
+  }
+
+  /// 治理提案 id:从共享年缓存按机构码过滤,替代 3 次 `ProposalsByOrg` 查询。
   Future<List<int>> fetchGovernanceProposalIds(
     Set<String> codes, {
     bool forceRefresh = false,

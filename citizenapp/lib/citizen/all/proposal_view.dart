@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/citizen/institution/institution.dart';
+import 'package:citizenapp/citizen/institution/institution_accounts.dart';
+import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/shared/institution_manage_detail_page.dart';
 
 import 'package:citizenapp/ui/app_theme.dart';
@@ -15,16 +18,19 @@ import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_local_store.dart';
 import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_detail_page.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
+import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 公民 tab「提案」列表:展示 NRC / PRC / PRB 三类机构所有提案,按 ID 倒序。
+/// 公民 tab「提案」统一列表:默认公共机构 + 当前钱包订阅公权机构,按 ID 倒序。
 ///
-/// **数据源(v1 双层 ID + 反向索引)**:
-/// - `ProposalsByOrg[NRC] ∪ ByOrg[PRC] ∪ ByOrg[PRB]` 取所有治理类提案 ID
-/// - **不再扫主键 + 客户端过滤**;个人多签提案天然不进列表
+/// **数据源(v1 双层 ID + 当前年缓存)**:
+/// - 默认机构码: NRC/NLG/NSN/NRP/NED/NJD/NSP/PRS。
+/// - 订阅机构:按当前热钱包订阅的公权机构 CID 精确命中。
+/// - 不把全部公权机构提案塞进列表,订阅范围也不得按机构码放大。
 ///
 /// **分页**:cursor 模式按 `_allIds` 切分,翻页天然不会卡空页。
-/// **新区块订阅**:周期性重 fetch 三 org id 列表,补差异。
+/// **新区块订阅**:周期性重 fetch 可见提案 id 列表,补差异。
 class ProposalView extends StatefulWidget {
   const ProposalView({
     super.key,
@@ -42,10 +48,18 @@ class _ProposalViewState extends State<ProposalView> {
   static const int _pageSize = 10;
   static const Duration _newBlockIndexCheckMinInterval = Duration(seconds: 60);
 
-  // 治理类 institution_code 编码。
-  static const String _codeNrc = 'NRC';
-  static const String _codePrc = 'PRC';
-  static const String _codePrb = 'PRB';
+  // 中文注释：提案页默认公共机构集合独立于“治理”子 tab。
+  // 省储会/省储行不默认进入提案流,只有用户订阅对应机构后才展示。
+  static const Set<String> _defaultProposalCodes = {
+    'NRC',
+    'NLG',
+    'NSN',
+    'NRP',
+    'NED',
+    'NJD',
+    'NSP',
+    'PRS',
+  };
 
   final MultisigTransferProposalFeed _multisigTransferFeed =
       MultisigTransferProposalFeed();
@@ -53,6 +67,8 @@ class _ProposalViewState extends State<ProposalView> {
   final ProposalContextResolver _contextResolver = ProposalContextResolver();
   final VoteChecker _voteChecker = VoteChecker();
   final ScrollController _scrollController = ScrollController();
+  final InstitutionRepository _institutionRepo = InstitutionRepository();
+  final WalletManager _walletManager = WalletManager();
 
   // 轻节点新区块订阅
   ChainEventSubscription? _subscription;
@@ -64,10 +80,13 @@ class _ProposalViewState extends State<ProposalView> {
   String? _error;
   List<_ProposalDisplayItem> _items = [];
 
-  /// 通过反向索引取到的全部治理提案 ID(降序排列)。
+  /// 当前钱包可见提案 ID(降序排列)。
   /// 列表页基于此切分翻页 — cursor `_items.length` 标记已加载到第几条,
   /// `_hasMore = _items.length < _allIds.length`。
   List<int> _allIds = const [];
+
+  /// accountHex -> InstitutionInfo。列表和详情复用,避免普通公权机构显示成账户名。
+  Map<String, InstitutionInfo> _knownInstitutionsByAccountHex = const {};
 
   /// 待投票计数。
   int _pendingVoteCount = 0;
@@ -121,19 +140,23 @@ class _ProposalViewState extends State<ProposalView> {
     _lastProposalIndexCheckAt = now;
 
     try {
-      final fresh = await _fetchAllGovernanceIds();
-      await ProposalLocalStore.instance.putGlobalIndex(fresh);
+      final scope = await _fetchVisibleProposalScope();
+      final fresh = scope.ids;
       final knownSet = _allIds.toSet();
       final newIds = fresh.where((id) => !knownSet.contains(id)).toList();
       if (newIds.isEmpty) return;
 
       // 新增提案插到列表顶部。按 proposalId 去重(fresh 在前优先保留),避免
       // 本地缓存 _items 与 _allIds 口径不同步时同一提案出现两张卡片。
-      final newItems = await _loadItemsForIds(newIds);
+      final newItems = await _loadItemsForIds(
+        newIds,
+        knownInstitutionsByAccountHex: scope.knownInstitutionsByAccountHex,
+      );
       if (mounted) {
         setState(() {
           _items = _dedupById([...newItems, ..._items]);
           _allIds = fresh;
+          _knownInstitutionsByAccountHex = scope.knownInstitutionsByAccountHex;
         });
         _updatePendingVoteCount();
       }
@@ -151,13 +174,84 @@ class _ProposalViewState extends State<ProposalView> {
     }
   }
 
-  /// 治理类提案 id,降序返回(主键单调,降序即按时间倒序)。
-  ///
-  /// ADR-018:从共享年缓存按 org 过滤,替代原来 3 次 `ProposalsByOrg` 查询,
-  /// 与机构详情共用同一份当前年提案缓存(全应用一次按年取)。
-  Future<List<int>> _fetchAllGovernanceIds() async {
-    return _multisigTransferFeed
-        .fetchGovernanceProposalIds({_codeNrc, _codePrc, _codePrb});
+  Future<
+      ({
+        Set<String> subscribedInstitutionCidNumbers,
+        Map<String, InstitutionInfo> knownInstitutionsByAccountHex,
+      })> _loadInstitutionScope() async {
+    try {
+      // 中文注释：提案流需要真实机构名称和主账户;本地数据包同步失败时,
+      // 仍继续按链上机构码过滤,不能让提案列表整体不可用。
+      await _institutionRepo.directory.ensureSynced();
+    } catch (_) {}
+
+    final defaultInstitutions = await _institutionRepo
+        .listByCodes(_defaultProposalCodes)
+        .catchError((_) => <Institution>[]);
+    final activeWallet =
+        await _walletManager.getWallet().catchError((_) => null);
+    final subscribedInstitutions = activeWallet == null
+        ? <Institution>[]
+        : await _institutionRepo
+            .listSubscribed(activeWallet.pubkeyHex)
+            .catchError((_) => <Institution>[]);
+
+    final known = <String, InstitutionInfo>{};
+    for (final inst in [...defaultInstitutions, ...subscribedInstitutions]) {
+      final info = _institutionInfoFromInstitution(inst);
+      known[_normalizeAccountHex(info.mainAccount)] = info;
+    }
+
+    final subscribedCidNumbers = <String>{
+      for (final inst in subscribedInstitutions) inst.cidNumber,
+    };
+    return (
+      subscribedInstitutionCidNumbers: subscribedCidNumbers,
+      knownInstitutionsByAccountHex: known,
+    );
+  }
+
+  /// 为普通公权机构派生 ProposalContext 使用的 InstitutionInfo。
+  InstitutionInfo _institutionInfoFromInstitution(Institution inst) {
+    final govInfo = _institutionRepo.governanceInfo(inst.cidNumber);
+    if (govInfo != null) return govInfo;
+    final rows = institutionAccountRows(inst);
+    final main = rows.isNotEmpty ? rows.first.accountHex : inst.mainAccountHex;
+    final fee = rows.length > 1 ? rows[1].accountHex : null;
+    return InstitutionInfo(
+      cidFullName: inst.cidFullName,
+      cidShortName: inst.displayName,
+      cidFullNameEn: inst.cidFullName,
+      cidShortNameEn: inst.displayName,
+      cidNumber: registeredAccountIdentity(main),
+      orgType: inst.orgType,
+      accounts: InstitutionAccounts(mainAccount: main, feeAccount: fee),
+      adminAccountCode: inst.institutionCode,
+    );
+  }
+
+  static String _normalizeAccountHex(String hex) {
+    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return clean.toLowerCase();
+  }
+
+  Future<
+      ({
+        List<int> ids,
+        Map<String, InstitutionInfo> knownInstitutionsByAccountHex,
+      })> _fetchVisibleProposalScope({bool forceRefresh = false}) async {
+    final institutionScope = await _loadInstitutionScope();
+    final ids = await _multisigTransferFeed.fetchCitizenProposalFeedIds(
+      defaultCodes: _defaultProposalCodes,
+      subscribedInstitutionCidNumbers:
+          institutionScope.subscribedInstitutionCidNumbers,
+      forceRefresh: forceRefresh,
+    );
+    return (
+      ids: ids,
+      knownInstitutionsByAccountHex:
+          institutionScope.knownInstitutionsByAccountHex,
+    );
   }
 
   Future<void> _loadFirstPage({bool force = false}) async {
@@ -167,23 +261,16 @@ class _ProposalViewState extends State<ProposalView> {
       _loadingMore = false;
     });
 
-    final localLoaded = !force && await _loadFirstPageFromLocal();
-    if (localLoaded && await ProposalLocalStore.instance.isGlobalIndexFresh()) {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-      return;
-    }
-
     try {
-      final ids = await _fetchAllGovernanceIds();
+      final scope = await _fetchVisibleProposalScope(forceRefresh: force);
+      final ids = scope.ids;
 
       if (ids.isEmpty) {
-        await ProposalLocalStore.instance.putGlobalIndex(const []);
         if (!mounted) return;
         setState(() {
           _allIds = const [];
           _items = const [];
+          _knownInstitutionsByAccountHex = scope.knownInstitutionsByAccountHex;
           _loading = false;
         });
         widget.onPendingVoteCountChanged?.call(0);
@@ -193,50 +280,27 @@ class _ProposalViewState extends State<ProposalView> {
       // 切前 _pageSize 条
       final firstPageIds =
           ids.sublist(0, ids.length < _pageSize ? ids.length : _pageSize);
-      final items = await _loadItemsForIds(firstPageIds);
-      await ProposalLocalStore.instance.putGlobalIndex(ids);
+      final items = await _loadItemsForIds(
+        firstPageIds,
+        knownInstitutionsByAccountHex: scope.knownInstitutionsByAccountHex,
+      );
 
       if (!mounted) return;
       setState(() {
         _allIds = ids;
         _items = items;
+        _knownInstitutionsByAccountHex = scope.knownInstitutionsByAccountHex;
         _loading = false;
       });
 
       _updatePendingVoteCount();
     } catch (e) {
       if (!mounted) return;
-      if (localLoaded) {
-        setState(() => _loading = false);
-        return;
-      }
       setState(() {
         _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
       widget.onPendingVoteCountChanged?.call(0);
-    }
-  }
-
-  Future<bool> _loadFirstPageFromLocal() async {
-    try {
-      final index = await ProposalLocalStore.instance.readGlobalIndex();
-      if (index == null || index.ids.isEmpty) return false;
-      final summaries = await ProposalLocalStore.instance.readGlobalPage(
-        limit: _pageSize,
-      );
-      if (!mounted || summaries.isEmpty) return summaries.isNotEmpty;
-      setState(() {
-        _allIds = index.ids;
-        _items = summaries
-            .map(_ProposalDisplayItem.fromLocalSummary)
-            .toList(growable: false);
-        _loading = false;
-      });
-      widget.onPendingVoteCountChanged?.call(0);
-      return true;
-    } catch (_) {
-      return false;
     }
   }
 
@@ -251,11 +315,10 @@ class _ProposalViewState extends State<ProposalView> {
           ? _allIds.length
           : (from + _pageSize);
       final pageIds = _allIds.sublist(from, to);
-      final localItems = await _loadLocalItemsForIds(pageIds);
-      final useLocalOnly = localItems.length == pageIds.length &&
-          await ProposalLocalStore.instance.isGlobalIndexFresh();
-      final newItems =
-          useLocalOnly ? localItems : await _loadItemsForIds(pageIds);
+      final newItems = await _loadItemsForIds(
+        pageIds,
+        knownInstitutionsByAccountHex: _knownInstitutionsByAccountHex,
+      );
 
       if (!mounted) return;
       setState(() {
@@ -271,18 +334,12 @@ class _ProposalViewState extends State<ProposalView> {
     }
   }
 
-  Future<List<_ProposalDisplayItem>> _loadLocalItemsForIds(
-      List<int> ids) async {
-    final summaries =
-        await ProposalLocalStore.instance.readSummariesForIds(ids);
-    return summaries
-        .map(_ProposalDisplayItem.fromLocalSummary)
-        .toList(growable: false);
-  }
-
   /// 给定一组 proposal_id,batch fetch 详情 + 上下文 + 待投票判定,
   /// 返回 `_ProposalDisplayItem` 列表(顺序与入参一致)。
-  Future<List<_ProposalDisplayItem>> _loadItemsForIds(List<int> ids) async {
+  Future<List<_ProposalDisplayItem>> _loadItemsForIds(
+    List<int> ids, {
+    Map<String, InstitutionInfo> knownInstitutionsByAccountHex = const {},
+  }) async {
     if (ids.isEmpty) return const [];
 
     // 批量取提案详情(meta + 业务详情)
@@ -293,6 +350,7 @@ class _ProposalViewState extends State<ProposalView> {
       proposals.map((p) => p.meta.institutionBytes?.toList()).toList(),
       internalOrgList: proposals.map((p) => p.meta.internalOrg).toList(),
       internalCodeList: proposals.map((p) => p.meta.internalCode).toList(),
+      knownInstitutionsByAccountHex: knownInstitutionsByAccountHex,
     );
 
     // ADR-018 R2:一次性批量算出"哪些提案需要投票",替代过去每提案各发一次
@@ -662,6 +720,7 @@ class _ProposalViewState extends State<ProposalView> {
         [proposal.meta.institutionBytes?.toList()],
         internalOrgList: [proposal.meta.internalOrg],
         internalCodeList: [proposal.meta.internalCode],
+        knownInstitutionsByAccountHex: _knownInstitutionsByAccountHex,
       );
       final proposalContext =
           contexts.isEmpty ? const ProposalContext() : contexts.first;
@@ -713,12 +772,6 @@ class _ProposalDisplayItem {
       ),
       needsVote: needsVote,
     );
-  }
-
-  factory _ProposalDisplayItem.fromLocalSummary(
-    LocalProposalSummary summary,
-  ) {
-    return _ProposalDisplayItem(summary: summary);
   }
 
   final LocalProposalSummary summary;

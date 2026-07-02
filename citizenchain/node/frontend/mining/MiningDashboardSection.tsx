@@ -25,7 +25,6 @@ export function MiningDashboardSection() {
       todayIncome: '0.00',
     },
     records: [],
-    resources: { cpuHashrateMhs: null, gpuHashrateMhs: null, memoryMb: null, nodeDataSizeMb: null },
     warning: null,
   });
   const [error, setError] = useState<string | null>(null);
@@ -122,36 +121,6 @@ export function MiningDashboardSection() {
                   <span className="metric-value-currency">（公民币）</span>
                 </>
               )}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="section mining-section">
-        <h2>资源监控</h2>
-        <div className="mining-income-grid">
-          <div className="metric-card">
-            <div className="metric-label">CPU 哈希率</div>
-            <div className="metric-value">
-              {loading ? '加载中...' : (mining.resources.cpuHashrateMhs == null ? '未启用' : `${mining.resources.cpuHashrateMhs.toFixed(2)} MH/s`)}
-            </div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-label">GPU 哈希率</div>
-            <div className="metric-value">
-              {loading ? '加载中...' : (mining.resources.gpuHashrateMhs == null ? '未启用' : `${mining.resources.gpuHashrateMhs.toFixed(2)} MH/s`)}
-            </div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-label">内存占用</div>
-            <div className="metric-value">
-              {loading ? '加载中...' : (mining.resources.memoryMb == null ? '未知' : `${mining.resources.memoryMb} MB`)}
-            </div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-label">节点数据大小</div>
-            <div className="metric-value">
-              {loading ? '加载中...' : (mining.resources.nodeDataSizeMb == null ? '未知' : `${mining.resources.nodeDataSizeMb} MB`)}
             </div>
           </div>
         </div>

@@ -24,13 +24,14 @@ use admin_primitives::{
     can_store_public_admin_code, AdminAccount, AdminAccountKind, AdminAccountLifecycle,
     AdminAccountStatus, AdminProfile, AdminSetChangeAction,
 };
+use entity_primitives::InstitutionMultisigQuery;
 use primitives::cid::{
     china::china_zf::CHINA_ZF,
     code::PROVINCE_CODE_INFOS,
     code::{institution_code_from_cid_number, ProvinceCode, FRG},
 };
 use votingengine::{
-    types::InstitutionCode, InternalVoteResultCallback, ProposalExecutionOutcome,
+    types::InstitutionCode, InternalVoteResultCallback, ProposalExecutionOutcome, ProposalSubject,
     PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED,
     STATUS_REJECTED, STATUS_VOTING,
 };
@@ -85,6 +86,13 @@ fn federal_registry_account<T: frame_system::Config>() -> Option<T::AccountId> {
     )
 }
 
+fn federal_registry_cid() -> Option<Vec<u8>> {
+    CHINA_ZF
+        .iter()
+        .find(|node| institution_code_from_cid_number(node.cid_number) == Some(FRG))
+        .map(|node| node.cid_number.as_bytes().to_vec())
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
@@ -101,6 +109,9 @@ pub mod pallet {
         type MaxAdminsPerInstitution: Get<u32>;
         /// 中文注释：内部投票引擎（返回真实 proposal_id，避免外部猜测 next_proposal_id）。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
+
+        /// 机构账户 → CID 查询入口。机构管理员变更提案必须以 CID 为主体真源。
+        type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
 
         /// 该 pallet 的可配置权重实现。
         type WeightInfo: crate::weights::WeightInfo;
@@ -335,6 +346,9 @@ pub mod pallet {
                 !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
             );
+            let subject_cid_numbers =
+                alloc::vec![T::InstitutionQuery::lookup_cid(&account)
+                    .ok_or(Error::<T>::InvalidInstitution)?];
             // 3) 在同一个链上事务中创建投票提案、互斥锁和业务数据。
             with_transaction(|| {
                 let action = AdminSetChangeAction {
@@ -348,6 +362,7 @@ pub mod pallet {
                         who.clone(),
                         institution_code,
                         account.clone(),
+                        subject_cid_numbers,
                         admins.len() as u32,
                         new_threshold,
                         crate::MODULE_TAG,
@@ -414,6 +429,8 @@ pub mod pallet {
                 !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
             );
+            let subject_cid_numbers =
+                alloc::vec![federal_registry_cid().ok_or(Error::<T>::InvalidInstitution)?];
 
             with_transaction(|| {
                 let action = AdminSetChangeAction {
@@ -427,6 +444,7 @@ pub mod pallet {
                         who.clone(),
                         FRG,
                         group_account.clone(),
+                        subject_cid_numbers,
                         admins.len() as u32,
                         new_threshold,
                         crate::MODULE_TAG,
@@ -528,6 +546,17 @@ pub mod pallet {
             left_set == right_set
         }
 
+        fn institution_subject_from_cid(
+            cid_number: Vec<u8>,
+        ) -> Result<ProposalSubject<T::AccountId>, DispatchError> {
+            let mut bounded =
+                votingengine::Pallet::<T>::bound_subject_cid_numbers(alloc::vec![cid_number])?;
+            let cid_number = bounded
+                .pop()
+                .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
+            Ok(ProposalSubject::InstitutionCid(cid_number))
+        }
+
         fn ensure_account_kind_matches_org(
             kind: AdminAccountKind,
             institution_code: InstitutionCode,
@@ -595,7 +624,7 @@ pub mod pallet {
                 Error::<T>::InvalidAdminAccountLifecycleScope
             );
             ensure!(
-                proposal.internal_institution == Some(institution),
+                proposal.account_context == Some(institution),
                 Error::<T>::ProposalInstitutionMismatch
             );
             ensure!(
@@ -1022,18 +1051,21 @@ pub mod pallet {
                 Error::<T>::AdminAccountNotActive
             );
             ensure!(
-                proposal.internal_institution == Some(action.admin_root_account_id.clone()),
+                proposal.account_context == Some(action.admin_root_account_id.clone()),
                 Error::<T>::ProposalInstitutionMismatch
             );
             ensure!(
                 proposal.internal_code == Some(account.institution_code),
                 Error::<T>::ProposalCodeMismatch
             );
-            votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(
-                account.institution_code,
-                action.admin_root_account_id.clone(),
-                proposal_id,
-            )?;
+            let cid_number = if province_group.is_some() {
+                federal_registry_cid().ok_or(Error::<T>::InvalidInstitution)?
+            } else {
+                T::InstitutionQuery::lookup_cid(&action.admin_root_account_id)
+                    .ok_or(Error::<T>::InvalidInstitution)?
+            };
+            let subject = Self::institution_subject_from_cid(cid_number)?;
+            votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(subject, proposal_id)?;
             let current_admins: Vec<T::AccountId> =
                 account.admins.iter().map(|p| p.account.clone()).collect();
             let new_admins: Vec<T::AccountId> =

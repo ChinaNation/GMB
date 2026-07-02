@@ -30,8 +30,8 @@ use sp_runtime::DispatchResult;
 use sp_std::collections::btree_set::BTreeSet;
 use votingengine::{
     types::{InstitutionCode, PMUL},
-    InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
-    STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
+    InternalVoteResultCallback, ProposalExecutionOutcome, ProposalSubject, PROPOSAL_KIND_INTERNAL,
+    STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
 };
 
 pub use pallet::*;
@@ -202,6 +202,7 @@ pub mod pallet {
                         who.clone(),
                         PMUL,
                         account.clone(),
+                        Vec::new(),
                         admins.len() as u32,
                         new_threshold,
                         crate::MODULE_TAG,
@@ -283,7 +284,7 @@ pub mod pallet {
                 Error::<T>::InvalidLifecycleScope
             );
             ensure!(
-                proposal.internal_institution == Some(account),
+                proposal.account_context == Some(account),
                 Error::<T>::InvalidLifecycleScope
             );
             ensure!(
@@ -522,7 +523,7 @@ pub mod pallet {
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
-                proposal.internal_institution == Some(action.admin_root_account_id.clone()),
+                proposal.account_context == Some(action.admin_root_account_id.clone()),
                 Error::<T>::ProposalActionNotFound
             );
             ensure!(
@@ -530,8 +531,7 @@ pub mod pallet {
                 Error::<T>::ProposalActionNotFound
             );
             votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(
-                PMUL,
-                action.admin_root_account_id.clone(),
+                ProposalSubject::PersonalAccount(action.admin_root_account_id.clone()),
                 proposal_id,
             )?;
 

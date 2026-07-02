@@ -95,7 +95,7 @@ citizenapp/test/governance/admins-change/
 - 私权机构走 `PrivateAdmins(30).propose_admin_set_change(0)`。
 - 非法人机构按所属法人归属走 `PublicAdmins(29).propose_admin_set_change(0)` 或 `PrivateAdmins(30).propose_admin_set_change(0)`。
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
-- 固定治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6，NJD=8；FRG 省级组固定为 3/5。
+- 固定治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6，NJD=8；固定人数为 NRC=19，PRC/PRB=9，NJD=15；FRG 省级组固定为 3/5。
 - 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
 - 阈值真源不在各管理员 `AdminAccounts`；治理固定阈值来自制度常量，动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存。
 - QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与冷钱包 decoder 逐项一致：`institution_code / subject / admins / new_threshold`。

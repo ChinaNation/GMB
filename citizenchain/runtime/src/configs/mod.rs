@@ -1241,6 +1241,7 @@ impl public_admins::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type InternalVoteEngine = InternalVote;
+    type InstitutionQuery = RuntimeInstitutionQuery;
     type WeightInfo = public_admins::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1248,6 +1249,7 @@ impl private_admins::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type InternalVoteEngine = InternalVote;
+    type InstitutionQuery = RuntimeInstitutionQuery;
     type WeightInfo = private_admins::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1317,6 +1319,11 @@ impl multisig_transfer::Config for Runtime {
 pub struct RuntimeInstitutionQuery;
 
 impl entity_primitives::InstitutionMultisigQuery<AccountId> for RuntimeInstitutionQuery {
+    fn lookup_cid(addr: &AccountId) -> Option<Vec<u8>> {
+        public_manage::Pallet::<Runtime>::lookup_cid(addr)
+            .or_else(|| private_manage::Pallet::<Runtime>::lookup_cid(addr))
+    }
+
     fn lookup_org(addr: &AccountId) -> Option<votingengine::types::InstitutionCode> {
         public_manage::Pallet::<Runtime>::lookup_org(addr)
             .or_else(|| private_manage::Pallet::<Runtime>::lookup_org(addr))
@@ -2104,10 +2111,12 @@ impl election_vote::Config for Runtime {
     type MaxElectionOfficeCodeLen = ConstU32<64>;
     type MaxElectionCandidates = ConstU32<256>;
     type MaxElectionVoters = ConstU32<4096>;
+    type InstitutionQuery = RuntimeInstitutionQuery;
 }
 
 impl legislation_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type InstitutionQuery = RuntimeInstitutionQuery;
     type WeightInfo = ();
 }
 

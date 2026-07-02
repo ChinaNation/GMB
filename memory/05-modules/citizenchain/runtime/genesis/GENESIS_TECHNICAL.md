@@ -15,6 +15,7 @@
 - 其他模块（难度调整、runtime-upgrade）各自读本模块的链上值。
 - 创世常量在创世区块写入后不再变更。
 - 本模块通过 `src/institution.rs` 在创世区块一次性写入内置公权机构和初始管理员；运行期机构生命周期仍归 `public-manage` / `private-manage` / `personal-manage`，运行期管理员治理仍归 `public-admins` / `private-admins` / `personal-admins`。
+- 国家司法院创世公职人员固定 15 人：7 名护宪大法官、1 名首席大法官、2 名次席大法官、5 名大法官；护宪角色顺序由 `national_judicial_yuan_admin_role` 写入，固定治理阈值为 8/15。
 - 本模块不暴露机构或管理员治理 extrinsic；旧创世机构/管理员运行期模块已删除，不允许恢复为影子真源。
 
 ## 2. 核心类型

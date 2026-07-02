@@ -674,7 +674,7 @@ void main() {
       for (final item in [
         (7, 3, 'PMUL', 2, 2, 'propose_personal_admin_set_change'),
         (29, 0, 'FRG', 5, 3, 'propose_public_admin_set_change'),
-        (29, 0, 'NJD', 13, 8, 'propose_public_admin_set_change'),
+        (29, 0, 'NJD', 15, 8, 'propose_public_admin_set_change'),
         (29, 0, 'CGOV', 2, 2, 'propose_public_admin_set_change'),
         (30, 0, 'SFLP', 2, 2, 'propose_private_admin_set_change'),
       ]) {

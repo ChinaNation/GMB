@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
@@ -13,20 +14,15 @@ class ProposalLimitService {
 
   final ChainRpc _rpc;
 
-  /// 每个机构最多同时 10 个活跃提案（全局，不区分提案类型）。
+  /// 每个机构 CID 主体最多同时 10 个活跃提案（全局，不区分提案类型）。
   static const maxActiveProposalsPerInstitution = 10;
 
-  /// 查询机构活跃的提案 ID 列表（从 VotingEngine 全局存储读取）。
+  /// 查询机构 CID 主体活跃的提案 ID 列表（从 VotingEngine 全局存储读取）。
   Future<List<int>> fetchActiveProposalIds(InstitutionInfo institution) async {
     final key = _buildStorageKey(
       'VotingEngine',
-      'ActiveProposalsByInstitution',
-      Uint8List.fromList(
-        institutionIdentityToAccountId(
-          institution.cidNumber,
-          mainAccount: institution.mainAccount,
-        ),
-      ),
+      'ActiveProposalsBySubject',
+      _proposalSubjectInstitutionCidKey(institution.cidNumber),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null || data.isEmpty) return const [];
@@ -65,6 +61,33 @@ class ProposalLimitService {
     result.setAll(0, hash);
     result.setAll(hash.length, data);
     return result;
+  }
+
+  Uint8List _proposalSubjectInstitutionCidKey(String cidNumber) {
+    final cidBytes = Uint8List.fromList(utf8.encode(cidNumber));
+    final lenBytes = _encodeCompactInt(cidBytes.length);
+    final result = Uint8List(1 + lenBytes.length + cidBytes.length);
+    result[0] = 0; // ProposalSubject::InstitutionCid
+    result.setAll(1, lenBytes);
+    result.setAll(1 + lenBytes.length, cidBytes);
+    return result;
+  }
+
+  Uint8List _encodeCompactInt(int value) {
+    if (value < 1 << 6) {
+      return Uint8List.fromList([value << 2]);
+    }
+    if (value < 1 << 14) {
+      final encoded = (value << 2) | 0x01;
+      return Uint8List.fromList([encoded & 0xff, (encoded >> 8) & 0xff]);
+    }
+    final encoded = (value << 2) | 0x02;
+    return Uint8List.fromList([
+      encoded & 0xff,
+      (encoded >> 8) & 0xff,
+      (encoded >> 16) & 0xff,
+      (encoded >> 24) & 0xff,
+    ]);
   }
 
   (int, int) _decodeCompact(Uint8List data, int offset) {

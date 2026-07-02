@@ -28,9 +28,12 @@ pub enum EntityKind {
 
 /// 机构多签账户查询 trait，供交易、清算、验签等下游模块使用。
 ///
-/// 输入任意机构账户地址，返回该账户所属机构码和管理员快照。
+/// 输入任意机构账户地址，返回该账户所属机构 CID、机构码和管理员快照。
 /// 公权/私权 pallet 各自实现本 trait，runtime 再提供聚合查询适配器。
 pub trait InstitutionMultisigQuery<AccountId> {
+    /// 返回机构账户所属唯一 CID。个人多签没有 CID,不得返回伪 CID。
+    fn lookup_cid(addr: &AccountId) -> Option<Vec<u8>>;
+
     /// 返回机构账户所属机构码。
     fn lookup_org(addr: &AccountId) -> Option<InstitutionCode>;
 
@@ -59,6 +62,10 @@ impl<CidNumber> InstitutionCidQuery<CidNumber> for () {
 }
 
 impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
+    fn lookup_cid(_addr: &AccountId) -> Option<Vec<u8>> {
+        None
+    }
+
     fn lookup_org(_addr: &AccountId) -> Option<InstitutionCode> {
         None
     }

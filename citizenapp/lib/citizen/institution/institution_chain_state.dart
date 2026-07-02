@@ -7,10 +7,6 @@
 //   公权机构硬编码 'CGOV' 的 bug —— 见 ADR-028 决策 2 / 风险点 5)。
 // - 读取遵守 ADR-018:余额走精确整键批量,提案走当年共享缓存客户端过滤,不长前缀扫描。
 
-import 'dart:typed_data';
-
-import 'package:flutter/foundation.dart' show listEquals;
-
 import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/institution/institution_classification.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
@@ -54,8 +50,8 @@ abstract interface class InstitutionChainState {
   /// 机构主账户管理员**完整资料**(cid/姓名/职务/任期/来源,A2;个人多签仅 account)。
   Future<List<AdminProfile>> adminProfiles(Institution institution);
 
-  /// 该机构当年提案(按 institutionBytes==主账户 id 过滤当年缓存)。
-  Future<List<InstitutionProposalSummary>> proposals(Uint8List mainAccountId);
+  /// 该机构当年提案(按 subject_cid_numbers 包含机构 CID 过滤当年缓存)。
+  Future<List<InstitutionProposalSummary>> proposals(Institution institution);
 }
 
 /// 生产实现:复用既有链读基础设施。链读需联网,真机验证。
@@ -90,13 +86,11 @@ class LiveInstitutionChainState implements InstitutionChainState {
 
   @override
   Future<List<InstitutionProposalSummary>> proposals(
-    Uint8List mainAccountId,
-  ) async {
+      Institution institution) async {
     final all = await _feed.currentYearProposals();
     final out = <InstitutionProposalSummary>[];
     for (final p in all) {
-      final ib = p.meta.institutionBytes;
-      if (ib != null && listEquals(ib, mainAccountId)) {
+      if (p.meta.subjectCidNumbers.contains(institution.cidNumber)) {
         out.add(InstitutionProposalSummary(
           proposalId: p.meta.proposalId,
           idLabel: '提案 #${p.meta.proposalId}',

@@ -104,7 +104,7 @@ class ProposalContextResolver {
 
   /// 解析用户与指定提案的关系。
   ///
-  /// [institutionBytes] 提案的机构 AccountId32（可为 null）。
+  /// [institutionBytes] Proposal.account_context 的 AccountId32（可为 null）。
   /// [knownInstitution] 如果调用方已知机构信息（如从机构页面进入），直接传入跳过反查。
   Future<ProposalContext> resolve({
     List<int>? institutionBytes,
@@ -123,7 +123,7 @@ class ProposalContextResolver {
           adminAccountCode: internalCode);
     }
 
-    // 2. 如果仍然没有机构（如联合投票 institutionBytes 反查失败），
+    // 2. 如果仍然没有机构（如 account_context 反查失败），
     //    遍历用户所有冷钱包，逐个查链上管理员列表反向匹配。
     if (institution == null && coldWallets.isNotEmpty) {
       institution = await _reverseMatchInstitution(coldWallets);
@@ -189,10 +189,16 @@ class ProposalContextResolver {
   Future<List<ProposalContext>> resolveBatch(
       List<List<int>?> institutionBytesList,
       {List<int?>? internalOrgList,
-      List<String?>? internalCodeList}) async {
+      List<String?>? internalCodeList,
+      Map<String, InstitutionInfo> knownInstitutionsByAccountHex =
+          const {}}) async {
     final wallets = await _getWallets();
     final coldWallets = wallets.where((w) => w.isColdWallet).toList();
     final results = <ProposalContext>[];
+    final knownInstitutions = {
+      for (final entry in knownInstitutionsByAccountHex.entries)
+        _normalize(entry.key): entry.value,
+    };
 
     for (var i = 0; i < institutionBytesList.length; i++) {
       final institutionBytes = institutionBytesList[i];
@@ -203,8 +209,9 @@ class ProposalContextResolver {
       InstitutionInfo? institution;
 
       if (institutionBytes != null) {
-        institution = findInstitutionByAccountId(institutionBytes,
-            adminAccountCode: internalCode);
+        institution = knownInstitutions[_hexFromBytes(institutionBytes)] ??
+            findInstitutionByAccountId(institutionBytes,
+                adminAccountCode: internalCode);
       }
 
       if (institution == null && coldWallets.isNotEmpty) {
@@ -317,6 +324,14 @@ class ProposalContextResolver {
   static String _normalize(String hex) {
     final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
     return clean.toLowerCase();
+  }
+
+  static String _hexFromBytes(List<int> bytes) {
+    final buffer = StringBuffer();
+    for (final byte in bytes) {
+      buffer.write(byte.toRadixString(16).padLeft(2, '0'));
+    }
+    return buffer.toString();
   }
 }
 

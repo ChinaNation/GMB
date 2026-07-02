@@ -45,6 +45,20 @@ fn nrc_account<T: frame_system::Config>() -> Option<T::AccountId> {
         .and_then(|n| decode_account::<T>(&n.main_account))
 }
 
+fn account_cid<T: frame_system::Config>(institution: &T::AccountId) -> Option<Vec<u8>> {
+    for entry in CHINA_CB.iter() {
+        if decode_account::<T>(&entry.main_account).as_ref() == Some(institution) {
+            return Some(entry.cid_number.as_bytes().to_vec());
+        }
+    }
+    for entry in CHINA_CH.iter() {
+        if decode_account::<T>(&entry.main_account).as_ref() == Some(institution) {
+            return Some(entry.cid_number.as_bytes().to_vec());
+        }
+    }
+    None
+}
+
 fn account_org<T: frame_system::Config>(institution: T::AccountId) -> Option<InstitutionCode> {
     if Some(institution.clone()) == nrc_account::<T>() {
         return Some(NRC);
@@ -171,6 +185,7 @@ pub mod pallet {
                 who.clone(),
                 institution_code,
                 institution.clone(),
+                Vec::from([account_cid::<T>(&institution).ok_or(Error::<T>::InvalidInstitution)?]),
                 crate::MODULE_TAG,
                 encoded,
             )?;

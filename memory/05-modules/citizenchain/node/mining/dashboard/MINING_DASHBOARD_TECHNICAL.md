@@ -4,7 +4,7 @@
 
 - 页面需要展示四项挖矿实际收益指标：实际到账收益总额、累计手续费到账收益、累计铸块奖励到账、今日实际到账收益。
 - 页面需要展示最近出块记录，包括区块高度、时间、手续费到账收益、铸块奖励和区块作者。
-- 页面需要展示节点资源监控，包括 CPU 占用、内存占用、磁盘占用和节点数据大小。
+- 页面不展示节点资源监控；CPU/GPU 哈希率、内存占用和节点数据大小不属于挖矿收益看板返回值。
 - 前端会定时轮询该接口，模块需要支持高频读取而不重复全链重扫。
 - 当节点未完成追块时，模块需要返回当前已统计结果，并明确提示还有多少区块待补算。
 - 当部分链上字段读取失败时，模块需要尽量返回已有统计结果，并通过 `warning` 提示不完整原因。
@@ -16,7 +16,7 @@
 - 后端路径：`node/src/mining/dashboard/mod.rs`
 - 前端路径：`node/frontend/mining/`
   - `api.ts`：挖矿 tab 专用 Tauri API
-  - `types.ts`：挖矿收益、资源监控、网络概览与出块记录类型
+  - `types.ts`：挖矿收益、网络概览与出块记录类型
   - `MiningDashboardSection.tsx` / `NetworkInlineSection.tsx`：挖矿 tab UI
 - 对外命令：
   - `get_mining_dashboard`
@@ -25,13 +25,13 @@
 
 - 汇总挖矿收益看板数据：总收益、手续费到账收益、奖励到账收益、今日收益。
 - 生成最近 20 个区块的出块记录。
-- 返回节点资源占用（CPU、内存、磁盘、数据目录大小）。
+- 不返回节点资源占用；挖矿页资源监控分组已删除。
 - 在数据不完整或 RPC 异常时返回告警信息（`warning`），避免静默错误。
 
 ## 3. 数据模型
 
 - 对外返回：
-  - `MiningDashboard { income, records, resources, warning }`
+  - `MiningDashboard { income, records, warning }`
 - 进程内缓存：
   - `MiningComputationCache`
     - `cache_version`
@@ -97,17 +97,12 @@
 - JSON-RPC `error` 字段统一转错误。
 - 共享 HTTP RPC URL 会复用当前本地 RPC 端口，而不是硬编码到单一端口。
 
-## 8. 资源采样优化
+## 8. 资源监控边界
 
-- 资源采样结果做短 TTL 缓存（5 秒），减少高频执行开销。
-- CPU / 内存采样通过 `sysinfo` crate（`System::process(pid)`）直接读取进程统计，不再依赖外部 `ps` 命令。
-- 磁盘占用通过 `sysinfo::Disks` 获取，不再依赖外部 `df` 命令。
-- 节点数据目录大小通过 Rust `fs::metadata` 递归计算，不再依赖外部 `du` 命令。
-- 仍优先读取节点 PID 定向资源；无 PID 时回退整机视角。
+- 挖矿页已删除资源监控分组，不再采样 CPU/GPU 哈希率、内存占用或节点数据大小。
+- 节点本地数据目录、链上中国数据库和其它本地缓存不再通过挖矿收益接口暴露，避免把非链数据误显示为节点链数据。
 
 ## 9. 依赖关系
 
-- 依赖 `home/process` 的 `current_status` 获取节点 PID（用于定向资源统计）。
-- 依赖 `shared/keystore::node_data_dir` 获取节点数据目录路径。
 - 依赖 `shared/security` 提供应用数据目录路径。
-- 依赖 `sysinfo` crate 进行跨平台进程和磁盘资源采样。
+- 不依赖 `sysinfo` 进行挖矿页资源采样。

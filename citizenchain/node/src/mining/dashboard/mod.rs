@@ -1,7 +1,7 @@
 use crate::{
     home,
     settings::fee_account,
-    shared::{constants, keystore, rpc, security},
+    shared::{constants, rpc, security},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -10,18 +10,15 @@ use std::{
     cmp,
     collections::{HashMap, VecDeque},
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Mutex, MutexGuard, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
-use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 use tauri::AppHandle;
 
 const RECENT_RECORD_LIMIT: usize = 20;
 const MAX_BLOCKS_PER_REFRESH: u64 = 100;
 const DAY_MS: u64 = 86_400_000;
-const RESOURCE_CACHE_TTL_MS: u64 = 5_000;
-const NODE_DATA_SIZE_CACHE_TTL_MS: u64 = 60_000;
 const INCOME_DAY_KEEP: u64 = 400;
 const MINING_CACHE_VERSION: u32 = 2;
 const MINING_CACHE_FILENAME: &str = "mining-dashboard-cache.json";
@@ -49,23 +46,12 @@ pub struct MiningBlockRecord {
     pub author: String,
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-/// 资源监控面板展示的节点资源占用。
-pub struct ResourceUsage {
-    pub cpu_hashrate_mhs: Option<f64>,
-    pub gpu_hashrate_mhs: Option<f64>,
-    pub memory_mb: Option<u64>,
-    pub node_data_size_mb: Option<u64>,
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 /// 挖矿看板聚合响应。
 pub struct MiningDashboard {
     pub income: MiningIncome,
     pub records: Vec<MiningBlockRecord>,
-    pub resources: ResourceUsage,
     pub warning: Option<String>,
 }
 
@@ -108,19 +94,6 @@ impl Default for MiningComputationCache {
     }
 }
 
-#[derive(Clone, Debug)]
-struct ResourceUsageSample {
-    sampled_at_ms: u64,
-    usage: ResourceUsage,
-}
-
-#[derive(Clone, Debug)]
-struct NodeDataSizeSample {
-    sampled_at_ms: u64,
-    data_dir: String,
-    size_mb: Option<u64>,
-}
-
 #[derive(Clone, Debug, Default)]
 struct RefreshStats {
     fee_query_failures: u64,
@@ -144,23 +117,13 @@ struct ProcessedBlock {
 }
 
 static MINING_CACHE: OnceLock<Mutex<MiningComputationCache>> = OnceLock::new();
-static RESOURCE_USAGE_CACHE: OnceLock<Mutex<Option<ResourceUsageSample>>> = OnceLock::new();
 static MINING_REFRESHING: OnceLock<Mutex<bool>> = OnceLock::new();
 static MINING_CACHE_LOADED: OnceLock<Mutex<bool>> = OnceLock::new();
 static TIMESTAMP_NOW_STORAGE_KEY_CACHE: OnceLock<String> = OnceLock::new();
 static LAST_CACHE_PERSIST_AT_MS: OnceLock<Mutex<u64>> = OnceLock::new();
-static NODE_DATA_SIZE_CACHE: OnceLock<Mutex<Option<NodeDataSizeSample>>> = OnceLock::new();
 
 fn mining_cache() -> &'static Mutex<MiningComputationCache> {
     MINING_CACHE.get_or_init(|| Mutex::new(MiningComputationCache::default()))
-}
-
-fn resource_usage_cache() -> &'static Mutex<Option<ResourceUsageSample>> {
-    RESOURCE_USAGE_CACHE.get_or_init(|| Mutex::new(None))
-}
-
-fn node_data_size_cache() -> &'static Mutex<Option<NodeDataSizeSample>> {
-    NODE_DATA_SIZE_CACHE.get_or_init(|| Mutex::new(None))
 }
 
 fn mining_refreshing_flag() -> &'static Mutex<bool> {
@@ -295,10 +258,6 @@ fn ensure_mining_cache_loaded(app: &AppHandle) {
         Err(err) => eprintln!("load mining cache skipped: {err}"),
     }
     *loaded = true;
-}
-
-fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    keystore::node_data_dir(app)
 }
 
 fn unix_now_ms() -> Result<u64, String> {
@@ -862,7 +821,6 @@ fn warning_from_stats(stats: &RefreshStats) -> Option<String> {
 // 资源采样与收益统计解耦，即使 RPC 不可用，也尽量继续返回本地资源面板。
 fn dashboard_from_cache(
     cache: &MiningComputationCache,
-    resources: ResourceUsage,
     warning: Option<String>,
     today_utc: u64,
 ) -> MiningDashboard {
@@ -893,12 +851,11 @@ fn dashboard_from_cache(
             today_income: format_2_decimals_fen(today_income_fen),
         },
         records,
-        resources,
         warning,
     }
 }
 
-fn empty_dashboard(resources: ResourceUsage, warning: Option<String>) -> MiningDashboard {
+fn empty_dashboard(warning: Option<String>) -> MiningDashboard {
     MiningDashboard {
         income: MiningIncome {
             total_income: "0.00".to_string(),
@@ -907,138 +864,8 @@ fn empty_dashboard(resources: ResourceUsage, warning: Option<String>) -> MiningD
             today_income: "0.00".to_string(),
         },
         records: vec![],
-        resources,
         warning,
     }
-}
-
-fn collect_node_data_size_mb(data_dir: &Path) -> Option<u64> {
-    fn dir_size(path: &Path) -> u64 {
-        let Ok(entries) = fs::read_dir(path) else {
-            return 0;
-        };
-        let mut total: u64 = 0;
-        for entry in entries.flatten() {
-            let Ok(meta) = entry.metadata() else {
-                continue;
-            };
-            if meta.is_dir() {
-                total = total.saturating_add(dir_size(&entry.path()));
-            } else {
-                total = total.saturating_add(meta.len());
-            }
-        }
-        total
-    }
-    if !data_dir.exists() {
-        return None;
-    }
-    let bytes = dir_size(data_dir);
-    Some(bytes.saturating_add(1024 * 1024 - 1) / (1024 * 1024))
-}
-
-fn node_data_size_mb_with_cache(data_dir: &PathBuf) -> Option<u64> {
-    let now_ms = unix_now_ms().unwrap_or(0);
-    let data_dir_s = data_dir.display().to_string();
-    {
-        let guard = lock_or_reset(node_data_size_cache(), "NODE_DATA_SIZE_CACHE");
-        if let Some(sample) = guard.as_ref() {
-            if sample.data_dir == data_dir_s
-                && now_ms.saturating_sub(sample.sampled_at_ms) <= NODE_DATA_SIZE_CACHE_TTL_MS
-            {
-                return sample.size_mb;
-            }
-        }
-    }
-
-    let size_mb = collect_node_data_size_mb(data_dir);
-    let mut guard = lock_or_reset(node_data_size_cache(), "NODE_DATA_SIZE_CACHE");
-    if let Some(sample) = guard.as_ref() {
-        if sample.data_dir == data_dir_s
-            && now_ms.saturating_sub(sample.sampled_at_ms) <= NODE_DATA_SIZE_CACHE_TTL_MS
-        {
-            return sample.size_mb;
-        }
-    }
-    *guard = Some(NodeDataSizeSample {
-        sampled_at_ms: now_ms,
-        data_dir: data_dir_s,
-        size_mb,
-    });
-    size_mb
-}
-
-fn collect_resource_usage(app: &AppHandle) -> ResourceUsage {
-    let mut memory_mb = None;
-    let mut node_data_size_mb = None;
-
-    if let Ok(status) = home::current_status(app) {
-        if let Some(pid) = status.pid {
-            let sys = System::new_with_specifics(
-                RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing().with_memory()),
-            );
-            let sysinfo_pid = sysinfo::Pid::from_u32(pid);
-            if let Some(proc) = sys.process(sysinfo_pid) {
-                let rss_bytes = proc.memory();
-                memory_mb = Some(rss_bytes.saturating_add(1024 * 1024 - 1) / (1024 * 1024));
-            }
-        }
-    }
-
-    if let Ok(data_dir) = node_data_dir(app) {
-        node_data_size_mb = node_data_size_mb_with_cache(&data_dir);
-    }
-
-    // CPU 哈希率：通过节点 RPC 获取（mining_cpuHashrate 返回 H/s，u64 整数）。
-    let cpu_hashrate_mhs: Option<f64> = match rpc_post("mining_cpuHashrate", Value::Array(vec![])) {
-        Ok(val) => {
-            let hs = val.as_u64().unwrap_or(0) as f64;
-            Some(hs / 1_000_000.0) // H/s → MH/s
-        }
-        Err(_) => None,
-    };
-
-    // GPU 哈希率：通过节点 RPC 获取（mining_gpuHashrate 返回 H/s，u64 整数）。
-    let gpu_hashrate_mhs: Option<f64> = match rpc_post("mining_gpuHashrate", Value::Array(vec![])) {
-        Ok(val) => {
-            let hs = val.as_u64().unwrap_or(0) as f64;
-            Some(hs / 1_000_000.0) // H/s → MH/s
-        }
-        Err(_) => None, // 节点未启用 GPU 或 RPC 不可用
-    };
-
-    ResourceUsage {
-        cpu_hashrate_mhs,
-        gpu_hashrate_mhs,
-        memory_mb,
-        node_data_size_mb,
-    }
-}
-
-fn resource_usage(app: &AppHandle) -> ResourceUsage {
-    let now_ms = unix_now_ms().unwrap_or(0);
-    let cache = resource_usage_cache();
-    {
-        let guard = lock_or_reset(cache, "RESOURCE_USAGE_CACHE");
-        if let Some(sample) = guard.as_ref() {
-            if now_ms.saturating_sub(sample.sampled_at_ms) <= RESOURCE_CACHE_TTL_MS {
-                return sample.usage.clone();
-            }
-        }
-    }
-
-    let usage = collect_resource_usage(app);
-    let mut guard = lock_or_reset(cache, "RESOURCE_USAGE_CACHE");
-    if let Some(sample) = guard.as_ref() {
-        if now_ms.saturating_sub(sample.sampled_at_ms) <= RESOURCE_CACHE_TTL_MS {
-            return sample.usage.clone();
-        }
-    }
-    *guard = Some(ResourceUsageSample {
-        sampled_at_ms: now_ms,
-        usage: usage.clone(),
-    });
-    usage
 }
 
 // 同一时刻只允许一个请求做增量追块，其余请求直接复用最近缓存，避免重复扫链。
@@ -1065,18 +892,17 @@ impl Drop for RefreshInFlightGuard {
 pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
     // 先加载最近一次落盘缓存，保证 RPC 短暂异常时仍能返回可展示的旧数据。
     ensure_mining_cache_loaded(&app);
-    let resources = resource_usage(&app);
     let today_utc = utc_day(unix_now_ms().unwrap_or(0));
     let mut warnings: Vec<String> = Vec::new();
 
     if !home::current_status(&app)?.running {
-        return Ok(empty_dashboard(resources, None));
+        return Ok(empty_dashboard(None));
     }
 
     if let Err(err) = ensure_expected_rpc_node() {
         let warning = format!("挖矿统计不可用：{err}");
         eprintln!("{warning}");
-        return Ok(empty_dashboard(resources, Some(warning)));
+        return Ok(empty_dashboard(Some(warning)));
     }
 
     let finalized_height = match finalized_block_height() {
@@ -1084,7 +910,7 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
         Err(err) => {
             let warning = format!("读取 finalized 区块高度失败：{err}");
             eprintln!("{warning}");
-            return Ok(empty_dashboard(resources, Some(warning)));
+            return Ok(empty_dashboard(Some(warning)));
         }
     };
 
@@ -1095,7 +921,6 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
             let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
             return Ok(dashboard_from_cache(
                 &cache,
-                resources,
                 merge_warnings(warnings),
                 today_utc,
             ));
@@ -1107,7 +932,6 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
         let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
         return Ok(dashboard_from_cache(
             &cache,
-            resources,
             merge_warnings(warnings),
             today_utc,
         ));
@@ -1128,7 +952,6 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
             let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
             return Ok(dashboard_from_cache(
                 &cache,
-                resources,
                 merge_warnings(warnings),
                 today_utc,
             ));
@@ -1141,7 +964,6 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
     let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
     Ok(dashboard_from_cache(
         &cache,
-        resources,
         merge_warnings(warnings),
         today_utc,
     ))
