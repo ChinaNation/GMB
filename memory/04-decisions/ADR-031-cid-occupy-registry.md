@@ -135,6 +135,8 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 
 ## 状态
 
+- 2026-07-03:**卡3 代码全部完成**——plain spec 部署形态(chain_spec 切换/bake 重写/宪法检查 RPC 模式/首启物化实测 301s·2.7GB)、smoldot 轻形态(fork 已确认支持 StateRootHash)、onchina 启动抽样对账+audit-chain-catalog 全量比对、同源年份钉死+596,517 交叉测试、runtime 全量断言(抓修 193 常量漏铸)。测试:runtime 31/onchina 135/primitives 45 全绿。剩部署 runbook(方案 E)。
+
 - 2026-07-02:v1 定稿(批量交易方案);同日完成嵌入式库旧机构清理。
 - 2026-07-03:Q1-Q5 已决;卡1 完成归档;命名规则统一并验证;**v2 终稿 = 全量创世直铸 + 运行期占号先行**。
 - 2026-07-03:**卡2 链端完成**(§3.1 CidRegistry+occupy/batch/revoke、§3.2 机构 Closed 墓碑+register 缺口封堵、§3.3 费类 Free)——citizen-identity 21/21、entity 34+34、citizen-issuance 12+5、runtime 30/30 全绿;全 runtime benchmarks 编译过(顺修 4 处既有断链)。

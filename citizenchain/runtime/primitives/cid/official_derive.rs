@@ -55,6 +55,23 @@ fn derive_template_cid(
     })
 }
 
+/// 派生机构明细:链上创世与链下(onchina 目录物化/同源校验)共用的完整上下文。
+pub struct DerivedInstitutionItem<'a> {
+    /// "NATIONAL" | "PROVINCE" | "CITY" | "TOWN"(seed 作用域,与 onchina 一致)。
+    pub scope: &'a str,
+    pub province_code: &'a str,
+    pub city_code: &'a str,
+    pub town_code: &'a str,
+    pub province_name: &'a str,
+    pub city_name: &'a str,
+    /// 名称组装用显示名(省名/市名/镇名;国家两院为空)。
+    pub display_area_name: &'a str,
+    pub template: &'static OfficialOrgTemplate,
+    pub cid_number: &'a str,
+    pub cid_full_name: &'a str,
+    pub cid_short_name: &'a str,
+}
+
 /// 枚举全部派生公权机构,对每个机构调用 `f(cid_number, cid_full_name, cid_short_name)`。
 ///
 /// 遍历顺序与 `AREA_DATA` 字节序一致,确定性。省级部门落省主市、显示名=省名;
@@ -64,11 +81,21 @@ pub fn for_each_public_institution<F>(mut f: F)
 where
     F: FnMut(&str, &str, &str),
 {
+    for_each_public_institution_detailed(|item| {
+        f(item.cid_number, item.cid_full_name, item.cid_short_name)
+    })
+}
+
+/// 明细版枚举(创世/onchina 物化/同源校验共用)。
+pub fn for_each_public_institution_detailed<F>(mut f: F)
+where
+    F: for<'a> FnMut(&DerivedInstitutionItem<'a>),
+{
     let mut emit = |scope: &str,
                     province_code: &str,
                     city_code: &str,
                     town_code: &str,
-                    template: &OfficialOrgTemplate,
+                    template: &'static OfficialOrgTemplate,
                     province_name: &str,
                     city_name: &str,
                     display_area_name: &str| {
@@ -81,11 +108,21 @@ where
             province_name,
             city_name,
         );
-        f(
-            cid.as_str(),
-            template.full_name(display_area_name).as_str(),
-            template.short_name(display_area_name).as_str(),
-        );
+        let full = template.full_name(display_area_name);
+        let short = template.short_name(display_area_name);
+        f(&DerivedInstitutionItem {
+            scope,
+            province_code,
+            city_code,
+            town_code,
+            province_name,
+            city_name,
+            display_area_name,
+            template,
+            cid_number: cid.as_str(),
+            cid_full_name: full.as_str(),
+            cid_short_name: short.as_str(),
+        });
     };
 
     for_each_area(|item| match item {

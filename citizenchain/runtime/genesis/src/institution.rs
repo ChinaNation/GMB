@@ -16,6 +16,9 @@ use primitives::{
         china::{
             china_cb::CHINA_CB,
             china_ch::CHINA_CH,
+            china_jc::CHINA_JC,
+            china_jy::CHINA_JY,
+            china_lf::CHINA_LF,
             china_sf::{CHINA_SF, NATIONAL_JUDICIAL_YUAN_ADMINS},
             china_zf::{CHINA_ZF, FEDERAL_REGISTRY_ADMINS},
         },
@@ -426,17 +429,59 @@ where
         );
     }
 
+    // 常量数组全量直铸(ADR-031 卡3):ZF/JC/SF/LF/JY 逐节点写入机构+双账户,
+    // 与上方 CB/CH 合计 282;创世不带管理员(NJD/FRG 特例在下方单独写入)。
+    for node in CHINA_ZF.iter() {
+        insert_public_institution::<T>(
+            node.cid_number,
+            node.cid_full_name,
+            node.cid_short_name,
+            node.main_account,
+            node.fee_account,
+        );
+    }
+    for node in CHINA_JC.iter() {
+        insert_public_institution::<T>(
+            node.cid_number,
+            node.cid_full_name,
+            node.cid_short_name,
+            node.main_account,
+            node.fee_account,
+        );
+    }
+    for node in CHINA_SF.iter() {
+        insert_public_institution::<T>(
+            node.cid_number,
+            node.cid_full_name,
+            node.cid_short_name,
+            node.main_account,
+            node.fee_account,
+        );
+    }
+    for node in CHINA_LF.iter() {
+        insert_public_institution::<T>(
+            node.cid_number,
+            node.cid_full_name,
+            node.cid_short_name,
+            node.main_account,
+            node.fee_account,
+        );
+    }
+    for node in CHINA_JY.iter() {
+        insert_public_institution::<T>(
+            node.cid_number,
+            node.cid_full_name,
+            node.cid_short_name,
+            node.main_account,
+            node.fee_account,
+        );
+    }
+
+    // NJD 创世大法官/宪法守护管理员特例。
     let njd_node = CHINA_SF
         .iter()
         .find(|node| institution_code_from_cid_number(node.cid_number) == Some(NJD))
         .expect("china_sf must include NJD");
-    insert_public_institution::<T>(
-        njd_node.cid_number,
-        njd_node.cid_full_name,
-        njd_node.cid_short_name,
-        njd_node.main_account,
-        njd_node.fee_account,
-    );
     insert_fixed_admins::<T, _>(
         njd_node.main_account,
         njd_node.cid_number,
@@ -445,17 +490,11 @@ where
         national_judicial_yuan_admin_role,
     );
 
+    // FRG 省级 5 人组管理员特例。
     let frg_node = CHINA_ZF
         .iter()
         .find(|node| institution_code_from_cid_number(node.cid_number) == Some(FRG))
         .expect("china_zf must include FRG");
-    insert_public_institution::<T>(
-        frg_node.cid_number,
-        frg_node.cid_full_name,
-        frg_node.cid_short_name,
-        frg_node.main_account,
-        frg_node.fee_account,
-    );
     assert!(
         FEDERAL_REGISTRY_ADMINS.len()
             == PROVINCE_CODE_INFOS.len() * FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE,

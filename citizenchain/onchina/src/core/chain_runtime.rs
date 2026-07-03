@@ -1016,6 +1016,102 @@ fn contains_admin(decoded: &OnChainAdminAccount, target: &[u8; 32]) -> bool {
 /// 这是链上中国通用平台的登录真源。平台启动时不再预设机构;
 /// 已验签账户在链上哪些机构的 Active 管理员集合内,就得到哪些可绑定候选。
 /// 当前不改 runtime,先扫描现有 storage;后续若要性能优化,再单独给链端加反向索引。
+/// 链上公权机构登记查询结果(创世目录抽样/全量对账用,字段最小化)。
+pub(crate) struct OnChainInstitution {
+    pub(crate) cid_full_name: Vec<u8>,
+    pub(crate) cid_short_name: Vec<u8>,
+    /// InstitutionLifecycleStatus 判别值:0=Pending 1=Active 2=Closed。
+    pub(crate) status: u8,
+}
+
+/// 与 public-manage `InstitutionInfo` 字段序一致的最小解码结构。
+#[derive(codec::Decode)]
+struct RawInstitutionInfo {
+    cid_full_name: Vec<u8>,
+    cid_short_name: Vec<u8>,
+    _institution_code: [u8; 4],
+    _created_at: u32,
+    status: u8,
+}
+
+/// 读链上 `PublicManage::Institutions[cid]`;None = 未登记。
+pub(crate) async fn institution_lookup(
+    cid_number: &str,
+) -> Result<Option<OnChainInstitution>, String> {
+    let ws_url = super::chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for institutions failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let query = dynamic::storage(
+        "PublicManage",
+        "Institutions",
+        vec![dynamic::Value::from_bytes(cid_number.as_bytes())],
+    );
+    let Some(value) = storage
+        .fetch(&query)
+        .await
+        .map_err(|e| format!("fetch institution failed: {e}"))?
+    else {
+        return Ok(None);
+    };
+    let mut raw = value.encoded();
+    let info = RawInstitutionInfo::decode(&mut raw)
+        .map_err(|e| format!("decode institution info failed: {e}"))?;
+    Ok(Some(OnChainInstitution {
+        cid_full_name: info.cid_full_name,
+        cid_short_name: info.cid_short_name,
+        status: info.status,
+    }))
+}
+
+/// 全量遍历链上 `PublicManage::Institutions`(部署验收对账用),
+/// 每条回调 `(cid_number 字节, 机构信息)`,返回遍历总数。
+pub(crate) async fn for_each_chain_institution(
+    mut f: impl FnMut(Vec<u8>, OnChainInstitution),
+) -> Result<usize, String> {
+    let ws_url = super::chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for institutions failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let query = dynamic::storage("PublicManage", "Institutions", Vec::<dynamic::Value>::new());
+    let mut iter = storage
+        .iter(query)
+        .await
+        .map_err(|e| format!("iterate institutions failed: {e}"))?;
+    let mut count = 0usize;
+    while let Some(item) = iter.next().await {
+        let kv = item.map_err(|e| format!("read institution entry failed: {e}"))?;
+        // 键 = 32 前缀 + 16 blake2_128 + SCALE(BoundedVec<u8>);取尾段解出号字节。
+        let suffix = &kv.key_bytes[48..];
+        let mut cursor = suffix;
+        let cid: Vec<u8> = codec::Decode::decode(&mut cursor)
+            .map_err(|e| format!("decode institution key failed: {e}"))?;
+        let mut raw = kv.value.encoded();
+        let info = RawInstitutionInfo::decode(&mut raw)
+            .map_err(|e| format!("decode institution info failed: {e}"))?;
+        f(
+            cid,
+            OnChainInstitution {
+                cid_full_name: info.cid_full_name,
+                cid_short_name: info.cid_short_name,
+                status: info.status,
+            },
+        );
+        count += 1;
+    }
+    Ok(count)
+}
+
 /// 链上 CID 占号登记查询结果(发号预查与幂等续用识别用,字段最小化)。
 pub(crate) struct OnChainCidRecord {
     pub(crate) commitment: [u8; 32],

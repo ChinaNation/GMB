@@ -43,13 +43,20 @@ pub fn official_institution_cid<E>(
         town_code,
         institution_code,
     );
-    let cid = generate_cid_number(GenerateCidInput {
-        account_pubkey: account_seed.as_str(),
-        p1: "0",
-        province_name,
-        city_name,
-        institution: institution_code,
-    })
+    // 直接调 primitives 生成器并钉死创世年份:公权机构号是创世直铸集,
+    // 必须与链上派生逐字节一致;走按“当前年份”的适配层会在跨年后漂移。
+    let cid = primitives::cid::generator::generate_cid_number(
+        primitives::cid::generator::GenerateCidNumberInput {
+            account_pubkey: account_seed.as_str(),
+            p1: "0",
+            province_code,
+            province_name,
+            city_code,
+            city_name,
+            year: primitives::cid::official_derive::GENESIS_INSTITUTION_YEAR,
+            institution: institution_code,
+        },
+    )
     .map_err(SeedCidError::Generate)?;
     if exists_fn(&cid).map_err(SeedCidError::Exists)? {
         return Err(SeedCidError::Exhausted);
@@ -145,5 +152,40 @@ mod tests {
         let cid = dynamic_institution_cid("广东省", "荔湾市", "CGOV", "0", never_exists)
             .expect("dyn cid");
         assert!(crate::cid::validate_cid_number_format(&cid).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod official_source_tests {
+    use super::*;
+
+    /// 创世派生(primitives::official_derive)与 onchina 官方号派生必须逐字节同源:
+    /// 全量 596,517 机构逐个复算,号完全一致(含年份钉死后跨年不漂移)。
+    #[test]
+    fn onchina_official_cid_matches_primitives_derivation() {
+        let mut total = 0usize;
+        primitives::cid::official_derive::for_each_public_institution_detailed(|item| {
+            total += 1;
+            let cid = official_institution_cid::<std::convert::Infallible>(
+                item.scope,
+                item.province_code,
+                item.city_code,
+                item.town_code,
+                item.template.institution_code,
+                item.province_name,
+                item.city_name,
+                |_| Ok(false),
+            )
+            .expect("onchina official cid derives");
+            assert_eq!(
+                cid, item.cid_number,
+                "同源漂移: scope={} code={} area={}",
+                item.scope, item.template.institution_code, item.display_area_name
+            );
+        });
+        assert_eq!(
+            total,
+            primitives::cid::official_derive::public_institution_derived_count()
+        );
     }
 }

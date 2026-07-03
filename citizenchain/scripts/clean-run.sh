@@ -2,7 +2,7 @@
 # 清链重新创世:杀进程 + 完全删除本机区块链数据 + 用【当前源码】现造创世启动。
 #
 # 与 run.sh 的区别(两脚本只此一别):
-#   - run.sh        = 正常启动,用【冻结 SSOT】(node/chainspecs/citizenchain.raw.json)续跑现有链。
+#   - run.sh        = 正常启动,用【冻结 SSOT】(node/chainspecs/citizenchain.plain.json)续跑现有链。
 #   - clean-run.sh  = 清链 + 【不走 SSOT】,直接用当前 genesis_build 现造创世。
 #     改了创世配置(宪法、立法院、创世账户…)无需重烤 SSOT 即时生效 —— 本地验证新创世的唯一入口。
 #     宪法/机构等创世改动(如护照颁发改注册局)就靠它重新创世生效。
@@ -16,8 +16,8 @@
 #
 # 代价:
 #   ① 现造创世的 genesis :code = 本地构建的 WASM,与他人/现网不逐字节一致 → 这是一条独立本地链。
-#      要做全网共识,需用同一份 WASM 导出 raw spec 分发(`cargo run -p node -- export-chain-spec
-#      --chain citizenchain-fresh --raw`),不在本脚本职责内。
+#      要做全网共识,需用同一份 CI WASM 经 bake-chainspec.sh --finalize 重生冻结 plain spec
+#      并分发,不在本脚本职责内。
 #   ② 首次需从源码编译 runtime WASM,较慢。
 set -euo pipefail
 

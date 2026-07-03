@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 正常启动:不清库,用【冻结 SSOT】(node/chainspecs/citizenchain.raw.json)续跑现有链。
+# 正常启动:不清库,用【冻结 SSOT】(node/chainspecs/citizenchain.plain.json)续跑现有链。
 # 要清链并用当前源码现造创世,改用 clean-run.sh。
 #
 # 启动后:节点自动挖矿;链上中国平台需在节点设置页手动启动,统一入口 https://onchina.local:8964。

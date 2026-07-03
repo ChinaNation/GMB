@@ -238,7 +238,34 @@ def parse_manifest(raw: bytes) -> tuple[list[int], list[bytes]]:
     return numbers, hashes
 
 
-def top_value(top: dict[str, str], key: str, label: str) -> bytes:
+class RpcTop:
+    """--rpc 模式:以 state_getStorage(key, at) 透明替代 raw.top 字典。
+
+    plain chainspec(ADR-031 D5)不再物化 GB 级 raw state,检查改为
+    对临时节点的创世块按键查询,键与断言逻辑与文件模式完全一致。
+    """
+
+    def __init__(self, url: str, at: str | None) -> None:
+        self.url = url
+        self.at = at
+
+    def get(self, key: str) -> str | None:
+        import urllib.request
+
+        if not key.startswith("0x"):
+            key = "0x" + key
+        params = [key] + ([self.at] if self.at else [])
+        body = json.dumps(
+            {"jsonrpc": "2.0", "id": 1, "method": "state_getStorage", "params": params}
+        ).encode()
+        req = urllib.request.Request(
+            self.url, data=body, headers={"content-type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read()).get("result")
+
+
+def top_value(top, key: str, label: str) -> bytes:
     value = top.get(key.lower()) or top.get(key)
     if value is None:
         raise AssertionError(f"缺少 {label}: {key}")
@@ -246,11 +273,14 @@ def top_value(top: dict[str, str], key: str, label: str) -> bytes:
     return bytes.fromhex(raw)
 
 
-def check(path: Path, expect_code_file: Path | None) -> None:
-    spec = json.loads(path.read_text())
-    top = spec.get("genesis", {}).get("raw", {}).get("top", {})
-    if not isinstance(top, dict):
-        raise AssertionError("chainspec 缺 genesis.raw.top")
+def check(path: Path | None, expect_code_file: Path | None, rpc_top=None) -> None:
+    if rpc_top is not None:
+        top = rpc_top
+    else:
+        spec = json.loads(path.read_text())
+        top = spec.get("genesis", {}).get("raw", {}).get("top", {})
+        if not isinstance(top, dict):
+            raise AssertionError("chainspec 缺 genesis.raw.top")
 
     code = top_value(top, CODE_KEY, ":code")
     if not code:
@@ -311,13 +341,22 @@ def check(path: Path, expect_code_file: Path | None) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="检查公民宪法 raw chainspec 创世冻结条件")
-    parser.add_argument("chainspec", type=Path)
+    parser = argparse.ArgumentParser(description="检查公民宪法创世冻结条件(raw 文件或 --rpc 临时节点)")
+    parser.add_argument("chainspec", type=Path, nargs="?")
     parser.add_argument("--expect-code-file", type=Path)
+    parser.add_argument("--rpc", help="临时节点 RPC 地址,如 http://127.0.0.1:19944")
+    parser.add_argument("--at", help="创世块哈希(--rpc 模式钉块查询)")
     args = parser.parse_args()
 
+    if args.rpc is None and args.chainspec is None:
+        parser.error("必须提供 raw chainspec 文件或 --rpc")
+
     try:
-        check(args.chainspec, args.expect_code_file)
+        check(
+            args.chainspec,
+            args.expect_code_file,
+            rpc_top=RpcTop(args.rpc, args.at) if args.rpc else None,
+        )
     except Exception as exc:  # noqa: BLE001
         print(f"constitution genesis check failed: {exc}", file=sys.stderr)
         return 1

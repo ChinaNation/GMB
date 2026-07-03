@@ -1738,6 +1738,8 @@ enum BackendCommand {
         dry_run: bool,
         backup_path: Option<String>,
     },
+    /// 创世机构目录全量链上双向比对(部署验收,ADR-031 D9)。
+    AuditChainCatalog,
 }
 
 fn parse_backend_command() -> BackendCommand {
@@ -1774,6 +1776,7 @@ fn parse_backend_command() -> BackendCommand {
                 city_code,
             }
         }
+        "audit-chain-catalog" => BackendCommand::AuditChainCatalog,
         "purge-legacy-cid" => BackendCommand::PurgeLegacyCid {
             dry_run: args.iter().any(|arg| arg == "--dry-run"),
         },
@@ -2060,6 +2063,11 @@ fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool 
 
     let (scope, force_row_sync, label) = match command {
         BackendCommand::Serve => return false,
+        BackendCommand::AuditChainCatalog => {
+            crate::domains::gov::chain_audit::full_audit_blocking()
+                .unwrap_or_else(|e| panic!("audit-chain-catalog failed: {e}"));
+            return true;
+        }
         BackendCommand::EnsureGov => {
             run_ensure_gov_command(state).unwrap_or_else(|e| panic!("ensure-gov failed: {e}"));
             return true;
@@ -2429,6 +2437,18 @@ fn main() {
     // china.sqlite,否则行政区变更后旧公权机构会继续对外服务。
     ensure_gov_catalog_current_for_serve(&state)
         .unwrap_or_else(|e| panic!("cid gov directory guard failed: {e}"));
+    // 创世机构目录链上抽样对账(ADR-031 D9,fail-closed):
+    // 目录与创世同源派生,启动抽 32 号核对链上登记,防 runtime↔onchina 版本漂移;
+    // ONCHINA_GOV_CHAIN_AUDIT=0 为开发无链环境逃生门。
+    if std::env::var("ONCHINA_GOV_CHAIN_AUDIT")
+        .map(|v| v != "0")
+        .unwrap_or(true)
+    {
+        crate::domains::gov::chain_audit::startup_sample_audit_blocking()
+            .unwrap_or_else(|e| panic!("创世机构目录链上对账失败(fail-closed): {e}"));
+    } else {
+        warn!("ONCHINA_GOV_CHAIN_AUDIT=0,已跳过创世机构目录链上对账(仅限开发)");
+    }
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

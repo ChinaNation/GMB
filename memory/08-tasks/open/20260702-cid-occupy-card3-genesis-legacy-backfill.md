@@ -104,6 +104,20 @@
 ### F. 风险
 - WASM 创世构建耗时/内存(退化=DB 快照);smoldot stateRootHash 真机未验;bootnodes 复用已由 fresh_genesis_config 处理;创世哈希决定性=同 WASM+同 patch(派生代码确定性已测)。
 
+## 收尾执行完成(2026-07-03)
+
+- **A node 部署形态改造完成**:`chain_spec.rs` 切换冻结 plain spec(`citizenchain.plain.json`,10MB=WASM 5.3MB+patch+44 bootnodes;raw 已删零残留);`bake-chainspec.sh` 重写为 plain 流程(导出 plain → CITIZENCHAIN_HEADLESS 临时节点物化创世并记录耗时 → RPC 宪法检查 → 读块 0 头产 App 轻形态 → finalize 同步双 SSOT);`check-constitution-genesis.py` 新增 `--rpc/--at` 模式(临时节点按键查询,文件模式保留);run.sh/clean-run.sh raw 引用清零。
+- **首启物化冒烟实测(debug 构建)**:596,799 机构物化 **301 秒**,落盘 RocksDB **2.7GB**(初写未压实,compaction 后回落;release 构建更快);宪法创世 RPC 检查一次通过;genesis/stateRoot 正常产出。
+- **B smoldot 轻形态**:bake 脚本自动产 `genesis.stateRootHash` 形态 App chainspec;**smoldot-pow 分支已确认原生支持 StateRootHash**(chain_spec.rs:72/317),真机验证留部署验收。
+- **C onchina 链上对账完成**:新 `domains/gov/chain_audit.rs`——启动抽样 32+1 号对链上 `Institutions` 核对(名称/Active,fail-closed 拒绝启动;链暂不可达重试 6×10s;`ONCHINA_GOV_CHAIN_AUDIT=0` 开发逃生门);`audit-chain-catalog` 子命令全量双向比对(部署验收);`chain_runtime` 新增 `institution_lookup`/`for_each_chain_institution`。**同源加固**:onchina `official_institution_cid` 直调 primitives 生成器并钉死创世年份 2026(修掉"按当前年份"的跨年漂移炸弹);新增全量 596,517 逐个复算的同源交叉测试(6.5s 绿)。
+- **D1 runtime 全量断言抓到真缺口并修复**:断言首跑 596,606≠596,799——genesis 常量直铸仍是旧 89(CB/CH/NJD/FRG),**193 个常量机构漏铸**;已补全 7 数组全量循环(NJD/FRG 管理员特例保留、机构记录不重复),断言通过(含派生首条逐字节抽查+NJD 管理员在位);plain spec 已用修复后 runtime 重生。
+- **测试终态**:runtime 31/31(含 3 分钟全量直铸断言)、onchina 135/135(含同源交叉)、primitives 45/45、node 编译过。
+- **D2 遗留(不阻塞部署)**:genesis-pallet 自带 test mock 为上轮 runtime 重构预留断链(Config 要求 public_manage/public_admins 全栈),其相位切换测试待镜像 entity 全栈 mock 修复;派生/直铸断言已由 primitives 45 + runtime 31 覆盖。
+
+## 剩余 = 部署 runbook(用户执行,方案 E 节)
+
+①`bake-chainspec.sh --finalize --wasm <CI_WASM>` 重生冻结双 SSOT → 提交;②fuwuqi.sh 出 deb、6 节点部署、首启耗时记录、`chain_getBlockHash(0)` 全网一致核对;③citizenapp 真机 smoldot 验证 + 机构注册表生成器重跑;④onchina 各节点启动抽样对账通过 + `audit-chain-catalog` 全量比对;⑤删本机与各节点旧 `sfid` 库;⑥公民建档占号端到端 walkthrough。
+
 ## 状态
 
 - 2026-07-02:建卡(原批量交易上链方案)。

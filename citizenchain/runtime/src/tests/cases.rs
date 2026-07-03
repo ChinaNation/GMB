@@ -900,3 +900,49 @@ fn ordinary_account_allows_all_actions() {
         InstitutionAssetAction::OffchainFeeSweepExecute
     ));
 }
+
+// ── 创世直铸全量断言(ADR-031 卡3 验收)──
+
+/// 全量创世直铸:常量 282 + 模板派生 596,517 = 596,799,零交易;
+/// 并抽查派生首条与链上登记逐字节一致、NJD 创世管理员在位。
+#[test]
+fn genesis_public_institutions_full_mint_counts() {
+    new_test_ext().execute_with(|| {
+        genesis_pallet::institution::build::<Runtime>();
+
+        let total = public_manage::Institutions::<Runtime>::iter().count();
+        assert_eq!(
+            total,
+            282 + primitives::cid::official_derive::public_institution_derived_count()
+        );
+
+        // 抽查:派生枚举首条必须与链上登记逐字节一致。
+        let mut first: Option<(Vec<u8>, Vec<u8>, Vec<u8>)> = None;
+        primitives::cid::official_derive::for_each_public_institution(|cid, full, short| {
+            if first.is_none() {
+                first = Some((
+                    cid.as_bytes().to_vec(),
+                    full.as_bytes().to_vec(),
+                    short.as_bytes().to_vec(),
+                ));
+            }
+        });
+        let (cid, full, short) = first.expect("derived set non-empty");
+        let bounded: frame_support::BoundedVec<u8, _> = cid.try_into().expect("cid fits");
+        let info = public_manage::Institutions::<Runtime>::get(&bounded).expect("derived minted");
+        assert_eq!(info.cid_full_name.to_vec(), full);
+        assert_eq!(info.cid_short_name.to_vec(), short);
+
+        // NJD 创世管理员在位(常量特例保留)。
+        let njd = primitives::cid::china::china_sf::CHINA_SF
+            .iter()
+            .find(|n| {
+                primitives::cid::code::institution_code_from_cid_number(n.cid_number)
+                    == Some(primitives::cid::code::NJD)
+            })
+            .expect("NJD in china_sf");
+        let njd_main: AccountId =
+            codec::Decode::decode(&mut njd.main_account.as_slice()).expect("decode");
+        assert!(public_admins::AdminAccounts::<Runtime>::get(njd_main).is_some());
+    });
+}
