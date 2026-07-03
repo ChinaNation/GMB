@@ -54,6 +54,51 @@ fn binding_from_row(row: &postgres::Row) -> Result<NodeInstitutionBinding, Strin
     })
 }
 
+fn strip_hex_prefix_text(value: &str) -> &str {
+    value
+        .trim()
+        .strip_prefix("0x")
+        .or_else(|| value.trim().strip_prefix("0X"))
+        .unwrap_or(value.trim())
+}
+
+fn hydrate_binding_candidate_metadata_conn(
+    conn: &mut Client,
+    binding: &mut NodeInstitutionBinding,
+) -> Result<(), String> {
+    if binding.candidate.frg_province_code.is_some()
+        || binding
+            .candidate
+            .institution_cid_number
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .is_some()
+    {
+        return Ok(());
+    }
+    let Some(main_account) = binding.candidate.institution_main_account.clone() else {
+        return Ok(());
+    };
+    let Some((cid_number, cid_full_name, cid_short_name, province_code, city_code, town_code)) =
+        resolve_binding_candidate_metadata_conn(conn, main_account.as_str())?
+    else {
+        return Ok(());
+    };
+    let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
+        province_code.as_str(),
+        Some(city_code.as_str()),
+        Some(town_code.as_str()),
+    );
+    binding.candidate.institution_cid_number = Some(cid_number);
+    binding.candidate.cid_full_name = cid_full_name;
+    binding.candidate.cid_short_name = cid_short_name;
+    binding.candidate.scope_province_name = (!province_name.is_empty()).then_some(province_name);
+    binding.candidate.scope_city_name = (!city_name.is_empty()).then_some(city_name);
+    binding.candidate.scope_town_name = (!town_name.is_empty()).then_some(town_name);
+    Ok(())
+}
+
 // `list_federal_registry_admins_by_province_conn` 已退役。
 // Tier1 创世注册局管理员「全走链读」(决策③):权威集合在链上
 // `PublicAdmins::FederalRegistryProvinceGroups[绑定省码]`,由链上读取并回填本地缓存;
@@ -319,6 +364,8 @@ pub(crate) fn resolve_binding_candidate_metadata_conn(
     )>,
     String,
 > {
+    let normalized_main_account =
+        strip_hex_prefix_text(institution_main_account).to_ascii_lowercase();
     let row = conn
         .query_opt(
             "SELECT s.cid_number, s.cid_full_name, s.cid_short_name,
@@ -327,11 +374,11 @@ pub(crate) fn resolve_binding_candidate_metadata_conn(
              JOIN subjects s
                ON s.province_code = a.province_code
               AND s.cid_number = a.cid_number
-             WHERE lower(a.account) = lower($1)
+             WHERE lower(regexp_replace(a.account, '^0x', '', 'i')) = $1
                AND s.status = 'ACTIVE'
              ORDER BY s.updated_at DESC
              LIMIT 1",
-            &[&institution_main_account],
+            &[&normalized_main_account],
         )
         .map_err(|e| {
             format!(
@@ -363,7 +410,13 @@ pub(crate) fn get_active_node_binding_conn(
                 postgres_error_text(&e)
             )
         })?;
-    row.as_ref().map(binding_from_row).transpose()
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let mut binding = binding_from_row(&row)?;
+    // 早期绑定行可能因账号 0x 前缀不一致缺少 CID 元数据;读取时补齐可让旧绑定继续按链上真源工作。
+    hydrate_binding_candidate_metadata_conn(conn, &mut binding)?;
+    Ok(Some(binding))
 }
 
 pub(crate) fn active_node_binding(db: &Db) -> Result<Option<NodeInstitutionBinding>, String> {

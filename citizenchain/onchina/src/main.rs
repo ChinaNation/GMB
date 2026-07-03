@@ -24,6 +24,7 @@ mod indexer;
 mod institution;
 mod platform;
 mod scope;
+mod workspace;
 
 #[cfg(test)]
 mod genesis {
@@ -2534,6 +2535,10 @@ fn main() {
             .route(
                 "/api/v1/admin/own-institution-admins",
                 get(auth::list_own_institution_admins),
+            )
+            .route(
+                "/api/v1/admin/own-institution",
+                get(auth::get_own_institution),
             )
             // 机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
             // - GET  /api/v1/institution/check-cid-full-name             — cid_full_name 查重

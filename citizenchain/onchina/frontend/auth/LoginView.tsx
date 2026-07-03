@@ -85,6 +85,7 @@ export function LoginView() {
       institution_code: admin.institution_code,
       admin_level: admin.admin_level ?? null,
       capabilities: admin.capabilities,
+      workspace: admin.workspace,
       admin_name: admin.admin_name,
       scope_province_name: admin.scope_province_name ?? null,
       scope_city_name: admin.scope_city_name ?? null,

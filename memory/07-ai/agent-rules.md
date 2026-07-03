@@ -37,7 +37,7 @@
 
 ### OnChina Agent
 
-- 由当前主聊天入口在任务涉及 `citizenchain/onchina`、注册局身份、CID 号、机构登记、管理后台或链侧凭证时按需调度
+- 由当前主聊天入口在任务涉及 `citizenchain/onchina`、多机构工作台、注册局业务、CID 号、机构登记、管理后台或链侧凭证时按需调度
 - 负责 `citizenchain/onchina` 后端、前端、数据库、扫码签名、公开查询与文档
 
 ### Mobile Agent

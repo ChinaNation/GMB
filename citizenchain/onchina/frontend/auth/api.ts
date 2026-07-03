@@ -4,6 +4,7 @@
 import { adminHeaders, request } from '../utils/http';
 import type { AdminAuth } from './types';
 import type { RoleCapabilities } from '../platform/capabilityMap';
+import type { InstitutionWorkspace } from '../workspace/types';
 
 export type AdminAuthCheck = {
   ok: boolean;
@@ -11,6 +12,7 @@ export type AdminAuthCheck = {
   institution_code: string;
   admin_level?: string | null;
   capabilities?: RoleCapabilities;
+  workspace?: InstitutionWorkspace;
   admin_name: string;
   scope_province_name?: string | null;
   scope_city_name?: string | null;
@@ -23,6 +25,7 @@ export type AdminIdentifyResult = {
   institution_code: string;
   admin_level?: string | null;
   capabilities?: RoleCapabilities;
+  workspace?: InstitutionWorkspace;
   admin_name: string;
   scope_province_name?: string | null;
   scope_city_name?: string | null;

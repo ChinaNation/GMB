@@ -17,6 +17,7 @@ type Props = {
   index?: number;
   action?: ReactNode;
   status?: ReactNode;
+  actionPlacement?: 'top' | 'balance-row';
 };
 
 function formatDay(day?: number | null): string {
@@ -50,12 +51,12 @@ function formatBalanceFen(fen?: string | null): string {
   }
 }
 
-function Field({ label, value }: { label: string; value: string; wide?: boolean }) {
+function Field({ label, value, trailing }: { label: string; value: string; wide?: boolean; trailing?: ReactNode }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'max-content minmax(0, 1fr)',
-      gap: 4,
+      gridTemplateColumns: trailing ? 'max-content minmax(0, 1fr) auto' : 'max-content minmax(0, 1fr)',
+      gap: trailing ? 8 : 4,
       alignItems: 'start',
       minHeight: 20,
     }}>
@@ -70,12 +71,18 @@ function Field({ label, value }: { label: string; value: string; wide?: boolean 
       }}>
         {value}
       </span>
+      {trailing ? (
+        <span style={{ display: 'inline-flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+          {trailing}
+        </span>
+      ) : null}
     </div>
   );
 }
 
-export function AdminProfileCard({ profile, index, action, status }: Props) {
-  const topAction = action ?? status;
+export function AdminProfileCard({ profile, index, action, status, actionPlacement = 'top' }: Props) {
+  const topAction = actionPlacement === 'top' ? action ?? status : status;
+  const balanceAction = actionPlacement === 'balance-row' ? action : null;
   const accountText = profile.admin_account ? tryEncodeSs58(profile.admin_account) : '';
   // 字段标签固定显示;字段值为空时只保留空值区域,不显示兜底文案。
   return (
@@ -121,7 +128,7 @@ export function AdminProfileCard({ profile, index, action, status }: Props) {
         </div>
         <Field label="身份CID" value={profile.admin_cid_number ?? ''} wide />
         <Field label="账户" value={accountText} wide />
-        <Field label="余额" value={formatBalanceFen(profile.balance_fen)} wide />
+        <Field label="余额" value={formatBalanceFen(profile.balance_fen)} wide trailing={balanceAction} />
       </div>
     </div>
   );

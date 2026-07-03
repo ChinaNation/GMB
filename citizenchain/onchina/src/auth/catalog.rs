@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 use crate::auth::repo;
 use crate::core::chain_runtime;
 use crate::crypto::pubkey::same_admin_account;
+use crate::institution::subjects::http::resolve_created_by;
+use crate::institution::subjects::model::InstitutionDetailOutput;
 use crate::*;
 
 fn balance_lookup_key(account: &str) -> String {
@@ -237,6 +239,67 @@ pub(crate) async fn list_own_institution_admins(
         code: 0,
         message: "ok".to_string(),
         data,
+    })
+    .into_response()
+}
+
+/// 当前登录机构详情。
+///
+/// 只读取本节点 active binding 对应的机构 CID,不允许前端传 cid_number,避免把“本机构信息”
+/// 变成任意机构详情读取入口。管理员资格仍由登录守卫和链上 active admins 决定。
+pub(crate) async fn get_own_institution(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let binding = match repo::active_node_binding(&state.db) {
+        Ok(Some(binding)) => binding,
+        Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin"),
+        Err(err) => {
+            let message = format!("query node binding failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    };
+    if binding.candidate.institution_code != ctx.institution_code {
+        return api_error(StatusCode::FORBIDDEN, 1003, "permission denied");
+    }
+    let Some(cid_number) = binding
+        .candidate
+        .institution_cid_number
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+    else {
+        return api_error(
+            StatusCode::CONFLICT,
+            1007,
+            "binding institution_cid_number is required",
+        );
+    };
+    let Some((inst, accounts)) = (match state.db.get_institution_with_accounts(cid_number.as_str())
+    {
+        Ok(v) => v,
+        Err(err) => {
+            let message = format!("query own institution failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    }) else {
+        return api_error(StatusCode::NOT_FOUND, 1004, "institution not found");
+    };
+    let (created_by_name, created_by_role) = resolve_created_by(&state, &inst.created_by);
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: InstitutionDetailOutput {
+            institution: inst,
+            accounts,
+            created_by_name,
+            created_by_role,
+        },
     })
     .into_response()
 }

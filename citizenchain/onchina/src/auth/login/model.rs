@@ -79,7 +79,7 @@ pub(crate) struct QrLoginResultRecord {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct AdminAuthContext {
     pub(crate) admin_account: String,
-    /// 所属机构码(3/4 字符文本,前端据此渲染 tab 与能力)。
+    /// 所属机构码(3/4 字符文本,前端据此渲染工作台入口与能力)。
     pub(crate) institution_code: String,
     /// 行政层级标签(NATIONAL/PROVINCE/CITY/TOWN);私权法人/非法人无层级为 None。
     pub(crate) admin_level: Option<String>,
@@ -99,8 +99,10 @@ pub(crate) struct AdminAuthOutput {
     pub(crate) admin_account: String,
     pub(crate) institution_code: String,
     pub(crate) admin_level: Option<String>,
-    /// 机构能力位(后端单源,前端据此渲染 tab)。
+    /// 机构能力位(后端单源,前端据此渲染工作台入口)。
     pub(crate) capabilities: crate::platform::capability::CapabilitySet,
+    /// 当前机构工作台清单,用于前端按机构类型挂载 UI。
+    pub(crate) workspace: crate::workspace::InstitutionWorkspace,
     pub(crate) admin_name: String,
     pub(crate) scope_province_name: Option<String>,
     pub(crate) scope_city_name: Option<String>,
@@ -118,8 +120,10 @@ pub(crate) struct AdminIdentifyOutput {
     pub(crate) admin_account: String,
     pub(crate) institution_code: String,
     pub(crate) admin_level: Option<String>,
-    /// 机构能力位(后端单源,前端据此渲染 tab)。
+    /// 机构能力位(后端单源,前端据此渲染工作台入口)。
     pub(crate) capabilities: crate::platform::capability::CapabilitySet,
+    /// 当前机构工作台清单,用于前端按机构类型挂载 UI。
+    pub(crate) workspace: crate::workspace::InstitutionWorkspace,
     pub(crate) admin_name: String,
     pub(crate) scope_province_name: Option<String>,
     pub(crate) scope_city_name: Option<String>,

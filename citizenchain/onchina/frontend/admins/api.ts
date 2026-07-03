@@ -2,6 +2,7 @@
 // 更换联邦注册局管理员走 REPLACE_GOVERNING_REGISTRY 冷钱包扫码签名动作,不走普通 PATCH。
 
 import type { AdminAuth } from '../auth/types';
+import type { InstitutionDetail } from '../subjects/api';
 import { adminHeaders, request } from '../utils/http';
 
 // 联邦注册局管理员对外行(API 返回结构)。
@@ -55,6 +56,13 @@ export async function listFederalRegistryAdmins(auth: AdminAuth): Promise<Federa
 
 export async function listOwnInstitutionAdmins(auth: AdminAuth): Promise<OwnInstitutionAdminListOutput> {
   return request<OwnInstitutionAdminListOutput>('/api/v1/admin/own-institution-admins', {
+    method: 'GET',
+    headers: adminHeaders(auth),
+  });
+}
+
+export async function getOwnInstitution(auth: AdminAuth): Promise<InstitutionDetail> {
+  return request<InstitutionDetail>('/api/v1/admin/own-institution', {
     method: 'GET',
     headers: adminHeaders(auth),
   });

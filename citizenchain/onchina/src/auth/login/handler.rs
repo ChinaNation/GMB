@@ -45,6 +45,11 @@ pub(crate) async fn admin_auth_check(
         Err(resp) => return resp,
     };
     let capabilities = crate::platform::capability::capabilities_for(&ctx.institution_code);
+    let workspace = crate::workspace::build_institution_workspace(
+        &ctx.institution_code,
+        ctx.cid_short_name.as_deref(),
+        capabilities,
+    );
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -54,6 +59,7 @@ pub(crate) async fn admin_auth_check(
             institution_code: ctx.institution_code,
             admin_level: ctx.admin_level,
             capabilities,
+            workspace,
             admin_name: ctx.admin_name,
             scope_province_name: ctx.scope_province_name,
             scope_city_name: ctx.scope_city_name,
@@ -127,6 +133,12 @@ pub(crate) async fn admin_auth_identify(
         scope_city_name.as_deref(),
     )
     .unwrap_or(None);
+    let capabilities = crate::platform::capability::capabilities_for(&admin.institution_code);
+    let workspace = crate::workspace::build_institution_workspace(
+        &admin.institution_code,
+        cid_short_name.as_deref(),
+        capabilities,
+    );
 
     Json(ApiResponse {
         code: 0,
@@ -135,7 +147,8 @@ pub(crate) async fn admin_auth_identify(
             admin_account: admin.admin_account.clone(),
             institution_code: admin.institution_code.clone(),
             admin_level: crate::core::chain_runtime::admin_level_label_for(&admin.institution_code),
-            capabilities: crate::platform::capability::capabilities_for(&admin.institution_code),
+            capabilities,
+            workspace,
             admin_name: build_admin_name_from_user(&admin, province.as_deref()),
             scope_province_name: province,
             scope_city_name,

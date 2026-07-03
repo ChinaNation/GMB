@@ -153,8 +153,12 @@ pub(crate) fn build_admin_name(
     // Tier1 创世注册局默认名不带省份;省份是列表列字段,不是姓名的一部分。
     if crate::core::chain_runtime::is_tier1_registry(institution_code) {
         "联邦注册局管理员".to_string()
-    } else {
+    } else if crate::core::chain_runtime::is_subordinate_registry(institution_code) {
         "市注册局管理员".to_string()
+    } else if institution_code == "NJD" {
+        "国家司法院管理员".to_string()
+    } else {
+        "机构管理员".to_string()
     }
 }
 

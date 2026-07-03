@@ -30,6 +30,7 @@
     "subjects",
     "admins",
     "theme",
-    "utils"
+    "utils",
+    "workspace"
   ]
 }

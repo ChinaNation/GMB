@@ -23,7 +23,7 @@
 
 ## OnChina Agent
 
-- 触发条件：任务涉及 `citizenchain/onchina`、注册局身份、CID 号、行政区、机构登记、管理后台、扫码验签或链侧凭证
+- 触发条件：任务涉及 `citizenchain/onchina`、多机构工作台、注册局业务、CID 号、行政区、机构登记、管理后台、扫码验签或链侧凭证
 - 负责 OnChina 后端、前端、数据库、扫码签名、公开查询与文档
 
 ## Mobile Agent

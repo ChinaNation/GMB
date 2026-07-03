@@ -365,6 +365,12 @@ pub(crate) async fn admin_auth_qr_result(
             scope_city_name.as_deref(),
         )
         .unwrap_or(None);
+        let capabilities = crate::platform::capability::capabilities_for(&result.institution_code);
+        let workspace = crate::workspace::build_institution_workspace(
+            &result.institution_code,
+            cid_short_name.as_deref(),
+            capabilities,
+        );
         return Json(ApiResponse {
             code: 0,
             message: "ok".to_string(),
@@ -379,9 +385,8 @@ pub(crate) async fn admin_auth_qr_result(
                     admin_level: crate::core::chain_runtime::admin_level_label_for(
                         &result.institution_code,
                     ),
-                    capabilities: crate::platform::capability::capabilities_for(
-                        &result.institution_code,
-                    ),
+                    capabilities,
+                    workspace,
                     admin_name: admin
                         .as_ref()
                         .map(|v| build_admin_name_from_user(v, province.as_deref()))

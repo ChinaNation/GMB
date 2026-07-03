@@ -17,6 +17,7 @@ pub(crate) mod repo;
 /// 管理员一次性安全授权模型(扫码签名挑战与 grant)。
 pub(crate) mod security_model;
 
+pub(crate) use catalog::get_own_institution;
 pub(crate) use catalog::list_federal_registry_admins;
 pub(crate) use catalog::list_own_institution_admins;
 pub(crate) use city_registry_admins::list_city_registry_admins;

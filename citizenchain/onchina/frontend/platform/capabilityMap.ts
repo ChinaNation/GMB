@@ -1,7 +1,7 @@
 // 控制台能力位类型 + 空能力兜底。
 //
-// 能力单源在【后端】(registry src/platform/capability.rs),由登录会话下发(auth.capabilities)。
-// 前端只镜像渲染 tab,不在此硬编码权限——render-gating 非安全边界,后端始终对越权独立拒绝。
+// 能力单源在【后端】(src/platform/capability.rs),由登录会话下发(auth.capabilities)。
+// 前端只镜像渲染工作台入口,不在此硬编码权限——render-gating 非安全边界,后端始终对越权独立拒绝。
 // 新增机构类型只需在后端 capability.rs 补能力位,前端无需改动。
 
 export type RoleCapabilities = {

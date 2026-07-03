@@ -94,7 +94,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/` | 公民链 | citizenchain | runtime、节点、桌面端和打包 |
 | `citizenchain/runtime/` | 链上运行时 | runtime | pallet、runtime 配置和链上规则 |
 | `citizenchain/node/` | 节点桌面端 | node | 原生节点、Tauri 后端和桌面前端 |
-| `citizenchain/onchina/` | OnChina | onchina | 公民链内置注册局身份、行政区、机构登记、管理后台和链侧凭证能力 |
+| `citizenchain/onchina/` | OnChina | onchina | 公民链内置多机构工作台、注册局业务、行政区、机构登记、管理后台和链侧凭证能力 |
 | `citizenchain/onchina/src/cid/` | 身份 ID 编码协议 | number | OnChina 身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
 | `citizenwallet/` | 公民钱包 | citizenwallet | 离线签名、扫码识别和钱包 UI |
 | `citizenapp/` | 公民 | citizenapp | Flutter 客户端、钱包、治理和轻节点能力 |
@@ -153,6 +153,10 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 治理主体 | `Subjects` | storage | 管理员主体 storage |
 | 账户级内部投票管理员模型 | `account-admin-internal-vote` | ADR / 文档 | ADR-015 记录的账户级管理员、动态阈值和内部投票治理模型 |
 | 机构账户主体 | `InstitutionAccount` | AdminAccountKind / 类型 | 注册机构账户级内部投票主体，已使用 `AdminAccountKind = 0x05`，payload 为账户 `AccountId` 前 32 字节并右填零 |
+| 机构工作台 | `workspace` / `InstitutionWorkspace` | `citizenchain/onchina/src/workspace/` / `citizenchain/onchina/frontend/workspace/` | OnChina 当前登录机构的工作台框架，注册局、司法院、立法机构和通用机构都通过该框架挂载 UI |
+| 机构工作台类型 | `WorkspaceKind` / `workspace_kind` | OnChina auth API / workspace DTO / 前端 workspace 类型 | 当前登录机构对应的工作台类型，取值 `registry`、`judicial`、`legislation`、`generic` |
+| 机构工作台分区 | `WorkspaceSection` / `workspace_section` | OnChina auth API / workspace DTO / 前端 workspace 类型 | 工作台顶层分区，固定为 `operations`、`display`、`records` |
+| 机构工作台入口 | `WorkspaceAction` / `workspace_action` | OnChina auth API / workspace DTO / 前端 workspace 类型 | 当前机构工作台下的动作或页面入口，例如本机构信息、本机构管理员、护宪终审 |
 | 主体身份号码 | `cid_number` | API / call data / storage key | CID 对外身份 ID 字段,所有主体统一使用该字段名 |
 | 机构全称 | `cid_full_name` | API / call data | 机构全称,可随机构法定名称变更 |
 | 机构简称 | `cid_short_name` | API / call data | 机构简称,用于列表和紧凑展示 |
@@ -394,6 +398,10 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/onchina/src/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战写操作 |
 | `citizenchain/onchina/src/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | OnChina 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
 | `citizenchain/onchina/src/store/` | Store | store | Store 聚合体、省级进程内分片缓存和存储边界模型 |
+| `citizenchain/onchina/src/workspace/` | 机构工作台 | workspace | 后端机构工作台类型、机构码分类、三段式分区和登录态工作台清单生成 |
+| `citizenchain/onchina/src/workspace/model.rs` | 机构工作台模型 | workspace-model | `InstitutionWorkspace`、`WorkspaceKind`、`WorkspaceSection` 和 `WorkspaceAction` DTO |
+| `citizenchain/onchina/src/workspace/kind.rs` | 工作台分类 | workspace-kind | 机构码到 `workspace_kind` 的分类规则 |
+| `citizenchain/onchina/src/workspace/manifest.rs` | 工作台清单 | workspace-manifest | 按能力位生成当前登录机构的操作、显示和记录入口清单 |
 | `citizenchain/onchina/src/tests/` | 测试 | tests | 后端测试 |
 
 ### OnChina 前端目录
@@ -422,6 +430,10 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/onchina/frontend/admins/` | 管理员 | admins | 联邦注册局机构管理员、市注册局机构管理员、Passkey 和签名挑战前端流程 |
 | `citizenchain/onchina/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
 | `citizenchain/onchina/frontend/utils/` | 工具 | utils | 前端通用工具；业务 API 不放在这里 |
+| `citizenchain/onchina/frontend/workspace/` | 机构工作台 | workspace | 前端机构工作台路由、通用壳和机构专属 UI 挂载边界 |
+| `citizenchain/onchina/frontend/workspace/registry/` | 注册局工作台 | registry-workspace | 注册局既有 UI 的工作台挂载层，不改注册局业务 UI |
+| `citizenchain/onchina/frontend/workspace/judicial/` | 司法院工作台 | judicial-workspace | 国家司法院专属工作台，按操作、显示、记录分类 |
+| `citizenchain/onchina/frontend/workspace/generic/` | 通用机构工作台 | generic-workspace | 未落专属 UI 的公权、私权和非法人机构通用工作台 |
 
 ## 12. citizenapp 功能目录命名登记
 
@@ -542,6 +554,16 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 省名称 | `province_name` | API / call data / storage | 行政区省级名称 |
 | 市名称 | `city_name` | API / call data / storage | 行政区市级名称 |
 | 管理员姓名 | `admin_name` | CID admins / auth API / SQL | 注册局管理员真实姓名,不是显示名字段 |
+| 工作台 | `workspace` | OnChina auth API / frontend auth state | 当前登录机构的工作台清单对象 |
+| 工作台类型 | `workspace_kind` | OnChina auth API / frontend workspace | 当前登录机构工作台类型,取值 `registry` / `judicial` / `legislation` / `generic` |
+| 工作台标题 | `workspace_title` | OnChina auth API / frontend workspace | 当前登录机构工作台页面标题,通常由 `cid_short_name` 派生 |
+| 工作台分区列表 | `workspace_sections` | OnChina auth API / frontend workspace | 当前工作台可见分区数组 |
+| 工作台分区 | `workspace_section` | OnChina auth API / frontend workspace | 单个工作台分区,固定为 `operations` / `display` / `records` |
+| 工作台分区标题 | `workspace_section_title` | OnChina auth API / frontend workspace | 单个工作台分区的人读标题 |
+| 工作台入口列表 | `workspace_actions` | OnChina auth API / frontend workspace | 当前分区下可见动作或页面入口数组 |
+| 工作台入口 | `workspace_action` | OnChina auth API / frontend workspace | 单个动作或页面入口的稳定枚举值 |
+| 工作台入口标题 | `workspace_action_title` | OnChina auth API / frontend workspace | 单个动作或页面入口的人读标题 |
+| 工作台入口启用状态 | `workspace_action_enabled` | OnChina auth API / frontend workspace | 入口是否已经接入可操作能力；未接入时只能显示禁用态 |
 | 管理员账户标签 | `account_label` | App local cache / account selector | 本地展示标签,不作为机构名称真源 |
 | 钱包标签 | `wallet_label` | node frontend wallet selector | 钱包候选展示标签,不作为机构名称真源 |
 | 权威节点标签 | `authority_node_label` | node settings bootnode / GRANDPA | 节点身份或 GRANDPA 私钥匹配到的权威节点标签,不作为机构名称真源 |

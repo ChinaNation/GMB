@@ -104,7 +104,7 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 清档 → revoke_cid(PasskeyColdSign)→ 链上墓碑 + 本地清档
 ```
 
-- **机构册只读对账(卡3)**:各市节点首启从链上拉全国机构册写本地 subjects(`cid_number` 新 schema),零交易;onchina 不再生成公权机构;旧 `sfid` 库删除,全仓零 `sfid_number` 残留。
+- **机构册只读对账(卡3,2026-07-03 修订)**:创世机构册与 onchina **同源**(primitives 派生代码)——各节点首启用同一套 primitives 本地物化 596,799 条写 subjects/gov/accounts(零网络零交易),启动时随机抽样 32 号 fetch 链上核对(不一致 fail-closed),部署验收另有全量比对 CLI;不做每节点 ~200MB 的全量 WSS 拉取。运行期新增机构走占号先行路径落库;旧 `sfid` 库删除,全仓零 `sfid_number` 残留。
 
 ## 六、执行顺序
 

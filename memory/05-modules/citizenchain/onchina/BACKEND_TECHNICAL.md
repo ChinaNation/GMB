@@ -2,7 +2,7 @@
 
 ## 1. 功能需求
 
-OnChina 后端负责多机构管理员身份、行政区、机构、公民、管理员、扫码签名、公开查询和链侧凭证。它运行在 `citizenchain/onchina/src/`，属于公民链产品内部能力。
+OnChina 后端负责多机构工作台、管理员身份、行政区、机构、公民、管理员、扫码签名、公开查询和链侧凭证。它运行在 `citizenchain/onchina/src/`，属于公民链产品内部能力。
 
 ## 2. 当前结构
 
@@ -30,7 +30,8 @@ citizenchain/onchina/src/
 ├── indexer/                   # 链事件解析与索引 worker
 ├── platform/                  # 控制台能力、mDNS、TLS CA 和平台健康检查
 ├── scope/                     # 省/市可见范围与过滤规则
-└── store/                     # Store 聚合体和结构化存储边界
+├── store/                     # Store 聚合体和结构化存储边界
+└── workspace/                 # 机构工作台类型、三段式分区和登录态工作台清单
 ```
 
 ## 3. 目录铁律
@@ -42,6 +43,7 @@ citizenchain/onchina/src/
 - 禁止恢复独立 `cid_number`、`models`、`login`、`qr` 等历史目录壳。
 - `scope/` 只放权限范围规则，不放 HTTP handler 或公钥工具。
 - 非法人机构能力统一归 `institution/subjects/unincorporated_org/`，不得放在单侧 `domains/gov/` 或 `domains/private/`。
+- 机构工作台统一归 `workspace/`。`workspace` 只生成登录态可渲染清单，不保存管理员授权真源，不承载业务 handler。
 
 ## 4. Store 和表边界
 
@@ -115,16 +117,25 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 管理员列表 API 的展示字段统一来自链上 `AdminProfile` 投影：`admin_cid_number / name / admin_role / term_start / term_end / source / source_label`。本地 `admins.admin_name` 只用于登录态缓存、创建市注册局管理员和审计历史，不作为联邦注册局、市注册局、本机构管理员列表的展示真源；旧的本地管理员姓名 PATCH 动作和前端入口不得恢复。
 
-## 10. 控制台能力映射
+## 10. 机构工作台能力映射
 
-控制台 tab 能力由 `src/platform/capability.rs` 单源下发给前端。runtime 已经实现 FRG 省级组登记权高于 CREG 本市登记权，OnChina 能力表必须只镜像这个目标状态，不能另行降权：
+工作台类型和工作台入口由 `src/workspace/` 生成，底层能力位由 `src/platform/capability.rs` 单源下发给前端。runtime 已经实现 FRG 省级组登记权高于 CREG 本市登记权，OnChina 能力表必须只镜像这个目标状态，不能另行降权：
 
-- `FRG` 是 Tier1 创世注册局，能力必须是 `CREG` 的超集：可进入公民、私权、教育、公权机构、市注册局和联邦注册局，并可在本省范围内登记机构、写业务、维护市注册局管理员、维护本省联邦注册局管理员。
-- `CREG` 是 Tier2 下级注册局，保留本市公民/机构/业务写入能力；同时必须能进入“联邦注册局”tab，只读查看本省联邦注册局管理员列表，不得发起联邦注册局管理员编辑或更换。
-- `NJD`、普通公权机构、私权机构和非法人组织只获得 `can_view_own_admins`，只读查看本机构链上 active admin 列表。
+- `FRG` 是 Tier1 创世注册局，进入 `registry` 工作台，能力必须是 `CREG` 的超集：可进入公民、私权、教育、公权机构、市注册局和联邦注册局，并可在本省范围内登记机构、写业务、维护市注册局管理员、维护本省联邦注册局管理员。
+- `CREG` 是 Tier2 下级注册局，进入 `registry` 工作台，保留本市公民/机构/业务写入能力；同时必须能进入“联邦注册局”入口，只读查看本省联邦注册局管理员列表，不得发起联邦注册局管理员编辑或更换。
+- `NJD` 进入 `judicial` 工作台，不复用注册局 UI。当前工作台按 `operations / display / records` 分类：显示页可只读查看本机构信息和链上 active admin 列表；护宪终审、管理员变更和操作记录入口保留清单位置，未接入链上动作前保持禁用。
+- 立法机构进入 `legislation` 工作台或通用工作台的立法入口，立法能力由 `domains/legislation/category.rs` 和 `can_*_legislation` 位决定。
+- 普通公权机构、私权机构和非法人组织进入 `generic` 工作台；当前至少可只读查看本机构链上 active admin 列表，专属操作按后续机构能力接入。
 - `NRC`、`PRC`、`PRB` 走节点桌面端，不获得 OnChina 网页能力。
 - `PMUL` 和其它个人主体不获得 OnChina 网页能力。
-- 前端 tab 展示只使用后端下发的 `capabilities`；后端 handler、scope 和链上 active admin 校验仍是安全边界。
+- 前端工作台展示只使用后端下发的 `workspace` 和 `capabilities`；后端 handler、scope 和链上 active admin 校验仍是安全边界。
+
+### 10.1 本机构只读接口
+
+- `GET /api/v1/admin/own-institution` 返回当前 active binding 对应机构的 `InstitutionDetailOutput`，用于非注册局工作台“显示”页。
+- 本接口不接受前端传入 `cid_number`；后端只从当前节点 active binding 的 `institution_cid_number` 定位本机构，避免变成任意机构详情读取入口。
+- 返回数据仍来自结构化 `subjects/accounts` 投影；管理员资格由登录守卫、节点绑定和链上 active admins 校验决定。
+- `GET /api/v1/admin/own-institution-admins` 继续只返回链上 active admin 列表，展示字段来自链上 `AdminProfile` 投影。
 
 ## 11. 验收
 

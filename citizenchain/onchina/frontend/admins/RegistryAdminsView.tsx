@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyOutlined } from '@ant-design/icons';
-import { Badge, Button, Card, Form, Modal, Space, Table, Typography } from 'antd';
+import { Badge, Button, Card, Empty, Form, Grid, Modal, Space, Spin, Table, Tooltip, Typography } from 'antd';
 import type { ModalProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { normalizeScopeProvinceName } from '../hooks/useScope';
@@ -108,12 +108,18 @@ function writeCachedAdminList<T>(key: string, rows: T[]) {
   }
 }
 
-export function OwnInstitutionAdminsView() {
+export interface OwnInstitutionAdminsViewProps {
+  layout?: 'table' | 'cards';
+}
+
+export function OwnInstitutionAdminsView({ layout = 'table' }: OwnInstitutionAdminsViewProps) {
   const { auth } = useAuth();
   const { registered: passkeyRegistered, busy: passkeyBusy, register: doRegisterPasskey } =
     usePasskeyRegistration();
   const [data, setData] = useState<OwnInstitutionAdminListOutput | null>(null);
   const [loading, setLoading] = useState(false);
+  const screens = Grid.useBreakpoint();
+  const isCardLayout = layout === 'cards';
 
   useEffect(() => {
     if (!auth) {
@@ -137,41 +143,78 @@ export function OwnInstitutionAdminsView() {
     };
   }, [auth?.access_token]);
 
+  const passkeyAction = (row: OwnInstitutionAdminRow) => {
+    const isSelf = row.is_self || sameHexAccount(row.admin_account, auth?.admin_account);
+    if (!isSelf) return null;
+    const button = (
+      <Button size="small" icon={<KeyOutlined />} loading={passkeyBusy} onClick={doRegisterPasskey}>
+        {isCardLayout ? '密钥' : passkeyRegistered ? '更新passkey密钥' : '设置passkey密钥'}
+      </Button>
+    );
+    return (
+      <Badge dot={passkeyRegistered === false} size="small">
+        {isCardLayout ? (
+          <Tooltip title={passkeyRegistered ? '更新 passkey 密钥' : '设置 passkey 密钥'}>{button}</Tooltip>
+        ) : (
+          button
+        )}
+      </Badge>
+    );
+  };
+
+  const rows = data?.rows ?? [];
+
   return (
     <Card
       title={`${data?.cid_short_name || '本机构'}管理员列表`}
       bordered={false}
       style={{ background: '#ffffff', borderRadius: 8 }}
     >
-      <Table<OwnInstitutionAdminRow>
-        rowKey={(row) => row.admin_account}
-        loading={loading}
-        dataSource={data?.rows ?? []}
-        pagination={false}
-        columns={[
-          {
-            title: '管理员信息',
-            dataIndex: 'admin_account',
-            render: (_value: string, row, index) => <AdminProfileCard profile={row} index={index + 1} />,
-          },
-          {
-            title: '操作',
-            width: 220,
-            align: 'center',
-            render: (_v: unknown, row) => {
-              const isSelf = row.is_self || sameHexAccount(row.admin_account, auth?.admin_account);
-              if (!isSelf) return null;
-              return (
-                <Badge dot={passkeyRegistered === false} size="small">
-                  <Button size="small" icon={<KeyOutlined />} loading={passkeyBusy} onClick={doRegisterPasskey}>
-                    {passkeyRegistered ? '更新passkey密钥' : '设置passkey密钥'}
-                  </Button>
-                </Badge>
-              );
+      {isCardLayout ? (
+        <Spin spinning={loading}>
+          {rows.length === 0 && !loading ? (
+            <Empty description="暂无管理员" />
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: screens.lg ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)',
+                gap: 14,
+              }}
+            >
+              {rows.map((row, index) => (
+                <AdminProfileCard
+                  key={row.admin_account}
+                  profile={row}
+                  index={index + 1}
+                  action={passkeyAction(row)}
+                  actionPlacement="balance-row"
+                />
+              ))}
+            </div>
+          )}
+        </Spin>
+      ) : (
+        <Table<OwnInstitutionAdminRow>
+          rowKey={(row) => row.admin_account}
+          loading={loading}
+          dataSource={rows}
+          pagination={false}
+          columns={[
+            {
+              title: '管理员信息',
+              dataIndex: 'admin_account',
+              render: (_value: string, row, index) => <AdminProfileCard profile={row} index={index + 1} />,
             },
-          },
-        ]}
-      />
+            {
+              title: '操作',
+              width: 220,
+              align: 'center',
+              render: (_v: unknown, row) => passkeyAction(row),
+            },
+          ]}
+        />
+      )}
     </Card>
   );
 }

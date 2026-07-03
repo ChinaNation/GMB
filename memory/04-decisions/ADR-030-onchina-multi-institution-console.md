@@ -4,14 +4,16 @@
 
 已接受（2026-06-28）。取代 registry 的"联邦/市注册局双角色"定位，扩展为全机构控制台。承接 [ADR-029](ADR-029-registry-into-citizenchain.md) 的去中心化进程模型。
 
+2026-07-03 修订：全机构控制台统一命名为 `workspace` 机构工作台。注册局只是 `workspace_kind=registry` 的一类；司法院、立法机构和普通机构分别进入自己的工作台壳，非注册局机构不复用注册局 UI。
+
 ## 背景
 
-registry 后端最初只服务联邦注册局 + 市注册局两类管理员（前端 `registry_org_code` 二值枚举、后端曾以本机节点机构身份预判登录边界）。随着立法院、监察院、政府、储备、私权公司等机构都要在电脑端登录发起提案，需要一套统一控制台：同一套软件、同一登录入口，按链上管理员所属机构显示不同子 tab、不同权限。
+registry 后端最初只服务联邦注册局 + 市注册局两类管理员（前端 `registry_org_code` 二值枚举、后端曾以本机节点机构身份预判登录边界）。随着立法院、监察院、政府、储备、私权公司等机构都要在电脑端登录发起提案，需要一套统一工作台：同一套软件、同一登录入口，按链上管理员所属机构显示不同机构工作台和不同权限。
 
 ## 决策
 
 ### 1. 平台定位
-registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上中国，china≈chain 双关）。注册局只是其中一个机构租户。去中心化：每机构在自己办公室部署节点（内嵌 onchina 后端 + 本地 PostgreSQL）。
+registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上中国，china≈chain 双关）。注册局只是 `workspace` 机构工作台中的一个机构类型。去中心化：每机构在自己办公室部署节点（内嵌 onchina 后端 + 本地 PostgreSQL）。
 
 ### 2. 统一入口
 全节点统一访问字符串 `https://onchina.local:8964`：后端绑 `0.0.0.0:8964`，mDNS 广告 `onchina.local`（`_onchina._tcp.local`），TLS 自签证书目标主机为 `onchina.local`。各机构管理员输入同一字符串，连的是各自办公室本地节点。"统一"指统一字符串与体验，非指向同一台服务器。
@@ -25,10 +27,10 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 |---|---|---|
 | 联邦注册局 FRG | `== FRG` | `PublicAdmins::FederalRegistryProvinceGroups`（29） | 可登录，完整注册局能力 |
 | 市注册局 CREG | `== CREG` | `PublicAdmins::AdminAccounts`（29） | 可登录，本市业务能力 + 只读本省联邦注册局 |
-| 国家司法院 NJD | `== NJD` | `PublicAdmins::AdminAccounts`（29） | 可登录，本期只读本机构管理员 |
-| 其它公权法人（政府/立法/监察/司法/教育/公安等） | `is_public_legal_code` | `PublicAdmins::AdminAccounts`（29） | 可登录，本期只读本机构管理员 |
-| 私权法人（股权/股份/有限合伙/公益/协会/私立学校等） | `is_private_legal_code` | `PrivateAdmins::AdminAccounts`（30） | 可登录，本期只读本机构管理员 |
-| 非法人组织 | `is_unincorporated_code` | `PublicAdmins::AdminAccounts` / `PrivateAdmins::AdminAccounts` 双探测 | 可登录，本期只读本机构管理员 |
+| 国家司法院 NJD | `== NJD` | `PublicAdmins::AdminAccounts`（29） | 可登录，进入 `judicial` 工作台 |
+| 其它公权法人（政府/立法/监察/司法/教育/公安等） | `is_public_legal_code` | `PublicAdmins::AdminAccounts`（29） | 可登录，按机构能力进入专属或通用工作台 |
+| 私权法人（股权/股份/有限合伙/公益/协会/私立学校等） | `is_private_legal_code` | `PrivateAdmins::AdminAccounts`（30） | 可登录，按机构能力进入专属或通用工作台 |
+| 非法人组织 | `is_unincorporated_code` | `PublicAdmins::AdminAccounts` / `PrivateAdmins::AdminAccounts` 双探测 | 可登录，按机构能力进入通用工作台 |
 | 国家储委会 / 省储委会 / 省储行 | `NRC` / `PRC` / `PRB` | `PublicAdmins::AdminAccounts`（29） | 不登录 OnChina，使用节点桌面端 |
 
 个人多签 PMUL（personal-admins，idx7）**不登录控制台**：无 CID、不跑节点，纯 CitizenApp 客户端功能。
@@ -42,10 +44,10 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 - 本节点已绑定机构后：后续登录只允许该绑定机构的 active admin；管理员被链上移除后由后台复查清退会话。
 - 本节点解绑 / 换机构：必须由当前本机会话管理员发起 `NODE_BINDING_UNBIND` 安全动作，并由冷钱包签名确认；commit 成功后 active binding 置为 `INACTIVE` 并清退本节点管理员会话。换机构不走影子兼容流程，必须先解绑，再由新机构 active admin 重新扫码登录并确认绑定。
 - 本地 `node_institution_bindings` 只保存“本节点已绑定哪个机构”的结果与缓存展示字段，不是权限真源；权限真源始终是链上 active admin 关系。
-- 登录后 UI 由后端 `capabilities` 单源下发：FRG/CREG 显示注册局业务 tab；NJD、普通公权、私权和非法人组织本期只显示“本机构管理员”只读 tab，并允许管理员在自己的行设置 / 更新 passkey。
+- 登录后 UI 由后端 `workspace` + `capabilities` 单源下发：FRG/CREG 进入注册局工作台；NJD 进入司法院工作台；普通公权、私权和非法人组织进入专属或通用工作台。当前未接入专属业务的机构至少可在显示页只读查看本机构链上 active admin 列表，并允许管理员在自己的行设置 / 更新 passkey。
 
 ### 5. 权限模型 = CID 码（主）+ CID 号（辅）+ 实例覆盖
-- **CID 码**（主键）：决定可见 tab / 能力基线、`admin_level`（国/省/市/镇）、所属 admin pallet。
+- **CID 码**（主键）：决定工作台类型 / 能力基线、`admin_level`（国/省/市/镇）、所属 admin pallet。
 - **CID 号 R5**（辅键，省码+市码）：决定数据 scope 与跨地区写边界。CID 号与作用域来自登录绑定机构的链上/本地投影候选，不再由节点启动前预填。
 - **实例覆盖位**（R4 第三层）：同机构码、同层级、跨地区能力可不同。采用「机构码静态模板 ⊕ 链上按 cid 号能力覆盖位」，缺省纯模板；覆盖位本期仅签名占位，配置真源（宪法/治理派生）留后续 ADR。
 - 登录即隔离：本节点 active binding = 会话机构边界；每次登录和冷签 step-up 都复查 signer 是否仍属于该机构链上 Active 集合。

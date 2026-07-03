@@ -1,13 +1,13 @@
 //! 机构码 → 控制台能力位的唯一权威源(后端单源,经会话下发给前端镜像)。
 //!
-//! 决定「什么机构登录后显示什么 tab、能做什么」。这是权限的【声明式单源】,与后端实际执行
+//! 决定「什么机构登录后进入什么工作台、能看到什么入口」。这是权限的【声明式单源】,与后端实际执行
 //! 边界(`is_tier1_registry` 谓词 / `scope` / 链上 Active 集合)同源对齐;前端只据此 render-gating,
 //! 不构成安全边界(后端始终对越权独立拒绝)。
 //!
 //! 机构类分发(`primitives::cid::code` 单源):
 //! - Tier1 创世注册局(FRG):拥有 Tier2 全部业务能力,并额外管理联邦/市注册局管理员。
 //! - Tier2 下级注册局(CREG,公权子集):录入公民/机构 + 看本市注册局 + 只读本省联邦注册局。
-//! - 国家司法院(NJD):可登录控制台,本期只开只读「本机构管理员」位。
+//! - 国家司法院(NJD):可登录司法院工作台,本期只开只读「本机构管理员」位。
 //! - 国家储委会/省储委会/省储行(NRC/PRC/PRB):使用节点桌面端,不归本控制台 → 空能力。
 //! - 其余公权/私权/非法人机构:本期只开只读「本机构管理员」位(`can_view_own_admins`);
 //!   CRUD / 录入等具体功能待各机构功能落地时再开(机制就绪、不越权)。
@@ -106,7 +106,7 @@ const SUBORDINATE_REGISTRY: CapabilitySet = CapabilitySet {
     ..EMPTY
 };
 
-// 普通机构(NJD/公权/私权/非法人,非注册局):本期只开只读「本机构管理员」位。
+// 普通机构(NJD/公权/私权/非法人,非注册局):本期只开只读「本机构管理员」入口。
 const OWN_ADMINS_READONLY: CapabilitySet = CapabilitySet {
     can_view_own_admins: true,
     ..EMPTY
@@ -171,7 +171,7 @@ mod tests {
         let federal = capabilities_for("FRG");
         let city = capabilities_for("CREG");
 
-        // FRG 是 CREG 的省级上游,业务 tab 能力必须覆盖 CREG。
+        // FRG 是 CREG 的省级上游,注册局工作台业务能力必须覆盖 CREG。
         assert!(federal.can_view_citizens && city.can_view_citizens);
         assert!(federal.can_view_institutions && city.can_view_institutions);
         assert!(federal.can_view_private && city.can_view_private);
@@ -187,7 +187,7 @@ mod tests {
         let federal = capabilities_for("FRG");
         let city = capabilities_for("CREG");
 
-        // CREG 必须能进入联邦注册局 tab 只读本省管理员;注册局维护类写权只留给 FRG。
+        // CREG 必须能进入联邦注册局入口只读本省管理员;注册局维护类写权只留给 FRG。
         assert!(city.can_view_federal_registry);
         assert!(city.can_view_federal_registry_admins);
         assert!(!city.can_crud_city_registry_admins);
@@ -200,7 +200,7 @@ mod tests {
     fn national_judicial_yuan_can_view_own_admins_only() {
         let judicial = capabilities_for("NJD");
 
-        // NJD 可进入 OnChina,但本期只给本机构管理员只读页,不获得注册局业务能力。
+        // NJD 可进入司法院工作台,但本期只给本机构管理员只读页,不获得注册局业务能力。
         assert!(judicial.can_view_own_admins);
         assert!(!judicial.can_view_citizens);
         assert!(!judicial.can_view_institutions);

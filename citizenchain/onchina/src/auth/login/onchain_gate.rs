@@ -365,6 +365,11 @@ async fn issue_session_for_candidate(
 
             let admin_level = chain_runtime::admin_level_label_for(&institution_code);
             let capabilities = crate::platform::capability::capabilities_for(&institution_code);
+            let workspace = crate::workspace::build_institution_workspace(
+                &institution_code,
+                cid_short_name.as_deref(),
+                capabilities,
+            );
             Ok((
                 access_token,
                 expire_at,
@@ -373,6 +378,7 @@ async fn issue_session_for_candidate(
                     institution_code: institution_code.clone(),
                     admin_level,
                     capabilities,
+                    workspace,
                     admin_name,
                     scope_province_name,
                     scope_city_name,
