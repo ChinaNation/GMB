@@ -51,6 +51,13 @@ pub(crate) fn do_register_cid_public_institution<T: pallet::Config>(
         primitives::cid::code::is_public_legal_code(&parts.institution),
         Error::<T>::InvalidCidNumber
     );
+    // 机构级墓碑拦截:整机构已关闭的 CID 永不复用,拒绝重建账户索引。
+    if let Some(info) = crate::pallet::Institutions::<T>::get(&cid_number) {
+        ensure!(
+            info.status != crate::institution::types::InstitutionLifecycleStatus::Closed,
+            Error::<T>::InstitutionAlreadyClosed
+        );
+    }
     ensure!(
         !T::SiblingInstitutionQuery::cid_exists(&cid_number),
         Error::<T>::CidAlreadyRegistered

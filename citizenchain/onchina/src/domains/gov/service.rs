@@ -123,231 +123,12 @@ struct OfficialInstitutionTarget {
     education_type: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct OfficialOrgTemplate {
-    institution_code: &'static str,
-    suffix: &'static str,
-    full_suffix: &'static str,
-}
-
-const PROVINCE_DEPARTMENT_TEMPLATES: &[OfficialOrgTemplate] = &[
-    OfficialOrgTemplate {
-        institution_code: "PDF",
-        suffix: "国防厅",
-        full_suffix: "国家防务厅",
-    },
-    OfficialOrgTemplate {
-        institution_code: "PHS",
-        suffix: "国安厅",
-        full_suffix: "国土安全厅",
-    },
-    OfficialOrgTemplate {
-        institution_code: "PCW",
-        suffix: "民生厅",
-        full_suffix: "公民生活保障厅",
-    },
-    OfficialOrgTemplate {
-        institution_code: "PHU",
-        suffix: "住建厅",
-        full_suffix: "住房与城镇建设厅",
-    },
-    OfficialOrgTemplate {
-        institution_code: "PAG",
-        suffix: "农业厅",
-        full_suffix: "农业与农村发展厅",
-    },
-    OfficialOrgTemplate {
-        institution_code: "PCM",
-        suffix: "商贸厅",
-        full_suffix: "商务与市场贸易厅",
-    },
-    OfficialOrgTemplate {
-        institution_code: "PFT",
-        suffix: "财税厅",
-        full_suffix: "财政与税务厅",
-    },
-    OfficialOrgTemplate {
-        institution_code: "PEN",
-        suffix: "能源厅",
-        full_suffix: "能源与环保发展厅",
-    },
-    OfficialOrgTemplate {
-        institution_code: "PTR",
-        suffix: "交通厅",
-        full_suffix: "交通运输厅",
-    },
-    OfficialOrgTemplate {
-        institution_code: "PSN",
-        suffix: "参议会",
-        full_suffix: "联邦立法院参议会",
-    },
-    OfficialOrgTemplate {
-        institution_code: "PRP",
-        suffix: "众议会",
-        full_suffix: "联邦立法院众议会",
-    },
-];
-
-const CITY_TEMPLATES: &[OfficialOrgTemplate] = &[
-    OfficialOrgTemplate {
-        institution_code: "CGOV",
-        suffix: "政府",
-        full_suffix: "自治政府",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CLEG",
-        suffix: "立法会",
-        full_suffix: "公民立法委员会",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CSUP",
-        suffix: "监察院",
-        full_suffix: "自治监察院",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CJUD",
-        suffix: "司法院",
-        full_suffix: "自治司法院",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CEDU",
-        suffix: "教委会",
-        full_suffix: "公民教育委员会",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CSLF",
-        suffix: "自治会",
-        full_suffix: "公民自治委员会",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CDEF",
-        suffix: "国防局",
-        full_suffix: "国家防务局",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CHSC",
-        suffix: "国安局",
-        full_suffix: "国土安全局",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CPOL",
-        suffix: "公安局",
-        full_suffix: "公民安全局",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CCWF",
-        suffix: "民生局",
-        full_suffix: "公民生活保障局",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CHUD",
-        suffix: "住建局",
-        full_suffix: "住房与城镇建设局",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CAGR",
-        suffix: "农业局",
-        full_suffix: "农业与农村发展局",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CCOM",
-        suffix: "商贸局",
-        full_suffix: "商务与市场贸易局",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CFIN",
-        suffix: "财税局",
-        full_suffix: "财政与税务局",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CENR",
-        suffix: "能源局",
-        full_suffix: "能源与环保发展局",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CTRN",
-        suffix: "交通局",
-        full_suffix: "交通运输局",
-    },
-    OfficialOrgTemplate {
-        institution_code: "CREG",
-        suffix: "注册局",
-        full_suffix: "身份注册局",
-    },
-];
-
-const TOWN_TEMPLATES: &[OfficialOrgTemplate] = &[
-    OfficialOrgTemplate {
-        institution_code: "TGOV",
-        suffix: "政府",
-        full_suffix: "自治政府",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TCWF",
-        suffix: "民生科",
-        full_suffix: "公民生活保障科",
-    },
-    OfficialOrgTemplate {
-        institution_code: "THUD",
-        suffix: "住建科",
-        full_suffix: "住房与城镇建设科",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TAGR",
-        suffix: "农业科",
-        full_suffix: "农业与农村发展科",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TFIN",
-        suffix: "财税科",
-        full_suffix: "财政与税务科",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TDEF",
-        suffix: "国防科",
-        full_suffix: "国家防务科",
-    },
-    OfficialOrgTemplate {
-        institution_code: "THSC",
-        suffix: "国安科",
-        full_suffix: "国土安全科",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TCOM",
-        suffix: "商贸科",
-        full_suffix: "商务与市场贸易科",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TENR",
-        suffix: "能源科",
-        full_suffix: "能源与环保发展科",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TTRN",
-        suffix: "交通科",
-        full_suffix: "交通运输科",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TPOL",
-        suffix: "公安科",
-        full_suffix: "公民安全科",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TSLF",
-        suffix: "自治会",
-        full_suffix: "公民自治委员会",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TSUP",
-        suffix: "监察院",
-        full_suffix: "自治监察院",
-    },
-    OfficialOrgTemplate {
-        institution_code: "TJUD",
-        suffix: "司法院",
-        full_suffix: "自治司法院",
-    },
-];
+// 机构命名/机构集模板单源在 primitives::cid::official_template(ADR-031 卡3);
+// onchina 只引用,不再本地维护第二份,避免与创世直铸漂移。
+use primitives::cid::official_template::{
+    OfficialOrgTemplate, CITY_TEMPLATES, NATIONAL_ASSEMBLY_TEMPLATES,
+    PROVINCE_DEPARTMENT_TEMPLATES, TOWN_TEMPLATES,
+};
 
 impl OfficialReconcileScope {
     fn scope_key(&self) -> String {
@@ -646,15 +427,7 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
     // 5 个总统府联邦局(安全/情报/特勤/人事/注册)已作为创世常量收录于
     // china_zf.rs CHINA_ZF(带 main/fee 账户),由 :375 的常量循环单一 push;
     // 此处不用区划模板重复生成,避免同号双定义触发 reconcile 21000。仅保留两院议会。
-    for (institution_code, cid_short_name, cid_full_name) in [
-        ("NSN", "国家参议会", "中华民族联邦共和国立法院参议会"),
-        ("NRP", "国家众议会", "中华民族联邦共和国立法院众议会"),
-    ] {
-        let template = OfficialOrgTemplate {
-            institution_code,
-            suffix: cid_short_name,
-            full_suffix: cid_full_name,
-        };
+    for template in NATIONAL_ASSEMBLY_TEMPLATES {
         push_area_template_target(
             targets,
             province.province_name,
@@ -664,7 +437,7 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
             "",
             "",
             "",
-            &template,
+            template,
             "NATIONAL",
         );
     }

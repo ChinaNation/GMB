@@ -33,7 +33,7 @@ frame_benchmarking::define_benchmarks!(
     [fullnode_issuance, FullnodeIssuance]
     [citizen_issuance, CitizenIssuance]
     [resolution_issuance, ResolutionIssuance]
-    [citizen_identity, CitizenIdentity]
+    // citizen-identity 权重为手工保守上界(见其 weights.rs),暂不注册基准。
     [pow_difficulty, PowDifficulty]
     [public_admins, PublicAdmins]
     [private_admins, PrivateAdmins]

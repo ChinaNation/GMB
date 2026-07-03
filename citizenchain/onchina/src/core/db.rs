@@ -100,6 +100,23 @@ impl Db {
             "-- 机构/账户「注册局域注销态」+ 已签发注销凭证(区别于链投影 chain_status）。
              -- 注册局管理员发起注销(冷签特殊档）后写 ISSUED;机构管理员持凭证上链 propose_close,
              -- indexer 收到链上关闭后置 ONCHAIN_CLOSED(投影子项）。见 ADR-023 §6.3。
+             -- 链交易冷签会话(ADR-031 D6/D7):prepare 落库,submit 单次消费;
+             -- 占号先行 = 链上进块后才建档,会话携带校验哈希防 runtime 漂移。
+             CREATE TABLE IF NOT EXISTS chain_sign_sessions (
+                request_id   TEXT PRIMARY KEY,
+                purpose      TEXT NOT NULL,
+                actor_pubkey TEXT NOT NULL,
+                call_data    TEXT NOT NULL,
+                nonce        BIGINT NOT NULL,
+                signing_hash TEXT NOT NULL,
+                context      JSONB NOT NULL,
+                created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                expires_at   TIMESTAMPTZ NOT NULL,
+                consumed_at  TIMESTAMPTZ
+             );
+             CREATE INDEX IF NOT EXISTS idx_chain_sign_sessions_expiry
+                ON chain_sign_sessions(expires_at) WHERE consumed_at IS NULL;
+
              CREATE TABLE IF NOT EXISTS institution_deregistrations (
                 id               BIGSERIAL PRIMARY KEY,
                 cid_number       TEXT NOT NULL,

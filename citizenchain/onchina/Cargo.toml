@@ -51,7 +51,6 @@ hkdf = "0.12"
 zeroize = "1"
 getrandom = "0.2"
 twox-hash = "1"
-parity-scale-codec = "3"
 
 # 链交互:subxt 经节点 RPC 读写链 + reqwest 直连 HTTP RPC
 subxt = { version = "0.43.1", default-features = false, features = ["jsonrpsee", "native"] }
@@ -65,6 +64,13 @@ async-trait = "0.1"
 # 链上共享原语(随 workspace 统一到 ss58-2027-fix-citizenapp-grandpa 分支的 sp-core)
 sp-core = { workspace = true, default-features = true }
 primitives = { path = "../runtime/primitives" }
+# 链交易组装+提交(D7):与 node 端同一套 runtime 类型拼 SignedPayload/UncheckedExtrinsic
+citizenchain = { workspace = true, default-features = true }
+frame-system = { workspace = true, default-features = true }
+pallet-transaction-payment = { workspace = true, default-features = true }
+frame-metadata-hash-extension = { workspace = true, default-features = true }
+sp-runtime = { workspace = true, default-features = true }
+codec = { workspace = true, default-features = true }
 webauthn-rs = { version = "0.5.5", features = ["danger-allow-state-serialisation"] }
 mdns-sd = "0.20.1"
 

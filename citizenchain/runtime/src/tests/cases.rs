@@ -531,6 +531,17 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
         let wallet_pair =
             sr25519::Pair::from_string("//citizen-wallet-1", None).expect("wallet pair");
         let wallet_account = AccountId::new(wallet_pair.public().0);
+        // 占号先行:身份写入前置。
+        assert_ok!(CitizenIdentity::occupy_cid(
+            RuntimeOrigin::signed(registrar.clone()),
+            registrar_account.clone(),
+            real_cid_number("RUNTIME-0001", "CTZN", "1")
+                .try_into()
+                .expect("cid number should fit"),
+            [7u8; 32],
+            b"43".to_vec().try_into().expect("province should fit"),
+            b"4301".to_vec().try_into().expect("city should fit"),
+        ));
         let payload = build_voting_identity_payload(
             wallet_account.clone(),
             &real_cid_number("RUNTIME-0001", "CTZN", "1"),
@@ -589,6 +600,17 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
         let wallet_pair =
             sr25519::Pair::from_string("//citizen-wallet-3", None).expect("wallet pair");
         let wallet_account = AccountId::new(wallet_pair.public().0);
+        // 占号先行:身份写入前置。
+        assert_ok!(CitizenIdentity::occupy_cid(
+            RuntimeOrigin::signed(registrar.clone()),
+            registrar_account.clone(),
+            real_cid_number("RUNTIME-0003", "CTZN", "1")
+                .try_into()
+                .expect("cid number should fit"),
+            [7u8; 32],
+            b"43".to_vec().try_into().expect("province should fit"),
+            b"4301".to_vec().try_into().expect("city should fit"),
+        ));
         let voting = build_voting_identity_payload(
             wallet_account.clone(),
             &real_cid_number("RUNTIME-0003", "CTZN", "1"),

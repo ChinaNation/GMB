@@ -204,7 +204,9 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     Ok(())
 }
 
-/// 执行关闭：转出余额 + 删除 InstitutionAccounts entry 状态置 Closed + 关闭 admin account。
+/// 执行关闭:转出余额 + 物理删除账户级索引(InstitutionAccounts/CidRegisteredAccount/
+/// AccountRegisteredCid)+ 关闭 admin account;机构级 Institutions 永不删除,
+/// 整机构注销时状态置 Closed(墓碑,CID 号永不复用)。
 pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     proposal_id: u64,
     action: &CloseInstitutionAction<T::AccountId>,
@@ -291,6 +293,12 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     // 单账户注销保留机构与其管理员。
     if action.scope == SCOPE_INSTITUTION {
         Pallet::<T>::close_admin_account(proposal_id, institution_code, admin_account)?;
+        // 机构级墓碑:Institutions 永不删除,状态置 Closed,该 CID 号永不复用。
+        crate::pallet::Institutions::<T>::mutate(&cid_number, |info| {
+            if let Some(info) = info {
+                info.status = crate::institution::types::InstitutionLifecycleStatus::Closed;
+            }
+        });
     }
     InstitutionPendingClose::<T>::remove(&action.account);
 

@@ -11,7 +11,6 @@ import {
   Input,
   Modal,
   Popconfirm,
-  QRCode,
   Select,
   Space,
   Table,
@@ -36,10 +35,13 @@ import { glassCardHeadStyle, glassCardStyle } from '../core/cardStyles';
 import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
 import { ScanAccountModal } from '../core/ScanAccountModal';
 import { useScanSignGrant } from '../core/useScanSignGrant';
+import { useChainSign } from '../core/useChainSign';
 import { notice } from '../utils/notice';
 import {
   CITIZEN_DOCUMENT_TYPES,
   completeCitizenOnchainSignature,
+  submitCitizenChainSign,
+  prepareCitizenRevoke,
   deleteCitizenDocument,
   downloadCitizenDocument,
   listCitizenDocuments,
@@ -48,7 +50,6 @@ import {
   type CitizenDocument,
   type CitizenDocumentType,
   type CitizenRow,
-  type CompleteCitizenOnchainResult,
   type PrepareCitizenOnchainResult,
 } from './api';
 
@@ -146,8 +147,6 @@ export function CitizenDetailPage({
   const [prepareLoading, setPrepareLoading] = useState(false);
   const [completeLoading, setCompleteLoading] = useState(false);
   const [prepared, setPrepared] = useState<PrepareCitizenOnchainResult | null>(null);
-  const [chainRequest, setChainRequest] = useState<CompleteCitizenOnchainResult | null>(null);
-  const [chainModalOpen, setChainModalOpen] = useState(false);
   const [documents, setDocuments] = useState<CitizenDocument[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentUploading, setDocumentUploading] = useState(false);
@@ -155,6 +154,8 @@ export function CitizenDetailPage({
   // 公民身份上链为注册局最严档操作:prepare/complete 前各弹一次
   // passkey + 管理员冷钱包扫码签名,换取一次性安全 grant。
   const { signWithScan, scanSignModal } = useScanSignGrant('管理员安全确认');
+  const { signChain, chainSignModal } = useChainSign('注册局链交易签名');
+  const [chainSubmitting, setChainSubmitting] = useState(false);
 
   const ageYears = useMemo(() => calculateAgeYears(current.citizen_birth_date), [current.citizen_birth_date]);
   const canPushOnchain =
@@ -189,7 +190,6 @@ export function CitizenDetailPage({
     const values = await form.validateFields();
     setPrepareLoading(true);
     setPrepared(null);
-    setChainRequest(null);
     try {
       const output = await prepareCitizenOnchainSignature(
         auth,
@@ -198,8 +198,6 @@ export function CitizenDetailPage({
         signWithScan,
       );
       setPrepared(output);
-      setChainRequest(null);
-      setChainModalOpen(false);
       notice.success('公民钱包签名二维码已生成');
     } catch (err) {
       notice.error(err, '生成签名二维码失败');
@@ -225,14 +223,53 @@ export function CitizenDetailPage({
         signWithScan,
       );
       setPrepared(null);
-      setChainRequest(output);
-      setChainModalOpen(true);
       updateWalletAddress(output.wallet_address);
-      notice.success('公民钱包签名已验证,请继续提交链上交易');
+      notice.success('公民钱包签名已验证,请用管理员冷钱包签名并提交上链');
+      // D7:身份上链交易由 onchina 组装提交,管理员冷钱包只签不提交。
+      const signed = await signChain(output.request_id, output.citizen_identity_chain_sign_request);
+      setChainSubmitting(true);
+      try {
+        const submitted = await submitCitizenChainSign(
+          auth,
+          output.request_id,
+          signed.signer_pubkey,
+          signed.signature,
+        );
+        notice.success(`公民身份已上链,交易哈希：${submitted.tx_hash}`);
+        onUpdated({ ...current, wallet_address: output.wallet_address });
+      } finally {
+        setChainSubmitting(false);
+      }
     } catch (err) {
-      notice.error(err, '公民钱包签名验证失败');
+      notice.error(err, '公民身份上链失败');
     } finally {
       setCompleteLoading(false);
+    }
+  };
+
+  const revokeOnchain = async () => {
+    const values = form.getFieldsValue();
+    const walletAccount = values.wallet_account?.trim();
+    if (!walletAccount) {
+      notice.warning('请先录入钱包账户');
+      return;
+    }
+    setChainSubmitting(true);
+    try {
+      // 吊销 = 登记表墓碑(号永不复用),先取最严档 grant 再冷签提交。
+      const prep = await prepareCitizenRevoke(auth, current.cid_number, walletAccount, signWithScan);
+      const signed = await signChain(prep.request_id, prep.sign_request);
+      const submitted = await submitCitizenChainSign(
+        auth,
+        prep.request_id,
+        signed.signer_pubkey,
+        signed.signature,
+      );
+      notice.success(`公民身份已吊销,交易哈希：${submitted.tx_hash}`);
+    } catch (err) {
+      notice.error(err, '公民身份吊销失败');
+    } finally {
+      setChainSubmitting(false);
     }
   };
 
@@ -366,13 +403,17 @@ export function CitizenDetailPage({
                 生成签名二维码
               </Button>
             </Form.Item>
-            {chainRequest && (
-              <Form.Item style={{ marginBottom: 0 }}>
-                <Button icon={<CloudUploadOutlined />} onClick={() => setChainModalOpen(true)}>
-                  查看链上交易二维码
-                </Button>
-              </Form.Item>
-            )}
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Button
+                danger
+                icon={<CloudUploadOutlined />}
+                loading={chainSubmitting}
+                disabled={!canPushOnchain || current.citizen_status === 'REVOKED'}
+                onClick={revokeOnchain}
+              >
+                吊销身份(墓碑)
+              </Button>
+            </Form.Item>
           </Form>
         </div>
       </Card>
@@ -493,31 +534,7 @@ export function CitizenDetailPage({
         onScannerError={(msg) => notice.error(msg)}
       />
 
-      <Modal
-        title="公民身份上链交易"
-        open={chainModalOpen && !!chainRequest}
-        onCancel={() => setChainModalOpen(false)}
-        footer={[
-          <Button key="done" type="primary" onClick={() => setChainModalOpen(false)}>
-            已提交链上交易
-          </Button>,
-        ]}
-        destroyOnClose
-        width={460}
-      >
-        <Space direction="vertical" align="center" style={{ width: '100%' }} size={14}>
-          <QRCode
-            value={chainRequest?.citizen_identity_chain_sign_request ?? 'CID_CITIZEN_CHAIN_PENDING'}
-            size={280}
-          />
-          <Typography.Text type="secondary" style={{ textAlign: 'center' }}>
-            使用当前注册局管理员的公民钱包扫码签名并提交
-          </Typography.Text>
-          <Typography.Text copyable={{ text: chainRequest?.call_data_hex ?? '' }} style={{ maxWidth: 380 }}>
-            {chainRequest?.call_data_hex ?? ''}
-          </Typography.Text>
-        </Space>
-      </Modal>
+      {chainSignModal}
     </>
   );
 }

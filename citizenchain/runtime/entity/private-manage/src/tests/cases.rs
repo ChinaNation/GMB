@@ -756,6 +756,30 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
             internal_vote::ActiveDynamicThresholds::<Test>::get(code_bytes("SFLP"), account)
                 .is_none()
         );
+        // 机构级墓碑:Institutions 永不删除,状态置 Closed。
+        assert_eq!(
+            pallet::Institutions::<Test>::get(&cid)
+                .expect("tombstone kept")
+                .status,
+            InstitutionLifecycleStatus::Closed,
+        );
+        // 墓碑号永不复用:同号 register 重建账户索引被拒。
+        assert_noop!(
+            PrivateManage::register_cid_private_institution(
+                RuntimeOrigin::signed(creator()),
+                cid.clone(),
+                cid_full_name("重建尝试".as_bytes()),
+                account_names_bv(&[RESERVED_NAME_MAIN]),
+                register_nonce(b"nonce-reopen"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::InstitutionAlreadyClosed
+        );
     });
 }
 

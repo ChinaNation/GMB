@@ -369,6 +369,8 @@ pub mod pallet {
         EmptyCidNumber,
         /// CID 号格式或机构码家族非法
         InvalidCidNumber,
+        /// 机构已整体关闭(墓碑),该 CID 号永不复用
+        InstitutionAlreadyClosed,
         /// 机构登记 nonce 已被使用
         RegisterNonceAlreadyUsed,
         /// 机构签发凭证缺签发机构 CID 号。

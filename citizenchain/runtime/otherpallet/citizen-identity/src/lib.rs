@@ -20,6 +20,71 @@ pub type CidNumberBound = BoundedVec<u8, ConstU32<32>>;
 pub type AreaCodeBound = BoundedVec<u8, ConstU32<16>>;
 pub type CitizenNameBound = BoundedVec<u8, ConstU32<128>>;
 pub const MIN_ONCHAIN_CITIZEN_AGE_YEARS: u8 = 16;
+/// 批量占号单笔上限。
+pub const MAX_CID_OCCUPY_BATCH: u32 = 10_000;
+
+/// CID 占号登记状态:吊销走墓碑,存储项永不删除、号码永不复用。
+#[derive(
+    Clone,
+    Copy,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+#[repr(u8)]
+pub enum CidRecordStatus {
+    Active = 0,
+    Revoked = 1,
+}
+
+/// CID 占号登记记录:链上写入时原子查重的唯一仲裁真源。
+///
+/// 只含号码归属与承诺哈希,不含姓名生日等隐私;居住地码用于吊销时的
+/// 注册局作用域授权;承诺哈希用于建档落库失败后的幂等续用识别。
+#[derive(
+    Clone,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub struct CidRecord<AccountId, BlockNumber> {
+    pub registrar_account: AccountId,
+    pub commitment: [u8; 32],
+    pub residence_province_code: AreaCodeBound,
+    pub residence_city_code: AreaCodeBound,
+    pub status: CidRecordStatus,
+    pub registered_at: BlockNumber,
+    pub revoked_at: Option<BlockNumber>,
+}
+
+/// 批量占号单项。
+#[derive(
+    Clone,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub struct CidOccupyItem {
+    pub cid_number: CidNumberBound,
+    pub commitment: [u8; 32],
+}
+
+pub type CidOccupyItemsBound = BoundedVec<CidOccupyItem, ConstU32<MAX_CID_OCCUPY_BATCH>>;
 
 /// days since 1970-01-01 → 公历 (年, 月, 日)。
 ///
@@ -343,6 +408,16 @@ pub mod pallet {
     pub type AccountByCid<T: Config> =
         StorageMap<_, Blake2_128Concat, CidNumberBound, T::AccountId, OptionQuery>;
 
+    /// CID 占号登记表:发号全局唯一的链上真源(占号先行,墓碑不删除)。
+    #[pallet::storage]
+    pub type CidRegistry<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        CidNumberBound,
+        CidRecord<T::AccountId, BlockNumberFor<T>>,
+        OptionQuery,
+    >;
+
     #[pallet::storage]
     pub type CountryVotingCount<T> = StorageValue<_, u64, ValueQuery>;
 
@@ -398,6 +473,13 @@ pub mod pallet {
             scope: PopulationScope,
             eligible_total: u64,
         },
+        CidOccupied {
+            cid_number: CidNumberBound,
+            registrar_account: T::AccountId,
+        },
+        CidRevoked {
+            cid_number: CidNumberBound,
+        },
     }
 
     #[pallet::error]
@@ -414,6 +496,9 @@ pub mod pallet {
         CidAlreadyRegisteredToAnotherAccount,
         CidNotFound,
         VotingIdentityNotFound,
+        CidAlreadyOccupied,
+        CidNotOccupied,
+        CidAlreadyRevoked,
     }
 
     #[pallet::call]
@@ -443,6 +528,7 @@ pub mod pallet {
                 &citizen_signature,
             )?;
             Self::ensure_cid_available(&payload.cid_number, &payload.wallet_account)?;
+            Self::ensure_cid_occupied_active(&payload.cid_number)?;
 
             let old = VotingIdentityByAccount::<T>::get(&payload.wallet_account);
             let first_identity = old.is_none();
@@ -490,6 +576,7 @@ pub mod pallet {
                 &citizen_signature,
             )?;
             Self::ensure_cid_available(&payload.voting.cid_number, &payload.voting.wallet_account)?;
+            Self::ensure_cid_occupied_active(&payload.voting.cid_number)?;
 
             let old = VotingIdentityByAccount::<T>::get(&payload.voting.wallet_account);
             let identity = Self::identity_from_payload(&payload.voting);
@@ -535,6 +622,7 @@ pub mod pallet {
                 &citizen_signature,
             )?;
             Self::ensure_cid_available(&payload.cid_number, &payload.wallet_account)?;
+            Self::ensure_cid_occupied_active(&payload.cid_number)?;
 
             let old = VotingIdentityByAccount::<T>::get(&payload.wallet_account)
                 .ok_or(Error::<T>::VotingIdentityNotFound)?;
@@ -570,6 +658,7 @@ pub mod pallet {
                 &citizen_signature,
             )?;
             Self::ensure_cid_available(&payload.voting.cid_number, &payload.voting.wallet_account)?;
+            Self::ensure_cid_occupied_active(&payload.voting.cid_number)?;
 
             let old = VotingIdentityByAccount::<T>::get(&payload.voting.wallet_account)
                 .ok_or(Error::<T>::VotingIdentityNotFound)?;
@@ -632,6 +721,8 @@ pub mod pallet {
             revoked.updated_at = frame_system::Pallet::<T>::block_number();
             Self::replace_voting_identity(account.clone(), revoked, Some(old));
             CandidateIdentityByAccount::<T>::remove(&account);
+            // 身份吊销联动登记表墓碑,保证发号真源与身份状态一致。
+            Self::tombstone_cid_record(&cid_number);
             Self::deposit_event(Event::<T>::CitizenIdentityRevoked {
                 wallet_account: account,
                 cid_number,
@@ -662,23 +753,210 @@ pub mod pallet {
             });
             Ok(())
         }
+
+        /// 占号:公民建档先行登记 CID 号,链上原子「验格式+查重+登记」是
+        /// 全局唯一的唯一仲裁;成功后注册局才落本地档案。
+        #[pallet::call_index(6)]
+        #[pallet::weight(<T as Config>::WeightInfo::occupy_cid())]
+        pub fn occupy_cid(
+            origin: OriginFor<T>,
+            registrar_account: T::AccountId,
+            cid_number: CidNumberBound,
+            commitment: [u8; 32],
+            residence_province_code: AreaCodeBound,
+            residence_city_code: AreaCodeBound,
+        ) -> DispatchResult {
+            let registrar = ensure_signed(origin)?;
+            ensure!(
+                !residence_province_code.is_empty() && !residence_city_code.is_empty(),
+                Error::<T>::EmptyResidenceScope
+            );
+            ensure!(
+                T::CitizenIdentityAuthority::can_manage_voting_identity(
+                    &registrar,
+                    &registrar_account,
+                    residence_province_code.as_slice(),
+                    residence_city_code.as_slice(),
+                    CitizenIdentityLevel::Voting,
+                ),
+                Error::<T>::UnauthorizedRegistrar
+            );
+            Self::do_occupy_cid(
+                &registrar_account,
+                &cid_number,
+                &commitment,
+                &residence_province_code,
+                &residence_city_code,
+            )
+        }
+
+        /// 批量占号:同一注册局同一作用域一次占 N 号(批量建档摊薄冷签);
+        /// 任一项失败整笔回滚。
+        #[pallet::call_index(7)]
+        #[pallet::weight(<T as Config>::WeightInfo::occupy_cids_batch(items.len() as u32))]
+        pub fn occupy_cids_batch(
+            origin: OriginFor<T>,
+            registrar_account: T::AccountId,
+            items: CidOccupyItemsBound,
+            residence_province_code: AreaCodeBound,
+            residence_city_code: AreaCodeBound,
+        ) -> DispatchResult {
+            let registrar = ensure_signed(origin)?;
+            ensure!(!items.is_empty(), Error::<T>::EmptyCidNumber);
+            ensure!(
+                !residence_province_code.is_empty() && !residence_city_code.is_empty(),
+                Error::<T>::EmptyResidenceScope
+            );
+            ensure!(
+                T::CitizenIdentityAuthority::can_manage_voting_identity(
+                    &registrar,
+                    &registrar_account,
+                    residence_province_code.as_slice(),
+                    residence_city_code.as_slice(),
+                    CitizenIdentityLevel::Voting,
+                ),
+                Error::<T>::UnauthorizedRegistrar
+            );
+            for item in items.iter() {
+                Self::do_occupy_cid(
+                    &registrar_account,
+                    &item.cid_number,
+                    &item.commitment,
+                    &residence_province_code,
+                    &residence_city_code,
+                )?;
+            }
+            Ok(())
+        }
+
+        /// 吊销:登记表墓碑(Active→Revoked,永不复用);号已绑定链上身份
+        /// 则联动置 Revoked。作用域授权用占号时登记的居住地,防跨域吊销。
+        #[pallet::call_index(8)]
+        #[pallet::weight(<T as Config>::WeightInfo::revoke_cid())]
+        pub fn revoke_cid(
+            origin: OriginFor<T>,
+            registrar_account: T::AccountId,
+            cid_number: CidNumberBound,
+        ) -> DispatchResult {
+            let registrar = ensure_signed(origin)?;
+            let rec = CidRegistry::<T>::get(&cid_number).ok_or(Error::<T>::CidNotOccupied)?;
+            ensure!(
+                rec.status == CidRecordStatus::Active,
+                Error::<T>::CidAlreadyRevoked
+            );
+            ensure!(
+                T::CitizenIdentityAuthority::can_manage_voting_identity(
+                    &registrar,
+                    &registrar_account,
+                    rec.residence_province_code.as_slice(),
+                    rec.residence_city_code.as_slice(),
+                    CitizenIdentityLevel::Voting,
+                ),
+                Error::<T>::UnauthorizedRegistrar
+            );
+            Self::tombstone_cid_record(&cid_number);
+            if let Some(account) = AccountByCid::<T>::get(&cid_number) {
+                Self::revoke_bound_identity(&account);
+            }
+            Self::deposit_event(Event::<T>::CidRevoked { cid_number });
+            Ok(())
+        }
     }
 
     impl<T: Config> Pallet<T> {
-        fn ensure_valid_voting_payload(
-            payload: &VotingIdentityPayload<T::AccountId>,
-        ) -> DispatchResult {
-            ensure!(!payload.cid_number.is_empty(), Error::<T>::EmptyCidNumber);
-            // CID 号全量校验(段结构+机构码+盈利位+校验和)单源 primitives::cid,
-            // 且机构码必须是公民人 CTZN。
-            let parts = primitives::cid::number::parse_cid_number_parts_bytes(
-                payload.cid_number.as_slice(),
-            )
-            .map_err(|_| Error::<T>::InvalidCitizenCode)?;
+        /// 公民 CID 号全量校验(段结构+机构码+盈利位+校验和)单源
+        /// primitives::cid,且机构码必须是公民人 CTZN。
+        fn ensure_valid_citizen_cid(cid_number: &CidNumberBound) -> DispatchResult {
+            ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
+            let parts =
+                primitives::cid::number::parse_cid_number_parts_bytes(cid_number.as_slice())
+                    .map_err(|_| Error::<T>::InvalidCitizenCode)?;
             ensure!(
                 parts.institution == *b"CTZN",
                 Error::<T>::InvalidCitizenCode
             );
+            Ok(())
+        }
+
+        /// 身份写入前置:CID 必须已占号且未吊销(占号先行铁律)。
+        fn ensure_cid_occupied_active(cid_number: &CidNumberBound) -> DispatchResult {
+            match CidRegistry::<T>::get(cid_number) {
+                Some(rec) if rec.status == CidRecordStatus::Active => Ok(()),
+                Some(_) => Err(Error::<T>::CidAlreadyRevoked.into()),
+                None => Err(Error::<T>::CidNotOccupied.into()),
+            }
+        }
+
+        /// 登记表墓碑:Active → Revoked;不存在或已吊销则不动(幂等)。
+        fn tombstone_cid_record(cid_number: &CidNumberBound) {
+            CidRegistry::<T>::mutate(cid_number, |rec| {
+                if let Some(rec) = rec {
+                    if rec.status == CidRecordStatus::Active {
+                        rec.status = CidRecordStatus::Revoked;
+                        rec.revoked_at = Some(frame_system::Pallet::<T>::block_number());
+                    }
+                }
+            });
+        }
+
+        /// 占号核心:链上原子「验格式+查重+登记」。
+        /// 同注册局+同承诺哈希的重复提交幂等放行(建档落库失败恢复路径)。
+        fn do_occupy_cid(
+            registrar_account: &T::AccountId,
+            cid_number: &CidNumberBound,
+            commitment: &[u8; 32],
+            residence_province_code: &AreaCodeBound,
+            residence_city_code: &AreaCodeBound,
+        ) -> DispatchResult {
+            Self::ensure_valid_citizen_cid(cid_number)?;
+            match CidRegistry::<T>::get(cid_number) {
+                None => {
+                    CidRegistry::<T>::insert(
+                        cid_number,
+                        CidRecord {
+                            registrar_account: registrar_account.clone(),
+                            commitment: *commitment,
+                            residence_province_code: residence_province_code.clone(),
+                            residence_city_code: residence_city_code.clone(),
+                            status: CidRecordStatus::Active,
+                            registered_at: frame_system::Pallet::<T>::block_number(),
+                            revoked_at: None,
+                        },
+                    );
+                    Self::deposit_event(Event::<T>::CidOccupied {
+                        cid_number: cid_number.clone(),
+                        registrar_account: registrar_account.clone(),
+                    });
+                    Ok(())
+                }
+                Some(rec)
+                    if rec.status == CidRecordStatus::Active
+                        && rec.registrar_account == *registrar_account
+                        && rec.commitment == *commitment =>
+                {
+                    Ok(())
+                }
+                Some(_) => Err(Error::<T>::CidAlreadyOccupied.into()),
+            }
+        }
+
+        /// 吊销已绑定的链上身份:状态置 Revoked、退出人口分母、移除参选档案。
+        fn revoke_bound_identity(account: &T::AccountId) {
+            if let Some(old) = VotingIdentityByAccount::<T>::get(account) {
+                if old.citizen_status != CitizenStatus::Revoked {
+                    let mut revoked = old.clone();
+                    revoked.citizen_status = CitizenStatus::Revoked;
+                    revoked.updated_at = frame_system::Pallet::<T>::block_number();
+                    Self::replace_voting_identity(account.clone(), revoked, Some(old));
+                    CandidateIdentityByAccount::<T>::remove(account);
+                }
+            }
+        }
+
+        fn ensure_valid_voting_payload(
+            payload: &VotingIdentityPayload<T::AccountId>,
+        ) -> DispatchResult {
+            Self::ensure_valid_citizen_cid(&payload.cid_number)?;
             ensure!(
                 !payload.residence_province_code.is_empty()
                     && !payload.residence_city_code.is_empty()
@@ -815,6 +1093,8 @@ pub mod pallet {
                 }
                 if old_identity.cid_number != next.cid_number {
                     AccountByCid::<T>::remove(&old_identity.cid_number);
+                    // 换号 = 旧号退役:登记表墓碑,永不复用。
+                    Self::tombstone_cid_record(&old_identity.cid_number);
                 }
             }
             if Self::identity_counts_as_voter(&next) {

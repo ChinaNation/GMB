@@ -6,15 +6,30 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use crate::Pallet as PrivateAdmins;
-use crate::{BlockNumberFor, Call, Config, Pallet, CHINA_CB};
+use crate::{BlockNumberFor, Call, Config, Pallet};
+use admin_primitives::{AdminProfile, AdminSource};
 use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
+use primitives::cid::china::china_cb::CHINA_CB;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 use votingengine::types::PRC;
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
+}
+
+/// benchmark 夹具管理员档案:只填账户,实名字段留空。
+fn profile_of<T: Config>(account: T::AccountId) -> AdminProfile<T::AccountId> {
+    AdminProfile {
+        account,
+        admin_cid_number: Default::default(),
+        name: Default::default(),
+        admin_role: Default::default(),
+        term_start: 0,
+        term_end: 0,
+        source: AdminSource::Genesis,
+    }
 }
 
 fn prc_institution<T: Config>() -> T::AccountId {
@@ -43,9 +58,9 @@ mod benchmarks {
             .expect("benchmark genesis account should exist");
         let threshold = votingengine::types::fixed_governance_pass_threshold(&PRC).unwrap_or(2);
         let mut stale_admins = account.admins.clone();
-        stale_admins[1] = stale_new_admin;
+        stale_admins[1] = profile_of::<T>(stale_new_admin);
         let mut admins = account.admins;
-        admins[1] = new_admin;
+        admins[1] = profile_of::<T>(new_admin);
 
         // 先发一个"陈旧"提案,让它自然超时被终结,验证新提案不会冲突。
         assert!(PrivateAdmins::<T>::propose_admin_set_change(

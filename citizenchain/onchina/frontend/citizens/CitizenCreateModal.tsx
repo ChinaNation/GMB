@@ -6,7 +6,13 @@ import { Alert, Button, DatePicker, Form, Input, Modal, Select, Switch } from 'a
 import type { Dayjs } from 'dayjs';
 
 import type { AdminAuth } from '../auth/types';
-import { createCitizen, type CitizenSex, type CreateCitizenInput } from './api';
+import { useChainSign } from '../core/useChainSign';
+import {
+  prepareCitizenOccupy,
+  submitCitizenChainSign,
+  type CitizenSex,
+  type CreateCitizenInput,
+} from './api';
 import {
   getCidMeta,
   listCidCities,
@@ -67,6 +73,7 @@ export function CitizenCreateModal({
 }: Props) {
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
+  const { signChain, chainSignModal } = useChainSign('注册局占号签名');
   const [birthProvinces, setBirthProvinces] = useState<CidProvinceItem[]>([]);
   const [birthCities, setBirthCities] = useState<CidCityItem[]>([]);
   const [birthTowns, setBirthTowns] = useState<CidTownItem[]>([]);
@@ -160,8 +167,20 @@ export function CitizenCreateModal({
     };
     setSubmitting(true);
     try {
-      const result = await createCitizen(auth, payload);
-      notice.success(`公民录入成功,护照号：${result.passport_no}`);
+      const prepared = await prepareCitizenOccupy(auth, payload);
+      // 占号先行:管理员冷钱包扫码签占号交易 → onchina 组装提交 → 进块后才落档案。
+      const signed = await signChain(prepared.request_id, prepared.sign_request);
+      const submitted = await submitCitizenChainSign(
+        auth,
+        prepared.request_id,
+        signed.signer_pubkey,
+        signed.signature,
+      );
+      const result = submitted.citizen;
+      if (!result) {
+        throw new Error('占号已上链,但档案落库结果缺失');
+      }
+      notice.success(`占号上链成功,护照号：${result.passport_no}`);
       onClose();
       await onCreated(result.cid_number);
     } catch (err) {
@@ -172,6 +191,7 @@ export function CitizenCreateModal({
   };
 
   return (
+    <>
     <Modal
       title={<div style={{ textAlign: 'center', width: '100%' }}>新增公民</div>}
       open={open}
@@ -328,5 +348,7 @@ export function CitizenCreateModal({
         </Form.Item>
       </Form>
     </Modal>
+    {chainSignModal}
+    </>
   );
 }

@@ -5,4 +5,6 @@ pub mod china;
 pub mod code;
 pub mod generator;
 pub mod number;
+pub mod official_derive;
+pub mod official_template;
 pub mod seed;

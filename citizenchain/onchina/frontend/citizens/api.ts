@@ -55,7 +55,7 @@ export type PageResult<T> = {
   has_more: boolean;
 };
 
-/** 直接录入公民请求 DTO,字段与后端 admin_create_citizen 对齐。 */
+/** 建档占号请求 DTO,字段与后端 validate_citizen_input 对齐。 */
 export type CreateCitizenInput = {
   citizen_family_name: string;
   citizen_given_name: string;
@@ -104,6 +104,7 @@ export type PrepareCitizenOnchainResult = {
 };
 
 export type CompleteCitizenOnchainResult = {
+  request_id: string;
   cid_number: string;
   wallet_address: string;
   chain_action: number;
@@ -176,15 +177,40 @@ export async function searchLegalRepresentativeCitizens(
   });
 }
 
+/** 占号 prepare 返回:冷签 QR + 待占号(此时尚未建档,ADR-031 占号先行)。 */
+export type PrepareCitizenOccupyResult = {
+  request_id: string;
+  cid_number: string;
+  sign_request: string;
+  expires_at: number;
+};
+
+/** 链交易 submit 返回:占号成功落库的公民档案(占号用途)。 */
+export type ChainSubmitResult = {
+  purpose: string;
+  cid_number: string;
+  tx_hash: string;
+  block_number?: number | null;
+  citizen?: CreateCitizenResult | null;
+};
+
+/** 吊销 prepare 返回:冷签 QR。 */
+export type PrepareCitizenRevokeResult = {
+  request_id: string;
+  cid_number: string;
+  sign_request: string;
+  expires_at: number;
+};
+
 /**
- * 注册局管理员直接录入本地公民档案并发护照。
- * 钱包账户只在后续链上身份推送时录入并由该钱包签名确认。
+ * 建档占号 prepare:后端校验档案并生成号,返回管理员冷钱包签名的占号 QR。
+ * 此步不落任何档案 —— 占号交易进块后才建档(见 submitCitizenChainSign)。
  */
-export async function createCitizen(
+export async function prepareCitizenOccupy(
   auth: AdminAuth,
   payload: CreateCitizenInput,
-): Promise<CreateCitizenResult> {
-  return request<CreateCitizenResult>('/api/v1/admin/citizens', {
+): Promise<PrepareCitizenOccupyResult> {
+  return request<PrepareCitizenOccupyResult>('/api/v1/admin/citizens', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -192,6 +218,55 @@ export async function createCitizen(
     },
     body: JSON.stringify(payload),
   });
+}
+
+/**
+ * 统一链交易 submit:管理员冷钱包回签后由 onchina 组装、dry-run、提交并等进块;
+ * 占号用途在进块后落公民档案并回传。
+ */
+export async function submitCitizenChainSign(
+  auth: AdminAuth,
+  requestId: string,
+  signerPubkey: string,
+  signature: string,
+): Promise<ChainSubmitResult> {
+  return request<ChainSubmitResult>('/api/v1/admin/citizens/chain/submit', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...adminHeaders(auth),
+    },
+    body: JSON.stringify({
+      request_id: requestId,
+      signer_pubkey: signerPubkey,
+      signature,
+    }),
+  });
+}
+
+/**
+ * 吊销 prepare:登记表墓碑(号永不复用),最严档 PASSKEY_COLD_SIGN grant。
+ * 返回冷签 QR,回签后同样走 submitCitizenChainSign。
+ */
+export async function prepareCitizenRevoke(
+  auth: AdminAuth,
+  cidNumber: string,
+  walletAccount: string,
+  signWithScan: ScanSignResolver,
+): Promise<PrepareCitizenRevokeResult> {
+  const grantId = await citizenOnchainGrant(auth, cidNumber, walletAccount, signWithScan);
+  return request<PrepareCitizenRevokeResult>(
+    `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/revoke/prepare`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [SECURITY_GRANT_HEADER]: grantId,
+        ...adminHeaders(auth),
+      },
+      body: JSON.stringify({ wallet_account: walletAccount }),
+    },
+  );
 }
 
 // 公民身份上链属注册局上链操作,最严档 PASSKEY_COLD_SIGN:

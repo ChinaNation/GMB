@@ -2,7 +2,7 @@
 //!
 //! OnChina 只构造裸 SCALE call data 和 QR 动作码,不在这里提交 extrinsic。
 
-use parity_scale_codec::{Compact, Encode};
+use codec::{Compact, Encode};
 
 use crate::{cid::china::china_sqlite_hash, parse_sr25519_pubkey_bytes};
 

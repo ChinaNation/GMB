@@ -66,12 +66,11 @@ where
 {
     let now = frame_system::Pallet::<T>::block_number();
     let prepared_at = now.saturating_add(1u32.saturated_into());
-    let nonce_hash = T::Hashing::hash(b"benchmark-resolution-issuance-population");
     joint_vote::PendingPopulationSnapshots::<T>::insert(
         who,
         joint_vote::PreparedPopulationSnapshot {
             eligible_total: 10u64,
-            nonce_hash,
+            scope: votingengine::PopulationScope::Country,
             prepared_at,
         },
     );

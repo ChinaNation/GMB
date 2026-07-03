@@ -2664,11 +2664,20 @@ fn main() {
                 "/api/v1/admin/audit-logs",
                 get(audit::admin_list_audit_logs),
             )
-            // 注册局管理员直接录入公民并直接发护照(POST),列表查询走 GET。
+            // 建档占号先行(ADR-031):POST = 占号 prepare(返回冷签 QR),
+            // 链上进块后经 chain/submit 才落档案;列表查询走 GET。
             .route(
                 "/api/v1/admin/citizens",
                 get(domains::citizens::handler::admin_list_citizens)
-                    .post(domains::citizens::admin_entry::admin_create_citizen),
+                    .post(domains::citizens::occupy::prepare_citizen_occupy),
+            )
+            .route(
+                "/api/v1/admin/citizens/chain/submit",
+                post(domains::citizens::occupy::submit_chain_sign),
+            )
+            .route(
+                "/api/v1/admin/citizens/:cid_number/onchain/revoke/prepare",
+                post(domains::citizens::occupy::prepare_citizen_revoke),
             )
             .route(
                 "/api/v1/admin/citizens/legal-representatives",

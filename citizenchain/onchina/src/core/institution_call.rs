@@ -19,7 +19,7 @@
 //! `tests` 模块用真实的 `admin_primitives::AdminProfile` 与真实参数类型 `.encode()`
 //! 做逐字节交叉校验,杜绝本编码器与链端 SCALE 静默漂移。
 
-use parity_scale_codec::{Compact, Encode};
+use codec::{Compact, Encode};
 
 /// PublicManage pallet 在 runtime construct_runtime 中的索引(公权机构生命周期)。
 pub const PUBLIC_MANAGE_PALLET_INDEX: u8 = 32;

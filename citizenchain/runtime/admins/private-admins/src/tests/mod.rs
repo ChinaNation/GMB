@@ -251,8 +251,22 @@ fn private_admins_store_and_query_admin_profiles() {
     new_test_ext().execute_with(|| {
         let root = account(40);
         let profiles = alloc::vec![
-            profile_full(account(0), b"GD000-CTZN8-191941078-2026", b"Alice", b"Chair", 10, 20),
-            profile_full(account(1), b"GD000-CTZN2-141250905-2026", b"Bob", b"Member", 11, 21),
+            profile_full(
+                account(0),
+                b"GD000-CTZN8-191941078-2026",
+                b"Alice",
+                b"Chair",
+                10,
+                20
+            ),
+            profile_full(
+                account(1),
+                b"GD000-CTZN2-141250905-2026",
+                b"Bob",
+                b"Member",
+                11,
+                21
+            ),
         ];
         assert_ok!(PrivateAdmins::do_create_pending_admin_account(
             root.clone(),

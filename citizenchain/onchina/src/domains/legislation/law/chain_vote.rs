@@ -64,7 +64,7 @@ pub fn encode_guard_vote(proposal_id: u64, approve: bool) -> ChainCall {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use parity_scale_codec::Encode;
+    use codec::Encode;
 
     /// 院内表决编码 = `[28,1]` + `(u64 小端, bool)`,与 codec golden 逐字节一致;动作码 0x1C01。
     #[test]

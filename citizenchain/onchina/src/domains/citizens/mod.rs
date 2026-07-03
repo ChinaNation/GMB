@@ -14,6 +14,7 @@ pub(crate) mod chain_joint_vote;
 pub(crate) mod chain_vote;
 pub(crate) mod handler;
 pub(crate) mod model;
+pub(crate) mod occupy;
 /// OnChina 自持的护照号与护照有效期生成逻辑。
 pub(crate) mod passport_no;
 pub(crate) mod vote;

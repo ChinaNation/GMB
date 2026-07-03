@@ -433,8 +433,14 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                 votingengine::pallet::Call::finalize_proposal { .. } => FeeChargeKind::Free,
                 _ => FeeChargeKind::VoteFlat,
             },
-            // CitizenIdentity 公民身份登记、更新、撤销和人口快照按投票统一价 1 元/次。
-            RuntimeCall::CitizenIdentity(_) => FeeChargeKind::VoteFlat,
+            // CitizenIdentity:占号/吊销是公共登记服务,免费(滥用由链上注册局
+            // 授权门槛拦截);身份登记、更新、撤销和人口快照按投票统一价 1 元/次。
+            RuntimeCall::CitizenIdentity(ref ci_call) => match ci_call {
+                citizen_identity::pallet::Call::occupy_cid { .. }
+                | citizen_identity::pallet::Call::occupy_cids_batch { .. }
+                | citizen_identity::pallet::Call::revoke_cid { .. } => FeeChargeKind::Free,
+                _ => FeeChargeKind::VoteFlat,
+            },
             // FullnodeIssuance bind_reward_wallet / rebind_reward_wallet:1 元/次。
             RuntimeCall::FullnodeIssuance(_) => FeeChargeKind::VoteFlat,
             // 手动重试/取消统一收口至 votingengine::retry_passed_proposal /

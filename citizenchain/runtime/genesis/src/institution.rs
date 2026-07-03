@@ -11,7 +11,7 @@ use codec::Decode;
 use frame_support::{pallet_prelude::BoundedVec, traits::Currency};
 use frame_system::pallet_prelude::BlockNumberFor;
 use primitives::{
-    account_derive::{RESERVED_NAME_FEE, RESERVED_NAME_MAIN},
+    account_derive::{AccountKind, RESERVED_NAME_FEE, RESERVED_NAME_MAIN},
     cid::{
         china::{
             china_cb::CHINA_CB,
@@ -131,6 +131,98 @@ fn insert_public_account<T: public_manage::Config>(
     );
     public_manage::ProtectedGenesisAccounts::<T>::insert(address, ());
     let _ = cid_number;
+}
+
+/// 模板派生机构落地(ADR-031 卡3 全量创世直铸):账户由 CID 号确定性派生、
+/// 名称为运行态 String;不进 ProtectedGenesisAccounts(市/镇级机构后续可治理,
+/// 且避免 59 万机构双倍保护条目)。构建期断言号格式合法 + 公权家族。
+fn insert_derived_public_institution<T: public_manage::Config>(
+    cid_number: &str,
+    cid_full_name: &str,
+    cid_short_name: &str,
+) {
+    let parts = primitives::cid::number::parse_cid_number_parts(cid_number)
+        .unwrap_or_else(|e| panic!("genesis derived cid {cid_number} 非法: {e}"));
+    assert!(
+        primitives::cid::code::is_public_legal_code(&parts.institution),
+        "genesis derived cid {cid_number} 非公权家族"
+    );
+    let cid: PublicCidNumberOf<T> = cid_number
+        .as_bytes()
+        .to_vec()
+        .try_into()
+        .unwrap_or_else(|_| panic!("genesis derived cid {cid_number} 超过 MaxCidNumberLength"));
+    let bounded_name =
+        |value: &str| -> PublicAccountNameOf<T> {
+            value.as_bytes().to_vec().try_into().unwrap_or_else(|_| {
+                panic!("genesis derived name {value} 超过 MaxAccountNameLength")
+            })
+        };
+    public_manage::Institutions::<T>::insert(
+        &cid,
+        PublicInstitutionInfoOf::<T> {
+            cid_full_name: bounded_name(cid_full_name),
+            cid_short_name: bounded_name(cid_short_name),
+            institution_code: parts.institution,
+            created_at: BlockNumberFor::<T>::default(),
+            status: InstitutionLifecycleStatus::Active,
+        },
+    );
+    let bounded_reserved = |value: &[u8]| -> PublicAccountNameOf<T> {
+        value
+            .to_vec()
+            .try_into()
+            .expect("reserved account name fits")
+    };
+    let cid_bytes = cid_number.as_bytes();
+    let main = AccountKind::InstitutionMain {
+        cid_number: cid_bytes,
+    }
+    .derive(primitives::core_const::SS58_FORMAT);
+    let fee = AccountKind::InstitutionFee {
+        cid_number: cid_bytes,
+    }
+    .derive(primitives::core_const::SS58_FORMAT);
+    insert_derived_account::<T>(
+        &cid,
+        bounded_reserved(RESERVED_NAME_MAIN),
+        decode_account::<T>(&main, "派生主账户"),
+        true,
+    );
+    insert_derived_account::<T>(
+        &cid,
+        bounded_reserved(RESERVED_NAME_FEE),
+        decode_account::<T>(&fee, "派生费用账户"),
+        false,
+    );
+}
+
+/// 派生机构账户落地(不标记 ProtectedGenesisAccounts)。
+fn insert_derived_account<T: public_manage::Config>(
+    cid: &PublicCidNumberOf<T>,
+    account_name: PublicAccountNameOf<T>,
+    address: T::AccountId,
+    is_default: bool,
+) {
+    public_manage::InstitutionAccounts::<T>::insert(
+        cid,
+        &account_name,
+        PublicInstitutionAccountInfoOf::<T> {
+            address: address.clone(),
+            initial_balance: PublicBalanceOf::<T>::zero(),
+            status: InstitutionLifecycleStatus::Active,
+            is_default,
+            created_at: BlockNumberFor::<T>::default(),
+        },
+    );
+    public_manage::CidRegisteredAccount::<T>::insert(cid, &account_name, address.clone());
+    public_manage::AccountRegisteredCid::<T>::insert(
+        address,
+        PublicRegisteredInstitutionOf::<T> {
+            cid_number: cid.clone(),
+            account_name,
+        },
+    );
 }
 
 fn insert_public_institution<T: public_manage::Config>(
@@ -284,6 +376,14 @@ fn insert_fixed_admins<T, F>(
 }
 
 /// 创世写入内置公权机构和创世公职人员。
+/// 创世直铸市/镇/省部门/国家两院机构(ADR-031 卡3):纯枚举(primitives 单源)
+/// → 落地存储;账户由 CID 号确定性派生,与 282 常量互不重号。
+fn build_template_institutions<T: public_manage::Config>() {
+    primitives::cid::official_derive::for_each_public_institution(|cid, full, short| {
+        insert_derived_public_institution::<T>(cid, full, short);
+    });
+}
+
 pub fn build<T>()
 where
     T: public_manage::Config + public_admins::Config,
@@ -377,4 +477,7 @@ where
             province.province_code,
         );
     }
+
+    // 全量创世直铸市/镇/省部门/国家两院机构(ADR-031 卡3):常量 282 + 派生 596,517。
+    build_template_institutions::<T>();
 }

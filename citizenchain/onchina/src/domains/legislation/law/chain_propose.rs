@@ -17,7 +17,7 @@
 //! 随 Phase 1B 接入,届时移除本 allow。
 
 use crate::core::institution_call::{chain_action_code, ChainCall};
-use parity_scale_codec::{Compact, Decode, Encode};
+use codec::{Compact, Decode, Encode};
 
 /// LegislationYuan pallet 在 construct_runtime 的索引。
 pub const LEGISLATION_YUAN_PALLET_INDEX: u8 = 27;

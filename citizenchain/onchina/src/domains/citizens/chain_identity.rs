@@ -10,7 +10,7 @@ use axum::{
     Json,
 };
 use chrono::{Datelike, Duration, NaiveDate, Utc};
-use parity_scale_codec::{Compact, Encode};
+use codec::{Compact, Encode};
 use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair};
 use uuid::Uuid;
@@ -50,6 +50,7 @@ pub(crate) struct CompleteCitizenOnchainInput {
 
 #[derive(Serialize)]
 pub(crate) struct CompleteCitizenOnchainOutput {
+    pub(crate) request_id: String,
     pub(crate) cid_number: String,
     pub(crate) wallet_address: String,
     pub(crate) chain_action: u16,
@@ -232,20 +233,49 @@ pub(crate) async fn complete_citizen_onchain_signature(
         CITIZEN_IDENTITY_PALLET_INDEX,
         REGISTER_VOTING_IDENTITY_CALL_INDEX,
     );
+    // D7:QR 载荷 = 完整 runtime 签名载荷(与钱包解码器扩展尾规则对齐),
+    // 回签后经 /citizens/chain/submit 由 onchina 组装提交,QR 只签不提交。
+    let prepared =
+        match crate::core::chain_submit::prepare_signing(&call, ctx.admin_account.as_str()).await {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::error!(error = %err, "prepare identity push signing failed");
+                return api_error(
+                    StatusCode::BAD_GATEWAY,
+                    1004,
+                    "链签名载荷准备失败(链不可用)",
+                );
+            }
+        };
     let issued_at = Utc::now();
-    let expires_at = issued_at + Duration::seconds(180);
+    let expires_at = issued_at + Duration::seconds(600);
     let request_id = format!("citizen-chain-{}", Uuid::new_v4());
     let chain_sign_request = match crate::core::qr::build_sign_request_bytes(
         request_id.as_str(),
         issued_at.timestamp(),
         expires_at.timestamp(),
         ctx.admin_account.as_str(),
-        &call,
+        &prepared.payload,
         action,
     ) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let session = crate::domains::citizens::occupy::ChainSignSession {
+        request_id: request_id.clone(),
+        purpose: crate::domains::citizens::occupy::PURPOSE_CITIZEN_IDENTITY_PUSH.to_string(),
+        actor_pubkey: ctx.admin_account.clone(),
+        call_data: call.clone(),
+        nonce: prepared.nonce,
+        signing_hash: prepared.signing_hash_hex.clone(),
+        context: serde_json::json!({ "cid_number": record.cid_number }),
+        expires_at,
+        consumed_at: None,
+    };
+    if let Err(err) = state.db.insert_chain_sign_session(&session) {
+        tracing::error!(error = %err, "insert identity push session failed");
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "冷签会话落库失败");
+    }
 
     let now = Utc::now();
     record.wallet_pubkey = Some(wallet.pubkey.clone());
@@ -281,6 +311,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
         code: 0,
         message: "ok".to_string(),
         data: CompleteCitizenOnchainOutput {
+            request_id,
             cid_number: record.cid_number,
             wallet_address: wallet.address,
             chain_action: action,
@@ -329,7 +360,7 @@ struct VotingIdentityPayloadBytes {
     citizen_age_years: u8,
 }
 
-fn ensure_registry_admin(
+pub(crate) fn ensure_registry_admin(
     ctx: &crate::auth::login::AdminAuthContext,
 ) -> Result<(), axum::response::Response> {
     if crate::core::chain_runtime::is_tier1_registry(&ctx.institution_code)
@@ -515,7 +546,7 @@ fn parse_signature_bytes(signature_hex: &str) -> Option<[u8; 64]> {
     raw.try_into().ok()
 }
 
-fn same_pubkey_hex(left: &str, right: &str) -> bool {
+pub(crate) fn same_pubkey_hex(left: &str, right: &str) -> bool {
     normalize_prefixed_hex(left).eq_ignore_ascii_case(normalize_prefixed_hex(right))
 }
 
@@ -526,7 +557,9 @@ fn normalize_prefixed_hex(value: &str) -> &str {
         .unwrap_or(value)
 }
 
-fn active_registry_main_account(state: &AppState) -> Result<[u8; 32], axum::response::Response> {
+pub(crate) fn active_registry_main_account(
+    state: &AppState,
+) -> Result<[u8; 32], axum::response::Response> {
     let binding = crate::auth::repo::active_node_binding(&state.db).map_err(|err| {
         tracing::error!(error = %err, "query active registry binding failed");
         api_error(

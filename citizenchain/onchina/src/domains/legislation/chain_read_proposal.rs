@@ -11,7 +11,7 @@
 use super::law::model::{house_ref, HouseRef};
 use crate::core::chain_runtime::storage_key_suffix;
 use crate::core::chain_url;
-use parity_scale_codec::Decode;
+use codec::Decode;
 use serde::Serialize;
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 
@@ -213,7 +213,7 @@ pub async fn fetch_proposal_state(proposal_id: u64) -> Result<Option<LegProposal
 #[cfg(test)]
 mod tests {
     use super::*;
-    use parity_scale_codec::Encode;
+    use codec::Encode;
 
     /// Proposal 镜像从链端字段序编码的 golden 逐字节解码一致。
     #[test]

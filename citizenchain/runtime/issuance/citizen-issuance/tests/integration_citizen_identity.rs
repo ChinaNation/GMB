@@ -149,6 +149,20 @@ fn citizen_cid_number(tag: &str) -> Vec<u8> {
     .into_bytes()
 }
 
+/// 占号先行:身份写入前必须先占号(注册局夹具 100/200,作用域 43/4301)。
+fn occupy_tag(tag: &str) {
+    assert_ok!(CitizenIdentity::occupy_cid(
+        RuntimeOrigin::signed(100),
+        200,
+        citizen_cid_number(tag)
+            .try_into()
+            .expect("cid number should fit"),
+        [7u8; 32],
+        b"43".to_vec().try_into().expect("province should fit"),
+        b"4301".to_vec().try_into().expect("city should fit"),
+    ));
+}
+
 fn payload(wallet_account: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64> {
     VotingIdentityPayload {
         cid_number: cid_number
@@ -173,6 +187,9 @@ fn valid_signature() -> citizen_identity::pallet::SignatureOf<Test> {
 #[test]
 fn register_voting_identity_triggers_reward_issuance() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("0001");
+
         let cid_number = &citizen_cid_number("0001");
         let cid_number_hash = <Test as frame_system::Config>::Hashing::hash(cid_number);
 
@@ -193,6 +210,10 @@ fn register_voting_identity_triggers_reward_issuance() {
 #[test]
 fn updating_existing_identity_does_not_issue_second_reward() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("0001");
+        occupy_tag("0002");
+
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
@@ -224,6 +245,9 @@ fn updating_existing_identity_does_not_issue_second_reward() {
 #[test]
 fn max_reward_cap_is_applied_from_identity_callback() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("CAP");
+
         citizen_issuance::RewardedCount::<Test>::put(CITIZEN_ISSUANCE_MAX_COUNT);
 
         assert_ok!(CitizenIdentity::register_voting_identity(

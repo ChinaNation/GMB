@@ -20,6 +20,9 @@ pub trait WeightInfo {
     fn update_candidate_identity() -> Weight;
     fn revoke_identity() -> Weight;
     fn start_population_snapshot() -> Weight;
+    fn occupy_cid() -> Weight;
+    fn occupy_cids_batch(n: u32) -> Weight;
+    fn revoke_cid() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -65,6 +68,27 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
             .saturating_add(T::DbWeight::get().reads(2))
             .saturating_add(T::DbWeight::get().writes(2))
     }
+
+    fn occupy_cid() -> Weight {
+        Weight::from_parts(30_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 4_000))
+            .saturating_add(T::DbWeight::get().reads(2))
+            .saturating_add(T::DbWeight::get().writes(1))
+    }
+
+    fn occupy_cids_batch(n: u32) -> Weight {
+        Weight::from_parts(10_000_000, 0)
+            .saturating_add(Weight::from_parts(25_000_000, 3_000).saturating_mul(n.into()))
+            .saturating_add(T::DbWeight::get().reads(1))
+            .saturating_add(T::DbWeight::get().reads_writes(1, 1).saturating_mul(n.into()))
+    }
+
+    fn revoke_cid() -> Weight {
+        Weight::from_parts(55_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 8_000))
+            .saturating_add(T::DbWeight::get().reads(5))
+            .saturating_add(T::DbWeight::get().writes(11))
+    }
 }
 
 impl WeightInfo for () {
@@ -108,5 +132,26 @@ impl WeightInfo for () {
             .saturating_add(Weight::from_parts(0, 4_000))
             .saturating_add(RocksDbWeight::get().reads(2))
             .saturating_add(RocksDbWeight::get().writes(2))
+    }
+
+    fn occupy_cid() -> Weight {
+        Weight::from_parts(30_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 4_000))
+            .saturating_add(RocksDbWeight::get().reads(2))
+            .saturating_add(RocksDbWeight::get().writes(1))
+    }
+
+    fn occupy_cids_batch(n: u32) -> Weight {
+        Weight::from_parts(10_000_000, 0)
+            .saturating_add(Weight::from_parts(25_000_000, 3_000).saturating_mul(n.into()))
+            .saturating_add(RocksDbWeight::get().reads(1))
+            .saturating_add(RocksDbWeight::get().reads_writes(1, 1).saturating_mul(n.into()))
+    }
+
+    fn revoke_cid() -> Weight {
+        Weight::from_parts(55_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 8_000))
+            .saturating_add(RocksDbWeight::get().reads(5))
+            .saturating_add(RocksDbWeight::get().writes(11))
     }
 }

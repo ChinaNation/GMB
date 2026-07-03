@@ -14,7 +14,7 @@ use super::chain_propose::ChapterArg;
 use super::model::{house_ref, to_law_chapters, LawView};
 use crate::core::chain_url;
 use crate::core::db::Db;
-use parity_scale_codec::Decode;
+use codec::Decode;
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 
 const TIER_CONSTITUTION: u8 = 0;
@@ -332,8 +332,8 @@ pub async fn fetch_law_version_label(
 mod tests {
     use super::super::chain_propose::{ArticleArg, ClauseArg, SectionArg};
     use super::*;
+    use codec::Encode;
     use legislation_yuan::{LawStatus, Tier, VoteType};
-    use parity_scale_codec::Encode;
 
     fn sample_chapters() -> Vec<ChapterArg> {
         vec![ChapterArg {

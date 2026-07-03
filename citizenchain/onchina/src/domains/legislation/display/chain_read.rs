@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use parity_scale_codec::{Decode, Encode};
+use codec::{Decode, Encode};
 use subxt::{dynamic, OnlineClient, PolkadotConfig};
 
 use crate::core::chain_runtime::storage_key_suffix;
@@ -99,7 +99,7 @@ pub(crate) async fn fetch_house_ballots(proposal_id: u64) -> Result<HashMap<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use parity_scale_codec::Encode;
+    use codec::Encode;
 
     /// 活跃提案 ID 列表:`BoundedVec<u64>` 与 `Vec<u64>` 同编码,镜像 decode 一致。
     #[test]

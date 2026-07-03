@@ -122,6 +122,45 @@ fn name(bytes: &[u8]) -> CitizenNameBound {
     bytes.to_vec().try_into().expect("citizen name should fit")
 }
 
+/// 测试承诺哈希:由 tag 填充,幂等续用用同值。
+fn commitment_for(tag: &str) -> [u8; 32] {
+    let mut c = [0u8; 32];
+    let bytes = tag.as_bytes();
+    let n = bytes.len().min(32);
+    c[..n].copy_from_slice(&bytes[..n]);
+    c
+}
+
+/// 占号先行:身份写入前必须先占号(注册局夹具 100/200,作用域 43/4301)。
+fn occupy_tag(tag: &str) {
+    assert_ok!(CitizenIdentity::occupy_cid(
+        RuntimeOrigin::signed(100),
+        200,
+        cid(&citizen_cid_number(tag)),
+        commitment_for(tag),
+        code(b"43"),
+        code(b"4301"),
+    ));
+}
+
+/// 按 tag 生成真实规则公权机构号(市政府 CGOV),供家族拒绝用例。
+fn public_cid_number(tag: &str) -> alloc::vec::Vec<u8> {
+    primitives::cid::generator::generate_cid_number(
+        primitives::cid::generator::GenerateCidNumberInput {
+            account_pubkey: tag,
+            p1: "0",
+            province_code: "GD",
+            province_name: "广东省",
+            city_code: "001",
+            city_name: "荔湾市",
+            year: "2026",
+            institution: "CGOV",
+        },
+    )
+    .expect("public cid should generate")
+    .into_bytes()
+}
+
 fn valid_signature() -> pallet::SignatureOf<Test> {
     b"valid".to_vec().try_into().expect("signature should fit")
 }
@@ -158,6 +197,9 @@ fn town_scope() -> PopulationScope {
 #[test]
 fn register_voting_identity_stores_identity_and_counts_scope() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("0001");
+
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
@@ -179,6 +221,9 @@ fn register_voting_identity_stores_identity_and_counts_scope() {
 #[test]
 fn duplicate_cid_cannot_move_to_another_wallet_account() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("0001");
+
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
@@ -201,6 +246,10 @@ fn duplicate_cid_cannot_move_to_another_wallet_account() {
 #[test]
 fn updating_same_account_replaces_cid_without_double_counting() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("0001");
+        occupy_tag("0002");
+
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
@@ -233,6 +282,9 @@ fn updating_same_account_replaces_cid_without_double_counting() {
 #[test]
 fn candidate_identity_requires_full_profile_and_enables_candidate_reader() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("CANDIDATE");
+
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
             200,
@@ -249,6 +301,9 @@ fn candidate_identity_requires_full_profile_and_enables_candidate_reader() {
 #[test]
 fn revoke_identity_marks_status_and_removes_population_count() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("REVOKE");
+
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
             200,
@@ -272,6 +327,9 @@ fn revoke_identity_marks_status_and_removes_population_count() {
 #[test]
 fn population_snapshot_reads_current_scope_count() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("0001");
+
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
@@ -308,6 +366,9 @@ fn invalid_citizen_code_is_rejected() {
 #[test]
 fn expired_passport_cannot_vote_but_still_counts_in_population() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("EXPIRED");
+
         let mut payload = voting_payload(1, &citizen_cid_number("EXPIRED"));
         payload.passport_valid_from = 20200101;
         payload.passport_valid_until = 20250101;
@@ -330,6 +391,9 @@ fn expired_passport_cannot_vote_but_still_counts_in_population() {
 #[test]
 fn not_yet_valid_passport_cannot_vote() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("FUTURE");
+
         let mut payload = voting_payload(1, &citizen_cid_number("FUTURE"));
         payload.passport_valid_from = 20300101;
         payload.passport_valid_until = 20400101;
@@ -348,6 +412,9 @@ fn not_yet_valid_passport_cannot_vote() {
 #[test]
 fn candidate_identity_stores_sex_and_public_profile() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("SEX");
+
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
             200,
@@ -372,6 +439,9 @@ fn current_date_int_matches_fixed_time() {
 #[test]
 fn under_sixteen_cannot_register_onchain_identity() {
     new_test_ext().execute_with(|| {
+        // 占号先行:身份写入前置。
+        occupy_tag("UNDERAGE");
+
         let mut payload = voting_payload(1, &citizen_cid_number("UNDERAGE"));
         payload.citizen_age_years = 15;
 
@@ -414,6 +484,221 @@ fn non_citizen_family_code_is_rejected() {
                 valid_signature(),
             ),
             Error::<Test>::InvalidCitizenCode
+        );
+    });
+}
+
+#[test]
+fn occupy_cid_is_idempotent_for_same_registrar_and_commitment() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("OCC-1");
+        // 同注册局+同承诺重复提交:幂等放行(落库失败恢复路径)。
+        occupy_tag("OCC-1");
+        // 承诺不同:视为撞号,拒绝。
+        assert_noop!(
+            CitizenIdentity::occupy_cid(
+                RuntimeOrigin::signed(100),
+                200,
+                cid(&citizen_cid_number("OCC-1")),
+                commitment_for("OTHER"),
+                code(b"43"),
+                code(b"4301"),
+            ),
+            Error::<Test>::CidAlreadyOccupied
+        );
+    });
+}
+
+#[test]
+fn occupy_cid_rejects_unauthorized_registrar_and_bad_number() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            CitizenIdentity::occupy_cid(
+                RuntimeOrigin::signed(999),
+                200,
+                cid(&citizen_cid_number("OCC-2")),
+                commitment_for("OCC-2"),
+                code(b"43"),
+                code(b"4301"),
+            ),
+            Error::<Test>::UnauthorizedRegistrar
+        );
+        // 公权机构号打公民占号入口:家族断言拒绝。
+        assert_noop!(
+            CitizenIdentity::occupy_cid(
+                RuntimeOrigin::signed(100),
+                200,
+                cid(&public_cid_number("OCC-2")),
+                commitment_for("OCC-2"),
+                code(b"43"),
+                code(b"4301"),
+            ),
+            Error::<Test>::InvalidCitizenCode
+        );
+    });
+}
+
+#[test]
+fn occupy_cids_batch_rolls_back_entirely_on_any_conflict() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("B-TAKEN");
+        let items: CidOccupyItemsBound = alloc::vec![
+            CidOccupyItem {
+                cid_number: cid(&citizen_cid_number("B-1")),
+                commitment: commitment_for("B-1"),
+            },
+            CidOccupyItem {
+                cid_number: cid(&citizen_cid_number("B-TAKEN")),
+                commitment: commitment_for("CONFLICT"),
+            },
+        ]
+        .try_into()
+        .expect("batch fits");
+        assert_noop!(
+            CitizenIdentity::occupy_cids_batch(
+                RuntimeOrigin::signed(100),
+                200,
+                items,
+                code(b"43"),
+                code(b"4301"),
+            ),
+            Error::<Test>::CidAlreadyOccupied
+        );
+        // 整笔回滚:B-1 未被占。
+        assert!(CidRegistry::<Test>::get(cid(&citizen_cid_number("B-1"))).is_none());
+
+        // 全部合法则整批占号成功。
+        let ok_items: CidOccupyItemsBound = alloc::vec![
+            CidOccupyItem {
+                cid_number: cid(&citizen_cid_number("B-2")),
+                commitment: commitment_for("B-2"),
+            },
+            CidOccupyItem {
+                cid_number: cid(&citizen_cid_number("B-3")),
+                commitment: commitment_for("B-3"),
+            },
+        ]
+        .try_into()
+        .expect("batch fits");
+        assert_ok!(CitizenIdentity::occupy_cids_batch(
+            RuntimeOrigin::signed(100),
+            200,
+            ok_items,
+            code(b"43"),
+            code(b"4301"),
+        ));
+        assert!(CidRegistry::<Test>::get(cid(&citizen_cid_number("B-2"))).is_some());
+        assert!(CidRegistry::<Test>::get(cid(&citizen_cid_number("B-3"))).is_some());
+    });
+}
+
+#[test]
+fn register_without_occupation_is_rejected() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(100),
+                200,
+                voting_payload(1, &citizen_cid_number("NO-OCC")),
+                valid_signature(),
+            ),
+            Error::<Test>::CidNotOccupied
+        );
+    });
+}
+
+#[test]
+fn revoke_cid_tombstones_and_revokes_bound_identity() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("RV-1");
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            200,
+            voting_payload(1, &citizen_cid_number("RV-1")),
+            valid_signature(),
+        ));
+        assert_eq!(CountryVotingCount::<Test>::get(), 1);
+
+        assert_ok!(CitizenIdentity::revoke_cid(
+            RuntimeOrigin::signed(100),
+            200,
+            cid(&citizen_cid_number("RV-1")),
+        ));
+        // 登记表墓碑 + 身份联动吊销 + 退出人口分母。
+        let rec = CidRegistry::<Test>::get(cid(&citizen_cid_number("RV-1"))).expect("record kept");
+        assert_eq!(rec.status, CidRecordStatus::Revoked);
+        assert_eq!(
+            VotingIdentityByAccount::<Test>::get(1)
+                .expect("identity kept")
+                .citizen_status,
+            CitizenStatus::Revoked
+        );
+        assert_eq!(CountryVotingCount::<Test>::get(), 0);
+
+        // 再吊销:已墓碑。
+        assert_noop!(
+            CitizenIdentity::revoke_cid(
+                RuntimeOrigin::signed(100),
+                200,
+                cid(&citizen_cid_number("RV-1")),
+            ),
+            Error::<Test>::CidAlreadyRevoked
+        );
+        // 墓碑号任何人不可再占(号码永不复用)。
+        assert_noop!(
+            CitizenIdentity::occupy_cid(
+                RuntimeOrigin::signed(100),
+                200,
+                cid(&citizen_cid_number("RV-1")),
+                commitment_for("RV-1"),
+                code(b"43"),
+                code(b"4301"),
+            ),
+            Error::<Test>::CidAlreadyOccupied
+        );
+        // 墓碑号也不能再注册身份:AccountByCid 映射保留,
+        // 归属检查先于墓碑检查拦截(双保险,谁先触发都拒绝)。
+        assert_noop!(
+            CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(100),
+                200,
+                voting_payload(2, &citizen_cid_number("RV-1")),
+                valid_signature(),
+            ),
+            Error::<Test>::CidAlreadyRegisteredToAnotherAccount
+        );
+    });
+}
+
+#[test]
+fn changing_cid_tombstones_old_registry_record() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("CHG-A");
+        occupy_tag("CHG-B");
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            200,
+            voting_payload(1, &citizen_cid_number("CHG-A")),
+            valid_signature(),
+        ));
+        assert_ok!(CitizenIdentity::update_voting_identity(
+            RuntimeOrigin::signed(100),
+            200,
+            voting_payload(1, &citizen_cid_number("CHG-B")),
+            valid_signature(),
+        ));
+        // 换号 = 旧号登记表墓碑,永不复用。
+        assert_eq!(
+            CidRegistry::<Test>::get(cid(&citizen_cid_number("CHG-A")))
+                .expect("old record kept")
+                .status,
+            CidRecordStatus::Revoked
+        );
+        assert_eq!(
+            CidRegistry::<Test>::get(cid(&citizen_cid_number("CHG-B")))
+                .expect("new record kept")
+                .status,
+            CidRecordStatus::Active
         );
     });
 }
