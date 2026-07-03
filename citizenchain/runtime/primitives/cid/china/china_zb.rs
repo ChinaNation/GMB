@@ -1,9 +1,5 @@
-//! 汇总 runtime/primitives/cid/china 目录下所有制度保留地址
-//! （main_account + fee_account + stake_account + SAFETY_FUND_ACCOUNT）。
-//! 用于禁止 public-manage/private-manage 抢注这些机构地址。
-//!
-//! 派生统一走 `primitives::core_const::GMB` + op_tag，由
-//! `scripts/gmb.py` 一次性生成，禁止手改。
+//! 内置机构制度保留地址汇总。
+//! 由生成脚本一次性生成,用于禁止抢注。
 
 use hex_literal::hex;
 
@@ -619,7 +615,7 @@ pub const CHINA_RESERVED_MAIN_ACCOUNTS: &[[u8; 32]; 609] = &[
     hex!("ffdd5f6b0ba8c48e289c86670606a4aa0b2800c8945e2abaf2180419564800bc"),
 ];
 
-/// 检查地址是否属于制度保留地址（静态常量数组二分查找）。
+/// 地址是否属于制度保留地址。
 pub fn is_reserved_main_account(address: &[u8; 32]) -> bool {
     CHINA_RESERVED_MAIN_ACCOUNTS.binary_search(address).is_ok()
 }

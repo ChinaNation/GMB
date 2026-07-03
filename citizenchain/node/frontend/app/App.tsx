@@ -1,4 +1,4 @@
-// 节点 UI 顶级 tab 栏：首页 / 挖矿 / 国储会 / 省储会 / 省储行 / 清算行 / 白皮书 / 公民宪法 / 设置。
+// 节点 UI 顶级 tab 栏：首页 / 挖矿 / 国家储委会 / 省储委会 / 省储行 / 清算行 / 白皮书 / 公民宪法 / 设置。
 import { useCallback, useEffect, useState } from 'react';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
@@ -86,8 +86,8 @@ export default function App() {
       <nav className="top-nav">
         <button className={tab === 'home' ? 'active' : ''} onClick={() => setTab('home')}>首页</button>
         <button className={tab === 'mining' ? 'active' : ''} onClick={() => setTab('mining')}>挖矿</button>
-        <button className={tab === 'nrc' ? 'active' : ''} onClick={() => setTab('nrc')}>国储会</button>
-        <button className={tab === 'prc' ? 'active' : ''} onClick={() => setTab('prc')}>省储会</button>
+        <button className={tab === 'nrc' ? 'active' : ''} onClick={() => setTab('nrc')}>国家储委会</button>
+        <button className={tab === 'prc' ? 'active' : ''} onClick={() => setTab('prc')}>省储委会</button>
         <button className={tab === 'prb' ? 'active' : ''} onClick={() => setTab('prb')}>省储行</button>
         <button className={tab === 'clearing-bank' ? 'active' : ''} onClick={() => setTab('clearing-bank')}>清算行</button>
         <button className={tab === 'whitepaper' ? 'active' : ''} onClick={() => setTab('whitepaper')}>白皮书</button>

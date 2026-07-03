@@ -8,7 +8,7 @@
 //! - Tier1 创世注册局(FRG):拥有 Tier2 全部业务能力,并额外管理联邦/市注册局管理员。
 //! - Tier2 下级注册局(CREG,公权子集):录入公民/机构 + 看本市注册局 + 只读本省联邦注册局。
 //! - 国家司法院(NJD):可登录控制台,本期只开只读「本机构管理员」位。
-//! - 国储会/省储会/省储行(NRC/PRC/PRB):使用节点桌面端,不归本控制台 → 空能力。
+//! - 国家储委会/省储委会/省储行(NRC/PRC/PRB):使用节点桌面端,不归本控制台 → 空能力。
 //! - 其余公权/私权/非法人机构:本期只开只读「本机构管理员」位(`can_view_own_admins`);
 //!   CRUD / 录入等具体功能待各机构功能落地时再开(机制就绪、不越权)。
 //!
@@ -146,7 +146,7 @@ pub(crate) fn capabilities_for(institution_code: &str) -> CapabilitySet {
     let Some(code) = institution_code_from_str(institution_code) else {
         return EMPTY;
     };
-    // 国储会/省储会/省储行使用节点桌面端,不进入 OnChina 网页控制台。
+    // 国家储委会/省储委会/省储行使用节点桌面端,不进入 OnChina 网页控制台。
     if matches!(code, NRC | PRC | PRB) {
         return EMPTY;
     }
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn reserve_governance_institutions_stay_out_of_onchina() {
-        // 国储会/省储会/省储行使用节点桌面端,不能因为同属公权码而拿到网页能力。
+        // 国家储委会/省储委会/省储行使用节点桌面端,不能因为同属公权码而拿到网页能力。
         for code in ["NRC", "PRC", "PRB"] {
             let capability = capabilities_for(code);
             assert!(

@@ -1,6 +1,6 @@
 //! # 联合投票 pallet (joint-vote)
 //!
-//! 国储会 / 省储会 / 省储行的加权多签投票模式 + 联合公投两阶段:
+//! 国家储委会 / 省储委会 / 省储行的加权多签投票模式 + 联合公投两阶段:
 //! - [`jointinternal`]:内部投票阶段 — 业务函数 `do_create_joint_proposal` /
 //!   `do_joint_vote` / `do_finalize_joint_timeout` 等。
 //! - [`jointreferendum`]:联合公投阶段 — 业务函数 `do_jointreferendum_vote` /

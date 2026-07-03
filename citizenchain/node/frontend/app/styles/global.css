@@ -965,7 +965,7 @@ select option:checked {
 }
 
 /* 治理节点卡片：3 列子网格，每列 = 1 个数字 + 对应名称，数字与名称上下对齐。
-   列顺序固定为国储会｜省储会｜省储行，与挖矿页内嵌网络统计卡片展示语义一致。 */
+   列顺序固定为国家储委会｜省储委会｜省储行，与挖矿页内嵌网络统计卡片展示语义一致。 */
 .governance-node-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

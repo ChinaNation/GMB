@@ -1,6 +1,6 @@
 //! 联合投票 — 内部投票阶段。
 //!
-//! 国储会 / 省储会 / 省储行管理员按机构投票,任一机构反对或超时都进入联合公投阶段(jointreferendum)。
+//! 国家储委会 / 省储委会 / 省储行管理员按机构投票,任一机构反对或超时都进入联合公投阶段(jointreferendum)。
 //!
 //! 业务函数挂在 `super::Pallet<T>` 上,在 super(lib.rs)的 #[pallet::call]
 //! `cast_admin` extrinsic 与 `JointVoteEngine` / `JointProposalFinalizer`

@@ -86,7 +86,7 @@ class _GovernanceDragData {
   final int index;
 }
 
-/// 治理 tab 视图(ADR-028 P2)：从统一目录按机构码过滤治理类机构(国储会/省储会/
+/// 治理 tab 视图(ADR-028 P2)：从统一目录按机构码过滤治理类机构(国家储委会/省储委会/
 /// 省储行),分类展示 + 拖拽排序;详情入口走统一机构详情页。替代旧 GovernanceListPage
 /// 静态烘焙注册表「列表」承载。
 ///
@@ -214,7 +214,7 @@ class _GovernanceTabState extends State<GovernanceTab> {
         const SizedBox(height: 20),
         _GovernanceSection(
           sectionKind: _GovernanceSectionKind.nationalCouncil,
-          title: '国储会',
+          title: '国家储委会',
           icon: Icons.account_balance,
           badgeColor: AppTheme.primaryDark,
           institutions: _national,
@@ -222,7 +222,7 @@ class _GovernanceTabState extends State<GovernanceTab> {
         ),
         _GovernanceSection(
           sectionKind: _GovernanceSectionKind.provincialCouncil,
-          title: '省储会',
+          title: '省储委会',
           icon: Icons.groups_2_outlined,
           iconAsset: _governanceProvincialCouncilIconAsset,
           badgeColor: AppTheme.primary,
@@ -347,7 +347,7 @@ class _GovernanceSection extends StatelessWidget {
               if (constraints.maxWidth <= 0) {
                 return const SizedBox.shrink();
               }
-              // 国储会虽横跨整行，但高度必须和省储会/省储行网格卡片保持一致。
+              // 国家储委会虽横跨整行，但高度必须和省储委会/省储行网格卡片保持一致。
               const crossAxisCount = 2;
               const crossAxisSpacing = 8.0;
               final childAspectRatio = constraints.maxWidth < 360 ? 2.6 : 2.9;
@@ -557,7 +557,7 @@ class _GovernanceCard extends StatelessWidget {
                 Expanded(
                   // 机构卡片不再显示名称左侧图标，只保留名称和右箭头。
                   child: Text(
-                    institution.displayName,
+                    institution.cidShortNameOrFullName,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -611,7 +611,7 @@ class _GovernanceIconBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(7),
       ),
       child: Center(
-        // 省储会/省储行使用指定 SVG 图案；国储会使用 Material 图标。
+        // 省储委会/省储行使用指定 SVG 图案；国家储委会使用 Material 图标。
         child: asset == null
             ? Icon(icon, size: iconSize, color: color)
             : SvgPicture.asset(

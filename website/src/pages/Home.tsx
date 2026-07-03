@@ -3,7 +3,7 @@ import GlowCard from '../components/GlowCard'
 
 const stats = [
   { value: '2.23万亿', label: '固定发行合计 (GMB)', suffix: '' },
-  { value: '44', label: '权威节点（国储会+省储会）', suffix: '' },
+  { value: '44', label: '权威节点（国家储委会+省储委会）', suffix: '' },
   { value: '43', label: '权益节点（省储行）', suffix: '' },
   { value: '4', label: '链上投票体系', suffix: '' },
 ]

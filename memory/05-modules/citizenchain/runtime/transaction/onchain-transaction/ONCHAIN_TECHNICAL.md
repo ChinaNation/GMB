@@ -4,7 +4,7 @@
 ### 0.1 核心职责
 `onchain-transaction` 的功能需求是：
 - 按五类费用模型收取交易基础费：投票交易费、链上交易费、链下交易费、免费、未知拒绝。
-- 支持按制度规则把手续费分配给全节点、国储会手续费账户与安全基金账户。
+- 支持按制度规则把手续费分配给全节点、国家储委会手续费账户与安全基金账户。
 - 支持代付账户与交易费用分类策略由 runtime 注入。
 
 ### 0.2 功能边界
@@ -25,7 +25,7 @@
 - 已扣手续费必须按常量 `ONCHAIN_FEE_FULLNODE_PERCENT`、`ONCHAIN_FEE_NRC_PERCENT`、`ONCHAIN_FEE_SAFETY_FUND_PERCENT` 分配。
 - 三项分账比例必须固定总和为 `100`，避免"名为百分比、实为任意权重"的语义漂移。
 - 全节点分成（80%）必须仅发给"当前区块作者绑定的钱包地址"；若作者不存在或未绑定钱包，该份额自动销毁。
-- 国储会手续费账户分成（10%）必须仅发给 `NrcAccountProvider` 提供的账户（`NRC_FEIYONG_ADDRESS`）；若账户缺失或无法入账，该份额自动销毁。
+- 国家储委会手续费账户分成（10%）必须仅发给 `NrcAccountProvider` 提供的账户（`NRC_FEIYONG_ADDRESS`）；若账户缺失或无法入账，该份额自动销毁。
 - 安全基金分成（10%）必须转入 `SafetyFundAccountProvider` 提供的安全基金账户（当前 runtime 映射到 `SAFETY_FUND_ACCOUNT`）。
 - tip 与基础手续费必须走同一条 Router 分账路径，避免出现两套分账口径。
 
@@ -126,7 +126,7 @@
 
 分账比例（来自 `primitives::fee_policy`，2026-05-03 起单一权威源）：
 - 全节点分成：`ONCHAIN_FEE_FULLNODE_PERCENT`（80%）
-- 国储会手续费账户分成：`ONCHAIN_FEE_NRC_PERCENT`（10%）
+- 国家储委会手续费账户分成：`ONCHAIN_FEE_NRC_PERCENT`（10%）
 - 安全基金账户分成：`ONCHAIN_FEE_SAFETY_FUND_PERCENT`（10%）
 
 处理顺序：
@@ -226,8 +226,8 @@
 - `AuthorMissing`：区块作者未找到，全节点份额销毁
 - `WalletUnbound`：作者已找到但未绑定奖励钱包，全节点份额销毁
 - `FullnodeResolveFailed`：奖励钱包入账失败，全节点份额销毁
-- `NrcMissing`：国储会手续费账户未配置，NRC 份额销毁
-- `NrcResolveFailed`：国储会手续费账户入账失败，NRC 份额销毁
+- `NrcMissing`：国家储委会手续费账户未配置，NRC 份额销毁
+- `NrcResolveFailed`：国家储委会手续费账户入账失败，NRC 份额销毁
 - `SafetyFundResolveFailed`：安全基金账户入账失败，安全基金份额销毁
 
 出现上述告警时，优先检查：

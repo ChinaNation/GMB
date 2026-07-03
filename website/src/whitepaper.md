@@ -7,17 +7,18 @@
 
   [1.1. 目的](#11目的)
   [1.2. 名称](#12名称)
-  [1.3. 发行](#13发行)
-  [1.4. 创世理念](#14创世理念)
-  [1.5. 去中心化](#15去中心化)
+  [1.3. 发行机构](#13发行机构)
+  [1.4. 发行量](#14发行量)
+  [1.5. 创世理念](#15创世理念)
+  [1.6. 去中心化](#16去中心化)
   </details>
 
 - <details>
   <summary>2. 节点设置</summary>
 
   [2.1. 节点概览](#21节点概览)
-  [2.2. 国储会权威节点](#22国储会权威节点)
-  [2.3. 省储会权威节点](#23省储会权威节点)
+  [2.2. 国家储委会权威节点](#22国家储委会权威节点)
+  [2.3. 省储委会权威节点](#23省储委会权威节点)
   [2.4. 省储行权益节点](#24省储行权益节点)
   [2.5. 全节点](#25全节点)
   [2.6. 轻节点：公民/访客](#26轻节点公民访客)
@@ -26,7 +27,6 @@
 - <details>
   <summary>3. 发行与销毁</summary>
 
-  [3.0. 发行与销毁总览](#30发行与销毁总览)
   [3.1. 创世发行](#31创世发行)
   [3.2. 省储行创立发行与质押利息](#32省储行创立发行与质押利息)
   [3.3. 全节点发行](#33全节点发行)
@@ -110,8 +110,6 @@
 * 名称：公民链（英文：CitizenChain），原生数字货币：公民币，符号：GMB；<br><span class="whitepaper-en">Name: 公民链, English name: CitizenChain. Native digital currency: Citizen Coin. Symbol: GMB.</span>
 * 单位：常用单位：元（YUAN），小数单位：分（FEN），元最小为1元，分最小为1分，100分等于1元，统一使用分为系统计算单位，使用元为前端展示单位。<br><span class="whitepaper-en">Units: the common unit is yuan (YUAN), and the fractional unit is fen (FEN). The minimum yuan unit is 1 yuan, the minimum fen unit is 1 fen, and 100 fen equals 1 yuan. The system uniformly uses fen as the calculation unit and yuan as the frontend display unit.</span>
 
-### 1.2.1.术语与命名约定<br><span class="whitepaper-heading-en">1.2.1. Terminology and Naming Conventions</span>
-
 * 本白皮书中的中文名称、英文名称和系统名称均以本节为统一约定，全文统一使用本节名称、缩写和系统称谓。<br><span class="whitepaper-en">The Chinese names, English names, and system names in this whitepaper are uniformly defined in this section. The entire whitepaper uses the names, abbreviations, and system terms defined here.</span>
 
 ```
@@ -131,24 +129,22 @@
 | 参选范围                | candidacy scope                               | 公民按出生地参与被选举或出生地类选举的地域范围        |
 ```
 
-## 1.3.发行<br><span class="whitepaper-heading-en">1.3. Issuance</span>
+## 1.3.发行机构<br><span class="whitepaper-heading-en">1.3. Issuing Institution</span>
 
-### 1.3.1.发行机构<br><span class="whitepaper-heading-en">1.3.1. Issuing Institution</span>
-
-* 国家公民储备委员会（National Citizen Reserve Committee），简称：国储会（National Reserve Committee）；<br><span class="whitepaper-en">The issuing institution is the National Citizen Reserve Committee, abbreviated as the National Reserve Committee.</span>
+* 国家公民储备委员会（National Citizen Reserve Committee），简称：国家储委会（National Reserve Committee）；<br><span class="whitepaper-en">The issuing institution is the National Citizen Reserve Committee, abbreviated as the National Reserve Committee.</span>
 * 依据《公民宪法》公民储备委员会体系由1个国家公民储备委员会、43个省公民储备委员会和43个省公民储备银行组成。<br><span class="whitepaper-en">Pursuant to the Citizen Constitution, the Citizen Reserve Committee system consists of one National Citizen Reserve Committee, 43 Provincial Citizen Reserve Committees, and 43 Provincial Citizen Reserve Banks.</span>
 
-### 1.3.2.发行量<br><span class="whitepaper-heading-en">1.3.2. Issuance Amount</span>
+## 1.4.发行量<br><span class="whitepaper-heading-en">1.4. Issuance Amount</span>
 
 ```
 |     发行类型    |               发行金额/上限           |          释放/流通状态          |               执行模块/触发                |              账户归属/边界              |
 |:--------------:|:-----------------------------------:|:----------------------------:|:----------------------------------------:|:--------------------------------------:|
-|  创世发行       |  144,349,737,800.00元 (1443.49亿)    |   创世一次性流通               |  创世状态写入                             |  国储会主账户承接余额，19名国储会创世管理员各预置1000万元 |
+|  创世发行       |  144,349,737,800.00元 (1443.49亿)    |   创世一次性流通               |  创世状态写入                             |  国家储委会主账户承接余额，19名国家储委会创世管理员各预置1000万元 |
 |  省储行创立发行  |  144,349,737,800.00元 (1443.49亿)    |   永久质押                    |  创世状态写入+省储行常量                   |  43个省储行无私钥永久质押账户              |
 |  省储行质押利息  |    72,896,617,589.00元 (728.97亿)    |   100年逐年释放               |  provincialbank-interest模块，每87,600块结算一次 |  43个省储行多签治理账户                   |
 |  全节点发行     |    99,989,990,001.00元 (999.89亿)    |   第1至9,999,999块逐块释放      |  fullnode-issuance模块，出块时触发          |  出块矿工账户或其绑定奖励钱包              |
 |  公民发行       | 1,571,981,633,622.00元 (1.57万亿)    |   首次链上投票身份登记后逐个释放   |  citizen-issuance模块，投票身份登记成功回调触发 |  完成投票身份登记的公民钱包账户，参选身份升级不重复发行 |
-|  两和基金发行    |  195,818,501,966.00元 (1958.18亿)    |   创世一次性流通               |  创世状态HE_FUND_ISSUANCE写入              |  国储会两和基金账户                       |
+|  两和基金发行    |  195,818,501,966.00元 (1958.18亿)    |   创世一次性流通               |  创世状态HE_FUND_ISSUANCE写入              |  国家储委会两和基金账户                       |
 |  已确定发行合计  | 2,229,386,218,778.00元 (2.23万亿)    |   按上述规则释放或质押           |  固定发行合计，不含决议发行                  |  不含后续治理决议新增发行                  |
 |  决议发行       |  按单个提案金额执行，受链上限额约束       |   提案通过后一次性执行           |  resolution-issuance模块+联合投票回调       |  仅能发行至链上允许的合法收款账户集合        |
 ```
@@ -171,12 +167,12 @@
 * 上述发行金额以元为展示单位，链上以分为计算单位；固定发行合计为2,229,386,218,778.00元，不包含后续决议发行。<br><span class="whitepaper-en">The amounts above are displayed in yuan while on-chain calculation uses fen. The fixed determined issuance total is 2,229,386,218,778.00 yuan, excluding later resolution issuance.</span>
 * 决议发行不是创世固定发行的一部分，只能在公民储备委员会联合会议决议、链上联合投票和发行模块限额校验均通过后执行；交易手续费不属于发行，销毁会减少链上总供应量。<br><span class="whitepaper-en">Resolution issuance is not part of fixed genesis issuance. It may execute only after resolution of the Joint Meeting of the Citizen Reserve Committee, on-chain joint voting, and issuance-module limit checks all pass. Transaction fees are not issuance, and destruction reduces total on-chain supply.</span>
 
-## 1.4.创世理念<br><span class="whitepaper-heading-en">1.4. Genesis Philosophy</span>
+## 1.5.创世理念<br><span class="whitepaper-heading-en">1.5. Genesis Philosophy</span>
 
 * 公民宣言：先有人类后有国家，是公民建立国家，国家是公民的国家，是公民治理国家，而不是国家统治公民，公民没有爱国的义务；国家政权的建立其基本原则是保护公民的生命权、自由权、财产权、反抗压迫权和选举与被选举权不受任何的非法侵犯，当国家政权无法保证这一基本原则时，公民有权有义务推翻这个政权，建立一个以保障公民生命权、自由权、财产权、反抗压迫权和选举与被选举权为基本原则的政权。<br><span class="whitepaper-en">Citizen Declaration: humanity precedes the state. Citizens establish the state; the state belongs to citizens; citizens govern the state; the state does not rule over citizens; and citizens have no obligation of patriotism. The founding principle of state power is to protect citizens' rights to life, liberty, property, resistance against oppression, and to vote and stand for election from any unlawful infringement. When state power cannot guarantee this basic principle, citizens have both the right and the duty to overthrow that regime and establish a regime whose founding principle is the protection of citizens' rights to life, liberty, property, resistance against oppression, and to vote and stand for election.</span>
-* 国家名称与公民主义：中华民族联邦共和国国家名称是基于中华各民族悠久历史与璀璨文化的沉淀，全称为：中华民族联邦共和国，简称为：中华联邦；中华民族联邦共和国是致力于推行“公民主义”的———「公民治理国家（民治）、实现民主共和（民主）、保障公民权利（民权）、建设民生社会（民生）、复兴民族文化（民族）」———联邦制共和国。<br><span class="whitepaper-en">State name and Citizenism: the state name Federal Republic of the China Nation is rooted in the long history and splendid cultures of the various ethnic groups of the China Nation. Its full name is the Federal Republic of the China Nation, and its abbreviated name is the China Federation. The Federal Republic of the China Nation is a federal republic committed to advancing “Citizenism”: governance of the State by citizens (mínzhì), democratic republicanism (mínzhǔ), citizens’ rights (mínquán), a society of citizens’ livelihood security (mínshēng), and the revival of ethnic cultures (mínzú).</span>
+* 国家名称与公民主义：中华民族联邦共和国国家名称是基于中华各民族悠久历史与璀璨文化的沉淀，全称为：中华民族联邦共和国，简称为：中华联邦；中华民族联邦共和国是致力于推行“公民主义”的———「公民治理国家（民治）、实行民主共和（民主）、保障公民权利（民权）、建设民生社会（民生）、复兴民族文化（民族）」———联邦制共和国。<br><span class="whitepaper-en">State name and Citizenism: the state name Federal Republic of the China Nation is rooted in the long history and splendid cultures of the various ethnic groups of the China Nation. Its full name is the Federal Republic of the China Nation, and its abbreviated name is the China Federation. The Federal Republic of the China Nation is a federal republic committed to advancing “Citizenism”: governance of the State by citizens (mínzhì), democratic republicanism (mínzhǔ), citizens’ rights (mínquán), a society of citizens’ livelihood security (mínshēng), and the revival of ethnic cultures (mínzú).</span>
 
-## 1.5.去中心化<br><span class="whitepaper-heading-en">1.5. Decentralization</span>
+## 1.6.去中心化<br><span class="whitepaper-heading-en">1.6. Decentralization</span>
 
 * 公民链及其附属软件采用MIT开源协议，并在GitHub上开放源代码，以构建一套使开发者能快速、简易开发部署区块链应用的系统；<br><span class="whitepaper-en">CitizenChain and its affiliated software use the MIT open-source license and publish their source code on GitHub, with the goal of building a system that enables developers to develop and deploy blockchain applications quickly and easily.</span>
 * 公民链坚持去中心化，任何个人、任何组织都可以加入成为去中心化的节点（全节点、轻节点），及参与公民链的治理与技术开发。<br><span class="whitepaper-en">CitizenChain upholds decentralization. Any individual or organization may join as a decentralized node, including a full node or light node, and may participate in CitizenChain governance and technical development.</span>
@@ -187,36 +183,36 @@
 ## 2.1.节点概览<br><span class="whitepaper-heading-en">2.1. Node Overview</span>
 
 ```
-|  节点  |  国储会权威节点  |   初始省储会权威节点  |  初始省储行权益节点  |     全节点     |       清算行节点       |          轻节点       |
-|:-----:|:--------------:|:------------------:|:-----------------:|:-------------:|:--------------------:|:--------------------:|
-|  数量  |       1个      |        43个        |        43个        |      无限     |  符合资格并完成链上注册的全节点 |      公民/访客：无限    |
-|  功能  | 国家级治理与最终性 |  省级治理与最终性投票   | 永久质押与省储行治理  | PoW出块、归档、通信 | 扫码支付清算与收款方结算 | 钱包、公民身份确认、投票、通信 |
+|  节点  |  国家储委会权威节点  |   初始省储委会权威节点  |  初始省储行权益节点  |     全节点     |          轻节点       |
+|:-----:|:--------------:|:------------------:|:-----------------:|:-------------:|:--------------------:|
+|  数量  |       1个      |        43个        |        43个        |      无限     |      公民/访客：无限    |
+|  功能  | 国家级治理与最终性 |  省级治理与最终性投票   | 永久质押与省储行治理  | PoW出块、归档、通信、清算行、公权机构、私权机构等 | 钱包、公民身份确认、投票、通信 |
 ```
 
 <span class="whitepaper-en">Node overview:</span>
 
 ```
-| Node | National Citizen Reserve Committee Authority Node | Initial Provincial Citizen Reserve Committee Authority Nodes | Initial Provincial Citizen Reserve Bank Stake Nodes | Full Nodes | Clearing-Bank Nodes | Light Nodes |
-|:----:|:-----------------------------------------:|:----------------------------------------------------:|:------------------------------------------:|:----------:|:-------------------:|:-----------:|
-| Quantity | 1 | 43 | 43 | Unlimited | Eligible full nodes that complete on-chain registration | Citizens / visitors: unlimited |
-| Function | National governance and finality | Provincial governance and finality voting | Permanent staking and provincial reserve bank governance | PoW block production, archiving, communication | QR-payment clearing and recipient-bank settlement | Wallet, citizen identity, voting, communication |
+| Node | National Citizen Reserve Committee Authority Node | Initial Provincial Citizen Reserve Committee Authority Nodes | Initial Provincial Citizen Reserve Bank Stake Nodes | Full Nodes | Light Nodes |
+|:----:|:-----------------------------------------:|:----------------------------------------------------:|:------------------------------------------:|:----------:|:-----------:|
+| Quantity | 1 | 43 | 43 | Unlimited | Citizens / visitors: unlimited |
+| Function | National governance and finality | Provincial governance and finality voting | Permanent staking and provincial reserve bank governance | PoW block production, archiving, communication, clearing banks, public-power institutions, private institutions, etc. | Wallet, citizen identity, voting, communication |
 ```
 
 <img src="./assets/whitepaper-node-diagram.png" alt="节点图" width="1000">
 
-## 2.2.国储会权威节点<br><span class="whitepaper-heading-en">2.2. National Citizen Reserve Committee Authority Node</span>
+## 2.2.国家储委会权威节点<br><span class="whitepaper-heading-en">2.2. National Citizen Reserve Committee Authority Node</span>
 
-* 有1个国储会权威节点，不能增删改，拥有19个管理员，分别对应国家公民储备委员会的19个委员；<br><span class="whitepaper-en">There is one National Citizen Reserve Committee authority node. It cannot be added, deleted, or modified. It has 19 administrators, corresponding respectively to the 19 members of the National Citizen Reserve Committee.</span>
-* 国储会拥有19票投票权和4个多签名治理账户（主账户+费用账户+安全基金账户+两和基金账户），采用N=19，T≥13签名，通过则19票同时生效，反之则同时否决；<br><span class="whitepaper-en">The National Citizen Reserve Committee has 19 votes and four multisignature governance accounts: a main account, a fee account, a security fund account, and a Reconciliation Fund account. It uses N=19 and threshold T>=13 signatures. If approved, all 19 votes take effect simultaneously; otherwise, they are all rejected simultaneously.</span>
-* 国储会拥有发起“发行数字公民币、销毁数字公民币、协议升级、更换国储会多签管理员、增删改新省储会/新省储行”等提案权，承担数据归档和节点引导；<br><span class="whitepaper-en">The National Citizen Reserve Committee has the authority to initiate proposals including issuing digital Citizen Coins, destroying digital Citizen Coins, protocol upgrades, replacing National Citizen Reserve Committee multisig administrators, and adding, deleting, or modifying new Provincial Citizen Reserve Committees or Provincial Citizen Reserve Banks. It also undertakes data archiving and node bootstrapping.</span>
-* 国储会和省储会负责区块的最终性确认，由一套最终性验证密钥负责投票，此投票仅属于区块的最终性确认投票，投票由国储会1票+43个省储会每省1票=44票，大于等于30票即生成确定性最终性；<br><span class="whitepaper-en">The National Citizen Reserve Committee and Provincial Citizen Reserve Committees are responsible for block finality confirmation. A set of finality validation keys is responsible for voting, and this vote is only for block finality confirmation. The vote consists of one National Citizen Reserve Committee vote plus one vote from each of the 43 Provincial Citizen Reserve Committees, for a total of 44 votes. At least 30 votes generate deterministic finality.</span>
-* 国储会费用账户用于接收10%的链上交易手续费，且只能往主账户转账；安全基金账户用于接收10%的链上交易手续费，安全基金用于赔付用户因区块链技术原因造成的损失。<br><span class="whitepaper-en">The National Citizen Reserve Committee fee account receives 10% of on-chain transaction fees and may only transfer funds to the main account. The security fund account receives 10% of on-chain transaction fees, and the security fund is used to compensate users for losses caused by blockchain technology reasons.</span>
+* 有1个国家储委会权威节点，不能增删改，拥有19个管理员，分别对应国家公民储备委员会的19个委员；<br><span class="whitepaper-en">There is one National Citizen Reserve Committee authority node. It cannot be added, deleted, or modified. It has 19 administrators, corresponding respectively to the 19 members of the National Citizen Reserve Committee.</span>
+* 国家储委会拥有19票投票权和4个多签名治理账户（主账户+费用账户+安全基金账户+两和基金账户），采用N=19，T≥13签名，通过则19票同时生效，反之则同时否决；<br><span class="whitepaper-en">The National Citizen Reserve Committee has 19 votes and four multisignature governance accounts: a main account, a fee account, a security fund account, and a Reconciliation Fund account. It uses N=19 and threshold T>=13 signatures. If approved, all 19 votes take effect simultaneously; otherwise, they are all rejected simultaneously.</span>
+* 国家储委会拥有发起“发行数字公民币、销毁数字公民币、协议升级、更换国家储委会多签管理员、增删改新省储委会/新省储行”等提案权，承担数据归档和节点引导；<br><span class="whitepaper-en">The National Citizen Reserve Committee has the authority to initiate proposals including issuing digital Citizen Coins, destroying digital Citizen Coins, protocol upgrades, replacing National Citizen Reserve Committee multisig administrators, and adding, deleting, or modifying new Provincial Citizen Reserve Committees or Provincial Citizen Reserve Banks. It also undertakes data archiving and node bootstrapping.</span>
+* 国家储委会和省储委会负责区块的最终性确认，由一套最终性验证密钥负责投票，此投票仅属于区块的最终性确认投票，投票由国家储委会1票+43个省储委会每省1票=44票，大于等于30票即生成确定性最终性；<br><span class="whitepaper-en">The National Citizen Reserve Committee and Provincial Citizen Reserve Committees are responsible for block finality confirmation. A set of finality validation keys is responsible for voting, and this vote is only for block finality confirmation. The vote consists of one National Citizen Reserve Committee vote plus one vote from each of the 43 Provincial Citizen Reserve Committees, for a total of 44 votes. At least 30 votes generate deterministic finality.</span>
+* 国家储委会费用账户用于接收10%的链上交易手续费，且只能往主账户转账；安全基金账户用于接收10%的链上交易手续费，安全基金用于赔付用户因区块链技术原因造成的损失。<br><span class="whitepaper-en">The National Citizen Reserve Committee fee account receives 10% of on-chain transaction fees and may only transfer funds to the main account. The security fund account receives 10% of on-chain transaction fees, and the security fund is used to compensate users for losses caused by blockchain technology reasons.</span>
 
-## 2.3.省储会权威节点<br><span class="whitepaper-heading-en">2.3. Provincial Citizen Reserve Committee Authority Nodes</span>
+## 2.3.省储委会权威节点<br><span class="whitepaper-heading-en">2.3. Provincial Citizen Reserve Committee Authority Nodes</span>
 
-* 初始43个省，每省1个省储会权威节点，初始权威节点不能增删改，每个节点拥有9个管理员，分别对应省公民储备委员会的9个委员；<br><span class="whitepaper-en">There are initially 43 provinces, each with one Provincial Citizen Reserve Committee authority node. These initial authority nodes cannot be added, deleted, or modified. Each node has nine administrators, corresponding respectively to the nine members of the Provincial Citizen Reserve Committee.</span>
-* 每个省储会拥有1票投票权和2个多签名治理账户（主账户+费用账户），采用N=9，T≥6签名，签名通过则生效，反之则否决；<br><span class="whitepaper-en">Each Provincial Citizen Reserve Committee has one vote and two multisignature governance accounts: a main account and a fee account. It uses N=9 and threshold T>=6 signatures. If the signatures pass, the decision takes effect; otherwise, it is rejected.</span>
-* 省储会拥有发起“销毁数字公民币、更换省储会多签管理员、提案发行”等提案权，承担数据归档、节点引导和区块最终性投票。<br><span class="whitepaper-en">A Provincial Citizen Reserve Committee has the authority to initiate proposals including destroying digital Citizen Coins, replacing Provincial Citizen Reserve Committee multisig administrators, and proposing issuance. It undertakes data archiving, node bootstrapping, and block finality voting.</span>
+* 初始43个省，每省1个省储委会权威节点，初始权威节点不能增删改，每个节点拥有9个管理员，分别对应省公民储备委员会的9个委员；<br><span class="whitepaper-en">There are initially 43 provinces, each with one Provincial Citizen Reserve Committee authority node. These initial authority nodes cannot be added, deleted, or modified. Each node has nine administrators, corresponding respectively to the nine members of the Provincial Citizen Reserve Committee.</span>
+* 每个省储委会拥有1票投票权和2个多签名治理账户（主账户+费用账户），采用N=9，T≥6签名，签名通过则生效，反之则否决；<br><span class="whitepaper-en">Each Provincial Citizen Reserve Committee has one vote and two multisignature governance accounts: a main account and a fee account. It uses N=9 and threshold T>=6 signatures. If the signatures pass, the decision takes effect; otherwise, it is rejected.</span>
+* 省储委会拥有发起“销毁数字公民币、更换省储委会多签管理员、提案发行”等提案权，承担数据归档、节点引导和区块最终性投票。<br><span class="whitepaper-en">A Provincial Citizen Reserve Committee has the authority to initiate proposals including destroying digital Citizen Coins, replacing Provincial Citizen Reserve Committee multisig administrators, and proposing issuance. It undertakes data archiving, node bootstrapping, and block finality voting.</span>
 
 ## 2.4.省储行权益节点<br><span class="whitepaper-heading-en">2.4. Provincial Citizen Reserve Bank Stake Nodes</span>
 
@@ -243,16 +239,9 @@
 ****
 # 3.发行与销毁<br><span class="whitepaper-heading-en">3. Issuance and Destruction</span>
 
-## 3.0.发行与销毁总览<br><span class="whitepaper-heading-en">3.0. Issuance and Destruction Overview</span>
-
-* 公民币发行分为固定发行和决议发行：固定发行由创世状态、固定常量和链上投票身份登记规则确定；决议发行由公民储备委员会联合会议决议、链上联合投票和发行模块校验共同约束；<br><span class="whitepaper-en">Citizen Coin issuance is divided into fixed issuance and resolution issuance. Fixed issuance is determined by genesis state, fixed constants, and on-chain voting-identity registration rules. Resolution issuance is constrained jointly by resolution of the Joint Meeting of the Citizen Reserve Committee, on-chain joint voting, and issuance-module validation.</span>
-* 固定发行合计为2,229,386,218,778.00元，其中一部分在创世时流通，一部分永久质押，一部分按区块、年度或首次链上投票身份登记逐步释放；<br><span class="whitepaper-en">The fixed issuance total is 2,229,386,218,778.00 yuan. Part of it circulates at genesis, part is permanently staked, and part is released progressively by block height, annual settlement, or first on-chain voting-identity registration.</span>
-* 交易手续费不是新增发行；链上交易手续费按规则分配给全节点、国储会费用账户和安全基金，链下清算手续费由清算网络规则处理；<br><span class="whitepaper-en">Transaction fees are not new issuance. On-chain transaction fees are distributed under the rules to full nodes, the National Citizen Reserve Committee fee account, and the safety fund; off-chain clearing fees are handled under the clearing-network rules.</span>
-* 销毁由对应机构内部投票通过后执行，销毁结果直接减少账户余额和链上总供应量；低于 Existential Deposit (ED) 的账户清理属于账户生命周期规则。<br><span class="whitepaper-en">Destruction executes after approval by the corresponding institution's internal vote, directly reducing the account balance and total on-chain supply. Reaping accounts below the Existential Deposit (ED) belongs to the account lifecycle rule.</span>
-
 ## 3.1.创世发行<br><span class="whitepaper-heading-en">3.1. Genesis Issuance</span>
 
-* 创世发行144,349,737,800.00元数字公民币（1443.49亿元），以中共第7次人口普查数为准，每个中共国人发行100.00元数字公民币；创世状态中，19名国储会创世管理员各预置10,000,000.00元公民币，剩余创世发行余额写入国储会主账户。<br><span class="whitepaper-en">Genesis issuance is 144,349,737,800.00 yuan of digital Citizen Coins (144.349 billion yuan), based on the CCP's Seventh National Population Census. Each person under CCP rule is issued 100.00 yuan of digital Citizen Coins. In genesis state, each of the 19 National Citizen Reserve Committee genesis administrators receives a preset 10,000,000.00 Citizen Coins, and the remaining genesis issuance balance is written to the NRC main account.</span>
+* 创世发行144,349,737,800.00元数字公民币（1443.49亿元），以中共第7次人口普查数为准，每个中共国人发行100.00元数字公民币；创世状态中，19名国家储委会创世管理员各预置10,000,000.00元公民币，剩余创世发行余额写入国家储委会主账户。<br><span class="whitepaper-en">Genesis issuance is 144,349,737,800.00 yuan of digital Citizen Coins (144.349 billion yuan), based on the CCP's Seventh National Population Census. Each person under CCP rule is issued 100.00 yuan of digital Citizen Coins. In genesis state, each of the 19 National Citizen Reserve Committee genesis administrators receives a preset 10,000,000.00 Citizen Coins, and the remaining genesis issuance balance is written to the NRC main account.</span>
 
 ```
 中共第7次人口普查总人口数：1,443,497,378人   ｜    公民币创世发行量：144,349,737,800.00元
@@ -260,17 +249,17 @@
 
 <span class="whitepaper-en">CCP's Seventh National Population Census total population: 1,443,497,378 people | Citizen Coin genesis issuance: 144,349,737,800.00 yuan</span>
 
-* 国储会在公民链上的创世身份识别码为 `LN001-NRC0G-944805165-2026`，创世状态写入国储会主账户、费用账户、安全基金账户和两和基金账户；这些账户分别承接治理余额、链上交易费分账、安全基金和两和基金，不再使用旧版国储会身份识别码或旧版单一治理账户口径。<br><span class="whitepaper-en">The National Citizen Reserve Committee genesis identity identification code on CitizenChain is `LN001-NRC0G-944805165-2026`. Genesis state writes the NRC main account, fee account, safety-fund account, and Reconciliation Fund account. These accounts respectively carry governance balance, on-chain fee distribution, the safety fund, and the Reconciliation Fund, and the old NRC identity code and single-governance-account wording are no longer used.</span>
+* 国家储委会在公民链上的创世身份识别码为 `LN001-NRC0G-944805165-2026`，链端固定国家储委会主账户、费用账户、安全基金账户和两和基金账户；其中，创世发行余额写入主账户，两和基金发行写入两和基金账户，费用账户和安全基金账户用于后续链上交易费分账，不再使用旧版国家储委会身份识别码或旧版单一治理账户口径。<br><span class="whitepaper-en">The National Citizen Reserve Committee genesis identity identification code on CitizenChain is `LN001-NRC0G-944805165-2026`. The chain fixes the NRC main account, fee account, safety-fund account, and Reconciliation Fund account. The genesis-issuance balance is written to the main account, Reconciliation Fund issuance is written to the Reconciliation Fund account, and the fee account and safety-fund account are used for later on-chain transaction-fee distribution. The old NRC identity code and single-governance-account wording are no longer used.</span>
 
 ```
-国储会主账户：w5FeELKL18kHBGrhFpt6F91xuW1GWpr79CQ4fWgwMEzZtm1jU
-国储会费用账户：w5EPSwHc7WfFv4VhiRWochDVCZgftf8Jx5iZmEBhcbwrBZMfU
+国家储委会主账户：w5FeELKL18kHBGrhFpt6F91xuW1GWpr79CQ4fWgwMEzZtm1jU
+国家储委会费用账户：w5EPSwHc7WfFv4VhiRWochDVCZgftf8Jx5iZmEBhcbwrBZMfU
 安全基金账户：w5GTQvsevT7RNNnr963UDX4Kbm2bBEmjsjSaczhRBJX41UWvM
 两和基金账户：w5DGrDtSJvnxgztNZ8HuYprX4cNFcPCYA6RuTEzVys2Q1bjgi
 ```
 
 * 一个人在社会中享有若干权益的同时，同样应尽若干义务，尽了若干义务的，亦应享受若干权益；创世发行寓意每一个中共国人支付100.00元公民币，以支持“公民建国运动”，使全体中共国人共同建立中华民族联邦共和国。<br><span class="whitepaper-en">While a person enjoys certain rights and interests in society, that person should likewise fulfill certain obligations; and after fulfilling certain obligations, that person should likewise enjoy certain rights and interests. Genesis issuance symbolizes each person under CCP rule paying 100.00 Citizen Coins to support the Citizen Nation-Building Movement, so that all people under CCP rule jointly establish the Federal Republic of the China Nation.</span>
-* 创世发行只在创世状态中写入一次，链进入运行期后不得再次触发创世发行；国储会主账户余额和19名国储会创世管理员预置余额均属于创世状态分配，不是后续可重复调用的发行入口。<br><span class="whitepaper-en">Genesis issuance is written exactly once in genesis state. After the chain enters the operating period, genesis issuance cannot be triggered again. The NRC main-account balance and the preset balances of the 19 NRC genesis administrators are all part of genesis-state allocation and are not later repeatable issuance entries.</span>
+* 创世发行只在创世状态中写入一次，链进入运行期后不得再次触发创世发行；国家储委会主账户余额和19名国家储委会创世管理员预置余额均属于创世状态分配，不是后续可重复调用的发行入口。<br><span class="whitepaper-en">Genesis issuance is written exactly once in genesis state. After the chain enters the operating period, genesis issuance cannot be triggered again. The NRC main-account balance and the preset balances of the 19 NRC genesis administrators are all part of genesis-state allocation and are not later repeatable issuance entries.</span>
 
 ## 3.2.省储行创立发行与质押利息<br><span class="whitepaper-heading-en">3.2. Provincial Citizen Reserve Bank Founding Issuance and Staking Interest</span>
 
@@ -331,12 +320,12 @@
 
 * 两和基金发行是指历史和解与和平建国基金发行，发行目的是为了历史和解与和平建立民主自由的中华民族联邦共和国；中华民族的历史包袱太重，几千年的同室操戈、相互攻伐致使历史血债累累，但是，如果我们不从历史中汲取教训，继续争斗，即使再过数千年，这片土地上也不会长出自由、博爱的花朵；所以，需要从我们这一代人开始，与历史和解，把所有的仇恨化为明鉴，放下仇恨，以和平的方式建立一个自由、民主、博爱的国家；<br><span class="whitepaper-en">Reconciliation Fund issuance refers to the issuance of the Historical Reconciliation and Peaceful Nation-Building Fund. Its purpose is to achieve historical reconciliation and peace and to build a democratic and free Federal Republic of the China Nation. The China nation carries too heavy a historical burden: thousands of years of internecine strife and mutual slaughter have left a long trail of blood debts. Yet if we do not learn from history and keep fighting, then even after thousands more years no flowers of freedom and fraternity will grow on this land. Therefore, beginning with our generation, we must reconcile with history, turn all hatred into a clear mirror, lay down our hatred, and build a free, democratic, and fraternal nation by peaceful means.</span>
 * 两和基金发行额为195,818,501,966.00元（1958.18亿元），其中，1958代表大跃进、1850代表太平天国战争、1966代表文革运动，整组数据分别表达中华大地上死亡人数最多的政治运动、死亡人数最多的战争和人文倒退最严重的文化大革命运动，以此警醒世人勿重蹈覆辙；<br><span class="whitepaper-en">The Reconciliation Fund issuance amount is 195,818,501,966.00 yuan (195.818 billion yuan). In this figure, 1958 stands for the Great Leap Forward, 1850 for the Taiping Rebellion war, and 1966 for the Cultural Revolution — respectively the political movement with the highest death toll, the war with the highest death toll, and the Cultural Revolution that caused the most severe humanistic regression on the Chinese land — as a warning to the world never to repeat these tragedies.</span>
-* 两和基金仅用于赔偿因各类战争、运动或人祸中非正常死亡的同胞的后代，以及建设相关纪念警示场馆，由国储会两和基金账户持有，国储会使用内部投票管理基金；<br><span class="whitepaper-en">The Reconciliation Fund is used solely to compensate the descendants of compatriots who died abnormally in wars, political movements, or man-made disasters of all kinds, and to build related memorial and cautionary facilities. It is held by the National Citizen Reserve Committee's Reconciliation Fund account, and the National Citizen Reserve Committee manages the fund through internal votes.</span>
-* 两和基金在创世状态中一次性写入国储会两和基金账户，计入链上总供应量，但独立于创世发行、公民发行和决议发行，不提供运行期重复发行入口。<br><span class="whitepaper-en">The Reconciliation Fund is written once into the National Citizen Reserve Committee Reconciliation Fund account at genesis and counts toward total on-chain supply. It is independent from genesis issuance, citizen issuance, and resolution issuance, and provides no repeatable operating-period issuance entry point.</span>
+* 两和基金仅用于赔偿因各类战争、运动或人祸中非正常死亡的同胞的后代，以及建设相关纪念警示场馆，由国家储委会两和基金账户持有，国家储委会使用内部投票管理基金；<br><span class="whitepaper-en">The Reconciliation Fund is used solely to compensate the descendants of compatriots who died abnormally in wars, political movements, or man-made disasters of all kinds, and to build related memorial and cautionary facilities. It is held by the National Citizen Reserve Committee's Reconciliation Fund account, and the National Citizen Reserve Committee manages the fund through internal votes.</span>
+* 两和基金在创世状态中一次性写入国家储委会两和基金账户，计入链上总供应量，但独立于创世发行、公民发行和决议发行，不提供运行期重复发行入口。<br><span class="whitepaper-en">The Reconciliation Fund is written once into the National Citizen Reserve Committee Reconciliation Fund account at genesis and counts toward total on-chain supply. It is independent from genesis issuance, citizen issuance, and resolution issuance, and provides no repeatable operating-period issuance entry point.</span>
 
 ## 3.6.决议发行<br><span class="whitepaper-heading-en">3.6. Resolution Issuance</span>
 
-* 公民储备委员会体系成立后，由公民储备委员会联合会议决议发行数字公民币，经公民储备委员会联合会议决议通过后，由国储会或任意省储会权威节点提案发起决议发行，使用“联合投票”流程执行；联合投票全票通过的直接执行，非全票或超期的进入联合投票模块内的联合公投阶段，由联合公投结果决定是否执行；<br><span class="whitepaper-en">After the Citizen Reserve Committee system is established, digital Citizen Coins are issued by resolution of the Joint Meeting of the Citizen Reserve Committee. After that resolution is passed by the Joint Meeting of the Citizen Reserve Committee, the National Citizen Reserve Committee authority node or any Provincial Citizen Reserve Committee authority node may initiate a proposal to start resolution issuance, which is executed through the joint-vote process. If the joint vote is unanimous, execution occurs directly; if it is non-unanimous or times out, the proposal enters the joint referendum stage inside the joint-vote module, and execution depends on the joint referendum result.</span>
+* 公民储备委员会体系成立后，由公民储备委员会联合会议决议发行数字公民币，经公民储备委员会联合会议决议通过后，由国家储委会或任意省储委会权威节点提案发起决议发行，使用“联合投票”流程执行；联合投票全票通过的直接执行，非全票或超期的进入联合投票模块内的联合公投阶段，由联合公投结果决定是否执行；<br><span class="whitepaper-en">After the Citizen Reserve Committee system is established, digital Citizen Coins are issued by resolution of the Joint Meeting of the Citizen Reserve Committee. After that resolution is passed by the Joint Meeting of the Citizen Reserve Committee, the National Citizen Reserve Committee authority node or any Provincial Citizen Reserve Committee authority node may initiate a proposal to start resolution issuance, which is executed through the joint-vote process. If the joint vote is unanimous, execution occurs directly; if it is non-unanimous or times out, the proposal enters the joint referendum stage inside the joint-vote module, and execution depends on the joint referendum result.</span>
 * 决议发行子模块统一负责提案创建、联合投票结果接收、发行执行、执行幂等和暂停维护；发行只能由投票引擎回调触发，不能通过人工终结或绕过投票流程直接铸造；<br><span class="whitepaper-en">The resolution issuance submodule is uniformly responsible for proposal creation, receiving joint-vote results, issuance execution, execution idempotency, and pause-based maintenance. Issuance may be triggered only by a voting-engine callback and cannot be minted directly through manual finalization or by bypassing the voting process.</span>
 * 决议发行必须通过收款账户集合、金额合计、单次限额、累计限额、ED、暂停状态和防重放校验；提案收款账户必须与链上允许收款账户集合一致，不得在提案内临时指定任意私账。<br><span class="whitepaper-en">Resolution issuance must pass checks for recipient set, total allocation amount, single-issuance cap, cumulative cap, ED, pause state, and anti-replay. Proposal recipients must match the on-chain allowed recipient set and may not temporarily designate arbitrary private accounts inside the proposal.</span>
 * 适时发行纸质公民币，纸质公民币用以替换人民币，数字公民币与纸质公民币按1:1兑换，公民币与人民币及其他货币自由兑换；<br><span class="whitepaper-en">Paper Citizen Coins will be issued at the proper time to replace the renminbi. Digital Citizen Coins and paper Citizen Coins are exchanged at a 1:1 ratio, and Citizen Coins are freely exchangeable with renminbi and other currencies.</span>
@@ -344,8 +333,8 @@
 
 ## 3.7.销毁<br><span class="whitepaper-heading-en">3.7. Destruction</span>
 
-* 国储会权威节点可发起销毁所持有账户内的公民币，国储会发起销毁流程的，在国储会“内部投票”；<br><span class="whitepaper-en">The National Citizen Reserve Committee authority node may initiate destruction of Citizen Coins held in accounts it controls. When the National Citizen Reserve Committee initiates a destruction process, it is decided by an internal vote of the National Citizen Reserve Committee.</span>
-* 省储会权威节点可发起销毁所持有账户内的公民币，省储会发起销毁流程的，在该省储会“内部投票”；<br><span class="whitepaper-en">A Provincial Citizen Reserve Committee authority node may initiate destruction of Citizen Coins held in accounts it controls. When a Provincial Citizen Reserve Committee initiates a destruction process, it is decided by an internal vote of that Provincial Citizen Reserve Committee.</span>
+* 国家储委会权威节点可发起销毁所持有账户内的公民币，国家储委会发起销毁流程的，在国家储委会“内部投票”；<br><span class="whitepaper-en">The National Citizen Reserve Committee authority node may initiate destruction of Citizen Coins held in accounts it controls. When the National Citizen Reserve Committee initiates a destruction process, it is decided by an internal vote of the National Citizen Reserve Committee.</span>
+* 省储委会权威节点可发起销毁所持有账户内的公民币，省储委会发起销毁流程的，在该省储委会“内部投票”；<br><span class="whitepaper-en">A Provincial Citizen Reserve Committee authority node may initiate destruction of Citizen Coins held in accounts it controls. When a Provincial Citizen Reserve Committee initiates a destruction process, it is decided by an internal vote of that Provincial Citizen Reserve Committee.</span>
 * 省储行权益节点可发起销毁所持有账户内的公民币，省储行发起销毁流程的，在该省储行“内部投票”；<br><span class="whitepaper-en">A Provincial Citizen Reserve Bank stake node may initiate destruction of Citizen Coins held in accounts it controls. When a Provincial Citizen Reserve Bank initiates a destruction process, it is decided by an internal vote of that Provincial Citizen Reserve Bank.</span>
 * 决议销毁只能销毁提案主体自身控制账户中的公民币，不能替其他主体销毁；销毁执行时必须保留 ED，不能把账户销毁到违反账户生命周期规则的状态；<br><span class="whitepaper-en">Resolution destruction may destroy only Citizen Coins in accounts controlled by the proposing subject itself and may not destroy funds for another subject. Execution must preserve ED and may not destroy an account into a state that violates account lifecycle rules.</span>
 * 销毁通过链上余额扣减执行，销毁金额从总供应量中扣除；已通过但执行失败的销毁提案保留可重试状态，由投票引擎的已通过提案重试流程继续执行。<br><span class="whitepaper-en">Destruction is executed by reducing the on-chain balance, and the destroyed amount is deducted from total supply. A destruction proposal that has passed but failed during execution keeps a retryable passed state and continues through the voting engine's retry flow for passed proposals.</span>
@@ -406,7 +395,7 @@ GMB/
 ## 4.3.节点<br><span class="whitepaper-heading-en">4.3. Node</span>
 
 * 节点采用 libp2p 网络、RocksDB 存储、Blake2 哈希、sr25519 链上账户签名和 Ed25519 网络密钥；<br><span class="whitepaper-en">The node uses libp2p networking, RocksDB storage, Blake2 hashing, sr25519 on-chain account signatures, and Ed25519 network keys.</span>
-* 全节点通过 PoW 获得出块权，权威节点通过 GRANDPA 进行最终性投票；44 个权威节点由 1 个国储会权威节点和 43 个省储会权威节点组成；<br><span class="whitepaper-en">Full nodes obtain block-production rights through PoW, while authority nodes vote on finality through GRANDPA. The 44 authority nodes consist of one National Citizen Reserve Committee authority node and 43 Provincial Citizen Reserve Committee authority nodes.</span>
+* 全节点通过 PoW 获得出块权，权威节点通过 GRANDPA 进行最终性投票；44 个权威节点由 1 个国家储委会权威节点和 43 个省储委会权威节点组成；<br><span class="whitepaper-en">Full nodes obtain block-production rights through PoW, while authority nodes vote on finality through GRANDPA. The 44 authority nodes consist of one National Citizen Reserve Committee authority node and 43 Provincial Citizen Reserve Committee authority nodes.</span>
 * 桌面端负责启动、停止和观察本地节点，并在用户确认后启动本机链上中国平台。<br><span class="whitepaper-en">The desktop application starts, stops, and observes the local node, and starts the local OnChina platform only after user confirmation.</span>
 
 ## 4.4.链上中国<br><span class="whitepaper-heading-en">4.4. OnChina</span>
@@ -435,8 +424,8 @@ GMB/
 
 ### 5.2.2.联合投票<br><span class="whitepaper-heading-en">5.2.2. Joint Voting</span>
 
-* 联合投票用于国储会、省储会、省储行之间的共同治理事项，独立于选举投票，不得把联合公投阶段混写为公职选举。<br><span class="whitepaper-en">Joint voting is used for common-governance matters among the National Citizen Reserve Committee, Provincial Citizen Reserve Committees, and Provincial Citizen Reserve Banks. It is separate from election voting, and its referendum stage must not be treated as a public-office election.</span>
-* 机构联合投票阶段由国储会 19 票、43 个省储会 43 票、43 个省储行 43 票组成，共 105 票；全票通过则直接执行，非全票或超期则进入联合投票模块内部的联合公投阶段。<br><span class="whitepaper-en">The institutional joint-vote stage consists of 19 National Citizen Reserve Committee votes, 43 Provincial Citizen Reserve Committee votes, and 43 Provincial Citizen Reserve Bank votes, totaling 105 votes. Unanimous approval executes directly; non-unanimous approval or timeout enters the joint referendum stage inside the joint-vote module.</span>
+* 联合投票用于国家储委会、省储委会、省储行之间的共同治理事项，独立于选举投票，不得把联合公投阶段混写为公职选举。<br><span class="whitepaper-en">Joint voting is used for common-governance matters among the National Citizen Reserve Committee, Provincial Citizen Reserve Committees, and Provincial Citizen Reserve Banks. It is separate from election voting, and its referendum stage must not be treated as a public-office election.</span>
+* 机构联合投票阶段由国家储委会 19 票、43 个省储委会 43 票、43 个省储行 43 票组成，共 105 票；全票通过则直接执行，非全票或超期则进入联合投票模块内部的联合公投阶段。<br><span class="whitepaper-en">The institutional joint-vote stage consists of 19 National Citizen Reserve Committee votes, 43 Provincial Citizen Reserve Committee votes, and 43 Provincial Citizen Reserve Bank votes, totaling 105 votes. Unanimous approval executes directly; non-unanimous approval or timeout enters the joint referendum stage inside the joint-vote module.</span>
 * 联合公投只由提案快照中的认证公民参与，超过 50% 的可投票公民同意才通过；超期或未超过 50% 则否决。<br><span class="whitepaper-en">A joint referendum is participated in only by certified citizens in the proposal snapshot. It passes only when more than 50% of eligible voting citizens approve; timeout or approval not exceeding 50% rejects it.</span>
 
 ### 5.2.3.立法投票<br><span class="whitepaper-heading-en">5.2.3. Legislative Voting</span>
@@ -458,7 +447,7 @@ GMB/
 | 模块 | 适用事项 | 规则重点 | 业务模块边界 |
 |:---:|:-------:|:--------:|:-----------:|
 | 内部投票 | 机构和多签账户内部治理 | 管理员快照 + 阈值快照 | 不自建投票流程，只接收执行回调 |
-| 联合投票 | 国储会、省储会、省储行共同治理 | 105 票机构联合投票 + 联合公投 | 不传人口快照或计票材料 |
+| 联合投票 | 国家储委会、省储委会、省储行共同治理 | 105 票机构联合投票 + 联合公投 | 不传人口快照或计票材料 |
 | 立法投票 | 法律制定、修改、废止 | 宪法表决类型、两院顺序、行政签署、公投 | 立法院只保存法律数据和版本 |
 | 选举投票 | 公职人员普选和互选 | 公民身份快照或机构成员快照 | 不与联合公投混写，不接收链下身份凭证 |
 ```
@@ -490,19 +479,19 @@ VOTING → PASSED → EXECUTED
 ### 5.3.1.协议升级<br><span class="whitepaper-heading-en">5.3.1. runtime-upgrade</span>
 
 * 协议升级/runtime_upgrade.rs<br><span class="whitepaper-en">Protocol upgrade / runtime_upgrade.rs.</span>
-* 链的协议升级由国储会和省储会任意管理员发起提案，经联合投票决定，通过则升级，反之则否决。<br><span class="whitepaper-en">A chain protocol upgrade is proposed by any administrator of the National Citizen Reserve Committee and Provincial Citizen Reserve Committee and decided through joint voting. If approved, the upgrade is performed; otherwise, it is rejected.</span>
+* 链的协议升级由国家储委会和省储委会任意管理员发起提案，经联合投票决定，通过则升级，反之则否决。<br><span class="whitepaper-en">A chain protocol upgrade is proposed by any administrator of the National Citizen Reserve Committee and Provincial Citizen Reserve Committee and decided through joint voting. If approved, the upgrade is performed; otherwise, it is rejected.</span>
 * 运行期 runtime 升级不得由开发者直接替换；升级 wasm 作为提案对象由投票引擎对象层保存，联合投票通过后由 runtime-upgrade 模块执行升级。<br><span class="whitepaper-en">During the operating period, runtime upgrades may not be directly replaced by developers. The upgrade wasm is stored as a proposal object by the voting-engine object layer, and the runtime-upgrade module executes the upgrade after joint-vote approval.</span>
 
 ### 5.3.2.决议销毁<br><span class="whitepaper-heading-en">5.3.2. resolution-destro</span>
 
-* 国储会可提案销毁所持有治理账户内的公民币，由任意国储会委员/管理员提案，本提案为内部投票提案；<br><span class="whitepaper-en">The National Citizen Reserve Committee may propose destruction of Citizen Coins held in its governance accounts. The proposal may be initiated by any National Citizen Reserve Committee member or administrator and is an internal-vote proposal.</span>
-* 省储会可提案销毁所持有治理账户内的公民币，由任意省储会委员/管理员提案，本提案为内部投票提案；<br><span class="whitepaper-en">A Provincial Citizen Reserve Committee may propose destruction of Citizen Coins held in its governance accounts. The proposal may be initiated by any Provincial Citizen Reserve Committee member or administrator and is an internal-vote proposal.</span>
+* 国家储委会可提案销毁所持有治理账户内的公民币，由任意国家储委会委员/管理员提案，本提案为内部投票提案；<br><span class="whitepaper-en">The National Citizen Reserve Committee may propose destruction of Citizen Coins held in its governance accounts. The proposal may be initiated by any National Citizen Reserve Committee member or administrator and is an internal-vote proposal.</span>
+* 省储委会可提案销毁所持有治理账户内的公民币，由任意省储委会委员/管理员提案，本提案为内部投票提案；<br><span class="whitepaper-en">A Provincial Citizen Reserve Committee may propose destruction of Citizen Coins held in its governance accounts. The proposal may be initiated by any Provincial Citizen Reserve Committee member or administrator and is an internal-vote proposal.</span>
 * 省储行可提案销毁所持有治理账户内的公民币，由任意省储行董事/管理员提案，本提案为内部投票提案。<br><span class="whitepaper-en">A Provincial Citizen Reserve Bank may propose destruction of Citizen Coins held in its governance accounts. The proposal may be initiated by any Provincial Citizen Reserve Bank director or administrator and is an internal-vote proposal.</span>
 * 决议销毁只能销毁提案主体自身控制账户中的公民币，投票通过后由投票引擎 callback 调用 resolution-destro 执行余额扣减和总供应量扣减；执行失败的已通过提案由投票引擎统一重试或转入执行失败终态。<br><span class="whitepaper-en">Resolution destruction may destroy only Citizen Coins in accounts controlled by the proposing subject itself. After approval, the voting-engine callback invokes resolution-destro to reduce the balance and total supply. Passed proposals that fail execution are retried uniformly by the voting engine or moved to the execution-failed terminal state.</span>
 
 ### 5.3.3.GRANDPA 密钥更换<br><span class="whitepaper-heading-en">5.3.3. grandpakey-change</span>
 
-* 国储会、各省储会通过内部投票更换各自的 GRANDPA 投票公钥。<br><span class="whitepaper-en">The National Citizen Reserve Committee and each Provincial Citizen Reserve Committee replace their respective GRANDPA voting public keys through internal voting.</span>
+* 国家储委会、各省储委会通过内部投票更换各自的 GRANDPA 投票公钥。<br><span class="whitepaper-en">The National Citizen Reserve Committee and each Provincial Citizen Reserve Committee replace their respective GRANDPA voting public keys through internal voting.</span>
 * GRANDPA 密钥更换不提供独立投票入口；投票统一走内部投票模块，通过后由 grandpakey-change 调度 GRANDPA authority set 变更。<br><span class="whitepaper-en">GRANDPA key replacement provides no independent voting entry point. Voting uniformly goes through the internal-vote module, and after approval grandpakey-change schedules the GRANDPA authority-set change.</span>
 * 如果执行时存在 pending change 或新密钥冲突，模块向投票引擎返回可重试失败或确定失败，由投票引擎统一维护 retry、取消和终态。<br><span class="whitepaper-en">If execution encounters a pending change or new-key conflict, the module returns retryable failure or fatal failure to the voting engine, which uniformly maintains retry, cancellation, and terminal state.</span>
 
@@ -588,7 +577,7 @@ VOTING → PASSED → EXECUTED
 
 ### 5.7.4.决议发行<br><span class="whitepaper-heading-en">5.7.4. resolution-issuance</span>
 
-* 公民储备委员会体系成立后，由公民储备委员会联合会议决议发行数字公民币，经公民储备委员会联合会议决议通过后，由国储会或任意省储会权威节点提案发起发行；<br><span class="whitepaper-en">After the Citizen Reserve Committee system is established, the Joint Meeting of the Citizen Reserve Committee resolves to issue digital Citizen Coins. After passage by a resolution of the Joint Meeting of the Citizen Reserve Committee, the National Citizen Reserve Committee authority node or any Provincial Citizen Reserve Committee authority node may initiate the issuance proposal.</span>
+* 公民储备委员会体系成立后，由公民储备委员会联合会议决议发行数字公民币，经公民储备委员会联合会议决议通过后，由国家储委会或任意省储委会权威节点提案发起发行；<br><span class="whitepaper-en">After the Citizen Reserve Committee system is established, the Joint Meeting of the Citizen Reserve Committee resolves to issue digital Citizen Coins. After passage by a resolution of the Joint Meeting of the Citizen Reserve Committee, the National Citizen Reserve Committee authority node or any Provincial Citizen Reserve Committee authority node may initiate the issuance proposal.</span>
 * 决议发行子模块统一负责提案创建、联合投票结果接收、发行执行、执行幂等与暂停维护；<br><span class="whitepaper-en">The resolution issuance submodule is uniformly responsible for proposal creation, receiving joint-vote results, issuance execution, execution idempotency, and pause-based maintenance.</span>
 * 发行模组根据决议发行提案铸造新公民币，所铸造的新币只能进入链上允许收款账户集合；提案收款账户、金额合计、限额、ED、暂停状态和防重放校验全部通过后才能执行。<br><span class="whitepaper-en">The issuance module group mints new Citizen Coins according to the resolution issuance proposal, and the newly minted coins may enter only the on-chain allowed recipient set. Execution requires recipient, total amount, cap, ED, pause-state, and anti-replay checks to all pass.</span>
 
@@ -602,8 +591,8 @@ VOTING → PASSED → EXECUTED
 
 * 链上金额交易手续费为0.1%，按“分”四舍五入，单笔最低0.1元，不足0.1元的以0.1元计算，由付款方支付；<br><span class="whitepaper-en">For on-chain amount transactions, the fee is 0.1%, rounded in fen, with a minimum of 0.1 yuan per transaction. Any amount below 0.1 yuan is charged as 0.1 yuan, and the payer pays the fee.</span>
 * 投票和治理类主动交易按固定1元收取；免费交易仅允许收取 tip；未知费用类型直接拒绝，防止制度内应收费交易被漏收；<br><span class="whitepaper-en">Active voting and governance transactions are charged a fixed fee of 1 yuan. Free transactions may collect only a tip. Unknown fee types are rejected directly to prevent chargeable institutional transactions from being missed.</span>
-* 链上交易费按80%:10%:10%分配：80%给当前区块作者绑定的奖励钱包，10%给国储会费用账户，10%给安全基金账户；<br><span class="whitepaper-en">On-chain transaction fees are distributed at 80%:10%:10%: 80% to the reward wallet bound by the current block author, 10% to the National Citizen Reserve Committee fee account, and 10% to the safety fund account.</span>
-* 当区块作者缺失、奖励钱包未绑定、国储会费用账户缺失或安全基金账户无法入账时，对应手续费份额销毁并留下链上事件，不会错误打入未知账户；<br><span class="whitepaper-en">If the block author is missing, the reward wallet is unbound, the National Citizen Reserve Committee fee account is missing, or the safety fund account cannot receive funds, the corresponding fee share is destroyed with an on-chain event and is not misdirected to an unknown account.</span>
+* 链上交易费按80%:10%:10%分配：80%给当前区块作者绑定的奖励钱包，10%给国家储委会费用账户，10%给安全基金账户；<br><span class="whitepaper-en">On-chain transaction fees are distributed at 80%:10%:10%: 80% to the reward wallet bound by the current block author, 10% to the National Citizen Reserve Committee fee account, and 10% to the safety fund account.</span>
+* 当区块作者缺失、奖励钱包未绑定、国家储委会费用账户缺失或安全基金账户无法入账时，对应手续费份额销毁并留下链上事件，不会错误打入未知账户；<br><span class="whitepaper-en">If the block author is missing, the reward wallet is unbound, the National Citizen Reserve Committee fee account is missing, or the safety fund account cannot receive funds, the corresponding fee share is destroyed with an on-chain event and is not misdirected to an unknown account.</span>
 * 链下清算批次上链时，清算本金和清算手续费由 offchain-transaction 模块按链下清算规则执行，链上手续费适配层不对清算本金重复收取0.1%的链上金额交易费。<br><span class="whitepaper-en">When an off-chain clearing batch is submitted on-chain, the clearing principal and clearing fee are executed by the offchain-transaction module under off-chain clearing rules. The on-chain fee adapter does not duplicate the 0.1% on-chain amount fee on the clearing principal.</span>
 
 ### 5.8.2.链下交易<br><span class="whitepaper-heading-en">5.8.2. offchain-transaction</span>
@@ -618,7 +607,7 @@ VOTING → PASSED → EXECUTED
 ### 5.8.3.多签名链上交易<br><span class="whitepaper-heading-en">5.8.3. multisig-transfer</span>
 
 * 多签名链上交易是机构多签账户、个人多签账户共用的转账交易子模块，只处理多签账户授权后的链上转账，不处理链下清算流程；<br><span class="whitepaper-en">Multisignature on-chain transaction is the transfer submodule shared by institutional multisig accounts and personal multisig accounts. It handles on-chain transfers after multisig-account authorization and does not process off-chain clearing flows.</span>
-* 多签名链上转账按链上金额交易规则收取手续费，并进入全节点、国储会费用账户和安全基金账户的80%:10%:10%分账。<br><span class="whitepaper-en">Multisignature on-chain transfers are charged under the on-chain amount-transaction fee rule and enter the 80%:10%:10% split among full nodes, the National Citizen Reserve Committee fee account, and the safety fund account.</span>
+* 多签名链上转账按链上金额交易规则收取手续费，并进入全节点、国家储委会费用账户和安全基金账户的80%:10%:10%分账。<br><span class="whitepaper-en">Multisignature on-chain transfers are charged under the on-chain amount-transaction fee rule and enter the 80%:10%:10% split among full nodes, the National Citizen Reserve Committee fee account, and the safety fund account.</span>
 
 ## 5.9.其他模组<br><span class="whitepaper-heading-en">5.9. otherpallet</span>
 
@@ -644,9 +633,9 @@ VOTING → PASSED → EXECUTED
 
 ## 6.2.治理机构<br><span class="whitepaper-heading-en">6.2. Governance Institutions</span>
 
-* 国储会、省储会和省储行属于创世治理机构，创世时写入机构、账户和初始管理员；国储会与省储会承担 GRANDPA 最终性投票，省储行承担永久质押和省级储备银行治理。<br><span class="whitepaper-en">The National Citizen Reserve Committee, Provincial Citizen Reserve Committees, and Provincial Citizen Reserve Banks are genesis governance institutions. Their institutions, accounts, and initial administrators are written at genesis. The National and Provincial Citizen Reserve Committees participate in GRANDPA finality voting, while Provincial Citizen Reserve Banks carry permanent staking and provincial reserve-bank governance.</span>
+* 国家储委会、省储委会和省储行属于创世治理机构，创世时写入机构、账户和初始管理员；国家储委会与省储委会承担 GRANDPA 最终性投票，省储行承担永久质押和省级储备银行治理。<br><span class="whitepaper-en">The National Citizen Reserve Committee, Provincial Citizen Reserve Committees, and Provincial Citizen Reserve Banks are genesis governance institutions. Their institutions, accounts, and initial administrators are written at genesis. The National and Provincial Citizen Reserve Committees participate in GRANDPA finality voting, while Provincial Citizen Reserve Banks carry permanent staking and provincial reserve-bank governance.</span>
 * 治理机构节点应以归档全节点形态运行，保存完整链数据并参与节点引导；其治理动作仍以链上 active admins、内部投票、联合投票和对应治理模块为准。<br><span class="whitepaper-en">Governance institution nodes should run as archive full nodes, store complete chain data, and participate in node bootstrapping. Their governance actions are still governed by on-chain active admins, internal voting, joint voting, and the corresponding governance modules.</span>
-* 国储会、省储会、省储行属于节点桌面端治理范围，不作为普通链上中国网页登录主体；链上中国主要服务注册局和被授权的业务机构管理员。<br><span class="whitepaper-en">The National Citizen Reserve Committee, Provincial Citizen Reserve Committees, and Provincial Citizen Reserve Banks belong to the node-desktop governance scope and are not ordinary OnChina web-console login subjects. OnChina mainly serves registries and authorized business-institution administrators.</span>
+* 国家储委会、省储委会、省储行属于节点桌面端治理范围，不作为普通链上中国网页登录主体；链上中国主要服务注册局和被授权的业务机构管理员。<br><span class="whitepaper-en">The National Citizen Reserve Committee, Provincial Citizen Reserve Committees, and Provincial Citizen Reserve Banks belong to the node-desktop governance scope and are not ordinary OnChina web-console login subjects. OnChina mainly serves registries and authorized business-institution administrators.</span>
 
 ## 6.3.链下清算行<br><span class="whitepaper-heading-en">6.3. Off-Chain Clearing Banks</span>
 

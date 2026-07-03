@@ -186,7 +186,7 @@
   - `flutter test test/governance/admins-change/admins_change_codec_test.dart`：通过，固定治理机构校验接受 NJD 15 人 / 阈值 8。
   - `flutter test test/signer/payload_decoder_test.dart`：通过，公民钱包解码接受 NJD 15 人 / 阈值 8 并继续拒绝错误固定阈值。
   - `cargo fmt --manifest-path citizenchain/Cargo.toml --all --check`、双端 `dart format --output=none --set-exit-if-changed ...`、`git diff --check`：通过。
-  - 定向残留扫描：本轮相关范围内未再发现国家司法院上一版人数、上一版固定阈值或上一版护宪终审票数口径；国储会固定阈值与联邦注册局省级组阈值为其他制度常量保留。
+  - 定向残留扫描：本轮相关范围内未再发现国家司法院上一版人数、上一版固定阈值或上一版护宪终审票数口径；国家储委会固定阈值与联邦注册局省级组阈值为其他制度常量保留。
   - 冻结 chainspec 尚未重烤：正式冻结 SSOT 必须等本轮源码对应的 GitHub WASM CI 产物后执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>`；本轮未获得推送/CI 授权，未触碰 GitHub 远端。
 - 2026-07-02 第 3 条逐条定稿验收：
   - 结构化回读 `constitution.scale`：第 3 条中文正文已包含 `实行民主共和（民主）`，英文保持 `democratic republicanism`。
@@ -227,6 +227,122 @@
   - 结构化回读 `constitution.scale`：第 43 条已按用户定稿删除“海外 / 同胞 / 不侵犯他国公民人权的基础上”口径，改为维护“华人、华侨”的人权与利益，英文同步更新；文件大小 222341 → 222153 字节。
   - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222153/222153 字节。
   - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 44 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 44 条正文已将“任意注册局”更新为“任意身份注册局”，英文同步更新为 `Identity Registry Bureau`；文件大小 222153 → 222164 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222164/222164 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 45 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 45 条第 2 款已将“省立法院”更新为“省联邦立法院”，英文同步更新为 `Provincial Federal Legislative Yuan`；文件大小 222164 → 222178 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222178/222178 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 46 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 46 条已将“市立法会 / 市教委会”更新为“市公民立法委员会 / 市公民教育委员会”，英文同步更新为 `Municipal Citizen Legislative Committee` 和 `Municipal Citizen Education Committee`；文件大小 222178 → 222462 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222462/222462 字节；第 46 条范围内无“市立法会 / 市教委会 / Municipal Legislative Council / Municipal Education Committee”残留。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 48 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 48 条第 1 款已将“国家允许存在多个合法的宗教”更新为“允许存在多个合法的宗教”；第 3 款已将“政党不具有国家公权权力”更新为“政党不具有公权权力”；第 4 款已将许可机构更新为“公民生活保障部食品药品监管局”并补齐句号，英文同步更新；文件大小 222462 → 222426 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222426/222426 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 49 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 49 条正文已将公职人员分类由“民选 / 民聘 / 国聘”三类更新为“民选公职人员 / 聘用公职人员”两类；第 1 款和第 2 款已统一为国家立法院参议会 / 众议会、省联邦立法院参议会 / 众议会、市公民立法委员会、市公民教育委员会、国家司法院护宪大法官等机构全称，英文同步更新；文件大小 222426 → 222592 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222592/222592 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 50 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 50 条已将记者和律师工作自由的例外范围更新为“总统府联邦安全局、联邦情报局、联邦特勤局，国家防务部、各军事管辖区以及国家司法院另行规定的公权机构和区域”，英文同步更新；文件大小 222592 → 222759 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222759/222759 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 51 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 51 条已将公共场所音视频设备安装授权机构更新为“市公民立法委员会”，调用资料双重授权机构更新为“市自治监察院”和“省联邦监察院”，英文同步更新；文件大小 222759 → 222816 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222816/222816 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 52 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 52 条已将法人配合行权的授权许可机构更新为“该法人注册地市自治监察院”，删除注册局所在地监察院、市注册局、该市监察院等旧口径，英文同步更新；文件大小 222816 → 222554 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222554/222554 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 52 条逐条定稿微调：
+  - 结构化回读 `constitution.scale`：第 52 条中文已将“该法人注册地市自治监察院”补正为“该法人注册地的市自治监察院”，英文保持上一版含义；文件大小 222554 → 222557 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222557/222557 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 53 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 53 条第 1 款已将“国家参议会”更新为“国家立法院参议会”；第 3 款替任顺序已将各直属部部长统一为全称“外事交流部 / 国家防务部 / 国土安全部 / 公民生活保障部 / 住房与城镇建设部 / 农业与农村发展部 / 商务与市场贸易部 / 财政与税务部 / 能源与环保发展部 / 交通运输部”，英文同步更新；文件大小 222557 → 222797 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222797/222797 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：未通过编译；当前工作区已有无关修改 `citizenchain/runtime/otherpallet/citizen-identity/src/lib.rs`，编译报 `T::TimeProvider::now()` 缺少 `UnixTime` trait 导入及后续类型推断错误。本轮未修改该文件，未修复或回滚该无关改动。
+- 2026-07-02 第 54 条逐条定稿验收：
+  - 结构化回读 `constitution.scale`：第 54 条已删除“外交部（外事交流部）/ 国防部（国家防务部）”等简称加括号写法，统一为“外事交流部 / 国家防务部 / 国土安全部 / 公民生活保障部 / 住房与城镇建设部 / 农业与农村发展部 / 商务与市场贸易部 / 财政与税务部 / 能源与环保发展部 / 交通运输部”十个直属公权机构，英文同步更新；文件大小 222797 → 222664 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222664/222664 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+  - 残留扫描：活动源码和当前文档范围未发现第 54 条旧简称加括号写法；仅命中 `memory/08-tasks/done/20260606-citizen-constitution-naming-fix.md` 的历史完成任务说明，作为历史记录保留。
+- 2026-07-02 第 54 条逐条定稿微调：
+  - 结构化回读 `constitution.scale`：第 54 条句尾已从“能源与环保发展部、交通运输部共十个直属公权机构”更新为“能源与环保发展部和交通运输部等公权机构”，英文同步去掉 `ten directly subordinate` 并改为 `public-power institutions including ...`；文件大小 222664 → 222636 字节。
+  - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222636/222636 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+  - 残留扫描：未发现“共十个直属公权机构”或 `ten directly subordinate public-power institutions` 残留。
+- 2026-07-02 第 57-141 条简称全称化验收：
+  - 结构化重写 `constitution.scale`：仅遍历第 57 条至第 141 条，第 57 条之前条文保持不变；将扫描命中的简称统一改为全称，包括国家立法院参议会 / 众议会、省联邦立法院参议会 / 众议会、省联邦立法院、市公民立法委员会、市公民教育委员会、国家公民教育委员会、校公民教育委员会、镇公民自治委员会、市公民自治委员会、市自治司法院、省联邦司法院、市自治监察院、省联邦监察院、公民储备委员会，以及省联邦政府各厅全称；第 58 条“国防厅（国家防务厅）”等括号写法已统一为全称；英文同步更新。
+  - 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 228763/228763 字节；按本轮简称统计项扫描第 57-141 条，中文残留 0；对应英文旧称残留 0；第 100/102 条额外清理泛称“参议会 / 众议会”为国家立法院参议会 / 众议会。
+  - 文件大小 222636 → 228763 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 55-70 条人工审核修正：
+  - 结构化重写 `constitution.scale`：第 55 条第 1 款和第 2 款已将“国家参议会 / 国家众议会”更新为“国家立法院参议会 / 国家立法院众议会”；第 56 条删除“对内”；第 57 条删除“省联邦政府隶属于国家联邦政府”；第 60 条至第 68 条按用户审核意见清理“市政府 / 镇政府”简称并改为“市自治政府 / 镇自治政府”；第 63 条第 4 款调整为“30 名以内本市公民”；第 65 条直属机构改为“国家防务局 / 国土安全局 / 公民安全局 / 公民生活保障局 / 财政与税务局 / 身份注册局”；第 70 条第 4 款调整为“20 名以内本镇公民”，英文同步更新。
+  - 不需修改条款确认：第 58 条、第 59 条、第 62 条、第 69 条按当前内容确认。
+  - 结构化回读校验：7 章、141 条、条号 1..141 连续，消费 228988/228988 字节；第 55-70 条范围内未发现“国家参议会 / 国家众议会 / 依法对内发布国家战争动员令和紧急状态令 / 省联邦政府隶属于国家联邦政府 / 简称市政府 / 市政府 / 简称镇政府 / 镇政府是市政府 / 30名以上本镇 / 50名以上本市”等旧口径残留。
+  - 文件大小 228763 → 228988 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 71-86 条人工审核前全称化：
+  - 结构化重写 `constitution.scale`：第 71 条正文两处“镇政府”已更新为“镇自治政府”，英文同步更新为 `town self-governing government`。
+  - 结构化回读校验：7 章、141 条、条号 1..141 连续，消费 229030/229030 字节；第 71-86 条范围内未发现“镇政府 / 市政府 / 国家参议会 / 国家众议会 / 省立法院 / 市立法会 / 市教委会 / 市司法院 / 市监察院 / 省司法院 / 省监察院 / 教委会 / 储委会”等简称残留。
+  - 文件大小 228988 → 229030 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 71-86 条人工审核修正：
+  - 结构化重写 `constitution.scale`：全文命中的“校公民教育委员”已统一为“学校公民教育委员”，包含第 8 条第 2 款和第 74、75、77、80-86 条；第 79 条正文已按用户定稿替换，删除“国家教育法律法案”口径，改为“教育法律法案”，并改为由市公民教育委员会委员提交教育类法案草案后由市公民立法委员会表决；英文同步更新。
+  - 章/节标题全称化：已将“市政府 / 镇政府 / 教委会 / 国家教委会 / 市教委会 / 校教委会 / 储委会 / 储委会联合会议 / 省立法院 / 市立法会 / 省司法院 / 市司法院 / 省监察院 / 市监察院”等章或节标题统一为全称，英文标题同步更新。
+  - 结构化回读校验：7 章、141 条、条号 1..141 连续，消费 229531/229531 字节；全文未发现非“学校”前缀的“校公民教育委员”、叠字“学学校公民教育委员”、标题简称、旧英文标题和第 79 条旧表述残留。
+  - 文件大小 229030 → 229531 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 87-102 条人工审核修正：
+  - 结构化重写 `constitution.scale`：第 87 条英文已将 `Reserve Committee` 补正为 `Citizen Reserve Committee`；第 89 条已将“立法院立法程序”更新为“国家立法院立法程序”；第 90 条删除“简称国家储委会”；第 92 条删除“简称省储委会”；第 94 条删除“简称省储行”；第 98 条已将“设立法院，简称国家立法院”更新为“设国家立法院”；英文同步更新。
+  - 节标题补正：第 90 条所在节标题已由“国家储委会”改为“国家公民储备委员会”；第 92 条所在节标题已由“省储委会”改为“省公民储备委员会”；第 94 条所在节标题已由“省储行”改为“省公民储备银行”；英文标题同步更新。
+  - 不需修改条款确认：第 88 条、第 91 条、第 93 条、第 95 条、第 96 条、第 97 条、第 99 条、第 100 条、第 101 条、第 102 条按当前内容确认。
+  - 结构化回读校验：7 章、141 条、条号 1..141 连续，消费 229376/229376 字节；第 87-102 条范围内未发现 `highest decision-making body of the Reserve Committee`、`不属于立法院立法程序`、`简称国家储委会`、`简称省储委会`、`简称省储行`、`设立法院，简称国家立法院` 等旧口径残留，第四章相关节标题旧简称残留为 0。
+  - 文件大小 229531 → 229376 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 90 条人工审核定稿：
+  - 结构化重写 `constitution.scale`：第 90 条已按用户定稿改为“国家公民储备委员会委员由总统提名，经国家立法院参议会以常规案表决任免产生，常规案表决未通过的即驳回，驳回的由提名人另选被提名人。”，并删除原第 1 款、第 2 款、第 3 款；英文同步更新。
+  - 不需修改条款确认：第 88 条、第 89 条、第 91-102 条按当前内容确认。
+  - 结构化回读校验：7 章、141 条、条号 1..141 连续，消费 227530/227530 字节；第 90 条款数为 0，原“主席职位 / 副主席职位 / 任期 / 每年更换 / 年满 35 周岁”等旧内容残留为 0。
+  - 文件大小 229376 → 227530 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 103-118 条人工审核修正：
+  - 结构化重写 `constitution.scale`：第 103 条已将“国家立法院参议员 / 国家立法院众议员”更新为“国家立法院参议会参议员 / 国家立法院众议会众议员”；第 114 条已将“设司法院，简称国家司法院”更新为“设国家司法院”；英文同步更新。
+  - 不需修改条款确认：第 104-113 条、第 115-118 条按当前内容确认。
+  - 结构化回读校验：7 章、141 条、条号 1..141 连续，消费 227542/227542 字节；第 103-118 条范围内未发现“国家立法院参议员，由 / 国家立法院众议员，由 / 设司法院，简称国家司法院 / establish a Judicial Yuan, abbreviated as the National Judicial Yuan”等旧口径残留。
+  - 文件大小 227530 → 227542 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 119-141 条人工审核修正：
+  - 结构化重写 `constitution.scale`：第 125 条已将“设监察院，简称国家监察院”更新为“设国家监察院”；第 127 条、第 130 条、第 133 条删除“简称联邦廉政署 / 简称联邦审计署 / 简称联邦调查署”，并统一使用“国家监察院联邦廉政署 / 国家监察院联邦审计署 / 国家监察院联邦调查署”；第 128-129 条、第 131-132 条、第 134-135 条内相关署名同步全称化；英文同步更新为 `... of the National Control Yuan`。
+  - 节标题补正：第 7 章第 2 节、第 3 节、第 4 节标题已更新为“国家监察院联邦廉政署 / 国家监察院联邦审计署 / 国家监察院联邦调查署”，英文标题同步更新。
+  - 不需修改条款确认：第 119-124 条、第 126 条、第 136-141 条按当前内容确认。
+  - 结构化回读校验：7 章、141 条、条号 1..141 连续，消费 228561/228561 字节；第 119-141 条范围内未发现“简称”、非“国家监察院”前缀的“联邦廉政署 / 联邦审计署 / 联邦调查署”、`abbreviated as`、未带 `of the National Control Yuan` 的英文署名等旧口径残留。
+  - 文件大小 227542 → 228561 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+- 2026-07-02 第 55-141 条最终收尾残留清理：
+  - 结构化重写 `constitution.scale`：按最终全文扫描结果补清第 11 条第 3 款“国家立法院参议员议政会”为“国家立法院参议会”，第 11 条第 4 款“省立法院参议员议政会”为“省联邦立法院参议会”，第 12 条第 3 款“本省立法院参议会 / 本省立法院众议会”为“本省联邦立法院参议会 / 本省联邦立法院众议会”，第 47 条第二处“联邦廉政署”为“国家监察院联邦廉政署”；英文同步更新。第 16 条按用户要求未修改。
+  - 结构化回读校验：7 章、28 节、141 条、130 款，条号 1..141 连续，消费 228629/228629 字节；最终真实残留扫描未发现“省立法院 / Provincial Legislative Yuan / 参议员议政会 / 众议员议政会 / 非国家监察院前缀的联邦廉政署 / 校公民教育委员旧称或叠字”等目标残留。
+  - 文件大小 228561 → 228629 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+  - `git diff --check -- citizenchain/runtime/public/legislation-yuan/src/constitution.scale memory/08-tasks/open/20260701-citizenapp-constitution-reader-fix.md`：通过。
+- 2026-07-03 公民宪法终检修复：
+  - 结构化重写 `constitution.scale`：第 46 条第 4 款“市自治会委员”改为“市公民自治委员会委员”，第 18 条第 3 款“各立法院和立法会”改为“各立法机构”，第 8 条第 2 款半角分号改为全角分号，第 100 条和第 106 条“有权力有义务”改为“有权有义务”；第 11 条第 3 款、第 4 款删除与第 90 条、第 92 条冲突的“重要案表决免职”句；第二章第二节标题由“省政府”改为“省联邦政府”；英文同步更新。
+  - 结构化回读校验：7 章、28 节、141 条、130 款，条号 1..141 连续，消费 227823/227823 字节；目标残留扫描未发现“市自治会 / 立法会 / 组成;市公民教育委员会 / 有权力有义务 / 重要案表决通过的……不得被免职 / each Legislative Yuan and legislative council / Municipal Self-Governing Committee / Section 2 Provincial Government”等旧口径残留。
+  - 文件大小 228629 → 227823 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+  - `git diff --check`：通过。
+- 2026-07-03 公民宪法最终确认：
+  - 结构化重写 `constitution.scale`：第 7 条第 1 款“本宪法及其所属法律”统一为“本宪法及其附属法律”；同步将第 7 条第 1 款英文改为 `this Constitution and its subsidiary laws`。为保持双语术语一致，第 35 条第 4 款入籍誓词英文同步将 `the laws subordinate to it` 改为 `its subsidiary laws`，中文原文“中华民族联邦共和国宪法及其附属法律”保持不变。
+  - 结构化回读校验：7 章、28 节、141 条、130 款，条号 1..141 连续，消费 227809/227809 字节；“所属法律”和 `the laws subordinate to it` 残留均为 0，“附属法律”和 `subsidiary laws` 均仅保留在第 7 条第 1 款与第 35 条第 4 款对应位置。
+  - 文件大小 227823 → 227809 字节。
+  - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
+  - `git diff --check`：通过。
 
 残留清理：
 - 未新增 Isar schema、未新增业务目录。

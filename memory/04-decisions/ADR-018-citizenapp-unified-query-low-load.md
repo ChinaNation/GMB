@@ -109,7 +109,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 ## 六、验证
 1. `flutter analyze` 0 + `flutter test --concurrency=1` 全过;新增 ProposalFeedCache 过滤单测(多机构/多 org/joint 夹具)。
 2. 落地前手机 logcat 实测确认 A 类 2 处确返回空(验后删诊断)。
-3. 真机 E2E:机构详情(国储会)显示提案;广场/个人多签一致;**logcat 统计改造前后 getKeysPaged/fetchStorage/fetchFinalizedBalance/HTTP 调用计数,验证显著下降**。
+3. 真机 E2E:机构详情(国家储委会)显示提案;广场/个人多签一致;**logcat 统计改造前后 getKeysPaged/fetchStorage/fetchFinalizedBalance/HTTP 调用计数,验证显著下降**。
 
 ## 七、任务拆卡
 - 卡①(A+D 提案)`ProposalFeedCache` + 机构详情/广场/个人多签统一接入(收口本次 bug + 最大降载)。
@@ -136,12 +136,12 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 
 | 类别 | 范围语义 | 发现来源 | 缓存模型 | 新鲜度 | 链改空间 |
 |---|---|---|---|---|---|
-| 治理机构(87:国储会1+省储会43+省储行43) | 目录·全集(与用户无关) | 编译期注册表 `governance_institution_registry.generated.dart` | 静态写死 | 永不变 | 无 |
+| 治理机构(87:国家储委会1+省储委会43+省储行43) | 目录·全集(与用户无关) | 编译期注册表 `governance_institution_registry.generated.dart` | 静态写死 | 永不变 | 无 |
 | 公权机构(动态注册) | 目录·全集(与用户无关) | **CID 后端 catalog**(分页+搜索) | HTTP+Isar/TTL(天级) | 慢 | 无 |
 | 多签(机构多签+个人多签) | **我的**(我的钱包某钱包是管理员才显示) | 链上扫 `AdminsChange::AdminAccounts` | Isar 永久+增量 | 随钱包/出块变 | ADR-019 反向索引 |
 
 账户类型注记(用户口径,2026-06-13):
-- 治理机构账户固定不变:国储会 4(主/费/安全基金/两和)、省储会 2(主/费)、省储行 3(主/费/永久质押)。
+- 治理机构账户固定不变:国家储委会 4(主/费/安全基金/两和)、省储委会 2(主/费)、省储行 3(主/费/永久质押)。
 - 公权机构:主/费 + N 个自定义(cid_number+account_name 组合),界面"下一步再做"。
 - 个人多签:发起人钱包 + account_name,无 cid,仅链上注册。
 

@@ -1,8 +1,8 @@
-//!  联邦监察院机构常量=china_jc.rs
+//! 联邦监察院机构常量。
 
 use hex_literal::hex;
 
-/// 单个监察院机构常量结构。
+/// 监察院机构常量。
 pub struct ChinaJc {
     pub cid_full_name: &'static str,
     pub cid_short_name: &'static str,

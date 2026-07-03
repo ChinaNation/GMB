@@ -109,6 +109,8 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 管理员新增、替换、Passkey 更新、节点解绑和链写动作必须使用 `PASSKEY_COLD_SIGN` 二次确认。业务 handler 只负责构造业务动作，二维码协议包装和签名结果识别归 `core/qr/`。
 
+公民身份上链(`CITIZEN_ONCHAIN_PUSH`)属注册局上链操作,同归 `PASSKEY_COLD_SIGN` 最严档:`prepare` 与 `complete` 各消费一次一次性 grant,grant 载荷绑定 `{cid_number, wallet_account}` 且 target = cid_number,与业务请求逐字段一致才放行。
+
 联邦注册局机构 `admins` 不允许本地新增或删除，只允许在同省范围内替换。市注册局机构 `admins` 每省每市最多 30 人，统计必须同时带省和市，不能只按市名统计。NJD、普通公权机构、私权机构和非法人组织本期只能查看本机构链上 active admin 列表，不能在 OnChina 内维护管理员集合。
 
 管理员列表 API 的展示字段统一来自链上 `AdminProfile` 投影：`admin_cid_number / name / admin_role / term_start / term_end / source / source_label`。本地 `admins.admin_name` 只用于登录态缓存、创建市注册局管理员和审计历史，不作为联邦注册局、市注册局、本机构管理员列表的展示真源；旧的本地管理员姓名 PATCH 动作和前端入口不得恢复。

@@ -1,4 +1,4 @@
-# 任务卡：citizenapp 国储会详情页新增两和基金账户行 + 金额右对齐核验
+# 任务卡：citizenapp 国家储委会详情页新增两和基金账户行 + 金额右对齐核验
 
 ## 需求(user 确认 2026-06-11)
 
@@ -9,14 +9,14 @@
 
 链端 `NRC_HE_ACCOUNT`(两和基金,`ce19b7f0…`,china_cb.rs)已存在,citizenapp 数据链路缺位:
 
-1. 生成器 `scripts/generate_citizenapp_governance_registry.mjs` 提取 `NRC_HE_ACCOUNT` → 国储会条目新增 `heAccount`,重生成注册表;
-2. 模型 `InstitutionAccounts` 新增 `heAccount`(仅国储会非空);
+1. 生成器 `scripts/generate_citizenapp_governance_registry.mjs` 提取 `NRC_HE_ACCOUNT` → 国家储委会条目新增 `heAccount`,重生成注册表;
+2. 模型 `InstitutionAccounts` 新增 `heAccount`(仅国家储委会非空);
 3. 详情页 `_extraAccountSources()` 在安全基金账户后插入「两和基金账户」行(行序:费用 → 安全基金 → 两和基金);余额复用现有展开拉取逻辑;
 4. 金额右对齐:三账户共用同一行组件(`_buildExpandedAccountItem`,金额行右端 `textAlign.right`),新增行自动继承,真机核验。
 
 ## 验收
 
-- [x] 注册表国储会 heAccount = ce19b7f0…(与 china_cb.rs NRC_HE_ACCOUNT 逐字节一致)
+- [x] 注册表国家储委会 heAccount = ce19b7f0…(与 china_cb.rs NRC_HE_ACCOUNT 逐字节一致)
 - [x] `flutter analyze` 0 issue + `flutter test --concurrency=1` 196/196 全过
 - [ ] 真机:两和基金账户显示在安全基金账户下方、三账户金额右对齐(user 验证)
 
@@ -28,7 +28,7 @@
 
 ## 完工记录(2026-06-11)
 
-- 生成器:提取 `NRC_HE_ACCOUNT` → 国储会条目 `heAccount`(仅 NRC,省储会/省储行为 null),重生成注册表 87 机构;
+- 生成器:提取 `NRC_HE_ACCOUNT` → 国家储委会条目 `heAccount`(仅 NRC,省储委会/省储行为 null),重生成注册表 87 机构;
 - 模型:`InstitutionAccounts` 新增可选 `heAccount` 字段;
 - 详情页:`_extraAccountSources()` 安全基金账户后插入「两和基金账户」行(icon=handshake_outlined),行序 费用 → 安全基金 → 两和基金;余额复用展开拉取逻辑零改动;
 - 金额右对齐:三账户共用 `_buildExpandedAccountItem`(金额行右端 textAlign.right),新增行自动继承。

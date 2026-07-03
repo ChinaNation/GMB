@@ -684,13 +684,13 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
             votingengine::Error::<Test>::NoPermission
         );
 
-        // 省储会管理员可以创建联合提案
+        // 省储委会管理员可以创建联合提案
         prepare_population_snapshot_for(prc_admin(0), 10);
         assert_ok!(
             <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(prc_admin(0))
         );
 
-        // 国储会管理员可以创建联合提案
+        // 国家储委会管理员可以创建联合提案
         prepare_population_snapshot_for(nrc_admin(0), 10);
         assert_ok!(
             <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin(0))

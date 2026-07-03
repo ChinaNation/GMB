@@ -1,27 +1,13 @@
-//! 国家码、省级行政区码与 CID 机构码的全仓唯一常量真源。
-//!
-//! (铁律):
-//! - 国家码、省级行政区码、机构码只在本文件维护。
-//! - CID 号生成、解析、校验的核心协议在 `citizenchain/runtime/primitives/cid/`。
-//! - registry 只能在 `citizenchain/registry/src/cid/` 做 SQLite 行政区、当前年份、
-//!   UUID 与数据库查重等运行态适配,不得手写第二份机构码表或省码表。
-//! - 省级行政区代码来自 `citizenchain/registry/src/cid/china/china.sqlite` 现有 43 省抽离结果;
-//!   市、镇行政区代码仍由 registry CID 行政区数据按省管理。
-//! - 字段命名必须使用 `country_full_name` / `country_short_name` /
-//!   `province_name` / `cid_short_name`,不得恢复 `name`、`label` 等泛化字段。
-//!
-//! ## 字节表示
-//! - 国家码、省级行政区码:2 个大写 ASCII 字符,如 `CN`、`GD`。
-//! - 机构码:3~4 个大写 ASCII 字符。链上统一用 `[u8; 4]`,3 字符码右补 `0`:
-//!   `NRC` → `*b"NRC\0"`;`CGOV` → `*b"CGOV"`;`PMUL` → `*b"PMUL"`。
+//! 国家码、省码与 CID 机构码常量真源。
+//! 国家/省码为 2 位 ASCII;机构码为 3~4 位 ASCII,链上用 `[u8; 4]`。
 
-/// 国家码:2 字符大写 ASCII。
+/// 国家码。
 pub type CountryCode = [u8; 2];
 
-/// 省级行政区码:2 字符大写 ASCII。
+/// 省级行政区码。
 pub type ProvinceCode = [u8; 2];
 
-/// 机构码链上表示:3~4 字符大写 ASCII,3 字符码右补 `0`。
+/// 机构码链上表示。
 pub type InstitutionCode = [u8; 4];
 
 /// 国家代码元数据。
@@ -39,7 +25,7 @@ pub struct ProvinceCodeInfo {
     pub province_name: &'static str,
 }
 
-/// 机构码元数据。`cid_short_name` 是机构实体中文简称,也是机构码对应中文名。
+/// 机构码元数据。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InstitutionCodeInfo {
     pub institution_code: InstitutionCode,
@@ -47,29 +33,29 @@ pub struct InstitutionCodeInfo {
     pub cid_short_name: &'static str,
 }
 
-/// 机构码所属行政层级(由机构码本身派生)。
+/// 机构码所属行政层级。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdminLevel {
-    /// 国家级(26 个 A 组国家级单体)。
+    /// 国家级。
     National,
-    /// 省级(17 个 B 组省级类型)。
+    /// 省级。
     Province,
-    /// 市级(17 个 C 组市级类型)。
+    /// 市级。
     City,
-    /// 镇级(14 个 D 组镇级类型)。
+    /// 镇级。
     Town,
 }
 
-/// 机构码的盈利策略(决定号码 M1 / 盈利位如何生成与校验)。
+/// 机构码盈利策略。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProfitPolicy {
-    /// 固定非盈利(公权机构、公益组织)。
+    /// 固定非盈利。
     NonProfit,
-    /// 固定盈利(经营性私权实体、公民人/自然人)。
+    /// 固定盈利。
     Profit,
-    /// 按实例可变(注册协会、智能人、私立/教会学校)。
+    /// 按实例可变。
     Variable,
-    /// 继承父级法人盈利属性(非法人组织)。
+    /// 继承父级法人盈利属性。
     InheritParent,
 }
 
@@ -83,7 +69,7 @@ pub const COUNTRY_CN_INFO: CountryCodeInfo = CountryCodeInfo {
     country_short_name: "中华联邦",
 };
 
-/// 从字符串机构码构造链上字节表示(3 字符右补 `0`)。
+/// 从文本机构码构造链上字节表示。
 pub const fn code_bytes(s: &str) -> InstitutionCode {
     let b = s.as_bytes();
     let mut out = [0u8; 4];
@@ -95,7 +81,7 @@ pub const fn code_bytes(s: &str) -> InstitutionCode {
     out
 }
 
-/// 省级行政区代码表:国家/省级行政区统一两位大写字母。
+/// 省级行政区代码表。
 pub const PROVINCE_CODE_INFOS: [ProvinceCodeInfo; 43] = [
     ProvinceCodeInfo {
         province_code: *b"ZS",
@@ -312,19 +298,19 @@ pub fn province_name_by_code(code: &ProvinceCode) -> Option<&'static str> {
         .find(|info| info.province_code.eq_ignore_ascii_case(code))
         .map(|info| info.province_name)
 }
-// 机构码清单:A-I 九组,分组只用注释表达,不在数据项里另设 group/kind 字段。
-/// 国家公民储备委员会(固定治理档)。
+// 机构码清单按 A-I 九组排列。
+/// 国家公民储备委员会。
 pub const NRC: InstitutionCode = *b"NRC\0";
-/// 省公民储备委员会(固定治理档)。
+/// 省公民储备委员会。
 pub const PRC: InstitutionCode = *b"PRC\0";
-/// 省公民储备银行(固定治理档)。
+/// 省公民储备银行。
 pub const PRB: InstitutionCode = *b"PRB\0";
-/// 联邦注册局(固定治理档,按省级 5 人组投票)。
+/// 联邦注册局。
 pub const FRG: InstitutionCode = *b"FRG\0";
-/// 国家司法院(护宪大法官归口机构)。
+/// 国家司法院。
 pub const NJD: InstitutionCode = *b"NJD\0";
 
-/// 个人多签账户(不发号,仅链上/后端分类常量)。
+/// 个人多签账户,不发 CID 号。
 pub const PMUL: InstitutionCode = *b"PMUL";
 
 /// 全部 92 个机构码信息,按 A-I 九组排列。
@@ -363,52 +349,52 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
     InstitutionCodeInfo {
         institution_code: *b"MFA\0",
         institution_code_text: "MFA",
-        cid_short_name: "外事交流部",
+        cid_short_name: "外交部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MDF\0",
         institution_code_text: "MDF",
-        cid_short_name: "国家防务部",
+        cid_short_name: "国防部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MHS\0",
         institution_code_text: "MHS",
-        cid_short_name: "国土安全部",
+        cid_short_name: "国安部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MCW\0",
         institution_code_text: "MCW",
-        cid_short_name: "公民生活保障部",
+        cid_short_name: "民生部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MHU\0",
         institution_code_text: "MHU",
-        cid_short_name: "住房与城镇建设部",
+        cid_short_name: "住建部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MAG\0",
         institution_code_text: "MAG",
-        cid_short_name: "农业与农村发展部",
+        cid_short_name: "农业部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MCM\0",
         institution_code_text: "MCM",
-        cid_short_name: "商务与市场贸易部",
+        cid_short_name: "商贸部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MFT\0",
         institution_code_text: "MFT",
-        cid_short_name: "财政与税务部",
+        cid_short_name: "财税部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MEN\0",
         institution_code_text: "MEN",
-        cid_short_name: "能源与环保发展部",
+        cid_short_name: "能源部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MTR\0",
         institution_code_text: "MTR",
-        cid_short_name: "交通运输部",
+        cid_short_name: "交通部",
     },
     InstitutionCodeInfo {
         institution_code: *b"NLG\0",
@@ -443,12 +429,12 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
     InstitutionCodeInfo {
         institution_code: *b"NED\0",
         institution_code_text: "NED",
-        cid_short_name: "国家公民教育委员会",
+        cid_short_name: "国家教委会",
     },
     InstitutionCodeInfo {
         institution_code: *b"NRC\0",
         institution_code_text: "NRC",
-        cid_short_name: "国家公民储备委员会",
+        cid_short_name: "国家储委会",
     },
     InstitutionCodeInfo {
         institution_code: *b"NSN\0",
@@ -484,7 +470,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
     InstitutionCodeInfo {
         institution_code: *b"PRC\0",
         institution_code_text: "PRC",
-        cid_short_name: "省储会",
+        cid_short_name: "省储委会",
     },
     InstitutionCodeInfo {
         institution_code: *b"PRB\0",
@@ -494,7 +480,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
     InstitutionCodeInfo {
         institution_code: *b"PDF\0",
         institution_code_text: "PDF",
-        cid_short_name: "省防务厅",
+        cid_short_name: "省国防厅",
     },
     InstitutionCodeInfo {
         institution_code: *b"PHS\0",
@@ -555,7 +541,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
     InstitutionCodeInfo {
         institution_code: *b"CLEG",
         institution_code_text: "CLEG",
-        cid_short_name: "市立法委",
+        cid_short_name: "市立法会",
     },
     InstitutionCodeInfo {
         institution_code: *b"CSUP",
@@ -570,12 +556,12 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
     InstitutionCodeInfo {
         institution_code: *b"CEDU",
         institution_code_text: "CEDU",
-        cid_short_name: "市教委",
+        cid_short_name: "市教委会",
     },
     InstitutionCodeInfo {
         institution_code: *b"CSLF",
         institution_code_text: "CSLF",
-        cid_short_name: "市自治委",
+        cid_short_name: "市自治会",
     },
     InstitutionCodeInfo {
         institution_code: *b"CDEF",
@@ -691,7 +677,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
     InstitutionCodeInfo {
         institution_code: *b"TSLF",
         institution_code_text: "TSLF",
-        cid_short_name: "镇自治委",
+        cid_short_name: "镇自治会",
     },
     InstitutionCodeInfo {
         institution_code: *b"TSUP",
@@ -838,20 +824,17 @@ pub fn institution_code_from_str(value: &str) -> Option<InstitutionCode> {
         .map(|info| info.institution_code)
 }
 
-/// 机构码字符长度(3 = 国家/省部布局,4 = 市镇/私权/个人布局)。
+/// 机构码字符长度。
 pub fn institution_code_len(code: &InstitutionCode) -> Option<usize> {
     institution_code_text(code).map(str::len)
 }
 
-/// 是否为 3 字符码(国家级单体、省级类型、大学类)。
+/// 是否为 3 字符码。
 pub fn is_three_char_code(code: &InstitutionCode) -> bool {
     institution_code_len(code) == Some(3)
 }
 
-/// 从 CID 号(`R5-seg2-N9-D4`)解析机构码。
-///
-/// 机构码在第二段 seg2:3 字符码布局 = `码(3)+盈利位(1)+校验(1)`;
-/// 4 字符码布局 = `码(4)+M1(1)`。靠 seg2 索引 3 区分(数字→3 字符,字母→4 字符)。
+/// 从 CID 号第二段解析机构码。
 pub fn institution_code_from_cid_number(cid_number: &str) -> Option<InstitutionCode> {
     let seg2 = cid_number.split('-').nth(1)?;
     let b = seg2.as_bytes();
@@ -875,7 +858,7 @@ fn text_matches(code: &InstitutionCode, values: &[&str]) -> bool {
     values.iter().any(|value| *value == text)
 }
 
-/// 盈利策略(决定号码 M1 / 盈利位的生成与校验)。
+/// 获取机构码盈利策略。
 pub fn profit_policy(code: &InstitutionCode) -> Option<ProfitPolicy> {
     let text = institution_code_text(code)?;
     let policy = match text {
@@ -887,17 +870,17 @@ pub fn profit_policy(code: &InstitutionCode) -> Option<ProfitPolicy> {
     Some(policy)
 }
 
-/// 个人主体(公民人/自然人/智能人)。
+/// 是否个人主体。
 pub fn is_person_code(code: &InstitutionCode) -> bool {
     text_matches(code, &["CTZN", "NATP", "SMTP"])
 }
 
-/// 非法人(个体经营/无限合伙/非法人组织)。
+/// 是否非法人。
 pub fn is_unincorporated_code(code: &InstitutionCode) -> bool {
     text_matches(code, &["SFGT", "SFGP", "UNIN"])
 }
 
-/// 私法人(有限合伙/股权/股份/公益/协会/私立大学/私立学校/教会大学/教会学校)。
+/// 是否私法人。
 pub fn is_private_legal_code(code: &InstitutionCode) -> bool {
     text_matches(
         code,
@@ -928,22 +911,22 @@ pub fn admin_level(code: &InstitutionCode) -> Option<AdminLevel> {
     }
 }
 
-/// 公法人(国家/省部/市镇公权机构、公立大学/学校)。
+/// 是否公法人。
 pub fn is_public_legal_code(code: &InstitutionCode) -> bool {
     admin_level(code).is_some() || text_matches(code, &["GUN", "GSCH"])
 }
 
-/// 是否教育机构(公私大学/学校)。
+/// 是否教育机构。
 pub fn is_education_institution_code(code: &InstitutionCode) -> bool {
     text_matches(code, &["GUN", "SUN", "JUN", "GSCH", "SFSC", "JSCH"])
 }
 
-/// 是否基础教育学校(初学/小学/中学),需要 education_type 级别字段。
+/// 是否基础教育学校。
 pub fn requires_education_level(code: &InstitutionCode) -> bool {
     text_matches(code, &["GSCH", "SFSC", "JSCH"])
 }
 
-/// 是否为固定治理档机构码(国储会/省储会/省储行/联邦注册局/国家司法院)。
+/// 是否固定治理档机构码。
 pub fn is_fixed_governance_code(code: &InstitutionCode) -> bool {
     matches!(*code, NRC | PRC | PRB | FRG | NJD)
 }
@@ -964,12 +947,12 @@ pub fn fixed_governance_pass_threshold(code: &InstitutionCode) -> Option<u32> {
     }
 }
 
-/// 是否为个人多签账户机构码(PMUL)。管理员来自 personal-admins。
+/// 是否个人多签账户机构码。
 pub fn is_personal_code(code: &InstitutionCode) -> bool {
     *code == PMUL
 }
 
-/// 是否为机构账户机构码(公权法人/私权法人/非法人实体)。
+/// 是否机构账户机构码。
 pub fn is_institution_code(code: &InstitutionCode) -> bool {
     !is_fixed_governance_code(code)
         && (is_public_legal_code(code)
@@ -977,12 +960,12 @@ pub fn is_institution_code(code: &InstitutionCode) -> bool {
             || is_unincorporated_code(code))
 }
 
-/// 是否为注册多签动态阈值账户机构码(个人多签 或 机构账户)。
+/// 是否注册多签动态阈值账户机构码。
 pub fn is_registered_multisig_code(code: &InstitutionCode) -> bool {
     is_personal_code(code) || is_institution_code(code)
 }
 
-/// 是否为内部投票支持的治理机构码(固定治理档 或 注册多签账户)。
+/// 是否内部投票支持的治理机构码。
 pub fn is_valid_governance_code(code: &InstitutionCode) -> bool {
     is_fixed_governance_code(code) || is_registered_multisig_code(code)
 }
@@ -1038,7 +1021,7 @@ mod tests {
     #[test]
     fn classification_spot_check() {
         assert_eq!(institution_code_text(&NRC), Some("NRC"));
-        assert_eq!(cid_short_name(&NRC), Some("国家公民储备委员会"));
+        assert_eq!(cid_short_name(&NRC), Some("国家储委会"));
         assert!(is_fixed_governance_code(&NRC));
         assert!(!is_registered_multisig_code(&NRC));
         assert!(is_public_legal_code(&NRC));

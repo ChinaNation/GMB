@@ -133,7 +133,7 @@ OnChina 管理员登录必须使用登录专用错误码，禁止继续把登录
 | `ONCHINA_LOGIN_RESULT_QUERY_FAILED` | 查询登录结果失败，请稍后重试 |
 | `ONCHINA_LOGIN_VERIFY_FAILED` | 登录签名校验失败，请重新生成二维码 |
 | `ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN` | 当前钱包不是本机构链上有效管理员 |
-| `ONCHINA_LOGIN_DESKTOP_GOVERNANCE_UNSUPPORTED` | 国储会、省储会、省储行使用节点桌面端管理，不支持登录链上中国平台 |
+| `ONCHINA_LOGIN_DESKTOP_GOVERNANCE_UNSUPPORTED` | 国家储委会、省储委会、省储行使用节点桌面端管理，不支持登录链上中国平台 |
 | `ONCHINA_LOGIN_PERSONAL_MULTISIG_UNSUPPORTED` | 个人多签账户不支持登录链上中国平台 |
 | `ONCHINA_LOGIN_CHAIN_UNREACHABLE` | 无法连接区块链节点，请确认节点已启动并同步 |
 | `ONCHINA_LOGIN_NODE_BINDING_REQUIRED` | 请先确认本节点绑定机构 |

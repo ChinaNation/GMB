@@ -47,7 +47,7 @@
 - `memory/01-architecture/`、`memory/05-modules/`：同步记录管理员资料展示统一契约；涉及文档。
 
 验收标准：
-- node 国储会、省储会、省储行管理员列表来自链上 `AdminProfile` 正确解码，不再出现管理员错位导致的余额不一致。
+- node 国家储委会、省储委会、省储行管理员列表来自链上 `AdminProfile` 正确解码，不再出现管理员错位导致的余额不一致。
 - 公民、链上中国、node 所有机构管理员展示为统一卡片结构：顶部序号/操作状态，内容依次为姓名/职务、任期/来源、身份CID、账户、余额。
 - 管理员资料字段值为空时，该字段标签仍显示，值区域留空。
 - 管理员账户统一显示完整 SS58；余额统一来自 finalized `System.Account.free`，余额为空只留空值区域。
@@ -93,7 +93,7 @@
 - `cargo check --manifest-path citizenchain/Cargo.toml -p node`：通过。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p node admins::admin_management::codec -- --nocapture`：通过，3 个 codec 测试覆盖机构 `AdminProfile` 和个人多签 account-only 解码。
 - `dart analyze ...` 与 `flutter analyze ...`（本任务改动的 7 个 Dart 文件）：通过。
-- 真实页面预览：`npm preview` 启动 node `http://localhost:5181/` 和 OnChina `http://localhost:5182/`；node 首页/国储会 tab 可加载但普通浏览器缺少 Tauri `invoke`，管理员数据页无法直连；OnChina 可加载管理员扫码登录页且控制台无 error。管理员列表的真实数据页仍需 Tauri/真实 OnChina 登录态和链节点环境做人工运行态复核。
+- 真实页面预览：`npm preview` 启动 node `http://localhost:5181/` 和 OnChina `http://localhost:5182/`；node 首页/国家储委会 tab 可加载但普通浏览器缺少 Tauri `invoke`，管理员数据页无法直连；OnChina 可加载管理员扫码登录页且控制台无 error。管理员列表的真实数据页仍需 Tauri/真实 OnChina 登录态和链节点环境做人工运行态复核。
 
 残留清理：
 - 清理旧前端 `updateCityRegistryName`、`updateFederalRegistryName` API 封装和编辑入口。

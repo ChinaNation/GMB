@@ -3,11 +3,11 @@ part of 'governance_registry.dart';
 // 本文件由 scripts/generate_citizenapp_governance_registry.mjs 自动生成。
 // 创世治理机构中英全称/简称、cid_number 和制度账户来自 runtime primitives；管理员必须动态读取链上 AdminAccounts。
 
-/// 国储会（1 个）。
+/// 国家储委会（1 个）。
 const List<InstitutionInfo> kNationalCouncil = [
   InstitutionInfo(
     cidFullName: '国家公民储备委员会',
-    cidShortName: '国储会',
+    cidShortName: '国家储委会',
     cidFullNameEn: 'National Citizen Reserve Committee',
     cidShortNameEn: 'National Reserve Committee',
     cidNumber: 'LN001-NRC0G-944805165-2026',
@@ -25,11 +25,11 @@ const List<InstitutionInfo> kNationalCouncil = [
   ),
 ];
 
-/// 省储会（43 个）。
+/// 省储委会（43 个）。
 const List<InstitutionInfo> kProvincialCouncils = [
   InstitutionInfo(
     cidFullName: '中枢省公民储备委员会',
-    cidShortName: '中枢省储会',
+    cidShortName: '中枢省储委会',
     cidFullNameEn: 'Zhongshu Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Zhongshu Provincial Reserve Committee',
     cidNumber: 'ZS001-PRC0E-016974075-2026',
@@ -43,7 +43,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '岭南省公民储备委员会',
-    cidShortName: '岭南省储会',
+    cidShortName: '岭南省储委会',
     cidFullNameEn: 'Lingnan Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Lingnan Provincial Reserve Committee',
     cidNumber: 'LN001-PRC05-773405642-2026',
@@ -57,7 +57,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '广东省公民储备委员会',
-    cidShortName: '广东省储会',
+    cidShortName: '广东省储委会',
     cidFullNameEn: 'Guangdong Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Guangdong Provincial Reserve Committee',
     cidNumber: 'GD001-PRC0V-067440774-2026',
@@ -71,7 +71,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '广西省公民储备委员会',
-    cidShortName: '广西省储会',
+    cidShortName: '广西省储委会',
     cidFullNameEn: 'Guangxi Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Guangxi Provincial Reserve Committee',
     cidNumber: 'GX001-PRC0C-663454043-2026',
@@ -85,7 +85,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '福建省公民储备委员会',
-    cidShortName: '福建省储会',
+    cidShortName: '福建省储委会',
     cidFullNameEn: 'Fujian Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Fujian Provincial Reserve Committee',
     cidNumber: 'FJ001-PRC0I-389570546-2026',
@@ -99,7 +99,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '海南省公民储备委员会',
-    cidShortName: '海南省储会',
+    cidShortName: '海南省储委会',
     cidFullNameEn: 'Hainan Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Hainan Provincial Reserve Committee',
     cidNumber: 'HN001-PRC0S-545676096-2026',
@@ -113,7 +113,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '云南省公民储备委员会',
-    cidShortName: '云南省储会',
+    cidShortName: '云南省储委会',
     cidFullNameEn: 'Yunnan Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Yunnan Provincial Reserve Committee',
     cidNumber: 'YN001-PRC0W-145427171-2026',
@@ -127,7 +127,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '贵州省公民储备委员会',
-    cidShortName: '贵州省储会',
+    cidShortName: '贵州省储委会',
     cidFullNameEn: 'Guizhou Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Guizhou Provincial Reserve Committee',
     cidNumber: 'GZ001-PRC02-969970096-2026',
@@ -141,7 +141,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '湖南省公民储备委员会',
-    cidShortName: '湖南省储会',
+    cidShortName: '湖南省储委会',
     cidFullNameEn: 'Hunan Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Hunan Provincial Reserve Committee',
     cidNumber: 'HU001-PRC0P-400319700-2026',
@@ -155,7 +155,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '江西省公民储备委员会',
-    cidShortName: '江西省储会',
+    cidShortName: '江西省储委会',
     cidFullNameEn: 'Jiangxi Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Jiangxi Provincial Reserve Committee',
     cidNumber: 'JX001-PRC0J-458681566-2026',
@@ -169,7 +169,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '浙江省公民储备委员会',
-    cidShortName: '浙江省储会',
+    cidShortName: '浙江省储委会',
     cidFullNameEn: 'Zhejiang Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Zhejiang Provincial Reserve Committee',
     cidNumber: 'ZJ001-PRC08-471270801-2026',
@@ -183,7 +183,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '江苏省公民储备委员会',
-    cidShortName: '江苏省储会',
+    cidShortName: '江苏省储委会',
     cidFullNameEn: 'Jiangsu Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Jiangsu Provincial Reserve Committee',
     cidNumber: 'JS001-PRC0O-358467174-2026',
@@ -197,7 +197,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '山东省公民储备委员会',
-    cidShortName: '山东省储会',
+    cidShortName: '山东省储委会',
     cidFullNameEn: 'Shandong Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Shandong Provincial Reserve Committee',
     cidNumber: 'SD001-PRC07-027328848-2026',
@@ -211,7 +211,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '山西省公民储备委员会',
-    cidShortName: '山西省储会',
+    cidShortName: '山西省储委会',
     cidFullNameEn: 'Shanxi Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Shanxi Provincial Reserve Committee',
     cidNumber: 'SX001-PRC0O-104465679-2026',
@@ -225,7 +225,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '河南省公民储备委员会',
-    cidShortName: '河南省储会',
+    cidShortName: '河南省储委会',
     cidFullNameEn: 'Henan Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Henan Provincial Reserve Committee',
     cidNumber: 'HE001-PRC0S-849245626-2026',
@@ -239,7 +239,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '河北省公民储备委员会',
-    cidShortName: '河北省储会',
+    cidShortName: '河北省储委会',
     cidFullNameEn: 'Hebei Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Hebei Provincial Reserve Committee',
     cidNumber: 'HB001-PRC0W-499533387-2026',
@@ -253,7 +253,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '湖北省公民储备委员会',
-    cidShortName: '湖北省储会',
+    cidShortName: '湖北省储委会',
     cidFullNameEn: 'Hubei Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Hubei Provincial Reserve Committee',
     cidNumber: 'HI001-PRC0D-659443961-2026',
@@ -267,7 +267,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '陕西省公民储备委员会',
-    cidShortName: '陕西省储会',
+    cidShortName: '陕西省储委会',
     cidFullNameEn: 'Shaanxi Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Shaanxi Provincial Reserve Committee',
     cidNumber: 'SI001-PRC0T-711309909-2026',
@@ -281,7 +281,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '重庆省公民储备委员会',
-    cidShortName: '重庆省储会',
+    cidShortName: '重庆省储委会',
     cidFullNameEn: 'Chongqing Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Chongqing Provincial Reserve Committee',
     cidNumber: 'CQ001-PRC06-478472058-2026',
@@ -295,7 +295,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '四川省公民储备委员会',
-    cidShortName: '四川省储会',
+    cidShortName: '四川省储委会',
     cidFullNameEn: 'Sichuan Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Sichuan Provincial Reserve Committee',
     cidNumber: 'SC001-PRC0Y-935659021-2026',
@@ -309,7 +309,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '甘肃省公民储备委员会',
-    cidShortName: '甘肃省储会',
+    cidShortName: '甘肃省储委会',
     cidFullNameEn: 'Gansu Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Gansu Provincial Reserve Committee',
     cidNumber: 'GS001-PRC0L-679051155-2026',
@@ -323,7 +323,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '北平省公民储备委员会',
-    cidShortName: '北平省储会',
+    cidShortName: '北平省储委会',
     cidFullNameEn: 'Beiping Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Beiping Provincial Reserve Committee',
     cidNumber: 'BP001-PRC0R-189323546-2026',
@@ -337,7 +337,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '海滨省公民储备委员会',
-    cidShortName: '海滨省储会',
+    cidShortName: '海滨省储委会',
     cidFullNameEn: 'Haibin Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Haibin Provincial Reserve Committee',
     cidNumber: 'HA001-PRC0Y-214178517-2026',
@@ -351,7 +351,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '松江省公民储备委员会',
-    cidShortName: '松江省储会',
+    cidShortName: '松江省储委会',
     cidFullNameEn: 'Songjiang Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Songjiang Provincial Reserve Committee',
     cidNumber: 'SJ001-PRC09-044490898-2026',
@@ -365,7 +365,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '龙江省公民储备委员会',
-    cidShortName: '龙江省储会',
+    cidShortName: '龙江省储委会',
     cidFullNameEn: 'Longjiang Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Longjiang Provincial Reserve Committee',
     cidNumber: 'LJ001-PRC08-279890045-2026',
@@ -379,7 +379,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '吉林省公民储备委员会',
-    cidShortName: '吉林省储会',
+    cidShortName: '吉林省储委会',
     cidFullNameEn: 'Jilin Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Jilin Provincial Reserve Committee',
     cidNumber: 'JL001-PRC05-850461124-2026',
@@ -393,7 +393,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '辽宁省公民储备委员会',
-    cidShortName: '辽宁省储会',
+    cidShortName: '辽宁省储委会',
     cidFullNameEn: 'Liaoning Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Liaoning Provincial Reserve Committee',
     cidNumber: 'LI001-PRC0T-978545133-2026',
@@ -407,7 +407,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '宁夏省公民储备委员会',
-    cidShortName: '宁夏省储会',
+    cidShortName: '宁夏省储委会',
     cidFullNameEn: 'Ningxia Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Ningxia Provincial Reserve Committee',
     cidNumber: 'NX001-PRC0J-389752794-2026',
@@ -421,7 +421,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '青海省公民储备委员会',
-    cidShortName: '青海省储会',
+    cidShortName: '青海省储委会',
     cidFullNameEn: 'Qinghai Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Qinghai Provincial Reserve Committee',
     cidNumber: 'QH001-PRC0C-882026762-2026',
@@ -435,7 +435,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '安徽省公民储备委员会',
-    cidShortName: '安徽省储会',
+    cidShortName: '安徽省储委会',
     cidFullNameEn: 'Anhui Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Anhui Provincial Reserve Committee',
     cidNumber: 'AH001-PRC00-589856828-2026',
@@ -449,7 +449,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '台湾省公民储备委员会',
-    cidShortName: '台湾省储会',
+    cidShortName: '台湾省储委会',
     cidFullNameEn: 'Taiwan Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Taiwan Provincial Reserve Committee',
     cidNumber: 'TW001-PRC07-265218823-2026',
@@ -463,7 +463,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '西藏省公民储备委员会',
-    cidShortName: '西藏省储会',
+    cidShortName: '西藏省储委会',
     cidFullNameEn: 'Xizang Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Xizang Provincial Reserve Committee',
     cidNumber: 'XZ001-PRC02-435616961-2026',
@@ -477,7 +477,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '新疆省公民储备委员会',
-    cidShortName: '新疆省储会',
+    cidShortName: '新疆省储委会',
     cidFullNameEn: 'Xinjiang Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Xinjiang Provincial Reserve Committee',
     cidNumber: 'XJ001-PRC02-671044381-2026',
@@ -491,7 +491,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '西康省公民储备委员会',
-    cidShortName: '西康省储会',
+    cidShortName: '西康省储委会',
     cidFullNameEn: 'Xikang Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Xikang Provincial Reserve Committee',
     cidNumber: 'XK001-PRC0P-695945392-2026',
@@ -505,7 +505,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '阿里省公民储备委员会',
-    cidShortName: '阿里省储会',
+    cidShortName: '阿里省储委会',
     cidFullNameEn: 'Ali Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Ali Provincial Reserve Committee',
     cidNumber: 'AL001-PRC0D-487847725-2026',
@@ -519,7 +519,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '葱岭省公民储备委员会',
-    cidShortName: '葱岭省储会',
+    cidShortName: '葱岭省储委会',
     cidFullNameEn: 'Congling Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Congling Provincial Reserve Committee',
     cidNumber: 'CL001-PRC0J-771698743-2026',
@@ -533,7 +533,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '伊犁省公民储备委员会',
-    cidShortName: '伊犁省储会',
+    cidShortName: '伊犁省储委会',
     cidFullNameEn: 'Yili Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Yili Provincial Reserve Committee',
     cidNumber: 'YL001-PRC0Q-293160581-2026',
@@ -547,7 +547,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '河西省公民储备委员会',
-    cidShortName: '河西省储会',
+    cidShortName: '河西省储委会',
     cidFullNameEn: 'Hexi Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Hexi Provincial Reserve Committee',
     cidNumber: 'HX001-PRC0D-475713213-2026',
@@ -561,7 +561,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '昆仑省公民储备委员会',
-    cidShortName: '昆仑省储会',
+    cidShortName: '昆仑省储委会',
     cidFullNameEn: 'Kunlun Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Kunlun Provincial Reserve Committee',
     cidNumber: 'KL001-PRC0O-091969119-2026',
@@ -575,7 +575,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '河套省公民储备委员会',
-    cidShortName: '河套省储会',
+    cidShortName: '河套省储委会',
     cidFullNameEn: 'Hetao Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Hetao Provincial Reserve Committee',
     cidNumber: 'HT001-PRC00-481172908-2026',
@@ -589,7 +589,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '热河省公民储备委员会',
-    cidShortName: '热河省储会',
+    cidShortName: '热河省储委会',
     cidFullNameEn: 'Rehe Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Rehe Provincial Reserve Committee',
     cidNumber: 'RH001-PRC0F-697831866-2026',
@@ -603,7 +603,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '兴安省公民储备委员会',
-    cidShortName: '兴安省储会',
+    cidShortName: '兴安省储委会',
     cidFullNameEn: 'Xingan Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Xingan Provincial Reserve Committee',
     cidNumber: 'XA001-PRC0H-384161601-2026',
@@ -617,7 +617,7 @@ const List<InstitutionInfo> kProvincialCouncils = [
   ),
   InstitutionInfo(
     cidFullName: '合江省公民储备委员会',
-    cidShortName: '合江省储会',
+    cidShortName: '合江省储委会',
     cidFullNameEn: 'Hejiang Provincial Citizen Reserve Committee',
     cidShortNameEn: 'Hejiang Provincial Reserve Committee',
     cidNumber: 'HJ001-PRC0V-963948997-2026',

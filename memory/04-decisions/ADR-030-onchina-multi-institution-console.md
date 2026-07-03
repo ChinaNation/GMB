@@ -29,7 +29,7 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 | 其它公权法人（政府/立法/监察/司法/教育/公安等） | `is_public_legal_code` | `PublicAdmins::AdminAccounts`（29） | 可登录，本期只读本机构管理员 |
 | 私权法人（股权/股份/有限合伙/公益/协会/私立学校等） | `is_private_legal_code` | `PrivateAdmins::AdminAccounts`（30） | 可登录，本期只读本机构管理员 |
 | 非法人组织 | `is_unincorporated_code` | `PublicAdmins::AdminAccounts` / `PrivateAdmins::AdminAccounts` 双探测 | 可登录，本期只读本机构管理员 |
-| 国储会 / 省储会 / 省储行 | `NRC` / `PRC` / `PRB` | `PublicAdmins::AdminAccounts`（29） | 不登录 OnChina，使用节点桌面端 |
+| 国家储委会 / 省储委会 / 省储行 | `NRC` / `PRC` / `PRB` | `PublicAdmins::AdminAccounts`（29） | 不登录 OnChina，使用节点桌面端 |
 
 个人多签 PMUL（personal-admins，idx7）**不登录控制台**：无 CID、不跑节点，纯 CitizenApp 客户端功能。
 
@@ -37,7 +37,7 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 
 - 启动只做运行健康检查：`ONCHAIN_WS_URL` 可连接、本地数据库可用、HTTPS 服务可用、平台进程健康接口可达。
 - 冷钱包签名验证后，后端用 `verified_pubkey` 扫描链上 active admin 集合，生成该管理员可登录机构候选。
-- 非 active admin 不能登录；国储会 / 省储会 / 省储行返回桌面端专用错误；个人多签返回个人多签不支持错误。
+- 非 active admin 不能登录；国家储委会 / 省储委会 / 省储行返回桌面端专用错误；个人多签返回个人多签不支持错误。
 - 本节点未绑定机构时：一个候选也必须在页面显示机构信息并二次确认绑定；多个候选由管理员选择一个后确认绑定。
 - 本节点已绑定机构后：后续登录只允许该绑定机构的 active admin；管理员被链上移除后由后台复查清退会话。
 - 本节点解绑 / 换机构：必须由当前本机会话管理员发起 `NODE_BINDING_UNBIND` 安全动作，并由冷钱包签名确认；commit 成功后 active binding 置为 `INACTIVE` 并清退本节点管理员会话。换机构不走影子兼容流程，必须先解绑，再由新机构 active admin 重新扫码登录并确认绑定。

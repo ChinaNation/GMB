@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 use sp_core::{sr25519, Pair};
 use uuid::Uuid;
 
+use crate::auth::actions::require_admin_security_grant;
+use crate::auth::operation_auth::AdminActionType;
 use crate::domains::citizens::admin_entry::{
     citizen_record_from_row, resolve_wallet_account, ResolvedWallet,
 };
@@ -67,6 +69,22 @@ pub(crate) async fn prepare_citizen_onchain_signature(
         Err(resp) => return resp,
     };
     if let Err(resp) = ensure_registry_admin(&ctx) {
+        return resp;
+    }
+    // 注册局上链操作最严档:passkey 断言 + 冷钱包扫码签名 grant,
+    // grant 与 cid_number/wallet_account 载荷绑定,单次消费。
+    let grant_payload = serde_json::json!({
+        "cid_number": cid_number,
+        "wallet_account": input.wallet_account,
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CitizenOnchainPush,
+        cid_number.as_str(),
+        Some(&grant_payload),
+    ) {
         return resp;
     }
     let wallet = match resolve_wallet_account(input.wallet_account.as_str()) {
@@ -133,6 +151,22 @@ pub(crate) async fn complete_citizen_onchain_signature(
         Err(resp) => return resp,
     };
     if let Err(resp) = ensure_registry_admin(&ctx) {
+        return resp;
+    }
+    // complete 同为上链操作,单独消费一次最严档 grant;载荷绑定不含
+    // sign_response(公民回执在 grant 签发时尚不存在)。
+    let grant_payload = serde_json::json!({
+        "cid_number": cid_number,
+        "wallet_account": input.wallet_account,
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CitizenOnchainPush,
+        cid_number.as_str(),
+        Some(&grant_payload),
+    ) {
         return resp;
     }
     let wallet = match resolve_wallet_account(input.wallet_account.as_str()) {

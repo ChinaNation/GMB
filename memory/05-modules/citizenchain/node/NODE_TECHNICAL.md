@@ -129,7 +129,7 @@
 
 - 地址真源：
   - `node/src/governance/registry.rs` 直接读取 `runtime/primitives/cid/china/china_cb.rs`、`runtime/primitives/cid/china/china_ch.rs` 和 `SAFETY_FUND_ACCOUNT`
-  - `治理 -> 国储会 / 省储会 / 省储行` 页面的 `主账户 / 费用账户 / 安全基金账户 / 永久质押账户` 不再允许 node 侧手抄第二份地址表
+  - `治理 -> 国家储委会 / 省储委会 / 省储行` 页面的 `主账户 / 费用账户 / 安全基金账户 / 永久质押账户` 不再允许 node 侧手抄第二份地址表
 - 金额真源：
   - `node/src/governance/institution.rs` 先取 `chain_getFinalizedHead`
   - 再用同一个 `block_hash` 调 `state_getStorage(System::Account)` 读取 `free` 余额
@@ -150,13 +150,13 @@
   - `node/src/governance/runtime_upgrade/commands.rs`：Tauri 命令入口，保留 `build_propose_upgrade_request`、`submit_propose_upgrade`、`build_developer_upgrade_request`、`submit_developer_upgrade` 命令名。
   - `node/src/governance/runtime_upgrade/call_data.rs`：RuntimeUpgrade pallet call_data 编码，只承载 `propose_runtime_upgrade` 与 `developer_direct_upgrade`。
   - `node/src/governance/runtime_upgrade/signing.rs`：Runtime WASM 大 payload 的 QR 签名请求构建，通用签名校验仍复用 `node/src/governance/signing.rs`。
-  - 开发升级命令会校验签名公钥属于本机已激活国储会管理员，避免绕过前端直接调用 Tauri 命令。
+  - 开发升级命令会校验签名公钥属于本机已激活国家储委会管理员，避免绕过前端直接调用 Tauri 命令。
 - 前端实现：
-  - `node/frontend/governance/runtime-upgrade/ProtocolUpgradeProposalPage.tsx`：国储会详情页“协议升级”，提交运行期协议升级提案，进入联合投票。
-  - `node/frontend/governance/runtime-upgrade/DeveloperUpgradePage.tsx`：国储会详情页“开发升级”，只使用当前国储会已激活管理员发起开发期直升。
+  - `node/frontend/governance/runtime-upgrade/ProtocolUpgradeProposalPage.tsx`：国家储委会详情页“协议升级”，提交运行期协议升级提案，进入联合投票。
+  - `node/frontend/governance/runtime-upgrade/DeveloperUpgradePage.tsx`：国家储委会详情页“开发升级”，只使用当前国家储委会已激活管理员发起开发期直升。
   - `node/frontend/governance/runtime-upgrade/api.ts`：协议升级专用 Tauri API；`governance/api.ts` 不再承载协议升级创建/提交接口。
 - 入口约束：
-  - 国储会详情页使用“协议升级”入口。
+  - 国家储委会详情页使用“协议升级”入口。
   - “开发升级”是独立按钮，放在“协议升级”后，不与协议升级合并。
   - 设置页不再保留任何开发升级入口或 `settings/developer-upgrade` 代码。
 - 当前边界：

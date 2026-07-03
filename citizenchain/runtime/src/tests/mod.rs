@@ -24,6 +24,9 @@ fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
         System::set_block_number(1);
+        // 链上时间 = 2026-07-02 00:00 UTC,使公民身份夹具护照(20260630-20360630)
+        // 落在投票资格的护照有效期窗口内。
+        pallet_timestamp::Pallet::<crate::Runtime>::set_timestamp(1_782_950_400_000);
     });
     ext
 }

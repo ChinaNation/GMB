@@ -254,9 +254,9 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `fee-address` | `fee_account` | Rust 后端模块目录 | `citizenchain/node/src/settings/fee_account/`;节点前端现有 `settings/fee-address/` 仍按前端路径命名登记处理 |
 | `duoqian-transfer` / `duoqian_transfer` / `DuoqianTransfer` | `multisig-transfer` / `multisig_transfer` / `MultisigTransfer` | 多签转账 pallet、node 后端、App 前端和文档 | 当前实现只允许 `multisig-transfer` 一套命名 |
 | `shengbank-interest` / `shengbank_interest` / `ShengBankInterest` | `provincialbank-interest` / `provincialbank_interest` / `ProvincialBankInterest` | 省行利息 pallet、runtime 配置和文档 | pallet 目录最多两段，统一用 `provincialbank-interest` |
-| `nrc_anquan_account` / `anquanAccount` | `safety_fund_account` / `safetyFundAccount` | 国储会安全基金账户字段 | 安全基金是账户用途，不使用拼音字段名 |
+| `nrc_anquan_account` / `anquanAccount` | `safety_fund_account` / `safetyFundAccount` | 国家储委会安全基金账户字段 | 安全基金是账户用途，不使用拼音字段名 |
 | `ACCOUNT_NAME_ANQUAN` / `RESERVED_NAME_ANQUAN` / `OP_AN` | `ACCOUNT_NAME_SAFETYFUND` / `RESERVED_NAME_SAFETYFUND` / `OP_SAFETY` | 制度账户名称和派生 op tag | 与 `SAFETY_FUND_ACCOUNT` 统一 |
-| `guochuhui` / `shengchuhui` / `shengchuhang` | `nrc` / `prc` / `prb` | 机构角色代码、列表字段和类型派生 | 对应国储会、省储会、省储行标准缩写 |
+| `guochuhui` / `shengchuhui` / `shengchuhang` | `nrc` / `prc` / `prb` | 机构角色代码、列表字段和类型派生 | 对应国家储委会、省储委会、省储行标准缩写 |
 
 ## 6. 新命名登记模板
 

@@ -8,6 +8,7 @@ import 'package:citizenapp/qr/bodies/sign_response_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
+import 'package:citizenapp/signer/signing.dart';
 
 void main() {
   group('QrSigner QR_V1', () {
@@ -205,6 +206,24 @@ void main() {
       );
 
       expect(actual, expected);
+    });
+
+    test('citizen identity uses GMB 0x10 hash domain, not raw payload', () {
+      final actual = QrSigner.signingBytesForHex(
+        payloadHex: payload,
+        action: QrActions.citizenIdentity,
+      );
+      final expected = Hasher.blake2b256.hash(
+        Uint8List.fromList([0x47, 0x4d, 0x42, 0x10, 1, 2, 3, 4]),
+      );
+      final viaPrimitive = signingMessage(
+        opTag: kOpSignCitizenIdentity,
+        scalePayload: const [1, 2, 3, 4],
+      );
+
+      expect(actual, expected);
+      expect(actual, viaPrimitive);
+      expect(actual.toList(), isNot([1, 2, 3, 4]));
     });
   });
 }

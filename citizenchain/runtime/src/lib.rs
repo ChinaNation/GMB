@@ -339,7 +339,7 @@ mod runtime {
     #[runtime::pallet_index(14)]
     pub type ResolutionDestro = resolution_destro;
 
-    // GRANDPA 密钥治理模块：国储会/省储会内部投票通过后替换 GRANDPA 投票公钥
+    // GRANDPA 密钥治理模块：国家储委会/省储委会内部投票通过后替换 GRANDPA 投票公钥
     #[runtime::pallet_index(16)]
     pub type GrandpaKeyChange = grandpakey_change;
 

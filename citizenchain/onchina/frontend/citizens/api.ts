@@ -3,7 +3,13 @@
 // 通用请求能力只从 utils/http.ts 引入,本文件不承接机构或管理员模块接口。
 
 import type { AdminAuth } from '../auth/types';
+import {
+  createScanSignSecurityGrant,
+  type ScanSignResolver,
+} from '../admins/admin_security_api';
 import { adminHeaders, adminRequest, request } from '../utils/http';
+
+const SECURITY_GRANT_HEADER = 'x-cid-security-grant';
 
 export type CitizenState = 'NORMAL' | 'REVOKED';
 export type CitizenSex = 'MALE' | 'FEMALE';
@@ -188,17 +194,38 @@ export async function createCitizen(
   });
 }
 
+// 公民身份上链属注册局上链操作,最严档 PASSKEY_COLD_SIGN:
+// prepare 与 complete 各自先取一次性安全 grant(passkey + 管理员冷钱包扫码签名),
+// grant 载荷绑定 { cid_number, wallet_account },必须与业务请求逐字段一致。
+async function citizenOnchainGrant(
+  auth: AdminAuth,
+  cidNumber: string,
+  walletAccount: string,
+  signWithScan: ScanSignResolver,
+): Promise<string> {
+  const grant = await createScanSignSecurityGrant(
+    auth,
+    'CITIZEN_ONCHAIN_PUSH',
+    { cid_number: cidNumber, wallet_account: walletAccount },
+    signWithScan,
+  );
+  return grant.grant_id;
+}
+
 export async function prepareCitizenOnchainSignature(
   auth: AdminAuth,
   cidNumber: string,
   walletAccount: string,
+  signWithScan: ScanSignResolver,
 ): Promise<PrepareCitizenOnchainResult> {
+  const grantId = await citizenOnchainGrant(auth, cidNumber, walletAccount, signWithScan);
   return request<PrepareCitizenOnchainResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/prepare`,
     {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
+        [SECURITY_GRANT_HEADER]: grantId,
         ...adminHeaders(auth),
       },
       body: JSON.stringify({ wallet_account: walletAccount }),
@@ -211,13 +238,16 @@ export async function completeCitizenOnchainSignature(
   cidNumber: string,
   walletAccount: string,
   signResponse: string,
+  signWithScan: ScanSignResolver,
 ): Promise<CompleteCitizenOnchainResult> {
+  const grantId = await citizenOnchainGrant(auth, cidNumber, walletAccount, signWithScan);
   return request<CompleteCitizenOnchainResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/complete`,
     {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
+        [SECURITY_GRANT_HEADER]: grantId,
         ...adminHeaders(auth),
       },
       body: JSON.stringify({ wallet_account: walletAccount, sign_response: signResponse }),

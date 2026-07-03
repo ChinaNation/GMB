@@ -2,6 +2,9 @@
 
 ## open
 
+- `memory/08-tasks/open/20260702-cid-occupy-card1-runtime-validation.md`
+- `memory/08-tasks/open/20260702-cid-occupy-card2-occupy-first-flow.md`
+- `memory/08-tasks/open/20260702-cid-occupy-card3-genesis-legacy-backfill.md`
 - `memory/08-tasks/open/20260626-registry-merge-00-adr-scaffold.md`
 - `memory/08-tasks/open/20260626-registry-merge-01-backend-migrate.md`
 - `memory/08-tasks/open/20260626-registry-merge-02-frontend-migrate.md`
@@ -218,7 +221,7 @@
 - `memory/08-tasks/done/20260508-170114-restore-doc-style.md`
 - `memory/08-tasks/done/20260508-172933-fix-doc-tab-binding-title.md`
 - `memory/08-tasks/done/20260508-admins-change-lifecycle-events.md`
-- `memory/08-tasks/done/20260509-182958-调整国储会详情页-runtime-升级入口-状态升级改为协议升级-并新增独立开发升级按钮.md`
+- `memory/08-tasks/done/20260509-182958-调整国家储委会详情页-runtime-升级入口-状态升级改为协议升级-并新增独立开发升级按钮.md`
 - `memory/08-tasks/done/20260511-wasm-ci-auto-spec-version.md`
 - `memory/08-tasks/done/20260516-runtime-audit-fixes-vote-cid.md`
 - `memory/08-tasks/done/20260524-citizenchain-ci-five-packages.md`

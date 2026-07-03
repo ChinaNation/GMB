@@ -2,7 +2,7 @@
 
 ## 概述
 
-国储会安全基金（SAFETY_FUND_ACCOUNT）的转账通过内部投票治理。仅国储会管理员（NRC admin）可发起提案，经多签投票通过后自动执行转账并扣除手续费。
+国家储委会安全基金（SAFETY_FUND_ACCOUNT）的转账通过内部投票治理。仅国家储委会管理员（NRC admin）可发起提案，经多签投票通过后自动执行转账并扣除手续费。
 
 ## 安全基金账户
 
@@ -11,7 +11,7 @@ pub const SAFETY_FUND_ACCOUNT: [u8; 32] =
     hex!("045bdb35046c60c1346ba48e1e79049519edf4c009e40c7ecead1bebd1884a37");
 ```
 
-账户派生方式：`BLAKE2-256(GMB + OP_SAFETY + SS58_PREFIX_LE + 国储会 cid_number)`，详见 BLAKE2_ADDRESS_DERIVATION.md。
+账户派生方式：`BLAKE2-256(GMB + OP_SAFETY + SS58_PREFIX_LE + 国家储委会 cid_number)`，详见 BLAKE2_ADDRESS_DERIVATION.md。
 
 ## 存储
 
@@ -34,11 +34,11 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 
 ### 1. 发起提案（propose_safety_fund_transfer，call_index=1）
 
-- **调用者**：国储会管理员（机构码 NRC，`is_fixed_governance_code`）
+- **调用者**：国家储委会管理员（机构码 NRC，`is_fixed_governance_code`）
 - **参数**：beneficiary（收款地址）、amount（金额）、remark（备注）
 - **校验**：
   1. 金额大于零
-  2. 调用者是国储会管理员（通过 InternalAdminProvider::is_internal_admin 验证，institution_code=NRC）
+  2. 调用者是国家储委会管理员（通过 InternalAdminProvider::is_internal_admin 验证，institution_code=NRC）
   3. InstitutionAsset::can_spend 检查安全基金账户支出权限（NrcSafetyFundTransfer）
   4. **余额预检**：`free_balance >= amount + fee + ED`，避免创建必定无法执行的提案
 - **手续费预算**：使用 `calculate_onchain_fee(amount)` 计算，即 `max(amount * 0.1%, 0.1 元)`
@@ -73,7 +73,7 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 | 比例 | 接收方 | 说明 |
 |------|--------|------|
 | 80% | 全节点 | ONCHAIN_FEE_FULLNODE_PERCENT |
-| 10% | 国储会手续费账户 | ONCHAIN_FEE_NRC_PERCENT |
+| 10% | 国家储委会手续费账户 | ONCHAIN_FEE_NRC_PERCENT |
 | 10% | 安全基金账户 | ONCHAIN_FEE_SAFETY_FUND_PERCENT |
 
 手续费率固定为链上费率 0.1%（ONCHAIN_FEE_RATE），单笔最低 0.1 元（ONCHAIN_MIN_FEE）。

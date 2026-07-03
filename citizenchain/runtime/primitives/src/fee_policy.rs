@@ -1,78 +1,47 @@
-//! 费率规则常量库 = fee_policy.rs
-//!
-//! 全链费率定义的**单一权威源**。所有链上交易计费 / 链下清算行扣费 / 投票治理统一价 / 链上手续费分账比例,都以本文件常量为唯一参考。
-//! ## 类交易费用模型(规则定义)
-//! | 类别 | 规则 | 实际收费 |
-//! |---|---|---|
-//! | 免费 | 不进费率公式 | 0 |
-//! | 投票/治理 | 固定 `VOTE_FLAT_FEE` | 1 元 |
-//! | 链上交易费 | `max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)` | 0.1 元起 |
-//! | 链下交易费 | 清算模块按 `OFFCHAIN_*` 执行 | 不进入链上分账 |
-//! | 未识别 | 拒绝交易 | 不入块 |
-//! 具体每个 extrinsic 归哪一类由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier`决定;新增 extrinsic 必须在该 match 中显式归类。
+//! 费率常量单一真源:链上交易、链下清算、投票治理与手续费分账。
 
 use sp_runtime::Perbill;
-// 链上交易手续费模型(Onchain Fee Model)
-/// 链上交易费率:**0.1%**(amount × 1‰)。
-///
-/// 与 `ONCHAIN_MIN_FEE` 共同决定链上 extrinsic 的实际收费:
-/// `fee = max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)`。
+
+// 链上交易费:`max(amount × 0.1%, ONCHAIN_MIN_FEE)`。
 pub const ONCHAIN_FEE_RATE: Perbill = Perbill::from_parts(1_000_000);
 
-/// 链上交易单笔最小手续费:**10 FEN = 0.1 元**。
-///
-/// 当 `amount × ONCHAIN_FEE_RATE` 不足 10 FEN 时,按本最低值收取。
+/// 链上交易单笔最小手续费:10 FEN = 0.1 元。
 pub const ONCHAIN_MIN_FEE: u128 = 10;
-// 投票/治理类统一费用(Vote Flat Fee)
-/// 投票 / 治理类 extrinsic 统一费用:**100 FEN = 1 元/次**。
-///
-/// 适用范围:
-/// - VotingEngine: internal_vote / joint_vote / election_vote /
-///   retry_passed_proposal / cancel_passed_proposal
-/// - 各业务 pallet 不涉及金额的 propose_X / cleanup_X / register_X / 管理操作
-///
-/// 详见 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier`。
+
+/// 投票/治理类统一费用:100 FEN = 1 元/次。
 pub const VOTE_FLAT_FEE: u128 = 100;
-// 链上发行代币(onchain-issuance)创建费
-/// 链上发行代币一次性创建费:**100_000 FEN = 1000 元/次**。
-///
-/// 设计理由:
-/// 1. 防垃圾发行的核心门槛(对个人多签是高门槛,对机构是小钱)
-/// 2. 与 GMB 唯一计费铁律一致(用户代币创建只收 GMB,不按发行量阶梯)
-/// 3. 与发行后 mint/transfer 的 OnchainTx 标准价(0.1% / ≥0.1 元)正交,不重复计费
+
+/// 链上发行代币一次性创建费:100_000 FEN = 1000 元/次。
 pub const ONCHAIN_ASSET_CREATE_FEE: u128 = 100_000;
-// 链上手续费分账(Onchain Fee Split)
-/// 链上交易手续费铸块全节点分成:**80%**。
+
+// 链上交易手续费分账。
+/// 铸块全节点分成:80%。
 pub const ONCHAIN_FEE_FULLNODE_PERCENT: u32 = 80;
 
-/// 链上交易手续费国储会账户分成:**10%**。
+/// 国家储委会账户分成:10%。
 pub const ONCHAIN_FEE_NRC_PERCENT: u32 = 10;
 
-/// 链上交易手续费安全基金账户分成:**10%**。
+/// 安全基金账户分成:10%。
 pub const ONCHAIN_FEE_SAFETY_FUND_PERCENT: u32 = 10;
-// 链下清算行 L2 手续费模型(Offchain Fee Model)
-/// 链下交易单笔最小手续费:**1 FEN = 0.01 元**。
+
+// 链下清算行 L2 手续费。
+/// 链下交易单笔最小手续费:1 FEN = 0.01 元。
 pub const OFFCHAIN_MIN_FEE: u128 = 1;
 
-/// 链下清算行个体费率下限:**0.01%**。
-///
-/// 各清算行通过 `propose_l2_fee_rate` 投票设置自身费率,链上校验
-/// `OFFCHAIN_FEE_RATE_MIN ≤ rate ≤ OFFCHAIN_FEE_RATE_MAX`。
+/// 链下清算行个体费率下限:0.01%。
 pub const OFFCHAIN_FEE_RATE_MIN: Perbill = Perbill::from_parts(100_000);
 
-/// 链下清算行个体费率上限:**0.1%**。
+/// 链下清算行个体费率上限:0.1%。
 pub const OFFCHAIN_FEE_RATE_MAX: Perbill = Perbill::from_parts(1_000_000);
-// 运营类费用乘数(Operational Fee Multiplier)
-/// 运营类交易费乘数:**1**(不额外加价)。
-///
-/// 由 pallet-transaction-payment 引用,用于区分 `Operational` 与 `Normal` dispatch class。
+
+/// 运营类交易费乘数:1,不额外加价。
 pub const OPERATIONAL_FEE_MULTIPLIER: u8 = 1;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// 链上手续费分成铁律:三方比例之和必须 = 100%。
+    /// 链上手续费三方分账必须等于 100%。
     #[test]
     fn onchain_fee_percents_sum_to_100() {
         assert_eq!(
@@ -83,7 +52,7 @@ mod tests {
         );
     }
 
-    /// 投票统一价 = 1 元 = 100 FEN(精度 2 位)。
+    /// 投票统一价为 1 元。
     #[test]
     fn vote_flat_fee_equals_one_yuan() {
         assert_eq!(VOTE_FLAT_FEE, 100);
@@ -98,24 +67,20 @@ mod tests {
         );
     }
 
-    /// 最低费用必须 > 0,防止零费用攻击。
+    /// 最低费用必须大于 0。
     #[test]
     fn min_fees_positive() {
         assert!(ONCHAIN_MIN_FEE > 0);
         assert!(OFFCHAIN_MIN_FEE > 0);
     }
 
-    /// 链上费率 > 0,防止零费率绕过。
+    /// 链上费率必须大于 0。
     #[test]
     fn onchain_rate_positive() {
         assert!(ONCHAIN_FEE_RATE.deconstruct() > 0);
     }
 
-    /// 链下费率 Perbill / bp 单位换算自洽:
-    /// `OFFCHAIN_FEE_RATE_MIN.deconstruct() / 100_000 = 1 bp`(0.01%),
-    /// `OFFCHAIN_FEE_RATE_MAX.deconstruct() / 100_000 = 10 bp`(0.1%)。
-    /// `offchain-transaction::fee_config::L2_FEE_RATE_BP_MIN/MAX` 从此处推导,
-    /// 一旦本铁律破裂,链下清算行个体费率边界即与单一权威源脱钩。
+    /// 链下费率 Perbill 到 bp 的换算保持稳定。
     #[test]
     fn offchain_perbill_to_bp_conversion_stable() {
         assert_eq!(OFFCHAIN_FEE_RATE_MIN.deconstruct() / 100_000, 1);

@@ -9,6 +9,7 @@ import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/bodies/sign_response_body.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
+import 'package:citizenapp/signer/signing.dart';
 
 enum QrSignErrorCode {
   invalidFormat,
@@ -38,8 +39,6 @@ typedef SignResponseEnvelope = QrEnvelope<SignResponseBody>;
 class QrSigner {
   static const int defaultTtlSeconds = 90;
   static const int maxPayloadChars = 32768;
-  static const List<int> _gmbPrefix = [0x47, 0x4D, 0x42];
-  static const int _opSignImWalletBinding = 0x1A;
   static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
 
   /// 生成加密安全的随机 request id。base64url 比 hex 短,可降低二维码密度。
@@ -214,16 +213,25 @@ class QrSigner {
     }
   }
 
-  /// Substrate 交易签名必须复刻 SignedPayload::using_encoded:
-  /// payload <= 256B 签原文,>256B 签 blake2_256(payload)。
+  /// 按动作码构造签名原文,与 citizenwallet `signingBytesFor` 逐字节一致:
+  /// - 公民身份确认(0x10)/IM 钱包绑定(0x1A)走 GMB 哈希域 signingMessage;
+  /// - 链交易复刻 SignedPayload::using_encoded:
+  ///   payload <= 256B 签原文,>256B 签 blake2_256(payload)。
   static Uint8List signingBytesForHex({
     required String payloadHex,
     required int action,
   }) {
     final payload = Uint8List.fromList(_hexToBytes(payloadHex));
+    if (action == QrActions.citizenIdentity) {
+      return signingMessage(
+        opTag: kOpSignCitizenIdentity,
+        scalePayload: payload,
+      );
+    }
     if (action == QrActions.imWalletBinding) {
-      return Hasher.blake2b256.hash(
-        Uint8List.fromList([..._gmbPrefix, _opSignImWalletBinding, ...payload]),
+      return signingMessage(
+        opTag: kOpSignImWalletBinding,
+        scalePayload: payload,
       );
     }
     if (QrActions.isChainAction(action) && payload.length > 256) {

@@ -1,10 +1,8 @@
-//! 43个初始省储行常量=china_ch.rs
-//! 费用账户（GMB + OP_FEE + ss58 小端 + cid_number → BLAKE2-256）。
-//! 永久质押地址（GMB + OP_STAKE + ss58 小端 + cid_number → BLAKE2-256）。
+//! 43 个初始省储行常量。
 
 use hex_literal::hex;
 
-/// 单个省储行常量结构。
+/// 省储行常量。
 pub struct ChinaCh {
     pub cid_full_name: &'static str,
     pub cid_short_name: &'static str,
@@ -19,7 +17,7 @@ pub struct ChinaCh {
     pub admins: &'static [[u8; 32]],
 }
 
-/// 所有省储行数组
+/// 所有省储行。
 pub const CHINA_CH: &[ChinaCh] = &[
     ChinaCh {
         cid_full_name: "中枢省公民储备银行",
@@ -1019,14 +1017,14 @@ mod tests {
 
     #[test]
     fn citizens_sum_matches_genesis_total() {
-        // 43 省储行人口汇总必须与创世人口常量一致。
+        // 省储行人口总和必须等于创世人口。
         let citizens_sum: u64 = CHINA_CH.iter().map(|n| n.citizens_number).sum();
         assert_eq!(citizens_sum, GENESIS_CITIZEN_MAX);
     }
 
     #[test]
     fn stake_sum_matches_population_basis() {
-        // 省储行创立发行按"每人 10_000 分"汇总。
+        // 创立发行按每人 10_000 分汇总。
         let citizens_sum: u128 = CHINA_CH.iter().map(|n| n.citizens_number as u128).sum();
         let stake_sum: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
         assert_eq!(stake_sum, citizens_sum * 10_000u128);
@@ -1034,7 +1032,7 @@ mod tests {
 
     #[test]
     fn all_china_ch_main_accounts_are_unique() {
-        // 43 个省储行的多签账户必须全部唯一，不允许两省共用同一地址。
+        // 省储行主账户必须唯一。
         let mut addrs: Vec<[u8; 32]> = CHINA_CH.iter().map(|n| n.main_account).collect();
         let total = addrs.len();
         addrs.sort();

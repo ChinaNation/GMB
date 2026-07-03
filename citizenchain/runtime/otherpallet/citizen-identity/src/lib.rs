@@ -21,6 +21,24 @@ pub type AreaCodeBound = BoundedVec<u8, ConstU32<16>>;
 pub type CitizenNameBound = BoundedVec<u8, ConstU32<128>>;
 pub const MIN_ONCHAIN_CITIZEN_AGE_YEARS: u8 = 16;
 
+/// days since 1970-01-01 → 公历 (年, 月, 日)。
+///
+/// Howard Hinnant civil-from-days 整数算法,与 chrono 等价;no_std 下自带,
+/// 供护照有效期(YYYYMMDD)与链上时间戳比对。
+pub fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let year = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let year = if month <= 2 { year + 1 } else { year };
+    (year, month, day)
+}
+
 #[derive(
     Clone,
     Copy,
@@ -43,6 +61,25 @@ impl Default for CitizenStatus {
     fn default() -> Self {
         CitizenStatus::Normal
     }
+}
+
+/// 公民性别(参选身份公开档案字段)。
+#[derive(
+    Clone,
+    Copy,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+#[repr(u8)]
+pub enum CitizenSex {
+    Male = 0,
+    Female = 1,
 }
 
 #[derive(
@@ -103,6 +140,7 @@ pub struct CandidateIdentityPayload<AccountId> {
     pub birth_city_code: AreaCodeBound,
     pub birth_town_code: AreaCodeBound,
     pub citizen_full_name: CitizenNameBound,
+    pub citizen_sex: CitizenSex,
 }
 
 #[derive(
@@ -143,6 +181,7 @@ pub struct CandidateIdentity<BlockNumber> {
     pub birth_city_code: AreaCodeBound,
     pub birth_town_code: AreaCodeBound,
     pub citizen_full_name: CitizenNameBound,
+    pub citizen_sex: CitizenSex,
     pub updated_at: BlockNumber,
 }
 
@@ -272,6 +311,9 @@ pub mod pallet {
 
         type OnVotingIdentityRegistered: OnVotingIdentityRegistered<Self::AccountId>
             + OnVotingIdentityRegisteredWeight;
+
+        /// 链上时间源(pallet-timestamp),用于投票时校验护照有效期窗口。
+        type TimeProvider: frame_support::traits::UnixTime;
 
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -460,6 +502,7 @@ pub mod pallet {
                     birth_city_code: payload.birth_city_code,
                     birth_town_code: payload.birth_town_code,
                     citizen_full_name: payload.citizen_full_name,
+                    citizen_sex: payload.citizen_sex,
                     updated_at: frame_system::Pallet::<T>::block_number(),
                 },
             );
@@ -543,6 +586,7 @@ pub mod pallet {
                     birth_city_code: payload.birth_city_code,
                     birth_town_code: payload.birth_town_code,
                     citizen_full_name: payload.citizen_full_name,
+                    citizen_sex: payload.citizen_sex,
                     updated_at: frame_system::Pallet::<T>::block_number(),
                 },
             );
@@ -726,8 +770,33 @@ pub mod pallet {
             }
         }
 
+        // 人口计数器只按状态增量维护(链上没有"护照到期"事件,无法按时间自动
+        // 减计数),护照过期公民在注册局更新状态前仍计入分母;投票资格由
+        // `can_vote` 的护照有效期窗口实时拦截。
         fn identity_counts_as_voter(identity: &VotingIdentity<BlockNumberFor<T>>) -> bool {
             identity.citizen_status == CitizenStatus::Normal
+        }
+
+        /// 链上当前日期(UTC+8,YYYYMMDD 整数;时间戳未初始化时返回 0,fail-closed)。
+        pub fn current_date_int() -> u32 {
+            let secs =
+                <T::TimeProvider as frame_support::traits::UnixTime>::now().as_secs();
+            if secs == 0 {
+                return 0;
+            }
+            let days = (secs as i64 + 8 * 3600) / 86_400;
+            let (year, month, day) = crate::civil_from_days(days);
+            if !(1900..=9999).contains(&year) {
+                return 0;
+            }
+            (year as u32) * 10_000 + month * 100 + day
+        }
+
+        /// 护照有效期窗口校验:valid_from ≤ 今日 ≤ valid_until。
+        /// 过期或未生效的护照不能投票;时间戳缺失时按不可投票处理。
+        fn passport_window_valid(identity: &VotingIdentity<BlockNumberFor<T>>) -> bool {
+            let today = Self::current_date_int();
+            identity.passport_valid_from <= today && today <= identity.passport_valid_until
         }
 
         fn replace_voting_identity(
@@ -824,10 +893,13 @@ pub mod pallet {
     }
 
     impl<T: Config> crate::CitizenIdentityProvider<T::AccountId> for Pallet<T> {
+        // 消费端全量校验:身份存在(注册时已锁定 CID↔钱包一对一并验公民签名)、
+        // 状态 NORMAL、护照有效期窗口内、居住地在作用域内。
         fn can_vote(who: &T::AccountId, scope: &PopulationScope) -> bool {
             VotingIdentityByAccount::<T>::get(who)
                 .map(|identity| {
                     Self::identity_counts_as_voter(&identity)
+                        && Self::passport_window_valid(&identity)
                         && Self::scope_matches(&identity, scope)
                 })
                 .unwrap_or(false)

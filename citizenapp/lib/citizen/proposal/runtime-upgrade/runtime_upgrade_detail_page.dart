@@ -901,7 +901,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             ),
             const SizedBox(height: 6),
             Text(
-              '联合投票总权重 $jointVoteTotal，国储会权重 19，省储会/省储行各权重 1',
+              '联合投票总权重 $jointVoteTotal，国家储委会权重 19，省储委会/省储行各权重 1',
               style:
                   const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
             ),

@@ -91,7 +91,7 @@ pub struct AdminProfileArg {
 pub struct ProposeCreateInstitutionArgs {
     pub cid_number: Vec<u8>,
     pub cid_full_name: Vec<u8>,
-    /// 私权机构留空(链端按 A1 存空);公权机构填简称。
+    /// 机构简称只取 cid_short_name。
     pub cid_short_name: Vec<u8>,
     pub accounts: Vec<InitialAccountArg>,
     pub institution_code: [u8; 4],

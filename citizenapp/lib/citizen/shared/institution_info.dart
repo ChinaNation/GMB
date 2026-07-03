@@ -26,10 +26,10 @@ String formatProposalId(ProposalDisplayMeta? meta) {
 class OrgType {
   OrgType._();
 
-  /// 国储会 National Reserve Committee
+  /// 国家储委会 National Reserve Committee
   static const int nrc = 0;
 
-  /// 省储会 Provincial Reserve Committee
+  /// 省储委会 Provincial Reserve Committee
   static const int prc = 1;
 
   /// 省储行 Provincial Reserve Bank
@@ -41,9 +41,9 @@ class OrgType {
   static String label(int orgType) {
     switch (orgType) {
       case nrc:
-        return '国储会';
+        return '国家储委会';
       case prc:
-        return '省储会';
+        return '省储委会';
       case prb:
         return '省储行';
       case account:
@@ -57,7 +57,7 @@ class OrgType {
 /// 治理机构及多签账户的制度账户集合。
 ///
 /// 内置治理机构没有笼统的 `account`；链端按主账户、费用账户、
-/// 国储会安全基金账户、省储行永久质押账户分别建模。个人多签/机构账户只使用主账户。
+/// 国家储委会安全基金账户、省储行永久质押账户分别建模。个人多签/机构账户只使用主账户。
 class InstitutionAccounts {
   const InstitutionAccounts({
     required this.mainAccount,
@@ -73,10 +73,10 @@ class InstitutionAccounts {
   /// 费用账户 AccountId hex；内置治理机构必有，个人/注册多签账户可为空。
   final String? feeAccount;
 
-  /// 安全基金账户 AccountId hex；仅国储会存在。
+  /// 安全基金账户 AccountId hex；仅国家储委会存在。
   final String? safetyFundAccount;
 
-  /// 两和基金账户 hex（Reconciliation Fund，链端 NRC_HE_ACCOUNT）；仅国储会存在。
+  /// 两和基金账户 hex（Reconciliation Fund，链端 NRC_HE_ACCOUNT）；仅国家储委会存在。
   final String? heAccount;
 
   /// 永久质押账户 AccountId hex；仅省储行存在。

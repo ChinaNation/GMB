@@ -73,12 +73,13 @@ class _LegislationTabState extends State<LegislationTab> {
       _selectedProvince = provinceCode;
       _contentLoading = true;
     });
-    final rows = await _repo.listByProvinceAndCodes(provinceCode, _provinceCodes);
+    final rows =
+        await _repo.listByProvinceAndCodes(provinceCode, _provinceCodes);
     final sorted = [...rows]..sort((a, b) {
         final oa = _provinceCodeOrder.indexOf(a.institutionCode);
         final ob = _provinceCodeOrder.indexOf(b.institutionCode);
         if (oa != ob) return oa.compareTo(ob);
-        return a.displayName.compareTo(b.displayName);
+        return a.cidShortNameOrFullName.compareTo(b.cidShortNameOrFullName);
       });
     if (!mounted || _selectedProvince != provinceCode) return;
     setState(() {
@@ -162,7 +163,8 @@ class _LegislationTabState extends State<LegislationTab> {
         decoration: BoxDecoration(
           color: AppTheme.surfaceCard,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.primaryDark.withValues(alpha: 0.22)),
+          border:
+              Border.all(color: AppTheme.primaryDark.withValues(alpha: 0.22)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         child: const Row(
@@ -185,7 +187,7 @@ class _LegislationTabState extends State<LegislationTab> {
 
   Widget _nationalCard(String code, String fallbackLabel) {
     final inst = _national[code];
-    final label = inst != null ? inst.displayName : fallbackLabel;
+    final label = inst != null ? inst.cidShortNameOrFullName : fallbackLabel;
     return InkWell(
       onTap: inst == null ? null : () => _openDetail(inst.cidNumber),
       borderRadius: BorderRadius.circular(12),
@@ -237,17 +239,14 @@ class _LegislationTabState extends State<LegislationTab> {
                 padding:
                     const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
                 decoration: BoxDecoration(
-                  color: active
-                      ? AppTheme.surfaceElevated
-                      : Colors.transparent,
+                  color: active ? AppTheme.surfaceElevated : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(p.provinceDisplayName,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: active ? 16 : 15,
-                        fontWeight:
-                            active ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                         color: active
                             ? AppTheme.primary
                             : AppTheme.textSecondary)),
@@ -278,7 +277,7 @@ class _LegislationTabState extends State<LegislationTab> {
         final inst = _provinceContent[i];
         return ListTile(
           dense: true,
-          title: Text(inst.displayName,
+          title: Text(inst.cidShortNameOrFullName,
               style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,

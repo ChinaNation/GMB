@@ -1,18 +1,19 @@
-// 热钱包扫码签名页。
+// 电子护照热钱包扫码签名页(公民链上身份确认)。
 //
-// 用户到链上中国办理现场后：
-// 1. 打开此页，摄像头扫描链上中国平台的 sign_request 二维码
-// 2. 验证 pubkey 与当前电子护照钱包一致
-// 3. 用热钱包私钥签名 payload
-// 4. 构造 sign_response envelope
-// 5. 展示签名响应二维码，等管理端扫描
+// 公民到链上中国办理现场后:
+// 1. 打开此页,摄像头扫描 OnChina 平台的 sign_request 二维码(action=2)
+// 2. 独立解码 `VotingIdentityPayload` SCALE 载荷并展示中文字段,解不开拒签
+// 3. 验证载荷内钱包公钥 == 请求公钥 == 当前电子护照钱包
+// 4. 公民确认字段后,对 `blake2_256(GMB || 0x10 || payload)` 签名
+//    (经 QrSigner.signingBytesForHex,对齐 primitives::sign::OP_SIGN_CITIZEN_IDENTITY)
+// 5. 构造 sign_response envelope,展示签名响应二维码,等管理端扫描
 
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:citizenapp/my/myid/voting_identity_payload.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -27,12 +28,14 @@ class MyIdSignPage extends StatefulWidget {
   State<MyIdSignPage> createState() => _MyIdSignPageState();
 }
 
-enum _PageStep { scanning, signing, showResponse }
+enum _PageStep { scanning, confirm, signing, showResponse }
 
 class _MyIdSignPageState extends State<MyIdSignPage> {
   static const double _scanBoxSize = 260;
 
   _PageStep _step = _PageStep.scanning;
+  SignRequestEnvelope? _request;
+  VotingIdentityConsentPayload? _decoded;
   String? _responseJson;
   String? _errorMessage;
   bool _processing = false;
@@ -53,42 +56,19 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
 
     setState(() {
       _processing = true;
-      _step = _PageStep.signing;
       _errorMessage = null;
     });
 
     try {
-      // 解析 sign_request
       final qrSigner = QrSigner();
       final request = qrSigner.parseRequest(raw);
-
-      final expectedPubkey = '0x${widget.wallet.pubkeyHex}'.toLowerCase();
-      final requestPubkey = request.body.pubkeyHex.toLowerCase();
-      if (requestPubkey != expectedPubkey) {
-        throw Exception('签名请求中的公钥与当前钱包不一致');
-      }
-      _verifyCitizenArchiveConfirmRequest(request);
-
-      // 热钱包签名
-      final payloadBytes =
-          Uint8List.fromList(_hexToBytes(request.body.payloadHex));
-      final walletManager = WalletManager();
-      final signature = await walletManager.signWithWallet(
-        widget.wallet.walletIndex,
-        payloadBytes,
-      );
-
-      // 统一通过 QrSigner 构造 sign_response,避免页面私自拼接二维码结构。
-      final sigHex =
-          '0x${signature.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final responseEnvelope =
-          qrSigner.buildResponse(request: request, signatureHex: sigHex);
-      final json = qrSigner.encodeResponse(responseEnvelope);
+      final decoded = _verifyCitizenIdentityRequest(request);
 
       if (!mounted) return;
       setState(() {
-        _responseJson = json;
-        _step = _PageStep.showResponse;
+        _request = request;
+        _decoded = decoded;
+        _step = _PageStep.confirm;
         _processing = false;
       });
     } on QrSignException catch (e) {
@@ -108,6 +88,95 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
     }
   }
 
+  /// 两色识别:action、载荷解码、公钥三方一致才允许进入确认页。
+  VotingIdentityConsentPayload _verifyCitizenIdentityRequest(
+    SignRequestEnvelope request,
+  ) {
+    final body = request.body;
+    if (body.action != QrActions.citizenIdentity) {
+      throw Exception('只能签名公民链上身份确认请求');
+    }
+    final expectedPubkey = '0x${widget.wallet.pubkeyHex}'.toLowerCase();
+    final requestPubkey = body.pubkeyHex.toLowerCase();
+    if (requestPubkey != expectedPubkey) {
+      throw Exception('签名请求中的公钥与当前钱包不一致');
+    }
+    final decoded = VotingIdentityConsentPayload.decode(
+      Uint8List.fromList(body.payloadBytes),
+    );
+    if (decoded == null) {
+      throw Exception('无法独立验证公民身份载荷,禁止签名');
+    }
+    if (decoded.walletPubkeyHex != requestPubkey) {
+      throw Exception('身份载荷中的钱包公钥与签名请求不一致');
+    }
+    return decoded;
+  }
+
+  Future<void> _sign() async {
+    final request = _request;
+    if (request == null || _processing) return;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if ((request.expiresAt ?? 0) < now) {
+      setState(() {
+        _errorMessage = '签名请求已过期,请重新扫描';
+        _step = _PageStep.scanning;
+        _request = null;
+        _decoded = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _processing = true;
+      _step = _PageStep.signing;
+    });
+
+    try {
+      final message = QrSigner.signingBytesForHex(
+        payloadHex: request.body.payloadHex,
+        action: request.body.action,
+      );
+      final walletManager = WalletManager();
+      final signature = await walletManager.signWithWallet(
+        widget.wallet.walletIndex,
+        message,
+      );
+
+      // 统一通过 QrSigner 构造 sign_response,避免页面私自拼接二维码结构。
+      final qrSigner = QrSigner();
+      final sigHex =
+          '0x${signature.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final responseEnvelope =
+          qrSigner.buildResponse(request: request, signatureHex: sigHex);
+      final json = qrSigner.encodeResponse(responseEnvelope);
+
+      if (!mounted) return;
+      setState(() {
+        _responseJson = json;
+        _step = _PageStep.showResponse;
+        _processing = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.toString();
+        _step = _PageStep.scanning;
+        _request = null;
+        _decoded = null;
+        _processing = false;
+      });
+    }
+  }
+
+  void _cancelConfirm() {
+    setState(() {
+      _request = null;
+      _decoded = null;
+      _step = _PageStep.scanning;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -119,6 +188,7 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
         padding: const EdgeInsets.all(16),
         child: switch (_step) {
           _PageStep.scanning => _buildScanning(),
+          _PageStep.confirm => _buildConfirm(),
           _PageStep.signing => _buildSigning(),
           _PageStep.showResponse => _buildShowResponse(),
         },
@@ -135,7 +205,7 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: AppTheme.bannerDecoration(AppTheme.info),
           child: const Text(
-            '请扫描链上中国平台的鉴权签名码',
+            '请扫描链上中国平台的公民身份签名码',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppTheme.info, fontWeight: FontWeight.w600),
           ),
@@ -189,6 +259,88 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
     );
   }
 
+  Widget _buildConfirm() {
+    final decoded = _decoded;
+    if (decoded == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: AppTheme.bannerDecoration(AppTheme.success),
+          child: const Text(
+            '身份载荷已独立验证,请核对后签名',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: AppTheme.success, fontWeight: FontWeight.w600),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.cardDecoration(),
+          child: Column(
+            children: [
+              _detailRow('签名类型', '公民链上身份确认'),
+              ...decoded.reviewEntries
+                  .map((entry) => _detailRow(entry.$1, entry.$2)),
+            ],
+          ),
+        ),
+        const Spacer(),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _cancelConfirm,
+                child: const Text('取消'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                onPressed: _processing ? null : _sign,
+                child: const Text('确认签名'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppTheme.textPrimary,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSigning() {
     return const Center(
       child: Column(
@@ -239,21 +391,6 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
       ],
     );
   }
-
-  void _verifyCitizenArchiveConfirmRequest(SignRequestEnvelope request) {
-    final body = request.body;
-    if (body.action != QrActions.citizenIdentity) {
-      throw Exception('只能签名公民档案确认请求');
-    }
-    final decoded = _CitizenArchiveConfirmPayload.decode(body.payloadHex);
-    if (decoded.walletPubkey.toLowerCase() != body.pubkeyHex.toLowerCase()) {
-      throw Exception('公民档案载荷中的钱包公钥与签名请求不一致');
-    }
-    if (decoded.walletPubkey.toLowerCase() !=
-        '0x${widget.wallet.pubkeyHex}'.toLowerCase()) {
-      throw Exception('公民档案载荷中的钱包公钥与当前钱包不一致');
-    }
-  }
 }
 
 class _MyIdScanCornerPainter extends CustomPainter {
@@ -282,54 +419,4 @@ class _MyIdScanCornerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MyIdScanCornerPainter oldDelegate) => false;
-}
-
-List<int> _hexToBytes(String input) {
-  final hex = input.startsWith('0x') ? input.substring(2) : input;
-  final result = <int>[];
-  for (var i = 0; i < hex.length; i += 2) {
-    result.add(int.parse(hex.substring(i, i + 2), radix: 16));
-  }
-  return result;
-}
-
-class _CitizenArchiveConfirmPayload {
-  const _CitizenArchiveConfirmPayload({
-    required this.archiveNo,
-    required this.modeLabel,
-    required this.votingEligibleLabel,
-    required this.citizenStatusLabel,
-    required this.walletPubkey,
-  });
-
-  final String archiveNo;
-  final String modeLabel;
-  final String votingEligibleLabel;
-  final String citizenStatusLabel;
-  final String walletPubkey;
-
-  static _CitizenArchiveConfirmPayload decode(String payloadHex) {
-    final text = utf8.decode(_hexToBytes(payloadHex), allowMalformed: false);
-    final parts = text.split('|');
-    if (parts.length != 11 || parts[0] != 'citizen-identity-v1') {
-      throw Exception('无法独立验证公民档案确认载荷');
-    }
-    final mode = parts[2];
-    final archiveNo = parts[3];
-    final citizenStatus = parts[4];
-    final votingEligible = parts[5];
-    final walletPubkey = parts[9];
-    if (archiveNo.isEmpty || walletPubkey.isEmpty) {
-      throw Exception('公民档案确认载荷缺少必要字段');
-    }
-    return _CitizenArchiveConfirmPayload(
-      archiveNo: archiveNo,
-      modeLabel: mode == 'replace' ? '更换确认' : '新增公民档案确认',
-      votingEligibleLabel: votingEligible == 'true' ? '有' : '无',
-      citizenStatusLabel: citizenStatus == 'NORMAL' ? '正常' : '注销',
-      walletPubkey: walletPubkey.startsWith('0x')
-          ? walletPubkey.toLowerCase()
-          : '0x${walletPubkey.toLowerCase()}',
-    );
-  }
 }

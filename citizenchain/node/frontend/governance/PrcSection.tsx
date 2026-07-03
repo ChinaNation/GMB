@@ -1,4 +1,4 @@
-// 省储会顶级 Section：列表（orgType=1）→ 机构详情 两级导航。
+// 省储委会顶级 Section：列表（orgType=1）→ 机构详情 两级导航。
 import { useState } from 'react';
 import { AdminListPage, AdminSetChangePage } from '../admins/admin-management';
 import { InstitutionListView } from './InstitutionListView';
@@ -120,7 +120,7 @@ export function PrcSection() {
     );
   }
 
-  // 默认：省储会机构列表（orgTypeFilter=1）。
+  // 默认：省储委会机构列表（orgTypeFilter=1）。
   return (
     <InstitutionListView
       orgTypeFilter={1}

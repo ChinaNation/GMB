@@ -1,6 +1,6 @@
 // account_derivation 统一派生原语单测(ADR-018 §九,公权机构卡0)。
 //
-// golden 向量取自 governance_institution_registry.generated.dart 的国储会/中枢省
+// golden 向量取自 governance_institution_registry.generated.dart 的国家储委会/中枢省
 // 制度账户 hex —— 这些地址即链上派生结果,可交叉验证本端派生与
 // citizenchain primitives::core_const::derive_account 字节对齐:
 //   preimage = b"GMB" || op_tag || ss58.to_le_bytes() || payload
@@ -16,7 +16,7 @@ import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/reserved_account_names.dart';
 
 void main() {
-  // 国储会 LN001-NRC0G-944805165-2026（T3/T4 新机构码 + GMB 域，单源 china_cb.rs）
+  // 国家储委会 LN001-NRC0G-944805165-2026（T3/T4 新机构码 + GMB 域，单源 china_cb.rs）
   const nrcCid = 'LN001-NRC0G-944805165-2026';
   const nrcMain =
       'b38e86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153';
@@ -34,11 +34,11 @@ void main() {
       '54bad80b12cedbf7a1569fb96d18d90c4793949a356eb16c6304841af81001dd';
 
   group('机构账户派生 golden 向量(链上注册表交叉验证)', () {
-    test('国储会主账户 OP_MAIN', () {
+    test('国家储委会主账户 OP_MAIN', () {
       expect(hexFromAccountId(deriveInstitutionMainAccountId(nrcCid)), nrcMain);
     });
 
-    test('国储会费用账户 OP_FEE', () {
+    test('国家储委会费用账户 OP_FEE', () {
       expect(hexFromAccountId(deriveInstitutionFeeAccountId(nrcCid)), nrcFee);
     });
 

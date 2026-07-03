@@ -35,6 +35,7 @@ import type { AdminAuth } from '../auth/types';
 import { glassCardHeadStyle, glassCardStyle } from '../core/cardStyles';
 import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
 import { ScanAccountModal } from '../core/ScanAccountModal';
+import { useScanSignGrant } from '../core/useScanSignGrant';
 import { notice } from '../utils/notice';
 import {
   CITIZEN_DOCUMENT_TYPES,
@@ -151,6 +152,9 @@ export function CitizenDetailPage({
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentUploading, setDocumentUploading] = useState(false);
   const [selectedDocumentType, setSelectedDocumentType] = useState<CitizenDocumentType>('其他材料');
+  // 公民身份上链为注册局最严档操作:prepare/complete 前各弹一次
+  // passkey + 管理员冷钱包扫码签名,换取一次性安全 grant。
+  const { signWithScan, scanSignModal } = useScanSignGrant('管理员安全确认');
 
   const ageYears = useMemo(() => calculateAgeYears(current.citizen_birth_date), [current.citizen_birth_date]);
   const canPushOnchain =
@@ -191,6 +195,7 @@ export function CitizenDetailPage({
         auth,
         current.cid_number,
         values.wallet_account.trim(),
+        signWithScan,
       );
       setPrepared(output);
       setChainRequest(null);
@@ -217,6 +222,7 @@ export function CitizenDetailPage({
         current.cid_number,
         walletAccount,
         raw,
+        signWithScan,
       );
       setPrepared(null);
       setChainRequest(output);
@@ -470,6 +476,8 @@ export function CitizenDetailPage({
           setScanOpen(false);
         }}
       />
+
+      {scanSignModal}
 
       <CitizenSignatureModal
         title="公民钱包签名确认"

@@ -57,6 +57,7 @@ export async function createInstitution(
     institution: input.institution,
     education_type: input.education_type ?? null,
     cid_full_name: input.cid_full_name ?? null,
+    cid_short_name: input.cid_short_name ?? null,
     parent_cid_number: input.parent_cid_number ?? null,
     private_type: input.private_type ?? null,
     partnership_kind: input.partnership_kind ?? null,

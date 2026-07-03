@@ -2,7 +2,7 @@
 
 属 ADR-018 §九。公权机构详情页本地派生主/费/自定义账户地址的**前置底座**;也兑现 §九"derive_account 唯一 Dart 实现归位 shared"。
 
-状态:**代码完工(2026-06-13)**。account_derivation 归位 shared + 补 op_tag(0x00/0x01/0x06 + 路由 0x02/0x03/0x04 + 个人 0x05);golden 向量 11/11 与链上注册表 hex 逐一吻合(国储会/中枢省 main/fee + 安全基金 OP_AN + 两和基金 OP_HE);旧 personal_account_derive.dart 已删、调用方迁移、零残留;analyze 0。
+状态:**代码完工(2026-06-13)**。account_derivation 归位 shared + 补 op_tag(0x00/0x01/0x06 + 路由 0x02/0x03/0x04 + 个人 0x05);golden 向量 11/11 与链上注册表 hex 逐一吻合(国家储委会/中枢省 main/fee + 安全基金 OP_AN + 两和基金 OP_HE);旧 personal_account_derive.dart 已删、调用方迁移、零残留;analyze 0。
 
 ## 背景
 - 目前派生只有个人多签:`governance/personal-manage/personal_account_derive.dart`(仅 OP_PERSONAL=0x05)。

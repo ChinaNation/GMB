@@ -66,7 +66,7 @@
   - 前端预览 `127.0.0.1:5180` 浏览器验收:页面标题 `CID 管理端`,应用壳加载成功,控制台无 error。
   - `git diff --check`
   - 教育分类旧字段、旧文案和临时命名残留扫描。
-  - 教育机构市教委前端缓存修复验收:`npm --prefix citizencode/frontend run build`、`cd citizencode/backend && cargo check`、`cargo fmt --check`、`git diff --check` 均通过;构建产物包含 `cid:education-committees` / `education-committees-v1`;前端预览 `127.0.0.1:5180` 浏览器加载 `CID 管理端` 成功且控制台无 error。
+  - 教育机构市教委会前端缓存修复验收:`npm --prefix citizencode/frontend run build`、`cd citizencode/backend && cargo check`、`cargo fmt --check`、`git diff --check` 均通过;构建产物包含 `cid:education-committees` / `education-committees-v1`;前端预览 `127.0.0.1:5180` 浏览器加载 `CID 管理端` 成功且控制台无 error。
   - 临时后端 `127.0.0.1:8898` 真实 HTTP 复核:中枢省锦程市、巫山市空搜索各返回 1 条本市市公民教育委员会,`hasNational=false`。
   - 临时后端 `127.0.0.1:8898` 真实 HTTP 验证:中枢省联邦注册局机构管理员可在锦程市创建 `G + JY` 小学;验收数据已清理。
   - 临时后端 `127.0.0.1:8898` 真实 HTTP 验证:中枢省联邦注册局机构管理员跨省创建安徽省机构返回 `403 / province out of current admin scope`。

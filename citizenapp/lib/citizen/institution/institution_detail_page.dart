@@ -168,9 +168,9 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     final fee = rows.length > 1 ? rows[1].accountHex : null;
     return InstitutionInfo(
       cidFullName: inst.cidFullName,
-      cidShortName: inst.displayName,
+      cidShortName: inst.cidShortNameOrFullName,
       cidFullNameEn: inst.cidFullName, // 普通公权机构暂无英文名,中文兜底
-      cidShortNameEn: inst.displayName,
+      cidShortNameEn: inst.cidShortNameOrFullName,
       cidNumber: registeredAccountIdentity(main),
       orgType: inst.orgType,
       accounts: InstitutionAccounts(mainAccount: main, feeAccount: fee),
@@ -338,7 +338,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
-        title: Text(inst?.displayName ?? '机构'),
+        title: Text(inst?.cidShortNameOrFullName ?? '机构'),
         backgroundColor: AppTheme.surfaceWhite,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
@@ -516,7 +516,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           builder: (_) => LawListPage(
             tier: target.tier,
             scopeCode: target.scope,
-            title: '${inst.displayName} · 法律原文',
+            title: '${inst.cidShortNameOrFullName} · 法律原文',
           ),
         ),
       ),

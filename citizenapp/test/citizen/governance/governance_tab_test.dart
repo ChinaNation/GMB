@@ -78,9 +78,9 @@ void main() {
 
   setUp(() {
     councils = const [
-      (name: '甲省储会', cid: 'prc-a'),
-      (name: '乙省储会', cid: 'prc-b'),
-      (name: '丙省储会', cid: 'prc-c'),
+      (name: '甲省储委会', cid: 'prc-a'),
+      (name: '乙省储委会', cid: 'prc-b'),
+      (name: '丙省储委会', cid: 'prc-c'),
     ];
     banks = const [
       (name: '甲省储行', cid: 'prb-a'),
@@ -91,9 +91,9 @@ void main() {
 
   test('applyGovernanceInstitutionOrder 使用本机顺序并把新增机构补到末尾', () {
     final source = [
-      _inst('甲省储会', 'prc-a', 'PRC'),
-      _inst('乙省储会', 'prc-b', 'PRC'),
-      _inst('丙省储会', 'prc-c', 'PRC'),
+      _inst('甲省储委会', 'prc-a', 'PRC'),
+      _inst('乙省储委会', 'prc-b', 'PRC'),
+      _inst('丙省储委会', 'prc-c', 'PRC'),
     ];
     final ordered = applyGovernanceInstitutionOrder(
       source,
@@ -104,24 +104,24 @@ void main() {
 
   test('reorderGovernanceInstitutions 按拖拽目标位置重排', () {
     final source = [
-      _inst('甲省储会', 'prc-a', 'PRC'),
-      _inst('乙省储会', 'prc-b', 'PRC'),
-      _inst('丙省储会', 'prc-c', 'PRC'),
+      _inst('甲省储委会', 'prc-a', 'PRC'),
+      _inst('乙省储委会', 'prc-b', 'PRC'),
+      _inst('丙省储委会', 'prc-c', 'PRC'),
     ];
     final reordered = reorderGovernanceInstitutions(source, 0, 2);
     expect(reordered.map((i) => i.cidNumber), ['prc-b', 'prc-c', 'prc-a']);
   });
 
-  testWidgets('省储会和省储行默认折叠，国储会保持展示', (tester) async {
+  testWidgets('省储委会和省储行默认折叠，国家储委会保持展示', (tester) async {
     await _pumpPage(tester, councils: councils, banks: banks);
     expect(find.text('国家储备委员会'), findsOneWidget);
-    expect(find.text('甲省储会'), findsNothing);
+    expect(find.text('甲省储委会'), findsNothing);
     expect(find.text('甲省储行'), findsNothing);
     expect(find.byIcon(Icons.chevron_right), findsNWidgets(3));
     expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
   });
 
-  testWidgets('国储会卡片横跨整行且高度对齐省级卡片', (tester) async {
+  testWidgets('国家储委会卡片横跨整行且高度对齐省级卡片', (tester) async {
     await _pumpPage(tester, councils: councils, banks: banks);
     final cardSize = tester.getSize(
       find.byKey(const ValueKey('governance_national_card_nrc')),
@@ -138,8 +138,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('甲省储会'), findsOneWidget);
-    expect(find.text('乙省储会'), findsOneWidget);
+    expect(find.text('甲省储委会'), findsOneWidget);
+    expect(find.text('乙省储委会'), findsOneWidget);
     expect(find.text('甲省储行'), findsNothing);
     expect(find.byIcon(Icons.keyboard_arrow_down), findsOneWidget);
   });
@@ -155,12 +155,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final first = tester.getTopLeft(find.text('乙省储会'));
-    final second = tester.getTopLeft(find.text('甲省储会'));
+    final first = tester.getTopLeft(find.text('乙省储委会'));
+    final second = tester.getTopLeft(find.text('甲省储委会'));
     expect(first.dx, lessThan(second.dx));
   });
 
-  testWidgets('长按拖拽省储会后保存本机排序', (tester) async {
+  testWidgets('长按拖拽省储委会后保存本机排序', (tester) async {
     await _pumpPage(
       tester,
       councils: councils.take(2).toList(),
@@ -174,9 +174,9 @@ void main() {
     await tester.pumpAndSettle();
 
     final gesture =
-        await tester.startGesture(tester.getCenter(find.text('甲省储会')));
+        await tester.startGesture(tester.getCenter(find.text('甲省储委会')));
     await tester.pump(kLongPressTimeout + const Duration(milliseconds: 120));
-    await gesture.moveTo(tester.getCenter(find.text('乙省储会')));
+    await gesture.moveTo(tester.getCenter(find.text('乙省储委会')));
     await tester.pump();
     await gesture.up();
     await tester.pumpAndSettle();

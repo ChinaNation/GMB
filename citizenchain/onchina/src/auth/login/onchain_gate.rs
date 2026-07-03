@@ -23,7 +23,7 @@ use super::signature::build_admin_name_from_user;
 pub(super) enum GateError {
     /// 扫码者不在本机构链上 Active 管理员集合。
     NotOnchainAdmin,
-    /// 扫码者属于国储会/省储会/省储行,这些机构只走节点桌面端。
+    /// 扫码者属于国家储委会/省储委会/省储行,这些机构只走节点桌面端。
     DesktopGovernanceUnsupported,
     /// 扫码者属于个人多签,不进入机构节点控制台。
     PersonalMultisigUnsupported,

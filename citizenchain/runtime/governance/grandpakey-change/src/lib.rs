@@ -1,7 +1,7 @@
 //! # GRANDPA 密钥治理模块 (grandpakey-change)
 //!
 //! 本模块将"机构 GRANDPA 公钥替换"包装成受治理约束的链上流程：
-//! - 仅国储会（NRC）与省储会（PRC）可发起密钥替换提案。
+//! - 仅国家储委会（NRC）与省储委会（PRC）可发起密钥替换提案。
 //! - 仅目标机构内部管理员可参与提案/投票/执行/清理。
 //! - 借助 `votingengine` 内部投票达成通过后，调用 `pallet-grandpa::schedule_change` 变更 authority set。
 //! - 新公钥必须通过 ed25519 有效性校验和 small-order 弱公钥拒绝。
@@ -138,7 +138,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            // 初始 GRANDPA 公钥与 CHINA_CB 的机构地址一一对应（1 国储会 + 43 省储会）。
+            // 初始 GRANDPA 公钥与 CHINA_CB 的机构地址一一对应（1 国家储委会 + 43 省储委会）。
             for node in CHINA_CB.iter() {
                 let Some(institution) = decode_account::<T>(&node.main_account) else {
                     panic!("genesis: cid_number {} 主账户 decode 失败", node.cid_number);
@@ -217,7 +217,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 发起“GRANDPA 密钥替换”内部投票提案（仅支持国储会/省储会）。
+        /// 发起“GRANDPA 密钥替换”内部投票提案（仅支持国家储委会/省储委会）。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_replace_grandpa_key())]
         pub fn propose_replace_grandpa_key(

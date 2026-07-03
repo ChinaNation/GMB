@@ -23,9 +23,9 @@
 ```json
 {
   "action": "propose_transfer",
-  "summary": "国储会 提案转账 100.00 GMB 给 5Grw...",
+  "summary": "国家储委会 提案转账 100.00 GMB 给 5Grw...",
   "fields": [
-    {"key": "org", "label": "付款机构", "value": "国储会"},
+    {"key": "org", "label": "付款机构", "value": "国家储委会"},
     {"key": "beneficiary", "label": "收款账户", "value": "5Grw..."},
     {"key": "amount_yuan", "label": "金额", "value": "100.00 GMB", "format": "currency"},
     {"key": "remark", "label": "备注", "value": "日常拨款"}

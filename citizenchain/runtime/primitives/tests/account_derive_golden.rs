@@ -1,14 +1,5 @@
-//! 账户派生金标向量导出/断言测试。
-//!
-//! 唯一权威算法源 = `primitives::account_derive::AccountKind::derive`。本测试是
-//! 跨语言(Rust ↔ Dart)防漂移的金标兜底:
-//!
-//! - `ACCOUNT_DERIVE_UPDATE=1`:用 account_derive 重算每条向量的 address_hex 并写回
-//!   canonical fixture(`tests/fixtures/account_derive_vectors.json`)。
-//! - 默认(未设环境变量):读取 fixture,断言 account_derive 的派生结果逐字节 == fixture,
-//!   且 china_* 来源(Main/Fee/Stake/SafetyFund/He)必须 == china_*.rs 字面常量。
-//!
-//! CI 守卫脚本 `tools/sync_account_derive_vectors.sh` 跑 update + git diff --exit-code。
+//! 账户派生金标测试。
+//! `ACCOUNT_DERIVE_UPDATE=1` 重写 fixture;默认只断言派生结果不漂移。
 
 use primitives::account_derive::AccountKind;
 use primitives::core_const::{GMB, SS58_FORMAT};
@@ -20,7 +11,7 @@ const FIXTURE_PATH: &str = concat!(
 
 const UPDATE_ENV: &str = "ACCOUNT_DERIVE_UPDATE";
 
-// ── 极简 hex 编解码(避免引入 hex crate,保持依赖最小;算法字节正确性是 load-bearing) ──
+// 极简 hex 编解码。
 
 fn hex_encode(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
@@ -46,10 +37,9 @@ fn hex_decode_32(s: &str) -> [u8; 32] {
     out
 }
 
-// ── 用 account_derive 唯一入口派生每条向量 ──
+// 用 account_derive 唯一入口派生向量。
 
-/// 解析单条向量的 kind 字段,用 account_derive 计算 32B 地址。
-/// creator/cid/name 全部以 UTF-8 字节进入派生(与链端/创世一致)。
+/// 解析向量并计算地址。
 fn derive_vector(v: &serde_json::Value) -> [u8; 32] {
     let kind = v["kind"].as_str().expect("向量缺少 kind");
     let cid = v.get("cid_number").and_then(|x| x.as_str());
@@ -100,8 +90,7 @@ fn load_fixture() -> serde_json::Value {
     serde_json::from_str(&raw).expect("金标 fixture 不是合法 JSON")
 }
 
-/// china_*.rs 字面常量索引(cid_number, kind) → address_hex。
-/// 行为中性基线的第二道防线:这些值不仅要 == account_derive,还要 == china_*.rs 源码字面值。
+/// 查询 china_*.rs 字面地址常量。
 fn china_literal(cid: &str, kind: &str) -> Option<[u8; 32]> {
     use primitives::cid::china::china_cb::{CHINA_CB, NRC_HE_ACCOUNT, SAFETY_FUND_ACCOUNT};
     use primitives::cid::china::china_ch::CHINA_CH;
@@ -139,7 +128,7 @@ fn china_literal(cid: &str, kind: &str) -> Option<[u8; 32]> {
 
 #[test]
 fn account_derive_golden_vectors() {
-    // 守卫:fixture 头部元数据必须与链端常量一致,防止 Dart 副本/手改漂移。
+    // fixture 头部必须与链端常量一致。
     let mut fixture = load_fixture();
     assert_eq!(
         fixture["ss58_format"].as_u64(),
@@ -167,7 +156,7 @@ fn account_derive_golden_vectors() {
         let kind = v["kind"].as_str().unwrap();
         let cid = v.get("cid_number").and_then(|x| x.as_str()).unwrap_or("");
 
-        // china 来源:account_derive 结果必须等于 china_*.rs 字面常量(双向锚定)。
+        // china 来源必须等于源码字面常量。
         if let Some(lit) = china_literal(cid, kind) {
             assert_eq!(
                 computed, lit,

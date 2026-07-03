@@ -4,10 +4,10 @@
 //! `private/<type>/` 六类模块传入固定类型规则,不得再由一个 private 总 handler 吞掉。
 
 use axum::{
+    Json,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    Json,
 };
 use chrono::{Duration, Utc};
 use uuid::Uuid;
@@ -15,24 +15,24 @@ use uuid::Uuid;
 use crate::auth::actions::require_admin_security_grant;
 use crate::auth::login::require_admin_any;
 use crate::auth::operation_auth::AdminActionType;
+use crate::cid::InstitutionCategory;
 use crate::cid::china::{city_code_by_name, province_code_by_name};
 use crate::cid::code;
-use crate::cid::InstitutionCategory;
 use crate::crypto::pubkey::normalize_admin_account;
 use crate::domains::private::common::resolve_private_type_rule;
 use crate::institution::admins::model::InstitutionAdmin;
 use crate::institution::admins::repo::upsert_institution_admin;
 use crate::institution::subjects::http::{
-    extract_city_code, extract_province_code, insert_default_accounts_best_effort,
-    service_error_to_response, MAX_CITY_CHARS, MAX_PROVINCE_CHARS,
+    MAX_CITY_CHARS, MAX_PROVINCE_CHARS, extract_city_code, extract_province_code,
+    insert_default_accounts_best_effort, service_error_to_response,
 };
 use crate::institution::subjects::model::{
-    is_education_school_type, CreateInstitutionAdminInput, CreateInstitutionInput,
-    CreateInstitutionOutput, Institution, InstitutionListFilter, InstitutionListRow,
+    CreateInstitutionAdminInput, CreateInstitutionInput, CreateInstitutionOutput, Institution,
+    InstitutionListFilter, InstitutionListRow, is_education_school_type,
 };
 use crate::institution::subjects::service::{
     derive_category, resolve_legal_representative_scope_for_codes, validate_cid_full_name,
-    validate_legal_representative_required,
+    validate_cid_short_name, validate_legal_representative_required,
 };
 use crate::institution::subjects::unincorporated_org;
 use crate::scope::get_visible_scope;
@@ -85,6 +85,7 @@ async fn create_institution_inner(
         "institution": input.institution.clone(),
         "education_type": input.education_type.clone(),
         "cid_full_name": input.cid_full_name.clone(),
+        "cid_short_name": input.cid_short_name.clone(),
         "parent_cid_number": input.parent_cid_number.clone(),
         "private_type": input.private_type.clone(),
         "partnership_kind": input.partnership_kind.clone(),
@@ -192,6 +193,13 @@ async fn create_institution_inner(
             Err(e) => return service_error_to_response(e),
         },
         _ => return api_error(StatusCode::BAD_REQUEST, 1001, "学校全称/机构全称不能为空"),
+    };
+    let cid_short_name = match input.cid_short_name.as_deref().map(str::trim) {
+        Some(raw) if !raw.is_empty() => match validate_cid_short_name(raw) {
+            Ok(v) => v,
+            Err(e) => return service_error_to_response(e),
+        },
+        _ => return api_error(StatusCode::BAD_REQUEST, 1001, "学校简称/机构简称不能为空"),
     };
     let province = match scope.locked_province_name.clone() {
         Some(locked) => {
@@ -447,7 +455,7 @@ async fn create_institution_inner(
         let inst = Institution {
             cid_number: cid.clone(),
             cid_full_name: cid_full_name.clone(),
-            cid_short_name: cid_full_name.clone(),
+            cid_short_name: Some(cid_short_name.clone()),
             status: "ACTIVE".to_string(),
             category,
             p1: p1.clone(),

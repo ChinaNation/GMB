@@ -52,6 +52,8 @@ interface FormValues {
   partnership_kind?: PartnershipKind;
   /** 私权/教育机构/手动公权机构创建时必填全称。 */
   cid_full_name?: string;
+  /** 私权/教育机构/手动公权机构创建时必填简称。 */
+  cid_short_name?: string;
   /** 需挂靠的非法人必填;个体经营/无限合伙不接受所属法人。 */
   parent_cid_number?: string;
   legal_rep_name: string;
@@ -157,9 +159,10 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const showEducationType = isEducation && !isF;
   const watchedAdmins = Form.useWatch('admins', form) as FormValues['admins'] | undefined;
 
-  // 私权目标态创建阶段直接写入全称;教育学校和手动公权机构也在弹窗内查重。
-  const collectNameInModal = isPrivate || isEducation || (isGov && !isF);
+  // 机构创建阶段直接写入全称和简称,字段只允许 cid_full_name/cid_short_name。
+  const collectNameInModal = isPrivate || isEducation || isGov;
   const nameLabel = isEducation ? '学校全称' : '机构全称';
+  const shortNameLabel = isEducation ? '学校简称' : '机构简称';
 
   const subjectPropertyChoices = privateRule
     ? [{
@@ -221,7 +224,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     const defaultEducationType = category === 'EDUCATION_INSTITUTION' && defaultSubjectProperty !== 'F'
       ? SCHOOL_EDUCATION_TYPE_OPTIONS[0]?.value as EducationType
       : undefined;
-    const defaultCollectName = isPrivate || isEducation || (isGov && defaultSubjectProperty === 'G');
+    const defaultCollectName = isPrivate || isEducation || isGov;
     form.setFieldsValue({
       subject_property: defaultSubjectProperty,
       p1: defaultRule?.p1 ?? p1LocksForSubject(defaultSubjectProperty, null).value,
@@ -232,6 +235,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       private_type: privateType,
       partnership_kind: defaultPartnershipKind,
       cid_full_name: defaultCollectName ? '' : undefined,
+      cid_short_name: defaultCollectName ? '' : undefined,
       parent_cid_number: undefined,
       legal_rep_name: '',
       legal_rep_cid_number: '',
@@ -529,6 +533,9 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         cid_full_name: collectNameInModal
           ? (values.cid_full_name ?? '').trim()
           : undefined,
+        cid_short_name: collectNameInModal
+          ? (values.cid_short_name ?? '').trim()
+          : undefined,
         parent_cid_number: requiresParent ? (values.parent_cid_number ?? '').trim() : undefined,
         private_type: isPrivate ? privateType : undefined,
         partnership_kind: isPrivate && privateType === 'PARTNERSHIP'
@@ -702,7 +709,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         </Row>
         {collectNameInModal && (
           <Row gutter={16}>
-            <Col span={24}>
+            <Col span={12}>
               <Form.Item
                 label={nameLabel}
                 name="cid_full_name"
@@ -725,6 +732,23 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                   }
                 />
               </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label={shortNameLabel}
+                name="cid_short_name"
+                rules={[
+                  { required: true, message: `请输入${shortNameLabel}` },
+                  { max: 30, message: '最多 30 个字' },
+                ]}
+              >
+                <Input
+                  placeholder={`请输入${shortNameLabel}`}
+                  maxLength={30}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={24}>
               {cidFullNameAvailable === true && (
                 <div style={{ color: '#52c41a', marginTop: -16, marginBottom: 12, fontSize: 12 }}>
                   机构全称可用

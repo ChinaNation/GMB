@@ -1,12 +1,12 @@
 # 20260623 机构码表补全(镇 4 码)+ 常量库改名 code.rs + 两边 A-I 九组对齐
 
 ## 需求
-1. CID `number/code.rs` 补 4 个镇公权机构码:TPOL 镇公安科 / TSLF 镇自治委 / TSUP 镇监察院 / TJUD 镇司法院(镜像市级 CPOL/CSLF/CSUP/CJUD)。码表 已并入 92,D 镇组 10→14。
+1. CID `number/code.rs` 补 4 个镇公权机构码:TPOL 镇公安科 / TSLF 镇自治会 / TSUP 镇监察院 / TJUD 镇司法院(镜像市级 CPOL/CSLF/CSUP/CJUD)。码表 已并入 92,D 镇组 10→14。
 2. 常量库 `primitives/src/code.rs` → `code.rs`(与 CID 对称);补 4 镇码;按 A-I 九组重排。
 
 ## 决策(用户确认)
 - A-I 九组:**CID code.rs 与常量库都重排**(教育 E2→F、个人→G、非法人→H、个人多签→I)。
-- 4 个镇码**都加** `gov/service.rs` TOWN_TEMPLATES(镇自动生成监察院/司法院/公安科/自治委)。
+- 镇级模板统一补齐 `TDEF/THSC/TCOM/TENR/TTRN/TPOL/TSLF/TSUP/TJUD`，其中 `TSLF` 为镇自治会，`TSUP/TJUD` 为镇监察院/镇司法院。
 - 常量库属链上 WASM:**只改代码 + 验证**,重烤 SSOT(bake-chainspec.sh)+ clean-run 由用户自行执行。
 
 ## A-I 九组终态(90 码)

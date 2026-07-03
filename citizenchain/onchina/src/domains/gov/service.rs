@@ -7,13 +7,13 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use crate::cid::china::{china_sqlite_hash, provinces};
-use crate::cid::InstitutionCategory;
-use crate::institution::subjects::{
-    service::{build_default_accounts_for_codes, default_account_names_for_codes},
-    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
-};
 use crate::Db;
+use crate::cid::InstitutionCategory;
+use crate::cid::china::{china_sqlite_hash, provinces};
+use crate::institution::subjects::{
+    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
+    service::{build_default_accounts_for_codes, default_account_names_for_codes},
+};
 
 #[allow(dead_code)]
 #[path = "../../../../runtime/primitives/cid/china/china_cb.rs"]
@@ -179,12 +179,12 @@ const PROVINCE_DEPARTMENT_TEMPLATES: &[OfficialOrgTemplate] = &[
     OfficialOrgTemplate {
         institution_code: "PSN",
         suffix: "参议会",
-        full_suffix: "参议员议政会",
+        full_suffix: "联邦立法院参议会",
     },
     OfficialOrgTemplate {
         institution_code: "PRP",
         suffix: "众议会",
-        full_suffix: "众议员议政会",
+        full_suffix: "联邦立法院众议会",
     },
 ];
 
@@ -202,12 +202,12 @@ const CITY_TEMPLATES: &[OfficialOrgTemplate] = &[
     OfficialOrgTemplate {
         institution_code: "CSUP",
         suffix: "监察院",
-        full_suffix: "监察院",
+        full_suffix: "自治监察院",
     },
     OfficialOrgTemplate {
         institution_code: "CJUD",
         suffix: "司法院",
-        full_suffix: "司法院",
+        full_suffix: "自治司法院",
     },
     OfficialOrgTemplate {
         institution_code: "CEDU",
@@ -303,13 +303,38 @@ const TOWN_TEMPLATES: &[OfficialOrgTemplate] = &[
         full_suffix: "财政与税务科",
     },
     OfficialOrgTemplate {
+        institution_code: "TDEF",
+        suffix: "国防科",
+        full_suffix: "国家防务科",
+    },
+    OfficialOrgTemplate {
+        institution_code: "THSC",
+        suffix: "国安科",
+        full_suffix: "国土安全科",
+    },
+    OfficialOrgTemplate {
+        institution_code: "TCOM",
+        suffix: "商贸科",
+        full_suffix: "商务与市场贸易科",
+    },
+    OfficialOrgTemplate {
+        institution_code: "TENR",
+        suffix: "能源科",
+        full_suffix: "能源与环保发展科",
+    },
+    OfficialOrgTemplate {
+        institution_code: "TTRN",
+        suffix: "交通科",
+        full_suffix: "交通运输科",
+    },
+    OfficialOrgTemplate {
         institution_code: "TPOL",
         suffix: "公安科",
-        full_suffix: "公安科",
+        full_suffix: "公民安全科",
     },
     OfficialOrgTemplate {
         institution_code: "TSLF",
-        suffix: "自治委",
+        suffix: "自治会",
         full_suffix: "公民自治委员会",
     },
     OfficialOrgTemplate {
@@ -622,16 +647,8 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
     // china_zf.rs CHINA_ZF(带 main/fee 账户),由 :375 的常量循环单一 push;
     // 此处不用区划模板重复生成,避免同号双定义触发 reconcile 21000。仅保留两院议会。
     for (institution_code, cid_short_name, cid_full_name) in [
-        (
-            "NSN",
-            "国家参议会",
-            "中华民族联邦共和国国家立法院参议员议政会",
-        ),
-        (
-            "NRP",
-            "国家众议会",
-            "中华民族联邦共和国国家立法院众议员议政会",
-        ),
+        ("NSN", "国家参议会", "中华民族联邦共和国国家立法院参议会"),
+        ("NRP", "国家众议会", "中华民族联邦共和国国家立法院众议会"),
     ] {
         let template = OfficialOrgTemplate {
             institution_code,

@@ -1,6 +1,6 @@
 # QR_V1 Action Registry
 
-- 更新日期:2026-06-30
+- 更新日期:2026-07-02
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:`k=1` 签名请求的 `b.a` 数字动作码
 - 依赖:
@@ -19,7 +19,7 @@
 | a | 名称 | payload | 签名字节 | 生成方 | 扫码/签名方 | 注释 |
 |---:|---|---|---|---|---|---|
 | 1 | `login` | `system|system_signature` UTF-8 | 原文 | OnChina | CitizenWallet | 登录签名确认 |
-| 2 | `citizen_identity` | `VotingIdentityPayload` SCALE bytes | `blake2_256(GMB || 0x10 || payload)` | OnChina | CitizenWallet | 公民本人确认链上投票身份载荷 |
+| 2 | `citizen_identity` | `VotingIdentityPayload` SCALE bytes | `blake2_256(GMB || 0x10 || payload)` | OnChina | CitizenWallet / CitizenApp(电子护照扫码签名页) | 公民本人确认链上投票身份载荷;CitizenApp 侧解码器在 `my/myid/voting_identity_payload.dart` |
 | 3 | `onchina_admin_action` / `QR_ACTION_ONCHINA_ADMIN` | `onchina_admin_governance` canonical JSON UTF-8 | 原文 | OnChina | CitizenWallet | 链上中国平台管理员治理冷钱包确认 |
 | 5 | `activate_admin_account` | `GMB || 0x18` 二进制 payload | 原文 | citizenchain node / CitizenApp | CitizenWallet | 管理员激活 |
 | 6 | `decrypt_admin` | `GMB || 0x19` 二进制 payload | 原文 | citizenchain node | CitizenWallet | 清算行管理员解密 |

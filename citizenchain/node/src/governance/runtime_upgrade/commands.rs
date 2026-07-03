@@ -19,7 +19,7 @@ async fn ensure_nrc_activated_admin(app: &AppHandle, pubkey_hex: &str) -> Result
         .national_councils
         .first()
         .map(|item| item.cid_number.clone())
-        .ok_or_else(|| "国储会机构常量缺失，无法发起开发升级".to_string())?;
+        .ok_or_else(|| "国家储委会机构常量缺失，无法发起开发升级".to_string())?;
     let pubkey_clean = normalize_pubkey_hex(pubkey_hex);
     let admins = activation::get_activated_admins(app.clone(), nrc_cid_number, None, None).await?;
     if admins
@@ -28,7 +28,7 @@ async fn ensure_nrc_activated_admin(app: &AppHandle, pubkey_hex: &str) -> Result
     {
         Ok(())
     } else {
-        Err("开发升级仅允许已激活国储会管理员发起".to_string())
+        Err("开发升级仅允许已激活国家储委会管理员发起".to_string())
     }
 }
 

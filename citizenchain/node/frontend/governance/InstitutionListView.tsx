@@ -1,4 +1,4 @@
-// 机构列表：按 orgTypeFilter 过滤显示省储会或省储行，点击进入详情。
+// 机构列表：按 orgTypeFilter 过滤显示省储委会或省储行，点击进入详情。
 import { useEffect, useState } from 'react';
 import { sanitizeError } from '../core/tauri';
 import { governanceApi as api } from './api';
@@ -6,7 +6,7 @@ import type { GovernanceOverview, InstitutionListItem } from './types';
 
 type Props = {
   onSelect: (cidNumber: string) => void;
-  /** 按机构类型过滤：1=省储会, 2=省储行。不传则显示全部。 */
+  /** 按机构类型过滤：1=省储委会, 2=省储行。不传则显示全部。 */
   orgTypeFilter?: number;
 };
 

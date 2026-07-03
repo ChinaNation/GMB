@@ -415,7 +415,7 @@ pub mod pallet {
         MalformedSignature,
         /// 创世写入的封存公权机构永不可注销关闭
         CannotCloseProtectedInstitution,
-        /// 治理机构(国储会/省储会/省储行)永不可注销关闭
+        /// 治理机构(国家储委会/省储委会/省储行)永不可注销关闭
         CannotCloseGovernance,
         /// 注销凭证验签失败
         InvalidDeregisterCredential,

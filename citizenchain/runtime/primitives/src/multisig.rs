@@ -1,9 +1,4 @@
-//! 多签治理跨 pallet 共用模块（trait 抽象 + 轻量类型）。
-//!
-//! 由 personal-admins / public-manage/private-manage / multisig-transfer 共用，与 Pallet 内部状态无关：
-//! - 地址校验 / 资金保护 trait 由 runtime Config 注入实现，便于测试 mock 与生产分离；
-//! - 多签配置类型仅"裸结构 + 无业务逻辑"，避免业务 pallet 互相反向依赖。
-//! 放在 primitives 是为了避免 personal-admins 反向依赖 public-manage/private-manage。
+//! 多签治理跨 pallet 共用 trait 与轻量类型。
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::DecodeWithMemTracking;
@@ -11,9 +6,9 @@ use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 use sp_std::vec::Vec;
 
-// ===== 一、地址校验 / 资金保护抽象 trait =====
+// 地址校验与资金保护抽象。
 
-/// 账户地址合法性抽象：用于校验 account 是否为本链合法哈希地址。
+/// 账户地址合法性校验。
 pub trait AccountValidator<AccountId> {
     fn is_valid(address: &AccountId) -> bool;
 }
@@ -24,7 +19,7 @@ impl<AccountId> AccountValidator<AccountId> for () {
     }
 }
 
-/// 保留账户校验抽象：用于拦截制度保留账户被注册。
+/// 制度保留账户校验。
 pub trait ReservedAccountGuard<AccountId> {
     fn is_reserved(address: &AccountId) -> bool;
 }
@@ -35,7 +30,7 @@ impl<AccountId> ReservedAccountGuard<AccountId> for () {
     }
 }
 
-/// 转出源地址保护：用于禁止制度保留地址作为资金转出源。
+/// 转出源地址保护。
 pub trait ProtectedSourceChecker<AccountId> {
     fn is_protected(address: &AccountId) -> bool;
 }
@@ -46,12 +41,9 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
     }
 }
 
-// ===== 二、多签账户管理员配置类型 =====
+// 多签账户管理员配置类型。
 
 /// 多签账户的管理员配置快照。
-/// 由 `PersonalMultisigQuery::lookup_admin_config` 与 `InstitutionMultisigQuery::lookup_admin_config` 返回，
-/// multisig-transfer 在 propose_transfer / propose_safety_fund_transfer / propose_sweep_to_main
-/// 等治理流程里据此校验发起人是否在管理员列表内、阈值是否合法。
 #[derive(
     Encode,
     Decode,
@@ -73,10 +65,7 @@ where
     pub threshold: u32,
 }
 
-/// 不带 BoundedVec 约束的简化版 MultisigConfig，供 trait 接口返回值用。
-///
-/// 业务 pallet 在 trait 方法中返回此版本（避免把 MaxAdmins 泛型暴露到 trait 边界），
-/// multisig-transfer 拿到后只需读 admins/threshold/admins_len 三个字段做校验。
+/// 不带 BoundedVec 约束的 trait 返回快照。
 #[derive(Clone, RuntimeDebug, PartialEq, Eq)]
 pub struct MultisigConfigSnapshot<AccountId> {
     pub admins: Vec<AccountId>,

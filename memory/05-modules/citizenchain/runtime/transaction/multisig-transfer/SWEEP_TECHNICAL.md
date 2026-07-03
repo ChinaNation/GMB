@@ -2,7 +2,7 @@
 
 ## 概述
 
-`multisig-transfer` 模块中的 sweep 子功能，将机构手续费账户 (`fee_account`) 余额划转至机构主账户 (`main_account`)。仅限国储会 (NRC) 和省储行 (PRB) 使用，注册多签机构不支持。
+`multisig-transfer` 模块中的 sweep 子功能，将机构手续费账户 (`fee_account`) 余额划转至机构主账户 (`main_account`)。仅限国家储委会 (NRC) 和省储行 (PRB) 使用，注册多签机构不支持。
 
 ## 数据结构
 
@@ -64,8 +64,8 @@ pub struct SweepAction<Balance> {
 
 `TransferFeeRouter` 将旧 `NegativeImbalance` 转换为新 `Credit`，传递给 `OnchainFeeRouter`：
 - 80% -> 当前区块矿工（PoW 全节点）
-- 10% -> 国储会费用账户
-- 10% -> 国储会安全基金账户
+- 10% -> 国家储委会费用账户
+- 10% -> 国家储委会安全基金账户
 
 ## 错误码
 

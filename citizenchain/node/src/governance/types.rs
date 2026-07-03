@@ -6,9 +6,9 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OrgType {
-    /// 国储会 National Reserve Committee
+    /// 国家储委会 National Reserve Committee
     Nrc = 0,
-    /// 省储会 Provincial Reserve Committee
+    /// 省储委会 Provincial Reserve Committee
     Prc = 1,
     /// 省储行 Provincial Reserve Bank
     Prb = 2,
@@ -17,8 +17,8 @@ pub enum OrgType {
 impl OrgType {
     pub fn label(&self) -> &'static str {
         match self {
-            OrgType::Nrc => "国储会",
-            OrgType::Prc => "省储会",
+            OrgType::Nrc => "国家储委会",
+            OrgType::Prc => "省储委会",
             OrgType::Prb => "省储行",
         }
     }
@@ -84,17 +84,17 @@ pub struct InstitutionDetail {
     pub fee_account: Option<String>,
     /// 手续费账户余额（分，仅 PRB）。
     pub fee_balance_fen: Option<String>,
-    /// 储委会费用账户 AccountId hex（省储会，仅 PRC）。
+    /// 储委会费用账户 AccountId hex（省储委会，仅 PRC）。
     pub cb_fee_account: Option<String>,
     /// 储委会费用账户余额（分，仅 PRC）。
     pub cb_fee_balance_fen: Option<String>,
-    /// 国储会费用账户 AccountId hex（仅 NRC）。
+    /// 国家储委会费用账户 AccountId hex（仅 NRC）。
     pub nrc_fee_account: Option<String>,
-    /// 国储会手续费账户余额（分，仅 NRC）。
+    /// 国家储委会手续费账户余额（分，仅 NRC）。
     pub nrc_fee_balance_fen: Option<String>,
-    /// 国储会安全基金账户 AccountId hex（仅 NRC）。
+    /// 国家储委会安全基金账户 AccountId hex（仅 NRC）。
     pub safety_fund_account: Option<String>,
-    /// 国储会安全基金账户余额（分，仅 NRC）。
+    /// 国家储委会安全基金账户余额（分，仅 NRC）。
     pub safety_fund_balance_fen: Option<String>,
     /// 告警信息。
     pub warning: Option<String>,
@@ -112,11 +112,11 @@ pub struct InstitutionBalanceUpdate {
     pub staking_balance_fen: Option<String>,
     /// 费用账户链上余额（分，仅 PRB）。
     pub fee_balance_fen: Option<String>,
-    /// 省储会费用账户链上余额（分，仅 PRC）。
+    /// 省储委会费用账户链上余额（分，仅 PRC）。
     pub cb_fee_balance_fen: Option<String>,
-    /// 国储会费用账户链上余额（分，仅 NRC）。
+    /// 国家储委会费用账户链上余额（分，仅 NRC）。
     pub nrc_fee_balance_fen: Option<String>,
-    /// 国储会安全基金账户链上余额（分，仅 NRC）。
+    /// 国家储委会安全基金账户链上余额（分，仅 NRC）。
     pub safety_fund_balance_fen: Option<String>,
     /// 链上查询告警。
     pub warning: Option<String>,
@@ -145,9 +145,9 @@ pub struct InstitutionListItem {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GovernanceOverview {
-    /// 国储会列表。
+    /// 国家储委会列表。
     pub national_councils: Vec<InstitutionListItem>,
-    /// 省储会列表。
+    /// 省储委会列表。
     pub provincial_councils: Vec<InstitutionListItem>,
     /// 省储行列表。
     pub provincial_banks: Vec<InstitutionListItem>,

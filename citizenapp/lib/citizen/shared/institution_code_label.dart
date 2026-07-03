@@ -90,7 +90,7 @@ class InstitutionCodeLabel {
     'UNIN',
   };
   // 治理策略派生(纯函数，热钱包唯一分类来源)
-  /// 是否为固定治理档机构码(国储会/省储会/省储行/联邦注册局/国家司法院)。
+  /// 是否为固定治理档机构码(国家储委会/省储委会/省储行/联邦注册局/国家司法院)。
   static bool isFixedGovernance(String code) {
     return code == 'NRC' ||
         code == 'PRC' ||
@@ -192,9 +192,9 @@ class InstitutionCodeLabel {
   static String codeLabel(String code) {
     switch (code) {
       case 'NRC':
-        return '国储会';
+        return '国家储委会';
       case 'PRC':
-        return '省储会';
+        return '省储委会';
       case 'PRB':
         return '省储行';
       case 'FRG':

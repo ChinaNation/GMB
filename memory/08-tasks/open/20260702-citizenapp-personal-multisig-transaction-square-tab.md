@@ -69,7 +69,7 @@
 追加需求（2026-07-02）：
 - 公民 tab「提案」子 tab 保持单一列表，不增加“默认 / 订阅”切换或分组控件。
 - 提案列表默认显示机构码改为：`NRC/NLG/NSN/NRP/NED/NJD/NSP/PRS`。
-- `PRC/PRB` 不再默认进入提案列表；省储会、省储行只有在当前钱包订阅对应机构时才显示其提案。
+- `PRC/PRB` 不再默认进入提案列表；省储委会、省储行只有在当前钱包订阅对应机构时才显示其提案。
 - 其它公权机构提案按当前热钱包订阅机构 CID 精确命中 `subject_cid_numbers`，不按机构码放大到同类全部机构。
 - 链端 `Proposal` 保存机构归属 CID 列表：`subject_cid_numbers`；多机构关联提案写入多个机构 CID。
 - 机构活跃提案索引改为 `ActiveProposalsBySubject`，机构类主体 key 为 `InstitutionCid(cid_number)`，个人多签主体 key 为 `PersonalAccount(account_id)`。

@@ -1,5 +1,5 @@
-// 国储会顶级 Section：直接渲染国储会机构详情页（单机构，无列表层）。
-// 特权动作：协议升级、开发升级、安全基金转账提案 — 仅国储会管理员可发起。
+// 国家储委会顶级 Section：直接渲染国家储委会机构详情页（单机构，无列表层）。
+// 特权动作：协议升级、开发升级、安全基金转账提案 — 仅国家储委会管理员可发起。
 import { useState } from 'react';
 import { AdminListPage, AdminSetChangePage } from '../admins/admin-management';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
@@ -10,7 +10,7 @@ import { SweepProposalPage } from '../transaction/multisig-transfer/SweepProposa
 import { DeveloperUpgradePage, ProtocolUpgradeProposalPage } from './runtime-upgrade';
 import type { AdminWalletMatch } from './types';
 
-// 国储会 cidNumber（全链唯一，直接进入详情）。
+// 国家储委会 cidNumber（全链唯一，直接进入详情）。
 const NRC_CID_NUMBER = 'LN001-NRC0G-944805165-2026';
 
 type NrcView =
@@ -118,7 +118,7 @@ export function NrcSection() {
     );
   }
 
-  // 默认直接渲染国储会机构详情（hideBackButton 以保持 tab 语义）。
+  // 默认直接渲染国家储委会机构详情（hideBackButton 以保持 tab 语义）。
   return (
     <InstitutionDetailPage
       cidNumber={NRC_CID_NUMBER}

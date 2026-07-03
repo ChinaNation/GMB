@@ -41,6 +41,15 @@ parameter_types! {
     pub const MaxCitizenSignatureLength: u32 = 64;
 }
 
+/// 固定链上时间:2026-07-02 00:00 UTC(UTC+8 为 2026-07-02 08:00,
+/// 折算日期 20260702),让默认夹具护照(20260630-20360630)处于有效期窗口。
+pub struct FixedTime;
+impl frame_support::traits::UnixTime for FixedTime {
+    fn now() -> core::time::Duration {
+        core::time::Duration::from_secs(1_782_950_400)
+    }
+}
+
 pub struct TestCitizenIdentityAuthority;
 impl CitizenIdentityAuthority<u64, pallet::SignatureOf<Test>> for TestCitizenIdentityAuthority {
     fn can_manage_voting_identity(
@@ -70,6 +79,7 @@ impl Config for Test {
     type MaxCitizenSignatureLength = MaxCitizenSignatureLength;
     type CitizenIdentityAuthority = TestCitizenIdentityAuthority;
     type OnVotingIdentityRegistered = ();
+    type TimeProvider = FixedTime;
     type WeightInfo = ();
 }
 
@@ -119,6 +129,7 @@ fn candidate_payload(wallet_account: u64, cid_number: &[u8]) -> CandidateIdentit
         birth_city_code: code(b"4301"),
         birth_town_code: code(b"4301001"),
         citizen_full_name: name(b"Citizen One"),
+        citizen_sex: CitizenSex::Female,
     }
 }
 
@@ -264,6 +275,70 @@ fn invalid_citizen_code_is_rejected() {
             ),
             Error::<Test>::InvalidCitizenCode
         );
+    });
+}
+
+#[test]
+fn expired_passport_cannot_vote_but_still_counts_in_population() {
+    new_test_ext().execute_with(|| {
+        let mut payload = voting_payload(1, b"CTZN-EXPIRED");
+        payload.passport_valid_from = 20200101;
+        payload.passport_valid_until = 20250101;
+
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            200,
+            payload,
+            valid_signature(),
+        ));
+
+        // 计数器按状态增量维护,护照过期不减分母(设计约束,见 lib.rs 注释)。
+        assert_eq!(CountryVotingCount::<Test>::get(), 1);
+        // 但投票资格被护照有效期窗口实时拦截。
+        assert!(!CitizenIdentity::can_vote(&1, &town_scope()));
+        assert!(!CitizenIdentity::can_be_candidate(&1, &town_scope()));
+    });
+}
+
+#[test]
+fn not_yet_valid_passport_cannot_vote() {
+    new_test_ext().execute_with(|| {
+        let mut payload = voting_payload(1, b"CTZN-FUTURE");
+        payload.passport_valid_from = 20300101;
+        payload.passport_valid_until = 20400101;
+
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            200,
+            payload,
+            valid_signature(),
+        ));
+
+        assert!(!CitizenIdentity::can_vote(&1, &town_scope()));
+    });
+}
+
+#[test]
+fn candidate_identity_stores_sex_and_public_profile() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
+            RuntimeOrigin::signed(100),
+            200,
+            candidate_payload(1, b"CTZN-SEX"),
+            valid_signature(),
+        ));
+
+        let stored = CandidateIdentityByAccount::<Test>::get(1).expect("candidate stored");
+        assert_eq!(stored.citizen_sex, CitizenSex::Female);
+        assert_eq!(stored.citizen_full_name, name(b"Citizen One"));
+    });
+}
+
+#[test]
+fn current_date_int_matches_fixed_time() {
+    new_test_ext().execute_with(|| {
+        // FixedTime = 2026-07-02 00:00 UTC → UTC+8 折算 20260702。
+        assert_eq!(CitizenIdentity::current_date_int(), 20260702);
     });
 }
 

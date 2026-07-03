@@ -14,7 +14,7 @@
 ## 1. 钉死的模型(经多轮收敛,不得回退)
 
 - **org 分类用现有 6 类**(`citizenchain/runtime/votingengine/src/types.rs:16-27`),不新增:
-  `ORG_NRC=0` 国储会 / `ORG_PRC=1` 省储会 / `ORG_PRB=2` 省储行 / `ORG_REN=3` 个人 / `ORG_PUP=4` 公权机构(政府/教育/司法/立法/监察)/ `ORG_OTH=5` 私权机构(公司/银行/基金)。
+  `ORG_NRC=0` 国家储委会 / `ORG_PRC=1` 省储委会 / `ORG_PRB=2` 省储行 / `ORG_REN=3` 个人 / `ORG_PUP=4` 公权机构(政府/教育/司法/立法/监察)/ `ORG_OTH=5` 私权机构(公司/银行/基金)。
 - **市注册局不是特例**:身份注册局是政府类公权机构 = `ORG_PUP`,与联邦注册局/公安局/教育局完全同构。**禁止**为它新增 org 或链上专属类型。
 - **不新建账户**:所有机构(含每市的市注册局,`gov/service.rs` 的 `CITY_REGISTRY` 模板)都已由行政区生成 + `accounts/derive.rs::derive_account` 派生账户,链端/CID 同一派生口径。
 - **递归 D1-a 授权**:上级注册局给它登记的机构设"初始管理员",之后该机构**自治**(`propose_admin_set_change`, `who ∈ 本机构 admins`)。上级不能事后改下级 admin 集。

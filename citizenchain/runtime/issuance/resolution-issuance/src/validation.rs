@@ -70,7 +70,7 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    /// 所有收款账户必须是 CHINA_CB 省储会地址（跳过索引 0 的 NRC）。
+    /// 所有收款账户必须是 CHINA_CB 省储委会地址（跳过索引 0 的 NRC）。
     pub(crate) fn ensure_recipients_in_china_cb(
         recipients: &BoundedVec<T::AccountId, T::MaxAllocations>,
     ) -> DispatchResult {

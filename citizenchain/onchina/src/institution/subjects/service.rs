@@ -6,9 +6,9 @@
 #![allow(dead_code)]
 
 use crate::cid::code;
-use crate::cid::{classify, validate_cid_number_format, AdminLevel, InstitutionCategory};
-use crate::institution::subjects::model::{Institution, InstitutionAccount};
+use crate::cid::{AdminLevel, InstitutionCategory, classify, validate_cid_number_format};
 use crate::institution::subjects::MultisigChainStatus;
+use crate::institution::subjects::model::{Institution, InstitutionAccount};
 use primitives::account_derive::is_forbidden_account_name;
 
 // 保留名字面单源 = primitives::account_derive::RESERVED_NAME_*_STR(链端唯一字面)。
@@ -220,6 +220,25 @@ pub fn validate_cid_full_name(cid_full_name: &str) -> Result<String, ServiceErro
     if trimmed.len() > MAX_INSTITUTION_NAME_BYTES {
         return Err(ServiceError::BadInput(
             "cid_full_name too long (max 128 bytes)",
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// 校验机构简称格式。
+pub fn validate_cid_short_name(cid_short_name: &str) -> Result<String, ServiceError> {
+    let trimmed = cid_short_name.trim();
+    if trimmed.is_empty() {
+        return Err(ServiceError::BadInput("cid_short_name is required"));
+    }
+    if trimmed.chars().count() > MAX_INSTITUTION_NAME_CHARS {
+        return Err(ServiceError::BadInput(
+            "cid_short_name too long (max 30 chars)",
+        ));
+    }
+    if trimmed.len() > MAX_INSTITUTION_NAME_BYTES {
+        return Err(ServiceError::BadInput(
+            "cid_short_name too long (max 128 bytes)",
         ));
     }
     Ok(trimmed.to_string())

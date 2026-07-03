@@ -24,8 +24,8 @@ address = BLAKE2-256(
 | `0x00` | `OP_MAIN` | **所有机构**主账户（宪法 + CID 登记） | `cid_number` | `scripts/multisig.py` / 链上 `derive_institution_account(cid_number, Main)` |
 | `0x01` | `OP_FEE` | **所有机构**费用账户（宪法 + CID 登记） | `cid_number` | `scripts/multisig.py` / 链上 `derive_institution_account(cid_number, Fee)` |
 | `0x02` | `OP_STAKE` | 省储行永久质押账户（仅 PRB） | `citizens_number_u64_le` | `scripts/multisig.py` |
-| `0x03` | `OP_SAFETY` | 国储会安全基金账户（仅 NRC） | `cid_number`（国储会） | `scripts/multisig.py` |
-| `0x04` | `OP_HE` | 国储会两和基金账户（仅 NRC） | `cid_number`（国储会） | `scripts/multisig.py` |
+| `0x03` | `OP_SAFETY` | 国家储委会安全基金账户（仅 NRC） | `cid_number`（国家储委会） | `scripts/multisig.py` |
+| `0x04` | `OP_HE` | 国家储委会两和基金账户（仅 NRC） | `cid_number`（国家储委会） | `scripts/multisig.py` |
 | `0x05` | `OP_PERSONAL` | 个人多签 | `creator_32 || name` | 链上 `derive_personal_account` |
 | `0x06` | `OP_INSTITUTION` | **仅 CID 机构的自定义命名账户**（临时/工资/运营...） | `cid_number || account_name` | 链上 `derive_institution_account(cid_number, Named(account_name))` |
 
@@ -72,7 +72,7 @@ CID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 ## 示例
 
-国储会 `cid_number = "LN001-NRC0G-944805165-2026"`：
+国家储委会 `cid_number = "LN001-NRC0G-944805165-2026"`：
 
 ```
 // main_account
@@ -99,7 +99,7 @@ address  = BLAKE2-256(preimage)
 ## 源码位置
 
 - [primitives/src/core_const.rs](../../../../../citizenchain/runtime/primitives/src/core_const.rs) — `GMB` + `OP_*` 常量定义
-- [primitives/china/china_cb.rs](../../../../../citizenchain/runtime/primitives/cid/china/china_cb.rs) — 国储会 + 省储会常量（含 `SAFETY_FUND_ACCOUNT`）
+- [primitives/china/china_cb.rs](../../../../../citizenchain/runtime/primitives/cid/china/china_cb.rs) — 国家储委会 + 省储委会常量（含 `SAFETY_FUND_ACCOUNT`）
 - [primitives/china/china_ch.rs](../../../../../citizenchain/runtime/primitives/cid/china/china_ch.rs) — 省储行常量（含 `stake_account`）
 - [primitives/china/china_zb.rs](../../../../../citizenchain/runtime/primitives/cid/china/china_zb.rs) — 汇总保留名单 + `is_reserved_main_account()`
 - [public-manage](../../../../../citizenchain/runtime/entity/public-manage/src/lib.rs) / [private-manage](../../../../../citizenchain/runtime/entity/private-manage/src/lib.rs) — 链上公权/私权机构账户派生与 CID 注册账户登记

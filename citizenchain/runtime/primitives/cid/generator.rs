@@ -1,9 +1,5 @@
 //! CID 号核心生成协议。
-//!
-//!
-//! 本模块只接受已经解析好的行政区代码、行政区名称和年份,不读取 SQLite、
-//! 不读取系统时间、不做随机数和数据库查重。registry 负责把运行态输入解析好后
-//! 调用这里,从而让 CID 号码字节协议受到 runtime primitives 保护。
+//! 这里只处理字节协议;SQLite、时间、UUID 和查重由 registry 负责。
 
 use alloc::{format, string::String};
 
@@ -14,25 +10,24 @@ use crate::cid::{
     number::{checksum_char_m1, checksum_char_mod36},
 };
 
-/// 公民人/自然人/智能人的公开编码只精确到省,市级段固定为 000。
+/// 个人主体公开编码只精确到省。
 pub const RESERVED_PROVINCE_CITY_CODE: &str = "000";
 
 pub struct GenerateCidNumberInput<'a> {
     pub account_pubkey: &'a str,
-    /// 盈利输入,仅 Variable(注册协会/智能人)与 InheritParent(非法人组织,传父级)
-    /// 策略的机构码读取;固定盈利策略的码忽略本字段。取值 0/1 或 非盈利/盈利。
+    /// 可变/继承盈利策略读取的 0/1 输入。
     pub p1: &'a str,
-    /// 两位省级行政区代码,如 GD。
+    /// 两位省级行政区代码。
     pub province_code: &'a str,
-    /// 省级行政区名称。注意:N9 hash 继续使用名称,保证既有 CID 生成结果不漂移。
+    /// 省级行政区名称,N9 hash 使用。
     pub province_name: &'a str,
-    /// 三位市级行政区代码。个人主体会被协议强制替换为 000。
+    /// 三位市级行政区代码。
     pub city_code: &'a str,
-    /// 市级行政区名称。个人主体的 hash 组件会被协议强制替换为 000。
+    /// 市级行政区名称,N9 hash 使用。
     pub city_name: &'a str,
-    /// 生成年份 YYYY。由 registry 或创世工具显式传入,runtime 协议层不取当前时间。
+    /// 生成年份 YYYY。
     pub year: &'a str,
-    /// 机构码(3 或 4 字符代码,或机构实体中文简称)。
+    /// 机构码或机构简称。
     pub institution: &'a str,
 }
 
@@ -83,7 +78,7 @@ pub fn generate_cid_number(input: GenerateCidNumberInput<'_>) -> Result<String, 
         return Err("personal multisig (PMUL) has no cid number");
     }
 
-    // 盈利属性由机构码策略决定;可变/继承策略读取入参。
+    // 盈利属性由机构码策略决定。
     let profit = match code::profit_policy(&institution_code) {
         Some(ProfitPolicy::NonProfit) => false,
         Some(ProfitPolicy::Profit) => true,
@@ -109,7 +104,7 @@ pub fn generate_cid_number(input: GenerateCidNumberInput<'_>) -> Result<String, 
     let code_str =
         code::institution_code_text(&institution_code).ok_or("institution code text missing")?;
     let r5 = format!("{}{}", input.province_code, city_code);
-    // 同 (机构码,省,市,year) 四元组共享 10 亿 n9 桶;registry 用查重重试逃逸碰撞。
+    // 同一分类四元组共享 10 亿 n9 桶;碰撞由 registry 处理。
     let n9 = format!(
         "{:09}",
         (hash_text(&format!(

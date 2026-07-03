@@ -21,7 +21,7 @@ import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 国储会安全基金转账提案创建页面。
+/// 国家储委会安全基金转账提案创建页面。
 ///
 /// source 锁定为 NRC 安全基金账户(`InstitutionAccounts.safetyFundAccount`),
 /// 仅 NRC 管理员可发起,链端调用 `propose_safety_fund_transfer (call_index=1)`。
@@ -33,7 +33,7 @@ class SafetyFundTransferPage extends StatefulWidget {
     required this.badgeColor,
     required this.adminWallets,
   }) : assert(institution.orgType == OrgType.nrc,
-            'SafetyFundTransferPage 仅支持国储会(NRC)');
+            'SafetyFundTransferPage 仅支持国家储委会(NRC)');
 
   final InstitutionInfo institution;
   final IconData icon;
@@ -70,7 +70,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     final hex = widget.institution.accounts?.safetyFundAccount;
     if (hex == null) {
       throw StateError(
-          '国储会 InstitutionAccounts.safetyFundAccount 为空,无法发起安全基金转账');
+          '国家储委会 InstitutionAccounts.safetyFundAccount 为空,无法发起安全基金转账');
     }
     _safetyFundAccountHex = hex;
     _fromSs58 = _accountHexToSs58(_safetyFundAccountHex);
@@ -369,7 +369,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
           const SizedBox(height: 6),
           _buildAdminSelector(),
           const SizedBox(height: 16),
-          _buildLabel('转出账户（国储会安全基金）'),
+          _buildLabel('转出账户（国家储委会安全基金）'),
           const SizedBox(height: 6),
           _buildReadOnlyField(_fromSs58),
           const SizedBox(height: 16),

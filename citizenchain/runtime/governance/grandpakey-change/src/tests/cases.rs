@@ -396,7 +396,7 @@ fn propose_rejects_unchanged_key() {
 #[test]
 fn propose_rejects_key_owned_by_other_institution() {
     new_test_ext().execute_with(|| {
-        // CHINA_CB[0] 是国储会的 key，用它作为省储会的 new_key 应失败
+        // CHINA_CB[0] 是国家储委会的 key，用它作为省储委会的 new_key 应失败
         let nrc_key = CHINA_CB[0].grandpa_key;
         assert_noop!(
             GrandpaKeyChange::propose_replace_grandpa_key(

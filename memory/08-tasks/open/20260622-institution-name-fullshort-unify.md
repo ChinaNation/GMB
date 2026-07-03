@@ -11,7 +11,7 @@
 PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **5 真 bug + 50,661 模板故意短==全 + 129 本就最短**。
 
 - 旧口径认为常量机构走字符串匹配函数产出 `(full, short)` 已足够;用户最终确认此口径不够。该字符串匹配函数是第二实现源,必须删除;常量机构必须直接携带名称字段。
-- **病根**:历史实现拿 china_*.rs 的中文全名当 match 键。china 改名 → arm 静默落默认臂 → 简称=全称。国储会、4 联邦局、129 省两院都是这一个病根。
+- **病根**:历史实现拿 china_*.rs 的中文全名当 match 键。china 改名 → arm 静默落默认臂 → 简称=全称。国家储委会、4 联邦局、129 省两院都是这一个病根。
 
 ## 已确认决策
 
@@ -32,7 +32,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 | 总统府联邦情报局 | 总统府联邦情报局 | 联邦情报局 | 已落 `cid_full_name/cid_short_name` |
 | 总统府联邦特勤局 | 总统府联邦特勤局 | 联邦特勤局 | 已落 `cid_full_name/cid_short_name` |
 | 总统府联邦人事局 | 总统府联邦人事局 | 联邦人事局 | 已落 `cid_full_name/cid_short_name` |
-| 国家公民储备委员会 | 国家公民储备委员会 | 国储会 | 已经真实库 reconcile/check 通过 |
+| 国家公民储备委员会 | 国家公民储备委员会 | 国家储委会 | 已经真实库 reconcile/check 通过 |
 
 ### B. 模板机构(改 `suffix`,`full_suffix` 保持)
 | org_code/模板 | full_suffix(保持) | suffix(改为) | 条数 |
@@ -40,8 +40,8 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 | TOWN_GOV | 自治政府 | 政府 | 39,087 |
 | CITY_GOV | 自治政府 | 政府 | 2,872 |
 | CITY_EDU | 公民教育委员会 | 教委会 | 2,872 |
-| PROVINCE_SENATE_COUNCIL | 参议员议政会 | 参议会 | 43 |
-| PROVINCE_REPRESENTATIVE_COUNCIL | 众议员议政会 | 众议会 | 43 |
+| PROVINCE_SENATE_COUNCIL | 联邦立法院参议会 | 参议会 | 43 |
+| PROVINCE_REPRESENTATIVE_COUNCIL | 联邦立法院众议会 | 众议会 | 43 |
 | CITY_COURT | 司法院 | 司法院(保持,已最短) | 2,872 |
 | CITY_SUPERVISION | 监察院 | 监察院(保持,已最短) | 2,872 |
 
@@ -67,11 +67,11 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 
 **admins 非硬保护**:真源=链上 `admins-change::AdminAccounts`(service.rs:577-586),china admins 仅创世种子/止血兜底,改管理员走治理。⇒ 创世轴不含 admins。
 
-**WASM 绑定现状(要扩展不是移除)**:CB(国储会/省储会)/CH(省储行)被生产 pallet 读 `.main_account`,整数组含名字进 WASM⇒改名已吃 setCode;但 ZF/LF/SF/JC/JY 运行期无 pallet 触达,数组不进生产 WASM(`pub const` 未被编译进的代码引用→globaldce 裁掉)⇒改名不动哈希。**保护不一致,要补齐成全部内置统一吃 setCode。**
+**WASM 绑定现状(要扩展不是移除)**:CB(国家储委会/省储委会)/CH(省储行)被生产 pallet 读 `.main_account`,整数组含名字进 WASM⇒改名已吃 setCode;但 ZF/LF/SF/JC/JY 运行期无 pallet 触达,数组不进生产 WASM(`pub const` 未被编译进的代码引用→globaldce 裁掉)⇒改名不动哈希。**保护不一致,要补齐成全部内置统一吃 setCode。**
 
 ## 设计(用户定稿,随 T3/T4 一并做)
 
-**① china_*.rs 结构体补完整名称字段**(紧贴 `cid_full_name` 之后):built-in 中文全称/中文简称/英文全称/英文简称都成常量数据。built-in 不再通过字符串匹配推导名称(直接读字段)⇒ **匹配臂全删,国储会/4联邦局/省两院 bug 类根除**,简称也一起受保护。
+**① china_*.rs 结构体补完整名称字段**(紧贴 `cid_full_name` 之后):built-in 中文全称/中文简称/英文全称/英文简称都成常量数据。built-in 不再通过字符串匹配推导名称(直接读字段)⇒ **匹配臂全删,国家储委会/4联邦局/省两院 bug 类根除**,简称也一起受保护。
 
 **② 内置名摘要锚点(✅ 定稿就此方案,不做返回目录变体)**:
 - runtime 折叠所有 CHINA_*(中文全称+中文简称+英文全称+英文简称)字节 → `builtin_institution_name_digest() -> [u8;32]`,经 `runtime/src/apis.rs` 的 `BuiltinInstitutionNameApi` 暴露(单点引用即强制编译进 WASM)。
@@ -80,7 +80,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - (已否决:runtime API 直接返回目录的"链上可读"变体——不要,名字保持链下。)
 
 **③ 两层(✅ 定稿:只保护现有 china_*.rs 成员,不扩)**:
-- **Tier 1(内置,改链上承诺名要 setCode)= 凡在 china_*.rs 的常量机构**(总统府/10部委/5联邦局/两院+监察/教育/国储会/CB 省储会/CH 省储行/LF·SF·JC 省两院监察)。
+- **Tier 1(内置,改链上承诺名要 setCode)= 凡在 china_*.rs 的常量机构**(总统府/10部委/5联邦局/两院+监察/教育/国家储委会/CB 省储委会/CH 省储行/LF·SF·JC 省两院监察)。
 - **Tier 2(其他,全部 CID 系统自由改)= 后端模板区划机构(省厅/市局/镇政府)+ 用户注册**。**省厅不提升、不搬进 china_*.rs。**
 - **关键语义(用户最终确认)**:Tier 1 机构在 CID 系统**照样能改全称/简称,改了只在 CID 系统(链下)生效**;要让区块链侧也变,必须改 china_*.rs 常量 → runtime 升级。`china_*.rs` 是 runtime 保护锚,CID `subjects.cid_full_name/cid_short_name/cid_full_name_en/cid_short_name_en` 是链下运营展示数据。两者不是第二套命名,但全仓字段名和生成逻辑只能使用这四个字段,不得出现旧展示列作为机构名称别名。
 
@@ -123,7 +123,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - `cargo test --manifest-path citizencode/backend/Cargo.toml gov -- --nocapture`:通过,5 个 gov 相关测试通过。
 - 真实库 `reconcile-gov --changed-only`:通过,`scopes=33 inserted=0 updated=174947 account_inserted=349927 removed=0`。
 - 真实库 `check-gov --strict`:通过,`ok=true manifest_current=true target_count=245016 active_count=245016 missing=0 mismatched=0 missing_accounts=0 obsolete=0`。
-- 真实库 SQL 抽样: `PSN/PRP/CGOV/CEDU/TGOV` 的 `cid_full_name = cid_short_name` 均为 0;旧简称尾缀 `参议员议政会/众议员议政会/自治政府/公民教育委员会` 均为 0。
+- 真实库 SQL 抽样: `PSN/PRP/CGOV/CEDU/TGOV` 的 `cid_full_name = cid_short_name` 均为 0;旧简称尾缀均为 0。
 - 本地 CID HTTP 运行态验证:临时启动 `127.0.0.1:8901`,`/api/v1/app/institutions/search` 返回 `瑶海市公民教育委员会 / 瑶海市教委会`、`明光路镇自治政府 / 明光路镇政府`;`/api/v1/app/public-institutions` 返回 `province_code=AH city_code=001` 与 `CEDU` 的新简称。验证后已关闭临时服务。
 - 白皮书 `docs/《白皮书》.md` 与公民宪法 `citizenchain/runtime/primitives/src/旧宪法 HTML`:仅扫描待统一项,未修改;需用户二次确认后执行。
 

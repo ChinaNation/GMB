@@ -97,11 +97,20 @@ impl CitizenIdentityAuthority<u64, citizen_identity::pallet::SignatureOf<Test>>
     }
 }
 
+/// 固定链上时间(2026-07-02 00:00 UTC),集成测试夹具护照落在有效期窗口内。
+pub struct FixedTime;
+impl frame_support::traits::UnixTime for FixedTime {
+    fn now() -> core::time::Duration {
+        core::time::Duration::from_secs(1_782_950_400)
+    }
+}
+
 impl citizen_identity::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxCitizenSignatureLength = MaxCitizenSignatureLength;
     type CitizenIdentityAuthority = TestCitizenIdentityAuthority;
     type OnVotingIdentityRegistered = CitizenIssuance;
+    type TimeProvider = FixedTime;
     type WeightInfo = ();
 }
 

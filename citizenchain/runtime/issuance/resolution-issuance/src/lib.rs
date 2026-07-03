@@ -57,7 +57,7 @@ pub mod pallet {
 
         type Currency: Currency<Self::AccountId>;
 
-        /// 允许国储会或省储会管理员发起决议发行提案。
+        /// 允许国家储委会或省储委会管理员发起决议发行提案。
         type ProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
         /// 更新合法收款账户集合。
         type RecipientSetOrigin: EnsureOrigin<Self::RuntimeOrigin>;

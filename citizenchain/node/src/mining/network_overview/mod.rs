@@ -315,7 +315,7 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     }
     if uncategorized_bootnodes > 0 {
         warnings.push(format!(
-            "{} 个引导节点角色未命中\u{201c}国储会/省储会/省储行\u{201d}，按全节点口径处理",
+            "{} 个引导节点角色未命中\u{201c}国家储委会/省储委会/省储行\u{201d}，按全节点口径处理",
             uncategorized_bootnodes
         ));
     }

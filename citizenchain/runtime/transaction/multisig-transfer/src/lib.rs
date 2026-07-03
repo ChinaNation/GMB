@@ -56,7 +56,7 @@ pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
     pub proposer: AccountId,
 }
 
-/// 安全基金转账动作：从国储会安全基金账户向指定收款地址转账。
+/// 安全基金转账动作：从国家储委会安全基金账户向指定收款地址转账。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 #[scale_info(skip_type_params(MaxRemarkLen))]
 pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
@@ -208,7 +208,7 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 手续费划转提案动作存储（省储行 + 国储会共用）。
+    /// 手续费划转提案动作存储（省储行 + 国家储委会共用）。
     #[pallet::storage]
     pub type SweepProposalActions<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, SweepAction<T::AccountId, BalanceOf<T>>, OptionQuery>;
@@ -439,10 +439,10 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 发起国储会安全基金转账提案（内部投票）。
+        /// 发起国家储委会安全基金转账提案（内部投票）。
         ///
         /// 从安全基金账户（`SAFETY_FUND_ACCOUNT`）向指定收款地址转账。
-        /// 仅国储会管理员可发起。
+        /// 仅国家储委会管理员可发起。
         #[pallet::call_index(1)]
         #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
         pub fn propose_safety_fund_transfer(
@@ -454,7 +454,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
 
-            // 验证国储会管理员
+            // 验证国家储委会管理员
             let nrc_institution = Self::decode_institution_account(&CHINA_CB[0].main_account)?;
             ensure!(
                 <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(

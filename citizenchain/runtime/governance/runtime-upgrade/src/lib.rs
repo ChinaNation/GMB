@@ -44,7 +44,7 @@ pub mod pallet {
     )]
     #[scale_info(skip_type_params(T))]
     pub struct Proposal<T: Config> {
-        /// 提案发起人（国储会或省储会管理员）
+        /// 提案发起人（国家储委会或省储委会管理员）
         pub proposer: T::AccountId,
         /// 升级理由
         pub reason: ReasonOf<T>,
@@ -59,10 +59,10 @@ pub mod pallet {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// 允许国储会或省储会管理员发起 runtime 升级提案。
+        /// 允许国家储委会或省储委会管理员发起 runtime 升级提案。
         type ProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 
-        /// 开发期直接升级权限：只允许国储会管理员绕过投票执行 set_code。
+        /// 开发期直接升级权限：只允许国家储委会管理员绕过投票执行 set_code。
         type DeveloperUpgradeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
@@ -126,7 +126,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 国储会或省储会管理员发起 runtime 升级提案，升级流程走联合投票。
+        /// 国家储委会或省储委会管理员发起 runtime 升级提案，升级流程走联合投票。
         /// 本模块只提交协议升级业务内容；人口快照、联合签名、
         /// 投票资格和计票流程全部由 votingengine 负责。
         #[pallet::call_index(0)]
@@ -167,7 +167,7 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 开发期快捷通道：仅国储会管理员可直接 set_code，不走投票。
+        /// 开发期快捷通道：仅国家储委会管理员可直接 set_code，不走投票。
         /// 仅在 genesis-pallet 的 DeveloperUpgradeEnabled 为 true 时可用。
         /// 链进入运行期后此调用永久失效，升级必须走 propose_runtime_upgrade 联合投票。
         #[pallet::call_index(2)]

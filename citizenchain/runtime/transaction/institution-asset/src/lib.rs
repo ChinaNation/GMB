@@ -29,7 +29,7 @@ pub enum InstitutionAssetAction {
     OffchainBatchDebit,
     /// 省储行手续费账户归集：从 `fee_account` 划回机构主账户。
     OffchainFeeSweepExecute,
-    /// 国储会安全基金转账：从 `SAFETY_FUND_ACCOUNT` 向指定收款地址转账。
+    /// 国家储委会安全基金转账：从 `SAFETY_FUND_ACCOUNT` 向指定收款地址转账。
     NrcSafetyFundTransfer,
     // ========== 清算行(L2)体系动作 ==========
     /// L3 用户向清算行主账户充值。source 为 L3 自持账户。

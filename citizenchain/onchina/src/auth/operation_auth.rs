@@ -70,6 +70,9 @@ pub(crate) enum AdminActionType {
     ProposePersonnel,
     /// 发起预算案(政府;Phase 4 接入)。
     ProposeBudget,
+    /// 注册局推送公民身份上链(prepare 生成公民待签载荷 + complete 验签绑定,
+    /// 两步各消费一次 grant)。
+    CitizenOnchainPush,
 }
 
 impl AdminActionType {
@@ -97,6 +100,7 @@ impl AdminActionType {
             Self::GuardVote => "GUARD_VOTE",
             Self::ProposePersonnel => "PROPOSE_PERSONNEL",
             Self::ProposeBudget => "PROPOSE_BUDGET",
+            Self::CitizenOnchainPush => "CITIZEN_ONCHAIN_PUSH",
         }
     }
 
@@ -128,7 +132,9 @@ impl AdminActionType {
             | Self::OverrideSign
             | Self::GuardVote
             | Self::ProposePersonnel
-            | Self::ProposeBudget => AdminOperationAuth::PasskeyColdSign,
+            | Self::ProposeBudget
+            // 注册局上链操作一律最严档:passkey 断言 + 冷钱包扫码签名。
+            | Self::CitizenOnchainPush => AdminOperationAuth::PasskeyColdSign,
         }
     }
 
@@ -190,6 +196,7 @@ pub(crate) fn parse_action_type(
         "GUARD_VOTE" => Ok(AdminActionType::GuardVote),
         "PROPOSE_PERSONNEL" => Ok(AdminActionType::ProposePersonnel),
         "PROPOSE_BUDGET" => Ok(AdminActionType::ProposeBudget),
+        "CITIZEN_ONCHAIN_PUSH" => Ok(AdminActionType::CitizenOnchainPush),
         _ => Err(api_error(
             StatusCode::BAD_REQUEST,
             1001,
@@ -262,6 +269,18 @@ mod tests {
         assert!(!AdminActionType::InstitutionDeleteAccount.requires_governing_capability());
         assert!(!AdminActionType::InstitutionDeleteDocument.requires_governing_capability());
         assert!(!AdminActionType::NodeBindingUnbind.requires_governing_capability());
+    }
+
+    #[test]
+    fn citizen_onchain_push_is_cold_sign_and_round_trips() {
+        // 注册局上链操作最严档:passkey + 冷签;不属 Tier1 治理能力边界
+        // (Tier1/下辖注册局都能办理本辖区公民,由 ensure_registry_admin + scope 收口)。
+        let action = AdminActionType::CitizenOnchainPush;
+        assert_eq!(action.auth_type(), AdminOperationAuth::PasskeyColdSign);
+        assert!(!action.requires_governing_capability());
+        assert!(!action.is_governance());
+        let parsed = parse_action_type(action.as_str()).expect("citizen action parses");
+        assert_eq!(parsed, action);
     }
 
     #[test]

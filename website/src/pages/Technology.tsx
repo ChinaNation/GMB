@@ -82,13 +82,13 @@ const topNodeTypes = [
 
 const bottomNodeTypes = [
   {
-    type: '国储会权威节点',
+    type: '国家储委会权威节点',
     count: '1',
     desc: '国家级货币发行控制，19 位管理员多签治理',
     features: ['国家铸币权', '全网治理', '13/19 多签', '联合投票'],
   },
   {
-    type: '省储会权威节点',
+    type: '省储委会权威节点',
     count: '43',
     desc: '省级储备管理，每省 9 位管理员',
     features: ['省铸币权', '省级治理', '联合投票', '6/9 多签'],
@@ -180,7 +180,7 @@ export default function Technology() {
             </GlowCard>
           ))}
         </div>
-        {/* Bottom row: 国储会 / 省储会 / 省储行 */}
+        {/* Bottom row: 国家储委会 / 省储委会 / 省储行 */}
         <div className="mt-6 grid gap-6 md:grid-cols-3">
           {bottomNodeTypes.map((n) => (
             <GlowCard key={n.type} glow="gold" className="flex flex-col">

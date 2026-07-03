@@ -23,7 +23,7 @@
 | `src/genesis.rs` | 创世宣言、创世人口、创世发行总量 |
 | `china/mod.rs` | 机构常量模块声明 |
 | `china/china_ch.rs` | 43 个省储行（人口、质押、多签账户） |
-| `china/china_cb.rs` | 44 个储委会（1 国储会 + 43 省储会） |
+| `china/china_cb.rs` | 44 个储委会（1 国家储委会 + 43 省储委会） |
 | `china/china_jc.rs` | 47 个监察机构（国家监察院 + 3 联邦署 + 43 省级联邦监察院） |
 | `china/china_jy.rs` | 公民教育委员会 |
 | `china/china_lf.rs` | 44 个立法院（国家立法院 + 43 省级联邦立法院） |
@@ -81,7 +81,7 @@
 | OFFCHAIN_MIN_FEE | 1 分 | 链下最低 0.01 元 |
 | OPERATIONAL_FEE_MULTIPLIER | 1 | 运营类不额外加价 |
 | ONCHAIN_FEE_FULLNODE_PERCENT | 80% | 铸块全节点分成 |
-| ONCHAIN_FEE_NRC_PERCENT | 10% | 国储会分成 |
+| ONCHAIN_FEE_NRC_PERCENT | 10% | 国家储委会分成 |
 | ONCHAIN_FEE_SAFETY_FUND_PERCENT | 10% | 安全基金 SAFETY_FUND_ACCOUNT |
 
 **5 类交易费用模型**(由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier` 强制):
@@ -94,8 +94,8 @@
 ### 2.7 投票治理
 | 常量 | 值 | 说明 |
 |------|-----|------|
-| NRC_ADMIN_COUNT | 19 | 国储会管理员 |
-| PRC_ADMIN_COUNT / PRB_ADMIN_COUNT | 9 | 省储会/省储行管理员 |
+| NRC_ADMIN_COUNT | 19 | 国家储委会管理员 |
+| PRC_ADMIN_COUNT / PRB_ADMIN_COUNT | 9 | 省储委会/省储行管理员 |
 | NJD_ADMIN_COUNT | 15 | 国家司法院创世公职人员：7 名护宪大法官 + 1 名首席大法官 + 2 名次席大法官 + 5 名大法官 |
 | JOINT_VOTE_TOTAL | 105 | 19 + 43 + 43 |
 | JOINT_VOTE_PASS_THRESHOLD | 105 | 全票通过立即执行 |

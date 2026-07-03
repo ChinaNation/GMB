@@ -1,9 +1,8 @@
-//! 国储会 + 43 个初始省储会常量=china_cb.rs
-//! 费用账户地址（GMB + OP_FEE + ss58 小端 + cid_number → BLAKE2-256）。
+//! 国家储委会与 43 个初始省储委会常量。
 
 use hex_literal::hex;
 
-/// 单个储委会的常量结构
+/// 储委会常量。
 pub struct ChinaCb {
     pub cid_full_name: &'static str,
     pub cid_short_name: &'static str,
@@ -16,20 +15,19 @@ pub struct ChinaCb {
     pub admins: &'static [[u8; 32]],
 }
 
-/// 国储会安全基金账户地址（GMB + OP_SAFETY + ss58 小端 + 国储会 cid_number → BLAKE2-256）。
+/// 国家储委会安全基金账户地址。
 pub const SAFETY_FUND_ACCOUNT: [u8; 32] =
     hex!("d78abac2e0a7772e72ba663313718e97288377d9ca2ca1467c710058f8b5effa");
 
-/// 国储会两和基金账户地址（GMB + OP_HE + ss58 小端 + 国储会 cid_number → BLAKE2-256）。
-/// 两和基金 = 历史和解与和平建国基金，创世一次性发行 195,818,501,966.00 元，国储会内部投票管理。
+/// 国家储委会两和基金账户地址。
 pub const NRC_HE_ACCOUNT: [u8; 32] =
     hex!("4ac779852c175087c445c35efecfef3ce6e0232702152ea2283f0b5ec3952e53");
 
-/// 所有国储会+省储会数组
+/// 所有储委会。
 pub const CHINA_CB: &[ChinaCb] = &[
     ChinaCb {
         cid_full_name: "国家公民储备委员会",
-        cid_short_name: "国储会",
+        cid_short_name: "国家储委会",
         cid_full_name_en: "National Citizen Reserve Committee",
         cid_short_name_en: "National Reserve Committee",
         cid_number: "LN001-NRC0G-944805165-2026",
@@ -60,7 +58,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "中枢省公民储备委员会",
-        cid_short_name: "中枢省储会",
+        cid_short_name: "中枢省储委会",
         cid_full_name_en: "Zhongshu Provincial Citizen Reserve Committee",
         cid_short_name_en: "Zhongshu Provincial Reserve Committee",
         cid_number: "ZS001-PRC0E-016974075-2026",
@@ -81,7 +79,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "岭南省公民储备委员会",
-        cid_short_name: "岭南省储会",
+        cid_short_name: "岭南省储委会",
         cid_full_name_en: "Lingnan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Lingnan Provincial Reserve Committee",
         cid_number: "LN001-PRC05-773405642-2026",
@@ -102,7 +100,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "广东省公民储备委员会",
-        cid_short_name: "广东省储会",
+        cid_short_name: "广东省储委会",
         cid_full_name_en: "Guangdong Provincial Citizen Reserve Committee",
         cid_short_name_en: "Guangdong Provincial Reserve Committee",
         cid_number: "GD001-PRC0V-067440774-2026",
@@ -123,7 +121,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "广西省公民储备委员会",
-        cid_short_name: "广西省储会",
+        cid_short_name: "广西省储委会",
         cid_full_name_en: "Guangxi Provincial Citizen Reserve Committee",
         cid_short_name_en: "Guangxi Provincial Reserve Committee",
         cid_number: "GX001-PRC0C-663454043-2026",
@@ -144,7 +142,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "福建省公民储备委员会",
-        cid_short_name: "福建省储会",
+        cid_short_name: "福建省储委会",
         cid_full_name_en: "Fujian Provincial Citizen Reserve Committee",
         cid_short_name_en: "Fujian Provincial Reserve Committee",
         cid_number: "FJ001-PRC0I-389570546-2026",
@@ -165,7 +163,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "海南省公民储备委员会",
-        cid_short_name: "海南省储会",
+        cid_short_name: "海南省储委会",
         cid_full_name_en: "Hainan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hainan Provincial Reserve Committee",
         cid_number: "HN001-PRC0S-545676096-2026",
@@ -186,7 +184,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "云南省公民储备委员会",
-        cid_short_name: "云南省储会",
+        cid_short_name: "云南省储委会",
         cid_full_name_en: "Yunnan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Yunnan Provincial Reserve Committee",
         cid_number: "YN001-PRC0W-145427171-2026",
@@ -207,7 +205,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "贵州省公民储备委员会",
-        cid_short_name: "贵州省储会",
+        cid_short_name: "贵州省储委会",
         cid_full_name_en: "Guizhou Provincial Citizen Reserve Committee",
         cid_short_name_en: "Guizhou Provincial Reserve Committee",
         cid_number: "GZ001-PRC02-969970096-2026",
@@ -228,7 +226,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "湖南省公民储备委员会",
-        cid_short_name: "湖南省储会",
+        cid_short_name: "湖南省储委会",
         cid_full_name_en: "Hunan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hunan Provincial Reserve Committee",
         cid_number: "HU001-PRC0P-400319700-2026",
@@ -249,7 +247,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "江西省公民储备委员会",
-        cid_short_name: "江西省储会",
+        cid_short_name: "江西省储委会",
         cid_full_name_en: "Jiangxi Provincial Citizen Reserve Committee",
         cid_short_name_en: "Jiangxi Provincial Reserve Committee",
         cid_number: "JX001-PRC0J-458681566-2026",
@@ -270,7 +268,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "浙江省公民储备委员会",
-        cid_short_name: "浙江省储会",
+        cid_short_name: "浙江省储委会",
         cid_full_name_en: "Zhejiang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Zhejiang Provincial Reserve Committee",
         cid_number: "ZJ001-PRC08-471270801-2026",
@@ -291,7 +289,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "江苏省公民储备委员会",
-        cid_short_name: "江苏省储会",
+        cid_short_name: "江苏省储委会",
         cid_full_name_en: "Jiangsu Provincial Citizen Reserve Committee",
         cid_short_name_en: "Jiangsu Provincial Reserve Committee",
         cid_number: "JS001-PRC0O-358467174-2026",
@@ -312,7 +310,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "山东省公民储备委员会",
-        cid_short_name: "山东省储会",
+        cid_short_name: "山东省储委会",
         cid_full_name_en: "Shandong Provincial Citizen Reserve Committee",
         cid_short_name_en: "Shandong Provincial Reserve Committee",
         cid_number: "SD001-PRC07-027328848-2026",
@@ -333,7 +331,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "山西省公民储备委员会",
-        cid_short_name: "山西省储会",
+        cid_short_name: "山西省储委会",
         cid_full_name_en: "Shanxi Provincial Citizen Reserve Committee",
         cid_short_name_en: "Shanxi Provincial Reserve Committee",
         cid_number: "SX001-PRC0O-104465679-2026",
@@ -354,7 +352,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "河南省公民储备委员会",
-        cid_short_name: "河南省储会",
+        cid_short_name: "河南省储委会",
         cid_full_name_en: "Henan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Henan Provincial Reserve Committee",
         cid_number: "HE001-PRC0S-849245626-2026",
@@ -375,7 +373,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "河北省公民储备委员会",
-        cid_short_name: "河北省储会",
+        cid_short_name: "河北省储委会",
         cid_full_name_en: "Hebei Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hebei Provincial Reserve Committee",
         cid_number: "HB001-PRC0W-499533387-2026",
@@ -396,7 +394,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "湖北省公民储备委员会",
-        cid_short_name: "湖北省储会",
+        cid_short_name: "湖北省储委会",
         cid_full_name_en: "Hubei Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hubei Provincial Reserve Committee",
         cid_number: "HI001-PRC0D-659443961-2026",
@@ -417,7 +415,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "陕西省公民储备委员会",
-        cid_short_name: "陕西省储会",
+        cid_short_name: "陕西省储委会",
         cid_full_name_en: "Shaanxi Provincial Citizen Reserve Committee",
         cid_short_name_en: "Shaanxi Provincial Reserve Committee",
         cid_number: "SI001-PRC0T-711309909-2026",
@@ -438,7 +436,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "重庆省公民储备委员会",
-        cid_short_name: "重庆省储会",
+        cid_short_name: "重庆省储委会",
         cid_full_name_en: "Chongqing Provincial Citizen Reserve Committee",
         cid_short_name_en: "Chongqing Provincial Reserve Committee",
         cid_number: "CQ001-PRC06-478472058-2026",
@@ -459,7 +457,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "四川省公民储备委员会",
-        cid_short_name: "四川省储会",
+        cid_short_name: "四川省储委会",
         cid_full_name_en: "Sichuan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Sichuan Provincial Reserve Committee",
         cid_number: "SC001-PRC0Y-935659021-2026",
@@ -480,7 +478,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "甘肃省公民储备委员会",
-        cid_short_name: "甘肃省储会",
+        cid_short_name: "甘肃省储委会",
         cid_full_name_en: "Gansu Provincial Citizen Reserve Committee",
         cid_short_name_en: "Gansu Provincial Reserve Committee",
         cid_number: "GS001-PRC0L-679051155-2026",
@@ -501,7 +499,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "北平省公民储备委员会",
-        cid_short_name: "北平省储会",
+        cid_short_name: "北平省储委会",
         cid_full_name_en: "Beiping Provincial Citizen Reserve Committee",
         cid_short_name_en: "Beiping Provincial Reserve Committee",
         cid_number: "BP001-PRC0R-189323546-2026",
@@ -522,7 +520,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "海滨省公民储备委员会",
-        cid_short_name: "海滨省储会",
+        cid_short_name: "海滨省储委会",
         cid_full_name_en: "Haibin Provincial Citizen Reserve Committee",
         cid_short_name_en: "Haibin Provincial Reserve Committee",
         cid_number: "HA001-PRC0Y-214178517-2026",
@@ -543,7 +541,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "松江省公民储备委员会",
-        cid_short_name: "松江省储会",
+        cid_short_name: "松江省储委会",
         cid_full_name_en: "Songjiang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Songjiang Provincial Reserve Committee",
         cid_number: "SJ001-PRC09-044490898-2026",
@@ -564,7 +562,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "龙江省公民储备委员会",
-        cid_short_name: "龙江省储会",
+        cid_short_name: "龙江省储委会",
         cid_full_name_en: "Longjiang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Longjiang Provincial Reserve Committee",
         cid_number: "LJ001-PRC08-279890045-2026",
@@ -585,7 +583,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "吉林省公民储备委员会",
-        cid_short_name: "吉林省储会",
+        cid_short_name: "吉林省储委会",
         cid_full_name_en: "Jilin Provincial Citizen Reserve Committee",
         cid_short_name_en: "Jilin Provincial Reserve Committee",
         cid_number: "JL001-PRC05-850461124-2026",
@@ -606,7 +604,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "辽宁省公民储备委员会",
-        cid_short_name: "辽宁省储会",
+        cid_short_name: "辽宁省储委会",
         cid_full_name_en: "Liaoning Provincial Citizen Reserve Committee",
         cid_short_name_en: "Liaoning Provincial Reserve Committee",
         cid_number: "LI001-PRC0T-978545133-2026",
@@ -627,7 +625,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "宁夏省公民储备委员会",
-        cid_short_name: "宁夏省储会",
+        cid_short_name: "宁夏省储委会",
         cid_full_name_en: "Ningxia Provincial Citizen Reserve Committee",
         cid_short_name_en: "Ningxia Provincial Reserve Committee",
         cid_number: "NX001-PRC0J-389752794-2026",
@@ -648,7 +646,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "青海省公民储备委员会",
-        cid_short_name: "青海省储会",
+        cid_short_name: "青海省储委会",
         cid_full_name_en: "Qinghai Provincial Citizen Reserve Committee",
         cid_short_name_en: "Qinghai Provincial Reserve Committee",
         cid_number: "QH001-PRC0C-882026762-2026",
@@ -669,7 +667,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "安徽省公民储备委员会",
-        cid_short_name: "安徽省储会",
+        cid_short_name: "安徽省储委会",
         cid_full_name_en: "Anhui Provincial Citizen Reserve Committee",
         cid_short_name_en: "Anhui Provincial Reserve Committee",
         cid_number: "AH001-PRC00-589856828-2026",
@@ -690,7 +688,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "台湾省公民储备委员会",
-        cid_short_name: "台湾省储会",
+        cid_short_name: "台湾省储委会",
         cid_full_name_en: "Taiwan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Taiwan Provincial Reserve Committee",
         cid_number: "TW001-PRC07-265218823-2026",
@@ -711,7 +709,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "西藏省公民储备委员会",
-        cid_short_name: "西藏省储会",
+        cid_short_name: "西藏省储委会",
         cid_full_name_en: "Xizang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Xizang Provincial Reserve Committee",
         cid_number: "XZ001-PRC02-435616961-2026",
@@ -732,7 +730,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "新疆省公民储备委员会",
-        cid_short_name: "新疆省储会",
+        cid_short_name: "新疆省储委会",
         cid_full_name_en: "Xinjiang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Xinjiang Provincial Reserve Committee",
         cid_number: "XJ001-PRC02-671044381-2026",
@@ -753,7 +751,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "西康省公民储备委员会",
-        cid_short_name: "西康省储会",
+        cid_short_name: "西康省储委会",
         cid_full_name_en: "Xikang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Xikang Provincial Reserve Committee",
         cid_number: "XK001-PRC0P-695945392-2026",
@@ -774,7 +772,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "阿里省公民储备委员会",
-        cid_short_name: "阿里省储会",
+        cid_short_name: "阿里省储委会",
         cid_full_name_en: "Ali Provincial Citizen Reserve Committee",
         cid_short_name_en: "Ali Provincial Reserve Committee",
         cid_number: "AL001-PRC0D-487847725-2026",
@@ -795,7 +793,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "葱岭省公民储备委员会",
-        cid_short_name: "葱岭省储会",
+        cid_short_name: "葱岭省储委会",
         cid_full_name_en: "Congling Provincial Citizen Reserve Committee",
         cid_short_name_en: "Congling Provincial Reserve Committee",
         cid_number: "CL001-PRC0J-771698743-2026",
@@ -816,7 +814,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "伊犁省公民储备委员会",
-        cid_short_name: "伊犁省储会",
+        cid_short_name: "伊犁省储委会",
         cid_full_name_en: "Yili Provincial Citizen Reserve Committee",
         cid_short_name_en: "Yili Provincial Reserve Committee",
         cid_number: "YL001-PRC0Q-293160581-2026",
@@ -837,7 +835,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "河西省公民储备委员会",
-        cid_short_name: "河西省储会",
+        cid_short_name: "河西省储委会",
         cid_full_name_en: "Hexi Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hexi Provincial Reserve Committee",
         cid_number: "HX001-PRC0D-475713213-2026",
@@ -858,7 +856,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "昆仑省公民储备委员会",
-        cid_short_name: "昆仑省储会",
+        cid_short_name: "昆仑省储委会",
         cid_full_name_en: "Kunlun Provincial Citizen Reserve Committee",
         cid_short_name_en: "Kunlun Provincial Reserve Committee",
         cid_number: "KL001-PRC0O-091969119-2026",
@@ -879,7 +877,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "河套省公民储备委员会",
-        cid_short_name: "河套省储会",
+        cid_short_name: "河套省储委会",
         cid_full_name_en: "Hetao Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hetao Provincial Reserve Committee",
         cid_number: "HT001-PRC00-481172908-2026",
@@ -900,7 +898,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "热河省公民储备委员会",
-        cid_short_name: "热河省储会",
+        cid_short_name: "热河省储委会",
         cid_full_name_en: "Rehe Provincial Citizen Reserve Committee",
         cid_short_name_en: "Rehe Provincial Reserve Committee",
         cid_number: "RH001-PRC0F-697831866-2026",
@@ -921,7 +919,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "兴安省公民储备委员会",
-        cid_short_name: "兴安省储会",
+        cid_short_name: "兴安省储委会",
         cid_full_name_en: "Xingan Provincial Citizen Reserve Committee",
         cid_short_name_en: "Xingan Provincial Reserve Committee",
         cid_number: "XA001-PRC0H-384161601-2026",
@@ -942,7 +940,7 @@ pub const CHINA_CB: &[ChinaCb] = &[
     },
     ChinaCb {
         cid_full_name: "合江省公民储备委员会",
-        cid_short_name: "合江省储会",
+        cid_short_name: "合江省储委会",
         cid_full_name_en: "Hejiang Provincial Citizen Reserve Committee",
         cid_short_name_en: "Hejiang Provincial Reserve Committee",
         cid_number: "HJ001-PRC0V-963948997-2026",

@@ -13,7 +13,7 @@ import 'package:citizenapp/citizen/shared/institution_info.dart';
 enum ProposalKind {
   transfer, // 转账(资金,proposal/transaction → MultisigTransferPage)
   feeTransfer, // 手续费划转/归集到主账户(资金,proposal/transaction → SweepToMainPage)
-  safetyFundTransfer, // 安全基金转账(资金,仅国储会)
+  safetyFundTransfer, // 安全基金转账(资金,仅国家储委会)
   adminsChange, // 换管理员(proposal/admins-change)
   resolutionIssuance, // 决议发行(占位)
   resolutionDestroy, // 决议销毁(占位)

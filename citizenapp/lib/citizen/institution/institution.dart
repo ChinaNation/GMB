@@ -89,10 +89,11 @@ class Institution {
   bool get isUnincorporated =>
       parentCidNumber != null && parentCidNumber!.isNotEmpty;
 
-  /// 详情页顶部标题用:简称优先,回退全称(ADR-028 决策 6)。
-  String get displayName => (cidShortName != null && cidShortName!.isNotEmpty)
-      ? cidShortName!
-      : cidFullName;
+  /// 详情页顶部标题用:简称优先,回退全称,只取 cid_short_name/cid_full_name。
+  String get cidShortNameOrFullName =>
+      (cidShortName != null && cidShortName!.isNotEmpty)
+          ? cidShortName!
+          : cidFullName;
 
   /// 主账户 AccountId:创世治理机构用 china 固定 hex,其余本地派生。
   Uint8List mainAccountId() {

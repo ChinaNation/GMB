@@ -605,6 +605,7 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
                 .to_vec()
                 .try_into()
                 .expect("citizen name fits"),
+            citizen_sex: citizen_identity::CitizenSex::Male,
         };
         let signature = sign_citizen_identity_payload(&wallet_pair, &candidate);
 

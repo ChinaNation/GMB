@@ -35,7 +35,7 @@ pub type ProposalSubjectCidNumbers = BoundedVec<CidNumber, ConstU32<MAX_PROPOSAL
 
 /// 内部投票 pallet 的 stage(单阶段提案)。
 pub const STAGE_INTERNAL: u8 = 0;
-/// 联合投票 pallet 的内部投票阶段(jointinternal):国储会/省储会/省储行管理员加权投票。
+/// 联合投票 pallet 的内部投票阶段(jointinternal):国家储委会/省储委会/省储行管理员加权投票。
 pub const STAGE_JOINT: u8 = 1;
 /// 联合投票 pallet 的联合公投阶段(jointreferendum):内部投票阶段未全票通过或超时进入,
 /// 由 CID 持有者按 >50% 严格多数投票。

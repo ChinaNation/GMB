@@ -233,7 +233,7 @@ export function writeCachedEducationCommitteeRows(
       } satisfies InstitutionRowsCachePayload),
     );
   } catch {
-    // 教育机构确定性市教委缓存只是首屏展示加速,写失败不影响后端权威结果。
+    // 教育机构确定性市教委会缓存只是首屏展示加速,写失败不影响后端权威结果。
   }
 }
 

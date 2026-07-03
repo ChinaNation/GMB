@@ -192,6 +192,8 @@ export interface CreateInstitutionInput {
    * - 自动公权机构:不走手动创建接口
   */
   cid_full_name?: string;
+  /** 机构简称,展示简称和链上简称都只使用 cid_short_name。 */
+  cid_short_name?: string;
   /**
    * 所属法人 cid_number。仅需挂靠的非法人创建必传;个体经营/无限合伙是独立非法人,
    * 不接受所属法人。规则单一源:后端 subjects/unincorporated_org。

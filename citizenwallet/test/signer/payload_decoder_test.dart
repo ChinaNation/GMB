@@ -801,7 +801,7 @@ void main() {
       final account = List<int>.generate(32, (i) => 0x40 + i);
       final payload = Uint8List.fromList([
         0x0c, 0x00,
-        ...InstitutionCode.codeBytes('NRC'), // 国储会固定治理档 19/13
+        ...InstitutionCode.codeBytes('NRC'), // 国家储委会固定治理档 19/13
         ...account,
         0x4c, // Compact(19)
         for (var i = 0; i < 19; i++) ...List<int>.filled(32, i + 1),
@@ -1309,23 +1309,23 @@ void main() {
     });
     // 签名扩展尾校验(2026-06-10):真实 QR payload_hex = call_data + 扩展尾。
     // 历史 bug:84080b6a 把多个分支改成"严格到尾"却没算扩展尾,
-    // 国储会转账提案等 9 类提案扫码必红。本组用例锁死两端约定:
+    // 国家储委会转账提案等 9 类提案扫码必红。本组用例锁死两端约定:
     // 带合法尾 → 解码成功;裸 call_data / 篡改尾 → null(红色拒签)。
     List<int> buildNrcTransferCallData() => [
           0x13, 0x00,
-          ...InstitutionCode.codeBytes('NRC'), // institution_code = 国储会
+          ...InstitutionCode.codeBytes('NRC'), // institution_code = 国家储委会
           ...List<int>.filled(32, 0x66), // institution AccountId32
           ...List<int>.filled(32, 0x44), // beneficiary
           ...u128LeForTest(BigInt.from(12345)),
           0x00, // remark 空 Vec
         ];
 
-    test('decodes 国储会 propose_transfer 带真实签名扩展尾', () {
+    test('decodes 国家储委会 propose_transfer 带真实签名扩展尾', () {
       final decoded = PayloadDecoder.decode(
           hexOf(withSigningTail(buildNrcTransferCallData())));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_transfer');
-      expect(decoded.fields['institution'], '国储会');
+      expect(decoded.fields['institution'], '国家储委会');
       expect(decoded.fields['amount_yuan'], '123.45 GMB');
       expect(decoded.fields['remark'], '');
     });

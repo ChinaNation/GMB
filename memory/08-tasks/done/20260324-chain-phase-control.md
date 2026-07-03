@@ -31,7 +31,7 @@
 
 | # | 文件 | 改什么 |
 |---|------|--------|
-| 1 | `genesis_config_presets.rs` | 主网创世 GRANDPA 从 44 个改为 1 个（只放第 1 个国储会） |
+| 1 | `genesis_config_presets.rs` | 主网创世 GRANDPA 从 44 个改为 1 个（只放第 1 个国家储委会） |
 | 2 | `grandpakey-change/src/lib.rs` | 创世初始化只写 1 个 key，与 pallet_grandpa 保持一致 |
 | 3 | `runtime-upgrade/src/lib.rs` | 新增 `developer_direct_upgrade` extrinsic + 开关控制 |
 | 4 | `configs/mod.rs` | 新增 `DeveloperUpgradeOrigin`；phase-control pallet Config |

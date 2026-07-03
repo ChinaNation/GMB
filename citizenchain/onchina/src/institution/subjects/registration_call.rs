@@ -8,18 +8,18 @@
 //! - `account`:管理员进链账户(institution_admins.admin_account);
 //! - `admin_cid_number` / `name`:来自注册局公民记录(citizens 关联 subjects.cid_full_name);
 //! - `admin_role` / `term_start` / `term_end`:来自创建表单;`source` 固定 `Registry`。
-//! 公权机构 `cid_short_name` 取官方简称;私权机构留空(链端按 A1 存空)。
+//! 机构 `cid_short_name` 只取 subjects.cid_short_name,与 `cid_full_name` 同源上链。
 
 use postgres::Client;
 use uuid::Uuid;
 
+use crate::AppState;
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::core::institution_call::{
-    encode_propose_create_institution, AdminProfileArg, AdminSourceTag, ChainCall,
-    InitialAccountArg, ProposeCreateInstitutionArgs,
+    AdminProfileArg, AdminSourceTag, ChainCall, InitialAccountArg, ProposeCreateInstitutionArgs,
+    encode_propose_create_institution,
 };
 use crate::institution::subjects::model::CreateInstitutionAdminInput;
-use crate::AppState;
 
 /// 默认初始余额(分)。链端 MinCreateAmount=111,这里按最小值构造注册交易。
 const DEFAULT_INITIAL_ACCOUNT_AMOUNT_FEN: u128 = 111;
@@ -93,13 +93,12 @@ pub(crate) fn build_create_institution_call_data(
         buf[..raw.len()].copy_from_slice(raw);
         buf
     };
-    // 私权机构留空(链端按 A1 存空);公权/教育机构取官方简称(单源 cid_short_name)。
-    // 机构码私权判定复用 primitives 单源,杜绝码表漂移。
-    let cid_short_name = if primitives::cid::code::is_private_legal_code(&code_bytes) {
-        String::new()
-    } else {
-        inst.cid_short_name.clone().unwrap_or_default()
-    };
+    let cid_short_name = inst.cid_short_name.clone().unwrap_or_default();
+    if cid_short_name.trim().is_empty() {
+        return Err(
+            "http:conflict:cid_short_name is required before chain registration".to_string(),
+        );
+    }
 
     let account_args: Vec<InitialAccountArg> = accounts
         .iter()

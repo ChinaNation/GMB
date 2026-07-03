@@ -3,11 +3,11 @@
 ## 0. 功能需求
 ### 0.1 模块职责
 `runtime-upgrade` 负责把"Runtime wasm 升级"包装成一个受治理约束的链上流程，核心要求是：
-- 仅允许国储会（NRC）和 43 个省储会（PRC）管理员发起升级提案。
+- 仅允许国家储委会（NRC）和 43 个省储委会（PRC）管理员发起升级提案。
 - 升级提案必须先经过 `votingengine` 的联合投票。
 - 联合阶段由各机构管理员个人钱包直接上链投票，链上按机构阈值自动形成机构结果。
 - 联合投票通过后才允许执行 `set_code`。
-- 开发期直升通道只允许国储会管理员使用，并且必须受 `DeveloperUpgradeEnabled` 开关约束。
+- 开发期直升通道只允许国家储委会管理员使用，并且必须受 `DeveloperUpgradeEnabled` 开关约束。
 - 投票结果、执行结果必须在链上可追踪。
 
 ### 0.2 提案创建需求
@@ -37,7 +37,7 @@
 
 ## 1. 模块定位
 `runtime-upgrade` 是"协议升级治理编排模块"，负责：
-- 接收国储会或省储会管理员提交的 wasm 升级提案；
+- 接收国家储委会或省储委会管理员提交的 wasm 升级提案；
 - 调用 `votingengine` 创建联合投票；
 - 在联合投票回调后执行 `set_code`；
 - 摘要数据存储在 `votingengine` 的 `ProposalData`；
@@ -86,7 +86,7 @@ Runtime 配置位置：
 
 ## 3. 核心数据结构
 ### 3.1 Proposal（摘要，序列化存入 votingengine ProposalData）
-- `proposer: AccountId`：提案发起人（国储会或省储会管理员）
+- `proposer: AccountId`：提案发起人（国家储委会或省储委会管理员）
 - `reason: BoundedVec<u8, MaxReasonLen>`：升级理由
 - `code_hash: Hash`：升级 code 哈希，便于事件与链下审计对齐
 
@@ -144,7 +144,7 @@ Runtime 配置位置：
 
 ### 5.3 `developer_direct_upgrade`（call index = 2）
 说明：
-- 开发期快捷通道：仅国储会管理员直接 `set_code`，不走联合投票。
+- 开发期快捷通道：仅国家储委会管理员直接 `set_code`，不走联合投票。
 - 仅在 `genesis-pallet` 的 `DeveloperUpgradeEnabled` 为 `true` 时可用。
 - 链进入运行期后此调用永久失效，升级必须走 `propose_runtime_upgrade` 联合投票。
 
@@ -245,7 +245,7 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 
 ## 9. 测试覆盖
 已覆盖（当前单测与框架完整性检查共 17 个测试）：
-- 国储会和省储会管理员均可发起提案，非联合提案发起人拒绝
+- 国家储委会和省储委会管理员均可发起提案，非联合提案发起人拒绝
 - 提案摘要与对象数据正确分别存入 votingengine
 - 联合投票拒绝时保持 votingengine `STATUS_REJECTED`（含 wasm 对象保留到统一清理）
 - 联合投票通过并成功执行进入 votingengine `STATUS_EXECUTED`
@@ -254,10 +254,10 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - `owns_proposal` 能正确识别本模块提案
 - 已终结的提案不可重复终结（`ProposalNotVoting`）
 - 不存在的提案终结失败（`ProposalNotFound`）
-- 开发者直升：国储会管理员可直接升级
-- 开发者直升：省储会管理员拒绝（`BadOrigin`）
+- 开发者直升：国家储委会管理员可直接升级
+- 开发者直升：省储委会管理员拒绝（`BadOrigin`）
 - 开发者直升：开关关闭时拒绝（`DeveloperUpgradeDisabled`）
-- 开发者直升：非国储会管理员拒绝（`BadOrigin`）
+- 开发者直升：非国家储委会管理员拒绝（`BadOrigin`）
 - 开发者直升：空 code 拒绝（`EmptyRuntimeCode`）
 - GenesisConfig 构建成功
 - Runtime 完整性检查

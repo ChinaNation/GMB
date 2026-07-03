@@ -8,10 +8,6 @@ pub mod china_zb;
 pub mod china_zf;
 
 /// 内置机构名称四元组的 runtime 指纹。
-///
-/// `china_*.rs` 中的 `cid_full_name/cid_short_name/cid_full_name_en/cid_short_name_en`
-/// 是链上防改锚点:CID 可以修改自己的投影名称,但这些内置机构名称要在链上生效必须随
-/// runtime 升级。本函数把四个名称字段都纳入 runtime API,避免出现绕过内置常量的第二套实现。
 pub fn builtin_institution_name_digest() -> [u8; 32] {
     let mut digest = [0x47u8; 32];
     fold_builtin_names(&mut digest, china_zf::CHINA_ZF);
@@ -26,7 +22,7 @@ pub fn builtin_institution_name_digest() -> [u8; 32] {
 
 sp_api::decl_runtime_apis! {
     pub trait BuiltinInstitutionNameApi {
-        /// 返回当前 runtime 内置机构名称四元组的指纹。
+        /// 返回当前内置机构名称指纹。
         fn builtin_institution_name_digest() -> [u8; 32];
     }
 }
@@ -109,9 +105,7 @@ impl_builtin_institution_name!(china_jy::ChinaJy);
 impl_builtin_institution_name!(china_cb::ChinaCb);
 impl_builtin_institution_name!(china_ch::ChinaCh);
 
-/// 创世内置机构预派生地址对拍测试：用唯一派生入口
-/// `account_derive::AccountKind::{InstitutionMain,InstitutionFee}.derive` 重新派生
-/// 主账户/费用账户地址，断言等于硬编码常量，防止派生协议与创世常量漂移。
+/// 内置机构主/费用账户派生对拍测试。
 #[cfg(test)]
 mod derive_consistency_tests {
     use crate::account_derive::AccountKind;

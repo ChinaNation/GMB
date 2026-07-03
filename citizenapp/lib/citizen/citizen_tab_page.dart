@@ -54,7 +54,7 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
         return const LegislationTab();
       case 2: // 选举(P8 接选举活动视图)
         return const ElectionTab();
-      case 3: // 治理:国储会/省储会/省储行(统一目录按机构码过滤)
+      case 3: // 治理:国家储委会/省储委会/省储行(统一目录按机构码过滤)
         return const GovernanceTab();
       case 4: // 公权:全部机构地理浏览
         return const PublicPage();

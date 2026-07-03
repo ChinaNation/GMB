@@ -50,9 +50,9 @@ pub mod pallet {
         WalletUnbound,
         /// 全节点奖励钱包入账失败，剩余 credit 被销毁。
         FullnodeResolveFailed,
-        /// 国储会手续费账户未配置。
+        /// 国家储委会手续费账户未配置。
         NrcMissing,
-        /// 国储会手续费账户入账失败，剩余 credit 被销毁。
+        /// 国家储委会手续费账户入账失败，剩余 credit 被销毁。
         NrcResolveFailed,
         /// 安全基金账户入账失败，剩余 credit 被销毁。
         SafetyFundResolveFailed,
@@ -92,7 +92,7 @@ const _: () = {
 
 /// 链上交易手续费分配器（统一入口）：
 /// - 全节点（绑定钱包）分成：`ONCHAIN_FEE_FULLNODE_PERCENT`（80%）
-/// - 国储会手续费账户分成：`ONCHAIN_FEE_NRC_PERCENT`（10%）
+/// - 国家储委会手续费账户分成：`ONCHAIN_FEE_NRC_PERCENT`（10%）
 /// - 安全基金账户分成：`ONCHAIN_FEE_SAFETY_FUND_PERCENT`（10%）
 pub struct OnchainFeeRouter<T, Currency, AuthorFinder, NrcProvider, SafetyFundProvider>(
     PhantomData<(T, Currency, AuthorFinder, NrcProvider, SafetyFundProvider)>,
@@ -135,9 +135,9 @@ impl<AccountId, Call> CallFeePayer<AccountId, Call> for () {
     }
 }
 
-/// 统一抽象：由 Runtime 注入国储会收款账户来源。
+/// 统一抽象：由 Runtime 注入国家储委会收款账户来源。
 pub trait NrcAccountProvider<AccountId> {
-    /// 提供国储会收款账户。
+    /// 提供国家储委会收款账户。
     /// 返回 None 时，NRC 份额按安全退化策略直接销毁。
     fn nrc_account() -> Option<AccountId>;
 }
@@ -363,7 +363,7 @@ where
             }
         }
 
-        // 国储会手续费账户分成。
+        // 国家储委会手续费账户分成。
         if let Some(nrc_fee_account) = NrcProvider::nrc_account() {
             if let Err(remaining) = Currency::resolve(&nrc_fee_account, nrc_credit) {
                 let burnt_amount = remaining.peek().saturated_into::<u128>();

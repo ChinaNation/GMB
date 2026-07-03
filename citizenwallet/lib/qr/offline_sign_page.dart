@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../ui/app_theme.dart';
 import '../signer/action_labels.dart';
+import '../signer/field_labels.dart';
 import '../signer/offline_sign_service.dart';
 import '../signer/qr_signer.dart';
 import '../qr/qr_protocols.dart';
@@ -343,78 +344,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     );
   }
 
-  /// fields value 转换（如 approve: true → 赞成）。
-  static String _fieldValue(String key, String value) {
-    if (key == 'approve') return value == 'true' ? '赞成' : '反对';
-    return value;
-  }
-
-  /// 扫码确认页字段名必须显示中文。
-  ///
-  /// decoder 的 `reviewFields` 保留英文机器 key 用于跨端验真,到 UI 层统一翻译。
-  /// 未登记字段用中文兜底,避免直接把英文 key 展示给用户。
-  static String _fieldLabel(String key) {
-    if (key.startsWith('amount_')) {
-      final accountName = key.substring('amount_'.length);
-      return accountName.isEmpty ? '账户金额' : '$accountName金额';
-    }
-    return switch (key) {
-      'to' => '收款账户',
-      'beneficiary' => '收款账户',
-      'account' => '账户',
-      'institution' => '机构账户',
-      'institution_code' => '机构类型',
-      'cid_number' => 'CID编号',
-      'cid_full_name' => '机构全称',
-      'account_name' => '账户名称',
-      'amount_yuan' => '金额',
-      'total_amount_yuan' => '总金额',
-      'remark' => '备注',
-      'reason' => '原因',
-      'proposal_id' => '提案编号',
-      'approve' => '投票意见',
-      'admins' => '管理员',
-      'admins_len' => '管理员人数',
-      'threshold' => '阈值',
-      'regular_threshold' => '普通阈值',
-      'create_threshold' => '创建阈值',
-      'new_threshold' => '新阈值',
-      'issuer_cid_number' => '签发机构编号',
-      'issuer_main_account' => '签发机构账户',
-      'signer_pubkey' => '签发管理员',
-      'scope_province_name' => '省级范围',
-      'scope_city_name' => '市级范围',
-      'allocation_count' => '分配项数',
-      'action_type' => '操作类型',
-      'actor_province_name' => '操作省份',
-      'actor_pubkey' => '操作管理员',
-      'target' => '目标账户',
-      'before_hash' => '变更前哈希',
-      'after_hash' => '变更后哈希',
-      'admin_pubkey' => '管理员账户',
-      'pubkey' => '公钥',
-      'bank_main' => '清算行主账户',
-      'new_bank' => '新清算行',
-      'peer_id' => '节点标识',
-      'rpc_domain' => '节点域名',
-      'rpc_port' => '节点端口',
-      'new_domain' => '新节点域名',
-      'new_port' => '新节点端口',
-      'new_key' => '新密钥',
-      'expires_at' => '过期时间',
-      'title' => '法律标题',
-      'tier' => '法律层级',
-      'vote_type' => '表决类型',
-      'scope_code' => '行政区代码',
-      'houses' => '表决院',
-      'chapter_count' => '章数',
-      'article_count' => '条数',
-      'effective_at' => '生效区块',
-      'law_id' => '法律编号',
-      'eligible_total' => '合格选民数',
-      _ => '未知字段',
-    };
-  }
+  // 扫码确认页字段名必须显示中文,翻译单源在 signer/field_labels.dart。
 
   Widget _buildTransactionDetails(
       SignRequestEnvelope request, OfflineSignVerification verification) {
@@ -453,7 +383,10 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       detailRows = [
         _detailRow('交易类型', actionLabel),
         ...decoded.reviewFields.entries.map((e) {
-          return _detailRow(_fieldLabel(e.key), _fieldValue(e.key, e.value));
+          return _detailRow(
+            fieldLabelText(e.key),
+            fieldValueText(e.key, e.value),
+          );
         }),
       ];
     } else {

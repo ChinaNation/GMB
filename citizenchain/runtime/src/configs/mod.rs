@@ -113,12 +113,12 @@ fn is_reserved_fee_account(address: &AccountId) -> bool {
         .any(|n| address == &AccountId::new(n.fee_account))
 }
 
-/// 检查是否为国储会安全基金账户。
+/// 检查是否为国家储委会安全基金账户。
 fn is_safety_fund_account(address: &AccountId) -> bool {
     address == &AccountId::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT)
 }
 
-/// 检查是否为国储会两和基金账户。
+/// 检查是否为国家储委会两和基金账户。
 fn is_nrc_he_account(address: &AccountId) -> bool {
     address == &AccountId::new(primitives::cid::china::china_cb::NRC_HE_ACCOUNT)
 }
@@ -591,7 +591,7 @@ impl primitives::multisig::AccountValidator<AccountId> for RuntimeAccountValidat
             return false;
         }
 
-        // 禁止占用“国储会/省储会”的制度保留交易账户。
+        // 禁止占用“国家储委会/省储委会”的制度保留交易账户。
         if primitives::cid::china::china_cb::CHINA_CB
             .iter()
             .any(|n| account == &AccountId::new(n.main_account))
@@ -615,12 +615,12 @@ impl primitives::multisig::AccountValidator<AccountId> for RuntimeAccountValidat
             return false;
         }
 
-        // 禁止占用国储会安全基金账户。
+        // 禁止占用国家储委会安全基金账户。
         if is_safety_fund_account(account) {
             return false;
         }
 
-        // 禁止占用国储会两和基金账户。
+        // 禁止占用国家储委会两和基金账户。
         if is_nrc_he_account(account) {
             return false;
         }
@@ -674,7 +674,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
             );
         }
 
-        // 4. 国储会安全基金账户：只允许安全基金转账
+        // 4. 国家储委会安全基金账户：只允许安全基金转账
         if source == &AccountId::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT) {
             return matches!(
                 action,
@@ -714,12 +714,12 @@ impl primitives::multisig::ReservedAccountGuard<AccountId> for RuntimeReservedAc
             return true;
         }
 
-        // 禁止占用国储会安全基金账户。
+        // 禁止占用国家储委会安全基金账户。
         if is_safety_fund_account(account) {
             return true;
         }
 
-        // 禁止占用国储会两和基金账户。
+        // 禁止占用国家储委会两和基金账户。
         if is_nrc_he_account(account) {
             return true;
         }
@@ -1206,6 +1206,7 @@ impl citizen_identity::Config for Runtime {
     type MaxCitizenSignatureLength = ConstU32<64>;
     type CitizenIdentityAuthority = RuntimeCitizenIdentityAuthority;
     type OnVotingIdentityRegistered = CitizenIssuance;
+    type TimeProvider = crate::Timestamp;
     type WeightInfo = citizen_identity::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1268,7 +1269,7 @@ impl grandpakey_change::Config for Runtime {
 }
 
 /// 转账提案手续费分账适配器：将旧 Currency NegativeImbalance 转换后
-/// 交给现有 OnchainFeeRouter 处理（80% 全节点 / 10% 国储会 / 10% 安全基金）。
+/// 交给现有 OnchainFeeRouter 处理（80% 全节点 / 10% 国家储委会 / 10% 安全基金）。
 pub struct TransferFeeRouter;
 
 impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runtime>>
@@ -1873,7 +1874,7 @@ pub(crate) fn is_nrc_admin(who: &AccountId) -> bool {
     )
 }
 
-/// 联合提案发起权限：国储会（CHINA_CB[0]）+ 43个省储会（CHINA_CB[1..44]）。
+/// 联合提案发起权限：国家储委会（CHINA_CB[0]）+ 43个省储委会（CHINA_CB[1..44]）。
 pub struct EnsureJointProposer;
 
 impl EnsureOrigin<RuntimeOrigin> for EnsureJointProposer {
@@ -1895,7 +1896,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureJointProposer {
     }
 }
 
-/// 国储会和省储会管理员均可发起联合提案（含运行时升级、决议发行等）。
+/// 国家储委会和省储委会管理员均可发起联合提案（含运行时升级、决议发行等）。
 fn is_joint_proposer(who: &AccountId) -> bool {
     use primitives::cid::china::china_cb::CHINA_CB;
     for (idx, entry) in CHINA_CB.iter().enumerate() {

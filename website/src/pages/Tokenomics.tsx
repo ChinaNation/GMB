@@ -6,7 +6,7 @@ const allocations = [
     name: '创世发行',
     amount: '1,443.49 亿',
     percent: 6.47,
-    desc: '创世发行由国储会账户持有',
+    desc: '创世发行由国家储委会账户持有',
     color: 'bg-gold-400',
   },
   {
@@ -41,7 +41,7 @@ const allocations = [
     name: '两和基金发行',
     amount: '1,958.19 亿',
     percent: 8.78,
-    desc: '创世一次性写入国储会两和基金账户',
+    desc: '创世一次性写入国家储委会两和基金账户',
     color: 'bg-navy-500',
   },
 ]
@@ -59,7 +59,7 @@ const economics = [
 
 const feeDistribution = [
   { name: '全节点奖励', share: '80%', desc: '出块全节点获得交易手续费的 80%' },
-  { name: '手续费账户', share: '10%', desc: '国储会手续费账户用于国储会运营' },
+  { name: '手续费账户', share: '10%', desc: '国家储委会手续费账户用于国家储委会运营' },
   { name: '安全基金', share: '10%', desc: '网络安全与应急储备基金' },
 ]
 

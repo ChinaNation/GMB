@@ -285,7 +285,7 @@ class _ProposalEntryPageState extends State<ProposalEntryPage> {
         return _typeCard(
             Icons.shield_outlined,
             '安全基金转账',
-            '从国储会安全基金账户向指定地址发起转账提案',
+            '从国家储委会安全基金账户向指定地址发起转账提案',
             AppTheme.warning,
             enabled,
             () => _checkAndOpenProposal(

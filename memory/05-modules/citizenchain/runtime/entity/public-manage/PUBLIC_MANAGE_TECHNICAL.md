@@ -14,7 +14,7 @@
 ## 边界
 
 - 只接受公权机构码。
-- 不通过运行期 extrinsic 写入创世机构；国储会、省储会、省储行、联邦注册局、国家司法院的机构本体由 `genesis-pallet/src/institution.rs` 在创世时直接写入本模块 storage。
+- 不通过运行期 extrinsic 写入创世机构；国家储委会、省储委会、省储行、联邦注册局、国家司法院的机构本体由 `genesis-pallet/src/institution.rs` 在创世时直接写入本模块 storage。
 - 管理员生命周期只调用 `public-admins`。
 - CID 重复校验通过 `entity-primitives::InstitutionCidQuery` 查询 `private-manage`。
 - 不承担多签转账，转账只归 `multisig-transfer`。

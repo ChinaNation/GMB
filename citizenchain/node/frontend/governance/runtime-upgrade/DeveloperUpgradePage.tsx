@@ -1,4 +1,4 @@
-// 开发期直升页：国储会任意已激活管理员签名后直接提交 developer_direct_upgrade。
+// 开发期直升页：国家储委会任意已激活管理员签名后直接提交 developer_direct_upgrade。
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { sanitizeError } from '../../core/tauri';
@@ -125,7 +125,7 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
           <div className="wallet-form-field">
             <label>发起管理员</label>
             {adminWallets.length === 0 ? (
-              <p className="upgrade-no-wallet">无已激活国储会管理员</p>
+              <p className="upgrade-no-wallet">无已激活国家储委会管理员</p>
             ) : (
               <select
                 value={selectedPubkey}

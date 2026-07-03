@@ -28,7 +28,7 @@ citizenchain/registry（→ onchina），自动分工：CID Agent（后端身份
 - FRG（联邦注册局）→ `PublicAdmins::FederalRegistryProvinceGroups`（idx29，按省组读取）。
 - CREG（市注册局）→ `PublicAdmins::AdminAccounts`（idx29）。
 - NJD（国家司法院）→ `PublicAdmins::AdminAccounts`（idx29），允许登录 OnChina，本期只读“本机构管理员”。
-- NRC/PRC/PRB（国储会 / 省储会 / 省储行）→ 链上属 `PublicAdmins`，但产品边界为节点桌面端，不登录 OnChina 网页控制台。
+- NRC/PRC/PRB（国家储委会 / 省储委会 / 省储行）→ 链上属 `PublicAdmins`，但产品边界为节点桌面端，不登录 OnChina 网页控制台。
 - 其它公权机构 → `PublicAdmins::AdminAccounts`（idx29），允许登录 OnChina，本期只读“本机构管理员”。
 - 私权公司 → `PrivateAdmins`（idx30，已真实接线：AdminAccounts + `propose_admin_set_change` 内部投票 + organization-manage `AdminAccountLifecycle`）。
 - 非法人组织 → 按 [PublicAdmins, PrivateAdmins] 顺序双探测，允许登录 OnChina，本期只读“本机构管理员”。

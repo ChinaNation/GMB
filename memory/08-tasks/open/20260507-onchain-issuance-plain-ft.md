@@ -46,7 +46,7 @@
 - 不可擅自修改安全红线(BaseCallFilter 屏蔽 pallet_assets 原生 extrinsic 不可松开)
 - pallet_assets 仅作内核,对外只能通过 OnchainIssuance pallet 包装入口暴露
 - decimals 区间强制 `0..=18`,链端硬校验(用户已确认)
-- monitor 主体强制 NRC(国家级清算行 / 国储会),链端在 GenesisConfig 写入,extrinsic 入参不接受
+- monitor 主体强制 NRC(国家级清算行 / 国家储委会),链端在 GenesisConfig 写入,extrinsic 入参不接受
 - 创建费固定 1000 GMB(= 100_000 FEN),写入 primitives::fee_policy 权威源
 - 不写 storage migration(用户单独处理重新创世)
 - 不动 chainspec.json(用户单独处理)

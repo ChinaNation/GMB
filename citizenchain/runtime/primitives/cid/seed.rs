@@ -1,11 +1,9 @@
 //! CID 确定性种子协议。
-//!
-//!
-//! runtime 只保护种子字节格式,不做随机 UUID、数据库查重和撞号重试。
+//! runtime 只保护字节格式,不做运行态查重。
 
 use alloc::{format, string::String};
 
-/// 公权机构(政府模板)CID 的确定性 account seed。
+/// 公权机构确定性 account seed。
 pub fn official_institution_account_seed(
     scope: &str,
     province_code: &str,

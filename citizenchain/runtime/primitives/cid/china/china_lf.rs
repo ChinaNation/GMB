@@ -1,8 +1,8 @@
-//!  联邦立法院机构常量=china_lf.rs
+//! 联邦立法院机构常量。
 
 use hex_literal::hex;
 
-/// 单个立法院机构常量结构。
+/// 立法院机构常量。
 pub struct ChinaLf {
     pub cid_full_name: &'static str,
     pub cid_short_name: &'static str,

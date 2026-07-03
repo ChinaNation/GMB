@@ -4,7 +4,7 @@
 
 - 只修复 citizenchain runtime 里的 `runtime-upgrade` 模块。
 - 协议升级提案继续保留联合提案边界。
-- 开发直升 runtime 只允许国储会管理员执行。
+- 开发直升 runtime 只允许国家储委会管理员执行。
 - 更新测试、中文注释和模块文档。
 - 清理本次修复产生的残留，权重数值由 CI 基准流程更新。
 
@@ -22,7 +22,7 @@
 - 已在 `runtime-upgrade` pallet 中拆分 `ProposeOrigin` 与 `DeveloperUpgradeOrigin`。
 - 已在 runtime 配置中接入 `DeveloperUpgradeOrigin = EnsureNrcAdmin`。
 - 已保留协议升级提案权限为 `ProposeOrigin = EnsureJointProposer`。
-- 已更新单测：国储会管理员可开发直升，省储会管理员和非国储会管理员均拒绝。
+- 已更新单测：国家储委会管理员可开发直升，省储委会管理员和非国家储委会管理员均拒绝。
 - 已更新模块技术文档，删除开发直升仍待 runtime 侧收窄的过时说明。
 - 已清理“状态升级”旧注释，将 runtime-upgrade 包注释改为“运行时协议升级治理模块”。
 - 权重数值未手工修改，按要求交由 CI 基准流程更新。

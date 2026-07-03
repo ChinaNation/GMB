@@ -3,7 +3,7 @@
 ## 0. 功能需求
 ### 0.1 模块职责
 `grandpakey-change` 负责把“机构 GRANDPA 公钥替换”包装成受治理约束的链上流程，要求：
-- 仅支持国储会（NRC）与省储会（PRC）发起 GRANDPA 密钥替换。
+- 仅支持国家储委会（NRC）与省储委会（PRC）发起 GRANDPA 密钥替换。
 - 仅允许目标机构内部管理员发起、投票、执行和清理提案。
 - 治理投票由 `votingengine` 的内部投票统一承载。
 - 投票通过后由模块自动调度 `pallet-grandpa::schedule_change`。
@@ -29,7 +29,7 @@
 
 ## 1. 模块定位
 `grandpakey-change` 是“GRANDPA 密钥治理模块”，职责是：
-- 仅允许国储会（NRC）与省储会（PRC）发起 GRANDPA 密钥替换提案。
+- 仅允许国家储委会（NRC）与省储委会（PRC）发起 GRANDPA 密钥替换提案。
 - 仅允许目标机构内部管理员参与提案/投票/执行/清理。
 - 借助 `votingengine` 内部投票达成通过后，调用 `pallet-grandpa::schedule_change` 变更 authority set。
 

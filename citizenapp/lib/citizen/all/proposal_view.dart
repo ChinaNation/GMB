@@ -49,7 +49,7 @@ class _ProposalViewState extends State<ProposalView> {
   static const Duration _newBlockIndexCheckMinInterval = Duration(seconds: 60);
 
   // 提案页默认公共机构集合独立于“治理”子 tab。
-  // 省储会/省储行不默认进入提案流,只有用户订阅对应机构后才展示。
+  // 省储委会/省储行不默认进入提案流,只有用户订阅对应机构后才展示。
   static const Set<String> _defaultProposalCodes = {
     'NRC',
     'NLG',
@@ -220,9 +220,9 @@ class _ProposalViewState extends State<ProposalView> {
     final fee = rows.length > 1 ? rows[1].accountHex : null;
     return InstitutionInfo(
       cidFullName: inst.cidFullName,
-      cidShortName: inst.displayName,
+      cidShortName: inst.cidShortNameOrFullName,
       cidFullNameEn: inst.cidFullName,
-      cidShortNameEn: inst.displayName,
+      cidShortNameEn: inst.cidShortNameOrFullName,
       cidNumber: registeredAccountIdentity(main),
       orgType: inst.orgType,
       accounts: InstitutionAccounts(mainAccount: main, feeAccount: fee),
