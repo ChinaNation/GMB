@@ -26,9 +26,9 @@ pub const NRC_HE_ACCOUNT: [u8; 32] =
 /// 所有储委会。
 pub const CHINA_CB: &[ChinaCb] = &[
     ChinaCb {
-        cid_full_name: "国家公民储备委员会",
+        cid_full_name: "中华民族联邦共和国公民储备委员会",
         cid_short_name: "国家储委会",
-        cid_full_name_en: "National Citizen Reserve Committee",
+        cid_full_name_en: "Citizen Reserve Committee of the Federal Republic of the China Nation",
         cid_short_name_en: "National Reserve Committee",
         cid_number: "LN001-NRC0G-944805165-2026",
         main_account: hex!("b38e86de933984b3a6b4190fc9d4b020ff44b38471a8a65bbf95b440e05c5153"),

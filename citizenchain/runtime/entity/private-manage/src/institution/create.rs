@@ -60,6 +60,18 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         Error::<T>::ProtectedSource
     );
     ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
+    // CID 号全量校验单源 primitives::cid;机构码必须是私权法人/非法人家族且与参数一致。
+    let parts = primitives::cid::number::parse_cid_number_parts_bytes(cid_number.as_slice())
+        .map_err(|_| Error::<T>::InvalidCidNumber)?;
+    ensure!(
+        primitives::cid::code::is_private_legal_code(&parts.institution)
+            || primitives::cid::code::is_unincorporated_code(&parts.institution),
+        Error::<T>::InvalidCidNumber
+    );
+    ensure!(
+        parts.institution == institution_code,
+        Error::<T>::InvalidCidNumber
+    );
     // private-manage 只管理私权机构;私权机构名称留在注册端业务库,
     // 链上只保存 CID 号、账户、管理员与生命周期状态。
     let (stored_full_name, stored_short_name) =

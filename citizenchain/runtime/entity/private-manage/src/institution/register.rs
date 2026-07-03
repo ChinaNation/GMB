@@ -44,6 +44,14 @@ pub(crate) fn do_register_cid_private_institution<T: pallet::Config>(
     scope_city_name: Vec<u8>,
 ) -> DispatchResult {
     ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
+    // CID 号全量校验单源 primitives::cid,且机构码必须是私权法人/非法人家族。
+    let parts = primitives::cid::number::parse_cid_number_parts_bytes(cid_number.as_slice())
+        .map_err(|_| Error::<T>::InvalidCidNumber)?;
+    ensure!(
+        primitives::cid::code::is_private_legal_code(&parts.institution)
+            || primitives::cid::code::is_unincorporated_code(&parts.institution),
+        Error::<T>::InvalidCidNumber
+    );
     ensure!(
         !T::SiblingInstitutionQuery::cid_exists(&cid_number),
         Error::<T>::CidAlreadyRegistered

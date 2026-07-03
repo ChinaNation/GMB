@@ -5,7 +5,7 @@ import type { AdminAuth } from '../auth/types';
 
 export type CidInstitutionCodeItem = {
   institution_code: string;
-  cid_short_name: string;
+  institution_code_label: string;
 };
 
 export type CidProvinceItem = {

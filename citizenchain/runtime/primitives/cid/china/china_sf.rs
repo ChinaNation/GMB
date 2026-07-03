@@ -34,9 +34,9 @@ pub const NATIONAL_JUDICIAL_YUAN_ADMINS: &[[u8; 32]] = &[
 
 pub const CHINA_SF: &[ChinaSf] = &[
     ChinaSf {
-        cid_full_name: "中华民族联邦共和国国家司法院",
+        cid_full_name: "中华民族联邦共和国司法院",
         cid_short_name: "国家司法院",
-        cid_full_name_en: "National Judicial Yuan of the Federal Republic of the China Nation",
+        cid_full_name_en: "Judicial Yuan of the Federal Republic of the China Nation",
         cid_short_name_en: "National Judicial Yuan",
         cid_number: "ZS001-NJD0T-052283563-2026",
         main_account: hex!("87f4690d671daf09b6466443377ddc6d60640d8dea3a1e911f7fdf8da0f2680c"),

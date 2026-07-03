@@ -48,7 +48,7 @@ pub(crate) async fn admin_cid_meta(
                 .map(|c| CidInstitutionCodeItem {
                     institution_code: institution_code::institution_code_text(c)
                         .expect("known CID institution code"),
-                    cid_short_name: institution_code::cid_short_name(c)
+                    institution_code_label: institution_code::institution_code_label(c)
                         .expect("known CID institution code"),
                 })
                 .collect(),

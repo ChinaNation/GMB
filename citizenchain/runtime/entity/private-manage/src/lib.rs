@@ -362,6 +362,8 @@ pub mod pallet {
         CidAlreadyRegistered,
         /// CID ID 为空
         EmptyCidNumber,
+        /// CID 号格式或机构码家族非法
+        InvalidCidNumber,
         /// 机构登记 nonce 已被使用
         RegisterNonceAlreadyUsed,
         /// 机构签发凭证缺签发机构 CID 号。

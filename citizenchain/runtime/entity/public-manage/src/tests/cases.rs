@@ -27,7 +27,7 @@ fn typical_accounts() -> pallet::InstitutionInitialAccountsOf<Test> {
 fn register_cid_public_institution_with_valid_signature_succeeds() {
     new_test_ext().execute_with(|| {
         let submitter = fund_creator();
-        let cid = cid_number(b"CID001");
+        let cid = generated_cid("CID001", "CGOV");
         let names = account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]);
 
         assert_ok!(PublicManage::register_cid_public_institution(
@@ -69,7 +69,7 @@ fn register_rejects_invalid_cid_institution_signature() {
         assert_noop!(
             PublicManage::register_cid_public_institution(
                 RuntimeOrigin::signed(submitter),
-                cid_number(b"CID-bad-sig"),
+                generated_cid("CID-bad-sig", "CGOV"),
                 cid_full_name("机构甲".as_bytes()),
                 account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
                 register_nonce(b"nonce-bs"),
@@ -89,7 +89,7 @@ fn register_rejects_invalid_cid_institution_signature() {
 fn register_rejects_duplicate_cid_account_name() {
     new_test_ext().execute_with(|| {
         let submitter = fund_creator();
-        let cid = cid_number(b"CID-dup");
+        let cid = generated_cid("CID-dup", "CGOV");
         // 第一次成功
         assert_ok!(PublicManage::register_cid_public_institution(
             RuntimeOrigin::signed(submitter.clone()),
@@ -131,7 +131,7 @@ fn register_rejects_replayed_nonce() {
         // 第一次成功
         assert_ok!(PublicManage::register_cid_public_institution(
             RuntimeOrigin::signed(submitter.clone()),
-            cid_number(b"CID-N1"),
+            generated_cid("CID-N1", "CGOV"),
             cid_full_name(b"A"),
             account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
             register_nonce(b"nonce-replay"),
@@ -146,7 +146,7 @@ fn register_rejects_replayed_nonce() {
         assert_noop!(
             PublicManage::register_cid_public_institution(
                 RuntimeOrigin::signed(submitter),
-                cid_number(b"CID-N2"),
+                generated_cid("CID-N2", "CGOV"),
                 cid_full_name(b"B"),
                 account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
                 register_nonce(b"nonce-replay"),
@@ -187,7 +187,7 @@ fn register_rejects_empty_required_fields() {
         assert_noop!(
             PublicManage::register_cid_public_institution(
                 RuntimeOrigin::signed(submitter.clone()),
-                cid_number(b"CID-E"),
+                generated_cid("CID-E", "CGOV"),
                 cid_full_name(b""),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-empty2"),
@@ -204,7 +204,7 @@ fn register_rejects_empty_required_fields() {
         assert_noop!(
             PublicManage::register_cid_public_institution(
                 RuntimeOrigin::signed(submitter),
-                cid_number(b"CID-E"),
+                generated_cid("CID-E", "CGOV"),
                 cid_full_name(b"A"),
                 account_names_bv(&[RESERVED_NAME_MAIN]),
                 register_nonce(b"nonce-empty3"),
@@ -224,7 +224,7 @@ fn register_rejects_empty_required_fields() {
 fn propose_create_public_institution_registers_active_without_vote() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        let cid = cid_number(b"CID-CR-1");
+        let cid = generated_cid("CID-CR-1", "CGOV");
         let proposal_before = votingengine::Pallet::<Test>::next_proposal_id();
 
         assert_ok!(PublicManage::propose_create_public_institution(
@@ -283,7 +283,7 @@ fn propose_create_public_institution_registers_active_without_vote() {
 fn public_institution_stores_full_and_short_name_onchain() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        let cid = cid_number(b"CID-PUB-1");
+        let cid = generated_cid("CID-PUB-1", "CGOV");
 
         assert_ok!(PublicManage::propose_create_public_institution(
             RuntimeOrigin::signed(c.clone()),
@@ -321,7 +321,7 @@ fn public_institution_rejects_empty_short_name() {
         assert_noop!(
             PublicManage::propose_create_public_institution(
                 RuntimeOrigin::signed(c),
-                cid_number(b"CID-PUB-2"),
+                generated_cid("CID-PUB-2", "CGOV"),
                 cid_full_name("某市人民政府".as_bytes()),
                 cid_short_name(b""),
                 typical_accounts(),
@@ -349,7 +349,7 @@ fn propose_create_rejects_unincorporated_without_parent_routing() {
         assert_noop!(
             PublicManage::propose_create_public_institution(
                 RuntimeOrigin::signed(c),
-                cid_number(b"CID-UNIN-1"),
+                generated_cid("CID-UNIN-1", "UNIN"),
                 cid_full_name("非法人机构".as_bytes()),
                 cid_short_name("简称".as_bytes()),
                 typical_accounts(),
@@ -365,7 +365,8 @@ fn propose_create_rejects_unincorporated_without_parent_routing() {
                 province_name(),
                 b"city".to_vec(),
             ),
-            pallet::Error::<Test>::InvalidInstitutionCode
+            // 号内机构码 UNIN 不属公权家族,新校验先于 lifecycle 检查拒绝。
+            pallet::Error::<Test>::InvalidCidNumber
         );
     });
 }
@@ -374,7 +375,7 @@ fn propose_create_rejects_unincorporated_without_parent_routing() {
 fn create_directly_funds_initial_accounts() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        let cid = cid_number(b"CID-CR-2");
+        let cid = generated_cid("CID-CR-2", "CGOV");
 
         assert_ok!(PublicManage::propose_create_public_institution(
             RuntimeOrigin::signed(c.clone()),
@@ -421,7 +422,7 @@ fn propose_create_rejects_below_create_amount_minimum() {
         assert_noop!(
             PublicManage::propose_create_public_institution(
                 RuntimeOrigin::signed(c),
-                cid_number(b"CID-MIN"),
+                generated_cid("CID-MIN", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
                 bad_accounts,
@@ -455,7 +456,7 @@ fn propose_create_rejects_duplicate_account_name() {
         assert_noop!(
             PublicManage::propose_create_public_institution(
                 RuntimeOrigin::signed(c),
-                cid_number(b"CID-DUP"),
+                generated_cid("CID-DUP", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
                 dup,
@@ -479,7 +480,7 @@ fn propose_create_rejects_duplicate_account_name() {
 #[test]
 fn derive_registered_account_rejects_reserved_system_names() {
     new_test_ext().execute_with(|| {
-        let cid = cid_number(b"CID-RESV");
+        let cid = generated_cid("CID-RESV", "CGOV");
         // 永久质押/安全基金/两和基金 为制度专属账户,普通机构禁止注册。
         for name in [
             RESERVED_NAME_STAKE,
@@ -519,7 +520,7 @@ fn propose_create_rejects_reserved_system_account_name() {
         assert_noop!(
             PublicManage::propose_create_public_institution(
                 RuntimeOrigin::signed(c),
-                cid_number(b"CID-RSV"),
+                generated_cid("CID-RSV", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
                 bad,
@@ -548,7 +549,7 @@ fn propose_create_rejects_missing_main_account() {
         assert_noop!(
             PublicManage::propose_create_public_institution(
                 RuntimeOrigin::signed(c),
-                cid_number(b"CID-NM"),
+                generated_cid("CID-NM", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
                 no_main,
@@ -577,7 +578,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
         assert_noop!(
             PublicManage::propose_create_public_institution(
                 RuntimeOrigin::signed(c.clone()),
-                cid_number(b"CID-T1"),
+                generated_cid("CID-T1", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
                 typical_accounts(),
@@ -599,7 +600,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
         assert_noop!(
             PublicManage::propose_create_public_institution(
                 RuntimeOrigin::signed(c),
-                cid_number(b"CID-T2"),
+                generated_cid("CID-T2", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
                 typical_accounts(),
@@ -624,7 +625,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
 fn propose_create_rejects_when_institution_already_exists() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        let cid = cid_number(b"CID-AE");
+        let cid = generated_cid("CID-AE", "CGOV");
 
         // 先创建一个
         assert_ok!(PublicManage::propose_create_public_institution(
@@ -671,12 +672,12 @@ fn propose_create_rejects_when_institution_already_exists() {
 }
 // 关闭路径(5 个用例)
 fn create_and_activate_institution(
-    cid_number_bytes: &[u8],
+    cid_tag: &str,
     admins_len: u8,
 ) -> (pallet::CidNumberOf<Test>, AccountId32) {
     let c = creator();
     let _ = Balances::deposit_creating(&c, SEED_BALANCE);
-    let cid = cid_number(cid_number_bytes);
+    let cid = generated_cid(cid_tag, "CGOV");
 
     assert_ok!(PublicManage::propose_create_public_institution(
         RuntimeOrigin::signed(c.clone()),
@@ -688,7 +689,7 @@ fn create_and_activate_institution(
         admins_len as u32,
         admin_profiles_vec(admins_len),
         admins_len.saturating_add(1) as u32 / 2 + 1, // m-of-n 治理阈值,取一个能通过的
-        register_nonce(cid_number_bytes),
+        register_nonce(cid_tag.as_bytes()),
         valid_signature(),
         province_name(),
         creator(),
@@ -706,7 +707,7 @@ fn create_and_activate_institution(
 #[test]
 fn propose_close_writes_pending() {
     new_test_ext().execute_with(|| {
-        let (_cid, main) = create_and_activate_institution(b"CID-CL-1", 3);
+        let (_cid, main) = create_and_activate_institution("CID-CL-1", 3);
 
         assert_ok!(close_with_cred(
             RuntimeOrigin::signed(admin(0)),
@@ -725,7 +726,7 @@ fn propose_close_writes_pending() {
 #[test]
 fn close_executes_when_vote_reaches_threshold_returns_balance() {
     new_test_ext().execute_with(|| {
-        let (cid, main) = create_and_activate_institution(b"CID-CL-2", 3);
+        let (cid, main) = create_and_activate_institution("CID-CL-2", 3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
         let main_name = account_name(RESERVED_NAME_MAIN);
@@ -767,7 +768,7 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
 #[test]
 fn propose_close_rejects_close_balance_below_minimum() {
     new_test_ext().execute_with(|| {
-        let (_cid, main) = create_and_activate_institution(b"CID-CL-3", 3);
+        let (_cid, main) = create_and_activate_institution("CID-CL-3", 3);
 
         // 把主账户余额清空到 50(<MinCloseBalance=111)
         // 用 force-set: 直接 transfer 走
@@ -801,7 +802,7 @@ fn propose_close_rejects_when_not_institution_account() {
 #[test]
 fn propose_close_rejects_self_beneficiary() {
     new_test_ext().execute_with(|| {
-        let (_cid, main) = create_and_activate_institution(b"CID-CL-5", 3);
+        let (_cid, main) = create_and_activate_institution("CID-CL-5", 3);
         // beneficiary == account 应拒
         assert_noop!(
             close_with_cred(RuntimeOrigin::signed(admin(0)), main.clone(), main, 5),
@@ -813,7 +814,7 @@ fn propose_close_rejects_self_beneficiary() {
 #[test]
 fn cleanup_rejected_public_proposal_only_after_engine_rejected() {
     new_test_ext().execute_with(|| {
-        let (_cid, main) = create_and_activate_institution(b"CID-CU", 3);
+        let (_cid, main) = create_and_activate_institution("CID-CU", 3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
 
         assert_ok!(close_with_cred(
@@ -844,7 +845,7 @@ fn cleanup_rejected_public_proposal_only_after_engine_rejected() {
 fn registry_creator_need_not_be_target_admin() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        let cid = cid_number(b"CID-NA");
+        let cid = generated_cid("CID-NA", "CGOV");
         // 注册局代创建:交易发起人不要求进入新机构 admins 集合。
         let admins_no_creator = admin_profiles_from(&[admin(1), admin(2), admin(3)]);
         assert_ok!(PublicManage::propose_create_public_institution(
@@ -879,7 +880,7 @@ fn registry_creator_need_not_be_target_admin() {
 #[test]
 fn existential_deposit_is_preserved_after_close() {
     new_test_ext().execute_with(|| {
-        let (_cid, main) = create_and_activate_institution(b"CID-ED", 3);
+        let (_cid, main) = create_and_activate_institution("CID-ED", 3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
 
@@ -901,7 +902,7 @@ fn existential_deposit_is_preserved_after_close() {
 #[test]
 fn created_institution_stores_admin_profiles_and_accounts_path_intact() {
     new_test_ext().execute_with(|| {
-        let (cid, main) = create_and_activate_institution(b"CID-PROF", 3);
+        let (cid, main) = create_and_activate_institution("CID-PROF", 3);
         let _ = cid;
 
         // 激活后管理员资料落 public-admins(CGOV=公权);存的是 AdminProfile。
@@ -921,12 +922,12 @@ fn created_institution_stores_admin_profiles_and_accounts_path_intact() {
 }
 
 fn create_and_activate_institution_with_profiles(
-    cid_number_bytes: &[u8],
+    cid_tag: &str,
     profiles: pallet::AdminProfilesOf<Test>,
 ) -> AccountId32 {
     let c = creator();
     let _ = Balances::deposit_creating(&c, SEED_BALANCE);
-    let cid = cid_number(cid_number_bytes);
+    let cid = generated_cid(cid_tag, "CGOV");
     let admins_len = profiles.len() as u8;
 
     assert_ok!(PublicManage::propose_create_public_institution(
@@ -939,7 +940,7 @@ fn create_and_activate_institution_with_profiles(
         admins_len as u32,
         profiles,
         admins_len.saturating_add(1) as u32 / 2 + 1,
-        register_nonce(cid_number_bytes),
+        register_nonce(cid_tag.as_bytes()),
         valid_signature(),
         province_name(),
         creator(),
@@ -957,7 +958,7 @@ fn create_and_activate_institution_with_profiles(
 fn registry_create_preserves_admin_profile_metadata() {
     new_test_ext().execute_with(|| {
         let expected = admin_profiles_with_meta();
-        let main = create_and_activate_institution_with_profiles(b"CID-META", expected.clone());
+        let main = create_and_activate_institution_with_profiles("CID-META", expected.clone());
         // 公权管理员 pallet 存储:非空 姓名/职务/任期/实名CID/来源 必须逐字段幸存。
         let stored =
             public_admins::AdminAccounts::<Test>::get(main).expect("public admin account present");
@@ -977,7 +978,7 @@ fn admin_account_is_main_account() {
 #[test]
 fn close_non_main_account_only_removes_that_account() {
     new_test_ext().execute_with(|| {
-        let (cid, main) = create_and_activate_institution(b"CID-SUB", 3);
+        let (cid, main) = create_and_activate_institution("CID-SUB", 3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
         let fee_name = account_name(RESERVED_NAME_FEE);
@@ -1014,7 +1015,7 @@ fn close_non_main_account_only_removes_that_account() {
 #[test]
 fn propose_close_rejects_invalid_deregister_credential() {
     new_test_ext().execute_with(|| {
-        let (_cid, main) = create_and_activate_institution(b"CID-BC", 3);
+        let (_cid, main) = create_and_activate_institution("CID-BC", 3);
         let bad_sig: pallet::RegisterSignatureOf<Test> =
             b"wrong-sig".to_vec().try_into().expect("sig fits");
         let nonce: pallet::RegisterNonceOf<Test> = vec![0xAB, 0xCD].try_into().expect("nonce fits");
@@ -1037,7 +1038,7 @@ fn propose_close_rejects_invalid_deregister_credential() {
 #[test]
 fn propose_close_rejects_replayed_deregister_nonce() {
     new_test_ext().execute_with(|| {
-        let (_cid, main) = create_and_activate_institution(b"CID-NR", 3);
+        let (_cid, main) = create_and_activate_institution("CID-NR", 3);
         // 首次注销(nonce seed 7)成功 → nonce 标记已用。
         assert_ok!(close_with_cred(
             RuntimeOrigin::signed(admin(0)),
@@ -1049,6 +1050,30 @@ fn propose_close_rejects_replayed_deregister_nonce() {
         assert_noop!(
             close_with_cred(RuntimeOrigin::signed(admin(0)), main, beneficiary(), 7),
             pallet::Error::<Test>::DeregisterNonceAlreadyUsed
+        );
+    });
+}
+
+#[test]
+fn register_rejects_non_public_family_cid_number() {
+    new_test_ext().execute_with(|| {
+        let submitter = fund_creator();
+        // 真实格式的私权机构号(SFLP)打到公权入口必须被家族断言拒绝。
+        assert_noop!(
+            PublicManage::register_cid_public_institution(
+                RuntimeOrigin::signed(submitter),
+                generated_cid("CID-FAMILY-X", "SFLP"),
+                cid_full_name("机构甲".as_bytes()),
+                account_names_bv(&[RESERVED_NAME_MAIN, RESERVED_NAME_FEE]),
+                register_nonce(b"nonce-family-x"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::InvalidCidNumber
         );
     });
 }

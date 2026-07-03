@@ -6,6 +6,9 @@
 
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
+extern crate alloc;
+
+use alloc::format;
 use sp_std::{vec, vec::Vec};
 
 use crate::{
@@ -18,9 +21,23 @@ use crate::{
 
 fn find_safe_cid<T: Config>() -> Result<(CidNumberOf<T>, T::AccountId), BenchmarkError> {
     for candidate in 0..2_048u32 {
-        let mut raw = b"multisig-benchmark-cid-".to_vec();
-        raw.extend_from_slice(&candidate.to_le_bytes());
-        let cid_number: CidNumberOf<T> = raw
+        // benchmark 夹具同样必须是真实规则号,否则被链端 CID 校验拒绝。
+        let tag = format!("multisig-benchmark-cid-{candidate}");
+        let number = primitives::cid::generator::generate_cid_number(
+            primitives::cid::generator::GenerateCidNumberInput {
+                account_pubkey: tag.as_str(),
+                p1: "0",
+                province_code: "GD",
+                province_name: "广东省",
+                city_code: "001",
+                city_name: "荔湾市",
+                year: "2026",
+                institution: "CGOV",
+            },
+        )
+        .map_err(|_| BenchmarkError::Stop("benchmark cid should generate"))?;
+        let cid_number: CidNumberOf<T> = number
+            .into_bytes()
             .try_into()
             .map_err(|_| BenchmarkError::Stop("benchmark cid id should fit"))?;
 

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize)]
 pub(crate) struct CidInstitutionCodeItem {
     pub(crate) institution_code: &'static str,
-    pub(crate) cid_short_name: &'static str,
+    pub(crate) institution_code_label: &'static str,
 }
 
 #[derive(Serialize)]

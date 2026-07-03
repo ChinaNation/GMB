@@ -13,13 +13,13 @@
 use postgres::Client;
 use uuid::Uuid;
 
-use crate::AppState;
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::core::institution_call::{
-    AdminProfileArg, AdminSourceTag, ChainCall, InitialAccountArg, ProposeCreateInstitutionArgs,
-    encode_propose_create_institution,
+    encode_propose_create_institution, AdminProfileArg, AdminSourceTag, ChainCall,
+    InitialAccountArg, ProposeCreateInstitutionArgs,
 };
 use crate::institution::subjects::model::CreateInstitutionAdminInput;
+use crate::AppState;
 
 /// 默认初始余额(分)。链端 MinCreateAmount=111,这里按最小值构造注册交易。
 const DEFAULT_INITIAL_ACCOUNT_AMOUNT_FEN: u128 = 111;

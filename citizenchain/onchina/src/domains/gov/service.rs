@@ -7,13 +7,13 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use crate::Db;
-use crate::cid::InstitutionCategory;
 use crate::cid::china::{china_sqlite_hash, provinces};
+use crate::cid::InstitutionCategory;
 use crate::institution::subjects::{
-    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
     service::{build_default_accounts_for_codes, default_account_names_for_codes},
+    EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
 };
+use crate::Db;
 
 #[allow(dead_code)]
 #[path = "../../../../runtime/primitives/cid/china/china_cb.rs"]
@@ -37,7 +37,7 @@ mod china_sf_constants;
 #[path = "../../../../runtime/primitives/cid/china/china_zf.rs"]
 mod china_zf_constants;
 
-pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v7";
+pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v8";
 pub const MIN_DEFAULT_ACCOUNT_COUNT: i64 = 2;
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -340,12 +340,12 @@ const TOWN_TEMPLATES: &[OfficialOrgTemplate] = &[
     OfficialOrgTemplate {
         institution_code: "TSUP",
         suffix: "监察院",
-        full_suffix: "监察院",
+        full_suffix: "自治监察院",
     },
     OfficialOrgTemplate {
         institution_code: "TJUD",
         suffix: "司法院",
-        full_suffix: "司法院",
+        full_suffix: "自治司法院",
     },
 ];
 
@@ -647,8 +647,8 @@ fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
     // china_zf.rs CHINA_ZF(带 main/fee 账户),由 :375 的常量循环单一 push;
     // 此处不用区划模板重复生成,避免同号双定义触发 reconcile 21000。仅保留两院议会。
     for (institution_code, cid_short_name, cid_full_name) in [
-        ("NSN", "国家参议会", "中华民族联邦共和国国家立法院参议会"),
-        ("NRP", "国家众议会", "中华民族联邦共和国国家立法院众议会"),
+        ("NSN", "国家参议会", "中华民族联邦共和国立法院参议会"),
+        ("NRP", "国家众议会", "中华民族联邦共和国立法院众议会"),
     ] {
         let template = OfficialOrgTemplate {
             institution_code,

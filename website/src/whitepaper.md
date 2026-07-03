@@ -131,7 +131,7 @@
 
 ## 1.3.发行机构<br><span class="whitepaper-heading-en">1.3. Issuing Institution</span>
 
-* 国家公民储备委员会（National Citizen Reserve Committee），简称：国家储委会（National Reserve Committee）；<br><span class="whitepaper-en">The issuing institution is the National Citizen Reserve Committee, abbreviated as the National Reserve Committee.</span>
+* 中华民族联邦共和国公民储备委员会（Citizen Reserve Committee of the Federal Republic of the China Nation），简称：国家储委会（National Reserve Committee）；<br><span class="whitepaper-en">The issuing institution is the Citizen Reserve Committee of the Federal Republic of the China Nation, abbreviated as the National Reserve Committee.</span>
 * 依据《公民宪法》公民储备委员会体系由1个国家公民储备委员会、43个省公民储备委员会和43个省公民储备银行组成。<br><span class="whitepaper-en">Pursuant to the Citizen Constitution, the Citizen Reserve Committee system consists of one National Citizen Reserve Committee, 43 Provincial Citizen Reserve Committees, and 43 Provincial Citizen Reserve Banks.</span>
 
 ## 1.4.发行量<br><span class="whitepaper-heading-en">1.4. Issuance Amount</span>

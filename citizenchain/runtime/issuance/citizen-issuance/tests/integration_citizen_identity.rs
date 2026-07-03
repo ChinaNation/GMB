@@ -131,6 +131,24 @@ fn new_test_ext() -> sp_io::TestExternalities {
     ext
 }
 
+/// 按 tag 生成真实规则公民 CID 号(格式/校验和/机构码全合规)。
+fn citizen_cid_number(tag: &str) -> Vec<u8> {
+    primitives::cid::generator::generate_cid_number(
+        primitives::cid::generator::GenerateCidNumberInput {
+            account_pubkey: tag,
+            p1: "1",
+            province_code: "GD",
+            province_name: "广东省",
+            city_code: "001",
+            city_name: "荔湾市",
+            year: "2026",
+            institution: "CTZN",
+        },
+    )
+    .expect("citizen cid should generate")
+    .into_bytes()
+}
+
 fn payload(wallet_account: u64, cid_number: &[u8]) -> VotingIdentityPayload<u64> {
     VotingIdentityPayload {
         cid_number: cid_number
@@ -155,7 +173,7 @@ fn valid_signature() -> citizen_identity::pallet::SignatureOf<Test> {
 #[test]
 fn register_voting_identity_triggers_reward_issuance() {
     new_test_ext().execute_with(|| {
-        let cid_number = b"CTZN-0001";
+        let cid_number = &citizen_cid_number("0001");
         let cid_number_hash = <Test as frame_system::Config>::Hashing::hash(cid_number);
 
         assert_ok!(CitizenIdentity::register_voting_identity(
@@ -178,13 +196,13 @@ fn updating_existing_identity_does_not_issue_second_reward() {
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
-            payload(1, b"CTZN-0001"),
+            payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
-            payload(1, b"CTZN-0002"),
+            payload(1, &citizen_cid_number("0002")),
             valid_signature(),
         ));
 
@@ -192,12 +210,12 @@ fn updating_existing_identity_does_not_issue_second_reward() {
         assert_eq!(citizen_issuance::RewardedCount::<Test>::get(), 1);
         assert!(
             citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(
-                <Test as frame_system::Config>::Hashing::hash(b"CTZN-0001")
+                <Test as frame_system::Config>::Hashing::hash(&citizen_cid_number("0001"))
             )
         );
         assert!(
             !citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(
-                <Test as frame_system::Config>::Hashing::hash(b"CTZN-0002")
+                <Test as frame_system::Config>::Hashing::hash(&citizen_cid_number("0002"))
             )
         );
     });
@@ -211,7 +229,7 @@ fn max_reward_cap_is_applied_from_identity_callback() {
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
-            payload(1, b"CTZN-CAP"),
+            payload(1, &citizen_cid_number("CAP")),
             valid_signature(),
         ));
 

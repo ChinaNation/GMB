@@ -1,14 +1,15 @@
 part of 'governance_registry.dart';
 
 // 本文件由 scripts/generate_citizenapp_governance_registry.mjs 自动生成。
-// 创世治理机构中英全称/简称、cid_number 和制度账户来自 runtime primitives；管理员必须动态读取链上 AdminAccounts。
+// 中文注释：创世治理机构中英全称/简称、cid_number 和制度账户来自 runtime primitives；管理员必须动态读取链上 AdminAccounts。
 
-/// 国家储委会（1 个）。
+/// 国储会（1 个）。
 const List<InstitutionInfo> kNationalCouncil = [
   InstitutionInfo(
-    cidFullName: '国家公民储备委员会',
+    cidFullName: '中华民族联邦共和国公民储备委员会',
     cidShortName: '国家储委会',
-    cidFullNameEn: 'National Citizen Reserve Committee',
+    cidFullNameEn:
+        'Citizen Reserve Committee of the Federal Republic of the China Nation',
     cidShortNameEn: 'National Reserve Committee',
     cidNumber: 'LN001-NRC0G-944805165-2026',
     orgType: OrgType.nrc,
@@ -25,7 +26,7 @@ const List<InstitutionInfo> kNationalCouncil = [
   ),
 ];
 
-/// 省储委会（43 个）。
+/// 省储会（43 个）。
 const List<InstitutionInfo> kProvincialCouncils = [
   InstitutionInfo(
     cidFullName: '中枢省公民储备委员会',
@@ -1341,10 +1342,9 @@ const List<InstitutionInfo> kFixedGovernanceInstitutions = [
     ),
   ),
   InstitutionInfo(
-    cidFullName: '中华民族联邦共和国国家司法院',
+    cidFullName: '中华民族联邦共和国司法院',
     cidShortName: '国家司法院',
-    cidFullNameEn:
-        'National Judicial Yuan of the Federal Republic of the China Nation',
+    cidFullNameEn: 'Judicial Yuan of the Federal Republic of the China Nation',
     cidShortNameEn: 'National Judicial Yuan',
     cidNumber: 'ZS001-NJD0T-052283563-2026',
     orgType: OrgType.account,

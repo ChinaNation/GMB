@@ -15,7 +15,7 @@ import 'dart:typed_data';
 class InstitutionCodeLabel {
   const InstitutionCodeLabel._();
   // 治理相关机构码常量(4 字节,3 字符码末位补 0)
-  /// 国家公民储备委员会(固定治理档)。"NRC\0"。
+  /// 国家储委会(固定治理档)。"NRC\0"。
   static const List<int> nrc = [78, 82, 67, 0];
 
   /// 省公民储备委员会(固定治理档)。"PRC\0"。
@@ -48,6 +48,7 @@ class InstitutionCodeLabel {
     }
     return out;
   }
+
   // 机构码分类清单(与链端 PUBLIC/PRIVATE/UNINCORPORATED 同源)
   /// 公权法人机构码(A 国家级 26 + B 省级 17 + C 市级 17 + D 镇级 14 + 公立大学/学校 2)= 76。
   static const Set<String> _publicLegalCodes = <String>{

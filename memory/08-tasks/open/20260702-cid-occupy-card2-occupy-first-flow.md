@@ -4,7 +4,8 @@
 > - onchina 现无任何自动提交交易通路(全部=裸 call_data→冷签→钱包提交),须按 D7 补「组装+dry-run+author_submitExtrinsic」后端提交骨架(参照 node/src/governance/signing.rs:612-683),QR 仍只签不提交;
 > - 机构关闭现状=账户级物理删除、`Institutions` 永不删但状态从未置 Closed;须按 D3 落地 Closed 墓碑语义 + 堵 register(call 2)不查本 pallet Institutions 的重注册缺口;
 > - citizens.onchain_tx_hash 等列现无写入者,须按 D8 经 indexer 事件回写闭环;
-> - 新增 `occupy_cids_batch`(≤10,000 项/笔)供批量建档与重建;占号/吊销/批量注册费类 **Free(2026-07-02 已决,ADR-031 Q4)**,滥用由链上注册局授权门槛拦截。
+> - 新增 `occupy_cids_batch`(≤10,000 项/笔)供公民批量建档;占号/吊销费类 **Free(2026-07-02 已决,ADR-031 Q4)**,滥用由链上注册局授权门槛拦截。
+> - 2026-07-03 修订:机构存量改全量创世直铸(卡3 D5),本卡占号先行流程只服务**运行期新增**(公民建档、未来新设机构);机构批量注册 extrinsic 本轮不实现。
 
 ## 设计定稿(用户已确认)
 

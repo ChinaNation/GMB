@@ -15,7 +15,7 @@ pub struct GenerateCidInput<'a> {
     pub p1: &'a str,
     pub province_name: &'a str,
     pub city_name: &'a str,
-    /// 机构码(3 或 4 字符代码,或机构实体中文简称),全仓库机构分类唯一真源。
+    /// 机构码(3 或 4 字符代码,或机构码中文标签),全仓库机构分类唯一真源。
     pub institution: &'a str,
 }
 

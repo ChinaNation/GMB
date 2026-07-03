@@ -263,8 +263,8 @@ fn public_admins_store_and_query_admin_profiles() {
     new_test_ext().execute_with(|| {
         let root = account(40);
         let profiles = alloc::vec![
-            profile_full(account(0), b"CID-A", b"Alice", b"Director", 10, 20),
-            profile_full(account(1), b"CID-B", b"Bob", b"Deputy", 11, 21),
+            profile_full(account(0), b"GD000-CTZN8-191941078-2026", b"Alice", b"Director", 10, 20),
+            profile_full(account(1), b"GD000-CTZN2-141250905-2026", b"Bob", b"Deputy", 11, 21),
         ];
         assert_ok!(PublicAdmins::do_create_pending_admin_account(
             root.clone(),
@@ -287,7 +287,7 @@ fn public_admins_store_and_query_admin_profiles() {
         assert_eq!(stored, profiles);
         assert_eq!(stored[0].name.to_vec(), b"Alice".to_vec());
         assert_eq!(stored[0].admin_role.to_vec(), b"Director".to_vec());
-        assert_eq!(stored[0].admin_cid_number.to_vec(), b"CID-A".to_vec());
+        assert_eq!(stored[0].admin_cid_number.to_vec(), b"GD000-CTZN8-191941078-2026".to_vec());
         assert_eq!(stored[1].term_start, 11);
         assert_eq!(stored[1].term_end, 21);
         assert_eq!(stored[1].source, AdminSource::MutualElection);

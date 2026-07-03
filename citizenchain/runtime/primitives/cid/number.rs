@@ -71,6 +71,12 @@ pub fn validate_cid_number_format(raw: &str) -> Result<String, &'static str> {
     parse_cid_number_parts(raw).map(|_| raw.trim().to_string())
 }
 
+/// 从链上字节解析并校验 cid_number。
+pub fn parse_cid_number_parts_bytes(raw: &[u8]) -> Result<CidNumberParts, &'static str> {
+    let text = core::str::from_utf8(raw).map_err(|_| "cid_number must be utf-8")?;
+    parse_cid_number_parts(text)
+}
+
 /// 解析并校验 cid_number。
 pub fn parse_cid_number_parts(raw: &str) -> Result<CidNumberParts, &'static str> {
     let normalized = raw.trim();

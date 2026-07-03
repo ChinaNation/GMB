@@ -87,7 +87,7 @@ fn new_test_ext() -> sp_io::TestExternalities {
 #[test]
 fn voting_identity_registered_issues_reward() {
     new_test_ext().execute_with(|| {
-        let cid_number_hash = notify_voting_identity_registered(1, b"CTZN-0001");
+        let cid_number_hash = notify_voting_identity_registered(1, &citizen_cid_number("0001"));
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(RewardedCount::<Test>::get(), 1);
@@ -107,7 +107,7 @@ fn voting_identity_registered_issues_reward() {
 fn max_cap_stops_reward() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_MAX_COUNT);
-        let cid_number_hash = notify_voting_identity_registered(1, b"CTZN-CAP");
+        let cid_number_hash = notify_voting_identity_registered(1, &citizen_cid_number("CAP"));
 
         assert_eq!(Balances::free_balance(1), 0);
         assert_eq!(RewardedCount::<Test>::get(), CITIZEN_ISSUANCE_MAX_COUNT);
@@ -132,8 +132,8 @@ fn max_count_minus_one_allows_last_reward_then_rejects_next() {
             };
 
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_MAX_COUNT.saturating_sub(1));
-        let cid_number_hash_a = notify_voting_identity_registered(1, b"CTZN-LAST");
-        let cid_number_hash_b = notify_voting_identity_registered(2, b"CTZN-OVER");
+        let cid_number_hash_a = notify_voting_identity_registered(1, &citizen_cid_number("LAST"));
+        let cid_number_hash_b = notify_voting_identity_registered(2, &citizen_cid_number("OVER"));
 
         assert_eq!(Balances::free_balance(1), last_reward_amount);
         assert_eq!(Balances::free_balance(2), 0);
@@ -159,8 +159,8 @@ fn max_count_minus_one_allows_last_reward_then_rejects_next() {
 #[test]
 fn same_citizen_identity_only_rewards_once() {
     new_test_ext().execute_with(|| {
-        let cid_number_hash = notify_voting_identity_registered(1, b"CTZN-REPEAT");
-        notify_voting_identity_registered(1, b"CTZN-REPEAT");
+        let cid_number_hash = notify_voting_identity_registered(1, &citizen_cid_number("REPEAT"));
+        notify_voting_identity_registered(1, &citizen_cid_number("REPEAT"));
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(RewardedCount::<Test>::get(), 1);
@@ -179,8 +179,8 @@ fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT.saturating_sub(1));
 
-        let cid_number_hash_a = notify_voting_identity_registered(1, b"CTZN-TIER-A");
-        let cid_number_hash_b = notify_voting_identity_registered(2, b"CTZN-TIER-B");
+        let cid_number_hash_a = notify_voting_identity_registered(1, &citizen_cid_number("TIER-A"));
+        let cid_number_hash_b = notify_voting_identity_registered(2, &citizen_cid_number("TIER-B"));
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(Balances::free_balance(2), CITIZEN_ISSUANCE_NORMAL_REWARD);
@@ -220,7 +220,7 @@ fn boundary_switches_to_normal_reward_at_high_reward_count() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT);
 
-        notify_voting_identity_registered(1, b"CTZN-BOUNDARY");
+        notify_voting_identity_registered(1, &citizen_cid_number("BOUNDARY"));
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_NORMAL_REWARD);
         assert_eq!(
@@ -234,7 +234,8 @@ fn boundary_switches_to_normal_reward_at_high_reward_count() {
 fn high_reward_count_minus_one_still_gets_high_reward() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT.saturating_sub(1));
-        let cid_number_hash = notify_voting_identity_registered(1, b"CTZN-HIGH-MINUS-1");
+        let cid_number_hash =
+            notify_voting_identity_registered(1, &citizen_cid_number("HIGH-MINUS-1"));
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         System::assert_last_event(RuntimeEvent::CitizenIssuance(
@@ -250,8 +251,10 @@ fn high_reward_count_minus_one_still_gets_high_reward() {
 #[test]
 fn same_account_second_citizen_identity_is_not_marked_reward_claimed() {
     new_test_ext().execute_with(|| {
-        let cid_number_hash_a = notify_voting_identity_registered(1, b"CTZN-CLAIM-A");
-        let cid_number_hash_b = notify_voting_identity_registered(1, b"CTZN-CLAIM-B");
+        let cid_number_hash_a =
+            notify_voting_identity_registered(1, &citizen_cid_number("CLAIM-A"));
+        let cid_number_hash_b =
+            notify_voting_identity_registered(1, &citizen_cid_number("CLAIM-B"));
 
         assert!(IdentityRewardClaimed::<Test>::contains_key(
             cid_number_hash_a
@@ -273,8 +276,8 @@ fn same_account_second_citizen_identity_is_not_marked_reward_claimed() {
 #[test]
 fn different_accounts_and_citizen_identities_reward_independently() {
     new_test_ext().execute_with(|| {
-        notify_voting_identity_registered(1, b"CTZN-A-2");
-        notify_voting_identity_registered(2, b"CTZN-B-2");
+        notify_voting_identity_registered(1, &citizen_cid_number("A-2"));
+        notify_voting_identity_registered(2, &citizen_cid_number("B-2"));
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(Balances::free_balance(2), CITIZEN_ISSUANCE_HIGH_REWARD);
@@ -285,8 +288,8 @@ fn different_accounts_and_citizen_identities_reward_independently() {
 #[test]
 fn same_account_different_citizen_identities_only_rewards_once() {
     new_test_ext().execute_with(|| {
-        notify_voting_identity_registered(1, b"CTZN-ACC-A");
-        let cid_number_hash_b = notify_voting_identity_registered(1, b"CTZN-ACC-B");
+        notify_voting_identity_registered(1, &citizen_cid_number("ACC-A"));
+        let cid_number_hash_b = notify_voting_identity_registered(1, &citizen_cid_number("ACC-B"));
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(RewardedCount::<Test>::get(), 1);
@@ -298,6 +301,24 @@ fn same_account_different_citizen_identities_only_rewards_once() {
             },
         ));
     });
+}
+
+/// 按 tag 生成真实规则公民 CID 号(格式/校验和/机构码全合规)。
+fn citizen_cid_number(tag: &str) -> Vec<u8> {
+    primitives::cid::generator::generate_cid_number(
+        primitives::cid::generator::GenerateCidNumberInput {
+            account_pubkey: tag,
+            p1: "1",
+            province_code: "GD",
+            province_name: "广东省",
+            city_code: "001",
+            city_name: "荔湾市",
+            year: "2026",
+            institution: "CTZN",
+        },
+    )
+    .expect("citizen cid should generate")
+    .into_bytes()
 }
 
 fn notify_voting_identity_registered(

@@ -533,7 +533,7 @@ fn runtime_citizen_identity_frg_province_admin_registers_voting_identity() {
         let wallet_account = AccountId::new(wallet_pair.public().0);
         let payload = build_voting_identity_payload(
             wallet_account.clone(),
-            b"CTZN-RUNTIME-0001",
+            &real_cid_number("RUNTIME-0001", "CTZN", "1"),
             b"43",
             b"4301",
             b"4301001",
@@ -563,7 +563,7 @@ fn runtime_citizen_identity_frg_admin_cannot_register_other_province() {
         let wallet_account = AccountId::new(wallet_pair.public().0);
         let payload = build_voting_identity_payload(
             wallet_account,
-            b"CTZN-RUNTIME-0002",
+            &real_cid_number("RUNTIME-0002", "CTZN", "1"),
             b"44",
             b"4401",
             b"4401001",
@@ -591,7 +591,7 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
         let wallet_account = AccountId::new(wallet_pair.public().0);
         let voting = build_voting_identity_payload(
             wallet_account.clone(),
-            b"CTZN-RUNTIME-0003",
+            &real_cid_number("RUNTIME-0003", "CTZN", "1"),
             b"43",
             b"4301",
             b"4301001",
@@ -667,7 +667,8 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
         let issuer_cid_number = test_issuer_cid_number();
         let issuer_main_account = test_issuer_main_account();
         let scope_city_name = test_scope_city_name();
-        let cid_number: &[u8] = b"AH001-GCB07-000000001-2026";
+        let cid_number_owned = real_cid_number("verifier-lookup", "CGOV", "0");
+        let cid_number: &[u8] = cid_number_owned.as_slice();
         let register_nonce: public_manage::pallet::RegisterNonceOf<Runtime> =
             b"register-nonce-ah-1"
                 .to_vec()

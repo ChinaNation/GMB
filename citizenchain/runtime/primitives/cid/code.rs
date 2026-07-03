@@ -30,7 +30,7 @@ pub struct ProvinceCodeInfo {
 pub struct InstitutionCodeInfo {
     pub institution_code: InstitutionCode,
     pub institution_code_text: &'static str,
-    pub cid_short_name: &'static str,
+    pub institution_code_label: &'static str,
 }
 
 /// 机构码所属行政层级。
@@ -299,7 +299,7 @@ pub fn province_name_by_code(code: &ProvinceCode) -> Option<&'static str> {
         .map(|info| info.province_name)
 }
 // 机构码清单按 A-I 九组排列。
-/// 国家公民储备委员会。
+/// 国家储委会。
 pub const NRC: InstitutionCode = *b"NRC\0";
 /// 省公民储备委员会。
 pub const PRC: InstitutionCode = *b"PRC\0";
@@ -319,470 +319,470 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
     InstitutionCodeInfo {
         institution_code: *b"PRS\0",
         institution_code_text: "PRS",
-        cid_short_name: "总统府",
+        institution_code_label: "总统府",
     },
     InstitutionCodeInfo {
         institution_code: *b"FSC\0",
         institution_code_text: "FSC",
-        cid_short_name: "联邦安全局",
+        institution_code_label: "联邦安全局",
     },
     InstitutionCodeInfo {
         institution_code: *b"FIB\0",
         institution_code_text: "FIB",
-        cid_short_name: "联邦情报局",
+        institution_code_label: "联邦情报局",
     },
     InstitutionCodeInfo {
         institution_code: *b"FSS\0",
         institution_code_text: "FSS",
-        cid_short_name: "联邦特勤局",
+        institution_code_label: "联邦特勤局",
     },
     InstitutionCodeInfo {
         institution_code: *b"FPR\0",
         institution_code_text: "FPR",
-        cid_short_name: "联邦人事局",
+        institution_code_label: "联邦人事局",
     },
     InstitutionCodeInfo {
         institution_code: FRG,
         institution_code_text: "FRG",
-        cid_short_name: "联邦注册局",
+        institution_code_label: "联邦注册局",
     },
     InstitutionCodeInfo {
         institution_code: *b"MFA\0",
         institution_code_text: "MFA",
-        cid_short_name: "外交部",
+        institution_code_label: "外交部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MDF\0",
         institution_code_text: "MDF",
-        cid_short_name: "国防部",
+        institution_code_label: "国防部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MHS\0",
         institution_code_text: "MHS",
-        cid_short_name: "国安部",
+        institution_code_label: "国安部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MCW\0",
         institution_code_text: "MCW",
-        cid_short_name: "民生部",
+        institution_code_label: "民生部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MHU\0",
         institution_code_text: "MHU",
-        cid_short_name: "住建部",
+        institution_code_label: "住建部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MAG\0",
         institution_code_text: "MAG",
-        cid_short_name: "农业部",
+        institution_code_label: "农业部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MCM\0",
         institution_code_text: "MCM",
-        cid_short_name: "商贸部",
+        institution_code_label: "商贸部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MFT\0",
         institution_code_text: "MFT",
-        cid_short_name: "财税部",
+        institution_code_label: "财税部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MEN\0",
         institution_code_text: "MEN",
-        cid_short_name: "能源部",
+        institution_code_label: "能源部",
     },
     InstitutionCodeInfo {
         institution_code: *b"MTR\0",
         institution_code_text: "MTR",
-        cid_short_name: "交通部",
+        institution_code_label: "交通部",
     },
     InstitutionCodeInfo {
         institution_code: *b"NLG\0",
         institution_code_text: "NLG",
-        cid_short_name: "国家立法院",
+        institution_code_label: "国家立法院",
     },
     InstitutionCodeInfo {
         institution_code: *b"NJD\0",
         institution_code_text: "NJD",
-        cid_short_name: "国家司法院",
+        institution_code_label: "国家司法院",
     },
     InstitutionCodeInfo {
         institution_code: *b"NSP\0",
         institution_code_text: "NSP",
-        cid_short_name: "国家监察院",
+        institution_code_label: "国家监察院",
     },
     InstitutionCodeInfo {
         institution_code: *b"FAC\0",
         institution_code_text: "FAC",
-        cid_short_name: "联邦廉政署",
+        institution_code_label: "联邦廉政署",
     },
     InstitutionCodeInfo {
         institution_code: *b"FAU\0",
         institution_code_text: "FAU",
-        cid_short_name: "联邦审计署",
+        institution_code_label: "联邦审计署",
     },
     InstitutionCodeInfo {
         institution_code: *b"FIV\0",
         institution_code_text: "FIV",
-        cid_short_name: "联邦调查署",
+        institution_code_label: "联邦调查署",
     },
     InstitutionCodeInfo {
         institution_code: *b"NED\0",
         institution_code_text: "NED",
-        cid_short_name: "国家教委会",
+        institution_code_label: "国家教委会",
     },
     InstitutionCodeInfo {
         institution_code: *b"NRC\0",
         institution_code_text: "NRC",
-        cid_short_name: "国家储委会",
+        institution_code_label: "国家储委会",
     },
     InstitutionCodeInfo {
         institution_code: *b"NSN\0",
         institution_code_text: "NSN",
-        cid_short_name: "国家参议会",
+        institution_code_label: "国家参议会",
     },
     InstitutionCodeInfo {
         institution_code: *b"NRP\0",
         institution_code_text: "NRP",
-        cid_short_name: "国家众议会",
+        institution_code_label: "国家众议会",
     },
     // B 省级类型(17,3 位,43 省共用,R5 省码区分实例,非盈利)
     InstitutionCodeInfo {
         institution_code: *b"PGV\0",
         institution_code_text: "PGV",
-        cid_short_name: "省政府",
+        institution_code_label: "省政府",
     },
     InstitutionCodeInfo {
         institution_code: *b"PLG\0",
         institution_code_text: "PLG",
-        cid_short_name: "省立法院",
+        institution_code_label: "省立法院",
     },
     InstitutionCodeInfo {
         institution_code: *b"PJD\0",
         institution_code_text: "PJD",
-        cid_short_name: "省司法院",
+        institution_code_label: "省司法院",
     },
     InstitutionCodeInfo {
         institution_code: *b"PSP\0",
         institution_code_text: "PSP",
-        cid_short_name: "省监察院",
+        institution_code_label: "省监察院",
     },
     InstitutionCodeInfo {
         institution_code: *b"PRC\0",
         institution_code_text: "PRC",
-        cid_short_name: "省储委会",
+        institution_code_label: "省储委会",
     },
     InstitutionCodeInfo {
         institution_code: *b"PRB\0",
         institution_code_text: "PRB",
-        cid_short_name: "省储行",
+        institution_code_label: "省储行",
     },
     InstitutionCodeInfo {
         institution_code: *b"PDF\0",
         institution_code_text: "PDF",
-        cid_short_name: "省国防厅",
+        institution_code_label: "省国防厅",
     },
     InstitutionCodeInfo {
         institution_code: *b"PHS\0",
         institution_code_text: "PHS",
-        cid_short_name: "省国安厅",
+        institution_code_label: "省国安厅",
     },
     InstitutionCodeInfo {
         institution_code: *b"PCW\0",
         institution_code_text: "PCW",
-        cid_short_name: "省民生厅",
+        institution_code_label: "省民生厅",
     },
     InstitutionCodeInfo {
         institution_code: *b"PHU\0",
         institution_code_text: "PHU",
-        cid_short_name: "省住建厅",
+        institution_code_label: "省住建厅",
     },
     InstitutionCodeInfo {
         institution_code: *b"PAG\0",
         institution_code_text: "PAG",
-        cid_short_name: "省农业厅",
+        institution_code_label: "省农业厅",
     },
     InstitutionCodeInfo {
         institution_code: *b"PCM\0",
         institution_code_text: "PCM",
-        cid_short_name: "省商贸厅",
+        institution_code_label: "省商贸厅",
     },
     InstitutionCodeInfo {
         institution_code: *b"PFT\0",
         institution_code_text: "PFT",
-        cid_short_name: "省财税厅",
+        institution_code_label: "省财税厅",
     },
     InstitutionCodeInfo {
         institution_code: *b"PEN\0",
         institution_code_text: "PEN",
-        cid_short_name: "省能源厅",
+        institution_code_label: "省能源厅",
     },
     InstitutionCodeInfo {
         institution_code: *b"PTR\0",
         institution_code_text: "PTR",
-        cid_short_name: "省交通厅",
+        institution_code_label: "省交通厅",
     },
     InstitutionCodeInfo {
         institution_code: *b"PSN\0",
         institution_code_text: "PSN",
-        cid_short_name: "省参议会",
+        institution_code_label: "省参议会",
     },
     InstitutionCodeInfo {
         institution_code: *b"PRP\0",
         institution_code_text: "PRP",
-        cid_short_name: "省众议会",
+        institution_code_label: "省众议会",
     },
     // C 市级类型(17,4 位,非盈利)
     InstitutionCodeInfo {
         institution_code: *b"CGOV",
         institution_code_text: "CGOV",
-        cid_short_name: "市政府",
+        institution_code_label: "市政府",
     },
     InstitutionCodeInfo {
         institution_code: *b"CLEG",
         institution_code_text: "CLEG",
-        cid_short_name: "市立法会",
+        institution_code_label: "市立法会",
     },
     InstitutionCodeInfo {
         institution_code: *b"CSUP",
         institution_code_text: "CSUP",
-        cid_short_name: "市监察院",
+        institution_code_label: "市监察院",
     },
     InstitutionCodeInfo {
         institution_code: *b"CJUD",
         institution_code_text: "CJUD",
-        cid_short_name: "市司法院",
+        institution_code_label: "市司法院",
     },
     InstitutionCodeInfo {
         institution_code: *b"CEDU",
         institution_code_text: "CEDU",
-        cid_short_name: "市教委会",
+        institution_code_label: "市教委会",
     },
     InstitutionCodeInfo {
         institution_code: *b"CSLF",
         institution_code_text: "CSLF",
-        cid_short_name: "市自治会",
+        institution_code_label: "市自治会",
     },
     InstitutionCodeInfo {
         institution_code: *b"CDEF",
         institution_code_text: "CDEF",
-        cid_short_name: "市国防局",
+        institution_code_label: "市国防局",
     },
     InstitutionCodeInfo {
         institution_code: *b"CHSC",
         institution_code_text: "CHSC",
-        cid_short_name: "市国安局",
+        institution_code_label: "市国安局",
     },
     InstitutionCodeInfo {
         institution_code: *b"CCWF",
         institution_code_text: "CCWF",
-        cid_short_name: "市民生局",
+        institution_code_label: "市民生局",
     },
     InstitutionCodeInfo {
         institution_code: *b"CHUD",
         institution_code_text: "CHUD",
-        cid_short_name: "市住建局",
+        institution_code_label: "市住建局",
     },
     InstitutionCodeInfo {
         institution_code: *b"CAGR",
         institution_code_text: "CAGR",
-        cid_short_name: "市农业局",
+        institution_code_label: "市农业局",
     },
     InstitutionCodeInfo {
         institution_code: *b"CCOM",
         institution_code_text: "CCOM",
-        cid_short_name: "市商贸局",
+        institution_code_label: "市商贸局",
     },
     InstitutionCodeInfo {
         institution_code: *b"CFIN",
         institution_code_text: "CFIN",
-        cid_short_name: "市财税局",
+        institution_code_label: "市财税局",
     },
     InstitutionCodeInfo {
         institution_code: *b"CENR",
         institution_code_text: "CENR",
-        cid_short_name: "市能源局",
+        institution_code_label: "市能源局",
     },
     InstitutionCodeInfo {
         institution_code: *b"CTRN",
         institution_code_text: "CTRN",
-        cid_short_name: "市交通局",
+        institution_code_label: "市交通局",
     },
     InstitutionCodeInfo {
         institution_code: *b"CREG",
         institution_code_text: "CREG",
-        cid_short_name: "市注册局",
+        institution_code_label: "市注册局",
     },
     InstitutionCodeInfo {
         institution_code: *b"CPOL",
         institution_code_text: "CPOL",
-        cid_short_name: "市公安局",
+        institution_code_label: "市公安局",
     },
     // D 镇级类型(14,4 位,非盈利)
     InstitutionCodeInfo {
         institution_code: *b"TGOV",
         institution_code_text: "TGOV",
-        cid_short_name: "镇政府",
+        institution_code_label: "镇政府",
     },
     InstitutionCodeInfo {
         institution_code: *b"TCWF",
         institution_code_text: "TCWF",
-        cid_short_name: "镇民生科",
+        institution_code_label: "镇民生科",
     },
     InstitutionCodeInfo {
         institution_code: *b"THUD",
         institution_code_text: "THUD",
-        cid_short_name: "镇住建科",
+        institution_code_label: "镇住建科",
     },
     InstitutionCodeInfo {
         institution_code: *b"TAGR",
         institution_code_text: "TAGR",
-        cid_short_name: "镇农业科",
+        institution_code_label: "镇农业科",
     },
     InstitutionCodeInfo {
         institution_code: *b"TFIN",
         institution_code_text: "TFIN",
-        cid_short_name: "镇财税科",
+        institution_code_label: "镇财税科",
     },
     InstitutionCodeInfo {
         institution_code: *b"TDEF",
         institution_code_text: "TDEF",
-        cid_short_name: "镇国防科",
+        institution_code_label: "镇国防科",
     },
     InstitutionCodeInfo {
         institution_code: *b"THSC",
         institution_code_text: "THSC",
-        cid_short_name: "镇国安科",
+        institution_code_label: "镇国安科",
     },
     InstitutionCodeInfo {
         institution_code: *b"TCOM",
         institution_code_text: "TCOM",
-        cid_short_name: "镇商贸科",
+        institution_code_label: "镇商贸科",
     },
     InstitutionCodeInfo {
         institution_code: *b"TENR",
         institution_code_text: "TENR",
-        cid_short_name: "镇能源科",
+        institution_code_label: "镇能源科",
     },
     InstitutionCodeInfo {
         institution_code: *b"TTRN",
         institution_code_text: "TTRN",
-        cid_short_name: "镇交通科",
+        institution_code_label: "镇交通科",
     },
     InstitutionCodeInfo {
         institution_code: *b"TPOL",
         institution_code_text: "TPOL",
-        cid_short_name: "镇公安科",
+        institution_code_label: "镇公安科",
     },
     InstitutionCodeInfo {
         institution_code: *b"TSLF",
         institution_code_text: "TSLF",
-        cid_short_name: "镇自治会",
+        institution_code_label: "镇自治会",
     },
     InstitutionCodeInfo {
         institution_code: *b"TSUP",
         institution_code_text: "TSUP",
-        cid_short_name: "镇监察院",
+        institution_code_label: "镇监察院",
     },
     InstitutionCodeInfo {
         institution_code: *b"TJUD",
         institution_code_text: "TJUD",
-        cid_short_name: "镇司法院",
+        institution_code_label: "镇司法院",
     },
     // E 私权机构(7,4 位)
     InstitutionCodeInfo {
         institution_code: *b"SFGT",
         institution_code_text: "SFGT",
-        cid_short_name: "个体经营",
+        institution_code_label: "个体经营",
     },
     InstitutionCodeInfo {
         institution_code: *b"SFGP",
         institution_code_text: "SFGP",
-        cid_short_name: "无限合伙",
+        institution_code_label: "无限合伙",
     },
     InstitutionCodeInfo {
         institution_code: *b"SFLP",
         institution_code_text: "SFLP",
-        cid_short_name: "有限合伙",
+        institution_code_label: "有限合伙",
     },
     InstitutionCodeInfo {
         institution_code: *b"SFGQ",
         institution_code_text: "SFGQ",
-        cid_short_name: "股权公司",
+        institution_code_label: "股权公司",
     },
     InstitutionCodeInfo {
         institution_code: *b"SFGF",
         institution_code_text: "SFGF",
-        cid_short_name: "股份公司",
+        institution_code_label: "股份公司",
     },
     InstitutionCodeInfo {
         institution_code: *b"SFGY",
         institution_code_text: "SFGY",
-        cid_short_name: "公益组织",
+        institution_code_label: "公益组织",
     },
     InstitutionCodeInfo {
         institution_code: *b"SFAS",
         institution_code_text: "SFAS",
-        cid_short_name: "注册协会",
+        institution_code_label: "注册协会",
     },
     // F 教育学校(6:公私教大学 3 位 / 公私教中小初学 4 位)
     InstitutionCodeInfo {
         institution_code: *b"GUN\0",
         institution_code_text: "GUN",
-        cid_short_name: "公立大学",
+        institution_code_label: "公立大学",
     },
     InstitutionCodeInfo {
         institution_code: *b"SUN\0",
         institution_code_text: "SUN",
-        cid_short_name: "私立大学",
+        institution_code_label: "私立大学",
     },
     InstitutionCodeInfo {
         institution_code: *b"JUN\0",
         institution_code_text: "JUN",
-        cid_short_name: "教会大学",
+        institution_code_label: "教会大学",
     },
     InstitutionCodeInfo {
         institution_code: *b"GSCH",
         institution_code_text: "GSCH",
-        cid_short_name: "公立学校",
+        institution_code_label: "公立学校",
     },
     InstitutionCodeInfo {
         institution_code: *b"SFSC",
         institution_code_text: "SFSC",
-        cid_short_name: "私立学校",
+        institution_code_label: "私立学校",
     },
     InstitutionCodeInfo {
         institution_code: *b"JSCH",
         institution_code_text: "JSCH",
-        cid_short_name: "教会学校",
+        institution_code_label: "教会学校",
     },
     // G 个人主体(3,4 位)
     InstitutionCodeInfo {
         institution_code: *b"CTZN",
         institution_code_text: "CTZN",
-        cid_short_name: "公民人",
+        institution_code_label: "公民人",
     },
     InstitutionCodeInfo {
         institution_code: *b"NATP",
         institution_code_text: "NATP",
-        cid_short_name: "自然人",
+        institution_code_label: "自然人",
     },
     InstitutionCodeInfo {
         institution_code: *b"SMTP",
         institution_code_text: "SMTP",
-        cid_short_name: "智能人",
+        institution_code_label: "智能人",
     },
     // H 非法人组织(1,4 位)
     InstitutionCodeInfo {
         institution_code: *b"UNIN",
         institution_code_text: "UNIN",
-        cid_short_name: "非法人组织",
+        institution_code_label: "非法人组织",
     },
     // I 个人多签(1,4 位,不发号)
     InstitutionCodeInfo {
         institution_code: *b"PMUL",
         institution_code_text: "PMUL",
-        cid_short_name: "个人多签",
+        institution_code_label: "个人多签",
     },
 ];
 
@@ -810,17 +810,17 @@ pub fn institution_code_text(code: &InstitutionCode) -> Option<&'static str> {
     institution_info(code).map(|info| info.institution_code_text)
 }
 
-/// 机构码对应的机构实体中文简称。
-pub fn cid_short_name(code: &InstitutionCode) -> Option<&'static str> {
-    institution_info(code).map(|info| info.cid_short_name)
+/// 机构码对应的中文标签。
+pub fn institution_code_label(code: &InstitutionCode) -> Option<&'static str> {
+    institution_info(code).map(|info| info.institution_code_label)
 }
 
-/// 解析机构码:接受 3/4 字符机构码或机构实体中文简称。
+/// 解析机构码:接受 3/4 字符机构码或机构码中文标签。
 pub fn institution_code_from_str(value: &str) -> Option<InstitutionCode> {
     let v = value.trim();
     INSTITUTION_CODE_INFOS
         .iter()
-        .find(|info| info.institution_code_text == v || info.cid_short_name == v)
+        .find(|info| info.institution_code_text == v || info.institution_code_label == v)
         .map(|info| info.institution_code)
 }
 
@@ -1007,7 +1007,7 @@ mod tests {
             assert!(text.chars().all(|ch| ch.is_ascii_uppercase()));
             assert_eq!(institution_code_from_str(text), Some(info.institution_code));
             assert_eq!(
-                institution_code_from_str(info.cid_short_name),
+                institution_code_from_str(info.institution_code_label),
                 Some(info.institution_code)
             );
         }
@@ -1021,7 +1021,7 @@ mod tests {
     #[test]
     fn classification_spot_check() {
         assert_eq!(institution_code_text(&NRC), Some("NRC"));
-        assert_eq!(cid_short_name(&NRC), Some("国家储委会"));
+        assert_eq!(institution_code_label(&NRC), Some("国家储委会"));
         assert!(is_fixed_governance_code(&NRC));
         assert!(!is_registered_multisig_code(&NRC));
         assert!(is_public_legal_code(&NRC));

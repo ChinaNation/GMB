@@ -1,12 +1,12 @@
 // 链上机构名称注册表（公民钱包签名校验用）。
 //
 // 本文件由 scripts/generate_citizenapp_governance_registry.mjs 自动生成。
-// 唯一事实源是 citizenchain/runtime/primitives/cid/china/china_{cb,ch}.rs。
+// 中文注释：唯一事实源是 citizenchain/runtime/primitives/cid/china/china_{cb,ch}.rs。
 // 冷钱包用同一套映射把 cid_number 还原成中英全称/简称，保证交易摘要与解码结果一致。
 
 /// 机构分类（与服务端 OrgType 对齐）。
 enum InstitutionType {
-  /// 国家公民储备委员会。
+  /// 国家储委会。
   nrc,
 
   /// 省级公民储备委员会。
@@ -37,19 +37,20 @@ class Institution {
   final InstitutionType type;
 }
 
-/// 国家储委会（1）。
+/// 国储会（1）。
 const List<Institution> kNationalCouncils = [
   Institution(
     cidNumber: 'LN001-NRC0G-944805165-2026',
-    cidFullName: '国家公民储备委员会',
+    cidFullName: '中华民族联邦共和国公民储备委员会',
     cidShortName: '国家储委会',
-    cidFullNameEn: 'National Citizen Reserve Committee',
+    cidFullNameEn:
+        'Citizen Reserve Committee of the Federal Republic of the China Nation',
     cidShortNameEn: 'National Reserve Committee',
     type: InstitutionType.nrc,
   ),
 ];
 
-/// 省储委会（43）。
+/// 省储会（43）。
 const List<Institution> kProvincialCouncils = [
   Institution(
     cidNumber: 'ZS001-PRC0E-016974075-2026',
@@ -757,10 +758,9 @@ const List<Institution> kFixedGovernanceInstitutions = [
   ),
   Institution(
     cidNumber: 'ZS001-NJD0T-052283563-2026',
-    cidFullName: '中华民族联邦共和国国家司法院',
+    cidFullName: '中华民族联邦共和国司法院',
     cidShortName: '国家司法院',
-    cidFullNameEn:
-        'National Judicial Yuan of the Federal Republic of the China Nation',
+    cidFullNameEn: 'Judicial Yuan of the Federal Republic of the China Nation',
     cidShortNameEn: 'National Judicial Yuan',
     type: InstitutionType.fixedGovernance,
   ),

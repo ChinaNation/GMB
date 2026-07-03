@@ -472,6 +472,7 @@ impl public_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type InstitutionQuery = ();
     type WeightInfo = ();
 }
 
@@ -479,6 +480,7 @@ impl private_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type InstitutionQuery = ();
     type WeightInfo = ();
 }
 
@@ -529,6 +531,32 @@ pub fn creator() -> AccountId32 {
 
 pub fn beneficiary() -> AccountId32 {
     AccountId32::new([99u8; 32])
+}
+
+/// 用 primitives::cid 真实生成器产 CID 号字节。
+///
+/// tag 与旧假号一一对应:同 tag 产同号(保留去重语义),不同 tag 产不同号。
+pub fn generated_cid_bytes(tag: &str, institution: &str) -> alloc::vec::Vec<u8> {
+    primitives::cid::generator::generate_cid_number(
+        primitives::cid::generator::GenerateCidNumberInput {
+            account_pubkey: tag,
+            // 固定盈利策略机构码忽略 p1;可变/继承策略(如 UNIN)取非盈利。
+            p1: "0",
+            province_code: "GD",
+            province_name: "广东省",
+            city_code: "001",
+            city_name: "荔湾市",
+            year: "2026",
+            institution,
+        },
+    )
+    .expect("cid generates")
+    .into_bytes()
+}
+
+/// 指定机构码的真 CID 号夹具。
+pub fn generated_cid(tag: &str, institution: &str) -> pallet::CidNumberOf<Test> {
+    BoundedVec::try_from(generated_cid_bytes(tag, institution)).expect("cid_number fits")
 }
 
 pub fn cid_number(s: &[u8]) -> pallet::CidNumberOf<Test> {

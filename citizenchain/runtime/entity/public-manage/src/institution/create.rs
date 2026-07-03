@@ -60,6 +60,17 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         Error::<T>::ProtectedSource
     );
     ensure!(!cid_number.is_empty(), Error::<T>::EmptyCidNumber);
+    // CID 号全量校验单源 primitives::cid;机构码必须是公权家族且与参数一致。
+    let parts = primitives::cid::number::parse_cid_number_parts_bytes(cid_number.as_slice())
+        .map_err(|_| Error::<T>::InvalidCidNumber)?;
+    ensure!(
+        primitives::cid::code::is_public_legal_code(&parts.institution),
+        Error::<T>::InvalidCidNumber
+    );
+    ensure!(
+        parts.institution == institution_code,
+        Error::<T>::InvalidCidNumber
+    );
     // public-manage 只管理公权机构,公权机构全称/简称必须上链供 App 直读。
     ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
     ensure!(!cid_short_name.is_empty(), Error::<T>::EmptyAccountName);

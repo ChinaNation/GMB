@@ -100,6 +100,24 @@ fn cid(bytes: &[u8]) -> CidNumberBound {
     bytes.to_vec().try_into().expect("cid number should fit")
 }
 
+/// 按 tag 生成真实规则公民 CID 号(格式/校验和/机构码全合规)。
+fn citizen_cid_number(tag: &str) -> alloc::vec::Vec<u8> {
+    primitives::cid::generator::generate_cid_number(
+        primitives::cid::generator::GenerateCidNumberInput {
+            account_pubkey: tag,
+            p1: "1",
+            province_code: "GD",
+            province_name: "广东省",
+            city_code: "001",
+            city_name: "荔湾市",
+            year: "2026",
+            institution: "CTZN",
+        },
+    )
+    .expect("citizen cid should generate")
+    .into_bytes()
+}
+
 fn name(bytes: &[u8]) -> CitizenNameBound {
     bytes.to_vec().try_into().expect("citizen name should fit")
 }
@@ -143,12 +161,15 @@ fn register_voting_identity_stores_identity_and_counts_scope() {
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
-            voting_payload(1, b"CTZN-0001"),
+            voting_payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
 
         assert!(VotingIdentityByAccount::<Test>::contains_key(1));
-        assert_eq!(AccountByCid::<Test>::get(cid(b"CTZN-0001")), Some(1));
+        assert_eq!(
+            AccountByCid::<Test>::get(cid(&citizen_cid_number("0001"))),
+            Some(1)
+        );
         assert_eq!(CountryVotingCount::<Test>::get(), 1);
         assert_eq!(ProvinceVotingCount::<Test>::get(code(b"43")), 1);
         assert!(CitizenIdentity::can_vote(&1, &town_scope()));
@@ -161,7 +182,7 @@ fn duplicate_cid_cannot_move_to_another_wallet_account() {
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
-            voting_payload(1, b"CTZN-0001"),
+            voting_payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
 
@@ -169,7 +190,7 @@ fn duplicate_cid_cannot_move_to_another_wallet_account() {
             CitizenIdentity::register_voting_identity(
                 RuntimeOrigin::signed(100),
                 200,
-                voting_payload(2, b"CTZN-0001"),
+                voting_payload(2, &citizen_cid_number("0001")),
                 valid_signature(),
             ),
             Error::<Test>::CidAlreadyRegisteredToAnotherAccount
@@ -183,18 +204,24 @@ fn updating_same_account_replaces_cid_without_double_counting() {
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
-            voting_payload(1, b"CTZN-0001"),
+            voting_payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
         assert_ok!(CitizenIdentity::update_voting_identity(
             RuntimeOrigin::signed(100),
             200,
-            voting_payload(1, b"CTZN-0002"),
+            voting_payload(1, &citizen_cid_number("0002")),
             valid_signature(),
         ));
 
-        assert_eq!(AccountByCid::<Test>::get(cid(b"CTZN-0001")), None);
-        assert_eq!(AccountByCid::<Test>::get(cid(b"CTZN-0002")), Some(1));
+        assert_eq!(
+            AccountByCid::<Test>::get(cid(&citizen_cid_number("0001"))),
+            None
+        );
+        assert_eq!(
+            AccountByCid::<Test>::get(cid(&citizen_cid_number("0002"))),
+            Some(1)
+        );
         assert_eq!(CountryVotingCount::<Test>::get(), 1);
         assert_eq!(
             TownVotingCount::<Test>::get((code(b"43"), code(b"4301"), code(b"4301001"))),
@@ -209,7 +236,7 @@ fn candidate_identity_requires_full_profile_and_enables_candidate_reader() {
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
             200,
-            candidate_payload(1, b"CTZN-CANDIDATE"),
+            candidate_payload(1, &citizen_cid_number("CANDIDATE")),
             valid_signature(),
         ));
 
@@ -225,13 +252,13 @@ fn revoke_identity_marks_status_and_removes_population_count() {
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
             200,
-            candidate_payload(1, b"CTZN-REVOKE"),
+            candidate_payload(1, &citizen_cid_number("REVOKE")),
             valid_signature(),
         ));
         assert_ok!(CitizenIdentity::revoke_identity(
             RuntimeOrigin::signed(100),
             200,
-            cid(b"CTZN-REVOKE"),
+            cid(&citizen_cid_number("REVOKE")),
         ));
 
         let stored = VotingIdentityByAccount::<Test>::get(1).expect("identity should remain");
@@ -248,7 +275,7 @@ fn population_snapshot_reads_current_scope_count() {
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
-            voting_payload(1, b"CTZN-0001"),
+            voting_payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
 
@@ -281,7 +308,7 @@ fn invalid_citizen_code_is_rejected() {
 #[test]
 fn expired_passport_cannot_vote_but_still_counts_in_population() {
     new_test_ext().execute_with(|| {
-        let mut payload = voting_payload(1, b"CTZN-EXPIRED");
+        let mut payload = voting_payload(1, &citizen_cid_number("EXPIRED"));
         payload.passport_valid_from = 20200101;
         payload.passport_valid_until = 20250101;
 
@@ -303,7 +330,7 @@ fn expired_passport_cannot_vote_but_still_counts_in_population() {
 #[test]
 fn not_yet_valid_passport_cannot_vote() {
     new_test_ext().execute_with(|| {
-        let mut payload = voting_payload(1, b"CTZN-FUTURE");
+        let mut payload = voting_payload(1, &citizen_cid_number("FUTURE"));
         payload.passport_valid_from = 20300101;
         payload.passport_valid_until = 20400101;
 
@@ -324,7 +351,7 @@ fn candidate_identity_stores_sex_and_public_profile() {
         assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
             RuntimeOrigin::signed(100),
             200,
-            candidate_payload(1, b"CTZN-SEX"),
+            candidate_payload(1, &citizen_cid_number("SEX")),
             valid_signature(),
         ));
 
@@ -345,7 +372,7 @@ fn current_date_int_matches_fixed_time() {
 #[test]
 fn under_sixteen_cannot_register_onchain_identity() {
     new_test_ext().execute_with(|| {
-        let mut payload = voting_payload(1, b"CTZN-UNDERAGE");
+        let mut payload = voting_payload(1, &citizen_cid_number("UNDERAGE"));
         payload.citizen_age_years = 15;
 
         assert_noop!(
@@ -356,6 +383,37 @@ fn under_sixteen_cannot_register_onchain_identity() {
                 valid_signature(),
             ),
             Error::<Test>::UnderVotingAge
+        );
+    });
+}
+
+#[test]
+fn non_citizen_family_code_is_rejected() {
+    new_test_ext().execute_with(|| {
+        // 真实格式的公权机构号(CGOV)打到公民入口必须被家族断言拒绝。
+        let institution_number = primitives::cid::generator::generate_cid_number(
+            primitives::cid::generator::GenerateCidNumberInput {
+                account_pubkey: "gov",
+                p1: "0",
+                province_code: "GD",
+                province_name: "广东省",
+                city_code: "001",
+                city_name: "荔湾市",
+                year: "2026",
+                institution: "CGOV",
+            },
+        )
+        .expect("institution cid should generate")
+        .into_bytes();
+
+        assert_noop!(
+            CitizenIdentity::register_voting_identity(
+                RuntimeOrigin::signed(100),
+                200,
+                voting_payload(1, &institution_number),
+                valid_signature(),
+            ),
+            Error::<Test>::InvalidCitizenCode
         );
     });
 }

@@ -15,9 +15,9 @@ pub struct ChinaLf {
 
 pub const CHINA_LF: &[ChinaLf] = &[
     ChinaLf {
-        cid_full_name: "中华民族联邦共和国国家立法院",
+        cid_full_name: "中华民族联邦共和国立法院",
         cid_short_name: "国家立法院",
-        cid_full_name_en: "National Legislative Yuan of the Federal Republic of the China Nation",
+        cid_full_name_en: "Legislative Yuan of the Federal Republic of the China Nation",
         cid_short_name_en: "National Legislative Yuan",
         cid_number: "ZS001-NLG0H-084852748-2026",
         main_account: hex!("877ed3765a31e9b29a7cefc402f542105a67ed75358c37c2013ea4064b75a073"),

@@ -20,7 +20,20 @@ mod benchmarks {
     #[benchmark]
     fn on_voting_identity_registered() {
         let who = decode_account::<T>([7u8; 32]);
-        let cid_number = b"CTZN-BENCH-0001";
+        let cid_number = primitives::cid::generator::generate_cid_number(
+            primitives::cid::generator::GenerateCidNumberInput {
+                account_pubkey: "bench-0001",
+                p1: "1",
+                province_code: "GD",
+                province_name: "广东省",
+                city_code: "001",
+                city_name: "荔湾市",
+                year: "2026",
+                institution: "CTZN",
+            },
+        )
+        .expect("citizen cid should generate");
+        let cid_number = cid_number.as_bytes();
         let cid_number_hash = T::Hashing::hash(cid_number);
 
         #[block]

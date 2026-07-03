@@ -101,6 +101,24 @@ fn test_cid_number(bytes: &[u8]) -> citizen_identity::CidNumberBound {
     bytes.to_vec().try_into().expect("cid number fits")
 }
 
+/// 按 tag 生成真实规则 CID 号(格式/校验和/机构码全合规)。
+fn real_cid_number(tag: &str, institution: &str, p1: &str) -> Vec<u8> {
+    primitives::cid::generator::generate_cid_number(
+        primitives::cid::generator::GenerateCidNumberInput {
+            account_pubkey: tag,
+            p1,
+            province_code: "GD",
+            province_name: "广东省",
+            city_code: "001",
+            city_name: "荔湾市",
+            year: "2026",
+            institution,
+        },
+    )
+    .expect("cid should generate")
+    .into_bytes()
+}
+
 fn build_voting_identity_payload(
     wallet_account: AccountId,
     cid_number: &[u8],

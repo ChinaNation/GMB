@@ -669,8 +669,14 @@ pub mod pallet {
             payload: &VotingIdentityPayload<T::AccountId>,
         ) -> DispatchResult {
             ensure!(!payload.cid_number.is_empty(), Error::<T>::EmptyCidNumber);
+            // CID 号全量校验(段结构+机构码+盈利位+校验和)单源 primitives::cid,
+            // 且机构码必须是公民人 CTZN。
+            let parts = primitives::cid::number::parse_cid_number_parts_bytes(
+                payload.cid_number.as_slice(),
+            )
+            .map_err(|_| Error::<T>::InvalidCitizenCode)?;
             ensure!(
-                payload.cid_number.as_slice().starts_with(b"CTZN"),
+                parts.institution == *b"CTZN",
                 Error::<T>::InvalidCitizenCode
             );
             ensure!(
@@ -779,8 +785,7 @@ pub mod pallet {
 
         /// 链上当前日期(UTC+8,YYYYMMDD 整数;时间戳未初始化时返回 0,fail-closed)。
         pub fn current_date_int() -> u32 {
-            let secs =
-                <T::TimeProvider as frame_support::traits::UnixTime>::now().as_secs();
+            let secs = <T::TimeProvider as frame_support::traits::UnixTime>::now().as_secs();
             if secs == 0 {
                 return 0;
             }

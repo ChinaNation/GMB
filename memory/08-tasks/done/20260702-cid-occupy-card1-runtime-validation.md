@@ -33,3 +33,10 @@
 ## 状态
 
 - 2026-07-02:建卡。
+- 2026-07-03:**完成**。落地内容:
+  - `primitives::cid::number` 新增 `parse_cid_number_parts_bytes` 字节入口(单源复用)。
+  - `citizen-identity::ensure_valid_voting_payload` 删 `starts_with(b"CTZN")` 残桩,改全量解析 + 机构码必须 CTZN(修真实号全拒的 CRITICAL)。
+  - `public-manage` register/create、`private-manage` register/create 接入全量解析 + 家族断言(公权 `is_public_legal_code`;私权 `is_private_legal_code`||`is_unincorporated_code`),create 另断言号内机构码与 `institution_code` 参数一致;两 pallet 新增 `Error::InvalidCidNumber`。
+  - 测试夹具全仓换真号:citizen-identity(15)、citizen-issuance 单测/集成/benchmark(12+5)、public/private-manage 测试与 benchmark(34+34,含 close 路径 helper 改 tag 签名)、runtime 主 crate(30,含 GCB 旧码假号)、public/private-admins 管理员档案字段字面量;新增 3 个家族拒绝用例(公民入口拒 CGOV、公权入口拒 SFLP、私权入口拒 CGOV);公权 UNIN 用例期望错误改 `InvalidCidNumber`(家族断言先于 lifecycle 检查)。
+  - 顺手修工作区既有断链:entity 两 pallet 测试 mock 补 `type InstitutionQuery = ();`。
+  - 验收:`cargo test -p primitives -p citizen-identity -p citizen-issuance -p public-manage -p private-manage` 与 `cargo test -p citizenchain --lib` 全绿;`cargo check --features runtime-benchmarks` 过;全仓 `b"CID-*"`/`b"CTZN-*"` 手造假号零残留;`cargo fmt --all` 过。
