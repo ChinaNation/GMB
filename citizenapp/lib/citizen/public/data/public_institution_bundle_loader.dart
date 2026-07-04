@@ -1,9 +1,12 @@
-// 公权机构目录数据包载入 —— 版本驱动增量 reconcile(ADR-018 §九 混合模式 ①)。
+// 公权机构创世快照包载入 —— 链上快照驱动 reconcile(ADR-018 §九 混合模式 ①)。
 //
-// 发布期生成的全量目录打进 assets;客户端无服务端,数据靠 assets 包
-// 分发。包版本变了就增量刷新——变的换、删的清、没变的不动,零旧数据残留
-// (只读派生数据,无用户数据)。数据包结构:
-//   assets/public_institutions/manifest.json = { version, provinces:[{province_name,manifest_version}] }
+// 发布期从链上创世状态导出的全量快照打进 assets;客户端把它当本地缓存,
+// 公权机构唯一真源仍是链上状态。快照根或省级版本变了就增量刷新——
+// 变的换、删的清、没变的不动,零旧数据残留(只读派生数据,无用户数据)。
+// 数据包结构:
+//   assets/public_institutions/manifest.json =
+//     { schema_version, genesis_hash, snapshot_block_hash, state_root,
+//       public_institution_root, provinces:[{province_name,manifest_version,shard_hash}] }
 //   assets/public_institutions/<省名>.json    = { province_name, manifest_version, institutions:[...] }
 // provinces[].manifest_version = 该省机构目录版本,内容一变即变。
 
@@ -64,7 +67,7 @@ class PublicInstitutionBundleLoader {
       return loadFromBundle();
     }
 
-    final globalVersion = manifest['version'] as String? ?? '0';
+    final globalVersion = _snapshotVersion(manifest);
     final provinceVers = _parseProvinceVersions(manifest['provinces']);
 
     // 当前数据包必须提供省级版本表;缺失时不猜测、不回退。
@@ -118,7 +121,7 @@ class PublicInstitutionBundleLoader {
 
     final provinceNames =
         provinceVers.map((p) => p.provinceName).toList(growable: false);
-    final fallbackVersion = manifest['version'] as String? ?? '0';
+    final fallbackVersion = _snapshotVersion(manifest);
 
     await store.setProvinceOrder(provinceNames);
     var changed = false;
@@ -204,6 +207,21 @@ class PublicInstitutionBundleLoader {
     } on FormatException {
       return null;
     }
+  }
+
+  /// 全局快照版本优先由链身份锚点 + 公权机构根哈希组成。
+  /// 这样 App 可以区分“同名 version 但实际链快照不同”的发布错误。
+  static String _snapshotVersion(Map<String, dynamic> manifest) {
+    final genesisHash = manifest['genesis_hash']?.toString() ?? '';
+    final snapshotBlockHash = manifest['snapshot_block_hash']?.toString() ?? '';
+    final publicInstitutionRoot =
+        manifest['public_institution_root']?.toString() ?? '';
+    if (genesisHash.isNotEmpty &&
+        snapshotBlockHash.isNotEmpty &&
+        publicInstitutionRoot.isNotEmpty) {
+      return '$genesisHash:$snapshotBlockHash:$publicInstitutionRoot';
+    }
+    return manifest['version'] as String? ?? '0';
   }
 
   /// 解析当前 manifest `provinces:[{province_name,manifest_version}]` → 有序列表。

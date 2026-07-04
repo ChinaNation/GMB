@@ -4,7 +4,8 @@ use std::{
     env,
     io::Read,
     sync::{Mutex, OnceLock},
-    time::Duration,
+    thread,
+    time::{Duration, Instant},
 };
 
 pub(crate) const DEFAULT_LOCAL_RPC_PORT: u16 = 9944;
@@ -14,6 +15,7 @@ const RPC_CONNECT_TIMEOUT_MS: u64 = 2500;
 pub(crate) const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 const GENESIS_HASH_TIMEOUT: Duration = Duration::from_secs(3);
 const GENESIS_HASH_MAX_BYTES: u64 = 1024;
+const RPC_READY_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 static RPC_HTTP_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
 static RPC_HTTP_CLIENT_INIT_LOCK: Mutex<()> = Mutex::new(());
@@ -199,6 +201,12 @@ pub(crate) fn cached_genesis_hash() -> Result<String, String> {
     if let Some(ref hash) = *guard {
         return Ok(hash.clone());
     }
+    let hash_str = fetch_local_genesis_hash()?;
+    *guard = Some(hash_str.clone());
+    Ok(hash_str)
+}
+
+fn fetch_local_genesis_hash() -> Result<String, String> {
     let hash = rpc_post(
         "chain_getBlockHash",
         Value::Array(vec![Value::Number(0.into())]),
@@ -209,9 +217,7 @@ pub(crate) fn cached_genesis_hash() -> Result<String, String> {
         .as_str()
         .ok_or_else(|| "chain_getBlockHash(0) 返回值不是字符串".to_string())?
         .to_string();
-    let hash_str = normalize_genesis_hash(&hash_str)?;
-    *guard = Some(hash_str.clone());
-    Ok(hash_str)
+    normalize_genesis_hash(&hash_str)
 }
 
 /// 校验当前连接的 RPC 节点 genesis hash 是否与首次缓存的一致。
@@ -234,6 +240,34 @@ pub(crate) fn verify_genesis_hash() -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// 等待本机链 RPC 真正可用。
+///
+/// 进程内节点线程存活不等于创世状态已经物化完成;大创世场景下 RPC 端口可能很久
+/// 才会监听。所有 UI 可用态和 OnChina 启动前置检查都以本函数成功读到
+/// `chain_getBlockHash(0)` 为准。
+pub(crate) fn wait_for_local_rpc_ready(timeout: Duration) -> Result<String, String> {
+    let started_at = Instant::now();
+    loop {
+        let last_error = match fetch_local_genesis_hash() {
+            Ok(hash) => {
+                let mutex = CACHED_GENESIS_HASH.get_or_init(|| Mutex::new(None));
+                if let Ok(mut guard) = mutex.lock() {
+                    *guard = Some(hash.clone());
+                }
+                return Ok(hash);
+            }
+            Err(err) => err,
+        };
+        if started_at.elapsed() >= timeout {
+            return Err(format!(
+                "节点 RPC 在 {} 秒内未就绪: {last_error}",
+                timeout.as_secs()
+            ));
+        }
+        thread::sleep(RPC_READY_POLL_INTERVAL);
+    }
 }
 
 /// 节点停止后清除 genesis hash 缓存，以便下次启动时重新校验。

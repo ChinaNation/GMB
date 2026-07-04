@@ -5,7 +5,7 @@ on:
     branches: [main]
     # 中文注释:按 ci-path-routing 文档,node 桌面端/deb 构建只在 node 目录(含
     # chainspecs/)变更时触发。runtime/** 改动只走 citizenchain-wasm.yml;待 wasm CI
-    # 产出新 WASM 重生 node/chainspecs/citizenchain.raw.json 后,推送该文件才触发本 CI。
+    # 产出新 WASM 后用 bake-chainspec.sh 重生 plain SSOT + genesis-state,再推送触发本 CI。
     paths:
       - "citizenchain/node/**"
   workflow_dispatch:
@@ -224,6 +224,12 @@ jobs:
         run: |
           npm --prefix citizenchain/node/frontend ci
           npm --prefix citizenchain/node/frontend run build
+
+      - name: 准备创世状态资源目录
+        run: |
+          # push 检查不生成正式创世状态包;正式安装包由 prepack 从
+          # target/chainspec/genesis-state/ 复制真实 manifest + db。
+          mkdir -p citizenchain/node/resources/genesis-state
 
       - name: 安装 Tauri CLI
         run: cargo install tauri-cli --locked

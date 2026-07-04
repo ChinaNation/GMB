@@ -28,7 +28,9 @@ use serde::Serialize;
 use crate::cid::china::{city_code_by_name, province_code_by_name};
 use crate::cid::InstitutionCategory;
 use crate::core::response::{ApiResponse, PageResult};
-use crate::domains::gov::service::current_chain_projection_version;
+use crate::domains::gov::service::{
+    current_chain_projection_snapshot, current_chain_projection_version,
+};
 use crate::*;
 
 /// 公民端完整公权目录过滤。
@@ -243,6 +245,14 @@ struct PublicInstitutionVersion {
     /// 目录版本 = `chain_projection_state(public-gov)` 投影版本;无投影时 null。
     #[serde(skip_serializing_if = "Option::is_none")]
     manifest_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_genesis_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_block_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_block_number: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    synced_at: Option<String>,
     /// 机构总数(供客户端粗判增删,删除兜底)。
     count: i64,
 }
@@ -286,10 +296,15 @@ pub(crate) async fn public_institutions_version(
             );
         }
     };
+    let projection = current_chain_projection_snapshot(&state.db);
     let data = PublicInstitutionVersion {
         province_name: province.to_string(),
         city_name: city.map(str::to_string),
         manifest_version: version,
+        chain_genesis_hash: projection.as_ref().map(|v| v.chain_genesis_hash.clone()),
+        chain_block_hash: projection.as_ref().map(|v| v.chain_block_hash.clone()),
+        chain_block_number: projection.as_ref().and_then(|v| v.chain_block_number),
+        synced_at: projection.map(|v| v.synced_at),
         count,
     };
     Json(ApiResponse {

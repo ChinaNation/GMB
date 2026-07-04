@@ -101,4 +101,16 @@ void main() {
     expect(api.pageCalls, 2);
     expect(store.byId.length, 2);
   });
+
+  test('后端缺少链投影版本 → 拒绝自造本地版本', () async {
+    final store = FakePublicInstitutionStore();
+    final api = _FakeApi(version: null, pages: const []);
+    final sync = PublicInstitutionSyncService(store: store, api: api);
+
+    expect(
+      () => sync.syncProvince('中枢'),
+      throwsA(isA<StateError>()),
+    );
+    expect(api.pageCalls, 0);
+  });
 }

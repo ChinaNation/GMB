@@ -53,6 +53,9 @@ lib/rpc/
 - `chainspec.json` 必须与目标链的 genesis / properties / bootNodes 一致
 - 如果打进 App 的 chainspec 错了，轻节点即使“连上了”，也可能连到错误链或错误引导节点
 - `bootNodes` 的来源应以 `citizenchain/node/src/chain_spec.rs` 为准
+- 正式创世后,CitizenApp 的 `assets/chainspec.json` 使用轻节点形态,只承载链身份、bootNodes 和 `stateRootHash`;不得内置全节点链数据库或 GB 级 raw state。
+- `assets/public_institutions/` 是从创世链状态导出的公权机构快照缓存,manifest 必须包含 `snapshot_block_number / snapshot_block_hash / genesis_hash / state_root / public_institution_root / shard_hashes`。App 首屏读取本地 Isar/快照缓存,后台通过 OnChina 链上投影 BFF 按 `manifest_version` 增量刷新;`manifest_version` 必须来自链投影 finalized anchor,不得由本地同步时间单独推进。
+- 公权机构唯一真源仍是链上 `PublicManage`;CitizenApp 内置快照、Isar 缓存和 OnChina BFF 都不是授权或真源。
 
 ## 5. 连接与同步策略
 

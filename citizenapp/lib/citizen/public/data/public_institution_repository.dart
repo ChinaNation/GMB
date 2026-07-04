@@ -1,10 +1,9 @@
-// 公权机构目录 repo 门面(ADR-018 §九,混合模式)。
+// 公权机构快照缓存 repo 门面(ADR-018 §九,混合模式)。
 //
 // card B/C 的统一入口。**读全部走本地 store(零链读零网络、秒开)**;
-// 数据包由 [ensureSynced] 在首启后台版本驱动增量同步(包版本变了就增量刷新:
-// 变的换、删的清、没变的不动);某省的在线增量由 [refreshProvince] 后台跑
-// (TTL 节流 + 失败上抛供 UI 决定提示)。UI 一律先读本地、再后台刷新,绝不阻塞
-// 在网络同步上(消除"一直转圈")。
+// 创世快照包由 [ensureSynced] 在首启后台导入/对账;某省链上投影增量由
+// [refreshProvince] 后台跑(TTL 节流 + 失败上抛供 UI 决定提示)。UI 一律先读
+// 本地缓存、再后台刷新,绝不阻塞在网络同步上(消除"一直转圈")。
 
 import 'package:flutter/foundation.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
@@ -144,8 +143,8 @@ class PublicInstitutionRepository {
   ) =>
       store.listSubscribed(walletPubkeyHex);
 
-  /// 后台版本驱动增量同步数据包(包版本变了就增量刷新:变的换、删的清、没变的
-  /// 不动)。返回机构部分是否发生写入。非阻塞调用方:UI 先读本地再调本方法。
+  /// 后台导入/对账内置创世快照包。返回机构部分是否发生写入。
+  /// 非阻塞调用方:UI 先读本地缓存再调本方法。
   Future<bool> ensureSynced() => loader.ensureSynced();
 
   /// 后台刷新某省的在线增量。**非阻塞调用方**:UI 先读本地再调本方法。

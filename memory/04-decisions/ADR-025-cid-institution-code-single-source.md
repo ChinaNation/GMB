@@ -44,7 +44,7 @@
 | ORG_PUP/OTH（机构账户） | `is_institution_code`（公权/私权法人，管理员来自 organization-manage） |
 
 ## 影响
-- **重新创世**：改 CID 号 = 改 china_*.rs 常量 = 派生账户变 = 必须重新创世（用户同意，pre-genesis）。china/账户/代码已就绪，重生 `citizenchain.raw.json`+出 deb+重启节点为用户部署步骤。
+- **重新创世**：改 CID 号 = 改 china_*.rs 常量 = 派生账户变 = 必须重新创世（用户同意，pre-genesis）。china/账户/代码已就绪后,按当前口径重生 `citizenchain.plain.json`、CitizenApp `stateRootHash` 轻形态和 `genesis-state/` 创世链状态包,再出安装包并重启节点。
 - 链端阈值/票数/人数（13/6/6、19/1/1、19/9）统一派生 `primitives::count_const`，桌面端不再硬编码。
 - error/storage 命名去 org：`ProposalsByOrg`→`ProposalsByCode`、`*OrgMismatch`/`InvalidOrg`/`InvalidInternalOrg`→`*Code*`（原地改保留 SCALE index）。
 - 展示侧机构码中文名只允许来自 `cid_short_name`;不得恢复旧标签字段或任意第二份标签表。
@@ -56,5 +56,5 @@
 - **阈值 DoubleMap 删 org 腿（AccountId 已全局唯一）**：用户选"阈值存储键保持"，故只改腿类型 u8→[u8;4]，降低风险。
 
 ## 后续动作
-- [ ] 用户部署：重生 `citizenchain.raw.json` + 出 deb + 重启 6 节点；重跑公权机构数据包 + citizenapp 机构注册表生成器（china 重派生后必须）。
+- [ ] 用户部署：重生 plain SSOT + `genesis-state/` + CitizenApp 轻形态 chainspec,出安装包并重启 6 节点；重跑公权机构快照包（china 重派生后必须）。
 - [ ] 提交（用户授权后）。

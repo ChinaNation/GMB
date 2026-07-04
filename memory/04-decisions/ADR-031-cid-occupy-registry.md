@@ -71,12 +71,15 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 - 模板派生 596,517:「行政区 × 模板」双循环——号 = 生成器现场派生,主/费账户 = `derive_duoqian_account` 现场派生,名称 = 模板组装;与 282 共用 `insert_public_institution`;创世机构不带管理员(后续走联邦特权直设市管理员既有通道)。
 - 构建期逐号断言 `parse_cid_number_parts` + `is_public_legal_code`,坏号创世构建即 panic(fail-fast)。
 
-### 4.3 部署形态改造(必做)
+### 4.3 部署形态改造(必做,2026-07-04 更新)
 
 - 起始 state ≈ 0.7-0.9GB(59.7 万机构 × 机构记录+双账户三索引 ≈1KB);raw chainspec JSON(≈1.5GB+)不可行。
-- 节点:从「raw chainspec include_bytes! 全量 state」改「**plain spec + 首启 GenesisBuilder 本地构建创世**」——冻结语义 = 冻结 runtime+常量,创世哈希全网唯一;首启一次性写 ~420 万存储项,分钟级。
-- CitizenApp/smoldot:chainspec 用 `stateRootHash` 轻形态。
-- 重新创世部署(6 节点 mesh);创世后重跑 citizenapp 机构注册表生成器(死规则:否则机构全断)。
+- 节点:从「raw chainspec include_bytes! 全量 state」改为「**plain spec + 官方创世状态包**」。
+  - plain spec 冻结 runtime WASM、genesis patch、bootNodes、properties。
+  - `bake-chainspec.sh` 用 CI WASM 启动临时节点物化块 0,导出 `genesis-state/chains/citizenchain/db`。
+  - 正式安装包内置 `genesis-state/`,节点首启只复制链数据库;缺包时才允许开发/排障回退到 GenesisBuilder 本地物化。
+- CitizenApp/smoldot:chainspec 用 `stateRootHash` 轻形态,公权机构目录用“创世快照缓存 + 链投影增量更新”。
+- 重新创世部署(6 节点 mesh);创世后重跑 CitizenApp 公权机构快照包生成器(死规则:否则机构全断)。
 
 ### 4.4 规模账(终态)
 
@@ -104,12 +107,16 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 清档 → revoke_cid(PasskeyColdSign)→ 链上墓碑 + 本地清档
 ```
 
-- **机构册只读对账(卡3,2026-07-03 修订)**:创世机构册与 onchina **同源**(primitives 派生代码)——各节点首启用同一套 primitives 本地物化 596,799 条写 subjects/gov/accounts(零网络零交易),启动时随机抽样 32 号 fetch 链上核对(不一致 fail-closed),部署验收另有全量比对 CLI;不做每节点 ~200MB 的全量 WSS 拉取。运行期新增机构走占号先行路径落库;旧 `sfid` 库删除,全仓零 `sfid_number` 残留。
+- **机构册只读投影(卡3,2026-07-04 修订)**:公权机构唯一真源是链上
+  `PublicManage::Institutions` / `InstitutionAccounts`。OnChina 不再按 primitives 或
+  `china.sqlite × 模板` 本地物化公权机构,只能从链上读取并写入 PostgreSQL 查询缓存;
+  链不可达、创世哈希不匹配或链上目录不可读时 fail-closed。运行期新增机构走占号先行路径落库;
+  旧 `sfid` 库删除,全仓零 `sfid_number` 残留。
 
 ## 六、执行顺序
 
 1. **卡2**(`20260702-cid-occupy-card2-occupy-first-flow.md`):3.1 + 3.2 + 3.3 + onchina 提交通路/回写/建档流程——与卡1 同一 runtime 版本;
-2. **卡3**(`20260702-cid-occupy-card3-genesis-legacy-backfill.md`):4.1-4.3 全量直铸 + 部署形态改造 → 重新创世 → 注册表生成器重跑 → onchina 对账同步;
+2. **卡3**(`20260702-cid-occupy-card3-genesis-legacy-backfill.md`):4.1-4.3 全量直铸 + 部署形态改造 → 重新创世 → CitizenApp 公权机构快照包重跑 → onchina 链投影同步;
 3. 终态对账:链上 Institutions = 596,799(genesis 测试断言与推导值一致),onchina 本地库 ↔ 链上两方一致。
 
 ## 七、影响
@@ -123,14 +130,14 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 
 - **建档只做链下查询防重**:TOCTOU 竞态防不住并发,查询不是仲裁。
 - **清档删除链上号**:删除即可复用,污染历史指认;墓碑成本极小。
-- **存量走批量交易上链**(v1 方案):数十笔批量交易+冷签+迁移窗口,全是多余复杂度;"直铸不可行"的旧判断只对 raw chainspec 形态成立,改 plain spec + 首启本地构建后直铸零交易更简。
+- **存量走批量交易上链**(v1 方案):数十笔批量交易+冷签+迁移窗口,全是多余复杂度;"直铸不可行"的旧判断只对 raw chainspec 形态成立,改 plain spec + 官方创世状态包后直铸零交易更简。
 - **占号交易由节点热键自动签**:违背「鉴权真源=链上 Active 管理员集合+冷签 origin」安全边界。
 
 ## 九、风险与防护
 
 - **模板/行政区常量漂移**:导出工具幂等 + genesis 测试断言数量/名称与推导值一致 + 构建期逐号 parse 断言。
 - **smoldot 轻端 chainspec 形态**:stateRootHash 形态需在 CitizenApp 真机验证(卡3 验收项)。
-- **首启构建性能**:~420 万存储项写入,验收记录耗时;不可接受时退化方案为发布「官方预构建创世 DB 快照」(仍零交易)。
+- **首启构建性能**:正式安装包内置官方创世状态包,用户首启只复制链数据库;GenesisBuilder 本地物化仅作为开发/排障兜底,不得作为正式用户默认路径。
 - **占号规模**:公民占号随建档线性增长,`CidRegistry` 条目 ~100B/人,亿级人口 ≈ 数十 GB 级远期 state——链上极简字段已是下限,属注册局链上化的固有账,创世期无感。
 
 ## 状态
@@ -138,6 +145,8 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 - 2026-07-03:**机构信息可维护补齐**(卡 20260703-institution-info-update-and-add-account)——链是机构信息唯一真源(公权/私权统一),私权名改为上链;entity 两 pallet 加 `update_institution_info`(改全称/简称,机构码/CID/省市码物理编码在 CID 里不可改)+ `add_institution_account`(存量机构新增账户,派生地址上链),注册局授权;创世只铸初始版本,今后改名/加账户/新增机构走交易。public 38+private 37 测试绿。剩 onchina 冷签流程/App reconcile/internal-vote 自治路径。
 
 - 2026-07-03:**卡3 代码全部完成**——plain spec 部署形态(chain_spec 切换/bake 重写/宪法检查 RPC 模式/首启物化实测 301s·2.7GB)、smoldot 轻形态(fork 已确认支持 StateRootHash)、onchina 启动抽样对账+audit-chain-catalog 全量比对、同源年份钉死+596,517 交叉测试、runtime 全量断言(抓修 193 常量漏铸)。测试:runtime 31/onchina 135/primitives 45 全绿。剩部署 runbook(方案 E)。
+
+- 2026-07-04:**部署口径更新**——正式节点不再要求每台机器首启全量 GenesisBuilder 物化;`bake-chainspec.sh` 生成冻结 plain spec、CitizenApp `stateRootHash` 轻形态和 `genesis-state/` 链数据库包;节点安装包内置该包,首启复制本地 DB 后等待 RPC ready;OnChina 启动前必须等 `chain_getBlockHash(0)` 成功。
 
 - 2026-07-02:v1 定稿(批量交易方案);同日完成嵌入式库旧机构清理。
 - 2026-07-03:Q1-Q5 已决;卡1 完成归档;命名规则统一并验证;**v2 终稿 = 全量创世直铸 + 运行期占号先行**。

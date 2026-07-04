@@ -10,6 +10,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
 
@@ -155,6 +156,10 @@ pub fn start_onchina(app: &AppHandle) -> Result<(), String> {
     if guard.is_some() {
         return Ok(());
     }
+    // OnChina 启动入口依赖链 RPC 读取 genesis hash 和链上投影。节点线程存在但
+    // 创世 state 尚未物化完成时,这里必须 fail-fast,避免子进程启动后 panic。
+    crate::shared::rpc::wait_for_local_rpc_ready(Duration::from_secs(3))
+        .map_err(|err| format!("链上中国平台启动前检查失败: 本机区块链 RPC 尚未就绪。{err}"))?;
     let Some(binary) = onchina_binary_path(app) else {
         return Err("未找到链上中国平台二进制;开发期请先执行 cargo build -p onchina".to_string());
     };

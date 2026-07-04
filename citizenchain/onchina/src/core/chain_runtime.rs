@@ -386,6 +386,24 @@ struct ChainRpcValueResponse {
     error: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct ChainFinalizedAnchor {
+    pub(crate) block_hash: String,
+    pub(crate) block_number: i64,
+}
+
+#[derive(Deserialize)]
+struct ChainHeaderResponse {
+    result: Option<ChainHeader>,
+    error: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChainHeader {
+    number: String,
+}
+
 async fn fetch_chain_genesis_hash_via_http(http_url: &str) -> Result<[u8; 32], String> {
     let client = reqwest::Client::new();
     let response = client
@@ -452,6 +470,59 @@ async fn fetch_finalized_head_via_http(
     payload
         .result
         .ok_or_else(|| "chain http rpc missing finalized head result".to_string())
+}
+
+async fn fetch_header_via_http(
+    client: &reqwest::Client,
+    http_url: &str,
+    block_hash: &str,
+) -> Result<ChainHeader, String> {
+    let response = client
+        .post(http_url)
+        .json(&serde_json::json!({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "chain_getHeader",
+            "params": [block_hash]
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("connect chain http rpc for header failed: {e}"))?;
+    let status = response.status();
+    let payload: ChainHeaderResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("decode chain http rpc header response failed: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("chain http rpc returned status {status}"));
+    }
+    if let Some(error) = payload.error {
+        return Err(format!("chain http rpc returned error: {error}"));
+    }
+    payload
+        .result
+        .ok_or_else(|| "chain http rpc missing header result".to_string())
+}
+
+fn parse_header_number(raw: &str) -> Result<i64, String> {
+    let hex = raw
+        .strip_prefix("0x")
+        .or_else(|| raw.strip_prefix("0X"))
+        .ok_or_else(|| "chain header number must be hex".to_string())?;
+    i64::from_str_radix(hex, 16).map_err(|e| format!("parse chain header number failed: {e}"))
+}
+
+/// 读取当前 finalized head 作为链投影版本锚点。
+pub(crate) async fn fetch_finalized_anchor() -> Result<ChainFinalizedAnchor, String> {
+    let http_url = super::chain_url::chain_http_url()?;
+    let client = reqwest::Client::new();
+    let block_hash = fetch_finalized_head_via_http(&client, http_url.as_str()).await?;
+    let header = fetch_header_via_http(&client, http_url.as_str(), block_hash.as_str()).await?;
+    let block_number = parse_header_number(header.number.as_str())?;
+    Ok(ChainFinalizedAnchor {
+        block_hash,
+        block_number,
+    })
 }
 
 fn clean_account_hex_key(account_hex: &str) -> String {

@@ -1,10 +1,14 @@
 #!/usr/bin/env node
-// 公权机构目录数据包生成器(ADR-018 §九 混合模式 ①)。
+// 公权机构创世快照包生成器(ADR-018 §九 混合模式 ①)。
 //
-// 发布期从 OnChina 公开接口**keyset 翻页**拉全量公权机构目录,写成 assets 数据包(基线):
-//   assets/public_institutions/manifest.json = { version, generated_at, provinces: [{province_name,manifest_version}] }
+// 发布期从 OnChina 链上投影公开接口**keyset 翻页**拉创世公权机构目录,
+// 写成 CitizenApp 内置快照缓存:
+//   assets/public_institutions/manifest.json =
+//     { schema_version, chain_id, snapshot_block_number, snapshot_block_hash,
+//       genesis_hash, state_root, public_institution_root, shard_hashes, provinces }
 //   assets/public_institutions/<省全名>.json  = { province_name, manifest_version, count, institutions: [...] }
 // App 启动后按省级 manifest_version 做本地 reconcile:只写变化行,并删除包内已消失的 cid。
+// 快照只作本地缓存,公权机构唯一真源仍是链上状态。
 //
 // 量级:确定性目录到镇级,单省上万、全国数十万。**必须用 keyset**(after_cid),
 // 否则 OFFSET 深翻 O(n²) 会非常慢。
@@ -12,15 +16,18 @@
 // 用法(需 OnChina 后端在跑):
 //   ONCHINA_BASE_URL=https://onchina.local:8964 node tools/generate_public_institution_bundle.mjs
 //   可选 --provinces 中枢省,岭南省 只生成部分省;--version 2026-06-13 指定包版本。
+//   必填 --state-root <块0 state root>;--snapshot-block-hash / --genesis-hash 默认取 BFF 链投影。
 //
 // 省全名(含"省")与 china.sqlite / OnChina `province` 字段逐字对齐;展示去"省"由客户端做。
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, '..', 'assets', 'public_institutions');
+const CHAIN_SPEC = join(__dirname, '..', 'assets', 'chainspec.json');
 const BASE_URL = process.env.ONCHINA_BASE_URL || 'https://onchina.local:8964';
 const PAGE_SIZE = 500;
 // 后端默认限流 120 请求/分钟/IP。页间默认延时 550ms(≈109/min,留余量)+ 429 退避重试。
@@ -43,6 +50,14 @@ const DEFAULT_PROVINCES = [
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
   return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : fallback;
+}
+
+function sha256Text(text) {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+function sha256File(path) {
+  return existsSync(path) ? sha256Text(readFileSync(path)) : '';
 }
 
 async function fetchPage(province, afterCid) {
@@ -69,6 +84,14 @@ async function fetchPage(province, afterCid) {
   }
 }
 
+async function fetchVersion(province) {
+  const url = new URL(`${BASE_URL}/api/v1/app/public-institutions/version`);
+  url.searchParams.set('province_name', province);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${province} version failed: ${res.status}`);
+  return (await res.json()).data ?? {};
+}
+
 async function fetchProvince(province) {
   const institutions = [];
   let afterCid = '';
@@ -93,26 +116,54 @@ async function fetchProvince(province) {
 
 async function main() {
   const provincesArg = arg('--provinces', '');
-  const version = arg('--version', new Date().toISOString());
+  const chainId = arg('--chain-id', 'citizenchain');
   const provinces = provincesArg
     ? provincesArg.split(',').map((s) => s.trim()).filter(Boolean)
     : DEFAULT_PROVINCES;
+  const projection = await fetchVersion(provinces[0]);
+  const version = arg('--version', projection.manifest_version || new Date().toISOString());
+  const snapshotBlockNumber = Number(
+    arg('--snapshot-block-number', projection.chain_block_number?.toString() ?? '0'),
+  );
+  const snapshotBlockHash = arg(
+    '--snapshot-block-hash',
+    projection.chain_block_hash || projection.chain_genesis_hash || '',
+  );
+  const genesisHash = arg('--genesis-hash', projection.chain_genesis_hash || snapshotBlockHash);
+  const stateRoot = arg('--state-root', '');
+  const chainspecHash = arg('--chainspec-hash', sha256File(CHAIN_SPEC));
+  const adminDivisionRoot = arg('--admin-division-root', '');
+  if (!snapshotBlockHash || !genesisHash || !stateRoot) {
+    throw new Error(
+      'public institution bundle requires genesis_hash, snapshot_block_hash and state_root; pass --state-root from genesis-state manifest',
+    );
+  }
 
   mkdirSync(OUT_DIR, { recursive: true });
   let total = 0;
   // 省级版本表(增量同步用):[{ province_name, manifest_version }]。
   // 客户端逐省比对 manifest_version,只重灌版本变了的省,没变的省连分片都不读。
   const provinceVersions = [];
+  const shardHashes = {};
+  const rootParts = [];
   for (const province of provinces) {
     const t0 = Date.now();
     const shard = await fetchProvince(province);
-    writeFileSync(
-      join(OUT_DIR, `${province}.json`),
-      JSON.stringify(shard, null, 0),
-    );
+    const shardJson = `${JSON.stringify(shard, null, 0)}\n`;
+    writeFileSync(join(OUT_DIR, `${province}.json`), shardJson);
+    const shardHash = sha256Text(shardJson);
+    shardHashes[province] = shardHash;
     provinceVersions.push({
       province_name: province,
       manifest_version: shard.manifest_version,
+      shard_hash: shardHash,
+      count: shard.count,
+    });
+    rootParts.push({
+      province_name: province,
+      manifest_version: shard.manifest_version,
+      shard_hash: shardHash,
+      count: shard.count,
     });
     total += shard.count;
     console.log(
@@ -122,7 +173,21 @@ async function main() {
   writeFileSync(
     join(OUT_DIR, 'manifest.json'),
     JSON.stringify(
-      { version, generated_at: version, provinces: provinceVersions },
+      {
+        schema_version: 1,
+        chain_id: chainId,
+        snapshot_block_number: Number.isFinite(snapshotBlockNumber) ? snapshotBlockNumber : 0,
+        snapshot_block_hash: snapshotBlockHash,
+        genesis_hash: genesisHash,
+        state_root: stateRoot,
+        chainspec_hash: chainspecHash,
+        admin_division_root: adminDivisionRoot,
+        public_institution_root: sha256Text(JSON.stringify(rootParts)),
+        version,
+        generated_at: version,
+        shard_hashes: shardHashes,
+        provinces: provinceVersions,
+      },
       null,
       2,
     ),

@@ -56,8 +56,12 @@ pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
             state.node_handle.take()
         } else {
             if state.node_handle.is_some() {
-                state.node_state = NodeLifecycleState::Running;
-                state.last_error = None;
+                // 线程存活不代表 RPC 已可用。保留 starting / genesis_preparing /
+                // restarting 等中间态,只修正“不一致的 stopped + handle 存在”状态。
+                if state.node_state == NodeLifecycleState::Stopped {
+                    state.node_state = NodeLifecycleState::Running;
+                    state.last_error = None;
+                }
             }
             None
         }
@@ -74,7 +78,7 @@ pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
         let running = state
             .node_handle
             .as_ref()
-            .map(|handle| handle.is_alive())
+            .map(|handle| handle.is_alive() && state.node_state == NodeLifecycleState::Running)
             .unwrap_or(false);
         (running, state.node_state.as_str().to_string())
     };

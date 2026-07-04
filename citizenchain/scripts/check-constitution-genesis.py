@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""检查 raw chainspec 是否具备公民宪法创世冻结条件。
+"""检查公民宪法创世冻结条件。
 
-本脚本只读 raw chainspec,不连接节点、不依赖 runtime metadata。
+本脚本支持读取已有 chainspec 的 raw storage,也支持通过 RPC 读取已物化块 0 storage。
 检查项:
 1. `:code` 存在,可选校验其字节等于指定 CI WASM。
 2. `LegislationYuan::Laws[0]` 是宪法、全国 scope、v1 生效、无待生效版。
@@ -341,7 +341,7 @@ def check(path: Path | None, expect_code_file: Path | None, rpc_top=None) -> Non
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="检查公民宪法创世冻结条件(raw 文件或 --rpc 临时节点)")
+    parser = argparse.ArgumentParser(description="检查公民宪法创世冻结条件(chainspec 文件或 --rpc 临时节点)")
     parser.add_argument("chainspec", type=Path, nargs="?")
     parser.add_argument("--expect-code-file", type=Path)
     parser.add_argument("--rpc", help="临时节点 RPC 地址,如 http://127.0.0.1:19944")
@@ -349,7 +349,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.rpc is None and args.chainspec is None:
-        parser.error("必须提供 raw chainspec 文件或 --rpc")
+        parser.error("必须提供 chainspec 文件或 --rpc")
 
     try:
         check(

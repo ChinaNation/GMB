@@ -24,6 +24,7 @@ set -euo pipefail
 APP_DATA_DIR="$HOME/Library/Application Support/gmb.dev"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CHAIN_ROOT="$(dirname "$SCRIPT_DIR")"   # citizenchain/
+GENESIS_STATE_RESOURCE_DIR="$CHAIN_ROOT/node/resources/genesis-state"
 
 cleanup() {
     echo ""
@@ -57,6 +58,7 @@ rm -rf "$DB_DIR"
 echo "==> 删除链上中国平台内嵌 PG 数据(随新创世全新 initdb):$ONCHINA_PGDATA"
 rm -rf "$ONCHINA_PGDATA"
 echo "    已清链(node-key/keystore/tls 保留)"
+mkdir -p "$GENESIS_STATE_RESOURCE_DIR"
 
 # ── 3. onchina 控制台 dev 配置 ──
 # 启动节点不需要任何机构鉴权/身份;此处仅准备链上中国平台手动启动所需资源(内嵌 PG + 前端 + china.sqlite)。
@@ -81,10 +83,8 @@ export ONCHINA_CHINA_DB="$CHAIN_ROOT/onchina/src/cid/china/china.sqlite"
 export ONCHINA_FRONTEND_DIST="$CHAIN_ROOT/onchina/frontend/dist"
 export ONCHINA_ENABLE_TLS=1
 export ONCHINA_TLS_DIR="$APP_DATA_DIR/onchina-tls"
-# 本地开发让链上中国平台启动时自动对账公权机构目录(全新内嵌 PG 是空库,
-#   首启需把 40 万+ 公权机构从 china.sqlite 生成进库;首次较慢,之后增量对账很快),
-#   否则启动期"目录落后"守卫会 panic、平台起不来。
-export ONCHINA_GOV_AUTO_RECONCILE=1
+# 公权机构目录只允许从链上投影到本地缓存;clean-run 不再打开旧本地生成开关。
+# 链不可达或投影不可读时,链上中国按 fail-closed 拒绝启动。
 
 # ── dev 平台签名与链上凭证签发配置(本地测试值)──
 # 这些变量只让本地能签登录 QR 挑战和链上凭证;节点启动、平台启动、

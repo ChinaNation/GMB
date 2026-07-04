@@ -16,12 +16,11 @@ DART_DEFINES=(--dart-define=CITIZENAPP_ONCHINA_ENV=dev_usb)
 ANDROID_TARGET_PLATFORMS=(--target-platform android-arm,android-arm64)
 echo "[启动模式] smoldot 轻节点"
 
-# ── chainspec.json 是从链端 SSOT 派生的轻节点创世,启动前校验与 SSOT 一致 ──
-# SSOT = citizenchain/node/chainspecs/citizenchain.raw.json(:code 永远是 CI WASM)。
-# chainspec 决定 genesis hash → libp2p 通知协议名;与 SSOT 不一致会让 smoldot 握手
-# 直接 ProtocolNotAvailable、永远连不上链。重新创世请先跑
-# citizenchain/scripts/bake-chainspec.sh 同步 SSOT 与本副本;runtime 升级走链上
-# system.setCode,绝不重新 build-spec。详见 memory/07-ai/chainspec-frozen.md
+# ── chainspec.json 是从链端 plain SSOT + 创世状态包派生的轻节点创世 ──
+# 节点 SSOT = citizenchain/node/chainspecs/citizenchain.plain.json;App 资产只保留
+# genesis.stateRootHash 轻形态。正式创世请先跑 citizenchain/scripts/bake-chainspec.sh
+# 同步 plain SSOT、App 轻形态和 genesis-state;runtime 升级走链上 system.setCode。
+# 详见 memory/07-ai/chainspec-frozen.md
 bash "$SCRIPT_DIR/check-chainspec-frozen.sh"
 
 # ── 启动前 adb 健康自检：只在 adb 真正卡死时才重置，健康时绝不触碰 ──

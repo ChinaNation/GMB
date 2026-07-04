@@ -63,6 +63,7 @@ citizenchain/onchina/src/
 - 投影状态写入 `chain_projection_state(projection_key='public-gov')`;旧 `gov_manifest`、`ensure-gov`、`reconcile-gov`、`check-gov` 均不得恢复。
 - 普通列表、联邦注册局详情和本机构显示页只能读取 `gov.source='CHAIN'` 的公权投影；本地手工/pending 行不能冒充链上公权机构真源。
 - `audit-chain-catalog` 只做创世链目录验收,不得用本地派生结果灌库。
+- CitizenApp 公权机构接口只读取链上投影并下发 `chain_genesis_hash / chain_block_hash / chain_block_number / synced_at` 作为同步锚点;`manifest_version` 由 genesis hash + finalized block hash/number + 投影数量组成,不得使用本地 `synced_at` 单独推进版本,也不得把 OnChina PostgreSQL 当成公权机构真源。
 
 ## 5. 公民录入和护照号
 
@@ -145,6 +146,14 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 - 本接口不接受前端传入 `cid_number`；后端只从当前节点 active binding 的 `institution_cid_number` 定位本机构，避免变成任意机构详情读取入口。
 - 返回数据仍来自结构化 `subjects/accounts` 投影；管理员资格由登录守卫、节点绑定和链上 active admins 校验决定。
 - `GET /api/v1/admin/own-institution-admins` 继续只返回链上 active admin 列表，展示字段来自链上 `AdminProfile` 投影。
+
+### 10.2 CitizenApp 公权机构只读接口
+
+- `GET /api/v1/app/public-institutions` 提供匿名只读公权机构链上投影分页;请求字段为 `province_name / city_name / since_version / after_cid / page_size`。
+- `GET /api/v1/app/public-institutions/version` 返回当前 scope 的 `manifest_version / chain_genesis_hash / chain_block_hash / chain_block_number / synced_at / count`。
+- `manifest_version` 由 `chain_projection_state(public-gov)` 的 `chain_genesis_hash / chain_block_hash / chain_block_number / item_count / account_count` 生成,只作为 CitizenApp 本地缓存游标;链上 `PublicManage` 仍是唯一真源。
+- 接口只下发行政区 code,不下发行政区名称副本;CitizenApp 通过内置行政区字典按 `province_code / city_code / town_code` join 名称。
+- 接口不得读取 `china.sqlite` 运行态派生公权机构,也不得把本地 `subjects/gov/accounts` 投影作为授权真源。
 
 ## 11. 验收
 

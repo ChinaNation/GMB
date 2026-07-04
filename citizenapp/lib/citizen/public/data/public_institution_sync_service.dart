@@ -1,9 +1,8 @@
-// 公权机构目录增量同步(ADR-018 §九 混合模式 ②)。
+// 公权机构链上投影增量同步(ADR-018 §九 混合模式 ②)。
 //
-// 版本(MAX updated_at)无变化则跳过(零拉取);有变化时走 **keyset + since
-// 增量**——带本地版本 since 去问,后端只回 updated_at 之后变过的行(通常空或几条),
-// keyset 翻页直到无更多,upsert 写回 + 推进版本戳。首次(无本地版本)since=null 即全量。
-// R3:走 CID HTTP,不扫链。
+// 本地版本等于 OnChina `chain_projection_state(public-gov)` 链投影版本时跳过;
+// 有变化时走 keyset + since_version。OnChina 只是链上状态投影/索引服务,
+// 不是公权机构真源;App 本地 Isar 也只是快照缓存。
 
 import 'public_institution_api.dart';
 import 'public_institution_dto.dart';
@@ -22,14 +21,15 @@ class PublicInstitutionSyncService {
   Future<bool> syncProvince(String province) async {
     final remote = await api.fetchVersion(provinceName: province);
     final remoteVersion = remote.manifestVersion;
+    if (remoteVersion == null || remoteVersion.isEmpty) {
+      throw StateError('public institution chain projection version missing');
+    }
     final localVersion = await store.provinceVersion(province);
-    if (remoteVersion != null && remoteVersion == localVersion) {
+    if (remoteVersion == localVersion) {
       return false;
     }
-    final newVersion =
-        remoteVersion ?? DateTime.now().millisecondsSinceEpoch.toString();
 
-    // 有本地版本→只拉 updated_at 之后的增量;无本地版本→全量(since=null)。
+    // 有本地版本→请求链投影增量;无本地版本→全量窗口。
     final since = localVersion;
     final changed = <PublicInstitutionDto>[];
     String? afterCid;
@@ -46,9 +46,9 @@ class PublicInstitutionSyncService {
     }
 
     if (changed.isNotEmpty) {
-      await store.upsertInstitutions(changed, catalogVersion: newVersion);
+      await store.upsertInstitutions(changed, catalogVersion: remoteVersion);
     }
-    await store.setProvinceVersion(province, newVersion);
+    await store.setProvinceVersion(province, remoteVersion);
     return true;
   }
 }

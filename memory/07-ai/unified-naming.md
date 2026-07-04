@@ -162,6 +162,14 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 机构简称 | `cid_short_name` | API / call data | 机构简称,用于列表和紧凑展示 |
 | 机构英文全称 | `cid_full_name_en` | API / call data / runtime primitives | 机构英文全称,具体名称规范见 `memory/07-ai/institution-naming.md` |
 | 机构英文简称 | `cid_short_name_en` | API / call data / runtime primitives | 机构英文简称,具体名称规范见 `memory/07-ai/institution-naming.md` |
+| 快照区块高度 | `snapshot_block_number` | JSON manifest / API | 本地快照导出时对应的链上区块高度,创世快照固定为 0 |
+| 快照区块哈希 | `snapshot_block_hash` | JSON manifest / API | 本地快照导出时对应的链上区块哈希,创世快照等于 `genesis_hash` |
+| 创世哈希 | `genesis_hash` | JSON manifest / API / node RPC | 链身份锚点,来自 `chain_getBlockHash(0)` |
+| 状态根 | `state_root` | JSON manifest / chainspec | 快照区块头中的 state root,用于校验轻节点和快照来源 |
+| 公权机构根哈希 | `public_institution_root` | CitizenApp 公权机构快照 manifest / 创世链状态包 manifest | 按省级分片 hash 计算出的公权机构快照根哈希,只证明快照内容,不作为真源 |
+| 分片哈希表 | `shard_hashes` | CitizenApp 公权机构快照 manifest | 省级公权机构分片文件名到 sha256 的映射 |
+| 链投影区块哈希 | `chain_block_hash` | OnChina `chain_projection_state` / API | OnChina 本地投影对应的链上 finalized 区块哈希;为空表示创世全量投影未记录具体后续块 |
+| 链投影区块高度 | `chain_block_number` | OnChina `chain_projection_state` / API | OnChina 本地投影对应的链上 finalized 区块高度 |
 | 账户名称 | `account_name` | API / call data | 机构账户名 |
 | 签发机构 CID 号 | `issuer_cid_number` | credential / call data | 签发凭证的机构 CID 号 |
 | 签发机构主账户 | `issuer_main_account` | credential / call data | 签发凭证的机构主账户,用于查询 `admins-change` 管理员真源 |

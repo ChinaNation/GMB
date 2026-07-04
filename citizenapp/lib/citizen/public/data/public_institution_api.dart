@@ -1,9 +1,10 @@
-// 公权机构目录 CID 公开接口客户端(匿名只读)。
+// 公权机构链上投影公开接口客户端(匿名只读)。
 //
-// 对应 CID BFF(混合模式:keyset 翻页 + updated_at 增量):
+// 对应 OnChina BFF(混合模式:keyset 翻页 + 链投影版本增量):
 //   GET /api/v1/app/public-institutions?province_name=&city_name=&since_version=&after_cid=&page_size=
 //   GET /api/v1/app/public-institutions/version?province_name=&city_name=
-// 走 CidApiConfig 唯一地址策略,无鉴权头,带超时(杜绝无限转)。
+// 走 CidApiConfig 唯一地址策略,无鉴权头,带超时(杜绝无限转)。BFF 只提供链上
+// 状态索引,不改变“公权机构唯一真源是链上”的边界。
 
 import 'dart:convert';
 
@@ -18,14 +19,22 @@ class PublicInstitutionVersion {
     required this.provinceName,
     this.cityName,
     this.manifestVersion,
+    this.chainGenesisHash,
+    this.chainBlockHash,
+    this.chainBlockNumber,
+    this.syncedAt,
     this.count = 0,
   });
 
   final String provinceName;
   final String? cityName;
 
-  /// 目录版本 = MAX(updated_at) RFC3339;增量同步 since 用。
+  /// 目录版本 = OnChina `chain_projection_state(public-gov)` 链投影版本;增量同步 since 用。
   final String? manifestVersion;
+  final String? chainGenesisHash;
+  final String? chainBlockHash;
+  final int? chainBlockNumber;
+  final String? syncedAt;
   final int count;
 }
 
@@ -100,6 +109,10 @@ class PublicInstitutionApi {
       provinceName: data['province_name'] as String? ?? provinceName,
       cityName: data['city_name'] as String?,
       manifestVersion: data['manifest_version'] as String?,
+      chainGenesisHash: data['chain_genesis_hash'] as String?,
+      chainBlockHash: data['chain_block_hash'] as String?,
+      chainBlockNumber: (data['chain_block_number'] as num?)?.toInt(),
+      syncedAt: data['synced_at'] as String?,
       count: (data['count'] as num?)?.toInt() ?? 0,
     );
   }

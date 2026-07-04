@@ -45,7 +45,7 @@
 - [x] 更新文档、完善注释、清理残留。
 - [x] 执行测试和运行态/脚本验收。
 - [x] GitHub `CitizenChain WASM` CI 成功后下载正式 artifact。
-- [x] 用 CI WASM 烘焙正式 `citizenchain.raw.json` 并同步 `citizenapp/assets/chainspec.json`。
+- [x] 用 CI WASM 烘焙正式创世资产(历史口径为 `citizenchain.raw.json`;当前口径已改为 plain SSOT + genesis-state + CitizenApp `stateRootHash`)。
 - [x] 重新构建 node 并用全新临时 base-path 完成真实节点烟测。
 
 ## 验收记录
@@ -59,8 +59,7 @@
 - GitHub `CitizenChain WASM` run `28492547251`：`success`，提交 `208ae60d81828d04946239e21b648b8f1ba0c2a0`，artifact `citizenchain-wasm` id `7999877697`。
 - CI WASM `citizenchain.compact.compressed.wasm` sha256：`b6d8c9dcee90df963dcda89c96b18c8f3361d37f31c52686dddda0480195df92`。
 - `citizenchain/scripts/bake-chainspec.sh --out citizenchain/target/chainspec/final-preview.raw.json --wasm citizenchain/target/ci-wasm/208ae60/citizenchain.compact.compressed.wasm`：预览 raw 导出成功，`:code bytes=832584`，宪法 `law_id=0`、`effective_version=1`、`latest_version=1`、`pending=None`。
-- `citizenchain/scripts/bake-chainspec.sh --finalize --wasm citizenchain/target/ci-wasm/208ae60/citizenchain.compact.compressed.wasm`：正式 raw 已同步到 `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json`。
-- `cmp -s citizenchain/node/chainspecs/citizenchain.raw.json citizenapp/assets/chainspec.json`：两份 SSOT 字节完全一致。
-- 两份正式 chainspec 均通过 `check-constitution-genesis.py --expect-code-file`；raw chainspec sha256：`ac54acb5fdad4e21732f8bb0b7724c0435496d3829ca8eb78e23d6838434331c`。
+- `citizenchain/scripts/bake-chainspec.sh --finalize --wasm citizenchain/target/ci-wasm/208ae60/citizenchain.compact.compressed.wasm`：当时按 raw 口径同步正式创世资产;2026-07-04 后正式口径已改为 plain SSOT + genesis-state + CitizenApp `stateRootHash`。
+- 当时两份正式 chainspec 均通过 `check-constitution-genesis.py --expect-code-file`;该记录为历史验收,不是当前部署指引。
 - `cargo build --manifest-path citizenchain/Cargo.toml -p node`：通过，重新把正式 raw 烤进 node debug binary。
 - `CITIZENCHAIN_HEADLESS=1 citizenchain/target/debug/citizenchain --chain citizenchain --base-path citizenchain/target/smoke-final-chain --mining-threads 0 ...`：真实节点烟测通过；genesis hash `0x6c88667d43f5a2690f2cb176f5883e051a057db6bee5fa56bc8337becbf23417`，`constitution_getDocument.source=legislation-raw`。

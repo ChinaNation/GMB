@@ -36,6 +36,16 @@ pub(crate) struct GovChainProjectionReport {
     pub(crate) chain_genesis_hash: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ChainProjectionSnapshot {
+    pub(crate) chain_genesis_hash: String,
+    pub(crate) chain_block_hash: String,
+    pub(crate) chain_block_number: Option<i64>,
+    pub(crate) synced_at: String,
+    pub(crate) item_count: i64,
+    pub(crate) account_count: i64,
+}
+
 #[derive(Debug, Clone)]
 struct ChainInstitutionProjection {
     cid_number: String,
@@ -66,16 +76,50 @@ struct ChainAccountProjection {
 
 /// 当前链上投影版本。HTTP 列表接口只把它作为缓存游标回传,不再表达本地生成目录版本。
 pub(crate) fn current_chain_projection_version(db: &Db) -> Option<String> {
+    current_chain_projection_snapshot(db).map(|snapshot| {
+        format!(
+            "{}:{}:{}:{}:{}",
+            snapshot.chain_genesis_hash,
+            snapshot.chain_block_hash,
+            snapshot
+                .chain_block_number
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+            snapshot.item_count,
+            snapshot.account_count
+        )
+    })
+}
+
+/// 当前链上投影锚点。CitizenApp 只把它作为缓存版本/校验线索,不把 OnChina 当真源。
+pub(crate) fn current_chain_projection_snapshot(db: &Db) -> Option<ChainProjectionSnapshot> {
     db.with_client(|conn| {
         let row = conn
             .query_opt(
-                "SELECT chain_genesis_hash || ':' || COALESCE(chain_block_hash, '') || ':' || synced_at::text
+                "SELECT chain_genesis_hash,
+                        COALESCE(chain_block_hash, ''),
+                        chain_block_number,
+                        synced_at::text,
+                        item_count,
+                        account_count
                  FROM chain_projection_state
                  WHERE projection_key = $1 AND status = 'OK'",
                 &[&PROJECTION_KEY_PUBLIC_GOV],
             )
-            .map_err(|e| format!("query chain projection version failed: {}", postgres_error_text(&e)))?;
-        Ok(row.map(|r| r.get::<_, String>(0)))
+            .map_err(|e| {
+                format!(
+                    "query chain projection version failed: {}",
+                    postgres_error_text(&e)
+                )
+            })?;
+        Ok(row.map(|r| ChainProjectionSnapshot {
+            chain_genesis_hash: r.get(0),
+            chain_block_hash: r.get(1),
+            chain_block_number: r.get(2),
+            synced_at: r.get(3),
+            item_count: r.get(4),
+            account_count: r.get(5),
+        }))
     })
     .ok()
     .flatten()
@@ -109,8 +153,12 @@ pub(crate) fn sync_gov_chain_projection_blocking(
         .ok_or_else(|| "chain genesis hash not initialized".to_string())?;
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| format!("build gov projection sync runtime failed: {e}"))?;
-    let (institutions, accounts) = rt.block_on(read_chain_projection())?;
-    write_chain_projection(db, chain_genesis_hash, institutions, accounts)
+    let (anchor, (institutions, accounts)) = rt.block_on(async {
+        let anchor = chain_runtime::fetch_finalized_anchor().await?;
+        let projection = read_chain_projection().await?;
+        Ok::<_, String>((anchor, projection))
+    })?;
+    write_chain_projection(db, chain_genesis_hash, anchor, institutions, accounts)
 }
 
 async fn read_chain_projection(
@@ -256,6 +304,7 @@ fn parse_chain_account(
 fn write_chain_projection(
     db: &Db,
     chain_genesis_hash: String,
+    anchor: chain_runtime::ChainFinalizedAnchor,
     institutions: Vec<ChainInstitutionProjection>,
     accounts: Vec<ChainAccountProjection>,
 ) -> Result<GovChainProjectionReport, String> {
@@ -332,7 +381,7 @@ fn write_chain_projection(
             "INSERT INTO chain_projection_state (
                 projection_key, chain_genesis_hash, chain_block_hash, chain_block_number,
                 item_count, account_count, status, synced_at
-             ) VALUES ($1, $2, '', NULL, $3, $4, 'OK', now())
+             ) VALUES ($1, $2, $3, $4, $5, $6, 'OK', now())
              ON CONFLICT (projection_key) DO UPDATE SET
                 chain_genesis_hash = EXCLUDED.chain_genesis_hash,
                 chain_block_hash = EXCLUDED.chain_block_hash,
@@ -344,6 +393,8 @@ fn write_chain_projection(
             &[
                 &PROJECTION_KEY_PUBLIC_GOV,
                 &chain_genesis_hash,
+                &anchor.block_hash,
+                &anchor.block_number,
                 &i64::try_from(chain_institutions)
                     .map_err(|_| "chain institution count exceeds i64".to_string())?,
                 &i64::try_from(chain_accounts)

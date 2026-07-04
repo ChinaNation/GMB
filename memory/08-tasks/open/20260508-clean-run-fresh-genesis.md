@@ -1,11 +1,15 @@
 # 任务卡:修复本机清链脚本为最新 CI WASM 重新创世
 
+> 2026-07-04 口径更新:当前正式重新创世不再生成 raw SSOT,而是由
+> `bake-chainspec.sh` 生成 plain SSOT、CitizenApp `stateRootHash` 轻形态和
+> `genesis-state/` 创世链状态包。本卡下方 raw 描述只记录当时历史需求。
+
 ## 任务需求
 
 `citizenchain/scripts/clean-run.sh` 必须执行真正的本机重新创世:
 
 - 下载最新成功的 GitHub `citizenchain-wasm` artifact。
-- 使用该 WASM 生成新的 raw chainspec/genesis。
+- 使用该 WASM 生成新的创世锚点(历史口径为 raw chainspec/genesis;当前口径为 plain + genesis-state)。
 - 清空本机节点数据。
 - 启动桌面端时使用新生成的 fresh chainspec。
 - fresh chainspec 不得携带旧网络 bootnodes,避免清链后重新接回旧链。
@@ -22,9 +26,9 @@
 ## 验收标准
 
 - `clean-run.sh` 不再默认使用冻结主网 chainspec 重新接回旧网络。
-- `clean-run.sh` 生成的 fresh raw chainspec 的 bootNodes 必须为空。
-- fresh raw chainspec 的 genesis `:code` 必须等于下载的最新 CI WASM。
-- 桌面内嵌节点能读取 `CITIZENCHAIN_CHAIN_SPEC` 并使用 fresh raw chainspec 启动。
+- `clean-run.sh` 生成的 fresh chainspec 的 bootNodes 必须为空。
+- fresh chainspec 的 genesis `:code` 必须等于下载的最新 CI WASM。
+- 桌面内嵌节点能读取 `CITIZENCHAIN_CHAIN_SPEC` 并使用 fresh chainspec 启动。
 - Rust 格式化和节点编译检查通过。
 
 ## 执行记录

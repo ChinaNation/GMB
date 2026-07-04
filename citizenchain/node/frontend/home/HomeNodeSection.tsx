@@ -26,6 +26,7 @@ export function HomeNodeSection() {
   const refreshInFlightRef = useRef(false);
   const lifecycleBusy = nodeAction !== null
     || status.state === 'starting'
+    || status.state === 'genesis_preparing'
     || status.state === 'stopping'
     || status.state === 'restarting';
 
@@ -162,26 +163,28 @@ export function HomeNodeSection() {
     ? '启动中...'
     : nodeAction === 'stopping'
       ? '关闭中...'
-      : status.state === 'starting' || status.state === 'restarting'
+      : status.state === 'starting' || status.state === 'genesis_preparing' || status.state === 'restarting'
         ? '启动中...'
         : status.state === 'stopping'
           ? '关闭中...'
-      : status.running
-        ? '关闭'
-        : '启动';
+          : status.running
+            ? '关闭'
+            : '启动';
   const statusLabel = status.running
     ? '运行中'
-    : status.state === 'starting' || status.state === 'restarting'
-      ? '启动中'
-      : status.state === 'stopping'
-        ? '关闭中'
-        : status.state === 'lock_held'
-          ? '数据库锁未释放'
-          : status.state === 'failed'
-            ? '启动失败'
-            : status.state === 'exited'
-              ? '异常退出'
-              : '已停止';
+    : status.state === 'genesis_preparing'
+      ? '创世准备中'
+      : status.state === 'starting' || status.state === 'restarting'
+        ? '启动中'
+        : status.state === 'stopping'
+          ? '关闭中'
+          : status.state === 'lock_held'
+            ? '数据库锁未释放'
+            : status.state === 'failed'
+              ? '启动失败'
+              : status.state === 'exited'
+                ? '异常退出'
+                : '已停止';
   const confirmTitle = pendingNodeAction === 'stop' ? '确认关闭节点？' : '确认启动节点？';
   const confirmBody = pendingNodeAction === 'stop'
     ? '节点将停止运行，软件保持打开。'

@@ -24,13 +24,14 @@ trap cleanup EXIT INT TERM HUP
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"   # citizenchain/
 TARGET_DIR="$REPO_ROOT/target"
+GENESIS_STATE_RESOURCE_DIR="$REPO_ROOT/node/resources/genesis-state"
 
 # 本地启动脚本只使用当前源码构建 runtime WASM。
 # runtime 正式升级走链上 setCode，桌面端启动不再从 GitHub CI 下载 wasm 产物。
 unset WASM_FILE
 # 开发启动固定使用 gmb.dev，避免和正式安装版争用同一份 RocksDB。
 export CITIZENCHAIN_DATA_PROFILE=dev
-mkdir -p "$TARGET_DIR"
+mkdir -p "$TARGET_DIR" "$GENESIS_STATE_RESOURCE_DIR"
 
 # ── onchina 控制台dev 配置 ──
 # 启动节点不需要任何机构鉴权/身份。这里只让本机能跑起链上中国平台服务:
@@ -58,10 +59,8 @@ export ONCHINA_CHINA_DB="$REPO_ROOT/onchina/src/cid/china/china.sqlite"
 export ONCHINA_FRONTEND_DIST="$REPO_ROOT/onchina/frontend/dist"
 export ONCHINA_ENABLE_TLS=1
 export ONCHINA_TLS_DIR="$HOME/Library/Application Support/gmb.dev/onchina-tls"
-# 本地开发让链上中国平台启动时自动对账公权机构目录(全新内嵌 PG 是空库,
-#   首启需把 40 万+ 公权机构从 china.sqlite 生成进库;首次较慢,之后增量对账很快),
-#   否则启动期"目录落后"守卫会 panic、平台起不来。
-export ONCHINA_GOV_AUTO_RECONCILE=1
+# 公权机构目录只允许从链上投影到本地缓存;开发启动不再打开旧本地生成开关。
+# 链不可达或投影不可读时,链上中国按 fail-closed 拒绝启动。
 
 # ── dev 平台签名与链上凭证签发配置(本地测试值)──
 # 这些变量只让本地能签登录 QR 挑战和链上凭证;节点启动、平台启动、

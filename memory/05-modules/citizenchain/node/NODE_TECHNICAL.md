@@ -70,13 +70,16 @@
 - TxExtension 与 benchmarking.rs 保持一致
 - 矿工热钱包转账 RPC 额外要求一次性令牌；令牌由桌面 Tauri 命令在设备密码校验通过后生成并由 RPC 消费
 
-## 4. Chain Spec（冻结铁律）
+## 4. Chain Spec 与创世链状态包（冻结铁律）
 
-主网创世后,chainspec 永久冻结(memory/feedback_chainspec_frozen.md)。
+主网创世后,chainspec 与创世链状态包都必须永久冻结。公权机构唯一真源是链上
+`genesis + 后续交易状态`;节点本地数据库只是链状态副本。
 
-- 冻结资产：[citizenchain/node/chainspecs/citizenchain.raw.json](../../../../citizenchain/node/chainspecs/citizenchain.raw.json),raw 格式 1.3 MB,含 44 个权威节点 bootnode、token 属性、协议 ID、扁平化 genesis state(含 `:code` 下的 runtime WASM 字节)
-- 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 把 JSON 字节烤进二进制,启动时 `ChainSpec::from_json_bytes` 反序列化。**不再 `with_genesis_config_patch` 现编创世**
-- 全网一致性保证：任何平台、任何 commit 编出来的 binary,内嵌的都是同一份 JSON 字节 → genesis_hash 全网恒等 → 所有节点 P2P handshake 必通过
+- 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、44 个权威节点 bootnode、token 属性和协议 ID。
+- 创世链状态包：`citizenchain/scripts/bake-chainspec.sh` 在临时节点完成创世物化后导出 `target/chainspec/genesis-state/`,包含 `chains/citizenchain/db` 与 `manifest.json`。正式安装包把该目录作为 `genesis-state/` 资源内置。
+- 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 加载冻结 plain JSON;[process/mod.rs](../../../../citizenchain/node/src/home/process/mod.rs) 首次启动时优先把内置 `genesis-state/chains/citizenchain/db` 复制到本机数据目录,没有内置包才回退到 runtime `GenesisBuilder` 本地物化。
+- 全网一致性保证：plain JSON、CI WASM、创世链状态包 manifest 中的 `genesis_hash/state_root/runtime_wasm_hash/chainspec_hash/public_institution_root` 必须一致;后续 runtime 升级一律走链上 `setCode`,不重写创世包。
+- 运行态可用标准：进程内节点线程存活不等于节点可用。首页状态和链上中国启动前置检查都必须等待 `chain_getBlockHash(0)` 成功;RPC ready 前显示“创世准备中”,不得标记“运行中”。
 
 正式创世冻结流程(只做一次,**永不重做**):
 
@@ -84,7 +87,8 @@
 2. 取 `citizenchain.compact.compressed.wasm` 作为创世 `:code` 字节源。
 3. 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>`。
 4. 脚本必须通过 `check-constitution-genesis.py --expect-code-file <CI_WASM>` 校验,确认 `:code` 字节等于 CI WASM,公民宪法 `law_id=0`、v1 直接生效且无待生效版。
-5. git commit 入库两份 SSOT:`citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json`。
+5. 脚本生成三份发布输入:`citizenchain/node/chainspecs/citizenchain.plain.json`、`citizenapp/assets/chainspec.json`、`target/chainspec/genesis-state/`。
+6. 正式打包前必须把 `target/chainspec/genesis-state/` 放入 Tauri 资源 `genesis-state/`,或在验收时用 `CITIZENCHAIN_GENESIS_STATE_DIR` 指向该目录。
 
 后续 runtime 升级一律走链上 `setCode`(governance/runtime-upgrade),**绝不**重新烘焙或覆盖这份 JSON。
 
@@ -93,16 +97,15 @@
 - [clean-run.sh](../../../../citizenchain/scripts/clean-run.sh) 只用于本机清开发链后按当前源码现造 fresh genesis；runtime WASM 来自当前源码构建，不下载 CI artifact。
 - clean-run 不再执行 `seed-federal-admins`；联邦注册局管理员省映射全走链上 `PublicAdmins::FederalRegistryProvinceGroups`。
 - 正式创世前需要真正替换仓库 SSOT 时,唯一入口是 [bake-chainspec.sh](../../../../citizenchain/scripts/bake-chainspec.sh)。
-- `bake-chainspec.sh` 用 `citizenchain-fresh` 入口生成新的 raw chainspec,并保留当前 SSOT 中的 44 个权威节点 bootNodes。
-- fresh raw chainspec 的 genesis `:code` 必须与下载的 CI WASM 字节一致。
-- 脚本同时写回 `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json`,保证全节点和轻节点使用同一创世。
+- `bake-chainspec.sh` 用 `citizenchain-fresh` 入口生成新的 plain chainspec,并保留当前 SSOT 中的 44 个权威节点 bootNodes。
+- fresh plain chainspec 的 genesis `:code` 必须与下载的 CI WASM 字节一致。
+- 脚本同时写回 `citizenchain/node/chainspecs/citizenchain.plain.json` 与 `citizenapp/assets/chainspec.json`,并导出 `target/chainspec/genesis-state/`,保证全节点和轻节点使用同一创世锚点。
 
 2026-07-01 正式创世冻结收口:
 
 - GitHub WASM run:`28492547251`,提交 `208ae60d81828d04946239e21b648b8f1ba0c2a0`,artifact `citizenchain-wasm` id `7999877697`。
 - CI WASM `citizenchain.compact.compressed.wasm` sha256:`b6d8c9dcee90df963dcda89c96b18c8f3361d37f31c52686dddda0480195df92`。
-- raw chainspec sha256:`ac54acb5fdad4e21732f8bb0b7724c0435496d3829ca8eb78e23d6838434331c`。
-- `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json` 完全一致。
+- 当时仍处 raw 过渡口径;2026-07-04 后正式口径改为 plain SSOT + genesis-state + CitizenApp stateRootHash。
 - genesis hash:`0x6c88667d43f5a2690f2cb176f5883e051a057db6bee5fa56bc8337becbf23417`。
 - 宪法创世检查通过:`law_id=0`、`tier=Constitution`、`effective_version=1`、`latest_version=1`、`pending_version=None`,不可修改条款 `1,2,3,17,19,24,34,42` manifest 与创世条文摘要一致。
 - 临时全新 base-path 真实节点烟测通过,`constitution_getDocument.source=legislation-raw`。
@@ -110,8 +113,7 @@
 2026-06-19 预上线重新创世收口:
 
 - runtime 本地 release WASM blake2:`f213cdc476fb0d1e723421a5bd1f5afafc792b5180852d2266346b967386e680`
-- raw chainspec sha256:`cdf74fd89148ab8d681b020c65f59ff8f93e238a1404da44a7b47fae8bb4757a`
-- `citizenchain/node/chainspecs/citizenchain.raw.json` 与 `citizenapp/assets/chainspec.json` 完全一致。
+- 当时产物为历史 raw 形态;2026-07-04 后不再作为当前部署口径。
 - bootNodes 保持 44 个;伊犁省权威节点域名为 `prcyls.crcfrcn.com`。
 
 历史:2026-05-06 首次冻结,源 nrcgch.crcfrcn.com,sha256 `2b9f46e4aefb66f892d5dc170b2c2bfc33b6b12a88192617b06c18e8ea38a2db`。
@@ -275,7 +277,7 @@
 | `src/core/rpc.rs` | 419 | 节点核心 RPC、钱包绑定签名、哈希率查询、轻节点同步 |
 | `src/mining/gpu_miner.rs` | 392 | OpenCL 初始化、GPU kernel 调度、哈希率统计 |
 | `src/core/command.rs` | 237 | CLI 子命令路由 |
-| `src/core/chain_spec.rs` | 25 | 冻结 chainspec 加载入口(`include_bytes!` + `from_json_bytes`),bootnode/token 属性/genesis state 全在 `chainspecs/citizenchain.raw.json` |
+| `src/core/chain_spec.rs` | 25 | 冻结 plain chainspec 加载入口(`include_bytes!` + `from_json_bytes`),创世链状态包由启动流程复制到本地链数据库 |
 | `src/core/benchmarking.rs` | 180 | Benchmark extrinsic 构建器 |
 | `src/core/cli.rs` | 83 | CLI 参数定义 |
 | `src/core/tls_cert.rs` | 107 | WSS 传输 TLS 证书校验 |
