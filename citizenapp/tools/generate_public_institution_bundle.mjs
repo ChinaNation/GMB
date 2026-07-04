@@ -11,7 +11,7 @@
 // 快照只作本地缓存,公权机构唯一真源仍是链上状态。
 //
 // 量级:创世快照只含国家/省/市公权机构,镇级和新增机构由注册局运行期上链后增量同步。
-// 即使当前快照为 49,581 条,仍必须用 keyset(after_cid),避免以后增量扩容时 OFFSET 深翻 O(n²)。
+// 即使当前快照为 49,593 条,仍必须用 keyset(after_cid),避免以后增量扩容时 OFFSET 深翻 O(n²)。
 //
 // 用法(需 OnChina 后端在跑):
 //   ONCHINA_BASE_URL=https://onchina.local:8964 node tools/generate_public_institution_bundle.mjs
