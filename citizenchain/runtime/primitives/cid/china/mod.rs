@@ -181,6 +181,47 @@ mod derive_consistency_tests {
     }
 
     #[test]
+    fn reserved_account_list_matches_builtin_institution_accounts() {
+        let mut accounts: Vec<[u8; 32]> = Vec::new();
+        macro_rules! push_main_fee {
+            ($arr:expr) => {
+                for node in $arr {
+                    accounts.push(node.main_account);
+                    accounts.push(node.fee_account);
+                }
+            };
+        }
+
+        push_main_fee!(super::china_cb::CHINA_CB);
+        push_main_fee!(super::china_ch::CHINA_CH);
+        push_main_fee!(super::china_zf::CHINA_ZF);
+        push_main_fee!(super::china_jc::CHINA_JC);
+        push_main_fee!(super::china_lf::CHINA_LF);
+        push_main_fee!(super::china_sf::CHINA_SF);
+        push_main_fee!(super::china_jy::CHINA_JY);
+        accounts.extend(
+            super::china_ch::CHINA_CH
+                .iter()
+                .map(|node| node.stake_account),
+        );
+        accounts.push(super::china_cb::SAFETY_FUND_ACCOUNT);
+        accounts.push(super::china_cb::NRC_HE_ACCOUNT);
+        accounts.sort();
+        accounts.dedup();
+
+        assert_eq!(
+            accounts.len(),
+            super::china_zb::CHINA_RESERVED_MAIN_ACCOUNTS.len(),
+            "制度保留地址数量必须覆盖全部内置机构主/费用账户、省储行质押账户和国家储委会基金账户"
+        );
+        assert_eq!(
+            accounts.as_slice(),
+            super::china_zb::CHINA_RESERVED_MAIN_ACCOUNTS.as_slice(),
+            "china_zb.rs 必须与内置制度账户排序去重后一致"
+        );
+    }
+
+    #[test]
     fn builtin_institution_name_have_runtime_digest() {
         let digest = super::builtin_institution_name_digest();
         assert_ne!(digest, [0u8; 32], "内置机构名称四元组 runtime 指纹不可为空");

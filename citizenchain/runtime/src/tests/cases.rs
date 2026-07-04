@@ -915,19 +915,27 @@ fn ordinary_account_allows_all_actions() {
 
 // ── 创世直铸全量断言(ADR-031 卡3 验收)──
 
-/// 创世直铸当前国家/省/市骨架:常量 282 + 模板派生 49,299 = 49,581,零交易;
+/// 创世直铸当前国家/省/市骨架:常量 294 + 模板派生 49,299 = 49,593,零交易;
 /// 镇级公权机构不进创世,运行期由注册局按 town_code 注册上链。
-/// 并抽查派生首条与链上登记逐字节一致、NJD 创世管理员在位。
+/// 并抽查派生首条与链上登记逐字节一致、新补国家级机构入链、NJD 创世管理员在位。
 #[test]
 fn genesis_public_institutions_full_mint_counts() {
     new_test_ext().execute_with(|| {
         genesis_pallet::institution::build::<Runtime>();
 
+        let builtin_count = primitives::cid::china::china_cb::CHINA_CB.len()
+            + primitives::cid::china::china_ch::CHINA_CH.len()
+            + primitives::cid::china::china_zf::CHINA_ZF.len()
+            + primitives::cid::china::china_jc::CHINA_JC.len()
+            + primitives::cid::china::china_sf::CHINA_SF.len()
+            + primitives::cid::china::china_lf::CHINA_LF.len()
+            + primitives::cid::china::china_jy::CHINA_JY.len();
         let total = public_manage::Institutions::<Runtime>::iter().count();
         assert_eq!(
             total,
-            282 + primitives::cid::official_derive::public_institution_derived_count()
+            builtin_count + primitives::cid::official_derive::public_institution_derived_count()
         );
+        assert_eq!(builtin_count, 294);
 
         // 抽查:派生枚举首条必须与链上登记逐字节一致。
         let mut first: Option<(Vec<u8>, Vec<u8>, Vec<u8>)> = None;
@@ -945,6 +953,47 @@ fn genesis_public_institutions_full_mint_counts() {
         let info = public_manage::Institutions::<Runtime>::get(&bounded).expect("derived minted");
         assert_eq!(info.cid_full_name.to_vec(), full);
         assert_eq!(info.cid_short_name.to_vec(), short);
+
+        // 抽查:本任务新增的国家级创世机构必须逐个入链,且机构码与 CID 段一致。
+        let mut new_national_count = 0usize;
+        for node in primitives::cid::china::china_zf::CHINA_ZF.iter().filter(|node| {
+            matches!(
+                primitives::cid::code::institution_code_from_cid_number(node.cid_number),
+                Some(code)
+                    if matches!(
+                        primitives::cid::code::institution_code_text(&code),
+                        Some("ARM" | "NAV" | "AIR" | "SPF" | "JOS" | "ARC" | "NVC" | "AFC" | "SFC" | "NGB" | "NGC" | "FDA")
+                    )
+            )
+        }) {
+            new_national_count += 1;
+            let bounded: frame_support::BoundedVec<u8, _> = node
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("new genesis cid fits");
+            let info =
+                public_manage::Institutions::<Runtime>::get(&bounded).expect("new genesis minted");
+            assert_eq!(info.cid_full_name.to_vec(), node.cid_full_name.as_bytes());
+            assert_eq!(info.cid_short_name.to_vec(), node.cid_short_name.as_bytes());
+            assert_eq!(
+                info.institution_code,
+                primitives::cid::code::institution_code_from_cid_number(node.cid_number)
+                    .expect("new genesis cid code")
+            );
+            assert!(
+                RuntimeReservedAccountGuard::is_reserved(&AccountId::new(node.main_account)),
+                "{} 主账户必须进入制度保留地址表",
+                node.cid_short_name
+            );
+            assert!(
+                RuntimeReservedAccountGuard::is_reserved(&AccountId::new(node.fee_account)),
+                "{} 费用账户必须进入制度保留地址表",
+                node.cid_short_name
+            );
+        }
+        assert_eq!(new_national_count, 12);
 
         // NJD 创世管理员在位(常量特例保留)。
         let njd = primitives::cid::china::china_sf::CHINA_SF

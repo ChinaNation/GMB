@@ -64,11 +64,12 @@ CID 机构的账户名被链端硬翻译成 `InstitutionAccountRole`：
 
 | 类型 | 数量 | 文件 |
 |---|---|---|
-| main_account | 277 | china_cb(44) + china_ch(43) + china_zf(54) + china_jc(47) + china_lf(44) + china_sf(44) + china_jy(1) |
-| fee_account | 87 | china_cb(44) + china_ch(43) |
+| main_account | 294 | china_cb(44) + china_ch(43) + china_zf(71) + china_jc(47) + china_lf(44) + china_sf(44) + china_jy(1) |
+| fee_account | 294 | china_cb(44) + china_ch(43) + china_zf(71) + china_jc(47) + china_lf(44) + china_sf(44) + china_jy(1) |
 | stake_account | 43 | china_ch |
 | SAFETY_FUND_ACCOUNT | 1 | china_cb（全局唯一常量） |
-| `CHINA_RESERVED_MAIN_ACCOUNTS` 汇总 | 408 唯一项 | china_zb（由 scripts/multisig.py 生成） |
+| NRC_HE_ACCOUNT | 1 | china_cb（全局唯一常量） |
+| `CHINA_RESERVED_MAIN_ACCOUNTS` 汇总 | 633 唯一项 | china_zb（内置主/费用账户、省储行质押账户、国家储委会安全基金和两和基金的排序去重表） |
 
 ## 示例
 

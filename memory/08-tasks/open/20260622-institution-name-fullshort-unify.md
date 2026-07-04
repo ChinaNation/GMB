@@ -89,7 +89,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 **reconcile/check-gov**:不得再比较或写入 `name`。Tier 1 名称保护锚由 `china_*.rs` 摘要约束;CID 运营展示名由 `subjects.cid_full_name/cid_short_name/cid_full_name_en/cid_short_name_en` 表达。若执行命令目标是“按保护锚重播内置目录”,则写入这四字段;不再通过字符串匹配另造名字。
 
 ## 落地结果
-1. **链端(citizenchain)**:china_*.rs 各结构体补 `cid_short_name/cid_full_name_en/cid_short_name_en` 字段并填值;加 `builtin_institution_name_digest()` + `BuiltinInstitutionNameApi` runtime API;名称指纹覆盖七个具名常量文件共 282 个机构。
+1. **链端(citizenchain)**:china_*.rs 各结构体补 `cid_short_name/cid_full_name_en/cid_short_name_en` 字段并填值;加 `builtin_institution_name_digest()` + `BuiltinInstitutionNameApi` runtime API;名称指纹覆盖七个具名常量文件共 294 个机构。
 2. **后端(Tier 1)**:删除字符串匹配第二实现,常量机构直接投影 `china_*.rs` 的四个名称字段。
 3. **后端(Tier 2)**:模板 `suffix` 按目标表改造,`GOV_TEMPLATE_VERSION` 已升级,目录 hash 能触发 strict 检查。
 4. **数据库结构**:启动期删除旧展示缓存列;搜索与排序只查 `cid_number / cid_full_name / cid_short_name`。
@@ -102,7 +102,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - 省级常量全称待核对:`china_{lf,sf,jc}.rs`(省两院带不带「联邦」)
 
 ## 1.1 验收记录(2026-06-22)
-- 常量库完整性脚本:通过,7 个具名常量文件共 282 个机构全部具备 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段。
+- 常量库完整性脚本:通过,7 个具名常量文件共 294 个机构全部具备 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段。
 - 旧 runtime API/旧二字段命名扫描:通过,目标文件内未发现旧二字段 API 名称残留。
 - 第二套英文字段名扫描:通过,目标文件内未发现 `english_name` 等替代字段承载机构英文名。
 - `node scripts/generate_citizenapp_governance_registry.mjs`:通过,重新生成公民端和公民钱包 87 个治理机构。

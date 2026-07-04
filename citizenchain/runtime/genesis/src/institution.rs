@@ -382,7 +382,7 @@ fn insert_fixed_admins<T, F>(
 
 /// 创世写入内置公权机构和创世公职人员。
 /// 创世直铸国家/省/市公权机构(ADR-031 v3):纯枚举(primitives 单源)
-/// → 落地存储;账户由 CID 号确定性派生,与 282 常量互不重号。
+/// → 落地存储;账户由 CID 号确定性派生,与 294 常量互不重号。
 fn build_template_institutions<T: public_manage::Config>() {
     primitives::cid::official_derive::for_each_public_institution(|cid, full, short| {
         insert_derived_public_institution::<T>(cid, full, short);
@@ -432,7 +432,7 @@ where
     }
 
     // 常量数组全量直铸(ADR-031 卡3):ZF/JC/SF/LF/JY 逐节点写入机构+双账户,
-    // 与上方 CB/CH 合计 282;创世不带管理员(NJD/FRG 特例在下方单独写入)。
+    // 与上方 CB/CH 合计 294;创世不带管理员(NJD/FRG 特例在下方单独写入)。
     for node in CHINA_ZF.iter() {
         insert_public_institution::<T>(
             node.cid_number,
@@ -519,6 +519,6 @@ where
         );
     }
 
-    // 创世直铸当前国家/省/市公权机构(ADR-031 v3):常量 282 + 派生 49,299。
+    // 创世直铸当前国家/省/市公权机构(ADR-031 v3):常量 294 + 派生 49,299。
     build_template_institutions::<T>();
 }

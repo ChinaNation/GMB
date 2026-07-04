@@ -83,11 +83,11 @@
 - `bash citizenapp/scripts/check-chainspec-frozen.sh`:通过;正式 `citizenapp/assets/chainspec.json` 已切换为 `stateRootHash` 轻形态。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p node -p onchina`:通过;输出 Polkadot SDK 既有循环提示,无编译错误。
 - GitHub `CitizenChain WASM` run `28694378543`:成功;artifact `citizenchain.compact.compressed.wasm` 的 sha256 为 `70e6d1fd01b763628e8b595399487bdfe19191a44a4cfadd5255be0577b9310a`。
-- `citizenchain/scripts/bake-chainspec.sh --finalize --wasm ... --public-institution-root 4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`:通过;`genesis_hash=0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`,`state_root=0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0`,`chainspec_hash=650c1ed8462a326e43394576eaa99f7533f9ee427cf1d80c58cd2922a82d7558`,创世物化 30 秒。
-- `chain_getBlockHash(0)`:临时正式节点返回 `0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`。
-- `onchina sync-gov`:通过;链上投影 `chain_institutions=49581`,`chain_accounts=99162`,`local_institutions=49581`,`local_accounts=99162`,链上创世哈希等于正式锚点。
+- 旧 49,581 口径记录已被本轮 49,593 源码创世废弃:`citizenchain/scripts/bake-chainspec.sh --finalize --wasm ... --public-institution-root 4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318` 曾通过;`genesis_hash=0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`,`state_root=0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0`,`chainspec_hash=650c1ed8462a326e43394576eaa99f7533f9ee427cf1d80c58cd2922a82d7558` 仅作历史对照。
+- 旧 49,581 口径记录已被本轮 49,593 源码创世废弃:`chain_getBlockHash(0)` 曾返回 `0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`,不能作为当前发布锚点。
+- 旧 49,581 口径记录已被本轮 49,593 源码创世废弃:`onchina sync-gov` 曾显示 `chain_institutions=49581`,`chain_accounts=99162`,`local_institutions=49581`,`local_accounts=99162`;当前源码口径重烤后应为 `chain_institutions=49593`,`chain_accounts=99186`,`local_institutions=49593`,`local_accounts=99186`。
 - 新 OnChina `serve` 启动验收:本地投影锚点等于当前 finalized head 时打印 `cid gov chain projection is current; skip startup full sync`,随后抽样对账通过并监听 `http://127.0.0.1:8975`。
-- `GEN_DELAY_MS=0 ONCHINA_BASE_URL=http://127.0.0.1:8975 node citizenapp/tools/generate_public_institution_bundle.mjs ...`:通过;生成 43 个省级分片,合计 49,581 个创世公权机构,`public_institution_root=4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`。
+- 旧 49,581 口径记录已被本轮 49,593 源码创世废弃:`GEN_DELAY_MS=0 ONCHINA_BASE_URL=http://127.0.0.1:8975 node citizenapp/tools/generate_public_institution_bundle.mjs ...` 曾生成 43 个省级分片,合计 49,581 个创世公权机构,`public_institution_root=4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`;当前发布前必须重跑生成 49,593 快照根。
 - `npm --prefix citizenchain/node/frontend run build`:通过,同步重建本地文档索引。
 - `git diff --check`:通过。
 - `git diff --name-only -- citizenchain/runtime`:本轮已按用户二次确认修改 runtime,旧“不修改 runtime”记录不再适用。

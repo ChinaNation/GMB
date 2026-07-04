@@ -97,7 +97,7 @@ gov chain projection:
   projection_state=chain_projection_state(public-gov,status=OK)
 gov chain audit:
   command=onchina audit-chain-catalog
-  expected=49581 public institutions from genesis
+  expected=49593 public institutions from genesis
 public_institutions bundle:
   source=OnChina real API after sync-gov
   code cross-check bad_count=0

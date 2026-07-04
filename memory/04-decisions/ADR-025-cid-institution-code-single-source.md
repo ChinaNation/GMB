@@ -34,7 +34,7 @@
 ### 三阶段消除
 - **Phase 1（后端 number/）**：删 `subject_property`/`SubjectProperty` 枚举 + DB 列；机构类别一律从机构码派生。104 码双布局落地（2026-07-04 补齐 12 个国家级公权机构码）。
 - **Phase 2（后端 org_code）**：删 `subjects.org_code`/`gov.org_code` 列 + 50+ 消费方；改为 primitives 谓词 `admin_level()`、`is_public_legal_code()` 和纯码匹配派生。`registry_org_code`（管理员授权范围 FEDERAL/CITY_REGISTRY，与机构分类无关）**保留**。registry 前端删除旧机构标签 DTO；citizenapp 删除旧机构分类字段并重生 Isar。CPOL 市公安局只作为普通市级公权机构码处理,不得恢复公安局专用分类或专用 seed。
-- **Phase 3（链端 ORG_xx，重新创世）**：旧 `org: u8` 全替换为 `institution_code: [u8;4]`（~499 引用/48 文件）；阈值 `DoubleMap` **保留结构**只改腿类型（用户"阈值存储键保持"）；固定治理档 NRC/PRC/PRB/FRG/NJD 阈值来自代码级常量。china_*.rs 282 内建 cid_number 重烤为专属码（脚本 `scripts/rebake_china_codes.py`，base36 校验位同后端）+ `scripts/gmb.py --apply` 重派生账户。客户端线格式 `org` 1 字节 → 机构码 4 字节（冷/热钱包解码器 offset、node TS invoke 参数）。
+- **Phase 3（链端 ORG_xx，重新创世）**：旧 `org: u8` 全替换为 `institution_code: [u8;4]`（~499 引用/48 文件）；阈值 `DoubleMap` **保留结构**只改腿类型（用户"阈值存储键保持"）；固定治理档 NRC/PRC/PRB/FRG/NJD 阈值来自代码级常量。china_*.rs 294 内建 cid_number 重烤为专属码（脚本 `scripts/rebake_china_codes.py`，base36 校验位同后端）+ `scripts/gmb.py --apply` 重派生账户。客户端线格式 `org` 1 字节 → 机构码 4 字节（冷/热钱包解码器 offset、node TS invoke 参数）。
 
 ### 治理档派生（取代 ORG_xx 语义）
 | 旧 ORG | 新派生 |
