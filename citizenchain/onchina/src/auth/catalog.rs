@@ -25,11 +25,11 @@ fn balance_fen(balances: &BTreeMap<String, Option<String>>, account: &str) -> Op
         .flatten()
 }
 
-/// Tier1 创世注册局管理员列表(本省 5 人组,「全走链读」决策③)。
+/// Tier1 创世注册局管理员列表(全量省级组,「全走链读」决策③)。
 ///
-/// 权威集合在链上 `PublicAdmins::FederalRegistryProvinceGroups[本省省码]`;本接口直读链上账户,
-/// 回填本地缓存(缺失即补,保证有本地 id 供换届按 id 定位),再以缓存元数据(自定义名/时间戳)
-/// 装配返回。省维度即本节点省(每节点单省);FRG/CREG 节点的管理员省一致,故按 ctx 省读本省组。
+/// 权威集合在链上 `PublicAdmins::FederalRegistryProvinceGroups[省码]`;本接口逐省直读链上账户,
+/// 回填本地缓存(缺失即补,保证有本地 id 供换届按 id 定位),并同步
+/// `federal_registry_admin_scopes` 作为同省操作预检缓存。成员资格仍以链上 Active 集合为唯一真源。
 pub(crate) async fn list_federal_registry_admins(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -47,24 +47,28 @@ pub(crate) async fn list_federal_registry_admins(
     else {
         return api_error(StatusCode::FORBIDDEN, 1003, "admin province scope missing");
     };
-    let Some(province_code) = chain_runtime::chain_province_code_by_name(&province) else {
+    if chain_runtime::chain_province_code_by_name(&province).is_none() {
         let message = format!("province '{province}' is not a valid chain province");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+    }
+    // 全走链读:43 个省级 Tier1 创世注册局 5 人组的权威资料集合。
+    let province_groups = match chain_runtime::fetch_all_federal_registry_admin_profiles().await {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::warn!(error = %err, "chain unreachable listing all federal registry admins");
+            return api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable");
+        }
     };
-    // 全走链读:本省 Tier1 创世注册局 5 人组的权威资料集合。
-    let chain_profiles =
-        match chain_runtime::fetch_federal_registry_province_admin_profiles(province_code).await {
-            Ok(v) => v,
-            Err(err) => {
-                tracing::warn!(error = %err, "chain unreachable listing federal registry admins");
-                return api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable");
-            }
-        };
     let now = Utc::now();
     let tier1_code = chain_runtime::TIER1_REGISTRY_CODE.to_string();
-    let balance_accounts = chain_profiles
+    let balance_accounts = province_groups
         .iter()
-        .map(|profile| profile.account_hex.clone())
+        .flat_map(|group| {
+            group
+                .profiles
+                .iter()
+                .map(|profile| profile.account_hex.clone())
+        })
         .collect::<Vec<_>>();
     let balance_by_account = match chain_runtime::fetch_account_balances_onchain(&balance_accounts)
         .await
@@ -76,46 +80,51 @@ pub(crate) async fn list_federal_registry_admins(
         }
     };
     let result = state.db.with_client(move |conn| {
-        let mut rows = Vec::with_capacity(chain_profiles.len());
-        for profile in &chain_profiles {
-            let account = &profile.account_hex;
-            // 缓存缺失即补一条 built_in 行(名字空→显示回退),保证有本地 id 供换届定位。
-            let admin = match repo::get_admin_by_account_conn(conn, account)? {
-                Some(admin) => admin,
-                None => {
-                    let row = AdminUser {
-                        id: repo::next_admin_id_conn(conn)?,
-                        admin_account: account.clone(),
-                        admin_name: String::new(),
-                        institution_code: tier1_code.clone(),
-                        built_in: true,
-                        created_by: "SYSTEM".to_string(),
-                        created_at: now,
-                        updated_at: None,
-                        city_name: String::new(),
-                    };
-                    repo::upsert_admin_conn(conn, &row)?;
-                    repo::get_admin_by_account_conn(conn, account)?
-                        .ok_or_else(|| "federal admin cache backfill lost".to_string())?
-                }
-            };
-            rows.push(FederalRegistryAdminRow {
-                id: admin.id,
-                province_name: province.clone(),
-                admin_account: admin.admin_account,
-                admin_name: profile.name.clone(),
-                admin_cid_number: profile.admin_cid_number.clone(),
-                name: profile.name.clone(),
-                admin_role: profile.admin_role.clone(),
-                term_start: profile.term_start,
-                term_end: profile.term_end,
-                source: profile.source,
-                source_label: profile.source_label.clone(),
-                balance_fen: balance_fen(&balance_by_account, account),
-                built_in: admin.built_in,
-                created_at: admin.created_at,
-                updated_at: admin.updated_at,
-            });
+        let mut rows = Vec::with_capacity(balance_accounts.len());
+        for group in &province_groups {
+            let province_name = group.province_name.clone();
+            let _province_code = group.province_code;
+            for profile in &group.profiles {
+                let account = &profile.account_hex;
+                repo::upsert_federal_registry_admin_scope_conn(conn, account, &province_name)?;
+                // 缓存缺失即补一条 built_in 行(名字空→显示回退),保证有本地 id 供换届定位。
+                let admin = match repo::get_admin_by_account_conn(conn, account)? {
+                    Some(admin) => admin,
+                    None => {
+                        let row = AdminUser {
+                            id: repo::next_admin_id_conn(conn)?,
+                            admin_account: account.clone(),
+                            admin_name: String::new(),
+                            institution_code: tier1_code.clone(),
+                            built_in: true,
+                            created_by: "SYSTEM".to_string(),
+                            created_at: now,
+                            updated_at: None,
+                            city_name: String::new(),
+                        };
+                        repo::upsert_admin_conn(conn, &row)?;
+                        repo::get_admin_by_account_conn(conn, account)?
+                            .ok_or_else(|| "federal admin cache backfill lost".to_string())?
+                    }
+                };
+                rows.push(FederalRegistryAdminRow {
+                    id: admin.id,
+                    province_name: province_name.clone(),
+                    admin_account: admin.admin_account,
+                    admin_name: profile.name.clone(),
+                    admin_cid_number: profile.admin_cid_number.clone(),
+                    name: profile.name.clone(),
+                    admin_role: profile.admin_role.clone(),
+                    term_start: profile.term_start,
+                    term_end: profile.term_end,
+                    source: profile.source,
+                    source_label: profile.source_label.clone(),
+                    balance_fen: balance_fen(&balance_by_account, account),
+                    built_in: admin.built_in,
+                    created_at: admin.created_at,
+                    updated_at: admin.updated_at,
+                });
+            }
         }
         Ok(rows)
     });

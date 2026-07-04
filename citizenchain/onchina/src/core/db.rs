@@ -175,8 +175,18 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_admins_account_lower ON admins(lower(admin_account));
              CREATE INDEX IF NOT EXISTS idx_admins_created_by_lower ON admins(lower(created_by));
 
-             -- `federal_registry_scope` / `provinces` 占位表已退役(决策③)——节点机构
-             -- 归属由 active admin 首次登录绑定,行政区真源为 china.sqlite。
+             -- 联邦注册局 215 名管理员按链上省级 5 人组归属缓存。
+             -- 权限真源仍是 `PublicAdmins::FederalRegistryProvinceGroups`;本表只保存
+             -- 列表展示和同省更换预检所需的省名。
+             CREATE TABLE IF NOT EXISTS federal_registry_admin_scopes (
+                admin_account TEXT PRIMARY KEY,
+                province_name TEXT NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+             CREATE INDEX IF NOT EXISTS idx_frg_admin_scopes_province
+                ON federal_registry_admin_scopes(province_name);
+
+             -- 节点机构归属由 active admin 首次登录绑定,行政区真源为 china.sqlite。
 
              CREATE TABLE IF NOT EXISTS admin_action_challenges (
                 action_id TEXT PRIMARY KEY,

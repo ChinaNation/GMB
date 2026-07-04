@@ -6,7 +6,7 @@
 // 管理员列表由详情页左侧导航显示。数据由 RegistryAdminsView 统一加载。
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Button, Card, Space, Table, Tag, Typography } from 'antd';
+import { Badge, Button, Card, Modal, Space, Table, Tag, Typography } from 'antd';
 import { KeyOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useAuth } from '../hooks/useAuth';
@@ -21,10 +21,15 @@ import type { RegistryAdminsSharedState } from './adminUtils';
 import { usePasskeyRegistration } from '../auth/passkey/usePasskey';
 import { AddCityRegistryAdminModal } from './AddCityRegistryAdminModal';
 import { FederalRegistryAdminSubTab } from './FederalRegistryAdminSubTab';
-import { AdminProfileCard } from './AdminProfileCard';
+import {
+  AdminProfileDetails,
+  adminDisplayName,
+  formatAdminBalanceFen,
+} from './AdminProfileCard';
 import { GovDetailPage } from '../gov/GovDetailPage';
 import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
 import type { InstitutionListRow } from '../subjects/api';
+import { CID_MODAL_Z_INDEX } from '../core/modalStack';
 
 interface RegistryViewProps {
   state: RegistryAdminsSharedState;
@@ -339,6 +344,7 @@ function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins,
   const { auth } = useAuth();
   const { registered: passkeyRegistered, busy: passkeyBusy, register: doRegisterPasskey } =
     usePasskeyRegistration();
+  const [detailTarget, setDetailTarget] = useState<CityRegistryAdminRow | null>(null);
   // 本列表已经按当前市过滤,所以长度就是该市市注册局管理员数量。
   const cityLimitReached = cityRegistryAdmins.length >= MAX_CITY_REGISTRY_ADMINS_PER_CITY;
   return (
@@ -363,48 +369,82 @@ function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins,
         </Space>
       }
     >
-      <Table<CityRegistryAdminRow>
-        rowKey={(r) => `${r.id}-${r.admin_account}`}
-        loading={cityRegistryAdminsLoading}
-        dataSource={cityRegistryAdmins}
-        pagination={{
-          pageSize: 10, current: cityRegistryAdminListPage,
-          onChange: (page) => setCityRegistryListPage(page),
-          showSizeChanger: false,
-          showTotal: (total) => `共 ${total} 条`,
-        }}
-        columns={[
-          {
-            title: '管理员信息',
-            dataIndex: 'admin_account',
-            render: (_v, row, index) => (
-              <AdminProfileCard
-                profile={row}
-                index={(cityRegistryAdminListPage - 1) * 10 + index + 1}
-              />
-            ),
-          },
-          {
-            title: '操作', width: 320, align: 'center' as const,
-            render: (_v: unknown, row: CityRegistryAdminRow) => {
-              const isSelf = sameHexAccount(row.admin_account, auth?.admin_account);
-              return (
-                <Space>
-                  {canEditCityRegistryAdmins ? <Button size="small" danger onClick={() => onDeleteCityRegistry(row)}>删除</Button> : null}
-                  {/* passkey 登录密钥 self-only:只能为当前登录管理员自己注册本机认证器。 */}
-                  {isSelf ? (
-                    <Badge dot={passkeyRegistered === false} size="small">
-                      <Button size="small" icon={<KeyOutlined />} loading={passkeyBusy} onClick={doRegisterPasskey}>
-                        {passkeyRegistered ? '更新passkey密钥' : '设置passkey密钥'}
-                      </Button>
-                    </Badge>
-                  ) : null}
-                </Space>
-              );
+      <>
+        <Table<CityRegistryAdminRow>
+          rowKey={(r) => `${r.id}-${r.admin_account}`}
+          loading={cityRegistryAdminsLoading}
+          dataSource={cityRegistryAdmins}
+          pagination={{
+            pageSize: 10, current: cityRegistryAdminListPage,
+            onChange: (page) => setCityRegistryListPage(page),
+            showSizeChanger: false,
+            showTotal: (total) => `共 ${total} 条`,
+          }}
+          columns={[
+            {
+              title: '序号',
+              width: 72,
+              align: 'center' as const,
+              render: (_v, _row, index) => (cityRegistryAdminListPage - 1) * 10 + index + 1,
             },
-          },
-        ]}
-      />
+            {
+              title: '城市',
+              dataIndex: 'city_name',
+              width: 140,
+              align: 'center' as const,
+            },
+            {
+              title: '姓名',
+              dataIndex: 'name',
+              render: (_v, row) => adminDisplayName(row) || '-',
+            },
+            {
+              title: '余额',
+              dataIndex: 'balance_fen',
+              width: 160,
+              align: 'right' as const,
+              render: (_v, row) => formatAdminBalanceFen(row.balance_fen) || '-',
+            },
+            {
+              title: '操作',
+              width: 220,
+              align: 'center' as const,
+              render: (_v: unknown, row: CityRegistryAdminRow) => {
+                const isSelf = sameHexAccount(row.admin_account, auth?.admin_account);
+                return (
+                  <Space onClick={(event) => event.stopPropagation()}>
+                    {canEditCityRegistryAdmins ? <Button size="small" danger onClick={() => onDeleteCityRegistry(row)}>删除</Button> : null}
+                    {/* passkey 登录密钥 self-only:只能为当前登录管理员自己注册本机认证器。 */}
+                    {isSelf ? (
+                      <Badge dot={passkeyRegistered === false} size="small">
+                        <Button size="small" icon={<KeyOutlined />} loading={passkeyBusy} onClick={doRegisterPasskey}>
+                          密钥
+                        </Button>
+                      </Badge>
+                    ) : null}
+                  </Space>
+                );
+              },
+            },
+          ]}
+          onRow={(row) => ({
+            onClick: () => setDetailTarget(row),
+            style: { cursor: 'pointer' },
+          })}
+        />
+        <Modal
+          title="管理员完整信息"
+          open={!!detailTarget}
+          footer={null}
+          centered
+          onCancel={() => setDetailTarget(null)}
+          zIndex={CID_MODAL_Z_INDEX.business}
+        >
+          {detailTarget ? (
+            <AdminProfileDetails profile={detailTarget} areaLabel="城市" areaValue={detailTarget.city_name} />
+          ) : null}
+        </Modal>
+      </>
     </Card>
   );
 }

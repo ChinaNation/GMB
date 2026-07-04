@@ -1516,6 +1516,18 @@ pub(crate) struct OnChainAdminProfileView {
     pub(crate) source_label: String,
 }
 
+/// 联邦注册局单省 5 人组的链上只读投影。
+///
+/// `province_code` 是 `PublicAdmins::FederalRegistryProvinceGroups` 的链上键,
+/// `province_name` 来自 `PROVINCE_CODE_INFOS`。这组字段只服务列表展示和同省操作校验,
+/// 不改变管理员集合的链上唯一真源。
+#[derive(Debug, Clone)]
+pub(crate) struct FederalRegistryProvinceAdminProfiles {
+    pub(crate) province_code: [u8; 2],
+    pub(crate) province_name: String,
+    pub(crate) profiles: Vec<OnChainAdminProfileView>,
+}
+
 fn admin_source_label(source: u8) -> &'static str {
     match source {
         0 => "创世",
@@ -1525,6 +1537,24 @@ fn admin_source_label(source: u8) -> &'static str {
         4 => "普选",
         _ => "",
     }
+}
+
+fn admin_profile_views(decoded: &OnChainAdminAccount) -> Vec<OnChainAdminProfileView> {
+    decoded
+        .admins
+        .iter()
+        .map(|profile| OnChainAdminProfileView {
+            account_hex: format!("0x{}", hex::encode(profile.account)),
+            admin_cid_number: String::from_utf8_lossy(&profile.admin_cid_number).to_string(),
+            name: String::from_utf8_lossy(&profile.name).to_string(),
+            admin_role: String::from_utf8_lossy(&profile.admin_role).to_string(),
+            title: String::from_utf8_lossy(&profile.admin_role).to_string(),
+            term_start: profile.term_start,
+            term_end: profile.term_end,
+            source: profile.source,
+            source_label: admin_source_label(profile.source).to_string(),
+        })
+        .collect()
 }
 
 /// 读取本节点机构的链上 Active 管理员**资料**集合(账户 + 姓名 + 职务 + 任期)。
@@ -1579,72 +1609,61 @@ pub(crate) async fn fetch_active_admin_profiles_onchain(
         if decoded.status != ADMIN_STATUS_ACTIVE {
             continue;
         }
-        let profiles = decoded
-            .admins
-            .iter()
-            .map(|profile| OnChainAdminProfileView {
-                account_hex: format!("0x{}", hex::encode(profile.account)),
-                admin_cid_number: String::from_utf8_lossy(&profile.admin_cid_number).to_string(),
-                name: String::from_utf8_lossy(&profile.name).to_string(),
-                admin_role: String::from_utf8_lossy(&profile.admin_role).to_string(),
-                title: String::from_utf8_lossy(&profile.admin_role).to_string(),
-                term_start: profile.term_start,
-                term_end: profile.term_end,
-                source: profile.source,
-                source_label: admin_source_label(profile.source).to_string(),
-            })
-            .collect();
+        let profiles = admin_profile_views(&decoded);
         return Ok(Some(profiles));
     }
     Ok(None)
 }
 
-/// 读取联邦注册局指定省 5 人组的 Active 管理员完整资料。
-pub(crate) async fn fetch_federal_registry_province_admin_profiles(
-    province_code: [u8; 2],
-) -> Result<Vec<OnChainAdminProfileView>, String> {
+/// 读取全部联邦注册局省级 5 人组管理员资料。
+///
+/// FRG 的链上 Active 集合不是一个全局 `AdminAccounts`,而是按 43 个
+/// `ProvinceCode` 拆在 `FederalRegistryProvinceGroups`。列表页需要全量目录,
+/// 所以这里逐省读取;任一省组缺失会以空组返回,调用方按链上现状展示。
+pub(crate) async fn fetch_all_federal_registry_admin_profiles(
+) -> Result<Vec<FederalRegistryProvinceAdminProfiles>, String> {
     let ws_url = super::chain_url::chain_ws_url()?;
     let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
         .await
-        .map_err(|e| format!("connect chain ws for federal registry profiles failed: {e}"))?;
+        .map_err(|e| format!("connect chain ws for all federal registry profiles failed: {e}"))?;
     let storage = client
         .storage()
         .at_latest()
         .await
         .map_err(|e| format!("get latest chain storage failed: {e}"))?;
-    let address = dynamic::storage(
-        AdminPallet::PublicAdmins.pallet_name(),
-        "FederalRegistryProvinceGroups",
-        vec![dynamic::Value::from_bytes(province_code)],
-    );
-    let Some(thunk) = storage
-        .fetch(&address)
-        .await
-        .map_err(|e| format!("fetch federal registry province profiles failed: {e}"))?
-    else {
-        return Ok(vec![]);
-    };
-    let mut raw = thunk.encoded();
-    let decoded = OnChainAdminAccount::decode(&mut raw)
-        .map_err(|e| format!("decode federal registry province profiles failed: {e}"))?;
-    if decoded.status != ADMIN_STATUS_ACTIVE {
-        return Ok(vec![]);
+
+    let mut groups = Vec::with_capacity(primitives::cid::code::PROVINCE_CODE_INFOS.len());
+    for info in primitives::cid::code::PROVINCE_CODE_INFOS {
+        let address = dynamic::storage(
+            AdminPallet::PublicAdmins.pallet_name(),
+            "FederalRegistryProvinceGroups",
+            vec![dynamic::Value::from_bytes(info.province_code)],
+        );
+        let profiles = match storage
+            .fetch(&address)
+            .await
+            .map_err(|e| format!("fetch all federal registry province profiles failed: {e}"))?
+        {
+            Some(thunk) => {
+                let mut raw = thunk.encoded();
+                let decoded = OnChainAdminAccount::decode(&mut raw).map_err(|e| {
+                    format!("decode all federal registry province profiles failed: {e}")
+                })?;
+                if decoded.status == ADMIN_STATUS_ACTIVE {
+                    admin_profile_views(&decoded)
+                } else {
+                    Vec::new()
+                }
+            }
+            None => Vec::new(),
+        };
+        groups.push(FederalRegistryProvinceAdminProfiles {
+            province_code: info.province_code,
+            province_name: info.province_name.to_string(),
+            profiles,
+        });
     }
-    Ok(decoded
-        .admins
-        .iter()
-        .map(|profile| OnChainAdminProfileView {
-            account_hex: format!("0x{}", hex::encode(profile.account)),
-            admin_cid_number: String::from_utf8_lossy(&profile.admin_cid_number).to_string(),
-            name: String::from_utf8_lossy(&profile.name).to_string(),
-            admin_role: String::from_utf8_lossy(&profile.admin_role).to_string(),
-            title: String::from_utf8_lossy(&profile.admin_role).to_string(),
-            term_start: profile.term_start,
-            term_end: profile.term_end,
-            source: profile.source,
-            source_label: admin_source_label(profile.source).to_string(),
-        })
-        .collect())
+    Ok(groups)
 }
 
 #[cfg(test)]

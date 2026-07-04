@@ -1254,6 +1254,12 @@ fn apply_replace_federal_registry_conn(
         ],
     )
     .map_err(|e| format!("replace federal admin failed: {e}"))?;
+    repo::replace_federal_registry_admin_scope_conn(
+        conn,
+        old_account.as_str(),
+        replacement_account.as_str(),
+        province.as_str(),
+    )?;
     federal_registry_row_value(&admin, province)
 }
 

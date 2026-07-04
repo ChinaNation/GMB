@@ -1,7 +1,7 @@
-// 注册局联邦注册局管理员列表。每节点单省部署,展示本省 5 人组(链上
-// FederalRegistryProvinceGroups 全走链读);FRG 可在本省组内操作,CREG 只能只读查看本省组。
+// 注册局联邦注册局管理员列表。链上按省级 5 人组存放,本页展示全部省份管理员;
+// 当前登录省份置顶且只允许本省组执行更换,其它省份只读。
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Badge, Button, Card, Form, Input, Modal, Space, Table, Typography } from 'antd';
 import { KeyOutlined, ScanOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -16,7 +16,11 @@ import { formatAdminCreateError, type AdminActionType } from './admin_security_a
 import { sameHexAccount } from './adminUtils';
 import { notice } from '../utils/notice';
 import { usePasskeyRegistration } from '../auth/passkey/usePasskey';
-import { AdminProfileCard } from './AdminProfileCard';
+import {
+  AdminProfileDetails,
+  adminDisplayName,
+  formatAdminBalanceFen,
+} from './AdminProfileCard';
 
 interface FederalRegistryAdminSubTabProps {
   selectedFederalRegistry: FederalRegistryAdminRow;
@@ -31,6 +35,8 @@ interface FederalRegistryAdminSubTabProps {
 type ReplaceFormValues = {
   admin_account: string;
 };
+
+const FEDERAL_REGISTRY_PAGE_SIZE = 20;
 
 export function FederalRegistryAdminSubTab({
   selectedFederalRegistry,
@@ -47,13 +53,28 @@ export function FederalRegistryAdminSubTab({
   const [replaceLoading, setReplaceLoading] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [replaceTarget, setReplaceTarget] = useState<FederalRegistryAdminRow | null>(null);
+  const [detailTarget, setDetailTarget] = useState<FederalRegistryAdminRow | null>(null);
+  const [federalListPage, setFederalListPage] = useState(1);
   const [form] = Form.useForm<ReplaceFormValues>();
 
   const currentProvinceName = normalizeScopeProvinceName(auth?.scope_province_name) || selectedFederalRegistry.province_name;
   const titleProvinceName = currentProvinceName || selectedFederalRegistry.province_name;
   const canOperateFederalRegistry = isTier1Registry(auth?.institution_code);
   const canManageSameProvince = (row: FederalRegistryAdminRow) =>
-    canOperateFederalRegistry && row.province_name === currentProvinceName;
+    canOperateFederalRegistry && normalizeScopeProvinceName(row.province_name) === currentProvinceName;
+
+  const displayedFederalRegistryAdmins = useMemo(
+    () => federalRegistryAdmins
+      .map((row, index) => ({ row, index }))
+      .sort((left, right) => {
+        const leftCurrent = normalizeScopeProvinceName(left.row.province_name) === currentProvinceName;
+        const rightCurrent = normalizeScopeProvinceName(right.row.province_name) === currentProvinceName;
+        if (leftCurrent !== rightCurrent) return leftCurrent ? -1 : 1;
+        return left.index - right.index;
+      })
+      .map((entry) => entry.row),
+    [currentProvinceName, federalRegistryAdmins],
+  );
 
   const openReplaceModal = (row: FederalRegistryAdminRow) => {
     if (!canManageSameProvince(row)) {
@@ -102,45 +123,61 @@ export function FederalRegistryAdminSubTab({
   };
 
   const columns: ColumnsType<FederalRegistryAdminRow> = [
+    {
+      title: '序号',
+      width: 72,
+      align: 'center',
+      render: (_value, _row, index) => (federalListPage - 1) * FEDERAL_REGISTRY_PAGE_SIZE + index + 1,
+    },
     { title: '省份', dataIndex: 'province_name', align: 'center', width: 120 },
     {
-      title: '管理员信息',
-      dataIndex: 'admin_account',
-      render: (_v, row, index) => <AdminProfileCard profile={row} index={index + 1} />,
+      title: '姓名',
+      dataIndex: 'name',
+      render: (_value, row) => adminDisplayName(row) || '-',
+    },
+    {
+      title: '余额',
+      dataIndex: 'balance_fen',
+      width: 160,
+      align: 'right',
+      render: (_value, row) => formatAdminBalanceFen(row.balance_fen) || '-',
     },
   ];
 
-  if (canOperateFederalRegistry) {
-    columns.push({
-      title: '操作',
-      width: 320,
-      align: 'center',
-      render: (_value, row) => {
-        const canManage = canManageSameProvince(row);
-        const isSelf = sameHexAccount(row.admin_account, auth?.admin_account);
-        return (
-          <Space>
-            <Button size="small" disabled={!canManage} onClick={() => openReplaceModal(row)}>
-              更换
-            </Button>
-            {/* passkey 登录密钥 self-only:只能为当前登录管理员自己注册本机认证器。 */}
-            {isSelf ? (
-              <Badge dot={passkeyRegistered === false} size="small">
-                <Button
-                  size="small"
-                  icon={<KeyOutlined />}
-                  loading={passkeyBusy}
-                  onClick={doRegisterPasskey}
-                >
-                  {passkeyRegistered ? '更新passkey密钥' : '设置passkey密钥'}
-                </Button>
-              </Badge>
-            ) : null}
-          </Space>
-        );
-      },
-    });
-  }
+  columns.push({
+    title: '操作',
+    width: 220,
+    align: 'center',
+    render: (_value, row) => {
+      const canManage = canManageSameProvince(row);
+      const isSelf = sameHexAccount(row.admin_account, auth?.admin_account);
+      return (
+        <Space onClick={(event) => event.stopPropagation()}>
+          <Button
+            size="small"
+            disabled={!canManage}
+            title={!canManage ? '只能更换本省联邦注册局管理员' : undefined}
+            onClick={() => openReplaceModal(row)}
+          >
+            更换
+          </Button>
+          {/* passkey 登录密钥 self-only:只能为当前登录管理员自己注册本机认证器。 */}
+          {isSelf ? (
+            <Badge dot={passkeyRegistered === false} size="small">
+              <Button
+                size="small"
+                icon={<KeyOutlined />}
+                loading={passkeyBusy}
+                onClick={doRegisterPasskey}
+              >
+                密钥
+              </Button>
+            </Badge>
+          ) : null}
+        </Space>
+      );
+    },
+  });
 
   return (
     <>
@@ -162,11 +199,38 @@ export function FederalRegistryAdminSubTab({
       <Table<FederalRegistryAdminRow>
         rowKey={(row) => `${row.id}-${row.admin_account}`}
         loading={federalRegistryAdminsLoading}
-        dataSource={federalRegistryAdmins}
-        pagination={false}
+        dataSource={displayedFederalRegistryAdmins}
+        pagination={{
+          pageSize: FEDERAL_REGISTRY_PAGE_SIZE,
+          current: federalListPage,
+          showSizeChanger: false,
+          showTotal: (total) => `共 ${total} 条`,
+          onChange: (page) => setFederalListPage(page),
+        }}
         columns={columns}
+        onRow={(row) => ({
+          onClick: () => setDetailTarget(row),
+          style: { cursor: 'pointer' },
+        })}
       />
       </Card>
+
+      <Modal
+        title="管理员完整信息"
+        open={!!detailTarget}
+        footer={null}
+        centered
+        onCancel={() => setDetailTarget(null)}
+        zIndex={CID_MODAL_Z_INDEX.business}
+      >
+        {detailTarget ? (
+          <AdminProfileDetails
+            profile={detailTarget}
+            areaLabel="省份"
+            areaValue={detailTarget.province_name}
+          />
+        ) : null}
+      </Modal>
 
       <Modal
         title={
@@ -199,7 +263,11 @@ export function FederalRegistryAdminSubTab({
               <div style={{ marginTop: 6, marginBottom: 8 }}>
                 {replaceTarget.province_name}
               </div>
-              <AdminProfileCard profile={replaceTarget} />
+              <AdminProfileDetails
+                profile={replaceTarget}
+                areaLabel="省份"
+                areaValue={replaceTarget.province_name}
+              />
             </div>
           ) : null}
           <Form form={form} layout="vertical" onFinish={submitReplace}>

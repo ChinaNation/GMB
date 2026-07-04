@@ -34,7 +34,12 @@ import { notice } from '../utils/notice';
 import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
 import type { InstitutionDetail } from '../subjects/api';
 import { usePasskeyRegistration } from '../auth/passkey/usePasskey';
-import { AdminProfileCard } from './AdminProfileCard';
+import {
+  AdminProfileCard,
+  AdminProfileDetails,
+  adminDisplayName,
+  formatAdminBalanceFen,
+} from './AdminProfileCard';
 
 export interface RegistryAdminsViewProps {
   /// 'city-registry' = 市注册局 tab(城市表格→市注册局机构详情页);
@@ -118,6 +123,7 @@ export function OwnInstitutionAdminsView({ layout = 'table' }: OwnInstitutionAdm
     usePasskeyRegistration();
   const [data, setData] = useState<OwnInstitutionAdminListOutput | null>(null);
   const [loading, setLoading] = useState(false);
+  const [detailTarget, setDetailTarget] = useState<OwnInstitutionAdminRow | null>(null);
   const screens = Grid.useBreakpoint();
   const isCardLayout = layout === 'cards';
 
@@ -148,7 +154,7 @@ export function OwnInstitutionAdminsView({ layout = 'table' }: OwnInstitutionAdm
     if (!isSelf) return null;
     const button = (
       <Button size="small" icon={<KeyOutlined />} loading={passkeyBusy} onClick={doRegisterPasskey}>
-        {isCardLayout ? '密钥' : passkeyRegistered ? '更新passkey密钥' : '设置passkey密钥'}
+        密钥
       </Button>
     );
     return (
@@ -202,19 +208,48 @@ export function OwnInstitutionAdminsView({ layout = 'table' }: OwnInstitutionAdm
           pagination={false}
           columns={[
             {
-              title: '管理员信息',
-              dataIndex: 'admin_account',
-              render: (_value: string, row, index) => <AdminProfileCard profile={row} index={index + 1} />,
+              title: '序号',
+              width: 72,
+              align: 'center',
+              render: (_value: string, _row, index) => index + 1,
+            },
+            {
+              title: '姓名',
+              dataIndex: 'name',
+              render: (_value: string, row) => adminDisplayName(row) || '-',
+            },
+            {
+              title: '余额',
+              dataIndex: 'balance_fen',
+              width: 160,
+              align: 'right',
+              render: (_value: string, row) => formatAdminBalanceFen(row.balance_fen) || '-',
             },
             {
               title: '操作',
               width: 220,
               align: 'center',
-              render: (_v: unknown, row) => passkeyAction(row),
+              render: (_v: unknown, row) => (
+                <span onClick={(event) => event.stopPropagation()}>{passkeyAction(row)}</span>
+              ),
             },
           ]}
+          onRow={(row) => ({
+            onClick: () => setDetailTarget(row),
+            style: { cursor: 'pointer' },
+          })}
         />
       )}
+      <Modal
+        title="管理员完整信息"
+        open={!!detailTarget}
+        footer={null}
+        centered
+        onCancel={() => setDetailTarget(null)}
+        zIndex={CID_MODAL_Z_INDEX.business}
+      >
+        {detailTarget ? <AdminProfileDetails profile={detailTarget} /> : null}
+      </Modal>
     </Card>
   );
 }
@@ -552,7 +587,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       content: (
         <div>
           <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该市注册局管理员?</Typography.Paragraph>
-          <AdminProfileCard profile={row} />
+          <AdminProfileDetails profile={row} areaLabel="城市" areaValue={row.city_name} />
         </div>
       ),
       okText: '确认删除',

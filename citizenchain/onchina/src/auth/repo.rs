@@ -99,10 +99,9 @@ fn hydrate_binding_candidate_metadata_conn(
     Ok(())
 }
 
-// `list_federal_registry_admins_by_province_conn` 已退役。
 // Tier1 创世注册局管理员「全走链读」(决策③):权威集合在链上
-// `PublicAdmins::FederalRegistryProvinceGroups[绑定省码]`,由链上读取并回填本地缓存;
-// 本地不再以 `federal_registry_scope` 表派生省维度。
+// `PublicAdmins::FederalRegistryProvinceGroups[省码]`,由链上读取并回填本地缓存;
+// 省维度由链上省级组和节点 active binding 共同派生。
 
 pub(crate) fn get_admin_by_id_and_registry_org_conn(
     conn: &mut Client,
@@ -123,8 +122,7 @@ pub(crate) fn get_admin_by_id_and_registry_org_conn(
 
 /// Tier2 下级注册局(CREG)管理员列表。
 ///
-/// 每节点单省部署,本地 `admins` 缓存即本省数据,省维度由部署隐含——不再 JOIN
-/// 已退役的 `federal_registry_scope` 表(决策③),仅按机构码 + 可选市名过滤。
+/// 每节点单省部署,本地 `admins` 缓存即本省数据,列表仅按机构码 + 可选市名过滤。
 pub(crate) fn list_city_registry_admins_by_scope_conn(
     conn: &mut Client,
     city_name: Option<&str>,
@@ -255,11 +253,73 @@ pub(crate) fn resolve_admin_account_key_conn(
 /// 不再读取节点 `ONCHAIN_CREDENTIAL_SCOPE_*` 环境变量。
 pub(crate) fn province_scope_for_registry_org_conn(
     conn: &mut Client,
-    _admin_account: &str,
-    _institution_code: &str,
+    admin_account: &str,
+    institution_code: &str,
 ) -> Result<Option<String>, String> {
+    if crate::core::chain_runtime::is_tier1_registry(institution_code) {
+        if let Some(province_name) =
+            federal_registry_admin_scope_conn(conn, admin_account)?.filter(|v| !v.trim().is_empty())
+        {
+            return Ok(Some(province_name));
+        }
+    }
     Ok(get_active_node_binding_conn(conn)?
         .and_then(|binding| binding.candidate.scope_province_name))
+}
+
+/// 写入联邦注册局管理员的链上省级组归属缓存。
+///
+/// 该缓存由 `FederalRegistryProvinceGroups[ProvinceCode]` 全量链读派生,只供列表显示
+/// 和同省操作预检使用;管理员成员资格仍以链上 Active 集合为唯一真源。
+pub(crate) fn upsert_federal_registry_admin_scope_conn(
+    conn: &mut Client,
+    admin_account: &str,
+    province_name: &str,
+) -> Result<(), String> {
+    let admin_account = admin_account.trim();
+    let province_name = province_name.trim();
+    if admin_account.is_empty() || province_name.is_empty() {
+        return Ok(());
+    }
+    conn.execute(
+        "INSERT INTO federal_registry_admin_scopes(admin_account, province_name, updated_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (admin_account) DO UPDATE SET
+            province_name = EXCLUDED.province_name,
+            updated_at = EXCLUDED.updated_at",
+        &[&admin_account, &province_name],
+    )
+    .map_err(|e| format!("upsert federal registry admin scope failed: {e}"))?;
+    Ok(())
+}
+
+pub(crate) fn federal_registry_admin_scope_conn(
+    conn: &mut Client,
+    admin_account: &str,
+) -> Result<Option<String>, String> {
+    let row = conn
+        .query_opt(
+            "SELECT province_name
+             FROM federal_registry_admin_scopes
+             WHERE lower(admin_account) = lower($1)",
+            &[&admin_account],
+        )
+        .map_err(|e| format!("query federal registry admin scope failed: {e}"))?;
+    Ok(row.map(|r| r.get(0)))
+}
+
+pub(crate) fn replace_federal_registry_admin_scope_conn(
+    conn: &mut Client,
+    old_account: &str,
+    new_account: &str,
+    province_name: &str,
+) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM federal_registry_admin_scopes WHERE lower(admin_account) = lower($1)",
+        &[&old_account],
+    )
+    .map_err(|e| format!("delete old federal registry admin scope failed: {e}"))?;
+    upsert_federal_registry_admin_scope_conn(conn, new_account, province_name)
 }
 
 /// 派生管理员的省/市/镇作用域。**登录签发(onchain_gate)与会话重建(guards)共用此唯一来源**,
@@ -560,10 +620,6 @@ pub(crate) fn consume_node_binding_challenge_conn(
     })?;
     Ok(())
 }
-
-// `find_federal_registry_scope_conn` / `repair_federal_registry_scope_conn` 已退役——
-// `federal_registry_scope` 省映射表连同 `provinces` 占位表一并下线(决策③);Tier1 创世注册局
-// 省作用域改取节点 active binding(见 `province_scope_for_registry_org_conn` / `derive_admin_scope_conn`)。
 
 pub(crate) fn next_admin_id_conn(conn: &mut Client) -> Result<u64, String> {
     let row = conn
