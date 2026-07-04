@@ -1,6 +1,6 @@
 # ADR-021:行政区代码与市镇数据唯一真源
 
-状态:Accepted(2026-06-18),修订(2026-06-30)
+状态:Accepted(2026-06-18),修订(2026-07-03)
 关联:[[ADR-018]](citizenapp 混合模式)、reference_citizenapp_public_institution_bundle、feedback_no_compatibility
 
 ## 背景 / 问题
@@ -33,8 +33,10 @@ citizenchain/onchina/src/cid/china/china.sqlite
   的省名、省码、顺序和数量一致。
 - CID 不提供行政区管理 tab,也不提供运行中新增、改名、删除行政区 API。
 - citizenapp 安装包内置 `assets/admin_divisions/` 行政区字典,启动走版本驱动 reconcile(见下「客户端同步」),不向 OnChina 联网拉行政区新版。
-- CID 运行库中的自动公权机构必须由同一 `china.sqlite` 对账生成,`gov_manifest` 必须记录当前 SQLite hash 和目录 hash。
-- 公权机构包 `assets/public_institutions/` 必须由对账并通过严格校验后的 CID 真实接口导出,避免旧行政区 code 残留。
+- 公权机构不再由 OnChina 本地启动或命令从 `china.sqlite` 生成。所有公权机构信息唯一真源是链上
+  `PublicManage::Institutions` / `PublicManage::InstitutionAccounts`;OnChina 只把链上存在的机构同步为本地查询投影。
+- OnChina 本地投影状态记录在 `chain_projection_state(projection_key='public-gov')`;旧 `gov_manifest` 必须删除。
+- 公权机构包 `assets/public_institutions/` 必须由完成 `sync-gov` 后的 OnChina 真实接口导出,避免本地派生目录或旧行政区 code 残留。
 - 镇下地址只通过 `addresses` 单表保存当前有效数据。链上变更以 `AddressRegistry` 事件为同步事实,每次只更新对应地址名称或完整地址。
 
 铁律:
@@ -79,7 +81,7 @@ sha256:    54709a0c1935a59593c690c4547c8b6fa1140de8ebec642ef5c7daacb6012a5f
 - 河南 `人和市` 对应现实平顶山市石龙区,用于避让广东 `石龙市`;广东 `石龙市` 保留,全国仅一个 `石龙市`。
 - 海南儋州区域收敛为 `儋州市`、`兰洋市`、`白马井市`、`新州市` 四个市。
 - 本轮已清理已确认的截断名、`县市` 后缀名、跨省错挂名、重复壳和伪镇,并按重新创世重排市镇 code。最终审计发现的 42 个镇级伪行政区已删除,同步删除其下 235 条地址段;镇级伪行政区关键词命中归零。
-- 重新创世后,开发库审计记录中的旧省命名残留已清理;2026-06-20 已按当前 `china.sqlite` 重新生成 citizenapp 行政区包、执行 CID 公权机构运行库对账和 strict check,并通过当前 CID 真实公开接口重新生成 citizenapp 公权机构包。
+- 重新创世后,开发库审计记录中的旧省命名残留已清理;2026-07-03 起公权机构不再执行本地运行库生成/对账,必须先随创世写入链上,再由 OnChina `sync-gov` 从链上同步投影并通过真实公开接口导出 citizenapp 公权机构包。
 - 镇下地址已统一迁移为 `addresses` 单表,字段为 `province_code/city_code/town_code/address_name_code/address_name/address_local_no/address_detail/sort_order`。旧镇下地址表、旧来源字段、墓碑和变更日志表均已清除。
 
 当前发布验收:
@@ -89,14 +91,15 @@ china.sqlite sha256:
   c477cb5a300eac9f56d53beaef235617a6fc64584a0f1cffd8c85b2537840bbb
 admin_divisions bundle:
   version=1 provinces=43 cities=2872 towns=39227
-gov reconcile:
-  scopes=43 inserted=55354 updated=190362 account_inserted=491475 removed=58281
-gov strict:
-  ok=true manifest_current=true target_count=245716 active_count=245716
-  missing=0 mismatched=0 missing_accounts=0 obsolete=0
-  catalog_hash=499c1ee8af974f0a79affe6731883d491052da1767f4a99ae072ff29c1f42ea6
+gov chain projection:
+  command=onchina sync-gov
+  source=PublicManage::Institutions + PublicManage::InstitutionAccounts
+  projection_state=chain_projection_state(public-gov,status=OK)
+gov chain audit:
+  command=onchina audit-chain-catalog
+  expected=596799 public institutions from genesis
 public_institutions bundle:
-  version=1 provinces=43 total=245716 YL=1697
+  source=OnChina real API after sync-gov
   code cross-check bad_count=0
 ```
 
@@ -113,17 +116,18 @@ public_institutions bundle:
 1. 修改 `citizenchain/onchina/src/cid/china/china.sqlite`。
 2. 运行 `python3 citizenchain/onchina/src/cid/china/check_code_immutable.py`。
 3. 运行 `node citizenapp/tools/generate_admin_division_bundle.mjs` 生成行政区字典包。
-4. 用指向同一 `china.sqlite` 的 OnChina 后端执行 `onchina reconcile-gov --changed-only`。
-5. 执行 `onchina check-gov --strict`,确认 `gov_manifest.china_hash` 等于当前 `china.sqlite` SHA-256,且缺失、错配、缺账户、废弃残留均为 0。
-6. 运行 `node citizenapp/tools/generate_public_institution_bundle.mjs --version <行政区版本>` 生成公权机构包。
+4. 重新创世并确认所有一府两会三院等公权机构已写入链上 `PublicManage`。
+5. 用连接该链的 OnChina 后端执行 `onchina sync-gov`,确认 `chain_projection_state.public-gov` 为 `OK`。
+6. 执行 `onchina audit-chain-catalog`,确认链上公权机构与创世清单全量一致。
+7. 运行 `node citizenapp/tools/generate_public_institution_bundle.mjs --version <行政区版本>` 通过 OnChina 真实接口生成公权机构包。
 
 ## 客户端增量同步(citizenapp,2026-06-18)
 
 citizenapp 无服务端,数据靠 assets 包随版本分发。包版本变了就**增量刷新:变的换、删的清、没变的不动**,零旧数据残留(行政区/公权机构都是只读派生数据,无用户数据)。
 
-- **包内版本表**:两个 manifest 都带 `version`(全局,= `admin_division_version`)+ `provinces:[{code/name, ver}]`(省级内容版本)。行政区 `ver` = 该省市/镇分片内容 sha256;公权机构 `ver` = 该省目录 `manifest_version`。省内容(改名/删码/重排)一变 `ver` 即变。
+- **包内版本表**:两个 manifest 都带 `version`(全局,= `admin_division_version`)+ `provinces:[{code/name, ver}]`(省级内容版本)。行政区 `ver` = 该省市/镇分片内容 sha256;公权机构 `ver` 来自 OnChina 链投影版本(`chain_projection_state`),不得再使用本地生成目录 manifest。
 - **客户端 `ensureSynced()`**(`*_bundle_loader.dart`):
-  1. 先同步行政区字典,公权机构全称/简称只允许从已对账的行政区 code 生成。
+  1. 先同步行政区字典,再同步公权机构包;公权机构全称/简称来自链投影接口,行政区只用于 code→名称展示 join。
   2. 全局 `version` 只作完成标记,不得短路省级检查;即使全局相等,也必须读取本地省级 `ver` 游标。
   3. 逐省比 `ver`,**只 reconcile `ver` 变了或本地缺游标的省**,没变的省连分片都不读。
   4. reconcile 单省(事务/分块内):按主键(行政区 `divisionKey` / 机构 `cidNumber`)做行级 diff,只 upsert 新增/字段变化的行,再删「包里已没有、本地还在」的废键。

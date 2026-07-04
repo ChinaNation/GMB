@@ -640,15 +640,22 @@ pub(crate) async fn get_federal_registry(
     if let Err(resp) = require_admin_any(&state, &headers) {
         return resp;
     }
-    // 联邦注册局 cid 来自创世常量(china_zf),按 cid_number 直接定位,绕过 scope。
-    let Some(cid_number) = crate::domains::gov::service::federal_registry_cid_number() else {
-        return api_error(
-            StatusCode::NOT_FOUND,
-            1004,
-            "federal registry not configured",
-        );
+    // 联邦注册局 CID 也来自链上公权机构投影,按机构码查唯一 CID 后绕过 scope 展示。
+    let cid_number = match state.db.chain_public_institution_cid_by_code("FRG") {
+        Ok(Some(cid_number)) => cid_number,
+        Ok(None) => {
+            return api_error(
+                StatusCode::NOT_FOUND,
+                1004,
+                "federal registry not configured",
+            );
+        }
+        Err(err) => {
+            let message = format!("query federal registry code failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
     };
-    let Some((inst, accounts)) = (match state.db.get_institution_with_accounts(cid_number) {
+    let Some((inst, accounts)) = (match state.db.get_institution_with_accounts(&cid_number) {
         Ok(v) => v,
         Err(err) => {
             let message = format!("query federal registry failed: {err}");

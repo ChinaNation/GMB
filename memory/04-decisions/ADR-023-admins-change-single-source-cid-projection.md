@@ -46,7 +46,7 @@
 ## 5. Bootstrap 与止血
 
 - **~~P0 止血 seed-federal-admins~~ 已退役(2026-06-30 更新)**:`seed-federal-admins` CLI + 本地 215 平铺播种 + `federal_registry_scope` 表全删;FRG 管理员「全走链读」链上 `PublicAdmins::FederalRegistryProvinceGroups[省码]`(每节点单省),无本地 china_zf 播种兜底。
-- **重新创世顺序(更新)**:重生 chainspec(含 FRG 43 省×5 写入 FederalRegistryProvinceGroups + NRC/PRC/PRB/NJD 写 AdminAccounts)→ 起链 → `ensure-gov` → 重跑 `generate_public_institution_bundle.mjs`([[feedback_registry_regen_after_genesis]])→ FRG 管理员经链上省组直接扫码登录(无需 seed)。
+- **重新创世顺序(2026-07-03 更新)**:重生 chainspec(含所有公权机构写入 `PublicManage::Institutions/InstitutionAccounts`、FRG 43 省×5 写入 `FederalRegistryProvinceGroups`、NRC/PRC/PRB/NJD 写 `AdminAccounts`)→ 起链 → OnChina 执行 `sync-gov` 从链上同步公权机构投影 → 执行 `audit-chain-catalog` 全量验收 → 重跑 `generate_public_institution_bundle.mjs`([[feedback_registry_regen_after_genesis]])→ FRG 管理员经链上省组直接扫码登录(无需 seed)。
 
 ## 6. 链端:PUP 自治 + 机构注销 close + 创世封存(`20260621-admins-change-builtin-pup-selfgovern`)
 

@@ -21,7 +21,7 @@ citizenchain/onchina/src/
 │   ├── address/               # 镇下地址库查询和 AddressRegistry call data 构造
 │   ├── citizens/              # 公民档案、护照号和投票凭证
 │   ├── docs/                  # 机构资料库入口
-│   ├── gov/                   # 公权机构确定性目录和公权机构接口
+│   ├── gov/                   # 公权机构链上投影、链目录验收和公权机构接口
 │   └── private/               # 私权机构入口和六类私权机构子模块
 ├── institution/               # 机构账户、机构管理员元数据和主体共享内核
 │   ├── accounts/              # 机构账户入口
@@ -52,8 +52,17 @@ citizenchain/onchina/src/
 - 机构主写入只进入 `institution/subjects`、`domains/gov`、`domains/private`、`institution/accounts` 和 `domains/docs`。
 - 公民主写入只进入 `domains/citizens`、`subjects`、`citizens`、`citizen_documents`、`passport_numbers` 和 `sequence_counters`。
 - 管理员写入只进入 `admins`(本地元数据缓存)和短生命周期安全运行态表;成员资格真源在链上(`federal_registry_scope` 表已退役,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
-- 链上状态只属于 `accounts.chain_status`，机构主体本身不保存链上状态。
+- 公权机构唯一真源是链上 `PublicManage`;`subjects/gov/accounts` 中的公权行只是本地查询投影,投影版本只记录在 `chain_projection_state`。
+- 链上状态字段只作本地投影缓存(`subjects.chain_status`、`accounts.chain_status`),不得成为第二授权真源。
 - 审计写入统一走结构化审计入口，详情字段只保存事实，不保存 UI 文案。
+
+### 4.1 公权机构链投影
+
+- 启动和显式 `sync-gov` 都必须从链上 `PublicManage::Institutions` 与 `PublicManage::InstitutionAccounts` 全量读取,再写入本地 `subjects/gov/accounts` 投影。
+- OnChina 不得在启动时从 `china.sqlite` 重新生成公权机构；`china.sqlite` 只提供行政区名称和镇级索引校验/展示。
+- 投影状态写入 `chain_projection_state(projection_key='public-gov')`;旧 `gov_manifest`、`ensure-gov`、`reconcile-gov`、`check-gov` 均不得恢复。
+- 普通列表、联邦注册局详情和本机构显示页只能读取 `gov.source='CHAIN'` 的公权投影；本地手工/pending 行不能冒充链上公权机构真源。
+- `audit-chain-catalog` 只做创世链目录验收,不得用本地派生结果灌库。
 
 ## 5. 公民录入和护照号
 
@@ -142,6 +151,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 ```text
 rg "mod chain;|crate::chain|chain::" citizenchain/onchina/src -g '*.rs'
 cargo check --manifest-path citizenchain/Cargo.toml -p onchina
+ONCHINA_EMBEDDED_PG=0 DATABASE_URL=<local_pg> ONCHAIN_WS_URL=<chain_ws> cargo run --manifest-path citizenchain/Cargo.toml -p onchina -- sync-gov
 curl -kfsS https://onchina.local:8964/api/v1/health
 curl -kfsS https://onchina.local:8964/api/v1/platform/ca-certificate/info
 curl -kfsS -o /tmp/onchina-org-root-ca.crt https://onchina.local:8964/api/v1/platform/ca-certificate

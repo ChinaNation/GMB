@@ -24,4 +24,4 @@ pub use primitives::cid::number::{
     CID_NUMBER_SEGMENT_D4_LEN, CID_NUMBER_SEGMENT_K3P1C1_LEN, CID_NUMBER_SEGMENT_N9_LEN,
     CID_NUMBER_SEGMENT_R5_LEN,
 };
-pub use seed::{dynamic_institution_cid, official_institution_cid, SeedCidError};
+pub use seed::{dynamic_institution_cid, SeedCidError};

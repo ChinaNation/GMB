@@ -1,9 +1,8 @@
-//! 创世公权机构目录链上对账(ADR-031 D9)。
+//! 创世公权机构目录链上验收(ADR-031 D9)。
 //!
-//! 目录数据与创世**同源**(primitives 派生代码 + china_*.rs 常量),不做每节点
-//! 全量拉取:启动抽样 N 个号 fetch 链上 `PublicManage::Institutions` 核对
-//! (不一致 fail-closed 拒绝服务;链暂不可达重试后拒绝,`ONCHINA_GOV_CHAIN_AUDIT=0`
-//! 为开发逃生门);部署验收另有 `audit-chain-catalog` 全量双向比对子命令。
+//! 本文件只做部署/启动验收:用创世派生规则抽样或全量比对链上
+//! `PublicManage::Institutions`,确认 runtime/onchina 版本未漂移。
+//! OnChina 本地公权机构数据不得由这里生成,只能由 gov::service 从链上投影。
 
 use std::collections::{BTreeMap, BTreeSet};
 

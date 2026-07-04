@@ -19,54 +19,12 @@ use axum::{
 use crate::auth::login::require_admin_any;
 use crate::cid::china::{city_code_by_name, province_code_by_name, town_code_by_name};
 use crate::core::response::ApiResponse;
-use crate::domains::gov::service::{
-    check_gov_catalog_db, current_gov_manifest_version, gov_manifest_key, GovTargetKind,
-    OfficialReconcileScope,
-};
+use crate::domains::gov::service::{chain_projection_ready, current_chain_projection_version};
 use crate::institution::subjects::model::InstitutionListRow;
 use crate::scope::get_visible_scope;
 use crate::*;
 
 // ─── 0. 机构全称查重(私权=全国唯一,公权=同城唯一) ──────────────
-
-fn manifest_version_for_scope(
-    state: &AppState,
-    scope: &OfficialReconcileScope,
-    kind: GovTargetKind,
-    province_code: &str,
-) -> Option<String> {
-    current_gov_manifest_version(&state.db, gov_manifest_key(scope, kind).as_str())
-        .or_else(|| {
-            current_gov_manifest_version(
-                &state.db,
-                gov_manifest_key(scope, GovTargetKind::All).as_str(),
-            )
-        })
-        .or_else(|| {
-            let province_scope = OfficialReconcileScope::Province {
-                province_code: province_code.to_string(),
-            };
-            current_gov_manifest_version(
-                &state.db,
-                gov_manifest_key(&province_scope, kind).as_str(),
-            )
-        })
-        .or_else(|| {
-            let province_scope = OfficialReconcileScope::Province {
-                province_code: province_code.to_string(),
-            };
-            current_gov_manifest_version(
-                &state.db,
-                gov_manifest_key(&province_scope, GovTargetKind::All).as_str(),
-            )
-        })
-        .or_else(|| {
-            current_gov_manifest_version(
-                &state.db,
-                gov_manifest_key(&OfficialReconcileScope::All, GovTargetKind::All).as_str(),
-            )
-        })
-}
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ListOfficialInstitutionQuery {
@@ -82,7 +40,7 @@ pub(crate) struct ListOfficialInstitutionQuery {
 
 /// GET /api/v1/institutions/official
 ///
-/// 公权机构目录和公安局一样是确定性列表,进入市详情时直接展示。
+/// 公权机构列表来自链上投影缓存,进入市详情时直接展示。
 /// `q` 只作为已展示列表的过滤条件,不能再作为是否返回数据的前提。
 pub(crate) async fn list_official_institutions(
     State(state): State<AppState>,
@@ -187,15 +145,6 @@ pub(crate) async fn list_official_institutions(
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty());
-    let directory_scope = match city_code {
-        Some(code) => OfficialReconcileScope::City {
-            province_code: province_code.to_string(),
-            city_code: code.to_string(),
-        },
-        None => OfficialReconcileScope::Province {
-            province_code: province_code.to_string(),
-        },
-    };
     let mut page = match state.db.list_official_institutions_scope(
         province_code,
         city_code,
@@ -215,26 +164,21 @@ pub(crate) async fn list_official_institutions(
             );
         }
     };
-    page.manifest_version = manifest_version_for_scope(
-        &state,
-        &directory_scope,
-        GovTargetKind::Official,
-        province_code,
-    );
+    page.manifest_version = current_chain_projection_version(&state.db);
     page.catalog_status = Some("OK".to_string());
     if page.items.is_empty() {
-        match check_gov_catalog_db(&state.db, directory_scope, GovTargetKind::Official) {
-            Ok(report) if !report.ok => {
+        match chain_projection_ready(&state.db) {
+            Ok(false) => {
                 return api_error(
                     StatusCode::CONFLICT,
                     1005,
-                    "deterministic gov directory is not initialized",
+                    "chain public institution projection is not initialized",
                 );
             }
             Err(e) => {
-                tracing::warn!(error = %e, "official directory check failed");
+                tracing::warn!(error = %e, "official chain projection check failed");
             }
-            _ => {}
+            Ok(true) => {}
         }
     }
     Json(ApiResponse {

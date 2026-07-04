@@ -1,20 +1,9 @@
 //! 运行期启动辅助和显式维护动作。
 //!
-//! 启动只初始化必要结构化数据,
-//! 大型确定性目录只在显式命令或接口中对账。
+//! 公权机构不在这里生成或对账;其唯一真源是链上 PublicManage,
+//! 本地只通过 gov::service 同步链投影缓存。
 
-use crate::domains::gov::service::{
-    reconcile_gov_catalog_db, GovTargetKind, OfficialReconcileReport, OfficialReconcileScope,
-};
 use crate::AppState;
-
-pub(crate) fn reconcile_official_institutions_explicit(
-    state: &AppState,
-    scope: OfficialReconcileScope,
-    _force_row_sync: bool,
-) -> Result<OfficialReconcileReport, String> {
-    reconcile_gov_catalog_db(&state.db, "SYSTEM", scope, GovTargetKind::All)
-}
 
 /// 审计日志只存"事实"——detail 是结构化 JSON(键小写蛇形,值存系统原值:
 /// 代码/布尔/原始字段),不得写展示文案;人话翻译统一归前端操作记录渲染器

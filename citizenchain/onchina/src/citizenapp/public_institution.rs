@@ -1,18 +1,19 @@
 //! 公权机构目录 —— CitizenApp 公民端匿名只读 BFF。
 //!
-//! 数据来自 CID 自有 Postgres 确定性目录(subjects + gov + accounts),**与链交互无关**。
+//! 数据来自 OnChina 本地链投影(subjects + gov + accounts),唯一真源是链上
+//! `PublicManage::Institutions` / `PublicManage::InstitutionAccounts`。
 //! 本层只做:① 去鉴权 / 去 scope 锁(公民可查任意省/市);② 公开 DTO 白名单(丢弃
 //! 管理员/运营/PII 字段);③ custom_account_names 批量补。
 //!
 //! ### 量级与混合模式
-//! 确定性目录生成到镇级,单省机构上万、全国数十万。客户端走「发布期完整数据包打底
+//! 链投影目录覆盖到镇级,单省机构上万、全国数十万。客户端走「发布期完整数据包打底
 //! + 在线增量」混合:
 //! - **keyset 翻页**(`after_cid`,`WHERE cid_number > $after`):恒定快,避免 OFFSET
 //!   深翻 O(n²),供生成器高效全量导出。
-//! - **增量同步**(`since_version`,`WHERE updated_at > $since`):客户端带本地版本来,
-//!   只回这之后变过的行,在线代价趋近于零。
-//! - **真实版本号**:`MAX(updated_at)`(按省/市 scope),非 null、随增改前进。
-//!   (删除 updated_at 抓不到,删机构罕见,留低频全量对账兜底。)
+//! - **增量同步**(`since_version`):客户端版本等于当前链投影版本时返回空窗口;
+//!   版本不同则按 keyset 窗口刷新。
+//! - **真实版本号**:`chain_projection_state(public-gov)` 投影版本。链上新增、删除、
+//!   账户变化或重同步都会推进版本,客户端据此刷新。
 //!
 //! 路由(挂 app_routes,非 admin):
 //!   GET /api/v1/app/public-institutions?province_name=&city_name=&since_version=&after_cid=&page_size=
@@ -27,26 +28,29 @@ use serde::Serialize;
 use crate::cid::china::{city_code_by_name, province_code_by_name};
 use crate::cid::InstitutionCategory;
 use crate::core::response::{ApiResponse, PageResult};
+use crate::domains::gov::service::current_chain_projection_version;
 use crate::*;
 
 /// 公民端完整公权目录过滤。
 /// CitizenApp 公民端“公权机构”必须显示:
-/// ① CID 自动公权目录(含市级直属公权机构、教育委员会、省储行等);
-/// ② 手动公法人;③ 上级为公法人的非法人。
+/// ① 链上 PublicManage 投影出的公权机构;
+/// ② 上级为链上公法人的非法人。
 /// 参数 $1=province_code、$2=city_code。
 const GOV_FROM_WHERE: &str = "
     FROM subjects s
     LEFT JOIN gov g ON g.province_code = s.province_code AND g.cid_number = s.cid_number
     LEFT JOIN subjects par ON par.cid_number = s.parent_cid_number
+    LEFT JOIN gov pg ON pg.province_code = par.province_code AND pg.cid_number = par.cid_number
     WHERE s.kind IN ('PUBLIC', 'PRIVATE')
       AND s.status = 'ACTIVE'
       AND (
             (s.kind = 'PUBLIC'
-             AND g.cid_number IS NOT NULL
+             AND g.source = 'CHAIN'
              AND s.category = 'GOV_INSTITUTION')
-            OR s.category = 'GOV_INSTITUTION'
             OR (s.institution_code IN ('SFGT', 'SFGP', 'UNIN')
-                AND par.category = 'GOV_INSTITUTION')
+                AND par.kind = 'PUBLIC'
+                AND par.category = 'GOV_INSTITUTION'
+                AND pg.source = 'CHAIN')
           )
       AND s.province_code = $1
       AND ($2::text IS NULL OR s.city_code = $2)
@@ -126,7 +130,7 @@ impl PublicInstitutionRow {
 pub(crate) struct PublicInstitutionListQuery {
     pub province_name: Option<String>,
     pub city_name: Option<String>,
-    /// 增量游标:仅回 updated_at 严格大于此 RFC3339 时间戳的行。
+    /// 增量游标:客户端保存的链投影版本。当前实现收到旧版本时仍走 keyset 返回全量窗口。
     pub since_version: Option<String>,
     /// keyset 翻页游标:仅回 cid_number 严格大于此值的行。
     pub after_cid: Option<String>,
@@ -236,7 +240,7 @@ struct PublicInstitutionVersion {
     province_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     city_name: Option<String>,
-    /// 目录版本 = MAX(updated_at) RFC3339;无机构时 null。增量同步比对/since 用。
+    /// 目录版本 = `chain_projection_state(public-gov)` 投影版本;无投影时 null。
     #[serde(skip_serializing_if = "Option::is_none")]
     manifest_version: Option<String>,
     /// 机构总数(供客户端粗判增删,删除兜底)。
@@ -309,6 +313,11 @@ fn query_public_institutions(
     let city_code = city_code.map(str::to_string);
     let limit = i64::try_from(page_size.saturating_add(1))
         .map_err(|_| "page_size too large".to_string())?;
+    let current_version = current_chain_projection_version(&state.db)
+        .ok_or_else(|| "chain public institution projection is not initialized".to_string())?;
+    if since_version.as_deref() == Some(current_version.as_str()) {
+        return Ok((Vec::new(), false, None));
+    }
     // 全列显式 AS 别名,from_pg_row 按列名取;行政区只下发 code(province_code/city_code/town_code),不吐名字。
     let sql = format!(
         "SELECT s.cid_number,
@@ -319,24 +328,17 @@ fn query_public_institutions(
                 s.institution_code, s.parent_cid_number, s.has_legal_personality,
                 (SELECT COUNT(*) FROM accounts a
                    WHERE a.province_code = s.province_code AND a.cid_number = s.cid_number) AS account_count,
-                s.created_at, s.legal_rep_name
-         {GOV_FROM_WHERE}
-           AND ($3::text IS NULL OR s.cid_number > $3)
-           AND ($4::text IS NULL OR s.updated_at > $4::timestamptz)
-         ORDER BY s.cid_number ASC
-         LIMIT $5"
+	                s.created_at, s.legal_rep_name
+	         {GOV_FROM_WHERE}
+	           AND ($3::text IS NULL OR s.cid_number > $3)
+	         ORDER BY s.cid_number ASC
+	         LIMIT $4"
     );
     state.db.with_client(move |conn| {
         let rows = conn
             .query(
                 sql.as_str(),
-                &[
-                    &province_code,
-                    &city_code,
-                    &after_cid,
-                    &since_version,
-                    &limit,
-                ],
+                &[&province_code, &city_code, &after_cid, &limit],
             )
             .map_err(|e| format!("public institution keyset query failed: {e}"))?;
         let mut items: Vec<PublicInstitutionRow> =
@@ -354,14 +356,14 @@ fn query_public_institutions(
     })
 }
 
-/// 目录版本 = MAX(updated_at) RFC3339(单查,list 用)。
+/// 目录版本 = 链上公权投影版本(单查,list 用)。
 fn scope_version(state: &AppState, province_code: &str, city_code: Option<&str>) -> Option<String> {
     scope_version_and_count(state, province_code, city_code)
         .ok()
         .and_then(|(v, _)| v)
 }
 
-/// 目录版本 + 机构总数:`MAX(updated_at)` RFC3339 + COUNT。
+/// 目录版本 + 机构总数:链投影版本 + 当前 scope COUNT。
 fn scope_version_and_count(
     state: &AppState,
     province_code: &str,
@@ -369,14 +371,14 @@ fn scope_version_and_count(
 ) -> Result<(Option<String>, i64), String> {
     let province_code = province_code.to_string();
     let city_code = city_code.map(str::to_string);
-    let sql = format!("SELECT COUNT(*), MAX(s.updated_at) {GOV_FROM_WHERE}");
+    let projection_version = current_chain_projection_version(&state.db);
+    let sql = format!("SELECT COUNT(*) {GOV_FROM_WHERE}");
     state.db.with_client(move |conn| {
         let row = conn
             .query_one(sql.as_str(), &[&province_code, &city_code])
             .map_err(|e| format!("public institution version query failed: {e}"))?;
         let count: i64 = row.get(0);
-        let max_updated: Option<DateTime<Utc>> = row.get(1);
-        Ok((max_updated.map(|t| t.to_rfc3339()), count))
+        Ok((projection_version, count))
     })
 }
 

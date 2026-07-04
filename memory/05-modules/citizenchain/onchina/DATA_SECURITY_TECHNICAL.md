@@ -34,6 +34,8 @@ CID 号格式为 `R5-K3P1C1-N9-D4`。
 
 CID 号生成和校验唯一源码目录为 `citizenchain/onchina/src/cid/`。任何端不得维护第二份号码格式、机构码表或省码表。
 
+公权机构 CID 与机构信息不在 OnChina 运行态生成。所有公权机构唯一真源是链上 `PublicManage::Institutions` / `PublicManage::InstitutionAccounts`;OnChina 只保存 `sync-gov` 同步出的本地查询投影,投影状态以 `chain_projection_state(public-gov)` 为准。
+
 ### 3.1 公民 CID 和护照号
 
 - 公民 CID 的机构代码固定为 `CTZN`;个人码不携带办理市码,R5 市段固定为 `000`。

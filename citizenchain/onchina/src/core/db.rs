@@ -355,15 +355,17 @@ impl Db {
              VALUES (1, 0)
              ON CONFLICT (id) DO NOTHING;
 
-             CREATE TABLE IF NOT EXISTS gov_manifest (
-                scope_key TEXT PRIMARY KEY,
-                china_hash TEXT NOT NULL,
-                catalog_hash TEXT NOT NULL,
-                template_version TEXT NOT NULL,
-                target_count BIGINT NOT NULL,
-                status TEXT NOT NULL CHECK (status IN ('OK', 'INCOMPLETE')),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-             );",
+             CREATE TABLE IF NOT EXISTS chain_projection_state (
+                projection_key TEXT PRIMARY KEY,
+                chain_genesis_hash TEXT NOT NULL,
+                chain_block_hash TEXT NOT NULL DEFAULT '',
+                chain_block_number BIGINT,
+                item_count BIGINT NOT NULL DEFAULT 0,
+                account_count BIGINT NOT NULL DEFAULT 0,
+                status TEXT NOT NULL CHECK (status IN ('OK', 'FAILED')),
+                synced_at TIMESTAMPTZ NOT NULL DEFAULT now()
+             );
+             DROP TABLE IF EXISTS gov_manifest;",
         )
         .map_err(|e| format!("init core schema failed: {}", postgres_error_text(&e)))?;
         Self::init_subject_partition_schema(conn)?;
@@ -532,7 +534,7 @@ impl Db {
 		                city_code TEXT,
 		                town_code TEXT,
 		                institution_code TEXT NOT NULL,
-                source TEXT NOT NULL DEFAULT 'MANUAL' CHECK (source IN ('GENERATED', 'MANUAL')),
+                source TEXT NOT NULL DEFAULT 'CHAIN' CHECK (source IN ('CHAIN', 'MANUAL')),
                 home_p TEXT,
                 home_c TEXT,
                 PRIMARY KEY (province_code, cid_number)
@@ -624,18 +626,23 @@ impl Db {
         conn.batch_execute(
             "ALTER TABLE gov
                 DROP CONSTRAINT IF EXISTS gov_source_check;
+             UPDATE gov
+             SET source = 'CHAIN'
+             WHERE source = 'GENERATED';
+             ALTER TABLE gov
+                ALTER COLUMN source SET DEFAULT 'CHAIN';
              ALTER TABLE gov
                 ADD CONSTRAINT gov_source_check
-                CHECK (source IN ('GENERATED', 'MANUAL'));
+                CHECK (source IN ('CHAIN', 'MANUAL'));
              UPDATE gov g
-             SET source = 'GENERATED'
+             SET source = 'CHAIN'
              FROM subjects s
              WHERE s.province_code = g.province_code
                AND s.cid_number = g.cid_number
                AND s.kind = 'PUBLIC'
                AND s.created_by = 'SYSTEM'
                AND s.category = 'GOV_INSTITUTION'
-               AND g.source IS DISTINCT FROM 'GENERATED';",
+               AND g.source IS DISTINCT FROM 'CHAIN';",
         )
         .map_err(|e| {
             format!(

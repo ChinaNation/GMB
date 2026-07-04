@@ -26,6 +26,9 @@ pub enum SeedCidError<E> {
 }
 
 /// 公权机构(政府模板)CID — 确定性种子,无重试。
+/// 仅用于测试校验 onchina 与 primitives 创世派生是否逐字节同源;
+/// 运行态公权机构不得从本函数生成,只能读取链上投影。
+#[cfg(test)]
 pub fn official_institution_cid<E>(
     scope: &str,
     province_code: &str,

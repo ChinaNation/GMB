@@ -64,11 +64,11 @@ pub(crate) fn with_china_connection<T>(
 
 /// 返回当前行政区划 SQLite 文件哈希。
 ///
-/// 该哈希只用于部署期确定性目录完整性校验。运行时只读打开数据库,
-/// 不会因为哈希变化自动写库或发布新版本。
+/// 该哈希只用于部署期行政区资源完整性校验。运行时只读打开数据库,
+/// 不会因为哈希变化自动生成公权机构、写库或发布新版本。
 pub fn china_sqlite_hash() -> Result<String, String> {
     // china_db_path 本身已在进程内固定,部署期完整性哈希也随之缓存,
-    // 避免 gov changed-only 逐省检查时重复读取并哈希同一个只读 SQLite 文件。
+    // 避免多处读取行政区资源时重复哈希同一个只读 SQLite 文件。
     if let Some(hash) = CHINA_SQLITE_HASH_CACHE.get() {
         return Ok(hash.clone());
     }

@@ -9,7 +9,7 @@ use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use postgres::config::Host;
 use serde::Serialize;
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -440,6 +440,37 @@ impl Db {
     > {
         let cid_number = cid_number.trim().to_string();
         self.with_client(move |conn| Self::get_institution_with_accounts_conn(conn, &cid_number))
+    }
+
+    pub(crate) fn chain_public_institution_cid_by_code(
+        &self,
+        institution_code: &str,
+    ) -> Result<Option<String>, String> {
+        let institution_code = institution_code.trim().to_string();
+        self.with_client(move |conn| {
+            let rows = conn
+                .query(
+                    "SELECT cid_number
+                     FROM gov
+                     WHERE source = 'CHAIN'
+                       AND institution_code = $1
+                     ORDER BY cid_number ASC
+                     LIMIT 2",
+                    &[&institution_code],
+                )
+                .map_err(|e| {
+                    format!(
+                        "query chain public institution by code failed: {}",
+                        crate::core::db::postgres_error_text(&e)
+                    )
+                })?;
+            if rows.len() > 1 {
+                return Err(format!(
+                    "chain public institution code {institution_code} is not unique in local projection"
+                ));
+            }
+            Ok(rows.first().map(|row| row.get::<_, String>(0)))
+        })
     }
 
     /// `get_institution_with_accounts` 的 conn 级版本,供已持有连接的
@@ -1548,16 +1579,18 @@ impl Db {
                                     a.admin_name, a.institution_code, s.cid_full_name, s.cid_short_name,
                                     ''::text AS town_name, COALESCE(s.town_code, ''),
                                     s.education_type, s.status
-                     FROM subjects s
-                     LEFT JOIN (
+	                     FROM subjects s
+	                     JOIN gov g ON g.province_code = s.province_code AND g.cid_number = s.cid_number
+	                     LEFT JOIN (
                         SELECT cid_number, COUNT(*)::BIGINT AS account_count
                         FROM accounts
                         GROUP BY cid_number
                      ) ac ON ac.cid_number = s.cid_number
                      LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
                      WHERE s.kind = 'PUBLIC'
-	                       AND s.status = 'ACTIVE'
-	                       AND s.institution_code IN ('NED', 'CEDU', 'GUN', 'GSCH')
+		                       AND s.status = 'ACTIVE'
+		                       AND g.source = 'CHAIN'
+		                       AND s.institution_code IN ('NED', 'CEDU', 'GUN', 'GSCH')
 	                       AND s.education_type = $3
 	                       AND s.province_code = $1
 	                       AND ($2::text IS NULL OR s.city_code = $2)
@@ -1597,8 +1630,8 @@ impl Db {
                 .map_err(|_| "page_size too large".to_string())?;
             let offset_i64 =
                 i64::try_from(offset).map_err(|_| "page offset too large".to_string())?;
-            // 公权目录 = 自动生成目录(gov 表) + 手动公权机构
-            // (category=GOV,无 gov 行,非 JY 学校) + 公权下属非法人(F,父级为公法人)。
+	            // 公权目录 = 链上 PublicManage 投影(gov.source=CHAIN)
+	            // + 公权下属非法人(F,父级为公法人)。本地 pending/手工行不能作为公权机构真源。
             // 父级只按 cid_number 关联(cid 全局唯一,父级不限定本省分区)。
             let rows = conn
                 .query(
@@ -1625,14 +1658,12 @@ impl Db {
 	                             LEFT JOIN admins a ON lower(a.admin_account) = lower(s.created_by)
 	                             WHERE s.kind IN ('PUBLIC', 'PRIVATE')
 	                               AND s.status = 'ACTIVE'
-		                               AND (
-		                                    (s.category = 'GOV_INSTITUTION'
-		                                     AND g.cid_number IS NOT NULL
-		                                     AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH'))
-	                                    OR (s.category = 'GOV_INSTITUTION'
-	                                        AND g.cid_number IS NULL
-	                                        AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH'))
-	                                    OR (s.institution_code IN ('SFGT', 'SFGP', 'UNIN')
+			                               AND (
+			                                    (s.category = 'GOV_INSTITUTION'
+			                                     AND g.cid_number IS NOT NULL
+			                                     AND g.source = 'CHAIN'
+			                                     AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'JUN', 'GSCH', 'SFSC', 'JSCH'))
+		                                    OR (s.institution_code IN ('SFGT', 'SFGP', 'UNIN')
 	                                        AND s.institution_code NOT IN ('NED', 'CEDU', 'GUN', 'SUN', 'GSCH', 'SFSC')
 	                                        AND par.category = 'GOV_INSTITUTION')
 	                               )
@@ -1718,19 +1749,7 @@ fn disable_core_dumps() {
 #[derive(Debug, Clone)]
 enum BackendCommand {
     Serve,
-    EnsureGov,
-    InitGov,
-    CheckGov {
-        strict: bool,
-    },
-    ReconcileGovChanged,
-    ReconcileGovProvince {
-        province_code: String,
-    },
-    ReconcileGovCity {
-        province_code: String,
-        city_code: String,
-    },
+    SyncGov,
     PurgeLegacyCid {
         dry_run: bool,
     },
@@ -1749,33 +1768,7 @@ fn parse_backend_command() -> BackendCommand {
     };
     match command {
         "serve" => BackendCommand::Serve,
-        "ensure-gov" => BackendCommand::EnsureGov,
-        "init-gov" => BackendCommand::InitGov,
-        "check-gov" => BackendCommand::CheckGov {
-            strict: args.iter().any(|arg| arg == "--strict"),
-        },
-        "reconcile-gov" => {
-            if args.iter().any(|arg| arg == "--changed-only") {
-                BackendCommand::ReconcileGovChanged
-            } else {
-                panic!("reconcile-gov requires --changed-only");
-            }
-        }
-        "reconcile-gov-province" => {
-            let province_code = parse_cli_option(&args, "--province")
-                .unwrap_or_else(|| panic!("reconcile-gov-province requires --province <code>"));
-            BackendCommand::ReconcileGovProvince { province_code }
-        }
-        "reconcile-gov-city" => {
-            let province_code = parse_cli_option(&args, "--province")
-                .unwrap_or_else(|| panic!("reconcile-gov-city requires --province <code>"));
-            let city_code = parse_cli_option(&args, "--city")
-                .unwrap_or_else(|| panic!("reconcile-gov-city requires --city <code>"));
-            BackendCommand::ReconcileGovCity {
-                province_code,
-                city_code,
-            }
-        }
+        "sync-gov" => BackendCommand::SyncGov,
         "audit-chain-catalog" => BackendCommand::AuditChainCatalog,
         "purge-legacy-cid" => BackendCommand::PurgeLegacyCid {
             dry_run: args.iter().any(|arg| arg == "--dry-run"),
@@ -1801,358 +1794,62 @@ fn parse_cli_option(args: &[String], name: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
-#[derive(Debug, Clone, Copy)]
-struct GovBootstrapState {
-    manifest_present: bool,
-    manifest_ready: bool,
-    target_count: i64,
-    subject_count: i64,
-    gov_count: i64,
-    account_count: i64,
+fn init_chain_genesis_hash_blocking() -> Result<(), String> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("build chain genesis init runtime failed: {e}"))?;
+    rt.block_on(core::chain_runtime::init_genesis_hash_from_chain())
 }
 
-fn gov_bootstrap_state_ready(state: &GovBootstrapState) -> bool {
-    state.manifest_ready
-        && state.target_count > 0
-        && state.subject_count >= state.target_count
-        && state.gov_count >= state.target_count
-        && state.account_count
-            >= state.target_count * crate::domains::gov::service::MIN_DEFAULT_ACCOUNT_COUNT
-}
-
-fn gov_bootstrap_state_summary(state: &GovBootstrapState) -> String {
-    format!(
-        "manifest_present={}, manifest_ready={}, target_count={}, subjects={}, gov={}, accounts={}",
-        state.manifest_present,
-        state.manifest_ready,
-        state.target_count,
-        state.subject_count,
-        state.gov_count,
-        state.account_count
-    )
-}
-
-fn load_gov_bootstrap_state(state: &AppState) -> Result<GovBootstrapState, String> {
-    use crate::domains::gov::service::{gov_manifest_key, GovTargetKind, OfficialReconcileScope};
-
-    let scope_key = gov_manifest_key(&OfficialReconcileScope::All, GovTargetKind::All);
-    state.db.with_client(move |conn| {
-        let row = conn
-            .query_one(
-                "SELECT
-                    EXISTS(SELECT 1 FROM gov_manifest WHERE scope_key = $1) AS manifest_present,
-                    COALESCE((
-                        SELECT status = 'OK' AND template_version = $2 AND target_count > 0
-                        FROM gov_manifest
-                        WHERE scope_key = $1
-                        ORDER BY updated_at DESC
-                        LIMIT 1
-                    ), false) AS manifest_ready,
-                    COALESCE((
-                        SELECT target_count
-                        FROM gov_manifest
-                        WHERE scope_key = $1
-                        ORDER BY updated_at DESC
-                        LIMIT 1
-                    ), 0)::BIGINT AS target_count,
-                    (SELECT COUNT(*)::BIGINT FROM subjects WHERE kind = 'PUBLIC' AND status = 'ACTIVE') AS subject_count,
-                    (SELECT COUNT(*)::BIGINT FROM gov) AS gov_count,
-                    (
-                        SELECT COUNT(*)::BIGINT
-                        FROM accounts a
-                        JOIN gov g ON g.province_code = a.province_code AND g.cid_number = a.cid_number
-                    ) AS account_count",
-                &[&scope_key, &crate::domains::gov::service::GOV_TEMPLATE_VERSION],
-            )
-            .map_err(|e| {
-                format!(
-                    "query gov bootstrap state failed: {}",
-                    crate::core::db::postgres_error_text(&e)
-                )
-            })?;
-        Ok(GovBootstrapState {
-            manifest_present: row.get(0),
-            manifest_ready: row.get(1),
-            target_count: row.get(2),
-            subject_count: row.get(3),
-            gov_count: row.get(4),
-            account_count: row.get(5),
-        })
-    })
-}
-
-fn run_ensure_gov_command(state: &AppState) -> Result<(), String> {
-    use crate::domains::gov::service::{
-        check_gov_catalog_db, upsert_gov_manifest_from_check_db, GovTargetKind,
-        OfficialReconcileScope,
-    };
-
-    let lock_sql = "SELECT pg_advisory_lock(hashtext('cid'), hashtext('ensure-gov'))";
-    let unlock_sql = "SELECT pg_advisory_unlock(hashtext('cid'), hashtext('ensure-gov'))";
-
-    // 部署脚本可能被多实例同时执行,PostgreSQL 会话锁保证只有一个进程做目录初始化。
-    let database_url =
-        std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL is required".to_string())?;
-    let mut lock_conn =
-        postgres::Client::connect(database_url.as_str(), postgres::NoTls).map_err(|e| {
-            format!(
-                "connect postgres for gov ensure lock failed: {}",
-                crate::core::db::postgres_error_text(&e)
-            )
-        })?;
-    lock_conn.batch_execute(lock_sql).map_err(|e| {
-        format!(
-            "acquire gov ensure lock failed: {}",
-            crate::core::db::postgres_error_text(&e)
-        )
-    })?;
-
-    let result = (|| {
-        let before = load_gov_bootstrap_state(state)?;
-        info!(
-            manifest_present = before.manifest_present,
-            manifest_ready = before.manifest_ready,
-            target_count = before.target_count,
-            subjects = before.subject_count,
-            gov = before.gov_count,
-            accounts = before.account_count,
-            "cid gov directory bootstrap state checked"
-        );
-
-        let check =
-            check_gov_catalog_db(&state.db, OfficialReconcileScope::All, GovTargetKind::All)?;
-        let manifest_current =
-            check.manifest_catalog_hash.as_deref() == Some(check.catalog_hash.as_str());
-        info!(
-            ok = check.ok,
-            manifest_current,
-            target_count = check.target_count,
-            active_count = check.active_count,
-            missing = check.missing_cids.len(),
-            mismatched = check.mismatched_cids.len(),
-            missing_accounts = check.missing_account_cids.len(),
-            obsolete = check.obsolete_cids.len(),
-            "cid gov directory existing data checked before ensure rewrite"
-        );
-        if check.ok && manifest_current {
-            info!("cid gov directory already matches current china hash; ensure-gov skipped");
-            return Ok(());
-        }
-        if check.ok {
-            upsert_gov_manifest_from_check_db(&state.db, &check)?;
-            info!("cid gov directory manifest repaired by ensure-gov");
-            return Ok(());
-        }
-
-        let report = core::runtime_ops::reconcile_official_institutions_explicit(
-            state,
-            OfficialReconcileScope::All,
-            true,
-        )?;
-        let after = load_gov_bootstrap_state(state)?;
-        if !gov_bootstrap_state_ready(&after) {
-            return Err(format!(
-                "gov directory remains incomplete after ensure-gov: {}",
-                gov_bootstrap_state_summary(&after)
-            ));
-        }
-        let after_check =
-            check_gov_catalog_db(&state.db, OfficialReconcileScope::All, GovTargetKind::All)?;
-        if !after_check.ok
-            || after_check.manifest_catalog_hash.as_deref()
-                != Some(after_check.catalog_hash.as_str())
-        {
-            return Err(format!(
-                "gov directory remains stale after ensure-gov: ok={}, manifest_current={}, missing={}, mismatched={}, missing_accounts={}, obsolete={}",
-                after_check.ok,
-                after_check.manifest_catalog_hash.as_deref()
-                    == Some(after_check.catalog_hash.as_str()),
-                after_check.missing_cids.len(),
-                after_check.mismatched_cids.len(),
-                after_check.missing_account_cids.len(),
-                after_check.obsolete_cids.len()
-            ));
-        }
-
-        info!(
-            inserted = report.inserted,
-            updated = report.updated,
-            account_inserted = report.account_inserted,
-            removed = report.removed,
-            total_after = report.total_after,
-            touched = report.touched_cids.len(),
-            targets = report.target_cids.len(),
-            "cid gov directory initialized by ensure-gov"
-        );
-        Ok(())
-    })();
-
-    let unlock_result = lock_conn.batch_execute(unlock_sql).map_err(|e| {
-        format!(
-            "release gov ensure lock failed: {}",
-            crate::core::db::postgres_error_text(&e)
-        )
-    });
-    if result.is_ok() {
-        unlock_result?;
-    }
-    result
-}
-
-fn ensure_gov_catalog_current_for_serve(state: &AppState) -> Result<(), String> {
-    use crate::domains::gov::service::{
-        check_gov_catalog_db, check_gov_manifest_db, reconcile_changed_gov_catalog_db,
-        GovTargetKind, OfficialReconcileScope,
-    };
-
-    let manifest = check_gov_manifest_db(&state.db)?;
-    if manifest.ok {
-        info!(
-            target_count = manifest.target_count,
-            china_hash = %manifest.china_hash,
-            catalog_hash = %manifest.catalog_hash,
-            "cid gov directory manifest matches current china sqlite"
-        );
-        return Ok(());
-    }
-    warn!(
-        target_count = manifest.target_count,
-        china_hash = %manifest.china_hash,
-        catalog_hash = %manifest.catalog_hash,
-        manifest_china_hash = ?manifest.manifest_china_hash,
-        manifest_catalog_hash = ?manifest.manifest_catalog_hash,
-        manifest_status = ?manifest.manifest_status,
-        "cid gov directory manifest is stale"
-    );
-    if !env_flag_enabled("ONCHINA_GOV_AUTO_RECONCILE") {
-        return Err(
-            "CID 公权机构目录已落后于当前 china.sqlite；请先执行 `onchina reconcile-gov --changed-only` 和 `onchina check-gov --strict`，或在本地开发显式设置 ONCHINA_GOV_AUTO_RECONCILE=1 后再启动。"
-                .to_string(),
-        );
-    }
-
-    let reports = reconcile_changed_gov_catalog_db(&state.db, "SYSTEM")?;
+fn log_gov_projection_report(
+    label: &'static str,
+    report: &domains::gov::service::GovChainProjectionReport,
+) {
     info!(
-        scopes = reports.len(),
-        inserted = reports.iter().map(|r| r.inserted).sum::<usize>(),
-        updated = reports.iter().map(|r| r.updated).sum::<usize>(),
-        removed = reports.iter().map(|r| r.removed).sum::<usize>(),
-        "cid gov directory auto reconciled before serve"
+        chain_institutions = report.chain_institutions,
+        chain_accounts = report.chain_accounts,
+        local_institutions = report.local_institutions,
+        local_accounts = report.local_accounts,
+        institution_rows_changed = report.institution_rows_changed,
+        account_rows_changed = report.account_rows_changed,
+        obsolete_subjects_removed = report.obsolete_subjects_removed,
+        obsolete_accounts_removed = report.obsolete_accounts_removed,
+        chain_genesis_hash = %report.chain_genesis_hash,
+        label,
+        "cid gov chain projection synced"
     );
-    let check = check_gov_catalog_db(&state.db, OfficialReconcileScope::All, GovTargetKind::All)?;
-    if check.ok && check.manifest_catalog_hash.as_deref() == Some(check.catalog_hash.as_str()) {
-        Ok(())
-    } else {
-        Err(format!(
-            "CID 公权机构目录自动对账后仍未通过: ok={}, manifest_current={}, missing={}, mismatched={}, missing_accounts={}, obsolete={}",
-            check.ok,
-            check.manifest_catalog_hash.as_deref() == Some(check.catalog_hash.as_str()),
-            check.missing_cids.len(),
-            check.mismatched_cids.len(),
-            check.missing_account_cids.len(),
-            check.obsolete_cids.len()
-        ))
-    }
 }
 
-fn run_gov_directory_command(state: &AppState, command: BackendCommand) -> bool {
-    use crate::domains::gov::service::{
-        check_gov_catalog_db, reconcile_changed_gov_catalog_db, GovTargetKind,
-        OfficialReconcileScope,
-    };
-
-    let (scope, force_row_sync, label) = match command {
-        BackendCommand::Serve => return false,
+fn run_gov_chain_projection_command(state: &AppState, command: BackendCommand) -> bool {
+    match command {
+        BackendCommand::Serve => false,
         BackendCommand::AuditChainCatalog => {
+            init_chain_genesis_hash_blocking()
+                .unwrap_or_else(|e| panic!("init chain genesis hash failed: {e}"));
             crate::domains::gov::chain_audit::full_audit_blocking()
                 .unwrap_or_else(|e| panic!("audit-chain-catalog failed: {e}"));
-            return true;
+            true
         }
-        BackendCommand::EnsureGov => {
-            run_ensure_gov_command(state).unwrap_or_else(|e| panic!("ensure-gov failed: {e}"));
-            return true;
-        }
-        BackendCommand::InitGov => (OfficialReconcileScope::All, true, "init-gov"),
-        BackendCommand::CheckGov { strict } => {
+        BackendCommand::SyncGov => {
+            init_chain_genesis_hash_blocking()
+                .unwrap_or_else(|e| panic!("init chain genesis hash failed: {e}"));
             let report =
-                check_gov_catalog_db(&state.db, OfficialReconcileScope::All, GovTargetKind::All)
-                    .unwrap_or_else(|e| panic!("check-gov failed: {e}"));
-            info!(
-                ok = report.ok,
-                manifest_current =
-                    report.manifest_catalog_hash.as_deref() == Some(report.catalog_hash.as_str()),
-                target_count = report.target_count,
-                active_count = report.active_count,
-                missing = report.missing_cids.len(),
-                mismatched = report.mismatched_cids.len(),
-                missing_accounts = report.missing_account_cids.len(),
-                obsolete = report.obsolete_cids.len(),
-                catalog_hash = report.catalog_hash,
-                "cid gov directory check finished"
-            );
-            let manifest_current =
-                report.manifest_catalog_hash.as_deref() == Some(report.catalog_hash.as_str());
-            if strict && (!report.ok || !manifest_current) {
-                panic!("check-gov --strict failed: deterministic gov directory is incomplete");
-            }
-            return true;
-        }
-        BackendCommand::ReconcileGovChanged => {
-            let reports = reconcile_changed_gov_catalog_db(&state.db, "SYSTEM")
-                .unwrap_or_else(|e| panic!("reconcile-gov --changed-only failed: {e}"));
-            info!(
-                scopes = reports.len(),
-                inserted = reports.iter().map(|r| r.inserted).sum::<usize>(),
-                updated = reports.iter().map(|r| r.updated).sum::<usize>(),
-                account_inserted = reports.iter().map(|r| r.account_inserted).sum::<usize>(),
-                removed = reports.iter().map(|r| r.removed).sum::<usize>(),
-                "cid changed gov directory reconcile finished"
-            );
-            return true;
+                crate::domains::gov::service::sync_gov_chain_projection_blocking(&state.db)
+                    .unwrap_or_else(|e| panic!("sync-gov failed: {e}"));
+            log_gov_projection_report("sync-gov", &report);
+            true
         }
         BackendCommand::PurgeLegacyCid { dry_run } => {
             run_purge_legacy_cid(state, dry_run);
-            return true;
+            true
         }
         BackendCommand::PurgeOrphanInstitutions {
             dry_run,
             backup_path,
         } => {
             run_purge_orphan_institutions(state, dry_run, backup_path.as_deref());
-            return true;
+            true
         }
-        BackendCommand::ReconcileGovProvince { province_code } => (
-            OfficialReconcileScope::Province { province_code },
-            false,
-            "reconcile-gov-province",
-        ),
-        BackendCommand::ReconcileGovCity {
-            province_code,
-            city_code,
-        } => (
-            OfficialReconcileScope::City {
-                province_code,
-                city_code,
-            },
-            false,
-            "reconcile-gov-city",
-        ),
-    };
-    let report =
-        core::runtime_ops::reconcile_official_institutions_explicit(state, scope, force_row_sync)
-            .unwrap_or_else(|e| panic!("{label} failed: {e}"));
-    info!(
-        command = label,
-        inserted = report.inserted,
-        updated = report.updated,
-        account_inserted = report.account_inserted,
-        removed = report.removed,
-        total_after = report.total_after,
-        touched = report.touched_cids.len(),
-        targets = report.target_cids.len(),
-        "cid gov directory command finished"
-    );
-    true
+    }
 }
 
 #[derive(Debug)]
@@ -2164,9 +1861,8 @@ struct PurgeReport {
     dry_run: bool,
 }
 
-// 清掉所有不合规 CID 号,再把能确定性
-// 自动重建的公权机构重对账。PRIVATE 私权机构与公民属注册局直接录入,
-// 删后无法自动重建,需由注册局重新录入。链端不在本命令范围。
+// 清掉所有不合规 CID 号。PUBLIC 公权机构删后只能从链上唯一真源重建投影;
+// PRIVATE 私权机构与公民属注册局直接录入,删后无法自动重建,需由注册局重新录入。
 fn run_purge_legacy_cid(state: &AppState, dry_run: bool) {
     let report = state
         .db
@@ -2191,7 +1887,7 @@ fn run_purge_legacy_cid(state: &AppState, dry_run: bool) {
         return;
     }
     if report.legacy_count == 0 {
-        info!("purge-legacy-cid: no legacy cid rows; skip reconcile");
+        info!("purge-legacy-cid: no legacy cid rows; skip chain projection sync");
         return;
     }
     if report.private_count > 0 || report.citizen_count > 0 {
@@ -2201,22 +1897,11 @@ fn run_purge_legacy_cid(state: &AppState, dry_run: bool) {
             "purge-legacy-cid removed user-created PRIVATE/CITIZEN rows; they must be re-created/re-bound to get new-scheme cid"
         );
     }
-    // build_raw_targets(GovTargetKind::All) 返回完整自动公权机构目录,
-    // 一次全量重对账即把所有 PUBLIC 主体按新号重建。
-    let recon = core::runtime_ops::reconcile_official_institutions_explicit(
-        state,
-        crate::domains::gov::service::OfficialReconcileScope::All,
-        true,
-    )
-    .unwrap_or_else(|e| panic!("purge-legacy-cid reconcile failed: {e}"));
-    info!(
-        inserted = recon.inserted,
-        updated = recon.updated,
-        account_inserted = recon.account_inserted,
-        removed = recon.removed,
-        total_after = recon.total_after,
-        "cid public institutions reconciled with new scheme"
-    );
+    init_chain_genesis_hash_blocking()
+        .unwrap_or_else(|e| panic!("purge-legacy-cid init chain genesis hash failed: {e}"));
+    let projection = crate::domains::gov::service::sync_gov_chain_projection_blocking(&state.db)
+        .unwrap_or_else(|e| panic!("purge-legacy-cid chain projection sync failed: {e}"));
+    log_gov_projection_report("purge-legacy-cid", &projection);
 }
 
 // 一条孤儿机构记录(subjects 行 town_code 指向 china.sqlite 已退役/不存在的镇)。
@@ -2354,36 +2039,6 @@ fn run_purge_orphan_institutions(state: &AppState, dry_run: bool, backup_path: O
     );
 }
 
-fn chain_genesis_source_configured() -> bool {
-    std::env::var("ONCHAIN_GENESIS_HASH")
-        .ok()
-        .map(|v| !v.trim().is_empty())
-        .unwrap_or(false)
-        || core::chain_url::chain_ws_url().is_ok()
-}
-
-// 链节点是 OnChina 的外部联调依赖,不能阻塞后端和管理员基础服务启动。
-async fn cache_chain_genesis_hash_until_ready() {
-    let mut retry_secs = 2u64;
-    loop {
-        match core::chain_runtime::init_genesis_hash_from_chain().await {
-            Ok(()) => {
-                info!("chain genesis hash initialized");
-                return;
-            }
-            Err(err) => {
-                warn!(
-                    error = %err,
-                    retry_in = retry_secs,
-                    "chain genesis hash unavailable; onchina backend continues without chain"
-                );
-            }
-        }
-        tokio::time::sleep(Duration::from_secs(retry_secs)).await;
-        retry_secs = (retry_secs * 2).min(60);
-    }
-}
-
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter("info")
@@ -2429,16 +2084,18 @@ fn main() {
         rate_limiter: Arc::new(LocalRateLimiter::new()),
     };
     info!("initialized database state with defaults");
-    if run_gov_directory_command(&state, command.clone()) {
+    if run_gov_chain_projection_command(&state, command.clone()) {
         return;
     }
-    // 普通公权/宪法机构目录是持久化数据,正常启动只读数据库,
-    // 不在健康检查前执行全量生成和逐条 upsert;但必须确认运行库目录来自当前
-    // china.sqlite,否则行政区变更后旧公权机构会继续对外服务。
-    ensure_gov_catalog_current_for_serve(&state)
-        .unwrap_or_else(|e| panic!("cid gov directory guard failed: {e}"));
-    // 创世机构目录链上抽样对账(ADR-031 D9,fail-closed):
-    // 目录与创世同源派生,启动抽 32 号核对链上登记,防 runtime↔onchina 版本漂移;
+    init_chain_genesis_hash_blocking()
+        .unwrap_or_else(|e| panic!("init chain genesis hash failed: {e}"));
+    // 公权机构唯一真源是链上 PublicManage。普通启动先全量同步链投影:
+    // 链上缺失或不可达时 fail-closed,避免本地重新生成公权机构继续对外服务。
+    let projection = crate::domains::gov::service::sync_gov_chain_projection_blocking(&state.db)
+        .unwrap_or_else(|e| panic!("cid gov chain projection sync failed: {e}"));
+    log_gov_projection_report("serve-startup", &projection);
+    // 创世机构目录链上抽样对账(ADR-031 D9,fail-closed):只校验 runtime/onchina
+    // 派生规则与链上创世写入仍一致,不得作为 OnChina 本地公权机构生成来源。
     // ONCHINA_GOV_CHAIN_AUDIT=0 为开发无链环境逃生门。
     if std::env::var("ONCHINA_GOV_CHAIN_AUDIT")
         .map(|v| v != "0")
@@ -2464,11 +2121,6 @@ fn main() {
     runtime.block_on(async move {
         if let Some(db) = indexer_db {
             tokio::spawn(indexer::indexer_worker(db));
-        }
-        if chain_genesis_source_configured() {
-            tokio::spawn(cache_chain_genesis_hash_until_ready());
-        } else {
-            warn!("chain genesis hash source not configured; onchina backend continues without chain");
         }
         // 链上集合鉴权(3b)——后台周期复查,清退已不在链上 Active 集合的管理员会话。
         if core::chain_url::chain_ws_url().is_ok() {
@@ -2826,7 +2478,7 @@ fn main() {
                 "/api/v1/app/institutions/:cid_number/accounts",
                 get(institution::subjects::chain_multisig_info::app_list_accounts),
             )
-            // ── 公权机构目录(CitizenApp BFF,匿名只读,数据来自 CID Postgres 确定性目录)──
+            // ── 公权机构目录(CitizenApp BFF,匿名只读,数据来自链上公权机构投影)──
             .route(
                 "/api/v1/app/public-institutions",
                 get(citizenapp::public_institution::list_public_institutions),

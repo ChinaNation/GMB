@@ -1,1209 +1,512 @@
-//! 公权机构自动目录服务。
+//! 公权机构链上投影服务。
 //!
-//! 自动生成的公权机构只归 gov 模块维护。编译不写库,serve 只做版本守门;
-//! 部署入口必须先运行 `reconcile-gov --changed-only` 与 `check-gov --strict`。
+//! 公权机构唯一真源是链上 `PublicManage::Institutions` 与
+//! `PublicManage::InstitutionAccounts`。OnChina PostgreSQL 只保存查询缓存:
+//! 启动或显式同步时全量读取链上 storage,只把链上存在的机构投影到本地。
+//! 行政区 `china.sqlite` 仅用于校验/补充省市镇索引,不得反向生成机构。
 
 use serde::Serialize;
-use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
-use crate::cid::china::{china_sqlite_hash, provinces};
-use crate::cid::InstitutionCategory;
+use crate::cid::{code, parse_cid_number_parts};
+use crate::core::{chain_runtime, db::postgres_error_text};
 use crate::institution::subjects::{
-    service::{build_default_accounts_for_codes, default_account_names_for_codes},
     EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE, EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE,
 };
 use crate::Db;
 
-#[allow(dead_code)]
-#[path = "../../../../runtime/primitives/cid/china/china_cb.rs"]
-mod china_cb_constants;
-#[allow(dead_code)]
-#[path = "../../../../runtime/primitives/cid/china/china_ch.rs"]
-mod china_ch_constants;
-#[allow(dead_code)]
-#[path = "../../../../runtime/primitives/cid/china/china_jc.rs"]
-mod china_jc_constants;
-#[allow(dead_code)]
-#[path = "../../../../runtime/primitives/cid/china/china_jy.rs"]
-mod china_jy_constants;
-#[allow(dead_code)]
-#[path = "../../../../runtime/primitives/cid/china/china_lf.rs"]
-mod china_lf_constants;
-#[allow(dead_code)]
-#[path = "../../../../runtime/primitives/cid/china/china_sf.rs"]
-mod china_sf_constants;
-#[allow(dead_code)]
-#[path = "../../../../runtime/primitives/cid/china/china_zf.rs"]
-mod china_zf_constants;
-
-pub const GOV_TEMPLATE_VERSION: &str = "gov-deterministic-v8";
-pub const MIN_DEFAULT_ACCOUNT_COUNT: i64 = 2;
+const PROJECTION_KEY_PUBLIC_GOV: &str = "public-gov";
+const GOV_SOURCE_CHAIN: &str = "CHAIN";
+const CHAIN_STATUS_ACTIVE: &str = "ACTIVE_ON_CHAIN";
+const CHAIN_STATUS_REVOKED: &str = "REVOKED_ON_CHAIN";
+const SUBJECT_STATUS_ACTIVE: &str = "ACTIVE";
+const SUBJECT_STATUS_REVOKED: &str = "REVOKED";
+const INSTITUTION_STATUS_ACTIVE: u8 = 1;
 
 #[derive(Debug, Clone, Default, Serialize)]
-pub struct OfficialReconcileReport {
-    pub inserted: usize,
-    pub updated: usize,
-    pub account_inserted: usize,
-    pub removed: usize,
-    pub total_after: usize,
-    pub target_cids: Vec<String>,
-    pub touched_cids: Vec<String>,
-    pub removed_cids: Vec<String>,
-    pub scope_key: String,
-    pub china_hash: String,
-    pub catalog_hash: String,
-    pub template_version: &'static str,
-}
-
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct GovDirectoryCheckReport {
-    pub ok: bool,
-    pub scope_key: String,
-    pub china_hash: String,
-    pub catalog_hash: String,
-    pub manifest_catalog_hash: Option<String>,
-    pub template_version: &'static str,
-    pub target_count: usize,
-    pub active_count: usize,
-    pub missing_cids: Vec<String>,
-    pub mismatched_cids: Vec<String>,
-    pub missing_account_cids: Vec<String>,
-    pub obsolete_cids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct GovDirectoryManifestCheckReport {
-    pub ok: bool,
-    pub scope_key: String,
-    pub china_hash: String,
-    pub catalog_hash: String,
-    pub target_count: usize,
-    pub manifest_china_hash: Option<String>,
-    pub manifest_catalog_hash: Option<String>,
-    pub manifest_template_version: Option<String>,
-    pub manifest_status: Option<String>,
-    pub manifest_target_count: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OfficialReconcileScope {
-    All,
-    Province {
-        province_code: String,
-    },
-    City {
-        province_code: String,
-        city_code: String,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GovTargetKind {
-    /// 全部公权机构目录,不按 category 过滤。
-    All,
-    /// 公权机构列表口径(category=GOV_INSTITUTION)。
-    Official,
+pub(crate) struct GovChainProjectionReport {
+    pub(crate) chain_institutions: usize,
+    pub(crate) chain_accounts: usize,
+    pub(crate) local_institutions: i64,
+    pub(crate) local_accounts: i64,
+    pub(crate) institution_rows_changed: u64,
+    pub(crate) account_rows_changed: u64,
+    pub(crate) obsolete_subjects_removed: u64,
+    pub(crate) obsolete_accounts_removed: u64,
+    pub(crate) chain_genesis_hash: String,
 }
 
 #[derive(Debug, Clone)]
-struct OfficialInstitutionTarget {
+struct ChainInstitutionProjection {
     cid_number: String,
     cid_full_name: String,
     cid_short_name: String,
-    category: InstitutionCategory,
+    subject_status: &'static str,
+    chain_status: &'static str,
+    category: &'static str,
     p1: String,
-    province_name: String,
-    city_name: String,
-    town_name: String,
     province_code: String,
     city_code: String,
     town_code: String,
     institution_code: String,
     education_type: Option<String>,
+    chain_block_number: i64,
 }
 
-// 机构命名/机构集模板单源在 primitives::cid::official_template(ADR-031 卡3);
-// onchina 只引用,不再本地维护第二份,避免与创世直铸漂移。
-use primitives::cid::official_template::{
-    OfficialOrgTemplate, CITY_TEMPLATES, NATIONAL_ASSEMBLY_TEMPLATES,
-    PROVINCE_DEPARTMENT_TEMPLATES, TOWN_TEMPLATES,
-};
-
-impl OfficialReconcileScope {
-    fn scope_key(&self) -> String {
-        match self {
-            Self::All => "all".to_string(),
-            Self::Province { province_code } => {
-                format!("province:{}", province_code.to_ascii_uppercase())
-            }
-            Self::City {
-                province_code,
-                city_code,
-            } => format!(
-                "city:{}:{}",
-                province_code.to_ascii_uppercase(),
-                city_code.to_ascii_uppercase()
-            ),
-        }
-    }
+#[derive(Debug, Clone)]
+struct ChainAccountProjection {
+    cid_number: String,
+    province_code: String,
+    city_code: Option<String>,
+    account_name: String,
+    account: String,
+    chain_status: &'static str,
+    _chain_block_number: i64,
 }
 
-impl GovTargetKind {
-    fn scope_key_suffix(self) -> &'static str {
-        match self {
-            Self::All => "all",
-            Self::Official => "official",
-        }
-    }
-
-    fn includes(self, category: InstitutionCategory) -> bool {
-        match self {
-            Self::All => true,
-            Self::Official => category == InstitutionCategory::GovInstitution,
-        }
-    }
-}
-
-fn scoped_manifest_key(scope: &OfficialReconcileScope, kind: GovTargetKind) -> String {
-    format!("{}:{}", kind.scope_key_suffix(), scope.scope_key())
-}
-
-pub fn gov_manifest_key(scope: &OfficialReconcileScope, kind: GovTargetKind) -> String {
-    scoped_manifest_key(scope, kind)
-}
-
-fn official_institution_targets(scope: &OfficialReconcileScope) -> Vec<OfficialInstitutionTarget> {
-    let mut targets = Vec::new();
-    for item in china_zf_constants::CHINA_ZF.iter() {
-        push_constant_target(
-            &mut targets,
-            item.cid_full_name,
-            item.cid_short_name,
-            item.cid_number,
-        );
-    }
-    for item in china_lf_constants::CHINA_LF.iter() {
-        push_constant_target(
-            &mut targets,
-            item.cid_full_name,
-            item.cid_short_name,
-            item.cid_number,
-        );
-    }
-    for item in china_sf_constants::CHINA_SF.iter() {
-        push_constant_target(
-            &mut targets,
-            item.cid_full_name,
-            item.cid_short_name,
-            item.cid_number,
-        );
-    }
-    for item in china_jc_constants::CHINA_JC.iter() {
-        push_constant_target(
-            &mut targets,
-            item.cid_full_name,
-            item.cid_short_name,
-            item.cid_number,
-        );
-    }
-    for item in china_jy_constants::CHINA_JY.iter() {
-        push_constant_target(
-            &mut targets,
-            item.cid_full_name,
-            item.cid_short_name,
-            item.cid_number,
-        );
-    }
-    for item in china_cb_constants::CHINA_CB.iter() {
-        push_constant_target(
-            &mut targets,
-            item.cid_full_name,
-            item.cid_short_name,
-            item.cid_number,
-        );
-    }
-    for item in china_ch_constants::CHINA_CH.iter() {
-        push_constant_target(
-            &mut targets,
-            item.cid_full_name,
-            item.cid_short_name,
-            item.cid_number,
-        );
-    }
-    push_extra_national_targets(&mut targets);
-    // 省/市对账只生成命中 scope 的行政区目标,避免 changed-only
-    // 逐省检查时重复计算全国镇级 CID。
-    for province in provinces()
-        .iter()
-        .filter(|province| province_matches_scope(province, scope))
-    {
-        let province_home_city = province
-            .cities
-            .iter()
-            .find(|city| city.city_code == "001")
-            .or_else(|| province.cities.first());
-        if let Some(home_city) =
-            province_home_city.filter(|city| home_city_matches_scope(city, scope))
-        {
-            for template in PROVINCE_DEPARTMENT_TEMPLATES {
-                push_area_template_target(
-                    &mut targets,
-                    province.province_name,
-                    province.province_code,
-                    home_city.city_name,
-                    home_city.city_code,
-                    "",
-                    "",
-                    province.province_name,
-                    template,
-                    "PROVINCE",
-                );
-            }
-        }
-        for city in province
-            .cities
-            .iter()
-            .filter(|city| city.city_code != "000")
-            .filter(|city| city_matches_scope(city, scope))
-        {
-            for template in CITY_TEMPLATES {
-                push_area_template_target(
-                    &mut targets,
-                    province.province_name,
-                    province.province_code,
-                    city.city_name,
-                    city.city_code,
-                    "",
-                    "",
-                    city.city_name,
-                    template,
-                    "CITY",
-                );
-            }
-            for town in city.towns {
-                for template in TOWN_TEMPLATES {
-                    push_area_template_target(
-                        &mut targets,
-                        province.province_name,
-                        province.province_code,
-                        city.city_name,
-                        city.city_code,
-                        town.town_name,
-                        town.town_code,
-                        town.town_name,
-                        template,
-                        "TOWN",
-                    );
-                }
-            }
-        }
-    }
-    targets.retain(|target| target_in_scope(target, scope));
-    targets
-}
-
-fn build_raw_targets(
-    scope: &OfficialReconcileScope,
-    kind: GovTargetKind,
-) -> Vec<OfficialInstitutionTarget> {
-    let mut targets = Vec::new();
-    if matches!(kind, GovTargetKind::All | GovTargetKind::Official) {
-        targets.extend(official_institution_targets(scope));
-    }
-    targets
-}
-
-fn province_matches_scope(
-    province: &crate::cid::china::model::ProvinceDivision,
-    scope: &OfficialReconcileScope,
-) -> bool {
-    match scope {
-        OfficialReconcileScope::All => true,
-        OfficialReconcileScope::Province { province_code }
-        | OfficialReconcileScope::City { province_code, .. } => {
-            province.province_code.eq_ignore_ascii_case(province_code)
-        }
-    }
-}
-
-fn city_matches_scope(
-    city: &crate::cid::china::model::CityDivision,
-    scope: &OfficialReconcileScope,
-) -> bool {
-    match scope {
-        OfficialReconcileScope::All | OfficialReconcileScope::Province { .. } => true,
-        OfficialReconcileScope::City { city_code, .. } => {
-            city.city_code.eq_ignore_ascii_case(city_code)
-        }
-    }
-}
-
-fn home_city_matches_scope(
-    city: &crate::cid::china::model::CityDivision,
-    scope: &OfficialReconcileScope,
-) -> bool {
-    match scope {
-        OfficialReconcileScope::All | OfficialReconcileScope::Province { .. } => true,
-        OfficialReconcileScope::City { city_code, .. } => {
-            city.city_code.eq_ignore_ascii_case(city_code)
-        }
-    }
-}
-
-fn target_in_scope(target: &OfficialInstitutionTarget, scope: &OfficialReconcileScope) -> bool {
-    match scope {
-        OfficialReconcileScope::All => true,
-        OfficialReconcileScope::Province { province_code } => {
-            target.province_code.eq_ignore_ascii_case(province_code)
-        }
-        OfficialReconcileScope::City {
-            province_code,
-            city_code,
-        } => {
-            target.province_code.eq_ignore_ascii_case(province_code)
-                && target.city_code.eq_ignore_ascii_case(city_code)
-        }
-    }
-}
-
-fn push_constant_target(
-    targets: &mut Vec<OfficialInstitutionTarget>,
-    cid_full_name: &'static str,
-    cid_short_name: &'static str,
-    cid_number: &'static str,
-) {
-    let Some((province_code, city_code, institution_code, p1)) =
-        parse_cid_institution_parts(cid_number)
-    else {
-        return;
-    };
-    let Some((province, city)) = province_city_by_codes(&province_code, &city_code) else {
-        return;
-    };
-    let education_type = (institution_code == "NED")
-        .then(|| EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE.to_string());
-    targets.push(OfficialInstitutionTarget {
-        cid_number: cid_number.to_string(),
-        cid_full_name: cid_full_name.to_string(),
-        cid_short_name: cid_short_name.to_string(),
-        category: InstitutionCategory::GovInstitution,
-        p1,
-        province_name: province.to_string(),
-        city_name: city.to_string(),
-        town_name: String::new(),
-        province_code,
-        city_code,
-        town_code: String::new(),
-        institution_code,
-        education_type,
-    });
-}
-
-/// 联邦注册局是全国唯一机构,cid_number 取自创世常量 china_zf.rs(总统府联邦注册局)。
-/// 只读接口按 cid_number 直接定位。
-pub fn federal_registry_cid_number() -> Option<&'static str> {
-    china_zf_constants::CHINA_ZF
-        .iter()
-        .find(|item| cid_institution_code_is(item.cid_number, "FRG"))
-        .map(|item| item.cid_number)
-}
-
-fn push_extra_national_targets(targets: &mut Vec<OfficialInstitutionTarget>) {
-    let Some(province) = provinces()
-        .iter()
-        .find(|province| province.province_name == "中枢省")
-    else {
-        return;
-    };
-    let Some(city) = province
-        .cities
-        .iter()
-        .find(|city| city.city_code == "001")
-        .or_else(|| province.cities.first())
-    else {
-        return;
-    };
-    // 5 个总统府联邦局(安全/情报/特勤/人事/注册)已作为创世常量收录于
-    // china_zf.rs CHINA_ZF(带 main/fee 账户),由 :375 的常量循环单一 push;
-    // 此处不用区划模板重复生成,避免同号双定义触发 reconcile 21000。仅保留两院议会。
-    for template in NATIONAL_ASSEMBLY_TEMPLATES {
-        push_area_template_target(
-            targets,
-            province.province_name,
-            province.province_code,
-            city.city_name,
-            city.city_code,
-            "",
-            "",
-            "",
-            template,
-            "NATIONAL",
-        );
-    }
-}
-
-fn push_area_template_target(
-    targets: &mut Vec<OfficialInstitutionTarget>,
-    province_name: &'static str,
-    province_code: &'static str,
-    city_name: &'static str,
-    city_code: &'static str,
-    town_name: &'static str,
-    town_code: &'static str,
-    display_area_name: &'static str,
-    template: &OfficialOrgTemplate,
-    seed_scope: &'static str,
-) {
-    let cid_short_name = format!("{display_area_name}{}", template.suffix);
-    let cid_full_name = format!("{display_area_name}{}", template.full_suffix);
-    // 种子约定 + (创世)无重试 收敛在 cid::seed,本处只传参。
-    // 创世幂等故不查重,exists_fn 恒返 false 等价原行为。
-    let Ok(cid_number) = crate::cid::official_institution_cid::<std::convert::Infallible>(
-        seed_scope,
-        province_code,
-        city_code,
-        town_code,
-        template.institution_code,
-        province_name,
-        city_name,
-        |_| Ok(false),
-    ) else {
-        return;
-    };
-    targets.push(OfficialInstitutionTarget {
-        cid_number,
-        cid_full_name,
-        cid_short_name,
-        category: InstitutionCategory::GovInstitution,
-        p1: "0".to_string(),
-        province_name: province_name.to_string(),
-        city_name: city_name.to_string(),
-        town_name: town_name.to_string(),
-        province_code: province_code.to_string(),
-        city_code: city_code.to_string(),
-        town_code: town_code.to_string(),
-        institution_code: template.institution_code.to_string(),
-        education_type: (template.institution_code == "CEDU")
-            .then(|| EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE.to_string()),
-    });
-}
-
-/// 解析常量机构 CID,返回 (省码, 市码, 机构码, 盈利位)。
-/// 机构类别一律由机构码派生,不单独返回。
-fn parse_cid_institution_parts(cid_number: &str) -> Option<(String, String, String, String)> {
-    let parts = crate::cid::parse_cid_number_parts(cid_number).ok()?;
-    let province_code = parts.r5.get(0..2)?.to_string();
-    let city_code = parts.r5.get(2..5)?.to_string();
-    let p1 = if parts.profit { "1" } else { "0" }.to_string();
-    Some((province_code, city_code, parts.institution_code_text, p1))
-}
-
-fn cid_institution_code_is(cid_number: &str, expected: &str) -> bool {
-    parse_cid_institution_parts(cid_number)
-        .map(|(_, _, institution_code, _)| institution_code == expected)
-        .unwrap_or(false)
-}
-
-fn province_city_by_codes(
-    province_code: &str,
-    city_code: &str,
-) -> Option<(&'static str, &'static str)> {
-    let province = provinces()
-        .iter()
-        .find(|p| p.province_code.eq_ignore_ascii_case(province_code))?;
-    let city = province
-        .cities
-        .iter()
-        .find(|c| c.city_code.eq_ignore_ascii_case(city_code))?;
-    Some((province.province_name, city.city_name))
-}
-
-fn category_text(category: InstitutionCategory) -> &'static str {
-    match category {
-        InstitutionCategory::GovInstitution => "GOV_INSTITUTION",
-        InstitutionCategory::PrivateInstitution => "PRIVATE_INSTITUTION",
-    }
-}
-
-fn resolve_targets(
-    _db: &Db,
-    scope: &OfficialReconcileScope,
-    kind: GovTargetKind,
-) -> Result<Vec<OfficialInstitutionTarget>, String> {
-    let mut targets = build_raw_targets(scope, kind);
-    targets.sort_by(|a, b| {
-        (
-            a.province_code.as_str(),
-            a.city_code.as_str(),
-            a.town_code.as_str(),
-            category_text(a.category),
-            a.institution_code.as_str(),
-            a.cid_number.as_str(),
-        )
-            .cmp(&(
-                b.province_code.as_str(),
-                b.city_code.as_str(),
-                b.town_code.as_str(),
-                category_text(b.category),
-                b.institution_code.as_str(),
-                b.cid_number.as_str(),
-            ))
-    });
-    Ok(targets)
-}
-
-fn catalog_hash(china_hash: &str, targets: &[OfficialInstitutionTarget]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(GOV_TEMPLATE_VERSION.as_bytes());
-    hasher.update(b"\n");
-    hasher.update(china_hash.as_bytes());
-    hasher.update(b"\n");
-    for target in targets {
-        hasher.update(target.cid_number.as_bytes());
-        hasher.update(b"|");
-        hasher.update(target.cid_full_name.as_bytes());
-        hasher.update(b"|");
-        hasher.update(target.cid_short_name.as_bytes());
-        hasher.update(b"|");
-        hasher.update(category_text(target.category).as_bytes());
-        hasher.update(b"|");
-        hasher.update(target.province_code.as_bytes());
-        hasher.update(b"|");
-        hasher.update(target.city_code.as_bytes());
-        hasher.update(b"|");
-        hasher.update(target.town_code.as_bytes());
-        hasher.update(b"|");
-        hasher.update(target.institution_code.as_bytes());
-        hasher.update(b"|");
-        hasher.update(target.institution_code.as_bytes());
-        hasher.update(b"|");
-        hasher.update(target.education_type.as_deref().unwrap_or("").as_bytes());
-        hasher.update(b"\n");
-    }
-    hex::encode(hasher.finalize())
-}
-
-pub fn current_gov_manifest_version(db: &Db, scope_key: &str) -> Option<String> {
-    let scope_key = scope_key.to_string();
-    db.with_client(move |conn| {
+/// 当前链上投影版本。HTTP 列表接口只把它作为缓存游标回传,不再表达本地生成目录版本。
+pub(crate) fn current_chain_projection_version(db: &Db) -> Option<String> {
+    db.with_client(|conn| {
         let row = conn
             .query_opt(
-                "SELECT catalog_hash FROM gov_manifest WHERE scope_key = $1 AND status = 'OK'",
-                &[&scope_key],
+                "SELECT chain_genesis_hash || ':' || COALESCE(chain_block_hash, '') || ':' || synced_at::text
+                 FROM chain_projection_state
+                 WHERE projection_key = $1 AND status = 'OK'",
+                &[&PROJECTION_KEY_PUBLIC_GOV],
             )
-            .map_err(|e| format!("query gov manifest failed: {e}"))?;
+            .map_err(|e| format!("query chain projection version failed: {}", postgres_error_text(&e)))?;
         Ok(row.map(|r| r.get::<_, String>(0)))
     })
     .ok()
     .flatten()
 }
 
-pub fn check_gov_manifest_db(db: &Db) -> Result<GovDirectoryManifestCheckReport, String> {
-    let scope = OfficialReconcileScope::All;
-    let kind = GovTargetKind::All;
-    let targets = resolve_targets(db, &scope, kind)?;
-    let china_hash = china_sqlite_hash()?;
-    let catalog_hash = catalog_hash(china_hash.as_str(), &targets);
-    let target_count = targets.len();
-    let scope_key = scoped_manifest_key(&scope, kind);
-    let manifest = {
-        let scope_key = scope_key.clone();
-        db.with_client(move |conn| {
-            let row = conn
-                .query_opt(
-                    "SELECT china_hash, catalog_hash, template_version, status, target_count
-                     FROM gov_manifest
-                     WHERE scope_key = $1
-                     ORDER BY updated_at DESC
-                     LIMIT 1",
-                    &[&scope_key],
+pub(crate) fn chain_projection_ready(db: &Db) -> Result<bool, String> {
+    db.with_client(|conn| {
+        let row = conn
+            .query_one(
+                "SELECT EXISTS(
+                    SELECT 1 FROM chain_projection_state
+                    WHERE projection_key = $1 AND status = 'OK'
+                 )",
+                &[&PROJECTION_KEY_PUBLIC_GOV],
+            )
+            .map_err(|e| {
+                format!(
+                    "query chain projection readiness failed: {}",
+                    postgres_error_text(&e)
                 )
-                .map_err(|e| {
-                    format!(
-                        "query gov manifest current state failed: {}",
-                        crate::core::db::postgres_error_text(&e)
-                    )
-                })?;
-            Ok(row.map(|row| {
-                (
-                    row.get::<_, String>(0),
-                    row.get::<_, String>(1),
-                    row.get::<_, String>(2),
-                    row.get::<_, String>(3),
-                    row.get::<_, i64>(4),
-                )
-            }))
-        })?
-    };
-    let (
-        manifest_china_hash,
-        manifest_catalog_hash,
-        manifest_template_version,
-        manifest_status,
-        manifest_target_count,
-    ) = match manifest {
-        Some((china, catalog, template, status, count)) => (
-            Some(china),
-            Some(catalog),
-            Some(template),
-            Some(status),
-            Some(count),
-        ),
-        None => (None, None, None, None, None),
-    };
-    let target_count_i64 =
-        i64::try_from(target_count).map_err(|_| "gov target count exceeds i64".to_string())?;
-    let ok = manifest_china_hash.as_deref() == Some(china_hash.as_str())
-        && manifest_catalog_hash.as_deref() == Some(catalog_hash.as_str())
-        && manifest_template_version.as_deref() == Some(GOV_TEMPLATE_VERSION)
-        && manifest_status.as_deref() == Some("OK")
-        && manifest_target_count == Some(target_count_i64);
-    Ok(GovDirectoryManifestCheckReport {
-        ok,
-        scope_key,
-        china_hash,
-        catalog_hash,
-        target_count,
-        manifest_china_hash,
-        manifest_catalog_hash,
-        manifest_template_version,
-        manifest_status,
-        manifest_target_count,
+            })?;
+        Ok(row.get(0))
     })
 }
 
-fn upsert_manifest(
+/// 从链上唯一真源同步公权机构投影。
+pub(crate) fn sync_gov_chain_projection_blocking(
     db: &Db,
-    scope_key: &str,
-    china_hash: &str,
-    catalog_hash: &str,
-    target_count: usize,
-    ok: bool,
-) -> Result<(), String> {
-    let scope_key = scope_key.to_string();
-    let china_hash = china_hash.to_string();
-    let catalog_hash = catalog_hash.to_string();
-    let target_count =
-        i64::try_from(target_count).map_err(|_| "gov target count exceeds i64".to_string())?;
-    let status = if ok { "OK" } else { "INCOMPLETE" }.to_string();
+) -> Result<GovChainProjectionReport, String> {
+    let chain_genesis_hash = chain_runtime::cached_chain_genesis_hash_hex()
+        .ok_or_else(|| "chain genesis hash not initialized".to_string())?;
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("build gov projection sync runtime failed: {e}"))?;
+    let (institutions, accounts) = rt.block_on(read_chain_projection())?;
+    write_chain_projection(db, chain_genesis_hash, institutions, accounts)
+}
+
+async fn read_chain_projection(
+) -> Result<(Vec<ChainInstitutionProjection>, Vec<ChainAccountProjection>), String> {
+    let town_index = derived_town_index();
+    let mut institution_error: Option<String> = None;
+    let mut institutions = Vec::new();
+    chain_runtime::for_each_chain_institution(|cid, info| {
+        if institution_error.is_some() {
+            return;
+        }
+        match parse_chain_institution(cid, info, &town_index) {
+            Ok(item) => institutions.push(item),
+            Err(err) => institution_error = Some(err),
+        }
+    })
+    .await?;
+    if let Some(err) = institution_error {
+        return Err(err);
+    }
+
+    let scope_by_cid = institutions
+        .iter()
+        .map(|item| {
+            (
+                item.cid_number.clone(),
+                (
+                    item.province_code.clone(),
+                    normalized_city_code(item.city_code.as_str()),
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut account_error: Option<String> = None;
+    let mut accounts = Vec::new();
+    chain_runtime::for_each_chain_institution_account(|item| {
+        if account_error.is_some() {
+            return;
+        }
+        match parse_chain_account(item, &scope_by_cid) {
+            Ok(account) => accounts.push(account),
+            Err(err) => account_error = Some(err),
+        }
+    })
+    .await?;
+    if let Some(err) = account_error {
+        return Err(err);
+    }
+
+    Ok((institutions, accounts))
+}
+
+fn parse_chain_institution(
+    cid_bytes: Vec<u8>,
+    info: chain_runtime::OnChainInstitution,
+    town_index: &BTreeMap<String, String>,
+) -> Result<ChainInstitutionProjection, String> {
+    let cid_number = String::from_utf8(cid_bytes)
+        .map_err(|_| "chain institution cid_number must be utf-8".to_string())?;
+    let parts = parse_cid_number_parts(cid_number.as_str())
+        .map_err(|e| format!("chain institution cid_number {cid_number} invalid: {e}"))?;
+    if !code::is_public_legal_code(&parts.institution) {
+        return Err(format!(
+            "chain institution cid_number {cid_number} is not public legal code"
+        ));
+    }
+    let code_from_storage = trim_institution_code(info.institution_code.as_slice())?;
+    if code_from_storage != parts.institution_code_text {
+        return Err(format!(
+            "chain institution {cid_number} code mismatch: cid={} storage={}",
+            parts.institution_code_text, code_from_storage
+        ));
+    }
+    let province_code = parts
+        .r5
+        .get(0..2)
+        .ok_or_else(|| format!("chain institution {cid_number} missing province code"))?
+        .to_string();
+    let city_code = parts
+        .r5
+        .get(2..5)
+        .ok_or_else(|| format!("chain institution {cid_number} missing city code"))?
+        .to_string();
+    let status_active = info.status == INSTITUTION_STATUS_ACTIVE;
+    Ok(ChainInstitutionProjection {
+        cid_full_name: String::from_utf8(info.cid_full_name)
+            .map_err(|_| format!("chain institution {cid_number} cid_full_name must be utf-8"))?,
+        cid_short_name: String::from_utf8(info.cid_short_name)
+            .map_err(|_| format!("chain institution {cid_number} cid_short_name must be utf-8"))?,
+        subject_status: if status_active {
+            SUBJECT_STATUS_ACTIVE
+        } else {
+            SUBJECT_STATUS_REVOKED
+        },
+        chain_status: if status_active {
+            CHAIN_STATUS_ACTIVE
+        } else {
+            CHAIN_STATUS_REVOKED
+        },
+        category: "GOV_INSTITUTION",
+        p1: if parts.profit { "1" } else { "0" }.to_string(),
+        province_code,
+        city_code,
+        town_code: town_index
+            .get(cid_number.as_str())
+            .cloned()
+            .unwrap_or_default(),
+        institution_code: parts.institution_code_text,
+        education_type: education_type_for_code(&code_from_storage).map(str::to_string),
+        chain_block_number: i64::from(info.created_at),
+        cid_number,
+    })
+}
+
+fn parse_chain_account(
+    item: chain_runtime::OnChainInstitutionAccount,
+    scope_by_cid: &BTreeMap<String, (String, Option<String>)>,
+) -> Result<ChainAccountProjection, String> {
+    let cid_number = String::from_utf8(item.cid_number)
+        .map_err(|_| "chain account cid_number must be utf-8".to_string())?;
+    let account_name = String::from_utf8(item.account_name)
+        .map_err(|_| format!("chain account {cid_number} account_name must be utf-8"))?;
+    let Some((province_code, city_code)) = scope_by_cid.get(cid_number.as_str()) else {
+        return Err(format!(
+            "chain account {cid_number}/{account_name} has no chain institution"
+        ));
+    };
+    Ok(ChainAccountProjection {
+        cid_number,
+        province_code: province_code.clone(),
+        city_code: city_code.clone(),
+        account_name,
+        account: hex::encode(item.account),
+        chain_status: if item.status == INSTITUTION_STATUS_ACTIVE {
+            CHAIN_STATUS_ACTIVE
+        } else {
+            CHAIN_STATUS_REVOKED
+        },
+        _chain_block_number: i64::from(item.created_at),
+    })
+}
+
+fn write_chain_projection(
+    db: &Db,
+    chain_genesis_hash: String,
+    institutions: Vec<ChainInstitutionProjection>,
+    accounts: Vec<ChainAccountProjection>,
+) -> Result<GovChainProjectionReport, String> {
+    if institutions.is_empty() {
+        return Err("chain public institution projection is empty".to_string());
+    }
+    let chain_institutions = institutions.len();
+    let chain_accounts = accounts.len();
     db.with_client(move |conn| {
-        conn.execute(
-            "INSERT INTO gov_manifest (
-                scope_key, china_hash, catalog_hash, template_version, target_count, status, updated_at
-             ) VALUES ($1, $2, $3, $4, $5, $6, now())
-             ON CONFLICT (scope_key) DO UPDATE SET
-                china_hash = EXCLUDED.china_hash,
-                catalog_hash = EXCLUDED.catalog_hash,
-                template_version = EXCLUDED.template_version,
-                target_count = EXCLUDED.target_count,
+        let mut tx = conn.transaction().map_err(|e| {
+            format!(
+                "begin gov chain projection sync failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+        tx.batch_execute(
+            "CREATE TEMP TABLE tmp_chain_gov_cids (
+                province_code TEXT NOT NULL,
+                cid_number TEXT NOT NULL,
+                PRIMARY KEY (province_code, cid_number)
+             ) ON COMMIT DROP;
+             CREATE TEMP TABLE tmp_chain_gov_accounts (
+                province_code TEXT NOT NULL,
+                cid_number TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                PRIMARY KEY (province_code, cid_number, account_name)
+             ) ON COMMIT DROP;",
+        )
+        .map_err(|e| {
+            format!(
+                "create gov projection temp tables failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+
+        let mut institution_rows_changed = 0u64;
+        for chunk in institutions.chunks(5_000) {
+            insert_tmp_cids(&mut tx, chunk)?;
+            institution_rows_changed += upsert_institution_chunk(&mut tx, chunk)?;
+        }
+
+        let mut account_rows_changed = 0u64;
+        for chunk in accounts.chunks(5_000) {
+            insert_tmp_accounts(&mut tx, chunk)?;
+            account_rows_changed += upsert_account_chunk(&mut tx, chunk)?;
+        }
+
+        let obsolete_accounts_removed = tx
+            .execute(
+                "DELETE FROM accounts a
+                 USING gov g
+                 WHERE g.province_code = a.province_code
+                   AND g.cid_number = a.cid_number
+                   AND g.source = $1
+                   AND NOT EXISTS (
+                     SELECT 1 FROM tmp_chain_gov_accounts t
+                     WHERE t.province_code = a.province_code
+                       AND t.cid_number = a.cid_number
+                       AND t.account_name = a.account_name
+                   )",
+                &[&GOV_SOURCE_CHAIN],
+            )
+            .map_err(|e| {
+                format!(
+                    "delete obsolete chain accounts failed: {}",
+                    postgres_error_text(&e)
+                )
+            })?;
+
+        let obsolete_subjects_removed = delete_obsolete_chain_institutions(&mut tx)?;
+        let local_institutions = count_chain_institutions(&mut tx)?;
+        let local_accounts = count_chain_accounts(&mut tx)?;
+        tx.execute(
+            "INSERT INTO chain_projection_state (
+                projection_key, chain_genesis_hash, chain_block_hash, chain_block_number,
+                item_count, account_count, status, synced_at
+             ) VALUES ($1, $2, '', NULL, $3, $4, 'OK', now())
+             ON CONFLICT (projection_key) DO UPDATE SET
+                chain_genesis_hash = EXCLUDED.chain_genesis_hash,
+                chain_block_hash = EXCLUDED.chain_block_hash,
+                chain_block_number = EXCLUDED.chain_block_number,
+                item_count = EXCLUDED.item_count,
+                account_count = EXCLUDED.account_count,
                 status = EXCLUDED.status,
-                updated_at = now()",
+                synced_at = now()",
             &[
-                &scope_key,
-                &china_hash,
-                &catalog_hash,
-                &GOV_TEMPLATE_VERSION,
-                &target_count,
-                &status,
+                &PROJECTION_KEY_PUBLIC_GOV,
+                &chain_genesis_hash,
+                &i64::try_from(chain_institutions)
+                    .map_err(|_| "chain institution count exceeds i64".to_string())?,
+                &i64::try_from(chain_accounts)
+                    .map_err(|_| "chain account count exceeds i64".to_string())?,
             ],
         )
-        .map_err(|e| format!("upsert gov manifest failed: {e}"))?;
-        Ok(())
-    })
-}
-
-pub fn upsert_gov_manifest_from_check_db(
-    db: &Db,
-    report: &GovDirectoryCheckReport,
-) -> Result<(), String> {
-    upsert_manifest(
-        db,
-        report.scope_key.as_str(),
-        report.china_hash.as_str(),
-        report.catalog_hash.as_str(),
-        report.target_count,
-        report.ok,
-    )
-}
-
-fn target_category_sql(kind: GovTargetKind) -> Option<&'static str> {
-    match kind {
-        GovTargetKind::All => None,
-        GovTargetKind::Official => Some("GOV_INSTITUTION"),
-    }
-}
-
-fn auto_rows_in_scope(
-    db: &Db,
-    scope: &OfficialReconcileScope,
-    kind: GovTargetKind,
-) -> Result<
-    BTreeMap<
-        String,
-        // (cid_full_name, cid_short_name, category, province_code, city_code,
-        //  town_code, institution_code, education_type)
-        (
-            String,
-            String,
-            String,
-            String,
-            String,
-            String,
-            String,
-            String,
-        ),
-    >,
-    String,
-> {
-    let p_filter = match scope {
-        OfficialReconcileScope::All => None,
-        OfficialReconcileScope::Province { province_code }
-        | OfficialReconcileScope::City { province_code, .. } => Some(province_code.clone()),
-    };
-    let c_filter = match scope {
-        OfficialReconcileScope::City { city_code, .. } => Some(city_code.clone()),
-        _ => None,
-    };
-    let category_filter = target_category_sql(kind).map(str::to_string);
-    db.with_client(move |conn| {
-        let rows = conn
-            .query(
-                "SELECT s.cid_number, COALESCE(s.cid_full_name, ''),
-                        COALESCE(s.cid_short_name, ''), s.category, s.province_code, s.city_code,
-                        COALESCE(s.town_code, ''), s.institution_code,
-                        COALESCE(s.education_type, '')
-                 FROM subjects s
-                 JOIN gov g ON g.province_code = s.province_code AND g.cid_number = s.cid_number
-                 WHERE s.kind = 'PUBLIC'
-                   AND s.status = 'ACTIVE'
-                   AND g.source = 'GENERATED'
-                   AND ($1::text IS NULL OR s.province_code = $1)
-                   AND ($2::text IS NULL OR s.city_code = $2)
-                   AND ($3::text IS NULL OR s.category = $3)",
-                &[&p_filter, &c_filter, &category_filter],
+        .map_err(|e| {
+            format!(
+                "upsert chain projection state failed: {}",
+                postgres_error_text(&e)
             )
-            .map_err(|e| format!("query active auto gov rows failed: {e}"))?;
-        let mut output = BTreeMap::new();
-        for row in rows {
-            output.insert(
-                row.get::<_, String>(0),
-                (
-                    row.get(1),
-                    row.get(2),
-                    row.get(3),
-                    row.get(4),
-                    row.get(5),
-                    row.get(6),
-                    row.get(7),
-                    row.get(8),
-                ),
-            );
-        }
-        Ok(output)
+        })?;
+        tx.commit().map_err(|e| {
+            format!(
+                "commit gov chain projection sync failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+        Ok(GovChainProjectionReport {
+            chain_institutions,
+            chain_accounts,
+            local_institutions,
+            local_accounts,
+            institution_rows_changed,
+            account_rows_changed,
+            obsolete_subjects_removed,
+            obsolete_accounts_removed,
+            chain_genesis_hash,
+        })
     })
 }
 
-fn account_counts(db: &Db, cids: &[String]) -> Result<BTreeMap<String, i64>, String> {
-    if cids.is_empty() {
-        return Ok(BTreeMap::new());
-    }
-    let cids = cids.to_vec();
-    db.with_client(move |conn| {
-        let mut output = BTreeMap::new();
-        // 全量镇目录接近 30 万机构,账户校验按块查,避免超大数组压垮单条 SQL。
-        for chunk in cids.chunks(10_000) {
-            let chunk = chunk.to_vec();
-            let rows = conn
-                .query(
-                    "SELECT cid_number, COUNT(*)::BIGINT
-                     FROM accounts
-                     WHERE cid_number = ANY($1)
-                     GROUP BY cid_number",
-                    &[&chunk],
-                )
-                .map_err(|e| {
-                    format!(
-                        "query gov account counts failed: {}",
-                        crate::core::db::postgres_error_text(&e)
-                    )
-                })?;
-            for row in rows {
-                output.insert(row.get::<_, String>(0), row.get::<_, i64>(1));
-            }
-        }
-        Ok(output)
-    })
-}
-
-pub fn check_gov_catalog_db(
-    db: &Db,
-    scope: OfficialReconcileScope,
-    kind: GovTargetKind,
-) -> Result<GovDirectoryCheckReport, String> {
-    let targets = resolve_targets(db, &scope, kind)?;
-    let china_hash = china_sqlite_hash()?;
-    let catalog_hash = catalog_hash(china_hash.as_str(), &targets);
-    let scope_key = scoped_manifest_key(&scope, kind);
-    let manifest_catalog_hash = current_gov_manifest_version(db, scope_key.as_str());
-    let active_rows = auto_rows_in_scope(db, &scope, kind)?;
-    let target_cids = targets
-        .iter()
-        .map(|target| target.cid_number.clone())
-        .collect::<BTreeSet<_>>();
-    let counts = account_counts(db, &target_cids.iter().cloned().collect::<Vec<_>>())?;
-
-    let mut missing_cids = Vec::new();
-    let mut mismatched_cids = Vec::new();
-    let mut missing_account_cids = Vec::new();
-    for target in &targets {
-        match active_rows.get(&target.cid_number) {
-            Some((
-                cid_full_name,
-                cid_short_name,
-                category,
-                province_code,
-                city_code,
-                town_code,
-                institution_code,
-                education_type,
-            )) => {
-                // 行政区身份由 province_code/city_code/town_code 唯一确定(china.sqlite 单源),
-                // 名字是派生展示,不参与一致性比对。
-                if cid_full_name != &target.cid_full_name
-                    || cid_short_name != &target.cid_short_name
-                    || category != category_text(target.category)
-                    || province_code != &target.province_code
-                    || city_code != &target.city_code
-                    || town_code != &target.town_code
-                    || institution_code != &target.institution_code
-                    || education_type != target.education_type.as_deref().unwrap_or("")
-                {
-                    mismatched_cids.push(target.cid_number.clone());
-                }
-            }
-            None => missing_cids.push(target.cid_number.clone()),
-        }
-        let expected_count = i64::try_from(default_account_names_for_target(target).len())
-            .map_err(|_| "default account count exceeds i64".to_string())?;
-        if counts.get(&target.cid_number).copied().unwrap_or(0) < expected_count {
-            missing_account_cids.push(target.cid_number.clone());
-        }
-    }
-    let obsolete_cids = active_rows
-        .keys()
-        .filter(|cid| !target_cids.contains(*cid))
-        .cloned()
-        .collect::<Vec<_>>();
-    let ok = missing_cids.is_empty()
-        && mismatched_cids.is_empty()
-        && missing_account_cids.is_empty()
-        && obsolete_cids.is_empty();
-    Ok(GovDirectoryCheckReport {
-        ok,
-        scope_key,
-        china_hash,
-        catalog_hash,
-        manifest_catalog_hash,
-        template_version: GOV_TEMPLATE_VERSION,
-        target_count: targets.len(),
-        active_count: active_rows.len(),
-        missing_cids,
-        mismatched_cids,
-        missing_account_cids,
-        obsolete_cids,
-    })
-}
-
-pub fn reconcile_gov_catalog_db(
-    db: &Db,
-    actor: &str,
-    scope: OfficialReconcileScope,
-    kind: GovTargetKind,
-) -> Result<OfficialReconcileReport, String> {
-    let targets = resolve_targets(db, &scope, kind)?;
-    let china_hash = china_sqlite_hash()?;
-    let catalog_hash = catalog_hash(china_hash.as_str(), &targets);
-    let scope_key = scoped_manifest_key(&scope, kind);
-    let mut report = write_targets(db, actor, targets, scope.clone(), kind)?;
-    let check = check_gov_catalog_db(db, scope, kind)?;
-    upsert_manifest(
-        db,
-        scope_key.as_str(),
-        china_hash.as_str(),
-        catalog_hash.as_str(),
-        report.total_after,
-        check.ok,
-    )?;
-    report.scope_key = scope_key;
-    report.china_hash = china_hash;
-    report.catalog_hash = catalog_hash;
-    report.template_version = GOV_TEMPLATE_VERSION;
-    Ok(report)
-}
-
-pub fn reconcile_changed_gov_catalog_db(
-    db: &Db,
-    actor: &str,
-) -> Result<Vec<OfficialReconcileReport>, String> {
-    let mut reports = Vec::new();
-    for province in provinces() {
-        let scope = OfficialReconcileScope::Province {
-            province_code: province.province_code.to_string(),
-        };
-        let check = check_gov_catalog_db(db, scope.clone(), GovTargetKind::All)?;
-        if check.ok && check.manifest_catalog_hash.is_none() {
-            upsert_manifest(
-                db,
-                check.scope_key.as_str(),
-                check.china_hash.as_str(),
-                check.catalog_hash.as_str(),
-                check.target_count,
-                true,
-            )?;
-            continue;
-        }
-        if !check.ok || check.manifest_catalog_hash.as_deref() != Some(check.catalog_hash.as_str())
-        {
-            reports.push(reconcile_gov_catalog_db(
-                db,
-                actor,
-                scope,
-                GovTargetKind::All,
-            )?);
-        }
-    }
-    // changed-only 以省为单位减少写库范围,但部署守门看的是全局
-    // all:all manifest。省级对账完成后必须刷新全局版本,否则 strict 会误判目录过期。
-    let all_check = check_gov_catalog_db(db, OfficialReconcileScope::All, GovTargetKind::All)?;
-    if all_check.ok {
-        upsert_gov_manifest_from_check_db(db, &all_check)?;
-    } else {
-        reports.push(reconcile_gov_catalog_db(
-            db,
-            actor,
-            OfficialReconcileScope::All,
-            GovTargetKind::All,
-        )?);
-    }
-    Ok(reports)
-}
-
-fn write_targets(
-    db: &Db,
-    actor: &str,
-    targets: Vec<OfficialInstitutionTarget>,
-    scope: OfficialReconcileScope,
-    kind: GovTargetKind,
-) -> Result<OfficialReconcileReport, String> {
-    let mut report = OfficialReconcileReport::default();
-    let target_cids = targets
-        .iter()
-        .map(|target| target.cid_number.clone())
-        .collect::<HashSet<_>>();
-    let target_cid_vec = target_cids.iter().cloned().collect::<Vec<_>>();
-    let existing_public_count = count_existing_public_targets(db, &target_cid_vec)?;
-    bulk_write_targets(db, actor, &targets)?;
-    report.updated = existing_public_count.min(targets.len());
-    report.inserted = targets.len().saturating_sub(report.updated);
-    report.account_inserted = targets
-        .iter()
-        .map(|target| default_account_names_for_target(target).len())
-        .sum::<usize>();
-    let removed = revoke_obsolete_targets(db, &target_cids, &scope, kind)?;
-    report.removed = removed.len();
-    report.removed_cids = removed;
-    report.total_after = target_cids.len();
-    report.target_cids = target_cids.into_iter().collect();
-    report.target_cids.sort();
-    report.touched_cids = report.target_cids.clone();
-    Ok(report)
-}
-
-fn count_existing_public_targets(db: &Db, target_cids: &[String]) -> Result<usize, String> {
-    if target_cids.is_empty() {
-        return Ok(0);
-    }
-    let target_cids = target_cids.to_vec();
-    db.with_client(move |conn| {
-        let mut total: usize = 0;
-        // 全量公权目录接近 30 万行,统计时也按块传参,避免超大数组触发驱动/数据库错误。
-        for chunk in target_cids.chunks(10_000) {
-            let chunk = chunk.to_vec();
-            let row = conn
-                .query_one(
-                    "SELECT COUNT(*)::BIGINT
-                     FROM subjects
-                     WHERE kind = 'PUBLIC'
-                       AND cid_number = ANY($1)",
-                    &[&chunk],
-                )
-                .map_err(|e| format!("count existing gov targets failed: {e}"))?;
-            let count: i64 = row.get(0);
-            total = total
-                .checked_add(
-                    usize::try_from(count)
-                        .map_err(|_| "existing gov target count exceeds usize".to_string())?,
-                )
-                .ok_or_else(|| "existing gov target count overflows usize".to_string())?;
-        }
-        Ok(total)
-    })
-}
-
-fn bulk_write_targets(
-    db: &Db,
-    actor: &str,
-    targets: &[OfficialInstitutionTarget],
-) -> Result<(), String> {
-    if targets.is_empty() {
-        return Ok(());
-    }
-    // 号生成若在同一批 targets 内产生重复 cid_number(确定性 N9 碰撞或重复目标),
-    // 后续 bulk upsert 会以 21000 cardinality_violation 报错且不带定位信息。这里提前全量探测,
-    // 带出碰撞双方机构信息,便于判断是重复目标(同 seed)还是 N9 哈希碰撞(不同 seed)。
-    {
-        let mut seen: std::collections::HashMap<&str, &OfficialInstitutionTarget> =
-            std::collections::HashMap::new();
-        let mut collisions: Vec<String> = Vec::new();
-        for target in targets {
-            if let Some(prev) = seen.insert(target.cid_number.as_str(), target) {
-                collisions.push(format!(
-                    "{}: [{} | {}{}{} | inst={}] vs [{} | {}{}{} | inst={}]",
-                    target.cid_number,
-                    prev.cid_full_name,
-                    prev.province_name,
-                    prev.city_name,
-                    prev.town_name,
-                    prev.institution_code,
-                    target.cid_full_name,
-                    target.province_name,
-                    target.city_name,
-                    target.town_name,
-                    target.institution_code,
-                ));
-            }
-        }
-        if !collisions.is_empty() {
-            let shown = collisions
-                .iter()
-                .take(20)
-                .cloned()
-                .collect::<Vec<_>>()
-                .join("\n  ");
-            return Err(format!(
-                "gov reconcile produced {} duplicate cid_number(s) among {} targets; first {}:\n  {}",
-                collisions.len(),
-                targets.len(),
-                collisions.len().min(20),
-                shown
-            ));
-        }
-    }
-    let actor = actor.to_string();
-    let targets = targets.to_vec();
-    db.with_client(move |conn| {
-        let mut tx = conn
-            .transaction()
-            .map_err(|e| format!("begin bulk gov target write failed: {e}"))?;
-        for chunk in targets.chunks(5_000) {
-            bulk_write_target_chunk(&mut tx, actor.as_str(), chunk)?;
-        }
-        tx.commit()
-            .map_err(|e| format!("commit bulk gov target write failed: {e}"))?;
-        Ok(())
-    })
-}
-
-fn bulk_write_target_chunk(
+fn insert_tmp_cids(
     tx: &mut postgres::Transaction<'_>,
-    actor: &str,
-    targets: &[OfficialInstitutionTarget],
+    chunk: &[ChainInstitutionProjection],
 ) -> Result<(), String> {
-    let cids = targets
+    let province_codes = chunk
         .iter()
-        .map(|target| target.cid_number.clone())
+        .map(|item| item.province_code.clone())
+        .collect::<Vec<_>>();
+    let cids = chunk
+        .iter()
+        .map(|item| item.cid_number.clone())
+        .collect::<Vec<_>>();
+    tx.execute(
+        "INSERT INTO tmp_chain_gov_cids(province_code, cid_number)
+         SELECT province_code, cid_number
+         FROM unnest($1::text[], $2::text[]) AS u(province_code, cid_number)
+         ON CONFLICT DO NOTHING",
+        &[&province_codes, &cids],
+    )
+    .map_err(|e| {
+        format!(
+            "insert tmp chain gov cids failed: {}",
+            postgres_error_text(&e)
+        )
+    })?;
+    Ok(())
+}
+
+fn insert_tmp_accounts(
+    tx: &mut postgres::Transaction<'_>,
+    chunk: &[ChainAccountProjection],
+) -> Result<(), String> {
+    let province_codes = chunk
+        .iter()
+        .map(|item| item.province_code.clone())
+        .collect::<Vec<_>>();
+    let cids = chunk
+        .iter()
+        .map(|item| item.cid_number.clone())
+        .collect::<Vec<_>>();
+    let account_names = chunk
+        .iter()
+        .map(|item| item.account_name.clone())
+        .collect::<Vec<_>>();
+    tx.execute(
+        "INSERT INTO tmp_chain_gov_accounts(province_code, cid_number, account_name)
+         SELECT province_code, cid_number, account_name
+         FROM unnest($1::text[], $2::text[], $3::text[]) AS u(province_code, cid_number, account_name)
+         ON CONFLICT DO NOTHING",
+        &[&province_codes, &cids, &account_names],
+    )
+    .map_err(|e| format!("insert tmp chain gov accounts failed: {}", postgres_error_text(&e)))?;
+    Ok(())
+}
+
+fn upsert_institution_chunk(
+    tx: &mut postgres::Transaction<'_>,
+    chunk: &[ChainInstitutionProjection],
+) -> Result<u64, String> {
+    let cids = chunk
+        .iter()
+        .map(|item| item.cid_number.clone())
         .collect::<Vec<_>>();
     let conflict = tx
         .query_opt(
-            "SELECT cid_number, kind
-             FROM ids
-             WHERE cid_number = ANY($1)
-               AND kind <> 'PUBLIC'
+            "SELECT i.cid_number, i.kind
+             FROM ids i
+             WHERE i.cid_number = ANY($1)
+               AND i.kind <> 'PUBLIC'
              LIMIT 1",
             &[&cids],
         )
-        .map_err(|e| format!("query gov target id conflict failed: {e}"))?;
+        .map_err(|e| {
+            format!(
+                "query chain gov id conflict failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
     if let Some(row) = conflict {
         let cid: String = row.get(0);
         let kind: String = row.get(1);
         return Err(format!(
-            "cid_number {cid} already belongs to {kind}, cannot write PUBLIC"
+            "chain public institution cid_number {cid} already belongs to local {kind}"
         ));
     }
 
-    let province_codes = targets
+    let province_codes = chunk
         .iter()
-        .map(|target| target.province_code.clone())
+        .map(|item| item.province_code.clone())
         .collect::<Vec<_>>();
-    let city_codes = targets
+    let city_codes = chunk
         .iter()
-        .map(target_city_code)
+        .map(|item| normalized_city_code(item.city_code.as_str()))
         .collect::<Vec<Option<String>>>();
-    let town_codes = targets
+    let town_codes = chunk
         .iter()
-        .map(target_town_code)
+        .map(|item| (!item.town_code.trim().is_empty()).then(|| item.town_code.clone()))
         .collect::<Vec<Option<String>>>();
-    let cid_full_names = targets
+    let full_names = chunk
         .iter()
-        .map(|target| target.cid_full_name.clone())
+        .map(|item| item.cid_full_name.clone())
         .collect::<Vec<_>>();
-    let cid_short_names = targets
+    let short_names = chunk
         .iter()
-        .map(|target| target.cid_short_name.clone())
+        .map(|item| item.cid_short_name.clone())
         .collect::<Vec<_>>();
-    let categories = targets
+    let subject_statuses = chunk
         .iter()
-        .map(|target| category_text(target.category).to_string())
+        .map(|item| item.subject_status.to_string())
         .collect::<Vec<_>>();
-    let p1_values = targets
+    let categories = chunk
         .iter()
-        .map(|target| target.p1.clone())
+        .map(|item| item.category.to_string())
         .collect::<Vec<_>>();
-    let institution_codes = targets
+    let p1_values = chunk.iter().map(|item| item.p1.clone()).collect::<Vec<_>>();
+    let institution_codes = chunk
         .iter()
-        .map(|target| target.institution_code.clone())
+        .map(|item| item.institution_code.clone())
         .collect::<Vec<_>>();
-    let education_types = targets
+    let education_types = chunk
         .iter()
-        .map(|target| target.education_type.clone())
+        .map(|item| item.education_type.clone())
         .collect::<Vec<_>>();
-    let home_province_codes = vec![None::<String>; targets.len()];
-    let home_city_codes = vec![None::<String>; targets.len()];
-
-    // 同一 cid 如果曾因行政区划修正落在旧分区,批量清掉旧分区行。
-    for table in ["subjects", "gov", "accounts"] {
-        let sql = format!(
-            "DELETE FROM {table} t
-             USING unnest($1::text[], $2::text[]) AS u(cid_number, province_code)
-             WHERE t.cid_number = u.cid_number
-               AND t.province_code <> u.province_code"
-        );
-        tx.execute(sql.as_str(), &[&cids, &province_codes])
-            .map_err(|e| {
-                format!(
-                    "bulk delete {table} rows outside scope failed: {}",
-                    crate::core::db::postgres_error_text(&e)
-                )
-            })?;
-    }
-    tx.execute("DELETE FROM private WHERE cid_number = ANY($1)", &[&cids])
-        .map_err(|e| {
-            format!(
-                "bulk delete private rows for gov targets failed: {}",
-                crate::core::db::postgres_error_text(&e)
-            )
-        })?;
+    let chain_statuses = chunk
+        .iter()
+        .map(|item| item.chain_status.to_string())
+        .collect::<Vec<_>>();
+    let chain_blocks = chunk
+        .iter()
+        .map(|item| item.chain_block_number)
+        .collect::<Vec<_>>();
 
     tx.execute(
         "INSERT INTO ids (cid_number, kind, province_code, city_code)
@@ -1212,281 +515,339 @@ fn bulk_write_target_chunk(
          ON CONFLICT (cid_number) DO UPDATE SET
             province_code = EXCLUDED.province_code,
             city_code = EXCLUDED.city_code
-         WHERE ids.kind = 'PUBLIC'",
+         WHERE ids.kind = 'PUBLIC'
+           AND (ids.province_code IS DISTINCT FROM EXCLUDED.province_code
+             OR ids.city_code IS DISTINCT FROM EXCLUDED.city_code)",
         &[&cids, &province_codes, &city_codes],
     )
-    .map_err(|e| {
-        format!(
-            "bulk upsert gov ids failed: {}",
-            crate::core::db::postgres_error_text(&e)
-        )
-    })?;
+    .map_err(|e| format!("upsert chain gov ids failed: {}", postgres_error_text(&e)))?;
 
-    // 行政区名字不入库(china.sqlite 单源),只灌 province_code/city_code/town_code。
-    tx.execute(
-        "INSERT INTO subjects (
-            cid_number, kind, cid_full_name, cid_short_name,
-            status, category, p1,
-            province_code, city_code, town_code, institution_code,
-            education_type, private_type, partnership_kind, has_legal_personality,
-            parent_cid_number, created_by, created_at, updated_at
-         )
-         SELECT
-            cid_number, 'PUBLIC', cid_full_name, cid_short_name,
-            'ACTIVE', category, p1,
-            province_code, COALESCE(city_code, ''), COALESCE(town_code, ''), institution_code,
-            education_type, NULL::text, NULL::text, NULL::boolean, NULL::text, $11, now(), now()
-         FROM unnest(
-            $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
-            $6::text[], $7::text[], $8::text[], $9::text[], $10::text[]
-         ) AS u(
-            cid_number, cid_full_name, cid_short_name, category,
-            p1, institution_code, province_code, city_code, town_code,
-            education_type
-         )
-         ON CONFLICT (province_code, cid_number) DO UPDATE SET
-            kind = EXCLUDED.kind,
-            cid_full_name = EXCLUDED.cid_full_name,
-            cid_short_name = EXCLUDED.cid_short_name,
-            status = EXCLUDED.status,
-            category = EXCLUDED.category,
-            p1 = EXCLUDED.p1,
-            province_code = EXCLUDED.province_code,
-            city_code = EXCLUDED.city_code,
-            town_code = EXCLUDED.town_code,
-            institution_code = EXCLUDED.institution_code,
-            education_type = EXCLUDED.education_type,
-            private_type = EXCLUDED.private_type,
-            partnership_kind = EXCLUDED.partnership_kind,
-            has_legal_personality = EXCLUDED.has_legal_personality,
-            parent_cid_number = EXCLUDED.parent_cid_number,
-            created_by = EXCLUDED.created_by,
-            updated_at = now()",
-        &[
-            &cids,
-            &cid_full_names,
-            &cid_short_names,
-            &categories,
-            &p1_values,
-            &institution_codes,
-            &province_codes,
-            &city_codes,
-            &town_codes,
-            &education_types,
-            &actor,
-        ],
-    )
-    .map_err(|e| {
-        format!(
-            "bulk upsert gov subjects failed: {}",
-            crate::core::db::postgres_error_text(&e)
+    let changed = tx
+        .execute(
+            "INSERT INTO subjects (
+                cid_number, kind, cid_full_name, cid_short_name,
+                status, category, p1,
+                province_code, city_code, town_code, institution_code,
+                education_type, private_type, partnership_kind, has_legal_personality,
+                parent_cid_number, created_by, updated_by, created_at, updated_at,
+                institution_source_type, chain_status, chain_block_number
+             )
+             SELECT
+                cid_number, 'PUBLIC', cid_full_name, cid_short_name,
+                subject_status, category, p1,
+                province_code, COALESCE(city_code, ''), COALESCE(town_code, ''), institution_code,
+                education_type, NULL::text, NULL::text, NULL::boolean,
+                NULL::text, 'CHAIN', 'CHAIN', now(), now(),
+                'CHAIN', chain_status, chain_block_number
+             FROM unnest(
+                $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
+                $6::text[], $7::text[], $8::text[], $9::text[], $10::text[],
+                $11::text[], $12::text[], $13::bigint[]
+             ) AS u(
+                cid_number, cid_full_name, cid_short_name, subject_status,
+                category, p1, institution_code, province_code, city_code, town_code,
+                education_type, chain_status, chain_block_number
+             )
+             ON CONFLICT (province_code, cid_number) DO UPDATE SET
+                kind = EXCLUDED.kind,
+                cid_full_name = EXCLUDED.cid_full_name,
+                cid_short_name = EXCLUDED.cid_short_name,
+                status = EXCLUDED.status,
+                category = EXCLUDED.category,
+                p1 = EXCLUDED.p1,
+                city_code = EXCLUDED.city_code,
+                town_code = EXCLUDED.town_code,
+                institution_code = EXCLUDED.institution_code,
+                education_type = EXCLUDED.education_type,
+                private_type = EXCLUDED.private_type,
+                partnership_kind = EXCLUDED.partnership_kind,
+                has_legal_personality = EXCLUDED.has_legal_personality,
+                parent_cid_number = EXCLUDED.parent_cid_number,
+                updated_by = 'CHAIN',
+                updated_at = now(),
+                institution_source_type = EXCLUDED.institution_source_type,
+                chain_status = EXCLUDED.chain_status,
+                chain_block_number = EXCLUDED.chain_block_number
+             WHERE subjects.kind IS DISTINCT FROM EXCLUDED.kind
+                OR subjects.cid_full_name IS DISTINCT FROM EXCLUDED.cid_full_name
+                OR subjects.cid_short_name IS DISTINCT FROM EXCLUDED.cid_short_name
+                OR subjects.status IS DISTINCT FROM EXCLUDED.status
+                OR subjects.category IS DISTINCT FROM EXCLUDED.category
+                OR subjects.p1 IS DISTINCT FROM EXCLUDED.p1
+                OR subjects.city_code IS DISTINCT FROM EXCLUDED.city_code
+                OR subjects.town_code IS DISTINCT FROM EXCLUDED.town_code
+                OR subjects.institution_code IS DISTINCT FROM EXCLUDED.institution_code
+                OR subjects.education_type IS DISTINCT FROM EXCLUDED.education_type
+                OR subjects.institution_source_type IS DISTINCT FROM EXCLUDED.institution_source_type
+                OR subjects.chain_status IS DISTINCT FROM EXCLUDED.chain_status
+                OR subjects.chain_block_number IS DISTINCT FROM EXCLUDED.chain_block_number",
+            &[
+                &cids,
+                &full_names,
+                &short_names,
+                &subject_statuses,
+                &categories,
+                &p1_values,
+                &institution_codes,
+                &province_codes,
+                &city_codes,
+                &town_codes,
+                &education_types,
+                &chain_statuses,
+                &chain_blocks,
+            ],
         )
-    })?;
+        .map_err(|e| format!("upsert chain gov subjects failed: {}", postgres_error_text(&e)))?;
 
+    tx.execute("DELETE FROM private WHERE cid_number = ANY($1)", &[&cids])
+        .map_err(|e| {
+            format!(
+                "delete private rows for chain gov failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
     tx.execute(
         "INSERT INTO gov (
             cid_number, province_code, city_code, town_code, institution_code,
             source, home_p, home_c
          )
          SELECT cid_number, province_code, city_code, town_code, institution_code,
-                'GENERATED',
-                home_p, home_c
-         FROM unnest(
-            $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
-            $6::text[], $7::text[]
-         ) AS u(
-            cid_number, province_code, city_code, town_code, institution_code,
-            home_p, home_c
-         )
+                $6, NULL::text, NULL::text
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[])
+              AS u(cid_number, province_code, city_code, town_code, institution_code)
          ON CONFLICT (province_code, cid_number) DO UPDATE SET
             city_code = EXCLUDED.city_code,
             town_code = EXCLUDED.town_code,
             institution_code = EXCLUDED.institution_code,
             source = EXCLUDED.source,
             home_p = EXCLUDED.home_p,
-            home_c = EXCLUDED.home_c",
+            home_c = EXCLUDED.home_c
+         WHERE gov.city_code IS DISTINCT FROM EXCLUDED.city_code
+            OR gov.town_code IS DISTINCT FROM EXCLUDED.town_code
+            OR gov.institution_code IS DISTINCT FROM EXCLUDED.institution_code
+            OR gov.source IS DISTINCT FROM EXCLUDED.source
+            OR gov.home_p IS DISTINCT FROM EXCLUDED.home_p
+            OR gov.home_c IS DISTINCT FROM EXCLUDED.home_c",
         &[
             &cids,
             &province_codes,
             &city_codes,
             &town_codes,
             &institution_codes,
-            &home_province_codes,
-            &home_city_codes,
+            &GOV_SOURCE_CHAIN,
         ],
     )
-    .map_err(|e| {
-        format!(
-            "bulk upsert gov rows failed: {}",
-            crate::core::db::postgres_error_text(&e)
-        )
-    })?;
+    .map_err(|e| format!("upsert chain gov rows failed: {}", postgres_error_text(&e)))?;
+    Ok(changed)
+}
 
-    let default_account_total = targets
+fn upsert_account_chunk(
+    tx: &mut postgres::Transaction<'_>,
+    chunk: &[ChainAccountProjection],
+) -> Result<u64, String> {
+    let cids = chunk
         .iter()
-        .map(|target| default_account_names_for_target(target).len())
-        .sum::<usize>();
-    let mut account_cids = Vec::with_capacity(default_account_total);
-    let mut account_p_codes = Vec::with_capacity(account_cids.capacity());
-    let mut account_c_codes = Vec::with_capacity(account_cids.capacity());
-    let mut account_names = Vec::with_capacity(account_cids.capacity());
-    let mut account_addresses = Vec::with_capacity(account_cids.capacity());
-    for target in targets {
-        for account in build_default_accounts_for_codes(
-            target.cid_number.as_str(),
-            actor,
-            target.institution_code.as_str(),
-        ) {
-            account_cids.push(target.cid_number.clone());
-            account_p_codes.push(target.province_code.clone());
-            account_c_codes.push(target_city_code(target));
-            account_names.push(account.account_name);
-            account_addresses.push(account.account);
-        }
-    }
+        .map(|item| item.cid_number.clone())
+        .collect::<Vec<_>>();
+    let province_codes = chunk
+        .iter()
+        .map(|item| item.province_code.clone())
+        .collect::<Vec<_>>();
+    let city_codes = chunk
+        .iter()
+        .map(|item| item.city_code.clone())
+        .collect::<Vec<Option<String>>>();
+    let account_names = chunk
+        .iter()
+        .map(|item| item.account_name.clone())
+        .collect::<Vec<_>>();
+    let accounts = chunk
+        .iter()
+        .map(|item| Some(item.account.clone()))
+        .collect::<Vec<Option<String>>>();
+    let chain_statuses = chunk
+        .iter()
+        .map(|item| item.chain_status.to_string())
+        .collect::<Vec<_>>();
     tx.execute(
         "INSERT INTO accounts (
             cid_number, province_code, city_code, account_name, account, chain_status, created_at
          )
-         SELECT cid_number, province_code, city_code, account_name, account, 'NOT_ON_CHAIN', now()
-         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[])
-              AS u(cid_number, province_code, city_code, account_name, account)
+         SELECT cid_number, province_code, city_code, account_name, account, chain_status, now()
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[])
+              AS u(cid_number, province_code, city_code, account_name, account, chain_status)
          ON CONFLICT (province_code, cid_number, account_name) DO UPDATE SET
             city_code = EXCLUDED.city_code,
             account = EXCLUDED.account,
-            chain_status = EXCLUDED.chain_status,
-            created_at = EXCLUDED.created_at",
+            chain_status = EXCLUDED.chain_status
+         WHERE accounts.city_code IS DISTINCT FROM EXCLUDED.city_code
+            OR accounts.account IS DISTINCT FROM EXCLUDED.account
+            OR accounts.chain_status IS DISTINCT FROM EXCLUDED.chain_status",
         &[
-            &account_cids,
-            &account_p_codes,
-            &account_c_codes,
+            &cids,
+            &province_codes,
+            &city_codes,
             &account_names,
-            &account_addresses,
+            &accounts,
+            &chain_statuses,
         ],
     )
     .map_err(|e| {
         format!(
-            "bulk upsert gov accounts failed: {}",
-            crate::core::db::postgres_error_text(&e)
+            "upsert chain gov accounts failed: {}",
+            postgres_error_text(&e)
         )
-    })?;
-
-    Ok(())
-}
-
-fn default_account_names_for_target(target: &OfficialInstitutionTarget) -> &'static [&'static str] {
-    default_account_names_for_codes(target.institution_code.as_str())
-}
-
-fn target_city_code(target: &OfficialInstitutionTarget) -> Option<String> {
-    (!target.city_code.is_empty() && target.city_code != "000").then(|| target.city_code.clone())
-}
-
-fn target_town_code(target: &OfficialInstitutionTarget) -> Option<String> {
-    (!target.town_code.is_empty()).then(|| target.town_code.clone())
-}
-
-fn revoke_obsolete_targets(
-    db: &Db,
-    target_cids: &HashSet<String>,
-    scope: &OfficialReconcileScope,
-    kind: GovTargetKind,
-) -> Result<Vec<String>, String> {
-    let target_cids = target_cids.clone();
-    let scope = scope.clone();
-    let category_filter = target_category_sql(kind).map(str::to_string);
-    let candidates = db.with_client(move |conn| {
-        let rows = conn
-            .query(
-                "SELECT s.cid_number, s.category, s.province_code, s.city_code
-                 FROM subjects s
-                 JOIN gov g ON g.province_code = s.province_code AND g.cid_number = s.cid_number
-                 WHERE s.kind = 'PUBLIC'
-                   AND g.source = 'GENERATED'
-                   AND ($1::text IS NULL OR s.category = $1)",
-                &[&category_filter],
-            )
-            .map_err(|e| format!("query obsolete gov candidates failed: {e}"))?;
-        let mut output = Vec::new();
-        for row in rows {
-            let cid: String = row.get(0);
-            if target_cids.contains(&cid) {
-                continue;
-            }
-            let category: String = row.get(1);
-            let province_code: String = row.get(2);
-            let city_code: String = row.get(3);
-            if !kind.includes(match category.as_str() {
-                "GOV_INSTITUTION" => InstitutionCategory::GovInstitution,
-                _ => continue,
-            }) {
-                continue;
-            }
-            let in_scope = match &scope {
-                OfficialReconcileScope::All => true,
-                OfficialReconcileScope::Province { province_code: p } => {
-                    province_code.eq_ignore_ascii_case(p)
-                }
-                OfficialReconcileScope::City {
-                    province_code: p,
-                    city_code: c,
-                } => province_code.eq_ignore_ascii_case(p) && city_code.eq_ignore_ascii_case(c),
-            };
-            if in_scope {
-                output.push(cid);
-            }
-        }
-        Ok(output)
-    })?;
-    delete_obsolete_generated_targets(db, &candidates)?;
-    Ok(candidates)
-}
-
-fn delete_obsolete_generated_targets(db: &Db, cids: &[String]) -> Result<(), String> {
-    if cids.is_empty() {
-        return Ok(());
-    }
-    let cids = cids.to_vec();
-    db.with_client(move |conn| {
-        let mut tx = conn
-            .transaction()
-            .map_err(|e| format!("begin obsolete generated gov cleanup failed: {e}"))?;
-        for chunk in cids.chunks(10_000) {
-            let chunk = chunk.to_vec();
-            // obsolete 只来自 gov.source=GENERATED 的确定性目录。行政区 code
-            // 删除/合并后,这些行不再是目标目录的一部分,必须连同账户和索引一起清掉。
-            tx.execute("DELETE FROM accounts WHERE cid_number = ANY($1)", &[&chunk])
-                .map_err(|e| format!("delete obsolete generated gov accounts failed: {e}"))?;
-            tx.execute("DELETE FROM docs WHERE cid_number = ANY($1)", &[&chunk])
-                .map_err(|e| format!("delete obsolete generated gov docs failed: {e}"))?;
-            tx.execute("DELETE FROM audit WHERE target_cid = ANY($1)", &[&chunk])
-                .map_err(|e| format!("delete obsolete generated gov audit failed: {e}"))?;
-            tx.execute(
-                "DELETE FROM gov
-                 WHERE cid_number = ANY($1)
-                   AND source = 'GENERATED'",
-                &[&chunk],
-            )
-            .map_err(|e| format!("delete obsolete generated gov rows failed: {e}"))?;
-            tx.execute("DELETE FROM private WHERE cid_number = ANY($1)", &[&chunk])
-                .map_err(|e| format!("delete obsolete generated private residuals failed: {e}"))?;
-            tx.execute(
-                "DELETE FROM ids
-                 WHERE cid_number = ANY($1)
-                   AND kind = 'PUBLIC'",
-                &[&chunk],
-            )
-            .map_err(|e| format!("delete obsolete generated gov ids failed: {e}"))?;
-            tx.execute(
-                "DELETE FROM subjects
-                 WHERE cid_number = ANY($1)
-                   AND kind = 'PUBLIC'",
-                &[&chunk],
-            )
-            .map_err(|e| format!("delete obsolete generated gov subjects failed: {e}"))?;
-        }
-        tx.commit()
-            .map_err(|e| format!("commit obsolete generated gov cleanup failed: {e}"))?;
-        Ok(())
     })
+}
+
+fn delete_obsolete_chain_institutions(tx: &mut postgres::Transaction<'_>) -> Result<u64, String> {
+    let rows = tx
+        .query(
+            "SELECT province_code, cid_number
+             FROM gov g
+             WHERE g.source = $1
+               AND NOT EXISTS (
+                 SELECT 1 FROM tmp_chain_gov_cids t
+                 WHERE t.province_code = g.province_code
+                   AND t.cid_number = g.cid_number
+               )",
+            &[&GOV_SOURCE_CHAIN],
+        )
+        .map_err(|e| {
+            format!(
+                "query obsolete chain gov rows failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+    let mut total = 0u64;
+    for row in rows {
+        let province_code: String = row.get(0);
+        let cid_number: String = row.get(1);
+        tx.execute(
+            "DELETE FROM accounts WHERE province_code = $1 AND cid_number = $2",
+            &[&province_code, &cid_number],
+        )
+        .map_err(|e| {
+            format!(
+                "delete obsolete chain accounts failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+        tx.execute(
+            "DELETE FROM gov WHERE province_code = $1 AND cid_number = $2",
+            &[&province_code, &cid_number],
+        )
+        .map_err(|e| {
+            format!(
+                "delete obsolete chain gov row failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+        tx.execute(
+            "DELETE FROM subjects WHERE province_code = $1 AND cid_number = $2 AND kind = 'PUBLIC'",
+            &[&province_code, &cid_number],
+        )
+        .map_err(|e| {
+            format!(
+                "delete obsolete chain subject failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+        tx.execute(
+            "DELETE FROM ids WHERE cid_number = $1 AND kind = 'PUBLIC'",
+            &[&cid_number],
+        )
+        .map_err(|e| {
+            format!(
+                "delete obsolete chain id failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+        total = total.saturating_add(1);
+    }
+    Ok(total)
+}
+
+fn count_chain_institutions(tx: &mut postgres::Transaction<'_>) -> Result<i64, String> {
+    let row = tx
+        .query_one(
+            "SELECT COUNT(*)::BIGINT FROM gov WHERE source = $1",
+            &[&GOV_SOURCE_CHAIN],
+        )
+        .map_err(|e| {
+            format!(
+                "count chain gov institutions failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+    Ok(row.get(0))
+}
+
+fn count_chain_accounts(tx: &mut postgres::Transaction<'_>) -> Result<i64, String> {
+    let row = tx
+        .query_one(
+            "SELECT COUNT(*)::BIGINT
+             FROM accounts a
+             JOIN gov g ON g.province_code = a.province_code AND g.cid_number = a.cid_number
+             WHERE g.source = $1",
+            &[&GOV_SOURCE_CHAIN],
+        )
+        .map_err(|e| {
+            format!(
+                "count chain gov accounts failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+    Ok(row.get(0))
+}
+
+fn derived_town_index() -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    primitives::cid::official_derive::for_each_public_institution_detailed(|item| {
+        if !item.town_code.is_empty() {
+            out.insert(item.cid_number.to_string(), item.town_code.to_string());
+        }
+    });
+    out
+}
+
+fn education_type_for_code(institution_code: &str) -> Option<&'static str> {
+    match institution_code {
+        "NED" => Some(EDUCATION_TYPE_NATIONAL_CITIZEN_EDU_COMMITTEE),
+        "CEDU" => Some(EDUCATION_TYPE_CITY_CITIZEN_EDU_COMMITTEE),
+        _ => None,
+    }
+}
+
+fn normalized_city_code(city_code: &str) -> Option<String> {
+    let trimmed = city_code.trim();
+    (!trimmed.is_empty() && trimmed != "000").then(|| trimmed.to_string())
+}
+
+fn trim_institution_code(raw: &[u8]) -> Result<String, String> {
+    let end = raw.iter().position(|b| *b == 0).unwrap_or(raw.len());
+    let code = std::str::from_utf8(&raw[..end])
+        .map_err(|_| "chain institution_code must be ascii".to_string())?
+        .trim()
+        .to_string();
+    if code.is_empty() {
+        return Err("chain institution_code is empty".to_string());
+    }
+    Ok(code)
+}
+
+#[allow(dead_code)]
+fn assert_no_duplicate_chain_cids(
+    institutions: &[ChainInstitutionProjection],
+) -> Result<(), String> {
+    let mut seen = BTreeSet::new();
+    for item in institutions {
+        if !seen.insert(item.cid_number.as_str()) {
+            return Err(format!(
+                "duplicate chain public institution {}",
+                item.cid_number
+            ));
+        }
+    }
+    Ok(())
 }

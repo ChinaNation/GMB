@@ -95,7 +95,7 @@ pub struct Institution {
     pub town_name: String,
     /// 所属省代码(r5 前 2 字符)。
     pub province_code: String,
-    /// 所属市代码(r5 后 3 字符)。自动公权目录的稳定地域键,市名改动时保持不变。
+    /// 所属市代码(r5 后 3 字符)。链投影公权机构的稳定地域键,市名改动时保持不变。
     #[serde(default)]
     pub city_code: String,
     /// 所属镇代码。只有镇目录机构填写。

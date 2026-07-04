@@ -341,6 +341,13 @@ fn resolve_chain_genesis_hash() -> Result<[u8; 32], String> {
     Err("genesis hash not available: configure ONCHAIN_GENESIS_HASH or call init_genesis_hash_from_chain() at startup".to_string())
 }
 
+/// 返回已经通过启动校验缓存的链创世哈希。
+pub(crate) fn cached_chain_genesis_hash_hex() -> Option<String> {
+    CHAIN_GENESIS_HASH
+        .get()
+        .map(|hash| format!("0x{}", hex::encode(hash)))
+}
+
 fn trusted_production_chain_by_hash(
     hash: &[u8; 32],
 ) -> Result<Option<TrustedProductionChain>, String> {
@@ -1020,8 +1027,20 @@ fn contains_admin(decoded: &OnChainAdminAccount, target: &[u8; 32]) -> bool {
 pub(crate) struct OnChainInstitution {
     pub(crate) cid_full_name: Vec<u8>,
     pub(crate) cid_short_name: Vec<u8>,
+    pub(crate) institution_code: [u8; 4],
+    pub(crate) created_at: u32,
     /// InstitutionLifecycleStatus 判别值:0=Pending 1=Active 2=Closed。
     pub(crate) status: u8,
+}
+
+/// 链上公权机构账户投影。真源为 `PublicManage::InstitutionAccounts`。
+pub(crate) struct OnChainInstitutionAccount {
+    pub(crate) cid_number: Vec<u8>,
+    pub(crate) account_name: Vec<u8>,
+    pub(crate) account: [u8; 32],
+    /// InstitutionLifecycleStatus 判别值:0=Pending 1=Active 2=Closed。
+    pub(crate) status: u8,
+    pub(crate) created_at: u32,
 }
 
 /// 与 public-manage `InstitutionInfo` 字段序一致的最小解码结构。
@@ -1029,9 +1048,19 @@ pub(crate) struct OnChainInstitution {
 struct RawInstitutionInfo {
     cid_full_name: Vec<u8>,
     cid_short_name: Vec<u8>,
-    _institution_code: [u8; 4],
-    _created_at: u32,
+    institution_code: [u8; 4],
+    created_at: u32,
     status: u8,
+}
+
+/// 与 public-manage `InstitutionAccountInfo<AccountId, Balance, BlockNumber>` 字段序一致。
+#[derive(codec::Decode)]
+struct RawInstitutionAccountInfo {
+    address: [u8; 32],
+    _initial_balance: u128,
+    status: u8,
+    _is_default: bool,
+    created_at: u32,
 }
 
 /// 读链上 `PublicManage::Institutions[cid]`;None = 未登记。
@@ -1065,6 +1094,8 @@ pub(crate) async fn institution_lookup(
     Ok(Some(OnChainInstitution {
         cid_full_name: info.cid_full_name,
         cid_short_name: info.cid_short_name,
+        institution_code: info.institution_code,
+        created_at: info.created_at,
         status: info.status,
     }))
 }
@@ -1104,9 +1135,63 @@ pub(crate) async fn for_each_chain_institution(
             OnChainInstitution {
                 cid_full_name: info.cid_full_name,
                 cid_short_name: info.cid_short_name,
+                institution_code: info.institution_code,
+                created_at: info.created_at,
                 status: info.status,
             },
         );
+        count += 1;
+    }
+    Ok(count)
+}
+
+/// 全量遍历链上 `PublicManage::InstitutionAccounts`。
+///
+/// 只读取链上 storage,不按本地行政区或模板派生账户;本地 PostgreSQL 仅作为投影缓存。
+pub(crate) async fn for_each_chain_institution_account(
+    mut f: impl FnMut(OnChainInstitutionAccount),
+) -> Result<usize, String> {
+    let ws_url = super::chain_url::chain_ws_url()?;
+    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
+        .await
+        .map_err(|e| format!("connect chain ws for institution accounts failed: {e}"))?;
+    let storage = client
+        .storage()
+        .at_latest()
+        .await
+        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
+    let query = dynamic::storage(
+        "PublicManage",
+        "InstitutionAccounts",
+        Vec::<dynamic::Value>::new(),
+    );
+    let mut iter = storage
+        .iter(query)
+        .await
+        .map_err(|e| format!("iterate institution accounts failed: {e}"))?;
+    let mut count = 0usize;
+    while let Some(item) = iter.next().await {
+        let kv = item.map_err(|e| format!("read institution account entry failed: {e}"))?;
+        // 键 = 32 前缀 + 16 blake2_128 + SCALE(cid) + 16 blake2_128 + SCALE(account_name)。
+        let mut suffix = &kv.key_bytes[48..];
+        let cid_number: Vec<u8> = codec::Decode::decode(&mut suffix)
+            .map_err(|e| format!("decode institution account cid key failed: {e}"))?;
+        if suffix.len() < 16 {
+            return Err("institution account key missing account_name hash suffix".to_string());
+        }
+        suffix = &suffix[16..];
+        let account_name: Vec<u8> = codec::Decode::decode(&mut suffix)
+            .map_err(|e| format!("decode institution account name key failed: {e}"))?;
+        let mut raw = kv.value.encoded();
+        let info = RawInstitutionAccountInfo::decode(&mut raw)
+            .map_err(|e| format!("decode institution account info failed: {e}"))?;
+        f(OnChainInstitutionAccount {
+            cid_number,
+            account_name,
+            account: info.address,
+            status: info.status,
+            created_at: info.created_at,
+        });
         count += 1;
     }
     Ok(count)
