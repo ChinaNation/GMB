@@ -5,7 +5,7 @@ import 'dart:typed_data';
 ///
 /// (铁律):
 /// 本文件逐字镜像冷钱包 `citizenwallet/lib/signer/institution_code.dart`(同一套
-/// 92 码)。链上治理统一使用 4 字节 `institution_code`
+/// 104 码)。链上治理统一使用 4 字节 `institution_code`
 /// ([u8;4] 原始码字节,3 字符码右补 `0`)。热钱包用本
 /// 文件的纯函数从机构码派生治理分类(是不是固定治理档 / 个人多签 / 机构账户)，
 /// 绝不另立第二套分类。
@@ -50,17 +50,18 @@ class InstitutionCodeLabel {
   }
 
   // 机构码分类清单(与链端 PUBLIC/PRIVATE/UNINCORPORATED 同源)
-  /// 公权法人机构码(A 国家级 26 + B 省级 17 + C 市级 17 + D 镇级 14 + 公立大学/学校 2)= 76。
+  /// 公权法人机构码(A 国家级 38 + B 省级 17 + C 市级 17 + D 镇级 14 + 公立大学/学校 2)= 88。
   static const Set<String> _publicLegalCodes = <String>{
-    // A 国家级单体(26)
+    // A 国家级单体(38)
     'PRS', 'FSC', 'FIB', 'FSS', 'FPR', 'FRG', 'MFA', 'MDF',
-    'MHS', 'MCW', 'MHU', 'MAG', 'MCM', 'MFT', 'MEN', 'MTR',
-    'NLG', 'NJD', 'NSP', 'FAC', 'FAU', 'FIV', 'NED', 'NRC',
-    'NSN', 'NRP',
+    'ARM', 'NAV', 'AIR', 'SPF', 'JOS', 'ARC', 'NVC', 'AFC',
+    'SFC', 'MHS', 'NGB', 'NGC', 'MCW', 'FDA', 'MHU', 'MAG',
+    'MCM', 'MFT', 'MEN', 'MTR', 'NLG', 'NSN', 'NRP', 'NJD',
+    'NSP', 'FAC', 'FAU', 'FIV', 'NED', 'NRC',
     // B 省级类型(17)
-    'PGV', 'PLG', 'PJD', 'PSP', 'PRC', 'PRB', 'PDF', 'PHS',
-    'PCW', 'PHU', 'PAG', 'PCM', 'PFT', 'PEN', 'PTR', 'PSN',
-    'PRP',
+    'PGV', 'PLG', 'PSN', 'PRP', 'PJD', 'PSP', 'PRC', 'PRB',
+    'PDF', 'PHS', 'PCW', 'PHU', 'PAG', 'PCM', 'PFT', 'PEN',
+    'PTR',
     // C 市级类型(17)
     'CGOV', 'CLEG', 'CSUP', 'CJUD', 'CEDU', 'CSLF', 'CDEF', 'CHSC', 'CCWF',
     'CHUD', 'CAGR', 'CCOM', 'CFIN', 'CENR', 'CTRN', 'CREG', 'CPOL',

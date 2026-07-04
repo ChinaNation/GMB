@@ -41,7 +41,7 @@ pub(crate) async fn admin_cid_meta(
         code: 0,
         message: "ok".to_string(),
         data: AdminCidMetaOutput {
-            // 机构码选项由 primitives code.rs 单源派生(92 码);
+            // 机构码选项由 primitives code.rs 单源派生(104 码);
             // 机构类别由机构码派生,不单列。
             institution_options: institution_code::ALL_CODES
                 .iter()

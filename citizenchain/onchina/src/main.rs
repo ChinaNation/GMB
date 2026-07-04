@@ -1681,7 +1681,7 @@ impl Db {
 		                                s.city_code ASC NULLS LAST,
 		                                s.town_code ASC NULLS LAST,
 		                                CASE
-                                        WHEN s.institution_code IN ('NLG','PLG','CLEG','NSN','NRP','PSN','PRP') THEN 1
+                                        WHEN s.institution_code IN ('NLG','NSN','NRP','PLG','PSN','PRP','CLEG') THEN 1
                                         WHEN s.institution_code IN ('NJD','PJD','CJUD') THEN 2
                                         WHEN s.institution_code IN ('NSP','PSP','CSUP','FAC','FAU','FIV') THEN 3
                                         WHEN s.institution_code IN ('NRC','PRC','PRB') THEN 4

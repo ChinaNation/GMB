@@ -20,9 +20,9 @@
 
 ## 决策
 
-**机构分类唯一真源 = CID 号机构码（institution_code，92 码）。** 所有"是不是公权/私权/个人/某档治理机构"一律从机构码派生，绝不另立第二套。
+**机构分类唯一真源 = CID 号机构码（institution_code，当前 104 码）。** 所有"是不是公权/私权/个人/某档治理机构"一律从机构码派生，绝不另立第二套。
 
-### 92 码体系（双布局，总长 26 不变）
+### 104 码体系（双布局，总长 26 不变）
 - 常量唯一真源 `citizenchain/runtime/primitives/cid/code.rs`:
   `CountryCode`、`ProvinceCode`、`InstitutionCode`、`INSTITUTION_CODE_INFOS`、
   `cid_short_name`、盈利策略、行政层级和治理谓词全部在此维护。
@@ -32,7 +32,7 @@
 - 国家/省级代码也纳入 `code.rs`:国家为 `CN`,省级行政区为 43 个两位大写 `ProvinceCode`。市镇代码仍由 CID `china.sqlite` 管理。
 
 ### 三阶段消除
-- **Phase 1（后端 number/）**：删 `subject_property`/`SubjectProperty` 枚举 + DB 列；机构类别一律从机构码派生。92 码双布局落地。
+- **Phase 1（后端 number/）**：删 `subject_property`/`SubjectProperty` 枚举 + DB 列；机构类别一律从机构码派生。104 码双布局落地（2026-07-04 补齐 12 个国家级公权机构码）。
 - **Phase 2（后端 org_code）**：删 `subjects.org_code`/`gov.org_code` 列 + 50+ 消费方；改为 primitives 谓词 `admin_level()`、`is_public_legal_code()` 和纯码匹配派生。`registry_org_code`（管理员授权范围 FEDERAL/CITY_REGISTRY，与机构分类无关）**保留**。registry 前端删除旧机构标签 DTO；citizenapp 删除旧机构分类字段并重生 Isar。CPOL 市公安局只作为普通市级公权机构码处理,不得恢复公安局专用分类或专用 seed。
 - **Phase 3（链端 ORG_xx，重新创世）**：旧 `org: u8` 全替换为 `institution_code: [u8;4]`（~499 引用/48 文件）；阈值 `DoubleMap` **保留结构**只改腿类型（用户"阈值存储键保持"）；固定治理档 NRC/PRC/PRB/FRG/NJD 阈值来自代码级常量。china_*.rs 282 内建 cid_number 重烤为专属码（脚本 `scripts/rebake_china_codes.py`，base36 校验位同后端）+ `scripts/gmb.py --apply` 重派生账户。客户端线格式 `org` 1 字节 → 机构码 4 字节（冷/热钱包解码器 offset、node TS invoke 参数）。
 

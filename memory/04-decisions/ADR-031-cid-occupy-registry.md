@@ -20,7 +20,7 @@ CID 号以链上写入时原子查重为唯一仲裁:校验单源、占号先行
 | 项 | 状态 |
 |---|---|
 | **卡1 链端统一校验**(done/20260702-cid-occupy-card1) | ✅ citizen-identity 修 `starts_with(b"CTZN")` CRITICAL(真实号 `GD000-CTZN1-…` 曾被全拒);public/private-manage register/create 四入口接 `parse_cid_number_parts_bytes` + 家族断言(`is_person_code`=CTZN / `is_public_legal_code` / `is_private_legal_code`‖`is_unincorporated_code`)+ create 号码↔`institution_code` 参数一致;新增 `Error::InvalidCidNumber`;全仓夹具换真号 + 3 个家族拒绝用例;受影响 crate 测试全绿 |
-| 码表 92 定稿 | ✅ 四级完整即制度设计:镇无立法/教委、省无省教委/省公安厅(死规则,绝不再提补码);A 国家 26/B 省 17/C 市 17/D 镇 14/E 私权 7/F 教育 6/G 个人 3/UNIN/PMUL |
+| 码表 104 定稿 | ✅ 四级完整即制度设计:镇无立法/教委、省无省教委/省公安厅;2026-07-04 按宪法补齐 12 个国家级公权机构码后为 A 国家 38/B 省 17/C 市 17/D 镇 14/E 私权 7/F 教育 6/G 个人 3/UNIN/PMUL |
 | 命名规则定稿并程序验证 | ✅ 单源 = 确定性模板 gov-deterministic-v8:**简称 = 行政区显示名 + suffix,全称 = 行政区显示名 + full_suffix**;282 常量逆向验证零例外;模板覆盖 C 17/T 14/省部门 11/国家 NSN·NRP 全齐 |
 | 嵌入式库清理 | ✅ 删旧公权 245,629(+账户 491,258+gov 目录);87 储备机构(NRC/PRC/PRB)对齐常量库(号/全称/简称/码/五类账户);旧码零残留 |
 | 行政区真源 | china.sqlite:43 省 / 2,872 市 / 39,087 镇 |

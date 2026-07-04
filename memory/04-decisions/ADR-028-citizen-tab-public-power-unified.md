@@ -16,7 +16,7 @@ CitizenApp 公民 tab 从三子 tab 重构为五子 tab(广场/立法/选举/治
   - 广场 = `VoteView`(全局 NRC/PRC/PRB 提案投票流)。
 - 公权与治理是两套并行实现:两套机构模型(`PublicInstitutionEntity` vs `InstitutionInfo`)、两套详情/账户/管理员页,靠注释保持"看起来一样",改一处要改两处、必然漂移。
 - `institution_code` 已在公权 DTO/entity 上但 UI 从不消费(连 admin 查询都硬编码 `'CGOV'`);治理的静态注册表与 `public_provinces.dart` 互相硬耦合(省名/省码复用)。
-- 机构分类唯一真源 = CID `institution_code`(92 码表,`citizenchain/runtime/primitives/cid/code.rs` + Registry `cid` 模块),后端 `main.rs` 已按机构码分支分组(立法/司法/监察/储备/行政),但 app 端没用上。
+- 机构分类唯一真源 = CID `institution_code`(当前 104 码表,`citizenchain/runtime/primitives/cid/code.rs` + Registry `cid` 模块),后端 `main.rs` 已按机构码分支分组(立法/司法/监察/储备/行政),但 app 端没用上。
 
 ### 权威依据
 
@@ -58,7 +58,7 @@ CitizenApp 公民 tab 从三子 tab 重构为五子 tab(广场/立法/选举/治
 
 - 不创建任何「选举委员会」机构。选举 = `election-vote` 引擎的提案,由职位所属或对应机构的管理员依法发起。
 - 总统选举由**总统府(PRS)**组织(PRS 已是 `china_zf.rs` 内置机构,自带管理员);宪法第四十四条第二款已改为总统府组织。
-- 删除 `CSLF`/`TSLF` 两个法人机构码(92→90),市/镇自治会改为**非法人(UNIN)**从属市政府(CGOV)/镇政府(TGOV);自治会由后端 gov reconcile 生成(非公民自助注册)。
+- 市/镇自治会不作为公民自助注册入口;自治会实例由后端 gov reconcile 生成(非公民自助注册),机构码真源以 `code.rs` 当前 104 码为准。
 - **选举 ≠ 立法(正交)**:选举 = 电选机构的**管理员/法定代表人**(选人);立法 = 立**法律条文**(立法)。机构按功能归立法/治理/公权,其管理员的选举是「选举活动」,不在选举 tab 重复列机构。
 - **选举保留普选 + 互选**:普选由公民按宪法/选举法规定的行政区和职位范围选举；互选由机构现任成员在成员快照内选举院长、主席、参议长、众议长等职位。国家立法院参议员/众议员已确定为省行政区公民普选:各省公民分别在本省省参议会/省众议会现任成员中选出。
 - 理由:Option A 需凭空建 ~3,229 个委员会机构 + 新增宪法机构条文且与机构自组织条文矛盾;Option B 零新增机构体、契合「投票职责边界硬规则(业务只发起、引擎管投票)」、与 election-vote 普选/互选双模式一致。

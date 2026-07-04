@@ -313,9 +313,9 @@ pub const NJD: InstitutionCode = *b"NJD\0";
 /// 个人多签账户,不发 CID 号。
 pub const PMUL: InstitutionCode = *b"PMUL";
 
-/// 全部 92 个机构码信息,按 A-I 九组排列。
-pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
-    // A 国家级单体(26,3 位,公法人,非盈利)
+/// 全部 104 个机构码信息,按 A-I 九组排列。
+pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
+    // A 国家级单体(38,3 位,公法人,非盈利)
     InstitutionCodeInfo {
         institution_code: *b"PRS\0",
         institution_code_text: "PRS",
@@ -356,15 +356,76 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
         institution_code_text: "MDF",
         institution_code_label: "国防部",
     },
+    // 国防部下属军政部门与作战/军种司令部,均属国家级公权机构码。
+    InstitutionCodeInfo {
+        institution_code: *b"ARM\0",
+        institution_code_text: "ARM",
+        institution_code_label: "陆军部",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"NAV\0",
+        institution_code_text: "NAV",
+        institution_code_label: "海军部",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"AIR\0",
+        institution_code_text: "AIR",
+        institution_code_label: "空军部",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"SPF\0",
+        institution_code_text: "SPF",
+        institution_code_label: "天军部",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"JOS\0",
+        institution_code_text: "JOS",
+        institution_code_label: "联合作战参谋部",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"ARC\0",
+        institution_code_text: "ARC",
+        institution_code_label: "陆军司令部",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"NVC\0",
+        institution_code_text: "NVC",
+        institution_code_label: "海军司令部",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"AFC\0",
+        institution_code_text: "AFC",
+        institution_code_label: "空军司令部",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"SFC\0",
+        institution_code_text: "SFC",
+        institution_code_label: "天军司令部",
+    },
     InstitutionCodeInfo {
         institution_code: *b"MHS\0",
         institution_code_text: "MHS",
         institution_code_label: "国安部",
     },
     InstitutionCodeInfo {
+        institution_code: *b"NGB\0",
+        institution_code_text: "NGB",
+        institution_code_label: "国民警卫局",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"NGC\0",
+        institution_code_text: "NGC",
+        institution_code_label: "国民警卫队司令部",
+    },
+    InstitutionCodeInfo {
         institution_code: *b"MCW\0",
         institution_code_text: "MCW",
         institution_code_label: "民生部",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"FDA\0",
+        institution_code_text: "FDA",
+        institution_code_label: "食品药品监管局",
     },
     InstitutionCodeInfo {
         institution_code: *b"MHU\0",
@@ -402,6 +463,16 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
         institution_code_label: "国家立法院",
     },
     InstitutionCodeInfo {
+        institution_code: *b"NSN\0",
+        institution_code_text: "NSN",
+        institution_code_label: "国家参议会",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"NRP\0",
+        institution_code_text: "NRP",
+        institution_code_label: "国家众议会",
+    },
+    InstitutionCodeInfo {
         institution_code: *b"NJD\0",
         institution_code_text: "NJD",
         institution_code_label: "国家司法院",
@@ -436,16 +507,6 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
         institution_code_text: "NRC",
         institution_code_label: "国家储委会",
     },
-    InstitutionCodeInfo {
-        institution_code: *b"NSN\0",
-        institution_code_text: "NSN",
-        institution_code_label: "国家参议会",
-    },
-    InstitutionCodeInfo {
-        institution_code: *b"NRP\0",
-        institution_code_text: "NRP",
-        institution_code_label: "国家众议会",
-    },
     // B 省级类型(17,3 位,43 省共用,R5 省码区分实例,非盈利)
     InstitutionCodeInfo {
         institution_code: *b"PGV\0",
@@ -456,6 +517,16 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
         institution_code: *b"PLG\0",
         institution_code_text: "PLG",
         institution_code_label: "省立法院",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"PSN\0",
+        institution_code_text: "PSN",
+        institution_code_label: "省参议会",
+    },
+    InstitutionCodeInfo {
+        institution_code: *b"PRP\0",
+        institution_code_text: "PRP",
+        institution_code_label: "省众议会",
     },
     InstitutionCodeInfo {
         institution_code: *b"PJD\0",
@@ -521,16 +592,6 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
         institution_code: *b"PTR\0",
         institution_code_text: "PTR",
         institution_code_label: "省交通厅",
-    },
-    InstitutionCodeInfo {
-        institution_code: *b"PSN\0",
-        institution_code_text: "PSN",
-        institution_code_label: "省参议会",
-    },
-    InstitutionCodeInfo {
-        institution_code: *b"PRP\0",
-        institution_code_text: "PRP",
-        institution_code_label: "省众议会",
     },
     // C 市级类型(17,4 位,非盈利)
     InstitutionCodeInfo {
@@ -786,8 +847,8 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 92] = [
     },
 ];
 
-const fn institution_codes_from_infos() -> [InstitutionCode; 92] {
-    let mut out = [[0u8; 4]; 92];
+const fn institution_codes_from_infos() -> [InstitutionCode; 104] {
+    let mut out = [[0u8; 4]; 104];
     let mut i = 0;
     while i < INSTITUTION_CODE_INFOS.len() {
         out[i] = INSTITUTION_CODE_INFOS[i].institution_code;
@@ -796,8 +857,8 @@ const fn institution_codes_from_infos() -> [InstitutionCode; 92] {
     out
 }
 
-/// 全部 92 个机构码,顺序与 `INSTITUTION_CODE_INFOS` 一致。
-pub const ALL_CODES: [InstitutionCode; 92] = institution_codes_from_infos();
+/// 全部 104 个机构码,顺序与 `INSTITUTION_CODE_INFOS` 一致。
+pub const ALL_CODES: [InstitutionCode; 104] = institution_codes_from_infos();
 
 fn institution_info(code: &InstitutionCode) -> Option<&'static InstitutionCodeInfo> {
     INSTITUTION_CODE_INFOS
@@ -894,13 +955,14 @@ pub fn is_private_legal_code(code: &InstitutionCode) -> bool {
 pub fn admin_level(code: &InstitutionCode) -> Option<AdminLevel> {
     let text = institution_code_text(code)?;
     match text {
-        // A 国家级单体(26)
-        "PRS" | "FSC" | "FIB" | "FSS" | "FPR" | "FRG" | "MFA" | "MDF" | "MHS" | "MCW" | "MHU"
-        | "MAG" | "MCM" | "MFT" | "MEN" | "MTR" | "NLG" | "NJD" | "NSP" | "FAC" | "FAU" | "FIV"
-        | "NED" | "NRC" | "NSN" | "NRP" => Some(AdminLevel::National),
+        // A 国家级单体(38)
+        "PRS" | "FSC" | "FIB" | "FSS" | "FPR" | "FRG" | "MFA" | "MDF" | "ARM" | "NAV" | "AIR"
+        | "SPF" | "JOS" | "ARC" | "NVC" | "AFC" | "SFC" | "MHS" | "NGB" | "NGC" | "MCW" | "FDA"
+        | "MHU" | "MAG" | "MCM" | "MFT" | "MEN" | "MTR" | "NLG" | "NSN" | "NRP" | "NJD" | "NSP"
+        | "FAC" | "FAU" | "FIV" | "NED" | "NRC" => Some(AdminLevel::National),
         // B 省级类型(17)
-        "PGV" | "PLG" | "PJD" | "PSP" | "PRC" | "PRB" | "PDF" | "PHS" | "PCW" | "PHU" | "PAG"
-        | "PCM" | "PFT" | "PEN" | "PTR" | "PSN" | "PRP" => Some(AdminLevel::Province),
+        "PGV" | "PLG" | "PSN" | "PRP" | "PJD" | "PSP" | "PRC" | "PRB" | "PDF" | "PHS" | "PCW"
+        | "PHU" | "PAG" | "PCM" | "PFT" | "PEN" | "PTR" => Some(AdminLevel::Province),
         // C 市级类型(17)
         "CGOV" | "CLEG" | "CSUP" | "CJUD" | "CEDU" | "CSLF" | "CDEF" | "CHSC" | "CCWF" | "CHUD"
         | "CAGR" | "CCOM" | "CFIN" | "CENR" | "CTRN" | "CREG" | "CPOL" => Some(AdminLevel::City),
@@ -1000,7 +1062,7 @@ mod tests {
 
     #[test]
     fn institution_codes_are_three_or_four_uppercase_and_unique() {
-        assert_eq!(INSTITUTION_CODE_INFOS.len(), 92);
+        assert_eq!(INSTITUTION_CODE_INFOS.len(), 104);
         for info in INSTITUTION_CODE_INFOS {
             let text = info.institution_code_text;
             assert!(text.len() == 3 || text.len() == 4);
@@ -1031,6 +1093,16 @@ mod tests {
         assert!(is_fixed_governance_code(&NJD));
         assert!(!is_registered_multisig_code(&NJD));
         assert!(is_public_legal_code(&NJD));
+        assert_eq!(
+            institution_code_label(&code_bytes("FDA")),
+            Some("食品药品监管局")
+        );
+        assert_eq!(
+            institution_code_label(&code_bytes("NGB")),
+            Some("国民警卫局")
+        );
+        assert_eq!(admin_level(&code_bytes("ARM")), Some(AdminLevel::National));
+        assert_eq!(admin_level(&code_bytes("NGC")), Some(AdminLevel::National));
 
         assert!(is_personal_code(&PMUL));
         assert!(is_registered_multisig_code(&PMUL));

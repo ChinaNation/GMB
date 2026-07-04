@@ -510,12 +510,13 @@ pub(crate) async fn search_parent_institutions(
                       AND $4::text IS DISTINCT FROM 'S'
                       AND (
                            s.institution_code IN (
-                               'PRS','FSC','FIB','FSS','FPR','FRG','MFA','MDF','MHS','MCW','MHU',
-                               'MAG','MCM','MFT','MEN','MTR','NLG','NJD','NSP','FAC','FAU','FIV',
-                               'NED','NRC','NSN','NRP')
+                               'PRS','FSC','FIB','FSS','FPR','FRG','MFA','MDF','ARM','NAV','AIR',
+                               'SPF','JOS','ARC','NVC','AFC','SFC','MHS','NGB','NGC','MCW','FDA',
+                               'MHU','MAG','MCM','MFT','MEN','MTR','NLG','NSN','NRP','NJD','NSP',
+                               'FAC','FAU','FIV','NED','NRC')
                            OR (s.institution_code IN (
-                                   'PGV','PLG','PJD','PSP','PRC','PRB','PDF','PHS','PCW','PHU','PAG',
-                                   'PCM','PFT','PEN','PTR','PSN','PRP')
+                                   'PGV','PLG','PSN','PRP','PJD','PSP','PRC','PRB','PDF','PHS','PCW',
+                                   'PHU','PAG','PCM','PFT','PEN','PTR')
                                AND s.province_code = $2)
                            OR (s.institution_code IN (
                                    'CGOV','CLEG','CSUP','CJUD','CEDU','CSLF','CDEF','CHSC','CCWF',
