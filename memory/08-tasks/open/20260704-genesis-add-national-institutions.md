@@ -67,3 +67,11 @@
 - 已清理立法体系文档残留:ADR 和 open 任务卡中“参议会/众议会是两个独立机构”“省参议会/省众议会”等旧表述,已改为国家立法院/省联邦立法院下设参议会和众议会。
 - 已删除未跟踪临时审计脚本 `citizenchain/scripts/runtime-audit-wf.js`,避免被误提交为正式脚本。
 - 复查确认 `citizenapp/assets/public_institutions/` 与 `CitizenApp/assets/public_institutions/` 仍是上一轮 49,581 发布快照;`citizenchain/node/chainspecs/`、`citizenchain/target/chainspec/` 和 App 内置 chainspec 仍对应上一轮冻结锚点。这些属于正式发布生成物残留,不得手工改 JSON 冒充新快照,必须在同一提交 CI WASM 确定后重新 `--finalize` bake、同步 OnChina 投影并重跑快照生成器。
+
+## 正式 bake 冻结记录
+
+- 已核对 GitHub `CitizenChain WASM` 最新成功 run `28700551692`,分支 `main`,headSha `21057d4f9459e32ee12cd6aeecc5757038503f64`,与本地 HEAD 一致。
+- 已下载 artifact `citizenchain-wasm`;`citizenchain.compact.compressed.wasm` 文件大小 1,057,995 字节,sha256 `467a031f7021f46fd18a38963d826a32e085e44503b6b1abe66535b95554fca1`,blake2_256 `0x4c39fdd6aee34329df34b2a66cbae71c1e6b407a3e35af1c90141c7d716921c0`。
+- 已执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm citizenchain/target/wasm-ci/citizenchain.compact.compressed.wasm`:通过,创世物化耗时 30s,`genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`,`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`,`chainspec_hash=57e8e641ba0fa371262a6cfcf5ba53a0607a6caca940d16d77729ae45b0cf3de`。
+- bake 已同步冻结 SSOT:`citizenchain/node/chainspecs/citizenchain.plain.json` 与 `citizenapp/assets/chainspec.json`;大小写 `CitizenApp/assets/chainspec.json` 与 `citizenapp/assets/chainspec.json` 为同一 inode,已同步到新 `stateRootHash`。
+- `target/chainspec/genesis-state/manifest.json` 已生成,但 `public_institution_root` 仍为空;这是因为 49,593 公权机构快照根必须在冻结链启动、OnChina 投影同步后由 CitizenApp 快照生成器重生,不得沿用上一轮 49,581 根。
