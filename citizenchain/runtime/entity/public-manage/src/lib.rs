@@ -393,7 +393,7 @@ pub mod pallet {
         EmptyIssuerCidNumber,
         /// 机构签发凭证缺业务作用域省名。
         EmptyScopeProvinceName,
-        /// 镇级机构必须携带 3 字节 town_code,非镇级机构必须为空。
+        /// 镇行政区机构必须携带 3 字节 town_code,非镇行政区机构必须为空。
         InvalidTownCode,
         /// 无法将派生地址转换为账户ID
         DerivedAccountDecodeFailed,
@@ -913,7 +913,7 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<T::AccountId>> {
         let institution_code = Self::lookup_org(addr)?;
         if institution_code == admin_primitives::FRG {
-            // FRG 固定阈值 3 只属于省级 5 人组内部投票；
+            // FRG 固定阈值 3 只属于省行政区 5 人组内部投票；
             // 主账户聚合 215 人仅用于身份/特权校验，不作为 215/3 多签配置。
             return None;
         }

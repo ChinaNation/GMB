@@ -810,6 +810,9 @@ class LocalTxEntity {
   String? fromAddress;
   String? toAddress;
 
+  /// 转账备注，来自 OnchainTransaction::TransferWithRemark 事件或本机提交草稿。
+  String? remark;
+
   /// 状态(ADR-017)：pending=已提交 / finalized=已确认 / failed=失败；
   /// inBlock 为交易提交 watch 的临时进度态(豁免区)，非 finalized 流水终态。
   late String status;

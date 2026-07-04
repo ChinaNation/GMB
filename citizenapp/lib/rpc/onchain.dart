@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
@@ -12,34 +13,41 @@ class OnchainRpc {
 
   final ChainRpc _rpc;
 
-  /// Balances pallet index（citizenchain runtime 定义）。
-  static const _balancesPalletIndex = 2;
+  /// 普通转账备注最大 UTF-8 字节数，与 runtime `MaxTransferRemarkLen` 保持一致。
+  static const int maxTransferRemarkBytes = 99;
 
-  /// transfer_keep_alive call index（标准 pallet_balances）。
-  static const _transferKeepAliveCallIndex = 3;
+  /// OnchainTransaction pallet index（citizenchain runtime 定义）。
+  static const _onchainTransactionPalletIndex = 4;
+
+  /// transfer_with_remark call index。
+  static const _transferWithRemarkCallIndex = 0;
 
   // ──── 公开方法 ────
 
-  /// 执行 Balances::transfer_keep_alive 转账。
+  /// 执行 OnchainTransaction::transfer_with_remark 转账。
   ///
   /// [fromAddress] 发送方 SS58 地址
   /// [signerPubkey] 发送方公钥 32 字节
   /// [toAddress] 接收方 SS58 地址
   /// [amountYuan] 转账金额（元），内部转为分
+  /// [remark] 转账备注，按 UTF-8 字节编码并随交易事件上链
   /// [sign] 签名回调：接收签名载荷字节，返回 64 字节 sr25519 签名
   ///
   /// 返回交易哈希 hex（含 0x 前缀）和提交时使用的 nonce。
-  Future<({String txHash, int usedNonce})> transferKeepAlive({
+  Future<({String txHash, int usedNonce})> transferWithRemark({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String toAddress,
     required double amountYuan,
+    required String remark,
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
     final destAccountId = Keyring().decodeAddress(toAddress);
     final amountFen = BigInt.from((amountYuan * 100).round());
-    final callData = _buildTransferKeepAliveCall(destAccountId, amountFen);
+    final remarkBytes = Uint8List.fromList(utf8.encode(remark));
+    final callData =
+        _buildTransferWithRemarkCall(destAccountId, amountFen, remarkBytes);
     return SignedExtrinsicBuilder(
       chainRpc: _rpc,
       logLabel: 'OnchainRpc',
@@ -83,19 +91,43 @@ class OnchainRpc {
 
   // ──── 内部：extrinsic 编码 ────
 
-  /// 构造 Balances::transfer_keep_alive 的 SCALE 编码 call data。
+  /// 构造 OnchainTransaction::transfer_with_remark 的 SCALE 编码 call data。
   ///
-  /// 格式：[pallet_index] [call_index] [MultiAddress::Id(0x00) + dest_32bytes] [Compact<u128>(fen)]
-  Uint8List _buildTransferKeepAliveCall(
+  /// 格式：[pallet_index=4] [call_index=0] [beneficiary:AccountId32] [amount:u128_le] [remark:BoundedVec<u8>]
+  Uint8List _buildTransferWithRemarkCall(
     Uint8List destAccountId,
     BigInt amountFen,
+    Uint8List remarkBytes,
   ) {
+    if (remarkBytes.length > maxTransferRemarkBytes) {
+      throw ArgumentError(
+        '转账备注不能超过 $maxTransferRemarkBytes 字节，当前 ${remarkBytes.length} 字节',
+      );
+    }
     final output = ByteOutput();
-    output.pushByte(_balancesPalletIndex);
-    output.pushByte(_transferKeepAliveCallIndex);
-    output.pushByte(0x00);
+    output.pushByte(_onchainTransactionPalletIndex);
+    output.pushByte(_transferWithRemarkCallIndex);
     output.write(destAccountId);
-    output.write(CompactBigIntCodec.codec.encode(amountFen));
+    output.write(_u128LittleEndian(amountFen));
+    output.write(
+        CompactBigIntCodec.codec.encode(BigInt.from(remarkBytes.length)));
+    output.write(remarkBytes);
     return output.toBytes();
+  }
+
+  Uint8List _u128LittleEndian(BigInt value) {
+    if (value < BigInt.zero) {
+      throw ArgumentError('u128 不能为负数');
+    }
+    final out = Uint8List(16);
+    var remaining = value;
+    for (var i = 0; i < out.length; i++) {
+      out[i] = (remaining & BigInt.from(0xff)).toInt();
+      remaining = remaining >> 8;
+    }
+    if (remaining != BigInt.zero) {
+      throw ArgumentError('金额超出 u128 范围');
+    }
+    return out;
   }
 }

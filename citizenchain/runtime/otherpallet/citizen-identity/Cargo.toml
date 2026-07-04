@@ -1,5 +1,5 @@
 [package]
-name = "citizen-identity"
+name = "citizen-identity"  # 链上公民身份模块
 edition.workspace = true
 version.workspace = true
 authors.workspace = true

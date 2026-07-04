@@ -1,5 +1,5 @@
 use super::{
-    benchmarking::{inherent_benchmark_data, RemarkBuilder, TransferKeepAliveBuilder},
+    benchmarking::{RemarkBuilder, TransferWithRemarkBuilder, inherent_benchmark_data},
     chain_spec,
     cli::{Cli, Subcommand},
     service,
@@ -9,7 +9,7 @@ use frame_benchmarking_cli::{BenchmarkCmd, ExtrinsicFactory, SUBSTRATE_REFERENCE
 use primitives::core_const::{SS58_FORMAT, SUPPORT_URL};
 use sc_cli::SubstrateCli;
 use sc_service::PartialComponents;
-use sp_core::crypto::{set_default_ss58_version, Ss58AddressFormat};
+use sp_core::crypto::{Ss58AddressFormat, set_default_ss58_version};
 use sp_keyring::Sr25519Keyring;
 
 impl SubstrateCli for Cli {
@@ -196,10 +196,10 @@ pub fn run() -> sc_cli::Result<()> {
                     }
                     BenchmarkCmd::Extrinsic(cmd) => {
                         let PartialComponents { client, .. } = service::new_partial(&config)?;
-                        // Register the *Remark* and *TKA* builders.
+                        // 注册 System::remark 与普通带备注转账 benchmark 构造器。
                         let ext_factory = ExtrinsicFactory(vec![
                             Box::new(RemarkBuilder::new(client.clone())),
-                            Box::new(TransferKeepAliveBuilder::new(
+                            Box::new(TransferWithRemarkBuilder::new(
                                 client.clone(),
                                 Sr25519Keyring::Alice.to_account_id(),
                                 EXISTENTIAL_DEPOSIT,

@@ -148,7 +148,7 @@ RPC 暴露说明：
 - **矿工热钱包**：列表名称固定为“矿工热钱包”，不显示删除按钮；若用户尝试重复添加同一矿工地址，后端直接拒绝。
 - **余额查询**：按钱包公钥读取 finalized 链上账户余额，供首页交易栏展示。
 - **公民钱包签名请求**：构造二维码签名所需 payload，确保普通钱包继续由离线设备签名。
-- **矿工热钱包签名提交**：前端要求设备开机密码；后端校验通过后签发进程内一次性令牌，再调用本机 `transaction_submitMinerTransfer` RPC 使用 `powr` 密钥签名 `Balances::transfer_keep_alive`。
+- **矿工热钱包签名提交**：前端要求设备开机密码；后端校验通过后签发进程内一次性令牌，再调用本机 `transaction_submitMinerTransfer` RPC 使用 `powr` 密钥签名 `OnchainTransaction::transfer_with_remark`，备注最多 99 UTF-8 字节。
 - **签名提交**：公民钱包接收离线签名结果后提交链上转账；矿工热钱包由节点直接返回交易哈希。
 
 安全约束：

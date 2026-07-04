@@ -22,7 +22,7 @@ enum AuditError {
     Unreachable(String),
 }
 
-/// 常量 282 机构 (号 → (全称, 简称))。
+/// 常量 296 机构 (号 → (全称, 简称))。
 fn constant_institutions() -> BTreeMap<String, (String, String)> {
     use primitives::cid::china::{
         china_cb::CHINA_CB, china_ch::CHINA_CH, china_jc::CHINA_JC, china_jy::CHINA_JY,
@@ -75,7 +75,7 @@ async fn audit_one(cid: &str, full: &str, short: &str) -> Result<(), AuditError>
     Ok(())
 }
 
-/// 单轮抽样:确定性步长 + 时间盐,覆盖派生全域;常量 282 固定抽首条(FRG 所在数组头)。
+/// 单轮抽样:确定性步长 + 时间盐,覆盖派生全域;常量 296 固定抽首条(FRG 所在数组头)。
 async fn sample_audit_once() -> Result<usize, AuditError> {
     let total = primitives::cid::official_derive::public_institution_derived_count();
     let salt = (chrono::Utc::now().timestamp().unsigned_abs() as usize) % total;
@@ -127,7 +127,7 @@ pub(crate) fn startup_sample_audit_blocking() -> Result<(), String> {
 }
 
 /// 全量双向比对(`audit-chain-catalog` 子命令,部署验收用):
-/// 本地创世目录(常量 282 + 国家/省/市派生 49,299)与链上
+/// 本地创世目录(常量 296 + 省/市派生 49,297)与链上
 /// `Institutions` 逐字节互查。
 pub(crate) fn full_audit_blocking() -> Result<(), String> {
     let rt = tokio::runtime::Runtime::new().map_err(|e| format!("audit runtime: {e}"))?;

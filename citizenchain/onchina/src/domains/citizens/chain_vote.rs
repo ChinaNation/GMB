@@ -1,4 +1,4 @@
-//! 公民投票资格查询 handler。
+//! 投票资格查询 handler。
 //!
 //! 本接口只返回 OnChina 本地公民档案的即时状态,方便 CitizenApp 在提交交易前提示用户。
 //! 链端投票资格以 runtime `citizen-identity` 的链上状态为唯一真源,交易执行时再次校验。

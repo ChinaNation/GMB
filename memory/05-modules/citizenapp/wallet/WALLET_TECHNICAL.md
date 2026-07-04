@@ -158,8 +158,8 @@ lib/
 ### 4.5.1 钱包交易流水同步
 
 1. 钱包新建或导入到本机后，`ChainTxMonitor` 为该钱包建立 `WalletTxSyncCursorEntity`，finalized 补同步起点为当前 finalized 区块；不查询、不补录导入前历史。
-2. 钱包页加载本地钱包后按 `walletPubkeyHex` 注册监听；监听 newHeads 时先把当前区块命中的 `Balances::Transfer` 写成 `inBlock`，启动、重连和 finalized 后还会补扫 `finalized+1..best` 的未确认区块，避免错过 newHeads 的收款记录；监听 finalizedHeads 时按游标补同步并升级为 `finalized`。
-3. 命中本机钱包的事件写入 `LocalTxEntity`：收入保存正数 `amountDeltaFen`，支出保存负数 `amountDeltaFen`；不再单独保存 `direction`。
+2. 钱包页加载本地钱包后按 `walletPubkeyHex` 注册监听；监听 newHeads 时先把当前区块命中的 `OnchainTransaction::TransferWithRemark` 写成 `inBlock`，启动、重连和 finalized 后还会补扫 `finalized+1..best` 的未确认区块，避免错过 newHeads 的收款记录；监听 finalizedHeads 时按游标补同步并升级为 `finalized`。
+3. 命中本机钱包的事件写入 `LocalTxEntity`：收入保存正数 `amountDeltaFen`，支出保存负数 `amountDeltaFen`；普通链上转账备注写入 `remark`；不再单独保存 `direction`。
 4. 业务类型只写入 `type`，例如 `transfer / fee / reward / interest / issuance / burn / multisig_transfer`；列表方向由金额正负号推导。
 5. 区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`；本机提交后的 pending 记录唯一键为 `walletPubkeyHex:pending:txHash`，写入时按同钱包、同区块、同发送方、同接收方、同转账本金合并本机提交记录和重复区块事件，避免重复显示。
 6. 删除钱包时同步删除该 `walletPubkeyHex` 下的 `LocalTxEntity` 和 `WalletTxSyncCursorEntity`；再次导入同一链上账户也从新的本机导入时刻重新记录。
@@ -220,7 +220,7 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 - `WalletSettingsEntity`
   - `activeWalletIndex, updatedAtMillis`
 - `LocalTxEntity`
-  - `recordKey, walletAddress, walletPubkeyHex, type, amountDeltaFen, transferAmountFen, feeFen, counterpartyAddress, fromAddress, toAddress, status, source, txHash, blockNumber, blockHash, eventIndex, extrinsicIndex, usedNonce, confirmedAtMillis, failureReason, createdAtMillis`
+  - `recordKey, walletAddress, walletPubkeyHex, type, amountDeltaFen, transferAmountFen, feeFen, counterpartyAddress, fromAddress, toAddress, remark, status, source, txHash, blockNumber, blockHash, eventIndex, extrinsicIndex, usedNonce, confirmedAtMillis, failureReason, createdAtMillis`
 - `WalletTxSyncCursorEntity`
   - `walletAddress, walletPubkeyHex, trackingStartBlock, lastSyncedBlock, createdAtMillis, updatedAtMillis`
 - `AdminGroupCacheEntity`
@@ -259,7 +259,7 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 钱包详情页和交易记录页面直接复用 `LocalTxStore`（Isar `LocalTxEntity`），按 `walletPubkeyHex` 过滤。
 
-- 本机提交普通转账成功后通过 `LocalTxStore.upsertLocalSubmitTransfer()` 写入 `source=local_submit / status=pending` 记录，用于立即反馈支出；如果区块事件已经先写入，则合并手续费、txHash 和 nonce，不新增第二条
+- 本机提交普通转账成功后通过 `LocalTxStore.upsertLocalSubmitTransfer()` 写入 `source=local_submit / status=pending` 记录，用于立即反馈支出；如果区块事件已经先写入，则合并手续费、txHash、nonce 和备注，不新增第二条
 - 交易池 included 回调先把本机提交记录升级为 `status=inBlock`；newHeads 命中收入或支出事件时写入 `source=chain_event / status=inBlock`；启动、重连和 finalized 后会补扫 finalized 之后的未确认区块，补齐错过实时订阅的 `inBlock` 流水
 - finalized 区块事件监听命中后升级同一条区块事件记录为 `status=finalized`，并把匹配的本机提交记录合并为 finalized；该升级只能来自 finalized 高度，不能来自 best/latest 高度
 - 钱包详情页展示最近 5 条，点击"交易记录"标题或右侧箭头进入完整列表，点击单条进入该笔交易详情
@@ -357,7 +357,7 @@ mnemonic
 ## 11. 治理字段联动要求
 
 - 联合提案人口分母由 runtime 按 `PopulationScope` 从链上公民身份读取。
-- 公民投票交易只提交账户签名、提案号和赞反意见。
+- 链上投票交易只提交账户签名、提案号和赞反意见。
 - 钱包模块负责提供签名账户上下文，不负责生成投票资格或人口凭证。
 - 钱包模块必须保证"登录签名"和"转账/治理签名"使用不同签名 payload。
 

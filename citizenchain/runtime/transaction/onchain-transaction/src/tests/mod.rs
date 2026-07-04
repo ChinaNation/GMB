@@ -2,7 +2,7 @@
 
 use super::*;
 use frame_support::{
-    assert_ok, derive_impl,
+    assert_noop, assert_ok, derive_impl,
     dispatch::GetDispatchInfo,
     parameter_types,
     traits::{Currency as _, VariantCountOf},
@@ -10,7 +10,7 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_transaction_payment::OnChargeTransaction;
-use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage, Perbill};
+use sp_runtime::{AccountId32, BuildStorage, Perbill, traits::IdentityLookup};
 use std::{cell::RefCell, thread_local};
 
 type Block = frame_system::mocking::MockBlockU32<Test>;
@@ -105,7 +105,10 @@ impl fullnode_issuance::Config for Test {
     type WeightInfo = ();
 }
 
-impl crate::pallet::Config for Test {}
+impl crate::pallet::Config for Test {
+    type Currency = Balances;
+    type MaxTransferRemarkLen = frame_support::traits::ConstU32<99>;
+}
 
 struct MockNrcAccountProvider;
 impl NrcAccountProvider<AccountId32> for MockNrcAccountProvider {

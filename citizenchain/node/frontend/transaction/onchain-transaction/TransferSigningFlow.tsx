@@ -9,6 +9,7 @@ type Props = {
   wallet: ColdWallet;
   toAddress: string;
   amountYuan: number;
+  remark: string;
   onClose: () => void;
   onSuccess: (txHash: string) => void;
 };
@@ -26,7 +27,7 @@ function fmtYuan(v: number): string {
   return `${int.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${dec}`;
 }
 
-export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, onSuccess }: Props) {
+export function TransferSigningFlow({ wallet, toAddress, amountYuan, remark, onClose, onSuccess }: Props) {
   const [step, setStep] = useState<FlowStep>('confirm');
   const [signRequest, setSignRequest] = useState<TransferSignRequestResult | null>(null);
   const [requestJson, setRequestJson] = useState('');
@@ -61,14 +62,14 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
           return;
         }
         setStep('submit');
-        const result = await api.submitMinerTransfer(toAddress, amountYuan, unlockPassword);
+        const result = await api.submitMinerTransfer(toAddress, amountYuan, remark, unlockPassword);
         setUnlockPassword('');
         setTxHash(result.txHash);
         setStep('done');
         return;
       }
 
-      const result = await api.buildTransferRequest(wallet.pubkeyHex, toAddress, amountYuan);
+      const result = await api.buildTransferRequest(wallet.pubkeyHex, toAddress, amountYuan, remark);
       setSignRequest(result);
       setRequestJson(result.requestJson);
       setCountdown(90);
@@ -77,7 +78,7 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [isMinerHotWallet, wallet.pubkeyHex, toAddress, amountYuan, unlockPassword]);
+  }, [isMinerHotWallet, wallet.pubkeyHex, toAddress, amountYuan, remark, unlockPassword]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
@@ -129,6 +130,12 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
                 <span className="transfer-signing-label">转账金额</span>
                 <span className="transfer-signing-value">{fmtYuan(amountYuan)} 元</span>
               </div>
+              {remark.length > 0 && (
+                <div className="transfer-signing-row">
+                  <span className="transfer-signing-label">转账备注</span>
+                  <span className="transfer-signing-value">{remark}</span>
+                </div>
+              )}
               <div className="transfer-signing-row">
                 <span className="transfer-signing-label">预估手续费</span>
                 <span className="transfer-signing-value">{fmtYuan(fee)} 元</span>

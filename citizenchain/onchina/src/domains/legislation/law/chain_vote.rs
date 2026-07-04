@@ -41,7 +41,7 @@ pub fn encode_cast_house_vote(proposal_id: u64, approve: bool) -> ChainCall {
     encode_vote(CAST_HOUSE_VOTE_CALL_INDEX, proposal_id, approve)
 }
 
-/// 特别案公民投票。
+/// 特别案立法公投。
 pub fn encode_cast_referendum_vote(proposal_id: u64, approve: bool) -> ChainCall {
     encode_vote(CAST_REFERENDUM_VOTE_CALL_INDEX, proposal_id, approve)
 }

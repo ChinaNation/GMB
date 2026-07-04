@@ -468,7 +468,7 @@ pub const CHINA_ZF: &[ChinaZf] = &[
         fee_account: hex!("0fa03ca91455ae1dca6dac42dc946537afbfa7fd2850e941a0fa2f73febcf640"),
     },
     ChinaZf {
-        cid_full_name: "公民生活保障部食品药品监管局",
+        cid_full_name: "公民生活保障部食品药品监督管理局",
         cid_short_name: "食品药品监管局",
         cid_full_name_en: "Food and Drug Administration of the Ministry of Citizen Welfare",
         cid_short_name_en: "Food and Drug Administration",

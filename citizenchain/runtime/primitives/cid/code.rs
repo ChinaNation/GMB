@@ -1,10 +1,10 @@
 //! 国家码、省码与 CID 机构码常量真源。
-//! 国家/省码为 2 位 ASCII;机构码为 3~4 位 ASCII,链上用 `[u8; 4]`。
+//! 国家/省码为 2 位 ASCII Base36 字符集;机构码为 3~4 位 ASCII Base36 字符集,链上用 `[u8; 4]`。
 
 /// 国家码。
 pub type CountryCode = [u8; 2];
 
-/// 省级行政区码。
+/// 省行政区码。
 pub type ProvinceCode = [u8; 2];
 
 /// 机构码链上表示。
@@ -18,7 +18,7 @@ pub struct CountryCodeInfo {
     pub country_short_name: &'static str,
 }
 
-/// 省级行政区代码元数据。
+/// 省行政区代码元数据。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProvinceCodeInfo {
     pub province_code: ProvinceCode,
@@ -33,16 +33,16 @@ pub struct InstitutionCodeInfo {
     pub institution_code_label: &'static str,
 }
 
-/// 机构码所属行政层级。
+/// 机构码所属行政层。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdminLevel {
-    /// 国家级。
+    /// 国家码 2位 ASCII Base36 字符集。
     National,
-    /// 省级。
+    /// 省行政区 2位 ASCII Base36 字符集。
     Province,
-    /// 市级。
+    /// 市行政区 4位 ASCII Base36 字符集 市行政区码3位 000-999。
     City,
-    /// 镇级。
+    /// 镇行政区 4位 ASCII Base36 字符集 镇行政区码3位 001-999。
     Town,
 }
 
@@ -81,7 +81,7 @@ pub const fn code_bytes(s: &str) -> InstitutionCode {
     out
 }
 
-/// 省级行政区代码表。
+/// 省行政区代码表。
 pub const PROVINCE_CODE_INFOS: [ProvinceCodeInfo; 43] = [
     ProvinceCodeInfo {
         province_code: *b"ZS",
@@ -267,7 +267,7 @@ const fn province_codes_from_infos() -> [ProvinceCode; 43] {
     out
 }
 
-/// 全部省级行政区代码,顺序与 `PROVINCE_CODE_INFOS` 一致。
+/// 全部省行政区代码,顺序与 `PROVINCE_CODE_INFOS` 一致。
 pub const PROVINCE_CODES: [ProvinceCode; 43] = province_codes_from_infos();
 
 /// 国家码转文本。
@@ -275,7 +275,7 @@ pub fn country_code_text(code: &CountryCode) -> Option<&str> {
     core::str::from_utf8(code).ok()
 }
 
-/// 省级行政区码转文本。
+/// 省行政区码转文本。
 pub fn province_code_text(code: &ProvinceCode) -> Option<&'static str> {
     let matched = PROVINCE_CODE_INFOS
         .iter()
@@ -283,7 +283,7 @@ pub fn province_code_text(code: &ProvinceCode) -> Option<&'static str> {
     core::str::from_utf8(&matched.province_code).ok()
 }
 
-/// 省级行政区名称转两位省码。
+/// 省行政区名称转两位省码。
 pub fn province_code_by_name(province_name: &str) -> Option<ProvinceCode> {
     PROVINCE_CODE_INFOS
         .iter()
@@ -291,7 +291,7 @@ pub fn province_code_by_name(province_name: &str) -> Option<ProvinceCode> {
         .map(|info| info.province_code)
 }
 
-/// 两位省码转省级行政区名称。
+/// 两位省码转省行政区名称。
 pub fn province_name_by_code(code: &ProvinceCode) -> Option<&'static str> {
     PROVINCE_CODE_INFOS
         .iter()
@@ -315,7 +315,7 @@ pub const PMUL: InstitutionCode = *b"PMUL";
 
 /// 全部 104 个机构码信息,按 A-I 九组排列。
 pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
-    // A 国家级单体(38,3 位,公法人,非盈利)
+    // A 国家码单体(38,3 位,公法人,非盈利)
     InstitutionCodeInfo {
         institution_code: *b"PRS\0",
         institution_code_text: "PRS",
@@ -356,7 +356,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
         institution_code_text: "MDF",
         institution_code_label: "国防部",
     },
-    // 国防部下属军政部门与作战/军种司令部,均属国家级公权机构码。
+    // 国防部下属军政部门与作战/军种司令部,均属国家公权机构码。
     InstitutionCodeInfo {
         institution_code: *b"ARM\0",
         institution_code_text: "ARM",
@@ -507,7 +507,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
         institution_code_text: "NRC",
         institution_code_label: "国家储委会",
     },
-    // B 省级类型(17,3 位,43 省共用,R5 省码区分实例,非盈利)
+    // B 省类型(17,3 位,43 省共用,R5 省码区分实例,非盈利)
     InstitutionCodeInfo {
         institution_code: *b"PGV\0",
         institution_code_text: "PGV",
@@ -593,7 +593,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
         institution_code_text: "PTR",
         institution_code_label: "省交通厅",
     },
-    // C 市级类型(17,4 位,非盈利)
+    // C 市类型(17,4 位,非盈利)
     InstitutionCodeInfo {
         institution_code: *b"CGOV",
         institution_code_text: "CGOV",
@@ -679,7 +679,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
         institution_code_text: "CPOL",
         institution_code_label: "市公安局",
     },
-    // D 镇级类型(14,4 位,非盈利)
+    // D 镇类型(14,4 位,非盈利)
     InstitutionCodeInfo {
         institution_code: *b"TGOV",
         institution_code_text: "TGOV",
@@ -951,22 +951,22 @@ pub fn is_private_legal_code(code: &InstitutionCode) -> bool {
     )
 }
 
-/// 机构码所属行政层级。
+/// 机构码所属行政层。
 pub fn admin_level(code: &InstitutionCode) -> Option<AdminLevel> {
     let text = institution_code_text(code)?;
     match text {
-        // A 国家级单体(38)
+        // A 国家单体(38)
         "PRS" | "FSC" | "FIB" | "FSS" | "FPR" | "FRG" | "MFA" | "MDF" | "ARM" | "NAV" | "AIR"
         | "SPF" | "JOS" | "ARC" | "NVC" | "AFC" | "SFC" | "MHS" | "NGB" | "NGC" | "MCW" | "FDA"
         | "MHU" | "MAG" | "MCM" | "MFT" | "MEN" | "MTR" | "NLG" | "NSN" | "NRP" | "NJD" | "NSP"
         | "FAC" | "FAU" | "FIV" | "NED" | "NRC" => Some(AdminLevel::National),
-        // B 省级类型(17)
+        // B 省类型(17)
         "PGV" | "PLG" | "PSN" | "PRP" | "PJD" | "PSP" | "PRC" | "PRB" | "PDF" | "PHS" | "PCW"
         | "PHU" | "PAG" | "PCM" | "PFT" | "PEN" | "PTR" => Some(AdminLevel::Province),
-        // C 市级类型(17)
+        // C 市类型(17)
         "CGOV" | "CLEG" | "CSUP" | "CJUD" | "CEDU" | "CSLF" | "CDEF" | "CHSC" | "CCWF" | "CHUD"
         | "CAGR" | "CCOM" | "CFIN" | "CENR" | "CTRN" | "CREG" | "CPOL" => Some(AdminLevel::City),
-        // D 镇级类型(14)
+        // D 镇类型(14)
         "TGOV" | "TCWF" | "THUD" | "TAGR" | "TFIN" | "TDEF" | "THSC" | "TCOM" | "TENR" | "TTRN"
         | "TPOL" | "TSLF" | "TSUP" | "TJUD" => Some(AdminLevel::Town),
         _ => None,

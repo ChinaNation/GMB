@@ -10,7 +10,7 @@ pub(crate) mod admin_entry;
 pub(crate) mod chain_identity;
 /// 公民模块联合投票本地人数查询接口。
 pub(crate) mod chain_joint_vote;
-/// 公民投票资格查询接口。
+/// 投票资格提示查询接口。
 pub(crate) mod chain_vote;
 pub(crate) mod handler;
 pub(crate) mod model;

@@ -1,14 +1,14 @@
 //! # 投票引擎 (votingengine)
 //!
-//! 投票基础设施模块，统一承载多类投票流程：
+//! 投票基础设施模块，统一承载四类投票流程：
 //! - **内部投票**（INTERNAL）：机构内部管理员按阈值投票，赞成 ≥ 阈值提前通过，
 //!   剩余票不足达到阈值提前否决，30 天超时兜底否决。
 
 //! - **联合投票**（JOINT）：国家储委会/省储委会/省储行管理员按票权加权投票，
 //!   105 票全票通过直接执行，任一机构反对立即进入联合公投，30 天超时进入联合公投。
 
-//! - **公民投票**（CITIZEN）：链上公民身份持有者按 >50% 严格多数投票，
-//!   赞成 > 50% 提前通过，反对 ≥ 50% 提前否决，30 天超时按最终票数判定。
+//! - **立法投票**（LEGISLATION）：由 legislation-vote sub-pallet 承载院内表决、
+//!   特别案/核心修宪立法公投、行政签署、三人会签和护宪终审。
 //!
 //! - **选举投票**（ELECTION）：由 election-vote sub-pallet 承载普选/互选选人流程，
 //!   核心只提供提案生命周期、超时结算分发、回调和清理状态机。
@@ -452,9 +452,9 @@ pub mod pallet {
             end: BlockNumberFor<T>,
         },
         /// 联合投票阶段非全票通过或超时，提案推进到联合公投阶段。
-        ProposalAdvancedToCitizen {
+        ProposalAdvancedToReferendum {
             proposal_id: u64,
-            citizen_end: BlockNumberFor<T>,
+            referendum_end: BlockNumberFor<T>,
             eligible_total: u64,
         },
         /// 投票阶段完成或执行状态变化；PASSED 是执行授权/可重试态，不是终态。
@@ -765,14 +765,14 @@ pub mod pallet {
             });
         }
 
-        pub fn emit_proposal_advanced_to_citizen(
+        pub fn emit_proposal_advanced_to_referendum(
             proposal_id: u64,
-            citizen_end: BlockNumberFor<T>,
+            referendum_end: BlockNumberFor<T>,
             eligible_total: u64,
         ) {
-            Self::deposit_event(Event::<T>::ProposalAdvancedToCitizen {
+            Self::deposit_event(Event::<T>::ProposalAdvancedToReferendum {
                 proposal_id,
-                citizen_end,
+                referendum_end,
                 eligible_total,
             });
         }
@@ -1707,18 +1707,18 @@ pub mod pallet {
                     let next = if has_remaining {
                         Some(PendingCleanupStage::JointInstitutionTallies)
                     } else {
-                        Some(PendingCleanupStage::CitizenVotes)
+                        Some(PendingCleanupStage::JointReferendumVotes)
                     };
                     (next, weight)
                 }
-                PendingCleanupStage::CitizenVotes => {
+                PendingCleanupStage::JointReferendumVotes => {
                     let (removed, has_remaining) =
                         <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_referendum_votes_chunk(
                             proposal_id, cleanup_limit,
                         );
                     let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
                     let next = if has_remaining {
-                        Some(PendingCleanupStage::CitizenVotes)
+                        Some(PendingCleanupStage::JointReferendumVotes)
                     } else {
                         Some(PendingCleanupStage::LegislationHouseVotes)
                     };

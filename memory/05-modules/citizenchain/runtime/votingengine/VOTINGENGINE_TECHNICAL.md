@@ -8,7 +8,7 @@
 
 ## 公民身份真源
 
-公民投票和参选资格统一通过 `CitizenIdentityReader` 读取 `citizen-identity`：
+投票资格和参选资格统一通过 `CitizenIdentityReader` 读取 `citizen-identity`：
 
 - `can_vote(who, scope)`：判断账户在作用域内是否有投票资格。
 - `can_be_candidate(who, scope)`：判断账户在作用域内是否有参选资格。
@@ -31,8 +31,8 @@ OnChina 本地数据库只能用于注册局录入和界面提示，不能作为
 
 - 内部阶段：`JointVote::cast_admin(proposal_id, institution, approve)`。
 - 联合公投阶段：`JointVote::cast_referendum(proposal_id, approve)`。
-- 公民投票按 `proposal_id + who` 去重。
-- 公民资格由 `CitizenIdentityReader::can_vote(who, scope)` 判定。
+- 联合公投按 `proposal_id + who` 去重。
+- 联合公投资格由 `CitizenIdentityReader::can_vote(who, scope)` 判定。
 
 ## 立法投票
 
@@ -43,7 +43,7 @@ OnChina 本地数据库只能用于注册局录入和界面提示，不能作为
 
 ## 清理
 
-提案完成后统一进入投票引擎清理状态机，清理内部投票记录、联合投票记录、公民投票账户记录、提案对象和反向索引。
+提案完成后统一进入投票引擎清理状态机，清理内部投票记录、联合投票记录、联合公投记录、立法投票记录、选举投票记录、提案对象和反向索引。
 
 ## 验收
 

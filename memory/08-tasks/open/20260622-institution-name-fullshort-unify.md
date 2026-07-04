@@ -34,8 +34,8 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 | 总统府联邦人事局 | 总统府联邦人事局 | 联邦人事局 | 已落 `cid_full_name/cid_short_name` |
 | 国家公民储备委员会 | 国家公民储备委员会 | 国家储委会 | 已经真实库 reconcile/check 通过 |
 
-### B. 模板机构(改 `suffix`,`full_suffix` 保持)
-| org_code/模板 | full_suffix(保持) | suffix(改为) | 条数 |
+### B. 模板机构(改 `cid_short_name_suffix`,`cid_full_name_suffix` 保持)
+| org_code/模板 | cid_full_name_suffix(保持) | cid_short_name_suffix(改为) | 条数 |
 |---|---|---|---|
 | TOWN_GOV | 自治政府 | 政府 | 39,087 |
 | CITY_GOV | 自治政府 | 政府 | 2,872 |
@@ -91,7 +91,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 ## 落地结果
 1. **链端(citizenchain)**:china_*.rs 各结构体补 `cid_short_name/cid_full_name_en/cid_short_name_en` 字段并填值;加 `builtin_institution_name_digest()` + `BuiltinInstitutionNameApi` runtime API;名称指纹覆盖七个具名常量文件共 294 个机构。
 2. **后端(Tier 1)**:删除字符串匹配第二实现,常量机构直接投影 `china_*.rs` 的四个名称字段。
-3. **后端(Tier 2)**:模板 `suffix` 按目标表改造,`GOV_TEMPLATE_VERSION` 已升级,目录 hash 能触发 strict 检查。
+3. **后端(Tier 2)**:模板 `cid_short_name_suffix` 按目标表改造,`GOV_TEMPLATE_VERSION` 已升级,目录 hash 能触发 strict 检查。
 4. **数据库结构**:启动期删除旧展示缓存列;搜索与排序只查 `cid_number / cid_full_name / cid_short_name`。
 5. **前端/移动端/冷钱包**:机构名称统一为 `cidFullName/cidShortName/cidFullNameEn/cidShortNameEn`(JSON/API 仍为 `cid_full_name/cid_short_name/cid_full_name_en/cid_short_name_en`);生成器和生成物同步改造。
 6. **查重接口名**:旧查重路径与旧前端函数已改为 `/api/v1/institution/check-cid-full-name` 与 `checkCidFullName`。
@@ -102,7 +102,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - 省级常量全称待核对:`china_{lf,sf,jc}.rs`(省两院带不带「联邦」)
 
 ## 1.1 验收记录(2026-06-22)
-- 常量库完整性脚本:通过,7 个具名常量文件共 294 个机构全部具备 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段。
+- 常量库完整性脚本:通过,7 个具名常量文件共 296 个机构全部具备 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段。
 - 旧 runtime API/旧二字段命名扫描:通过,目标文件内未发现旧二字段 API 名称残留。
 - 第二套英文字段名扫描:通过,目标文件内未发现 `english_name` 等替代字段承载机构英文名。
 - `node scripts/generate_citizenapp_governance_registry.mjs`:通过,重新生成公民端和公民钱包 87 个治理机构。
@@ -114,7 +114,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 
 ## 1.2 验收记录(2026-06-23)
 
-- 命名规范文件 `memory/07-ai/institution-naming.md`:已补非常量机构 NSN/NRP、PDF/PHS/PCW/PHU/PAG/PCM/PFT/PEN/PTR/PSN/PRP、CGOV/CLEG/CSUP/CJUD/CEDU/CSLF/CDEF/CHSC/CCWF/CHUD/CAGR/CCOM/CFIN/CENR/CTRN/CREG/CPOL、TGOV/TCWF/THUD/TAGR/TFIN 的中文全称、中文简称、英文全称规范、英文简称规范和行政区代码字段。
+- 命名规范文件 `memory/07-ai/institution-naming.md`:已补常量补充机构 NSN/NRP/FDA/NGB/ARM/NAV/AIR/SPF/JOS/ARC/NVC/AFC/SFC/NGC,以及省/市/镇模板机构的中文全称、中文简称、英文全称规范、英文简称规范和行政区代码字段。
 - 省代码表校验:通过,`memory/07-ai/institution-naming.md` 43 个省代码与 `citizencode/backend/china/china.sqlite` 的 `provinces.code` 全量一致。
 - 后端模板:已统一 `PSN/PRP/CGOV/CEDU/TGOV` 的简称模板,`GOV_TEMPLATE_VERSION` 升级为 `gov-deterministic-v7`。
 - 对账性能修正:省/市 scope 在目标生成阶段生效,`china.sqlite` 哈希改为进程内缓存,避免 `reconcile-gov --changed-only` 逐省重复全量生成和重复哈希。

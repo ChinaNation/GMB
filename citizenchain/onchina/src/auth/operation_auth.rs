@@ -58,7 +58,7 @@ pub(crate) enum AdminActionType {
     ProposeRepealLaw,
     /// 院内表决(议员/委员对当前院投票)。
     CastHouseVote,
-    /// 特别案公民投票。
+    /// 特别案立法公投。
     CastReferendumVote,
     /// 行政签署 / 否决(总统/省长/市长;另线程接入)。
     ExecutiveSign,

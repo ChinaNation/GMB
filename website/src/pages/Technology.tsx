@@ -76,7 +76,7 @@ const topNodeTypes = [
     type: '轻节点',
     count: '无限',
     desc: '公民用户运行的轻客户端（CitizenApp），完成链上公民身份后可参与链上投票',
-    features: ['公民身份', '转账交易', '公民投票'],
+    features: ['公民身份', '转账交易', '投票交互'],
   },
 ]
 

@@ -2,15 +2,15 @@
 //!
 //! 立法机构专属投票模式(ADR-027,公民宪法第45/46条)。投票引擎「头等模式」:
 //! `PROPOSAL_KIND_LEGISLATION`,共享核心 `votingengine`(Proposals/AdminSnapshot/状态机/
-//! 公投快照验签/清理/反向索引),只本地保管计票账本。三个既有投票 sub-pallet
-//! (internal/joint/citizen)逻辑零改动。
+//! 公投快照验签/清理/反向索引),只本地保管计票账本。内部/联合/选举投票
+//! sub-pallet 逻辑零改动。
 //!
 //! 阶段(ADR-027,当前五类提案 + 特别案公投 + 行政签署/三人会签/护宪终审):
 //! - `STAGE_LEG_HOUSE` 内部表决:单院(市立法会)一段;两院(国家/省立法院 众→参;教委会→参议会)顺序两段。
 //! - `STAGE_LEG_REFERENDUM` 强制公投:仅特别案(含核心修宪),内部全过后强制进入,公投通过即生效不签署。
 //! - `STAGE_LEG_SIGN` 行政签署:非特别案内部全过后,行政机构法定代表人(市长/省长/总统)签署。
-//!   市级无救济(否决=否决/30天超时=通过);省国级否决或超时 → 会签。
-//! - `STAGE_LEG_OVERRIDE` 三人会签(省/国家级):立法院院长 + 参议长 + 众议长,全签=生效/任一否决或超时=否决。
+//!   市行政区无救济(否决=否决/30天超时=通过);省行政区/国家否决或超时 → 会签。
+//! - `STAGE_LEG_OVERRIDE` 三人会签(省行政区/国家):立法院院长 + 参议长 + 众议长,全签=生效/任一否决或超时=否决。
 //!
 //! 计票口径:按现任议员/委员管理员快照总数算参与率/赞成率(`votingengine::types`
 //! 的立法阈值纯函数),投票期满 finalize 统一判定;结果已确定时可提前决。
@@ -176,7 +176,7 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 三人会签记录(省/国家级 STAGE_LEG_OVERRIDE):proposal_id → [(签署人, 是否赞成)],
+    /// 三人会签记录(省行政区/国家 STAGE_LEG_OVERRIDE):proposal_id → [(签署人, 是否赞成)],
     /// 去重 + 集齐 3 个不同身份赞成判通过。签署人 ∈ {院长, 参议长, 众议长} 法定代表人。
     #[pallet::storage]
     pub type LegOverrideSigns<T: Config> = StorageMap<
@@ -250,7 +250,7 @@ pub mod pallet {
             who: T::AccountId,
             approve: bool,
         },
-        /// 退回立法院三人会签阶段(省/国家级)。
+        /// 退回立法院三人会签阶段(省行政区/国家)。
         LegislationAdvancedToOverride { proposal_id: u64 },
         /// 三人会签其一已签署或否决。
         LegislationOverrideSigned {
@@ -342,7 +342,7 @@ pub mod pallet {
         }
 
         /// 行政首长(机构法定代表人:市长/省长/总统)对终审通过的非特别案签署或否决。
-        /// 批准=生效;否决:市级=否决,省/国级=退回三人会签。
+        /// 批准=生效;否决:市行政区=否决,省行政区/国家=退回三人会签。
         #[pallet::call_index(3)]
         #[pallet::weight(<T as Config>::WeightInfo::cast_house_vote())]
         pub fn executive_sign(
@@ -354,7 +354,7 @@ pub mod pallet {
             Self::do_executive_sign(who, proposal_id, approve)
         }
 
-        /// 三人会签(省/国家级:立法院院长 + 参议长 + 众议长)签署或否决。
+        /// 三人会签(省行政区/国家:立法院院长 + 参议长 + 众议长)签署或否决。
         /// 三人全批准=生效;任一否决=否决。
         #[pallet::call_index(4)]
         #[pallet::weight(<T as Config>::WeightInfo::cast_house_vote())]
@@ -457,7 +457,7 @@ impl<T: Config> Pallet<T> {
             Self::resolve_subject_cid_numbers(&houses, &executive, &legislature)?;
         // ADR-027 修订:提案方与表决院解耦——发起人资格由 legislation-yuan 对 proposer_body 校验,
         // 本层只锁定 houses[0](表决院)管理员快照;发起人若属表决院则自动赞成一票(国家/省两院),
-        // 市级 市自治会/市教委会 委员提案时发起人不在表决院,不自动投票(市立法会从零计票)。
+        // 市行政区 市自治会/市教委会 委员提案时发起人不在表决院,不自动投票(市立法会从零计票)。
 
         let referendum_required = vote_type == LEG_VOTE_SPECIAL;
         let now = <frame_system::Pallet<T>>::block_number();
@@ -669,7 +669,7 @@ impl<T: Config> Pallet<T> {
         }
     }
 
-    /// 内部全过 → 推进至强制公投阶段(对标 joint advance_to_citizen)。
+    /// 内部全过 → 推进至强制公投阶段(对标 joint advance_to_referendum)。
     fn advance_to_referendum(proposal_id: u64) -> DispatchResult {
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::stage_duration());
@@ -701,7 +701,7 @@ impl<T: Config> Pallet<T> {
                 return TransactionOutcome::Rollback(Err(err));
             }
             <votingengine::Pallet<T>>::release_internal_proposal_mutexes(proposal_id);
-            <votingengine::Pallet<T>>::emit_proposal_advanced_to_citizen(
+            <votingengine::Pallet<T>>::emit_proposal_advanced_to_referendum(
                 proposal_id,
                 end,
                 eligible_total,
@@ -753,7 +753,7 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    /// 行政首长否决/超时(省国级) → 退回立法院三人会签阶段。
+    /// 行政首长否决/超时(省行政区/国家) → 退回立法院三人会签阶段。
     fn advance_to_override(proposal_id: u64) -> DispatchResult {
         pallet::LegOverrideSigns::<T>::remove(proposal_id);
         Self::transition_stage(proposal_id, STAGE_LEG_OVERRIDE)?;
@@ -769,7 +769,7 @@ impl<T: Config> Pallet<T> {
         )
     }
 
-    /// 行政签署:机构法定代表人(市长/省长/总统)批准=生效;否决:市级=否决/省国级=退回会签。
+    /// 行政签署:机构法定代表人(市长/省长/总统)批准=生效;否决:市行政区=否决/省行政区/国家=退回会签。
     pub fn do_executive_sign(who: T::AccountId, proposal_id: u64, approve: bool) -> DispatchResult {
         let proposal =
             Proposals::<T>::get(proposal_id).ok_or(votingengine::Error::<T>::ProposalNotFound)?;
@@ -792,10 +792,10 @@ impl<T: Config> Pallet<T> {
         if approve {
             Self::finalize_or_guard(proposal_id, meta.needs_guard)
         } else if meta.legislature.is_some() {
-            // 省/国家级:否决 → 退回三人会签救济。
+            // 省行政区/国家:否决 → 退回三人会签救济。
             Self::advance_to_override(proposal_id)
         } else {
-            // 市级:无救济,否决即否决。
+            // 市行政区:无救济,否决即否决。
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
         }
     }
@@ -863,7 +863,7 @@ impl<T: Config> Pallet<T> {
         }
     }
 
-    /// 行政签署阶段超时:市级(无 legislature)= 视为通过;省/国级 = 退回三人会签。
+    /// 行政签署阶段超时:市行政区(无 legislature)= 视为通过;省行政区/国家 = 退回三人会签。
     pub fn do_finalize_sign_timeout(
         proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
         proposal_id: u64,
@@ -1142,7 +1142,7 @@ impl<T: Config> votingengine::LegislationVoteEngine<T::AccountId> for Pallet<T> 
                 return TransactionOutcome::Rollback(Err(err));
             }
             // 发起人若属表决院(国家/省两院:发起院=众议会/教委会)则自动赞成一票;
-            // 市级 市自治会/市教委会 委员提案时发起人不在表决院(市立法会),不自动投票。
+            // 市行政区 市自治会/市教委会 委员提案时发起人不在表决院(市立法会),不自动投票。
             if <votingengine::Pallet<T>>::is_admin_in_snapshot(id, first_account, &who) {
                 match Self::do_cast_house_vote(who, id, true) {
                     Ok(()) => TransactionOutcome::Commit(Ok(id)),

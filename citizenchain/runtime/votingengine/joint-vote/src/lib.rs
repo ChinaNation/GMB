@@ -185,7 +185,7 @@ pub mod pallet {
     pub struct PreparedPopulationSnapshot<BlockNumber> {
         /// 联合公投阶段可投票总人数，由投票引擎从链上公民身份模块读取后缓存。
         pub eligible_total: u64,
-        /// 人口统计作用域，后续公民投票资格按同一作用域读取。
+        /// 人口统计作用域，后续联合公投资格按同一作用域读取。
         pub scope: PopulationScope,
         /// 准备快照所在区块。
         pub prepared_at: BlockNumber,

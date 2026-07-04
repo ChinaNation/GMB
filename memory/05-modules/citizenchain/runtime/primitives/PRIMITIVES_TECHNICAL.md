@@ -26,9 +26,9 @@
 | `china/china_cb.rs` | 44 个储委会（1 国家储委会 + 43 省储委会） |
 | `china/china_jc.rs` | 47 个监察机构（国家监察院 + 3 联邦署 + 43 省级联邦监察院） |
 | `china/china_jy.rs` | 公民教育委员会 |
-| `china/china_lf.rs` | 44 个立法院（国家立法院 + 43 省级联邦立法院） |
+| `china/china_lf.rs` | 46 个立法机构（国家立法院 + 国家参议会 + 国家众议会 + 43 省级联邦立法院） |
 | `china/china_sf.rs` | 44 个司法院（国家司法院 + 43 省级联邦司法院） |
-| `china/china_zb.rs` | 633 个制度保留地址（防抢注） |
+| `china/china_zb.rs` | 637 个制度保留地址（防抢注） |
 | `china/china_zf.rs` | 71 个政府机构（总统府 + 联邦局 + 部委 + 宪法国家级机构 + 43 省级联邦政府） |
 
 ---
@@ -110,7 +110,7 @@
 - 内置机构名称统一使用 `cid_full_name / cid_short_name / cid_full_name_en / cid_short_name_en` 四字段。
 - `builtin_institution_name_digest()` 覆盖全部内置机构名称四字段；修改任一名称字段都必须通过 runtime 升级生效。
 - 具体机构命名规范见 `memory/07-ai/institution-naming.md`。
-- `china_zb.rs` 中的 633 个保留地址由 `RuntimeReservedAccountGuard` 注入 `public-manage`、`private-manage`、`personal-manage`，在注册和创建账户时统一校验，防止抢注制度地址。
+- `china_zb.rs` 中的 637 个保留地址由 `RuntimeReservedAccountGuard` 注入 `public-manage`、`private-manage`、`personal-manage`，在注册和创建账户时统一校验，防止抢注制度地址。
 
 ---
 

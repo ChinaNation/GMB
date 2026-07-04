@@ -372,7 +372,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
         border: Border.all(color: AppTheme.info.withValues(alpha: 0.18)),
       ),
       child: const Text(
-        '特别案需公民公投表决。请在「公民投票」入口凭 CID 资格参与，本页仅展示进度。',
+        '特别案需立法公投表决。请在「立法投票」入口凭 CID 资格参与，本页仅展示进度。',
         style: TextStyle(fontSize: 13, height: 1.5, color: AppTheme.textSecondary),
       ),
     );

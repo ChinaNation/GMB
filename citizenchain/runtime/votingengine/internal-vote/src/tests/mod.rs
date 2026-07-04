@@ -727,7 +727,7 @@ fn cast_internal_vote_via_extrinsic(
     )
 }
 
-fn insert_citizen_proposal(proposal_id: u64, eligible_total: u64, end: u64) {
+fn insert_joint_referendum_proposal(proposal_id: u64, eligible_total: u64, end: u64) {
     Proposals::<Test>::insert(
         proposal_id,
         Proposal {

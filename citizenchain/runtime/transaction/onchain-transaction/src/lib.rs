@@ -1,34 +1,53 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::traits::{
+    FindAuthor, OnUnbalanced,
     fungible::Inspect,
     tokens::{
-        fungible::{Balanced, Credit},
         Fortitude, Imbalance, Precision, Preservation,
+        fungible::{Balanced, Credit},
     },
-    FindAuthor, OnUnbalanced,
 };
 use frame_support::unsigned::TransactionValidityError;
 use pallet_transaction_payment::{Config as TxPaymentConfig, OnChargeTransaction, TxCreditHold};
 use sp_runtime::{
+    RuntimeDebug,
     traits::{DispatchInfoOf, PostDispatchInfoOf, SaturatedConversion, Saturating, Zero},
     transaction_validity::InvalidTransaction,
-    RuntimeDebug,
 };
 use sp_std::{marker::PhantomData, prelude::*};
 
-/// 最小 pallet：仅承载手续费事件，无 storage、无 call、无 hooks。
+/// 链上资金交易 pallet：承载普通转账备注调用和统一手续费审计事件。
 #[frame_support::pallet]
 pub mod pallet {
     use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+    use frame_support::{
+        pallet_prelude::*,
+        traits::{Currency, ExistenceRequirement, Get},
+    };
+    use frame_system::pallet_prelude::*;
     use scale_info::TypeInfo;
-    use sp_runtime::RuntimeDebug;
+    use sp_runtime::{RuntimeDebug, traits::Zero};
 
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
     #[pallet::config]
-    pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {}
+    pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
+        /// 普通链上转账使用的余额系统。
+        type Currency: Currency<Self::AccountId>;
+
+        /// 普通转账备注最大 UTF-8 字节数。
+        #[pallet::constant]
+        type MaxTransferRemarkLen: Get<u32>;
+    }
+
+    /// 普通转账金额类型。
+    pub type BalanceOf<T> =
+        <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+
+    /// 普通转账备注，编码为 SCALE BoundedVec<u8>。
+    pub type TransferRemarkOf<T> = BoundedVec<u8, <T as Config>::MaxTransferRemarkLen>;
 
     /// 手续费份额销毁原因，供链上事件审计和运维聚合。
     #[derive(
@@ -67,6 +86,51 @@ pub mod pallet {
         FeePaid { who: T::AccountId, fee: u128 },
         /// 手续费分账份额因无法安全入账而被销毁。
         FeeShareBurnt { reason: BurnReason, amount: u128 },
+        /// 普通链上转账已执行，备注随交易事件绑定。
+        TransferWithRemark {
+            from: T::AccountId,
+            beneficiary: T::AccountId,
+            amount: BalanceOf<T>,
+            remark: TransferRemarkOf<T>,
+        },
+    }
+
+    #[pallet::error]
+    pub enum Error<T> {
+        /// 转账金额不能为零。
+        ZeroAmount,
+        /// 不能向自己转账。
+        SelfTransferNotAllowed,
+        /// 余额模块拒绝转账。
+        TransferFailed,
+    }
+
+    #[pallet::call]
+    impl<T: Config> Pallet<T> {
+        /// 普通转账并把备注绑定到同一笔链上交易事件。
+        #[pallet::call_index(0)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+        pub fn transfer_with_remark(
+            origin: OriginFor<T>,
+            beneficiary: T::AccountId,
+            amount: BalanceOf<T>,
+            remark: TransferRemarkOf<T>,
+        ) -> DispatchResult {
+            let from = ensure_signed(origin)?;
+            ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
+            ensure!(from != beneficiary, Error::<T>::SelfTransferNotAllowed);
+
+            T::Currency::transfer(&from, &beneficiary, amount, ExistenceRequirement::KeepAlive)
+                .map_err(|_| Error::<T>::TransferFailed)?;
+
+            Self::deposit_event(Event::TransferWithRemark {
+                from,
+                beneficiary,
+                amount,
+                remark,
+            });
+            Ok(())
+        }
     }
 }
 

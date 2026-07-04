@@ -447,7 +447,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `citizenapp/lib/citizen/` | 公民 | citizen | citizenapp 底部“公民”Tab 入口、公民投票页和公共页 |
+| `citizenapp/lib/citizen/` | 公民 | citizen | citizenapp 底部“公民”Tab 入口、投票交互和公共页 |
 | `citizenapp/lib/citizen/proposal/` | 公民提案 | proposal | citizenapp 统一发起提案入口、提案能力表、管理员更换、协议升级和提案详情路由 |
 | `citizenapp/lib/citizen/shared/` | 公民共享 | shared | 公民页共享机构模型、提案模型、上下文、查询、缓存、账户列表和共用详情 |
 | `citizenapp/lib/citizen/institution/` | 机构管理(机构组织生命周期) | institution | citizenapp 机构身份/账户/管理员**只读**链访问核心(InstitutionChainService + multisig_storage_codec + governance_registry + institution_pallet_router 按机构码路由 PublicManage/PrivateManage)+ 统一机构模型(ADR-028);机构创建/关闭已收归 onchina,不在此 |
@@ -468,7 +468,6 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenapp/lib/my/` | 我的 | my | 我的页、电子护照、用户身份和个人工具 |
 | `citizenapp/lib/votingengine/internal-vote/` | 内部投票 | internal-vote | citizenapp 内部投票查询、提交、待确认和投票 UI |
 | `citizenapp/lib/votingengine/joint-vote/` | 联合投票 | joint-vote | citizenapp 联合投票客户端预留目录 |
-| `citizenapp/lib/votingengine/citizen-vote/` | 公民投票 | citizen-vote | citizenapp 公民投票客户端预留目录 |
 | `citizenapp/lib/wallet/` | 钱包 | wallet | 钱包账户和资产 |
 
 ## 12b. citizenchain node 治理功能目录命名登记
@@ -500,7 +499,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/runtime/issuance/provincialbank-interest/` | 省行利息 | provincialbank-interest | 省行利息 pallet |
 | `citizenchain/runtime/otherpallet/` | 其他 pallet | otherpallet | 非治理、非交易、非发行类 pallet |
 | `citizenchain/runtime/otherpallet/pow-difficulty/` | PoW 难度 | pow-difficulty | PoW 难度 pallet |
-| `citizenchain/runtime/otherpallet/citizen-identity/` | 链上公民身份 pallet | citizen-identity | 公民投票身份、参选身份、人口统计与投票引擎资格真源 |
+| `citizenchain/runtime/otherpallet/citizen-identity/` | 链上公民身份 pallet | citizen-identity | 投票身份、参选身份、人口统计与投票引擎资格真源 |
 | `citizenchain/runtime/primitives/` | 运行时基础类型 | primitives | runtime 共享基础类型 |
 | `citizenchain/runtime/src/` | runtime 入口 | runtime-src | runtime 配置、类型和测试入口 |
 | `citizenchain/runtime/transaction/` | 交易 | transaction | 交易类 pallet |
@@ -509,7 +508,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/runtime/transaction/offchain-transaction/` | 链下交易 | offchain-transaction | 链下交易 pallet |
 | `citizenchain/runtime/transaction/onchain-transaction/` | 链上交易 | onchain-transaction | 链上交易 pallet |
 | `citizenchain/runtime/votingengine/` | 投票引擎 | votingengine | 投票引擎父目录 |
-| `citizenchain/runtime/votingengine/citizen-vote/` | 公民投票 | citizen-vote | 公民投票 pallet |
+| `citizenchain/runtime/votingengine/election-vote/` | 选举投票 | election-vote | 选举投票 pallet |
 | `citizenchain/runtime/votingengine/internal-vote/` | 内部投票 | internal-vote | 机构或主体内部管理员投票 pallet |
 | `citizenchain/runtime/votingengine/joint-vote/` | 联合投票 | joint-vote | 多主体联合投票 pallet |
 

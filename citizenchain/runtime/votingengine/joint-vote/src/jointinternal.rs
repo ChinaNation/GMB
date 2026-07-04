@@ -147,7 +147,7 @@ impl<T: Config> Pallet<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
-    pub(super) fn citizen_stage_duration() -> frame_system::pallet_prelude::BlockNumberFor<T> {
+    pub(super) fn referendum_stage_duration() -> frame_system::pallet_prelude::BlockNumberFor<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
@@ -388,11 +388,11 @@ impl<T: Config> Pallet<T> {
                 return Ok(());
             }
             if tally.yes.saturating_add(tally.no) >= JOINT_VOTE_TOTAL {
-                return Self::advance_joint_to_citizen(proposal_id);
+                return Self::advance_joint_to_referendum(proposal_id);
             }
             return Ok(());
         }
-        Self::advance_joint_to_citizen(proposal_id)
+        Self::advance_joint_to_referendum(proposal_id)
     }
 
     /// 联合内部投票阶段超时结算:全票通过 → PASSED,否则进入联合公投阶段。
@@ -417,12 +417,12 @@ impl<T: Config> Pallet<T> {
         if is_joint_unanimous(tally.yes) {
             return <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED);
         }
-        Self::advance_joint_to_citizen(proposal_id)
+        Self::advance_joint_to_referendum(proposal_id)
     }
 
-    fn advance_joint_to_citizen(proposal_id: u64) -> DispatchResult {
+    fn advance_joint_to_referendum(proposal_id: u64) -> DispatchResult {
         let now = <frame_system::Pallet<T>>::block_number();
-        let citizen_end = now.saturating_add(Self::citizen_stage_duration());
+        let referendum_end = now.saturating_add(Self::referendum_stage_duration());
         with_transaction(|| {
             let (eligible_total, old_end) = match Proposals::<T>::try_mutate(
                 proposal_id,
@@ -437,7 +437,7 @@ impl<T: Config> Pallet<T> {
                     let old_end = proposal.end;
                     proposal.stage = votingengine::STAGE_REFERENDUM;
                     proposal.start = now;
-                    proposal.end = citizen_end;
+                    proposal.end = referendum_end;
                     Ok((eligible_total, old_end))
                 },
             ) {
@@ -451,15 +451,15 @@ impl<T: Config> Pallet<T> {
             });
 
             if let Err(err) =
-                <votingengine::Pallet<T>>::schedule_proposal_expiry(proposal_id, citizen_end)
+                <votingengine::Pallet<T>>::schedule_proposal_expiry(proposal_id, referendum_end)
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
             <votingengine::Pallet<T>>::release_internal_proposal_mutexes(proposal_id);
 
-            <votingengine::Pallet<T>>::emit_proposal_advanced_to_citizen(
+            <votingengine::Pallet<T>>::emit_proposal_advanced_to_referendum(
                 proposal_id,
-                citizen_end,
+                referendum_end,
                 eligible_total,
             );
             TransactionOutcome::Commit(Ok(()))

@@ -3,9 +3,76 @@
 use super::*;
 
 #[test]
+fn transfer_with_remark_moves_balance_and_emits_bound_remark() {
+    new_test_ext().execute_with(|| {
+        let from = account(1);
+        let beneficiary = account(2);
+        let remark = crate::pallet::TransferRemarkOf::<Test>::try_from(
+            "美西已深夜，美东在庆国庆，中华联邦创世！"
+                .as_bytes()
+                .to_vec(),
+        )
+        .expect("remark should fit 99 bytes");
+
+        assert_ok!(OnchainTransaction::transfer_with_remark(
+            RuntimeOrigin::signed(from.clone()),
+            beneficiary.clone(),
+            123,
+            remark.clone(),
+        ));
+
+        assert_eq!(Balances::free_balance(&from), 877);
+        assert_eq!(Balances::free_balance(&beneficiary), 1_123);
+        assert!(System::events().iter().any(|record| matches!(
+            &record.event,
+            RuntimeEvent::OnchainTransaction(pallet::Event::TransferWithRemark {
+                from: event_from,
+                beneficiary: event_beneficiary,
+                amount,
+                remark: event_remark,
+            }) if event_from == &from
+                && event_beneficiary == &beneficiary
+                && *amount == 123
+                && event_remark == &remark
+        )));
+    });
+}
+
+#[test]
+fn transfer_with_remark_rejects_invalid_transfer_and_caps_remark_bytes() {
+    new_test_ext().execute_with(|| {
+        let remark = crate::pallet::TransferRemarkOf::<Test>::try_from(b"ok".to_vec())
+            .expect("short remark should fit");
+
+        assert_noop!(
+            OnchainTransaction::transfer_with_remark(
+                RuntimeOrigin::signed(account(1)),
+                account(2),
+                0,
+                remark.clone(),
+            ),
+            pallet::Error::<Test>::ZeroAmount
+        );
+        assert_noop!(
+            OnchainTransaction::transfer_with_remark(
+                RuntimeOrigin::signed(account(1)),
+                account(1),
+                1,
+                remark,
+            ),
+            pallet::Error::<Test>::SelfTransferNotAllowed
+        );
+        assert!(
+            crate::pallet::TransferRemarkOf::<Test>::try_from(vec![b'a'; 100]).is_err(),
+            "ordinary transfer remark must be capped at 99 bytes",
+        );
+    });
+}
+
+#[test]
 fn onchain_fee_round_and_min_work() {
     let rate = Perbill::from_parts(1_000_000); // 0.1%
-                                               // 1分*0.1%=0.001分 => round=0分，应用最低10分
+    // 1分*0.1%=0.001分 => round=0分，应用最低10分
     let fee_small = mul_perbill_round(1, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
     assert_eq!(fee_small, 10);
 
@@ -148,10 +215,10 @@ fn can_withdraw_and_withdraw_fail_when_insufficient_balance() {
         let call = sample_call();
         let info = call.get_dispatch_info();
 
-        assert!(<Adapter as OnChargeTransaction<Test>>::can_withdraw_fee(
-            &poor, &call, &info, 0, 0
-        )
-        .is_err());
+        assert!(
+            <Adapter as OnChargeTransaction<Test>>::can_withdraw_fee(&poor, &call, &info, 0, 0)
+                .is_err()
+        );
 
         assert!(
             <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&poor, &call, &info, 0, 0)

@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
-use citizenchain::{self as runtime, opaque::Block, AccountId, Balance, Nonce};
+use citizenchain::{self as runtime, AccountId, Balance, Nonce, opaque::Block};
 use codec::{Decode, Encode};
 use jsonrpsee::RpcModule;
 use sc_client_api::StorageProvider;
@@ -21,11 +21,12 @@ use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::crypto::KeyTypeId;
 use sp_keystore::Keystore;
-use sp_runtime::{generic::Era, traits::IdentifyAccount, MultiSigner, OpaqueExtrinsic};
+use sp_runtime::{MultiSigner, OpaqueExtrinsic, generic::Era, traits::IdentifyAccount};
 use substrate_frame_rpc_system::AccountNonceApi;
 
 /// PoW 矿工密钥类型（与 service.rs 中 POW_AUTHOR_KEY_TYPE 一致）。
 const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
+const MAX_TRANSFER_REMARK_BYTES: usize = 99;
 static MINER_TRANSFER_TOKENS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 /// 签发一次性矿工热钱包转账令牌。
@@ -455,8 +456,8 @@ where
         })?;
     }
 
-    // transaction_submitMinerTransfer(to_ss58: String, amount_fen: String, token: String) -> tx_hash
-    // 由 node 端使用本机 powr 矿工密钥签名并提交 Balances::transfer_keep_alive。
+    // transaction_submitMinerTransfer(to_ss58: String, amount_fen: String, remark: String, token: String) -> tx_hash
+    // 由 node 端使用本机 powr 矿工密钥签名并提交 OnchainTransaction::transfer_with_remark。
     {
         let client = client.clone();
         let pool = pool.clone();
@@ -464,7 +465,12 @@ where
         module.register_method("transaction_submitMinerTransfer", move |params, _, _| {
             use jsonrpsee::types::error::ErrorObject;
 
-            let (to_ss58, amount_fen_raw, auth_token): (String, String, String) = params.parse()?;
+            let (to_ss58, amount_fen_raw, remark_raw, auth_token): (
+                String,
+                String,
+                String,
+                String,
+            ) = params.parse()?;
             if !consume_miner_transfer_token(&auth_token) {
                 return Err(ErrorObject::owned(-1, "矿工热钱包提交令牌无效", None::<()>));
             }
@@ -475,11 +481,30 @@ where
             if amount_fen == 0 {
                 return Err(ErrorObject::owned(-1, "转账金额不能为零", None::<()>));
             }
+            let remark_len = remark_raw.as_bytes().len();
+            if remark_len > MAX_TRANSFER_REMARK_BYTES {
+                return Err(ErrorObject::owned(
+                    -1,
+                    format!(
+                        "转账备注不能超过 {MAX_TRANSFER_REMARK_BYTES} 字节，当前 {remark_len} 字节"
+                    ),
+                    None::<()>,
+                ));
+            }
+            let remark: onchain_transaction::pallet::TransferRemarkOf<runtime::Runtime> =
+                remark_raw
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| ErrorObject::owned(-1, "转账备注长度超过链上限制", None::<()>))?;
 
-            let call = runtime::RuntimeCall::Balances(runtime::BalancesCall::transfer_keep_alive {
-                dest: dest.into(),
-                value: amount_fen,
-            });
+            let call = runtime::RuntimeCall::OnchainTransaction(
+                onchain_transaction::pallet::Call::transfer_with_remark {
+                    beneficiary: dest,
+                    amount: amount_fen,
+                    remark,
+                },
+            );
             let tx_hash = submit_powr_signed_tx(&client, &pool, &keystore, call)?;
             Ok::<String, jsonrpsee::types::ErrorObjectOwned>(tx_hash)
         })?;

@@ -4,7 +4,7 @@
 /** 六阶段(对齐链端 STAGE_LEG_*)。 */
 export const STAGES: { value: number; label: string }[] = [
   { value: 10, label: '院内表决' },
-  { value: 11, label: '公民投票' },
+  { value: 11, label: '立法公投' },
   { value: 12, label: '行政签署' },
   { value: 13, label: '三人会签' },
   { value: 14, label: '护宪终审' },

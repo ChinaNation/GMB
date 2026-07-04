@@ -263,7 +263,7 @@ fn pubkey_from_accountid<T: Config>(acc: &T::AccountId) -> Result<Sr25519Public,
     Ok(Sr25519Public::from_raw(arr))
 }
 
-/// 从清算行主账户反查省级 shard key(CID 第一段 R5 前 2 字符),失败时返回 None。
+/// 从清算行主账户反查省行政区 shard key(CID 第一段 R5 前 2 字符),失败时返回 None。
 fn province_shard_from_bank<T: Config>(bank_main: &T::AccountId) -> Option<[u8; 2]> {
     let info = T::CidAccountQuery::account_info(bank_main)?;
     let cid_bytes = info.0;

@@ -17,7 +17,7 @@ void main() {
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
-        action: QrActions.balancesTransfer,
+        action: QrActions.transferWithRemark,
       );
       requestJson = signer.encodeRequest(request);
     });
@@ -81,7 +81,7 @@ void main() {
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
-        action: QrActions.balancesTransfer,
+        action: QrActions.transferWithRemark,
         nowEpochSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 200,
       );
       final expiredJson = signer.encodeRequest(expiredRequest);

@@ -773,7 +773,7 @@ pub mod pallet {
     // ──────────────── 内部 helper:校验 / 编排 / 执行器 / 查询 ────────────────
     impl<T: Config> Pallet<T> {
         /// 校验发起人是提案机构(proposer_body)的现任管理员(议员/委员)。
-        /// ADR-027 修订:提案方与表决院解耦——市级 市自治会/市教委会 委员可提案,
+        /// ADR-027 修订:提案方与表决院解耦——市行政区 市自治会/市教委会 委员可提案,
         /// 但表决院恒为 houses[0]=市立法会,故 auth 校验对 proposer_body 而非 houses[0]。
         fn ensure_legislator(
             proposer_body: &(InstitutionCode, T::AccountId),
@@ -798,7 +798,7 @@ pub mod pallet {
 
         /// 路由校验(ADR-027,宪法第45/46/75/79/100/106条):提案机构 ⟺ 表决类型 ⟺ 院结构 ⟺ 签署机构。
         /// - 教育类(常规教育/重要教育)⟺ 提案机构是教委会(NED/CEDU);非教育类禁教委会、教委会禁非教育。
-        /// - tier ⟺ houses 数:市级单院(1);国家/省/宪法两院(2)。legislature 仅两院携带。
+        /// - tier ⟺ houses 数:市行政区单院(1);国家/省/宪法两院(2)。legislature 仅两院携带。
         /// - 两院级:提案机构 = 发起院 houses[0](众议会/教委会本会先表决)。
         /// - 特别案禁教育类(宪法教育提案规则)。
         fn ensure_routing(
@@ -831,7 +831,7 @@ pub mod pallet {
                 // 两院级:提案机构 = 发起院 houses[0](众议会/教委会本会先表决)。
                 ensure!(proposer_code == first.0, Error::<T>::RoutingMismatch);
             }
-            // ④ tier ⟺ 院数:市级单院、国家/省两院;宪法院数由创世固定,豁免结构校验。
+            // ④ tier ⟺ 院数:市行政区单院、国家/省两院;宪法院数由创世固定,豁免结构校验。
             match tier {
                 Tier::Municipal => ensure!(single_house, Error::<T>::RoutingMismatch),
                 Tier::National | Tier::Provincial => {

@@ -405,7 +405,7 @@ pub fn is_personal_admin_code(code: &InstitutionCode) -> bool {
 
 /// 固定治理公权机构的固定管理员人数。
 ///
-/// FRG 的固定人数语义是"单个省级组 5 人",不是全局 215 人平铺账户。
+/// FRG 的固定人数语义是"单个省行政区组 5 人",不是全局 215 人平铺账户。
 pub fn expected_fixed_governance_admins_len(code: InstitutionCode) -> Option<u32> {
     use primitives::count_const::{
         FRG_PROVINCE_GROUP_ADMIN_COUNT, NJD_ADMIN_COUNT, NRC_ADMIN_COUNT, PRB_ADMIN_COUNT,

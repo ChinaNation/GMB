@@ -52,9 +52,9 @@ pub const STAGE_LEG_HOUSE: u8 = 10;
 pub const STAGE_LEG_REFERENDUM: u8 = 11;
 /// 立法投票行政签署阶段(legislation-vote,ADR-027,宪法第45/46/100/106条):
 /// 非特别案内部全过后,由机构法定代表人签署——市长(市)/省长(省)/总统(国)。
-/// 市级单院无救济;省/国家级否决或超时进入 `STAGE_LEG_OVERRIDE`。特别案不经此阶段。
+/// 市行政区单院无救济;省行政区/国家否决或超时进入 `STAGE_LEG_OVERRIDE`。特别案不经此阶段。
 pub const STAGE_LEG_SIGN: u8 = 12;
-/// 立法投票三人会签救济阶段(省/国家级):立法院院长 + 参议长 + 众议长共同签署。
+/// 立法投票三人会签救济阶段(省行政区/国家):立法院院长 + 参议长 + 众议长共同签署。
 /// 三人全签同意 → 生效;任一否决或会签超时 → 否决。
 pub const STAGE_LEG_OVERRIDE: u8 = 13;
 /// 立法投票护宪大法官终审阶段(ADR-027 修订 2026-06-25,宪法第21条):**仅修宪(tier=宪法)**。
@@ -304,7 +304,8 @@ pub enum PendingCleanupStage {
     JointAdminVotes,
     JointInstitutionVotes,
     JointInstitutionTallies,
-    CitizenVotes,
+    /// 联合投票公投阶段投票账本(ReferendumVotesByAccount)分块清理。
+    JointReferendumVotes,
     /// 立法投票内部表决投票账本(LegHouseVotesByAdmin)分块清理。
     LegislationHouseVotes,
     /// 立法投票公投账本(LegReferendumVotesByAccount)分块清理。

@@ -18,9 +18,9 @@
 class PalletRegistry {
   const PalletRegistry._();
 
-  // ---- Balances (2) ----
-  static const int balancesPallet = 2;
-  static const int transferKeepAliveCall = 3;
+  // ---- OnchainTransaction (4) ----
+  static const int onchainTransactionPallet = 4;
+  static const int transferWithRemarkCall = 0;
 
   // ---- VotingEngine (9) · 引擎核心 ----
   // 仅承载 lifecycle extrinsic:finalize_proposal / retry_passed_proposal /

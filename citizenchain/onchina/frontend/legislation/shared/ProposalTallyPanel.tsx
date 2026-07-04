@@ -22,7 +22,7 @@ export function ProposalTallyPanel({ state }: Props) {
         <span>表决类型:{voteTypeLabel(state.voteType)}</span>
         <span>当前院:第 {state.currentHouse + 1} 院</span>
         {state.needsGuard && <Tag color="volcano">需护宪终审</Tag>}
-        {state.referendumRequired && <Tag color="gold">需公民投票</Tag>}
+        {state.referendumRequired && <Tag color="gold">需立法公投</Tag>}
       </Space>
 
       <Steps

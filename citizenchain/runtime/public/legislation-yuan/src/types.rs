@@ -23,11 +23,11 @@ use scale_info::TypeInfo;
 pub enum Tier {
     /// 宪法(最高层级)
     Constitution,
-    /// 国家级法律(国家立法院)
+    /// 国家法律(国家立法院)
     National,
-    /// 省级法律(省立法院)
+    /// 省行政区法律(省立法院)
     Provincial,
-    /// 市级法律(市立法会)
+    /// 市行政区法律(市立法会)
     Municipal,
 }
 

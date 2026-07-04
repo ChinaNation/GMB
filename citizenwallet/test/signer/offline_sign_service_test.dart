@@ -119,15 +119,15 @@ void main() {
     });
 
     test('verifyPayload decodes transfer payload', () {
-      // Balances::transfer_keep_alive: pallet=2, call=3
-      // MultiAddress::Id prefix=0x00, then 32 bytes dest, then compact amount
+      // OnchainTransaction::transfer_with_remark: pallet=4, call=0。
+      // beneficiary 32B, amount u128_le, remark 空 Vec。
       final request = _buildTestRequest(
         requestId: 'offline-req-test-known',
         pubkey: '0x${hotWallet.pubkeyHex}',
-        // call_data: [02][03][00][dest 32B][Compact(1) = 0x04] → 0.01 GMB
+        // call_data: [04][00][dest 32B][u128_le(1)][Vec(0)] → 0.01 GMB
         payloadHex: _withSigningTailHex(
-            '0x020300aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa04'),
-        action: QrActions.balancesTransfer,
+            '0x0400aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0100000000000000000000000000000000'),
+        action: QrActions.transferWithRemark,
       );
 
       final verification = service.verifyPayload(request);

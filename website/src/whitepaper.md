@@ -119,7 +119,7 @@
 | 公民链                  | CitizenChain                                  | 主权区块链系统                                      |
 | 公民币                  | Citizen Coin / GMB                            | 公民链原生法定数字货币和治理货币                    |
 | 公民钱包                | CitizenWallet                                 | 离线冷钱包软件                                      |
-| 公民                    | CitizenApp                                    | 公民链轻节点、热钱包、公民投票和去中心化通信软件      |
+| 公民                    | CitizenApp                                    | 公民链轻节点、热钱包、投票交互和去中心化通信软件      |
 | 链上中国平台             | OnChina                                       | 公民链节点内置的本地治理与注册平台，负责管理员登录、公民档案、机构注册、法律文库、立法入口和链上身份提交 |
 | 注册局                  | Registry                                      | 链上中国平台中的注册业务角色，包含联邦注册局和市注册局，用于注册公民、公权机构、私权机构和机构管理员 |
 | 身份识别码               | CID / Identity Identification Code            | 注册局签发的统一身份号码，是公民身份、自然人和机构的身份编号字段 |
@@ -367,7 +367,7 @@ GMB/
 │         ├── transaction/       # 链上转账、链下清算、多签转账
 │         ├── otherpallet/       # citizen-identity、pow-difficulty 等链上基础能力
 │         └── primitives/        # 公共常量、类型和创世参数
-├── citizenapp/                  # 公民，热钱包、轻节点、公民投票、通信和支付入口
+├── citizenapp/                  # 公民，热钱包、轻节点、投票交互、通信和支付入口
 ├── citizenwallet/               # 公民钱包，离线冷钱包和扫码签名工具
 └── website/                     # 官网与白皮书展示
 ```
@@ -673,7 +673,7 @@ VOTING → PASSED → EXECUTED
 ****
 # 8.公民<br><span class="whitepaper-heading-en">8. CitizenApp</span>
 
-* 公民（CitizenApp）是公民链轻节点软件，iOS、Android端；公民承担热钱包、链上状态查询、交易提交、公民身份确认、公民投票、治理交互、清算支付和去中心化通信入口职责。<br><span class="whitepaper-en">CitizenApp is CitizenChain light-node software for iOS and Android. It serves as the entry point for the hot wallet, on-chain state queries, transaction submission, citizen identity confirmation, citizen voting, governance interaction, clearing payment, and decentralized communication.</span>
+* 公民（CitizenApp）是公民链轻节点软件，iOS、Android端；公民承担热钱包、链上状态查询、交易提交、公民身份确认、投票交互、治理交互、清算支付和去中心化通信入口职责。<br><span class="whitepaper-en">CitizenApp is CitizenChain light-node software for iOS and Android. It serves as the entry point for the hot wallet, on-chain state queries, transaction submission, citizen identity confirmation, voting interaction, governance interaction, clearing payment, and decentralized communication.</span>
 * 公民提供清算行绑定、充值、提现和扫码支付入口，扫码支付时由公民签署 PaymentIntent 并发送给收款方清算行；<br><span class="whitepaper-en">CitizenApp provides the entry points for clearing-bank binding, deposit, withdrawal, and QR-code payment. During QR-code payment, CitizenApp signs the PaymentIntent and sends it to the recipient-side clearing bank.</span>
 * 公民的热钱包负责联网广播、余额查询、清算行绑定、扫码支付和投票交互；任何涉及资产、公民身份确认、投票或治理的敏感动作，均必须经过账户签名授权。钱包私钥不得交给注册局、通信全节点、清算行、网站前端或任何链下服务。<br><span class="whitepaper-en">The CitizenApp hot wallet is responsible for networked broadcasting, balance queries, clearing-bank binding, QR-code payment, and voting interaction. Any sensitive action involving assets, citizen identity confirmation, voting, or governance must be authorized by an account signature. Wallet private keys must never be handed to the Registry, communication full nodes, clearing banks, web frontends, or any off-chain service.</span>
 * 公民提供完全去中心化的即时通信能力，采用区块链软件通信全节点和手机近场通信双模式实现；通信不上链，不依赖 CID，不使用中心化消息服务器。通信全节点是私人节点，只服务自己的手机和自己的收件箱，只保存密文 mailbox，不解密消息，不替第三方存消息，不做公共中继。<br><span class="whitepaper-en">CitizenApp provides fully decentralized instant messaging through a dual mode of blockchain-software communication full nodes and mobile near-field communication. Communication shall not be placed on chain, shall not depend on CID, and shall not use centralized messaging servers. A communication full node is a private node that serves only its owner’s phones and mailbox, stores only encrypted mailboxes, does not decrypt messages, does not store messages for third parties, and does not act as a public relay.</span>

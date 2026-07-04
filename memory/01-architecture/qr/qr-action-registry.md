@@ -1,6 +1,6 @@
 # QR_V1 Action Registry
 
-- 更新日期:2026-07-02
+- 更新日期:2026-07-04
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:`k=1` 签名请求的 `b.a` 数字动作码
 - 依赖:
@@ -34,11 +34,11 @@
 a = (pallet_index << 8) | call_index
 ```
 
-示例:`Balances(2).transfer_keep_alive(3)` 的 `a = 0x0203 = 515`。
+示例:`OnchainTransaction(4).transfer_with_remark(0)` 的 `a = 0x0400 = 1024`。
 
 | a(hex) | pallet.call | decoder action | payload 展示字段 | 签发方 |
 |---|---|---|---|---|
-| `0x0203` | `Balances.transfer_keep_alive` | `transfer` | `to`, `amount_yuan` | citizenchain node / CitizenApp |
+| `0x0400` | `OnchainTransaction.transfer_with_remark` | `transfer` | `to`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
 | `0x0700` | `PersonalAdmins.propose_create` | `propose_create_personal` | `account_name`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | CitizenApp |
 | `0x0701` | `PersonalAdmins.propose_close` | `propose_close_personal` | `account`, `beneficiary` | CitizenApp |
 | `0x0702` | `PersonalAdmins.cleanup_rejected_proposal` | `cleanup_rejected_personal_proposal` | `proposal_id` | CitizenApp |

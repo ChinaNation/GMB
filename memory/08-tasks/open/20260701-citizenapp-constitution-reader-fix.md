@@ -240,7 +240,7 @@
   - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222462/222462 字节；第 46 条范围内无“市立法会 / 市教委会 / Municipal Legislative Council / Municipal Education Committee”残留。
   - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
 - 2026-07-02 第 48 条逐条定稿验收：
-  - 结构化回读 `constitution.scale`：第 48 条第 1 款已将“国家允许存在多个合法的宗教”更新为“允许存在多个合法的宗教”；第 3 款已将“政党不具有国家公权权力”更新为“政党不具有公权权力”；第 4 款已将许可机构更新为“公民生活保障部食品药品监管局”并补齐句号，英文同步更新；文件大小 222462 → 222426 字节。
+  - 结构化回读 `constitution.scale`：第 48 条第 1 款已将“国家允许存在多个合法的宗教”更新为“允许存在多个合法的宗教”；第 3 款已将“政党不具有国家公权权力”更新为“政党不具有公权权力”；第 4 款已将许可机构更新为“公民生活保障部食品药品监督管理局”并补齐句号，英文同步更新；文件大小 222462 → 222426 字节。
   - Python 结构化回读校验：7 章、141 条、条号 1..141 连续、英文标题和正文齐全，消费 222426/222426 字节。
   - `cargo test --manifest-path citizenchain/Cargo.toml -p legislation-yuan constitution_scale_decodes_and_is_well_formed`：通过。
 - 2026-07-02 第 49 条逐条定稿验收：

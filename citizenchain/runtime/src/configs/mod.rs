@@ -181,6 +181,15 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
             // 保留 pallet 与 storage;日后启用只需删除对应分支并走一次 setCode,无需重新创世。
             RuntimeCall::OnchainIssuance(_) => false,
             RuntimeCall::OffchainTransaction(_) => false,
+            // 选举创建只能经 election-campaign 业务壳解释规则后进入 election-vote。
+            // 当前 election-campaign 只接入 runtime 骨架,因此外部禁止直接创建选举提案;
+            // cast_popular_vote / cast_mutual_vote 仍保留给后续已创建提案投票使用。
+            RuntimeCall::ElectionVote(election_vote::pallet::Call::create_popular_election {
+                ..
+            })
+            | RuntimeCall::ElectionVote(election_vote::pallet::Call::create_mutual_election {
+                ..
+            }) => false,
             _ => true,
         }
     }
@@ -291,7 +300,10 @@ impl pallet_transaction_payment::Config for Runtime {
     type WeightInfo = pallet_transaction_payment::weights::SubstrateWeight<Runtime>;
 }
 
-impl onchain_transaction::pallet::Config for Runtime {}
+impl onchain_transaction::pallet::Config for Runtime {
+    type Currency = Balances;
+    type MaxTransferRemarkLen = ConstU32<99>;
+}
 
 pub struct RuntimeNrcAccountProvider;
 
@@ -342,9 +354,10 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
                 value, ..
             }) => FeeChargeKind::OnchainAmount(*value),
-            RuntimeCall::Balances(pallet_balances::Call::transfer_keep_alive { value, .. }) => {
-                FeeChargeKind::OnchainAmount(*value)
-            }
+            RuntimeCall::OnchainTransaction(
+                onchain_transaction::pallet::Call::transfer_with_remark { amount, .. },
+            ) => FeeChargeKind::OnchainAmount(*amount),
+            RuntimeCall::OnchainTransaction(_) => FeeChargeKind::Unknown,
             RuntimeCall::Balances(pallet_balances::Call::force_transfer { value, .. }) => {
                 FeeChargeKind::OnchainAmount(*value)
             }
@@ -815,7 +828,7 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
             >::get(issuer_main_account) else {
                 return false;
             };
-            // FRG 省级组只能登记本省 CID;FRG 主账户聚合 215 人不携带省码,不得用于登记。
+            // FRG 省行政区组只能登记本省 CID;FRG 主账户聚合 215 人不携带省码,不得用于登记。
             return group_province_code == target_province_code;
         }
 
@@ -864,7 +877,7 @@ impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAutho
         if let Some(group_province_code) =
             public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
         {
-            // FRG 省级组管理员可以更新本省任意地址,不能跨省改地址。
+            // FRG 省行政区组管理员可以更新本省任意地址,不能跨省改地址。
             return group_province_code.as_ref() == province_code;
         }
 
@@ -1159,7 +1172,7 @@ impl
         if let Some(group_province_code) =
             public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
         {
-            // FRG 省级组管理员可登记、更新、撤销本省任意公民身份。
+            // FRG 省行政区组管理员可登记、更新、撤销本省任意公民身份。
             return group_province_code.as_ref() == residence_province_code;
         }
 
@@ -1377,7 +1390,7 @@ impl RuntimeAdminAccountQuery {
             return Self::is_active_account_admin(institution_code, account.clone(), who);
         }
 
-        // FRG 省级虚拟组账户不属于机构生命周期账户，只能按固定治理码查公权管理员模块。
+        // FRG 省行政区虚拟组账户不属于机构生命周期账户，只能按固定治理码查公权管理员模块。
         [
             admin_primitives::FRG,
             primitives::cid::code::NRC,
@@ -2122,6 +2135,8 @@ impl election_vote::Config for Runtime {
     type MaxElectionVoters = ConstU32<4096>;
     type InstitutionQuery = RuntimeInstitutionQuery;
 }
+
+impl election_campaign::Config for Runtime {}
 
 impl legislation_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;

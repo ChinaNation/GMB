@@ -49,7 +49,7 @@ pub enum InstitutionLifecycleStatus {
 /// 机构信息(链上最小集)。
 ///
 /// 链上只保存全国可见的机构身份事实:`cid_number` 作 storage key 已编码省/市/机构码/法人/盈利;
-/// 镇级公权机构运行期注册时,CID 仍只编码省市,镇归属必须单独写入 `town_code`;
+/// 镇行政区公权机构运行期注册时,CID 仍只编码省市,镇归属必须单独写入 `town_code`;
 /// 主账户/费用账户由 `(cid_number, 保留名)` 派生且常驻 `InstitutionAccounts`,故不在此重复存;
 /// 管理员集合与动态阈值的长期真源在 admins 模块与 internal-vote,亦不在此存快照。
 /// 公权/私权机构名称均以上链字段为准;OnChina 只保留查询缓存。
@@ -69,7 +69,7 @@ pub struct InstitutionInfo<BlockNumber, AccountName> {
     pub cid_full_name: AccountName,
     /// 机构简称。
     pub cid_short_name: AccountName,
-    /// 所属镇代码。非镇级机构为空;镇级公权机构由注册局创建时写入。
+    /// 所属镇代码。非镇行政区机构为空;镇行政区公权机构由注册局创建时写入。
     pub town_code: AccountName,
     /// 管理员更换/路由使用的机构码:机构账户只能是公权/私权法人机构码。
     pub institution_code: InstitutionCode,

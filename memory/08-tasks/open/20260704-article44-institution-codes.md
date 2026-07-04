@@ -4,7 +4,7 @@
 
 1. 修复公民宪法第 44 条第一款中的“国聘公职人员”残留，统一为“聘用公职人员”，并同步英文。
 2. 补齐以下国家级公权机构的机构码、中文全称、中文简称、英文全称和英文简称：
-   - 公民生活保障部食品药品监管局 / 食品药品监管局 / Food and Drug Administration of the Ministry of Citizen Welfare / Food and Drug Administration / `FDA`
+   - 公民生活保障部食品药品监督管理局 / 食品药品监管局 / Food and Drug Administration of the Ministry of Citizen Welfare / Food and Drug Administration / `FDA`
    - 国土安全部国民警卫局 / 国民警卫局 / National Guard Bureau of the Ministry of Homeland Security / National Guard Bureau / `NGB`
    - 国家防务部陆军部 / 陆军部 / Department of the Army of the Ministry of National Defense / Department of the Army / `ARM`
    - 国家防务部海军部 / 海军部 / Department of the Navy of the Ministry of National Defense / Department of the Navy / `NAV`

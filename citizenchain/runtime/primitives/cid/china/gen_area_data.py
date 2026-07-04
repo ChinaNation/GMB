@@ -3,7 +3,7 @@
 
 china.sqlite 是行政区唯一真源(ADR-021);本脚本把其省/市/镇快照编成紧凑二进制,
 供 primitives no_std 端 include_bytes! 读取,创世直铸「行政区 × 机构码模板」派生
-全部市/镇级公权机构。幂等:重跑覆盖 area_data.bin。
+全部市行政区/镇行政区公权机构。幂等:重跑覆盖 area_data.bin。
 
 格式(小端 u16):
   u16 省数

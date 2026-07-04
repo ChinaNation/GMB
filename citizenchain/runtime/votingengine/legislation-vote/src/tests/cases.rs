@@ -79,7 +79,7 @@ fn referendum_threshold() {
 fn single_house_regular_passes_then_mayor_signs() {
     new_test_ext().execute_with(|| {
         let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
-        // 10 名议员全投:7 赞成 3 反对 → 院通过 → 进入行政签署阶段(市级)。
+        // 10 名议员全投:7 赞成 3 反对 → 院通过 → 进入行政签署阶段(市行政区)。
         for i in 1u8..=7 {
             assert_ok!(cast(member(i), pid, true));
         }
@@ -105,7 +105,7 @@ fn single_house_mayor_veto_rejects_without_rescue() {
             assert_ok!(cast(member(i), pid, false));
         }
         assert_eq!(stage(pid), STAGE_LEG_SIGN);
-        // 市长否决 → 市级无救济 → 否决。
+        // 市长否决 → 市行政区无救济 → 否决。
         assert_ok!(exec_sign(exec_rep(), pid, false));
         assert_eq!(status(pid), STATUS_REJECTED);
     });
@@ -122,7 +122,7 @@ fn single_house_sign_timeout_passes() {
             assert_ok!(cast(member(i), pid, false));
         }
         assert_eq!(stage(pid), STAGE_LEG_SIGN);
-        // 市级:市长 30 天未表态 → 超时视为通过。
+        // 市行政区:市长 30 天未表态 → 超时视为通过。
         run_to_expiry(pid);
         assert_eq!(status(pid), STATUS_EXECUTED);
     });
@@ -182,7 +182,7 @@ fn non_member_cannot_vote() {
 fn create_no_longer_authorizes_proposer_at_vote_layer() {
     new_test_ext().execute_with(|| {
         // ADR-027 修订:发起人资格由 legislation-yuan 对 proposer_body 校验,提案方与表决院解耦;
-        // legislation-vote 层不再卡 who(市级 市自治会/市教委会 委员可提案,不属表决院 houses[0])。
+        // legislation-vote 层不再卡 who(市行政区 市自治会/市教委会 委员可提案,不属表决院 houses[0])。
         let pid = create(member(50), single_house(), LEG_VOTE_REGULAR);
         assert_eq!(stage(pid), STAGE_LEG_HOUSE);
     });
@@ -207,7 +207,7 @@ fn two_houses_passed_to_sign() -> u64 {
     for i in 19u8..=20 {
         assert_ok!(cast(member(i), pid, false));
     }
-    // 两院通过(重要案无公投)→ 行政签署阶段(省/国级)。
+    // 两院通过(重要案无公投)→ 行政签署阶段(省行政区/国家)。
     assert_eq!(stage(pid), STAGE_LEG_SIGN);
     assert_eq!(status(pid), STATUS_VOTING);
     pid
@@ -255,7 +255,7 @@ fn two_houses_override_one_veto_rejects() {
 fn two_houses_sign_timeout_goes_to_override() {
     new_test_ext().execute_with(|| {
         let pid = two_houses_passed_to_sign();
-        // 省/国级:行政首长 30 天未表态 → 退回三人会签。
+        // 省行政区/国家:行政首长 30 天未表态 → 退回三人会签。
         run_to_expiry(pid);
         assert_eq!(stage(pid), STAGE_LEG_OVERRIDE);
         assert_eq!(status(pid), STATUS_VOTING);

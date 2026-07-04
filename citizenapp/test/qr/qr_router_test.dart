@@ -70,7 +70,7 @@ void main() {
         'i': 'req-0123456789abcdef',
         'e': 1090,
         'b': SignRequestBody.fromHex(
-          action: QrActions.balancesTransfer,
+          action: QrActions.transferWithRemark,
           pubkeyHex:
               '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           payloadHex: '0xccdd',

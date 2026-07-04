@@ -139,17 +139,18 @@ void main() {
       expect(decoded.reviewFields['node_endpoints'], contains('/ip4/'));
     });
 
-    test('decodes transfer_keep_alive (pallet=2 call=3)', () {
+    test('decodes transfer_with_remark (pallet=4 call=0)', () {
       final dest = Keyring.sr25519.fromSeed(Uint8List(32));
       dest.ss58Format = 2027;
       final destBytes = dest.bytes().toList();
+      final remark = '中华联邦创世';
 
-      // 23400 分 = 234 元,Compact four-byte mode:(23400 << 2) | 2
       final payload = Uint8List.fromList([
-        0x02, 0x03,
-        0x00, // MultiAddress::Id
+        0x04,
+        0x00,
         ...destBytes,
-        0xA2, 0x6D, 0x01, 0x00, // Compact(23400)
+        ...u128LeForTest(BigInt.from(23400)),
+        ...compactVec(remark),
       ]);
 
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
@@ -158,6 +159,7 @@ void main() {
       expect(decoded!.action, 'transfer');
       expect(decoded.fields['amount_yuan'], '234.00 GMB');
       expect(decoded.fields['to'], dest.address);
+      expect(decoded.fields['remark'], remark);
     });
 
     // Phase 3(2026-04-22)「投票引擎统一入口整改」:
@@ -588,18 +590,23 @@ void main() {
       final dest = Keyring.sr25519.fromSeed(Uint8List(32));
       dest.ss58Format = 2027;
       final destBytes = dest.bytes().toList();
+      final remark = List.filled(64, 'a').join();
+      final remarkBytes = utf8.encode(remark);
 
       final payload = Uint8List.fromList([
-        0x02, 0x03,
+        0x04,
         0x00,
         ...destBytes,
-        0xA9, 0x03, // Compact(234) two-byte mode
+        ...u128LeForTest(BigInt.from(234)),
+        ...compactU32(remarkBytes.length), // Compact(64) two-byte mode
+        ...remarkBytes,
       ]);
 
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
       expect(decoded, isNotNull);
       expect(decoded!.fields['amount_yuan'], '2.34 GMB');
+      expect(decoded.fields['remark'], remark);
     });
     // Phase 3(2026-04-22)新增:8 个 execute / cleanup / cancel 类 call。
     // 链端签名统一 `fn <name>(origin, proposal_id: u64)`,

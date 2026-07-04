@@ -88,7 +88,7 @@ citizenchain/onchina/src/
 链交互按业务归属放置：
 
 - 机构注册信息凭证、账户列表 DTO 和 handler：`institution/subjects/chain_*.rs`
-- 公民投票资格查询：`domains/citizens/chain_vote.rs`
+- 投票资格提示查询：`domains/citizens/chain_vote.rs`
 - 公民链上身份推送：`domains/citizens/chain_identity.rs`
   - `POST /api/v1/admin/citizens/:cid_number/onchain/prepare` 生成 `a=2 citizen_identity` 签名请求,由目标公民钱包签名。
   - `POST /api/v1/admin/citizens/:cid_number/onchain/complete` 验证公民钱包签名,落库钱包绑定,并生成 `0x0a00 register_voting_identity` 注册局管理员链上签名二维码。

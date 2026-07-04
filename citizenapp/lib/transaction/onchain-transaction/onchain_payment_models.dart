@@ -22,9 +22,11 @@ class OnchainPaymentDraft {
     required this.toAddress,
     required this.amount,
     required this.symbol,
+    required this.remark,
   });
 
   final String toAddress;
   final double amount;
   final String symbol;
+  final String remark;
 }

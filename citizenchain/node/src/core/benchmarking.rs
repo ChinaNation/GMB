@@ -5,7 +5,7 @@
 use crate::core::service::FullClient;
 
 use citizenchain as runtime;
-use runtime::{AccountId, Balance, BalancesCall, SystemCall};
+use runtime::{AccountId, Balance, SystemCall};
 use sc_cli::Result;
 use sc_client_api::BlockBackend;
 use sp_core::{Encode, Pair};
@@ -52,16 +52,16 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for RemarkBuilder {
     }
 }
 
-/// Generates `Balances::TransferKeepAlive` extrinsics for the benchmarks.
+/// Generates `OnchainTransaction::transfer_with_remark` extrinsics for the benchmarks.
 ///
 /// Note: Should only be used for benchmarking.
-pub struct TransferKeepAliveBuilder {
+pub struct TransferWithRemarkBuilder {
     client: Arc<FullClient>,
     dest: AccountId,
     value: Balance,
 }
 
-impl TransferKeepAliveBuilder {
+impl TransferWithRemarkBuilder {
     /// Creates a new [`Self`] from the given client.
     pub fn new(client: Arc<FullClient>, dest: AccountId, value: Balance) -> Self {
         Self {
@@ -72,13 +72,13 @@ impl TransferKeepAliveBuilder {
     }
 }
 
-impl frame_benchmarking_cli::ExtrinsicBuilder for TransferKeepAliveBuilder {
+impl frame_benchmarking_cli::ExtrinsicBuilder for TransferWithRemarkBuilder {
     fn pallet(&self) -> &str {
-        "balances"
+        "onchain_transaction"
     }
 
     fn extrinsic(&self) -> &str {
-        "transfer_keep_alive"
+        "transfer_with_remark"
     }
 
     fn build(&self, nonce: u32) -> std::result::Result<OpaqueExtrinsic, &'static str> {
@@ -86,11 +86,13 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for TransferKeepAliveBuilder {
         let extrinsic: OpaqueExtrinsic = create_benchmark_extrinsic(
             self.client.as_ref(),
             acc,
-            BalancesCall::transfer_keep_alive {
-                dest: self.dest.clone().into(),
-                value: self.value,
-            }
-            .into(),
+            runtime::RuntimeCall::OnchainTransaction(
+                onchain_transaction::pallet::Call::transfer_with_remark {
+                    beneficiary: self.dest.clone(),
+                    amount: self.value,
+                    remark: Default::default(),
+                },
+            ),
             nonce,
         )
         .into();

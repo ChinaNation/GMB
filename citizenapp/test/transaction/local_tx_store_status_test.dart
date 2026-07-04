@@ -192,4 +192,43 @@ void main() {
     expect(records.single.status, LocalTxStore.statusFinalized);
     expect(records.single.amountDeltaFen, '210');
   });
+
+  test('本机提交备注在区块事件合并后保留', () async {
+    await LocalTxStore.upsertLocalSubmitTransfer(
+      walletAddress: fromAddress,
+      walletPubkeyHex: fromPubkey,
+      txHash: '0xremark',
+      amountDeltaFen: '-110',
+      transferAmountFen: '100',
+      feeFen: '10',
+      counterpartyAddress: toAddress,
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+      usedNonce: 9,
+      createdAtMillis: 3,
+      remark: '中华联邦创世',
+    );
+
+    final eventKey = LocalTxStore.blockEventRecordKey(fromPubkey, '0x66', 4);
+    await LocalTxStore.upsertBlockTransferEvent(
+      walletAddress: fromAddress,
+      walletPubkeyHex: fromPubkey,
+      recordKey: eventKey,
+      status: LocalTxStore.statusFinalized,
+      amountDeltaFen: '-100',
+      transferAmountFen: '100',
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+      counterpartyAddress: toAddress,
+      blockNumber: 13,
+      blockHash: '0x66',
+      eventIndex: 4,
+    );
+
+    final records = await LocalTxStore.queryByWalletPubkey(fromPubkey);
+    expect(records, hasLength(1));
+    expect(records.single.recordKey, eventKey);
+    expect(records.single.status, LocalTxStore.statusFinalized);
+    expect(records.single.remark, '中华联邦创世');
+  });
 }

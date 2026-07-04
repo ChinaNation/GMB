@@ -32,3 +32,9 @@ export type TransferSignRequestResult = {
 export type TransferSubmitResult = {
   txHash: string;
 };
+
+export type TransferDraft = {
+  toAddress: string;
+  amountYuan: number;
+  remark: string;
+};

@@ -498,6 +498,13 @@ class LocalTxRecordDetailPage extends StatelessWidget {
               value: record.counterpartyAddress!,
               copyable: true,
             ),
+          if (record.remark != null && record.remark!.isNotEmpty)
+            _buildRow(
+              context,
+              label: '转账备注',
+              value: record.remark!,
+              copyable: true,
+            ),
           if (record.txHash != null)
             _buildRow(
               context,

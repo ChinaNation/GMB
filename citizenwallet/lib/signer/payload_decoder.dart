@@ -142,10 +142,10 @@ class PayloadDecoder {
       final palletIndex = bytes[0];
       final callIndex = bytes[1];
 
-      // Balances / transfer_keep_alive
-      if (palletIndex == PalletRegistry.balancesPallet &&
-          callIndex == PalletRegistry.transferKeepAliveCall) {
-        return _decodeTransferKeepAlive(bytes);
+      // OnchainTransaction / transfer_with_remark
+      if (palletIndex == PalletRegistry.onchainTransactionPallet &&
+          callIndex == PalletRegistry.transferWithRemarkCall) {
+        return _decodeTransferWithRemark(bytes);
       }
 
       // ── InternalVote sub-pallet (22) · 内部投票管理员一人一票 ──
@@ -501,17 +501,13 @@ class PayloadDecoder {
     }
   }
 
-  // Balances(2) / transfer_keep_alive(3)
-  // 格式：[0x02][0x03][MultiAddress::Id = 0x00 + 32 bytes][Compact amount]
-  static DecodedPayload? _decodeTransferKeepAlive(Uint8List bytes) {
-    // 2 (pallet+call) + 1 (MultiAddress prefix) + 32 (AccountId) + 至少 1 (Compact)
-    if (bytes.length < 36) return null;
+  // OnchainTransaction(4) / transfer_with_remark(0)
+  // 格式：[0x04][0x00][beneficiary:AccountId32][amount:u128_le][remark:BoundedVec<u8>]
+  static DecodedPayload? _decodeTransferWithRemark(Uint8List bytes) {
+    // 2 (pallet+call) + 32 (AccountId) + 16 (u128) + 至少 1 (Vec len)
+    if (bytes.length < 51) return null;
 
     var offset = 2;
-
-    // MultiAddress::Id 前缀 0x00
-    if (bytes[offset] != 0x00) return null;
-    offset += 1;
 
     // 收款地址 32 bytes
     final toAccountId = bytes.sublist(offset, offset + 32);
@@ -519,19 +515,34 @@ class PayloadDecoder {
     final toAddress =
         Keyring().encodeAddress(toAccountId.toList(), _ss58Prefix);
 
-    // Compact<u128> 金额（分）
-    final (amountFen, amountSize) = _decodeCompactBigInt(bytes, offset);
-    if (amountFen == null || amountSize == 0) return null;
-    if (!_hasValidSigningTail(bytes, offset + amountSize)) return null;
+    // amount: u128 little-endian（分）
+    final amountFen = _readU128Le(bytes, offset);
+    offset += 16;
+
+    // remark: BoundedVec<u8>
+    final (remarkLen, remarkLenSize) = _decodeCompactU32(bytes, offset);
+    if (remarkLenSize == 0) return null;
+    offset += remarkLenSize;
+    if (offset + remarkLen > bytes.length) return null;
+    if (!_hasValidSigningTail(bytes, offset + remarkLen)) return null;
+    final remark = remarkLen == 0
+        ? ''
+        : utf8.decode(
+            bytes.sublist(offset, offset + remarkLen),
+            allowMalformed: true,
+          );
 
     final amountYuan = _fenToYuan(amountFen);
+    final remarkSuffix = remark.isEmpty ? '' : '，备注：$remark';
 
     return DecodedPayload(
       action: 'transfer',
-      summary: '转账 $amountYuan GMB 给 ${_truncateAddress(toAddress)}',
+      summary:
+          '转账 $amountYuan GMB 给 ${_truncateAddress(toAddress)}$remarkSuffix',
       fields: {
         'to': toAddress,
         'amount_yuan': '$amountYuan GMB',
+        'remark': remark,
       },
     );
   }

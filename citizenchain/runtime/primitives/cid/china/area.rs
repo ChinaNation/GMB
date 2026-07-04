@@ -2,7 +2,7 @@
 //!
 //! 数据由 `gen_area_data.py` 从 china.sqlite(行政区唯一真源 ADR-021)生成,
 //! 编成紧凑二进制 `area_data.bin`,本模块 no_std 零拷贝解析,供 genesis 直铸
-//! 「行政区 × 机构码模板」全部市/镇级公权机构。
+//! 「行政区 × 机构码模板」全部市行政区/镇行政区公权机构。
 //!
 //! 二进制格式(小端 u16):
 //!   u16 省数
@@ -46,7 +46,7 @@ impl<'a> Cursor<'a> {
     }
 }
 
-/// 一个市级行政区(用于市级机构直铸与作为省级/国家级机构的落点)。
+/// 一个市行政区(用于市行政区机构直铸与作为省行政区/国家机构的落点)。
 pub struct CityArea<'a> {
     pub province_code: &'a str,
     pub province_name: &'a str,
@@ -54,7 +54,7 @@ pub struct CityArea<'a> {
     pub city_name: &'a str,
 }
 
-/// 一个镇级行政区(用于镇级机构直铸)。
+/// 一个镇行政区(用于镇行政区机构直铸)。
 pub struct TownArea<'a> {
     pub province_code: &'a str,
     pub province_name: &'a str,
@@ -66,7 +66,7 @@ pub struct TownArea<'a> {
 
 /// 遍历项:省(含归属主市)/市/镇。单回调避免多闭包同时可变借用。
 pub enum AreaItem<'a> {
-    /// 省级部门落点:该省主市(市码 "001" 或首个市)。
+    /// 省行政区部门落点:该省主市(市码 "001" 或首个市)。
     Province {
         province_code: &'a str,
         province_name: &'a str,
@@ -93,7 +93,7 @@ where
         for _ in 0..city_count {
             let city_code = cur.fixed(3);
             let city_name = cur.var();
-            // 省级部门落点=市码 "001",否则首个市(与 onchina 生成一致):
+            // 省行政区部门落点=市码 "001",否则首个市(与 onchina 生成一致):
             // 首个市先占位,遇到 "001" 覆盖。
             if home_city.is_none() || city_code == "001" {
                 home_city = Some((city_code, city_name));

@@ -35,7 +35,7 @@
 
 - 12 个国家级公权机构进入 `CHINA_ZF` 并由创世直铸。
 - `CHINA_ZF` 数量由 59 更新为 71。
-- 常量直铸数量由 282 更新为 294。
+- 常量直铸数量由 282 更新为 294,后续随 NSN/NRP 常量化更新为 296。
 - 创世公权机构总量由 49,581 更新为 49,593。
 - 新机构 CID、机构码、主账户、费用账户可被测试验证。
 - 源码、文档和注释无旧口径残留;上一轮发布生成物若仍保留 49,581 旧锚点,必须明确标注为历史口径且不得作为当前发布物。
@@ -43,8 +43,11 @@
 ## 执行记录
 
 - 已将 `FDA/NGB/ARM/NAV/AIR/SPF/JOS/ARC/NVC/AFC/SFC/NGC` 12 个国家级公权机构加入 `CHINA_ZF`。
-- 已同步 `china_zb.rs` 制度保留地址表:609 → 633,覆盖新增 12 个机构的主账户和费用账户。
-- 已将 runtime 创世常量直铸计数更新为 294,创世公权机构源码口径更新为 49,593。
+- 已同步 `china_zb.rs` 制度保留地址表:609 → 633 → 637,覆盖新增 12 个机构和 NSN/NRP 的主账户、费用账户。
+- 已将 runtime 创世常量直铸计数更新为 296,创世公权机构源码口径保持 49,593。
+- 已将国家立法院参议会 `NSN`、国家立法院众议会 `NRP` 从模板派生迁入 `CHINA_LF`,CID、主账户和费用账户沿用原值。
+- 已将 FDA 中文全称修正为“公民生活保障部食品药品监督管理局”,简称、英文名、CID 和账户不变。
+- 已同步 CitizenApp 公权机构快照中枢省分片的 FDA 全称,并重算 manifest:`public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。
 - 已补 primitives 级 `china_zb` 与内置账户全量一致性测试,防止后续新增常量机构时漏同步保留表。
 - 已补 runtime 创世测试:新增 12 个国家级机构逐个入链,并验证主/费用账户均进入制度保留地址守卫。
 - 已更新 ADR、runtime primitives、node、CitizenApp 和相关 open 任务卡文档;上一轮 49,581 bake 锚点已标注为历史口径,不得作为当前发布锚点。
@@ -66,7 +69,22 @@
 - 已复查第 44 条“国聘公职人员”残留:现行真源未再命中,仅任务卡历史记录保留“已修复”描述。
 - 已清理立法体系文档残留:ADR 和 open 任务卡中“参议会/众议会是两个独立机构”“省参议会/省众议会”等旧表述,已改为国家立法院/省联邦立法院下设参议会和众议会。
 - 已删除未跟踪临时审计脚本 `citizenchain/scripts/runtime-audit-wf.js`,避免被误提交为正式脚本。
-- 复查确认 `citizenapp/assets/public_institutions/` 与 `CitizenApp/assets/public_institutions/` 仍是上一轮 49,581 发布快照;`citizenchain/node/chainspecs/`、`citizenchain/target/chainspec/` 和 App 内置 chainspec 仍对应上一轮冻结锚点。这些属于正式发布生成物残留,不得手工改 JSON 冒充新快照,必须在同一提交 CI WASM 确定后重新 `--finalize` bake、同步 OnChina 投影并重跑快照生成器。
+- 当时复查曾确认 `citizenapp/assets/public_institutions/` 与 `CitizenApp/assets/public_institutions/`、`citizenchain/node/chainspecs/`、`citizenchain/target/chainspec/` 和 App 内置 chainspec 还停留在上一轮旧生成物;这些发布生成物残留已在后续 CI WASM 正式 bake、冻结链启动、OnChina 投影同步和快照生成器重跑后清理到 49,593 口径。
+
+## 本轮 NSN/NRP 常量化复查记录
+
+- 已将 `NSN/NRP` 从 `official_derive` 模板派生迁入 `china_lf.rs` 常量,保留原 CID、主账户和费用账户;省级 PSN/PRP 仍保持模板拼接。
+- 已删除国家参众议会模板派生残留,派生总数更新为 49,297;常量总数更新为 296;创世总数仍为 49,593。
+- 已将 `china_zb.rs` 制度保留地址表更新为 637,覆盖 NSN/NRP 主账户和费用账户。
+- 已将 FDA 中文全称和 CitizenApp 快照同步为“公民生活保障部食品药品监督管理局”,并重算中枢省分片 hash 与 `public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。
+- 残留搜索已通过:未再命中旧国家模板、旧派生数量、旧常量数量和 FDA 旧全称等关键口径。
+- `cargo fmt --manifest-path citizenchain/runtime/primitives/Cargo.toml --check`:通过。
+- 本轮 Rust 文件定向 `rustfmt --edition 2021 --check`:通过。
+- `cargo test --manifest-path citizenchain/runtime/primitives/Cargo.toml -- --nocapture`:通过,46 个 primitives 测试和 2 个 golden 测试全绿。
+- `cargo test --manifest-path citizenchain/runtime/Cargo.toml genesis_public_institutions_full_mint_counts -- --nocapture`:通过。
+- `cargo check --manifest-path citizenchain/onchina/Cargo.toml`:通过。
+- `git diff --check`:通过。
+- `cargo fmt --manifest-path citizenchain/runtime/Cargo.toml --check`:未作为本轮通过项;报出既有无关 `citizenchain/runtime/src/configs/mod.rs` import 排序差异,本轮未改该文件。
 
 ## 正式 bake 冻结记录
 
@@ -74,4 +92,12 @@
 - 已下载 artifact `citizenchain-wasm`;`citizenchain.compact.compressed.wasm` 文件大小 1,057,995 字节,sha256 `467a031f7021f46fd18a38963d826a32e085e44503b6b1abe66535b95554fca1`,blake2_256 `0x4c39fdd6aee34329df34b2a66cbae71c1e6b407a3e35af1c90141c7d716921c0`。
 - 已执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm citizenchain/target/wasm-ci/citizenchain.compact.compressed.wasm`:通过,创世物化耗时 30s,`genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`,`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`,`chainspec_hash=57e8e641ba0fa371262a6cfcf5ba53a0607a6caca940d16d77729ae45b0cf3de`。
 - bake 已同步冻结 SSOT:`citizenchain/node/chainspecs/citizenchain.plain.json` 与 `citizenapp/assets/chainspec.json`;大小写 `CitizenApp/assets/chainspec.json` 与 `citizenapp/assets/chainspec.json` 为同一 inode,已同步到新 `stateRootHash`。
-- `target/chainspec/genesis-state/manifest.json` 已生成,但 `public_institution_root` 仍为空;这是因为 49,593 公权机构快照根必须在冻结链启动、OnChina 投影同步后由 CitizenApp 快照生成器重生,不得沿用上一轮 49,581 根。
+- `target/chainspec/genesis-state/manifest.json` 已生成;后续已启动冻结链、同步 OnChina 投影并由 CitizenApp 快照生成器重生 49,593 快照根,上一轮 `public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`,未沿用上一轮 49,581 根。本轮 NSN/NRP 常量化与 FDA 全称修正后,正式发布前必须重新 bake 并重跑链上投影;当前端上快照名称残留已先清理到 `public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。
+
+## CitizenApp 快照生成记录
+
+- 已用冻结 chainspec 启动临时节点:`chain_getBlockHash(0)=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`,`stateRoot=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`。
+- 已用临时 OnChina PostgreSQL 同步链上投影:`chain_institutions=49593`,`chain_accounts=99186`,`local_institutions=49593`,`local_accounts=99186`。
+- 已通过 `ONCHINA_BASE_URL=http://127.0.0.1:8975 GEN_DELAY_MS=0 node citizenapp/tools/generate_public_institution_bundle.mjs ...` 生成 43 个省级分片,合计 49,593 个创世公权机构。
+- 已逐条抽样确认新增 12 个国家级机构进入 `中枢省.json`:`FDA/NGB/ARM/NAV/AIR/SPF/JOS/ARC/NVC/AFC/SFC/NGC`。
+- 已执行 OnChina `audit-chain-catalog` 全量双向对账:本地 49,593 / 链上 49,593 / 不一致 0 / 链上多出 0 / 链上缺失 0。

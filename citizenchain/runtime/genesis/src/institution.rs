@@ -137,7 +137,7 @@ fn insert_public_account<T: public_manage::Config>(
 }
 
 /// 模板派生机构落地(ADR-031 卡3 全量创世直铸):账户由 CID 号确定性派生、
-/// 名称为运行态 String;不进 ProtectedGenesisAccounts(市/镇级机构后续可治理,
+/// 名称为运行态 String;不进 ProtectedGenesisAccounts(市行政区/镇行政区机构后续可治理,
 /// 且避免 59 万机构双倍保护条目)。构建期断言号格式合法 + 公权家族。
 fn insert_derived_public_institution<T: public_manage::Config>(
     cid_number: &str,
@@ -360,7 +360,7 @@ fn federal_registry_province_group_account<T: frame_system::Config>(
     payload.extend_from_slice(&province_code);
     let raw = sp_io::hashing::blake2_256(&payload);
     T::AccountId::decode(&mut &raw[..])
-        .unwrap_or_else(|_| panic!("genesis institution: FRG 省级组账户 decode 失败"))
+        .unwrap_or_else(|_| panic!("genesis institution: FRG 省行政区组账户 decode 失败"))
 }
 
 fn insert_fixed_admins<T, F>(
@@ -382,7 +382,7 @@ fn insert_fixed_admins<T, F>(
 
 /// 创世写入内置公权机构和创世公职人员。
 /// 创世直铸国家/省/市公权机构(ADR-031 v3):纯枚举(primitives 单源)
-/// → 落地存储;账户由 CID 号确定性派生,与 294 常量互不重号。
+/// → 落地存储;账户由 CID 号确定性派生,与 296 常量互不重号。
 fn build_template_institutions<T: public_manage::Config>() {
     primitives::cid::official_derive::for_each_public_institution(|cid, full, short| {
         insert_derived_public_institution::<T>(cid, full, short);
@@ -432,7 +432,7 @@ where
     }
 
     // 常量数组全量直铸(ADR-031 卡3):ZF/JC/SF/LF/JY 逐节点写入机构+双账户,
-    // 与上方 CB/CH 合计 294;创世不带管理员(NJD/FRG 特例在下方单独写入)。
+    // 与上方 CB/CH 合计 296;创世不带管理员(NJD/FRG 特例在下方单独写入)。
     for node in CHINA_ZF.iter() {
         insert_public_institution::<T>(
             node.cid_number,
@@ -492,7 +492,7 @@ where
         national_judicial_yuan_admin_role,
     );
 
-    // FRG 省级 5 人组管理员特例。
+    // FRG 省行政区 5 人组管理员特例。
     let frg_node = CHINA_ZF
         .iter()
         .find(|node| institution_code_from_cid_number(node.cid_number) == Some(FRG))
@@ -519,6 +519,6 @@ where
         );
     }
 
-    // 创世直铸当前国家/省/市公权机构(ADR-031 v3):常量 294 + 派生 49,299。
+    // 创世直铸当前国家/省/市公权机构(ADR-031 v3):常量 296 + 派生 49,297。
     build_template_institutions::<T>();
 }

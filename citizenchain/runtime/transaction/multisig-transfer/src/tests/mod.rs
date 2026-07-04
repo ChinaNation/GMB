@@ -772,7 +772,7 @@ fn insert_active_registered_institution_account(
     public_manage::Institutions::<Test>::insert(
         &cid_number,
         public_manage::InstitutionInfo {
-            // 本测试只关心账户反查,机构名称可为空;town_code 非镇级为空。
+            // 本测试只关心账户反查,机构名称可为空;town_code 非镇行政区为空。
             cid_full_name: Default::default(),
             cid_short_name: Default::default(),
             town_code: Default::default(),

@@ -27,7 +27,7 @@ void main() {
         requestId: requestId,
         pubkey: pubkey,
         payloadHex: payload,
-        action: QrActions.balancesTransfer,
+        action: QrActions.transferWithRemark,
       );
       final encoded = signer.encodeRequest(request);
 
@@ -36,7 +36,7 @@ void main() {
       expect(json['k'], QrKind.signRequest.code);
       expect(json['i'], requestId);
       expect(json['e'], isA<int>());
-      expect(json['b']['a'], QrActions.balancesTransfer);
+      expect(json['b']['a'], QrActions.transferWithRemark);
       expect(json['b']['g'], 1);
       expect(json['b']['u'], isA<String>());
       expect(json['b']['d'], isA<String>());
@@ -45,7 +45,7 @@ void main() {
       final parsed = signer.parseRequest(encoded);
       expect(parsed.kind, QrKind.signRequest);
       expect(parsed.id, requestId);
-      expect(parsed.body.action, QrActions.balancesTransfer);
+      expect(parsed.body.action, QrActions.transferWithRemark);
       expect(parsed.body.pubkeyHex, pubkey);
       expect(parsed.body.payloadHex, payload);
     });

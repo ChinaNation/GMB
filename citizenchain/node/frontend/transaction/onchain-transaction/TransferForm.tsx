@@ -6,9 +6,11 @@ import type { ColdWallet } from './types';
 type Props = {
   activeWallet: ColdWallet | null;
   balance: string | null;
-  onSubmit: (toAddress: string, amountYuan: number) => void;
+  onSubmit: (toAddress: string, amountYuan: number, remark: string) => void;
   disabled?: boolean;
 };
+
+const MAX_TRANSFER_REMARK_BYTES = 99;
 
 /** 千分位格式化（元）：1234567.89 → "1,234,567.89" */
 function fmtYuan(v: number): string {
@@ -49,17 +51,25 @@ function addThousandSep(s: string): string {
   return formatted + decPart;
 }
 
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
 export function TransferForm({ activeWallet, balance, onSubmit, disabled }: Props) {
   const [toAddress, setToAddress] = useState('');
   // 金额用字符串存储，显示带千分位
   const [amountText, setAmountText] = useState('');
+  const [remark, setRemark] = useState('');
   const [showScan, setShowScan] = useState(false);
 
   const amount = parseAmount(amountText);
   const fee = calculateTransferFeeYuan(amount);
   const total = amount + fee;
+  const remarkBytes = utf8ByteLength(remark);
   const formDisabled = disabled || !activeWallet;
-  const canSubmit = amount > 0 && toAddress.trim().length > 0 && !formDisabled;
+  const remarkTooLong = remarkBytes > MAX_TRANSFER_REMARK_BYTES;
+  const canSubmit =
+    amount > 0 && toAddress.trim().length > 0 && !remarkTooLong && !formDisabled;
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -70,7 +80,7 @@ export function TransferForm({ activeWallet, balance, onSubmit, disabled }: Prop
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    onSubmit(toAddress.trim(), amount);
+    onSubmit(toAddress.trim(), amount, remark);
   };
 
   return (
@@ -137,6 +147,20 @@ export function TransferForm({ activeWallet, balance, onSubmit, disabled }: Prop
           />
           <span className="transfer-form-currency">GMB</span>
         </div>
+      </div>
+
+      <div className="transfer-form-field">
+        <label>转账备注</label>
+        <input
+          type="text"
+          value={remark}
+          onChange={(e) => setRemark(e.target.value)}
+          placeholder="选填，最多 99 字节"
+          disabled={formDisabled}
+        />
+        <span className={remarkTooLong ? 'error' : 'transfer-form-status-hint'}>
+          {remarkBytes}/{MAX_TRANSFER_REMARK_BYTES} 字节
+        </span>
       </div>
 
       {/* 手续费 & 合计 */}

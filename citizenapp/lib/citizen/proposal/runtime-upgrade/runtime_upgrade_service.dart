@@ -248,7 +248,7 @@ class RuntimeUpgradeService {
     return data[0] == 1;
   }
 
-  /// 查询公民投票计数（CitizenTallies）。
+  /// 查询联合公投计数（ReferendumTallies）。
   ///
   /// Value: VoteCountU64 { yes: u64, no: u64 } = 16 bytes。
   Future<({int yes, int no})> fetchReferendumTally(int proposalId) async {

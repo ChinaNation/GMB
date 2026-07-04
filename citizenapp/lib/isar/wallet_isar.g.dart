@@ -29431,48 +29431,53 @@ const LocalTxEntitySchema = CollectionSchema(
       name: r'recordKey',
       type: IsarType.string,
     ),
-    r'source': PropertySchema(
+    r'remark': PropertySchema(
       id: 12,
+      name: r'remark',
+      type: IsarType.string,
+    ),
+    r'source': PropertySchema(
+      id: 13,
       name: r'source',
       type: IsarType.string,
     ),
     r'status': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'status',
       type: IsarType.string,
     ),
     r'toAddress': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'toAddress',
       type: IsarType.string,
     ),
     r'transferAmountFen': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'transferAmountFen',
       type: IsarType.string,
     ),
     r'txHash': PropertySchema(
-      id: 16,
+      id: 17,
       name: r'txHash',
       type: IsarType.string,
     ),
     r'type': PropertySchema(
-      id: 17,
+      id: 18,
       name: r'type',
       type: IsarType.string,
     ),
     r'usedNonce': PropertySchema(
-      id: 18,
+      id: 19,
       name: r'usedNonce',
       type: IsarType.long,
     ),
     r'walletAddress': PropertySchema(
-      id: 19,
+      id: 20,
       name: r'walletAddress',
       type: IsarType.string,
     ),
     r'walletPubkeyHex': PropertySchema(
-      id: 20,
+      id: 21,
       name: r'walletPubkeyHex',
       type: IsarType.string,
     )
@@ -29582,6 +29587,12 @@ int _localTxEntityEstimateSize(
     }
   }
   bytesCount += 3 + object.recordKey.length * 3;
+  {
+    final value = object.remark;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.source.length * 3;
   bytesCount += 3 + object.status.length * 3;
   {
@@ -29626,15 +29637,16 @@ void _localTxEntitySerialize(
   writer.writeString(offsets[9], object.feeFen);
   writer.writeString(offsets[10], object.fromAddress);
   writer.writeString(offsets[11], object.recordKey);
-  writer.writeString(offsets[12], object.source);
-  writer.writeString(offsets[13], object.status);
-  writer.writeString(offsets[14], object.toAddress);
-  writer.writeString(offsets[15], object.transferAmountFen);
-  writer.writeString(offsets[16], object.txHash);
-  writer.writeString(offsets[17], object.type);
-  writer.writeLong(offsets[18], object.usedNonce);
-  writer.writeString(offsets[19], object.walletAddress);
-  writer.writeString(offsets[20], object.walletPubkeyHex);
+  writer.writeString(offsets[12], object.remark);
+  writer.writeString(offsets[13], object.source);
+  writer.writeString(offsets[14], object.status);
+  writer.writeString(offsets[15], object.toAddress);
+  writer.writeString(offsets[16], object.transferAmountFen);
+  writer.writeString(offsets[17], object.txHash);
+  writer.writeString(offsets[18], object.type);
+  writer.writeLong(offsets[19], object.usedNonce);
+  writer.writeString(offsets[20], object.walletAddress);
+  writer.writeString(offsets[21], object.walletPubkeyHex);
 }
 
 LocalTxEntity _localTxEntityDeserialize(
@@ -29657,15 +29669,16 @@ LocalTxEntity _localTxEntityDeserialize(
   object.fromAddress = reader.readStringOrNull(offsets[10]);
   object.id = id;
   object.recordKey = reader.readString(offsets[11]);
-  object.source = reader.readString(offsets[12]);
-  object.status = reader.readString(offsets[13]);
-  object.toAddress = reader.readStringOrNull(offsets[14]);
-  object.transferAmountFen = reader.readStringOrNull(offsets[15]);
-  object.txHash = reader.readStringOrNull(offsets[16]);
-  object.type = reader.readString(offsets[17]);
-  object.usedNonce = reader.readLongOrNull(offsets[18]);
-  object.walletAddress = reader.readString(offsets[19]);
-  object.walletPubkeyHex = reader.readString(offsets[20]);
+  object.remark = reader.readStringOrNull(offsets[12]);
+  object.source = reader.readString(offsets[13]);
+  object.status = reader.readString(offsets[14]);
+  object.toAddress = reader.readStringOrNull(offsets[15]);
+  object.transferAmountFen = reader.readStringOrNull(offsets[16]);
+  object.txHash = reader.readStringOrNull(offsets[17]);
+  object.type = reader.readString(offsets[18]);
+  object.usedNonce = reader.readLongOrNull(offsets[19]);
+  object.walletAddress = reader.readString(offsets[20]);
+  object.walletPubkeyHex = reader.readString(offsets[21]);
   return object;
 }
 
@@ -29701,22 +29714,24 @@ P _localTxEntityDeserializeProp<P>(
     case 11:
       return (reader.readString(offset)) as P;
     case 12:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 13:
       return (reader.readString(offset)) as P;
     case 14:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 15:
       return (reader.readStringOrNull(offset)) as P;
     case 16:
       return (reader.readStringOrNull(offset)) as P;
     case 17:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 18:
-      return (reader.readLongOrNull(offset)) as P;
-    case 19:
       return (reader.readString(offset)) as P;
+    case 19:
+      return (reader.readLongOrNull(offset)) as P;
     case 20:
+      return (reader.readString(offset)) as P;
+    case 21:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -31559,6 +31574,160 @@ extension LocalTxEntityQueryFilter
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'remark',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'remark',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'remark',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'remark',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'remark',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'remark',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'remark',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'remark',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'remark',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'remark',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'remark',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
+      remarkIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'remark',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
       sourceEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -32943,6 +33112,18 @@ extension LocalTxEntityQuerySortBy
     });
   }
 
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterSortBy> sortByRemark() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'remark', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterSortBy> sortByRemarkDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'remark', Sort.desc);
+    });
+  }
+
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterSortBy> sortBySource() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'source', Sort.asc);
@@ -33235,6 +33416,18 @@ extension LocalTxEntityQuerySortThenBy
     });
   }
 
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterSortBy> thenByRemark() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'remark', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterSortBy> thenByRemarkDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'remark', Sort.desc);
+    });
+  }
+
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterSortBy> thenBySource() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'source', Sort.asc);
@@ -33440,6 +33633,13 @@ extension LocalTxEntityQueryWhereDistinct
     });
   }
 
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QDistinct> distinctByRemark(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'remark', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<LocalTxEntity, LocalTxEntity, QDistinct> distinctBySource(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -33587,6 +33787,12 @@ extension LocalTxEntityQueryProperty
   QueryBuilder<LocalTxEntity, String, QQueryOperations> recordKeyProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'recordKey');
+    });
+  }
+
+  QueryBuilder<LocalTxEntity, String?, QQueryOperations> remarkProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'remark');
     });
   }
 

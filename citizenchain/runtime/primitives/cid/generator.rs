@@ -17,13 +17,13 @@ pub struct GenerateCidNumberInput<'a> {
     pub account_pubkey: &'a str,
     /// 可变/继承盈利策略读取的 0/1 输入。
     pub p1: &'a str,
-    /// 两位省级行政区代码。
+    /// 两位省行政区代码。
     pub province_code: &'a str,
-    /// 省级行政区名称,N9 hash 使用。
+    /// 省行政区名称,N9 hash 使用。
     pub province_name: &'a str,
-    /// 三位市级行政区代码。
+    /// 三位市行政区代码。
     pub city_code: &'a str,
-    /// 市级行政区名称,N9 hash 使用。
+    /// 市行政区名称,N9 hash 使用。
     pub city_name: &'a str,
     /// 生成年份 YYYY。
     pub year: &'a str,

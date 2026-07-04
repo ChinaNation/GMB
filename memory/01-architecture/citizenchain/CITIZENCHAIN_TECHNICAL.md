@@ -38,7 +38,7 @@
   - 桌面节点软件：`node/src/desktop.rs`、`node/src/<功能名>` 与 `node/frontend`
 
 ### 3.2 对外协作边界
-- 对 `CID`：提供绑定、资格校验、人口快照、公民投票凭证等链侧接口承载能力。
+- 对 `CID`：提供绑定、资格校验、人口快照、投票凭证等链侧接口承载能力。
 - 对 `citizenapp`：提供链上账户、交易、治理、节点状态、奖励与网络可观测能力。
 
 ## 4. 当前目录结构
@@ -148,7 +148,7 @@ citizenchain/
 ## 9. 链上模块分组
 
 ### 9.1 治理模块（`runtime/governance/`）
-- 负责内部投票、联合投票、公民投票、最终性密钥治理、运行时升级治理、销毁治理，并为决议发行提供联合投票引擎。
+- 负责内部投票、联合投票、立法投票、选举投票、最终性密钥治理、运行时升级治理、销毁治理，并为决议发行提供联合投票引擎。
 
 当前模块：
 - `grandpakey-change`
@@ -175,7 +175,16 @@ citizenchain/
 - `private-manage`（私权机构生命周期,idx33）
 - `personal-manage`（个人多签）
 
-### 9.4 发行模块（`runtime/issuance/`）
+### 9.4 公权业务模块（`runtime/public/`）
+- 负责公权机构的业务壳。业务壳只解释业务规则和写回业务真源，不复刻投票流程。
+- `legislation-yuan` 是立法业务壳；立法表决、计票和公投流程归 `legislation-vote`。
+- `election-campaign` 是选举业务壳；当前只以 pallet index 34 接入 runtime 骨架，真实选举规则后续再做。选举投票、计票和结果快照归 `election-vote`。
+
+当前模块：
+- `legislation-yuan`（idx27）
+- `election-campaign`（idx34，骨架）
+
+### 9.5 发行模块（`runtime/issuance/`）
 - 负责公民发行、全节点发行、省储行利息、决议发行完整流程。
 
 当前模块：
@@ -184,7 +193,7 @@ citizenchain/
 - `resolution-issuance`
 - `provincialbank-interest`
 
-### 9.5 交易模块（`runtime/transaction/`）
+### 9.6 交易模块（`runtime/transaction/`）
 - 负责链上交易手续费、链下交易手续费、机构多签交易能力。
 
 当前模块：
@@ -193,9 +202,9 @@ citizenchain/
 - `offchain-transaction`
 - `onchain-transaction`
 
-### 9.6 其他模块（`runtime/otherpallet/`）
+### 9.7 其他模块（`runtime/otherpallet/`）
 - 负责链上公民身份、人口统计、PoW 难度调整等基础能力。
-- `citizen-identity` 是链上公民投票身份和人口快照的真源,`VotingIdentityPayload` 包含 `citizen_age_years`;runtime 必须拒绝未满 16 周岁的链上公民身份注册或更新。
+- `citizen-identity` 是链上投票身份、参选身份和人口快照的真源,`VotingIdentityPayload` 包含 `citizen_age_years`;runtime 必须拒绝未满 16 周岁的链上公民身份注册或更新。
 
 当前模块：
 - `pow-difficulty`
@@ -250,6 +259,9 @@ citizenchain/
 - `runtime/governance/resolution-destro/RESOLUTIONDESTRO_TECHNICAL.md`
 - `runtime/governance/runtime-upgrade/RUNTIMEUPGRADE_TECHNICAL.md`
 - `runtime/votingengine/VOTINGENGINE_TECHNICAL.md`
+
+### 12.1.0 公权业务
+- `runtime/election-campaign/ELECTION_CAMPAIGN_TECHNICAL.md`
 
 ### 12.1.1 管理员
 - `runtime/admins/ADMINS_TECHNICAL.md`

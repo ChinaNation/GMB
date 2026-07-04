@@ -6,7 +6,7 @@
 
 - 链上支付表单与提交页面
 - 支付草稿与错误模型
-- 支付提交编排：钱包读取、签名回调注入、调用 `OnchainRpc.transferKeepAlive()`
+- 支付提交编排：钱包读取、签名回调注入、调用 `OnchainRpc.transferWithRemark()`
 
 以下能力不属于 `lib/transaction/onchain-transaction/`，不迁入本目录：
 
@@ -38,30 +38,30 @@ citizenapp/lib/transaction/shared/
 
 ## 3. 关键流程
 
-1. `OnchainPaymentPanel` 收集 `toAddress / amount / symbol`；`OnchainPaymentPage` 只是独立链上支付路由包装
+1. `OnchainPaymentPanel` 收集 `toAddress / amount / remark / symbol`；`OnchainPaymentPage` 只是独立链上支付路由包装
 2. 页面校验 SS58 前缀、金额、finalized 余额、ED 和预估手续费
    - 从通讯录进入时，`ContactBookPage` 返回的联系人 `address` 已经是 SS58，页面直接填入收款栏，不做 AccountId hex 转换
 3. 页面根据钱包类型注入签名回调：
    - 热钱包：先调用 `WalletManager.authenticateForSigning()`，再用 `signWithWalletNoAuth()` 签名
    - 冷钱包：构造 `sign_request` 二维码，等待 `sign_response` 响应
 4. 调用 `OnchainPaymentService.submitTransfer()`
-5. 服务调用 `OnchainRpc.transferKeepAlive()` 完成 extrinsic 构造、签名和广播
-6. 广播成功后写入 `LocalTxEntity(source=local_submit, status=pending, usedNonce=...)`
+5. 服务调用 `OnchainRpc.transferWithRemark()` 完成 extrinsic 构造、签名和广播
+6. 广播成功后写入 `LocalTxEntity(source=local_submit, status=pending, usedNonce=..., remark=...)`
 7. 交易池 watch 收到 included 后先把本机记录升级为 `inBlock`；`ChainTxMonitor` 监听 newHeads 并补扫 finalized 之后的未确认区块，把命中本机钱包的收支先写为 `inBlock`，再按 finalized 高度把匹配记录合并并升级为 `finalized`
 
 交易状态仍保留 `pending / inBlock / finalized` 三段；余额、可用金额、余额不足提示和钱包余额回写统一读取 finalized 余额，不能因为 `inBlock` 事件先到就把 best 余额写入展示缓存。
 
 ## 4. 链上转账
 
-`OnchainRpc.transferKeepAlive()` 仍在 `lib/rpc/onchain.dart`，因为它是链上 extrinsic 公共底座的一部分，不随 `lib/transaction/onchain-transaction/` 迁移。
+`OnchainRpc.transferWithRemark()` 仍在 `lib/rpc/onchain.dart`，因为它是链上 extrinsic 公共底座的一部分，不随 `lib/transaction/onchain-transaction/` 迁移。
 
 当前普通转账 call data：
 
 ```text
-[pallet_index=2] [call_index=3] [MultiAddress::Id(0x00) + dest_32bytes] [Compact<u128>(fen)]
+[pallet_index=4] [call_index=0] [beneficiary:AccountId32] [amount:u128_le] [remark:BoundedVec<u8>]
 ```
 
-对应 `Balances::transfer_keep_alive`。
+对应 `OnchainTransaction::transfer_with_remark`。备注按 UTF-8 字节计数，最大 99 字节；空备注编码为长度 0 的 `BoundedVec<u8>`。
 
 ## 5. 交易记录
 
@@ -74,6 +74,7 @@ citizenapp/lib/transaction/shared/
 - `txHash = result.txHash`
 - `usedNonce = result.usedNonce`
 - `transferAmountFen = 转账本金`
+- `remark = 转账备注`，本机 pending 与区块事件合并时保留非空备注
 - `feeFen = OnchainRpc.estimateTransferFeeYuan(amount)` 换算后的分值
 - `amountDeltaFen = -(transferAmountFen + feeFen)`，方向由正负号推导，不单独保存 `direction`
 

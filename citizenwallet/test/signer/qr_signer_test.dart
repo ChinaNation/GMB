@@ -49,7 +49,7 @@ void main() {
         'i': 'test-valid-req-id-0001',
         'e': now + 90,
         'b': SignRequestBody.fromHex(
-          action: QrActions.balancesTransfer,
+          action: QrActions.transferWithRemark,
           pubkeyHex: testPubkeyHex,
           payloadHex: '0x0102',
         ).toJson(),
@@ -63,7 +63,7 @@ void main() {
 
       expect(parsed.kind, QrKind.signRequest);
       expect(parsed.id, 'test-valid-req-id-0001');
-      expect(parsed.body.action, QrActions.balancesTransfer);
+      expect(parsed.body.action, QrActions.transferWithRemark);
       expect(parsed.body.pubkeyHex, testPubkeyHex);
       expect(parsed.body.payloadHex, '0x0102');
     });

@@ -60,7 +60,7 @@
 | `mining_gpuHashrate` | GPU 哈希率（仅 gpu-mining feature） |
 | `reward_bindWallet(ss58)` | 节点端签名提交 bind_reward_wallet 交易 |
 | `reward_rebindWallet(ss58)` | 节点端签名提交 rebind_reward_wallet 交易 |
-| `transaction_submitMinerTransfer(ss58, amount_fen, token)` | 节点端使用 `powr` 密钥提交矿工热钱包转账，要求进程内一次性令牌 |
+| `transaction_submitMinerTransfer(ss58, amount_fen, remark, token)` | 节点端使用 `powr` 密钥提交矿工热钱包 `OnchainTransaction::transfer_with_remark` 转账，备注最多 99 UTF-8 字节，要求进程内一次性令牌 |
 | `fee_blockFees(block_hash_hex)` | 读取指定区块的 FeePaid 事件累计手续费 |
 | `sync_state_genSyncSpec` | 返回 lightSyncState（自定义实现，替代 BABE 依赖的标准 RPC） |
 
@@ -76,8 +76,8 @@
 `genesis + 后续交易状态`;节点本地数据库只是链状态副本。
 
 - 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、44 个权威节点 bootnode、token 属性和协议 ID。
-- 创世链状态包：`citizenchain/scripts/bake-chainspec.sh` 在临时节点完成创世物化后导出 `target/chainspec/genesis-state/`,包含 `chains/citizenchain/db` 与 `manifest.json`。正式安装包把该目录作为 `genesis-state/` 资源内置。2026-07-04 起源码创世口径为国家/省/市 49,593 个公权机构；同日已用 GitHub `CitizenChain WASM` run `28700551692` 的同提交 CI WASM 完成正式 bake,下一步必须启动冻结链、同步 OnChina 投影并重生 CitizenApp 公权机构快照根。
-- 当前冻结锚点（49,593 源码口径,Git commit `21057d4f9459e32ee12cd6aeecc5757038503f64`,CI run `28700551692`）：`genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`、`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`、`runtime_wasm_hash=467a031f7021f46fd18a38963d826a32e085e44503b6b1abe66535b95554fca1`、`chainspec_hash=57e8e641ba0fa371262a6cfcf5ba53a0607a6caca940d16d77729ae45b0cf3de`、`public_institution_root=` 待 CitizenApp 49,593 快照生成后写入。
+- 创世链状态包：`citizenchain/scripts/bake-chainspec.sh` 在临时节点完成创世物化后导出 `target/chainspec/genesis-state/`,包含 `chains/citizenchain/db` 与 `manifest.json`。正式安装包把该目录作为 `genesis-state/` 资源内置。2026-07-04 起源码创世口径为国家/省/市 49,593 个公权机构；同日已用 GitHub `CitizenChain WASM` run `28700551692` 的同提交 CI WASM 完成正式 bake,并已启动冻结链、同步 OnChina 投影、重生 CitizenApp 公权机构快照根。
+- 当前冻结锚点（49,593 源码口径,Git commit `21057d4f9459e32ee12cd6aeecc5757038503f64`,CI run `28700551692`）：`genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`、`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`、`runtime_wasm_hash=467a031f7021f46fd18a38963d826a32e085e44503b6b1abe66535b95554fca1`、`chainspec_hash=57e8e641ba0fa371262a6cfcf5ba53a0607a6caca940d16d77729ae45b0cf3de`、`public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`。
 - 上一轮冻结锚点（49,581 旧口径，仅作历史对照，不能作为当前发布锚点）：`genesis_hash=0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`、`state_root=0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0`、`runtime_wasm_hash=70e6d1fd01b763628e8b595399487bdfe19191a44a4cfadd5255be0577b9310a`、`chainspec_hash=650c1ed8462a326e43394576eaa99f7533f9ee427cf1d80c58cd2922a82d7558`、`public_institution_root=4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`。
 - 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 加载冻结 plain JSON;[process/mod.rs](../../../../citizenchain/node/src/home/process/mod.rs) 首次启动时优先把内置 `genesis-state/chains/citizenchain/db` 复制到本机数据目录,没有内置包才回退到 runtime `GenesisBuilder` 本地物化。
 - 当前限制：即使已复制 `genesis-state` RocksDB,Substrate 启动仍会根据 plain spec 调 `GenesisBlockBuilder` 校验创世块;这不是重新生成并写入链数据库,但会产生分钟级 CPU 成本。节点状态必须等 `chain_getBlockHash(0)` 成功后才从“创世准备中”进入“运行中”。
@@ -329,7 +329,7 @@
 - **风险场景**：节点桌面端启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，会将代签 RPC 暴露到外部网络。
 - **建议**：生产部署必须限制 RPC 绑定地址或加鉴权中间件；或改为节点桌面端本地签名后提交。
 
-矿工热钱包转账不复用上述裸 RPC 模式：`transaction_submitMinerTransfer` 必须携带进程内一次性令牌，令牌只在设备开机密码校验通过后由 Tauri 命令签发，RPC 调用后立即消费。
+矿工热钱包转账不复用上述裸 RPC 模式：`transaction_submitMinerTransfer` 必须携带进程内一次性令牌，并显式传入 `remark`；令牌只在设备开机密码校验通过后由 Tauri 命令签发，RPC 调用后立即消费。
 
 ### 12.2 空块策略仍与 runtime panic 耦合
 当前 `service.rs` 已要求：

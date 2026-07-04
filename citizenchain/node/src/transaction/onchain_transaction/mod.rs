@@ -1,4 +1,4 @@
-// 交易模块：冷钱包管理 + 链上转账（Balances::transfer_keep_alive）。
+// 交易模块：冷钱包管理 + 带备注链上转账（OnchainTransaction::transfer_with_remark）。
 //
 // 冷钱包仅存储 SS58 地址，签名通过 QR_V1 协议由离线设备完成。
 // 转账构建和提交复用 governance/signing.rs 中的通用基础设施。
@@ -17,6 +17,9 @@ use wallet_store::{ColdWallet, WalletKind, WalletStore};
 const LOCAL_MINER_WALLET_ID: &str = "local-miner-hot-wallet";
 const TRANSFER_RPC_TIMEOUT: Duration = Duration::from_secs(45);
 const EXISTENTIAL_DEPOSIT_FEN: u128 = 111; // 1.11 元
+const ONCHAIN_TRANSACTION_PALLET_INDEX: u8 = 4;
+const TRANSFER_WITH_REMARK_CALL_INDEX: u8 = 0;
+const MAX_TRANSFER_REMARK_BYTES: usize = 99;
 
 /// 转账签名请求结果（前端用于显示 QR 码）。
 #[derive(Debug, Serialize)]
@@ -67,6 +70,16 @@ fn amount_yuan_to_fen(amount_yuan: f64) -> Result<u128, String> {
 
 fn calculate_transfer_fee(amount_fen: u128) -> u128 {
     onchain_transaction::calculate_onchain_fee(amount_fen)
+}
+
+fn validate_transfer_remark(remark: &str) -> Result<(), String> {
+    let len = remark.as_bytes().len();
+    if len > MAX_TRANSFER_REMARK_BYTES {
+        return Err(format!(
+            "转账备注不能超过 {MAX_TRANSFER_REMARK_BYTES} 字节，当前 {len} 字节"
+        ));
+    }
+    Ok(())
 }
 
 fn ensure_spendable_balance(
@@ -253,7 +266,7 @@ pub fn get_wallet_balance(pubkey_hex: String) -> Result<Option<String>, String> 
 
 // ──── 转账命令 ────
 
-/// 构建 Balances::transfer_keep_alive 签名请求。
+/// 构建 OnchainTransaction::transfer_with_remark 签名请求。
 ///
 /// 返回 QR 签名请求 JSON，前端显示 QR 码供离线设备扫码签名。
 #[tauri::command]
@@ -261,6 +274,7 @@ pub fn build_transfer_request(
     pubkey_hex: String,
     to_address: String,
     amount_yuan: f64,
+    remark: String,
 ) -> Result<TransferSignRequestResult, String> {
     // 校验发送方公钥
     let sender_clean = normalize_pubkey_hex(&pubkey_hex, "发送方公钥")?;
@@ -275,6 +289,7 @@ pub fn build_transfer_request(
     }
 
     let amount_fen = amount_yuan_to_fen(amount_yuan)?;
+    validate_transfer_remark(&remark)?;
 
     // 前端预估费和链上实扣费统一复用 runtime 手续费公式。
     let fee_fen = calculate_transfer_fee(amount_fen);
@@ -283,14 +298,7 @@ pub fn build_transfer_request(
     // 校验余额
     ensure_spendable_balance(&sender_clean, amount_fen, fee_fen)?;
 
-    // 构建 call_data: Balances::transfer_keep_alive
-    // pallet_index=2, call_index=3, MultiAddress::Id(0x00) + 32 bytes, Compact<u128>(amount_fen)
-    let mut call_data = Vec::with_capacity(70);
-    call_data.push(2u8); // Balances pallet index
-    call_data.push(3u8); // transfer_keep_alive call index
-    call_data.push(0x00); // MultiAddress::Id variant
-    call_data.extend_from_slice(&dest_pubkey);
-    call_data.extend_from_slice(&encode_compact_u128(amount_fen));
+    let call_data = build_transfer_with_remark_call(&dest_pubkey, amount_fen, &remark)?;
 
     // 获取链上参数并构建签名载荷
     let result =
@@ -342,6 +350,7 @@ pub async fn submit_miner_transfer(
     app: tauri::AppHandle,
     to_address: String,
     amount_yuan: f64,
+    remark: String,
     unlock_password: String,
 ) -> Result<TransferSubmitResult, String> {
     if let Err(e) = security::append_audit_log(&app, "submit_miner_transfer", "attempt") {
@@ -354,7 +363,7 @@ pub async fn submit_miner_transfer(
 
     let app_for_task = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        submit_miner_transfer_inner(&app_for_task, to_address, amount_yuan)
+        submit_miner_transfer_inner(&app_for_task, to_address, amount_yuan, remark)
     })
     .await
     .map_err(|e| format!("矿工热钱包签名任务失败: {e}"))?;
@@ -380,6 +389,7 @@ fn submit_miner_transfer_inner(
     app: &tauri::AppHandle,
     to_address: String,
     amount_yuan: f64,
+    remark: String,
 ) -> Result<TransferSubmitResult, String> {
     let miner_wallet =
         local_miner_wallet(app)?.ok_or("未找到矿工热钱包，请先启动节点生成矿工密钥")?;
@@ -391,6 +401,7 @@ fn submit_miner_transfer_inner(
     }
 
     let amount_fen = amount_yuan_to_fen(amount_yuan)?;
+    validate_transfer_remark(&remark)?;
     let fee_fen = calculate_transfer_fee(amount_fen);
     ensure_spendable_balance(&miner_wallet.pubkey_hex, amount_fen, fee_fen)?;
 
@@ -398,7 +409,12 @@ fn submit_miner_transfer_inner(
     let auth_token = crate::core::rpc::issue_miner_transfer_token()?;
     let result = rpc::rpc_post(
         "transaction_submitMinerTransfer",
-        serde_json::json!([to_address, amount_fen.to_string(), auth_token.clone()]),
+        serde_json::json!([
+            to_address,
+            amount_fen.to_string(),
+            remark,
+            auth_token.clone()
+        ]),
         TRANSFER_RPC_TIMEOUT,
         RPC_RESPONSE_LIMIT_SMALL,
     );
@@ -418,29 +434,41 @@ fn submit_miner_transfer_inner(
 
 // ──── 编码工具 ────
 
-/// SCALE Compact<u128> 编码。
-fn encode_compact_u128(value: u128) -> Vec<u8> {
+/// 构造 OnchainTransaction::transfer_with_remark 的 SCALE 编码 call data。
+///
+/// 格式：[pallet=4][call=0][beneficiary:AccountId32][amount:u128_le][remark:BoundedVec<u8>]
+fn build_transfer_with_remark_call(
+    dest_pubkey: &[u8],
+    amount_fen: u128,
+    remark: &str,
+) -> Result<Vec<u8>, String> {
+    if dest_pubkey.len() != 32 {
+        return Err("收款账户公钥长度无效".to_string());
+    }
+    validate_transfer_remark(remark)?;
+
+    let remark_bytes = remark.as_bytes();
+    let remark_len = encode_compact_u32(remark_bytes.len() as u32);
+    let mut call_data = Vec::with_capacity(2 + 32 + 16 + remark_len.len() + remark_bytes.len());
+    call_data.push(ONCHAIN_TRANSACTION_PALLET_INDEX);
+    call_data.push(TRANSFER_WITH_REMARK_CALL_INDEX);
+    call_data.extend_from_slice(dest_pubkey);
+    call_data.extend_from_slice(&amount_fen.to_le_bytes());
+    call_data.extend_from_slice(&remark_len);
+    call_data.extend_from_slice(remark_bytes);
+    Ok(call_data)
+}
+
+/// SCALE Compact<u32> 编码，用于备注字节长度。
+fn encode_compact_u32(value: u32) -> Vec<u8> {
     if value < 0x40 {
         vec![(value as u8) << 2]
     } else if value < 0x4000 {
-        let v = ((value as u16) << 2) | 0x01;
+        let v = (value << 2) | 0x01;
         vec![v as u8, (v >> 8) as u8]
-    } else if value < 0x4000_0000 {
-        let v = ((value as u32) << 2) | 0x02;
-        v.to_le_bytes().to_vec()
     } else {
-        // big-integer mode: 上 6 位 = (byte_count - 4), 下 2 位 = 0b11
-        let le_bytes = value.to_le_bytes();
-        // 找到最后一个非零字节确定实际长度
-        let byte_count = le_bytes
-            .iter()
-            .rposition(|&b| b != 0)
-            .map(|i| i + 1)
-            .unwrap_or(1);
-        let header = (((byte_count as u8 - 4) << 2) | 0x03) as u8;
-        let mut out = vec![header];
-        out.extend_from_slice(&le_bytes[..byte_count]);
-        out
+        let v = (value << 2) | 0x02;
+        v.to_le_bytes().to_vec()
     }
 }
 
@@ -470,39 +498,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compact_u128_single_byte() {
-        assert_eq!(encode_compact_u128(0), vec![0x00]);
-        assert_eq!(encode_compact_u128(1), vec![0x04]);
-        assert_eq!(encode_compact_u128(63), vec![0xfc]);
+    fn compact_u32_single_byte() {
+        assert_eq!(encode_compact_u32(0), vec![0x00]);
+        assert_eq!(encode_compact_u32(1), vec![0x04]);
+        assert_eq!(encode_compact_u32(63), vec![0xfc]);
     }
 
     #[test]
-    fn compact_u128_two_bytes() {
-        assert_eq!(encode_compact_u128(64), vec![0x01, 0x01]);
-        assert_eq!(encode_compact_u128(16383), vec![0xfd, 0xff]);
+    fn compact_u32_two_bytes() {
+        assert_eq!(encode_compact_u32(64), vec![0x01, 0x01]);
+        assert_eq!(encode_compact_u32(16383), vec![0xfd, 0xff]);
     }
 
     #[test]
-    fn compact_u128_four_bytes() {
-        assert_eq!(encode_compact_u128(16384), vec![0x02, 0x00, 0x01, 0x00]);
-        assert_eq!(
-            encode_compact_u128(1_073_741_823),
-            vec![0xfe, 0xff, 0xff, 0xff]
-        );
+    fn transfer_with_remark_call_data_uses_onchain_transaction_pallet() {
+        let dest = [0xAAu8; 32];
+        let call =
+            build_transfer_with_remark_call(&dest, 25_000, "ok").expect("call data should build");
+
+        assert_eq!(&call[0..2], &[0x04, 0x00]);
+        assert_eq!(&call[2..34], &dest);
+        assert_eq!(&call[34..50], &25_000u128.to_le_bytes());
+        assert_eq!(call[50], 0x08); // Compact(2)
+        assert_eq!(&call[51..53], b"ok");
     }
 
     #[test]
-    fn compact_u128_big_integer() {
-        // 2^30 = 1_073_741_824:超出 4 字节 compact 上限(2^30-1),进入 big-integer 模式。
-        let result = encode_compact_u128(1_073_741_824);
-        assert_eq!(result[0] & 0x03, 0x03); // big-integer mode
-    }
-
-    #[test]
-    fn compact_u128_large_value() {
-        // 确保大金额不溢出
-        let result = encode_compact_u128(100_000_000_000_u128);
-        assert!(!result.is_empty());
-        assert_eq!(result[0] & 0x03, 0x03);
+    fn transfer_remark_rejects_more_than_99_bytes() {
+        let dest = [0xAAu8; 32];
+        let err = build_transfer_with_remark_call(&dest, 1, &"a".repeat(100))
+            .expect_err("overlong remark should be rejected");
+        assert!(err.contains("99"));
     }
 }

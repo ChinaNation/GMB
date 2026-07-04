@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -31,10 +32,17 @@ class OnchainPaymentService {
   }) async {
     final toAddress = draft.toAddress.trim();
     final symbol = draft.symbol.trim().toUpperCase();
+    final remarkBytes = utf8.encode(draft.remark).length;
     if (toAddress.isEmpty || symbol.isEmpty || draft.amount <= 0) {
       throw const OnchainPaymentException(
         OnchainPaymentErrorCode.invalidDraft,
         '交易草稿不合法，请检查收款地址、数量和币种',
+      );
+    }
+    if (remarkBytes > OnchainRpc.maxTransferRemarkBytes) {
+      throw OnchainPaymentException(
+        OnchainPaymentErrorCode.invalidDraft,
+        '转账备注不能超过 ${OnchainRpc.maxTransferRemarkBytes} 字节',
       );
     }
 
@@ -50,11 +58,12 @@ class OnchainPaymentService {
 
     ({String txHash, int usedNonce}) result;
     try {
-      result = await _onchainRpc.transferKeepAlive(
+      result = await _onchainRpc.transferWithRemark(
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         toAddress: toAddress,
         amountYuan: draft.amount,
+        remark: draft.remark,
         sign: sign,
         onWatchEvent: onWatchEvent,
       );

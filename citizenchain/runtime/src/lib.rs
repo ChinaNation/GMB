@@ -388,6 +388,10 @@ mod runtime {
     #[runtime::pallet_index(28)]
     pub type LegislationVote = legislation_vote;
 
+    // 公权选举业务模块骨架:只承载选举业务规则位置;投票流程归 election-vote。
+    #[runtime::pallet_index(34)]
+    pub type ElectionCampaign = election_campaign;
+
     // 公权机构管理员模块：含创世写入的固定治理机构运行期管理员治理。
     #[runtime::pallet_index(29)]
     pub type PublicAdmins = public_admins;

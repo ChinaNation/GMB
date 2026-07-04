@@ -8,7 +8,7 @@
 
 ## 触发链路
 
-1. 注册局管理员在 OnChina 发起公民投票身份上链交易。
+1. 注册局管理员在 OnChina 发起链上投票身份上链交易。
 2. `citizen-identity` 校验注册局权限、公民钱包签名、身份号和居住地作用域。
 3. 投票身份写入链上。
 4. `citizen-identity` 调用 `OnVotingIdentityRegistered::on_voting_identity_registered(who, cid_number_hash)`。

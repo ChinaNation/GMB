@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart' show Events, Hasher;
@@ -16,11 +17,13 @@ class _DecodedTransferEvent {
     required this.fromHex,
     required this.toHex,
     required this.amountFen,
+    this.remark,
   });
 
   final String fromHex;
   final String toHex;
   final String amountFen;
+  final String? remark;
 }
 
 /// 链上交易监控服务（本机增量流水模式）。
@@ -59,6 +62,8 @@ class ChainTxMonitor {
   /// Balances::Transfer (pallet=2, event=2)，仅作为 metadata 解码失败后的兜底。
   static const int _balancesPallet = 2;
   static const int _transferEvent = 2;
+  static const int _onchainTransactionPallet = 4;
+  static const int _transferWithRemarkEvent = 2;
 
   /// System.Events storage key（twox128("System") + twox128("Events")）。
   static final Uint8List _eventsStorageKey = _buildEventsKey();
@@ -318,6 +323,21 @@ class ChainTxMonitor {
 
       for (var index = 0; index < events.eventRecord.length; index++) {
         final record = events.eventRecord[index];
+        final transferWithRemark = _readTransferWithRemark(record.event);
+        if (transferWithRemark != null) {
+          final extrinsicIndex = _readExtrinsicIndex(record.phase);
+          await _writeTransferForBothSides(
+            fromHex: transferWithRemark.fromHex,
+            toHex: transferWithRemark.toHex,
+            transferAmountFen: transferWithRemark.amountFen,
+            blockNumber: blockNumber,
+            blockHash: blockHash,
+            eventRecordIndex: index,
+            extrinsicIndex: extrinsicIndex,
+            remark: transferWithRemark.remark,
+          );
+          continue;
+        }
         final transfer = _readBalancesTransfer(record.event);
         if (transfer == null) continue;
         final extrinsicIndex = _readExtrinsicIndex(record.phase);
@@ -392,6 +412,44 @@ class ChainTxMonitor {
           continue;
         }
       }
+      if (palletIndex == _onchainTransactionPallet &&
+          eventIndex == _transferWithRemarkEvent) {
+        // OnchainTransaction::TransferWithRemark { from, beneficiary, amount, remark }
+        if (offset + 81 <= data.length) {
+          final from = data.sublist(offset, offset + 32);
+          final to = data.sublist(offset + 32, offset + 64);
+          final amountBytes = data.sublist(offset + 64, offset + 80);
+          offset += 80;
+          final (remarkLen, remarkLenSize) = _decodeCompactU32(data, offset);
+          if (remarkLenSize == 0 ||
+              offset + remarkLenSize + remarkLen > data.length) {
+            break;
+          }
+          offset += remarkLenSize;
+          final remark = remarkLen == 0
+              ? null
+              : utf8.decode(
+                  data.sublist(offset, offset + remarkLen),
+                  allowMalformed: true,
+                );
+          offset += remarkLen;
+
+          await _writeTransferForBothSides(
+            fromHex: _hexEncode(from),
+            toHex: _hexEncode(to),
+            transferAmountFen: _readU128LE(amountBytes, 0).toString(),
+            blockNumber: blockNumber,
+            blockHash: blockHash,
+            eventRecordIndex: eventRecordIndex,
+            extrinsicIndex: extrinsicIndex,
+            remark: remark,
+          );
+
+          offset = _skipTopics(data, offset);
+          eventRecordIndex++;
+          continue;
+        }
+      }
 
       final skipped = _skipKnownEventPayload(data, offset, palletIndex,
           eventIndex: eventIndex);
@@ -415,6 +473,7 @@ class ChainTxMonitor {
     required String blockHash,
     required int eventRecordIndex,
     required int? extrinsicIndex,
+    String? remark,
   }) async {
     if (fromHex == toHex) return;
     final fromBytes = _hexDecode(fromHex);
@@ -430,6 +489,7 @@ class ChainTxMonitor {
       fromAddress: _pubkeyToSs58(fromBytes),
       toAddress: _walletAddressByPubkey[toHex] ?? _pubkeyToSs58(toBytes),
       counterpartyAddress: _pubkeyToSs58(fromBytes),
+      remark: remark,
     );
 
     await _writeWalletTransferIfMatched(
@@ -443,6 +503,51 @@ class ChainTxMonitor {
       fromAddress: _walletAddressByPubkey[fromHex] ?? _pubkeyToSs58(fromBytes),
       toAddress: _pubkeyToSs58(toBytes),
       counterpartyAddress: _pubkeyToSs58(toBytes),
+      remark: remark,
+    );
+  }
+
+  _DecodedTransferEvent? _readTransferWithRemark(Map<String, dynamic> event) {
+    final onchain = event['OnchainTransaction'] ?? event['onchainTransaction'];
+    if (onchain is! Map) return null;
+    final transfer = onchain['TransferWithRemark'] ??
+        onchain['transferWithRemark'] ??
+        onchain['transfer_with_remark'];
+    if (transfer == null) return null;
+
+    dynamic from;
+    dynamic to;
+    dynamic amount;
+    dynamic remark;
+    if (transfer is Map) {
+      from = transfer['from'] ?? transfer['0'];
+      to = transfer['beneficiary'] ?? transfer['to'] ?? transfer['1'];
+      amount = transfer['amount'] ?? transfer['2'];
+      remark = transfer['remark'] ?? transfer['3'];
+      if ((from == null || to == null || amount == null || remark == null) &&
+          transfer.values.length >= 4) {
+        final values = transfer.values.toList(growable: false);
+        from ??= values[0];
+        to ??= values[1];
+        amount ??= values[2];
+        remark ??= values[3];
+      }
+    } else if (transfer is List && transfer.length >= 4) {
+      from = transfer[0];
+      to = transfer[1];
+      amount = transfer[2];
+      remark = transfer[3];
+    }
+
+    final fromHex = _accountToPubkeyHex(from);
+    final toHex = _accountToPubkeyHex(to);
+    final amountFen = _eventAmountToFen(amount);
+    if (fromHex == null || toHex == null || amountFen == null) return null;
+    return _DecodedTransferEvent(
+      fromHex: fromHex,
+      toHex: toHex,
+      amountFen: amountFen,
+      remark: _eventRemarkToString(remark),
     );
   }
 
@@ -518,6 +623,33 @@ class ChainTxMonitor {
     return null;
   }
 
+  String? _eventRemarkToString(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is Uint8List) {
+      return raw.isEmpty ? null : utf8.decode(raw, allowMalformed: true);
+    }
+    if (raw is List) {
+      final bytes = raw.whereType<int>().toList(growable: false);
+      return bytes.isEmpty ? null : utf8.decode(bytes, allowMalformed: true);
+    }
+    if (raw is Map) {
+      final bytes = raw.values.whereType<int>().toList(growable: false);
+      if (bytes.isNotEmpty) {
+        return utf8.decode(bytes, allowMalformed: true);
+      }
+    }
+    if (raw is String) {
+      final text = raw.trim();
+      if (text.isEmpty) return null;
+      if (RegExp(r'^0x[0-9a-fA-F]*$').hasMatch(text)) {
+        final bytes = _hexDecode(text.substring(2));
+        return bytes.isEmpty ? null : utf8.decode(bytes, allowMalformed: true);
+      }
+      return raw;
+    }
+    return raw.toString();
+  }
+
   int? _skipKnownEventPayload(
     Uint8List data,
     int offset,
@@ -539,6 +671,10 @@ class ChainTxMonitor {
     if (palletIndex == 4 && eventIndex == 0) {
       return oneAccountAndAmount;
     }
+    // OnchainTransaction::FeeShareBurnt { reason: BurnReason, amount: u128 }
+    if (palletIndex == 4 && eventIndex == 1) {
+      return offset + 17 <= data.length ? offset + 17 : null;
+    }
     return null;
   }
 
@@ -553,6 +689,7 @@ class ChainTxMonitor {
     required String fromAddress,
     required String toAddress,
     required String counterpartyAddress,
+    String? remark,
   }) async {
     final pubkey = LocalTxStore.normalizePubkey(walletPubkeyHex);
     final walletAddress = _walletAddressByPubkey[pubkey];
@@ -577,6 +714,7 @@ class ChainTxMonitor {
       blockHash: blockHash,
       eventIndex: eventRecordIndex,
       extrinsicIndex: extrinsicIndex,
+      remark: remark,
     );
 
     try {

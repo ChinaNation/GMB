@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -97,6 +98,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   final OnchainPaymentService _paymentService = OnchainPaymentService();
   final TextEditingController _toController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _remarkController = TextEditingController();
   final String _selectedSymbol = 'GMB';
 
   WalletProfile? _currentWallet;
@@ -114,14 +116,22 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     if (widget.initialToAddress != null) {
       _toController.text = widget.initialToAddress!;
     }
+    _remarkController.addListener(_onRemarkChanged);
     _bootstrap();
   }
 
   @override
   void dispose() {
+    _remarkController.removeListener(_onRemarkChanged);
     _toController.dispose();
     _amountController.dispose();
+    _remarkController.dispose();
     super.dispose();
+  }
+
+  void _onRemarkChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _bootstrap() async {
@@ -335,6 +345,18 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       ).showSnackBar(const SnackBar(content: Text('金额格式不正确')));
       return;
     }
+    final remark = _remarkController.text;
+    final remarkBytes = utf8.encode(remark).length;
+    if (remarkBytes > OnchainRpc.maxTransferRemarkBytes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '转账备注不能超过 ${OnchainRpc.maxTransferRemarkBytes} 字节，当前 $remarkBytes 字节',
+          ),
+        ),
+      );
+      return;
+    }
 
     // 预估手续费，展示确认对话框
     final estimatedFee = OnchainRpc.estimateTransferFeeYuan(amount);
@@ -362,6 +384,10 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           children: [
             Text(
                 '转账金额：${AmountFormat.format(amount, symbol: _selectedSymbol)}'),
+            if (remark.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text('转账备注：$remark'),
+            ],
             const SizedBox(height: 4),
             Text(
                 '预估手续费：${AmountFormat.format(estimatedFee, symbol: _selectedSymbol)}'),
@@ -410,7 +436,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
             requestId: requestId,
             pubkey: '0x${wallet.pubkeyHex}',
             payloadHex: '0x${_toHex(payload)}',
-            action: QrActions.balancesTransfer,
+            action: QrActions.transferWithRemark,
           );
           final requestJson = qrSigner.encodeRequest(request);
 
@@ -456,6 +482,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           toAddress: toAddress,
           amount: amount,
           symbol: _selectedSymbol,
+          remark: remark,
         ),
         sign: signCallback,
         onWatchEvent: handleWatchEvent,
@@ -472,6 +499,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       ).showSnackBar(SnackBar(content: Text('签名成功，交易已发送，tx=$txHash')));
       _toController.clear();
       _amountController.clear();
+      _remarkController.clear();
 
       // 写入本地交易记录（失败不影响交易）
       try {
@@ -490,6 +518,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           counterpartyAddress: toAddress,
           fromAddress: _currentWallet!.address,
           toAddress: toAddress,
+          remark: remark,
           usedNonce: result.usedNonce,
           createdAtMillis: DateTime.now().millisecondsSinceEpoch,
           blockHash: includedBlockHash,
@@ -637,6 +666,20 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _remarkController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: '转账备注',
+                helperText:
+                    '$_transferRemarkBytes/${OnchainRpc.maxTransferRemarkBytes} 字节',
+                errorText:
+                    _transferRemarkBytes > OnchainRpc.maxTransferRemarkBytes
+                        ? '备注不能超过 ${OnchainRpc.maxTransferRemarkBytes} 字节'
+                        : null,
+              ),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -812,6 +855,8 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     });
   }
 
+  int get _transferRemarkBytes => utf8.encode(_remarkController.text).length;
+
   bool get _canSubmit =>
       !_submitting &&
       !_loadingWallet &&
@@ -821,6 +866,9 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   String? get _submitBlockedReason {
     if (_submitting || _loadingWallet || _currentWallet == null) {
       return null;
+    }
+    if (_transferRemarkBytes > OnchainRpc.maxTransferRemarkBytes) {
+      return '转账备注不能超过 ${OnchainRpc.maxTransferRemarkBytes} 字节';
     }
 
     final progress = _chainProgress;

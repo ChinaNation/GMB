@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { sanitizeError } from '../../core/tauri';
 import { transactionApi as api } from './api';
-import type { ColdWallet, WalletStore } from './types';
+import type { ColdWallet, TransferDraft, WalletStore } from './types';
 import { WalletManagerModal } from './WalletManagerModal';
 import { TransferForm } from './TransferForm';
 import { TransferSigningFlow } from './TransferSigningFlow';
@@ -11,7 +11,7 @@ export function TransactionPanel() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
   const [showWalletModal, setShowWalletModal] = useState(false);
-  const [signingFlow, setSigningFlow] = useState<{ toAddress: string; amountYuan: number } | null>(null);
+  const [signingFlow, setSigningFlow] = useState<TransferDraft | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,8 +51,8 @@ export function TransactionPanel() {
     setBalance(balanceFen);
   }, []);
 
-  const handleTransferSubmit = useCallback((toAddress: string, amountYuan: number) => {
-    setSigningFlow({ toAddress, amountYuan });
+  const handleTransferSubmit = useCallback((toAddress: string, amountYuan: number, remark: string) => {
+    setSigningFlow({ toAddress, amountYuan, remark });
   }, []);
 
   const handleTransferSuccess = useCallback((txHash: string) => {
@@ -86,6 +86,7 @@ export function TransactionPanel() {
           wallet={activeWallet}
           toAddress={signingFlow.toAddress}
           amountYuan={signingFlow.amountYuan}
+          remark={signingFlow.remark}
           onClose={() => setSigningFlow(null)}
           onSuccess={handleTransferSuccess}
         />

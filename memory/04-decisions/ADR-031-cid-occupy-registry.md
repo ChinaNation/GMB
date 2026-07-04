@@ -2,7 +2,7 @@
 
 ## 标题
 
-CID 号以链上写入时原子查重为唯一仲裁:校验单源、占号先行、墓碑不删、幂等续用;当前国家/省/市公权机构创世直铸(常量 294 + 模板派生 49,299 = 49,593),零交易;镇级公权机构、国家/省/市新增公权机构、私权机构与公民均走运行期注册/占号先行流程。
+CID 号以链上写入时原子查重为唯一仲裁:校验单源、占号先行、墓碑不删、幂等续用;当前国家/省/市公权机构创世直铸(常量 296 + 模板派生 49,297 = 49,593),零交易;镇级公权机构、国家/省/市新增公权机构、私权机构与公民均走运行期注册/占号先行流程。
 
 > v1(2026-07-02)为批量交易上链方案;v2(2026-07-03)为扩大创世范围方案;v3(2026-07-04)按用户最终口径改为创世到国家/省/市,镇级和新增机构运行期注册。历史推演见 git 历史与 `memory/08-tasks/` 卡片。
 
@@ -21,7 +21,7 @@ CID 号以链上写入时原子查重为唯一仲裁:校验单源、占号先行
 |---|---|
 | **卡1 链端统一校验**(done/20260702-cid-occupy-card1) | ✅ citizen-identity 修 `starts_with(b"CTZN")` CRITICAL(真实号 `GD000-CTZN1-…` 曾被全拒);public/private-manage register/create 四入口接 `parse_cid_number_parts_bytes` + 家族断言(`is_person_code`=CTZN / `is_public_legal_code` / `is_private_legal_code`‖`is_unincorporated_code`)+ create 号码↔`institution_code` 参数一致;新增 `Error::InvalidCidNumber`;全仓夹具换真号 + 3 个家族拒绝用例;受影响 crate 测试全绿 |
 | 码表 104 定稿 | ✅ 四级完整即制度设计:镇无立法/教委、省无省教委/省公安厅;2026-07-04 按宪法补齐 12 个国家级公权机构码后为 A 国家 38/B 省 17/C 市 17/D 镇 14/E 私权 7/F 教育 6/G 个人 3/UNIN/PMUL |
-| 命名规则定稿并程序验证 | ✅ 单源 = 确定性模板 gov-deterministic-v8:**简称 = 行政区显示名 + suffix,全称 = 行政区显示名 + full_suffix**;294 常量逆向验证零例外;模板覆盖 C 17/T 14/省部门 11/国家 NSN·NRP 全齐 |
+| 命名规则定稿并程序验证 | ✅ 单源 = 确定性模板 gov-deterministic-v8:**cid_short_name = 行政区显示名 + cid_short_name_suffix,cid_full_name = 行政区显示名 + cid_full_name_suffix**;296 常量逆向验证零例外;模板覆盖 C 17/T 14/省部门 11,国家 NSN/NRP 已归入 `china_lf.rs` 常量 |
 | 嵌入式库清理 | ✅ 删旧公权 245,629(+账户 491,258+gov 目录);87 储备机构(NRC/PRC/PRB)对齐常量库(号/全称/简称/码/五类账户);旧码零残留 |
 | 行政区真源 | china.sqlite:43 省 / 2,872 市 / 39,087 镇 |
 
@@ -62,13 +62,13 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 
 ### 4.1 数据源(单源迁移,不进 chainspec)
 
-- **模板表搬家**:`OfficialOrgTemplate { institution_code, suffix, full_suffix }`(国家 NSN/NRP + 省部门 11 + 市 17 + 镇 14)从 onchina `gov/service.rs` 迁入 `primitives`,onchina 改引用——创世派生与运行期注册共用同一命名真源,杜绝漂移。
+- **模板表搬家**:`OfficialOrgTemplate { institution_code, cid_short_name_suffix, cid_full_name_suffix }`(省部门 11 + 市 17 + 镇 14)从 onchina `gov/service.rs` 迁入 `primitives`,onchina 改引用——创世派生与运行期注册共用同一命名真源;国家 NSN/NRP 固定在 `china_lf.rs` 常量中。
 - **行政区常量表**:2,872 市 + 39,087 镇(code+显示名,约 2MB)由 china.sqlite 导出生成编进 primitives(幂等导出工具 + 一致性校验)。
 
 ### 4.2 创世构建(genesis/institution.rs)
 
-- 常量 294:全量遍历 7 个 `china_*` 数组写入;NJD/FRG 管理员特例保留;2026-07-04 已补入 FDA/NGB/ARM/NAV/AIR/SPF/JOS/ARC/NVC/AFC/SFC/NGC 12 个宪法国家级机构。
-- 模板派生 49,299:国家两院 2 + 省级部门 473 + 市级 48,824。号 = 生成器现场派生,主/费账户 = `derive_duoqian_account` 现场派生,名称 = 模板组装;与 294 共用 `insert_public_institution`;创世机构不带管理员(后续走联邦特权直设市管理员既有通道)。
+- 常量 296:全量遍历 7 个 `china_*` 数组写入;NJD/FRG 管理员特例保留;2026-07-04 已补入 12 个宪法国家级机构,并将 NSN/NRP 固定到 `CHINA_LF`。
+- 模板派生 49,297:省级部门 473 + 市级 48,824。号 = 生成器现场派生,主/费账户 = `derive_duoqian_account` 现场派生,名称 = 模板组装;与 296 常量共用 `insert_public_institution`;创世机构不带管理员(后续走联邦特权直设市管理员既有通道)。
 - 镇级 547,218 不进创世:注册局在运行期按实际设立需要注册上链,同时写入 `town_code` 作为链上机构信息的一部分。
 - 构建期逐号断言 `parse_cid_number_parts` + `is_public_legal_code`,坏号创世构建即 panic(fail-fast)。
 
@@ -82,14 +82,13 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
   - 当前 plain spec 启动仍会触发 Substrate `GenesisBlockBuilder` 做创世存储校验,不是重新写库,但仍有分钟级 CPU 成本;RPC ready 前 UI 必须保持“创世准备中”。
 - CitizenApp/smoldot:chainspec 用 `stateRootHash` 轻形态,公权机构目录用“创世快照缓存 + 链投影增量更新”。
 - 重新创世部署(6 节点 mesh);创世后重跑 CitizenApp 公权机构快照包生成器(死规则:否则机构全断)。
-- 2026-07-04 旧全量镇级创世资产已废弃;本轮已用 `origin/main` GitHub `CitizenChain WASM` artifact 正式 bake: `genesis_hash=0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`、`state_root=0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0`、`public_institution_root=4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`。
+- 2026-07-04 旧全量镇级创世资产已废弃;上一轮 49,593 bake 使用 GitHub `CitizenChain WASM` run `28700551692` artifact: `genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`、`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`、`public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`。本轮 NSN/NRP 常量化与 FDA 全称修正会改变创世状态,正式发布前必须重新 bake;端上快照已先同步 FDA 名称,当前本地 `public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。旧 49,581 根 `4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318` 仅作历史对照,不得作为当前发布锚点。
 
 ### 4.4 规模账(终态)
 
 | 层 | 构成 | 数量 |
 |---|---|---|
-| 常量直铸 | 国家单体+联邦部委署局+新增宪法国家级机构+省核心治理 6 类×43 | 294 |
-| 模板派生 | 国家参众议会 NSN/NRP | 2 |
+| 常量直铸 | 国家单体+国家参众议会+联邦部委署局+新增宪法国家级机构+省核心治理 6 类×43 | 296 |
 | 模板派生 | 省级部门 11 类 × 43 省 | 473 |
 | 模板派生 | 市级 17 类 × 2,872 市 | 48,824 |
 | 非创世运行期注册 | 镇级 14 类 × 39,087 镇 | 547,218 |
@@ -155,4 +154,4 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 - 2026-07-03:Q1-Q5 已决;卡1 完成归档;命名规则统一并验证;v2 曾定为扩大创世范围。
 - 2026-07-03:**卡2 链端完成**(§3.1 CidRegistry+occupy/batch/revoke、§3.2 机构 Closed 墓碑+register 缺口封堵、§3.3 费类 Free)——citizen-identity 21/21、entity 34+34、citizen-issuance 12+5、runtime 30/30 全绿;全 runtime benchmarks 编译过(顺修 4 处既有断链)。
 - 2026-07-03:**卡2 完工(onchina 侧 D6/D7/D8 完成,归档 done/)**——`core/chain_submit.rs`(组装+dry-run+提交+等进块+区块回查,QR 只签不提交)、`domains/citizens/occupy.rs`(两阶段占号 prepare/submit,nonce 碰撞重试+承诺哈希幂等续用+吊销墓碑,`chain_sign_sessions` 会话表)、D8 提交路径同步回写 onchain_* + `cid_registry_lookup` 链上预查、chain_identity complete 切 D7 会话、前端 useChainSign+两阶段 api+建档/吊销 UI;onchina 134 测试全绿、前端 tsc+build 过、node 不受影响。
-- 2026-07-04:**卡3 口径更新为 v3**——`official_derive` 创世枚举只含国家/省/市,直铸 294+49,299=**49,593**;镇级模板保留给注册局运行期注册,并通过 `town_code` 入链。随后补齐 12 个宪法国家级机构进入 `CHINA_ZF` 与创世常量,`china_zb` 制度保留地址同步增至 633。
+- 2026-07-04:**卡3 口径更新为 v3**——`official_derive` 创世枚举只含省/市模板,直铸 296+49,297=**49,593**;镇级模板保留给注册局运行期注册,并通过 `town_code` 入链。12 个宪法国家级机构进入 `CHINA_ZF`;国家 NSN/NRP 进入 `CHINA_LF`;`china_zb` 制度保留地址同步增至 637。

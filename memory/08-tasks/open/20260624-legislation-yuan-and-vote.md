@@ -12,7 +12,7 @@
 ## 总体架构(两个新 pallet)
 
 - 业务壳 `citizenchain/runtime/public/legislation-yuan`(pallet_index=27,MODULE_TAG=b"leg-yuan"):法律数据 + 状态机 + 提案入口 + 通过回调 + 查询 API。
-- 投票 sub-pallet `citizenchain/runtime/votingengine/legislation-vote`(pallet_index 暂 28):立法专属投票,复用投票引擎核心共享基础,只本地存计票账本;不改 internal-vote / joint-vote / citizen-vote。
+- 投票 sub-pallet `citizenchain/runtime/votingengine/legislation-vote`(pallet_index 暂 28):立法专属投票,复用投票引擎核心共享基础,只本地存计票账本;不改 internal-vote / joint-vote / election-vote。
 - 解耦:业务壳 `Config` 注入 `type LegislationVoteEngine`,第1步装 `()`(返 NotConfigured),第2步装 `LegislationVote`。
 
 ## 第1步:立法院模块(legislation-yuan 业务壳)

@@ -700,7 +700,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           ],
           if (_meta?.stage == 2) ...[
             const SizedBox(height: 16),
-            _buildCitizenVotingProgress(),
+            _buildJointReferendumProgress(),
           ],
         ],
       ),
@@ -1083,7 +1083,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     );
   }
 
-  Widget _buildCitizenVotingProgress() {
+  Widget _buildJointReferendumProgress() {
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -1132,7 +1132,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   /// 联合公投阶段判断
-  bool get _citizenVoteOpen =>
+  bool get _jointReferendumOpen =>
       (_meta?.status == 0) && (_meta?.stage == 2) && _resolvedStatusCode() == 0;
 
   Widget? _buildBottomBar() {
@@ -1142,8 +1142,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       return _buildVoteButtons();
     }
     // 联合公投阶段：所有用户显示投票按钮（链上公民身份校验后续完善）
-    if (_citizenVoteOpen) {
-      return _buildCitizenVoteButtons();
+    if (_jointReferendumOpen) {
+      return _buildJointReferendumButtons();
     }
     // 非投票阶段但是管理员：显示禁用状态的投票按钮
     if (_isAdmin) {
@@ -1152,7 +1152,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     return null;
   }
 
-  Widget _buildCitizenVoteButtons() {
+  Widget _buildJointReferendumButtons() {
     return Container(
       padding: EdgeInsets.fromLTRB(
           16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
@@ -1182,7 +1182,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               Expanded(
                 child: ElevatedButton(
                   onPressed:
-                      _submitting ? null : () => _confirmCitizenVote(false),
+                      _submitting ? null : () => _confirmJointReferendumVote(false),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.danger,
                     foregroundColor: Colors.white,
@@ -1209,7 +1209,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               Expanded(
                 child: ElevatedButton(
                   onPressed:
-                      _submitting ? null : () => _confirmCitizenVote(true),
+                      _submitting ? null : () => _confirmJointReferendumVote(true),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.success,
                     foregroundColor: Colors.white,
@@ -1239,7 +1239,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     );
   }
 
-  void _confirmCitizenVote(bool approve) {
+  void _confirmJointReferendumVote(bool approve) {
     final label = approve ? '赞成' : '反对';
     showDialog<void>(
       context: context,
@@ -1256,7 +1256,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
-              _submitCitizenVote(approve);
+              _submitJointReferendumVote(approve);
             },
             child: Text(label),
           ),
@@ -1265,12 +1265,12 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     );
   }
 
-  Future<void> _submitCitizenVote(bool approve) async {
+  Future<void> _submitJointReferendumVote(bool approve) async {
     // 联合公投提交依赖链上 cast_referendum extrinsic，入口未开放前只提示状态。
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('公民投票功能开发中'),
+        content: Text('联合公投功能开发中'),
         backgroundColor: AppTheme.warning,
       ),
     );

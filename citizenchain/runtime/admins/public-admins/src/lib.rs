@@ -58,7 +58,7 @@ fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountI
     T::AccountId::decode(&mut &raw[..]).ok()
 }
 
-/// 联邦注册局省级治理组虚拟账户。
+/// 联邦注册局省行政区治理组虚拟账户。
 ///
 /// 该账户不是机构资金账户,只作为投票引擎的内部投票根账户使用。
 /// 同一省 5 名 FRG 管理员围绕此账户创建管理员更换提案,代码级固定阈值 3/5。
@@ -142,15 +142,15 @@ pub mod pallet {
     pub type AdminAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, AdminAccountOf<T>, OptionQuery>;
 
-    /// 联邦注册局省级管理员组：province_code -> 5 人管理员集合。
+    /// 联邦注册局省行政区管理员组：province_code -> 5 人管理员集合。
     ///
     /// FRG 总计 215 名管理员按 43 省拆成 43 个 5 人组。
-    /// 每个省级组单独作为内部投票根账户,换本省管理员只由本省 5 人组 3/5 投票。
+    /// 每个省行政区组单独作为内部投票根账户,换本省管理员只由本省 5 人组 3/5 投票。
     #[pallet::storage]
     pub type FederalRegistryProvinceGroups<T: Config> =
         StorageMap<_, Blake2_128Concat, ProvinceCode, AdminAccountOf<T>, OptionQuery>;
 
-    /// 联邦注册局省级管理员组账户反向索引：group_account -> province_code。
+    /// 联邦注册局省行政区管理员组账户反向索引：group_account -> province_code。
     #[pallet::storage]
     pub type FederalRegistryProvinceGroupAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, ProvinceCode, OptionQuery>;
@@ -245,7 +245,7 @@ pub mod pallet {
             threshold: u32,
             created: bool,
         },
-        /// 联邦注册局省级管理员组更换提案已发起。
+        /// 联邦注册局省行政区管理员组更换提案已发起。
         FederalRegistryProvinceAdminSetChangeProposed {
             proposal_id: u64,
             province_code: ProvinceCode,
@@ -297,9 +297,9 @@ pub mod pallet {
         DuplicateAdmin,
         /// 管理员账户生命周期写入缺少有效 votingengine 提案作用域
         InvalidAdminAccountLifecycleScope,
-        /// 联邦注册局管理员更换必须走省级 5 人组治理入口
+        /// 联邦注册局管理员更换必须走省行政区 5 人组治理入口
         FederalRegistryRequiresProvinceGroup,
-        /// 省级代码不存在或没有对应联邦注册局管理员组
+        /// 省行政区代码不存在或没有对应联邦注册局管理员组
         InvalidProvinceGroup,
     }
 
@@ -385,7 +385,7 @@ pub mod pallet {
             })
         }
 
-        /// 联邦注册局省级管理员组更换提案。
+        /// 联邦注册局省行政区管理员组更换提案。
         ///
         /// FRG 管理员按省分成 43 个 5 人组。本入口只允许
         /// 本省组内管理员发起本省组的管理员更换,投票引擎快照为该省 5 人组,
@@ -515,7 +515,7 @@ pub mod pallet {
             admins: &[T::AccountId],
             new_threshold: u32,
         ) -> DispatchResult {
-            // FRG 省级组是制度固定的 5 人治理单元；
+            // FRG 省行政区组是制度固定的 5 人治理单元；
             // 阈值来自代码级固定阈值 FRG=3，不会扩大到 215 人全局投票。
             ensure!(
                 admins.len() == FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE,

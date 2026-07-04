@@ -835,7 +835,7 @@ fn joint_vote_auto_rejects_institution_when_yes_is_no_longer_reachable() {
 }
 
 #[test]
-fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
+fn joint_stage_mutex_blocks_admin_set_mutation_until_referendum_stage() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
 
@@ -905,9 +905,9 @@ fn population_snapshot_can_be_prepared_for_each_joint_proposal() {
 }
 
 #[test]
-fn citizen_vote_allows_eligible_account() {
+fn joint_referendum_allows_eligible_account() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 100);
+        insert_joint_referendum_proposal(0, 10, 100);
 
         assert_ok!(<joint_vote::Pallet<Test>>::do_jointreferendum_vote(
             nrc_admin(0),
@@ -923,9 +923,9 @@ fn citizen_vote_allows_eligible_account() {
 }
 
 #[test]
-fn citizen_vote_same_account_can_only_vote_once_per_proposal() {
+fn joint_referendum_same_account_can_only_vote_once_per_proposal() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 100);
+        insert_joint_referendum_proposal(0, 10, 100);
 
         assert_ok!(<joint_vote::Pallet<Test>>::do_jointreferendum_vote(
             nrc_admin(0),
@@ -941,10 +941,10 @@ fn citizen_vote_same_account_can_only_vote_once_per_proposal() {
 }
 
 #[test]
-fn citizen_vote_same_account_can_vote_on_different_proposals() {
+fn joint_referendum_same_account_can_vote_on_different_proposals() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 100);
-        insert_citizen_proposal(1, 10, 100);
+        insert_joint_referendum_proposal(0, 10, 100);
+        insert_joint_referendum_proposal(1, 10, 100);
 
         assert_ok!(<joint_vote::Pallet<Test>>::do_jointreferendum_vote(
             nrc_admin(0),
@@ -960,9 +960,9 @@ fn citizen_vote_same_account_can_vote_on_different_proposals() {
 }
 
 #[test]
-fn citizen_vote_rejects_when_eligible_total_not_set_in_proposal() {
+fn joint_referendum_rejects_when_eligible_total_not_set_in_proposal() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 0, 100);
+        insert_joint_referendum_proposal(0, 0, 100);
 
         assert_noop!(
             <joint_vote::Pallet<Test>>::do_jointreferendum_vote(nrc_admin(0), 0, true),
@@ -972,9 +972,9 @@ fn citizen_vote_rejects_when_eligible_total_not_set_in_proposal() {
 }
 
 #[test]
-fn citizen_timeout_with_half_or_less_is_rejected() {
+fn joint_referendum_timeout_with_half_or_less_is_rejected() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 5);
+        insert_joint_referendum_proposal(0, 10, 5);
         joint_vote::ReferendumTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
         System::set_block_number(6);
 
@@ -992,9 +992,9 @@ fn citizen_timeout_with_half_or_less_is_rejected() {
 }
 
 #[test]
-fn citizen_timeout_is_auto_rejected_on_initialize() {
+fn joint_referendum_timeout_is_auto_rejected_on_initialize() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 5);
+        insert_joint_referendum_proposal(0, 10, 5);
         assert_ok!(VotingEngine::schedule_proposal_expiry(0, 5));
         joint_vote::ReferendumTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
 
@@ -1010,9 +1010,9 @@ fn citizen_timeout_is_auto_rejected_on_initialize() {
 }
 
 #[test]
-fn citizen_timeout_auto_registers_cleanup_and_clears_referendum_votes() {
+fn joint_referendum_timeout_auto_registers_cleanup_and_clears_referendum_votes() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 5);
+        insert_joint_referendum_proposal(0, 10, 5);
         assert_ok!(VotingEngine::schedule_proposal_expiry(0, 5));
 
         assert_ok!(<joint_vote::Pallet<Test>>::do_jointreferendum_vote(
@@ -1053,9 +1053,9 @@ fn citizen_timeout_auto_registers_cleanup_and_clears_referendum_votes() {
 }
 
 #[test]
-fn citizen_vote_rejects_ineligible_account() {
+fn joint_referendum_rejects_ineligible_account() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 100);
+        insert_joint_referendum_proposal(0, 10, 100);
         let outsider = AccountId32::new([7u8; 32]);
 
         assert_noop!(
@@ -1066,7 +1066,7 @@ fn citizen_vote_rejects_ineligible_account() {
 }
 
 #[test]
-fn citizen_vote_rejects_when_not_in_citizen_stage() {
+fn joint_referendum_rejects_when_not_in_referendum_stage() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal_for(nrc_admin(0), 10);
 
@@ -1078,9 +1078,9 @@ fn citizen_vote_rejects_when_not_in_citizen_stage() {
 }
 
 #[test]
-fn citizen_vote_passes_immediately_when_yes_exceeds_half() {
+fn joint_referendum_passes_immediately_when_yes_exceeds_half() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 100);
+        insert_joint_referendum_proposal(0, 10, 100);
         joint_vote::ReferendumTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
 
         assert_ok!(<joint_vote::Pallet<Test>>::do_jointreferendum_vote(
@@ -1097,7 +1097,7 @@ fn citizen_vote_passes_immediately_when_yes_exceeds_half() {
 #[test]
 fn delayed_cleanup_cleans_referendum_votes_after_retention() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 100);
+        insert_joint_referendum_proposal(0, 10, 100);
         joint_vote::ReferendumTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
 
         assert_ok!(<joint_vote::Pallet<Test>>::do_jointreferendum_vote(
@@ -1127,9 +1127,9 @@ fn delayed_cleanup_cleans_referendum_votes_after_retention() {
 }
 
 #[test]
-fn citizen_finalize_before_timeout_is_rejected() {
+fn joint_referendum_finalize_before_timeout_is_rejected() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 100);
+        insert_joint_referendum_proposal(0, 10, 100);
         System::set_block_number(100);
 
         assert_noop!(
@@ -1140,7 +1140,7 @@ fn citizen_finalize_before_timeout_is_rejected() {
 }
 
 #[test]
-fn citizen_pass_threshold_function_boundaries_are_correct() {
+fn joint_referendum_pass_threshold_function_boundaries_are_correct() {
     assert!(!joint_vote::is_jointreferendum_vote_passed(0, 0));
     assert!(!joint_vote::is_jointreferendum_vote_passed(5, 10));
     assert!(joint_vote::is_jointreferendum_vote_passed(6, 10));
@@ -1158,7 +1158,7 @@ fn citizen_pass_threshold_function_boundaries_are_correct() {
 }
 
 #[test]
-fn citizen_reject_threshold_function_boundaries_are_correct() {
+fn joint_referendum_reject_threshold_function_boundaries_are_correct() {
     // eligible_total=0 → 不否决（无意义）
     assert!(!joint_vote::is_jointreferendum_vote_rejected(0, 0));
     // 反对 4/10 = 40% < 50% → 不否决（赞成仍有可能 > 50%）
@@ -1205,7 +1205,7 @@ fn joint_vote_all_yes_passes_immediately() {
 }
 
 #[test]
-fn joint_vote_non_unanimous_moves_to_citizen_immediately_after_one_institution_rejects() {
+fn joint_vote_non_unanimous_moves_to_referendum_immediately_after_one_institution_rejects() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal_for(nrc_admin(0), 77);
         cast_joint_votes_until_finalized(proposal_id, nrc_pid(), true);
@@ -1229,7 +1229,7 @@ fn joint_vote_non_unanimous_moves_to_citizen_immediately_after_one_institution_r
 }
 
 #[test]
-fn joint_vote_timeout_moves_to_citizen_when_not_unanimous() {
+fn joint_vote_timeout_moves_to_referendum_when_not_unanimous() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal_for(nrc_admin(0), 88);
 
@@ -1258,7 +1258,7 @@ fn joint_vote_timeout_moves_to_citizen_when_not_unanimous() {
 }
 
 #[test]
-fn joint_vote_timeout_auto_moves_to_citizen_on_initialize() {
+fn joint_vote_timeout_auto_moves_to_referendum_on_initialize() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal_for(nrc_admin(0), 88);
 
@@ -1327,7 +1327,7 @@ fn joint_vote_callback_failure_rolls_back_final_status() {
 #[test]
 fn joint_vote_callback_failure_does_not_cleanup_referendum_votes() {
     new_test_ext().execute_with(|| {
-        insert_citizen_proposal(0, 10, 100);
+        insert_joint_referendum_proposal(0, 10, 100);
         joint_vote::ReferendumVotesByAccount::<Test>::insert(0, nrc_admin(0), true);
         set_joint_callback_should_fail(true);
 
@@ -1442,7 +1442,7 @@ fn auto_finalize_uses_pending_cursor_when_expiry_bucket_exceeds_per_block_limit(
         let expiry = end + 1;
         let total = 70u64;
         for proposal_id in 0..total {
-            insert_citizen_proposal(proposal_id, 10, end);
+            insert_joint_referendum_proposal(proposal_id, 10, end);
             assert_ok!(VotingEngine::schedule_proposal_expiry(proposal_id, end));
         }
 
@@ -1490,7 +1490,7 @@ fn cleanup_queue_processes_full_due_bucket_without_orphaning_remaining_items() {
             .try_into()
             .expect("cleanup queue should fit");
         for proposal_id in ids.iter().copied() {
-            insert_citizen_proposal(proposal_id, 10, 100);
+            insert_joint_referendum_proposal(proposal_id, 10, 100);
         }
         CleanupQueue::<Test>::insert(cleanup_block, ids);
 
@@ -1525,7 +1525,7 @@ fn terminal_status_rolls_back_when_cleanup_cannot_be_scheduled() {
     new_test_ext().execute_with(|| {
         let proposal_id = 9_999u64;
         let now = System::block_number();
-        insert_citizen_proposal(proposal_id, 10, now + 100);
+        insert_joint_referendum_proposal(proposal_id, 10, now + 100);
         fill_cleanup_schedule_window(now);
 
         assert_noop!(
@@ -1625,17 +1625,17 @@ fn retry_deadline_enters_pending_queue_when_reschedule_window_is_full() {
 fn delayed_cleanup_chunks_cleanup_across_blocks() {
     new_test_ext().execute_with(|| {
         let proposal_id = 42u64;
-        let citizen_accounts = [
+        let referendum_accounts = [
             AccountId32::new([201u8; 32]),
             AccountId32::new([202u8; 32]),
             AccountId32::new([203u8; 32]),
         ];
 
-        insert_citizen_proposal(proposal_id, 10, 100);
+        insert_joint_referendum_proposal(proposal_id, 10, 100);
         joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, nrc_pid(), true);
         joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, prc_pid(), true);
         joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, prb_pid(), true);
-        for account in citizen_accounts.iter() {
+        for account in referendum_accounts.iter() {
             joint_vote::ReferendumVotesByAccount::<Test>::insert(proposal_id, account, true);
         }
 
@@ -1662,7 +1662,7 @@ fn delayed_cleanup_chunks_cleanup_across_blocks() {
         }
 
         assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
-        for account in citizen_accounts.iter() {
+        for account in referendum_accounts.iter() {
             assert!(!joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
                 proposal_id,
                 account

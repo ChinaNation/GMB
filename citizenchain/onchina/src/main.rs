@@ -2451,7 +2451,7 @@ fn main() {
                 "/api/v1/app/voters/count",
                 get(domains::citizens::chain_joint_vote::app_voters_count),
             )
-            // ── 公民投票:提交交易前查询本地档案资格,链端资格由 citizen-identity 负责 ──
+            // ── 投票资格提示:提交交易前查询本地档案资格,链端资格由 citizen-identity 负责 ──
             .route(
                 "/api/v1/app/vote/eligibility",
                 post(domains::citizens::chain_vote::app_vote_eligibility),
@@ -2641,7 +2641,7 @@ async fn shutdown_signal() {
     }
 }
 
-// chain pull 端点(multisig_info / joint_vote / citizen_vote)无 attestor 鉴权需求,
+// chain pull 端点(multisig_info / joint_vote / vote_eligibility)无 attestor 鉴权需求,
 // 全局 rate limiter 防滥用,凭证签名本身就是反伪造保护。
 
 fn api_error(status: StatusCode, code: u32, message: &str) -> axum::response::Response {

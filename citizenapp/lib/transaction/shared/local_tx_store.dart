@@ -106,6 +106,7 @@ class LocalTxStore {
     required String toAddress,
     required int usedNonce,
     required int createdAtMillis,
+    String? remark,
     String? blockHash,
   }) async {
     final pubkey = normalizePubkey(walletPubkeyHex);
@@ -130,6 +131,7 @@ class LocalTxStore {
           ..counterpartyAddress = counterpartyAddress
           ..fromAddress = fromAddress
           ..toAddress = toAddress
+          ..remark = _mergeRemark(remark, existingPending.remark)
           ..status = _mergeStatus(existingPending.status, statusPending)
           ..source = 'local_submit'
           ..txHash = normalizedTxHash
@@ -165,6 +167,7 @@ class LocalTxStore {
         ..counterpartyAddress = counterpartyAddress
         ..fromAddress = fromAddress
         ..toAddress = toAddress
+        ..remark = _mergeRemark(remark, existingEvent?.remark)
         ..status = _mergeStatus(existingEvent?.status, statusPending)
         ..source = 'local_submit'
         ..txHash = normalizedTxHash
@@ -197,6 +200,7 @@ class LocalTxStore {
     required int eventIndex,
     int? extrinsicIndex,
     int? confirmedAtMillis,
+    String? remark,
   }) async {
     final pubkey = normalizePubkey(walletPubkeyHex);
     final normalizedBlockHash = normalizeBlockHash(blockHash);
@@ -216,6 +220,7 @@ class LocalTxStore {
           ..toAddress = existing.toAddress ?? toAddress
           ..counterpartyAddress =
               existing.counterpartyAddress ?? counterpartyAddress
+          ..remark = _mergeRemark(remark, existing.remark)
           ..blockNumber = blockNumber
           ..blockHash = normalizedBlockHash
           ..eventIndex = eventIndex
@@ -255,6 +260,7 @@ class LocalTxStore {
           ..toAddress = semanticExisting.toAddress ?? toAddress
           ..counterpartyAddress =
               semanticExisting.counterpartyAddress ?? counterpartyAddress
+          ..remark = _mergeRemark(remark, semanticExisting.remark)
           ..status = _mergeStatus(semanticExisting.status, status)
           ..blockNumber = blockNumber
           ..blockHash = normalizedBlockHash
@@ -289,6 +295,7 @@ class LocalTxStore {
         ..counterpartyAddress = counterpartyAddress
         ..fromAddress = fromAddress
         ..toAddress = toAddress
+        ..remark = _mergeRemark(remark, localSubmit?.remark)
         ..status = _mergeStatus(localSubmit?.status, status)
         ..source = localSubmit?.source ?? 'chain_event'
         ..blockNumber = blockNumber
@@ -332,6 +339,11 @@ class LocalTxStore {
     final currentRank = _statusRank(current);
     final incomingRank = _statusRank(incoming);
     return incomingRank >= currentRank ? incoming : (current ?? incoming);
+  }
+
+  static String? _mergeRemark(String? incoming, String? existing) {
+    final normalized = incoming == null || incoming.isEmpty ? null : incoming;
+    return normalized ?? existing;
   }
 
   static int _statusRank(String? status) {

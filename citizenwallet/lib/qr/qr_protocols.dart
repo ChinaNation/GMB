@@ -51,7 +51,7 @@ class QrActions {
   static const int runtimeUpgradeHash = 7;
   static const int imWalletBinding = 8;
 
-  static const int balancesTransfer = 0x0203;
+  static const int transferWithRemark = 0x0400;
   static const int personalCreate = 0x0700;
   static const int personalClose = 0x0701;
   static const int personalCleanupRejected = 0x0702;
@@ -116,7 +116,7 @@ class QrActions {
       action == developerDirectUpgrade;
 
   static int fromDecodedAction(String action) => switch (action) {
-        'transfer' => balancesTransfer,
+        'transfer' => transferWithRemark,
         'propose_create_personal' => personalCreate,
         'propose_close_personal' => personalClose,
         'cleanup_rejected_personal_proposal' => personalCleanupRejected,

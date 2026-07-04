@@ -801,7 +801,7 @@ impl JointCleanupHandler for () {
 }
 // 立法投票(legislation-vote)mode trait(ADR-027)
 // 核心 votingengine 按 PROPOSAL_KIND_LEGISLATION / STAGE_LEG_* 分发到这些 trait。
-// 三个投票 sub-pallet(internal/joint/citizen)逻辑零改动。
+// 内部/联合/选举投票 sub-pallet 逻辑零改动。
 /// 立法投票超时结算入口。legislation-vote sub-pallet 实现。
 /// 四阶段(ADR-027 修订 2026-06-25):内部表决(STAGE_LEG_HOUSE,单院一段/两院顺序两段)
 /// + 强制公投(STAGE_LEG_REFERENDUM)+ 行政签署(STAGE_LEG_SIGN)+ 三人会签(STAGE_LEG_OVERRIDE)。
@@ -816,7 +816,7 @@ pub trait LegislationProposalFinalizer<BlockNumber, AccountId> {
         proposal_id: u64,
     ) -> DispatchResult;
 
-    /// 行政签署阶段超时:市级(无 legislature)= 视为通过(PASSED);省/国级 = 退回三人会签。
+    /// 行政签署阶段超时:市行政区(无 legislature)= 视为通过(PASSED);省行政区/国家 = 退回三人会签。
     fn finalize_legislation_sign_timeout(
         _proposal: &crate::Proposal<BlockNumber, AccountId>,
         _proposal_id: u64,

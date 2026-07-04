@@ -229,7 +229,7 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
         assert_eq!(free, onchain_transaction::FeeChargeKind::Free);
 
         let transfer_call = RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
-            dest: sp_runtime::MultiAddress::Id(recipient),
+            dest: sp_runtime::MultiAddress::Id(recipient.clone()),
             value: 123,
         });
         let amount = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
@@ -240,6 +240,28 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
         assert_eq!(
             amount,
             onchain_transaction::FeeChargeKind::OnchainAmount(123)
+        );
+
+        let remark =
+            frame_support::BoundedVec::<u8, frame_support::traits::ConstU32<99>>::try_from(
+                b"ordinary transfer remark".to_vec(),
+            )
+            .expect("remark should fit");
+        let transfer_with_remark_call = RuntimeCall::OnchainTransaction(
+            onchain_transaction::pallet::Call::transfer_with_remark {
+                beneficiary: recipient,
+                amount: 456,
+                remark,
+            },
+        );
+        let amount_with_remark = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+            AccountId,
+            RuntimeCall,
+            Balance,
+        >>::fee_kind(&who, &transfer_with_remark_call);
+        assert_eq!(
+            amount_with_remark,
+            onchain_transaction::FeeChargeKind::OnchainAmount(456)
         );
 
         let internal_vote_call = RuntimeCall::InternalVote(internal_vote::pallet::Call::cast {
@@ -915,9 +937,9 @@ fn ordinary_account_allows_all_actions() {
 
 // ── 创世直铸全量断言(ADR-031 卡3 验收)──
 
-/// 创世直铸当前国家/省/市骨架:常量 294 + 模板派生 49,299 = 49,593,零交易;
-/// 镇级公权机构不进创世,运行期由注册局按 town_code 注册上链。
-/// 并抽查派生首条与链上登记逐字节一致、新补国家级机构入链、NJD 创世管理员在位。
+/// 创世直铸当前国家/省/市骨架:常量 296 + 模板派生 49,297 = 49,593,零交易;
+/// 镇行政区公权机构不进创世,运行期由注册局按 town_code 注册上链。
+/// 并抽查派生首条与链上登记逐字节一致、新补国家机构入链、NJD 创世管理员在位。
 #[test]
 fn genesis_public_institutions_full_mint_counts() {
     new_test_ext().execute_with(|| {
@@ -935,7 +957,7 @@ fn genesis_public_institutions_full_mint_counts() {
             total,
             builtin_count + primitives::cid::official_derive::public_institution_derived_count()
         );
-        assert_eq!(builtin_count, 294);
+        assert_eq!(builtin_count, 296);
 
         // 抽查:派生枚举首条必须与链上登记逐字节一致。
         let mut first: Option<(Vec<u8>, Vec<u8>, Vec<u8>)> = None;
@@ -954,7 +976,7 @@ fn genesis_public_institutions_full_mint_counts() {
         assert_eq!(info.cid_full_name.to_vec(), full);
         assert_eq!(info.cid_short_name.to_vec(), short);
 
-        // 抽查:本任务新增的国家级创世机构必须逐个入链,且机构码与 CID 段一致。
+        // 抽查:本任务新增的国家创世机构必须逐个入链,且机构码与 CID 段一致。
         let mut new_national_count = 0usize;
         for node in primitives::cid::china::china_zf::CHINA_ZF.iter().filter(|node| {
             matches!(
