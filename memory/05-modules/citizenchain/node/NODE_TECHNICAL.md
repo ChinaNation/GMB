@@ -76,7 +76,8 @@
 `genesis + 后续交易状态`;节点本地数据库只是链状态副本。
 
 - 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、44 个权威节点 bootnode、token 属性和协议 ID。
-- 创世链状态包：`citizenchain/scripts/bake-chainspec.sh` 在临时节点完成创世物化后导出 `target/chainspec/genesis-state/`,包含 `chains/citizenchain/db` 与 `manifest.json`。正式安装包把该目录作为 `genesis-state/` 资源内置。本轮改为国家/省/市创世 49,581 个公权机构后,正式 bake 锚点必须等待新的 `origin/main` CI WASM 成功再重新生成并回填;旧 2026-07-04 全量镇级 bake 锚点已废弃。
+- 创世链状态包：`citizenchain/scripts/bake-chainspec.sh` 在临时节点完成创世物化后导出 `target/chainspec/genesis-state/`,包含 `chains/citizenchain/db` 与 `manifest.json`。正式安装包把该目录作为 `genesis-state/` 资源内置。2026-07-04 本轮国家/省/市创世 49,581 个公权机构已用 `origin/main` 的 GitHub `CitizenChain WASM` artifact 正式 bake；旧全量镇级 bake 锚点已废弃。
+- 当前冻结锚点：`genesis_hash=0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`、`state_root=0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0`、`runtime_wasm_hash=70e6d1fd01b763628e8b595399487bdfe19191a44a4cfadd5255be0577b9310a`、`chainspec_hash=650c1ed8462a326e43394576eaa99f7533f9ee427cf1d80c58cd2922a82d7558`、`public_institution_root=4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`。
 - 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 加载冻结 plain JSON;[process/mod.rs](../../../../citizenchain/node/src/home/process/mod.rs) 首次启动时优先把内置 `genesis-state/chains/citizenchain/db` 复制到本机数据目录,没有内置包才回退到 runtime `GenesisBuilder` 本地物化。
 - 当前限制：即使已复制 `genesis-state` RocksDB,Substrate 启动仍会根据 plain spec 调 `GenesisBlockBuilder` 校验创世块;这不是重新生成并写入链数据库,但会产生分钟级 CPU 成本。节点状态必须等 `chain_getBlockHash(0)` 成功后才从“创世准备中”进入“运行中”。
 - 全网一致性保证：plain JSON、CI WASM、创世链状态包 manifest 中的 `genesis_hash/state_root/runtime_wasm_hash/chainspec_hash/public_institution_root` 必须一致;后续 runtime 升级一律走链上 `setCode`,不重写创世包。
@@ -86,7 +87,7 @@
 
 1. GitHub `CitizenChain WASM` CI 成功后,下载同一提交的 `citizenchain-wasm` artifact。
 2. 取 `citizenchain.compact.compressed.wasm` 作为创世 `:code` 字节源。
-3. 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>`。
+3. 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM> --public-institution-root <CitizenApp 公权快照根>`。
 4. 脚本必须通过 `check-constitution-genesis.py --expect-code-file <CI_WASM>` 校验,确认 `:code` 字节等于 CI WASM,公民宪法 `law_id=0`、v1 直接生效且无待生效版。
 5. 脚本生成三份发布输入:`citizenchain/node/chainspecs/citizenchain.plain.json`、`citizenapp/assets/chainspec.json`、`target/chainspec/genesis-state/`。
 6. 正式打包前必须把 `target/chainspec/genesis-state/` 放入 Tauri 资源 `genesis-state/`,或在验收时用 `CITIZENCHAIN_GENESIS_STATE_DIR` 指向该目录。

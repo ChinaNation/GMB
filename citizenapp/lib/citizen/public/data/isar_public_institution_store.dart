@@ -30,7 +30,7 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
     return WalletIsar.instance.writeTxn(action);
   }
 
-  /// 单事务批量上限:大数据包(数十万条)分块写,避免巨型事务卡 UI / 占内存。
+  /// 单事务批量上限:创世快照和后续增量都分块写,避免巨型事务卡 UI / 占内存。
   static const int _upsertChunk = 2000;
 
   @override

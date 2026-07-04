@@ -10,8 +10,8 @@
 // App 启动后按省级 manifest_version 做本地 reconcile:只写变化行,并删除包内已消失的 cid。
 // 快照只作本地缓存,公权机构唯一真源仍是链上状态。
 //
-// 量级:确定性目录到镇级,单省上万、全国数十万。**必须用 keyset**(after_cid),
-// 否则 OFFSET 深翻 O(n²) 会非常慢。
+// 量级:创世快照只含国家/省/市公权机构,镇级和新增机构由注册局运行期上链后增量同步。
+// 即使当前快照为 49,581 条,仍必须用 keyset(after_cid),避免以后增量扩容时 OFFSET 深翻 O(n²)。
 //
 // 用法(需 OnChina 后端在跑):
 //   ONCHINA_BASE_URL=https://onchina.local:8964 node tools/generate_public_institution_bundle.mjs

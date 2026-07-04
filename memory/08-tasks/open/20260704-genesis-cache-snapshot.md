@@ -80,21 +80,20 @@
 - `node --check citizenapp/tools/generate_public_institution_bundle.mjs`:通过。
 - `npm --prefix citizenchain/node/frontend run build`:通过,并重新生成 `citizenchain/node/frontend/generated/local-docs.generated.ts`。
 - `flutter test test/citizen/public/public_institution_bundle_loader_test.dart test/citizen/public/public_institution_sync_test.dart`:通过。
-- `bash citizenapp/scripts/check-chainspec-frozen.sh`:通过;当前 `citizenapp/assets/chainspec.json` 仍是旧 raw 资产,脚本按代码 CI 阶段给出 warning,正式发包需 `CITIZENAPP_REQUIRE_STATE_ROOT=1`。
+- `bash citizenapp/scripts/check-chainspec-frozen.sh`:通过;正式 `citizenapp/assets/chainspec.json` 已切换为 `stateRootHash` 轻形态。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p node -p onchina`:通过;输出 Polkadot SDK 既有循环提示,无编译错误。
-- 旧 GitHub WASM 与旧 bake 验收记录已废弃;本轮改为国家/省/市创世 49,581 个公权机构后,必须等待新的 `origin/main` CI WASM 成功再重新 bake 正式创世状态包。
-- 旧 `genesis_hash`、`state_root`、`runtime_wasm_hash` 与 `public_institution_root` 不再作为锚点;新锚点只能由本轮 CI WASM 对应的正式 bake 结果回填。
-- `CITIZENAPP_REQUIRE_STATE_ROOT=1 CITIZENCHAIN_GENESIS_STATE_MANIFEST=... bash citizenapp/scripts/check-chainspec-frozen.sh`:待新创世状态包生成后重跑。
-- 临时节点使用正式 `genesis-state` 的 RPC `chain_getBlockHash(0)` 验收:待新创世状态包生成后重跑。
-- `onchina sync-gov`:旧创世资产验收记录已废弃;本轮改为 49,581 创世机构后需用新 CI WASM 重新 bake 并重跑投影。
+- GitHub `CitizenChain WASM` run `28694378543`:成功;artifact `citizenchain.compact.compressed.wasm` 的 sha256 为 `70e6d1fd01b763628e8b595399487bdfe19191a44a4cfadd5255be0577b9310a`。
+- `citizenchain/scripts/bake-chainspec.sh --finalize --wasm ... --public-institution-root 4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`:通过;`genesis_hash=0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`,`state_root=0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0`,`chainspec_hash=650c1ed8462a326e43394576eaa99f7533f9ee427cf1d80c58cd2922a82d7558`,创世物化 30 秒。
+- `chain_getBlockHash(0)`:临时正式节点返回 `0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`。
+- `onchina sync-gov`:通过;链上投影 `chain_institutions=49581`,`chain_accounts=99162`,`local_institutions=49581`,`local_accounts=99162`,链上创世哈希等于正式锚点。
 - 新 OnChina `serve` 启动验收:本地投影锚点等于当前 finalized head 时打印 `cid gov chain projection is current; skip startup full sync`,随后抽样对账通过并监听 `http://127.0.0.1:8975`。
-- `GEN_DELAY_MS=0 ONCHINA_BASE_URL=http://127.0.0.1:8975 node citizenapp/tools/generate_public_institution_bundle.mjs ...`:旧快照根已废弃;本轮需生成 49,581 创世机构快照并重新记录 `public_institution_root`。
+- `GEN_DELAY_MS=0 ONCHINA_BASE_URL=http://127.0.0.1:8975 node citizenapp/tools/generate_public_institution_bundle.mjs ...`:通过;生成 43 个省级分片,合计 49,581 个创世公权机构,`public_institution_root=4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`。
 - `npm --prefix citizenchain/node/frontend run build`:通过,同步重建本地文档索引。
 - `git diff --check`:通过。
 - `git diff --name-only -- citizenchain/runtime`:本轮已按用户二次确认修改 runtime,旧“不修改 runtime”记录不再适用。
 
-## 待发布步骤
+## 发布边界
 
-- 将本地更新提交并在用户再次明确允许后推送 `origin main`,触发 GitHub CI。
+- 本地更新按用户当前确认推送 `origin main`,触发 GitHub CI;不创建分支、不打 tag、不创建 PR。
 - 正式安装包打包前把 `target/chainspec/genesis-state/` 作为 `genesis-state/` 资源内置;该目录为生成物,不进 Git。
 - 6 节点部署时逐台核对 `chain_getBlockHash(0)` 和 `stateRoot`,再启动 OnChina 服务。

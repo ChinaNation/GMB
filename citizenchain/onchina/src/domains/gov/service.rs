@@ -267,7 +267,12 @@ fn parse_chain_institution(
             "chain institution cid_number {cid_number} is not public legal code"
         ));
     }
-    let code_from_storage = trim_institution_code(info.institution_code.as_slice())?;
+    let code_from_storage = trim_institution_code(info.institution_code.as_slice()).map_err(|e| {
+        format!(
+            "chain institution {cid_number} {e}, raw={:?}",
+            info.institution_code
+        )
+    })?;
     if code_from_storage != parts.institution_code_text {
         return Err(format!(
             "chain institution {cid_number} code mismatch: cid={} storage={}",

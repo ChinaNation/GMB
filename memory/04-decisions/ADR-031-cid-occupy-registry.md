@@ -82,7 +82,7 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
   - 当前 plain spec 启动仍会触发 Substrate `GenesisBlockBuilder` 做创世存储校验,不是重新写库,但仍有分钟级 CPU 成本;RPC ready 前 UI 必须保持“创世准备中”。
 - CitizenApp/smoldot:chainspec 用 `stateRootHash` 轻形态,公权机构目录用“创世快照缓存 + 链投影增量更新”。
 - 重新创世部署(6 节点 mesh);创世后重跑 CitizenApp 公权机构快照包生成器(死规则:否则机构全断)。
-- 2026-07-04 旧创世资产已废弃;本轮需等待新的 CI WASM 成功后重新 bake,再回填 `genesis_hash/state_root/public_institution_root`。
+- 2026-07-04 旧全量镇级创世资产已废弃;本轮已用 `origin/main` GitHub `CitizenChain WASM` artifact 正式 bake: `genesis_hash=0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`、`state_root=0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0`、`public_institution_root=4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`。
 
 ### 4.4 规模账(终态)
 

@@ -1,178 +1,318 @@
 {
-  "version": "2026-07-03T00:00:00Z",
-  "generated_at": "2026-07-03T00:00:00Z",
+  "schema_version": 1,
+  "chain_id": "citizenchain",
+  "snapshot_block_number": 0,
+  "snapshot_block_hash": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7",
+  "genesis_hash": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7",
+  "state_root": "0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0",
+  "chainspec_hash": "c1229d42148f590c29769a8675bbeaabab90c073b76d0b14fd6f5a3c48753143",
+  "admin_division_root": "",
+  "public_institution_root": "4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318",
+  "version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+  "generated_at": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+  "shard_hashes": {
+    "中枢省": "82b0a8a17f643cf3e29133d22d76b1c50cd21dabb8424aa8b3a262295af1d611",
+    "岭南省": "0cc4bf8fb110e4969fb4b71bd09673599e541dad982fc6209a3316c29b3f8605",
+    "广东省": "8dbaf656fe35ce74fc511b8633bec6f9f389a0c4f102de9a3a8f5f9eb633c855",
+    "广西省": "70cec5ad94ab97e971c0f8692fe4cc964c86db94aac01b1602bd2a1f422b974f",
+    "福建省": "c1d4cc5122f9d2ea3824be08b5824652aa036bf5205716aa6d39eb593a09096c",
+    "海南省": "142503377b95fd0d3cb24987331eed3d1a05b9f09e1a6fbc2d2b5c8a31e14a9e",
+    "云南省": "9aa133b956d8b6d5941111327fc938caf093404b424e91dda74b93c38ad6e2e0",
+    "贵州省": "11a878640c7086ec192b9dc4ad1d783e19c75c5bce9dcc9424666b83c0e8d644",
+    "湖南省": "4179b9d2d0f140cbfd05ceaa74b62dd36dedbe992892077d94284c17ffb74fb4",
+    "江西省": "dde832b9dd5c1818a41b48ab4732314847314fc2b37c43f1ea0c43d7a6f6f39b",
+    "浙江省": "9c3bbb14b5b8523609337e6997ece6b57b6838bde757afbda87a1c0150cb64da",
+    "江苏省": "a1ea2986b4afc69465a491a5326f4cbd6a3421829d32b47a207d95bc0c498804",
+    "山东省": "eba8349166501efd00512ce9266dc3d2c2bb107d6cfa1c6884a0e67810f30c20",
+    "山西省": "b59490d3b13ca3d5702007b03cc43deb29d0e7d014a18c22a9833a8eb14aeede",
+    "河南省": "86b98e62928fe28f7a0cfa60c053f0bb920bbcc6c13177343862030092537078",
+    "河北省": "6e501b82fc3f184980e0d3d63d1e68357dfdf78c52460fffbdeb38c328bd48d1",
+    "湖北省": "42b69ec759a71ec5218d73e5e9d7d5fcb7fd61294fbb6178c183fd361b6322c7",
+    "陕西省": "ee7ddd591323ac1db1e8a87a0180b7c008c636970b5ea89c498b1586c35da0f3",
+    "重庆省": "b03246eaa7cb7b467bc9ea9f77b900e4ad0be917a06d58ea266cf116846fc11a",
+    "四川省": "43c778249b08fc7c3bf08af6b7803070af3669812a53314198a82ed50d359ede",
+    "甘肃省": "918080c136c289cbec5d81d20948c50eda77890b6561175413acbed9a31d3a37",
+    "北平省": "dbd03634a7e8f1a983bf651081a13d32058acfcef52fc8fbd68c7573fb1c8474",
+    "海滨省": "2b247c5933cb9e122b9428a1a77c8c41773d5ecdfc6a683b3db4ff26b1fe4153",
+    "松江省": "191bc6b3e73916611fadc76d4fea9964db138be3f67f51f19b838bab444f8616",
+    "龙江省": "57be1360ef06d57eac0bae019c85c29273d571010e894ea210ca8d2f1636dee6",
+    "吉林省": "b3d3e07f16a784ba4a7fc28d9e2a3f582b08da6447f9b7f5e3197d48a3314223",
+    "辽宁省": "21f846e969b42cd4de3191bc4dea53ad9ae267f7228439b92e1959deac2d2451",
+    "宁夏省": "62d3f5bda6e62617e408f3e87a4627e1240e07359cf8322fa5d2efe6c728205f",
+    "青海省": "7f61313a63dcf690aa82f1815d7adbfb5929e7ef869b524da6f43fae17bb8ce2",
+    "安徽省": "0c786d54abf9ae1e15eb2be14b61c0edca7618b9c7e30b1875fb4b50e29ccad6",
+    "台湾省": "962396454da5538a7d4769f9d3bfa82ac6ba39a3fc7d2140d190547f08dee233",
+    "西藏省": "cb2ff4d83b1f4e96e6a78a76a2277e801a4730d0d9a72004ac6e82a07fd3f053",
+    "新疆省": "3b4f4878bdcf133199ab3c07b8279c000fe4330049aaddd8d8b2c4d883653884",
+    "西康省": "82f9dda7b78d5e8000f6aeeb3655ec03710aefa65059fbf06ee3596ec1de98ef",
+    "阿里省": "e0e18651c45feb204ad9772212cd8459eb88db07ceaf9d7d17344f25348ae9f9",
+    "葱岭省": "74ac5aa57fc067bc6eb1da42e104b139caf040ec8d66b83b6d653f8594e13116",
+    "伊犁省": "c1426a056849081f3b46095e55058f544e574ff989e9f39abaf196bd63e35440",
+    "河西省": "f17f3dccdb933cdbc01a840d3d68ffd8cdfb386999e2a0d1c29df4453a743852",
+    "昆仑省": "8174e9b8da04e3307865ed14392e3b70327ffd70aa3ec89b434e7c78eb487ea6",
+    "河套省": "330078154ffcff320d5ce248596db737ae4730b0d823bc17077a63e8dff06e1c",
+    "热河省": "2a05600776a414417a6f0dda819deaf1c1e0f48f085acb8f970ad7fc65467c18",
+    "兴安省": "11493ba1166e06d0acf850cc13893db6053a17239a94177f6e6a0c10168ed5d5",
+    "合江省": "febd1f1e3fff02e756157e0ae2c5fb152023cfb26ee071a5e7906fca93b38cac"
+  },
   "provinces": [
     {
       "province_name": "中枢省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "云南省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "伊犁省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "兴安省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "北平省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "台湾省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "合江省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "吉林省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "四川省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "宁夏省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "安徽省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "山东省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "山西省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "82b0a8a17f643cf3e29133d22d76b1c50cd21dabb8424aa8b3a262295af1d611",
+      "count": 636
     },
     {
       "province_name": "岭南省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "0cc4bf8fb110e4969fb4b71bd09673599e541dad982fc6209a3316c29b3f8605",
+      "count": 188
     },
     {
       "province_name": "广东省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "8dbaf656fe35ce74fc511b8633bec6f9f389a0c4f102de9a3a8f5f9eb633c855",
+      "count": 2040
     },
     {
       "province_name": "广西省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "新疆省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "昆仑省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "松江省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "江苏省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "江西省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "河北省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "河南省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "河套省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "河西省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "浙江省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "海南省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "海滨省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "湖北省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "湖南省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "热河省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "甘肃省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "70cec5ad94ab97e971c0f8692fe4cc964c86db94aac01b1602bd2a1f422b974f",
+      "count": 1785
     },
     {
       "province_name": "福建省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "c1d4cc5122f9d2ea3824be08b5824652aa036bf5205716aa6d39eb593a09096c",
+      "count": 1394
     },
     {
-      "province_name": "葱岭省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "province_name": "海南省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "142503377b95fd0d3cb24987331eed3d1a05b9f09e1a6fbc2d2b5c8a31e14a9e",
+      "count": 459
     },
     {
-      "province_name": "西康省",
-      "manifest_version": "2026-07-03T00:00:00Z"
-    },
-    {
-      "province_name": "西藏省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "province_name": "云南省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "9aa133b956d8b6d5941111327fc938caf093404b424e91dda74b93c38ad6e2e0",
+      "count": 2040
     },
     {
       "province_name": "贵州省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "11a878640c7086ec192b9dc4ad1d783e19c75c5bce9dcc9424666b83c0e8d644",
+      "count": 1496
     },
     {
-      "province_name": "辽宁省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "province_name": "湖南省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "4179b9d2d0f140cbfd05ceaa74b62dd36dedbe992892077d94284c17ffb74fb4",
+      "count": 2023
     },
     {
-      "province_name": "重庆省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "province_name": "江西省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "dde832b9dd5c1818a41b48ab4732314847314fc2b37c43f1ea0c43d7a6f6f39b",
+      "count": 1683
     },
     {
-      "province_name": "阿里省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "province_name": "浙江省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "9c3bbb14b5b8523609337e6997ece6b57b6838bde757afbda87a1c0150cb64da",
+      "count": 1513
+    },
+    {
+      "province_name": "江苏省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "a1ea2986b4afc69465a491a5326f4cbd6a3421829d32b47a207d95bc0c498804",
+      "count": 1598
+    },
+    {
+      "province_name": "山东省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "eba8349166501efd00512ce9266dc3d2c2bb107d6cfa1c6884a0e67810f30c20",
+      "count": 2244
+    },
+    {
+      "province_name": "山西省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "b59490d3b13ca3d5702007b03cc43deb29d0e7d014a18c22a9833a8eb14aeede",
+      "count": 1989
+    },
+    {
+      "province_name": "河南省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "86b98e62928fe28f7a0cfa60c053f0bb920bbcc6c13177343862030092537078",
+      "count": 2618
+    },
+    {
+      "province_name": "河北省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "6e501b82fc3f184980e0d3d63d1e68357dfdf78c52460fffbdeb38c328bd48d1",
+      "count": 2244
+    },
+    {
+      "province_name": "湖北省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "42b69ec759a71ec5218d73e5e9d7d5fcb7fd61294fbb6178c183fd361b6322c7",
+      "count": 1632
     },
     {
       "province_name": "陕西省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "ee7ddd591323ac1db1e8a87a0180b7c008c636970b5ea89c498b1586c35da0f3",
+      "count": 1445
     },
     {
-      "province_name": "青海省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "province_name": "重庆省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "b03246eaa7cb7b467bc9ea9f77b900e4ad0be917a06d58ea266cf116846fc11a",
+      "count": 612
+    },
+    {
+      "province_name": "四川省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "43c778249b08fc7c3bf08af6b7803070af3669812a53314198a82ed50d359ede",
+      "count": 2635
+    },
+    {
+      "province_name": "甘肃省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "918080c136c289cbec5d81d20948c50eda77890b6561175413acbed9a31d3a37",
+      "count": 1207
+    },
+    {
+      "province_name": "北平省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "dbd03634a7e8f1a983bf651081a13d32058acfcef52fc8fbd68c7573fb1c8474",
+      "count": 290
+    },
+    {
+      "province_name": "海滨省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "2b247c5933cb9e122b9428a1a77c8c41773d5ecdfc6a683b3db4ff26b1fe4153",
+      "count": 646
+    },
+    {
+      "province_name": "松江省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "191bc6b3e73916611fadc76d4fea9964db138be3f67f51f19b838bab444f8616",
+      "count": 272
     },
     {
       "province_name": "龙江省",
-      "manifest_version": "2026-07-03T00:00:00Z"
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "57be1360ef06d57eac0bae019c85c29273d571010e894ea210ca8d2f1636dee6",
+      "count": 1309
+    },
+    {
+      "province_name": "吉林省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "b3d3e07f16a784ba4a7fc28d9e2a3f582b08da6447f9b7f5e3197d48a3314223",
+      "count": 986
+    },
+    {
+      "province_name": "辽宁省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "21f846e969b42cd4de3191bc4dea53ad9ae267f7228439b92e1959deac2d2451",
+      "count": 1598
+    },
+    {
+      "province_name": "宁夏省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "62d3f5bda6e62617e408f3e87a4627e1240e07359cf8322fa5d2efe6c728205f",
+      "count": 391
+    },
+    {
+      "province_name": "青海省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "7f61313a63dcf690aa82f1815d7adbfb5929e7ef869b524da6f43fae17bb8ce2",
+      "count": 595
+    },
+    {
+      "province_name": "安徽省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "0c786d54abf9ae1e15eb2be14b61c0edca7618b9c7e30b1875fb4b50e29ccad6",
+      "count": 1751
+    },
+    {
+      "province_name": "台湾省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "962396454da5538a7d4769f9d3bfa82ac6ba39a3fc7d2140d190547f08dee233",
+      "count": 1530
+    },
+    {
+      "province_name": "西藏省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "cb2ff4d83b1f4e96e6a78a76a2277e801a4730d0d9a72004ac6e82a07fd3f053",
+      "count": 901
+    },
+    {
+      "province_name": "新疆省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "3b4f4878bdcf133199ab3c07b8279c000fe4330049aaddd8d8b2c4d883653884",
+      "count": 816
+    },
+    {
+      "province_name": "西康省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "82f9dda7b78d5e8000f6aeeb3655ec03710aefa65059fbf06ee3596ec1de98ef",
+      "count": 612
+    },
+    {
+      "province_name": "阿里省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "e0e18651c45feb204ad9772212cd8459eb88db07ceaf9d7d17344f25348ae9f9",
+      "count": 306
+    },
+    {
+      "province_name": "葱岭省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "74ac5aa57fc067bc6eb1da42e104b139caf040ec8d66b83b6d653f8594e13116",
+      "count": 442
+    },
+    {
+      "province_name": "伊犁省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "c1426a056849081f3b46095e55058f544e574ff989e9f39abaf196bd63e35440",
+      "count": 442
+    },
+    {
+      "province_name": "河西省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "f17f3dccdb933cdbc01a840d3d68ffd8cdfb386999e2a0d1c29df4453a743852",
+      "count": 340
+    },
+    {
+      "province_name": "昆仑省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "8174e9b8da04e3307865ed14392e3b70327ffd70aa3ec89b434e7c78eb487ea6",
+      "count": 170
+    },
+    {
+      "province_name": "河套省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "330078154ffcff320d5ce248596db737ae4730b0d823bc17077a63e8dff06e1c",
+      "count": 850
+    },
+    {
+      "province_name": "热河省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "2a05600776a414417a6f0dda819deaf1c1e0f48f085acb8f970ad7fc65467c18",
+      "count": 731
+    },
+    {
+      "province_name": "兴安省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "11493ba1166e06d0acf850cc13893db6053a17239a94177f6e6a0c10168ed5d5",
+      "count": 459
+    },
+    {
+      "province_name": "合江省",
+      "manifest_version": "0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7:0:49581:99162",
+      "shard_hash": "febd1f1e3fff02e756157e0ae2c5fb152023cfb26ee071a5e7906fca93b38cac",
+      "count": 663
     }
   ]
 }
