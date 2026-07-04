@@ -83,21 +83,30 @@
 - `bash citizenapp/scripts/check-chainspec-frozen.sh`:通过;正式 `citizenapp/assets/chainspec.json` 已切换为 `stateRootHash` 轻形态。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p node -p onchina`:通过;输出 Polkadot SDK 既有循环提示,无编译错误。
 - GitHub `CitizenChain WASM` run `28694378543`:成功;artifact `citizenchain.compact.compressed.wasm` 的 sha256 为 `70e6d1fd01b763628e8b595399487bdfe19191a44a4cfadd5255be0577b9310a`。
-- GitHub `CitizenChain WASM` run `28700551692`:成功;headSha `21057d4f9459e32ee12cd6aeecc5757038503f64`;artifact `citizenchain.compact.compressed.wasm` 的 sha256 为 `467a031f7021f46fd18a38963d826a32e085e44503b6b1abe66535b95554fca1`。
-- 新 49,593 源码口径已完成正式 bake:`citizenchain/scripts/bake-chainspec.sh --finalize --wasm citizenchain/target/wasm-ci/citizenchain.compact.compressed.wasm` 通过;`genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`,`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`,`chainspec_hash=57e8e641ba0fa371262a6cfcf5ba53a0607a6caca940d16d77729ae45b0cf3de`;已重生 49,593 CitizenApp 快照并回填 `public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`。
+- GitHub `CitizenChain WASM` run `28700551692`:成功;headSha `21057d4f9459e32ee12cd6aeecc5757038503f64`;artifact `citizenchain.compact.compressed.wasm` 的 sha256 为 `467a031f7021f46fd18a38963d826a32e085e44503b6b1abe66535b95554fca1`;该记录已被 #99 WASM 冻结替代,仅作历史对照。
+- 上一轮 49,593 源码口径曾完成历史 bake:`citizenchain/scripts/bake-chainspec.sh --finalize --wasm citizenchain/target/wasm-ci/citizenchain.compact.compressed.wasm` 通过;`genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`,`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`,`chainspec_hash=57e8e641ba0fa371262a6cfcf5ba53a0607a6caca940d16d77729ae45b0cf3de`;已重生 49,593 CitizenApp 快照并回填 `public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`;该冻结已被 #99 替代。
 - 旧 49,581 口径记录已被本轮 49,593 源码创世废弃:`citizenchain/scripts/bake-chainspec.sh --finalize --wasm ... --public-institution-root 4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318` 曾通过;`genesis_hash=0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`,`state_root=0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0`,`chainspec_hash=650c1ed8462a326e43394576eaa99f7533f9ee427cf1d80c58cd2922a82d7558` 仅作历史对照。
 - 旧 49,581 口径记录已被本轮 49,593 源码创世废弃:`chain_getBlockHash(0)` 曾返回 `0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`,不能作为当前发布锚点。
 - 旧 49,581 口径记录已被本轮 49,593 源码创世废弃:`onchina sync-gov` 曾显示 `chain_institutions=49581`,`chain_accounts=99162`,`local_institutions=49581`,`local_accounts=99162`;当前源码口径重烤后应为 `chain_institutions=49593`,`chain_accounts=99186`,`local_institutions=49593`,`local_accounts=99186`。
 - 新 OnChina `serve` 启动验收:本地投影锚点等于当前 finalized head 时打印 `cid gov chain projection is current; skip startup full sync`,随后抽样对账通过并监听 `http://127.0.0.1:8975`。
-- 已用新冻结链重跑 `GEN_DELAY_MS=0 ONCHINA_BASE_URL=http://127.0.0.1:8975 node citizenapp/tools/generate_public_institution_bundle.mjs ...`,生成 43 个省级分片,合计 49,593 个创世公权机构,`public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`,`snapshot_block_hash=genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`,`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`。
+- 已用上一轮冻结链重跑 `GEN_DELAY_MS=0 ONCHINA_BASE_URL=http://127.0.0.1:8975 node citizenapp/tools/generate_public_institution_bundle.mjs ...`,生成 43 个省级分片,合计 49,593 个创世公权机构,`public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`,`snapshot_block_hash=genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`,`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`;该快照根已被当前 `fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492` 替代。
 - 新增 12 个国家级机构抽样均在 `中枢省.json` 中命中:`FDA/NGB/ARM/NAV/AIR/SPF/JOS/ARC/NVC/AFC/SFC/NGC`。
 - 新 OnChina `audit-chain-catalog`:通过,本地 49,593 / 链上 49,593 / 不一致 0 / 链上多出 0 / 链上缺失 0。
 - `npm --prefix citizenchain/node/frontend run build`:通过,同步重建本地文档索引。
 - `git diff --check`:通过。
 - `git diff --name-only -- citizenchain/runtime`:本轮已按用户二次确认修改 runtime,旧“不修改 runtime”记录不再适用。
 
+## 2026-07-04 #99 WASM 正式冻结
+
+- 已核对 GitHub `CitizenChain WASM` #99 / run `28716997121`,分支 `main`,headSha `42cbcb1c98cb6d69ff2e8172bed8cb2dab7e4442`,与本地 HEAD 一致。
+- 已下载 artifact `citizenchain-wasm`;`citizenchain.compact.compressed.wasm` 文件大小 1,060,546 字节,sha256 `c3cf273ec78acc373020873cf51370f5e3ec867b296842b3f27fc6eb163db1bc`,blake2_256 `0xb97f27adce675a457b08d5e713c17a2bc44c6204d8985d4e7542f71c4aaa8771`。
+- 已执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm citizenchain/target/wasm-ci/citizenchain.compact.compressed.wasm --public-institution-root fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`:通过,创世物化耗时 30s,`genesis_hash=0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971`,`state_root=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`,`chainspec_hash=2c2557a356b99f34d9d5a42ddd10af85a7f8b6c7615550f3c7c5fc8dbaa0de89`。
+- bake 已同步冻结 SSOT:`citizenchain/node/chainspecs/citizenchain.plain.json` 内嵌 #99 runtime WASM,`citizenapp/assets/chainspec.json` 已同步到 `stateRootHash=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`。
+- `target/chainspec/genesis-state/manifest.json` 已生成,记录 `runtime_wasm_hash=c3cf273ec78acc373020873cf51370f5e3ec867b296842b3f27fc6eb163db1bc`,`public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。
+- 本轮只使用最新成功 `CitizenChain WASM` artifact 作为 bake 输入,未等待 CitizenApp CI;CitizenApp 冻结点来自本地轻形态 `chainspec.json` 的 `stateRootHash` 同步。
+
 ## 发布边界
 
-- 本地更新按用户当前确认推送 `origin main`,触发 GitHub CI;不创建分支、不打 tag、不创建 PR。
+- 本轮未获得推送授权,冻结变更仅保留在本地工作区;如需推送 `origin main`、触发 GitHub CI、打 tag 或创建 PR,必须另行确认远端、分支/tag/ref、CI 范围和风险。
 - 正式安装包打包前把 `target/chainspec/genesis-state/` 作为 `genesis-state/` 资源内置;该目录为生成物,不进 Git。
 - 6 节点部署时逐台核对 `chain_getBlockHash(0)` 和 `stateRoot`,再启动 OnChina 服务。

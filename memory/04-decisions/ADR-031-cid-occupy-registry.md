@@ -82,7 +82,8 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
   - 当前 plain spec 启动仍会触发 Substrate `GenesisBlockBuilder` 做创世存储校验,不是重新写库,但仍有分钟级 CPU 成本;RPC ready 前 UI 必须保持“创世准备中”。
 - CitizenApp/smoldot:chainspec 用 `stateRootHash` 轻形态,公权机构目录用“创世快照缓存 + 链投影增量更新”。
 - 重新创世部署(6 节点 mesh);创世后重跑 CitizenApp 公权机构快照包生成器(死规则:否则机构全断)。
-- 2026-07-04 旧全量镇级创世资产已废弃;上一轮 49,593 bake 使用 GitHub `CitizenChain WASM` run `28700551692` artifact: `genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`、`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`、`public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`。本轮 NSN/NRP 常量化与 FDA 全称修正会改变创世状态,正式发布前必须重新 bake;端上快照已先同步 FDA 名称,当前本地 `public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。旧 49,581 根 `4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318` 仅作历史对照,不得作为当前发布锚点。
+- 2026-07-04 旧全量镇级创世资产已废弃;当前 49,593 bake 使用 GitHub `CitizenChain WASM` #99 / run `28716997121` artifact: `genesis_hash=0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971`、`state_root=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`、`runtime_wasm_hash=c3cf273ec78acc373020873cf51370f5e3ec867b296842b3f27fc6eb163db1bc`、`chainspec_hash=2c2557a356b99f34d9d5a42ddd10af85a7f8b6c7615550f3c7c5fc8dbaa0de89`、`public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。
+- 旧 49,593 锚点 `0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005` 与旧 49,581 根 `4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318` 仅作历史对照,不得作为当前发布锚点。
 
 ### 4.4 规模账(终态)
 

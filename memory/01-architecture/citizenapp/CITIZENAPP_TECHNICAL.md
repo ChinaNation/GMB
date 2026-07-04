@@ -19,7 +19,7 @@
 - P2P IM 路线：信息 Tab + 钱包账户聊天身份 + 用户自己的私人通信全节点 + 近场无网点对点通信；当前已落地基础模型、信息 Tab、绑定 payload、私人节点传输骨架和 node 端 owner-only mailbox Spike；Android 近场模块规划为 `android/im/`，iOS 近场模块规划为 `ios/im/`
 - 外部接口：HTTP API（由 OnChina 提供，用于电子护照状态、管理员目录、公权机构目录等非链上查询场景）
 - 行政区字典：安装包内置 `assets/admin_divisions/`，由 `citizenchain/onchina/src/cid/china/china.sqlite` 直接生成；运行中只读本地包，不向 OnChina 联网更新行政区。
-- 公权机构包：安装包内置 `assets/public_institutions/`，发布期从已完成链上 `PublicManage` 投影的 OnChina 真实 HTTP 接口导出；2026-07-04 起源码创世快照口径只包含国家/省/市公权机构 49,593 条，镇级和后续新增机构通过链投影增量进入本地缓存。上一轮 49,581 冻结锚点已因补齐 12 个国家级机构而失效；当前 CI WASM 已正式 bake 到 `genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`、`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`，并已用该冻结链同步 OnChina 投影、重跑快照生成器，得到 `public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`。citizenapp 公民端不按 OnChina 管理端“公权机构 / 市公安局 / 教育机构”等后台功能 tab 分流或排除。
+- 公权机构包：安装包内置 `assets/public_institutions/`，发布期从已完成链上 `PublicManage` 投影的 OnChina 真实 HTTP 接口导出；2026-07-04 起源码创世快照口径只包含国家/省/市公权机构 49,593 条，镇级和后续新增机构通过链投影增量进入本地缓存。上一轮 49,581 冻结锚点已因补齐 12 个国家级机构而失效；当前 GitHub `CitizenChain WASM` #99 已正式 bake 到 `genesis_hash=0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971`、`state_root=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`，CitizenApp 轻形态 `chainspec.json` 已同步为该 `stateRootHash`，当前端上快照 `public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。citizenapp 公民端不按 OnChina 管理端“公权机构 / 市公安局 / 教育机构”等后台功能 tab 分流或排除。
 
 ### 2.1 Android 打包和正式签名
 
