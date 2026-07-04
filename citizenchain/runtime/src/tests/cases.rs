@@ -237,10 +237,7 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &transfer_call);
-        assert_eq!(
-            amount,
-            onchain_transaction::FeeChargeKind::OnchainAmount(123)
-        );
+        assert_eq!(amount, onchain_transaction::FeeChargeKind::Unknown);
 
         let remark =
             frame_support::BoundedVec::<u8, frame_support::traits::ConstU32<99>>::try_from(
@@ -391,7 +388,7 @@ fn multisig_reserved_checker_rejects_stake_and_fee_accounts() {
 }
 
 #[test]
-fn runtime_call_filter_blocks_force_transfer_from_stake() {
+fn runtime_call_filter_blocks_external_balances_calls() {
     let stake = AccountId::new(primitives::cid::china::china_ch::CHINA_CH[0].stake_account);
     let dst = AccountId::new([9u8; 32]);
 
@@ -417,12 +414,13 @@ fn runtime_call_filter_blocks_force_transfer_from_stake() {
     });
     assert!(!RuntimeCallFilter::contains(&blocked_by_raw));
 
-    let allowed = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
-        source: sp_runtime::MultiAddress::Id(AccountId::new([8u8; 32])),
-        dest: sp_runtime::MultiAddress::Id(dst),
-        value: 1,
-    });
-    assert!(RuntimeCallFilter::contains(&allowed));
+    let blocked_from_regular_account =
+        RuntimeCall::Balances(pallet_balances::Call::force_transfer {
+            source: sp_runtime::MultiAddress::Id(AccountId::new([8u8; 32])),
+            dest: sp_runtime::MultiAddress::Id(dst),
+            value: 1,
+        });
+    assert!(!RuntimeCallFilter::contains(&blocked_from_regular_account));
 
     let blocked_force_unreserve = RuntimeCall::Balances(pallet_balances::Call::force_unreserve {
         who: sp_runtime::MultiAddress::Id(AccountId::new(
@@ -440,6 +438,44 @@ fn runtime_call_filter_blocks_force_transfer_from_stake() {
             new_free: 1,
         });
     assert!(!RuntimeCallFilter::contains(&blocked_force_set_balance));
+
+    let blocked_transfer_allow_death =
+        RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
+            dest: sp_runtime::MultiAddress::Id(AccountId::new([7u8; 32])),
+            value: 1,
+        });
+    assert!(!RuntimeCallFilter::contains(&blocked_transfer_allow_death));
+
+    let blocked_transfer_keep_alive =
+        RuntimeCall::Balances(pallet_balances::Call::transfer_keep_alive {
+            dest: sp_runtime::MultiAddress::Id(AccountId::new([7u8; 32])),
+            value: 1,
+        });
+    assert!(!RuntimeCallFilter::contains(&blocked_transfer_keep_alive));
+
+    let blocked_transfer_all = RuntimeCall::Balances(pallet_balances::Call::transfer_all {
+        dest: sp_runtime::MultiAddress::Id(AccountId::new([7u8; 32])),
+        keep_alive: true,
+    });
+    assert!(!RuntimeCallFilter::contains(&blocked_transfer_all));
+
+    let blocked_burn = RuntimeCall::Balances(pallet_balances::Call::burn {
+        value: 1,
+        keep_alive: true,
+    });
+    assert!(!RuntimeCallFilter::contains(&blocked_burn));
+
+    let remark = frame_support::BoundedVec::<u8, frame_support::traits::ConstU32<99>>::try_from(
+        b"ordinary transfer remark".to_vec(),
+    )
+    .expect("remark should fit");
+    let allowed_onchain_transfer =
+        RuntimeCall::OnchainTransaction(onchain_transaction::pallet::Call::transfer_with_remark {
+            beneficiary: AccountId::new([7u8; 32]),
+            amount: 1,
+            remark,
+        });
+    assert!(RuntimeCallFilter::contains(&allowed_onchain_transfer));
 }
 
 #[test]

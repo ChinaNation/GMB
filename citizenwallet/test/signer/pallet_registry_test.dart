@@ -6,8 +6,9 @@ void main() {
     // PalletRegistry 只登记 pallet/call 索引,放行由 decoder 两色识别决定。
 
     test('pallet 索引常量已定义且互不相同', () {
-      final pallets = {
-        PalletRegistry.balancesPallet,
+      const pallets = {
+        // 普通转账统一走 OnchainTransaction(4).transfer_with_remark(0),不再暴露 Balances 直签入口。
+        PalletRegistry.onchainTransactionPallet,
         PalletRegistry.multisigTransferPallet,
         PalletRegistry.publicManagePallet,
         PalletRegistry.privateManagePallet,

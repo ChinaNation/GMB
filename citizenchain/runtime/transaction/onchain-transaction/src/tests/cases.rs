@@ -71,8 +71,8 @@ fn transfer_with_remark_rejects_invalid_transfer_and_caps_remark_bytes() {
 
 #[test]
 fn onchain_fee_round_and_min_work() {
+    // 1分*0.1%=0.001分 => round=0分，应用最低10分。
     let rate = Perbill::from_parts(1_000_000); // 0.1%
-    // 1分*0.1%=0.001分 => round=0分，应用最低10分
     let fee_small = mul_perbill_round(1, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
     assert_eq!(fee_small, 10);
 
@@ -215,10 +215,10 @@ fn can_withdraw_and_withdraw_fail_when_insufficient_balance() {
         let call = sample_call();
         let info = call.get_dispatch_info();
 
-        assert!(
-            <Adapter as OnChargeTransaction<Test>>::can_withdraw_fee(&poor, &call, &info, 0, 0)
-                .is_err()
-        );
+        assert!(<Adapter as OnChargeTransaction<Test>>::can_withdraw_fee(
+            &poor, &call, &info, 0, 0
+        )
+        .is_err());
 
         assert!(
             <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&poor, &call, &info, 0, 0)
@@ -825,5 +825,74 @@ fn tip_is_routed_with_fee_using_same_distribution() {
         assert_eq!(Balances::free_balance(&nrc), expected_nrc);
         assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
         assert_eq!(fee_share_burn_event_total(), 0);
+    });
+}
+
+#[test]
+fn charge_transaction_amount_path_routes_fee_to_all_accounts() {
+    type Adapter = OnchainChargeAdapter<
+        Balances,
+        OnchainFeeRouter<
+            Test,
+            Balances,
+            MockFindAuthor,
+            MockNrcAccountProvider,
+            MockSafetyFundAccountProvider,
+        >,
+        FeeKindExtractorOnchainAmount,
+        (),
+    >;
+
+    new_test_ext().execute_with(|| {
+        let who = account(1);
+        let call = sample_call();
+        let info = call.get_dispatch_info();
+        let miner = account(9);
+        let reward_wallet = account(8);
+        let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
+        let safety_fund = AccountId32::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT);
+
+        fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+        MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
+
+        // FeeKindExtractorOnchainAmount 固定返回 50_000 分,链上资金交易费率 0.1%,应扣 50 分。
+        let total_fee = 50u128;
+        let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+        let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+        let total_percent = fullnode_percent
+            .saturating_add(nrc_percent)
+            .saturating_add(safety_fund_percent);
+        let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
+        let remainder = total_fee.saturating_sub(expected_fullnode);
+        let expected_nrc = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
+            0
+        } else {
+            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent)
+        };
+        let expected_safety_fund = remainder.saturating_sub(expected_nrc);
+
+        let liquidity =
+            <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 0)
+                .expect("withdraw should succeed");
+        assert_eq!(Balances::free_balance(&who), 950);
+
+        assert_ok!(
+            <Adapter as OnChargeTransaction<Test>>::correct_and_deposit_fee(
+                &who,
+                &info,
+                &Default::default(),
+                total_fee,
+                0,
+                liquidity,
+            )
+        );
+
+        assert_eq!(Balances::free_balance(&who), 950);
+        assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
+        assert_eq!(Balances::free_balance(&nrc), expected_nrc);
+        assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
+        assert_eq!(fee_share_burn_event_total(), 0);
+        assert!(has_fee_paid_event());
     });
 }

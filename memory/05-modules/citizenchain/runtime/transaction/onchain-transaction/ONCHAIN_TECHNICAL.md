@@ -47,11 +47,9 @@
 - 日志必须能够区分"全节点份额销毁"和"NRC 份额销毁"的原因，便于运维排障。
 - 链上事件必须能够被区块浏览器、RPC 聚合或运维任务直接统计，不能只依赖节点本地日志。
 
-### 0.8 Benchmark 需求
+### 0.8 手续费热路径验证需求
 - 本模块不是 FRAME pallet，因此不进入 runtime 的 `define_benchmarks!` 注册表。
-- 需要提供专项 benchmark，覆盖：
-  - 扣费热路径（计算费用 + 扣费 + 分账）
-  - Router 分账热路径
+- 不保留独立 Cargo `benches/` 目录；扣费热路径与 Router 分账热路径统一放在 `src/tests/cases.rs` 做回归验证。
 
 ---
 
@@ -184,20 +182,17 @@
 
 ---
 
-## 8. 专项 Benchmark
-- 本模块新增独立 benchmark harness：`benches/transaction_fee_paths.rs`
-- 基准用例：
-  - `onchain_fee_charge_transaction_amount_path`
-  - `onchain_fee_router_distribution_success`
-- 执行命令：
-  - `cargo bench -p onchain-transaction --bench transaction_fee_paths`
-- 说明：
-  - 这里不是标准 pallet benchmark，而是针对交易扣费与分账热路径的专项性能验证。
+## 8. 手续费热路径回归测试
+- 本模块不再保留独立 `benches/` 目录。
+- 原 `benches/transaction_fee_paths.rs` 的有效验证点已合并到 `src/tests/cases.rs`：
+  - `charge_transaction_amount_path_routes_fee_to_all_accounts`
+  - `fee_router_distributes_to_bound_author_wallet_and_nrc_and_safety_fund`
+- 说明：这里不是标准 pallet benchmark；当前目标是用普通单元测试锁住交易扣费与分账热路径,避免独立 benchmark 目录和模块结构漂移。
 
 ---
 
 ## 9. 测试覆盖（当前）
-当前单测覆盖 20 项，包含：
+当前单测覆盖手续费、转账与分账核心路径，包含：
 - 费率四舍五入与最低费
 - `VoteFlat / OnchainAmount / OffchainFee / Free / Unknown` 五类费用行为
 - 默认扣费与自定义代付

@@ -59,7 +59,7 @@ class ChainTxMonitor {
 
   // ──── 已知事件的 pallet_index + event_index ────
 
-  /// Balances::Transfer (pallet=2, event=2)，仅作为 metadata 解码失败后的兜底。
+  /// Balances::Transfer (pallet=2, event=2)，仅作为底层余额事件兜底。
   static const int _balancesPallet = 2;
   static const int _transferEvent = 2;
   static const int _onchainTransactionPallet = 4;
@@ -306,7 +306,10 @@ class ChainTxMonitor {
     }
   }
 
-  /// 解码 System.Events，提取与本机钱包相关的 Balances::Transfer 余额变化。
+  /// 解码 System.Events，优先提取 OnchainTransaction 转账事件。
+  ///
+  /// Balances::Transfer 只作为底层余额事件兜底；外部普通转账入口仍然唯一收口到
+  /// OnchainTransaction::transfer_with_remark。
   Future<void> _decodeTransferEvents(
     Uint8List data,
     int blockNumber,

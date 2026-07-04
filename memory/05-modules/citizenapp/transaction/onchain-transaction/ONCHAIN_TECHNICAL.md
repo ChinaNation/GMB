@@ -63,6 +63,8 @@ citizenapp/lib/transaction/shared/
 
 对应 `OnchainTransaction::transfer_with_remark`。备注按 UTF-8 字节计数，最大 99 字节；空备注编码为长度 0 的 `BoundedVec<u8>`。
 
+普通单账户链上转账唯一外部入口是 `OnchainTransaction::transfer_with_remark`；`Balances` 只作为 runtime 底层余额账本和内部 `Currency` 能力保留，页面、服务和 RPC 层不得构造 `Balances.transfer_*` 裸调用。
+
 ## 5. 交易记录
 
 普通链上支付提交成功后写入 `LocalTxEntity`：

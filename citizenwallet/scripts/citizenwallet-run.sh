@@ -12,15 +12,15 @@ echo "==> 同步 runtime pallet/call 索引..."
 RUNTIME_LIB="$REPO_ROOT/citizenchain/runtime/src/lib.rs"
 REGISTRY="lib/signer/pallet_registry.dart"
 
-# 从 runtime pallet_index 宏提取 pallet 索引
-extract_pallet_index() {
-  grep -A1 "pallet_index($1)" "$RUNTIME_LIB" | grep "pub type $2" > /dev/null && echo "$1"
-}
-BALANCES_IDX=$(grep -B1 'pub type Balances' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
+ONCHAIN_TRANSACTION_IDX=$(grep -B1 'pub type OnchainTransaction' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
 MULTISIG_IDX=$(grep -B1 'pub type MultisigTransfer' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
 VOTING_IDX=$(grep -B1 'pub type VotingEngine' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
 
-sed -i '' "s/balancesPallet = [0-9]*/balancesPallet = $BALANCES_IDX/" "$REGISTRY"
+test -n "$ONCHAIN_TRANSACTION_IDX" || { echo "未找到 OnchainTransaction pallet_index"; exit 1; }
+test -n "$MULTISIG_IDX" || { echo "未找到 MultisigTransfer pallet_index"; exit 1; }
+test -n "$VOTING_IDX" || { echo "未找到 VotingEngine pallet_index"; exit 1; }
+
+sed -i '' "s/onchainTransactionPallet = [0-9]*/onchainTransactionPallet = $ONCHAIN_TRANSACTION_IDX/" "$REGISTRY"
 sed -i '' "s/multisigTransferPallet = [0-9]*/multisigTransferPallet = $MULTISIG_IDX/" "$REGISTRY"
 sed -i '' "s/votingEnginePallet = [0-9]*/votingEnginePallet = $VOTING_IDX/" "$REGISTRY"
 
@@ -34,11 +34,15 @@ JOINT_CALL=$(grep -B2 'fn cast_admin' "$JOINT_VOTE_PALLET" | grep -o 'call_index
 # 联合公投阶段:JointVote::cast_referendum
 REFERENDUM_CALL=$(grep -B2 'fn cast_referendum' "$JOINT_VOTE_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
 
+test -n "$PROPOSE_CALL" || { echo "未找到 MultisigTransfer::propose_transfer call_index"; exit 1; }
+test -n "$JOINT_CALL" || { echo "未找到 JointVote::cast_admin call_index"; exit 1; }
+test -n "$REFERENDUM_CALL" || { echo "未找到 JointVote::cast_referendum call_index"; exit 1; }
+
 sed -i '' "s/proposeTransferCall = [0-9]*/proposeTransferCall = $PROPOSE_CALL/" "$REGISTRY"
 sed -i '' "s/jointVoteCall = [0-9]*/jointVoteCall = $JOINT_CALL/" "$REGISTRY"
 sed -i '' "s/castReferendumCall = [0-9]*/castReferendumCall = $REFERENDUM_CALL/" "$REGISTRY"
 
-echo "    Balances=$BALANCES_IDX MultisigTransfer=$MULTISIG_IDX VotingEngine=$VOTING_IDX"
+echo "    OnchainTransaction=$ONCHAIN_TRANSACTION_IDX MultisigTransfer=$MULTISIG_IDX VotingEngine=$VOTING_IDX"
 echo "    propose=$PROPOSE_CALL joint=$JOINT_CALL referendum=$REFERENDUM_CALL"
 
 echo "==> 清空构建缓存..."

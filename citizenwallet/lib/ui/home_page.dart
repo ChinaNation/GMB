@@ -49,10 +49,8 @@ class _HomePageState extends State<HomePage> {
       final wallets = await _walletManager.getWallets();
       final activeIndex = await _walletManager.getActiveWalletIndex();
       final isar = await WalletIsar.instance.db();
-      final groups = await isar.walletGroupEntitys
-          .where()
-          .sortBySortOrder()
-          .findAll();
+      final groups =
+          await isar.walletGroupEntitys.where().sortBySortOrder().findAll();
       if (!mounted) return;
       setState(() {
         _wallets = wallets;
@@ -337,7 +335,8 @@ class _HomePageState extends State<HomePage> {
                   color: AppTheme.primary.withAlpha(25),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.add, size: 20, color: AppTheme.primaryLight),
+                child: const Icon(Icons.add,
+                    size: 20, color: AppTheme.primaryLight),
               ),
               tooltip: '添加钱包',
               onPressed: _showAddWalletMenu,
@@ -379,9 +378,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                 Expanded(
-                  child: hasWallets
-                      ? _buildWalletList()
-                      : _buildEmptyState(),
+                  child: hasWallets ? _buildWalletList() : _buildEmptyState(),
                 ),
               ],
             ),
@@ -521,8 +518,8 @@ class _HomePageState extends State<HomePage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: wallets.length,
-                  onReorder: (oldIndex, newIndex) =>
-                      _onReorder(wallets, oldIndex, newIndex),
+                  onReorderItem: (oldIndex, newIndex) =>
+                      _onReorderItem(wallets, oldIndex, newIndex),
                   proxyDecorator: (child, index, animation) {
                     return AnimatedBuilder(
                       animation: animation,
@@ -550,27 +547,39 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _onReorder(
+  Future<void> _onReorderItem(
     List<WalletProfile> displayedWallets,
     int oldIndex,
     int newIndex,
   ) async {
-    if (newIndex > oldIndex) newIndex--;
+    // onReorderItem 已按 Flutter 新语义修正向下拖动后的 newIndex,这里不能再二次减一。
     if (oldIndex == newIndex) return;
+    if (oldIndex < 0 ||
+        oldIndex >= displayedWallets.length ||
+        newIndex < 0 ||
+        newIndex >= displayedWallets.length) {
+      return;
+    }
 
-    final movedWalletIndex = displayedWallets[oldIndex].walletIndex;
-    final targetWalletIndex = displayedWallets[newIndex].walletIndex;
+    final reorderedDisplayedWallets = List<WalletProfile>.of(displayedWallets);
+    final movedWallet = reorderedDisplayedWallets.removeAt(oldIndex);
+    reorderedDisplayedWallets.insert(newIndex, movedWallet);
 
-    final fromGlobal =
-        _wallets.indexWhere((w) => w.walletIndex == movedWalletIndex);
-    var toGlobal =
-        _wallets.indexWhere((w) => w.walletIndex == targetWalletIndex);
+    // 分组视图只重排当前显示的钱包槽位,不移动其它分组的钱包。
+    final displayedWalletIndexes =
+        displayedWallets.map((wallet) => wallet.walletIndex).toSet();
+    final displayedSlotCount = _wallets
+        .where((wallet) => displayedWalletIndexes.contains(wallet.walletIndex))
+        .length;
+    if (displayedSlotCount != reorderedDisplayedWallets.length) return;
 
-    if (fromGlobal < 0 || toGlobal < 0) return;
+    var displayedCursor = 0;
+    final reorderedWallets = _wallets.map((wallet) {
+      if (!displayedWalletIndexes.contains(wallet.walletIndex)) return wallet;
+      return reorderedDisplayedWallets[displayedCursor++];
+    }).toList();
 
-    final item = _wallets.removeAt(fromGlobal);
-    if (fromGlobal < toGlobal) toGlobal--;
-    _wallets.insert(toGlobal, item);
+    _wallets = reorderedWallets;
 
     setState(() {});
 
@@ -597,9 +606,7 @@ class _HomePageState extends State<HomePage> {
                   width: 46,
                   height: 46,
                   decoration: BoxDecoration(
-                    gradient: isActive
-                        ? AppTheme.primaryGradient
-                        : null,
+                    gradient: isActive ? AppTheme.primaryGradient : null,
                     color: isActive ? null : AppTheme.surfaceElevated,
                     borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                   ),

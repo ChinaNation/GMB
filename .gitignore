@@ -49,6 +49,8 @@ docs/citizenpassport/.citizenpassport_key
 **/.pub/
 **/build/
 **/coverage/
+.fvm/flutter_sdk
+.fvm/versions/
 
 # Flutter iOS generated dependencies
 **/ios/Pods/

@@ -16,5 +16,7 @@
 ## CI 与发布边界
 
 - `citizenwallet-ci.yml` 的 push 自动 CI 只执行索引同步、Flutter 依赖安装、`flutter analyze`、`flutter test` 和 Debug APK 检查构建。
+- 移动端 CI 与本机开发统一锁定 Flutter `3.44.4`，版本真源为仓库根目录 `.fvm/fvm_config.json`；CI workflow 不使用浮动 `channel: stable`。
+- CI 与本地启动脚本同步的转账入口是 `OnchainTransaction(4).transfer_with_remark(0)`；公民钱包不得恢复 `Balances` 直签入口。
 - 正式签名 `公民钱包.apk` 只允许 GitHub 页面手动 `Run workflow` 构建和上传。
 - 手动发布只读取一个 GitHub Secret：`GMB_APP_KEY`。它与公民 App 共用，内容至少包含 `keystore=<base64后的jks>` 和 `password=<keystore密码>`；默认 Android key alias 为 `upload`，如现有 keystore 使用其他别名，可在同一个 secret 内增加 `alias=<key别名>`；key password 默认复用同一个 `password`。

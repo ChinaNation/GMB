@@ -10,7 +10,7 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_transaction_payment::OnChargeTransaction;
-use sp_runtime::{AccountId32, BuildStorage, Perbill, traits::IdentityLookup};
+use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage, Perbill};
 use std::{cell::RefCell, thread_local};
 
 type Block = frame_system::mocking::MockBlockU32<Test>;

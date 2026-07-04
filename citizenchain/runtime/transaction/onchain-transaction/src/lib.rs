@@ -1,19 +1,19 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::traits::{
-    FindAuthor, OnUnbalanced,
     fungible::Inspect,
     tokens::{
-        Fortitude, Imbalance, Precision, Preservation,
         fungible::{Balanced, Credit},
+        Fortitude, Imbalance, Precision, Preservation,
     },
+    FindAuthor, OnUnbalanced,
 };
 use frame_support::unsigned::TransactionValidityError;
 use pallet_transaction_payment::{Config as TxPaymentConfig, OnChargeTransaction, TxCreditHold};
 use sp_runtime::{
-    RuntimeDebug,
     traits::{DispatchInfoOf, PostDispatchInfoOf, SaturatedConversion, Saturating, Zero},
     transaction_validity::InvalidTransaction,
+    RuntimeDebug,
 };
 use sp_std::{marker::PhantomData, prelude::*};
 
@@ -27,7 +27,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::TypeInfo;
-    use sp_runtime::{RuntimeDebug, traits::Zero};
+    use sp_runtime::{traits::Zero, RuntimeDebug};
 
     #[pallet::pallet]
     pub struct Pallet<T>(_);

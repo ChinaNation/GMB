@@ -143,7 +143,7 @@ void main() {
       final dest = Keyring.sr25519.fromSeed(Uint8List(32));
       dest.ss58Format = 2027;
       final destBytes = dest.bytes().toList();
-      final remark = '中华联邦创世';
+      const remark = '中华联邦创世';
 
       final payload = Uint8List.fromList([
         0x04,

@@ -37,8 +37,7 @@ use frame_support::{
     dispatch::DispatchResult,
     parameter_types,
     traits::{
-        fungible::{Balanced, Credit, Inspect},
-        tokens::{Fortitude, Preservation},
+        fungible::{Balanced, Credit},
         ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor, OnUnbalanced,
         VariantCountOf,
     },
@@ -63,11 +62,11 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Address, Assets, Balance, Balances, Block, BlockNumber, CitizenIssuance,
-    ElectionVote, GenesisPallet, Hash, InternalVote, JointVote, LegislationVote, LegislationYuan,
-    Nonce, PalletInfo, PrivateAdmins, PrivateManage, PublicAdmins, PublicManage, Runtime,
-    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
-    System, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    AccountId, Assets, Balance, Balances, Block, BlockNumber, CitizenIssuance, ElectionVote,
+    GenesisPallet, Hash, InternalVote, JointVote, LegislationVote, LegislationYuan, Nonce,
+    PalletInfo, PrivateAdmins, PrivateManage, PublicAdmins, PublicManage, Runtime, RuntimeCall,
+    RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
+    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 #[cfg(not(feature = "runtime-benchmarks"))]
 use super::{ResolutionIssuance, RuntimeUpgrade};
@@ -140,37 +139,14 @@ fn is_reserved_main_account(address: &AccountId) -> bool {
     primitives::cid::china::china_zb::is_reserved_main_account(&addr)
 }
 
-fn is_stake_multi_address(address: &Address) -> bool {
-    match address {
-        sp_runtime::MultiAddress::Id(account) => is_stake_account(account),
-        sp_runtime::MultiAddress::Address32(raw) => is_stake_account(&AccountId::new(*raw)),
-        sp_runtime::MultiAddress::Raw(raw) if raw.len() == 32 => {
-            let mut out = [0u8; 32];
-            out.copy_from_slice(raw.as_slice());
-            is_stake_account(&AccountId::new(out))
-        }
-        _ => false,
-    }
-}
-
 pub struct RuntimeCallFilter;
 
 impl Contains<RuntimeCall> for RuntimeCallFilter {
     fn contains(call: &RuntimeCall) -> bool {
         match call {
-            RuntimeCall::Balances(pallet_balances::Call::force_transfer { source, .. }) => {
-                !is_stake_multi_address(source)
-            }
-            RuntimeCall::Balances(pallet_balances::Call::force_unreserve { who, .. }) => {
-                !is_stake_multi_address(who)
-            }
-            RuntimeCall::Balances(pallet_balances::Call::force_set_balance { who, .. }) => {
-                !is_stake_multi_address(who)
-            }
-            // force_adjust_total_issuance 直接影响全局发行量；统一在 BaseCallFilter 禁用外部入口。
-            RuntimeCall::Balances(pallet_balances::Call::force_adjust_total_issuance {
-                ..
-            }) => false,
+            // Balances 只作为底层余额账本和内部 Currency 能力保留。
+            // 外部单账户链上转账唯一入口是 OnchainTransaction::transfer_with_remark。
+            RuntimeCall::Balances(_) => false,
             // ADR-011 铁律:pallet_assets 内核所有原生 extrinsic 一律 reject。
             // 业务调用必须经由 OnchainIssuance::propose_* → InternalVote/JointVote callback → 内部 root 调用。
             // 任何外部 extrinsic 直接打到 pallet_assets 全部不入块,
@@ -345,48 +321,16 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
     for RuntimeFeeKindClassifier
 {
     fn fee_kind(
-        who: &AccountId,
+        _who: &AccountId,
         call: &RuntimeCall,
     ) -> onchain_transaction::FeeChargeKind<Balance> {
         use onchain_transaction::FeeChargeKind;
 
         match call {
-            RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
-                value, ..
-            }) => FeeChargeKind::OnchainAmount(*value),
             RuntimeCall::OnchainTransaction(
                 onchain_transaction::pallet::Call::transfer_with_remark { amount, .. },
             ) => FeeChargeKind::OnchainAmount(*amount),
             RuntimeCall::OnchainTransaction(_) => FeeChargeKind::Unknown,
-            RuntimeCall::Balances(pallet_balances::Call::force_transfer { value, .. }) => {
-                FeeChargeKind::OnchainAmount(*value)
-            }
-            RuntimeCall::Balances(pallet_balances::Call::force_unreserve { amount, .. }) => {
-                FeeChargeKind::OnchainAmount(*amount)
-            }
-            RuntimeCall::Balances(pallet_balances::Call::force_set_balance {
-                new_free, ..
-            }) => FeeChargeKind::OnchainAmount(*new_free),
-            RuntimeCall::Balances(pallet_balances::Call::force_adjust_total_issuance {
-                delta,
-                ..
-            }) => FeeChargeKind::OnchainAmount(*delta),
-            RuntimeCall::Balances(pallet_balances::Call::burn { value, .. }) => {
-                FeeChargeKind::OnchainAmount(*value)
-            }
-            RuntimeCall::Balances(pallet_balances::Call::transfer_all { keep_alive, .. }) => {
-                let preservation = if *keep_alive {
-                    Preservation::Preserve
-                } else {
-                    Preservation::Expendable
-                };
-                let value = <Balances as Inspect<AccountId>>::reducible_balance(
-                    who,
-                    preservation,
-                    Fortitude::Polite,
-                );
-                FeeChargeKind::OnchainAmount(value)
-            }
             // PersonalManage 的 propose_create/propose_close 是治理提案交易，
             // 交易本身固定收 1 元；执行阶段的资金手续费由对应 pallet 内部按金额另行处理。
             RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
@@ -523,12 +467,12 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // pallet_assets 内核所有原生 extrinsic 已被 RuntimeCallFilter 拦在入口,
             // 永远到不了本路径;此分支仅供编译期 exhaustive 检查。
             RuntimeCall::Assets(_) => FeeChargeKind::Free,
-            // 对 Balances 未覆盖分支按 Unknown 拒绝,避免"有金额但漏提取"。
+            // Balances 外部入口已被 RuntimeCallFilter 全部拒绝;这里只保留穷尽分支。
+            RuntimeCall::Balances(_) => FeeChargeKind::Unknown,
             //
             // 不再写 `_ => Unknown` 兜底:补 RuntimeCall::Grandpa 之后所有 pallet 变体已穷尽,
             // 将来新增 pallet 若忘记归类会编译期 non-exhaustive match 报错,
             // 强制开发者显式选择五类费用模型之一。
-            RuntimeCall::Balances(_) => FeeChargeKind::Unknown,
         }
     }
 }
