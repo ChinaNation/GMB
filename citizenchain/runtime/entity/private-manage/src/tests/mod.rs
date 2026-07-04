@@ -137,9 +137,11 @@ impl
         scope_province_name: &[u8],
         _scope_city_name: &[u8],
     ) -> bool {
+        // account_names 可为空(改名 update_institution_info 无账户名);
+        // 登记入口自身已在 verifier 前拒空账户名。
+        let _ = account_names;
         !cid_number.is_empty()
             && !cid_full_name.is_empty()
-            && !account_names.is_empty()
             && !nonce.is_empty()
             && !scope_province_name.is_empty()
             && signer_pubkey != &[0u8; 32]

@@ -14,6 +14,8 @@ use frame_support::{
 /// Weight functions for `public_manage`.
 pub trait WeightInfo {
 	fn register_cid_public_institution() -> Weight;
+	fn update_institution_info() -> Weight;
+	fn add_institution_account() -> Weight;
 	fn propose_create_public_institution() -> Weight;
 	/// `n` = 聚合的签名数量(= 管理员投票数)。
 	fn propose_close_public_institution() -> Weight;
@@ -23,6 +25,18 @@ pub trait WeightInfo {
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn register_cid_public_institution() -> Weight {
+		Weight::from_parts(45_334_000, 0)
+			.saturating_add(Weight::from_parts(0, 3619))
+			.saturating_add(T::DbWeight::get().reads(3))
+			.saturating_add(T::DbWeight::get().writes(2))
+	}
+	fn update_institution_info() -> Weight {
+		Weight::from_parts(45_334_000, 0)
+			.saturating_add(Weight::from_parts(0, 3619))
+			.saturating_add(T::DbWeight::get().reads(3))
+			.saturating_add(T::DbWeight::get().writes(2))
+	}
+	fn add_institution_account() -> Weight {
 		Weight::from_parts(45_334_000, 0)
 			.saturating_add(Weight::from_parts(0, 3619))
 			.saturating_add(T::DbWeight::get().reads(3))
@@ -50,6 +64,18 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 
 impl WeightInfo for () {
 	fn register_cid_public_institution() -> Weight {
+		Weight::from_parts(45_334_000, 0)
+			.saturating_add(Weight::from_parts(0, 3619))
+			.saturating_add(RocksDbWeight::get().reads(3))
+			.saturating_add(RocksDbWeight::get().writes(2))
+	}
+	fn update_institution_info() -> Weight {
+		Weight::from_parts(45_334_000, 0)
+			.saturating_add(Weight::from_parts(0, 3619))
+			.saturating_add(RocksDbWeight::get().reads(3))
+			.saturating_add(RocksDbWeight::get().writes(2))
+	}
+	fn add_institution_account() -> Weight {
 		Weight::from_parts(45_334_000, 0)
 			.saturating_add(Weight::from_parts(0, 3619))
 			.saturating_add(RocksDbWeight::get().reads(3))

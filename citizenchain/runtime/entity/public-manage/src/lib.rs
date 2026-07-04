@@ -316,6 +316,20 @@ pub mod pallet {
             account: T::AccountId,
             submitter: T::AccountId,
         },
+        /// 机构信息(全称/简称)已更新。
+        InstitutionInfoUpdated {
+            cid_number: CidNumberOf<T>,
+            cid_full_name: AccountNameOf<T>,
+            cid_short_name: AccountNameOf<T>,
+            submitter: T::AccountId,
+        },
+        /// 已给存量机构新增账户。
+        InstitutionAccountAdded {
+            cid_number: CidNumberOf<T>,
+            account_name: AccountNameOf<T>,
+            account: T::AccountId,
+            submitter: T::AccountId,
+        },
     }
 
     #[pallet::error]
@@ -369,6 +383,8 @@ pub mod pallet {
         EmptyCidNumber,
         /// CID 号格式或机构码家族非法
         InvalidCidNumber,
+        /// 目标机构不存在。
+        InstitutionNotFound,
         /// 机构已整体关闭(墓碑),该 CID 号永不复用
         InstitutionAlreadyClosed,
         /// 机构登记 nonce 已被使用
@@ -518,6 +534,71 @@ pub mod pallet {
                 admins_len,
                 admins,
                 threshold,
+                register_nonce,
+                signature,
+                issuer_cid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
+            )
+        }
+
+        /// 注册局更新机构全称/简称(链是机构信息唯一真源)。
+        /// 机构码/CID/省市码物理编码在 CID 里,不可改故不作为参数。
+        #[pallet::call_index(6)]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::update_institution_info())]
+        #[allow(clippy::too_many_arguments)]
+        pub fn update_institution_info(
+            origin: OriginFor<T>,
+            cid_number: CidNumberOf<T>,
+            cid_full_name: AccountNameOf<T>,
+            cid_short_name: AccountNameOf<T>,
+            register_nonce: RegisterNonceOf<T>,
+            signature: RegisterSignatureOf<T>,
+            issuer_cid_number: Vec<u8>,
+            issuer_main_account: T::AccountId,
+            signer_pubkey: [u8; 32],
+            scope_province_name: Vec<u8>,
+            scope_city_name: Vec<u8>,
+        ) -> DispatchResult {
+            let submitter = ensure_signed(origin)?;
+            crate::institution::maintain::do_update_institution_info::<T>(
+                submitter,
+                cid_number,
+                cid_full_name,
+                cid_short_name,
+                register_nonce,
+                signature,
+                issuer_cid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
+            )
+        }
+
+        /// 给已存在机构新增账户(新账户名 → 确定性派生地址 → 上链)。
+        #[pallet::call_index(7)]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::add_institution_account())]
+        #[allow(clippy::too_many_arguments)]
+        pub fn add_institution_account(
+            origin: OriginFor<T>,
+            cid_number: CidNumberOf<T>,
+            account_names: InstitutionAccountNamesOf<T>,
+            register_nonce: RegisterNonceOf<T>,
+            signature: RegisterSignatureOf<T>,
+            issuer_cid_number: Vec<u8>,
+            issuer_main_account: T::AccountId,
+            signer_pubkey: [u8; 32],
+            scope_province_name: Vec<u8>,
+            scope_city_name: Vec<u8>,
+        ) -> DispatchResult {
+            let submitter = ensure_signed(origin)?;
+            crate::institution::maintain::do_add_institution_account::<T>(
+                submitter,
+                cid_number,
+                account_names,
                 register_nonce,
                 signature,
                 issuer_cid_number,

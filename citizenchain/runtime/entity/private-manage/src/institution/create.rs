@@ -41,7 +41,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
     who: T::AccountId,
     cid_number: CidNumberOf<T>,
     cid_full_name: AccountNameOf<T>,
-    _cid_short_name: AccountNameOf<T>,
+    cid_short_name: AccountNameOf<T>,
     accounts: InstitutionInitialAccountsOf<T>,
     institution_code: InstitutionCode,
     admins_len: u32,
@@ -72,10 +72,11 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         parts.institution == institution_code,
         Error::<T>::InvalidCidNumber
     );
-    // private-manage 只管理私权机构;私权机构名称留在注册端业务库,
-    // 链上只保存 CID 号、账户、管理员与生命周期状态。
-    let (stored_full_name, stored_short_name) =
-        (AccountNameOf::<T>::default(), AccountNameOf::<T>::default());
+    // 私权机构名称上链:链是机构信息唯一真源(注册局本地库为同步副本),
+    // 公权/私权统一。全称必填,简称非空。
+    ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
+    ensure!(!cid_short_name.is_empty(), Error::<T>::EmptyAccountName);
+    let (stored_full_name, stored_short_name) = (cid_full_name.clone(), cid_short_name.clone());
     ensure!(
         !issuer_cid_number.is_empty(),
         Error::<T>::EmptyIssuerCidNumber

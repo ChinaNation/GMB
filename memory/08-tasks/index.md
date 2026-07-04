@@ -2,6 +2,7 @@
 
 ## open
 
+- `memory/08-tasks/open/20260703-institution-info-update-and-add-account.md`
 - `memory/08-tasks/open/20260702-cid-occupy-card3-genesis-legacy-backfill.md`
 - `memory/08-tasks/open/20260626-registry-merge-00-adr-scaffold.md`
 - `memory/08-tasks/open/20260626-registry-merge-01-backend-migrate.md`

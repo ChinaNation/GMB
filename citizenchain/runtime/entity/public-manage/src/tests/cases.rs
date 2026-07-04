@@ -1101,3 +1101,170 @@ fn register_rejects_non_public_family_cid_number() {
         );
     });
 }
+
+// ── 机构信息维护:改名 + 新增账户 ──
+
+#[test]
+fn update_institution_info_changes_names_only() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        let cid = generated_cid("CID-UPD-1", "CGOV");
+        assert_ok!(PublicManage::propose_create_public_institution(
+            RuntimeOrigin::signed(c.clone()),
+            cid.clone(),
+            cid_full_name("旧全称".as_bytes()),
+            cid_short_name("旧简称".as_bytes()),
+            typical_accounts(),
+            code_bytes("CGOV"),
+            3,
+            admin_profiles_vec(3),
+            2,
+            register_nonce(b"nonce-upd-c"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+
+        assert_ok!(PublicManage::update_institution_info(
+            RuntimeOrigin::signed(c),
+            cid.clone(),
+            cid_full_name("新全称".as_bytes()),
+            cid_short_name("新简称".as_bytes()),
+            register_nonce(b"nonce-upd-u"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+        let info = pallet::Institutions::<Test>::get(&cid).expect("institution");
+        assert_eq!(info.cid_full_name, cid_full_name("新全称".as_bytes()));
+        assert_eq!(info.cid_short_name, cid_short_name("新简称".as_bytes()));
+        // 机构码/CID 不动。
+        assert_eq!(info.institution_code, code_bytes("CGOV"));
+    });
+}
+
+#[test]
+fn update_institution_info_rejects_empty_and_unknown() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        // 机构不存在。
+        assert_noop!(
+            PublicManage::update_institution_info(
+                RuntimeOrigin::signed(c.clone()),
+                generated_cid("CID-UPD-X", "CGOV"),
+                cid_full_name("x".as_bytes()),
+                cid_short_name("y".as_bytes()),
+                register_nonce(b"nonce-upd-x"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::InstitutionNotFound
+        );
+    });
+}
+
+#[test]
+fn add_institution_account_derives_and_registers() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        let cid = generated_cid("CID-ADD-1", "CGOV");
+        assert_ok!(PublicManage::propose_create_public_institution(
+            RuntimeOrigin::signed(c.clone()),
+            cid.clone(),
+            cid_full_name("机构".as_bytes()),
+            cid_short_name("简".as_bytes()),
+            typical_accounts(),
+            code_bytes("CGOV"),
+            3,
+            admin_profiles_vec(3),
+            2,
+            register_nonce(b"nonce-add-c"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+
+        assert_ok!(PublicManage::add_institution_account(
+            RuntimeOrigin::signed(c),
+            cid.clone(),
+            account_names_bv(&["专项账户".as_bytes()]),
+            register_nonce(b"nonce-add-a"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+        let expected =
+            PublicManage::derive_registered_account(cid.as_slice(), "专项账户".as_bytes())
+                .expect("derive")
+                .0;
+        assert_eq!(
+            pallet::CidRegisteredAccount::<Test>::get(&cid, &account_name("专项账户".as_bytes())),
+            Some(expected.clone())
+        );
+        assert!(pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid,
+            &account_name("专项账户".as_bytes())
+        ));
+        assert!(pallet::AccountRegisteredCid::<Test>::contains_key(
+            &expected
+        ));
+    });
+}
+
+#[test]
+fn add_institution_account_rejects_duplicate() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        let cid = generated_cid("CID-ADD-2", "CGOV");
+        assert_ok!(PublicManage::propose_create_public_institution(
+            RuntimeOrigin::signed(c.clone()),
+            cid.clone(),
+            cid_full_name("机构".as_bytes()),
+            cid_short_name("简".as_bytes()),
+            typical_accounts(),
+            code_bytes("CGOV"),
+            3,
+            admin_profiles_vec(3),
+            2,
+            register_nonce(b"nonce-add2-c"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+        // 主账户名已存在,重复加拒绝。
+        assert_noop!(
+            PublicManage::add_institution_account(
+                RuntimeOrigin::signed(c),
+                cid,
+                account_names_bv(&[RESERVED_NAME_MAIN]),
+                register_nonce(b"nonce-add2-a"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::CidAlreadyRegistered
+        );
+    });
+}

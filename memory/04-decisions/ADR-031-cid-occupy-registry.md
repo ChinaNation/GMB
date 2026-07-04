@@ -135,6 +135,8 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 
 ## 状态
 
+- 2026-07-03:**机构信息可维护补齐**(卡 20260703-institution-info-update-and-add-account)——链是机构信息唯一真源(公权/私权统一),私权名改为上链;entity 两 pallet 加 `update_institution_info`(改全称/简称,机构码/CID/省市码物理编码在 CID 里不可改)+ `add_institution_account`(存量机构新增账户,派生地址上链),注册局授权;创世只铸初始版本,今后改名/加账户/新增机构走交易。public 38+private 37 测试绿。剩 onchina 冷签流程/App reconcile/internal-vote 自治路径。
+
 - 2026-07-03:**卡3 代码全部完成**——plain spec 部署形态(chain_spec 切换/bake 重写/宪法检查 RPC 模式/首启物化实测 301s·2.7GB)、smoldot 轻形态(fork 已确认支持 StateRootHash)、onchina 启动抽样对账+audit-chain-catalog 全量比对、同源年份钉死+596,517 交叉测试、runtime 全量断言(抓修 193 常量漏铸)。测试:runtime 31/onchina 135/primitives 45 全绿。剩部署 runbook(方案 E)。
 
 - 2026-07-02:v1 定稿(批量交易方案);同日完成嵌入式库旧机构清理。

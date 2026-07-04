@@ -262,10 +262,10 @@ fn propose_create_private_institution_registers_active_without_vote() {
                 .institution_code,
             code_bytes("SFLP"),
         );
-        // 私权机构名称不上链:链上 cid_full_name / cid_short_name 留空。
+        // 私权机构名称上链(链是唯一真源):存全称/简称。
         let stored = pallet::Institutions::<Test>::get(&cid).unwrap();
-        assert!(stored.cid_full_name.is_empty());
-        assert!(stored.cid_short_name.is_empty());
+        assert_eq!(stored.cid_full_name, cid_full_name("机构甲".as_bytes()));
+        assert_eq!(stored.cid_short_name, cid_short_name("简称".as_bytes()));
         let main = PrivateManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
             .unwrap()
             .0;
@@ -281,7 +281,7 @@ fn propose_create_private_institution_registers_active_without_vote() {
 }
 
 #[test]
-fn private_institution_discards_full_and_short_name_onchain() {
+fn private_institution_stores_full_and_short_name_onchain() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
         let cid = generated_cid("CID-PRI-1", "SFLP");
@@ -305,35 +305,42 @@ fn private_institution_discards_full_and_short_name_onchain() {
             b"city".to_vec(),
         ));
 
-        // 私权机构名称不上链,避免链上保存私权主体展示名副本。
+        // 私权机构名称上链(链是机构信息唯一真源)。
         let stored = pallet::Institutions::<Test>::get(&cid).unwrap();
-        assert!(stored.cid_full_name.is_empty());
-        assert!(stored.cid_short_name.is_empty());
+        assert_eq!(
+            stored.cid_full_name,
+            cid_full_name("某市人民政府".as_bytes())
+        );
+        assert_eq!(stored.cid_short_name, cid_short_name("某市府".as_bytes()));
     });
 }
 
 #[test]
-fn private_institution_allows_empty_short_name() {
+fn private_institution_rejects_empty_short_name() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        assert_ok!(PrivateManage::propose_create_private_institution(
-            RuntimeOrigin::signed(c),
-            generated_cid("CID-PRI-2", "SFLP"),
-            cid_full_name("某市人民政府".as_bytes()),
-            cid_short_name(b""),
-            typical_accounts(),
-            code_bytes("SFLP"),
-            3,
-            admin_profiles_vec(3),
-            2,
-            register_nonce(b"nonce-pri-2"),
-            valid_signature(),
-            province_name(),
-            creator(),
-            signer_pubkey(),
-            province_name(),
-            b"city".to_vec(),
-        ));
+        // 私权名上链后简称必填。
+        assert_noop!(
+            PrivateManage::propose_create_private_institution(
+                RuntimeOrigin::signed(c),
+                generated_cid("CID-PRI-2", "SFLP"),
+                cid_full_name("某市人民政府".as_bytes()),
+                cid_short_name(b""),
+                typical_accounts(),
+                code_bytes("SFLP"),
+                3,
+                admin_profiles_vec(3),
+                2,
+                register_nonce(b"nonce-pri-2"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::EmptyAccountName
+        );
     });
 }
 
@@ -1093,5 +1100,126 @@ fn register_rejects_non_private_family_cid_number() {
             ),
             pallet::Error::<Test>::InvalidCidNumber
         );
+    });
+}
+
+// ── 机构信息维护:改名 + 新增账户 ──
+
+#[test]
+fn update_institution_info_changes_names_only() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        let cid = generated_cid("CID-UPD-1", "SFLP");
+        assert_ok!(PrivateManage::propose_create_private_institution(
+            RuntimeOrigin::signed(c.clone()),
+            cid.clone(),
+            cid_full_name("旧全称".as_bytes()),
+            cid_short_name("旧简称".as_bytes()),
+            typical_accounts(),
+            code_bytes("SFLP"),
+            3,
+            admin_profiles_vec(3),
+            2,
+            register_nonce(b"nonce-upd-c"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+        assert_ok!(PrivateManage::update_institution_info(
+            RuntimeOrigin::signed(c),
+            cid.clone(),
+            cid_full_name("新全称".as_bytes()),
+            cid_short_name("新简称".as_bytes()),
+            register_nonce(b"nonce-upd-u"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+        let info = pallet::Institutions::<Test>::get(&cid).expect("institution");
+        assert_eq!(info.cid_full_name, cid_full_name("新全称".as_bytes()));
+        assert_eq!(info.cid_short_name, cid_short_name("新简称".as_bytes()));
+        assert_eq!(info.institution_code, code_bytes("SFLP"));
+    });
+}
+
+#[test]
+fn update_institution_info_rejects_unknown() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        assert_noop!(
+            PrivateManage::update_institution_info(
+                RuntimeOrigin::signed(c),
+                generated_cid("CID-UPD-X", "SFLP"),
+                cid_full_name("x".as_bytes()),
+                cid_short_name("y".as_bytes()),
+                register_nonce(b"nonce-upd-x"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::InstitutionNotFound
+        );
+    });
+}
+
+#[test]
+fn add_institution_account_derives_and_registers() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        let cid = generated_cid("CID-ADD-1", "SFLP");
+        assert_ok!(PrivateManage::propose_create_private_institution(
+            RuntimeOrigin::signed(c.clone()),
+            cid.clone(),
+            cid_full_name("机构".as_bytes()),
+            cid_short_name("简".as_bytes()),
+            typical_accounts(),
+            code_bytes("SFLP"),
+            3,
+            admin_profiles_vec(3),
+            2,
+            register_nonce(b"nonce-add-c"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+        assert_ok!(PrivateManage::add_institution_account(
+            RuntimeOrigin::signed(c),
+            cid.clone(),
+            account_names_bv(&["专项账户".as_bytes()]),
+            register_nonce(b"nonce-add-a"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+        let expected =
+            PrivateManage::derive_registered_account(cid.as_slice(), "专项账户".as_bytes())
+                .expect("derive")
+                .0;
+        assert_eq!(
+            pallet::CidRegisteredAccount::<Test>::get(&cid, &account_name("专项账户".as_bytes())),
+            Some(expected.clone())
+        );
+        assert!(pallet::InstitutionAccounts::<Test>::contains_key(
+            &cid,
+            &account_name("专项账户".as_bytes())
+        ));
+        assert!(pallet::AccountRegisteredCid::<Test>::contains_key(
+            &expected
+        ));
     });
 }
