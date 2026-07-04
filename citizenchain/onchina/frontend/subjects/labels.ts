@@ -162,13 +162,28 @@ export const SCHOOL_EDUCATION_TYPES: EducationType[] = [
   'UNIVERSITY',
 ];
 
-// ── 手动公权机构可选代码:市级公权码(表单强制选市建市级机构);
-//    排除 CEDU(归教育 tab)、市级官方自动目录代码,以及国家/省级与储备体系码。 ──
+// ── 运行期公权机构可选代码。
+// 创世只写国家/省/市当前骨架;镇级公权机构以后由注册局选择 town_code 注册上链。
+// CEDU 归教育 tab,储备体系/固定治理码不在本表单创建。
 const GOV_MANUAL_INSTITUTIONS: ChoiceItem[] = [
   { value: 'CGOV', label: '政府' },
   { value: 'CLEG', label: '立法院' },
   { value: 'CJUD', label: '司法院' },
   { value: 'CSUP', label: '监察院' },
+  { value: 'TGOV', label: '镇政府' },
+  { value: 'TCWF', label: '镇民生科' },
+  { value: 'THUD', label: '镇住建科' },
+  { value: 'TAGR', label: '镇农业科' },
+  { value: 'TFIN', label: '镇财税科' },
+  { value: 'TDEF', label: '镇国防科' },
+  { value: 'THSC', label: '镇国安科' },
+  { value: 'TCOM', label: '镇商贸科' },
+  { value: 'TENR', label: '镇能源科' },
+  { value: 'TTRN', label: '镇交通科' },
+  { value: 'TPOL', label: '镇公安科' },
+  { value: 'TSLF', label: '镇自治会' },
+  { value: 'TSUP', label: '镇监察院' },
+  { value: 'TJUD', label: '镇司法院' },
 ];
 
 // ── 公权下属非法人锁死非法人组织(UNIN) ──

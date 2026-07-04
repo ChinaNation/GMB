@@ -54,10 +54,10 @@ a = (pallet_index << 8) | call_index
 | `0x1000` | `GrandpaKeyChange.propose_replace_grandpa_key` | `propose_replace_grandpa_key` | `institution`, `new_key` | citizenchain node |
 | `0x2001` | `PublicManage.propose_close_public_institution` | `propose_close_public_institution` | `account`, `beneficiary` | CitizenApp |
 | `0x2004` | `PublicManage.cleanup_rejected_public_proposal` | `cleanup_rejected_public_proposal` | `proposal_id` | CitizenApp |
-| `0x2005` | `PublicManage.propose_create_public_institution` | `propose_create_public_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
+| `0x2005` | `PublicManage.propose_create_public_institution` | `propose_create_public_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
 | `0x2101` | `PrivateManage.propose_close_private_institution` | `propose_close_private_institution` | `account`, `beneficiary` | CitizenApp |
 | `0x2104` | `PrivateManage.cleanup_rejected_private_proposal` | `cleanup_rejected_private_proposal` | `proposal_id` | CitizenApp |
-| `0x2105` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
+| `0x2105` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
 | `0x2300` | `AddressRegistry.set_catalog_version` | `set_address_catalog_version` | `registrar_account`, `catalog_version`, `catalog_hash` | onchina |
 | `0x2301` | `AddressRegistry.set_address_name` | `set_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_name` | onchina |
 | `0x2302` | `AddressRegistry.remove_address_name` | `remove_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code` | onchina |

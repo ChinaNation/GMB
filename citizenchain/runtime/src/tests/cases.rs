@@ -700,7 +700,9 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             .to_vec()
             .try_into()
             .expect("cid_full_name should fit");
+        let cid_short_name: &[u8] = b"test-inst";
         let account_names: Vec<Vec<u8>> = vec![b"main-account".to_vec(), b"fee-account".to_vec()];
+        let town_code: &[u8] = b"";
 
         let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
             let payload = (
@@ -709,6 +711,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 cid_number,
                 cid_full_name.as_slice(),
+                cid_short_name,
                 &account_names,
                 register_nonce.as_slice(),
                 issuer_cid_number.as_slice(),
@@ -716,6 +719,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 admin_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
+                town_code,
             );
             let msg = blake2_256(&payload.encode());
             let sig = signing_pair.sign(&msg);
@@ -734,6 +738,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             >>::verify_institution_registration(
                 cid_number,
                 &cid_full_name,
+                cid_short_name,
                 &account_names,
                 &register_nonce,
                 &main_signature,
@@ -742,6 +747,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 &main_admin_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
+                town_code,
             ),
             "main admin signature should pass"
         );
@@ -756,6 +762,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             >>::verify_institution_registration(
                 cid_number,
                 &cid_full_name,
+                cid_short_name,
                 &account_names,
                 &register_nonce,
                 &backup_signature,
@@ -764,6 +771,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 &backup_admin_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
+                town_code,
             ),
             "backup admin signature should pass"
         );
@@ -780,6 +788,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             >>::verify_institution_registration(
                 cid_number,
                 &cid_full_name,
+                cid_short_name,
                 &account_names,
                 &register_nonce,
                 &outsider_signature,
@@ -788,6 +797,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 &outsider_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
+                town_code,
             ),
             "outsider admin pubkey must reject"
         );
@@ -803,6 +813,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             >>::verify_institution_registration(
                 cid_number,
                 &cid_full_name,
+                cid_short_name,
                 &account_names,
                 &register_nonce,
                 &bad_signature,
@@ -811,6 +822,7 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 &main_admin_pubkey,
                 province_bytes.as_slice(),
                 scope_city_name.as_slice(),
+                town_code,
             ),
             "tampered signature must reject"
         );
@@ -903,7 +915,8 @@ fn ordinary_account_allows_all_actions() {
 
 // ── 创世直铸全量断言(ADR-031 卡3 验收)──
 
-/// 全量创世直铸:常量 282 + 模板派生 596,517 = 596,799,零交易;
+/// 创世直铸当前国家/省/市骨架:常量 282 + 模板派生 49,299 = 49,581,零交易;
+/// 镇级公权机构不进创世,运行期由注册局按 town_code 注册上链。
 /// 并抽查派生首条与链上登记逐字节一致、NJD 创世管理员在位。
 #[test]
 fn genesis_public_institutions_full_mint_counts() {

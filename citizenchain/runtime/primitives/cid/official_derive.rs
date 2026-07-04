@@ -2,16 +2,16 @@
 //!
 //! 「行政区(`china::area`)× 机构码模板(`official_template`)」纯派生:号由
 //! `seed + generator` 确定性生成,名称由模板组装。genesis 落地存储与数量/格式断言
-//! 共享本枚举,杜绝逻辑漂移。数量 = 国家两院 2 + 省部门 11×43 + 市级 17×市数 +
-//! 镇级 14×镇数,与 china_*.rs 282 常量互不重号。
+//! 共享本枚举,杜绝逻辑漂移。创世只直铸当前国家/省/市骨架:
+//! 数量 = 国家两院 2 + 省部门 11×43 + 市级 17×市数,与 china_*.rs 282 常量互不重号。
+//! 镇级公权机构保留模板,但运行期统一由注册局按镇码注册上链。
 
 use alloc::string::String;
 
 use crate::cid::china::area::{for_each_area, AreaItem};
 use crate::cid::generator::{generate_cid_number, GenerateCidNumberInput};
 use crate::cid::official_template::{
-    OfficialOrgTemplate, CITY_TEMPLATES, NATIONAL_ASSEMBLY_TEMPLATES,
-    PROVINCE_DEPARTMENT_TEMPLATES, TOWN_TEMPLATES,
+    OfficialOrgTemplate, CITY_TEMPLATES, NATIONAL_ASSEMBLY_TEMPLATES, PROVINCE_DEPARTMENT_TEMPLATES,
 };
 use crate::cid::seed::official_institution_account_seed;
 
@@ -75,8 +75,7 @@ pub struct DerivedInstitutionItem<'a> {
 /// 枚举全部派生公权机构,对每个机构调用 `f(cid_number, cid_full_name, cid_short_name)`。
 ///
 /// 遍历顺序与 `AREA_DATA` 字节序一致,确定性。省级部门落省主市、显示名=省名;
-/// 国家两院落中枢省主市、显示名为空(模板 full_suffix 已含国名前缀);市级显示名=
-/// 市名;镇级 generator 的 city_name 取市名(与 onchina 一致)、显示名=镇名。
+/// 国家两院落中枢省主市、显示名为空(模板 full_suffix 已含国名前缀);市级显示名=市名。
 pub fn for_each_public_institution<F>(mut f: F)
 where
     F: FnMut(&str, &str, &str),
@@ -173,30 +172,18 @@ where
                 );
             }
         }
-        AreaItem::Town(town) => {
-            for template in TOWN_TEMPLATES {
-                emit(
-                    "TOWN",
-                    town.province_code,
-                    town.city_code,
-                    town.town_code,
-                    template,
-                    town.province_name,
-                    town.city_name,
-                    town.town_name,
-                );
-            }
-        }
+        // 镇级行政区仍是行政区真源的一部分,但镇级公权机构不再参与创世直铸。
+        // 运行期由注册局按 town_code 创建,链上 PublicManage 才是机构唯一真源。
+        AreaItem::Town(_) => {}
     });
 }
 
-/// 派生机构总数(= 国家两院 2 + 省部门 11×省 + 市级 17×市 + 镇级 14×镇)。
+/// 派生机构总数(= 国家两院 2 + 省部门 11×省 + 市级 17×市)。
 pub fn public_institution_derived_count() -> usize {
-    let (provinces, cities, towns) = crate::cid::china::area::area_counts();
+    let (provinces, cities, _towns) = crate::cid::china::area::area_counts();
     NATIONAL_ASSEMBLY_TEMPLATES.len()
         + PROVINCE_DEPARTMENT_TEMPLATES.len() * provinces as usize
         + CITY_TEMPLATES.len() * cities as usize
-        + TOWN_TEMPLATES.len() * towns as usize
 }
 
 #[cfg(test)]
@@ -209,8 +196,8 @@ mod tests {
     fn derived_count_matches_area_and_templates() {
         assert_eq!(
             public_institution_derived_count(),
-            596_517,
-            "派生机构总数 = 2 + 11×43 + 17×2872 + 14×39087"
+            49_299,
+            "派生机构总数 = 2 + 11×43 + 17×2872"
         );
     }
 

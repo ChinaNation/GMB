@@ -163,7 +163,7 @@ mod official_source_tests {
     use super::*;
 
     /// 创世派生(primitives::official_derive)与 onchina 官方号派生必须逐字节同源:
-    /// 全量 596,517 机构逐个复算,号完全一致(含年份钉死后跨年不漂移)。
+    /// 创世派生机构逐个复算,号完全一致(含年份钉死后跨年不漂移)。
     #[test]
     fn onchina_official_cid_matches_primitives_derivation() {
         let mut total = 0usize;

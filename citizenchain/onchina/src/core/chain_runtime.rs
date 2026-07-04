@@ -97,16 +97,21 @@ pub(crate) fn build_institution_registration_credential(
     state: &AppState,
     cid_number: &str,
     cid_full_name: &str,
+    cid_short_name: &str,
     account_names: &[String],
     register_nonce: String,
     scope_province_name: &str,
     scope_city_name: &str,
+    town_code: &str,
 ) -> Result<RuntimeInstitutionRegistrationCredential, String> {
     if cid_number.trim().is_empty() {
         return Err("cid_number is required".to_string());
     }
     if cid_full_name.trim().is_empty() {
         return Err("cid_full_name is required".to_string());
+    }
+    if cid_short_name.trim().is_empty() {
+        return Err("cid_short_name is required".to_string());
     }
     if account_names.is_empty() || account_names.iter().any(|name| name.trim().is_empty()) {
         return Err("account_names are required".to_string());
@@ -120,12 +125,16 @@ pub(crate) fn build_institution_registration_credential(
         .iter()
         .map(|name| name.trim().as_bytes().to_vec())
         .collect::<Vec<_>>();
+    // 字段顺序必须与 RuntimeCidInstitutionVerifier 完全一致:
+    // genesis_hash + cid_number + cid_full_name + cid_short_name + account_names[]
+    // + nonce + 签发机构 + 作用域 + town_code。
     let payload = (
         GMB,
         OP_SIGN_INST,
         genesis_hash,
         cid_number.trim().as_bytes(),
         cid_full_name.trim().as_bytes(),
+        cid_short_name.trim().as_bytes(),
         &account_name_payload,
         register_nonce.trim().as_bytes(),
         signing_ctx.issuer_cid_number.as_bytes(),
@@ -133,6 +142,7 @@ pub(crate) fn build_institution_registration_credential(
         &signing_ctx.signer_pubkey,
         signing_ctx.scope_province_name.as_bytes(),
         signing_ctx.scope_city_name.as_bytes(),
+        town_code.trim().as_bytes(),
     );
     let payload_digest = blake2_256(&payload.encode());
     let signature = sign_runtime_digest(state, &payload_digest)?;
@@ -1098,6 +1108,7 @@ fn contains_admin(decoded: &OnChainAdminAccount, target: &[u8; 32]) -> bool {
 pub(crate) struct OnChainInstitution {
     pub(crate) cid_full_name: Vec<u8>,
     pub(crate) cid_short_name: Vec<u8>,
+    pub(crate) town_code: Vec<u8>,
     pub(crate) institution_code: [u8; 4],
     pub(crate) created_at: u32,
     /// InstitutionLifecycleStatus 判别值:0=Pending 1=Active 2=Closed。
@@ -1119,6 +1130,7 @@ pub(crate) struct OnChainInstitutionAccount {
 struct RawInstitutionInfo {
     cid_full_name: Vec<u8>,
     cid_short_name: Vec<u8>,
+    town_code: Vec<u8>,
     institution_code: [u8; 4],
     created_at: u32,
     status: u8,
@@ -1165,6 +1177,7 @@ pub(crate) async fn institution_lookup(
     Ok(Some(OnChainInstitution {
         cid_full_name: info.cid_full_name,
         cid_short_name: info.cid_short_name,
+        town_code: info.town_code,
         institution_code: info.institution_code,
         created_at: info.created_at,
         status: info.status,
@@ -1206,6 +1219,7 @@ pub(crate) async fn for_each_chain_institution(
             OnChainInstitution {
                 cid_full_name: info.cid_full_name,
                 cid_short_name: info.cid_short_name,
+                town_code: info.town_code,
                 institution_code: info.institution_code,
                 created_at: info.created_at,
                 status: info.status,

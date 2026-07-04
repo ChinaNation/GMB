@@ -2089,11 +2089,20 @@ fn main() {
     }
     init_chain_genesis_hash_blocking()
         .unwrap_or_else(|e| panic!("init chain genesis hash failed: {e}"));
-    // 公权机构唯一真源是链上 PublicManage。普通启动先全量同步链投影:
-    // 链上缺失或不可达时 fail-closed,避免本地重新生成公权机构继续对外服务。
-    let projection = crate::domains::gov::service::sync_gov_chain_projection_blocking(&state.db)
-        .unwrap_or_else(|e| panic!("cid gov chain projection sync failed: {e}"));
-    log_gov_projection_report("serve-startup", &projection);
+    // 公权机构唯一真源是链上 PublicManage。本地 PostgreSQL 只是查询缓存:
+    // 启动时先比对链 genesis/finalized head,只有链有变化或本地无有效投影时才全量刷新。
+    // 链不可达或投影无法确认时仍 fail-closed,避免回退到本地重新生成公权机构。
+    let projection_current =
+        crate::domains::gov::service::chain_projection_matches_current_head_blocking(&state.db)
+            .unwrap_or_else(|e| panic!("check cid gov chain projection anchor failed: {e}"));
+    if projection_current {
+        info!("cid gov chain projection is current; skip startup full sync");
+    } else {
+        let projection =
+            crate::domains::gov::service::sync_gov_chain_projection_blocking(&state.db)
+                .unwrap_or_else(|e| panic!("cid gov chain projection sync failed: {e}"));
+        log_gov_projection_report("serve-startup", &projection);
+    }
     // 创世机构目录链上抽样对账(ADR-031 D9,fail-closed):只校验 runtime/onchina
     // 派生规则与链上创世写入仍一致,不得作为 OnChina 本地公权机构生成来源。
     // ONCHINA_GOV_CHAIN_AUDIT=0 为开发无链环境逃生门。

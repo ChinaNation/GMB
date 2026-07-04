@@ -11,7 +11,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AutoComplete, Button, Col, Form, Input, InputNumber, Modal, QRCode, Row, Select, Spin, Typography, Upload } from 'antd';
 import { DeleteOutlined, PlusOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../../auth/types';
-import type { CidCityItem } from '../../china/api';
+import { listCidTowns, type CidCityItem, type CidTownItem } from '../../china/api';
 import { loadCachedCidCities } from '../../china/metaCache';
 import type {
   CreateInstitutionInput,
@@ -46,6 +46,7 @@ interface FormValues {
   p1: string;
   province_name: string;
   city_name: string;
+  town_name?: string;
   institution: string;
   education_type?: EducationType;
   private_type?: PrivateType;
@@ -129,7 +130,9 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const { signWithScan, scanSignModal } = useScanSignGrant('机构创建签名确认');
   const [createdResult, setCreatedResult] = useState<CreateInstitutionOutput | null>(null);
   const [cities, setCities] = useState<CidCityItem[]>([]);
+  const [towns, setTowns] = useState<CidTownItem[]>([]);
   const [citiesLoading, setCitiesLoading] = useState(false);
+  const [townsLoading, setTownsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cidFullNameChecking, setCidFullNameChecking] = useState(false);
   const [cidFullNameAvailable, setCidFullNameAvailable] = useState<boolean | null>(null);
@@ -151,6 +154,9 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const isEducation = category === 'EDUCATION_INSTITUTION';
   const watchedPartnershipKind = Form.useWatch('partnership_kind', form) as PartnershipKind | undefined;
   const watchedEducationType = Form.useWatch('education_type', form) as EducationType | undefined;
+  const watchedInstitution = Form.useWatch('institution', form) as string | undefined;
+  const watchedProvinceName = Form.useWatch('province_name', form) as string | undefined;
+  const watchedCityName = Form.useWatch('city_name', form) as string | undefined;
   const privateRule = isPrivate && privateType
     ? privateRuleFor(privateType, watchedPartnershipKind)
     : null;
@@ -158,6 +164,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const requiresParent = isF && !isPrivate;
   const showEducationType = isEducation && !isF;
   const watchedAdmins = Form.useWatch('admins', form) as FormValues['admins'] | undefined;
+  const requiresTown = isGov && currentSubjectProperty === 'G' && (watchedInstitution ?? '').startsWith('T');
 
   // 机构创建阶段直接写入全称和简称,字段只允许 cid_full_name/cid_short_name。
   const collectNameInModal = isPrivate || isEducation || isGov;
@@ -230,6 +237,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       p1: defaultRule?.p1 ?? p1LocksForSubject(defaultSubjectProperty, null).value,
       province_name: lockedProvinceName ?? '',
       city_name: lockedCityName ?? '',
+      town_name: undefined,
       institution: defaultInstitution,
       education_type: defaultEducationType,
       private_type: privateType,
@@ -275,6 +283,40 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     };
   }, [open, lockedProvinceName, auth.access_token]);
 
+  useEffect(() => {
+    if (!open || !requiresTown) {
+      setTowns([]);
+      form.setFieldsValue({ town_name: undefined });
+      return;
+    }
+    const provinceName = (watchedProvinceName ?? '').trim();
+    const cityName = (watchedCityName ?? '').trim();
+    const cityCode = cities.find((c) => c.city_name === cityName)?.city_code;
+    if (!provinceName || !cityCode) {
+      setTowns([]);
+      form.setFieldsValue({ town_name: undefined });
+      return;
+    }
+    let cancelled = false;
+    setTownsLoading(true);
+    listCidTowns(auth, provinceName, cityCode)
+      .then((rows) => {
+        if (!cancelled) setTowns(rows);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setTowns([]);
+          notice.error(err, '');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTownsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, requiresTown, watchedProvinceName, watchedCityName, cities, auth.access_token]);
+
   const onSubjectPropertyChange = (subject_property: string) => {
     setCurrentSubjectProperty(subject_property);
     setCidFullNameAvailable(null);
@@ -292,6 +334,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       education_type: nextEducationType,
       p1: p1LocksForSubject(subject_property, null).value,
       parent_cid_number: undefined,
+      town_name: undefined,
       cid_full_name: collectName ? (form.getFieldValue('cid_full_name') ?? '') : undefined,
     });
   };
@@ -521,6 +564,10 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       notice.warning(`管理员阈值必须在 ${minThreshold} 到 ${admins.length} 之间`);
       return;
     }
+    if (requiresTown && !(values.town_name ?? '').trim()) {
+      notice.warning('请选择镇');
+      return;
+    }
     setSubmitting(true);
     try {
       const result = await createInstitution(auth, {
@@ -528,6 +575,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         p1: values.p1?.trim(),
         province_name: values.province_name.trim(),
         city_name: values.city_name.trim(),
+        town_name: requiresTown ? (values.town_name ?? '').trim() : undefined,
         institution: institutionCode,
         education_type: showEducationType ? values.education_type : undefined,
         cid_full_name: collectNameInModal
@@ -673,6 +721,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                 placeholder="请选择市"
                 onChange={() => {
                   // G 全称查重按市,所属法人搜索按落位省市;换市后两者都要重来。
+                  form.setFieldsValue({ town_name: undefined });
                   if (currentSubjectProperty === 'G' && cidFullNameAvailable !== null) {
                     setCidFullNameAvailable(null);
                   }
@@ -689,9 +738,27 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item label="机构" name="institution" rules={[{ required: true }]}>
-              <Select options={visibleInstChoices} disabled={instDisabled} />
+              <Select
+                options={visibleInstChoices}
+                disabled={instDisabled}
+                onChange={() => {
+                  form.setFieldsValue({ town_name: undefined });
+                  if (cidFullNameAvailable !== null) setCidFullNameAvailable(null);
+                }}
+              />
             </Form.Item>
           </Col>
+          {requiresTown && (
+            <Col span={12}>
+              <Form.Item label="镇" name="town_name" rules={[{ required: true, message: '请选择镇' }]}>
+                <Select
+                  loading={townsLoading}
+                  options={towns.map((t) => ({ label: t.town_name, value: t.town_name }))}
+                  placeholder="请选择镇"
+                />
+              </Form.Item>
+            </Col>
+          )}
           {showEducationType && (
             <Col span={12}>
               <Form.Item

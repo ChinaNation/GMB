@@ -933,6 +933,7 @@ where
     fn verify_institution_registration(
         cid_number: &[u8],
         cid_full_name: &AccountName,
+        cid_short_name: &[u8],
         account_names: &[Vec<u8>],
         nonce: &NonceBytes,
         signature: &SignatureBytes,
@@ -941,6 +942,7 @@ where
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
         scope_city_name: &[u8],
+        town_code: &[u8],
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
@@ -950,6 +952,8 @@ where
                 signer_pubkey,
                 scope_province_name,
                 scope_city_name,
+                cid_short_name,
+                town_code,
             );
             return !cid_number.is_empty()
                 && !cid_full_name.as_ref().is_empty()
@@ -969,12 +973,13 @@ where
 
             // 这里必须和身份注册局 `/registration-info` 的签名 payload 严格一致。
             // payload 字段(GMB + OP_SIGN_INST 域头由 signing_message 统一拼接):
-            // genesis_hash + cid_number + cid_full_name + account_names[] + nonce
-            // + 签发机构 + 作用域。
+            // genesis_hash + cid_number + cid_full_name + cid_short_name + account_names[]
+            // + nonce + 签发机构 + 作用域 + town_code。
             let payload = (
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 cid_number,
                 cid_full_name.as_ref(),
+                cid_short_name,
                 account_names,
                 nonce.as_ref(),
                 issuer_cid_number,
@@ -982,6 +987,7 @@ where
                 signer_pubkey,
                 scope_province_name,
                 scope_city_name,
+                town_code,
             );
             let msg = primitives::sign::signing_message(
                 primitives::sign::OP_SIGN_INST,

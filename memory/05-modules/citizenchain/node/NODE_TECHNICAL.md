@@ -76,8 +76,9 @@
 `genesis + 后续交易状态`;节点本地数据库只是链状态副本。
 
 - 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、44 个权威节点 bootnode、token 属性和协议 ID。
-- 创世链状态包：`citizenchain/scripts/bake-chainspec.sh` 在临时节点完成创世物化后导出 `target/chainspec/genesis-state/`,包含 `chains/citizenchain/db` 与 `manifest.json`。正式安装包把该目录作为 `genesis-state/` 资源内置。
+- 创世链状态包：`citizenchain/scripts/bake-chainspec.sh` 在临时节点完成创世物化后导出 `target/chainspec/genesis-state/`,包含 `chains/citizenchain/db` 与 `manifest.json`。正式安装包把该目录作为 `genesis-state/` 资源内置。本轮改为国家/省/市创世 49,581 个公权机构后,正式 bake 锚点必须等待新的 `origin/main` CI WASM 成功再重新生成并回填;旧 2026-07-04 全量镇级 bake 锚点已废弃。
 - 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 加载冻结 plain JSON;[process/mod.rs](../../../../citizenchain/node/src/home/process/mod.rs) 首次启动时优先把内置 `genesis-state/chains/citizenchain/db` 复制到本机数据目录,没有内置包才回退到 runtime `GenesisBuilder` 本地物化。
+- 当前限制：即使已复制 `genesis-state` RocksDB,Substrate 启动仍会根据 plain spec 调 `GenesisBlockBuilder` 校验创世块;这不是重新生成并写入链数据库,但会产生分钟级 CPU 成本。节点状态必须等 `chain_getBlockHash(0)` 成功后才从“创世准备中”进入“运行中”。
 - 全网一致性保证：plain JSON、CI WASM、创世链状态包 manifest 中的 `genesis_hash/state_root/runtime_wasm_hash/chainspec_hash/public_institution_root` 必须一致;后续 runtime 升级一律走链上 `setCode`,不重写创世包。
 - 运行态可用标准：进程内节点线程存活不等于节点可用。首页状态和链上中国启动前置检查都必须等待 `chain_getBlockHash(0)` 成功;RPC ready 前显示“创世准备中”,不得标记“运行中”。
 

@@ -388,6 +388,8 @@ pub mod pallet {
         EmptyIssuerCidNumber,
         /// 机构签发凭证缺业务作用域省名。
         EmptyScopeProvinceName,
+        /// 私权机构当前不接收镇归属,必须传空 town_code。
+        InvalidTownCode,
         /// 无法将派生地址转换为账户ID
         DerivedAccountDecodeFailed,
         /// 账户仍有保留余额，不允许注销
@@ -505,6 +507,7 @@ pub mod pallet {
             cid_number: CidNumberOf<T>,
             cid_full_name: AccountNameOf<T>,
             cid_short_name: AccountNameOf<T>,
+            town_code: AccountNameOf<T>,
             accounts: InstitutionInitialAccountsOf<T>,
             institution_code: InstitutionCode,
             admins_len: u32,
@@ -524,6 +527,7 @@ pub mod pallet {
                 cid_number,
                 cid_full_name,
                 cid_short_name,
+                town_code,
                 accounts,
                 institution_code,
                 admins_len,

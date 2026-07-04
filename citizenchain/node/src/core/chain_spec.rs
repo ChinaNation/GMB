@@ -3,7 +3,7 @@
 //! 默认入口加载冻结主网 chainspec(plain 形态:WASM + genesis patch + bootnodes)。
 //! 正式安装包同时内置已物化的创世链状态包,首启优先复制本地链数据库;缺包时
 //! 才由节点经 runtime `GenesisBuilder` 本地物化,作为开发/排障兜底。
-//! 59.7 万公权机构全量直铸下 raw 形态会到 GB 级,不再入库。
+//! 当前创世只直铸国家/省/市公权机构;镇级和新增机构运行期注册上链。
 //! `citizenchain-fresh` 仅供 `bake-chainspec.sh` 用最新 CI WASM 重生冻结 JSON 使用。
 //!
 //! 冻结语义(ADR-031 D5):冻结的是 plain JSON(runtime WASM + patch + bootnodes),

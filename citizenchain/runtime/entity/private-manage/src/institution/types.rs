@@ -49,9 +49,10 @@ pub enum InstitutionLifecycleStatus {
 /// 机构信息(链上最小集)。
 ///
 /// 链上只保存全国可见的机构身份事实:`cid_number` 作 storage key 已编码省/市/机构码/法人/盈利;
+/// 镇归属使用统一字段 `town_code`;当前私权机构注册先写空值,保留同形态解码。
 /// 主账户/费用账户由 `(cid_number, 保留名)` 派生且常驻 `InstitutionAccounts`,故不在此重复存;
 /// 管理员集合与动态阈值的长期真源在 admins 模块与 internal-vote,亦不在此存快照。
-/// 名称按主体分档:公权法人机构上链全称/简称供 CitizenApp 全国直读,私权机构留空(名称落 onchina 本地)。
+/// 公权/私权机构名称均以上链字段为准;OnChina 只保留查询缓存。
 #[derive(
     Encode,
     Decode,
@@ -64,10 +65,12 @@ pub enum InstitutionLifecycleStatus {
     Eq,
 )]
 pub struct InstitutionInfo<BlockNumber, AccountName> {
-    /// 机构全称:仅公权法人机构上链,私权机构为空。
+    /// 机构全称。
     pub cid_full_name: AccountName,
-    /// 机构简称:仅公权法人机构上链,私权机构为空。
+    /// 机构简称。
     pub cid_short_name: AccountName,
+    /// 所属镇代码。当前私权机构写空值;字段保持与 public-manage 同形态。
+    pub town_code: AccountName,
     /// 管理员更换/路由使用的机构码:机构账户只能是公权/私权法人机构码。
     pub institution_code: InstitutionCode,
     /// 机构注册创建区块号。

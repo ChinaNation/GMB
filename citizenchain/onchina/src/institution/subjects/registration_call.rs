@@ -159,10 +159,12 @@ pub(crate) fn build_create_institution_call_data(
         state,
         cid_number,
         cid_full_name.as_str(),
+        cid_short_name.as_str(),
         &account_names,
         register_nonce.clone(),
         inst.province_name.as_str(),
         inst.city_name.as_str(),
+        inst.town_code.as_str(),
     )?;
 
     let issuer_main_account = hex_to_bytes32(credential.issuer_main_account.as_str())
@@ -176,6 +178,7 @@ pub(crate) fn build_create_institution_call_data(
         cid_number: cid_number.as_bytes().to_vec(),
         cid_full_name: cid_full_name.trim().as_bytes().to_vec(),
         cid_short_name: cid_short_name.trim().as_bytes().to_vec(),
+        town_code: inst.town_code.trim().as_bytes().to_vec(),
         accounts: account_args,
         institution_code: code_bytes,
         admins_len,

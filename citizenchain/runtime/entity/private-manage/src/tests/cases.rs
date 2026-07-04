@@ -233,6 +233,7 @@ fn propose_create_private_institution_registers_active_without_vote() {
             cid.clone(),
             cid_full_name("机构甲".as_bytes()),
             cid_short_name("简称".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
@@ -291,6 +292,7 @@ fn private_institution_stores_full_and_short_name_onchain() {
             cid.clone(),
             cid_full_name("某市人民政府".as_bytes()),
             cid_short_name("某市府".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
@@ -326,6 +328,7 @@ fn private_institution_rejects_empty_short_name() {
                 generated_cid("CID-PRI-2", "SFLP"),
                 cid_full_name("某市人民政府".as_bytes()),
                 cid_short_name(b""),
+                empty_town_code(),
                 typical_accounts(),
                 code_bytes("SFLP"),
                 3,
@@ -345,6 +348,35 @@ fn private_institution_rejects_empty_short_name() {
 }
 
 #[test]
+fn private_institution_rejects_nonempty_town_code() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        assert_noop!(
+            PrivateManage::propose_create_private_institution(
+                RuntimeOrigin::signed(c),
+                generated_cid("CID-PRI-TOWN-1", "SFLP"),
+                cid_full_name("某公司".as_bytes()),
+                cid_short_name("某公司".as_bytes()),
+                town_code(b"001"),
+                typical_accounts(),
+                code_bytes("SFLP"),
+                3,
+                admin_profiles_vec(3),
+                2,
+                register_nonce(b"nonce-pri-town-1"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::InvalidTownCode
+        );
+    });
+}
+
+#[test]
 fn propose_create_rejects_unincorporated_without_parent_routing() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
@@ -354,6 +386,7 @@ fn propose_create_rejects_unincorporated_without_parent_routing() {
                 generated_cid("CID-UNIN-1", "UNIN"),
                 cid_full_name("非法人机构".as_bytes()),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 typical_accounts(),
                 code_bytes("UNIN"),
                 3,
@@ -383,6 +416,7 @@ fn create_directly_funds_initial_accounts() {
             cid.clone(),
             cid_full_name("机构乙".as_bytes()),
             cid_short_name("简称".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
@@ -426,6 +460,7 @@ fn propose_create_rejects_below_create_amount_minimum() {
                 generated_cid("CID-MIN", "SFLP"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 bad_accounts,
                 code_bytes("SFLP"),
                 3,
@@ -460,6 +495,7 @@ fn propose_create_rejects_duplicate_account_name() {
                 generated_cid("CID-DUP", "SFLP"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 dup,
                 code_bytes("SFLP"),
                 3,
@@ -524,6 +560,7 @@ fn propose_create_rejects_reserved_system_account_name() {
                 generated_cid("CID-RSV", "SFLP"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 bad,
                 code_bytes("SFLP"),
                 3,
@@ -553,6 +590,7 @@ fn propose_create_rejects_missing_main_account() {
                 generated_cid("CID-NM", "SFLP"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 no_main,
                 code_bytes("SFLP"),
                 3,
@@ -582,6 +620,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 generated_cid("CID-T1", "SFLP"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 typical_accounts(),
                 code_bytes("SFLP"),
                 3,
@@ -604,6 +643,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 generated_cid("CID-T2", "SFLP"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 typical_accounts(),
                 code_bytes("SFLP"),
                 3,
@@ -634,6 +674,7 @@ fn propose_create_rejects_when_institution_already_exists() {
             cid.clone(),
             cid_full_name(b"A"),
             cid_short_name("简称".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
@@ -654,6 +695,7 @@ fn propose_create_rejects_when_institution_already_exists() {
                 cid,
                 cid_full_name(b"B"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 typical_accounts(),
                 code_bytes("SFLP"),
                 3,
@@ -685,6 +727,7 @@ fn create_and_activate_institution(
         cid.clone(),
         cid_full_name(b"X"),
         cid_short_name("简称".as_bytes()),
+        empty_town_code(),
         typical_accounts(),
         code_bytes("SFLP"),
         admins_len as u32,
@@ -878,6 +921,7 @@ fn registry_creator_need_not_be_target_admin() {
             cid.clone(),
             cid_full_name(b"X"),
             cid_short_name("简称".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
@@ -960,6 +1004,7 @@ fn create_and_activate_institution_with_profiles(
         cid.clone(),
         cid_full_name(b"X"),
         cid_short_name("简称".as_bytes()),
+        empty_town_code(),
         typical_accounts(),
         code_bytes("SFLP"),
         admins_len as u32,
@@ -1115,6 +1160,7 @@ fn update_institution_info_changes_names_only() {
             cid.clone(),
             cid_full_name("旧全称".as_bytes()),
             cid_short_name("旧简称".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("SFLP"),
             3,
@@ -1181,6 +1227,7 @@ fn add_institution_account_derives_and_registers() {
             cid.clone(),
             cid_full_name("机构".as_bytes()),
             cid_short_name("简".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("SFLP"),
             3,

@@ -974,8 +974,32 @@ void main() {
         return out;
       }
 
+      List<int> boundedBytes(String value) {
+        final bytes = utf8.encode(value);
+        return <int>[(bytes.length << 2) & 0xff, ...bytes];
+      }
+
+      List<int> adminProfile(
+        List<int> account,
+        String adminCidNumber,
+        String name,
+        String adminRole,
+      ) {
+        return <int>[
+          ...account,
+          ...boundedBytes(adminCidNumber),
+          ...boundedBytes(name),
+          ...boundedBytes(adminRole),
+          0, 0, 0, 0, // term_start
+          0, 0, 0, 0, // term_end
+          1, // AdminSource::Registry
+        ];
+      }
+
       final cid = utf8.encode('AH001-SCB0N-202605010-2026');
       final instName = utf8.encode('安徽省储行');
+      final instShortName = utf8.encode('安徽储行');
+      final townCode = utf8.encode('');
       final mainAccount = utf8.encode('主账户');
       final feeAccount = utf8.encode(secondAccountName);
       final mainAmount = u128Le(BigInt.from(1000000)); // 10,000.00 GMB
@@ -999,6 +1023,12 @@ void main() {
         // cid_full_name: Vec<u8>
         (instName.length << 2) & 0xff,
         ...instName,
+        // cid_short_name: Vec<u8>
+        (instShortName.length << 2) & 0xff,
+        ...instShortName,
+        // town_code: Vec<u8>，非镇级机构为空。
+        (townCode.length << 2) & 0xff,
+        ...townCode,
         // accounts: Vec<{name, amount}> count=2
         (2 << 2) & 0xff,
         (mainAccount.length << 2) & 0xff,
@@ -1011,10 +1041,10 @@ void main() {
         ...InstitutionCode.codeBytes('CGOV'),
         // admins_len: u32 LE
         2, 0, 0, 0,
-        // admins: BoundedVec<AccountId32> count=2
+        // admins: BoundedVec<AdminProfile<AccountId32>> count=2
         (2 << 2) & 0xff,
-        ...admins[0],
-        ...admins[1],
+        ...adminProfile(admins[0], 'AH000-CTZN1-000000001-2026', '甲管理员', '管理员'),
+        ...adminProfile(admins[1], 'AH000-CTZN1-000000002-2026', '乙管理员', '管理员'),
         // threshold: u32 LE = 2
         2, 0, 0, 0,
         // register_nonce: Vec<u8>
@@ -1064,6 +1094,8 @@ void main() {
       expect(decoded!.action, 'propose_create_public_institution');
       expect(decoded.fields['cid_number'], 'AH001-SCB0N-202605010-2026');
       expect(decoded.fields['cid_full_name'], '安徽省储行');
+      expect(decoded.fields['cid_short_name'], '安徽储行');
+      expect(decoded.fields.containsKey('town_code'), isFalse);
       expect(decoded.fields['institution_code'], 'CGOV');
       expect(decoded.fields['admins_len'], '2');
       expect(decoded.fields['threshold'], '2/2');

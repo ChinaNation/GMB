@@ -35,6 +35,26 @@ use sp_runtime::{
 };
 use votingengine::types::InstitutionCode;
 
+fn ensure_public_town_code<T: Config>(
+    institution_code: &InstitutionCode,
+    town_code: &AccountNameOf<T>,
+) -> DispatchResult {
+    let is_town = matches!(
+        primitives::cid::code::admin_level(institution_code),
+        Some(primitives::cid::code::AdminLevel::Town)
+    );
+    if is_town {
+        ensure!(
+            town_code.as_slice().len() == 3
+                && town_code.as_slice().iter().all(u8::is_ascii_alphanumeric),
+            Error::<T>::InvalidTownCode
+        );
+    } else {
+        ensure!(town_code.is_empty(), Error::<T>::InvalidTownCode);
+    }
+    Ok(())
+}
+
 /// 机构注册创建(call_index=5)。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn do_propose_create_public_institution<T: Config>(
@@ -42,6 +62,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
     cid_number: CidNumberOf<T>,
     cid_full_name: AccountNameOf<T>,
     cid_short_name: AccountNameOf<T>,
+    town_code: AccountNameOf<T>,
     accounts: InstitutionInitialAccountsOf<T>,
     institution_code: InstitutionCode,
     admins_len: u32,
@@ -74,7 +95,12 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
     // public-manage 只管理公权机构,公权机构全称/简称必须上链供 App 直读。
     ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
     ensure!(!cid_short_name.is_empty(), Error::<T>::EmptyAccountName);
-    let (stored_full_name, stored_short_name) = (cid_full_name.clone(), cid_short_name.clone());
+    ensure_public_town_code::<T>(&institution_code, &town_code)?;
+    let (stored_full_name, stored_short_name, stored_town_code) = (
+        cid_full_name.clone(),
+        cid_short_name.clone(),
+        town_code.clone(),
+    );
     ensure!(
         !issuer_cid_number.is_empty(),
         Error::<T>::EmptyIssuerCidNumber
@@ -104,6 +130,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
         T::CidInstitutionVerifier::verify_institution_registration(
             cid_number.as_slice(),
             &cid_full_name,
+            cid_short_name.as_slice(),
             &account_name_payload,
             &register_nonce,
             &signature,
@@ -112,6 +139,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
             &signer_pubkey,
             scope_province_name.as_slice(),
             scope_city_name.as_slice(),
+            town_code.as_slice(),
         ),
         Error::<T>::InvalidCidInstitutionSignature
     );
@@ -173,6 +201,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
             InstitutionInfo {
                 cid_full_name: stored_full_name.clone(),
                 cid_short_name: stored_short_name.clone(),
+                town_code: stored_town_code.clone(),
                 institution_code,
                 created_at: now,
                 status: InstitutionLifecycleStatus::Active,

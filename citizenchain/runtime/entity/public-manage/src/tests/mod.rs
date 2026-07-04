@@ -128,6 +128,7 @@ impl
     fn verify_institution_registration(
         cid_number: &[u8],
         cid_full_name: &crate::pallet::AccountNameOf<Test>,
+        _cid_short_name: &[u8],
         account_names: &[alloc::vec::Vec<u8>],
         nonce: &crate::pallet::RegisterNonceOf<Test>,
         signature: &crate::pallet::RegisterSignatureOf<Test>,
@@ -136,6 +137,7 @@ impl
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
         _scope_city_name: &[u8],
+        _town_code: &[u8],
     ) -> bool {
         // account_names 可为空(改名 update_institution_info 无账户名);
         // 登记入口自身已在 verifier 前拒空账户名。
@@ -565,17 +567,20 @@ pub fn generated_cid(tag: &str, institution: &str) -> pallet::CidNumberOf<Test> 
     BoundedVec::try_from(generated_cid_bytes(tag, institution)).expect("cid_number fits")
 }
 
-/// 公权 CGOV 家族真 CID 号(本测试套默认机构码)。
-pub fn valid_cid(tag: &str) -> pallet::CidNumberOf<Test> {
-    generated_cid(tag, "CGOV")
-}
-
 pub fn cid_full_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
     BoundedVec::try_from(s.to_vec()).expect("cid_full_name fits")
 }
 
 pub fn cid_short_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
     BoundedVec::try_from(s.to_vec()).expect("cid_short_name fits")
+}
+
+pub fn empty_town_code() -> pallet::AccountNameOf<Test> {
+    BoundedVec::new()
+}
+
+pub fn town_code(s: &[u8]) -> pallet::AccountNameOf<Test> {
+    BoundedVec::try_from(s.to_vec()).expect("town_code fits")
 }
 
 pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {

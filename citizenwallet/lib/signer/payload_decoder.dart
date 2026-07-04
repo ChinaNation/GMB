@@ -875,11 +875,13 @@ class PayloadDecoder {
   //     origin,
   //     cid_number: CidNumberOf<T>,                 // BoundedVec<u8>
   //     cid_full_name: AccountNameOf<T>,   // BoundedVec<u8>
+  //     cid_short_name: AccountNameOf<T>,  // BoundedVec<u8>
+  //     town_code: AccountNameOf<T>,       // BoundedVec<u8>
   //     accounts: InstitutionInitialAccountsOf<T>,
   //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
   //     institution_code: [u8; 4],      // 注册多签机构码(公权/私权/非法人法人)
   //     admins_len: u32,
-  //     admins: AdminsOf<T>,   // BoundedVec<AccountId32>
+  //     admins: AdminProfilesOf<T>,   // BoundedVec<AdminProfile<AccountId32>>
   //     threshold: u32,
   //     register_nonce: RegisterNonceOf<T>,   // BoundedVec<u8>
   //     signature: RegisterSignatureOf<T>,    // BoundedVec<u8> (64B sr25519)
@@ -916,6 +918,26 @@ class PayloadDecoder {
     final cidFullName = utf8.decode(bytes.sublist(offset, offset + nameLen),
         allowMalformed: true);
     offset += nameLen;
+
+    // cid_short_name: BoundedVec<u8>
+    final (shortNameLen, shortNameLenSize) = _decodeCompactU32(bytes, offset);
+    offset += shortNameLenSize;
+    if (offset + shortNameLen > bytes.length) return null;
+    final cidShortName = utf8.decode(
+      bytes.sublist(offset, offset + shortNameLen),
+      allowMalformed: true,
+    );
+    offset += shortNameLen;
+
+    // town_code: BoundedVec<u8>。非镇级为空;镇级公权机构为 3 字节镇码。
+    final (townCodeLen, townCodeLenSize) = _decodeCompactU32(bytes, offset);
+    offset += townCodeLenSize;
+    if (offset + townCodeLen > bytes.length) return null;
+    final townCode = utf8.decode(
+      bytes.sublist(offset, offset + townCodeLen),
+      allowMalformed: true,
+    );
+    offset += townCodeLen;
 
     // accounts: BoundedVec<InstitutionInitialAccount>
     //   每项 = (account_name: Vec<u8>, amount: u128)
@@ -957,11 +979,23 @@ class PayloadDecoder {
         (bytes[offset + 3] << 24);
     offset += 4;
 
-    // admins: BoundedVec<AccountId32> — 跳过 N × 32 bytes
+    // admins: BoundedVec<AdminProfile<AccountId32>>
     final (adminsVecLen, adminsVecLenSize) = _decodeCompactU32(bytes, offset);
     offset += adminsVecLenSize;
-    if (offset + adminsVecLen * 32 > bytes.length) return null;
-    offset += adminsVecLen * 32;
+    for (var i = 0; i < adminsVecLen; i++) {
+      if (offset + 32 > bytes.length) return null;
+      offset += 32; // account
+      offset = _skipBoundedBytes(bytes, offset); // admin_cid_number
+      if (offset < 0) return null;
+      offset = _skipBoundedBytes(bytes, offset); // name
+      if (offset < 0) return null;
+      offset = _skipBoundedBytes(bytes, offset); // admin_role
+      if (offset < 0) return null;
+      if (offset + 9 > bytes.length) return null;
+      offset += 4; // term_start
+      offset += 4; // term_end
+      offset += 1; // source
+    }
 
     // threshold: u32 (LE)
     if (offset + 4 > bytes.length) return null;
@@ -1030,6 +1064,7 @@ class PayloadDecoder {
     final fields = <String, String>{
       'cid_number': cidNumber,
       'cid_full_name': cidFullName,
+      'cid_short_name': cidShortName,
       'institution_code': InstitutionCode.codeLabel(code),
       'admins_len': adminsLen.toString(),
       'threshold': '$threshold/$adminsLen',
@@ -1043,6 +1078,9 @@ class PayloadDecoder {
     fields['signer_pubkey'] = _bytesToSs58(signerPubkey);
     fields['scope_province_name'] = scopeProvinceName;
     fields['scope_city_name'] = scopeCityName;
+    if (townCode.isNotEmpty) {
+      fields['town_code'] = townCode;
+    }
 
     return DecodedPayload(
       action: action,

@@ -1,10 +1,10 @@
-# ADR-031 CID 全局唯一与链上占号体系(终稿 v2)
+# ADR-031 CID 全局唯一与链上占号体系(终稿 v3)
 
 ## 标题
 
-CID 号以链上写入时原子查重为唯一仲裁:校验单源、占号先行、墓碑不删、幂等续用;公权机构全量创世直铸(常量 282 + 模板派生 596,517 = 596,799),零交易;运行期新增(公民/机构)走占号先行流程。
+CID 号以链上写入时原子查重为唯一仲裁:校验单源、占号先行、墓碑不删、幂等续用;当前国家/省/市公权机构创世直铸(常量 282 + 模板派生 49,299 = 49,581),零交易;镇级公权机构、国家/省/市新增公权机构、私权机构与公民均走运行期注册/占号先行流程。
 
-> v1(2026-07-02)为批量交易上链方案;2026-07-03 按用户决策全面修订为本终稿。历史推演见 git 历史与 `memory/08-tasks/` 卡片。
+> v1(2026-07-02)为批量交易上链方案;v2(2026-07-03)为扩大创世范围方案;v3(2026-07-04)按用户最终口径改为创世到国家/省/市,镇级和新增机构运行期注册。历史推演见 git 历史与 `memory/08-tasks/` 卡片。
 
 ## 一、铁则(用户已确认)
 
@@ -13,7 +13,7 @@ CID 号以链上写入时原子查重为唯一仲裁:校验单源、占号先行
 3. **墓碑不删除**:清档/关闭发吊销交易,链上状态 Active→Revoked/Closed,存储项永不删除、号码永不复用(对齐 ADR-021 行政区码墓碑)。
 4. **幂等续用**:占号携档案承诺哈希(建档稳定字段 blake2_256);落库失败重试识别「同注册局 + 同承诺」直接续用,孤号不产生。
 5. **校验单源**:链上链下同一套 `primitives::cid`(码表/生成器/校验和/家族谓词),pallet 写入口全量接入。
-6. **公权机构存量零交易**:全量创世直铸,与 NRC/PRC/PRB/FRG/NJD 同一模式。
+6. **当前国家/省/市公权机构零交易**:创世直铸,与 NRC/PRC/PRB/FRG/NJD 同一模式;镇级和新增机构只走注册局运行期注册。
 
 ## 二、已完成基座(2026-07-02/03)
 
@@ -58,28 +58,31 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 - `occupy_cid`/`occupy_cids_batch`/`revoke_cid` → **Free**(公共登记服务,滥用由链上注册局授权门槛拦截);`configs/mod.rs` 穷尽 match 显式归类(编译期强制)。
 - 创世直铸走创世块 state 写入,**不产生交易、不产生任何手续费**。
 
-## 四、公权机构全量创世直铸——卡3
+## 四、公权机构国家/省/市创世直铸——卡3
 
 ### 4.1 数据源(单源迁移,不进 chainspec)
 
-- **模板表搬家**:`OfficialOrgTemplate { institution_code, suffix, full_suffix }`(国家 NSN/NRP + 省部门 11 + 市 17 + 镇 14)从 onchina `gov/service.rs` 迁入 `primitives`,onchina 改引用——链上创世与链下目录同一真源,杜绝漂移。
+- **模板表搬家**:`OfficialOrgTemplate { institution_code, suffix, full_suffix }`(国家 NSN/NRP + 省部门 11 + 市 17 + 镇 14)从 onchina `gov/service.rs` 迁入 `primitives`,onchina 改引用——创世派生与运行期注册共用同一命名真源,杜绝漂移。
 - **行政区常量表**:2,872 市 + 39,087 镇(code+显示名,约 2MB)由 china.sqlite 导出生成编进 primitives(幂等导出工具 + 一致性校验)。
 
 ### 4.2 创世构建(genesis/institution.rs)
 
-- 常量 282:全量遍历 7 个 `china_*` 数组写入(现状只铸 89:CB44+CH43+NJD+FRG);NJD/FRG 管理员特例保留。
-- 模板派生 596,517:「行政区 × 模板」双循环——号 = 生成器现场派生,主/费账户 = `derive_duoqian_account` 现场派生,名称 = 模板组装;与 282 共用 `insert_public_institution`;创世机构不带管理员(后续走联邦特权直设市管理员既有通道)。
+- 常量 282:全量遍历 7 个 `china_*` 数组写入;NJD/FRG 管理员特例保留。
+- 模板派生 49,299:国家两院 2 + 省级部门 473 + 市级 48,824。号 = 生成器现场派生,主/费账户 = `derive_duoqian_account` 现场派生,名称 = 模板组装;与 282 共用 `insert_public_institution`;创世机构不带管理员(后续走联邦特权直设市管理员既有通道)。
+- 镇级 547,218 不进创世:注册局在运行期按实际设立需要注册上链,同时写入 `town_code` 作为链上机构信息的一部分。
 - 构建期逐号断言 `parse_cid_number_parts` + `is_public_legal_code`,坏号创世构建即 panic(fail-fast)。
 
 ### 4.3 部署形态改造(必做,2026-07-04 更新)
 
-- 起始 state ≈ 0.7-0.9GB(59.7 万机构 × 机构记录+双账户三索引 ≈1KB);raw chainspec JSON(≈1.5GB+)不可行。
-- 节点:从「raw chainspec include_bytes! 全量 state」改为「**plain spec + 官方创世状态包**」。
+- 创世 state 规模降为 49,581 机构,但正式链仍以 plain spec + 官方创世状态包冻结,避免各节点本地物化产生运行差异。
+- 节点:使用「**plain spec + 官方创世状态包**」。
   - plain spec 冻结 runtime WASM、genesis patch、bootNodes、properties。
   - `bake-chainspec.sh` 用 CI WASM 启动临时节点物化块 0,导出 `genesis-state/chains/citizenchain/db`。
-  - 正式安装包内置 `genesis-state/`,节点首启只复制链数据库;缺包时才允许开发/排障回退到 GenesisBuilder 本地物化。
+  - 正式安装包内置 `genesis-state/`,节点首启先复制链数据库;缺包时才允许开发/排障回退到 GenesisBuilder 本地物化。
+  - 当前 plain spec 启动仍会触发 Substrate `GenesisBlockBuilder` 做创世存储校验,不是重新写库,但仍有分钟级 CPU 成本;RPC ready 前 UI 必须保持“创世准备中”。
 - CitizenApp/smoldot:chainspec 用 `stateRootHash` 轻形态,公权机构目录用“创世快照缓存 + 链投影增量更新”。
 - 重新创世部署(6 节点 mesh);创世后重跑 CitizenApp 公权机构快照包生成器(死规则:否则机构全断)。
+- 2026-07-04 旧创世资产已废弃;本轮需等待新的 CI WASM 成功后重新 bake,再回填 `genesis_hash/state_root/public_institution_root`。
 
 ### 4.4 规模账(终态)
 
@@ -89,8 +92,8 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 | 模板派生 | 国家参众议会 NSN/NRP | 2 |
 | 模板派生 | 省级部门 11 类 × 43 省 | 473 |
 | 模板派生 | 市级 17 类 × 2,872 市 | 48,824 |
-| 模板派生 | 镇级 14 类 × 39,087 镇 | 547,218 |
-| **合计** | **全部创世,零交易零手续费** | **596,799** |
+| 非创世运行期注册 | 镇级 14 类 × 39,087 镇 | 547,218 |
+| **创世合计** | **国家/省/市创世,零交易零手续费** | **49,581** |
 
 ## 五、onchina 端
 
@@ -116,15 +119,15 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 ## 六、执行顺序
 
 1. **卡2**(`20260702-cid-occupy-card2-occupy-first-flow.md`):3.1 + 3.2 + 3.3 + onchina 提交通路/回写/建档流程——与卡1 同一 runtime 版本;
-2. **卡3**(`20260702-cid-occupy-card3-genesis-legacy-backfill.md`):4.1-4.3 全量直铸 + 部署形态改造 → 重新创世 → CitizenApp 公权机构快照包重跑 → onchina 链投影同步;
-3. 终态对账:链上 Institutions = 596,799(genesis 测试断言与推导值一致),onchina 本地库 ↔ 链上两方一致。
+2. **卡3**(`20260702-cid-occupy-card3-genesis-legacy-backfill.md`):4.1-4.3 国家/省/市直铸 + 部署形态改造 → 重新创世 → CitizenApp 公权机构快照包重跑 → onchina 链投影同步;
+3. 终态对账:链上创世 Institutions = 49,581(genesis 测试断言与推导值一致),onchina 本地库 ↔ 链上两方一致。
 
 ## 七、影响
 
 - runtime breaking,重新创世,零兼容零残留。
 - 公民建档依赖链活性(fail-closed),每单一次管理员冷签(批量入口摊薄);链上可枚举每省建档量与全国机构册(号内无姓名生日)。
 - CitizenApp/CitizenWallet:公民确认签名(ACTION_CITIZEN_IDENTITY)与扩展尾规则不变;链交易提交动作从钱包端移到 onchina 后端。
-- 节点首启一次性创世构建(分钟级)与 ~0.8GB 起始 state(桌面矿工可承受);耗时记录在案。
+- 节点首启复制官方创世状态包并等待 RPC ready;GenesisBuilder 本地物化仅作开发/排障兜底。
 
 ## 八、备选方案(均已否)
 
@@ -137,19 +140,19 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 
 - **模板/行政区常量漂移**:导出工具幂等 + genesis 测试断言数量/名称与推导值一致 + 构建期逐号 parse 断言。
 - **smoldot 轻端 chainspec 形态**:stateRootHash 形态需在 CitizenApp 真机验证(卡3 验收项)。
-- **首启构建性能**:正式安装包内置官方创世状态包,用户首启只复制链数据库;GenesisBuilder 本地物化仅作为开发/排障兜底,不得作为正式用户默认路径。
+- **首启构建性能**:正式安装包内置官方创世状态包,用户首启先复制链数据库;GenesisBuilder 本地物化落库仅作为开发/排障兜底,不得作为正式用户默认路径。当前 plain spec 仍会被 Substrate 用于创世块校验,可能产生分钟级 CPU 窗口,以 `chain_getBlockHash(0)` 作为唯一可用标准。
 - **占号规模**:公民占号随建档线性增长,`CidRegistry` 条目 ~100B/人,亿级人口 ≈ 数十 GB 级远期 state——链上极简字段已是下限,属注册局链上化的固有账,创世期无感。
 
 ## 状态
 
 - 2026-07-03:**机构信息可维护补齐**(卡 20260703-institution-info-update-and-add-account)——链是机构信息唯一真源(公权/私权统一),私权名改为上链;entity 两 pallet 加 `update_institution_info`(改全称/简称,机构码/CID/省市码物理编码在 CID 里不可改)+ `add_institution_account`(存量机构新增账户,派生地址上链),注册局授权;创世只铸初始版本,今后改名/加账户/新增机构走交易。public 38+private 37 测试绿。剩 onchina 冷签流程/App reconcile/internal-vote 自治路径。
 
-- 2026-07-03:**卡3 代码全部完成**——plain spec 部署形态(chain_spec 切换/bake 重写/宪法检查 RPC 模式/首启物化实测 301s·2.7GB)、smoldot 轻形态(fork 已确认支持 StateRootHash)、onchina 启动抽样对账+audit-chain-catalog 全量比对、同源年份钉死+596,517 交叉测试、runtime 全量断言(抓修 193 常量漏铸)。测试:runtime 31/onchina 135/primitives 45 全绿。剩部署 runbook(方案 E)。
+- 2026-07-03:**卡3 代码全部完成**——plain spec 部署形态、smoldot 轻形态、onchina 启动抽样对账+audit-chain-catalog 全量比对、同源年份钉死、runtime 全量断言(抓修 193 常量漏铸)。旧扩大创世口径已被 v3 废弃,需按 49,581 重新验证。
 
 - 2026-07-04:**部署口径更新**——正式节点不再要求每台机器首启全量 GenesisBuilder 物化;`bake-chainspec.sh` 生成冻结 plain spec、CitizenApp `stateRootHash` 轻形态和 `genesis-state/` 链数据库包;节点安装包内置该包,首启复制本地 DB 后等待 RPC ready;OnChina 启动前必须等 `chain_getBlockHash(0)` 成功。
 
 - 2026-07-02:v1 定稿(批量交易方案);同日完成嵌入式库旧机构清理。
-- 2026-07-03:Q1-Q5 已决;卡1 完成归档;命名规则统一并验证;**v2 终稿 = 全量创世直铸 + 运行期占号先行**。
+- 2026-07-03:Q1-Q5 已决;卡1 完成归档;命名规则统一并验证;v2 曾定为扩大创世范围。
 - 2026-07-03:**卡2 链端完成**(§3.1 CidRegistry+occupy/batch/revoke、§3.2 机构 Closed 墓碑+register 缺口封堵、§3.3 费类 Free)——citizen-identity 21/21、entity 34+34、citizen-issuance 12+5、runtime 30/30 全绿;全 runtime benchmarks 编译过(顺修 4 处既有断链)。
 - 2026-07-03:**卡2 完工(onchina 侧 D6/D7/D8 完成,归档 done/)**——`core/chain_submit.rs`(组装+dry-run+提交+等进块+区块回查,QR 只签不提交)、`domains/citizens/occupy.rs`(两阶段占号 prepare/submit,nonce 碰撞重试+承诺哈希幂等续用+吊销墓碑,`chain_sign_sessions` 会话表)、D8 提交路径同步回写 onchain_* + `cid_registry_lookup` 链上预查、chain_identity complete 切 D7 会话、前端 useChainSign+两阶段 api+建档/吊销 UI;onchina 134 测试全绿、前端 tsc+build 过、node 不受影响。
-- 2026-07-03:**卡3 代码核心完成(§4.1/4.2 全量创世直铸)**——命名/机构集模板迁 `primitives/cid/official_template.rs` 单源(onchina 改引用)、区划表嵌入 `primitives/cid/china/area.rs`+`area_data.bin`(43/2872/39087,gen_area_data.py 重生)、`primitives/cid/official_derive.rs` 确定性派生全部机构、genesis `insert_derived_public_institution`+`build_template_institutions` 直铸 282+596,517=**596,799**;primitives 45 测试全绿(含 596k 号 parse+唯一+计数断言)、runtime 30+onchina 134 过。**剩 §4.3 部署操作(chainspec 形态改造 + 重新创世 + onchina 只读对账 + 注册表重跑 + 旧库删除)属用户 重新创世 步**。
+- 2026-07-04:**卡3 口径更新为 v3**——`official_derive` 创世枚举只含国家/省/市,直铸 282+49,299=**49,581**;镇级模板保留给注册局运行期注册,并通过 `town_code` 入链。

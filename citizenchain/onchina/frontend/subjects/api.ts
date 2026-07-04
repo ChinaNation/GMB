@@ -182,6 +182,8 @@ export interface CreateInstitutionInput {
   p1?: string;
   province_name?: string;
   city_name: string;
+  /** 镇级公权机构创建时必填;非镇级不传。 */
+  town_name?: string;
   institution: string;
   /** 教育机构业务分类。仅 G/S 学校创建时提交;F+JY 分校不使用。 */
   education_type?: EducationType;

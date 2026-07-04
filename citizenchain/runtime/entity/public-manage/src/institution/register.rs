@@ -84,6 +84,7 @@ pub(crate) fn do_register_cid_public_institution<T: pallet::Config>(
         T::CidInstitutionVerifier::verify_institution_registration(
             cid_number.as_slice(),
             &cid_full_name,
+            &[],
             &account_name_payload,
             &register_nonce,
             &signature,
@@ -92,6 +93,7 @@ pub(crate) fn do_register_cid_public_institution<T: pallet::Config>(
             &signer_pubkey,
             scope_province_name.as_slice(),
             scope_city_name.as_slice(),
+            &[],
         ),
         Error::<T>::InvalidCidInstitutionSignature
     );

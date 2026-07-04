@@ -42,6 +42,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
     cid_number: CidNumberOf<T>,
     cid_full_name: AccountNameOf<T>,
     cid_short_name: AccountNameOf<T>,
+    town_code: AccountNameOf<T>,
     accounts: InstitutionInitialAccountsOf<T>,
     institution_code: InstitutionCode,
     admins_len: u32,
@@ -76,7 +77,12 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
     // 公权/私权统一。全称必填,简称非空。
     ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
     ensure!(!cid_short_name.is_empty(), Error::<T>::EmptyAccountName);
-    let (stored_full_name, stored_short_name) = (cid_full_name.clone(), cid_short_name.clone());
+    ensure!(town_code.is_empty(), Error::<T>::InvalidTownCode);
+    let (stored_full_name, stored_short_name, stored_town_code) = (
+        cid_full_name.clone(),
+        cid_short_name.clone(),
+        town_code.clone(),
+    );
     ensure!(
         !issuer_cid_number.is_empty(),
         Error::<T>::EmptyIssuerCidNumber
@@ -106,6 +112,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         T::CidInstitutionVerifier::verify_institution_registration(
             cid_number.as_slice(),
             &cid_full_name,
+            cid_short_name.as_slice(),
             &account_name_payload,
             &register_nonce,
             &signature,
@@ -114,6 +121,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
             &signer_pubkey,
             scope_province_name.as_slice(),
             scope_city_name.as_slice(),
+            town_code.as_slice(),
         ),
         Error::<T>::InvalidCidInstitutionSignature
     );
@@ -175,6 +183,7 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
             InstitutionInfo {
                 cid_full_name: stored_full_name.clone(),
                 cid_short_name: stored_short_name.clone(),
+                town_code: stored_town_code.clone(),
                 institution_code,
                 created_at: now,
                 status: InstitutionLifecycleStatus::Active,

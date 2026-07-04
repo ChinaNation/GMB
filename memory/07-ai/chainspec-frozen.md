@@ -21,7 +21,7 @@
 ## 为什么
 
 1. genesis hash 决定 Substrate / libp2p 通知协议名。
-2. 59.7 万公权机构全量创世直铸后，raw chainspec 会膨胀到 GB 级，不适合作为仓库和
+2. 创世状态必须由同一份 CI WASM 和同一份 plain spec 冻结；raw chainspec 不作为仓库和
    App 资产。
 3. 节点安装包内置已物化的 RocksDB 创世状态，可以避免每台用户电脑首启都跑一次全量
    GenesisBuilder。

@@ -166,6 +166,7 @@ fn insert_derived_public_institution<T: public_manage::Config>(
         PublicInstitutionInfoOf::<T> {
             cid_full_name: bounded_name(cid_full_name),
             cid_short_name: bounded_name(cid_short_name),
+            town_code: BoundedVec::new(),
             institution_code: parts.institution,
             created_at: BlockNumberFor::<T>::default(),
             status: InstitutionLifecycleStatus::Active,
@@ -247,6 +248,7 @@ fn insert_public_institution<T: public_manage::Config>(
         PublicInstitutionInfoOf::<T> {
             cid_full_name: bounded_static_name::<T>(cid_full_name, "cid_full_name", cid_number),
             cid_short_name: bounded_static_name::<T>(cid_short_name, "cid_short_name", cid_number),
+            town_code: BoundedVec::new(),
             institution_code,
             created_at: BlockNumberFor::<T>::default(),
             status: InstitutionLifecycleStatus::Active,
@@ -379,7 +381,7 @@ fn insert_fixed_admins<T, F>(
 }
 
 /// 创世写入内置公权机构和创世公职人员。
-/// 创世直铸市/镇/省部门/国家两院机构(ADR-031 卡3):纯枚举(primitives 单源)
+/// 创世直铸国家/省/市公权机构(ADR-031 v3):纯枚举(primitives 单源)
 /// → 落地存储;账户由 CID 号确定性派生,与 282 常量互不重号。
 fn build_template_institutions<T: public_manage::Config>() {
     primitives::cid::official_derive::for_each_public_institution(|cid, full, short| {
@@ -517,6 +519,6 @@ where
         );
     }
 
-    // 全量创世直铸市/镇/省部门/国家两院机构(ADR-031 卡3):常量 282 + 派生 596,517。
+    // 创世直铸当前国家/省/市公权机构(ADR-031 v3):常量 282 + 派生 49,299。
     build_template_institutions::<T>();
 }

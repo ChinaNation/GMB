@@ -232,6 +232,7 @@ fn propose_create_public_institution_registers_active_without_vote() {
             cid.clone(),
             cid_full_name("机构甲".as_bytes()),
             cid_short_name("简称".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("CGOV"),
             3,
@@ -290,6 +291,7 @@ fn public_institution_stores_full_and_short_name_onchain() {
             cid.clone(),
             cid_full_name("某市人民政府".as_bytes()),
             cid_short_name("某市府".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("CGOV"),
             3,
@@ -324,6 +326,7 @@ fn public_institution_rejects_empty_short_name() {
                 generated_cid("CID-PUB-2", "CGOV"),
                 cid_full_name("某市人民政府".as_bytes()),
                 cid_short_name(b""),
+                empty_town_code(),
                 typical_accounts(),
                 code_bytes("CGOV"),
                 3,
@@ -343,6 +346,90 @@ fn public_institution_rejects_empty_short_name() {
 }
 
 #[test]
+fn town_public_institution_requires_town_code_and_stores_it() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        let cid = generated_cid("CID-TOWN-1", "TGOV");
+        let code = town_code(b"001");
+
+        assert_ok!(PublicManage::propose_create_public_institution(
+            RuntimeOrigin::signed(c.clone()),
+            cid.clone(),
+            cid_full_name("某镇自治政府".as_bytes()),
+            cid_short_name("某镇政府".as_bytes()),
+            code.clone(),
+            typical_accounts(),
+            code_bytes("TGOV"),
+            3,
+            admin_profiles_vec(3),
+            2,
+            register_nonce(b"nonce-town-1"),
+            valid_signature(),
+            province_name(),
+            creator(),
+            signer_pubkey(),
+            province_name(),
+            b"city".to_vec(),
+        ));
+
+        let stored = pallet::Institutions::<Test>::get(&cid).unwrap();
+        assert_eq!(stored.town_code, code);
+    });
+}
+
+#[test]
+fn public_institution_rejects_wrong_town_code_shape() {
+    new_test_ext().execute_with(|| {
+        let c = fund_creator();
+        assert_noop!(
+            PublicManage::propose_create_public_institution(
+                RuntimeOrigin::signed(c.clone()),
+                generated_cid("CID-TOWN-2", "TGOV"),
+                cid_full_name("某镇自治政府".as_bytes()),
+                cid_short_name("某镇政府".as_bytes()),
+                empty_town_code(),
+                typical_accounts(),
+                code_bytes("TGOV"),
+                3,
+                admin_profiles_vec(3),
+                2,
+                register_nonce(b"nonce-town-2"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::InvalidTownCode
+        );
+
+        assert_noop!(
+            PublicManage::propose_create_public_institution(
+                RuntimeOrigin::signed(c),
+                generated_cid("CID-CITY-TOWN-1", "CGOV"),
+                cid_full_name("某市人民政府".as_bytes()),
+                cid_short_name("某市府".as_bytes()),
+                town_code(b"001"),
+                typical_accounts(),
+                code_bytes("CGOV"),
+                3,
+                admin_profiles_vec(3),
+                2,
+                register_nonce(b"nonce-city-town-1"),
+                valid_signature(),
+                province_name(),
+                creator(),
+                signer_pubkey(),
+                province_name(),
+                b"city".to_vec(),
+            ),
+            pallet::Error::<Test>::InvalidTownCode
+        );
+    });
+}
+
+#[test]
 fn propose_create_rejects_unincorporated_without_parent_routing() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
@@ -352,6 +439,7 @@ fn propose_create_rejects_unincorporated_without_parent_routing() {
                 generated_cid("CID-UNIN-1", "UNIN"),
                 cid_full_name("非法人机构".as_bytes()),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 typical_accounts(),
                 code_bytes("UNIN"),
                 3,
@@ -382,6 +470,7 @@ fn create_directly_funds_initial_accounts() {
             cid.clone(),
             cid_full_name("机构乙".as_bytes()),
             cid_short_name("简称".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("CGOV"),
             3,
@@ -425,6 +514,7 @@ fn propose_create_rejects_below_create_amount_minimum() {
                 generated_cid("CID-MIN", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 bad_accounts,
                 code_bytes("CGOV"),
                 3,
@@ -459,6 +549,7 @@ fn propose_create_rejects_duplicate_account_name() {
                 generated_cid("CID-DUP", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 dup,
                 code_bytes("CGOV"),
                 3,
@@ -523,6 +614,7 @@ fn propose_create_rejects_reserved_system_account_name() {
                 generated_cid("CID-RSV", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 bad,
                 code_bytes("CGOV"),
                 3,
@@ -552,6 +644,7 @@ fn propose_create_rejects_missing_main_account() {
                 generated_cid("CID-NM", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 no_main,
                 code_bytes("CGOV"),
                 3,
@@ -581,6 +674,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 generated_cid("CID-T1", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 typical_accounts(),
                 code_bytes("CGOV"),
                 3,
@@ -603,6 +697,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 generated_cid("CID-T2", "CGOV"),
                 cid_full_name(b"X"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 typical_accounts(),
                 code_bytes("CGOV"),
                 3,
@@ -633,6 +728,7 @@ fn propose_create_rejects_when_institution_already_exists() {
             cid.clone(),
             cid_full_name(b"A"),
             cid_short_name("简称".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("CGOV"),
             3,
@@ -653,6 +749,7 @@ fn propose_create_rejects_when_institution_already_exists() {
                 cid,
                 cid_full_name(b"B"),
                 cid_short_name("简称".as_bytes()),
+                empty_town_code(),
                 typical_accounts(),
                 code_bytes("CGOV"),
                 3,
@@ -684,6 +781,7 @@ fn create_and_activate_institution(
         cid.clone(),
         cid_full_name(b"X"),
         cid_short_name("简称".as_bytes()),
+        empty_town_code(),
         typical_accounts(),
         code_bytes("CGOV"),
         admins_len as u32,
@@ -877,6 +975,7 @@ fn registry_creator_need_not_be_target_admin() {
             cid.clone(),
             cid_full_name(b"X"),
             cid_short_name("简称".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("CGOV"),
             3,
@@ -959,6 +1058,7 @@ fn create_and_activate_institution_with_profiles(
         cid.clone(),
         cid_full_name(b"X"),
         cid_short_name("简称".as_bytes()),
+        empty_town_code(),
         typical_accounts(),
         code_bytes("CGOV"),
         admins_len as u32,
@@ -1114,6 +1214,7 @@ fn update_institution_info_changes_names_only() {
             cid.clone(),
             cid_full_name("旧全称".as_bytes()),
             cid_short_name("旧简称".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("CGOV"),
             3,
@@ -1183,6 +1284,7 @@ fn add_institution_account_derives_and_registers() {
             cid.clone(),
             cid_full_name("机构".as_bytes()),
             cid_short_name("简".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("CGOV"),
             3,
@@ -1237,6 +1339,7 @@ fn add_institution_account_rejects_duplicate() {
             cid.clone(),
             cid_full_name("机构".as_bytes()),
             cid_short_name("简".as_bytes()),
+            empty_town_code(),
             typical_accounts(),
             code_bytes("CGOV"),
             3,

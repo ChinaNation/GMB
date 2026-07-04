@@ -71,6 +71,8 @@ struct OnChainInstitution {
     cid_full_name: BoundedVec<u8, ConstU32<128>>,
     #[allow(dead_code)]
     cid_short_name: BoundedVec<u8, ConstU32<128>>,
+    #[allow(dead_code)]
+    town_code: BoundedVec<u8, ConstU32<128>>,
     institution_code: InstitutionCode,
     created_at: u32,
     status: OnChainInstitutionStatus,

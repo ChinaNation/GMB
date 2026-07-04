@@ -235,6 +235,9 @@ pub struct CreateInstitutionInput {
     pub p1: Option<String>,
     pub province_name: Option<String>,
     pub city_name: String,
+    /// 镇级公权机构运行期注册时必填;非镇级机构必须为空。
+    #[serde(default)]
+    pub town_name: Option<String>,
     pub institution: String,
     /// 教育机构业务分类。仅 `institution=JY` 的教育入口使用,不参与 CID 号生成。
     #[serde(default)]

@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::auth::actions::require_admin_security_grant;
 use crate::auth::login::require_admin_any;
 use crate::auth::operation_auth::AdminActionType;
-use crate::cid::china::{city_code_by_name, province_code_by_name};
+use crate::cid::china::{city_code_by_name, province_code_by_name, town_code_by_name};
 use crate::cid::code;
 use crate::cid::InstitutionCategory;
 use crate::crypto::pubkey::normalize_admin_account;
@@ -82,6 +82,7 @@ async fn create_institution_inner(
         "p1": input.p1.clone(),
         "province_name": input.province_name.clone(),
         "city_name": input.city_name.clone(),
+        "town_name": input.town_name.clone(),
         "institution": input.institution.clone(),
         "education_type": input.education_type.clone(),
         "cid_full_name": input.cid_full_name.clone(),
@@ -261,6 +262,35 @@ async fn create_institution_inner(
                 "institution is not a valid institution",
             );
         }
+    };
+    let is_town_public_institution = matches!(
+        institution,
+        Some(code) if code::admin_level(&code) == Some(code::AdminLevel::Town)
+    );
+    let (town_name, town_code) = if is_town_public_institution {
+        let Some(raw_town) = input
+            .town_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        else {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "town is required");
+        };
+        let Some(code) = town_code_by_name(&province, &city, raw_town) else {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "unknown town");
+        };
+        (raw_town.to_string(), code.to_string())
+    } else {
+        if input
+            .town_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .is_some()
+        {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "非镇级机构不得提交镇");
+        }
+        (String::new(), String::new())
     };
     // 手动公权机构按管理员注册局角色 + 机构层级开放:
     // 联邦注册局管理员 → 国家/省/部级(3 字符码);市注册局管理员 → 市/镇级(4 字符码)。
@@ -461,10 +491,10 @@ async fn create_institution_inner(
             p1: p1.clone(),
             province_name: province.clone(),
             city_name: city.clone(),
-            town_name: String::new(),
+            town_name: town_name.clone(),
             province_code: extract_province_code(&cid),
             city_code: extract_city_code(&cid),
-            town_code: String::new(),
+            town_code: town_code.clone(),
             institution_code: institution_code.clone(),
             education_type: education_type.clone(),
             private_type: private_rule.map(|rule| rule.private_type.as_code().to_string()),
@@ -519,6 +549,7 @@ async fn create_institution_inner(
                 "category": category_text_for_audit(category),
                 "province_name": province.clone(),
                 "city_name": city.clone(),
+                "town_name": town_name.clone(),
                 "private_type": inst.private_type.clone(),
                 "partnership_kind": inst.partnership_kind.clone(),
                 "parent_cid_number": parent_cid_number.clone(),
@@ -741,9 +772,8 @@ async fn list_institutions_inner(
         Err(resp) => return resp,
     };
     let scope = get_visible_scope(&ctx);
-    // 本路列表只服务"手动创建机构"(私权/教育/手动公权),其 town_code 在创建时恒空
-    // (create_institution 写 town_name/town_code = "")。无镇维度即"不限镇",对镇级管理员同样可见,
-    // 故此路只按省/市收口,不做镇过滤(与对账目录路径的 town 过滤不冲突:那条服务带 town_code 的对账机构)。
+    // 本路列表只服务运行期创建机构(私权/教育/手动公权)。镇级公权机构会携带
+    // town_code,非镇级机构 town_code 为空;本列表仍按省/市收口,详情展示再读 town_code。
     // JY 教育机构统一收口教育机构 tab(EDUCATION_INSTITUTION),私权/公权两路列表同步排除,
     // 过滤子句见 InstitutionListFilter。
     let filter = match query.category.as_deref() {

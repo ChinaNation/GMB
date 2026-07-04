@@ -90,6 +90,7 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
     fn verify_institution_registration(
         cid_number: &[u8],
         cid_full_name: &AccountName,
+        cid_short_name: &[u8],
         account_names: &[Vec<u8>],
         nonce: &Nonce,
         signature: &Signature,
@@ -98,6 +99,7 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
         scope_city_name: &[u8],
+        town_code: &[u8],
     ) -> bool;
 
     /// 校验 CID 机构注销凭证。
@@ -120,6 +122,7 @@ impl<AccountId, AccountName, Nonce, Signature>
     fn verify_institution_registration(
         _cid_number: &[u8],
         _cid_full_name: &AccountName,
+        _cid_short_name: &[u8],
         _account_names: &[Vec<u8>],
         _nonce: &Nonce,
         _signature: &Signature,
@@ -128,6 +131,7 @@ impl<AccountId, AccountName, Nonce, Signature>
         _signer_pubkey: &[u8; 32],
         _scope_province_name: &[u8],
         _scope_city_name: &[u8],
+        _town_code: &[u8],
     ) -> bool {
         false
     }

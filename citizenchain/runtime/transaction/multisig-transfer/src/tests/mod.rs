@@ -119,6 +119,7 @@ impl
     fn verify_institution_registration(
         _cid_number: &[u8],
         cid_full_name: &public_manage::pallet::AccountNameOf<Test>,
+        _cid_short_name: &[u8],
         account_names: &[alloc::vec::Vec<u8>],
         nonce: &public_manage::pallet::RegisterNonceOf<Test>,
         signature: &public_manage::pallet::RegisterSignatureOf<Test>,
@@ -127,6 +128,7 @@ impl
         signer_pubkey: &[u8; 32],
         scope_province_name: &[u8],
         _scope_city_name: &[u8],
+        _town_code: &[u8],
     ) -> bool {
         !cid_full_name.is_empty()
             && !account_names.is_empty()
@@ -770,9 +772,10 @@ fn insert_active_registered_institution_account(
     public_manage::Institutions::<Test>::insert(
         &cid_number,
         public_manage::InstitutionInfo {
-            // 私权机构名称不上链:链上留空。
+            // 本测试只关心账户反查,机构名称可为空;town_code 非镇级为空。
             cid_full_name: Default::default(),
             cid_short_name: Default::default(),
+            town_code: Default::default(),
             institution_code: PRIVATE_CODE,
             created_at: 1,
             status: public_manage::InstitutionLifecycleStatus::Active,

@@ -2,7 +2,7 @@
 
 ## 任务目标
 
-- 节点安装包内置创世链状态包,避免每台机器首次启动都重新物化 59.7 万公权机构创世状态。
+- 节点安装包内置创世链状态包,避免每台机器首次启动都重新物化创世状态。
 - CitizenApp 内置创世区块公权机构快照包,用于首屏快速展示;后续只按链上变化增量更新本地 Isar 缓存。
 - 链上仍然是公权机构唯一真源;节点本地数据库、OnChina 投影库、CitizenApp 内置快照和 Isar 缓存都只是链上状态副本或查询投影。
 - 代码完成后准备本地提交,提交信息使用“创世”;不新建分支、不打 tag、不创建 PR。GitHub 推送必须在推送前再次列明远端、当前分支、CI 范围和风险,等用户明确允许后执行。
@@ -24,7 +24,7 @@
 - 不绕过推送确认规则。
 - 不把 CitizenApp 内置快照当作真源。
 - 不恢复 OnChina 本地派生公权机构作为运行态真源。
-- 不修改 `citizenchain/runtime/`。如发现必须修改 runtime,先列出完整路径、原因和预计改动,等待二次确认。
+- `citizenchain/runtime/` 已在本轮按用户二次确认修改;后续再次涉及 runtime 仍须重新二次确认。
 
 ## 执行步骤
 
@@ -37,7 +37,9 @@
 - [x] 更新文档、补中文注释、清理旧口径残留。
 - [x] 运行本地检查和可行的真实运行态验收。
 - [x] 准备本地提交“创世”。
-- [ ] 推送前再次请求用户确认远端、当前分支、CI 范围和风险。
+- [x] 推送前再次请求用户确认远端、当前分支、CI 范围和风险。
+- [x] GitHub `CitizenChain WASM` 成功后下载 CI WASM artifact,执行正式 bake。
+- [x] 用正式创世链启动临时节点、同步 OnChina 链上公权机构投影、生成 CitizenApp 公权机构快照。
 
 ## 验收标准
 
@@ -56,6 +58,7 @@
   - 只复制 `chains/citizenchain/db`,不复制 keystore / network key。
   - 空资源占位目录会被忽略;出现 `manifest.json` 或 `chains/` 但包不完整时 fail-fast。
   - 首页和 OnChina 启动前都以 `chain_getBlockHash(0)` 成功作为 RPC ready 标准。
+  - 真实临时节点验收发现:复制 `genesis-state` 后仍会触发 Substrate plain spec 创世存储校验,约 5 分钟 CPU;该过程不重新写库,但正式部署必须预留 RPC ready 等待窗口。
 - 发布脚本:
   - `bake-chainspec.sh` 改为导出 plain spec、物化块 0、生成 CitizenApp `stateRootHash` 轻形态并输出 `target/chainspec/genesis-state/`。
   - `prepack.sh` / `prepack.ps1` 从 `CITIZENCHAIN_GENESIS_STATE_DIR` 或默认 `target/chainspec/genesis-state` 复制创世状态包到 Tauri resources。
@@ -63,6 +66,7 @@
 - OnChina / CitizenApp:
   - OnChina 公权机构版本接口下发 `chain_genesis_hash / chain_block_hash / chain_block_number / synced_at`。
   - `manifest_version` 改为链投影 finalized anchor + 投影数量,不再由本地 `synced_at` 单独推进。
+  - `serve` 启动先比对本地投影锚点与当前链 finalized head;一致则跳过全量同步,链变化或本地无有效投影时才重新读链。
   - CitizenApp 增量同步缺少链投影版本时直接失败,不再用本机时间自造版本。
   - 公权机构快照生成器要求真实 `genesis_hash / snapshot_block_hash / state_root`,缺失则拒绝生成。
 - 残留清理:
@@ -78,10 +82,19 @@
 - `flutter test test/citizen/public/public_institution_bundle_loader_test.dart test/citizen/public/public_institution_sync_test.dart`:通过。
 - `bash citizenapp/scripts/check-chainspec-frozen.sh`:通过;当前 `citizenapp/assets/chainspec.json` 仍是旧 raw 资产,脚本按代码 CI 阶段给出 warning,正式发包需 `CITIZENAPP_REQUIRE_STATE_ROOT=1`。
 - `cargo check --manifest-path citizenchain/Cargo.toml -p node -p onchina`:通过;输出 Polkadot SDK 既有循环提示,无编译错误。
+- 旧 GitHub WASM 与旧 bake 验收记录已废弃;本轮改为国家/省/市创世 49,581 个公权机构后,必须等待新的 `origin/main` CI WASM 成功再重新 bake 正式创世状态包。
+- 旧 `genesis_hash`、`state_root`、`runtime_wasm_hash` 与 `public_institution_root` 不再作为锚点;新锚点只能由本轮 CI WASM 对应的正式 bake 结果回填。
+- `CITIZENAPP_REQUIRE_STATE_ROOT=1 CITIZENCHAIN_GENESIS_STATE_MANIFEST=... bash citizenapp/scripts/check-chainspec-frozen.sh`:待新创世状态包生成后重跑。
+- 临时节点使用正式 `genesis-state` 的 RPC `chain_getBlockHash(0)` 验收:待新创世状态包生成后重跑。
+- `onchina sync-gov`:旧创世资产验收记录已废弃;本轮改为 49,581 创世机构后需用新 CI WASM 重新 bake 并重跑投影。
+- 新 OnChina `serve` 启动验收:本地投影锚点等于当前 finalized head 时打印 `cid gov chain projection is current; skip startup full sync`,随后抽样对账通过并监听 `http://127.0.0.1:8975`。
+- `GEN_DELAY_MS=0 ONCHINA_BASE_URL=http://127.0.0.1:8975 node citizenapp/tools/generate_public_institution_bundle.mjs ...`:旧快照根已废弃;本轮需生成 49,581 创世机构快照并重新记录 `public_institution_root`。
+- `npm --prefix citizenchain/node/frontend run build`:通过,同步重建本地文档索引。
 - `git diff --check`:通过。
-- `git diff --name-only -- citizenchain/runtime`:空,本任务未修改 runtime。
+- `git diff --name-only -- citizenchain/runtime`:本轮已按用户二次确认修改 runtime,旧“不修改 runtime”记录不再适用。
 
-## 未完成的正式验收
+## 待发布步骤
 
-- 正式 `bake-chainspec.sh --finalize --wasm <CI_WASM>` 未执行:需要 GitHub `CitizenChain WASM` 成功后的正式 WASM artifact,不能用本地源码伪造正式创世状态包。
-- 真实节点首启复制 `genesis-state/` 未执行:当前仓库尚无正式 `target/chainspec/genesis-state/` 包;待 CI WASM 成功并 bake 后用该包验收。
+- 将本地更新提交并在用户再次明确允许后推送 `origin main`,触发 GitHub CI。
+- 正式安装包打包前把 `target/chainspec/genesis-state/` 作为 `genesis-state/` 资源内置;该目录为生成物,不进 Git。
+- 6 节点部署时逐台核对 `chain_getBlockHash(0)` 和 `stateRoot`,再启动 OnChina 服务。

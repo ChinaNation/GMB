@@ -289,10 +289,12 @@ pub(crate) async fn app_get_institution_registration_info(
         &state,
         &cid_number,
         &cid_full_name,
+        &cid_short_name,
         &account_names,
         Uuid::new_v4().to_string(),
         &inst.province_name,
         &inst.city_name,
+        "",
     ) {
         Ok(v) => v,
         Err(message) => {

@@ -127,7 +127,8 @@ pub(crate) fn startup_sample_audit_blocking() -> Result<(), String> {
 }
 
 /// 全量双向比对(`audit-chain-catalog` 子命令,部署验收用):
-/// 本地(常量 282 + 派生 596,517)与链上 `Institutions` 逐字节互查。
+/// 本地创世目录(常量 282 + 国家/省/市派生 49,299)与链上
+/// `Institutions` 逐字节互查。
 pub(crate) fn full_audit_blocking() -> Result<(), String> {
     let rt = tokio::runtime::Runtime::new().map_err(|e| format!("audit runtime: {e}"))?;
     rt.block_on(async {

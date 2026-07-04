@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 烘焙 CitizenChain 冻结 chainspec(plain 形态,ADR-031 D5)。
 #
-# 59.7 万公权机构全量创世直铸下 raw 形态会到 GB 级,不再入库。冻结 SSOT 为
-# plain JSON(runtime WASM + genesis patch + bootnodes)。脚本启动临时节点物化块 0,
+# 当前创世只直铸国家/省/市公权机构;镇级和新增机构运行期注册上链。
+# 冻结 SSOT 为 plain JSON(runtime WASM + genesis patch + bootnodes)。脚本启动临时节点物化块 0,
 # 同时导出安装包内置的 genesis-state 链数据库包;CitizenApp/smoldot 用 stateRootHash 轻形态。
 #
 # 默认模式只生成预览文件到 target/chainspec,不覆盖冻结 SSOT。
@@ -128,7 +128,7 @@ rpc() {
         "http://127.0.0.1:$RPC_PORT" | python3 -c 'import sys,json;print(json.dumps(json.load(sys.stdin).get("result")))'
 }
 
-echo "==> 启动临时节点物化创世(59.7 万机构,分钟级,记录耗时)..."
+echo "==> 启动临时节点物化创世(国家/省/市公权机构,记录耗时)..."
 GENESIS_T0=$(date +%s)
 (
     cd "$CHAIN_ROOT"
@@ -176,7 +176,7 @@ python3 - "$TMP" "$APP_OUT" "$STATE_ROOT" <<'PYEOF'
 import json, sys
 plain_path, app_path, state_root = sys.argv[1], sys.argv[2], sys.argv[3]
 plain = json.load(open(plain_path))
-# 轻形态:去掉 runtimeGenesis(59.7 万 state 不进 App),只留 stateRootHash;
+# 轻形态:去掉 runtimeGenesis(完整 state 不进 App),只留 stateRootHash;
 # smoldot 据此自建创世头,校验后续区块。
 app = {k: plain[k] for k in
        ("name", "id", "chainType", "bootNodes", "telemetryEndpoints",

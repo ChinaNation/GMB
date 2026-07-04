@@ -6,7 +6,7 @@
 
 ## 任务背景
 
-OnChina 启动期仍保留 `china.sqlite × 公权机构模板` 的本地生成/对账路径。当前目标态已经明确：全部公权机构在创世时一次性写入链上，本地节点软件启动时不得再生成公权机构，只能从链上唯一真源读取并投影到本地缓存。
+OnChina 启动期仍保留 `china.sqlite × 公权机构模板` 的本地生成/对账路径。当前目标态已经明确：当前国家/省/市公权机构在创世时写入链上;镇级和新增机构由注册局运行期注册上链。本地节点软件启动时不得再生成公权机构，只能从链上唯一真源读取并投影到本地缓存。
 
 ## 任务目标
 
@@ -49,7 +49,7 @@ OnChina 启动期仍保留 `china.sqlite × 公权机构模板` 的本地生成/
 - 普通启动不再调用 `reconcile_changed_gov_catalog_db` 或 `write_targets` 生成公权机构。
 - 搜索不到运行期依赖 `ONCHINA_GOV_AUTO_RECONCILE` 的自动生成分支。
 - 新空库启动只能从链上同步公权机构投影，链不可达时拒绝进入工作台。
-- 链上 `PublicManage::Institutions` 数量为 596799 时，本地投影缓存同步为 596799。
+- 链上创世 `PublicManage::Institutions` 数量为 49,581 时，本地投影缓存同步为 49,581;后续新增机构按链投影增量进入缓存。
 - 后端编译、前端无关检查、真实本地服务启动验收通过。
 - 文档已更新，旧本地生成口径已清理。
 
@@ -66,7 +66,7 @@ OnChina 启动期仍保留 `china.sqlite × 公权机构模板` 的本地生成/
 ## 验收记录
 
 - `cargo check -p onchina`：通过，无警告。
-- `onchina sync-gov` 真实链读同步：链上机构 `596799`，链上账户 `1193598`，本地机构 `596799`，本地账户 `1193598`，首次清理旧账户 `45`。
-- 数据库校验：`chain_projection_state(public-gov)=OK`，`gov.source='CHAIN'` 行 `596799`，`gov.source='MANUAL'` 行 `0`，`gov_manifest` 表不存在，`source='GENERATED'` 行 `0`。
+- `onchina sync-gov` 真实链读同步：旧创世资产验收记录已废弃;本轮需在 49,581 创世机构链上重跑。
+- 数据库校验：旧数量记录已废弃;本轮重跑后记录 `chain_projection_state(public-gov)=OK` 与 `gov.source='CHAIN'` 行数。
 - 临时 `serve` 启动验收：`ONCHINA_BIND_ADDR=127.0.0.1:8972` 启动成功；启动同步报告二次变化为 `0`；`GET /api/v1/health` 返回 `status=UP`。
 - 公权机构公开接口验收：`/api/v1/app/public-institutions/version?province_name=中枢省` 返回链投影版本；`/api/v1/app/public-institutions?province_name=中枢省&page_size=2` 返回链投影机构列表。

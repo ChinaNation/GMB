@@ -58,7 +58,8 @@ citizenchain/onchina/src/
 
 ### 4.1 公权机构链投影
 
-- 启动和显式 `sync-gov` 都必须从链上 `PublicManage::Institutions` 与 `PublicManage::InstitutionAccounts` 全量读取,再写入本地 `subjects/gov/accounts` 投影。
+- 显式 `sync-gov` 必须从链上 `PublicManage::Institutions` 与 `PublicManage::InstitutionAccounts` 全量读取,再写入本地 `subjects/gov/accounts` 投影。
+- `serve` 启动时先读取链 `genesis_hash` 与 finalized head,再比对 `chain_projection_state(public-gov)` 的 `chain_genesis_hash / chain_block_hash / chain_block_number / item_count / account_count`;一致则直接启动并跳过全量同步,不一致或无投影才全量同步。链不可达、锚点无法确认或同步失败时 fail-closed。
 - OnChina 不得在启动时从 `china.sqlite` 重新生成公权机构；`china.sqlite` 只提供行政区名称和镇级索引校验/展示。
 - 投影状态写入 `chain_projection_state(projection_key='public-gov')`;旧 `gov_manifest`、`ensure-gov`、`reconcile-gov`、`check-gov` 均不得恢复。
 - 普通列表、联邦注册局详情和本机构显示页只能读取 `gov.source='CHAIN'` 的公权投影；本地手工/pending 行不能冒充链上公权机构真源。

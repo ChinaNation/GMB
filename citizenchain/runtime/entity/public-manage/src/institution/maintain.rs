@@ -4,8 +4,8 @@
 //! 链是机构信息唯一真源(ADR-031);创世只铸定初始集,今后改名/加账户走交易。
 //! 注册局授权凭证与登记同一套(复用 `verify_institution_registration` +
 //! `RegistryAuthority` + `UsedRegisterNonce` 防重放),不引入新签名域:
-//! - 改名 payload = cid + 新全称 + 空账户名 + nonce;
-//! - 加账户 payload = cid + 机构现全称 + 新账户名列表 + nonce。
+//! - 改名 payload = cid + 新全称 + 新简称 + 空账户名 + nonce;
+//! - 加账户 payload = cid + 机构现全称 + 机构现简称 + 新账户名列表 + nonce。
 //! 机构码/CID/省市码物理编码在 CID 里,改不了也不给参数。
 
 extern crate alloc;
@@ -60,11 +60,12 @@ pub(crate) fn do_update_institution_info<T: pallet::Config>(
         !UsedRegisterNonce::<T>::get(nonce_hash),
         Error::<T>::RegisterNonceAlreadyUsed
     );
-    // 复用登记验签:payload = cid + 新全称 + 空账户名 + nonce。
+    // 复用登记验签:payload = cid + 新全称 + 新简称 + 空账户名 + nonce。
     ensure!(
         T::CidInstitutionVerifier::verify_institution_registration(
             cid_number.as_slice(),
             &cid_full_name,
+            cid_short_name.as_slice(),
             &[],
             &register_nonce,
             &signature,
@@ -73,6 +74,7 @@ pub(crate) fn do_update_institution_info<T: pallet::Config>(
             &signer_pubkey,
             scope_province_name.as_slice(),
             scope_city_name.as_slice(),
+            &[],
         ),
         Error::<T>::InvalidCidInstitutionSignature
     );
@@ -135,12 +137,13 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
         !UsedRegisterNonce::<T>::get(nonce_hash),
         Error::<T>::RegisterNonceAlreadyUsed
     );
-    // 复用登记验签:payload = cid + 机构现全称 + 新账户名列表 + nonce。
+    // 复用登记验签:payload = cid + 机构现全称 + 机构现简称 + 新账户名列表 + nonce。
     let account_name_payload = Pallet::<T>::account_names_payload_from_names(&account_names)?;
     ensure!(
         T::CidInstitutionVerifier::verify_institution_registration(
             cid_number.as_slice(),
             &info.cid_full_name,
+            info.cid_short_name.as_slice(),
             &account_name_payload,
             &register_nonce,
             &signature,
@@ -149,6 +152,7 @@ pub(crate) fn do_add_institution_account<T: pallet::Config>(
             &signer_pubkey,
             scope_province_name.as_slice(),
             scope_city_name.as_slice(),
+            &[],
         ),
         Error::<T>::InvalidCidInstitutionSignature
     );

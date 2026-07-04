@@ -7,6 +7,7 @@
 //!   简称 = 行政区显示名 + `suffix`
 //!   全称 = 行政区显示名 + `full_suffix`
 //! 显示名:省级部门=省名,市级=市名,镇级=镇名,国家参众议会=国名前缀已含在 full。
+//! 创世只消费国家/省/市模板;镇级模板只供注册局运行期按 town_code 注册上链。
 
 use alloc::format;
 use alloc::string::String;
@@ -179,6 +180,9 @@ pub const CITY_TEMPLATES: &[OfficialOrgTemplate] = &[
 ];
 
 /// 镇级机构模板(D 族 14 类,全;镇无立法/教委,制度设计)。
+///
+/// 本模板不参与创世直铸。镇级公权机构由市注册局在运行期选择
+/// `province_code/city_code/town_code` 后注册上链,链上机构记录才是唯一真源。
 pub const TOWN_TEMPLATES: &[OfficialOrgTemplate] = &[
     OfficialOrgTemplate {
         institution_code: "TGOV",

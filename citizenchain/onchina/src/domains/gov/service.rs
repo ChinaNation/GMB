@@ -145,6 +145,50 @@ pub(crate) fn chain_projection_ready(db: &Db) -> Result<bool, String> {
     })
 }
 
+/// 检查本地公权机构投影是否已经对应当前链 finalized head。
+///
+/// 本地 PostgreSQL 只是链上 `PublicManage` 的查询缓存。启动时先读取链锚点,
+/// 只有 genesis/finalized head/count 都匹配时才跳过全量同步;任一不匹配就重新读链。
+pub(crate) fn chain_projection_matches_current_head_blocking(db: &Db) -> Result<bool, String> {
+    let chain_genesis_hash = chain_runtime::cached_chain_genesis_hash_hex()
+        .ok_or_else(|| "chain genesis hash not initialized".to_string())?;
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("build gov projection anchor runtime failed: {e}"))?;
+    let anchor = rt.block_on(chain_runtime::fetch_finalized_anchor())?;
+    db.with_client(|conn| {
+        let row = conn
+            .query_opt(
+                "SELECT chain_genesis_hash,
+                        COALESCE(chain_block_hash, ''),
+                        chain_block_number,
+                        item_count,
+                        account_count
+                 FROM chain_projection_state
+                 WHERE projection_key = $1 AND status = 'OK'",
+                &[&PROJECTION_KEY_PUBLIC_GOV],
+            )
+            .map_err(|e| {
+                format!(
+                    "query chain projection anchor failed: {}",
+                    postgres_error_text(&e)
+                )
+            })?;
+        let Some(row) = row else {
+            return Ok(false);
+        };
+        let stored_genesis_hash: String = row.get(0);
+        let stored_block_hash: String = row.get(1);
+        let stored_block_number: Option<i64> = row.get(2);
+        let item_count: i64 = row.get(3);
+        let account_count: i64 = row.get(4);
+        Ok(stored_genesis_hash == chain_genesis_hash
+            && stored_block_hash == anchor.block_hash
+            && stored_block_number == Some(anchor.block_number)
+            && item_count > 0
+            && account_count > 0)
+    })
+}
+
 /// 从链上唯一真源同步公权机构投影。
 pub(crate) fn sync_gov_chain_projection_blocking(
     db: &Db,
@@ -163,14 +207,13 @@ pub(crate) fn sync_gov_chain_projection_blocking(
 
 async fn read_chain_projection(
 ) -> Result<(Vec<ChainInstitutionProjection>, Vec<ChainAccountProjection>), String> {
-    let town_index = derived_town_index();
     let mut institution_error: Option<String> = None;
     let mut institutions = Vec::new();
     chain_runtime::for_each_chain_institution(|cid, info| {
         if institution_error.is_some() {
             return;
         }
-        match parse_chain_institution(cid, info, &town_index) {
+        match parse_chain_institution(cid, info) {
             Ok(item) => institutions.push(item),
             Err(err) => institution_error = Some(err),
         }
@@ -214,7 +257,6 @@ async fn read_chain_projection(
 fn parse_chain_institution(
     cid_bytes: Vec<u8>,
     info: chain_runtime::OnChainInstitution,
-    town_index: &BTreeMap<String, String>,
 ) -> Result<ChainInstitutionProjection, String> {
     let cid_number = String::from_utf8(cid_bytes)
         .map_err(|_| "chain institution cid_number must be utf-8".to_string())?;
@@ -243,6 +285,22 @@ fn parse_chain_institution(
         .ok_or_else(|| format!("chain institution {cid_number} missing city code"))?
         .to_string();
     let status_active = info.status == INSTITUTION_STATUS_ACTIVE;
+    let town_code = String::from_utf8(info.town_code)
+        .map_err(|_| format!("chain institution {cid_number} town_code must be utf-8"))?;
+    let is_town_institution = matches!(
+        code::admin_level(&parts.institution),
+        Some(code::AdminLevel::Town)
+    );
+    if is_town_institution && town_code.trim().is_empty() {
+        return Err(format!(
+            "chain town institution {cid_number} missing town_code"
+        ));
+    }
+    if !is_town_institution && !town_code.trim().is_empty() {
+        return Err(format!(
+            "chain non-town institution {cid_number} has town_code"
+        ));
+    }
     Ok(ChainInstitutionProjection {
         cid_full_name: String::from_utf8(info.cid_full_name)
             .map_err(|_| format!("chain institution {cid_number} cid_full_name must be utf-8"))?,
@@ -262,10 +320,7 @@ fn parse_chain_institution(
         p1: if parts.profit { "1" } else { "0" }.to_string(),
         province_code,
         city_code,
-        town_code: town_index
-            .get(cid_number.as_str())
-            .cloned()
-            .unwrap_or_default(),
+        town_code,
         institution_code: parts.institution_code_text,
         education_type: education_type_for_code(&code_from_storage).map(str::to_string),
         chain_block_number: i64::from(info.created_at),
@@ -850,16 +905,6 @@ fn count_chain_accounts(tx: &mut postgres::Transaction<'_>) -> Result<i64, Strin
             )
         })?;
     Ok(row.get(0))
-}
-
-fn derived_town_index() -> BTreeMap<String, String> {
-    let mut out = BTreeMap::new();
-    primitives::cid::official_derive::for_each_public_institution_detailed(|item| {
-        if !item.town_code.is_empty() {
-            out.insert(item.cid_number.to_string(), item.town_code.to_string());
-        }
-    });
-    out
 }
 
 fn education_type_for_code(institution_code: &str) -> Option<&'static str> {
