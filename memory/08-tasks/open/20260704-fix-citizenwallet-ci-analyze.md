@@ -5,7 +5,7 @@
 修复 `CitizenWallet CI` 中 `flutter analyze --no-fatal-infos` 报出的 3 个问题：
 
 - 公民钱包测试仍引用已删除的旧 `Balances` 直签 pallet 常量。
-- `ReorderableListView.builder` 的 `onReorder` 已废弃，需要改为新回调。
+- `ReorderableListView.builder` 曾切到新版拖拽回调参数,但本机安装脚本使用的 Flutter 3.41.0 不支持该参数。
 - 测试中常量字符串使用 `final`，触发 `prefer_const_declarations`。
 
 ## 影响范围
@@ -22,7 +22,7 @@
 
 - [x] 读取执行前必读文档和公民钱包相关文档。
 - [x] 修复 `balancesPallet` 旧常量引用。
-- [x] 修复 `onReorder` 废弃 API。
+- [x] 修复拖拽排序回调的 Flutter 版本兼容问题。
 - [x] 修复测试常量声明。
 - [x] 清理 CI / 本地脚本中的旧 `Balances` 同步口径。
 - [x] 运行公民钱包本地分析/测试验证。
@@ -42,5 +42,7 @@
 - `flutter test test/signer`：通过。
 - `git diff --check`：通过。
 - 旧引用检查：公民钱包、CI workflow 和公民钱包文档中不再残留旧 `Balances` 直签同步口径。
-- `flutter analyze --no-fatal-infos`：本机 Flutter 3.41.0 不支持 CI 目标 API `onReorderItem`，因此本地无法作为 3.44.x 验收结果；后续任务已将移动端 CI 与仓库版本真源统一为 `.fvm/fvm_config.json` 的 Flutter 3.44.4。
-- `flutter test`：本机同样因 3.41.0 不支持 `onReorderItem` 导致 `widget_test.dart` 编译失败；`test/signer` 业务测试已通过。
+- 2026-07-04 本机安装失败复修:`citizenwallet/lib/ui/home_page.dart` 回退为 Flutter 3.41.0 支持的 `onReorder`,并按 Flutter 原生语义恢复向下拖动时 `newIndex -= 1`。
+- `flutter analyze --no-fatal-infos`：通过。
+- `flutter build apk --debug`：通过,已生成 `build/app/outputs/flutter-apk/app-debug.apk`。
+- `flutter install --debug -d RZCY814477Y`：通过,已安装到 `SM A156U`。

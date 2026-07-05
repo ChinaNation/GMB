@@ -3,17 +3,10 @@
 //! onchina 侧唯一的 extrinsic 组装+提交通路:QR 仍只签不提交(冷钱包边界不变),
 //! 管理员扫码回签后由本模块「重建签名材料 → 本地 sr25519 验签 → system_dryRun
 //! 拒 Future/Stale → author_submitExtrinsic → 轮询 nonce 消费(InBestBlock 代理)」。
-//! 签名材料构建与 node/src/governance/signing.rs 同源同规则:runtime 类型拼
-//! SignedPayload,immortal era + 显式 nonce(PoW 推链三件套)。
+//! 签名材料构建统一调用 `chain-signing`,避免 OnChina 和 node 各自拼 payload。
 
-use citizenchain as runtime;
-use codec::{Decode, Encode};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use sp_core::crypto::Ss58Codec;
-use sp_runtime::generic::Era;
-use sp_runtime::traits::IdentifyAccount;
-use sp_runtime::MultiSigner;
 
 use super::chain_url::chain_http_url;
 
@@ -22,16 +15,6 @@ const RPC_TIMEOUT_SECS: u64 = 10;
 const WAIT_INCLUSION_SECS: u64 = 95;
 /// nonce 消费轮询间隔。
 const WAIT_POLL_INTERVAL_SECS: u64 = 3;
-
-/// 链交易签名材料:与冷钱包侧 `SignedPayload::using_encoded` 规则逐字节一致。
-pub(crate) struct SigningMaterial {
-    pub call: runtime::RuntimeCall,
-    pub tx_ext: runtime::TxExtension,
-    /// QR `b.d` 承载的完整 SignedPayload SCALE 字节。
-    pub payload: Vec<u8>,
-    /// sr25519 实际签名输入(payload 超 256B 时 Substrate 规则改签 blake2_256)。
-    pub signing_bytes: Vec<u8>,
-}
 
 /// prepare 阶段产物:随会话持久化,submit 阶段重建校验。
 pub(crate) struct PreparedChainSign {
@@ -109,73 +92,6 @@ pub(crate) async fn fetch_nonce(pubkey_hex: &str) -> Result<u32, String> {
         .ok_or_else(|| "accountNextIndex malformed".to_string())
 }
 
-fn decode_runtime_call(call_data: &[u8]) -> Result<runtime::RuntimeCall, String> {
-    let mut input = call_data;
-    let call = runtime::RuntimeCall::decode(&mut input)
-        .map_err(|e| format!("call_data 不是当前 runtime 可解码调用: {e}"))?;
-    if !input.is_empty() {
-        return Err(format!("call_data 存在 {} 字节尾随数据", input.len()));
-    }
-    Ok(call)
-}
-
-fn build_tx_extension(nonce: u32) -> runtime::TxExtension {
-    (
-        frame_system::AuthorizeCall::<runtime::Runtime>::new(),
-        frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
-        runtime::CheckNonStakeSender,
-        frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
-        frame_system::CheckTxVersion::<runtime::Runtime>::new(),
-        frame_system::CheckGenesis::<runtime::Runtime>::new(),
-        frame_system::CheckEra::<runtime::Runtime>::from(Era::Immortal),
-        frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
-        frame_system::CheckWeight::<runtime::Runtime>::new(),
-        pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
-        frame_metadata_hash_extension::CheckMetadataHash::<runtime::Runtime>::new(false),
-        frame_system::WeightReclaim::<runtime::Runtime>::new(),
-    )
-}
-
-pub(crate) fn build_signing_material(
-    call_data: &[u8],
-    genesis_hash: &[u8; 32],
-    nonce: u32,
-    spec_version: u32,
-    tx_version: u32,
-) -> Result<SigningMaterial, String> {
-    let call = decode_runtime_call(call_data)?;
-    let tx_ext = build_tx_extension(nonce);
-    let genesis_hash = sp_core::H256::from_slice(genesis_hash);
-    let raw_payload = runtime::SignedPayload::from_raw(
-        call.clone(),
-        tx_ext.clone(),
-        (
-            (),
-            (),
-            (),
-            spec_version,
-            tx_version,
-            genesis_hash,
-            genesis_hash, // CheckEra: immortal → block_hash(0) = genesis_hash。
-            (),
-            (),
-            (),
-            None,
-            (),
-        ),
-    );
-    Ok(SigningMaterial {
-        call,
-        tx_ext,
-        payload: raw_payload.encode(),
-        signing_bytes: raw_payload.using_encoded(|payload| payload.to_vec()),
-    })
-}
-
-fn sha256_hex(data: &[u8]) -> String {
-    hex::encode(Sha256::digest(data))
-}
-
 /// prepare:实时取 nonce/版本/创世哈希,构建冷签载荷与校验哈希。
 pub(crate) async fn prepare_signing(
     call_data: &[u8],
@@ -184,24 +100,18 @@ pub(crate) async fn prepare_signing(
     let nonce = fetch_nonce(signer_pubkey_hex).await?;
     let (spec_version, tx_version) = fetch_runtime_version().await?;
     let genesis_hash = fetch_genesis_hash().await?;
-    let material =
-        build_signing_material(call_data, &genesis_hash, nonce, spec_version, tx_version)?;
+    let material = chain_signing::build_signing_material(
+        call_data,
+        &genesis_hash,
+        nonce,
+        spec_version,
+        tx_version,
+    )?;
     Ok(PreparedChainSign {
         nonce,
-        signing_hash_hex: sha256_hex(&material.signing_bytes),
+        signing_hash_hex: chain_signing::sha256_hex(&material.signing_bytes),
         payload: material.payload,
     })
-}
-
-/// dry-run 拒绝原因(与 node 端同口径:Future 给人话,其余留技术原因)。
-fn dry_run_reject_message(result_bytes: &[u8], raw_hex: &str) -> String {
-    if result_bytes.starts_with(&[0x01, 0x00, 0x02]) {
-        return "上一笔交易尚未出块,请稍候再试".to_string();
-    }
-    if result_bytes.starts_with(&[0x01, 0x00, 0x01]) {
-        return "交易 nonce 已过期(Stale),请重新发起".to_string();
-    }
-    format!("交易预检被拒绝: 0x{raw_hex}")
 }
 
 /// submit:重建材料校验哈希 → 本地验签 → dry-run → 提交,返回交易哈希。
@@ -214,35 +124,26 @@ pub(crate) async fn assemble_and_submit(
 ) -> Result<String, String> {
     let (spec_version, tx_version) = fetch_runtime_version().await?;
     let genesis_hash = fetch_genesis_hash().await?;
-    let material =
-        build_signing_material(call_data, &genesis_hash, nonce, spec_version, tx_version)?;
+    let material = chain_signing::build_signing_material(
+        call_data,
+        &genesis_hash,
+        nonce,
+        spec_version,
+        tx_version,
+    )?;
     // 会话期间 runtime 版本/创世哈希不得漂移,否则签名对不上载荷。
-    if sha256_hex(&material.signing_bytes) != expected_signing_hash_hex {
+    if chain_signing::sha256_hex(&material.signing_bytes) != expected_signing_hash_hex {
         return Err("签名载荷与会话不一致(runtime 版本或创世哈希已变化),请重新发起".into());
     }
 
-    let pk_raw = hex::decode(signer_pubkey_hex.trim_start_matches("0x"))
-        .map_err(|e| format!("公钥解码失败: {e}"))?;
-    let public = sp_core::sr25519::Public::from_raw(
-        <[u8; 32]>::try_from(pk_raw.as_slice()).map_err(|_| "公钥必须 32 字节")?,
-    );
-    let sig_raw = hex::decode(signature_hex.trim_start_matches("0x"))
-        .map_err(|e| format!("签名解码失败: {e}"))?;
-    let signature = sp_core::sr25519::Signature::from_raw(
-        <[u8; 64]>::try_from(sig_raw.as_slice()).map_err(|_| "签名必须 64 字节")?,
-    );
-    if !sp_core::sr25519::Pair::verify(&signature, &material.signing_bytes, &public) {
+    let public = chain_signing::parse_sr25519_public_hex(signer_pubkey_hex)?;
+    let signature = chain_signing::parse_sr25519_signature_hex(signature_hex)?;
+    if !chain_signing::verify_signature(&material, &signature, &public) {
         return Err("sr25519 本地验签失败,拒绝提交".to_string());
     }
 
-    let account = MultiSigner::from(public).into_account();
-    let extrinsic = runtime::UncheckedExtrinsic::new_signed(
-        material.call,
-        sp_runtime::MultiAddress::Id(account),
-        runtime::Signature::Sr25519(signature),
-        material.tx_ext,
-    );
-    let extrinsic_hex = format!("0x{}", hex::encode(extrinsic.encode()));
+    let extrinsic = chain_signing::assemble_signed_extrinsic(material, public, signature);
+    let extrinsic_hex = chain_signing::signed_extrinsic_hex(&extrinsic);
 
     // dry-run:Future/Stale 提交后只会"看似成功永不上链",必须先拒;
     // dry-run RPC 本身不可用时保持可用性兜底继续提交,由交易池终审。
@@ -261,7 +162,7 @@ pub(crate) async fn assemble_and_submit(
                 return Err("dry-run 返回空结果,拒绝提交".to_string());
             }
             if bytes[0] != 0x00 {
-                return Err(dry_run_reject_message(&bytes, raw));
+                return Err(chain_signing::dry_run_reject_message(&bytes, raw));
             }
             if bytes.len() > 1 && bytes[1] != 0x00 {
                 return Err(format!("交易执行会失败: DispatchError (hex: {s})"));
@@ -349,11 +250,9 @@ pub(crate) async fn find_extrinsic_block(tx_hash_hex: &str) -> Result<Option<u64
     Ok(None)
 }
 
-pub(crate) use sp_core::Pair as _;
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use citizenchain as runtime;
     use codec::Encode;
 
     /// 材料构建离线自洽:同输入同产物,call 解码回等值,>256B 载荷签名输入为 blake2。
@@ -364,7 +263,8 @@ mod tests {
         });
         let call_data = call.encode();
         let genesis = [9u8; 32];
-        let m = build_signing_material(&call_data, &genesis, 5, 1, 1).expect("material");
+        let m =
+            chain_signing::build_signing_material(&call_data, &genesis, 5, 1, 1).expect("material");
         assert_eq!(m.call.encode(), call_data);
         // 小载荷:签名输入 == payload 本体。
         assert!(m.payload.len() <= 256);
@@ -373,7 +273,8 @@ mod tests {
         let big_call = runtime::RuntimeCall::System(frame_system::Call::remark {
             remark: vec![7u8; 400],
         });
-        let big = build_signing_material(&big_call.encode(), &genesis, 5, 1, 1).expect("material");
+        let big = chain_signing::build_signing_material(&big_call.encode(), &genesis, 5, 1, 1)
+            .expect("material");
         // 大载荷:SignedPayload 的 Encode 规则内置 >256B 改签 blake2_256,
         // encode() 与 using_encoded 同值 —— payload 即最终签名输入(32 字节哈希)。
         assert_eq!(big.signing_bytes.len(), 32);
@@ -385,6 +286,6 @@ mod tests {
         let call = runtime::RuntimeCall::System(frame_system::Call::remark { remark: vec![] });
         let mut data = call.encode();
         data.push(0xff);
-        assert!(decode_runtime_call(&data).is_err());
+        assert!(chain_signing::decode_runtime_call(&data).is_err());
     }
 }

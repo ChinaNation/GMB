@@ -109,8 +109,8 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 
 ### 安全设计
 - nonce 有 90 秒 TTL，防止重放
-- 链交易 payload 由当前 runtime `SignedPayload::from_raw` 构造，包含 `spec_version/transaction_version/genesis_hash/immortal era` 做链域隔离
-- 签名响应提交前先校验 QR 过期时间、本地 session payload hash、sr25519 签名，再用 runtime `UncheckedExtrinsic::new_signed` 构造交易并 dry-run
+- 链交易 payload 统一由 `citizenchain/crates/chain-signing` 构造，包含 `spec_version/transaction_version/genesis_hash/immortal era` 做链域隔离
+- 签名响应提交前先校验 QR 过期时间、本地 session payload hash、sr25519 签名，再用 `chain-signing` 构造交易并 dry-run
 - 签名验证使用 sr25519（与链上一致）
 
 ## proposal.rs — 提案查询

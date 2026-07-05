@@ -560,7 +560,6 @@ pub fn new_full(
         let client = client.clone();
         let pool = transaction_pool.clone();
         let keystore = keystore_container.keystore();
-        let chain_spec = config.chain_spec.cloned_box();
         let clearing_rpc_impl = clearing_rpc_impl.clone();
 
         Box::new(move |_| {
@@ -570,7 +569,6 @@ pub fn new_full(
                 keystore: keystore.clone(),
                 cpu_hashrate_fn: cpu_hashrate as fn() -> f64,
                 gpu_hashrate_fn,
-                chain_spec: chain_spec.cloned_box(),
                 // 清算行 RPC 命名空间(None 时跳过注入)
                 offchain_clearing_rpc: clearing_rpc_impl.clone(),
             };

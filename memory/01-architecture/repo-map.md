@@ -82,6 +82,8 @@ GMB/
 
 ```text
 citizenchain/
+  crates/
+    chain-signing/
   node/
   runtime/
     governance/
@@ -103,11 +105,13 @@ citizenchain/
 - `citizenchain/runtime/otherpallet`
 - `citizenchain/runtime/transaction`
 - `citizenchain/runtime/primitives`
+- `citizenchain/crates/chain-signing`
 - `citizenchain/node`
 - `citizenchain/onchina`
 
 其中：
 
+- `citizenchain/crates/chain-signing` 是 Rust host 端链交易签名材料唯一真源，node 与 OnChina 不再各自拼 `SignedPayload`
 - 四类 runtime 业务目录已经统一收敛到 `citizenchain/runtime/`
 - 原仓库根目录 `primitives/` 已迁入 `citizenchain/runtime/primitives`
 - 原生节点、桌面节点 UI、Tauri 壳与打包入口统一收口到 `citizenchain/node`
@@ -117,7 +121,7 @@ citizenchain/
 
 ## 6. 当前落地策略
 
-当前结构已经完成物理整合，后续新增 桌面节点 Rust 后端功能直接放在 `citizenchain/node/src/<功能名>`，前端功能放在 `citizenchain/node/frontend/<功能名>`；新增 runtime 相关 crate 与文档均直接放在 `citizenchain/runtime/` 下，不再回到旧顶层目录。
+当前结构已经完成物理整合，后续新增桌面节点 Rust 后端功能直接放在 `citizenchain/node/src/<功能名>`，前端功能放在 `citizenchain/node/frontend/<功能名>`；runtime pallet 与运行时原语直接放在 `citizenchain/runtime/`，跨 node/OnChina 的 Rust host 共享库放在 `citizenchain/crates/`。
 
 ## 6b. OnChina 目录策略
 

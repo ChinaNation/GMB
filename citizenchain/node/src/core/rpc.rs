@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
-use citizenchain::{self as runtime, AccountId, Balance, Nonce, opaque::Block};
+use citizenchain::{self as runtime, opaque::Block, AccountId, Balance, Nonce};
 use codec::{Decode, Encode};
 use jsonrpsee::RpcModule;
 use sc_client_api::StorageProvider;
@@ -21,7 +21,7 @@ use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::crypto::KeyTypeId;
 use sp_keystore::Keystore;
-use sp_runtime::{MultiSigner, OpaqueExtrinsic, generic::Era, traits::IdentifyAccount};
+use sp_runtime::OpaqueExtrinsic;
 use substrate_frame_rpc_system::AccountNonceApi;
 
 /// PoW 矿工密钥类型（与 service.rs 中 POW_AUTHOR_KEY_TYPE 一致）。
@@ -74,8 +74,6 @@ pub struct FullDeps<C, P> {
     pub cpu_hashrate_fn: fn() -> f64,
     /// GPU 哈希率查询函数（仅在 gpu-mining feature 启用且有 GPU 时为 Some）。
     pub gpu_hashrate_fn: Option<fn() -> f64>,
-    /// Chain spec（用于 sync_state_genSyncSpec RPC，供轻节点获取 lightSyncState）。
-    pub chain_spec: Box<dyn sc_chain_spec::ChainSpec + Send>,
     /// 清算行节点的 RPC 命名空间实现。
     /// None 表示本节点未以清算行角色启动,跳过 `offchain_*` RPC 注入。
     pub offchain_clearing_rpc:
@@ -105,8 +103,7 @@ where
         .ok_or_else(|| ErrorObject::owned(-1, "未找到矿工密钥，请先启动节点", None::<()>))?;
 
     // 2. 推导 AccountId
-    let miner_account: AccountId =
-        MultiSigner::from(sp_core::sr25519::Public::from(public)).into_account();
+    let miner_account: AccountId = chain_signing::account_id_from_public(public);
 
     // 3. 查询链信息
     let info = (*client).info();
@@ -129,56 +126,23 @@ where
         .version(best_hash)
         .map_err(|e| ErrorObject::owned(-1, format!("查询运行时版本失败: {e}"), None::<()>))?;
 
-    // 5. 构造 TxExtension(immortal era,与 benchmarking.rs / signing.rs 一致)
-    let tx_ext: runtime::TxExtension = (
-        frame_system::AuthorizeCall::<runtime::Runtime>::new(),
-        frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
-        runtime::CheckNonStakeSender,
-        frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
-        frame_system::CheckTxVersion::<runtime::Runtime>::new(),
-        frame_system::CheckGenesis::<runtime::Runtime>::new(),
-        frame_system::CheckEra::<runtime::Runtime>::from(Era::Immortal),
-        frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
-        frame_system::CheckWeight::<runtime::Runtime>::new(),
-        pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
-        frame_metadata_hash_extension::CheckMetadataHash::<runtime::Runtime>::new(false),
-        frame_system::WeightReclaim::<runtime::Runtime>::new(),
+    // 5. 使用共享签名材料，版本号取链上 WASM。
+    let material = chain_signing::build_signing_material_from_call(
+        call,
+        genesis_hash,
+        nonce,
+        on_chain_version.spec_version,
+        on_chain_version.transaction_version,
     );
-
-    // 6. 签名(immortal: CheckEra additional_signed = genesis_hash)
-    let raw_payload = runtime::SignedPayload::from_raw(
-        call.clone(),
-        tx_ext.clone(),
-        (
-            (),
-            (),
-            (),
-            on_chain_version.spec_version,
-            on_chain_version.transaction_version,
-            genesis_hash,
-            genesis_hash, // CheckEra: immortal → block_hash(0) = genesis_hash
-            (),
-            (),
-            (),
-            None,
-            (),
-        ),
-    );
-    let signature = raw_payload
-        .using_encoded(|payload| keystore.sr25519_sign(POW_AUTHOR_KEY_TYPE, &public, payload));
+    let signature = keystore.sr25519_sign(POW_AUTHOR_KEY_TYPE, &public, &material.signing_bytes);
     let signature = signature
         .map_err(|e| ErrorObject::owned(-1, format!("keystore 签名失败: {e}"), None::<()>))?
         .ok_or_else(|| ErrorObject::owned(-1, "keystore 未返回签名", None::<()>))?;
 
-    // 7. 构造 UncheckedExtrinsic
-    let extrinsic = runtime::UncheckedExtrinsic::new_signed(
-        call,
-        sp_runtime::MultiAddress::Id(miner_account),
-        runtime::Signature::Sr25519(signature),
-        tx_ext,
-    );
+    // 6. 组装 UncheckedExtrinsic
+    let extrinsic = chain_signing::assemble_signed_extrinsic(material, public, signature);
 
-    // 8. 编码并提交到交易池
+    // 7. 编码并提交到交易池
     let encoded = extrinsic.encode();
     let opaque = OpaqueExtrinsic::try_from_encoded_extrinsic(&encoded)
         .map_err(|_| ErrorObject::owned(-1, "交易编码失败", None::<()>))?;
@@ -201,6 +165,89 @@ fn parse_ss58_account(address: &str) -> Result<AccountId, jsonrpsee::types::Erro
             None::<()>,
         )
     })
+}
+
+/// 构造 smoldot 轻节点 checkpoint。
+///
+/// CitizenApp 的 chainspec 只保留 `genesis.stateRootHash`,不携带完整创世存储。
+/// smoldot 因此还需要一个 finalized header + GRANDPA authority set 作为轻节点
+/// 启动锚点；这里只返回这两个字段,避免把完整 chainspec 塞进 RPC 响应触发大小限制。
+fn build_light_sync_state<C>(
+    client: &Arc<C>,
+) -> Result<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>
+where
+    C: HeaderBackend<Block> + StorageProvider<Block, sc_service::TFullBackend<Block>> + 'static,
+{
+    use jsonrpsee::types::error::ErrorObject;
+
+    let finalized_hash = client.info().finalized_hash;
+    let finalized_header = client
+        .header(finalized_hash)
+        .map_err(|e| {
+            ErrorObject::owned(-1, format!("获取 finalized header 失败: {e}"), None::<()>)
+        })?
+        .ok_or_else(|| ErrorObject::owned(-1, "finalized header 不存在", None::<()>))?;
+    let finalized_header_hex = format!("0x{}", hex::encode(finalized_header.encode()));
+
+    // Grandpa::CurrentSetId 的 storage key = twox_128("Grandpa") ++ twox_128("CurrentSetId")。
+    let grandpa_set_id_key = {
+        let mut k = Vec::new();
+        k.extend_from_slice(&sp_io::hashing::twox_128(b"Grandpa"));
+        k.extend_from_slice(&sp_io::hashing::twox_128(b"CurrentSetId"));
+        k
+    };
+    let set_id_bytes = client
+        .storage(finalized_hash, &sp_storage::StorageKey(grandpa_set_id_key))
+        .map_err(|e| ErrorObject::owned(-1, format!("读取 GRANDPA set_id 失败: {e}"), None::<()>))?
+        .ok_or_else(|| ErrorObject::owned(-1, "GRANDPA set_id 不存在", None::<()>))?;
+    let set_id = u64::decode(&mut &set_id_bytes.0[..]).map_err(|e| {
+        ErrorObject::owned(-1, format!("解码 GRANDPA set_id 失败: {e}"), None::<()>)
+    })?;
+
+    // Grandpa::Authorities 已经是 Vec<(AuthorityId, u64)> 的 SCALE 编码。
+    let grandpa_authorities_key = {
+        let mut k = Vec::new();
+        k.extend_from_slice(&sp_io::hashing::twox_128(b"Grandpa"));
+        k.extend_from_slice(&sp_io::hashing::twox_128(b"Authorities"));
+        k
+    };
+    let auth_bytes = client
+        .storage(
+            finalized_hash,
+            &sp_storage::StorageKey(grandpa_authorities_key),
+        )
+        .map_err(|e| {
+            ErrorObject::owned(
+                -1,
+                format!("读取 GRANDPA authorities 失败: {e}"),
+                None::<()>,
+            )
+        })?
+        .ok_or_else(|| ErrorObject::owned(-1, "GRANDPA authorities 不存在", None::<()>))?;
+    if auth_bytes.0.is_empty() {
+        return Err(ErrorObject::owned(
+            -1,
+            "GRANDPA authorities 为空,无法生成 lightSyncState",
+            None::<()>,
+        ));
+    }
+
+    // smoldot 的 grandpaAuthoritySet 期望完整 AuthoritySet 编码:
+    // Vec<(AuthorityId, u64)> + set_id + 空 pending_standard_changes/
+    // pending_forced_changes/authority_set_changes。
+    let set_id_encoded = set_id.encode();
+    let mut combined = Vec::with_capacity(auth_bytes.0.len() + set_id_encoded.len() + 4);
+    combined.extend_from_slice(&auth_bytes.0);
+    combined.extend_from_slice(&set_id_encoded);
+    combined.push(0x00u8); // ForkTree roots: Compact<0>
+    combined.push(0x00u8); // ForkTree best_finalized_number: Option::None
+    combined.push(0x00u8); // Vec<PendingChange>: Compact<0>
+    combined.push(0x00u8); // Vec<(u64, u32)>: Compact<0>
+
+    Ok(serde_json::json!({
+        "finalizedBlockHeader": finalized_header_hex,
+        "grandpaAuthoritySet": format!("0x{}", hex::encode(&combined)),
+    }))
 }
 
 /// Instantiate all full RPC extensions.
@@ -228,7 +275,6 @@ where
         keystore,
         cpu_hashrate_fn,
         gpu_hashrate_fn,
-        chain_spec,
         offchain_clearing_rpc,
     } = deps;
 
@@ -315,98 +361,12 @@ where
         })?;
     }
 
-    // sync_state_genSyncSpec: 返回包含 lightSyncState 的 chainspec 快照，
-    // 供 smoldot 轻节点跳过历史区块头验证。
-    // 标准 sc-sync-state-rpc 依赖 BABE，citizenchain 用 PoW 没有 BABE，
-    // 因此用自定义实现：从 chain_spec + 当前 finalized header + GRANDPA authority set 构造。
+    // sync_state_genLightSyncState: 返回小体积 checkpoint,供 CitizenApp 注入
+    // smoldot chainspec。旧的 full spec 响应会超过 RPC 限制,这里不再返回完整 chainspec。
     {
         let client = client.clone();
-        let chain_spec_for_rpc = chain_spec;
-        module.register_method("sync_state_genSyncSpec", move |_params, _, _| {
-            use jsonrpsee::types::error::ErrorObject;
-
-            // 1. 解析原始 chain_spec JSON
-            let spec_json_str = chain_spec_for_rpc.as_json(true).map_err(|e| {
-                ErrorObject::owned(-1, format!("chain_spec 序列化失败: {e}"), None::<()>)
-            })?;
-            let mut spec: serde_json::Value =
-                serde_json::from_str(&spec_json_str).map_err(|e| {
-                    ErrorObject::owned(-1, format!("chain_spec JSON 解析失败: {e}"), None::<()>)
-                })?;
-
-            // 2. 获取 finalized block header
-            let finalized_hash = client.info().finalized_hash;
-            let finalized_header = client
-                .header(finalized_hash)
-                .map_err(|e| {
-                    ErrorObject::owned(-1, format!("获取 finalized header 失败: {e}"), None::<()>)
-                })?
-                .ok_or_else(|| ErrorObject::owned(-1, "finalized header 不存在", None::<()>))?;
-            let finalized_header_hex = format!("0x{}", hex::encode(finalized_header.encode()));
-
-            // 3. 读取 GRANDPA authority set（从 storage 中读取 Grandpa::CurrentSetId 和 Grandpa::Authorities）
-            let grandpa_set_id_key = {
-                let mut k = Vec::new();
-                k.extend_from_slice(&sp_io::hashing::twox_128(b"Grandpa"));
-                k.extend_from_slice(&sp_io::hashing::twox_128(b"CurrentSetId"));
-                k
-            };
-            let set_id_bytes = client
-                .storage(finalized_hash, &sp_storage::StorageKey(grandpa_set_id_key))
-                .map_err(|e| {
-                    ErrorObject::owned(-1, format!("读取 GRANDPA set_id 失败: {e}"), None::<()>)
-                })?;
-            let set_id: u64 = set_id_bytes
-                .map(|d| u64::decode(&mut &d.0[..]).unwrap_or(0))
-                .unwrap_or(0);
-
-            let grandpa_authorities_key = {
-                let mut k = Vec::new();
-                k.extend_from_slice(&sp_io::hashing::twox_128(b"Grandpa"));
-                k.extend_from_slice(&sp_io::hashing::twox_128(b"Authorities"));
-                k
-            };
-            let auth_bytes = client
-                .storage(
-                    finalized_hash,
-                    &sp_storage::StorageKey(grandpa_authorities_key),
-                )
-                .map_err(|e| {
-                    ErrorObject::owned(
-                        -1,
-                        format!("读取 GRANDPA authorities 失败: {e}"),
-                        None::<()>,
-                    )
-                })?;
-
-            // 将 GRANDPA AuthoritySet 编码为 smoldot 要求的完整格式。
-            // smoldot authority_set 解析器期望：
-            //   Vec<(AuthorityId, u64)>    ← authorities（从 Grandpa::Authorities 存储读取）
-            //   u64                        ← set_id
-            //   ForkTree<PendingChange>    ← pending_standard_changes（空 = 0x00 0x00）
-            //   Vec<PendingChange>         ← pending_forced_changes（空 = 0x00）
-            //   Vec<(u64, u32)>            ← authority_set_changes（空 = 0x00）
-            let authority_set_hex = {
-                let auth_raw = auth_bytes.map(|d| d.0).unwrap_or_default();
-                let set_id_encoded = set_id.encode();
-                let mut combined = Vec::with_capacity(auth_raw.len() + set_id_encoded.len() + 4);
-                combined.extend_from_slice(&auth_raw); // Vec<(AuthorityId, u64)>
-                combined.extend_from_slice(&set_id_encoded); // u64 set_id
-                combined.push(0x00u8); // ForkTree roots: Compact<0>
-                combined.push(0x00u8); // ForkTree best_finalized_number: Option::None
-                combined.push(0x00u8); // Vec<PendingChange>: Compact<0>
-                combined.push(0x00u8); // Vec<(u64, u32)>: Compact<0>
-                format!("0x{}", hex::encode(&combined))
-            };
-
-            // 4. 构造 lightSyncState
-            let light_sync_state = serde_json::json!({
-                "finalizedBlockHeader": finalized_header_hex,
-                "grandpaAuthoritySet": authority_set_hex,
-            });
-            spec["lightSyncState"] = light_sync_state;
-
-            Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(spec)
+        module.register_method("sync_state_genLightSyncState", move |_params, _, _| {
+            build_light_sync_state(&client)
         })?;
     }
 

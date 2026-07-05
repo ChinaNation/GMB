@@ -24,7 +24,7 @@ use sc_transaction_pool_api::{TransactionPool, TransactionSource};
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_core::{sr25519, Pair, H256};
-use sp_runtime::{generic::Era, AccountId32, MultiAddress, OpaqueExtrinsic};
+use sp_runtime::{AccountId32, OpaqueExtrinsic};
 use std::sync::{Arc, RwLock};
 
 use citizenchain as runtime;
@@ -211,7 +211,7 @@ where
 /// 本函数是 **本步单测的重点**:
 /// - 参数确定性输入 → extrinsic 可 SCALE roundtrip
 /// - SignedPayload 可被 `sr25519_verify` 验证
-/// - TxExtension 各字段顺序与 runtime `type TxExtension` 一致
+/// - TxExtension 顺序由 `chain-signing` 统一维护
 pub fn build_signed_extrinsic(
     client: &FullClient,
     sender: &sr25519::Pair,
@@ -223,48 +223,14 @@ pub fn build_signed_extrinsic(
         .map_err(|e| format!("读取 genesis_hash 失败:{e}"))?
         .ok_or_else(|| "Genesis block 尚未可用".to_string())?;
 
-    // immortal era(feedback_cid_pow_chain_recipe.md):PoW 链 offchain submitter 一律 immortal
-    let tx_ext: runtime::TxExtension = (
-        frame_system::AuthorizeCall::<runtime::Runtime>::new(),
-        frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
-        runtime::CheckNonStakeSender,
-        frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
-        frame_system::CheckTxVersion::<runtime::Runtime>::new(),
-        frame_system::CheckGenesis::<runtime::Runtime>::new(),
-        frame_system::CheckEra::<runtime::Runtime>::from(Era::Immortal),
-        frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
-        frame_system::CheckWeight::<runtime::Runtime>::new(),
-        pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
-        frame_metadata_hash_extension::CheckMetadataHash::<runtime::Runtime>::new(false),
-        frame_system::WeightReclaim::<runtime::Runtime>::new(),
-    );
-
-    let raw_payload = runtime::SignedPayload::from_raw(
-        call.clone(),
-        tx_ext.clone(),
-        (
-            (),
-            (),
-            (),
-            runtime::VERSION.spec_version,
-            runtime::VERSION.transaction_version,
+    Ok(
+        chain_signing::build_signed_extrinsic_with_pair_local_version(
+            call,
             genesis_hash,
-            genesis_hash, // CheckEra: immortal → block_hash(0) = genesis_hash
-            (),
-            (),
-            (),
-            None,
-            (),
+            nonce,
+            sender,
         ),
-    );
-    let signature = raw_payload.using_encoded(|e| sender.sign(e));
-
-    Ok(runtime::UncheckedExtrinsic::new_signed(
-        call,
-        MultiAddress::Id(AccountId32::from(sender.public())),
-        runtime::Signature::Sr25519(signature),
-        tx_ext,
-    ))
+    )
 }
 
 // ---------------- 单元测试 ----------------

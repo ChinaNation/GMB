@@ -12,17 +12,19 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CITIZENAPP="$REPO_ROOT/citizenapp/assets/chainspec.json"
+LIGHT_SYNC_STATE="$REPO_ROOT/citizenapp/assets/light_sync_state.json"
 SSOT="$REPO_ROOT/citizenchain/node/chainspecs/citizenchain.plain.json"
 GENESIS_MANIFEST="${CITIZENCHAIN_GENESIS_STATE_MANIFEST:-$REPO_ROOT/citizenchain/target/chainspec/genesis-state/manifest.json}"
 REQUIRE_STATE_ROOT="${CITIZENAPP_REQUIRE_STATE_ROOT:-0}"
 
-python3 - "$CITIZENAPP" "$SSOT" "$GENESIS_MANIFEST" "$REQUIRE_STATE_ROOT" <<'PY'
+python3 - "$CITIZENAPP" "$SSOT" "$GENESIS_MANIFEST" "$LIGHT_SYNC_STATE" "$REQUIRE_STATE_ROOT" <<'PY'
+import hashlib
 import json
 import os
 import re
 import sys
 
-app_path, ssot_path, manifest_path, require_state_root = sys.argv[1:]
+app_path, ssot_path, manifest_path, light_sync_state_path, require_state_root = sys.argv[1:]
 errors = []
 warnings = []
 
@@ -36,6 +38,13 @@ def load_json(path, label):
     except Exception as exc:
         errors.append(f"{label} JSON 解析失败:{exc}")
         return {}
+
+def sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 app = load_json(app_path, "CitizenApp chainspec")
 ssot = load_json(ssot_path, "节点 plain SSOT")
@@ -54,6 +63,8 @@ if app:
         errors.append("CitizenApp chainspec id 必须为 citizenchain")
     if ssot and app.get("protocolId") != ssot.get("protocolId"):
         errors.append("CitizenApp protocolId 必须与节点 plain SSOT 一致")
+    if "lightSyncState" in app:
+        errors.append("CitizenApp chainspec 不得内嵌 lightSyncState,必须使用 assets/light_sync_state.json")
     app_genesis = app.get("genesis") or {}
     state_root = app_genesis.get("stateRootHash")
     if state_root:
@@ -71,8 +82,24 @@ if app:
                 )
             if manifest.get("chain_id") and manifest.get("chain_id") != "citizenchain":
                 errors.append("创世状态包 manifest.chain_id 必须为 citizenchain")
+            manifest_lss_hash = manifest.get("light_sync_state_hash")
+            if manifest_lss_hash and os.path.isfile(light_sync_state_path):
+                actual_lss_hash = sha256_file(light_sync_state_path)
+                if actual_lss_hash != manifest_lss_hash:
+                    errors.append(
+                        "CitizenApp light_sync_state.json 与创世状态包 manifest.light_sync_state_hash 不一致:"
+                        f" app={actual_lss_hash} manifest={manifest_lss_hash}"
+                    )
         else:
             warnings.append(f"未找到创世状态包 manifest,跳过 stateRootHash 交叉校验:{manifest_path}")
+        lss = load_json(light_sync_state_path, "CitizenApp light_sync_state")
+        if not lss:
+            errors.append("CitizenApp light_sync_state.json 不得为空,否则 smoldot 无法加入 stateRootHash 轻形态链")
+        else:
+            for key in ("finalizedBlockHeader", "grandpaAuthoritySet"):
+                value = lss.get(key)
+                if not isinstance(value, str) or not re.fullmatch(r"0x[0-9a-fA-F]+", value):
+                    errors.append(f"CitizenApp light_sync_state.{key} 必须为 0x 十六进制字符串")
     elif "raw" in app_genesis:
         msg = (
             "CitizenApp chainspec 仍为旧 raw 形态。代码 CI 可暂时通过,"

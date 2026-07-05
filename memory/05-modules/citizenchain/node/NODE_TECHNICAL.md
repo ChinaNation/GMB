@@ -62,12 +62,12 @@
 | `reward_rebindWallet(ss58)` | 节点端签名提交 rebind_reward_wallet 交易 |
 | `transaction_submitMinerTransfer(ss58, amount_fen, remark, token)` | 节点端使用 `powr` 密钥提交矿工热钱包 `OnchainTransaction::transfer_with_remark` 转账，备注最多 99 UTF-8 字节，要求进程内一次性令牌 |
 | `fee_blockFees(block_hash_hex)` | 读取指定区块的 FeePaid 事件累计手续费 |
-| `sync_state_genSyncSpec` | 返回 lightSyncState（自定义实现，替代 BABE 依赖的标准 RPC） |
+| `sync_state_genLightSyncState` | 返回小体积 lightSyncState checkpoint（finalized header + GRANDPA authority set） |
 
 ### RPC 交易签名
 - 使用 `powr` keystore 密钥签名
 - spec_version 从链上 WASM 运行时读取（非 native 编译时常量），防止升级后 BadProof
-- TxExtension 与 benchmarking.rs 保持一致
+- TxExtension、SignedPayload 和 UncheckedExtrinsic 统一由 `citizenchain/crates/chain-signing` 构造
 - 矿工热钱包转账 RPC 额外要求一次性令牌；令牌由桌面 Tauri 命令在设备密码校验通过后生成并由 RPC 消费
 
 ## 4. Chain Spec 与创世链状态包（冻结铁律）
@@ -91,7 +91,7 @@
 2. 取 `citizenchain.compact.compressed.wasm` 作为创世 `:code` 字节源。
 3. 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM> --public-institution-root <CitizenApp 公权快照根>`。
 4. 脚本必须通过 `check-constitution-genesis.py --expect-code-file <CI_WASM>` 校验,确认 `:code` 字节等于 CI WASM,公民宪法 `law_id=0`、v1 直接生效且无待生效版。
-5. 脚本生成三份发布输入:`citizenchain/node/chainspecs/citizenchain.plain.json`、`citizenapp/assets/chainspec.json`、`target/chainspec/genesis-state/`。
+5. 脚本生成四份发布输入:`citizenchain/node/chainspecs/citizenchain.plain.json`、`citizenapp/assets/chainspec.json`、`citizenapp/assets/light_sync_state.json`、`target/chainspec/genesis-state/`。
 6. 正式打包前必须把 `target/chainspec/genesis-state/` 放入 Tauri 资源 `genesis-state/`,或在验收时用 `CITIZENCHAIN_GENESIS_STATE_DIR` 指向该目录。
 
 后续 runtime 升级一律走链上 `setCode`(governance/runtime-upgrade),**绝不**重新烘焙或覆盖这份 JSON。

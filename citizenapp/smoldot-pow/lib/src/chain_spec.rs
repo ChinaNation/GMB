@@ -468,12 +468,11 @@ impl LightSyncState {
     pub fn to_chain_information(
         &self,
     ) -> Result<ValidChainInformation, CheckpointToChainInformationError> {
-        if self.inner.finalized_block_header.number == 0 {
-            return Err(CheckpointToChainInformationError::GenesisBlockCheckpoint);
-        }
-
         // 共识类型：有 BABE epoch 数据则用 BABE，否则用 PoW。
         let consensus = if let Some(ref babe_epoch_changes) = self.inner.babe_epoch_changes {
+            if self.inner.finalized_block_header.number == 0 {
+                return Err(CheckpointToChainInformationError::GenesisBlockCheckpoint);
+            }
             // BABE 共识链
             let mut epochs: Vec<_> = babe_epoch_changes
                 .epochs
@@ -503,7 +502,10 @@ impl LightSyncState {
                 finalized_next_epoch_transition: convert_epoch(next_epoch),
             }
         } else {
-            // PoW 共识链（无 BABE 数据）
+            // PoW 共识链（无 BABE 数据）。CitizenApp 的 stateRootHash 轻形态
+            // 没有完整创世存储；正式链刚冻结且尚未出块时,只能用块 0 header
+            // 作为启动锚点。GRANDPA set_id=0 的 genesis checkpoint 由
+            // ChainInformation 校验继续约束。
             ChainInformationConsensus::Pow
         };
 
@@ -566,7 +568,7 @@ pub enum FromGenesisStorageError {
 /// Error when building the chain information corresponding to a checkpoint.
 #[derive(Debug, derive_more::Display, derive_more::Error)]
 pub enum CheckpointToChainInformationError {
-    /// The checkpoint corresponds to the genesis block.
+    /// The BABE checkpoint corresponds to the genesis block.
     GenesisBlockCheckpoint,
     /// Found a value of 0 for the number of Babe slots per epoch.
     InvalidBabeSlotsPerEpoch,

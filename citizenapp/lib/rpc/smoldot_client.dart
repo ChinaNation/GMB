@@ -221,7 +221,7 @@ class SmoldotClientManager {
 
       // 注入 lightSyncState checkpoint：让 smoldot 从 finalized block 开始同步，
       // 跳过 genesis 到 finalized 之间的全部区块头验证，冷启动从分钟级降到秒级。
-      // checkpoint 由 scripts/update-light-sync-state.sh 从全节点生成，
+      // checkpoint 由 citizenchain/scripts/bake-chainspec.sh 从冻结节点生成，
       // 打包在 assets/light_sync_state.json 中，不修改 chainspec.json 文件。
       final chainSpec = await _injectLightSyncState(withBootnode);
 
@@ -334,25 +334,23 @@ class SmoldotClientManager {
   /// lightSyncState 让 smoldot 从 finalized block 开始同步，跳过 genesis
   /// 到 finalized 之间的全部区块头验证。checkpoint 由构建脚本预生成，
   /// 即使落后几个块也不影响正确性，smoldot 会自动追赶。
-  /// 加载失败时静默降级，不阻塞启动。
+  /// stateRootHash 轻形态没有 checkpoint 无法启动；资产异常时直接报错，
+  /// 避免继续落到 smoldot 的底层 ChainSpecNeitherGenesisStorageNorCheckpoint。
   Future<String> _injectLightSyncState(String chainSpecJson) async {
-    try {
-      final lssRaw =
-          await rootBundle.loadString('assets/light_sync_state.json');
-      if (lssRaw.trim().isEmpty) return chainSpecJson;
-      final lss = jsonDecode(lssRaw);
-      if (lss is! Map || !lss.containsKey('finalizedBlockHeader')) {
-        debugPrint('[Smoldot] light_sync_state.json 格式无效，跳过');
-        return chainSpecJson;
-      }
-      final spec = jsonDecode(chainSpecJson) as Map<String, dynamic>;
-      spec['lightSyncState'] = lss;
-      debugPrint('[Smoldot] 已注入 lightSyncState checkpoint');
-      return jsonEncode(spec);
-    } catch (e) {
-      debugPrint('[Smoldot] 加载 lightSyncState 失败，降级为 genesis 冷启动: $e');
-      return chainSpecJson;
+    final lssRaw = await rootBundle.loadString('assets/light_sync_state.json');
+    if (lssRaw.trim().isEmpty) {
+      throw StateError('light_sync_state.json 为空，无法启动轻节点');
     }
+    final lss = jsonDecode(lssRaw);
+    if (lss is! Map ||
+        lss['finalizedBlockHeader'] is! String ||
+        lss['grandpaAuthoritySet'] is! String) {
+      throw const FormatException('light_sync_state.json 缺少必要 checkpoint 字段');
+    }
+    final spec = jsonDecode(chainSpecJson) as Map<String, dynamic>;
+    spec['lightSyncState'] = lss;
+    debugPrint('[Smoldot] 已注入 lightSyncState checkpoint');
+    return jsonEncode(spec);
   }
 
   /// 从 SharedPreferences 加载缓存的 smoldot 同步数据库。

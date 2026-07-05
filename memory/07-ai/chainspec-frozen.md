@@ -1,11 +1,11 @@
 # chainspec 与创世状态冻结规则（铁律）
 
 > 适用范围：全节点 `citizenchain.plain.json`、安装包内置 `genesis-state/`、CitizenApp
-> `assets/chainspec.json`，以及任何分发给轻节点 / 钱包 / App 的创世锚点文件。
+> `assets/chainspec.json`、`assets/light_sync_state.json`，以及任何分发给轻节点 / 钱包 / App 的创世锚点文件。
 
 ## 结论
 
-主网创世那一刻必须同时冻结三件东西：
+主网创世那一刻必须同时冻结四件东西：
 
 1. **全节点 plain SSOT**：`citizenchain/node/chainspecs/citizenchain.plain.json`。
    它只保存 runtime WASM、genesis patch、bootNodes、properties 和 protocolId。
@@ -14,6 +14,9 @@
    `target/chainspec/genesis-state/`。
 3. **CitizenApp 轻形态 chainspec**：`citizenapp/assets/chainspec.json`。
    它只保存轻节点联网所需字段和 `genesis.stateRootHash`，不得携带 GB 级 raw state。
+4. **CitizenApp light sync checkpoint**：`citizenapp/assets/light_sync_state.json`。
+   它保存 smoldot 加入 `stateRootHash` 轻形态链所必需的 finalized header 和 GRANDPA authority set。
+   正式链高度仍为 0 时允许保存创世头 checkpoint；这是 PoW + `stateRootHash` 轻形态的启动锚点。
 
 创世后 runtime 升级一律走链上 `system.setCode` 交易。除非正式硬分叉，任何脚本、CI、
 启动入口都不得重烤创世锚点。
@@ -31,7 +34,8 @@
 
 - 全节点创世配置唯一真源：`citizenchain/node/chainspecs/citizenchain.plain.json`。
 - 创世状态包唯一来源：`citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>`。
-- CitizenApp 轻形态唯一来源：同一次 `bake-chainspec.sh` 读取块 0 header 后写出。
+- CitizenApp 轻形态与 checkpoint 唯一来源：同一次 `bake-chainspec.sh` 读取块 0 header 并调用
+  `sync_state_genLightSyncState` 后写出。
 - 公权机构唯一真源：链上 `PublicManage::Institutions` /
   `PublicManage::InstitutionAccounts`；App 内置快照和 OnChina PostgreSQL 都只是缓存。
 
@@ -51,6 +55,7 @@
    - 通过 `check-constitution-genesis.py --rpc --expect-code-file <CI_WASM>`。
    - 写回 `citizenchain/node/chainspecs/citizenchain.plain.json`。
    - 写回 `citizenapp/assets/chainspec.json` 的 `stateRootHash` 轻形态。
+   - 写回 `citizenapp/assets/light_sync_state.json` 的 smoldot checkpoint。
    - 导出 `target/chainspec/genesis-state/manifest.json` 和
      `target/chainspec/genesis-state/chains/citizenchain/db`。
 4. 打包前执行 `citizenchain/scripts/prepack.sh` 或 `prepack.ps1`，把
@@ -60,8 +65,9 @@
 
 ## 防御措施
 
-1. `citizenapp/scripts/check-chainspec-frozen.sh` 校验 node plain SSOT 与 CitizenApp
-   轻形态阶段是否匹配；正式发布设置 `CITIZENAPP_REQUIRE_STATE_ROOT=1`。
+1. `citizenapp/scripts/check-chainspec-frozen.sh` 校验 node plain SSOT、CitizenApp
+   轻形态 chainspec 与 `light_sync_state.json` 是否匹配；正式发布设置
+   `CITIZENAPP_REQUIRE_STATE_ROOT=1`。
 2. `citizenchain/node/src/home/process/mod.rs` 在启动节点前尝试安装内置
    `genesis-state/`，并在 RPC `chain_getBlockHash(0)` 成功前保持“创世准备中”。
 3. `citizenchain/node/src/onchina_proc/mod.rs` 启动 OnChina 前必须确认本机链 RPC 已就绪。
@@ -71,6 +77,7 @@
 
 - 在启动脚本里重新 `build-spec --raw` 覆盖主网创世。
 - 把 raw chainspec 重新作为仓库 SSOT 或 App 资产。
+- 把 `lightSyncState` 内嵌回 `chainspec.json`，或让 `light_sync_state.json` 保持空对象。
 - 让 OnChina 或 CitizenApp 把链下公权机构目录当成真源。
 - 因 runtime 升级重新烘焙 genesis；runtime 升级只能走链上 `system.setCode`。
 
@@ -78,6 +85,6 @@
 
 - runtime 升级：编译新 WASM，发链上升级交易，genesis 不动。
 - 预上线重新创世：等 CI WASM 成功，再用 `bake-chainspec.sh` 同步 plain SSOT、
-  CitizenApp 轻形态和 genesis-state。
+  CitizenApp 轻形态、light sync checkpoint 和 genesis-state。
 - 正式节点打包：prepack 复制真实 `genesis-state/`，安装包首启直接复制链数据库。
 - CitizenApp 公权机构目录：内置创世快照缓存，运行后只按链上投影版本拉增量。

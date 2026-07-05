@@ -159,3 +159,33 @@ fn issue_598() {
         Err(CheckpointToChainInformationError::GenesisBlockCheckpoint)
     ));
 }
+
+#[test]
+fn pow_state_root_hash_allows_genesis_checkpoint() {
+    // CitizenChain PoW 的 App chainspec 只保存 stateRootHash。首个大于 0 的
+    // finalized block 出现前,smoldot 必须接受创世头 checkpoint,不能要求
+    // App 携带完整创世存储。
+    let chain_spec = ChainSpec::from_json_bytes(
+        br#"{
+            "name": "CitizenChain",
+            "id": "citizenchain",
+            "bootNodes": [],
+            "properties": null,
+            "genesis": {
+              "stateRootHash": "0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63"
+            },
+            "lightSyncState": {
+              "finalizedBlockHeader": "0x0000000000000000000000000000000000000000000000000000000000000000006a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff6303170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c11131400",
+              "grandpaAuthoritySet": "0x043719c39cf92462da2e22a7dfa760f463c801dd86a27a4151d24935e42692e5b50100000000000000000000000000000000000000"
+            }
+          }"#,
+    )
+    .unwrap();
+
+    let info = chain_spec
+        .light_sync_state()
+        .unwrap()
+        .to_chain_information()
+        .unwrap();
+    assert_eq!(info.as_ref().finalized_block_header.number, 0);
+}

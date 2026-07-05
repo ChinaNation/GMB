@@ -8,13 +8,10 @@
 
 use crate::shared::rpc;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use citizenchain as runtime;
-use codec::{Decode, Encode};
+use codec::Encode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use sp_core::crypto::Pair;
-use sp_runtime::{generic::Era, traits::IdentifyAccount, MultiSigner};
 use std::{
     collections::HashMap,
     sync::{Mutex, OnceLock},
@@ -555,35 +552,15 @@ pub fn verify_and_submit(
         return Err("提交参数 call_data 与本地签名 session 不匹配".to_string());
     }
 
-    // 提取签名
-    let sig_hex = response
-        .body
-        .signature
-        .strip_prefix("0x")
-        .unwrap_or(&response.body.signature);
-    if sig_hex.len() != 128 {
-        return Err(format!(
-            "签名长度无效：期望 128 hex，实际 {}",
-            sig_hex.len()
-        ));
-    }
-    let signature_bytes = hex::decode(sig_hex).map_err(|e| format!("签名解码失败: {e}"))?;
-
-    // 提取公钥
     let pubkey_hex_clean = expected_pubkey
         .strip_prefix("0x")
         .unwrap_or(&expected_pubkey);
-    let pubkey_bytes = hex::decode(pubkey_hex_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
-    let public = sp_core::sr25519::Public::from_raw(
-        <[u8; 32]>::try_from(pubkey_bytes.as_slice()).map_err(|_| "公钥长度必须为 32 字节")?,
-    );
-    let signature = sp_core::sr25519::Signature::from_raw(
-        <[u8; 64]>::try_from(signature_bytes.as_slice()).map_err(|_| "签名长度必须为 64 字节")?,
-    );
+    let public = chain_signing::parse_sr25519_public_hex(pubkey_hex_clean)?;
+    let signature = chain_signing::parse_sr25519_signature_hex(&response.body.signature)?;
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
-    let material = build_runtime_signing_material(
+    let material = chain_signing::build_signing_material(
         call_data,
         &genesis_hash,
         sign_nonce,
@@ -601,19 +578,13 @@ pub fn verify_and_submit(
         ));
     }
 
-    if !sp_core::sr25519::Pair::verify(&signature, &material.signing_bytes, &public) {
+    if !chain_signing::verify_signature(&material, &signature, &public) {
         return Err("sr25519 本地验签失败，拒绝提交到链".to_string());
     }
 
     let _ = sign_block_number; // immortal era 不再使用区块号，字段只保留给前端会话结构。
     eprintln!("[签名提交] sign_nonce={sign_nonce}, era=immortal, runtime_typed=true");
-    let account = MultiSigner::from(public).into_account();
-    let extrinsic = runtime::UncheckedExtrinsic::new_signed(
-        material.call,
-        sp_runtime::MultiAddress::Id(account),
-        runtime::Signature::Sr25519(signature),
-        material.tx_ext,
-    );
+    let extrinsic = chain_signing::assemble_signed_extrinsic(material, public, signature);
     let full_extrinsic = extrinsic.encode();
 
     // 先 dry-run 验证，避免提交错误交易导致链卡住
@@ -691,38 +662,13 @@ pub fn verify_and_submit(
 }
 
 /// 把 dry-run 拒绝结果转成抛给前端的报错文案。
-///
-/// Future（0x01 0x00 0x02）对用户而言就是"上一笔还没出块"——
-/// 签名 nonce 排在池中上一笔之后，链上状态尚未消费——给人话提示，
-/// 技术细节留在调用方日志；其余变体保留技术原因便于排查。
 fn dry_run_reject_message(result_bytes: &[u8], raw_hex: &str) -> String {
-    if result_bytes.starts_with(&[0x01, 0x00, 0x02]) {
-        return "上一笔交易尚未出块，请稍候再试".to_string();
-    }
-    let reason = classify_invalid_tx(result_bytes);
-    format!("交易校验失败，已拒绝提交: {reason} (hex: {raw_hex})")
+    chain_signing::dry_run_reject_message(result_bytes, raw_hex)
 }
 
-/// 解析 dry-run 返回的 TransactionValidityError，给出可读原因。
-///
-/// SCALE 布局：外层 0x01 = Err；第二字节 0x00 = InvalidTransaction、
-/// 0x01 = UnknownTransaction；第三字节为具体变体编号。
+/// 解析 dry-run 返回的 TransactionValidityError。
 fn classify_invalid_tx(result_bytes: &[u8]) -> String {
-    if result_bytes.len() > 1 && result_bytes[1] == 0x00 {
-        let kind = match result_bytes.get(2).copied().unwrap_or(0xff) {
-            0 => "Call(当前链状态下不可调度)",
-            1 => "Payment(余额不足以支付手续费)",
-            2 => "Future(nonce 超前，交易会卡在 future 队列永不出块)",
-            3 => "Stale(nonce 已被消费，交易过期)",
-            4 => "BadProof(签名校验失败)",
-            5 => "AncientBirthBlock(签名时代过旧)",
-            6 => "ExhaustsResources(资源超限，请稍后重试)",
-            _ => "Unknown",
-        };
-        format!("InvalidTransaction::{kind}")
-    } else {
-        "UnknownTransaction".to_string()
-    }
+    chain_signing::classify_invalid_tx(result_bytes)
 }
 
 /// 提交后的后台核对：延迟一个出块周期后检查账户 nonce 是否前进。
@@ -777,83 +723,7 @@ pub(crate) fn fetch_runtime_version() -> Result<(u32, u32), String> {
     Ok((spec as u32, tx as u32))
 }
 
-struct RuntimeSigningMaterial {
-    call: runtime::RuntimeCall,
-    tx_ext: runtime::TxExtension,
-    /// QR 中承载的完整 SignedPayload SCALE 字节。
-    payload: Vec<u8>,
-    /// sr25519 实际签名字节；当 payload 超过 256B 时由 Substrate 自动改签 blake2_256。
-    signing_bytes: Vec<u8>,
-}
-
-fn decode_runtime_call(call_data: &[u8]) -> Result<runtime::RuntimeCall, String> {
-    let mut input = call_data;
-    let call = runtime::RuntimeCall::decode(&mut input)
-        .map_err(|e| format!("call_data 不是当前 runtime 可解码调用: {e}"))?;
-    if !input.is_empty() {
-        return Err(format!("call_data 存在 {} 字节尾随数据", input.len()));
-    }
-    Ok(call)
-}
-
-fn build_tx_extension(nonce: u32) -> runtime::TxExtension {
-    (
-        frame_system::AuthorizeCall::<runtime::Runtime>::new(),
-        frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
-        runtime::CheckNonStakeSender,
-        frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
-        frame_system::CheckTxVersion::<runtime::Runtime>::new(),
-        frame_system::CheckGenesis::<runtime::Runtime>::new(),
-        frame_system::CheckEra::<runtime::Runtime>::from(Era::Immortal),
-        frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
-        frame_system::CheckWeight::<runtime::Runtime>::new(),
-        pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
-        frame_metadata_hash_extension::CheckMetadataHash::<runtime::Runtime>::new(false),
-        frame_system::WeightReclaim::<runtime::Runtime>::new(),
-    )
-}
-
-fn build_runtime_signing_material(
-    call_data: &[u8],
-    genesis_hash: &[u8; 32],
-    nonce: u32,
-    spec_version: u32,
-    tx_version: u32,
-) -> Result<RuntimeSigningMaterial, String> {
-    let call = decode_runtime_call(call_data)?;
-    let tx_ext = build_tx_extension(nonce);
-    let genesis_hash = sp_core::H256::from_slice(genesis_hash);
-    let raw_payload = runtime::SignedPayload::from_raw(
-        call.clone(),
-        tx_ext.clone(),
-        (
-            (),
-            (),
-            (),
-            spec_version,
-            tx_version,
-            genesis_hash,
-            genesis_hash, // CheckEra: immortal → block_hash(0) = genesis_hash。
-            (),
-            (),
-            (),
-            None,
-            (),
-        ),
-    );
-
-    Ok(RuntimeSigningMaterial {
-        call,
-        tx_ext,
-        payload: raw_payload.encode(),
-        signing_bytes: raw_payload.using_encoded(|payload| payload.to_vec()),
-    })
-}
-
 /// 构建链交易冷签 payload。
-///
-/// 第一个返回值是 QR_V1 `b.d` 中的完整 runtime SignedPayload；第二个返回值是
-/// sr25519 实际签名输入，完全复用 Substrate `SignedPayload::using_encoded` 规则。
 pub(crate) fn build_runtime_signing_payloads(
     call_data: &[u8],
     genesis_hash: &[u8; 32],
@@ -861,9 +731,13 @@ pub(crate) fn build_runtime_signing_payloads(
     spec_version: u32,
     tx_version: u32,
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
-    let material =
-        build_runtime_signing_material(call_data, genesis_hash, nonce, spec_version, tx_version)?;
-    Ok((material.payload, material.signing_bytes))
+    chain_signing::build_runtime_signing_payloads(
+        call_data,
+        genesis_hash,
+        nonce,
+        spec_version,
+        tx_version,
+    )
 }
 
 pub(crate) fn fetch_genesis_hash() -> Result<[u8; 32], String> {

@@ -94,7 +94,7 @@ echo "==> Android USB: adb reverse tcp:$CID_DEV_USB_PORT, citizenapp CID 环境=
 # ── 开发期 USB 桥接：自动检测本地诊断节点并打开 ADB reverse + 注入 dart-define ──
 # 远端 prczss/nrcgch 偶发 SubstreamReset 时，本地节点 (--listen-addr ws/30334)
 # 作为 citizenapp 第三个稳定 peer 兜底。出门后 localhost 不可达 smoldot 自动忽略。
-DEV_NODE_RPC="${CITIZENAPP_DEV_LOCAL_RPC:-http://localhost:9945}"
+DEV_NODE_RPC="${CITIZENAPP_DEV_LOCAL_RPC:-http://localhost:9944}"
 DEV_NODE_PORT="${CITIZENAPP_DEV_LOCAL_WS_PORT:-30334}"
 DEV_NODE_PEER_ID="$(curl -sS --max-time 2 -H 'Content-Type: application/json' \
   -d '{"id":1,"jsonrpc":"2.0","method":"system_localPeerId","params":[]}' \

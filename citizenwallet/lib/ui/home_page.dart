@@ -518,8 +518,8 @@ class _HomePageState extends State<HomePage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: wallets.length,
-                  onReorderItem: (oldIndex, newIndex) =>
-                      _onReorderItem(wallets, oldIndex, newIndex),
+                  onReorder: (oldIndex, newIndex) =>
+                      _onReorderWallet(wallets, oldIndex, newIndex),
                   proxyDecorator: (child, index, animation) {
                     return AnimatedBuilder(
                       animation: animation,
@@ -547,12 +547,15 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _onReorderItem(
+  Future<void> _onReorderWallet(
     List<WalletProfile> displayedWallets,
     int oldIndex,
     int newIndex,
   ) async {
-    // onReorderItem 已按 Flutter 新语义修正向下拖动后的 newIndex,这里不能再二次减一。
+    // Flutter 原生 onReorder 向下拖动时 newIndex 仍按移除前列表计算。
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
     if (oldIndex == newIndex) return;
     if (oldIndex < 0 ||
         oldIndex >= displayedWallets.length ||

@@ -84,6 +84,7 @@ codec = { workspace = true, default-features = true }
 frame-benchmarking-cli = { workspace = true, default-features = true }
 
 # Local Dependencies
+chain-signing = { path = "../crates/chain-signing" }
 citizenchain = { workspace = true }
 pow-difficulty = { path = "../runtime/otherpallet/pow-difficulty", default-features = true }
 genesis-pallet = { path = "../runtime/genesis", default-features = true }

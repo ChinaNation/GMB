@@ -60,7 +60,7 @@
 
 签名响应中不得出现 payload、payload hash、签名时间、摘要字段。若出现旧字段,解析器应报错。
 
-citizenchain node 的链交易冷签路径必须和热钱包路径一样使用 runtime `TxExtension`、`SignedPayload`、`UncheckedExtrinsic` 类型构造交易。任何手写拼接 SCALE 字节的实现都属于第二真源,会导致扫码端绿签但链端 `BadProof`。
+citizenchain node 的链交易冷签路径和热钱包路径必须统一调用 `citizenchain/crates/chain-signing` 构造 runtime `TxExtension`、`SignedPayload`、`UncheckedExtrinsic`。任何模块手写拼接 SCALE 字节都属于第二真源,会导致扫码端绿签但链端 `BadProof`。
 
 ## 4. 登录签名
 

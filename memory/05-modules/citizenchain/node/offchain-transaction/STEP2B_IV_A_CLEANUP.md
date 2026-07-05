@@ -72,7 +72,7 @@ Step 2b-iii-b 完成后,新清算行节点(citizenapp RPC → ledger → packer 
 
 保留:
 - `parse_ss58_account` — 仍被 `reward_bindWallet` / `reward_rebindWallet` 调用
-- `sync_state_genSyncSpec` / `mining_cpuHashrate` / `mining_gpuHashrate` / `reward_*` / `fee_blockFees` RPC
+- `sync_state_genLightSyncState` / `mining_cpuHashrate` / `mining_gpuHashrate` / `reward_*` / `fee_blockFees` RPC
 - 新清算行 `offchain_clearing_rpc` 字段与 `OffchainClearingRpcServer::into_rpc` 合并
 
 ### 2.6 `home/process/mod.rs`

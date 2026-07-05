@@ -12,9 +12,10 @@
 # 正式模式会同步:
 #   1. citizenchain/node/chainspecs/citizenchain.plain.json   (节点冻结 SSOT)
 #   2. citizenapp/assets/chainspec.json                        (smoldot 轻形态:stateRootHash)
+#   3. citizenapp/assets/light_sync_state.json                 (smoldot checkpoint)
 #
 # 流程:导出 plain spec → 临时节点物化创世(记录耗时)→ RPC 宪法创世检查
-#       → 读块 0 头生成轻形态 → 导出 genesis-state → finalize 同步。
+#       → 读块 0 头生成轻形态 → 生成 lightSyncState → 导出 genesis-state → finalize 同步。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -22,6 +23,7 @@ CHAIN_ROOT="$(dirname "$SCRIPT_DIR")"
 REPO_ROOT="$(dirname "$CHAIN_ROOT")"
 OUT="$CHAIN_ROOT/target/chainspec/citizenchain.plain.json"
 APP_OUT="$CHAIN_ROOT/target/chainspec/chainspec.app.json"
+APP_LIGHT_SYNC_STATE_OUT="$CHAIN_ROOT/target/chainspec/light_sync_state.json"
 GENESIS_STATE_OUT="$CHAIN_ROOT/target/chainspec/genesis-state"
 FINALIZE=0
 SKIP_CHECK=0
@@ -125,7 +127,17 @@ echo "==> 导出 fresh plain chainspec..."
 rpc() {
     curl -s -H 'content-type: application/json' \
         -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\",\"params\":$2}" \
-        "http://127.0.0.1:$RPC_PORT" | python3 -c 'import sys,json;print(json.dumps(json.load(sys.stdin).get("result")))'
+        "http://127.0.0.1:$RPC_PORT" | python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)
+if data.get("error"):
+    raise SystemExit(f"RPC error: {data[\"error\"]}")
+if data.get("result") is None:
+    raise SystemExit("RPC result is null")
+print(json.dumps(data["result"], ensure_ascii=False))
+'
 }
 
 echo "==> 启动临时节点物化创世(国家/省/市公权机构,记录耗时)..."
@@ -186,6 +198,29 @@ json.dump(app, open(app_path, "w"), ensure_ascii=False, indent=2)
 print(f"    {app_path}")
 PYEOF
 
+echo "==> 生成 CitizenApp lightSyncState checkpoint..."
+LIGHT_SYNC_STATE_JSON="$(rpc sync_state_genLightSyncState '[]')"
+python3 - "$APP_LIGHT_SYNC_STATE_OUT" "$LIGHT_SYNC_STATE_JSON" <<'PYEOF'
+import json
+import re
+import sys
+
+out_path, raw = sys.argv[1], sys.argv[2]
+lss = json.loads(raw)
+required = ("finalizedBlockHeader", "grandpaAuthoritySet")
+missing = [key for key in required if key not in lss]
+if missing:
+    raise SystemExit(f"lightSyncState 缺少字段:{','.join(missing)}")
+for key in required:
+    value = lss[key]
+    if not isinstance(value, str) or not re.fullmatch(r"0x[0-9a-fA-F]+", value):
+        raise SystemExit(f"lightSyncState.{key} 必须为 0x 十六进制字符串")
+with open(out_path, "w", encoding="utf-8") as f:
+    json.dump(lss, f, ensure_ascii=False, indent=2)
+    f.write("\n")
+print(f"    {out_path}")
+PYEOF
+
 kill "$NODE_PID" 2>/dev/null || true
 wait "$NODE_PID" 2>/dev/null || true
 NODE_PID=""
@@ -199,14 +234,14 @@ if [[ ! -d "$NODE_TMP_DIR/chains/citizenchain/db" ]]; then
     exit 1
 fi
 cp -a "$NODE_TMP_DIR/chains/citizenchain/db" "$GENESIS_STATE_OUT/chains/citizenchain/db"
-python3 - "$GENESIS_STATE_OUT/manifest.json" "$GENESIS_HASH_STR" "$STATE_ROOT" "$TMP" "${WASM_FILE:-}" "$PUBLIC_INSTITUTION_ROOT" "$GENESIS_SECS" <<'PYEOF'
+python3 - "$GENESIS_STATE_OUT/manifest.json" "$GENESIS_HASH_STR" "$STATE_ROOT" "$TMP" "${WASM_FILE:-}" "$APP_LIGHT_SYNC_STATE_OUT" "$PUBLIC_INSTITUTION_ROOT" "$GENESIS_SECS" <<'PYEOF'
 import datetime
 import hashlib
 import json
 import os
 import sys
 
-manifest_path, genesis_hash, state_root, chainspec_path, wasm_path, public_institution_root, secs = sys.argv[1:]
+manifest_path, genesis_hash, state_root, chainspec_path, wasm_path, light_sync_state_path, public_institution_root, secs = sys.argv[1:]
 
 def sha256_file(path):
     if not path or not os.path.isfile(path):
@@ -226,6 +261,7 @@ manifest = {
     "state_root": state_root,
     "chainspec_hash": sha256_file(chainspec_path),
     "runtime_wasm_hash": sha256_file(wasm_path),
+    "light_sync_state_hash": sha256_file(light_sync_state_path),
     "public_institution_root": public_institution_root,
     "genesis_materialization_secs": int(secs),
     "included_paths": ["chains/citizenchain/db"],
@@ -246,11 +282,14 @@ echo "==> 首启物化耗时 ${GENESIS_SECS}s(验收记录);创世哈希 $GENESI
 if [[ "$FINALIZE" == "1" ]]; then
     NODE_SPEC="$CHAIN_ROOT/node/chainspecs/citizenchain.plain.json"
     APP_SPEC="$REPO_ROOT/citizenapp/assets/chainspec.json"
+    APP_LIGHT_SYNC_STATE="$REPO_ROOT/citizenapp/assets/light_sync_state.json"
     install -m 0644 "$OUT" "$NODE_SPEC"
     install -m 0644 "$APP_OUT" "$APP_SPEC"
+    install -m 0644 "$APP_LIGHT_SYNC_STATE_OUT" "$APP_LIGHT_SYNC_STATE"
     echo "==> 已同步冻结 SSOT:"
     echo "    $NODE_SPEC"
     echo "    $APP_SPEC (轻形态 stateRootHash)"
+    echo "    $APP_LIGHT_SYNC_STATE (lightSyncState checkpoint)"
     echo "==> 创世链状态包已生成,打包安装包前需作为资源放入 genesis-state/:"
     echo "    $GENESIS_STATE_OUT"
 else

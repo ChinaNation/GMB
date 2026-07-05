@@ -53,7 +53,7 @@ pub type TxPool =
 
 ### 2.3 extrinsic 构造
 
-复制 `benchmarking.rs::create_benchmark_extrinsic` 的 `TxExtension` 12 元组(顺序与 `runtime::TxExtension` 严格一致):
+`PoolBatchSubmitter` 不再复制 `TxExtension` 12 元组，统一调用 `citizenchain/crates/chain-signing`:
 
 ```
 (AuthorizeCall, CheckNonZeroSender, CheckNonStakeSender,
@@ -62,7 +62,7 @@ pub type TxPool =
  CheckMetadataHash, WeightReclaim)
 ```
 
-`SignedPayload::from_raw` 携带 implicit 部分:`(spec_version, tx_version, genesis_hash, best_hash)`,签名消息由 `raw_payload.using_encoded(|e| sender.sign(e))` 给出。
+`chain-signing` 负责构造 `TxExtension`、`SignedPayload` 签名字节和 `UncheckedExtrinsic`；submitter 只读取 `genesis_hash`、nonce 与业务 call。
 
 ### 2.4 β-2-a 的降级提交
 
@@ -71,8 +71,8 @@ pub type TxPool =
 2. ✅ 打包 BoundedVec<..., MaxBatchSize> 和 BatchSignatureOf<Runtime>
 3. ✅ 组 `RuntimeCall::OffchainTransaction(submit_offchain_batch_v2 {..})`
 4. ✅ 从 signing_key 读 sr25519 pair
-5. ⚠️ **nonce 暂用 0 占位**(β-2-b 查真实)
-6. ✅ 调 `build_signed_extrinsic` 构造签名 extrinsic
+5. ✅ 按签名账户读取真实 nonce
+6. ✅ 调 `chain-signing` 构造签名 extrinsic
 7. ⚠️ **不调 `pool.submit_one`**,返回 `H256::from(blake2b_256(extrinsic.encode()))` 作为占位 hash + log 记录
 
 packer 收到 `Ok(placeholder_hash)` 后:

@@ -81,8 +81,8 @@
 - A5 冻结语义:冻结的是 plain JSON(runtime WASM + patch + bootnodes)与同一次物化出的创世状态包,创世哈希由其唯一决定,全网一致(派生全确定性)。
 
 ### B. citizenapp/smoldot 轻形态
-- B1 新脚本从首个已启动节点读 genesis header(块 0 哈希 + stateRoot),产出 `assets/chainspec.json` 轻形态:name/id/bootNodes/properties + `genesis.stateRootHash`(不含完整 state,不含 runtimeGenesis)。
-- B2 smoldot-pow 分支对 `genesis.stateRootHash` 解析的兼容性验证(真机,验收项)。
+- B1 `bake-chainspec.sh` 从已物化节点读 genesis header(块 0 哈希 + stateRoot),产出 `assets/chainspec.json` 轻形态:name/id/bootNodes/properties + `genesis.stateRootHash`(不含完整 state,不含 runtimeGenesis)。
+- B2 同一次 bake 调节点 RPC `sync_state_genLightSyncState`,产出 `assets/light_sync_state.json`；`stateRootHash` 轻形态缺 checkpoint 时 smoldot 不能 `addChain`,CI 和本地启动脚本必须硬拦空对象。
 - B3 公权机构快照包生成器重跑(死规则)。
 
 ### C. onchina 机构册投影(D9 修订:链上唯一真源)
@@ -110,7 +110,8 @@
 
 - **A node 部署形态改造完成**:`chain_spec.rs` 切换冻结 plain spec(`citizenchain.plain.json`,10MB=WASM 5.3MB+patch+44 bootnodes;raw 已删零残留);`bake-chainspec.sh` 重写为 plain 流程(导出 plain → CITIZENCHAIN_HEADLESS 临时节点物化创世并记录耗时 → RPC 宪法检查 → 读块 0 头产 App 轻形态 → finalize 同步双 SSOT);`check-constitution-genesis.py` 新增 `--rpc/--at` 模式(临时节点按键查询,文件模式保留);run.sh/clean-run.sh raw 引用清零。
 - **旧首启物化冒烟实测已废弃**:旧方案的首启重物化数据不再作为验收依据;本轮改为 49,593 机构后必须用 CI WASM 重新 bake。
-- **B smoldot 轻形态**:bake 脚本自动产 `genesis.stateRootHash` 形态 App chainspec;**smoldot-pow 分支已确认原生支持 StateRootHash**(chain_spec.rs:72/317),真机验证留部署验收。
+- **B smoldot 轻形态**:bake 脚本自动产 `genesis.stateRootHash` 形态 App chainspec;2026-07-04 修复补齐 `assets/light_sync_state.json` checkpoint 冻结资产,并由 `check-chainspec-frozen.sh` 硬拦空对象;**smoldot-pow 分支已确认原生支持 StateRootHash**(chain_spec.rs:72/317),真机验证留部署验收。
+- **B 补充验收(2026-07-04)**:真机发现 smoldot 还拒绝 genesis checkpoint(`InvalidCheckpoint(GenesisBlockCheckpoint)`);已在收编 smoldot fork 中仅对无 BABE epoch 的 PoW 链放开创世头 checkpoint,并重编 Android native `libsmoldot.so`。真机日志已到 `轻节点已启动`、`区块头同步完成`。
 - **C onchina 链上对账完成**:新 `domains/gov/chain_audit.rs`——启动抽样 32+1 号对链上 `Institutions` 核对(名称/Active,fail-closed 拒绝启动;链暂不可达重试 6×10s;`ONCHINA_GOV_CHAIN_AUDIT=0` 开发逃生门);`audit-chain-catalog` 子命令全量双向比对(部署验收);`chain_runtime` 新增 `institution_lookup`/`for_each_chain_institution`。**同源加固**:onchina `official_institution_cid` 直调 primitives 生成器并钉死创世年份 2026(修掉"按当前年份"的跨年漂移炸弹);本轮同源交叉测试需按 49,297 创世派生重跑。
 - **D1 runtime 全量断言抓到真缺口并修复**:旧断言曾抓出常量机构漏铸;本轮总数应更新为 49,593(含派生首条逐字节抽查+NJD 管理员在位),plain spec 需用 CI WASM 重生。
 - **测试终态**:runtime 31/31(含 3 分钟全量直铸断言)、onchina 135/135(含同源交叉)、primitives 45/45、node 编译过。
@@ -118,7 +119,7 @@
 
 ## 剩余 = 部署 runbook(用户执行,方案 E 节)
 
-①`bake-chainspec.sh --finalize --wasm <CI_WASM>` 重生 plain SSOT、CitizenApp 轻形态和 genesis-state → 提交;②prepack 内置 genesis-state、6 节点部署、`chain_getBlockHash(0)` 全网一致核对;③citizenapp 真机 smoldot 验证 + 49,593 创世公权机构快照包重跑;④onchina 各节点链投影同步通过 + `audit-chain-catalog` 全量比对;⑤删本机与各节点旧 `sfid` 库;⑥公民建档占号端到端 walkthrough。
+①`bake-chainspec.sh --finalize --wasm <CI_WASM>` 重生 plain SSOT、CitizenApp 轻形态、`light_sync_state.json` 和 genesis-state → 提交;②prepack 内置 genesis-state、6 节点部署、`chain_getBlockHash(0)` 全网一致核对;③citizenapp 真机 smoldot 验证 + 49,593 创世公权机构快照包重跑;④onchina 各节点链投影同步通过 + `audit-chain-catalog` 全量比对;⑤删本机与各节点旧 `sfid` 库;⑥公民建档占号端到端 walkthrough。
 
 ## 状态
 
@@ -126,3 +127,4 @@
 - 2026-07-03:曾改为扩大创世范围方案;代码核心完成。
 - 2026-07-04:按用户最终口径调整为**创世只到国家/省/市**;镇级公权机构和后续新增机构统一由注册局运行期注册上链。
 - 2026-07-04:国家立法院参议会 `NSN`、众议会 `NRP` 从模板派生迁入 `china_lf.rs` 常量;创世计数保持 49,593,口径改为 296 常量 + 49,297 派生。
+- 2026-07-04:修复 CitizenApp 轻节点启动失败:废弃超大 full-spec checkpoint 响应,新增小体积 `sync_state_genLightSyncState`;bake 同步生成 `light_sync_state.json`;App/CI 对空 checkpoint fail-closed;收编 smoldot fork 允许 CitizenChain PoW genesis checkpoint 并完成真机通过。

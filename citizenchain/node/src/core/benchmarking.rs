@@ -8,7 +8,6 @@ use citizenchain as runtime;
 use runtime::{AccountId, Balance, SystemCall};
 use sc_cli::Result;
 use sc_client_api::BlockBackend;
-use sp_core::{Encode, Pair};
 use sp_inherents::{InherentData, InherentDataProvider};
 use sp_keyring::Sr25519Keyring;
 use sp_runtime::OpaqueExtrinsic;
@@ -115,48 +114,11 @@ pub fn create_benchmark_extrinsic(
         .ok()
         .flatten()
         .expect("Genesis block exists; qed");
-    // immortal era(feedback_cid_pow_chain_recipe.md):PoW 链一律 immortal,
-    // CheckEra::additional_signed 取 block_hash(0) = genesis_hash。
-    let tx_ext: runtime::TxExtension = (
-        frame_system::AuthorizeCall::<runtime::Runtime>::new(),
-        frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
-        runtime::CheckNonStakeSender,
-        frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
-        frame_system::CheckTxVersion::<runtime::Runtime>::new(),
-        frame_system::CheckGenesis::<runtime::Runtime>::new(),
-        frame_system::CheckEra::<runtime::Runtime>::from(sp_runtime::generic::Era::Immortal),
-        frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
-        frame_system::CheckWeight::<runtime::Runtime>::new(),
-        pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
-        frame_metadata_hash_extension::CheckMetadataHash::<runtime::Runtime>::new(false),
-        frame_system::WeightReclaim::<runtime::Runtime>::new(),
-    );
-
-    let raw_payload = runtime::SignedPayload::from_raw(
-        call.clone(),
-        tx_ext.clone(),
-        (
-            (),
-            (),
-            (),
-            runtime::VERSION.spec_version,
-            runtime::VERSION.transaction_version,
-            genesis_hash,
-            genesis_hash, // CheckEra: immortal → block_hash(0) = genesis_hash
-            (),
-            (),
-            (),
-            None,
-            (),
-        ),
-    );
-    let signature = raw_payload.using_encoded(|e| sender.sign(e));
-
-    runtime::UncheckedExtrinsic::new_signed(
+    chain_signing::build_signed_extrinsic_with_pair_local_version(
         call,
-        sp_runtime::AccountId32::from(sender.public()).into(),
-        runtime::Signature::Sr25519(signature),
-        tx_ext,
+        genesis_hash,
+        nonce,
+        &sender,
     )
 }
 
