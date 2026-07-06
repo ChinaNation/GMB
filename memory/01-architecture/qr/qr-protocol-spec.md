@@ -46,9 +46,10 @@
 | 2 | `sign_response` | 临时 | 签名方 | 请求生成方 | 回传签名结果 |
 | 3 | `user_contact` | 固定 | CitizenApp / CitizenWallet | 需要地址的一方 | 展示钱包地址和联系人名 |
 | 4 | `user_transfer` | 临时 | 收款方 | 付款方 | 收款码,可带金额和备注 |
-| 5 | `im_node_pairing` | 固定 | citizenchain node | CitizenApp | 通信节点配对 |
 
 登录、公民身份确认、管理员确认、交易签名、运行时升级等都不新增 `k`;它们统一是 `k=1` 签名请求,具体业务由 `b.a` 区分。
+
+`k=5 im_node_pairing` 已删除。正式解析器必须把 `k=5` 当成未知类型拒绝，不得恢复桌面区块链软件通信节点配对流程。
 
 ## 4. k=1 sign_request
 
@@ -167,27 +168,9 @@
 | `memo` | string | 是 | 备注,允许空串 |
 | `bank` | string | 是 | 清算行/清算网络标识,允许空串 |
 
-## 8. k=5 im_node_pairing
+## 8. 已删除 k=5 im_node_pairing
 
-固定码,不带 `i/e`。
-
-```jsonc
-{
-  "p": "QR_V1",
-  "k": 5,
-  "b": {
-    "node_peer_id": "12D3KooWNode",
-    "node_multiaddr": "/ip4/127.0.0.1/tcp/30333/ws/p2p/12D3KooWNode",
-    "endpoint_kind": "ip4"
-  }
-}
-```
-
-| 字段 | 类型 | 必填 | 注释 |
-|---|---|---|---|
-| `node_peer_id` | string | 是 | 通信节点 libp2p PeerId |
-| `node_multiaddr` | string | 是 | 配对 multiaddr,不携带 RPC URL |
-| `endpoint_kind` | string | 是 | `ip4` 或 `ip6` |
+旧 `k=5 im_node_pairing` 固定码已删除。旧字段 `node_peer_id`、`node_multiaddr`、`endpoint_kind` 不再属于当前 QR_V1 可解析 body；CitizenApp 扫到 `k=5` 必须返回未知类型。
 
 ## 9. 签名原文拼接
 

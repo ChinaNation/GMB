@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { adminsChangeApi } from '../../admins/admin-management/api';
 import { homeNodeApi } from '../../home/api';
 import { settingsApi } from '../api';
-import { CommunicationNodeSection } from '../communication-node/CommunicationNodeSection';
 import { WalletSection } from '../fee-address/WalletSection';
 import { NodeModeSection } from '../node-mode/NodeModeSection';
 import { NodeKeySection } from '../node-key/NodeKeySection';
@@ -10,7 +9,6 @@ import { OnChinaPlatformSection } from '../OnChinaPlatformSection';
 import type { ChainStatus } from '../../home/types';
 import type {
   BootnodeKey,
-  CommunicationNodeState,
   DesktopUpdateInfo,
   NodeModeState,
   OnChinaPlatformState,
@@ -29,8 +27,6 @@ export function SettingsSection({
   const [nodeMode, setNodeMode] = useState<NodeModeState | null>(null);
   const [onChinaPlatform, setOnChinaPlatform] =
     useState<OnChinaPlatformState | null>(null);
-  const [communicationNode, setCommunicationNode] =
-    useState<CommunicationNodeState | null>(null);
   const [wallet, setWallet] = useState<RewardWallet>({ address: null });
   const [nodeKey, setNodeKey] = useState<BootnodeKey>({
     nodeKey: null,
@@ -41,10 +37,9 @@ export function SettingsSection({
   const [isAdmin, setIsAdmin] = useState(false);
 
   const loadSettings = useCallback(async () => {
-    const [m, p, im, w, k, c, a] = await Promise.allSettled([
+    const [m, p, w, k, c, a] = await Promise.allSettled([
       settingsApi.getNodeMode(),
       settingsApi.getOnChinaPlatform(),
-      settingsApi.getCommunicationNode(),
       settingsApi.getRewardWallet(),
       settingsApi.getBootnodeKey(),
       homeNodeApi.getChainStatus(),
@@ -52,7 +47,6 @@ export function SettingsSection({
     ]);
     if (m.status === 'fulfilled') setNodeMode(m.value);
     if (p.status === 'fulfilled') setOnChinaPlatform(p.value);
-    if (im.status === 'fulfilled') setCommunicationNode(im.value);
     if (w.status === 'fulfilled') setWallet(w.value);
     if (k.status === 'fulfilled') setNodeKey(k.value);
     if (c.status === 'fulfilled') setChainStatus(c.value);
@@ -69,10 +63,6 @@ export function SettingsSection({
       <OnChinaPlatformSection
         platform={onChinaPlatform}
         onUpdated={setOnChinaPlatform}
-      />
-      <CommunicationNodeSection
-        communicationNode={communicationNode}
-        onUpdated={setCommunicationNode}
       />
       <WalletSection wallet={wallet} onUpdated={setWallet} />
       {isAdmin && (

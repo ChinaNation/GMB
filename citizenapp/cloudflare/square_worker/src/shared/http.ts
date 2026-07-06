@@ -1,0 +1,87 @@
+import type { Env, SessionState } from '../types';
+
+export class HttpError extends Error {
+  readonly status: number;
+  readonly code: string;
+
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function jsonResponse(data: unknown, init: ResponseInit = {}): Response {
+  const headers = new Headers(init.headers);
+  headers.set('content-type', 'application/json; charset=utf-8');
+  headers.set('access-control-allow-origin', '*');
+  headers.set('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  headers.set('access-control-allow-headers', 'authorization,content-type');
+
+  return new Response(JSON.stringify(data), {
+    ...init,
+    headers
+  });
+}
+
+export function errorResponse(error: unknown): Response {
+  if (error instanceof HttpError) {
+    return jsonResponse(
+      {
+        ok: false,
+        error_code: error.code,
+        message: error.message
+      },
+      { status: error.status }
+    );
+  }
+
+  return jsonResponse(
+    {
+      ok: false,
+      error_code: 'internal_error',
+      message: '广场服务暂时不可用'
+    },
+    { status: 500 }
+  );
+}
+
+export async function readJson<T>(request: Request): Promise<T> {
+  try {
+    return (await request.json()) as T;
+  } catch {
+    throw new HttpError(400, 'invalid_json', '请求体不是合法 JSON');
+  }
+}
+
+export function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export async function requireSession(request: Request, env: Env): Promise<SessionState> {
+  const authorization = request.headers.get('authorization');
+  if (!authorization?.startsWith('Bearer ')) {
+    throw new HttpError(401, 'missing_session', '请先用钱包签名登录广场');
+  }
+
+  const sessionToken = authorization.slice('Bearer '.length).trim();
+  if (!sessionToken) {
+    throw new HttpError(401, 'missing_session', '请先用钱包签名登录广场');
+  }
+
+  const session = await env.FEED_CACHE.get<SessionState>(`square_session:${sessionToken}`, 'json');
+  if (!session || session.expires_at <= Date.now()) {
+    throw new HttpError(401, 'expired_session', '钱包登录态已过期');
+  }
+
+  return session;
+}
+
+export function optionsResponse(): Response {
+  return jsonResponse({ ok: true });
+}

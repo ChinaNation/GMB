@@ -327,6 +327,7 @@ pub mod pallet {
             AdminAccounts::<T>::insert(
                 account.clone(),
                 AdminAccount {
+                    cid_number: Default::default(),
                     institution_code: PMUL,
                     kind,
                     admins: bounded,
@@ -572,6 +573,7 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId> for pallet::Pallet<T
         proposal_id: u64,
         module_tag: &[u8],
         admin_root_account_id: T::AccountId,
+        _cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
         admins: Vec<T::AccountId>,

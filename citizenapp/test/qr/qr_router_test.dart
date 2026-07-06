@@ -111,5 +111,15 @@ void main() {
       final result = router.route(raw);
       expect(result.type, QrRouteType.unknown);
     });
+
+    test('should reject removed QR kind 5', () {
+      final raw = jsonEncode({
+        'p': QrProtocols.v1,
+        'k': 5,
+        'b': {'removed': true},
+      });
+      final result = router.route(raw);
+      expect(result.type, QrRouteType.unknown);
+    });
   });
 }

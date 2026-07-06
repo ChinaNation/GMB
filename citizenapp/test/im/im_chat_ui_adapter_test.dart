@@ -50,7 +50,7 @@ void main() {
     expect(incoming.metadata?['is_mine'], isFalse);
   });
 
-  test('non-text IM message still gets a safe visible placeholder', () {
+  test('attachment IM message shows safe visible filename placeholder', () {
     final attachment = imStoredMessageToChatMessage(
       const ImStoredMessage(
         envelopeId: 'env-attachment',
@@ -61,11 +61,17 @@ void main() {
         messageKind: ImMessageKind.attachment,
         deliveryState: ImMessageDeliveryState.failed,
         createdAtMillis: 3000,
+        plaintext: '{"type":"gmb_im_attachment_v1","file_name":"photo.txt"}',
       ),
       currentUserId: 'alice-wallet',
     ) as TextMessage;
 
-    expect(attachment.text, '');
+    expect(attachment.text, '[附件] photo.txt');
+    expect(attachment.metadata?['message_kind'], 'attachment');
+    expect(
+      attachment.metadata?['attachment_control_plaintext'],
+      contains('gmb_im_attachment_v1'),
+    );
     expect(attachment.status, MessageStatus.error);
     expect(attachment.failedAt, isNotNull);
   });

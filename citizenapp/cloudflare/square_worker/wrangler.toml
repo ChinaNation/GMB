@@ -1,0 +1,97 @@
+name = "citizenapp-square-api"
+main = "src/index.ts"
+compatibility_date = "2026-07-05"
+workers_dev = true
+
+# 远端部署前必须把 database_id / kv id 替换为 Cloudflare 实际资源 ID。
+# Cloudflare API token、R2 access key、R2 secret key、生产链 RPC 不得写入本文件。
+
+[[r2_buckets]]
+binding = "SQUARE_MEDIA"
+bucket_name = "citizenapp-square-media"
+preview_bucket_name = "citizenapp-square-media-dev"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "citizenapp-square-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "FEED_CACHE"
+id = "00000000000000000000000000000000"
+preview_id = "00000000000000000000000000000000"
+
+[[durable_objects.bindings]]
+name = "CHAT_REALTIME"
+class_name = "ChatRealtimeObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRealtimeObject"]
+
+[vars]
+SQUARE_SESSION_TTL_SECONDS = "86400"
+SQUARE_UPLOAD_URL_TTL_SECONDS = "900"
+SQUARE_DEV_UPLOAD_PROXY = "0"
+R2_BUCKET_NAME = "citizenapp-square-media"
+
+[env.staging]
+name = "citizenapp-square-api-staging"
+workers_dev = true
+
+[[env.staging.r2_buckets]]
+binding = "SQUARE_MEDIA"
+bucket_name = "citizenapp-square-media-staging"
+preview_bucket_name = "citizenapp-square-media-staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "citizenapp-square-db-staging"
+database_id = "4ba85b05-657a-46ac-ab19-8bbd84fe850a"
+migrations_dir = "migrations"
+
+[[env.staging.kv_namespaces]]
+binding = "FEED_CACHE"
+id = "91133becebc24f27bf10a00cb001f27e"
+preview_id = "91133becebc24f27bf10a00cb001f27e"
+
+[[env.staging.durable_objects.bindings]]
+name = "CHAT_REALTIME"
+class_name = "ChatRealtimeObject"
+
+[env.staging.vars]
+SQUARE_SESSION_TTL_SECONDS = "86400"
+SQUARE_UPLOAD_URL_TTL_SECONDS = "900"
+SQUARE_DEV_UPLOAD_PROXY = "0"
+R2_BUCKET_NAME = "citizenapp-square-media-staging"
+
+[env.production]
+name = "citizenapp-square-api"
+workers_dev = true
+
+[[env.production.r2_buckets]]
+binding = "SQUARE_MEDIA"
+bucket_name = "citizenapp-square-media"
+preview_bucket_name = "citizenapp-square-media"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "citizenapp-square-db"
+database_id = "00000000-0000-0000-0000-000000000201"
+migrations_dir = "migrations"
+
+[[env.production.kv_namespaces]]
+binding = "FEED_CACHE"
+id = "00000000000000000000000000000201"
+preview_id = "00000000000000000000000000000201"
+
+[[env.production.durable_objects.bindings]]
+name = "CHAT_REALTIME"
+class_name = "ChatRealtimeObject"
+
+[env.production.vars]
+SQUARE_SESSION_TTL_SECONDS = "86400"
+SQUARE_UPLOAD_URL_TTL_SECONDS = "900"
+SQUARE_DEV_UPLOAD_PROXY = "0"
+R2_BUCKET_NAME = "citizenapp-square-media"

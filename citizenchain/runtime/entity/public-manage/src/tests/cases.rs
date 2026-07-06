@@ -994,8 +994,11 @@ fn registry_creator_need_not_be_target_admin() {
             .0;
         let stored =
             public_admins::AdminAccounts::<Test>::get(main).expect("public admin account present");
-        let stored_accounts: alloc::vec::Vec<AccountId32> =
-            stored.admins.iter().map(|p| p.account.clone()).collect();
+        let stored_accounts: alloc::vec::Vec<AccountId32> = stored
+            .admins
+            .iter()
+            .map(|p| p.admin_account.clone())
+            .collect();
         assert_eq!(stored_accounts, alloc::vec![admin(1), admin(2), admin(3)]);
     });
 }
@@ -1033,7 +1036,7 @@ fn created_institution_stores_admin_profiles_and_accounts_path_intact() {
             .expect("public admin account present");
         assert_eq!(stored.admins.len(), 3);
         for (i, profile) in stored.admins.iter().enumerate() {
-            assert_eq!(profile.account, admin(i as u8));
+            assert_eq!(profile.admin_account, admin(i as u8));
         }
 
         // 一人一票/多签路径仍读账户:active_account_admins 返回 account 列表。

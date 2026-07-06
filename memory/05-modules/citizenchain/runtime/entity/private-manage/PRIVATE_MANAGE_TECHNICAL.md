@@ -21,6 +21,13 @@
 - 不承担管理员集合变更，管理员真源只归 `private-admins`。
 - 关闭机构账户时通过 `public-manage` 的封存表识别创世机构，创世机构永不可按普通私权机构关闭。
 
+## 管理员写入边界
+
+- 本模块创建私权机构时把机构 `cid_number`、机构码、主账户和 `AdminProfile` 列表传给 `private-admins`。
+- 具体管理员本人、姓名、个人 CID、岗位快照、任期和来源只落在 `private-admins::AdminAccounts`。
+- 本模块不保存管理员真源，也不判断岗位产生方式；后续岗位制度只能作为 entity 侧规则供 admins 模块校验。
+- 通过本模块创建机构时，对应管理员来源由 `private-admins` 统一落为 `Registry`。
+
 ## MODULE_TAG
 
 - `b"pri-mgmt"`

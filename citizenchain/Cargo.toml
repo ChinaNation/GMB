@@ -30,6 +30,7 @@ members = [
     "runtime/otherpallet/citizen-identity",    # 其他-链上公民身份模块 pallet
     "runtime/otherpallet/pow-difficulty",   # 其他-PoW 动态难度调整模块 pallet
     "runtime/otherpallet/address-registry",   # 其他-地址变更上链模块 pallet
+    "runtime/otherpallet/square-post",   # 其他-广场动态链上发布索引模块 pallet
     "runtime/genesis",                           # 创世模块 pallet
 
     "runtime/transaction/offchain-transaction", # 交易-链下交易手续费模块 pallet

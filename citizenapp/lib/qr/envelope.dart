@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:citizenapp/qr/qr_protocols.dart';
-import 'package:citizenapp/qr/bodies/im_node_pairing_body.dart';
 import 'package:citizenapp/qr/bodies/sign_request_body.dart';
 import 'package:citizenapp/qr/bodies/sign_response_body.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
@@ -107,8 +106,6 @@ class QrEnvelope<T extends QrBody> {
         body = UserContactBody.fromJson(bodyRaw);
       case QrKind.userTransfer:
         body = UserTransferBody.fromJson(bodyRaw);
-      case QrKind.imNodePairing:
-        body = ImNodePairingBody.fromJson(bodyRaw);
     }
 
     return QrEnvelope<QrBody>(

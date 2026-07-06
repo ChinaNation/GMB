@@ -232,6 +232,7 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
 
         // 注册局创建机构时直接提交目标机构管理员合集;交易成功即写 Active。
         if let Err(err) = Pallet::<T>::set_active_admin_account_direct(
+            &cid_number,
             institution_code,
             institution.clone(),
             &admins,

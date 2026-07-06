@@ -31,21 +31,6 @@ final $typed_data.Uint8List imMlsWireMessageKindDescriptor = $convert.base64Deco
     'VDSUZJRUQQABIkCiBJTV9NTFNfV0lSRV9NRVNTQUdFX0tJTkRfV0VMQ09NRRABEigKJElNX01M'
     'U19XSVJFX01FU1NBR0VfS0lORF9BUFBMSUNBVElPThAC');
 
-@$core.Deprecated('Use imNodeEndpointDescriptor instead')
-const ImNodeEndpoint$json = {
-  '1': 'ImNodeEndpoint',
-  '2': [
-    {'1': 'peer_id', '3': 1, '4': 1, '5': 9, '10': 'peerId'},
-    {'1': 'multiaddr', '3': 2, '4': 1, '5': 9, '10': 'multiaddr'},
-    {'1': 'kind', '3': 3, '4': 1, '5': 9, '10': 'kind'},
-  ],
-};
-
-/// Descriptor for `ImNodeEndpoint`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List imNodeEndpointDescriptor = $convert.base64Decode(
-    'Cg5JbU5vZGVFbmRwb2ludBIXCgdwZWVyX2lkGAEgASgJUgZwZWVySWQSHAoJbXVsdGlhZGRyGA'
-    'IgASgJUgltdWx0aWFkZHISEgoEa2luZBgDIAEoCVIEa2luZA==');
-
 @$core.Deprecated('Use imRouteRecordDescriptor instead')
 const ImRouteRecord$json = {
   '1': 'ImRouteRecord',
@@ -75,15 +60,21 @@ const ImRouteRecord$json = {
     },
     {'1': 'safety_number', '3': 6, '4': 1, '5': 9, '10': 'safetyNumber'},
     {
-      '1': 'node_endpoints',
+      '1': 'cloudflare_mailbox_id',
       '3': 7,
-      '4': 3,
-      '5': 11,
-      '6': '.gmb.im.v1.ImNodeEndpoint',
-      '10': 'nodeEndpoints'
+      '4': 1,
+      '5': 9,
+      '10': 'cloudflareMailboxId'
     },
-    {'1': 'created_at_millis', '3': 8, '4': 1, '5': 4, '10': 'createdAtMillis'},
-    {'1': 'expires_at_millis', '3': 9, '4': 1, '5': 4, '10': 'expiresAtMillis'},
+    {'1': 'nearby_peer_hint', '3': 8, '4': 1, '5': 9, '10': 'nearbyPeerHint'},
+    {'1': 'created_at_millis', '3': 9, '4': 1, '5': 4, '10': 'createdAtMillis'},
+    {
+      '1': 'expires_at_millis',
+      '3': 10,
+      '4': 1,
+      '5': 4,
+      '10': 'expiresAtMillis'
+    },
   ],
 };
 
@@ -93,10 +84,11 @@ final $typed_data.Uint8List imRouteRecordDescriptor = $convert.base64Decode(
     'lvbhIuChN3YWxsZXRfY2hhdF9hY2NvdW50GAIgASgJUhF3YWxsZXRDaGF0QWNjb3VudBIsChJy'
     'b3V0ZV9kaXNwbGF5X25hbWUYAyABKAlSEHJvdXRlRGlzcGxheU5hbWUSIAoMaW1fZGV2aWNlX2'
     'lkGAQgASgJUgppbURldmljZUlkEi8KFGltX2RldmljZV9wdWJrZXlfaGV4GAUgASgJUhFpbURl'
-    'dmljZVB1YmtleUhleBIjCg1zYWZldHlfbnVtYmVyGAYgASgJUgxzYWZldHlOdW1iZXISQAoObm'
-    '9kZV9lbmRwb2ludHMYByADKAsyGS5nbWIuaW0udjEuSW1Ob2RlRW5kcG9pbnRSDW5vZGVFbmRw'
-    'b2ludHMSKgoRY3JlYXRlZF9hdF9taWxsaXMYCCABKARSD2NyZWF0ZWRBdE1pbGxpcxIqChFleH'
-    'BpcmVzX2F0X21pbGxpcxgJIAEoBFIPZXhwaXJlc0F0TWlsbGlz');
+    'dmljZVB1YmtleUhleBIjCg1zYWZldHlfbnVtYmVyGAYgASgJUgxzYWZldHlOdW1iZXISMgoVY2'
+    'xvdWRmbGFyZV9tYWlsYm94X2lkGAcgASgJUhNjbG91ZGZsYXJlTWFpbGJveElkEigKEG5lYXJi'
+    'eV9wZWVyX2hpbnQYCCABKAlSDm5lYXJieVBlZXJIaW50EioKEWNyZWF0ZWRfYXRfbWlsbGlzGA'
+    'kgASgEUg9jcmVhdGVkQXRNaWxsaXMSKgoRZXhwaXJlc19hdF9taWxsaXMYCiABKARSD2V4cGly'
+    'ZXNBdE1pbGxpcw==');
 
 @$core.Deprecated('Use imEnvelopeDescriptor instead')
 const ImEnvelope$json = {
@@ -326,93 +318,3 @@ final $typed_data.Uint8List consumeImKeyPackageRequestDescriptor = $convert.base
     'EoCVISb3duZXJXYWxsZXRBY2NvdW50EiQKDmtleV9wYWNrYWdlX2lkGAIgASgJUgxrZXlQYWNr'
     'YWdlSWQSNAoWcmVxdWVzdGVyX2NoYXRfYWNjb3VudBgDIAEoCVIUcmVxdWVzdGVyQ2hhdEFjY2'
     '91bnQ=');
-
-@$core.Deprecated('Use imDirectDeliveryRequestDescriptor instead')
-const ImDirectDeliveryRequest$json = {
-  '1': 'ImDirectDeliveryRequest',
-  '2': [
-    {
-      '1': 'remote_endpoint',
-      '3': 1,
-      '4': 1,
-      '5': 11,
-      '6': '.gmb.im.v1.ImNodeEndpoint',
-      '10': 'remoteEndpoint'
-    },
-    {
-      '1': 'envelope',
-      '3': 2,
-      '4': 1,
-      '5': 11,
-      '6': '.gmb.im.v1.ImEnvelope',
-      '10': 'envelope'
-    },
-  ],
-};
-
-/// Descriptor for `ImDirectDeliveryRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List imDirectDeliveryRequestDescriptor = $convert.base64Decode(
-    'ChdJbURpcmVjdERlbGl2ZXJ5UmVxdWVzdBJCCg9yZW1vdGVfZW5kcG9pbnQYASABKAsyGS5nbW'
-    'IuaW0udjEuSW1Ob2RlRW5kcG9pbnRSDnJlbW90ZUVuZHBvaW50EjEKCGVudmVsb3BlGAIgASgL'
-    'MhUuZ21iLmltLnYxLkltRW52ZWxvcGVSCGVudmVsb3Bl');
-
-@$core.Deprecated('Use imDirectKeyPackageFetchRequestDescriptor instead')
-const ImDirectKeyPackageFetchRequest$json = {
-  '1': 'ImDirectKeyPackageFetchRequest',
-  '2': [
-    {
-      '1': 'remote_endpoint',
-      '3': 1,
-      '4': 1,
-      '5': 11,
-      '6': '.gmb.im.v1.ImNodeEndpoint',
-      '10': 'remoteEndpoint'
-    },
-    {
-      '1': 'fetch',
-      '3': 2,
-      '4': 1,
-      '5': 11,
-      '6': '.gmb.im.v1.FetchImKeyPackagesRequest',
-      '10': 'fetch'
-    },
-  ],
-};
-
-/// Descriptor for `ImDirectKeyPackageFetchRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List imDirectKeyPackageFetchRequestDescriptor =
-    $convert.base64Decode(
-        'Ch5JbURpcmVjdEtleVBhY2thZ2VGZXRjaFJlcXVlc3QSQgoPcmVtb3RlX2VuZHBvaW50GAEgAS'
-        'gLMhkuZ21iLmltLnYxLkltTm9kZUVuZHBvaW50Ug5yZW1vdGVFbmRwb2ludBI6CgVmZXRjaBgC'
-        'IAEoCzIkLmdtYi5pbS52MS5GZXRjaEltS2V5UGFja2FnZXNSZXF1ZXN0UgVmZXRjaA==');
-
-@$core.Deprecated('Use imDirectKeyPackageConsumeRequestDescriptor instead')
-const ImDirectKeyPackageConsumeRequest$json = {
-  '1': 'ImDirectKeyPackageConsumeRequest',
-  '2': [
-    {
-      '1': 'remote_endpoint',
-      '3': 1,
-      '4': 1,
-      '5': 11,
-      '6': '.gmb.im.v1.ImNodeEndpoint',
-      '10': 'remoteEndpoint'
-    },
-    {
-      '1': 'consume',
-      '3': 2,
-      '4': 1,
-      '5': 11,
-      '6': '.gmb.im.v1.ConsumeImKeyPackageRequest',
-      '10': 'consume'
-    },
-  ],
-};
-
-/// Descriptor for `ImDirectKeyPackageConsumeRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List imDirectKeyPackageConsumeRequestDescriptor =
-    $convert.base64Decode(
-        'CiBJbURpcmVjdEtleVBhY2thZ2VDb25zdW1lUmVxdWVzdBJCCg9yZW1vdGVfZW5kcG9pbnQYAS'
-        'ABKAsyGS5nbWIuaW0udjEuSW1Ob2RlRW5kcG9pbnRSDnJlbW90ZUVuZHBvaW50Ej8KB2NvbnN1'
-        'bWUYAiABKAsyJS5nbWIuaW0udjEuQ29uc3VtZUltS2V5UGFja2FnZVJlcXVlc3RSB2NvbnN1bW'
-        'U=');

@@ -183,6 +183,7 @@ fn seed_active_admin_account(account: AccountId32, admins: pallet::AdminsOf<Test
     pallet::AdminAccounts::<Test>::insert(
         account.clone(),
         admin_primitives::AdminAccount {
+            cid_number: Default::default(),
             institution_code: PMUL,
             kind: admin_primitives::AdminAccountKind::PersonalMultisig,
             admins,

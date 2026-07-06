@@ -222,9 +222,9 @@ citizenchain/
 - `node/src/<功能名>` 负责桌面端 Rust 后端能力，不再保留 `node/src/ui` 目录层。
 - `node/frontend/<功能名>` 负责 React 前端页面与交互。
 - `citizenchain/node` 负责启动 / 停止内嵌节点进程，管理 bootnode 地址、奖励地址、GRANDPA 地址、节点名称等本地设置，并展示节点状态、链状态、网络概览、挖矿面板与其他辅助信息。
-- Node 端所有公民钱包离线扫码签名 UI 统一由 `node/frontend/shared/qr/CitizenSignaturePanel.tsx` 和 `CitizenSignatureModal.tsx` 承载：左侧固定“扫码签名”，右侧固定“识别签名”，面板只显示二维码有效期倒计时，不显示内部 request id 或签名账户地址；业务页面只负责构造请求、验签和提交交易。地址扫码填入、通信节点配对等非签名二维码不纳入该组件。
+- Node 端所有公民钱包离线扫码签名 UI 统一由 `node/frontend/shared/qr/CitizenSignaturePanel.tsx` 和 `CitizenSignatureModal.tsx` 承载：左侧固定“扫码签名”，右侧固定“识别签名”，面板只显示二维码有效期倒计时，不显示内部 request id 或签名账户地址；业务页面只负责构造请求、验签和提交交易。地址扫码填入等非签名二维码不纳入该组件。
 - 设置页的“全节点模式”当前展示归档全节点和普通全节点：默认归档全节点；普通全节点置灰不可选择；在底层剪裁能力完成前，节点实际仍按归档全节点运行。
-- 设置页在“全节点模式”和“通信节点功能”之间提供“链上中国平台”手动启动行，显示 `未开启` / `启动中` / `已开启` 状态标签、固定入口 `https://onchina.local:8964` 和“启动 / 关闭”按钮；点击后必须二次确认，只启动或停止 OnChina 子进程，不自动打开浏览器；只有 `/api/v1/health` 真实健康检查通过后才显示 `已开启`。
+- 设置页在“全节点模式”之后提供“链上中国平台”手动启动行，显示 `未开启` / `启动中` / `已开启` 状态标签、固定入口 `https://onchina.local:8964` 和“启动 / 关闭”按钮；点击后必须二次确认，只启动或停止 OnChina 子进程，不自动打开浏览器；只有 `/api/v1/health` 真实健康检查通过后才显示 `已开启`。
 
 ### 10.3 打包边界
 - 桌面端与原生节点在同一个 `node` crate 中构建，Tauri 打包从 `node/frontend/dist` 读取前端产物。

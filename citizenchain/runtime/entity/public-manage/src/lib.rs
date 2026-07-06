@@ -794,15 +794,16 @@ pub mod pallet {
                     && u64::from(threshold).saturating_mul(2) > u64::from(admins_len),
                 Error::<T>::InvalidThreshold
             );
-            // 账户语义校验取 profile.account:注册局代创建时,发起人是注册局管理员,
+            // 账户语义校验取 profile.admin_account:注册局代创建时,发起人是注册局管理员,
             // 目标 admins 是新机构管理员集合,这里只校验目标集合自身合法。
             let admin_accounts: Vec<T::AccountId> =
-                admins.iter().map(|p| p.account.clone()).collect();
+                admins.iter().map(|p| p.admin_account.clone()).collect();
             Self::ensure_unique_admins(&admin_accounts)?;
             Ok(())
         }
 
         pub(crate) fn set_active_admin_account_direct(
+            cid_number: &CidNumberOf<T>,
             institution_code: InstitutionCode,
             institution_id: T::AccountId,
             admins: &AdminProfilesOf<T>,
@@ -813,6 +814,7 @@ pub mod pallet {
             T::AdminLifecycle::set_active_admin_account_direct(
                 crate::MODULE_TAG,
                 institution_id,
+                cid_number.to_vec(),
                 institution_code,
                 AdminAccountKind::PublicInstitution,
                 admins.iter().cloned().collect(),

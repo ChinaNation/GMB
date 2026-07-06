@@ -53,7 +53,7 @@ void main() {
     expect(restored.keyPackage, [0xde, 0xad, 0xbe, 0xef]);
   });
 
-  test('ImRouteRecord protobuf keeps wallet address and IPv6 endpoint', () {
+  test('ImRouteRecord protobuf keeps wallet address and mailbox hints', () {
     final route = ImRouteRecord(
       protocolVersion: 1,
       walletChatAccount: 'bob-wallet',
@@ -61,19 +61,15 @@ void main() {
       imDeviceId: 'bob-phone',
       imDevicePubkeyHex: 'aabbcc',
       safetyNumber: '12 34',
-      nodeEndpoints: [
-        ImNodeEndpoint(
-          peerId: 'peer-bob',
-          multiaddr: '/ip6/::1/tcp/30334/p2p/peer-bob',
-          kind: 'ip6',
-        ),
-      ],
+      cloudflareMailboxId: 'bob-wallet',
+      nearbyPeerHint: 'bob-nearby',
       createdAtMillis: Int64(1),
       expiresAtMillis: Int64(2),
     );
 
     final restored = ImRouteRecord.fromBuffer(route.writeToBuffer());
     expect(restored.walletChatAccount, 'bob-wallet');
-    expect(restored.nodeEndpoints.single.kind, 'ip6');
+    expect(restored.cloudflareMailboxId, 'bob-wallet');
+    expect(restored.nearbyPeerHint, 'bob-nearby');
   });
 }

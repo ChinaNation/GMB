@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 
 import 'im_session_models.dart';
@@ -21,13 +23,33 @@ Message imStoredMessageToChatMessage(
         ? createdAt
         : null,
     status: _messageStatus(message.deliveryState),
-    text: message.plaintext ?? '',
+    text: _visibleText(message),
     metadata: {
       'conversation_id': message.conversationId,
       'direction': message.direction,
       'is_mine': message.senderChatAccount == currentUserId,
+      'message_kind': message.messageKind.name,
+      if (message.messageKind == ImMessageKind.attachment)
+        'attachment_control_plaintext': message.plaintext ?? '',
     },
   );
+}
+
+String _visibleText(ImStoredMessage message) {
+  if (message.messageKind != ImMessageKind.attachment) {
+    return message.plaintext ?? '';
+  }
+  final plaintext = message.plaintext ?? '';
+  try {
+    final decoded = jsonDecode(plaintext);
+    if (decoded is Map) {
+      final fileName = decoded['file_name']?.toString() ?? '';
+      return fileName.isEmpty ? '[附件]' : '[附件] $fileName';
+    }
+  } catch (_) {
+    return '[附件]';
+  }
+  return '[附件]';
 }
 
 /// 把本地消息列表转换为聊天 UI controller 的初始列表。

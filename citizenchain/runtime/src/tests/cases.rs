@@ -717,6 +717,135 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
 }
 
 #[test]
+fn runtime_square_post_normal_publish_allows_visitor_wallet() {
+    new_test_ext().execute_with(|| {
+        let visitor = AccountId::new([42u8; 32]);
+        assert_ok!(SquarePost::publish_square_post(
+            RuntimeOrigin::signed(visitor.clone()),
+            b"sqp_runtime_normal".to_vec(),
+            square_post::SquarePostCategory::Normal,
+            [3u8; 32],
+            b"sqr_runtime_normal".to_vec(),
+            1_893_456_000_000,
+        ));
+
+        let stored_post_id: square_post::PostIdOf<Runtime> = b"sqp_runtime_normal"
+            .to_vec()
+            .try_into()
+            .expect("post id fits");
+        let stored = square_post::SquarePosts::<Runtime>::get(stored_post_id)
+            .expect("square post should be indexed");
+        assert_eq!(stored.owner_account, visitor);
+        assert_eq!(stored.cid_number, None);
+        assert_eq!(
+            stored.post_category,
+            square_post::SquarePostCategory::Normal
+        );
+    });
+}
+
+#[test]
+fn runtime_square_post_campaign_requires_citizen_identity() {
+    new_test_ext().execute_with(|| {
+        let visitor = AccountId::new([43u8; 32]);
+        assert_noop!(
+            SquarePost::publish_square_post(
+                RuntimeOrigin::signed(visitor),
+                b"sqp_runtime_campaign_denied".to_vec(),
+                square_post::SquarePostCategory::Campaign,
+                [4u8; 32],
+                b"sqr_runtime_campaign_denied".to_vec(),
+                1_893_456_000_000,
+            ),
+            square_post::Error::<Runtime>::CampaignRequiresCitizen
+        );
+    });
+}
+
+#[test]
+fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
+    new_test_ext().execute_with(|| {
+        let (_, registrar, registrar_account) = setup_frg_citizen_identity_admin(b"43");
+        let wallet_pair =
+            sr25519::Pair::from_string("//square-citizen-wallet", None).expect("wallet pair");
+        let wallet_account = AccountId::new(wallet_pair.public().0);
+        let cid_number = real_cid_number("SQUARE-0001", "CTZN", "1");
+
+        assert_ok!(CitizenIdentity::occupy_cid(
+            RuntimeOrigin::signed(registrar.clone()),
+            registrar_account.clone(),
+            cid_number
+                .clone()
+                .try_into()
+                .expect("cid number should fit"),
+            [8u8; 32],
+            b"43".to_vec().try_into().expect("province should fit"),
+            b"4301".to_vec().try_into().expect("city should fit"),
+        ));
+        let payload = build_voting_identity_payload(
+            wallet_account.clone(),
+            &cid_number,
+            b"43",
+            b"4301",
+            b"4301001",
+        );
+        let signature = sign_citizen_identity_payload(&wallet_pair, &payload);
+
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(registrar),
+            registrar_account,
+            payload,
+            signature,
+        ));
+        assert_ok!(SquarePost::publish_square_post(
+            RuntimeOrigin::signed(wallet_account.clone()),
+            b"sqp_runtime_campaign_ok".to_vec(),
+            square_post::SquarePostCategory::Campaign,
+            [5u8; 32],
+            b"sqr_runtime_campaign_ok".to_vec(),
+            1_893_456_000_000,
+        ));
+
+        let stored_post_id: square_post::PostIdOf<Runtime> = b"sqp_runtime_campaign_ok"
+            .to_vec()
+            .try_into()
+            .expect("post id fits");
+        let stored = square_post::SquarePosts::<Runtime>::get(stored_post_id)
+            .expect("square post should be indexed");
+        assert_eq!(stored.owner_account, wallet_account);
+        assert_eq!(
+            stored.cid_number.map(|value| value.to_vec()),
+            Some(cid_number)
+        );
+        assert_eq!(
+            square_post::PublishedPostCountByAccount::<Runtime>::get(wallet_account),
+            1
+        );
+    });
+}
+
+#[test]
+fn runtime_square_post_fee_kind_is_vote_flat_one_yuan() {
+    new_test_ext().execute_with(|| {
+        let who = AccountId::new([44u8; 32]);
+        let call = RuntimeCall::SquarePost(square_post::pallet::Call::publish_square_post {
+            post_id: b"sqp_fee_kind".to_vec(),
+            post_category: square_post::SquarePostCategory::Normal,
+            content_hash: [6u8; 32],
+            storage_receipt_id: b"sqr_fee_kind".to_vec(),
+            storage_until: 1_893_456_000_000,
+        });
+        let fee_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+            AccountId,
+            RuntimeCall,
+            Balance,
+        >>::fee_kind(&who, &call);
+        assert_eq!(fee_kind, onchain_transaction::FeeChargeKind::VoteFlat);
+        assert_eq!(primitives::fee_policy::VOTE_FLAT_FEE, YUAN);
+    });
+}
+
+#[test]
 fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
     new_test_ext().execute_with(|| {
         let nrc_id = AccountId::new(CHINA_CB[0].main_account);

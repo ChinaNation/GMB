@@ -77,8 +77,9 @@ void main() {
     // 等待异步锁检查完成并渲染主界面。
     await tester.pumpAndSettle();
 
-    // 底部导航第 2 项已从多签改为广场，个人多签入口迁到交易页。
+    // 底部导航最左侧为广场，公民 tab 右移；个人多签入口迁到交易页。
     expect(find.text('广场'), findsWidgets);
+    expect(find.text('暂无推荐动态'), findsOneWidget);
     expect(find.text('交易'), findsWidgets);
     expect(find.text('多签'), findsNothing);
     expect(find.text('消息'), findsNothing);

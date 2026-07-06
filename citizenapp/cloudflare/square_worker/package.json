@@ -1,0 +1,27 @@
+{
+  "name": "citizenapp-square-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "dev:local": "wrangler dev --local --var SQUARE_DEV_UPLOAD_PROXY:1",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "migrate:local": "wrangler d1 migrations apply citizenapp-square-db --local",
+    "migrate:staging": "wrangler d1 migrations apply citizenapp-square-db-staging --env staging --remote",
+    "migrate:production": "wrangler d1 migrations apply citizenapp-square-db-production --env production --remote",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production"
+  },
+  "dependencies": {
+    "@polkadot/util-crypto": "^14.0.3",
+    "aws4fetch": "^1.0.20"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260702.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.107.0"
+  }
+}

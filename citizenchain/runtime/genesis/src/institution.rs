@@ -308,17 +308,19 @@ where
         .iter()
         .enumerate()
         .map(|(index, raw)| {
-            let admin_role = role_for_index(index)
+            let role_name = role_for_index(index)
                 .map(|role| bounded_role::<T>(cid_number, role))
                 .unwrap_or_else(BoundedVec::new);
             AdminProfile {
-                account: decode_account::<T>(raw, "管理员"),
+                admin_account: decode_account::<T>(raw, "管理员"),
                 admin_cid_number: BoundedVec::new(),
-                name: BoundedVec::new(),
-                admin_role,
+                admin_name: BoundedVec::new(),
+                role_code: Default::default(),
+                role_name,
                 term_start: 0,
                 term_end: 0,
-                source: AdminSource::Genesis,
+                admin_source: AdminSource::Genesis,
+                admin_source_ref: Default::default(),
             }
         })
         .collect();
@@ -330,7 +332,7 @@ where
     });
     let creator = bounded
         .first()
-        .map(|p| p.account.clone())
+        .map(|p| p.admin_account.clone())
         .unwrap_or_else(|| {
             panic!(
                 "genesis institution: cid_number {} 内置机构必须至少 1 个管理员",
@@ -338,6 +340,16 @@ where
             )
         });
     PublicAdminAccountOf::<T> {
+        cid_number: cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .unwrap_or_else(|_| {
+                panic!(
+                    "genesis institution: cid_number {} 超过管理员集合 CID 长度上限",
+                    cid_number
+                )
+            }),
         institution_code,
         kind: AdminAccountKind::PublicInstitution,
         admins: bounded,

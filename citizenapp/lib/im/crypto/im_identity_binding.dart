@@ -11,8 +11,6 @@ class ImWalletBindingDraft {
     required this.walletAccount,
     required this.imDeviceId,
     required this.imDevicePubkey,
-    required this.communicationNodePeerId,
-    required this.nodeEndpoints,
     required this.expiresAt,
     required this.nonce,
     this.walletSignature,
@@ -26,12 +24,6 @@ class ImWalletBindingDraft {
 
   /// IM 设备公钥，后续由 OpenMLS / HPKE 绑定真实密钥材料。
   final String imDevicePubkey;
-
-  /// 自己私人通信全节点的 PeerId。
-  final String communicationNodePeerId;
-
-  /// 自己节点的 IPv4 / IPv6 / dnsaddr 可达端点。
-  final List<String> nodeEndpoints;
 
   /// 绑定凭证过期时间。
   final DateTime expiresAt;
@@ -47,8 +39,6 @@ class ImWalletBindingDraft {
         walletAccount: walletAccount,
         imDeviceId: imDeviceId,
         imDevicePubkey: imDevicePubkey,
-        nodePeerId: communicationNodePeerId,
-        nodeEndpoints: nodeEndpoints,
         expiresAtMillis: expiresAt.toUtc().millisecondsSinceEpoch,
         nonce: nonce,
       ).signingPayloadBytes();
@@ -58,8 +48,6 @@ class ImWalletBindingDraft {
         walletAccount: walletAccount,
         imDeviceId: imDeviceId,
         imDevicePubkey: imDevicePubkey,
-        nodePeerId: communicationNodePeerId,
-        nodeEndpoints: nodeEndpoints,
         expiresAtMillis: expiresAt.toUtc().millisecondsSinceEpoch,
         nonce: nonce,
       ).signingPayloadHex();

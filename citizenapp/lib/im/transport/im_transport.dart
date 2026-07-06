@@ -2,10 +2,10 @@ import '../im_session_models.dart';
 
 /// IM 传输类型。
 enum ImTransportType {
-  /// 手机连接自己的私人通信全节点，再由私人节点直连对方私人节点。
-  privateNode,
+  /// 互联网聊天，Cloudflare 只保存密文 mailbox 和必要投递元数据。
+  cloudflare,
 
-  /// 手机近场直连，不经过通信全节点。
+  /// 手机近场直连，不经过互联网 mailbox。
   nearby,
 }
 
@@ -31,10 +31,166 @@ class ImDeliveryResult {
   final String? errorMessage;
 }
 
+/// 待处理的密文 envelope。
+class ImPendingEncryptedEnvelope {
+  const ImPendingEncryptedEnvelope({
+    required this.envelopeId,
+    required this.envelopeBytes,
+  });
+
+  /// 全局去重用 envelope ID。
+  final String envelopeId;
+
+  /// 完整的 GMB_IM_V1 Protobuf envelope bytes。
+  final List<int> envelopeBytes;
+}
+
+/// 待上传的附件密文分片描述。
+class ImAttachmentChunkDraft {
+  const ImAttachmentChunkDraft({
+    required this.chunkId,
+    required this.byteSize,
+  });
+
+  /// 分片在当前附件内的稳定编号。
+  final String chunkId;
+
+  /// 密文分片字节数。
+  final int byteSize;
+}
+
+/// Worker 返回的附件上传目标。
+class ImAttachmentUploadTarget {
+  const ImAttachmentUploadTarget({
+    required this.chunkId,
+    required this.objectKey,
+    required this.uploadUrl,
+  });
+
+  /// 分片在当前附件内的稳定编号。
+  final String chunkId;
+
+  /// R2 对象 key。该 key 只能指向密文分片。
+  final String objectKey;
+
+  /// Worker 签发的短期 PUT URL 或本地 dev-put 代理 URL。
+  final Uri uploadUrl;
+}
+
+/// 附件密文 manifest 和分片上传计划。
+class ImAttachmentUploadPlan {
+  const ImAttachmentUploadPlan({
+    required this.attachmentId,
+    required this.manifestObjectKey,
+    required this.manifestUploadUrl,
+    required this.chunks,
+  });
+
+  /// 本次附件上传 ID。
+  final String attachmentId;
+
+  /// 加密 manifest 的 R2 object key。
+  final String manifestObjectKey;
+
+  /// 加密 manifest 的短期上传 URL。
+  final Uri manifestUploadUrl;
+
+  /// 加密分片上传目标。
+  final List<ImAttachmentUploadTarget> chunks;
+}
+
+/// 已上传密文附件的完成确认输入。
+class ImAttachmentCompleteRequest {
+  const ImAttachmentCompleteRequest({
+    required this.attachmentId,
+    required this.conversationId,
+    required this.manifestObjectKey,
+    required this.manifestHash,
+    required this.chunkObjectKeys,
+  });
+
+  /// 本次附件上传 ID。
+  final String attachmentId;
+
+  /// 所属 IM 会话 ID。
+  final String conversationId;
+
+  /// 加密 manifest 的 R2 object key。
+  final String manifestObjectKey;
+
+  /// 加密 manifest 的 sha256 hex，用于 envelope 引用和下载校验。
+  final String manifestHash;
+
+  /// 加密分片 object key 列表。
+  final List<String> chunkObjectKeys;
+}
+
+/// 附件密文对象下载授权输入。
+class ImAttachmentDownloadRequest {
+  const ImAttachmentDownloadRequest({
+    required this.attachmentId,
+    required this.conversationId,
+    required this.manifestObjectKey,
+    required this.manifestHash,
+    required this.chunkObjectKeys,
+  });
+
+  /// 本次附件 ID。
+  final String attachmentId;
+
+  /// 所属 IM 会话 ID。
+  final String conversationId;
+
+  /// 加密 manifest 的 R2 object key。
+  final String manifestObjectKey;
+
+  /// 加密 manifest 的 sha256 hex。
+  final String manifestHash;
+
+  /// 加密分片 object key 列表。
+  final List<String> chunkObjectKeys;
+}
+
+/// Worker 返回的附件下载目标。
+class ImAttachmentDownloadTarget {
+  const ImAttachmentDownloadTarget({
+    required this.objectKey,
+    required this.downloadUrl,
+  });
+
+  /// R2 对象 key。该 key 只能指向密文 manifest 或密文分片。
+  final String objectKey;
+
+  /// Worker 签发的短期 GET URL 或本地 dev-get 代理 URL。
+  final Uri downloadUrl;
+}
+
+/// 附件密文 manifest 和分片下载计划。
+class ImAttachmentDownloadPlan {
+  const ImAttachmentDownloadPlan({
+    required this.attachmentId,
+    required this.manifestObjectKey,
+    required this.manifestDownloadUrl,
+    required this.chunks,
+  });
+
+  /// 本次附件 ID。
+  final String attachmentId;
+
+  /// 加密 manifest 的 R2 object key。
+  final String manifestObjectKey;
+
+  /// 加密 manifest 的短期下载 URL。
+  final Uri manifestDownloadUrl;
+
+  /// 加密分片下载目标。
+  final List<ImAttachmentDownloadTarget> chunks;
+}
+
 /// IM 传输抽象。
 ///
-/// 真实 P2P、OpenMLS envelope 和近场能力后续分别接入这里；页面层只依赖
-/// 这个接口，避免把节点投递、近场发现和 UI 状态耦合在一起。
+/// Cloudflare mailbox、OpenMLS envelope 和近场能力分别接入这里；页面层只依赖
+/// 这个接口，避免把投递服务、近场发现和 UI 状态耦合在一起。
 abstract class ImTransport {
   /// 当前传输类型。
   ImTransportType get type;

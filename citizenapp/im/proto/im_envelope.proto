@@ -8,12 +8,6 @@ package gmb.im.v1;
 // KeyPackage 发布与确认结构。钱包账户只作为聊天账户和转账收款标识，
 // 不代表 IM 设备身份密钥。
 
-message ImNodeEndpoint {
-  string peer_id = 1;
-  string multiaddr = 2;
-  string kind = 3;
-}
-
 message ImRouteRecord {
   uint32 protocol_version = 1;
   string wallet_chat_account = 2;
@@ -21,9 +15,10 @@ message ImRouteRecord {
   string im_device_id = 4;
   string im_device_pubkey_hex = 5;
   string safety_number = 6;
-  repeated ImNodeEndpoint node_endpoints = 7;
-  uint64 created_at_millis = 8;
-  uint64 expires_at_millis = 9;
+  string cloudflare_mailbox_id = 7;
+  string nearby_peer_hint = 8;
+  uint64 created_at_millis = 9;
+  uint64 expires_at_millis = 10;
 }
 
 enum ImMlsWireMessageKind {
@@ -89,19 +84,4 @@ message ConsumeImKeyPackageRequest {
   string owner_wallet_account = 1;
   string key_package_id = 2;
   string requester_chat_account = 3;
-}
-
-message ImDirectDeliveryRequest {
-  ImNodeEndpoint remote_endpoint = 1;
-  ImEnvelope envelope = 2;
-}
-
-message ImDirectKeyPackageFetchRequest {
-  ImNodeEndpoint remote_endpoint = 1;
-  FetchImKeyPackagesRequest fetch = 2;
-}
-
-message ImDirectKeyPackageConsumeRequest {
-  ImNodeEndpoint remote_endpoint = 1;
-  ConsumeImKeyPackageRequest consume = 2;
 }

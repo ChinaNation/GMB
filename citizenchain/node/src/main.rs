@@ -16,7 +16,6 @@ mod core;
 mod desktop;
 mod governance;
 mod home;
-mod im;
 mod mining;
 mod onchina_proc;
 mod other;

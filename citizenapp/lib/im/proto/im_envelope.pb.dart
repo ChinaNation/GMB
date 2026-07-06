@@ -21,84 +21,6 @@ export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 
 export 'im_envelope.pbenum.dart';
 
-class ImNodeEndpoint extends $pb.GeneratedMessage {
-  factory ImNodeEndpoint({
-    $core.String? peerId,
-    $core.String? multiaddr,
-    $core.String? kind,
-  }) {
-    final result = create();
-    if (peerId != null) result.peerId = peerId;
-    if (multiaddr != null) result.multiaddr = multiaddr;
-    if (kind != null) result.kind = kind;
-    return result;
-  }
-
-  ImNodeEndpoint._();
-
-  factory ImNodeEndpoint.fromBuffer($core.List<$core.int> data,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
-  factory ImNodeEndpoint.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
-
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ImNodeEndpoint',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.im.v1'),
-      createEmptyInstance: create)
-    ..aOS(1, _omitFieldNames ? '' : 'peerId')
-    ..aOS(2, _omitFieldNames ? '' : 'multiaddr')
-    ..aOS(3, _omitFieldNames ? '' : 'kind')
-    ..hasRequiredFields = false;
-
-  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ImNodeEndpoint clone() => deepCopy();
-  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ImNodeEndpoint copyWith(void Function(ImNodeEndpoint) updates) =>
-      super.copyWith((message) => updates(message as ImNodeEndpoint))
-          as ImNodeEndpoint;
-
-  @$core.override
-  $pb.BuilderInfo get info_ => _i;
-
-  @$core.pragma('dart2js:noInline')
-  static ImNodeEndpoint create() => ImNodeEndpoint._();
-  @$core.override
-  ImNodeEndpoint createEmptyInstance() => create();
-  @$core.pragma('dart2js:noInline')
-  static ImNodeEndpoint getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ImNodeEndpoint>(create);
-  static ImNodeEndpoint? _defaultInstance;
-
-  @$pb.TagNumber(1)
-  $core.String get peerId => $_getSZ(0);
-  @$pb.TagNumber(1)
-  set peerId($core.String value) => $_setString(0, value);
-  @$pb.TagNumber(1)
-  $core.bool hasPeerId() => $_has(0);
-  @$pb.TagNumber(1)
-  void clearPeerId() => $_clearField(1);
-
-  @$pb.TagNumber(2)
-  $core.String get multiaddr => $_getSZ(1);
-  @$pb.TagNumber(2)
-  set multiaddr($core.String value) => $_setString(1, value);
-  @$pb.TagNumber(2)
-  $core.bool hasMultiaddr() => $_has(1);
-  @$pb.TagNumber(2)
-  void clearMultiaddr() => $_clearField(2);
-
-  @$pb.TagNumber(3)
-  $core.String get kind => $_getSZ(2);
-  @$pb.TagNumber(3)
-  set kind($core.String value) => $_setString(2, value);
-  @$pb.TagNumber(3)
-  $core.bool hasKind() => $_has(2);
-  @$pb.TagNumber(3)
-  void clearKind() => $_clearField(3);
-}
-
 class ImRouteRecord extends $pb.GeneratedMessage {
   factory ImRouteRecord({
     $core.int? protocolVersion,
@@ -107,7 +29,8 @@ class ImRouteRecord extends $pb.GeneratedMessage {
     $core.String? imDeviceId,
     $core.String? imDevicePubkeyHex,
     $core.String? safetyNumber,
-    $core.Iterable<ImNodeEndpoint>? nodeEndpoints,
+    $core.String? cloudflareMailboxId,
+    $core.String? nearbyPeerHint,
     $fixnum.Int64? createdAtMillis,
     $fixnum.Int64? expiresAtMillis,
   }) {
@@ -118,7 +41,9 @@ class ImRouteRecord extends $pb.GeneratedMessage {
     if (imDeviceId != null) result.imDeviceId = imDeviceId;
     if (imDevicePubkeyHex != null) result.imDevicePubkeyHex = imDevicePubkeyHex;
     if (safetyNumber != null) result.safetyNumber = safetyNumber;
-    if (nodeEndpoints != null) result.nodeEndpoints.addAll(nodeEndpoints);
+    if (cloudflareMailboxId != null)
+      result.cloudflareMailboxId = cloudflareMailboxId;
+    if (nearbyPeerHint != null) result.nearbyPeerHint = nearbyPeerHint;
     if (createdAtMillis != null) result.createdAtMillis = createdAtMillis;
     if (expiresAtMillis != null) result.expiresAtMillis = expiresAtMillis;
     return result;
@@ -144,13 +69,13 @@ class ImRouteRecord extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'imDeviceId')
     ..aOS(5, _omitFieldNames ? '' : 'imDevicePubkeyHex')
     ..aOS(6, _omitFieldNames ? '' : 'safetyNumber')
-    ..pPM<ImNodeEndpoint>(7, _omitFieldNames ? '' : 'nodeEndpoints',
-        subBuilder: ImNodeEndpoint.create)
+    ..aOS(7, _omitFieldNames ? '' : 'cloudflareMailboxId')
+    ..aOS(8, _omitFieldNames ? '' : 'nearbyPeerHint')
     ..a<$fixnum.Int64>(
-        8, _omitFieldNames ? '' : 'createdAtMillis', $pb.PbFieldType.OU6,
+        9, _omitFieldNames ? '' : 'createdAtMillis', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..a<$fixnum.Int64>(
-        9, _omitFieldNames ? '' : 'expiresAtMillis', $pb.PbFieldType.OU6,
+        10, _omitFieldNames ? '' : 'expiresAtMillis', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
@@ -228,25 +153,40 @@ class ImRouteRecord extends $pb.GeneratedMessage {
   void clearSafetyNumber() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $pb.PbList<ImNodeEndpoint> get nodeEndpoints => $_getList(6);
+  $core.String get cloudflareMailboxId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set cloudflareMailboxId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasCloudflareMailboxId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearCloudflareMailboxId() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $fixnum.Int64 get createdAtMillis => $_getI64(7);
+  $core.String get nearbyPeerHint => $_getSZ(7);
   @$pb.TagNumber(8)
-  set createdAtMillis($fixnum.Int64 value) => $_setInt64(7, value);
+  set nearbyPeerHint($core.String value) => $_setString(7, value);
   @$pb.TagNumber(8)
-  $core.bool hasCreatedAtMillis() => $_has(7);
+  $core.bool hasNearbyPeerHint() => $_has(7);
   @$pb.TagNumber(8)
-  void clearCreatedAtMillis() => $_clearField(8);
+  void clearNearbyPeerHint() => $_clearField(8);
 
   @$pb.TagNumber(9)
-  $fixnum.Int64 get expiresAtMillis => $_getI64(8);
+  $fixnum.Int64 get createdAtMillis => $_getI64(8);
   @$pb.TagNumber(9)
-  set expiresAtMillis($fixnum.Int64 value) => $_setInt64(8, value);
+  set createdAtMillis($fixnum.Int64 value) => $_setInt64(8, value);
   @$pb.TagNumber(9)
-  $core.bool hasExpiresAtMillis() => $_has(8);
+  $core.bool hasCreatedAtMillis() => $_has(8);
   @$pb.TagNumber(9)
-  void clearExpiresAtMillis() => $_clearField(9);
+  void clearCreatedAtMillis() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $fixnum.Int64 get expiresAtMillis => $_getI64(9);
+  @$pb.TagNumber(10)
+  set expiresAtMillis($fixnum.Int64 value) => $_setInt64(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasExpiresAtMillis() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearExpiresAtMillis() => $_clearField(10);
 }
 
 class ImEnvelope extends $pb.GeneratedMessage {
@@ -1021,231 +961,6 @@ class ConsumeImKeyPackageRequest extends $pb.GeneratedMessage {
   $core.bool hasRequesterChatAccount() => $_has(2);
   @$pb.TagNumber(3)
   void clearRequesterChatAccount() => $_clearField(3);
-}
-
-class ImDirectDeliveryRequest extends $pb.GeneratedMessage {
-  factory ImDirectDeliveryRequest({
-    ImNodeEndpoint? remoteEndpoint,
-    ImEnvelope? envelope,
-  }) {
-    final result = create();
-    if (remoteEndpoint != null) result.remoteEndpoint = remoteEndpoint;
-    if (envelope != null) result.envelope = envelope;
-    return result;
-  }
-
-  ImDirectDeliveryRequest._();
-
-  factory ImDirectDeliveryRequest.fromBuffer($core.List<$core.int> data,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
-  factory ImDirectDeliveryRequest.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
-
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ImDirectDeliveryRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.im.v1'),
-      createEmptyInstance: create)
-    ..aOM<ImNodeEndpoint>(1, _omitFieldNames ? '' : 'remoteEndpoint',
-        subBuilder: ImNodeEndpoint.create)
-    ..aOM<ImEnvelope>(2, _omitFieldNames ? '' : 'envelope',
-        subBuilder: ImEnvelope.create)
-    ..hasRequiredFields = false;
-
-  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ImDirectDeliveryRequest clone() => deepCopy();
-  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ImDirectDeliveryRequest copyWith(
-          void Function(ImDirectDeliveryRequest) updates) =>
-      super.copyWith((message) => updates(message as ImDirectDeliveryRequest))
-          as ImDirectDeliveryRequest;
-
-  @$core.override
-  $pb.BuilderInfo get info_ => _i;
-
-  @$core.pragma('dart2js:noInline')
-  static ImDirectDeliveryRequest create() => ImDirectDeliveryRequest._();
-  @$core.override
-  ImDirectDeliveryRequest createEmptyInstance() => create();
-  @$core.pragma('dart2js:noInline')
-  static ImDirectDeliveryRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ImDirectDeliveryRequest>(create);
-  static ImDirectDeliveryRequest? _defaultInstance;
-
-  @$pb.TagNumber(1)
-  ImNodeEndpoint get remoteEndpoint => $_getN(0);
-  @$pb.TagNumber(1)
-  set remoteEndpoint(ImNodeEndpoint value) => $_setField(1, value);
-  @$pb.TagNumber(1)
-  $core.bool hasRemoteEndpoint() => $_has(0);
-  @$pb.TagNumber(1)
-  void clearRemoteEndpoint() => $_clearField(1);
-  @$pb.TagNumber(1)
-  ImNodeEndpoint ensureRemoteEndpoint() => $_ensure(0);
-
-  @$pb.TagNumber(2)
-  ImEnvelope get envelope => $_getN(1);
-  @$pb.TagNumber(2)
-  set envelope(ImEnvelope value) => $_setField(2, value);
-  @$pb.TagNumber(2)
-  $core.bool hasEnvelope() => $_has(1);
-  @$pb.TagNumber(2)
-  void clearEnvelope() => $_clearField(2);
-  @$pb.TagNumber(2)
-  ImEnvelope ensureEnvelope() => $_ensure(1);
-}
-
-class ImDirectKeyPackageFetchRequest extends $pb.GeneratedMessage {
-  factory ImDirectKeyPackageFetchRequest({
-    ImNodeEndpoint? remoteEndpoint,
-    FetchImKeyPackagesRequest? fetch,
-  }) {
-    final result = create();
-    if (remoteEndpoint != null) result.remoteEndpoint = remoteEndpoint;
-    if (fetch != null) result.fetch = fetch;
-    return result;
-  }
-
-  ImDirectKeyPackageFetchRequest._();
-
-  factory ImDirectKeyPackageFetchRequest.fromBuffer($core.List<$core.int> data,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
-  factory ImDirectKeyPackageFetchRequest.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
-
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ImDirectKeyPackageFetchRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.im.v1'),
-      createEmptyInstance: create)
-    ..aOM<ImNodeEndpoint>(1, _omitFieldNames ? '' : 'remoteEndpoint',
-        subBuilder: ImNodeEndpoint.create)
-    ..aOM<FetchImKeyPackagesRequest>(2, _omitFieldNames ? '' : 'fetch',
-        subBuilder: FetchImKeyPackagesRequest.create)
-    ..hasRequiredFields = false;
-
-  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ImDirectKeyPackageFetchRequest clone() => deepCopy();
-  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ImDirectKeyPackageFetchRequest copyWith(
-          void Function(ImDirectKeyPackageFetchRequest) updates) =>
-      super.copyWith(
-              (message) => updates(message as ImDirectKeyPackageFetchRequest))
-          as ImDirectKeyPackageFetchRequest;
-
-  @$core.override
-  $pb.BuilderInfo get info_ => _i;
-
-  @$core.pragma('dart2js:noInline')
-  static ImDirectKeyPackageFetchRequest create() =>
-      ImDirectKeyPackageFetchRequest._();
-  @$core.override
-  ImDirectKeyPackageFetchRequest createEmptyInstance() => create();
-  @$core.pragma('dart2js:noInline')
-  static ImDirectKeyPackageFetchRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ImDirectKeyPackageFetchRequest>(create);
-  static ImDirectKeyPackageFetchRequest? _defaultInstance;
-
-  @$pb.TagNumber(1)
-  ImNodeEndpoint get remoteEndpoint => $_getN(0);
-  @$pb.TagNumber(1)
-  set remoteEndpoint(ImNodeEndpoint value) => $_setField(1, value);
-  @$pb.TagNumber(1)
-  $core.bool hasRemoteEndpoint() => $_has(0);
-  @$pb.TagNumber(1)
-  void clearRemoteEndpoint() => $_clearField(1);
-  @$pb.TagNumber(1)
-  ImNodeEndpoint ensureRemoteEndpoint() => $_ensure(0);
-
-  @$pb.TagNumber(2)
-  FetchImKeyPackagesRequest get fetch => $_getN(1);
-  @$pb.TagNumber(2)
-  set fetch(FetchImKeyPackagesRequest value) => $_setField(2, value);
-  @$pb.TagNumber(2)
-  $core.bool hasFetch() => $_has(1);
-  @$pb.TagNumber(2)
-  void clearFetch() => $_clearField(2);
-  @$pb.TagNumber(2)
-  FetchImKeyPackagesRequest ensureFetch() => $_ensure(1);
-}
-
-class ImDirectKeyPackageConsumeRequest extends $pb.GeneratedMessage {
-  factory ImDirectKeyPackageConsumeRequest({
-    ImNodeEndpoint? remoteEndpoint,
-    ConsumeImKeyPackageRequest? consume,
-  }) {
-    final result = create();
-    if (remoteEndpoint != null) result.remoteEndpoint = remoteEndpoint;
-    if (consume != null) result.consume = consume;
-    return result;
-  }
-
-  ImDirectKeyPackageConsumeRequest._();
-
-  factory ImDirectKeyPackageConsumeRequest.fromBuffer(
-          $core.List<$core.int> data,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
-  factory ImDirectKeyPackageConsumeRequest.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
-
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ImDirectKeyPackageConsumeRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.im.v1'),
-      createEmptyInstance: create)
-    ..aOM<ImNodeEndpoint>(1, _omitFieldNames ? '' : 'remoteEndpoint',
-        subBuilder: ImNodeEndpoint.create)
-    ..aOM<ConsumeImKeyPackageRequest>(2, _omitFieldNames ? '' : 'consume',
-        subBuilder: ConsumeImKeyPackageRequest.create)
-    ..hasRequiredFields = false;
-
-  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ImDirectKeyPackageConsumeRequest clone() => deepCopy();
-  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ImDirectKeyPackageConsumeRequest copyWith(
-          void Function(ImDirectKeyPackageConsumeRequest) updates) =>
-      super.copyWith(
-              (message) => updates(message as ImDirectKeyPackageConsumeRequest))
-          as ImDirectKeyPackageConsumeRequest;
-
-  @$core.override
-  $pb.BuilderInfo get info_ => _i;
-
-  @$core.pragma('dart2js:noInline')
-  static ImDirectKeyPackageConsumeRequest create() =>
-      ImDirectKeyPackageConsumeRequest._();
-  @$core.override
-  ImDirectKeyPackageConsumeRequest createEmptyInstance() => create();
-  @$core.pragma('dart2js:noInline')
-  static ImDirectKeyPackageConsumeRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ImDirectKeyPackageConsumeRequest>(
-          create);
-  static ImDirectKeyPackageConsumeRequest? _defaultInstance;
-
-  @$pb.TagNumber(1)
-  ImNodeEndpoint get remoteEndpoint => $_getN(0);
-  @$pb.TagNumber(1)
-  set remoteEndpoint(ImNodeEndpoint value) => $_setField(1, value);
-  @$pb.TagNumber(1)
-  $core.bool hasRemoteEndpoint() => $_has(0);
-  @$pb.TagNumber(1)
-  void clearRemoteEndpoint() => $_clearField(1);
-  @$pb.TagNumber(1)
-  ImNodeEndpoint ensureRemoteEndpoint() => $_ensure(0);
-
-  @$pb.TagNumber(2)
-  ConsumeImKeyPackageRequest get consume => $_getN(1);
-  @$pb.TagNumber(2)
-  set consume(ConsumeImKeyPackageRequest value) => $_setField(2, value);
-  @$pb.TagNumber(2)
-  $core.bool hasConsume() => $_has(1);
-  @$pb.TagNumber(2)
-  void clearConsume() => $_clearField(2);
-  @$pb.TagNumber(2)
-  ConsumeImKeyPackageRequest ensureConsume() => $_ensure(1);
 }
 
 const $core.bool _omitFieldNames =

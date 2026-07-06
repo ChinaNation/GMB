@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../my/user/user_service.dart';
@@ -13,11 +15,18 @@ typedef ImSendTextFactory = ImSendTextCallback? Function(
   String conversationId,
 );
 typedef ImSyncFactory = ImSyncCallback? Function(String peerWalletAddress);
+typedef ImSendAttachmentFactory = ImSendAttachmentCallback? Function(
+  String peerWalletAddress,
+  String conversationId,
+);
+typedef ImDownloadAttachmentFactory = ImDownloadAttachmentCallback? Function(
+  String peerWalletAddress,
+);
 
 /// 公民“信息”Tab。
 ///
 /// 信息页只展示会话列表。联系人添加、联系人详情和转账入口统一归属
-/// “我的通讯录”；通信节点配对归属设置/用户资料流程，不能在信息页暴露工程按钮。
+/// “我的通讯录”；互联网 mailbox 和近场传输由 IM 运行态自动处理。
 class ImTabPage extends StatefulWidget {
   ImTabPage({
     super.key,
@@ -26,6 +35,8 @@ class ImTabPage extends StatefulWidget {
     UserProfileService? profileService,
     this.currentUserId,
     this.sendTextFactory,
+    this.sendAttachmentFactory,
+    this.downloadAttachmentFactory,
     this.syncFactory,
     this.runtime,
   })  : store = store ?? ImIsarStore(),
@@ -37,6 +48,8 @@ class ImTabPage extends StatefulWidget {
   final UserProfileService profileService;
   final String? currentUserId;
   final ImSendTextFactory? sendTextFactory;
+  final ImSendAttachmentFactory? sendAttachmentFactory;
+  final ImDownloadAttachmentFactory? downloadAttachmentFactory;
   final ImSyncFactory? syncFactory;
   final ImRuntime? runtime;
 
@@ -45,24 +58,49 @@ class ImTabPage extends StatefulWidget {
 }
 
 class _ImTabPageState extends State<ImTabPage> {
+  // 信息页只做前台轻量轮询；离开页面或 App 退后台即停止，不做后台常驻扫描。
+  static const _normalPollInterval = Duration(seconds: 15);
+  static const _backoffPollInterval = Duration(seconds: 30);
+
   List<ImConversationPreview> _conversations = const [];
   String _currentUserId = '';
   bool _loading = true;
+  bool _polling = false;
+  bool _realtimeConnecting = false;
   String? _error;
+  Timer? _pollTimer;
+  String? _realtimeWallet;
+  Future<void> Function()? _stopRealtime;
+  late final _LifecycleObserver _lifecycleObserver;
 
   @override
   void initState() {
     super.initState();
-    _reload();
+    _lifecycleObserver = _LifecycleObserver(
+      onResume: () => _reload(syncFirst: true),
+      onPause: _pauseSync,
+    );
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    _reload(syncFirst: true);
   }
 
-  Future<void> _reload() async {
+  @override
+  void dispose() {
+    _pauseSync();
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    super.dispose();
+  }
+
+  Future<void> _reload({bool syncFirst = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final activeWallet = widget.currentUserId ?? await _readCommunicationId();
+      if (syncFirst && activeWallet.isNotEmpty) {
+        await _syncPendingSilently();
+      }
       final conversations = await widget.store.readConversationPreviews(
         ownerChatAccount: activeWallet.isEmpty ? null : activeWallet,
       );
@@ -73,6 +111,7 @@ class _ImTabPageState extends State<ImTabPage> {
         _conversations = conversations;
         _currentUserId = activeWallet;
       });
+      _configurePolling(activeWallet);
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -88,6 +127,138 @@ class _ImTabPageState extends State<ImTabPage> {
     }
   }
 
+  Future<bool> _syncPendingSilently() async {
+    final runtime = widget.runtime;
+    if (runtime == null) {
+      return true;
+    }
+    try {
+      await runtime.syncPending();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _configurePolling(String activeWallet) {
+    if (activeWallet.isEmpty || widget.runtime == null) {
+      _pauseSync();
+      return;
+    }
+    if (_realtimeWallet != null && _realtimeWallet != activeWallet) {
+      _pauseSync();
+    }
+    if (_stopRealtime != null) {
+      return;
+    }
+    _schedulePoll(_normalPollInterval);
+    unawaited(_startRealtime(activeWallet));
+  }
+
+  Future<bool> _startRealtime(String activeWallet) async {
+    final runtime = widget.runtime;
+    if (runtime == null || activeWallet.isEmpty) {
+      return false;
+    }
+    if (_stopRealtime != null || _realtimeConnecting) {
+      return _stopRealtime != null;
+    }
+    _realtimeConnecting = true;
+    try {
+      final stop = await runtime.startRealtimeSync(
+        onNotice: () => _syncAndRefresh(activeWallet),
+        onDisconnected: () async {
+          _stopRealtime = null;
+          _realtimeWallet = null;
+          if (mounted && widget.runtime != null && _currentUserId.isNotEmpty) {
+            _schedulePoll(_backoffPollInterval);
+          }
+        },
+      );
+      if (!mounted || _currentUserId != activeWallet) {
+        await stop?.call();
+        return false;
+      }
+      _stopRealtime = stop;
+      _realtimeWallet = activeWallet;
+      if (stop != null) {
+        _stopPolling();
+      }
+      return stop != null;
+    } catch (_) {
+      return false;
+    } finally {
+      _realtimeConnecting = false;
+    }
+  }
+
+  Future<void> _syncAndRefresh(String ownerChatAccount) async {
+    await _syncPendingSilently();
+    final conversations = await widget.store.readConversationPreviews(
+      ownerChatAccount: ownerChatAccount,
+    );
+    if (mounted && _currentUserId == ownerChatAccount) {
+      setState(() {
+        _conversations = conversations;
+      });
+    }
+  }
+
+  void _schedulePoll(Duration delay) {
+    _pollTimer?.cancel();
+    _pollTimer = Timer(delay, _runPoll);
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  void _pauseSync() {
+    _stopPolling();
+    final stop = _stopRealtime;
+    _stopRealtime = null;
+    _realtimeWallet = null;
+    if (stop != null) {
+      unawaited(stop());
+    }
+  }
+
+  Future<void> _runPoll() async {
+    if (!mounted || widget.runtime == null || _currentUserId.isEmpty) {
+      return;
+    }
+    if (_stopRealtime != null) {
+      return;
+    }
+    if (_polling) {
+      _schedulePoll(_backoffPollInterval);
+      return;
+    }
+    _polling = true;
+    var ok = true;
+    try {
+      ok = await _syncPendingSilently();
+      final conversations = await widget.store.readConversationPreviews(
+        ownerChatAccount: _currentUserId,
+      );
+      if (mounted) {
+        setState(() {
+          _conversations = conversations;
+        });
+      }
+    } catch (_) {
+      ok = false;
+    }
+    _polling = false;
+    if (mounted && widget.runtime != null && _currentUserId.isNotEmpty) {
+      if (ok && await _startRealtime(_currentUserId)) {
+        return;
+      }
+      _schedulePoll(ok ? _normalPollInterval : _backoffPollInterval);
+    }
+  }
+
   Future<String> _readCommunicationId() async {
     final runtimeAddress = await widget.runtime?.readCommunicationAddress();
     if (runtimeAddress != null && runtimeAddress.isNotEmpty) {
@@ -95,6 +266,43 @@ class _ImTabPageState extends State<ImTabPage> {
     }
     final profile = await widget.profileService.getState();
     return profile.communicationAddress?.trim() ?? '';
+  }
+
+  Future<void> _deleteLocalConversation(String conversationId) {
+    final runtime = widget.runtime;
+    if (runtime != null) {
+      return runtime.deleteLocalConversation(conversationId);
+    }
+    return widget.store.deleteConversation(conversationId);
+  }
+
+  Future<void> _confirmAndDeleteConversation(
+    ImConversationPreview preview,
+  ) async {
+    final confirmed = await _confirmDeleteConversation(context);
+    if (!confirmed || !mounted) {
+      return;
+    }
+    try {
+      await _deleteLocalConversation(preview.conversationId);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _conversations = _conversations
+            .where(
+              (item) => item.conversationId != preview.conversationId,
+            )
+            .toList(growable: false);
+        _error = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error.toString();
+        });
+      }
+    }
   }
 
   void _openConversation(ImConversationPreview preview) {
@@ -124,10 +332,38 @@ class _ImTabPageState extends State<ImTabPage> {
                             conversationId: preview.conversationId,
                             text: text,
                           )),
+              onSendAttachment: widget.sendAttachmentFactory?.call(
+                    preview.walletAddress,
+                    preview.conversationId,
+                  ) ??
+                  (widget.runtime == null
+                      ? null
+                      : (attachment) => widget.runtime!.sendAttachment(
+                            peerWalletAddress: preview.walletAddress,
+                            conversationId: preview.conversationId,
+                            attachment: attachment,
+                          )),
+              onDownloadAttachment: widget.downloadAttachmentFactory?.call(
+                    preview.walletAddress,
+                  ) ??
+                  (widget.runtime == null
+                      ? null
+                      : (
+                          String conversationId,
+                          String controlPlaintext,
+                        ) =>
+                          widget.runtime!.downloadAttachment(
+                            conversationId: conversationId,
+                            controlPlaintext: controlPlaintext,
+                          )),
               onSync: widget.syncFactory?.call(preview.walletAddress) ??
                   (widget.runtime == null
                       ? null
                       : () => widget.runtime!.syncPending()),
+              onStartRealtime: widget.runtime?.startRealtimeSync,
+              onDeleteConversation: () => _deleteLocalConversation(
+                preview.conversationId,
+              ),
             ),
           ),
         )
@@ -140,7 +376,7 @@ class _ImTabPageState extends State<ImTabPage> {
       child: ColoredBox(
         color: AppTheme.scaffoldBg,
         child: RefreshIndicator(
-          onRefresh: _reload,
+          onRefresh: () => _reload(syncFirst: true),
           child: CustomScrollView(
             slivers: [
               const SliverToBoxAdapter(child: _ImHeader()),
@@ -164,6 +400,7 @@ class _ImTabPageState extends State<ImTabPage> {
                     return _ConversationTile(
                       preview: preview,
                       onTap: () => _openConversation(preview),
+                      onDelete: () => _confirmAndDeleteConversation(preview),
                     );
                   },
                 )
@@ -177,6 +414,25 @@ class _ImTabPageState extends State<ImTabPage> {
         ),
       ),
     );
+  }
+}
+
+class _LifecycleObserver extends WidgetsBindingObserver {
+  _LifecycleObserver({
+    required this.onResume,
+    required this.onPause,
+  });
+
+  final VoidCallback onResume;
+  final VoidCallback onPause;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      onResume();
+    } else {
+      onPause();
+    }
   }
 }
 
@@ -210,22 +466,57 @@ class _ConversationTile extends StatelessWidget {
   const _ConversationTile({
     required this.preview,
     required this.onTap,
+    required this.onDelete,
   });
 
   final ImConversationPreview preview;
   final VoidCallback onTap;
+  final Future<void> Function() onDelete;
 
   @override
   Widget build(BuildContext context) {
     final subtitle = preview.lastMessage.trim().isEmpty
         ? preview.walletAddress
         : preview.lastMessage.trim();
-    return _ListTileShell(
-      title: preview.title,
-      subtitle: subtitle,
-      trailing: _statusText(preview.deliveryState),
-      unreadCount: preview.unreadCount,
-      onTap: onTap,
+    return Dismissible(
+      key: ValueKey('im-conversation-${preview.conversationId}'),
+      direction: DismissDirection.endToStart,
+      background: const _DeleteDismissBackground(),
+      confirmDismiss: (_) async {
+        await onDelete();
+        return false;
+      },
+      child: _ListTileShell(
+        title: preview.title,
+        subtitle: subtitle,
+        trailing: _statusText(preview.deliveryState),
+        unreadCount: preview.unreadCount,
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _DeleteDismissBackground extends StatelessWidget {
+  const _DeleteDismissBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.red.shade600,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: EdgeInsets.only(right: 20),
+            child: Icon(Icons.delete_outline_rounded, color: Colors.white),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -397,4 +688,25 @@ String _statusText(ImMessageDeliveryState state) {
     ImMessageDeliveryState.receivedByDevice => '已接收',
     ImMessageDeliveryState.failed => '失败',
   };
+}
+
+Future<bool> _confirmDeleteConversation(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('删除聊天记录'),
+      content: const Text('确定删除这台设备上的聊天记录？'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('删除'),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
 }

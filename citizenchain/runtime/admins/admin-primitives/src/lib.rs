@@ -24,6 +24,12 @@ pub use primitives::cid::code::{FRG, NJD};
 /// 管理员资料里姓名/职务的最大字节长度(与实体生命周期模块 `MaxAccountNameLength` 一致)。
 pub const ADMIN_NAME_MAX_BYTES: u32 = 128;
 
+/// 管理员岗位代码最大字节长度。
+pub const ADMIN_ROLE_CODE_MAX_BYTES: u32 = 64;
+
+/// 管理员任职来源追溯 ID 最大字节长度。
+pub const ADMIN_SOURCE_REF_MAX_BYTES: u32 = 128;
+
 /// 护宪大法官职务字面量。护宪成员解析只认本常量,禁止各处手写字符串。
 pub const ADMIN_ROLE_CONSTITUTION_GUARD: &[u8] = "护宪大法官".as_bytes();
 /// 首席大法官职务字面量。
@@ -36,9 +42,12 @@ pub const ADMIN_ROLE_JUSTICE: &[u8] = "大法官".as_bytes();
 /// 管理员资料里实名 CID 号最大字节长度(与全仓 `CID_NUMBER_MAX_BYTES` 一致)。
 pub const ADMIN_CID_NUMBER_MAX_BYTES: u32 = CID_NUMBER_MAX_BYTES;
 
-/// 管理员职务/任期/姓名的来源。
+/// 管理员集合所属机构 CID 号类型。
+pub type AdminCidNumber = BoundedVec<u8, ConstU32<CID_NUMBER_MAX_BYTES>>;
+
+/// 管理员任职事实的来源。
 ///
-/// 佐证 `AdminProfile` 的 admin_role/term 由哪条治理路径产生;供 CitizenApp 展示。
+/// 佐证 `AdminProfile` 的岗位/任期/姓名由哪条治理路径产生;供 CitizenApp 展示。
 #[derive(
     Encode,
     Decode,
@@ -62,12 +71,15 @@ pub enum AdminSource {
     MutualElection,
     /// 普选产生。
     PopularElection,
+    /// 提名任免产生。
+    NominationAppointment,
 }
 
 /// 单个机构管理员的链上公开资料。
 ///
-/// `account` 是密码学账户(投票/多签资格本身);`admin_cid_number` 是注册局签发、
-/// 与真人一一绑定的实名锚;姓名/职务/任期供 CitizenApp 跨机构展示。私权机构与个人多签不使用本结构。
+/// `admin_account` 是密码学账户(投票/多签资格本身);`admin_cid_number`
+/// 是注册局签发、与真人一一绑定的实名锚。岗位制度归 entity 模块,
+/// 本结构只记录某个具体管理员正在担任哪个岗位以及这次任职事实的来源。
 #[derive(
     Encode,
     Decode,
@@ -81,19 +93,23 @@ pub enum AdminSource {
 )]
 pub struct AdminProfile<AccountId> {
     /// 管理员密码学账户,∈ 机构管理员集合。
-    pub account: AccountId,
+    pub admin_account: AccountId,
     /// 管理员实名锚:注册局签发的 CID 号。
     pub admin_cid_number: BoundedVec<u8, ConstU32<ADMIN_CID_NUMBER_MAX_BYTES>>,
     /// 姓名快照,来自注册局-公民列表。
-    pub name: BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>,
-    /// 对外法定职务。
-    pub admin_role: BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>,
+    pub admin_name: BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>,
+    /// 岗位代码,引用 entity 模块中该机构的岗位定义。
+    pub role_code: BoundedVec<u8, ConstU32<ADMIN_ROLE_CODE_MAX_BYTES>>,
+    /// 岗位名称快照,用于跨端展示和历史留痕。
+    pub role_name: BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>,
     /// 任期开始(天数自纪元;无任期填 0)。
     pub term_start: u32,
     /// 任期结束(天数自纪元;无任期填 0)。
     pub term_end: u32,
-    /// 职务/任期来源。
-    pub source: AdminSource,
+    /// 本次任职事实的来源。
+    pub admin_source: AdminSource,
+    /// 来源追溯 ID:注册局操作、投票提案、选举或提名任免记录。
+    pub admin_source_ref: BoundedVec<u8, ConstU32<ADMIN_SOURCE_REF_MAX_BYTES>>,
 }
 
 /// 管理员集合所属类型。
@@ -157,6 +173,8 @@ pub enum AdminAccountStatus {
 )]
 #[scale_info(skip_type_params(AdminList))]
 pub struct AdminAccount<AdminList, AccountId, BlockNumber> {
+    /// 管理员集合所属机构 CID 号;个人多签没有机构 CID 时为空。
+    pub cid_number: AdminCidNumber,
     pub institution_code: InstitutionCode,
     pub kind: AdminAccountKind,
     pub admins: AdminList,
@@ -189,6 +207,7 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
         proposal_id: u64,
         module_tag: &[u8],
         admin_root_account_id: AccountId,
+        cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
         admins: Vec<AdminItem>,
@@ -223,6 +242,7 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
     fn set_active_admin_account_direct(
         _module_tag: &[u8],
         _admin_root_account_id: AccountId,
+        _cid_number: Vec<u8>,
         _institution_code: InstitutionCode,
         _kind: AdminAccountKind,
         _admins: Vec<AdminItem>,

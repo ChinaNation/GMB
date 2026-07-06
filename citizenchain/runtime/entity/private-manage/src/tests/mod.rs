@@ -619,13 +619,15 @@ pub fn admin_profiles_from(accounts: &[AccountId32]) -> pallet::AdminProfilesOf<
         .iter()
         .cloned()
         .map(|account| admin_primitives::AdminProfile {
-            account,
+            admin_account: account,
             admin_cid_number: BoundedVec::new(),
-            name: BoundedVec::new(),
-            admin_role: BoundedVec::new(),
+            admin_name: BoundedVec::new(),
+            role_code: Default::default(),
+            role_name: BoundedVec::new(),
             term_start: 0,
             term_end: 0,
-            source: admin_primitives::AdminSource::Registry,
+            admin_source: admin_primitives::AdminSource::Registry,
+            admin_source_ref: Default::default(),
         })
         .collect();
     BoundedVec::try_from(v).expect("admin profiles fit")
@@ -638,33 +640,39 @@ pub fn admin_profiles_with_meta() -> pallet::AdminProfilesOf<Test> {
     let mut v: alloc::vec::Vec<admin_primitives::AdminProfile<AccountId32>> =
         alloc::vec::Vec::new();
     v.push(admin_primitives::AdminProfile {
-        account: admin(0),
+        admin_account: admin(0),
         admin_cid_number: BoundedVec::try_from(b"LN001-AAAAA-000000001-2026".to_vec())
             .expect("cid fits"),
-        name: BoundedVec::try_from("张三".as_bytes().to_vec()).expect("name fits"),
-        admin_role: BoundedVec::try_from("董事长".as_bytes().to_vec()).expect("admin_role fits"),
+        admin_name: BoundedVec::try_from("张三".as_bytes().to_vec()).expect("name fits"),
+        role_code: Default::default(),
+        role_name: BoundedVec::try_from("董事长".as_bytes().to_vec()).expect("admin_role fits"),
         term_start: 20_100,
         term_end: 21_561,
-        source: admin_primitives::AdminSource::MutualElection,
+        admin_source: admin_primitives::AdminSource::Registry,
+        admin_source_ref: Default::default(),
     });
     v.push(admin_primitives::AdminProfile {
-        account: admin(1),
+        admin_account: admin(1),
         admin_cid_number: BoundedVec::try_from(b"LN001-BBBBB-000000002-2026".to_vec())
             .expect("cid fits"),
-        name: BoundedVec::try_from("李四".as_bytes().to_vec()).expect("name fits"),
-        admin_role: BoundedVec::try_from("董事".as_bytes().to_vec()).expect("admin_role fits"),
+        admin_name: BoundedVec::try_from("李四".as_bytes().to_vec()).expect("name fits"),
+        role_code: Default::default(),
+        role_name: BoundedVec::try_from("董事".as_bytes().to_vec()).expect("admin_role fits"),
         term_start: 20_100,
         term_end: 21_561,
-        source: admin_primitives::AdminSource::MutualElection,
+        admin_source: admin_primitives::AdminSource::Registry,
+        admin_source_ref: Default::default(),
     });
     v.push(admin_primitives::AdminProfile {
-        account: admin(2),
+        admin_account: admin(2),
         admin_cid_number: BoundedVec::new(),
-        name: BoundedVec::new(),
-        admin_role: BoundedVec::new(),
+        admin_name: BoundedVec::new(),
+        role_code: Default::default(),
+        role_name: BoundedVec::new(),
         term_start: 0,
         term_end: 0,
-        source: admin_primitives::AdminSource::Registry,
+        admin_source: admin_primitives::AdminSource::Registry,
+        admin_source_ref: Default::default(),
     });
     BoundedVec::try_from(v).expect("admin profiles fit")
 }
@@ -724,7 +732,7 @@ pub fn cast_no_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::
 /// `nonce_seed` 区分同一测试内多次调用的 nonce,避免 `UsedDeregisterNonce` 冲突。
 pub fn close_with_cred(
     origin: RuntimeOrigin,
-    account: AccountId32,
+    admin_account: AccountId32,
     beneficiary: AccountId32,
     nonce_seed: u8,
 ) -> sp_runtime::DispatchResult {
@@ -736,7 +744,7 @@ pub fn close_with_cred(
         .expect("sig fits bound");
     PrivateManage::propose_close_private_institution(
         origin,
-        account,
+        admin_account,
         beneficiary,
         nonce,
         signature,

@@ -80,7 +80,8 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // 当前 runtime 采用统一模块命名：
     // genesis-pallet / public-admins / private-admins / personal-admins /
     // public-manage / private-manage / personal-manage / votingengine /
-    // multisig-transfer / offchain-transaction / onchain-transaction / institution-asset。
+    // multisig-transfer / offchain-transaction / onchain-transaction / institution-asset /
+    // square-post。
     spec_version: 1,
     impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,
@@ -411,6 +412,10 @@ mod runtime {
     // 地址变更上链模块：只保存地址目录版本、单条地址当前哈希和变更事件。
     #[runtime::pallet_index(35)]
     pub type AddressRegistry = address_registry;
+
+    // 广场动态发布索引模块：只记录 post_id/content_hash/storage_receipt_id 等链上索引。
+    #[runtime::pallet_index(36)]
+    pub type SquarePost = square_post;
 }
 
 #[cfg(test)]

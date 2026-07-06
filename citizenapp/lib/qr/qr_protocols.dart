@@ -16,8 +16,7 @@ enum QrKind {
   signRequest(1, temporary: true),
   signResponse(2, temporary: true),
   userContact(3, temporary: false),
-  userTransfer(4, temporary: true),
-  imNodePairing(5, temporary: false);
+  userTransfer(4, temporary: true);
 
   const QrKind(this.code, {required this.temporary});
 

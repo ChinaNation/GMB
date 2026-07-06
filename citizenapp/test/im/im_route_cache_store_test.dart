@@ -21,8 +21,8 @@ void main() {
         deviceId: 'bob-phone',
         devicePublicKeyHex: '0a0b',
         safetyNumber: '12 34',
-        nodePeerId: 'peer-bob',
-        nodeMultiaddr: '/ip6/::1/tcp/30334/p2p/peer-bob',
+        cloudflareMailboxId: 'bob-wallet',
+        nearbyPeerHint: 'bob-nearby',
         note: 'first',
       ),
     );
@@ -30,7 +30,8 @@ void main() {
     final created = await store.getRouteRecord('bob-wallet');
     expect(created, isNotNull);
     expect(created!.routeDisplayName, 'Bob');
-    expect(created.nodeMultiaddr, startsWith('/ip6/'));
+    expect(created.cloudflareMailboxId, 'bob-wallet');
+    expect(created.nearbyPeerHint, 'bob-nearby');
 
     await store.upsertRouteRecord(
       ImRouteRecord(
@@ -39,8 +40,8 @@ void main() {
         deviceId: created.deviceId,
         devicePublicKeyHex: created.devicePublicKeyHex,
         safetyNumber: created.safetyNumber,
-        nodePeerId: created.nodePeerId,
-        nodeMultiaddr: created.nodeMultiaddr,
+        cloudflareMailboxId: created.cloudflareMailboxId,
+        nearbyPeerHint: created.nearbyPeerHint,
         createdAtMillis: created.createdAtMillis,
       ),
     );

@@ -398,6 +398,8 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                 | citizen_identity::pallet::Call::revoke_cid { .. } => FeeChargeKind::Free,
                 _ => FeeChargeKind::VoteFlat,
             },
+            // 广场发布交易固定收 1 元发布费；分账继续复用 OnchainFeeRouter 的 80/10/10。
+            RuntimeCall::SquarePost(_) => FeeChargeKind::VoteFlat,
             // FullnodeIssuance bind_reward_wallet / rebind_reward_wallet:1 元/次。
             RuntimeCall::FullnodeIssuance(_) => FeeChargeKind::VoteFlat,
             // 手动重试/取消统一收口至 votingengine::retry_passed_proposal /
@@ -1177,6 +1179,33 @@ impl citizen_identity::Config for Runtime {
     type OnVotingIdentityRegistered = CitizenIssuance;
     type TimeProvider = crate::Timestamp;
     type WeightInfo = citizen_identity::weights::SubstrateWeight<Runtime>;
+}
+
+pub struct RuntimeSquarePostCitizenIdentity;
+
+impl square_post::SquarePostCitizenIdentityProvider<AccountId>
+    for RuntimeSquarePostCitizenIdentity
+{
+    fn cid_number(owner_account: &AccountId) -> Option<Vec<u8>> {
+        citizen_identity::VotingIdentityByAccount::<Runtime>::get(owner_account).and_then(
+            |identity| {
+                if identity.citizen_status == citizen_identity::CitizenStatus::Normal {
+                    Some(identity.cid_number.to_vec())
+                } else {
+                    None
+                }
+            },
+        )
+    }
+}
+
+impl square_post::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type CitizenIdentity = RuntimeSquarePostCitizenIdentity;
+    type MaxSquarePostIdLen = ConstU32<64>;
+    type MaxSquareCidNumberLen = ConstU32<32>;
+    type MaxSquareStorageReceiptIdLen = ConstU32<96>;
+    type WeightInfo = square_post::weights::SubstrateWeight<Runtime>;
 }
 
 impl citizen_issuance::Config for Runtime {
@@ -2158,8 +2187,8 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
         )
         .unwrap_or_default()
         .into_iter()
-        .filter(|profile| profile.admin_role.as_slice() == ADMIN_ROLE_CONSTITUTION_GUARD)
-        .map(|profile| profile.account)
+        .filter(|profile| profile.role_name.as_slice() == ADMIN_ROLE_CONSTITUTION_GUARD)
+        .map(|profile| profile.admin_account)
         .collect()
     }
 }

@@ -96,8 +96,7 @@ fn build_node_mode_state(selected_mode: NodeMode) -> NodeModeState {
         } else {
             NodeMode::Archive
         },
-        // 全节点模式只描述链数据保存方式；IM 通信能力由
-        // settings::communication_node 的独立开关管理，必须和归档/普通模式分离。
+        // 全节点模式只描述链数据保存方式；聊天投递不再由区块链节点承载。
         effective_mode: if selected_mode.enabled() {
             selected_mode
         } else {

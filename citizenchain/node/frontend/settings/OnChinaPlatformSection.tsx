@@ -71,11 +71,11 @@ export function OnChinaPlatformSection({ platform, onUpdated }: Props) {
       ) : null}
       {error ? <p className="section-inline-error">{error}</p> : null}
       {pendingAction ? (
-        <div className="communication-node-confirm-mask" onClick={() => !saving && setPendingAction(null)}>
-          <div className="communication-node-confirm" onClick={(event) => event.stopPropagation()}>
+        <div className="settings-confirm-mask" onClick={() => !saving && setPendingAction(null)}>
+          <div className="settings-confirm" onClick={(event) => event.stopPropagation()}>
             <h3>确定</h3>
             <p>{pendingAction === 'start' ? '确认启动链上中国平台？' : '确认关闭链上中国平台？'}</p>
-            <div className="communication-node-confirm-actions">
+            <div className="settings-confirm-actions">
               <button type="button" disabled={saving} onClick={() => setPendingAction(null)}>
                 取消
               </button>

@@ -20,15 +20,17 @@ fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
 }
 
 /// benchmark 夹具管理员档案:只填账户,实名字段留空。
-fn profile_of<T: Config>(account: T::AccountId) -> AdminProfile<T::AccountId> {
+fn profile_of<T: Config>(admin_account: T::AccountId) -> AdminProfile<T::AccountId> {
     AdminProfile {
-        account,
+        admin_account,
         admin_cid_number: Default::default(),
-        name: Default::default(),
-        admin_role: Default::default(),
+        admin_name: Default::default(),
+        role_code: Default::default(),
+        role_name: Default::default(),
         term_start: 0,
         term_end: 0,
-        source: AdminSource::Genesis,
+        admin_source: AdminSource::Genesis,
+        admin_source_ref: Default::default(),
     }
 }
 

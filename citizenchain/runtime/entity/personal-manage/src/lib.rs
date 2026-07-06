@@ -543,6 +543,7 @@ pub mod pallet {
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
+                Vec::new(),
                 votingengine::types::PMUL,
                 kind,
                 admins.iter().cloned().collect(),

@@ -46,14 +46,6 @@ export type OnChinaPlatformState = {
   detail?: string | null;
 };
 
-export type CommunicationNodeState = {
-  enabled: boolean;
-  peerId: string | null;
-  nodeMultiaddr: string | null;
-  endpointKind: string | null;
-  pairingPayload: string | null;
-};
-
 export type DesktopUpdateStatus =
   | 'checking'
   | 'available'

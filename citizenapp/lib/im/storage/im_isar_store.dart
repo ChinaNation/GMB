@@ -37,8 +37,8 @@ class ImRouteRecord {
     required this.deviceId,
     required this.devicePublicKeyHex,
     required this.safetyNumber,
-    required this.nodePeerId,
-    required this.nodeMultiaddr,
+    this.cloudflareMailboxId,
+    this.nearbyPeerHint,
     this.note,
     this.createdAtMillis,
     this.updatedAtMillis,
@@ -49,8 +49,8 @@ class ImRouteRecord {
   final String deviceId;
   final String devicePublicKeyHex;
   final String safetyNumber;
-  final String nodePeerId;
-  final String nodeMultiaddr;
+  final String? cloudflareMailboxId;
+  final String? nearbyPeerHint;
   final String? note;
   final int? createdAtMillis;
   final int? updatedAtMillis;
@@ -60,8 +60,8 @@ class ImRouteRecord {
 
 /// 公民 IM 的 Isar 持久化仓库。
 ///
-/// 本仓库只保存手机本地状态。节点投递层只拿到完整 Protobuf
-/// envelope bytes，不会接触 [plaintext]。
+/// 本仓库只保存手机本地状态。Cloudflare 和近场 transport 只拿到完整
+/// Protobuf envelope bytes，不会接触 [plaintext]。
 class ImIsarStore {
   ImIsarStore({
     WalletIsar? walletIsar,
@@ -122,8 +122,8 @@ class ImIsarStore {
         ..deviceId = route.deviceId
         ..devicePublicKeyHex = route.devicePublicKeyHex
         ..safetyNumber = route.safetyNumber
-        ..nodePeerId = route.nodePeerId
-        ..nodeMultiaddr = route.nodeMultiaddr
+        ..cloudflareMailboxId = route.cloudflareMailboxId
+        ..nearbyPeerHint = route.nearbyPeerHint
         ..note = route.note
         ..createdAtMillis =
             existing?.createdAtMillis ?? route.createdAtMillis ?? now
@@ -143,6 +143,54 @@ class ImIsarStore {
           .toList(growable: false)
         ..sort((a, b) => a.createdAtMillis.compareTo(b.createdAtMillis));
       return filtered.map(_messageFromEntity).toList(growable: false);
+    });
+  }
+
+  /// 彻底删除本机会话记录。
+  ///
+  /// Cloudflare 只做临时投递队列；用户删除聊天记录时，本地 Isar 是唯一
+  /// 需要清理的聊天历史真源。附件缓存目录由运行态在同一操作中删除。
+  Future<void> deleteConversation(String conversationId) {
+    return _walletIsar.writeTxn((isar) async {
+      final messages = await isar.imMessageEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      for (final message in messages.where(
+        (message) => message.conversationId == conversationId,
+      )) {
+        await isar.imMessageEntitys.delete(message.id);
+      }
+
+      final conversations = await isar.imConversationEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      for (final conversation in conversations.where(
+        (conversation) => conversation.conversationId == conversationId,
+      )) {
+        await isar.imConversationEntitys.delete(conversation.id);
+      }
+
+      final outboundRows = await isar.imOutboundQueueEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      for (final row in outboundRows.where(
+        (row) => row.conversationId == conversationId,
+      )) {
+        await isar.imOutboundQueueEntitys.delete(row.id);
+      }
+
+      final pendingRows = await isar.imPendingInboundEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      for (final row in pendingRows.where(
+        (row) => row.conversationId == conversationId,
+      )) {
+        await isar.imPendingInboundEntitys.delete(row.id);
+      }
     });
   }
 
@@ -389,8 +437,8 @@ ImRouteRecord _routeFromEntity(ImRouteCacheEntity row) {
     deviceId: row.deviceId,
     devicePublicKeyHex: row.devicePublicKeyHex,
     safetyNumber: row.safetyNumber,
-    nodePeerId: row.nodePeerId,
-    nodeMultiaddr: row.nodeMultiaddr,
+    cloudflareMailboxId: row.cloudflareMailboxId,
+    nearbyPeerHint: row.nearbyPeerHint,
     note: row.note,
     createdAtMillis: row.createdAtMillis,
     updatedAtMillis: row.updatedAtMillis,

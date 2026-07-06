@@ -24,7 +24,7 @@
 | 5 | `activate_admin_account` | `GMB || 0x18` 二进制 payload | 原文 | citizenchain node / CitizenApp | CitizenWallet | 管理员激活 |
 | 6 | `decrypt_admin` | `GMB || 0x19` 二进制 payload | 原文 | citizenchain node | CitizenWallet | 清算行管理员解密 |
 | 7 | `runtime_upgrade_hash` | 32B WASM hash | 原文 32B | citizenchain node / CitizenApp | CitizenWallet | Runtime 升级哈希直签 |
-| 8 | `im_wallet_binding` / `QR_ACTION_IM_WALLET_BINDING` | IM 绑定字段 SCALE bytes | `signing_message(OP_SIGN_IM_WALLET_BINDING, payload)` | CitizenApp | CitizenWallet | 钱包账户授权 IM 设备绑定私人通信节点 |
+| 8 | `im_wallet_binding` / `QR_ACTION_IM_WALLET_BINDING` | IM 绑定字段 SCALE bytes | `signing_message(OP_SIGN_IM_WALLET_BINDING, payload)` | CitizenApp | CitizenWallet | 钱包账户授权 IM 设备绑定钱包聊天账户；不得绑定区块链通信节点 |
 
 ## 2. 链交易动作码
 

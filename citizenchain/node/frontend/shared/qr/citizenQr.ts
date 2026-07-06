@@ -9,22 +9,20 @@ export type QrKind =
   | 'sign_request'
   | 'sign_response'
   | 'user_contact'
-  | 'user_transfer'
-  | 'im_node_pairing';
+  | 'user_transfer';
 
 export const QR_KIND_CODE: Record<QrKind, number> = {
   sign_request: 1,
   sign_response: 2,
   user_contact: 3,
   user_transfer: 4,
-  im_node_pairing: 5,
 };
 
 const QR_KIND_BY_CODE = new Map<number, QrKind>(
   Object.entries(QR_KIND_CODE).map(([kind, code]) => [code, kind as QrKind]),
 );
 
-export const FIXED_KINDS: readonly QrKind[] = ['user_contact', 'im_node_pairing'];
+export const FIXED_KINDS: readonly QrKind[] = ['user_contact'];
 
 export function isFixedKind(kind: QrKind): boolean {
   return FIXED_KINDS.includes(kind);
@@ -56,18 +54,11 @@ export interface UserTransferBody {
   bank: string;
 }
 
-export interface ImNodePairingBody {
-  node_peer_id: string;
-  node_multiaddr: string;
-  endpoint_kind: string;
-}
-
 export type QrBodyByKind = {
   sign_request: SignRequestBody;
   sign_response: SignResponseBody;
   user_contact: UserContactBody;
   user_transfer: UserTransferBody;
-  im_node_pairing: ImNodePairingBody;
 };
 
 export interface QrEnvelope<K extends QrKind = QrKind> {
@@ -178,14 +169,6 @@ function parseUserTransferBody(b: Record<string, unknown>): UserTransferBody {
   return { address, recipientName, amount, symbol, memo, bank };
 }
 
-function parseImNodePairingBody(b: Record<string, unknown>): ImNodePairingBody {
-  return {
-    node_peer_id: requireString(b, 'node_peer_id'),
-    node_multiaddr: requireString(b, 'node_multiaddr'),
-    endpoint_kind: requireString(b, 'endpoint_kind'),
-  };
-}
-
 export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelope {
   let data: Record<string, unknown>;
   if (typeof raw === 'string') {
@@ -240,9 +223,6 @@ export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelo
       break;
     case 'user_transfer':
       body = parseUserTransferBody(b);
-      break;
-    case 'im_node_pairing':
-      body = parseImNodePairingBody(b);
       break;
   }
 

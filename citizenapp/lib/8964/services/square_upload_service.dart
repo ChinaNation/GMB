@@ -1,0 +1,208 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
+
+import 'package:citizenapp/8964/models/square_models.dart';
+import 'package:citizenapp/8964/services/square_api_client.dart';
+
+class SquareUploadedContent {
+  const SquareUploadedContent({
+    required this.session,
+    required this.postId,
+    required this.contentHash,
+    required this.storageReceiptId,
+    required this.storageUntil,
+    required this.manifestHash,
+  });
+
+  final SquareSession session;
+  final String postId;
+  final String contentHash;
+  final String storageReceiptId;
+  final int storageUntil;
+  final String manifestHash;
+}
+
+class SquarePreparedContent {
+  SquarePreparedContent({
+    required this.session,
+    required this.preparedUpload,
+    required this.postId,
+    required this.contentHash,
+    required this.storageReceiptId,
+    required this.storageUntil,
+    required this.manifestHash,
+    required this.manifestBytes,
+    required List<SquareLocalMediaDraft> mediaDrafts,
+  }) : mediaDrafts = List.unmodifiable(mediaDrafts);
+
+  final SquareSession session;
+  final SquarePreparedUpload preparedUpload;
+  final String postId;
+  final String contentHash;
+  final String storageReceiptId;
+  final int storageUntil;
+  final String manifestHash;
+  final Uint8List manifestBytes;
+  final List<SquareLocalMediaDraft> mediaDrafts;
+}
+
+abstract class SquareContentUploader {
+  Future<SquarePreparedContent> preparePostContent({
+    required String ownerAccount,
+    required SquarePostCategory postCategory,
+    required String text,
+    required List<SquareLocalMediaDraft> mediaDrafts,
+    required SquareLoginSigner signLoginPayload,
+    void Function(SquarePublishStage stage)? onStage,
+  });
+
+  Future<SquareUploadedContent> uploadPreparedContent(
+    SquarePreparedContent prepared, {
+    void Function(SquarePublishStage stage)? onStage,
+  });
+}
+
+class SquareUploadService implements SquareContentUploader {
+  SquareUploadService({SquareApiClient? apiClient})
+      : _api = apiClient ?? SquareApiClient();
+
+  final SquareApiClient _api;
+
+  @override
+  Future<SquarePreparedContent> preparePostContent({
+    required String ownerAccount,
+    required SquarePostCategory postCategory,
+    required String text,
+    required List<SquareLocalMediaDraft> mediaDrafts,
+    required SquareLoginSigner signLoginPayload,
+    void Function(SquarePublishStage stage)? onStage,
+  }) async {
+    if (mediaDrafts.isEmpty) {
+      throw const SquareApiException('请至少选择一张图片或一个视频');
+    }
+
+    onStage?.call(SquarePublishStage.signingIn);
+    final session = await _api.ensureSession(
+      ownerAccount: ownerAccount,
+      signLoginPayload: signLoginPayload,
+    );
+
+    final mediaManifests = <Map<String, Object?>>[];
+    for (final draft in mediaDrafts) {
+      final file = File(draft.path);
+      final digest = await sha256.bind(file.openRead()).first;
+      mediaManifests.add({
+        'media_kind': draft.mediaKind.workerValue,
+        'file_name': draft.fileName,
+        'content_type': draft.contentType,
+        'byte_size': draft.byteSize,
+        'sha256': digest.toString(),
+      });
+    }
+
+    final manifestBytes = _canonicalJsonBytes({
+      'schema': 'citizenapp.square.post.v1',
+      'owner_account': ownerAccount,
+      'post_category': postCategory.workerValue,
+      'text': text,
+      'media_items': mediaManifests,
+    });
+    final manifestHash = sha256.convert(manifestBytes).toString();
+
+    onStage?.call(SquarePublishStage.preparingStorage);
+    final membership = await _api.fetchMembership(session);
+    if (!membership.active || membership.expiresAt <= 0) {
+      throw const SquareApiException('需要有效会员才能使用广场内容存储');
+    }
+
+    final prepared = await _api.prepareUpload(
+      session: session,
+      postCategory: postCategory,
+      manifestHash: manifestHash,
+      mediaItems: mediaDrafts
+          .map(
+            (draft) => SquareUploadMediaRequest(
+              mediaKind: draft.mediaKind,
+              contentType: draft.contentType,
+              byteSize: draft.byteSize,
+              fileExt: draft.fileExt,
+            ),
+          )
+          .toList(growable: false),
+    );
+    if (prepared.mediaItems.length != mediaDrafts.length) {
+      throw const SquareApiException('上传授权数量与本地媒体数量不一致');
+    }
+
+    return SquarePreparedContent(
+      session: session,
+      preparedUpload: prepared,
+      postId: prepared.postId,
+      contentHash: manifestHash,
+      storageReceiptId: prepared.storageReceiptId,
+      storageUntil: membership.expiresAt,
+      manifestHash: manifestHash,
+      manifestBytes: manifestBytes,
+      mediaDrafts: mediaDrafts,
+    );
+  }
+
+  @override
+  Future<SquareUploadedContent> uploadPreparedContent(
+    SquarePreparedContent prepared, {
+    void Function(SquarePublishStage stage)? onStage,
+  }) async {
+    final mediaDrafts = prepared.mediaDrafts;
+    final preparedUpload = prepared.preparedUpload;
+    if (preparedUpload.mediaItems.length != mediaDrafts.length) {
+      throw const SquareApiException('上传授权数量与本地媒体数量不一致');
+    }
+
+    // R2 对象只允许在链上扣费入块后写入；prepare 阶段只固定链上索引所需的回执。
+    onStage?.call(SquarePublishStage.uploadingMedia);
+    await _api.uploadObject(
+      uploadUrl: preparedUpload.manifestUploadUrl,
+      contentType: 'application/json; charset=utf-8',
+      contentLength: prepared.manifestBytes.length,
+      body: Stream<List<int>>.value(prepared.manifestBytes),
+    );
+    for (var i = 0; i < mediaDrafts.length; i++) {
+      final draft = mediaDrafts[i];
+      final upload = preparedUpload.mediaItems[i];
+      await _api.uploadObject(
+        uploadUrl: upload.uploadUrl,
+        contentType: draft.contentType,
+        contentLength: draft.byteSize,
+        body: File(draft.path).openRead(),
+      );
+    }
+
+    onStage?.call(SquarePublishStage.completingStorage);
+    final completed = await _api.completeUpload(
+      session: prepared.session,
+      uploadId: preparedUpload.uploadId,
+      manifestHash: prepared.manifestHash,
+      contentHash: prepared.contentHash,
+    );
+    if (completed.postId != prepared.postId ||
+        completed.storageReceiptId != prepared.storageReceiptId) {
+      throw const SquareApiException('存储完成响应与链上发布索引不一致');
+    }
+
+    return SquareUploadedContent(
+      session: prepared.session,
+      postId: completed.postId,
+      contentHash: completed.contentHash,
+      storageReceiptId: completed.storageReceiptId,
+      storageUntil: prepared.storageUntil,
+      manifestHash: prepared.manifestHash,
+    );
+  }
+
+  Uint8List _canonicalJsonBytes(Map<String, Object?> value) {
+    return Uint8List.fromList(utf8.encode(jsonEncode(value)));
+  }
+}

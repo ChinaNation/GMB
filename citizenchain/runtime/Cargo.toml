@@ -68,6 +68,7 @@ onchain-issuance = { path = "issuance/onchain-issuance", default-features = fals
 citizen-identity = { path = "otherpallet/citizen-identity", default-features = false }
 pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
 address-registry = { path = "otherpallet/address-registry", default-features = false }
+square-post = { path = "otherpallet/square-post", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
 entity-primitives = { path = "entity/entity-primitives", default-features = false }
 public-manage = { path = "entity/public-manage", default-features = false }
@@ -118,6 +119,7 @@ std = [
 	"citizen-identity/std",
 	"pow-difficulty/std",
 	"address-registry/std",
+	"square-post/std",
 	"onchain-transaction/std",
 	"entity-primitives/std",
 	"public-manage/std",
@@ -181,6 +183,7 @@ runtime-benchmarks = [
 	"citizen-identity/runtime-benchmarks",
 	"pow-difficulty/runtime-benchmarks",
 	"address-registry/runtime-benchmarks",
+	"square-post/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
 	"public-manage/runtime-benchmarks",
 	"private-manage/runtime-benchmarks",
@@ -220,6 +223,7 @@ try-runtime = [
 	"citizen-identity/try-runtime",
 	"pow-difficulty/try-runtime",
 	"address-registry/try-runtime",
+	"square-post/try-runtime",
 	"onchain-transaction/try-runtime",
 	"public-manage/try-runtime",
 	"private-manage/try-runtime",

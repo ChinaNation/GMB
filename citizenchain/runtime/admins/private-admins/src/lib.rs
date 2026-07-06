@@ -22,7 +22,7 @@ use sp_std::collections::btree_set::BTreeSet;
 
 use admin_primitives::{
     can_store_private_admin_code, AdminAccount, AdminAccountKind, AdminAccountLifecycle,
-    AdminAccountStatus, AdminProfile, AdminSetChangeAction,
+    AdminAccountStatus, AdminCidNumber, AdminProfile, AdminSetChangeAction, AdminSource,
 };
 use entity_primitives::InstitutionMultisigQuery;
 use votingengine::{
@@ -232,10 +232,13 @@ pub mod pallet {
             origin: OriginFor<T>,
             institution_code: InstitutionCode,
             account: T::AccountId,
-            admins: AdminProfilesOf<T>,
+            mut admins: AdminProfilesOf<T>,
             new_threshold: u32,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+            admins
+                .iter_mut()
+                .for_each(|profile| profile.admin_source = AdminSource::InternalVote);
 
             // 1) 校验管理员账户已激活且机构码匹配。
             let current =
@@ -249,10 +252,14 @@ pub mod pallet {
                 Error::<T>::InstitutionCodeMismatch
             );
 
-            // 2) 校验发起人与目标管理员集合合法性(账户语义校验取 profile.account)。
-            let current_admins: Vec<T::AccountId> =
-                current.admins.iter().map(|p| p.account.clone()).collect();
-            let new_admins: Vec<T::AccountId> = admins.iter().map(|p| p.account.clone()).collect();
+            // 2) 校验发起人与目标管理员集合合法性(账户语义校验取 profile.admin_account)。
+            let current_admins: Vec<T::AccountId> = current
+                .admins
+                .iter()
+                .map(|p| p.admin_account.clone())
+                .collect();
+            let new_admins: Vec<T::AccountId> =
+                admins.iter().map(|p| p.admin_account.clone()).collect();
             ensure!(current_admins.contains(&who), Error::<T>::UnauthorizedAdmin);
             Self::validate_admin_set_for_account(
                 current.kind,
@@ -420,17 +427,24 @@ pub mod pallet {
         /// 生命周期写入只能经 `AdminAccountLifecycle` trait 做提案上下文校验后进入。
         pub(crate) fn do_create_pending_admin_account(
             institution: T::AccountId,
+            cid_number: Vec<u8>,
             institution_code: InstitutionCode,
             kind: AdminAccountKind,
-            admins: Vec<AdminProfile<T::AccountId>>,
+            mut admins: Vec<AdminProfile<T::AccountId>>,
             creator: T::AccountId,
         ) -> DispatchResult {
             ensure!(
                 !AdminAccounts::<T>::contains_key(institution.clone()),
                 Error::<T>::InstitutionAlreadyExists
             );
+            admins
+                .iter_mut()
+                .for_each(|profile| profile.admin_source = AdminSource::Registry);
+            let cid_number: AdminCidNumber = cid_number
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidInstitution)?;
             let admin_accounts: Vec<T::AccountId> =
-                admins.iter().map(|p| p.account.clone()).collect();
+                admins.iter().map(|p| p.admin_account.clone()).collect();
             Self::validate_admin_set_for_account(kind, institution_code, &admin_accounts)?;
 
             let bounded: AdminProfilesOf<T> = admins
@@ -441,6 +455,7 @@ pub mod pallet {
             AdminAccounts::<T>::insert(
                 institution.clone(),
                 AdminAccount {
+                    cid_number,
                     institution_code,
                     kind,
                     admins: bounded,
@@ -525,14 +540,21 @@ pub mod pallet {
         /// 边界,并把管理员集合与动态阈值作为一个链上事务提交。
         pub(crate) fn do_set_active_admin_account_direct(
             institution: T::AccountId,
+            cid_number: Vec<u8>,
             institution_code: InstitutionCode,
             kind: AdminAccountKind,
-            admins: Vec<AdminProfile<T::AccountId>>,
+            mut admins: Vec<AdminProfile<T::AccountId>>,
             threshold: u32,
             creator: T::AccountId,
         ) -> DispatchResult {
+            admins
+                .iter_mut()
+                .for_each(|profile| profile.admin_source = AdminSource::Registry);
+            let cid_number: AdminCidNumber = cid_number
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidInstitution)?;
             let admin_accounts: Vec<T::AccountId> =
-                admins.iter().map(|p| p.account.clone()).collect();
+                admins.iter().map(|p| p.admin_account.clone()).collect();
             Self::validate_admin_set_for_account(kind, institution_code, &admin_accounts)?;
             let bounded: AdminProfilesOf<T> = admins
                 .try_into()
@@ -552,6 +574,11 @@ pub mod pallet {
 
                 let created = match AdminAccounts::<T>::get(institution.clone()) {
                     Some(existing) => {
+                        if existing.cid_number != cid_number {
+                            return TransactionOutcome::Rollback(Err(
+                                Error::<T>::InvalidInstitution.into(),
+                            ));
+                        }
                         if existing.institution_code != institution_code {
                             return TransactionOutcome::Rollback(Err(
                                 Error::<T>::InstitutionCodeMismatch.into(),
@@ -575,6 +602,7 @@ pub mod pallet {
                         AdminAccounts::<T>::insert(
                             institution.clone(),
                             AdminAccount {
+                                cid_number: cid_number.clone(),
                                 institution_code,
                                 kind,
                                 admins: bounded.clone(),
@@ -645,10 +673,13 @@ pub mod pallet {
             ) else {
                 return false;
             };
-            account.admins.iter().any(|admin| &admin.account == who)
+            account
+                .admins
+                .iter()
+                .any(|admin| &admin.admin_account == who)
         }
 
-        /// 读取 Active 账户管理员账户列表(投票/多签资格语义,取 profile.account)。
+        /// 读取 Active 账户管理员账户列表(投票/多签资格语义,取 profile.admin_account)。
         ///
         /// 普通业务提案创建和投票快照默认使用此 API;返回的是账户而非资料,
         /// 内部投票一人一票、多签转账、组织管理查配置全部零改动。
@@ -661,7 +692,13 @@ pub mod pallet {
                 institution,
                 AdminAccountStatus::Active,
             )?;
-            Some(account.admins.iter().map(|p| p.account.clone()).collect())
+            Some(
+                account
+                    .admins
+                    .iter()
+                    .map(|p| p.admin_account.clone())
+                    .collect(),
+            )
         }
 
         /// 读取 Active 账户管理员完整资料列表(展示路径,含姓名/职务/任期/实名 CID)。
@@ -748,10 +785,13 @@ pub mod pallet {
             ) else {
                 return false;
             };
-            account.admins.iter().any(|admin| &admin.account == who)
+            account
+                .admins
+                .iter()
+                .any(|admin| &admin.admin_account == who)
         }
 
-        /// 读取 Pending 账户管理员账户列表(取 profile.account)。仅供投票引擎 Pending 创建入口写快照。
+        /// 读取 Pending 账户管理员账户列表(取 profile.admin_account)。仅供投票引擎 Pending 创建入口写快照。
         pub fn pending_account_admins_for_snapshot(
             institution_code: InstitutionCode,
             institution: T::AccountId,
@@ -761,7 +801,13 @@ pub mod pallet {
                 institution,
                 AdminAccountStatus::Pending,
             )?;
-            Some(account.admins.iter().map(|p| p.account.clone()).collect())
+            Some(
+                account
+                    .admins
+                    .iter()
+                    .map(|p| p.admin_account.clone())
+                    .collect(),
+            )
         }
 
         /// 读取 Pending 账户管理员数量。仅用于创建/激活该账户的快照语义。
@@ -816,10 +862,16 @@ pub mod pallet {
                     .ok_or(Error::<T>::InvalidInstitution)?,
             )?;
             votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(subject, proposal_id)?;
-            let current_admins: Vec<T::AccountId> =
-                account.admins.iter().map(|p| p.account.clone()).collect();
-            let new_admins: Vec<T::AccountId> =
-                action.admins.iter().map(|p| p.account.clone()).collect();
+            let current_admins: Vec<T::AccountId> = account
+                .admins
+                .iter()
+                .map(|p| p.admin_account.clone())
+                .collect();
+            let new_admins: Vec<T::AccountId> = action
+                .admins
+                .iter()
+                .map(|p| p.admin_account.clone())
+                .collect();
             Self::validate_admin_set_for_account(
                 account.kind,
                 account.institution_code,
@@ -855,6 +907,7 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, AdminProfile<T::Acco
         proposal_id: u64,
         module_tag: &[u8],
         institution: T::AccountId,
+        cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
         admins: Vec<AdminProfile<T::AccountId>>,
@@ -868,7 +921,14 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, AdminProfile<T::Acco
             STATUS_VOTING,
             false,
         )?;
-        Self::do_create_pending_admin_account(institution, institution_code, kind, admins, creator)
+        Self::do_create_pending_admin_account(
+            institution,
+            cid_number,
+            institution_code,
+            kind,
+            admins,
+            creator,
+        )
     }
 
     fn activate_admin_account_for_proposal(
@@ -934,6 +994,7 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, AdminProfile<T::Acco
     fn set_active_admin_account_direct(
         _module_tag: &[u8],
         admin_root_account_id: T::AccountId,
+        cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
         admins: Vec<AdminProfile<T::AccountId>>,
@@ -942,6 +1003,7 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, AdminProfile<T::Acco
     ) -> DispatchResult {
         Self::do_set_active_admin_account_direct(
             admin_root_account_id,
+            cid_number,
             institution_code,
             kind,
             admins,

@@ -314,7 +314,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   final AppUpdateController _updateController = AppUpdateController.instance;
-  int _currentIndex = 3;
+  int _currentIndex = 0;
   int _pendingVoteCount = 0;
   bool _isRooted = false;
 
@@ -352,8 +352,8 @@ class _AppShellState extends State<AppShell> {
   });
 
   List<Widget> get _pages => [
-        _citizenPage,
         const SquareTabPage(),
+        _citizenPage,
         ImTabPage(runtime: ImRuntime()),
         const TransactionTabPage(),
         ProfilePage(showSettingsUpdateDot: _updateController.state.hasUpdate),
@@ -414,6 +414,11 @@ class _AppShellState extends State<AppShell> {
             });
           },
           destinations: [
+            const NavigationDestination(
+              icon: Icon(Icons.explore_outlined),
+              selectedIcon: Icon(Icons.explore),
+              label: '广场',
+            ),
             NavigationDestination(
                 icon: Badge(
                   isLabelVisible: _pendingVoteCount > 0,
@@ -428,11 +433,6 @@ class _AppShellState extends State<AppShell> {
                   child: const Icon(Icons.how_to_vote),
                 ),
                 label: '公民'),
-            const NavigationDestination(
-              icon: Icon(Icons.explore_outlined),
-              selectedIcon: Icon(Icons.explore),
-              label: '广场',
-            ),
             const NavigationDestination(
               icon: Icon(Icons.chat_bubble_outline_rounded),
               selectedIcon: Icon(Icons.chat_bubble_rounded),

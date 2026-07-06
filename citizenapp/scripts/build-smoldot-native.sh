@@ -107,7 +107,10 @@ build_macos() {
   echo ""
   echo "=== 编译 macOS (arm64，桌面调试用) ==="
   cd "$RUST_DIR"
-  cargo build --release
+  # macOS 桌面调试库要给 Dart FFI / flutter test 直接 dlopen。
+  # Rust release profile 的 strip=true 会让本机 dyld 报 LINKEDIT 对齐错误，
+  # 因此 host 调试库单独禁用 strip；Android/iOS 打包库仍沿用 release profile。
+  CARGO_PROFILE_RELEASE_STRIP=false cargo build --release
 
   echo "macOS arm64: $RUST_DIR/target/release/libsmoldot.dylib ($(wc -c < "$RUST_DIR/target/release/libsmoldot.dylib" | tr -d ' ') bytes)"
 }

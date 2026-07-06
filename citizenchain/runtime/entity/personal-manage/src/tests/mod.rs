@@ -382,6 +382,7 @@ pub fn seed_active_multisig(
     personal_admins::AdminAccounts::<Test>::insert(
         account.clone(),
         admin_primitives::AdminAccount {
+            cid_number: Default::default(),
             institution_code: PMUL,
             kind: admin_primitives::AdminAccountKind::PersonalMultisig,
             admins: admins_ac,

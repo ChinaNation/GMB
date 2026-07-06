@@ -55,7 +55,7 @@ export function NodeModeSection({ nodeMode, onUpdated }: Props) {
                 .filter(Boolean)
                 .join(' ');
 
-              // 这里仅选择链数据模式；通信节点功能在独立设置区开启。
+              // 这里仅选择链数据模式；聊天投递不再由区块链节点承载。
               return (
                 <button
                   key={option.mode}

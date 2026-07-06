@@ -1,5 +1,5 @@
 use super::{
-    benchmarking::{RemarkBuilder, TransferWithRemarkBuilder, inherent_benchmark_data},
+    benchmarking::{inherent_benchmark_data, RemarkBuilder, TransferWithRemarkBuilder},
     chain_spec,
     cli::{Cli, Subcommand},
     service,
@@ -9,7 +9,7 @@ use frame_benchmarking_cli::{BenchmarkCmd, ExtrinsicFactory, SUBSTRATE_REFERENCE
 use primitives::core_const::{SS58_FORMAT, SUPPORT_URL};
 use sc_cli::SubstrateCli;
 use sc_service::PartialComponents;
-use sp_core::crypto::{Ss58AddressFormat, set_default_ss58_version};
+use sp_core::crypto::{set_default_ss58_version, Ss58AddressFormat};
 use sp_keyring::Sr25519Keyring;
 
 impl SubstrateCli for Cli {

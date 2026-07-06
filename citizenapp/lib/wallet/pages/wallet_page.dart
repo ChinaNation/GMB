@@ -108,7 +108,6 @@ String? extractColdWalletImportAddress(String raw) {
       return result.extractedAddress?.trim();
     case QrRouteType.signRequest:
     case QrRouteType.signResponse:
-    case QrRouteType.imNodePairing:
     case QrRouteType.unknown:
       if (_coldWalletPubkeyPattern.hasMatch(text)) {
         return text;

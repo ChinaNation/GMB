@@ -1,9 +1,11 @@
 # ADR-020 citizenapp P2P IM 私人通信全节点方案
 
-- 状态：Accepted target-state
+- 状态：Superseded
 - 决议日期：2026-06-14
 - 关联任务卡：`memory/08-tasks/open/20260614-im-p2p.md`
 - 替代文档：`memory/05-modules/citizenapp/im/IM_TECHNICAL.md`
+
+> 2026-07-05 追加：本 ADR 的“私人通信全节点 / `/gmb/im/1` / 区块链节点承载聊天”路线已被当前 IM 技术方案替代。当前正式路线只保留 Cloudflare 密文 mailbox 互联网聊天和手机近场聊天；本 ADR 仅作为历史决策记录，不得作为新实现依据。
 
 ## 背景
 

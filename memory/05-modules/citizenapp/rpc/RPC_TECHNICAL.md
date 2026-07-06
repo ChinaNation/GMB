@@ -24,6 +24,7 @@
 - 当前 `smoldot-light` Rust 内核通过 Git submodule 位于：`citizenapp/third_party/smoldot-pow`
 - 这两层收编的目的，是为后续 PoW 专用 typed capability 改造建立可控演进入口
 - Android 真机 ABI 只支持 `arm64-v8a` 与 `armeabi-v7a`。`scripts/build-smoldot-native.sh android` 必须同时构建 `aarch64-linux-android` 与 `armv7-linux-androideabi`，并分别写入 `android/app/src/main/jniLibs/arm64-v8a/libsmoldot.so` 与 `android/app/src/main/jniLibs/armeabi-v7a/libsmoldot.so`；APK 构建入口必须显式传入 `--target-platform android-arm,android-arm64`，避免生成未适配 smoldot 的 x86 / x86_64 包内容。
+- macOS 桌面调试库只用于 Dart FFI / `flutter test` 本机验收。`scripts/build-smoldot-native.sh macos` 必须设置 `CARGO_PROFILE_RELEASE_STRIP=false`，否则 Rust release profile 的 `strip=true` 会导致 dyld 报 `mis-aligned LINKEDIT string pool`，OpenMLS native 测试会被误判为 native 库不可用。
 
 ## 2. 目录结构
 

@@ -192,7 +192,7 @@
 
 ## 9. 全节点模式设置边界
 
-2026-05-23 起，桌面设置页新增“全节点模式”入口；2026-06-15 起，通信节点能力从全节点模式中拆出，固定为独立 IM 功能开关。
+2026-05-23 起，桌面设置页新增“全节点模式”入口；2026-07-05 起，CitizenApp 私密聊天不再由区块链节点承载，桌面设置页不再提供 IM 通信节点功能开关。
 
 - 当前默认模式：归档全节点。
 - 当前可选模式：归档全节点。
@@ -205,7 +205,7 @@
   - 当前版本只允许写入归档全节点；普通全节点仍会被后端拒绝。
   - 如果本机旧配置曾错误保存 `communication`，读取时按归档全节点清理。
 - 切换边界：
-  - 全节点模式只描述链数据保存方式，不承载 IM 通信开关。
+  - 全节点模式只描述链数据保存方式，不承载 IM 通信开关或聊天投递能力。
   - 后续普通全节点真正实现时，少数据模式切换到多数据模式应从网络补充同步数据；多数据模式切换到少数据模式应删除不再需要的本地数据。
   - 在普通全节点底层能力完成前，不得让设置页暗示当前已执行剪裁或删除数据。
 
@@ -214,51 +214,22 @@
 2026-06-29 起，节点桌面端只在用户手动确认后启动链上中国平台，不再随节点程序启动自动拉起 OnChina 子进程。
 
 - 固定入口：`https://onchina.local:8964`。
-- 设置页入口：`frontend/settings/OnChinaPlatformSection.tsx` 位于“全节点模式”和“通信节点功能”之间，左侧显示“链上中国平台”，右侧显示 `未开启` / `启动中` / `已开启` 状态标签，状态标签右侧显示固定入口，最右侧按钮按进程状态显示“启动”或“关闭”。
+- 设置页入口：`frontend/settings/OnChinaPlatformSection.tsx` 位于“全节点模式”之后，左侧显示“链上中国平台”，右侧显示 `未开启` / `启动中` / `已开启` 状态标签，状态标签右侧显示固定入口，最右侧按钮按进程状态显示“启动”或“关闭”。
 - 二次确认：点击“启动”或“关闭”只打开确认弹窗；确认后调用 `start_onchina_platform` 或 `stop_onchina_platform`，不自动打开浏览器。
 - 后端命令：`src/settings/onchina_platform/mod.rs` 提供 `get_onchina_platform` / `start_onchina_platform` / `stop_onchina_platform`，只返回本进程管理的 OnChina 子进程状态、`/api/v1/health` 真实健康结果和固定入口；只有健康接口返回 `UP` 才显示 `已开启`。
 - 子进程管理：`src/onchina_proc/mod.rs` 负责解析随包或开发期 `onchina` 二进制、注入链 RPC / 内嵌 PG / TLS / 前端资源环境变量、启动进程、清理已退出句柄和 App 退出时停掉已启动子进程。
 - 默认行为：`src/desktop/mod.rs` 仍自动启动区块链节点和同步守护，但不会自动启动链上中国平台，避免只挖矿节点承担 PostgreSQL、HTTPS 管理后台和浏览器业务入口。
 - HTTPS 入口：OnChina TLS 证书目标主机为 `onchina.local`；旧 `localhost/127.0.0.1` 证书会在下次启动时按主机标记重新生成。
 
-### 9.2 通信节点 IM 边界
+### 9.2 IM 聊天承载边界
 
-2026-06-14 起，通信节点 IM 能力统一规划到 `citizenchain/node/src/im/`，并按 ADR-020 固定为只服务本机用户的通信节点；2026-06-15 起，桌面设置页通过独立“通信节点功能”开关启用，不再作为全节点模式选项。
+2026-07-05 起，CitizenApp 私密聊天正式路线只保留 Cloudflare 密文 mailbox 互联网聊天和手机近场聊天，区块链节点软件不再承载聊天投递、聊天 mailbox、KeyPackage 池或手机配对入口。
 
-- 模块定位：通信节点用于让公民用户全天候实时在线，承接自己的端到端加密 IM 收件箱、KeyPackage 池、密文消息投递、设备绑定和通信端点管理。
-- 私人边界：一台通信节点可以服务同一用户多台手机和多个钱包聊天号；不互为中继，不做公共 Relay / DHT / rendezvous，不替第三方存消息。
-- 设置边界：归档全节点和普通全节点都可以开启通信节点功能；开启/关闭通信节点功能不改变链数据库、同步策略或全节点数据模式。
-- 网络能力：复用当前节点已经固定使用的 `sc-network/libp2p` 后端，注册 IM 专用 request-response 协议 `/gmb/im/1`，不默认另起 swarm。
-- 可达性：节点端点支持 IPv4、IPv6、用户自有 `dns4` / `dnsaddr`；不可达时消息留在发送队列重试，不退化成借别人节点中继。
-- 存储边界：通信节点只保存密文 `ImEnvelope`、附件密文分片、KeyPackage 池和必要索引，不读取明文；聊天内容、通信端点、设备公钥、PeerId、更新时间和撤销状态都只进入 IM 专属存储。
-- 账户边界：公民钱包地址是用户可见聊天号；钱包私钥只用于设备绑定证明，不作为 IM 消息加密密钥。
-- 业务边界：`src/im/` 不处理治理、投票、实名信息或交易业务；联系人详情里的“转账”继续归公民既有交易页面处理。
-- 用户入口：公民端从“我的 -> 用户资料”设置通信账户，从“我的通讯录 -> 联系人详情 -> 消息”进入聊天；“信息”Tab 只展示会话列表。
-- 配对入口：桌面设置页 `frontend/settings/communication-node/CommunicationNodeSection.tsx` 读取 `get_communication_node`，展示 `im_node_pairing` 固定二维码；公民端在“我的 -> 设置 -> 设置通信节点”扫码保存或更换自己的电脑通信节点。
-- 当前实现：`src/im/` 已提供通信节点策略结构、端点校验、钱包账户设备绑定、密文信封、多钱包账号 mailbox、多钱包账号 KeyPackage 池、`/gmb/im/1` request-response 配置、incoming handler、显式端点直连投递和 KeyPackage 拉取/消费 helper；`src/settings/communication-node/mod.rs` 已提供独立开关、IPv4/IPv6 端点生成和不含 RPC URL / 有效期的 QR_V1 配对二维码生成。
-- 当前命令：
-  - `get_communication_node`：读取通信节点功能状态、PeerId、multiaddr 和配对二维码 payload。
-  - `set_communication_node_enabled`：独立开启/关闭通信节点功能，不改变归档/普通全节点模式，不注册手机 RPC。
-  - `get_im_private_node_policy`：查询通信节点边界。
-  - `get_im_direct_network_capability`：查询 `/gmb/im/1` 直连网络 Spike 能力。
-  - `validate_im_node_endpoint`：校验 IPv4 / IPv6 / dns4 / dnsaddr multiaddr 与 PeerId 是否匹配。
-  - `validate_im_direct_delivery_request`：校验直连投递请求是否满足显式端点和目标钱包 mailbox 边界。
-  - `submit_im_direct_encrypted_envelope`：通过已启动的 sc-network 向对方通信节点直连投递密文信封。
-  - `fetch_im_direct_key_packages`：通过已启动的 sc-network 从对方通信节点直连拉取 KeyPackage。
-  - `consume_im_direct_key_package`：通过已启动的 sc-network 向对方通信节点声明消费一次性 KeyPackage。
-  - `register_im_owner_device`：登记钱包聊天账户、IM 设备、公钥、节点 PeerId、端点和钱包签名。
-  - `submit_im_encrypted_envelope`：提交投递给目标钱包地址的密文信封，拒绝未授权 mailbox。
-  - `fetch_im_pending_envelopes`：已授权设备拉取本钱包地址待收密文。
-  - `ack_im_envelope`：已授权设备确认并移除密文信封。
-  - `publish_im_key_package`：已授权手机向自己的通信节点发布 OpenMLS KeyPackage。
-  - `fetch_im_key_packages`：查询本机钱包地址 KeyPackage 池，供调试和本机验收使用。
-  - `consume_im_key_package`：消费本机钱包地址 KeyPackage，供调试和本机验收使用。
-- 正式手机连接：禁止使用节点 RPC。公民手机会离开家庭局域网，后续必须通过专用 IM P2P 通道连接自己的通信节点。
-- IM RPC 边界：通信节点不提供正式或调试节点 RPC 入口；手机连接自己的通信节点必须走后续专用 IM P2P 通道。
-- 持久化边界：mailbox 快照落在 `base-path/im/mailbox.json`，包含多钱包账号设备绑定、pending envelope 和 ack tombstone；KeyPackage 池快照落在 `base-path/im/keypackages.json`，包含多钱包账号 KeyPackage、TTL 和消费时间；节点启动时加载，登记/投递/ack/发布/消费后写回。
-- sc-network Spike 结论：当前节点能注册 request-response 协议并处理 incoming；outbound 直连会先把显式 `PeerId + multiaddr` 写入地址簿，再用 `NetworkService::request(..., TryConnect)` 发起请求；该路径不使用 DHT、rendezvous 或 Relay。
-- 双节点运行态验收：`citizenchain/scripts/im-two-node-smoke.sh` 已用两个临时 headless 节点验证 KeyPackage 发布/重启恢复/直连拉取/消费、A→B 密文投递、B 重启后 pending 不丢、B 授权设备拉取、ack、ack 后重启不重复、第三方 mailbox 拒绝和 ack 后重复投递不入队。
-- 未完成能力：设备撤销、正式容量配置、TTL 后台清理、真机双手机联调和近场原生能力仍需后续任务落地。
+- 删除边界：已删除 `citizenchain/node/src/im/`、`src/settings/communication-node/`、`frontend/settings/communication-node/`、`/gmb/im/1` 注册、通信节点 Tauri 命令、桌面通信节点二维码和 `citizenchain/scripts/im-two-node-smoke.sh`。
+- 全节点边界：归档全节点和普通全节点只描述链数据保存方式；节点同步、挖矿、治理、交易和链上中国平台启动不受 IM 方案调整影响。
+- App 聊天边界：CitizenApp 私聊和群聊继续使用钱包地址作为聊天账户、OpenMLS 端到端加密和 `GMB_IM_V1` / `ImEnvelope` 外层协议；互联网投递由 Cloudflare Worker / D1 / R2 的密文 mailbox 承接，近场由手机蓝牙 / Wi-Fi 直连承接。
+- 二维码边界：`QR_V1/k=5 im_node_pairing` 已删除，扫码解析端应按未知类型拒绝；桌面节点不再生成聊天配对二维码。
+- 禁止恢复：不得把聊天功能重新接回节点 RPC、`sc-network/libp2p` request-response、通信节点开关或区块链节点 mailbox；后续 IM 运行态验收以 CitizenApp + Cloudflare Worker 本地/预发环境和近场真机收发为准。
 
 ## 10. 桌面同步守护边界
 
@@ -291,13 +262,10 @@
 | `src/settings/node-mode/mod.rs` | 230 | 设置页全节点模式后端，当前只允许归档全节点，普通全节点由后端拒绝选择；旧 `communication` 本地值读取时清理回归档 |
 | `src/settings/onchina_platform/mod.rs` | 53 | 设置页链上中国平台后端，返回固定 HTTPS 入口并在用户确认后手动启动 / 停止 OnChina 子进程 |
 | `src/onchina_proc/mod.rs` | 183 | 节点桌面端 OnChina 子进程管理，负责手动启动、运行状态检查、环境变量注入和退出清理 |
-| `src/settings/communication-node/mod.rs` | 265 | 设置页通信节点功能后端，独立读写 `<app_data>/communication-node.json`，生成 IPv4/IPv6 固定配对二维码，不返回 RPC URL |
-| `src/im/` | 10 files | 通信节点 IM 边界模块，当前提供策略、端点、绑定、密文信封、持久化 mailbox、持久化 KeyPackage 池和 `/gmb/im/1` 网络接入；不提供节点 RPC 入口 |
 | `src/governance/runtime_upgrade/` | 5 files | 协议升级 node 后端，含 Tauri 命令、签名请求和 call_data 编码 |
 | `frontend/governance/runtime-upgrade/` | 4 files | 协议升级 node 前端，含协议升级、开发升级和专用 API |
 | `frontend/settings/node-mode/NodeModeSection.tsx` | 85 | 设置页全节点模式选择器，只展示归档/普通两种链数据模式，并将普通全节点置灰禁用 |
 | `frontend/settings/OnChinaPlatformSection.tsx` | 69 | 设置页链上中国平台启动行，展示状态标签、固定 HTTPS 入口、启动 / 关闭按钮和二次确认弹窗 |
-| `frontend/settings/communication-node/CommunicationNodeSection.tsx` | 126 | 设置页通信节点功能面板，独立开关、状态标签、PeerId/multiaddr 摘要和公民扫码配对二维码 |
 | `src/desktop/node_runner.rs` | 204 | 桌面端进程内节点启动器，含后台线程活跃标记和失败线程 join |
 | `src/home/sync_guard.rs` | 421 | 本机同步守护，检测 raw P2P 已连但 block sync peer 表为空并进入降级状态 |
 | `src/transaction/onchain_transaction/mod.rs` | 508 | 首页交易后端，包含钱包列表、矿工热钱包、余额查询、转账签名请求与提交 |

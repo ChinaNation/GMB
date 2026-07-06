@@ -21,7 +21,7 @@ class ImMemoryStore {
   List<ImConversationPreview> get conversations =>
       List.unmodifiable(_conversations);
 
-  /// 更新私人通信全节点概览。
+  /// 更新互联网 mailbox / 近场聊天概览。
   void updateOverview(ImInboxOverview overview) {
     _overview = overview;
   }

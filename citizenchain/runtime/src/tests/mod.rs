@@ -49,18 +49,21 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
         admin_primitives::AdminAccount {
             institution_code: votingengine::types::PRC,
             kind: admin_primitives::AdminAccountKind::PublicInstitution,
+            cid_number: Default::default(),
             // 固定治理机构管理员集合存 AdminProfile(来源 Genesis、逐人 meta 暂空)。
             admins: admin_accounts
                 .iter()
                 .cloned()
                 .map(|account| admin_primitives::AdminProfile {
-                    account,
+                    admin_account: account,
                     admin_cid_number: Default::default(),
-                    name: Default::default(),
-                    admin_role: Default::default(),
+                    admin_name: Default::default(),
+                    role_code: Default::default(),
+                    role_name: Default::default(),
                     term_start: 0,
                     term_end: 0,
-                    source: admin_primitives::AdminSource::Genesis,
+                    admin_source: admin_primitives::AdminSource::Genesis,
+                    admin_source_ref: Default::default(),
                 })
                 .collect::<Vec<_>>()
                 .try_into()
@@ -165,14 +168,17 @@ fn setup_frg_citizen_identity_admin(province_code: &[u8]) -> (sr25519::Pair, Acc
         admin_primitives::AdminAccount {
             institution_code: admin_primitives::FRG,
             kind: admin_primitives::AdminAccountKind::PublicInstitution,
+            cid_number: Default::default(),
             admins: vec![admin_primitives::AdminProfile {
-                account: registrar.clone(),
+                admin_account: registrar.clone(),
                 admin_cid_number: Default::default(),
-                name: Default::default(),
-                admin_role: Default::default(),
+                admin_name: Default::default(),
+                role_code: Default::default(),
+                role_name: Default::default(),
                 term_start: 0,
                 term_end: 0,
-                source: admin_primitives::AdminSource::Genesis,
+                admin_source: admin_primitives::AdminSource::Genesis,
+                admin_source_ref: Default::default(),
             }]
             .try_into()
             .expect("single registrar admin fits"),

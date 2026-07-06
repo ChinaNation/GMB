@@ -637,8 +637,8 @@ class PublicInstitutionSubscriptionEntity {
 
 /// IM 会话本地索引。
 ///
-/// 聊天明文只允许在公民手机本地保存；通信全节点只保存密文
-/// envelope。本表负责会话列表首屏，不参与链上状态。
+/// 聊天明文只允许在公民手机本地保存；Cloudflare mailbox 与近场 transport
+/// 只承载密文 envelope。本表负责会话列表首屏，不参与链上状态。
 @collection
 class ImConversationEntity {
   Id id = Isar.autoIncrement;
@@ -668,7 +668,7 @@ class ImConversationEntity {
 /// IM 消息本地记录。
 ///
 /// `envelopeBytesHex` 保存完整 GMB_IM_V1 Protobuf bytes，便于重试
-/// 和排查；`plaintext` 只写手机本地库，绝不上传私人通信全节点。
+/// 和排查；`plaintext` 只写手机本地库，绝不上传 Cloudflare 或近场 transport。
 @collection
 class ImMessageEntity {
   Id id = Isar.autoIncrement;
@@ -744,7 +744,7 @@ class ImPendingInboundEntity {
 /// IM 路由缓存记录。
 ///
 /// IM 路由缓存只保存在公民手机本地，用于把联系人钱包地址映射到
-/// OpenMLS 设备和通信节点端点；用户联系人仍以“我的通讯录”为准。
+/// OpenMLS 设备、Cloudflare mailbox 和近场提示；用户联系人仍以“我的通讯录”为准。
 @collection
 class ImRouteCacheEntity {
   Id id = Isar.autoIncrement;
@@ -762,8 +762,8 @@ class ImRouteCacheEntity {
   late String deviceId;
   late String devicePublicKeyHex;
   late String safetyNumber;
-  late String nodePeerId;
-  late String nodeMultiaddr;
+  String? cloudflareMailboxId;
+  String? nearbyPeerHint;
   String? note;
   late int createdAtMillis;
   late int updatedAtMillis;

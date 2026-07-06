@@ -10,8 +10,6 @@ class ImBindingPayload {
     required this.walletAccount,
     required this.imDeviceId,
     required this.imDevicePubkey,
-    required this.nodePeerId,
-    required this.nodeEndpoints,
     required this.expiresAtMillis,
     required this.nonce,
   });
@@ -25,12 +23,6 @@ class ImBindingPayload {
   /// IM 设备公钥；真实 OpenMLS 接入后由密码模块提供。
   final String imDevicePubkey;
 
-  /// 自己私人通信全节点 PeerId。
-  final String nodePeerId;
-
-  /// 自己节点可达端点，支持 IPv4、IPv6、dns4 和 dnsaddr。
-  final List<String> nodeEndpoints;
-
   /// 绑定凭证过期时间，毫秒时间戳。
   final int expiresAtMillis;
 
@@ -43,12 +35,6 @@ class ImBindingPayload {
       ..add(_scaleString(walletAccount))
       ..add(_scaleString(imDeviceId))
       ..add(_scaleString(imDevicePubkey))
-      ..add(_scaleString(nodePeerId))
-      ..add(_scaleCompact(nodeEndpoints.length));
-    for (final endpoint in nodeEndpoints) {
-      builder.add(_scaleString(endpoint));
-    }
-    builder
       ..add(_u64Le(expiresAtMillis))
       ..add(_scaleString(nonce));
     return builder.toBytes();
@@ -57,14 +43,12 @@ class ImBindingPayload {
   /// SCALE 签名载荷 hex,供 QR_V1 sign_request 的 `b.d` 使用。
   String signingPayloadHex() => _hex(signingPayloadBytes());
 
-  /// 转为提交给私人通信全节点的 JSON map。
+  /// 转为提交给 Cloudflare mailbox 设备绑定接口的 JSON map。
   Map<String, Object?> toUnsignedJson() {
     return {
       'wallet_account': walletAccount,
       'im_device_id': imDeviceId,
       'im_device_pubkey': imDevicePubkey,
-      'node_peer_id': nodePeerId,
-      'node_endpoints': nodeEndpoints,
       'expires_at_millis': expiresAtMillis,
       'nonce': nonce,
     };

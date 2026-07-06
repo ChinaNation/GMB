@@ -435,9 +435,6 @@ pub fn new_full(
         other: (block_import, grandpa_link, mut telemetry),
     } = new_partial(&config)?;
 
-    crate::im::commands::init_mailbox_storage(config.base_path.path())
-        .map_err(|e| ServiceError::Other(e.into()))?;
-
     let keystore = keystore_container.keystore();
     let role = config.role;
     let name = config.network.node_name.clone();
@@ -475,10 +472,6 @@ pub fn new_full(
             peer_store_handle,
         );
     net_config.add_notification_protocol(grandpa_protocol_config);
-    let (im_protocol_config, im_inbound_rx) =
-        crate::im::network::request_response_config::<Block, NetworkBackend>();
-    net_config.add_request_response_protocol(im_protocol_config);
-
     let warp_sync = Arc::new(sc_consensus_grandpa::warp_proof::NetworkProvider::new(
         backend.clone(),
         grandpa_link.shared_authority_set().clone(),
@@ -498,10 +491,6 @@ pub fn new_full(
             block_relay: None,
             metrics,
         })?;
-
-    crate::im::network::spawn_incoming_handler(&mut task_manager, im_inbound_rx);
-    crate::im::network::register_network_service(Arc::new(network.clone()))
-        .map_err(|e| ServiceError::Other(e.into()))?;
 
     if config.offchain_worker.enabled {
         let offchain_workers =

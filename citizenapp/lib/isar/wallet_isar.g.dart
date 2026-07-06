@@ -26952,29 +26952,29 @@ const ImRouteCacheEntitySchema = CollectionSchema(
   name: r'ImRouteCacheEntity',
   id: 5261079736093654422,
   properties: {
-    r'createdAtMillis': PropertySchema(
+    r'cloudflareMailboxId': PropertySchema(
       id: 0,
+      name: r'cloudflareMailboxId',
+      type: IsarType.string,
+    ),
+    r'createdAtMillis': PropertySchema(
+      id: 1,
       name: r'createdAtMillis',
       type: IsarType.long,
     ),
     r'deviceId': PropertySchema(
-      id: 1,
+      id: 2,
       name: r'deviceId',
       type: IsarType.string,
     ),
     r'devicePublicKeyHex': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'devicePublicKeyHex',
       type: IsarType.string,
     ),
-    r'nodeMultiaddr': PropertySchema(
-      id: 3,
-      name: r'nodeMultiaddr',
-      type: IsarType.string,
-    ),
-    r'nodePeerId': PropertySchema(
+    r'nearbyPeerHint': PropertySchema(
       id: 4,
-      name: r'nodePeerId',
+      name: r'nearbyPeerHint',
       type: IsarType.string,
     ),
     r'note': PropertySchema(
@@ -27055,10 +27055,20 @@ int _imRouteCacheEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
+  {
+    final value = object.cloudflareMailboxId;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.deviceId.length * 3;
   bytesCount += 3 + object.devicePublicKeyHex.length * 3;
-  bytesCount += 3 + object.nodeMultiaddr.length * 3;
-  bytesCount += 3 + object.nodePeerId.length * 3;
+  {
+    final value = object.nearbyPeerHint;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   {
     final value = object.note;
     if (value != null) {
@@ -27078,11 +27088,11 @@ void _imRouteCacheEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeLong(offsets[0], object.createdAtMillis);
-  writer.writeString(offsets[1], object.deviceId);
-  writer.writeString(offsets[2], object.devicePublicKeyHex);
-  writer.writeString(offsets[3], object.nodeMultiaddr);
-  writer.writeString(offsets[4], object.nodePeerId);
+  writer.writeString(offsets[0], object.cloudflareMailboxId);
+  writer.writeLong(offsets[1], object.createdAtMillis);
+  writer.writeString(offsets[2], object.deviceId);
+  writer.writeString(offsets[3], object.devicePublicKeyHex);
+  writer.writeString(offsets[4], object.nearbyPeerHint);
   writer.writeString(offsets[5], object.note);
   writer.writeString(offsets[6], object.routeDisplayName);
   writer.writeString(offsets[7], object.routeId);
@@ -27098,12 +27108,12 @@ ImRouteCacheEntity _imRouteCacheEntityDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = ImRouteCacheEntity();
-  object.createdAtMillis = reader.readLong(offsets[0]);
-  object.deviceId = reader.readString(offsets[1]);
-  object.devicePublicKeyHex = reader.readString(offsets[2]);
+  object.cloudflareMailboxId = reader.readStringOrNull(offsets[0]);
+  object.createdAtMillis = reader.readLong(offsets[1]);
+  object.deviceId = reader.readString(offsets[2]);
+  object.devicePublicKeyHex = reader.readString(offsets[3]);
   object.id = id;
-  object.nodeMultiaddr = reader.readString(offsets[3]);
-  object.nodePeerId = reader.readString(offsets[4]);
+  object.nearbyPeerHint = reader.readStringOrNull(offsets[4]);
   object.note = reader.readStringOrNull(offsets[5]);
   object.routeDisplayName = reader.readString(offsets[6]);
   object.routeId = reader.readString(offsets[7]);
@@ -27121,15 +27131,15 @@ P _imRouteCacheEntityDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readLong(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 1:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
       return (reader.readString(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 5:
       return (reader.readStringOrNull(offset)) as P;
     case 6:
@@ -27447,6 +27457,160 @@ extension ImRouteCacheEntityQueryWhere
 
 extension ImRouteCacheEntityQueryFilter
     on QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QFilterCondition> {
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'cloudflareMailboxId',
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'cloudflareMailboxId',
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'cloudflareMailboxId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'cloudflareMailboxId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'cloudflareMailboxId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'cloudflareMailboxId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'cloudflareMailboxId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'cloudflareMailboxId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'cloudflareMailboxId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'cloudflareMailboxId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'cloudflareMailboxId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      cloudflareMailboxIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'cloudflareMailboxId',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
       createdAtMillisEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
@@ -27832,13 +27996,31 @@ extension ImRouteCacheEntityQueryFilter
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodeMultiaddrEqualTo(
-    String value, {
+      nearbyPeerHintIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'nearbyPeerHint',
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      nearbyPeerHintIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'nearbyPeerHint',
+      ));
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
+      nearbyPeerHintEqualTo(
+    String? value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'nodeMultiaddr',
+        property: r'nearbyPeerHint',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -27846,15 +28028,15 @@ extension ImRouteCacheEntityQueryFilter
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodeMultiaddrGreaterThan(
-    String value, {
+      nearbyPeerHintGreaterThan(
+    String? value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'nodeMultiaddr',
+        property: r'nearbyPeerHint',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -27862,15 +28044,15 @@ extension ImRouteCacheEntityQueryFilter
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodeMultiaddrLessThan(
-    String value, {
+      nearbyPeerHintLessThan(
+    String? value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'nodeMultiaddr',
+        property: r'nearbyPeerHint',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -27878,16 +28060,16 @@ extension ImRouteCacheEntityQueryFilter
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodeMultiaddrBetween(
-    String lower,
-    String upper, {
+      nearbyPeerHintBetween(
+    String? lower,
+    String? upper, {
     bool includeLower = true,
     bool includeUpper = true,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'nodeMultiaddr',
+        property: r'nearbyPeerHint',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -27898,13 +28080,13 @@ extension ImRouteCacheEntityQueryFilter
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodeMultiaddrStartsWith(
+      nearbyPeerHintStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'nodeMultiaddr',
+        property: r'nearbyPeerHint',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -27912,13 +28094,13 @@ extension ImRouteCacheEntityQueryFilter
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodeMultiaddrEndsWith(
+      nearbyPeerHintEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'nodeMultiaddr',
+        property: r'nearbyPeerHint',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -27926,10 +28108,10 @@ extension ImRouteCacheEntityQueryFilter
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodeMultiaddrContains(String value, {bool caseSensitive = true}) {
+      nearbyPeerHintContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'nodeMultiaddr',
+        property: r'nearbyPeerHint',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -27937,10 +28119,10 @@ extension ImRouteCacheEntityQueryFilter
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodeMultiaddrMatches(String pattern, {bool caseSensitive = true}) {
+      nearbyPeerHintMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'nodeMultiaddr',
+        property: r'nearbyPeerHint',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -27948,156 +28130,20 @@ extension ImRouteCacheEntityQueryFilter
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodeMultiaddrIsEmpty() {
+      nearbyPeerHintIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'nodeMultiaddr',
+        property: r'nearbyPeerHint',
         value: '',
       ));
     });
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodeMultiaddrIsNotEmpty() {
+      nearbyPeerHintIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'nodeMultiaddr',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodePeerIdEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'nodePeerId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodePeerIdGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'nodePeerId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodePeerIdLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'nodePeerId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodePeerIdBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'nodePeerId',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodePeerIdStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'nodePeerId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodePeerIdEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'nodePeerId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodePeerIdContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'nodePeerId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodePeerIdMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'nodePeerId',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodePeerIdIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'nodePeerId',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterFilterCondition>
-      nodePeerIdIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'nodePeerId',
+        property: r'nearbyPeerHint',
         value: '',
       ));
     });
@@ -28867,6 +28913,20 @@ extension ImRouteCacheEntityQueryLinks
 extension ImRouteCacheEntityQuerySortBy
     on QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QSortBy> {
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
+      sortByCloudflareMailboxId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cloudflareMailboxId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
+      sortByCloudflareMailboxIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cloudflareMailboxId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
       sortByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAtMillis', Sort.asc);
@@ -28909,30 +28969,16 @@ extension ImRouteCacheEntityQuerySortBy
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
-      sortByNodeMultiaddr() {
+      sortByNearbyPeerHint() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'nodeMultiaddr', Sort.asc);
+      return query.addSortBy(r'nearbyPeerHint', Sort.asc);
     });
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
-      sortByNodeMultiaddrDesc() {
+      sortByNearbyPeerHintDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'nodeMultiaddr', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
-      sortByNodePeerId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'nodePeerId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
-      sortByNodePeerIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'nodePeerId', Sort.desc);
+      return query.addSortBy(r'nearbyPeerHint', Sort.desc);
     });
   }
 
@@ -29024,6 +29070,20 @@ extension ImRouteCacheEntityQuerySortBy
 extension ImRouteCacheEntityQuerySortThenBy
     on QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QSortThenBy> {
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
+      thenByCloudflareMailboxId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cloudflareMailboxId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
+      thenByCloudflareMailboxIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'cloudflareMailboxId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
       thenByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAtMillis', Sort.asc);
@@ -29080,30 +29140,16 @@ extension ImRouteCacheEntityQuerySortThenBy
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
-      thenByNodeMultiaddr() {
+      thenByNearbyPeerHint() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'nodeMultiaddr', Sort.asc);
+      return query.addSortBy(r'nearbyPeerHint', Sort.asc);
     });
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
-      thenByNodeMultiaddrDesc() {
+      thenByNearbyPeerHintDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'nodeMultiaddr', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
-      thenByNodePeerId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'nodePeerId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QAfterSortBy>
-      thenByNodePeerIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'nodePeerId', Sort.desc);
+      return query.addSortBy(r'nearbyPeerHint', Sort.desc);
     });
   }
 
@@ -29195,6 +29241,14 @@ extension ImRouteCacheEntityQuerySortThenBy
 extension ImRouteCacheEntityQueryWhereDistinct
     on QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QDistinct> {
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QDistinct>
+      distinctByCloudflareMailboxId({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'cloudflareMailboxId',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QDistinct>
       distinctByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAtMillis');
@@ -29217,17 +29271,10 @@ extension ImRouteCacheEntityQueryWhereDistinct
   }
 
   QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QDistinct>
-      distinctByNodeMultiaddr({bool caseSensitive = true}) {
+      distinctByNearbyPeerHint({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'nodeMultiaddr',
+      return query.addDistinctBy(r'nearbyPeerHint',
           caseSensitive: caseSensitive);
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, ImRouteCacheEntity, QDistinct>
-      distinctByNodePeerId({bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'nodePeerId', caseSensitive: caseSensitive);
     });
   }
 
@@ -29284,6 +29331,13 @@ extension ImRouteCacheEntityQueryProperty
     });
   }
 
+  QueryBuilder<ImRouteCacheEntity, String?, QQueryOperations>
+      cloudflareMailboxIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'cloudflareMailboxId');
+    });
+  }
+
   QueryBuilder<ImRouteCacheEntity, int, QQueryOperations>
       createdAtMillisProperty() {
     return QueryBuilder.apply(this, (query) {
@@ -29305,17 +29359,10 @@ extension ImRouteCacheEntityQueryProperty
     });
   }
 
-  QueryBuilder<ImRouteCacheEntity, String, QQueryOperations>
-      nodeMultiaddrProperty() {
+  QueryBuilder<ImRouteCacheEntity, String?, QQueryOperations>
+      nearbyPeerHintProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'nodeMultiaddr');
-    });
-  }
-
-  QueryBuilder<ImRouteCacheEntity, String, QQueryOperations>
-      nodePeerIdProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'nodePeerId');
+      return query.addPropertyName(r'nearbyPeerHint');
     });
   }
 

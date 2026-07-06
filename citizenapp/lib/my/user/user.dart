@@ -21,7 +21,6 @@ import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/im/im_chat_page.dart';
-import 'package:citizenapp/im/im_node_settings_page.dart';
 import 'package:citizenapp/im/im_runtime.dart';
 import 'package:citizenapp/update/app_update.dart';
 import 'package:citizenapp/update/update_badge.dart';
@@ -1062,7 +1061,23 @@ class _ContactDetailPage extends StatelessWidget {
             conversationId: conversationId,
             text: text,
           ),
+          onSendAttachment: (attachment) => runtime.sendAttachment(
+            peerWalletAddress: contact.address,
+            conversationId: conversationId,
+            attachment: attachment,
+          ),
+          onDownloadAttachment: (
+            conversationId,
+            controlPlaintext,
+          ) =>
+              runtime.downloadAttachment(
+            conversationId: conversationId,
+            controlPlaintext: controlPlaintext,
+          ),
           onSync: runtime.syncPending,
+          onStartRealtime: runtime.startRealtimeSync,
+          onDeleteConversation: () =>
+              runtime.deleteLocalConversation(conversationId),
         ),
       ),
     );
@@ -1479,22 +1494,6 @@ class _SettingsPageState extends State<_SettingsPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 18),
-                Container(
-                  decoration:
-                      AppTheme.cardDecoration(radius: AppTheme.radiusLg),
-                  child: _buildNavSettingTile(
-                    icon: Icons.dns_outlined,
-                    title: '设置通信节点',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ImNodeSettingsPage(),
-                        ),
-                      );
-                    },
-                  ),
-                ),
                 const SizedBox(height: 28),
                 // 关于区标题
                 const Padding(
@@ -1624,46 +1623,6 @@ class _SettingsPageState extends State<_SettingsPage> {
             onChanged: onChanged,
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildNavSettingTile({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withAlpha(20),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, size: 20, color: AppTheme.primary),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded,
-                color: AppTheme.textTertiary),
-          ],
-        ),
       ),
     );
   }

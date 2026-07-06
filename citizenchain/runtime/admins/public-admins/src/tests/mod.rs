@@ -158,13 +158,15 @@ fn admins(count: u8) -> Vec<AdminProfile<AccountId32>> {
 /// 构造一条空元数据(Registry 来源)的管理员资料。
 fn profile(acc: AccountId32) -> AdminProfile<AccountId32> {
     AdminProfile {
-        account: acc,
+        admin_account: acc,
         admin_cid_number: BoundedVec::new(),
-        name: BoundedVec::new(),
-        admin_role: BoundedVec::new(),
+        admin_name: BoundedVec::new(),
+        role_code: Default::default(),
+        role_name: BoundedVec::new(),
         term_start: 0,
         term_end: 0,
-        source: AdminSource::Registry,
+        admin_source: AdminSource::Registry,
+        admin_source_ref: Default::default(),
     }
 }
 
@@ -172,24 +174,26 @@ fn profile(acc: AccountId32) -> AdminProfile<AccountId32> {
 fn profile_full(
     acc: AccountId32,
     cid: &[u8],
-    name: &[u8],
-    admin_role: &[u8],
+    admin_name: &[u8],
+    role_name: &[u8],
     term_start: u32,
     term_end: u32,
 ) -> AdminProfile<AccountId32> {
     AdminProfile {
-        account: acc,
+        admin_account: acc,
         admin_cid_number: BoundedVec::<u8, ConstU32<ADMIN_CID_NUMBER_MAX_BYTES>>::try_from(
             cid.to_vec(),
         )
         .expect("cid fits"),
-        name: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(name.to_vec())
+        admin_name: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(admin_name.to_vec())
             .expect("name fits"),
-        admin_role: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(admin_role.to_vec())
+        role_code: Default::default(),
+        role_name: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(role_name.to_vec())
             .expect("title fits"),
         term_start,
         term_end,
-        source: AdminSource::MutualElection,
+        admin_source: AdminSource::Registry,
+        admin_source_ref: Default::default(),
     }
 }
 
@@ -199,6 +203,7 @@ fn public_admins_accept_public_codes_and_reject_private_codes() {
         let root = account(10);
         assert_ok!(PublicAdmins::do_create_pending_admin_account(
             root.clone(),
+            b"TEST-CID".to_vec(),
             code_bytes("PRS"),
             AdminAccountKind::PublicInstitution,
             admins(3),
@@ -214,6 +219,7 @@ fn public_admins_accept_public_codes_and_reject_private_codes() {
 
         assert_ok!(PublicAdmins::do_create_pending_admin_account(
             account(11),
+            b"TEST-CID".to_vec(),
             code_bytes("UNIN"),
             AdminAccountKind::PublicInstitution,
             admins(2),
@@ -223,6 +229,7 @@ fn public_admins_accept_public_codes_and_reject_private_codes() {
         assert_noop!(
             PublicAdmins::do_create_pending_admin_account(
                 account(12),
+                b"TEST-CID".to_vec(),
                 code_bytes("SFLP"),
                 AdminAccountKind::PublicInstitution,
                 admins(3),
@@ -239,6 +246,7 @@ fn public_admins_activate_and_query_active_admins() {
         let root = account(20);
         assert_ok!(PublicAdmins::do_create_pending_admin_account(
             root.clone(),
+            b"TEST-CID".to_vec(),
             code_bytes("CGOV"),
             AdminAccountKind::PublicInstitution,
             admins(3),
@@ -282,6 +290,7 @@ fn public_admins_store_and_query_admin_profiles() {
         ];
         assert_ok!(PublicAdmins::do_create_pending_admin_account(
             root.clone(),
+            b"TEST-CID".to_vec(),
             code_bytes("CGOV"),
             AdminAccountKind::PublicInstitution,
             profiles.clone(),
@@ -299,15 +308,15 @@ fn public_admins_store_and_query_admin_profiles() {
         let stored = PublicAdmins::active_account_admin_profiles(code_bytes("CGOV"), root)
             .expect("profiles present");
         assert_eq!(stored, profiles);
-        assert_eq!(stored[0].name.to_vec(), b"Alice".to_vec());
-        assert_eq!(stored[0].admin_role.to_vec(), b"Director".to_vec());
+        assert_eq!(stored[0].admin_name.to_vec(), b"Alice".to_vec());
+        assert_eq!(stored[0].role_name.to_vec(), b"Director".to_vec());
         assert_eq!(
             stored[0].admin_cid_number.to_vec(),
             b"GD000-CTZN8-191941078-2026".to_vec()
         );
         assert_eq!(stored[1].term_start, 11);
         assert_eq!(stored[1].term_end, 21);
-        assert_eq!(stored[1].source, AdminSource::MutualElection);
+        assert_eq!(stored[1].admin_source, AdminSource::Registry);
     });
 }
 
@@ -317,6 +326,7 @@ fn public_admins_accept_fixed_governance_codes_with_fixed_size() {
         assert_noop!(
             PublicAdmins::do_create_pending_admin_account(
                 account(30),
+                b"TEST-CID".to_vec(),
                 code_bytes("NRC"),
                 AdminAccountKind::PublicInstitution,
                 admins(3),
@@ -327,6 +337,7 @@ fn public_admins_accept_fixed_governance_codes_with_fixed_size() {
 
         assert_ok!(PublicAdmins::do_create_pending_admin_account(
             account(31),
+            b"TEST-CID".to_vec(),
             code_bytes("NRC"),
             AdminAccountKind::PublicInstitution,
             admins(NRC_ADMIN_COUNT as u8),
