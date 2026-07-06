@@ -77,14 +77,14 @@ preview_bucket_name = "citizenapp-square-media"
 
 [[env.production.d1_databases]]
 binding = "DB"
-database_name = "citizenapp-square-db"
-database_id = "00000000-0000-0000-0000-000000000201"
+database_name = "citizenapp-square-db-production"
+database_id = "0c5a0924-83ef-4347-bacc-b3f6f36da460"
 migrations_dir = "migrations"
 
 [[env.production.kv_namespaces]]
 binding = "FEED_CACHE"
-id = "00000000000000000000000000000201"
-preview_id = "00000000000000000000000000000201"
+id = "b72bbbcb36d240acb317fdaf79ce46f4"
+preview_id = "b72bbbcb36d240acb317fdaf79ce46f4"
 
 [[env.production.durable_objects.bindings]]
 name = "CHAT_REALTIME"

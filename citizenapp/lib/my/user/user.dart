@@ -46,10 +46,14 @@ class _ProfilePageState extends State<ProfilePage> {
   final UserProfileService _userProfileService = UserProfileService();
 
   UserProfileState _userProfile = const UserProfileState();
+  WalletProfile? _defaultWallet;
 
-  String get _communicationAddress {
-    return _userProfile.communicationAddress?.trim() ?? '';
-  }
+  /// 用户身份地址 = 默认用户钱包（列表中最靠前的热钱包）地址。
+  String get _communicationAddress => _defaultWallet?.address ?? '';
+
+  /// 用户昵称 = 默认用户钱包名称。
+  String get _nickname =>
+      _defaultWallet?.walletName ?? UserProfileService.defaultNickname;
 
   @override
   void initState() {
@@ -59,11 +63,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadState() async {
     final profile = await _userProfileService.getState();
+    final defaultWallet = await WalletManager().getDefaultWallet();
     if (!mounted) {
       return;
     }
     setState(() {
       _userProfile = profile;
+      _defaultWallet = defaultWallet;
     });
   }
 
@@ -92,14 +98,14 @@ class _ProfilePageState extends State<ProfilePage> {
     final address = _communicationAddress;
     if (address.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在用户资料中设置通信账户')),
+        const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
       );
       return;
     }
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => _MyQrCodePage(
-          contactName: _userProfile.nickname,
+          contactName: _nickname,
           address: address,
         ),
       ),
@@ -137,7 +143,7 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              _userProfile.nickname,
+              _nickname,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 19,
@@ -403,29 +409,38 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
 
   final GlobalKey _qrKey = GlobalKey();
   late UserProfileState _profile;
+  WalletProfile? _defaultWallet;
   bool _isSavingQr = false;
 
   @override
   void initState() {
     super.initState();
     _profile = widget.initialState;
+    _loadDefaultWallet();
+  }
+
+  Future<void> _loadDefaultWallet() async {
+    final wallet = await WalletManager().getDefaultWallet();
+    if (!mounted) return;
+    setState(() {
+      _defaultWallet = wallet;
+    });
   }
 
   // ---- 二维码数据 ----
 
-  bool get _isQrReady {
-    return (_profile.communicationAddress?.trim().isNotEmpty ?? false);
-  }
+  bool get _isQrReady => _defaultWallet != null;
 
   String get _qrPayload {
+    final wallet = _defaultWallet;
     return QrEnvelope<UserContactBody>(
       kind: QrKind.userContact,
       id: null,
       issuedAt: null,
       expiresAt: null,
       body: UserContactBody(
-        address: _profile.communicationAddress?.trim() ?? '',
-        contactName: _profile.nickname,
+        address: wallet?.address ?? '',
+        contactName: wallet?.walletName ?? UserProfileService.defaultNickname,
       ),
     ).toRawJson();
   }
@@ -487,16 +502,17 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     }
   }
 
-  // ---- 昵称（= 通信钱包名称，双向同步） ----
+  // ---- 昵称（= 默认钱包名称） ----
 
   Future<void> _editNickname() async {
-    if (_profile.communicationWalletIndex == null) {
+    final wallet = _defaultWallet;
+    if (wallet == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先设置通信账户')),
+        const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
       );
       return;
     }
-    final controller = TextEditingController(text: _profile.nickname);
+    final controller = TextEditingController(text: wallet.walletName);
     final nickname = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
@@ -528,35 +544,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     await WidgetsBinding.instance.endOfFrame;
     controller.dispose();
     if (!mounted || nickname == null || nickname.trim().isEmpty) return;
-    // 双向同步：同时改钱包名称 + 用户资料中的通信钱包名称
-    final walletManager = WalletManager();
-    await walletManager.renameWallet(
-        _profile.communicationWalletIndex!, nickname);
-    final saved = await _profileService.updateCommunicationWalletName(nickname);
-    if (!mounted) return;
-    setState(() {
-      _profile = saved;
-    });
-  }
-
-  // ---- 通信账户 ----
-
-  Future<void> _selectCommunicationWallet() async {
-    final wallet = await Navigator.of(context).push<WalletProfile>(
-      MaterialPageRoute(
-        builder: (_) => const MyWalletPage(selectForBind: true),
-      ),
-    );
-    if (!mounted || wallet == null) return;
-    final saved = await _profileService.setCommunicationWallet(
-      walletIndex: wallet.walletIndex,
-      address: wallet.address,
-      walletName: wallet.walletName,
-    );
-    if (!mounted) return;
-    setState(() {
-      _profile = saved;
-    });
+    // 昵称 = 默认钱包名，改昵称即改默认钱包名。
+    await WalletManager().renameWallet(wallet.walletIndex, nickname.trim());
+    await _loadDefaultWallet();
   }
 
   // ---- 通用行构建 ----
@@ -671,7 +661,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                       ),
                       child: const Center(
                         child: Text(
-                          '请设置通信账户后\n生成二维码',
+                          '请先在「我的 → 我的钱包」\n创建热钱包后生成二维码',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: AppTheme.textTertiary),
                         ),
@@ -696,17 +686,11 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
             ),
           ),
           const Divider(height: 1),
-          // ---- 用户昵称 ----
+          // ---- 用户昵称（= 默认钱包名） ----
           _buildSettingRow(
-            label: _profile.nickname,
+            label: _defaultWallet?.walletName ??
+                UserProfileService.defaultNickname,
             onTap: _editNickname,
-          ),
-          const Divider(height: 1),
-          // ---- 通信账户 ----
-          _buildSettingRow(
-            label: '通信账户',
-            value: _profile.communicationAddress ?? '未设置',
-            onTap: _selectCommunicationWallet,
           ),
           const Divider(height: 1),
         ],
@@ -1034,12 +1018,11 @@ class _ContactDetailPage extends StatelessWidget {
   final UserContact contact;
 
   Future<void> _openMessage(BuildContext context) async {
-    final profile = await UserProfileService().getState();
-    final sender = profile.communicationAddress?.trim() ?? '';
+    final sender = (await WalletManager().getDefaultWallet())?.address ?? '';
     if (sender.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在用户资料中设置通信账户')),
+        const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
       );
       return;
     }

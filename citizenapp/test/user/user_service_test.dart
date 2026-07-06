@@ -10,42 +10,25 @@ void main() {
   });
 
   group('UserProfileService', () {
-    test('returns default nickname when no communication wallet is set',
-        () async {
+    test('returns empty profile when nothing stored', () async {
       final service = UserProfileService();
 
       final state = await service.getState();
 
-      expect(state.nickname, UserProfileService.defaultNickname);
-      expect(state.communicationWalletName, isNull);
+      expect(state.avatarPath, isNull);
+      expect(state.backgroundPath, isNull);
     });
 
-    test('setCommunicationWallet stores wallet and exposes nickname', () async {
+    test('persists avatar and background paths across reads', () async {
       final service = UserProfileService();
 
-      final state = await service.setCommunicationWallet(
-        walletIndex: 0,
-        address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-        walletName: '小节点',
-      );
+      await service.updateAvatarPath('/tmp/avatar.png');
+      await service.updateBackgroundPath('/tmp/bg.png');
 
-      expect(state.nickname, '小节点');
-      expect(state.communicationWalletIndex, 0);
-      expect(state.communicationAddress,
-          '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY');
-    });
+      final state = await UserProfileService().getState();
 
-    test('updateCommunicationWalletName updates nickname', () async {
-      final service = UserProfileService();
-      await service.setCommunicationWallet(
-        walletIndex: 0,
-        address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-        walletName: '旧名称',
-      );
-
-      final state = await service.updateCommunicationWalletName('新名称');
-
-      expect(state.nickname, '新名称');
+      expect(state.avatarPath, '/tmp/avatar.png');
+      expect(state.backgroundPath, '/tmp/bg.png');
     });
   });
 

@@ -8,7 +8,7 @@
 
 ## 建议模块
 
-- CitizenApp 广场 Worker：`citizenapp/cloudflare/square_worker/`
+- CitizenApp 广场 Worker：`citizenapp/cloudflare/`
 - 架构与任务文档：`memory/01-architecture/citizenapp/`、`memory/08-tasks/`
 
 ## 影响范围
@@ -32,7 +32,7 @@
 
 ## 预计修改目录
 
-- `citizenapp/cloudflare/square_worker/`：替换 staging 真实资源 ID、执行远端迁移和 staging deploy；涉及配置，不写密钥。
+- `citizenapp/cloudflare/`：替换 staging 真实资源 ID、执行远端迁移和 staging deploy；涉及配置，不写密钥。
 - `memory/01-architecture/citizenapp/`：记录 staging 部署结果和 production 前置条件；涉及文档。
 - `memory/08-tasks/`：记录阶段 9 方案、执行、验收和残留清理；涉及文档。
 
@@ -59,8 +59,8 @@
 
 ### 步骤 4：远端迁移和 staging 部署
 
-- 执行 `npm --prefix citizenapp/cloudflare/square_worker run migrate:staging`。
-- 执行 `npm --prefix citizenapp/cloudflare/square_worker run deploy:staging`。
+- 执行 `npm --prefix citizenapp/cloudflare run migrate:staging`。
+- 执行 `npm --prefix citizenapp/cloudflare run deploy:staging`。
 - 获取 staging Worker URL。
 
 ### 步骤 5：远端 smoke 验收和清理
@@ -82,7 +82,7 @@
 
 ## 执行记录
 
-- 已执行 `npm --prefix citizenapp/cloudflare/square_worker install` 恢复本地 Wrangler 运行依赖；该依赖仅用于当前审计，验收清理时删除。
+- 已执行 `npm --prefix citizenapp/cloudflare install` 恢复本地 Wrangler 运行依赖；该依赖仅用于当前审计，验收清理时删除。
 - 已执行 `npx wrangler whoami`：返回 `You are not authenticated. Please run wrangler login.`，当前本机无 Cloudflare 登录态。
 - 已执行 `npx wrangler d1 list`、`npx wrangler r2 bucket list`、`npx wrangler kv namespace list`：均因非交互环境缺少 `CLOUDFLARE_API_TOKEN` 而失败。
 - 2026-07-05 后续复查：用户完成 `wrangler login` 后，`npx wrangler whoami` 已成功识别 Cloudflare 账号 `ChinaNation`，本机 OAuth 登录态可用。
@@ -92,19 +92,19 @@
 - 已创建 staging R2 bucket：`citizenapp-square-media-staging`。
 - 已创建 staging D1 database：`citizenapp-square-db-staging`，`database_id=4ba85b05-657a-46ac-ab19-8bbd84fe850a`。
 - 已创建 staging KV namespace：`staging-FEED_CACHE`，`id=91133becebc24f27bf10a00cb001f27e`。
-- 已把 staging D1/KV 公开资源 ID 写入 `citizenapp/cloudflare/square_worker/wrangler.toml`；R2 bucket 使用资源名绑定，不需要 secret 写仓库。
+- 已把 staging D1/KV 公开资源 ID 写入 `citizenapp/cloudflare/wrangler.toml`；R2 bucket 使用资源名绑定，不需要 secret 写仓库。
 - 已在 staging vars 中显式配置 `R2_BUCKET_NAME=citizenapp-square-media-staging`，避免后续 R2 预签名误指向 production bucket。
-- 已执行 `npm --prefix citizenapp/cloudflare/square_worker run migrate:staging`：远端 D1 已应用 `0001_square_core.sql` 和 `0002_chat_mailbox.sql`。
-- 已执行 `npm --prefix citizenapp/cloudflare/square_worker run deploy:staging`：staging Worker 已部署到 `https://citizenapp-square-api-staging.stews87-fawn.workers.dev`，当前版本 `d1b0f4b2-1cc8-4cd8-88f4-a5ac9a969211`。
+- 已执行 `npm --prefix citizenapp/cloudflare run migrate:staging`：远端 D1 已应用 `0001_square_core.sql` 和 `0002_chat_mailbox.sql`。
+- 已执行 `npm --prefix citizenapp/cloudflare run deploy:staging`：staging Worker 已部署到 `https://citizenapp-square-api-staging.stews87-fawn.workers.dev`，当前版本 `d1b0f4b2-1cc8-4cd8-88f4-a5ac9a969211`。
 - 已执行远端 D1 表检查：`square_login_challenges`、`square_memberships`、`square_uploads`、`square_posts`、`square_follows`、`square_user_signals`、`chat_devices`、`chat_keypackages`、`chat_envelopes` 等表均存在。
 - 已执行远端 smoke：`GET /health` 返回 200，`content_on_chain=false`；未登录访问 `/v1/square/membership` 返回 401 `missing_session`；`PUT /v1/square/uploads/dev-put` 返回 404 `dev_upload_proxy_disabled`，证明 staging 未开启本地开发上传代理。
-- 已执行 `npm --prefix citizenapp/cloudflare/square_worker run typecheck`：通过。
-- 已执行 `npm --prefix citizenapp/cloudflare/square_worker test`：通过，5 个测试文件、11 个测试用例通过。
+- 已执行 `npm --prefix citizenapp/cloudflare run typecheck`：通过。
+- 已执行 `npm --prefix citizenapp/cloudflare test`：通过，5 个测试文件、11 个测试用例通过。
 - 用户已在 staging Worker 写入 R2 secrets；`npx wrangler secret list --env staging` 已确认存在 `R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`。
 - 已执行 staging 远端 R2 预签名上传 smoke：临时写入 KV session 与 D1 会员记录，调用 `uploads/prepare` 获取真实 R2 S3 预签名 URL，分别 PUT `manifest.json` 与 `media_001.png` 到 `citizenapp-square-media-staging`，再调用 `uploads/complete` 返回 `storage_state=completed` 和 `storage_receipt_id`。
 - R2 smoke 测试数据已清理：删除临时 KV session、D1 会员/上传记录、远端 R2 `manifest.json` 与 `media_001.png` 测试对象；复查 `square_uploads` 对应 `post_id` 记录数为 0。
 - staging 当前仍未配置 `SQUARE_CHAIN_RPC_URL`；因此本阶段已完成 Worker 远端部署、基础 smoke 和真实 R2 预签名上传 smoke，但未执行链上确认 smoke。
-- 已执行 `git diff --check`：通过；已清理 `citizenapp/cloudflare/square_worker/node_modules` 和 `citizenapp/cloudflare/square_worker/.wrangler`，未发现 `wrangler` / `workerd` 进程残留。
+- 已执行 `git diff --check`：通过；已清理 `citizenapp/cloudflare/node_modules` 和 `citizenapp/cloudflare/.wrangler`，未发现 `wrangler` / `workerd` 进程残留。
 - 本阶段未修改 `citizenchain/runtime/`，未写入 Cloudflare token、R2 access key、R2 secret key 或链 RPC 私密地址，未触碰 GitHub 远端。
 
 ## 后续前置条件

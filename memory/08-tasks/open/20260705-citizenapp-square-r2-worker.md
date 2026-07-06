@@ -114,7 +114,7 @@ GMB/
 │   │   └── rpc/                           # 复用现有链 RPC/交易提交能力
 │   │
 │   └── cloudflare/
-│       └── square_worker/                 # Cloudflare Worker 服务源码，不放密钥
+│       (worker 文件已扁平化，直接位于 cloudflare/ 下，原 square_worker/ 层已移除；见卡 20260705-cloudflare-worker-flatten-dir)
 │           ├── src/
 │           │   ├── index.ts               # Worker HTTP 入口
 │           │   ├── auth/                  # 钱包签名登录、session 校验
@@ -330,7 +330,7 @@ score =
 - `citizenapp/lib/8964/`：实现广场首页、推荐流、关注流、竞选流、发布页、详情页、会员状态、上传状态；代码和残留清理。
 - `citizenapp/lib/isar/`：增加本地草稿、上传任务、浏览缓存、推荐信号缓存；代码和生成文件。
 - `citizenapp/lib/rpc/`：复用现有链 RPC 与交易提交管线，增加广场发布交易调用边界；代码。
-- `citizenapp/cloudflare/square_worker/`：新增 Cloudflare Worker 工程，承载登录校验、会员、R2 上传、feed API、D1/KV；代码和配置。
+- `citizenapp/cloudflare/`：新增 Cloudflare Worker 工程，承载登录校验、会员、R2 上传、feed API、D1/KV；代码和配置。
 - `citizenchain/runtime/`：后续新增广场发布索引、1 元发布费、竞选权限校验；代码、测试、生成物，执行前必须二次确认。
 - `citizenapp/lib/im/`：统一私聊/群聊运行态，保留 OpenMLS，删除区块链节点聊天链路，接入 Cloudflare 和近场 transport；代码和残留清理。
 - `citizenapp/android/im/`、`citizenapp/ios/im/`：实现无互联网近场聊天；原生代码。
@@ -439,13 +439,13 @@ score =
 - 实现钱包签名登录、会员校验、容量校验、R2 上传准备、上传完成、manifest/hash 校验。
 
 执行前必须确认：
-- 新增目录 `citizenapp/cloudflare/square_worker/`。
+- 新增目录 `citizenapp/cloudflare/`。
 - Worker 技术栈、依赖和 wrangler 配置。
 - D1/KV/R2 资源绑定名。
 - 本地开发和测试方式。
 
 预计修改：
-- `citizenapp/cloudflare/square_worker/`
+- `citizenapp/cloudflare/`
 - `memory/01-architecture/citizenapp/`
 - `memory/07-ai/unified-protocols.md`
 
@@ -457,7 +457,7 @@ score =
 - R2 secret 不进入仓库。
 
 阶段 3 执行记录：
-- 已新增 `citizenapp/cloudflare/square_worker/` Cloudflare Worker 工程。
+- 已新增 `citizenapp/cloudflare/` Cloudflare Worker 工程。
 - 已新增 `package.json`、`package-lock.json`、`tsconfig.json`、`vitest.config.ts`、`wrangler.toml` 和 `.gitignore`；`.gitignore` 已忽略 `.dev.vars`、`.wrangler/`、`node_modules/`、`coverage/`、`dist/`、`*.tsbuildinfo`。
 - 已新增 `migrations/0001_square_core.sql`，创建 `square_login_challenges`、`square_memberships`、`square_uploads`、`square_posts`、`square_follows`、`square_user_signals`。
 - 已新增 `src/auth/`，实现钱包登录挑战、签名验签、session 写入 KV。验签直接导入 `@polkadot/util-crypto/signature/verify`，避免 Worker 顶层触发 wasm 初始化。
@@ -479,7 +479,7 @@ score =
 - 本地临时 sr25519 钱包完成 `challenge -> signature -> session`：通过，Worker 返回 `session_token`。
 - `npx wrangler dev --local --port 8788 --var SQUARE_DEV_UPLOAD_PROXY:1`：通过，本地开发上传代理启动。
 - 本地 D1 插入临时会员记录后，完成 `uploads/prepare -> dev-put manifest -> dev-put media -> uploads/complete`：通过，返回 `storage_state=completed` 和 `storage_receipt_id`。
-- `git status --short --untracked-files=all citizenapp/cloudflare/square_worker`：确认未跟踪候选只包含源码、配置、迁移、测试和 `package-lock.json`，不包含 `.wrangler/` 与 `node_modules/`。
+- `git status --short --untracked-files=all citizenapp/cloudflare`：确认未跟踪候选只包含源码、配置、迁移、测试和 `package-lock.json`，不包含 `.wrangler/` 与 `node_modules/`。
 
 ## 阶段 4：CitizenChain 发布索引
 
@@ -597,11 +597,11 @@ score =
 - `citizenapp/lib/8964/pages/`
 - `citizenapp/lib/8964/widgets/`
 - `citizenapp/lib/8964/services/`
-- `citizenapp/cloudflare/square_worker/src/chain/`
-- `citizenapp/cloudflare/square_worker/src/posts/`
-- `citizenapp/cloudflare/square_worker/src/feeds/`
+- `citizenapp/cloudflare/src/chain/`
+- `citizenapp/cloudflare/src/posts/`
+- `citizenapp/cloudflare/src/feeds/`
 - `citizenapp/test/8964/`
-- `citizenapp/cloudflare/square_worker/test/`
+- `citizenapp/cloudflare/test/`
 - `memory/01-architecture/citizenapp/`
 - `memory/07-ai/unified-protocols.md`
 - `memory/08-tasks/open/`
@@ -617,28 +617,28 @@ score =
 
 阶段 6 执行记录：
 - 用户已明确回复“确认执行阶段 6”。
-- 已新增 `citizenapp/cloudflare/square_worker/src/chain/rpc.ts`，实现按 `SQUARE_CHAIN_RPC_URL` 调用链 RPC，读取指定区块 `System.Events`；RPC 地址属于环境配置，不写入仓库。
-- 已新增 `citizenapp/cloudflare/square_worker/src/chain/square_event.ts`，按阶段 4 固定的 pallet index `36`、event index `0` 解码 `SquarePostPublished` 事件，读取 `post_id`、`owner_account`、可空 `cid_number`、`post_category`、`content_hash`、`storage_receipt_id`、`storage_until`、`created_block`。
-- 已新增 `citizenapp/cloudflare/square_worker/src/posts/confirm.ts`，实现 `POST /v1/square/posts/confirm`：校验登录 session、上传记录归属、上传完成状态、链上事件字段、R2 manifest schema/owner/category，然后写入 `square_posts` 并返回正式 feed item。
-- 已修改 `citizenapp/cloudflare/square_worker/src/posts/repository.ts`，feed 只读取 `post_state = published` 的正式动态；推荐按发布时间倒序，关注按 D1 关注关系过滤，竞选只返回 `campaign`；feed item 会从 R2 manifest 和上传对象列表补齐 `media_items`。
-- 已修改 `citizenapp/cloudflare/square_worker/src/routes.ts` 和 `src/types.ts`，登记确认发布路由、链 RPC 环境变量和 feed 媒体字段。
+- 已新增 `citizenapp/cloudflare/src/chain/rpc.ts`，实现按 `SQUARE_CHAIN_RPC_URL` 调用链 RPC，读取指定区块 `System.Events`；RPC 地址属于环境配置，不写入仓库。
+- 已新增 `citizenapp/cloudflare/src/chain/square_event.ts`，按阶段 4 固定的 pallet index `36`、event index `0` 解码 `SquarePostPublished` 事件，读取 `post_id`、`owner_account`、可空 `cid_number`、`post_category`、`content_hash`、`storage_receipt_id`、`storage_until`、`created_block`。
+- 已新增 `citizenapp/cloudflare/src/posts/confirm.ts`，实现 `POST /v1/square/posts/confirm`：校验登录 session、上传记录归属、上传完成状态、链上事件字段、R2 manifest schema/owner/category，然后写入 `square_posts` 并返回正式 feed item。
+- 已修改 `citizenapp/cloudflare/src/posts/repository.ts`，feed 只读取 `post_state = published` 的正式动态；推荐按发布时间倒序，关注按 D1 关注关系过滤，竞选只返回 `campaign`；feed item 会从 R2 manifest 和上传对象列表补齐 `media_items`。
+- 已修改 `citizenapp/cloudflare/src/routes.ts` 和 `src/types.ts`，登记确认发布路由、链 RPC 环境变量和 feed 媒体字段。
 - 已修改 `citizenapp/lib/8964/services/square_api_client.dart`，新增 `SquareFeedSource`、`SquarePublicationConfirmer`，实现 `fetchFeed()` 和 `confirmPublishedPost()`。
 - 已修改 `citizenapp/lib/8964/services/square_publish_service.dart`，链上入块后调用 Worker 确认接口，返回 Worker 确认后的正式动态。
 - 已修改 `citizenapp/lib/8964/services/square_upload_service.dart`，上传结果保留 Worker session，供发布确认接口复用。
 - 已修改 `citizenapp/lib/8964/pages/square_home_page.dart`，广场首页默认读取 Worker 推荐 feed，切换关注/竞选时读取对应 feed，发布完成后先插入返回动态再刷新 Worker feed。
-- 已新增 `citizenapp/cloudflare/square_worker/test/chain_confirm.test.ts`，覆盖事件解码和发布确认入库。
+- 已新增 `citizenapp/cloudflare/test/chain_confirm.test.ts`，覆盖事件解码和发布确认入库。
 - 已新增 `citizenapp/test/8964/square_feed_service_test.dart`，覆盖 App 解析 Worker feed 动态和媒体列表。
 - 已更新 `citizenapp/test/8964/square_publish_service_test.dart` 与 `citizenapp/test/8964/square_home_page_test.dart`，适配 Worker 确认接口和 feed 注入。
 - 阶段 6 未修改 `citizenchain/runtime/`，未部署 Cloudflare 远端资源，未写入任何 Cloudflare token、R2 access key、R2 secret key 或链 RPC 私密地址。
 
 阶段 6 验收结果：
 - `dart format citizenapp/lib/8964/models/square_models.dart citizenapp/lib/8964/pages/square_home_page.dart citizenapp/lib/8964/services/square_api_client.dart citizenapp/lib/8964/services/square_publish_service.dart citizenapp/lib/8964/services/square_upload_service.dart citizenapp/test/8964/square_publish_service_test.dart citizenapp/test/8964/square_home_page_test.dart citizenapp/test/8964/square_feed_service_test.dart`：通过。
-- `npm --prefix citizenapp/cloudflare/square_worker run typecheck`：通过。
-- `npm --prefix citizenapp/cloudflare/square_worker test`：通过，4 个测试文件、6 个测试用例全部通过。
+- `npm --prefix citizenapp/cloudflare run typecheck`：通过。
+- `npm --prefix citizenapp/cloudflare test`：通过，4 个测试文件、6 个测试用例全部通过。
 - `flutter analyze lib/8964 test/8964`：通过。
 - `flutter test test/8964/square_chain_service_test.dart test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart test/8964/square_home_page_test.dart`：通过。
-- `npm --prefix citizenapp/cloudflare/square_worker run migrate:local`：通过，Wrangler 本地 D1 迁移成功。
-- `npm --prefix citizenapp/cloudflare/square_worker run dev -- --port 8787`：通过，本地 Worker 启动于 `http://localhost:8787`。
+- `npm --prefix citizenapp/cloudflare run migrate:local`：通过，Wrangler 本地 D1 迁移成功。
+- `npm --prefix citizenapp/cloudflare run dev -- --port 8787`：通过，本地 Worker 启动于 `http://localhost:8787`。
 - `curl http://127.0.0.1:8787/health`：通过，返回 `ok=true`、`service=citizenapp-square-api`、`storage_backend=cloudflare-r2`、`content_on_chain=false`。
 - `curl http://127.0.0.1:8787/v1/square/feed/recommended?limit=5`：通过，返回空推荐 feed。
 - `curl http://127.0.0.1:8787/v1/square/feed/following?limit=5`：通过，未登录关注 feed 返回空列表。
@@ -693,11 +693,11 @@ score =
 - 本地链运行态观察：交易块导入后，矿工曾立即尝试下一轮空块 proposal，被 runtime `pow-difficulty` 的“空块不允许上链”保护阻止；该日志不影响本次广场发布 E2E 结论，但后续如要长期运行本地 fresh 链，需要单独优化空池 proposal 门控。
 
 阶段 7 已通过验证：
-- `npm --prefix citizenapp/cloudflare/square_worker run migrate:local`：通过，本地 D1 无待执行迁移。
+- `npm --prefix citizenapp/cloudflare run migrate:local`：通过，本地 D1 无待执行迁移。
 - Worker HTTP 真实运行态：`auth/challenge`、`auth/session`、`membership`、`uploads/prepare`、`uploads/dev-put`、`uploads/complete` 均通过。
 - Worker + R2 + CitizenChain 完整真实 E2E：通过；`publishSquarePost` 入块后，`POST /v1/square/posts/confirm` 成功写入 `square_posts`，`GET /v1/square/feed/recommended?limit=5` 返回该 `post_id`，media item 数为 1。
-- `npm --prefix citizenapp/cloudflare/square_worker run typecheck`：通过。
-- `npm --prefix citizenapp/cloudflare/square_worker test`：通过，5 个测试文件、10 个测试用例全部通过。
+- `npm --prefix citizenapp/cloudflare run typecheck`：通过。
+- `npm --prefix citizenapp/cloudflare test`：通过，5 个测试文件、10 个测试用例全部通过。
 - `flutter analyze lib/8964 test/8964`：通过。
 - `flutter test test/8964/square_chain_service_test.dart test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart test/8964/square_home_page_test.dart`：通过。
 - `git diff --check`：通过。
@@ -774,10 +774,10 @@ score =
 - 不修改 `citizenchain/runtime/`，不恢复区块链节点聊天路线。
 
 执行范围：
-- `citizenapp/cloudflare/square_worker/src/chat/`：新增 chat mailbox 模块；涉及代码。
-- `citizenapp/cloudflare/square_worker/migrations/0002_chat_mailbox.sql`：新增 D1 chat 表；涉及数据库迁移。
-- `citizenapp/cloudflare/square_worker/src/routes.ts`：注册 `/v1/chat/*` 路由；涉及代码。
-- `citizenapp/cloudflare/square_worker/test/chat.test.ts`：补 chat helper 与无效设备绑定签名测试；涉及测试。
+- `citizenapp/cloudflare/src/chat/`：新增 chat mailbox 模块；涉及代码。
+- `citizenapp/cloudflare/migrations/0002_chat_mailbox.sql`：新增 D1 chat 表；涉及数据库迁移。
+- `citizenapp/cloudflare/src/routes.ts`：注册 `/v1/chat/*` 路由；涉及代码。
+- `citizenapp/cloudflare/test/chat.test.ts`：补 chat helper 与无效设备绑定签名测试；涉及测试。
 - `citizenapp/lib/im/transport/im_cloudflare_transport.dart`：接入真实 Worker HTTP API；涉及代码。
 - `citizenapp/test/im/im_cloudflare_transport_test.dart`：补 transport HTTP 行为测试；涉及测试。
 - `memory/05-modules/citizenapp/im/IM_TECHNICAL.md`、`memory/07-ai/unified-protocols.md`：同步当前协议与实现态；涉及文档。
@@ -793,13 +793,13 @@ score =
 
 验收结果：
 - `npx wrangler d1 migrations apply citizenapp-square-db --local`：通过，已在本地 D1 应用 `0001` 和 `0002_chat_mailbox` 迁移。
-- `npm install`：通过，补齐 `square_worker` 本地 `node_modules`，用于 Worker 本地打包与运行态验收。
+- `npm install`：通过，补齐 `cloudflare` Worker 本地 `node_modules`，用于 Worker 本地打包与运行态验收。
 - `npm exec wrangler dev -- --local --port 8789 --var SQUARE_DEV_UPLOAD_PROXY:1`：通过，Worker 本地服务启动成功。
 - `curl http://127.0.0.1:8789/health`：返回 200，`citizenapp-square-api` 正常。
 - `curl http://127.0.0.1:8789/v1/chat/envelopes/pending`：返回 401 `missing_session`，证明 chat 路由已加载，未登录访问按预期拒绝。
 - `curl -X POST http://127.0.0.1:8789/v1/chat/devices/register`：返回 401 `missing_session`，证明设备登记路由已加载，未登录访问按预期拒绝。
-- `npm --prefix citizenapp/cloudflare/square_worker run typecheck`：通过。
-- `npm --prefix citizenapp/cloudflare/square_worker test`：通过，5 个测试文件、10 个测试用例通过。
+- `npm --prefix citizenapp/cloudflare run typecheck`：通过。
+- `npm --prefix citizenapp/cloudflare test`：通过，5 个测试文件、10 个测试用例通过。
 - `flutter analyze --no-fatal-infos lib/im/transport/im_cloudflare_transport.dart test/im/im_cloudflare_transport_test.dart`：通过。
 - `flutter test --concurrency=1 test/im/im_cloudflare_transport_test.dart test/im/im_envelope_proto_test.dart test/im/im_envelope_session_test.dart test/im/im_route_cache_store_test.dart test/im/im_tab_page_test.dart test/im/im_isar_store_test.dart test/im/im_chat_ui_adapter_test.dart test/qr/qr_router_test.dart`：通过，29 个测试通过。
 
@@ -834,11 +834,11 @@ score =
 验收结果：
 - `flutter analyze --no-fatal-infos lib/im/im_chat_page.dart lib/im/im_runtime.dart test/im/im_envelope_session_test.dart`：通过。
 - `flutter test --concurrency=1 test/im/im_envelope_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_tab_page_test.dart test/im/im_chat_ui_adapter_test.dart`：通过，15 个测试通过。
-- `npm --prefix citizenapp/cloudflare/square_worker run typecheck && npm --prefix citizenapp/cloudflare/square_worker test`：通过，5 个 Worker 测试文件、10 个测试用例通过。
+- `npm --prefix citizenapp/cloudflare run typecheck && npm --prefix citizenapp/cloudflare test`：通过，5 个 Worker 测试文件、10 个测试用例通过。
 - `flutter analyze --no-fatal-infos lib/im/im_runtime.dart lib/im/im_chat_page.dart lib/im/transport/im_cloudflare_transport.dart lib/8964/services/square_api_client.dart test/im/im_envelope_session_test.dart test/im/im_cloudflare_transport_test.dart`：通过。
 - `flutter test --concurrency=1 test/im/im_cloudflare_transport_test.dart test/im/im_envelope_proto_test.dart test/im/im_envelope_session_test.dart test/im/im_route_cache_store_test.dart test/im/im_tab_page_test.dart test/im/im_isar_store_test.dart test/im/im_chat_ui_adapter_test.dart test/qr/qr_router_test.dart`：通过，30 个测试通过。
 - 旧通信节点残留扫描：未发现 `im_node_pairing`、`ImNodeSettingsPage`、`ImPrivateNodeTransport`、`CommunicationNode`、`/gmb/im/1`、`nodePeerId`、`nodeMultiaddr` 等旧实现残留。
-- Worker 本地运行态 smoke：先在 `citizenapp/cloudflare/square_worker` 执行 `npm install`，再执行 `./node_modules/.bin/wrangler dev --local --port 8789 --var SQUARE_DEV_UPLOAD_PROXY:1`；服务启动成功。
+- Worker 本地运行态 smoke：先在 `citizenapp/cloudflare` 执行 `npm install`，再执行 `./node_modules/.bin/wrangler dev --local --port 8789 --var SQUARE_DEV_UPLOAD_PROXY:1`；服务启动成功。
 - `curl http://127.0.0.1:8789/health`：返回 200，`citizenapp-square-api` 正常。
 - `curl http://127.0.0.1:8789/v1/chat/envelopes/pending`：返回 401 `missing_session`，证明 chat pending 路由已加载，未登录访问按预期拒绝。
 - `curl -X POST http://127.0.0.1:8789/v1/chat/devices/register`：返回 401 `missing_session`，证明设备登记路由已加载，未登录访问按预期拒绝。
@@ -872,7 +872,7 @@ score =
 验收结果：
 - `flutter analyze --no-fatal-infos lib/im/im_tab_page.dart lib/im/im_chat_page.dart test/im/im_tab_page_test.dart`：通过。
 - `flutter test --concurrency=1 test/im/im_tab_page_test.dart`：通过，4 个测试通过。
-- `npm --prefix citizenapp/cloudflare/square_worker run typecheck && npm --prefix citizenapp/cloudflare/square_worker test`：通过，5 个 Worker 测试文件、10 个测试用例通过。
+- `npm --prefix citizenapp/cloudflare run typecheck && npm --prefix citizenapp/cloudflare test`：通过，5 个 Worker 测试文件、10 个测试用例通过。
 - `flutter analyze --no-fatal-infos lib/im/im_tab_page.dart lib/im/im_chat_page.dart lib/im/im_runtime.dart lib/im/transport/im_cloudflare_transport.dart lib/8964/services/square_api_client.dart test/im/im_tab_page_test.dart test/im/im_envelope_session_test.dart test/im/im_cloudflare_transport_test.dart`：通过。
 - `flutter test --concurrency=1 test/im/im_cloudflare_transport_test.dart test/im/im_envelope_proto_test.dart test/im/im_envelope_session_test.dart test/im/im_route_cache_store_test.dart test/im/im_tab_page_test.dart test/im/im_isar_store_test.dart test/im/im_chat_ui_adapter_test.dart test/qr/qr_router_test.dart`：通过，32 个测试通过。
 - 旧通信节点残留扫描：未发现 `im_node_pairing`、`ImNodeSettingsPage`、`ImPrivateNodeTransport`、`CommunicationNode`、`/gmb/im/1`、`nodePeerId`、`nodeMultiaddr` 等旧实现残留。
@@ -900,12 +900,12 @@ score =
 - 已验证 Bob 端本地 Isar 会话和消息记录写入 incoming 明文，Alice 本地库不共享给 Bob。
 - 已新增 native OpenMLS mailbox 闭环用例，验证真实 OpenMLS 生成的密文 envelope 能经 mailbox 语义进入接收端解密落库路径。
 - 本机纯 Dart 测试环境没有 host 版 `libsmoldot.dylib`，native OpenMLS 用例按现有 `smoldotNativeSkipReason()` 跳过；没有擅自编译生成 `/Users/rhett/GMB/citizenapp/rust/target/release/libsmoldot.dylib`。
-- Worker 本地依赖缺失时执行 `npm install` 恢复 `node_modules/`，该目录已被 `citizenapp/cloudflare/square_worker/.gitignore` 忽略；未修改 `package.json` 或 `package-lock.json`。
+- Worker 本地依赖缺失时执行 `npm install` 恢复 `node_modules/`，该目录已被 `citizenapp/cloudflare/.gitignore` 忽略；未修改 `package.json` 或 `package-lock.json`。
 - 已清理 `citizenapp/lib/` 中遗留“通信全节点”注释口径，改为 Cloudflare mailbox / 近场 transport 边界。
 
 验收结果：
 - `flutter test --concurrency=1 test/im/im_envelope_session_test.dart test/im/im_mls_native_session_test.dart`：通过，5 个测试通过、2 个 native 测试因本机缺 host 版 `libsmoldot.dylib` 跳过。
-- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare/square_worker`）：通过，5 个 Worker 测试文件、10 个测试用例通过。
+- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare`）：通过，5 个 Worker 测试文件、10 个测试用例通过。
 - Worker 本地运行态 smoke：`./node_modules/.bin/wrangler dev --local --port 8789 --var SQUARE_DEV_UPLOAD_PROXY:1` 启动成功。
 - `curl http://127.0.0.1:8789/health`：返回 200，`citizenapp-square-api` 正常。
 - `curl http://127.0.0.1:8789/v1/chat/envelopes/pending?owner_account=alice-wallet&device_id=alice-phone`：返回 401 `missing_session`，证明 chat pending 路由已加载，未登录访问按预期拒绝。
@@ -940,7 +940,7 @@ score =
 - `flutter test --concurrency=1 test/im/im_mls_native_session_test.dart`：通过，2 个 native OpenMLS 会话测试真实执行通过，无 skip。
 - `flutter test --concurrency=1 test/im/im_mls_native_test.dart test/im/im_mls_native_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_envelope_proto_test.dart test/im/im_envelope_session_test.dart test/im/im_route_cache_store_test.dart test/im/im_tab_page_test.dart test/im/im_isar_store_test.dart test/im/im_chat_ui_adapter_test.dart test/qr/qr_router_test.dart`：通过，37 个测试通过，无 native skip。
 - `flutter analyze --no-fatal-infos lib/im/im_tab_page.dart lib/im/im_chat_page.dart lib/im/im_runtime.dart lib/im/transport/im_cloudflare_transport.dart lib/im/transport/im_transport.dart lib/isar/wallet_isar.dart test/im/im_tab_page_test.dart test/im/im_envelope_session_test.dart test/im/im_mls_native_session_test.dart test/im/im_cloudflare_transport_test.dart`：通过。
-- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare/square_worker`）：通过，5 个 Worker 测试文件、10 个测试用例通过。
+- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare`）：通过，5 个 Worker 测试文件、10 个测试用例通过。
 - Worker 本地运行态 smoke：`./node_modules/.bin/wrangler dev --local --port 8789 --var SQUARE_DEV_UPLOAD_PROXY:1` 启动成功；`/health` 返回 200；`/v1/chat/envelopes/pending` 未登录返回 401 `missing_session`。
 - 阶段 IM-6 未修改 `citizenchain/runtime/`，未恢复通信节点、节点 mailbox、`im_node_pairing` 或 `/gmb/im/1`。
 
@@ -960,8 +960,8 @@ score =
 - `citizenapp/lib/im/im_runtime.dart`：新增 `sendAttachment` 运行态入口；涉及代码。
 - `citizenapp/lib/im/im_chat_ui_adapter.dart`：附件消息显示 `[附件] 文件名` 安全占位；涉及代码。
 - `citizenapp/lib/im/transport/im_transport.dart`、`citizenapp/lib/im/transport/im_cloudflare_transport.dart`：新增附件 prepare/upload/complete transport 抽象和 Cloudflare HTTP 实现；涉及代码。
-- `citizenapp/cloudflare/square_worker/src/chat/service.ts`、`citizenapp/cloudflare/square_worker/src/routes.ts`、`citizenapp/cloudflare/square_worker/src/storage/presigned.ts`：新增聊天附件上传准备、开发代理上传、上传完成校验和路由；涉及代码。
-- `citizenapp/test/im/im_envelope_session_test.dart`、`citizenapp/test/im/im_cloudflare_transport_test.dart`、`citizenapp/test/im/im_chat_ui_adapter_test.dart`、`citizenapp/cloudflare/square_worker/test/chat.test.ts`：补附件加密、上传、transport 和展示测试；涉及测试。
+- `citizenapp/cloudflare/src/chat/service.ts`、`citizenapp/cloudflare/src/routes.ts`、`citizenapp/cloudflare/src/storage/presigned.ts`：新增聊天附件上传准备、开发代理上传、上传完成校验和路由；涉及代码。
+- `citizenapp/test/im/im_envelope_session_test.dart`、`citizenapp/test/im/im_cloudflare_transport_test.dart`、`citizenapp/test/im/im_chat_ui_adapter_test.dart`、`citizenapp/cloudflare/test/chat.test.ts`：补附件加密、上传、transport 和展示测试；涉及测试。
 - `memory/05-modules/citizenapp/im/IM_TECHNICAL.md`、`memory/07-ai/unified-protocols.md`、本任务卡：同步 IM-7 当前实现态；涉及文档。
 
 执行记录：
@@ -977,7 +977,7 @@ score =
 
 验收结果：
 - `dart format citizenapp/lib/im/im_message_flow.dart citizenapp/lib/im/im_runtime.dart citizenapp/lib/im/im_chat_ui_adapter.dart citizenapp/lib/im/transport/im_cloudflare_transport.dart citizenapp/lib/im/transport/im_transport.dart citizenapp/test/im/im_envelope_session_test.dart citizenapp/test/im/im_cloudflare_transport_test.dart citizenapp/test/im/im_chat_ui_adapter_test.dart`：通过。
-- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare/square_worker`）：通过，5 个 Worker 测试文件、11 个测试用例通过。
+- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare`）：通过，5 个 Worker 测试文件、11 个测试用例通过。
 - `flutter test --concurrency=1 test/im/im_envelope_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_chat_ui_adapter_test.dart`：通过，16 个测试通过。
 - `flutter test --concurrency=1 test/im/im_mls_native_test.dart test/im/im_mls_native_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_envelope_proto_test.dart test/im/im_envelope_session_test.dart test/im/im_route_cache_store_test.dart test/im/im_tab_page_test.dart test/im/im_isar_store_test.dart test/im/im_chat_ui_adapter_test.dart test/qr/qr_router_test.dart`：通过，39 个测试通过。
 - `flutter analyze --no-fatal-infos lib/im/im_message_flow.dart lib/im/im_runtime.dart lib/im/im_chat_ui_adapter.dart lib/im/transport/im_cloudflare_transport.dart lib/im/transport/im_transport.dart test/im/im_envelope_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_chat_ui_adapter_test.dart`：通过。
@@ -1000,8 +1000,8 @@ score =
 - `citizenapp/lib/im/im_chat_ui_adapter.dart`：把附件控制消息放入本机 UI metadata，显示层仍只展示 `[附件] 文件名`；涉及代码。
 - `citizenapp/lib/im/im_tab_page.dart`、`citizenapp/lib/my/user/user.dart`：信息 Tab 和联系人详情两条聊天入口接入附件发送/下载运行态；涉及代码。
 - `citizenapp/lib/im/transport/im_transport.dart`、`citizenapp/lib/im/transport/im_cloudflare_transport.dart`：新增附件下载计划和密文对象 GET；涉及代码。
-- `citizenapp/cloudflare/square_worker/src/chat/service.ts`、`citizenapp/cloudflare/square_worker/src/routes.ts`、`citizenapp/cloudflare/square_worker/src/storage/presigned.ts`：新增附件下载授权、开发代理下载和 R2 signed GET；涉及代码。
-- `citizenapp/test/im/im_envelope_session_test.dart`、`citizenapp/test/im/im_cloudflare_transport_test.dart`、`citizenapp/test/im/im_chat_ui_adapter_test.dart`、`citizenapp/test/im/im_tab_page_test.dart`、`citizenapp/cloudflare/square_worker/test/chat.test.ts`：补下载解密、transport、Worker 授权和 UI 测试；涉及测试。
+- `citizenapp/cloudflare/src/chat/service.ts`、`citizenapp/cloudflare/src/routes.ts`、`citizenapp/cloudflare/src/storage/presigned.ts`：新增附件下载授权、开发代理下载和 R2 signed GET；涉及代码。
+- `citizenapp/test/im/im_envelope_session_test.dart`、`citizenapp/test/im/im_cloudflare_transport_test.dart`、`citizenapp/test/im/im_chat_ui_adapter_test.dart`、`citizenapp/test/im/im_tab_page_test.dart`、`citizenapp/cloudflare/test/chat.test.ts`：补下载解密、transport、Worker 授权和 UI 测试；涉及测试。
 - `memory/05-modules/citizenapp/im/IM_TECHNICAL.md`、`memory/07-ai/unified-protocols.md`、本任务卡：同步 IM-8 当前实现态；涉及文档。
 
 执行记录：
@@ -1018,7 +1018,7 @@ score =
 - `flutter analyze --no-fatal-infos lib/im/im_message_flow.dart lib/im/im_runtime.dart lib/im/im_chat_ui_adapter.dart lib/im/im_chat_page.dart lib/im/im_tab_page.dart lib/im/transport/im_cloudflare_transport.dart lib/im/transport/im_transport.dart lib/my/user/user.dart test/im/im_envelope_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_chat_ui_adapter_test.dart test/im/im_tab_page_test.dart`：通过。
 - `flutter test --concurrency=1 test/im/im_envelope_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_chat_ui_adapter_test.dart test/im/im_tab_page_test.dart`：通过，23 个测试通过。
 - `flutter test --concurrency=1 test/im/im_mls_native_test.dart test/im/im_mls_native_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_envelope_proto_test.dart test/im/im_envelope_session_test.dart test/im/im_route_cache_store_test.dart test/im/im_tab_page_test.dart test/im/im_isar_store_test.dart test/im/im_chat_ui_adapter_test.dart test/qr/qr_router_test.dart`：通过，42 个测试通过。
-- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare/square_worker`）：通过，5 个 Worker 测试文件、11 个测试用例通过。
+- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare`）：通过，5 个 Worker 测试文件、11 个测试用例通过。
 - `cargo test`（目录 `citizenapp/rust`）：通过，2 个 Rust OpenMLS 单元测试通过。
 - Worker 本地运行态 smoke：`./node_modules/.bin/wrangler dev --local --port 8789 --var SQUARE_DEV_UPLOAD_PROXY:1` 启动成功；`/health` 返回 200；`/v1/chat/attachments/download` 未登录返回 401 `missing_session`；`/v1/chat/attachments/dev-get` 未登录返回 401 `missing_session`。
 
@@ -1031,8 +1031,8 @@ score =
 - 不新增 D1 表，不改 Protobuf，不改 Isar schema，不修改 `citizenchain/runtime/`，不恢复区块链节点聊天路线。
 
 预计修改目录：
-- `citizenapp/cloudflare/square_worker/src/chat/`：新增 Worker 实例内 WebSocket 连接表、连接认证、清理和新密文通知 fanout；涉及代码和中文注释边界。
-- `citizenapp/cloudflare/square_worker/src/routes.ts`：挂载 `/v1/chat/ws` 路由；涉及代码。
+- `citizenapp/cloudflare/src/chat/`：新增 Worker 实例内 WebSocket 连接表、连接认证、清理和新密文通知 fanout；涉及代码和中文注释边界。
+- `citizenapp/cloudflare/src/routes.ts`：挂载 `/v1/chat/ws` 路由；涉及代码。
 - `citizenapp/lib/im/transport/`：在 Cloudflare transport 中增加 WebSocket 客户端连接，保持 HTTP pending/ack 为真同步路径；涉及代码和中文注释。
 - `citizenapp/lib/im/`：运行态、信息 Tab、聊天页接入实时通知优先和轮询兜底；涉及代码和中文注释。
 - `citizenapp/lib/my/user/`：联系人详情消息入口补同一套实时同步入口；涉及代码。
@@ -1054,7 +1054,7 @@ score =
 - `flutter analyze --no-fatal-infos lib/im/transport/im_cloudflare_transport.dart lib/im/im_runtime.dart lib/im/im_chat_page.dart lib/im/im_tab_page.dart lib/my/user/user.dart test/im/im_tab_page_test.dart`：通过。
 - `flutter test --concurrency=1 test/im/im_tab_page_test.dart`：通过，8 个测试通过。
 - `flutter test --concurrency=1 test/im/im_mls_native_test.dart test/im/im_mls_native_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_envelope_proto_test.dart test/im/im_envelope_session_test.dart test/im/im_route_cache_store_test.dart test/im/im_tab_page_test.dart test/im/im_isar_store_test.dart test/im/im_chat_ui_adapter_test.dart test/qr/qr_router_test.dart`：通过，44 个测试通过。
-- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare/square_worker`）：通过，5 个 Worker 测试文件、11 个测试用例通过。
+- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare`）：通过，5 个 Worker 测试文件、11 个测试用例通过。
 - `cargo test`（目录 `citizenapp/rust`）：通过，2 个 Rust OpenMLS 单元测试通过。
 - Worker 本地运行态 smoke：`./node_modules/.bin/wrangler dev --local --port 8789 --var SQUARE_DEV_UPLOAD_PROXY:1` 启动成功；`/health` 返回 200；带 Upgrade 访问 `/v1/chat/ws` 未登录返回 401 `missing_session`；非 WebSocket 访问 `/v1/chat/ws` 返回 426 `websocket_required`。
 
@@ -1067,12 +1067,12 @@ score =
 - 不新增 D1 表，不改 Protobuf，不改 App 端接口，不修改 `citizenchain/runtime/`，不恢复区块链节点聊天路线。
 
 预计修改目录：
-- `citizenapp/cloudflare/square_worker/src/chat/`：新增 `realtime.ts`，实现 `ChatRealtimeObject`、WebSocket 接入、设备标签和通知 RPC；涉及代码和中文注释。
-- `citizenapp/cloudflare/square_worker/src/chat/service.ts`：移除 Worker 实例内 socket Map，改为鉴权后转发 WebSocket 到 DO、密文落库后调用 DO 通知；涉及代码。
-- `citizenapp/cloudflare/square_worker/src/index.ts`：导出 `ChatRealtimeObject` 供 wrangler 绑定；涉及代码。
-- `citizenapp/cloudflare/square_worker/src/types.ts`：增加 `CHAT_REALTIME` binding 类型；涉及代码。
-- `citizenapp/cloudflare/square_worker/wrangler.toml`：增加 Durable Object binding 和 migration；涉及配置，不写入任何 Cloudflare token 或 secret。
-- `citizenapp/cloudflare/square_worker/test/chat.test.ts`：补 `/v1/chat/ws` 转发到 DO、通知按接收钱包路由到 DO 的单测；涉及测试。
+- `citizenapp/cloudflare/src/chat/`：新增 `realtime.ts`，实现 `ChatRealtimeObject`、WebSocket 接入、设备标签和通知 RPC；涉及代码和中文注释。
+- `citizenapp/cloudflare/src/chat/service.ts`：移除 Worker 实例内 socket Map，改为鉴权后转发 WebSocket 到 DO、密文落库后调用 DO 通知；涉及代码。
+- `citizenapp/cloudflare/src/index.ts`：导出 `ChatRealtimeObject` 供 wrangler 绑定；涉及代码。
+- `citizenapp/cloudflare/src/types.ts`：增加 `CHAT_REALTIME` binding 类型；涉及代码。
+- `citizenapp/cloudflare/wrangler.toml`：增加 Durable Object binding 和 migration；涉及配置，不写入任何 Cloudflare token 或 secret。
+- `citizenapp/cloudflare/test/chat.test.ts`：补 `/v1/chat/ws` 转发到 DO、通知按接收钱包路由到 DO 的单测；涉及测试。
 - `memory/05-modules/citizenapp/im/IM_TECHNICAL.md`、`memory/07-ai/unified-protocols.md`、本任务卡：同步 IM-10 当前实现态；涉及文档。
 
 执行记录：
@@ -1084,7 +1084,7 @@ score =
 - 阶段 IM-10 没有修改 CitizenApp 端代码，没有新增 D1 migration，没有修改 `citizenchain/runtime/`，未恢复通信节点、节点 mailbox、`im_node_pairing` 或 `/gmb/im/1`。
 
 验收结果：
-- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare/square_worker`）：通过，5 个 Worker 测试文件、13 个测试用例通过。
+- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare`）：通过，5 个 Worker 测试文件、13 个测试用例通过。
 - Worker 本地运行态 smoke：`./node_modules/.bin/wrangler dev --local --port 8789 --var SQUARE_DEV_UPLOAD_PROXY:1` 启动成功，并识别 `env.CHAT_REALTIME Durable Object ChatRealtimeObject`；`/health` 返回 200；带 Upgrade 访问 `/v1/chat/ws` 未登录返回 401 `missing_session`；非 WebSocket 访问 `/v1/chat/ws` 返回 426 `websocket_required`。
 - `flutter test --concurrency=1 test/im/im_mls_native_test.dart test/im/im_mls_native_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_envelope_proto_test.dart test/im/im_envelope_session_test.dart test/im/im_route_cache_store_test.dart test/im/im_tab_page_test.dart test/im/im_isar_store_test.dart test/im/im_chat_ui_adapter_test.dart test/qr/qr_router_test.dart`：通过，44 个测试通过。
 - `cargo test`（目录 `citizenapp/rust`）：通过，2 个 Rust OpenMLS 单元测试通过。
@@ -1101,9 +1101,9 @@ score =
 - 不新增 D1 表，不改 Protobuf，不修改 `citizenchain/runtime/`，不恢复区块链节点聊天路线。
 
 预计修改目录：
-- `citizenapp/cloudflare/square_worker/src/chat/`：把 mailbox ack 从标记状态改为删除临时 envelope，并删除对应 R2 加密附件对象；涉及代码和中文注释。
-- `citizenapp/cloudflare/square_worker/migrations/`：移除 `chat_envelopes.acked_at` 旧字段口径，新建部署按临时队列表结构初始化；涉及迁移定义清理。
-- `citizenapp/cloudflare/square_worker/test/`：补 ack 删除 envelope 和 R2 加密附件对象单测；涉及测试。
+- `citizenapp/cloudflare/src/chat/`：把 mailbox ack 从标记状态改为删除临时 envelope，并删除对应 R2 加密附件对象；涉及代码和中文注释。
+- `citizenapp/cloudflare/migrations/`：移除 `chat_envelopes.acked_at` 旧字段口径，新建部署按临时队列表结构初始化；涉及迁移定义清理。
+- `citizenapp/cloudflare/test/`：补 ack 删除 envelope 和 R2 加密附件对象单测；涉及测试。
 - `citizenapp/lib/im/`：附件发送/接收流程先落本机缓存再 ack，下载优先读本机缓存；涉及代码和中文注释。
 - `citizenapp/lib/im/storage/`：增加本机会话删除能力；涉及代码和中文注释。
 - `citizenapp/test/im/`：补附件先缓存再 ack、本机会话删除不误删其他会话测试；涉及测试。
@@ -1123,7 +1123,7 @@ score =
 - `flutter test --concurrency=1 test/im/im_isar_store_test.dart`：通过，2 个测试通过。
 - `flutter test --concurrency=1 test/im/im_mls_native_test.dart test/im/im_mls_native_session_test.dart test/im/im_cloudflare_transport_test.dart test/im/im_envelope_proto_test.dart test/im/im_envelope_session_test.dart test/im/im_route_cache_store_test.dart test/im/im_tab_page_test.dart test/im/im_isar_store_test.dart test/im/im_chat_ui_adapter_test.dart test/qr/qr_router_test.dart`：通过，45 个测试通过。
 - `cargo test`（目录 `citizenapp/rust`）：通过，2 个 Rust OpenMLS 单元测试通过。
-- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare/square_worker`）：通过，5 个 Worker 测试文件、15 个测试用例通过。
+- `npm run typecheck && npm test`（目录 `citizenapp/cloudflare`）：通过，5 个 Worker 测试文件、15 个测试用例通过。
 - Worker 本地运行态 smoke：`./node_modules/.bin/wrangler dev --local --port 8789 --var SQUARE_DEV_UPLOAD_PROXY:1` 启动成功，并识别 `CHAT_REALTIME` Durable Object、D1、R2、KV 绑定；`/health` 返回 200；带 Upgrade 访问 `/v1/chat/ws` 未登录返回 401 `missing_session`；非 WebSocket 访问 `/v1/chat/ws` 返回 426 `websocket_required`。
 
 ## 阶段 IM-12：聊天记录删除 UI 与本机彻底删除验收
@@ -1166,8 +1166,8 @@ score =
 - 不修改 `citizenchain/runtime/`，发布费和 8:1:1 分账继续复用阶段 4 已确认的 runtime 实现。
 
 预计修改目录：
-- `citizenapp/cloudflare/square_worker/src/uploads/`：调整上传准备和完成边界；涉及 Worker 代码和中文注释。
-- `citizenapp/cloudflare/square_worker/test/`：补预生成存储回执测试；涉及 Worker 测试。
+- `citizenapp/cloudflare/src/uploads/`：调整上传准备和完成边界；涉及 Worker 代码和中文注释。
+- `citizenapp/cloudflare/test/`：补预生成存储回执测试；涉及 Worker 测试。
 - `citizenapp/lib/8964/services/`：拆分 prepare 与 upload，重排发布编排，增加余额守卫；涉及 App 代码和中文注释。
 - `citizenapp/lib/8964/storage/`：新增广场发布草稿 KV 存储；涉及 App 代码，不新增 Isar schema。
 - `citizenapp/lib/8964/pages/`：发布页恢复当前钱包的未完成草稿；涉及 App UI 代码。
@@ -1183,11 +1183,52 @@ score =
 - 阶段 10 未修改 `citizenchain/runtime/`，未新增 Cloudflare secret，未要求 App 用户直接接触 Cloudflare/R2 账户。
 
 验收记录：
-- `npm run typecheck`（目录 `citizenapp/cloudflare/square_worker`）：通过。
-- `npm test`（目录 `citizenapp/cloudflare/square_worker`）：通过，5 个 Worker 测试文件、15 个测试用例通过。
+- `npm run typecheck`（目录 `citizenapp/cloudflare`）：通过。
+- `npm test`（目录 `citizenapp/cloudflare`）：通过，5 个 Worker 测试文件、15 个测试用例通过。
 - `flutter analyze lib/8964 test/8964`（目录 `citizenapp`）：通过，无问题。
 - `flutter test test/8964/square_publish_service_test.dart test/8964/square_draft_store_test.dart test/8964/square_chain_service_test.dart test/8964/square_feed_service_test.dart test/8964/square_home_page_test.dart`：通过，12 个测试通过。
 - Worker 本地运行态 smoke：`npm run dev:local -- --port 8789` 启动成功；`GET /health` 返回 200；未登录 `POST /v1/square/uploads/prepare` 返回 401 `missing_session`。
+
+## 阶段 11：staging 真实端到端发布前置验收与最小修复
+
+目标：
+- 在 Cloudflare staging 上复验 Worker、D1、KV、R2 上传授权和广场发布前置链路。
+- 验证 `uploads/prepare` 在链上扣费入块前只生成 `post_id/storage_receipt_id` 和短期上传授权，不写 R2 对象，不把动态放入正式 feed。
+- 明确 staging 当前是否具备链上确认 smoke 条件，不猜测链 RPC 地址。
+- 不修改 `citizenchain/runtime/`，不回滚其它线程已完成的 Cloudflare Worker 扁平化迁移。
+
+预计修改目录：
+- `citizenapp/cloudflare/`：执行 staging 部署、D1/KV 远端 smoke、Worker typecheck/test 和残留清理；本阶段不改 Worker 业务代码。
+- `citizenapp/lib/8964/pages/`：为广场首页补草稿仓库注入边界注释，避免页面测试触碰真实本机草稿存储；涉及代码和中文注释。
+- `citizenapp/test/8964/`：同步 `SquareIdentityService` 当前默认钱包读取口径，补页面测试的默认钱包和空草稿仓库桩；涉及测试。
+- `memory/01-architecture/citizenapp/`、`memory/07-ai/unified-protocols.md`、本任务卡：记录阶段 11 staging 真实验收结果、缺失配置和清理结果；涉及文档。
+
+执行记录：
+- Worker 目录已由其它任务扁平化到 `citizenapp/cloudflare/`；本阶段按新目录执行，没有恢复旧 `citizenapp/cloudflare/square_worker/`。
+- `npx wrangler whoami` 已确认当前登录 Cloudflare 账户 `ChinaNation`，账户 ID 为 `f088b553d27d9c26b81f48f1924c3bbd`。
+- staging 远端 secret 当前只有 `R2_ACCESS_KEY_ID`、`R2_ACCOUNT_ID`、`R2_SECRET_ACCESS_KEY`；未发现 `SQUARE_CHAIN_RPC_URL`，因此本阶段不能执行 Worker 链上确认 smoke。
+- staging 远端 D1 迁移检查显示 `citizenapp-square-db-staging` 没有待应用 migration。
+- 已部署 staging Worker：`citizenapp-square-api-staging`，URL `https://citizenapp-square-api-staging.stews87-fawn.workers.dev`，版本 ID `f0be968a-0744-4543-8f1f-80318044d4e1`。
+- 部署后 `GET /health` 返回 200，响应为 Cloudflare R2 后端且 `content_on_chain=false`。
+- 未登录 `POST /v1/square/uploads/prepare` 返回 401 `missing_session`。
+- 使用临时 KV session 和临时 D1 会员执行远端 `uploads/prepare`，返回 200 且包含 `storage_receipt_id`；D1 中对应 `square_uploads` 记录为 `status=prepared`、`content_hash=null`、`storage_receipt_id` 非空。
+- 本次远端 smoke 没有执行 R2 PUT，没有写入 R2 对象；验收后已删除临时 KV session、临时会员和临时上传记录，D1 反查 `uploads_count=0`、`memberships_count=0`，KV 反查为 404。
+- 已删除本轮 Wrangler 生成的 `citizenapp/cloudflare/.wrangler` 残留目录。
+- 页面测试发现 `SquareIdentityService` 当前读取默认热钱包入口 `getDefaultWallet()`，已在测试桩中补齐该入口，并通过 `SquareHomePage.draftStore` 注入空草稿仓库，避免测试误触真实草稿存储。
+- 阶段 11 没有修改 `citizenchain/runtime/`，没有新增 Cloudflare secret，没有 GitHub push/PR，没有保留 staging 临时数据。
+
+验收记录：
+- `npx wrangler secret list --env staging`（目录 `citizenapp/cloudflare`）：通过；确认缺少 `SQUARE_CHAIN_RPC_URL`。
+- `npx wrangler d1 migrations list citizenapp-square-db-staging --env staging --remote`（目录 `citizenapp/cloudflare`）：通过，无待执行 migration。
+- `npm run deploy:staging`（目录 `citizenapp/cloudflare`）：通过，部署版本 ID `f0be968a-0744-4543-8f1f-80318044d4e1`。
+- `curl GET /health`（staging Worker）：通过，HTTP 200。
+- `curl POST /v1/square/uploads/prepare`（未登录）：通过，HTTP 401 `missing_session`。
+- `curl POST /v1/square/uploads/prepare`（临时 session）：通过，HTTP 200，返回 `storage_receipt_id`。
+- 远端 D1 验证：通过，临时上传记录为 `prepared` 且 `content_hash=null`；清理后临时上传和会员数量均为 0。
+- `npm run typecheck`（目录 `citizenapp/cloudflare`）：通过。
+- `npm test`（目录 `citizenapp/cloudflare`）：通过，5 个 Worker 测试文件、15 个测试用例通过。
+- `flutter analyze lib/8964 test/8964`（目录 `citizenapp`）：通过，无问题。
+- `flutter test test/8964/square_publish_service_test.dart test/8964/square_draft_store_test.dart test/8964/square_chain_service_test.dart test/8964/square_feed_service_test.dart test/8964/square_home_page_test.dart`（目录 `citizenapp`）：通过，12 个测试通过。
 
 当前执行状态：
 - [x] 阶段 0：任务卡与技术方案固化
@@ -1212,3 +1253,4 @@ score =
 - [x] 阶段 6：链上确认与正式 feed
 - [x] 阶段 7：真实运行态验收与文档回写
 - [x] 阶段 10：发布扣费入块后再上传 R2 与本地草稿保护
+- [x] 阶段 11：staging 真实端到端发布前置验收与最小修复

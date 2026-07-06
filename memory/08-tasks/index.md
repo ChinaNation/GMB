@@ -2,6 +2,9 @@
 
 ## open
 
+- `memory/08-tasks/open/20260705-cloudflare-worker-flatten-dir.md`
+- `memory/08-tasks/open/20260705-citizenapp-worker-prod-url-no-fallback.md`
+- `memory/08-tasks/open/20260705-citizenapp-default-wallet-identity.md`
 - `memory/08-tasks/open/20260704-genesis-add-national-institutions.md`
 - `memory/08-tasks/open/20260703-institution-info-update-and-add-account.md`
 - `memory/08-tasks/open/20260702-cid-occupy-card3-genesis-legacy-backfill.md`

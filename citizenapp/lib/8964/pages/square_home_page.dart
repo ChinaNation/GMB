@@ -5,6 +5,7 @@ import 'package:citizenapp/8964/pages/square_compose_page.dart';
 import 'package:citizenapp/8964/pages/square_post_detail_page.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
+import 'package:citizenapp/8964/storage/square_draft_store.dart';
 import 'package:citizenapp/8964/widgets/square_empty_state.dart';
 import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
@@ -15,12 +16,15 @@ class SquareHomePage extends StatefulWidget {
     super.key,
     this.identityService = const SquareIdentityService(),
     this.feedSource,
+    this.draftStore,
     this.initialFeed = SquareFeedKind.recommended,
     this.seedPosts = const <SquarePost>[],
   });
 
   final SquareIdentityService identityService;
   final SquareFeedSource? feedSource;
+  // 页面测试可注入空草稿仓库；正式运行由发布页使用默认本机草稿存储。
+  final SquareDraftRepository? draftStore;
   final SquareFeedKind initialFeed;
   final List<SquarePost> seedPosts;
 
@@ -46,8 +50,10 @@ class _SquareHomePageState extends State<SquareHomePage> {
   Future<void> _openCompose() async {
     final post = await Navigator.of(context).push<SquarePost>(
       MaterialPageRoute<SquarePost>(
-        builder: (_) =>
-            SquareComposePage(identityService: widget.identityService),
+        builder: (_) => SquareComposePage(
+          identityService: widget.identityService,
+          draftStore: widget.draftStore,
+        ),
       ),
     );
     if (post == null || !mounted) return;

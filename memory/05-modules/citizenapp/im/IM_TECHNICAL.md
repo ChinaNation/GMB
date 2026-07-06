@@ -259,7 +259,7 @@ CitizenApp 本地继续负责明文和会话状态：
 - `citizenapp/lib/im/`：信息 Tab、聊天详情页、OpenMLS native 边界、Protobuf、Isar 消息库、消息流状态机、Cloudflare mailbox 自动运行态。
 - `citizenapp/im/proto/im_envelope.proto`：`GMB_IM_V1` 外层 Protobuf 真源。
 - `citizenapp/lib/im/crypto/`：OpenMLS 设备密钥、KeyPackage、会话处理和本地状态目录。
-- `citizenapp/cloudflare/square_worker/src/chat/`：Cloudflare 临时密文 mailbox API 已落地，包含设备绑定验签、KeyPackage 发布/拉取/消费、密文 envelope 投递、pending 拉取、ack 删除、过期清理、加密附件上传准备、开发代理上传、上传完成确认、下载授权、开发代理下载和 `/v1/chat/ws` 新密文通知；实时通知由 `ChatRealtimeObject` 按钱包账户聚合在线设备。
+- `citizenapp/cloudflare/src/chat/`：Cloudflare 临时密文 mailbox API 已落地，包含设备绑定验签、KeyPackage 发布/拉取/消费、密文 envelope 投递、pending 拉取、ack 删除、过期清理、加密附件上传准备、开发代理上传、上传完成确认、下载授权、开发代理下载和 `/v1/chat/ws` 新密文通知；实时通知由 `ChatRealtimeObject` 按钱包账户聚合在线设备。
 - `citizenapp/android/im/`、`citizenapp/ios/im/`：近场原生能力预留目录。
 - `citizenapp/lib/im/im_runtime.dart`：发送或同步前自动复用广场 Worker 钱包 session，自动登记本机 IM 设备，自动发布本设备 KeyPackage，首次会话自动拉取并消费对方 KeyPackage；已开放 `sendAttachment`、`downloadAttachment`、`startRealtimeSync` 和 `deleteLocalConversation`。
 - `citizenapp/lib/im/im_tab_page.dart`：信息 Tab 打开后自动同步 pending 密文；优先连接 WebSocket 新密文通知，连接不可用或断开时回退到前台每 15 秒轻量轮询，失败后退避到 30 秒，轮询成功后重试 WebSocket，离开页面或 App 退后台即停止；会话列表支持左滑删除本机聊天记录。
@@ -293,7 +293,7 @@ CitizenApp 本地继续负责明文和会话状态：
 - `citizenapp/lib/im/crypto/`：继续承载 OpenMLS、设备密钥、KeyPackage 和安全码；涉及代码。当前 native OpenMLS KeyPackage、两方 smoke、持久化会话恢复和 mailbox 闭环均已在 host 调试库下真实执行通过。
 - `citizenapp/lib/im/storage/`：会话、消息、路由缓存、发送队列、pending 入站 envelope 和本机会话删除；涉及代码。
 - `citizenapp/lib/8964/`：广场作者页、动态卡片、评论作者私信入口和 Worker session 复用；涉及代码。当前 `SquareApiClient` 已向 IM 运行态开放 Worker base URI 和登录 session 复用能力。
-- `citizenapp/cloudflare/square_worker/`：新增临时密文 mailbox、KeyPackage、设备绑定、ack 删除、过期清理、加密附件上传授权、下载授权和 WebSocket 推送；涉及代码和配置。当前 IM-11 已将 ack 改为删除 D1 envelope，并删除对应 R2 加密附件对象；WebSocket 在线连接由账户级 `ChatRealtimeObject` 管理，不推送明文或密文正文。
+- `citizenapp/cloudflare/`：新增临时密文 mailbox、KeyPackage、设备绑定、ack 删除、过期清理、加密附件上传授权、下载授权和 WebSocket 推送；涉及代码和配置。当前 IM-11 已将 ack 改为删除 D1 envelope，并删除对应 R2 加密附件对象；WebSocket 在线连接由账户级 `ChatRealtimeObject` 管理，不推送明文或密文正文。
 - `citizenapp/android/im/`：Android 近场聊天；涉及原生代码。
 - `citizenapp/ios/im/`：iOS 近场聊天；涉及原生代码。
 - 旧 `citizenchain/node/src/im/`：已删除区块链节点聊天实现；后续不得恢复。

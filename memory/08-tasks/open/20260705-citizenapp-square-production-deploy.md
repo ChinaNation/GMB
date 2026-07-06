@@ -8,7 +8,7 @@
 
 ## 建议模块
 
-- CitizenApp 广场 Worker：`citizenapp/cloudflare/square_worker/`
+- CitizenApp 广场 Worker：`citizenapp/cloudflare/`
 - CitizenApp 广场 App 端：`citizenapp/lib/8964/`
 - 架构与任务文档：`memory/01-architecture/citizenapp/`、`memory/07-ai/`、`memory/08-tasks/`
 
@@ -33,7 +33,7 @@
 
 ## 预计修改目录
 
-- `citizenapp/cloudflare/square_worker/`：整理 Worker 生产化配置和脚本边界；涉及配置/代码审查，不写密钥，不新增目录。
+- `citizenapp/cloudflare/`：整理 Worker 生产化配置和脚本边界；涉及配置/代码审查，不写密钥，不新增目录。
 - `citizenapp/lib/8964/`：检查并必要时调整 App 端 Worker base URL 注入方式；涉及代码。
 - `memory/01-architecture/citizenapp/`：补充生产部署前准备和运行边界；涉及文档。
 - `memory/07-ai/`：如协议或统一口径变化，更新统一协议登记；涉及文档。
@@ -58,7 +58,7 @@
 
 - 检查 `SquareApiClient` 或同等入口的 base URL 来源。
 - 如果存在硬编码本地地址，改为通过编译期 define 或集中配置读取。
-- 保留默认安全行为：生产包必须显式提供 HTTPS Worker URL；本地调试才使用 `http://127.0.0.1:8787`。
+- ~~保留默认安全行为：生产包必须显式提供 HTTPS Worker URL；本地调试才使用 `http://127.0.0.1:8787`。~~ **已被卡 20260705-citizenapp-worker-prod-url-no-fallback 覆盖**：App 内置生产 URL `https://citizenapp-square-api.stews87-fawn.workers.dev` 为唯一默认，删除本机兜底与 fail-fast；本机联调仅在显式 `--dart-define` 时启用。
 
 ### 步骤 4：文档与残留清理
 
@@ -96,10 +96,10 @@
 ## 验收结果
 
 - `dart format citizenapp/lib/8964/services/square_api_client.dart citizenapp/test/8964/square_feed_service_test.dart`：通过。
-- `npm --prefix citizenapp/cloudflare/square_worker install`：通过，仅用于本地验收依赖恢复，验收后已清理 `node_modules`。
-- `npm --prefix citizenapp/cloudflare/square_worker run typecheck`：通过。
-- `npm --prefix citizenapp/cloudflare/square_worker test`：通过，5 个测试文件、10 个测试用例通过。
+- `npm --prefix citizenapp/cloudflare install`：通过，仅用于本地验收依赖恢复，验收后已清理 `node_modules`。
+- `npm --prefix citizenapp/cloudflare run typecheck`：通过。
+- `npm --prefix citizenapp/cloudflare test`：通过，5 个测试文件、10 个测试用例通过。
 - `flutter analyze lib/8964 test/8964`：通过。
 - `flutter test test/8964/square_chain_service_test.dart test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart test/8964/square_home_page_test.dart`：通过，9 个测试通过。
 - `git diff --check`：通过。
-- 残留清理：已删除 `citizenapp/cloudflare/square_worker/node_modules`、`citizenapp/cloudflare/square_worker/.wrangler`；未发现 `wrangler`、`workerd` 或本地链服务进程残留。
+- 残留清理：已删除 `citizenapp/cloudflare/node_modules`、`citizenapp/cloudflare/.wrangler`；未发现 `wrangler`、`workerd` 或本地链服务进程残留。

@@ -5,6 +5,7 @@ import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/pages/square_home_page.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
+import 'package:citizenapp/8964/storage/square_draft_store.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -15,6 +16,9 @@ class _FakeWalletManager extends WalletManager {
 
   @override
   Future<WalletProfile?> getWallet() async => wallet;
+
+  @override
+  Future<WalletProfile?> getDefaultWallet() async => wallet;
 }
 
 class _FakeSquareChainService extends SquareChainService {
@@ -41,6 +45,19 @@ class _FakeFeedSource implements SquareFeedSource {
   }
 }
 
+class _EmptyDraftStore implements SquareDraftRepository {
+  const _EmptyDraftStore();
+
+  @override
+  Future<void> delete(String ownerAccount) async {}
+
+  @override
+  Future<SquarePublishDraft?> read(String ownerAccount) async => null;
+
+  @override
+  Future<void> save(SquarePublishDraft draft) async {}
+}
+
 Widget _wrap(Widget child) {
   return MaterialApp(
     theme: AppTheme.lightTheme,
@@ -58,6 +75,7 @@ void main() {
       _wrap(SquareHomePage(
         identityService: identityService,
         feedSource: const _FakeFeedSource(),
+        draftStore: const _EmptyDraftStore(),
       )),
     );
     await tester.pumpAndSettle();
@@ -100,6 +118,7 @@ void main() {
       _wrap(SquareHomePage(
         identityService: identityService,
         feedSource: const _FakeFeedSource(),
+        draftStore: const _EmptyDraftStore(),
       )),
     );
     await tester.pumpAndSettle();

@@ -17,7 +17,6 @@ import 'package:citizenapp/im/storage/im_isar_store.dart';
 import 'package:citizenapp/im/transport/im_cloudflare_transport.dart';
 import 'package:citizenapp/im/transport/im_transport.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 void main() {
@@ -469,7 +468,6 @@ void main() {
     final runtime = ImRuntime(
       store: store,
       walletManager: _FakeWalletManager(),
-      profileService: _FakeProfileService(),
       preferences: await SharedPreferences.getInstance(),
       squareApiClient: api,
       cloudflareTransportFactory: ({
@@ -680,33 +678,25 @@ class _FakeMlsCrypto implements ImMlsCryptoBoundary {
 }
 
 class _FakeWalletManager extends WalletManager {
-  @override
-  Future<WalletProfile?> getWalletByIndex(int walletIndex) async {
-    return const WalletProfile(
-      walletIndex: 7,
-      walletName: 'Alice',
-      walletIcon: 'person',
-      balance: 0,
-      address: 'alice-wallet',
-      pubkeyHex: '00',
-      alg: 'sr25519',
-      ss58: 2027,
-      createdAtMillis: 1,
-      source: 'test',
-      signMode: 'local',
-    );
-  }
-}
+  static const _alice = WalletProfile(
+    walletIndex: 7,
+    walletName: 'Alice',
+    walletIcon: 'person',
+    balance: 0,
+    address: 'alice-wallet',
+    pubkeyHex: '00',
+    alg: 'sr25519',
+    ss58: 2027,
+    createdAtMillis: 1,
+    source: 'test',
+    signMode: 'local',
+  );
 
-class _FakeProfileService extends UserProfileService {
   @override
-  Future<UserProfileState> getState() async {
-    return const UserProfileState(
-      communicationWalletIndex: 7,
-      communicationAddress: 'alice-wallet',
-      communicationWalletName: 'Alice',
-    );
-  }
+  Future<WalletProfile?> getWalletByIndex(int walletIndex) async => _alice;
+
+  @override
+  Future<WalletProfile?> getDefaultWallet() async => _alice;
 }
 
 ImMlsKeyPackage _dummyKeyPackage() {

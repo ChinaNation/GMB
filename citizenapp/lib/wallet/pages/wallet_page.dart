@@ -10,7 +10,6 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/my/user/user_service.dart' show UserProfileService;
 import 'package:citizenapp/ui/widgets/bip39_input.dart';
 import 'package:citizenapp/ui/widgets/shimmer_loading.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
@@ -31,7 +30,7 @@ class MyWalletPage extends StatefulWidget {
     super.key,
     this.selectForTrade = false,
     this.selectForBind = false,
-    this.bindPurposeLabel = '通信账户',
+    this.bindPurposeLabel = '账户',
   });
 
   final bool selectForTrade;
@@ -60,6 +59,18 @@ List<WalletProfile> reorderWalletProfiles(
   final wallet = next.removeAt(oldIndex);
   next.insert(targetIndex, wallet);
   return next;
+}
+
+/// 默认用户钱包 = 列表中最靠前的**热钱包**的 walletIndex；无热钱包返回 null。
+/// 与 [WalletManager.getDefaultWallet] 判定一致，UI 仅用来渲染「默认用户」徽标。
+@visibleForTesting
+int? defaultUserWalletIndex(List<WalletProfile> wallets) {
+  for (final wallet in wallets) {
+    if (wallet.isHotWallet) {
+      return wallet.walletIndex;
+    }
+  }
+  return null;
 }
 
 /// 本地 Isar/MDBX 繁忙属于钱包数据库问题，不能提示成区块链网络异常。
@@ -335,12 +346,6 @@ class _MyWalletPageState extends State<MyWalletPage> {
     }
     try {
       await _walletService.renameWallet(wallet.walletIndex, newName);
-      // 双向同步：如果该钱包是通信账户，同步更新用户资料中的昵称。
-      final profileService = UserProfileService();
-      final profileState = await profileService.getState();
-      if (profileState.communicationWalletIndex == wallet.walletIndex) {
-        await profileService.updateCommunicationWalletName(newName);
-      }
       if (!mounted) return;
       await _loadWallets();
     } catch (e) {
@@ -621,6 +626,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
               child: _buildEmptyWalletChoices(),
             );
           }
+          final defaultWalletIndex = defaultUserWalletIndex(wallets);
           return Column(
             children: [
               if (!_isSelectionMode)
@@ -644,6 +650,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
                         child: WalletListTile(
                           wallet: wallet,
                           showActions: !_isSelectionMode,
+                          isDefault: wallet.walletIndex == defaultWalletIndex,
                           onTap: () => _openWalletDetail(wallet),
                           onRename: () => _renameWallet(wallet),
                           onDelete: () => _deleteWallet(wallet),
@@ -679,6 +686,7 @@ class WalletListTile extends StatelessWidget {
     required this.onTap,
     required this.onRename,
     required this.onDelete,
+    this.isDefault = false,
   });
 
   final WalletProfile wallet;
@@ -688,6 +696,10 @@ class WalletListTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onRename;
   final VoidCallback onDelete;
+
+  /// 是否为默认用户钱包（列表中最靠前的热钱包）。默认卡片在三点菜单
+  /// 左侧展示「默认用户」徽标，代表该钱包用于聊天与发动态的身份。
+  final bool isDefault;
 
   @override
   Widget build(BuildContext context) {
@@ -748,6 +760,25 @@ class WalletListTile extends StatelessWidget {
                   ],
                 ),
               ),
+              // 默认用户徽标：默认钱包在三点菜单左侧展示（聊天/发动态身份）。
+              if (isDefault) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withAlpha(24),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  ),
+                  child: const Text(
+                    '默认用户',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primaryDark,
+                    ),
+                  ),
+                ),
+              ],
               // 右：三点菜单（仅非选择模式）
               if (showActions) ...[
                 const SizedBox(width: 4),
@@ -984,12 +1015,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         walletName: newName,
         walletIcon: widget.wallet.walletIcon,
       );
-      // 双向同步：如果该钱包是通信账户，同步更新用户资料中的昵称
-      final profileService = UserProfileService();
-      final profileState = await profileService.getState();
-      if (profileState.communicationWalletIndex == widget.wallet.walletIndex) {
-        await profileService.updateCommunicationWalletName(newName);
-      }
       if (!mounted) return;
       setState(() {
         _hasChanged = true;

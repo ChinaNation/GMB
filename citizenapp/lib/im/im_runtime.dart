@@ -7,7 +7,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../8964/services/square_api_client.dart';
-import '../my/user/user_service.dart';
 import '../signer/signing.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'crypto/im_identity_binding.dart';
@@ -87,7 +86,6 @@ class ImRuntime {
   ImRuntime({
     ImIsarStore? store,
     WalletManager? walletManager,
-    UserProfileService? profileService,
     SharedPreferences? preferences,
     SquareApiClient? squareApiClient,
     ImSquareLoginPayloadSigner? squareLoginPayloadSigner,
@@ -100,7 +98,6 @@ class ImRuntime {
     ImCloudflareTransportFactory? cloudflareTransportFactory,
   })  : _store = store ?? ImIsarStore(),
         _walletManager = walletManager ?? WalletManager(),
-        _profileService = profileService ?? UserProfileService(),
         _preferences = preferences,
         _squareApiClient = squareApiClient ?? SquareApiClient(),
         _squareLoginPayloadSigner = squareLoginPayloadSigner,
@@ -118,7 +115,6 @@ class ImRuntime {
 
   final ImIsarStore _store;
   final WalletManager _walletManager;
-  final UserProfileService _profileService;
   final SharedPreferences? _preferences;
   final SquareApiClient _squareApiClient;
   final ImSquareLoginPayloadSigner? _squareLoginPayloadSigner;
@@ -155,9 +151,8 @@ class ImRuntime {
   }
 
   Future<String?> readCommunicationAddress() async {
-    final profile = await _profileService.getState();
-    final address = profile.communicationAddress?.trim() ?? '';
-    return address.isEmpty ? null : address;
+    final wallet = await _walletManager.getDefaultWallet();
+    return wallet?.address;
   }
 
   static String directConversationId(
@@ -563,18 +558,10 @@ class ImRuntime {
   }
 
   Future<_ImCommunicationAccount> _readCommunicationAccount() async {
-    final profile = await _profileService.getState();
-    final walletIndex = profile.communicationWalletIndex;
-    final address = profile.communicationAddress?.trim() ?? '';
-    if (walletIndex == null || address.isEmpty) {
-      throw StateError('请先在用户资料中设置通信账户');
-    }
-    final wallet = await _walletManager.getWalletByIndex(walletIndex);
+    // 身份统一取默认用户钱包（钱包列表中最靠前的热钱包）。
+    final wallet = await _walletManager.getDefaultWallet();
     if (wallet == null) {
-      throw StateError('通信账户钱包不存在，请重新设置通信账户');
-    }
-    if (wallet.address != address) {
-      throw StateError('通信账户地址与本地钱包不一致，请重新设置通信账户');
+      throw StateError('请先在「我的 → 我的钱包」创建热钱包，第一个热钱包即默认用户');
     }
     return _ImCommunicationAccount(
       walletIndex: wallet.walletIndex,

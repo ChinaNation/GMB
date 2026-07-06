@@ -42,7 +42,8 @@ class SquareIdentityService {
   final SquareChainService? chainService;
 
   Future<SquareIdentityState> loadCurrent() async {
-    final wallet = await (walletManager ?? WalletManager()).getWallet();
+    // 发动态身份统一取默认用户钱包（列表中最靠前的热钱包），与聊天同源。
+    final wallet = await (walletManager ?? WalletManager()).getDefaultWallet();
     if (wallet == null) {
       return const SquareIdentityState(ownerAccount: '');
     }

@@ -205,6 +205,27 @@ class WalletManager {
     return _toProfile(row);
   }
 
+  /// 默认用户钱包：钱包列表中最靠前的**热钱包**。
+  ///
+  /// 这是公民 App 的统一身份来源，同时用于聊天和发动态。排序沿用
+  /// [getWallets] 的 sortOrder（用户拖拽置顶即改默认），冷钱包永不成为
+  /// 默认。列表中没有任何热钱包时返回 null，由上层给出创建热钱包引导。
+  Future<WalletProfile?> getDefaultWallet() async {
+    final wallets = await getWallets();
+    for (final wallet in wallets) {
+      if (wallet.isHotWallet) {
+        return wallet;
+      }
+    }
+    return null;
+  }
+
+  /// 默认用户钱包的 walletIndex；无热钱包时返回 null。
+  Future<int?> getDefaultWalletIndex() async {
+    final wallet = await getDefaultWallet();
+    return wallet?.walletIndex;
+  }
+
   /// 获取当前活跃热钱包的密钥材料。冷钱包返回 null。
   ///
   /// **已弃用**：请使用 [signWithWallet] 或 [signUtf8WithWallet]，seed 不出类。

@@ -7,34 +7,14 @@ class UserProfileState {
   const UserProfileState({
     this.avatarPath,
     this.backgroundPath,
-    this.communicationWalletIndex,
-    this.communicationAddress,
-    this.communicationWalletName,
   });
 
   final String? avatarPath;
   final String? backgroundPath;
 
-  /// 通信账户钱包 index（对应 WalletProfile.walletIndex）。
-  final int? communicationWalletIndex;
-
-  /// 通信账户钱包地址（SS58）。
-  final String? communicationAddress;
-
-  /// 通信账户钱包名称（= 用户昵称）。
-  final String? communicationWalletName;
-
-  /// 用户昵称 = 通信钱包名称，未设置时显示默认值。
-  String get nickname => communicationWalletName?.trim().isNotEmpty == true
-      ? communicationWalletName!
-      : UserProfileService.defaultNickname;
-
   UserProfileState copyWith({
     Object? avatarPath = _sentinel,
     Object? backgroundPath = _sentinel,
-    Object? communicationWalletIndex = _sentinel,
-    Object? communicationAddress = _sentinel,
-    Object? communicationWalletName = _sentinel,
   }) {
     return UserProfileState(
       avatarPath: identical(avatarPath, _sentinel)
@@ -43,15 +23,6 @@ class UserProfileState {
       backgroundPath: identical(backgroundPath, _sentinel)
           ? this.backgroundPath
           : backgroundPath as String?,
-      communicationWalletIndex: identical(communicationWalletIndex, _sentinel)
-          ? this.communicationWalletIndex
-          : communicationWalletIndex as int?,
-      communicationAddress: identical(communicationAddress, _sentinel)
-          ? this.communicationAddress
-          : communicationAddress as String?,
-      communicationWalletName: identical(communicationWalletName, _sentinel)
-          ? this.communicationWalletName
-          : communicationWalletName as String?,
     );
   }
 
@@ -59,9 +30,6 @@ class UserProfileState {
     return <String, dynamic>{
       'avatar_path': avatarPath,
       'background_path': backgroundPath,
-      'communication_wallet_index': communicationWalletIndex,
-      'communication_address': communicationAddress,
-      'communication_wallet_name': communicationWalletName,
     };
   }
 
@@ -69,11 +37,6 @@ class UserProfileState {
     return UserProfileState(
       avatarPath: _normalizeOptionalString(json['avatar_path']),
       backgroundPath: _normalizeOptionalString(json['background_path']),
-      communicationWalletIndex: json['communication_wallet_index'] as int?,
-      communicationAddress:
-          _normalizeOptionalString(json['communication_address']),
-      communicationWalletName:
-          _normalizeOptionalString(json['communication_wallet_name']),
     );
   }
 }
@@ -197,28 +160,6 @@ class UserProfileService {
   Future<UserProfileState> updateBackgroundPath(String? backgroundPath) async {
     final current = await getState();
     return saveState(current.copyWith(backgroundPath: backgroundPath));
-  }
-
-  /// 设置通信账户（钱包 index + 地址 + 名称）。
-  Future<UserProfileState> setCommunicationWallet({
-    required int walletIndex,
-    required String address,
-    required String walletName,
-  }) async {
-    final current = await getState();
-    return saveState(current.copyWith(
-      communicationWalletIndex: walletIndex,
-      communicationAddress: address,
-      communicationWalletName: walletName,
-    ));
-  }
-
-  /// 更新通信账户钱包名称（双向同步用）。
-  Future<UserProfileState> updateCommunicationWalletName(
-      String walletName) async {
-    final current = await getState();
-    if (current.communicationWalletIndex == null) return current;
-    return saveState(current.copyWith(communicationWalletName: walletName));
   }
 }
 

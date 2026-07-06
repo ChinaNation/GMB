@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../my/user/user_service.dart';
 import '../ui/app_theme.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'im_chat_page.dart';
@@ -32,7 +31,6 @@ class ImTabPage extends StatefulWidget {
     super.key,
     ImIsarStore? store,
     WalletManager? walletManager,
-    UserProfileService? profileService,
     this.currentUserId,
     this.sendTextFactory,
     this.sendAttachmentFactory,
@@ -40,12 +38,10 @@ class ImTabPage extends StatefulWidget {
     this.syncFactory,
     this.runtime,
   })  : store = store ?? ImIsarStore(),
-        walletManager = walletManager ?? WalletManager(),
-        profileService = profileService ?? UserProfileService();
+        walletManager = walletManager ?? WalletManager();
 
   final ImIsarStore store;
   final WalletManager walletManager;
-  final UserProfileService profileService;
   final String? currentUserId;
   final ImSendTextFactory? sendTextFactory;
   final ImSendAttachmentFactory? sendAttachmentFactory;
@@ -264,8 +260,9 @@ class _ImTabPageState extends State<ImTabPage> {
     if (runtimeAddress != null && runtimeAddress.isNotEmpty) {
       return runtimeAddress;
     }
-    final profile = await widget.profileService.getState();
-    return profile.communicationAddress?.trim() ?? '';
+    // 身份统一取默认用户钱包（列表中最靠前的热钱包）。
+    final wallet = await widget.walletManager.getDefaultWallet();
+    return wallet?.address ?? '';
   }
 
   Future<void> _deleteLocalConversation(String conversationId) {

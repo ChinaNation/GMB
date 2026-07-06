@@ -139,21 +139,20 @@ class SquareApiConfig {
   const SquareApiConfig._();
 
   static const baseUrlDefineName = 'CITIZENAPP_SQUARE_API_BASE_URL';
-  static const localDevBaseUrl = 'http://127.0.0.1:8787';
+
+  /// 线上 Worker 唯一默认地址：聊天 mailbox 与广场共用同一个 Cloudflare Worker。
+  /// 默认即连生产 Cloudflare，绝不回落本机；开发者要连本机 wrangler dev 时，
+  /// 显式传 --dart-define=CITIZENAPP_SQUARE_API_BASE_URL=http://127.0.0.1:8787。
+  static const prodBaseUrl =
+      'https://citizenapp-square-api.stews87-fawn.workers.dev';
 
   static const _configuredBaseUrl = String.fromEnvironment(baseUrlDefineName);
-  static const _isProductBuild = bool.fromEnvironment('dart.vm.product');
 
   static String get defaultBaseUrl {
     if (_configuredBaseUrl.trim().isNotEmpty) {
       return normalizeBaseUrl(_configuredBaseUrl);
     }
-    if (_isProductBuild) {
-      throw UnsupportedError(
-        '生产广场 API 地址必须通过 --dart-define=$baseUrlDefineName=https://... 显式提供',
-      );
-    }
-    return localDevBaseUrl;
+    return prodBaseUrl;
   }
 
   static String normalizeBaseUrl(String value) {

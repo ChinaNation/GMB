@@ -119,10 +119,10 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 机构命名规范 | `institution-naming.md` | `memory/07-ai/` | 管理机构具体中英文全称/简称；字段命名仍以本文件为总入口 |
 | 统一协议文件 | `unified-protocols.md` | `memory/07-ai/` | 管理协议、载荷格式和接口契约 |
 | 统一必读文件 | `unified-required-reading.md` | `memory/07-ai/` | 管理每次设计和编程前必须读取的文档 |
-| GMB IM 协议 | `GMB_IM_V1` | `memory/07-ai/unified-protocols.md` / `citizenapp/im/proto/im_envelope.proto` / `citizenapp/lib/im/` / `citizenapp/cloudflare/square_worker/src/chat/` / `citizenapp/android/im/` / `citizenapp/ios/im/` | 公民私密聊天的 Protobuf 外层协议，统一承载 Cloudflare 互联网聊天和近场聊天的 OpenMLS 密文 |
+| GMB IM 协议 | `GMB_IM_V1` | `memory/07-ai/unified-protocols.md` / `citizenapp/im/proto/im_envelope.proto` / `citizenapp/lib/im/` / `citizenapp/cloudflare/src/chat/` / `citizenapp/android/im/` / `citizenapp/ios/im/` | 公民私密聊天的 Protobuf 外层协议，统一承载 Cloudflare 互联网聊天和近场聊天的 OpenMLS 密文 |
 | IM Envelope | `ImEnvelope` | `GMB_IM_V1` / `citizenapp/lib/im/` | IM 外层消息信封，承载 OpenMLS wire bytes、MLS 消息类型、ratchet tree、附件引用和 ack 策略 |
 | IM 路由记录 | `ImRouteRecord` | `GMB_IM_V1` / `citizenapp/lib/im/storage/im_isar_store.dart` / `citizenapp/lib/isar/wallet_isar.dart` | IM 内部路由缓存，保存对方钱包聊天账户、设备公钥、安全码、Cloudflare mailbox 标识和近场提示，不替代“我的通讯录” |
-| IM KeyPackage | `ImKeyPackage` / `ImMlsKeyPackage` | `GMB_IM_V1` / `citizenapp/lib/im/crypto/` / `citizenapp/cloudflare/square_worker/src/chat/` | OpenMLS 设备预密钥包，发布到 Cloudflare 密文 mailbox 的对应钱包账号池并一次性消费 |
+| IM KeyPackage | `ImKeyPackage` / `ImMlsKeyPackage` | `GMB_IM_V1` / `citizenapp/lib/im/crypto/` / `citizenapp/cloudflare/src/chat/` | OpenMLS 设备预密钥包，发布到 Cloudflare 密文 mailbox 的对应钱包账号池并一次性消费 |
 | IM OpenMLS native 实现 | `NativeImMlsCrypto` / `ImMlsNativeBindings` | `citizenapp/lib/im/crypto/im_mls_native.dart` | Dart 侧调用现有 `libsmoldot` native 库中的 OpenMLS C ABI，生成真实 KeyPackage、执行 OpenMLS smoke、创建/恢复持久化 MLS 会话 |
 | IM OpenMLS 会话模型 | `ImMlsWireMessage` / `ImMlsOutboundMessage` / `ImMlsInboundMessage` / `ImMlsMessageKind` | `citizenapp/lib/im/crypto/im_mls_session.dart` | Dart 侧描述 Welcome/application wire message、首次会话输出顺序和入站处理结果，不实现密码学 |
 | IM OpenMLS 状态目录 | `ImMlsStateStore` | `citizenapp/lib/im/crypto/im_mls_state_store.dart` | App 私有 MLS 状态目录和 pending inbound 队列边界，OpenMLS provider storage 仍由 Rust native 写入 |
@@ -135,10 +135,10 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | IM 路由缓存记录 | `ImRouteRecord` | `citizenapp/lib/im/storage/im_isar_store.dart` | 公民端 IM 路由缓存模型，保存对方钱包聊天账户、IM 设备公钥、安全码、Cloudflare mailbox 标识和近场提示 |
 | IM 聊天页面 | `ImChatPage` | `citizenapp/lib/im/im_chat_page.dart` | 通讯录详情“消息”按钮和信息 Tab 会话列表共用的聊天详情页，使用 `flutter_chat_ui` 展示本地消息，默认由 `ImRuntime` 注入真实 P2P/MLS 发送和同步回调 |
 | IM 聊天 UI 适配器 | `imStoredMessageToChatMessage` / `imStoredMessagesToChatMessages` | `citizenapp/lib/im/im_chat_ui_adapter.dart` | 将本地 IM 消息记录转换为 `flutter_chat_core.Message`，避免 UI 层直接读取 Isar entity |
-| IM Cloudflare 传输 | `ImCloudflareTransport` | `citizenapp/lib/im/transport/` / `citizenapp/cloudflare/square_worker/src/chat/` | 互联网聊天正式传输，向 Cloudflare 密文 mailbox 投递、拉取和 ack `ImEnvelope` |
+| IM Cloudflare 传输 | `ImCloudflareTransport` | `citizenapp/lib/im/transport/` / `citizenapp/cloudflare/src/chat/` | 互联网聊天正式传输，向 Cloudflare 密文 mailbox 投递、拉取和 ack `ImEnvelope` |
 | IM 近场传输 | `ImNearbyTransport` | `citizenapp/lib/im/transport/` / `citizenapp/android/im/` / `citizenapp/ios/im/` | 无互联网近场聊天正式传输，通过蓝牙和 Wi-Fi 手机直连传输同一种 `ImEnvelope` |
 | IM 节点端点 | `ImNodeEndpoint` / `ImPrivateNodeEndpoint` | 旧 `citizenchain/node/src/im/endpoint.rs` / 旧 `citizenapp/lib/im/transport/` 通信节点类型 | 已删除旧名；旧通信节点 IPv4、IPv6、dns4、dnsaddr multiaddr 入口模型，不得恢复 |
-| IM 设备绑定请求 | `RegisterImDeviceRequest` / `ImBindingPayload` | `GMB_IM_V1` / `citizenapp/lib/im/crypto/` / `citizenapp/cloudflare/square_worker/src/chat/` | 钱包聊天账户和 IM 设备密钥的绑定载荷；不得再绑定通信节点 PeerId 或端点 |
+| IM 设备绑定请求 | `RegisterImDeviceRequest` / `ImBindingPayload` | `GMB_IM_V1` / `citizenapp/lib/im/crypto/` / `citizenapp/cloudflare/src/chat/` | 钱包聊天账户和 IM 设备密钥的绑定载荷；不得再绑定通信节点 PeerId 或端点 |
 | IM 直连投递请求 | `ImDirectDeliveryRequest` | 旧 `citizenchain/node/src/im/direct.rs` | 已删除旧名；旧显式 PeerId + multiaddr 到对方通信节点的密文投递请求，不得恢复 |
 | IM 直连 KeyPackage 请求 | `ImDirectKeyPackageFetchRequest` / `ImDirectKeyPackageConsumeRequest` | 旧 `citizenchain/node/src/im/keypackage.rs` / 旧 `citizenapp/lib/im/transport/` 通信节点类型 | 已删除旧名；旧显式 PeerId + multiaddr 到对方通信节点的 KeyPackage 拉取和消费请求，不得恢复 |
 | IM 网络请求 | `ImNetworkRequest` / `ImNetworkResponse` | 旧 `citizenchain/node/src/im/network.rs` | 已删除旧名；旧 `/gmb/im/1` request-response 的 Spike 阶段 JSON wire 请求和响应，不得恢复 |
