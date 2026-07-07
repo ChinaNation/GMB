@@ -1,9 +1,9 @@
-// 公民链上身份确认载荷(VotingIdentityPayload)独立解码器。
+// 公民链上身份确认载荷独立解码器。
 //
 // 两色识别模型:签名前必须能从 payload 字节独立解码出全部字段并展示给公民,
 // 解不开一律拒签。SCALE 布局与链端结构体逐字节一致,字段变更三处必须同步:
 //   citizenchain/runtime/otherpallet/citizen-identity/src/lib.rs
-//     (VotingIdentityPayload)
+//     (VotingIdentityPayload / CandidateIdentityPayload)
 //   citizenwallet/lib/signer/payload_decoder.dart(_readVotingIdentityPayload)
 //   本文件
 import 'dart:convert';
@@ -17,8 +17,11 @@ const int kMinOnchainCitizenAgeYears = 16;
 /// CitizenChain SS58 前缀。
 const int _ss58Prefix = 2027;
 
+enum CitizenIdentityConsentLevel { voting, candidate }
+
 class VotingIdentityConsentPayload {
   const VotingIdentityConsentPayload({
+    required this.identityLevel,
     required this.cidNumber,
     required this.walletPubkeyHex,
     required this.walletAddress,
@@ -29,8 +32,14 @@ class VotingIdentityConsentPayload {
     required this.provinceCode,
     required this.cityCode,
     required this.townCode,
+    this.birthProvinceCode,
+    this.birthCityCode,
+    this.birthTownCode,
+    this.citizenFullName,
+    this.citizenSexLabel,
   });
 
+  final CitizenIdentityConsentLevel identityLevel;
   final String cidNumber;
 
   /// 0x 小写 hex,32 字节公民钱包公钥。
@@ -51,18 +60,109 @@ class VotingIdentityConsentPayload {
   final String provinceCode;
   final String cityCode;
   final String townCode;
+  final String? birthProvinceCode;
+  final String? birthCityCode;
+  final String? birthTownCode;
+  final String? citizenFullName;
+  final String? citizenSexLabel;
 
-  /// 解码 SCALE `VotingIdentityPayload`,必须恰好消费完全部字节。
+  bool get isCandidate =>
+      identityLevel == CitizenIdentityConsentLevel.candidate;
+
+  /// 解码 SCALE 公民身份载荷,必须恰好消费完全部字节。
   ///
   /// 任何字段越界、长度非法、年龄不足、日期非法、状态未知都返回 null,
   /// 由调用方按"无法独立验证"拒签。
   static VotingIdentityConsentPayload? decode(Uint8List bytes) {
-    var offset = 0;
+    return _decodeCandidate(bytes) ?? _decodeVotingRoot(bytes);
+  }
 
-    final (cidNumber, afterCid) = _readUtf8Vec(bytes, offset);
-    if (cidNumber == null || cidNumber.isEmpty || cidNumber.length > 32) {
-      return null;
-    }
+  /// 确认页展示条目,字段中文名与 citizenwallet 确认页一致。
+  List<(String, String)> get reviewEntries => [
+        ('身份类型', isCandidate ? '参选身份' : '投票身份'),
+        ('CID编号', cidNumber),
+        ('公民钱包账户', walletAddress),
+        ('周岁年龄', '$ageYears周岁'),
+        (
+          '护照有效期',
+          '${_formatDateInt(validFrom)} 至 ${_formatDateInt(validUntil)}'
+        ),
+        ('身份状态', statusNormal ? '正常' : '注销'),
+        ('居住地', '$provinceCode / $cityCode / $townCode'),
+        if (isCandidate) ...[
+          (
+            '出生地',
+            '$birthProvinceCode / $birthCityCode / $birthTownCode',
+          ),
+          ('公民姓名', citizenFullName ?? ''),
+          ('公民性别', citizenSexLabel ?? ''),
+        ],
+      ];
+
+  static VotingIdentityConsentPayload? _decodeVotingRoot(Uint8List bytes) {
+    final decoded = _readVotingIdentityPayload(bytes, 0);
+    if (decoded == null || decoded.next != bytes.length) return null;
+    return decoded.payload;
+  }
+
+  static VotingIdentityConsentPayload? _decodeCandidate(Uint8List bytes) {
+    final voting = _readVotingIdentityPayload(bytes, 0);
+    if (voting == null) return null;
+    var offset = voting.next;
+
+    final (birthProvinceCode, afterBirthProvince) =
+        _readUtf8Vec(bytes, offset, maxLen: 16);
+    if (birthProvinceCode == null) return null;
+    offset = afterBirthProvince;
+    final (birthCityCode, afterBirthCity) =
+        _readUtf8Vec(bytes, offset, maxLen: 16);
+    if (birthCityCode == null) return null;
+    offset = afterBirthCity;
+    final (birthTownCode, afterBirthTown) =
+        _readUtf8Vec(bytes, offset, maxLen: 16);
+    if (birthTownCode == null) return null;
+    offset = afterBirthTown;
+    final (citizenFullName, afterFullName) =
+        _readUtf8Vec(bytes, offset, maxLen: 128);
+    if (citizenFullName == null) return null;
+    offset = afterFullName;
+    if (offset >= bytes.length) return null;
+    final sex = bytes[offset];
+    offset += 1;
+    final sexLabel = switch (sex) {
+      0 => '男',
+      1 => '女',
+      _ => null,
+    };
+    if (sexLabel == null || offset != bytes.length) return null;
+
+    final base = voting.payload;
+    return VotingIdentityConsentPayload(
+      identityLevel: CitizenIdentityConsentLevel.candidate,
+      cidNumber: base.cidNumber,
+      walletPubkeyHex: base.walletPubkeyHex,
+      walletAddress: base.walletAddress,
+      ageYears: base.ageYears,
+      validFrom: base.validFrom,
+      validUntil: base.validUntil,
+      statusNormal: base.statusNormal,
+      provinceCode: base.provinceCode,
+      cityCode: base.cityCode,
+      townCode: base.townCode,
+      birthProvinceCode: birthProvinceCode,
+      birthCityCode: birthCityCode,
+      birthTownCode: birthTownCode,
+      citizenFullName: citizenFullName,
+      citizenSexLabel: sexLabel,
+    );
+  }
+
+  static ({
+    VotingIdentityConsentPayload payload,
+    int next,
+  })? _readVotingIdentityPayload(Uint8List bytes, int offset) {
+    final (cidNumber, afterCid) = _readUtf8Vec(bytes, offset, maxLen: 32);
+    if (cidNumber == null) return null;
     offset = afterCid;
     if (offset + 32 + 1 + 4 + 4 + 1 > bytes.length) return null;
 
@@ -86,59 +186,53 @@ class VotingIdentityConsentPayload {
     offset += 1;
     if (status > 1) return null;
 
-    final (provinceCode, afterProvince) = _readUtf8Vec(bytes, offset);
-    if (provinceCode == null ||
-        provinceCode.isEmpty ||
-        provinceCode.length > 16) {
-      return null;
-    }
+    final (provinceCode, afterProvince) =
+        _readUtf8Vec(bytes, offset, maxLen: 16);
+    if (provinceCode == null) return null;
     offset = afterProvince;
-    final (cityCode, afterCity) = _readUtf8Vec(bytes, offset);
-    if (cityCode == null || cityCode.isEmpty || cityCode.length > 16) {
-      return null;
-    }
+    final (cityCode, afterCity) = _readUtf8Vec(bytes, offset, maxLen: 16);
+    if (cityCode == null) return null;
     offset = afterCity;
-    final (townCode, afterTown) = _readUtf8Vec(bytes, offset);
-    if (townCode == null || townCode.isEmpty || townCode.length > 16) {
-      return null;
-    }
+    final (townCode, afterTown) = _readUtf8Vec(bytes, offset, maxLen: 16);
+    if (townCode == null) return null;
     offset = afterTown;
-    if (offset != bytes.length) return null;
 
-    return VotingIdentityConsentPayload(
-      cidNumber: cidNumber,
-      walletPubkeyHex: _bytesToLowerHex(walletBytes),
-      walletAddress: Keyring().encodeAddress(walletBytes.toList(), _ss58Prefix),
-      ageYears: age,
-      validFrom: validFrom,
-      validUntil: validUntil,
-      statusNormal: status == 0,
-      provinceCode: provinceCode,
-      cityCode: cityCode,
-      townCode: townCode,
+    return (
+      payload: VotingIdentityConsentPayload(
+        identityLevel: CitizenIdentityConsentLevel.voting,
+        cidNumber: cidNumber,
+        walletPubkeyHex: _bytesToLowerHex(walletBytes),
+        walletAddress:
+            Keyring().encodeAddress(walletBytes.toList(), _ss58Prefix),
+        ageYears: age,
+        validFrom: validFrom,
+        validUntil: validUntil,
+        statusNormal: status == 0,
+        provinceCode: provinceCode,
+        cityCode: cityCode,
+        townCode: townCode,
+      ),
+      next: offset,
     );
   }
 
-  /// 确认页展示条目,字段中文名与 citizenwallet 确认页一致。
-  List<(String, String)> get reviewEntries => [
-        ('CID编号', cidNumber),
-        ('公民钱包账户', walletAddress),
-        ('周岁年龄', '$ageYears周岁'),
-        ('护照有效期', '${_formatDateInt(validFrom)} 至 ${_formatDateInt(validUntil)}'),
-        ('身份状态', statusNormal ? '正常' : '注销'),
-        ('居住地', '$provinceCode / $cityCode / $townCode'),
-      ];
-
-  static (String?, int) _readUtf8Vec(Uint8List bytes, int offset) {
+  static (String?, int) _readUtf8Vec(
+    Uint8List bytes,
+    int offset, {
+    required int maxLen,
+  }) {
     if (offset >= bytes.length) return (null, offset);
     final (len, lenSize) = _decodeCompactU32(bytes, offset);
     if (lenSize == 0) return (null, offset);
     offset += lenSize;
-    if (offset + len > bytes.length) return (null, offset);
+    if (len <= 0 || len > maxLen || offset + len > bytes.length) {
+      return (null, offset);
+    }
     final text = utf8.decode(
       bytes.sublist(offset, offset + len),
-      allowMalformed: true,
+      allowMalformed: false,
     );
+    if (text.trim().isEmpty) return (null, offset);
     return (text, offset + len);
   }
 

@@ -80,7 +80,7 @@ class _ImCommunicationAccount {
 /// 公民 IM 运行态编排服务。
 ///
 /// 页面层不直接操作 OpenMLS、Cloudflare mailbox、近场通道和 Isar。
-/// 这个服务负责读取用户资料中的通信账户、建立设备身份，并把聊天发送
+/// 这个服务负责读取默认用户钱包、建立设备身份，并把聊天发送
 /// /同步接到正式 transport。钱包私钥只用于设备绑定证明，不参与消息加密。
 class ImRuntime {
   ImRuntime({
@@ -125,7 +125,6 @@ class ImRuntime {
     ImMlsStateStore stateStore,
   )? _cryptoFactory;
   final ImCloudflareTransportFactory? _cloudflareTransportFactory;
-  final Set<int> _authenticatedWalletIndexes = <int>{};
 
   Future<SharedPreferences> get _prefs async {
     final provided = _preferences;
@@ -542,16 +541,13 @@ class ImRuntime {
     }
     final wallet = await _walletManager.getWalletByIndex(account.walletIndex);
     if (wallet == null || wallet.address != account.address) {
-      throw StateError('通信账户钱包不存在，请重新设置通信账户');
+      throw StateError('默认用户钱包不存在，请在「我的 → 我的钱包」重新设置');
     }
     if (!wallet.isHotWallet) {
-      throw StateError('冷钱包通信账户需要在聊天页接入扫码签名后才能自动登记 IM 设备');
+      throw StateError('默认用户必须是热钱包');
     }
-    if (!_authenticatedWalletIndexes.contains(account.walletIndex)) {
-      // 首次自动登记或登录 mailbox 时验证一次，之后只签 Worker 登录和设备绑定。
-      await _walletManager.authenticateForSigning();
-      _authenticatedWalletIndexes.add(account.walletIndex);
-    }
+    // 聊天登录 mailbox 与 IM 设备绑定使用默认热钱包静默签名，不弹身份验证：
+    // 这些操作不涉及转账，授权只保留在转账/投票/切换默认钱包等动钱或换身份处。
     final signature =
         await _walletManager.signWithWalletNoAuth(account.walletIndex, payload);
     return '0x${_hexEncode(signature)}';

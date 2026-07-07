@@ -17,9 +17,17 @@ import {
 } from "./chat/service";
 import { feedRoute } from "./feeds/service";
 import { followRoute, unfollowRoute } from "./feeds/follows";
+import { mediaRoute } from "./media/service";
 import { membershipRoute } from "./membership/service";
 import { reportRoute, signalRoute } from "./moderation/service";
 import { confirmPostRoute } from "./posts/confirm";
+import { devPutProfileAsset, prepareProfileAsset } from "./profiles/assets";
+import {
+  getUserFollowsRoute,
+  getUserPostsRoute,
+  getUserProfileRoute,
+  putProfileRoute,
+} from "./profiles/service";
 import {
   completeUpload,
   devPutUploadObject,
@@ -69,8 +77,23 @@ export async function routeRequest(
   if (request.method === "POST" && path === "/v1/square/posts/confirm") {
     return confirmPostRoute(request, env);
   }
+  if (request.method === "GET" && path.startsWith("/v1/square/media/")) {
+    return mediaRoute(request, env, path);
+  }
   if (request.method === "GET" && path.startsWith("/v1/square/feed/")) {
     return feedRoute(request, env, parseFeedKind(path));
+  }
+  if (request.method === "PUT" && path === "/v1/square/profile") {
+    return putProfileRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/profile/assets/prepare") {
+    return prepareProfileAsset(request, env);
+  }
+  if (request.method === "PUT" && path === "/v1/square/profile/assets/dev-put") {
+    return devPutProfileAsset(request, env);
+  }
+  if (request.method === "GET" && path.startsWith("/v1/square/users/")) {
+    return routeUserPath(request, env, path);
   }
   if (request.method === "POST" && path === "/v1/square/follows") {
     return followRoute(request, env);
@@ -124,6 +147,26 @@ export async function routeRequest(
     return devGetChatAttachmentObject(request, env);
   }
 
+  throw new HttpError(404, "route_not_found", "广场接口不存在");
+}
+
+function routeUserPath(
+  request: Request,
+  env: Env,
+  path: string,
+): Promise<Response> {
+  const rest = path.slice("/v1/square/users/".length);
+  const segments = rest.split("/").filter((segment) => segment.length > 0);
+  const account = segments[0] ?? "";
+  if (segments.length === 1) {
+    return getUserProfileRoute(request, env, account);
+  }
+  if (segments.length === 2 && segments[1] === "posts") {
+    return getUserPostsRoute(request, env, account);
+  }
+  if (segments.length === 2 && segments[1] === "follows") {
+    return getUserFollowsRoute(request, env, account);
+  }
   throw new HttpError(404, "route_not_found", "广场接口不存在");
 }
 

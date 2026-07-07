@@ -185,10 +185,14 @@ class PayloadDecoder {
         }
       }
 
-      // ── CitizenIdentity(10) · 公民链上投票身份注册 ──
-      if (palletIndex == PalletRegistry.citizenIdentityPallet &&
-          callIndex == PalletRegistry.registerVotingIdentityCall) {
-        return _decodeRegisterVotingIdentity(bytes);
+      // ── CitizenIdentity(10) · 公民链上投票/参选身份注册 ──
+      if (palletIndex == PalletRegistry.citizenIdentityPallet) {
+        if (callIndex == PalletRegistry.registerVotingIdentityCall) {
+          return _decodeRegisterVotingIdentity(bytes);
+        }
+        if (callIndex == PalletRegistry.upgradeToCandidateIdentityCall) {
+          return _decodeUpgradeToCandidateIdentity(bytes);
+        }
       }
 
       // ── MultisigTransfer(19) ──
@@ -1909,6 +1913,15 @@ class PayloadDecoder {
   //   residence_town_code
   // }
   static DecodedPayload? _decodeCitizenIdentityPayload(Uint8List bytes) {
+    final candidate = _readCandidateIdentityPayload(bytes, 0);
+    if (candidate != null && candidate.next == bytes.length) {
+      return DecodedPayload(
+        action: 'citizen_candidate_identity',
+        summary: '确认公民参选身份上链：${candidate.cidNumber}',
+        fields: candidate.fields,
+        reviewFields: candidate.reviewFields,
+      );
+    }
     final payload = _readVotingIdentityPayload(bytes, 0);
     if (payload == null || payload.next != bytes.length) return null;
     return DecodedPayload(
@@ -1942,6 +1955,41 @@ class PayloadDecoder {
     return DecodedPayload(
       action: 'register_voting_identity',
       summary: '注册公民链上身份：${payload.cidNumber}',
+      fields: <String, String>{
+        'registrar_account': registrarAddress,
+        ...payload.fields,
+        'citizen_signature_len': signatureLen.toString(),
+      },
+      reviewFields: <String, String>{
+        'registrar_account': registrarAddress,
+        ...payload.reviewFields,
+      },
+    );
+  }
+
+  // CitizenIdentity(10) / upgrade_to_candidate_identity(1)
+  // SCALE: [10][1][registrar_account:AccountId32][CandidateIdentityPayload]
+  //        [Vec<u8> citizen_signature]
+  static DecodedPayload? _decodeUpgradeToCandidateIdentity(Uint8List bytes) {
+    if (bytes.length < 2 + 32) return null;
+    var offset = 2;
+    final registrar = bytes.sublist(offset, offset + 32);
+    offset += 32;
+    final payload = _readCandidateIdentityPayload(bytes, offset);
+    if (payload == null) return null;
+    offset = payload.next;
+
+    final (signatureLen, signatureLenSize) = _decodeCompactU32(bytes, offset);
+    if (signatureLenSize == 0 || signatureLen != 64) return null;
+    offset += signatureLenSize;
+    if (offset + signatureLen > bytes.length) return null;
+    offset += signatureLen;
+    if (!_hasCallDataEnd(bytes, offset)) return null;
+
+    final registrarAddress = _bytesToSs58(registrar);
+    return DecodedPayload(
+      action: 'upgrade_to_candidate_identity',
+      summary: '注册公民参选身份：${payload.cidNumber}',
       fields: <String, String>{
         'registrar_account': registrarAddress,
         ...payload.fields,
@@ -2037,6 +2085,78 @@ class PayloadDecoder {
         'valid_range': validRange,
         'citizen_status': statusLabel == 'NORMAL' ? '正常' : '注销',
         'residence': residence,
+      },
+    );
+  }
+
+  static ({
+    String cidNumber,
+    String walletAddress,
+    Map<String, String> fields,
+    Map<String, String> reviewFields,
+    int next,
+  })? _readCandidateIdentityPayload(Uint8List bytes, int offset) {
+    final voting = _readVotingIdentityPayload(bytes, offset);
+    if (voting == null) return null;
+    offset = voting.next;
+
+    final (birthProvinceCode, afterBirthProvince) = _readUtf8Vec(bytes, offset);
+    if (birthProvinceCode == null ||
+        birthProvinceCode.isEmpty ||
+        birthProvinceCode.length > 16) {
+      return null;
+    }
+    offset = afterBirthProvince;
+    final (birthCityCode, afterBirthCity) = _readUtf8Vec(bytes, offset);
+    if (birthCityCode == null ||
+        birthCityCode.isEmpty ||
+        birthCityCode.length > 16) {
+      return null;
+    }
+    offset = afterBirthCity;
+    final (birthTownCode, afterBirthTown) = _readUtf8Vec(bytes, offset);
+    if (birthTownCode == null ||
+        birthTownCode.isEmpty ||
+        birthTownCode.length > 16) {
+      return null;
+    }
+    offset = afterBirthTown;
+    final (citizenFullName, afterFullName) = _readUtf8Vec(bytes, offset);
+    if (citizenFullName == null ||
+        citizenFullName.isEmpty ||
+        citizenFullName.length > 128) {
+      return null;
+    }
+    offset = afterFullName;
+    if (offset >= bytes.length) return null;
+    final sex = bytes[offset];
+    offset += 1;
+    final sexLabel = switch (sex) {
+      0 => '男',
+      1 => '女',
+      _ => null,
+    };
+    if (sexLabel == null) return null;
+
+    final birthPlace = '$birthProvinceCode / $birthCityCode / $birthTownCode';
+    return (
+      cidNumber: voting.cidNumber,
+      walletAddress: voting.walletAddress,
+      next: offset,
+      fields: <String, String>{
+        ...voting.fields,
+        'birth_province_code': birthProvinceCode,
+        'birth_city_code': birthCityCode,
+        'birth_town_code': birthTownCode,
+        'citizen_full_name': citizenFullName,
+        'citizen_sex': sex.toString(),
+      },
+      reviewFields: <String, String>{
+        'identity_level': '参选身份',
+        ...voting.reviewFields,
+        'birth_place': birthPlace,
+        'citizen_full_name': citizenFullName,
+        'citizen_sex': sexLabel,
       },
     );
   }

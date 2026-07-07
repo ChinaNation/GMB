@@ -185,6 +185,8 @@ class _FakeUploader implements SquareContentUploader {
     required String text,
     required List<SquareLocalMediaDraft> mediaDrafts,
     required SquareLoginSigner signLoginPayload,
+    SquarePostContentFormat contentFormat = SquarePostContentFormat.normal,
+    String? title,
     void Function(SquarePublishStage stage)? onStage,
   }) async {
     called = true;

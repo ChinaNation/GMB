@@ -19,10 +19,6 @@ interface ChatSocketAttachment {
   connected_at: number;
 }
 
-type ChatRealtimeStub = DurableObjectStub & {
-  notify(payload: ChatNoticePayload): Promise<number>;
-};
-
 const deviceTagPrefix = "device:";
 
 /// 账户级实时通知 Durable Object。
@@ -39,6 +35,17 @@ export class ChatRealtimeObject implements DurableObject {
   }
 
   async fetch(request: Request): Promise<Response> {
+    // 内部推送入口：Worker 写入 D1 后经 stub.fetch(/__notify) 触发广播。
+    // 走 fetch 而非自定义方法 RPC，避免依赖 DurableObject RPC 基类。
+    if (
+      request.method === "POST" &&
+      new URL(request.url).pathname === "/__notify"
+    ) {
+      const payload = (await request.json()) as ChatNoticePayload;
+      const sent = await this.deliver(payload);
+      return jsonResponse({ ok: true, sent });
+    }
+
     if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
       return jsonResponse(
         {
@@ -76,7 +83,7 @@ export class ChatRealtimeObject implements DurableObject {
     });
   }
 
-  async notify(payload: ChatNoticePayload): Promise<number> {
+  private async deliver(payload: ChatNoticePayload): Promise<number> {
     const sockets = payload.recipient_device_id
       ? this.state.getWebSockets(deviceTag(payload.recipient_device_id))
       : this.state.getWebSockets();
@@ -122,8 +129,18 @@ export async function notifyChatRealtime(
   if (!namespace) {
     return 0;
   }
-  const stub = namespace.getByName(payload.recipient_account) as ChatRealtimeStub;
-  return stub.notify(payload);
+  const stub = namespace.getByName(payload.recipient_account);
+  const request = new Request("https://chat-realtime.internal/__notify", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const response = await stub.fetch(request);
+  if (!response.ok) {
+    return 0;
+  }
+  const data = (await response.json()) as { sent?: number };
+  return data.sent ?? 0;
 }
 
 export function requireChatRealtimeNamespace(

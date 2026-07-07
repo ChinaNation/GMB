@@ -72,13 +72,18 @@ String fieldLabelText(String key) {
     'effective_at' => '生效区块',
     'law_id' => '法律编号',
     'eligible_total' => '合格选民数',
-    // 公民链上身份(citizen_identity / register_voting_identity)。
+    // 公民链上身份(citizen_identity / register_voting_identity /
+    // upgrade_to_candidate_identity)。
     'registrar_account' => '注册机构账户',
+    'identity_level' => '身份类型',
     'wallet_account' => '公民钱包账户',
     'citizen_age_years' => '周岁年龄',
     'valid_range' => '护照有效期',
     'citizen_status' => '身份状态',
     'residence' => '居住地',
+    'birth_place' => '出生地',
+    'citizen_full_name' => '公民姓名',
+    'citizen_sex' => '公民性别',
     _ => '未知字段',
   };
 }

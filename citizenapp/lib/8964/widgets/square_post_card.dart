@@ -9,10 +9,14 @@ class SquarePostCard extends StatelessWidget {
     super.key,
     required this.post,
     this.onTap,
+    this.onAuthorTap,
   });
 
   final SquarePost post;
   final VoidCallback? onTap;
+
+  /// 点击作者头像/名进入其用户主页。
+  final VoidCallback? onAuthorTap;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +29,7 @@ class SquarePostCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _AuthorRow(post: post),
+              _AuthorRow(post: post, onAuthorTap: onAuthorTap),
               if (post.text.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
@@ -63,60 +67,71 @@ class SquarePostCard extends StatelessWidget {
 }
 
 class _AuthorRow extends StatelessWidget {
-  const _AuthorRow({required this.post});
+  const _AuthorRow({required this.post, this.onAuthorTap});
 
   final SquarePost post;
+  final VoidCallback? onAuthorTap;
 
   @override
   Widget build(BuildContext context) {
     final author = post.author;
     return Row(
       children: [
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: AppTheme.primary.withAlpha(20),
-          child: Icon(
-            author.isCertified
-                ? Icons.verified_user_rounded
-                : Icons.account_circle_rounded,
-            color: AppTheme.primary,
-            size: 20,
-          ),
-        ),
-        const SizedBox(width: 10),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      author.title,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+          child: GestureDetector(
+            onTap: onAuthorTap,
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: AppTheme.primary.withAlpha(20),
+                  child: Icon(
+                    author.isCertified
+                        ? Icons.verified_user_rounded
+                        : Icons.account_circle_rounded,
+                    color: AppTheme.primary,
+                    size: 20,
                   ),
-                  if (author.isCertified) ...[
-                    const SizedBox(width: 6),
-                    const Icon(Icons.verified_rounded,
-                        size: 15, color: AppTheme.primary),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _formatCreatedAt(post.createdAt),
-                style: const TextStyle(
-                  color: AppTheme.textTertiary,
-                  fontSize: 12,
                 ),
-              ),
-            ],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              author.title,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          if (author.isCertified) ...[
+                            const SizedBox(width: 6),
+                            const Icon(Icons.verified_rounded,
+                                size: 15, color: AppTheme.primary),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatCreatedAt(post.createdAt),
+                        style: const TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         if (post.postCategory == SquarePostCategory.campaign)

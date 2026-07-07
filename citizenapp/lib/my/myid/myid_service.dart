@@ -1,256 +1,329 @@
-import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:citizenapp/my/myid/myid_api.dart';
+import 'dart:convert';
 
-/// 本地电子护照档案状态。
-enum MyIdArchiveStatus { unset, pending, registered }
+import 'package:flutter/foundation.dart';
+import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:citizenapp/rpc/chain_rpc.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
+
+/// 电子护照只读链上状态。
+///
+/// 本状态不再表达本机“已登记/待登记”档案流程；公民 App 只承认
+/// `CitizenIdentity::VotingIdentityByAccount` 已确认的链上身份。
+enum MyIdIdentityStatus {
+  notOnchain,
+  normal,
+  notYetValid,
+  expired,
+  revoked,
+  conflict,
+  queryFailed,
+}
 
 class MyIdState {
   const MyIdState({
-    required this.archiveStatus,
-    this.walletAddress,
-    this.walletPubkeyHex,
-    this.walletIndex,
-    this.cidNumber,
-    this.passportNo,
-    this.citizenStatus,
-    this.votingEligible,
-    this.voteStatus,
-    this.identityStatus,
+    required this.identityStatus,
+    this.identityWalletAccount,
+    this.identityCidNumber,
     this.passportValidFrom,
     this.passportValidUntil,
-    this.statusUpdatedAt,
-    this.isColdWallet = false,
-    this.updatedAtMillis,
+    this.errorMessage,
   });
 
-  final MyIdArchiveStatus archiveStatus;
-  final String? walletAddress;
-  final String? walletPubkeyHex;
-  final int? walletIndex;
-  final String? cidNumber;
-  final String? passportNo;
-  final String? citizenStatus;
-  final bool? votingEligible;
-  final String? voteStatus;
-  final String? identityStatus;
+  final MyIdIdentityStatus identityStatus;
+
+  /// 链上唯一身份绑定的钱包账户，也就是投票账户。
+  final String? identityWalletAccount;
+  final String? identityCidNumber;
+
+  /// YYYY-MM-DD，直接来自链上 YYYYMMDD 整数的展示格式。
   final String? passportValidFrom;
   final String? passportValidUntil;
-  final int? statusUpdatedAt;
-  final bool isColdWallet;
-  final int? updatedAtMillis;
+  final String? errorMessage;
+
+  bool get hasOnchainIdentity =>
+      identityWalletAccount != null && identityCidNumber != null;
+
+  bool get isCertified => identityStatus == MyIdIdentityStatus.normal;
 }
 
 class MyIdService {
-  final MyIdApi _api = MyIdApi();
+  MyIdService({
+    WalletManager? walletManager,
+    ChainRpc? chainRpc,
+    DateTime Function()? nowProvider,
+  })  : _walletManager = walletManager ?? WalletManager(),
+        _chainRpc = chainRpc ?? ChainRpc(),
+        _nowProvider = nowProvider ?? DateTime.now;
 
-  static const _kArchiveStatus = 'myid.archive_status';
-  static const _kAddress = 'myid.wallet_address';
-  static const _kPubkeyHex = 'myid.wallet_pubkey_hex';
-  static const _kWalletIndex = 'myid.wallet_index';
-  static const _kCidNumber = 'myid.cid_number';
-  static const _kPassportNo = 'myid.passport_no';
-  static const _kCitizenStatus = 'myid.citizen_status';
-  static const _kVotingEligible = 'myid.voting_eligible';
-  static const _kVoteStatus = 'myid.vote_status';
-  static const _kIdentityStatus = 'myid.identity_status';
-  static const _kPassportValidFrom = 'myid.passport_valid_from';
-  static const _kPassportValidUntil = 'myid.passport_valid_until';
-  static const _kStatusUpdatedAt = 'myid.status_updated_at';
-  static const _kIsColdWallet = 'myid.is_cold_wallet';
-  static const _kUpdatedAt = 'myid.updated_at';
+  final WalletManager _walletManager;
+  final ChainRpc _chainRpc;
+  final DateTime Function() _nowProvider;
 
+  /// 从本机钱包列表中发现唯一链上身份钱包。
+  ///
+  /// 这里只读取链上 finalized storage。若本机导入了多个不同公民的身份钱包，
+  /// UI 按异常处理，不会显示多个认证身份。
   Future<MyIdState> getState() async {
-    final prefs = await SharedPreferences.getInstance();
-    final rawArchiveStatus = prefs.getString(_kArchiveStatus) ?? 'unset';
-    final archiveStatus = switch (rawArchiveStatus) {
-      'pending' => MyIdArchiveStatus.pending,
-      'registered' => MyIdArchiveStatus.registered,
-      _ => MyIdArchiveStatus.unset,
-    };
+    List<WalletProfile> wallets;
+    try {
+      wallets = await _walletManager.getWallets();
+    } catch (e) {
+      debugPrint('myid wallet list load failed: $e');
+      return const MyIdState(
+        identityStatus: MyIdIdentityStatus.queryFailed,
+        errorMessage: '本地钱包读取失败',
+      );
+    }
+    if (wallets.isEmpty) {
+      return const MyIdState(identityStatus: MyIdIdentityStatus.notOnchain);
+    }
+
+    final keyToWallet = <String, WalletProfile>{};
+    for (final wallet in wallets) {
+      try {
+        final accountId = Uint8List.fromList(_keyring.decodeAddress(
+          wallet.address,
+        ));
+        final key = _storageMapKey(
+          'CitizenIdentity',
+          'VotingIdentityByAccount',
+          accountId,
+        );
+        keyToWallet['0x${_hexEncode(key)}'] = wallet;
+      } catch (e) {
+        debugPrint('myid skip invalid wallet address ${wallet.address}: $e');
+      }
+    }
+    if (keyToWallet.isEmpty) {
+      return const MyIdState(identityStatus: MyIdIdentityStatus.notOnchain);
+    }
+
+    Map<String, Uint8List?> rows;
+    try {
+      rows = await _chainRpc.fetchStorageBatch(keyToWallet.keys.toList());
+    } catch (e) {
+      debugPrint('myid chain identity query failed: $e');
+      return const MyIdState(
+        identityStatus: MyIdIdentityStatus.queryFailed,
+        errorMessage: '链上身份读取失败',
+      );
+    }
+
+    final identities = <_LocatedVotingIdentity>[];
+    for (final entry in rows.entries) {
+      final raw = entry.value;
+      if (raw == null) continue;
+      final wallet = keyToWallet[entry.key];
+      if (wallet == null) continue;
+      final decoded = _decodeVotingIdentity(raw);
+      if (decoded == null) continue;
+      identities.add(_LocatedVotingIdentity(wallet: wallet, identity: decoded));
+    }
+
+    if (identities.isEmpty) {
+      return const MyIdState(identityStatus: MyIdIdentityStatus.notOnchain);
+    }
+    if (identities.length > 1) {
+      return const MyIdState(
+        identityStatus: MyIdIdentityStatus.conflict,
+        errorMessage: '本机检测到多个链上身份钱包',
+      );
+    }
+
+    final located = identities.single;
+    final identity = located.identity;
     return MyIdState(
-      archiveStatus: archiveStatus,
-      walletAddress: prefs.getString(_kAddress),
-      walletPubkeyHex: prefs.getString(_kPubkeyHex),
-      walletIndex: prefs.getInt(_kWalletIndex),
-      cidNumber: prefs.getString(_kCidNumber),
-      passportNo: prefs.getString(_kPassportNo),
-      citizenStatus: prefs.getString(_kCitizenStatus),
-      votingEligible: prefs.getBool(_kVotingEligible),
-      voteStatus: prefs.getString(_kVoteStatus),
-      identityStatus: prefs.getString(_kIdentityStatus),
-      passportValidFrom: prefs.getString(_kPassportValidFrom),
-      passportValidUntil: prefs.getString(_kPassportValidUntil),
-      statusUpdatedAt: prefs.getInt(_kStatusUpdatedAt),
-      isColdWallet: prefs.getBool(_kIsColdWallet) ?? false,
-      updatedAtMillis: prefs.getInt(_kUpdatedAt),
+      identityStatus: _deriveStatus(identity),
+      identityWalletAccount: located.wallet.address,
+      identityCidNumber: identity.cidNumber,
+      passportValidFrom: _formatDateInt(identity.passportValidFrom),
+      passportValidUntil: _formatDateInt(identity.passportValidUntil),
     );
   }
 
-  /// 选择电子护照使用的钱包。
-  ///
-  /// 这里仅选择本机电子护照钱包,不联网注册、不写已登记态。
-  Future<MyIdState> selectWallet({
-    required String walletAddress,
-    required String walletPubkeyHex,
-    required int walletIndex,
-    required bool isColdWallet,
-  }) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kArchiveStatus, 'pending');
-    await prefs.setString(_kAddress, walletAddress);
-    await prefs.setString(_kPubkeyHex, walletPubkeyHex.trim());
-    await prefs.setInt(_kWalletIndex, walletIndex);
-    await prefs.setBool(_kIsColdWallet, isColdWallet);
-    await prefs.setInt(_kUpdatedAt, now);
-    debugPrint('myid wallet selected: address=$walletAddress');
-    return getState();
+  MyIdIdentityStatus _deriveStatus(_VotingIdentity identity) {
+    if (identity.citizenStatus == _CitizenStatus.revoked) {
+      return MyIdIdentityStatus.revoked;
+    }
+    final today = _dateInt(_nowProvider());
+    if (today < identity.passportValidFrom) {
+      return MyIdIdentityStatus.notYetValid;
+    }
+    if (today > identity.passportValidUntil) {
+      return MyIdIdentityStatus.expired;
+    }
+    return MyIdIdentityStatus.normal;
   }
 
-  /// 从后端同步电子护照状态。
-  ///
-  /// 在 initState / onResume 时调用，静默更新本地缓存。
-  Future<MyIdState> syncFromBackend() async {
-    final localState = await getState();
-    if (localState.walletAddress == null || localState.walletAddress!.isEmpty) {
-      return localState;
-    }
+  _VotingIdentity? _decodeVotingIdentity(Uint8List data) {
     try {
-      final remote = await _api.queryMyIdStatus(
-        localState.walletAddress!,
-      );
-      final prefs = await SharedPreferences.getInstance();
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (remote.found) {
-        await prefs.setString(_kArchiveStatus, 'registered');
-        await _setStringIfPresent(prefs, _kAddress, remote.walletAddress);
-        await _setOptionalString(prefs, _kCidNumber, remote.cidNumber);
-        await _setOptionalString(prefs, _kPassportNo, remote.passportNo);
-        await _setOptionalString(
-          prefs,
-          _kCitizenStatus,
-          remote.citizenStatus,
-        );
-        await _setOptionalBool(
-          prefs,
-          _kVotingEligible,
-          remote.votingEligible,
-        );
-        await _setOptionalString(prefs, _kVoteStatus, remote.voteStatus);
-        await _setOptionalString(
-          prefs,
-          _kIdentityStatus,
-          remote.identityStatus,
-        );
-        await _setOptionalString(
-          prefs,
-          _kPassportValidFrom,
-          remote.passportValidFrom,
-        );
-        await _setOptionalString(
-          prefs,
-          _kPassportValidUntil,
-          remote.passportValidUntil,
-        );
-        await _setOptionalInt(
-          prefs,
-          _kStatusUpdatedAt,
-          remote.statusUpdatedAt,
-        );
-      } else if (localState.archiveStatus == MyIdArchiveStatus.registered) {
-        // 只有曾经由后端确认有档案的状态,才允许远端未找到时清空。
-        await prefs.setString(_kArchiveStatus, 'unset');
-        await prefs.remove(_kAddress);
-        await prefs.remove(_kPubkeyHex);
-        await prefs.remove(_kWalletIndex);
-        await prefs.remove(_kCidNumber);
-        await prefs.remove(_kPassportNo);
-        await prefs.remove(_kCitizenStatus);
-        await prefs.remove(_kVotingEligible);
-        await prefs.remove(_kVoteStatus);
-        await prefs.remove(_kIdentityStatus);
-        await prefs.remove(_kPassportValidFrom);
-        await prefs.remove(_kPassportValidUntil);
-        await prefs.remove(_kStatusUpdatedAt);
-        await prefs.remove(_kIsColdWallet);
+      var offset = 0;
+      final cid = _readUtf8Vec(data, offset, maxLen: 32);
+      offset = cid.nextOffset;
+      if (offset + 4 + 4 + 1 > data.length) return null;
+      final validFrom = _readU32Le(data, offset);
+      offset += 4;
+      final validUntil = _readU32Le(data, offset);
+      offset += 4;
+      if (!_isValidDateInt(validFrom) || !_isValidDateInt(validUntil)) {
+        return null;
       }
-      await prefs.setInt(_kUpdatedAt, now);
-      return getState();
-    } catch (e) {
-      // 静默失败：网络不可用时不影响本地状态
-      debugPrint('syncFromBackend failed: $e');
-      return localState;
+      final status = switch (data[offset]) {
+        0 => _CitizenStatus.normal,
+        1 => _CitizenStatus.revoked,
+        _ => null,
+      };
+      if (status == null) return null;
+      offset += 1;
+      offset = _readUtf8Vec(data, offset, maxLen: 16).nextOffset;
+      offset = _readUtf8Vec(data, offset, maxLen: 16).nextOffset;
+      offset = _readUtf8Vec(data, offset, maxLen: 16).nextOffset;
+      // BlockNumber 当前为 u32；这里只校验 storage 尾部存在，展示不使用。
+      if (offset + 4 > data.length) return null;
+      return _VotingIdentity(
+        cidNumber: cid.value,
+        passportValidFrom: validFrom,
+        passportValidUntil: validUntil,
+        citizenStatus: status,
+      );
+    } catch (_) {
+      return null;
     }
   }
 
-  /// 清除本地电子护照档案状态。
-  Future<MyIdState> clear() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kArchiveStatus);
-    await prefs.remove(_kAddress);
-    await prefs.remove(_kPubkeyHex);
-    await prefs.remove(_kWalletIndex);
-    await prefs.remove(_kCidNumber);
-    await prefs.remove(_kPassportNo);
-    await prefs.remove(_kCitizenStatus);
-    await prefs.remove(_kVotingEligible);
-    await prefs.remove(_kVoteStatus);
-    await prefs.remove(_kIdentityStatus);
-    await prefs.remove(_kPassportValidFrom);
-    await prefs.remove(_kPassportValidUntil);
-    await prefs.remove(_kStatusUpdatedAt);
-    await prefs.remove(_kIsColdWallet);
-    await prefs.remove(_kUpdatedAt);
-    return getState();
+  static final Keyring _keyring = Keyring();
+
+  static Uint8List _storageMapKey(
+    String palletName,
+    String storageName,
+    Uint8List keyData,
+  ) {
+    final palletHash = Hasher.twoxx128.hashString(palletName);
+    final storageHash = Hasher.twoxx128.hashString(storageName);
+    final keyHash = _blake2128Concat(keyData);
+    final result =
+        Uint8List(palletHash.length + storageHash.length + keyHash.length);
+    var offset = 0;
+    result.setAll(offset, palletHash);
+    offset += palletHash.length;
+    result.setAll(offset, storageHash);
+    offset += storageHash.length;
+    result.setAll(offset, keyHash);
+    return result;
   }
 
-  Future<void> _setOptionalString(
-    SharedPreferences prefs,
-    String key,
-    String? value,
-  ) async {
-    final normalized = value?.trim();
-    if (normalized == null || normalized.isEmpty) {
-      await prefs.remove(key);
-      return;
-    }
-    await prefs.setString(key, normalized);
+  static Uint8List _blake2128Concat(Uint8List data) {
+    final hash = Hasher.blake2b128.hash(data);
+    final result = Uint8List(hash.length + data.length);
+    result.setAll(0, hash);
+    result.setAll(hash.length, data);
+    return result;
   }
 
-  Future<void> _setStringIfPresent(
-    SharedPreferences prefs,
-    String key,
-    String? value,
-  ) async {
-    final normalized = value?.trim();
-    if (normalized == null || normalized.isEmpty) {
-      return;
+  static ({String value, int nextOffset}) _readUtf8Vec(
+    Uint8List data,
+    int offset, {
+    required int maxLen,
+  }) {
+    final (length, lengthSize) = _readCompactU32(data, offset);
+    final start = offset + lengthSize;
+    final end = start + length;
+    if (length <= 0 || length > maxLen || end > data.length) {
+      throw const FormatException('BoundedVec 长度不合法');
     }
-    await prefs.setString(key, normalized);
+    final text = utf8.decode(data.sublist(start, end), allowMalformed: false);
+    if (text.trim().isEmpty) {
+      throw const FormatException('BoundedVec 内容为空');
+    }
+    return (value: text, nextOffset: end);
   }
 
-  Future<void> _setOptionalInt(
-    SharedPreferences prefs,
-    String key,
-    int? value,
-  ) async {
-    if (value == null) {
-      await prefs.remove(key);
-      return;
+  static (int, int) _readCompactU32(Uint8List data, int offset) {
+    if (offset >= data.length) {
+      throw const FormatException('Compact<u32> offset 越界');
     }
-    await prefs.setInt(key, value);
+    final first = data[offset];
+    final mode = first & 0x03;
+    if (mode == 0) return (first >> 2, 1);
+    if (mode == 1) {
+      if (offset + 1 >= data.length) {
+        throw const FormatException('Compact<u32> mode1 长度不足');
+      }
+      return ((first >> 2) | (data[offset + 1] << 6), 2);
+    }
+    if (mode == 2) {
+      if (offset + 3 >= data.length) {
+        throw const FormatException('Compact<u32> mode2 长度不足');
+      }
+      return (
+        (first >> 2) |
+            (data[offset + 1] << 6) |
+            (data[offset + 2] << 14) |
+            (data[offset + 3] << 22),
+        4,
+      );
+    }
+    throw const FormatException('Compact<u32> big-integer 模式暂不支持');
   }
 
-  Future<void> _setOptionalBool(
-    SharedPreferences prefs,
-    String key,
-    bool? value,
-  ) async {
-    if (value == null) {
-      await prefs.remove(key);
-      return;
-    }
-    await prefs.setBool(key, value);
+  static int _readU32Le(Uint8List data, int offset) {
+    return data[offset] |
+        (data[offset + 1] << 8) |
+        (data[offset + 2] << 16) |
+        (data[offset + 3] << 24);
   }
+
+  static bool _isValidDateInt(int value) {
+    final year = value ~/ 10000;
+    final month = (value ~/ 100) % 100;
+    final day = value % 100;
+    return year >= 1900 &&
+        year <= 9999 &&
+        month >= 1 &&
+        month <= 12 &&
+        day >= 1 &&
+        day <= 31;
+  }
+
+  static int _dateInt(DateTime value) =>
+      value.year * 10000 + value.month * 100 + value.day;
+
+  static String _formatDateInt(int value) {
+    final year = value ~/ 10000;
+    final month = (value ~/ 100) % 100;
+    final day = value % 100;
+    return '${year.toString().padLeft(4, '0')}-'
+        '${month.toString().padLeft(2, '0')}-'
+        '${day.toString().padLeft(2, '0')}';
+  }
+
+  static String _hexEncode(List<int> bytes) =>
+      bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 }
+
+class _LocatedVotingIdentity {
+  const _LocatedVotingIdentity({
+    required this.wallet,
+    required this.identity,
+  });
+
+  final WalletProfile wallet;
+  final _VotingIdentity identity;
+}
+
+class _VotingIdentity {
+  const _VotingIdentity({
+    required this.cidNumber,
+    required this.passportValidFrom,
+    required this.passportValidUntil,
+    required this.citizenStatus,
+  });
+
+  final String cidNumber;
+  final int passportValidFrom;
+  final int passportValidUntil;
+  final _CitizenStatus citizenStatus;
+}
+
+enum _CitizenStatus { normal, revoked }

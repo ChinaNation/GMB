@@ -80,6 +80,8 @@ class SquarePublishService {
     required List<SquareLocalMediaDraft> mediaDrafts,
     required SquareLoginSigner signLoginPayload,
     required SquareChainSigner signChainPayload,
+    SquarePostContentFormat contentFormat = SquarePostContentFormat.normal,
+    String? title,
     void Function(SquarePublishStage stage)? onStage,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
@@ -109,6 +111,8 @@ class SquarePublishService {
         text: trimmedText,
         mediaDrafts: mediaDrafts,
         signLoginPayload: signLoginPayload,
+        contentFormat: contentFormat,
+        title: title,
         onStage: onStage,
       );
 

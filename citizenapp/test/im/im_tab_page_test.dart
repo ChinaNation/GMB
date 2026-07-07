@@ -111,7 +111,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('请先在用户资料中设置通信账户'), findsOneWidget);
+    expect(find.text('请先在「我的 → 我的钱包」创建热钱包'), findsOneWidget);
   });
 
   testWidgets('信息 Tab opens and polls Cloudflare mailbox automatically',

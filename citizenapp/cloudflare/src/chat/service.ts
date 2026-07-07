@@ -521,7 +521,11 @@ export async function submitChatEnvelope(
     recipient_device_id: recipientDeviceId,
     mls_message_kind: mlsMessageKind,
     created_at: createdAt,
-  }).catch(() => 0);
+  }).catch((error) => {
+    // 推送失败不阻断发送（消息已入 D1，收件方仍可拉取），但必须可观测。
+    console.warn("chat realtime notify failed", error);
+    return 0;
+  });
 
   return jsonResponse({
     ok: true,

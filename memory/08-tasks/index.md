@@ -2,6 +2,12 @@
 
 ## open
 
+- `memory/08-tasks/open/20260706-citizenapp-square-article.md`
+- `memory/08-tasks/open/20260706-clean-run-two-modes.md`
+- `memory/08-tasks/open/20260706-citizenapp-chat-square-silent-sign.md`
+- `memory/08-tasks/open/20260705-citizenapp-im-realtime-delivery-fix.md`
+- `memory/08-tasks/open/20260705-citizenapp-im-push-notifications.md`
+- `memory/08-tasks/open/20260705-citizenapp-worker-prod-url-no-fallback.md`
 - `memory/08-tasks/open/20260705-cloudflare-worker-flatten-dir.md`
 - `memory/08-tasks/open/20260705-citizenapp-worker-prod-url-no-fallback.md`
 - `memory/08-tasks/open/20260705-citizenapp-default-wallet-identity.md`
@@ -115,6 +121,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260706-citizenapp-user-profile-homepage.md`
 - `memory/08-tasks/done/20260702-cid-occupy-card2-occupy-first-flow.md`
 - `memory/08-tasks/done/20260702-cid-occupy-card1-runtime-validation.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`

@@ -32,6 +32,8 @@ interface SquarePostManifest {
   schema?: string;
   owner_account?: string;
   post_category?: 'normal' | 'campaign';
+  content_format?: 'normal' | 'article';
+  title?: string;
   text?: string;
   media_items?: SquareManifestMediaItem[];
 }
@@ -80,23 +82,28 @@ export async function confirmPublishedPost(
   const manifest = await readManifest(env, manifestObjectKey);
   validateManifest(manifest, upload);
   const mediaItems = manifestMediaItems(manifest, objectKeys);
+  const contentFormat = manifest.content_format === 'article' ? 'article' : 'normal';
+  const title = typeof manifest.title === 'string' ? manifest.title : null;
+  const createdAt = nowMs();
 
   await env.DB.prepare(
     `INSERT OR REPLACE INTO square_posts
-      (post_id, owner_account, cid_number, post_category, text, content_hash,
-        storage_receipt_id, chain_block, created_at, post_state)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'published')`
+      (post_id, owner_account, cid_number, post_category, content_format, title,
+        text, content_hash, storage_receipt_id, chain_block, created_at, post_state)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published')`
   )
     .bind(
       upload.post_id,
       upload.owner_account,
       event.cid_number,
       upload.post_category,
+      contentFormat,
+      title,
       manifest.text ?? '',
       normalizeHash(upload.content_hash),
       upload.storage_receipt_id,
       event.created_block,
-      nowMs()
+      createdAt
     )
     .run();
 
@@ -105,11 +112,13 @@ export async function confirmPublishedPost(
     owner_account: upload.owner_account,
     cid_number: event.cid_number,
     post_category: upload.post_category,
+    content_format: contentFormat,
+    title,
     text: manifest.text ?? '',
     content_hash: normalizeHash(upload.content_hash),
     storage_receipt_id: upload.storage_receipt_id,
     chain_block: event.created_block,
-    created_at: nowMs(),
+    created_at: createdAt,
     post_state: 'published',
     media_items: mediaItems
   };

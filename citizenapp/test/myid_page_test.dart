@@ -4,16 +4,12 @@ import 'package:citizenapp/my/myid/myid_page.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 
 void main() {
-  testWidgets('电子护照页展示护照号、身份 CID、投票账户地址和正常状态', (tester) async {
+  testWidgets('电子护照页只展示链上唯一身份核心字段', (tester) async {
     final service = _FakeMyIdService(
       const MyIdState(
-        archiveStatus: MyIdArchiveStatus.registered,
-        walletAddress: '5F-test-address',
-        walletPubkeyHex: 'abcd',
-        walletIndex: 1,
-        cidNumber: 'LN001-NRC0G-944805165-2026',
-        passportNo: 'GD12345678A',
-        identityStatus: 'NORMAL',
+        identityStatus: MyIdIdentityStatus.normal,
+        identityWalletAccount: '5F-test-address',
+        identityCidNumber: 'LN001-NRC0G-944805165-2026',
         passportValidFrom: '2026-05-24',
         passportValidUntil: '2036-05-23',
       ),
@@ -26,25 +22,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('护照号'), findsOneWidget);
-    expect(find.text('GD12345678A'), findsOneWidget);
-    expect(find.text('身份 CID'), findsOneWidget);
-    expect(find.text('LN001-NRC0G-944805165-2026'), findsOneWidget);
-    expect(find.text('投票账户地址'), findsOneWidget);
-    expect(find.text('绑定账户'), findsNothing);
+    expect(find.text('投票账户'), findsOneWidget);
     expect(find.text('5F-test-address'), findsOneWidget);
-    expect(find.text('状态：正常'), findsOneWidget);
-    expect(find.text('有效期：2026年05月24日-2036年05月23日'), findsOneWidget);
+    expect(find.text('身份 CID 号'), findsOneWidget);
+    expect(find.text('LN001-NRC0G-944805165-2026'), findsOneWidget);
+    expect(find.text('状态'), findsOneWidget);
+    expect(find.text('正常'), findsWidgets);
+    expect(find.text('有效期'), findsOneWidget);
+    expect(find.text('2026年05月24日-2036年05月23日'), findsOneWidget);
+
+    expect(find.text('护照号'), findsNothing);
+    expect(find.text('选择钱包'), findsNothing);
+    expect(find.text('更换钱包'), findsNothing);
+    expect(find.text('扫码签名'), findsNothing);
+    expect(find.text('钱包地址二维码'), findsNothing);
   });
 
-  testWidgets('电子护照待登记时按钮左右显示更换钱包和扫码签名', (tester) async {
+  testWidgets('未发现链上身份时电子护照页不显示登记操作', (tester) async {
     final service = _FakeMyIdService(
-      const MyIdState(
-        archiveStatus: MyIdArchiveStatus.pending,
-        walletAddress: '5F-test-address',
-        walletPubkeyHex: 'abcd',
-        walletIndex: 1,
-      ),
+      const MyIdState(identityStatus: MyIdIdentityStatus.notOnchain),
     );
 
     await tester.pumpWidget(
@@ -53,11 +49,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, -500));
-    await tester.pumpAndSettle();
 
-    expect(find.text('更换钱包'), findsOneWidget);
-    expect(find.text('扫码签名'), findsOneWidget);
+    expect(find.text('未上链'), findsWidgets);
+    expect(find.text('选择钱包'), findsNothing);
+    expect(find.text('扫码签名'), findsNothing);
   });
 }
 
@@ -68,7 +63,4 @@ class _FakeMyIdService extends MyIdService {
 
   @override
   Future<MyIdState> getState() async => state;
-
-  @override
-  Future<MyIdState> syncFromBackend() async => state;
 }

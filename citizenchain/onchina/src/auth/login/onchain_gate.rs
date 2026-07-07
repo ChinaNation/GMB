@@ -111,32 +111,10 @@ fn candidate_from_membership_conn(
 
     if let Some(province_code) = membership.frg_province_code {
         candidate.scope_province_name = chain_runtime::chain_province_name_by_code(province_code);
-        return Ok(candidate);
     }
 
-    if let Some(main_account) = candidate.institution_main_account.as_deref() {
-        if let Some((
-            cid_number,
-            cid_full_name,
-            cid_short_name,
-            province_code,
-            city_code,
-            town_code,
-        )) = repo::resolve_binding_candidate_metadata_conn(conn, main_account)?
-        {
-            let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
-                province_code.as_str(),
-                Some(city_code.as_str()),
-                Some(town_code.as_str()),
-            );
-            candidate.institution_cid_number = Some(cid_number);
-            candidate.cid_full_name = cid_full_name;
-            candidate.cid_short_name = cid_short_name;
-            candidate.scope_province_name = (!province_name.is_empty()).then_some(province_name);
-            candidate.scope_city_name = (!city_name.is_empty()).then_some(city_name);
-            candidate.scope_town_name = (!town_name.is_empty()).then_some(town_name);
-        }
-    }
+    // 候选写入绑定前统一补齐机构 CID 与账户元数据;FRG 省组的 scope 保留链上省组 key。
+    repo::hydrate_candidate_metadata_conn(conn, &mut candidate)?;
     Ok(candidate)
 }
 

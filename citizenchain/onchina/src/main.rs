@@ -2461,11 +2461,6 @@ fn main() {
                 "/api/v1/app/wallet/:address/transactions",
                 get(indexer::api::wallet_transactions),
             )
-            // ── CitizenApp 电子护照状态查询 ──
-            .route(
-                "/api/v1/app/myid/status",
-                get(domains::citizens::vote::app_myid_status),
-            )
             // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 注册信息凭证 / 账户列表 ──
             .route(
                 "/api/v1/app/institutions/search",
@@ -2718,6 +2713,7 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
         "login persist failed" => "ONCHINA_LOGIN_PERSIST_FAILED",
         "challenge wallet mismatch" => "ONCHINA_BIND_WALLET_MISMATCH",
         "signature verify failed" => "ONCHINA_BIND_SIGNATURE_VERIFY_FAILED",
+        "当前注册局缺少机构主账户绑定" => "ONCHINA_REGISTRY_MAIN_ACCOUNT_MISSING",
         "onchina ca certificate unavailable" => "ONCHINA_TLS_CA_UNAVAILABLE",
         "admin admin_account already exists as federal admin" => {
             "ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY"

@@ -62,40 +62,49 @@ fn strip_hex_prefix_text(value: &str) -> &str {
         .unwrap_or(value.trim())
 }
 
+fn prefixed_account_text(value: &str) -> Option<String> {
+    let raw = strip_hex_prefix_text(value);
+    (!raw.is_empty()).then(|| format!("0x{}", raw.to_ascii_lowercase()))
+}
+
 fn hydrate_binding_candidate_metadata_conn(
     conn: &mut Client,
     binding: &mut NodeInstitutionBinding,
+) -> Result<bool, String> {
+    hydrate_candidate_metadata_conn(conn, &mut binding.candidate)
+}
+
+fn persist_binding_candidate_metadata_conn(
+    conn: &mut Client,
+    binding: &NodeInstitutionBinding,
 ) -> Result<(), String> {
-    if binding.candidate.frg_province_code.is_some()
-        || binding
-            .candidate
-            .institution_cid_number
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .is_some()
-    {
-        return Ok(());
-    }
-    let Some(main_account) = binding.candidate.institution_main_account.clone() else {
-        return Ok(());
-    };
-    let Some((cid_number, cid_full_name, cid_short_name, province_code, city_code, town_code)) =
-        resolve_binding_candidate_metadata_conn(conn, main_account.as_str())?
-    else {
-        return Ok(());
-    };
-    let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
-        province_code.as_str(),
-        Some(city_code.as_str()),
-        Some(town_code.as_str()),
-    );
-    binding.candidate.institution_cid_number = Some(cid_number);
-    binding.candidate.cid_full_name = cid_full_name;
-    binding.candidate.cid_short_name = cid_short_name;
-    binding.candidate.scope_province_name = (!province_name.is_empty()).then_some(province_name);
-    binding.candidate.scope_city_name = (!city_name.is_empty()).then_some(city_name);
-    binding.candidate.scope_town_name = (!town_name.is_empty()).then_some(town_name);
+    conn.execute(
+        "UPDATE node_institution_bindings
+         SET institution_cid_number = $2,
+             institution_main_account = $3,
+             cid_full_name = $4,
+             cid_short_name = $5,
+             scope_province_name = $6,
+             scope_city_name = $7,
+             scope_town_name = $8
+         WHERE binding_id = $1 AND status = 'ACTIVE'",
+        &[
+            &binding.binding_id,
+            &binding.candidate.institution_cid_number,
+            &binding.candidate.institution_main_account,
+            &binding.candidate.cid_full_name,
+            &binding.candidate.cid_short_name,
+            &binding.candidate.scope_province_name,
+            &binding.candidate.scope_city_name,
+            &binding.candidate.scope_town_name,
+        ],
+    )
+    .map_err(|e| {
+        format!(
+            "persist node binding candidate metadata failed: {}",
+            postgres_error_text(&e)
+        )
+    })?;
     Ok(())
 }
 
@@ -449,6 +458,115 @@ pub(crate) fn resolve_binding_candidate_metadata_conn(
     Ok(row.map(|r| (r.get(0), r.get(1), r.get(2), r.get(3), r.get(4), r.get(5))))
 }
 
+fn resolve_frg_registry_metadata_conn(
+    conn: &mut Client,
+) -> Result<Option<(String, Option<String>, Option<String>, String)>, String> {
+    let row = conn
+        .query_opt(
+            "SELECT s.cid_number, s.cid_full_name, s.cid_short_name, a.account
+             FROM subjects s
+             JOIN accounts a
+               ON s.province_code = a.province_code
+              AND s.cid_number = a.cid_number
+             WHERE s.institution_code = $1
+               AND s.status = 'ACTIVE'
+               AND s.chain_status = 'ACTIVE_ON_CHAIN'
+               AND a.account_name = '主账户'
+               AND a.chain_status = 'ACTIVE_ON_CHAIN'
+               AND COALESCE(a.account, '') <> ''
+             ORDER BY s.updated_at DESC, a.created_at DESC
+             LIMIT 1",
+            &[&crate::core::chain_runtime::TIER1_REGISTRY_CODE],
+        )
+        .map_err(|e| {
+            format!(
+                "query FRG registry metadata failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+    Ok(row.and_then(|r| {
+        let account: String = r.get(3);
+        prefixed_account_text(account.as_str()).map(|main_account| {
+            (
+                r.get::<_, String>(0),
+                r.get::<_, Option<String>>(1),
+                r.get::<_, Option<String>>(2),
+                main_account,
+            )
+        })
+    }))
+}
+
+pub(crate) fn hydrate_candidate_metadata_conn(
+    conn: &mut Client,
+    candidate: &mut AdminInstitutionCandidate,
+) -> Result<bool, String> {
+    if candidate.institution_code == crate::core::chain_runtime::TIER1_REGISTRY_CODE
+        && candidate.frg_province_code.is_some()
+    {
+        return hydrate_frg_candidate_metadata_conn(conn, candidate);
+    }
+    if candidate
+        .institution_cid_number
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .is_some()
+    {
+        return Ok(false);
+    }
+    let Some(main_account) = candidate.institution_main_account.clone() else {
+        return Ok(false);
+    };
+    let Some((cid_number, cid_full_name, cid_short_name, province_code, city_code, town_code)) =
+        resolve_binding_candidate_metadata_conn(conn, main_account.as_str())?
+    else {
+        return Ok(false);
+    };
+    let (province_name, city_name, town_name) = crate::cid::china::area_display_names(
+        province_code.as_str(),
+        Some(city_code.as_str()),
+        Some(town_code.as_str()),
+    );
+    let changed = candidate.institution_cid_number.as_deref() != Some(cid_number.as_str())
+        || candidate.cid_full_name != cid_full_name
+        || candidate.cid_short_name != cid_short_name
+        || candidate.scope_province_name.as_deref()
+            != (!province_name.is_empty()).then_some(province_name.as_str())
+        || candidate.scope_city_name.as_deref()
+            != (!city_name.is_empty()).then_some(city_name.as_str())
+        || candidate.scope_town_name.as_deref()
+            != (!town_name.is_empty()).then_some(town_name.as_str());
+    candidate.institution_cid_number = Some(cid_number);
+    candidate.cid_full_name = cid_full_name;
+    candidate.cid_short_name = cid_short_name;
+    candidate.scope_province_name = (!province_name.is_empty()).then_some(province_name);
+    candidate.scope_city_name = (!city_name.is_empty()).then_some(city_name);
+    candidate.scope_town_name = (!town_name.is_empty()).then_some(town_name);
+    Ok(changed)
+}
+
+fn hydrate_frg_candidate_metadata_conn(
+    conn: &mut Client,
+    candidate: &mut AdminInstitutionCandidate,
+) -> Result<bool, String> {
+    let Some((cid_number, cid_full_name, cid_short_name, main_account)) =
+        resolve_frg_registry_metadata_conn(conn)?
+    else {
+        return Ok(false);
+    };
+    // FRG 省组绑定的业务范围来自链上省组 key;机构 CID 与主账户来自 FRG 主体投影。
+    let changed = candidate.institution_cid_number.as_deref() != Some(cid_number.as_str())
+        || candidate.institution_main_account.as_deref() != Some(main_account.as_str())
+        || candidate.cid_full_name != cid_full_name
+        || candidate.cid_short_name != cid_short_name;
+    candidate.institution_cid_number = Some(cid_number);
+    candidate.institution_main_account = Some(main_account);
+    candidate.cid_full_name = cid_full_name;
+    candidate.cid_short_name = cid_short_name;
+    Ok(changed)
+}
+
 pub(crate) fn get_active_node_binding_conn(
     conn: &mut Client,
 ) -> Result<Option<NodeInstitutionBinding>, String> {
@@ -474,8 +592,10 @@ pub(crate) fn get_active_node_binding_conn(
         return Ok(None);
     };
     let mut binding = binding_from_row(&row)?;
-    // 早期绑定行可能因账号 0x 前缀不一致缺少 CID 元数据;读取时补齐可让旧绑定继续按链上真源工作。
-    hydrate_binding_candidate_metadata_conn(conn, &mut binding)?;
+    // 旧绑定可能只保存 FRG 省组 scope 或账号未带 0x 前缀;读取时按链投影自愈并回写,避免后续链写拿不到 registrar。
+    if hydrate_binding_candidate_metadata_conn(conn, &mut binding)? {
+        persist_binding_candidate_metadata_conn(conn, &binding)?;
+    }
     Ok(Some(binding))
 }
 

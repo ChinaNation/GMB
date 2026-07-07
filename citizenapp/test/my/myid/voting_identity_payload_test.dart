@@ -48,13 +48,30 @@ Uint8List buildPayload({
   return Uint8List.fromList(out);
 }
 
+Uint8List buildCandidatePayload() {
+  final out = <int>[...buildPayload()];
+  void pushVec(String text) {
+    final bytes = utf8.encode(text);
+    out.add(bytes.length << 2);
+    out.addAll(bytes);
+  }
+
+  pushVec('11');
+  pushVec('01');
+  pushVec('002');
+  pushVec('测试公民');
+  out.add(1);
+  return Uint8List.fromList(out);
+}
+
 void main() {
   group('VotingIdentityConsentPayload.decode', () {
     test('解码完整载荷并生成中文确认条目', () {
       final decoded = VotingIdentityConsentPayload.decode(buildPayload());
 
       expect(decoded, isNotNull);
-      expect(decoded!.cidNumber, 'BJ110198512345678');
+      expect(decoded!.identityLevel, CitizenIdentityConsentLevel.voting);
+      expect(decoded.cidNumber, 'BJ110198512345678');
       expect(decoded.walletPubkeyHex, '0x${'aa' * 32}');
       expect(
         decoded.walletAddress,
@@ -75,6 +92,29 @@ void main() {
       expect(entries['居住地'], '11 / 01 / 001');
       // 中文标签必须全量存在,禁止英文 key 直出。
       expect(entries.keys, containsAll(['CID编号', '公民钱包账户']));
+    });
+
+    test('解码参选身份载荷并展示额外公开档案字段', () {
+      final decoded = VotingIdentityConsentPayload.decode(
+        buildCandidatePayload(),
+      );
+
+      expect(decoded, isNotNull);
+      expect(decoded!.identityLevel, CitizenIdentityConsentLevel.candidate);
+      expect(decoded.isCandidate, isTrue);
+      expect(decoded.birthProvinceCode, '11');
+      expect(decoded.birthCityCode, '01');
+      expect(decoded.birthTownCode, '002');
+      expect(decoded.citizenFullName, '测试公民');
+      expect(decoded.citizenSexLabel, '女');
+
+      final entries = Map.fromEntries(
+        decoded.reviewEntries.map((e) => MapEntry(e.$1, e.$2)),
+      );
+      expect(entries['身份类型'], '参选身份');
+      expect(entries['出生地'], '11 / 01 / 002');
+      expect(entries['公民姓名'], '测试公民');
+      expect(entries['公民性别'], '女');
     });
 
     test('注销状态展示为注销', () {

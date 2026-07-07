@@ -82,12 +82,13 @@ lib/
 - `attestation_service.dart`
   - 证明 token（secure）+ 元信息（Isar）
 
-电子护照归属 `lib/my/myid/`；钱包模块只提供钱包选择、热钱包签名和钱包元数据。
+电子护照归属 `lib/my/myid/`；钱包模块只提供钱包元数据、热钱包签名和唯一身份钱包标记。电子护照不再复用钱包页作为身份钱包选择器。
 
 ### 3.3 `pages`
 
 - `wallet_page.dart`
   - 钱包列表（带热/冷标识）、长按拖拽排序、创建、导入、删除、激活、地址复制
+  - 钱包列表只允许把链上唯一 `identity_wallet_account` 对应的钱包标为“身份钱包”，不得按多个钱包分别认证
   - 热钱包创建/导入（`CreateWalletPage` / `ImportWalletPage`）
   - 冷钱包创建/导入（`CreateColdWalletPage` / `ImportColdWalletPage`），导入冷钱包页标题右侧提供扫码图标，复用 `QrScanPage(raw)` 识别钱包二维码并只回填账户地址/公钥输入框
   - 余额显示与刷新（通过 `lib/rpc/ChainRpc.fetchFinalizedBalance()` / `fetchFinalizedBalances()` 直连节点）
@@ -242,7 +243,7 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 ### 5.3 其他 SharedPreferences（尚未迁移）
 
-- `cid.bind.*`（`lib/my/myid/MyIdService` 继续使用的旧存储键）
+- 电子护照不再使用 `cid.bind.*` 或 `myid.*` 本地身份缓存；链上身份以 finalized `CitizenIdentity::VotingIdentityByAccount` 为准。
 
 ### 5.4 钱包详情页布局 `WalletDetailPage`
 
@@ -278,7 +279,8 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 - 助记词不持久化，仅创建时一次性展示
 - 冷钱包不在本机保存任何密钥材料
 - 本机签名在本地完成，私钥材料不出端
-- seed 读取前强制生物识别/设备密码验证（`_authenticateIfSupported()`），每次签名均需认证
+- 授权分层（2026-07-06 定）：`authenticateForSigning()`（生物识别/设备密码）**只**用于「动钱 / 换身份」——转账、充值、提现、清算行绑定、多签、个人账户、投票、以及**切换默认用户钱包**；聊天登录 mailbox、IM 设备绑定、发帖（自动扣 1 元入块）一律用 `signWithWalletNoAuth()` **静默签名不弹**。发帖弹窗是多余的，已删；发帖前仍做余额校验（够 ED + 1 元才发）。
+- `signWithWallet()` / `signUtf8WithWallet()` 内含 `_authenticateIfSupported()`（会弹）；`signWithWalletNoAuth()` 只读 seed 不弹。调用方按上条策略选用。seed 读取后做格式校验，异常立即抛错。
 - 设备未启用锁屏时硬拒绝访问，不再跳过验证（`isDeviceSupported()` 返回 false 时抛出异常）
 - 热钱包创建/导入入口前置设备锁检查（`_ensureDeviceSecure()`），未启用锁屏的设备无法创建或导入热钱包
 - seed 读取后进行格式校验（64 位 hex），异常数据立即抛错

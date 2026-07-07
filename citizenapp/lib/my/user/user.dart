@@ -1,16 +1,15 @@
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:saver_gallery/saver_gallery.dart';
+import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/my/myid/myid_page.dart';
+import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/security/app_lock_service.dart';
 import 'package:citizenapp/security/pin_input_page.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
@@ -20,8 +19,7 @@ import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/im/im_chat_page.dart';
-import 'package:citizenapp/im/im_runtime.dart';
+import 'package:citizenapp/im/open_direct_chat.dart';
 import 'package:citizenapp/update/app_update.dart';
 import 'package:citizenapp/update/update_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -47,6 +45,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   UserProfileState _userProfile = const UserProfileState();
   WalletProfile? _defaultWallet;
+  MyIdState _myIdState =
+      const MyIdState(identityStatus: MyIdIdentityStatus.notOnchain);
 
   /// 用户身份地址 = 默认用户钱包（列表中最靠前的热钱包）地址。
   String get _communicationAddress => _defaultWallet?.address ?? '';
@@ -54,6 +54,11 @@ class _ProfilePageState extends State<ProfilePage> {
   /// 用户昵称 = 默认用户钱包名称。
   String get _nickname =>
       _defaultWallet?.walletName ?? UserProfileService.defaultNickname;
+
+  bool get _isDefaultWalletCertified =>
+      _myIdState.isCertified &&
+      _defaultWallet?.address.trim() ==
+          _myIdState.identityWalletAccount?.trim();
 
   @override
   void initState() {
@@ -64,12 +69,22 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _loadState() async {
     final profile = await _userProfileService.getState();
     final defaultWallet = await WalletManager().getDefaultWallet();
+    MyIdState myIdState;
+    try {
+      myIdState = await MyIdService().getState();
+    } catch (e) {
+      myIdState = MyIdState(
+        identityStatus: MyIdIdentityStatus.queryFailed,
+        errorMessage: '$e',
+      );
+    }
     if (!mounted) {
       return;
     }
     setState(() {
       _userProfile = profile;
       _defaultWallet = defaultWallet;
+      _myIdState = myIdState;
     });
   }
 
@@ -94,24 +109,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _openMyQrPage() async {
-    final address = _communicationAddress;
-    if (address.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
-      );
-      return;
-    }
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => _MyQrCodePage(
-          contactName: _nickname,
-          address: address,
-        ),
-      ),
-    );
-  }
-
   Future<void> _openContacts() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -123,10 +120,20 @@ class _ProfilePageState extends State<ProfilePage> {
     await _loadState();
   }
 
-  Future<void> _openProfileEdit() async {
+  Future<void> _openMyProfile() async {
+    final address = _communicationAddress;
+    if (address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
+      );
+      return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => ProfileEditPage(initialState: _userProfile),
+        builder: (_) => UserProfilePage(
+          ownerAccount: address,
+          isSelf: true,
+        ),
       ),
     );
     if (!mounted) return;
@@ -139,7 +146,11 @@ class _ProfilePageState extends State<ProfilePage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SquareAvatar(path: _userProfile.avatarPath, size: 84),
+          _SquareAvatar(
+            path: _userProfile.avatarPath,
+            size: 84,
+            isCertified: _isDefaultWalletCertified,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -162,7 +173,7 @@ class _ProfilePageState extends State<ProfilePage> {
             height: 84,
             child: Center(
               child: InkWell(
-                onTap: _openProfileEdit,
+                onTap: _openMyProfile,
                 borderRadius: BorderRadius.circular(8),
                 child: const Padding(
                   padding: EdgeInsets.all(4),
@@ -280,29 +291,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                   Positioned(
-                    top: topPadding + 14,
-                    right: 8,
-                    child: InkWell(
-                      onTap: _openMyQrPage,
-                      borderRadius: BorderRadius.circular(12),
-                      child: const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Icon(
-                          Icons.qr_code_2,
-                          size: 22,
-                          color: Colors.white,
-                          shadows: [
-                            Shadow(
-                              color: Color(0x80000000),
-                              blurRadius: 10,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
                     left: 16,
                     right: 16,
                     bottom: 22,
@@ -386,314 +374,6 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 32),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class ProfileEditPage extends StatefulWidget {
-  const ProfileEditPage({
-    super.key,
-    required this.initialState,
-  });
-
-  final UserProfileState initialState;
-
-  @override
-  State<ProfileEditPage> createState() => _ProfileEditPageState();
-}
-
-class _ProfileEditPageState extends State<ProfileEditPage> {
-  final ImagePicker _imagePicker = ImagePicker();
-  final UserProfileService _profileService = UserProfileService();
-
-  final GlobalKey _qrKey = GlobalKey();
-  late UserProfileState _profile;
-  WalletProfile? _defaultWallet;
-  bool _isSavingQr = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _profile = widget.initialState;
-    _loadDefaultWallet();
-  }
-
-  Future<void> _loadDefaultWallet() async {
-    final wallet = await WalletManager().getDefaultWallet();
-    if (!mounted) return;
-    setState(() {
-      _defaultWallet = wallet;
-    });
-  }
-
-  // ---- 二维码数据 ----
-
-  bool get _isQrReady => _defaultWallet != null;
-
-  String get _qrPayload {
-    final wallet = _defaultWallet;
-    return QrEnvelope<UserContactBody>(
-      kind: QrKind.userContact,
-      id: null,
-      issuedAt: null,
-      expiresAt: null,
-      body: UserContactBody(
-        address: wallet?.address ?? '',
-        contactName: wallet?.walletName ?? UserProfileService.defaultNickname,
-      ),
-    ).toRawJson();
-  }
-
-  // ---- 保存二维码 ----
-
-  Future<void> _saveQrToGallery() async {
-    if (_isSavingQr) return;
-    setState(() => _isSavingQr = true);
-    try {
-      final boundary =
-          _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return;
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null || !mounted) return;
-      final result = await SaverGallery.saveImage(
-        byteData.buffer.asUint8List(),
-        fileName: 'qr_${DateTime.now().millisecondsSinceEpoch}.png',
-        androidRelativePath: 'Pictures/CitizenApp',
-        skipIfExists: false,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.isSuccess ? '已保存到相册' : '保存失败'),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：$e')),
-      );
-    } finally {
-      if (mounted) setState(() => _isSavingQr = false);
-    }
-  }
-
-  // ---- 头像 ----
-
-  Future<void> _pickAvatar() async {
-    try {
-      final picked = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-      );
-      if (picked == null || !mounted) return;
-      final saved = await _profileService.updateAvatarPath(picked.path);
-      if (!mounted) return;
-      setState(() {
-        _profile = saved;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('访问相册失败：$e')),
-      );
-    }
-  }
-
-  // ---- 昵称（= 默认钱包名称） ----
-
-  Future<void> _editNickname() async {
-    final wallet = _defaultWallet;
-    if (wallet == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
-      );
-      return;
-    }
-    final controller = TextEditingController(text: wallet.walletName);
-    final nickname = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('修改昵称'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLength: 20,
-            decoration: const InputDecoration(
-              hintText: '请输入昵称',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(controller.text.trim()),
-              child: const Text('保存'),
-            ),
-          ],
-        );
-      },
-    );
-    await WidgetsBinding.instance.endOfFrame;
-    controller.dispose();
-    if (!mounted || nickname == null || nickname.trim().isEmpty) return;
-    // 昵称 = 默认钱包名，改昵称即改默认钱包名。
-    await WalletManager().renameWallet(wallet.walletIndex, nickname.trim());
-    await _loadDefaultWallet();
-  }
-
-  // ---- 通用行构建 ----
-
-  Widget _buildSettingRow({
-    required String label,
-    String? value,
-    Widget? trailing,
-    VoidCallback? onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        child: Row(
-          children: [
-            Text(
-              label,
-              style: const TextStyle(fontSize: 16),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                value ?? '',
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.textTertiary,
-                ),
-              ),
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: 4),
-              trailing,
-            ],
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right,
-                size: 20, color: AppTheme.textTertiary),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('用户资料'),
-        centerTitle: true,
-      ),
-      body: ListView(
-        children: [
-          // ---- 用户二维码 ----
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: Center(
-              child: _isQrReady
-                  ? Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        RepaintBoundary(
-                          key: _qrKey,
-                          child: Container(
-                            color: Colors.white,
-                            padding: const EdgeInsets.all(8),
-                            child: CustomPaint(
-                              size: const Size(180, 180),
-                              painter: _HollowQrPainter(
-                                data: _qrPayload,
-                                hollowSize: 40,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: AppTheme.border,
-                              width: 1,
-                            ),
-                          ),
-                          child: IconButton(
-                            constraints: const BoxConstraints(),
-                            padding: EdgeInsets.zero,
-                            onPressed: _isSavingQr ? null : _saveQrToGallery,
-                            icon: _isSavingQr
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.download,
-                                    size: 18, color: AppTheme.textSecondary),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Container(
-                      width: 180,
-                      height: 180,
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceElevated,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          '请先在「我的 → 我的钱包」\n创建热钱包后生成二维码',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppTheme.textTertiary),
-                        ),
-                      ),
-                    ),
-            ),
-          ),
-          const Divider(height: 1),
-          // ---- 用户头像 ----
-          InkWell(
-            onTap: _pickAvatar,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  _SquareAvatar(path: _profile.avatarPath, size: 44),
-                  const Spacer(),
-                  const Icon(Icons.chevron_right,
-                      size: 20, color: AppTheme.textTertiary),
-                ],
-              ),
-            ),
-          ),
-          const Divider(height: 1),
-          // ---- 用户昵称（= 默认钱包名） ----
-          _buildSettingRow(
-            label: _defaultWallet?.walletName ??
-                UserProfileService.defaultNickname,
-            onTap: _editNickname,
-          ),
-          const Divider(height: 1),
-        ],
       ),
     );
   }
@@ -868,201 +548,16 @@ class _ContactBookPageState extends State<ContactBookPage> {
   }
 }
 
-class _MyQrCodePage extends StatefulWidget {
-  const _MyQrCodePage({required this.contactName, required this.address});
-
-  final String contactName;
-  final String address;
-
-  @override
-  State<_MyQrCodePage> createState() => _MyQrCodePageState();
-}
-
-class _MyQrCodePageState extends State<_MyQrCodePage> {
-  final GlobalKey _qrKey = GlobalKey();
-  bool _saving = false;
-
-  String get _qrData => QrEnvelope<UserContactBody>(
-        kind: QrKind.userContact,
-        id: null,
-        issuedAt: null,
-        expiresAt: null,
-        body: UserContactBody(
-          address: widget.address,
-          contactName: widget.contactName,
-        ),
-      ).toRawJson();
-
-  Future<void> _saveQr() async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    try {
-      final boundary =
-          _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return;
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null || !mounted) return;
-      final result = await SaverGallery.saveImage(
-        byteData.buffer.asUint8List(),
-        fileName: 'my_qr_${DateTime.now().millisecondsSinceEpoch}.png',
-        androidRelativePath: 'Pictures/CitizenApp',
-        skipIfExists: false,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.isSuccess ? '已保存到相册' : '保存失败')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：$e')),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('我的二维码'),
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          const Spacer(),
-          Text(
-            widget.contactName,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              RepaintBoundary(
-                key: _qrKey,
-                child: Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.all(12),
-                  child: CustomPaint(
-                    size: const Size(240, 240),
-                    painter: _HollowQrPainter(
-                      data: _qrData,
-                      hollowSize: 48,
-                    ),
-                  ),
-                ),
-              ),
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: AppTheme.border,
-                    width: 1,
-                  ),
-                ),
-                child: IconButton(
-                  constraints: const BoxConstraints(),
-                  padding: EdgeInsets.zero,
-                  onPressed: _saving ? null : _saveQr,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.download,
-                          size: 20, color: AppTheme.textSecondary),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              widget.address,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppTheme.textTertiary,
-                height: 1.5,
-              ),
-            ),
-          ),
-          const Spacer(),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 32),
-            child: Text(
-              '其他用户扫描此二维码可添加通讯录',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ContactDetailPage extends StatelessWidget {
   const _ContactDetailPage({required this.contact});
 
   final UserContact contact;
 
   Future<void> _openMessage(BuildContext context) async {
-    final sender = (await WalletManager().getDefaultWallet())?.address ?? '';
-    if (sender.isEmpty) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在「我的 → 我的钱包」创建热钱包')),
-      );
-      return;
-    }
-    final runtime = ImRuntime();
-    final conversationId = ImRuntime.directConversationId(
-      sender,
-      contact.address,
-    );
-    if (!context.mounted) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => ImChatPage(
-          conversationId: conversationId,
-          currentUserId: sender,
-          peerUserId: contact.address,
-          title: contact.displayNickname,
-          onSendText: (text) => runtime.sendText(
-            peerWalletAddress: contact.address,
-            conversationId: conversationId,
-            text: text,
-          ),
-          onSendAttachment: (attachment) => runtime.sendAttachment(
-            peerWalletAddress: contact.address,
-            conversationId: conversationId,
-            attachment: attachment,
-          ),
-          onDownloadAttachment: (
-            conversationId,
-            controlPlaintext,
-          ) =>
-              runtime.downloadAttachment(
-            conversationId: conversationId,
-            controlPlaintext: controlPlaintext,
-          ),
-          onSync: runtime.syncPending,
-          onStartRealtime: runtime.startRealtimeSync,
-          onDeleteConversation: () =>
-              runtime.deleteLocalConversation(conversationId),
-        ),
-      ),
+    await openDirectChat(
+      context,
+      peerAddress: contact.address,
+      title: contact.displayNickname,
     );
   }
 
@@ -1261,10 +756,12 @@ class _SquareAvatar extends StatelessWidget {
   const _SquareAvatar({
     required this.path,
     required this.size,
+    this.isCertified = false,
   });
 
   final String? path;
   final double size;
+  final bool isCertified;
 
   @override
   Widget build(BuildContext context) {
@@ -1272,22 +769,49 @@ class _SquareAvatar extends StatelessWidget {
     final file = hasImage ? File(path!) : null;
     final validImage = file != null && file.existsSync();
 
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        color: AppTheme.primary.withAlpha(20),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: validImage
-            ? Image.file(file, fit: BoxFit.cover)
-            : const Icon(
-                Icons.person,
-                size: 40,
-                color: _inkGreen,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withAlpha(20),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: validImage
+                  ? Image.file(file, fit: BoxFit.cover)
+                  : const Icon(
+                      Icons.person,
+                      size: 40,
+                      color: _inkGreen,
+                    ),
+            ),
+          ),
+          if (isCertified)
+            Positioned(
+              right: -4,
+              bottom: -4,
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.verified,
+                  size: 21,
+                  color: Color(0xFF007A74),
+                ),
               ),
+            ),
+        ],
       ),
     );
   }
@@ -1645,56 +1169,5 @@ class _SettingsPageState extends State<_SettingsPage> {
         ),
       ),
     );
-  }
-}
-
-/// 自绘二维码，中央 [hollowSize] 像素区域不绘制任何模块（真正留白）。
-class _HollowQrPainter extends CustomPainter {
-  _HollowQrPainter({required this.data, required this.hollowSize});
-
-  final String data;
-  final double hollowSize;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final qrCode = QrCode.fromData(
-      data: data,
-      errorCorrectLevel: QrErrorCorrectLevel.H,
-    );
-    final qrImage = QrImage(qrCode);
-    final moduleCount = qrImage.moduleCount;
-    final moduleSize = size.width / moduleCount;
-    final paint = Paint()..color = const Color(0xFF000000);
-
-    final hollowModules = (hollowSize / moduleSize).ceil();
-    final hollowStart = (moduleCount - hollowModules) ~/ 2;
-    final hollowEnd = hollowStart + hollowModules;
-
-    for (var row = 0; row < moduleCount; row++) {
-      for (var col = 0; col < moduleCount; col++) {
-        if (qrImage.isDark(row, col)) {
-          if (row >= hollowStart &&
-              row < hollowEnd &&
-              col >= hollowStart &&
-              col < hollowEnd) {
-            continue;
-          }
-          canvas.drawRect(
-            Rect.fromLTWH(
-              col * moduleSize,
-              row * moduleSize,
-              moduleSize,
-              moduleSize,
-            ),
-            paint,
-          );
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_HollowQrPainter oldDelegate) {
-    return oldDelegate.data != data || oldDelegate.hollowSize != hollowSize;
   }
 }

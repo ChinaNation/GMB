@@ -99,9 +99,12 @@ describe("chat mailbox helpers", () => {
       getByName: (name: string) => {
         routedName = name;
         return {
-          notify: async (notice: ChatNoticePayload) => {
+          fetch: async (request: Request) => {
+            const notice = (await request.json()) as ChatNoticePayload;
             routedPayloads.push(notice);
-            return 1;
+            return new Response(JSON.stringify({ ok: true, sent: 1 }), {
+              headers: { "content-type": "application/json" },
+            });
           },
         };
       },

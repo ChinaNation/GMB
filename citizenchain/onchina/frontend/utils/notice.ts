@@ -181,6 +181,7 @@ function translateErrorCode(code: string): string | null {
     ONCHINA_LOGIN_NODE_BINDING_ADMIN_MISMATCH: '当前管理员已不属于所选机构，无法绑定本节点',
     ONCHINA_LOGIN_PERSIST_FAILED: '登录会话保存失败，请稍后重试',
     ONCHINA_BIND_SIGNATURE_VERIFY_FAILED: '签名验签失败，请重新扫码签名',
+    ONCHINA_REGISTRY_MAIN_ACCOUNT_MISSING: '当前注册局缺少机构主账户绑定，请重新登录绑定本节点或检查链上投影',
   };
   return map[code] ?? null;
 }

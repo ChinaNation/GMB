@@ -11,8 +11,8 @@ export async function listFeedPosts(
 
   if (feedKind === 'campaign') {
     const result = await env.DB.prepare(
-      `SELECT post_id, owner_account, cid_number, post_category, text, content_hash,
-          storage_receipt_id, chain_block, created_at, post_state
+      `SELECT post_id, owner_account, cid_number, post_category, content_format, title,
+          text, content_hash, storage_receipt_id, chain_block, created_at, post_state
         FROM square_posts
         WHERE post_state = 'published' AND post_category = 'campaign'
         ORDER BY created_at DESC
@@ -28,8 +28,9 @@ export async function listFeedPosts(
   }
   if (feedKind === 'following' && ownerAccount) {
     const result = await env.DB.prepare(
-      `SELECT p.post_id, p.owner_account, p.cid_number, p.post_category, p.text, p.content_hash,
-          p.storage_receipt_id, p.chain_block, p.created_at, p.post_state
+      `SELECT p.post_id, p.owner_account, p.cid_number, p.post_category, p.content_format,
+          p.title, p.text, p.content_hash, p.storage_receipt_id, p.chain_block,
+          p.created_at, p.post_state
         FROM square_posts p
         INNER JOIN square_follows f
           ON f.followed_account = p.owner_account
@@ -43,8 +44,8 @@ export async function listFeedPosts(
   }
 
   const result = await env.DB.prepare(
-    `SELECT post_id, owner_account, cid_number, post_category, text, content_hash,
-        storage_receipt_id, chain_block, created_at, post_state
+    `SELECT post_id, owner_account, cid_number, post_category, content_format, title,
+        text, content_hash, storage_receipt_id, chain_block, created_at, post_state
       FROM square_posts
       WHERE post_state = 'published'
       ORDER BY created_at DESC

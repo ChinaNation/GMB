@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'package:citizenapp/8964/models/square_models.dart';
+import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 
 class SquareApiException implements Exception {
   const SquareApiException(this.message, {this.statusCode, this.errorCode});
@@ -372,6 +373,196 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
         .toList(growable: false);
   }
 
+  /// 把 R2 object_key 拼成公开媒体读取 URL，供 `Image.network` 与 CDN 使用。
+  String mediaUrl(String objectKey) {
+    final encoded = objectKey.split('/').map(Uri.encodeComponent).join('/');
+    return '$baseUrl/v1/square/media/$encoded';
+  }
+
+  /// 拉取某账户的用户主页资料（公开可读；带 session 时附带 is_following）。
+  Future<CitizenProfile> fetchUserProfile({
+    required String ownerAccount,
+    SquareSession? session,
+  }) async {
+    final data = await _getJson(
+      '/v1/square/users/${Uri.encodeComponent(ownerAccount)}',
+      session: session,
+    );
+    final profile = data['profile'];
+    if (profile is! Map<String, dynamic>) {
+      throw const SquareApiException('用户主页响应缺少资料数据');
+    }
+    return CitizenProfile.fromJson(profile);
+  }
+
+  /// 按作者分页拉帖。[category]/[contentFormat] 为空表示不过滤；[cursor] 为上一页 nextCursor。
+  Future<({List<SquarePost> posts, int? nextCursor})> fetchAuthorPosts({
+    required String ownerAccount,
+    SquarePostCategory? category,
+    SquarePostContentFormat? contentFormat,
+    int limit = 20,
+    int? cursor,
+    SquareSession? session,
+  }) async {
+    final params = <String, String>{'limit': '$limit'};
+    if (category != null) {
+      params['category'] = category.workerValue;
+    }
+    if (contentFormat != null) {
+      params['content_format'] = contentFormat.workerValue;
+    }
+    if (cursor != null) {
+      params['cursor'] = '$cursor';
+    }
+    final query = params.entries
+        .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
+        .join('&');
+    final data = await _getJson(
+      '/v1/square/users/${Uri.encodeComponent(ownerAccount)}/posts?$query',
+      session: session,
+    );
+    final posts = data['posts'];
+    if (posts is! List) {
+      throw const SquareApiException('用户主页响应缺少动态列表');
+    }
+    return (
+      posts: posts.whereType<Map<String, dynamic>>().map(_parsePost).toList(
+            growable: false,
+          ),
+      nextCursor: _nullableInt(data['next_cursor']),
+    );
+  }
+
+  /// 申请头像/背景上传授权：返回 object_key、内容哈希与短期上传 URL。
+  Future<({String objectKey, String contentHash, String uploadUrl})>
+      prepareProfileAsset({
+    required SquareSession session,
+    required String kind,
+    required String contentType,
+    required int byteSize,
+    required String sha256Hex,
+  }) async {
+    final data = await _postJson(
+      '/v1/square/profile/assets/prepare',
+      {
+        'kind': kind,
+        'content_type': contentType,
+        'byte_size': byteSize,
+        'sha256': sha256Hex,
+      },
+      session: session,
+    );
+    return (
+      objectKey: _requireString(data, 'object_key'),
+      contentHash: _requireString(data, 'content_hash'),
+      uploadUrl: _requireString(data, 'upload_url'),
+    );
+  }
+
+  /// 把字节 PUT 到上传 URL。dev-put 同源需 Bearer；生产预签名 URL 绝不能带 Authorization。
+  Future<void> uploadBytesTo(
+    String uploadUrl,
+    List<int> bytes,
+    String contentType, {
+    SquareSession? session,
+  }) async {
+    final uri = Uri.parse(uploadUrl);
+    final headers = <String, String>{'content-type': contentType};
+    if (session != null && uri.origin == baseUri.origin) {
+      headers['authorization'] = 'Bearer ${session.sessionToken}';
+    }
+    final response = await _http
+        .put(uri, headers: headers, body: bytes)
+        .timeout(const Duration(seconds: 60));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw SquareApiException(
+        '资源上传失败：${response.statusCode}',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  /// 更新本人公开资料（仅传要改的字段；owner 由 Worker 从 session 派生）。
+  Future<CitizenProfile> updateProfile({
+    required SquareSession session,
+    String? displayName,
+    String? bio,
+    String? avatarObjectKey,
+    String? avatarContentHash,
+    String? bannerObjectKey,
+    String? bannerContentHash,
+  }) async {
+    final body = <String, Object?>{
+      if (displayName != null) 'display_name': displayName,
+      if (bio != null) 'bio': bio,
+      if (avatarObjectKey != null) 'avatar_object_key': avatarObjectKey,
+      if (avatarContentHash != null) 'avatar_content_hash': avatarContentHash,
+      if (bannerObjectKey != null) 'banner_object_key': bannerObjectKey,
+      if (bannerContentHash != null) 'banner_content_hash': bannerContentHash,
+    };
+    final data = await _putJson('/v1/square/profile', body, session: session);
+    final profile = data['profile'];
+    if (profile is! Map<String, dynamic>) {
+      throw const SquareApiException('更新资料响应缺少资料数据');
+    }
+    return CitizenProfile.fromJson(profile);
+  }
+
+  /// 关注一个账户（写接口带 session；owner 由 Worker 从 session 派生）。
+  Future<void> followUser({
+    required SquareSession session,
+    required String followedAccount,
+  }) async {
+    await _postJson(
+      '/v1/square/follows',
+      {'followed_account': followedAccount},
+      session: session,
+    );
+  }
+
+  /// 取消关注一个账户。
+  Future<void> unfollowUser({
+    required SquareSession session,
+    required String followedAccount,
+  }) async {
+    await _deleteJson(
+      '/v1/square/follows/${Uri.encodeComponent(followedAccount)}',
+      session: session,
+    );
+  }
+
+  /// 拉取关注/粉丝列表。
+  Future<({List<SquareFollowEntry> accounts, int? nextCursor})> fetchFollows({
+    required String ownerAccount,
+    required String type,
+    int limit = 20,
+    int? cursor,
+    SquareSession? session,
+  }) async {
+    final params = <String, String>{'type': type, 'limit': '$limit'};
+    if (cursor != null) {
+      params['cursor'] = '$cursor';
+    }
+    final query = params.entries
+        .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
+        .join('&');
+    final data = await _getJson(
+      '/v1/square/users/${Uri.encodeComponent(ownerAccount)}/follows?$query',
+      session: session,
+    );
+    final accounts = data['accounts'];
+    if (accounts is! List) {
+      throw const SquareApiException('关注列表响应缺少账户列表');
+    }
+    return (
+      accounts: accounts
+          .whereType<Map<String, dynamic>>()
+          .map(SquareFollowEntry.fromJson)
+          .toList(growable: false),
+      nextCursor: _nullableInt(data['next_cursor']),
+    );
+  }
+
   Future<Map<String, dynamic>> _getJson(
     String path, {
     SquareSession? session,
@@ -393,6 +584,31 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
           headers: _headers(session),
           body: jsonEncode(body),
         )
+        .timeout(const Duration(seconds: 20));
+    return _decodeResponse(response);
+  }
+
+  Future<Map<String, dynamic>> _putJson(
+    String path,
+    Map<String, Object?> body, {
+    SquareSession? session,
+  }) async {
+    final response = await _http
+        .put(
+          _uri(path),
+          headers: _headers(session),
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 20));
+    return _decodeResponse(response);
+  }
+
+  Future<Map<String, dynamic>> _deleteJson(
+    String path, {
+    SquareSession? session,
+  }) async {
+    final response = await _http
+        .delete(_uri(path), headers: _headers(session))
         .timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
   }
@@ -453,6 +669,12 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
         cidNumber: data['cid_number']?.toString(),
       ),
       postCategory: _parseCategory(data['post_category']),
+      contentFormat: data['content_format'] == 'article'
+          ? SquarePostContentFormat.article
+          : SquarePostContentFormat.normal,
+      title: (data['title']?.toString().trim().isNotEmpty ?? false)
+          ? data['title'].toString().trim()
+          : null,
       text: data['text']?.toString() ?? '',
       createdAt:
           DateTime.fromMillisecondsSinceEpoch(_asInt(data['created_at'])),
@@ -465,15 +687,24 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
       contentHash: data['content_hash']?.toString(),
       storageReceiptId: data['storage_receipt_id']?.toString(),
       chainBlock: _nullableInt(data['chain_block']),
+      // 竞选目标（预留）：Worker 暂未返回，待公民身份上链落地后填充。
+      campaignInstitutionCid: data['campaign_institution_cid']?.toString(),
+      campaignPosition: data['campaign_position']?.toString(),
     );
   }
 
   SquareMediaItem _parseMediaItem(Map<String, dynamic> data) {
+    final objectKey =
+        data['object_key']?.toString() ?? data['url']?.toString() ?? '';
+    final coverKey = data['cover_object_key']?.toString() ??
+        data['cover_url']?.toString() ??
+        '';
     return SquareMediaItem(
       mediaKind: data['media_kind'] == 'video'
           ? SquareMediaKind.video
           : SquareMediaKind.image,
-      url: data['url']?.toString() ?? data['object_key']?.toString() ?? '',
+      url: objectKey.isEmpty ? '' : mediaUrl(objectKey),
+      coverUrl: coverKey.isEmpty ? null : mediaUrl(coverKey),
       byteSize: _nullableInt(data['byte_size']),
     );
   }

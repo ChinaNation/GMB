@@ -176,35 +176,6 @@ pub(crate) struct CitizenRow {
     pub(crate) onchain_at: Option<DateTime<Utc>>,
 }
 
-// ── CitizenApp 电子护照状态接口类型 ──
-
-/// CitizenApp 查询电子护照状态。
-#[derive(Deserialize)]
-pub(crate) struct MyIdStatusQuery {
-    pub(crate) wallet_address: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct MyIdStatusOutput {
-    pub(crate) found: bool,
-    pub(crate) wallet_address: Option<String>,
-    pub(crate) cid_number: Option<String>,
-    pub(crate) passport_no: Option<String>,
-    pub(crate) citizen_status: Option<CitizenStatus>,
-    pub(crate) voting_eligible: Option<bool>,
-    pub(crate) vote_status: Option<CitizenStatus>,
-    pub(crate) identity_status: Option<CitizenStatus>,
-    pub(crate) passport_valid_from: Option<String>,
-    pub(crate) passport_valid_until: Option<String>,
-    pub(crate) status_updated_at: Option<i64>,
-    pub(crate) province_code: Option<String>,
-    pub(crate) city_code: Option<String>,
-    pub(crate) town_code: Option<String>,
-    pub(crate) birth_province_code: Option<String>,
-    pub(crate) birth_city_code: Option<String>,
-    pub(crate) birth_town_code: Option<String>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,38 +215,6 @@ mod tests {
             updated_by: None,
             updated_at: now,
         }
-    }
-
-    #[test]
-    fn myid_status_output_has_no_bind_status_or_election_scope() {
-        let output = MyIdStatusOutput {
-            found: true,
-            wallet_address: Some("5F-test".to_string()),
-            cid_number: Some("1234567890".to_string()),
-            passport_no: Some("GD12345678A".to_string()),
-            citizen_status: Some(CitizenStatus::Normal),
-            voting_eligible: Some(true),
-            vote_status: Some(CitizenStatus::Normal),
-            identity_status: Some(CitizenStatus::Normal),
-            passport_valid_from: Some("2026-05-24".to_string()),
-            passport_valid_until: Some("2036-05-23".to_string()),
-            status_updated_at: Some(1_779_580_800),
-            province_code: Some("GD".to_string()),
-            city_code: Some("001".to_string()),
-            town_code: Some("001001".to_string()),
-            birth_province_code: Some("GD".to_string()),
-            birth_city_code: Some("001".to_string()),
-            birth_town_code: Some("001001".to_string()),
-        };
-
-        let value = serde_json::to_value(output).expect("serialize status output");
-        assert!(value.get("bind_status").is_none());
-        assert!(value.get("election_scope_level").is_none());
-        assert_eq!(value["found"], true);
-        assert_eq!(value["cid_number"], "1234567890");
-        assert_eq!(value["passport_no"], "GD12345678A");
-        assert_eq!(value["passport_valid_from"], "2026-05-24");
-        assert_eq!(value["passport_valid_until"], "2036-05-23");
     }
 
     #[test]

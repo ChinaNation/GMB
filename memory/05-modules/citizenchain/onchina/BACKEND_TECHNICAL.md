@@ -54,6 +54,7 @@ citizenchain/onchina/src/
 - 管理员写入只进入 `admins`(本地元数据缓存)和短生命周期安全运行态表;成员资格真源在链上(`federal_registry_scope` 表已退役,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
 - 公权机构唯一真源是链上 `PublicManage`;`subjects/gov/accounts` 中的公权行只是本地查询投影,投影版本只记录在 `chain_projection_state`。
 - 链上状态字段只作本地投影缓存(`subjects.chain_status`、`accounts.chain_status`),不得成为第二授权真源。
+- `node_institution_bindings` 只缓存本节点当前绑定机构。FRG 省组绑定是一个 FRG 机构身份,不得拆成多个身份或多个钱包:省级办理范围来自链上省组 key,机构 CID/全称/简称/主账户来自链上 FRG 主体投影和 `accounts.account_name='主账户'`。读取旧 active binding 时必须自动补齐并回写缺失的 FRG 主账户,否则公民占号和身份上链不得继续。
 - 审计写入统一走结构化审计入口，详情字段只保存事实，不保存 UI 文案。
 
 ### 4.1 公权机构链投影
@@ -74,7 +75,7 @@ citizenchain/onchina/src/
 - 公民身份 CID 由 `src/cid/generator.rs` 生成,机构代码固定为 `CTZN`,个人码 R5 市段固定为 `000`。
 - 护照号由 `src/domains/citizens/passport_no.rs` 生成,OnChina 自持完整算法。
 - 创建公民不得要求 `wallet_account`;未成年人或暂未开户公民可以先建立本地电子护照档案。
-- 推送链上公民身份时才录入 `wallet_account`;后端接受 SS58 地址或 0x 公钥,解析为内部 `wallet_pubkey` 并要求该钱包对 `VotingIdentityPayload` 签名。
+- 推送链上公民身份时才录入 `wallet_account`;后端接受 SS58 地址或 0x 公钥,解析为内部 `wallet_pubkey`。请求必须显式提供 `identity_level=voting/candidate`：投票身份要求该钱包签 `VotingIdentityPayload`，参选身份要求该钱包签 `CandidateIdentityPayload`。
 - 未满 16 周岁不得推送链上公民身份。OnChina 在生成签名二维码前校验年龄,runtime `citizen-identity` 在 `register_voting_identity / update_voting_identity / upgrade_to_candidate_identity` 再次校验 `citizen_age_years >= 16`。
 - 出生省市镇必填,字段为 `birth_province_code / birth_city_code / birth_town_code`;创建后不得被普通编辑流程修改。
 - 居住/办理行政区直接使用链上中国统一行政区字段 `province_code / city_code / town_code`;前端只允许在当前办理城市下选择 `town_code`,不得恢复旧的第二套居住字段。
@@ -90,8 +91,10 @@ citizenchain/onchina/src/
 - 机构注册信息凭证、账户列表 DTO 和 handler：`institution/subjects/chain_*.rs`
 - 投票资格提示查询：`domains/citizens/chain_vote.rs`
 - 公民链上身份推送：`domains/citizens/chain_identity.rs`
-  - `POST /api/v1/admin/citizens/:cid_number/onchain/prepare` 生成 `a=2 citizen_identity` 签名请求,由目标公民钱包签名。
-  - `POST /api/v1/admin/citizens/:cid_number/onchain/complete` 验证公民钱包签名,落库钱包绑定,并生成 `0x0a00 register_voting_identity` 注册局管理员链上签名二维码。
+  - `POST /api/v1/admin/citizens/:cid_number/onchain/prepare` 生成 `a=2 citizen_identity` 签名请求,由目标公民钱包签名;请求体必须包含 `wallet_account` 和 `identity_level`。
+  - `identity_level=voting` 编码 `VotingIdentityPayload`，完成后生成 `0x0a00 register_voting_identity` 注册局管理员链上签名二维码。
+  - `identity_level=candidate` 编码 `CandidateIdentityPayload`，完成后生成 `0x0a01 upgrade_to_candidate_identity` 注册局管理员链上签名二维码；该交易同时写入投票身份和参选身份。
+  - `POST /api/v1/admin/citizens/:cid_number/onchain/complete` 验证公民钱包签名后才落库钱包绑定并生成管理员冷签二维码。
 - 联合投票本地人数查询：`domains/citizens/chain_joint_vote.rs`
 - 地址变更调用：`domains/address/chain_call.rs`
 - 立法法律只读链读：`domains/legislation/law/chain_read.rs` 负责读取 `Law`、`LawVersion`、`LawVersionLabels` 和宪法不可修改条款 manifest；`LawView.version_title/version_title_en` 只能来自链上 `LawVersionLabels[(law_id, version)]`。
@@ -115,6 +118,8 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 ## 8. 错误码和提示边界
 
 后端统一通过 `ApiError.error_code` 暴露稳定业务错误码。HTTP `401` 只表示管理员登录态无效；公民档案不存在、账户不匹配、签名失败等业务错误不得返回 `401`。
+
+注册局机构主账户缺失必须返回稳定错误码 `ONCHINA_REGISTRY_MAIN_ACCOUNT_MISSING`;正常目标态下该错误只能在链投影异常或绑定自愈失败时出现,不得再被前端降级成通用“请求内容不正确”。
 
 数据库错误必须展开 PostgreSQL SQLSTATE、message、detail 和 hint，禁止只向前端或日志传 `db error`。
 

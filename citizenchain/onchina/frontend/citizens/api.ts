@@ -13,6 +13,7 @@ const SECURITY_GRANT_HEADER = 'x-cid-security-grant';
 
 export type CitizenState = 'NORMAL' | 'REVOKED';
 export type CitizenSex = 'MALE' | 'FEMALE';
+export type CitizenOnchainIdentityLevel = 'voting' | 'candidate';
 
 export type CitizenRow = {
   id: number;
@@ -95,6 +96,7 @@ export type CreateCitizenResult = {
 
 export type PrepareCitizenOnchainResult = {
   cid_number: string;
+  identity_level: CitizenOnchainIdentityLevel;
   wallet_address: string;
   wallet_pubkey: string;
   citizen_age_years: number;
@@ -106,6 +108,7 @@ export type PrepareCitizenOnchainResult = {
 export type CompleteCitizenOnchainResult = {
   request_id: string;
   cid_number: string;
+  identity_level: CitizenOnchainIdentityLevel;
   wallet_address: string;
   chain_action: number;
   call_data_hex: string;
@@ -254,14 +257,19 @@ export async function prepareCitizenRevoke(
   walletAccount: string,
   signWithScan: ScanSignResolver,
 ): Promise<PrepareCitizenRevokeResult> {
-  const grantId = await citizenOnchainGrant(auth, cidNumber, walletAccount, signWithScan);
+  const grant = await createScanSignSecurityGrant(
+    auth,
+    'CITIZEN_ONCHAIN_PUSH',
+    { cid_number: cidNumber, wallet_account: walletAccount },
+    signWithScan,
+  );
   return request<PrepareCitizenRevokeResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/revoke/prepare`,
     {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        [SECURITY_GRANT_HEADER]: grantId,
+        [SECURITY_GRANT_HEADER]: grant.grant_id,
         ...adminHeaders(auth),
       },
       body: JSON.stringify({ wallet_account: walletAccount }),
@@ -276,12 +284,13 @@ async function citizenOnchainGrant(
   auth: AdminAuth,
   cidNumber: string,
   walletAccount: string,
+  identityLevel: CitizenOnchainIdentityLevel,
   signWithScan: ScanSignResolver,
 ): Promise<string> {
   const grant = await createScanSignSecurityGrant(
     auth,
     'CITIZEN_ONCHAIN_PUSH',
-    { cid_number: cidNumber, wallet_account: walletAccount },
+    { cid_number: cidNumber, wallet_account: walletAccount, identity_level: identityLevel },
     signWithScan,
   );
   return grant.grant_id;
@@ -291,9 +300,10 @@ export async function prepareCitizenOnchainSignature(
   auth: AdminAuth,
   cidNumber: string,
   walletAccount: string,
+  identityLevel: CitizenOnchainIdentityLevel,
   signWithScan: ScanSignResolver,
 ): Promise<PrepareCitizenOnchainResult> {
-  const grantId = await citizenOnchainGrant(auth, cidNumber, walletAccount, signWithScan);
+  const grantId = await citizenOnchainGrant(auth, cidNumber, walletAccount, identityLevel, signWithScan);
   return request<PrepareCitizenOnchainResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/prepare`,
     {
@@ -303,7 +313,7 @@ export async function prepareCitizenOnchainSignature(
         [SECURITY_GRANT_HEADER]: grantId,
         ...adminHeaders(auth),
       },
-      body: JSON.stringify({ wallet_account: walletAccount }),
+      body: JSON.stringify({ wallet_account: walletAccount, identity_level: identityLevel }),
     },
   );
 }
@@ -312,10 +322,11 @@ export async function completeCitizenOnchainSignature(
   auth: AdminAuth,
   cidNumber: string,
   walletAccount: string,
+  identityLevel: CitizenOnchainIdentityLevel,
   signResponse: string,
   signWithScan: ScanSignResolver,
 ): Promise<CompleteCitizenOnchainResult> {
-  const grantId = await citizenOnchainGrant(auth, cidNumber, walletAccount, signWithScan);
+  const grantId = await citizenOnchainGrant(auth, cidNumber, walletAccount, identityLevel, signWithScan);
   return request<CompleteCitizenOnchainResult>(
     `/api/v1/admin/citizens/${encodeURIComponent(cidNumber)}/onchain/complete`,
     {
@@ -325,7 +336,11 @@ export async function completeCitizenOnchainSignature(
         [SECURITY_GRANT_HEADER]: grantId,
         ...adminHeaders(auth),
       },
-      body: JSON.stringify({ wallet_account: walletAccount, sign_response: signResponse }),
+      body: JSON.stringify({
+        wallet_account: walletAccount,
+        identity_level: identityLevel,
+        sign_response: signResponse,
+      }),
     },
   );
 }

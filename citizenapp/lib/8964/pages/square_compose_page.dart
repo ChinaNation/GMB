@@ -1,20 +1,13 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path/path.dart' as path;
 
-import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
+import 'package:citizenapp/8964/services/square_compose_signers.dart';
+import 'package:citizenapp/8964/services/square_media_draft.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
 import 'package:citizenapp/8964/services/square_publish_service.dart';
 import 'package:citizenapp/8964/storage/square_draft_store.dart';
-import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
-import 'package:citizenapp/qr/qr_protocols.dart';
-import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 class SquareComposePage extends StatefulWidget {
   const SquareComposePage({
@@ -77,7 +70,7 @@ class _SquareComposePageState extends State<SquareComposePage> {
     if (images.isEmpty || !mounted) return;
     final next = <SquareLocalMediaDraft>[];
     for (final image in images) {
-      next.add(await _draftFromXFile(image, SquareMediaKind.image));
+      next.add(await buildSquareMediaDraft(image, SquareMediaKind.image));
     }
     setState(() {
       final capacity = 9 - _mediaDrafts.length;
@@ -88,37 +81,10 @@ class _SquareComposePageState extends State<SquareComposePage> {
   Future<void> _pickVideo() async {
     final video = await _imagePicker.pickVideo(source: ImageSource.gallery);
     if (video == null || !mounted) return;
-    final draft = await _draftFromXFile(video, SquareMediaKind.video);
+    final draft = await buildSquareMediaDraft(video, SquareMediaKind.video);
     setState(() {
       if (_mediaDrafts.length < 9) _mediaDrafts.add(draft);
     });
-  }
-
-  Future<SquareLocalMediaDraft> _draftFromXFile(
-    XFile file,
-    SquareMediaKind mediaKind,
-  ) async {
-    final name = file.name.isNotEmpty ? file.name : path.basename(file.path);
-    final contentType = file.mimeType ?? _inferContentType(name, mediaKind);
-    return SquareLocalMediaDraft(
-      mediaKind: mediaKind,
-      path: file.path,
-      fileName: name,
-      contentType: contentType,
-      byteSize: await file.length(),
-    );
-  }
-
-  String _inferContentType(String fileName, SquareMediaKind mediaKind) {
-    final ext = path.extension(fileName).toLowerCase();
-    if (mediaKind == SquareMediaKind.video) {
-      return ext == '.webm' ? 'video/webm' : 'video/mp4';
-    }
-    return switch (ext) {
-      '.png' => 'image/png',
-      '.webp' => 'image/webp',
-      _ => 'image/jpeg',
-    };
   }
 
   void _removeMedia(int index) {
@@ -173,22 +139,16 @@ class _SquareComposePageState extends State<SquareComposePage> {
       _publishStage = SquarePublishStage.signingIn;
     });
 
-    WalletManager? hotWalletManager;
+    // 发帖为自动扣款：默认热钱包静默签名扣费入块，不弹身份验证。
+    final signers = SquareComposeSigners(context: context, identity: identity);
     try {
-      if (identity.isHotWallet) {
-        hotWalletManager = WalletManager();
-        await hotWalletManager.authenticateForSigning();
-      }
-
       final result = await _publishService.publish(
         identity: identity,
         postCategory: _category,
         text: _textController.text,
         mediaDrafts: List<SquareLocalMediaDraft>.unmodifiable(_mediaDrafts),
-        signLoginPayload: (payload) =>
-            _signLoginPayload(identity, hotWalletManager, payload),
-        signChainPayload: (payload) =>
-            _signChainPayload(identity, hotWalletManager, payload),
+        signLoginPayload: signers.signLogin,
+        signChainPayload: signers.signChain,
         onStage: (stage) {
           if (!mounted) return;
           setState(() => _publishStage = stage);
@@ -216,77 +176,6 @@ class _SquareComposePageState extends State<SquareComposePage> {
     }
   }
 
-  Future<String> _signLoginPayload(
-    SquareIdentityState identity,
-    WalletManager? hotWalletManager,
-    String signingPayload,
-  ) async {
-    final signature = await _signPayload(
-      identity: identity,
-      hotWalletManager: hotWalletManager,
-      payload: Uint8List.fromList(utf8.encode(signingPayload)),
-      action: QrActions.login,
-      requestPrefix: 'square-login-',
-    );
-    return '0x${_hexEncode(signature)}';
-  }
-
-  Future<Uint8List> _signChainPayload(
-    SquareIdentityState identity,
-    WalletManager? hotWalletManager,
-    Uint8List payload,
-  ) {
-    return _signPayload(
-      identity: identity,
-      hotWalletManager: hotWalletManager,
-      payload: payload,
-      action: QrActions.chain(
-        SquareChainService.palletIndex,
-        SquareChainService.publishSquarePostCallIndex,
-      ),
-      requestPrefix: 'square-post-',
-    );
-  }
-
-  Future<Uint8List> _signPayload({
-    required SquareIdentityState identity,
-    required WalletManager? hotWalletManager,
-    required Uint8List payload,
-    required int action,
-    required String requestPrefix,
-  }) async {
-    final walletIndex = identity.walletIndex;
-    final pubkeyHex = identity.pubkeyHex;
-    if (walletIndex == null || pubkeyHex == null) {
-      throw const SquarePublishException('当前钱包信息不完整');
-    }
-    if (hotWalletManager != null) {
-      return hotWalletManager.signWithWalletNoAuth(walletIndex, payload);
-    }
-
-    final qrSigner = QrSigner();
-    final request = qrSigner.buildRequest(
-      requestId: QrSigner.generateRequestId(prefix: requestPrefix),
-      pubkey: '0x$pubkeyHex',
-      payloadHex: '0x${_hexEncode(payload)}',
-      action: action,
-    );
-    final requestJson = qrSigner.encodeRequest(request);
-    if (!mounted) throw const SquarePublishException('页面已关闭');
-    final response = await Navigator.push<SignResponseEnvelope>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => QrSignSessionPage(
-          request: request,
-          requestJson: requestJson,
-          expectedPubkey: '0x$pubkeyHex',
-        ),
-      ),
-    );
-    if (response == null) throw const SquarePublishException('签名已取消');
-    return Uint8List.fromList(_hexDecode(response.body.signatureHex));
-  }
-
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
@@ -296,18 +185,6 @@ class _SquareComposePageState extends State<SquareComposePage> {
   String _truncate(String value) {
     if (value.length <= 18) return value;
     return '${value.substring(0, 10)}...${value.substring(value.length - 6)}';
-  }
-
-  String _hexEncode(List<int> bytes) =>
-      bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-
-  List<int> _hexDecode(String input) {
-    final text = input.startsWith('0x') ? input.substring(2) : input;
-    final out = <int>[];
-    for (var i = 0; i < text.length; i += 2) {
-      out.add(int.parse(text.substring(i, i + 2), radix: 16));
-    }
-    return out;
   }
 
   @override

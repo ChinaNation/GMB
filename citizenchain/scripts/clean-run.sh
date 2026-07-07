@@ -1,25 +1,42 @@
 #!/usr/bin/env bash
-# 清链重新创世:杀进程 + 完全删除本机区块链数据 + 用【当前源码】现造创世启动。
+# 清库后二选一启动(杀进程 + 删本机链数据 + 删链上中国运行时 PG,再按模式启动):
+#   [1] 烘焙创世 + 从网络同步:用【冻结 SSOT】(node/chainspecs/citizenchain.plain.json)
+#       启动,不重新创世,作为新节点从区块链网络同步区块。
+#       要求:冻结创世 = 现网创世、且有可达 bootnode;本机为唯一节点时同步不到对等数据。
+#   [2] 重新创世 + 新链:用【当前源码 genesis_build】现造创世启动,一条独立本地新链。
+#       改了创世配置(宪法/立法院/创世账户…)无需重烤 SSOT 即时生效 —— 本地验证新创世入口。
 #
-# 与 run.sh 的区别(两脚本只此一别):
-#   - run.sh        = 正常启动,用【冻结 SSOT】(node/chainspecs/citizenchain.plain.json)续跑现有链。
-#   - clean-run.sh  = 清链 + 【不走 SSOT】,直接用当前 genesis_build 现造创世。
-#     改了创世配置(宪法、立法院、创世账户…)无需重烤 SSOT 即时生效 —— 本地验证新创世的唯一入口。
-#     宪法/机构等创世改动(如护照颁发改注册局)就靠它重新创世生效。
+# 两模式都删:chains/citizenchain/db(区块+状态)+ onchina-pgdata(链上中国运行时 PG,可从链重投影)。
+# 两模式都保留:node-key(PeerId)/keystore(矿工密钥)/tls(WSS 证书)= 与创世无关的节点身份。
+# 两模式都不动:china.sqlite(行政区只读源数据)。
 #
-# 机制:节点进程内启动读 CITIZENCHAIN_CHAIN_SPEC;设为 citizenchain-fresh 即走
-#   chain_spec::fresh_genesis_config()(当前源码 genesis_config() 现造),不读冻结 JSON。
-#   fresh genesis 需要 runtime WASM,故 WASM_BUILD_FROM_SOURCE=1 让 build.rs 从源码编 WASM。
+# 与 run.sh 的区别:run.sh 不删任何数据、用冻结 SSOT 续跑现有链。
+#
+# 机制:节点启动读 CITIZENCHAIN_CHAIN_SPEC;设为 citizenchain-fresh 即走
+#   chain_spec::fresh_genesis_config()(当前源码现造),不读冻结 JSON;不设则用冻结 SSOT。
+#   fresh genesis 需 runtime WASM,故模式 2 用 WASM_BUILD_FROM_SOURCE=1 从源码编 WASM。
 #
 # 启动后:节点自动挖矿;链上中国平台需在节点设置页手动启动,统一入口 https://onchina.local:8964。
 #   平台登录与节点启动解耦,本机构管理员冷钱包扫码、对链上 Active 管理员集合鉴权(3b)即可登录。
 #
-# 代价:
-#   ① 现造创世的 genesis :code = 本地构建的 WASM,与他人/现网不逐字节一致 → 这是一条独立本地链。
-#      要做全网共识,需用同一份 CI WASM 经 bake-chainspec.sh --finalize 重生冻结 plain spec
-#      并分发,不在本脚本职责内。
-#   ② 首次需从源码编译 runtime WASM,较慢。
+# 代价(模式 2):现造创世 genesis :code = 本地 WASM,与现网不逐字节一致 → 独立本地链;
+#   要做全网共识需用同一份 CI WASM 经 bake-chainspec.sh --finalize 重生冻结 plain spec 分发;
+#   首次需从源码编译 runtime WASM,较慢。
 set -euo pipefail
+
+# ── 0. 选择启动模式(可传参 ./clean-run.sh 1|2 免交互)──
+MODE="${1:-}"
+if [ -z "$MODE" ]; then
+    echo "请选择启动模式:"
+    echo "  [1] 烘焙创世 + 从网络同步(删库,用冻结创世启动,不重新创世)"
+    echo "  [2] 重新创世 + 新链  (删库,用当前源码现造创世启动)"
+    read -rp "输入 1 或 2: " MODE
+fi
+case "$MODE" in
+    1) echo "==> 模式 1:烘焙创世 + 从网络同步" ;;
+    2) echo "==> 模式 2:重新创世 + 新链" ;;
+    *) echo "[error] 无效选择:'$MODE'(只能是 1 或 2)" >&2; exit 1 ;;
+esac
 
 APP_DATA_DIR="$HOME/Library/Application Support/gmb.dev"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -55,9 +72,9 @@ DB_DIR="$APP_DATA_DIR/chains/citizenchain/db"
 ONCHINA_PGDATA="$APP_DATA_DIR/onchina-pgdata"
 echo "==> 完全删除区块链数据:$DB_DIR"
 rm -rf "$DB_DIR"
-echo "==> 删除链上中国平台内嵌 PG 数据(随新创世全新 initdb):$ONCHINA_PGDATA"
+echo "==> 删除链上中国平台运行时 PG 数据(重新 initdb,数据后续从链重投影):$ONCHINA_PGDATA"
 rm -rf "$ONCHINA_PGDATA"
-echo "    已清链(node-key/keystore/tls 保留)"
+echo "    已清库(node-key/keystore/tls 节点身份保留;china.sqlite 源数据不动)"
 mkdir -p "$GENESIS_STATE_RESOURCE_DIR"
 
 # ── 3. onchina 控制台 dev 配置 ──
@@ -95,11 +112,18 @@ export ONCHAIN_CREDENTIAL_ISSUER_MAIN_ACCOUNT="${ONCHAIN_CREDENTIAL_ISSUER_MAIN_
 echo "==> 联邦注册局管理员省映射:全走链读,不再执行本地 seed"
 echo "==> 链上中国平台:节点设置页点击“启动”后访问 https://onchina.local:8964"
 
-# ── 4. 用当前源码现造创世启动(不走冻结 SSOT)──
+# ── 4. 按模式设置启动 env 并启动 ──
 unset WASM_FILE
-export WASM_BUILD_FROM_SOURCE=1                   # build.rs 从源码编 runtime WASM → fresh genesis 可用
-export CITIZENCHAIN_CHAIN_SPEC=citizenchain-fresh # 节点改用 fresh_genesis_config()(当前 genesis_build)
 export CITIZENCHAIN_DATA_PROFILE=dev
+if [ "$MODE" = "2" ]; then
+    # 模式 2:当前源码现造创世(不走冻结 SSOT)。
+    export WASM_BUILD_FROM_SOURCE=1                   # build.rs 从源码编 runtime WASM → fresh genesis 可用
+    export CITIZENCHAIN_CHAIN_SPEC=citizenchain-fresh # 节点改用 fresh_genesis_config()(当前 genesis_build)
+    echo "==> 用当前源码现造创世启动(genesis_build 现跑,宪法/立法院等创世改动即时生效)..."
+else
+    # 模式 1:不设 CITIZENCHAIN_CHAIN_SPEC → 默认冻结 SSOT;不重新创世,从网络同步区块。
+    echo "==> 用冻结创世(node/chainspecs/citizenchain.plain.json)启动,从网络同步区块..."
+    echo "    注意:需冻结创世 = 现网创世、且有可达 bootnode;本机为唯一节点时同步不到对等数据。"
+fi
 cd "$CHAIN_ROOT/node"
-echo "==> 用当前源码现造创世启动(genesis_build 现跑,宪法/立法院等创世改动即时生效)..."
 cargo tauri dev

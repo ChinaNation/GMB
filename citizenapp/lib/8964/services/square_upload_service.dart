@@ -56,6 +56,8 @@ abstract class SquareContentUploader {
     required String text,
     required List<SquareLocalMediaDraft> mediaDrafts,
     required SquareLoginSigner signLoginPayload,
+    SquarePostContentFormat contentFormat,
+    String? title,
     void Function(SquarePublishStage stage)? onStage,
   });
 
@@ -78,6 +80,8 @@ class SquareUploadService implements SquareContentUploader {
     required String text,
     required List<SquareLocalMediaDraft> mediaDrafts,
     required SquareLoginSigner signLoginPayload,
+    SquarePostContentFormat contentFormat = SquarePostContentFormat.normal,
+    String? title,
     void Function(SquarePublishStage stage)? onStage,
   }) async {
     if (mediaDrafts.isEmpty) {
@@ -103,10 +107,15 @@ class SquareUploadService implements SquareContentUploader {
       });
     }
 
+    final trimmedTitle = title?.trim() ?? '';
     final manifestBytes = _canonicalJsonBytes({
       'schema': 'citizenapp.square.post.v1',
       'owner_account': ownerAccount,
       'post_category': postCategory.workerValue,
+      // 普通帖不写 content_format/title，保持旧 manifest 形状；文章才带。
+      if (contentFormat != SquarePostContentFormat.normal)
+        'content_format': contentFormat.workerValue,
+      if (trimmedTitle.isNotEmpty) 'title': trimmedTitle,
       'text': text,
       'media_items': mediaManifests,
     });

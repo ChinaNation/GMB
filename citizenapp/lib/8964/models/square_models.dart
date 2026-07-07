@@ -23,6 +23,17 @@ enum SquarePostCategory {
   final String workerValue;
 }
 
+/// 内容形态：普通短动态 vs 长文文章。与链上 post_category 正交，只落链下。
+enum SquarePostContentFormat {
+  normal('动态', 'normal'),
+  article('文章', 'article');
+
+  const SquarePostContentFormat(this.label, this.workerValue);
+
+  final String label;
+  final String workerValue;
+}
+
 enum SquareMediaKind {
   image('图片', 'image'),
   video('视频', 'video');
@@ -114,19 +125,39 @@ class SquarePost {
     required this.postCategory,
     required this.text,
     required this.createdAt,
+    this.contentFormat = SquarePostContentFormat.normal,
+    this.title,
     this.mediaItems = const <SquareMediaItem>[],
     this.contentHash,
     this.storageReceiptId,
     this.chainBlock,
+    this.campaignInstitutionCid,
+    this.campaignPosition,
   });
 
   final String postId;
   final SquareAuthor author;
   final SquarePostCategory postCategory;
+
+  /// 内容形态（普通/文章）。文章为长文，另带标题。
+  final SquarePostContentFormat contentFormat;
+
+  /// 文章标题；普通动态为空。
+  final String? title;
+
   final String text;
   final DateTime createdAt;
   final List<SquareMediaItem> mediaItems;
   final String? contentHash;
   final String? storageReceiptId;
   final int? chainBlock;
+
+  // 竞选目标（预留，待公民身份上链完成后填充与校验）：竞选哪个机构的哪个岗位。
+  // 公民 CID 复用 author.cidNumber；下面两项当前不生成、不校验、不入 UI。
+
+  /// 竞选目标机构 CID（预留）。
+  final String? campaignInstitutionCid;
+
+  /// 竞选目标岗位（预留）。
+  final String? campaignPosition;
 }

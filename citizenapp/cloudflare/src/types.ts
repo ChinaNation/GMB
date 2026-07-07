@@ -1,5 +1,7 @@
 export type PostCategory = 'normal' | 'campaign';
 
+export type PostContentFormat = 'normal' | 'article';
+
 export type MediaKind = 'image' | 'video' | 'cover';
 
 export type UploadStatus = 'prepared' | 'completed';
@@ -74,12 +76,17 @@ export interface SquarePostRow {
   owner_account: string;
   cid_number: string | null;
   post_category: PostCategory;
+  content_format: PostContentFormat;
+  title: string | null;
   text: string;
   content_hash: string;
   storage_receipt_id: string;
   chain_block: number | null;
   created_at: number;
   post_state: string;
+  // 竞选目标（预留，待公民身份上链完成后落地）：竞选哪个机构的哪个岗位。
+  // 公民 CID 复用 cid_number；下面两项待落地时新增 D1 列
+  // campaign_institution_cid / campaign_position 并在此补类型与查询。
 }
 
 export interface SquareFeedMediaItem {
@@ -93,4 +100,45 @@ export interface SquareFeedMediaItem {
 
 export interface SquarePostFeedItem extends SquarePostRow {
   media_items?: SquareFeedMediaItem[];
+}
+
+/// 按作者拉帖的分类过滤维度。'all' 表示不过滤。
+export type AuthorPostCategory = 'all' | PostCategory;
+
+/// 按作者拉帖的内容形态过滤。'all' 不过滤；'normal' 排除文章；'article' 只看文章。
+export type AuthorContentFormat = 'all' | PostContentFormat;
+
+/// R2 公开资料包（citizenapp.square.profile.v1）。
+/// 头像/背景/签名/展示名等公开链下资料的唯一真源。
+export interface CitizenProfileDoc {
+  schema: 'citizenapp.square.profile.v1';
+  owner_account: string;
+  display_name: string;
+  bio: string;
+  avatar_object_key: string | null;
+  avatar_content_hash: string | null;
+  banner_object_key: string | null;
+  banner_content_hash: string | null;
+  updated_at: number;
+}
+
+/// 主页计数：均为 D1 实时聚合，不写入 profile.json。
+export interface UserProfileCounts {
+  following: number;
+  followers: number;
+  posts: number;
+}
+
+/// GET /v1/square/users/:account 响应载荷。
+export interface UserProfileResponse {
+  owner_account: string;
+  display_name: string;
+  bio: string;
+  avatar_object_key: string | null;
+  banner_object_key: string | null;
+  cid_number: string | null;
+  is_certified: boolean;
+  counts: UserProfileCounts;
+  is_following: boolean;
+  updated_at: number;
 }

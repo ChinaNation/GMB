@@ -82,6 +82,19 @@ export async function requireSession(request: Request, env: Env): Promise<Sessio
   return session;
 }
 
+/// 可选登录态：带合法 Bearer 时返回 session，否则返回 null（用于公开可读、登录可增强的接口）。
+export async function maybeSession(request: Request, env: Env): Promise<SessionState | null> {
+  const authorization = request.headers.get('authorization');
+  if (!authorization?.startsWith('Bearer ')) {
+    return null;
+  }
+  try {
+    return await requireSession(request, env);
+  } catch {
+    return null;
+  }
+}
+
 export function optionsResponse(): Response {
   return jsonResponse({ ok: true });
 }

@@ -49,6 +49,7 @@ import {
   uploadCitizenDocument,
   type CitizenDocument,
   type CitizenDocumentType,
+  type CitizenOnchainIdentityLevel,
   type CitizenRow,
   type PrepareCitizenOnchainResult,
 } from './api';
@@ -65,6 +66,7 @@ type Props = {
 
 type OnchainForm = {
   wallet_account: string;
+  identity_level: CitizenOnchainIdentityLevel;
 };
 
 function makeCitizenName(row: Pick<CitizenRow, 'citizen_family_name' | 'citizen_given_name'>) {
@@ -195,6 +197,7 @@ export function CitizenDetailPage({
         auth,
         current.cid_number,
         values.wallet_account.trim(),
+        values.identity_level,
         signWithScan,
       );
       setPrepared(output);
@@ -213,12 +216,18 @@ export function CitizenDetailPage({
       notice.warning('请先录入钱包账户');
       return;
     }
+    const identityLevel = values.identity_level;
+    if (!identityLevel) {
+      notice.warning('请先选择身份类型');
+      return;
+    }
     setCompleteLoading(true);
     try {
       const output = await completeCitizenOnchainSignature(
         auth,
         current.cid_number,
         walletAccount,
+        identityLevel,
         raw,
         signWithScan,
       );
@@ -354,7 +363,7 @@ export function CitizenDetailPage({
 
         <div style={{ marginTop: 20, borderTop: '1px solid #e5e7eb', paddingTop: 18 }}>
           <Typography.Title level={5} style={{ marginTop: 0 }}>
-            链上身份推送
+            链上身份上链
           </Typography.Title>
           {!canPushOnchain && (
             <Alert
@@ -368,9 +377,25 @@ export function CitizenDetailPage({
           <Form
             form={form}
             layout="inline"
-            initialValues={{ wallet_account: current.wallet_address ?? '' }}
+            initialValues={{
+              wallet_account: current.wallet_address ?? '',
+              identity_level: 'voting',
+            }}
             style={{ rowGap: 12 }}
           >
+            <Form.Item
+              name="identity_level"
+              rules={[{ required: canPushOnchain, message: '请选择身份类型' }]}
+              style={{ minWidth: 180, marginBottom: 0 }}
+            >
+              <Select<CitizenOnchainIdentityLevel>
+                disabled={!canPushOnchain || prepareLoading || completeLoading}
+                options={[
+                  { value: 'voting', label: '投票身份' },
+                  { value: 'candidate', label: '参选身份' },
+                ]}
+              />
+            </Form.Item>
             <Form.Item
               name="wallet_account"
               rules={[{ required: canPushOnchain, message: '请输入钱包账户' }]}
@@ -521,7 +546,7 @@ export function CitizenDetailPage({
       {scanSignModal}
 
       <CitizenSignatureModal
-        title="公民钱包签名确认"
+        title={prepared?.identity_level === 'candidate' ? '参选身份签名确认' : '投票身份签名确认'}
         open={!!prepared}
         onCancel={() => setPrepared(null)}
         qrTitle="身份载荷签名二维码"

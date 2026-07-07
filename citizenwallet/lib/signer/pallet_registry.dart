@@ -37,11 +37,14 @@ class PalletRegistry {
   /// `cancel_passed_proposal(proposal_id, reason)` — 已通过但确认不可执行的提案取消入口。
   static const int cancelPassedProposalCall = 5;
 
-  // ---- CitizenIdentity (10) · 公民链上投票身份 ----
+  // ---- CitizenIdentity (10) · 公民链上身份 ----
   static const int citizenIdentityPallet = 10;
 
   /// `register_voting_identity(registrar_account, payload, citizen_signature)`。
   static const int registerVotingIdentityCall = 0;
+
+  /// `upgrade_to_candidate_identity(registrar_account, payload, citizen_signature)`。
+  static const int upgradeToCandidateIdentityCall = 1;
 
   // ---- InternalVote sub-pallet (22) · 内部投票管理员一人一票 ----
   static const int internalVotePallet = 22;

@@ -70,6 +70,8 @@ class _ImChatPageState extends State<ImChatPage> {
   // 聊天页停留时短轮询当前 mailbox；失败后退避，避免弱网下持续压请求。
   static const _normalPollInterval = Duration(seconds: 8);
   static const _backoffPollInterval = Duration(seconds: 30);
+  // 实时已连时仍保留的低频心跳兜底：即使 WS 推送静默丢失，也能在此间隔内收到。
+  static const _heartbeatPollInterval = Duration(seconds: 20);
 
   late final InMemoryChatController _chatController;
   late final _ChatLifecycleObserver _lifecycleObserver;
@@ -168,7 +170,8 @@ class _ImChatPageState extends State<ImChatPage> {
       }
       _stopRealtime = stop;
       if (stop != null) {
-        _stopPolling();
+        // 实时已连也保留低频心跳兜底，防止推送静默丢失导致收不到新消息。
+        _schedulePoll(_heartbeatPollInterval);
       }
       return stop != null;
     } catch (_) {
@@ -225,9 +228,6 @@ class _ImChatPageState extends State<ImChatPage> {
     if (!mounted || widget.onSync == null) {
       return;
     }
-    if (_stopRealtime != null) {
-      return;
-    }
     if (_polling) {
       _schedulePoll(_backoffPollInterval);
       return;
@@ -235,12 +235,19 @@ class _ImChatPageState extends State<ImChatPage> {
     _polling = true;
     final ok = await _syncAndReload(silent: true);
     _polling = false;
-    if (mounted && widget.onSync != null) {
-      if (ok && await _startRealtime()) {
-        return;
-      }
-      _schedulePoll(ok ? _normalPollInterval : _backoffPollInterval);
+    if (!mounted || widget.onSync == null) {
+      return;
     }
+    // 实时在线：保留低频心跳兜底，按心跳间隔继续复查。
+    if (_stopRealtime != null) {
+      _schedulePoll(_heartbeatPollInterval);
+      return;
+    }
+    // 实时离线：尝试重连；重连成功由 _startRealtime 起心跳，否则常规/退避轮询。
+    if (ok && await _startRealtime()) {
+      return;
+    }
+    _schedulePoll(ok ? _normalPollInterval : _backoffPollInterval);
   }
 
   Future<void> _handleSend(String text) async {

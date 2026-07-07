@@ -126,6 +126,10 @@ void main() {
     await tester.tap(find.byTooltip('发布动态'));
     await tester.pumpAndSettle();
 
+    // 发布入口先选类型：进「发动态」到达动态发布页。
+    await tester.tap(find.text('发动态'));
+    await tester.pumpAndSettle();
+
     expect(find.text('发布动态'), findsOneWidget);
     expect(find.text('测试钱包'), findsOneWidget);
     expect(find.text('当前钱包未认证，不能发布竞选内容。'), findsOneWidget);

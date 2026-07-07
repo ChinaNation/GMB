@@ -54,6 +54,7 @@ class _MediaTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isVideo = item.mediaKind == SquareMediaKind.video;
+    final imageUrl = isVideo ? (item.coverUrl ?? '') : item.url;
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
       child: DecoratedBox(
@@ -61,11 +62,19 @@ class _MediaTile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Icon(
-              isVideo ? Icons.play_circle_fill_rounded : Icons.image_rounded,
-              size: 42,
-              color: AppTheme.textTertiary,
-            ),
+            if (imageUrl.isNotEmpty)
+              Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _fallbackIcon(isVideo),
+              )
+            else
+              _fallbackIcon(isVideo),
+            if (isVideo)
+              const Center(
+                child: Icon(Icons.play_circle_fill_rounded,
+                    size: 42, color: Colors.white70),
+              ),
             if (overlayText != null)
               ColoredBox(
                 color: Colors.black38,
@@ -83,6 +92,14 @@ class _MediaTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _fallbackIcon(bool isVideo) {
+    return Icon(
+      isVideo ? Icons.play_circle_fill_rounded : Icons.image_rounded,
+      size: 42,
+      color: AppTheme.textTertiary,
     );
   }
 }

@@ -1,7 +1,6 @@
 //! 公民身份业务模块。
 //!
-//! 公民电子护照档案、状态扫码、CitizenApp 电子护照状态查询
-//! 等业务统一收口在此目录。
+//! 公民电子护照档案、状态扫码、链上身份推送等业务统一收口在此目录。
 //! 公民模型和公民查询 handler 归属本目录。
 
 /// 注册局直接录入公民并直接发护照入口。
@@ -17,7 +16,6 @@ pub(crate) mod model;
 pub(crate) mod occupy;
 /// OnChina 自持的护照号与护照有效期生成逻辑。
 pub(crate) mod passport_no;
-pub(crate) mod vote;
 
 #[allow(unused_imports)]
 pub(crate) use model::*;

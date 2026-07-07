@@ -55,7 +55,8 @@ citizenchain/onchina/frontend/
 - 新增公民弹窗不得出现手填身份 CID、手填护照有效期、居住省市选择或投票账户公钥输入框。
 - 新增公民弹窗必须展示当前办理城市对应的居住省市,只允许选择居住镇;出生省市镇必须选择。
 - 新增公民请求只提交 `province_name / city_name / town_code` 和 `birth_*` 字段;不得向后端发送旧的第二套居住字段。
-- 公民详情页负责链上身份推送:未满 16 周岁、无选举资格或档案非正常时禁用推送;推送时才录入钱包账户、生成目标公民钱包签名二维码,验签后展示注册局管理员链上交易二维码。
+- 公民详情页负责链上身份上链:未满 16 周岁、无选举资格或档案非正常时禁用推送;推送时必须先选择“投票身份”或“参选身份”,再录入钱包账户、生成目标公民钱包签名二维码,验签后展示注册局管理员链上交易二维码。
+- “投票身份”提交 `identity_level=voting`,链交易为 `CitizenIdentity.register_voting_identity(10.0)`;“参选身份”提交 `identity_level=candidate`,链交易为 `CitizenIdentity.upgrade_to_candidate_identity(10.1)`。
 - 公民详情页底部必须显示公民独立资料库,资料类型固定为“护照相片 / 出生证明 / 监护人护照 / 其他材料”。该区域只调用 `citizens/api.ts` 的公民资料接口,不得复用机构资料库 `docs/DocumentLibrary.tsx`。
 - 投票账户只有一个输入框,用于填写 SS58 地址或点击扫码图标回填账户;提交后列表和详情只显示 SS58 地址。
 - 联邦注册局、市注册局和本机构管理员列表统一使用 `frontend/admins/AdminProfileCard.tsx` 展示链上 `AdminProfile` 投影；卡片固定为顶部“序号/操作状态”、第 1 行“姓名:/职务:”、第 2 行“任期:/来源:”、第 3 行“身份CID:”、第 4 行“账户:”、第 5 行“余额:”。字段值为空时只留空值区域，不隐藏标签；余额来自 finalized `System.Account.free`，账户不存在或查询失败时仅余额值留空。
@@ -73,6 +74,7 @@ citizenchain/onchina/frontend/
 
 - 同一时刻只显示一个提示。
 - 将扫码签名、网络和后端错误翻译为中文。
+- 优先按后端 `ApiError.error_code` 映射业务提示；例如注册局主账户缺失使用 `ONCHINA_REGISTRY_MAIN_ACCOUNT_MISSING`,不得让稳定业务错误退化为通用 400 文案。
 - 将用户取消类错误显示为取消提示或静默。
 - 将无法识别的英文错误降级为中文兜底提示。
 

@@ -305,7 +305,7 @@ class _ImTabPageState extends State<ImTabPage> {
   void _openConversation(ImConversationPreview preview) {
     if (_currentUserId.isEmpty) {
       setState(() {
-        _error = '请先在用户资料中设置通信账户';
+        _error = '请先在「我的 → 我的钱包」创建热钱包';
       });
       return;
     }
@@ -643,7 +643,7 @@ class _NoCommunicationAccount extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.fromLTRB(32, 32, 32, 80),
         child: Text(
-          '请先在用户资料中设置通信账户',
+          '请先在「我的 → 我的钱包」创建热钱包',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppTheme.textSecondary,

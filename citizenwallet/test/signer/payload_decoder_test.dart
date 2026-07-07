@@ -91,6 +91,15 @@ void main() {
         ...compactVec('001'),
       ];
 
+  List<int> candidateIdentityPayloadForTest(List<int> walletBytes) => [
+        ...citizenIdentityPayloadForTest(walletBytes),
+        ...compactVec('43'),
+        ...compactVec('0100'),
+        ...compactVec('002'),
+        ...compactVec('测试公民'),
+        1,
+      ];
+
   List<int> imWalletBindingPayloadForTest(String walletAccount) => [
         ...compactVec(walletAccount),
         ...compactVec('phone-1'),
@@ -271,6 +280,21 @@ void main() {
       expect(decoded.reviewFields['residence'], '43 / 0100 / 001');
     });
 
+    test('decodes raw candidate citizen identity payload', () {
+      final wallet = List<int>.generate(32, (i) => i + 1);
+      final payload = candidateIdentityPayloadForTest(wallet);
+      final decoded = PayloadDecoder.decode(hexOf(payload));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'citizen_candidate_identity');
+      expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
+      expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
+      expect(decoded.reviewFields['identity_level'], '参选身份');
+      expect(decoded.reviewFields['birth_place'], '43 / 0100 / 002');
+      expect(decoded.reviewFields['citizen_full_name'], '测试公民');
+      expect(decoded.reviewFields['citizen_sex'], '女');
+    });
+
     test('decodes register_voting_identity raw call data', () {
       final registrar = List<int>.filled(32, 7);
       final wallet = List<int>.generate(32, (i) => i + 1);
@@ -312,6 +336,29 @@ void main() {
       expect(decoded!.action, 'register_voting_identity');
       expect(
           decoded.reviewFields['registrar_account'], ss58FromBytes(registrar));
+    });
+
+    test('decodes upgrade_to_candidate_identity raw call data', () {
+      final registrar = List<int>.filled(32, 7);
+      final wallet = List<int>.generate(32, (i) => i + 1);
+      final payload = candidateIdentityPayloadForTest(wallet);
+      final callData = [
+        0x0a,
+        0x01,
+        ...registrar,
+        ...payload,
+        ...compactU32(64),
+        ...List<int>.filled(64, 0xaa),
+      ];
+
+      final decoded = PayloadDecoder.decode(hexOf(callData));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'upgrade_to_candidate_identity');
+      expect(decoded.fields['registrar_account'], ss58FromBytes(registrar));
+      expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
+      expect(decoded.reviewFields['identity_level'], '参选身份');
+      expect(decoded.reviewFields['citizen_full_name'], '测试公民');
     });
 
     test('cast_referendum 缺少 issuer/admins 字段时拒绝解码', () {

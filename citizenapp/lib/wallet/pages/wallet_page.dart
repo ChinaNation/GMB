@@ -16,6 +16,7 @@ import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/my/util/screenshot_guard.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
+import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 import 'package:citizenapp/wallet/widgets/wallet_identity_card.dart';
@@ -29,15 +30,9 @@ class MyWalletPage extends StatefulWidget {
   const MyWalletPage({
     super.key,
     this.selectForTrade = false,
-    this.selectForBind = false,
-    this.bindPurposeLabel = '账户',
   });
 
   final bool selectForTrade;
-  final bool selectForBind;
-
-  /// 选择绑定钱包时的用途文案；电子护照复用钱包选择器时传入“电子护照”。
-  final String bindPurposeLabel;
 
   @override
   State<MyWalletPage> createState() => _MyWalletPageState();
@@ -142,9 +137,10 @@ class _MyWalletPageState extends State<MyWalletPage> {
   List<WalletProfile>? _wallets;
   bool _walletsLoading = true;
   bool _balanceRefreshing = false;
+  String? _identityWalletAccount;
   DateTime? _lastWalletStoreSnackAt;
 
-  bool get _isSelectionMode => widget.selectForTrade || widget.selectForBind;
+  bool get _isSelectionMode => widget.selectForTrade;
 
   @override
   void initState() {
@@ -184,7 +180,27 @@ class _MyWalletPageState extends State<MyWalletPage> {
   Future<void> _reload() async {
     final wallets = await _loadWallets();
     if (!_isSelectionMode) {
+      await _loadIdentityWallet();
       await _refreshBalancesFromChain(wallets: wallets);
+    }
+  }
+
+  Future<void> _loadIdentityWallet() async {
+    try {
+      final identity =
+          await MyIdService(walletManager: _walletService).getState();
+      if (!mounted) return;
+      setState(() {
+        _identityWalletAccount = identity.isCertified
+            ? identity.identityWalletAccount?.trim()
+            : null;
+      });
+    } catch (e) {
+      debugPrint('wallet identity marker load failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _identityWalletAccount = null;
+      });
     }
   }
 
@@ -357,10 +373,27 @@ class _MyWalletPageState extends State<MyWalletPage> {
 
   /// 拖拽排序回调：先 setState 反馈到 UI，再异步落盘 sortOrder。
   /// 落盘失败只提示，不回滚 UI，避免视觉跳动。
+  ///
+  /// 特例：当拖拽改变了「默认用户钱包」（列表最靠前的热钱包）时，等于切换
+  /// 用户身份，需先通过身份验证才落盘；验证失败则回滚 UI、不切换。
   Future<void> _onReorder(int oldIdx, int newIdx) async {
     final wallets = _wallets;
     if (wallets == null) return;
     final next = reorderWalletProfiles(wallets, oldIdx, newIdx);
+    final defaultChanged =
+        defaultUserWalletIndex(next) != defaultUserWalletIndex(wallets);
+    if (defaultChanged) {
+      try {
+        await _walletService.authenticateForSigning();
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('切换默认用户需通过身份验证')),
+        );
+        return;
+      }
+      if (!mounted) return;
+    }
     setState(() {
       _wallets = next;
     });
@@ -403,28 +436,6 @@ class _MyWalletPageState extends State<MyWalletPage> {
     }
   }
 
-  Future<bool?> _confirmBindWallet(WalletProfile wallet) {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('设置账户'),
-        content: Text(
-          '确定使用「${wallet.walletName}」作为${widget.bindPurposeLabel}吗？',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('确认'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _openWalletDetail(WalletProfile wallet) async {
     if (widget.selectForTrade) {
       await _walletService.setActiveWallet(wallet.walletIndex);
@@ -432,17 +443,6 @@ class _MyWalletPageState extends State<MyWalletPage> {
         return;
       }
       Navigator.of(context).pop(true);
-      return;
-    }
-    if (widget.selectForBind) {
-      final confirmed = await _confirmBindWallet(wallet);
-      if (!mounted || confirmed != true) {
-        return;
-      }
-      if (!mounted) {
-        return;
-      }
-      Navigator.of(context).pop(wallet);
       return;
     }
     final changed = await Navigator.of(context).push<bool>(
@@ -592,11 +592,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.selectForTrade
-              ? '选择交易钱包'
-              : (widget.selectForBind
-                  ? '选择${widget.bindPurposeLabel}'
-                  : '我的钱包'),
+          widget.selectForTrade ? '选择交易钱包' : '我的钱包',
         ),
         centerTitle: true,
         actions: [
@@ -651,6 +647,8 @@ class _MyWalletPageState extends State<MyWalletPage> {
                           wallet: wallet,
                           showActions: !_isSelectionMode,
                           isDefault: wallet.walletIndex == defaultWalletIndex,
+                          isIdentityWallet:
+                              wallet.address == _identityWalletAccount,
                           onTap: () => _openWalletDetail(wallet),
                           onRename: () => _renameWallet(wallet),
                           onDelete: () => _deleteWallet(wallet),
@@ -687,6 +685,7 @@ class WalletListTile extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     this.isDefault = false,
+    this.isIdentityWallet = false,
   });
 
   final WalletProfile wallet;
@@ -700,6 +699,9 @@ class WalletListTile extends StatelessWidget {
   /// 是否为默认用户钱包（列表中最靠前的热钱包）。默认卡片在三点菜单
   /// 左侧展示「默认用户」徽标，代表该钱包用于聊天与发动态的身份。
   final bool isDefault;
+
+  /// 是否为链上唯一公民身份绑定的钱包。
+  final bool isIdentityWallet;
 
   @override
   Widget build(BuildContext context) {
@@ -760,23 +762,20 @@ class WalletListTile extends StatelessWidget {
                   ],
                 ),
               ),
-              // 默认用户徽标：默认钱包在三点菜单左侧展示（聊天/发动态身份）。
-              if (isDefault) ...[
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withAlpha(24),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                  ),
-                  child: const Text(
-                    '默认用户',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.primaryDark,
-                    ),
-                  ),
+              if (isIdentityWallet || isDefault) ...[
+                const SizedBox(width: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    if (isIdentityWallet)
+                      const _WalletBadge(
+                        label: '身份钱包',
+                        icon: Icons.verified,
+                      ),
+                    if (isDefault) const _WalletBadge(label: '默认用户'),
+                  ],
                 ),
               ],
               // 右：三点菜单（仅非选择模式）
@@ -811,6 +810,44 @@ class WalletListTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _WalletBadge extends StatelessWidget {
+  const _WalletBadge({
+    required this.label,
+    this.icon,
+  });
+
+  final String label;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withAlpha(24),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: AppTheme.primaryDark),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.primaryDark,
+            ),
+          ),
+        ],
       ),
     );
   }

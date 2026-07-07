@@ -1,0 +1,146 @@
+/// 用户主页公开资料模型（对应 Worker `UserProfileResponse`）。
+///
+/// 头像/背景/签名/展示名是链下 R2 资料；计数与认证是 D1/链上派生。
+/// App 侧只读展示，写入走 `PUT /v1/square/profile`。
+class CitizenProfile {
+  const CitizenProfile({
+    required this.ownerAccount,
+    required this.displayName,
+    required this.bio,
+    required this.avatarObjectKey,
+    required this.bannerObjectKey,
+    required this.cidNumber,
+    required this.isCertified,
+    required this.following,
+    required this.followers,
+    required this.posts,
+    required this.isFollowing,
+    required this.updatedAt,
+  });
+
+  final String ownerAccount;
+  final String displayName;
+  final String bio;
+  final String? avatarObjectKey;
+  final String? bannerObjectKey;
+  final String? cidNumber;
+  final bool isCertified;
+  final int following;
+  final int followers;
+  final int posts;
+  final bool isFollowing;
+  final int updatedAt;
+
+  /// 展示名兜底：无 `display_name` 时回落调用方给的钱包名，再回落截断地址。
+  String resolvedDisplayName(String fallback) {
+    final name = displayName.trim();
+    if (name.isNotEmpty) return name;
+    final normalizedFallback = fallback.trim();
+    if (normalizedFallback.isNotEmpty) return normalizedFallback;
+    return _shortenAccount(ownerAccount);
+  }
+
+  static String _shortenAccount(String account) {
+    if (account.length <= 12) return account;
+    return '${account.substring(0, 6)}...'
+        '${account.substring(account.length - 6)}';
+  }
+
+  factory CitizenProfile.fromJson(Map<String, dynamic> json) {
+    final counts = json['counts'];
+    final countsMap = counts is Map<String, dynamic> ? counts : const {};
+    return CitizenProfile(
+      ownerAccount: _asString(json['owner_account']),
+      displayName: _asString(json['display_name']),
+      bio: _asString(json['bio']),
+      avatarObjectKey: _asNullableString(json['avatar_object_key']),
+      bannerObjectKey: _asNullableString(json['banner_object_key']),
+      cidNumber: _asNullableString(json['cid_number']),
+      isCertified: json['is_certified'] == true,
+      following: _asInt(countsMap['following']),
+      followers: _asInt(countsMap['followers']),
+      posts: _asInt(countsMap['posts']),
+      isFollowing: json['is_following'] == true,
+      updatedAt: _asInt(json['updated_at']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'owner_account': ownerAccount,
+        'display_name': displayName,
+        'bio': bio,
+        'avatar_object_key': avatarObjectKey,
+        'banner_object_key': bannerObjectKey,
+        'cid_number': cidNumber,
+        'is_certified': isCertified,
+        'counts': <String, dynamic>{
+          'following': following,
+          'followers': followers,
+          'posts': posts,
+        },
+        'is_following': isFollowing,
+        'updated_at': updatedAt,
+      };
+
+  CitizenProfile copyWith({
+    String? displayName,
+    String? bio,
+    Object? avatarObjectKey = _sentinel,
+    Object? bannerObjectKey = _sentinel,
+    bool? isFollowing,
+    int? followers,
+    int? updatedAt,
+  }) {
+    return CitizenProfile(
+      ownerAccount: ownerAccount,
+      displayName: displayName ?? this.displayName,
+      bio: bio ?? this.bio,
+      avatarObjectKey: identical(avatarObjectKey, _sentinel)
+          ? this.avatarObjectKey
+          : avatarObjectKey as String?,
+      bannerObjectKey: identical(bannerObjectKey, _sentinel)
+          ? this.bannerObjectKey
+          : bannerObjectKey as String?,
+      cidNumber: cidNumber,
+      isCertified: isCertified,
+      following: following,
+      followers: followers ?? this.followers,
+      posts: posts,
+      isFollowing: isFollowing ?? this.isFollowing,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}
+
+/// 关注/粉丝列表的一行（对应 Worker follows 列表项）。
+class SquareFollowEntry {
+  const SquareFollowEntry({
+    required this.ownerAccount,
+    required this.createdAt,
+  });
+
+  final String ownerAccount;
+  final int createdAt;
+
+  factory SquareFollowEntry.fromJson(Map<String, dynamic> json) {
+    return SquareFollowEntry(
+      ownerAccount: _asString(json['owner_account']),
+      createdAt: _asInt(json['created_at']),
+    );
+  }
+}
+
+const Object _sentinel = Object();
+
+String _asString(Object? value) => value?.toString() ?? '';
+
+String? _asNullableString(Object? value) {
+  final normalized = value?.toString().trim() ?? '';
+  return normalized.isEmpty ? null : normalized;
+}
+
+int _asInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
+import 'package:citizenapp/8964/pages/square_article_compose_page.dart';
 import 'package:citizenapp/8964/pages/square_compose_page.dart';
 import 'package:citizenapp/8964/pages/square_post_detail_page.dart';
+import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
 import 'package:citizenapp/8964/storage/square_draft_store.dart';
@@ -10,6 +12,8 @@ import 'package:citizenapp/8964/widgets/square_empty_state.dart';
 import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+
+enum _ComposeKind { post, article }
 
 class SquareHomePage extends StatefulWidget {
   const SquareHomePage({
@@ -48,17 +52,62 @@ class _SquareHomePageState extends State<SquareHomePage> {
   }
 
   Future<void> _openCompose() async {
+    final choice = await showModalBottomSheet<_ComposeKind>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.dynamic_feed_outlined),
+              title: const Text('发动态'),
+              subtitle: const Text('短文 + 图片/视频'),
+              onTap: () => Navigator.of(sheetContext).pop(_ComposeKind.post),
+            ),
+            ListTile(
+              leading: const Icon(Icons.article_outlined),
+              title: const Text('发文章'),
+              subtitle: const Text('长文：标题 + 首图 + 正文'),
+              onTap: () => Navigator.of(sheetContext).pop(_ComposeKind.article),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+
     final post = await Navigator.of(context).push<SquarePost>(
       MaterialPageRoute<SquarePost>(
-        builder: (_) => SquareComposePage(
-          identityService: widget.identityService,
-          draftStore: widget.draftStore,
-        ),
+        builder: (_) => switch (choice) {
+          _ComposeKind.post => SquareComposePage(
+              identityService: widget.identityService,
+              draftStore: widget.draftStore,
+            ),
+          _ComposeKind.article => SquareArticleComposePage(
+              identityService: widget.identityService,
+            ),
+        },
       ),
     );
     if (post == null || !mounted) return;
     setState(() => _localPosts.insert(0, post));
     await _refreshFeed();
+  }
+
+  Future<void> _openAuthor(String ownerAccount) async {
+    if (ownerAccount.isEmpty) return;
+    final identity = await _identityFuture;
+    if (!mounted) return;
+    final isSelf = identity.ownerAccount.isNotEmpty &&
+        identity.ownerAccount == ownerAccount;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => UserProfilePage(
+          ownerAccount: ownerAccount,
+          isSelf: isSelf,
+        ),
+      ),
+    );
   }
 
   void _openDetail(SquarePost post) {
@@ -166,6 +215,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
                     posts: posts,
                     errorMessage: snapshot.hasError ? '广场内容加载失败' : null,
                     onOpenPost: _openDetail,
+                    onOpenAuthor: _openAuthor,
                   ),
                 );
               },
@@ -206,12 +256,14 @@ class _FeedBody extends StatelessWidget {
     required this.posts,
     required this.errorMessage,
     required this.onOpenPost,
+    required this.onOpenAuthor,
   });
 
   final SquareFeedKind feedKind;
   final List<SquarePost> posts;
   final String? errorMessage;
   final ValueChanged<SquarePost> onOpenPost;
+  final ValueChanged<String> onOpenAuthor;
 
   @override
   Widget build(BuildContext context) {
@@ -245,6 +297,7 @@ class _FeedBody extends StatelessWidget {
         return SquarePostCard(
           post: post,
           onTap: () => onOpenPost(post),
+          onAuthorTap: () => onOpenAuthor(post.author.ownerAccount),
         );
       },
       separatorBuilder: (_, __) => const SizedBox(height: 10),

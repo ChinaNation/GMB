@@ -1,8 +1,8 @@
-// 电子护照热钱包扫码签名页(公民链上身份确认)。
+// 公民身份上链热钱包扫码签名页。
 //
 // 公民到链上中国办理现场后:
 // 1. 打开此页,摄像头扫描 OnChina 平台的 sign_request 二维码(action=2)
-// 2. 独立解码 `VotingIdentityPayload` SCALE 载荷并展示中文字段,解不开拒签
+// 2. 独立解码投票/参选身份 SCALE 载荷并展示中文字段,解不开拒签
 // 3. 验证载荷内钱包公钥 == 请求公钥 == 当前电子护照钱包
 // 4. 公民确认字段后,对 `blake2_256(GMB || 0x10 || payload)` 签名
 //    (经 QrSigner.signingBytesForHex,对齐 primitives::sign::OP_SIGN_CITIZEN_IDENTITY)
@@ -271,8 +271,8 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           child: const Text(
             '身份载荷已独立验证,请核对后签名',
             textAlign: TextAlign.center,
-            style: TextStyle(
-                color: AppTheme.success, fontWeight: FontWeight.w600),
+            style:
+                TextStyle(color: AppTheme.success, fontWeight: FontWeight.w600),
           ),
         ),
         const SizedBox(height: 16),
@@ -281,7 +281,10 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           decoration: AppTheme.cardDecoration(),
           child: Column(
             children: [
-              _detailRow('签名类型', '公民链上身份确认'),
+              _detailRow(
+                '签名类型',
+                decoded.isCandidate ? '参选身份上链确认' : '投票身份上链确认',
+              ),
               ...decoded.reviewEntries
                   .map((entry) => _detailRow(entry.$1, entry.$2)),
             ],

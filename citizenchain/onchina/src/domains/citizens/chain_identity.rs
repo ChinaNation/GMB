@@ -24,16 +24,42 @@ use crate::*;
 
 const CITIZEN_IDENTITY_PALLET_INDEX: u8 = 10;
 const REGISTER_VOTING_IDENTITY_CALL_INDEX: u8 = 0;
+const UPGRADE_TO_CANDIDATE_IDENTITY_CALL_INDEX: u8 = 1;
 const MIN_ONCHAIN_CITIZEN_AGE_YEARS: u8 = 16;
+
+#[derive(Clone, Copy, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CitizenOnchainIdentityLevel {
+    Voting,
+    Candidate,
+}
+
+impl CitizenOnchainIdentityLevel {
+    fn as_str(self) -> &'static str {
+        match self {
+            CitizenOnchainIdentityLevel::Voting => "voting",
+            CitizenOnchainIdentityLevel::Candidate => "candidate",
+        }
+    }
+
+    fn call_index(self) -> u8 {
+        match self {
+            CitizenOnchainIdentityLevel::Voting => REGISTER_VOTING_IDENTITY_CALL_INDEX,
+            CitizenOnchainIdentityLevel::Candidate => UPGRADE_TO_CANDIDATE_IDENTITY_CALL_INDEX,
+        }
+    }
+}
 
 #[derive(Deserialize)]
 pub(crate) struct PrepareCitizenOnchainInput {
     pub(crate) wallet_account: String,
+    pub(crate) identity_level: CitizenOnchainIdentityLevel,
 }
 
 #[derive(Serialize)]
 pub(crate) struct PrepareCitizenOnchainOutput {
     pub(crate) cid_number: String,
+    pub(crate) identity_level: CitizenOnchainIdentityLevel,
     pub(crate) wallet_address: String,
     pub(crate) wallet_pubkey: String,
     pub(crate) citizen_age_years: u8,
@@ -45,6 +71,7 @@ pub(crate) struct PrepareCitizenOnchainOutput {
 #[derive(Deserialize)]
 pub(crate) struct CompleteCitizenOnchainInput {
     pub(crate) wallet_account: String,
+    pub(crate) identity_level: CitizenOnchainIdentityLevel,
     pub(crate) sign_response: String,
 }
 
@@ -52,6 +79,7 @@ pub(crate) struct CompleteCitizenOnchainInput {
 pub(crate) struct CompleteCitizenOnchainOutput {
     pub(crate) request_id: String,
     pub(crate) cid_number: String,
+    pub(crate) identity_level: CitizenOnchainIdentityLevel,
     pub(crate) wallet_address: String,
     pub(crate) chain_action: u16,
     pub(crate) call_data_hex: String,
@@ -77,6 +105,7 @@ pub(crate) async fn prepare_citizen_onchain_signature(
     let grant_payload = serde_json::json!({
         "cid_number": cid_number,
         "wallet_account": input.wallet_account,
+        "identity_level": input.identity_level.as_str(),
     });
     if let Err(resp) = require_admin_security_grant(
         &state,
@@ -106,7 +135,7 @@ pub(crate) async fn prepare_citizen_onchain_signature(
     if let Err(resp) = ensure_wallet_available(&state, &record, &wallet) {
         return resp;
     }
-    let payload = match build_voting_identity_payload(&record, &wallet) {
+    let payload = match build_citizen_identity_payload(&record, &wallet, input.identity_level) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -130,6 +159,7 @@ pub(crate) async fn prepare_citizen_onchain_signature(
         message: "ok".to_string(),
         data: PrepareCitizenOnchainOutput {
             cid_number: record.cid_number,
+            identity_level: payload.identity_level,
             wallet_address: wallet.address,
             wallet_pubkey: wallet.pubkey,
             citizen_age_years: payload.citizen_age_years,
@@ -159,6 +189,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
     let grant_payload = serde_json::json!({
         "cid_number": cid_number,
         "wallet_account": input.wallet_account,
+        "identity_level": input.identity_level.as_str(),
     });
     if let Err(resp) = require_admin_security_grant(
         &state,
@@ -188,7 +219,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
     if let Err(resp) = ensure_wallet_available(&state, &record, &wallet) {
         return resp;
     }
-    let payload = match build_voting_identity_payload(&record, &wallet) {
+    let payload = match build_citizen_identity_payload(&record, &wallet, input.identity_level) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -224,14 +255,15 @@ pub(crate) async fn complete_citizen_onchain_signature(
         Some(v) => v,
         None => return api_error(StatusCode::BAD_REQUEST, 1001, "公民签名格式错误"),
     };
-    let call = encode_register_voting_identity_call(
+    let call = encode_citizen_identity_call(
+        payload.identity_level,
         &registrar_account,
         &payload.payload_bytes,
         &signature_bytes,
     );
     let action = crate::core::institution_call::chain_action_code(
         CITIZEN_IDENTITY_PALLET_INDEX,
-        REGISTER_VOTING_IDENTITY_CALL_INDEX,
+        payload.identity_level.call_index(),
     );
     // D7:QR 载荷 = 完整 runtime 签名载荷(与钱包解码器扩展尾规则对齐),
     // 回签后经 /citizens/chain/submit 由 onchina 组装提交,QR 只签不提交。
@@ -268,7 +300,10 @@ pub(crate) async fn complete_citizen_onchain_signature(
         call_data: call.clone(),
         nonce: prepared.nonce,
         signing_hash: prepared.signing_hash_hex.clone(),
-        context: serde_json::json!({ "cid_number": record.cid_number }),
+        context: serde_json::json!({
+            "cid_number": record.cid_number,
+            "identity_level": payload.identity_level.as_str(),
+        }),
         expires_at,
         consumed_at: None,
     };
@@ -300,6 +335,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
         Some(record.cid_number.clone()),
         serde_json::json!({
             "cid_number": record.cid_number,
+            "identity_level": payload.identity_level.as_str(),
             "wallet_address": wallet.address,
             "citizen_age_years": payload.citizen_age_years,
             "request_id": request_id_from_headers(&headers),
@@ -313,6 +349,7 @@ pub(crate) async fn complete_citizen_onchain_signature(
         data: CompleteCitizenOnchainOutput {
             request_id,
             cid_number: record.cid_number,
+            identity_level: payload.identity_level,
             wallet_address: wallet.address,
             chain_action: action,
             call_data_hex: format!("0x{}", hex::encode(call)),
@@ -355,9 +392,10 @@ impl Db {
     }
 }
 
-struct VotingIdentityPayloadBytes {
+struct CitizenIdentityPayloadBytes {
     payload_bytes: Vec<u8>,
     citizen_age_years: u8,
+    identity_level: CitizenOnchainIdentityLevel,
 }
 
 pub(crate) fn ensure_registry_admin(
@@ -438,7 +476,7 @@ fn ensure_wallet_available(
 fn build_voting_identity_payload(
     record: &CitizenRecord,
     wallet: &ResolvedWallet,
-) -> Result<VotingIdentityPayloadBytes, axum::response::Response> {
+) -> Result<CitizenIdentityPayloadBytes, axum::response::Response> {
     if record.citizen_status != CitizenStatus::Normal
         || record.computed_identity_status() != CitizenStatus::Normal
     {
@@ -486,10 +524,66 @@ fn build_voting_identity_payload(
     )?;
     append_bounded_bytes(&mut out, record.city_code.as_bytes(), 16, "city_code")?;
     append_bounded_bytes(&mut out, record.town_code.as_bytes(), 16, "town_code")?;
-    Ok(VotingIdentityPayloadBytes {
+    Ok(CitizenIdentityPayloadBytes {
         payload_bytes: out,
         citizen_age_years: age,
+        identity_level: CitizenOnchainIdentityLevel::Voting,
     })
+}
+
+fn build_citizen_identity_payload(
+    record: &CitizenRecord,
+    wallet: &ResolvedWallet,
+    identity_level: CitizenOnchainIdentityLevel,
+) -> Result<CitizenIdentityPayloadBytes, axum::response::Response> {
+    let mut payload = build_voting_identity_payload(record, wallet)?;
+    if identity_level == CitizenOnchainIdentityLevel::Voting {
+        return Ok(payload);
+    }
+
+    append_bounded_bytes(
+        &mut payload.payload_bytes,
+        record.birth_province_code.as_bytes(),
+        16,
+        "birth_province_code",
+    )?;
+    append_bounded_bytes(
+        &mut payload.payload_bytes,
+        record.birth_city_code.as_bytes(),
+        16,
+        "birth_city_code",
+    )?;
+    append_bounded_bytes(
+        &mut payload.payload_bytes,
+        record.birth_town_code.as_bytes(),
+        16,
+        "birth_town_code",
+    )?;
+    let citizen_full_name = format!(
+        "{}{}",
+        record.citizen_family_name.trim(),
+        record.citizen_given_name.trim()
+    );
+    append_bounded_bytes(
+        &mut payload.payload_bytes,
+        citizen_full_name.as_bytes(),
+        128,
+        "citizen_full_name",
+    )?;
+    let sex = match record.citizen_sex.trim().to_ascii_uppercase().as_str() {
+        "MALE" => 0,
+        "FEMALE" => 1,
+        _ => {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "公民性别不能编码为参选身份",
+            ));
+        }
+    };
+    payload.payload_bytes.push(sex);
+    payload.identity_level = CitizenOnchainIdentityLevel::Candidate;
+    Ok(payload)
 }
 
 fn append_bounded_bytes(
@@ -581,14 +675,15 @@ pub(crate) fn active_registry_main_account(
         .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, 1001, "注册局机构主账户格式错误"))
 }
 
-fn encode_register_voting_identity_call(
+fn encode_citizen_identity_call(
+    identity_level: CitizenOnchainIdentityLevel,
     registrar_account: &[u8; 32],
     payload_bytes: &[u8],
     citizen_signature: &[u8; 64],
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(CITIZEN_IDENTITY_PALLET_INDEX);
-    out.push(REGISTER_VOTING_IDENTITY_CALL_INDEX);
+    out.push(identity_level.call_index());
     out.extend_from_slice(registrar_account);
     out.extend_from_slice(payload_bytes);
     out.extend(Compact(citizen_signature.len() as u32).encode());

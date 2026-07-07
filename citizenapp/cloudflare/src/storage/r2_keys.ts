@@ -15,6 +15,16 @@ export function sanitizeOwnerAccount(ownerAccount: string): string {
   return ownerAccount.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
+/// 公开资料包 R2 object key：一个钱包账户一份 profile.json。
+export function profileObjectKey(ownerAccount: string): string {
+  return `profile/${sanitizeOwnerAccount(ownerAccount)}/profile.json`;
+}
+
+/// 头像/背景 R2 object key 前缀；本人上传的头像与背景对象必须落在此前缀下。
+export function profileAssetPrefix(ownerAccount: string): string {
+  return `profile/${sanitizeOwnerAccount(ownerAccount)}/`;
+}
+
 export function normalizeFileExt(contentType: string, fileExt?: string): string {
   if (fileExt && /^[a-z0-9]{2,8}$/i.test(fileExt)) {
     return fileExt.toLowerCase();
