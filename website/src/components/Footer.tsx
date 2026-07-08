@@ -33,11 +33,11 @@ export default function Footer() {
           </div>
 
           <div>
-            <h4 className="mb-4 text-sm font-semibold tracking-wider text-gold-400">生态系统</h4>
+            <h4 className="mb-4 text-sm font-semibold tracking-wider text-gold-400">产品体系</h4>
             <ul className="space-y-2 text-sm">
-              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">链上中国平台</Link></li>
-              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">CitizenApp 移动端</Link></li>
-              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">全节点网络</Link></li>
+              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">公民</Link></li>
+              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">CitizenWallet 公民钱包</Link></li>
+              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">公民链</Link></li>
             </ul>
           </div>
         </div>

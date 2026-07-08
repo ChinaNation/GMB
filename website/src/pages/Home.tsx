@@ -170,7 +170,7 @@ export default function Home() {
               to="/ecosystem"
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold-500 to-gold-600 px-8 py-3.5 text-sm font-semibold text-navy-950 no-underline shadow-lg shadow-gold-500/25 transition-all hover:shadow-gold-500/40"
             >
-              探索生态系统
+              探索产品体系
             </Link>
             <Link
               to="/governance"

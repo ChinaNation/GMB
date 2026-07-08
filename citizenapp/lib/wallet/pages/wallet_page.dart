@@ -18,6 +18,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:citizenapp/wallet/pages/create_wallet_flow.dart';
 import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 import 'package:citizenapp/wallet/widgets/wallet_identity_card.dart';
 import 'package:citizenapp/wallet/widgets/wallet_onchain_balance_card.dart';
@@ -66,29 +67,6 @@ int? defaultUserWalletIndex(List<WalletProfile> wallets) {
     }
   }
   return null;
-}
-
-/// 本地 Isar/MDBX 繁忙属于钱包数据库问题，不能提示成区块链网络异常。
-bool _isWalletLocalStoreError(Object? error) {
-  final raw = error.toString().toLowerCase();
-  return raw.contains('isar') ||
-      raw.contains('mdbx') ||
-      raw.contains('active transaction') ||
-      raw.contains('database');
-}
-
-String _walletLocalStoreErrorMessage(Object? error) {
-  if (_isWalletLocalStoreError(error)) {
-    return '本地钱包数据库繁忙，请稍后重试';
-  }
-  return '本地钱包读取失败：$error';
-}
-
-String _walletOperationErrorMessage(Object error) {
-  if (_isWalletLocalStoreError(error)) {
-    return _walletLocalStoreErrorMessage(error);
-  }
-  return '$error';
 }
 
 final RegExp _coldWalletPubkeyPattern = RegExp(r'^(?:0x)?[0-9a-fA-F]{64}$');
@@ -212,7 +190,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
     }
     _lastWalletStoreSnackAt = now;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text(_walletLocalStoreErrorMessage(error))),
+      SnackBar(content: Text(walletLocalStoreErrorMessage(error))),
     );
   }
 
@@ -272,10 +250,10 @@ class _MyWalletPageState extends State<MyWalletPage> {
         if (!mounted) return;
       }
       if (hasError) {
-        final msg = _isWalletLocalStoreError(refreshError)
-            ? _walletLocalStoreErrorMessage(refreshError)
+        final msg = isWalletLocalStoreError(refreshError)
+            ? walletLocalStoreErrorMessage(refreshError)
             : SmoldotClientManager.instance.buildUserFacingError(refreshError);
-        if (_isWalletLocalStoreError(refreshError)) {
+        if (isWalletLocalStoreError(refreshError)) {
           _showWalletStoreErrorOnce(refreshError);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1243,48 +1221,7 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
       _isSaving = true;
     });
     try {
-      final created = await WalletManager().createWallet(wordCount: _wordCount);
-      unawaited(ChainTxMonitor.instance.initBaselineBalance(
-        created.profile.address,
-        created.profile.pubkeyHex,
-      ));
-      if (!mounted) {
-        return;
-      }
-      await ScreenshotGuard.enable();
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('请备份助记词'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '助记词已加密存储在本机，后续可在钱包详情中查看。\n'
-                  '请务必手抄备份并妥善保管，这是恢复钱包的唯一凭证。\n'
-                  '不支持复制，不支持截屏。',
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  created.mnemonic,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('我已备份'),
-              ),
-            ],
-          );
-        },
-      );
-      await ScreenshotGuard.disable();
+      await runCreateWalletFlow(context, wordCount: _wordCount);
       if (!mounted) {
         return;
       }
@@ -1293,7 +1230,7 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
       debugPrint('wallet create failed: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_walletOperationErrorMessage(e))),
+        SnackBar(content: Text(walletOperationErrorMessage(e))),
       );
     } finally {
       if (mounted) {
@@ -1375,7 +1312,7 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = _walletOperationErrorMessage(e);
+        _error = walletOperationErrorMessage(e);
       });
     } finally {
       if (mounted) {
@@ -1481,7 +1418,7 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = _walletOperationErrorMessage(e);
+        _error = walletOperationErrorMessage(e);
       });
     } finally {
       if (mounted) {

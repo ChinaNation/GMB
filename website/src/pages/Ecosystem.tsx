@@ -3,55 +3,24 @@ import GlowCard from '../components/GlowCard'
 
 const systems = [
   {
-    name: '链上中国平台',
-    subtitle: '本地治理与注册平台',
-    desc: '节点内置的链上中国平台，承接注册局业务、法律文库、立法入口、机构注册、公民档案和链上身份提交。',
+    name: '公民',
+    subtitle: 'CitizenApp 公民移动客户端',
+    desc: '面向全体公民的移动端应用，公民的链上生活入口：CID 身份与投票凭证、治理投票与选举立法参与、机构与个人多签账户管理、公民广场与加密聊天。',
     features: [
-      '链上管理员鉴权',
-      '扫码签名登录',
-      '公民电子护照',
-      '公权机构注册',
-      '私权机构注册',
-      '法律文库展示',
-      '立法入口生成',
-      '完整审计日志',
-    ],
-    tech: 'Rust / Axum / PostgreSQL / React',
-    color: 'gold',
-  },
-  {
-    name: 'CitizenApp',
-    subtitle: '公民移动客户端',
-    desc: '面向全体公民的移动端应用，集成钱包管理、交易转账、治理投票、QR 码扫描等核心功能。',
-    features: [
-      '助记词钱包管理',
+      'CID 身份与投票凭证',
+      '治理提案与链上投票',
+      '选举与立法参与',
+      '机构与个人多签管理',
       '公民币转账交易',
-      '链上治理投票',
-      'QR 码扫描绑定',
-      '生物识别认证',
+      '公民广场图文动态',
+      '加密即时聊天',
       '内置轻节点 (Smoldot)',
     ],
     tech: 'Dart / Flutter / iOS / Android',
     color: 'gold',
   },
   {
-    name: 'NodeUI 桌面端',
-    subtitle: '全节点桌面应用',
-    desc: '基于 Tauri 构建的桌面节点管理界面，集成原生区块链节点程序，提供可视化的节点运维体验。',
-    features: [
-      'Tauri 原生桌面应用',
-      '集成全节点程序',
-      '可视化节点状态',
-      '区块浏览与查询',
-      'PoW 挖矿管理',
-      '网络对等节点监控',
-    ],
-    tech: 'Rust (Tauri) / React / TypeScript',
-    color: 'blue',
-    fullWidth: false,
-  },
-  {
-    name: 'CitizenWallet 冷钱包',
+    name: 'CitizenWallet 公民钱包',
     subtitle: '离线签名冷钱包',
     desc: '完全离线运行的签名钱包，用于关键身份与治理操作的气隙式 Sr25519 签名，与 CitizenApp 热钱包形成"冷热分离"的双钱包体系。',
     features: [
@@ -66,6 +35,24 @@ const systems = [
     ],
     tech: 'Dart / Flutter / 完全离线 / 独立应用',
     color: 'gold',
+    fullWidth: false,
+  },
+  {
+    name: '公民链',
+    subtitle: 'CitizenChain · runtime / node / onchina 三大版本',
+    desc: '公民链软件由三大版本组成：runtime 链上运行时承载公民身份、四类投票引擎、货币发行、立法与选举等全部业务规则；node 全节点桌面端负责 PoW 出块、GRANDPA 最终性与可视化节点运维；onchina 机构统一控制台面向公权机构提供 CID 颁发、公民与机构档案和立法表决操作台。',
+    features: [
+      'runtime · PoW + GRANDPA 共识',
+      'runtime · 四类投票引擎',
+      'runtime · 身份 / 发行 / 立法模块',
+      'node · 全节点 + 矿工桌面端',
+      'node · 可视化节点运维',
+      'onchina · 机构统一控制台',
+      'onchina · CID 颁发与档案管理',
+      'onchina · 立法与表决操作台',
+    ],
+    tech: 'Rust / polkadot-sdk / Tauri / Axum / PostgreSQL',
+    color: 'blue',
     fullWidth: true,
   },
 ]
@@ -98,7 +85,7 @@ export default function Ecosystem() {
         </div>
         <div className="relative mx-auto max-w-7xl px-6">
           <SectionTitle
-            subtitle="生态系统"
+            subtitle="产品体系"
             title="完整的公民链生态"
             description="从链上中国到移动钱包，从法律文库到投票引擎，公民链把注册、立法、选举、机构和资产操作连成完整闭环。"
           />
@@ -109,7 +96,7 @@ export default function Ecosystem() {
 
       {/* Systems */}
       <section className="mx-auto max-w-7xl px-6 py-24">
-        <SectionTitle subtitle="核心产品" title="四大核心系统" />
+        <SectionTitle subtitle="核心产品" title="三大核心系统" />
         <div className="grid gap-8 md:grid-cols-2">
           {systems.map((s) => (
             <GlowCard
@@ -165,7 +152,7 @@ export default function Ecosystem() {
       <section className="border-t border-white/10 bg-gradient-to-b from-navy-900/40 to-navy-950 py-24">
         <div className="mx-auto max-w-5xl px-6">
           <SectionTitle subtitle="安全保障" title="端到端密码学安全" />
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             <GlowCard glow="blue" className="text-center">
               <div className="mb-3 text-3xl font-bold text-gold-400">Sr25519</div>
               <h3 className="mb-2 text-base font-semibold text-white">数字签名</h3>
@@ -179,7 +166,12 @@ export default function Ecosystem() {
             <GlowCard glow="blue" className="text-center">
               <div className="mb-3 text-3xl font-bold text-gold-400">AES-256</div>
               <h3 className="mb-2 text-base font-semibold text-white">数据加密</h3>
-              <p className="text-sm text-slate-400">AES-256-GCM 加密保护省级签名密钥，HKDF 密钥派生确保安全</p>
+              <p className="text-sm text-slate-400">AES-256-GCM 加密保护密钥库静态数据，HKDF 密钥派生确保安全</p>
+            </GlowCard>
+            <GlowCard glow="blue" className="text-center">
+              <div className="mb-3 text-3xl font-bold text-gold-400">ML-DSA-65</div>
+              <h3 className="mb-2 text-base font-semibold text-white">抗量子升级（PQC）</h3>
+              <p className="text-sm text-slate-400">NIST 后量子签名与 ML-KEM-768 密钥封装，升级路线已定稿，不换助记词与地址在位切换</p>
             </GlowCard>
           </div>
         </div>

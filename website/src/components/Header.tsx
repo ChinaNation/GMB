@@ -5,11 +5,11 @@ const navItems = [
   { path: '/', label: '首页' },
   { path: '/technology', label: '区块链技术' },
   { path: '/tokenomics', label: '公民币经济' },
+  { path: '/ecosystem', label: '产品体系' },
   { path: '/membership', label: '会员订阅' },
   { path: '/governance', label: '治理体系' },
   { path: '/whitepaper', label: '白皮书' },
   { path: '/about', label: '关于我们' },
-  { path: '/ecosystem', label: '生态系统' },
 ]
 
 export default function Header() {

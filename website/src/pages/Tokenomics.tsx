@@ -66,22 +66,6 @@ const feeDistribution = [
 export default function Tokenomics() {
   return (
     <>
-      {/* Hero */}
-      <section className="relative overflow-hidden py-24 md:py-32">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute left-1/2 top-0 h-[500px] w-[700px] -translate-x-1/2 rounded-full bg-gradient-to-b from-gold-500/8 to-transparent blur-3xl" />
-        </div>
-        <div className="relative mx-auto max-w-7xl px-6">
-          <SectionTitle
-            subtitle="公民币经济"
-            title="公民币代币经济模型"
-            description="基于《公民宪法》发行的法定数字货币，通过多渠道发行机制确保公平分配。"
-          />
-        </div>
-      </section>
-
-      <div className="mx-auto h-px max-w-7xl bg-gradient-to-r from-transparent via-gold-500/30 to-transparent" />
-
       {/* Basic Info */}
       <section className="mx-auto max-w-7xl px-6 py-24">
         <SectionTitle subtitle="基本参数" title="公民币核心指标" />
@@ -102,7 +86,7 @@ export default function Tokenomics() {
         <SectionTitle
           subtitle="代币分配"
           title="发行分配方案"
-          description="公民币固定发行合计为 2,229,386,218,778 GMB，不含后续治理决议新增发行。"
+          description="基于《公民宪法》发行的法定数字货币，通过多渠道发行机制确保公平分配。"
         />
 
         <div className="grid gap-6 md:grid-cols-2">

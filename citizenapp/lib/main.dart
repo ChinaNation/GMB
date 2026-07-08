@@ -18,6 +18,7 @@ import 'package:citizenapp/my/user/user.dart';
 import 'package:citizenapp/security/app_permission_gate.dart';
 import 'package:citizenapp/update/app_update.dart';
 import 'package:citizenapp/update/update_badge.dart';
+import 'package:citizenapp/wallet/wallet_gate.dart';
 
 import 'ui/app_theme.dart';
 
@@ -222,7 +223,8 @@ class _AppLockGateState extends State<_AppLockGate>
     }
 
     if (_authenticated) {
-      return const AppPermissionGate(child: AppShell());
+      // 账户门禁排在最后一环：无热钱包先进强制创建页，再放行主界面。
+      return const AppPermissionGate(child: WalletGate(child: AppShell()));
     }
 
     if (_showDeviceLock) {

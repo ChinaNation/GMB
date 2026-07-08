@@ -150,6 +150,30 @@ void main() {
       final secret = await manager.getWalletSecretByIndex(walletIndex);
       expect(secret, isNull);
     });
+
+    test('getDefaultWallet ignores cold wallets (WalletGate 门禁判定依据)',
+        () async {
+      final manager = WalletManager();
+
+      // 空库无钱包 → null，门禁据此拦进强制创建页。
+      expect(await manager.getDefaultWallet(), isNull);
+
+      // 仅有冷钱包 → 仍为 null（冷钱包不能作为默认身份）。
+      await manager.importColdWallet(
+        address:
+            '0x2222222222222222222222222222222222222222222222222222222222222222',
+      );
+      expect(await manager.getDefaultWallet(), isNull);
+
+      // 出现热钱包 → 返回该热钱包。
+      final imported = await manager.importWallet(
+        'legal winner thank year wave sausage worth useful legal winner thank yellow',
+      );
+      final def = await manager.getDefaultWallet();
+      expect(def, isNotNull);
+      expect(def!.walletIndex, imported.walletIndex);
+      expect(def.isHotWallet, isTrue);
+    });
   });
 
   group('WalletManager — 冷钱包', () {

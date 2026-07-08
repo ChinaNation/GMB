@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import SectionTitle from '../components/SectionTitle'
 import GlowCard from '../components/GlowCard'
+import QrScannerModal from '../components/QrScannerModal'
 
 type MembershipLevel = 'visitor' | 'voting' | 'candidate'
 
@@ -26,7 +27,7 @@ const plans: Plan[] = [
     level: 'voting',
     name: '投票公民会员',
     price: '$9.99 / 月',
-    identity: 'VotingIdentityByAccount',
+    identity: '认证投票公民',
     dynamic: '动态：300 字、9 张高清图片、30 分钟高清视频',
     article: '文章：30,000 字、100 张高清图片、1 张高清首图',
   },
@@ -34,7 +35,7 @@ const plans: Plan[] = [
     level: 'candidate',
     name: '竞选公民会员',
     price: '$99.99 / 月',
-    identity: 'CandidateIdentityByAccount',
+    identity: '认证选举公民',
     dynamic: '动态：300 字、9 张高清图片、3 小时高清视频',
     article: '文章：30,000 字、100 张高清图片、1 张高清首图',
   },
@@ -44,11 +45,38 @@ const apiBaseUrl =
   import.meta.env.VITE_CITIZENAPP_SQUARE_API_BASE_URL?.replace(/\/+$/, '') ??
   'https://citizenapp-square-api.stews87-fawn.workers.dev'
 
+/**
+ * 从二维码文本中提取钱包地址：兼容纯地址与 substrate:地址:哈希 之类的 URI。
+ * 只接受完整的 40–64 位 base58 段（前后不能再连着 base58 字符，避免截断长串），无匹配返回 null。
+ */
+function extractWalletAddress(raw: string): string | null {
+  const match = raw
+    .trim()
+    .match(/(?<![1-9A-HJ-NP-Za-km-z])[1-9A-HJ-NP-Za-km-z]{40,64}(?![1-9A-HJ-NP-Za-km-z])/)
+  return match ? match[0] : null
+}
+
 export default function Membership() {
   const [ownerAccount, setOwnerAccount] = useState('')
   const [selectedLevel, setSelectedLevel] = useState<MembershipLevel>('visitor')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [scannerOpen, setScannerOpen] = useState(false)
+
+  const handleScanResult = useCallback((text: string) => {
+    const address = extractWalletAddress(text)
+    if (address) {
+      setOwnerAccount(address)
+      setMessage(null)
+    } else {
+      setMessage('二维码中未识别到钱包地址，请扫描 CitizenApp 钱包地址二维码')
+    }
+    setScannerOpen(false)
+  }, [])
+
+  const handleScannerClose = useCallback(() => {
+    setScannerOpen(false)
+  }, [])
 
   const selectedPlan = useMemo(
     () => plans.find((plan) => plan.level === selectedLevel) ?? plans[0],
@@ -132,13 +160,39 @@ export default function Membership() {
           <label className="mt-8 block text-sm font-semibold text-slate-200" htmlFor="owner-account">
             钱包账户地址
           </label>
-          <input
-            id="owner-account"
-            value={ownerAccount}
-            onChange={(event) => setOwnerAccount(event.target.value)}
-            className="mt-3 w-full rounded-lg border border-white/10 bg-navy-950 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-gold-400"
-            placeholder="输入 CitizenApp 钱包地址"
-          />
+          <div className="relative mt-3">
+            <input
+              id="owner-account"
+              value={ownerAccount}
+              onChange={(event) => setOwnerAccount(event.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-navy-950 py-3 pl-4 pr-12 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-gold-400"
+              placeholder="输入 CitizenApp 钱包地址"
+            />
+            <button
+              type="button"
+              onClick={() => setScannerOpen(true)}
+              aria-label="扫码识别钱包地址"
+              title="扫码识别钱包地址"
+              className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/5 hover:text-gold-400"
+            >
+              {/* 扫码图标：取景框四角 + 中间一条横线 */}
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M4 8V6a2 2 0 0 1 2-2h2" />
+                <path d="M16 4h2a2 2 0 0 1 2 2v2" />
+                <path d="M20 16v2a2 2 0 0 1-2 2h-2" />
+                <path d="M8 20H6a2 2 0 0 1-2-2v-2" />
+                <path d="M4 12h16" />
+              </svg>
+            </button>
+          </div>
 
           <button
             type="button"
@@ -160,6 +214,8 @@ export default function Membership() {
           </div>
         </GlowCard>
       </section>
+
+      {scannerOpen && <QrScannerModal onResult={handleScanResult} onClose={handleScannerClose} />}
     </>
   )
 }
