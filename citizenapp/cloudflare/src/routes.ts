@@ -1,5 +1,7 @@
 import type { Env, FeedKind } from "./types";
 import { createLoginChallenge, createSession } from "./auth/service";
+import { chainBootstrapRoute } from "./chain/bootstrap";
+import { relaySignedExtrinsicRoute } from "./chain/extrinsic_relay";
 import {
   ackChatEnvelope,
   completeChatAttachmentUpload,
@@ -18,9 +20,11 @@ import {
 import { feedRoute } from "./feeds/service";
 import { followRoute, unfollowRoute } from "./feeds/follows";
 import { mediaRoute } from "./media/service";
+import { stripeCheckoutRoute } from "./membership/checkout";
 import { membershipRoute } from "./membership/service";
+import { stripeWebhookRoute } from "./membership/stripe";
 import { reportRoute, signalRoute } from "./moderation/service";
-import { confirmPostRoute } from "./posts/confirm";
+import { confirmPostRoute, deletePostRoute } from "./posts/confirm";
 import { devPutProfileAsset, prepareProfileAsset } from "./profiles/assets";
 import {
   getUserFollowsRoute,
@@ -30,8 +34,10 @@ import {
 } from "./profiles/service";
 import {
   completeUpload,
+  devUploadMediaAsset,
   devPutUploadObject,
   prepareUpload,
+  streamWebhookRoute,
 } from "./uploads/service";
 import { HttpError, jsonResponse, optionsResponse } from "./shared/http";
 
@@ -50,10 +56,17 @@ export async function routeRequest(
     return jsonResponse({
       ok: true,
       service: "citizenapp-square-api",
-      storage_backend: "cloudflare-r2",
-      // 广场内容只进 R2，链上只记录发布索引和哈希。
+      storage_backend: "cloudflare-images-stream",
+      // 广场主媒体进 Images / Stream；R2 只保留 manifest，链上只记录发布索引和哈希。
       content_on_chain: false,
     });
+  }
+
+  if (request.method === "GET" && path === "/v1/chain/bootstrap") {
+    return chainBootstrapRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/chain/extrinsics/relay") {
+    return relaySignedExtrinsicRoute(request, env);
   }
 
   if (request.method === "POST" && path === "/v1/square/auth/challenge") {
@@ -65,17 +78,35 @@ export async function routeRequest(
   if (request.method === "GET" && path === "/v1/square/membership") {
     return membershipRoute(request, env);
   }
+  if (request.method === "POST" && path === "/v1/square/membership/stripe/checkout") {
+    return stripeCheckoutRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/membership/stripe/webhook") {
+    return stripeWebhookRoute(request, env);
+  }
   if (request.method === "POST" && path === "/v1/square/uploads/prepare") {
     return prepareUpload(request, env);
   }
   if (request.method === "PUT" && path === "/v1/square/uploads/dev-put") {
     return devPutUploadObject(request, env);
   }
+  if (
+    (request.method === "POST" || request.method === "PATCH") &&
+    path === "/v1/square/uploads/dev-media"
+  ) {
+    return devUploadMediaAsset(request, env);
+  }
   if (request.method === "POST" && path === "/v1/square/uploads/complete") {
     return completeUpload(request, env);
   }
+  if (request.method === "POST" && path === "/v1/square/uploads/stream/webhook") {
+    return streamWebhookRoute(request, env);
+  }
   if (request.method === "POST" && path === "/v1/square/posts/confirm") {
     return confirmPostRoute(request, env);
+  }
+  if (request.method === "DELETE" && path.startsWith("/v1/square/posts/")) {
+    return deletePostRoute(request, env, path.slice("/v1/square/posts/".length));
   }
   if (request.method === "GET" && path.startsWith("/v1/square/media/")) {
     return mediaRoute(request, env, path);

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -36,12 +37,101 @@ class SquareMembershipState {
     required this.expiresAt,
     required this.storageQuotaBytes,
     required this.storageUsedBytes,
+    this.membershipLevel,
+    this.subscriptionStatus,
+    this.inactiveCode,
+    this.inactiveMessage,
+    this.identityLevel,
+    this.hasVotingIdentity = false,
+    this.hasCandidateIdentity = false,
+    this.plans = const <SquareMembershipPlan>[],
   });
 
   final bool active;
   final int expiresAt;
   final int storageQuotaBytes;
   final int storageUsedBytes;
+  final String? membershipLevel;
+  final String? subscriptionStatus;
+  final String? inactiveCode;
+  final String? inactiveMessage;
+  final String? identityLevel;
+  final bool hasVotingIdentity;
+  final bool hasCandidateIdentity;
+  final List<SquareMembershipPlan> plans;
+
+  SquareMembershipPlan? planForLevel(String? level) {
+    if (level == null) return null;
+    for (final plan in plans) {
+      if (plan.membershipLevel == level) return plan;
+    }
+    return null;
+  }
+
+  SquareMembershipPlan? get activePlan =>
+      active ? planForLevel(membershipLevel) : null;
+
+  bool get isCandidateMembership => active && membershipLevel == 'candidate';
+}
+
+class SquareMembershipPlan {
+  const SquareMembershipPlan({
+    required this.membershipLevel,
+    required this.displayName,
+    required this.priceUsdMonthly,
+    required this.requiredIdentityLevel,
+    required this.dynamicTextMaxChars,
+    required this.dynamicImageQuality,
+    required this.dynamicMaxImages,
+    required this.dynamicVideoQuality,
+    required this.dynamicMaxVideos,
+    required this.dynamicMaxVideoSeconds,
+    required this.articleTitleMinChars,
+    required this.articleTitleMaxChars,
+    required this.articleBodyMaxChars,
+    required this.articleCoverQuality,
+    required this.articleImageQuality,
+    required this.articleMaxImages,
+  });
+
+  final String membershipLevel;
+  final String displayName;
+  final String priceUsdMonthly;
+  final String requiredIdentityLevel;
+  final int dynamicTextMaxChars;
+  final String dynamicImageQuality;
+  final int dynamicMaxImages;
+  final String dynamicVideoQuality;
+  final int dynamicMaxVideos;
+  final int dynamicMaxVideoSeconds;
+  final int articleTitleMinChars;
+  final int articleTitleMaxChars;
+  final int articleBodyMaxChars;
+  final String articleCoverQuality;
+  final String articleImageQuality;
+  final int articleMaxImages;
+
+  String get priceLabel => '\$$priceUsdMonthly / 月';
+
+  String get identityLabel => switch (requiredIdentityLevel) {
+        'candidate' => '竞选公民身份',
+        'voting' => '投票公民身份',
+        _ => '任意钱包账户',
+      };
+
+  String get dynamicLabel =>
+      '动态：$dynamicTextMaxChars 字、$dynamicMaxImages 张${_quality(dynamicImageQuality)}图片、$dynamicMaxVideos 个${_duration(dynamicMaxVideoSeconds)}${_quality(dynamicVideoQuality)}视频';
+
+  String get articleLabel =>
+      '文章：$articleBodyMaxChars 字、$articleMaxImages 张${_quality(articleImageQuality)}图片、1 张${_quality(articleCoverQuality)}首图、标题 $articleTitleMinChars-$articleTitleMaxChars 字';
+
+  static String _quality(String value) => value == 'hd' ? '高清' : '标清';
+
+  static String _duration(int seconds) {
+    if (seconds >= 3600) return '${seconds ~/ 3600} 小时';
+    if (seconds >= 60) return '${seconds ~/ 60} 分钟';
+    return '$seconds 秒';
+  }
 }
 
 class SquareUploadMediaRequest {
@@ -70,15 +160,27 @@ class SquarePreparedMediaUpload {
     required this.mediaKind,
     required this.contentType,
     required this.byteSize,
-    required this.objectKey,
+    required this.provider,
+    required this.providerAssetId,
+    required this.uploadMethod,
     required this.uploadUrl,
+    this.deliveryUrl,
+    this.playbackHlsUrl,
+    this.playbackDashUrl,
+    this.thumbnailUrl,
   });
 
   final SquareMediaKind mediaKind;
   final String contentType;
   final int byteSize;
-  final String objectKey;
+  final String provider;
+  final String providerAssetId;
+  final String uploadMethod;
   final String uploadUrl;
+  final String? deliveryUrl;
+  final String? playbackHlsUrl;
+  final String? playbackDashUrl;
+  final String? thumbnailUrl;
 }
 
 class SquarePreparedUpload {
@@ -109,12 +211,14 @@ class SquareCompletedUpload {
     required this.postId,
     required this.contentHash,
     required this.storageReceiptId,
+    required this.storageState,
   });
 
   final String uploadId;
   final String postId;
   final String contentHash;
   final String storageReceiptId;
+  final String storageState;
 }
 
 abstract class SquareFeedSource {
@@ -131,6 +235,13 @@ abstract class SquarePublicationConfirmer {
     required String postId,
     required String blockHashHex,
     required String txHash,
+  });
+}
+
+abstract class SquarePostDeletionService {
+  Future<void> deletePost({
+    required SquareSession session,
+    required String postId,
   });
 }
 
@@ -174,7 +285,11 @@ class SquareApiConfig {
   }
 }
 
-class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
+class SquareApiClient
+    implements
+        SquareFeedSource,
+        SquarePublicationConfirmer,
+        SquarePostDeletionService {
   SquareApiClient({
     String? baseUrl,
     http.Client? httpClient,
@@ -236,12 +351,22 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
     );
     final membership = data['membership'];
     final active = data['active'] == true;
+    final plans = _parseMembershipPlans(data['plans']);
+    final identity = data['identity'] is Map<String, dynamic>
+        ? data['identity'] as Map<String, dynamic>
+        : const <String, dynamic>{};
     if (membership is! Map<String, dynamic>) {
-      return const SquareMembershipState(
+      return SquareMembershipState(
         active: false,
         expiresAt: 0,
         storageQuotaBytes: 0,
         storageUsedBytes: 0,
+        inactiveCode: data['inactive_code']?.toString(),
+        inactiveMessage: data['inactive_message']?.toString(),
+        identityLevel: identity['identity_level']?.toString(),
+        hasVotingIdentity: identity['has_voting_identity'] == true,
+        hasCandidateIdentity: identity['has_candidate_identity'] == true,
+        plans: plans,
       );
     }
     return SquareMembershipState(
@@ -249,12 +374,23 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
       expiresAt: _asInt(membership['expires_at']),
       storageQuotaBytes: _asInt(membership['storage_quota_bytes']),
       storageUsedBytes: _asInt(membership['storage_used_bytes']),
+      membershipLevel: membership['membership_level']?.toString(),
+      subscriptionStatus: membership['subscription_status']?.toString(),
+      inactiveCode: data['inactive_code']?.toString(),
+      inactiveMessage: data['inactive_message']?.toString(),
+      identityLevel: identity['identity_level']?.toString(),
+      hasVotingIdentity: identity['has_voting_identity'] == true,
+      hasCandidateIdentity: identity['has_candidate_identity'] == true,
+      plans: plans,
     );
   }
 
   Future<SquarePreparedUpload> prepareUpload({
     required SquareSession session,
     required SquarePostCategory postCategory,
+    required SquarePostContentFormat contentFormat,
+    required int titleLength,
+    required int textLength,
     required String manifestHash,
     required List<SquareUploadMediaRequest> mediaItems,
   }) async {
@@ -262,6 +398,9 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
       '/v1/square/uploads/prepare',
       {
         'post_category': postCategory.workerValue,
+        'content_format': contentFormat.workerValue,
+        'title_length': titleLength,
+        'text_length': textLength,
         'manifest_hash': manifestHash,
         'media_items': mediaItems.map((item) => item.toJson()).toList(),
       },
@@ -301,10 +440,34 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final text = await response.stream.bytesToString();
       throw SquareApiException(
-        'R2 对象上传失败：${response.statusCode} $text',
+        '存储对象上传失败：${response.statusCode} $text',
         statusCode: response.statusCode,
       );
     }
+  }
+
+  Future<void> uploadMediaAsset({
+    required SquarePreparedMediaUpload upload,
+    required String filePath,
+    required String fileName,
+    required SquareSession session,
+  }) async {
+    if (upload.uploadMethod == 'tus') {
+      await _uploadTusMedia(
+        uploadUrl: upload.uploadUrl,
+        filePath: filePath,
+        contentLength: upload.byteSize,
+        session: session,
+      );
+      return;
+    }
+    await _uploadMultipartMedia(
+      uploadUrl: upload.uploadUrl,
+      filePath: filePath,
+      fileName: fileName,
+      contentLength: upload.byteSize,
+      session: session,
+    );
   }
 
   Future<SquareCompletedUpload> completeUpload({
@@ -327,6 +490,7 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
       postId: _requireString(data, 'post_id'),
       contentHash: _requireString(data, 'content_hash'),
       storageReceiptId: _requireString(data, 'storage_receipt_id'),
+      storageState: _requireString(data, 'storage_state'),
     );
   }
 
@@ -354,6 +518,17 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
   }
 
   @override
+  Future<void> deletePost({
+    required SquareSession session,
+    required String postId,
+  }) async {
+    await _deleteJson(
+      '/v1/square/posts/${Uri.encodeComponent(postId)}',
+      session: session,
+    );
+  }
+
+  @override
   Future<List<SquarePost>> fetchFeed({
     required SquareFeedKind feedKind,
     int limit = 20,
@@ -373,7 +548,7 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
         .toList(growable: false);
   }
 
-  /// 把 R2 object_key 拼成公开媒体读取 URL，供 `Image.network` 与 CDN 使用。
+  /// 把头像/背景等 R2 object_key 拼成公开读取 URL；广场主媒体直接使用 Images / Stream URL。
   String mediaUrl(String objectKey) {
     final encoded = objectKey.split('/').map(Uri.encodeComponent).join('/');
     return '$baseUrl/v1/square/media/$encoded';
@@ -655,8 +830,52 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
       mediaKind: mediaKind,
       contentType: _requireString(item, 'content_type'),
       byteSize: _asInt(item['byte_size']),
-      objectKey: _requireString(item, 'object_key'),
+      provider: _requireString(item, 'provider'),
+      providerAssetId: _requireString(item, 'provider_asset_id'),
+      uploadMethod: _requireString(item, 'upload_method'),
       uploadUrl: _requireString(item, 'upload_url'),
+      deliveryUrl: item['delivery_url']?.toString(),
+      playbackHlsUrl: item['playback_hls_url']?.toString(),
+      playbackDashUrl: item['playback_dash_url']?.toString(),
+      thumbnailUrl: item['thumbnail_url']?.toString(),
+    );
+  }
+
+  List<SquareMembershipPlan> _parseMembershipPlans(Object? value) {
+    if (value is! List) {
+      return const <SquareMembershipPlan>[];
+    }
+    return value
+        .whereType<Map<String, dynamic>>()
+        .map(_parseMembershipPlan)
+        .toList(growable: false);
+  }
+
+  SquareMembershipPlan _parseMembershipPlan(Map<String, dynamic> data) {
+    final dynamicQuota = data['dynamic'] is Map<String, dynamic>
+        ? data['dynamic'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final articleQuota = data['article'] is Map<String, dynamic>
+        ? data['article'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return SquareMembershipPlan(
+      membershipLevel: _requireString(data, 'membership_level'),
+      displayName: _requireString(data, 'display_name'),
+      priceUsdMonthly: _requireString(data, 'price_usd_monthly'),
+      requiredIdentityLevel:
+          data['required_identity_level']?.toString() ?? 'visitor',
+      dynamicTextMaxChars: _asInt(dynamicQuota['text_max_chars']),
+      dynamicImageQuality: dynamicQuota['image_quality']?.toString() ?? 'sd',
+      dynamicMaxImages: _asInt(dynamicQuota['max_images']),
+      dynamicVideoQuality: dynamicQuota['video_quality']?.toString() ?? 'sd',
+      dynamicMaxVideos: _asInt(dynamicQuota['max_videos']),
+      dynamicMaxVideoSeconds: _asInt(dynamicQuota['max_video_seconds']),
+      articleTitleMinChars: _asInt(articleQuota['title_min_chars']),
+      articleTitleMaxChars: _asInt(articleQuota['title_max_chars']),
+      articleBodyMaxChars: _asInt(articleQuota['body_max_chars']),
+      articleCoverQuality: articleQuota['cover_quality']?.toString() ?? 'hd',
+      articleImageQuality: articleQuota['image_quality']?.toString() ?? 'sd',
+      articleMaxImages: _asInt(articleQuota['max_images']),
     );
   }
 
@@ -694,19 +913,90 @@ class SquareApiClient implements SquareFeedSource, SquarePublicationConfirmer {
   }
 
   SquareMediaItem _parseMediaItem(Map<String, dynamic> data) {
-    final objectKey =
-        data['object_key']?.toString() ?? data['url']?.toString() ?? '';
-    final coverKey = data['cover_object_key']?.toString() ??
+    final url = data['url']?.toString() ?? data['object_key']?.toString() ?? '';
+    final coverUrl = data['thumbnail_url']?.toString() ??
         data['cover_url']?.toString() ??
+        data['cover_object_key']?.toString() ??
         '';
     return SquareMediaItem(
       mediaKind: data['media_kind'] == 'video'
           ? SquareMediaKind.video
           : SquareMediaKind.image,
-      url: objectKey.isEmpty ? '' : mediaUrl(objectKey),
-      coverUrl: coverKey.isEmpty ? null : mediaUrl(coverKey),
+      url: _resolveMediaUrl(url),
+      coverUrl: coverUrl.isEmpty ? null : _resolveMediaUrl(coverUrl),
       byteSize: _nullableInt(data['byte_size']),
+      assetState: data['asset_state']?.toString(),
     );
+  }
+
+  Future<void> _uploadMultipartMedia({
+    required String uploadUrl,
+    required String filePath,
+    required String fileName,
+    required int contentLength,
+    required SquareSession session,
+  }) async {
+    if (contentLength <= 0) {
+      throw const SquareApiException('媒体文件大小不合法');
+    }
+    final uri = Uri.parse(uploadUrl);
+    final request = http.MultipartRequest('POST', uri);
+    if (uri.origin == baseUri.origin) {
+      request.headers['authorization'] = 'Bearer ${session.sessionToken}';
+    }
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'file',
+        filePath,
+        filename: fileName,
+      ),
+    );
+    final response =
+        await _http.send(request).timeout(const Duration(hours: 4));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final text = await response.stream.bytesToString();
+      throw SquareApiException(
+        '媒体上传失败：${response.statusCode} $text',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  Future<void> _uploadTusMedia({
+    required String uploadUrl,
+    required String filePath,
+    required int contentLength,
+    required SquareSession session,
+  }) async {
+    final uri = Uri.parse(uploadUrl);
+    final request = http.StreamedRequest('PATCH', uri)
+      ..headers['tus-resumable'] = '1.0.0'
+      ..headers['upload-offset'] = '0'
+      ..headers['content-type'] = 'application/offset+octet-stream'
+      ..contentLength = contentLength;
+    if (uri.origin == baseUri.origin) {
+      request.headers['authorization'] = 'Bearer ${session.sessionToken}';
+    }
+    await request.sink.addStream(File(filePath).openRead());
+    await request.sink.close();
+    final response =
+        await _http.send(request).timeout(const Duration(hours: 4));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final text = await response.stream.bytesToString();
+      throw SquareApiException(
+        '视频 tus 上传失败：${response.statusCode} $text',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  String _resolveMediaUrl(String value) {
+    if (value.isEmpty) return '';
+    final uri = Uri.tryParse(value);
+    if (uri != null && uri.hasScheme && uri.host.isNotEmpty) {
+      return value;
+    }
+    return mediaUrl(value);
   }
 
   SquarePostCategory _parseCategory(Object? value) {

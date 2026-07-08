@@ -8,6 +8,12 @@ export type UploadStatus = 'prepared' | 'completed';
 
 export type FeedKind = 'recommended' | 'following' | 'campaign';
 
+export type MediaProvider = 'cloudflare_images' | 'cloudflare_stream';
+
+export type MediaUploadMethod = 'direct_form' | 'tus';
+
+export type MediaAssetState = 'prepared' | 'uploaded' | 'processing' | 'ready' | 'error';
+
 export interface Env {
   DB: D1Database;
   SQUARE_MEDIA: R2Bucket;
@@ -22,8 +28,37 @@ export interface Env {
   SQUARE_UPLOAD_URL_TTL_SECONDS?: string;
   // Worker 只读取链上事件用于确认发布，不托管钱包、不代签交易。
   SQUARE_CHAIN_RPC_URL?: string;
+  // 轻节点启动清单只下发公开 bootnodes / checkpoint 信息，不下发 RPC 地址。
+  CITIZEN_CHAIN_BOOTNODES?: string;
+  CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS?: string;
+  CITIZEN_CHAIN_GENESIS_HASH?: string;
+  CITIZEN_CHAIN_STATE_ROOT?: string;
+  CITIZEN_CHAIN_LIGHT_SYNC_STATE_URL?: string;
+  CITIZEN_CHAIN_LIGHT_SYNC_STATE_SHA256?: string;
+  // 已签名交易兜底广播：只转发完整 signed extrinsic，不提供通用 JSON-RPC proxy。
+  CHAIN_EXTRINSIC_RELAY_ENABLED?: string;
+  CHAIN_EXTRINSIC_RELAY_MAX_BYTES?: string;
+  CHAIN_EXTRINSIC_RELAY_MAX_PER_MINUTE?: string;
   // 只允许本地 Miniflare 验证使用；生产环境必须保持关闭。
   SQUARE_DEV_UPLOAD_PROXY?: string;
+  // Stripe webhook secret 必须使用 Cloudflare secret/变量配置，不能写入仓库或下发 App。
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_WEBHOOK_TOLERANCE_SECONDS?: string;
+  // 只允许本地 Miniflare 验证使用；生产环境必须保持关闭。
+  STRIPE_DEV_CHECKOUT_PROXY?: string;
+  // Stripe secret key 只允许放 Worker Secret，用于官网创建 Checkout Session。
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_PRICE_VISITOR?: string;
+  STRIPE_PRICE_VOTING?: string;
+  STRIPE_PRICE_CANDIDATE?: string;
+  CITIZENAPP_MEMBERSHIP_SUCCESS_URL?: string;
+  CITIZENAPP_MEMBERSHIP_CANCEL_URL?: string;
+  // Cloudflare Images / Stream API token 只放 Worker Secret；App 只拿一次性上传 URL。
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_IMAGES_DELIVERY_BASE_URL?: string;
+  CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN?: string;
+  CLOUDFLARE_STREAM_WEBHOOK_SECRET?: string;
 }
 
 export interface SessionState {
@@ -47,6 +82,16 @@ export interface MembershipRow {
   storage_used_bytes: number;
   expires_at: number;
   updated_at: number;
+  subscription_source: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_price_id: string | null;
+  subscription_status: string;
+  current_period_start: number | null;
+  current_period_end: number | null;
+  cancel_at_period_end: number;
+  identity_level: string;
+  identity_checked_at: number | null;
 }
 
 export interface UploadItemInput {
@@ -71,6 +116,31 @@ export interface PreparedUploadRow {
   completed_at: number | null;
 }
 
+export interface MediaAssetRow {
+  upload_id: string;
+  post_id: string;
+  owner_account: string;
+  media_index: number;
+  media_kind: 'image' | 'video';
+  provider: MediaProvider;
+  provider_asset_id: string;
+  upload_method: MediaUploadMethod;
+  content_type: string;
+  byte_size: number;
+  asset_state: MediaAssetState;
+  delivery_url: string | null;
+  playback_hls_url: string | null;
+  playback_dash_url: string | null;
+  thumbnail_url: string | null;
+  duration_seconds: number | null;
+  width: number | null;
+  height: number | null;
+  error_code: string | null;
+  created_at: number;
+  updated_at: number;
+  ready_at: number | null;
+}
+
 export interface SquarePostRow {
   post_id: string;
   owner_account: string;
@@ -93,9 +163,17 @@ export interface SquareFeedMediaItem {
   media_kind: 'image' | 'video';
   object_key: string;
   url: string;
+  provider: MediaProvider;
+  provider_asset_id: string;
+  asset_state: MediaAssetState;
+  playback_hls_url?: string | null;
+  playback_dash_url?: string | null;
   content_type: string;
   byte_size: number;
   sha256: string;
+  duration_seconds?: number | null;
+  width?: number | null;
+  height?: number | null;
 }
 
 export interface SquarePostFeedItem extends SquarePostRow {

@@ -9,17 +9,27 @@ import 'package:citizenapp/8964/services/square_publish_service.dart';
 import 'package:citizenapp/8964/storage/square_draft_store.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
+const int dynamicTextMax = 300;
+const int dynamicMaxImages = 9;
+const int dynamicMaxVideos = 1;
+
 class SquareComposePage extends StatefulWidget {
   const SquareComposePage({
     super.key,
     this.identityService = const SquareIdentityService(),
     this.publishService,
     this.draftStore,
+    this.initialText,
+    this.initialCategory,
+    this.replacePostId,
   });
 
   final SquareIdentityService identityService;
   final SquarePublishService? publishService;
   final SquareDraftRepository? draftStore;
+  final String? initialText;
+  final SquarePostCategory? initialCategory;
+  final String? replacePostId;
 
   @override
   State<SquareComposePage> createState() => _SquareComposePageState();
@@ -37,11 +47,21 @@ class _SquareComposePageState extends State<SquareComposePage> {
   bool _publishing = false;
   bool _draftRestored = false;
 
+  int get _imageCount => _mediaDrafts
+      .where((draft) => draft.mediaKind == SquareMediaKind.image)
+      .length;
+
+  int get _videoCount => _mediaDrafts
+      .where((draft) => draft.mediaKind == SquareMediaKind.video)
+      .length;
+
   @override
   void initState() {
     super.initState();
     _publishService = widget.publishService ?? SquarePublishService();
     _draftStore = widget.draftStore ?? SquareDraftStore.instance;
+    _textController.text = widget.initialText ?? '';
+    _category = widget.initialCategory ?? SquarePostCategory.normal;
     _identityFuture = widget.identityService.loadCurrent();
     _identityFuture
         .then(_restoreDraftForIdentity)
@@ -66,6 +86,10 @@ class _SquareComposePageState extends State<SquareComposePage> {
   }
 
   Future<void> _pickImages() async {
+    if (_imageCount >= dynamicMaxImages) {
+      _showError('动态图片不能超过 $dynamicMaxImages 张');
+      return;
+    }
     final images = await _imagePicker.pickMultiImage();
     if (images.isEmpty || !mounted) return;
     final next = <SquareLocalMediaDraft>[];
@@ -73,17 +97,21 @@ class _SquareComposePageState extends State<SquareComposePage> {
       next.add(await buildSquareMediaDraft(image, SquareMediaKind.image));
     }
     setState(() {
-      final capacity = 9 - _mediaDrafts.length;
+      final capacity = dynamicMaxImages - _imageCount;
       _mediaDrafts.addAll(next.take(capacity));
     });
   }
 
   Future<void> _pickVideo() async {
+    if (_videoCount >= dynamicMaxVideos) {
+      _showError('动态视频不能超过 $dynamicMaxVideos 个');
+      return;
+    }
     final video = await _imagePicker.pickVideo(source: ImageSource.gallery);
     if (video == null || !mounted) return;
     final draft = await buildSquareMediaDraft(video, SquareMediaKind.video);
     setState(() {
-      if (_mediaDrafts.length < 9) _mediaDrafts.add(draft);
+      _mediaDrafts.add(draft);
     });
   }
 
@@ -92,6 +120,7 @@ class _SquareComposePageState extends State<SquareComposePage> {
   }
 
   Future<void> _restoreDraftForIdentity(SquareIdentityState identity) async {
+    if (widget.replacePostId != null) return;
     if (_draftRestored || !identity.hasWallet) return;
     _draftRestored = true;
     try {
@@ -129,6 +158,10 @@ class _SquareComposePageState extends State<SquareComposePage> {
       _showError('当前钱包未认证，不能发布竞选内容');
       return;
     }
+    if (_textController.text.trim().length > dynamicTextMax) {
+      _showError('动态文字不能超过 $dynamicTextMax 字');
+      return;
+    }
     if (_mediaDrafts.isEmpty) {
       _showError('请至少选择一张图片或一个视频');
       return;
@@ -149,6 +182,7 @@ class _SquareComposePageState extends State<SquareComposePage> {
         mediaDrafts: List<SquareLocalMediaDraft>.unmodifiable(_mediaDrafts),
         signLoginPayload: signers.signLogin,
         signChainPayload: signers.signChain,
+        replacePostId: widget.replacePostId,
         onStage: (stage) {
           if (!mounted) return;
           setState(() => _publishStage = stage);
@@ -158,7 +192,8 @@ class _SquareComposePageState extends State<SquareComposePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('动态已入块：${_truncate(result.txHash)}'),
+          content: Text(
+              result.cleanupWarning ?? '动态已入块：${_truncate(result.txHash)}'),
           backgroundColor: AppTheme.primaryDark,
         ),
       );
@@ -190,7 +225,8 @@ class _SquareComposePageState extends State<SquareComposePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('发布动态')),
+      appBar:
+          AppBar(title: Text(widget.replacePostId == null ? '发布动态' : '修改动态')),
       body: FutureBuilder<SquareIdentityState>(
         future: _identityFuture,
         builder: (context, snapshot) {
@@ -248,7 +284,7 @@ class _SquareComposePageState extends State<SquareComposePage> {
                   controller: _textController,
                   minLines: 6,
                   maxLines: 10,
-                  maxLength: 500,
+                  maxLength: dynamicTextMax,
                   decoration: const InputDecoration(
                     hintText: '写下你的动态',
                   ),

@@ -40,7 +40,7 @@ void main() {
     expect(order, isEmpty);
   });
 
-  test('普通动态按余额校验、链上扣费入块、R2 上传、feed 确认顺序发布', () async {
+  test('普通动态按余额校验、链上扣费入块、媒体上传、feed 确认顺序发布', () async {
     final order = <String>[];
     final upload = _FakeUploader(order);
     final chain = _FakeChainPublisher(order);
@@ -85,7 +85,35 @@ void main() {
         ]));
   });
 
-  test('余额不足时不准备 R2、不提交链上，并保存本地草稿', () async {
+  test('修改动态时新发布确认成功后再删除旧动态', () async {
+    final order = <String>[];
+    final oldPostDeleter = _FakePostDeletionService(order);
+    final service = SquarePublishService(
+      uploadService: _FakeUploader(order),
+      chainService: _FakeChainPublisher(order),
+      publicationConfirmer: _FakePublicationConfirmer(order),
+      postDeletionService: oldPostDeleter,
+      balanceReader: _FakeBalanceReader(order),
+      draftStore: _FakeDraftStore(),
+    );
+
+    final result = await service.publish(
+      identity: _identity(cidNumber: 'CN001-CTZN-000000001-2026'),
+      postCategory: SquarePostCategory.normal,
+      text: '修改后的动态',
+      mediaDrafts: [_media()],
+      signLoginPayload: (_) async => '0x11',
+      signChainPayload: (_) async => Uint8List(64),
+      replacePostId: 'sqp_old',
+    );
+
+    expect(result.cleanupWarning, isNull);
+    expect(oldPostDeleter.deletedPostId, 'sqp_old');
+    expect(order,
+        ['balance', 'prepare', 'chain', 'upload', 'confirm', 'delete_old']);
+  });
+
+  test('余额不足时不准备媒体、不提交链上，并保存本地草稿', () async {
     final order = <String>[];
     final upload = _FakeUploader(order);
     final chain = _FakeChainPublisher(order);
@@ -117,7 +145,7 @@ void main() {
     expect(draftStore.savedDraft?.text, '余额不足的动态');
   });
 
-  test('链上扣费未入块时不上传 R2，并保存可再次发布的草稿', () async {
+  test('链上扣费未入块时不上传媒体，并保存可再次发布的草稿', () async {
     final order = <String>[];
     final upload = _FakeUploader(order);
     final chain = _FakeChainPublisher(order)..throwOnPublish = true;
@@ -211,7 +239,9 @@ class _FakeUploader implements SquareContentUploader {
             mediaKind: SquareMediaKind.image,
             contentType: 'image/jpeg',
             byteSize: 1024,
-            objectKey: 'square/test/media_001.jpg',
+            provider: 'cloudflare_images',
+            providerAssetId: 'img_test',
+            uploadMethod: 'direct_form',
             uploadUrl: 'http://127.0.0.1/media',
           ),
         ],
@@ -269,6 +299,22 @@ class _FakePublicationConfirmer implements SquarePublicationConfirmer {
       storageReceiptId: 'sqr_test',
       chainBlock: 88,
     );
+  }
+}
+
+class _FakePostDeletionService implements SquarePostDeletionService {
+  _FakePostDeletionService(this.order);
+
+  final List<String> order;
+  String? deletedPostId;
+
+  @override
+  Future<void> deletePost({
+    required SquareSession session,
+    required String postId,
+  }) async {
+    order.add('delete_old');
+    deletedPostId = postId;
   }
 }
 

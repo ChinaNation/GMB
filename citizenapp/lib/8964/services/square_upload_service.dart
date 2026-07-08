@@ -126,10 +126,25 @@ class SquareUploadService implements SquareContentUploader {
     if (!membership.active || membership.expiresAt <= 0) {
       throw const SquareApiException('需要有效会员才能使用广场内容存储');
     }
+    _validateMembershipQuota(
+      membership: membership,
+      postCategory: postCategory,
+      contentFormat: contentFormat,
+      titleLength: contentFormat == SquarePostContentFormat.article
+          ? trimmedTitle.length
+          : 0,
+      textLength: text.trim().length,
+      mediaDrafts: mediaDrafts,
+    );
 
     final prepared = await _api.prepareUpload(
       session: session,
       postCategory: postCategory,
+      contentFormat: contentFormat,
+      titleLength: contentFormat == SquarePostContentFormat.article
+          ? trimmedTitle.length
+          : 0,
+      textLength: text.trim().length,
       manifestHash: manifestHash,
       mediaItems: mediaDrafts
           .map(
@@ -170,7 +185,7 @@ class SquareUploadService implements SquareContentUploader {
       throw const SquareApiException('上传授权数量与本地媒体数量不一致');
     }
 
-    // R2 对象只允许在链上扣费入块后写入；prepare 阶段只固定链上索引所需的回执。
+    // 媒体只允许在链上扣费入块后写入；prepare 阶段只固定链上索引所需的回执。
     onStage?.call(SquarePublishStage.uploadingMedia);
     await _api.uploadObject(
       uploadUrl: preparedUpload.manifestUploadUrl,
@@ -181,11 +196,11 @@ class SquareUploadService implements SquareContentUploader {
     for (var i = 0; i < mediaDrafts.length; i++) {
       final draft = mediaDrafts[i];
       final upload = preparedUpload.mediaItems[i];
-      await _api.uploadObject(
-        uploadUrl: upload.uploadUrl,
-        contentType: draft.contentType,
-        contentLength: draft.byteSize,
-        body: File(draft.path).openRead(),
+      await _api.uploadMediaAsset(
+        upload: upload,
+        filePath: draft.path,
+        fileName: draft.fileName,
+        session: prepared.session,
       );
     }
 
@@ -213,5 +228,92 @@ class SquareUploadService implements SquareContentUploader {
 
   Uint8List _canonicalJsonBytes(Map<String, Object?> value) {
     return Uint8List.fromList(utf8.encode(jsonEncode(value)));
+  }
+
+  void _validateMembershipQuota({
+    required SquareMembershipState membership,
+    required SquarePostCategory postCategory,
+    required SquarePostContentFormat contentFormat,
+    required int titleLength,
+    required int textLength,
+    required List<SquareLocalMediaDraft> mediaDrafts,
+  }) {
+    final plan = membership.activePlan;
+    if (plan == null) {
+      throw const SquareApiException('会员套餐信息不完整，请刷新会员状态后重试');
+    }
+    if (postCategory == SquarePostCategory.campaign &&
+        !membership.isCandidateMembership) {
+      throw const SquareApiException('只有竞选公民会员可以发布竞选内容');
+    }
+    if (contentFormat == SquarePostContentFormat.article) {
+      _validateArticleQuota(
+        plan: plan,
+        titleLength: titleLength,
+        textLength: textLength,
+        mediaDrafts: mediaDrafts,
+      );
+      return;
+    }
+    _validateDynamicQuota(
+      plan: plan,
+      textLength: textLength,
+      mediaDrafts: mediaDrafts,
+    );
+  }
+
+  void _validateDynamicQuota({
+    required SquareMembershipPlan plan,
+    required int textLength,
+    required List<SquareLocalMediaDraft> mediaDrafts,
+  }) {
+    if (textLength > plan.dynamicTextMaxChars) {
+      throw SquareApiException('动态文字不能超过 ${plan.dynamicTextMaxChars} 字');
+    }
+    final imageCount = mediaDrafts
+        .where((draft) => draft.mediaKind == SquareMediaKind.image)
+        .length;
+    final videoCount = mediaDrafts
+        .where((draft) => draft.mediaKind == SquareMediaKind.video)
+        .length;
+    if (imageCount > plan.dynamicMaxImages) {
+      throw SquareApiException('动态图片不能超过 ${plan.dynamicMaxImages} 张');
+    }
+    if (videoCount > plan.dynamicMaxVideos) {
+      throw SquareApiException('动态视频不能超过 ${plan.dynamicMaxVideos} 个');
+    }
+  }
+
+  void _validateArticleQuota({
+    required SquareMembershipPlan plan,
+    required int titleLength,
+    required int textLength,
+    required List<SquareLocalMediaDraft> mediaDrafts,
+  }) {
+    if (titleLength < plan.articleTitleMinChars ||
+        titleLength > plan.articleTitleMaxChars) {
+      throw SquareApiException(
+        '文章标题必须是 ${plan.articleTitleMinChars}-${plan.articleTitleMaxChars} 字',
+      );
+    }
+    if (textLength == 0) {
+      throw const SquareApiException('文章正文不能为空');
+    }
+    if (textLength > plan.articleBodyMaxChars) {
+      throw SquareApiException('文章正文不能超过 ${plan.articleBodyMaxChars} 字');
+    }
+    final hasVideo =
+        mediaDrafts.any((draft) => draft.mediaKind == SquareMediaKind.video);
+    if (hasVideo) {
+      throw const SquareApiException('文章不能上传视频');
+    }
+    if (mediaDrafts.isEmpty ||
+        mediaDrafts.first.mediaKind != SquareMediaKind.image) {
+      throw const SquareApiException('文章必须上传 1 张首图');
+    }
+    final bodyImageCount = mediaDrafts.length - 1;
+    if (bodyImageCount > plan.articleMaxImages) {
+      throw SquareApiException('文章正文图片不能超过 ${plan.articleMaxImages} 张');
+    }
   }
 }

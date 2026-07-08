@@ -33,13 +33,16 @@
 ### 3.1 产品定位
 - `citizenchain` 是 `GMB` 仓库中的主权区块链产品，负责链上状态、共识、治理、发行、交易结算与节点运行。
 - 原生链名称为 `CitizenChain`，原生数字货币为 `GMB`。
-- 产品同时包含两部分：
-  - 区块链节点程序：`node/src/service.rs`、`node/src/command.rs` 等原生节点模块
-  - 桌面节点软件：`node/src/desktop.rs`、`node/src/<功能名>` 与 `node/frontend`
+- 产品作为一个安装包交付，包含三类核心能力：
+  - 区块链节点程序：`node/src/service.rs`、`node/src/command.rs` 等原生节点模块。
+  - 链上状态机：`runtime/` 编译出的 wasm 与所有 pallet。
+  - 链上中国平台：`onchina/` 多机构工作台，由节点桌面端按需拉起。
+- 桌面节点软件由 `node/src/desktop.rs`、`node/src/<功能名>` 与 `node/frontend` 提供本地节点运维、设置和打包入口。
 
 ### 3.2 对外协作边界
 - 对 `CID`：提供绑定、资格校验、人口快照、投票凭证等链侧接口承载能力。
-- 对 `citizenapp`：提供链上账户、交易、治理、节点状态、奖励与网络可观测能力。
+- 对 `citizenapp`：提供链上账户、交易、治理、节点状态、奖励与网络可观测能力；CitizenApp 默认通过内置 smoldot 轻节点连接 P2P 网络并验证 finalized 链状态，不把公网 HTTP API 当作链上真源。
+- 对 Cloudflare 边缘层：只提供受控服务节点、链事件投影、启动清单来源和已签名交易广播入口；Cloudflare 不运行 Substrate 节点，不保存用户私钥。
 
 ## 4. 当前目录结构
 
@@ -104,6 +107,17 @@ citizenchain/
 - 网络层：`libp2p` / `litep2p`
 - 默认本地 RPC：`127.0.0.1:9944`
 - 默认本地 Prometheus：`127.0.0.1:9615`
+
+### 6.4 云节点角色与公民端接入
+
+生产网络中，国储会等云服务器节点不得同时承担“核心权威节点”和“公民 App 公共 RPC 入口”两种职责。节点角色按安全边界拆分：
+
+- 核心/权威节点：用于出块、最终性、机构运行或国储会核心运维；只开放必要 P2P，RPC/Prometheus 只允许本机或内网访问。
+- 公开 bootnode：用于 CitizenApp 轻节点和普通节点的 P2P 发现；尽量不持有关键业务私钥。
+- RPC service node：供 Citizen API、Indexer 或 Worker 后端受控访问；必须经反向代理、白名单、限流和审计。
+- Archive/Indexer：用于历史查询、广场发布确认、公开投影和运维观测；不托管用户私钥。
+
+CitizenApp P2P 暂时不可用时，聊天和广场不依赖链节点 RPC，继续走 Cloudflare；链上关键状态必须等待轻节点恢复或通过受控服务节点完成已签名交易广播后再由 finalized 链状态确认。
 
 ## 7. Runtime（`runtime/`）
 

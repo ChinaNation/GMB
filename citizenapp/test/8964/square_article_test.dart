@@ -32,8 +32,8 @@ void main() {
       expect(_validate(body: '   '), '正文不能为空');
     });
 
-    test('rejects a body over 19890 chars', () {
-      expect(_validate(body: 'x' * 19891), '正文不能超过 19890 字');
+    test('rejects a body over 30000 chars', () {
+      expect(_validate(body: 'x' * 30001), '正文不能超过 30000 字');
     });
   });
 }

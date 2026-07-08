@@ -19,7 +19,7 @@ describe('upload validation', () => {
     ).toThrow(HttpError);
   });
 
-  it('pre-generates stable storage receipt before R2 upload', async () => {
+  it('pre-generates stable storage receipt before external media upload', async () => {
     const input = {
       uploadId: 'squ_test',
       postId: 'sqp_test',

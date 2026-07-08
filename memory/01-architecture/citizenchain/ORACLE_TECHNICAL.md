@@ -25,6 +25,17 @@
 - 默认 P2P 端口：`30333`
 - 首次启动若不存在 `powr` 密钥，节点会自动生成本地 PoW 作者密钥
 
+### 3.3 生产节点角色口径
+
+Oracle Cloud 上的 CitizenChain 节点不应全部使用同一种公网暴露方式。生产网络按角色拆分：
+
+- 国储会核心/权威节点：承担核心运维、出块、最终性或机构能力；只开放必要 P2P，RPC 与 Prometheus 保持本机或内网访问。
+- 公开 bootnode：承担 P2P 发现和连接引导，服务 CitizenApp 轻节点、普通全节点和其它云节点；尽量不持有关键业务私钥。
+- RPC service node：只给 Citizen API、Indexer 或受控 Worker 后端访问，必须配置反向代理、白名单、限流、日志和审计。
+- Archive/Indexer 节点：承担历史查询、广场发布确认、公开投影和运维观察，不托管用户私钥。
+
+公民 App 不直接依赖国储会核心节点 RPC；App 的链上真源是内置轻节点验证的 finalized 链状态。
+
 相关实现参考：
 - [`CITIZENCHAIN_TECHNICAL.md`](/Users/rhett/GMB/memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md)
 - [`node/src/command.rs`](/Users/rhett/GMB/citizenchain/node/src/command.rs)
@@ -226,6 +237,15 @@ sudo ufw enable
 
 除非你明确配置了访问控制、反向代理、白名单和限流策略。
 
+### 10.4 国储会核心节点安全边界
+
+国储会核心节点不得作为 CitizenApp 的公共 RPC 节点。建议默认只放通：
+
+- `22/tcp`：仅限固定运维 IP 或通过云厂商堡垒/安全组控制。
+- `30333/tcp`：CitizenChain P2P 通信端口。
+
+核心节点的 `9944` 和 `9615` 必须保持本机或内网访问。若业务确实需要公网 API，应新增 RPC service node 或 archive/indexer 节点，并把公网入口放在 Cloudflare / 反向代理 / Citizen API 之后。
+
 ## 11. 第 7 步：配置 systemd 常驻运行
 
 ### 11.1 创建服务文件
@@ -354,7 +374,9 @@ journalctl -u citizenchain -n 100 --no-pager
 ## 13. 生产部署建议
 - 使用固定 `--base-path`，不要用 `--tmp`
 - 使用 `systemd` 进行常驻托管
-- 不要把 RPC `9944` 直接暴露到公网
+- 不要把国储会核心节点 RPC `9944` 直接暴露到公网
+- 将核心/权威节点、公开 bootnode、RPC service node、Archive/Indexer 分角色部署
+- CitizenApp 的 P2P 引导优先使用公开 bootnode；受控交易广播和链事件投影只访问 RPC service node 或 Archive/Indexer
 - 定期检查磁盘使用量、日志和同步状态
 - 在升级节点版本前，先保留数据目录和服务配置备份
 

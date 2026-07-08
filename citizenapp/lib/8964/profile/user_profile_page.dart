@@ -69,6 +69,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   late final DirectChatOpener _directChat;
   CitizenProfile? _profile;
   SquareSession? _session;
+  int _postsRevision = 0;
 
   @override
   void initState() {
@@ -239,26 +240,33 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  void _openPost(SquarePost post) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
+  Future<void> _openPost(SquarePost post) async {
+    final result = await Navigator.of(context).push<SquarePostDetailResult>(
+      MaterialPageRoute<SquarePostDetailResult>(
         builder: (_) => SquarePostDetailPage(post: post),
       ),
     );
+    if (result != null && mounted) {
+      setState(() => _postsRevision += 1);
+    }
   }
 
-  void _openArticle(SquarePost post) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
+  Future<void> _openArticle(SquarePost post) async {
+    final result = await Navigator.of(context).push<SquarePostDetailResult>(
+      MaterialPageRoute<SquarePostDetailResult>(
         builder: (_) => SquareArticleDetailPage(post: post),
       ),
     );
+    if (result != null && mounted) {
+      setState(() => _postsRevision += 1);
+    }
   }
 
   Widget _tabBody(ProfileTab tab) {
     switch (tab) {
       case ProfileTab.posts:
         return ProfilePostsTab(
+          key: ValueKey('posts:$_postsRevision'),
           ownerAccount: widget.ownerAccount,
           api: _api,
           category: SquarePostCategory.normal,
@@ -268,6 +276,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         );
       case ProfileTab.campaign:
         return ProfilePostsTab(
+          key: ValueKey('campaign:$_postsRevision'),
           ownerAccount: widget.ownerAccount,
           api: _api,
           category: SquarePostCategory.campaign,
@@ -276,6 +285,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         );
       case ProfileTab.photos:
         return ProfilePostsTab(
+          key: ValueKey('photos:$_postsRevision'),
           ownerAccount: widget.ownerAccount,
           api: _api,
           mediaKind: SquareMediaKind.image,
@@ -284,6 +294,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         );
       case ProfileTab.videos:
         return ProfilePostsTab(
+          key: ValueKey('videos:$_postsRevision'),
           ownerAccount: widget.ownerAccount,
           api: _api,
           mediaKind: SquareMediaKind.video,
@@ -292,6 +303,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         );
       case ProfileTab.articles:
         return ProfilePostsTab(
+          key: ValueKey('articles:$_postsRevision'),
           ownerAccount: widget.ownerAccount,
           api: _api,
           contentFormat: SquarePostContentFormat.article,

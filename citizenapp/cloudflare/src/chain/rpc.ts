@@ -16,11 +16,24 @@ export async function fetchSystemEventsAtBlock(
   env: Env,
   blockHashHex: string
 ): Promise<string> {
+  const result = await fetchChainStorage(env, systemEventsStorageKey, blockHashHex);
+  if (!result) {
+    throw new HttpError(404, 'chain_events_not_found', '指定区块没有 System.Events');
+  }
+  return result;
+}
+
+export async function fetchChainStorage(
+  env: Env,
+  storageKeyHex: string,
+  blockHashHex?: string
+): Promise<string | null> {
   const rpcUrl = env.SQUARE_CHAIN_RPC_URL;
   if (!rpcUrl) {
     throw new HttpError(503, 'chain_rpc_not_configured', '广场链上确认 RPC 未配置');
   }
 
+  const params = blockHashHex ? [storageKeyHex, blockHashHex] : [storageKeyHex];
   const response = await fetch(rpcUrl, {
     method: 'POST',
     headers: {
@@ -30,7 +43,7 @@ export async function fetchSystemEventsAtBlock(
       jsonrpc: '2.0',
       id: 1,
       method: 'state_getStorage',
-      params: [systemEventsStorageKey, blockHashHex]
+      params
     })
   });
 
@@ -42,8 +55,5 @@ export async function fetchSystemEventsAtBlock(
   if (data.error) {
     throw new HttpError(502, 'chain_rpc_error', data.error.message);
   }
-  if (!data.result) {
-    throw new HttpError(404, 'chain_events_not_found', '指定区块没有 System.Events');
-  }
-  return data.result;
+  return data.result ?? null;
 }

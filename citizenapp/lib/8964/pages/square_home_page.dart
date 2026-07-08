@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
+import 'package:citizenapp/8964/pages/square_article_detail_page.dart';
 import 'package:citizenapp/8964/pages/square_article_compose_page.dart';
 import 'package:citizenapp/8964/pages/square_compose_page.dart';
 import 'package:citizenapp/8964/pages/square_post_detail_page.dart';
@@ -110,12 +111,24 @@ class _SquareHomePageState extends State<SquareHomePage> {
     );
   }
 
-  void _openDetail(SquarePost post) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => SquarePostDetailPage(post: post),
+  Future<void> _openDetail(SquarePost post) async {
+    final result = await Navigator.of(context).push<SquarePostDetailResult>(
+      MaterialPageRoute<SquarePostDetailResult>(
+        builder: (_) => post.contentFormat == SquarePostContentFormat.article
+            ? SquareArticleDetailPage(post: post)
+            : SquarePostDetailPage(post: post),
       ),
     );
+    if (result == null || !mounted) return;
+    setState(() {
+      _localPosts.removeWhere((item) => item.postId == post.postId);
+      final replacement = result.replacement;
+      if (replacement != null) {
+        _localPosts.removeWhere((item) => item.postId == replacement.postId);
+        _localPosts.insert(0, replacement);
+      }
+    });
+    await _refreshFeed();
   }
 
   @override
@@ -214,7 +227,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
                     feedKind: _selectedFeed,
                     posts: posts,
                     errorMessage: snapshot.hasError ? '广场内容加载失败' : null,
-                    onOpenPost: _openDetail,
+                    onOpenPost: (post) => _openDetail(post),
                     onOpenAuthor: _openAuthor,
                   ),
                 );

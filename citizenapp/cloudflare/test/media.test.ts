@@ -45,11 +45,11 @@ describe('media read channel', () => {
 
   it('404s a missing object', async () => {
     await expect(
-      call(fakeEnv({}), '/v1/square/media/square/a/posts/p/media_001.webp')
+      call(fakeEnv({}), '/v1/square/media/profile/a/avatar.webp')
     ).rejects.toMatchObject({ status: 404 });
   });
 
-  it('rejects keys outside the square/ and profile/ prefixes', async () => {
+  it('rejects keys outside the profile prefix', async () => {
     await expect(
       call(fakeEnv({}), '/v1/square/media/secret/keys.txt')
     ).rejects.toMatchObject({ code: 'invalid_media_key' });

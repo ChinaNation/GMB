@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smoldot/smoldot.dart';
 
+import 'chain_bootstrap_api.dart';
+
 /// 链健康状态。
 enum ChainHealthStatus {
   /// 轻节点未初始化。
@@ -19,6 +21,9 @@ enum ChainHealthStatus {
 
   /// 链暂不可用（storage proof 下载失败等瞬断场景）。
   degraded,
+
+  /// 设备网络不可用或链路入口完全不可达。
+  offline,
 }
 
 /// citizenchain 轻节点客户端管理器（全局单例）。
@@ -48,6 +53,12 @@ class SmoldotClientManager {
   /// 最近一次链操作错误信息（仅 degraded 时有值）。
   String? _lastError;
   String? get lastError => _lastError;
+
+  ChainBootstrapManifest? _lastBootstrapManifest;
+  ChainBootstrapManifest? get lastBootstrapManifest => _lastBootstrapManifest;
+
+  String? _lastBootstrapError;
+  String? get lastBootstrapError => _lastBootstrapError;
 
   static const _readMaxRetries = 4;
   static const _readRetryDelay = Duration(seconds: 2);
@@ -158,6 +169,13 @@ class SmoldotClientManager {
         raw.contains('failed to add chain')) {
       return '轻节点初始化失败，请检查网络后重试';
     }
+    if (_healthStatus == ChainHealthStatus.offline ||
+        raw.contains('socketexception') ||
+        raw.contains('failed host lookup') ||
+        raw.contains('network is unreachable') ||
+        raw.contains('connection refused')) {
+      return '设备网络不可用，请检查网络后重试';
+    }
     if ((_healthStatus == ChainHealthStatus.degraded &&
             (raw.contains('waituntilsynced') ||
                 raw.contains('timeout') ||
@@ -192,9 +210,12 @@ class SmoldotClientManager {
     if (_initialized) return;
 
     _lastError = null;
+    _lastBootstrapError = null;
     _healthStatus = ChainHealthStatus.syncing;
 
     try {
+      final bootstrap = await _fetchBootstrapManifest();
+
       // 1. 创建 smoldot 客户端
       _client = SmoldotClient(
         config: const SmoldotConfig(
@@ -218,12 +239,14 @@ class SmoldotClientManager {
       // `/ip4/.../tcp/.../ws`，不支持 `/ip4/.../tcp/.../wss`。
       // 详见 citizenapp/smoldot-pow/light-base/src/platform/address_parse.rs
       final withBootnode = _injectLocalhostBootnode(chainSpecRaw);
+      final withBootstrapBootnodes =
+          _injectBootstrapBootnodes(withBootnode, bootstrap);
 
       // 注入 lightSyncState checkpoint：让 smoldot 从 finalized block 开始同步，
       // 跳过 genesis 到 finalized 之间的全部区块头验证，冷启动从分钟级降到秒级。
       // checkpoint 由 citizenchain/scripts/bake-chainspec.sh 从冻结节点生成，
       // 打包在 assets/light_sync_state.json 中，不修改 chainspec.json 文件。
-      final chainSpec = await _injectLightSyncState(withBootnode);
+      final chainSpec = await _injectLightSyncState(withBootstrapBootnodes);
 
       // 3. 优先恢复上次导出的 finalized database，避免每次冷启动都从零同步
       final cachedDatabase = await _loadCachedDatabase();
@@ -258,7 +281,9 @@ class SmoldotClientManager {
         }),
       );
     } catch (e) {
-      _healthStatus = ChainHealthStatus.degraded;
+      _healthStatus = _looksOffline(e)
+          ? ChainHealthStatus.offline
+          : ChainHealthStatus.degraded;
       _lastError = '轻节点初始化失败: $e';
       debugPrint('[Smoldot] $_lastError');
       try {
@@ -273,6 +298,26 @@ class SmoldotClientManager {
       _synced = false;
       _syncFuture = null;
       rethrow;
+    }
+  }
+
+  Future<ChainBootstrapManifest?> _fetchBootstrapManifest() async {
+    final api = ChainBootstrapApi();
+    try {
+      final manifest = await api.fetchManifest();
+      _lastBootstrapManifest = manifest;
+      _lastBootstrapError = null;
+      debugPrint(
+        '[Smoldot] 已读取链启动清单: bootnodes=${manifest.p2p.bootnodes.length}',
+      );
+      return manifest;
+    } catch (e) {
+      _lastBootstrapManifest = null;
+      _lastBootstrapError = '链启动清单不可用，继续使用本地链规格: $e';
+      debugPrint('[Smoldot] $_lastBootstrapError');
+      return null;
+    } finally {
+      api.close();
     }
   }
 
@@ -327,6 +372,57 @@ class SmoldotClientManager {
       debugPrint('[Smoldot] 注入本地 bootnode 失败，回退原始 chainspec: $e');
       return chainSpecJson;
     }
+  }
+
+  @visibleForTesting
+  String injectBootstrapBootnodesForTest(
+    String chainSpecJson,
+    ChainBootstrapManifest? manifest,
+  ) =>
+      _injectBootstrapBootnodes(chainSpecJson, manifest);
+
+  String _injectBootstrapBootnodes(
+    String chainSpecJson,
+    ChainBootstrapManifest? manifest,
+  ) {
+    if (manifest == null || manifest.p2p.bootnodes.isEmpty) {
+      return chainSpecJson;
+    }
+    try {
+      final spec = jsonDecode(chainSpecJson) as Map<String, dynamic>;
+      if (!_bootstrapMatchesLocalSpec(spec, manifest)) {
+        debugPrint('[Smoldot] 链启动清单与本地 chainspec 不一致，跳过远端 bootnodes');
+        return chainSpecJson;
+      }
+      final List<dynamic> bootNodes =
+          (spec['bootNodes'] as List?)?.cast<dynamic>() ?? <dynamic>[];
+      for (final bootnode in manifest.p2p.bootnodes.reversed) {
+        bootNodes.removeWhere((entry) => entry == bootnode);
+        bootNodes.insert(0, bootnode);
+      }
+      spec['bootNodes'] = bootNodes;
+      debugPrint(
+          '[Smoldot] 已注入 Cloudflare 推荐 bootnodes: ${manifest.p2p.bootnodes.length}');
+      return jsonEncode(spec);
+    } catch (e) {
+      debugPrint('[Smoldot] 注入链启动清单 bootnodes 失败，回退本地 chainspec: $e');
+      return chainSpecJson;
+    }
+  }
+
+  bool _bootstrapMatchesLocalSpec(
+    Map<String, dynamic> spec,
+    ChainBootstrapManifest manifest,
+  ) {
+    final genesis = spec['genesis'];
+    final properties = spec['properties'];
+    final stateRoot = genesis is Map ? genesis['stateRootHash'] : null;
+    final ss58 = properties is Map ? properties['ss58Format'] : null;
+    return spec['id'] == manifest.chain.chainId &&
+        spec['protocolId'] == manifest.chain.protocolId &&
+        stateRoot is String &&
+        stateRoot.toLowerCase() == manifest.chain.stateRoot &&
+        ss58 == manifest.chain.ss58Format;
   }
 
   /// 从 assets/light_sync_state.json 加载 checkpoint 并注入 chainspec。
@@ -579,6 +675,14 @@ class SmoldotClientManager {
     }
   }
 
+  bool _looksOffline(Object error) {
+    final raw = error.toString().toLowerCase();
+    return raw.contains('socketexception') ||
+        raw.contains('failed host lookup') ||
+        raw.contains('network is unreachable') ||
+        raw.contains('connection refused');
+  }
+
   /// 获取当前连接的 P2P 节点数。
   Future<int> getPeerCount() async {
     if (!isReady) return 0;
@@ -735,6 +839,8 @@ class SmoldotClientManager {
     _syncFuture = null;
     _healthStatus = ChainHealthStatus.uninitialized;
     _lastError = null;
+    _lastBootstrapManifest = null;
+    _lastBootstrapError = null;
     debugPrint('[Smoldot] 轻节点已关闭');
   }
 

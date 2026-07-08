@@ -7,6 +7,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 
 import 'chain_read_cache.dart';
+import 'signed_extrinsic_relay_api.dart';
 import 'smoldot_client.dart';
 
 /// 交易池观察状态。
@@ -283,15 +284,95 @@ class ChainRpc {
         '[ChainRpc.submitExtrinsic] 提交 extrinsic (${encoded.length} bytes)');
     debugPrint('[ChainRpc.submitExtrinsic] full hex: $hex');
 
-    final txHashHex =
-        await SmoldotClientManager.instance.submitExtrinsicHex(hex);
-    if (txHashHex == null || txHashHex.isEmpty) {
-      throw StateError('smoldot 未返回交易哈希');
-    }
-    debugPrint('[ChainRpc.submitExtrinsic] smoldot 返回 txHash: $txHashHex');
+    try {
+      final txHashHex =
+          await SmoldotClientManager.instance.submitExtrinsicHex(hex);
+      if (txHashHex == null || txHashHex.isEmpty) {
+        throw StateError('smoldot 未返回交易哈希');
+      }
+      debugPrint('[ChainRpc.submitExtrinsic] smoldot 返回 txHash: $txHashHex');
 
-    unawaited(_watchTxRejectInBackground(hex, txHashHex, onWatchEvent));
-    return _hexDecode(_stripHexPrefix(txHashHex));
+      unawaited(_watchTxRejectInBackground(hex, txHashHex, onWatchEvent));
+      return _hexDecode(_stripHexPrefix(txHashHex));
+    } catch (error) {
+      if (!_shouldRelaySignedExtrinsic(error)) {
+        rethrow;
+      }
+      return _relaySignedExtrinsicAfterSmoldotFailure(
+        hex,
+        error,
+        onWatchEvent,
+      );
+    }
+  }
+
+  Future<Uint8List> _relaySignedExtrinsicAfterSmoldotFailure(
+    String signedExtrinsicHex,
+    Object smoldotError,
+    TxPoolWatchCallback? onWatchEvent,
+  ) async {
+    final manifest = SmoldotClientManager.instance.lastBootstrapManifest;
+    if (manifest?.services.signedExtrinsicRelayEnabled != true ||
+        manifest?.services.signedExtrinsicRelayPath !=
+            SignedExtrinsicRelayApi.relayPath) {
+      throw smoldotError;
+    }
+
+    debugPrint(
+      '[ChainRpc.submitExtrinsic] 轻节点提交失败，尝试已签名交易受控广播兜底: $smoldotError',
+    );
+    final api = SignedExtrinsicRelayApi();
+    try {
+      final result = await api.relaySignedExtrinsic(
+        signedExtrinsicHex: signedExtrinsicHex,
+      );
+      onWatchEvent?.call(TxPoolWatchEvent(
+        kind: TxPoolWatchKind.broadcast,
+        description: '已通过受控 API 广播，最终成功以 finalized 链状态或事件为准',
+        raw: 'signed_extrinsic_relay:${result.relayId}',
+      ));
+      debugPrint(
+        '[ChainRpc.submitExtrinsic] 受控广播返回 txHash=${result.txHash}, relay=${result.relayId}',
+      );
+      return _hexDecode(_stripHexPrefix(result.txHash));
+    } catch (relayError) {
+      throw StateError(
+        '轻节点提交失败且受控广播兜底失败: $relayError; 原始错误: $smoldotError',
+      );
+    } finally {
+      api.close();
+    }
+  }
+
+  bool _shouldRelaySignedExtrinsic(Object error) {
+    final manifest = SmoldotClientManager.instance.lastBootstrapManifest;
+    if (manifest?.services.signedExtrinsicRelayEnabled != true) {
+      return false;
+    }
+    final raw = error.toString().toLowerCase();
+    if (raw.contains('invalid transaction') ||
+        raw.contains('bad proof') ||
+        raw.contains('exhausts resources') ||
+        raw.contains('payment') ||
+        raw.contains('future') ||
+        raw.contains('stale')) {
+      return false;
+    }
+    final status = SmoldotClientManager.instance.healthStatus;
+    if (status == ChainHealthStatus.offline ||
+        status == ChainHealthStatus.degraded) {
+      return true;
+    }
+    return raw.contains('timeout') ||
+        raw.contains('timed out') ||
+        raw.contains('socketexception') ||
+        raw.contains('failed host lookup') ||
+        raw.contains('network is unreachable') ||
+        raw.contains('connection refused') ||
+        raw.contains('channel closed') ||
+        raw.contains('no node') ||
+        raw.contains('peers') ||
+        raw.contains('inaccessible');
   }
 
   /// 提交已签名 extrinsic，并阻塞等待交易真正进入区块。

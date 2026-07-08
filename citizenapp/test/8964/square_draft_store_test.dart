@@ -31,7 +31,7 @@ void main() {
       ],
       draftState: SquareDraftState.chainInBlockUploadPending,
       updatedAtMillis: 1800000000000,
-      lastError: 'R2 上传失败',
+      lastError: '媒体上传失败',
       uploadId: 'squ_test',
       postId: 'sqp_test',
       contentHash: '11' * 32,

@@ -13,6 +13,17 @@ OnChina 不是第五个产品。仓库产品只保留：
 - 公民钱包 `citizenwallet`
 - 官方网站 `website`
 
+### 1.1 与 CitizenApp 边缘架构的边界
+
+OnChina 可以向 CitizenApp 或 Cloudflare 边缘层提供公开目录、链上投影、机构资料查询和受控服务端聚合能力，但不得成为 CitizenApp 的链上状态真源。
+
+固定边界：
+
+- CitizenApp 链上余额、身份、提案、投票和交易成功判断以端上轻节点读取的 finalized runtime storage 为准。
+- OnChina / Citizen API 可以广播 CitizenApp 已经本地签名完成的 extrinsic，但不接触私钥、不修改交易载荷、不把广播成功解释为链上成功。
+- OnChina 的主入口仍是机构内网工作台 `https://onchina.local:8964`；如后续提供公网投影服务，必须以独立受控服务节点、反向代理、白名单、限流和审计为边界，不直接暴露国储会核心节点 RPC。
+- OnChina 不恢复旧独立后端目录，不新建 `backend/src/`、`backend/chain/` 或 `frontend/chain/` 业务壳。
+
 ## 2. 技术栈
 
 - 后端：Rust + Axum + PostgreSQL

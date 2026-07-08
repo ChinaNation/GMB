@@ -23,12 +23,14 @@ class SquarePublishResult {
     required this.txHash,
     required this.blockHashHex,
     required this.storageUntil,
+    this.cleanupWarning,
   });
 
   final SquarePost post;
   final String txHash;
   final String blockHashHex;
   final int storageUntil;
+  final String? cleanupWarning;
 }
 
 typedef SquareChainSigner = Future<Uint8List> Function(Uint8List payload);
@@ -54,17 +56,20 @@ class SquarePublishService {
     SquareContentUploader? uploadService,
     SquarePostChainPublisher? chainService,
     SquarePublicationConfirmer? publicationConfirmer,
+    SquarePostDeletionService? postDeletionService,
     SquarePublishBalanceReader? balanceReader,
     SquareDraftRepository? draftStore,
   })  : _uploadService = uploadService ?? SquareUploadService(),
         _chainService = chainService ?? SquareChainService(),
         _publicationConfirmer = publicationConfirmer ?? SquareApiClient(),
+        _postDeletionService = postDeletionService ?? SquareApiClient(),
         _balanceReader = balanceReader ?? SquareChainBalanceReader(),
         _draftStore = draftStore ?? SquareDraftStore.instance;
 
   final SquareContentUploader _uploadService;
   final SquarePostChainPublisher _chainService;
   final SquarePublicationConfirmer _publicationConfirmer;
+  final SquarePostDeletionService _postDeletionService;
   final SquarePublishBalanceReader _balanceReader;
   final SquareDraftRepository _draftStore;
 
@@ -82,6 +87,7 @@ class SquarePublishService {
     required SquareChainSigner signChainPayload,
     SquarePostContentFormat contentFormat = SquarePostContentFormat.normal,
     String? title,
+    String? replacePostId,
     void Function(SquarePublishStage stage)? onStage,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
@@ -90,7 +96,7 @@ class SquarePublishService {
       throw const SquarePublishException('请先创建或选择钱包');
     }
     if (postCategory == SquarePostCategory.campaign && !identity.isCertified) {
-      throw const SquarePublishException('只有链上认证公民才能发布竞选动态');
+      throw const SquarePublishException('只有链上认证公民才能发布竞选内容');
     }
     if (trimmedText.isEmpty && mediaDrafts.isEmpty) {
       throw const SquarePublishException('动态内容不能为空');
@@ -148,12 +154,18 @@ class SquarePublishService {
       );
 
       await _deleteDraftAfterSuccess(identity.ownerAccount);
+      final cleanupWarning = await _deleteReplacedPostAfterSuccess(
+        session: uploaded.session,
+        newPostId: uploaded.postId,
+        replacePostId: replacePostId,
+      );
       onStage?.call(SquarePublishStage.completed);
       return SquarePublishResult(
         post: confirmedPost,
         txHash: chainResult.txHash,
         blockHashHex: chainResult.blockHashHex,
         storageUntil: uploaded.storageUntil,
+        cleanupWarning: cleanupWarning,
       );
     } catch (e) {
       await _saveDraftAfterFailure(
@@ -166,6 +178,27 @@ class SquarePublishService {
         error: e,
       );
       throw SquarePublishException('${_messageOf(e)}，已保存到草稿箱');
+    }
+  }
+
+  Future<String?> _deleteReplacedPostAfterSuccess({
+    required SquareSession session,
+    required String newPostId,
+    required String? replacePostId,
+  }) async {
+    final oldPostId = replacePostId?.trim();
+    if (oldPostId == null || oldPostId.isEmpty || oldPostId == newPostId) {
+      return null;
+    }
+    try {
+      // 修改视为重新发布：新帖成功后再清旧帖，避免发布失败导致原内容丢失。
+      await _postDeletionService.deletePost(
+          session: session, postId: oldPostId);
+      return null;
+    } catch (error) {
+      final message = '新内容已发布，但旧内容清理失败：${_messageOf(error)}';
+      debugPrint('[SquarePublishService] $message');
+      return message;
     }
   }
 

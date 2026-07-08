@@ -5,7 +5,7 @@ import { isSha256Hex } from '../shared/hash';
 const maxImageBytes = 20 * 1024 * 1024;
 const maxVideoBytes = 500 * 1024 * 1024;
 const maxManifestBytes = 512 * 1024;
-const maxMediaItems = 9;
+const maxMediaItems = 101;
 
 export function assertPostCategory(value: unknown): PostCategory {
   if (value === 'normal' || value === 'campaign') {
@@ -23,7 +23,7 @@ export function assertManifestHash(value: unknown): string {
 
 export function validateUploadItems(value: unknown): UploadItemInput[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > maxMediaItems) {
-    throw new HttpError(400, 'invalid_media_items', '媒体数量必须在 1 到 9 个之间');
+    throw new HttpError(400, 'invalid_media_items', '媒体数量必须在 1 到 101 个之间');
   }
 
   return value.map((raw, index) => {

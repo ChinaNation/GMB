@@ -8,6 +8,7 @@ import Technology from './pages/Technology'
 import Tokenomics from './pages/Tokenomics'
 import Governance from './pages/Governance'
 import Ecosystem from './pages/Ecosystem'
+import Membership from './pages/Membership'
 
 const Whitepaper = lazy(() => import('./pages/Whitepaper'))
 
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/technology" element={<Technology />} />
           <Route path="/tokenomics" element={<Tokenomics />} />
           <Route path="/governance" element={<Governance />} />
+          <Route path="/membership" element={<Membership />} />
           <Route
             path="/whitepaper"
             element={(

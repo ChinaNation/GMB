@@ -3,8 +3,8 @@ import { HttpError } from '../shared/http';
 
 const MEDIA_PREFIX = '/v1/square/media/';
 
-/// 公开媒体读取通道：把 R2 中的广场媒体 / 头像 / 背景对象按 object_key 直出，
-/// 供 App `Image.network` 与 CDN 缓存使用。只允许 square/ 与 profile/ 前缀，杜绝任意读。
+/// 公开资料媒体读取通道：只把 R2 中的头像 / 背景对象按 object_key 直出。
+/// 广场主媒体已经迁移到 Cloudflare Images / Stream，manifest 也不作为公开媒体暴露。
 export async function mediaRoute(
   request: Request,
   env: Env,
@@ -19,7 +19,7 @@ export async function mediaRoute(
   if (
     !objectKey ||
     objectKey.includes('..') ||
-    (!objectKey.startsWith('square/') && !objectKey.startsWith('profile/'))
+    !objectKey.startsWith('profile/')
   ) {
     throw new HttpError(400, 'invalid_media_key', '媒体对象路径不合法');
   }

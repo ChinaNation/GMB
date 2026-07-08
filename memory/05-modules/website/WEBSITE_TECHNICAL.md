@@ -4,7 +4,7 @@
 
 `website/` 是 GMB 官网前端工程，用于对外展示公民区块链与项目基础信息。
 
-该模块只负责公开官网页面和白皮书展示，不承载 CitizenChain、链上中国、CitizenApp 或 CitizenWallet 的信任根逻辑。
+该模块只负责公开官网页面、白皮书展示和 CitizenApp 会员订阅发起页，不承载 CitizenChain、链上中国、CitizenApp 或 CitizenWallet 的信任根逻辑。
 
 白皮书唯一真源位于 `website/src/whitepaper.md`，官网白皮书页通过 Vite raw import 读取该文件；白皮书图片资源继续通过官网构建流程打包展示。
 
@@ -16,6 +16,7 @@
 - 样式：Tailwind CSS Vite 插件与本地 CSS
 - 生产产物目录：`website/dist/`
 - 白皮书正文：`website/src/whitepaper.md`
+- 会员订阅页：`website/src/pages/Membership.tsx`
 
 ## 3. 本地构建
 
@@ -27,7 +28,14 @@ npm run build
 
 该命令会先执行 TypeScript 构建检查，再执行 Vite 生产构建。发布前必须确认该命令通过。
 
-白皮书内容、首页发行量、链上中国卖点、技术页和生态页更新后，必须至少访问首页、技术页、生态页、代币经济页和白皮书页确认页面可正常渲染。
+白皮书内容、首页发行量、链上中国卖点、技术页、生态页和会员页更新后，必须至少访问首页、技术页、生态页、代币经济页、会员订阅页和白皮书页确认页面可正常渲染。
+
+## 3.2. 会员订阅页
+
+- `/membership` 是 CitizenApp 官网会员订阅入口，展示访客会员、投票公民会员、竞选公民会员三档美元月费和权益说明。
+- 官网页面只调用 Cloudflare Worker `POST /v1/square/membership/stripe/checkout` 创建 Stripe Checkout Session，不保存会员状态、不保存本地法币金额、不接触 Stripe secret。
+- 会员权益真源在 CitizenApp Cloudflare Worker / D1：Stripe subscription webhook 写入 `square_memberships` 后，iOS / Android / GitHub Android 版 CitizenApp 均通过同一钱包账户读取会员状态。
+- `VITE_CITIZENAPP_SQUARE_API_BASE_URL` 可在官网构建时指定 Worker API 根地址；未设置时使用 production Worker 默认地址。
 
 ## 3.1. 白皮书结构维护记录
 

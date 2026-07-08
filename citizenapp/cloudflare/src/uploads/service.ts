@@ -1,15 +1,30 @@
-import type { Env, PreparedUploadRow, UploadItemInput } from '../types';
+import type { Env, MediaAssetRow, PreparedUploadRow, UploadItemInput } from '../types';
 import { HttpError, jsonResponse, parsePositiveInt, readJson, requireSession } from '../shared/http';
 import { isSha256Hex, sha256Hex } from '../shared/hash';
 import { createId } from '../shared/ids';
 import { nowMs, secondsFromNow } from '../shared/time';
 import { requireActiveMembership } from '../membership/service';
+import { membershipPlan } from '../membership/plans';
+import {
+  createProviderUpload,
+  refreshProviderAssetState,
+  streamDetailsToAssetUpdate
+} from '../media/cloudflare_assets';
 import { buildObjectKeyPlan } from '../storage/r2_keys';
 import { createUploadUrl } from '../storage/presigned';
 import { assertManifestHash, assertPostCategory, estimateUploadBytes, validateUploadItems } from './validation';
+import {
+  assertContentFormat,
+  assertDeclaredContentQuota,
+  assertDeclaredLength,
+  assertManifestQuota
+} from './quota';
 
 interface PrepareUploadRequest {
   post_category?: unknown;
+  content_format?: unknown;
+  title_length?: unknown;
+  text_length?: unknown;
   manifest_hash?: unknown;
   media_items?: unknown;
 }
@@ -18,6 +33,23 @@ interface CompleteUploadRequest {
   upload_id?: unknown;
   manifest_hash?: unknown;
   content_hash?: unknown;
+}
+
+interface StreamWebhookBody {
+  uid?: string;
+  readyToStream?: boolean;
+  thumbnail?: string;
+  duration?: number;
+  input?: { width?: number; height?: number };
+  status?: {
+    state?: string;
+    errorReasonCode?: string;
+    errReasonCode?: string;
+  };
+  playback?: {
+    hls?: string;
+    dash?: string;
+  };
 }
 
 function parseObjectKeys(row: PreparedUploadRow): string[] {
@@ -62,18 +94,32 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
   const session = await requireSession(request, env);
   const body = await readJson<PrepareUploadRequest>(request);
   const postCategory = assertPostCategory(body.post_category);
+  const contentFormat = assertContentFormat(body.content_format);
+  const titleLength = assertDeclaredLength(body.title_length, 'title_length');
+  const textLength = assertDeclaredLength(body.text_length, 'text_length');
   const manifestHash = assertManifestHash(body.manifest_hash);
   const mediaItems = validateUploadItems(body.media_items);
   const estimatedBytes = estimateUploadBytes(mediaItems);
 
   // 会员容量在签发上传授权前扣住入口，避免用户绕过 App 直接灌入媒体对象。
-  await requireActiveMembership(env, session.owner_account, estimatedBytes);
+  const membership = await requireActiveMembership(env, session.owner_account, estimatedBytes);
+  const membershipLevel = normalizeMembershipLevel(membership.membership_level);
+  const plan = membershipPlan(membershipLevel);
+  assertDeclaredContentQuota({
+    membershipLevel,
+    plan,
+    postCategory,
+    contentFormat,
+    titleLength,
+    textLength,
+    mediaItems
+  });
 
   const uploadId = createId('squ');
   const postId = createId('sqp');
   const expiresSeconds = parsePositiveInt(env.SQUARE_UPLOAD_URL_TTL_SECONDS, 900);
   const expiresAt = secondsFromNow(expiresSeconds);
-  const objectKeyPlan = buildObjectKeyPlan(session.owner_account, postId, mediaItems);
+  const objectKeyPlan = buildObjectKeyPlan(session.owner_account, postId);
   const requestUrl = new URL(request.url);
   const storageReceiptId = await createStorageReceiptId({
     uploadId,
@@ -87,27 +133,32 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
     content_type: 'application/json',
     expires_seconds: expiresSeconds,
     request_url: requestUrl,
-    upload_id: uploadId
-  });
-  const uploadUrls = await Promise.all(
-    objectKeyPlan.media_items.map((item) =>
-      createUploadUrl(env, {
-        object_key: item.object_key,
-        content_type: item.content_type,
-        expires_seconds: expiresSeconds,
-        request_url: requestUrl,
-        upload_id: uploadId
+      upload_id: uploadId
+    });
+  const mediaUploads = await Promise.all(
+    mediaItems.map((item, index) =>
+      createProviderUpload(env, {
+        ownerAccount: session.owner_account,
+        uploadId,
+        postId,
+        mediaIndex: index,
+        mediaKind: item.media_kind,
+        contentType: item.content_type,
+        byteSize: item.byte_size,
+        maxDurationSeconds: plan.dynamic.max_video_seconds,
+        requestOrigin: requestUrl.origin
       })
     )
   );
 
-  await env.DB.prepare(
-    `INSERT INTO square_uploads
-      (upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
-        storage_receipt_id, estimated_bytes, object_keys_json, status, created_at, completed_at)
-      VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, 'prepared', ?, NULL)`
-  )
-    .bind(
+  const createdAt = nowMs();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO square_uploads
+        (upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
+          storage_receipt_id, estimated_bytes, object_keys_json, status, created_at, completed_at)
+        VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, 'prepared', ?, NULL)`
+    ).bind(
       uploadId,
       postId,
       session.owner_account,
@@ -116,9 +167,38 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
       storageReceiptId,
       estimatedBytes,
       JSON.stringify(objectKeyPlan.object_keys),
-      nowMs()
-    )
-    .run();
+      createdAt
+    ),
+    ...mediaUploads.map((asset, index) => {
+      const item = mediaItems[index];
+      return env.DB.prepare(
+        `INSERT INTO square_media_assets
+          (upload_id, post_id, owner_account, media_index, media_kind, provider,
+            provider_asset_id, upload_method, content_type, byte_size, asset_state,
+            delivery_url, playback_hls_url, playback_dash_url, thumbnail_url,
+            duration_seconds, width, height, error_code, created_at, updated_at, ready_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, NULL)`
+      ).bind(
+        uploadId,
+        postId,
+        session.owner_account,
+        index,
+        item.media_kind === 'video' ? 'video' : 'image',
+        asset.provider,
+        asset.provider_asset_id,
+        asset.upload_method,
+        item.content_type,
+        item.byte_size,
+        asset.asset_state,
+        asset.delivery_url,
+        asset.playback_hls_url,
+        asset.playback_dash_url,
+        asset.thumbnail_url,
+        createdAt,
+        createdAt
+      );
+    })
+  ]);
 
   return jsonResponse({
     ok: true,
@@ -129,12 +209,19 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
     estimated_bytes: estimatedBytes,
     manifest_object_key: objectKeyPlan.manifest_object_key,
     manifest_upload_url: manifestUploadUrl,
-    media_items: objectKeyPlan.media_items.map((item, index) => ({
-      media_kind: item.media_kind,
+    media_items: mediaItems.map((item, index) => ({
+      media_kind: item.media_kind === 'video' ? 'video' : 'image',
       content_type: item.content_type,
       byte_size: item.byte_size,
-      object_key: item.object_key,
-      upload_url: uploadUrls[index]
+      provider: mediaUploads[index].provider,
+      provider_asset_id: mediaUploads[index].provider_asset_id,
+      upload_method: mediaUploads[index].upload_method,
+      asset_state: mediaUploads[index].asset_state,
+      delivery_url: mediaUploads[index].delivery_url,
+      playback_hls_url: mediaUploads[index].playback_hls_url,
+      playback_dash_url: mediaUploads[index].playback_dash_url,
+      thumbnail_url: mediaUploads[index].thumbnail_url,
+      upload_url: mediaUploads[index].upload_url
     }))
   });
 }
@@ -170,6 +257,44 @@ export async function devPutUploadObject(request: Request, env: Env): Promise<Re
     ok: true,
     object_key: objectKey,
     byte_size: body.byteLength
+  });
+}
+
+export async function devUploadMediaAsset(request: Request, env: Env): Promise<Response> {
+  if (env.SQUARE_DEV_UPLOAD_PROXY !== '1') {
+    throw new HttpError(404, 'dev_upload_proxy_disabled', '开发上传代理未启用');
+  }
+
+  const session = await requireSession(request, env);
+  const requestUrl = new URL(request.url);
+  const uploadId = requestUrl.searchParams.get('upload_id');
+  const mediaIndex = Number.parseInt(requestUrl.searchParams.get('media_index') ?? '', 10);
+  if (!uploadId || !Number.isInteger(mediaIndex) || mediaIndex < 0) {
+    throw new HttpError(400, 'invalid_dev_media_request', '开发媒体上传请求缺少 upload_id 或 media_index');
+  }
+
+  const asset = await loadMediaAsset(env, uploadId, mediaIndex);
+  if (asset.owner_account !== session.owner_account) {
+    throw new HttpError(403, 'upload_media_forbidden', '无权写入该媒体资产');
+  }
+
+  // 本地 Miniflare 没有真实 Images / Stream；读取请求体后只更新 D1 状态用于端到端验收。
+  await request.arrayBuffer();
+  const nextState = asset.provider === 'cloudflare_stream' ? 'processing' : 'ready';
+  const updatedAt = nowMs();
+  await env.DB.prepare(
+    `UPDATE square_media_assets
+      SET asset_state = ?, updated_at = ?, ready_at = ?
+      WHERE upload_id = ? AND media_index = ?`
+  )
+    .bind(nextState, updatedAt, nextState === 'ready' ? updatedAt : null, uploadId, mediaIndex)
+    .run();
+
+  return jsonResponse({
+    ok: true,
+    upload_id: uploadId,
+    media_index: mediaIndex,
+    asset_state: nextState
   });
 }
 
@@ -214,6 +339,40 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
     }
   }
 
+  const mediaAssets = await loadMediaAssets(env, upload.upload_id);
+  if (mediaAssets.length === 0) {
+    throw new HttpError(409, 'media_assets_missing', '上传记录缺少 Cloudflare Images / Stream 媒体资产');
+  }
+  const manifestObject = await env.SQUARE_MEDIA.get(objectKeys[0]);
+  if (!manifestObject) {
+    throw new HttpError(409, 'manifest_missing', 'manifest 对象未上传');
+  }
+  const manifestText = await manifestObject.text();
+  const manifestObjectHash = await sha256Hex(manifestText);
+  if (manifestObjectHash !== manifestHash) {
+    throw new HttpError(409, 'manifest_object_hash_mismatch', 'R2 manifest 内容与 manifest_hash 不一致');
+  }
+  const membership = await requireActiveMembership(env, upload.owner_account, 0);
+  const membershipLevel = normalizeMembershipLevel(membership.membership_level);
+  await assertManifestQuota({
+    membershipLevel,
+    plan: membershipPlan(membershipLevel),
+    upload,
+    manifestText,
+    mediaAssets
+  });
+
+  const refreshedAssets = await Promise.all(mediaAssets.map((asset) => refreshMediaAsset(env, asset)));
+  const hasProcessingMedia = refreshedAssets.some((asset) => asset.asset_state === 'processing');
+  const hasPreparedMedia = refreshedAssets.some((asset) => asset.asset_state === 'prepared');
+  const failedMedia = refreshedAssets.find((asset) => asset.asset_state === 'error');
+  if (failedMedia) {
+    throw new HttpError(409, 'media_asset_error', `媒体资产处理失败：${failedMedia.error_code ?? failedMedia.provider_asset_id}`);
+  }
+  if (hasPreparedMedia) {
+    throw new HttpError(409, 'media_asset_not_uploaded', '媒体资产尚未上传到 Cloudflare Images / Stream');
+  }
+
   const completedAt = nowMs();
 
   await env.DB.batch([
@@ -235,8 +394,196 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
     post_id: upload.post_id,
     content_hash: contentHash,
     storage_receipt_id: upload.storage_receipt_id,
-    storage_state: 'completed'
+    storage_state: hasProcessingMedia ? 'processing' : 'completed'
+  });
+}
+
+export async function streamWebhookRoute(request: Request, env: Env): Promise<Response> {
+  const secret = env.CLOUDFLARE_STREAM_WEBHOOK_SECRET;
+  if (!secret) {
+    throw new HttpError(503, 'stream_webhook_not_configured', 'Cloudflare Stream webhook secret 未配置');
+  }
+  const rawBody = await request.text();
+  await verifyStreamWebhookSignature(
+    rawBody,
+    request.headers.get('webhook-signature'),
+    secret
+  );
+  const body = parseStreamWebhookBody(rawBody);
+  const uid = typeof body.uid === 'string' ? body.uid : '';
+  if (!uid) {
+    throw new HttpError(400, 'invalid_stream_webhook', 'Cloudflare Stream webhook 缺少 uid');
+  }
+  const update = streamDetailsToAssetUpdate(env, body, uid);
+  const result = await env.DB.prepare(
+    `UPDATE square_media_assets
+      SET asset_state = ?, playback_hls_url = ?, playback_dash_url = ?, thumbnail_url = ?,
+        duration_seconds = ?, width = ?, height = ?, error_code = ?, updated_at = ?, ready_at = ?
+      WHERE provider = 'cloudflare_stream' AND provider_asset_id = ?`
+  )
+    .bind(
+      update.asset_state,
+      update.playback_hls_url,
+      update.playback_dash_url,
+      update.thumbnail_url,
+      update.duration_seconds,
+      update.width,
+      update.height,
+      update.error_code,
+      update.updated_at ?? nowMs(),
+      update.ready_at,
+      uid
+    )
+    .run();
+
+  return jsonResponse({
+    ok: true,
+    action: result.meta?.changes ? 'stream_asset_updated' : 'stream_asset_ignored',
+    provider_asset_id: uid,
+    asset_state: update.asset_state
   });
 }
 
 export { validateUploadItems, estimateUploadBytes };
+
+function normalizeMembershipLevel(value: string): 'visitor' | 'voting' | 'candidate' {
+  if (value === 'candidate' || value === 'voting') {
+    return value;
+  }
+  return 'visitor';
+}
+
+async function loadMediaAsset(env: Env, uploadId: string, mediaIndex: number): Promise<MediaAssetRow> {
+  const asset = await env.DB.prepare(
+    `SELECT upload_id, post_id, owner_account, media_index, media_kind, provider,
+        provider_asset_id, upload_method, content_type, byte_size, asset_state,
+        delivery_url, playback_hls_url, playback_dash_url, thumbnail_url,
+        duration_seconds, width, height, error_code, created_at, updated_at, ready_at
+      FROM square_media_assets
+      WHERE upload_id = ? AND media_index = ?`
+  )
+    .bind(uploadId, mediaIndex)
+    .first<MediaAssetRow>();
+  if (!asset) {
+    throw new HttpError(404, 'media_asset_not_found', '媒体资产不存在');
+  }
+  return asset;
+}
+
+export async function loadMediaAssets(env: Env, uploadId: string): Promise<MediaAssetRow[]> {
+  const result = await env.DB.prepare(
+    `SELECT upload_id, post_id, owner_account, media_index, media_kind, provider,
+        provider_asset_id, upload_method, content_type, byte_size, asset_state,
+        delivery_url, playback_hls_url, playback_dash_url, thumbnail_url,
+        duration_seconds, width, height, error_code, created_at, updated_at, ready_at
+      FROM square_media_assets
+      WHERE upload_id = ?
+      ORDER BY media_index ASC`
+  )
+    .bind(uploadId)
+    .all<MediaAssetRow>();
+  return result.results ?? [];
+}
+
+async function refreshMediaAsset(env: Env, asset: MediaAssetRow): Promise<MediaAssetRow> {
+  const update = await refreshProviderAssetState(env, asset);
+  if (Object.keys(update).length === 0) {
+    return asset;
+  }
+  const next: MediaAssetRow = { ...asset, ...update };
+  await env.DB.prepare(
+    `UPDATE square_media_assets
+      SET asset_state = ?, delivery_url = ?, playback_hls_url = ?, playback_dash_url = ?,
+        thumbnail_url = ?, duration_seconds = ?, width = ?, height = ?, error_code = ?,
+        updated_at = ?, ready_at = ?
+      WHERE upload_id = ? AND media_index = ?`
+  )
+    .bind(
+      next.asset_state,
+      next.delivery_url,
+      next.playback_hls_url,
+      next.playback_dash_url,
+      next.thumbnail_url,
+      next.duration_seconds,
+      next.width,
+      next.height,
+      next.error_code,
+      next.updated_at,
+      next.ready_at,
+      next.upload_id,
+      next.media_index
+    )
+    .run();
+  return next;
+}
+
+async function verifyStreamWebhookSignature(
+  rawBody: string,
+  signatureHeader: string | null,
+  secret: string,
+  nowSeconds = Math.floor(nowMs() / 1000),
+  toleranceSeconds = 300
+): Promise<void> {
+  if (!signatureHeader) {
+    throw new HttpError(400, 'stream_signature_missing', 'Webhook-Signature 缺失');
+  }
+  const parsed = parseStreamSignatureHeader(signatureHeader);
+  if (!parsed.timestamp || !parsed.signature) {
+    throw new HttpError(400, 'stream_signature_invalid', 'Webhook-Signature 不合法');
+  }
+  if (Math.abs(nowSeconds - parsed.timestamp) > toleranceSeconds) {
+    throw new HttpError(400, 'stream_signature_expired', 'Webhook-Signature 已过期');
+  }
+  const expected = await hmacSha256Hex(secret, `${parsed.timestamp}.${rawBody}`);
+  if (!timingSafeEqualHex(parsed.signature, expected)) {
+    throw new HttpError(400, 'stream_signature_mismatch', 'Webhook-Signature 校验失败');
+  }
+}
+
+function parseStreamSignatureHeader(header: string): { timestamp: number | null; signature: string | null } {
+  let timestamp: number | null = null;
+  let signature: string | null = null;
+  for (const part of header.split(',')) {
+    const [key, value] = part.split('=', 2);
+    if (key === 'time') {
+      const parsed = Number.parseInt(value ?? '', 10);
+      timestamp = Number.isFinite(parsed) ? parsed : null;
+    }
+    if (key === 'sig1' && value) {
+      signature = value;
+    }
+  }
+  return { timestamp, signature };
+}
+
+function parseStreamWebhookBody(rawBody: string): StreamWebhookBody {
+  try {
+    return JSON.parse(rawBody) as StreamWebhookBody;
+  } catch {
+    throw new HttpError(400, 'invalid_stream_webhook_json', 'Cloudflare Stream webhook JSON 不合法');
+  }
+}
+
+async function hmacSha256Hex(secret: string, payload: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
+  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (!/^[a-f0-9]+$/i.test(a) || !/^[a-f0-9]+$/i.test(b) || a.length !== b.length) {
+    return false;
+  }
+  let diff = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    diff |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return diff === 0;
+}

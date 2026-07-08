@@ -10,8 +10,8 @@ import 'package:citizenapp/ui/app_theme.dart';
 
 const int articleTitleMin = 10;
 const int articleTitleMax = 50;
-const int articleBodyMax = 19890;
-const int articleBodyImagesMax = 64;
+const int articleBodyMax = 30000;
+const int articleBodyImagesMax = 100;
 
 /// 文章发布校验（纯函数，便于单测）。返回错误文案，null 表示通过。
 String? articleValidationError({
@@ -37,19 +37,27 @@ String? articleValidationError({
   return null;
 }
 
-/// 文章长文发布页：标题（10-50）+ 首图（必填 1 张）+ 正文（≤19890）+ 正文图（≤64）。
+/// 文章长文发布页：标题（10-50）+ 首图（必填 1 张）+ 正文（≤30000）+ 正文图（≤100）。
 ///
-/// 链上仍发 Normal（零改动）；manifest 标 content_format=article + title；
-/// media_items[0]=首图，[1..]=正文图。复用发布服务与共享签名器（默认热钱包静默签名）。
+/// 链上仍只发 normal/campaign；manifest 标 content_format=article + title。
+/// media_items[0]=首图，[1..]=正文图。发布服务会按会员等级再次校验真实额度。
 class SquareArticleComposePage extends StatefulWidget {
   const SquareArticleComposePage({
     super.key,
     this.identityService = const SquareIdentityService(),
     this.publishService,
+    this.initialTitle,
+    this.initialBody,
+    this.initialCategory,
+    this.replacePostId,
   });
 
   final SquareIdentityService identityService;
   final SquarePublishService? publishService;
+  final String? initialTitle;
+  final String? initialBody;
+  final SquarePostCategory? initialCategory;
+  final String? replacePostId;
 
   @override
   State<SquareArticleComposePage> createState() =>
@@ -65,6 +73,7 @@ class _SquareArticleComposePageState extends State<SquareArticleComposePage> {
 
   SquareLocalMediaDraft? _cover;
   final List<SquareLocalMediaDraft> _bodyImages = [];
+  SquarePostCategory _category = SquarePostCategory.normal;
   SquarePublishStage _publishStage = SquarePublishStage.idle;
   bool _publishing = false;
 
@@ -72,6 +81,9 @@ class _SquareArticleComposePageState extends State<SquareArticleComposePage> {
   void initState() {
     super.initState();
     _publishService = widget.publishService ?? SquarePublishService();
+    _titleController.text = widget.initialTitle ?? '';
+    _bodyController.text = widget.initialBody ?? '';
+    _category = widget.initialCategory ?? SquarePostCategory.normal;
     _identityFuture = widget.identityService.loadCurrent();
   }
 
@@ -110,12 +122,27 @@ class _SquareArticleComposePageState extends State<SquareArticleComposePage> {
         body: _bodyController.text,
       );
 
+  void _selectCategory(
+    Set<SquarePostCategory> values,
+    SquareIdentityState identity,
+  ) {
+    final next = values.first;
+    if (next == SquarePostCategory.campaign && !identity.isCertified) {
+      return;
+    }
+    setState(() => _category = next);
+  }
+
   Future<void> _submit(SquareIdentityState identity) async {
     if (_publishing) return;
     if (!identity.hasWallet ||
         identity.walletIndex == null ||
         identity.pubkeyHex == null) {
       _showError('请先创建或选择钱包');
+      return;
+    }
+    if (_category == SquarePostCategory.campaign && !identity.isCertified) {
+      _showError('当前钱包未认证，不能发布竞选文章');
       return;
     }
     final error = _validate();
@@ -134,13 +161,14 @@ class _SquareArticleComposePageState extends State<SquareArticleComposePage> {
       final mediaDrafts = <SquareLocalMediaDraft>[_cover!, ..._bodyImages];
       final result = await _publishService.publish(
         identity: identity,
-        postCategory: SquarePostCategory.normal,
+        postCategory: _category,
         contentFormat: SquarePostContentFormat.article,
         title: _titleController.text.trim(),
         text: _bodyController.text.trim(),
         mediaDrafts: List<SquareLocalMediaDraft>.unmodifiable(mediaDrafts),
         signLoginPayload: signers.signLogin,
         signChainPayload: signers.signChain,
+        replacePostId: widget.replacePostId,
         onStage: (stage) {
           if (!mounted) return;
           setState(() => _publishStage = stage);
@@ -148,8 +176,8 @@ class _SquareArticleComposePageState extends State<SquareArticleComposePage> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('文章已发布'),
+        SnackBar(
+          content: Text(result.cleanupWarning ?? '文章已发布'),
           backgroundColor: AppTheme.primaryDark,
         ),
       );
@@ -176,17 +204,62 @@ class _SquareArticleComposePageState extends State<SquareArticleComposePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('发布文章')),
+      appBar:
+          AppBar(title: Text(widget.replacePostId == null ? '发布文章' : '修改文章')),
       body: FutureBuilder<SquareIdentityState>(
         future: _identityFuture,
         builder: (context, snapshot) {
           final identity = snapshot.data;
+          final isCertified = identity?.isCertified ?? false;
+          if (_category == SquarePostCategory.campaign && !isCertified) {
+            _category = SquarePostCategory.normal;
+          }
           return Column(
             children: [
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    if (identity != null) ...[
+                      SegmentedButton<SquarePostCategory>(
+                        showSelectedIcon: false,
+                        segments: [
+                          const ButtonSegment<SquarePostCategory>(
+                            value: SquarePostCategory.normal,
+                            label: Text('普通'),
+                            icon: Icon(Icons.article_outlined),
+                          ),
+                          ButtonSegment<SquarePostCategory>(
+                            value: SquarePostCategory.campaign,
+                            enabled: identity.isCertified,
+                            label: const Text('竞选'),
+                            icon: const Icon(Icons.campaign_outlined),
+                          ),
+                        ],
+                        selected: {_category},
+                        onSelectionChanged: (values) =>
+                            _selectCategory(values, identity),
+                      ),
+                      if (!identity.isCertified) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: AppTheme.bannerDecoration(
+                            AppTheme.warning,
+                          ),
+                          child: const Text(
+                            '当前钱包未认证，不能发布竞选文章。',
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 13,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                    ],
                     TextField(
                       controller: _titleController,
                       maxLength: articleTitleMax,

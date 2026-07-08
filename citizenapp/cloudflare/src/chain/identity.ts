@@ -1,0 +1,185 @@
+import { blake2AsU8a, decodeAddress, xxhashAsU8a } from '@polkadot/util-crypto';
+import type { Env } from '../types';
+import { HttpError } from '../shared/http';
+import { nowMs } from '../shared/time';
+import { fetchChainStorage } from './rpc';
+import type { RequiredIdentityLevel } from '../membership/plans';
+
+export interface ChainIdentityState {
+  owner_account: string;
+  identity_level: RequiredIdentityLevel;
+  has_voting_identity: boolean;
+  has_candidate_identity: boolean;
+  cid_number: string | null;
+  checked_at: number;
+}
+
+interface VotingIdentity {
+  cid_number: string;
+  passport_valid_from: number;
+  passport_valid_until: number;
+  citizen_status: 'normal' | 'revoked';
+}
+
+export async function fetchChainIdentityState(
+  env: Env,
+  ownerAccount: string
+): Promise<ChainIdentityState> {
+  const accountId = decodeOwnerAccount(ownerAccount);
+  const votingKey = storageMapKey('CitizenIdentity', 'VotingIdentityByAccount', accountId);
+  const candidateKey = storageMapKey('CitizenIdentity', 'CandidateIdentityByAccount', accountId);
+  const [votingHex, candidateHex] = await Promise.all([
+    fetchChainStorage(env, `0x${hex(votingKey)}`),
+    fetchChainStorage(env, `0x${hex(candidateKey)}`)
+  ]);
+
+  const votingIdentity = votingHex ? decodeVotingIdentity(hexToBytes(votingHex)) : null;
+  const hasVotingIdentity = votingIdentity ? votingIdentityIsActive(votingIdentity) : false;
+  const hasCandidateIdentity = hasVotingIdentity && Boolean(candidateHex);
+  const identityLevel: RequiredIdentityLevel = hasCandidateIdentity
+    ? 'candidate'
+    : hasVotingIdentity
+      ? 'voting'
+      : 'visitor';
+
+  return {
+    owner_account: ownerAccount,
+    identity_level: identityLevel,
+    has_voting_identity: hasVotingIdentity,
+    has_candidate_identity: hasCandidateIdentity,
+    cid_number: hasVotingIdentity ? votingIdentity?.cid_number ?? null : null,
+    checked_at: nowMs()
+  };
+}
+
+function decodeOwnerAccount(ownerAccount: string): Uint8Array {
+  try {
+    return decodeAddress(ownerAccount);
+  } catch {
+    throw new HttpError(400, 'invalid_owner_account', '钱包账户地址不合法');
+  }
+}
+
+function storageMapKey(
+  palletName: string,
+  storageName: string,
+  keyData: Uint8Array
+): Uint8Array {
+  const palletHash = xxhashAsU8a(palletName, 128);
+  const storageHash = xxhashAsU8a(storageName, 128);
+  const keyHash = blake2AsU8a(keyData, 128);
+  return concat([palletHash, storageHash, keyHash, keyData]);
+}
+
+function decodeVotingIdentity(data: Uint8Array): VotingIdentity | null {
+  try {
+    let offset = 0;
+    const cid = readCompactBytes(data, offset, 32);
+    offset = cid.nextOffset;
+    if (offset + 4 + 4 + 1 > data.length) return null;
+    const passportValidFrom = readU32Le(data, offset);
+    offset += 4;
+    const passportValidUntil = readU32Le(data, offset);
+    offset += 4;
+    const statusByte = data[offset];
+    if (statusByte !== 0 && statusByte !== 1) return null;
+    return {
+      cid_number: utf8(cid.value).trim(),
+      passport_valid_from: passportValidFrom,
+      passport_valid_until: passportValidUntil,
+      citizen_status: statusByte === 0 ? 'normal' : 'revoked'
+    };
+  } catch {
+    return null;
+  }
+}
+
+function votingIdentityIsActive(identity: VotingIdentity): boolean {
+  if (!identity.cid_number || identity.citizen_status !== 'normal') {
+    return false;
+  }
+  const today = dateInt(new Date(nowMs()));
+  return today >= identity.passport_valid_from && today <= identity.passport_valid_until;
+}
+
+function dateInt(date: Date): number {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return Number(`${year}${month}${day}`);
+}
+
+function readCompactBytes(
+  data: Uint8Array,
+  offset: number,
+  maxLen: number
+): { value: Uint8Array; nextOffset: number } {
+  const [length, lengthSize] = readCompactU32(data, offset);
+  if (length > maxLen) {
+    throw new Error('compact bytes too long');
+  }
+  const start = offset + lengthSize;
+  const end = start + length;
+  if (end > data.length) {
+    throw new Error('compact bytes out of range');
+  }
+  return {
+    value: data.slice(start, end),
+    nextOffset: end
+  };
+}
+
+function readCompactU32(data: Uint8Array, offset: number): [number, number] {
+  if (offset >= data.length) throw new Error('compact offset out of range');
+  const first = data[offset];
+  const mode = first & 0x03;
+  if (mode === 0) return [first >> 2, 1];
+  if (mode === 1) {
+    if (offset + 1 >= data.length) throw new Error('compact mode1 out of range');
+    return [(first >> 2) | (data[offset + 1] << 6), 2];
+  }
+  if (mode === 2) {
+    if (offset + 3 >= data.length) throw new Error('compact mode2 out of range');
+    return [
+      (first >> 2) |
+        (data[offset + 1] << 6) |
+        (data[offset + 2] << 14) |
+        (data[offset + 3] << 22),
+      4
+    ];
+  }
+  throw new Error('compact big integer mode is not supported');
+}
+
+function readU32Le(data: Uint8Array, offset: number): number {
+  return new DataView(data.buffer, data.byteOffset + offset, 4).getUint32(0, true);
+}
+
+function hex(bytes: Uint8Array): string {
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBytes(input: string): Uint8Array {
+  const text = input.startsWith('0x') ? input.slice(2) : input;
+  if (text.length % 2 !== 0) throw new Error('hex length must be even');
+  const out = new Uint8Array(text.length / 2);
+  for (let index = 0; index < out.length; index += 1) {
+    out[index] = Number.parseInt(text.slice(index * 2, index * 2 + 2), 16);
+  }
+  return out;
+}
+
+function utf8(bytes: Uint8Array): string {
+  return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+}
+
+function concat(chunks: Uint8Array[]): Uint8Array {
+  const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const out = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}

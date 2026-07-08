@@ -1,5 +1,6 @@
 import type {
   Env,
+  MediaAssetRow,
   PreparedUploadRow,
   SessionState,
   SquareFeedMediaItem,
@@ -10,9 +11,11 @@ import {
   decodeSquarePostPublishedEvents,
   type SquarePostPublishedEvent
 } from '../chain/square_event';
+import { deleteProviderAsset } from '../media/cloudflare_assets';
 import { HttpError, jsonResponse, readJson, requireSession } from '../shared/http';
 import { nowMs } from '../shared/time';
 import { sanitizeOwnerAccount } from '../storage/r2_keys';
+import { loadMediaAssets } from '../uploads/service';
 
 interface ConfirmRequest {
   post_id?: unknown;
@@ -48,6 +51,81 @@ export async function confirmPostRoute(request: Request, env: Env): Promise<Resp
   });
 }
 
+export async function deletePostRoute(request: Request, env: Env, rawPostId: string): Promise<Response> {
+  const session = await requireSession(request, env);
+  const postId = decodePostId(rawPostId);
+  const result = await deletePostCloudflareData(env, session, postId);
+  return jsonResponse({
+    ok: true,
+    post_id: postId,
+    post_state: 'deleted',
+    cleanup: result
+  });
+}
+
+export async function deletePostCloudflareData(
+  env: Env,
+  session: SessionState,
+  postId: string
+): Promise<{
+  deleted_media_assets: number;
+  deleted_r2_objects: number;
+  reclaimed_storage_bytes: number;
+}> {
+  if (postId.length === 0) {
+    throw new HttpError(400, 'invalid_post_id', '动态编号不合法');
+  }
+
+  const post = await loadPostForDelete(env, postId);
+  if (post.owner_account !== session.owner_account) {
+    throw new HttpError(403, 'post_owner_mismatch', '登录钱包与动态作者不一致');
+  }
+
+  const upload = await loadUploadForPost(env, postId);
+  const mediaAssets = upload ? await loadMediaAssets(env, upload.upload_id) : [];
+  const objectKeys = upload ? parseObjectKeys(upload) : [];
+
+  for (const asset of mediaAssets) {
+    await deleteProviderAsset(env, asset);
+  }
+  for (const objectKey of objectKeys) {
+    await env.SQUARE_MEDIA.delete(objectKey);
+  }
+
+  const deletedAt = nowMs();
+  const shouldReclaimStorage = post.post_state !== 'deleted' && upload !== null;
+  const reclaimedStorageBytes = shouldReclaimStorage ? Math.max(0, upload.estimated_bytes) : 0;
+  const statements = [
+    env.DB.prepare(
+      `UPDATE square_posts
+        SET post_state = 'deleted', title = NULL, text = ''
+        WHERE post_id = ? AND owner_account = ?`
+    ).bind(postId, session.owner_account)
+  ];
+
+  if (upload) {
+    statements.push(
+      env.DB.prepare('DELETE FROM square_media_assets WHERE upload_id = ?').bind(upload.upload_id)
+    );
+  }
+  if (shouldReclaimStorage) {
+    statements.push(
+      env.DB.prepare(
+        `UPDATE square_memberships
+          SET storage_used_bytes = MAX(0, storage_used_bytes - ?), updated_at = ?
+          WHERE owner_account = ?`
+      ).bind(reclaimedStorageBytes, deletedAt, session.owner_account)
+    );
+  }
+  await env.DB.batch(statements);
+
+  return {
+    deleted_media_assets: mediaAssets.length,
+    deleted_r2_objects: objectKeys.length,
+    reclaimed_storage_bytes: reclaimedStorageBytes
+  };
+}
+
 export async function confirmPublishedPost(
   env: Env,
   session: SessionState,
@@ -81,7 +159,7 @@ export async function confirmPublishedPost(
   }
   const manifest = await readManifest(env, manifestObjectKey);
   validateManifest(manifest, upload);
-  const mediaItems = manifestMediaItems(manifest, objectKeys);
+  const mediaItems = manifestMediaItems(manifest, await loadMediaAssets(env, upload.upload_id));
   const contentFormat = manifest.content_format === 'article' ? 'article' : 'normal';
   const title = typeof manifest.title === 'string' ? manifest.title : null;
   const createdAt = nowMs();
@@ -125,14 +203,15 @@ export async function confirmPublishedPost(
 }
 
 export async function buildFeedPostItem(env: Env, row: SquarePostFeedItem): Promise<SquarePostFeedItem> {
-  const objectKeys = await loadObjectKeysForPost(env, row.post_id);
+  const upload = await loadUploadForPost(env, row.post_id);
+  const objectKeys = upload ? parseObjectKeys(upload) : [];
   const manifestObjectKey =
     objectKeys.find((key) => key.endsWith('/manifest.json')) ??
     `square/${sanitizeOwnerAccount(row.owner_account)}/posts/${row.post_id}/manifest.json`;
   const manifest = await readManifest(env, manifestObjectKey).catch(() => null);
   return {
     ...row,
-    media_items: manifest ? manifestMediaItems(manifest, objectKeys) : []
+    media_items: manifest && upload ? manifestMediaItems(manifest, await loadMediaAssets(env, upload.upload_id)) : []
   };
 }
 
@@ -170,8 +249,8 @@ async function loadCompletedUpload(env: Env, postId: string): Promise<PreparedUp
   return upload;
 }
 
-async function loadObjectKeysForPost(env: Env, postId: string): Promise<string[]> {
-  const upload = await env.DB.prepare(
+async function loadUploadForPost(env: Env, postId: string): Promise<PreparedUploadRow | null> {
+  return env.DB.prepare(
     `SELECT upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
         storage_receipt_id, estimated_bytes, object_keys_json, status, created_at, completed_at
       FROM square_uploads
@@ -179,7 +258,29 @@ async function loadObjectKeysForPost(env: Env, postId: string): Promise<string[]
   )
     .bind(postId)
     .first<PreparedUploadRow>();
-  return upload ? parseObjectKeys(upload) : [];
+}
+
+async function loadPostForDelete(env: Env, postId: string): Promise<SquarePostFeedItem> {
+  const post = await env.DB.prepare(
+    `SELECT post_id, owner_account, cid_number, post_category, content_format, title,
+        text, content_hash, storage_receipt_id, chain_block, created_at, post_state
+      FROM square_posts
+      WHERE post_id = ?`
+  )
+    .bind(postId)
+    .first<SquarePostFeedItem>();
+  if (!post) {
+    throw new HttpError(404, 'post_not_found', '动态不存在');
+  }
+  return post;
+}
+
+function decodePostId(rawPostId: string): string {
+  try {
+    return decodeURIComponent(rawPostId).trim();
+  } catch {
+    throw new HttpError(400, 'invalid_post_id', '动态编号不合法');
+  }
 }
 
 function parseObjectKeys(row: PreparedUploadRow): string[] {
@@ -214,18 +315,32 @@ function validateManifest(manifest: SquarePostManifest, upload: PreparedUploadRo
 
 function manifestMediaItems(
   manifest: SquarePostManifest,
-  objectKeys: string[]
+  mediaAssets: MediaAssetRow[]
 ): SquareFeedMediaItem[] {
-  const mediaKeys = objectKeys.filter((key) => !key.endsWith('/manifest.json'));
   const items = Array.isArray(manifest.media_items) ? manifest.media_items : [];
-  return items.map((item, index) => ({
-    media_kind: item.media_kind === 'video' ? 'video' as const : 'image' as const,
-    object_key: mediaKeys[index] ?? '',
-    url: mediaKeys[index] ?? '',
-    content_type: item.content_type ?? 'application/octet-stream',
-    byte_size: item.byte_size ?? 0,
-    sha256: item.sha256 ?? ''
-  }));
+  return items.map((item, index) => {
+    const asset = mediaAssets[index];
+    const mediaKind = item.media_kind === 'video' ? 'video' as const : 'image' as const;
+    const primaryUrl = mediaKind === 'video'
+      ? asset?.playback_hls_url ?? asset?.delivery_url ?? ''
+      : asset?.delivery_url ?? '';
+    return {
+      media_kind: mediaKind,
+      object_key: asset?.provider_asset_id ?? '',
+      url: primaryUrl,
+      provider: asset?.provider ?? (mediaKind === 'video' ? 'cloudflare_stream' : 'cloudflare_images'),
+      provider_asset_id: asset?.provider_asset_id ?? '',
+      asset_state: asset?.asset_state ?? 'prepared',
+      playback_hls_url: asset?.playback_hls_url ?? null,
+      playback_dash_url: asset?.playback_dash_url ?? null,
+      content_type: item.content_type ?? asset?.content_type ?? 'application/octet-stream',
+      byte_size: item.byte_size ?? asset?.byte_size ?? 0,
+      sha256: item.sha256 ?? '',
+      duration_seconds: asset?.duration_seconds ?? null,
+      width: asset?.width ?? null,
+      height: asset?.height ?? null
+    };
+  });
 }
 
 function normalizeHash(value: string): string {

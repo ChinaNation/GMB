@@ -1,6 +1,6 @@
 /// 广场前端模型。
 ///
-/// 广场内容正文和媒体只进入 Worker/R2；链上只记录发布索引、内容哈希和
+/// 广场正文和 manifest 进入 Worker/R2，主媒体进入 Cloudflare Images / Stream；链上只记录发布索引、内容哈希和
 /// 存储回执，App 本地模型也按这条边界拆分展示态、上传态和发布态。
 enum SquareFeedKind {
   recommended('推荐', 'recommended'),
@@ -88,12 +88,14 @@ class SquareMediaItem {
     required this.url,
     this.coverUrl,
     this.byteSize,
+    this.assetState,
   });
 
   final SquareMediaKind mediaKind;
   final String url;
   final String? coverUrl;
   final int? byteSize;
+  final String? assetState;
 }
 
 class SquareLocalMediaDraft {
