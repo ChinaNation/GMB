@@ -743,7 +743,7 @@ score =
 - `citizenapp/lib/qr/`、`citizenapp/test/qr/`：删除 `im_node_pairing` 解析，补 `k=5` 拒绝测试。
 - `citizenapp/lib/my/user/user.dart`：删除“设置通信节点”设置入口。
 - `citizenchain/node/src/`、`citizenchain/node/frontend/settings/`、`citizenchain/scripts/`：删除节点 IM mailbox、通信节点开关、桌面二维码、Tauri 命令和双节点 smoke。
-- `memory/`、`website/src/whitepaper.md`：同步当前技术口径、协议登记和白皮书。
+- `memory/`、`citizenweb/src/whitepaper.md`：同步当前技术口径、协议登记和白皮书。
 - 本阶段不修改 `citizenchain/runtime/`。
 
 执行记录：

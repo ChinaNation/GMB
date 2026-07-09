@@ -46,21 +46,39 @@ const allocations = [
   },
 ]
 
-const economics = [
+type Economic = {
+  label: string
+  value?: string
+  units?: { k: string; v: string }[]
+}
+
+const economics: Economic[] = [
   { label: '代币符号', value: 'GMB' },
   { label: '代币名称', value: '公民币' },
-  { label: '基本单位', value: '元 (Yuan)' },
-  { label: '最小单位', value: '分 (Fen)' },
+  {
+    label: '货币单位',
+    units: [
+      { k: '基本单位', v: '元 (Yuan)' },
+      { k: '最小单位', v: '分 (Fen)' },
+    ],
+  },
   { label: '精度', value: '1 元 = 100 分' },
   { label: '固定发行合计', value: '2.23万亿 GMB' },
-  { label: '交易费率', value: '0.1% (最低 0.1 元)' },
+  { label: '链上交易费', value: '0.1% (最低 0.1 元)' },
+  { label: '链下交易费', value: '0.01%–0.1% (最低 0.01 元)' },
   { label: '最小存款', value: '1.11 元' },
 ]
 
-const feeDistribution = [
-  { name: '全节点奖励', share: '80%', desc: '出块全节点获得交易手续费的 80%' },
+// 链上交易手续费按 8:1:1 分账。
+const onchainFeeDistribution = [
+  { name: '全节点奖励', share: '80%', desc: '出块全节点获得链上交易手续费的 80%' },
   { name: '手续费账户', share: '10%', desc: '国家储委会手续费账户用于国家储委会运营' },
   { name: '安全基金', share: '10%', desc: '网络安全与应急储备基金' },
+]
+
+// 链下清算手续费全部归执行清算的清算行。
+const offchainFeeDistribution = [
+  { name: '清算行', share: '100%', desc: '链下清算手续费全部归实际执行清算的清算行节点所有' },
 ]
 
 export default function Tokenomics() {
@@ -73,7 +91,18 @@ export default function Tokenomics() {
           {economics.map((e) => (
             <div key={e.label} className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5">
               <div className="text-xs font-medium uppercase tracking-wider text-gold-400">{e.label}</div>
-              <div className="mt-2 text-sm font-semibold text-white">{e.value}</div>
+              {e.units ? (
+                <div className="mt-2 space-y-1.5">
+                  {e.units.map((u) => (
+                    <div key={u.k} className="flex items-baseline justify-between gap-2">
+                      <span className="text-xs text-slate-400">{u.k}</span>
+                      <span className="text-sm font-semibold text-white">{u.v}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm font-semibold text-white">{e.value}</div>
+              )}
             </div>
           ))}
         </div>
@@ -116,11 +145,32 @@ export default function Tokenomics() {
         <SectionTitle
           subtitle="手续费分配"
           title="交易费用分配机制"
-          description="交易手续费按 8:1:1 比例分配，激励全节点运营同时保障网络安全。"
+          description="链上交易手续费按 8:1:1 分配，激励全节点运营同时保障网络安全；链下清算手续费全部归执行清算的清算行。"
         />
+
+        {/* 链上交易手续费 */}
+        <div className="mb-6 flex items-baseline gap-3">
+          <h3 className="text-lg font-semibold text-white">链上交易手续费</h3>
+          <span className="text-sm text-slate-400">按 8:1:1 分配</span>
+        </div>
         <div className="grid gap-6 md:grid-cols-3">
-          {feeDistribution.map((f) => (
+          {onchainFeeDistribution.map((f) => (
             <GlowCard key={f.name} glow="blue" className="text-center">
+              <div className="mb-3 text-4xl font-extrabold text-gold-400">{f.share}</div>
+              <h3 className="mb-2 text-lg font-semibold text-white">{f.name}</h3>
+              <p className="text-sm text-slate-400">{f.desc}</p>
+            </GlowCard>
+          ))}
+        </div>
+
+        {/* 链下交易手续费 */}
+        <div className="mb-6 mt-14 flex items-baseline gap-3">
+          <h3 className="text-lg font-semibold text-white">链下交易手续费</h3>
+          <span className="text-sm text-slate-400">全部归清算行</span>
+        </div>
+        <div className="grid gap-6 md:grid-cols-3">
+          {offchainFeeDistribution.map((f) => (
+            <GlowCard key={f.name} glow="gold" className="text-center">
               <div className="mb-3 text-4xl font-extrabold text-gold-400">{f.share}</div>
               <h3 className="mb-2 text-lg font-semibold text-white">{f.name}</h3>
               <p className="text-sm text-slate-400">{f.desc}</p>

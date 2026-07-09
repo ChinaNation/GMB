@@ -271,15 +271,15 @@
 - 新增 `citizenapp/cloudflare/src/membership/checkout.ts`：官网创建 Stripe subscription Checkout Session；请求收 `owner_account` 与 `membership_level`，可选 Bearer session。带 session 时强制 owner 一致；投票 / 竞选会员创建 Checkout 前先查 `VotingIdentityByAccount` / `CandidateIdentityByAccount`，不满足则拒绝；访客会员不读链。
 - 新增 `citizenapp/cloudflare/test/membership_checkout.test.ts`：覆盖 visitor checkout、candidate 身份通过、candidate 身份不足、session owner mismatch、Stripe 错误透传。
 - 更新 `citizenapp/cloudflare/src/routes.ts`、`src/types.ts`、`wrangler.toml`：新增 `POST /v1/square/membership/stripe/checkout`，登记 `STRIPE_SECRET_KEY`、`STRIPE_DEV_CHECKOUT_PROXY`、`CITIZENAPP_MEMBERSHIP_SUCCESS_URL`、`CITIZENAPP_MEMBERSHIP_CANCEL_URL`；secret 只放部署环境。
-- 新增 `website/src/pages/Membership.tsx` 并更新官网路由 / 导航：官网 `/membership` 展示三档美元价格和权益，调用 Worker 创建 Stripe Checkout；官网不保存会员状态，不接触 Stripe secret。
+- 新增 `citizenweb/src/pages/Membership.tsx` 并更新官网路由 / 导航：官网 `/membership` 展示三档美元价格和权益，调用 Worker 创建 Stripe Checkout；官网不保存会员状态，不接触 Stripe secret。
 - 更新 `citizenapp/lib/8964/services/square_api_client.dart`：`fetchMembership` 解析 `plans[]`、链上身份、订阅状态、未生效原因，供 App 只读会员页展示。
 - 更新 `citizenapp/lib/my/user/user.dart`：在「我的」Tab 钱包和通讯录之间新增“会员”卡片；新增只读会员页，展示当前会员状态、链上身份、订阅状态、有效期和三档权益，不提供 App 内支付按钮。
-- 更新文档：`memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`、`memory/07-ai/unified-protocols.md`、`memory/05-modules/website/WEBSITE_TECHNICAL.md` 同步 Checkout API、官网会员页、App 会员入口、环境变量和安全边界。
+- 更新文档：`memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`、`memory/07-ai/unified-protocols.md`、`memory/05-modules/citizenweb/CITIZENWEB_TECHNICAL.md` 同步 Checkout API、官网会员页、App 会员入口、环境变量和安全边界。
 - 验收：
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test -- membership_checkout.test.ts membership.test.ts` 通过：2 个测试文件，13 个测试。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test` 通过：13 个测试文件，56 个测试。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run typecheck` 通过。
-  - `npm --prefix /Users/rhett/GMB/website run build` 通过。
+  - `npm --prefix /Users/rhett/GMB/citizenweb run build` 通过。
   - `flutter analyze citizenapp/lib/8964/services/square_api_client.dart citizenapp/lib/my/user/user.dart` 通过。
   - `flutter test --concurrency=1 test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart` 通过：6 个测试。
   - 真实本地 Worker HTTP 验收通过：`wrangler dev --local --port 8787 --var STRIPE_DEV_CHECKOUT_PROXY:1 ...` 启动后，`POST /v1/square/membership/stripe/checkout` 使用合法钱包账户和 `visitor` 返回 `checkout_session_id=cs_dev_visitor` 与官网成功回跳 URL。

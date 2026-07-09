@@ -64,7 +64,7 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   - CI：`.github/workflows/citizenwallet-ci.yml`
   - `push`:只做 Flutter analyze/test 与 Debug APK 检查构建,不读取 release keystore
   - 手动 `Run workflow`:读取同一个 `GMB_APP_KEY`,构建并上传正式 `公民钱包.apk`
-- `website`
+- `citizenweb`
   - 当前暂无专用 GitHub Actions，发布前在本地执行构建并部署静态产物
 
 ## 4. 当前结论

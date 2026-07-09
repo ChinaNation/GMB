@@ -11,7 +11,7 @@
 
 ## 所属模块
 
-citizenchain/registry、CitizenApp、CitizenWallet、website、memory 文档
+citizenchain/registry、CitizenApp、CitizenWallet、citizenweb、memory 文档
 
 ## 当前执行摘要
 
@@ -26,5 +26,5 @@ citizenchain/registry、CitizenApp、CitizenWallet、website、memory 文档
 
 - 非备份代码路径无旧授信、旧二维码导入、旧独立分类残留。
 - 有效架构文档、模块文档、AI 规则和 open 任务队列不再描述旧流程。
-- registry 前端、registry 后端、CitizenApp、CitizenWallet、website 可完成构建或静态检查。
+- registry 前端、registry 后端、CitizenApp、CitizenWallet、citizenweb 可完成构建或静态检查。
 - runtime 旧签名常量已按 runtime 二次确认规则完成清理。

@@ -16,7 +16,7 @@ GMB 是一套由公民链、公民、公民钱包、官方网站和 AI 驱动研
 - `citizenchain`：区块链 runtime、节点程序、节点 UI、桌面安装包和 OnChina 注册局身份能力
 - `citizenapp`：公民端在线钱包与业务入口
 - `citizenwallet`：公民钱包离线签名、扫码识别和签名响应
-- `website`：官方网站
+- `citizenweb`：官方网站
 - `memory`：AI 永久记忆中心
 
 ## 3. AI 开发目标

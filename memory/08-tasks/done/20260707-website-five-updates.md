@@ -10,12 +10,12 @@
 
 ## 建议模块
 
-- 全部在 `website/`（React 19 + Vite + Tailwind v4），无链端改动：
-  - `website/src/pages/Tokenomics.tsx`（需求 1）
-  - `website/src/pages/Membership.tsx` + 新增扫码组件（需求 2）
-  - `website/src/pages/Governance.tsx`（需求 3）
-  - `website/src/pages/Ecosystem.tsx`、`website/src/components/Header.tsx`、`Footer.tsx`、`website/src/pages/Home.tsx`（需求 4）
-  - `website/src/pages/Ecosystem.tsx` 安全板块（需求 5）
+- 全部在 `citizenweb/`（React 19 + Vite + Tailwind v4），无链端改动：
+  - `citizenweb/src/pages/Tokenomics.tsx`（需求 1）
+  - `citizenweb/src/pages/Membership.tsx` + 新增扫码组件（需求 2）
+  - `citizenweb/src/pages/Governance.tsx`（需求 3）
+  - `citizenweb/src/pages/Ecosystem.tsx`、`citizenweb/src/components/Header.tsx`、`Footer.tsx`、`citizenweb/src/pages/Home.tsx`（需求 4）
+  - `citizenweb/src/pages/Ecosystem.tsx` 安全板块（需求 5）
 
 ## 影响范围
 
@@ -39,7 +39,7 @@
 
 ## 输出物
 
-- 代码（website/src 各页面 + 扫码组件）
+- 代码（citizenweb/src 各页面 + 扫码组件）
 - 中文注释
 - `npm run build` 通过 + 页面视觉核验（320/768/1280 断点）
 - 文档回写（本卡 + memory 相关）
@@ -56,7 +56,7 @@
 
 - 五条需求全部落地并在本地预览逐项核验（DOM 坐标级验证布局、点击验证弹层）：
   1. Tokenomics Hero 板块删除（含金色分隔线），宪法句替换发行分配方案描述。
-  2. 会员卡文案改「认证投票公民 / 认证选举公民」；地址输入框右侧新增取景框+横线扫码图标；新建 `website/src/components/QrScannerModal.tsx`（jsqr + getUserMedia），识别后提取 base58 地址回填，非地址二维码给出明确提示。
+  2. 会员卡文案改「认证投票公民 / 认证选举公民」；地址输入框右侧新增取景框+横线扫码图标；新建 `citizenweb/src/components/QrScannerModal.tsx`（jsqr + getUserMedia），识别后提取 base58 地址回填，非地址二维码给出明确提示。
   3. 治理页四卡 `md:grid-cols-3`→`md:grid-cols-2`，2×2 排布（上：内部|联合，下：立法|选举）已实测坐标确认。
   4. 导航「产品体系」移至公民币经济与会员订阅之间；三大核心系统=公民（按 citizenapp 现状重写）/ CitizenWallet 公民钱包（内容保持，改名）/ 公民链（整行卡，介绍 runtime/node/onchina）；Footer、首页 CTA、页面 Hero 副标题同步，全站无旧标签残留。
   5. 安全板块 4 卡（新增 ML-DSA-65 抗量子升级卡，口径为「升级路线已定稿」）；顺手修正 AES-256 卡过时的「省级签名密钥」表述。

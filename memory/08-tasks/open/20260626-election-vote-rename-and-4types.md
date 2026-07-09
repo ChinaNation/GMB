@@ -7,7 +7,7 @@
   3. 立法投票 legislation-vote：仅立法机构修法表决（市自治会/市教委会/市立法会/省联邦立法院参议会和众议会/国家立法院参议会和众议会/国家教委会）
   4. 选举投票 election-vote：选举公职人员=普选（公民选）+互选（机构成员互选）
 - 独立选举 pallet 统一为 `election-vote`（crate/目录/标识符/construct_runtime `ElectionVote` idx24；历史空骨架已接入选举框架）
-- 白皮书 5.2 + 官网 website（Governance.tsx/Technology.tsx）同步四种投票，CitizenApp 只描述为投票交互入口
+- 白皮书 5.2 + 官网 citizenweb（Governance.tsx/Technology.tsx）同步四种投票，CitizenApp 只描述为投票交互入口
 - 修残留：旧 HTML 解析脚本 OUT 路径 governance/legislation-yuan → public/legislation-yuan
 - 2026-06-28 追加：`election-vote` 已从空骨架接入普选/互选框架，新增候选人/选民快照、投票、计票、超时结算、终态回调和清理状态机。
 
@@ -32,4 +32,4 @@
 - `election-vote/src/snapshot.rs`：候选人/选民快照校验与写入。
 - `election-vote/src/cleanup.rs`：选举账本分块清理。
 - 2026-07-04：按用户确认追加收口 runtime 核心旧描述；旧清理阶段名改为 `JointReferendumVotes`，internal-vote 测试辅助和测试名改为 joint_referendum 语义。
-- 2026-07-04：同步 OnChina、CitizenApp、website、memory 当前文档，把旧独立投票类型描述改为四类投票、联合公投或立法公投。
+- 2026-07-04：同步 OnChina、CitizenApp、citizenweb、memory 当前文档，把旧独立投票类型描述改为四类投票、联合公投或立法公投。

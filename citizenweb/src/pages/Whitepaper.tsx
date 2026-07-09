@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import whitepaperMarkdown from '../whitepaper.md?raw'
 
-// 白皮书正文归入 website/src/whitepaper.md；图片仍通过 Vite glob 打包 docs/assets/*，
+// 白皮书正文归入 citizenweb/src/whitepaper.md；图片仍通过 Vite glob 打包 docs/assets/*，
 // 渲染前把 markdown 里的 ./assets/<file> 替换成打包 URL（保证线上能加载，
 // 同时保留现有白皮书图片资源目录）。
 const whitepaperAssetUrls = import.meta.glob('../../../docs/assets/*', {

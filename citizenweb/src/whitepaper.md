@@ -7,7 +7,7 @@
 
   [1.1. 目的](#11目的)
   [1.2. 名称](#12名称)
-  [1.3. 发行机构](#13发行机构)
+  [1.3. 发行方](#13发行方)
   [1.4. 发行量](#14发行量)
   [1.5. 创世理念](#15创世理念)
   [1.6. 去中心化](#16去中心化)
@@ -129,9 +129,9 @@
 | 参选范围                | candidacy scope                               | 公民按出生地参与被选举或出生地类选举的地域范围        |
 ```
 
-## 1.3.发行机构<br><span class="whitepaper-heading-en">1.3. Issuing Institution</span>
+## 1.3.发行方<br><span class="whitepaper-heading-en">1.3. Issuer</span>
 
-* 发行机构为国家储委会（National Reserve Committee）；<br><span class="whitepaper-en">The issuing institution is the National Reserve Committee.</span>
+* 发行方为中华民族联邦共和国公民储备委员会联合会议；<br><span class="whitepaper-en">The issuer is the Joint Meeting of the Citizen Reserve Committee of the Federal Republic of the China Nation.</span>
 * 依据《公民宪法》储委会体系由1个国家储委会、43个省储委会和43个省储行组成。<br><span class="whitepaper-en">Pursuant to the Citizen Constitution, the Reserve Committee system consists of one National Reserve Committee, 43 Provincial Reserve Committees, and 43 Provincial Reserve Banks.</span>
 
 ## 1.4.发行量<br><span class="whitepaper-heading-en">1.4. Issuance Amount</span>
@@ -369,7 +369,7 @@ GMB/
 │         └── primitives/        # 公共常量、类型和创世参数
 ├── citizenapp/                  # 公民，热钱包、轻节点、投票交互、通信和支付入口
 ├── citizenwallet/               # 公民钱包，离线冷钱包和扫码签名工具
-└── website/                     # 官网与白皮书展示
+└── citizenweb/                     # 官网与白皮书展示
 ```
 
 <span class="whitepaper-en">English architecture map:</span>
@@ -382,7 +382,7 @@ GMB/
 │   └── runtime/                 # On-chain runtime for issuance, governance, voting, entities, admins, and citizen identity
 ├── citizenapp/                  # CitizenApp, online light node and hot wallet
 ├── citizenwallet/               # CitizenWallet, offline cold wallet and QR signing tool
-└── website/                     # Official website and whitepaper presentation
+└── citizenweb/                     # Official citizenweb and whitepaper presentation
 ```
 
 ****

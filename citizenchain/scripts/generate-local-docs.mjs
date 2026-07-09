@@ -13,7 +13,7 @@ const sources = [
   {
     key: 'whitepaper',
     title: '白皮书',
-    sourcePath: 'website/src/whitepaper.md',
+    sourcePath: 'citizenweb/src/whitepaper.md',
     // 白皮书正文迁入官网源码目录后，图片仍沿用 docs/assets 资源目录。
     assetFallbackRoots: ['docs'],
   }

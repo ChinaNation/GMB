@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import flagEmblem from '../assets/flag-emblem.png'
 
 export default function Footer() {
   return (
@@ -7,12 +8,14 @@ export default function Footer() {
         <div className="grid gap-12 md:grid-cols-4">
           <div className="md:col-span-2">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 text-lg font-bold text-navy-950">
-                G
-              </div>
+              <img
+                src={flagEmblem}
+                alt="中华民族联邦共和国国徽"
+                className="h-10 w-10 rounded-full object-cover ring-1 ring-white/15"
+              />
               <div>
-                <div className="text-sm font-semibold text-white">公民区块链</div>
-                <div className="text-[10px] tracking-wider text-gold-400">CITIZENCHAIN</div>
+                <div className="text-sm font-semibold text-white">中华民族联邦共和国</div>
+                <div className="text-xs tracking-wider text-gold-400">公民储备委员会</div>
               </div>
             </div>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-400">
@@ -35,9 +38,9 @@ export default function Footer() {
           <div>
             <h4 className="mb-4 text-sm font-semibold tracking-wider text-gold-400">产品体系</h4>
             <ul className="space-y-2 text-sm">
-              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">公民</Link></li>
+              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">CitizenApp 公民</Link></li>
               <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">CitizenWallet 公民钱包</Link></li>
-              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">公民链</Link></li>
+              <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">CitizenChain 公民链</Link></li>
             </ul>
           </div>
         </div>

@@ -18,7 +18,7 @@
 
 - 统一提供“白皮书 / 公民宪法 / 公民党”三个标签页的内容配置。
 - 将前端展示项抽象为结构化数据，避免在前端硬编码多个来源。
-- 白皮书正文只允许来自 `website/src/whitepaper.md`。
+- 白皮书正文只允许来自 `citizenweb/src/whitepaper.md`。
 - 公民宪法正文唯一真源 = 链上立法院模块（`legislation-yuan`，`law_id=0`、`tier=宪法`，
   ADR-027）；节点通过 RAW storage 读取当前生效版本的结构化法律（章>节>条>款 + 中英双语），
   在 `node/src/core/constitution.rs` 据原 CSS 外壳重建 HTML；修改宪法走立法投票上链，不再发 runtime 升级改 HTML。
@@ -51,7 +51,7 @@
 
 ## 4. 当前内容来源
 
-- 白皮书：`website/src/whitepaper.md`
+- 白皮书：`citizenweb/src/whitepaper.md`
 - 公民宪法：链上立法院模块（`legislation-yuan`，`law_id=0`），节点据结构化法律重建 HTML
 - 公民党：占位文本（待接入）
 

@@ -6,7 +6,7 @@
 
 ## 影响范围
 
-- `website/src/whitepaper.md`
+- `citizenweb/src/whitepaper.md`
   - 白皮书唯一真源，更新中英文正文、节点模式、移除节点通信能力表述、链上中国启停能力和国家储委会创世账户表述。
 - 本任务卡
   - 记录本次文档修改范围、执行步骤和验收结果。
@@ -29,7 +29,7 @@
 
 ## 验收记录
 
-- `rg -n '通信全节点|三种模式|3种模式|旧版|以前|不再使用旧版|communication full node|communication full-node|communication full nodes|three modes|old NRC|no longer used|legacy' website/src/whitepaper.md`
+- `rg -n '通信全节点|三种模式|3种模式|旧版|以前|不再使用旧版|communication full node|communication full-node|communication full nodes|three modes|old NRC|no longer used|legacy' citizenweb/src/whitepaper.md`
   - 无输出，表示白皮书中已无本次目标残留关键词。
 - `npm run build`
   - 通过，TypeScript 构建检查和 Vite 生产构建均成功。

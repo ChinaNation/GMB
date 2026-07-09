@@ -3,7 +3,7 @@ import GlowCard from '../components/GlowCard'
 
 const systems = [
   {
-    name: '公民',
+    name: 'CitizenApp 公民',
     subtitle: 'CitizenApp 公民移动客户端',
     desc: '面向全体公民的移动端应用，公民的链上生活入口：CID 身份与投票凭证、治理投票与选举立法参与、机构与个人多签账户管理、公民广场与加密聊天。',
     features: [
@@ -38,9 +38,9 @@ const systems = [
     fullWidth: false,
   },
   {
-    name: '公民链',
-    subtitle: 'CitizenChain · runtime / node / onchina 三大版本',
-    desc: '公民链软件由三大版本组成：runtime 链上运行时承载公民身份、四类投票引擎、货币发行、立法与选举等全部业务规则；node 全节点桌面端负责 PoW 出块、GRANDPA 最终性与可视化节点运维；onchina 机构统一控制台面向公权机构提供 CID 颁发、公民与机构档案和立法表决操作台。',
+    name: 'CitizenChain 公民链',
+    subtitle: 'CitizenChain · runtime / 运行时协议、node / 节点程序、onchina / 链上中国',
+    desc: '公民链软件由统一运行时协议、节点程序、链上中国平台组成：runtime 链上运行时承载公民身份、四类投票引擎、货币发行、立法与选举等全部业务规则；node 全节点桌面端负责 PoW 出块、GRANDPA 最终性与可视化节点运维；onchina 链上中国为所有机构提供链上操作平台，注册局 CID 颁发、立法提案表决、公权机构选举、企业内部治理等。',
     features: [
       'runtime · PoW + GRANDPA 共识',
       'runtime · 四类投票引擎',

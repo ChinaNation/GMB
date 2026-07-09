@@ -6,7 +6,7 @@
 
 ## 目标
 
-- 将白皮书移动到 `website/src/whitepaper.md`，让白皮书归入官网源码目录维护。
+- 将白皮书移动到 `citizenweb/src/whitepaper.md`，让白皮书归入官网源码目录维护。
 - 删除白皮书中的“文库”“脚本库”和归档 `citizenpassport` 旧描述。
 - 按仓库真实实现更新发行量、节点、运行时、链上中国、公民、公民钱包等章节。
 - 官网首页、技术页、生态页、Tokenomics 页同步展示真实发行量和链上中国核心卖点。
@@ -29,10 +29,10 @@
 
 ## 执行记录
 
-- 已将白皮书真源从 `docs/《白皮书》.md` 移动到 `website/src/whitepaper.md`。
+- 已将白皮书真源从 `docs/《白皮书》.md` 移动到 `citizenweb/src/whitepaper.md`。
 - 已删除白皮书中的“文库”“脚本库”和归档 `citizenpassport` 旧描述。
 - 已按真实发行规则把固定发行合计统一为 `2,229,386,218,778.00 GMB`。
 - 已在官网首页、技术页、生态页、代币经济页和白皮书中补充链上中国、立法、选举、私权机构、法律文库等展示内容。
-- 已执行 `npm --prefix website run build`，构建通过。
+- 已执行 `npm --prefix citizenweb run build`，构建通过。
 - 已启动本地预览服务并访问 `/`、`/technology`、`/ecosystem`、`/tokenomics`、`/whitepaper`，关键文案均真实渲染。
 - 已执行残留搜索，官网和新白皮书不再命中旧白皮书路径、旧发行量、`cid-system`、文库/脚本库章节等目标残留。

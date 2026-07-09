@@ -11,7 +11,7 @@ OnChina 不是第五个产品。仓库产品只保留：
 - 公民 `citizenapp`
 - 公民链 `citizenchain`
 - 公民钱包 `citizenwallet`
-- 官方网站 `website`
+- 官方网站 `citizenweb`
 
 ### 1.1 与 CitizenApp 边缘架构的边界
 

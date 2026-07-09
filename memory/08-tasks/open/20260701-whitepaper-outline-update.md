@@ -8,9 +8,9 @@
 
 ## 修改范围
 
-- `website/src/whitepaper.md`：白皮书正文唯一真源。
+- `citizenweb/src/whitepaper.md`：白皮书正文唯一真源。
 - `README.md`：仓库快速入口中的白皮书/公民宪法真源路径说明。
-- `memory/05-modules/website/WEBSITE_TECHNICAL.md`：官网白皮书维护记录。
+- `memory/05-modules/citizenweb/CITIZENWEB_TECHNICAL.md`：官网白皮书维护记录。
 - `citizenchain/scripts/generate-local-docs.mjs`：节点桌面端内置白皮书生成脚本，读取新白皮书真源并兼容 `docs/assets/` 图片资源。
 - `citizenchain/node/frontend/generated/local-docs.generated.ts`：节点桌面端本地白皮书生成物。
 - `memory/05-modules/citizenchain/node/`：节点桌面端白皮书真源路径说明。
@@ -40,6 +40,6 @@
 - 节点桌面端前端构建通过：`npm run build` 已通过。
 - 节点桌面端前置开发命令通过：`npm run dev` 已启动到 Vite ready，已手动停止临时 dev server。
 - Git 提交只包含本次白皮书相关改动，不混入其他线程的工作区改动。
-- 补充修复验收：`website` 构建、节点桌面端 `generate:docs` 与前端构建均已通过；国家储委会历史 CID、历史账户和历史创世分配口径已做残留搜索。
-- 2026-07-02 二次验收：`npm --prefix website run build`、`npm --prefix citizenchain/node/frontend run build`、`git diff --check` 均通过；脚本确认白皮书和节点端生成文档无 3.0 总览、旧民主表述和旧国家储委会四账户创世写入句。
-- 2026-07-02 第 1 章标题层级验收：白皮书和节点端生成文档均无 `1.2.1`、旧 `1.3 发行`、旧 `1.3.1/1.3.2`、旧 `1.4/1.5` 标题残留；术语正文和术语表保留；`npm --prefix website run build`、`npm --prefix citizenchain/node/frontend run build`、`git diff --check` 均通过。
+- 补充修复验收：`citizenweb` 构建、节点桌面端 `generate:docs` 与前端构建均已通过；国家储委会历史 CID、历史账户和历史创世分配口径已做残留搜索。
+- 2026-07-02 二次验收：`npm --prefix citizenweb run build`、`npm --prefix citizenchain/node/frontend run build`、`git diff --check` 均通过；脚本确认白皮书和节点端生成文档无 3.0 总览、旧民主表述和旧国家储委会四账户创世写入句。
+- 2026-07-02 第 1 章标题层级验收：白皮书和节点端生成文档均无 `1.2.1`、旧 `1.3 发行`、旧 `1.3.1/1.3.2`、旧 `1.4/1.5` 标题残留；术语正文和术语表保留；`npm --prefix citizenweb run build`、`npm --prefix citizenchain/node/frontend run build`、`git diff --check` 均通过。

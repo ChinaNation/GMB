@@ -15,7 +15,7 @@ GMB/
   citizenchain/
   citizenwallet/
   citizenapp/
-  website/
+  citizenweb/
   docs/
   scripts/
   AGENTS.md
@@ -35,7 +35,7 @@ GMB/
 - `citizenchain/`：公民链产品，包含区块链 runtime、节点程序、节点桌面 UI、打包发布和 OnChina 内置注册局能力
 - `citizenwallet/`：公民钱包，负责离线签名、扫码识别和钱包 UI
 - `citizenapp/`：公民，负责公民端钱包、治理、投票和链上状态展示
-- `website/`：GMB 官网前端工程，当前使用 React + TypeScript + Vite 构建静态站点
+- `citizenweb/`：GMB 官网前端工程，当前使用 React + TypeScript + Vite 构建静态站点
 - `docs/`：静态发布文档和展示资产，不承载系统权威记忆
 - `scripts/`：仓库级脚本、生成器和自动化工具
 
@@ -179,8 +179,8 @@ GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
   - `.github/workflows/citizenapp-ci.yml`
 - `citizenwallet`
   - `.github/workflows/citizenwallet-ci.yml`
-- `website`
-  - 当前暂无专用 GitHub Actions，官网发布前需在本地执行 `npm run build` 并部署 `website/dist/`
+- `citizenweb`
+  - 当前暂无专用 GitHub Actions，官网发布前需在本地执行 `npm run build` 并部署 `citizenweb/dist/`
 
 补充说明：
 

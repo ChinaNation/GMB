@@ -3,9 +3,9 @@ import GlowCard from '../components/GlowCard'
 
 const stats = [
   { value: '2.23万亿', label: '固定发行合计 (GMB)', suffix: '' },
-  { value: '44', label: '权威节点（国家储委会+省储委会）', suffix: '' },
-  { value: '43', label: '权益节点（省储行）', suffix: '' },
-  { value: '4', label: '链上投票体系', suffix: '' },
+  { value: '44个', label: '权威节点（国家储委会+省储委会）', suffix: '' },
+  { value: '43个', label: '权益节点（省储行）', suffix: '' },
+  { value: '4类', label: '投票引擎', suffix: '' },
 ]
 
 const features = [
@@ -25,7 +25,7 @@ const features = [
       </svg>
     ),
     title: '链上中国平台',
-    desc: '节点内置注册与治理平台，承接公民档案、机构注册、管理员登录和链上身份提交',
+    desc: '区块链系统的链上中国平台，承接公民档案、机构注册、链上身份提交、立法提案、选举提案等链下上链业务',
   },
   {
     icon: (
@@ -51,7 +51,7 @@ const features = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
       </svg>
     ),
-    title: '选举与投票引擎',
+    title: '投票引擎',
     desc: '内部投票、联合投票、立法投票、选举投票统一由链上投票引擎管理',
   },
   {
@@ -61,7 +61,7 @@ const features = [
       </svg>
     ),
     title: '私权机构注册',
-    desc: '个体经营、合伙企业、股权公司、股份公司、公益组织和注册协会统一注册上链',
+    desc: '个体经营、合伙企业、股权公司、股份公司、公益组织和注册协会等社会私权机构由链上中国平台注册局注册上链',
   },
 ]
 

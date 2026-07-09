@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import flagEmblem from '../assets/flag-emblem.png'
 
 const navItems = [
   { path: '/', label: '首页' },
@@ -20,12 +21,14 @@ export default function Header() {
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-navy-950/80 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <Link to="/" className="flex items-center gap-3 no-underline">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 text-lg font-bold text-navy-950">
-            G
-          </div>
+          <img
+            src={flagEmblem}
+            alt="中华民族联邦共和国国徽"
+            className="h-10 w-10 rounded-full object-cover ring-1 ring-white/15"
+          />
           <div className="hidden sm:block">
-            <div className="text-base font-semibold tracking-wide text-white">公民区块链</div>
-            <div className="text-[10px] tracking-wider text-gold-400">CITIZENCHAIN</div>
+            <div className="text-base font-semibold tracking-wide text-white">中华民族联邦共和国</div>
+            <div className="text-xs tracking-wider text-gold-400">公民储备委员会</div>
           </div>
         </Link>
 

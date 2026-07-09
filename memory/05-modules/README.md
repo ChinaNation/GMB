@@ -7,7 +7,7 @@
 - `citizenchain` 模块文档
 - `citizenapp` 模块文档
 - `citizenwallet` 模块文档
-- `website` 官网模块文档
+- `citizenweb` 官网模块文档
 
 ## 规则
 
@@ -22,4 +22,4 @@
 - `memory/05-modules/citizenchain/onchina/`
 - `memory/05-modules/citizenapp/`
 - `memory/05-modules/citizenwallet/`
-- `memory/05-modules/website/`
+- `memory/05-modules/citizenweb/`

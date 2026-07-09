@@ -114,7 +114,7 @@ export default function Governance() {
 
       {/* Three Tiers */}
       <section className="mx-auto max-w-7xl px-6 py-24">
-        <SectionTitle subtitle="投票分类" title="四种投票体系" />
+        <SectionTitle subtitle="投票分类" title="投票引擎" />
         <div className="grid gap-8 md:grid-cols-2">
           {votingTiers.map((v) => (
             <GlowCard key={v.name} glow="gold" className="flex flex-col">

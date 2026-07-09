@@ -106,7 +106,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenapp/lib/im/transport/` | citizenapp 信息传输 | citizenapp-im-transport | Cloudflare 密文 mailbox 传输、近场传输、自动路由和去重；旧通信节点传输已删除 |
 | `citizenapp/android/im/` | Android 信息近场 | android-im | citizenapp Android 近场通信原生模块，优先承载 Nearby Connections 或 Wi-Fi Direct 接入 |
 | `citizenapp/ios/im/` | iOS 信息近场 | ios-im | citizenapp iOS 近场通信原生模块，承载 Multipeer Connectivity 接入 |
-| `website/` | 官网 | website | GMB 官网前端工程 |
+| `citizenweb/` | 官网 | citizenweb | GMB 官网前端工程 |
 | `docs/` | 文库 | docs | 白皮书唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
 | `citizenchain/runtime/public/legislation-yuan/` | 立法院模块 | legislation-yuan | 公民宪法唯一真源（`law_id=0`、`tier=宪法`，创世注入 `constitution.scale` + 立法投票修订）；所有法律统一章>节>条>款，展示端从链上结构化法律重建 HTML（ADR-027） |
 | `scripts/` | 脚本 | scripts | 仓库级脚本工具、生成器和自动化脚本 |
@@ -357,7 +357,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 |---|---|---|---|
 | `memory/05-modules/citizenchain/` | 公民链模块文档 | citizenchain-module-docs | citizenchain runtime、node、桌面端模块文档 |
 | `memory/05-modules/citizenchain/onchina/` | OnChina 模块文档 | onchina-module-docs | OnChina 后端、前端和业务模块文档 |
-| `memory/05-modules/website/` | 官网模块文档 | website-module-docs | 官网模块文档 |
+| `memory/05-modules/citizenweb/` | 官网模块文档 | citizenweb-module-docs | 官网模块文档 |
 | `memory/05-modules/citizenapp/` | citizenapp 模块文档 | citizenapp-module-docs | citizenapp 移动端模块文档 |
 | `memory/05-modules/citizenapp/governance/` | citizenapp 治理 | citizenapp-governance | 移动端治理流程文档 |
 | `memory/05-modules/citizenapp/transaction/offchain-transaction/` | citizenapp 链下交易 | citizenapp-offchain-transaction-docs | 移动端链下交易文档 |

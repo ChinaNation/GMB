@@ -38,7 +38,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 白皮书页直接渲染 website/src/whitepaper.md，这里只约束官网阅读版式。 */
+/* 白皮书页直接渲染 citizenweb/src/whitepaper.md，这里只约束官网阅读版式。 */
 .whitepaper-page {
   color: #dbe4f0;
   font-family: "Noto Sans SC", system-ui, -apple-system, sans-serif;

@@ -19,7 +19,7 @@
 - `citizenchain/node/frontend/`：声明前端运行基线为 Node.js 24。
 - `citizenpassport/frontend/`：声明前端运行基线为 Node.js 24。
 - `citizencode/frontend/`：声明前端运行基线为 Node.js 24。
-- `website/`：声明前端运行基线为 Node.js 24。
+- `citizenweb/`：声明前端运行基线为 Node.js 24。
 - `memory/05-modules/citizenchain/node/`：同步桌面端跨平台构建文档。
 
 ## 主要风险点

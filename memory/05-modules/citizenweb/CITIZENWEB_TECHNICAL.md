@@ -2,11 +2,11 @@
 
 ## 1. 模块定位
 
-`website/` 是 GMB 官网前端工程，用于对外展示公民区块链与项目基础信息。
+`citizenweb/` 是 GMB 官网前端工程，用于对外展示公民区块链与项目基础信息。
 
 该模块只负责公开官网页面、白皮书展示和 CitizenApp 会员订阅发起页，不承载 CitizenChain、链上中国、CitizenApp 或 CitizenWallet 的信任根逻辑。
 
-白皮书唯一真源位于 `website/src/whitepaper.md`，官网白皮书页通过 Vite raw import 读取该文件；白皮书图片资源继续通过官网构建流程打包展示。
+白皮书唯一真源位于 `citizenweb/src/whitepaper.md`，官网白皮书页通过 Vite raw import 读取该文件；白皮书图片资源继续通过官网构建流程打包展示。
 
 ## 2. 当前技术栈
 
@@ -14,13 +14,13 @@
 - 类型系统：TypeScript
 - 构建工具：Vite
 - 样式：Tailwind CSS Vite 插件与本地 CSS
-- 生产产物目录：`website/dist/`
-- 白皮书正文：`website/src/whitepaper.md`
-- 会员订阅页：`website/src/pages/Membership.tsx`
+- 生产产物目录：`citizenweb/dist/`
+- 白皮书正文：`citizenweb/src/whitepaper.md`
+- 会员订阅页：`citizenweb/src/pages/Membership.tsx`
 
 ## 3. 本地构建
 
-在 `website/` 目录执行：
+在 `citizenweb/` 目录执行：
 
 ```bash
 npm run build
@@ -41,7 +41,7 @@ npm run build
 
 - 2026-07-01：白皮书运行时章节按当前模块边界重排为投票引擎、治理模组、管理员模组、公权业务模组、实体模组、发行模组、交易模组和其他模组。
 - 2026-07-01：节点章节拆为节点简介、治理机构、链下清算行；链上中国章节拆为链上中国简介、注册局、链上立法、链上选举。
-- 后续更新白皮书时，应继续以 `website/src/whitepaper.md` 为唯一正文真源，并保持目录锚点与正文标题同步。
+- 后续更新白皮书时，应继续以 `citizenweb/src/whitepaper.md` 为唯一正文真源，并保持目录锚点与正文标题同步。
 
 ## 4. 线上部署口径
 
@@ -50,20 +50,20 @@ npm run build
 推荐标准流程：
 
 1. 本地执行 `npm run build`。
-2. 确认 `website/dist/` 内生成 `index.html`、`assets/`、`favicon.svg`、`icons.svg`。
+2. 确认 `citizenweb/dist/` 内生成 `index.html`、`assets/`、`favicon.svg`、`icons.svg`。
 3. 通过 SSH 登录官网服务器。
 4. 备份当前 Nginx 静态根目录。
-5. 上传并替换为 `website/dist/` 产物。
+5. 上传并替换为 `citizenweb/dist/` 产物。
 6. 执行 `nginx -t` 与 `systemctl reload nginx`。
 7. 使用 `curl -I http://64.181.239.233` 和浏览器访问验证。
 
 ## 5. 2026-04-30 发布记录
 
 - 本地 `npm run build` 已通过。
-- 产物入口为 `website/dist/index.html`。
+- 产物入口为 `citizenweb/dist/index.html`。
 - 生成的主要资源为：
-  - `website/dist/assets/index-CyL55-iR.js`
-  - `website/dist/assets/index-C4uOHj7J.css`
+  - `citizenweb/dist/assets/index-CyL55-iR.js`
+  - `citizenweb/dist/assets/index-C4uOHj7J.css`
 - 服务器使用 releases/current 部署结构：
   - 新 release：`/var/www/crcfrcn/releases/20260430-122742`
   - 当前指针：`/var/www/crcfrcn/current`
