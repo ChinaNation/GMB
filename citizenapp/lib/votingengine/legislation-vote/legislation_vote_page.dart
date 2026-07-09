@@ -110,8 +110,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
       _state?.status == LegProposalStatus.voting &&
       _state?.stage != LegStage.referendum;
 
-  bool get _canAct =>
-      _isVotingStage && !_submitting && _selectedWallet != null;
+  bool get _canAct => _isVotingStage && !_submitting && _selectedWallet != null;
 
   Future<void> _act(bool approve) async {
     final wallet = _selectedWallet;
@@ -120,7 +119,8 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
     setState(() => _submitting = true);
     try {
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
-      final balance = await ChainRpc().fetchFinalizedBalance(_normalize0x(wallet.pubkeyHex));
+      final balance = await ChainRpc()
+          .fetchFinalizedBalance(_normalize0x(wallet.pubkeyHex));
       if (balance <= 0) {
         throw StateError('当前钱包余额不足，无法支付链上手续费');
       }
@@ -128,11 +128,10 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
       WalletManager? hot;
       if (wallet.isHotWallet) {
         hot = WalletManager();
-        await hot.authenticateForSigning();
       }
       Future<Uint8List> signCallback(Uint8List payload) async {
         if (hot != null) {
-          return hot.signWithWalletNoAuth(wallet.walletIndex, payload);
+          return hot.signWithWallet(wallet.walletIndex, payload);
         }
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(
@@ -291,7 +290,8 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        ProposalStatusBadge(status: state.status, proposalId: widget.proposalId),
+        ProposalStatusBadge(
+            status: state.status, proposalId: widget.proposalId),
         const SizedBox(height: 16),
         _infoCard(state, meta),
         const SizedBox(height: 12),
@@ -322,8 +322,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
               const SizedBox(height: 6),
               _kv('表决类型', _voteTypeLabel(meta.voteType)),
               const SizedBox(height: 6),
-              _kv('院序列',
-                  meta.houses.map((h) => h.code).join(' → ')),
+              _kv('院序列', meta.houses.map((h) => h.code).join(' → ')),
               if (meta.needsGuard) ...[
                 const SizedBox(height: 6),
                 _kv('修宪', '通过后需护宪大法官终审'),
@@ -355,8 +354,8 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
                     fontWeight: FontWeight.w700,
                     color: AppTheme.primaryDark)),
             Text('赞成 ${t.yes}　反对 ${t.no}',
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600)),
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -373,7 +372,8 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
       ),
       child: const Text(
         '特别案需立法公投表决。请在「立法投票」入口凭 CID 资格参与，本页仅展示进度。',
-        style: TextStyle(fontSize: 13, height: 1.5, color: AppTheme.textSecondary),
+        style:
+            TextStyle(fontSize: 13, height: 1.5, color: AppTheme.textSecondary),
       ),
     );
   }
@@ -385,12 +385,14 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
         SizedBox(
           width: 72,
           child: Text(k,
-              style: const TextStyle(fontSize: 13, color: AppTheme.textTertiary)),
+              style:
+                  const TextStyle(fontSize: 13, color: AppTheme.textTertiary)),
         ),
         Expanded(
           child: Text(v,
               style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                   color: AppTheme.textPrimary)),
         ),
       ],

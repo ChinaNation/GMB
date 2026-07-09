@@ -50,6 +50,10 @@ class _ProfilePageState extends State<ProfilePage> {
   MyIdState _myIdState =
       const MyIdState(identityStatus: MyIdIdentityStatus.notOnchain);
 
+  /// _loadState 世代号:含链上查询(秒级),并发调用乱序完成时旧结果
+  /// 不得覆盖新身份(stale-wins 会重现「UI 显示旧身份」分叉)。
+  int _loadGeneration = 0;
+
   /// 用户身份地址 = 默认用户钱包（列表中最靠前的热钱包）地址。
   String get _communicationAddress => _defaultWallet?.address ?? '';
 
@@ -65,10 +69,33 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
+    // 本页常驻 IndexedStack，initState 只跑一次；默认用户钱包在「我的钱包」
+    // 里被切换（拖拽置顶）/增删/改名时经 walletsRevision 广播，这里重读身份，
+    // 保证昵称、地址、认证勾和「我的主页」入参始终是当前默认用户。
+    WalletManager.walletsRevision.addListener(_onWalletsChanged);
     _loadState();
   }
 
+  @override
+  void dispose() {
+    WalletManager.walletsRevision.removeListener(_onWalletsChanged);
+    super.dispose();
+  }
+
+  Future<void> _onWalletsChanged() async {
+    // 先廉价比对(纯 Isar 读):默认钱包地址与昵称都没变的操作
+    // (如重命名冷钱包、导入新钱包未置顶)不触发链查询,避免无谓刷新。
+    final wallet = await WalletManager().getDefaultWallet();
+    if (!mounted) return;
+    if (wallet?.address == _defaultWallet?.address &&
+        wallet?.walletName == _defaultWallet?.walletName) {
+      return;
+    }
+    await _loadState();
+  }
+
   Future<void> _loadState() async {
+    final generation = ++_loadGeneration;
     final profile = await _userProfileService.getState();
     final defaultWallet = await WalletManager().getDefaultWallet();
     MyIdState myIdState;
@@ -80,7 +107,7 @@ class _ProfilePageState extends State<ProfilePage> {
         errorMessage: '$e',
       );
     }
-    if (!mounted) {
+    if (!mounted || generation != _loadGeneration) {
       return;
     }
     setState(() {

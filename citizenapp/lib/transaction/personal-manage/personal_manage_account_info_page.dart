@@ -526,14 +526,13 @@ class _PersonalManageAccountInfoPageState
 
     try {
       final wm = WalletManager();
-      await wm.authenticateForSigning();
       final pubkeyBytes = _hexDecode(hot.pubkeyHex);
       await InternalVoteService().submit(
         proposalId: pid,
         approve: false,
         fromAddress: hot.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
-        sign: (payload) => wm.signWithWalletNoAuth(hot.walletIndex, payload),
+        sign: (payload) => wm.signWithWallet(hot.walletIndex, payload),
       );
       // 链上 reject 触发 cleanup 是异步的(下个出块周期),但 admins-change
       // 一旦清空,反向索引就扫不到 → 兜底机制完整。本地立即清,避免用户再看到。

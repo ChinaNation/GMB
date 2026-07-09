@@ -144,7 +144,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('创建你的公民钱包'), findsOneWidget);
-    expect(find.text('创建热钱包'), findsOneWidget);
+    expect(find.text('创建钱包'), findsOneWidget);
     expect(find.text('广场'), findsNothing);
   });
 }

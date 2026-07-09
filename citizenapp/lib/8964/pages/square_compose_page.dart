@@ -324,7 +324,7 @@ class _SquareComposePageState extends State<SquareComposePage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.publish_rounded),
-                  label: Text(_publishing ? _publishStage.label : '发布'),
+                  label: Text(_publishing ? _publishStage.label : '签名发布'),
                 ),
               ],
             ),

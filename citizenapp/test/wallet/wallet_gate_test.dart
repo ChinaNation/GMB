@@ -117,7 +117,7 @@ void main() {
       expect(find.text('未检测到系统锁屏'), findsOneWidget);
       expect(find.text('开启系统锁屏后可创建'), findsOneWidget);
       final button = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, '创建热钱包'),
+        find.widgetWithText(FilledButton, '创建钱包'),
       );
       expect(button.onPressed, isNull);
     });
@@ -136,7 +136,7 @@ void main() {
       expect(find.text('未检测到系统锁屏'), findsNothing);
       expect(find.text('创建完成后进入公民广场'), findsOneWidget);
       final button = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, '创建热钱包'),
+        find.widgetWithText(FilledButton, '创建钱包'),
       );
       expect(button.onPressed, isNotNull);
     });

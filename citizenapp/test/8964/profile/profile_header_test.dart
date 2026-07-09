@@ -37,8 +37,8 @@ void main() {
     expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
     expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
     expect(find.byIcon(Icons.people_outline), findsOneWidget);
+    // 认证以头像角的勾号呈现（推特式，去掉旧「认证公民」胶囊）。
     expect(find.byIcon(Icons.verified), findsOneWidget);
-    expect(find.text('认证公民'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
@@ -82,8 +82,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('uncertified profile hides the verified badge and pill',
-      (tester) async {
+  testWidgets('uncertified profile hides the verified badge', (tester) async {
     await tester.pumpWidget(
       _wrap(
           isSelf: false, api: FakeProfileApi(sampleProfile(certified: false))),
@@ -91,7 +90,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.verified), findsNothing);
-    expect(find.text('认证公民'), findsNothing);
   });
 
   testWidgets('cache-first renders the fetched profile and writes cache',

@@ -298,7 +298,7 @@ class _SquareArticleComposePageState extends State<SquareArticleComposePage> {
                         ? null
                         : () => _submit(identity),
                     child: Text(
-                      _publishing ? _publishStage.label : '发布文章',
+                      _publishing ? _publishStage.label : '签名发布',
                     ),
                   ),
                 ),

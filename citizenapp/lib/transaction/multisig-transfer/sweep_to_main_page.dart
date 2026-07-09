@@ -184,12 +184,11 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
       WalletManager? hotWalletManager;
       if (wallet.isHotWallet) {
         hotWalletManager = WalletManager();
-        await hotWalletManager.authenticateForSigning();
       }
 
       Future<Uint8List> signCallback(Uint8List payload) async {
         if (hotWalletManager != null) {
-          return await hotWalletManager.signWithWalletNoAuth(
+          return await hotWalletManager.signWithWallet(
               wallet.walletIndex, payload);
         }
         final qrSigner = QrSigner();

@@ -91,6 +91,7 @@ class AppLockService {
     final hash = await _secure.read(key: _keyPinHash);
     return hash != null && hash.isNotEmpty;
   }
+
   // 锁定状态
   /// 当前是否处于 24h 锁定期。
   static Future<bool> isLocked() async {
@@ -133,6 +134,7 @@ class AppLockService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
   }
+
   // 内部工具
   static String _generateSalt() {
     final random = Random.secure();

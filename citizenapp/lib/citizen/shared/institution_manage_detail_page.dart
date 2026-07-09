@@ -529,15 +529,12 @@ class _InstitutionManageDetailPageState
       // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
       WalletManager? hotWalletManager;
       if (wallet.isHotWallet) {
-        debugPrint('[VoteDetail] 热钱包 authenticate 开始');
         hotWalletManager = WalletManager();
-        await hotWalletManager.authenticateForSigning();
-        debugPrint('[VoteDetail] 热钱包 authenticate 完成');
       }
 
       Future<Uint8List> signCallback(Uint8List payload) async {
         if (hotWalletManager != null) {
-          return await hotWalletManager.signWithWalletNoAuth(
+          return await hotWalletManager.signWithWallet(
               wallet.walletIndex, payload);
         }
         // 冷钱包 QR 签名

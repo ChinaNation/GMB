@@ -1,15 +1,15 @@
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
-import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:isar_community/isar.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:substrate_bip39/crypto_scheme.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/wallet/core/wallet_secure_keys.dart';
+import 'package:citizenapp/wallet/core/biometric_secure_seed_store.dart';
+import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 
 class WalletProfile {
   const WalletProfile({
@@ -60,15 +60,6 @@ class WalletCreationResult {
   final String mnemonic;
 }
 
-class WalletSecret {
-  const WalletSecret({required this.profile, required this.seedHex});
-
-  final WalletProfile profile;
-
-  /// 32 字节 mini-secret，以 64 个 hex 字符表示。
-  final String seedHex;
-}
-
 /// [WalletManager.signUtf8WithWallet] 的返回值。
 class WalletSignResult {
   const WalletSignResult({
@@ -94,8 +85,26 @@ class WalletAuthException implements Exception {
 
 class WalletManager {
   static const int _ss58Format = 2027;
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
-  static final LocalAuthentication _localAuth = LocalAuthentication();
+
+  /// 钱包身份数据版本号：钱包增删、拖拽排序（即切换默认用户）、改名后自增。
+  ///
+  /// 默认用户钱包 = 全 App 唯一身份主键，但它是派生规则（最靠前的热钱包）
+  /// 而非存储字段，Isar 写完没有任何广播。常驻页面（我的 tab、广场首页、
+  /// IM 会话列表）监听此版本号，在切换默认用户后立即重读身份，避免
+  /// 「UI 显示旧身份、动作以新身份执行」的分叉。余额刷新是高频操作且
+  /// 不影响身份，不计入此版本号。
+  static final ValueNotifier<int> walletsRevision = ValueNotifier<int>(0);
+
+  static void _bumpWalletsRevision() {
+    walletsRevision.value++;
+  }
+
+  /// seed / 助记词的硬件级安全存储后端。默认走 biometric_storage（Keystore /
+  /// Keychain 绑定用户认证）；测试经 [debugSeedStore] 注入内存 fake。
+  static SecureSeedStore _store = BiometricSecureSeedStore();
+
+  @visibleForTesting
+  static set debugSeedStore(SecureSeedStore store) => _store = store;
 
   /// 拖拽排序首次迁移 flag。设置后不再重复填充 sortOrder。
   static const String _kSortOrderInitialized = 'wallet_sort_order_initialized';
@@ -153,6 +162,7 @@ class WalletManager {
         }
       }
     });
+    _bumpWalletsRevision();
   }
 
   Future<WalletProfile?> getWallet() async {
@@ -226,26 +236,6 @@ class WalletManager {
     return wallet?.walletIndex;
   }
 
-  /// 获取当前活跃热钱包的密钥材料。冷钱包返回 null。
-  ///
-  /// **已弃用**：请使用 [signWithWallet] 或 [signUtf8WithWallet]，seed 不出类。
-  @Deprecated(
-      'Use signWithWallet() instead — seed should not leave WalletManager')
-  Future<WalletSecret?> getLatestWalletSecret() async {
-    final active = await getWallet();
-    if (active == null) {
-      return null;
-    }
-    if (active.isColdWallet) {
-      return null;
-    }
-    final seedHex = await _readSeedHex(active.walletIndex);
-    if (seedHex == null || seedHex.isEmpty) {
-      return null;
-    }
-    return WalletSecret(profile: active, seedHex: seedHex);
-  }
-
   Future<int?> getActiveWalletIndex() async {
     return WalletIsar.instance.read((isar) async {
       final settings = await isar.walletSettingsEntitys.get(0);
@@ -269,34 +259,6 @@ class WalletManager {
     });
   }
 
-  /// 获取指定热钱包的密钥材料。冷钱包返回 null。
-  ///
-  /// **已弃用**：请使用 [signWithWallet] 或 [signUtf8WithWallet]，seed 不出类。
-  @Deprecated(
-      'Use signWithWallet() instead — seed should not leave WalletManager')
-  Future<WalletSecret?> getWalletSecretByIndex(int walletIndex) async {
-    final row = await WalletIsar.instance.read((isar) {
-      return isar.walletProfileEntitys
-          .filter()
-          .walletIndexEqualTo(walletIndex)
-          .findFirst();
-    });
-    if (row == null) {
-      return null;
-    }
-
-    final profile = _toProfile(row);
-    if (profile.isColdWallet) {
-      return null;
-    }
-
-    final seedHex = await _readSeedHex(walletIndex);
-    if (seedHex == null || seedHex.isEmpty) {
-      return null;
-    }
-
-    return WalletSecret(profile: profile, seedHex: seedHex);
-  }
   // 热钱包创建 / 导入
   /// 创建热钱包：生成助记词 → 派生 seed → 存 seed + 助记词。
   ///
@@ -316,12 +278,13 @@ class WalletManager {
       source: 'created',
     );
     try {
-      await _writeMnemonic(profile.walletIndex, mnemonic);
+      await _store.putMnemonic(profile.walletIndex, mnemonic);
       await _verifyWalletPersisted(profile);
     } catch (_) {
       await _rollbackWalletCreation(profile.walletIndex);
       rethrow;
     }
+    _bumpWalletsRevision();
     return WalletCreationResult(profile: profile, mnemonic: mnemonic);
   }
 
@@ -346,14 +309,16 @@ class WalletManager {
       source: 'imported',
     );
     try {
-      await _writeMnemonic(profile.walletIndex, trimmed);
+      await _store.putMnemonic(profile.walletIndex, trimmed);
       await _verifyWalletPersisted(profile);
     } catch (_) {
       await _rollbackWalletCreation(profile.walletIndex);
       rethrow;
     }
+    _bumpWalletsRevision();
     return profile;
   }
+
   // 冷钱包导入
   /// 导入冷钱包：接受 SS58 地址或 0x 开头的 hex 公钥 → 解码公钥 → 只存公钥。
   Future<WalletProfile> importColdWallet({required String address}) async {
@@ -401,8 +366,10 @@ class WalletManager {
       address: ss58Address,
       pubkeyHex: pubkeyHex,
     );
+    _bumpWalletsRevision();
     return profile;
   }
+
   // 删除
   Future<void> clearWallet() async {
     final wallets = await WalletIsar.instance.read((isar) {
@@ -419,10 +386,15 @@ class WalletManager {
       await isar.walletSettingsEntitys.put(settings);
     });
 
+    // 身份在事务提交时即已切换,广播必须先于安全存储清理:
+    // deleteSeed/deleteMnemonic 可能抛错(Keystore 不可用/用户取消验证),
+    // 若 bump 放在其后会被跳过,常驻页面将停留在已删除的旧身份上。
+    _bumpWalletsRevision();
+
     for (final row in wallets) {
       if (row.signMode == 'local') {
-        await _deleteSeedHex(row.walletIndex);
-        await _deleteMnemonic(row.walletIndex);
+        await _store.deleteSeed(row.walletIndex);
+        await _store.deleteMnemonic(row.walletIndex);
       }
     }
   }
@@ -472,11 +444,15 @@ class WalletManager {
       }
     });
 
+    // 同 clearWallet:事务已提交、身份已切换,先广播再做可能抛错的存储清理。
+    _bumpWalletsRevision();
+
     if (target.signMode == 'local') {
-      await _deleteSeedHex(walletIndex);
-      await _deleteMnemonic(walletIndex);
+      await _store.deleteSeed(walletIndex);
+      await _store.deleteMnemonic(walletIndex);
     }
   }
+
   // 更新
   Future<void> renameWallet(int walletIndex, String walletName) async {
     await updateWalletDisplay(walletIndex, walletName: walletName);
@@ -515,6 +491,7 @@ class WalletManager {
       }
       await isar.walletProfileEntitys.put(row);
     });
+    _bumpWalletsRevision();
   }
 
   Future<void> setWalletBalance(int walletIndex, double balance) async {
@@ -530,6 +507,7 @@ class WalletManager {
       await isar.walletProfileEntitys.put(row);
     });
   }
+
   // Seed 派生
   /// mnemonic → entropy → PBKDF2 → 64 字节 → 前 32 字节 mini-secret。
   ///
@@ -550,120 +528,103 @@ class WalletManager {
     final address = pair.address;
     return _DerivedWallet(address: address, pubkeyHex: pubkeyHex);
   }
-  // Secure Storage（seed）
-  String _seedKey(int walletIndex) => WalletSecureKeys.seedHexV1(walletIndex);
+  // 签名（seed 绑定硬件，经 SecureSeedStore；seed 不出类）
 
-  Future<void> _writeSeedHex(int walletIndex, String seedHex) async {
-    await _secureStorage.write(key: _seedKey(walletIndex), value: seedHex);
-  }
-
-  static final RegExp _seedHexPattern = RegExp(r'^[0-9a-fA-F]{64}$');
-
-  /// 读取 seed（含认证 + 格式校验）。
-  Future<String?> _readSeedHex(int walletIndex) async {
-    await _authenticateIfSupported();
-    return _readSeedHexRaw(walletIndex);
-  }
-
-  /// 读取 seed（仅格式校验，不触发认证）。供已通过认证的内部方法调用。
-  Future<String?> _readSeedHexRaw(int walletIndex) async {
-    final seedHex = await _secureStorage.read(key: _seedKey(walletIndex));
-    if (seedHex == null) return null;
-    if (!_seedHexPattern.hasMatch(seedHex)) {
-      throw const WalletAuthException('钱包密钥数据异常，请重新导入钱包');
-    }
-    return seedHex;
-  }
-  // 签名（seed 不出类）
-  /// 使用指定热钱包对 [payload] 进行 sr25519 签名。
+  /// 用钱包私钥对 [payload] 签名。
   ///
-  /// seed 仅在本方法内短暂存在，签名完成后立即清零，不对外暴露。
-  /// 每次调用均触发生物/密码认证（设备未启用锁屏时拒绝访问）。
-  /// 预先验证设备密码/生物识别。
-  ///
-  /// 在构造交易前调用，确保用户先验证身份，再等待 RPC 数据。
-  Future<void> authenticateForSigning() async {
-    await _authenticateIfSupported();
-  }
-
-  /// 签名（跳过认证，调用方需确保已调用 authenticateForSigning）。
-  Future<Uint8List> signWithWalletNoAuth(
-      int walletIndex, Uint8List payload) async {
-    final profile = await _requireHotWalletProfile(walletIndex);
-    final seedHex = await _readSeedHexRaw(walletIndex);
-    if (seedHex == null) {
-      throw const WalletAuthException('密钥不可用，请重新导入钱包');
-    }
-    final seedBytes = Uint8List.fromList(_hexToBytes(seedHex));
-    try {
-      final pair = Keyring.sr25519.fromSeed(seedBytes);
-      pair.ss58Format = profile.ss58;
-      final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
-      if (localPubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
-        throw const WalletAuthException('本地签名密钥与当前钱包不一致，请重新导入钱包');
-      }
-      return Uint8List.fromList(pair.sign(payload));
-    } finally {
-      seedBytes.fillRange(0, seedBytes.length, 0);
-    }
-  }
-
+  /// 统一签名入口：动钱动权（转账 / 投票 / 切换默认身份 / 发布动态）一律走
+  /// 此方法。每次调用都读严档 seed（触发一次生物识别 / 设备验证），失效时从
+  /// 宽档助记词自愈；派生出的密钥用后即弃、不缓存、无会话流程——「要么验证、
+  /// 要么不验证」，一次操作一次验证。
   Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async {
-    await _authenticateIfSupported();
-    final profile = await _requireHotWalletProfile(walletIndex);
-    final seedHex = await _readSeedHexRaw(walletIndex);
-    if (seedHex == null) {
-      throw const WalletAuthException('密钥不可用，请重新导入钱包');
-    }
-    final seedBytes = Uint8List.fromList(_hexToBytes(seedHex));
-    try {
-      final pair = Keyring.sr25519.fromSeed(seedBytes);
-      pair.ss58Format = profile.ss58;
-      // 提案页面选中的管理员钱包必须与实际本地签名密钥完全一致，
-      // 否则会导致人口快照与上链发起人不一致，链上直接拒绝创建提案。
-      final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
-      if (localPubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
-        throw const WalletAuthException('本地签名密钥与当前钱包不一致，请重新导入钱包');
-      }
-      return Uint8List.fromList(pair.sign(payload));
-    } finally {
-      seedBytes.fillRange(0, seedBytes.length, 0);
-    }
+    final pair = await _loadSigningKey(walletIndex);
+    return Uint8List.fromList(pair.sign(payload));
   }
 
-  /// 使用指定热钱包对 UTF-8 字符串进行 sr25519 签名，返回签名结果。
-  ///
-  /// 用于登录等场景，返回值包含公钥、签名 hex 等信息。
+  /// 校验用户能否解锁指定热钱包（触发一次生物识别 / 设备验证），供「切换默认
+  /// 身份」等无签名负载、但属动权、需先验证的场景。验证失败上抛，成功即返回。
+  Future<void> verifyWalletAccess(int walletIndex) async {
+    await _loadSigningKey(walletIndex);
+  }
+
+  /// 用钱包私钥对 UTF-8 字符串签名，返回签名结果（含公钥 / 签名 hex）。
+  /// 同 [signWithWallet]，每次都触发验证。
   Future<WalletSignResult> signUtf8WithWallet(
     int walletIndex,
     String message,
   ) async {
-    await _authenticateIfSupported();
     final profile = await _requireHotWalletProfile(walletIndex);
-    final seedHex = await _readSeedHexRaw(walletIndex);
-    if (seedHex == null) {
-      throw const WalletAuthException('密钥不可用，请重新导入钱包');
-    }
+    final pair = await _loadSigningKey(walletIndex);
+    final payload = Uint8List.fromList(utf8.encode(message));
+    final signature = pair.sign(payload);
+    return WalletSignResult(
+      account: profile.address,
+      pubkeyHex: '0x${profile.pubkeyHex}',
+      sigAlg: 'sr25519',
+      signatureHex: '0x${_toHex(signature.toList(growable: false))}',
+    );
+  }
 
+  /// 读严档 seed（失效自愈）→ 派生并校验 sr25519 密钥对。
+  Future<KeyPair> _loadSigningKey(int walletIndex) async {
+    final profile = await _requireHotWalletProfile(walletIndex);
+    final seedHex = await _readSeedHexWithSelfHeal(walletIndex, profile);
+    return _keyPairFromSeedHex(seedHex, profile);
+  }
+
+  /// 读严档 seed；KEK 失效或条目缺失则从宽档助记词静默自愈。
+  ///
+  /// 用户取消 / 超时（[AuthCancelled]）与无锁屏（[NoDeviceCredential]）直接
+  /// 上抛，绝不自愈。
+  Future<String> _readSeedHexWithSelfHeal(
+    int walletIndex,
+    WalletProfile profile,
+  ) async {
+    try {
+      final seedHex = await _store.readSeed(walletIndex);
+      if (seedHex != null) {
+        return seedHex;
+      }
+      // 条目缺失但助记词可能仍在 → 尝试自愈。
+      return _selfHealSeedFromMnemonic(walletIndex, profile);
+    } on SeedKeyInvalidated {
+      return _selfHealSeedFromMnemonic(walletIndex, profile);
+    }
+  }
+
+  /// 从宽档助记词重派生 seed → 校验 pubkey → 重建严档 key → 返回新 seed hex。
+  Future<String> _selfHealSeedFromMnemonic(
+    int walletIndex,
+    WalletProfile profile,
+  ) async {
+    final mnemonic = await _store.readMnemonic(walletIndex);
+    if (mnemonic == null || mnemonic.isEmpty) {
+      throw const WalletAuthException('生物识别已变更，请用助记词重新导入钱包');
+    }
+    final seed = await _mnemonicToMiniSecret(mnemonic);
+    final derived = _deriveSr25519FromSeed(seed);
+    if (derived.pubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
+      throw const WalletAuthException('助记词与当前钱包不一致，无法恢复');
+    }
+    final seedHex = _toHex(seed);
+    await _store.deleteSeed(walletIndex);
+    await _store.putSeed(walletIndex, seedHex);
+    return seedHex;
+  }
+
+  /// seed hex → sr25519 KeyPair，校验派生公钥与 profile 一致。
+  KeyPair _keyPairFromSeedHex(String seedHex, WalletProfile profile) {
     final seedBytes = Uint8List.fromList(_hexToBytes(seedHex));
     try {
+      // fromSeed 会把 seed 展开成独立 SecretKey（不引用输入字节），因此派生后
+      // 立即把本地 seed 副本清零，缩短明文私钥材料在内存中的存活窗口。
       final pair = Keyring.sr25519.fromSeed(seedBytes);
-      pair.ss58Format = _ss58Format;
-
-      // 校验 seed 与 profile 公钥一致
+      pair.ss58Format = profile.ss58;
       final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
       if (localPubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
         throw const WalletAuthException('本地签名密钥与当前钱包不一致，请重新导入钱包');
       }
-
-      final payload = Uint8List.fromList(utf8.encode(message));
-      final signature = pair.sign(payload);
-      return WalletSignResult(
-        account: profile.address,
-        pubkeyHex: '0x${profile.pubkeyHex}',
-        sigAlg: 'sr25519',
-        signatureHex: '0x${_toHex(signature.toList(growable: false))}',
-      );
+      return pair;
     } finally {
       seedBytes.fillRange(0, seedBytes.length, 0);
     }
@@ -679,80 +640,28 @@ class WalletManager {
     return out;
   }
 
-  Future<void> _deleteSeedHex(int walletIndex) async {
-    await _secureStorage.delete(key: _seedKey(walletIndex));
-  }
-  // Secure Storage（mnemonic）
-  String _mnemonicKey(int walletIndex) =>
-      WalletSecureKeys.mnemonicV1(walletIndex);
-
-  Future<void> _writeMnemonic(int walletIndex, String mnemonic) async {
-    await _secureStorage.write(key: _mnemonicKey(walletIndex), value: mnemonic);
-  }
-
-  Future<String?> _readMnemonicRaw(int walletIndex) async {
-    return _secureStorage.read(key: _mnemonicKey(walletIndex));
-  }
-
-  Future<void> _deleteMnemonic(int walletIndex) async {
-    await _secureStorage.delete(key: _mnemonicKey(walletIndex));
-  }
-
-  /// 获取钱包私钥（seed hex），需设备密码验证。
+  /// 获取钱包私钥（seed hex），触发认证；失效时自愈。仅用于「查看私钥」。
   Future<String?> getSeedHex(int walletIndex) async {
-    await _authenticateIfSupported();
-    return _readSeedHexRaw(walletIndex);
+    final profile = await _requireHotWalletProfile(walletIndex);
+    return _readSeedHexWithSelfHeal(walletIndex, profile);
   }
 
-  /// 获取钱包助记词，需设备密码验证。
-  Future<String?> getMnemonic(int walletIndex) async {
-    await _authenticateIfSupported();
-    return _readMnemonicRaw(walletIndex);
+  /// 获取钱包助记词（宽档），触发认证。仅用于「查看助记词」。
+  Future<String?> getMnemonic(int walletIndex) {
+    return _store.readMnemonic(walletIndex);
   }
 
-  /// 前置检查：设备必须启用锁屏，否则拒绝创建/导入热钱包。
-  static Future<void> _ensureDeviceSecure() async {
-    final supported = await _localAuth.isDeviceSupported();
-    if (!supported) {
+  /// 前置检查：设备必须有锁屏（生物识别 / 数字 / 图案 / PIN），否则拒绝
+  /// 创建 / 导入热钱包（D3 fail-closed）。
+  Future<void> _ensureDeviceSecure() async {
+    final status = await _store.authStatus();
+    if (status == SecureAuthStatus.noDeviceLock) {
       throw const WalletAuthException(
-        '请先在系统设置中启用屏幕锁定，才能创建或导入热钱包。',
+        '请先在系统设置中启用屏幕锁定（数字密码、图案或生物识别），才能创建或导入热钱包。',
       );
     }
   }
 
-  static Future<void> _authenticateIfSupported() async {
-    try {
-      final supported = await _localAuth.isDeviceSupported();
-      if (!supported) {
-        throw const WalletAuthException(
-          '您的设备未启用锁屏密码，无法安全访问钱包密钥。请先在系统设置中启用屏幕锁定。',
-        );
-      }
-
-      // 按优先级选择认证方式：人脸 > 指纹 > 设备密码
-      final biometrics = await _localAuth.getAvailableBiometrics();
-      final hasFace = biometrics.contains(BiometricType.face);
-      final hasFingerprint = biometrics.contains(BiometricType.fingerprint) ||
-          biometrics.contains(BiometricType.strong);
-      // 有生物识别（人脸或指纹）时只用生物识别，系统自动选优先级最高的；
-      // 都没有时回退到设备密码。
-      final biometricOnly = hasFace || hasFingerprint;
-
-      final ok = await _localAuth.authenticate(
-        localizedReason: '请验证身份以访问钱包密钥',
-        options: AuthenticationOptions(
-          biometricOnly: biometricOnly,
-          stickyAuth: true,
-          useErrorDialogs: true,
-        ),
-      );
-      if (!ok) {
-        throw const WalletAuthException('未通过身份验证');
-      }
-    } on PlatformException catch (e) {
-      throw WalletAuthException('身份验证不可用：${e.message ?? e.code}');
-    }
-  }
   // 内部工具
   /// 检查公钥是否已存在，重复则抛出异常。
   Future<void> _checkDuplicatePubkey(String pubkeyHex) async {
@@ -821,7 +730,7 @@ class WalletManager {
       signMode: 'local',
     );
     try {
-      await _writeSeedHex(walletIndex, seedHex);
+      await _store.putSeed(walletIndex, seedHex);
       await _verifyWalletPersisted(profile);
     } catch (_) {
       await _rollbackWalletCreation(walletIndex);
@@ -922,12 +831,8 @@ class WalletManager {
         persisted.pubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
       throw Exception('钱包写入后校验失败，请重试');
     }
-    if (profile.isHotWallet) {
-      final seedHex = await _readSeedHexRaw(profile.walletIndex);
-      if (seedHex == null || seedHex.isEmpty) {
-        throw Exception('钱包密钥写入后校验失败，请重试');
-      }
-    }
+    // seed / 助记词已由 SecureSeedStore 写入并隐式校验（putSeed/putMnemonic
+    // 失败即抛），此处不再回读，避免创建时额外触发一次生物识别。
   }
 
   Future<void> _rollbackWalletCreation(int walletIndex) async {
@@ -951,8 +856,8 @@ class WalletManager {
         await isar.walletSettingsEntitys.put(settings);
       }
     });
-    await _deleteSeedHex(walletIndex);
-    await _deleteMnemonic(walletIndex);
+    await _store.deleteSeed(walletIndex);
+    await _store.deleteMnemonic(walletIndex);
   }
 
   String _toHex(List<int> bytes) {

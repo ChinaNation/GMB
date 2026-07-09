@@ -138,6 +138,7 @@ class ActivationService {
     return all
         .any((a) => a.pubkeyHex == pk && _normalize(a.accountHex) == accountId);
   }
+
   // QR 激活流程
   /// 构建激活签名请求（用于展示 QR 码）。
   ///
@@ -209,6 +210,7 @@ class ActivationService {
 
     return activation;
   }
+
   // 取消激活
   /// 取消激活。
   Future<void> deactivate(
@@ -220,6 +222,7 @@ class ActivationService {
         (a) => a.pubkeyHex == pk && _normalize(a.accountHex) == accountId);
     await _saveAll(all);
   }
+
   // 内部方法
   Uint8List _buildActivatePayload(
       AdminAccountIdentity identity, String pubkeyHex) {

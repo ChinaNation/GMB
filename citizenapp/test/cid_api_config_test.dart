@@ -2,7 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/cid_api_config.dart';
 
 void main() {
-  test('OnChina API config only allows production and USB development paths', () {
+  test('OnChina API config only allows production and USB development paths',
+      () {
     expect(
       CidApiConfig.baseUrlForEnvironment('prod'),
       'https://cid.crcfrcn.com',

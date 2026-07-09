@@ -28,15 +28,15 @@ export default function Footer() {
             <h4 className="mb-4 text-sm font-semibold tracking-wider text-gold-400">快速链接</h4>
             <ul className="space-y-2 text-sm">
               <li><Link to="/about" className="text-slate-400 no-underline transition-colors hover:text-white">关于我们</Link></li>
-              <li><Link to="/technology" className="text-slate-400 no-underline transition-colors hover:text-white">区块链技术</Link></li>
-              <li><Link to="/tokenomics" className="text-slate-400 no-underline transition-colors hover:text-white">公民币经济</Link></li>
+              <li><Link to="/technology" className="text-slate-400 no-underline transition-colors hover:text-white">区块链</Link></li>
+              <li><Link to="/tokenomics" className="text-slate-400 no-underline transition-colors hover:text-white">公民币</Link></li>
               <li><Link to="/governance" className="text-slate-400 no-underline transition-colors hover:text-white">治理体系</Link></li>
               <li><Link to="/whitepaper" className="text-slate-400 no-underline transition-colors hover:text-white">白皮书</Link></li>
             </ul>
           </div>
 
           <div>
-            <h4 className="mb-4 text-sm font-semibold tracking-wider text-gold-400">产品体系</h4>
+            <h4 className="mb-4 text-sm font-semibold tracking-wider text-gold-400">产品</h4>
             <ul className="space-y-2 text-sm">
               <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">CitizenApp 公民</Link></li>
               <li><Link to="/ecosystem" className="text-slate-400 no-underline transition-colors hover:text-white">CitizenWallet 公民钱包</Link></li>
@@ -48,9 +48,6 @@ export default function Footer() {
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-8 md:flex-row">
           <p className="text-xs text-slate-500">
             &copy; {new Date().getFullYear()} 中华民族联邦共和国公民储备委员会 &mdash; 版权所有
-          </p>
-          <p className="text-xs text-slate-500">
-            基于 Substrate 构建的主权区块链
           </p>
         </div>
       </div>

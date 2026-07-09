@@ -116,7 +116,7 @@ export default function Membership() {
 
   return (
     <>
-      <section className="border-b border-white/10 bg-navy-900/35 py-20 md:py-28">
+      <section className="border-b border-white/10 bg-navy-900/35 py-10 md:py-12">
         <div className="mx-auto max-w-7xl px-6">
           <SectionTitle
             subtitle="CitizenApp Membership"

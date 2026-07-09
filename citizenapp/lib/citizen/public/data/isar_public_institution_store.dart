@@ -141,8 +141,7 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
     // institutionCode 已建索引(ADR-028 P2);anyOf 走索引匹配,非全表扫。
     return isar.publicInstitutionEntitys
         .filter()
-        .anyOf(institutionCodes,
-            (q, code) => q.institutionCodeEqualTo(code))
+        .anyOf(institutionCodes, (q, code) => q.institutionCodeEqualTo(code))
         .findAll();
   }
 
@@ -158,8 +157,7 @@ class IsarPublicInstitutionStore implements PublicInstitutionStore {
         .filter()
         .provinceCodeEqualTo(provinceCode)
         .and()
-        .anyOf(institutionCodes,
-            (q, code) => q.institutionCodeEqualTo(code))
+        .anyOf(institutionCodes, (q, code) => q.institutionCodeEqualTo(code))
         .findAll();
   }
 

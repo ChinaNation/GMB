@@ -106,11 +106,13 @@ class _PublicPageState extends State<PublicPage> {
       await _repo.ensureSynced();
     } on Object catch (e, st) {
       // [DIAG-admindiv] 临时诊断:抓被静默吞掉的同步异常(真机失败极可能藏这)。
-      debugPrint('[DIAG-admindiv] _syncThenRefresh ensureSynced ERROR: $e\n$st');
+      debugPrint(
+          '[DIAG-admindiv] _syncThenRefresh ensureSynced ERROR: $e\n$st');
       return;
     }
     if (!mounted) return;
-    debugPrint('[DIAG-admindiv] _syncThenRefresh done → reload selected=$_selected');
+    debugPrint(
+        '[DIAG-admindiv] _syncThenRefresh done → reload selected=$_selected');
     _cityCache.clear(); // 关键:清掉灌库未完成时缓存的脏市名(001)。
     await _selectGroup(_selected);
   }

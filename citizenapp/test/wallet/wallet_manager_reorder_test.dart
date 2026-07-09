@@ -124,6 +124,34 @@ void main() {
       expect(wallets[2].sortOrder, 2);
     });
 
+    test('reorderWallets 自增 walletsRevision(切默认用户的全端广播信号)', () async {
+      await seedThreeWallets();
+      final manager = WalletManager();
+
+      final before = WalletManager.walletsRevision.value;
+      var notified = 0;
+      void listener() => notified++;
+      WalletManager.walletsRevision.addListener(listener);
+      addTearDown(() => WalletManager.walletsRevision.removeListener(listener));
+
+      await manager.reorderWallets([3, 1, 2]);
+
+      expect(WalletManager.walletsRevision.value, before + 1);
+      expect(notified, 1);
+    });
+
+    test('renameWallet(昵称=钱包名)自增 walletsRevision', () async {
+      await seedThreeWallets();
+      final manager = WalletManager();
+
+      final before = WalletManager.walletsRevision.value;
+      await manager.renameWallet(1, '新昵称');
+
+      expect(WalletManager.walletsRevision.value, before + 1);
+      final wallets = await manager.getWallets();
+      expect(wallets.firstWhere((w) => w.walletIndex == 1).walletName, '新昵称');
+    });
+
     test('sortOrder 相同(全 0)时按 walletIndex 升序兜底', () async {
       // 直接写 3 个 sortOrder 全为 0 的 entity,跳过迁移 flag,模拟边界场景。
       SharedPreferences.setMockInitialValues(<String, Object>{

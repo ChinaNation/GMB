@@ -21,6 +21,35 @@ class _FakeWalletManager extends WalletManager {
   Future<WalletProfile?> getDefaultWallet() async => wallet;
 }
 
+/// 可切换默认钱包的 fake：模拟「我的钱包」拖拽置顶另一个热钱包。
+class _SwitchableWalletManager extends WalletManager {
+  _SwitchableWalletManager(this.wallet);
+
+  WalletProfile? wallet;
+
+  @override
+  Future<WalletProfile?> getWallet() async => wallet;
+
+  @override
+  Future<WalletProfile?> getDefaultWallet() async => wallet;
+}
+
+WalletProfile _hotWallet({required int index, required String address}) {
+  return WalletProfile(
+    walletIndex: index,
+    walletName: '钱包$index',
+    walletIcon: '',
+    balance: 0,
+    address: address,
+    pubkeyHex: 'a' * 64,
+    alg: 'sr25519',
+    ss58: 2027,
+    createdAtMillis: index,
+    source: 'test',
+    signMode: 'local',
+  );
+}
+
 class _FakeSquareChainService extends SquareChainService {
   _FakeSquareChainService(this.cidNumber);
 
@@ -133,6 +162,35 @@ void main() {
     expect(find.text('发布动态'), findsOneWidget);
     expect(find.text('测试钱包'), findsOneWidget);
     expect(find.text('当前钱包未认证，不能发布竞选内容。'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, '发布'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '签名发布'), findsOneWidget);
+  });
+
+  testWidgets('walletsRevision 自增(切换默认用户)后广场身份即时重载', (tester) async {
+    // 地址 ≤14 字符时 accountLabel 原样显示,便于用 Tooltip 断言身份切换。
+    final walletManager = _SwitchableWalletManager(
+      _hotWallet(index: 1, address: 'addr_user_a'),
+    );
+    final identityService = SquareIdentityService(
+      walletManager: walletManager,
+      chainService: _FakeSquareChainService(null),
+    );
+
+    await tester.pumpWidget(
+      _wrap(SquareHomePage(
+        identityService: identityService,
+        feedSource: const _FakeFeedSource(),
+        draftStore: const _EmptyDraftStore(),
+      )),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('addr_user_a'), findsOneWidget);
+
+    // 模拟在「我的钱包」拖拽置顶另一个热钱包:默认钱包变化 + 版本号广播。
+    walletManager.wallet = _hotWallet(index: 2, address: 'addr_user_b');
+    WalletManager.walletsRevision.value++;
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('addr_user_b'), findsOneWidget);
+    expect(find.byTooltip('addr_user_a'), findsNothing);
   });
 }

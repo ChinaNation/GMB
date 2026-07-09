@@ -13,6 +13,7 @@ import 'package:citizenapp/8964/widgets/square_empty_state.dart';
 import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 enum _ComposeKind { post, article }
 
@@ -44,12 +45,49 @@ class _SquareHomePageState extends State<SquareHomePage> {
   late Future<List<SquarePost>> _feedFuture;
   final List<SquarePost> _localPosts = [];
 
+  /// 最近一次身份加载结果的钱包快照,供 _onWalletsChanged 廉价比对。
+  String? _identityAddress;
+  String? _identityWalletName;
+
   @override
   void initState() {
     super.initState();
     _feedSource = widget.feedSource ?? SquareApiClient();
-    _identityFuture = widget.identityService.loadCurrent();
+    _identityFuture = _loadIdentity();
     _feedFuture = _loadFeed();
+    // 本页常驻 IndexedStack；切换默认用户钱包（= 切换身份）后经
+    // walletsRevision 广播重载身份，保证身份图标与作者点击的 isSelf
+    // 判定始终基于当前默认用户。
+    WalletManager.walletsRevision.addListener(_onWalletsChanged);
+  }
+
+  @override
+  void dispose() {
+    WalletManager.walletsRevision.removeListener(_onWalletsChanged);
+    super.dispose();
+  }
+
+  Future<SquareIdentityState> _loadIdentity() async {
+    final identity = await widget.identityService.loadCurrent();
+    _identityAddress = identity.ownerAccount;
+    _identityWalletName = identity.walletName;
+    return identity;
+  }
+
+  Future<void> _onWalletsChanged() async {
+    // 先廉价比对(纯 Isar 读):默认身份地址与昵称都没变时跳过,
+    // 避免无关钱包操作触发 CID 链查询。乱序安全由 FutureBuilder
+    // 只跟踪最新 _identityFuture 保证。
+    final manager = widget.identityService.walletManager ?? WalletManager();
+    final wallet = await manager.getDefaultWallet();
+    if (!mounted) return;
+    if ((wallet?.address ?? '') == (_identityAddress ?? '') &&
+        wallet?.walletName == _identityWalletName) {
+      return;
+    }
+    setState(() {
+      _identityFuture = _loadIdentity();
+    });
   }
 
   Future<void> _openCompose() async {

@@ -176,6 +176,7 @@ class _QrScanPageState extends State<QrScanPage> {
       }
     }
   }
+
   // 收款码
   void _handleTransfer(QrRouteResult result) {
     if (!mounted) {
@@ -196,6 +197,7 @@ class _QrScanPageState extends State<QrScanPage> {
     final body = result.envelope!.body as UserContactBody;
     Navigator.of(context).pop(QrScanTransferResult(toAddress: body.address));
   }
+
   // 裸地址（向后兼容）
   void _handleLegacyAddress(String address) {
     if (!mounted) {
@@ -203,6 +205,7 @@ class _QrScanPageState extends State<QrScanPage> {
     }
     Navigator.of(context).pop(QrScanTransferResult(toAddress: address));
   }
+
   // 收款码 → 添加通讯录
   Future<void> _handleContactFromTransfer(QrRouteResult result) async {
     if (!mounted) return;
@@ -258,6 +261,7 @@ class _QrScanPageState extends State<QrScanPage> {
       );
     }
   }
+
   // 用户码
   Future<void> _handleContact(QrRouteResult result) async {
     if (!mounted) return;
@@ -296,6 +300,7 @@ class _QrScanPageState extends State<QrScanPage> {
       );
     }
   }
+
   // 未识别
   String get _hintText =>
       widget.customTitle ??
@@ -446,6 +451,7 @@ class _QrScanPageState extends State<QrScanPage> {
     );
   }
 }
+
 // 扫描框半透明遮罩
 class _ScanOverlayPainter extends CustomPainter {
   _ScanOverlayPainter({required this.scanBoxSize, this.offsetY = 0});
@@ -475,6 +481,7 @@ class _ScanOverlayPainter extends CustomPainter {
   bool shouldRepaint(covariant _ScanOverlayPainter oldDelegate) =>
       oldDelegate.scanBoxSize != scanBoxSize || oldDelegate.offsetY != offsetY;
 }
+
 // 扫描框四角装饰线
 class _ScanCornerPainter extends CustomPainter {
   @override

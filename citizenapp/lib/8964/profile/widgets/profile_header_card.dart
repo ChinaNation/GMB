@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
+import 'package:citizenapp/ui/app_theme.dart';
 
-/// 展开态资料卡：圆角方形头像 + 认证勾 + 展示名/签名/计数 + 右上三图标。
+/// 推特式资料卡：头图下方白底，圆角方形头像跨压头图下缘 + 认证勾 +
+/// 展示名/地址·CID/签名/计数 + 右上三图标。
 ///
-/// 阶段 4 用占位头像（阶段 6 换真图）；数据来自已加载的 [profile]（可空 → 占位）。
+/// 头像用 [Positioned] 上移半个身位跨到头图上；文字为深色（落在白底）；
+/// 数据来自已加载的 [profile]（可空 → 占位）。
 class ProfileHeaderCard extends StatelessWidget {
   const ProfileHeaderCard({
     super.key,
@@ -31,6 +34,10 @@ class ProfileHeaderCard extends StatelessWidget {
   final VoidCallback? onFollowers;
   final VoidCallback? onPosts;
 
+  /// 头像尺寸；上移半个身位跨压头图。
+  static const double _avatarSize = 80;
+  static const double _avatarOverlap = 40;
+
   bool get _isCertified => profile?.isCertified ?? false;
 
   String get _name =>
@@ -39,79 +46,86 @@ class ProfileHeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bio = profile?.bio.trim() ?? '';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return ColoredBox(
+      color: AppTheme.surfaceWhite,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Avatar(isCertified: _isCertified, imageUrl: avatarUrl),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: actions,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Flexible(
-                child: Text(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 头像下半部与右上三图标同处一带；头像另由 Positioned 跨压头图。
+                SizedBox(
+                  height: _avatarOverlap + 4,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: actions,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
                   _name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-              if (_isCertified) const SizedBox(width: 8),
-              if (_isCertified) const _CertifiedPill(),
-            ],
-          ),
-          const SizedBox(height: 3),
-          _AddressRow(
-              ownerAccount: ownerAccount, cidNumber: profile?.cidNumber),
-          if (bio.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              bio,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                height: 1.4,
-              ),
+                const SizedBox(height: 3),
+                _AddressRow(
+                  ownerAccount: ownerAccount,
+                  cidNumber: profile?.cidNumber,
+                ),
+                if (bio.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    bio,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _Stat(
+                      value: profile?.following ?? 0,
+                      label: '关注',
+                      onTap: onFollowing,
+                    ),
+                    const SizedBox(width: 18),
+                    _Stat(
+                      value: profile?.followers ?? 0,
+                      label: '关注者',
+                      onTap: onFollowers,
+                    ),
+                    const SizedBox(width: 18),
+                    _Stat(
+                      value: profile?.posts ?? 0,
+                      label: '帖子',
+                      onTap: onPosts,
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _Stat(
-                value: profile?.following ?? 0,
-                label: '关注',
-                onTap: onFollowing,
-              ),
-              const SizedBox(width: 18),
-              _Stat(
-                value: profile?.followers ?? 0,
-                label: '关注者',
-                onTap: onFollowers,
-              ),
-              const SizedBox(width: 18),
-              _Stat(
-                value: profile?.posts ?? 0,
-                label: '帖子',
-                onTap: onPosts,
-              ),
-            ],
+          ),
+          Positioned(
+            left: 16,
+            top: -_avatarOverlap,
+            child: _Avatar(isCertified: _isCertified, imageUrl: avatarUrl),
           ),
         ],
       ),
@@ -132,40 +146,40 @@ class _Avatar extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Container(
-          width: 64,
-          height: 64,
+          width: ProfileHeaderCard._avatarSize,
+          height: ProfileHeaderCard._avatarSize,
           decoration: BoxDecoration(
-            color: Colors.white24,
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: Colors.white, width: 3),
+            color: AppTheme.primary.withAlpha(20),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppTheme.surfaceWhite, width: 4),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             child: url == null
                 ? const _AvatarPlaceholder()
                 : Image.network(
                     url,
                     fit: BoxFit.cover,
-                    width: 64,
-                    height: 64,
+                    width: ProfileHeaderCard._avatarSize,
+                    height: ProfileHeaderCard._avatarSize,
                     errorBuilder: (_, __, ___) => const _AvatarPlaceholder(),
                   ),
           ),
         ),
         if (isCertified)
           Positioned(
-            right: -4,
-            bottom: -4,
+            right: -2,
+            bottom: -2,
             child: Container(
-              width: 22,
-              height: 22,
+              width: 24,
+              height: 24,
               decoration: const BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.surfaceWhite,
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.verified,
-                size: 20,
+                size: 22,
                 color: Color(0xFF007A74),
               ),
             ),
@@ -181,28 +195,9 @@ class _AvatarPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const SizedBox(
-      width: 64,
-      height: 64,
-      child: Icon(Icons.person, size: 30, color: Colors.white),
-    );
-  }
-}
-
-class _CertifiedPill extends StatelessWidget {
-  const _CertifiedPill();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white24,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: const Text(
-        '认证公民',
-        style: TextStyle(color: Colors.white, fontSize: 11),
-      ),
+      width: ProfileHeaderCard._avatarSize,
+      height: ProfileHeaderCard._avatarSize,
+      child: Icon(Icons.person, size: 36, color: AppTheme.primary),
     );
   }
 }
@@ -223,7 +218,7 @@ class _AddressRow extends StatelessWidget {
             _shortenAccount(ownerAccount),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
         ),
         const SizedBox(width: 4),
@@ -236,7 +231,7 @@ class _AddressRow extends StatelessWidget {
           },
           child: const Padding(
             padding: EdgeInsets.all(2),
-            child: Icon(Icons.copy, size: 13, color: Colors.white70),
+            child: Icon(Icons.copy, size: 13, color: AppTheme.textTertiary),
           ),
         ),
         if (cid.isNotEmpty) ...[
@@ -246,7 +241,8 @@ class _AddressRow extends StatelessWidget {
               '· $cid',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
+              style:
+                  const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
             ),
           ),
         ],
@@ -272,14 +268,17 @@ class _Stat extends StatelessWidget {
             TextSpan(
               text: '$value ',
               style: const TextStyle(
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
             ),
             TextSpan(
               text: label,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+              ),
             ),
           ],
         ),

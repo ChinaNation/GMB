@@ -278,12 +278,10 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
       WalletManager? hotWalletManager;
       if (wallet.isHotWallet) {
         hotWalletManager = WalletManager();
-        await hotWalletManager.authenticateForSigning();
       }
       Future<Uint8List> signCallback(Uint8List payload) async {
         if (hotWalletManager != null) {
-          return hotWalletManager.signWithWalletNoAuth(
-              wallet.walletIndex, payload);
+          return hotWalletManager.signWithWallet(wallet.walletIndex, payload);
         }
         final qrSigner = QrSigner();
         final request = qrSigner.buildRequest(

@@ -2,13 +2,13 @@
 
 - 状态：**Phase 1 + Phase 2 完成并验证；2026-07-02 追加 IM 钱包绑定收口。** 签名 op_tag/signing_message 单源 primitives::sign;治理 5 个(0x10-0x14)字节零变化(后端 golden 137304f0 不变);7 个哈希域 Rust↔Dart 金标逐字节对齐;ACTIVATE/DECRYPT 四方逐字节一致。未提交(待用户授权)。
   - Phase 1:primitives::sign 原语 + op_tag 注册表 + 金标;治理 5(0x10-0x14)字节不变;3 哈希域 L3_PAY(0x15)/OFFCHAIN_BATCH(0x16)/L2_ACK(0x17) 折好。
-  - Phase 2:ACTIVATE_ADMIN(0x18)/DECRYPT(0x19) 内嵌前缀 → `GMB||op_tag` 4B 二进制前缀(原始字节可解析保留,payload 97B/108B,node 构造/验签/冷钱包/citizenapp 四方 + 金标 fixture 逐字节一致);IM_NODE_PAIRING 仅保留 QR body schema。
+  - Phase 2:ACTIVATE_ADMIN(0x18)/DECRYPT(0x19) 内嵌前缀 → `GMB||op_tag` 4B 二进制前缀(原始字节可解析保留,payload 97B/108B,node 构造/验签/冷钱包/citizenapp 四方 + 金标 fixture 逐字节一致);IM_NODE_PAIRING 原仅保留 QR body schema,2026-07-08 随链端不再提供 IM 已删除。
   - Phase 3:IM_WALLET_BINDING 使用 `QR_V1/k=1/a=8` + `OP_SIGN_IM_WALLET_BINDING(0x1A)` + `signing_message`，删除旧字符串签名域。
   - 验证:链端 cargo check --workspace + primitives/node/offchain-transaction test;后端 77(golden 不变);citizenapp signer/trade + citizenwallet payload_decoder flutter test 全绿。
 - **二进制原文签名裁决（2026-06-22 用户拍板"抖中方案"）**:下面 2 个不是 `blake2_256(域||SCALE)` 哈希域,**不强折成 hash**(会丢原始字节可解析性):
   - `ACTIVATE_ADMIN(0x18)` / `DECRYPT(0x19)`:签**原始可解析字节**,域是内嵌前缀,统一为 **`GMB || op_tag`(4B)二进制前缀**,保留原始字节签名 + 按偏移解析(冷钱包/node/citizenapp 锁步;DECRYPT 的 CHALLENGE_TOTAL_LEN + sha256 完整性字段同步)。
   - `IM_WALLET_BINDING(0x1A)`:2026-07-02 改为哈希域,签 `signing_message(OP_SIGN_IM_WALLET_BINDING, SCALE payload)`。
-  - `IM_NODE_PAIRING`:QR body schema 版本字符串,**不签名**,不占 signing_message op_tag。
+  - `IM_NODE_PAIRING`:原 QR body schema 版本字符串(不签名、不占 signing_message op_tag);2026-07-08 链端不再提供 IM 节点配对,已删除 sign.rs / signing.dart 常量。
   - 注册表收口:0x10/0x13-0x17/0x1A 为哈希域;0x18/0x19 为二进制前缀域。
 - 关联：[[ADR-024]] 账户派生单源（同 `GMB` 域 + op_tag 思想，本 ADR 把签名侧也收敛）；末尾随 T3/T4 / ADR-024 同一次重新创世生效
 - 取代：7 个散落的 `b"GMB_<NAME>_V1"` 字符串签名域

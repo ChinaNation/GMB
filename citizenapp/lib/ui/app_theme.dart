@@ -110,6 +110,7 @@ class AppTheme {
       ],
     );
   }
+
   // 状态提示装饰（用于 banner / 提示条）
   static BoxDecoration bannerDecoration(Color color) {
     return BoxDecoration(
@@ -118,6 +119,7 @@ class AppTheme {
       border: Border.all(color: color.withAlpha(50)),
     );
   }
+
   // 提案状态颜色
   static Color proposalStatusColor(int status) {
     switch (status) {
@@ -135,6 +137,7 @@ class AppTheme {
         return textTertiary;
     }
   }
+
   // ThemeData
   static ThemeData get lightTheme {
     return ThemeData(

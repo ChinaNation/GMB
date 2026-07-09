@@ -26,7 +26,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///   5. 展示确认 UI(金额 / 手续费 / 合计 / 收款方地址 / 备注);
 ///   6. 用户点确认 → 查 `offchain_queryNextNonce(user)` → 构造
 ///      `NodePaymentIntent`(随机 tx_id + `expires_at = currentBlock + 100`) →
-///      `signingHash()` → 热钱包 `signWithWalletNoAuth` → 提交
+///      `signingHash()` → 热钱包 `signWithWallet` → 提交
 ///      `offchain_submitPayment(intent_hex, sig_hex)` → 显示结果。
 class OffchainClearingPayPage extends StatefulWidget {
   const OffchainClearingPayPage({
@@ -423,8 +423,8 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
 
   /// 热钱包 / 冷钱包统一签名入口。
   ///
-  /// - 热钱包:先走 `WalletManager.authenticateForSigning`(生物/密码) +
-  ///   `signWithWalletNoAuth(walletIndex, signingHash)` 直接返 64 字节签名。
+  /// - 热钱包:走 `WalletManager.signWithWallet(walletIndex, signingHash)`,
+  ///   每次触发一次生物/密码验证,直接返 64 字节签名。
   /// - 清算行付款 payload 当前是 32 字节 signing_hash,冷钱包无法从 hash 独立还原
   ///   PaymentIntent 业务字段,因此不生成离线签名二维码。
   Future<Uint8List> _signSigningHash({
@@ -435,8 +435,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
     final wallet = widget.wallet;
     if (wallet.isHotWallet) {
       final manager = WalletManager();
-      await manager.authenticateForSigning();
-      return manager.signWithWalletNoAuth(wallet.walletIndex, signingHash);
+      return manager.signWithWallet(wallet.walletIndex, signingHash);
     }
 
     throw Exception('清算行付款签名必须使用本机热钱包；冷钱包无法独立验证付款 hash');

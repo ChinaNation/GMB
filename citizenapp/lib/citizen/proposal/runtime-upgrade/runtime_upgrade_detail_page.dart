@@ -1181,8 +1181,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed:
-                      _submitting ? null : () => _confirmJointReferendumVote(false),
+                  onPressed: _submitting
+                      ? null
+                      : () => _confirmJointReferendumVote(false),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.danger,
                     foregroundColor: Colors.white,
@@ -1208,8 +1209,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed:
-                      _submitting ? null : () => _confirmJointReferendumVote(true),
+                  onPressed: _submitting
+                      ? null
+                      : () => _confirmJointReferendumVote(true),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.success,
                     foregroundColor: Colors.white,

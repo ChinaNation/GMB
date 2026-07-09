@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:citizenapp/ui/app_theme.dart';
+
 /// 头像行右上角的三图标（决策 5：是图标不是按钮）。
 ///
 /// 本人：通知 / 聊天 / 关注（我的关注列表）。
@@ -46,6 +48,7 @@ class ProfileActionIcons extends StatelessWidget {
             _CircleIcon(
               icon: isFollowing ? Icons.how_to_reg : Icons.person_add_alt,
               tooltip: isFollowing ? '已关注' : '关注',
+              active: isFollowing,
               onTap: onToggleFollow,
             ),
             _CircleIcon(
@@ -71,18 +74,28 @@ class _CircleIcon extends StatelessWidget {
   const _CircleIcon({
     required this.icon,
     required this.tooltip,
+    this.active = false,
     this.onTap,
   });
 
   final IconData icon;
   final String tooltip;
+
+  /// 激活态（如已关注）用品牌色描边与图标高亮。
+  final bool active;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final color = active ? AppTheme.primary : AppTheme.textSecondary;
     return Material(
-      color: Colors.black.withValues(alpha: 0.22),
-      shape: const CircleBorder(),
+      color: AppTheme.surfaceWhite,
+      shape: CircleBorder(
+        side: BorderSide(
+          color: active ? AppTheme.primary : AppTheme.border,
+          width: active ? 1 : 0.5,
+        ),
+      ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -90,7 +103,7 @@ class _CircleIcon extends StatelessWidget {
           padding: const EdgeInsets.all(7),
           child: Icon(
             icon,
-            color: Colors.white,
+            color: color,
             size: 20,
             semanticLabel: tooltip,
           ),

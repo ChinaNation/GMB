@@ -549,7 +549,7 @@ class ImRuntime {
     // 聊天登录 mailbox 与 IM 设备绑定使用默认热钱包静默签名，不弹身份验证：
     // 这些操作不涉及转账，授权只保留在转账/投票/切换默认钱包等动钱或换身份处。
     final signature =
-        await _walletManager.signWithWalletNoAuth(account.walletIndex, payload);
+        await _walletManager.signWithWallet(account.walletIndex, payload);
     return '0x${_hexEncode(signature)}';
   }
 

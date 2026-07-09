@@ -148,7 +148,6 @@ class _WithdrawPageState extends State<WithdrawPage> {
         throw Exception('钱包公钥必须是 32 字节');
       }
       final walletManager = WalletManager();
-      await walletManager.authenticateForSigning();
 
       final rpc = OnchainClearingBankRpc();
       final result = await rpc.withdraw(
@@ -156,7 +155,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         amountFen: amountFen,
         sign: (payload) =>
-            walletManager.signWithWalletNoAuth(wallet.walletIndex, payload),
+            walletManager.signWithWallet(wallet.walletIndex, payload),
       );
 
       if (!mounted) return;

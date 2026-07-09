@@ -1,17 +1,24 @@
-import 'package:flutter/services.dart';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/wallet/core/wallet_secure_keys.dart';
+
+import '../support/fake_secure_seed_store.dart';
+
+const _mnemonicA =
+    'legal winner thank year wave sausage worth useful legal winner thank yellow';
+// 另一条合法但派生不同公钥的助记词，用于自愈"助记词不一致"分支。
+const _mnemonicB =
+    'abandon abandon abandon abandon abandon abandon abandon abandon '
+    'abandon abandon abandon about';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const secureStorageChannel =
-      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
-  const localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');
-  final secureStorage = <String, String>{};
+  late FakeSecureSeedStore fakeStore;
 
   setUpAll(() async {
     await WalletIsar.instance.ensureTestCoreInitialized();
@@ -19,65 +26,13 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    secureStorage.clear();
     await WalletIsar.instance.resetForTest();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(secureStorageChannel, (call) async {
-      final args = (call.arguments as Map?)?.cast<String, dynamic>() ??
-          <String, dynamic>{};
-      final key = args['key']?.toString();
-      switch (call.method) {
-        case 'read':
-          return key == null ? null : secureStorage[key];
-        case 'write':
-          if (key != null) {
-            secureStorage[key] = args['value']?.toString() ?? '';
-          }
-          return null;
-        case 'delete':
-          if (key != null) {
-            secureStorage.remove(key);
-          }
-          return null;
-        case 'deleteAll':
-          secureStorage.clear();
-          return null;
-        case 'containsKey':
-          return key != null && secureStorage.containsKey(key);
-        case 'readAll':
-          return Map<String, String>.from(secureStorage);
-        default:
-          return null;
-      }
-    });
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(localAuthChannel, (call) async {
-      switch (call.method) {
-        case 'isDeviceSupported':
-          return true;
-        case 'deviceSupportsBiometrics':
-          return false;
-        case 'getAvailableBiometrics':
-          return const <String>[];
-        case 'authenticate':
-          return true;
-        default:
-          return null;
-      }
-    });
+    fakeStore = FakeSecureSeedStore();
+    WalletManager.debugSeedStore = fakeStore;
   });
 
-  tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(secureStorageChannel, null);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(localAuthChannel, null);
-  });
-
-  group('WalletManager — 热钱包', () {
-    test(
-        'create/import/delete wallet should keep profile and secure data synced',
-        () async {
+  group('WalletManager — 热钱包创建/导入/删除', () {
+    test('create/import/delete 保持 profile 与安全存储同步', () async {
       final manager = WalletManager();
 
       final created = await manager.createWallet();
@@ -86,44 +41,29 @@ void main() {
       expect(created.profile.ss58, 2027);
       expect(created.profile.signMode, 'local');
       expect(created.mnemonic.trim().split(RegExp(r'\s+')).length, 12);
+      // seed（64 hex）与助记词分别落入严档 / 宽档金库。
+      expect(fakeStore.seeds[1], isNotNull);
+      expect(fakeStore.seeds[1]!.length, 64);
+      expect(fakeStore.mnemonics[1], created.mnemonic);
 
-      var wallets = await manager.getWallets();
-      expect(wallets.length, 1);
-      expect(await manager.getActiveWalletIndex(), 1);
-      // 热钱包应存储 seedHex（非助记词）。
-      expect(secureStorage[WalletSecureKeys.seedHexV1(1)], isNotEmpty);
-
-      final imported = await manager.importWallet(
-        'legal winner thank year wave sausage worth useful legal winner thank yellow',
-      );
+      final imported = await manager.importWallet(_mnemonicA);
       expect(imported.walletIndex, 2);
-      expect(imported.alg, 'sr25519');
       expect(imported.signMode, 'local');
-
-      wallets = await manager.getWallets();
-      expect(wallets.length, 2);
-      expect(await manager.getActiveWalletIndex(), 2);
-      expect(secureStorage[WalletSecureKeys.seedHexV1(2)], isNotEmpty);
-
-      final latestSecret = await manager.getLatestWalletSecret();
-      expect(latestSecret, isNotNull);
-      expect(latestSecret!.profile.walletIndex, 2);
-      // seedHex 应为 64 个 hex 字符（32 字节）。
-      expect(latestSecret.seedHex.length, 64);
+      expect(fakeStore.seeds[2], isNotNull);
+      expect(fakeStore.mnemonics[2], _mnemonicA);
 
       await manager.deleteWallet(2);
-      wallets = await manager.getWallets();
-      expect(wallets.length, 1);
-      expect(await manager.getActiveWalletIndex(), 1);
-      expect(secureStorage.containsKey(WalletSecureKeys.seedHexV1(2)), isFalse);
+      expect(fakeStore.seeds.containsKey(2), isFalse);
+      expect(fakeStore.mnemonics.containsKey(2), isFalse);
 
       await manager.deleteWallet(1);
       expect(await manager.getWallet(), isNull);
       expect(await manager.getWallets(), isEmpty);
-      expect(secureStorage, isEmpty);
+      expect(fakeStore.seeds, isEmpty);
+      expect(fakeStore.mnemonics, isEmpty);
     });
 
-    test('importWallet should reject invalid mnemonic', () async {
+    test('importWallet 拒绝非法助记词', () async {
       final manager = WalletManager();
       expect(
         () => manager.importWallet('hello world'),
@@ -137,77 +77,147 @@ void main() {
       );
     });
 
-    test('should not read removed seed key', () async {
-      final manager = WalletManager();
-      final imported = await manager.importWallet(
-        'legal winner thank year wave sausage worth useful legal winner thank yellow',
-      );
-      final walletIndex = imported.walletIndex;
-      final seedKey = WalletSecureKeys.seedHexV1(walletIndex);
-
-      secureStorage.remove(seedKey);
-
-      final secret = await manager.getWalletSecretByIndex(walletIndex);
-      expect(secret, isNull);
-    });
-
-    test('getDefaultWallet ignores cold wallets (WalletGate 门禁判定依据)',
-        () async {
+    test('getDefaultWallet 忽略冷钱包（WalletGate 门禁判定依据）', () async {
       final manager = WalletManager();
 
-      // 空库无钱包 → null，门禁据此拦进强制创建页。
       expect(await manager.getDefaultWallet(), isNull);
 
-      // 仅有冷钱包 → 仍为 null（冷钱包不能作为默认身份）。
       await manager.importColdWallet(
         address:
             '0x2222222222222222222222222222222222222222222222222222222222222222',
       );
       expect(await manager.getDefaultWallet(), isNull);
 
-      // 出现热钱包 → 返回该热钱包。
-      final imported = await manager.importWallet(
-        'legal winner thank year wave sausage worth useful legal winner thank yellow',
-      );
+      final imported = await manager.importWallet(_mnemonicA);
       final def = await manager.getDefaultWallet();
       expect(def, isNotNull);
       expect(def!.walletIndex, imported.walletIndex);
       expect(def.isHotWallet, isTrue);
     });
+
+    test('D3：无锁屏设备拒绝创建热钱包（fail-closed）', () async {
+      fakeStore.noDeviceLock = true;
+      final manager = WalletManager();
+      await expectLater(
+        manager.createWallet(),
+        throwsA(isA<WalletAuthException>()),
+      );
+      // 未落库、未写密钥。
+      expect(await manager.getWallets(), isEmpty);
+      expect(fakeStore.seeds, isEmpty);
+    });
+  });
+
+  group('WalletManager — 统一签名', () {
+    final payload = Uint8List.fromList(List<int>.generate(32, (i) => i));
+
+    test('统一签名：每次都读一次 seed（无会话缓存）', () async {
+      final manager = WalletManager();
+      await manager.importWallet(_mnemonicA);
+      fakeStore.readSeedCount = 0;
+
+      final sig = await manager.signWithWallet(1, payload);
+      await manager.signWithWallet(1, payload);
+
+      expect(sig.length, 64);
+      // 两次签名 = 两次读 seed（两次验证），不复用、无会话密钥。
+      expect(fakeStore.readSeedCount, 2);
+    });
+
+    test('verifyWalletAccess 读一次 seed 触发一次验证（切换身份用）', () async {
+      final manager = WalletManager();
+      await manager.importWallet(_mnemonicA);
+      fakeStore.readSeedCount = 0;
+
+      await manager.verifyWalletAccess(1);
+
+      expect(fakeStore.readSeedCount, 1);
+    });
+
+    test('AuthCancelled 上抛，绝不自愈重写 seed', () async {
+      final manager = WalletManager();
+      await manager.importWallet(_mnemonicA);
+      fakeStore.putSeedCount = 0;
+      fakeStore.cancelSeedReads.add(1);
+
+      await expectLater(
+        manager.signWithWallet(1, payload),
+        throwsA(isA<AuthCancelled>()),
+      );
+      expect(fakeStore.putSeedCount, 0);
+    });
+  });
+
+  group('WalletManager — seed 严档失效自愈', () {
+    final payload = Uint8List.fromList(List<int>.generate(32, (_) => 7));
+
+    test('KEK 失效 → 从助记词自愈重封装并签名成功', () async {
+      final manager = WalletManager();
+      await manager.importWallet(_mnemonicA);
+      expect(fakeStore.putSeedCount, 1);
+      final originalSeed = fakeStore.seeds[1];
+
+      fakeStore.invalidatedSeeds.add(1);
+      final sig = await manager.signWithWallet(1, payload);
+
+      expect(sig.length, 64);
+      expect(fakeStore.putSeedCount, 2); // 自愈重封装一次
+      expect(fakeStore.seeds[1], originalSeed); // 重派生得到相同 seed
+      expect(fakeStore.invalidatedSeeds.contains(1), isFalse);
+    });
+
+    test('助记词也缺失 → 抛需重新导入', () async {
+      final manager = WalletManager();
+      await manager.importWallet(_mnemonicA);
+      fakeStore.invalidatedSeeds.add(1);
+      fakeStore.mnemonics.remove(1);
+
+      await expectLater(
+        manager.signWithWallet(1, payload),
+        throwsA(
+          isA<WalletAuthException>()
+              .having((e) => e.message, 'message', contains('重新导入')),
+        ),
+      );
+    });
+
+    test('助记词与钱包不一致 → 抛无法恢复，不写错误 seed', () async {
+      final manager = WalletManager();
+      await manager.importWallet(_mnemonicA);
+      fakeStore.putSeedCount = 0;
+      fakeStore.invalidatedSeeds.add(1);
+      fakeStore.mnemonics[1] = _mnemonicB; // 派生不同公钥
+
+      await expectLater(
+        manager.signWithWallet(1, payload),
+        throwsA(
+          isA<WalletAuthException>()
+              .having((e) => e.message, 'message', contains('不一致')),
+        ),
+      );
+      // pubkey 校验在 deleteSeed/putSeed 之前，错误 seed 不落库。
+      expect(fakeStore.putSeedCount, 0);
+    });
   });
 
   group('WalletManager — 冷钱包', () {
-    // 使用固定 hex 公钥导入冷钱包，避免与热钱包公钥重复。
     const coldPubkeyHex =
         '0x1111111111111111111111111111111111111111111111111111111111111111';
 
-    test('importColdWallet should store only public key, no seed', () async {
+    test('importColdWallet 只存公钥，seed 金库无条目', () async {
       final manager = WalletManager();
-
       final cold = await manager.importColdWallet(address: coldPubkeyHex);
       expect(cold.signMode, 'external');
-
-      // 冷钱包不存 seed。
-      expect(
-        secureStorage.containsKey(WalletSecureKeys.seedHexV1(cold.walletIndex)),
-        isFalse,
-      );
-
-      // getLatestWalletSecret 返回 null（冷钱包无密钥）。
-      await manager.setActiveWallet(cold.walletIndex);
-      final secret = await manager.getLatestWalletSecret();
-      expect(secret, isNull);
+      expect(fakeStore.seeds.containsKey(cold.walletIndex), isFalse);
+      expect(fakeStore.mnemonics.containsKey(cold.walletIndex), isFalse);
     });
 
-    test('deleteColdWallet should not touch secure storage', () async {
+    test('deleteWallet 冷钱包不影响 seed 金库', () async {
       final manager = WalletManager();
-
       final cold = await manager.importColdWallet(address: coldPubkeyHex);
-      final walletIndex = cold.walletIndex;
-
-      await manager.deleteWallet(walletIndex);
+      await manager.deleteWallet(cold.walletIndex);
       final wallets = await manager.getWallets();
-      expect(wallets.where((w) => w.walletIndex == walletIndex), isEmpty);
+      expect(wallets.where((w) => w.walletIndex == cold.walletIndex), isEmpty);
     });
   });
 }

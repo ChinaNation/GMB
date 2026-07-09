@@ -117,16 +117,26 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       _toController.text = widget.initialToAddress!;
     }
     _remarkController.addListener(_onRemarkChanged);
+    // 本页常驻 IndexedStack;在「我的→钱包」增删/清空钱包后经
+    // walletsRevision 广播重读当前交易钱包(纯本地 Isar),
+    // 避免付款方停留在已删除的钱包上导致签名报错。
+    WalletManager.walletsRevision.addListener(_onWalletsChanged);
     _bootstrap();
   }
 
   @override
   void dispose() {
+    WalletManager.walletsRevision.removeListener(_onWalletsChanged);
     _remarkController.removeListener(_onRemarkChanged);
     _toController.dispose();
     _amountController.dispose();
     _remarkController.dispose();
     super.dispose();
+  }
+
+  void _onWalletsChanged() {
+    if (!mounted) return;
+    _reloadWalletAndLocalRecords();
   }
 
   void _onRemarkChanged() {
@@ -420,13 +430,10 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       final Future<Uint8List> Function(Uint8List payload) signCallback;
 
       if (wallet.isHotWallet) {
-        // 热钱包：先验证设备密码/生物识别，再构造交易。
-        // 密码验证必须在 RPC 调用之前，避免用户等 RPC 后才弹密码框。
+        // 热钱包：签名回调在构造交易后调用，届时弹一次生物/密码验证。
         final walletManager = WalletManager();
-        await walletManager.authenticateForSigning();
-        // 验证通过后，签名回调跳过二次验证
         signCallback = (payload) =>
-            walletManager.signWithWalletNoAuth(wallet.walletIndex, payload);
+            walletManager.signWithWallet(wallet.walletIndex, payload);
       } else {
         // 冷钱包：扫码签名。
         signCallback = (Uint8List payload) async {

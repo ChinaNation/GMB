@@ -121,7 +121,6 @@ class _DepositPageState extends State<DepositPage> {
         throw Exception('钱包公钥必须是 32 字节');
       }
       final walletManager = WalletManager();
-      await walletManager.authenticateForSigning();
 
       final rpc = OnchainClearingBankRpc();
       final result = await rpc.deposit(
@@ -129,7 +128,7 @@ class _DepositPageState extends State<DepositPage> {
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         amountFen: amountFen,
         sign: (payload) =>
-            walletManager.signWithWalletNoAuth(wallet.walletIndex, payload),
+            walletManager.signWithWallet(wallet.walletIndex, payload),
       );
 
       if (!mounted) return;

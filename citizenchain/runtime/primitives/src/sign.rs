@@ -18,8 +18,6 @@ pub const QR_KIND_SIGN_RESPONSE: u8 = 2;
 pub const QR_KIND_USER_CONTACT: u8 = 3;
 /// QR_V1 用户转账固定码。
 pub const QR_KIND_USER_TRANSFER: u8 = 4;
-/// QR_V1 IM 节点配对固定码。
-pub const QR_KIND_IM_NODE_PAIRING: u8 = 5;
 
 /// QR_V1 登录签名动作。
 pub const QR_ACTION_LOGIN: u16 = 1;
@@ -45,7 +43,6 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 // - 0x10/0x13-0x17:哈希域,走 `signing_message`,进入 `SIGN_OP_TAGS`。
 // - 0x18/0x19:二进制前缀域,只签原始 payload,不进入 `SIGN_OP_TAGS`。
 // - 0x1A:IM 钱包绑定哈希域,走 `signing_message`。
-// - IM 节点配对不是签名,只保留 QR body schema 字符串。
 
 /// 公民档案上链确认。
 pub const OP_SIGN_CITIZEN_IDENTITY: u8 = 0x10;
@@ -98,6 +95,3 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
     data.extend_from_slice(scale_payload);
     blake2_256(&data)
 }
-
-/// IM 节点配对 QR body 的 schema 版本串,不是签名域。
-pub const IM_NODE_PAIRING_PROTO: &str = "GMB_IM_NODE_PAIRING_V1";

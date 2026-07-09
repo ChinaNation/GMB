@@ -58,8 +58,8 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
   Future<void> _probeDeviceSecure() async {
     bool secure;
     try {
-      final probe = widget.deviceSecureProbe ??
-          LocalAuthentication().isDeviceSupported;
+      final probe =
+          widget.deviceSecureProbe ?? LocalAuthentication().isDeviceSupported;
       secure = await probe();
     } catch (_) {
       // 探测不可用按未开锁屏处理（fail-closed），与 createWallet 的前置一致。
@@ -170,6 +170,11 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
                   ),
                   const SizedBox(height: 20),
                   const _SecurityNoteRow(
+                    icon: Icons.vpn_key_outlined,
+                    text: '助记词和密钥独立储存，创建时各验证一次',
+                  ),
+                  const SizedBox(height: 8),
+                  const _SecurityNoteRow(
                     icon: Icons.lock_outline,
                     text: '助记词加密存储在本机，可在钱包详情中查看',
                   ),
@@ -198,7 +203,7 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
                     height: 48,
                     child: FilledButton(
                       onPressed: canCreate ? _create : null,
-                      child: Text(_creating ? '创建中…' : '创建热钱包'),
+                      child: Text(_creating ? '创建中…' : '创建钱包'),
                     ),
                   ),
                   const SizedBox(height: 10),

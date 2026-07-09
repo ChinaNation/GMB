@@ -61,7 +61,11 @@ class UserProfilePage extends StatefulWidget {
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
-  static const double _expandedHeight = 300;
+  /// 顶部头图高度（不含状态栏）。
+  static const double _bannerHeight = 128;
+
+  /// 头部展开总高（头图 + 白底资料区），不含状态栏。
+  static const double _expandedHeight = 348;
 
   late final CitizenProfileApi _api;
   late final CitizenProfileCache _cache;
@@ -343,8 +347,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 flexibleSpace: FlexibleSpaceBar(
                   background: CollapsibleHeader(
                     expandedHeight: _expandedHeight,
+                    bannerHeight: _bannerHeight,
                     collapsedTitle: _title,
-                    bottomInset: ProfileCategoryTabs.height,
                     banner: _bannerWidget(),
                     foreground: ProfileHeaderCard(
                       ownerAccount: widget.ownerAccount,

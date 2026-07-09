@@ -138,7 +138,7 @@ export default function QrScannerModal({ onResult, onClose }: QrScannerModalProp
     >
       <div
         ref={dialogRef}
-        className="w-full max-w-md rounded-2xl border border-white/10 bg-navy-900 p-6"
+        className="w-full max-w-xs rounded-2xl border border-white/10 bg-navy-900 p-5"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -163,7 +163,7 @@ export default function QrScannerModal({ onResult, onClose }: QrScannerModalProp
             {error}
           </div>
         ) : (
-          <div className="relative overflow-hidden rounded-xl bg-black">
+          <div className="relative mx-auto w-full max-w-[240px] overflow-hidden rounded-xl bg-black">
             <video ref={videoRef} className="aspect-square w-full object-cover" muted playsInline />
             {/* 取景框：四角 + 中间扫描线 */}
             <div className="pointer-events-none absolute inset-8">

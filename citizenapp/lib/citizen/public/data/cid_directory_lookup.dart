@@ -3,8 +3,7 @@ import 'package:citizenapp/citizen/public/data/public_provinces.dart';
 
 /// 机构目录只读反查结果(省/市/法定代表人),源自公权目录本地 Isar 库。
 class CidDirectoryInfo {
-  const CidDirectoryInfo(
-      {this.provinceName, this.cityName, this.legalRepName});
+  const CidDirectoryInfo({this.provinceName, this.cityName, this.legalRepName});
 
   final String? provinceName;
   final String? cityName;

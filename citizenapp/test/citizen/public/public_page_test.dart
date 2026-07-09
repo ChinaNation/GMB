@@ -13,8 +13,7 @@ import 'public_nav_harness.dart';
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 void main() {
-  testWidgets('字典延迟就绪:先回退 code,ensureSynced 完成后回刷成市名(时序回归)',
-      (tester) async {
+  testWidgets('字典延迟就绪:先回退 code,ensureSynced 完成后回刷成市名(时序回归)', (tester) async {
     // 回归 20260623 时序 bug:首装字典(4.2 万条)还在灌库时市名回退 code(001),
     // 同步完成后 _syncThenRefresh 须清脏缓存按就绪字典重 join,否则永远停在 001。
     final gate = Completer<void>();

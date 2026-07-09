@@ -13,7 +13,8 @@ class ProposalCache {
       {};
   static final Map<int, CreateMultisigProposalInfo> _createMultisigDetailCache =
       {};
-  static final Map<int, CloseMultisigProposalInfo> _closeMultisigDetailCache = {};
+  static final Map<int, CloseMultisigProposalInfo> _closeMultisigDetailCache =
+      {};
 
   // ──── 读取 ────
 

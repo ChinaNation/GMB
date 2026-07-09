@@ -63,11 +63,6 @@ const int kOpSignImWalletBinding = 0x1A;
 /// 二进制前缀域统一前缀长度 = GMB(3B) + op_tag(1B) = 4(对齐 BINARY_PREFIX_LEN)。
 const int kBinaryPrefixLen = 4;
 
-// ── IM QR body schema 常量 ──
-
-/// IM 节点配对 QR body schema 版本串,不是签名域。
-const String kImNodePairingProto = 'GMB_IM_NODE_PAIRING_V1';
-
 /// 签名域分隔符 GMB(3 字节 ASCII),单源对齐 core_const::GMB。
 const List<int> kGmbSignDomain = [0x47, 0x4D, 0x42]; // "GMB"
 

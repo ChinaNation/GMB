@@ -100,7 +100,8 @@ class LegislationVoteQueryService {
     );
     final legislature = c.u8() == 0
         ? null
-        : LegHouseRef(code: _codeStr(c.bytes(4)), accountHex: _hex(c.bytes(32)));
+        : LegHouseRef(
+            code: _codeStr(c.bytes(4)), accountHex: _hex(c.bytes(32)));
     final needsGuard = c.u8() == 1;
     return LegislationVoteMeta(
       voteType: voteType,

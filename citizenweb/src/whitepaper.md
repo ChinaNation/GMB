@@ -224,12 +224,12 @@
 
 ## 2.5.全节点<br><span class="whitepaper-heading-en">2.5. Full Nodes</span>
 
-* 全节点是链同步、交易验证和新块铸块节点，按归档或普通模式保存链数据；链上中国平台和节能能力是可按需打开或关闭的本地节点能力；CitizenApp 私密聊天不再由区块链节点承载；新区块特指除创世区块以外的所有区块，采用PoW共识机制获得铸块权；<br><span class="whitepaper-en">Full nodes are chain-synchronization, transaction-validation, and new-block minting nodes. They store chain data in archive or regular mode; the OnChina platform and energy-saving capability are local node capabilities that can be enabled or disabled as needed. CitizenApp private chat is no longer carried by blockchain nodes. New blocks refer to all blocks other than the genesis block. Full nodes obtain block-minting rights through the PoW consensus mechanism.</span>
+* 全节点是链同步、交易验证和新块铸块节点，按归档或普通模式保存链数据；链上中国平台和节能能力是可按需打开或关闭的本地节点能力；新区块特指除创世区块以外的所有区块，采用PoW共识机制获得铸块权；<br><span class="whitepaper-en">Full nodes are chain-synchronization, transaction-validation, and new-block minting nodes. They store chain data in archive or regular mode; the OnChina platform and energy-saving capability are local node capabilities that can be enabled or disabled as needed. New blocks refer to all blocks other than the genesis block. Full nodes obtain block-minting rights through the PoW consensus mechanism.</span>
 * 全节点数量不限，部署运行citizenchain（中文：公民链）的即全节点，任何组织、任何人均可下载安装节点软件成为全节点，全节点只分为归档全节点和普通全节点两种模式，默认启动为归档全节点模式；<br><span class="whitepaper-en">The number of full nodes is unlimited. Any deployment that runs citizenchain (Chinese: 公民链) is a full node. Any organization or individual may download and install the node software to become a full node. Full nodes have only two modes: archive full node and regular full node. The default startup mode is archive full node.</span>
 * 清算行不是新的机构类型，而是全节点的链下清算角色；全节点在注册局注册为私法人股份公司或其下属非法人，并在链上完成清算行节点声明后，可加入清算网络成为清算行节点；<br><span class="whitepaper-en">A clearing bank is not a new institution type; it is an off-chain clearing role of a full node. A full node registered with the Registry as a private legal-person joint-stock company or its subordinate unincorporated entity may join the clearing network as a clearing-bank node after completing on-chain clearing-bank node declaration.</span>
 * 清算行节点必须绑定机构主账户、节点 PeerId 和可访问的 RPC 端点；用户可绑定清算行开户，清算行可提供扫码支付清算服务，并获得其作为收款方清算行实际执行的链下清算手续费；<br><span class="whitepaper-en">A clearing-bank node must bind its institutional main account, node PeerId, and reachable RPC endpoint. Users may bind a clearing bank to open a clearing account. The clearing bank may provide QR-payment clearing services and receives the off-chain clearing fees for settlement it actually performs as the recipient-side clearing bank.</span>
 * 清算网络是连接去中心化金融与传统金融的纽带，把符合资格并有能力部署全节点的银行、第三方支付机构和企业纳入公民链，为用户提供快速的去中心化金融服务。<br><span class="whitepaper-en">The clearing network links decentralized finance with traditional finance. It brings eligible banks, third-party payment providers, and enterprises capable of deploying full nodes into CitizenChain, providing users with fast decentralized financial services.</span>
-* 权威节点、权益节点和清算行节点必须是归档全节点，其他任意节点可自行选择归档全节点或普通全节点；归档全节点保存完整区块链数据，适合治理机构、清算行和需要完整历史数据的组织；普通全节点适用于大部分用户，使用剪裁后的链数据，同时保留挖矿和出块能力，以节约磁盘空间。链上中国平台和节能能力属于本机节点能力，可在节点桌面端按需打开或关闭；公民 App 私密聊天不再由区块链节点承载。<br><span class="whitepaper-en">Authority nodes, stake nodes, and clearing-bank nodes must be archive full nodes. Any other node may choose archive full node or regular full node. Archive full nodes store complete blockchain data and are suitable for governance institutions, clearing banks, and organizations that need complete historical data. Regular full nodes are suitable for most users: they use pruned chain data while retaining mining and block-production capability, thereby saving disk space. The OnChina platform and energy-saving capability are local node capabilities that can be enabled or disabled from the desktop console as needed. CitizenApp private chat is no longer carried by blockchain nodes.</span>
+* 权威节点、权益节点和清算行节点必须是归档全节点，其他任意节点可自行选择归档全节点或普通全节点；归档全节点保存完整区块链数据，适合治理机构、清算行和需要完整历史数据的组织；普通全节点适用于大部分用户，使用剪裁后的链数据，同时保留挖矿和出块能力，以节约磁盘空间。链上中国平台和节能能力属于本机节点能力，可在节点桌面端按需打开或关闭。<br><span class="whitepaper-en">Authority nodes, stake nodes, and clearing-bank nodes must be archive full nodes. Any other node may choose archive full node or regular full node. Archive full nodes store complete blockchain data and are suitable for governance institutions, clearing banks, and organizations that need complete historical data. Regular full nodes are suitable for most users: they use pruned chain data while retaining mining and block-production capability, thereby saving disk space. The OnChina platform and energy-saving capability are local node capabilities that can be enabled or disabled from the desktop console as needed.</span>
 
 ## 2.6.轻节点：公民/访客<br><span class="whitepaper-heading-en">2.6. Light Nodes: Citizens / Visitors</span>
 
@@ -382,7 +382,7 @@ GMB/
 │   └── runtime/                 # On-chain runtime for issuance, governance, voting, entities, admins, and citizen identity
 ├── citizenapp/                  # CitizenApp, online light node and hot wallet
 ├── citizenwallet/               # CitizenWallet, offline cold wallet and QR signing tool
-└── citizenweb/                     # Official citizenweb and whitepaper presentation
+└── citizenweb/                     # Official website and whitepaper presentation
 ```
 
 ****
@@ -416,25 +416,25 @@ GMB/
 * 投票引擎是链上投票流程的统一归属，负责提案状态、投票快照、计票、防重放、结果确认、执行回调和失败处理；业务模块只提交业务数据、声明提案 owner，并接收投票引擎回调，不自行实现投票流程。<br><span class="whitepaper-en">The voting engine is the unified owner of on-chain voting flows. It manages proposal state, voting snapshots, tallying, replay protection, result confirmation, execution callbacks, and failure handling. Business modules submit business data, declare proposal ownership, and receive voting-engine callbacks; they do not implement voting flows themselves.</span>
 * 投票引擎按用途分为内部投票、联合投票、立法投票和选举投票四类，使机构自治、治理决议、法律制定和公职选举各走各的规则，同时共享同一套链上状态机。<br><span class="whitepaper-en">The voting engine is divided by purpose into internal voting, joint voting, legislative voting, and election voting, so institutional self-governance, governance resolutions, lawmaking, and public-office elections each follow their own rules while sharing one on-chain state machine.</span>
 
-### 5.2.1.内部投票<br><span class="whitepaper-heading-en">5.2.1. Internal Voting</span>
+### 5.2.1.内部投票<br><span class="whitepaper-heading-en">5.2.1. internal-vote</span>
 
 * 内部投票用于机构和多签账户的内部治理，例如管理员更换、账户关闭、机构内部资金划转和其他仅影响本主体的事项。<br><span class="whitepaper-en">Internal voting is used for the internal governance of institutions and multisig accounts, including administrator changes, account closure, internal fund transfers, and other matters affecting only the subject itself.</span>
 * 内部投票以当前 active admins 为授权基础，创建提案时锁定管理员快照和阈值快照；动态阈值必须严格过半且不得超过管理员人数，固定治理机构按链上固定阈值执行。<br><span class="whitepaper-en">Internal voting is authorized by the current active admins. When a proposal is created, the administrator snapshot and threshold snapshot are locked. Dynamic thresholds must be strictly more than half and may not exceed the administrator count, while fixed governance institutions use fixed on-chain thresholds.</span>
 * 内部投票不处理业务本身的生命周期写入；通过后由投票引擎回调对应 owner 模块执行，失败重试、取消和终态清理仍归投票引擎。<br><span class="whitepaper-en">Internal voting does not write the business lifecycle itself. After approval, the voting engine calls back the corresponding owner module for execution, while retries, cancellation, and terminal cleanup remain inside the voting engine.</span>
 
-### 5.2.2.联合投票<br><span class="whitepaper-heading-en">5.2.2. Joint Voting</span>
+### 5.2.2.联合投票<br><span class="whitepaper-heading-en">5.2.2. joint-vote</span>
 
 * 联合投票用于国家储委会、省储委会、省储行之间的共同治理事项，独立于选举投票，不得把联合公投阶段混写为公职选举。<br><span class="whitepaper-en">Joint voting is used for common-governance matters among the National Reserve Committee, Provincial Reserve Committees, and Provincial Reserve Banks. It is separate from election voting, and its referendum stage must not be treated as a public-office election.</span>
 * 机构联合投票阶段由国家储委会 19 票、43 个省储委会 43 票、43 个省储行 43 票组成，共 105 票；全票通过则直接执行，非全票或超期则进入联合投票模块内部的联合公投阶段。<br><span class="whitepaper-en">The institutional joint-vote stage consists of 19 National Reserve Committee votes, 43 Provincial Reserve Committee votes, and 43 Provincial Reserve Bank votes, totaling 105 votes. Unanimous approval executes directly; non-unanimous approval or timeout enters the joint referendum stage inside the joint-vote module.</span>
 * 联合公投只由提案快照中的认证公民参与，超过 50% 的可投票公民同意才通过；超期或未超过 50% 则否决。<br><span class="whitepaper-en">A joint referendum is participated in only by certified citizens in the proposal snapshot. It passes only when more than 50% of eligible voting citizens approve; timeout or approval not exceeding 50% rejects it.</span>
 
-### 5.2.3.立法投票<br><span class="whitepaper-heading-en">5.2.3. Legislative Voting</span>
+### 5.2.3.立法投票<br><span class="whitepaper-heading-en">5.2.3. legislation-vote</span>
 
 * 立法投票用于公民宪法和各级法律的制定、修改、废止流程，按公民宪法规定的主体、表决类型、阈值和阶段推进。<br><span class="whitepaper-en">Legislative voting is used for enacting, amending, and repealing the Citizen Constitution and laws at each level. It follows the subjects, vote types, thresholds, and stages defined by the Citizen Constitution.</span>
 * 两院顺序、行政签署、强制公投、教育类表决和重大表决等立法规则由立法投票模块统一承载；立法院模块只保存法律数据、版本和状态，不自行计票。<br><span class="whitepaper-en">Legislative rules such as bicameral ordering, executive signing, mandatory referendum, education-related votes, and major votes are carried uniformly by the legislative-vote module. The legislature module stores only law data, versions, and status, and does not tally votes itself.</span>
 * 立法投票通过后回调立法院模块写入新的法律版本；公民宪法不可修改条款由链端硬性保护。<br><span class="whitepaper-en">After legislative voting passes, it calls back the legislature module to write the new law version. Immutable clauses of the Citizen Constitution are protected by hard on-chain guards.</span>
 
-### 5.2.4.选举投票<br><span class="whitepaper-heading-en">5.2.4. Election Voting</span>
+### 5.2.4.选举投票<br><span class="whitepaper-heading-en">5.2.4. election-vote</span>
 
 * 选举投票面向公职人员产生机制，目标是支持公民普选和公权机构成员互选两类场景；普选按链上公民身份快照确定选民范围，互选按对应机构成员快照确定选民范围。<br><span class="whitepaper-en">Election voting serves the mechanism for selecting public officials. Its goal is to support both general citizen elections and mutual elections among members of public-authority institutions. General elections use on-chain citizen-identity snapshots to determine the electorate, while mutual elections use snapshots of the corresponding institution's members.</span>
 * 投票资格和人口范围由 `citizen-identity` 与投票引擎快照共同确认，选举模块只读取链上授权身份、账户和必要哈希，不接收链下身份凭证。<br><span class="whitepaper-en">Eligibility and population scope are confirmed jointly by `citizen-identity` and voting-engine snapshots. The election module reads only authorized on-chain identities, accounts, and necessary hashes; it does not accept off-chain identity credentials.</span>
@@ -500,52 +500,52 @@ VOTING → PASSED → EXECUTED
 * 管理员模组只维护管理员集合这个授权真源，不承担机构创建、机构注销、公民档案或投票计票；管理员变更一律围绕 active admins、内部投票和注册局登记边界展开。<br><span class="whitepaper-en">The admins module group maintains only the administrator set as the authorization source of truth. It does not handle institution creation, institution closure, citizen records, or vote tallying. Administrator changes are built around active admins, internal voting, and registry boundaries.</span>
 * 创世机构的初始管理员在创世状态写入；运行期非创世机构由注册局创建机构时提交初始管理员集合，之后由该机构按自己的规则更换管理员。<br><span class="whitepaper-en">Initial administrators of genesis institutions are written in genesis state. During runtime, non-genesis institutions receive their initial administrator set when the registry creates the institution, and later change administrators under their own rules.</span>
 
-### 5.4.1.个人多签管理员<br><span class="whitepaper-heading-en">5.4.1. Personal Multisig Admins</span>
+### 5.4.1.个人多签管理员<br><span class="whitepaper-heading-en">5.4.1. personal-admins</span>
 
 * 个人多签管理员模块保存个人多签账户的管理员集合，个人多签创建、关闭和资金动作由个人多签实体模块执行，管理员变更通过内部投票完成。<br><span class="whitepaper-en">The personal multisig admins module stores administrator sets for personal multisig accounts. Creation, closure, and fund actions are executed by the personal multisig entity module, while administrator changes are completed through internal voting.</span>
 * 个人多签不依附注册局机构，属于开放账户形态；管理员集合和动态阈值服务于个人共同控制账户的自治。<br><span class="whitepaper-en">Personal multisig accounts are not attached to registry institutions and are an open account form. Their administrator sets and dynamic thresholds serve self-governance of jointly controlled personal accounts.</span>
 
-### 5.4.2.私权机构管理员<br><span class="whitepaper-heading-en">5.4.2. Private-Institution Admins</span>
+### 5.4.2.私权机构管理员<br><span class="whitepaper-heading-en">5.4.2. private-admins</span>
 
 * 私权机构管理员模块保存个体经营、合伙企业、股权公司、股份公司、公益组织、注册协会和非法人组织等私权主体的管理员集合。<br><span class="whitepaper-en">The private-institution admins module stores administrator sets for private-law subjects such as sole proprietorships, partnerships, equity companies, corporations, welfare organizations, registered associations, and unincorporated organizations.</span>
 * 私权机构由注册局创建时写入初始管理员，创建成功后机构自治；后续更换管理员应由机构自身管理员按规则发起，不由注册局长期代管。<br><span class="whitepaper-en">Private institutions receive initial administrators when created by the registry. After creation they are self-governing; later administrator changes should be initiated by the institution's own administrators under its rules, not permanently managed by the registry.</span>
 
-### 5.4.3.公权机构管理员<br><span class="whitepaper-heading-en">5.4.3. Public-Institution Admins</span>
+### 5.4.3.公权机构管理员<br><span class="whitepaper-heading-en">5.4.3. public-admins</span>
 
 * 公权机构管理员模块保存公权机构管理员集合，包括注册局、法院、立法机构、教育机构和其他政府类机构的 active admins。<br><span class="whitepaper-en">The public-institution admins module stores administrator sets for public-authority institutions, including registries, courts, legislatures, education institutions, and other government institutions.</span>
 * 联邦注册局按省级 5 人组治理，市注册局和其他公权机构按本机构管理员集合自治；公权机构管理员变更不得绕过投票引擎，也不得把注册局操作员身份恢复成独立授权真源。<br><span class="whitepaper-en">The Federal Registry is governed by provincial five-person groups, while city registries and other public institutions govern themselves through their own administrator sets. Public-institution administrator changes must not bypass the voting engine or restore registry-operator identity as an independent authorization source.</span>
 
-## 5.5.公权业务模组<br><span class="whitepaper-heading-en">5.5. Public-Business Modules</span>
+## 5.5.公权业务模组<br><span class="whitepaper-heading-en">5.5. public</span>
 
 * 公权业务模组承载立法、选举等公权业务的业务壳和数据状态；凡涉及表决、计票、快照、通过或否决判定的流程，统一交由投票引擎处理。<br><span class="whitepaper-en">Public-business modules carry business shells and data state for public-authority affairs such as legislation and elections. Any flow involving voting, tallying, snapshots, or pass/reject judgment is handled uniformly by the voting engine.</span>
 
-### 5.5.1.立法院模块<br><span class="whitepaper-heading-en">5.5.1. Legislature Module</span>
+### 5.5.1.立法院模块<br><span class="whitepaper-heading-en">5.5.1. legislation-yuan</span>
 
 * 立法院模块把公民宪法和各级法律作为链上结构化法律保存，维护 law、law_version、状态和提案入口；展示端从链上结构化法律重建可读文本。<br><span class="whitepaper-en">The legislature module stores the Citizen Constitution and laws at each level as structured on-chain laws, maintaining laws, law versions, status, and proposal entry points. Display clients reconstruct readable text from structured on-chain laws.</span>
 * 立法院模块不复刻立法投票规则；修法、废止、新法制定等提案进入立法投票模块，由投票引擎完成阶段推进和结果确认。<br><span class="whitepaper-en">The legislature module does not replicate legislative voting rules. Proposals to amend, repeal, or enact laws enter the legislative-vote module, where the voting engine handles stage progression and result confirmation.</span>
 * 公民宪法不可修改条款在链端强制保护，任何立法入口都不能绕开该保护写入非法版本。<br><span class="whitepaper-en">Immutable clauses of the Citizen Constitution are protected by hard on-chain guards, and no legislative entry point may bypass that protection to write an invalid version.</span>
 
-### 5.5.2.选举模块<br><span class="whitepaper-heading-en">5.5.2. Election Module</span>
+### 5.5.2.选举模块<br><span class="whitepaper-heading-en">5.5.2. election-campaign</span>
 
 * 选举模块定位为公职人员选举的业务入口，面向候选人登记、职位规则、选民范围、届期衔接和结果公示等业务材料组织。<br><span class="whitepaper-en">The election module is positioned as the business entry for public-office elections, organizing materials such as candidate registration, office rules, electorate scope, term transition, and result publication.</span>
 * 选举模块不是独立治理系统；它与选举投票模块分工明确，业务入口准备选举材料，选举投票模块负责链上投票、快照、计票和结果不可篡改。<br><span class="whitepaper-en">The election module is not an independent governance system. It is clearly separated from the election-vote module: the business entry prepares election materials, while the election-vote module handles on-chain voting, snapshots, tallying, and tamper-proof results.</span>
 * 当前仓库已具备选举投票的链端基础，后续选举业务壳应按公民宪法和投票引擎边界逐步完善，不在业务模块中另写投票逻辑。<br><span class="whitepaper-en">The repository already contains the on-chain foundation for election voting. The future election business shell should be expanded according to the Citizen Constitution and voting-engine boundaries, without writing separate voting logic inside business modules.</span>
 
-## 5.6.实体模组<br><span class="whitepaper-heading-en">5.6. Entity Modules</span>
+## 5.6.实体模组<br><span class="whitepaper-heading-en">5.6. entity</span>
 
 * 实体模组负责个人多签、私权机构、公权机构三类实体的生命周期、账户派生、状态写入和注册局权限校验；投票和管理员集合仍分别由投票引擎和管理员模组负责。<br><span class="whitepaper-en">Entity modules are responsible for the lifecycle, account derivation, state writes, and registry-authority checks of personal multisigs, private institutions, and public institutions. Voting and administrator sets remain the responsibility of the voting engine and admins modules respectively.</span>
 
-### 5.6.1.个人多签<br><span class="whitepaper-heading-en">5.6.1. Personal Multisig</span>
+### 5.6.1.个人多签<br><span class="whitepaper-heading-en">5.6.1. personal-manage</span>
 
 * 个人多签是任何人都可以创建的链上共同控制账户，用于个人之间的共同资产和共同事项管理。<br><span class="whitepaper-en">Personal multisig is an on-chain jointly controlled account that anyone may create for shared assets and shared matters among individuals.</span>
 * 个人多签的创建、关闭和资金动作由个人多签实体模块执行；管理员集合由个人多签管理员模块保存，内部投票由投票引擎承载。<br><span class="whitepaper-en">Creation, closure, and fund actions of personal multisig accounts are executed by the personal multisig entity module; administrator sets are stored by the personal multisig admins module, and internal voting is carried by the voting engine.</span>
 
-### 5.6.2.私权机构<br><span class="whitepaper-heading-en">5.6.2. Private Institutions</span>
+### 5.6.2.私权机构<br><span class="whitepaper-heading-en">5.6.2. private-manage</span>
 
 * 私权机构包括个体经营、合伙企业、股权公司、股份公司、公益组织、注册协会和非法人组织等，统一由注册局发起登记，并按私权机构实体模块流程形成链上机构。<br><span class="whitepaper-en">Private institutions include sole proprietorships, partnerships, equity companies, corporations, welfare organizations, registered associations, and unincorporated organizations. Registries initiate their registration, and they become on-chain institutions through the private-institution entity-module flow.</span>
 * 私权机构实体模块负责机构码、法人资格、账户派生、状态生命周期和注册局授权校验；创建时同步写入该机构自己的初始管理员集合。<br><span class="whitepaper-en">The private-institution entity module handles institution codes, legal personality, account derivation, lifecycle state, and registry-authority checks. At creation, it writes the institution's own initial administrator set.</span>
 
-### 5.6.3.公权机构<br><span class="whitepaper-heading-en">5.6.3. Public Institutions</span>
+### 5.6.3.公权机构<br><span class="whitepaper-heading-en">5.6.3. public-manage</span>
 
 * 公权机构包括联邦注册局、市注册局、法院、立法机构、教育机构和其他政府类机构，创世机构由创世写入，运行期机构由有权限的注册局登记。<br><span class="whitepaper-en">Public institutions include the Federal Registry, City Registries, courts, legislatures, education institutions, and other government institutions. Genesis institutions are written at genesis, while runtime institutions are registered by authorized registries.</span>
 * 联邦注册局通过省级5人组账户在所辖省份内登记机构，市注册局在本市范围内登记机构；实体模块负责链上机构生命周期，管理员模块负责 active admins，链上中国负责注册局录入和交易生成。<br><span class="whitepaper-en">The Federal Registry registers institutions within its governed provinces through provincial five-person group accounts, and City Registries register institutions within their own city. Entity modules handle on-chain institution lifecycle, admins modules handle active admins, and OnChina handles registry data entry and transaction generation.</span>

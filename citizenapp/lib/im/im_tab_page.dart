@@ -77,17 +77,35 @@ class _ImTabPageState extends State<ImTabPage> {
       onPause: _pauseSync,
     );
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    // 本页常驻 IndexedStack；切换默认用户钱包（= 切换聊天身份）后经
+    // walletsRevision 广播重载，会话列表 owner 立即切到新默认用户，
+    // 不再等 App 退后台回前台。
+    WalletManager.walletsRevision.addListener(_onWalletsChanged);
     _reload(syncFirst: true);
   }
 
   @override
   void dispose() {
+    WalletManager.walletsRevision.removeListener(_onWalletsChanged);
     _pauseSync();
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     super.dispose();
   }
 
+  Future<void> _onWalletsChanged() async {
+    // 先廉价比对(纯 Isar 读):默认聊天身份没变的钱包操作(重命名/导入
+    // 未置顶钱包)不触发全量邮箱同步,避免整页转圈与无谓网络请求。
+    final address = await _readCommunicationId();
+    if (!mounted || address == _currentUserId) return;
+    await _reload(syncFirst: true);
+  }
+
+  /// _reload 世代号:含网络同步(秒级),切默认钱包后并发 reload 乱序完成时
+  /// 旧身份不得覆写新身份,也不得以旧身份重建轮询/realtime。
+  int _reloadGeneration = 0;
+
   Future<void> _reload({bool syncFirst = false}) async {
+    final generation = ++_reloadGeneration;
     setState(() {
       _loading = true;
       _error = null;
@@ -100,7 +118,7 @@ class _ImTabPageState extends State<ImTabPage> {
       final conversations = await widget.store.readConversationPreviews(
         ownerChatAccount: activeWallet.isEmpty ? null : activeWallet,
       );
-      if (!mounted) {
+      if (!mounted || generation != _reloadGeneration) {
         return;
       }
       setState(() {
@@ -109,13 +127,13 @@ class _ImTabPageState extends State<ImTabPage> {
       });
       _configurePolling(activeWallet);
     } catch (error) {
-      if (mounted) {
+      if (mounted && generation == _reloadGeneration) {
         setState(() {
           _error = error.toString();
         });
       }
     } finally {
-      if (mounted) {
+      if (mounted && generation == _reloadGeneration) {
         setState(() {
           _loading = false;
         });

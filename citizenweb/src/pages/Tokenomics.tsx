@@ -69,16 +69,13 @@ const economics: Economic[] = [
   { label: '最小存款', value: '1.11 元' },
 ]
 
-// 链上交易手续费按 8:1:1 分账。
-const onchainFeeDistribution = [
-  { name: '全节点奖励', share: '80%', desc: '出块全节点获得链上交易手续费的 80%' },
-  { name: '手续费账户', share: '10%', desc: '国家储委会手续费账户用于国家储委会运营' },
-  { name: '安全基金', share: '10%', desc: '网络安全与应急储备基金' },
-]
-
-// 链下清算手续费全部归执行清算的清算行。
-const offchainFeeDistribution = [
-  { name: '清算行', share: '100%', desc: '链下清算手续费全部归实际执行清算的清算行节点所有' },
+// 手续费分配 2×2:上排 全节点/清算行,下排 国储会费用账户/安全基金账户。
+// 链上手续费按 8:1:1(全节点/费用账户/安全基金),链下清算手续费全部归清算行。
+const feeDistribution: { name: string; share: string; desc: string; glow: 'gold' | 'blue'; tx: string }[] = [
+  { name: '全节点奖励', share: '80%', desc: '出块全节点获得链上交易手续费的 80%', glow: 'blue', tx: '链上交易' },
+  { name: '清算行', share: '100%', desc: '链下清算手续费全部归实际执行清算的清算行节点所有', glow: 'gold', tx: '链下交易' },
+  { name: '国储会费用账户', share: '10%', desc: '国家储委会费用账户用于国家储委会运营', glow: 'blue', tx: '链上交易' },
+  { name: '安全基金账户', share: '10%', desc: '网络安全与应急储备基金', glow: 'blue', tx: '链上交易' },
 ]
 
 export default function Tokenomics() {
@@ -148,29 +145,10 @@ export default function Tokenomics() {
           description="链上交易手续费按 8:1:1 分配，激励全节点运营同时保障网络安全；链下清算手续费全部归执行清算的清算行。"
         />
 
-        {/* 链上交易手续费 */}
-        <div className="mb-6 flex items-baseline gap-3">
-          <h3 className="text-lg font-semibold text-white">链上交易手续费</h3>
-          <span className="text-sm text-slate-400">按 8:1:1 分配</span>
-        </div>
-        <div className="grid gap-6 md:grid-cols-3">
-          {onchainFeeDistribution.map((f) => (
-            <GlowCard key={f.name} glow="blue" className="text-center">
-              <div className="mb-3 text-4xl font-extrabold text-gold-400">{f.share}</div>
-              <h3 className="mb-2 text-lg font-semibold text-white">{f.name}</h3>
-              <p className="text-sm text-slate-400">{f.desc}</p>
-            </GlowCard>
-          ))}
-        </div>
-
-        {/* 链下交易手续费 */}
-        <div className="mb-6 mt-14 flex items-baseline gap-3">
-          <h3 className="text-lg font-semibold text-white">链下交易手续费</h3>
-          <span className="text-sm text-slate-400">全部归清算行</span>
-        </div>
-        <div className="grid gap-6 md:grid-cols-3">
-          {offchainFeeDistribution.map((f) => (
-            <GlowCard key={f.name} glow="gold" className="text-center">
+        <div className="grid gap-6 md:grid-cols-2">
+          {feeDistribution.map((f) => (
+            <GlowCard key={f.name} glow={f.glow} className="text-center">
+              <div className="mb-2 text-left text-xs font-medium text-gold-400">{f.tx}</div>
               <div className="mb-3 text-4xl font-extrabold text-gold-400">{f.share}</div>
               <h3 className="mb-2 text-lg font-semibold text-white">{f.name}</h3>
               <p className="text-sm text-slate-400">{f.desc}</p>

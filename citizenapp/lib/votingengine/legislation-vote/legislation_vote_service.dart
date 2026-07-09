@@ -51,7 +51,8 @@ class LegislationVoteService {
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
-    await _confirmHouseVote(proposalId, approve, signerPubkey, result.blockHashHex);
+    await _confirmHouseVote(
+        proposalId, approve, signerPubkey, result.blockHashHex);
     return result;
   }
 
@@ -225,7 +226,8 @@ class LegislationVoteService {
       final state = await _query.fetchProposalState(proposalId);
       // 签署被处理后:或已终态(passed/rejected),或推进到下一阶段(会签)。
       if (state != null &&
-          (state.status != LegProposalStatus.voting || state.stage != fromStage)) {
+          (state.status != LegProposalStatus.voting ||
+              state.stage != fromStage)) {
         return;
       }
       if (attempt < 5) {
@@ -235,7 +237,8 @@ class LegislationVoteService {
     await _throwWithEventFailure(blockHashHex, '交易已入块，但 runtime 未推进签署阶段');
   }
 
-  Future<void> _throwWithEventFailure(String blockHashHex, String fallback) async {
+  Future<void> _throwWithEventFailure(
+      String blockHashHex, String fallback) async {
     final events = await _rpc.fetchSystemEventsAtBlock(blockHashHex);
     final failure =
         events == null ? null : _rpc.findExtrinsicFailureInEvents(events);

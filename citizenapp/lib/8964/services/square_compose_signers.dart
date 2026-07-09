@@ -13,7 +13,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 广场发布签名器（发动态 / 发文章共用）。
 ///
-/// 默认热钱包静默签名（`signWithWalletNoAuth`，无弹窗）；冷钱包走 QR 冷签兜底，
+/// 默认热钱包静默签名（`signWithWallet`，无弹窗）；冷钱包走 QR 冷签兜底，
 /// 但广场身份恒为默认热钱包，冷签分支实际不触发。
 class SquareComposeSigners {
   SquareComposeSigners({required this.context, required this.identity})
@@ -55,7 +55,7 @@ class SquareComposeSigners {
     }
     final hotWallet = hotWalletManager;
     if (hotWallet != null) {
-      return hotWallet.signWithWalletNoAuth(walletIndex, payload);
+      return hotWallet.signWithWallet(walletIndex, payload);
     }
 
     final qrSigner = QrSigner();

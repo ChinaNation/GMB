@@ -113,7 +113,7 @@ export default function Technology() {
         <div className="relative mx-auto max-w-7xl px-6">
           <SectionTitle
             subtitle="区块链技术"
-            title="基于 Substrate 的主权区块链"
+            title="基于 PoW共识 的主权区块链"
             description="采用 Rust 语言与 Polkadot SDK 构建，PoW + GRANDPA 混合共识，WASM 可升级运行时，并内置链上中国平台承接注册、立法、选举和机构治理入口。"
           />
         </div>

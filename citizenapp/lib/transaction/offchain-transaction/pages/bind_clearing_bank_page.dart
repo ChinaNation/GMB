@@ -120,7 +120,6 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
       }
 
       final walletManager = WalletManager();
-      await walletManager.authenticateForSigning();
 
       final rpc = OnchainClearingBankRpc();
       final result = widget.switchMode
@@ -128,15 +127,15 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
               fromAddress: wallet.address,
               signerPubkey: Uint8List.fromList(pubkeyBytes),
               newBankMainAccount: Uint8List.fromList(mainAccountBytes),
-              sign: (payload) => walletManager.signWithWalletNoAuth(
-                  wallet.walletIndex, payload),
+              sign: (payload) =>
+                  walletManager.signWithWallet(wallet.walletIndex, payload),
             )
           : await rpc.bindClearingBank(
               fromAddress: wallet.address,
               signerPubkey: Uint8List.fromList(pubkeyBytes),
               bankMainAccount: Uint8List.fromList(mainAccountBytes),
-              sign: (payload) => walletManager.signWithWalletNoAuth(
-                  wallet.walletIndex, payload),
+              sign: (payload) =>
+                  walletManager.signWithWallet(wallet.walletIndex, payload),
             );
 
       // 绑定成功后写入完整清算行快照。链上仍是最终权威,本地快照只用于

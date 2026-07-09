@@ -358,11 +358,12 @@ class _MyWalletPageState extends State<MyWalletPage> {
     final wallets = _wallets;
     if (wallets == null) return;
     final next = reorderWalletProfiles(wallets, oldIdx, newIdx);
-    final defaultChanged =
-        defaultUserWalletIndex(next) != defaultUserWalletIndex(wallets);
-    if (defaultChanged) {
+    final newDefaultIndex = defaultUserWalletIndex(next);
+    final defaultChanged = newDefaultIndex != defaultUserWalletIndex(wallets);
+    if (defaultChanged && newDefaultIndex != null) {
       try {
-        await _walletService.authenticateForSigning();
+        // 切换默认用户即换身份，先对新默认热钱包做一次生物识别验证。
+        await _walletService.verifyWalletAccess(newDefaultIndex);
       } catch (_) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -441,7 +442,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
             children: [
               ListTile(
                 leading: const Icon(Icons.add_circle_outline),
-                title: const Text('创建热钱包'),
+                title: const Text('创建钱包'),
                 subtitle: const Text('私钥存在本机'),
                 onTap: () {
                   Navigator.of(context).pop();
@@ -543,7 +544,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
           children: [
             _buildWalletEntryOption(
               color: AppTheme.danger.withAlpha(15),
-              title: '创建热钱包',
+              title: '创建钱包',
               description: '创建私钥存在本机的热钱包',
               onTap: _openCreatePage,
             ),

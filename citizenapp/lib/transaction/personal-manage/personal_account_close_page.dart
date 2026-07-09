@@ -156,12 +156,11 @@ class _PersonalAccountClosePageState extends State<PersonalAccountClosePage> {
       WalletManager? hotWalletManager;
       if (wallet.isHotWallet) {
         hotWalletManager = WalletManager();
-        await hotWalletManager.authenticateForSigning();
       }
 
       Future<Uint8List> signCallback(Uint8List payload) async {
         if (hotWalletManager != null) {
-          return await hotWalletManager.signWithWalletNoAuth(
+          return await hotWalletManager.signWithWallet(
               wallet.walletIndex, payload);
         }
         // 冷钱包路径

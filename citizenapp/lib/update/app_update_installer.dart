@@ -3,8 +3,7 @@ import 'package:flutter/services.dart';
 import 'app_update_manifest.dart';
 
 class AppUpdateInstaller {
-  static const MethodChannel _channel =
-      MethodChannel('org.citizenapp/update');
+  static const MethodChannel _channel = MethodChannel('org.citizenapp/update');
 
   Future<AppVersionInfo> getPackageInfo() async {
     final result = await _channel.invokeMapMethod<String, Object?>(

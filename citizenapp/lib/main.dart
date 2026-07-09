@@ -130,7 +130,9 @@ class _AppLockGateState extends State<_AppLockGate>
       final paused = _pausedAt;
       if (paused != null &&
           DateTime.now().difference(paused) > _sessionTimeout) {
-        // 超时，重新锁定
+        // 超时只重新锁定 App 入口（PIN/设备锁），不清会话签名密钥：
+        // App 锁已拦住入口，会话密钥留到进程结束，避免每次重进都为发广场
+        // 动态等低敏感操作重复生物识别。转账/投票/切换身份仍每次强制认证。
         setState(() {
           _authenticated = false;
           _checking = true;
