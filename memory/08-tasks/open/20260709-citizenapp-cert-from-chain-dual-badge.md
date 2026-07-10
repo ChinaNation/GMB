@@ -8,7 +8,7 @@
 
 - 现状 bug：主页 `is_certified = cidNumber!==null`，cidNumber 来自 D1「最近一条带 cid 的已发布帖」（service.ts:76 + repository.ts:94 `readLatestCidNumber`）→ 没发帖=未认证，且不反映护照过期/吊销。
 - 链上真源现成：`fetchChainIdentityState`（chain/identity.ts:24）已同时读 `VotingIdentityByAccount`+`CandidateIdentityByAccount`、校验护照窗口+status=normal，返回 `identity_level`(visitor/voting/candidate)。会员校验已在用。
-- 读链成本：每次 2 个 RPC、单端点 `env.SQUARE_CHAIN_RPC_URL`（secret，未配→503）、无缓存无超时。
+- 读链成本：每次 2 个 RPC、单个 Access 保护的 HTTPS 上游；`CITIZEN_CHAIN_RPC_URL` 与两项 `CITIZEN_CHAIN_RPC_ACCESS_*` Secret 缺任一项均视为未配置。Worker 统一 RPC 层已有 3 秒超时和 4 MiB 响应上限，无缓存、无自动重试。
 - 徽章色：`AppTheme.voting=0xFF3B82F6`(蓝)、`AppTheme.danger=0xFFEF4444`(红)；现单色 `0xFF007A74`。
 - 四处认证展示点：①主页头像(profile_header_card，BFF)②我的tab头像(user.dart，MyIdService链直读，仅投票)③广场帖子作者(square_post_card，feed cid)④广场首页顶栏(square_home_page，SquareIdentityService链直读，仅投票)。当前全只认投票表、单色。
 
@@ -38,7 +38,7 @@
 
 ## 主要风险点
 
-- ⚠️ 生产 Worker secrets 为空，`SQUARE_CHAIN_RPC_URL` 未配 → 部署后主页读链软降级为"全员未认证"（比现状发帖投影更严格）。**必须等用户给 RPC 地址、配好 secret 再部署**，避免认证空窗。
+- ⚠️ 生产 Worker 的链 RPC 三项 Secret 未配，部署后主页读链会软降级为“全员未认证”（比现状发帖投影更严格）。必须先完成 Access + Tunnel 和三项 Secret，再部署依赖读链的身份功能，避免认证空窗。
 - is_certified 语义变更 + 新增 identity_level = 响应契约变更，Dart 端解析需同步（Phase 2）。
 - 读链无缓存会拖垮主页首屏 → Phase 1 的 KV 缓存 + 超时 + 软降级是硬要求。
 - 四处口径统一，抽共享 helper，避免各改各的漂移。
@@ -60,7 +60,7 @@
 - profiles/service.ts `buildProfileResponse`：`readLatestCidNumber`→`fetchChainIdentityStateCached`；`is_certified=identity_level!=='visitor'`；响应加 `identity_level`。
 - types.ts `UserProfileResponse` 加 `identity_level`。repository.ts 删死代码 `readLatestCidNumber`。
 - 测试：profiles.test.ts 认证桩改链上（往 FEED_CACHE 塞 `square_identity:`）+ 新增竞选/访客软降级用例。typecheck 干净、`npm test` **65 项全绿**。
-- **未部署**：等用户给 `SQUARE_CHAIN_RPC_URL` 生产地址，配 secret + 部署后链上认证生效；未配前主页软降级为未认证（不崩）。
+- **未部署**：等待生产 Access + Tunnel 地址与服务令牌配置完成后，链上认证才可生效；未配前主页软降级为未认证（不崩）。
 
 ### Phase 2 · 客户端主页徽章 point1 —— 完成
 - citizen_profile.dart 加 `identityLevel`（未知 fail-closed→visitor）。
@@ -96,7 +96,7 @@
 - point4 广场顶栏：square_chain_service 加 fetchIdentity(投票+候选)；SquareIdentityState.identityLevel；square_home_page 非阻塞拉会员 + 顶栏 CitizenBadge。
 - 验收：`flutter analyze lib` 干净；`flutter test test/8964` 65 全绿、myid/square_chain 全绿；Worker `npm test` 67 全绿。会员一律非阻塞加载（身份先渲染，勾稍后补）。
 - 注：test/wallet/wallet_manager_test 6 失败属并行线程 seed 迁移（biometric），非本卡改动。
-- **仍缺**：生产 `SQUARE_CHAIN_RPC_URL` secret（待用户给地址）+ 部署；未配前主页/feed 颜色软降级为访客→无徽章。
+- **仍缺**：生产 `CITIZEN_CHAIN_RPC_URL` 与两项 `CITIZEN_CHAIN_RPC_ACCESS_*` Secret、Access + Tunnel 部署；未配前主页/feed 颜色软降级为访客、无徽章。
 
 ### 徽章样式二次定稿（2026-07-09 晚，用户拍板，已实现）
 推翻我擅自改的"实心圆/空心环"，改成**推特式扇贝勋章**（`CitizenBadge` 用 `_RosetteBadgePainter` CustomPaint 画：8 花瓣+中心圆，白底盘）。规则最终简化：

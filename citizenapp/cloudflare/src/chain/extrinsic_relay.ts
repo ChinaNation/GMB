@@ -2,6 +2,7 @@ import type { Env } from '../types';
 import { HttpError, jsonResponse, parsePositiveInt, readJson } from '../shared/http';
 import { createId } from '../shared/ids';
 import { nowMs } from '../shared/time';
+import { callChainRpc, isChainRpcConfigured } from './rpc';
 
 export const CHAIN_EXTRINSIC_RELAY_PATH = '/v1/chain/extrinsics/relay';
 
@@ -16,14 +17,6 @@ interface RelayRequestBody {
   [key: string]: unknown;
 }
 
-interface JsonRpcResponse<T> {
-  result?: T;
-  error?: {
-    code: number;
-    message: string;
-  };
-}
-
 interface RecentRelayRow {
   relay_id: string;
   tx_hash: string | null;
@@ -33,7 +26,7 @@ interface RecentRelayRow {
 /// Worker 只在显式开关开启且服务节点 RPC 已配置时提供广播兜底。
 /// 这里不把 RPC URL 写入任何响应，App 只知道固定 path。
 export function isChainExtrinsicRelayEnabled(env: Env): boolean {
-  return env.CHAIN_EXTRINSIC_RELAY_ENABLED === '1' && Boolean(env.SQUARE_CHAIN_RPC_URL);
+  return env.CHAIN_EXTRINSIC_RELAY_ENABLED === '1' && isChainRpcConfigured(env);
 }
 
 export async function relaySignedExtrinsicRoute(
@@ -181,33 +174,13 @@ async function submitExtrinsicToRpc(
   signedExtrinsicHex: string,
   relayId: string
 ): Promise<string> {
-  const rpcUrl = env.SQUARE_CHAIN_RPC_URL;
-  if (!rpcUrl) {
-    throw new HttpError(503, 'chain_rpc_not_configured', '链服务节点 RPC 未配置');
-  }
-
-  const response = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: relayId,
-      method: 'author_submitExtrinsic',
-      params: [signedExtrinsicHex]
-    })
-  });
-
-  if (!response.ok) {
-    throw new HttpError(502, 'chain_rpc_http_failed', '签名交易广播请求失败');
-  }
-
-  const data = (await response.json()) as JsonRpcResponse<string>;
-  if (data.error) {
-    throw new HttpError(502, 'chain_rpc_error', data.error.message);
-  }
-  return normalizeTxHash(data.result);
+  const result = await callChainRpc(
+    env,
+    'author_submitExtrinsic',
+    [signedExtrinsicHex],
+    relayId
+  );
+  return normalizeTxHash(result);
 }
 
 function normalizeTxHash(value: unknown): string {

@@ -353,6 +353,61 @@ async function deleteStreamAsset(env: Env, uid: string): Promise<void> {
   await assertCloudflareDeleteOk(response, 'stream_delete_failed');
 }
 
+interface StreamDownloadResult {
+  default?: {
+    status?: string;
+    url?: string;
+    percentComplete?: number;
+  };
+}
+
+/// 冷归档取片：Stream 无冷层，只能用 downloads API 导出编码版 MP4。POST 触发生成（幂等），
+/// 就绪则返回可下载 URL；仍在生成返回 null（本轮跳过，下次扫描再归档，避免 Cron 长轮询）。
+export async function createStreamDownloadUrl(env: Env, uid: string): Promise<string | null> {
+  const config = requireCloudflareApiConfig(env);
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream/${encodeURIComponent(uid)}/downloads`,
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${config.apiToken}`,
+        'content-type': 'application/json'
+      },
+      body: '{}'
+    }
+  );
+  const result = await parseCloudflareJson<StreamDownloadResult>(response, 'stream_download_failed');
+  if (result.default?.status === 'ready' && result.default.url) {
+    return result.default.url;
+  }
+  return null;
+}
+
+/// 冷归档回灌：从 R2 冷存的短期只读 URL 复制回 Stream，返回新 uid；转码完成信号走 Stream webhook。
+export async function copyStreamFromUrl(
+  env: Env,
+  sourceUrl: string,
+  maxDurationSeconds: number
+): Promise<string> {
+  const config = requireCloudflareApiConfig(env);
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream/copy`,
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${config.apiToken}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ url: sourceUrl, maxDurationSeconds })
+    }
+  );
+  const result = await parseCloudflareJson<StreamDirectUploadResult>(response, 'stream_copy_failed');
+  if (!result.uid) {
+    throw new HttpError(502, 'stream_copy_incomplete', 'Cloudflare Stream 回灌响应缺少 uid');
+  }
+  return result.uid;
+}
+
 export function streamDetailsToAssetUpdate(
   env: Env,
   result: StreamDetailsResult,

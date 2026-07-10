@@ -4,7 +4,8 @@ compatibility_date = "2026-07-05"
 workers_dev = true
 
 # 远端部署前必须把 database_id / kv id 替换为 Cloudflare 实际资源 ID。
-# Cloudflare API token、R2 access key、R2 secret key、Stripe secret key、Stripe webhook secret、Stream webhook secret、生产链 RPC 不得写入本文件。
+# Cloudflare API token、R2 access key、R2 secret key、Stripe secret key、Stripe webhook secret、Stream webhook secret 不得写入本文件。
+# CITIZEN_CHAIN_RPC_URL 与两项 CITIZEN_CHAIN_RPC_ACCESS_* 服务令牌必须分别使用 wrangler secret 配置，禁止写入 vars 或仓库。
 
 [[r2_buckets]]
 binding = "SQUARE_MEDIA"
@@ -30,11 +31,17 @@ class_name = "ChatRealtimeObject"
 tag = "v1"
 new_sqlite_classes = ["ChatRealtimeObject"]
 
+# 退订视频冷归档扫描：每日一次（UTC 03:00）。是否真正归档由 VIDEO_ARCHIVE_ENABLED 开关控制。
+[triggers]
+crons = ["0 3 * * *"]
+
 [vars]
 SQUARE_SESSION_TTL_SECONDS = "86400"
 SQUARE_UPLOAD_URL_TTL_SECONDS = "900"
 SQUARE_DEV_UPLOAD_PROXY = "0"
 STRIPE_DEV_CHECKOUT_PROXY = "0"
+VIDEO_ARCHIVE_ENABLED = "0"
+VIDEO_ARCHIVE_LAPSE_DAYS = "90"
 R2_BUCKET_NAME = "citizenapp-square-media"
 # Stripe price id 不是密钥，可按官网订阅实际价格填入；webhook secret 必须用 wrangler secret 配置。
 STRIPE_PRICE_VISITOR = ""
@@ -84,11 +91,16 @@ preview_id = "91133becebc24f27bf10a00cb001f27e"
 name = "CHAT_REALTIME"
 class_name = "ChatRealtimeObject"
 
+[env.staging.triggers]
+crons = ["0 3 * * *"]
+
 [env.staging.vars]
 SQUARE_SESSION_TTL_SECONDS = "86400"
 SQUARE_UPLOAD_URL_TTL_SECONDS = "900"
 SQUARE_DEV_UPLOAD_PROXY = "0"
 STRIPE_DEV_CHECKOUT_PROXY = "0"
+VIDEO_ARCHIVE_ENABLED = "0"
+VIDEO_ARCHIVE_LAPSE_DAYS = "90"
 R2_BUCKET_NAME = "citizenapp-square-media-staging"
 STRIPE_PRICE_VISITOR = ""
 STRIPE_PRICE_VOTING = ""
@@ -137,11 +149,16 @@ preview_id = "b72bbbcb36d240acb317fdaf79ce46f4"
 name = "CHAT_REALTIME"
 class_name = "ChatRealtimeObject"
 
+[env.production.triggers]
+crons = ["0 3 * * *"]
+
 [env.production.vars]
 SQUARE_SESSION_TTL_SECONDS = "86400"
 SQUARE_UPLOAD_URL_TTL_SECONDS = "900"
 SQUARE_DEV_UPLOAD_PROXY = "0"
 STRIPE_DEV_CHECKOUT_PROXY = "0"
+VIDEO_ARCHIVE_ENABLED = "0"
+VIDEO_ARCHIVE_LAPSE_DAYS = "90"
 R2_BUCKET_NAME = "citizenapp-square-media"
 STRIPE_PRICE_VISITOR = ""
 STRIPE_PRICE_VOTING = ""

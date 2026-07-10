@@ -38,8 +38,6 @@ class SquareMembershipState {
   const SquareMembershipState({
     required this.active,
     required this.expiresAt,
-    required this.storageQuotaBytes,
-    required this.storageUsedBytes,
     this.membershipLevel,
     this.subscriptionStatus,
     this.inactiveCode,
@@ -52,8 +50,6 @@ class SquareMembershipState {
 
   final bool active;
   final int expiresAt;
-  final int storageQuotaBytes;
-  final int storageUsedBytes;
   final String? membershipLevel;
   final String? subscriptionStatus;
   final String? inactiveCode;
@@ -469,8 +465,6 @@ class SquareApiClient
       return SquareMembershipState(
         active: false,
         expiresAt: 0,
-        storageQuotaBytes: 0,
-        storageUsedBytes: 0,
         inactiveCode: data['inactive_code']?.toString(),
         inactiveMessage: data['inactive_message']?.toString(),
         identityLevel: identity['identity_level']?.toString(),
@@ -482,8 +476,6 @@ class SquareApiClient
     return SquareMembershipState(
       active: active,
       expiresAt: _asInt(membership['expires_at']),
-      storageQuotaBytes: _asInt(membership['storage_quota_bytes']),
-      storageUsedBytes: _asInt(membership['storage_used_bytes']),
       membershipLevel: membership['membership_level']?.toString(),
       subscriptionStatus: membership['subscription_status']?.toString(),
       inactiveCode: data['inactive_code']?.toString(),
@@ -1040,6 +1032,7 @@ class SquareApiClient
       coverUrl: coverUrl.isEmpty ? null : _resolveMediaUrl(coverUrl),
       byteSize: _nullableInt(data['byte_size']),
       assetState: data['asset_state']?.toString(),
+      archiveState: data['archive_state']?.toString(),
     );
   }
 

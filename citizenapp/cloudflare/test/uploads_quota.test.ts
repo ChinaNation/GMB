@@ -176,6 +176,9 @@ function mediaAsset(): MediaAssetRow {
     error_code: null,
     created_at: 1,
     updated_at: 1,
-    ready_at: 1
+    ready_at: 1,
+    archive_state: 'live',
+    archived_at: null,
+    r2_archive_key: null
   };
 }

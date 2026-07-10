@@ -42,6 +42,7 @@ class ChainTxMonitor {
   Future<void>? _syncInflight;
   Timer? _subscriptionRetryTimer;
   Timer? _syncRetryTimer;
+  Future<void>? _subscriptionConnectFuture;
   bool _running = false;
   bool _subscriptionConnected = false;
 
@@ -144,8 +145,23 @@ class ChainTxMonitor {
   void _ensureSubscription() {
     if (!_running) return;
     if (_subscriptionConnected) return;
+    if (_subscriptionConnectFuture != null) return;
 
-    final connected = _subscription.connect();
+    late final Future<void> task;
+    task = _connectSubscriptionOnce().whenComplete(() {
+      if (identical(_subscriptionConnectFuture, task)) {
+        _subscriptionConnectFuture = null;
+      }
+    });
+    _subscriptionConnectFuture = task;
+  }
+
+  Future<void> _connectSubscriptionOnce() async {
+    final connected = await _subscription.connect();
+    if (!_running) {
+      _subscription.disconnect();
+      return;
+    }
     if (connected) {
       _subscriptionConnected = true;
       _subscriptionRetryTimer?.cancel();
@@ -154,15 +170,9 @@ class ChainTxMonitor {
       return;
     }
 
-    _subscriptionRetryTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!_running) return;
-      if (_subscriptionConnected) return;
-      if (_subscription.connect()) {
-        _subscriptionConnected = true;
-        _subscriptionRetryTimer?.cancel();
-        _subscriptionRetryTimer = null;
-        unawaited(_syncToLatest());
-      }
+    _subscriptionRetryTimer ??= Timer(const Duration(seconds: 5), () {
+      _subscriptionRetryTimer = null;
+      _ensureSubscription();
     });
   }
 

@@ -11,10 +11,10 @@ import {
 
 export async function getMembership(env: Env, ownerAccount: string): Promise<MembershipRow | null> {
   return env.DB.prepare(
-    `SELECT owner_account, membership_level, storage_quota_bytes, storage_used_bytes, expires_at,
+    `SELECT owner_account, membership_level, expires_at,
         updated_at, subscription_source, stripe_customer_id, stripe_subscription_id, stripe_price_id,
         subscription_status, current_period_start, current_period_end, cancel_at_period_end,
-        identity_level, identity_checked_at
+        identity_level, identity_checked_at, entitlement_lapsed_at
       FROM square_memberships
       WHERE owner_account = ?`
   )
@@ -34,10 +34,10 @@ export async function batchMemberships(
   }
   const placeholders = distinct.map(() => '?').join(', ');
   const result = await env.DB.prepare(
-    `SELECT owner_account, membership_level, storage_quota_bytes, storage_used_bytes, expires_at,
+    `SELECT owner_account, membership_level, expires_at,
         updated_at, subscription_source, stripe_customer_id, stripe_subscription_id, stripe_price_id,
         subscription_status, current_period_start, current_period_end, cancel_at_period_end,
-        identity_level, identity_checked_at
+        identity_level, identity_checked_at, entitlement_lapsed_at
       FROM square_memberships
       WHERE owner_account IN (${placeholders})`
   )
@@ -51,38 +51,18 @@ export async function batchMemberships(
 
 export async function requireActiveMembership(
   env: Env,
-  ownerAccount: string,
-  requiredBytes: number
+  ownerAccount: string
 ): Promise<MembershipRow> {
   const membership = await getMembership(env, ownerAccount);
   if (!membership) {
-    throw new HttpError(402, 'membership_required', '需要有效会员才能使用广场内容存储');
+    throw new HttpError(402, 'membership_required', '需要有效会员才能发布广场内容');
   }
   const effective = await resolveMembershipEntitlement(env, membership);
   if (!effective.active) {
     throw new HttpError(402, effective.inactive_code, effective.inactive_message);
   }
-
-  const remainingBytes = membership.storage_quota_bytes - membership.storage_used_bytes;
-  if (requiredBytes > remainingBytes) {
-    throw new HttpError(402, 'storage_quota_exceeded', '会员存储容量不足');
-  }
-
+  // 已移除账户总储存上限维度（对齐 YouTube/推特）：仅校验会员有效，不再核算容量。
   return membership;
-}
-
-export async function addStorageUsage(
-  env: Env,
-  ownerAccount: string,
-  usedBytes: number
-): Promise<void> {
-  await env.DB.prepare(
-    `UPDATE square_memberships
-      SET storage_used_bytes = storage_used_bytes + ?, updated_at = ?
-      WHERE owner_account = ?`
-  )
-    .bind(usedBytes, nowMs(), ownerAccount)
-    .run();
 }
 
 export async function membershipRoute(request: Request, env: Env): Promise<Response> {
@@ -202,18 +182,16 @@ export async function upsertStripeMembership(
     identity: ChainIdentityState;
   }
 ): Promise<void> {
-  const plan = membershipPlan(input.membershipLevel);
   const now = nowMs();
   await env.DB.prepare(
     `INSERT INTO square_memberships
-      (owner_account, membership_level, storage_quota_bytes, storage_used_bytes, expires_at,
+      (owner_account, membership_level, expires_at,
         updated_at, subscription_source, stripe_customer_id, stripe_subscription_id,
         stripe_price_id, subscription_status, current_period_start, current_period_end,
-        cancel_at_period_end, identity_level, identity_checked_at)
-      VALUES (?, ?, ?, 0, ?, ?, 'stripe', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        cancel_at_period_end, identity_level, identity_checked_at, entitlement_lapsed_at)
+      VALUES (?, ?, ?, ?, 'stripe', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
       ON CONFLICT(owner_account) DO UPDATE SET
         membership_level = excluded.membership_level,
-        storage_quota_bytes = excluded.storage_quota_bytes,
         expires_at = excluded.expires_at,
         updated_at = excluded.updated_at,
         subscription_source = excluded.subscription_source,
@@ -225,12 +203,12 @@ export async function upsertStripeMembership(
         current_period_end = excluded.current_period_end,
         cancel_at_period_end = excluded.cancel_at_period_end,
         identity_level = excluded.identity_level,
-        identity_checked_at = excluded.identity_checked_at`
+        identity_checked_at = excluded.identity_checked_at,
+        entitlement_lapsed_at = NULL`
   )
     .bind(
       input.ownerAccount,
       input.membershipLevel,
-      plan.legacy_storage_quota_bytes,
       input.currentPeriodEnd,
       now,
       input.stripeCustomerId,
@@ -251,11 +229,13 @@ export async function markStripeMembershipInactive(
   stripeSubscriptionId: string,
   status: string
 ): Promise<void> {
+  const now = nowMs();
   await env.DB.prepare(
     `UPDATE square_memberships
-      SET subscription_status = ?, expires_at = ?, updated_at = ?
+      SET subscription_status = ?, expires_at = ?, updated_at = ?,
+        entitlement_lapsed_at = COALESCE(entitlement_lapsed_at, ?)
       WHERE stripe_subscription_id = ?`
   )
-    .bind(status, nowMs(), nowMs(), stripeSubscriptionId)
+    .bind(status, now, now, now, stripeSubscriptionId)
     .run();
 }

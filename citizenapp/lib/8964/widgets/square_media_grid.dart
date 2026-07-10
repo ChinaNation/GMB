@@ -70,7 +70,9 @@ class _MediaTile extends StatelessWidget {
               )
             else
               _fallbackIcon(isVideo),
-            if (isVideo)
+            if (isVideo && (item.isArchived || item.isRestoring))
+              _archiveOverlay(item.isRestoring)
+            else if (isVideo)
               const Center(
                 child: Icon(Icons.play_circle_fill_rounded,
                     size: 42, color: Colors.white70),
@@ -100,6 +102,34 @@ class _MediaTile extends StatelessWidget {
       isVideo ? Icons.play_circle_fill_rounded : Icons.image_rounded,
       size: 42,
       color: AppTheme.textTertiary,
+    );
+  }
+
+  /// 视频冷归档占位：作者退订满 3 月后视频已移入冷存不可播，重订解冻；显示占位而非坏播放器。
+  Widget _archiveOverlay(bool restoring) {
+    return ColoredBox(
+      color: Colors.black54,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              restoring ? Icons.hourglass_top_rounded : Icons.inventory_2_outlined,
+              size: 34,
+              color: Colors.white70,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              restoring ? '恢复中' : '已归档',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

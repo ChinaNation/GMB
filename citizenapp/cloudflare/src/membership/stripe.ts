@@ -10,6 +10,7 @@ import {
   type MembershipLevel
 } from './plans';
 import { markStripeMembershipInactive, upsertStripeMembership } from './service';
+import { restoreOwnerVideos } from './archive';
 
 interface StripeEvent {
   id: string;
@@ -113,6 +114,17 @@ async function processSubscription(
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
     identity
   });
+
+  // 重订解冻：订阅重新生效 → 回灌该 owner 已归档的视频（幂等，失败不阻断权益落地）。
+  if (status === 'active' || status === 'trialing') {
+    try {
+      await restoreOwnerVideos(env, ownerAccount);
+    } catch (error) {
+      console.error(
+        `[video-archive] restore on resubscribe failed: ${error instanceof Error ? error.message : error}`
+      );
+    }
+  }
 
   return {
     action: status === 'identity_required' ? 'identity_rejected' : 'subscription_upserted',

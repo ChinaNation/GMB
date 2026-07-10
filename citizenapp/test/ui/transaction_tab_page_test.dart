@@ -69,7 +69,7 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('交易页显示扫码支付和多签账户入口', (tester) async {
+  testWidgets('交易页显示扫一扫和多签账户入口', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightTheme,
@@ -85,7 +85,7 @@ void main() {
     expect(find.byTooltip('我的通讯录'), findsOneWidget);
     expect(find.byTooltip('选择交易钱包'), findsOneWidget);
     expect(find.byType(ChainProgressBanner), findsOneWidget);
-    expect(find.text('扫码支付'), findsOneWidget);
+    expect(find.text('扫一扫'), findsOneWidget);
     expect(find.text('多签账户'), findsOneWidget);
     expect(find.text('个人多签'), findsNothing);
     expect(find.text('机构多签'), findsNothing);

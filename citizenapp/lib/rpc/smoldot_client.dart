@@ -28,27 +28,58 @@ enum ChainHealthStatus {
 
 /// citizenchain 轻节点客户端管理器（全局单例）。
 ///
-/// 基于 smoldot 轻客户端，App 启动时初始化，加载 chainspec 后
-/// 加入 citizenchain P2P 网络。提供 JSON-RPC 请求和订阅接口。
+/// 基于 smoldot 轻客户端，仅在主动链消费方首次访问时初始化，加载 chainspec 后
+/// 加入 citizenchain P2P 网络。广场浏览和本地身份徽章不得启动本客户端。
 ///
 /// 所有链上读操作内置瞬断重试（最多 4 次，间隔 2 秒），
 /// 并维护 [healthStatus] 供 UI 层展示链状态。
 class SmoldotClientManager {
-  SmoldotClientManager._();
+  SmoldotClientManager._({
+    Future<void> Function()? initializeOverride,
+    Future<void> Function()? disposeOverride,
+  })  : _initializeOverride = initializeOverride,
+        _disposeOverride = disposeOverride;
 
   /// 全局唯一实例。
   static final SmoldotClientManager instance = SmoldotClientManager._();
 
+  /// 生命周期单测专用实例，不加载 Flutter asset 或原生 smoldot。
+  @visibleForTesting
+  factory SmoldotClientManager.forTesting({
+    required Future<void> Function() initialize,
+    Future<void> Function()? dispose,
+  }) {
+    return SmoldotClientManager._(
+      initializeOverride: initialize,
+      disposeOverride: dispose,
+    );
+  }
+
+  final Future<void> Function()? _initializeOverride;
+  final Future<void> Function()? _disposeOverride;
+
   SmoldotClient? _client;
   Chain? _chain;
   bool _initialized = false;
+  Future<void>? _initFuture;
+  int? _initGeneration;
+  Future<void>? _disposeFuture;
+
+  /// 每次开始销毁时递增。旧生命周期中的异步初始化不得提交到新状态。
+  int _lifecycleGeneration = 0;
   bool _synced = false;
   Future<void>? _syncFuture;
-  bool _retrySyncRunning = false;
+  Future<void>? _retrySyncFuture;
 
   /// 当前链健康状态。
   ChainHealthStatus _healthStatus = ChainHealthStatus.uninitialized;
   ChainHealthStatus get healthStatus => _healthStatus;
+
+  /// 页面只监听状态变化，不得通过监听本身启动轻节点。
+  final ValueNotifier<ChainHealthStatus> _healthStatusNotifier =
+      ValueNotifier<ChainHealthStatus>(ChainHealthStatus.uninitialized);
+  ValueListenable<ChainHealthStatus> get healthStatusListenable =>
+      _healthStatusNotifier;
 
   /// 最近一次链操作错误信息（仅 degraded 时有值）。
   String? _lastError;
@@ -75,7 +106,7 @@ class SmoldotClientManager {
         final result = await action();
         // 成功 → 恢复健康状态
         if (_healthStatus == ChainHealthStatus.degraded) {
-          _healthStatus = ChainHealthStatus.operational;
+          _setHealthStatus(ChainHealthStatus.operational);
           _lastError = null;
           debugPrint('[Smoldot] 链操作恢复正常');
         }
@@ -99,7 +130,7 @@ class SmoldotClientManager {
             msg.contains('peers') ||
             msg.contains('inaccessible');
         if (!isTransient || attempt == _readMaxRetries) {
-          _healthStatus = ChainHealthStatus.degraded;
+          _setHealthStatus(ChainHealthStatus.degraded);
           _synced = false;
           _syncFuture = null;
           _lastError = '$debugLabel 失败: $e';
@@ -123,6 +154,7 @@ class SmoldotClientManager {
 
   /// 打印当前轻节点诊断信息到 debugPrint，用于排查连接/同步/读取问题。
   Future<void> printDiagnostics() async {
+    await ensureStarted();
     debugPrint('╔══════ Smoldot 诊断 ══════');
     debugPrint('║ initialized: $_initialized');
     debugPrint('║ chain: ${_chain != null ? "已加入" : "null"}');
@@ -205,16 +237,59 @@ class SmoldotClientManager {
   /// 从 assets/chainspec.json 加载链规格文件。
   /// 如果上次运行有缓存的同步数据库，会通过 `databaseContent` 恢复，
   /// 大幅缩短区块头同步时间。
-  /// 如果已初始化则直接返回。
-  Future<void> initialize() async {
+  /// 如果已初始化或已有初始化正在执行，则复用同一个 Future。
+  Future<void> initialize() => ensureStarted();
+
+  /// 轻节点唯一启动闸口：成功幂等、进行中合并、失败后允许重试。
+  Future<void> ensureStarted() {
+    final generation = _lifecycleGeneration;
+    final current = _initFuture;
+    if (current != null && _initGeneration == generation) return current;
+
+    final pendingDispose = _disposeFuture;
+    if (pendingDispose == null && _initialized) return Future<void>.value();
+
+    // 捕获调用时已存在的销毁任务，避免 start/dispose 互相等待形成环。
+    late final Future<void> task;
+    task = _startAfterDispose(pendingDispose).whenComplete(() {
+      if (identical(_initFuture, task)) {
+        _initFuture = null;
+        _initGeneration = null;
+      }
+    });
+    _initFuture = task;
+    _initGeneration = generation;
+    return task;
+  }
+
+  Future<void> _startAfterDispose(Future<void>? pendingDispose) async {
+    if (pendingDispose != null) {
+      await pendingDispose;
+    }
     if (_initialized) return;
+
+    final generation = _lifecycleGeneration;
+    final initializeOverride = _initializeOverride;
+    if (initializeOverride != null) {
+      await initializeOverride();
+      _ensureLifecycleCurrent(generation);
+      _initialized = true;
+      _setHealthStatus(ChainHealthStatus.syncing);
+      return;
+    }
+    await _doInitialize(generation);
+  }
+
+  Future<void> _doInitialize(int generation) async {
+    _ensureLifecycleCurrent(generation);
 
     _lastError = null;
     _lastBootstrapError = null;
-    _healthStatus = ChainHealthStatus.syncing;
+    _setHealthStatus(ChainHealthStatus.syncing);
 
     try {
       final bootstrap = await _fetchBootstrapManifest();
+      _ensureLifecycleCurrent(generation);
 
       // 1. 创建 smoldot 客户端
       _client = SmoldotClient(
@@ -224,6 +299,7 @@ class SmoldotClientManager {
         ),
       );
       await _client!.initialize();
+      _ensureLifecycleCurrent(generation);
 
       // 2. 从 assets 加载 citizenchain 链规格文件
       final chainSpecRaw = await rootBundle.loadString('assets/chainspec.json');
@@ -247,59 +323,73 @@ class SmoldotClientManager {
       // checkpoint 由 citizenchain/scripts/bake-chainspec.sh 从冻结节点生成，
       // 打包在 assets/light_sync_state.json 中，不修改 chainspec.json 文件。
       final chainSpec = await _injectLightSyncState(withBootstrapBootnodes);
+      _ensureLifecycleCurrent(generation);
 
       // 3. 优先恢复上次导出的 finalized database，避免每次冷启动都从零同步
       final cachedDatabase = await _loadCachedDatabase();
+      _ensureLifecycleCurrent(generation);
       if (cachedDatabase != null && cachedDatabase.isNotEmpty) {
         try {
           _chain = await _addChain(
             chainSpec,
             databaseContent: cachedDatabase,
           );
+          _ensureLifecycleCurrent(generation);
           debugPrint('[Smoldot] 已从同步缓存恢复轻节点 (${cachedDatabase.length} bytes)');
         } catch (e) {
+          _ensureLifecycleCurrent(generation);
           // 缓存与当前链状态不兼容时，清掉缓存并回退到无缓存重连，
           // 避免一次坏缓存把后续所有启动都卡死。
           debugPrint('[Smoldot] 同步缓存失效，清理后重试: $e');
           await _clearCachedDatabase();
+          _ensureLifecycleCurrent(generation);
           _chain = await _addChain(chainSpec);
+          _ensureLifecycleCurrent(generation);
         }
       } else {
         _chain = await _addChain(chainSpec);
+        _ensureLifecycleCurrent(generation);
       }
 
       _initialized = true;
       _synced = false;
       _syncFuture = null;
-      _healthStatus = ChainHealthStatus.syncing;
+      _setHealthStatus(ChainHealthStatus.syncing);
       debugPrint('[Smoldot] 轻节点已启动，正在同步区块头...');
 
-      // App 启动后立刻在后台预热同步，后续页面读链只需等待同一个 Future。
+      // 主动链入口加入网络后立刻预热同步，后续读链复用同一个 Future。
       unawaited(
         ensureSynced(timeout: _defaultSyncTimeout).catchError((Object e) {
           debugPrint('[Smoldot] 后台同步失败: $e');
         }),
       );
     } catch (e) {
-      _healthStatus = _looksOffline(e)
-          ? ChainHealthStatus.offline
-          : ChainHealthStatus.degraded;
-      _lastError = '轻节点初始化失败: $e';
-      debugPrint('[Smoldot] $_lastError');
-      try {
-        _chain?.dispose();
-      } catch (_) {}
-      try {
-        _client?.dispose();
-      } catch (_) {}
-      _chain = null;
-      _client = null;
+      final lifecycleInvalidated = e is _SmoldotLifecycleInvalidated;
+      if (!lifecycleInvalidated) {
+        _setHealthStatus(
+          _looksOffline(e)
+              ? ChainHealthStatus.offline
+              : ChainHealthStatus.degraded,
+        );
+        _lastError = '轻节点初始化失败: $e';
+        debugPrint('[Smoldot] $_lastError');
+      }
+      await _releaseNativeResources();
       _initialized = false;
       _synced = false;
       _syncFuture = null;
       rethrow;
     }
   }
+
+  void _ensureLifecycleCurrent(int generation) {
+    if (generation != _lifecycleGeneration) {
+      throw const _SmoldotLifecycleInvalidated();
+    }
+  }
+
+  @visibleForTesting
+  bool get initializedForTesting => _initialized;
 
   Future<ChainBootstrapManifest?> _fetchBootstrapManifest() async {
     final api = ChainBootstrapApi();
@@ -471,13 +561,21 @@ class SmoldotClientManager {
   }
 
   /// 通过 JSON-RPC 导出当前同步数据库并写入 SharedPreferences。
-  Future<void> _saveDatabaseCache() async {
+  Future<void> _saveDatabaseCache({int? lifecycleGeneration}) async {
+    if (lifecycleGeneration != null &&
+        lifecycleGeneration != _lifecycleGeneration) {
+      return;
+    }
     if (!isReady) return;
     try {
       final result = await _chain!.request(
         'chainHead_unstable_finalizedDatabase',
         [_dbExportMaxSize],
       );
+      if (lifecycleGeneration != null &&
+          lifecycleGeneration != _lifecycleGeneration) {
+        return;
+      }
       if (result.isError || result.result == null) {
         debugPrint('[Smoldot] 导出同步数据库失败: ${result.error}');
         return;
@@ -504,10 +602,12 @@ class SmoldotClientManager {
     List<dynamic> params, {
     bool requireSynced = true,
   }) async {
-    _ensureReady();
     if (requireSynced) {
       await ensureSynced();
+    } else {
+      await ensureStarted();
     }
+    _ensureReady();
 
     // 等待至少有 1 个 peer 连接
     await _waitForPeer();
@@ -534,8 +634,8 @@ class SmoldotClientManager {
     int count = 1000,
     String? startKey,
   }) async {
-    _ensureReady();
     await ensureSynced();
+    _ensureReady();
     final snapshot = await getStatusSnapshotRaw();
     final finalizedHash = snapshot.finalizedBlockHash;
     if (finalizedHash == null || finalizedHash.isEmpty) {
@@ -565,9 +665,14 @@ class SmoldotClientManager {
   /// 创建轻节点订阅，返回事件流。
   ///
   /// 当前用于接收 `chain_subscribeNewHeads` 等链事件。
-  Stream<dynamic> subscribe(String method, List<dynamic> params) {
+  Stream<dynamic> subscribe(
+    String method,
+    List<dynamic> params,
+  ) async* {
+    // 订阅驱动后续业务状态，必须从已追上 finalized 的生命周期开始。
+    await ensureSynced();
     _ensureReady();
-    return _chain!.subscribe(method, params);
+    yield* _chain!.subscribe(method, params);
   }
 
   /// 等待轻节点同步到最新区块。
@@ -579,17 +684,21 @@ class SmoldotClientManager {
 
   /// 在首次链上读写前等待轻节点同步完成，避免把未同步状态误判为链上空数据。
   ///
-  /// 如果后台重试已在运行（_retrySyncRunning），改为短等 30 秒检查一次是否
+  /// 如果后台重试已在运行，改为短等 30 秒检查一次是否
   /// 已追上，避免每次读操作都重新发起 3 分钟的阻塞等待。
   Future<void> ensureSynced({
     Duration timeout = _defaultSyncTimeout,
   }) async {
-    if (!isReady || _synced) return;
+    await ensureStarted();
+    if (_synced) return;
+    _ensureReady();
+    final generation = _lifecycleGeneration;
 
     // 后台重试正在运行时，短等即可——后台会设置 _synced=true
-    if (_retrySyncRunning) {
+    if (_retrySyncFuture != null) {
       for (var i = 0; i < 6; i++) {
         await Future<void>.delayed(const Duration(seconds: 5));
+        _ensureLifecycleCurrent(generation);
         if (_synced) return;
       }
       throw Exception('轻节点同步中，请稍后再试');
@@ -601,39 +710,43 @@ class SmoldotClientManager {
       return;
     }
 
-    final future = _waitForSync(timeout);
+    final future = _waitForSync(timeout, generation);
     _syncFuture = future;
     try {
       await future;
     } finally {
-      if (!_synced) {
+      if (identical(_syncFuture, future) && !_synced) {
         _syncFuture = null;
       }
     }
   }
 
-  Future<void> _waitForSync(Duration timeout) async {
+  Future<void> _waitForSync(Duration timeout, int generation) async {
     debugPrint('[Smoldot] 等待轻节点同步完成...');
     try {
       await _chain!.waitUntilSynced(timeout: timeout);
+      _ensureLifecycleCurrent(generation);
       _synced = true;
-      _healthStatus = ChainHealthStatus.operational;
+      _setHealthStatus(ChainHealthStatus.operational);
       _lastError = null;
       debugPrint('[Smoldot] 区块头同步完成');
 
       // 同步完成后异步保存数据库缓存，下次启动可快速恢复
-      unawaited(_saveDatabaseCache());
+      unawaited(_saveDatabaseCache(lifecycleGeneration: generation));
     } catch (e) {
+      if (generation != _lifecycleGeneration) {
+        rethrow;
+      }
       // 同步超时不等于链不可用——smoldot 后台仍在追赶区块头。
       // 保持 syncing 状态，保存部分进度，启动后台重试。
-      _healthStatus = ChainHealthStatus.syncing;
+      _setHealthStatus(ChainHealthStatus.syncing);
       _synced = false;
       _syncFuture = null;
       _lastError = '轻节点同步中，尚未追上最新区块: $e';
       debugPrint('[Smoldot] $_lastError');
-      unawaited(_saveDatabaseCache());
+      unawaited(_saveDatabaseCache(lifecycleGeneration: generation));
       // 后台定时重试同步检查，追上后自动恢复 operational
-      unawaited(_scheduleRetrySync());
+      unawaited(_scheduleRetrySync(generation));
       rethrow;
     }
   }
@@ -642,36 +755,46 @@ class SmoldotClientManager {
   ///
   /// smoldot 链实例在后台持续同步区块头，此方法定期检查是否已追上最新块。
   /// 追上后自动将状态从 syncing 切换到 operational，并保存 database 缓存。
-  /// _retrySyncRunning 保证同一时刻只有一组重试在运行，弱网下不会堆叠。
-  Future<void> _scheduleRetrySync() async {
-    if (_retrySyncRunning) return;
-    _retrySyncRunning = true;
-    try {
-      for (var i = 0; i < 5; i++) {
-        await Future<void>.delayed(const Duration(seconds: 60));
-        if (_synced || !isReady) return;
-        try {
-          await _chain!.waitUntilSynced(timeout: const Duration(seconds: 30));
-          _synced = true;
-          _healthStatus = ChainHealthStatus.operational;
-          _lastError = null;
-          _syncFuture = null;
-          debugPrint('[Smoldot] 后台重试同步成功 (第 ${i + 1} 次)');
-          unawaited(_saveDatabaseCache());
-          return;
-        } catch (e) {
-          debugPrint('[Smoldot] 后台重试同步未完成 (第 ${i + 1}/5 次): $e');
-          unawaited(_saveDatabaseCache());
-        }
+  /// Future 身份守卫保证同一时刻只有一组重试，旧生命周期也不能清掉新重试。
+  Future<void> _scheduleRetrySync(int generation) {
+    final current = _retrySyncFuture;
+    if (current != null) return current;
+
+    late final Future<void> task;
+    task = _runRetrySync(generation).whenComplete(() {
+      if (identical(_retrySyncFuture, task)) {
+        _retrySyncFuture = null;
       }
-      // 5 次都没成功（共等 5 分钟），标记 degraded
-      if (!_synced) {
-        _healthStatus = ChainHealthStatus.degraded;
-        _lastError = '轻节点长时间未能同步到最新区块';
-        debugPrint('[Smoldot] $_lastError');
+    });
+    _retrySyncFuture = task;
+    return task;
+  }
+
+  Future<void> _runRetrySync(int generation) async {
+    for (var i = 0; i < 5; i++) {
+      await Future<void>.delayed(const Duration(seconds: 60));
+      if (generation != _lifecycleGeneration || _synced || !isReady) return;
+      try {
+        await _chain!.waitUntilSynced(timeout: const Duration(seconds: 30));
+        _ensureLifecycleCurrent(generation);
+        _synced = true;
+        _setHealthStatus(ChainHealthStatus.operational);
+        _lastError = null;
+        _syncFuture = null;
+        debugPrint('[Smoldot] 后台重试同步成功 (第 ${i + 1} 次)');
+        unawaited(_saveDatabaseCache(lifecycleGeneration: generation));
+        return;
+      } catch (e) {
+        if (generation != _lifecycleGeneration) return;
+        debugPrint('[Smoldot] 后台重试同步未完成 (第 ${i + 1}/5 次): $e');
+        unawaited(_saveDatabaseCache(lifecycleGeneration: generation));
       }
-    } finally {
-      _retrySyncRunning = false;
+    }
+    // 5 次都没成功（共等 5 分钟），标记 degraded
+    if (!_synced && generation == _lifecycleGeneration) {
+      _setHealthStatus(ChainHealthStatus.degraded);
+      _lastError = '轻节点长时间未能同步到最新区块';
+      debugPrint('[Smoldot] $_lastError');
     }
   }
 
@@ -700,6 +823,7 @@ class SmoldotClientManager {
   /// 用于展示 peer / best / finalized / syncing 等诊断信息。
   /// 这里不要先等待 peer，因为 peerCount=0 本身就是需要暴露的状态。
   Future<LightClientStatusSnapshot> getStatusSnapshotRaw() async {
+    await ensureStarted();
     _ensureReady();
     return _withRetry(
       'getStatusSnapshotRaw',
@@ -709,6 +833,7 @@ class SmoldotClientManager {
 
   /// 原生读取运行时版本 JSON（不要求完整同步）。
   Future<Map<String, dynamic>?> getRuntimeVersionJson() async {
+    await ensureStarted();
     _ensureReady();
     await _waitForPeer();
     return _withRetry(
@@ -717,6 +842,7 @@ class SmoldotClientManager {
 
   /// 原生读取 metadata hex（不要求完整同步）。
   Future<String?> getMetadataHex() async {
+    await ensureStarted();
     _ensureReady();
     await _waitForPeer();
     return _withRetry('getMetadata', () => _chain!.getMetadataHex());
@@ -727,6 +853,7 @@ class SmoldotClientManager {
   /// genesis hash (blockNumber=0) 永远可用；已知高度的 block hash
   /// 只要 smoldot 已同步过该高度即可返回。
   Future<String?> getBlockHash(int blockNumber) async {
+    await ensureStarted();
     _ensureReady();
     await _waitForPeer();
     return _withRetry('getBlockHash', () => _chain!.getBlockHash(blockNumber));
@@ -739,16 +866,16 @@ class SmoldotClientManager {
 
   /// 获取轻节点状态快照（必须完整同步）。
   Future<LightClientStatusSnapshot?> getStatusSnapshot() async {
-    _ensureReady();
     await ensureSynced();
+    _ensureReady();
     await _waitForPeer();
     return _withRetry('getStatusSnapshot', () => _chain!.getStatusSnapshot());
   }
 
   /// 原生读取账户下一个可用 nonce（必须完整同步）。
   Future<int?> getAccountNextIndex(String accountIdHex) async {
-    _ensureReady();
     await ensureSynced();
+    _ensureReady();
     await _waitForPeer();
     return _withRetry(
         'getAccountNextIndex', () => _chain!.getAccountNextIndex(accountIdHex));
@@ -762,8 +889,8 @@ class SmoldotClientManager {
 
   /// 原生提交已编码 extrinsic（必须完整同步）。
   Future<String?> submitExtrinsicHex(String extrinsicHex) async {
-    _ensureReady();
     await ensureSynced();
+    _ensureReady();
     await _waitForPeer();
     return _withRetry(
         'submitExtrinsic', () => _chain!.submitExtrinsicHex(extrinsicHex));
@@ -772,8 +899,8 @@ class SmoldotClientManager {
   /// 原生读取 `System.Account` 快照（必须完整同步）。
   Future<SystemAccountSnapshot?> getSystemAccountSnapshot(
       String accountIdHex) async {
-    _ensureReady();
     await ensureSynced();
+    _ensureReady();
     return _withRetry(
         'getSystemAccount', () => _chain!.getSystemAccount(accountIdHex));
   }
@@ -781,8 +908,8 @@ class SmoldotClientManager {
   /// 原生读取 finalized 块上的 `System.Account` 快照（必须完整同步）。
   Future<SystemAccountSnapshot?> getFinalizedSystemAccountSnapshot(
       String accountIdHex) async {
-    _ensureReady();
     await ensureSynced();
+    _ensureReady();
     // 金额展示统一走 finalized storage proof，避免 best 头余额先行变动。
     return _withRetry('getFinalizedSystemAccount',
         () => _chain!.getFinalizedSystemAccount(accountIdHex));
@@ -790,16 +917,16 @@ class SmoldotClientManager {
 
   /// 原生读取单个 storage value hex（必须完整同步）。
   Future<String?> getStorageValueHex(String storageKeyHex) async {
-    _ensureReady();
     await ensureSynced();
+    _ensureReady();
     return _withRetry(
         'getStorageValue', () => _chain!.getStorageValueHex(storageKeyHex));
   }
 
   /// 原生读取 finalized 块上的单个 storage value hex（必须完整同步）。
   Future<String?> getFinalizedStorageValueHex(String storageKeyHex) async {
-    _ensureReady();
     await ensureSynced();
+    _ensureReady();
     return _withRetry('getFinalizedStorageValue',
         () => _chain!.getFinalizedStorageValueHex(storageKeyHex));
   }
@@ -810,8 +937,8 @@ class SmoldotClientManager {
     if (storageKeyHexList.isEmpty) {
       return const {};
     }
-    _ensureReady();
     await ensureSynced();
+    _ensureReady();
     return _withRetry('getStorageValues',
         () => _chain!.getStorageValuesHex(storageKeyHexList));
   }
@@ -822,22 +949,77 @@ class SmoldotClientManager {
     if (storageKeyHexList.isEmpty) {
       return const {};
     }
-    _ensureReady();
     await ensureSynced();
+    _ensureReady();
     return _withRetry('getFinalizedStorageValues',
         () => _chain!.getFinalizedStorageValuesHex(storageKeyHexList));
   }
 
-  /// 释放资源。App 退出时调用。
-  void dispose() {
-    _chain?.dispose();
-    _client?.dispose();
+  /// 释放资源。App 退出或重启轻节点时必须等待完成。
+  ///
+  /// 销毁会使当前生命周期代际失效；调用时已经在途的初始化先自行收口，
+  /// 随后统一释放原生 chain/client，避免旧 Future 在销毁后重新写回就绪态。
+  Future<void> dispose() {
+    final current = _disposeFuture;
+    if (current != null) return current;
+
+    _lifecycleGeneration += 1;
+    final pendingStart = _initFuture;
+    late final Future<void> task;
+    task = _disposeAfterStart(pendingStart).whenComplete(() {
+      if (identical(_disposeFuture, task)) {
+        _disposeFuture = null;
+      }
+    });
+    _disposeFuture = task;
+    return task;
+  }
+
+  Future<void> _disposeAfterStart(Future<void>? pendingStart) async {
+    if (pendingStart != null) {
+      try {
+        await pendingStart;
+      } catch (_) {
+        // 初始化失败或被本次代际切换取消，仍继续收口已经分配的原生资源。
+      }
+    }
+
+    try {
+      final disposeOverride = _disposeOverride;
+      if (disposeOverride != null) {
+        await disposeOverride();
+      } else {
+        await _releaseNativeResources();
+      }
+    } finally {
+      _resetLifecycleState();
+    }
+  }
+
+  Future<void> _releaseNativeResources() async {
+    final chain = _chain;
+    final client = _client;
     _chain = null;
     _client = null;
+
+    try {
+      await chain?.dispose();
+    } catch (e) {
+      debugPrint('[Smoldot] 释放 chain 失败: $e');
+    }
+    try {
+      await client?.dispose();
+    } catch (e) {
+      debugPrint('[Smoldot] 释放 client 失败: $e');
+    }
+  }
+
+  void _resetLifecycleState() {
     _initialized = false;
     _synced = false;
     _syncFuture = null;
-    _healthStatus = ChainHealthStatus.uninitialized;
+    _retrySyncFuture = null;
+    _setHealthStatus(ChainHealthStatus.uninitialized);
     _lastError = null;
     _lastBootstrapManifest = null;
     _lastBootstrapError = null;
@@ -846,7 +1028,22 @@ class SmoldotClientManager {
 
   void _ensureReady() {
     if (!isReady) {
-      throw StateError('smoldot 轻节点未初始化，请先调用 initialize()');
+      throw StateError('smoldot 轻节点未初始化，请先调用 ensureStarted()');
     }
   }
+
+  void _setHealthStatus(ChainHealthStatus status) {
+    _healthStatus = status;
+    if (_healthStatusNotifier.value != status) {
+      _healthStatusNotifier.value = status;
+    }
+  }
+}
+
+/// 初始化所属生命周期已被 dispose 失效。
+class _SmoldotLifecycleInvalidated implements Exception {
+  const _SmoldotLifecycleInvalidated();
+
+  @override
+  String toString() => 'smoldot 初始化已被新的生命周期取代';
 }

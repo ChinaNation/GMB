@@ -15,14 +15,21 @@ describe('chain signed extrinsic relay', () => {
     const env = fakeEnv({ db });
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (_url: string, init: RequestInit) => {
+      vi.fn(async (url: string, init: RequestInit) => {
         const body = JSON.parse(init.body as string) as {
+          id: string;
           method: string;
           params: string[];
         };
+        const headers = new Headers(init.headers);
+        expect(url).toBe('https://rpc.internal.example/');
         expect(body.method).toBe('author_submitExtrinsic');
         expect(body.params).toEqual([signedExtrinsicHex]);
-        return Response.json({ jsonrpc: '2.0', id: 1, result: txHash });
+        expect(headers.get('CF-Access-Client-Id')).toBe('worker-rpc.access');
+        expect(headers.get('CF-Access-Client-Secret')).toBe('test-access-secret');
+        expect(init.redirect).toBe('manual');
+        expect(init.signal).toBeInstanceOf(AbortSignal);
+        return Response.json({ jsonrpc: '2.0', id: body.id, result: txHash });
       })
     );
 
@@ -51,9 +58,10 @@ describe('chain signed extrinsic relay', () => {
   it('deduplicates a recent successful relay instead of calling RPC again', async () => {
     const db = new FakeDb();
     const env = fakeEnv({ db });
-    const fetchMock = vi.fn(async () =>
-      Response.json({ jsonrpc: '2.0', id: 1, result: txHash })
-    );
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string) as { id: string };
+      return Response.json({ jsonrpc: '2.0', id: body.id, result: txHash });
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     await routeRequest(relayRequest({ signed_extrinsic_hex: signedExtrinsicHex }), env);
@@ -104,13 +112,67 @@ describe('chain signed extrinsic relay', () => {
     });
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => Response.json({ jsonrpc: '2.0', id: 1, result: txHash }))
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(init.body as string) as { id: string };
+        return Response.json({ jsonrpc: '2.0', id: body.id, result: txHash });
+      })
     );
 
     await routeRequest(relayRequest({ signed_extrinsic_hex: signedExtrinsicHex }), env);
     await expect(
       routeRequest(relayRequest({ signed_extrinsic_hex: '0x05060708' }), env)
     ).rejects.toMatchObject({ code: 'chain_extrinsic_relay_rate_limited' });
+  });
+
+  it('records timeout and transport failures with distinct audit codes', async () => {
+    const timeoutDb = new FakeDb();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new DOMException('timed out', 'TimeoutError');
+      })
+    );
+    await expect(
+      routeRequest(
+        relayRequest({ signed_extrinsic_hex: signedExtrinsicHex }),
+        fakeEnv({ db: timeoutDb })
+      )
+    ).rejects.toMatchObject({ code: 'chain_rpc_timeout' });
+    expect(timeoutDb.relays[0]?.error_code).toBe('chain_rpc_timeout');
+
+    const transportDb = new FakeDb();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('connection refused');
+      })
+    );
+    await expect(
+      routeRequest(
+        relayRequest({ signed_extrinsic_hex: '0x05060708' }),
+        fakeEnv({ db: transportDb })
+      )
+    ).rejects.toMatchObject({ code: 'chain_rpc_transport_failed' });
+    expect(transportDb.relays[0]?.error_code).toBe('chain_rpc_transport_failed');
+  });
+
+  it('records JSON-RPC semantic rejection without retrying', async () => {
+    const db = new FakeDb();
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string) as { id: string };
+      return Response.json({
+        jsonrpc: '2.0',
+        id: body.id,
+        error: { code: 1010, message: 'Invalid Transaction' }
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      routeRequest(relayRequest({ signed_extrinsic_hex: signedExtrinsicHex }), fakeEnv({ db }))
+    ).rejects.toMatchObject({ code: 'chain_rpc_rejected' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(db.relays[0]?.error_code).toBe('chain_rpc_rejected');
   });
 });
 
@@ -134,7 +196,9 @@ function fakeEnv(input: {
     DB: (input.db ?? new FakeDb()) as unknown as D1Database,
     SQUARE_MEDIA: {} as R2Bucket,
     FEED_CACHE: {} as KVNamespace,
-    SQUARE_CHAIN_RPC_URL: 'https://rpc.internal.example',
+    CITIZEN_CHAIN_RPC_URL: 'https://rpc.internal.example',
+    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
+    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret',
     CHAIN_EXTRINSIC_RELAY_ENABLED: input.enabled === false ? '0' : '1',
     CHAIN_EXTRINSIC_RELAY_MAX_PER_MINUTE: input.maxPerMinute
   };

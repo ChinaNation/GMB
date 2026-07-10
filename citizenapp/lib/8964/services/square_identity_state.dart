@@ -1,4 +1,5 @@
 import 'package:citizenapp/8964/chain/square_chain_service.dart';
+import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 广场身份状态。
@@ -40,12 +41,18 @@ class SquareIdentityService {
   const SquareIdentityService({
     this.walletManager,
     this.chainService,
+    this.badgeSnapshotStore,
   });
 
   final WalletManager? walletManager;
   final SquareChainService? chainService;
+  final IdentityBadgeSnapshotStore? badgeSnapshotStore;
 
-  Future<SquareIdentityState> loadCurrent() async {
+  /// 加载当前广场身份。
+  ///
+  /// [readLiveChain] 仅允许发布等主动链流程传 true；广场浏览必须传 false，
+  /// 只读账户级徽章快照，不能因此启动 smoldot。
+  Future<SquareIdentityState> loadCurrent({bool readLiveChain = true}) async {
     // 发动态身份统一取默认用户钱包（列表中最靠前的热钱包），与聊天同源。
     final wallet = await (walletManager ?? WalletManager()).getDefaultWallet();
     if (wallet == null) {
@@ -53,14 +60,28 @@ class SquareIdentityService {
     }
     String? cidNumber;
     String identityLevel = 'visitor';
-    try {
-      final identity = await (chainService ?? SquareChainService())
-          .fetchIdentity(wallet.address);
-      cidNumber = identity.cidNumber;
-      identityLevel = identity.identityLevel;
-    } catch (_) {
-      cidNumber = null;
-      identityLevel = 'visitor';
+    final snapshotStore = badgeSnapshotStore ?? IdentityBadgeSnapshotStore();
+    if (readLiveChain) {
+      try {
+        final identity = await (chainService ?? SquareChainService())
+            .fetchIdentity(wallet.address);
+        cidNumber = identity.cidNumber;
+        identityLevel = identity.identityLevel;
+        try {
+          await snapshotStore.write(
+            walletAccount: wallet.address,
+            identityLevel: identityLevel,
+          );
+        } catch (_) {
+          // 快照写失败不影响本次发布流程使用真实链上身份。
+        }
+      } catch (_) {
+        cidNumber = null;
+        identityLevel = 'visitor';
+      }
+    } else {
+      final snapshot = await snapshotStore.read(wallet.address);
+      identityLevel = snapshot?.identityLevel ?? 'visitor';
     }
 
     return SquareIdentityState(

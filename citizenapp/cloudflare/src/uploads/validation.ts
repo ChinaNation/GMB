@@ -3,7 +3,8 @@ import { HttpError } from '../shared/http';
 import { isSha256Hex } from '../shared/hash';
 
 const maxImageBytes = 20 * 1024 * 1024;
-const maxVideoBytes = 500 * 1024 * 1024;
+// 单视频体积的绝对硬顶（=最高档 10GB，防滥用）；精确的按档上限在 quota.ts 依会员档校验。
+const maxVideoBytes = 10 * 1024 * 1024 * 1024;
 const maxManifestBytes = 512 * 1024;
 const maxMediaItems = 101;
 
@@ -48,7 +49,7 @@ export function validateUploadItems(value: unknown): UploadItemInput[] {
         throw new HttpError(400, 'invalid_video_type', '视频只允许 mp4 或 webm');
       }
       if (byteSize > maxVideoBytes) {
-        throw new HttpError(400, 'video_too_large', '单个视频不能超过 500MB');
+        throw new HttpError(400, 'video_too_large', '单个视频体积超出上限');
       }
     } else {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(item.content_type)) {

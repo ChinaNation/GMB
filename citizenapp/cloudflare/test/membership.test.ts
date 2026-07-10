@@ -224,7 +224,9 @@ function fakeEnv(input: {
     DB: db as unknown as D1Database,
     SQUARE_MEDIA: {} as R2Bucket,
     FEED_CACHE: kv as unknown as KVNamespace,
-    SQUARE_CHAIN_RPC_URL: 'http://chain.test',
+    CITIZEN_CHAIN_RPC_URL: 'https://chain.test',
+    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
+    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret',
     STRIPE_WEBHOOK_SECRET: input.stripeSecret
   } as unknown as Env;
 }
@@ -307,8 +309,6 @@ function membershipRow(overrides: Partial<MembershipRow> = {}): MembershipRow {
   return {
     owner_account: owner,
     membership_level: 'visitor',
-    storage_quota_bytes: 1024,
-    storage_used_bytes: 0,
     expires_at: expiresAt,
     updated_at: Date.now(),
     subscription_source: 'stripe',
@@ -321,6 +321,7 @@ function membershipRow(overrides: Partial<MembershipRow> = {}): MembershipRow {
     cancel_at_period_end: 0,
     identity_level: 'visitor',
     identity_checked_at: Date.now(),
+    entitlement_lapsed_at: null,
     ...overrides
   };
 }
@@ -419,36 +420,35 @@ class FakeStmt {
   async run(): Promise<{ success: boolean }> {
     if (this.sql.includes('INSERT INTO square_memberships')) {
       const ownerAccount = this.args[0] as string;
-      const existing = this.db.memberships.get(ownerAccount);
       this.db.memberships.set(ownerAccount, {
         owner_account: ownerAccount,
         membership_level: this.args[1] as string,
-        storage_quota_bytes: this.args[2] as number,
-        storage_used_bytes: existing?.storage_used_bytes ?? 0,
-        expires_at: this.args[3] as number,
-        updated_at: this.args[4] as number,
+        expires_at: this.args[2] as number,
+        updated_at: this.args[3] as number,
         subscription_source: 'stripe',
-        stripe_customer_id: this.args[5] as string | null,
-        stripe_subscription_id: this.args[6] as string,
-        stripe_price_id: this.args[7] as string | null,
-        subscription_status: this.args[8] as string,
-        current_period_start: this.args[9] as number | null,
-        current_period_end: this.args[10] as number,
-        cancel_at_period_end: this.args[11] as number,
-        identity_level: this.args[12] as string,
-        identity_checked_at: this.args[13] as number
+        stripe_customer_id: this.args[4] as string | null,
+        stripe_subscription_id: this.args[5] as string,
+        stripe_price_id: this.args[6] as string | null,
+        subscription_status: this.args[7] as string,
+        current_period_start: this.args[8] as number | null,
+        current_period_end: this.args[9] as number,
+        cancel_at_period_end: this.args[10] as number,
+        identity_level: this.args[11] as string,
+        identity_checked_at: this.args[12] as number,
+        entitlement_lapsed_at: null
       });
     }
     if (this.sql.includes('UPDATE square_memberships') && this.sql.includes('stripe_subscription_id')) {
       const status = this.args[0] as string;
-      const subscriptionId = this.args[3] as string;
+      const subscriptionId = this.args[4] as string;
       for (const [ownerAccount, row] of this.db.memberships) {
         if (row.stripe_subscription_id === subscriptionId) {
           this.db.memberships.set(ownerAccount, {
             ...row,
             subscription_status: status,
             expires_at: this.args[1] as number,
-            updated_at: this.args[2] as number
+            updated_at: this.args[2] as number,
+            entitlement_lapsed_at: row.entitlement_lapsed_at ?? (this.args[3] as number)
           });
         }
       }

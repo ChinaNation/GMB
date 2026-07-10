@@ -102,7 +102,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
   const estimatedBytes = estimateUploadBytes(mediaItems);
 
   // 会员容量在签发上传授权前扣住入口，避免用户绕过 App 直接灌入媒体对象。
-  const membership = await requireActiveMembership(env, session.owner_account, estimatedBytes);
+  const membership = await requireActiveMembership(env, session.owner_account);
   const membershipLevel = normalizeMembershipLevel(membership.membership_level);
   const plan = membershipPlan(membershipLevel);
   assertDeclaredContentQuota({
@@ -352,7 +352,7 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
   if (manifestObjectHash !== manifestHash) {
     throw new HttpError(409, 'manifest_object_hash_mismatch', 'R2 manifest 内容与 manifest_hash 不一致');
   }
-  const membership = await requireActiveMembership(env, upload.owner_account, 0);
+  const membership = await requireActiveMembership(env, upload.owner_account);
   const membershipLevel = normalizeMembershipLevel(membership.membership_level);
   await assertManifestQuota({
     membershipLevel,
@@ -375,18 +375,13 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
 
   const completedAt = nowMs();
 
-  await env.DB.batch([
-    env.DB.prepare(
-      `UPDATE square_uploads
-        SET content_hash = ?, status = 'completed', completed_at = ?
-        WHERE upload_id = ?`
-    ).bind(contentHash, completedAt, upload.upload_id),
-    env.DB.prepare(
-      `UPDATE square_memberships
-        SET storage_used_bytes = storage_used_bytes + ?, updated_at = ?
-        WHERE owner_account = ?`
-    ).bind(upload.estimated_bytes, completedAt, upload.owner_account)
-  ]);
+  await env.DB.prepare(
+    `UPDATE square_uploads
+      SET content_hash = ?, status = 'completed', completed_at = ?
+      WHERE upload_id = ?`
+  )
+    .bind(contentHash, completedAt, upload.upload_id)
+    .run();
 
   return jsonResponse({
     ok: true,
@@ -435,6 +430,16 @@ export async function streamWebhookRoute(request: Request, env: Env): Promise<Re
       uid
     )
     .run();
+
+  // 冷归档回灌完成：restoring 资产转码就绪 → 转 live 恢复可播。
+  if (update.asset_state === 'ready') {
+    await env.DB.prepare(
+      `UPDATE square_media_assets SET archive_state = 'live', updated_at = ?
+        WHERE provider = 'cloudflare_stream' AND provider_asset_id = ? AND archive_state = 'restoring'`
+    )
+      .bind(nowMs(), uid)
+      .run();
+  }
 
   return jsonResponse({
     ok: true,

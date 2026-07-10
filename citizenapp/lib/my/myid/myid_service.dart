@@ -6,6 +6,8 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
+import 'identity_badge_snapshot_store.dart';
+
 /// 电子护照只读链上状态。
 ///
 /// 本状态不再表达本机“已登记/待登记”档案流程；公民 App 只承认
@@ -55,13 +57,17 @@ class MyIdService {
   MyIdService({
     WalletManager? walletManager,
     ChainRpc? chainRpc,
+    IdentityBadgeSnapshotStore? badgeSnapshotStore,
     DateTime Function()? nowProvider,
   })  : _walletManager = walletManager ?? WalletManager(),
         _chainRpc = chainRpc ?? ChainRpc(),
+        _badgeSnapshotStore =
+            badgeSnapshotStore ?? IdentityBadgeSnapshotStore(),
         _nowProvider = nowProvider ?? DateTime.now;
 
   final WalletManager _walletManager;
   final ChainRpc _chainRpc;
+  final IdentityBadgeSnapshotStore _badgeSnapshotStore;
   final DateTime Function() _nowProvider;
 
   /// 从本机钱包列表中发现唯一链上身份钱包。
@@ -126,6 +132,7 @@ class MyIdService {
     }
 
     if (identities.isEmpty) {
+      await _persistBadgeSnapshots(wallets);
       return const MyIdState(identityStatus: MyIdIdentityStatus.notOnchain);
     }
     if (identities.length > 1) {
@@ -142,6 +149,11 @@ class MyIdService {
     final identityLevel = status == MyIdIdentityStatus.normal
         ? await _resolveIdentityLevel(located.wallet.address)
         : null;
+    await _persistBadgeSnapshots(
+      wallets,
+      identityWalletAccount: located.wallet.address,
+      identityLevel: identityLevel,
+    );
     return MyIdState(
       identityStatus: status,
       identityWalletAccount: located.wallet.address,
@@ -150,6 +162,31 @@ class MyIdService {
       passportValidUntil: _formatDateInt(identity.passportValidUntil),
       identityLevel: identityLevel,
     );
+  }
+
+  Future<void> _persistBadgeSnapshots(
+    List<WalletProfile> wallets, {
+    String? identityWalletAccount,
+    String? identityLevel,
+  }) async {
+    try {
+      final normalizedIdentityAccount = identityWalletAccount?.trim();
+      for (final wallet in wallets) {
+        final level = normalizedIdentityAccount != null &&
+                normalizedIdentityAccount.isNotEmpty &&
+                wallet.address.trim() == normalizedIdentityAccount &&
+                (identityLevel == 'voting' || identityLevel == 'candidate')
+            ? identityLevel!
+            : 'visitor';
+        await _badgeSnapshotStore.write(
+          walletAccount: wallet.address,
+          identityLevel: level,
+        );
+      }
+    } catch (e) {
+      // 快照只服务非链页面展示，写失败不能改变本次真实链查询结果。
+      debugPrint('myid badge snapshot save failed: $e');
+    }
   }
 
   /// 有候选身份记录=竞选公民，否则投票公民；读失败降级为 voting。

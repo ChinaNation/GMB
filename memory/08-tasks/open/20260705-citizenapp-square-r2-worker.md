@@ -617,7 +617,7 @@ score =
 
 阶段 6 执行记录：
 - 用户已明确回复“确认执行阶段 6”。
-- 已新增 `citizenapp/cloudflare/src/chain/rpc.ts`，实现按 `SQUARE_CHAIN_RPC_URL` 调用链 RPC，读取指定区块 `System.Events`；RPC 地址属于环境配置，不写入仓库。
+- 已新增 `citizenapp/cloudflare/src/chain/rpc.ts` 读取指定区块 `System.Events`；2026-07-10 已删除当时使用的单一 RPC 配置，当前只通过 Access 三项 Secret 调用受保护的 HTTPS 上游，RPC 地址不写入仓库。
 - 已新增 `citizenapp/cloudflare/src/chain/square_event.ts`，按阶段 4 固定的 pallet index `36`、event index `0` 解码 `SquarePostPublished` 事件，读取 `post_id`、`owner_account`、可空 `cid_number`、`post_category`、`content_hash`、`storage_receipt_id`、`storage_until`、`created_block`。
 - 已新增 `citizenapp/cloudflare/src/posts/confirm.ts`，实现 `POST /v1/square/posts/confirm`：校验登录 session、上传记录归属、上传完成状态、链上事件字段、R2 manifest schema/owner/category，然后写入 `square_posts` 并返回正式 feed item。
 - 已修改 `citizenapp/cloudflare/src/posts/repository.ts`，feed 只读取 `post_state = published` 的正式动态；推荐按发布时间倒序，关注按 D1 关注关系过滤，竞选只返回 `campaign`；feed item 会从 R2 manifest 和上传对象列表补齐 `media_items`。
@@ -676,7 +676,7 @@ score =
 
 阶段 7 最终执行记录：
 - 用户已明确回复“确认执行阶段 7”。
-- 已恢复 Worker 本地依赖并启动 `citizenapp-square-api` Worker，绑定本地 D1、R2、KV、本地上传代理和 `SQUARE_CHAIN_RPC_URL=http://127.0.0.1:9946`。
+- 已恢复 Worker 本地依赖并启动 `citizenapp-square-api` Worker，绑定本地 D1、R2、KV、本地上传代理和当时的本地 HTTP RPC；该单 Secret 联调方式已于 2026-07-10 删除，当前代码必须使用 Access 保护的 HTTPS 上游。
 - 已完成 Worker/R2 真实前置链路：用 Alice 钱包账户完成 Worker 钱包签名登录；写入本地 D1 会员；调用 `uploads/prepare`；通过 `dev-put` 上传 manifest 和 image media 到本地 R2；调用 `uploads/complete` 获取 `storage_receipt_id`。
 - 本次前置链路生成的测试动态：`post_id=sqp_85dd4370c0f94e9587dc47ae3e62b27d`，`content_hash=3185c925084efdf8e475ab6178785ea685e1fb2e5e19d39b874edc62974efcd9`，`storage_receipt_id=sqr_cac0c5ab132a80d01c7d693b44a8497ea1acf5ba1ff61b6eef096b8bc4075d48`。
 - 已构建普通本地节点二进制并启动冻结 `--dev` 链；验收发现冻结 chainspec 仍使用旧 WASM，metadata 中只有 pallet index `0..35`，没有 `SquarePost`。
@@ -1206,7 +1206,7 @@ score =
 执行记录：
 - Worker 目录已由其它任务扁平化到 `citizenapp/cloudflare/`；本阶段按新目录执行，没有恢复旧 `citizenapp/cloudflare/square_worker/`。
 - `npx wrangler whoami` 已确认当前登录 Cloudflare 账户 `ChinaNation`，账户 ID 为 `f088b553d27d9c26b81f48f1924c3bbd`。
-- 阶段 11 当时 staging 远端 secret 只有 `R2_ACCESS_KEY_ID`、`R2_ACCOUNT_ID`、`R2_SECRET_ACCESS_KEY`；尚未包含 `SQUARE_CHAIN_RPC_URL`，因此阶段 11 不能执行 Worker 链上确认 smoke。阶段 12 已补齐该 secret 并完成负向确认 smoke。
+- 阶段 11 当时 staging 远端 Secret 只有 `R2_ACCESS_KEY_ID`、`R2_ACCOUNT_ID`、`R2_SECRET_ACCESS_KEY`，没有链 RPC 配置，因此不能执行 Worker 链上确认 smoke。阶段 12 曾补齐已废弃的单一 RPC Secret 并完成负向确认 smoke；当前 Access 三项 Secret 仍需重新部署验收。
 - staging 远端 D1 迁移检查显示 `citizenapp-square-db-staging` 没有待应用 migration。
 - 已部署 staging Worker：`citizenapp-square-api-staging`，URL `https://citizenapp-square-api-staging.stews87-fawn.workers.dev`，版本 ID `f0be968a-0744-4543-8f1f-80318044d4e1`。
 - 部署后 `GET /health` 返回 200，响应为 Cloudflare R2 后端且 `content_on_chain=false`。
@@ -1218,7 +1218,7 @@ score =
 - 阶段 11 没有修改 `citizenchain/runtime/`，没有新增 Cloudflare secret，没有 GitHub push/PR，没有保留 staging 临时数据。
 
 验收记录：
-- `npx wrangler secret list --env staging`（目录 `citizenapp/cloudflare`）：通过；阶段 11 当时尚未包含 `SQUARE_CHAIN_RPC_URL`，阶段 12 已补齐。
+- `npx wrangler secret list --env staging`（目录 `citizenapp/cloudflare`）：通过；阶段 11 当时尚无链 RPC Secret，阶段 12 曾补齐旧单一配置。
 - `npx wrangler d1 migrations list citizenapp-square-db-staging --env staging --remote`（目录 `citizenapp/cloudflare`）：通过，无待执行 migration。
 - `npm run deploy:staging`（目录 `citizenapp/cloudflare`）：通过，部署版本 ID `f0be968a-0744-4543-8f1f-80318044d4e1`。
 - `curl GET /health`（staging Worker）：通过，HTTP 200。
@@ -1233,7 +1233,7 @@ score =
 ## 阶段 12：staging 链 RPC 确认 smoke 与阻塞确认
 
 目标：
-- 在 `SQUARE_CHAIN_RPC_URL` 已配置后，复验 staging Worker 能通过 Cloudflare Tunnel 访问国储会节点 RPC。
+- 在当时的单一 RPC Secret 已配置后，复验 staging Worker 能通过 Cloudflare Tunnel 访问国储会节点 RPC；该历史结果不替代当前 Access 三项 Secret 验收。
 - 通过真实 staging KV/D1/R2/Worker 流程验证 `POST /v1/square/posts/confirm` 已进入链事件读取路径。
 - 明确正向“发布交易入块 -> Worker 确认入库”smoke 是否具备测试钱包条件，不猜测链上余额或私钥。
 - 清理本阶段产生的所有 staging 临时 KV、D1、R2 和本地 Wrangler 残留。
@@ -1243,7 +1243,7 @@ score =
 - `memory/01-architecture/citizenapp/`、`memory/07-ai/unified-protocols.md`、本任务卡：记录阶段 12 链 RPC 配置、负向确认 smoke、正向发布阻塞条件和清理结果；涉及文档。
 
 执行记录：
-- staging Worker secret 已包含 `SQUARE_CHAIN_RPC_URL`、`R2_ACCESS_KEY_ID`、`R2_ACCOUNT_ID`、`R2_SECRET_ACCESS_KEY`；链 RPC 完整 URL 只保存在 Cloudflare Secret，不写入仓库文档。
+- staging Worker 当时已包含旧单一链 RPC Secret 与 R2 三项 Secret；链 RPC 完整 URL 只保存在 Cloudflare Secret，不写入仓库文档。当前代码已删除旧链配置读取。
 - Cloudflare Tunnel RPC host 已可达：`/health` 返回 200 `ok`；`system_properties` 返回 `ss58Format=2027`、`tokenDecimals=2`、`tokenSymbol=GMB`。
 - 已复查 Worker 确认实现：`src/posts/confirm.ts` 先读取已完成上传，再通过 `fetchSystemEventsAtBlock()` 读取指定区块 `System.Events`，按 `post_id/owner_account/post_category/content_hash/storage_receipt_id` 匹配 `SquarePostPublished` 事件，最后校验 R2 manifest 并写入 `square_posts`。
 - 已扫描当前链 `0..30` 区块，未发现 `SquarePostPublished` 事件；仓库公开测试助记词派生账户余额均为 0，当前仓库没有可签名且有余额的 staging 热钱包。
@@ -1255,7 +1255,7 @@ score =
 验收记录：
 - `curl` 国储会节点 Tunnel `/health`：通过，HTTP 200。
 - `curl` 国储会节点 RPC `system_properties`：通过，返回 GMB 链属性。
-- `npx wrangler secret list --env staging`（目录 `citizenapp/cloudflare`）：通过，确认 `SQUARE_CHAIN_RPC_URL` 已存在。
+- `npx wrangler secret list --env staging`（目录 `citizenapp/cloudflare`）：通过，确认当时的单一链 RPC Secret 已存在。
 - staging 负向链确认 smoke：通过，临时内容完成 R2 上传和 D1 complete 后，Worker confirm 返回 HTTP 409 `square_event_not_found`。
 - 远端清理验证：通过，临时 owner 在 `square_memberships`、`square_uploads`、`square_posts` 中计数均为 0；临时 KV session 读取为 404；临时 R2 `manifest.json` 和 `media_001.webp` 已删除。
 - 本地残留清理：通过，已删除 `citizenapp/cloudflare/.wrangler` 本地缓存目录。
@@ -1275,11 +1275,11 @@ score =
 - 已只读校验用户提供的测试助记词可派生目标地址 `w5EGb2HHsZz1wyQLA3YFmCbp1aC9TzSLoNwWFfd4qj3UpLjN2`，链上余额为 200 GMB，nonce 为 0，满足 ED + 1 元发布费。
 - 首次正向 smoke 已完成 Worker 登录、临时会员、`uploads/prepare` 前置步骤，但在提交交易前读取链 RPC 时返回 Cloudflare 502 HTML，未生成 `tx_hash`，未提交链上交易，未扣费。
 - 首次尝试失败后已清理临时 `square_uploads`、`square_follows`、`stage13_smoke` 会员、登录 challenge、KV session 和 R2 object key；D1 反查该 owner 临时上传数和临时会员数均为 0。
-- 随后连续复测 `SQUARE_CHAIN_RPC_URL` 指向的 JSON-RPC 路径，`state_getRuntimeVersion` 稳定返回 `error code: 502`，WebSocket 也无法建立。
+- 随后连续复测当时单一 Secret 指向的 JSON-RPC 路径，`state_getRuntimeVersion` 稳定返回 `error code: 502`，WebSocket 也无法建立。
 - `https://nrcgch-rpc.crcfrcn.com/health` 返回 HTTP 530：`The origin has been unregistered from Argo Tunnel`。
 - 直连 `http://147.224.14.117:18080` 超时，说明当前本机无法绕过 Tunnel 访问该 RPC 服务。
-- 因 Worker 链上确认依赖同一个 `SQUARE_CHAIN_RPC_URL`，当前继续提交链上发布交易会造成“链上已扣费但 Worker 无法确认入库”的不完整状态；本阶段已停止在提交交易前。
-- Tunnel/DNS 恢复后已把 staging `SQUARE_CHAIN_RPC_URL` 切到一级域名 `nrcgch-rpc.crcfrcn.com`；公网 `/health`、`system_properties`、`state_getRuntimeVersion` 均恢复正常，staging Worker secret 已触发新版本部署。
+- 因 Worker 链上确认当时依赖同一个 RPC 上游，继续提交链上发布交易会造成“链上已扣费但 Worker 无法确认入库”的不完整状态；本阶段已停止在提交交易前。
+- Tunnel/DNS 恢复后曾把 staging 旧单一 RPC Secret 切到一级域名；当时公网 `/health`、`system_properties`、`state_getRuntimeVersion` 均恢复正常并触发 Worker 新版本部署。该公网历史链路已被当前 Access + Tunnel 私有链路方案取代，不得恢复。
 - 恢复后重新执行正向 smoke：Worker 登录、临时会员、`uploads/prepare` 均通过；第一次用一次性 Node 编码提交，在 `author_submitExtrinsic` 的交易池校验阶段被 runtime 拒绝，返回 `TaggedTransactionQueue_validate_transaction` wasm trap，nonce 仍为 0、余额仍为 200 GMB。
 - 为排除手工编码问题，已重新编译本地 `chain-signing` crate，并用仓库 Rust host 签名材料唯一真源构造 signed extrinsic；第二次提交仍在 `author_submitExtrinsic` 交易池校验阶段返回同一 `TaggedTransactionQueue_validate_transaction` wasm trap，说明失败不再是一次性 Node 编码问题。
 - 只读检查远端 `state_getMetadata`：metadata 中不存在 `SquarePost`、`SquarePostPublished`、`publish_square_post`、`PublishedPostCountByAccount` 字符串；因此当前国储会节点运行的 runtime 不是包含广场 `SquarePost` pallet 的版本，无法接受 pallet index 36 的 `publish_square_post` 交易。

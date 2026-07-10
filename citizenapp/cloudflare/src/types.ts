@@ -14,6 +14,9 @@ export type MediaUploadMethod = 'direct_form' | 'tus';
 
 export type MediaAssetState = 'prepared' | 'uploaded' | 'processing' | 'ready' | 'error';
 
+// 视频冷归档态：live=Stream 可播 / archived=已移入 R2 冷存不可播 / restoring=重订后回灌中。
+export type MediaArchiveState = 'live' | 'archived' | 'restoring';
+
 export interface Env {
   DB: D1Database;
   SQUARE_MEDIA: R2Bucket;
@@ -26,8 +29,10 @@ export interface Env {
   R2_BUCKET_NAME?: string;
   SQUARE_SESSION_TTL_SECONDS?: string;
   SQUARE_UPLOAD_URL_TTL_SECONDS?: string;
-  // Worker 只读取链上事件用于确认发布，不托管钱包、不代签交易。
-  SQUARE_CHAIN_RPC_URL?: string;
+  // Worker 通过 Access + Tunnel 调用权威节点回环 RPC；URL 和服务令牌只放远端 Secret。
+  CITIZEN_CHAIN_RPC_URL?: string;
+  CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID?: string;
+  CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET?: string;
   // 轻节点启动清单只下发公开 bootnodes / checkpoint 信息，不下发 RPC 地址。
   CITIZEN_CHAIN_BOOTNODES?: string;
   CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS?: string;
@@ -59,6 +64,9 @@ export interface Env {
   CLOUDFLARE_IMAGES_DELIVERY_BASE_URL?: string;
   CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN?: string;
   CLOUDFLARE_STREAM_WEBHOOK_SECRET?: string;
+  // 退订视频冷归档：开关（'1' 开）与阈值（天，缺省 90）。关闭时 Cron 不做任何归档。
+  VIDEO_ARCHIVE_ENABLED?: string;
+  VIDEO_ARCHIVE_LAPSE_DAYS?: string;
 }
 
 export interface SessionState {
@@ -86,8 +94,6 @@ export interface DeviceSubkeyRow {
 export interface MembershipRow {
   owner_account: string;
   membership_level: string;
-  storage_quota_bytes: number;
-  storage_used_bytes: number;
   expires_at: number;
   updated_at: number;
   subscription_source: string;
@@ -100,6 +106,8 @@ export interface MembershipRow {
   cancel_at_period_end: number;
   identity_level: string;
   identity_checked_at: number | null;
+  // 会员权益失效时刻（退订满 N 月冷归档的时钟起点；重订置 NULL）。
+  entitlement_lapsed_at: number | null;
 }
 
 export interface UploadItemInput {
@@ -147,6 +155,10 @@ export interface MediaAssetRow {
   created_at: number;
   updated_at: number;
   ready_at: number | null;
+  // 视频冷归档：仅视频行使用，图片恒 'live'。
+  archive_state: MediaArchiveState;
+  archived_at: number | null;
+  r2_archive_key: string | null;
 }
 
 export interface SquarePostRow {
@@ -182,6 +194,8 @@ export interface SquareFeedMediaItem {
   duration_seconds?: number | null;
   width?: number | null;
   height?: number | null;
+  // 视频冷归档态：archived=已归档不可播（作者未续订），restoring=恢复中；缺省视为 live。
+  archive_state?: MediaArchiveState;
 }
 
 export interface SquarePostFeedItem extends SquarePostRow {

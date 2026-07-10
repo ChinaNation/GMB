@@ -13,6 +13,8 @@ export interface DynamicQuota {
   video_quality: MediaQuality;
   max_videos: number;
   max_video_seconds: number;
+  /// 单个视频体积上限（字节，按档）。对齐推特：访客 512MB / 投票 2GB / 竞选 10GB。
+  max_video_bytes: number;
 }
 
 export interface ArticleQuota {
@@ -34,10 +36,10 @@ export interface MembershipPlan {
   required_identity_level: RequiredIdentityLevel;
   dynamic: DynamicQuota;
   article: ArticleQuota;
-  legacy_storage_quota_bytes: number;
 }
 
-const gib = 1024 * 1024 * 1024;
+const mib = 1024 * 1024;
+const gib = 1024 * mib;
 
 export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
   visitor: {
@@ -53,7 +55,8 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       max_images: 9,
       video_quality: 'sd',
       max_videos: 1,
-      max_video_seconds: 60
+      max_video_seconds: 60,
+      max_video_bytes: 512 * mib
     },
     article: {
       title_min_chars: 10,
@@ -63,8 +66,7 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       cover_required: true,
       image_quality: 'sd',
       max_images: 50
-    },
-    legacy_storage_quota_bytes: 20 * gib
+    }
   },
   voting: {
     membership_level: 'voting',
@@ -79,7 +81,8 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       max_images: 9,
       video_quality: 'hd',
       max_videos: 1,
-      max_video_seconds: 30 * 60
+      max_video_seconds: 30 * 60,
+      max_video_bytes: 2 * gib
     },
     article: {
       title_min_chars: 10,
@@ -89,8 +92,7 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       cover_required: true,
       image_quality: 'hd',
       max_images: 100
-    },
-    legacy_storage_quota_bytes: 200 * gib
+    }
   },
   candidate: {
     membership_level: 'candidate',
@@ -105,7 +107,8 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       max_images: 9,
       video_quality: 'hd',
       max_videos: 1,
-      max_video_seconds: 3 * 60 * 60
+      max_video_seconds: 3 * 60 * 60,
+      max_video_bytes: 10 * gib
     },
     article: {
       title_min_chars: 10,
@@ -115,8 +118,7 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       cover_required: true,
       image_quality: 'hd',
       max_images: 100
-    },
-    legacy_storage_quota_bytes: 1024 * gib
+    }
   }
 };
 

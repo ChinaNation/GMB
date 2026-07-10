@@ -520,11 +520,17 @@ class _MultisigTransferDetailPageState
     // 待投票确认期:订阅 finalized 头,有新最终块(即有新交易上链)才刷新,
     // 空闲链零查询。
     final sub = ChainEventSubscription();
-    if (!sub.connect()) {
+    _pendingSub = sub;
+    unawaited(_connectPendingSubscription(sub));
+  }
+
+  Future<void> _connectPendingSubscription(ChainEventSubscription sub) async {
+    final connected = await sub.connect();
+    if (!mounted || !identical(_pendingSub, sub) || !connected) {
+      if (identical(_pendingSub, sub)) _pendingSub = null;
       sub.disconnect();
       return;
     }
-    _pendingSub = sub;
     _pendingEventSub = sub.events.listen((event) {
       if (event.type != ChainEventType.newFinalizedBlock) return;
       if (!mounted || _loading) return;

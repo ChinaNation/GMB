@@ -54,7 +54,7 @@
 ### 步骤 3：配置 staging 远端变量/secret
 
 - 确认 `SQUARE_DEV_UPLOAD_PROXY=0`。
-- 配置或确认 `SQUARE_CHAIN_RPC_URL`、`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME` 只在 Cloudflare 远端变量/secret。
+- 配置或确认 `CITIZEN_CHAIN_RPC_URL`、两项 `CITIZEN_CHAIN_RPC_ACCESS_*`、`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME` 只在 Cloudflare 远端 Secret/变量；链 RPC 三项必须成套配置。
 - 如果缺少私密值且本机无法读取，记录阻塞，不伪造。
 
 ### 步骤 4：远端迁移和 staging 部署
@@ -103,11 +103,11 @@
 - 用户已在 staging Worker 写入 R2 secrets；`npx wrangler secret list --env staging` 已确认存在 `R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`。
 - 已执行 staging 远端 R2 预签名上传 smoke：临时写入 KV session 与 D1 会员记录，调用 `uploads/prepare` 获取真实 R2 S3 预签名 URL，分别 PUT `manifest.json` 与 `media_001.png` 到 `citizenapp-square-media-staging`，再调用 `uploads/complete` 返回 `storage_state=completed` 和 `storage_receipt_id`。
 - R2 smoke 测试数据已清理：删除临时 KV session、D1 会员/上传记录、远端 R2 `manifest.json` 与 `media_001.png` 测试对象；复查 `square_uploads` 对应 `post_id` 记录数为 0。
-- staging 当前仍未配置 `SQUARE_CHAIN_RPC_URL`；因此本阶段已完成 Worker 远端部署、基础 smoke 和真实 R2 预签名上传 smoke，但未执行链上确认 smoke。
+- 本阶段当时尚未配置链 RPC；因此只完成 Worker 远端部署、基础 smoke 和真实 R2 预签名上传 smoke，未执行链上确认 smoke。后续历史阶段曾用已废弃的单一 RPC Secret 验证，当前仍需按 Access 三项 Secret 重新验收。
 - 已执行 `git diff --check`：通过；已清理 `citizenapp/cloudflare/node_modules` 和 `citizenapp/cloudflare/.wrangler`，未发现 `wrangler` / `workerd` 进程残留。
 - 本阶段未修改 `citizenchain/runtime/`，未写入 Cloudflare token、R2 access key、R2 secret key 或链 RPC 私密地址，未触碰 GitHub 远端。
 
 ## 后续前置条件
 
-- 若要执行真实远端上传发布 smoke，需要先在 Cloudflare staging Worker 配置 `SQUARE_CHAIN_RPC_URL`、`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`；这些值只允许保存在 Cloudflare 远端变量或 secret，不得写入仓库。
+- 若要重新执行真实远端上传发布 smoke，需要先在 Cloudflare staging Worker 配置链 RPC 三项 Access Secret 与 R2 预签名凭据；这些值只允许保存在 Cloudflare 远端 Secret，不得写入仓库。
 - 若要部署 production，需要单独新建任务卡并确认 production R2/D1/KV 资源，不得复用 staging 数据。

@@ -138,6 +138,22 @@ function assertDynamicQuota(input: DeclaredQuotaInput): void {
       `动态视频不能超过 ${input.plan.dynamic.max_videos} 个`
     );
   }
+  // 单视频体积按档（对齐推特：访客 512MB / 投票 2GB / 竞选 10GB）。
+  for (const item of input.mediaItems) {
+    if (item.media_kind === 'video' && item.byte_size > input.plan.dynamic.max_video_bytes) {
+      throw new HttpError(
+        400,
+        'dynamic_video_too_large',
+        `单个视频不能超过 ${formatMaxVideoBytes(input.plan.dynamic.max_video_bytes)}`
+      );
+    }
+  }
+}
+
+function formatMaxVideoBytes(bytes: number): string {
+  const gib = 1024 * 1024 * 1024;
+  const mib = 1024 * 1024;
+  return bytes % gib === 0 ? `${bytes / gib}GB` : `${Math.round(bytes / mib)}MB`;
 }
 
 function assertArticleQuota(input: DeclaredQuotaInput): void {

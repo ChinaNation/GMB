@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -24,7 +22,7 @@ import 'package:citizenapp/wallet/wallet_gate.dart';
 
 import 'ui/app_theme.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 钱包创建后注册 P-256 设备子钥（8964 层实现，避免 wallet/core 反向依赖）。
@@ -65,25 +63,9 @@ void main() {
 
   // 先销毁可能残留的旧实例（hot restart 场景）。
   // 防止 Rust tokio 线程持有已删除的 Dart FFI 回调导致 SIGABRT。
-  SmoldotClientManager.instance.dispose();
+  await SmoldotClientManager.instance.dispose();
 
   runApp(const CitizenApp());
-  // 轻节点同步吃 CPU：延到首帧渲染 + 落地页（广场，走后端不需链）稳定后再启动，
-  // 避免与启动首屏抢核。落地页不需链上数据，短延迟无感知；进交易/钱包/公民等
-  // 需链场景时 initialize() 幂等，已在初始化中则直接复用。
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      unawaited(_initializeSmoldotInBackground());
-    });
-  });
-}
-
-Future<void> _initializeSmoldotInBackground() async {
-  try {
-    await SmoldotClientManager.instance.initialize();
-  } catch (e) {
-    debugPrint('[main] smoldot 轻节点初始化失败: $e');
-  }
 }
 
 class CitizenApp extends StatelessWidget {

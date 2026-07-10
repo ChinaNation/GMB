@@ -70,7 +70,6 @@ export async function deletePostCloudflareData(
 ): Promise<{
   deleted_media_assets: number;
   deleted_r2_objects: number;
-  reclaimed_storage_bytes: number;
 }> {
   if (postId.length === 0) {
     throw new HttpError(400, 'invalid_post_id', '动态编号不合法');
@@ -92,9 +91,6 @@ export async function deletePostCloudflareData(
     await env.SQUARE_MEDIA.delete(objectKey);
   }
 
-  const deletedAt = nowMs();
-  const shouldReclaimStorage = post.post_state !== 'deleted' && upload !== null;
-  const reclaimedStorageBytes = shouldReclaimStorage ? Math.max(0, upload.estimated_bytes) : 0;
   // 硬删除：彻底删掉帖子行本身，不留软删残行；链上仅存 content_hash 不受影响。
   const statements = [
     env.DB.prepare(
@@ -111,21 +107,11 @@ export async function deletePostCloudflareData(
       env.DB.prepare('DELETE FROM square_uploads WHERE upload_id = ?').bind(upload.upload_id)
     );
   }
-  if (shouldReclaimStorage) {
-    statements.push(
-      env.DB.prepare(
-        `UPDATE square_memberships
-          SET storage_used_bytes = MAX(0, storage_used_bytes - ?), updated_at = ?
-          WHERE owner_account = ?`
-      ).bind(reclaimedStorageBytes, deletedAt, session.owner_account)
-    );
-  }
   await env.DB.batch(statements);
 
   return {
     deleted_media_assets: mediaAssets.length,
-    deleted_r2_objects: objectKeys.length,
-    reclaimed_storage_bytes: reclaimedStorageBytes
+    deleted_r2_objects: objectKeys.length
   };
 }
 
@@ -341,7 +327,8 @@ function manifestMediaItems(
       sha256: item.sha256 ?? '',
       duration_seconds: asset?.duration_seconds ?? null,
       width: asset?.width ?? null,
-      height: asset?.height ?? null
+      height: asset?.height ?? null,
+      archive_state: asset?.archive_state ?? 'live'
     };
   });
 }

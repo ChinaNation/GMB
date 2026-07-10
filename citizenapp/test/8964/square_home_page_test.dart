@@ -6,8 +6,10 @@ import 'package:citizenapp/8964/pages/square_home_page.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
 import 'package:citizenapp/8964/storage/square_draft_store.dart';
+import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeWalletManager extends WalletManager {
   _FakeWalletManager(this.wallet);
@@ -54,10 +56,22 @@ class _FakeSquareChainService extends SquareChainService {
   _FakeSquareChainService(this.cidNumber);
 
   final String? cidNumber;
+  int fetchIdentityCount = 0;
 
   @override
   Future<String?> fetchNormalCitizenCidNumber(String ownerAccount) async {
     return cidNumber;
+  }
+
+  @override
+  Future<({String? cidNumber, String identityLevel})> fetchIdentity(
+    String ownerAccount,
+  ) async {
+    fetchIdentityCount += 1;
+    return (
+      cidNumber: cidNumber,
+      identityLevel: cidNumber == null ? 'visitor' : 'voting',
+    );
   }
 }
 
@@ -95,6 +109,10 @@ Widget _wrap(Widget child) {
 }
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('广场首页默认进入推荐流并可切换分类', (tester) async {
     final identityService = SquareIdentityService(
       walletManager: _FakeWalletManager(null),
@@ -123,6 +141,7 @@ void main() {
   });
 
   testWidgets('未认证钱包打开发布页时竞选发布入口禁用', (tester) async {
+    final chainService = _FakeSquareChainService(null);
     final identityService = SquareIdentityService(
       walletManager: _FakeWalletManager(
         const WalletProfile(
@@ -140,7 +159,7 @@ void main() {
           signMode: 'local',
         ),
       ),
-      chainService: _FakeSquareChainService(null),
+      chainService: chainService,
     );
 
     await tester.pumpWidget(
@@ -152,12 +171,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // 广场首页只读本地徽章快照，不读取链。
+    expect(chainService.fetchIdentityCount, 0);
+
     await tester.tap(find.byTooltip('发布动态'));
     await tester.pumpAndSettle();
 
     // 发布入口先选类型：进「发动态」到达动态发布页。
     await tester.tap(find.text('发动态'));
     await tester.pumpAndSettle();
+
+    // 发布页是主动链流程，必须读取一次真实身份。
+    expect(chainService.fetchIdentityCount, 1);
+    final snapshot = await IdentityBadgeSnapshotStore().read(
+      'gmb_test_owner_account',
+    );
+    expect(snapshot?.identityLevel, 'visitor');
 
     expect(find.text('发布动态'), findsOneWidget);
     expect(find.text('测试钱包'), findsOneWidget);

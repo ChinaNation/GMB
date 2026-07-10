@@ -123,13 +123,27 @@ class _ProposalViewState extends State<ProposalView> {
   // ──── 轻节点订阅 ────
 
   void _startChainSubscription() {
-    _subscription = ChainEventSubscription();
-    _subscription!.connect();
-    _eventSub = _subscription!.events.listen((event) {
+    final subscription = ChainEventSubscription();
+    _subscription = subscription;
+    _eventSub = subscription.events.listen((event) {
       if (event.type == ChainEventType.newBlock) {
         _checkForNewProposals();
       }
     });
+    unawaited(_connectChainSubscription(subscription));
+  }
+
+  Future<void> _connectChainSubscription(
+    ChainEventSubscription subscription,
+  ) async {
+    final connected = await subscription.connect();
+    if (!mounted || !identical(_subscription, subscription)) {
+      subscription.disconnect();
+      return;
+    }
+    if (!connected) {
+      debugPrint('[ProposalView] 链事件订阅连接失败');
+    }
   }
 
   Future<void> _checkForNewProposals() async {

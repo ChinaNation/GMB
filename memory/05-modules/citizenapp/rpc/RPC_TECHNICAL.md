@@ -20,8 +20,8 @@
 
 补充说明：
 
-- 当前 `smoldot` Dart 绑定已从 pub.dev 依赖切换为仓库内本地 fork：`citizenapp/third_party/smoldot-dart`
-- 当前 `smoldot-light` Rust 内核通过 Git submodule 位于：`citizenapp/third_party/smoldot-pow`
+- 当前 `smoldot` Dart 绑定已从 pub.dev 依赖切换为仓库内本地 fork：`citizenapp/smoldot-dart`
+- 当前 `smoldot-light` Rust 内核位于：`citizenapp/smoldot-pow`
 - 这两层收编的目的，是为后续 PoW 专用 typed capability 改造建立可控演进入口
 - Android 真机 ABI 只支持 `arm64-v8a` 与 `armeabi-v7a`。`scripts/build-smoldot-native.sh android` 必须同时构建 `aarch64-linux-android` 与 `armv7-linux-androideabi`，并分别写入 `android/app/src/main/jniLibs/arm64-v8a/libsmoldot.so` 与 `android/app/src/main/jniLibs/armeabi-v7a/libsmoldot.so`；APK 构建入口必须显式传入 `--target-platform android-arm,android-arm64`，避免生成未适配 smoldot 的 x86 / x86_64 包内容。
 - macOS 桌面调试库只用于 Dart FFI / `flutter test` 本机验收。`scripts/build-smoldot-native.sh macos` 必须设置 `CARGO_PROFILE_RELEASE_STRIP=false`，否则 Rust release profile 的 `strip=true` 会导致 dyld 报 `mis-aligned LINKEDIT string pool`，OpenMLS native 测试会被误判为 native 库不可用。
@@ -57,21 +57,35 @@ lib/rpc/
 - 正式创世后,CitizenApp 的 `assets/chainspec.json` 使用轻节点形态,只承载链身份、bootNodes 和 `stateRootHash`;不得内置全节点链数据库或 GB 级 raw state。
 - `assets/public_institutions/` 是从创世链状态导出的公权机构快照缓存,manifest 必须包含 `snapshot_block_number / snapshot_block_hash / genesis_hash / state_root / public_institution_root / shard_hashes`。App 首屏读取本地 Isar/快照缓存,后台通过 OnChina 链上投影 BFF 按 `manifest_version` 增量刷新;`manifest_version` 必须来自链投影 finalized anchor,不得由本地同步时间单独推进。
 - 公权机构唯一真源仍是链上 `PublicManage`;CitizenApp 内置快照、Isar 缓存和 OnChina BFF 都不是授权或真源。
+- `assets/light_sync_state.json` 是安装包签名保护的 finalized 信任锚；当前锚点是创世块 `#0`，不是会随 Worker 响应静默变化的运行时配置。
+- 后续正式 App 发行可以把该锚点推进到发布前已 finalized 的块，但必须继续绑定同一 genesis；本机 finalized database 更高时始终优先使用本机进度。
 
 ## 5. 连接与同步策略
 
-1. App 先完成 `runApp()` 和首帧渲染,再后台初始化 `SmoldotClientManager`
+1. App 完成 `runApp()` 和首帧渲染后不自动初始化轻节点；只有主动链消费方首次调用时才进入 `SmoldotClientManager.ensureStarted()`
 2. 轻节点读取 `SharedPreferences.smoldot_db_cache`，优先通过 `AddChainConfig.databaseContent` 恢复上次 finalized database
 3. 如果缓存失效或与当前链状态不兼容，会自动清掉缓存并回退到无缓存重连，避免坏缓存永久卡死启动
-4. 轻节点加入 `chainspec.json` 指定的 citizenchain 网络后，立即在后台预热同步
-5. `ChainRpc` 在发起余额、nonce、metadata、storage、extrinsic 等链上请求前，先等待轻节点完成同步
+4. 主动链入口触发轻节点加入 `chainspec.json` 指定的 citizenchain 网络后，立即在后台预热同步
+5. peer/best/finalized 进度展示只等待初始化；余额、nonce、finalized storage、extrinsic 和链事件订阅必须等待轻节点完成同步
 6. 当轻节点未初始化、同步失败或链路降级时，typed capability 必须抛出真实错误，不能返回 `null` / `[]` / `{}` 伪装成“链上没有数据”
+7. `SmoldotClientManager.ensureStarted()` 是唯一启动闸口：成功幂等、进行中复用同一 Future、失败后允许重试；`initialize()` 只保留为该闸口的对外别名
+8. `dispose()` 必须异步等待 chain/client 释放；生命周期代际切换后，旧初始化、同步和后台重试不得再写回健康状态或清掉新 Future
+9. `ChainEventSubscription.connect()` 必须等待启动与同步的真实结果；失败返回 false 供交易监控重试，禁止在异步初始化完成前假报连接成功
+
+### 5.1 新安装用户快速同步
+
+- 当前 smoldot fork 已启用 GRANDPA warp，固定 `warp_sync_minimum_gap=32`。远端 finalized 高度必须严格大于本地锚点高度加 32 才发起 warp；从当前 `#0` 锚点出发，链高 `#32` 不触发，`#33` 起才具备触发条件。
+- warp 先验证 GRANDPA authority set 交接与最终性 proof，再下载目标 finalized 块的 runtime 和必要 storage proof，随后切回普通同步追赶少量近头区块。成本主要随权威集变更与 proof 体积增长，不随普通区块高度线性增长。
+- 当前节点端已经为所有节点注册 GRANDPA 协议并挂载 warp proof provider；权威节点推进 finality，普通 observer 节点也能基于本地归档数据响应 proof。
+- Cloudflare bootstrap 只补充通过本地 chain id、protocol id、genesis state root 校验的 bootnodes；远端 checkpoint URL 和同源 SHA-256 不进入当前信任路径。
+- warp 不可用时 smoldot 仍可能退化为普通逐块同步。App 必须把它视为可观测的服务降级，保持 Flutter 输入响应并告警节点运维，禁止改走 HTTP 链真源。
+- 完整发布、节点数据保留和真实验收规则见 [checkpoint 与 GRANDPA warp 快速同步方案](./SMOLDOT_CHECKPOINT_PLAN.md)。
 
 补充说明：
 
 - 钱包余额不更新的首要风险点，不是 UI，而是“轻节点已初始化但尚未同步完成”时过早查询链上状态
-- Android 系统弹出“公民没有响应/关闭应用/等待”属于 ANR,首要排查点是启动阶段是否在
-  Flutter 首帧前等待 smoldot 初始化或同步;当前实现禁止在 `runApp()` 前 await 轻节点初始化。
+- Android 系统弹出“公民没有响应/关闭应用/等待”属于 ANR，首要排查点是是否有非链页面误触发 smoldot，或同步原生线程持续挤占主线程资源；当前实现只在 `runApp()` 前等待旧实例释放，禁止等待新轻节点初始化或同步。
+- 广场浏览、信息页和“我的”身份徽章不得调用主动链入口；这些页面没有链消费行为时，进程内不得创建 smoldot client。
 - `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0、没有提案或机构不存在
 - 当前代码已新增 `SmoldotClientManager.getStatusSnapshot()`，作为结构化轻节点状态接口；其底层已改为 Rust 原生 capability，不再由 Dart 层拼装 `system_health`
 - `ChainProgressBanner` 只展示轻节点状态快照（peer / best / finalized / syncing），文案必须使用“轻节点状态/轻节点已就绪”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。
@@ -275,7 +289,7 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 当前实现：
 
 ```text
-启动时：SharedPreferences.read('smoldot_db_cache')
+首次主动链访问时：SharedPreferences.read('smoldot_db_cache')
         → addChain(chainSpec, databaseContent: cached)
         → 只同步缓存之后的新区块头
 
@@ -287,7 +301,8 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 
 - 缓存恢复失败时必须自动 `remove('smoldot_db_cache')` 后重试一次
 - 不允许每次启动都主动清空缓存，否则会退化成“每次冷启动全量同步”
-- 当前默认同步超时为 3 分钟，且 App 启动后会立即在后台预热同步
+- 当前默认同步超时为 3 分钟；只有首次主动链访问加入网络后才会立即在后台预热同步
+- 启动、同步重试和销毁都使用 Future 身份守卫；旧生命周期的异步完成不得覆盖新实例状态
 
 ### 8.2 批量余额查询（已实现）
 

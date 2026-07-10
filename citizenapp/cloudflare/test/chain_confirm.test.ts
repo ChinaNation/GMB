@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encodeAddress } from '@polkadot/util-crypto';
 import { confirmPublishedPost, deletePostCloudflareData } from '../src/posts/confirm';
 import type { Env, MediaAssetRow, PreparedUploadRow, SessionState } from '../src/types';
@@ -10,6 +10,7 @@ import {
   u32Le,
   u64Le
 } from '../src/chain/square_event';
+import { fetchChainStorage } from '../src/chain/rpc';
 
 const ownerAccountBytes = Uint8Array.from(Array.from({ length: 32 }, (_, index) => index + 1));
 const ownerAccount = encodeAddress(ownerAccountBytes, 2027);
@@ -19,6 +20,10 @@ const storageReceiptId = 'sqr_test';
 const blockHash = `0x${'22'.repeat(32)}`;
 
 describe('square chain confirmation', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('decodes SquarePostPublished from System.Events bytes', () => {
     const eventsHex = buildEventsHex({
       cidNumber: 'CN001-CTZN-000000001-2026'
@@ -78,7 +83,10 @@ describe('square chain confirmation', () => {
         error_code: null,
         created_at: 1,
         updated_at: 2,
-        ready_at: 2
+        ready_at: 2,
+        archive_state: 'live',
+        archived_at: null,
+        r2_archive_key: null
       }
     ]);
     const env = {
@@ -101,7 +109,9 @@ describe('square chain confirmation', () => {
         })
       }),
       FEED_CACHE: {},
-      SQUARE_CHAIN_RPC_URL: 'http://chain.test'
+      CITIZEN_CHAIN_RPC_URL: 'https://chain.test',
+      CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
+      CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret'
     } as unknown as Env;
     vi.stubGlobal(
       'fetch',
@@ -132,13 +142,63 @@ describe('square chain confirmation', () => {
     expect(db.posts.get(postId)?.post_state).toBe('published');
   });
 
-  it('hard-deletes Cloudflare-side post data and reclaims storage', async () => {
+  it('sends state_getStorage only through the Access-protected HTTPS upstream', async () => {
+    const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+      const headers = new Headers(init.headers);
+      const body = JSON.parse(init.body as string) as {
+        id: number;
+        method: string;
+        params: string[];
+      };
+      expect(url).toBe('https://chain.test/');
+      expect(headers.get('CF-Access-Client-Id')).toBe('worker-rpc.access');
+      expect(headers.get('CF-Access-Client-Secret')).toBe('test-access-secret');
+      expect(body.method).toBe('state_getStorage');
+      expect(body.params).toEqual(['0x1234', blockHash]);
+      return Response.json({ jsonrpc: '2.0', id: body.id, result: '0xabcd' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchChainStorage(chainRpcEnv(), '0x1234', blockHash);
+
+    expect(result).toBe('0xabcd');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects non-HTTPS RPC configuration before making a request', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchChainStorage(
+        chainRpcEnv({ CITIZEN_CHAIN_RPC_URL: 'http://127.0.0.1:9944' }),
+        '0x1234'
+      )
+    ).rejects.toMatchObject({ code: 'chain_rpc_invalid_config' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversized RPC response before buffering its body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response('{}', {
+          headers: { 'content-length': String(4 * 1024 * 1024 + 1) }
+        })
+      )
+    );
+
+    await expect(fetchChainStorage(chainRpcEnv(), '0x1234')).rejects.toMatchObject({
+      code: 'chain_rpc_response_too_large'
+    });
+  });
+
+  it('hard-deletes Cloudflare-side post data', async () => {
     const db = new FakeDb();
     const manifestKey = `square/${ownerAccount}/posts/${postId}/manifest.json`;
     const upload = completedUpload(manifestKey);
     db.uploads.set(postId, upload);
     db.mediaAssets.set(upload.upload_id, [imageAsset(upload.upload_id)]);
-    db.membershipStorageUsed.set(ownerAccount, 4096);
     db.posts.set(postId, {
       post_id: postId,
       owner_account: ownerAccount,
@@ -173,15 +233,13 @@ describe('square chain confirmation', () => {
 
     expect(result).toMatchObject({
       deleted_media_assets: 1,
-      deleted_r2_objects: 1,
-      reclaimed_storage_bytes: 1024
+      deleted_r2_objects: 1
     });
     // 硬删除：帖子行 + 上传行 + 媒体资产 + R2 对象全部清空，无软删残行。
     expect(db.posts.has(postId)).toBe(false);
     expect(db.uploads.has(postId)).toBe(false);
     expect(db.mediaAssets.get(upload.upload_id)).toEqual([]);
     expect(r2.deletedKeys).toEqual([manifestKey]);
-    expect(db.membershipStorageUsed.get(ownerAccount)).toBe(3072);
 
     // 再删同一帖子 → 已无残行，报 404，证明是彻底删除而非软删。
     await expect(deletePostCloudflareData(env, session(), postId)).rejects.toMatchObject({
@@ -189,6 +247,18 @@ describe('square chain confirmation', () => {
     });
   });
 });
+
+function chainRpcEnv(overrides: Partial<Env> = {}): Env {
+  return {
+    DB: {} as D1Database,
+    SQUARE_MEDIA: {} as R2Bucket,
+    FEED_CACHE: {} as KVNamespace,
+    CITIZEN_CHAIN_RPC_URL: 'https://chain.test',
+    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
+    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret',
+    ...overrides
+  };
+}
 
 function session(): SessionState {
   return {
@@ -238,7 +308,10 @@ function imageAsset(uploadId: string): MediaAssetRow {
     error_code: null,
     created_at: 1,
     updated_at: 2,
-    ready_at: 2
+    ready_at: 2,
+    archive_state: 'live',
+    archived_at: null,
+    r2_archive_key: null
   };
 }
 
@@ -287,7 +360,6 @@ class FakeDb {
   uploads = new Map<string, PreparedUploadRow>();
   mediaAssets = new Map<string, MediaAssetRow[]>();
   posts = new Map<string, Record<string, unknown>>();
-  membershipStorageUsed = new Map<string, number>();
 
   prepare(sql: string) {
     return new FakeStmt(this, sql);
@@ -356,12 +428,6 @@ class FakeStmt {
           this.db.uploads.delete(postKey);
         }
       }
-    }
-    if (this.sql.includes('storage_used_bytes = MAX')) {
-      const bytes = this.args[0] as number;
-      const owner = this.args[2] as string;
-      const current = this.db.membershipStorageUsed.get(owner) ?? 0;
-      this.db.membershipStorageUsed.set(owner, Math.max(0, current - bytes));
     }
     return { success: true };
   }

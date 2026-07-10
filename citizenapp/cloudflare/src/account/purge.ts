@@ -62,6 +62,8 @@ export async function purgeAccount(
   deletedR2 += await deleteR2Prefix(env, `profile/${safeOwner}/`);
   deletedR2 += await deleteR2Prefix(env, `square/${safeOwner}/posts/`);
   deletedR2 += await deleteR2Prefix(env, `chat/${safeOwner}/`, keepPrefixes);
+  // 视频冷归档的 R2 冷存原片一并硬删（注销才删；退订只归档不删）。
+  deletedR2 += await deleteR2Prefix(env, `archive/${safeOwner}/`);
 
   // 5. D1 批删（只删 A 的）。保留：chat_envelopes(recipient!=A)、square_follows(followed_account=A)。
   const bind = (sql: string) => env.DB.prepare(sql).bind(ownerAccount);

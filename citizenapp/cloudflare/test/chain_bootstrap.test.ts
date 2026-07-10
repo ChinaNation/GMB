@@ -17,7 +17,9 @@ describe('chain bootstrap manifest', () => {
         CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS: '120',
         CITIZEN_CHAIN_LIGHT_SYNC_STATE_URL:
           'https://api.onchina.org/v1/chain/light-sync-state.json',
-        SQUARE_CHAIN_RPC_URL: 'https://rpc.internal.example'
+        CITIZEN_CHAIN_RPC_URL: 'https://rpc.internal.example',
+        CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
+        CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret'
       })
     );
 
@@ -40,7 +42,9 @@ describe('chain bootstrap manifest', () => {
       new Request('https://api.onchina.org/v1/chain/bootstrap'),
       env({
         CHAIN_EXTRINSIC_RELAY_ENABLED: '1',
-        SQUARE_CHAIN_RPC_URL: 'https://rpc.internal.example'
+        CITIZEN_CHAIN_RPC_URL: 'https://rpc.internal.example',
+        CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
+        CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret'
       })
     );
 
@@ -49,6 +53,22 @@ describe('chain bootstrap manifest', () => {
       path: '/v1/chain/extrinsics/relay'
     });
     expect(JSON.stringify(response)).not.toContain('rpc.internal.example');
+  });
+
+  it('keeps the relay disabled when the Access service token is incomplete', () => {
+    const response = buildChainBootstrapResponse(
+      new Request('https://api.onchina.org/v1/chain/bootstrap'),
+      env({
+        CHAIN_EXTRINSIC_RELAY_ENABLED: '1',
+        CITIZEN_CHAIN_RPC_URL: 'https://rpc.internal.example',
+        CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access'
+      })
+    );
+
+    expect(response.services.signed_extrinsic_relay).toEqual({
+      enabled: false,
+      path: null
+    });
   });
 
   it('falls back to bundled chainspec bootNodes when Worker config is empty', () => {

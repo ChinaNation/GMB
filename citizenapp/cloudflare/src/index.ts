@@ -1,6 +1,7 @@
 import type { Env } from './types';
 import { errorResponse } from './shared/http';
 import { routeRequest } from './routes';
+import { runVideoArchiveSweep } from './membership/archive';
 
 export { ChatRealtimeObject } from './chat/realtime';
 
@@ -11,5 +12,16 @@ export default {
     } catch (error) {
       return errorResponse(error);
     }
+  },
+
+  // Cron 触发：退订视频冷归档扫描（限流分批、幂等可续跑，由 VIDEO_ARCHIVE_ENABLED 开关控制）。
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      runVideoArchiveSweep(env).catch((error) => {
+        console.error(
+          `[video-archive] sweep failed: ${error instanceof Error ? error.message : error}`
+        );
+      })
+    );
   }
 };

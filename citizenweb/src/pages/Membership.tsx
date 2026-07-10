@@ -276,18 +276,21 @@ export default function Membership() {
             ))}
           </div>
 
-          {activeTab === 'subscribe' && (
-            <div className="mt-6">
-              <div className="text-sm font-medium text-gold-400">当前选择</div>
-              <h2 className="mt-2 text-2xl font-bold text-white">{selectedPlan.name}</h2>
-              <p className="mt-2 text-sm text-slate-400">{selectedPlan.price}</p>
-            </div>
-          )}
-          {activeTab === 'cancel' && (
-            <p className="mt-6 text-sm leading-relaxed text-slate-300">
-              取消订阅将在当前计费周期结束后生效；期间会员权益不变。
-            </p>
-          )}
+          {/* 固定高度：订阅(当前选择/档位/价格)与取消(说明)内容行数不同，
+              锁死高度后切换 tab 不会撑高卡片。 */}
+          <div className="mt-6 min-h-[104px]">
+            {activeTab === 'subscribe' ? (
+              <>
+                <div className="text-sm font-medium text-gold-400">当前选择</div>
+                <h2 className="mt-2 text-2xl font-bold text-white">{selectedPlan.name}</h2>
+                <p className="mt-2 text-sm text-slate-400">{selectedPlan.price}</p>
+              </>
+            ) : (
+              <p className="text-sm leading-relaxed text-slate-300">
+                取消订阅将在当前计费周期结束后生效；期间会员权益不变。
+              </p>
+            )}
+          </div>
 
           <label className="mt-8 block text-sm font-semibold text-slate-200" htmlFor="owner-account">
             钱包账户地址
@@ -338,12 +341,6 @@ export default function Membership() {
                 ? '扫码签名并订阅'
                 : '扫码签名并取消'}
           </button>
-
-          {message && (
-            <div className={`mt-4 rounded-lg border px-4 py-3 text-sm ${messageClass}`}>
-              {message.text}
-            </div>
-          )}
 
           <div className="mt-auto border-t border-white/10 pt-5 text-xs leading-relaxed text-slate-500">
             App Store 和 Google Play 版本只显示订阅状态；订阅与取消的支付操作统一在官网完成。
@@ -410,6 +407,15 @@ export default function Membership() {
               : '将 CitizenApp 钱包地址二维码对准取景框，识别后自动填入'
           }
         />
+      )}
+
+      {/* 提示以浮层呈现，不占卡片高度（否则会随内容撑高卡片、切换时跳动）。 */}
+      {message && (
+        <div className="fixed inset-x-0 bottom-6 z-40 mx-auto max-w-sm px-6">
+          <div className={`rounded-lg border px-4 py-3 text-sm shadow-lg ${messageClass}`}>
+            {message.text}
+          </div>
+        </div>
       )}
     </>
   )

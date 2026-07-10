@@ -40,6 +40,8 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
 - 关注/取关：单击 + 乐观更新（粉丝数±1，失败回滚），**不逐次签名**；session 由默认热钱包静默登录一次（`signWithWalletNoAuth`）复用。session 存在的意义是防伪造他人关注（写入完整性），非内容加密。
 - 认证勾以链上已确认发布携带的 `cid_number` 为真源（confirm 时写入），不信任 App/Worker 自报。
 - feed/主页媒体经 `mediaUrl(object_key)` → `GET /media/<key>` 渲染 `Image.network`（失败回落图标）。
+- 广场首页浏览只从 `IdentityBadgeSnapshotStore` 读取当前默认钱包的身份徽章展示信号，不启动 smoldot；用户进入动态/文章发布页时才通过 `SquareIdentityService.loadCurrent(readLiveChain: true)` 读取 finalized 身份，快照不得用于发布资格判断。
+- 若轻节点已被交易、治理或发布等其他主动流程启动并进入 operational，广场首页通过可取消状态监听为当前钱包刷新一次徽章快照；切换默认钱包后按新账户隔离读取，不轮询。
 
 ## 边界 / 待续
 - 文章长文分类已落地（发布/文章 Tab/详情，链端零改动，见任务卡 20260706-citizenapp-square-article）；广场推荐流暂仍按普通卡显示文章，feed 识别文章卡为后续增强。

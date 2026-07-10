@@ -10,8 +10,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/my/myid/identity_badge_snapshot_store.dart';
 import 'package:citizenapp/my/myid/myid_page.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
+import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/security/app_lock_service.dart';
 import 'package:citizenapp/security/pin_input_page.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
@@ -32,9 +34,17 @@ class ProfilePage extends StatefulWidget {
   const ProfilePage({
     super.key,
     this.showSettingsUpdateDot = false,
+    this.walletManager,
+    this.myIdService,
+    this.badgeSnapshotStore,
+    this.smoldotClientManager,
   });
 
   final bool showSettingsUpdateDot;
+  final WalletManager? walletManager;
+  final MyIdService? myIdService;
+  final IdentityBadgeSnapshotStore? badgeSnapshotStore;
+  final SmoldotClientManager? smoldotClientManager;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -42,19 +52,26 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final UserProfileService _userProfileService = UserProfileService();
+  late final WalletManager _walletManager;
+  late final IdentityBadgeSnapshotStore _badgeSnapshotStore;
+  late final MyIdService _myIdService;
+  late final SmoldotClientManager _smoldotClientManager;
 
   UserProfileState _userProfile = const UserProfileState();
   WalletProfile? _defaultWallet;
-  MyIdState _myIdState =
-      const MyIdState(identityStatus: MyIdIdentityStatus.notOnchain);
+  String? _defaultWalletIdentityLevel;
 
   /// 默认钱包的会员购买态（徽章「勾」）；best-effort，读失败为 null。
   final SquareApiClient _squareApi = SquareApiClient();
   SquareMembershipState? _membership;
 
-  /// _loadState 世代号:含链上查询(秒级),并发调用乱序完成时旧结果
-  /// 不得覆盖新身份(stale-wins 会重现「UI 显示旧身份」分叉)。
+  /// _loadState 世代号：本地钱包、资料和徽章快照并发重载时，旧结果
+  /// 不得覆盖新默认钱包。
   int _loadGeneration = 0;
+
+  /// 同一次 operational 状态下，同一默认钱包只做一次真实链身份刷新。
+  String? _operationalIdentityAccount;
+  bool _localStateLoaded = false;
 
   /// 用户身份地址 = 默认用户钱包（列表中最靠前的热钱包）地址。
   String get _communicationAddress => _defaultWallet?.address ?? '';
@@ -63,57 +80,70 @@ class _ProfilePageState extends State<ProfilePage> {
   String get _nickname =>
       _defaultWallet?.walletName ?? UserProfileService.defaultNickname;
 
-  bool get _isDefaultWalletCertified =>
-      _myIdState.isCertified &&
-      _defaultWallet?.address.trim() ==
-          _myIdState.identityWalletAccount?.trim();
-
-  /// 默认钱包徽章信号：颜色=链上身份档（仅默认钱包即认证身份钱包时有效）、勾=会员匹配。
-  String? get _defaultWalletIdentityLevel =>
-      _isDefaultWalletCertified ? _myIdState.identityLevel : null;
+  /// 默认钱包徽章信号：颜色只来自账户级链上身份快照，勾来自会员匹配。
   String? get _defaultWalletMembershipLevel => _membership?.membershipLevel;
   bool get _defaultWalletMembershipActive => _membership?.active ?? false;
 
   @override
   void initState() {
     super.initState();
+    _walletManager = widget.walletManager ?? WalletManager();
+    _badgeSnapshotStore =
+        widget.badgeSnapshotStore ?? IdentityBadgeSnapshotStore();
+    _myIdService = widget.myIdService ??
+        MyIdService(
+          walletManager: _walletManager,
+          badgeSnapshotStore: _badgeSnapshotStore,
+        );
+    _smoldotClientManager =
+        widget.smoldotClientManager ?? SmoldotClientManager.instance;
     // 本页常驻 IndexedStack，initState 只跑一次；默认用户钱包在「我的钱包」
     // 里被切换（拖拽置顶）/增删/改名时经 walletsRevision 广播，这里重读身份，
     // 保证昵称、地址、认证勾和「我的主页」入参始终是当前默认用户。
     WalletManager.walletsRevision.addListener(_onWalletsChanged);
+    _smoldotClientManager.healthStatusListenable
+        .addListener(_onChainHealthChanged);
     _loadState();
   }
 
   @override
   void dispose() {
     WalletManager.walletsRevision.removeListener(_onWalletsChanged);
+    _smoldotClientManager.healthStatusListenable
+        .removeListener(_onChainHealthChanged);
     super.dispose();
   }
 
   Future<void> _onWalletsChanged() async {
     // 先廉价比对(纯 Isar 读):默认钱包地址与昵称都没变的操作
     // (如重命名冷钱包、导入新钱包未置顶)不触发链查询,避免无谓刷新。
-    final wallet = await WalletManager().getDefaultWallet();
+    final wallet = await _walletManager.getDefaultWallet();
     if (!mounted) return;
     if (wallet?.address == _defaultWallet?.address &&
         wallet?.walletName == _defaultWallet?.walletName) {
       return;
     }
+    _operationalIdentityAccount = null;
+    _localStateLoaded = false;
     await _loadState();
   }
 
   Future<void> _loadState() async {
     final generation = ++_loadGeneration;
     final profile = await _userProfileService.getState();
-    final defaultWallet = await WalletManager().getDefaultWallet();
-    MyIdState myIdState;
+    final defaultWallet = await _walletManager.getDefaultWallet();
+    String? identityLevel;
     try {
-      myIdState = await MyIdService().getState();
+      final walletAccount = defaultWallet?.address.trim() ?? '';
+      final snapshot = walletAccount.isEmpty
+          ? null
+          : await _badgeSnapshotStore.read(walletAccount);
+      identityLevel = switch (snapshot?.identityLevel) {
+        'voting' || 'candidate' => snapshot!.identityLevel,
+        _ => null,
+      };
     } catch (e) {
-      myIdState = MyIdState(
-        identityStatus: MyIdIdentityStatus.queryFailed,
-        errorMessage: '$e',
-      );
+      debugPrint('profile badge snapshot load failed: $e');
     }
     if (!mounted || generation != _loadGeneration) {
       return;
@@ -121,10 +151,54 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() {
       _userProfile = profile;
       _defaultWallet = defaultWallet;
-      _myIdState = myIdState;
+      _defaultWalletIdentityLevel = identityLevel;
+      _localStateLoaded = true;
     });
     // 会员购买态（徽章勾）非阻塞加载：昵称/头像先渲染，勾稍后补上。
     unawaited(_refreshMembership(generation));
+    _onChainHealthChanged();
+  }
+
+  void _onChainHealthChanged() {
+    if (!_localStateLoaded) return;
+    if (_smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
+      _operationalIdentityAccount = null;
+      return;
+    }
+    unawaited(_refreshIdentityAfterChainOperational());
+  }
+
+  Future<void> _refreshIdentityAfterChainOperational() async {
+    final wallet = await _walletManager.getDefaultWallet();
+    if (!mounted ||
+        _smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
+      return;
+    }
+    final walletAccount = wallet?.address.trim() ?? '';
+    if (walletAccount.isEmpty || _operationalIdentityAccount == walletAccount) {
+      return;
+    }
+    _operationalIdentityAccount = walletAccount;
+
+    final state = await _myIdService.getState();
+    if (!mounted || _defaultWallet?.address.trim() != walletAccount) return;
+
+    String? refreshedLevel;
+    if (state.isCertified &&
+        state.identityWalletAccount?.trim() == walletAccount &&
+        (state.identityLevel == 'voting' ||
+            state.identityLevel == 'candidate')) {
+      refreshedLevel = state.identityLevel;
+    } else if (state.identityStatus == MyIdIdentityStatus.queryFailed ||
+        state.identityStatus == MyIdIdentityStatus.conflict) {
+      final snapshot = await _badgeSnapshotStore.read(walletAccount);
+      refreshedLevel = switch (snapshot?.identityLevel) {
+        'voting' || 'candidate' => snapshot!.identityLevel,
+        _ => null,
+      };
+    }
+    if (!mounted || _defaultWallet?.address.trim() != walletAccount) return;
+    setState(() => _defaultWalletIdentityLevel = refreshedLevel);
   }
 
   Future<void> _refreshMembership(int generation) async {

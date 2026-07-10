@@ -105,6 +105,7 @@ class SquareMediaItem {
     this.coverUrl,
     this.byteSize,
     this.assetState,
+    this.archiveState,
   });
 
   final SquareMediaKind mediaKind;
@@ -112,6 +113,11 @@ class SquareMediaItem {
   final String? coverUrl;
   final int? byteSize;
   final String? assetState;
+  // 视频冷归档态：'archived'=已归档不可播（作者未续订），'restoring'=恢复中；null/'live'=正常。
+  final String? archiveState;
+
+  bool get isArchived => archiveState == 'archived';
+  bool get isRestoring => archiveState == 'restoring';
 }
 
 class SquareLocalMediaDraft {

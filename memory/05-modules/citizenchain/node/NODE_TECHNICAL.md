@@ -21,6 +21,14 @@
 - Justification 周期：64 块
 - vendor 目录：`sc-consensus-grandpa` v0.40.0（独立 GPL-3.0 许可）
 
+### 1.2.1 GRANDPA warp 服务
+
+- `src/core/service.rs` 为所有节点挂载 `warp_proof::NetworkProvider`；权威 voter 和普通 observer 都可基于本地数据响应轻客户端 warp proof。
+- 节点每次 finalized 推进都会覆盖保存最新 GRANDPA justification；64 块周期只控制普通历史块 justification 的额外挂载，authority set 切换块始终持久化 justification。
+- proof 生成依赖请求起点的 finalized 正典 hash/header、各 authority set 切换块 header/justification、最新 best justification 和目标 finalized state。生产节点必须保持 `--state-pruning archive`，并保留 finalized 正典块；不得把缺失这些数据的剪裁节点作为 CitizenApp 新安装用户的 warp 服务节点。
+- warp 单段 proof 上限 8 MiB，超过后由客户端从上一段末尾继续请求；同步成本主要随 authority set 变更数量增长。
+- 公开网络进入规模化使用前，至少 3 个彼此独立的归档节点必须长期在线提供 warp。运维监控要区分 peer 可连接、finalized 是否推进、warp proof 是否成功，不能只监控 P2P 端口存活。
+
 ### 1.3 libp2p WebSocket 本地覆盖
 - 本地目录：`citizenchain/node/libp2p-websocket/`
 - 覆盖方式：`citizenchain/Cargo.toml` 通过 `[patch.crates-io]` 将 crates.io 的 `libp2p-websocket` 指向该本地目录。
@@ -54,6 +62,8 @@
 
 ## 3. RPC 接口
 
+生产权威引导节点的 RPC 固定为本机能力：`127.0.0.1:9944`、`--rpc-methods Safe`，不得使用 `--rpc-external`、`--unsafe-rpc-external` 或 `--rpc-cors all`。后续 Cloudflare 链连接只能通过 Access + Tunnel 到达本机 RPC，不开放 Oracle/主机防火墙入站端口。
+
 | 方法 | 说明 |
 |------|------|
 | `mining_cpuHashrate` | CPU 全线程合计哈希率（hashes/sec） |
@@ -63,6 +73,13 @@
 | `transaction_submitMinerTransfer(ss58, amount_fen, remark, token)` | 节点端使用 `powr` 密钥提交矿工热钱包 `OnchainTransaction::transfer_with_remark` 转账，备注最多 99 UTF-8 字节，要求进程内一次性令牌 |
 | `fee_blockFees(block_hash_hex)` | 读取指定区块的 FeePaid 事件累计手续费 |
 | `sync_state_genLightSyncState` | 返回小体积 lightSyncState checkpoint（finalized header + GRANDPA authority set） |
+
+### 3.1 权威引导节点网络基线
+
+- 44 个权威引导节点使用同一套安装包和 P2P 端口策略，第 1 个为国储会权威节点。
+- 唯一固定公网业务入口为 `/ip4/0.0.0.0/tcp/30333/wss`；当前链没有 UDP/QUIC P2P 监听，因此不开放 `30333/UDP`。
+- 云节点显式限制 `in_peers=32`、`in_peers_light=100`、`out_peers=8`、`max_parallel_downloads=5`；这些数值是当前 SDK 默认安全基线，扩容前必须压测。
+- Prometheus 默认关闭，OnChina 不随节点自动启动；没有运维需求时不得开放 SSH、OnChina 或数据库端口。
 
 ### RPC 交易签名
 - 使用 `powr` keystore 密钥签名
@@ -297,8 +314,8 @@
 ### 12.1 奖励钱包 RPC 代签无鉴权
 `reward_bindWallet` / `reward_rebindWallet` RPC 收到请求即用本地 `powr` 密钥签名发交易，无额外鉴权。
 - **当前缓解**：桌面内嵌节点只面向本机端口使用，奖励钱包 RPC 不转移余额。
-- **风险场景**：节点桌面端启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，会将代签 RPC 暴露到外部网络。
-- **建议**：生产部署必须限制 RPC 绑定地址或加鉴权中间件；或改为节点桌面端本地签名后提交。
+- **禁止场景**：任何节点使用 `--rpc-external`、`--unsafe-rpc-external` 或公网反向代理暴露裸 RPC，都会把本机 RPC 和代签能力置于公网攻击面。
+- **生产边界**：权威引导节点只允许回环 RPC；Worker 仅通过 Access 服务令牌和独立 Tunnel 调用 `state_getStorage`、`author_submitExtrinsic`，强制 HTTPS、超时、响应限长和禁止重定向，不提供通用 JSON-RPC 代理或自动重试广播。
 
 矿工热钱包转账不复用上述裸 RPC 模式：`transaction_submitMinerTransfer` 必须携带进程内一次性令牌，并显式传入 `remark`；令牌只在设备开机密码校验通过后由 Tauri 命令签发，RPC 调用后立即消费。
 

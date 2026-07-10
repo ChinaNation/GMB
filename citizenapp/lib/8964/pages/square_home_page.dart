@@ -15,6 +15,7 @@ import 'package:citizenapp/8964/storage/square_draft_store.dart';
 import 'package:citizenapp/8964/widgets/square_empty_state.dart';
 import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
+import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/identity_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -29,6 +30,7 @@ class SquareHomePage extends StatefulWidget {
     this.draftStore,
     this.initialFeed = SquareFeedKind.recommended,
     this.seedPosts = const <SquarePost>[],
+    this.smoldotClientManager,
   });
 
   final SquareIdentityService identityService;
@@ -37,6 +39,7 @@ class SquareHomePage extends StatefulWidget {
   final SquareDraftRepository? draftStore;
   final SquareFeedKind initialFeed;
   final List<SquarePost> seedPosts;
+  final SmoldotClientManager? smoldotClientManager;
 
   @override
   State<SquareHomePage> createState() => _SquareHomePageState();
@@ -56,32 +59,76 @@ class _SquareHomePageState extends State<SquareHomePage> {
   /// 顶栏徽章的会员信号（勾），随身份一起加载；best-effort。
   final SquareApiClient _squareApi = SquareApiClient();
   SquareMembershipState? _membership;
+  late final SmoldotClientManager _smoldotClientManager;
+
+  /// 同一次 operational 状态下，同一默认钱包只触发一次真实链刷新。
+  String? _operationalIdentityAccount;
 
   @override
   void initState() {
     super.initState();
+    _smoldotClientManager =
+        widget.smoldotClientManager ?? SmoldotClientManager.instance;
     _feedSource = widget.feedSource ?? SquareApiClient();
-    _identityFuture = _loadIdentity();
+    _identityFuture = _loadIdentity(readLiveChain: false);
     _feedFuture = _loadFeed();
     // 本页常驻 IndexedStack；切换默认用户钱包（= 切换身份）后经
     // walletsRevision 广播重载身份，保证身份图标与作者点击的 isSelf
     // 判定始终基于当前默认用户。
     WalletManager.walletsRevision.addListener(_onWalletsChanged);
+    _smoldotClientManager.healthStatusListenable
+        .addListener(_onChainHealthChanged);
+    _onChainHealthChanged();
   }
 
   @override
   void dispose() {
     WalletManager.walletsRevision.removeListener(_onWalletsChanged);
+    _smoldotClientManager.healthStatusListenable
+        .removeListener(_onChainHealthChanged);
     super.dispose();
   }
 
-  Future<SquareIdentityState> _loadIdentity() async {
-    final identity = await widget.identityService.loadCurrent();
+  Future<SquareIdentityState> _loadIdentity({
+    required bool readLiveChain,
+  }) async {
+    final identity = await widget.identityService.loadCurrent(
+      readLiveChain: readLiveChain,
+    );
     _identityAddress = identity.ownerAccount;
     _identityWalletName = identity.walletName;
     // 会员购买态（徽章勾）非阻塞加载：身份图标先渲染，勾稍后补上。
     unawaited(_refreshMembership());
     return identity;
+  }
+
+  void _onChainHealthChanged() {
+    if (_smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
+      _operationalIdentityAccount = null;
+      return;
+    }
+    unawaited(_refreshIdentityAfterChainOperational());
+  }
+
+  Future<void> _refreshIdentityAfterChainOperational() async {
+    final manager = widget.identityService.walletManager ?? WalletManager();
+    final wallet = await manager.getDefaultWallet();
+    if (!mounted ||
+        _smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
+      return;
+    }
+    final walletAccount = wallet?.address.trim() ?? '';
+    if (walletAccount.isEmpty || _operationalIdentityAccount == walletAccount) {
+      return;
+    }
+    _operationalIdentityAccount = walletAccount;
+    final future = _loadIdentity(readLiveChain: true);
+    setState(() => _identityFuture = future);
+    try {
+      await future;
+    } catch (e) {
+      debugPrint('square identity refresh after chain sync failed: $e');
+    }
   }
 
   Future<void> _refreshMembership() async {
@@ -106,9 +153,11 @@ class _SquareHomePageState extends State<SquareHomePage> {
         wallet?.walletName == _identityWalletName) {
       return;
     }
+    _operationalIdentityAccount = null;
     setState(() {
-      _identityFuture = _loadIdentity();
+      _identityFuture = _loadIdentity(readLiveChain: false);
     });
+    _onChainHealthChanged();
   }
 
   Future<void> _openCompose() async {
