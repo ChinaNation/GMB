@@ -21,8 +21,7 @@ dependencies:
   qr_flutter: ^4.1.0
   flutter_svg: ^2.0.10+1
   local_auth: ^2.3.0
-  flutter_secure_storage: ^9.2.2
-  biometric_storage: ^5.0.1
+  flutter_secure_storage: ^10.3.1
   image_picker: ^1.1.2
   crypto: ^3.0.3
   # 切换为仓库内本地 fork，后续 Dart FFI 能力扩展随主仓库一起演进。
@@ -55,6 +54,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - assets/avatars/
+    - assets/badges/
     - assets/chainspec.json
     - assets/light_sync_state.json
     - assets/public_institutions/

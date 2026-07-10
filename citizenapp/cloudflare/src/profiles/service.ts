@@ -15,6 +15,9 @@ import {
 } from '../shared/http';
 import { assertOwnerAccount } from '../shared/ids';
 import { nowMs } from '../shared/time';
+import { fetchChainIdentityStateCached } from '../chain/identity';
+import { getMembership, subscriptionIsActive } from '../membership/service';
+import type { MembershipLevel } from '../membership/plans';
 import { profileAssetPrefix } from '../storage/r2_keys';
 import {
   countUserStats,
@@ -22,7 +25,6 @@ import {
   isFollowing,
   listAuthorPosts,
   listFollows,
-  readLatestCidNumber,
   readProfileDoc,
   writeProfileDoc
 } from './repository';
@@ -58,22 +60,29 @@ async function buildProfileResponse(
   ownerAccount: string,
   viewerAccount: string | null
 ): Promise<UserProfileResponse> {
-  const [doc, counts, cidNumber, following] = await Promise.all([
+  // 认证真源=链上身份（VotingIdentity/CandidateIdentity），不再依赖发帖投影。
+  // 会员购买（membership）另取自 D1，公开下发以支撑徽章「勾」。
+  const [doc, counts, identity, membership, following] = await Promise.all([
     readProfileDoc(env, ownerAccount),
     countUserStats(env, ownerAccount),
-    readLatestCidNumber(env, ownerAccount),
+    fetchChainIdentityStateCached(env, ownerAccount),
+    getMembership(env, ownerAccount),
     isFollowing(env, viewerAccount, ownerAccount)
   ]);
 
   const profile = doc ?? defaultProfileDoc(ownerAccount);
+  const membershipLevel = (membership?.membership_level ?? null) as MembershipLevel | null;
   return {
     owner_account: ownerAccount,
     display_name: profile.display_name,
     bio: profile.bio,
     avatar_object_key: profile.avatar_object_key,
     banner_object_key: profile.banner_object_key,
-    cid_number: cidNumber,
-    is_certified: cidNumber !== null,
+    cid_number: identity.cid_number,
+    is_certified: identity.identity_level !== 'visitor',
+    identity_level: identity.identity_level,
+    membership_level: membershipLevel,
+    membership_active: membership ? subscriptionIsActive(membership) : false,
     counts,
     is_following: following,
     updated_at: profile.updated_at

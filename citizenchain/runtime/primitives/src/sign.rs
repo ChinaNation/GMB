@@ -33,6 +33,8 @@ pub const QR_ACTION_DECRYPT_ADMIN: u16 = 6;
 pub const QR_ACTION_RUNTIME_UPGRADE_HASH: u16 = 7;
 /// QR_V1 IM 钱包绑定签名动作。
 pub const QR_ACTION_IM_WALLET_BINDING: u16 = 8;
+/// QR_V1 广场账户动作（订阅/取消/…）链下签名动作，映射 op_tag OP_SIGN_SQUARE_ACTION(0x1D)。
+pub const QR_ACTION_SQUARE_ACCOUNT: u16 = 9;
 
 /// 链交易二维码动作码:高 8 位是 pallet index,低 8 位是 call index。
 pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
@@ -43,6 +45,9 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 // - 0x10/0x13-0x17:哈希域,走 `signing_message`,进入 `SIGN_OP_TAGS`。
 // - 0x18/0x19:二进制前缀域,只签原始 payload,不进入 `SIGN_OP_TAGS`。
 // - 0x1A:IM 钱包绑定哈希域,走 `signing_message`。
+// - 0x1B-0x1D:广场 BFF 登录/设备绑定/账户动作哈希域,走 `signing_message`,进入
+//   `SIGN_OP_TAGS`。仅链下(Cloudflare Worker + App)验签,链上 pallet 不引用,
+//   故新增它们不触发 runtime 变更/创世,只维护本单源与金标。
 
 /// 公民档案上链确认。
 pub const OP_SIGN_CITIZEN_IDENTITY: u8 = 0x10;
@@ -65,6 +70,13 @@ pub const OP_SIGN_DECRYPT: u8 = 0x19;
 /// IM 钱包绑定。
 pub const OP_SIGN_IM_WALLET_BINDING: u8 = 0x1A;
 
+/// 广场 BFF 登录挑战(链下 Worker 验签,设备子钥 ES256 签 digest)。
+pub const OP_SIGN_SQUARE_LOGIN: u8 = 0x1B;
+/// 广场 BFF 设备子钥绑定(链下 Worker 验签,sr25519 主钥签)。
+pub const OP_SIGN_SQUARE_DEVICE_BIND: u8 = 0x1C;
+/// 广场 BFF 账户敏感动作:注销/退订(链下 Worker 验签,sr25519 主钥签)。
+pub const OP_SIGN_SQUARE_ACTION: u8 = 0x1D;
+
 /// 二进制前缀域(0x18/0x19)统一前缀长度:`GMB`(3B) + op_tag(1B) = 4 字节。
 pub const BINARY_PREFIX_LEN: usize = 4;
 
@@ -77,7 +89,7 @@ pub fn binary_domain_prefix(op_tag: u8) -> [u8; BINARY_PREFIX_LEN] {
 }
 
 /// 全部哈希域签名 op_tag。新增哈希域 op_tag 必须同步追加并刷新金标。
-pub const SIGN_OP_TAGS: [u8; 7] = [
+pub const SIGN_OP_TAGS: [u8; 10] = [
     OP_SIGN_CITIZEN_IDENTITY,
     OP_SIGN_INST,
     OP_SIGN_DEREGISTER,
@@ -85,6 +97,9 @@ pub const SIGN_OP_TAGS: [u8; 7] = [
     OP_SIGN_OFFCHAIN_BATCH,
     OP_SIGN_L2_ACK,
     OP_SIGN_IM_WALLET_BINDING,
+    OP_SIGN_SQUARE_LOGIN,
+    OP_SIGN_SQUARE_DEVICE_BIND,
+    OP_SIGN_SQUARE_ACTION,
 ];
 
 /// 构造哈希域签名消息:`BLAKE2-256(GMB || op_tag || scale_payload)`。

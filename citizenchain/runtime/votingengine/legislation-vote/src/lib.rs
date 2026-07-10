@@ -58,7 +58,9 @@ pub const MAX_HOUSES: u32 = votingengine::types::MAX_LEGISLATION_HOUSES;
 pub const CONSTITUTION_GUARD_MEMBERS: u32 = 7;
 
 /// 修宪终审通过阈值(宪法第21条):7 人多数通过,即 4 名及以上护宪大法官赞成。
-pub const CONSTITUTION_GUARD_APPROVAL_THRESHOLD: usize = 4;
+/// 口径单源在 `primitives::constitution::CONSTITUTION_GUARD_APPROVAL_THRESHOLD`(与节点守卫共用)。
+pub const CONSTITUTION_GUARD_APPROVAL_THRESHOLD: usize =
+    primitives::constitution::CONSTITUTION_GUARD_APPROVAL_THRESHOLD as usize;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -1152,6 +1154,28 @@ impl<T: Config> votingengine::LegislationVoteEngine<T::AccountId> for Pallet<T> 
                 TransactionOutcome::Commit(Ok(id))
             }
         })
+    }
+
+    /// 读取某立法提案的强制公投结果 `(eligible, yes, no)`。
+    /// 无公投分母(`citizen_eligible_total==0`,即非特别案)或提案不存在 → `None`。
+    /// 公投计票 `LegReferendumTally` 在提案 90 天清理前一直保留,故核心修宪写入(护宪终审同块)时可读到。
+    fn referendum_result(proposal_id: u64) -> Option<(u64, u64, u64)> {
+        let eligible = <votingengine::Pallet<T>>::citizen_eligible_total_of(proposal_id)?;
+        if eligible == 0 {
+            return None;
+        }
+        let tally = pallet::LegReferendumTally::<T>::get(proposal_id);
+        Some((eligible, tally.yes, tally.no))
+    }
+
+    /// 读取某修宪提案的护宪大法官终审赞成票数;无终审记录(非修宪 / 未进终审)→ `None`。
+    /// 记录 `LegGuardSigns` 在提案 90 天清理前保留,故写入版本(终审通过同块)时可读到。
+    fn guard_review_result(proposal_id: u64) -> Option<u32> {
+        let signs = pallet::LegGuardSigns::<T>::get(proposal_id);
+        if signs.is_empty() {
+            return None;
+        }
+        Some(signs.iter().filter(|(_, approve)| *approve).count() as u32)
     }
 }
 

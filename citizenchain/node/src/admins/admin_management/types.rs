@@ -12,6 +12,7 @@ pub fn source_label(source: u8) -> &'static str {
         2 => "内部投票",
         3 => "互选",
         4 => "普选",
+        5 => "提名任免",
         _ => "",
     }
 }

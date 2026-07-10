@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:citizenapp/transaction/offchain-transaction/services/offchain_scan_flow.dart';
+import 'package:citizenapp/qr/scan_dispatch_flow.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_page.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_account_list_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -9,15 +9,16 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 交易 Tab 页面。
 ///
 /// 本页只负责交易页入口编排；链上支付主体仍由 onchain 模块渲染，
-/// 扫码支付内部业务仍留在链下支付功能域。
+/// 「扫一扫」统一入口按协议分派（链下支付 / 广场账户动作签名 / 未来类型）。
 class TransactionTabPage extends StatelessWidget {
   const TransactionTabPage({super.key});
 
-  Future<void> _openScanPayment(
+  Future<void> _openScan(
     BuildContext context,
     WalletProfile? wallet,
   ) async {
-    await openOffchainScanPaymentFlow(context: context, wallet: wallet);
+    // wallet = 交易页选的默认付款钱包；仅支付分支用它，签名分支按 QR u 另解析。
+    await openScanDispatchFlow(context: context, paymentWallet: wallet);
   }
 
   Future<void> _openPersonalAccounts(BuildContext context) async {
@@ -43,8 +44,8 @@ class TransactionTabPage extends StatelessWidget {
                   BlendMode.srcIn,
                 ),
               ),
-              title: '扫码支付',
-              onTap: () => _openScanPayment(context, wallet),
+              title: '扫一扫',
+              onTap: () => _openScan(context, wallet),
             ),
             _TransactionEntryTile(
               icon: const Icon(

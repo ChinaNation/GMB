@@ -43,6 +43,10 @@ const GENESIS_CONSTITUTION_VERSION: u32 = 1;
 /// 由 legislation-yuan 测试 `enum_discriminants_match_node_guard` 交叉钉死,防漂移。
 const TIER_CONSTITUTION: u8 = 0;
 const LAW_STATUS_REPEALED: u8 = 2;
+/// 表决类型「特别案」的 wire 值(`legislation-yuan::VoteType::Special.as_u8()`)。
+/// 由 legislation-yuan 测试 `enum_discriminants_match_node_guard` 交叉钉死,防漂移。
+/// 用途:核心章(第一章总则)条款改动必须记录为特别案(宪法第十九条 node 背书)。
+const LEG_VOTE_SPECIAL: u8 = 4;
 
 // ───────── 链上结构镜像 ─────────
 // 字段序必须与 legislation-yuan 链端 `LawVersion / Chapter / Section / Article / Clause` 一致。
@@ -83,15 +87,18 @@ struct MChapter {
     sections: Vec<MSection>,
 }
 
-/// 只解码 `LawVersion` 前缀(law_id..chapters);其后字段顺序解码到 chapters 即停。
+/// 只解码 `LawVersion` 前缀(law_id..vote_type);其后字段(proposal_id..effective_at)顺序解码到
+/// vote_type 即停。chapters 用于条文比对,vote_type 用于核心章档位背书(第十九条)。
 #[derive(Decode)]
-#[allow(dead_code)] // law_id/version/title/title_en 仅占位保持字段序,只用 chapters。
+#[allow(dead_code)] // law_id/version/title/title_en/content_hash 仅占位保持字段序。
 struct MLawVersionHead {
     law_id: u64,
     version: u32,
     title: Vec<u8>,
     title_en: Option<Vec<u8>>,
     chapters: Vec<MChapter>,
+    content_hash: [u8; 32],
+    vote_type: u8,
 }
 
 /// 链上 `LawVersionLabel` 镜像。版本号排序仍来自 `LawVersion.version`,本结构只负责展示名。
@@ -354,6 +361,22 @@ pub mod storage_key {
         map_prefix(b"ConstitutionImmutableManifest")
     }
 
+    /// `LegislationYuan::ConstitutionAmendmentProof[version]`(Blake2_128Concat)的完整 key。
+    /// 核心修宪的永久公投凭据 `(eligible, yes, no)`,供守卫背书(第十九条,ADR-027 §6.3)。
+    pub fn constitution_amendment_proof(version: u32) -> Vec<u8> {
+        let mut k = map_prefix(b"ConstitutionAmendmentProof");
+        k.extend_from_slice(&blake2_128_concat(&version.encode()));
+        k
+    }
+
+    /// `LegislationYuan::ConstitutionGuardVoteProof[version]`(Blake2_128Concat)的完整 key。
+    /// 修宪的永久护宪大法官终审凭据(赞成票数),供守卫背书(第21条,ADR-027 §6.3)。
+    pub fn constitution_guard_vote_proof(version: u32) -> Vec<u8> {
+        let mut k = map_prefix(b"ConstitutionGuardVoteProof");
+        k.extend_from_slice(&blake2_128_concat(&version.encode()));
+        k
+    }
+
     /// `LegislationYuan::LawsByScope[Tier::Constitution][0]` 的完整 key(宪法层级唯一性校验)。
     /// Tier::Constitution 编码为单字节变体索引 `[0]`,scope_code = 0。
     pub fn laws_by_scope_constitution() -> Vec<u8> {
@@ -435,17 +458,37 @@ pub enum GuardError {
     ConstitutionHousesChanged,
     /// 宪法层级唯一性被破坏(`LawsByScope[宪法][0]` 不再恰为 `[0]`:多出第二部宪法或 law_id=0 被隐藏)。
     ConstitutionNotUnique,
+    /// 核心章(第一章总则,创世口径)某条被修改/删除/移出核心章,但该版本未记录为特别案表决
+    /// (违反宪法第十九条:核心章条款修改须走特别案 + 强制公投)。参数为条号。
+    CoreClauseNotSpecial(u32),
+    /// 核心章条款有改动的版本缺失强制公投凭据 `ConstitutionAmendmentProof[version]`
+    /// (第十九条:核心修宪须经公投)。参数为版本号。
+    CoreClauseReferendumMissing(u32),
+    /// 核心章条款有改动的版本,其公投凭据未达通过口径(≥70% 参与 + ≥70% 赞成)。参数为版本号。
+    CoreClauseReferendumNotPassed(u32),
+    /// 修宪版本(v>创世)缺失护宪大法官终审凭据 `ConstitutionGuardVoteProof[version]`
+    /// (第21条:一切修宪须经护宪终审)。参数为版本号。
+    GuardReviewMissing(u32),
+    /// 修宪版本的护宪终审凭据未达通过口径(4 名及以上赞成)。参数为版本号。
+    GuardReviewNotPassed(u32),
 }
 
-/// 不可修改基准(创世/block#0):不可修改条款的规范 SCALE 字节 + 可修订机构 `houses`。
+/// 不可修改基准(创世/block#0):
+/// - `articles`:不可修改条款(第 1/2/3/17/19/24/34/42 条)的规范 SCALE 字节;
+/// - `core_articles`:核心章(第一章总则)**非禁改**条款的创世规范字节(条号→字节);
+/// - `houses`:宪法可修订机构。
+///
+/// `core_articles` 用于第十九条章→档位的 node 背书:任一核心条款相对创世被
+/// 修改/删除/移出核心章,则承载它的版本必须记录为特别案表决(见 [`check_core_chapter_tier`])。
 pub struct ImmutableReference {
     articles: BTreeMap<u32, Vec<u8>>,
+    core_articles: BTreeMap<u32, Vec<u8>>,
     houses: Vec<([u8; 4], [u8; 32])>,
 }
 
 impl ImmutableReference {
     /// 从一个 RAW 存储读取闭包(应指向 block#0 创世状态)派生基准:
-    /// 读 `Laws[0]` 取 `houses`,读创世版本 `LawVersions[0][1]` 取不可修改条款规范字节。
+    /// 读 `Laws[0]` 取 `houses`,读创世版本 `LawVersions[0][1]` 取不可修改条款与核心章条款规范字节。
     /// 任一缺失/不合法 → 返回错误(创世不合法,调用方应拒绝启动)。
     pub fn from_raw_reader<F>(read_raw: F) -> Result<Self, GuardError>
     where
@@ -463,14 +506,25 @@ impl ImmutableReference {
         let head = MLawVersionHead::decode(&mut &version_bytes[..])
             .map_err(|_| GuardError::VersionDecodeFailed)?;
 
+        // 不可修改条款基准:逐字冻结。
         let mut articles = BTreeMap::new();
         for &n in IMMUTABLE_CONSTITUTION_ARTICLES.iter() {
             let article =
                 find_article(&head.chapters, n).ok_or(GuardError::ImmutableArticleMissing(n))?;
             articles.insert(n, article.encode());
         }
+        // 核心章基准:创世第一章总则里的**非禁改**条款(可经特别案修订,故存字节供 diff)。
+        let mut core_articles = BTreeMap::new();
+        if let Some(core_chapter) = head.chapters.first() {
+            for article in core_chapter.sections.iter().flat_map(|s| s.articles.iter()) {
+                if !IMMUTABLE_CONSTITUTION_ARTICLES.contains(&article.number) {
+                    core_articles.insert(article.number, article.encode());
+                }
+            }
+        }
         Ok(Self {
             articles,
+            core_articles,
             houses: law.houses,
         })
     }
@@ -478,7 +532,10 @@ impl ImmutableReference {
 
 /// 纯判定:给定一个指向**目标区块后置状态**的 RAW 读取闭包,校验宪法全部不变式:
 /// ① Law 元数据(tier=Constitution、scope=0、status≠Repealed、houses=创世);
-/// ② 层级唯一性(`LawsByScope[宪法][0] == [0]`);③ 不可修改条款逐字 == 创世基准。
+/// ② 层级唯一性(`LawsByScope[宪法][0] == [0]`);③ 不可修改条款逐字 == 创世基准;
+/// ④ 核心章(第一章总则)条款改动须记录为特别案表决(第十九条,见 [`check_core_chapter_tier`])
+///    且挂一份过公投口径的永久凭据(见 [`check_core_referendum_proof`]);
+/// ⑤ 一切修宪版本(v>创世)须挂一份过 4/7 口径的护宪大法官终审凭据(第21条,见 [`check_guard_review_proof`])。
 /// 任一缺失/解码失败/不一致 → 返回 `Err`(拒块)。
 pub fn check_immutable_articles<F>(
     read_raw: F,
@@ -547,6 +604,88 @@ where
         if &current.encode() != baseline {
             return Err(GuardError::ImmutableArticleMutated(n));
         }
+    }
+    // 核心章条款(第一章总则非禁改条)改动:① 必须记录为特别案;② 必须挂合格公投凭据(宪法第十九条 node 背书)。
+    let core_changed = check_core_chapter_tier(&head, reference)?;
+    if core_changed {
+        check_core_referendum_proof(read_raw, version)?;
+    }
+    // 一切修宪版本(v > 创世版本)都须挂合格护宪大法官终审凭据(宪法第21条 node 背书,含一般章重要案)。
+    if version > GENESIS_CONSTITUTION_VERSION {
+        check_guard_review_proof(read_raw, version)?;
+    }
+    Ok(())
+}
+
+/// 修宪版本(生效/待生效,`version > 创世`)必须挂一份**通过口径**的永久护宪终审凭据
+/// `ConstitutionGuardVoteProof[version]`(第21条 node 背书:一切修宪须经护宪大法官 4/7 终审,含一般章)。
+/// 凭据是 legislation-yuan **永久存储**(不受 votingengine 90 天清理影响),故可对任意修宪版本随时校验。
+/// 口径复用 `primitives::constitution::guard_review_passed`(与链端结算共用单源)。
+fn check_guard_review_proof<F>(read_raw: &F, version: u32) -> Result<(), GuardError>
+where
+    F: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    let bytes = read_raw(&storage_key::constitution_guard_vote_proof(version))
+        .ok_or(GuardError::GuardReviewMissing(version))?;
+    let approve =
+        u32::decode(&mut &bytes[..]).map_err(|_| GuardError::GuardReviewMissing(version))?;
+    if !primitives::constitution::guard_review_passed(approve) {
+        return Err(GuardError::GuardReviewNotPassed(version));
+    }
+    Ok(())
+}
+
+/// 核心章(第一章总则,创世口径)条款的档位背书(宪法第十九条 node 侧强制)。
+/// 对每个创世核心条款:若其相对创世基准被**修改/删除/移出核心章**,则本版本必须记录为
+/// 特别案表决(`vote_type == LEG_VOTE_SPECIAL`),否则拒块;核心条款未变则不约束档位
+/// (一般章条款可走重要案)。仅盯创世核心集且按条号定位,故不受章节重排影响。
+///
+/// 返回 `true` 表示本版本相对创世核心基准**有改动**(调用方据此再校验公投凭据)。
+/// 本函数盯的是版本**记录的** `vote_type`(使 setCode 无法静默降级为重要案);
+/// 「公投是否真的通过」由 [`check_core_referendum_proof`] 读永久凭据补上。
+fn check_core_chapter_tier(
+    head: &MLawVersionHead,
+    reference: &ImmutableReference,
+) -> Result<bool, GuardError> {
+    // 当前版本核心章(chapters[0])的条号集,用于判定核心条款是否被移出核心章。
+    let core_chapter_now: Vec<u32> = head
+        .chapters
+        .first()
+        .into_iter()
+        .flat_map(|c| c.sections.iter())
+        .flat_map(|s| s.articles.iter())
+        .map(|a| a.number)
+        .collect();
+    let mut core_changed = false;
+    for (&n, baseline) in reference.core_articles.iter() {
+        let current = find_article(&head.chapters, n);
+        let content_same = current.map(|a| a.encode()).as_deref() == Some(baseline.as_slice());
+        let in_core_chapter = core_chapter_now.contains(&n);
+        // 修改(内容变)/删除(找不到)/移出核心章(不在 chapters[0])任一 → 有改动,且须特别案。
+        if !content_same || !in_core_chapter {
+            core_changed = true;
+            if head.vote_type != LEG_VOTE_SPECIAL {
+                return Err(GuardError::CoreClauseNotSpecial(n));
+            }
+        }
+    }
+    Ok(core_changed)
+}
+
+/// 核心章有改动的版本必须挂一份**通过口径**的强制公投凭据 `ConstitutionAmendmentProof[version]`
+/// (第十九条 node 背书的公投凭据层:不止记录 `vote_type=Special`,还须有过公投口径的计票)。
+/// 凭据是 legislation-yuan **永久存储**(不受 votingengine 90 天清理影响),故可对生效/待生效版本随时校验,
+/// 无转移块检测。口径复用 `primitives::constitution::referendum_passed`(与链端结算共用单源)。
+fn check_core_referendum_proof<F>(read_raw: &F, version: u32) -> Result<(), GuardError>
+where
+    F: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    let bytes = read_raw(&storage_key::constitution_amendment_proof(version))
+        .ok_or(GuardError::CoreClauseReferendumMissing(version))?;
+    let (eligible, yes, no) = <(u64, u64, u64)>::decode(&mut &bytes[..])
+        .map_err(|_| GuardError::CoreClauseReferendumMissing(version))?;
+    if !primitives::constitution::referendum_passed(eligible, yes, no) {
+        return Err(GuardError::CoreClauseReferendumNotPassed(version));
     }
     Ok(())
 }
@@ -785,8 +924,9 @@ mod tests {
         }
     }
 
-    /// 构造 LawVersion(version, 给定条文)的 SCALE 字节 + 哑尾(模拟链端完整编码)。
-    fn law_version_scale(version: u32, articles: Vec<MArticle>) -> Vec<u8> {
+    /// 构造 LawVersion(version, 条文, vote_type)的 SCALE 字节 + 哑尾(模拟链端完整编码)。
+    /// 单章夹具:全部条文置于第一章(核心章),便于测核心章档位背书。
+    fn law_version_scale_vt(version: u32, articles: Vec<MArticle>, vote_type: u8) -> Vec<u8> {
         let chapter = MChapter {
             number: 1,
             title: "第一章".as_bytes().to_vec(),
@@ -805,11 +945,16 @@ mod tests {
         Option::<Vec<u8>>::None.encode_to(&mut bytes); // title_en
         vec![chapter].encode_to(&mut bytes); // chapters
         [0u8; 32].encode_to(&mut bytes); // content_hash(哑尾)
-        0u8.encode_to(&mut bytes); // vote_type
+        vote_type.encode_to(&mut bytes); // vote_type
         0u64.encode_to(&mut bytes); // proposal_id
         0u64.encode_to(&mut bytes); // published_at
         0u64.encode_to(&mut bytes); // effective_at
         bytes
+    }
+
+    /// 默认版本编码:vote_type = 特别案(与创世宪法 `VoteType::Special` 一致)。
+    fn law_version_scale(version: u32, articles: Vec<MArticle>) -> Vec<u8> {
+        law_version_scale_vt(version, articles, LEG_VOTE_SPECIAL)
     }
 
     fn law_version_label_scale(title: &str, title_en: Option<&str>) -> Vec<u8> {
@@ -873,16 +1018,47 @@ mod tests {
         (storage_key::laws_by_scope_constitution(), list.encode())
     }
 
+    /// 一条核心修宪永久公投凭据:`ConstitutionAmendmentProof[version] = (eligible, yes, no)`。
+    fn amendment_proof_entry(version: u32, eligible: u64, yes: u64, no: u64) -> (Vec<u8>, Vec<u8>) {
+        (
+            storage_key::constitution_amendment_proof(version),
+            (eligible, yes, no).encode(),
+        )
+    }
+
+    /// 一条修宪护宪终审凭据:`ConstitutionGuardVoteProof[version] = approve`。
+    fn guard_proof_entry(version: u32, approve: u32) -> (Vec<u8>, Vec<u8>) {
+        (
+            storage_key::constitution_guard_vote_proof(version),
+            approve.encode(),
+        )
+    }
+
     /// 一份完整合法当前态:Laws[0] + LawVersions[0][version] + LawsByScope[宪法][0]=[0]。
     fn valid_current_state(version: u32, articles: Vec<MArticle>) -> Vec<(Vec<u8>, Vec<u8>)> {
-        vec![
+        valid_current_state_vt(version, articles, LEG_VOTE_SPECIAL)
+    }
+
+    /// 同 `valid_current_state`,但显式指定生效版本记录的 `vote_type`(测核心章档位背书)。
+    /// 修宪版本(v>创世)自动挂一份通过口径(4/7)的护宪终审凭据,使其为一份**合法**修宪态;
+    /// 需测护宪凭据缺失/不合格的用例请手工构造(不经本 helper)。
+    fn valid_current_state_vt(
+        version: u32,
+        articles: Vec<MArticle>,
+        vote_type: u8,
+    ) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut entries = vec![
             (storage_key::law(CONSTITUTION_LAW_ID), law_scale(version)),
             (
                 storage_key::law_version(CONSTITUTION_LAW_ID, version),
-                law_version_scale(version, articles),
+                law_version_scale_vt(version, articles, vote_type),
             ),
             laws_by_scope_entry(vec![CONSTITUTION_LAW_ID]),
-        ]
+        ];
+        if version > GENESIS_CONSTITUTION_VERSION {
+            entries.push(guard_proof_entry(version, 4));
+        }
+        entries
     }
 
     /// 一份合法待生效态:v1 仍生效、v2 待生效。
@@ -901,6 +1077,8 @@ mod tests {
                 law_version_scale(2, pending_articles),
             ),
             laws_by_scope_entry(vec![CONSTITUTION_LAW_ID]),
+            // 待生效版本 v2 是一次修宪 → 挂通过口径的护宪终审凭据(第21条)。
+            guard_proof_entry(2, 4),
         ]
     }
 
@@ -1020,11 +1198,126 @@ mod tests {
     #[test]
     fn passes_when_immutable_unchanged_even_if_mutable_changed() {
         let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
-        // 新版本:不可修改条款原样,只改了可变条 5,bump latest_version=2。
+        // 新版本:不可修改条款原样,只改了可变条 5(核心章),特别案 + 挂通过公投凭据,bump latest_version=2。
         let mut arts = amended_articles(immutable_intact);
         arts[IMMUTABLE_CONSTITUTION_ARTICLES.len()] = article_bytes(5, "可变条款已被合法修改");
-        let state = valid_current_state(2, arts);
+        let mut state = valid_current_state(2, arts);
+        state.push(amendment_proof_entry(2, 100, 80, 5));
         assert_eq!(check_immutable_articles(reader(state), &reference), Ok(()));
+    }
+
+    // ── 第十九条章→档位:核心章条款改动须记录为特别案 ──
+
+    #[test]
+    fn reference_derives_core_articles_excluding_immutable() {
+        let r = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        // 创世含核心章非禁改第 5 条 → 应入核心基准;禁改条不得混入核心基准。
+        assert!(r.core_articles.contains_key(&5), "核心章基准缺第 5 条");
+        for &n in IMMUTABLE_CONSTITUTION_ARTICLES.iter() {
+            assert!(
+                !r.core_articles.contains_key(&n),
+                "核心章基准不应含禁改条 {n}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_core_clause_change_without_special() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        // 改核心章第 5 条但版本记录为重要案(Major=2)→ 违反第十九条,拒块。
+        let mut arts = amended_articles(immutable_intact);
+        arts[IMMUTABLE_CONSTITUTION_ARTICLES.len()] = article_bytes(5, "核心条被改但走重要案");
+        let state = valid_current_state_vt(2, arts, 2 /* Major */);
+        assert_eq!(
+            check_immutable_articles(reader(state), &reference),
+            Err(GuardError::CoreClauseNotSpecial(5))
+        );
+    }
+
+    #[test]
+    fn allows_core_clause_change_with_special() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        // 改核心章第 5 条 + 特别案 + 挂通过公投凭据 → 合法。
+        let mut arts = amended_articles(immutable_intact);
+        arts[IMMUTABLE_CONSTITUTION_ARTICLES.len()] = article_bytes(5, "核心条经特别案修改");
+        let mut state = valid_current_state_vt(2, arts, LEG_VOTE_SPECIAL);
+        state.push(amendment_proof_entry(2, 100, 80, 5));
+        assert_eq!(check_immutable_articles(reader(state), &reference), Ok(()));
+    }
+
+    #[test]
+    fn rejects_core_clause_change_without_referendum_proof() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        // 核心章第 5 条改动 + 特别案,但缺永久公投凭据 → 拒。
+        let mut arts = amended_articles(immutable_intact);
+        arts[IMMUTABLE_CONSTITUTION_ARTICLES.len()] = article_bytes(5, "核心条改但无公投凭据");
+        let state = valid_current_state_vt(2, arts, LEG_VOTE_SPECIAL); // 不挂 proof
+        assert_eq!(
+            check_immutable_articles(reader(state), &reference),
+            Err(GuardError::CoreClauseReferendumMissing(2))
+        );
+    }
+
+    #[test]
+    fn rejects_core_clause_change_with_failing_referendum() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        // 核心章第 5 条改动 + 特别案 + 公投未过口径(参与 45% <70%)→ 拒。
+        let mut arts = amended_articles(immutable_intact);
+        arts[IMMUTABLE_CONSTITUTION_ARTICLES.len()] = article_bytes(5, "核心条改但公投未过");
+        let mut state = valid_current_state_vt(2, arts, LEG_VOTE_SPECIAL);
+        state.push(amendment_proof_entry(2, 100, 40, 5));
+        assert_eq!(
+            check_immutable_articles(reader(state), &reference),
+            Err(GuardError::CoreClauseReferendumNotPassed(2))
+        );
+    }
+
+    #[test]
+    fn allows_unchanged_core_clause_with_non_special() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        // 核心章第 5 条原样不动,版本记录为重要案 → 核心章未变,不约束档位 → 合法。
+        let state =
+            valid_current_state_vt(2, amended_articles(immutable_intact), 2 /* Major */);
+        assert_eq!(check_immutable_articles(reader(state), &reference), Ok(()));
+    }
+
+    // ── 第21条:一切修宪须挂通过口径(4/7)的护宪大法官终审凭据 ──
+
+    #[test]
+    fn rejects_amendment_without_guard_proof() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        // v2 修宪(核心条款不变、免公投),但无护宪终审凭据 → 拒。
+        let state = vec![
+            (storage_key::law(CONSTITUTION_LAW_ID), law_scale(2)),
+            (
+                storage_key::law_version(CONSTITUTION_LAW_ID, 2),
+                law_version_scale_vt(2, amended_articles(immutable_intact), 2 /* Major */),
+            ),
+            laws_by_scope_entry(vec![CONSTITUTION_LAW_ID]),
+        ];
+        assert_eq!(
+            check_immutable_articles(reader(state), &reference),
+            Err(GuardError::GuardReviewMissing(2))
+        );
+    }
+
+    #[test]
+    fn rejects_amendment_with_failing_guard_review() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        // v2 修宪 + 护宪终审仅 3/7 赞成(<4)→ 拒。
+        let state = vec![
+            (storage_key::law(CONSTITUTION_LAW_ID), law_scale(2)),
+            (
+                storage_key::law_version(CONSTITUTION_LAW_ID, 2),
+                law_version_scale_vt(2, amended_articles(immutable_intact), 2 /* Major */),
+            ),
+            laws_by_scope_entry(vec![CONSTITUTION_LAW_ID]),
+            guard_proof_entry(2, 3),
+        ];
+        assert_eq!(
+            check_immutable_articles(reader(state), &reference),
+            Err(GuardError::GuardReviewNotPassed(2))
+        );
     }
 
     #[test]

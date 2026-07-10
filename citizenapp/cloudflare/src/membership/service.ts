@@ -22,6 +22,33 @@ export async function getMembership(env: Env, ownerAccount: string): Promise<Mem
     .first<MembershipRow>();
 }
 
+/// 批量读会员：一页去重作者一条 IN() 查询（≤50 占位符），避免逐作者点查。
+export async function batchMemberships(
+  env: Env,
+  ownerAccounts: string[]
+): Promise<Map<string, MembershipRow>> {
+  const distinct = [...new Set(ownerAccounts)];
+  const map = new Map<string, MembershipRow>();
+  if (distinct.length === 0) {
+    return map;
+  }
+  const placeholders = distinct.map(() => '?').join(', ');
+  const result = await env.DB.prepare(
+    `SELECT owner_account, membership_level, storage_quota_bytes, storage_used_bytes, expires_at,
+        updated_at, subscription_source, stripe_customer_id, stripe_subscription_id, stripe_price_id,
+        subscription_status, current_period_start, current_period_end, cancel_at_period_end,
+        identity_level, identity_checked_at
+      FROM square_memberships
+      WHERE owner_account IN (${placeholders})`
+  )
+    .bind(...distinct)
+    .all<MembershipRow>();
+  for (const row of result.results ?? []) {
+    map.set(row.owner_account, row);
+  }
+  return map;
+}
+
 export async function requireActiveMembership(
   env: Env,
   ownerAccount: string,
@@ -78,12 +105,6 @@ export async function membershipRoute(request: Request, env: Env): Promise<Respo
     inactive_code: entitlement?.active === false ? entitlement.inactive_code : null,
     inactive_message: entitlement?.active === false ? entitlement.inactive_message : null
   });
-}
-
-export function assertSessionOwner(session: SessionState, ownerAccount: string): void {
-  if (session.owner_account !== ownerAccount) {
-    throw new HttpError(403, 'owner_account_mismatch', '登录钱包与请求钱包不一致');
-  }
 }
 
 export async function resolveMembershipEntitlement(

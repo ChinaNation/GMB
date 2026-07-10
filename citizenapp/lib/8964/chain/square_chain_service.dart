@@ -102,6 +102,28 @@ class SquareChainService implements SquarePostChainPublisher {
     return decodeNormalCitizenCidNumber(data);
   }
 
+  /// 读链上身份档：有效投票身份的 cid + 是否竞选公民。
+  /// identityLevel = visitor（无有效投票身份）/ voting / candidate（另有候选记录）。
+  Future<({String? cidNumber, String identityLevel})> fetchIdentity(
+    String ownerAccount,
+  ) async {
+    final cid = await fetchNormalCitizenCidNumber(ownerAccount);
+    if (cid == null) {
+      return (cidNumber: null, identityLevel: 'visitor');
+    }
+    final accountId = Uint8List.fromList(Keyring().decodeAddress(ownerAccount));
+    final candKey = storageMapKey(
+      'CitizenIdentity',
+      'CandidateIdentityByAccount',
+      accountId,
+    );
+    final candData = await _rpc.fetchStorage('0x${hexEncode(candKey)}');
+    return (
+      cidNumber: cid,
+      identityLevel: candData != null ? 'candidate' : 'voting',
+    );
+  }
+
   @visibleForTesting
   static Uint8List buildPublishSquarePostCallData({
     required String postId,

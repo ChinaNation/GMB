@@ -1,9 +1,12 @@
-import { blake2AsU8a } from "@polkadot/util-crypto/blake2";
 import { signatureVerify } from "@polkadot/util-crypto/signature/verify";
 import { bytesToBase64Url } from "./codec";
-
-const GMB_SIGN_DOMAIN = [0x47, 0x4d, 0x42];
-const OP_SIGN_IM_WALLET_BINDING = 0x1a;
+import {
+  OP_SIGN_IM_WALLET_BINDING,
+  concatBytes,
+  scaleString,
+  signingMessage,
+  u64Le,
+} from "../shared/signing_message";
 
 export interface DeviceBindingPayloadInput {
   wallet_account: string;
@@ -24,14 +27,7 @@ export function buildDeviceBindingSigningMessage(
     u64Le(input.expires_at_millis),
     scaleString(input.nonce),
   );
-  return blake2AsU8a(
-    new Uint8Array([
-      ...GMB_SIGN_DOMAIN,
-      OP_SIGN_IM_WALLET_BINDING,
-      ...scalePayload,
-    ]),
-    256,
-  );
+  return signingMessage(OP_SIGN_IM_WALLET_BINDING, scalePayload);
 }
 
 export function buildDeviceBindingSigningMessageBase64Url(
@@ -55,60 +51,4 @@ export async function verifyDeviceBindingSignature(
   } catch {
     return false;
   }
-}
-
-function scaleString(value: string): Uint8Array {
-  const bytes = new TextEncoder().encode(value);
-  return concatBytes(scaleCompact(bytes.length), bytes);
-}
-
-function scaleCompact(value: number): Uint8Array {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError(
-      "SCALE compact value must be a non-negative safe integer",
-    );
-  }
-  if (value < 1 << 6) {
-    return new Uint8Array([value << 2]);
-  }
-  if (value < 1 << 14) {
-    const encoded = (value << 2) | 0x01;
-    return new Uint8Array([encoded & 0xff, (encoded >> 8) & 0xff]);
-  }
-  if (value < 1 << 30) {
-    const encoded = (value << 2) | 0x02;
-    return new Uint8Array([
-      encoded & 0xff,
-      (encoded >> 8) & 0xff,
-      (encoded >> 16) & 0xff,
-      (encoded >> 24) & 0xff,
-    ]);
-  }
-  throw new RangeError(
-    "SCALE compact value is too large for IM binding payload",
-  );
-}
-
-function u64Le(value: number): Uint8Array {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError("u64 value must be a non-negative safe integer");
-  }
-  let current = BigInt(value);
-  const out = new Uint8Array(8);
-  for (let index = 0; index < out.length; index += 1) {
-    out[index] = Number(current & 0xffn);
-    current >>= 8n;
-  }
-  return out;
-}
-
-function concatBytes(...items: Uint8Array[]): Uint8Array {
-  const total = items.reduce((sum, item) => sum + item.length, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const item of items) {
-    out.set(item, offset);
-    offset += item.length;
-  }
-  return out;
 }

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- 公权机构徽章：青绿扇贝勋章 + 立柱建筑（公权/官方权威）。机构只有会员徽章，无实名小人态。 -->
+  <g fill="#0E8577">
+    <circle cx="18" cy="12" r="4.3"/>
+    <circle cx="16.24" cy="16.24" r="4.3"/>
+    <circle cx="12" cy="18" r="4.3"/>
+    <circle cx="7.76" cy="16.24" r="4.3"/>
+    <circle cx="6" cy="12" r="4.3"/>
+    <circle cx="7.76" cy="7.76" r="4.3"/>
+    <circle cx="12" cy="6" r="4.3"/>
+    <circle cx="16.24" cy="7.76" r="4.3"/>
+    <circle cx="12" cy="12" r="7.6"/>
+  </g>
+  <g fill="#ffffff">
+    <polygon points="12,7.4 7.2,10 16.8,10"/>
+    <rect x="7.4" y="15.2" width="9.2" height="1.5" rx="0.3"/>
+    <rect x="8.3" y="10.5" width="1.4" height="4.4"/>
+    <rect x="11.3" y="10.5" width="1.4" height="4.4"/>
+    <rect x="14.3" y="10.5" width="1.4" height="4.4"/>
+  </g>
+</svg>

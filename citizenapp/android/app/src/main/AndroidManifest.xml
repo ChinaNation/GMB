@@ -2,6 +2,8 @@
     <!-- 网络是 Android 普通权限，release 包必须声明，但系统不会弹运行时授权框。 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Step0 spike / 硬件金库：生物识别 CryptoObject 解密需要。 -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- Android 13+ 通知属于运行时权限，由首启权限引导按用户选择申请。 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

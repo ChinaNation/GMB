@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:citizenapp/8964/profile/services/nickname_publisher.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/bodies/user_transfer_body.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
@@ -340,6 +341,8 @@ class _MyWalletPageState extends State<MyWalletPage> {
     }
     try {
       await _walletService.renameWallet(wallet.walletIndex, newName);
+      // 钱包名 = 昵称：改默认钱包后把新名发布到后端 display_name 供他人可见。
+      await NicknamePublisher().publishDefault();
       if (!mounted) return;
       await _loadWallets();
     } catch (e) {
@@ -1031,6 +1034,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         walletName: newName,
         walletIcon: widget.wallet.walletIcon,
       );
+      // 钱包名 = 昵称：改默认钱包后把新名发布到后端 display_name 供他人可见。
+      await NicknamePublisher().publishDefault();
       if (!mounted) return;
       setState(() {
         _hasChanged = true;

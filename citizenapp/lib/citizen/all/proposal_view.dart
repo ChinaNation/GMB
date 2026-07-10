@@ -77,6 +77,8 @@ class _ProposalViewState extends State<ProposalView> {
   // 分页状态
   bool _loading = true;
   bool _loadingMore = false;
+  // 机构/行政区数据包是否已后台同步（首次进「公民」才触发，不阻塞首屏）。
+  bool _directorySynced = false;
   String? _error;
   List<_ProposalDisplayItem> _items = [];
 
@@ -179,11 +181,10 @@ class _ProposalViewState extends State<ProposalView> {
         Set<String> subscribedInstitutionCidNumbers,
         Map<String, InstitutionInfo> knownInstitutionsByAccountHex,
       })> _loadInstitutionScope() async {
-    try {
-      // 提案流需要真实机构名称和主账户;本地数据包同步失败时,
-      // 仍继续按链上机构码过滤,不能让提案列表整体不可用。
-      await _institutionRepo.directory.ensureSynced();
-    } catch (_) {}
+    // 机构/行政区数据包（首装 4.2 万条行政区，秒级~十几秒）**不阻塞**提案流
+    // 首屏：后台同步，首次未就绪先按链上机构码兜底显示（代码本就容忍缺数据），
+    // 就绪后回刷一次填充机构名。避免首次进「公民」卡十几秒。
+    unawaited(_ensureDirectorySyncedThenRefresh());
 
     final defaultInstitutions = await _institutionRepo
         .listByCodes(_defaultProposalCodes)
@@ -209,6 +210,22 @@ class _ProposalViewState extends State<ProposalView> {
       subscribedInstitutionCidNumbers: subscribedCidNumbers,
       knownInstitutionsByAccountHex: known,
     );
+  }
+
+  /// 后台同步机构/行政区数据包；首次就绪且有变更时回刷一次提案流以填机构名。
+  /// 幂等：同步过一次后直接返回，回刷再进本方法不会二次同步或二次回刷。
+  Future<void> _ensureDirectorySyncedThenRefresh() async {
+    if (_directorySynced) return;
+    try {
+      final changed = await _institutionRepo.directory.ensureSynced();
+      _directorySynced = true;
+      if (changed && mounted) {
+        // 名称就绪后静默回刷（_items 非空则不显示 loading，不闪屏）。
+        unawaited(_loadFirstPage(force: true));
+      }
+    } catch (_) {
+      // 同步失败：保持按机构码兜底显示，不阻塞。
+    }
   }
 
   /// 为普通公权机构派生 ProposalContext 使用的 InstitutionInfo。

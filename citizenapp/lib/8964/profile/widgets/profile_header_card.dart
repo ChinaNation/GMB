@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/identity_badge.dart';
 
 /// 推特式资料卡：头图下方白底，圆角方形头像跨压头图下缘 + 认证勾 +
 /// 展示名/地址·CID/签名/计数 + 右上三图标。
@@ -15,6 +17,7 @@ class ProfileHeaderCard extends StatelessWidget {
     required this.ownerAccount,
     required this.profile,
     required this.actions,
+    this.fallbackName = '',
     this.avatarUrl,
     this.onFollowing,
     this.onFollowers,
@@ -23,6 +26,11 @@ class ProfileHeaderCard extends StatelessWidget {
 
   final String ownerAccount;
   final CitizenProfile? profile;
+
+  /// 展示名兜底 = 本机钱包名称（即昵称）。竞选公民认证用户由后端把
+  /// `display_name` 置为链上真实姓名故优先；普通用户展示名 = 钱包名 = 昵称，
+  /// 只有钱包名也缺失时才最后回落截断地址。
+  final String fallbackName;
 
   /// 头像图片 URL（object_key 解析后的公开媒体地址）；为空显示占位。
   final String? avatarUrl;
@@ -38,10 +46,21 @@ class ProfileHeaderCard extends StatelessWidget {
   static const double _avatarSize = 80;
   static const double _avatarOverlap = 40;
 
-  bool get _isCertified => profile?.isCertified ?? false;
+  /// 链上身份档位；徽章据此分色（访客橙/投票蓝/竞选红/纯访客无）。
+  String? get _identityLevel => profile?.identityLevel;
 
-  String get _name =>
-      profile?.resolvedDisplayName('') ?? _shortenAccount(ownerAccount);
+  /// 会员信号（决定徽章是否带勾）。
+  String? get _membershipLevel => profile?.membershipLevel;
+  bool get _membershipActive => profile?.membershipActive ?? false;
+
+  /// 展示名 = 后端 display_name（认证用户 = 链上真实姓名）→ 钱包名（昵称）
+  /// → 截断地址（最后兜底）。绝不越过钱包名直接显示地址。
+  String get _name {
+    final resolved = profile?.resolvedDisplayName(fallbackName);
+    if (resolved != null && resolved.isNotEmpty) return resolved;
+    final fallback = fallbackName.trim();
+    return fallback.isNotEmpty ? fallback : _shortenAccount(ownerAccount);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +144,13 @@ class ProfileHeaderCard extends StatelessWidget {
           Positioned(
             left: 16,
             top: -_avatarOverlap,
-            child: _Avatar(isCertified: _isCertified, imageUrl: avatarUrl),
+            child: _Avatar(
+              identityLevel: _identityLevel,
+              membershipLevel: _membershipLevel,
+              membershipActive: _membershipActive,
+              imageUrl: avatarUrl,
+              seed: ownerAccount,
+            ),
           ),
         ],
       ),
@@ -134,14 +159,33 @@ class ProfileHeaderCard extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.isCertified, this.imageUrl});
+  const _Avatar({
+    required this.identityLevel,
+    required this.membershipLevel,
+    required this.membershipActive,
+    required this.seed,
+    this.imageUrl,
+  });
 
-  final bool isCertified;
+  /// 链上身份档位：颜色来源（访客橙/投票蓝/竞选红/纯访客无）。
+  final String? identityLevel;
+
+  /// 会员信号：决定徽章是否带勾（会员档匹配身份档且有效）。
+  final String? membershipLevel;
+  final bool membershipActive;
   final String? imageUrl;
+
+  /// 用于给未设头像的用户稳定选一张默认头像的种子（钱包地址）。
+  final String seed;
 
   @override
   Widget build(BuildContext context) {
     final url = imageUrl;
+    final badgeStyle = identityBadgeStyle(
+      identityLevel: identityLevel,
+      membershipLevel: membershipLevel,
+      membershipActive: membershipActive,
+    );
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -149,38 +193,31 @@ class _Avatar extends StatelessWidget {
           width: ProfileHeaderCard._avatarSize,
           height: ProfileHeaderCard._avatarSize,
           decoration: BoxDecoration(
-            color: AppTheme.primary.withAlpha(20),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: AppTheme.surfaceWhite, width: 4),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: url == null
-                ? const _AvatarPlaceholder()
+                ? _DefaultAvatar(seed: seed)
                 : Image.network(
                     url,
                     fit: BoxFit.cover,
                     width: ProfileHeaderCard._avatarSize,
                     height: ProfileHeaderCard._avatarSize,
-                    errorBuilder: (_, __, ___) => const _AvatarPlaceholder(),
+                    errorBuilder: (_, __, ___) => _DefaultAvatar(seed: seed),
                   ),
           ),
         ),
-        if (isCertified)
+        if (badgeStyle != null)
           Positioned(
             right: -2,
             bottom: -2,
-            child: Container(
-              width: 24,
-              height: 24,
-              decoration: const BoxDecoration(
-                color: AppTheme.surfaceWhite,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.verified,
-                size: 22,
-                color: Color(0xFF007A74),
+            child: CitizenBadge(
+              style: badgeStyle,
+              tooltip: identityBadgeLabel(
+                identityLevel: identityLevel,
+                checked: badgeStyle.checked,
               ),
             ),
           ),
@@ -189,15 +226,28 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-class _AvatarPlaceholder extends StatelessWidget {
-  const _AvatarPlaceholder();
+/// 未设头像时按账号稳定选一张不透明默认头像（不再透出头图/白底）。
+class _DefaultAvatar extends StatelessWidget {
+  const _DefaultAvatar({required this.seed});
+
+  /// 可选默认头像张数，与 assets/avatars/default_1..N.svg 一致。
+  static const int _count = 6;
+
+  final String seed;
+
+  int get _index {
+    // 账号 code unit 求和取模：稳定、确定，同一账号永远同一张默认头像。
+    final sum = seed.codeUnits.fold<int>(0, (acc, unit) => acc + unit);
+    return sum % _count + 1;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
+    return SvgPicture.asset(
+      'assets/avatars/default_$_index.svg',
       width: ProfileHeaderCard._avatarSize,
       height: ProfileHeaderCard._avatarSize,
-      child: Icon(Icons.person, size: 36, color: AppTheme.primary),
+      fit: BoxFit.cover,
     );
   }
 }

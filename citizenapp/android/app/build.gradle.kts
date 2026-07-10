@@ -89,6 +89,8 @@ android {
 
 dependencies {
     implementation("androidx.core:core:1.13.1")
+    // ⚠️ Step0 SPIKE：硬件 auth-bound 金库需要 AndroidX BiometricPrompt + CryptoObject。
+    implementation("androidx.biometric:biometric:1.1.0")
 }
 
 gradle.taskGraph.whenReady {

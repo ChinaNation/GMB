@@ -59,6 +59,7 @@
 - 联邦注册局管理员更换必须走省级组入口：目标省 5 人组内部投票，阈值来自代码级固定阈值 `FRG=3`；不允许再用全 FRG 215 人平铺集合发起换届。
 - FRG 主机构账户在读侧可聚合 43 个省级组，用于验签和身份展示；管理员更换投票根账户是链端按省码派生的省级组虚拟账户。
 - 所有管理员集合变更仍经 `votingengine` 内部投票；各管理员模块用自己的 `MODULE_TAG` 绑定提案 owner。
+- **固定治理骨架加锚（档 A，ADR-027 §6.4）**：NJD 护宪恰 7 席由 `public-admins::ensure_court_composition` runtime 强制（变更 + 执行终态，Error `InvalidCourtComposition`），并由节点 `core/governance_skeleton.rs` 守卫逐块背书（I1..I7：固定机构存在性/机构码/类型/Active/名额/NJD 护宪 7，setCode 改不动）。护宪 role 字面量 `ADMIN_ROLE_CONSTITUTION_GUARD` re-export 自 `primitives::governance_skeleton::ROLE_CONSTITUTION_GUARD`（与创世 role-by-index、节点守卫逐字节共用）。**只冻席位数不冻成员**：等长换人保持 7 席即放行。
 
 ## MODULE_TAG
 

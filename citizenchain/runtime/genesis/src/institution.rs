@@ -285,8 +285,10 @@ fn bounded_role<T: public_admins::Config>(
 }
 
 fn national_judicial_yuan_admin_role(index: usize) -> Option<&'static [u8]> {
+    // 护宪席位数单源 primitives::governance_skeleton(与节点骨架守卫 I6 同源;i<7 即原 0..=6)。
+    let guard_seats = primitives::governance_skeleton::NJD_CONSTITUTION_GUARD_SEATS as usize;
     match index {
-        0..=6 => Some(ADMIN_ROLE_CONSTITUTION_GUARD),
+        i if i < guard_seats => Some(ADMIN_ROLE_CONSTITUTION_GUARD),
         7 => Some(ADMIN_ROLE_CHIEF_JUSTICE),
         8..=9 => Some(ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE),
         10..=14 => Some(ADMIN_ROLE_JUSTICE),

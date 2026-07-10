@@ -34,6 +34,10 @@ enum QrScanMode {
 
   /// 通用扫码：直接返回原始字符串，不做协议路由。
   raw,
+
+  /// 统一「扫一扫」：按协议分类后交调用方分派——收款码/裸地址 pop
+  /// [QrScanTransferResult]（走支付）；signRequest pop 原始字符串（走签名）；未来类型再加。
+  dispatch,
 }
 
 /// 统一扫码页。
@@ -151,6 +155,18 @@ class _QrScanPageState extends State<QrScanPage> {
           // 通用扫码:直接返回原始字符串
           if (!mounted) return;
           Navigator.of(context).pop(raw);
+        case QrScanMode.dispatch:
+          // 统一扫一扫:收款/裸地址→支付结果;signRequest→原始串交调用方签名
+          if (result.type == QrRouteType.userTransfer) {
+            _handleTransfer(result);
+          } else if (result.type == QrRouteType.legacyAddress) {
+            _handleLegacyAddress(result.extractedAddress!);
+          } else if (result.type == QrRouteType.signRequest) {
+            if (!mounted) return;
+            Navigator.of(context).pop(raw);
+          } else {
+            await _showUnrecognized();
+          }
       }
     } catch (e) {
       if (!mounted) {
@@ -308,6 +324,7 @@ class _QrScanPageState extends State<QrScanPage> {
         QrScanMode.transfer => '扫描收款码',
         QrScanMode.contact => '扫描对方收款码',
         QrScanMode.raw => '扫描二维码',
+        QrScanMode.dispatch => '扫描二维码',
       };
 
   String get _titleText =>
@@ -316,6 +333,7 @@ class _QrScanPageState extends State<QrScanPage> {
         QrScanMode.transfer => '扫码支付',
         QrScanMode.contact => '扫码添加好友',
         QrScanMode.raw => '扫描二维码',
+        QrScanMode.dispatch => '扫一扫',
       };
 
   Future<void> _showUnrecognized() async {

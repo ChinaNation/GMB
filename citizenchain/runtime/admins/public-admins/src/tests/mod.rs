@@ -350,3 +350,49 @@ fn public_admins_accept_fixed_governance_codes_with_fixed_size() {
         );
     });
 }
+
+/// 构造 NJD 管理员集:前 `guard_count` 名 role_name=护宪、其余大法官,共 `total` 人。
+fn njd_admins(guard_count: u8, total: u8) -> Vec<AdminProfile<AccountId32>> {
+    (0..total)
+        .map(|i| {
+            let role: &[u8] = if i < guard_count {
+                admin_primitives::ADMIN_ROLE_CONSTITUTION_GUARD
+            } else {
+                "大法官".as_bytes()
+            };
+            profile_full(account(i), b"", b"", role, 0, 0)
+        })
+        .collect()
+}
+
+/// I6:NJD 护宪大法官必须恰 7 席(与节点骨架守卫同源),等长换人保持 7 席即过。
+#[test]
+fn njd_court_requires_exactly_seven_guards() {
+    use admin_primitives::NJD;
+    use primitives::count_const::NJD_ADMIN_COUNT;
+    use primitives::governance_skeleton::NJD_CONSTITUTION_GUARD_SEATS as SEATS;
+
+    new_test_ext().execute_with(|| {
+        let total = NJD_ADMIN_COUNT as u8;
+        // 恰 7 护宪 → 通过。
+        assert_ok!(PublicAdmins::ensure_court_composition(
+            NJD,
+            &njd_admins(SEATS as u8, total)
+        ));
+        // 6 护宪(稀释)→ 拒。
+        assert_noop!(
+            PublicAdmins::ensure_court_composition(NJD, &njd_admins(6, total)),
+            Error::<Test>::InvalidCourtComposition
+        );
+        // 8 护宪(灌水)→ 拒。
+        assert_noop!(
+            PublicAdmins::ensure_court_composition(NJD, &njd_admins(8, total)),
+            Error::<Test>::InvalidCourtComposition
+        );
+        // 非 NJD(NRC)不受护宪席位约束 → 通过(哪怕 0 护宪)。
+        assert_ok!(PublicAdmins::ensure_court_composition(
+            code_bytes("NRC"),
+            &njd_admins(0, NRC_ADMIN_COUNT as u8)
+        ));
+    });
+}

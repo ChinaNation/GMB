@@ -13,6 +13,7 @@ class SquareIdentityState {
     this.walletIndex,
     this.pubkeyHex,
     this.isHotWallet = false,
+    this.identityLevel,
   });
 
   final String ownerAccount;
@@ -21,6 +22,9 @@ class SquareIdentityState {
   final int? walletIndex;
   final String? pubkeyHex;
   final bool isHotWallet;
+
+  /// 链上身份档（徽章分色）：visitor/voting/candidate。
+  final String? identityLevel;
 
   bool get hasWallet => ownerAccount.isNotEmpty;
   bool get isCertified => cidNumber != null && cidNumber!.isNotEmpty;
@@ -48,11 +52,15 @@ class SquareIdentityService {
       return const SquareIdentityState(ownerAccount: '');
     }
     String? cidNumber;
+    String identityLevel = 'visitor';
     try {
-      cidNumber = await (chainService ?? SquareChainService())
-          .fetchNormalCitizenCidNumber(wallet.address);
+      final identity = await (chainService ?? SquareChainService())
+          .fetchIdentity(wallet.address);
+      cidNumber = identity.cidNumber;
+      identityLevel = identity.identityLevel;
     } catch (_) {
       cidNumber = null;
+      identityLevel = 'visitor';
     }
 
     return SquareIdentityState(
@@ -62,6 +70,7 @@ class SquareIdentityService {
       walletIndex: wallet.walletIndex,
       pubkeyHex: wallet.pubkeyHex,
       isHotWallet: wallet.isHotWallet,
+      identityLevel: identityLevel,
     );
   }
 }

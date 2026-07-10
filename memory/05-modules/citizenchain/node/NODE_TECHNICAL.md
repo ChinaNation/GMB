@@ -248,7 +248,9 @@
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
-| `src/core/service.rs` | 830 | 服务工厂、PoW 算法、CPU 挖矿、GRANDPA 角色选择 |
+| `src/core/service.rs` | 830 | 服务工厂、PoW 算法、CPU 挖矿、GRANDPA 角色选择、两道 L2 共识守卫串接 |
+| `src/core/constitution.rs` | 1535 | L2 共识守卫:宪法不可修改条款/核心章档位/公投·护宪凭据逐块背书 + 桌面端宪法 HTML 渲染 |
+| `src/core/governance_skeleton.rs` | 641 | L2 共识守卫(档 A):固定治理骨架 I1..I7 逐块背书(固定机构存在性/名额/NJD 护宪 7 席),setCode 改不动 |
 | `src/core/rpc.rs` | 419 | 节点核心 RPC、钱包绑定签名、哈希率查询、轻节点同步 |
 | `src/mining/gpu_miner.rs` | 392 | OpenCL 初始化、GPU kernel 调度、哈希率统计 |
 | `src/core/command.rs` | 237 | CLI 子命令路由 |

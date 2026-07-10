@@ -42,6 +42,12 @@ class AppTheme {
   /// 投票中 (蓝)
   static const Color voting = Color(0xFF3B82F6);
 
+  /// 公民身份徽章色（链上身份档）：访客橙 / 投票蓝 / 竞选红。独立语义别名，
+  /// 与 voting(投票中)/danger(危险)/warning(未生效) 解耦，避免撞色漂移。
+  static const Color identityVisitor = gold; // 0xFFE5A100
+  static const Color identityVoting = voting; // 0xFF3B82F6
+  static const Color identityCandidate = danger; // 0xFFEF4444
+
   /// 已通过 (绿)
   static const Color passed = Color(0xFF22C55E);
 

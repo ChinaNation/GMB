@@ -8,6 +8,7 @@ import type {
   UserProfileCounts
 } from '../types';
 import { buildFeedPostItem } from '../posts/confirm';
+import { resolveAuthorSignals } from '../social/author_signals';
 import { profileObjectKey } from '../storage/r2_keys';
 
 const PROFILE_SCHEMA = 'citizenapp.square.profile.v1' as const;
@@ -89,23 +90,6 @@ export async function countUserStats(
   return { following, followers, posts };
 }
 
-/// 认证真源：取该账户最近一条已发布帖子携带的 cid_number（confirm 时由链上事件写入）。
-/// 从未发帖的账户返回 null（展示为未认证），链上直连 CID 查询留待后续增强。
-export async function readLatestCidNumber(
-  env: Env,
-  ownerAccount: string
-): Promise<string | null> {
-  const row = await env.DB.prepare(
-    `SELECT cid_number FROM square_posts
-      WHERE owner_account = ? AND post_state = 'published' AND cid_number IS NOT NULL
-      ORDER BY created_at DESC
-      LIMIT 1`
-  )
-    .bind(ownerAccount)
-    .first<{ cid_number: string | null }>();
-  const cid = row?.cid_number?.trim();
-  return cid && cid.length > 0 ? cid : null;
-}
 
 /// 当前登录者是否已关注目标账户。未登录 viewer 传 null，直接返回 false。
 export async function isFollowing(
@@ -164,7 +148,20 @@ export async function listAuthorPosts(
     .all<SquarePostRow>();
 
   const rows = result.results ?? [];
-  return Promise.all(rows.map((row) => buildFeedPostItem(env, row)));
+  // 作者主页所有帖子同一作者：去重后仅读一次链上身份+会员，回填作者徽章信号。
+  const [signals, items] = await Promise.all([
+    resolveAuthorSignals(env, [ownerAccount]),
+    Promise.all(rows.map((row) => buildFeedPostItem(env, row)))
+  ]);
+  return items.map((item) => {
+    const signal = signals.get(item.owner_account);
+    return {
+      ...item,
+      identity_level: signal?.identity_level ?? 'visitor',
+      membership_level: signal?.membership_level ?? null,
+      membership_active: signal?.membership_active ?? false
+    };
+  });
 }
 
 export interface FollowEntry {

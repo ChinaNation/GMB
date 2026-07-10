@@ -146,14 +146,9 @@ pub fn legislation_house_decided(vote_type: u8, total: u32, yes: u32, no: u32) -
 
 /// 立法公投期满计票(特别案/核心修宪,宪法 ≥70% 参与 + ≥70% 赞成)。
 /// `eligible` = 作用域内拥有投票权的公民总数(人口快照);`yes`/`no` = 已投票数。
+/// 口径单源在 `primitives::constitution::referendum_passed`(与节点守卫核心章公投背书共用),此处仅转发。
 pub fn legislation_referendum_final_passed(eligible: u64, yes: u64, no: u64) -> bool {
-    let casted = yes.saturating_add(no);
-    if eligible == 0 || casted == 0 {
-        return false;
-    }
-    // 参与率 ≥70% 且 赞成率(参与者基数)≥70%
-    casted.saturating_mul(100) >= eligible.saturating_mul(70)
-        && yes.saturating_mul(100) >= casted.saturating_mul(70)
+    primitives::constitution::referendum_passed(eligible, yes, no)
 }
 
 /// 业务模块统一执行结果。

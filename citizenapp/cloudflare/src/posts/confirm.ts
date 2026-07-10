@@ -95,17 +95,20 @@ export async function deletePostCloudflareData(
   const deletedAt = nowMs();
   const shouldReclaimStorage = post.post_state !== 'deleted' && upload !== null;
   const reclaimedStorageBytes = shouldReclaimStorage ? Math.max(0, upload.estimated_bytes) : 0;
+  // 硬删除：彻底删掉帖子行本身，不留软删残行；链上仅存 content_hash 不受影响。
   const statements = [
     env.DB.prepare(
-      `UPDATE square_posts
-        SET post_state = 'deleted', title = NULL, text = ''
-        WHERE post_id = ? AND owner_account = ?`
+      `DELETE FROM square_posts WHERE post_id = ? AND owner_account = ?`
     ).bind(postId, session.owner_account)
   ];
 
   if (upload) {
     statements.push(
       env.DB.prepare('DELETE FROM square_media_assets WHERE upload_id = ?').bind(upload.upload_id)
+    );
+    // 一并删上传任务行，避免其 R2 对象已删后 D1 仍残留悬挂元数据。
+    statements.push(
+      env.DB.prepare('DELETE FROM square_uploads WHERE upload_id = ?').bind(upload.upload_id)
     );
   }
   if (shouldReclaimStorage) {

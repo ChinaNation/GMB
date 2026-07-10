@@ -16,10 +16,12 @@ import 'package:citizenapp/8964/profile/widgets/profile_category_tabs.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_header_card.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_kebab_menu.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_posts_list.dart';
+import 'package:citizenapp/8964/services/square_account_deletion_service.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
-import 'package:citizenapp/im/im_tab_page.dart';
 import 'package:citizenapp/im/open_direct_chat.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/wallet/core/device_subkey.dart' show bytesToHex;
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 推特式用户主页。
 ///
@@ -75,6 +77,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
   SquareSession? _session;
   int _postsRevision = 0;
 
+  /// 本机钱包名称 = 昵称，作为展示名兜底（本人主页）。他人主页无本机钱包，
+  /// 留空 → 由后端 display_name 兜底。
+  String _walletName = '';
+
   @override
   void initState() {
     super.initState();
@@ -83,7 +89,22 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _sessionProvider = widget.sessionProvider ?? SquareSessionProvider.instance;
     _directChat = widget.onOpenDirectChat ?? openDirectChat;
     _profile = widget.initialProfile;
+    _loadWalletName();
     _load();
+  }
+
+  /// 加载本机钱包名称作为昵称兜底（本人主页 = 默认身份钱包）。
+  Future<void> _loadWalletName() async {
+    if (!widget.isSelf) return;
+    try {
+      final wallet = await WalletManager().getDefaultWallet();
+      final name = wallet?.walletName.trim() ?? '';
+      if (name.isNotEmpty && mounted) {
+        setState(() => _walletName = name);
+      }
+    } on Exception {
+      // 钱包名兜底失败不影响主页展示，静默忽略。
+    }
   }
 
   Future<void> _load() async {
@@ -172,12 +193,65 @@ class _UserProfilePageState extends State<UserProfilePage> {
     await _cache.write(updated);
   }
 
+  /// 注销用户（仅本人）：二次确认 → 主钥签名(生物识别) → 服务端硬删 → 清本地 → 回落空态。
+  /// 无冷静期、硬删不可逆；链上数据与本地钱包不受影响。
+  Future<void> _openDeleteAccount() async {
+    final walletManager = WalletManager();
+    final walletIndex = await walletManager.getDefaultWalletIndex();
+    if (!mounted) return;
+    if (walletIndex == null) {
+      _snack('未找到可用热钱包，无法注销');
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('注销用户'),
+        content: const Text(
+          '注销将立即硬删除你在公民广场/私信的全部数据，无冷静期、不可恢复，链上数据不受注销影响。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('确认注销'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await SquareAccountDeletionService().deleteAccount(
+        ownerAccount: widget.ownerAccount,
+        walletIndex: walletIndex,
+        // 动钱动权 → sr25519 主钥对 0x1D 摘要签名（读硬件金库，弹一次生物识别）。
+        signAction: (message) async =>
+            '0x${bytesToHex(await walletManager.signWithWallet(walletIndex, message))}',
+      );
+    } on SquareApiException catch (e) {
+      if (mounted) _snack('注销失败：${e.message}');
+      return;
+    } on WalletAuthException catch (e) {
+      if (mounted) _snack('注销已取消：${e.message}');
+      return;
+    }
+
+    if (!mounted) return;
+    _snack('账户已注销');
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
   void _openQrCode() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => UserQrPage(
-          contactName: _profile?.resolvedDisplayName('') ??
-              _shortenAccount(widget.ownerAccount),
+          contactName: _displayName,
           address: widget.ownerAccount,
         ),
       ),
@@ -185,22 +259,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   void _openChatWithUser() {
-    final title = _profile?.resolvedDisplayName('') ??
-        _shortenAccount(widget.ownerAccount);
-    _directChat(context, peerAddress: widget.ownerAccount, title: title);
-  }
-
-  void _openImList() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => ImTabPage()),
-    );
-  }
-
-  void _openNotifications() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const _NotificationsPlaceholderPage(),
-      ),
+    _directChat(
+      context,
+      peerAddress: widget.ownerAccount,
+      title: _displayName,
     );
   }
 
@@ -222,8 +284,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  String get _title =>
-      _profile?.resolvedDisplayName('') ?? _shortenAccount(widget.ownerAccount);
+  /// 展示名 = 后端 display_name（认证 = 链上真实姓名）→ 钱包名（昵称）
+  /// → 截断地址（最后兜底）。绝不越过钱包名直接显示地址。
+  String get _displayName {
+    final resolved = _profile?.resolvedDisplayName(_walletName);
+    if (resolved != null && resolved.isNotEmpty) return resolved;
+    final fallback = _walletName.trim();
+    return fallback.isNotEmpty
+        ? fallback
+        : _shortenAccount(widget.ownerAccount);
+  }
+
+  String get _title => _displayName;
 
   String? _mediaUrl(String? objectKey) =>
       objectKey == null ? null : _api.mediaUrl(objectKey);
@@ -342,6 +414,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     onQrCode: _openQrCode,
                     onEditProfile: _openEditProfile,
                     onReport: () => _stub('举报'),
+                    onDeleteAccount: _openDeleteAccount,
                   ),
                 ],
                 flexibleSpace: FlexibleSpaceBar(
@@ -353,6 +426,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     foreground: ProfileHeaderCard(
                       ownerAccount: widget.ownerAccount,
                       profile: _profile,
+                      fallbackName: _walletName,
                       avatarUrl: _mediaUrl(_profile?.avatarObjectKey),
                       onFollowing: () => _openFollows(FollowsType.following),
                       onFollowers: () => _openFollows(FollowsType.followers),
@@ -360,10 +434,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       actions: ProfileActionIcons(
                         isSelf: widget.isSelf,
                         isFollowing: _profile?.isFollowing ?? false,
-                        onNotifications: _openNotifications,
-                        onChat: widget.isSelf ? _openImList : _openChatWithUser,
-                        onFollowingList: () =>
-                            _openFollows(FollowsType.following),
+                        onSubscribe: () => _stub('订阅动态'),
+                        onChat: _openChatWithUser,
                         onToggleFollow: _toggleFollow,
                       ),
                     ),
@@ -378,24 +450,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
               for (final tab in ProfileTab.values) _tabBody(tab),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 通知系统尚未建，先给一个占位页。
-class _NotificationsPlaceholderPage extends StatelessWidget {
-  const _NotificationsPlaceholderPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('通知'), centerTitle: true),
-      body: const Center(
-        child: Text(
-          '通知功能即将上线',
-          style: TextStyle(color: AppTheme.textTertiary),
         ),
       ),
     );

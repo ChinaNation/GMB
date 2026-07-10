@@ -241,6 +241,31 @@ pub fn chapters_of(articles: Vec<Article<Test>>) -> ChaptersOf<Test> {
     BoundedVec::try_from(vec![chapter]).expect("chapters within bound")
 }
 
+/// 构造两章宪法:核心章(第一章总则)+ 一般章(第二章),供第十九条章→档位测试。
+/// 核心章(`chapters[0]`)条款改动要求特别案,一般章条款改动要求重要案。
+pub fn chapters_core_general(
+    core_articles: Vec<Article<Test>>,
+    general_articles: Vec<Article<Test>>,
+) -> ChaptersOf<Test> {
+    let make_chapter = |number: u32, ch_title: &str, articles: Vec<Article<Test>>| Chapter::<Test> {
+        number,
+        title: title(ch_title.as_bytes()),
+        title_en: None,
+        sections: BoundedVec::try_from(vec![Section::<Test> {
+            number: 1,
+            title: title("第一节".as_bytes()),
+            title_en: None,
+            articles: BoundedVec::try_from(articles).expect("articles within bound"),
+        }])
+        .expect("sections within bound"),
+    };
+    BoundedVec::try_from(vec![
+        make_chapter(1, "第一章", core_articles),
+        make_chapter(2, "第二章", general_articles),
+    ])
+    .expect("chapters within bound")
+}
+
 pub fn title(s: &[u8]) -> BoundedVec<u8, MaxTitleLen> {
     BoundedVec::try_from(s.to_vec()).expect("title within bound")
 }

@@ -3,6 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/widgets/square_media_grid.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/identity_badge.dart';
+
+/// 作者徽章样式：颜色=链上身份、勾=会员匹配；返回 null 表示不显示徽章。
+IdentityBadgeStyle? _authorBadge(SquareAuthor author) => identityBadgeStyle(
+      identityLevel: author.identityLevel,
+      membershipLevel: author.membershipLevel,
+      membershipActive: author.membershipActive,
+    );
 
 class SquarePostCard extends StatelessWidget {
   const SquarePostCard({
@@ -86,10 +94,8 @@ class _AuthorRow extends StatelessWidget {
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: AppTheme.primary.withAlpha(20),
-                  child: Icon(
-                    author.isCertified
-                        ? Icons.verified_user_rounded
-                        : Icons.account_circle_rounded,
+                  child: const Icon(
+                    Icons.account_circle_rounded,
                     color: AppTheme.primary,
                     size: 20,
                   ),
@@ -112,10 +118,16 @@ class _AuthorRow extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (author.isCertified) ...[
+                          if (_authorBadge(author) case final badge?) ...[
                             const SizedBox(width: 6),
-                            const Icon(Icons.verified_rounded,
-                                size: 15, color: AppTheme.primary),
+                            CitizenBadge(
+                              style: badge,
+                              size: 16,
+                              tooltip: identityBadgeLabel(
+                                identityLevel: author.identityLevel,
+                                checked: badge.checked,
+                              ),
+                            ),
                           ],
                         ],
                       ),

@@ -920,6 +920,13 @@ pub mod pallet {
             (process_count, has_remaining, weight)
         }
 
+        /// 读取提案的公投选民总数(`citizen_eligible_total`);提案不存在返回 `None`。
+        /// 供立法业务壳在写入核心修宪版本时取永久公投凭据(见 legislation-vote `referendum_result`)。
+        /// 读已终结提案亦可(不校验 open 状态),故与 `ensure_open_proposal` 分开。
+        pub fn citizen_eligible_total_of(proposal_id: u64) -> Option<u64> {
+            Proposals::<T>::get(proposal_id).map(|p| p.citizen_eligible_total)
+        }
+
         pub fn ensure_open_proposal(
             proposal_id: u64,
         ) -> Result<Proposal<BlockNumberFor<T>, T::AccountId>, DispatchError> {

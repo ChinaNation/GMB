@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -8,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../8964/services/square_api_client.dart';
 import '../signer/signing.dart';
+import '../wallet/core/device_subkey.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'crypto/im_identity_binding.dart';
 import 'crypto/im_mls_boundary.dart';
@@ -22,7 +22,7 @@ import 'transport/im_transport.dart';
 typedef ImSquareLoginPayloadSigner = Future<String> Function({
   required int walletIndex,
   required String ownerAccount,
-  required String signingPayload,
+  required Uint8List loginMessage,
 });
 
 typedef ImWalletPayloadSigner = Future<String> Function({
@@ -90,6 +90,7 @@ class ImRuntime {
     SquareApiClient? squareApiClient,
     ImSquareLoginPayloadSigner? squareLoginPayloadSigner,
     ImWalletPayloadSigner? walletPayloadSigner,
+    DeviceSubkey? deviceSubkey,
     ImMlsStateStoreFactory? stateStoreFactory,
     ImMlsCryptoBoundary Function(
       ImMlsDeviceIdentity identity,
@@ -102,6 +103,7 @@ class ImRuntime {
         _squareApiClient = squareApiClient ?? SquareApiClient(),
         _squareLoginPayloadSigner = squareLoginPayloadSigner,
         _walletPayloadSigner = walletPayloadSigner,
+        _deviceSubkey = deviceSubkey ?? DeviceSubkey(),
         _stateStoreFactory = stateStoreFactory,
         _cryptoFactory = cryptoFactory,
         _cloudflareTransportFactory = cloudflareTransportFactory;
@@ -119,6 +121,7 @@ class ImRuntime {
   final SquareApiClient _squareApiClient;
   final ImSquareLoginPayloadSigner? _squareLoginPayloadSigner;
   final ImWalletPayloadSigner? _walletPayloadSigner;
+  final DeviceSubkey _deviceSubkey;
   final ImMlsStateStoreFactory? _stateStoreFactory;
   final ImMlsCryptoBoundary Function(
     ImMlsDeviceIdentity identity,
@@ -413,6 +416,7 @@ class ImRuntime {
     required SharedPreferences prefs,
     ImMlsKeyPackage? initialKeyPackage,
   }) async {
+    // 后台会话握手绝不读 seed / 不弹窗 / 不懒注册：子钥只在钱包创建时静默注册。
     final session = await _squareApiClient.ensureSession(
       ownerAccount: account.address,
       signLoginPayload: (payload) => _signSquareLoginPayload(account, payload),
@@ -513,18 +517,19 @@ class ImRuntime {
 
   Future<String> _signSquareLoginPayload(
     _ImCommunicationAccount account,
-    String signingPayload,
+    Uint8List loginMessage,
   ) async {
     final signer = _squareLoginPayloadSigner;
     if (signer != null) {
       return signer(
         walletIndex: account.walletIndex,
         ownerAccount: account.address,
-        signingPayload: signingPayload,
+        loginMessage: loginMessage,
       );
     }
-    final payload = Uint8List.fromList(utf8.encode(signingPayload));
-    return _signWalletPayload(account: account, payload: payload);
+    // 会话握手 = 非用户动权 → P-256 硬件子钥静默签名 signing_message 摘要（不读 seed、不弹生物识别）。
+    final raw = await _deviceSubkey.signRawHex(account.walletIndex, loginMessage);
+    return '0x$raw';
   }
 
   Future<String> _signWalletPayload({
@@ -546,10 +551,12 @@ class ImRuntime {
     if (!wallet.isHotWallet) {
       throw StateError('默认用户必须是热钱包');
     }
-    // 聊天登录 mailbox 与 IM 设备绑定使用默认热钱包静默签名，不弹身份验证：
-    // 这些操作不涉及转账，授权只保留在转账/投票/切换默认钱包等动钱或换身份处。
-    final signature =
-        await _walletManager.signWithWallet(account.walletIndex, payload);
+    // IM 设备绑定 = 罕见的钱包授权证明（缓存到期才重签）→ 保持 sr25519 主钥签名。
+    // 硬件绑定后无法再静默读 seed，故读硬件金库时弹一次生物识别（罕见，可接受）。
+    final signature = await _walletManager.signWithWallet(
+      account.walletIndex,
+      payload,
+    );
     return '0x${_hexEncode(signature)}';
   }
 

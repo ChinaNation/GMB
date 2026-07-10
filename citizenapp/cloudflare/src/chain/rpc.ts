@@ -4,6 +4,9 @@ import { HttpError } from '../shared/http';
 const systemEventsStorageKey =
   '0x26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7';
 
+/// 单次链上 state_getStorage 的超时（毫秒）。
+const CHAIN_RPC_TIMEOUT_MS = 3000;
+
 interface JsonRpcResponse<T> {
   result?: T;
   error?: {
@@ -34,18 +37,25 @@ export async function fetchChainStorage(
   }
 
   const params = blockHashHex ? [storageKeyHex, blockHashHex] : [storageKeyHex];
-  const response = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'state_getStorage',
-      params
-    })
-  });
+  let response: Response;
+  try {
+    response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'state_getStorage',
+        params
+      }),
+      // 链上 RPC 抖动/挂起不得拖垮请求首屏；超时即失败，由上层软降级。
+      signal: AbortSignal.timeout(CHAIN_RPC_TIMEOUT_MS)
+    });
+  } catch {
+    throw new HttpError(504, 'chain_rpc_timeout', '读取链上数据超时');
+  }
 
   if (!response.ok) {
     throw new HttpError(502, 'chain_rpc_http_failed', '读取链上事件失败');

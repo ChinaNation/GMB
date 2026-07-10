@@ -31,7 +31,9 @@ pub const ADMIN_ROLE_CODE_MAX_BYTES: u32 = 64;
 pub const ADMIN_SOURCE_REF_MAX_BYTES: u32 = 128;
 
 /// 护宪大法官职务字面量。护宪成员解析只认本常量,禁止各处手写字符串。
-pub const ADMIN_ROLE_CONSTITUTION_GUARD: &[u8] = "护宪大法官".as_bytes();
+/// 单源 = [`primitives::governance_skeleton::ROLE_CONSTITUTION_GUARD`](与节点骨架守卫 I6、
+/// 创世 role-by-index 逐字节共用),消除多份字面量。
+pub use primitives::governance_skeleton::ROLE_CONSTITUTION_GUARD as ADMIN_ROLE_CONSTITUTION_GUARD;
 /// 首席大法官职务字面量。
 pub const ADMIN_ROLE_CHIEF_JUSTICE: &[u8] = "首席大法官".as_bytes();
 /// 次席大法官职务字面量。
@@ -438,5 +440,33 @@ pub fn expected_fixed_governance_admins_len(code: InstitutionCode) -> Option<u32
         FRG => Some(FRG_PROVINCE_GROUP_ADMIN_COUNT),
         NJD => Some(NJD_ADMIN_COUNT),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 节点骨架守卫按声明序解码 `kind`/`status`(单字节判别值),此处与
+    /// `primitives::governance_skeleton` 的共享常量交叉钉死:任一枚举重排即测试红。
+    #[test]
+    fn scale_discriminants_match_governance_skeleton() {
+        assert_eq!(
+            AdminAccountKind::PublicInstitution as u8,
+            primitives::governance_skeleton::KIND_PUBLIC_INSTITUTION
+        );
+        assert_eq!(
+            AdminAccountStatus::Active as u8,
+            primitives::governance_skeleton::STATUS_ACTIVE
+        );
+    }
+
+    /// 护宪职务字面量单源(re-export 自 primitives)。
+    #[test]
+    fn constitution_guard_role_is_single_sourced() {
+        assert_eq!(
+            ADMIN_ROLE_CONSTITUTION_GUARD,
+            primitives::governance_skeleton::ROLE_CONSTITUTION_GUARD
+        );
     }
 }

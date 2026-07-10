@@ -55,6 +55,9 @@ CitizenProfile sampleProfile({
   String owner = kOwner,
   String? avatarKey,
   String? bannerKey,
+  String? identityLevel,
+  String? membershipLevel,
+  bool? membershipActive,
 }) {
   return CitizenProfile(
     ownerAccount: owner,
@@ -64,6 +67,11 @@ CitizenProfile sampleProfile({
     bannerObjectKey: bannerKey,
     cidNumber: certified ? 'CN001-CTZN-000000001-2026' : null,
     isCertified: certified,
+    // 认证真源=链上身份档位；默认认证=投票公民（蓝），未认证=访客（无徽章）。
+    identityLevel: identityLevel ?? (certified ? 'voting' : 'visitor'),
+    // 会员默认未购买（徽章不带勾，显空心环）；传 membershipLevel 才可能带勾。
+    membershipLevel: membershipLevel,
+    membershipActive: membershipActive ?? (membershipLevel != null),
     following: 2,
     followers: 128,
     posts: 36,

@@ -119,6 +119,11 @@ tokio = { workspace = true, default-features = true, features = ["time"] }
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 
+[dev-dependencies]
+# 金标向量测试用:直接 encode 真链上类型 admin-primitives::{AdminAccount, AdminProfile},
+# 喂给节点端解码器断言逐字段对齐,任何字段序漂移即测试红(仅测试编译,不进发布二进制)。
+admin-primitives = { path = "../runtime/admins/admin-primitives" }
+
 [build-dependencies]
 substrate-build-script-utils = { workspace = true, default-features = true }
 tauri-build = { version = "2", features = [] }

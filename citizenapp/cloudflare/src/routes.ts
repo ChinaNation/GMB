@@ -1,5 +1,11 @@
 import type { Env, FeedKind } from "./types";
-import { createLoginChallenge, createSession } from "./auth/service";
+import {
+  cancelMembershipChallengeRoute,
+  cancelMembershipRoute,
+  deleteAccountChallengeRoute,
+  deleteAccountRoute,
+} from "./account/service";
+import { createLoginChallenge, createSession, registerDeviceSubkey } from "./auth/service";
 import { chainBootstrapRoute } from "./chain/bootstrap";
 import { relaySignedExtrinsicRoute } from "./chain/extrinsic_relay";
 import {
@@ -20,7 +26,7 @@ import {
 import { feedRoute } from "./feeds/service";
 import { followRoute, unfollowRoute } from "./feeds/follows";
 import { mediaRoute } from "./media/service";
-import { stripeCheckoutRoute } from "./membership/checkout";
+import { subscribeChallengeRoute, subscribeConfirmRoute } from "./membership/checkout";
 import { membershipRoute } from "./membership/service";
 import { stripeWebhookRoute } from "./membership/stripe";
 import { reportRoute, signalRoute } from "./moderation/service";
@@ -75,14 +81,32 @@ export async function routeRequest(
   if (request.method === "POST" && path === "/v1/square/auth/session") {
     return createSession(request, env);
   }
+  if (request.method === "POST" && path === "/v1/square/auth/device/register") {
+    return registerDeviceSubkey(request, env);
+  }
   if (request.method === "GET" && path === "/v1/square/membership") {
     return membershipRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/membership/stripe/checkout") {
-    return stripeCheckoutRoute(request, env);
+  if (request.method === "POST" && path === "/v1/square/membership/subscribe/challenge") {
+    return subscribeChallengeRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/membership/subscribe") {
+    return subscribeConfirmRoute(request, env);
   }
   if (request.method === "POST" && path === "/v1/square/membership/stripe/webhook") {
     return stripeWebhookRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/membership/cancel/challenge") {
+    return cancelMembershipChallengeRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/membership/cancel") {
+    return cancelMembershipRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/account/delete/challenge") {
+    return deleteAccountChallengeRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/account/delete") {
+    return deleteAccountRoute(request, env);
   }
   if (request.method === "POST" && path === "/v1/square/uploads/prepare") {
     return prepareUpload(request, env);

@@ -41,8 +41,10 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use primitives::cid::china::china_lf::CHINA_LF;
     use primitives::cid::code::InstitutionCode;
+    use primitives::constitution::{self, AmendmentScope, CONSTITUTION_CORE_CHAPTER_INDEX};
     use primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES;
     use primitives::genesis::GENESIS_LAW_VERSION_LABELS;
+    use sp_runtime::sp_std::vec::Vec;
     use sp_runtime::DispatchError;
     use votingengine::{InternalAdminProvider, LegislationVoteEngine, ProposalExecutionOutcome};
 
@@ -366,6 +368,22 @@ pub mod pallet {
     pub type ConstitutionImmutableManifest<T: Config> =
         StorageValue<_, ImmutableManifest, OptionQuery>;
 
+    /// 核心修宪(第一章总则核心条款,走特别案)的**永久公投凭据**:`version → (eligible, yes, no)`。
+    /// 宪法(law_id=0)专用;`write_law_version` 对核心章改动版本写入(需过公投口径
+    /// `primitives::constitution::referendum_passed`),供节点守卫逐块背书(第十九条,ADR-027 §6.3)。
+    /// 永久保留(votingengine 90 天清理不涉及本表),故节点可对生效/待生效版本随时校验。
+    #[pallet::storage]
+    pub type ConstitutionAmendmentProof<T: Config> =
+        StorageMap<_, Blake2_128Concat, u32, (u64, u64, u64), OptionQuery>;
+
+    /// 修宪的**永久护宪终审凭据**:`version → 护宪大法官赞成票数`。
+    /// **所有** tier=宪法 的 Amend 版本(含一般章重要案)写入(需过 4/7 口径
+    /// `primitives::constitution::guard_review_passed`),供节点守卫逐块背书(第21条,ADR-027 §6.3)。
+    /// 永久保留(votingengine 90 天清理不涉及本表)。
+    #[pallet::storage]
+    pub type ConstitutionGuardVoteProof<T: Config> =
+        StorageMap<_, Blake2_128Concat, u32, u32, OptionQuery>;
+
     /// 创世配置:注入内置公民宪法作为 `tier=宪法`、`law_id=0` 的链上法律(宪法唯一真源)。
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -518,6 +536,20 @@ pub mod pallet {
         InvalidVoteTypeForConstitution,
         /// 命中宪法不可修改条款(第 1/2/3/17/19/24/34/42 条)
         ImmutableArticleViolation,
+        /// 修改第一章总则核心条款必须走特别案表决(宪法第十九条)
+        CoreClauseRequiresSpecial,
+        /// 修改第一章以外的一般条款必须走重要案表决(宪法第十九条)
+        GeneralClauseRequiresMajor,
+        /// 修宪提案未改动任何条文(空提案)
+        EmptyAmendment,
+        /// 核心修宪写入时取不到该提案的强制公投结果(第十九条:核心章改动须经公投)
+        ReferendumProofMissing,
+        /// 核心修宪的公投未达通过口径(≥70% 参与 + ≥70% 赞成)
+        ReferendumNotPassed,
+        /// 修宪写入时取不到该提案的护宪大法官终审结果(第21条:一切修宪须经护宪终审)
+        GuardReviewProofMissing,
+        /// 修宪的护宪大法官终审未达通过口径(4 名及以上赞成)
+        GuardReviewNotPassed,
         /// 宪法不可整体废止
         CannotRepealConstitution,
         /// 宪法唯一真源 = 创世 law_id=0,不可经立法入口新立第二部宪法
@@ -674,7 +706,13 @@ pub mod pallet {
                 let effective_version = law
                     .effective_version
                     .ok_or(Error::<T>::LawVersionNotFound)?;
-                Self::ensure_immutable_preserved(law_id, effective_version, &chapters)?;
+                // 第十九条章→档位强制 + 不可修改条款冻结(提案入口)。
+                Self::ensure_constitution_amend_ok(
+                    law_id,
+                    effective_version,
+                    vote_type,
+                    &chapters,
+                )?;
             }
 
             let summary = LawProposalSummary::<T> {
@@ -862,20 +900,155 @@ pub mod pallet {
                 .find(|a| a.number == number)
         }
 
-        /// 宪法不可修改条款必须与当前生效版本逐字保持一致(增/改/删任一即违规)。
-        /// 遍历 章>节>条 按条号比对。
-        fn ensure_immutable_preserved(
-            law_id: u64,
-            base_version: u32,
+        /// 宪法不可修改条款必须逐字保持一致(增/改/删任一即违规)。
+        /// 遍历 章>节>条 按条号比对当前生效全文与提案全文。
+        fn ensure_immutable_articles_unchanged(
+            current_chapters: &ChaptersOf<T>,
             new_chapters: &ChaptersOf<T>,
         ) -> DispatchResult {
-            let current = LawVersions::<T>::get(law_id, base_version)
-                .ok_or(Error::<T>::LawVersionNotFound)?;
             for &n in IMMUTABLE_CONSTITUTION_ARTICLES.iter() {
-                let cur = Self::find_article(&current.chapters, n);
-                let new = Self::find_article(new_chapters, n);
-                ensure!(cur == new, Error::<T>::ImmutableArticleViolation);
+                ensure!(
+                    Self::find_article(current_chapters, n) == Self::find_article(new_chapters, n),
+                    Error::<T>::ImmutableArticleViolation
+                );
             }
+            Ok(())
+        }
+
+        /// 收集「章>节>条」结构里全部条号(升序去重)。
+        fn all_article_numbers(chapters: &ChaptersOf<T>) -> Vec<u32> {
+            let mut ns: Vec<u32> = chapters
+                .iter()
+                .flat_map(|c| c.sections.iter())
+                .flat_map(|s| s.articles.iter())
+                .map(|a| a.number)
+                .collect();
+            ns.sort_unstable();
+            ns.dedup();
+            ns
+        }
+
+        /// 收集核心章(第一章总则,`chapters[CONSTITUTION_CORE_CHAPTER_INDEX]`)的全部条号。
+        fn core_chapter_article_numbers(chapters: &ChaptersOf<T>) -> Vec<u32> {
+            chapters
+                .get(CONSTITUTION_CORE_CHAPTER_INDEX)
+                .into_iter()
+                .flat_map(|c| c.sections.iter())
+                .flat_map(|s| s.articles.iter())
+                .map(|a| a.number)
+                .collect()
+        }
+
+        /// 判定宪法修改的改动范围(第十九条章→档位):对新旧全文逐条 diff 得变更条号,
+        /// 取核心章条号(旧∪新,覆盖增/删/改核心条),交
+        /// [`primitives::constitution::classify`] 判定。runtime 与节点守卫共用该判定单源。
+        fn constitution_amendment_scope(
+            current_chapters: &ChaptersOf<T>,
+            new_chapters: &ChaptersOf<T>,
+        ) -> AmendmentScope {
+            // 变更条号 = 新旧全部条号并集里,find_article 结果不等者(条内容含 clauses 变化亦算)。
+            let mut all = Self::all_article_numbers(current_chapters);
+            all.extend(Self::all_article_numbers(new_chapters));
+            all.sort_unstable();
+            all.dedup();
+            let changed: Vec<u32> = all
+                .into_iter()
+                .filter(|&n| {
+                    Self::find_article(current_chapters, n) != Self::find_article(new_chapters, n)
+                })
+                .collect();
+            // 核心章条号 = 第一章总则(旧∪新):新增条落入首章亦视为触碰核心章。
+            let mut core = Self::core_chapter_article_numbers(current_chapters);
+            core.extend(Self::core_chapter_article_numbers(new_chapters));
+            constitution::classify(&changed, &core, &IMMUTABLE_CONSTITUTION_ARTICLES)
+        }
+
+        /// 宪法修改专用校验(第十九条章→档位强制),供提案入口与提交层复校验共用,
+        /// 防回调/内部路径绕过。语义:
+        ///   ① 不可修改条款逐字冻结(权威 byte-for-byte);
+        ///   ② 核心章条款改动 → 必须特别案 Special;一般章改动 → 必须重要案 Major;空改动 → 拒。
+        fn ensure_constitution_amend_ok(
+            law_id: u64,
+            effective_version: u32,
+            vote_type: VoteType,
+            new_chapters: &ChaptersOf<T>,
+        ) -> DispatchResult {
+            let current = LawVersions::<T>::get(law_id, effective_version)
+                .ok_or(Error::<T>::LawVersionNotFound)?;
+            Self::ensure_immutable_articles_unchanged(&current.chapters, new_chapters)?;
+            match Self::constitution_amendment_scope(&current.chapters, new_chapters) {
+                AmendmentScope::NoChange => Err(Error::<T>::EmptyAmendment.into()),
+                // 已被 ensure_immutable_articles_unchanged 拦截,此处双保险。
+                AmendmentScope::ImmutableViolation => {
+                    Err(Error::<T>::ImmutableArticleViolation.into())
+                }
+                AmendmentScope::CoreChapter => {
+                    ensure!(
+                        vote_type == VoteType::Special,
+                        Error::<T>::CoreClauseRequiresSpecial
+                    );
+                    Ok(())
+                }
+                AmendmentScope::GeneralOnly => {
+                    ensure!(
+                        vote_type == VoteType::Major,
+                        Error::<T>::GeneralClauseRequiresMajor
+                    );
+                    Ok(())
+                }
+            }
+        }
+
+        /// 核心修宪(tier=宪法 且改动落第一章总则核心条款)写入**永久公投凭据**。
+        /// 取投票引擎的公投结果 `(eligible, yes, no)`、过通过口径 `referendum_passed`,
+        /// 存 `ConstitutionAmendmentProof[new_version]`,供节点守卫逐块背书(第十九条,ADR-027 §6.3)。
+        /// 非宪法 / 非核心章改动(一般章走重要案、无公投)→ 无操作。由 `write_law_version` Amend 分支调用。
+        fn record_constitution_amendment_proof(
+            tier: Tier,
+            law_id: u64,
+            current_effective_version: Option<u32>,
+            new_version: u32,
+            new_chapters: &ChaptersOf<T>,
+            proposal_id: u64,
+        ) -> DispatchResult {
+            if tier != Tier::Constitution {
+                return Ok(());
+            }
+            let eff = current_effective_version.ok_or(Error::<T>::LawVersionNotFound)?;
+            let current =
+                LawVersions::<T>::get(law_id, eff).ok_or(Error::<T>::LawVersionNotFound)?;
+            if Self::constitution_amendment_scope(&current.chapters, new_chapters)
+                == AmendmentScope::CoreChapter
+            {
+                let (eligible, yes, no) = T::LegislationVoteEngine::referendum_result(proposal_id)
+                    .ok_or(Error::<T>::ReferendumProofMissing)?;
+                ensure!(
+                    constitution::referendum_passed(eligible, yes, no),
+                    Error::<T>::ReferendumNotPassed
+                );
+                ConstitutionAmendmentProof::<T>::insert(new_version, (eligible, yes, no));
+            }
+            Ok(())
+        }
+
+        /// 修宪(tier=宪法,**任意章**)写入**永久护宪终审凭据**(第21条:一切修宪须经护宪大法官 4/7 终审)。
+        /// 取护宪大法官赞成票数、过口径 `guard_review_passed`,存 `ConstitutionGuardVoteProof[new_version]`,
+        /// 供节点守卫逐块背书(ADR-027 §6.3)。非宪法 → 无操作。由 `write_law_version` Amend 分支调用。
+        fn record_constitution_guard_proof(
+            tier: Tier,
+            new_version: u32,
+            proposal_id: u64,
+        ) -> DispatchResult {
+            if tier != Tier::Constitution {
+                return Ok(());
+            }
+            let approve = T::LegislationVoteEngine::guard_review_result(proposal_id)
+                .ok_or(Error::<T>::GuardReviewProofMissing)?;
+            ensure!(
+                constitution::guard_review_passed(approve),
+                Error::<T>::GuardReviewNotPassed
+            );
+            ConstitutionGuardVoteProof::<T>::insert(new_version, approve);
             Ok(())
         }
 
@@ -980,9 +1153,11 @@ pub mod pallet {
                         let effective_version = law
                             .effective_version
                             .ok_or(Error::<T>::LawVersionNotFound)?;
-                        Self::ensure_immutable_preserved(
+                        // 第十九条章→档位强制 + 不可修改条款冻结(提交层复校验,防回调绕过)。
+                        Self::ensure_constitution_amend_ok(
                             summary.law_id,
                             effective_version,
+                            summary.vote_type,
                             chapters,
                         )?;
                     }
@@ -1092,6 +1267,17 @@ pub mod pallet {
                 LawAction::Amend => {
                     let mut law = Laws::<T>::get(summary.law_id).ok_or(Error::<T>::LawNotFound)?;
                     let version = law.latest_version.saturating_add(1);
+                    // 核心修宪(第一章总则核心条款)落永久公投凭据 —— 须在 chapters 被移动前算。
+                    Self::record_constitution_amendment_proof(
+                        summary.tier,
+                        summary.law_id,
+                        law.effective_version,
+                        version,
+                        &chapters,
+                        proposal_id,
+                    )?;
+                    // 一切修宪(任意章)落永久护宪大法官终审凭据(第21条)。
+                    Self::record_constitution_guard_proof(summary.tier, version, proposal_id)?;
                     let lv = LawVersion::<T> {
                         law_id: summary.law_id,
                         version,

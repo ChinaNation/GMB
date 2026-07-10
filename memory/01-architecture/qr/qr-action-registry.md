@@ -25,6 +25,7 @@
 | 6 | `decrypt_admin` | `GMB || 0x19` 二进制 payload | 原文 | citizenchain node | CitizenWallet | 清算行管理员解密 |
 | 7 | `runtime_upgrade_hash` | 32B WASM hash | 原文 32B | citizenchain node / CitizenApp | CitizenWallet | Runtime 升级哈希直签 |
 | 8 | `im_wallet_binding` / `QR_ACTION_IM_WALLET_BINDING` | IM 绑定字段 SCALE bytes | `signing_message(OP_SIGN_IM_WALLET_BINDING, payload)` | CitizenApp | CitizenWallet | 钱包账户授权 IM 设备绑定钱包聊天账户；不得绑定区块链通信节点 |
+| 9 | `square_account_action` / `QR_ACTION_SQUARE_ACCOUNT` | 广场账户动作 SCALE bytes（`action‖owner‖challenge_id[‖level]‖u64(expires)`） | `signing_message(OP_SIGN_SQUARE_ACTION, payload)` | 官网 citizenweb / CitizenApp | CitizenApp（交易 tab「扫一扫」，owner 主钥+生物识别） | 会员订阅/取消等账户动作链下签名；owner 由 QR `u` 在本机定位钱包，两色解码 `signer/square_action_payload.dart`；Worker `account/action_challenge.ts` 构造/验签 |
 
 ## 2. 链交易动作码
 

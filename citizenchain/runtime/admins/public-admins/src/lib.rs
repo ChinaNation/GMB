@@ -301,6 +301,8 @@ pub mod pallet {
         FederalRegistryRequiresProvinceGroup,
         /// 省行政区代码不存在或没有对应联邦注册局管理员组
         InvalidProvinceGroup,
+        /// NJD 护宪大法官席位数不符(公民宪法第21条:必须恰 7 席)
+        InvalidCourtComposition,
     }
 
     #[pallet::call]
@@ -349,6 +351,8 @@ pub mod pallet {
                 current.institution_code,
                 new_admins.as_slice(),
             )?;
+            // I6:NJD 护宪席位数恒 7(等长换人保持 7 席即过;稀释/灌水拒)。
+            Self::ensure_court_composition(institution_code, &admins)?;
             ensure!(
                 !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
@@ -522,6 +526,32 @@ pub mod pallet {
             );
             Self::validate_admins_len_for_account(kind, institution_code, admins.len())?;
             Self::ensure_unique_admins(admins)?;
+            Ok(())
+        }
+
+        /// I6:NJD 护宪大法官法庭固定席位背书(公民宪法第21条 4/7 终审的「7」)。
+        ///
+        /// 仅约束 NJD;任何管理员集变更(换届/直设)其护宪计数必须恰 7,否则拒绝。与节点骨架
+        /// 守卫 I6 同源(`primitives::governance_skeleton::NJD_CONSTITUTION_GUARD_SEATS`),消除
+        /// 「runtime 放行、节点拒块」裂缝。**只冻席位数,不冻是谁**:等长换人保持 7 席即放行。
+        /// 非 NJD 直接通过。
+        pub(crate) fn ensure_court_composition(
+            institution_code: InstitutionCode,
+            admins: &[AdminProfile<T::AccountId>],
+        ) -> DispatchResult {
+            if institution_code != admin_primitives::NJD {
+                return Ok(());
+            }
+            let guard_seats = admins
+                .iter()
+                .filter(|p| {
+                    p.role_name.as_slice() == admin_primitives::ADMIN_ROLE_CONSTITUTION_GUARD
+                })
+                .count() as u32;
+            ensure!(
+                guard_seats == primitives::governance_skeleton::NJD_CONSTITUTION_GUARD_SEATS,
+                Error::<T>::InvalidCourtComposition
+            );
             Ok(())
         }
 
@@ -1143,6 +1173,8 @@ pub mod pallet {
                     new_admins.as_slice(),
                 )?;
             }
+            // I6:执行终态也复校验 NJD 护宪席位数,防提案期与执行期状态漂移。
+            Self::ensure_court_composition(account.institution_code, &action.admins)?;
             ensure!(
                 !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged

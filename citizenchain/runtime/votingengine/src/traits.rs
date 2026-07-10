@@ -81,6 +81,14 @@ pub trait LegislationVoteEngine<AccountId> {
         data: sp_std::vec::Vec<u8>,
         object_data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
+
+    /// 读取某立法提案的强制公投结果 `(eligible, yes, no)`;无公投(非特别案 / 提案不存在)返回 `None`。
+    /// 供立法业务壳在写入核心修宪版本时落**永久公投凭据**(公民宪法第十九条节点守卫背书的数据源,ADR-027 §6.3)。
+    fn referendum_result(proposal_id: u64) -> Option<(u64, u64, u64)>;
+
+    /// 读取某修宪提案的护宪大法官终审赞成票数;无终审记录(非修宪 / 未进终审)返回 `None`。
+    /// 供立法业务壳在写入修宪版本时落**永久护宪终审凭据**(公民宪法第21条节点守卫背书的数据源,ADR-027 §6.3)。
+    fn guard_review_result(proposal_id: u64) -> Option<u32>;
 }
 
 impl<AccountId> LegislationVoteEngine<AccountId> for () {
@@ -96,6 +104,14 @@ impl<AccountId> LegislationVoteEngine<AccountId> for () {
         _object_data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other("LegislationVoteEngineNotConfigured"))
+    }
+
+    fn referendum_result(_proposal_id: u64) -> Option<(u64, u64, u64)> {
+        None
+    }
+
+    fn guard_review_result(_proposal_id: u64) -> Option<u32> {
+        None
     }
 }
 

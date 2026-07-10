@@ -1,21 +1,163 @@
 import { describe, expect, it } from 'vitest';
-import { buildLoginPayload } from '../src/auth/wallet_signature';
+import { createLoginChallenge, createSession } from '../src/auth/service';
+import { hexToBytes, signingMessage } from '../src/shared/signing_message';
+import type { Env } from '../src/types';
 
-describe('wallet login payload', () => {
-  it('uses a stable domain-separated message', () => {
-    const payload = buildLoginPayload({
-      owner_account: '5GrwvaEF5zXb26Fz9rcQpDWS7u4m6DXb6T6TQvF9j5uQ8g6U',
-      challenge_id: 'sqc_001',
-      expires_at: 1_800_000
-    });
+const OWNER = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 
-    expect(payload).toBe(
-      [
-        'GMB_SQUARE_LOGIN_V1',
-        'owner_account:5GrwvaEF5zXb26Fz9rcQpDWS7u4m6DXb6T6TQvF9j5uQ8g6U',
-        'challenge_id:sqc_001',
-        'expires_at:1800000'
-      ].join('\n')
+interface ChallengeRow {
+  challenge_id: string;
+  owner_account: string;
+  signing_payload: string;
+  expires_at: number;
+  used_at: number | null;
+}
+
+class AuthStmt {
+  private binds: unknown[] = [];
+  constructor(private readonly db: AuthDb, private readonly sql: string) {}
+  bind(...args: unknown[]): AuthStmt {
+    this.binds = args;
+    return this;
+  }
+  async run(): Promise<{ meta: { changes: number } }> {
+    if (this.sql.includes('INSERT INTO square_login_challenges')) {
+      this.db.challenges.set(this.binds[0] as string, {
+        challenge_id: this.binds[0] as string,
+        owner_account: this.binds[1] as string,
+        signing_payload: this.binds[2] as string,
+        expires_at: this.binds[3] as number,
+        used_at: null
+      });
+    } else if (this.sql.includes('UPDATE square_login_challenges SET used_at')) {
+      const row = this.db.challenges.get(this.binds[1] as string);
+      if (row) row.used_at = this.binds[0] as number;
+    }
+    return { meta: { changes: 1 } };
+  }
+  async first<T>(): Promise<T | null> {
+    if (this.sql.includes('FROM square_login_challenges')) {
+      return (this.db.challenges.get(this.binds[0] as string) as T) ?? null;
+    }
+    if (this.sql.includes('FROM square_device_subkeys')) {
+      const pubkey = this.db.subkeys.get(this.binds[0] as string);
+      return pubkey ? ({ p256_pubkey: pubkey } as T) : null;
+    }
+    return null;
+  }
+}
+
+class AuthDb {
+  readonly challenges = new Map<string, ChallengeRow>();
+  readonly subkeys = new Map<string, string>();
+  prepare(sql: string): AuthStmt {
+    return new AuthStmt(this, sql);
+  }
+}
+
+class FakeKv {
+  store = new Map<string, string>();
+  async get(key: string): Promise<string | null> {
+    return this.store.get(key) ?? null;
+  }
+  async put(key: string, value: string): Promise<void> {
+    this.store.set(key, value);
+  }
+  async delete(key: string): Promise<void> {
+    this.store.delete(key);
+  }
+}
+
+function toHex(buf: ArrayBuffer): string {
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function jsonBody(request: Response): Promise<Record<string, unknown>> {
+  return (await request.json()) as Record<string, unknown>;
+}
+
+function req(path: string, body: unknown): Request {
+  return new Request(`https://worker.test${path}`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+}
+
+describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
+  async function setup() {
+    const db = new AuthDb();
+    const kv = new FakeKv();
+    const env = { DB: db, FEED_CACHE: kv } as unknown as Env;
+    const keyPair = await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify']
     );
+    const pubHex = toHex(await crypto.subtle.exportKey('raw', keyPair.publicKey));
+    db.subkeys.set(OWNER, pubHex);
+    return { db, kv, env, keyPair };
+  }
+
+  async function signChallenge(
+    keyPair: CryptoKeyPair,
+    opTag: number,
+    payloadHex: string
+  ): Promise<string> {
+    const message = signingMessage(opTag, hexToBytes(payloadHex));
+    const sig = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      keyPair.privateKey,
+      message
+    );
+    return toHex(sig);
+  }
+
+  it('signs the op_tag login message with the device subkey and mints a session', async () => {
+    const { env, keyPair } = await setup();
+
+    const challenge = await jsonBody(
+      await createLoginChallenge(req('/v1/square/auth/challenge', { owner_account: OWNER }), env)
+    );
+    expect(challenge.op_tag).toBe(0x1b);
+    expect(typeof challenge.signing_payload_hex).toBe('string');
+    // 不再下发任何 GMB_*_V1 字符串域。
+    expect(challenge.signing_payload_hex).not.toContain('GMB');
+
+    const signature = await signChallenge(
+      keyPair,
+      challenge.op_tag as number,
+      challenge.signing_payload_hex as string
+    );
+    const session = await jsonBody(
+      await createSession(
+        req('/v1/square/auth/session', {
+          owner_account: OWNER,
+          challenge_id: challenge.challenge_id,
+          signature
+        }),
+        env
+      )
+    );
+    expect(session.ok).toBe(true);
+    expect(typeof session.session_token).toBe('string');
+  });
+
+  it('rejects a signature over the wrong message', async () => {
+    const { env, keyPair } = await setup();
+    const challenge = await jsonBody(
+      await createLoginChallenge(req('/v1/square/auth/challenge', { owner_account: OWNER }), env)
+    );
+    // 对错误 payload 签名 → 摘要不符 → 拒。
+    const badSignature = await signChallenge(keyPair, 0x1b, '00'.repeat(8));
+    await expect(
+      createSession(
+        req('/v1/square/auth/session', {
+          owner_account: OWNER,
+          challenge_id: challenge.challenge_id,
+          signature: badSignature
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'invalid_signature' });
   });
 });

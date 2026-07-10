@@ -1,5 +1,6 @@
-import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:citizenapp/signer/signing.dart';
 
 /// 公民 IM 钱包账户绑定 payload。
 ///
@@ -32,11 +33,11 @@ class ImBindingPayload {
   /// 构造与 node 端一致的 SCALE 签名载荷。
   Uint8List signingPayloadBytes() {
     final builder = BytesBuilder(copy: false)
-      ..add(_scaleString(walletAccount))
-      ..add(_scaleString(imDeviceId))
-      ..add(_scaleString(imDevicePubkey))
-      ..add(_u64Le(expiresAtMillis))
-      ..add(_scaleString(nonce));
+      ..add(scaleString(walletAccount))
+      ..add(scaleString(imDeviceId))
+      ..add(scaleString(imDevicePubkey))
+      ..add(u64Le(expiresAtMillis))
+      ..add(scaleString(nonce));
     return builder.toBytes();
   }
 
@@ -53,47 +54,6 @@ class ImBindingPayload {
       'nonce': nonce,
     };
   }
-}
-
-Uint8List _scaleString(String value) {
-  final bytes = utf8.encode(value);
-  return Uint8List.fromList([..._scaleCompact(bytes.length), ...bytes]);
-}
-
-List<int> _scaleCompact(int value) {
-  if (value < 0) {
-    throw ArgumentError.value(value, 'value', 'SCALE compact 不允许负数');
-  }
-  if (value < 1 << 6) {
-    return [value << 2];
-  }
-  if (value < 1 << 14) {
-    final v = (value << 2) | 0x01;
-    return [v & 0xff, (v >> 8) & 0xff];
-  }
-  if (value < 1 << 30) {
-    final v = (value << 2) | 0x02;
-    return [
-      v & 0xff,
-      (v >> 8) & 0xff,
-      (v >> 16) & 0xff,
-      (v >> 24) & 0xff,
-    ];
-  }
-  throw ArgumentError.value(value, 'value', 'SCALE compact 超出本地支持范围');
-}
-
-List<int> _u64Le(int value) {
-  if (value < 0) {
-    throw ArgumentError.value(value, 'value', 'u64 不允许负数');
-  }
-  final out = List<int>.filled(8, 0);
-  var current = value;
-  for (var i = 0; i < out.length; i++) {
-    out[i] = current & 0xff;
-    current >>= 8;
-  }
-  return out;
 }
 
 String _hex(List<int> bytes) {

@@ -50,6 +50,10 @@ class QrActions {
   static const int runtimeUpgradeHash = 7;
   static const int imWalletBinding = 8;
 
+  /// 广场账户动作（订阅/取消/…）链下签名，走 GMB 哈希域 op_tag 0x1D。
+  /// 官网无私钥发起，CitizenApp「扫一扫」扫码用 owner 主钥签名回传。
+  static const int squareAccountAction = 9;
+
   static const int transferWithRemark = 0x0400;
   static const int personalCreate = 0x0700;
   static const int personalClose = 0x0701;

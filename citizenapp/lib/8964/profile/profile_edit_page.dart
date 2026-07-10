@@ -11,9 +11,12 @@ import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-/// 编辑本人公开资料：展示名 + 签名 + 头像 + 背景。
+/// 编辑本人公开资料：昵称（= 钱包名称）+ 签名 + 头像 + 背景。
 ///
+/// 昵称即默认钱包名称（钱包账户即用户、钱包名即昵称，同一字段）：保存时既重
+/// 命名本机默认钱包（真源），又把同名发布到后端 `display_name` 供他人可见。
 /// 头像/背景上传到 R2（不上链），保存时随 `PUT /profile` 写入 object_key。
 /// 首次打开若本地存有旧头像/背景（SharedPreferences），预载为待迁移资产，
 /// 保存成功后清本地私有副本（零残留）。
@@ -56,6 +59,10 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
   late final ImagePicker _imagePicker;
   late final TextEditingController _nameController;
   late final TextEditingController _bioController;
+  final WalletManager _walletManager = WalletManager();
+
+  /// 默认钱包 index，保存昵称时用于重命名本机钱包（真源）。
+  int? _walletIndex;
 
   _PendingImage? _pendingAvatar;
   _PendingImage? _pendingBanner;
@@ -70,11 +77,27 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
     _sessionProvider = widget.sessionProvider ?? SquareSessionProvider.instance;
     _assetService = widget.assetService ?? ProfileAssetService();
     _imagePicker = widget.imagePicker ?? ImagePicker();
+    // 昵称预填 = 后端 display_name（如有）否则默认钱包名，两者本应一致。
     _nameController =
         TextEditingController(text: widget.initialProfile?.displayName ?? '');
     _bioController =
         TextEditingController(text: widget.initialProfile?.bio ?? '');
+    _loadWalletName();
     _loadLocalMigration();
+  }
+
+  /// 加载默认钱包名作为昵称真源；若后端未设 display_name，用钱包名预填。
+  Future<void> _loadWalletName() async {
+    try {
+      final wallet = await _walletManager.getDefaultWallet();
+      if (wallet == null || !mounted) return;
+      _walletIndex = wallet.walletIndex;
+      if (_nameController.text.trim().isEmpty) {
+        _nameController.text = wallet.walletName;
+      }
+    } on Exception {
+      // 钱包名加载失败不影响编辑，静默忽略。
+    }
   }
 
   @override
@@ -183,9 +206,17 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
         bannerHash = result.contentHash;
       }
 
+      // 昵称 = 钱包名（同一字段）：先重命名本机默认钱包（真源），再随
+      // updateProfile 把同名发布到后端 display_name 供他人可见。
+      final nickname = _nameController.text.trim();
+      final walletIndex = _walletIndex;
+      if (nickname.isNotEmpty && walletIndex != null) {
+        await _walletManager.renameWallet(walletIndex, nickname);
+      }
+
       final updated = await _api.updateProfile(
         session: session,
-        displayName: _nameController.text.trim(),
+        displayName: nickname,
         bio: _bioController.text.trim(),
         avatarObjectKey: avatarKey,
         avatarContentHash: avatarHash,
@@ -285,8 +316,8 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
             controller: _nameController,
             maxLength: _displayNameMax,
             decoration: const InputDecoration(
-              labelText: '展示名',
-              hintText: '留空则显示钱包名',
+              labelText: '昵称（即钱包名称）',
+              hintText: '给自己起个名字',
             ),
           ),
           const SizedBox(height: 16),

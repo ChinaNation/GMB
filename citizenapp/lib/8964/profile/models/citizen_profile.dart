@@ -11,6 +11,9 @@ class CitizenProfile {
     required this.bannerObjectKey,
     required this.cidNumber,
     required this.isCertified,
+    required this.identityLevel,
+    required this.membershipLevel,
+    required this.membershipActive,
     required this.following,
     required this.followers,
     required this.posts,
@@ -25,6 +28,16 @@ class CitizenProfile {
   final String? bannerObjectKey;
   final String? cidNumber;
   final bool isCertified;
+
+  /// 链上身份档位：visitor 未认证 / voting 认证投票公民 / candidate 认证竞选公民。
+  /// 认证真源=链上，徽章据此分色（访客橙/投票蓝/竞选红）。
+  final String identityLevel;
+
+  /// 已购买的会员档位（公开）：visitor/voting/candidate/null。徽章「勾」= 会员档匹配身份档。
+  final String? membershipLevel;
+
+  /// 会员是否当前有效。
+  final bool membershipActive;
   final int following;
   final int followers;
   final int posts;
@@ -57,6 +70,9 @@ class CitizenProfile {
       bannerObjectKey: _asNullableString(json['banner_object_key']),
       cidNumber: _asNullableString(json['cid_number']),
       isCertified: json['is_certified'] == true,
+      identityLevel: _asIdentityLevel(json['identity_level']),
+      membershipLevel: _asMembershipLevel(json['membership_level']),
+      membershipActive: json['membership_active'] == true,
       following: _asInt(countsMap['following']),
       followers: _asInt(countsMap['followers']),
       posts: _asInt(countsMap['posts']),
@@ -73,6 +89,9 @@ class CitizenProfile {
         'banner_object_key': bannerObjectKey,
         'cid_number': cidNumber,
         'is_certified': isCertified,
+        'identity_level': identityLevel,
+        'membership_level': membershipLevel,
+        'membership_active': membershipActive,
         'counts': <String, dynamic>{
           'following': following,
           'followers': followers,
@@ -103,6 +122,9 @@ class CitizenProfile {
           : bannerObjectKey as String?,
       cidNumber: cidNumber,
       isCertified: isCertified,
+      identityLevel: identityLevel,
+      membershipLevel: membershipLevel,
+      membershipActive: membershipActive,
       following: following,
       followers: followers ?? this.followers,
       posts: posts,
@@ -137,6 +159,24 @@ String _asString(Object? value) => value?.toString() ?? '';
 String? _asNullableString(Object? value) {
   final normalized = value?.toString().trim() ?? '';
   return normalized.isEmpty ? null : normalized;
+}
+
+/// 归一化链上身份档位；未知/缺失一律 visitor（fail-closed，不误判认证）。
+String _asIdentityLevel(Object? value) {
+  final normalized = value?.toString().trim();
+  return (normalized == 'voting' || normalized == 'candidate')
+      ? normalized!
+      : 'visitor';
+}
+
+/// 归一化会员档位；未知/缺失/未购买 → null（不给勾）。
+String? _asMembershipLevel(Object? value) {
+  final normalized = value?.toString().trim();
+  return (normalized == 'visitor' ||
+          normalized == 'voting' ||
+          normalized == 'candidate')
+      ? normalized
+      : null;
 }
 
 int _asInt(Object? value) {

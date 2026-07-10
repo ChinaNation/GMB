@@ -212,6 +212,9 @@ fn enum_discriminants_match_node_guard() {
     assert_eq!(LawStatus::Pending.encode(), vec![0u8]);
     assert_eq!(LawStatus::Effective.encode(), vec![1u8]);
     assert_eq!(LawStatus::Repealed.encode(), vec![2u8]);
+    // 特别案 wire 值 = 4:节点守卫 `LEG_VOTE_SPECIAL` 据此判定核心章档位背书(第十九条)。
+    assert_eq!(VoteType::Special.as_u8(), 4);
+    assert_eq!(VoteType::Special.encode(), vec![4u8]);
 }
 
 #[test]
@@ -311,6 +314,248 @@ fn amend_constitution_immutable_article_rejected() {
                 200,
             ),
             Error::<Test>::ImmutableArticleViolation
+        );
+    });
+}
+
+// 预置一部两章宪法(核心章第一章 + 一般章第二章),供第十九条章→档位强制测试。
+// 核心章:第 1 条(不可修改)+ 第 5、20 条(核心非禁改);一般章:第 60、61 条。
+fn seed_constitution_tiered() {
+    let law_id = 0u64;
+    let version = 1u32;
+    let chapters = chapters_core_general(
+        vec![
+            article(1, b"core-1"),
+            article(5, b"core-5"),
+            article(20, b"core-20"),
+        ],
+        vec![article(60, b"gen-60"), article(61, b"gen-61")],
+    );
+    LawVersions::<Test>::insert(
+        law_id,
+        version,
+        LawVersion::<Test> {
+            law_id,
+            version,
+            title: title(b"constitution"),
+            title_en: None,
+            chapters,
+            content_hash: [0u8; 32],
+            vote_type: VoteType::Special,
+            proposal_id: 1,
+            published_at: 1_000,
+            effective_at: 1_000,
+        },
+    );
+    Laws::<Test>::insert(
+        law_id,
+        Law::<Test> {
+            law_id,
+            tier: Tier::Constitution,
+            scope_code: 0,
+            houses: houses(),
+            effective_version: Some(version),
+            latest_version: version,
+            pending_version: None,
+            status: LawStatus::Effective,
+        },
+    );
+    let _ = LawsByScope::<Test>::try_mutate(Tier::Constitution, 0, |v| v.try_push(law_id));
+    NextLawId::<Test>::put(1);
+}
+
+#[test]
+fn amend_core_chapter_with_major_rejected() {
+    // 第十九条:改第一章核心条款必须走特别案。用重要案改核心章第 5 条 → 拒。
+    new_test_ext().execute_with(|| {
+        seed_constitution_tiered();
+        assert_noop!(
+            Lib::propose_amend_law(
+                RuntimeOrigin::signed(legislator()),
+                0,
+                proposer_body(),
+                executive(),
+                None,
+                VoteType::Major,
+                title(b"c-v2"),
+                None,
+                chapters_core_general(
+                    vec![
+                        article(1, b"core-1"),
+                        article(5, b"CHANGED"),
+                        article(20, b"core-20"),
+                    ],
+                    vec![article(60, b"gen-60"), article(61, b"gen-61")],
+                ),
+                200,
+            ),
+            Error::<Test>::CoreClauseRequiresSpecial
+        );
+    });
+}
+
+#[test]
+fn amend_core_chapter_with_special_passes_gate() {
+    // 用特别案改核心章第 5 条 → 过章→档位闸 → 到引擎 () → VoteEngineCreateFailed。
+    new_test_ext().execute_with(|| {
+        seed_constitution_tiered();
+        assert_noop!(
+            Lib::propose_amend_law(
+                RuntimeOrigin::signed(legislator()),
+                0,
+                proposer_body(),
+                executive(),
+                None,
+                VoteType::Special,
+                title(b"c-v2"),
+                None,
+                chapters_core_general(
+                    vec![
+                        article(1, b"core-1"),
+                        article(5, b"CHANGED"),
+                        article(20, b"core-20"),
+                    ],
+                    vec![article(60, b"gen-60"), article(61, b"gen-61")],
+                ),
+                200,
+            ),
+            Error::<Test>::VoteEngineCreateFailed
+        );
+    });
+}
+
+#[test]
+fn amend_general_chapter_with_special_rejected() {
+    // 第十九条:改第一章以外的一般条款必须走重要案。用特别案改一般章第 60 条 → 拒。
+    new_test_ext().execute_with(|| {
+        seed_constitution_tiered();
+        assert_noop!(
+            Lib::propose_amend_law(
+                RuntimeOrigin::signed(legislator()),
+                0,
+                proposer_body(),
+                executive(),
+                None,
+                VoteType::Special,
+                title(b"c-v2"),
+                None,
+                chapters_core_general(
+                    vec![
+                        article(1, b"core-1"),
+                        article(5, b"core-5"),
+                        article(20, b"core-20"),
+                    ],
+                    vec![article(60, b"CHANGED"), article(61, b"gen-61")],
+                ),
+                200,
+            ),
+            Error::<Test>::GeneralClauseRequiresMajor
+        );
+    });
+}
+
+#[test]
+fn amend_general_chapter_with_major_passes_gate() {
+    // 用重要案改一般章第 60 条 → 过章→档位闸 → 到引擎 () → VoteEngineCreateFailed。
+    new_test_ext().execute_with(|| {
+        seed_constitution_tiered();
+        assert_noop!(
+            Lib::propose_amend_law(
+                RuntimeOrigin::signed(legislator()),
+                0,
+                proposer_body(),
+                executive(),
+                None,
+                VoteType::Major,
+                title(b"c-v2"),
+                None,
+                chapters_core_general(
+                    vec![
+                        article(1, b"core-1"),
+                        article(5, b"core-5"),
+                        article(20, b"core-20"),
+                    ],
+                    vec![article(60, b"CHANGED"), article(61, b"gen-61")],
+                ),
+                200,
+            ),
+            Error::<Test>::VoteEngineCreateFailed
+        );
+    });
+}
+
+#[test]
+fn amend_constitution_no_change_rejected() {
+    // 全文与当前生效版本完全一致 → 空提案,拒(EmptyAmendment)。
+    new_test_ext().execute_with(|| {
+        seed_constitution_tiered();
+        assert_noop!(
+            Lib::propose_amend_law(
+                RuntimeOrigin::signed(legislator()),
+                0,
+                proposer_body(),
+                executive(),
+                None,
+                VoteType::Special,
+                title(b"c-v2"),
+                None,
+                chapters_core_general(
+                    vec![
+                        article(1, b"core-1"),
+                        article(5, b"core-5"),
+                        article(20, b"core-20"),
+                    ],
+                    vec![article(60, b"gen-60"), article(61, b"gen-61")],
+                ),
+                200,
+            ),
+            Error::<Test>::EmptyAmendment
+        );
+    });
+}
+
+#[test]
+fn write_core_amend_without_referendum_proof_rejected() {
+    // 提交层复校验:核心章改动 + 特别案,但引擎无公投结果(mock=()→None)→ 拒(ReferendumProofMissing)。
+    new_test_ext().execute_with(|| {
+        seed_constitution_tiered();
+        let mut summary = enact_summary(Tier::Constitution, 0, VoteType::Special, b"c-v2");
+        summary.action = LawAction::Amend;
+        summary.law_id = 0;
+        let new_chapters = chapters_core_general(
+            vec![
+                article(1, b"core-1"),
+                article(5, b"CHANGED"),
+                article(20, b"core-20"),
+            ],
+            vec![article(60, b"gen-60"), article(61, b"gen-61")],
+        );
+        assert_noop!(
+            Lib::write_law_version(9, summary, new_chapters, Timestamp::now()),
+            Error::<Test>::ReferendumProofMissing
+        );
+    });
+}
+
+#[test]
+fn write_amend_without_guard_proof_rejected() {
+    // 提交层:一般章修宪(重要案,免公投),但引擎无护宪终审结果(mock=()→None)→ 拒(GuardReviewProofMissing)。
+    new_test_ext().execute_with(|| {
+        seed_constitution_tiered();
+        let mut summary = enact_summary(Tier::Constitution, 0, VoteType::Major, b"c-v2");
+        summary.action = LawAction::Amend;
+        summary.law_id = 0;
+        let new_chapters = chapters_core_general(
+            vec![
+                article(1, b"core-1"),
+                article(5, b"core-5"),
+                article(20, b"core-20"),
+            ],
+            vec![article(60, b"CHANGED"), article(61, b"gen-61")],
+        );
+        assert_noop!(
+            Lib::write_law_version(9, summary, new_chapters, Timestamp::now()),
+            Error::<Test>::GuardReviewProofMissing
         );
     });
 }

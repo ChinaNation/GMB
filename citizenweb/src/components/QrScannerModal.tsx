@@ -4,6 +4,9 @@ import jsQR from 'jsqr'
 interface QrScannerModalProps {
   onResult: (text: string) => void
   onClose: () => void
+  /** 弹层标题与提示（默认扫钱包地址；签名往返时传「扫描签名结果」）。 */
+  title?: string
+  hint?: string
 }
 
 /** 全分辨率逐帧解码会阻塞主线程，按此间隔节流 */
@@ -12,7 +15,12 @@ const DECODE_INTERVAL_MS = 150
 const DECODE_MAX_DIMENSION = 640
 
 /** 摄像头扫码弹层：识别到二维码后回传解码文本并由父组件关闭 */
-export default function QrScannerModal({ onResult, onClose }: QrScannerModalProps) {
+export default function QrScannerModal({
+  onResult,
+  onClose,
+  title = '扫码识别钱包地址',
+  hint = '将 CitizenApp 钱包地址二维码对准取景框，识别后自动填入',
+}: QrScannerModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
   // getUserMedia 只在 HTTPS 或 localhost 下可用，环境能力在渲染期即可判定
@@ -133,7 +141,7 @@ export default function QrScannerModal({ onResult, onClose }: QrScannerModalProp
       className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/80 px-6 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="扫码识别钱包地址"
+      aria-label={title}
       onClick={onClose}
     >
       <div
@@ -142,7 +150,7 @@ export default function QrScannerModal({ onResult, onClose }: QrScannerModalProp
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">扫码识别钱包地址</h3>
+          <h3 className="text-lg font-semibold text-white">{title}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -176,9 +184,7 @@ export default function QrScannerModal({ onResult, onClose }: QrScannerModalProp
           </div>
         )}
 
-        <p className="mt-4 text-center text-xs text-slate-500">
-          将 CitizenApp 钱包地址二维码对准取景框，识别后自动填入
-        </p>
+        <p className="mt-4 text-center text-xs text-slate-500">{hint}</p>
       </div>
     </div>
   )

@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
+import 'package:citizenapp/signer/signing.dart';
+import 'package:citizenapp/wallet/core/device_subkey.dart' show hexToBytes;
 
 class SquareApiException implements Exception {
   const SquareApiException(this.message, {this.statusCode, this.errorCode});
@@ -245,7 +248,14 @@ abstract class SquarePostDeletionService {
   });
 }
 
-typedef SquareLoginSigner = Future<String> Function(String signingPayload);
+/// 广场登录签名器：对 `signing_message(OP_SIGN_SQUARE_LOGIN)` 的 32 字节摘要
+/// 做签名，返回 `0x` hex 签名。摘要由 [_establishSession] 统一构造（客户端钉死
+/// op_tag，绝不采信服务端下发的 op_tag）。
+typedef SquareLoginSigner = Future<String> Function(Uint8List loginMessage);
+
+/// 账户敏感动作（注销/退订）签名器：对 `signing_message(OP_SIGN_SQUARE_ACTION)`
+/// 的 32 字节摘要用 sr25519 **主钥**签名，返回 `0x` hex 签名（动钱动权，弹生物识别）。
+typedef SquareActionSigner = Future<String> Function(Uint8List actionMessage);
 
 class SquareApiConfig {
   const SquareApiConfig._();
@@ -310,20 +320,44 @@ class SquareApiClient
   Future<SquareSession> ensureSession({
     required String ownerAccount,
     required SquareLoginSigner signLoginPayload,
+    Future<void> Function()? onDeviceNotRegistered,
   }) async {
     final cached = _sessions[ownerAccount];
     if (cached != null && cached.isUsable) return cached;
 
+    try {
+      return await _establishSession(ownerAccount, signLoginPayload);
+    } on SquareApiException catch (e) {
+      // 设备子钥未注册（首次 / 换机 / 重装）→ 懒注册后重试一次。
+      if (e.errorCode != 'device_not_registered' ||
+          onDeviceNotRegistered == null) {
+        rethrow;
+      }
+      await onDeviceNotRegistered();
+      return _establishSession(ownerAccount, signLoginPayload);
+    }
+  }
+
+  Future<SquareSession> _establishSession(
+    String ownerAccount,
+    SquareLoginSigner signLoginPayload,
+  ) async {
     final challenge = await _postJson('/v1/square/auth/challenge', {
       'owner_account': ownerAccount,
     });
-    final signingPayload = challenge['signing_payload'];
+    final signingPayloadHex = challenge['signing_payload_hex'];
     final challengeId = challenge['challenge_id'];
-    if (signingPayload is! String || challengeId is! String) {
+    if (signingPayloadHex is! String || challengeId is! String) {
       throw const SquareApiException('广场登录挑战响应不完整');
     }
 
-    final signature = await signLoginPayload(signingPayload);
+    // 客户端钉死 op_tag（登录 = OP_SIGN_SQUARE_LOGIN），只对 worker 下发的 SCALE
+    // payload 重算 signing_message 摘要后签名，杜绝服务端诱导跨域签名。
+    final loginMessage = signingMessage(
+      opTag: kOpSignSquareLogin,
+      scalePayload: hexToBytes(signingPayloadHex),
+    );
+    final signature = await signLoginPayload(loginMessage);
     final session = await _postJson('/v1/square/auth/session', {
       'challenge_id': challengeId,
       'owner_account': ownerAccount,
@@ -342,6 +376,82 @@ class SquareApiClient
     );
     _sessions[ownerAccount] = next;
     return next;
+  }
+
+  /// 清除某账户的本地会话缓存（注销后调用，配合 Worker 端会话失效实现零残留）。
+  void clearSession(String ownerAccount) {
+    _sessions.remove(ownerAccount);
+  }
+
+  /// 注销账户：硬删除该用户在 Cloudflare 的全部数据（链上数据不受影响）。
+  Future<void> deleteAccount({
+    required String ownerAccount,
+    required SquareActionSigner signAction,
+  }) {
+    return _consumeAccountAction(
+      ownerAccount: ownerAccount,
+      challengePath: '/v1/square/account/delete/challenge',
+      confirmPath: '/v1/square/account/delete',
+      signAction: signAction,
+    );
+  }
+
+  /// 取消订阅：到期取消（当期用完再终止）。目前由官网扫码触发，App 侧底座就位。
+  Future<void> cancelMembership({
+    required String ownerAccount,
+    required SquareActionSigner signAction,
+  }) {
+    return _consumeAccountAction(
+      ownerAccount: ownerAccount,
+      challengePath: '/v1/square/membership/cancel/challenge',
+      confirmPath: '/v1/square/membership/cancel',
+      signAction: signAction,
+    );
+  }
+
+  /// 账户敏感动作签名往返：取挑战 → 客户端**钉死** op_tag 重算摘要并签 → 提交确认。
+  /// 绝不采信服务端下发的 op_tag（固定 [kOpSignSquareAction]），防被诱导跨域签名。
+  Future<void> _consumeAccountAction({
+    required String ownerAccount,
+    required String challengePath,
+    required String confirmPath,
+    required SquareActionSigner signAction,
+  }) async {
+    final challenge = await _postJson(challengePath, {
+      'owner_account': ownerAccount,
+    });
+    final signingPayloadHex = challenge['signing_payload_hex'];
+    final challengeId = challenge['challenge_id'];
+    if (signingPayloadHex is! String || challengeId is! String) {
+      throw const SquareApiException('动作挑战响应不完整');
+    }
+    final message = signingMessage(
+      opTag: kOpSignSquareAction,
+      scalePayload: hexToBytes(signingPayloadHex),
+    );
+    final signature = await signAction(message);
+    await _postJson(confirmPath, {
+      'owner_account': ownerAccount,
+      'challenge_id': challengeId,
+      'signature': signature,
+    });
+  }
+
+  /// 注册 P-256 设备子钥：绑定证明由 sr25519 主钥对
+  /// [buildDeviceBindingSigningMessage]（op_tag 摘要）签名，后端验签后落库。
+  /// 此后登录挑战改由子钥静默签名。
+  Future<void> registerDeviceSubkey({
+    required String ownerAccount,
+    required String p256PubkeyHex,
+    required int issuedAt,
+    required String bindingSignatureHex,
+  }) async {
+    await _postJson('/v1/square/auth/device/register', {
+      'owner_account': ownerAccount,
+      'p256_pubkey': p256PubkeyHex,
+      'issued_at': issuedAt,
+      'binding_signature': bindingSignatureHex,
+    });
   }
 
   Future<SquareMembershipState> fetchMembership(SquareSession session) async {
@@ -886,6 +996,10 @@ class SquareApiClient
       author: SquareAuthor(
         ownerAccount: _requireString(data, 'owner_account'),
         cidNumber: data['cid_number']?.toString(),
+        // 作者徽章信号（Worker feed 已按去重作者读链身份+会员回填）。
+        identityLevel: data['identity_level']?.toString(),
+        membershipLevel: data['membership_level']?.toString(),
+        membershipActive: data['membership_active'] == true,
       ),
       postCategory: _parseCategory(data['post_category']),
       contentFormat: data['content_format'] == 'article'

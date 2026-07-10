@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
@@ -20,6 +21,11 @@ void main() {
 
   late FakeSecureSeedStore fakeStore;
 
+  // 动钱动权验证已上移到 WalletManager 的 local_auth；单测里把该 channel
+  // 打桩为「验证通过」，让 signWithWallet/verifyWalletAccess 走到 seed 读取与
+  // 自愈分支（否则纯 Dart 环境无插件实现，authenticate 抛 MissingPluginException）。
+  const localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');
+
   setUpAll(() async {
     await WalletIsar.instance.ensureTestCoreInitialized();
   });
@@ -29,6 +35,26 @@ void main() {
     await WalletIsar.instance.resetForTest();
     fakeStore = FakeSecureSeedStore();
     WalletManager.debugSeedStore = fakeStore;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(localAuthChannel, (call) async {
+      switch (call.method) {
+        case 'authenticate':
+          return true;
+        case 'getAvailableBiometrics':
+          return <String>['fingerprint', 'face'];
+        case 'isDeviceSupported':
+        case 'deviceSupportsBiometrics':
+        case 'canCheckBiometrics':
+          return true;
+        default:
+          return null;
+      }
+    });
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(localAuthChannel, null);
   });
 
   group('WalletManager — 热钱包创建/导入/删除', () {

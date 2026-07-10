@@ -98,7 +98,10 @@ export async function refreshProviderAssetState(
   return refreshImageAsset(env, row.provider_asset_id);
 }
 
-export async function deleteProviderAsset(env: Env, row: MediaAssetRow): Promise<void> {
+export async function deleteProviderAsset(
+  env: Env,
+  row: Pick<MediaAssetRow, 'provider' | 'provider_asset_id'>
+): Promise<void> {
   // 本地验收环境没有真实 Images / Stream 资源，删除动作由 D1/R2 清理覆盖。
   if (env.SQUARE_DEV_UPLOAD_PROXY === '1') {
     return;

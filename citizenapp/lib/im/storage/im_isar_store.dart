@@ -194,6 +194,59 @@ class ImIsarStore {
     });
   }
 
+  /// 注销用户：清除该 owner 在本机的全部 IM 历史（会话/消息/出入站队列）。
+  ///
+  /// Cloudflare 端 A 的 IM 数据由 Worker purge 删除；本地 Isar 是 A 私信**明文**
+  /// 的唯一残留处，须一并清空以做到零残留。路由缓存（imRouteCacheEntity）是设备级
+  /// 对端路由、非 owner 归属，不在此清除。
+  Future<void> clearAllForOwner(String ownerChatAccount) {
+    return _walletIsar.writeTxn((isar) async {
+      final conversations = await isar.imConversationEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      final owned = conversations
+          .where((c) => c.ownerChatAccount == ownerChatAccount)
+          .toList(growable: false);
+      final ownedIds = owned.map((c) => c.conversationId).toSet();
+      for (final c in owned) {
+        await isar.imConversationEntitys.delete(c.id);
+      }
+
+      final messages = await isar.imMessageEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      for (final m in messages.where(
+        (m) =>
+            m.ownerChatAccount == ownerChatAccount ||
+            ownedIds.contains(m.conversationId),
+      )) {
+        await isar.imMessageEntitys.delete(m.id);
+      }
+
+      final outbound = await isar.imOutboundQueueEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      for (final o in outbound.where(
+        (o) => ownedIds.contains(o.conversationId),
+      )) {
+        await isar.imOutboundQueueEntitys.delete(o.id);
+      }
+
+      final pending = await isar.imPendingInboundEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      for (final p in pending.where(
+        (p) => ownedIds.contains(p.conversationId),
+      )) {
+        await isar.imPendingInboundEntitys.delete(p.id);
+      }
+    });
+  }
+
   Future<void> saveOutgoingEnvelope({
     required ImEnvelope envelope,
     required List<int> envelopeBytes,

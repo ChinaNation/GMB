@@ -66,13 +66,29 @@ class SquareAuthor {
     required this.ownerAccount,
     this.cidNumber,
     this.displayName,
+    this.identityLevel,
+    this.membershipLevel,
+    this.membershipActive = false,
   });
 
   final String ownerAccount;
   final String? cidNumber;
   final String? displayName;
 
-  bool get isCertified => cidNumber != null && cidNumber!.isNotEmpty;
+  /// 作者链上身份档（徽章颜色）：visitor/voting/candidate/null。
+  final String? identityLevel;
+
+  /// 作者已购买会员档（徽章勾）：visitor/voting/candidate/null。
+  final String? membershipLevel;
+
+  /// 作者会员是否有效。
+  final bool membershipActive;
+
+  bool get isCertified {
+    final level = identityLevel;
+    if (level != null) return level != 'visitor';
+    return cidNumber != null && cidNumber!.isNotEmpty;
+  }
 
   String get title {
     final name = displayName;

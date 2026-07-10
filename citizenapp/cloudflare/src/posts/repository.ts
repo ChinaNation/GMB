@@ -1,5 +1,6 @@
 import type { Env, FeedKind, SquarePostFeedItem, SquarePostRow } from '../types';
 import { buildFeedPostItem } from './confirm';
+import { resolveAuthorSignals } from '../social/author_signals';
 
 export async function listFeedPosts(
   env: Env,
@@ -61,5 +62,18 @@ async function hydrateFeedItems(
   env: Env,
   rows: SquarePostRow[]
 ): Promise<SquarePostFeedItem[]> {
-  return Promise.all(rows.map((row) => buildFeedPostItem(env, row)));
+  // 本页去重作者统一读链上身份+批量读会员，回填每条帖子作者的徽章信号。
+  const [signals, items] = await Promise.all([
+    resolveAuthorSignals(env, rows.map((row) => row.owner_account)),
+    Promise.all(rows.map((row) => buildFeedPostItem(env, row)))
+  ]);
+  return items.map((item) => {
+    const signal = signals.get(item.owner_account);
+    return {
+      ...item,
+      identity_level: signal?.identity_level ?? 'visitor',
+      membership_level: signal?.membership_level ?? null,
+      membership_active: signal?.membership_active ?? false
+    };
+  });
 }

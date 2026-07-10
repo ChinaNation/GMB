@@ -180,8 +180,9 @@ LawVersion {
 ### 6. 修宪特别约束(第十九条)
 
 - 第一章总则核心条款修改 → 国家立法院特别案(= 必须立法公投)。
-- 不可修改条款硬清单:第 1、2、3、17、19、23、33、41 条(单源 `primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES`)。
-- 其它章节修改 → 国家立法院重要案。
+- 不可修改条款硬清单:第 1、2、3、17、19、24、34、42 条(单源 `primitives::count_const::IMMUTABLE_CONSTITUTION_ARTICLES`)。
+- 其它章节(第二章起)修改 → 国家立法院重要案。
+- **上述「章→档位」绑定为代码强制(2026-07-09 落地),不再依赖提案人自选 + 表决机构把关,详见 §6.3。**
 
 #### 6.1 不可修改条款「真不可修改」三层守卫 —— 已落地(2026-06-24)
 
@@ -227,6 +228,89 @@ LawVersion {
     避免多个待生效版本互相覆盖;现行生效版直接读 `effective_version`,不再做减一推断。
 - 验收:node 21 单测 + legislation-yuan 23 单测(含禁宪法/判别值/拒重叠 Pending/写入层复校验/warp 预校验纯函数)+ no_std + fmt 全过。
   **待 QA**:H2 warp 多节点真机(提交前抽取 `ImportedState` 的实测,实现风险最高项)+ 双执行 PoW 性能。
+
+#### 6.3 修宪「章→档位」硬规则 —— 已落地(2026-07-09,卡 `20260709-constitution-amend-tier-hardrule`)
+
+第十九条把修宪分三档:**不可修改条款(禁改)/ 第一章总则核心条款(特别案+公投)/ 第二章起一般条款(重要案)**。
+原实现只强制「不可修改条款禁改」与「宪法不得用常规案」,而「核心章→特别案、一般章→重要案」的绑定
+仅靠提案人自选 `vote_type` + 表决机构人工把关,代码未强制。本次将该绑定做成硬规则,分两步:
+
+- **判定单源(`primitives::constitution`)**:纯函数 `classify(changed, core, immutable) -> AmendmentScope`
+  (`NoChange/ImmutableViolation/CoreChapter/GeneralOnly`),与泛型 `T`、存储解耦,runtime 与节点守卫**共用同一份**,
+  靠交叉测试锁死语义一致。核心章 = 第一章总则(`CONSTITUTION_CORE_CHAPTER_INDEX=0`)。
+
+- **第一步 runtime 强制(`legislation-yuan`)**:`propose_amend_law` 与**提交层复校验** `ensure_write_law_version_allowed`
+  统一走 `ensure_constitution_amend_ok`:对新旧全文逐条 diff 得改动范围 →
+  核心章条款改动必须 `Special`(否则 `CoreClauseRequiresSpecial`)、一般章改动必须 `Major`(否则 `GeneralClauseRequiresMajor`,
+  **只许 Major,不许自愿升格 Special**)、空改动拒(`EmptyAmendment`)。两处入口共用,防回调/内部路径绕过。
+
+- **第二步 node 背书(`node/src/core/constitution.rs`,setCode 改不动)**:守卫 `ImmutableReference` 从 block#0 **另派生
+  核心章非禁改条款基准** `core_articles`(无需改创世 manifest、无需重新创世);逐块校验 `check_core_chapter_tier`:
+  任一创世核心条款相对基准被**修改/删除/移出核心章**,则承载它的版本必须记录 `vote_type==Special`(`LEG_VOTE_SPECIAL=4`,
+  由 `enum_discriminants_match_node_guard` 钉死),否则 `CoreClauseNotSpecial(n)` 拒块。使 setCode 无法把核心章修改静默降级为重要案。
+
+- **第三步 公投凭据背书(设计 B,2026-07-09 同批落地)**:仅记录 `vote_type==Special` 可被撒谎的 runtime 伪造,
+  故再落一层**永久公投凭据**——`write_law_version` 对核心章改动版本,经 `LegislationVoteEngine::referendum_result`
+  取公投计票 `(eligible, yes, no)`、过口径 `primitives::constitution::referendum_passed`,写入 legislation-yuan **永久**
+  `ConstitutionAmendmentProof[version]`(不受 votingengine 90 天清理影响);缺失/未过 → `ReferendumProofMissing`/`ReferendumNotPassed`。
+  节点 `check_core_referendum_proof` 对核心章有改动的版本(生效/待生效)逐块读该凭据并复核口径,缺/不过 →
+  `CoreClauseReferendumMissing/NotPassed` 拒块。**永久存储 + 同 pallet 读**,故无需转移块检测、无跨 pallet 布局漂移、无需重新创世。
+  口径单源迁入 `primitives::constitution::referendum_passed`(votingengine `legislation_referendum_final_passed` 改为转发)。
+
+- **第四步 护宪大法官终审凭据背书(第21条,2026-07-09 同批落地)**:第21条要求**一切修宪**(含一般章重要案)最终经
+  护宪大法官 4/7 终审才生效——覆盖面比公投更广(公投仅核心章)。同设计 B:`LegislationVoteEngine::guard_review_result`
+  取护宪赞成票数(数 `LegGuardSigns` 里 approve=true),`write_law_version` 对**所有** tier=宪法 Amend 版本经口径
+  `primitives::constitution::guard_review_passed`(≥4)后写入 legislation-yuan **永久** `ConstitutionGuardVoteProof[version]`;
+  缺/不过 → `GuardReviewProofMissing`/`GuardReviewNotPassed`。节点 `check_guard_review_proof` 对**每个** `v>创世` 的修宪版本
+  逐块读凭据 + 复核口径,缺/不过 → `GuardReviewMissing/NotPassed(v)` 拒块。阈值单源 `CONSTITUTION_GUARD_APPROVAL_THRESHOLD=4`
+  迁入 primitives(legislation-vote 引用之)。**护宪成员真源 = admins-change(`constitution_guard_members()` 查 NJD role=护宪大法官),
+  无论普选/互选/联邦特权/阈值票产生,终态都在此真源**——本层锚定它即可,不绑普选(普选生命周期是上游、另议)。
+
+- **天花板(honest)**:节点只读状态、runtime 产出状态,一个完全恶意的 runtime 仍可伪造自洽的通过计票(甚至选民集/护宪成员集);
+  故本层是**纵深防御**(抬高伪造成本、抓漏做/半做/只改 vote_type 不伪造计票),**非**对抗完全恶意 runtime 的密码学保证——
+  后者的真正门是 setCode 本身受治理闸(joint vote / NRC admin)+ 二进制分发/社会层。真不可伪造的只有冻结到创世的不可修改 8 条。
+
+- 验收:primitives 11(含 constitution 9)+ legislation-yuan 30(三档强制 5 + 公投凭据 fail-closed 1 + 护宪凭据 fail-closed 1)+
+  legislation-vote 29 + node 30(核心章档位 4 + 公投凭据 2 + 护宪凭据 2)+ votingengine 回归 + no_std(WASM)+ clippy(零新增告警)+ fmt 全过。
+
+- **follow-up(另窗口评估)**:护宪凭据背书的强度封顶在 admins-change 真源的完整性上,而该真源本身节点层无守卫。
+  「admins-change 真源本身能否加锚」已派生独立评估任务(不在本卡范围)。
+
+#### 6.4 admins-change 真源加锚:固定治理骨架守卫(档 A)—— 已落地(2026-07-09,卡 `20260709-governance-skeleton-guard`)
+
+承 §6.3 follow-up。护宪 4/7 终审的可信度封顶在 `AdminAccounts[NJD]` 完整性上,而 §6.3 的 `ConstitutionGuardVoteProof`
+只锚了「4」(赞成数),从未锚「7」(法庭规模);且整个 admins-change 真源节点层零守卫,setCode 可任意改写。本档把
+**永不合法变更的结构骨架**冻到节点二进制 + 创世,补齐结构性缺口。
+
+- **根本不对称**:宪法不可修改 8 条能冻创世是因为**永不合法变更**;管理员集**天生要变**(普选/互选/联邦特权/阈值票),
+  故只能冻**结构**、不能冻**成员**。档 A 冻的是"有几把椅子、椅子归谁管、多少人",不是"椅子上坐着谁"。
+
+- **规格单源**:`primitives::governance_skeleton`(编译常量,genesis 播种 / runtime 校验 / node 守卫三端共读):
+  `fixed_institutions()`(NRC/PRC/PRB/NJD 主账户 + 名额 + NJD 护宪席位)、`frg_province_groups()`、
+  `NJD_CONSTITUTION_GUARD_SEATS=7`、`KIND_PUBLIC_INSTITUTION/STATUS_ACTIVE` 判别值、`ROLE_CONSTITUTION_GUARD`
+  (admin-primitives re-export、创世 role-by-index、守卫三处逐字节共用)。
+
+- **逐块不变式(I1..I7,`node/src/core/governance_skeleton.rs::GovernanceSkeletonGuard`)**:对每个固定机构与 43 个 FRG 省组——
+  I1 `AdminAccounts[主账户]`/`FederalRegistryProvinceGroups[省码]` 恒存在;I2 机构码不变;I3 `kind==PublicInstitution`;
+  I4 `status==Active`;I5 名额不变(19/9/9/15/5);I6 **NJD 护宪计数恒 7**(补上 §6.3 里没锚的「7」)。判定路径
+  完全复刻 `ConstitutionGuard`:只读执行取后置变更 → 触 `PublicAdmins` 前缀或 `:code` 才全量校验 → 违规 `KnownBad`;
+  warp 提交前校验;守卫取数/解码失败 fail-closed 拒块;启动期从 block#0 双锚(创世 state 必须已满足规格)。与
+  `ConstitutionGuard` 并列串在导入栈(两处:常规导入 + 挖矿导入)。
+
+- **runtime 侧同步 I6**(`public-admins::ensure_court_composition`):NJD 管理员集变更(propose + 执行终态)强制护宪恰 7,
+  消除「runtime 放行、节点拒块」裂缝;新 Error `InvalidCourtComposition`。**等长换人保持 7 席即放行**(不冻成员)。
+
+- **天花板(honest)**:档 A 冻「7 这个数」,不冻「这 7 个人」。挡得住稀释/灌水/删机构/改码/关闭等结构攻击,挡**不住**
+  "保持恰 7 人、整体换成攻击者密钥"的成员劫持(节点无独立预言机判合法当选)。成员劫持须档 B(创世根验签链:换届
+  由旧护宪 ≥4 人对新集签名、节点自验签),有状态、须改签名模型,**缓做**。不冻**阈值**(固定治理阈值是
+  `fixed_governance_pass_threshold` 计票逻辑、不落 state,守卫锚不到)。
+
+- **落地代价**:纯节点二进制 + primitives 只读常量 + public-admins 一条校验;守卫逻辑在 runtime 之外,**无需 migration**;
+  含 public-admins 改动按链开发期规则重新创世即可。验收:primitives(governance_skeleton 4)+ admin-primitives 2(判别值/字面量交叉钉死)
+  + public-admins 回归 + node(governance_skeleton 9)+ no_std + fmt。
+
+- **遗留**:节点管理员展示解码器(`codec.rs`、`institution_read/chain.rs`)字段序疑似落后于当前 `admin-primitives`
+  (缺 `cid_number` + `role_code/role_name/admin_source_ref`),非本卡引入,已派生独立任务核对 deployed↔source 后对齐。
 
 ### 7. 宪法迁移(并入本模块)—— 已完成(2026-06-24,卡 `20260624-constitution-migration.md`)
 

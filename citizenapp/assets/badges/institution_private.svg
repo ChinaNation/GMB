@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- 私权机构徽章：紫色扇贝勋章 + 楼宇（私权/私营机构）。机构只有会员徽章，无实名小人态。 -->
+  <g fill="#7C6FD6">
+    <circle cx="18" cy="12" r="4.3"/>
+    <circle cx="16.24" cy="16.24" r="4.3"/>
+    <circle cx="12" cy="18" r="4.3"/>
+    <circle cx="7.76" cy="16.24" r="4.3"/>
+    <circle cx="6" cy="12" r="4.3"/>
+    <circle cx="7.76" cy="7.76" r="4.3"/>
+    <circle cx="12" cy="6" r="4.3"/>
+    <circle cx="16.24" cy="7.76" r="4.3"/>
+    <circle cx="12" cy="12" r="7.6"/>
+  </g>
+  <g fill="#ffffff">
+    <rect x="8.2" y="7.6" width="7.6" height="9.1" rx="0.8"/>
+  </g>
+  <g fill="#7C6FD6">
+    <rect x="9.4" y="9" width="1.5" height="1.5" rx="0.2"/>
+    <rect x="13.1" y="9" width="1.5" height="1.5" rx="0.2"/>
+    <rect x="9.4" y="11.4" width="1.5" height="1.5" rx="0.2"/>
+    <rect x="13.1" y="11.4" width="1.5" height="1.5" rx="0.2"/>
+    <rect x="10.9" y="13.9" width="2.2" height="2.8" rx="0.3"/>
+  </g>
+</svg>

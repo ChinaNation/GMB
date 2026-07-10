@@ -27,6 +27,7 @@ class MyIdState {
     this.identityCidNumber,
     this.passportValidFrom,
     this.passportValidUntil,
+    this.identityLevel,
     this.errorMessage,
   });
 
@@ -39,6 +40,9 @@ class MyIdState {
   /// YYYY-MM-DD，直接来自链上 YYYYMMDD 整数的展示格式。
   final String? passportValidFrom;
   final String? passportValidUntil;
+
+  /// 链上身份档（徽章分色）：仅在护照有效(normal)时为 'voting'/'candidate'，否则 null。
+  final String? identityLevel;
   final String? errorMessage;
 
   bool get hasOnchainIdentity =>
@@ -133,13 +137,37 @@ class MyIdService {
 
     final located = identities.single;
     final identity = located.identity;
+    final status = _deriveStatus(identity);
+    // 护照有效才算认证；再读候选表区分投票/竞选（读失败降级为 voting，不阻塞）。
+    final identityLevel = status == MyIdIdentityStatus.normal
+        ? await _resolveIdentityLevel(located.wallet.address)
+        : null;
     return MyIdState(
-      identityStatus: _deriveStatus(identity),
+      identityStatus: status,
       identityWalletAccount: located.wallet.address,
       identityCidNumber: identity.cidNumber,
       passportValidFrom: _formatDateInt(identity.passportValidFrom),
       passportValidUntil: _formatDateInt(identity.passportValidUntil),
+      identityLevel: identityLevel,
     );
+  }
+
+  /// 有候选身份记录=竞选公民，否则投票公民；读失败降级为 voting。
+  Future<String> _resolveIdentityLevel(String walletAddress) async {
+    try {
+      final accountId =
+          Uint8List.fromList(_keyring.decodeAddress(walletAddress));
+      final candKey = '0x${_hexEncode(_storageMapKey(
+        'CitizenIdentity',
+        'CandidateIdentityByAccount',
+        accountId,
+      ))}';
+      final rows = await _chainRpc.fetchStorageBatch([candKey]);
+      return rows[candKey] != null ? 'candidate' : 'voting';
+    } catch (e) {
+      debugPrint('myid candidate query failed: $e');
+      return 'voting';
+    }
   }
 
   MyIdIdentityStatus _deriveStatus(_VotingIdentity identity) {

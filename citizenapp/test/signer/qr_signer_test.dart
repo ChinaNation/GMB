@@ -225,5 +225,19 @@ void main() {
       expect(actual, viaPrimitive);
       expect(actual.toList(), isNot([1, 2, 3, 4]));
     });
+
+    test('square account action uses GMB 0x1D hash domain, not raw payload', () {
+      final actual = QrSigner.signingBytesForHex(
+        payloadHex: payload,
+        action: QrActions.squareAccountAction,
+      );
+      final viaPrimitive = signingMessage(
+        opTag: kOpSignSquareAction,
+        scalePayload: const [1, 2, 3, 4],
+      );
+
+      expect(actual, viaPrimitive);
+      expect(actual.toList(), isNot([1, 2, 3, 4]));
+    });
   });
 }

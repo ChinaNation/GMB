@@ -1,135 +1,85 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encodeAddress } from '@polkadot/util-crypto';
-import { stripeCheckoutRoute } from '../src/membership/checkout';
-import type { Env, SessionState } from '../src/types';
+
+vi.mock('../src/auth/wallet_signature', () => ({
+  verifyWalletSignature: vi.fn()
+}));
+
+import { subscribeChallengeRoute, subscribeConfirmRoute } from '../src/membership/checkout';
+import { verifyWalletSignature } from '../src/auth/wallet_signature';
+import type { Env } from '../src/types';
+
+const mockVerify = verifyWalletSignature as unknown as ReturnType<typeof vi.fn>;
 
 const ownerBytes = Uint8Array.from(Array.from({ length: 32 }, (_, index) => index + 41));
-const otherBytes = Uint8Array.from(Array.from({ length: 32 }, (_, index) => index + 73));
 const owner = encodeAddress(ownerBytes, 2027);
-const otherOwner = encodeAddress(otherBytes, 2027);
-const sessionToken = 'session_checkout';
 
-describe('stripe checkout route', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+interface ChallengeRow {
+  challenge_id: string;
+  owner_account: string;
+  signing_payload: string;
+  expires_at: number;
+  used_at: number | null;
+}
 
-  it('creates visitor checkout without reading chain identity', async () => {
-    let capturedBody = '';
-    const env = fakeEnv({
-      storageResponses: [],
-      stripeResponse: { id: 'cs_visitor', url: 'https://checkout.stripe.com/c/pay/cs_visitor' },
-      onStripeBody: (body) => {
-        capturedBody = body;
-      }
-    });
+class ChallengeStmt {
+  private binds: unknown[] = [];
+  constructor(private readonly db: ChallengeDb, private readonly sql: string) {}
+  bind(...args: unknown[]): ChallengeStmt {
+    this.binds = args;
+    return this;
+  }
+  async run(): Promise<{ meta: { changes: number } }> {
+    if (this.sql.includes('INSERT INTO square_login_challenges')) {
+      this.db.challenges.set(this.binds[0] as string, {
+        challenge_id: this.binds[0] as string,
+        owner_account: this.binds[1] as string,
+        signing_payload: this.binds[2] as string,
+        expires_at: this.binds[3] as number,
+        used_at: null
+      });
+    } else if (this.sql.includes('UPDATE square_login_challenges SET used_at')) {
+      const row = this.db.challenges.get(this.binds[1] as string);
+      if (row) row.used_at = this.binds[0] as number;
+    }
+    return { meta: { changes: 1 } };
+  }
+  async first<T>(): Promise<T | null> {
+    if (this.sql.includes('FROM square_login_challenges')) {
+      return (this.db.challenges.get(this.binds[0] as string) as T) ?? null;
+    }
+    return null;
+  }
+}
 
-    const response = await stripeCheckoutRoute(checkoutRequest('visitor'), env);
-    const json = (await response.json()) as {
-      checkout_session_id: string;
-      checkout_url: string;
-      membership_level: string;
-    };
-    const params = new URLSearchParams(capturedBody);
-
-    expect(json).toMatchObject({
-      checkout_session_id: 'cs_visitor',
-      checkout_url: 'https://checkout.stripe.com/c/pay/cs_visitor',
-      membership_level: 'visitor'
-    });
-    expect(params.get('mode')).toBe('subscription');
-    expect(params.get('line_items[0][price]')).toBe('price_visitor');
-    expect(params.get('subscription_data[metadata][owner_account]')).toBe(owner);
-    expect(params.get('subscription_data[metadata][membership_level]')).toBe('visitor');
-  });
-
-  it('creates candidate checkout only when chain identity is candidate', async () => {
-    const env = fakeEnv({
-      storageResponses: [votingIdentityHex(), '0x01'],
-      stripeResponse: { id: 'cs_candidate', url: 'https://checkout.stripe.com/c/pay/cs_candidate' }
-    });
-
-    const response = await stripeCheckoutRoute(checkoutRequest('candidate'), env);
-    const json = (await response.json()) as { membership_level: string };
-
-    expect(json.membership_level).toBe('candidate');
-  });
-
-  it('rejects candidate checkout when owner only has voting identity', async () => {
-    const env = fakeEnv({
-      storageResponses: [votingIdentityHex(), null],
-      stripeResponse: { id: 'cs_unused', url: 'https://checkout.stripe.com/c/pay/cs_unused' }
-    });
-
-    await expect(stripeCheckoutRoute(checkoutRequest('candidate'), env)).rejects.toMatchObject({
-      code: 'membership_identity_required'
-    });
-  });
-
-  it('rejects checkout when bearer session owner differs from request owner', async () => {
-    const env = fakeEnv({
-      storageResponses: [],
-      stripeResponse: { id: 'cs_unused', url: 'https://checkout.stripe.com/c/pay/cs_unused' }
-    });
-
-    await expect(
-      stripeCheckoutRoute(
-        checkoutRequest('visitor', {
-          ownerAccount: otherOwner,
-          session: true
-        }),
-        env
-      )
-    ).rejects.toMatchObject({ code: 'owner_account_mismatch' });
-  });
-
-  it('surfaces Stripe checkout errors without writing membership state', async () => {
-    const env = fakeEnv({
-      storageResponses: [],
-      stripeStatus: 400,
-      stripeResponse: { error: { message: 'No such price' } }
-    });
-
-    await expect(stripeCheckoutRoute(checkoutRequest('visitor'), env)).rejects.toMatchObject({
-      code: 'stripe_checkout_failed',
-      message: 'No such price'
-    });
-  });
-});
+class ChallengeDb {
+  readonly challenges = new Map<string, ChallengeRow>();
+  prepare(sql: string): ChallengeStmt {
+    return new ChallengeStmt(this, sql);
+  }
+}
 
 function fakeEnv(input: {
-  storageResponses: Array<string | null>;
+  db: ChallengeDb;
+  storageResponses?: Array<string | null>;
+  stripeResponse?: unknown;
   stripeStatus?: number;
-  stripeResponse: unknown;
   onStripeBody?: (body: string) => void;
 }): Env {
-  const session: SessionState = {
-    owner_account: owner,
-    created_at: 0,
-    expires_at: Date.now() + 60_000
-  };
-  const kv = new FakeKv(new Map([[`square_session:${sessionToken}`, session]]));
-  const responses = [...input.storageResponses];
+  const responses = [...(input.storageResponses ?? [])];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (request: RequestInfo | URL, init?: RequestInit) => {
       const url = request.toString();
       if (url.startsWith('https://api.stripe.com/')) {
         input.onStripeBody?.(init?.body?.toString() ?? '');
-        return Response.json(input.stripeResponse, { status: input.stripeStatus ?? 200 });
+        return Response.json(input.stripeResponse ?? {}, { status: input.stripeStatus ?? 200 });
       }
-      return Response.json({
-        jsonrpc: '2.0',
-        id: 1,
-        result: responses.shift() ?? null
-      });
+      return Response.json({ jsonrpc: '2.0', id: 1, result: responses.shift() ?? null });
     })
   );
-
   return {
-    DB: {} as D1Database,
-    SQUARE_MEDIA: {} as R2Bucket,
-    FEED_CACHE: kv as unknown as KVNamespace,
+    DB: input.db,
     SQUARE_CHAIN_RPC_URL: 'http://chain.test',
     STRIPE_SECRET_KEY: 'sk_test_secret',
     STRIPE_PRICE_VISITOR: 'price_visitor',
@@ -140,22 +90,147 @@ function fakeEnv(input: {
   } as unknown as Env;
 }
 
-function checkoutRequest(
-  membershipLevel: string,
-  input: { ownerAccount?: string; session?: boolean } = {}
-): Request {
-  return new Request('https://w/v1/square/membership/stripe/checkout', {
+function req(path: string, body: unknown): Request {
+  return new Request(`https://w${path}`, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(input.session ? { authorization: `Bearer ${sessionToken}` } : {})
-    },
-    body: JSON.stringify({
-      owner_account: input.ownerAccount ?? owner,
-      membership_level: membershipLevel
-    })
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
   });
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  mockVerify.mockReset();
+});
+
+describe('subscribe challenge (signed, level-bound)', () => {
+  it('visitor challenge returns op_tag 0x1D + owner_pubkey_hex + level, no chain read', async () => {
+    const db = new ChallengeDb();
+    const env = fakeEnv({ db });
+    const res = await subscribeChallengeRoute(
+      req('/v1/square/membership/subscribe/challenge', {
+        owner_account: owner,
+        membership_level: 'visitor'
+      }),
+      env
+    );
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(json.op_tag).toBe(0x1d);
+    expect(json.membership_level).toBe('visitor');
+    expect(typeof json.owner_pubkey_hex).toBe('string');
+    expect((json.owner_pubkey_hex as string).length).toBe(64);
+    expect(typeof json.signing_payload_hex).toBe('string');
+    expect(db.challenges.size).toBe(1);
+  });
+
+  it('candidate challenge issued only when chain identity is candidate', async () => {
+    const db = new ChallengeDb();
+    const env = fakeEnv({ db, storageResponses: [votingIdentityHex(), '0x01'] });
+    const res = await subscribeChallengeRoute(
+      req('/v1/square/membership/subscribe/challenge', {
+        owner_account: owner,
+        membership_level: 'candidate'
+      }),
+      env
+    );
+    expect(((await res.json()) as { membership_level: string }).membership_level).toBe('candidate');
+  });
+
+  it('rejects candidate challenge when owner only has voting identity', async () => {
+    const db = new ChallengeDb();
+    const env = fakeEnv({ db, storageResponses: [votingIdentityHex(), null] });
+    await expect(
+      subscribeChallengeRoute(
+        req('/v1/square/membership/subscribe/challenge', {
+          owner_account: owner,
+          membership_level: 'candidate'
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'membership_identity_required' });
+  });
+});
+
+describe('subscribe confirm (signed)', () => {
+  async function issue(env: Env, level: string): Promise<string> {
+    const res = await subscribeChallengeRoute(
+      req('/v1/square/membership/subscribe/challenge', {
+        owner_account: owner,
+        membership_level: level
+      }),
+      env
+    );
+    return ((await res.json()) as { challenge_id: string }).challenge_id;
+  }
+
+  it('valid signature (level matches) → creates Stripe checkout', async () => {
+    const db = new ChallengeDb();
+    mockVerify.mockResolvedValue(true);
+    let capturedBody = '';
+    const env = fakeEnv({
+      db,
+      stripeResponse: { id: 'cs_visitor', url: 'https://checkout.stripe.com/c/pay/cs_visitor' },
+      onStripeBody: (body) => {
+        capturedBody = body;
+      }
+    });
+    const challengeId = await issue(env, 'visitor');
+
+    const res = await subscribeConfirmRoute(
+      req('/v1/square/membership/subscribe', {
+        owner_account: owner,
+        membership_level: 'visitor',
+        challenge_id: challengeId,
+        signature: '0xSIG'
+      }),
+      env
+    );
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(json).toMatchObject({
+      checkout_url: 'https://checkout.stripe.com/c/pay/cs_visitor',
+      membership_level: 'visitor'
+    });
+    expect(new URLSearchParams(capturedBody).get('mode')).toBe('subscription');
+  });
+
+  it('level tampering (confirm level ≠ challenge level) → action_mismatch', async () => {
+    const db = new ChallengeDb();
+    mockVerify.mockResolvedValue(true);
+    const env = fakeEnv({ db });
+    const challengeId = await issue(env, 'visitor');
+
+    await expect(
+      subscribeConfirmRoute(
+        req('/v1/square/membership/subscribe', {
+          owner_account: owner,
+          membership_level: 'voting',
+          challenge_id: challengeId,
+          signature: '0xSIG'
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'action_mismatch' });
+  });
+
+  it('invalid signature → invalid_signature, no Stripe call', async () => {
+    const db = new ChallengeDb();
+    mockVerify.mockResolvedValue(false);
+    const env = fakeEnv({ db });
+    const challengeId = await issue(env, 'visitor');
+
+    await expect(
+      subscribeConfirmRoute(
+        req('/v1/square/membership/subscribe', {
+          owner_account: owner,
+          membership_level: 'visitor',
+          challenge_id: challengeId,
+          signature: '0xBAD'
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'invalid_signature' });
+  });
+});
 
 function votingIdentityHex(): string {
   const cid = new TextEncoder().encode('CN001-CTZN-000000001-2026');
@@ -197,12 +272,4 @@ function concat(chunks: Uint8Array[]): Uint8Array {
 
 function hex(bytes: Uint8Array): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-class FakeKv {
-  constructor(private readonly store: Map<string, unknown>) {}
-
-  async get<T>(key: string): Promise<T | null> {
-    return (this.store.get(key) as T) ?? null;
-  }
 }

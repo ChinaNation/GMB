@@ -132,7 +132,7 @@ describe('square chain confirmation', () => {
     expect(db.posts.get(postId)?.post_state).toBe('published');
   });
 
-  it('deletes only Cloudflare-side post data and reclaims storage once', async () => {
+  it('hard-deletes Cloudflare-side post data and reclaims storage', async () => {
     const db = new FakeDb();
     const manifestKey = `square/${ownerAccount}/posts/${postId}/manifest.json`;
     const upload = completedUpload(manifestKey);
@@ -169,23 +169,24 @@ describe('square chain confirmation', () => {
       SQUARE_DEV_UPLOAD_PROXY: '1'
     } as unknown as Env;
 
-    const first = await deletePostCloudflareData(env, session(), postId);
-    const second = await deletePostCloudflareData(env, session(), postId);
+    const result = await deletePostCloudflareData(env, session(), postId);
 
-    expect(first).toMatchObject({
+    expect(result).toMatchObject({
       deleted_media_assets: 1,
       deleted_r2_objects: 1,
       reclaimed_storage_bytes: 1024
     });
-    expect(second.reclaimed_storage_bytes).toBe(0);
-    expect(db.posts.get(postId)).toMatchObject({
-      post_state: 'deleted',
-      title: null,
-      text: ''
-    });
+    // 硬删除：帖子行 + 上传行 + 媒体资产 + R2 对象全部清空，无软删残行。
+    expect(db.posts.has(postId)).toBe(false);
+    expect(db.uploads.has(postId)).toBe(false);
     expect(db.mediaAssets.get(upload.upload_id)).toEqual([]);
-    expect(r2.deletedKeys).toEqual([manifestKey, manifestKey]);
+    expect(r2.deletedKeys).toEqual([manifestKey]);
     expect(db.membershipStorageUsed.get(ownerAccount)).toBe(3072);
+
+    // 再删同一帖子 → 已无残行，报 404，证明是彻底删除而非软删。
+    await expect(deletePostCloudflareData(env, session(), postId)).rejects.toMatchObject({
+      code: 'post_not_found'
+    });
   });
 });
 
@@ -340,17 +341,21 @@ class FakeStmt {
         post_state: 'published'
       });
     }
-    if (this.sql.includes("SET post_state = 'deleted'")) {
-      const postIdArg = this.args[0] as string;
-      const post = this.db.posts.get(postIdArg);
-      if (post) {
-        post.post_state = 'deleted';
-        post.title = null;
-        post.text = '';
-      }
+    if (this.sql.includes('DELETE FROM square_posts')) {
+      // 硬删除：帖子行整行移除，不保留软删残行。
+      this.db.posts.delete(this.args[0] as string);
     }
     if (this.sql.includes('DELETE FROM square_media_assets')) {
       this.db.mediaAssets.set(this.args[0] as string, []);
+    }
+    if (this.sql.includes('DELETE FROM square_uploads')) {
+      // 上传行按 upload_id 删；本假库以 post_id 为键，故按值反查。
+      const uploadId = this.args[0] as string;
+      for (const [postKey, row] of this.db.uploads) {
+        if (row.upload_id === uploadId) {
+          this.db.uploads.delete(postKey);
+        }
+      }
     }
     if (this.sql.includes('storage_used_bytes = MAX')) {
       const bytes = this.args[0] as number;

@@ -21,6 +21,53 @@ interface VotingIdentity {
   citizen_status: 'normal' | 'revoked';
 }
 
+/// 身份读取的 KV 短缓存 TTL（秒）。护照有效期按「日」判定，当天内结果稳定。
+const IDENTITY_CACHE_TTL_SECONDS = 45;
+
+function visitorIdentityState(ownerAccount: string): ChainIdentityState {
+  return {
+    owner_account: ownerAccount,
+    identity_level: 'visitor',
+    has_voting_identity: false,
+    has_candidate_identity: false,
+    cid_number: null,
+    checked_at: nowMs()
+  };
+}
+
+/// 带 KV 短缓存 + 失败软降级的身份读取。
+///
+/// 主页/feed 等展示路径用它，绝不因链上 RPC 未配置/超时/失败而阻塞渲染：
+/// 命中缓存直接返回；未命中读链并回写 KV；读链失败软降级为访客（未认证），不抛错。
+export async function fetchChainIdentityStateCached(
+  env: Env,
+  ownerAccount: string
+): Promise<ChainIdentityState> {
+  const cacheKey = `square_identity:${ownerAccount}`;
+  try {
+    const cached = await env.FEED_CACHE.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached) as ChainIdentityState;
+    }
+  } catch {
+    // 缓存读失败忽略，继续读链。
+  }
+  try {
+    const state = await fetchChainIdentityState(env, ownerAccount);
+    try {
+      await env.FEED_CACHE.put(cacheKey, JSON.stringify(state), {
+        expirationTtl: IDENTITY_CACHE_TTL_SECONDS
+      });
+    } catch {
+      // 缓存写失败忽略。
+    }
+    return state;
+  } catch {
+    // 链上 RPC 未配置/超时/失败：软降级为访客，展示未认证，不阻塞主页。
+    return visitorIdentityState(ownerAccount);
+  }
+}
+
 export async function fetchChainIdentityState(
   env: Env,
   ownerAccount: string

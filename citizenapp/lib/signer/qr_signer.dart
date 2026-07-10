@@ -234,6 +234,12 @@ class QrSigner {
         scalePayload: payload,
       );
     }
+    if (action == QrActions.squareAccountAction) {
+      return signingMessage(
+        opTag: kOpSignSquareAction,
+        scalePayload: payload,
+      );
+    }
     if (QrActions.isChainAction(action) && payload.length > 256) {
       return Hasher.blake2b256.hash(payload);
     }

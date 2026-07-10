@@ -1,10 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
@@ -21,6 +21,7 @@ import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/identity_badge.dart';
 import 'package:citizenapp/im/open_direct_chat.dart';
 import 'package:citizenapp/update/app_update.dart';
 import 'package:citizenapp/update/update_badge.dart';
@@ -39,16 +40,17 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
-const Color _inkGreen = AppTheme.primaryDark;
-
 class _ProfilePageState extends State<ProfilePage> {
-  final ImagePicker _imagePicker = ImagePicker();
   final UserProfileService _userProfileService = UserProfileService();
 
   UserProfileState _userProfile = const UserProfileState();
   WalletProfile? _defaultWallet;
   MyIdState _myIdState =
       const MyIdState(identityStatus: MyIdIdentityStatus.notOnchain);
+
+  /// 默认钱包的会员购买态（徽章「勾」）；best-effort，读失败为 null。
+  final SquareApiClient _squareApi = SquareApiClient();
+  SquareMembershipState? _membership;
 
   /// _loadState 世代号:含链上查询(秒级),并发调用乱序完成时旧结果
   /// 不得覆盖新身份(stale-wins 会重现「UI 显示旧身份」分叉)。
@@ -65,6 +67,12 @@ class _ProfilePageState extends State<ProfilePage> {
       _myIdState.isCertified &&
       _defaultWallet?.address.trim() ==
           _myIdState.identityWalletAccount?.trim();
+
+  /// 默认钱包徽章信号：颜色=链上身份档（仅默认钱包即认证身份钱包时有效）、勾=会员匹配。
+  String? get _defaultWalletIdentityLevel =>
+      _isDefaultWalletCertified ? _myIdState.identityLevel : null;
+  String? get _defaultWalletMembershipLevel => _membership?.membershipLevel;
+  bool get _defaultWalletMembershipActive => _membership?.active ?? false;
 
   @override
   void initState() {
@@ -115,26 +123,19 @@ class _ProfilePageState extends State<ProfilePage> {
       _defaultWallet = defaultWallet;
       _myIdState = myIdState;
     });
+    // 会员购买态（徽章勾）非阻塞加载：昵称/头像先渲染，勾稍后补上。
+    unawaited(_refreshMembership(generation));
   }
 
-  Future<void> _pickBackgroundImage() async {
+  Future<void> _refreshMembership(int generation) async {
     try {
-      final picked = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1600,
-        maxHeight: 1600,
-      );
-      if (picked == null) return;
-      final saved = await _userProfileService.updateBackgroundPath(picked.path);
-      if (!mounted) return;
-      setState(() {
-        _userProfile = saved;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('设置背景图失败：$e')),
-      );
+      final session = await SquareSessionProvider.instance.ensureSession();
+      final membership =
+          session != null ? await _squareApi.fetchMembership(session) : null;
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => _membership = membership);
+    } on Exception catch (e) {
+      debugPrint('profile membership load failed: $e');
     }
   }
 
@@ -185,7 +186,10 @@ class _ProfilePageState extends State<ProfilePage> {
           _SquareAvatar(
             path: _userProfile.avatarPath,
             size: 84,
-            isCertified: _isDefaultWalletCertified,
+            seed: _communicationAddress,
+            identityLevel: _defaultWalletIdentityLevel,
+            membershipLevel: _defaultWalletMembershipLevel,
+            membershipActive: _defaultWalletMembershipActive,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -298,7 +302,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 fit: StackFit.expand,
                 children: [
                   GestureDetector(
-                    onTap: _pickBackgroundImage,
+                    onTap: _openMyProfile,
                     child: _HeaderBackground(
                       path: _userProfile.backgroundPath,
                       height: headerHeight,
@@ -1239,18 +1243,33 @@ class _SquareAvatar extends StatelessWidget {
   const _SquareAvatar({
     required this.path,
     required this.size,
-    this.isCertified = false,
+    required this.seed,
+    this.identityLevel,
+    this.membershipLevel,
+    this.membershipActive = false,
   });
 
   final String? path;
   final double size;
-  final bool isCertified;
+
+  /// 未设头像时按账号稳定选默认头像的种子（默认钱包地址，与用户主页同源）。
+  final String seed;
+
+  /// 徽章信号：颜色=链上身份档、勾=会员匹配身份档。
+  final String? identityLevel;
+  final String? membershipLevel;
+  final bool membershipActive;
 
   @override
   Widget build(BuildContext context) {
     final hasImage = path != null && path!.trim().isNotEmpty;
     final file = hasImage ? File(path!) : null;
     final validImage = file != null && file.existsSync();
+    final badgeStyle = identityBadgeStyle(
+      identityLevel: identityLevel,
+      membershipLevel: membershipLevel,
+      membershipActive: membershipActive,
+    );
 
     return SizedBox(
       width: size,
@@ -1269,33 +1288,49 @@ class _SquareAvatar extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               child: validImage
                   ? Image.file(file, fit: BoxFit.cover)
-                  : const Icon(
-                      Icons.person,
-                      size: 40,
-                      color: _inkGreen,
-                    ),
+                  : _DefaultAvatar(seed: seed, size: size),
             ),
           ),
-          if (isCertified)
+          if (badgeStyle != null)
             Positioned(
               right: -4,
               bottom: -4,
-              child: Container(
-                width: 24,
-                height: 24,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.verified,
-                  size: 21,
-                  color: Color(0xFF007A74),
+              child: CitizenBadge(
+                style: badgeStyle,
+                tooltip: identityBadgeLabel(
+                  identityLevel: identityLevel,
+                  checked: badgeStyle.checked,
                 ),
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+/// 未设头像时按账号稳定选一张默认头像（与用户主页 ProfileHeaderCard 同源：
+/// assets/avatars/default_1..6.svg，账号 codeUnits 求和取模，同账号永远同一张）。
+class _DefaultAvatar extends StatelessWidget {
+  const _DefaultAvatar({required this.seed, required this.size});
+
+  static const int _count = 6;
+
+  final String seed;
+  final double size;
+
+  int get _index {
+    final sum = seed.codeUnits.fold<int>(0, (acc, unit) => acc + unit);
+    return sum % _count + 1;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SvgPicture.asset(
+      'assets/avatars/default_$_index.svg',
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
     );
   }
 }

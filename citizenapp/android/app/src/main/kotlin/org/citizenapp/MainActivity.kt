@@ -19,6 +19,12 @@ class MainActivity : FlutterFragmentActivity() {
     private val securityChannelName = "org.citizenapp/security"
     private val updateChannelName = "org.citizenapp/update"
     private val permissionsChannelName = "org.citizenapp/permissions"
+    // 硬件绑定 seed 金库原生桥通道。
+    private val hwSeedVaultChannelName = "org.citizenapp/hw_seed_vault"
+    private val hwSeedVault by lazy { HardwareSeedVaultBridge(this) }
+    // P-256 设备子钥原生桥通道（后台握手静默签名）。
+    private val deviceSubkeyChannelName = "org.citizenapp/device_subkey"
+    private val deviceSubkey by lazy { DeviceSubkeyBridge() }
     private val notificationPermissionRequestCode = 170517
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
 
@@ -52,6 +58,95 @@ class MainActivity : FlutterFragmentActivity() {
                     "requestNotificationPermission" -> requestNotificationPermission(result)
                     "getNotificationPermissionStatus" ->
                         result.success(isNotificationPermissionGranted())
+                    else -> result.notImplemented()
+                }
+            }
+
+        // 硬件绑定 seed 金库原生桥。encrypt/deleteKey 静默，decrypt 弹生物识别。
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, hwSeedVaultChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "authStatus" -> result.success(hwSeedVault.authStatus())
+                    "encrypt" -> {
+                        val tier = call.argument<String>("tier")
+                        val idx = call.argument<Int>("walletIndex")
+                        val plaintext = call.argument<String>("plaintext")
+                        if (tier == null || idx == null || plaintext == null) {
+                            result.error("badArgs", "tier/walletIndex/plaintext null", null)
+                        } else {
+                            try {
+                                result.success(hwSeedVault.encrypt(tier, idx, plaintext))
+                            } catch (error: Exception) {
+                                result.error("encryptFailed", error.message, null)
+                            }
+                        }
+                    }
+                    "decrypt" -> {
+                        val tier = call.argument<String>("tier")
+                        val idx = call.argument<Int>("walletIndex")
+                        val blob = call.argument<String>("blob")
+                        if (tier == null || idx == null || blob == null) {
+                            result.error("badArgs", "tier/walletIndex/blob null", null)
+                        } else {
+                            hwSeedVault.decrypt(tier, idx, blob, result)
+                        }
+                    }
+                    "deleteKey" -> {
+                        val tier = call.argument<String>("tier")
+                        val idx = call.argument<Int>("walletIndex")
+                        if (tier == null || idx == null) {
+                            result.error("badArgs", "tier/walletIndex null", null)
+                        } else {
+                            hwSeedVault.deleteKey(tier, idx)
+                            result.success(null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        // P-256 设备子钥原生桥。publicKey/sign/delete 全静默（无生物门禁）。
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, deviceSubkeyChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "publicKey" -> {
+                        val idx = call.argument<Int>("walletIndex")
+                        if (idx == null) {
+                            result.error("badArgs", "walletIndex null", null)
+                        } else {
+                            try {
+                                result.success(deviceSubkey.publicKeyHex(idx))
+                            } catch (error: Exception) {
+                                result.error("subkeyPubkeyFailed", error.message, null)
+                            }
+                        }
+                    }
+                    "sign" -> {
+                        val idx = call.argument<Int>("walletIndex")
+                        val payloadB64 = call.argument<String>("payload")
+                        if (idx == null || payloadB64 == null) {
+                            result.error("badArgs", "walletIndex/payload null", null)
+                        } else {
+                            try {
+                                val payload = android.util.Base64.decode(
+                                    payloadB64,
+                                    android.util.Base64.NO_WRAP,
+                                )
+                                result.success(deviceSubkey.signDerHex(idx, payload))
+                            } catch (error: Exception) {
+                                result.error("subkeySignFailed", error.message, null)
+                            }
+                        }
+                    }
+                    "delete" -> {
+                        val idx = call.argument<Int>("walletIndex")
+                        if (idx == null) {
+                            result.error("badArgs", "walletIndex null", null)
+                        } else {
+                            deviceSubkey.delete(idx)
+                            result.success(null)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }

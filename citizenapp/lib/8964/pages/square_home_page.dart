@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
@@ -6,6 +8,7 @@ import 'package:citizenapp/8964/pages/square_article_compose_page.dart';
 import 'package:citizenapp/8964/pages/square_compose_page.dart';
 import 'package:citizenapp/8964/pages/square_post_detail_page.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
+import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
 import 'package:citizenapp/8964/storage/square_draft_store.dart';
@@ -13,6 +16,7 @@ import 'package:citizenapp/8964/widgets/square_empty_state.dart';
 import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/identity_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 enum _ComposeKind { post, article }
@@ -49,6 +53,10 @@ class _SquareHomePageState extends State<SquareHomePage> {
   String? _identityAddress;
   String? _identityWalletName;
 
+  /// 顶栏徽章的会员信号（勾），随身份一起加载；best-effort。
+  final SquareApiClient _squareApi = SquareApiClient();
+  SquareMembershipState? _membership;
+
   @override
   void initState() {
     super.initState();
@@ -71,7 +79,20 @@ class _SquareHomePageState extends State<SquareHomePage> {
     final identity = await widget.identityService.loadCurrent();
     _identityAddress = identity.ownerAccount;
     _identityWalletName = identity.walletName;
+    // 会员购买态（徽章勾）非阻塞加载：身份图标先渲染，勾稍后补上。
+    unawaited(_refreshMembership());
     return identity;
+  }
+
+  Future<void> _refreshMembership() async {
+    try {
+      final session = await SquareSessionProvider.instance.ensureSession();
+      final membership =
+          session != null ? await _squareApi.fetchMembership(session) : null;
+      if (mounted) setState(() => _membership = membership);
+    } on Exception {
+      // 会员拉取失败不影响顶栏身份显示（无勾）。
+    }
   }
 
   Future<void> _onWalletsChanged() async {
@@ -207,15 +228,18 @@ class _SquareHomePageState extends State<SquareHomePage> {
                       future: _identityFuture,
                       builder: (context, snapshot) {
                         final identity = snapshot.data;
+                        final badge = identityBadgeStyle(
+                          identityLevel: identity?.identityLevel,
+                          membershipLevel: _membership?.membershipLevel,
+                          membershipActive: _membership?.active ?? false,
+                        );
                         return Tooltip(
                           message: identity?.accountLabel ?? '当前钱包',
                           child: IconButton.outlined(
                             onPressed: () {},
-                            icon: Icon(
-                              identity?.isCertified == true
-                                  ? Icons.verified_user_rounded
-                                  : Icons.account_circle_outlined,
-                            ),
+                            icon: badge != null
+                                ? CitizenBadge(style: badge, size: 22)
+                                : const Icon(Icons.account_circle_outlined),
                           ),
                         );
                       },

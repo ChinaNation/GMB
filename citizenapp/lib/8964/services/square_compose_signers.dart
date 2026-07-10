@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -9,30 +8,43 @@ import 'package:citizenapp/8964/services/square_publish_service.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
+import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 广场发布签名器（发动态 / 发文章共用）。
 ///
-/// 默认热钱包静默签名（`signWithWallet`，无弹窗）；冷钱包走 QR 冷签兜底，
-/// 但广场身份恒为默认热钱包，冷签分支实际不触发。
+/// 登录挑战 = 后端会话握手 → **P-256 硬件设备子钥静默签名**（不读 seed、不弹）。
+/// 发布上链 = 动钱动权 → 读硬件金库时弹一次生物识别。冷钱包走 QR 冷签兜底，但广场
+/// 身份恒为默认热钱包，冷签分支实际不触发。
 class SquareComposeSigners {
-  SquareComposeSigners({required this.context, required this.identity})
-      : hotWalletManager = identity.isHotWallet ? WalletManager() : null;
+  SquareComposeSigners({
+    required this.context,
+    required this.identity,
+    DeviceSubkey? deviceSubkey,
+  })  : hotWalletManager = identity.isHotWallet ? WalletManager() : null,
+        _deviceSubkey = deviceSubkey ?? DeviceSubkey();
 
   final BuildContext context;
   final SquareIdentityState identity;
   final WalletManager? hotWalletManager;
+  final DeviceSubkey _deviceSubkey;
 
-  Future<String> signLogin(String signingPayload) async {
-    final signature = await _sign(
-      payload: Uint8List.fromList(utf8.encode(signingPayload)),
-      action: QrActions.login,
-      requestPrefix: 'square-login-',
-    );
-    return '0x${_hexEncode(signature)}';
+  Future<String> signLogin(Uint8List loginMessage) async {
+    final walletIndex = identity.walletIndex;
+    if (walletIndex == null) {
+      throw const SquarePublishException('当前钱包信息不完整');
+    }
+    if (hotWalletManager == null) {
+      // 广场身份恒为默认热钱包；冷钱包不参与后端会话握手。
+      throw const SquarePublishException('冷钱包不支持广场登录');
+    }
+    // 会话握手 = 非用户动权 → P-256 硬件子钥静默签名 signing_message(0x1B) 摘要，后端 ES256 验。
+    final raw = await _deviceSubkey.signRawHex(walletIndex, loginMessage);
+    return '0x$raw';
   }
 
   Future<Uint8List> signChain(Uint8List payload) {
+    // 发布上链 = 动钱动权 → 读硬件金库 seed 时弹一次生物识别验证。
     return _sign(
       payload: payload,
       action: QrActions.chain(

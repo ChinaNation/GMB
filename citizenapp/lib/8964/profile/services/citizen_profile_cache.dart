@@ -11,7 +11,9 @@ import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 class CitizenProfileCache {
   const CitizenProfileCache();
 
-  static const String _keyPrefix = 'square.profile.cache.';
+  // v2：主页响应新增 identity_level/membership_level/membership_active 字段，
+  // bump 前缀作废旧缓存，避免旧形状读出空（见 feedback-dto-field-rename）。
+  static const String _keyPrefix = 'square.profile.cache.v2.';
 
   String _cacheKey(String ownerAccount) => '$_keyPrefix$ownerAccount';
 

@@ -4,7 +4,7 @@
 /// 密码），解密动作本身在 Keystore/Keychain 触发验证，密钥永不出硬件。本
 /// 接口把这层能力从具体插件后端解耦，[WalletManager] 只依赖它。
 ///
-/// 分两档金库（access control 语义不同，见 [BiometricSecureSeedStore]）：
+/// 分两档金库（access control 语义不同，见 [HardwareBoundSeedVault]）：
 /// - seedVault（严）：seed hex，增/删任一指纹即永久失效，保护高频签名路径。
 /// - recoveryVault（宽）：助记词，跟随生物变更不失效、设备密码可兜底，
 ///   供 seed 失效后静默自愈（自愈编排在 [WalletManager] 层，本 store 不做）。

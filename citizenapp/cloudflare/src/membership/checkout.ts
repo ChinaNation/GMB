@@ -1,18 +1,26 @@
 import { decodeAddress } from '@polkadot/util-crypto';
 import type { Env } from '../types';
 import { fetchChainIdentityState } from '../chain/identity';
-import { HttpError, jsonResponse, readJson, requireSession } from '../shared/http';
+import { HttpError, jsonResponse, readJson } from '../shared/http';
+import { ownerPubkeyHex } from '../shared/ids';
+import { consumeActionSignature, issueActionChallenge } from '../account/action_challenge';
 import {
   assertMembershipLevel,
   identitySatisfies,
   membershipPlan,
   type MembershipLevel
 } from './plans';
-import { assertSessionOwner } from './service';
 
 interface CheckoutRequestBody {
   owner_account?: unknown;
   membership_level?: unknown;
+}
+
+interface SubscribeConfirmBody {
+  owner_account?: unknown;
+  membership_level?: unknown;
+  challenge_id?: unknown;
+  signature?: unknown;
 }
 
 interface StripeCheckoutSession {
@@ -22,21 +30,51 @@ interface StripeCheckoutSession {
 
 const stripeCheckoutUrl = 'https://api.stripe.com/v1/checkout/sessions';
 
-export async function stripeCheckoutRoute(request: Request, env: Env): Promise<Response> {
+/// POST /v1/square/membership/subscribe/challenge —— 下发订阅签名挑战（0x1D，
+/// 会员等级绑进 payload）。官网无私钥，凭返回的 signing_payload_hex + owner_pubkey_hex
+/// 构建 QR_V1 signRequest 给 CitizenApp 扫一扫签名。
+export async function subscribeChallengeRoute(request: Request, env: Env): Promise<Response> {
   const body = await readJson<CheckoutRequestBody>(request);
   const ownerAccount = ownerAccountFromRequest(body);
   const membershipLevel = assertCheckoutMembershipLevel(body.membership_level);
+  // 资格预检：不满足直接拒，避免出无效签名 QR。
+  await assertCheckoutEligibility(env, ownerAccount, membershipLevel);
+  const challenge = await issueActionChallenge(
+    env,
+    ownerAccount,
+    'subscribe_membership',
+    membershipLevel
+  );
+  return jsonResponse({
+    ok: true,
+    owner_account: ownerAccount,
+    challenge_id: challenge.challengeId,
+    op_tag: challenge.opTag,
+    signing_payload_hex: challenge.signingPayloadHex,
+    owner_pubkey_hex: ownerPubkeyHex(ownerAccount),
+    membership_level: membershipLevel,
+    expires_at: challenge.expiresAt
+  });
+}
 
-  // 官网订阅允许用户输入钱包账户；App 或后续钱包登录态调用时必须和 session owner 一致。
-  const authorization = request.headers.get('authorization');
-  if (authorization?.startsWith('Bearer ')) {
-    const session = await requireSession(request, env);
-    assertSessionOwner(session, ownerAccount);
+/// POST /v1/square/membership/subscribe —— 验签（0x1D，level 一致）后创建 Stripe checkout。
+/// 取代旧的无签名 /membership/stripe/checkout（已退役，零残留）。
+export async function subscribeConfirmRoute(request: Request, env: Env): Promise<Response> {
+  const body = await readJson<SubscribeConfirmBody>(request);
+  const ownerAccount = ownerAccountFromRequest(body);
+  const membershipLevel = assertCheckoutMembershipLevel(body.membership_level);
+  if (typeof body.challenge_id !== 'string' || typeof body.signature !== 'string') {
+    throw new HttpError(400, 'invalid_action_request', '订阅请求缺少挑战或签名');
   }
-
+  await consumeActionSignature(env, {
+    ownerAccount,
+    action: 'subscribe_membership',
+    challengeId: body.challenge_id,
+    signature: body.signature,
+    context: membershipLevel
+  });
   await assertCheckoutEligibility(env, ownerAccount, membershipLevel);
   const session = await createStripeCheckoutSession(env, ownerAccount, membershipLevel);
-
   return jsonResponse({
     ok: true,
     checkout_session_id: session.id,
@@ -143,7 +181,7 @@ function priceIdForMembership(env: Env, membershipLevel: MembershipLevel): strin
   return priceId;
 }
 
-function ownerAccountFromRequest(body: CheckoutRequestBody): string {
+function ownerAccountFromRequest(body: { owner_account?: unknown }): string {
   if (typeof body.owner_account !== 'string' || body.owner_account.trim().length === 0) {
     throw new HttpError(400, 'owner_account_missing', '缺少钱包账户地址');
   }

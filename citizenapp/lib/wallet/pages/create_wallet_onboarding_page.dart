@@ -171,12 +171,12 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
                   const SizedBox(height: 20),
                   const _SecurityNoteRow(
                     icon: Icons.vpn_key_outlined,
-                    text: '助记词和密钥独立储存，创建时各验证一次',
+                    text: '助记词和密钥硬件加密存储在本机，转账/签名时验证身份',
                   ),
                   const SizedBox(height: 8),
                   const _SecurityNoteRow(
                     icon: Icons.lock_outline,
-                    text: '助记词加密存储在本机，可在钱包详情中查看',
+                    text: '每次动钱动权（转账/投票/发布）需通过指纹或人脸验证',
                   ),
                   const SizedBox(height: 8),
                   const _SecurityNoteRow(

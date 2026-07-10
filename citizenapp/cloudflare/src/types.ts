@@ -75,6 +75,14 @@ export interface LoginChallengeRow {
   used_at: number | null;
 }
 
+export interface DeviceSubkeyRow {
+  owner_account: string;
+  p256_pubkey: string;
+  issued_at: number;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface MembershipRow {
   owner_account: string;
   membership_level: string;
@@ -178,6 +186,10 @@ export interface SquareFeedMediaItem {
 
 export interface SquarePostFeedItem extends SquarePostRow {
   media_items?: SquareFeedMediaItem[];
+  // 作者徽章信号（公开）：身份档=颜色、会员匹配身份档=勾。由本页去重作者统一读链上身份+批量读会员填充。
+  identity_level?: 'visitor' | 'voting' | 'candidate';
+  membership_level?: 'visitor' | 'voting' | 'candidate' | null;
+  membership_active?: boolean;
 }
 
 /// 按作者拉帖的分类过滤维度。'all' 表示不过滤。
@@ -216,6 +228,12 @@ export interface UserProfileResponse {
   banner_object_key: string | null;
   cid_number: string | null;
   is_certified: boolean;
+  /// 链上身份档位：visitor 未认证 / voting 认证投票公民 / candidate 认证竞选公民。
+  identity_level: 'visitor' | 'voting' | 'candidate';
+  /// 已购买的会员档位（公开）；未购买为 null。徽章「勾」= 会员档与链上身份档匹配且有效。
+  membership_level: 'visitor' | 'voting' | 'candidate' | null;
+  /// 会员是否当前有效（订阅生效且未过期）。
+  membership_active: boolean;
   counts: UserProfileCounts;
   is_following: boolean;
   updated_at: number;

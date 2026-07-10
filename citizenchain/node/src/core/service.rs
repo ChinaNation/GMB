@@ -376,8 +376,17 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
 
     // 不可修改条款守卫(ADR-027 §7):在 PoW 导入之前逐块校验宪法第 1/2/3/17/19/24/34/42 条
     // 与创世逐字一致,违者拒块。执法在 runtime 之外,setCode/migration 改不动。
-    let guarded_import = crate::core::constitution::ConstitutionGuard::new(
+    let constitution_guard = crate::core::constitution::ConstitutionGuard::new(
         pow_block_import,
+        client.clone(),
+        backend.clone(),
+    )
+    .map_err(ServiceError::Other)?;
+
+    // 固定治理骨架守卫(档 A):与宪法守卫并列串接,逐块背书固定机构存在性/名额/护宪 7 席等
+    // 结构不变式(I1..I7),setCode 改不动。规格单源 primitives::governance_skeleton。
+    let guarded_import = crate::core::governance_skeleton::GovernanceSkeletonGuard::new(
+        constitution_guard,
         client.clone(),
         backend.clone(),
     )
@@ -647,8 +656,16 @@ pub fn new_full(
     };
     // 本地挖矿出块同样过护宪守卫:即便链上 runtime 被恶意升级,诚实矿工也绝不出
     // 改动不可修改条款的块(ADR-027 §7)。
-    let guarded_mining_import = crate::core::constitution::ConstitutionGuard::new(
+    let mining_constitution_guard = crate::core::constitution::ConstitutionGuard::new(
         pow_block_import,
+        client.clone(),
+        backend.clone(),
+    )
+    .map_err(ServiceError::Other)?;
+
+    // 诚实矿工同样绝不出破坏固定治理骨架的块(档 A):骨架守卫串在宪法守卫之外。
+    let guarded_mining_import = crate::core::governance_skeleton::GovernanceSkeletonGuard::new(
+        mining_constitution_guard,
         client.clone(),
         backend.clone(),
     )

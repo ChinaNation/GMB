@@ -19,7 +19,9 @@
 | `src/fee_policy.rs` | **费率规则常量单一权威源**：链上/链下/投票统一价 + 三方分账比例 |
 | `src/pow_const.rs` | PoW 难度、全节点发行、区块时间参数 |
 | `src/citizen_const.rs` | 公民认证发行常量 |
-| `src/count_const.rs` | 投票治理常量（机构数量、投票阈值、期限） |
+| `src/count_const.rs` | 投票治理常量（机构数量、投票阈值、期限、不可修改条款清单） |
+| `src/constitution.rs` | 修宪「章→档位」分类判定单源（第十九条 `classify`/`AmendmentScope`，runtime 与节点守卫共用） |
+| `src/governance_skeleton.rs` | 固定治理骨架冻结规格单源（档 A）：`fixed_institutions()`/`frg_province_groups()`/`NJD_CONSTITUTION_GUARD_SEATS=7`/kind·status 判别值/护宪 role 字面量，genesis 播种·runtime 校验·node 守卫三端共读 |
 | `src/genesis.rs` | 创世宣言、创世人口、创世发行总量 |
 | `china/mod.rs` | 机构常量模块声明 |
 | `china/china_ch.rs` | 43 个省储行（人口、质押、多签账户） |

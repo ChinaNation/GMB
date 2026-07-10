@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
@@ -8,7 +6,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:substrate_bip39/crypto_scheme.dart';
 import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/wallet/core/biometric_secure_seed_store.dart';
+import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 
 class WalletProfile {
@@ -60,21 +58,6 @@ class WalletCreationResult {
   final String mnemonic;
 }
 
-/// [WalletManager.signUtf8WithWallet] 的返回值。
-class WalletSignResult {
-  const WalletSignResult({
-    required this.account,
-    required this.pubkeyHex,
-    required this.sigAlg,
-    required this.signatureHex,
-  });
-
-  final String account;
-  final String pubkeyHex;
-  final String sigAlg;
-  final String signatureHex;
-}
-
 class WalletAuthException implements Exception {
   const WalletAuthException(this.message);
   final String message;
@@ -82,6 +65,15 @@ class WalletAuthException implements Exception {
   @override
   String toString() => 'WalletAuthException: $message';
 }
+
+/// 钱包创建后注册 P-256 设备子钥的钩子：给定 walletIndex/ownerAccount 与一个对
+/// 绑定消息做 sr25519 主钥签名的闭包（返回 `0x` hex）。由 app 启动注入实现，
+/// 避免 wallet/core 反向依赖 8964 层。
+typedef WalletSubkeyRegistrar = Future<void> Function({
+  required int walletIndex,
+  required String ownerAccount,
+  required Future<String> Function(Uint8List bindingMessage) signBinding,
+});
 
 class WalletManager {
   static const int _ss58Format = 2027;
@@ -99,12 +91,21 @@ class WalletManager {
     walletsRevision.value++;
   }
 
-  /// seed / 助记词的硬件级安全存储后端。默认走 biometric_storage（Keystore /
-  /// Keychain 绑定用户认证）；测试经 [debugSeedStore] 注入内存 fake。
-  static SecureSeedStore _store = BiometricSecureSeedStore();
+  /// seed / 助记词的硬件级安全存储后端（[HardwareBoundSeedVault]：Keystore/SE
+  /// auth-bound KEK 信封加密，**读 seed / 助记词时由硬件 + 生物识别原子解锁**，
+  /// 写入静默）；测试经 [debugSeedStore] 注入内存 fake。
+  static SecureSeedStore _store = HardwareBoundSeedVault();
 
   @visibleForTesting
   static set debugSeedStore(SecureSeedStore store) => _store = store;
+
+  /// 钱包创建后注册 P-256 设备子钥的钩子（app 启动注入；为空则跳过，用于测试 /
+  /// 未接后端）。「每次动钱动权都验证」现由硬件金库读 seed 时的原子生物识别实现，
+  /// 不再需要操作层 local_auth 软门禁。
+  static WalletSubkeyRegistrar? _subkeyRegistrar;
+
+  static set subkeyRegistrar(WalletSubkeyRegistrar? registrar) =>
+      _subkeyRegistrar = registrar;
 
   /// 拖拽排序首次迁移 flag。设置后不再重复填充 sortOrder。
   static const String _kSortOrderInitialized = 'wallet_sort_order_initialized';
@@ -285,6 +286,7 @@ class WalletManager {
       rethrow;
     }
     _bumpWalletsRevision();
+    await _tryRegisterDeviceSubkey(profile.walletIndex, profile.address, seed);
     return WalletCreationResult(profile: profile, mnemonic: mnemonic);
   }
 
@@ -316,6 +318,7 @@ class WalletManager {
       rethrow;
     }
     _bumpWalletsRevision();
+    await _tryRegisterDeviceSubkey(profile.walletIndex, profile.address, seed);
     return profile;
   }
 
@@ -532,37 +535,22 @@ class WalletManager {
 
   /// 用钱包私钥对 [payload] 签名。
   ///
-  /// 统一签名入口：动钱动权（转账 / 投票 / 切换默认身份 / 发布动态）一律走
-  /// 此方法。每次调用都读严档 seed（触发一次生物识别 / 设备验证），失效时从
-  /// 宽档助记词自愈；派生出的密钥用后即弃、不缓存、无会话流程——「要么验证、
-  /// 要么不验证」，一次操作一次验证。
-  Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async {
+  /// 统一签名入口：动钱动权（转账 / 投票 / 切换默认身份 / 发布动态 / IM 设备绑定）
+  /// 一律走此方法。读硬件金库 seed 时由硬件 + 生物识别原子解锁（一次操作一次验证），
+  /// seed 派生后用后即弃。广场 / IM 频繁会话握手不再走此方法，改用 P-256 设备子钥。
+  Future<Uint8List> signWithWallet(
+    int walletIndex,
+    Uint8List payload,
+  ) async {
     final pair = await _loadSigningKey(walletIndex);
     return Uint8List.fromList(pair.sign(payload));
   }
 
-  /// 校验用户能否解锁指定热钱包（触发一次生物识别 / 设备验证），供「切换默认
+  /// 校验用户身份（弹一次生物识别）并确认能解锁指定热钱包，供「切换默认
   /// 身份」等无签名负载、但属动权、需先验证的场景。验证失败上抛，成功即返回。
   Future<void> verifyWalletAccess(int walletIndex) async {
+    // 读硬件金库 seed 即触发一次生物识别；成功解锁即视为通过。
     await _loadSigningKey(walletIndex);
-  }
-
-  /// 用钱包私钥对 UTF-8 字符串签名，返回签名结果（含公钥 / 签名 hex）。
-  /// 同 [signWithWallet]，每次都触发验证。
-  Future<WalletSignResult> signUtf8WithWallet(
-    int walletIndex,
-    String message,
-  ) async {
-    final profile = await _requireHotWalletProfile(walletIndex);
-    final pair = await _loadSigningKey(walletIndex);
-    final payload = Uint8List.fromList(utf8.encode(message));
-    final signature = pair.sign(payload);
-    return WalletSignResult(
-      account: profile.address,
-      pubkeyHex: '0x${profile.pubkeyHex}',
-      sigAlg: 'sr25519',
-      signatureHex: '0x${_toHex(signature.toList(growable: false))}',
-    );
   }
 
   /// 读严档 seed（失效自愈）→ 派生并校验 sr25519 密钥对。
@@ -640,15 +628,42 @@ class WalletManager {
     return out;
   }
 
-  /// 获取钱包私钥（seed hex），触发认证；失效时自愈。仅用于「查看私钥」。
+  /// 获取钱包私钥（seed hex），读严档金库触发生物识别；失效时自愈。仅用于「查看私钥」。
   Future<String?> getSeedHex(int walletIndex) async {
     final profile = await _requireHotWalletProfile(walletIndex);
     return _readSeedHexWithSelfHeal(walletIndex, profile);
   }
 
-  /// 获取钱包助记词（宽档），触发认证。仅用于「查看助记词」。
-  Future<String?> getMnemonic(int walletIndex) {
+  /// 获取钱包助记词（读宽档金库触发生物识别 / 设备凭证）。仅用于「查看助记词 / 备份」。
+  Future<String?> getMnemonic(int walletIndex) async {
     return _store.readMnemonic(walletIndex);
+  }
+
+  /// best-effort 注册 P-256 设备子钥：用**内存里刚派生的 sr25519 keypair** 对绑定
+  /// 证明签名（零额外弹窗）。失败不阻塞创建；首次广场 / IM 握手会走 401 懒注册兜底。
+  Future<void> _tryRegisterDeviceSubkey(
+    int walletIndex,
+    String address,
+    List<int> seed,
+  ) async {
+    final registrar = _subkeyRegistrar;
+    if (registrar == null) {
+      return;
+    }
+    try {
+      await registrar(
+        walletIndex: walletIndex,
+        ownerAccount: address,
+        signBinding: (message) async {
+          final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(seed));
+          pair.ss58Format = _ss58Format;
+          final signature = pair.sign(message);
+          return '0x${_toHex(signature.toList(growable: false))}';
+        },
+      );
+    } catch (_) {
+      // best-effort：注册失败不阻塞创建。
+    }
   }
 
   /// 前置检查：设备必须有锁屏（生物识别 / 数字 / 图案 / PIN），否则拒绝

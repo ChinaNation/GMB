@@ -6,6 +6,8 @@ import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/user_qr_page.dart';
+import 'package:citizenapp/ui/app_theme.dart';
+import 'package:citizenapp/ui/identity_badge.dart';
 
 import 'profile_test_doubles.dart';
 
@@ -27,18 +29,20 @@ Widget _wrap({
 }
 
 void main() {
-  testWidgets('self profile shows three icons and edit-profile in kebab',
+  testWidgets('self profile hides owner-directed action icons, edit in kebab',
       (tester) async {
     await tester.pumpWidget(
       _wrap(isSelf: true, api: FakeProfileApi(sampleProfile())),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
-    expect(find.byIcon(Icons.people_outline), findsOneWidget);
-    // 认证以头像角的勾号呈现（推特式，去掉旧「认证公民」胶囊）。
-    expect(find.byIcon(Icons.verified), findsOneWidget);
+    // 自己看自己：通知/聊天/关注是对主页主人的操作，一律不显示。
+    expect(find.byIcon(Icons.notifications_outlined), findsNothing);
+    expect(find.byIcon(Icons.chat_bubble_outline), findsNothing);
+    expect(find.byIcon(Icons.person_add_alt), findsNothing);
+    expect(find.byIcon(Icons.how_to_reg), findsNothing);
+    // 认证以头像角的公民徽章呈现（链上身份分色 + 会员匹配带勾）。
+    expect(find.byType(CitizenBadge), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
@@ -47,7 +51,7 @@ void main() {
     expect(find.text('举报'), findsNothing);
   });
 
-  testWidgets('other profile shows follow + message and report in kebab',
+  testWidgets('other profile shows subscribe + chat + follow, report in kebab',
       (tester) async {
     await tester.pumpWidget(
       _wrap(
@@ -55,10 +59,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.person_add_alt), findsOneWidget);
+    // 看别人主页：通知(订阅)/聊天/关注 三个图标都在。
+    expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
     expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
-    expect(find.byIcon(Icons.notifications_outlined), findsNothing);
-    expect(find.byIcon(Icons.people_outline), findsNothing);
+    expect(find.byIcon(Icons.person_add_alt), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
@@ -82,14 +86,83 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('uncertified profile hides the verified badge', (tester) async {
+  testWidgets('pure visitor shows an orange person badge (no membership)',
+      (tester) async {
     await tester.pumpWidget(
       _wrap(
           isSelf: false, api: FakeProfileApi(sampleProfile(certified: false))),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.verified), findsNothing);
+    final badge = tester.widget<CitizenBadge>(find.byType(CitizenBadge));
+    expect(badge.style.color, AppTheme.identityVisitor);
+    expect(badge.style.checked, isFalse);
+  });
+
+  testWidgets('voting identity, no membership -> blue ring, unchecked',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        isSelf: false,
+        api: FakeProfileApi(sampleProfile(identityLevel: 'voting')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final badge = tester.widget<CitizenBadge>(find.byType(CitizenBadge));
+    expect(badge.style.color, AppTheme.identityVoting);
+    expect(badge.style.checked, isFalse);
+  });
+
+  testWidgets('voting identity + voting membership -> blue, checked',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        isSelf: false,
+        api: FakeProfileApi(sampleProfile(
+          identityLevel: 'voting',
+          membershipLevel: 'voting',
+        )),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final badge = tester.widget<CitizenBadge>(find.byType(CitizenBadge));
+    expect(badge.style.color, AppTheme.identityVoting);
+    expect(badge.style.checked, isTrue);
+  });
+
+  testWidgets('candidate identity + candidate membership -> red, checked',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        isSelf: false,
+        api: FakeProfileApi(sampleProfile(
+          identityLevel: 'candidate',
+          membershipLevel: 'candidate',
+        )),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final badge = tester.widget<CitizenBadge>(find.byType(CitizenBadge));
+    expect(badge.style.color, AppTheme.identityCandidate);
+    expect(badge.style.checked, isTrue);
+  });
+
+  testWidgets('candidate identity + any active membership -> red, checked',
+      (tester) async {
+    // 规则简化：买了会员（任意档）就带勾，颜色仍按链上身份=竞选红。
+    await tester.pumpWidget(
+      _wrap(
+        isSelf: false,
+        api: FakeProfileApi(sampleProfile(
+          identityLevel: 'candidate',
+          membershipLevel: 'voting',
+        )),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final badge = tester.widget<CitizenBadge>(find.byType(CitizenBadge));
+    expect(badge.style.color, AppTheme.identityCandidate);
+    expect(badge.style.checked, isTrue);
   });
 
   testWidgets('cache-first renders the fetched profile and writes cache',
@@ -173,15 +246,16 @@ void main() {
     expect(chatTitle, '轻节点');
   });
 
-  testWidgets('self notifications opens the placeholder page', (tester) async {
+  testWidgets('other profile subscribe icon shows a stub for now',
+      (tester) async {
     await tester
-        .pumpWidget(_wrap(isSelf: true, api: FakeProfileApi(sampleProfile())));
+        .pumpWidget(_wrap(isSelf: false, api: FakeProfileApi(sampleProfile())));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.notifications_outlined));
     await tester.pumpAndSettle();
 
-    expect(find.text('通知功能即将上线'), findsOneWidget);
+    expect(find.textContaining('订阅动态'), findsOneWidget);
   });
 
   testWidgets('kebab QR code opens the user QR page', (tester) async {

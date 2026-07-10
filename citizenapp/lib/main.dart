@@ -18,12 +18,17 @@ import 'package:citizenapp/my/user/user.dart';
 import 'package:citizenapp/security/app_permission_gate.dart';
 import 'package:citizenapp/update/app_update.dart';
 import 'package:citizenapp/update/update_badge.dart';
+import 'package:citizenapp/8964/services/device_subkey_registrar.dart';
+import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/wallet_gate.dart';
 
 import 'ui/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 钱包创建后注册 P-256 设备子钥（8964 层实现，避免 wallet/core 反向依赖）。
+  WalletManager.subkeyRegistrar = DeviceSubkeyRegistrar().register;
 
   // 诊断 — 把所有 framework / widget 静默吞掉的异常都打到 logcat。
   // 默认 ErrorWidget 在某些场景下表现为空白方块（白屏），这里换成显眼的红框 + 文字。
@@ -63,8 +68,13 @@ void main() {
   SmoldotClientManager.instance.dispose();
 
   runApp(const CitizenApp());
+  // 轻节点同步吃 CPU：延到首帧渲染 + 落地页（广场，走后端不需链）稳定后再启动，
+  // 避免与启动首屏抢核。落地页不需链上数据，短延迟无感知；进交易/钱包/公民等
+  // 需链场景时 initialize() 幂等，已在初始化中则直接复用。
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(_initializeSmoldotInBackground());
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      unawaited(_initializeSmoldotInBackground());
+    });
   });
 }
 
@@ -339,6 +349,8 @@ class _AppShellState extends State<AppShell> {
 
   void _handleUpdateStateChanged() {
     if (!mounted) return;
+    // 我的页懒建缓存失效以刷新「设置有更新」红点。
+    _tabCache[4] = null;
     setState(() {});
   }
 
@@ -355,13 +367,38 @@ class _AppShellState extends State<AppShell> {
     }
   });
 
-  List<Widget> get _pages => [
-        const SquareTabPage(),
-        _citizenPage,
-        ImTabPage(runtime: ImRuntime()),
-        const TransactionTabPage(),
-        ProfilePage(showSettingsUpdateDot: _updateController.state.hasUpdate),
-      ];
+  /// 顶层 tab 懒建缓存：仅访问过的 index 建真页并由 IndexedStack 保活，未访问
+  /// 的用占位，避免「打开即全建」把 42k 行政区同步 / IM runtime / 广场拉流等
+  /// 全拖到启动。落地页广场(0)启动即建，其余点到才建。
+  static const int _tabCount = 5;
+  final List<Widget?> _tabCache = List<Widget?>.filled(_tabCount, null);
+
+  Widget _buildTab(int index) {
+    switch (index) {
+      case 0:
+        return const SquareTabPage();
+      case 1:
+        return _citizenPage;
+      case 2:
+        return ImTabPage(runtime: ImRuntime());
+      case 3:
+        return const TransactionTabPage();
+      case 4:
+        return ProfilePage(
+            showSettingsUpdateDot: _updateController.state.hasUpdate);
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  /// 当前页按需建入缓存并保活，未访问的页用占位，避免启动即全建。
+  List<Widget> _lazyPages() {
+    _tabCache[_currentIndex] ??= _buildTab(_currentIndex);
+    return List<Widget>.generate(
+      _tabCount,
+      (i) => _tabCache[i] ?? const SizedBox.shrink(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -398,7 +435,7 @@ class _AppShellState extends State<AppShell> {
           Expanded(
             child: IndexedStack(
               index: _currentIndex,
-              children: _pages,
+              children: _lazyPages(),
             ),
           ),
         ],

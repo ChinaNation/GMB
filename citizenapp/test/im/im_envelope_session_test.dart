@@ -372,7 +372,8 @@ void main() {
             'ok': true,
             'challenge_id': 'challenge-1',
             'owner_account': 'alice-wallet',
-            'signing_payload': 'login payload',
+            'op_tag': 0x1b,
+            'signing_payload_hex': '6c6f67696e',
             'expires_at': DateTime.now()
                 .add(const Duration(minutes: 5))
                 .millisecondsSinceEpoch,
@@ -486,11 +487,11 @@ void main() {
       squareLoginPayloadSigner: ({
         required int walletIndex,
         required String ownerAccount,
-        required String signingPayload,
+        required Uint8List loginMessage,
       }) async {
         expect(walletIndex, 7);
         expect(ownerAccount, 'alice-wallet');
-        expect(signingPayload, 'login payload');
+        expect(loginMessage.length, 32);
         return '0xlogin';
       },
       walletPayloadSigner: ({

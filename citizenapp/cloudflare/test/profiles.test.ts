@@ -70,6 +70,10 @@ describe('GET /v1/square/users/:account', () => {
         published({ post_id: 'p1', cid_number: 'CN001-CTZN-000000001-2026', created_at: 200 }),
         published({ post_id: 'p2', cid_number: null, created_at: 100 })
       ],
+      // 认证真源=链上身份：投票公民携带 cid，主页据此判认证。
+      identity: { identity_level: 'voting', cid_number: 'CN001-CTZN-000000001-2026' },
+      // 且购买了投票会员且有效 → 主页会员匹配（徽章带勾）。
+      membership: { membership_level: 'voting' },
       follows: [
         { owner_account: owner, followed_account: 'a______________1' },
         { owner_account: owner, followed_account: 'a______________2' },
@@ -88,13 +92,73 @@ describe('GET /v1/square/users/:account', () => {
     expect(body.profile).toMatchObject({
       owner_account: owner,
       is_certified: true,
+      identity_level: 'voting',
+      membership_level: 'voting',
+      membership_active: true,
       cid_number: 'CN001-CTZN-000000001-2026',
       is_following: true
     });
     expect(body.profile.counts).toEqual({ following: 2, followers: 1, posts: 2 });
   });
 
-  it('is publicly readable with is_following false when unauthenticated', async () => {
+  it('reports membership level even when it is below the chain identity', async () => {
+    // 竞选身份但只买了投票会员 → 会员档=voting、生效，但与身份档 candidate 不匹配（客户端据此不给勾）。
+    const env = fakeEnv({
+      identity: { identity_level: 'candidate', cid_number: 'CN001-CTZN-000000009-2026' },
+      membership: { membership_level: 'voting' }
+    });
+    const response = await getUserProfileRoute(
+      request(`https://w/v1/square/users/${owner}`),
+      env,
+      owner
+    );
+    const body = (await response.json()) as { profile: Record<string, unknown> };
+    expect(body.profile).toMatchObject({
+      identity_level: 'candidate',
+      membership_level: 'voting',
+      membership_active: true
+    });
+  });
+
+  it('reports an expired membership as not active', async () => {
+    // 会员过期（expires_at 已过）→ membership_active=false（客户端据此不给勾）。
+    const env = fakeEnv({
+      identity: { identity_level: 'voting', cid_number: 'CN001-CTZN-000000001-2026' },
+      membership: { membership_level: 'voting', expires_at: 1 }
+    });
+    const response = await getUserProfileRoute(
+      request(`https://w/v1/square/users/${owner}`),
+      env,
+      owner
+    );
+    const body = (await response.json()) as { profile: Record<string, unknown> };
+    expect(body.profile).toMatchObject({
+      identity_level: 'voting',
+      membership_level: 'voting',
+      membership_active: false
+    });
+  });
+
+  it('marks a candidate identity account as certified candidate', async () => {
+    const env = fakeEnv({
+      identity: { identity_level: 'candidate', cid_number: 'CN001-CTZN-000000009-2026' }
+    });
+    const response = await getUserProfileRoute(
+      request(`https://w/v1/square/users/${owner}`),
+      env,
+      owner
+    );
+    const body = (await response.json()) as { profile: Record<string, unknown> };
+
+    expect(body.profile).toMatchObject({
+      is_certified: true,
+      identity_level: 'candidate',
+      cid_number: 'CN001-CTZN-000000009-2026'
+    });
+  });
+
+  it('is publicly readable, unverified visitor when no chain identity', async () => {
+    // 无身份桩 + 未配 RPC → 软降级为访客（未认证），不因链上不可用而报错。
     const env = fakeEnv({ posts: [], follows: [] });
     const response = await getUserProfileRoute(
       request(`https://w/v1/square/users/${owner}`),
@@ -105,6 +169,7 @@ describe('GET /v1/square/users/:account', () => {
 
     expect(body.profile).toMatchObject({
       is_certified: false,
+      identity_level: 'visitor',
       cid_number: null,
       is_following: false,
       display_name: ''
@@ -267,6 +332,14 @@ interface FakeEnvOptions {
   posts?: PostSeed[];
   follows?: FollowSeed[];
   session?: { token: string; owner_account: string };
+  /// 预置 owner 的链上身份（写进 FEED_CACHE 命中缓存版身份读取）；缺省=未配置→软降级为访客。
+  identity?: { identity_level: 'visitor' | 'voting' | 'candidate'; cid_number?: string | null };
+  /// 预置 owner 的会员购买（对应 D1 square_memberships 一行）；缺省=未购买（无行）。
+  membership?: {
+    membership_level: 'visitor' | 'voting' | 'candidate';
+    subscription_status?: string;
+    expires_at?: number;
+  };
 }
 
 function fakeEnv(options: FakeEnvOptions = {}): Env {
@@ -281,9 +354,32 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
     };
     kv.set(`square_session:${options.session.token}`, session);
   }
+  if (options.identity) {
+    const level = options.identity.identity_level;
+    kv.set(
+      `square_identity:${owner}`,
+      JSON.stringify({
+        owner_account: owner,
+        identity_level: level,
+        has_voting_identity: level !== 'visitor',
+        has_candidate_identity: level === 'candidate',
+        cid_number: options.identity.cid_number ?? null,
+        checked_at: 0
+      })
+    );
+  }
+
+  const membershipRow = options.membership
+    ? {
+        owner_account: owner,
+        membership_level: options.membership.membership_level,
+        subscription_status: options.membership.subscription_status ?? 'active',
+        expires_at: options.membership.expires_at ?? Date.now() + 60_000
+      }
+    : null;
 
   return {
-    DB: new FakeDb(posts, follows) as unknown as D1Database,
+    DB: new FakeDb(posts, follows, membershipRow) as unknown as D1Database,
     SQUARE_MEDIA: new FakeR2() as unknown as R2Bucket,
     FEED_CACHE: new FakeKv(kv) as unknown as KVNamespace
   } as unknown as Env;
@@ -331,11 +427,12 @@ class FakeKv {
 class FakeDb {
   constructor(
     private readonly posts: PostSeed[],
-    private readonly follows: FollowSeed[]
+    private readonly follows: FollowSeed[],
+    private readonly membership: Record<string, unknown> | null = null
   ) {}
 
   prepare(sql: string): FakeStmt {
-    return new FakeStmt(this.posts, this.follows, sql);
+    return new FakeStmt(this.posts, this.follows, this.membership, sql);
   }
 }
 
@@ -345,6 +442,7 @@ class FakeStmt {
   constructor(
     private readonly posts: PostSeed[],
     private readonly follows: FollowSeed[],
+    private readonly membership: Record<string, unknown> | null,
     private readonly sql: string
   ) {}
 
@@ -356,6 +454,11 @@ class FakeStmt {
   async first<T>(): Promise<T | null> {
     const sql = this.sql;
     const b0 = this.binds[0] as string;
+
+    if (sql.includes('square_memberships')) {
+      const m = this.membership;
+      return m && m.owner_account === b0 ? (m as T) : null;
+    }
 
     if (sql.includes('square_follows') && sql.includes('followed_account = ?') &&
       sql.includes('owner_account = ?')) {
