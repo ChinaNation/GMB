@@ -14,7 +14,7 @@ export default {
     }
   },
 
-  // Cron 触发：退订视频冷归档扫描（限流分批、幂等可续跑，由 VIDEO_ARCHIVE_ENABLED 开关控制）。
+  // Cron 触发：退订视频冷归档扫描（限流分批、幂等可续跑，由 ARCHIVE_ENABLED 开关控制）。
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
       runVideoArchiveSweep(env).catch((error) => {

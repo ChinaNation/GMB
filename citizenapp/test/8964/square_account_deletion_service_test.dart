@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/8964/services/square_account_deletion_service.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
-import 'package:citizenapp/im/storage/im_isar_store.dart';
+import 'package:citizenapp/chat/storage/chat_store.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 
 const _owner = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
@@ -51,10 +51,10 @@ class _FakeSubkey extends DeviceSubkey {
   }
 }
 
-class _FakeImStore extends ImIsarStore {
+class _FakeChatStore extends ChatStore {
   bool cleared = false;
   @override
-  Future<void> clearAllForOwner(String ownerChatAccount) async {
+  Future<void> clearAllForOwner(String ownerAccount) async {
     cleared = true;
   }
 }
@@ -64,12 +64,12 @@ void main() {
     final api = _FakeApi();
     final cache = _FakeCache();
     final subkey = _FakeSubkey();
-    final imStore = _FakeImStore();
+    final chatStore = _FakeChatStore();
     final service = SquareAccountDeletionService(
       apiClient: api,
       profileCache: cache,
       deviceSubkey: subkey,
-      imStore: imStore,
+      chatStore: chatStore,
     );
 
     await service.deleteAccount(
@@ -82,7 +82,7 @@ void main() {
     expect(api.signerInvoked, isTrue);
     expect(cache.cleared, isTrue);
     expect(api.sessionCleared, isTrue);
-    expect(imStore.cleared, isTrue);
+    expect(chatStore.cleared, isTrue);
     expect(subkey.deleted, isTrue);
   });
 
@@ -90,12 +90,12 @@ void main() {
     final api = _FakeApi(fail: true);
     final cache = _FakeCache();
     final subkey = _FakeSubkey();
-    final imStore = _FakeImStore();
+    final chatStore = _FakeChatStore();
     final service = SquareAccountDeletionService(
       apiClient: api,
       profileCache: cache,
       deviceSubkey: subkey,
-      imStore: imStore,
+      chatStore: chatStore,
     );
 
     await expectLater(
@@ -109,7 +109,7 @@ void main() {
 
     expect(cache.cleared, isFalse);
     expect(api.sessionCleared, isFalse);
-    expect(imStore.cleared, isFalse);
+    expect(chatStore.cleared, isFalse);
     expect(subkey.deleted, isFalse);
   });
 }

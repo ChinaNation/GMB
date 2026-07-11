@@ -713,7 +713,7 @@ impl<'a> DigestRef<'a> {
                 }
                 DigestItem::BabeConsensus(BabeConsensusLog::OnDisabled(_)) => {}
                 DigestItem::GrandpaConsensus(_) => {}
-                DigestItem::PowPreRuntime(_) => {}
+                DigestItem::PowPreDigest(_) => {}
                 DigestItem::PowSeal(_) if item_num == slice.len() - 1 => {
                     debug_assert!(aura_seal_index.is_none());
                     debug_assert!(babe_seal_index.is_none());
@@ -819,7 +819,7 @@ impl<'a> DigestRef<'a> {
                 }
                 DigestItemRef::BabeConsensus(BabeConsensusLogRef::OnDisabled(_)) => {}
                 DigestItemRef::GrandpaConsensus(_) => {}
-                DigestItemRef::PowPreRuntime(_) => {}
+                DigestItemRef::PowPreDigest(_) => {}
                 DigestItemRef::PowSeal(_) if item_num == digest_logs_len - 1 => {
                     debug_assert!(aura_seal_index.is_none());
                     debug_assert!(babe_seal_index.is_none());
@@ -1064,7 +1064,7 @@ pub enum DigestItemRef<'a> {
     GrandpaConsensus(GrandpaConsensusLogRef<'a>),
 
     /// PoW pre-runtime digest containing miner AccountId.
-    PowPreRuntime(&'a [u8]),
+    PowPreDigest(&'a [u8]),
     /// PoW seal containing encoded nonce.
     PowSeal(&'a [u8]),
 
@@ -1129,7 +1129,10 @@ impl<'a> DigestItemRef<'a> {
 
     /// Returns `true` if this item is PoW-related.
     pub fn is_pow(&self) -> bool {
-        matches!(self, DigestItemRef::PowPreRuntime(_) | DigestItemRef::PowSeal(_))
+        matches!(
+            self,
+            DigestItemRef::PowPreDigest(_) | DigestItemRef::PowSeal(_)
+        )
     }
 
     /// Decodes a SCALE-encoded digest item.
@@ -1233,7 +1236,7 @@ impl<'a> DigestItemRef<'a> {
                 ret.extend_from_slice(util::encode_scale_compact_usize(64).as_ref());
                 (ret, either::Right(&seal[..]))
             }
-            DigestItemRef::PowPreRuntime(data) => {
+            DigestItemRef::PowPreDigest(data) => {
                 let mut ret = Vec::with_capacity(12);
                 ret.push(6);
                 ret.extend_from_slice(b"pow_");
@@ -1291,7 +1294,7 @@ impl<'a> From<&'a DigestItem> for DigestItemRef<'a> {
             DigestItem::BabeConsensus(v) => DigestItemRef::BabeConsensus(v.into()),
             DigestItem::BabeSeal(v) => DigestItemRef::BabeSeal(v),
             DigestItem::GrandpaConsensus(v) => DigestItemRef::GrandpaConsensus(v.into()),
-            DigestItem::PowPreRuntime(v) => DigestItemRef::PowPreRuntime(v),
+            DigestItem::PowPreDigest(v) => DigestItemRef::PowPreDigest(v),
             DigestItem::PowSeal(v) => DigestItemRef::PowSeal(v),
             DigestItem::UnknownConsensus { engine, opaque } => DigestItemRef::UnknownConsensus {
                 engine: *engine,
@@ -1327,7 +1330,7 @@ pub enum DigestItem {
     GrandpaConsensus(GrandpaConsensusLog),
 
     /// PoW pre-runtime digest.
-    PowPreRuntime(Vec<u8>),
+    PowPreDigest(Vec<u8>),
     /// PoW seal.
     PowSeal(Vec<u8>),
 
@@ -1379,7 +1382,7 @@ impl<'a> From<DigestItemRef<'a>> for DigestItem {
                 DigestItem::BabeSeal(seal)
             }
             DigestItemRef::GrandpaConsensus(v) => DigestItem::GrandpaConsensus(v.into()),
-            DigestItemRef::PowPreRuntime(v) => DigestItem::PowPreRuntime(v.to_vec()),
+            DigestItemRef::PowPreDigest(v) => DigestItem::PowPreDigest(v.to_vec()),
             DigestItemRef::PowSeal(v) => DigestItem::PowSeal(v.to_vec()),
             DigestItemRef::UnknownConsensus { engine, opaque } => DigestItem::UnknownConsensus {
                 opaque: opaque.to_vec(),
@@ -1461,7 +1464,7 @@ fn decode_item_from_parts<'a>(
 ) -> Result<DigestItemRef<'a>, Error> {
     Ok(match (index, engine_id) {
         // 6 = PreRuntime for PoW
-        (6, b"pow_") => DigestItemRef::PowPreRuntime(content),
+        (6, b"pow_") => DigestItemRef::PowPreDigest(content),
         // 5 = Seal for PoW
         (5, b"pow_") => DigestItemRef::PowSeal(content),
         // 4 = Consensus for PoW (treat as unknown consensus)

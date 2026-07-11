@@ -104,8 +104,8 @@ mod sync_service;
 mod transactions_service;
 
 pub use sync_service::{
-    StartupFinalizedSource as ChainStartupFinalizedSource, SyncPhase as ChainSyncPhase,
-    WarpFailure as ChainWarpFailure,
+    StartupFinalizedSource, SyncPhase,
+    WarpFailure,
 };
 mod util;
 
@@ -583,9 +583,9 @@ pub struct ChainStatusSnapshot {
     /// Hash of the current finalized block.
     pub finalized_block_hash: [u8; 32],
     /// 同步状态机当前阶段，直接来自 sync service。
-    pub sync_phase: ChainSyncPhase,
+    pub sync_phase: SyncPhase,
     /// 本次 addChain 真实采用的 finalized 起点来源。
-    pub startup_finalized_source: Option<ChainStartupFinalizedSource>,
+    pub startup_finalized_source: Option<StartupFinalizedSource>,
     /// 本次 addChain 实际采用的 finalized 起点。
     pub startup_finalized_block_number: Option<u64>,
     /// 本次 addChain 实际采用的 finalized 起点 hash。
@@ -607,44 +607,44 @@ pub struct ChainStatusSnapshot {
     pub warp_received_fragment_count: u64,
     pub warp_verified_fragment_count: u64,
     pub warp_rejected_fragment_count: u64,
-    pub warp_last_failure: Option<ChainWarpFailure>,
+    pub warp_last_failure: Option<WarpFailure>,
 }
 
 /// 统一 runtime 近头启发式与同步状态机阶段的完成语义。
 ///
 /// runtime 已接近链头只说明目标 runtime 可用；只要 GRANDPA warp 尚未回到
 /// `Regular`，上层仍必须继续轮询，不能提前保存 database 或开放业务读写。
-fn chain_status_is_syncing(runtime_is_near_head: bool, sync_phase: ChainSyncPhase) -> bool {
-    !runtime_is_near_head || sync_phase != ChainSyncPhase::Regular
+fn chain_status_is_syncing(runtime_is_near_head: bool, sync_phase: SyncPhase) -> bool {
+    !runtime_is_near_head || sync_phase != SyncPhase::Regular
 }
 
-fn chain_status_is_usable(peer_count: u64, is_syncing: bool, sync_phase: ChainSyncPhase) -> bool {
-    peer_count > 0 && !is_syncing && sync_phase == ChainSyncPhase::Regular
+fn chain_status_is_usable(peer_count: u64, is_syncing: bool, sync_phase: SyncPhase) -> bool {
+    peer_count > 0 && !is_syncing && sync_phase == SyncPhase::Regular
 }
 
 #[cfg(test)]
 mod chain_status_tests {
-    use super::{ChainSyncPhase, chain_status_is_syncing, chain_status_is_usable};
+    use super::{SyncPhase, chain_status_is_syncing, chain_status_is_usable};
 
     #[test]
     fn warp_mode_remains_syncing_even_when_runtime_is_near_head() {
         assert!(chain_status_is_syncing(
             true,
-            ChainSyncPhase::WarpDownloadingFragments
+            SyncPhase::WarpDownloadingFragments
         ));
         assert!(chain_status_is_syncing(
             true,
-            ChainSyncPhase::WarpBuildingChainInformation
+            SyncPhase::WarpBuildingChainInformation
         ));
-        assert!(chain_status_is_syncing(false, ChainSyncPhase::Regular));
-        assert!(!chain_status_is_syncing(true, ChainSyncPhase::Regular));
+        assert!(chain_status_is_syncing(false, SyncPhase::Regular));
+        assert!(!chain_status_is_syncing(true, SyncPhase::Regular));
         assert!(!chain_status_is_usable(
             1,
             true,
-            ChainSyncPhase::WarpBuildingChainInformation
+            SyncPhase::WarpBuildingChainInformation
         ));
-        assert!(!chain_status_is_usable(0, false, ChainSyncPhase::Regular));
-        assert!(chain_status_is_usable(1, false, ChainSyncPhase::Regular));
+        assert!(!chain_status_is_usable(0, false, SyncPhase::Regular));
+        assert!(chain_status_is_usable(1, false, SyncPhase::Regular));
     }
 }
 

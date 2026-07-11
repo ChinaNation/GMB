@@ -18,7 +18,7 @@ import 'package:citizenapp/8964/profile/widgets/profile_kebab_menu.dart';
 import 'package:citizenapp/8964/profile/widgets/profile_posts_list.dart';
 import 'package:citizenapp/8964/services/square_account_deletion_service.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
-import 'package:citizenapp/im/open_direct_chat.dart';
+import 'package:citizenapp/chat/open_direct_chat.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart' show bytesToHex;
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -55,7 +55,7 @@ class UserProfilePage extends StatefulWidget {
   final CitizenProfileCache? cache;
   final SquareSessionProvider? sessionProvider;
 
-  /// 私聊入口，测试可注入 spy；默认走真 IM。
+  /// 私聊入口，测试可注入 spy；默认走正式 ChatRuntime。
   final DirectChatOpener? onOpenDirectChat;
 
   @override

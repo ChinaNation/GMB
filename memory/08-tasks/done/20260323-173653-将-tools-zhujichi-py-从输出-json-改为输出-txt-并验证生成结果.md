@@ -1,4 +1,4 @@
-# 任务卡：将 tools/zhujichi.py 从输出 json 改为输出 txt，并验证生成结果
+# 任务卡：将 tools/gen_mnemonics.py 从输出 json 改为输出 txt，并验证生成结果
 
 - 任务编号：20260323-173653
 - 状态：done
@@ -8,7 +8,7 @@
 
 ## 任务需求
 
-将 tools/zhujichi.py 从输出 json 改为输出 txt，并验证生成结果
+将 tools/gen_mnemonics.py 从输出 json 改为输出 txt，并验证生成结果
 
 ## 必读上下文
 
@@ -46,6 +46,6 @@
 ## 完成信息
 
 - 完成时间：2026-03-23 17:40:19
-- 完成摘要：已将 zhujichi.py 默认输出改为 vault_without_salt.txt，新增纯文本格式化输出与更明确的 subkey 错误提示，并更新仓库 tools 文档说明；已通过 py_compile 和临时 txt 生成验证。
+- 完成摘要：已将 gen_mnemonics.py 默认输出改为 vault_without_salt.txt，新增纯文本格式化输出与更明确的 subkey 错误提示，并更新仓库 tools 文档说明；已通过 py_compile 和临时 txt 生成验证。
 - 对照清单：memory/07-ai/pre-submit-checklist.md
 - 对照总标准：memory/07-ai/definition-of-done.md

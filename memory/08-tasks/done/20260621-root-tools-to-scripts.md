@@ -19,7 +19,7 @@
 
 ## 执行记录
 
-- 已将 `duoqian.py`、`extract_whitepaper_images.py`、`fill_china_admins.py`、`generate_citizenapp_governance_registry.mjs`、`zhujichi.py` 迁移到根 `scripts/`。
+- 已将 `duoqian.py`、`extract_whitepaper_images.py`、`fill_china_admins.py`、`generate_citizenapp_governance_registry.mjs`、`gen_mnemonics.py` 迁移到根 `scripts/`。
 - 已删除根 `tools/__pycache__` 和一次性临时脚本 `tools/resolve_stash_conflicts.py`，并删除根 `tools/` 目录。
 - 已更新白皮书、仓库结构文档、命名登记、活跃任务卡和生成器注释中的当前路径。
 - 已重新生成 `citizenchain/node/frontend/generated/local-docs.generated.ts`，保证区块链软件白皮书 Tab 使用同一结构说明。

@@ -70,9 +70,9 @@ export function buildChainBootstrapResponse(
   env: Env
 ): ChainBootstrapResponse {
   const origin = new URL(request.url).origin;
-  const bootnodes = parseBootnodes(env.CITIZEN_CHAIN_BOOTNODES);
+  const bootnodes = parseBootnodes(env.CHAIN_BOOTNODES);
   const cacheTtlSeconds = parsePositiveInt(
-    env.CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS,
+    env.BOOT_TTL_SECONDS,
     DEFAULT_BOOTSTRAP_TTL_SECONDS
   );
   const relayEnabled = isChainExtrinsicRelayEnabled(env);
@@ -87,8 +87,8 @@ export function buildChainBootstrapResponse(
       chain_name: 'CitizenChain',
       chain_type: 'Live',
       protocol_id: 'citizenchain',
-      genesis_hash: normalizeHex32(env.CITIZEN_CHAIN_GENESIS_HASH, DEFAULT_GENESIS_HASH),
-      state_root: normalizeHex32(env.CITIZEN_CHAIN_STATE_ROOT, DEFAULT_STATE_ROOT),
+      genesis_hash: normalizeHex32(env.CHAIN_GENESIS_HASH, DEFAULT_GENESIS_HASH),
+      state_root: normalizeHex32(env.CHAIN_STATE_ROOT, DEFAULT_STATE_ROOT),
       ss58_format: 2027,
       token_symbol: 'GMB',
       token_decimals: 2

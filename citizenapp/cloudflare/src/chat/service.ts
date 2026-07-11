@@ -19,8 +19,8 @@ import {
   assertPositiveMillis,
 } from "./codec";
 import {
-  buildDeviceBindingSigningMessageBase64Url,
-  verifyDeviceBindingSignature,
+  buildChatDeviceBindingMessageBase64Url,
+  verifyChatDeviceBinding,
 } from "./binding";
 import { isSha256Hex } from "../shared/hash";
 import { createDownloadUrl, createUploadUrl } from "../storage/presigned";
@@ -32,7 +32,6 @@ import {
 } from "./realtime";
 
 interface RegisterDeviceRequest {
-  owner_account?: unknown;
   device_id?: unknown;
   device_public_key_hex?: unknown;
   binding_signature?: unknown;
@@ -118,6 +117,10 @@ interface ChatDeviceRow {
   expires_at: number;
 }
 
+interface ChatDeviceSubkeyRow {
+  p256_pubkey: string;
+}
+
 interface ChatKeyPackageRow {
   owner_account: string;
   device_id: string;
@@ -153,17 +156,17 @@ export async function registerChatDevice(
   request: Request,
   env: Env,
 ): Promise<Response> {
-  // 设备登记只建立钱包账户与 IM 设备公钥的授权关系，不保存聊天明文。
+  // 账户只来自已验证 session；请求体不得恢复客户端 owner 真源。
   const session = await requireSession(request, env);
   const body = await readJson<RegisterDeviceRequest>(request);
-  const ownerAccount = assertChatAccount(body.owner_account);
-  if (ownerAccount !== session.owner_account) {
+  if (Object.prototype.hasOwnProperty.call(body, "owner_account")) {
     throw new HttpError(
-      403,
-      "chat_owner_mismatch",
-      "只能登记当前钱包账户的 IM 设备",
+      400,
+      "legacy_owner_account",
+      "Chat 设备登记账户只能来自当前 session",
     );
   }
+  const ownerAccount = assertChatAccount(session.owner_account);
 
   const deviceId = assertDeviceId(body.device_id);
   const devicePublicKeyHex = assertDevicePublicKeyHex(
@@ -172,10 +175,14 @@ export async function registerChatDevice(
   const expiresAt = assertPositiveMillis(
     body.expires_at,
     "invalid_binding_expires_at",
-    "IM 设备绑定过期时间不合法",
+    "Chat 设备绑定过期时间不合法",
   );
   if (expiresAt <= nowMs()) {
-    throw new HttpError(400, "expired_device_binding", "IM 设备绑定凭证已过期");
+    throw new HttpError(
+      400,
+      "expired_device_binding",
+      "Chat 设备绑定凭证已过期",
+    );
   }
   if (
     typeof body.nonce !== "string" ||
@@ -185,7 +192,7 @@ export async function registerChatDevice(
     throw new HttpError(
       400,
       "invalid_binding_nonce",
-      "IM 设备绑定 nonce 不合法",
+      "Chat 设备绑定 nonce 不合法",
     );
   }
   if (
@@ -195,27 +202,73 @@ export async function registerChatDevice(
     throw new HttpError(
       400,
       "invalid_binding_signature",
-      "IM 设备绑定签名不合法",
+      "Chat 设备绑定签名不合法",
     );
   }
 
   const bindingInput = {
-    wallet_account: ownerAccount,
-    im_device_id: deviceId,
-    im_device_pubkey: devicePublicKeyHex,
-    expires_at_millis: expiresAt,
+    owner_account: ownerAccount,
+    device_id: deviceId,
+    device_public_key_hex: devicePublicKeyHex,
+    expires_at: expiresAt,
     nonce: body.nonce,
   };
-  const validSignature = await verifyDeviceBindingSignature(
+  const deviceSubkey = await env.DB.prepare(
+    `SELECT p256_pubkey FROM square_device_subkeys WHERE owner_account = ?`,
+  )
+    .bind(ownerAccount)
+    .first<ChatDeviceSubkeyRow>();
+  if (!deviceSubkey) {
+    throw new HttpError(
+      401,
+      "missing_device_subkey",
+      "当前账户尚未登记硬件设备子钥",
+    );
+  }
+
+  const validSignature = await verifyChatDeviceBinding(
     bindingInput,
     body.binding_signature,
+    deviceSubkey.p256_pubkey,
   );
   if (!validSignature) {
     throw new HttpError(
       401,
       "invalid_device_binding_signature",
-      "IM 设备绑定签名校验失败",
+      "Chat 设备绑定签名校验失败",
     );
+  }
+
+  const createdAt = nowMs();
+  await env.DB.prepare(
+    `DELETE FROM chat_device_binding_nonces WHERE expires_at <= ?`,
+  )
+    .bind(createdAt)
+    .run();
+  try {
+    // owner + nonce 主键是协议级重放闸门；同一证明不得重复或跨设备使用。
+    await env.DB.prepare(
+      `INSERT INTO chat_device_binding_nonces
+        (owner_account, nonce, expires_at, created_at)
+        VALUES (?, ?, ?, ?)`,
+    )
+      .bind(ownerAccount, body.nonce, expiresAt, createdAt)
+      .run();
+  } catch (error) {
+    const replayed = await env.DB.prepare(
+      `SELECT 1 AS used FROM chat_device_binding_nonces
+        WHERE owner_account = ? AND nonce = ? LIMIT 1`,
+    )
+      .bind(ownerAccount, body.nonce)
+      .first<{ used: number }>();
+    if (replayed) {
+      throw new HttpError(
+        409,
+        "replayed_device_binding",
+        "Chat 设备绑定凭证已使用",
+      );
+    }
+    throw error;
   }
 
   await env.DB.prepare(
@@ -235,7 +288,7 @@ export async function registerChatDevice(
       devicePublicKeyHex,
       body.binding_signature,
       expiresAt,
-      nowMs(),
+      createdAt,
     )
     .run();
 
@@ -244,7 +297,7 @@ export async function registerChatDevice(
     owner_account: ownerAccount,
     device_id: deviceId,
     device_public_key_hex: devicePublicKeyHex,
-    binding_message: buildDeviceBindingSigningMessageBase64Url(bindingInput),
+    binding_message: buildChatDeviceBindingMessageBase64Url(bindingInput),
     expires_at: expiresAt,
   });
 }
@@ -439,7 +492,7 @@ export async function submitChatEnvelope(
     throw new HttpError(
       403,
       "sender_mismatch",
-      "只能发送当前钱包账户的 IM 密文",
+      "只能发送当前钱包账户的 Chat 密文",
     );
   }
   const senderDeviceId = assertDeviceId(body.sender_device_id);
@@ -514,7 +567,7 @@ export async function submitChatEnvelope(
     .run();
 
   await notifyChatRealtime(env, {
-    type: "gmb_im_new_envelope_v1",
+    type: "gmb_chat_new_envelope_v1",
     envelope_id: envelopeId,
     conversation_id: conversationId,
     recipient_account: recipientAccount,
@@ -707,7 +760,7 @@ export async function prepareChatAttachmentUpload(
   );
   const requestUrl = new URL(request.url);
   const expiresSeconds = Number.parseInt(
-    env.SQUARE_UPLOAD_URL_TTL_SECONDS ?? "900",
+    env.UPLOAD_TTL_SECONDS ?? "900",
     10,
   );
 
@@ -758,7 +811,7 @@ export async function devPutChatAttachmentObject(
   request: Request,
   env: Env,
 ): Promise<Response> {
-  if (env.SQUARE_DEV_UPLOAD_PROXY !== "1") {
+  if (env.DEV_UPLOAD_PROXY !== "1") {
     throw new HttpError(
       404,
       "dev_upload_proxy_disabled",
@@ -898,7 +951,7 @@ export async function prepareChatAttachmentDownload(
 
   const requestUrl = new URL(request.url);
   const expiresSeconds = Number.parseInt(
-    env.SQUARE_UPLOAD_URL_TTL_SECONDS ?? "900",
+    env.UPLOAD_TTL_SECONDS ?? "900",
     10,
   );
   const safeExpires = Number.isSafeInteger(expiresSeconds)
@@ -949,7 +1002,7 @@ export async function devGetChatAttachmentObject(
   request: Request,
   env: Env,
 ): Promise<Response> {
-  if (env.SQUARE_DEV_UPLOAD_PROXY !== "1") {
+  if (env.DEV_UPLOAD_PROXY !== "1") {
     throw new HttpError(
       404,
       "dev_download_proxy_disabled",
@@ -1014,7 +1067,7 @@ async function requireActiveDevice(
     throw new HttpError(
       403,
       "chat_device_not_registered",
-      "IM 设备未绑定或已过期",
+      "Chat 设备未绑定或已过期",
     );
   }
   if (
@@ -1024,7 +1077,7 @@ async function requireActiveDevice(
     throw new HttpError(
       403,
       "chat_device_key_mismatch",
-      "IM 设备公钥与绑定记录不一致",
+      "Chat 设备公钥与绑定记录不一致",
     );
   }
   return row;
@@ -1115,7 +1168,7 @@ function assertNonEmptyString(value: unknown, code: string): string {
     value.trim().length === 0 ||
     value.length > 220
   ) {
-    throw new HttpError(400, code, "IM 请求字段格式不合法");
+    throw new HttpError(400, code, "Chat 请求字段格式不合法");
   }
   return value;
 }

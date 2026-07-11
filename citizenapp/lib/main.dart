@@ -5,8 +5,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:citizenapp/8964/square_tab_page.dart';
 import 'package:citizenapp/citizen/citizen_tab_page.dart';
-import 'package:citizenapp/im/im_runtime.dart';
-import 'package:citizenapp/im/im_tab_page.dart';
+import 'package:citizenapp/chat/chat_runtime.dart';
+import 'package:citizenapp/chat/chat_tab.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/security/app_lock_service.dart';
 import 'package:citizenapp/security/pin_input_page.dart';
@@ -310,6 +310,8 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   final AppUpdateController _updateController = AppUpdateController.instance;
+  final ValueNotifier<int> _selectedTab = ValueNotifier<int>(0);
+  final ChatRuntime _chatRuntime = ChatRuntime();
   int _currentIndex = 0;
   int _pendingVoteCount = 0;
   bool _isRooted = false;
@@ -326,6 +328,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     _updateController.removeListener(_handleUpdateStateChanged);
+    _selectedTab.dispose();
     super.dispose();
   }
 
@@ -350,7 +353,7 @@ class _AppShellState extends State<AppShell> {
   });
 
   /// 顶层 tab 懒建缓存：仅访问过的 index 建真页并由 IndexedStack 保活，未访问
-  /// 的用占位，避免「打开即全建」把 42k 行政区同步 / IM runtime / 广场拉流等
+  /// 的用占位，避免「打开即全建」把 42k 行政区同步 / Chat runtime / 广场拉流等
   /// 全拖到启动。落地页广场(0)启动即建，其余点到才建。
   static const int _tabCount = 5;
   final List<Widget?> _tabCache = List<Widget?>.filled(_tabCount, null);
@@ -362,12 +365,15 @@ class _AppShellState extends State<AppShell> {
       case 1:
         return _citizenPage;
       case 2:
-        return ImTab(runtime: ImRuntime());
+        return ChatTab(
+          runtime: _chatRuntime,
+          selectedTab: _selectedTab,
+          tabIndex: 2,
+        );
       case 3:
         return const TransactionTabPage();
       case 4:
-        return MyTab(
-            showSettingsUpdateDot: _updateController.state.hasUpdate);
+        return MyTab(showSettingsUpdateDot: _updateController.state.hasUpdate);
       default:
         return const SizedBox.shrink();
     }
@@ -432,6 +438,9 @@ class _AppShellState extends State<AppShell> {
         child: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
+            // IndexedStack 会保活旧页面，因此必须额外广播唯一活动 Tab；
+            // ChatTab 不能把“仍在 widget tree”误判为“当前可同步”。
+            _selectedTab.value = index;
             setState(() {
               _currentIndex = index;
             });

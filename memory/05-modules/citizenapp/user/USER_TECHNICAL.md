@@ -6,7 +6,7 @@
 
 - 用户背景图上传与更换
 - 用户头像上传与更换
-- 通信账户选择（钱包名称即用户昵称，双向同步）
+- 聊天账户选择（钱包名称即用户昵称，双向同步）
 - 用户二维码生成与展示
 - 通讯录扫码导入与本地昵称修改
 - 电子护照入口展示
@@ -26,7 +26,7 @@
 相关协作模块：
 
 - `lib/wallet/pages/wallet_page.dart`
-  - 在选择通信账户时提供钱包选择
+  - 在选择聊天账户时提供钱包选择
   - 钱包改名时同步更新用户资料中的通信钱包名称
 - `lib/my/myid/`
   - 电子护照页面和链上唯一身份状态服务
@@ -41,9 +41,9 @@
 
 - `avatarPath` — 本地头像路径
 - `backgroundPath` — 本地背景图路径
-- `communicationWalletIndex` — 通信账户钱包 index
-- `communicationAddress` — 通信账户钱包地址（SS58）
-- `communicationWalletName` — 通信账户钱包名称
+- `communicationWalletIndex` — 聊天账户钱包 index
+- `communicationAddress` — 聊天账户钱包地址（SS58）
+- `communicationWalletName` — 聊天账户钱包名称
 
 计算属性：
 
@@ -51,7 +51,7 @@
 
 设计说明：
 
-- 不再有独立的昵称字段，用户昵称完全由通信账户钱包名称决定
+- 不再有独立的昵称字段，用户昵称完全由聊天账户钱包名称决定
 - 用户修改昵称 = 修改通信钱包名称（`WalletManager.renameWallet`）
 - 用户在钱包页改通信钱包名称 = 自动同步到用户资料
 - 头像和背景图只保存本机文件路径
@@ -66,7 +66,7 @@
 
 - `proto` — 协议标识（固定 `QR_V1`）
 - `kind` — 固定 `user_contact`
-- `body.address` — 通信账户 SS58 地址
+- `body.address` — 聊天账户 SS58 地址
 - `body.name` — 用户昵称（= 通信钱包名称）
 
 ### 3.3 通讯录 `UserContact`
@@ -107,19 +107,19 @@
 ### 5.2 用户资料页 `ProfileEditPage`
 
 自上而下：
-1. 用户二维码（通信账户未设置时显示占位提示）
+1. 用户二维码（聊天账户未设置时显示占位提示）
 2. 用户头像行（左侧头像 + 右箭头，点击换头像）
 3. 用户昵称行（左侧显示通信钱包名称 + 右箭头，点击弹窗修改，同步改钱包名）
-4. 通信账户行（选择钱包后即时保存）
+4. 聊天账户行（选择钱包后即时保存）
 
 ### 5.3 昵称双向同步
 
 - 用户资料页改昵称 → `WalletManager.renameWallet()` + `UserProfileService.updateCommunicationWalletName()`
-- 钱包详情页改钱包名 → 检查该钱包是否为通信账户 → 是则 `UserProfileService.updateCommunicationWalletName()`
+- 钱包详情页改钱包名 → 检查该钱包是否为聊天账户 → 是则 `UserProfileService.updateCommunicationWalletName()`
 
-### 5.4 通信账户流程
+### 5.4 聊天账户流程
 
-1. 用户资料页点击通信账户行 → 跳转钱包选择
+1. 用户资料页点击聊天账户行 → 跳转钱包选择
 2. 选中钱包后保存 `walletIndex + address + walletName`
 3. 二维码实时更新
 

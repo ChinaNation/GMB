@@ -1,4 +1,5 @@
 import type { Env } from '../types';
+import { hexToBytes } from '../shared/signing_message';
 import { HttpError, jsonResponse, parsePositiveInt, readJson } from '../shared/http';
 import { createId } from '../shared/ids';
 import { nowMs } from '../shared/time';
@@ -26,7 +27,7 @@ interface RecentRelayRow {
 /// Worker 只在显式开关开启且服务节点 RPC 已配置时提供广播兜底。
 /// 这里不把 RPC URL 写入任何响应，App 只知道固定 path。
 export function isChainExtrinsicRelayEnabled(env: Env): boolean {
-  return env.CHAIN_EXTRINSIC_RELAY_ENABLED === '1' && isChainRpcConfigured(env);
+  return env.RELAY_ENABLED === '1' && isChainRpcConfigured(env);
 }
 
 export async function relaySignedExtrinsicRoute(
@@ -38,7 +39,7 @@ export async function relaySignedExtrinsicRoute(
   }
 
   const maxBytes = parsePositiveInt(
-    env.CHAIN_EXTRINSIC_RELAY_MAX_BYTES,
+    env.RELAY_MAX_BYTES,
     DEFAULT_MAX_EXTRINSIC_BYTES
   );
   assertReasonableContentLength(request, maxBytes);
@@ -200,7 +201,7 @@ async function enforceRelayRateLimit(
   createdAt: number
 ): Promise<void> {
   const maxPerMinute = parsePositiveInt(
-    env.CHAIN_EXTRINSIC_RELAY_MAX_PER_MINUTE,
+    env.RELAY_PER_MINUTE,
     DEFAULT_MAX_PER_MINUTE
   );
   const row = await env.DB.prepare(
@@ -289,15 +290,6 @@ async function markRelayFailed(
   )
     .bind(errorCode, updatedAt, relayId)
     .run();
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const raw = hex.slice(2);
-  const out = new Uint8Array(raw.length / 2);
-  for (let i = 0; i < raw.length; i += 2) {
-    out[i / 2] = Number.parseInt(raw.slice(i, i + 2), 16);
-  }
-  return out;
 }
 
 async function hashRequestIp(request: Request): Promise<string> {

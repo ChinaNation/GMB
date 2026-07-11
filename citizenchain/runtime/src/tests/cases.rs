@@ -825,7 +825,7 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
 }
 
 #[test]
-fn runtime_square_post_fee_kind_is_vote_flat_one_yuan() {
+fn runtime_square_post_fee_kind_uses_onchain_minimum_fee() {
     new_test_ext().execute_with(|| {
         let who = AccountId::new([44u8; 32]);
         let call = RuntimeCall::SquarePost(square_post::pallet::Call::publish_square_post {
@@ -840,7 +840,16 @@ fn runtime_square_post_fee_kind_is_vote_flat_one_yuan() {
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &call);
-        assert_eq!(fee_kind, onchain_transaction::FeeChargeKind::VoteFlat);
+        assert_eq!(
+            fee_kind,
+            onchain_transaction::FeeChargeKind::OnchainAmount(0)
+        );
+        assert_eq!(
+            onchain_transaction::calculate_onchain_fee(0),
+            primitives::fee_policy::ONCHAIN_MIN_FEE
+        );
+        assert_eq!(primitives::fee_policy::ONCHAIN_MIN_FEE, 10);
+        // 广场降费不得改变投票和治理类统一费用。
         assert_eq!(primitives::fee_policy::VOTE_FLAT_FEE, YUAN);
     });
 }

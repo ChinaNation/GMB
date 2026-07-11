@@ -219,7 +219,7 @@
 
 ## 9. 全节点模式设置边界
 
-2026-05-23 起，桌面设置页新增“全节点模式”入口；2026-07-05 起，CitizenApp 私密聊天不再由区块链节点承载，桌面设置页不再提供 IM 通信节点功能开关。
+2026-05-23 起，桌面设置页新增“全节点模式”入口；2026-07-05 起，CitizenApp 私密聊天不再由区块链节点承载，桌面设置页不再提供 Chat 通信节点功能开关。
 
 - 当前默认模式：归档全节点。
 - 当前可选模式：归档全节点。
@@ -232,7 +232,7 @@
   - 当前版本只允许写入归档全节点；普通全节点仍会被后端拒绝。
   - 如果本机旧配置曾错误保存 `communication`，读取时按归档全节点清理。
 - 切换边界：
-  - 全节点模式只描述链数据保存方式，不承载 IM 通信开关或聊天投递能力。
+  - 全节点模式只描述链数据保存方式，不承载 Chat 通信开关或聊天投递能力。
   - 后续普通全节点真正实现时，少数据模式切换到多数据模式应从网络补充同步数据；多数据模式切换到少数据模式应删除不再需要的本地数据。
   - 在普通全节点底层能力完成前，不得让设置页暗示当前已执行剪裁或删除数据。
 
@@ -248,15 +248,15 @@
 - 默认行为：`src/desktop/mod.rs` 仍自动启动区块链节点和同步守护，但不会自动启动链上中国平台，避免只挖矿节点承担 PostgreSQL、HTTPS 管理后台和浏览器业务入口。
 - HTTPS 入口：OnChina TLS 证书目标主机为 `onchina.local`；旧 `localhost/127.0.0.1` 证书会在下次启动时按主机标记重新生成。
 
-### 9.2 IM 聊天承载边界
+### 9.2 Chat 聊天承载边界
 
 2026-07-05 起，CitizenApp 私密聊天正式路线只保留 Cloudflare 密文 mailbox 互联网聊天和手机近场聊天，区块链节点软件不再承载聊天投递、聊天 mailbox、KeyPackage 池或手机配对入口。
 
-- 删除边界：已删除 `citizenchain/node/src/im/`、`src/settings/communication-node/`、`frontend/settings/communication-node/`、`/gmb/im/1` 注册、通信节点 Tauri 命令、桌面通信节点二维码和 `citizenchain/scripts/im-two-node-smoke.sh`。
-- 全节点边界：归档全节点和普通全节点只描述链数据保存方式；节点同步、挖矿、治理、交易和链上中国平台启动不受 IM 方案调整影响。
-- App 聊天边界：CitizenApp 私聊和群聊继续使用钱包地址作为聊天账户、OpenMLS 端到端加密和 `GMB_IM_V1` / `ImEnvelope` 外层协议；互联网投递由 Cloudflare Worker / D1 / R2 的密文 mailbox 承接，近场由手机蓝牙 / Wi-Fi 直连承接。
-- 二维码边界：`QR_V1/k=5 im_node_pairing` 已删除，扫码解析端应按未知类型拒绝；桌面节点不再生成聊天配对二维码。
-- 禁止恢复：不得把聊天功能重新接回节点 RPC、`sc-network/libp2p` request-response、通信节点开关或区块链节点 mailbox；后续 IM 运行态验收以 CitizenApp + Cloudflare Worker 本地/预发环境和近场真机收发为准。
+- 删除边界：已删除 `citizenchain/node/src/chat/`、`src/settings/communication-node/`、`frontend/settings/communication-node/`、已删除的节点聊天协议 注册、通信节点 Tauri 命令、桌面通信节点二维码和 `citizenchain/scripts/im-two-node-smoke.sh`。
+- 全节点边界：归档全节点和普通全节点只描述链数据保存方式；节点同步、挖矿、治理、交易和链上中国平台启动不受 Chat 方案调整影响。
+- App 聊天边界：CitizenApp 私聊和群聊继续使用钱包地址作为聊天账户、OpenMLS 端到端加密和 `GMB_CHAT_V1` / `ChatEnvelope` 外层协议；互联网投递由 Cloudflare Worker / D1 / R2 的密文 mailbox 承接，近场由手机蓝牙 / Wi-Fi 直连承接。
+- 二维码边界：`QR_V1/k=5 chat_node_pairing` 已删除，扫码解析端应按未知类型拒绝；桌面节点不再生成聊天配对二维码。
+- 禁止恢复：不得把聊天功能重新接回节点 RPC、`sc-network/libp2p` request-response、通信节点开关或区块链节点 mailbox；后续 Chat 运行态验收以 CitizenApp + Cloudflare Worker 本地/预发环境和近场真机收发为准。
 
 ## 10. 桌面同步守护边界
 

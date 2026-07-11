@@ -56,7 +56,6 @@ pub enum KeyNamespace {
     AuthorityDiscovery,
     Babe,
     Grandpa,
-    ImOnline,
     // TODO: there exists other variants in Substrate but it's unclear whether they're in use (see https://github.com/paritytech/substrate/blob/cafe12e7785bf92e5dc04780c10e7f8330a15a4c/primitives/core/src/crypto.rs)
 }
 
@@ -68,7 +67,6 @@ impl KeyNamespace {
             KeyNamespace::AuthorityDiscovery,
             KeyNamespace::Babe,
             KeyNamespace::Grandpa,
-            KeyNamespace::ImOnline,
         ]
         .into_iter()
     }
@@ -79,7 +77,6 @@ impl KeyNamespace {
             "audi" => Some(KeyNamespace::AuthorityDiscovery),
             "babe" => Some(KeyNamespace::Babe),
             "gran" => Some(KeyNamespace::Grandpa),
-            "imon" => Some(KeyNamespace::ImOnline),
             _ => None,
         }
     }
@@ -90,7 +87,6 @@ impl KeyNamespace {
             KeyNamespace::AuthorityDiscovery => "audi",
             KeyNamespace::Babe => "babe",
             KeyNamespace::Grandpa => "gran",
-            KeyNamespace::ImOnline => "imon",
         }
     }
 }
@@ -691,12 +687,10 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert!(
-                ed25519_zebra::VerificationKey::try_from(public_key)
-                    .unwrap()
-                    .verify(&ed25519_zebra::Signature::from(signature), b"hello world")
-                    .is_ok()
-            );
+            assert!(ed25519_zebra::VerificationKey::try_from(public_key)
+                .unwrap()
+                .verify(&ed25519_zebra::Signature::from(signature), b"hello world")
+                .is_ok());
         });
     }
 
@@ -727,16 +721,14 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert!(
-                schnorrkel::PublicKey::from_bytes(&public_key)
-                    .unwrap()
-                    .verify_simple(
-                        b"substrate",
-                        b"hello world",
-                        &schnorrkel::Signature::from_bytes(&signature).unwrap()
-                    )
-                    .is_ok()
-            );
+            assert!(schnorrkel::PublicKey::from_bytes(&public_key)
+                .unwrap()
+                .verify_simple(
+                    b"substrate",
+                    b"hello world",
+                    &schnorrkel::Signature::from_bytes(&signature).unwrap()
+                )
+                .is_ok());
         });
     }
 }

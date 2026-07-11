@@ -177,7 +177,7 @@ lib/8964/profile/
 - 新增 `follows_list_page.dart`：关注/关注者分页列表，行短地址点击进主页。
 - 改 `user_profile_page.dart`：注入 `sessionProvider`；`_load` 带 session 拉 profile → is_following 正确；他人「关注」乐观 toggle（isFollowing 翻转 + 粉丝数±1，失败回滚 + snackbar）；self「关注」图标 + 关注/关注者计数点击 → `FollowsListPage`。
 - 新增/扩测试：Worker follows-list；`profile_test_doubles` 加 `FakeSessionProvider`/`fakeSession` + `FakeProfileApi.follow/unfollow/fetchFollows`（含 throwOnFollow）；header 测试 +关注乐观翻转 +失败回滚；`follows_list_page_test`（列表渲染 + 空态）。三处 page 测试注入 `FakeSessionProvider`。
-- **本步暂缓（保持 stub）**：self 聊天/通知真实入口、他人「消息」→ IM（`ImChatPage`）。作为后续小步接。
+- **本步暂缓（保持 stub）**：self 聊天/通知真实入口、他人「消息」→ Chat（`ChatPage`）。作为后续小步接。
 - 验收：Worker `npm run typecheck` + `npm test` 6 文件 **24/24**（+1 follows）；`flutter analyze lib/8964 lib/my/user/user.dart test/8964/profile` 干净；`flutter test test/8964` **37/37**（+4，无回归）。
 
 ### 阶段 6a（完成，编辑资料：展示名 + 签名）
@@ -203,19 +203,19 @@ lib/8964/profile/
 - 测试：Worker `profile_assets.test.ts`（key/kind/content_type 校验 3 例）；`profile_asset_service_test.dart`（上传返回 key/hash + 校验 sha256/byte_size/Bearer、PUT 失败抛异常 2 例）。
 - 验收：Worker `npm run typecheck` + `npm test` 8 文件 **30/30**（+3）；`flutter analyze lib/8964 test/8964/profile` 干净；`flutter test test/8964` **44/44**（+2，无回归）。
 
-### 阶段 5c（完成，IM/通知接实）
-- 新增 `lib/im/open_direct_chat.dart`：`openDirectChat(context, {peerAddress, title})` + `DirectChatOpener` typedef——抽取联系人详情的私聊拼装为共享助手（默认热钱包 sender，复用 `ImRuntime`/`ImChatPage`，空钱包引导）。
-- DRY：`lib/my/user/user.dart` `_ContactDetailPage._openMessage` 改调 `openDirectChat`，删去重复 IM 拼装 + 冗余 `im_chat_page`/`im_runtime` 导入。
-- `user_profile_page.dart` 三图标接实：他人「消息」→ `openDirectChat(peer=ownerAccount, title=展示名)`；本人「聊天」→ push `ImTabPage()`；本人「通知」→ push `_NotificationsPlaceholderPage`（通知系统未建，占位）。加可选 `onOpenDirectChat` 注入点便于测试。
+### 阶段 5c（完成，Chat/通知接实）
+- 新增 `lib/chat/open_direct_chat.dart`：`openDirectChat(context, {peerAddress, title})` + `DirectChatOpener` typedef——抽取联系人详情的私聊拼装为共享助手（默认热钱包 sender，复用 `ChatRuntime`/`ChatPage`，空钱包引导）。
+- DRY：`lib/my/user/user.dart` `_ContactDetailPage._openMessage` 改调 `openDirectChat`，删去重复 Chat 拼装 + 冗余 `chat_page`/`chat_runtime` 导入。
+- `user_profile_page.dart` 三图标接实：他人「消息」→ `openDirectChat(peer=ownerAccount, title=展示名)`；本人「聊天」→ push `ChatTab()`；本人「通知」→ push `_NotificationsPlaceholderPage`（通知系统未建，占位）。加可选 `onOpenDirectChat` 注入点便于测试。
 - 测试：他人页点「消息」→ spy 收到 `(ownerAccount, 展示名)`；本人页点「通知」→ 显示占位页。
-- 边界：只接线，复用现有 IM，不改 IM 协议/加密/传输；通知系统不新建。
-- 验收：`dart format` 通过；`flutter analyze lib/8964/profile lib/im/open_direct_chat.dart lib/my/user/user.dart test/8964/profile` 干净；`flutter test test/8964` **46/46**（+2，无回归）。
+- 边界：只接线，复用现有 Chat，不改 Chat 协议/加密/传输；通知系统不新建。
+- 验收：`dart format` 通过；`flutter analyze lib/8964/profile lib/chat/open_direct_chat.dart lib/my/user/user.dart test/8964/profile` 干净；`flutter test test/8964` **46/46**（+2，无回归）。
 
 ### 阶段 7a（完成，清理 + 文档）
 - 删残桩：`lib/my/user/user.dart` 旧 `ProfileEditPage`/`_ProfileEditPageState`（426–732 行，已被新主页 + `CitizenProfileEditPage` 取代，无人引用）整段删除；`_MyQrCodePage`/`_HollowQrPainter`/`_SquareAvatar`/`_HeaderBackground` 仍被 我的 tab 使用，保留。分析无残留未用导入。
 - 修注释：`user_profile_page.dart` 顶部类注释由「阶段 4…」更新为完整功能口径。
 - 文档：`memory/07-ai/unified-protocols.md` P-API-CITIZENAPP-002 追加 profile 六接口（users/:account、/posts、/follows、PUT /profile、assets prepare/dev-put、/media）+ R2 `profile.json` 契约；新增 `memory/05-modules/citizenapp/8964/PROFILE_TECHNICAL.md`。
-- 验收：`dart format` 通过；`flutter analyze lib/my lib/8964/profile lib/im/open_direct_chat.dart` 干净；`flutter test test/8964 test/im` **84 passed / 4 skipped**（native smoldot 跳过，无回归）。
+- 验收：`dart format` 通过；`flutter analyze lib/my lib/8964/profile lib/chat/open_direct_chat.dart` 干净；`flutter test test/8964 test/chat` **84 passed / 4 skipped**（native smoldot 跳过，无回归）。
 
 ### 阶段 7a 追加（二维码归属，用户拍板落地）
 - 决定：删「我的」tab 右上角二维码图标；主页 `⋮ → 二维码` 显示该主页用户名片码（钱包账户 + 昵称）。

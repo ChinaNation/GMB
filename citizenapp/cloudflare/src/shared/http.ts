@@ -74,7 +74,7 @@ export async function requireSession(request: Request, env: Env): Promise<Sessio
     throw new HttpError(401, 'missing_session', '请先用钱包签名登录广场');
   }
 
-  const session = await env.FEED_CACHE.get<SessionState>(`square_session:${sessionToken}`, 'json');
+  const session = await env.SQUARE_CACHE.get<SessionState>(`square_session:${sessionToken}`, 'json');
   if (!session || session.expires_at <= Date.now()) {
     throw new HttpError(401, 'expired_session', '钱包登录态已过期');
   }

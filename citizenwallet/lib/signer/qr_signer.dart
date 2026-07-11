@@ -42,7 +42,6 @@ class QrSigner {
   static const int maxPayloadChars = 32768;
   static const List<int> _gmbPrefix = [0x47, 0x4D, 0x42];
   static const int _opSignCitizenIdentity = 0x10;
-  static const int _opSignImWalletBinding = 0x1A;
   static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
 
   static String generateRequestId({String prefix = ''}) {
@@ -152,9 +151,6 @@ class QrSigner {
     final payload = body.payloadBytes;
     if (body.action == QrActions.citizenIdentity) {
       return _gmbSigningMessage(_opSignCitizenIdentity, payload);
-    }
-    if (body.action == QrActions.imWalletBinding) {
-      return _gmbSigningMessage(_opSignImWalletBinding, payload);
     }
     if (QrActions.isChainAction(body.action) && payload.length > 256) {
       final digest = Blake2bDigest(digestSize: 32)

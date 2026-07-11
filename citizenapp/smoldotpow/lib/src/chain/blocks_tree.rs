@@ -434,9 +434,7 @@ impl<T> NonFinalizedTree<T> {
                 finalized_next_epoch_transition: next_epoch.as_ref().into(),
             },
 
-            (FinalizedConsensus::Pow, _) => {
-                chain_information::ChainInformationConsensusRef::Pow
-            }
+            (FinalizedConsensus::Pow, _) => chain_information::ChainInformationConsensusRef::Pow,
 
             // Any mismatch of consensus engine between the finalized and best block is not
             // supported at the moment.

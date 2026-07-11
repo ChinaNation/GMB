@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { scaleCompact as compactU32 } from '../src/shared/signing_message';
 import { encodeAddress } from '@polkadot/util-crypto';
 import { membershipRoute } from '../src/membership/service';
-import { stripeWebhookRoute, verifyStripeSignature } from '../src/membership/stripe';
+import { stripeWebhookRoute, verifyStripeSignature } from '../src/membership/webhook';
+import { routeRequest } from '../src/routes';
 import type { Env, MembershipRow, SessionState } from '../src/types';
 
 const ownerBytes = Uint8Array.from(Array.from({ length: 32 }, (_, index) => index + 11));
@@ -36,9 +38,9 @@ describe('membership route', () => {
     expect(body.eligible_levels).toEqual(['candidate']);
   });
 
-  it('offers only visitor and visitor_pro to a visitor identity (no upgrade)', async () => {
+  it('offers only freedom and democracy to a visitor identity', async () => {
     const env = fakeEnv({
-      membership: membershipRow({ membership_level: 'visitor' }),
+      membership: membershipRow({ membership_level: 'freedom' }),
       storageResponses: [null, null]
     });
 
@@ -49,8 +51,8 @@ describe('membership route', () => {
     };
 
     expect(body.identity.identity_level).toBe('visitor');
-    // 访客身份可订两档访客会员：黄金(visitor) + 白金(visitor_pro)。
-    expect(body.eligible_levels).toEqual(['visitor', 'visitor_pro']);
+    // 访客身份可订自由与民主两档会员，会员值不再复用身份值 visitor。
+    expect(body.eligible_levels).toEqual(['freedom', 'democracy']);
   });
 
   it('does not activate candidate membership for voting-only identity', async () => {
@@ -92,7 +94,8 @@ describe('stripe membership webhook', () => {
       periodEnd: 1_893_456_000
     });
 
-    const response = await stripeWebhookRoute(await signedRequest(body), env);
+    // 通过总路由验收 webhook 的唯一正式路径，防止模块重命名后出现重复路径。
+    const response = await routeRequest(await signedRequest(body), env);
     const json = (await response.json()) as { action: string; membership_level: string };
 
     expect(json).toMatchObject({
@@ -107,7 +110,7 @@ describe('stripe membership webhook', () => {
     });
   });
 
-  it('upserts visitor membership without reading chain identity', async () => {
+  it('upserts freedom membership without reading chain identity', async () => {
     const db = new FakeDb();
     const env = fakeEnv({
       db,
@@ -116,7 +119,7 @@ describe('stripe membership webhook', () => {
       stripeSecret
     });
     const body = stripeEvent({
-      membership_level: 'visitor',
+      membership_level: 'freedom',
       status: 'active',
       periodEnd: 1_893_456_000
     });
@@ -126,13 +129,43 @@ describe('stripe membership webhook', () => {
 
     expect(json).toMatchObject({
       action: 'subscription_upserted',
-      membership_level: 'visitor'
+      membership_level: 'freedom'
     });
     expect(fetch).not.toHaveBeenCalled();
     expect(db.memberships.get(owner)).toMatchObject({
-      membership_level: 'visitor',
+      membership_level: 'freedom',
       subscription_status: 'active',
       identity_level: 'visitor'
+    });
+  });
+
+  it('upserts democracy membership with its own USD price', async () => {
+    const db = new FakeDb();
+    const env = fakeEnv({
+      db,
+      membership: null,
+      storageResponses: [],
+      stripeSecret
+    });
+    const body = stripeEvent({
+      membership_level: 'democracy',
+      status: 'active',
+      periodEnd: 1_893_456_000
+    });
+
+    const response = await stripeWebhookRoute(await signedRequest(body), env);
+    const json = (await response.json()) as { action: string; membership_level: string };
+
+    expect(json).toMatchObject({
+      action: 'subscription_upserted',
+      membership_level: 'democracy'
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(db.memberships.get(owner)).toMatchObject({
+      membership_level: 'democracy',
+      subscription_status: 'active',
+      identity_level: 'visitor',
+      stripe_price_id: 'price_democracy'
     });
   });
 
@@ -170,7 +203,7 @@ describe('stripe membership webhook', () => {
       stripeSecret
     });
     const body = stripeEvent({
-      membership_level: 'visitor',
+      membership_level: 'freedom',
       status: 'active',
       periodEnd: 1_893_456_000,
       priceCurrency: 'hkd',
@@ -242,11 +275,11 @@ function fakeEnv(input: {
   return {
     DB: db as unknown as D1Database,
     SQUARE_MEDIA: {} as R2Bucket,
-    FEED_CACHE: kv as unknown as KVNamespace,
+    SQUARE_CACHE: kv as unknown as KVNamespace,
     CHAIN_URL: 'https://chain.test',
     CHAIN_ID: 'worker-rpc.access',
     CHAIN_SECRET: 'test-access-secret',
-    STRIPE_WEBHOOK_SECRET: input.stripeSecret
+    STRIPE_HOOK_SECRET: input.stripeSecret
   } as unknown as Env;
 }
 
@@ -261,7 +294,7 @@ function request(url: string): Request {
 async function signedRequest(body: string): Promise<Request> {
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = await hmacSha256Hex(stripeSecret, `${timestamp}.${body}`);
-  return new Request('https://w/v1/square/membership/stripe/webhook', {
+  return new Request('https://w/v1/square/membership/webhook', {
     method: 'POST',
     headers: {
       'stripe-signature': `t=${timestamp},v1=${signature}`
@@ -320,14 +353,17 @@ function stripePriceForMembership(level: string): {
   if (level === 'voting') {
     return { id: 'price_voting', currency: 'usd', unit_amount: 999 };
   }
-  return { id: 'price_visitor', currency: 'usd', unit_amount: 299 };
+  if (level === 'democracy') {
+    return { id: 'price_democracy', currency: 'usd', unit_amount: 999 };
+  }
+  return { id: 'price_freedom', currency: 'usd', unit_amount: 299 };
 }
 
 function membershipRow(overrides: Partial<MembershipRow> = {}): MembershipRow {
   const expiresAt = Date.now() + 86_400_000;
   return {
     owner_account: owner,
-    membership_level: 'visitor',
+    membership_level: 'freedom',
     expires_at: expiresAt,
     updated_at: Date.now(),
     subscription_source: 'stripe',
@@ -355,15 +391,6 @@ function votingIdentityHex(): string {
     Uint8Array.of(0)
   ]);
   return `0x${hex(body)}`;
-}
-
-function compactU32(value: number): Uint8Array {
-  if (value < 1 << 6) return Uint8Array.of(value << 2);
-  if (value < 1 << 14) {
-    const encoded = (value << 2) | 0x01;
-    return Uint8Array.of(encoded & 0xff, (encoded >> 8) & 0xff);
-  }
-  throw new Error('test compact only supports small values');
 }
 
 function u32Le(value: number): Uint8Array {
@@ -434,6 +461,11 @@ class FakeStmt {
       return (this.db.memberships.get(this.args[0] as string) ?? null) as T | null;
     }
     return null;
+  }
+
+  async all<T>(): Promise<{ results: T[]; success: boolean }> {
+    // 本测试不构造已归档视频；实现 D1 all() 契约，确保续订回灌路径真实执行且无告警。
+    return { results: [], success: true };
   }
 
   async run(): Promise<{ success: boolean }> {

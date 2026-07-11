@@ -146,7 +146,7 @@
 - `media/cloudflare_assets.ts`：加 `createStreamDownloadUrl`（downloads API，未就绪返 null 跳过）+ `copyStreamFromUrl`（回灌）。
 - `storage/presigned.ts`：加 `signR2GetUrl`（回灌用 R2 只读预签名）。
 - `index.ts`：加 `scheduled()`（waitUntil 跑 sweep）；`wrangler.toml`：三环境 `[triggers] crons=["0 3 * * *"]` + `VIDEO_ARCHIVE_ENABLED="0"`（默认关）/`VIDEO_ARCHIVE_LAPSE_DAYS="90"`；`types.ts Env` 加两项。
-- `membership/stripe.ts`：订阅重新 active 时 `restoreOwnerVideos`；`account/purge.ts`：注销删 `archive/{owner}/` R2 前缀。
+- `membership/webhook.ts`：订阅重新 active 时 `restoreOwnerVideos`；`account/purge.ts`：注销删 `archive/{owner}/` R2 前缀。
 - 测试：新增 `test/archive.test.ts`（归档/跳过未到期/关关/重订恢复 4 例）；改 membership/chain_confirm/uploads_quota 夹具适配新列。
 
 ### App（citizenapp/lib）

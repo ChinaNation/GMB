@@ -40,7 +40,7 @@
     },
     {
       "message_hex": "ecfabbf1ad5cf526920af3e85dd129a45f45190e88fe33431f3e4d83f7a1167f",
-      "name": "OP_SIGN_IM_WALLET_BINDING",
+      "name": "OP_SIGN_CHAT_DEVICE_BIND",
       "op_tag": "0x1a",
       "scale_payload_hex": "696d2d62696e6431"
     },

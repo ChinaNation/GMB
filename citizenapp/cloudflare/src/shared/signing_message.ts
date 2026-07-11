@@ -11,8 +11,8 @@ import { blake2AsU8a } from '@polkadot/util-crypto/blake2';
 export const GMB_SIGN_DOMAIN = [0x47, 0x4d, 0x42];
 
 // 本 Worker 会验签的链下哈希域 op_tag（单源 citizenchain primitives::sign）。
-/// IM 钱包-设备绑定。
-export const OP_SIGN_IM_WALLET_BINDING = 0x1a;
+/// Chat 设备绑定（硬件 P-256 设备子钥签 digest）。
+export const OP_SIGN_CHAT_DEVICE_BIND = 0x1a;
 /// 广场 BFF 登录挑战（设备子钥 ES256 签 digest）。
 export const OP_SIGN_SQUARE_LOGIN = 0x1b;
 /// 广场 BFF 设备子钥绑定（sr25519 主钥签）。
@@ -95,7 +95,7 @@ export function bytesToHex(bytes: Uint8Array): string {
 }
 
 /// hex → 字节（容忍 `0x` 前缀与大小写）。
-export function hexToBytes(hex: string): Uint8Array {
+export function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
   const clean = hex.trim().toLowerCase().replace(/^0x/, '');
   if (clean.length % 2 !== 0 || /[^0-9a-f]/.test(clean)) {
     throw new RangeError('invalid hex string');

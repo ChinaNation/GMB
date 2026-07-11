@@ -53,6 +53,6 @@
 - `npm run build` in `citizenchain/node/frontend`
 - `node --check citizenapp/tools/generate_admin_division_bundle.mjs`
 - `node --check scripts/generate_citizenapp_governance_registry.mjs`
-- `python3 -m py_compile scripts/rebake_china_codes.py scripts/fill_china_admins.py scripts/gmb.py`
+- `python3 -m py_compile scripts/rebake_china_codes.py scripts/fill_china_admins.py scripts/rederive_accounts.py`
 - `node scripts/generate_citizenapp_governance_registry.mjs`
 - 旧路径残留扫描通过,`docs/citizenpassport/` 按要求未纳入本次清理。

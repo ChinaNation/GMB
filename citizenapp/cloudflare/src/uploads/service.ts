@@ -117,7 +117,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
 
   const uploadId = createId('squ');
   const postId = createId('sqp');
-  const expiresSeconds = parsePositiveInt(env.SQUARE_UPLOAD_URL_TTL_SECONDS, 900);
+  const expiresSeconds = parsePositiveInt(env.UPLOAD_TTL_SECONDS, 900);
   const expiresAt = secondsFromNow(expiresSeconds);
   const objectKeyPlan = buildObjectKeyPlan(session.owner_account, postId);
   const requestUrl = new URL(request.url);
@@ -227,7 +227,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
 }
 
 export async function devPutUploadObject(request: Request, env: Env): Promise<Response> {
-  if (env.SQUARE_DEV_UPLOAD_PROXY !== '1') {
+  if (env.DEV_UPLOAD_PROXY !== '1') {
     throw new HttpError(404, 'dev_upload_proxy_disabled', '开发上传代理未启用');
   }
 
@@ -261,7 +261,7 @@ export async function devPutUploadObject(request: Request, env: Env): Promise<Re
 }
 
 export async function devUploadMediaAsset(request: Request, env: Env): Promise<Response> {
-  if (env.SQUARE_DEV_UPLOAD_PROXY !== '1') {
+  if (env.DEV_UPLOAD_PROXY !== '1') {
     throw new HttpError(404, 'dev_upload_proxy_disabled', '开发上传代理未启用');
   }
 
@@ -394,7 +394,7 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
 }
 
 export async function streamWebhookRoute(request: Request, env: Env): Promise<Response> {
-  const secret = env.CLOUDFLARE_STREAM_WEBHOOK_SECRET;
+  const secret = env.STREAM_HOOK_SECRET;
   if (!secret) {
     throw new HttpError(503, 'stream_webhook_not_configured', 'Cloudflare Stream webhook secret 未配置');
   }
@@ -452,12 +452,11 @@ export async function streamWebhookRoute(request: Request, env: Env): Promise<Re
 export { validateUploadItems, estimateUploadBytes };
 
 function normalizeMembershipLevel(value: string): MembershipLevel {
-  // 保留 visitor_pro（民主），使 membershipPlan() 返回其对齐投票的高额度；
-  // 而竞选专属发帖闸门用 membershipLevel !== 'candidate' 仍将民主视作访客身份。
-  if (value === 'candidate' || value === 'voting' || value === 'visitor_pro') {
+  // 民主会员使用对齐投票会员的高额度；竞选专属发帖仍只认 candidate 会员。
+  if (value === 'candidate' || value === 'voting' || value === 'democracy') {
     return value;
   }
-  return 'visitor';
+  return 'freedom';
 }
 
 async function loadMediaAsset(env: Env, uploadId: string, mediaIndex: number): Promise<MediaAssetRow> {

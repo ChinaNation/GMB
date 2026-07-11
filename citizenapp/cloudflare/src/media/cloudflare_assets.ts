@@ -76,7 +76,7 @@ export async function createProviderUpload(
   input: ProviderUploadInput
 ): Promise<ProviderUploadPlan> {
   // 本地 Miniflare 没有真实 Images / Stream，使用同源 dev-media 端点验证完整控制流。
-  if (env.SQUARE_DEV_UPLOAD_PROXY === '1') {
+  if (env.DEV_UPLOAD_PROXY === '1') {
     return createDevProviderUpload(input);
   }
   if (input.mediaKind === 'video') {
@@ -89,7 +89,7 @@ export async function refreshProviderAssetState(
   env: Env,
   row: MediaAssetRow
 ): Promise<Partial<MediaAssetRow>> {
-  if (env.SQUARE_DEV_UPLOAD_PROXY === '1') {
+  if (env.DEV_UPLOAD_PROXY === '1') {
     return {};
   }
   if (row.provider === 'cloudflare_stream') {
@@ -103,7 +103,7 @@ export async function deleteProviderAsset(
   row: Pick<MediaAssetRow, 'provider' | 'provider_asset_id'>
 ): Promise<void> {
   // 本地验收环境没有真实 Images / Stream 资源，删除动作由 D1/R2 清理覆盖。
-  if (env.SQUARE_DEV_UPLOAD_PROXY === '1') {
+  if (env.DEV_UPLOAD_PROXY === '1') {
     return;
   }
   if (row.provider === 'cloudflare_stream') {
@@ -121,7 +121,7 @@ export function streamPlaybackUrls(
   playback_dash_url: string | null;
   thumbnail_url: string | null;
 } {
-  const base = trimTrailingSlash(env.CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN);
+  const base = trimTrailingSlash(env.STREAM_URL);
   if (!base) {
     return {
       playback_hls_url: null,
@@ -137,7 +137,7 @@ export function streamPlaybackUrls(
 }
 
 export function imageDeliveryUrl(env: Env, imageId: string): string | null {
-  const base = trimTrailingSlash(env.CLOUDFLARE_IMAGES_DELIVERY_BASE_URL);
+  const base = trimTrailingSlash(env.IMAGES_URL);
   return base ? `${base}/${imageId}/public` : null;
 }
 
@@ -456,12 +456,12 @@ async function assertCloudflareDeleteOk(response: Response, errorCode: string): 
 }
 
 function requireCloudflareApiConfig(env: Env): { accountId: string; apiToken: string } {
-  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_API_TOKEN) {
+  if (!env.CF_ACCOUNT_ID || !env.CF_API_TOKEN) {
     throw new HttpError(503, 'cloudflare_media_api_not_configured', 'Cloudflare Images / Stream API 未配置');
   }
   return {
-    accountId: env.CLOUDFLARE_ACCOUNT_ID,
-    apiToken: env.CLOUDFLARE_API_TOKEN
+    accountId: env.CF_ACCOUNT_ID,
+    apiToken: env.CF_API_TOKEN
   };
 }
 

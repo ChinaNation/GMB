@@ -100,17 +100,6 @@ void main() {
         1,
       ];
 
-  List<int> imWalletBindingPayloadForTest(String walletAccount) => [
-        ...compactVec(walletAccount),
-        ...compactVec('phone-1'),
-        ...compactVec('0xabc'),
-        ...compactVec('12D3KooWTest'),
-        ...compactU32(1),
-        ...compactVec('/ip4/127.0.0.1/tcp/30333/wss/p2p/12D3KooWTest'),
-        ...u64Le(1800000),
-        ...compactVec('nonce-1'),
-      ];
-
   List<int> bytesFromHex(String hex) {
     final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
     return List<int>.generate(
@@ -133,21 +122,6 @@ void main() {
   }
 
   group('PayloadDecoder', () {
-    test('decodes IM wallet binding SCALE payload', () {
-      final pair = Keyring.sr25519.fromSeed(Uint8List(32));
-      final walletAccount = ss58FromBytes(pair.bytes());
-      final decoded = PayloadDecoder.decode(
-        hexOf(imWalletBindingPayloadForTest(walletAccount)),
-      );
-
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'im_wallet_binding');
-      expect(decoded.fields['wallet_account'], walletAccount);
-      expect(decoded.fields['im_device_id'], 'phone-1');
-      expect(decoded.fields['node_peer_id'], '12D3KooWTest');
-      expect(decoded.reviewFields['node_endpoints'], contains('/ip4/'));
-    });
-
     test('decodes transfer_with_remark (pallet=4 call=0)', () {
       final dest = Keyring.sr25519.fromSeed(Uint8List(32));
       dest.ss58Format = 2027;

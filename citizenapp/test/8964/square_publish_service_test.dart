@@ -12,6 +12,12 @@ import 'package:citizenapp/8964/storage/square_draft_store.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 void main() {
+  test('广场发布费为最低链上费用且余额需保留存在性保证金', () {
+    expect(SquarePublishService.publishFeeFen, 10);
+    expect(SquarePublishService.accountExistentialDepositFen, 111);
+    expect(SquarePublishService.minimumPublishBalanceFen, 121);
+  });
+
   test('未认证钱包不能发布竞选动态，且不会进入存储准备', () async {
     final order = <String>[];
     final upload = _FakeUploader(order);
@@ -122,7 +128,7 @@ void main() {
       uploadService: upload,
       chainService: chain,
       publicationConfirmer: _FakePublicationConfirmer(order),
-      balanceReader: _FakeBalanceReader(order, balanceYuan: 2.10),
+      balanceReader: _FakeBalanceReader(order, balanceYuan: 1.20),
       draftStore: draftStore,
     );
 
@@ -361,7 +367,7 @@ class _FakeChainPublisher implements SquarePostChainPublisher {
 }
 
 class _FakeBalanceReader implements SquarePublishBalanceReader {
-  _FakeBalanceReader(this.order, {this.balanceYuan = 2.11});
+  _FakeBalanceReader(this.order, {this.balanceYuan = 1.21});
 
   final List<String> order;
   final double balanceYuan;

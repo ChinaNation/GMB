@@ -73,7 +73,8 @@ class SquarePublishService {
   final SquarePublishBalanceReader _balanceReader;
   final SquareDraftRepository _draftStore;
 
-  static const int publishFeeFen = 100;
+  /// 广场发布统一按链上最低费用收费：10 分 = 0.1 元。
+  static const int publishFeeFen = 10;
   static const int accountExistentialDepositFen = 111;
   static const int minimumPublishBalanceFen =
       publishFeeFen + accountExistentialDepositFen;

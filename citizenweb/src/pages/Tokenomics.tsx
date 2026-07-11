@@ -69,12 +69,12 @@ const economics: Economic[] = [
   { label: '最小存款', value: '1.11 元' },
 ]
 
-// 手续费分配 2×2:上排 全节点/清算行,下排 国储会费用账户/安全基金账户。
+// 手续费分配 2×2:上排 全节点/清算行,下排 国家储委会费用账户/安全基金账户。
 // 链上手续费按 8:1:1(全节点/费用账户/安全基金),链下清算手续费全部归清算行。
 const feeDistribution: { name: string; share: string; desc: string; glow: 'gold' | 'blue'; tx: string }[] = [
   { name: '全节点奖励', share: '80%', desc: '出块全节点获得链上交易手续费的 80%', glow: 'blue', tx: '链上交易' },
   { name: '清算行', share: '100%', desc: '链下清算手续费全部归实际执行清算的清算行节点所有', glow: 'gold', tx: '链下交易' },
-  { name: '国储会费用账户', share: '10%', desc: '国家储委会费用账户用于国家储委会运营', glow: 'blue', tx: '链上交易' },
+  { name: '国家储委会费用账户', share: '10%', desc: '国家储委会费用账户用于国家储委会运营', glow: 'blue', tx: '链上交易' },
   { name: '安全基金账户', share: '10%', desc: '网络安全与应急储备基金', glow: 'blue', tx: '链上交易' },
 ]
 

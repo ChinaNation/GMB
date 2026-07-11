@@ -82,7 +82,7 @@ class WalletManager {
   ///
   /// 默认用户钱包 = 全 App 唯一身份主键，但它是派生规则（最靠前的热钱包）
   /// 而非存储字段，Isar 写完没有任何广播。常驻页面（我的 tab、广场首页、
-  /// IM 会话列表）监听此版本号，在切换默认用户后立即重读身份，避免
+  /// Chat 会话列表）监听此版本号，在切换默认用户后立即重读身份，避免
   /// 「UI 显示旧身份、动作以新身份执行」的分叉。余额刷新是高频操作且
   /// 不影响身份，不计入此版本号。
   static final ValueNotifier<int> walletsRevision = ValueNotifier<int>(0);
@@ -535,9 +535,9 @@ class WalletManager {
 
   /// 用钱包私钥对 [payload] 签名。
   ///
-  /// 统一签名入口：动钱动权（转账 / 投票 / 切换默认身份 / 发布动态 / IM 设备绑定）
+  /// 统一签名入口：动钱动权（转账 / 投票 / 切换默认身份 / 发布动态）
   /// 一律走此方法。读硬件金库 seed 时由硬件 + 生物识别原子解锁（一次操作一次验证），
-  /// seed 派生后用后即弃。广场 / IM 频繁会话握手不再走此方法，改用 P-256 设备子钥。
+  /// seed 派生后用后即弃。广场 / Chat 后台握手统一使用 P-256 设备子钥。
   Future<Uint8List> signWithWallet(
     int walletIndex,
     Uint8List payload,
@@ -640,7 +640,7 @@ class WalletManager {
   }
 
   /// best-effort 注册 P-256 设备子钥：用**内存里刚派生的 sr25519 keypair** 对绑定
-  /// 证明签名（零额外弹窗）。失败不阻塞创建；首次广场 / IM 握手会走 401 懒注册兜底。
+  /// 证明签名（零额外弹窗）。失败不阻塞创建；首次广场 / Chat 握手会明确提示重新注册。
   Future<void> _tryRegisterDeviceSubkey(
     int walletIndex,
     String address,

@@ -15,7 +15,7 @@
 /// ## Usage
 ///
 /// ```dart
-/// import 'package:smoldot_light/smoldot_light.dart';
+/// import 'package:smoldot/smoldot.dart';
 ///
 /// void main() async {
 ///   // Create and initialize the client

@@ -4,7 +4,7 @@ import type { Env } from "../types";
 import { assertChatAccount, assertDeviceId } from "./codec";
 
 export interface ChatNoticePayload {
-  type: "gmb_im_new_envelope_v1";
+  type: "gmb_chat_new_envelope_v1";
   envelope_id: string;
   conversation_id: string;
   recipient_account: string;
@@ -70,7 +70,7 @@ export class ChatRealtimeObject implements DurableObject {
     this.state.acceptWebSocket(server, [deviceTag(deviceId)]);
     server.send(
       JSON.stringify({
-        type: "gmb_im_ws_ready_v1",
+        type: "gmb_chat_ws_ready_v1",
         owner_account: ownerAccount,
         device_id: deviceId,
         server_time: nowMs(),
@@ -108,7 +108,7 @@ export class ChatRealtimeObject implements DurableObject {
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
     if (message === "ping") {
-      socket.send(JSON.stringify({ type: "gmb_im_ws_pong_v1" }));
+      socket.send(JSON.stringify({ type: "gmb_chat_ws_pong_v1" }));
     }
   }
 

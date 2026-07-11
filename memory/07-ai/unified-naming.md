@@ -100,14 +100,12 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/onchina/src/cid/` | 身份 ID 编码协议 | number | OnChina 身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
 | `citizenwallet/` | 公民钱包 | citizenwallet | 离线签名、扫码识别和钱包 UI |
 | `citizenapp/` | 公民 | citizenapp | Flutter 客户端、钱包、治理和轻节点能力 |
-| `citizenapp/im/proto/` | citizenapp 信息协议 | citizenapp-im-proto | 公民 IM 外层 Protobuf schema 真源，不放仓库根目录 proto |
+| `citizenapp/chat/proto/` | CitizenApp 聊天协议 | citizenapp-chat-proto | 公民 Chat 外层 Protobuf schema 真源，不放仓库根目录 proto |
 | `citizenapp/lib/isar/` | citizenapp 本地数据库 | citizenapp-isar | citizenapp Isar 本地持久化实体、schema 和数据库入口 |
-| `citizenapp/lib/im/` | citizenapp 信息 | citizenapp-im | 公民信息 Tab、聊天详情、统一消息层、端到端加密、消息存储、发送队列和传输抽象 |
-| `citizenapp/lib/im/crypto/` | citizenapp 信息加密 | citizenapp-im-crypto | IM 设备密钥、OpenMLS、KeyPackage、安全码和钱包账户绑定 |
-| `citizenapp/lib/im/storage/` | citizenapp 信息本地存储 | citizenapp-im-storage | IM 会话、路由缓存、消息、发送队列和附件缓存的本地存储边界 |
-| `citizenapp/lib/im/transport/` | citizenapp 信息传输 | citizenapp-im-transport | Cloudflare 密文 mailbox 传输、近场传输、自动路由和去重；旧通信节点传输已删除 |
-| `citizenapp/android/im/` | Android 信息近场 | android-im | citizenapp Android 近场通信原生模块，优先承载 Nearby Connections 或 Wi-Fi Direct 接入 |
-| `citizenapp/ios/im/` | iOS 信息近场 | ios-im | citizenapp iOS 近场通信原生模块，承载 Multipeer Connectivity 接入 |
+| `citizenapp/lib/chat/` | CitizenApp 聊天 | citizenapp-chat | 公民聊天 Tab、聊天详情、统一消息层、端到端加密、消息存储、发送队列和传输抽象 |
+| `citizenapp/lib/chat/crypto/` | CitizenApp 聊天加密 | citizenapp-chat-crypto | P-256 会话认证、OpenMLS、KeyPackage、安全码和设备绑定 |
+| `citizenapp/lib/chat/storage/` | CitizenApp 聊天本地存储 | citizenapp-chat-storage | Chat 会话、路由缓存、消息、发送队列和附件缓存的本地存储边界 |
+| `citizenapp/lib/chat/transport/` | CitizenApp 聊天传输 | citizenapp-chat-transport | Cloudflare 密文 mailbox 传输、自动路由和去重；近场原生 transport 尚未落地 |
 | `citizenweb/` | 官网 | citizenweb | GMB 官网前端工程 |
 | `docs/` | 文库 | docs | 白皮书唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
 | `citizenchain/runtime/public/legislation-yuan/` | 立法院模块 | legislation-yuan | 公民宪法唯一真源（`law_id=0`、`tier=宪法`，创世注入 `constitution.scale` + 立法投票修订）；所有法律统一章>节>条>款，展示端从链上结构化法律重建 HTML（ADR-027） |
@@ -121,29 +119,23 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 机构命名规范 | `institution-naming.md` | `memory/07-ai/` | 管理机构具体中英文全称/简称；字段命名仍以本文件为总入口 |
 | 统一协议文件 | `unified-protocols.md` | `memory/07-ai/` | 管理协议、载荷格式和接口契约 |
 | 统一必读文件 | `unified-required-reading.md` | `memory/07-ai/` | 管理每次设计和编程前必须读取的文档 |
-| GMB IM 协议 | `GMB_IM_V1` | `memory/07-ai/unified-protocols.md` / `citizenapp/im/proto/im_envelope.proto` / `citizenapp/lib/im/` / `citizenapp/cloudflare/src/chat/` / `citizenapp/android/im/` / `citizenapp/ios/im/` | 公民私密聊天的 Protobuf 外层协议，统一承载 Cloudflare 互联网聊天和近场聊天的 OpenMLS 密文 |
-| IM Envelope | `ImEnvelope` | `GMB_IM_V1` / `citizenapp/lib/im/` | IM 外层消息信封，承载 OpenMLS wire bytes、MLS 消息类型、ratchet tree、附件引用和 ack 策略 |
-| IM 路由记录 | `ImRouteRecord` | `GMB_IM_V1` / `citizenapp/lib/im/storage/im_isar_store.dart` / `citizenapp/lib/isar/wallet_isar.dart` | IM 内部路由缓存，保存对方钱包聊天账户、设备公钥、安全码、Cloudflare mailbox 标识和近场提示，不替代“我的通讯录” |
-| IM KeyPackage | `ImKeyPackage` / `ImMlsKeyPackage` | `GMB_IM_V1` / `citizenapp/lib/im/crypto/` / `citizenapp/cloudflare/src/chat/` | OpenMLS 设备预密钥包，发布到 Cloudflare 密文 mailbox 的对应钱包账号池并一次性消费 |
-| IM OpenMLS native 实现 | `NativeImMlsCrypto` / `ImMlsNativeBindings` | `citizenapp/lib/im/crypto/im_mls_native.dart` | Dart 侧调用现有 `libsmoldot` native 库中的 OpenMLS C ABI，生成真实 KeyPackage、执行 OpenMLS smoke、创建/恢复持久化 MLS 会话 |
-| IM OpenMLS 会话模型 | `ImMlsWireMessage` / `ImMlsOutboundMessage` / `ImMlsInboundMessage` / `ImMlsMessageKind` | `citizenapp/lib/im/crypto/im_mls_session.dart` | Dart 侧描述 Welcome/application wire message、首次会话输出顺序和入站处理结果，不实现密码学 |
-| IM OpenMLS 状态目录 | `ImMlsStateStore` | `citizenapp/lib/im/crypto/im_mls_state_store.dart` | App 私有 MLS 状态目录和 pending inbound 队列边界，OpenMLS provider storage 仍由 Rust native 写入 |
-| IM OpenMLS Rust FFI | `gmb_im_mls_create_key_package_json` / `gmb_im_mls_two_party_smoke_json` / `gmb_im_mls_encrypt_json` / `gmb_im_mls_decrypt_json` | `citizenapp/rust/src/im_mls.rs` | 现有 `libsmoldot` native 库内的 OpenMLS C ABI 边界，不新增第二套 native 库 |
-| IM 消息流状态机 | `ImMessageFlow` | `citizenapp/lib/im/im_message_flow.dart` | Cloudflare 互联网聊天和近场聊天的发送、接收、pending 重放和 ack 编排 |
-| IM 运行态编排 | `ImRuntime` | `citizenapp/lib/im/im_runtime.dart` | IM 默认运行态入口，读取用户资料通信账户，连接 OpenMLS、本地 Isar、Cloudflare mailbox 传输和近场传输 |
-| IM 通信节点配对二维码 | `ImNodePairingBody` / `GMB_IM_NODE_PAIRING_V1` / `im_node_pairing` | 旧 `citizenapp/lib/qr/bodies/im_node_pairing_body.dart` / 旧 `citizenchain/node/src/settings/communication_node/mod.rs` | 已删除旧名与常量 `IM_NODE_PAIRING_PROTO`/`kImNodePairingProto`（2026-07-08 清理）；正式聊天不再扫描桌面区块链软件通信节点二维码，不得恢复 |
-| 桌面通信节点功能设置 | `CommunicationNodeState` / `get_communication_node` / `set_communication_node_enabled` | 旧 `citizenchain/node/src/settings/communication_node/mod.rs` / 旧 `citizenchain/node/frontend/settings/communication-node/` | 已删除旧名；区块链软件不再承载 CitizenApp 私密聊天投递，不得恢复 |
-| IM Isar 消息库 | `ImIsarStore` / `ImConversationEntity` / `ImRouteCacheEntity` / `ImMessageEntity` / `ImOutboundQueueEntity` / `ImPendingInboundEntity` | `citizenapp/lib/im/storage/im_isar_store.dart` / `citizenapp/lib/isar/wallet_isar.dart` | 公民端本地会话、路由缓存、消息、出站队列和待处理入站 envelope 持久化 |
-| IM 路由缓存记录 | `ImRouteRecord` | `citizenapp/lib/im/storage/im_isar_store.dart` | 公民端 IM 路由缓存模型，保存对方钱包聊天账户、IM 设备公钥、安全码、Cloudflare mailbox 标识和近场提示 |
-| IM 聊天页面 | `ImChatPage` | `citizenapp/lib/im/im_chat_page.dart` | 通讯录详情“消息”按钮和信息 Tab 会话列表共用的聊天详情页，使用 `flutter_chat_ui` 展示本地消息，默认由 `ImRuntime` 注入真实 P2P/MLS 发送和同步回调 |
-| IM 聊天 UI 适配器 | `imStoredMessageToChatMessage` / `imStoredMessagesToChatMessages` | `citizenapp/lib/im/im_chat_ui_adapter.dart` | 将本地 IM 消息记录转换为 `flutter_chat_core.Message`，避免 UI 层直接读取 Isar entity |
-| IM Cloudflare 传输 | `ImCloudflareTransport` | `citizenapp/lib/im/transport/` / `citizenapp/cloudflare/src/chat/` | 互联网聊天正式传输，向 Cloudflare 密文 mailbox 投递、拉取和 ack `ImEnvelope` |
-| IM 近场传输 | `ImNearbyTransport` | `citizenapp/lib/im/transport/` / `citizenapp/android/im/` / `citizenapp/ios/im/` | 无互联网近场聊天正式传输，通过蓝牙和 Wi-Fi 手机直连传输同一种 `ImEnvelope` |
-| IM 节点端点 | `ImNodeEndpoint` / `ImPrivateNodeEndpoint` | 旧 `citizenchain/node/src/im/endpoint.rs` / 旧 `citizenapp/lib/im/transport/` 通信节点类型 | 已删除旧名；旧通信节点 IPv4、IPv6、dns4、dnsaddr multiaddr 入口模型，不得恢复 |
-| IM 设备绑定请求 | `RegisterImDeviceRequest` / `ImBindingPayload` | `GMB_IM_V1` / `citizenapp/lib/im/crypto/` / `citizenapp/cloudflare/src/chat/` | 钱包聊天账户和 IM 设备密钥的绑定载荷；不得再绑定通信节点 PeerId 或端点 |
-| IM 直连投递请求 | `ImDirectDeliveryRequest` | 旧 `citizenchain/node/src/im/direct.rs` | 已删除旧名；旧显式 PeerId + multiaddr 到对方通信节点的密文投递请求，不得恢复 |
-| IM 直连 KeyPackage 请求 | `ImDirectKeyPackageFetchRequest` / `ImDirectKeyPackageConsumeRequest` | 旧 `citizenchain/node/src/im/keypackage.rs` / 旧 `citizenapp/lib/im/transport/` 通信节点类型 | 已删除旧名；旧显式 PeerId + multiaddr 到对方通信节点的 KeyPackage 拉取和消费请求，不得恢复 |
-| IM 网络请求 | `ImNetworkRequest` / `ImNetworkResponse` | 旧 `citizenchain/node/src/im/network.rs` | 已删除旧名；旧 `/gmb/im/1` request-response 的 Spike 阶段 JSON wire 请求和响应，不得恢复 |
+| GMB Chat 协议 | `GMB_CHAT_V1` | `memory/07-ai/unified-protocols.md` / `citizenapp/chat/proto/chat_envelope.proto` / `citizenapp/lib/chat/` / `citizenapp/cloudflare/src/chat/` | 公民私密聊天的 Protobuf 外层协议，统一承载 Cloudflare 互联网聊天和未来近场聊天的 OpenMLS 密文 |
+| Chat Envelope | `ChatEnvelope` | `GMB_CHAT_V1` / `citizenapp/lib/chat/` | Chat 外层消息信封，承载 OpenMLS wire bytes、MLS 消息类型、ratchet tree、附件引用和 ack 策略 |
+| Chat 路由记录 | `ChatRoute` | `GMB_CHAT_V1` / `citizenapp/lib/chat/storage/chat_store.dart` / `citizenapp/lib/isar/app_isar.dart` | Chat 内部路由缓存，保存对方钱包聊天账户、设备公钥、安全码、Cloudflare mailbox 标识和近场提示，不替代“我的通讯录” |
+| Chat KeyPackage | `ChatKeyPackage` / `MlsKeyPackage` | `GMB_CHAT_V1` / `citizenapp/lib/chat/crypto/` / `citizenapp/cloudflare/src/chat/` | OpenMLS 设备预密钥包，发布到 Cloudflare 密文 mailbox 的对应钱包账号池并一次性消费 |
+| Chat OpenMLS native 实现 | `NativeMlsCrypto` / `MlsNativeBindings` | `citizenapp/lib/chat/crypto/mls_native.dart` | Dart 侧调用现有 `libsmoldot` native 库中的 OpenMLS C ABI，生成真实 KeyPackage、执行 OpenMLS smoke、创建/恢复持久化 MLS 会话 |
+| Chat OpenMLS 会话模型 | `MlsWireMessage` / `MlsOutboundMessage` / `MlsInboundMessage` / `MlsMessageKind` | `citizenapp/lib/chat/crypto/mls_session.dart` | Dart 侧描述 Welcome/application wire message、首次会话输出顺序和入站处理结果，不实现密码学 |
+| Chat OpenMLS 状态目录 | `MlsStateStore` | `citizenapp/lib/chat/crypto/mls_state_store.dart` | App 私有 MLS 状态目录和 pending inbound 队列边界，OpenMLS provider storage 仍由 Rust native 写入 |
+| Chat OpenMLS Rust FFI | `gmb_chat_mls_create_key_package_json` / `gmb_chat_mls_two_party_smoke_json` / `gmb_chat_mls_encrypt_json` / `gmb_chat_mls_decrypt_json` | `citizenapp/rust/src/chat_mls.rs` | 现有 `libsmoldot` native 库内的 OpenMLS C ABI 边界，不新增第二套 native 库 |
+| Chat 消息流状态机 | `ChatFlow` | `citizenapp/lib/chat/chat_flow.dart` | Cloudflare 互联网聊天和近场聊天的发送、接收、pending 重放和 ack 编排 |
+| Chat 运行态编排 | `ChatRuntime` | `citizenapp/lib/chat/chat_runtime.dart` | Chat 默认运行态入口，读取用户资料聊天账户，连接 OpenMLS、本地 Isar、Cloudflare mailbox 传输和近场传输 |
+| Chat Isar 消息库 | `ChatStore` / `ChatConversationEntity` / `ChatRouteCacheEntity` / `ChatMessageEntity` / `ChatOutboundQueueEntity` / `ChatPendingInboundEntity` | `citizenapp/lib/chat/storage/chat_store.dart` / `citizenapp/lib/isar/app_isar.dart` | 公民端本地会话、路由缓存、消息、出站队列和待处理入站 envelope 持久化 |
+| Chat 路由缓存记录 | `ChatRoute` | `citizenapp/lib/chat/storage/chat_store.dart` | 公民端 Chat 路由缓存模型，保存对方钱包聊天账户、Chat 设备公钥、安全码、Cloudflare mailbox 标识和近场提示 |
+| Chat 聊天页面 | `ChatPage` | `citizenapp/lib/chat/chat_page.dart` | 通讯录详情“消息”按钮和聊天 Tab 会话列表共用的聊天详情页，使用 `flutter_chat_ui` 展示本地消息，默认由 `ChatRuntime` 注入真实 P2P/MLS 发送和同步回调 |
+| Chat 聊天 UI 适配器 | `storedMessageToChatMessage` / `storedMessagesToChatMessages` | `citizenapp/lib/chat/chat_ui_adapter.dart` | 将本地 Chat 消息记录转换为 `flutter_chat_core.Message`，避免 UI 层直接读取 Isar entity |
+| Chat Cloudflare 传输 | `ChatCloudTransport` | `citizenapp/lib/chat/transport/` / `citizenapp/cloudflare/src/chat/` | 互联网聊天正式传输，向 Cloudflare 密文 mailbox 投递、拉取和 ack `ChatEnvelope` |
+| Chat 近场传输 | `ChatNearbyTransport` | 规划中的 Android / iOS 原生 transport | 无互联网近场聊天通过蓝牙和 Wi-Fi 手机直连传输同一种 `ChatEnvelope`；未落地前不保留占位目录或空壳 |
+| Chat 设备绑定 | `ChatDeviceBinding` / `OP_SIGN_CHAT_DEVICE_BIND` | `citizenapp/lib/chat/crypto/chat_device_binding.dart` / `citizenapp/cloudflare/src/chat/binding.ts` | session owner、MLS 设备标识和设备公钥的 P-256 绑定载荷；不得使用钱包主私钥或客户端账户字段作为授权真源 |
 | Step2D 凭证载荷 fixture | `step2d_credential_payload.json` | `memory/06-quality/fixtures/` | CitizenWallet / CitizenApp 共享的 ADR-008 Step2D SCALE 字节一致性测试数据 |
 | 公权机构管理 | `public-manage` | runtime crate / pallet | 公权机构生命周期 pallet(idx32) |
 | 私权机构管理 | `private-manage` | runtime crate / pallet | 私权机构生命周期 pallet(idx33) |
@@ -234,7 +226,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 管理员账户选择标签 | `account_label` | `accountLabel` | App 本地管理员账户候选展示,不承载机构名称真源 |
 | 钱包候选标签 | `wallet_label` | `walletLabel` | node 前端钱包选择器展示,不承载机构名称真源 |
 | 权威节点标签 | `authority_node_label` | `authorityNodeLabel` | node 设置页 bootnode/GRANDPA 绑定展示,不是机构全称或简称 |
-| IM 路由显示名 | `route_display_name` | `routeDisplayName` | IM 路由缓存和 protobuf 路由记录,不是通讯录真源 |
+| Chat 路由显示名 | `route_display_name` | `routeDisplayName` | Chat 路由缓存和 protobuf 路由记录,不是通讯录真源 |
 | 行政区省名称 | `province_name` | `provinceName` | OnChina 行政区 API、App 省份列表、生成物 manifest |
 | 行政区市名称 | `city_name` | `cityName` | OnChina 行政区 API、App/前端市级选择 |
 | App 行政区内部名称 | `division_name` | `divisionName` | App Isar 行政区缓存内部字段 |
@@ -274,6 +266,48 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `nrc_anquan_account` / `anquanAccount` | `safety_fund_account` / `safetyFundAccount` | 国家储委会安全基金账户字段 | 安全基金是账户用途，不使用拼音字段名 |
 | `ACCOUNT_NAME_ANQUAN` / `RESERVED_NAME_ANQUAN` / `OP_AN` | `ACCOUNT_NAME_SAFETYFUND` / `RESERVED_NAME_SAFETYFUND` / `OP_SAFETY` | 制度账户名称和派生 op tag | 与 `SAFETY_FUND_ACCOUNT` 统一 |
 | `guochuhui` / `shengchuhui` / `shengchuhang` | `nrc` / `prc` / `prb` | 机构角色代码、列表字段和类型派生 | 对应国家储委会、省储委会、省储行标准缩写 |
+
+## 5.5 CitizenApp 会员与 Worker 配置短名
+
+以下名称经用户于 2026-07-11 确认。`CF` 是 Cloudflare 的部署配置缩写；同一
+Cloudflare 账户只允许使用一个 `CF_ACCOUNT_ID`，R2、Images、Stream 不得另造账户
+字段。会员档与链上身份档必须分开命名。
+
+| 中文名称 | English name | 类型 | 使用位置与边界 |
+|---|---|---|---|
+| 自由会员档 | `freedom` | API / D1 / Stripe metadata | 四档 `membership_level` 之一；不得再用身份值 `visitor` 表示会员 |
+| 民主会员档 | `democracy` | API / D1 / Stripe metadata | 四档 `membership_level` 之一；不得使用泛化旧值 `visitor_pro` |
+| 投票公民会员档 | `voting` | API / D1 / Stripe metadata | 四档 `membership_level` 之一；要求 `identity_level=voting` |
+| 竞选公民会员档 | `candidate` | API / D1 / Stripe metadata | 四档 `membership_level` 之一；要求 `identity_level=candidate` |
+| Cloudflare 账户 ID | `CF_ACCOUNT_ID` | Worker secret | R2、Images、Stream 共用的唯一 Cloudflare 账户字段 |
+| Cloudflare API Token | `CF_API_TOKEN` | Worker secret | Worker 调用 Images / Stream API 的令牌 |
+| R2 Access ID | `R2_ACCESS_ID` | Worker secret | R2 S3 预签名 access key id |
+| R2 Secret Key | `R2_SECRET_KEY` | Worker secret | R2 S3 预签名 secret access key |
+| R2 Bucket | `R2_BUCKET` | Worker var | R2 bucket 名称 |
+| Images 地址 | `IMAGES_URL` | Worker var | Images delivery 地址前缀 |
+| Stream 地址 | `STREAM_URL` | Worker var | Stream 播放地址前缀 |
+| Stream 回调密钥 | `STREAM_HOOK_SECRET` | Worker secret | Stream webhook 签名密钥 |
+| Stripe API Key | `STRIPE_API_KEY` | Worker secret | 创建和取消 Stripe 订阅 |
+| Stripe 回调密钥 | `STRIPE_HOOK_SECRET` | Worker secret | Stripe webhook 签名密钥 |
+| Stripe 回调窗口 | `STRIPE_HOOK_WINDOW` | Worker var | Stripe webhook 时间戳容差秒数 |
+| 自由会员 Price ID | `FREEDOM_PRICE_ID` | Worker var | Stripe 自由会员月付美元 Price ID |
+| 民主会员 Price ID | `DEMOCRACY_PRICE_ID` | Worker var | Stripe 民主会员月付美元 Price ID |
+| 投票会员 Price ID | `VOTING_PRICE_ID` | Worker var | Stripe 投票公民会员月付美元 Price ID |
+| 竞选会员 Price ID | `CANDIDATE_PRICE_ID` | Worker var | Stripe 竞选公民会员月付美元 Price ID |
+| Checkout 成功地址 | `CHECKOUT_SUCCESS_URL` | Worker var | Stripe Checkout 成功回跳地址 |
+| Checkout 取消地址 | `CHECKOUT_CANCEL_URL` | Worker var | Stripe Checkout 取消回跳地址 |
+| Session TTL | `SESSION_TTL_SECONDS` | Worker var | Worker session 有效秒数 |
+| Upload TTL | `UPLOAD_TTL_SECONDS` | Worker var | 上传授权有效秒数 |
+| 开发上传代理 | `DEV_UPLOAD_PROXY` | Worker var | 仅本地开发允许的上传代理开关 |
+| 归档开关 | `ARCHIVE_ENABLED` | Worker var | 退订视频归档开关 |
+| 归档等待天数 | `ARCHIVE_LAPSE_DAYS` | Worker var | 权益失效后等待归档的天数 |
+| 启动清单 TTL | `BOOT_TTL_SECONDS` | Worker var | 轻节点启动清单缓存秒数 |
+| 交易广播开关 | `RELAY_ENABLED` | Worker var | 已签名交易广播开关 |
+| 交易广播字节上限 | `RELAY_MAX_BYTES` | Worker var | 单笔已签名交易最大字节数 |
+| 交易广播分钟限额 | `RELAY_PER_MINUTE` | Worker var | 单 IP 每分钟广播次数上限 |
+| 官网 API 地址 | `VITE_API_URL` | CitizenWeb build var | 官网调用 Worker 的根地址 |
+| App API 地址 | `SQUARE_API_URL` | CitizenApp build var | App 调用广场、聊天和链启动清单 Worker 的根地址 |
+| App 会员地址 | `MEMBERSHIP_URL` | CitizenApp build var | App 打开的官网会员页地址 |
 
 ## 6. 新命名登记模板
 
@@ -579,7 +613,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 管理员账户标签 | `account_label` | App local cache / account selector | 本地展示标签,不作为机构名称真源 |
 | 钱包标签 | `wallet_label` | node frontend wallet selector | 钱包候选展示标签,不作为机构名称真源 |
 | 权威节点标签 | `authority_node_label` | node settings bootnode / GRANDPA | 节点身份或 GRANDPA 私钥匹配到的权威节点标签,不作为机构名称真源 |
-| IM 路由显示名 | `route_display_name` | IM protobuf / local cache | 通信路由列表展示,不作为联系人或机构名称真源 |
+| Chat 路由显示名 | `route_display_name` | Chat protobuf / local cache | 通信路由列表展示,不作为联系人或机构名称真源 |
 | 联系人姓名 | `contact_name` | QR body / Dart service | 用户联系方式二维码和通讯录导入服务中的联系人姓名 |
 | 收款人姓名 | `recipient_name` | QR body | 用户转账二维码中的收款人姓名 |
 | 签发机构 CID 号 | `issuer_cid_number` | credential / call data | 签发凭证的机构 CID 号 |
@@ -607,7 +641,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
 | 协议版本 | `p` | QR envelope | 恒为 `QR_V1` |
-| 流向码 | `k` | QR envelope | `1=sign_request,2=sign_response,3=user_contact,4=user_transfer`;旧 `5=im_node_pairing` 已删除并按未知类型拒绝 |
+| 流向码 | `k` | QR envelope | `1=sign_request,2=sign_response,3=user_contact,4=user_transfer`;旧 `5=chat_node_pairing` 已删除并按未知类型拒绝 |
 | 请求 ID | `i` | QR envelope | 临时码 request/session id |
 | 过期时间 | `e` | QR envelope | 临时码过期 unix 秒 |
 | Body | `b` | QR envelope | body 对象 |

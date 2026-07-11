@@ -26,11 +26,11 @@ const MEDIA_COLUMNS = `upload_id, post_id, owner_account, media_index, media_kin
   error_code, created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key`;
 
 export function videoArchiveEnabled(env: Env): boolean {
-  return env.VIDEO_ARCHIVE_ENABLED === '1';
+  return env.ARCHIVE_ENABLED === '1';
 }
 
 function lapseDays(env: Env): number {
-  const parsed = Number(env.VIDEO_ARCHIVE_LAPSE_DAYS);
+  const parsed = Number(env.ARCHIVE_LAPSE_DAYS);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_LAPSE_DAYS;
 }
 
@@ -106,7 +106,7 @@ async function archiveVideoAsset(env: Env, video: MediaAssetRow): Promise<boolea
   const r2Key = archiveObjectKey(video.owner_account, uid);
   try {
     // 本地验收无真实 Stream/R2：直接落归档态，验证状态机与 DB 迁移。
-    if (env.SQUARE_DEV_UPLOAD_PROXY === '1') {
+    if (env.DEV_UPLOAD_PROXY === '1') {
       await markArchived(env, video, r2Key);
       return true;
     }
@@ -145,7 +145,7 @@ async function restoreVideoAsset(env: Env, video: MediaAssetRow): Promise<boolea
   await setArchiveState(env, video, 'restoring');
   try {
     // 本地验收：直接落回 live（无真实回灌）。
-    if (env.SQUARE_DEV_UPLOAD_PROXY === '1') {
+    if (env.DEV_UPLOAD_PROXY === '1') {
       await markRestoredLive(env, video, video.provider_asset_id);
       return true;
     }

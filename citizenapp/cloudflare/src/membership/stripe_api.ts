@@ -4,7 +4,7 @@ import { HttpError } from '../shared/http';
 const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 
 function requireStripeKey(env: Env): string {
-  const key = env.STRIPE_SECRET_KEY;
+  const key = env.STRIPE_API_KEY;
   if (!key) {
     throw new HttpError(503, 'stripe_not_configured', 'Stripe secret key 未配置');
   }
@@ -13,12 +13,12 @@ function requireStripeKey(env: Env): string {
 
 /// 立即退订（账户注销用）：Stripe DELETE /v1/subscriptions/{id}，当场终止订阅。
 ///
-/// 本地 Miniflare 验收（STRIPE_DEV_CHECKOUT_PROXY==='1'）短路，不真打 Stripe。
+/// 本地 Miniflare 验收（STRIPE_DEV_PROXY==='1'）短路，不真打 Stripe。
 export async function cancelStripeSubscriptionNow(
   env: Env,
   subscriptionId: string
 ): Promise<void> {
-  if (env.STRIPE_DEV_CHECKOUT_PROXY === '1') {
+  if (env.STRIPE_DEV_PROXY === '1') {
     return;
   }
   const key = requireStripeKey(env);
@@ -36,7 +36,7 @@ export async function cancelStripeSubscriptionAtPeriodEnd(
   env: Env,
   subscriptionId: string
 ): Promise<void> {
-  if (env.STRIPE_DEV_CHECKOUT_PROXY === '1') {
+  if (env.STRIPE_DEV_PROXY === '1') {
     return;
   }
   const key = requireStripeKey(env);

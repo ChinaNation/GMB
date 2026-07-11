@@ -134,8 +134,8 @@ abstract interface class SecureSeedStore {
 
 ### 签名真相核实（2026-07-08，纠正早前误判）
 
-- **聊天消息不做钱包签名**：im_runtime 的钱包签名仅用于 ① mailbox 后端会话认证 ② IM 设备绑定（MLS key package），聊天消息本体走 MLS 端到端加密（设备密钥，非 seed）。**发消息无每条签名**。
-- **"登录"= 后端会话握手**：square_session_provider 对广场/IM Cloudflare Worker 签 challenge 证明钱包所有权，约一次/会话，无用户登录界面。
+- **聊天消息不做钱包签名**：chat_runtime 的钱包签名仅用于 ① mailbox 后端会话认证 ② Chat 设备绑定（MLS key package），聊天消息本体走 MLS 端到端加密（设备密钥，非 seed）。**发消息无每条签名**。
+- **"登录"= 后端会话握手**：square_session_provider 对广场/Chat Cloudflare Worker 签 challenge 证明钱包所有权，约一次/会话，无用户登录界面。
 - **广场发布 = 链上交易**：`publish_square_post` extrinsic（square_compose_signers.signChain），故扣费；费种见「广场发布费率」。
 
 ### ⚠️ 最终定案（2026-07-08）：完全统一签名，废弃两档 + 会话密钥
@@ -147,7 +147,7 @@ abstract interface class SecureSeedStore {
 - **发布按钮改「签名发布」**：点击→弹验证→直接发布，用户仍一步。
 - **切换身份**无签名负载 → `verifyWalletAccess(walletIndex)`（读 seed 触发验证即弃）。
 - **废弃理由**：seed 是全权私钥，发动态与转账同一把钥匙，"发动态免验证"和"转账必验证"不可兼得；会话密钥又因 App 进程被杀掉内存而退化成"每次开 App 验证"，而开 App 比发动态频繁，得不偿失。
-- **IM 聊天不签名**（仅 mailbox 会话 + MLS 设备绑定，罕见、令牌缓存过期才重签，不拦浏览）。
+- **Chat 聊天不签名**（仅 mailbox 会话 + MLS 设备绑定，罕见、令牌缓存过期才重签，不拦浏览）。
 - 若日后要"发动态真正零验证"，唯一干净解 = 链上"发帖专用子钥"（低权限、不能转账、低摩擦存储）——用户当前选择不做，维持统一。
 
 ---
@@ -157,16 +157,16 @@ abstract interface class SecureSeedStore {
 - **冲突（缩小后）**：seed 严档 = Android 每次读都认证。真正的高频项只有**广场发布**（聊天不签、会话认证/设备绑定是一次/会话）。若发布每条弹指纹则体验差且发布非敏感操作。
 - **两档模型**：
   - **Tier 1 严档（每次操作新鲜生物识别）**：转账、投票、切换默认身份。`authenticateForSigning(walletIndex)` 强制新鲜 per-use readSeed → 刷新会话密钥；随后 `signWithWalletNoAuth` 用之。
-  - **Tier 2 会话密钥（会话内一次生物识别，之后静默）**：后端会话认证、IM 设备绑定、广场发布。裸 `signWithWalletNoAuth`：会话槽命中即静默签；空则惰性加载一次。
+  - **Tier 2 会话密钥（会话内一次生物识别，之后静默）**：后端会话认证、Chat 设备绑定、广场发布。裸 `signWithWalletNoAuth`：会话槽命中即静默签；空则惰性加载一次。
 - **会话密钥**：一次认证读 seed → 派生 sr25519 KeyPair → 缓存**静态**会话槽（`WalletManager` 非单例，40 处 new，故 class-level static）→ 静默签不再读 seed。**生命周期 = App 进程存活期**（进程被杀 / 删钱包 / 登出才清），**不随 5 分钟 App 锁清除**——否则用户每隔 >5 分钟重进就为发广场动态重复生物识别，体验差（2026-07-08 用户明确否决）。App 锁只拦入口，会话密钥留着；Tier1 动钱/换身份不受影响仍每次强制认证。
 - **UX 口径（D5）**：推荐 **P1 惰性**——会话内首个签名（通常是会话认证，早发生）弹一次，之后广场发布全静默；每会话约一次验证。备选 P2 解锁预载（每次打开弹）——不推荐。
 - **安全口径（如实更新 §2）**：硬件绑定完整保护**静止态**（关机/锁屏/离线/被盗提取）；会话解锁活跃期 KeyPair 在内存，运行时被攻破可取——标准移动钱包权衡，相对现状（seed 无认证绑定 root 随时可读）仍大幅提升。
 
-### 广场发布费率（citizenchain runtime，单独卡 + 重新创世）
+### 广场发布费率（citizenchain runtime）
 
-- 现：`configs/mod.rs:402` `RuntimeCall::SquarePost(_) => FeeChargeKind::VoteFlat`（VOTE_FLAT_FEE=100 FEN=1元）。
-- 改：`=> FeeChargeKind::OnchainAmount(0)` → `max(0×rate, ONCHAIN_MIN_FEE=10 FEN)` = **0.1元**；更新测试 `runtime_square_post_fee_kind_is_vote_flat_one_yuan`。
-- 属 citizenchain 改动，**不并入本 citizenapp 卡**，另开链端卡。
+- 目标态：`RuntimeCall::SquarePost(_) => FeeChargeKind::OnchainAmount(0)` → `max(0×rate, ONCHAIN_MIN_FEE=10 FEN)` = **0.1元**。
+- runtime 测试 `runtime_square_post_fee_kind_uses_onchain_minimum_fee` 覆盖分类、10 分最低费用，并确保 `VOTE_FLAT_FEE=100 FEN` 不变。
+- 该改动登记在现有广场任务卡阶段 14，不新增第二套收费或分账逻辑。
 
 ### 签名 API 改造
 
@@ -293,7 +293,7 @@ abstract interface class SecureSeedStore {
 **待决策 / 待办（非本卡范围，另行安排）：**
 - **[MEDIUM] attestation_service 是假占位**：token=`Random(now)` 伪随机、签名=djb2 折叠哈希、payload 写死 `device_integrity:"…placeholder"`、自注释 "MVP placeholder replace with real sr25519 later"、生产无调用点。**提供零真实保证，名不副实**。若要按设备可信/密钥硬件背书放行，须真做 Play Integrity + Android Key Attestation；否则别让任何逻辑依赖它。
 - **[MEDIUM] root/越狱仅警告不处置**（main.dart:371 banner）：硬件密钥保证在 root 设备被削弱。策略题——是否禁止 root 设备创建/签名热钱包，待用户定。
-- **[MEDIUM] 无证书固定**：RPC / square·IM Worker 无 cert pinning，纵深防御可加。
+- **[MEDIUM] 无证书固定**：RPC / square·Chat Worker 无 cert pinning，纵深防御可加。
 - **[LOW/未来] StrongBox**：seed KEK 走 TEE（biometric_storage 默认，不暴露安全元件开关），有安全元件机型可升 StrongBox（需自写极薄 channel）。
 - **[LOW] 助记词展示**：已防截屏（备份弹窗+查看页+main 覆盖 ✓）；可选加点按才显示 + 自动关闭。
 

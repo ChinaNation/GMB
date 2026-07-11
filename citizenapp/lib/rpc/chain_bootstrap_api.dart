@@ -16,8 +16,8 @@ class ChainBootstrapApiConfig {
 
   /// 链启动清单与广场/聊天共用同一个 Cloudflare Worker 入口。
   ///
-  /// 这里复用现有 define 名，避免 App 出现两个 Worker 根地址配置。
-  static const edgeBaseUrlDefineName = 'CITIZENAPP_SQUARE_API_BASE_URL';
+  /// 这里复用广场 API define，避免 App 出现两个 Worker 根地址配置。
+  static const edgeBaseUrlDefineName = 'SQUARE_API_URL';
 
   static const prodBaseUrl =
       'https://citizenapp-square-api.stews87-fawn.workers.dev';

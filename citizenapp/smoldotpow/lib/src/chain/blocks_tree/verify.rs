@@ -164,9 +164,7 @@ impl<T> NonFinalizedTree<T> {
                 (FinalizedConsensus::Pow, Some(BlockConsensus::Pow)) => {
                     // 轻客户端不做完整 PoW 哈希验证（安全性由 GRANDPA 最终性保证），
                     // difficulty 值仅用于格式校验。
-                    verify::header_only::ConfigConsensus::Pow {
-                        difficulty: 1,
-                    }
+                    verify::header_only::ConfigConsensus::Pow { difficulty: 1 }
                 }
                 (FinalizedConsensus::Unknown, None) => {
                     return Err(HeaderVerifyError::UnknownConsensusEngine);

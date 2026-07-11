@@ -10,7 +10,7 @@
 
 **用户拍板两项：**
 1. **助记词 = Plan A**：助记词也硬件绑定，存「宽档 recoveryVault」；换指纹后自愈仅多一次验证、不手输。（Plan B「不存、靠纸备份」未采用，留作将来「高安全模式」开关。）
-2. **后台静默 = 方案①（P-256 硬件子钥，改后端）**：广场/IM 后端握手不再静默读 sr25519 seed，改用一把 SE/Keystore 原生 **P-256 子钥**（passkey 式，真硬件签名、不碰 seed、不弹生物识别）；Cloudflare Worker 后端注册子钥公钥绑定钱包。过渡期若后端来不及改，可先走方案②内存缓存，但**目标态 = ①**。
+2. **后台静默 = 方案①（P-256 硬件子钥，改后端）**：广场/Chat 后端握手不再静默读 sr25519 seed，改用一把 SE/Keystore 原生 **P-256 子钥**（passkey 式，真硬件签名、不碰 seed、不弹生物识别）；Cloudflare Worker 后端注册子钥公钥绑定钱包。过渡期若后端来不及改，可先走方案②内存缓存，但**目标态 = ①**。
 
 **密码学硬约束（为什么只能信封加密）：**
 - sr25519 = Schnorrkel/Ristretto255，**不进任何手机安全元件**。Apple SE 只有 EC **P-256**；Android Keystore 只有 RSA / EC-NIST / AES（+可选 Ed25519）。连比特币 secp256k1 都不进 SE（故硬件钱包才独立存在）。两家能硬件签名的交集 = **ECDSA/P-256（secp256r1，≠ 币圈的 secp256k1）**。
@@ -42,7 +42,7 @@
 **P-256 子钥（方案①）后端改动范围：**
 - 客户端：SE/Keystore 生成 per-wallet P-256 子钥（硬件原生签名）；首次用 sr25519 主钥对「子钥公钥」签一次名做绑定证明。
 - 后端 Cloudflare Worker：新增子钥注册端点（验 sr25519 绑定证明 → 存 `walletAddress↔P256pubkey`）；登录挑战验签从 sr25519 改验 P-256。
-- 涉 3 处客户端静默签名：`square_session_provider`、`square_compose_signers`、`im_runtime`。
+- 涉 3 处客户端静默签名：`square_session_provider`、`square_compose_signers`、`chat_runtime`。
 - **待评估**：是否单开 ADR 记「后端 P-256 子钥会话协议」（倾向是，跨端协议）。
 
 ## 核心设计：信封加密 + 硬件 auth-bound KEK
@@ -64,8 +64,8 @@
 - `NSFaceIDUsageDescription` 已存在。
 
 ## ⚠️ 关键难点：硬件绑定 vs 后台静默签名的矛盾（必须先解）
-硬件绑定后**任何读 seed 都弹生物识别**，但现设计里广场/IM 后端会话握手（`requireAuth:false`）是**静默读 seed 签名**的 → 直接绑定会让开 App 就弹/狂弹。三个候选解，Step 0 spike + 与用户定：
-1. **分离密钥（最正确）**：seed=硬件绑定的**花钱主钥**；另派生**非花钱的 session/device 子钥**静默存，登录握手/IM 用子钥签，后端注册子钥公钥绑定钱包。**需改 Cloudflare Worker 后端**接受 session key。
+硬件绑定后**任何读 seed 都弹生物识别**，但现设计里广场/Chat 后端会话握手（`requireAuth:false`）是**静默读 seed 签名**的 → 直接绑定会让开 App 就弹/狂弹。三个候选解，Step 0 spike + 与用户定：
+1. **分离密钥（最正确）**：seed=硬件绑定的**花钱主钥**；另派生**非花钱的 session/device 子钥**静默存，登录握手/Chat 用子钥签，后端注册子钥公钥绑定钱包。**需改 Cloudflare Worker 后端**接受 session key。
 2. **内存会话缓存**：首次动钱动权生物识别读出 seed → 内存缓存（进后台/被杀即清零），后台握手用缓存静默、动钱动权强制**跳过缓存重新生物识别**。改动小，但"缓存"安全性弱于方案1。
 3. **全都验**：握手也弹（回到"一直弹"，用户已否，排除）。
 → **已定：方案①（P-256 子钥，改后端）；过渡可②。详见上「决策锁定」。**
@@ -84,7 +84,7 @@
 
 ## P-256 设备子钥协议（方案①详设，2026-07-09）
 
-**目标**：后台握手（广场 session / IM 设备绑定）不再静默读 sr25519 seed（硬件绑定后会弹），改用 per-wallet **P-256 硬件子钥**（Keystore/SE，`PURPOSE_SIGN`、**无 user-auth** → 静默硬件 ECDSA，私钥永不出硬件；passkey 式）。
+**目标**：后台握手（广场 session / Chat 设备绑定）不再静默读 sr25519 seed（硬件绑定后会弹），改用 per-wallet **P-256 硬件子钥**（Keystore/SE，`PURPOSE_SIGN`、**无 user-auth** → 静默硬件 ECDSA，私钥永不出硬件；passkey 式）。
 
 **现有后端**（`citizenapp/cloudflare`，live worker `citizenapp-square-api.stews87-fawn.workers.dev`）：
 - `POST /v1/square/auth/challenge` → `buildLoginPayload`（`GMB_SQUARE_LOGIN_V1\nowner_account:..\nchallenge_id:..\nexpires_at:..`）存 D1 `square_login_challenges`。
@@ -97,7 +97,7 @@
 3. **握手（静默 P-256）**：challenge 不变；client 用 P-256 子钥签 `signing_payload`（静默）；`session` 查该 owner 已注册 p256_pubkey → **Web Crypto ES256** 验（`subtle.verify({name:ECDSA,hash:SHA-256})`）；无绑定 → 401 `device_not_registered` → client 注册后重试。
 4. **格式**：pubkey=裸未压缩点 65B(`0x04||X||Y`) hex；sig=裸 `r||s` 64B hex（client 把平台 DER→raw）。
 5. **D1**：新 `migrations/0008_device_subkeys.sql` 表 `square_device_subkeys(owner_account PK,p256_pubkey,issued_at,created_at,updated_at)`（一账户一活跃子钥，重注册覆盖=换机/轮换）。
-6. **client 接入**：3 处静默 `signWithWallet(requireAuth:false)`（`square_session_provider`/`square_compose_signers`/`im_runtime`）换 `DeviceSubkey.sign`。子钥 P-256 gen+sign 需**原生**（Android 加桥；iOS 卡硬件）。
+6. **client 接入**：3 处静默 `signWithWallet(requireAuth:false)`（`square_session_provider`/`square_compose_signers`/`chat_runtime`）换 `DeviceSubkey.sign`。子钥 P-256 gen+sign 需**原生**（Android 加桥；iOS 卡硬件）。
 
 **决策（已定 2026-07-09）**：A=**不单开 ADR**（任务卡为准）；B=**clean cutover**（worker+新 App 同发，session 直接 ES256，旧 App 短暂断登可接受）；C=钱包创建时注册（seed 新鲜零额外弹窗）+ 遇 401 `device_not_registered` 懒注册兜底。
 
@@ -111,7 +111,7 @@
 **剩余（客户端，与 worker 部署强耦合、必须同发）**：
 1. native P-256 gen+sign（Android 加桥：Keystore P-256 `PURPOSE_SIGN` 无 auth、ECDSA 签、导出裸点；iOS SE 卡硬件）。
 2. Dart `DeviceSubkey`（ensureKey/pubkey/sign；**平台 DER→raw r||s**；调 `/auth/device/register`；401 懒注册）。
-3. 3 处静默路径（`square_session_provider`/`square_compose_signers`/`im_runtime`）改 `DeviceSubkey.sign`；钱包创建时 sr25519 签绑定注册。
+3. 3 处静默路径（`square_session_provider`/`square_compose_signers`/`chat_runtime`）改 `DeviceSubkey.sign`；钱包创建时 sr25519 签绑定注册。
 4. **Step 3**：`WalletManager._store` 切 `HardwareBoundSeedVault` + 去 `_requireBiometric` local_auth 软门禁（前台动钱动权改硬件金库弹验证）。
 
 **native P-256 + Dart DeviceSubkey 落地（2026-07-09，纯新增，未接入）**：
@@ -120,17 +120,17 @@
 - **未接入**：3 静默路径改子钥 + 钱包创建注册 + Step 3 是下一步，与 worker 部署同发。
 - ⚠️ worker 全套 **71/72**：唯一 fail=`chain_confirm.test.ts` 存储回收（expected 1024 to be 0），**与本任务无关**——来自并发合入的 account-deletion/session-index 代码，非本 P-256 改动引起（不碰 posts/storage）；typecheck 干净、`device_subkey`/`auth` 全绿。
 
-**IM 路径范围澄清（重要）**：静默签名有两类，别搞混：
+**Chat 路径范围澄清（重要）**：静默签名有两类，别搞混：
 - **频繁**=广场 session 握手（`square_session_provider` / `square_compose_signers.signLogin` / im 的 `_signSquareLoginPayload`）→ 走 square `/auth/session`（已改 ES256）→ **改 P-256 子钥**（本轮目标）。
-- **罕见**=IM 设备绑定（`im_runtime._signWalletPayload` → chat `registerChatDevice` → `src/chat/binding.ts` 结构化 sr25519 op_tag `OP_SIGN_IM_WALLET_BINDING`，缓存到期才重签）。它是 ADR-026 op_tag 钱包授权证明，**保持 sr25519**、step ③ 把它从 `requireAuth:false` 翻成 `true`（罕见，弹一次生物识别可接受）→ **chat/binding.ts 零改**。故本次 cutover 后端只动 `createSession`。
+- **罕见**=Chat 设备绑定（`chat_runtime._signWalletPayload` → chat `registerChatDevice` → `src/chat/binding.ts` 结构化 sr25519 op_tag `OP_SIGN_CHAT_DEVICE_BIND`，缓存到期才重签）。它是 ADR-026 op_tag 钱包授权证明，**保持 sr25519**、step ③ 把它从 `requireAuth:false` 翻成 `true`（罕见，弹一次生物识别可接受）→ **chat/binding.ts 零改**。故本次 cutover 后端只动 `createSession`。
 
 ## Step 3 集成落地（2026-07-09，代码完成，⚠️未部署未 e2e）
 
 全部 code-complete、`flutter analyze` 0 error、全套单测 **458 passed / 5 skipped / 0 failed（`--concurrency=1`，Isar 并行须串行，见 [[feedback_isar_is_community_fork]]）**：
 - **WalletManager 切硬件金库**：`_store = HardwareBoundSeedVault()`；删 local_auth / `_requireBiometric` / `debugLocalAuth` / `signWithWallet(requireAuth)` 参数——「每次动钱动权验证」现由硬件金库读 seed 的**原子生物识别**实现；`verifyWalletAccess` / `getSeedHex` / `getMnemonic` 去软门禁。
 - **子钥注册**：`typedef WalletSubkeyRegistrar` 注入钩子（`main.dart` 注入 `DeviceSubkeyRegistrar().register`，wallet/core 不反依赖 8964）；`createWallet` / `importWallet` best-effort 用**内存 keypair** 签绑定注册（零额外弹窗、失败不阻塞创建）。
-- **3 静默路径改子钥**：`square_session_provider` / `square_compose_signers.signLogin` / `im_runtime._signSquareLoginPayload` → `DeviceSubkey.signRawHex`；`SquareApiClient.ensureSession` 加 `onDeviceNotRegistered` 懒注册重试 + `registerDeviceSubkey`；新增 `DeviceSubkeyRegistrar`（8964/services）。
-- **IM 设备绑定**（罕见）保持 sr25519：`_signWalletPayload` 去 `requireAuth:false` → 读硬件金库弹一次。
+- **3 静默路径改子钥**：`square_session_provider` / `square_compose_signers.signLogin` / `chat_runtime._signSquareLoginPayload` → `DeviceSubkey.signRawHex`；`SquareApiClient.ensureSession` 加 `onDeviceNotRegistered` 懒注册重试 + `registerDeviceSubkey`；新增 `DeviceSubkeyRegistrar`（8964/services）。
+- **Chat 设备绑定**（罕见）保持 sr25519：`_signWalletPayload` 去 `requireAuth:false` → 读硬件金库弹一次。
 - **部署完成（2026-07-09，用户授权 clean cutover）**：`migrate:production`（0008 `square_device_subkeys` 表 ✅）+ `deploy:production`（Version `ec94eb4e`）。**curl 验证生效**：`/health` ok；`register` 端点在线且校验（空→`invalid_owner_account`、缺 pubkey→`invalid_device_pubkey`）；`session` 对未注册子钥返回 `device_not_registered`（sr25519 旧登录已拒 = ES256 cutover 生效）。旧格式钱包需助记词重导入（clean cutover 代价，数据未毁、降级旧 App 仍可读）。
 - **死码清理完成**：删 `lib/wallet/core/biometric_secure_seed_store.dart` + `test/wallet/biometric_secure_seed_store_test.dart`；`secure_seed_store.dart` 文档引用改 `[HardwareBoundSeedVault]`。**`local_auth` dep 保留**（main.dart / user.dart / create_wallet_onboarding 设备锁探测仍用）。analyze 干净。
 - **待做**：iOS native P-256 + 硬件金库（**卡 Xcode 未装**：只有 CommandLineTools、无模拟器、无 CocoaPods；且模拟器无 Secure Enclave，真绑定需真 iPhone）；**Step 4 Android 真机 e2e**（新 App 已构建 102.6MB，装机时 **Pixel 掉线待重连**）：创建静默注册（查生产 D1 `square_device_subkeys` 确认）/ 广场登录静默 / 动钱动权弹验证 / 换指纹自愈 / 401 懒注册。
@@ -144,12 +144,12 @@
 3. logcat：后台每几秒读 `tier=strict`（严档 seed）→ 弹窗，decrypt SUCCESS。
 4. 死循环：旧钱包（idx=1，旧格式/未注册）→ 后台会话 401 `device_not_registered` → **Step 3 加的懒注册在后台读 seed 弹验证** → 注册没成 → 又 401 → 又弹；多服务 × 重试 = 狂弹。
 **Step 3 设计缺陷**：后台流程不该碰硬件 seed；懒注册在后台弹窗错误。**单测用 fake 没跑真实后台流，骗过了验证 → 没做 e2e 就部署+装机是判断失误。**
-**修复**：删掉后台懒注册（`onDeviceNotRegistered` 从 `square_session_provider` / `im_runtime` 移除）——后台**永不读 seed / 不弹 / 不懒注册**；子钥注册只在钱包创建时用**内存 keypair** 静默做；未注册钱包（旧格式）广场登不了但也不弹，**重建即注册**。
+**修复**：删掉后台懒注册（`onDeviceNotRegistered` 从 `square_session_provider` / `chat_runtime` 移除）——后台**永不读 seed / 不弹 / 不懒注册**；子钥注册只在钱包创建时用**内存 keypair** 静默做；未注册钱包（旧格式）广场登不了但也不弹，**重建即注册**。
 **真机验证**：新 App 静置 14s，后台零 `HW_SEED_VAULT` 读取 = **弹窗消失 ✅**。
 **同期对齐（并行 agent 的 ADR-026 SCALE 迁移）**：签名统一走 `signing_message(op_tag)`（登录 0x1b / 设备绑定 0x1c），登录/绑定签名器参数改 `Uint8List` 摘要；`WalletSubkeyRegistrar.signBinding` 同步改 `Uint8List`。app 编译净、worker 92 测试绿、worker 部署 `6bf9ecd1`。
 **协议端到端已验（2026-07-09 脚本对线上 worker）**：真 sr25519 主钥 + P-256 子钥跑 `register → challenge → session` **全 200**、换到 `session_token`（SCALE `signing_message` 逐字节对，测试行已清）。
 
-**App 真机 e2e 已验（2026-07-09）**：新 App 内新建热钱包 → `HW_SEED_VAULT` 仅两条静默 encrypt（strict+recovery）、**创建 0 弹窗**；子钥**自动注册**（生产 D1 出现新行）；清 logcat 后至今**无任何自发后台弹窗**（循环已灭）；唯一一次弹窗 = 用户**切换默认钱包**（`verifyWalletAccess` 动权，设计内正确）。**结论：狂弹事故彻底修复，后台永久静默，仅用户动权时弹。** 遗留 IM 设备绑定（罕见 sr25519，缓存 90 天）保持一次弹，属设计。
+**App 真机 e2e 已验（2026-07-09）**：新 App 内新建热钱包 → `HW_SEED_VAULT` 仅两条静默 encrypt（strict+recovery）、**创建 0 弹窗**；子钥**自动注册**（生产 D1 出现新行）；清 logcat 后至今**无任何自发后台弹窗**（循环已灭）；唯一一次弹窗 = 用户**切换默认钱包**（`verifyWalletAccess` 动权，设计内正确）。**结论：狂弹事故彻底修复，后台永久静默，仅用户动权时弹。** 遗留 Chat 设备绑定（罕见 sr25519，缓存 90 天）保持一次弹，属设计。
 **教训铁律**：硬件金库/签名类改动，**真机 e2e 通过后才部署**，绝不靠 fake 单测就上线。
 
 ## Step 0 结果（2026-07-09 Android PASS）

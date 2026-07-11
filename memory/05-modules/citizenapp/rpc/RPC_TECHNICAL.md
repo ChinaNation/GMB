@@ -89,7 +89,7 @@ lib/rpc/
 
 - 钱包余额不更新的首要风险点，不是 UI，而是“轻节点已初始化但尚未同步完成”时过早查询链上状态
 - Android 系统弹出“公民没有响应/关闭应用/等待”属于 ANR，首要排查点是是否有非链页面误触发 smoldot，或同步原生线程持续挤占主线程资源；当前实现只在 `runApp()` 前等待旧实例释放，禁止等待新轻节点初始化或同步。
-- 广场浏览、信息页和“我的”身份徽章不得调用主动链入口；这些页面没有链消费行为时，进程内不得创建 smoldot client。
+- 广场浏览、聊天页和“我的”身份徽章不得调用主动链入口；这些页面没有链消费行为时，进程内不得创建 smoldot client。
 - `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0、没有提案或机构不存在
 - 当前代码已新增 `SmoldotClientManager.getStatusSnapshot()`，作为结构化轻节点状态接口；其底层已改为 Rust 原生 capability，不再由 Dart 层拼装 `system_health`
 - 状态快照的 `syncPhase` 是严格枚举：`regular`、`warpDownloadingFragments`、`warpVerifyingFragments`、`warpDownloadingTargetState`、`warpBuildingRuntime`、`warpBuildingChainInformation`。未知值直接拒绝，禁止降级成 ready。

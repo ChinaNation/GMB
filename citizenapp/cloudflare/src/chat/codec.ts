@@ -20,7 +20,7 @@ export function assertChatAccount(
 
 export function assertDeviceId(value: unknown): string {
   if (typeof value !== "string" || !DEVICE_ID_PATTERN.test(value)) {
-    throw new HttpError(400, "invalid_device_id", "IM 设备编号格式不合法");
+    throw new HttpError(400, "invalid_device_id", "Chat 设备编号格式不合法");
   }
   return value;
 }
@@ -30,7 +30,7 @@ export function assertDevicePublicKeyHex(value: unknown): string {
     throw new HttpError(
       400,
       "invalid_device_public_key",
-      "IM 设备公钥格式不合法",
+      "Chat 设备公钥格式不合法",
     );
   }
   const normalized = value.toLowerCase();
@@ -42,14 +42,14 @@ export function assertDevicePublicKeyHex(value: unknown): string {
     throw new HttpError(
       400,
       "invalid_device_public_key",
-      "IM 设备公钥长度不合法",
+      "Chat 设备公钥长度不合法",
     );
   }
   if (!HEX_PATTERN.test(normalized)) {
     throw new HttpError(
       400,
       "invalid_device_public_key",
-      "IM 设备公钥必须是小写 hex",
+      "Chat 设备公钥必须是小写 hex",
     );
   }
   return normalized;

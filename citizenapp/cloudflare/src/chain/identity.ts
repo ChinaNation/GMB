@@ -1,4 +1,5 @@
 import { blake2AsU8a, decodeAddress, xxhashAsU8a } from '@polkadot/util-crypto';
+import { bytesToHex, hexToBytes } from '../shared/signing_message';
 import type { Env } from '../types';
 import { HttpError } from '../shared/http';
 import { nowMs } from '../shared/time';
@@ -45,7 +46,7 @@ export async function fetchChainIdentityStateCached(
 ): Promise<ChainIdentityState> {
   const cacheKey = `square_identity:${ownerAccount}`;
   try {
-    const cached = await env.FEED_CACHE.get(cacheKey);
+    const cached = await env.SQUARE_CACHE.get(cacheKey);
     if (cached) {
       return JSON.parse(cached) as ChainIdentityState;
     }
@@ -55,7 +56,7 @@ export async function fetchChainIdentityStateCached(
   try {
     const state = await fetchChainIdentityState(env, ownerAccount);
     try {
-      await env.FEED_CACHE.put(cacheKey, JSON.stringify(state), {
+      await env.SQUARE_CACHE.put(cacheKey, JSON.stringify(state), {
         expirationTtl: IDENTITY_CACHE_TTL_SECONDS
       });
     } catch {
@@ -76,8 +77,8 @@ export async function fetchChainIdentityState(
   const votingKey = storageMapKey('CitizenIdentity', 'VotingIdentityByAccount', accountId);
   const candidateKey = storageMapKey('CitizenIdentity', 'CandidateIdentityByAccount', accountId);
   const [votingHex, candidateHex] = await Promise.all([
-    fetchChainStorage(env, `0x${hex(votingKey)}`),
-    fetchChainStorage(env, `0x${hex(candidateKey)}`)
+    fetchChainStorage(env, `0x${bytesToHex(votingKey)}`),
+    fetchChainStorage(env, `0x${bytesToHex(candidateKey)}`)
   ]);
 
   const votingIdentity = votingHex ? decodeVotingIdentity(hexToBytes(votingHex)) : null;
@@ -200,20 +201,6 @@ function readCompactU32(data: Uint8Array, offset: number): [number, number] {
 
 function readU32Le(data: Uint8Array, offset: number): number {
   return new DataView(data.buffer, data.byteOffset + offset, 4).getUint32(0, true);
-}
-
-function hex(bytes: Uint8Array): string {
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function hexToBytes(input: string): Uint8Array {
-  const text = input.startsWith('0x') ? input.slice(2) : input;
-  if (text.length % 2 !== 0) throw new Error('hex length must be even');
-  const out = new Uint8Array(text.length / 2);
-  for (let index = 0; index < out.length; index += 1) {
-    out[index] = Number.parseInt(text.slice(index * 2, index * 2 + 2), 16);
-  }
-  return out;
 }
 
 function utf8(bytes: Uint8Array): string {

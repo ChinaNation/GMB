@@ -49,7 +49,7 @@
 
 登录、公民身份确认、管理员确认、交易签名、运行时升级等都不新增 `k`;它们统一是 `k=1` 签名请求,具体业务由 `b.a` 区分。
 
-`k=5 im_node_pairing` 已删除。正式解析器必须把 `k=5` 当成未知类型拒绝，不得恢复桌面区块链软件通信节点配对流程。
+`k=5 chat_node_pairing` 已删除。正式解析器必须把 `k=5` 当成未知类型拒绝，不得恢复桌面区块链软件通信节点配对流程。
 
 ## 4. k=1 sign_request
 
@@ -168,9 +168,9 @@
 | `memo` | string | 是 | 备注,允许空串 |
 | `bank` | string | 是 | 清算行/清算网络标识,允许空串 |
 
-## 8. 已删除 k=5 im_node_pairing
+## 8. 已删除 k=5 chat_node_pairing
 
-旧 `k=5 im_node_pairing` 固定码已删除。旧字段 `node_peer_id`、`node_multiaddr`、`endpoint_kind` 不再属于当前 QR_V1 可解析 body；CitizenApp 扫到 `k=5` 必须返回未知类型。
+旧 `k=5 chat_node_pairing` 固定码已删除。旧字段 `node_peer_id`、`node_multiaddr`、`endpoint_kind` 不再属于当前 QR_V1 可解析 body；CitizenApp 扫到 `k=5` 必须返回未知类型。
 
 ## 9. 签名原文拼接
 

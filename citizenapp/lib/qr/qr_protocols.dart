@@ -48,7 +48,6 @@ class QrActions {
   static const int activateAdmin = 5;
   static const int decryptAdmin = 6;
   static const int runtimeUpgradeHash = 7;
-  static const int imWalletBinding = 8;
 
   /// 广场账户动作（订阅/取消/…）链下签名，走 GMB 哈希域 op_tag 0x1D。
   /// 官网无私钥发起，CitizenApp「扫一扫」扫码用 owner 主钥签名回传。
@@ -151,7 +150,6 @@ class QrActions {
         'guard_vote' => legislationGuardVote,
         'activate_admin_account' => activateAdmin,
         'decrypt_admin' => decryptAdmin,
-        'im_wallet_binding' => imWalletBinding,
         'citizen_identity' => citizenIdentity,
         'onchina_admin_action' => onchinaAdmin,
         _ => 0,

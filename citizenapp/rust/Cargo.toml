@@ -4,7 +4,7 @@
 name = "smoldot_ffi"
 version = "1.0.0"
 edition = "2021"
-authors = ["Polkadart Contributors"]
+authors = ["GMB (ChinaNation)"]
 license = "Apache-2.0"
 description = "FFI bindings for smoldot-light"
 

@@ -172,7 +172,8 @@ String _asIdentityLevel(Object? value) {
 /// 归一化会员档位；未知/缺失/未购买 → null（不给勾）。
 String? _asMembershipLevel(Object? value) {
   final normalized = value?.toString().trim();
-  return (normalized == 'visitor' ||
+  return (normalized == 'freedom' ||
+          normalized == 'democracy' ||
           normalized == 'voting' ||
           normalized == 'candidate')
       ? normalized

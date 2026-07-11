@@ -138,8 +138,8 @@ export function subscriptionIsActive(membership: MembershipRow): boolean {
   );
 }
 
-/// 可订阅档位：精确匹配本身份档（禁止降档/越级）。visitor 身份 → [visitor,
-/// visitor_pro]；voting → [voting]；candidate → [candidate]。
+/// 可订阅档位：精确匹配本身份档（禁止降档/越级）。visitor 身份 → [freedom,
+/// democracy]；voting → [voting]；candidate → [candidate]。
 export function eligibleMembershipLevels(identity: ChainIdentityState): MembershipLevel[] {
   return membershipPlanList()
     .filter((plan) => identityEligibleForPlan(identity.identity_level, plan))

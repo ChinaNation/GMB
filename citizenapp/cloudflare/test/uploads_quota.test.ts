@@ -7,8 +7,8 @@ describe('membership upload quotas', () => {
   it('rejects a dynamic post whose text exceeds the member quota', () => {
     expect(() =>
       assertDeclaredContentQuota({
-        membershipLevel: 'visitor',
-        plan: membershipPlans.visitor,
+        membershipLevel: 'freedom',
+        plan: membershipPlans.freedom,
         postCategory: 'normal',
         contentFormat: 'normal',
         titleLength: 0,
@@ -46,11 +46,11 @@ describe('membership upload quotas', () => {
     ).toThrow(expect.objectContaining({ code: 'campaign_membership_required' }));
   });
 
-  it('rejects visitor article body images over the visitor quota', () => {
+  it('rejects freedom article body images over its quota', () => {
     expect(() =>
       assertDeclaredContentQuota({
-        membershipLevel: 'visitor',
-        plan: membershipPlans.visitor,
+        membershipLevel: 'freedom',
+        plan: membershipPlans.freedom,
         postCategory: 'normal',
         contentFormat: 'article',
         titleLength: 12,
@@ -94,8 +94,8 @@ describe('membership upload quotas', () => {
 
     await expect(
       assertManifestQuota({
-        membershipLevel: 'visitor',
-        plan: membershipPlans.visitor,
+        membershipLevel: 'freedom',
+        plan: membershipPlans.freedom,
         upload: {
           owner_account: 'owner_1',
           post_category: 'normal'
@@ -124,8 +124,8 @@ describe('membership upload quotas', () => {
 
     await expect(
       assertManifestQuota({
-        membershipLevel: 'visitor',
-        plan: membershipPlans.visitor,
+        membershipLevel: 'freedom',
+        plan: membershipPlans.freedom,
         upload: {
           owner_account: 'owner_1',
           post_category: 'normal'

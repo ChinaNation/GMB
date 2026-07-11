@@ -17,7 +17,7 @@ CitizenApp 只使用 `QR_V1`。所有扫码 envelope 顶层字段固定为 `p/k/
 
 CitizenApp 不处理管理员扫码登录。登录签名请求由 OnChina 页面生成,由 CitizenWallet 公民钱包扫码签名。
 
-`k=5 im_node_pairing` 已删除。CitizenApp 扫到旧通信节点配对码时按未知 `k` 拒绝，不再保存桌面区块链软件通信节点信息。
+`k=5 chat_node_pairing` 已删除。CitizenApp 扫到旧通信节点配对码时按未知 `k` 拒绝，不再保存桌面区块链软件通信节点信息。
 
 ## 2. 签名请求
 

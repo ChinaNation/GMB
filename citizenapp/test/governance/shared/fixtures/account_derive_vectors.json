@@ -1,5 +1,5 @@
 {
-  "_comment": "ADR-024 账户派生金标向量 (canonical, Rust 权威源). 行为中性基线: domain=GMB, ss58_format=2027. china_* 来源的 Main/Fee/Stake/SafetyFund/He address_hex 必须与 china_*.rs 字面值逐字节一致(创世账户烘焙器 scripts/gmb.py 用 GMB+OP_* 派生的真值,原名 multisig.py). InstitutionNamed / Personal 的 address_hex 由 Rust 导出测试(ACCOUNT_DERIVE_UPDATE=1)用 account_derive 计算后回填,勿手算. 重生方式: tools/sync_account_derive_vectors.sh.",
+  "_comment": "ADR-024 账户派生金标向量 (canonical, Rust 权威源). 行为中性基线: domain=GMB, ss58_format=2027. china_* 来源的 Main/Fee/Stake/SafetyFund/He address_hex 必须与 china_*.rs 字面值逐字节一致(创世账户烘焙器 scripts/rederive_accounts.py 用 GMB+OP_* 派生的真值,原名 multisig.py). InstitutionNamed / Personal 的 address_hex 由 Rust 导出测试(ACCOUNT_DERIVE_UPDATE=1)用 account_derive 计算后回填,勿手算. 重生方式: tools/sync-derive-vectors.sh.",
   "domain": "GMB",
   "ss58_format": 2027,
   "vectors": [

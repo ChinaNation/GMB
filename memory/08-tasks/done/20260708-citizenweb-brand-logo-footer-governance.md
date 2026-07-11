@@ -3,13 +3,13 @@
 ## 任务需求
 1. Footer「产品体系」列表改为：CitizenApp 公民 / CitizenWallet 公民钱包 / CitizenChain 公民链。
 2. 治理体系 tab 的「四种投票体系」标题改为「投票引擎」。
-3. 左上角 logo：图标换成 docs/国旗.png 中间花徽剪成圆形；文字上白「中华民族联邦共和国」、下金「公民储备委员会」。
+3. 左上角 logo：图标换成 docs/flag.png 中间花徽剪成圆形；文字上白「中华民族联邦共和国」、下金「公民储备委员会」。
 
 ## 所属模块
 - citizenweb：Header.tsx / Footer.tsx / pages/Governance.tsx / assets/flag-emblem.png
 
 ## 实现（均在 /Users/rhett/GMB）
-- 图标：`sips -c 480 480 docs/国旗.png --out citizenweb/src/assets/flag-emblem.png`（图片中心即花徽中心，居中裁正好框住白花红底），前端用 `rounded-full object-cover` 圆形遮罩 + `ring-1 ring-white/15`。
+- 图标：`sips -c 480 480 docs/flag.png --out citizenweb/src/assets/flag-emblem.png`（图片中心即花徽中心，居中裁正好框住白花红底），前端用 `rounded-full object-cover` 圆形遮罩 + `ring-1 ring-white/15`。
 - Header.tsx：G 方块 → 圆形国旗花徽 `<img>`；文字「公民区块链/CITIZENCHAIN」→「中华民族联邦共和国」(text-base 白) /「公民储备委员会」(text-xs 金)。
 - Footer.tsx：产品体系列表三项改名；logo 同步为国旗花徽 + 同款两行文字（品牌一致，超出任务3字面范围但属统一 logo）。
 - Governance.tsx L117：`四种投票体系` → `投票引擎`（仅此一处字面替换）。

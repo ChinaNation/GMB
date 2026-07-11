@@ -1495,7 +1495,7 @@ fn classify_warp_phase(
 #[cfg(test)]
 mod citizenapp_warp_policy_tests {
     use super::{
-        classify_warp_phase, should_request_warp, FragmentActivity, Phase, TargetActivity,
+        FragmentActivity, Phase, TargetActivity, classify_warp_phase, should_request_warp,
     };
 
     #[test]
@@ -2300,9 +2300,11 @@ impl<TSrc, TRq> BuildChainInformation<TSrc, TRq> {
 
         let runtime_calls = mem::take(&mut self.inner.runtime_calls);
 
-        debug_assert!(runtime_calls
-            .values()
-            .all(|c| matches!(c, CallProof::Downloaded { .. })));
+        debug_assert!(
+            runtime_calls
+                .values()
+                .all(|c| matches!(c, CallProof::Downloaded { .. }))
+        );
 
         // Decode all the Merkle proofs that have been received.
         let calls = {

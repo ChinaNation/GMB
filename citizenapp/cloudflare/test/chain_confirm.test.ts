@@ -3,13 +3,15 @@ import { encodeAddress } from '@polkadot/util-crypto';
 import { confirmPublishedPost, deletePostCloudflareData } from '../src/posts/confirm';
 import type { Env, MediaAssetRow, PreparedUploadRow, SessionState } from '../src/types';
 import {
-  compactBytes,
-  compactU32,
   decodeSquarePostPublishedEvents,
-  hex,
   u32Le,
   u64Le
 } from '../src/chain/square_event';
+import {
+  scaleString as compactBytes,
+  scaleCompact as compactU32,
+  bytesToHex as hex
+} from '../src/shared/signing_message';
 import { fetchChainStorage } from '../src/chain/rpc';
 
 const ownerAccountBytes = Uint8Array.from(Array.from({ length: 32 }, (_, index) => index + 1));
@@ -108,7 +110,7 @@ describe('square chain confirmation', () => {
           ]
         })
       }),
-      FEED_CACHE: {},
+      SQUARE_CACHE: {},
       CHAIN_URL: 'https://chain.test',
       CHAIN_ID: 'worker-rpc.access',
       CHAIN_SECRET: 'test-access-secret'
@@ -225,8 +227,8 @@ describe('square chain confirmation', () => {
     const env = {
       DB: db,
       SQUARE_MEDIA: r2,
-      FEED_CACHE: {},
-      SQUARE_DEV_UPLOAD_PROXY: '1'
+      SQUARE_CACHE: {},
+      DEV_UPLOAD_PROXY: '1'
     } as unknown as Env;
 
     const result = await deletePostCloudflareData(env, session(), postId);
@@ -252,7 +254,7 @@ function chainRpcEnv(overrides: Partial<Env> = {}): Env {
   return {
     DB: {} as D1Database,
     SQUARE_MEDIA: {} as R2Bucket,
-    FEED_CACHE: {} as KVNamespace,
+    SQUARE_CACHE: {} as KVNamespace,
     CHAIN_URL: 'https://chain.test',
     CHAIN_ID: 'worker-rpc.access',
     CHAIN_SECRET: 'test-access-secret',

@@ -6,7 +6,7 @@
 // 防止 Dart 与链端 primitives::sign 漂移。
 //
 // 治理 5 个 op_tag(0x10-0x14)message_hex 任何时候不得变化;业务哈希域
-// (0x15-0x17/0x1A)落创世前冻结。
+// (0x15-0x17/0x1A)已冻结；0x1A 是 Chat 设备绑定域。
 //
 // fixture 缺席时(Rust 切片尚未落地)skip,不阻塞纯 Dart 测试。
 

@@ -195,19 +195,6 @@ void main() {
       expect(h1.length, 66);
     });
 
-    test('IM wallet binding response verification uses GMB 0x1A hash domain',
-        () {
-      final actual = QrSigner.signingBytesForHex(
-        payloadHex: payload,
-        action: QrActions.imWalletBinding,
-      );
-      final expected = Hasher.blake2b256.hash(
-        Uint8List.fromList([0x47, 0x4d, 0x42, 0x1a, 1, 2, 3, 4]),
-      );
-
-      expect(actual, expected);
-    });
-
     test('citizen identity uses GMB 0x10 hash domain, not raw payload', () {
       final actual = QrSigner.signingBytesForHex(
         payloadHex: payload,
@@ -226,7 +213,8 @@ void main() {
       expect(actual.toList(), isNot([1, 2, 3, 4]));
     });
 
-    test('square account action uses GMB 0x1D hash domain, not raw payload', () {
+    test('square account action uses GMB 0x1D hash domain, not raw payload',
+        () {
       final actual = QrSigner.signingBytesForHex(
         payloadHex: payload,
         action: QrActions.squareAccountAction,

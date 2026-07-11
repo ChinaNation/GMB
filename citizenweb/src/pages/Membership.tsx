@@ -2,18 +2,18 @@ import { useCallback, useMemo, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import SectionTitle from '../components/SectionTitle'
 import GlowCard from '../components/GlowCard'
-import QrScannerModal from '../components/QrScannerModal'
-import { buildSquareActionSignRequest, parseSignResponseSignature } from '../lib/qrV1'
+import QRScannerModal from '../components/QRScannerModal'
+import { buildSquareActionSignRequest, parseSignResponseSignature } from '../lib/qr-v1'
 
-type MembershipLevel = 'visitor' | 'visitor_pro' | 'voting' | 'candidate'
+type MembershipLevel = 'freedom' | 'democracy' | 'voting' | 'candidate'
 // 链上身份档（与会员档解耦）：访客身份含自由/民主两档会员。
-type IdentityTier = 'visitor' | 'voting' | 'candidate'
+type IdentityLevel = 'visitor' | 'voting' | 'candidate'
 type TabKey = 'subscribe' | 'cancel'
 type Tone = 'error' | 'info' | 'success'
 
 interface Plan {
   level: MembershipLevel
-  requiredIdentity: IdentityTier
+  requiredIdentity: IdentityLevel
   name: string
   price: string
   identity: string
@@ -30,7 +30,7 @@ interface Signing {
 
 const plans: Plan[] = [
   {
-    level: 'visitor',
+    level: 'freedom',
     requiredIdentity: 'visitor',
     name: '自由会员',
     price: '$2.99 / 月',
@@ -40,7 +40,7 @@ const plans: Plan[] = [
   },
   {
     // 民主会员：访客身份的 $9.99 高权益档，权益对齐投票公民会员，唯身份匿名。
-    level: 'visitor_pro',
+    level: 'democracy',
     requiredIdentity: 'visitor',
     name: '民主会员',
     price: '$9.99 / 月',
@@ -69,32 +69,32 @@ const plans: Plan[] = [
 ]
 
 // 3 张身份卡顺序：访客 / 投票公民 / 竞选公民。
-const identityTierOrder: IdentityTier[] = ['visitor', 'voting', 'candidate']
+const identityTierOrder: IdentityLevel[] = ['visitor', 'voting', 'candidate']
 
-// 与公民 App 身份卡统一：档色 / 顶带前景色 / 档名 / 身份名 / 链上公开身份字段。
-const tierColor: Record<IdentityTier, string> = {
+// 与CitizenApp 身份卡统一：档色 / 顶带前景色 / 档名 / 身份名 / 链上公开身份字段。
+const tierColor: Record<IdentityLevel, string> = {
   visitor: '#E5A100',
   voting: '#3B82F6',
   candidate: '#EF4444',
 }
 // 访客金底用深棕保对比度，投票蓝/竞选红底用白字。
-const tierOnColor: Record<IdentityTier, string> = {
+const tierOnColor: Record<IdentityLevel, string> = {
   visitor: '#4A3000',
   voting: '#FFFFFF',
   candidate: '#FFFFFF',
 }
-const tierCardName: Record<IdentityTier, string> = {
+const tierCardName: Record<IdentityLevel, string> = {
   visitor: '访客轻节点',
   voting: '公民轻节点 · 投票',
   candidate: '公民轻节点 · 竞选',
 }
-const tierIdentityName: Record<IdentityTier, string> = {
+const tierIdentityName: Record<IdentityLevel, string> = {
   visitor: '访客',
   voting: '投票公民',
   candidate: '竞选公民',
 }
 // 该档在链上公开的身份字段（通用模板，非某用户真实值）。访客单独走「完全匿名」。
-const tierIdentityFields: Record<IdentityTier, string[]> = {
+const tierIdentityFields: Record<IdentityLevel, string[]> = {
   visitor: [],
   voting: ['公民身份 CID 号', '居住选区', '投票身份有效期'],
   candidate: ['公民身份 CID 号', '居住选区', '身份有效期', '真实姓名', '性别', '出生地'],
@@ -102,7 +102,7 @@ const tierIdentityFields: Record<IdentityTier, string[]> = {
 
 // 仓库扇贝勋章徽章（与 App identity_badge 一致）：档色底 + 中心白色小人（官网无
 // 登录用户，恒显小人），套半透明白圆底才能从同色顶带浮出。
-function RosetteBadge({ color, size = 40 }: { color: string; size?: number }) {
+function IdentityBadge({ color, size = 40 }: { color: string; size?: number }) {
   return (
     <div
       style={{
@@ -148,7 +148,7 @@ function SectionLabel({ color, text }: { color: string; text: string }) {
 }
 
 const apiBaseUrl =
-  import.meta.env.VITE_CITIZENAPP_SQUARE_API_BASE_URL?.replace(/\/+$/, '') ??
+  import.meta.env.VITE_API_URL?.replace(/\/+$/, '') ??
   'https://citizenapp-square-api.stews87-fawn.workers.dev'
 
 /**
@@ -178,8 +178,8 @@ async function postJson(path: string, body: unknown): Promise<Record<string, unk
 export default function Membership() {
   const [activeTab, setActiveTab] = useState<TabKey>('subscribe')
   const [ownerAccount, setOwnerAccount] = useState('')
-  // null=未选中任何会员卡（取消订阅态）；订阅态默认自由 visitor。
-  const [selectedLevel, setSelectedLevel] = useState<MembershipLevel | null>('visitor')
+  // null=未选中任何会员卡（取消订阅态）；订阅态默认自由会员。
+  const [selectedLevel, setSelectedLevel] = useState<MembershipLevel | null>('freedom')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ tone: Tone; text: string } | null>(null)
   const [signing, setSigning] = useState<Signing | null>(null)
@@ -203,7 +203,7 @@ export default function Membership() {
     setSigning(null)
     setMessage(null)
     // 取消订阅无需选中会员档：切到「取消订阅」即释放所有卡片选中；切回订阅默认自由。
-    setSelectedLevel(tab === 'cancel' ? null : (prev) => prev ?? 'visitor')
+    setSelectedLevel(tab === 'cancel' ? null : (prev) => prev ?? 'freedom')
   }, [])
 
   // 发起签名：取挑战 → 构建 signRequest 二维码等 CitizenApp 扫码签名。
@@ -339,8 +339,8 @@ export default function Membership() {
         <div className="mx-auto max-w-7xl px-6">
           <SectionTitle
             subtitle="CitizenApp Membership"
-            title="公民 App 会员订阅"
-            description="三档会员统一按美元计价，订阅与取消都由 CitizenApp 钱包扫码签名授权；Stripe Checkout 负责银行卡、本地法币和已启用的 USDC 支付。"
+            title="CitizenApp 会员订阅"
+            description="四档会员统一按美元计价，订阅、取消与续订都由 CitizenApp 钱包扫码签名授权；Stripe Checkout 负责银行卡、本地法币和已启用的 USDC 支付。"
           />
         </div>
       </section>
@@ -374,7 +374,7 @@ export default function Membership() {
                   {tierCardName[tier]}
                 </div>
                 <div className="absolute right-4 top-3.5">
-                  <RosetteBadge color={color} />
+                  <IdentityBadge color={color} />
                 </div>
               </div>
 
@@ -522,7 +522,7 @@ export default function Membership() {
               value={ownerAccount}
               onChange={(event) => setOwnerAccount(event.target.value)}
               className="w-full rounded-lg border border-white/10 bg-navy-950 py-3 pl-4 pr-12 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-gold-400"
-              placeholder="输入 公民 钱包地址"
+              placeholder="输入公民钱包地址"
             />
             <button
               type="button"
@@ -598,7 +598,7 @@ export default function Membership() {
               </button>
             </div>
             <p className="text-xs leading-relaxed text-slate-400">
-              打开公民 App → 交易 → 扫一扫，扫描下方二维码并确认，再点「扫描签名结果」。
+              打开CitizenApp → 交易 → 扫一扫，扫描下方二维码并确认，再点「扫描签名结果」。
             </p>
             <div className="mt-4 flex justify-center">
               <div className="rounded-xl bg-white p-3">
@@ -618,7 +618,7 @@ export default function Membership() {
       )}
 
       {scannerMode && (
-        <QrScannerModal
+        <QRScannerModal
           onResult={handleScanResult}
           onClose={handleScannerClose}
           title={scannerMode === 'signature' ? '扫描签名结果' : '扫码识别钱包地址'}

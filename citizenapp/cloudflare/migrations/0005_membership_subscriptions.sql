@@ -1,4 +1,4 @@
--- 官网 Stripe 订阅与三档会员权益。
+-- 官网 Stripe 订阅与四档会员权益。
 -- 旧 square_memberships 行保留 owner_account 主键；新增字段承载订阅来源、Stripe 标识和链上身份资格快照。
 
 ALTER TABLE square_memberships ADD COLUMN subscription_source TEXT NOT NULL DEFAULT 'stripe';

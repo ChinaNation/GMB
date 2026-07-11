@@ -75,7 +75,7 @@
 
 ### A. node 部署形态改造(plain spec + 官方创世状态包)
 - A1 生成冻结 plain spec:`fresh_genesis_config()` → `as_json(raw=false)` 落 `node/chainspecs/citizenchain.plain.json`(内嵌 WASM+genesis patch+bootnodes+properties,MB 级);新增导出入口(CLI 子命令或 clean-run.sh 步骤)。
-- A2 `chain_config()` 切换:include_bytes 冻结 plain JSON(替换 raw);raw 文件删除零残留;clean-run.sh / fuwuqi.sh 打包链路适配。
+- A2 `chain_config()` 切换:include_bytes 冻结 plain JSON(替换 raw);raw 文件删除零残留;clean-run.sh / deploy-node.sh 打包链路适配。
 - A3 bake 行为:`bake-chainspec.sh` 启动临时节点经 WASM `GenesisBuilder_build_state` 物化 49,593 机构,导出 `target/chainspec/genesis-state/`。
 - A4 正式首启行为:安装包内置 `genesis-state/`,节点启动前复制 `chains/citizenchain/db` 到本地数据目录;没有内置包时才允许开发/排障回退到 GenesisBuilder。
 - A5 冻结语义:冻结的是 plain JSON(runtime WASM + patch + bootnodes)与同一次物化出的创世状态包,创世哈希由其唯一决定,全网一致(派生全确定性)。

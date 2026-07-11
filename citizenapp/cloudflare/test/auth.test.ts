@@ -87,7 +87,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
   async function setup() {
     const db = new AuthDb();
     const kv = new FakeKv();
-    const env = { DB: db, FEED_CACHE: kv } as unknown as Env;
+    const env = { DB: db, SQUARE_CACHE: kv } as unknown as Env;
     const keyPair = await crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' },
       true,

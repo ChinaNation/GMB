@@ -7,8 +7,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 /// 规则（用户定稿）：底色 访客橙 / 投票蓝 / 竞选红；有生效会员→勾，否则→小人。
 /// 全体统一显示徽章（含纯访客=橙+小人）。
 ///
-/// 勾色（用户定稿）：默认白；**高档身份买低档会员**（会员档 < 身份档，如竞选公民买
-/// 投票会员）时勾染成所买会员档颜色（竞选身份+投票会员=红扇贝+蓝勾）。同档保持白勾。
+/// 勾色默认白；会员资格已按身份精确匹配，不再存在降档购买分支。
 class IdentityBadgeStyle {
   const IdentityBadgeStyle({
     required this.color,
@@ -22,17 +21,9 @@ class IdentityBadgeStyle {
   /// true=有生效会员→显示对勾；false=只有身份/纯访客→显示小人。
   final bool checked;
 
-  /// 对勾颜色：默认白；当**会员档低于身份档**（高档身份买低档会员）时，染成所买
-  /// 会员档的颜色以示区分。降档时勾色必与底色异色，一定清晰；同档保持白色。
+  /// 对勾颜色固定白色；字段保留给绘制器统一使用。
   final Color checkColor;
 }
-
-/// 身份/会员档位序：访客 0 < 投票 1 < 竞选 2。
-int _identityTierRank(String? level) => switch (level) {
-      'candidate' => 2,
-      'voting' => 1,
-      _ => 0,
-    };
 
 /// 档位对应颜色。
 Color _identityTierColor(String? level) => switch (level) {
@@ -41,25 +32,17 @@ Color _identityTierColor(String? level) => switch (level) {
       _ => AppTheme.identityVisitor,
     };
 
-/// 计算徽章样式。人人都有徽章，故恒返回非空（返回类型保留可空仅为兼容既有调用点）。
-///
-/// 底色取身份档；勾色默认白，仅当「降档买会员」（[membershipLevel] 档 < [identityLevel]
-/// 档，如竞选公民买投票会员）时染成会员档颜色。
+/// 计算徽章样式。底色只取身份档，有有效会员时显示白色对勾。
 IdentityBadgeStyle? identityBadgeStyle({
   required String? identityLevel,
   required String? membershipLevel,
   required bool membershipActive,
 }) {
   final color = _identityTierColor(identityLevel);
-  Color checkColor = Colors.white;
-  if (membershipActive &&
-      _identityTierRank(membershipLevel) < _identityTierRank(identityLevel)) {
-    checkColor = _identityTierColor(membershipLevel);
-  }
   return IdentityBadgeStyle(
     color: color,
     checked: membershipActive,
-    checkColor: checkColor,
+    checkColor: Colors.white,
   );
 }
 

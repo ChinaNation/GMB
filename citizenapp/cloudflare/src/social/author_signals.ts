@@ -5,7 +5,7 @@ import type { IdentityLevel, MembershipLevel } from '../membership/plans';
 
 /// 帖子作者徽章信号（公开）：身份档=颜色、会员匹配身份档且有效=勾。
 /// identity_level 是链上身份档（visitor/voting/candidate）；membership_level 是
-/// 已购买会员档（可含 visitor_pro 民主），二者已解耦。
+/// 已购买会员档（freedom/democracy/voting/candidate），二者已解耦。
 export interface AuthorSignals {
   identity_level: IdentityLevel;
   membership_level: MembershipLevel | null;

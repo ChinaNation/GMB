@@ -298,7 +298,9 @@ pub fn verify(config: Config) -> Result<Success, Error> {
             }
         }
         ConfigConsensus::Pow { difficulty } => {
-            if config.block_header.digest.has_any_aura() || config.block_header.digest.has_any_babe() {
+            if config.block_header.digest.has_any_aura()
+                || config.block_header.digest.has_any_babe()
+            {
                 return Err(Error::MultipleConsensusEngines);
             }
 
@@ -308,7 +310,9 @@ pub fn verify(config: Config) -> Result<Success, Error> {
             });
 
             match result {
-                Ok(success) => Ok(Success::Pow { nonce: success.nonce }),
+                Ok(success) => Ok(Success::Pow {
+                    nonce: success.nonce,
+                }),
                 Err(err) => Err(Error::PowVerification(err)),
             }
         }

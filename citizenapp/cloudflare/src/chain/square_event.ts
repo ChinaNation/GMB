@@ -1,4 +1,5 @@
 import { encodeAddress } from '@polkadot/util-crypto';
+import { scaleString, scaleCompact, bytesToHex, hexToBytes } from '../shared/signing_message';
 import type { PostCategory } from '../types';
 
 const squarePostPalletIndex = 36;
@@ -84,7 +85,7 @@ export function decodeSquarePostPublishedEventPayload(
   if (categoryByte !== 0 && categoryByte !== 1) return null;
   const postCategory: PostCategory = categoryByte === 0 ? 'normal' : 'campaign';
 
-  const contentHash = `0x${hex(data.slice(cursor, cursor + 32))}`;
+  const contentHash = `0x${bytesToHex(data.slice(cursor, cursor + 32))}`;
   cursor += 32;
   const receipt = readCompactBytes(data, cursor);
   cursor = receipt.nextOffset;
@@ -96,7 +97,7 @@ export function decodeSquarePostPublishedEventPayload(
   return {
     post_id: utf8(postId.value),
     owner_account: encodeAddress(ownerBytes, citizenSs58Prefix),
-    owner_account_hex: `0x${hex(ownerBytes)}`,
+    owner_account_hex: `0x${bytesToHex(ownerBytes)}`,
     cid_number: cidNumber,
     post_category: postCategory,
     content_hash: contentHash,
@@ -104,30 +105,6 @@ export function decodeSquarePostPublishedEventPayload(
     storage_until: storageUntil,
     created_block: createdBlock
   };
-}
-
-export function compactBytes(value: string): Uint8Array {
-  const bytes = new TextEncoder().encode(value);
-  return concat([compactU32(bytes.length), bytes]);
-}
-
-export function compactU32(value: number): Uint8Array {
-  if (value < 0) throw new Error('compact value must be positive');
-  if (value < 1 << 6) return Uint8Array.of(value << 2);
-  if (value < 1 << 14) {
-    const encoded = (value << 2) | 0x01;
-    return Uint8Array.of(encoded & 0xff, (encoded >> 8) & 0xff);
-  }
-  if (value < 1 << 30) {
-    const encoded = (value << 2) | 0x02;
-    return Uint8Array.of(
-      encoded & 0xff,
-      (encoded >> 8) & 0xff,
-      (encoded >> 16) & 0xff,
-      (encoded >> 24) & 0xff
-    );
-  }
-  throw new Error('compact big integer mode is not supported');
 }
 
 export function u32Le(value: number): Uint8Array {
@@ -140,12 +117,6 @@ export function u64Le(value: number): Uint8Array {
   const out = new Uint8Array(8);
   new DataView(out.buffer).setBigUint64(0, BigInt(value), true);
   return out;
-}
-
-export function hex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 function dedupeByPostId(events: SquarePostPublishedEvent[]): SquarePostPublishedEvent[] {
@@ -204,16 +175,6 @@ function readU64Le(data: Uint8Array, offset: number): number {
     throw new Error('u64 exceeds safe integer range');
   }
   return Number(value);
-}
-
-function hexToBytes(input: string): Uint8Array {
-  const text = input.startsWith('0x') ? input.slice(2) : input;
-  if (text.length % 2 !== 0) throw new Error('hex length must be even');
-  const out = new Uint8Array(text.length / 2);
-  for (let index = 0; index < out.length; index += 1) {
-    out[index] = Number.parseInt(text.slice(index * 2, index * 2 + 2), 16);
-  }
-  return out;
 }
 
 function utf8(bytes: Uint8Array): string {

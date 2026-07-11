@@ -2,10 +2,10 @@
 
 ## 状态
 
-**Tier 1/2 + `gmb.py` 改名 已实现并提交（2026-06-22，行为中性，地址逐字节零变化已金标验证）。** 取代原 `20260622-derive-domain-rename-gmb-op-name.md`（改名并入本卡 Tier 3）。Tier 1/2 行为中性（地址不变，本不需创世）；**Tier 3（域 `DUOQIAN→GMB`）+ 账户重生 仍 gated 在 `20260622-cid-classification-unify-t3t4` Phase 3 之后**（缺最终态 cid_number，本卡内不能独立闭环）。详见 ADR-024「实施记录」节。
+**Tier 1/2 + `rederive_accounts.py` 改名 已实现并提交（2026-06-22，行为中性，地址逐字节零变化已金标验证）。** 取代原 `20260622-derive-domain-rename-gmb-op-name.md`（改名并入本卡 Tier 3）。Tier 1/2 行为中性（地址不变，本不需创世）；**Tier 3（域 `DUOQIAN→GMB`）+ 账户重生 仍 gated 在 `20260622-cid-classification-unify-t3t4` Phase 3 之后**（缺最终态 cid_number，本卡内不能独立闭环）。详见 ADR-024「实施记录」节。
 
 ### Tier 3 + Q1 执行（2026-06-22，创世前最后代码准备）
-- **Tier 3 域 DUOQIAN→GMB 完成 + 验证**：`core_const::GMB`(b"GMB",&[u8;3]) + 全 Rust/Dart/gmb.py 引用锁步;签名域全在后端 chain_runtime(钱包零改);china 608 账户用 GMB 重派、两 golden + chain_runtime digest(fb420287→137304f0)重生。合并态：链端 org-manage29/personal23/primitives22/金标1 + 后端77 + citizenapp test/governance/shared 28 + analyze0，GMB 三角自洽(china字面==Rust金标==Dart派生)。
+- **Tier 3 域 DUOQIAN→GMB 完成 + 验证**：`core_const::GMB`(b"GMB",&[u8;3]) + 全 Rust/Dart/rederive_accounts.py 引用锁步;签名域全在后端 chain_runtime(钱包零改);china 608 账户用 GMB 重派、两 golden + chain_runtime digest(fb420287→137304f0)重生。合并态：链端 org-manage29/personal23/primitives22/金标1 + 后端77 + citizenapp test/governance/shared 28 + analyze0，GMB 三角自洽(china字面==Rust金标==Dart派生)。
 - **Q1 完成（4/4,2026-06-27 修订）**：`registry/src/cid/seed.rs` 保留 official_institution_cid / citizen_cid / dynamic_institution_cid + exists_fn 回调倒置;CPOL 已并入普通 `CITY` 公权机构模板,不再保留公安局专用种子。CID 输出以后以普通市级公权机构模板为 CPOL 唯一生成路径。
 - **🔴 创世前 blocker（独立验证发现，T3/T4 漏）**：citizenapp 其它 test/asset 仍旧 CID+旧域(public_institution_detail_test 真红 / myid_page_test / common/institution_info_test / admins-change institution_admin_service_test / public_provinces.dart:40 注释);assets/chainspec.json 旧域存储键须 bake-chainspec.sh 重生。**创世前必清零。**
 
@@ -16,10 +16,10 @@
   - 链端账户派生测试 22 passed（含 `china_cb/ch/other_main_fee_accounts_match_derive_primitive` = china **新码** 字面值 == `account_derive::derive(cid)` 逐字节）+ `account_derive_golden` 1 passed（7 向量）。
   - 后端 citizencode 71 passed（含 T3/T4 merged 的 number 全套）。
   - citizenapp Dart 28 passed + analyze 0 issues，`account_derivation_golden_test` 真跑（不再 skip），Dart 派生 == Rust 金标 7 向量逐字节一致 → **跨语言单源对齐成立**。
-- **gmb.py**：scripts/ 在 .gitignore（既定私密区），改名仅文件系统（duoqian.py 已删、gmb.py 在），不入 git。
+- **rederive_accounts.py**：scripts/ 在 .gitignore（既定私密区），改名仅文件系统（duoqian.py 已删、rederive_accounts.py 在），不入 git。
 - ~~遗留 follow-up：service.rs 第二份保留名字面~~ **已修(2026-06-22)**：`account_derive` 新增 `RESERVED_NAME_*_STR`(&str，全仓唯一字面源)，`&[u8]` 由 `.as_bytes()` 派生；`subjects/service.rs` 的 `ACCOUNT_NAME_*` 改为引用 `_STR`，删字面 copy。保留名字面全仓仅 `account_derive` 一处。验证：primitives 金标 1 passed + 后端 71 passed，行为中性。
 
-**决策 B（2026-06-22 用户拍板）：** china CID 重烤（=T3/T4 Phase 3，含 federal 常量种子约定）**留 T3/T4 线程**，本线程不吸收。本线程现在做范围 = **Tier 1 + Tier 2 + `duoqian.py→gmb.py` 改名**（regex 读取路径 op_tag 改到 `account_derive.rs`，域 GMB 留 Tier 3）；待 T3/T4 出新码 CID，本线程再 Tier 3 + 跑 `gmb.py` 账户重生 + 一次创世。
+**决策 B（2026-06-22 用户拍板）：** china CID 重烤（=T3/T4 Phase 3，含 federal 常量种子约定）**留 T3/T4 线程**，本线程不吸收。本线程现在做范围 = **Tier 1 + Tier 2 + `duoqian.py→rederive_accounts.py` 改名**（regex 读取路径 op_tag 改到 `account_derive.rs`，域 GMB 留 Tier 3）；待 T3/T4 出新码 CID，本线程再 Tier 3 + 跑 `rederive_accounts.py` 账户重生 + 一次创世。
 
 ## 任务需求
 
@@ -129,7 +129,7 @@
 - `scripts/duoqian.py` 第 5 镜像须同步改（op_tag 改读 account_derive.rs、域改读 GMB/`&[u8;3]`）。
 - `feedback_no_compatibility`：改即全切不留旧源；`feedback_scale_domain_must_be_array`：域常量保持 `&[u8;N]`。
 
-## 实施记录（2026-06-22，Tier 1/2 + gmb.py 完成）
+## 实施记录（2026-06-22，Tier 1/2 + rederive_accounts.py 完成）
 
 **实际改动文件清单**
 - 新建单源：`citizenchain/runtime/primitives/src/account_derive.rs`
@@ -137,10 +137,10 @@
 - 链端调用方：`organization-manage`（删 `address.rs`/`InstitutionAccountRole`）、`personal-manage/lib.rs`、`primitives/china/mod.rs`
 - 后端调用方：`citizencode/backend/accounts/derive.rs`（委托新源）、`subjects/service.rs`
 - Dart 单源：`citizenapp/lib/governance/shared/account_derivation.dart` + `reserved_account_names.dart`（citizenapp + citizenwallet，修 isForbidden 漂移=3 名不 trim）
-- 金标：`citizenchain/runtime/primitives/tests/account_derive_golden.rs` + 两份 `account_derive_vectors.json` + `scripts/sync_account_derive_vectors.sh`
-- 改名：`scripts/duoqian.py → scripts/gmb.py`
-- 收尾(本切片)：`number/generator.rs` 头注释调用方列表修正(registration/binding/gov)、`account_derive.rs`/`core_const.rs` 注释完善、两份 fixture `_comment` 的 `duoqian.py→gmb.py`、本卡 + ADR-024 状态更新
+- 金标：`citizenchain/runtime/primitives/tests/account_derive_golden.rs` + 两份 `account_derive_vectors.json` + `scripts/sync-derive-vectors.sh`
+- 改名：`scripts/duoqian.py → scripts/rederive_accounts.py`
+- 收尾(本切片)：`number/generator.rs` 头注释调用方列表修正(registration/binding/gov)、`account_derive.rs`/`core_const.rs` 注释完善、两份 fixture `_comment` 的 `duoqian.py→rederive_accounts.py`、本卡 + ADR-024 状态更新
 
 **测试结果**：链端 `cargo test -p primitives -p organization-manage -p personal-manage` 全绿（organization-manage 29 + personal-manage 23 + primitives lib 20 + golden 1 + 3 doc-tests，0 failed）；后端 `cargo test` 71 + 5 integration（含 `accounts::derive::tests` 6 项）0 failed；`ACCOUNT_DERIVE_UPDATE=1` 二次重跑后 fixture `git diff --stat` 为空 = 地址零变化。
 
-**仍 gated（Tier 3）**：域 `DUOQIAN→GMB` + china CID 重烤 + 跑 `gmb.py` 账户重生 + 一次创世 + 重跑公权机构数据包生成器。
+**仍 gated（Tier 3）**：域 `DUOQIAN→GMB` + china CID 重烤 + 跑 `rederive_accounts.py` 账户重生 + 一次创世 + 重跑公权机构数据包生成器。

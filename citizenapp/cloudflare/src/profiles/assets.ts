@@ -51,7 +51,7 @@ export async function prepareProfileAsset(request: Request, env: Env): Promise<R
   const sha = (body.sha256 as string).toLowerCase();
   const ext = normalizeFileExt(body.content_type);
   const objectKey = `${profileAssetPrefix(session.owner_account)}${kind}_${sha}.${ext}`;
-  const expiresSeconds = parsePositiveInt(env.SQUARE_UPLOAD_URL_TTL_SECONDS, 900);
+  const expiresSeconds = parsePositiveInt(env.UPLOAD_TTL_SECONDS, 900);
   const uploadUrl = await createUploadUrl(env, {
     object_key: objectKey,
     content_type: body.content_type,
@@ -71,7 +71,7 @@ export async function prepareProfileAsset(request: Request, env: Env): Promise<R
 
 /// 本地开发上传代理：仅校验对象属本人 profile/ 前缀（无上传行），写入 R2。
 export async function devPutProfileAsset(request: Request, env: Env): Promise<Response> {
-  if (env.SQUARE_DEV_UPLOAD_PROXY !== '1') {
+  if (env.DEV_UPLOAD_PROXY !== '1') {
     throw new HttpError(404, 'dev_upload_proxy_disabled', '开发上传代理未启用');
   }
   const session = await requireSession(request, env);

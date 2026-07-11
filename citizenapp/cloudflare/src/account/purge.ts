@@ -76,6 +76,7 @@ export async function purgeAccount(
     // A 关注别人（owner=A）删；别人关注 A（followed_account=A）是别人的，保留。
     bind(`DELETE FROM square_follows WHERE owner_account = ?`),
     bind(`DELETE FROM chat_devices WHERE owner_account = ?`),
+    bind(`DELETE FROM chat_device_binding_nonces WHERE owner_account = ?`),
     bind(`DELETE FROM chat_keypackages WHERE owner_account = ?`),
     // 只删 A 的收件箱（recipient=A）；A 发给 B（recipient=B）是 B 的，保留。
     bind(`DELETE FROM chat_envelopes WHERE recipient_account = ?`),
@@ -85,7 +86,7 @@ export async function purgeAccount(
   const deletedRows = results.reduce((sum, result) => sum + (result.meta?.changes ?? 0), 0);
 
   // 6. KV：身份缓存 + 该账户全部会话。
-  await env.FEED_CACHE.delete(`square_identity:${ownerAccount}`);
+  await env.SQUARE_CACHE.delete(`square_identity:${ownerAccount}`);
   await clearOwnerSessions(env, ownerAccount);
 
   return {

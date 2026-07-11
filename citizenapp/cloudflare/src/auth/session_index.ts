@@ -16,12 +16,12 @@ export async function indexSessionToken(
   sessionTtlSeconds: number
 ): Promise<void> {
   const key = ownerSessionsKey(ownerAccount);
-  const existing = await env.FEED_CACHE.get(key);
+  const existing = await env.SQUARE_CACHE.get(key);
   const tokens: string[] = existing ? (JSON.parse(existing) as string[]) : [];
   if (!tokens.includes(token)) {
     tokens.push(token);
   }
-  await env.FEED_CACHE.put(key, JSON.stringify(tokens), {
+  await env.SQUARE_CACHE.put(key, JSON.stringify(tokens), {
     expirationTtl: Math.max(sessionTtlSeconds, 3600)
   });
 }
@@ -29,12 +29,12 @@ export async function indexSessionToken(
 /// 注销时清空该账户全部会话 token 及索引本身。
 export async function clearOwnerSessions(env: Env, ownerAccount: string): Promise<void> {
   const key = ownerSessionsKey(ownerAccount);
-  const existing = await env.FEED_CACHE.get(key);
+  const existing = await env.SQUARE_CACHE.get(key);
   if (existing) {
     const tokens = JSON.parse(existing) as string[];
     for (const token of tokens) {
-      await env.FEED_CACHE.delete(`square_session:${token}`);
+      await env.SQUARE_CACHE.delete(`square_session:${token}`);
     }
   }
-  await env.FEED_CACHE.delete(key);
+  await env.SQUARE_CACHE.delete(key);
 }

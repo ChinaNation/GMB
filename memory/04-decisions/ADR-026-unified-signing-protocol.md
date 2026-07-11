@@ -1,14 +1,14 @@
 # ADR-026 全仓签名协议统一为单一原语 GMB+op_tag
 
-- 状态：**Phase 1 + Phase 2 完成并验证；2026-07-02 追加 IM 钱包绑定收口。** 签名 op_tag/signing_message 单源 primitives::sign;治理 5 个(0x10-0x14)字节零变化(后端 golden 137304f0 不变);7 个哈希域 Rust↔Dart 金标逐字节对齐;ACTIVATE/DECRYPT 四方逐字节一致。未提交(待用户授权)。
+- 状态：**Phase 1 + Phase 2 完成并验证；2026-07-11 将 0x1A 收口为 Chat 设备绑定。** 签名 op_tag/signing_message 单源 primitives::sign;治理 5 个(0x10-0x14)字节零变化(后端 golden 137304f0 不变);哈希域 Rust↔Dart/Worker 金标逐字节对齐;ACTIVATE/DECRYPT 四方逐字节一致。
   - Phase 1:primitives::sign 原语 + op_tag 注册表 + 金标;治理 5(0x10-0x14)字节不变;3 哈希域 L3_PAY(0x15)/OFFCHAIN_BATCH(0x16)/L2_ACK(0x17) 折好。
-  - Phase 2:ACTIVATE_ADMIN(0x18)/DECRYPT(0x19) 内嵌前缀 → `GMB||op_tag` 4B 二进制前缀(原始字节可解析保留,payload 97B/108B,node 构造/验签/冷钱包/citizenapp 四方 + 金标 fixture 逐字节一致);IM_NODE_PAIRING 原仅保留 QR body schema,2026-07-08 随链端不再提供 IM 已删除。
-  - Phase 3:IM_WALLET_BINDING 使用 `QR_V1/k=1/a=8` + `OP_SIGN_IM_WALLET_BINDING(0x1A)` + `signing_message`，删除旧字符串签名域。
+  - Phase 2:ACTIVATE_ADMIN(0x18)/DECRYPT(0x19) 内嵌前缀 → `GMB||op_tag` 4B 二进制前缀(原始字节可解析保留,payload 97B/108B,node 构造/验签/冷钱包/citizenapp 四方 + 金标 fixture 逐字节一致);IM_NODE_PAIRING 原仅保留 QR body schema,2026-07-08 随链端不再提供 Chat 已删除。
+  - Phase 3:`OP_SIGN_CHAT_DEVICE_BIND(0x1A)` 使用 `signing_message`，由 CitizenApp 硬件 P-256 设备子钥签 digest、Worker 用 session owner 已登记的 P-256 公钥验签；不再经过 QR 或钱包主私钥。
   - 验证:链端 cargo check --workspace + primitives/node/offchain-transaction test;后端 77(golden 不变);citizenapp signer/trade + citizenwallet payload_decoder flutter test 全绿。
 - **二进制原文签名裁决（2026-06-22 用户拍板"抖中方案"）**:下面 2 个不是 `blake2_256(域||SCALE)` 哈希域,**不强折成 hash**(会丢原始字节可解析性):
   - `ACTIVATE_ADMIN(0x18)` / `DECRYPT(0x19)`:签**原始可解析字节**,域是内嵌前缀,统一为 **`GMB || op_tag`(4B)二进制前缀**,保留原始字节签名 + 按偏移解析(冷钱包/node/citizenapp 锁步;DECRYPT 的 CHALLENGE_TOTAL_LEN + sha256 完整性字段同步)。
-  - `IM_WALLET_BINDING(0x1A)`:2026-07-02 改为哈希域,签 `signing_message(OP_SIGN_IM_WALLET_BINDING, SCALE payload)`。
-  - `IM_NODE_PAIRING`:原 QR body schema 版本字符串(不签名、不占 signing_message op_tag);2026-07-08 链端不再提供 IM 节点配对,已删除 sign.rs / signing.dart 常量。
+  - `CHAT_DEVICE_BIND(0x1A)`:签 `signing_message(OP_SIGN_CHAT_DEVICE_BIND, SCALE payload)`；2026-07-11 仅改变权威名称和调用密钥，op tag 数值、原语和金标 `message_hex` 不变。
+  - `IM_NODE_PAIRING`:原 QR body schema 版本字符串(不签名、不占 signing_message op_tag);2026-07-08 链端不再提供 Chat 节点配对,已删除 sign.rs / signing.dart 常量。
   - 注册表收口:0x10/0x13-0x17/0x1A 为哈希域;0x18/0x19 为二进制前缀域。
 - 关联：[[ADR-024]] 账户派生单源（同 `GMB` 域 + op_tag 思想，本 ADR 把签名侧也收敛）；末尾随 T3/T4 / ADR-024 同一次重新创世生效
 - 取代：7 个散落的 `b"GMB_<NAME>_V1"` 字符串签名域
@@ -26,8 +26,8 @@
 | GMB_L2_ACK_V1 | L2 确认 | node rpc（1） |
 | GMB \|\| 0x18 | 管理员激活 | node activation + dart + 冷钱包 + test（4） |
 | GMB \|\| 0x19 | 解密授权 | node admin_unlock + 冷钱包 + test（3） |
-| IM 节点配对 body schema | IM 节点配对 | node + dart（2） |
-| 旧 IM 钱包绑定字符串域 | IM 钱包绑定 | 已由 `OP_SIGN_IM_WALLET_BINDING` 取代 |
+| Chat 节点配对 body schema | Chat 节点配对 | node + dart（2） |
+| 旧聊天设备绑定字符串域 | Chat 设备绑定 | 已由 `OP_SIGN_CHAT_DEVICE_BIND` 取代 |
 
 另：冷钱包 `'onchina_admin_governance'` 是链上中国平台管理员 QR 治理域,不属于 `GMB_` 格式签名域,由 QR 协议文档单独约束。
 
@@ -54,10 +54,10 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
 
 ### op_tag 注册表（签名段 0x10-0x1F，单一真源 primitives::sign）
 0x10 BIND / 0x11 VOTE / 0x12 POP / 0x13 INST / 0x14 DEREGISTER（不变）
-0x15 L3_PAY / 0x16 OFFCHAIN_BATCH / 0x17 L2_ACK / 0x18 ACTIVATE_ADMIN / 0x19 DECRYPT / 0x1A IM_WALLET_BINDING（新，取代字符串域）
+0x15 L3_PAY / 0x16 OFFCHAIN_BATCH / 0x17 L2_ACK / 0x18 ACTIVATE_ADMIN / 0x19 DECRYPT / 0x1A CHAT_DEVICE_BIND
 
 ### 单源纪律
-- `primitives::sign` 持 `signing_message` + 全部 `OP_SIGN_*`；删 7 个字符串域常量（batch_item/ledger/packer/signer/rpc/activation/admin_unlock/communication-node/im::binding）。
+- `primitives::sign` 持 `signing_message` + 全部 `OP_SIGN_*`；Chat 设备绑定只保留 `OP_SIGN_CHAT_DEVICE_BIND`，不得恢复 QR 动作或钱包主私钥验签。
 - runtime/node/backend 全 import 调用；删本地 concat。
 - Dart（citizenapp + citizenwallet）手写镜像，靠**金标向量**（signing_message(op_tag,payload)→hash）逐字节断言对齐，CI sync 防漂移（类比 account_derive 金标）。
 - 冷钱包 `onchina_admin_governance` QR 域已正名为链上中国平台管理员治理域,保持 QR 协议文档单源。
@@ -71,7 +71,7 @@ pub fn signing_message(op_tag: u8, scale_payload: &[u8]) -> [u8; 32] {
 2. **runtime 迁移**：configs OP_SIGN 5 处改调（验字节不变）+ offchain-transaction batch_item L3_PAY/BATCH 改 op_tag；删本地域常量。
 3. **node 迁移**：ledger/packer/signer/rpc/activation/admin_unlock/communication-node/im::binding 全改调 + 删重复。
 4. **backend 迁移**：chain_runtime OP_SIGN 路径核对（治理字节不变）。
-5. **Dart 迁移**：citizenapp(payment_intent/im/admin_activation) + citizenwallet(payload_decoder activate-admin/decrypt) 改 op_tag 镜像 + 金标。
+5. **Dart 迁移**：citizenapp(payment_intent/chat/admin_activation) + citizenwallet(payload_decoder activate-admin/decrypt) 改 op_tag 镜像 + 金标。
 6. **金标 + 验证**：Rust 导出 signing golden（op_tag→hash 向量）+ Dart 断言；全量编译/测试/签名 golden + 残留=0。
 
 ## 验收

@@ -5,8 +5,8 @@
 - `memory/08-tasks/open/20260706-citizenapp-square-article.md`
 - `memory/08-tasks/open/20260706-clean-run-two-modes.md`
 - `memory/08-tasks/open/20260706-citizenapp-chat-square-silent-sign.md`
-- `memory/08-tasks/open/20260705-citizenapp-im-realtime-delivery-fix.md`
-- `memory/08-tasks/open/20260705-citizenapp-im-push-notifications.md`
+- `memory/08-tasks/open/20260705-citizenapp-chat-realtime-delivery-fix.md`
+- `memory/08-tasks/open/20260705-citizenapp-chat-push-notifications.md`
 - `memory/08-tasks/open/20260705-citizenapp-worker-prod-url-no-fallback.md`
 - `memory/08-tasks/open/20260705-cloudflare-worker-flatten-dir.md`
 - `memory/08-tasks/open/20260705-citizenapp-worker-prod-url-no-fallback.md`
@@ -94,7 +94,7 @@
 - `memory/08-tasks/open/20260613-citizenapp-public-institution-cardC-detail.md`
 - `memory/08-tasks/open/20260614-cid-education-classification.md`
 - `memory/08-tasks/open/20260614-citizenapp-public-institution-detail-align-governance.md`
-- `memory/08-tasks/open/20260614-im-p2p.md`
+- `memory/08-tasks/open/20260614-chat-p2p.md`
 - `memory/08-tasks/open/20260616-admin-district-dedup-cleanup.md`
 - `memory/08-tasks/open/20260618-citizenapp-admin-division-incremental-sync.md`
 - `memory/08-tasks/open/20260618-pqc-card0-hygiene-fixes.md`
@@ -102,7 +102,7 @@
 - `memory/08-tasks/open/20260618-pqc-card2-chain-account-keys-verifiers.md`
 - `memory/08-tasks/open/20260618-pqc-card3-wallet-derivation-signing.md`
 - `memory/08-tasks/open/20260618-pqc-card4-cid-signing.md`
-- `memory/08-tasks/open/20260618-pqc-card6-confidentiality-im-tls.md`
+- `memory/08-tasks/open/20260618-pqc-card6-confidentiality-chat-tls.md`
 - `memory/08-tasks/open/20260618-pqc-card7-seal-consensus-governance.md`
 - `memory/08-tasks/open/20260620-address-units.md`
 - `memory/08-tasks/open/20260620-citizenchain-test-debt-pqc-cid-scope.md`

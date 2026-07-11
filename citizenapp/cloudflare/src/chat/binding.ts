@@ -1,54 +1,50 @@
-import { signatureVerify } from "@polkadot/util-crypto/signature/verify";
 import { bytesToBase64Url } from "./codec";
 import {
-  OP_SIGN_IM_WALLET_BINDING,
+  OP_SIGN_CHAT_DEVICE_BIND,
   concatBytes,
   scaleString,
   signingMessage,
   u64Le,
 } from "../shared/signing_message";
+import { verifyP256Signature } from "../auth/device_subkey";
 
-export interface DeviceBindingPayloadInput {
-  wallet_account: string;
-  im_device_id: string;
-  im_device_pubkey: string;
-  expires_at_millis: number;
+export interface ChatDeviceBindingInput {
+  owner_account: string;
+  device_id: string;
+  device_public_key_hex: string;
+  expires_at: number;
   nonce: string;
 }
 
-export function buildDeviceBindingSigningMessage(
-  input: DeviceBindingPayloadInput,
-): Uint8Array {
-  // 必须与公民端 OP_SIGN_IM_WALLET_BINDING 的 SCALE 拼接顺序保持一致。
+export function buildChatDeviceBindingMessage(
+  input: ChatDeviceBindingInput,
+): Uint8Array<ArrayBuffer> {
+  // 必须与 CitizenApp 的 Chat 设备绑定 SCALE 字段顺序逐字节一致。
   const scalePayload = concatBytes(
-    scaleString(input.wallet_account),
-    scaleString(input.im_device_id),
-    scaleString(input.im_device_pubkey),
-    u64Le(input.expires_at_millis),
+    scaleString(input.owner_account),
+    scaleString(input.device_id),
+    scaleString(input.device_public_key_hex),
+    u64Le(input.expires_at),
     scaleString(input.nonce),
   );
-  return signingMessage(OP_SIGN_IM_WALLET_BINDING, scalePayload);
+  return signingMessage(OP_SIGN_CHAT_DEVICE_BIND, scalePayload);
 }
 
-export function buildDeviceBindingSigningMessageBase64Url(
-  input: DeviceBindingPayloadInput,
+export function buildChatDeviceBindingMessageBase64Url(
+  input: ChatDeviceBindingInput,
 ): string {
-  return bytesToBase64Url(buildDeviceBindingSigningMessage(input));
+  return bytesToBase64Url(buildChatDeviceBindingMessage(input));
 }
 
-export async function verifyDeviceBindingSignature(
-  input: DeviceBindingPayloadInput,
+export async function verifyChatDeviceBinding(
+  input: ChatDeviceBindingInput,
   signature: string,
+  p256PublicKeyHex: string,
 ): Promise<boolean> {
-  try {
-    // Worker 只验证“钱包账户授权此 IM 设备”，不接触 IM 消息明文。
-    const result = signatureVerify(
-      buildDeviceBindingSigningMessage(input),
-      signature,
-      input.wallet_account,
-    );
-    return result.isValid;
-  } catch {
-    return false;
-  }
+  // Chat 初始化只使用已登记的硬件设备子钥，禁止读取或验签钱包 seed。
+  return verifyP256Signature(
+    buildChatDeviceBindingMessage(input),
+    signature,
+    p256PublicKeyHex,
+  );
 }

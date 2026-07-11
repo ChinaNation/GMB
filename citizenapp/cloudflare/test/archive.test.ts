@@ -139,10 +139,10 @@ function env(db: FakeDb, overrides: Partial<Env> = {}): Env {
   return {
     DB: db,
     SQUARE_MEDIA: {},
-    VIDEO_ARCHIVE_ENABLED: '1',
-    VIDEO_ARCHIVE_LAPSE_DAYS: '90',
+    ARCHIVE_ENABLED: '1',
+    ARCHIVE_LAPSE_DAYS: '90',
     // 本地验收路径：不触碰真实 Stream/R2，直接走状态机。
-    SQUARE_DEV_UPLOAD_PROXY: '1',
+    DEV_UPLOAD_PROXY: '1',
     ...overrides
   } as unknown as Env;
 }
@@ -188,7 +188,7 @@ describe('video cold archive', () => {
     });
     db.videos.push(video());
 
-    const result = await runVideoArchiveSweep(env(db, { VIDEO_ARCHIVE_ENABLED: '0' }));
+    const result = await runVideoArchiveSweep(env(db, { ARCHIVE_ENABLED: '0' }));
 
     expect(result).toEqual({ owners: 0, archived: 0 });
     expect(db.videos[0].archive_state).toBe('live');

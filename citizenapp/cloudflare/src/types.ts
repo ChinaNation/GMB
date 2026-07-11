@@ -20,53 +20,52 @@ export type MediaArchiveState = 'live' | 'archived' | 'restoring';
 export interface Env {
   DB: D1Database;
   SQUARE_MEDIA: R2Bucket;
-  FEED_CACHE: KVNamespace;
+  SQUARE_CACHE: KVNamespace;
   CHAT_REALTIME?: DurableObjectNamespace;
-  // 生产环境只在 Worker Secret/变量中配置 R2 S3 凭证，绝不下发到 CitizenApp。
-  R2_ACCOUNT_ID?: string;
-  R2_ACCESS_KEY_ID?: string;
-  R2_SECRET_ACCESS_KEY?: string;
-  R2_BUCKET_NAME?: string;
-  SQUARE_SESSION_TTL_SECONDS?: string;
-  SQUARE_UPLOAD_URL_TTL_SECONDS?: string;
+  // Cloudflare 账户由 R2、Images、Stream 共用；R2 S3 密钥绝不下发到 CitizenApp。
+  CF_ACCOUNT_ID?: string;
+  R2_ACCESS_ID?: string;
+  R2_SECRET_KEY?: string;
+  R2_BUCKET?: string;
+  SESSION_TTL_SECONDS?: string;
+  UPLOAD_TTL_SECONDS?: string;
   // Worker 通过 Access + Tunnel 调用权威节点回环 RPC；URL 和服务令牌只放远端 Secret。
   CHAIN_URL?: string;
   CHAIN_ID?: string;
   CHAIN_SECRET?: string;
   // 轻节点启动清单只下发公开 bootnodes 和冻结链身份，不下发 checkpoint 或 RPC 地址。
-  CITIZEN_CHAIN_BOOTNODES?: string;
-  CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS?: string;
-  CITIZEN_CHAIN_GENESIS_HASH?: string;
-  CITIZEN_CHAIN_STATE_ROOT?: string;
+  CHAIN_BOOTNODES?: string;
+  BOOT_TTL_SECONDS?: string;
+  CHAIN_GENESIS_HASH?: string;
+  CHAIN_STATE_ROOT?: string;
   // 已签名交易兜底广播：只转发完整 signed extrinsic，不提供通用 JSON-RPC proxy。
-  CHAIN_EXTRINSIC_RELAY_ENABLED?: string;
-  CHAIN_EXTRINSIC_RELAY_MAX_BYTES?: string;
-  CHAIN_EXTRINSIC_RELAY_MAX_PER_MINUTE?: string;
+  RELAY_ENABLED?: string;
+  RELAY_MAX_BYTES?: string;
+  RELAY_PER_MINUTE?: string;
   // 只允许本地 Miniflare 验证使用；生产环境必须保持关闭。
-  SQUARE_DEV_UPLOAD_PROXY?: string;
+  DEV_UPLOAD_PROXY?: string;
   // Stripe webhook secret 必须使用 Cloudflare secret/变量配置，不能写入仓库或下发 App。
-  STRIPE_WEBHOOK_SECRET?: string;
-  STRIPE_WEBHOOK_TOLERANCE_SECONDS?: string;
+  STRIPE_HOOK_SECRET?: string;
+  STRIPE_HOOK_WINDOW?: string;
   // 只允许本地 Miniflare 验证使用；生产环境必须保持关闭。
-  STRIPE_DEV_CHECKOUT_PROXY?: string;
+  STRIPE_DEV_PROXY?: string;
   // Stripe secret key 只允许放 Worker Secret，用于官网创建 Checkout Session。
-  STRIPE_SECRET_KEY?: string;
-  STRIPE_PRICE_VISITOR?: string;
-  // 民主会员（visitor_pro）价格 ID：访客身份的 $9.99 高权益档。
-  STRIPE_PRICE_VISITOR_PRO?: string;
-  STRIPE_PRICE_VOTING?: string;
-  STRIPE_PRICE_CANDIDATE?: string;
-  CITIZENAPP_MEMBERSHIP_SUCCESS_URL?: string;
-  CITIZENAPP_MEMBERSHIP_CANCEL_URL?: string;
+  STRIPE_API_KEY?: string;
+  FREEDOM_PRICE_ID?: string;
+  // 民主会员价格 ID：访客身份的 $9.99 高权益档。
+  DEMOCRACY_PRICE_ID?: string;
+  VOTING_PRICE_ID?: string;
+  CANDIDATE_PRICE_ID?: string;
+  CHECKOUT_SUCCESS_URL?: string;
+  CHECKOUT_CANCEL_URL?: string;
   // Cloudflare Images / Stream API token 只放 Worker Secret；App 只拿一次性上传 URL。
-  CLOUDFLARE_ACCOUNT_ID?: string;
-  CLOUDFLARE_API_TOKEN?: string;
-  CLOUDFLARE_IMAGES_DELIVERY_BASE_URL?: string;
-  CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN?: string;
-  CLOUDFLARE_STREAM_WEBHOOK_SECRET?: string;
+  CF_API_TOKEN?: string;
+  IMAGES_URL?: string;
+  STREAM_URL?: string;
+  STREAM_HOOK_SECRET?: string;
   // 退订视频冷归档：开关（'1' 开）与阈值（天，缺省 90）。关闭时 Cron 不做任何归档。
-  VIDEO_ARCHIVE_ENABLED?: string;
-  VIDEO_ARCHIVE_LAPSE_DAYS?: string;
+  ARCHIVE_ENABLED?: string;
+  ARCHIVE_LAPSE_DAYS?: string;
 }
 
 export interface SessionState {
@@ -201,9 +200,9 @@ export interface SquareFeedMediaItem {
 export interface SquarePostFeedItem extends SquarePostRow {
   media_items?: SquareFeedMediaItem[];
   // 作者徽章信号（公开）：身份档=颜色、会员匹配身份档=勾。由本页去重作者统一读链上身份+批量读会员填充。
-  // identity_level 是链上身份档；membership_level 是已购买会员档（含 visitor_pro 民主）。
+  // identity_level 是链上身份档；membership_level 是已购买会员档（含 democracy 民主）。
   identity_level?: 'visitor' | 'voting' | 'candidate';
-  membership_level?: 'visitor' | 'visitor_pro' | 'voting' | 'candidate' | null;
+  membership_level?: 'freedom' | 'democracy' | 'voting' | 'candidate' | null;
   membership_active?: boolean;
 }
 
@@ -245,8 +244,8 @@ export interface UserProfileResponse {
   is_certified: boolean;
   /// 链上身份档位：visitor 未认证 / voting 认证投票公民 / candidate 认证竞选公民。
   identity_level: 'visitor' | 'voting' | 'candidate';
-  /// 已购买的会员档位（公开）；未购买为 null。含 visitor_pro（民主）。徽章「勾」= 会员有效。
-  membership_level: 'visitor' | 'visitor_pro' | 'voting' | 'candidate' | null;
+  /// 已购买的会员档位（公开）；未购买为 null。含 democracy（民主）。徽章「勾」= 会员有效。
+  membership_level: 'freedom' | 'democracy' | 'voting' | 'candidate' | null;
   /// 会员是否当前有效（订阅生效且未过期）。
   membership_active: boolean;
   counts: UserProfileCounts;

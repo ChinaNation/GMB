@@ -137,7 +137,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     throw new HttpError(401, 'invalid_signature', '设备子钥签名校验失败');
   }
 
-  const sessionTtlSeconds = parsePositiveInt(env.SQUARE_SESSION_TTL_SECONDS, 86_400);
+  const sessionTtlSeconds = parsePositiveInt(env.SESSION_TTL_SECONDS, 86_400);
   const sessionToken = createId('sqs');
   const session: SessionState = {
     owner_account: ownerAccount,
@@ -148,7 +148,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   await env.DB.prepare(`UPDATE square_login_challenges SET used_at = ? WHERE challenge_id = ?`)
     .bind(nowMs(), challenge.challenge_id)
     .run();
-  await env.FEED_CACHE.put(`square_session:${sessionToken}`, JSON.stringify(session), {
+  await env.SQUARE_CACHE.put(`square_session:${sessionToken}`, JSON.stringify(session), {
     expirationTtl: sessionTtlSeconds
   });
   // 记入「账户→token」索引，使注销可定向失效该账户全部会话（零残留）。

@@ -1019,13 +1019,13 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     }
   }
 
-  /// 钱包名持久化(纯落盘 + 通信账户昵称双向同步)。
+  /// 钱包名持久化（纯落盘 + 聊天账户昵称双向同步）。
   ///
   ///
   /// - 编辑态和回滚逻辑已搬到 [WalletIdentityCard],这里仅负责落盘 + 同步。
   /// - 调用方(WalletIdentityCard)传进来的 newName 已 trim,但 updateWalletDisplay
   ///   内部再 trim 一次也无副作用,保持签名稳定。
-  /// - 若该钱包绑定的是当前通信账户,需要同步更新 UserProfile 里的昵称。
+  /// - 若该钱包绑定的是当前聊天账户，需要同步更新 UserProfile 里的昵称。
   /// - 出错时重新抛出,让 WalletIdentityCard 走回滚分支。
   Future<void> _saveWalletName(String newName) async {
     try {

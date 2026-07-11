@@ -23,7 +23,7 @@ Pixel 8a / Android 16，debug 包打开公民 App 反复弹「公民没有响应
 - `IndexedStack` 保留（保活已建页），但 children 改**按访问懒建**：仅当前 index 或曾访问过的 index 建真页，未访问的用 `SizedBox.shrink()` 占位；页实例缓存一次建成后由 IndexedStack 保活。
 - 广场(0)=落地页启动即建；公民(1)/信息(2)/交易(3)/我的(4) 点击才建。
 - ProfilePage 更新红点：`_handleUpdateStateChanged` 里失效 index 4 缓存令其重建带新红点。
-- **权衡（记录）**：公民待办票数徽标(`onPendingVoteCountChanged`)、IM 后台收信 在首次访问该 tab 前不触发。IM 若需后台收信，另起轻量后台邮箱服务（本卡不做，标注）。
+- **权衡（记录）**：公民待办票数徽标(`onPendingVoteCountChanged`)、Chat 后台收信 在首次访问该 tab 前不触发。Chat 若需后台收信，另起轻量后台邮箱服务（本卡不做，标注）。
 
 ### ② 行政区/机构 sync 移出启动 + UI 关键路径
 - ①落地后 ProposalView 不在启动建 → `ensureSynced` 自然延到进「公民」才跑。
@@ -35,7 +35,7 @@ Pixel 8a / Android 16，debug 包打开公民 App 反复弹「公民没有响应
 - 权衡：首次看余额会等同步。
 
 ## 验收
-- profile/release 包冷启动 CPU 峰值与高占用时长明显下降；停广场时公民/IM/交易/我的 不 initState。
+- profile/release 包冷启动 CPU 峰值与高占用时长明显下降；停广场时公民/Chat/交易/我的 不 initState。
 - 点「公民」才触发 42k 同步且不卡 UI；点「机构」按省懒加载。
 - 全端 `flutter analyze` 干净；真机冷启动无 ANR、无「请新增钱包」误报。
 
@@ -43,7 +43,7 @@ Pixel 8a / Android 16，debug 包打开公民 App 反复弹「公民没有响应
 - ①②③ 全部实现，`flutter analyze` 干净。
 - **真机验证（Pixel 8a profile 包）**：停广场时 logcat 搜不到任何 admin_division/ensureSynced（42k 同步启动**不触发**）；**无 ANR**；App 落回空闲；点「公民」tab 秒开不冻结（②后台化生效）；点公民也无 ANR。
 - **单测**：`flutter test --concurrency=1` → **+433 通过 / ~5 跳过(native 库环境跳过) / 0 失败**。踩坑：本轮给 `signWithWallet/verifyWalletAccess` 加了 local_auth 后，`wallet_manager_test.dart` 6 条挂在 `MissingPluginException(local_auth authenticate)`；修法=setUp 打桩 `MethodChannel('plugins.flutter.io/local_auth')` authenticate→true（已修，全绿）。**教训：给 WalletManager 加 local_auth 会波及所有走签名/验证的单测，必须在 setUp 打桩该 channel。**
-- 遗留（另议）：release 包未出；iOS 未验；②可再拆「区域名字典延到机构详情」；IM 后台收信 / 公民待办徽标 懒建后首访前不触发。
+- 遗留（另议）：release 包未出；iOS 未验；②可再拆「区域名字典延到机构详情」；Chat 后台收信 / 公民待办徽标 懒建后首访前不触发。
 
 ## 备注
 - debug 包已被 profile 包覆盖（同包名），手机上只剩一个；日常测/发布用 **release** 包。

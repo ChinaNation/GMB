@@ -12,11 +12,11 @@ function fakeEnv(): Env {
     expires_at: Date.now() + 60_000
   };
   return {
-    FEED_CACHE: {
+    SQUARE_CACHE: {
       get: async (key: string) =>
         key === 'square_session:tok' ? session : null
     } as unknown as KVNamespace,
-    SQUARE_DEV_UPLOAD_PROXY: '1'
+    DEV_UPLOAD_PROXY: '1'
   } as unknown as Env;
 }
 

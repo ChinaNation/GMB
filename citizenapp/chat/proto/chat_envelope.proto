@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package gmb.chat.v1;
+
+// GMB_CHAT_V1 的跨端 Chat 信封真源。
+//
+// OpenMLS 标准 wire bytes 放在内层；本文件只定义外层投递、Chat 路由记录、
+// KeyPackage 发布与确认结构。钱包账户只作为聊天账户和转账收款标识，
+// 不代表 Chat 设备身份密钥。
+
+message ChatRoute {
+  uint32 protocol_version = 1;
+  string peer_account = 2;
+  string route_display_name = 3;
+  string device_id = 4;
+  string device_public_key_hex = 5;
+  string safety_number = 6;
+  string cloudflare_mailbox_id = 7;
+  string nearby_peer_hint = 8;
+  uint64 created_at_millis = 9;
+  uint64 expires_at_millis = 10;
+}
+
+enum MlsWireMessageKind {
+  MLS_WIRE_MESSAGE_KIND_UNSPECIFIED = 0;
+  MLS_WIRE_MESSAGE_KIND_WELCOME = 1;
+  MLS_WIRE_MESSAGE_KIND_APPLICATION = 2;
+}
+
+message ChatEnvelope {
+  uint32 protocol_version = 1;
+  string envelope_id = 2;
+  string conversation_id = 3;
+  string sender_account = 4;
+  string recipient_account = 5;
+  string sender_device_id = 6;
+  bytes mls_wire_message = 7;
+  bytes encrypted_metadata = 8;
+  string attachment_manifest_hash = 9;
+  repeated string chunk_refs = 10;
+  uint64 created_at_millis = 11;
+  uint64 ttl_millis = 12;
+  string ack_policy = 13;
+  MlsWireMessageKind mls_message_kind = 14;
+  bytes ratchet_tree = 15;
+}
+
+message ChatEnvelopeAck {
+  string envelope_id = 1;
+  string state = 2;
+}
+
+message ChatKeyPackage {
+  uint32 protocol_version = 1;
+  string owner_account = 2;
+  string device_id = 3;
+  string device_public_key_hex = 4;
+  string key_package_id = 5;
+  bytes key_package = 6;
+  string cipher_suite = 7;
+  uint64 created_at_millis = 8;
+  uint64 expires_at_millis = 9;
+  uint64 consumed_at_millis = 10;
+}
+
+message PublishChatKeyPackageRequest {
+  string owner_account = 1;
+  string device_id = 2;
+  string device_public_key_hex = 3;
+  string key_package_id = 4;
+  bytes key_package = 5;
+  string cipher_suite = 6;
+  uint64 created_at_millis = 7;
+  uint64 expires_at_millis = 8;
+}
+
+message FetchChatKeyPackagesRequest {
+  string owner_account = 1;
+  string requester_account = 2;
+  uint32 limit = 3;
+}
+
+message ConsumeChatKeyPackageRequest {
+  string owner_account = 1;
+  string key_package_id = 2;
+  string requester_account = 3;
+}

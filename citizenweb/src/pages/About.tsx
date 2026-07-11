@@ -11,7 +11,7 @@ const principles = [
 
 const orgStructure = [
   {
-    level: '国家储备委员会',
+    level: '国家储委会',
     count: '1',
     admins: '19 位委员',
     threshold: '13/19 多签管理',
@@ -19,7 +19,7 @@ const orgStructure = [
     color: 'gold',
   },
   {
-    level: '省储备委员会',
+    level: '省储委会',
     count: '43',
     admins: '9 位委员/省',
     threshold: '6/9 多签管理',
@@ -27,7 +27,7 @@ const orgStructure = [
     color: 'blue',
   },
   {
-    level: '省储备银行',
+    level: '省储行',
     count: '43',
     admins: '9 位董事/行',
     threshold: '6/9 多签管理',
@@ -60,7 +60,7 @@ export default function About() {
         <SectionTitle
           subtitle="核心理念"
           title="五民主义"
-          description="公民区块链以五民主义为核心思想指导，构建自由、民主、公正的公民社会。"
+          description="公民链以五民主义为核心思想指导，构建自由、民主、公正的公民社会。"
         />
 
         <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-5">
@@ -83,7 +83,7 @@ export default function About() {
         <SectionTitle
           subtitle="组织架构"
           title="三级储备体系"
-          description="国家储备委员会、省储备委员会、省储备银行构成完整的三级治理与治理架构。"
+          description="国家储委会、省储委会、省储行构成完整的三级治理与治理架构。"
         />
 
         <div className="grid gap-8 md:grid-cols-3">

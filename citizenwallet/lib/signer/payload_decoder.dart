@@ -123,10 +123,6 @@ class PayloadDecoder {
       if (citizenIdentity != null) {
         return citizenIdentity;
       }
-      final imWalletBinding = _decodeImWalletBindingPayload(raw);
-      if (imWalletBinding != null) {
-        return imWalletBinding;
-      }
     } catch (_) {
       // 非 challenge payload，继续正常解码。
     }
@@ -810,75 +806,6 @@ class PayloadDecoder {
       summary: '解密清算行管理员 - $cidNumber',
       fields: {
         'cid_number': cidNumber,
-      },
-    );
-  }
-
-  static DecodedPayload? _decodeImWalletBindingPayload(Uint8List bytes) {
-    var offset = 0;
-    final (walletAccount, walletOffset) = _readUtf8Vec(bytes, offset);
-    if (walletAccount == null || walletAccount.trim().isEmpty) return null;
-    offset = walletOffset;
-
-    final (imDeviceId, deviceOffset) = _readUtf8Vec(bytes, offset);
-    if (imDeviceId == null || imDeviceId.trim().isEmpty) return null;
-    offset = deviceOffset;
-
-    final (imDevicePubkey, pubkeyOffset) = _readUtf8Vec(bytes, offset);
-    if (imDevicePubkey == null || imDevicePubkey.trim().isEmpty) return null;
-    offset = pubkeyOffset;
-
-    final (nodePeerId, peerOffset) = _readUtf8Vec(bytes, offset);
-    if (nodePeerId == null || nodePeerId.trim().isEmpty) return null;
-    offset = peerOffset;
-
-    final (endpointCount, endpointSize) = _decodeCompactU32(bytes, offset);
-    if (endpointSize == 0 || endpointCount <= 0 || endpointCount > 16) {
-      return null;
-    }
-    offset += endpointSize;
-    final endpoints = <String>[];
-    for (var i = 0; i < endpointCount; i++) {
-      final (endpoint, endpointOffset) = _readUtf8Vec(bytes, offset);
-      if (endpoint == null || !_validImEndpoint(endpoint, nodePeerId)) {
-        return null;
-      }
-      endpoints.add(endpoint);
-      offset = endpointOffset;
-    }
-
-    if (offset + 8 > bytes.length) return null;
-    final expiresAtMillis = _readU64Le(bytes, offset);
-    offset += 8;
-
-    final (nonce, nonceOffset) = _readUtf8Vec(bytes, offset);
-    if (nonce == null || nonce.trim().isEmpty) return null;
-    offset = nonceOffset;
-    if (offset != bytes.length) return null;
-    if (!_looksLikeSs58(walletAccount)) return null;
-
-    final expiresAt = DateTime.fromMillisecondsSinceEpoch(
-      expiresAtMillis,
-      isUtc: true,
-    ).toLocal();
-    return DecodedPayload(
-      action: 'im_wallet_binding',
-      summary: '绑定 IM 设备 $imDeviceId 到私人通信节点',
-      fields: {
-        'wallet_account': walletAccount,
-        'im_device_id': imDeviceId,
-        'im_device_pubkey': imDevicePubkey,
-        'node_peer_id': nodePeerId,
-        'node_endpoints': endpoints.join(','),
-        'expires_at_millis': '$expiresAtMillis',
-        'nonce': nonce,
-      },
-      reviewFields: {
-        'wallet_account': walletAccount,
-        'im_device_id': imDeviceId,
-        'node_peer_id': nodePeerId,
-        'node_endpoints': endpoints.join('\n'),
-        'expires_at': expiresAt.toString(),
       },
     );
   }
@@ -2590,18 +2517,6 @@ class PayloadDecoder {
       if (bytes[i] != prefix[i]) return false;
     }
     return true;
-  }
-
-  static bool _looksLikeSs58(String value) {
-    return RegExp(r'^[1-9A-HJ-NP-Za-km-z]{30,80}$').hasMatch(value);
-  }
-
-  static bool _validImEndpoint(String endpoint, String nodePeerId) {
-    final allowed = endpoint.startsWith('/ip4/') ||
-        endpoint.startsWith('/ip6/') ||
-        endpoint.startsWith('/dns4/') ||
-        endpoint.startsWith('/dnsaddr/');
-    return allowed && endpoint.endsWith('/p2p/$nodePeerId');
   }
 
   /// 分 → 元字符串（带千分位）。

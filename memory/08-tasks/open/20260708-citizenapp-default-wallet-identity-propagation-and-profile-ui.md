@@ -6,14 +6,14 @@
 
 ## 背景（已完成的只读诊断，见本轮分析）
 
-根因三件套：①`WalletManager` 无任何变更通知（纯方法类，无 ChangeNotifier/Stream/Isar watch，监听者=0，切换只写 Isar `sortOrder`）；②`main.dart` 用 `IndexedStack` 常驻各 tab State，`ProfilePage`/`SquareHomePage`/`ImTabPage` 都只在 initState 读一次默认钱包；③我的 tab「钱包」入口 push 不 await、返回不 reload（唯一改默认钱包的路径恰好不刷新）。结果：动作类路径（发帖/聊天/session 签名）每次现取已用新钱包，而常驻页 UI 停留旧身份 → 显示/行为脑裂，须重启才对齐。
+根因三件套：①`WalletManager` 无任何变更通知（纯方法类，无 ChangeNotifier/Stream/Isar watch，监听者=0，切换只写 Isar `sortOrder`）；②`main.dart` 用 `IndexedStack` 常驻各 tab State，`ProfilePage`/`SquareHomePage`/`ChatTab` 都只在 initState 读一次默认钱包；③我的 tab「钱包」入口 push 不 await、返回不 reload（唯一改默认钱包的路径恰好不刷新）。结果：动作类路径（发帖/聊天/session 签名）每次现取已用新钱包，而常驻页 UI 停留旧身份 → 显示/行为脑裂，须重启才对齐。
 
 「默认用户钱包」= 派生规则：`getWallets()` 中第一个 `isHotWallet`（按 `sortOrder`），非存储字段（见 [[project_citizenapp_institution_arch_2026_06_29]] 相关钱包模型与卡 20260705-citizenapp-default-wallet-identity）。
 
 ## 建议模块
 
 Mobile Agent — citizenapp：
-- 传播：`lib/wallet/core/wallet_manager.dart`、`lib/wallet/pages/wallet_page.dart`、`lib/my/user/user.dart`、`lib/8964/pages/square_home_page.dart`、`lib/im/im_tab_page.dart`、会员显示入口。
+- 传播：`lib/wallet/core/wallet_manager.dart`、`lib/wallet/pages/wallet_page.dart`、`lib/my/user/user.dart`、`lib/8964/pages/square_home_page.dart`、`lib/chat/chat_tab.dart`、会员显示入口。
 - UI：`lib/8964/profile/user_profile_page.dart`、`lib/8964/profile/widgets/collapsible_header.dart`、`lib/8964/profile/widgets/profile_header_card.dart`。
 
 ## 设计定稿（用户已确认的 UI 决策）
@@ -29,7 +29,7 @@ Mobile Agent — citizenapp：
 2. `wallet_page._onReorder` 落盘成功且默认热钱包变化后调 `notifyChanged()`；创建/导入/删除若改变默认钱包同样触发。
 3. `ProfilePage`（我的 tab）：initState `addListener(_loadState)`、dispose 移除；「钱包」入口 push 改 await + 返回后 `_loadState()`（双保险）。
 4. `SquareHomePage`：监听 → 重置 `_identityFuture = loadCurrent()` + setState；`_openAuthor` isSelf 判定随新身份。
-5. `ImTabPage`：监听 → `_reload(syncFirst: true)`。
+5. `ChatTab`：监听 → `_reload(syncFirst: true)`。
 6. 会员：定位 citizenapp 会员状态显示处，确认其读默认钱包并接入同一监听（或每次现取）。
 
 ### Phase 2：我的主页推特式 UI
@@ -51,7 +51,7 @@ Mobile Agent — citizenapp：
 
 ## 输出物
 
-- 代码 + 中文注释；`dart format` + `flutter analyze` 干净；`flutter test test/8964 test/im test/wallet` 全绿。
+- 代码 + 中文注释；`dart format` + `flutter analyze` 干净；`flutter test test/8964 test/chat test/wallet` 全绿。
 - 文档回写（本卡 + memory 相关 + WALLET_TECHNICAL 身份传播）。
 - 残留清理（旧渐变兜底、read-once 僵死点）。
 
@@ -64,7 +64,7 @@ Mobile Agent — citizenapp：
 ## 完成记录（2026-07-08）
 
 ### Phase 1 传播骨架 —— 已由并行线程实现（本卡不重复做）
-核对当前工作树：`WalletManager.walletsRevision` ValueNotifier 已建，`reorderWallets` 落盘后 `_bumpWalletsRevision()`（wallet_manager.dart:165）；监听方全部接上——我的 tab（user.dart:75）、广场首页（square_home_page.dart:61）、IM 列表（im_tab_page.dart:83）、交易页（onchain_payment_page.dart:123）；会员页每次打开现取 session（天然新用户）。`square_home_page_test.dart` 已带「walletsRevision 自增后广场身份即时重载」测试并通过。→ **换钱包=换身份 功能已打通**；用户真机若仍见旧用户，是旧构建，重新 build/run 即跟随。
+核对当前工作树：`WalletManager.walletsRevision` ValueNotifier 已建，`reorderWallets` 落盘后 `_bumpWalletsRevision()`（wallet_manager.dart:165）；监听方全部接上——我的 tab（user.dart:75）、广场首页（square_home_page.dart:61）、Chat 列表（chat_tab.dart:83）、交易页（onchain_payment_page.dart:123）；会员页每次打开现取 session（天然新用户）。`square_home_page_test.dart` 已带「walletsRevision 自增后广场身份即时重载」测试并通过。→ **换钱包=换身份 功能已打通**；用户真机若仍见旧用户，是旧构建，重新 build/run 即跟随。
 
 ### Phase 2 我的主页推特式 UI —— 本轮完成
 - `collapsible_header.dart`：重排为「短头图（128，折叠虚化）在上 + 白底铺满在下 + 资料区从头图下缘 top-anchored」；去掉旧三色渐变兜底，改品牌色 `primaryDark` 平铺；删 `bottomInset` 参数、新增 `bannerHeight`。

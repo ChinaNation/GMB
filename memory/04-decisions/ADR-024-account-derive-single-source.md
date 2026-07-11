@@ -1,6 +1,6 @@
 # ADR-024 账户地址派生统一为唯一真源
 
-- 状态：账户派生单源、`GMB` 域和 `gmb.py` 已落地；合并态全量验证通过（链端 `cargo check --workspace` + 派生 22 测试 + 金标 1；后端 71；CitizenApp Dart 28 + 跨语言金标逐字节对齐）。账户重生仍 gated 在 `20260622-cid-classification-unify-t3t4` Phase 3 之后。
+- 状态：账户派生单源、`GMB` 域和 `rederive_accounts.py` 已落地；合并态全量验证通过（链端 `cargo check --workspace` + 派生 22 测试 + 金标 1；后端 71；CitizenApp Dart 28 + 跨语言金标逐字节对齐）。账户重生仍 gated 在 `20260622-cid-classification-unify-t3t4` Phase 3 之后。
 - 关联：[[ADR-021]] 单源思想；任务卡 `20260622-account-derive-single-source.md`；并入 `20260622-cid-classification-unify-t3t4` 末尾创世
 - 取代：原 `20260622-derive-domain-rename-gmb-op-name`
 
@@ -100,7 +100,7 @@ pub fn is_registrable_custom_name(name: &[u8]) -> bool {
 - `personal-manage::derive_personal_account`：`creator.encode()`→`[u8;32]`，走 `AccountKind::Personal`。
 - `china/mod.rs`（创世）：内联 `derive_account(OP_MAIN..)`→`AccountKind::InstitutionMain{cid}.derive(SS58_FORMAT)`。
 - 后端 `accounts/derive.rs`：删 5 个 `&str` 保留名 + 路由，`derive_account(cid,name)`→`institution_kind_by_name(...).map(|k| hex::encode(k.derive(SS58_FORMAT)))`；`RESERVED_ACCOUNT_NAMES` 改 re-export 新源（&[u8]）。调用方 `admins/actions.rs:909`、`accounts/handler.rs:86`、`subjects/service.rs:344`、`citizenapp/public_institution.rs:400`（&str→&[u8] 适配）。
-- **`scripts/gmb.py`（创世账户烘焙器）**：读取 `china_*.rs` 的 `cid_number`，并从 `core_const.rs` / `account_derive.rs` 读取 `GMB`、`SS58_FORMAT` 和 `OP_*`，计算 main/fee/stake 等账户并写回 `china_*.rs`。它只读 cid，不生成 cid。
+- **`scripts/rederive_accounts.py`（创世账户烘焙器）**：读取 `china_*.rs` 的 `cid_number`，并从 `core_const.rs` / `account_derive.rs` 读取 `GMB`、`SS58_FORMAT` 和 `OP_*`，计算 main/fee/stake 等账户并写回 `china_*.rs`。它只读 cid，不生成 cid。
 
 ### Tier 2 — 跨语言金标对齐
 
@@ -120,7 +120,7 @@ fixture 格式 `account_derive_vectors.json`：
   ] }
 ```
 - канon 路径 `citizenchain/runtime/primitives/tests/fixtures/account_derive_vectors.json`；Dart 副本 `citizenapp/test/governance/shared/fixtures/`。
-- Rust 测试：`ACCOUNT_DERIVE_UPDATE=1` 时写文件，否则读取断言。Dart 测试读副本断言。本机守卫脚本 `scripts/sync_account_derive_vectors.sh` 重生 + `git diff --exit-code` 两份。
+- Rust 测试：`ACCOUNT_DERIVE_UPDATE=1` 时写文件，否则读取断言。Dart 测试读副本断言。本机守卫脚本 `scripts/sync-derive-vectors.sh` 重生 + `git diff --exit-code` 两份。
 - **行为中性回归证明**：用当前 `GMB` 域生成 fixture，PR-1/2/3 后断言地址不变；账户重生阶段才允许 fixture 改变。
 
 ### 后续账户重生（gated 在 T3/T4 末尾创世）
@@ -145,12 +145,12 @@ fixture 格式 `account_derive_vectors.json`：
 **正确创世内顺序（全在最后一次 re-genesis）：**
 1. **T3/T4 Phase 3**：重烤 `china_*.rs` cid_number → 新码（前置，**未做**）。
 2. **ADR-024 账户重生**：确认 `GMB` 域并重算账户字面值。
-3. 跑 `scripts/gmb.py`（已改读取路径）：用「新 CID + GMB」重算 china 账户字面值。
+3. 跑 `scripts/rederive_accounts.py`（已改读取路径）：用「新 CID + GMB」重算 china 账户字面值。
 4. `citizenchain/scripts/bake-chainspec.sh` + 重跑 `citizenapp/tools/generate_public_institution_bundle.mjs`。
 
 **结论对实施的约束：** 单源改造可独立落地；账户重生硬 gated 在 T3/T4 Phase 3 之后（缺最终态 cid_number，ADR-024 内不能独立闭环）。
 
-**决策 B（2026-06-22，用户拍板）：** china 机构 CID 重烤（=T3/T4 Phase 3，含 federal 常量 CID 的 account_pubkey 确定性种子约定）留在 T3/T4 线程，避免两线程同改 `china_*.rs` 分叉。等 T3/T4 出新码 CID，再跑 `gmb.py` 账户重生 + 一次创世。
+**决策 B（2026-06-22，用户拍板）：** china 机构 CID 重烤（=T3/T4 Phase 3，含 federal 常量 CID 的 account_pubkey 确定性种子约定）留在 T3/T4 线程，避免两线程同改 `china_*.rs` 分叉。等 T3/T4 出新码 CID，再跑 `rederive_accounts.py` 账户重生 + 一次创世。
 （种子约定备注：CID 的 N9 = `blake2b(account_pubkey ‖ 机构码 ‖ 省 ‖ 市 ‖ 年)[:4] % 1e9`，account_pubkey 是同 (码,省,市,年) 桶内的去重熵；动态注册用随机 UUID+1000 重试，创世须确定性种子，gov 模板已用 `GOV-{scope}-…`，federal 常量种子由 T3/T4 定。）
 
 **新增守卫测试**（防静默过期）：每条 china `cid_number` 必须 `InstitutionCode::from_str` 过新码表，否则 CI 红。
@@ -174,16 +174,16 @@ fixture 格式 `account_derive_vectors.json`：
 - 负：引入 `AccountKind` 枚举 + 金标 fixture 维护（CI sync 脚本）；Dart 仍是手写镜像（金标兜底，非编译期保证）。
 - 风险：creator `encode()`→`[u8;32]` 转换需断言长度；no_std 下 `AccountKind::payload` 用 `sp_std::Vec`；账户重生牵连签名展示和创世账户，必须钱包锁步 + 创世重烤。
 
-## 实施记录（2026-06-22，Tier 1/2 + gmb.py 已落地，行为中性）
+## 实施记录（2026-06-22，Tier 1/2 + rederive_accounts.py 已落地，行为中性）
 
 **单源落地**：`citizenchain/runtime/primitives/src/account_derive.rs` = 全仓账户地址派生唯一真源（op_tag `OP_MAIN..OP_NAME`，`OP_NAME=0x06` = 原 `OP_INSTITUTION` 值不变；5 保留名；`is_forbidden_account_name`(3 名不 trim)；`AccountKind` 枚举 op_tag↔payload 唯一映射；`institution_kind_by_name` 路由；`is_registrable_custom_name`；唯一入口 `AccountKind::derive`）。`core_const` 账户 op_tag/保留名/`derive_account`/`is_forbidden` 已删，仅留域 `GMB`(派生+签名共用) + 签名 op_tag `OP_SIGN_*`，无任何兼容 re-export。调用方全部委托新源：后端 `accounts/derive.rs`、`organization-manage`(删 `address.rs`/`InstitutionAccountRole`)、`personal-manage`、`china/mod.rs`、`subjects/service.rs`。
 
 **Dart 单源**：`citizenapp/lib/governance/shared/account_derivation.dart`(op_tag + 路由)+ `account_derivation` 调用方 + `reserved_account_names.dart`(citizenapp + citizenwallet 各一,只共享保留名)；citizenapp `isForbidden` 漂移已修(3 名 + 不 trim,对齐链端)。
 
-**金标**：canonical `citizenchain/runtime/primitives/tests/fixtures/account_derive_vectors.json` + Dart 副本 `citizenapp/test/governance/shared/fixtures/`，导出测试 `tests/account_derive_golden.rs`，本机守卫 `scripts/sync_account_derive_vectors.sh`。`domain=GMB`/`ss58=2027` 基线，行为中性铁证 = `china_*.rs` 字面常量(NRC main/fee、SAFETYFUND、HE)与 fixture 逐字节一致。
+**金标**：canonical `citizenchain/runtime/primitives/tests/fixtures/account_derive_vectors.json` + Dart 副本 `citizenapp/test/governance/shared/fixtures/`，导出测试 `tests/account_derive_golden.rs`，本机守卫 `scripts/sync-derive-vectors.sh`。`domain=GMB`/`ss58=2027` 基线，行为中性铁证 = `china_*.rs` 字面常量(NRC main/fee、SAFETYFUND、HE)与 fixture 逐字节一致。
 
-**脚本**：`scripts/gmb.py` 的 op_tag 读取路径改到 `account_derive.rs`，域读取 `core_const::GMB`。
+**脚本**：`scripts/rederive_accounts.py` 的 op_tag 读取路径改到 `account_derive.rs`，域读取 `core_const::GMB`。
 
 **测试结果**：链端 `cargo test -p primitives -p organization-manage -p personal-manage` 全绿(organization-manage 29 + personal-manage 23 + primitives lib 20 + golden 1 + 3 doc-tests，0 failed)；后端 `cargo test` 71 + 5 integration passed(含 `accounts::derive::tests` 6 项)；金标二次 `ACCOUNT_DERIVE_UPDATE=1` 重跑后 fixture `git diff --stat` 为空 = 确定性/地址零变化。
 
-**仍 gated（T3/T4 Phase 3 之后）**：china CID 重烤 + 跑 `gmb.py` 账户重生 + 一次创世 + 重跑 `generate_public_institution_bundle.mjs`。
+**仍 gated（T3/T4 Phase 3 之后）**：china CID 重烤 + 跑 `rederive_accounts.py` 账户重生 + 一次创世 + 重跑 `generate_public_institution_bundle.mjs`。

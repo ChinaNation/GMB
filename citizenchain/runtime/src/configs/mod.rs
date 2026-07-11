@@ -398,8 +398,9 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                 | citizen_identity::pallet::Call::revoke_cid { .. } => FeeChargeKind::Free,
                 _ => FeeChargeKind::VoteFlat,
             },
-            // 广场发布交易固定收 1 元发布费；分账继续复用 OnchainFeeRouter 的 80/10/10。
-            RuntimeCall::SquarePost(_) => FeeChargeKind::VoteFlat,
+            // 广场发布没有资金交易金额，按零金额进入链上费用模型，收取
+            // ONCHAIN_MIN_FEE = 10 分；分账继续复用 OnchainFeeRouter 的 80/10/10。
+            RuntimeCall::SquarePost(_) => FeeChargeKind::OnchainAmount(0),
             // FullnodeIssuance bind_reward_wallet / rebind_reward_wallet:1 元/次。
             RuntimeCall::FullnodeIssuance(_) => FeeChargeKind::VoteFlat,
             // 手动重试/取消统一收口至 votingengine::retry_passed_proposal /

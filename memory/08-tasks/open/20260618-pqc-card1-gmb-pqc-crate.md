@@ -5,7 +5,7 @@
 
 任务需求:
 建立全系统单一抗量子原语基座 `gmb-pqc`(runtime no_std WASM + citizencode/citizenpassport/node 后端 + 钱包 FFI 共用):
-1. **HKDF-SHA512 账户派生单一源(精确口径,钉 golden vector)**:`PRK=HKDF-Extract(salt=空, IKM=AccountSeedV1[32B])`,域分离全靠 `info`:**仅** 字面 ASCII 串 `"GMB/account/ml-dsa-65/seed32/v1"`(🔴 **无 null 结尾、无独立长度前缀字节;串内 `seed32` 是输出长度的字面标识,不是要额外塞长度域字节**;Rust 传 `&[u8]`、Dart 按 UTF-8,golden vector 锁死这 31 字节序列三端逐字节一致)→ `HKDF-Expand L=32` → 32B ξ → FIPS204 `KeyGen_internal(ξ)`。🔴 **账户不派生 ML-KEM**(决策3:机密性 KEM 在 IM/TLS 层,不进账户体系)。🔴 **sr25519 锚点不在此表**(现有 `fromSeed(AccountSeedV1)` 直接派生,绝不套 HKDF)。
+1. **HKDF-SHA512 账户派生单一源(精确口径,钉 golden vector)**:`PRK=HKDF-Extract(salt=空, IKM=AccountSeedV1[32B])`,域分离全靠 `info`:**仅** 字面 ASCII 串 `"GMB/account/ml-dsa-65/seed32/v1"`(🔴 **无 null 结尾、无独立长度前缀字节;串内 `seed32` 是输出长度的字面标识,不是要额外塞长度域字节**;Rust 传 `&[u8]`、Dart 按 UTF-8,golden vector 锁死这 31 字节序列三端逐字节一致)→ `HKDF-Expand L=32` → 32B ξ → FIPS204 `KeyGen_internal(ξ)`。🔴 **账户不派生 ML-KEM**(决策3:机密性 KEM 在 Chat/TLS 层,不进账户体系)。🔴 **sr25519 锚点不在此表**(现有 `fromSeed(AccountSeedV1)` 直接派生,绝不套 HKDF)。
 2. 🔴 **(B8)锁库**:强制选用暴露 `KeyGen_internal(ξ)` seed-API 的 fips204 锁定版本,**删一切 DRBG fallback**(不暴露 ξ-API 则换库);库名+版本+API 名钉进本卡产出。
 3. **algo 常量**:`0x01` sr25519 / `0x02` ML-DSA-65 / `0x03` ML-DSA-87(预留)。
 4. **domain 常量强制 `[u8;N]`**(铁律 `feedback_scale_domain_must_be_array`):`DOMAIN_TX=b"GMB_PQC_TX_MLDSA65_V1"`、`DOMAIN_BOOTSTRAP=b"GMB_PQC_BOOTSTRAP_MLDSA65_V1"`(算法标识编进域字面量);并迁 `batch_item.rs:39/42` 的 `L3_PAY/BATCH_SIGNING_DOMAIN` `&[u8]`→`[u8;N]`。

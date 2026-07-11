@@ -267,11 +267,11 @@ typedef SquareActionSigner = Future<String> Function(Uint8List actionMessage);
 class SquareApiConfig {
   const SquareApiConfig._();
 
-  static const baseUrlDefineName = 'CITIZENAPP_SQUARE_API_BASE_URL';
+  static const baseUrlDefineName = 'SQUARE_API_URL';
 
   /// 线上 Worker 唯一默认地址：聊天 mailbox 与广场共用同一个 Cloudflare Worker。
   /// 默认即连生产 Cloudflare，绝不回落本机；开发者要连本机 wrangler dev 时，
-  /// 显式传 --dart-define=CITIZENAPP_SQUARE_API_BASE_URL=http://127.0.0.1:8787。
+  /// 显式传 --dart-define=SQUARE_API_URL=http://127.0.0.1:8787。
   static const prodBaseUrl =
       'https://citizenapp-square-api.stews87-fawn.workers.dev';
 
@@ -321,7 +321,7 @@ class SquareApiClient
   final http.Client _http;
   final Map<String, SquareSession> _sessions = {};
 
-  /// Worker API 根地址。IM Cloudflare mailbox 复用同一个 Worker 登录态。
+  /// Worker API 根地址。Chat Cloudflare mailbox 复用同一个 Worker 登录态。
   Uri get baseUri => Uri.parse(baseUrl);
 
   Future<SquareSession> ensureSession({

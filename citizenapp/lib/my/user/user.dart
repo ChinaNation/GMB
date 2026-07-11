@@ -25,7 +25,7 @@ import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/identity_badge.dart';
-import 'package:citizenapp/im/open_direct_chat.dart';
+import 'package:citizenapp/chat/open_direct_chat.dart';
 import 'package:citizenapp/update/app_update.dart';
 import 'package:citizenapp/update/update_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -135,10 +135,10 @@ class _ProfilePageState extends State<MyTab> {
     final defaultWallet = await _walletManager.getDefaultWallet();
     String? identityLevel;
     try {
-      final walletAccount = defaultWallet?.address.trim() ?? '';
-      final snapshot = walletAccount.isEmpty
+      final ownerAccount = defaultWallet?.address.trim() ?? '';
+      final snapshot = ownerAccount.isEmpty
           ? null
-          : await _badgeSnapshotStore.read(walletAccount);
+          : await _badgeSnapshotStore.read(ownerAccount);
       identityLevel = switch (snapshot?.identityLevel) {
         'voting' || 'candidate' => snapshot!.identityLevel,
         _ => null,
@@ -175,30 +175,30 @@ class _ProfilePageState extends State<MyTab> {
         _smoldotClientManager.healthStatus != ChainHealthStatus.operational) {
       return;
     }
-    final walletAccount = wallet?.address.trim() ?? '';
-    if (walletAccount.isEmpty || _operationalIdentityAccount == walletAccount) {
+    final ownerAccount = wallet?.address.trim() ?? '';
+    if (ownerAccount.isEmpty || _operationalIdentityAccount == ownerAccount) {
       return;
     }
-    _operationalIdentityAccount = walletAccount;
+    _operationalIdentityAccount = ownerAccount;
 
     final state = await _myIdService.getState();
-    if (!mounted || _defaultWallet?.address.trim() != walletAccount) return;
+    if (!mounted || _defaultWallet?.address.trim() != ownerAccount) return;
 
     String? refreshedLevel;
     if (state.isCitizen &&
-        state.votingAccount?.trim() == walletAccount &&
+        state.votingAccount?.trim() == ownerAccount &&
         (state.identityLevel == 'voting' ||
             state.identityLevel == 'candidate')) {
       refreshedLevel = state.identityLevel;
     } else if (state.status == MyIdStatus.queryFailed) {
       // 纯默认用户模型下不再有多身份冲突;仅链读失败时回落徽章快照。
-      final snapshot = await _badgeSnapshotStore.read(walletAccount);
+      final snapshot = await _badgeSnapshotStore.read(ownerAccount);
       refreshedLevel = switch (snapshot?.identityLevel) {
         'voting' || 'candidate' => snapshot!.identityLevel,
         _ => null,
       };
     }
-    if (!mounted || _defaultWallet?.address.trim() != walletAccount) return;
+    if (!mounted || _defaultWallet?.address.trim() != ownerAccount) return;
     setState(() => _defaultWalletIdentityLevel = refreshedLevel);
   }
 

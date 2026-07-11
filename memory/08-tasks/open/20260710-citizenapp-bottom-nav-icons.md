@@ -33,12 +33,12 @@
 - [x] `信息` → `聊天`：label 改字；icon `Icons.chat_bubble_outline_rounded`→`Icons.textsms_outlined`，selectedIcon `Icons.chat_bubble_rounded`→`Icons.textsms_rounded`。
 
 ### 第 3 步：聊天页头部一致性（清残桩）✅
-- [x] `lib/im/im_tab_page.dart:465` 大标题 `信息` → `聊天`（tab 改名后目的页头必须同步，否则半改）。
-- [x] `test/im/im_tab_page_test.dart`：标题断言 `信息`→`聊天`；两个受影响用例描述同步改名。
+- [x] `lib/chat/chat_tab.dart:465` 大标题 `信息` → `聊天`（tab 改名后目的页头必须同步，否则半改）。
+- [x] `test/chat/chat_tab_test.dart`：标题断言 `信息`→`聊天`；两个受影响用例描述同步改名。
 
 ### 第 4 步：验证 ✅
-- [x] `dart format` 通过；`flutter analyze lib/main.dart lib/im/im_tab_page.dart` — No issues found。
-- [x] `flutter test test/im/im_tab_page_test.dart --concurrency=1` — 10/10 通过（Isar 社区分支需 concurrency=1）。
+- [x] `dart format` 通过；`flutter analyze lib/main.dart lib/chat/chat_tab.dart` — No issues found。
+- [x] `flutter test test/chat/chat_tab_test.dart --concurrency=1` — 10/10 通过（Isar 社区分支需 concurrency=1）。
 - [x] `广场` label 未改（仅换图标），`test/widget_test.dart` 的 `find.text('广场')` 断言不受影响；`Icons.explore_outlined` 在 `square_home_page.dart:435` 是页内分类图标、非导航栏，未动。
 - [ ] （建议）真机目视：坦克描边 1.5 清晰、聊天气泡三点正确、选中态变主题绿、三个不变 tab 无回归。
 
@@ -50,7 +50,7 @@
 
 ## 完成状态
 
-代码与静态/单测验证已完成，等真机目视确认后本卡可归档。剩余 `test/im/im_tab_page_test.dart` 内其余以「信息 Tab …」命名的用例仅为测试描述（不断言标题文案），未改以免越界；如需全量统一可另行处理。
+代码与静态/单测验证已完成，等真机目视确认后本卡可归档。剩余 `test/chat/chat_tab_test.dart` 内其余以「聊天 Tab …」命名的用例仅为测试描述（不断言标题文案），未改以免越界；如需全量统一可另行处理。
 
 ## 备注
 

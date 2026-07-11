@@ -332,11 +332,11 @@ interface FakeEnvOptions {
   posts?: PostSeed[];
   follows?: FollowSeed[];
   session?: { token: string; owner_account: string };
-  /// 预置 owner 的链上身份（写进 FEED_CACHE 命中缓存版身份读取）；缺省=未配置→软降级为访客。
+  /// 预置 owner 的链上身份（写进 SQUARE_CACHE 命中缓存版身份读取）；缺省=未配置→软降级为访客。
   identity?: { identity_level: 'visitor' | 'voting' | 'candidate'; cid_number?: string | null };
   /// 预置 owner 的会员购买（对应 D1 square_memberships 一行）；缺省=未购买（无行）。
   membership?: {
-    membership_level: 'visitor' | 'voting' | 'candidate';
+    membership_level: 'freedom' | 'democracy' | 'voting' | 'candidate';
     subscription_status?: string;
     expires_at?: number;
   };
@@ -381,7 +381,7 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
   return {
     DB: new FakeDb(posts, follows, membershipRow) as unknown as D1Database,
     SQUARE_MEDIA: new FakeR2() as unknown as R2Bucket,
-    FEED_CACHE: new FakeKv(kv) as unknown as KVNamespace
+    SQUARE_CACHE: new FakeKv(kv) as unknown as KVNamespace
   } as unknown as Env;
 }
 

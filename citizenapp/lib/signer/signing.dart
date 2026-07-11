@@ -49,8 +49,8 @@ const int kOpSignActivateAdmin = 0x18;
 /// 解密授权(对齐 OP_SIGN_DECRYPT)。
 const int kOpSignDecrypt = 0x19;
 
-/// IM 钱包绑定(对齐 OP_SIGN_IM_WALLET_BINDING)。
-const int kOpSignImWalletBinding = 0x1A;
+/// Chat 设备绑定(对齐 OP_SIGN_CHAT_DEVICE_BIND；硬件 P-256 子钥签 digest)。
+const int kOpSignChatDeviceBind = 0x1A;
 
 /// 广场 BFF 登录挑战(对齐 OP_SIGN_SQUARE_LOGIN;链下 Worker 验签,设备子钥 ES256 签 digest)。
 const int kOpSignSquareLogin = 0x1B;

@@ -21,8 +21,8 @@
 
 ## 完成记录
 
-- 2026-06-23：确认 `tools/sync_account_derive_vectors.sh` 是账户派生金标本机同步守卫，仍有用途。
-- 2026-06-23：已移动为 `scripts/sync_account_derive_vectors.sh`，根 `tools/` 目录已删除。
+- 2026-06-23：确认 `tools/sync-derive-vectors.sh` 是账户派生金标本机同步守卫，仍有用途。
+- 2026-06-23：已移动为 `scripts/sync-derive-vectors.sh`，根 `tools/` 目录已删除。
 - 2026-06-23：已在 `memory/AGENTS.md`、`memory/07-ai/agent-rules.md`、`memory/07-ai/unified-required-reading.md` 增加新增文件/目录必须经用户确认的硬规则。
 - 2026-06-23：已将 ADR-024 和当前任务卡中的脚本路径从 `tools/` 同步为 `scripts/`。
-- 2026-06-23：已执行 `bash -n scripts/sync_account_derive_vectors.sh`、根 `tools/` 删除检查、根 `scripts/` 忽略检查、`git diff --check`。
+- 2026-06-23：已执行 `bash -n scripts/sync-derive-vectors.sh`、根 `tools/` 删除检查、根 `scripts/` 忽略检查、`git diff --check`。

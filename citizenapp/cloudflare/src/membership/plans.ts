@@ -1,12 +1,12 @@
 // 会员套餐真源。会员档 `membership_level` 与身份档 `required_identity_level` 解耦：
-// 访客身份含自由(visitor $2.99)/民主(visitor_pro $9.99，权益=投票、身份匿名)两档，
+// 访客身份含自由(freedom $2.99)/民主(democracy $9.99，权益=投票、身份匿名)两档，
 // 投票/竞选各一档。订阅资格精确匹配身份档（identityEligibleForPlan，禁止降档/越级）；
 // 发帖额度按所购套餐（membershipPlan(level).quota）。四档一改，须同步 App 卡片、官网
 // Membership.tsx、Stripe price 映射与 webhook 反查。
-export type MembershipLevel = 'visitor' | 'visitor_pro' | 'voting' | 'candidate';
+export type MembershipLevel = 'freedom' | 'democracy' | 'voting' | 'candidate';
 
 /// 链上身份档位（与会员档位解耦）：访客 / 投票公民 / 竞选公民。
-/// 会员档 `visitor_pro`（民主）不是身份档，其 required_identity_level 仍为 'visitor'。
+/// 会员档 `democracy`（民主）不是身份档，其 required_identity_level 仍为 'visitor'。
 export type IdentityLevel = 'visitor' | 'voting' | 'candidate';
 
 export type RequiredIdentityLevel = IdentityLevel;
@@ -51,8 +51,8 @@ const mib = 1024 * 1024;
 const gib = 1024 * mib;
 
 export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
-  visitor: {
-    membership_level: 'visitor',
+  freedom: {
+    membership_level: 'freedom',
     display_name: '自由会员',
     price_currency: 'usd',
     price_usd_cents: 299,
@@ -79,8 +79,8 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
   },
   // 民主会员：媒体权益与投票公民会员完全一致（仅身份不同——民主匿名、投票为
   // 公民认证）。required_identity_level 仍为 'visitor'，访客身份即可订阅。
-  visitor_pro: {
-    membership_level: 'visitor_pro',
+  democracy: {
+    membership_level: 'democracy',
     display_name: '民主会员',
     price_currency: 'usd',
     price_usd_cents: 999,
@@ -161,8 +161,8 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
 
 export function assertMembershipLevel(value: unknown): MembershipLevel {
   if (
-    value === 'visitor' ||
-    value === 'visitor_pro' ||
+    value === 'freedom' ||
+    value === 'democracy' ||
     value === 'voting' ||
     value === 'candidate'
   ) {
@@ -172,10 +172,10 @@ export function assertMembershipLevel(value: unknown): MembershipLevel {
 }
 
 export function membershipPlan(level: string): MembershipPlan {
-  if (level === 'voting' || level === 'candidate' || level === 'visitor_pro') {
+  if (level === 'voting' || level === 'candidate' || level === 'democracy') {
     return membershipPlans[level];
   }
-  return membershipPlans.visitor;
+  return membershipPlans.freedom;
 }
 
 export function identityLevelRank(level: RequiredIdentityLevel): number {
@@ -193,7 +193,7 @@ export function identitySatisfies(
 
 /// 订阅资格：精确匹配——只能订阅"本身份档对应"的会员，禁止降档/越级。
 /// 例：voting 身份只能订 voting；candidate 只能订 candidate；visitor 身份可订
-/// visitor 与 visitor_pro（二者 required_identity_level 均为 'visitor'）。
+/// freedom 与 democracy（二者 required_identity_level 均为 'visitor'）。
 export function identityEligibleForPlan(
   identity: RequiredIdentityLevel,
   plan: MembershipPlan
@@ -203,8 +203,8 @@ export function identityEligibleForPlan(
 
 export function membershipPlanList(): MembershipPlan[] {
   return [
-    membershipPlans.visitor,
-    membershipPlans.visitor_pro,
+    membershipPlans.freedom,
+    membershipPlans.democracy,
     membershipPlans.voting,
     membershipPlans.candidate
   ];

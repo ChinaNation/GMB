@@ -31,8 +31,6 @@ pub const QR_ACTION_ACTIVATE_ADMIN: u16 = 5;
 pub const QR_ACTION_DECRYPT_ADMIN: u16 = 6;
 /// QR_V1 runtime 升级 32 字节哈希直签动作。
 pub const QR_ACTION_RUNTIME_UPGRADE_HASH: u16 = 7;
-/// QR_V1 IM 钱包绑定签名动作。
-pub const QR_ACTION_IM_WALLET_BINDING: u16 = 8;
 /// QR_V1 广场账户动作（订阅/取消/…）链下签名动作，映射 op_tag OP_SIGN_SQUARE_ACTION(0x1D)。
 pub const QR_ACTION_SQUARE_ACCOUNT: u16 = 9;
 
@@ -44,7 +42,7 @@ pub const fn qr_chain_action(pallet_index: u8, call_index: u8) -> u16 {
 // 签名 op_tag 单一权威源:
 // - 0x10/0x13-0x17:哈希域,走 `signing_message`,进入 `SIGN_OP_TAGS`。
 // - 0x18/0x19:二进制前缀域,只签原始 payload,不进入 `SIGN_OP_TAGS`。
-// - 0x1A:IM 钱包绑定哈希域,走 `signing_message`。
+// - 0x1A:Chat 设备绑定哈希域,走 `signing_message`。
 // - 0x1B-0x1D:广场 BFF 登录/设备绑定/账户动作哈希域,走 `signing_message`,进入
 //   `SIGN_OP_TAGS`。仅链下(Cloudflare Worker + App)验签,链上 pallet 不引用,
 //   故新增它们不触发 runtime 变更/创世,只维护本单源与金标。
@@ -67,8 +65,8 @@ pub const OP_SIGN_L2_ACK: u8 = 0x17;
 pub const OP_SIGN_ACTIVATE_ADMIN: u8 = 0x18;
 /// 解密授权二进制前缀域;不走 `signing_message`。
 pub const OP_SIGN_DECRYPT: u8 = 0x19;
-/// IM 钱包绑定。
-pub const OP_SIGN_IM_WALLET_BINDING: u8 = 0x1A;
+/// Chat 设备绑定（链下 Worker 验签，硬件 P-256 设备子钥签 digest）。
+pub const OP_SIGN_CHAT_DEVICE_BIND: u8 = 0x1A;
 
 /// 广场 BFF 登录挑战(链下 Worker 验签,设备子钥 ES256 签 digest)。
 pub const OP_SIGN_SQUARE_LOGIN: u8 = 0x1B;
@@ -96,7 +94,7 @@ pub const SIGN_OP_TAGS: [u8; 10] = [
     OP_SIGN_L3_PAY,
     OP_SIGN_OFFCHAIN_BATCH,
     OP_SIGN_L2_ACK,
-    OP_SIGN_IM_WALLET_BINDING,
+    OP_SIGN_CHAT_DEVICE_BIND,
     OP_SIGN_SQUARE_LOGIN,
     OP_SIGN_SQUARE_DEVICE_BIND,
     OP_SIGN_SQUARE_ACTION,

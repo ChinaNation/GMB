@@ -105,15 +105,15 @@ describe('Cloudflare media assets', () => {
 
 function devEnv(): Env {
   return {
-    SQUARE_DEV_UPLOAD_PROXY: '1'
+    DEV_UPLOAD_PROXY: '1'
   } as unknown as Env;
 }
 
 function prodEnv(): Env {
   return {
-    CLOUDFLARE_ACCOUNT_ID: 'acct_123',
-    CLOUDFLARE_API_TOKEN: 'token',
-    CLOUDFLARE_IMAGES_DELIVERY_BASE_URL: 'https://imagedelivery.net/account',
-    CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN: 'https://customer.example'
+    CF_ACCOUNT_ID: 'acct_123',
+    CF_API_TOKEN: 'token',
+    IMAGES_URL: 'https://imagedelivery.net/account',
+    STREAM_URL: 'https://customer.example'
   } as unknown as Env;
 }

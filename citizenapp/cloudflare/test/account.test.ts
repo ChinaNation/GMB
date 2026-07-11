@@ -262,14 +262,14 @@ describe('purgeAccount', () => {
     kv.store.set(`square_identity:${OWNER}`, '{"identity_level":"voting"}');
     kv.store.set(`square_sessions_by_owner:${OWNER}`, JSON.stringify(['tok1']));
     kv.store.set('square_session:tok1', '{}');
-    // SQUARE_DEV_UPLOAD_PROXY 短路 deleteProviderAsset（无本地 Images/Stream）。
-    // STRIPE_DEV_CHECKOUT_PROXY 短路真退订；不设则缺密钥 → cancel 抛 503。
+    // DEV_UPLOAD_PROXY 短路 deleteProviderAsset（无本地 Images/Stream）。
+    // STRIPE_DEV_PROXY 短路真退订；不设则缺密钥 → cancel 抛 503。
     const env = {
       DB: db,
       SQUARE_MEDIA: r2,
-      FEED_CACHE: kv,
-      SQUARE_DEV_UPLOAD_PROXY: '1',
-      ...(options?.stripeConfigured === false ? {} : { STRIPE_DEV_CHECKOUT_PROXY: '1' })
+      SQUARE_CACHE: kv,
+      DEV_UPLOAD_PROXY: '1',
+      ...(options?.stripeConfigured === false ? {} : { STRIPE_DEV_PROXY: '1' })
     } as unknown as Env;
     return { env, db, r2, kv };
   }
@@ -286,6 +286,7 @@ describe('purgeAccount', () => {
     expect(joined).toContain('DELETE FROM square_memberships WHERE owner_account = ?');
     expect(joined).toContain('DELETE FROM square_posts WHERE owner_account = ?');
     expect(joined).toContain('DELETE FROM square_follows WHERE owner_account = ?');
+    expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE owner_account = ?');
     expect(joined).toContain('DELETE FROM chat_envelopes WHERE recipient_account = ?');
 
     // R2：profile / posts 全删；chat 里 c2 删、c1（B 未收到）保留。

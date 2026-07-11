@@ -13,8 +13,8 @@ describe('chain bootstrap manifest', () => {
     const response = buildChainBootstrapResponse(
       new Request('https://api.onchina.org/v1/chain/bootstrap'),
       env({
-        CITIZEN_CHAIN_BOOTNODES: `${bootnodeA}\n${bootnodeB}\n${bootnodeA}`,
-        CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS: '120',
+        CHAIN_BOOTNODES: `${bootnodeA}\n${bootnodeB}\n${bootnodeA}`,
+        BOOT_TTL_SECONDS: '120',
         CHAIN_URL: 'https://rpc.internal.example',
         CHAIN_ID: 'worker-rpc.access',
         CHAIN_SECRET: 'test-access-secret'
@@ -48,7 +48,7 @@ describe('chain bootstrap manifest', () => {
     const response = buildChainBootstrapResponse(
       new Request('https://api.onchina.org/v1/chain/bootstrap'),
       env({
-        CHAIN_EXTRINSIC_RELAY_ENABLED: '1',
+        RELAY_ENABLED: '1',
         CHAIN_URL: 'https://rpc.internal.example',
         CHAIN_ID: 'worker-rpc.access',
         CHAIN_SECRET: 'test-access-secret'
@@ -66,7 +66,7 @@ describe('chain bootstrap manifest', () => {
     const response = buildChainBootstrapResponse(
       new Request('https://api.onchina.org/v1/chain/bootstrap'),
       env({
-        CHAIN_EXTRINSIC_RELAY_ENABLED: '1',
+        RELAY_ENABLED: '1',
         CHAIN_URL: 'https://rpc.internal.example',
         CHAIN_ID: 'worker-rpc.access'
       })
@@ -94,7 +94,7 @@ describe('chain bootstrap manifest', () => {
   it('routes GET /v1/chain/bootstrap with cache headers', async () => {
     const response = await routeRequest(
       new Request('https://api.onchina.org/v1/chain/bootstrap'),
-      env({ CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS: '90' })
+      env({ BOOT_TTL_SECONDS: '90' })
     );
 
     expect(response.status).toBe(200);
@@ -111,7 +111,7 @@ function env(overrides: Partial<Env> = {}): Env {
   return {
     DB: {} as D1Database,
     SQUARE_MEDIA: {} as R2Bucket,
-    FEED_CACHE: {} as KVNamespace,
+    SQUARE_CACHE: {} as KVNamespace,
     ...overrides
   };
 }

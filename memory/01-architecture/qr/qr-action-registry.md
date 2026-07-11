@@ -1,6 +1,6 @@
 # QR_V1 Action Registry
 
-- 更新日期:2026-07-04
+- 更新日期:2026-07-11
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:`k=1` 签名请求的 `b.a` 数字动作码
 - 依赖:
@@ -24,8 +24,9 @@
 | 5 | `activate_admin_account` | `GMB || 0x18` 二进制 payload | 原文 | citizenchain node / CitizenApp | CitizenWallet | 管理员激活 |
 | 6 | `decrypt_admin` | `GMB || 0x19` 二进制 payload | 原文 | citizenchain node | CitizenWallet | 清算行管理员解密 |
 | 7 | `runtime_upgrade_hash` | 32B WASM hash | 原文 32B | citizenchain node / CitizenApp | CitizenWallet | Runtime 升级哈希直签 |
-| 8 | `im_wallet_binding` / `QR_ACTION_IM_WALLET_BINDING` | IM 绑定字段 SCALE bytes | `signing_message(OP_SIGN_IM_WALLET_BINDING, payload)` | CitizenApp | CitizenWallet | 钱包账户授权 IM 设备绑定钱包聊天账户；不得绑定区块链通信节点 |
 | 9 | `square_account_action` / `QR_ACTION_SQUARE_ACCOUNT` | 广场账户动作 SCALE bytes（`action‖owner‖challenge_id[‖level]‖u64(expires)`） | `signing_message(OP_SIGN_SQUARE_ACTION, payload)` | 官网 citizenweb / CitizenApp | CitizenApp（交易 tab「扫一扫」，owner 主钥+生物识别） | 会员订阅/取消等账户动作链下签名；owner 由 QR `u` 在本机定位钱包，两色解码 `signer/square_action_payload.dart`；Worker `account/action_challenge.ts` 构造/验签 |
+
+动作码 `8` 已取消登记。Chat 设备绑定只能使用 CitizenApp 已登记的硬件 P-256 设备子钥静默签名，不得生成 QR 请求，不得交给 CitizenWallet 或钱包主私钥签名。
 
 ## 2. 链交易动作码
 

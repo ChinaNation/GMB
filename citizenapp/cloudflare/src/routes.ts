@@ -26,9 +26,9 @@ import {
 import { feedRoute } from "./feeds/service";
 import { followRoute, unfollowRoute } from "./feeds/follows";
 import { mediaRoute } from "./media/service";
-import { subscribeChallengeRoute, subscribeConfirmRoute } from "./membership/checkout";
+import { subscribeChallengeRoute, subscribeConfirmRoute } from "./membership/subscribe";
 import { membershipRoute } from "./membership/service";
-import { stripeWebhookRoute } from "./membership/stripe";
+import { stripeWebhookRoute } from "./membership/webhook";
 import { reportRoute, signalRoute } from "./moderation/service";
 import { confirmPostRoute, deletePostRoute } from "./posts/confirm";
 import { devPutProfileAsset, prepareProfileAsset } from "./profiles/assets";
@@ -93,7 +93,7 @@ export async function routeRequest(
   if (request.method === "POST" && path === "/v1/square/membership/subscribe") {
     return subscribeConfirmRoute(request, env);
   }
-  if (request.method === "POST" && path === "/v1/square/membership/stripe/webhook") {
+  if (request.method === "POST" && path === "/v1/square/membership/webhook") {
     return stripeWebhookRoute(request, env);
   }
   if (request.method === "POST" && path === "/v1/square/membership/cancel/challenge") {

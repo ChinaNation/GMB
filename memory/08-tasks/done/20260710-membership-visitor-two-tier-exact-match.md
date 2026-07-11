@@ -61,7 +61,7 @@
 
 ## 8. 实际落点（已改文件）
 
-- worker：`plans.ts`(加 visitor_pro + IdentityLevel 解耦 + identityEligibleForPlan)、`checkout.ts`(精确匹配 + visitor_pro 价格)、`stripe.ts`(webhook 反查)、`service.ts`(eligibleMembershipLevels 精确)、`types.ts`(STRIPE_PRICE_VISITOR_PRO + membership_level 联合放宽)、`uploads/service.ts`(normalizeMembershipLevel 保 visitor_pro)、`social/author_signals.ts`(identity_level→IdentityLevel)、`wrangler.toml`(env)。测试 `membership.test.ts` / `membership_checkout.test.ts`。
+- worker：`plans.ts`(加 visitor_pro + IdentityLevel 解耦 + identityEligibleForPlan)、`subscribe.ts`(精确匹配 + visitor_pro 价格)、`webhook.ts`(webhook 反查)、`service.ts`(eligibleMembershipLevels 精确)、`types.ts`(STRIPE_PRICE_VISITOR_PRO + membership_level 联合放宽)、`uploads/service.ts`(normalizeMembershipLevel 保 visitor_pro)、`social/author_signals.ts`(identity_level→IdentityLevel)、`wrangler.toml`(env)。测试 `membership.test.ts` / `membership_subscribe.test.ts`。
 - App：`lib/my/membership/membership_page.dart`(_plansByTier 聚合 + _PlanToggle + 置灰 _SubscribeButton + 文案) + `test/my/membership/membership_page_test.dart`。
 - 官网：`citizenweb/src/pages/Membership.tsx`(4 档 plans + 身份档聚合渲染 + 访客自由/民主 toggle)。**2026-07-10 追加**：官网卡片整套复刻 App 身份卡设计(白卡+档色顶带「身份·X」在顶+扇贝徽章+「链上公开的身份信息」字段区+会员权益+档色价签)，两端统一;selectedLevel 改 nullable——选中卡自动切「订阅会员」tab、点「取消订阅」释放所有卡选中(取消无需选档);tsc/lint/build 干净+浏览器验证(卡片渲染/自由民主切换/取消deselect/选卡→订阅tab全通过)。
 
@@ -72,7 +72,7 @@
   - `STRIPE_PRICE_VISITOR_PRO = price_1TrrN3HSzSYWD2rFVtf8YsEY`（民主 $9.99）
   - `STRIPE_PRICE_VOTING = price_1TrrN8HSzSYWD2rF5A3KZ8ip`（投票 $9.99）
   - `STRIPE_PRICE_CANDIDATE = price_1TrrNCHSzSYWD2rFrZTsmKhl`（竞选 $99.99）
-  - `CITIZENAPP_MEMBERSHIP_SUCCESS_URL/CANCEL_URL = https://www.crcfrcn.com/membership?status=success|cancel`
+  - `MEMBERSHIP_SUCCESS_URL/CANCEL_URL = https://www.crcfrcn.com/membership?status=success|cancel`
 - 生产 5 个 secret：`CHAIN_URL` / `CHAIN_ID` / `CHAIN_SECRET`（链 RPC，经 Cloudflare Access Service Token + Tunnel `nrcgch-rpc.crcfrcn.com → 127.0.0.1:9944`）+ `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`。
   - **命名统一决定**：worker 链 RPC 三项 secret 统一短名 `CHAIN_URL/CHAIN_ID/CHAIN_SECRET`（取代旧 `CITIZEN_CHAIN_RPC_*`）；代码 `src/types.ts`+`src/chain/rpc.ts`、5 个 test、`wrangler.toml` 注释、6 个 memory 文档全库对齐，`CITIZEN_CHAIN_RPC` 全库清零。其余 `CITIZEN_CHAIN_*`（bootnodes/genesis/state/bootstrap_ttl）未改。
 - `wrangler deploy --env production` → 版本 `c2959b09`。四档 subscribe/challenge 实测（访客测试地址，prefix 2027）：自由 `visitor`/民主 `visitor_pro` 出订阅挑战 op_tag 29；投票 `voting`/竞选 `candidate` 越级精确匹配 `membership_identity_mismatch`。

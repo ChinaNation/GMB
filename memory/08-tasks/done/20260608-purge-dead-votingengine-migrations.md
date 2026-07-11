@@ -2,7 +2,7 @@
 
 ## 任务需求
 
-预上线全新创世(`fuwuqi.sh q`),`runtime/src/lib.rs` 的 `Migrations` 元组仍挂着上一阶段 sub-pallet 拆分/双层 ID 的 3 个 `OnRuntimeUpgrade`,对新链是死代码。按"预上线不留任何旧残留"铁律全部清除,并连带清理一切引用、benchmark、测试、自相矛盾的 stale 注释;清完复查 runtime 无残留、无遗漏、无漏洞。
+预上线全新创世(`deploy-node.sh q`),`runtime/src/lib.rs` 的 `Migrations` 元组仍挂着上一阶段 sub-pallet 拆分/双层 ID 的 3 个 `OnRuntimeUpgrade`,对新链是死代码。按"预上线不留任何旧残留"铁律全部清除,并连带清理一切引用、benchmark、测试、自相矛盾的 stale 注释;清完复查 runtime 无残留、无遗漏、无漏洞。
 
 所属模块:citizenchain/runtime(Blockchain Agent)
 
@@ -63,4 +63,4 @@ stale 注释/文档修正(自相矛盾的遗漏):
 
 遗留(非本卡):
 - configs/mod.rs 4 处 unused import(Encode/UnfilteredDispatchable/ResolutionIssuance/sr25519_verify/blake2_256)+ genesis.rs:52 rustfmt drift,均预存、与本次无关,按 no-scope-expansion 不动。
-- 部署口:`fuwuqi.sh` 走 deb 内嵌的冻结 `node/chainspecs/citizenchain.raw.json`(创世 `:code`=该文件内 WASM,文件日期 5/7)。本次 runtime 改动要真正进创世,需先重生该冻结 chainspec 再出 deb,否则创世跑的是旧 WASM。待 user 决策。
+- 部署口:`deploy-node.sh` 走 deb 内嵌的冻结 `node/chainspecs/citizenchain.raw.json`(创世 `:code`=该文件内 WASM,文件日期 5/7)。本次 runtime 改动要真正进创世,需先重生该冻结 chainspec 再出 deb,否则创世跑的是旧 WASM。待 user 决策。

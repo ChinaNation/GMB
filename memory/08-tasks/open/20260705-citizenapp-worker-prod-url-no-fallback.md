@@ -10,7 +10,7 @@
 ## 建议模块
 
 - App 地址入口：`citizenapp/lib/8964/services/square_api_client.dart`（`SquareApiConfig`）
-- 聊天 mailbox（复用同一 baseUri，自动跟随）：`citizenapp/lib/im/im_runtime.dart`
+- 聊天 mailbox（复用同一 baseUri，自动跟随）：`citizenapp/lib/chat/chat_runtime.dart`
 - 部署：既有 `20260705-citizenapp-square-cloudflare-staging-deploy.md` / `20260705-citizenapp-square-production-deploy.md`
 
 > 注：若目录扁平化卡（`20260705-cloudflare-worker-flatten-dir.md`）已执行，Worker 路径以 `citizenapp/cloudflare/` 为准。

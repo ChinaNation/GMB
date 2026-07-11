@@ -635,12 +635,12 @@ class PublicInstitutionSubscriptionEntity {
   late int subscribedAtMillis;
 }
 
-/// IM 会话本地索引。
+/// Chat 会话本地索引。
 ///
 /// 聊天明文只允许在公民手机本地保存；Cloudflare mailbox 与近场 transport
 /// 只承载密文 envelope。本表负责会话列表首屏，不参与链上状态。
 @collection
-class ImConversationEntity {
+class ChatConversationEntity {
   Id id = Isar.autoIncrement;
 
   /// 会话 ID，对应 MLS group id。
@@ -649,11 +649,11 @@ class ImConversationEntity {
 
   /// 本机钱包聊天账户。
   @Index()
-  late String ownerChatAccount;
+  late String ownerAccount;
 
   /// 对方钱包聊天账户。
   @Index()
-  late String peerChatAccount;
+  late String peerAccount;
 
   late String title;
   late String lastMessage;
@@ -665,12 +665,12 @@ class ImConversationEntity {
   late String lastDeliveryState;
 }
 
-/// IM 消息本地记录。
+/// Chat 消息本地记录。
 ///
-/// `envelopeBytesHex` 保存完整 GMB_IM_V1 Protobuf bytes，便于重试
+/// `envelopeBytesHex` 保存完整 GMB_CHAT_V1 Protobuf bytes，便于重试
 /// 和排查；`plaintext` 只写手机本地库，绝不上传 Cloudflare 或近场 transport。
 @collection
-class ImMessageEntity {
+class ChatMessageEntity {
   Id id = Isar.autoIncrement;
 
   @Index(unique: true, replace: true)
@@ -680,11 +680,11 @@ class ImMessageEntity {
   late String conversationId;
 
   @Index()
-  late String ownerChatAccount;
+  late String ownerAccount;
 
   late String direction;
-  late String senderChatAccount;
-  late String recipientChatAccount;
+  late String senderAccount;
+  late String recipientAccount;
   late String senderDeviceId;
   late String messageKind;
   late String mlsMessageKind;
@@ -696,12 +696,12 @@ class ImMessageEntity {
   late int createdAtMillis;
 }
 
-/// IM 出站队列。
+/// Chat 出站队列。
 ///
 /// 投递失败时只重试完整 envelope bytes，不重新加密，避免破坏
 /// MLS 会话状态和消息顺序。
 @collection
-class ImOutboundQueueEntity {
+class ChatOutboundQueueEntity {
   Id id = Isar.autoIncrement;
 
   @Index(unique: true, replace: true)
@@ -710,7 +710,7 @@ class ImOutboundQueueEntity {
   @Index()
   late String conversationId;
 
-  late String recipientChatAccount;
+  late String recipientAccount;
   late String envelopeBytesHex;
   late String deliveryState;
   late int attemptCount;
@@ -720,12 +720,12 @@ class ImOutboundQueueEntity {
   late int updatedAtMillis;
 }
 
-/// IM 待处理入站 envelope。
+/// Chat 待处理入站 envelope。
 ///
 /// application 早于 Welcome 到达时先落这里；处理 Welcome 后再
 /// 重放同会话 pending，避免因为网络乱序丢消息。
 @collection
-class ImPendingInboundEntity {
+class ChatPendingInboundEntity {
   Id id = Isar.autoIncrement;
 
   @Index(unique: true, replace: true)
@@ -741,12 +741,12 @@ class ImPendingInboundEntity {
   late int createdAtMillis;
 }
 
-/// IM 路由缓存记录。
+/// Chat 路由缓存记录。
 ///
-/// IM 路由缓存只保存在公民手机本地，用于把联系人钱包地址映射到
+/// Chat 路由缓存只保存在公民手机本地，用于把联系人钱包地址映射到
 /// OpenMLS 设备、Cloudflare mailbox 和近场提示；用户联系人仍以“我的通讯录”为准。
 @collection
-class ImRouteCacheEntity {
+class ChatRouteCacheEntity {
   Id id = Isar.autoIncrement;
 
   /// 路由唯一键，当前等于钱包聊天账户。
@@ -755,9 +755,9 @@ class ImRouteCacheEntity {
 
   /// 对方钱包聊天账户，也是公民币收款账户。
   @Index(unique: true, replace: true)
-  late String walletChatAccount;
+  late String peerAccount;
 
-  /// IM 路由显示名，只用于联系人路由列表，不承载机构全称或简称。
+  /// Chat 路由显示名，只用于联系人路由列表，不承载机构全称或简称。
   late String routeDisplayName;
   late String deviceId;
   late String devicePublicKeyHex;
@@ -994,8 +994,8 @@ class WalletIsar {
       try {
         // 尝试访问 LocalTxEntity collection，如果成功说明 schema 完整。
         existing.localTxEntitys;
-        existing.imConversationEntitys;
-        existing.imRouteCacheEntitys;
+        existing.chatConversationEntitys;
+        existing.chatRouteCacheEntitys;
         return existing;
       } catch (_) {
         // schema 不完整，关闭旧实例后重新打开
@@ -1017,11 +1017,11 @@ class WalletIsar {
       AdminDivisionEntitySchema,
       PublicInstitutionEntitySchema,
       PublicInstitutionSubscriptionEntitySchema,
-      ImConversationEntitySchema,
-      ImMessageEntitySchema,
-      ImOutboundQueueEntitySchema,
-      ImPendingInboundEntitySchema,
-      ImRouteCacheEntitySchema,
+      ChatConversationEntitySchema,
+      ChatMessageEntitySchema,
+      ChatOutboundQueueEntitySchema,
+      ChatPendingInboundEntitySchema,
+      ChatRouteCacheEntitySchema,
       LocalTxEntitySchema,
       WalletTxSyncCursorEntitySchema,
     ];

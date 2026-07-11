@@ -17,7 +17,7 @@
 - 纯目录搬移；`wrangler.toml`（`main`、`migrations_dir`）与 `package.json` 内部全是相对路径，不受影响。
 - 无任何 Dart 代码引用该路径（App 通过 HTTP 连 Worker，不 import 工程目录）。
 - 部署命令由 `npm --prefix citizenapp/cloudflare/square_worker run ...` 改为 `--prefix citizenapp/cloudflare`。
-- 约 20 处 `memory/` 文档路径引用（`07-ai/unified-protocols.md`、`unified-naming.md`、`01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`、`05-modules/citizenapp/im/IM_TECHNICAL.md`）。
+- 约 20 处 `memory/` 文档路径引用（`07-ai/unified-protocols.md`、`unified-naming.md`、`01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`、`05-modules/citizenapp/chat/CHAT_TECHNICAL.md`）。
 - 3 张 `20260705-citizenapp-square-*` 卡内多处路径。
 
 ## 主要风险点

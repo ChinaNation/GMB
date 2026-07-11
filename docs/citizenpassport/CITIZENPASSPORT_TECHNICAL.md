@@ -8,7 +8,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 角色访问控制：`admins / operators`。
 - 消费 CID 签发的 `CID_CPMS_V1 / INSTALL` 安装码。
 - CPMS 通用发行版只内置编译后的只读行政区数据，安装码决定运行实例所属市公安局。
-- 行政区快照来自开发库 `citizencode/backend/china/china.sqlite`；CPMS 必须离线运行，不主动联网拉取，发布包随附本地只读 `china.sqlite`。
+- 行政区快照来自开发库 `citizenchain/onchina/src/cid/china/china.sqlite`；CPMS 必须离线运行，不主动联网拉取，发布包随附本地只读 `china.sqlite`。
 - 安装后生成 `CID_CPMS_V1 / ARCHIVE` 公民档案二维码；签出前必须先绑定用户投票账户，并满足档案码完整性门槛。
 - ARCHIVE 包含档案号、公民状态、选举资格、电子护照有效期、公民状态更新时间、CPMS 签发公钥、`geo_seal`、投票账户地址/公钥和签名，不包含 `code_id` 或使用次数。
 - 档案号不暴露省、市、机构号。
@@ -307,7 +307,7 @@ ARCHIVE 二维码，不再使用“生成档案码”作为按钮文案。“打
 
 ## 11. 行政区数据
 
-- 开发库 `citizencode/backend/china/china.sqlite` 是行政区数据唯一源头。
+- 开发库 `citizenchain/onchina/src/cid/china/china.sqlite` 是行政区数据唯一源头。
 - CPMS 后端源码目录不保存行政区第二份文件，也不维护 `province.rs` 或 `city_codes/*.rs`
   的第二份源码。
 - CPMS 后端 `china` 模块运行时用 rusqlite 只读 `china.sqlite`，路径三层兜底：

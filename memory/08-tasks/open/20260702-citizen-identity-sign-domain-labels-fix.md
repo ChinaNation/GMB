@@ -66,7 +66,7 @@
 - 2026-07-02 完成,链端零改动,全部落在两个移动端与文档:
   - citizenapp `signingBytesForHex` 补 `citizen_identity`(0x10)分支,
     0x10/0x1A 两分支统一改调 `signing.dart::signingMessage`,删除本地
-    `_gmbPrefix`/`_opSignImWalletBinding` 副本(单源纪律归位)。
+    历史 GMB 前缀和聊天钱包绑定签名域副本（单源纪律归位）。
   - 新增 `citizenapp/lib/my/myid/voting_identity_payload.dart`:
     `VotingIdentityConsentPayload` 独立解码 SCALE 载荷(严格校验:年龄≥16、
     日期合法、状态 0/1、恰好消费完字节),输出中文确认条目;文件头登记

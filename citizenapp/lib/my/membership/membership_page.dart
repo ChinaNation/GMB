@@ -8,15 +8,14 @@ import 'package:citizenapp/ui/identity_badge.dart';
 
 /// 官网会员订阅页（订阅 / 取消订阅 / 续订会员均在官网完成，App 只负责拉起浏览器）。
 ///
-/// 仓库未登记官网主域（官网由独立 Nginx 提供），默认取项目主域 crcfrcn.com 的
-/// `/membership` 路由；官网主域不同时，构建期用
-/// `--dart-define=CITIZENAPP_MEMBERSHIP_SITE_URL=...` 覆盖即可。
+/// 默认打开已部署的官网会员页；官网主域不同时，构建期用
+/// `--dart-define=MEMBERSHIP_URL=...` 覆盖即可。
 class MembershipSiteConfig {
   const MembershipSiteConfig._();
 
-  static const _defineName = 'CITIZENAPP_MEMBERSHIP_SITE_URL';
+  static const _defineName = 'MEMBERSHIP_URL';
   static const _configured = String.fromEnvironment(_defineName);
-  static const _prodUrl = 'https://crcfrcn.com/membership';
+  static const _prodUrl = 'https://www.crcfrcn.com/membership';
 
   static String get membershipUrl {
     final value = _configured.trim();
@@ -61,7 +60,7 @@ class _MembershipPageState extends State<MembershipPage>
   double _page = 0;
   int _cardCount = 0;
 
-  /// 访客卡内会员档切换：0=自由(visitor) / 1=民主(visitor_pro)，默认自由。
+  /// 访客卡内会员档切换：0=自由(freedom) / 1=民主(democracy)，默认自由。
   int _visitorPlanIndex = 0;
 
   @override
@@ -927,10 +926,10 @@ class _MembershipMessage extends StatelessWidget {
   }
 }
 
-/// 三档兜底套餐：worker 未下发 plans 时用（与官网 / worker 三档参数对齐）。
+/// 四档兜底套餐：Worker 未下发 plans 时使用，与官网和 Worker 参数对齐。
 const List<SquareMembershipPlan> _fallbackMembershipPlans = [
   SquareMembershipPlan(
-    membershipLevel: 'visitor',
+    membershipLevel: 'freedom',
     displayName: '自由会员',
     priceUsdMonthly: '2.99',
     requiredIdentityLevel: 'visitor',
@@ -949,7 +948,7 @@ const List<SquareMembershipPlan> _fallbackMembershipPlans = [
   ),
   // 民主会员：访客身份的 $9.99 高权益档，权益对齐投票公民会员。
   SquareMembershipPlan(
-    membershipLevel: 'visitor_pro',
+    membershipLevel: 'democracy',
     displayName: '民主会员',
     priceUsdMonthly: '9.99',
     requiredIdentityLevel: 'visitor',
@@ -1005,7 +1004,7 @@ const List<SquareMembershipPlan> _fallbackMembershipPlans = [
 ];
 
 /// 按身份档聚合套餐（3 张卡）：每档取 required_identity_level 匹配的套餐，档内按价
-/// 升序（自由在前）。访客档 → [自由 visitor, 民主 visitor_pro]；投票/竞选各一档。
+/// 升序（自由在前）。访客档 → [自由 freedom, 民主 democracy]；投票/竞选各一档。
 /// worker 缺档用兜底补齐。
 List<List<SquareMembershipPlan>> _plansByTier(List<SquareMembershipPlan> plans) {
   return _tierOrder.map((tier) {

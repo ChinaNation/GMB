@@ -92,7 +92,7 @@ OnChina 是 CitizenChain 安装包内置能力，不是第五个产品。OnChina
 - 禁止把 API 广播成功显示成链上交易成功。
 - 禁止把 CitizenWallet 写入在线链连接、聊天或广场架构。
 - 禁止把 Matrix 写成当前聊天目标路线。
-- 禁止恢复区块链节点聊天、通信节点 mailbox 或旧 IM 节点配对流程。
+- 禁止恢复区块链节点聊天、通信节点 mailbox 或旧 Chat 节点配对流程。
 
 ## 影响
 

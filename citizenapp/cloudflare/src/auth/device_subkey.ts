@@ -4,8 +4,7 @@ import {
   concatBytes,
   scaleString,
   signingMessage,
-  u64Le,
-} from '../shared/signing_message';
+  u64Le, hexToBytes} from '../shared/signing_message';
 
 // P-256 设备子钥：后台握手用硬件 P-256 子钥（Keystore/SE）静默 ECDSA 签名，
 // 私钥永不出硬件，替代原先「静默读 sr25519 seed 签登录挑战」。
@@ -45,15 +44,6 @@ export function assertP256PublicKeyHex(value: unknown): string {
     throw new HttpError(400, 'invalid_device_pubkey', '设备子钥公钥必须是 65 字节未压缩点');
   }
   return hex;
-}
-
-function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
-  const clean = hex.trim().toLowerCase().replace(/^0x/, '');
-  const out = new Uint8Array(new ArrayBuffer(clean.length / 2));
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
 }
 
 /// Web Crypto ES256 验签：pubkey 裸点 65B、signature 裸 r||s 64B。

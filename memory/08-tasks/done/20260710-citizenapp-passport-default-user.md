@@ -10,7 +10,7 @@
 ## 决策锁定(多轮定案)
 - 身份钥匙 = 默认用户唯一;放弃扫全钱包/冲突判定(链上一人一 CID 一账户一身份,`AccountByCid`
   一对一 + `CidAlreadyRegisteredToAnotherAccount`/`CidAlreadyOccupied` 保证)。
-- 默认用户切换 → 护照自动跟随(监听 `WalletManager.walletsRevision`,与 IM/广场同机制)。
+- 默认用户切换 → 护照自动跟随(监听 `WalletManager.walletsRevision`,与 Chat/广场同机制)。
 - 三档:访客(完全匿名)/ 投票公民 / 竞选公民,字段数递增。
 - 冷钱包身份不认(默认用户只可能是热钱包)——纯默认用户版固有取舍。
 - 访客卡「完全匿名」= 不显钱包地址(投票账户只在公民档出现)。

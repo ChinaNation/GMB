@@ -34,7 +34,7 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
 - `follows_list_page.dart`：关注/粉丝列表。
 - `profile_edit_page.dart`：`CitizenProfileEditPage` 展示名/签名/头像/背景编辑；保存上传 R2 + `PUT /profile`；本地旧图迁移后清空。
 - `models/citizen_profile.dart`、`services/citizen_profile_api.dart`、`citizen_profile_cache.dart`、`profile_asset_service.dart`、`square_session_provider.dart`。
-- 私聊入口共享 [`lib/im/open_direct_chat.dart`](../../../../citizenapp/lib/im/open_direct_chat.dart)（联系人详情与主页共用）。
+- 私聊入口共享 [`lib/chat/open_direct_chat.dart`](../../../../citizenapp/lib/chat/open_direct_chat.dart)（联系人详情与主页共用）。
 
 ## 关键行为
 - 关注/取关：单击 + 乐观更新（粉丝数±1，失败回滚），**不逐次签名**；session 由默认热钱包静默登录一次（`signWithWalletNoAuth`）复用。session 存在的意义是防伪造他人关注（写入完整性），非内容加密。

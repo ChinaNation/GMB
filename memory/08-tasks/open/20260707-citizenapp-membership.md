@@ -3,13 +3,14 @@
 ## 任务需求
 
 - 在公民 App「我的」Tab 中，在钱包和通讯录之间新增会员入口。
-- 会员页展示三档会员介绍和当前订阅状态，App Store / Google Play 版本不在 App 内提供支付按钮。
+- 会员页展示四档会员介绍和当前订阅状态；App 按状态提供“订阅会员 / 取消订阅 / 续订会员”，命令统一打开官网，不在 App 内嵌支付。
 - 订阅优先走官网 Stripe，用户用钱包账户订阅后，iPhone / Android / GitHub Android 版均通过同一钱包账户显示会员状态。
-- 三档会员体系统一为：
-  - 访客会员：所有钱包账户可订阅。
+- 四档会员体系统一为：
+  - 自由会员：访客身份可订阅，2.99 美元 / 月。
+  - 民主会员：访客身份可订阅，9.99 美元 / 月，媒体额度对齐投票公民会员。
   - 投票公民会员：必须存在有效 `VotingIdentityByAccount`。
   - 竞选公民会员：必须存在有效 `CandidateIdentityByAccount`。
-- 普通动态 / 普通文章三档会员都可发布，但按会员等级限制文字、图片、视频时长、清晰度和数量。
+- 普通动态 / 普通文章四档会员都可发布，但按会员等级限制文字、图片、视频时长、清晰度和数量。
 - 竞选动态 / 竞选文章只有竞选公民会员可发布。
 - 图片走 Cloudflare Images，视频走 Cloudflare Stream；公民 App 不自建传统服务端，服务端能力统一放在 Cloudflare Worker。
 - 链上只放身份真源、发布唯一记录、必要哈希和必要回执；Cloudflare 放 App 用户快速访问的数据；设备本地放钱包私钥、草稿、缓存、上传队列等本地状态。
@@ -76,7 +77,7 @@
     - 原因：额度校验必须在 Cloudflare Worker 侧强制执行，不能只依赖 App UI。
     - 是否会被 Git 跟踪：是。
   - `citizenapp/cloudflare/test/uploads_quota.test.ts`
-    - 用途：覆盖三档会员额度、竞选会员限制和 manifest / 媒体资产一致性校验。
+    - 用途：覆盖四档会员额度、竞选会员限制和 manifest / 媒体资产一致性校验。
     - 原因：额度校验是发布入口的安全边界，必须有独立单元测试。
     - 是否会被 Git 跟踪：是。
 
@@ -84,7 +85,7 @@
 
 - 公民 App 没有自建传统服务端；会员、订阅回调、上传签发、额度校验、Feed 状态统一放 Cloudflare Worker。
 - 官网订阅先只接 Stripe；RevenueCat 仅在后续同时接 Apple IAP / Google Play Billing 时再引入。
-- App Store / Google Play 版本会员页只展示会员状态和三档介绍，不在 App 内提供外部支付按钮或价格跳转。
+- App Store / Google Play 版本会员页展示会员状态和四档介绍，并按状态提供打开官网的订阅、取消、续订命令；支付仍完全发生在官网 Stripe Checkout。
 - 会员套餐只按美元计价和展示；Stripe Checkout 可让用户使用本地法币或 USDC 支付，但本地币种和 USDC 只属于支付呈现 / 结算能力，不改变会员套餐价格。
 - USDC 是目标虚拟货币支付方式；USDT 不作为目标支付方式。
 - Stripe secret、Cloudflare API token、webhook secret 不得进入 App 或仓库明文。
@@ -93,18 +94,25 @@
 - 视频不得继续按旧 R2 主存储方案扩展，目标态改为 Cloudflare Stream。
 - Runtime 不存正文、文章、图片、视频、支付订阅信息和会员额度。
 - `post_category` 继续保持 `Normal` / `Campaign` 精简分类；动态 / 文章由 Cloudflare manifest 的 `content_format` 表达。
-- 普通内容三档会员均可发；竞选内容只能竞选公民会员发。
+- 普通内容四档会员均可发；竞选内容只能竞选公民会员发。
 - 删除只清 Cloudflare 展示与媒体数据；链上发布记录不可改写。
 - 修改视为新发布；新发布成功后旧 Cloudflare 数据删除，失败则旧内容保留。
 - 涉及 `citizenchain/runtime/` 的任何修改，执行前必须单独列完整路径、预计改动内容和原因，并取得用户二次确认。
 
 ## 目标会员额度
 
-### 访客会员
+### 自由会员
 
 - 价格：官网订阅 2.99 美元 / 月，会员页只展示美元价格。
 - 动态：文字 300 字；标清图片 9 张；横屏或竖屏标清视频 1 分钟。
 - 文章：正文 20000 字；标清图片 50 张；高清首图 1 张；标题 10-50 字。
+
+### 民主会员
+
+- 价格：官网订阅 9.99 美元 / 月，会员页只展示美元价格。
+- 资格：没有投票或竞选链上身份的访客钱包账户。
+- 动态：文字 300 字；高清图片 9 张；横屏或竖屏高清视频 30 分钟。
+- 文章：正文 30000 字；高清图片 100 张；高清首图 1 张；标题 10-50 字。
 
 ### 投票公民会员
 
@@ -125,7 +133,7 @@
 
 1. **第 0 步：任务卡与现状复查**
    - 创建任务卡。
-   - 只读复查发布扣 1 元公民币的真实实现位置。
+   - 只读复查发布费的真实实现位置；当前目标态按最低链上费用扣 0.1 元公民币。
    - 只读复查现有会员、上传、身份读取、发布确认实现。
    - 输出第 1 步 Cloudflare 会员系统方案。
 
@@ -133,7 +141,7 @@
    - D1 建立官网订阅、会员等级、资格快照和权益状态。
    - Stripe webhook 写入 Cloudflare Worker。
    - Worker 查询链上 `VotingIdentityByAccount` / `CandidateIdentityByAccount` 强制校验可订阅等级。
-   - App 查询会员状态但不提供 App 内支付。
+   - App 查询会员状态，订阅 / 取消 / 续订命令只打开官网，不在 App 内处理支付。
 
 3. **第 2 步：Cloudflare Images / Stream 上传**
    - 图片改走 Cloudflare Images Direct Creator Upload。
@@ -143,13 +151,13 @@
 
 4. **第 3 步：发帖与文章额度强校验**
    - Worker 按 `membership_level`、`post_category`、`content_format` 校验动态和文章。
-   - 普通动态 / 普通文章允许三档会员发布。
+   - 普通动态 / 普通文章允许四档会员发布。
    - 竞选动态 / 竞选文章只允许竞选公民会员发布。
    - manifest 写入 `content_format`，链上继续只传 `post_category`。
 
 5. **第 4 步：公民 App 会员 UI**
    - 「我的」Tab 钱包和通讯录之间新增会员入口。
-   - 新增会员页，展示当前会员状态、三档介绍和订阅来源说明。
+   - 新增会员页，展示当前会员状态、四档介绍和订阅来源说明，并按状态打开官网订阅 / 取消 / 续订。
    - App 发布页按 Worker 返回额度提示用户。
 
 6. **第 5 步：修改与删除流程**
@@ -159,7 +167,7 @@
 
 7. **第 6 步：真实验收与文档收口**
    - 使用真实本地 Worker、D1、HTTP 接口和 App 页面验收。
-   - 验证三档会员、身份资格、普通 / 竞选权限、图片 / 视频限制、修改、删除。
+   - 验证四档会员、三档身份资格、普通 / 竞选权限、图片 / 视频限制、订阅 / 取消 / 续订、修改、删除。
    - 更新技术文档、协议登记、任务卡执行记录。
    - 清理旧 R2 媒体主流程、旧会员口径、旧 UI 文案和测试残留。
 
@@ -204,8 +212,8 @@
 ### 第 0 步（完成，任务卡与现状复查）
 
 - 已创建任务卡。
-- 只读复查确认：发布扣 1 元不是 `square-post` pallet 内部直接扣款，而是 `RuntimeFeeKindClassifier` 将 `RuntimeCall::SquarePost(_)` 归类为 `FeeChargeKind::VoteFlat`；`VOTE_FLAT_FEE = 100` 分，即 1 元。
-- 只读复查确认：`OnchainChargeAdapter` 会按 `VoteFlat` 计算、预检查、扣费并交给 `OnchainFeeRouter` 分账；runtime 测试已覆盖 `SquarePost` 归类为 1 元。
+- 发布费目标态不是 `square-post` pallet 内部直接扣款，而是 `RuntimeFeeKindClassifier` 将 `RuntimeCall::SquarePost(_)` 归类为 `FeeChargeKind::OnchainAmount(0)`；`OnchainChargeAdapter` 按 `ONCHAIN_MIN_FEE = 10` 分收取 0.1 元。
+- `OnchainChargeAdapter` 会计算、预检查、扣费并交给 `OnchainFeeRouter` 按 8:1:1 分账；runtime 测试覆盖 `SquarePost` 归类和最低链上费用，`VOTE_FLAT_FEE = 100` 分保持不变。
 - 只读复查确认：`square-post` 链上仍只记录 `post_id`、`owner_account`、可空 `cid_number`、`post_category`、`content_hash`、`storage_receipt_id`、`storage_until`、`created_block`。
 - 只读复查确认：当前 runtime 的 `Campaign` 发布只要求有效 `VotingIdentityByAccount`，不要求 `CandidateIdentityByAccount`；本任务先由 Cloudflare 强制竞选公民会员才能发布竞选内容，默认不改 runtime。
 - 只读复查确认：Cloudflare 当前会员表只有 `owner_account`、`membership_level`、存储容量、已用容量、到期时间；没有 Stripe webhook、官网订阅、三档资格、权益快照。
@@ -218,12 +226,12 @@
 ### 第 1 步（完成，Cloudflare 会员系统）
 
 - 新增 D1 迁移 `citizenapp/cloudflare/migrations/0005_membership_subscriptions.sql`：`square_memberships` 增加官网 Stripe 订阅字段、订阅状态、周期字段、链上身份等级快照和索引。
-- 新增 `citizenapp/cloudflare/src/membership/plans.ts`：三档会员 `visitor` / `voting` / `candidate` 的价格、身份要求、动态额度、文章额度和当前 Worker 存储闸口容量配置收口为单一配置。
+- `citizenapp/cloudflare/src/membership/plans.ts`：四档会员 `visitor` / `visitor_pro` / `voting` / `candidate` 的价格、身份要求、动态额度、文章额度和当前 Worker 存储闸口容量配置收口为单一配置。
 - 新增 `citizenapp/cloudflare/src/chain/identity.ts`：Worker 通过 `state_getStorage` 读取 `CitizenIdentity::VotingIdentityByAccount` 与 `CandidateIdentityByAccount`；投票身份需状态 normal 且护照有效期覆盖当前日期，竞选身份必须在有效投票身份基础上存在 Candidate storage。
 - 更新 `citizenapp/cloudflare/src/chain/rpc.ts`：抽出通用 `fetchChainStorage`，既服务链上发布事件确认，也服务会员身份资格读取。
 - 更新 `citizenapp/cloudflare/src/membership/service.ts`：`GET /v1/square/membership` 返回三档计划、链上身份状态、可订阅等级、订阅是否有效和最终权益是否 active；`requireActiveMembership` 改为支付状态与链上身份资格同时满足才放行。
-- 新增 `citizenapp/cloudflare/src/membership/stripe.ts`：实现 Stripe webhook 签名校验、subscription created/updated/deleted 处理、checkout session 观察但不直接授权。访客会员 webhook 不读链；投票/竞选会员 webhook 读取链上身份，不满足则记录 `identity_required`，不授予权益。
-- 更新 `citizenapp/cloudflare/src/routes.ts`：新增 `POST /v1/square/membership/stripe/webhook`。
+- `citizenapp/cloudflare/src/membership/webhook.ts`：实现 Stripe webhook 签名校验、subscription created/updated/deleted 处理、checkout session 观察但不直接授权；所有档位按链上身份精确匹配，不满足则记录 `identity_required`，不授予权益。
+- `citizenapp/cloudflare/src/routes.ts`：Stripe webhook 唯一路径为 `POST /v1/square/membership/webhook`。
 - 更新 `citizenapp/cloudflare/src/types.ts` 和 `wrangler.toml`：登记 Stripe webhook secret、price id、会员订阅字段；secret 不写仓库。
 - 新增 `citizenapp/cloudflare/test/membership.test.ts`：覆盖会员查询 Candidate 权益、Candidate 身份不足、Stripe webhook 写入 voting、visitor 不读链、身份不足记录 `identity_required` 和签名失败。
 - 更新 `memory/07-ai/unified-protocols.md` 与 `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`：同步 API、D1 字段、环境变量和会员架构边界。
@@ -266,29 +274,29 @@
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run typecheck` 当前被未跟踪的 `citizenapp/cloudflare/src/chain/extrinsic_relay.ts` 中 `Uint8Array<ArrayBufferLike>` / `BufferSource` 类型错误阻塞；该文件不属于本步骤新增或修改范围，本步骤未改动。
 - 边界：第 2 步未修改 `citizenchain/runtime/`；未接入真实 Cloudflare 远端 Images / Stream 资源 ID 和 secrets；远端部署前需配置 `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_IMAGES_DELIVERY_BASE_URL`、`CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN`、`CLOUDFLARE_STREAM_WEBHOOK_SECRET`。
 
-### 第 3 步（完成，官网 Checkout 与 App 会员只读入口）
+### 第 3 步（完成，官网 Checkout 与 App 会员官网入口）
 
-- 新增 `citizenapp/cloudflare/src/membership/checkout.ts`：官网创建 Stripe subscription Checkout Session；请求收 `owner_account` 与 `membership_level`，可选 Bearer session。带 session 时强制 owner 一致；投票 / 竞选会员创建 Checkout 前先查 `VotingIdentityByAccount` / `CandidateIdentityByAccount`，不满足则拒绝；访客会员不读链。
-- 新增 `citizenapp/cloudflare/test/membership_checkout.test.ts`：覆盖 visitor checkout、candidate 身份通过、candidate 身份不足、session owner mismatch、Stripe 错误透传。
-- 更新 `citizenapp/cloudflare/src/routes.ts`、`src/types.ts`、`wrangler.toml`：新增 `POST /v1/square/membership/stripe/checkout`，登记 `STRIPE_SECRET_KEY`、`STRIPE_DEV_CHECKOUT_PROXY`、`CITIZENAPP_MEMBERSHIP_SUCCESS_URL`、`CITIZENAPP_MEMBERSHIP_CANCEL_URL`；secret 只放部署环境。
-- 新增 `citizenweb/src/pages/Membership.tsx` 并更新官网路由 / 导航：官网 `/membership` 展示三档美元价格和权益，调用 Worker 创建 Stripe Checkout；官网不保存会员状态，不接触 Stripe secret。
-- 更新 `citizenapp/lib/8964/services/square_api_client.dart`：`fetchMembership` 解析 `plans[]`、链上身份、订阅状态、未生效原因，供 App 只读会员页展示。
-- 更新 `citizenapp/lib/my/user/user.dart`：在「我的」Tab 钱包和通讯录之间新增“会员”卡片；新增只读会员页，展示当前会员状态、链上身份、订阅状态、有效期和三档权益，不提供 App 内支付按钮。
+- `citizenapp/cloudflare/src/membership/subscribe.ts`：官网先下发钱包签名挑战，验签并精确核验链上身份后创建 Stripe subscription Checkout Session；请求绑定 `owner_account` 与四档 `membership_level`。
+- `citizenapp/cloudflare/test/membership_subscribe.test.ts`：覆盖四档订阅挑战、candidate 身份通过/不足、session owner mismatch、Stripe 错误透传。
+- `citizenapp/cloudflare/src/routes.ts`、`src/types.ts`、`wrangler.toml`：订阅接口统一为 `POST /v1/square/membership/subscribe/challenge` 与 `POST /v1/square/membership/subscribe`；配置使用 `STRIPE_SECRET_KEY`、`STRIPE_DEV_PROXY`、`MEMBERSHIP_SUCCESS_URL`、`MEMBERSHIP_CANCEL_URL`，secret 只放部署环境。
+- `citizenweb/src/pages/Membership.tsx`：官网 `/membership` 展示四档美元价格和权益，钱包扫码签名后调用 Worker 完成订阅 / 取消 / 续订；官网不保存会员状态，不接触 Stripe secret。
+- `citizenapp/lib/8964/services/square_api_client.dart`：`fetchMembership` 解析 `plans[]`、链上身份、订阅状态、未生效原因，供 App 会员页展示。
+- `citizenapp/lib/my/user/user.dart` 与 `lib/my/membership/membership_page.dart`：在「我的」Tab 钱包和通讯录之间提供“会员”入口，展示当前状态、三档身份与四档权益，按状态显示订阅 / 取消 / 续订按钮并打开官网。
 - 更新文档：`memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`、`memory/07-ai/unified-protocols.md`、`memory/05-modules/citizenweb/CITIZENWEB_TECHNICAL.md` 同步 Checkout API、官网会员页、App 会员入口、环境变量和安全边界。
 - 验收：
-  - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test -- membership_checkout.test.ts membership.test.ts` 通过：2 个测试文件，13 个测试。
+  - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test -- membership_subscribe.test.ts membership.test.ts` 通过：订阅与会员核心测试通过。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test` 通过：13 个测试文件，56 个测试。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run typecheck` 通过。
   - `npm --prefix /Users/rhett/GMB/citizenweb run build` 通过。
   - `flutter analyze citizenapp/lib/8964/services/square_api_client.dart citizenapp/lib/my/user/user.dart` 通过。
   - `flutter test --concurrency=1 test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart` 通过：6 个测试。
-  - 真实本地 Worker HTTP 验收通过：`wrangler dev --local --port 8787 --var STRIPE_DEV_CHECKOUT_PROXY:1 ...` 启动后，`POST /v1/square/membership/stripe/checkout` 使用合法钱包账户和 `visitor` 返回 `checkout_session_id=cs_dev_visitor` 与官网成功回跳 URL。
+  - 真实本地 Worker HTTP 验收通过：`wrangler dev --local --port 8787 --var STRIPE_DEV_PROXY:1 ...` 启动后，官网订阅挑战经钱包签名确认，`POST /v1/square/membership/subscribe` 返回 `checkout_session_id=cs_dev_visitor` 与官网成功回跳 URL。
   - `git diff -- citizenchain/runtime` 为空，未修改 runtime。
-- 清理：本轮未新增未确认目录；未写入 Stripe / Cloudflare secret；官网 build 通过后未把支付状态放入官网本地存储；App 会员页保持只读展示。
+- 清理：未写入 Stripe / Cloudflare secret；官网不持久化支付状态；App 不内嵌支付，仅按会员状态打开官网。
 
 ### 第 4 步（完成，发帖与文章额度强校验）
 
-- 新增 `citizenapp/cloudflare/src/uploads/quota.ts`：集中实现三档会员动态 / 文章额度、普通 / 竞选分类权限、标题 / 正文长度、图片 / 视频数量和 manifest / 媒体资产一致性校验。
+- 新增 `citizenapp/cloudflare/src/uploads/quota.ts`：集中实现四档会员动态 / 文章额度、普通 / 竞选分类权限、标题 / 正文长度、图片 / 视频数量和 manifest / 媒体资产一致性校验。
 - 新增 `citizenapp/cloudflare/test/uploads_quota.test.ts`：覆盖 visitor 动态超字数、candidate 动态 9 图 + 1 视频、非 candidate 发布竞选内容拒绝、visitor 文章正文图超限、candidate 竞选文章通过、manifest 与 `square_media_assets` 一致性校验。
 - 更新 `citizenapp/cloudflare/src/uploads/service.ts`：`prepare` 新增 `content_format`、`title_length`、`text_length` 声明字段并按当前有效会员计划先拒绝超额请求；`complete` 读取 R2 manifest，复核 manifest hash、owner、`post_category`、`content_format`、正文 / 标题长度、媒体数量和 provider asset 记录，防止绕过 App 伪造声明。
 - 更新 `citizenapp/cloudflare/src/uploads/validation.ts`：基础媒体数量上限从旧 9 个调整为 101 个，具体动态 / 文章数量由会员额度校验决定。
@@ -301,7 +309,7 @@
 - 验收：
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run typecheck` 通过。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test` 通过：14 个测试文件，63 个测试。
-  - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test -- uploads_quota.test.ts uploads.test.ts media_assets.test.ts membership.test.ts membership_checkout.test.ts` 通过：5 个测试文件，26 个测试。
+  - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test -- uploads_quota.test.ts uploads.test.ts media_assets.test.ts membership.test.ts membership_subscribe.test.ts` 通过：上传额度与会员订阅核心测试通过。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run migrate:local` 通过：本地 D1 无待应用迁移。
   - `flutter analyze lib/8964/services/square_api_client.dart lib/8964/services/square_upload_service.dart lib/8964/pages/square_compose_page.dart lib/8964/pages/square_article_compose_page.dart lib/8964/services/square_publish_service.dart lib/my/user/user.dart test/8964/square_article_test.dart test/8964/square_feed_service_test.dart test/8964/square_publish_service_test.dart` 通过。
   - `flutter test test/8964/square_article_test.dart test/8964/square_feed_service_test.dart test/8964/square_publish_service_test.dart` 通过：13 个测试。
@@ -333,3 +341,39 @@
   - `flutter analyze` 当前仅报无关既有提示 `lib/transaction/onchain-transaction/onchain_payment_service.dart:43:13 prefer_const_constructors`；该文件无本轮 diff，本轮未修改无关交易模块。
   - `git diff -- citizenchain/runtime` 为空，未修改 runtime。
 - 清理：本轮未新增文件或目录；未写入 Stripe / Cloudflare secret；未保留“旧帖原地修改”兼容分支；删除接口不改链上记录、不接触 runtime；真实 HTTP smoke 后已删除 `sqp_delete_smoke` / `squ_delete_smoke` / `sqs_delete_smoke` 测试数据和临时 R2 manifest。
+
+### 第 6 步（完成，可执行范围内真实验收与文档收口）
+
+- 四档会员最终口径：自由 `visitor` `$2.99`、民主 `visitor_pro` `$9.99`、投票公民 `voting` `$9.99`、竞选公民 `candidate` `$99.99`；三档身份继续是 `visitor` / `voting` / `candidate`，订阅资格精确匹配。
+- App 最终交互：会员页按状态显示“订阅会员 / 取消订阅 / 续订会员”，统一打开 `https://www.crcfrcn.com/membership`；裸域 `crcfrcn.com` 当前无法解析，因此不再作为默认入口。App 不内嵌支付、不保存 Stripe 凭证。
+- Worker 最终接口：订阅使用 `/membership/subscribe/challenge` 与 `/membership/subscribe`，取消使用 `/membership/cancel/challenge` 与 `/membership/cancel`，Stripe 回调唯一使用 `/membership/webhook`；已清除重复 `/webhook/webhook` 和旧 checkout/stripe 路径口径。
+- 测试补强：`membership.test.ts` 增加 `visitor_pro` 独立 `$9.99 USD` Price webhook 覆盖，并通过 `routeRequest` 验证 webhook 正式路径；Fake D1 实现 `all()`，续订视频回灌路径不再产生被吞掉的测试告警。
+- 完整验收：
+  - Worker `npm run typecheck` 通过；`npm test` 通过，18 个测试文件、112 个测试。
+  - Flutter 会员页 7 个测试通过；会员相关 4 个文件 `flutter analyze` 无问题。
+  - 官网 `npm run build` 与 `npm run lint` 通过。
+  - `wrangler deploy --dry-run --env staging` 通过，Worker bundle 与 D1 / KV / R2 / Durable Object 绑定解析正常。
+  - 真实本地 Worker HTTP：`GET /health` 返回 200；重复 webhook 路径返回 404；正式 `/membership/webhook` 接收签名 Stripe `visitor_pro` 事件返回 200，D1 确认写入 `membership_level=visitor_pro`、`subscription_status=active`、`stripe_price_id=price_visitor_pro`、`identity_level=visitor`。
+  - 真实本地官网页面：桌面端四档计划与自由/民主切换正常；390px 移动视口无横向溢出；订阅 / 取消 / 续订入口文案齐全；浏览器控制台无 warning/error。
+- 远端边界：本轮未部署 staging/production。staging 的四个 Stripe Price、Checkout 回跳 URL 仍为空，且缺 `STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、Cloudflare Images / Stream API 与交付配置；部署后也无法完成真实支付和媒体服务，因此只执行 dry-run，不制造不可用远端版本。production 不作为本轮测试环境。
+- 清理：已删除真实 HTTP smoke 写入的 `sub_step6_http` 本地 D1 数据、临时文档/类型下载、`.DS_Store`，并关闭本地链 mock、Worker、Vite 服务；未新增文件或目录，未写入真实 secret，未修改 `citizenchain/runtime/`。
+
+### 第 7 步（执行中，统一短名与远端发布）
+
+- 用户已确认四档会员值改为 `freedom / democracy / voting / candidate`；身份档继续使用 `visitor / voting / candidate`，会员与身份不得混名。
+- 用户已确认 Worker、官网和 App 构建变量按 `memory/07-ai/unified-naming.md` 第 5.5 节统一为最多三段的短名，不保留旧环境变量 fallback。
+- staging 与 production `square_memberships` 只读查询均无现有会员记录，因此 D1 不需要保留 `visitor / visitor_pro` 数据兼容；部署前仍需核对 Stripe 是否存在未回写 D1 的订阅 metadata。
+- 用户确认聊天任务已经完成，允许将 `migrations/0010_chat_device_binding.sql` 纳入本任务，完成 staging / production 远端迁移、Worker 发布和聊天回归。
+- 本步骤复用现有文件，不新建目录、任务卡、迁移或测试文件；不修改 `citizenchain/runtime/`。
+- 完成条件：代码、配置、测试、注释、当前文档和远端 secret 全部只保留短名；本地真实 HTTP/页面、staging、production、Stripe/Stream 回调和聊天接口完成运行态验收；清理所有旧字段和临时数据。
+
+#### 第 7 步执行记录（2026-07-11）
+
+- 代码已统一四档会员值为 `freedom / democracy / voting / candidate`；身份档继续为 `visitor / voting / candidate`，源代码、测试和构建配置中旧会员值精确扫描为 0。
+- Worker、CitizenWeb、CitizenApp 的当前配置已改为 `memory/07-ai/unified-naming.md` 第 5.5 节短名；App 共用 Worker 编译变量补充登记为 `SQUARE_API_URL`，不保留旧变量 fallback。
+- Worker `typecheck` 和 18 个测试文件共 112 项测试通过；staging / production dry-run 均通过。Flutter 目标文件 analyze 无问题，会员页 7 项测试通过；CitizenWeb lint / build 通过。
+- 本地真实 Worker HTTP 验收通过：`GET /health` 返回 200，会员和聊天未登录接口均返回 401；带 `STRIPE_HOOK_SECRET` 签名的 `democracy` subscription webhook 返回 200，D1 写入 `membership_level=democracy`、`subscription_status=active`、`stripe_price_id=price_democracy`、`identity_level=visitor`，随后测试记录已删除。
+- `0010_chat_device_binding.sql` 已成功应用到 staging 和 production；两个环境均确认 migration 已登记、`chat_devices=0`、`chat_keypackages=0`、nonce 表存在，`chat_envelopes` 表保留。
+- 正式 Worker 发布当前只剩 Secret 原子改名阻塞。Cloudflare 不允许读取已保存 Secret 明文，Wrangler 也没有 Secret rename/copy：staging 旧链和 R2 Secret、production 旧 Stripe Secret 必须由持有人重新输入到目标短名，不能由代码 fallback、明文落库或猜值绕过。当前 Wrangler 登录态已可靠读取账户 ID，并已为 staging / production 写入 `CF_ACCOUNT_ID`；现行文档明确登记的 staging 链入口也已写入 `CHAIN_URL`。
+- 解除阻塞顺序：先为 staging 写入 `CHAIN_ID / CHAIN_SECRET / R2_ACCESS_ID / R2_SECRET_KEY`，为 production 写入 `STRIPE_API_KEY / STRIPE_HOOK_SECRET`；Images / Stream 与 production R2 正式启用时还须补 `CF_API_TOKEN / R2_ACCESS_ID / R2_SECRET_KEY / STREAM_HOOK_SECRET`。短名 Secret 就绪后立即发布 staging、完成 smoke，再发布 production、验收 Stripe webhook / Chat / health，最后删除远端旧 Secret。
+- 当前未执行 Worker 源码部署。远端版本检查确认 staging / production 仍运行旧配置名版本；写入 `CF_ACCOUNT_ID` 只产生 Secret 变更版本，没有把缺少必要短名 Secret 的新源码切入流量。两个远端 `/health` 当前均返回 200。
