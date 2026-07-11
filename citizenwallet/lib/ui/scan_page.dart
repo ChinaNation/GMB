@@ -4,10 +4,11 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'dart:convert';
 
-import '../qr/offline_sign_page.dart';
+import 'offline_sign_page.dart';
 import '../qr/qr_protocols.dart';
 import '../wallet/wallet_manager.dart';
 import 'app_theme.dart';
+import 'scan_overlay.dart';
 import 'login_sign_page.dart';
 
 /// 扫码页面（对准框 + 相册 + 手电筒）。
@@ -23,9 +24,6 @@ class ScanPage extends StatefulWidget {
 }
 
 class _ScanPageState extends State<ScanPage> {
-  static const double scanBoxSize = 260;
-  static const double scanBoxOffsetY = -40;
-
   late final MobileScannerController _controller;
   bool _handled = false;
   bool _torchOn = false;
@@ -85,11 +83,11 @@ class _ScanPageState extends State<ScanPage> {
         builder: (_) => isLogin
             ? LoginSignPage(
                 wallet: widget.wallet,
-                challengeRaw: raw,
+                raw: raw,
               )
             : OfflineSignPage(
                 wallet: widget.wallet,
-                initialCode: raw,
+                raw: raw,
               ),
       ),
     );
@@ -136,7 +134,7 @@ class _ScanPageState extends State<ScanPage> {
 
           // 扫描框 + 半透明遮罩
           CustomPaint(
-            painter: _ScanOverlayPainter(
+            painter: ScanOverlayPainter(
               scanBoxSize: scanBoxSize,
               offsetY: scanBoxOffsetY,
             ),
@@ -151,7 +149,7 @@ class _ScanPageState extends State<ScanPage> {
                 width: scanBoxSize,
                 height: scanBoxSize,
                 child: CustomPaint(
-                  painter: _ScanCornerPainter(),
+                  painter: ScanCornerPainter(),
                 ),
               ),
             ),
@@ -242,89 +240,4 @@ class _ScanPageState extends State<ScanPage> {
       ),
     );
   }
-}
-// 扫描框半透明遮罩
-class _ScanOverlayPainter extends CustomPainter {
-  _ScanOverlayPainter({required this.scanBoxSize, this.offsetY = 0});
-
-  final double scanBoxSize;
-  final double offsetY;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bgPaint = Paint()..color = Colors.black.withAlpha(140);
-    final clearPaint = Paint()..blendMode = BlendMode.clear;
-
-    final center = Offset(size.width / 2, size.height / 2 + offsetY);
-    final rect = Rect.fromCenter(
-      center: center,
-      width: scanBoxSize,
-      height: scanBoxSize,
-    );
-
-    canvas.saveLayer(Offset.zero & size, Paint());
-    canvas.drawRect(Offset.zero & size, bgPaint);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(12)),
-      clearPaint,
-    );
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _ScanOverlayPainter oldDelegate) =>
-      oldDelegate.scanBoxSize != scanBoxSize || oldDelegate.offsetY != offsetY;
-}
-// 扫描框四角装饰线
-class _ScanCornerPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    const cornerLen = 28.0;
-    const strokeWidth = 3.5;
-    const cornerRadius = 12.0;
-
-    final paint = Paint()
-      ..color = AppTheme.primaryLight
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final w = size.width;
-    final h = size.height;
-
-    // 左上
-    final topLeftPath = Path()
-      ..moveTo(0, cornerLen)
-      ..lineTo(0, cornerRadius)
-      ..quadraticBezierTo(0, 0, cornerRadius, 0)
-      ..lineTo(cornerLen, 0);
-    canvas.drawPath(topLeftPath, paint);
-
-    // 右上
-    final topRightPath = Path()
-      ..moveTo(w - cornerLen, 0)
-      ..lineTo(w - cornerRadius, 0)
-      ..quadraticBezierTo(w, 0, w, cornerRadius)
-      ..lineTo(w, cornerLen);
-    canvas.drawPath(topRightPath, paint);
-
-    // 左下
-    final bottomLeftPath = Path()
-      ..moveTo(0, h - cornerLen)
-      ..lineTo(0, h - cornerRadius)
-      ..quadraticBezierTo(0, h, cornerRadius, h)
-      ..lineTo(cornerLen, h);
-    canvas.drawPath(bottomLeftPath, paint);
-
-    // 右下
-    final bottomRightPath = Path()
-      ..moveTo(w - cornerLen, h)
-      ..lineTo(w - cornerRadius, h)
-      ..quadraticBezierTo(w, h, w, h - cornerRadius)
-      ..lineTo(w, h - cornerLen);
-    canvas.drawPath(bottomRightPath, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

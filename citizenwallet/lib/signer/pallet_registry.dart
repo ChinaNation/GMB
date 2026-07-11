@@ -178,7 +178,7 @@ class PalletRegistry {
   static const int depositCall = 31;
   static const int withdrawCall = 32;
   static const int switchBankCall = 33;
-  static const int submitOffchainBatchV2Call = 34;
+  static const int submitOffchainBatchCall = 34;
   static const int proposeL2FeeRateCall = 40;
   static const int setMaxL2FeeRateCall = 41;
   static const int registerClearingBankCall = 50;

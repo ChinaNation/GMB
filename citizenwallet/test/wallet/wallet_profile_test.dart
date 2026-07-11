@@ -10,12 +10,10 @@ void main() {
       return WalletProfile(
         walletIndex: 1,
         walletName: '测试钱包',
-        walletIcon: 'wallet',
-        balance: 0,
         address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
         pubkeyHex: 'aabbccdd' * 8,
         alg: 'sr25519',
-        ss58: 2027,
+        ss58Prefix: 2027,
         createdAtMillis: 1000000,
         source: 'created',
         signMode: signMode,

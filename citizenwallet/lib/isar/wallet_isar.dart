@@ -6,6 +6,9 @@ import 'package:path_provider/path_provider.dart';
 
 part 'wallet_isar.g.dart';
 
+/// 虚拟分组"全部"哨兵：不按分组过滤(不落库到 groupNames)。单源。
+const String allGroup = '全部';
+
 @collection
 class WalletProfileEntity {
   Id id = Isar.autoIncrement;
@@ -14,8 +17,6 @@ class WalletProfileEntity {
   late int walletIndex;
 
   late String walletName;
-  late String walletIcon;
-  late double balance;
 
   @Index(unique: true, replace: true)
   late String address;
@@ -24,11 +25,11 @@ class WalletProfileEntity {
   late String pubkeyHex;
 
   late String alg;
-  late int ss58;
+  late int ss58Prefix;
   late int createdAtMillis;
   late String source;
 
-  /// 签名模式：固定 `local`（citizenwallet 只有热钱包）。
+  /// 签名模式：固定 `local`（citizenwallet 为冷签设备，签名恒在本机完成）。
   late String signMode;
 
   /// 所属分组名称，逗号分隔，如 '分组一,分组二'。

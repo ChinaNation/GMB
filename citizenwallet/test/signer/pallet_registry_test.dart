@@ -87,7 +87,7 @@ void main() {
       expect(PalletRegistry.depositCall, 31);
       expect(PalletRegistry.withdrawCall, 32);
       expect(PalletRegistry.switchBankCall, 33);
-      expect(PalletRegistry.submitOffchainBatchV2Call, 34);
+      expect(PalletRegistry.submitOffchainBatchCall, 34);
       expect(PalletRegistry.proposeL2FeeRateCall, 40);
       expect(PalletRegistry.setMaxL2FeeRateCall, 41);
       expect(PalletRegistry.registerClearingBankCall, 50);

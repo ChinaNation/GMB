@@ -28,58 +28,48 @@ const WalletProfileEntitySchema = CollectionSchema(
       name: r'alg',
       type: IsarType.string,
     ),
-    r'balance': PropertySchema(
-      id: 2,
-      name: r'balance',
-      type: IsarType.double,
-    ),
     r'createdAtMillis': PropertySchema(
-      id: 3,
+      id: 2,
       name: r'createdAtMillis',
       type: IsarType.long,
     ),
     r'groupNames': PropertySchema(
-      id: 4,
+      id: 3,
       name: r'groupNames',
       type: IsarType.string,
     ),
     r'pubkeyHex': PropertySchema(
-      id: 5,
+      id: 4,
       name: r'pubkeyHex',
       type: IsarType.string,
     ),
     r'signMode': PropertySchema(
-      id: 6,
+      id: 5,
       name: r'signMode',
       type: IsarType.string,
     ),
     r'sortOrder': PropertySchema(
-      id: 7,
+      id: 6,
       name: r'sortOrder',
       type: IsarType.long,
     ),
     r'source': PropertySchema(
-      id: 8,
+      id: 7,
       name: r'source',
       type: IsarType.string,
     ),
-    r'ss58': PropertySchema(
-      id: 9,
-      name: r'ss58',
+    r'ss58Prefix': PropertySchema(
+      id: 8,
+      name: r'ss58Prefix',
       type: IsarType.long,
     ),
-    r'walletIcon': PropertySchema(
-      id: 10,
-      name: r'walletIcon',
-      type: IsarType.string,
-    ),
     r'walletIndex': PropertySchema(
-      id: 11,
+      id: 9,
       name: r'walletIndex',
       type: IsarType.long,
     ),
     r'walletName': PropertySchema(
-      id: 12,
+      id: 10,
       name: r'walletName',
       type: IsarType.string,
     )
@@ -150,7 +140,6 @@ int _walletProfileEntityEstimateSize(
   bytesCount += 3 + object.pubkeyHex.length * 3;
   bytesCount += 3 + object.signMode.length * 3;
   bytesCount += 3 + object.source.length * 3;
-  bytesCount += 3 + object.walletIcon.length * 3;
   bytesCount += 3 + object.walletName.length * 3;
   return bytesCount;
 }
@@ -163,17 +152,15 @@ void _walletProfileEntitySerialize(
 ) {
   writer.writeString(offsets[0], object.address);
   writer.writeString(offsets[1], object.alg);
-  writer.writeDouble(offsets[2], object.balance);
-  writer.writeLong(offsets[3], object.createdAtMillis);
-  writer.writeString(offsets[4], object.groupNames);
-  writer.writeString(offsets[5], object.pubkeyHex);
-  writer.writeString(offsets[6], object.signMode);
-  writer.writeLong(offsets[7], object.sortOrder);
-  writer.writeString(offsets[8], object.source);
-  writer.writeLong(offsets[9], object.ss58);
-  writer.writeString(offsets[10], object.walletIcon);
-  writer.writeLong(offsets[11], object.walletIndex);
-  writer.writeString(offsets[12], object.walletName);
+  writer.writeLong(offsets[2], object.createdAtMillis);
+  writer.writeString(offsets[3], object.groupNames);
+  writer.writeString(offsets[4], object.pubkeyHex);
+  writer.writeString(offsets[5], object.signMode);
+  writer.writeLong(offsets[6], object.sortOrder);
+  writer.writeString(offsets[7], object.source);
+  writer.writeLong(offsets[8], object.ss58Prefix);
+  writer.writeLong(offsets[9], object.walletIndex);
+  writer.writeString(offsets[10], object.walletName);
 }
 
 WalletProfileEntity _walletProfileEntityDeserialize(
@@ -185,18 +172,16 @@ WalletProfileEntity _walletProfileEntityDeserialize(
   final object = WalletProfileEntity();
   object.address = reader.readString(offsets[0]);
   object.alg = reader.readString(offsets[1]);
-  object.balance = reader.readDouble(offsets[2]);
-  object.createdAtMillis = reader.readLong(offsets[3]);
-  object.groupNames = reader.readString(offsets[4]);
+  object.createdAtMillis = reader.readLong(offsets[2]);
+  object.groupNames = reader.readString(offsets[3]);
   object.id = id;
-  object.pubkeyHex = reader.readString(offsets[5]);
-  object.signMode = reader.readString(offsets[6]);
-  object.sortOrder = reader.readLong(offsets[7]);
-  object.source = reader.readString(offsets[8]);
-  object.ss58 = reader.readLong(offsets[9]);
-  object.walletIcon = reader.readString(offsets[10]);
-  object.walletIndex = reader.readLong(offsets[11]);
-  object.walletName = reader.readString(offsets[12]);
+  object.pubkeyHex = reader.readString(offsets[4]);
+  object.signMode = reader.readString(offsets[5]);
+  object.sortOrder = reader.readLong(offsets[6]);
+  object.source = reader.readString(offsets[7]);
+  object.ss58Prefix = reader.readLong(offsets[8]);
+  object.walletIndex = reader.readLong(offsets[9]);
+  object.walletName = reader.readString(offsets[10]);
   return object;
 }
 
@@ -212,26 +197,22 @@ P _walletProfileEntityDeserializeProp<P>(
     case 1:
       return (reader.readString(offset)) as P;
     case 2:
-      return (reader.readDouble(offset)) as P;
-    case 3:
       return (reader.readLong(offset)) as P;
+    case 3:
+      return (reader.readString(offset)) as P;
     case 4:
       return (reader.readString(offset)) as P;
     case 5:
       return (reader.readString(offset)) as P;
     case 6:
-      return (reader.readString(offset)) as P;
-    case 7:
       return (reader.readLong(offset)) as P;
-    case 8:
+    case 7:
       return (reader.readString(offset)) as P;
+    case 8:
+      return (reader.readLong(offset)) as P;
     case 9:
       return (reader.readLong(offset)) as P;
     case 10:
-      return (reader.readString(offset)) as P;
-    case 11:
-      return (reader.readLong(offset)) as P;
-    case 12:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -965,72 +946,6 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      balanceEqualTo(
-    double value, {
-    double epsilon = Query.epsilon,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'balance',
-        value: value,
-        epsilon: epsilon,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      balanceGreaterThan(
-    double value, {
-    bool include = false,
-    double epsilon = Query.epsilon,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'balance',
-        value: value,
-        epsilon: epsilon,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      balanceLessThan(
-    double value, {
-    bool include = false,
-    double epsilon = Query.epsilon,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'balance',
-        value: value,
-        epsilon: epsilon,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      balanceBetween(
-    double lower,
-    double upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    double epsilon = Query.epsilon,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'balance',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        epsilon: epsilon,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
       createdAtMillisEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -1743,45 +1658,45 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      ss58EqualTo(int value) {
+      ss58PrefixEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'ss58',
+        property: r'ss58Prefix',
         value: value,
       ));
     });
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      ss58GreaterThan(
+      ss58PrefixGreaterThan(
     int value, {
     bool include = false,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'ss58',
+        property: r'ss58Prefix',
         value: value,
       ));
     });
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      ss58LessThan(
+      ss58PrefixLessThan(
     int value, {
     bool include = false,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'ss58',
+        property: r'ss58Prefix',
         value: value,
       ));
     });
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      ss58Between(
+      ss58PrefixBetween(
     int lower,
     int upper, {
     bool includeLower = true,
@@ -1789,147 +1704,11 @@ extension WalletProfileEntityQueryFilter on QueryBuilder<WalletProfileEntity,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'ss58',
+        property: r'ss58Prefix',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      walletIconEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'walletIcon',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      walletIconGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'walletIcon',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      walletIconLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'walletIcon',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      walletIconBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'walletIcon',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      walletIconStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'walletIcon',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      walletIconEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'walletIcon',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      walletIconContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'walletIcon',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      walletIconMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'walletIcon',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      walletIconIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'walletIcon',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterFilterCondition>
-      walletIconIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'walletIcon',
-        value: '',
       ));
     });
   }
@@ -2164,20 +1943,6 @@ extension WalletProfileEntityQuerySortBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      sortByBalance() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'balance', Sort.asc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      sortByBalanceDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'balance', Sort.desc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
       sortByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAtMillis', Sort.asc);
@@ -2262,30 +2027,16 @@ extension WalletProfileEntityQuerySortBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      sortBySs58() {
+      sortBySs58Prefix() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'ss58', Sort.asc);
+      return query.addSortBy(r'ss58Prefix', Sort.asc);
     });
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      sortBySs58Desc() {
+      sortBySs58PrefixDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'ss58', Sort.desc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      sortByWalletIcon() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'walletIcon', Sort.asc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      sortByWalletIconDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'walletIcon', Sort.desc);
+      return query.addSortBy(r'ss58Prefix', Sort.desc);
     });
   }
 
@@ -2345,20 +2096,6 @@ extension WalletProfileEntityQuerySortThenBy
       thenByAlgDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'alg', Sort.desc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      thenByBalance() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'balance', Sort.asc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      thenByBalanceDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'balance', Sort.desc);
     });
   }
 
@@ -2461,30 +2198,16 @@ extension WalletProfileEntityQuerySortThenBy
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      thenBySs58() {
+      thenBySs58Prefix() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'ss58', Sort.asc);
+      return query.addSortBy(r'ss58Prefix', Sort.asc);
     });
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      thenBySs58Desc() {
+      thenBySs58PrefixDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'ss58', Sort.desc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      thenByWalletIcon() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'walletIcon', Sort.asc);
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QAfterSortBy>
-      thenByWalletIconDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'walletIcon', Sort.desc);
+      return query.addSortBy(r'ss58Prefix', Sort.desc);
     });
   }
 
@@ -2534,13 +2257,6 @@ extension WalletProfileEntityQueryWhereDistinct
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
-      distinctByBalance() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'balance');
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
       distinctByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAtMillis');
@@ -2583,16 +2299,9 @@ extension WalletProfileEntityQueryWhereDistinct
   }
 
   QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
-      distinctBySs58() {
+      distinctBySs58Prefix() {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'ss58');
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, WalletProfileEntity, QDistinct>
-      distinctByWalletIcon({bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'walletIcon', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'ss58Prefix');
     });
   }
 
@@ -2629,13 +2338,6 @@ extension WalletProfileEntityQueryProperty
   QueryBuilder<WalletProfileEntity, String, QQueryOperations> algProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'alg');
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, double, QQueryOperations>
-      balanceProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'balance');
     });
   }
 
@@ -2679,16 +2381,10 @@ extension WalletProfileEntityQueryProperty
     });
   }
 
-  QueryBuilder<WalletProfileEntity, int, QQueryOperations> ss58Property() {
+  QueryBuilder<WalletProfileEntity, int, QQueryOperations>
+      ss58PrefixProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'ss58');
-    });
-  }
-
-  QueryBuilder<WalletProfileEntity, String, QQueryOperations>
-      walletIconProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'walletIcon');
+      return query.addPropertyName(r'ss58Prefix');
     });
   }
 

@@ -25,7 +25,7 @@ class _HomePageState extends State<HomePage> {
   final WalletManager _walletManager = WalletManager();
   List<WalletProfile> _wallets = [];
   List<WalletGroupEntity> _groups = [];
-  String _selectedGroup = '全部';
+  String _selectedGroup = allGroup;
   int? _activeIndex;
   bool _loading = true;
   bool _isRooted = false;
@@ -70,7 +70,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadWallets() => _loadAll();
 
   List<WalletProfile> get _filteredWallets {
-    if (_selectedGroup == '全部') return _wallets;
+    if (_selectedGroup == allGroup) return _wallets;
     return _wallets.where((w) => w.inGroup(_selectedGroup)).toList();
   }
 
@@ -455,7 +455,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildGroupRow() {
-    final otherGroups = _groups.where((g) => g.name != '全部').toList();
+    final otherGroups = _groups.where((g) => g.name != allGroup).toList();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
       child: Row(
@@ -463,10 +463,10 @@ class _HomePageState extends State<HomePage> {
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: ChoiceChip(
-              label: const Text('全部'),
-              selected: _selectedGroup == '全部',
+              label: const Text(allGroup),
+              selected: _selectedGroup == allGroup,
               onSelected: (_) {
-                setState(() => _selectedGroup = '全部');
+                setState(() => _selectedGroup = allGroup);
               },
             ),
           ),

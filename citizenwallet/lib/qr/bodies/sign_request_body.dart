@@ -8,14 +8,14 @@ class SignRequestBody implements QrBody {
     required this.action,
     required this.signerPubkey,
     required this.payload,
-    this.sigAlg = 1,
+    this.alg = 1,
   });
 
   /// 业务动作码 `a`:扫码流向以 `k` 表达,业务语义统一放这里。
   final int action;
 
   /// 签名算法 `g`:当前 1=sr25519。
-  final int sigAlg;
+  final int alg;
 
   /// 期望签名者公钥 `u`:32 字节公钥的 base64url 无填充编码。
   final String signerPubkey;
@@ -34,20 +34,20 @@ class SignRequestBody implements QrBody {
   @override
   Map<String, dynamic> toJson() => <String, dynamic>{
         'a': action,
-        'g': sigAlg,
+        'g': alg,
         'u': signerPubkey,
         'd': payload,
       };
 
   static SignRequestBody fromJson(Map<String, dynamic> data) {
     final action = data['a'];
-    final sigAlg = data['g'];
+    final alg = data['g'];
     final signerPubkey = data['u'];
     final payload = data['d'];
     if (action is! int || action <= 0) {
       throw const FormatException('签名请求 a 必须为正整数');
     }
-    if (sigAlg != 1) {
+    if (alg != 1) {
       throw const FormatException('签名请求 g 目前只允许 1(sr25519)');
     }
     if (signerPubkey is! String || signerPubkey.isEmpty) {
@@ -64,7 +64,7 @@ class SignRequestBody implements QrBody {
     }
     return SignRequestBody(
       action: action,
-      sigAlg: sigAlg as int,
+      alg: alg as int,
       signerPubkey: signerPubkey,
       payload: payload,
     );

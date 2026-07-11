@@ -28,10 +28,8 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
 
   Future<void> _load() async {
     final isar = await WalletIsar.instance.db();
-    final groups = await isar.walletGroupEntitys
-        .where()
-        .sortBySortOrder()
-        .findAll();
+    final groups =
+        await isar.walletGroupEntitys.where().sortBySortOrder().findAll();
     if (!mounted) return;
     setState(() {
       _groups = groups;
@@ -156,10 +154,8 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
           .groupNamesContains(group.name)
           .findAll();
       for (final w in wallets) {
-        final names = w.groupNames
-            .split(',')
-            .where((n) => n != group.name)
-            .join(',');
+        final names =
+            w.groupNames.split(',').where((n) => n != group.name).join(',');
         w.groupNames = names;
         await isar.walletProfileEntitys.put(w);
       }
@@ -219,8 +215,8 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
                 color: AppTheme.primary.withAlpha(25),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.add,
-                  size: 20, color: AppTheme.primaryLight),
+              child:
+                  const Icon(Icons.add, size: 20, color: AppTheme.primaryLight),
             ),
             tooltip: '新建分组',
           ),
@@ -257,8 +253,7 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
                     margin: const EdgeInsets.symmetric(vertical: 4),
                     decoration: BoxDecoration(
                       color: AppTheme.danger.withAlpha(30),
-                      borderRadius:
-                          BorderRadius.circular(AppTheme.radiusMd),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                     ),
                     child: const Icon(Icons.delete_outline,
                         color: AppTheme.danger),
@@ -269,8 +264,8 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
                       context: context,
                       builder: (ctx) => AlertDialog(
                         title: const Text('删除分组'),
-                        content: Text(
-                            '确定删除分组"${group.name}"？\n该分组下的钱包将移至"全部"。'),
+                        content:
+                            Text('确定删除分组"${group.name}"？\n该分组下的钱包将移至"全部"。'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(ctx, false),
@@ -308,9 +303,8 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radiusMd),
-                        onTap: group.name == '全部'
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        onTap: group.name == allGroup
                             ? null
                             : () => _renameGroup(group),
                         child: Container(
@@ -322,18 +316,17 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
                                 width: 36,
                                 height: 36,
                                 decoration: BoxDecoration(
-                                  color: group.name == '全部'
+                                  color: group.name == allGroup
                                       ? AppTheme.primary.withAlpha(20)
                                       : AppTheme.surfaceElevated,
-                                  borderRadius:
-                                      BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Icon(
-                                  group.name == '全部'
+                                  group.name == allGroup
                                       ? Icons.folder_special_rounded
                                       : Icons.folder_outlined,
                                   size: 18,
-                                  color: group.name == '全部'
+                                  color: group.name == allGroup
                                       ? AppTheme.primaryLight
                                       : AppTheme.textSecondary,
                                 ),
@@ -347,16 +340,14 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
                                   fontSize: 15,
                                 ),
                               ),
-                              if (group.name == '全部') ...[
+                              if (group.name == allGroup) ...[
                                 const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color:
-                                        AppTheme.primary.withAlpha(20),
-                                    borderRadius:
-                                        BorderRadius.circular(4),
+                                    color: AppTheme.primary.withAlpha(20),
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: const Text(
                                     '默认',
@@ -369,10 +360,9 @@ class _GroupManagementPageState extends State<GroupManagementPage> {
                                 ),
                               ],
                               const Spacer(),
-                              if (group.name != '全部')
+                              if (group.name != allGroup)
                                 const Icon(Icons.chevron_right,
-                                    size: 20,
-                                    color: AppTheme.textTertiary),
+                                    size: 20, color: AppTheme.textTertiary),
                             ],
                           ),
                         ),

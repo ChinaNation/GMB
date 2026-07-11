@@ -5,7 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../ui/app_theme.dart';
+import 'app_theme.dart';
+import 'scan_overlay.dart';
 import '../signer/action_labels.dart';
 import '../signer/field_labels.dart';
 import '../signer/offline_sign_service.dart';
@@ -22,20 +23,17 @@ class OfflineSignPage extends StatefulWidget {
   const OfflineSignPage({
     super.key,
     required this.wallet,
-    this.initialCode,
+    this.raw,
   });
 
   final WalletProfile wallet;
-  final String? initialCode;
+  final String? raw;
 
   @override
   State<OfflineSignPage> createState() => _OfflineSignPageState();
 }
 
 class _OfflineSignPageState extends State<OfflineSignPage> {
-  static const double scanBoxSize = 260;
-  static const double scanBoxOffsetY = -40;
-
   late final MobileScannerController _controller;
   final OfflineSignService _offlineSignService = OfflineSignService();
   final QrSigner _qrSigner = QrSigner();
@@ -58,7 +56,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       facing: CameraFacing.back,
       torchEnabled: false,
     );
-    final code = widget.initialCode;
+    final code = widget.raw;
     if (code != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _handleCode(code));
     }
@@ -245,7 +243,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
 
         // 扫描框 + 半透明遮罩
         CustomPaint(
-          painter: _ScanOverlayPainter(
+          painter: ScanOverlayPainter(
             scanBoxSize: scanBoxSize,
             offsetY: scanBoxOffsetY,
           ),
@@ -260,7 +258,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
               width: scanBoxSize,
               height: scanBoxSize,
               child: CustomPaint(
-                painter: _ScanCornerPainter(),
+                painter: ScanCornerPainter(),
               ),
             ),
           ),
@@ -661,89 +659,4 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
 String _actionLabel(int action) {
   if (QrActions.isRuntimeHashOnly(action)) return 'Runtime 升级签名';
   return '动作 $action';
-}
-
-class _ScanOverlayPainter extends CustomPainter {
-  _ScanOverlayPainter({required this.scanBoxSize, this.offsetY = 0});
-
-  final double scanBoxSize;
-  final double offsetY;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bgPaint = Paint()..color = Colors.black.withAlpha(140);
-    final clearPaint = Paint()..blendMode = BlendMode.clear;
-
-    final center = Offset(size.width / 2, size.height / 2 + offsetY);
-    final rect = Rect.fromCenter(
-      center: center,
-      width: scanBoxSize,
-      height: scanBoxSize,
-    );
-
-    canvas.saveLayer(Offset.zero & size, Paint());
-    canvas.drawRect(Offset.zero & size, bgPaint);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(12)),
-      clearPaint,
-    );
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _ScanOverlayPainter oldDelegate) =>
-      oldDelegate.scanBoxSize != scanBoxSize || oldDelegate.offsetY != offsetY;
-}
-
-class _ScanCornerPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    const cornerLen = 28.0;
-    const strokeWidth = 3.5;
-    const cornerRadius = 12.0;
-
-    final paint = Paint()
-      ..color = AppTheme.primaryLight
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final w = size.width;
-    final h = size.height;
-
-    // 左上
-    final topLeftPath = Path()
-      ..moveTo(0, cornerLen)
-      ..lineTo(0, cornerRadius)
-      ..quadraticBezierTo(0, 0, cornerRadius, 0)
-      ..lineTo(cornerLen, 0);
-    canvas.drawPath(topLeftPath, paint);
-
-    // 右上
-    final topRightPath = Path()
-      ..moveTo(w - cornerLen, 0)
-      ..lineTo(w - cornerRadius, 0)
-      ..quadraticBezierTo(w, 0, w, cornerRadius)
-      ..lineTo(w, cornerLen);
-    canvas.drawPath(topRightPath, paint);
-
-    // 左下
-    final bottomLeftPath = Path()
-      ..moveTo(0, h - cornerLen)
-      ..lineTo(0, h - cornerRadius)
-      ..quadraticBezierTo(0, h, cornerRadius, h)
-      ..lineTo(cornerLen, h);
-    canvas.drawPath(bottomLeftPath, paint);
-
-    // 右下
-    final bottomRightPath = Path()
-      ..moveTo(w - cornerLen, h)
-      ..lineTo(w - cornerRadius, h)
-      ..quadraticBezierTo(w, h, w, h - cornerRadius)
-      ..lineTo(w, h - cornerLen);
-    canvas.drawPath(bottomRightPath, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -141,15 +141,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       _buildSettingTile(
                         icon: Icons.fingerprint_rounded,
                         title: '设备锁',
-                        subtitle: _pinLockEnabled
-                            ? '请先关闭应用锁'
-                            : '启动应用时需要生物识别或设备密码',
+                        subtitle:
+                            _pinLockEnabled ? '请先关闭应用锁' : '启动应用时需要生物识别或设备密码',
                         value: _deviceLockEnabled,
-                        onChanged:
-                            _pinLockEnabled ? null : _toggleDeviceLock,
+                        onChanged: _pinLockEnabled ? null : _toggleDeviceLock,
                       ),
-                      const Divider(
-                          height: 1, indent: 56, endIndent: 16),
+                      const Divider(height: 1, indent: 56, endIndent: 16),
                       _buildSettingTile(
                         icon: Icons.pin_outlined,
                         title: '应用锁',
@@ -157,8 +154,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ? '请先关闭设备锁'
                             : '启动应用时需要输入 6 位数字密码',
                         value: _pinLockEnabled,
-                        onChanged:
-                            _deviceLockEnabled ? null : _togglePinLock,
+                        onChanged: _deviceLockEnabled ? null : _togglePinLock,
                       ),
                     ],
                   ),
@@ -195,15 +191,14 @@ class _SettingsPageState extends State<SettingsPage> {
                           Icon(Icons.shield_outlined,
                               size: 18, color: AppTheme.textSecondary),
                           SizedBox(width: 12),
-                          Text('公民冷钱包',
+                          Text('公民钱包',
                               style: TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontWeight: FontWeight.w500)),
                           Spacer(),
                           Text('v1.0.0',
                               style: TextStyle(
-                                  color: AppTheme.textTertiary,
-                                  fontSize: 13)),
+                                  color: AppTheme.textTertiary, fontSize: 13)),
                         ],
                       ),
                       SizedBox(height: 8),
@@ -250,9 +245,8 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             child: Icon(icon,
                 size: 20,
-                color: disabled
-                    ? AppTheme.textTertiary
-                    : AppTheme.primaryLight),
+                color:
+                    disabled ? AppTheme.textTertiary : AppTheme.primaryLight),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -264,9 +258,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
-                    color: disabled
-                        ? AppTheme.textTertiary
-                        : AppTheme.textPrimary,
+                    color:
+                        disabled ? AppTheme.textTertiary : AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 2),

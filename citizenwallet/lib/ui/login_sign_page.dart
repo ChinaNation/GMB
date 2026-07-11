@@ -12,11 +12,11 @@ class LoginSignPage extends StatefulWidget {
   const LoginSignPage({
     super.key,
     required this.wallet,
-    required this.challengeRaw,
+    required this.raw,
   });
 
   final WalletProfile wallet;
-  final String challengeRaw;
+  final String raw;
 
   @override
   State<LoginSignPage> createState() => _LoginSignPageState();
@@ -44,7 +44,7 @@ class _LoginSignPageState extends State<LoginSignPage> {
 
   void _parseSignRequest() {
     try {
-      final request = parseLoginSignRequest(widget.challengeRaw);
+      final request = parseLoginSignRequest(widget.raw);
       if (!verifySystemSignature(request)) {
         setState(() => _error = '系统签名验证失败,二维码可能被篡改');
         return;

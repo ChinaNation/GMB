@@ -227,12 +227,10 @@ class _FakeWalletManager extends WalletManager {
       profile: WalletProfile(
         walletIndex: 1,
         walletName: '离线测试热钱包',
-        walletIcon: 'wallet',
-        balance: 0,
         address: pair.address,
         pubkeyHex: pubkeyHex,
         alg: 'sr25519',
-        ss58: _ss58,
+        ss58Prefix: _ss58,
         createdAtMillis: DateTime.now().millisecondsSinceEpoch,
         source: 'test',
         signMode: 'local',

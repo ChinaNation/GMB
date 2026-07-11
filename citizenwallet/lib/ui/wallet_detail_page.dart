@@ -347,7 +347,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 _buildInfoTile('地址', wallet.address),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 _buildInfoTile('公钥', '0x${wallet.pubkeyHex}'),
-                if (_groups.where((g) => g.name != '全部').isNotEmpty) ...[
+                if (_groups.where((g) => g.name != allGroup).isNotEmpty) ...[
                   const Divider(height: 1, indent: 16, endIndent: 16),
                   _buildGroupSelector(),
                 ],
@@ -384,7 +384,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   }
 
   Widget _buildGroupSelector() {
-    final selectableGroups = _groups.where((g) => g.name != '全部').toList();
+    final selectableGroups = _groups.where((g) => g.name != allGroup).toList();
     if (selectableGroups.isEmpty) return const SizedBox.shrink();
 
     return Padding(

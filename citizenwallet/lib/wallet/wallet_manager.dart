@@ -16,12 +16,10 @@ class WalletProfile {
   const WalletProfile({
     required this.walletIndex,
     required this.walletName,
-    required this.walletIcon,
-    required this.balance,
     required this.address,
     required this.pubkeyHex,
     required this.alg,
-    required this.ss58,
+    required this.ss58Prefix,
     required this.createdAtMillis,
     required this.source,
     required this.signMode,
@@ -31,12 +29,10 @@ class WalletProfile {
 
   final int walletIndex;
   final String walletName;
-  final String walletIcon;
-  final double balance;
   final String address;
   final String pubkeyHex;
   final String alg;
-  final int ss58;
+  final int ss58Prefix;
   final int createdAtMillis;
   final String source;
   final String signMode;
@@ -49,7 +45,7 @@ class WalletProfile {
 
   /// 是否属于指定分组（"全部"始终返回 true）。
   bool inGroup(String group) {
-    if (group == '全部') return true;
+    if (group == allGroup) return true;
     return groupNames.contains(group);
   }
 
@@ -73,13 +69,13 @@ class WalletSignResult {
   const WalletSignResult({
     required this.account,
     required this.pubkeyHex,
-    required this.sigAlg,
+    required this.alg,
     required this.signatureHex,
   });
 
   final String account;
   final String pubkeyHex;
-  final String sigAlg;
+  final String alg;
   final String signatureHex;
 }
 
@@ -92,7 +88,7 @@ class WalletAuthException implements Exception {
 }
 
 class WalletManager {
-  static const int _ss58Format = ChainConstants.ss58Prefix;
+  static const int _ss58Prefix = ChainConstants.ss58Prefix;
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static final LocalAuthentication _localAuth = LocalAuthentication();
   // 查询
@@ -168,6 +164,7 @@ class WalletManager {
       await isar.walletSettingsEntitys.put(settings);
     });
   }
+
   // 热钱包创建 / 导入
   /// 创建新钱包。
   ///
@@ -222,6 +219,7 @@ class WalletManager {
       _zeroList(seed);
     }
   }
+
   // 删除
   Future<void> deleteWallet(int walletIndex) async {
     final isar = await WalletIsar.instance.db();
@@ -252,6 +250,7 @@ class WalletManager {
       }
     });
   }
+
   // 更新
   /// 钱包名称最大字符数。
   static const int maxWalletNameLength = 5;
@@ -299,6 +298,7 @@ class WalletManager {
       }
     });
   }
+
   // 签名（seed 不出类）
   Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async {
     await _authenticateIfSupported();
@@ -318,7 +318,7 @@ class WalletManager {
     final seedBytes = Uint8List.fromList(_hexToBytes(seedHex));
     try {
       final pair = Keyring.sr25519.fromSeed(seedBytes);
-      pair.ss58Format = profile.ss58;
+      pair.ss58Format = profile.ss58Prefix;
       final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
       if (localPubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
         throw const WalletAuthException('本地签名密钥与当前钱包不一致，请重新导入钱包');
@@ -351,7 +351,7 @@ class WalletManager {
     final seedBytes = Uint8List.fromList(_hexToBytes(seedHex));
     try {
       final pair = Keyring.sr25519.fromSeed(seedBytes);
-      pair.ss58Format = _ss58Format;
+      pair.ss58Format = _ss58Prefix;
 
       final localPubkeyHex = _toHex(pair.bytes().toList(growable: false));
       if (localPubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
@@ -363,13 +363,14 @@ class WalletManager {
       return WalletSignResult(
         account: profile.address,
         pubkeyHex: '0x${profile.pubkeyHex}',
-        sigAlg: 'sr25519',
+        alg: 'sr25519',
         signatureHex: '0x${_toHex(signature.toList(growable: false))}',
       );
     } finally {
       seedBytes.fillRange(0, seedBytes.length, 0);
     }
   }
+
   // Seed 派生
   Future<List<int>> _mnemonicToMiniSecret(String mnemonic) async {
     final entropy =
@@ -382,7 +383,7 @@ class WalletManager {
     final seedBytes = Uint8List.fromList(seed);
     try {
       final pair = Keyring.sr25519.fromSeed(seedBytes);
-      pair.ss58Format = _ss58Format;
+      pair.ss58Format = _ss58Prefix;
       final pubkeyBytes = pair.bytes().toList(growable: false);
       final pubkeyHex = _toHex(pubkeyBytes);
       final address = pair.address;
@@ -391,6 +392,7 @@ class WalletManager {
       seedBytes.fillRange(0, seedBytes.length, 0);
     }
   }
+
   // Secure Storage
   String _seedKey(int walletIndex) => WalletSecureKeys.seedHexV1(walletIndex);
 
@@ -488,6 +490,7 @@ class WalletManager {
       throw WalletAuthException('认证服务异常：${e.message}，请稍后重试');
     }
   }
+
   // 内部工具
   /// 原子化创建热钱包：在同一个事务中分配 walletIndex 并写入数据库。
   Future<WalletProfile> _appendHotWalletAtomic({
@@ -518,12 +521,10 @@ class WalletManager {
       final entity = WalletProfileEntity()
         ..walletIndex = walletIndex
         ..walletName = '钱包$walletIndex'
-        ..walletIcon = 'wallet'
-        ..balance = 0
         ..address = address
         ..pubkeyHex = pubkeyHex
         ..alg = 'sr25519'
-        ..ss58 = _ss58Format
+        ..ss58Prefix = _ss58Prefix
         ..createdAtMillis = DateTime.now().millisecondsSinceEpoch
         ..source = source
         ..signMode = 'local'
@@ -541,12 +542,10 @@ class WalletManager {
     return WalletProfile(
       walletIndex: walletIndex,
       walletName: '钱包$walletIndex',
-      walletIcon: 'wallet',
-      balance: 0,
       address: address,
       pubkeyHex: pubkeyHex,
       alg: 'sr25519',
-      ss58: _ss58Format,
+      ss58Prefix: _ss58Prefix,
       createdAtMillis: DateTime.now().millisecondsSinceEpoch,
       source: source,
       signMode: 'local',
@@ -613,12 +612,10 @@ class WalletManager {
     return WalletProfile(
       walletIndex: row.walletIndex,
       walletName: row.walletName,
-      walletIcon: row.walletIcon,
-      balance: row.balance,
       address: row.address,
       pubkeyHex: row.pubkeyHex,
       alg: row.alg,
-      ss58: row.ss58,
+      ss58Prefix: row.ss58Prefix,
       createdAtMillis: row.createdAtMillis,
       source: row.source,
       signMode: row.signMode,

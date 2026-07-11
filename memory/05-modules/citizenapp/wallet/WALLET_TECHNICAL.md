@@ -279,7 +279,7 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 - 助记词不持久化，仅创建时一次性展示
 - 冷钱包不在本机保存任何密钥材料
 - 本机签名在本地完成，私钥材料不出端
-- 授权分层（2026-07-06 定）：`authenticateForSigning()`（生物识别/设备密码）**只**用于「动钱 / 换身份」——转账、充值、提现、清算行绑定、多签、个人账户、投票、以及**切换默认用户钱包**；聊天登录 mailbox、IM 设备绑定、发帖（自动扣 1 元入块）一律用 `signWithWalletNoAuth()` **静默签名不弹**。发帖弹窗是多余的，已删；发帖前仍做余额校验（够 ED + 1 元才发）。
+- 授权分层（2026-07-06 定）：`authenticateForSigning()`（生物识别/设备密码）**只**用于「动钱 / 换身份」——转账、充值、提现、清算行绑定、多签、个人账户、投票、以及**切换默认用户钱包**；聊天登录 mailbox、IM 设备绑定、发帖（按最低链上费用自动扣 0.1 元入块）一律用 `signWithWalletNoAuth()` **静默签名不弹**。发帖弹窗是多余的，已删；发帖前仍做余额校验（够 ED + 0.1 元才发）。
 - `signWithWallet()` / `signUtf8WithWallet()` 内含 `_authenticateIfSupported()`（会弹）；`signWithWalletNoAuth()` 只读 seed 不弹。调用方按上条策略选用。seed 读取后做格式校验，异常立即抛错。
 - 设备未启用锁屏时硬拒绝访问，不再跳过验证（`isDeviceSupported()` 返回 false 时抛出异常）
 - 热钱包创建/导入入口前置设备锁检查（`_ensureDeviceSecure()`），未启用锁屏的设备无法创建或导入热钱包
