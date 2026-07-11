@@ -34,6 +34,12 @@ pub(crate) struct AdminCidMetaOutput {
     pub(crate) scoped_province_name: Option<String>,
 }
 
+/// 公开机构码标签表(免登录):前端替代原硬编码 INSTITUTION_CODE_LABEL 的单一真源。
+#[derive(Serialize)]
+pub(crate) struct CidLabelsOutput {
+    pub(crate) institution_labels: Vec<CidInstitutionCodeItem>,
+}
+
 #[derive(Deserialize)]
 pub(crate) struct AdminCidCitiesQuery {
     pub(crate) province_name: String,

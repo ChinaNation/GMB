@@ -4,11 +4,14 @@ import React, { useEffect, useState } from 'react';
 import { Card, Table, Typography } from 'antd';
 import type { AdminAuth } from '../auth/types';
 import {
-  INSTITUTION_CODE_LABEL,
   PARTNERSHIP_KIND_LABEL,
   PRIVATE_TYPE_LABEL,
   SUBJECT_PROPERTY_LABEL,
 } from '../subjects/labels';
+import {
+  useInstitutionCodeLabels,
+  type InstitutionCodeLabelMap,
+} from '../subjects/institutionLabels';
 import { adminRequest } from '../utils/http';
 import { tryEncodeSs58 } from '../utils/ss58';
 
@@ -88,9 +91,8 @@ const AUDIT_DETAIL_KEY_LABEL: Record<string, string> = {
   unmatched_releases: '未匹配解除数',
 };
 
-// 枚举值翻译:按键名选择值映射,机构代码复用全局映射。
+// 枚举值翻译:按键名选择值映射。机构代码(institution)改由后端单源标签在运行期解析(见 formatAuditDetailValue)。
 const AUDIT_DETAIL_VALUE_LABEL: Record<string, Record<string, string>> = {
-  institution: INSTITUTION_CODE_LABEL,
   subject_property: SUBJECT_PROPERTY_LABEL,
   category: CATEGORY_LABEL,
   private_type: PRIVATE_TYPE_LABEL as Record<string, string>,
@@ -106,20 +108,28 @@ const AUDIT_DETAIL_VALUE_LABEL: Record<string, Record<string, string>> = {
   result: { SUCCESS: '成功', FAILED: '失败' },
 };
 
-function formatAuditDetailValue(key: string, value: unknown): string | null {
+function formatAuditDetailValue(
+  key: string,
+  value: unknown,
+  institutionLabels: InstitutionCodeLabelMap,
+): string | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'boolean') return value ? '是' : '否';
   const text = String(value);
+  if (key === 'institution') return institutionLabels[text] ?? text;
   return AUDIT_DETAIL_VALUE_LABEL[key]?.[text] ?? text;
 }
 
 /** 结构化事实 → 人话(「市：锦程市；机构：政府」);旧文本行原样兜底。 */
-function formatAuditDetail(detail: AuditLogEntry['detail']): string {
+function formatAuditDetail(
+  detail: AuditLogEntry['detail'],
+  institutionLabels: InstitutionCodeLabelMap,
+): string {
   if (typeof detail === 'string') return detail;
   if (!detail || typeof detail !== 'object') return '';
   const parts: string[] = [];
   for (const [key, value] of Object.entries(detail)) {
-    const text = formatAuditDetailValue(key, value);
+    const text = formatAuditDetailValue(key, value, institutionLabels);
     if (text === null) continue;
     parts.push(`${AUDIT_DETAIL_KEY_LABEL[key] ?? key}：${text}`);
   }
@@ -134,6 +144,7 @@ interface Props {
 export const OperationRecords: React.FC<Props> = ({ auth, cidNumber }) => {
   const [rows, setRows] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const institutionLabels = useInstitutionCodeLabels();
 
   useEffect(() => {
     let cancelled = false;
@@ -185,7 +196,7 @@ export const OperationRecords: React.FC<Props> = ({ auth, cidNumber }) => {
             title: '详情',
             dataIndex: 'detail',
             ellipsis: true,
-            render: (v: AuditLogEntry['detail']) => formatAuditDetail(v),
+            render: (v: AuditLogEntry['detail']) => formatAuditDetail(v, institutionLabels),
           },
           {
             title: '时间',

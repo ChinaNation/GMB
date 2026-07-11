@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use codec::{Decode, Encode};
-use sp_core::hashing::{blake2_128, twox_128};
+use sp_core::hashing::blake2_128;
 
 use primitives::account_derive::RESERVED_NAME_MAIN;
 use primitives::cid::code::{
@@ -131,37 +131,28 @@ pub enum GuardError {
 pub mod storage_key {
     use super::*;
 
+    // 以下四个私有 helper 是 `crate::shared::storage_keys` 单源的薄委托:
+    // map_vec/double_map_vec 内部 SCALE 编码键(Vec 键带 compact 长度前缀),
+    // map_account 传裸 32 字节(AccountId32 无长度前缀)。
     fn storage_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
-        let mut key = Vec::with_capacity(32);
-        key.extend_from_slice(&twox_128(pallet));
-        key.extend_from_slice(&twox_128(storage));
-        key
+        crate::shared::storage_keys::prefix(pallet, storage)
     }
 
     fn map_vec(pallet: &[u8], storage: &[u8], value: &[u8]) -> Vec<u8> {
-        let encoded = value.encode();
-        let mut key = storage_prefix(pallet, storage);
-        key.extend_from_slice(&blake2_128(&encoded));
-        key.extend_from_slice(&encoded);
-        key
+        crate::shared::storage_keys::blake2_map(pallet, storage, &value.encode())
     }
 
     fn map_account(pallet: &[u8], storage: &[u8], account: &[u8; 32]) -> Vec<u8> {
-        let mut key = storage_prefix(pallet, storage);
-        key.extend_from_slice(&blake2_128(account));
-        key.extend_from_slice(account);
-        key
+        crate::shared::storage_keys::blake2_map(pallet, storage, account)
     }
 
     fn double_map_vec(pallet: &[u8], storage: &[u8], first: &[u8], second: &[u8]) -> Vec<u8> {
-        let first = first.encode();
-        let second = second.encode();
-        let mut key = storage_prefix(pallet, storage);
-        key.extend_from_slice(&blake2_128(&first));
-        key.extend_from_slice(&first);
-        key.extend_from_slice(&blake2_128(&second));
-        key.extend_from_slice(&second);
-        key
+        crate::shared::storage_keys::blake2_double_map(
+            pallet,
+            storage,
+            &first.encode(),
+            &second.encode(),
+        )
     }
 
     pub fn citizen_registry_prefix() -> Vec<u8> {

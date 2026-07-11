@@ -13,7 +13,7 @@ export type AdminProfileLike = {
   admin_role?: string | null;
   term_start?: number | null;
   term_end?: number | null;
-  source_label?: string | null;
+  origin_label?: string | null;
   balance_fen?: string | null;
   built_in?: boolean | null;
   created_by_name?: string | null;
@@ -137,7 +137,7 @@ export function AdminProfileCard({ profile, index, action, status, actionPlaceme
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
           <Field label="任期" value={adminTermText(profile)} />
-          <Field label="来源" value={profile.source_label ?? ''} />
+          <Field label="来源" value={profile.origin_label ?? ''} />
         </div>
         <Field label="身份CID" value={profile.admin_cid_number ?? ''} wide />
         <Field label="账户" value={accountText} wide />
@@ -167,7 +167,7 @@ export function AdminProfileDetails({
       <Descriptions.Item label="姓名">{shownName || '-'}</Descriptions.Item>
       <Descriptions.Item label="职务">{profile.admin_role || '-'}</Descriptions.Item>
       <Descriptions.Item label="任期">{adminTermText(profile) || '-'}</Descriptions.Item>
-      <Descriptions.Item label="来源">{profile.source_label || '-'}</Descriptions.Item>
+      <Descriptions.Item label="来源">{profile.origin_label || '-'}</Descriptions.Item>
       <Descriptions.Item label="身份CID">
         {profile.admin_cid_number ? (
           <Typography.Text style={{ wordBreak: 'break-all' }}>{profile.admin_cid_number}</Typography.Text>

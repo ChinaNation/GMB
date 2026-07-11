@@ -5,9 +5,9 @@ import type { CapabilitySet } from '../auth/AuthContext';
 import type { CidMetaResult } from '../china/api';
 import { isSubordinateRegistry, isTier1Registry } from '../platform/registryTier';
 import type { InstitutionWorkspace, WorkspaceKind } from './types';
-import { GenericWorkspace } from './generic/GenericWorkspace';
+import { GenericWorkspace } from './GenericWorkspace';
 import { JudicialWorkspace } from './judicial/JudicialWorkspace';
-import { RegistryWorkspace } from './registry/RegistryWorkspace';
+import { RegistryWorkspace } from './RegistryWorkspace';
 
 export type WorkspaceRouterProps = {
   auth: AdminAuth;

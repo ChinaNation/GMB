@@ -1,41 +1,14 @@
-// 链上存储 key 构造工具，用于查询治理相关 pallet 的通用存储。
+// 治理相关 pallet RPC 查询用的存储 key String 门面。
 //
-// 格式：twox_128(pallet_name) + twox_128(storage_name) + blake2_128(key) + key
+// key 派生逻辑单源在 `crate::shared::storage_keys`(裸字节);本模块只做 `&str` 入参 +
+// `"0x"+hex` 出参的 RPC 适配,并 re-export 原始 hasher 供少数手搓键的调用点复用。
+// 格式：twox_128(pallet) + twox_128(storage) + blake2_128_concat(key)。
 
-use blake2b_simd::Params as Blake2bParams;
-use std::hash::Hasher;
-use twox_hash::XxHash64;
+use crate::shared::storage_keys as skeys;
 
-/// 计算 twox_128 哈希（Substrate 存储前缀专用）。
-pub fn twox_128(data: &[u8]) -> [u8; 16] {
-    let mut h0 = XxHash64::with_seed(0);
-    h0.write(data);
-    let r0 = h0.finish();
-
-    let mut h1 = XxHash64::with_seed(1);
-    h1.write(data);
-    let r1 = h1.finish();
-
-    let mut out = [0u8; 16];
-    out[..8].copy_from_slice(&r0.to_le_bytes());
-    out[8..].copy_from_slice(&r1.to_le_bytes());
-    out
-}
-
-/// 计算 twox_64 哈希(Substrate `Twox64Concat` 第一层 key 用)。
-pub fn twox_64(data: &[u8]) -> [u8; 8] {
-    let mut h = XxHash64::with_seed(0);
-    h.write(data);
-    h.finish().to_le_bytes()
-}
-
-/// 计算 blake2_128 哈希（Substrate StorageMap key 哈希）。
-pub fn blake2_128(data: &[u8]) -> [u8; 16] {
-    let hash = Blake2bParams::new().hash_length(16).hash(data);
-    let mut out = [0u8; 16];
-    out.copy_from_slice(hash.as_bytes());
-    out
-}
+// 原始 hasher 单源出口(委托 shared → sp_core::hashing),保持
+// `storage_keys::{twox_128,blake2_128}` 既有调用点(endpoint/institution_read/admins)不变。
+pub use crate::shared::storage_keys::{blake2_128, twox_128};
 
 /// 构造查询账户余额的存储 key：`System::Account(account_id)`。
 /// account_id 为 32 字节公钥（hex 不含 0x）。
@@ -47,64 +20,34 @@ pub fn system_account_key(account_hex: &str) -> Result<String, String> {
             account_bytes.len()
         ));
     }
-
-    let pallet_hash = twox_128(b"System");
-    let storage_hash = twox_128(b"Account");
-    let blake2_hash = blake2_128(&account_bytes);
-
-    let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
-    key.extend_from_slice(&pallet_hash);
-    key.extend_from_slice(&storage_hash);
-    key.extend_from_slice(&blake2_hash);
-    key.extend_from_slice(&account_bytes);
-
-    Ok(format!("0x{}", hex::encode(&key)))
+    Ok(skeys::to_hex(&skeys::blake2_map(
+        b"System",
+        b"Account",
+        &account_bytes,
+    )))
 }
 
 /// 构造无 map key 的存储 value key：twox_128(pallet) + twox_128(storage)。
 /// 用于查询 NextProposalId 等 StorageValue。
 pub fn value_key(pallet: &str, storage: &str) -> String {
-    let pallet_hash = twox_128(pallet.as_bytes());
-    let storage_hash = twox_128(storage.as_bytes());
-    let mut key = Vec::with_capacity(32);
-    key.extend_from_slice(&pallet_hash);
-    key.extend_from_slice(&storage_hash);
-    format!("0x{}", hex::encode(&key))
+    skeys::to_hex(&skeys::prefix(pallet.as_bytes(), storage.as_bytes()))
 }
 
 /// 构造 StorageMap key：twox_128(pallet) + twox_128(storage) + blake2_128_concat(key_data)。
 /// blake2_128_concat = blake2_128(data) + data。
 pub fn map_key(pallet: &str, storage: &str, key_data: &[u8]) -> String {
-    let pallet_hash = twox_128(pallet.as_bytes());
-    let storage_hash = twox_128(storage.as_bytes());
-    let blake2_hash = blake2_128(key_data);
-
-    let mut key = Vec::with_capacity(16 + 16 + 16 + key_data.len());
-    key.extend_from_slice(&pallet_hash);
-    key.extend_from_slice(&storage_hash);
-    key.extend_from_slice(&blake2_hash);
-    key.extend_from_slice(key_data);
-
-    format!("0x{}", hex::encode(&key))
+    skeys::to_hex(&skeys::blake2_map(pallet.as_bytes(), storage.as_bytes(), key_data))
 }
 
 /// 构造 DoubleMap key：twox_128(pallet) + twox_128(storage)
 ///   + blake2_128_concat(key1) + blake2_128_concat(key2)。
 pub fn double_map_key(pallet: &str, storage: &str, key1: &[u8], key2: &[u8]) -> String {
-    let pallet_hash = twox_128(pallet.as_bytes());
-    let storage_hash = twox_128(storage.as_bytes());
-    let blake2_hash1 = blake2_128(key1);
-    let blake2_hash2 = blake2_128(key2);
-
-    let mut key = Vec::with_capacity(16 + 16 + 16 + key1.len() + 16 + key2.len());
-    key.extend_from_slice(&pallet_hash);
-    key.extend_from_slice(&storage_hash);
-    key.extend_from_slice(&blake2_hash1);
-    key.extend_from_slice(key1);
-    key.extend_from_slice(&blake2_hash2);
-    key.extend_from_slice(key2);
-
-    format!("0x{}", hex::encode(&key))
+    skeys::to_hex(&skeys::blake2_double_map(
+        pallet.as_bytes(),
+        storage.as_bytes(),
+        key1,
+        key2,
+    ))
 }
 
 /// 构造 `StorageDoubleMap<_, Twox64Concat, K1, Twox64Concat, K2, _>` 的
@@ -114,17 +57,7 @@ pub fn double_map_key(pallet: &str, storage: &str, key1: &[u8], key2: &[u8]) -> 
 /// 对应 votingengine v1 的 `ProposalsByCode / ProposalsByCid / ByOwner / ByYear`
 /// 4 张反向索引的列举前缀。
 pub fn twox64_concat_prefix(pallet: &str, storage: &str, key1: &[u8]) -> String {
-    let pallet_hash = twox_128(pallet.as_bytes());
-    let storage_hash = twox_128(storage.as_bytes());
-    let twox64_k1 = twox_64(key1);
-
-    let mut key = Vec::with_capacity(16 + 16 + 8 + key1.len());
-    key.extend_from_slice(&pallet_hash);
-    key.extend_from_slice(&storage_hash);
-    key.extend_from_slice(&twox64_k1);
-    key.extend_from_slice(key1);
-
-    format!("0x{}", hex::encode(&key))
+    skeys::to_hex(&skeys::twox64_map(pallet.as_bytes(), storage.as_bytes(), key1))
 }
 
 #[cfg(test)]

@@ -6,7 +6,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { listOfficialInstitutions } from './api';
 import type { AdminAuth } from '../auth/types';
 import type { InstitutionListRow } from '../subjects/api';
-import { INSTITUTION_CODE_LABEL } from '../subjects/labels';
+import { useInstitutionCodeLabels } from '../subjects/institutionLabels';
 import {
   officialInstitutionCacheKey,
   readCachedOfficialInstitutionRows,
@@ -56,6 +56,7 @@ export const GovListTable: React.FC<Props> = ({
   const [rows, setRows] = useState<InstitutionListRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [deterministicPage, setDeterministicPage] = useState(1);
+  const institutionLabels = useInstitutionCodeLabels();
   const cacheKey = officialInstitutionCacheKey(auth, province_name, city_name);
 
   const loadRows = () => {
@@ -142,7 +143,7 @@ export const GovListTable: React.FC<Props> = ({
         dataIndex: 'institution_code',
         width: 130,
         align: 'center',
-        render: (v: string) => INSTITUTION_CODE_LABEL[v] || v,
+        render: (v: string) => institutionLabels[v] || v,
       },
       {
         title: '状态',
@@ -153,7 +154,7 @@ export const GovListTable: React.FC<Props> = ({
       },
       { title: '账户数', dataIndex: 'account_count', width: 90, align: 'center' },
     ];
-  }, [deterministicPage]);
+  }, [deterministicPage, institutionLabels]);
 
   return (
     <div>

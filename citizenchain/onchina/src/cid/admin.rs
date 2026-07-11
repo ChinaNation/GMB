@@ -4,7 +4,22 @@ use crate::cid::china::provinces;
 use crate::cid::code as institution_code;
 use crate::*;
 
-// 本文件只保留管理端 CID 编码元信息接口;城市列表由 cid::china::admin 提供。
+// 本文件保留 CID 编码元信息接口:管理端 meta(含行政区,需登录) + 公开机构码标签(免登录单源下发)。
+// 城市列表由 cid::china::admin 提供。
+
+/// 机构码→中文标签全集(primitives code.rs 单源,ALL_CODES = 104 码)。
+/// admin_cid_meta 与 public_cid_labels 共用,保证前后端标签同源。
+fn institution_code_items() -> Vec<CidInstitutionCodeItem> {
+    institution_code::ALL_CODES
+        .iter()
+        .map(|c| CidInstitutionCodeItem {
+            institution_code: institution_code::institution_code_text(c)
+                .expect("known CID institution code"),
+            institution_code_label: institution_code::institution_code_label(c)
+                .expect("known CID institution code"),
+        })
+        .collect()
+}
 
 pub(crate) async fn admin_cid_meta(
     State(state): State<AppState>,
@@ -41,20 +56,25 @@ pub(crate) async fn admin_cid_meta(
         code: 0,
         message: "ok".to_string(),
         data: AdminCidMetaOutput {
-            // 机构码选项由 primitives code.rs 单源派生(104 码);
+            // 机构码选项由 primitives code.rs 单源派生(104 码,与 public_cid_labels 同源);
             // 机构类别由机构码派生,不单列。
-            institution_options: institution_code::ALL_CODES
-                .iter()
-                .map(|c| CidInstitutionCodeItem {
-                    institution_code: institution_code::institution_code_text(c)
-                        .expect("known CID institution code"),
-                    institution_code_label: institution_code::institution_code_label(c)
-                        .expect("known CID institution code"),
-                })
-                .collect(),
+            institution_options: institution_code_items(),
             provinces: provinces_rows,
             all_provinces,
             scoped_province_name: scoped,
+        },
+    })
+    .into_response()
+}
+
+/// 公开机构码标签表(免登录):前端 `useInstitutionCodeLabels` 拉取,替代原硬编码 INSTITUTION_CODE_LABEL。
+/// 数据即 primitives code.rs 单源,内容与已编译前端旧硬编码等价(且更全),公开无敏感性。
+pub(crate) async fn public_cid_labels() -> impl IntoResponse {
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data: CidLabelsOutput {
+            institution_labels: institution_code_items(),
         },
     })
     .into_response()

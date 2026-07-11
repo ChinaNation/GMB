@@ -1511,9 +1511,9 @@ pub(crate) struct OnChainAdminProfileView {
     /// 任期结束(天数自纪元;无任期为 0)。
     pub(crate) term_end: u32,
     /// 职务/任期来源判别值。
-    pub(crate) source: u8,
+    pub(crate) origin: u8,
     /// 来源中文标签;未知来源留空。
-    pub(crate) source_label: String,
+    pub(crate) origin_label: String,
 }
 
 /// 联邦注册局单省 5 人组的链上只读投影。
@@ -1528,7 +1528,7 @@ pub(crate) struct FederalRegistryProvinceAdminProfiles {
     pub(crate) profiles: Vec<OnChainAdminProfileView>,
 }
 
-fn admin_source_label(source: u8) -> &'static str {
+fn admin_origin_label(source: u8) -> &'static str {
     match source {
         0 => "创世",
         1 => "注册局",
@@ -1551,8 +1551,8 @@ fn admin_profile_views(decoded: &OnChainAdminAccount) -> Vec<OnChainAdminProfile
             title: String::from_utf8_lossy(&profile.admin_role).to_string(),
             term_start: profile.term_start,
             term_end: profile.term_end,
-            source: profile.source,
-            source_label: admin_source_label(profile.source).to_string(),
+            origin: profile.source,
+            origin_label: admin_origin_label(profile.source).to_string(),
         })
         .collect()
 }

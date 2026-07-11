@@ -5,4 +5,5 @@ pub(crate) mod keystore;
 pub(crate) mod proposal_business;
 pub(crate) mod rpc;
 pub(crate) mod security;
+pub(crate) mod storage_keys;
 pub(crate) mod validation;

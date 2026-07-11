@@ -7,7 +7,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use codec::{Decode, Encode};
-use sp_core::hashing::{blake2_128, blake2_256, twox_128, twox_64};
+use sp_core::hashing::{blake2_256, twox_128};
+// twox_64 只在测试期的 key 校验(parse_twox_u32_key)使用;运行期键构造已收敛 shared::storage_keys。
+#[cfg(test)]
+use sp_core::hashing::twox_64;
 
 use primitives::citizen_const::{
     CITIZEN_ISSUANCE_HIGH_REWARD, CITIZEN_ISSUANCE_HIGH_REWARD_COUNT, CITIZEN_ISSUANCE_MAX_COUNT,
@@ -72,18 +75,13 @@ pub enum GuardError {
 pub mod storage_key {
     use super::*;
 
+    // `crate::shared::storage_keys` 单源的薄委托;blake2_map_raw 传已编码键(裸哈希入参)。
     fn storage_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
-        let mut key = Vec::with_capacity(32);
-        key.extend_from_slice(&twox_128(pallet));
-        key.extend_from_slice(&twox_128(storage));
-        key
+        crate::shared::storage_keys::prefix(pallet, storage)
     }
 
     fn blake2_map_raw(pallet: &[u8], storage: &[u8], encoded_key: &[u8]) -> Vec<u8> {
-        let mut key = storage_prefix(pallet, storage);
-        key.extend_from_slice(&blake2_128(encoded_key));
-        key.extend_from_slice(encoded_key);
-        key
+        crate::shared::storage_keys::blake2_map(pallet, storage, encoded_key)
     }
 
     pub fn pallet_prefix() -> [u8; 16] {
@@ -113,11 +111,11 @@ pub mod storage_key {
     }
 
     pub fn pending_reward(index: u32) -> Vec<u8> {
-        let encoded = index.encode();
-        let mut key = storage_prefix(CITIZEN_ISSUANCE_PALLET, b"PendingRewards");
-        key.extend_from_slice(&twox_64(&encoded));
-        key.extend_from_slice(&encoded);
-        key
+        crate::shared::storage_keys::twox64_map(
+            CITIZEN_ISSUANCE_PALLET,
+            b"PendingRewards",
+            &index.encode(),
+        )
     }
 
     #[cfg(test)]

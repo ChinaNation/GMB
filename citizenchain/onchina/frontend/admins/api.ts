@@ -18,8 +18,8 @@ export type FederalRegistryAdminRow = {
   admin_role: string;
   term_start: number;
   term_end: number;
-  source: number;
-  source_label: string;
+  origin: number;
+  origin_label: string;
   balance_fen?: string | null;
   built_in: boolean;
   created_at: string;
@@ -35,8 +35,8 @@ export type OwnInstitutionAdminRow = {
   admin_role: string;
   term_start: number;
   term_end: number;
-  source: number;
-  source_label: string;
+  origin: number;
+  origin_label: string;
   balance_fen?: string | null;
   is_self: boolean;
 };

@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use super::{MAccountData, MAccountInfo};
 
 use codec::Decode;
-use sp_core::hashing::{blake2_128, twox_128};
+use sp_core::hashing::twox_128;
 use sp_runtime::traits::Header as HeaderT;
 
 use citizenchain::opaque::Header;
@@ -42,18 +42,13 @@ pub enum GuardError {
 pub mod storage_key {
     use super::*;
 
+    // `crate::shared::storage_keys` 单源的薄委托;blake2_map 传裸 32 字节账户(AccountId32 无长度前缀)。
     fn storage_value(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
-        let mut key = Vec::with_capacity(32);
-        key.extend_from_slice(&twox_128(pallet));
-        key.extend_from_slice(&twox_128(storage));
-        key
+        crate::shared::storage_keys::prefix(pallet, storage)
     }
 
     fn blake2_map(pallet: &[u8], storage: &[u8], encoded_key: &[u8]) -> Vec<u8> {
-        let mut key = storage_value(pallet, storage);
-        key.extend_from_slice(&blake2_128(encoded_key));
-        key.extend_from_slice(encoded_key);
-        key
+        crate::shared::storage_keys::blake2_map(pallet, storage, encoded_key)
     }
 
     pub fn pallet_prefix() -> [u8; 16] {

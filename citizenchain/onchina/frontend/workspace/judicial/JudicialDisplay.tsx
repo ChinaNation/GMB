@@ -8,10 +8,10 @@ import { OwnInstitutionAdminsView } from '../../admins/RegistryAdminsView';
 import { InstitutionCategoryLabel, type Institution, type InstitutionAccount, type InstitutionDetail } from '../../subjects/api';
 import {
   EDUCATION_TYPE_LABEL,
-  INSTITUTION_CODE_LABEL,
   PARTNERSHIP_KIND_LABEL,
   PRIVATE_TYPE_LABEL,
 } from '../../subjects/labels';
+import { useInstitutionCodeLabels } from '../../subjects/institutionLabels';
 import { tryEncodeSs58 } from '../../utils/ss58';
 import { notice } from '../../utils/notice';
 
@@ -72,6 +72,7 @@ function accountText(account?: string | null): string {
 export function OwnInstitutionInfoPanel({ auth }: JudicialDisplayProps) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const institutionLabels = useInstitutionCodeLabels();
 
   useEffect(() => {
     let cancelled = false;
@@ -96,7 +97,7 @@ export function OwnInstitutionInfoPanel({ auth }: JudicialDisplayProps) {
   const status = inst?.status ? STATUS_LABEL[inst.status] || inst.status : '-';
   const chainStatus = account?.chain_status ? CHAIN_STATUS_LABEL[account.chain_status] || account.chain_status : '-';
   const institutionCode = inst?.institution_code ?? auth.institution_code;
-  const institutionCodeTitle = INSTITUTION_CODE_LABEL[institutionCode] || institutionCode;
+  const institutionCodeTitle = institutionLabels[institutionCode] || institutionCode;
 
   const scopeText = [auth.scope_province_name, auth.scope_city_name, auth.scope_town_name]
     .filter(Boolean)

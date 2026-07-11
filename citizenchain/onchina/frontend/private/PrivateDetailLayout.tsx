@@ -39,10 +39,10 @@ import type { AdminAuth } from '../auth/types';
 import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/securityApi';
 import {
   EDUCATION_TYPE_LABEL,
-  INSTITUTION_CODE_LABEL,
   PARTNERSHIP_KIND_LABEL,
   PRIVATE_TYPE_LABEL,
 } from '../subjects/labels';
+import { useInstitutionCodeLabels } from '../subjects/institutionLabels';
 import {
   checkCidFullName,
   searchParentInstitutions,
@@ -54,7 +54,7 @@ import {
 import { searchLegalRepresentativeCitizens } from '../citizens/api';
 import { AccountList } from '../accounts/AccountList';
 import { CreateAccountModal } from '../accounts/CreateAccountModal';
-import { DocumentLibrary } from '../docs/DocumentLibrary';
+import { DocsLibrary } from '../docs/DocsLibrary';
 import { notice } from '../utils/notice';
 import { InstitutionDetailNavLayout } from '../core/InstitutionDetailNavLayout';
 import { OperationRecords } from '../gov/OperationRecords';
@@ -104,6 +104,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   backLabel,
 }) => {
   const inst = detail.institution;
+  const institutionLabels = useInstitutionCodeLabels();
   const accounts = detail.accounts;
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
 
@@ -479,7 +480,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                 {inst.p1 === '0' ? '非盈利' : '盈利'}
               </Descriptions.Item>
               <Descriptions.Item label="机构">
-                {INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
+                {institutionLabels[inst.institution_code] || inst.institution_code}
               </Descriptions.Item>
               {inst.education_type && (
                 <Descriptions.Item label="教育分类">
@@ -783,7 +784,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
             key: 'documents',
             label: '资料库',
             content: (
-              <DocumentLibrary
+              <DocsLibrary
                 auth={auth}
                 cidNumber={inst.cid_number}
                 canWrite={canWrite}

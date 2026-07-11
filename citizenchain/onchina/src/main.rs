@@ -2296,15 +2296,15 @@ fn main() {
             )
             // 机构资料库文档 CRUD
             .route(
-                "/api/v1/institutions/:cid_number/documents",
+                "/api/v1/institutions/:cid_number/docs",
                 get(domains::docs::handler::list_documents).post(domains::docs::handler::upload_document),
             )
             .route(
-                "/api/v1/institutions/:cid_number/documents/:doc_id/download",
+                "/api/v1/institutions/:cid_number/docs/:doc_id/download",
                 get(domains::docs::handler::download_document),
             )
             .route(
-                "/api/v1/institutions/:cid_number/documents/:doc_id",
+                "/api/v1/institutions/:cid_number/docs/:doc_id",
                 delete(domains::docs::handler::delete_document),
             )
             .route(
@@ -2434,6 +2434,8 @@ fn main() {
                 "/api/v1/public/identity/search",
                 get(domains::citizens::handler::public_identity_search),
             )
+            // 机构码→中文标签单源(免登录):前端替代硬编码 INSTITUTION_CODE_LABEL。
+            .route("/api/v1/public/cid/labels", get(cid::admin::public_cid_labels))
             // 立法大屏只读看板(免登录):机构由节点绑定确定,不接受请求参数(fail-closed)。
             .route(
                 "/api/public/legislation/display/board",

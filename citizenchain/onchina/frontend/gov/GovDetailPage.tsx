@@ -3,10 +3,8 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Col, Descriptions, Popconfirm, Row, Space, Tag, Typography } from 'antd';
-import {
-  EDUCATION_TYPE_LABEL,
-  INSTITUTION_CODE_LABEL,
-} from '../subjects/labels';
+import { EDUCATION_TYPE_LABEL } from '../subjects/labels';
+import { useInstitutionCodeLabels } from '../subjects/institutionLabels';
 import { getInstitution, type InstitutionDetail } from './api';
 import { deleteAccount } from '../accounts/api';
 import type { AdminAuth } from '../auth/types';
@@ -14,7 +12,7 @@ import { AccountList } from '../accounts/AccountList';
 import { notice } from '../utils/notice';
 import { CreateAccountModal } from '../accounts/CreateAccountModal';
 import { PrivateDetailLayout } from '../private/PrivateDetailLayout';
-import { DocumentLibrary } from '../docs/DocumentLibrary';
+import { DocsLibrary } from '../docs/DocsLibrary';
 import {
   commitAdminAction,
   prepareAdminAction,
@@ -147,6 +145,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
 
   const inst = detail?.institution;
   const accounts = detail?.accounts || [];
+  const institutionLabels = useInstitutionCodeLabels();
   const administrativeArea = inst
     ? [inst.province_name, inst.city_name, inst.town_name].filter(Boolean).join('/') || '-'
     : '-';
@@ -221,7 +220,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
               <Descriptions.Item label="简称">{inst.cid_short_name || inst.cid_full_name || '-'}</Descriptions.Item>
               <Descriptions.Item label="行政区">{administrativeArea}</Descriptions.Item>
               <Descriptions.Item label="机构类型">
-                {INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
+                {institutionLabels[inst.institution_code] || inst.institution_code}
               </Descriptions.Item>
               {inst.education_type && (
                 <Descriptions.Item label="教育分类">
@@ -299,7 +298,7 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
               key: 'documents',
               label: '资料库',
               content: (
-                <DocumentLibrary
+                <DocsLibrary
                   auth={auth}
                   cidNumber={inst.cid_number}
                   canWrite={canWrite}

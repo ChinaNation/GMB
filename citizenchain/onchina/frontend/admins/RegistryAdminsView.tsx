@@ -62,7 +62,7 @@ const centeredConfirmFooter: ModalProps['footer'] = (_originNode, { OkBtn, Cance
   </div>
 );
 
-const ADMIN_LIST_CACHE_VERSION = 'cid-admin-list-v4';
+const ADMIN_LIST_CACHE_VERSION = 'cid-admin-list-v5';
 
 interface CachedAdminListPayload<T> {
   version: string;

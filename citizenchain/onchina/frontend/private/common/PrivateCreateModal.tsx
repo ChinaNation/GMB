@@ -4,7 +4,7 @@
 
 import React from 'react';
 import type { AdminAuth } from '../../auth/types';
-import { CreateInstitutionForm } from '../../core/institution/CreateInstitutionForm';
+import { CreateInstitutionForm } from '../../core/CreateInstitutionForm';
 import type { CreateInstitutionInput, CreateInstitutionOutput, PrivateType } from '../../subjects/api';
 import type { ScanSignResolver } from '../../admins/securityApi';
 import {

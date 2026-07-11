@@ -22,7 +22,7 @@ export async function listDocuments(
   cidNumber: string,
 ): Promise<InstitutionDocument[]> {
   return adminRequest<InstitutionDocument[]>(
-    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/documents`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/docs`,
     auth,
   );
 }
@@ -38,7 +38,7 @@ export async function uploadDocument(
   formData.append('file', file);
   formData.append('doc_type', docType);
   return adminRequest<InstitutionDocument>(
-    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/documents`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/docs`,
     auth,
     {
       method: 'POST',
@@ -54,7 +54,7 @@ export async function downloadDocument(
   fileName: string,
 ): Promise<void> {
   const resp = await fetch(
-    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/documents/${docId}/download`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/docs/${docId}/download`,
     { headers: adminHeaders(auth) },
   );
   if (!resp.ok) throw new Error(`下载失败 (${resp.status})`);
@@ -74,7 +74,7 @@ export async function deleteDocument(
   securityGrant: AdminSecurityGrantOutput,
 ): Promise<void> {
   await adminRequest<string>(
-    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/documents/${docId}`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/docs/${docId}`,
     auth,
     { method: 'DELETE', headers: { [SECURITY_GRANT_HEADER]: securityGrant.grant_id } },
   );

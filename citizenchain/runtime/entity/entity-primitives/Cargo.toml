@@ -7,12 +7,20 @@ repository.workspace = true
 license = "MIT"
 
 [dependencies]
+codec = { workspace = true }
+scale-info = { workspace = true }
+frame-support = { workspace = true }
+sp-runtime = { workspace = true }
 primitives = { path = "../../primitives", default-features = false }
 sp-std = { workspace = true }
 
 [features]
 default = ["std"]
 std = [
+    "codec/std",
+    "scale-info/std",
+    "frame-support/std",
+    "sp-runtime/std",
     "primitives/std",
     "sp-std/std",
 ]

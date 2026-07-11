@@ -2,8 +2,8 @@
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
 // 使用 QR_V1 envelope,不支持字段别名。
 
-import { parseQrEnvelope, QrParseError } from '../core/qr/citizenQr';
-import type { SignResponseBody } from '../core/qr/citizenQr';
+import { parseQrEnvelope, QrParseError } from '../core/citizenQr';
+import type { SignResponseBody } from '../core/citizenQr';
 
 export type SignedLoginPayload = {
   challenge_id: string;

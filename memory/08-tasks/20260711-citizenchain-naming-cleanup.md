@@ -53,3 +53,33 @@ citizenchain `cargo check` GREEN、onchina 前端 tsc GREEN、CitizenApp/Citizen
 - 剩余单子目录:`node/gen/schemas`、`onchina/frontend/assets` 等(约定/低值)。
 
 **结论:四类审计(公民/公民钱包/其他/公民链)的核心命名精简统一 + 链上名四端锁步已全部执行并四端构建验证 GREEN;剩余为结构性 DRY 重构与 entangled 改名,非命名核心。**
+
+## 阶段 D 结构性重构(2026-07-11 续,逐项做+验证)
+
+基线:主检出起点 `cargo check` EXIT=0(干净)。改动均在主检出、不提交、供 review。
+
+- **[D1] 机构生命周期类型 → entity-primitives 单源 —— 完成,cargo GREEN。** 先逐字段确认 public/private 两份 `institution/types.rs` **完全一致(仅 4 行 doc 措辞不同)**。7 个类型(`RegisteredInstitution`/`InstitutionLifecycleStatus`/`InstitutionInfo`/`InstitutionAccountInfo`/`CloseInstitutionAction`/`InstitutionInitialAccount`/`CreateInstitutionAccount`)上提 `entity-primitives/src/lib.rs` 作唯一定义(doc 合并为公私通用措辞,字段序/derive/枚举判别值原样保留 = SCALE 编码不变);entity-primitives Cargo.toml 补 codec/scale-info/frame-support/sp-runtime(+/std)。两 pallet `institution/types.rs` 改为 `pub use entity_primitives::{…}`,`mod.rs` 的 `pub use types::*` 与 lib.rs 对外 `pub use` 链不变 → genesis/multisig 测试及所有下游零改。node/onchina 四处 SCALE 解码镜像(字段序钉死)未动,布局不变仍可解码。`cargo check --workspace` EXIT=0(仅 2 既有 warning)。
+
+- **[D2] storage-key helper 合并 → 单源模块 —— 完成,cargo GREEN + golden 测试过。** 实况:非两套而是 **4 份 byte 版**(node_guard 的 cid_lifecycle/citizen_issuance/fullnode_issuance/governance_skeleton 各一份 storage_prefix/map_vec/blake2_map… )+ **1 份 hex-String 版**(governance/storage_keys.rs,自研 twox_hash/blake2b_simd hasher)。统一表示决策:**裸 Vec<u8> 为核心 + `to_hex()` 包 RPC 十六进制**(String 版=`"0x"+hex(byte 版)`,逐字节等价)。新建唯一实现 `node/src/shared/storage_keys.rs`(hasher 统一 `sp_core::hashing`):`prefix`/`blake2_128_concat`/`blake2_map`/`blake2_double_map`/`twox64_map`/`to_hex` + re-export 原始 hasher。4 个 node_guard 文件的私有 helper **改薄委托**(名字/签名保留→~150 wrapper 调用点零改);governance/storage_keys.rs 的 `value_key/map_key/double_map_key/twox64_concat_prefix/system_account_key` 委托 shared + `to_hex`,`twox_128/blake2_128` 改 re-export shared(endpoint/institution_read/admins 直接取哈希的调用点零改);删自研 hasher 与 twox_hash/blake2b_simd 引用。SCALE 编码约定保留(map_vec/double_map_vec 内部 encode 带长度前缀,map_account 传裸 32 字节)。twox_64 仅测试期用故 `#[cfg(test)]` 门控。**验证:** `cargo check -p node` 仅 2 既有 warning;`cargo test storage_keys` 5 test 全过,含 golden `prefix_matches_known_system_account`(= 公认 `System::Account` 前缀 `0x26aa39…371da9`,证 twox_128 规范实现、委托后旧键逐字节不变)+ 既有 `storage_keys_distinct_per_account` 仍过。
+
+- **[D3] 删前端 INSTITUTION_CODE_LABEL → 后端 CID 码表单源下发 —— 完成,onchina cargo + 前端 tsc GREEN。** 核实:前端硬编码 92 条**已过时**(缺 12 条军事/子部门码),真源 `primitives/cid/code.rs` `INSTITUTION_CODE_INFOS`=**104**、`PROVINCE_CODE_INFOS`=**43**(数组长度类型 + 单测 assert 双证)。后端:抽 `institution_code_items()`(admin_cid_meta 与新端点共用,ALL_CODES 派生 104 码)+ 新增免登录 `GET /api/v1/public/cid/labels`(cid::admin::public_cid_labels + CidLabelsOutput DTO,挂 public_routes)——数据即单源、内容比旧硬编码更全且已随前端 bundle 公开,无敏感性。前端:新建 `subjects/institutionLabels.ts`(模块级缓存 + `useInstitutionCodeLabels()` hook,publicRequest 一次拉取,兜底裸码);删 labels.ts 的 INSTITUTION_CODE_LABEL(92 行);5 处消费改 hook(JudicialDisplay/GovDetailPage/PrivateDetailLayout 直改、GovListTable 补 useMemo dep、OperationRecords 把 institution 标签从模块级对象改运行期 `formatAuditDetail(detail, institutionLabels)` 传参)。`EDUCATION_INSTITUTION_CODE_LABEL`(另一张 7 条教育码表,非目标)保留。**验证:** `cargo check -p onchina` EXIT=0;`npx tsc -b` EXIT=0;残留 INSTITUTION_CODE_LABEL 仅注释与新代码文档字符串。
+
+- **[D4] source → origin(管理员展示来源字段)—— 完成,onchina cargo + tsc GREEN,前后端锁步。** 只改与 `source_label` 配对的 u8 展示字段;**`AdminSource` 枚举 + 解码镜像 `OnChainAdminProfile.source`(chain_runtime.rs:844)未动**。后端(source→origin / source_label→origin_label / fn admin_source_label→admin_origin_label):model.rs 3 DTO(CityRegistry/Federal/OwnInstitution)、chain_runtime.rs(OnChainAdminProfileView 字段 + fn + builder `origin: profile.source`——RHS 读 844 镜像故保留)、catalog.rs 2 处、city_registry_admins.rs、actions.rs、legislation/display/service.rs 测试。无 serde rename → 线名 = 字段名,前端锁步:admins/api.ts(Federal/OwnInstitution)、cityRegistryAdminsApi.ts、AdminProfileCard.tsx(type + 140/170 两处「来源」读)。缓存 bump `cid-admin-list-v4→v5`(RegistryAdminsView.tsx,含 source_label 的旧缓存自动淘汰)。**验证:** onchina cargo EXIT=0;tsc EXIT=0;非 dist 残留 source_label 零。
+
+- **[D5] docs/documents/DocumentLibrary 统一为 docs —— 完成,onchina cargo + tsc GREEN,前后端锁步。** 后端模块本已叫 docs;route `/documents`→`/docs`(main.rs 3 条 `/api/v1/institutions/:cid_number/documents*` → `/docs*`,replace_all;**citizen_documents 的 `/admin/citizens/.../documents` 是另一概念,不动**)+ 前端 docs/api.ts 4 条 URL 同步。组件 `DocumentLibrary`→`DocsLibrary`:`git mv DocumentLibrary.tsx DocsLibrary.tsx`、改声明、docs/index.ts re-export、两 importer(PrivateDetailLayout/GovDetailPage 的 import 路径 + JSX 标签)。**验证:** 非 dist 残留 DocumentLibrary 零;后端 3 route = `/institutions/:cid_number/docs*` 与前端 fetch 逐字一致;cargo EXIT=0;tsc EXIT=0。
+
+- **[D6] 单子目录清冗余(全面)+ 删死资源 —— 完成,四端 GREEN。** 用户拍板全面清(≈30),node/gen/ 按「Tauri 工具生成、构建即重建」排除。
+  - **23 个 Rust `mod.rs`-only 目录 → `foo.rs`**(git mv + rmdir,模块路径不变→零 import 改):runtime/src/configs、node/src/{onchina_proc,settings/{node_mode,device_password,onchina_platform,bootnodes_address,grandpa_address,fee_account},home/{identity,rpc,process},other/other_tabs,mining/{dashboard,network_overview}}、onchina/src/domains/private/{sole,participants,welfare,association,common,corporation,partnership,company}、onchina/src/institution/subjects/unincorporated_org。**踩坑:** grandpa_address.rs 的 `include_str!("../institution-catalog.json")` 相对源文件,上提一层后路径错→改 `include_str!("institution-catalog.json")`(cargo 抓到)。`cargo check --workspace` EXIT=0。
+  - **7 个前端单文件目录 → 上提一层**(修被移文件相对 import 深度 + 所有 importer 路径):onchina `core/qr/citizenQr.ts`、`core/institution/CreateInstitutionForm.tsx`、`workspace/registry/RegistryWorkspace.tsx`、`workspace/generic/GenericWorkspace.tsx`(onchina tsc EXIT=0);node `settings/fee-address/WalletSection.tsx`、`app/styles/global.css`、`transaction/offchain-transaction/settlement/admin-unlock.tsx`(node tsc EXIT=0)。
+  - **删死资源** `onchina/frontend/assets/login-bg.png`(12.5MB,全仓零引用,用户确认删)+ 移除空 assets/ 目录。
+  - **排除(工具/约定/占位/数据)不动:** node/gen(Tauri 生成)、node/capabilities、node/resources/onchina-frontend(.gitkeep 占位)、node/data、crates(workspace member)、node/kernels、node/chainspecs、onchina/src/cid/china/reference。
+  - **已知残留单子目录(超出本轮批准的 ≈30,重折叠另议):** `node/frontend/admins/` 只含 `admin-management/`(11 文件子目录,折叠需改大量 importer,属单子文件夹包装,非本轮 23+7 范围)。
+
+## 阶段 D 验收(四端全绿)
+
+- citizenchain `cargo check --workspace` **EXIT=0**(仅 2 既有 warning:MAccountData / KeyTypeId,与基线一致)
+- onchina 前端 `npx tsc -b` **EXIT=0**
+- node 前端 `npx tsc --noEmit` **EXIT=0**
+- CitizenApp `flutter analyze` **2 既有 info(零错,与基线一致)**;CitizenWallet `flutter analyze` **No issues found**
+- 6 项均无残留旧名/旧路径;链上名(extrinsic/MODULE_TAG/storage 布局/call_index)零改动,故无需重生金标夹具;Flutter 客户端未触碰(本轮全在 citizenchain runtime/node/onchina)。
+- 改动全部留在 `/Users/rhett/GMB` 主检出工作区、未提交,供 review。

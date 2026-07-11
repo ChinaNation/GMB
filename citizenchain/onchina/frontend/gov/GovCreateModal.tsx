@@ -6,7 +6,7 @@
 
 import React from 'react';
 import type { AdminAuth } from '../auth/types';
-import { CreateInstitutionForm } from '../core/institution/CreateInstitutionForm';
+import { CreateInstitutionForm } from '../core/CreateInstitutionForm';
 import {
   checkCidFullName,
   createInstitution,

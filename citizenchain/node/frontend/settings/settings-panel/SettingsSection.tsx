@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { adminsChangeApi } from '../../admins/admin-management/api';
 import { homeNodeApi } from '../../home/api';
 import { settingsApi } from '../api';
-import { WalletSection } from '../fee-address/WalletSection';
+import { WalletSection } from '../WalletSection';
 import { NodeModeSection } from '../NodeModeSection';
 import { NodeKeySection } from '../NodeKeySection';
 import { OnChinaPlatformSection } from '../OnChinaPlatformSection';

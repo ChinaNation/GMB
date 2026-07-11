@@ -103,8 +103,8 @@ mod tests {
             title: "委员".to_string(),
             term_start: 0,
             term_end: 0,
-            source: 255,
-            source_label: String::new(),
+            origin: 255,
+            origin_label: String::new(),
         }
     }
 

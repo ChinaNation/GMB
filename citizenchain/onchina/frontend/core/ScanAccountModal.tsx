@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Modal, Typography } from 'antd';
 import { decodeSs58 } from '../utils/ss58';
-import { parseQrEnvelope, QrParseError } from './qr/citizenQr';
+import { parseQrEnvelope, QrParseError } from './citizenQr';
 import { startCameraScanner } from '../utils/cameraScanner';
 import { CID_MODAL_Z_INDEX } from './modalStack';
 

@@ -30,7 +30,7 @@ import { hexToSs58 } from '../../shared/ss58';
 import { offchainApi } from './api';
 import type { ClearingBankView } from './types';
 import { ClearingBankDeclareNodePage } from './node-register';
-import { ClearingBankAdminListPage } from './settlement/admin-unlock';
+import { ClearingBankAdminListPage } from './admin-unlock';
 import './styles.css';
 
 const STORAGE_KEY = 'gmb-clearing-bank-known-cids';

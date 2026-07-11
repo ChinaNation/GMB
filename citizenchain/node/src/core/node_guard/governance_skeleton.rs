@@ -31,19 +31,15 @@ const PALLET_NAME: &[u8] = b"PublicAdmins";
 /// `FederalRegistryProvinceGroups: StorageMap<Blake2_128Concat, ProvinceCode, ..>`。
 pub mod storage_key {
     use super::PALLET_NAME;
-    use sp_core::hashing::{blake2_128, twox_128};
+    use sp_core::hashing::twox_128;
 
+    // `crate::shared::storage_keys` 单源的薄委托(pallet 固定为 PALLET_NAME)。
     fn map_prefix(storage: &[u8]) -> Vec<u8> {
-        let mut k = Vec::with_capacity(32);
-        k.extend_from_slice(&twox_128(PALLET_NAME));
-        k.extend_from_slice(&twox_128(storage));
-        k
+        crate::shared::storage_keys::prefix(PALLET_NAME, storage)
     }
 
     fn blake2_128_concat(encoded: &[u8]) -> Vec<u8> {
-        let mut out = blake2_128(encoded).to_vec();
-        out.extend_from_slice(encoded);
-        out
+        crate::shared::storage_keys::blake2_128_concat(encoded)
     }
 
     /// `PublicAdmins::AdminAccounts[account]` 的完整存储 key。
