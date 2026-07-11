@@ -103,7 +103,7 @@ pub mod pallet {
 
         /// **NRC 费用账户(收创建费 fee_account)** 提供器:
         /// - 1000 GMB 创建费 unreserve 后 transfer 的目标
-        /// - 与 onchain_transaction::NrcAccountProvider 语义一致(都是收钱账户)
+        /// - 与 onchain::NrcAccountProvider 语义一致(都是收钱账户)
         type NrcFeeAccountProvider: NrcFeeAccountProvider<Self::AccountId>;
 
         /// 资产元数据字符串字段最大长度(name / symbol / description)。
@@ -142,7 +142,7 @@ pub mod pallet {
     /// **NRC 费用账户(收创建费 fee_account)** trait。
     ///
     /// 实装位置:`runtime/src/configs/mod.rs::RuntimeNrcAccountProvider`(复用既有,
-    /// 返回 `china_cb[0].fee_account`,与 onchain_transaction::NrcAccountProvider 同源)。
+    /// 返回 `china_cb[0].fee_account`,与 onchain::NrcAccountProvider 同源)。
     pub trait NrcFeeAccountProvider<AccountId> {
         fn nrc_fee_account() -> Option<AccountId>;
     }
@@ -155,7 +155,7 @@ pub mod pallet {
     /// 用户代币的唯一权威 storage,记录 issuer / class / decimals / state。
     #[pallet::storage]
     #[pallet::getter(fn asset_meta)]
-    pub type Assets<T: Config> = StorageMap<
+    pub type AssetMetas<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         OnchainAssetId,

@@ -15,7 +15,7 @@
 pub use pallet::*;
 
 /// 模块标识前缀。后续如需把业务数据写入 votingengine ProposalData，必须使用本 tag。
-pub const MODULE_TAG: &[u8] = b"ele-camp1";
+pub const MODULE_TAG: &[u8] = b"ele-camp";
 
 /// 选举业务活动模式。具体含义由本模块后续规则解释，投票流程仍交给 election-vote。
 #[derive(
@@ -30,7 +30,7 @@ pub const MODULE_TAG: &[u8] = b"ele-camp1";
     scale_info::TypeInfo,
     frame_support::pallet_prelude::MaxEncodedLen,
 )]
-pub enum ElectionCampaignMode {
+pub enum CampaignMode {
     /// 普选活动：由具备投票身份的公民按作用域投票。
     Popular,
     /// 互选活动：由机构现任成员或管理员在快照内投票。
@@ -50,7 +50,7 @@ pub enum ElectionCampaignMode {
     scale_info::TypeInfo,
     frame_support::pallet_prelude::MaxEncodedLen,
 )]
-pub enum ElectionCampaignStatus {
+pub enum CampaignStatus {
     /// 活动草稿或预留状态。
     Draft,
     /// 已创建选举投票提案。
@@ -79,9 +79,9 @@ pub enum ElectionCampaignStatus {
     scale_info::TypeInfo,
     frame_support::pallet_prelude::MaxEncodedLen,
 )]
-pub struct ElectionCampaignMeta<AccountId, BlockNumber, OfficeCode> {
+pub struct CampaignMeta<AccountId, BlockNumber, OfficeCode> {
     pub vote_proposal_id: u64,
-    pub election_mode: ElectionCampaignMode,
+    pub campaign_mode: CampaignMode,
     pub organizer_code: primitives::cid::code::InstitutionCode,
     pub organizer_account: AccountId,
     pub target_code: primitives::cid::code::InstitutionCode,
@@ -91,7 +91,7 @@ pub struct ElectionCampaignMeta<AccountId, BlockNumber, OfficeCode> {
     pub seat_count: u16,
     pub term_start: BlockNumber,
     pub term_end: BlockNumber,
-    pub campaign_status: ElectionCampaignStatus,
+    pub campaign_status: CampaignStatus,
 }
 
 #[frame_support::pallet]
@@ -110,7 +110,7 @@ pub mod pallet {
     #[pallet::error]
     pub enum Error<T> {
         /// 真实选举业务尚未接入。
-        ElectionCampaignNotImplemented,
+        CampaignNotImplemented,
     }
 
     impl<T: Config> Pallet<T> {

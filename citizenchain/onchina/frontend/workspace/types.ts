@@ -20,9 +20,9 @@ export type WorkspaceAction =
   | 'view_operation_records';
 
 export type WorkspaceActionItem = {
-  workspace_action: WorkspaceAction;
-  workspace_action_title: string;
-  workspace_action_enabled: boolean;
+  action: WorkspaceAction;
+  title: string;
+  enabled: boolean;
 };
 
 export type WorkspaceSection = {

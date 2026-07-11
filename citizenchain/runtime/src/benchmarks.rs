@@ -37,14 +37,14 @@ frame_benchmarking::define_benchmarks!(
     [pow_difficulty, PowDifficulty]
     [public_admins, PublicAdmins]
     [private_admins, PrivateAdmins]
-    [resolution_destro, ResolutionDestro]
+    [resolution_destroy, ResolutionDestroy]
     [grandpakey_change, GrandpaKeyChange]
     [public_manage, PublicManage]
     [private_manage, PrivateManage]
     // personal_manage / personal_admins benchmark 用例待 follow-up;当前 benchmarks.rs 是空骨架,
     // 不挂载到 list_benchmarks 避免 Benchmarking trait 缺失编译错误。
     // [personal_admins, PersonalAdmins]
-    [multisig_transfer, MultisigTransfer]
+    [multisig, MultisigTransfer]
     // internal-vote / joint-vote 删除 migration benchmark 后暂无 benchmark fn,
     // cast / finalize 权重待补;votingengine 引擎核心 + election-vote 同样暂无。
     // 无 benchmark fn 的 pallet 不挂载,避免 Benchmarking trait 缺失编译错误。

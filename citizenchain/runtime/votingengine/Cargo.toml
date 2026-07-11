@@ -16,7 +16,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 primitives = { path = "../primitives", default-features = false }
-citizen-identity = { path = "../otherpallet/citizen-identity", default-features = false }
+citizen-identity = { path = "../misc/citizen-identity", default-features = false }
 
 [features]
 default = ["std"]

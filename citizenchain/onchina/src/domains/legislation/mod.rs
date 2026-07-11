@@ -14,7 +14,7 @@ pub(crate) mod category;
 pub(crate) mod chain_read_proposal;
 /// 大屏只读看板(Phase 3)——本节点机构名册 × 活跃提案 × 逐席投票聚合,免登录只读。
 pub(crate) mod display;
-/// 立法与表决 HTTP handler(/api/legislation/* 发起/表决/读法律/读提案)。
+/// 立法与表决 HTTP handler(/api/v1/legislation/* 发起/表决/读法律/读提案)。
 pub(crate) mod handler;
 /// 法律案——章节条款提案 + 院内/两院表决 + 签署的链交互编码器(Phase 1)。
 pub(crate) mod law;

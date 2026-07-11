@@ -180,7 +180,7 @@ class ProposalCapabilityRegistry {
       kind: ProposalKind.resolutionIssuance,
       enabled: true,
       pallet: 'ResolutionIssuance',
-      call: 'propose_resolution_issuance',
+      call: 'propose_issuance',
       voteEngine: 'JointVote',
       allows: (subject) =>
           _jointGovernanceCodes.contains(subject.institutionCode),

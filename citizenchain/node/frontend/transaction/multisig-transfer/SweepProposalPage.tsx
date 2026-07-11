@@ -1,6 +1,6 @@
 // 手续费划转提案页面：金额输入 + QR 签名流程。
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { sanitizeError } from '../../core/tauri';
+import { sanitizeError } from '../../tauri';
 import { hexToSs58 } from '../../shared/ss58';
 import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { multisigTransferApi as api } from './api';

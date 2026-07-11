@@ -38,7 +38,7 @@ import {
   type CreateFormCategory,
 } from '../../subjects/labels';
 import { notice } from '../../utils/notice';
-import type { ScanSignResolver } from '../../admins/admin_security_api';
+import type { ScanSignResolver } from '../../admins/securityApi';
 import { useScanSignGrant } from '../useScanSignGrant';
 
 interface FormValues {
@@ -151,7 +151,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
 
   const isPrivate = category === 'PRIVATE_INSTITUTION';
   const isGov = category === 'GOV_INSTITUTION';
-  const isEducation = category === 'EDUCATION_INSTITUTION';
+  const isEducation = category === 'EDUCATION_FORM';
   const watchedPartnershipKind = Form.useWatch('partnership_kind', form) as PartnershipKind | undefined;
   const watchedEducationType = Form.useWatch('education_type', form) as EducationType | undefined;
   const watchedInstitution = Form.useWatch('institution', form) as string | undefined;
@@ -228,7 +228,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     setCidFullNameAvailable(null);
     resetParentState();
     const defaultInstitution = defaultRule?.institution ?? institutionChoicesFor(category, defaultSubjectProperty)[0]?.value;
-    const defaultEducationType = category === 'EDUCATION_INSTITUTION' && defaultSubjectProperty !== 'F'
+    const defaultEducationType = category === 'EDUCATION_FORM' && defaultSubjectProperty !== 'F'
       ? SCHOOL_EDUCATION_TYPE_OPTIONS[0]?.value as EducationType
       : undefined;
     const defaultCollectName = isPrivate || isEducation || isGov;

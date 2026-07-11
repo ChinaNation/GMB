@@ -116,7 +116,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     );
 
     let balance_u128: u128 = all_balance.saturated_into();
-    let fee_u128 = onchain_transaction::calculate_onchain_fee(balance_u128);
+    let fee_u128 = onchain::calculate_onchain_fee(balance_u128);
     let fee: BalanceOf<T> = fee_u128.saturated_into();
     let transfer_amount = all_balance
         .checked_sub(&fee)

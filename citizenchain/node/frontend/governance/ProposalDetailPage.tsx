@@ -1,7 +1,7 @@
 // 提案详情页：提案元数据 + 业务详情模块挂载 + 投票进度 + 管理员投票状态列表。
 // 从提案列表和机构页面进入时行为一致：自动检测管理员钱包权限。
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { sanitizeError } from '../core/tauri';
+import { sanitizeError } from '../tauri';
 import { hexToSs58 } from '../shared/ss58';
 import { MultisigTransferProposalDetailSection } from '../transaction/multisig-transfer/ProposalDetailSection';
 import { adminsChangeApi } from '../admins/admin-management/api';

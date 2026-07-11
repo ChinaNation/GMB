@@ -12,7 +12,7 @@
 // benchmark
 // pallet
 // --runtime=/Users/rhett/GMB/citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
-// --genesis-builder=spec-genesis
+// --genesis_pallet-builder=spec-genesis_pallet
 // --pallet=runtime_upgrade
 // --extrinsic=*
 // --steps=50

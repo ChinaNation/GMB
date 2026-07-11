@@ -295,7 +295,7 @@ pub mod pallet {
             scope: PopulationScope,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_prepare_population_snapshot(who, scope)
+            Self::do_prepare_joint_population_snapshot(who, scope)
         }
     }
 }

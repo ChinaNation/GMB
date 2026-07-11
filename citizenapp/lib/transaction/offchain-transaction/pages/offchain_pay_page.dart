@@ -14,7 +14,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// - 入口:`offchain_scan_flow.dart` 扫商户码成功后跳转过来
 ///   (商户码 `UserTransferBody` 的 `bank` 字段是收款方清算行 `cid_number`)。
 /// - Step 3 范围:同行 / 跨行都提交到**收款方清算行节点**,与 runtime
-///   `submit_offchain_batch_v2` 的收款方主导模型对齐。
+///   `submit_offchain_batch` 的收款方主导模型对齐。
 /// - 流程:
 ///   1. 连清算行节点 RPC,查 `offchain_queryUserBank(user)` 得付款方清算行
 ///      `payer_bank` SS58(未绑定 → 结束);

@@ -19,7 +19,7 @@ use crate::transaction::offchain_transaction::types::{ConnectivityCheck, Connect
 
 const DNS_RESOLVE_TIMEOUT: Duration = Duration::from_secs(3);
 const REMOTE_RPC_TIMEOUT: Duration = Duration::from_secs(5);
-const EXPECTED_SS58_PREFIX: u64 = 2027;
+const EXPECTED_SS58_PREFIX: u64 = primitives::core_const::SS58_FORMAT as u64;
 
 /// 对 `domain:port` 做 4 重连通性自测,返回前端友好的逐项报告。
 pub fn run_endpoint_connectivity_test(

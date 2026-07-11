@@ -5,7 +5,7 @@
 //!
 //! ## 当前路由表(admin 端,login 中间件)
 //!
-//! - GET    /api/v1/institutions/official                  → list_official_institutions
+//! - GET    /api/v1/institutions/gov                  → list_official_institutions
 
 #![allow(dead_code)]
 
@@ -38,7 +38,7 @@ pub(crate) struct ListOfficialInstitutionQuery {
     pub page_size: Option<usize>,
 }
 
-/// GET /api/v1/institutions/official
+/// GET /api/v1/institutions/gov
 ///
 /// 公权机构列表来自链上投影缓存,进入市详情时直接展示。
 /// `q` 只作为已展示列表的过滤条件,不能再作为是否返回数据的前提。

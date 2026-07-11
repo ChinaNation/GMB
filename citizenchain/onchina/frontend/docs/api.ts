@@ -1,7 +1,7 @@
 // 机构资料库前端 API。资料上传、下载、删除都归 docs 模块。
 
 import type { AdminAuth } from '../auth/types';
-import type { AdminSecurityGrantOutput } from '../admins/admin_security_api';
+import type { AdminSecurityGrantOutput } from '../admins/securityApi';
 import { adminHeaders, adminRequest } from '../utils/http';
 import type { InstitutionDocument } from '../subjects/api';
 
@@ -22,7 +22,7 @@ export async function listDocuments(
   cidNumber: string,
 ): Promise<InstitutionDocument[]> {
   return adminRequest<InstitutionDocument[]>(
-    `/api/v1/institution/${encodeURIComponent(cidNumber)}/documents`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/documents`,
     auth,
   );
 }
@@ -38,7 +38,7 @@ export async function uploadDocument(
   formData.append('file', file);
   formData.append('doc_type', docType);
   return adminRequest<InstitutionDocument>(
-    `/api/v1/institution/${encodeURIComponent(cidNumber)}/documents`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/documents`,
     auth,
     {
       method: 'POST',
@@ -54,7 +54,7 @@ export async function downloadDocument(
   fileName: string,
 ): Promise<void> {
   const resp = await fetch(
-    `/api/v1/institution/${encodeURIComponent(cidNumber)}/documents/${docId}/download`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/documents/${docId}/download`,
     { headers: adminHeaders(auth) },
   );
   if (!resp.ok) throw new Error(`下载失败 (${resp.status})`);
@@ -74,7 +74,7 @@ export async function deleteDocument(
   securityGrant: AdminSecurityGrantOutput,
 ): Promise<void> {
   await adminRequest<string>(
-    `/api/v1/institution/${encodeURIComponent(cidNumber)}/documents/${docId}`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/documents/${docId}`,
     auth,
     { method: 'DELETE', headers: { [SECURITY_GRANT_HEADER]: securityGrant.grant_id } },
   );

@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::time::Duration;
 
 use super::{chain_query, storage_keys};
-use crate::admins::admin_management;
+use crate::admins::management;
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
@@ -22,8 +22,8 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
 /// 查询指定机构的管理员完整资料。
 pub fn fetch_admin_profiles(
     cid_number: &str,
-) -> Result<Vec<admin_management::types::AdminProfileInfo>, String> {
-    admin_management::storage::fetch_admin_profiles_by_cid_number(cid_number)
+) -> Result<Vec<management::types::AdminProfileInfo>, String> {
+    management::storage::fetch_admin_profiles_by_cid_number(cid_number)
 }
 
 /// 查询 finalized 块上的账户余额（返回 free 余额，单位为最小精度）。

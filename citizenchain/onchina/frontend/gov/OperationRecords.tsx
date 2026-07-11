@@ -43,7 +43,7 @@ const AUDIT_ACTION_LABEL: Record<string, string> = {
 const CATEGORY_LABEL: Record<string, string> = {
   GOV_INSTITUTION: '公权机构',
   PRIVATE_INSTITUTION: '私权机构',
-  EDUCATION_INSTITUTION: '教育机构',
+  EDUCATION_FORM: '教育机构',
 };
 
 // 审计详情"事实字段"的人话翻译(代码不上前端)。

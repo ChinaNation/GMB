@@ -8,7 +8,7 @@
 //   - 已声明 → 内联展示节点对外端点信息
 
 import { useEffect, useState } from 'react';
-import { sanitizeError } from '../../../core/tauri';
+import { sanitizeError } from '../../../tauri';
 import { offchainApi } from '../api';
 import type { ClearingBankNodeOnChainInfo } from '../types';
 import { institutionReadApi } from './api';

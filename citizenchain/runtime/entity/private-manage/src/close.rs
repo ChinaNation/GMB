@@ -159,7 +159,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     );
     {
         let balance_u128: u128 = all_balance.saturated_into();
-        let fee_u128 = onchain_transaction::calculate_onchain_fee(balance_u128);
+        let fee_u128 = onchain::calculate_onchain_fee(balance_u128);
         let fee: BalanceOf<T> = fee_u128.saturated_into();
         let transfer_amount = all_balance
             .checked_sub(&fee)
@@ -253,7 +253,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
         );
         let bal = T::Currency::free_balance(addr);
         if !bal.is_zero() {
-            let fee_u128 = onchain_transaction::calculate_onchain_fee(bal.saturated_into());
+            let fee_u128 = onchain::calculate_onchain_fee(bal.saturated_into());
             let mut fee: BalanceOf<T> = fee_u128.saturated_into();
             // 扣费后不足 ED 的 dust 子账户整额转出、不收费,避免转账失败留残。
             let transfer_amount = match bal.checked_sub(&fee) {

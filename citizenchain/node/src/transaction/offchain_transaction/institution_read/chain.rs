@@ -6,7 +6,7 @@
 //   主账户/费用账户由 `(cid_number, 保留名)` 经 GMB 协议确定性派生,不在链上重复存。
 // - 管理员集合真源在各管理员 pallet 的 `AdminAccounts[main_account]`,动态阈值真源在
 //   `InternalVote::ActiveDynamicThresholds[(institution_code, main_account)]`。
-// - 清算行节点声明 `OffchainTransaction::ClearingBankNodes` 走 `offchain_transaction::endpoint`,
+// - 清算行节点声明 `OffchainTransaction::ClearingBankNodes` 走 `offchain::endpoint`,
 //   与机构身份只读解耦。
 
 use codec::{Decode, Encode};
@@ -18,7 +18,7 @@ use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};
 use std::time::Duration;
 
-use crate::admins::admin_management::storage as admins_storage;
+use crate::admins::management::storage as admins_storage;
 use crate::governance::chain_query;
 use crate::governance::signing::pubkey_to_ss58;
 use crate::governance::storage_keys;
@@ -219,7 +219,7 @@ fn fetch_account_free_balance(account: &AccountId32, finalized_hash: &str) -> Re
     let raw: [u8; 32] = (*account).clone().into();
     // System.Account 用 Blake2_128Concat 哈希器,key = blake2_128(account) ++ account
     let mut hashed = Vec::with_capacity(48);
-    hashed.extend_from_slice(&storage_keys::blake2b_128(&raw));
+    hashed.extend_from_slice(&storage_keys::blake2_128(&raw));
     hashed.extend_from_slice(&raw);
     let key = format!(
         "0x{}{}{}",
@@ -466,7 +466,7 @@ fn fetch_institution_accounts(
     //   ++ blake2_128(cid_number_bytes) ++ cid_number_bytes(BoundedVec 编码)
     let cid_key = encode_cid_key_data(cid_number)?;
     let mut cid_prefix_data = Vec::with_capacity(16 + cid_key.len());
-    cid_prefix_data.extend_from_slice(&storage_keys::blake2b_128(&cid_key));
+    cid_prefix_data.extend_from_slice(&storage_keys::blake2_128(&cid_key));
     cid_prefix_data.extend_from_slice(&cid_key);
     let pallet = storage_keys::twox_128(manage_pallet.as_bytes());
     let storage = storage_keys::twox_128(b"InstitutionAccounts");

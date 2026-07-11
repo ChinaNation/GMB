@@ -20,15 +20,15 @@ export function JudicialOperations({ auth }: JudicialOperationsProps) {
   return (
     <Space wrap>
       {actions.map((action) => {
-        const icon = action.workspace_action === 'sign_legislation' ? <AuditOutlined /> : <TeamOutlined />;
+        const icon = action.action === 'sign_legislation' ? <AuditOutlined /> : <TeamOutlined />;
         return (
           <Button
-            key={action.workspace_action}
+            key={action.action}
             icon={icon}
-            disabled={!action.workspace_action_enabled}
-            type={action.workspace_action_enabled ? 'primary' : 'default'}
+            disabled={!action.enabled}
+            type={action.enabled ? 'primary' : 'default'}
           >
-            {action.workspace_action_title}
+            {action.title}
           </Button>
         );
       })}

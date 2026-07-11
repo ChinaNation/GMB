@@ -3,8 +3,8 @@ import { adminsChangeApi } from '../../admins/admin-management/api';
 import { homeNodeApi } from '../../home/api';
 import { settingsApi } from '../api';
 import { WalletSection } from '../fee-address/WalletSection';
-import { NodeModeSection } from '../node-mode/NodeModeSection';
-import { NodeKeySection } from '../node-key/NodeKeySection';
+import { NodeModeSection } from '../NodeModeSection';
+import { NodeKeySection } from '../NodeKeySection';
 import { OnChinaPlatformSection } from '../OnChinaPlatformSection';
 import type { ChainStatus } from '../../home/types';
 import type {

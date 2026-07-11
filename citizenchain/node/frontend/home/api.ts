@@ -1,4 +1,4 @@
-import { invoke } from '../core/tauri';
+import { invoke } from '../tauri';
 import type { ChainStatus, NodeIdentity, NodeStatus, TotalIssuance, TotalStake } from './types';
 
 // 首页节点面板专用 Tauri API。

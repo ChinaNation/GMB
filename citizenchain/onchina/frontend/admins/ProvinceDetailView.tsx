@@ -14,7 +14,7 @@ import { useScope } from '../hooks/useScope';
 import { isTier1Registry, TIER2_REGISTRY_CODE } from '../platform/registryTier';
 import type { AdminAuth } from '../auth/types';
 import type { CidCityItem } from '../china/api';
-import type { CityRegistryAdminRow } from './city_registry_admins_api';
+import type { CityRegistryAdminRow } from './cityRegistryAdminsApi';
 import { glassCardStyle, glassCardHeadStyle } from '../core/cardStyles';
 import { MAX_CITY_REGISTRY_ADMINS_PER_CITY, sameHexAccount } from './adminUtils';
 import type { RegistryAdminsSharedState } from './adminUtils';

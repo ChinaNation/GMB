@@ -3,7 +3,7 @@
 use primitives::cid::china::china_cb::{ChinaCb, CHINA_CB, SAFETY_FUND_ACCOUNT};
 use primitives::cid::china::china_ch::{ChinaCh, CHINA_CH};
 
-use super::types::{GovernanceOverview, InstitutionListItem, OrgType};
+use super::types::{GovernanceOverview, InstitutionListItem, InstitutionType};
 
 #[derive(Clone, Copy)]
 pub(crate) enum InstitutionRef {
@@ -48,11 +48,11 @@ impl InstitutionRef {
         }
     }
 
-    pub(crate) fn org_type(self) -> OrgType {
+    pub(crate) fn org_type(self) -> InstitutionType {
         match self {
-            InstitutionRef::Nrc(_) => OrgType::Nrc,
-            InstitutionRef::Prc(_) => OrgType::Prc,
-            InstitutionRef::Prb(_) => OrgType::Prb,
+            InstitutionRef::Nrc(_) => InstitutionType::Nrc,
+            InstitutionRef::Prc(_) => InstitutionType::Prc,
+            InstitutionRef::Prb(_) => InstitutionType::Prb,
         }
     }
 

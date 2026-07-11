@@ -1,7 +1,7 @@
 // 管理员列表页：两列网格展示所有管理员，每个管理员一个卡片。
 // 从机构详情页点击"管理员列表"入口卡片进入。
 import { useEffect, useState, useCallback } from 'react';
-import { sanitizeError } from '../../core/tauri';
+import { sanitizeError } from '../../tauri';
 import { CitizenSignatureModal } from '../../shared/qr/CitizenSignatureModal';
 import { adminsChangeApi as api } from './api';
 import { AdminProfileCard } from './AdminProfileCard';

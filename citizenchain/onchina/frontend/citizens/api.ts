@@ -6,7 +6,7 @@ import type { AdminAuth } from '../auth/types';
 import {
   createScanSignSecurityGrant,
   type ScanSignResolver,
-} from '../admins/admin_security_api';
+} from '../admins/securityApi';
 import { adminHeaders, adminRequest, request } from '../utils/http';
 
 const SECURITY_GRANT_HEADER = 'x-cid-security-grant';

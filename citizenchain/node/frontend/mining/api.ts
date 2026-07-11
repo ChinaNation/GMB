@@ -1,4 +1,4 @@
-import { invoke } from '../core/tauri';
+import { invoke } from '../tauri';
 import type { MiningDashboard, NetworkOverview } from './types';
 
 // 挖矿 tab 专用 Tauri API。

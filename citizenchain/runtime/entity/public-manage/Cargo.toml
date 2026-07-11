@@ -19,7 +19,7 @@ sp-std = { workspace = true }
 admin-primitives = { path = "../../admins/admin-primitives", default-features = false }
 votingengine = { path = "../../votingengine", default-features = false }
 institution-asset = { path = "../../transaction/institution-asset", default-features = false }
-onchain-transaction = { path = "../../transaction/onchain-transaction", default-features = false }
+onchain = { path = "../../transaction/onchain", default-features = false }
 primitives = { path = "../../primitives", default-features = false }
 entity-primitives = { path = "../entity-primitives", default-features = false }
 
@@ -44,7 +44,7 @@ std = [
     "admin-primitives/std",
     "votingengine/std",
     "institution-asset/std",
-    "onchain-transaction/std",
+    "onchain/std",
     "primitives/std",
     "entity-primitives/std",
 ]

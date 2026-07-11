@@ -8,12 +8,12 @@ import 'package:citizenapp/8964/chain/square_chain_service.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
 
 void main() {
-  test('publish_square_post call_data 与 runtime 下标和字段顺序一致', () {
+  test('publish_post call_data 与 runtime 下标和字段顺序一致', () {
     final hashHex = List<int>.generate(32, (index) => index + 1)
         .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
         .join();
 
-    final callData = SquareChainService.buildPublishSquarePostCallData(
+    final callData = SquareChainService.buildPublishPostCallData(
       postId: 'sqp_abc',
       postCategory: SquarePostCategory.campaign,
       contentHashHex: hashHex,
@@ -35,9 +35,9 @@ void main() {
     expect(callData, Uint8List.fromList(expected));
   });
 
-  test('publish_square_post 拒绝零 content_hash', () {
+  test('publish_post 拒绝零 content_hash', () {
     expect(
-      () => SquareChainService.buildPublishSquarePostCallData(
+      () => SquareChainService.buildPublishPostCallData(
         postId: 'sqp_abc',
         postCategory: SquarePostCategory.normal,
         contentHashHex: '00' * 32,

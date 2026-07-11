@@ -65,11 +65,11 @@ provincialbank-interest = { path = "issuance/provincialbank-interest", default-f
 fullnode-issuance = { path = "issuance/fullnode-issuance", default-features = false }
 citizen-issuance = { path = "issuance/citizen-issuance", default-features = false }
 onchain-issuance = { path = "issuance/onchain-issuance", default-features = false }
-citizen-identity = { path = "otherpallet/citizen-identity", default-features = false }
-pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
-address-registry = { path = "otherpallet/address-registry", default-features = false }
-square-post = { path = "otherpallet/square-post", default-features = false }
-onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
+citizen-identity = { path = "misc/citizen-identity", default-features = false }
+pow-difficulty = { path = "misc/pow-difficulty", default-features = false }
+address-registry = { path = "misc/address-registry", default-features = false }
+square-post = { path = "misc/square-post", default-features = false }
+onchain = { path = "transaction/onchain", default-features = false }
 entity-primitives = { path = "entity/entity-primitives", default-features = false }
 public-manage = { path = "entity/public-manage", default-features = false }
 private-manage = { path = "entity/private-manage", default-features = false }
@@ -88,10 +88,10 @@ grandpakey-change = { path = "governance/grandpakey-change", default-features = 
 runtime-upgrade = { path = "governance/runtime-upgrade", default-features = false }
 election-campaign = { path = "public/election-campaign", default-features = false }
 legislation-yuan = { path = "public/legislation-yuan", default-features = false }
-resolution-destro = { path = "governance/resolution-destro", default-features = false }
-multisig-transfer = { path = "transaction/multisig-transfer", default-features = false }
+resolution-destroy = { path = "governance/resolution-destroy", default-features = false }
+multisig = { path = "transaction/multisig", default-features = false }
 institution-asset = { path = "transaction/institution-asset", default-features = false }
-offchain-transaction = { path = "transaction/offchain-transaction", default-features = false }
+offchain = { path = "transaction/offchain", default-features = false }
 genesis-pallet = { path = "genesis", default-features = false }
 
 [build-dependencies]
@@ -120,7 +120,7 @@ std = [
 	"pow-difficulty/std",
 	"address-registry/std",
 	"square-post/std",
-	"onchain-transaction/std",
+	"onchain/std",
 	"entity-primitives/std",
 	"public-manage/std",
 	"private-manage/std",
@@ -139,10 +139,10 @@ std = [
 	"runtime-upgrade/std",
 	"election-campaign/std",
 	"legislation-yuan/std",
-	"resolution-destro/std",
-	"multisig-transfer/std",
+	"resolution-destroy/std",
+	"multisig/std",
 	"institution-asset/std",
-	"offchain-transaction/std",
+	"offchain/std",
 	"genesis-pallet/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
@@ -184,7 +184,7 @@ runtime-benchmarks = [
 	"pow-difficulty/runtime-benchmarks",
 	"address-registry/runtime-benchmarks",
 	"square-post/runtime-benchmarks",
-	"onchain-transaction/runtime-benchmarks",
+	"onchain/runtime-benchmarks",
 	"public-manage/runtime-benchmarks",
 	"private-manage/runtime-benchmarks",
 	"personal-manage/runtime-benchmarks",
@@ -199,10 +199,10 @@ runtime-benchmarks = [
 	"grandpakey-change/runtime-benchmarks",
 	"runtime-upgrade/runtime-benchmarks",
 	"election-campaign/runtime-benchmarks",
-	"resolution-destro/runtime-benchmarks",
-	"multisig-transfer/runtime-benchmarks",
+	"resolution-destroy/runtime-benchmarks",
+	"multisig/runtime-benchmarks",
 	"institution-asset/runtime-benchmarks",
-	"offchain-transaction/runtime-benchmarks",
+	"offchain/runtime-benchmarks",
 	"genesis-pallet/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
@@ -224,7 +224,7 @@ try-runtime = [
 	"pow-difficulty/try-runtime",
 	"address-registry/try-runtime",
 	"square-post/try-runtime",
-	"onchain-transaction/try-runtime",
+	"onchain/try-runtime",
 	"public-manage/try-runtime",
 	"private-manage/try-runtime",
 	"personal-manage/try-runtime",
@@ -239,10 +239,10 @@ try-runtime = [
 	"grandpakey-change/try-runtime",
 	"runtime-upgrade/try-runtime",
 	"election-campaign/try-runtime",
-	"resolution-destro/try-runtime",
-	"multisig-transfer/try-runtime",
+	"resolution-destroy/try-runtime",
+	"multisig/try-runtime",
 	"institution-asset/try-runtime",
-	"offchain-transaction/try-runtime",
+	"offchain/try-runtime",
 	"genesis-pallet/try-runtime",
 	"sp-runtime/try-runtime",
 ]

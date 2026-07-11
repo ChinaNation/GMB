@@ -43,7 +43,7 @@ pub mod weights;
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
 /// tag 带 schema 版本号。
-pub const MODULE_TAG: &[u8] = b"pub-adm1";
+pub const MODULE_TAG: &[u8] = b"pub-admin";
 
 /// public-admins pallet on-chain storage 版本。
 /// 全新创世口径:创世即终态布局,storage 版本恒为 v1,不承载任何历史迁移。

@@ -23,7 +23,7 @@ class SquareChainPublishedResult {
 }
 
 abstract class SquarePostChainPublisher {
-  Future<SquareChainPublishedResult> publishSquarePost({
+  Future<SquareChainPublishedResult> publishPost({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String postId,
@@ -42,12 +42,12 @@ class SquareChainService implements SquarePostChainPublisher {
   final ChainRpc _rpc;
 
   static const int palletIndex = 36;
-  static const int publishSquarePostCallIndex = 0;
+  static const int publishPostCallIndex = 0;
   static const int maxPostIdBytes = 64;
   static const int maxStorageReceiptIdBytes = 96;
 
   @override
-  Future<SquareChainPublishedResult> publishSquarePost({
+  Future<SquareChainPublishedResult> publishPost({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String postId,
@@ -58,7 +58,7 @@ class SquareChainService implements SquarePostChainPublisher {
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
-    final callData = buildPublishSquarePostCallData(
+    final callData = buildPublishPostCallData(
       postId: postId,
       postCategory: postCategory,
       contentHashHex: contentHashHex,
@@ -125,7 +125,7 @@ class SquareChainService implements SquarePostChainPublisher {
   }
 
   @visibleForTesting
-  static Uint8List buildPublishSquarePostCallData({
+  static Uint8List buildPublishPostCallData({
     required String postId,
     required SquarePostCategory postCategory,
     required String contentHashHex,
@@ -155,7 +155,7 @@ class SquareChainService implements SquarePostChainPublisher {
 
     final output = ByteOutput();
     output.pushByte(palletIndex);
-    output.pushByte(publishSquarePostCallIndex);
+    output.pushByte(publishPostCallIndex);
     writeCompactBytes(output, postIdBytes);
     output.pushByte(postCategory == SquarePostCategory.normal ? 0 : 1);
     output.write(contentHash);

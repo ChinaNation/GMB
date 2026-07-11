@@ -85,7 +85,7 @@ class QrActions {
   static const int internalVote = 0x1600;
   static const int jointVote = 0x1700;
   static const int castReferendum = 0x1701;
-  static const int prepareJointPopulationSnapshot = 0x1702;
+  static const int preparePopulationSnapshot = 0x1702;
 
   // 立法院 LegislationYuan(27 = 0x1b)
   static const int proposeEnactLaw = 0x1b00;
@@ -119,7 +119,7 @@ class QrActions {
         'propose_create_personal' => personalCreate,
         'propose_close_personal' => personalClose,
         'cleanup_rejected_personal_proposal' => personalCleanupRejected,
-        'propose_resolution_issuance' => resolutionIssuance,
+        'propose_issuance' => resolutionIssuance,
         'finalize_proposal' => finalizeProposal,
         'retry_passed_proposal' => retryPassedProposal,
         'cancel_passed_proposal' => cancelPassedProposal,
@@ -151,7 +151,7 @@ class QrActions {
         'internal_vote' => internalVote,
         'joint_vote' => jointVote,
         'cast_referendum' => castReferendum,
-        'prepare_joint_population_snapshot' => prepareJointPopulationSnapshot,
+        'prepare_population_snapshot' => preparePopulationSnapshot,
         'propose_enact_law' => proposeEnactLaw,
         'propose_amend_law' => proposeAmendLaw,
         'propose_repeal_law' => proposeRepealLaw,

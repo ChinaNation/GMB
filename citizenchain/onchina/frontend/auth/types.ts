@@ -1,7 +1,7 @@
 // 登录与角色相关的前端类型集中放在 auth 模块内。
 // 管理员按机构码(institution_code)归属机构;workspace/capabilities 由后端会话下发,前端镜像渲染工作台入口。
 
-import type { RoleCapabilities } from '../platform/capabilityMap';
+import type { CapabilitySet } from '../platform/capabilityMap';
 import type { InstitutionWorkspace } from '../workspace/types';
 
 export type TokenAdminAuth = {
@@ -12,7 +12,7 @@ export type TokenAdminAuth = {
   /** 行政层级标签(NATIONAL/PROVINCE/CITY/TOWN);私权法人/非法人为空。 */
   admin_level?: string | null;
   /** 机构能力位(后端单源下发);前端据此渲染工作台入口。 */
-  capabilities?: RoleCapabilities;
+  capabilities?: CapabilitySet;
   /** 当前机构工作台清单,用于按机构类型挂载 UI。 */
   workspace?: InstitutionWorkspace;
   admin_name?: string;

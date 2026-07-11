@@ -80,7 +80,7 @@ pub trait WeightInfo {
 	/// Proof: `VotingEngine::ProposalsByCid` (`max_values`: None, `max_size`: Some(56), added: 2531, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngine::YearProposalCounter` (r:0 w:1)
 	/// Proof: `VotingEngine::YearProposalCounter` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
-	fn propose_resolution_issuance() -> Weight;
+	fn propose_issuance() -> Weight;
 	/// Storage: `ResolutionIssuance::Executed` (r:1 w:1)
 	/// Proof: `ResolutionIssuance::Executed` (`max_values`: None, `max_size`: Some(20), added: 2495, mode: `MaxEncodedLen`)
 	fn clear_executed() -> Weight;
@@ -147,7 +147,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `VotingEngine::ProposalsByCid` (`max_values`: None, `max_size`: Some(56), added: 2531, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngine::YearProposalCounter` (r:0 w:1)
 	/// Proof: `VotingEngine::YearProposalCounter` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
-	fn propose_resolution_issuance() -> Weight {
+	fn propose_issuance() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `40956`
 		//  Estimated: `5762043`
@@ -240,7 +240,7 @@ impl WeightInfo for () {
 	/// Proof: `VotingEngine::ProposalsByCid` (`max_values`: None, `max_size`: Some(56), added: 2531, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngine::YearProposalCounter` (r:0 w:1)
 	/// Proof: `VotingEngine::YearProposalCounter` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
-	fn propose_resolution_issuance() -> Weight {
+	fn propose_issuance() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `40956`
 		//  Estimated: `5762043`

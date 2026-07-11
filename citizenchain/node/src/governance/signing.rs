@@ -315,7 +315,7 @@ pub fn build_vote_sign_request(
     // 链交易签名材料只能由 runtime 类型构造，避免 node 冷签与热钱包
     // 交易路径在 TxExtension 或 additional_signed 字节上分叉。
     let (payload, signing_bytes) =
-        build_runtime_signing_payloads(&call_data, &genesis_hash, nonce, spec_version, tx_version)?;
+        build_signing_payloads(&call_data, &genesis_hash, nonce, spec_version, tx_version)?;
 
     // 计算 payload hash
     let payload_hash = sha256_hash(&payload);
@@ -400,7 +400,7 @@ pub fn build_joint_vote_sign_request(
     call_data.push(if approve { 1u8 } else { 0u8 });
 
     let (payload, signing_bytes) =
-        build_runtime_signing_payloads(&call_data, &genesis_hash, nonce, spec_version, tx_version)?;
+        build_signing_payloads(&call_data, &genesis_hash, nonce, spec_version, tx_version)?;
     let payload_hash = sha256_hash(&payload);
     let payload_hash_hex = hex::encode(payload_hash);
     let signing_payload_hash_hex = hex::encode(sha256_hash(&signing_bytes));
@@ -724,14 +724,14 @@ pub(crate) fn fetch_runtime_version() -> Result<(u32, u32), String> {
 }
 
 /// 构建链交易冷签 payload。
-pub(crate) fn build_runtime_signing_payloads(
+pub(crate) fn build_signing_payloads(
     call_data: &[u8],
     genesis_hash: &[u8; 32],
     nonce: u32,
     spec_version: u32,
     tx_version: u32,
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
-    chain_signing::build_runtime_signing_payloads(
+    chain_signing::build_signing_payloads(
         call_data,
         genesis_hash,
         nonce,
@@ -873,7 +873,7 @@ pub fn build_sign_request_from_call_data(
     let nonce = fetch_nonce(pubkey_hex)?;
 
     let (payload, signing_bytes) =
-        build_runtime_signing_payloads(call_data, &genesis_hash, nonce, spec_version, tx_version)?;
+        build_signing_payloads(call_data, &genesis_hash, nonce, spec_version, tx_version)?;
     let payload_hash = sha256_hash(&payload);
     let payload_hash_hex = hex::encode(payload_hash);
     let signing_payload_hash_hex = hex::encode(sha256_hash(&signing_bytes));

@@ -14,7 +14,7 @@ pub enum NodeMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum NodeModeImplementationStatus {
+pub enum NodeModeStatus {
     Active,
     Pending,
 }
@@ -24,7 +24,7 @@ pub enum NodeModeImplementationStatus {
 pub struct NodeModeOption {
     pub mode: NodeMode,
     pub label: &'static str,
-    pub implementation_status: NodeModeImplementationStatus,
+    pub implementation_status: NodeModeStatus,
     pub enabled: bool,
     pub description: &'static str,
 }
@@ -128,14 +128,14 @@ fn node_mode_options() -> Vec<NodeModeOption> {
         NodeModeOption {
             mode: NodeMode::Archive,
             label: "归档全节点",
-            implementation_status: NodeModeImplementationStatus::Active,
+            implementation_status: NodeModeStatus::Active,
             enabled: true,
             description: "保存完整链数据，当前版本实际按此模式运行。",
         },
         NodeModeOption {
             mode: NodeMode::Normal,
             label: "普通全节点",
-            implementation_status: NodeModeImplementationStatus::Pending,
+            implementation_status: NodeModeStatus::Pending,
             enabled: false,
             description: "剪裁历史数据的全节点模式，功能后续完成。",
         },
@@ -165,7 +165,7 @@ pub fn set_node_mode(app: AppHandle, mode: String) -> Result<NodeModeState, Stri
 
 #[cfg(test)]
 mod tests {
-    use super::{build_node_mode_state, NodeMode, NodeModeImplementationStatus};
+    use super::{build_node_mode_state, NodeMode, NodeModeStatus};
 
     #[test]
     fn pending_selected_mode_falls_back_to_archive() {
@@ -192,12 +192,12 @@ mod tests {
 
         assert_eq!(
             archive.implementation_status,
-            NodeModeImplementationStatus::Active
+            NodeModeStatus::Active
         );
         assert!(archive.enabled);
         assert_eq!(
             normal.implementation_status,
-            NodeModeImplementationStatus::Pending
+            NodeModeStatus::Pending
         );
         assert!(!normal.enabled);
         assert_eq!(state.options.len(), 2);

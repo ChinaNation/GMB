@@ -124,7 +124,7 @@ class SquarePublishService {
       );
 
       onStage?.call(SquarePublishStage.submittingChain);
-      chainResult = await _chainService.publishSquarePost(
+      chainResult = await _chainService.publishPost(
         fromAddress: identity.ownerAccount,
         signerPubkey: SquareChainService.hexDecode(identity.pubkeyHex!),
         postId: prepared.postId,

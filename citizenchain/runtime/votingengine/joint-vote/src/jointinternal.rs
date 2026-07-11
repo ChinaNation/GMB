@@ -154,7 +154,7 @@ impl<T: Config> Pallet<T> {
     /// 准备联合投票人口快照。
     ///
     /// 这是投票引擎内部能力。业务模块不传快照材料，只能在发起联合提案前由管理员调用本入口，让 joint-vote 从链上身份模块读取总人数。
-    pub fn do_prepare_population_snapshot(
+    pub fn do_prepare_joint_population_snapshot(
         who: T::AccountId,
         scope: PopulationScope,
     ) -> DispatchResult {

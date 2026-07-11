@@ -101,7 +101,7 @@ pub fn build_signing_material_from_call(
 }
 
 /// 构建 QR 冷签需要的完整 payload 和实际 sr25519 签名字节。
-pub fn build_runtime_signing_payloads(
+pub fn build_signing_payloads(
     call_data: &[u8],
     genesis_hash: &[u8; 32],
     nonce: u32,
@@ -192,7 +192,7 @@ pub fn build_signed_extrinsic_with_pair(
 }
 
 /// 使用本机 runtime 版本构建并签名 extrinsic，供 benchmark/本地结算沿用既有语义。
-pub fn build_signed_extrinsic_with_pair_local_version(
+pub fn build_signed_extrinsic_local(
     call: runtime::RuntimeCall,
     genesis_hash: H256,
     nonce: u32,

@@ -2,7 +2,7 @@
 //!
 //!
 //! - 本文件实现 `packer::BatchSubmitter` trait,把组好的 batch 包进
-//!   `RuntimeCall::OffchainTransaction(submit_offchain_batch_v2 { .. })`
+//!   `RuntimeCall::OffchainTransaction(submit_offchain_batch { .. })`
 //!   → `UncheckedExtrinsic` → 扔到节点本地 `TransactionPool`。
 //! - extrinsic 构造流程与 `benchmarking.rs::create_benchmark_extrinsic` 严格对齐
 //!   (`TxExtension` 各 Check 顺序必须与 runtime `type TxExtension = (..)` 完全一致)。
@@ -28,7 +28,7 @@ use sp_runtime::{AccountId32, OpaqueExtrinsic};
 use std::sync::{Arc, RwLock};
 
 use citizenchain as runtime;
-use offchain_transaction::batch_item::OffchainBatchItemV2;
+use offchain::batch_item::OffchainBatchItem;
 
 use super::keystore::SigningKey;
 use super::packer::BatchSubmitter;
@@ -72,18 +72,18 @@ impl BatchSubmitter for PoolBatchSubmitter {
         batch_bytes: Vec<u8>,
         batch_signature: [u8; 64],
     ) -> Result<H256, String> {
-        // 1. 解回 Vec<OffchainBatchItemV2>
+        // 1. 解回 Vec<OffchainBatchItem>
         let batch = decode_batch_items(&batch_bytes)?;
 
         // 2. 构造 batch_signature 的 BoundedVec(runtime 端 BatchSignatureOf<T>)
         let sig_bounded = encode_bounded_sig::<runtime::Runtime>(&batch_signature)?;
 
-        // 3. 构造 BoundedVec<OffchainBatchItemV2, MaxBatchSize>
+        // 3. 构造 BoundedVec<OffchainBatchItem, MaxBatchSize>
         let batch_bounded = encode_bounded_batch::<runtime::Runtime>(batch)?;
 
         // 4. 拼 RuntimeCall
         let call = runtime::RuntimeCall::OffchainTransaction(
-            offchain_transaction::pallet::Call::submit_offchain_batch_v2 {
+            offchain::pallet::Call::submit_offchain_batch {
                 institution_main: institution_main.clone(),
                 batch_seq,
                 batch: batch_bounded,
@@ -146,21 +146,21 @@ fn lookup_nonce(client: &FullClient, account: &AccountId32) -> Result<u32, Strin
 
 // ---------------- 纯函数工具(便于单测) ----------------
 
-/// 解 SCALE 字节为 `Vec<OffchainBatchItemV2>`(字段顺序与 runtime 严格一致)。
+/// 解 SCALE 字节为 `Vec<OffchainBatchItem>`(字段顺序与 runtime 严格一致)。
 pub fn decode_batch_items(
     batch_bytes: &[u8],
-) -> Result<Vec<OffchainBatchItemV2<AccountId32, u32>>, String> {
-    <Vec<OffchainBatchItemV2<AccountId32, u32>>>::decode(&mut &batch_bytes[..])
+) -> Result<Vec<OffchainBatchItem<AccountId32, u32>>, String> {
+    <Vec<OffchainBatchItem<AccountId32, u32>>>::decode(&mut &batch_bytes[..])
         .map_err(|e| format!("batch_bytes 解码失败:{e}"))
 }
 
 /// 把 64 字节签名包装为 runtime `BatchSignatureOf<Runtime>`(`BoundedVec<u8, MaxBatchSignatureLength>`)。
-pub fn encode_bounded_sig<T: offchain_transaction::pallet::Config>(
+pub fn encode_bounded_sig<T: offchain::pallet::Config>(
     sig: &[u8; 64],
 ) -> Result<
     frame_support::BoundedVec<
         u8,
-        <T as offchain_transaction::pallet::Config>::MaxBatchSignatureLength,
+        <T as offchain::pallet::Config>::MaxBatchSignatureLength,
     >,
     String,
 > {
@@ -169,16 +169,16 @@ pub fn encode_bounded_sig<T: offchain_transaction::pallet::Config>(
         .map_err(|_| "batch_signature 超出 MaxBatchSignatureLength".to_string())
 }
 
-/// 把 Vec<OffchainBatchItemV2> 包装为 `BoundedVec<_, MaxBatchSize>`。
-pub fn encode_bounded_batch<T: offchain_transaction::pallet::Config>(
-    items: Vec<OffchainBatchItemV2<AccountId32, u32>>,
+/// 把 Vec<OffchainBatchItem> 包装为 `BoundedVec<_, MaxBatchSize>`。
+pub fn encode_bounded_batch<T: offchain::pallet::Config>(
+    items: Vec<OffchainBatchItem<AccountId32, u32>>,
 ) -> Result<
     frame_support::BoundedVec<
-        OffchainBatchItemV2<
+        OffchainBatchItem<
             <T as frame_system::Config>::AccountId,
             frame_system::pallet_prelude::BlockNumberFor<T>,
         >,
-        <T as offchain_transaction::pallet::Config>::MaxBatchSize,
+        <T as offchain::pallet::Config>::MaxBatchSize,
     >,
     String,
 >
@@ -188,7 +188,7 @@ where
 {
     let converted: Vec<_> = items
         .into_iter()
-        .map(|it| OffchainBatchItemV2 {
+        .map(|it| OffchainBatchItem {
             tx_id: it.tx_id,
             payer: it.payer.into(),
             payer_bank: it.payer_bank.into(),
@@ -224,7 +224,7 @@ pub fn build_signed_extrinsic(
         .ok_or_else(|| "Genesis block 尚未可用".to_string())?;
 
     Ok(
-        chain_signing::build_signed_extrinsic_with_pair_local_version(
+        chain_signing::build_signed_extrinsic_local(
             call,
             genesis_hash,
             nonce,
@@ -239,8 +239,8 @@ pub fn build_signed_extrinsic(
 mod tests {
     use super::*;
 
-    fn mk_item(seed: u8) -> OffchainBatchItemV2<AccountId32, u32> {
-        OffchainBatchItemV2 {
+    fn mk_item(seed: u8) -> OffchainBatchItem<AccountId32, u32> {
+        OffchainBatchItem {
             tx_id: H256::repeat_byte(seed),
             payer: AccountId32::new([seed; 32]),
             payer_bank: AccountId32::new([0xAA; 32]),
@@ -269,7 +269,7 @@ mod tests {
         let ok: Result<
             frame_support::BoundedVec<
                 u8,
-                <runtime::Runtime as offchain_transaction::pallet::Config>::MaxBatchSignatureLength,
+                <runtime::Runtime as offchain::pallet::Config>::MaxBatchSignatureLength,
             >,
             String,
         > = encode_bounded_sig::<runtime::Runtime>(&[7u8; 64]);

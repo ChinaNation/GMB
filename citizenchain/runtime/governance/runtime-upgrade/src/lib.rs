@@ -68,7 +68,7 @@ pub mod pallet {
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
         type RuntimeCodeExecutor: RuntimeCodeExecutor;
 
-        /// 开发者直升 runtime 开关检查（由 genesis-pallet 注入）。
+        /// 开发者直升 runtime 开关检查（由 genesis_pallet-pallet 注入）。
         type DeveloperUpgradeCheck: genesis_pallet::DeveloperUpgradeCheck;
 
         #[pallet::constant]
@@ -168,7 +168,7 @@ pub mod pallet {
         }
 
         /// 开发期快捷通道：仅国家储委会管理员可直接 set_code，不走投票。
-        /// 仅在 genesis-pallet 的 DeveloperUpgradeEnabled 为 true 时可用。
+        /// 仅在 genesis_pallet-pallet 的 DeveloperUpgradeEnabled 为 true 时可用。
         /// 链进入运行期后此调用永久失效，升级必须走 propose_runtime_upgrade 联合投票。
         #[pallet::call_index(2)]
         #[pallet::weight(

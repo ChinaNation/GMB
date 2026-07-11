@@ -36,7 +36,7 @@ import {
 } from 'antd';
 import { SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../auth/types';
-import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/admin_security_api';
+import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/securityApi';
 import {
   EDUCATION_TYPE_LABEL,
   INSTITUTION_CODE_LABEL,

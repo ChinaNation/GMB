@@ -2222,30 +2222,30 @@ fn main() {
                 get(auth::get_own_institution),
             )
             // 机构相关 API 外部路径保持稳定,内部按 subjects/gov/private/accounts/docs 归属。
-            // - GET  /api/v1/institution/check-cid-full-name             — cid_full_name 查重
-            // - POST /api/v1/institution/create                          — 公权/教育通用机构生成(不上链)
+            // - GET  /api/v1/institutions/check-cid-full-name             — cid_full_name 查重
+            // - POST /api/v1/institutions/create                          — 公权/教育通用机构生成(不上链)
             // - POST /api/v1/private/<type>                              — 六类私权机构专属生成入口
-            // - POST /api/v1/institution/:cid_number/account/create         — 只登记账户名称,不上链
-            // - GET  /api/v1/institution/list                            — 公权/教育按 scope 过滤的机构列表
+            // - POST /api/v1/institutions/:cid_number/account/create         — 只登记账户名称,不上链
+            // - GET  /api/v1/institutions/list                            — 公权/教育按 scope 过滤的机构列表
             // - GET  /api/v1/private/<type>                              — 六类私权机构专属列表入口
-            // - GET  /api/v1/institution/:cid_number                        — 机构详情
-            // - GET  /api/v1/institution/:cid_number/accounts               — 账户列表
-            // - DELETE /api/v1/institution/:cid_number/account/:account_name — 删除未上链/已注销新增账户
+            // - GET  /api/v1/institutions/:cid_number                        — 机构详情
+            // - GET  /api/v1/institutions/:cid_number/accounts               — 账户列表
+            // - DELETE /api/v1/institutions/:cid_number/account/:account_name — 删除未上链/已注销新增账户
             .route(
-                "/api/v1/institution/check-cid-full-name",
+                "/api/v1/institutions/check-cid-full-name",
                 get(institution::subjects::admin::check_cid_full_name),
             )
             // F 详情页"所属法人"搜索(全国范围 S/G 模糊匹配)
             .route(
-                "/api/v1/institution/search-parents",
+                "/api/v1/institutions/search-parents",
                 get(institution::subjects::admin::search_parent_institutions),
             )
             .route(
-                "/api/v1/institution/legal-representative/photo",
+                "/api/v1/institutions/legal-representative/photo",
                 post(institution::subjects::admin::upload_legal_representative_photo),
             )
             .route(
-                "/api/v1/institution/create",
+                "/api/v1/institutions/create",
                 post(institution::subjects::registration::create_institution),
             )
             .route(
@@ -2273,72 +2273,72 @@ fn main() {
                 get(domains::private::association::list).post(domains::private::association::create),
             )
             .route(
-                "/api/v1/institution/:cid_number/account/create",
+                "/api/v1/institutions/:cid_number/account/create",
                 post(institution::accounts::handler::create_account),
             )
             .route(
-                "/api/v1/institution/list",
+                "/api/v1/institutions/list",
                 get(institution::subjects::registration::list_institutions),
             )
             .route(
-                "/api/v1/institution/:cid_number",
+                "/api/v1/institutions/:cid_number",
                 get(institution::subjects::admin::get_institution)
                     // 详情页只更新机构资料;私权类型由创建时身份编码锁定,不可在此改。
                     .patch(institution::subjects::admin::update_institution),
             )
             .route(
-                "/api/v1/institution/:cid_number/accounts",
+                "/api/v1/institutions/:cid_number/accounts",
                 get(institution::accounts::handler::list_accounts),
             )
             .route(
-                "/api/v1/institution/:cid_number/account/:account_name",
+                "/api/v1/institutions/:cid_number/account/:account_name",
                 delete(institution::accounts::handler::delete_account),
             )
             // 机构资料库文档 CRUD
             .route(
-                "/api/v1/institution/:cid_number/documents",
+                "/api/v1/institutions/:cid_number/documents",
                 get(domains::docs::handler::list_documents).post(domains::docs::handler::upload_document),
             )
             .route(
-                "/api/v1/institution/:cid_number/documents/:doc_id/download",
+                "/api/v1/institutions/:cid_number/documents/:doc_id/download",
                 get(domains::docs::handler::download_document),
             )
             .route(
-                "/api/v1/institution/:cid_number/documents/:doc_id",
+                "/api/v1/institutions/:cid_number/documents/:doc_id",
                 delete(domains::docs::handler::delete_document),
             )
             .route(
-                "/api/v1/institutions/official",
+                "/api/v1/institutions/gov",
                 get(domains::gov::handler::list_official_institutions),
             )
             // 立法与表决:发起/院内表决(返回扫码上链 sign_request)+ 读法律/读提案进度。
             .route(
-                "/api/legislation/proposable",
+                "/api/v1/legislation/proposable",
                 get(domains::legislation::handler::list_proposable),
             )
             .route(
-                "/api/legislation/propose",
+                "/api/v1/legislation/propose",
                 post(domains::legislation::handler::propose_legislation),
             )
             .route(
-                "/api/legislation/house-vote",
+                "/api/v1/legislation/house-vote",
                 post(domains::legislation::handler::cast_house_vote),
             )
             .route(
-                "/api/legislation/laws",
+                "/api/v1/legislation/laws",
                 get(domains::legislation::handler::list_laws),
             )
             // 本节点绑定机构层级/辖区的法律(会话派生 scope);静态段先于 :law_id 匹配。
             .route(
-                "/api/legislation/laws/mine",
+                "/api/v1/legislation/laws/mine",
                 get(domains::legislation::handler::list_my_laws),
             )
             .route(
-                "/api/legislation/laws/:law_id",
-                get(domains::legislation::handler::get_law),
+                "/api/v1/legislation/laws/:law_id",
+                get(domains::legislation::handler::law),
             )
             .route(
-                "/api/legislation/proposals/:proposal_id",
+                "/api/v1/legislation/proposals/:proposal_id",
                 get(domains::legislation::handler::get_proposal_state),
             )
             // 联邦注册局机构详情(只读,绕过 scope,所有联邦注册局管理员可读)

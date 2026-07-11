@@ -42,12 +42,12 @@ pub(crate) enum WorkspaceAction {
     ViewOperationRecords,
 }
 
-/// 单个工作台入口。`workspace_action_enabled=false` 表示链上/后端能力尚未开放。
+/// 单个工作台入口。`enabled=false` 表示链上/后端能力尚未开放。
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct WorkspaceActionItem {
-    pub(crate) workspace_action: WorkspaceAction,
-    pub(crate) workspace_action_title: String,
-    pub(crate) workspace_action_enabled: bool,
+    pub(crate) action: WorkspaceAction,
+    pub(crate) title: String,
+    pub(crate) enabled: bool,
 }
 
 /// 工作台分区及其入口清单。

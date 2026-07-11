@@ -294,7 +294,7 @@ mod runtime {
 
     // 链上交易手续费模块：发出 FeePaid 事件，供客户端读取真实手续费
     #[runtime::pallet_index(4)]
-    pub type OnchainTransaction = onchain_transaction::pallet;
+    pub type OnchainTransaction = onchain::pallet;
 
     // 省储行利息模块：按年度给固定省储行账户发放质押利息
     #[runtime::pallet_index(5)]
@@ -338,7 +338,7 @@ mod runtime {
 
     // 决议销毁治理模块：本机构内部投票通过后销毁本机构交易地址余额
     #[runtime::pallet_index(14)]
-    pub type ResolutionDestro = resolution_destro;
+    pub type ResolutionDestroy = resolution_destroy;
 
     // GRANDPA 密钥治理模块：国家储委会/省储委会内部投票通过后替换 GRANDPA 投票公钥
     #[runtime::pallet_index(16)]
@@ -358,7 +358,7 @@ mod runtime {
 
     // 机构多签账户转账模块：治理机构内部投票通过后从 main_account 转账（宪法保留主账户，注册型 account）
     #[runtime::pallet_index(19)]
-    pub type MultisigTransfer = multisig_transfer;
+    pub type MultisigTransfer = multisig;
 
     // 创世模块：存储创世期/运行期阶段、出块目标时间、开发者直升开关、创世常量
     #[runtime::pallet_index(20)]
@@ -366,7 +366,7 @@ mod runtime {
 
     // 链下交易清算模块：省储行即时清算、批量上链、绑定清算行、费率治理
     #[runtime::pallet_index(21)]
-    pub type OffchainTransaction = offchain_transaction::pallet;
+    pub type OffchainTransaction = offchain::pallet;
 
     // 链上发行代币(Plain FT, ADR-011):用户(CID 机构 + personal-manage 个人多签账户)发行 GMB 之外的代币。
     // 唯一外壳入口,内核挂 pallet_assets;pallet_assets 原生 extrinsic 由 BaseCallFilter 屏蔽。
@@ -391,7 +391,7 @@ mod runtime {
 
     // 公权选举业务模块骨架:只承载选举业务规则位置;投票流程归 election-vote。
     #[runtime::pallet_index(34)]
-    pub type ElectionCampaign = election_campaign;
+    pub type Campaign = election_campaign;
 
     // 公权机构管理员模块：含创世写入的固定治理机构运行期管理员治理。
     #[runtime::pallet_index(29)]

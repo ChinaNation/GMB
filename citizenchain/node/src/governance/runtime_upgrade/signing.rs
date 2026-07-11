@@ -1,6 +1,6 @@
 use super::call_data;
 use crate::governance::signing::{
-    build_runtime_signing_payloads, chain_action_code, fetch_genesis_hash, fetch_nonce,
+    build_signing_payloads, chain_action_code, fetch_genesis_hash, fetch_nonce,
     fetch_runtime_version, generate_request_id, now_secs, payload_b64, pubkey_b64,
     remember_chain_sign_request_session, sha256_hash, QrSignRequest, SignRequestBody,
     VoteSignRequestResult, DEFAULT_TTL_SECS, IMMORTAL_SIGN_BLOCK_NUMBER, PROTOCOL_VERSION,
@@ -30,7 +30,7 @@ fn build_hashed_payload_request(
     let nonce = fetch_nonce(pubkey_clean)?;
 
     let (full_payload, payload_for_qr) =
-        build_runtime_signing_payloads(call_data, &genesis_hash, nonce, spec_version, tx_version)?;
+        build_signing_payloads(call_data, &genesis_hash, nonce, spec_version, tx_version)?;
     let request_id = generate_request_id(request_prefix);
 
     // Runtime WASM 交易 payload 远大于 QR 承载能力。Substrate sr25519 在 payload

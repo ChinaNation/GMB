@@ -1,4 +1,4 @@
-import { invoke } from '../../core/tauri';
+import { invoke } from '../../tauri';
 import type { VoteSignRequestResult, VoteSubmitResult } from './types';
 
 // 多签转账模块专用 Tauri API，对齐后端 src/transaction/multisig_transfer。

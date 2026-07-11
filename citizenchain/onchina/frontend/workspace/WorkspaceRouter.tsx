@@ -1,7 +1,7 @@
 // 机构工作台路由。登录机构决定进入注册局、司法院或通用机构工作台。
 
 import type { AdminAuth } from '../auth/types';
-import type { RoleCapabilities } from '../auth/AuthContext';
+import type { CapabilitySet } from '../auth/AuthContext';
 import type { CidMetaResult } from '../china/api';
 import { isSubordinateRegistry, isTier1Registry } from '../platform/registryTier';
 import type { InstitutionWorkspace, WorkspaceKind } from './types';
@@ -11,13 +11,13 @@ import { RegistryWorkspace } from './registry/RegistryWorkspace';
 
 export type WorkspaceRouterProps = {
   auth: AdminAuth;
-  capabilities: RoleCapabilities;
+  capabilities: CapabilitySet;
   passkeyRegistered: boolean | null;
   cidMeta: CidMetaResult | null;
   setCidMeta: (next: CidMetaResult | null) => void;
 };
 
-function fallbackWorkspaceKind(auth: AdminAuth, capabilities: RoleCapabilities): WorkspaceKind {
+function fallbackWorkspaceKind(auth: AdminAuth, capabilities: CapabilitySet): WorkspaceKind {
   if (isTier1Registry(auth.institution_code) || isSubordinateRegistry(auth.institution_code)) {
     return 'registry';
   }
@@ -26,7 +26,7 @@ function fallbackWorkspaceKind(auth: AdminAuth, capabilities: RoleCapabilities):
   return 'generic';
 }
 
-function fallbackWorkspace(auth: AdminAuth, capabilities: RoleCapabilities): InstitutionWorkspace {
+function fallbackWorkspace(auth: AdminAuth, capabilities: CapabilitySet): InstitutionWorkspace {
   const workspaceKind = fallbackWorkspaceKind(auth, capabilities);
   const workspaceTitle = `${auth.cid_short_name || auth.institution_code}工作台`;
   return {

@@ -12,7 +12,7 @@ import {
   createInstitution as createPrivateInstitution,
   listPrivateInstitutions,
 } from '../common/api';
-import type { ScanSignResolver } from '../../admins/admin_security_api';
+import type { ScanSignResolver } from '../../admins/securityApi';
 import { SOLE_ROUTE_SEGMENT } from './types';
 
 export function createSoleInstitution(

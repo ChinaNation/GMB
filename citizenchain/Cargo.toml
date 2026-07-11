@@ -12,7 +12,7 @@ members = [
     "runtime/admins/private-admins",          # admins 模组-私权机构管理员
     "runtime/admins/personal-admins",         # admins 模组-个人多签管理员
     "runtime/governance/grandpakey-change",         # 治理-GRANDPA 密钥治理模块 pallet
-    "runtime/governance/resolution-destro",   # 治理-决议销毁模块 pallet
+    "runtime/governance/resolution-destroy",   # 治理-决议销毁模块 pallet
     "runtime/governance/runtime-upgrade",    # 治理-协议升级模块 pallet
     "runtime/public/election-campaign",      # 公权模组-选举业务模块骨架 pallet
     "runtime/public/legislation-yuan",       # 公权模组-立法院模块 pallet(法律结构化上链,ADR-027)
@@ -27,19 +27,19 @@ members = [
     "runtime/issuance/onchain-issuance",         # 发行-链上发行代币(Plain FT, ADR-011) pallet
     "runtime/issuance/resolution-issuance",        # 发行-决议发行完整流程模块 pallet
     "runtime/issuance/provincialbank-interest",   # 发行-省储行利息模块 pallet
-    "runtime/otherpallet/citizen-identity",    # 其他-链上公民身份模块 pallet
-    "runtime/otherpallet/pow-difficulty",   # 其他-PoW 动态难度调整模块 pallet
-    "runtime/otherpallet/address-registry",   # 其他-地址变更上链模块 pallet
-    "runtime/otherpallet/square-post",   # 其他-广场动态链上发布索引模块 pallet
+    "runtime/misc/citizen-identity",    # 其他-链上公民身份模块 pallet
+    "runtime/misc/pow-difficulty",   # 其他-PoW 动态难度调整模块 pallet
+    "runtime/misc/address-registry",   # 其他-地址变更上链模块 pallet
+    "runtime/misc/square-post",   # 其他-广场动态链上发布索引模块 pallet
     "runtime/genesis",                           # 创世模块 pallet
 
-    "runtime/transaction/offchain-transaction", # 交易-链下交易手续费模块 pallet
-    "runtime/transaction/onchain-transaction",  # 交易-链上交易手续费模块 pallet
+    "runtime/transaction/offchain", # 交易-链下交易手续费模块 pallet
+    "runtime/transaction/onchain",  # 交易-链上交易手续费模块 pallet
     "runtime/entity/entity-primitives",          # 实体模组-生命周期共用类型与 trait
     "runtime/entity/public-manage",              # 实体模组-公权机构生命周期
     "runtime/entity/private-manage",             # 实体模组-私权机构生命周期
     "runtime/entity/personal-manage",            # 实体模组-个人多签账户生命周期
-    "runtime/transaction/multisig-transfer",     # 交易-机构多签名地址转账模块 pallet
+    "runtime/transaction/multisig",     # 交易-机构多签名地址转账模块 pallet
     "runtime/transaction/institution-asset",  # 交易-机构账户资金白名单公共模块
 
 ]

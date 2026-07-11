@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { sanitizeError } from '../../core/tauri';
+import { sanitizeError } from '../../tauri';
 import { transactionApi as api } from './api';
 import type { ColdWallet, TransferDraft, WalletStore } from './types';
 import { WalletManagerModal } from './WalletManagerModal';

@@ -22,12 +22,12 @@ export type BootnodeOption = {
 
 export type NodeMode = 'archive' | 'normal';
 
-export type NodeModeImplementationStatus = 'active' | 'pending';
+export type NodeModeStatus = 'active' | 'pending';
 
 export type NodeModeOption = {
   mode: NodeMode;
   label: string;
-  implementationStatus: NodeModeImplementationStatus;
+  implementationStatus: NodeModeStatus;
   enabled: boolean;
   description: string;
 };

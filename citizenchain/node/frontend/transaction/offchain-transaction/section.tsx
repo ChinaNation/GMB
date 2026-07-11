@@ -14,7 +14,7 @@
 //   declare-node                 多签 Active 但本机未声明节点 → 填 RPC + 自测 + 签名声明
 
 import { useEffect, useState, useCallback } from 'react';
-import { sanitizeError } from '../../core/tauri';
+import { sanitizeError } from '../../tauri';
 import { AdminSetChangePage } from '../../admins/admin-management';
 import { adminsChangeApi } from '../../admins/admin-management/api';
 import { institutionReadApi } from './institution/api';

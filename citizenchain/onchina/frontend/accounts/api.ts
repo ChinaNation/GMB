@@ -5,7 +5,7 @@ import {
   createScanSignSecurityGrant,
   type AdminSecurityGrantOutput,
   type ScanSignResolver,
-} from '../admins/admin_security_api';
+} from '../admins/securityApi';
 import { adminRequest } from '../utils/http';
 import type { CreateAccountOutput, InstitutionAccount } from '../subjects/api';
 
@@ -23,7 +23,7 @@ export async function createAccount(
   const grantPayload = { target: cidNumber, cid_number: cidNumber, account_name: accountName };
   const grant = await createScanSignSecurityGrant(auth, 'INSTITUTION_CREATE_ACCOUNT', grantPayload, signWithScan);
   return adminRequest<CreateAccountOutput>(
-    `/api/v1/institution/${encodeURIComponent(cidNumber)}/account/create`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/account/create`,
     auth,
     {
       method: 'POST',
@@ -38,7 +38,7 @@ export async function listAccounts(
   cidNumber: string,
 ): Promise<InstitutionAccount[]> {
   return adminRequest<InstitutionAccount[]>(
-    `/api/v1/institution/${encodeURIComponent(cidNumber)}/accounts`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/accounts`,
     auth,
   );
 }
@@ -50,7 +50,7 @@ export async function deleteAccount(
   securityGrant: AdminSecurityGrantOutput,
 ): Promise<{ deleted: boolean }> {
   return adminRequest<{ deleted: boolean }>(
-    `/api/v1/institution/${encodeURIComponent(cidNumber)}/account/${encodeURIComponent(accountName)}`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}/account/${encodeURIComponent(accountName)}`,
     auth,
     { method: 'DELETE', headers: { [SECURITY_GRANT_HEADER]: securityGrant.grant_id } },
   );

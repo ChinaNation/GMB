@@ -60,7 +60,7 @@ fn full_allocations<T: pallet::Config>() -> (pallet::AllocationOf<T>, pallet::Ba
     )
 }
 
-fn prepare_joint_population_snapshot<T>(who: &T::AccountId)
+fn prepare_population_snapshot<T>(who: &T::AccountId)
 where
     T: pallet::Config + joint_vote::Config,
 {
@@ -92,19 +92,19 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn propose_resolution_issuance() {
+    fn propose_issuance() {
         let proposer = nrc_admin::<T>();
         let recipients = prc_recipients::<T>();
         AllowedRecipients::<T>::put(recipients);
         VotingProposalCount::<T>::put(0u32);
-        prepare_joint_population_snapshot::<T>(&proposer);
+        prepare_population_snapshot::<T>(&proposer);
 
         let reason = reason_max::<T>();
         let (allocations, total_amount) = full_allocations::<T>();
 
         #[block]
         {
-            Pallet::<T>::propose_resolution_issuance(
+            Pallet::<T>::propose_issuance(
                 RawOrigin::Signed(proposer).into(),
                 reason,
                 total_amount,

@@ -5,7 +5,7 @@ use serde::Serialize;
 /// 机构类型枚举，数值与链上 `org` 编码一致。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum OrgType {
+pub enum InstitutionType {
     /// 国家储委会 National Reserve Committee
     Nrc = 0,
     /// 省储委会 Provincial Reserve Committee
@@ -14,12 +14,12 @@ pub enum OrgType {
     Prb = 2,
 }
 
-impl OrgType {
+impl InstitutionType {
     pub fn label(&self) -> &'static str {
         match self {
-            OrgType::Nrc => "国家储委会",
-            OrgType::Prc => "省储委会",
-            OrgType::Prb => "省储行",
+            InstitutionType::Nrc => "国家储委会",
+            InstitutionType::Prc => "省储委会",
+            InstitutionType::Prb => "省储行",
         }
     }
 }

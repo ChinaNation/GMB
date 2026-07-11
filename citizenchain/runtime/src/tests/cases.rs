@@ -13,12 +13,12 @@ fn time_and_currency_constants_are_consistent() {
 fn fee_payer_returns_none_for_transfer() {
     use configs::RuntimeFeePayerExtractor;
     use frame_support::BoundedVec;
-    use onchain_transaction::CallFeePayer;
+    use onchain::CallFeePayer;
     use primitives::cid::china::china_cb::CHINA_CB;
 
     let institution = AccountId::new(CHINA_CB[0].main_account);
     let beneficiary = AccountId::new([99u8; 32]);
-    let call = RuntimeCall::MultisigTransfer(multisig_transfer::pallet::Call::propose_transfer {
+    let call = RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
         institution_code: votingengine::types::NRC,
         institution,
         beneficiary,
@@ -48,13 +48,13 @@ fn governance_module_tags_are_globally_unique() {
         ("public_admins", public_admins::MODULE_TAG),
         ("private_admins", private_admins::MODULE_TAG),
         ("grandpakey_change", grandpakey_change::MODULE_TAG),
-        ("resolution_destro", resolution_destro::MODULE_TAG),
+        ("resolution_destroy", resolution_destroy::MODULE_TAG),
         ("resolution_issuance", resolution_issuance::MODULE_TAG),
         ("runtime_upgrade", runtime_upgrade::MODULE_TAG),
         ("public_manage", public_manage::MODULE_TAG),
         ("private_manage", private_manage::MODULE_TAG),
         ("personal_admins", personal_admins::MODULE_TAG),
-        ("multisig_transfer", multisig_transfer::MODULE_TAG),
+        ("multisig", multisig::MODULE_TAG),
         ("legislation_yuan", legislation_yuan::MODULE_TAG),
     ];
     let unique: HashSet<&[u8]> = tags.iter().map(|(_, t)| *t).collect();
@@ -183,7 +183,7 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
         let _ = Balances::deposit_creating(&nrc_account, initial_balance);
         let issuance_before = Balances::total_issuance();
 
-        assert_ok!(ResolutionDestro::propose_destroy(
+        assert_ok!(ResolutionDestroy::propose_destroy(
             RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].admins[0])),
             votingengine::types::NRC,
             nrc_institution,
@@ -221,23 +221,23 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
         let system_call = RuntimeCall::System(frame_system::Call::remark {
             remark: b"x".to_vec(),
         });
-        let free = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+        let free = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &system_call);
-        assert_eq!(free, onchain_transaction::FeeChargeKind::Free);
+        assert_eq!(free, onchain::FeeChargeKind::Free);
 
         let transfer_call = RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
             dest: sp_runtime::MultiAddress::Id(recipient.clone()),
             value: 123,
         });
-        let amount = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+        let amount = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &transfer_call);
-        assert_eq!(amount, onchain_transaction::FeeChargeKind::Unknown);
+        assert_eq!(amount, onchain::FeeChargeKind::Unknown);
 
         let remark =
             frame_support::BoundedVec::<u8, frame_support::traits::ConstU32<99>>::try_from(
@@ -245,61 +245,61 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
             )
             .expect("remark should fit");
         let transfer_with_remark_call = RuntimeCall::OnchainTransaction(
-            onchain_transaction::pallet::Call::transfer_with_remark {
+            onchain::pallet::Call::transfer_with_remark {
                 beneficiary: recipient,
                 amount: 456,
                 remark,
             },
         );
-        let amount_with_remark = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+        let amount_with_remark = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &transfer_with_remark_call);
         assert_eq!(
             amount_with_remark,
-            onchain_transaction::FeeChargeKind::OnchainAmount(456)
+            onchain::FeeChargeKind::OnchainAmount(456)
         );
 
         let internal_vote_call = RuntimeCall::InternalVote(internal_vote::pallet::Call::cast {
             proposal_id: 1,
             approve: true,
         });
-        let vote_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+        let vote_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &internal_vote_call);
         // 投票 extrinsic 本身按治理用户操作固定 1 元计费，不再套 0.1%。
-        assert_eq!(vote_kind, onchain_transaction::FeeChargeKind::VoteFlat);
+        assert_eq!(vote_kind, onchain::FeeChargeKind::VoteFlat);
 
         let nrc_institution = AccountId::new(CHINA_CB[0].main_account);
         let resolution_destro_call =
-            RuntimeCall::ResolutionDestro(resolution_destro::pallet::Call::propose_destroy {
+            RuntimeCall::ResolutionDestroy(resolution_destroy::pallet::Call::propose_destroy {
                 institution_code: votingengine::types::NRC,
                 institution: nrc_institution,
                 amount: 456,
             });
-        let resolution_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+        let resolution_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &resolution_destro_call);
         assert_eq!(
             resolution_kind,
-            onchain_transaction::FeeChargeKind::VoteFlat
+            onchain::FeeChargeKind::VoteFlat
         );
 
         let unknown_balances_call =
             RuntimeCall::Balances(pallet_balances::Call::upgrade_accounts {
                 who: vec![AccountId::new([9u8; 32])],
             });
-        let unknown = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+        let unknown = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &unknown_balances_call);
-        assert_eq!(unknown, onchain_transaction::FeeChargeKind::Unknown);
+        assert_eq!(unknown, onchain::FeeChargeKind::Unknown);
     });
 }
 
@@ -331,12 +331,12 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
                 regular_threshold: 2,
                 amount: 1_000,
             });
-        let create_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+        let create_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &create_call);
-        assert_eq!(create_kind, onchain_transaction::FeeChargeKind::VoteFlat);
+        assert_eq!(create_kind, onchain::FeeChargeKind::VoteFlat);
 
         let _ = Balances::deposit_creating(&account, 777);
         // propose_close 已加注销凭证字段(register_nonce/signature/issuer_*/signer_pubkey);
@@ -352,29 +352,29 @@ fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
                 signer_pubkey: [0u8; 32],
             },
         );
-        let close_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+        let close_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &close_call);
-        assert_eq!(close_kind, onchain_transaction::FeeChargeKind::VoteFlat);
+        assert_eq!(close_kind, onchain::FeeChargeKind::VoteFlat);
 
         let institution =
             AccountId::new(primitives::cid::china::china_cb::CHINA_CB[0].main_account);
         let transfer_call =
-            RuntimeCall::MultisigTransfer(multisig_transfer::pallet::Call::propose_transfer {
+            RuntimeCall::MultisigTransfer(multisig::pallet::Call::propose_transfer {
                 institution_code: votingengine::types::NRC,
                 institution,
                 beneficiary: AccountId::new([79u8; 32]),
                 amount: 88_888,
                 remark: frame_support::BoundedVec::default(),
             });
-        let transfer_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+        let transfer_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &transfer_call);
-        assert_eq!(transfer_kind, onchain_transaction::FeeChargeKind::VoteFlat);
+        assert_eq!(transfer_kind, onchain::FeeChargeKind::VoteFlat);
     });
 }
 
@@ -470,7 +470,7 @@ fn runtime_call_filter_blocks_external_balances_calls() {
     )
     .expect("remark should fit");
     let allowed_onchain_transfer =
-        RuntimeCall::OnchainTransaction(onchain_transaction::pallet::Call::transfer_with_remark {
+        RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
             beneficiary: AccountId::new([7u8; 32]),
             amount: 1,
             remark,
@@ -720,7 +720,7 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
 fn runtime_square_post_normal_publish_allows_visitor_wallet() {
     new_test_ext().execute_with(|| {
         let visitor = AccountId::new([42u8; 32]);
-        assert_ok!(SquarePost::publish_square_post(
+        assert_ok!(SquarePost::publish_post(
             RuntimeOrigin::signed(visitor.clone()),
             b"sqp_runtime_normal".to_vec(),
             square_post::SquarePostCategory::Normal,
@@ -749,7 +749,7 @@ fn runtime_square_post_campaign_requires_citizen_identity() {
     new_test_ext().execute_with(|| {
         let visitor = AccountId::new([43u8; 32]);
         assert_noop!(
-            SquarePost::publish_square_post(
+            SquarePost::publish_post(
                 RuntimeOrigin::signed(visitor),
                 b"sqp_runtime_campaign_denied".to_vec(),
                 square_post::SquarePostCategory::Campaign,
@@ -797,7 +797,7 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
             payload,
             signature,
         ));
-        assert_ok!(SquarePost::publish_square_post(
+        assert_ok!(SquarePost::publish_post(
             RuntimeOrigin::signed(wallet_account.clone()),
             b"sqp_runtime_campaign_ok".to_vec(),
             square_post::SquarePostCategory::Campaign,
@@ -828,24 +828,24 @@ fn runtime_square_post_campaign_records_chain_cid_for_verified_wallet() {
 fn runtime_square_post_fee_kind_uses_onchain_minimum_fee() {
     new_test_ext().execute_with(|| {
         let who = AccountId::new([44u8; 32]);
-        let call = RuntimeCall::SquarePost(square_post::pallet::Call::publish_square_post {
+        let call = RuntimeCall::SquarePost(square_post::pallet::Call::publish_post {
             post_id: b"sqp_fee_kind".to_vec(),
             post_category: square_post::SquarePostCategory::Normal,
             content_hash: [6u8; 32],
             storage_receipt_id: b"sqr_fee_kind".to_vec(),
             storage_until: 1_893_456_000_000,
         });
-        let fee_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+        let fee_kind = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &call);
         assert_eq!(
             fee_kind,
-            onchain_transaction::FeeChargeKind::OnchainAmount(0)
+            onchain::FeeChargeKind::OnchainAmount(0)
         );
         assert_eq!(
-            onchain_transaction::calculate_onchain_fee(0),
+            onchain::calculate_onchain_fee(0),
             primitives::fee_policy::ONCHAIN_MIN_FEE
         );
         assert_eq!(primitives::fee_policy::ONCHAIN_MIN_FEE, 10);
@@ -1117,7 +1117,7 @@ fn ordinary_account_allows_all_actions() {
 #[test]
 fn genesis_public_institutions_full_mint_counts() {
     new_test_ext().execute_with(|| {
-        genesis_pallet::institution::build::<Runtime>();
+        genesis::institution::build::<Runtime>();
 
         let builtin_count = primitives::cid::china::china_cb::CHINA_CB.len()
             + primitives::cid::china::china_ch::CHINA_CH.len()

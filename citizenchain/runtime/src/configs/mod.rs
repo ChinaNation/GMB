@@ -48,7 +48,7 @@ use frame_support::{
     BoundedVec,
 };
 use frame_system::limits::{BlockLength, BlockWeights};
-use onchain_transaction::NrcAccountProvider as _;
+use onchain::NrcAccountProvider as _;
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 #[cfg(not(feature = "runtime-benchmarks"))]
 use sp_core::sr25519;
@@ -257,9 +257,9 @@ parameter_types! {
 
 impl pallet_transaction_payment::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type OnChargeTransaction = onchain_transaction::OnchainChargeAdapter<
+    type OnChargeTransaction = onchain::OnchainChargeAdapter<
         Balances,
-        onchain_transaction::OnchainFeeRouter<
+        onchain::OnchainFeeRouter<
             Runtime,
             Balances,
             PowDigestAuthor,
@@ -276,14 +276,14 @@ impl pallet_transaction_payment::Config for Runtime {
     type WeightInfo = pallet_transaction_payment::weights::SubstrateWeight<Runtime>;
 }
 
-impl onchain_transaction::pallet::Config for Runtime {
+impl onchain::pallet::Config for Runtime {
     type Currency = Balances;
     type MaxTransferRemarkLen = ConstU32<99>;
 }
 
 pub struct RuntimeNrcAccountProvider;
 
-impl onchain_transaction::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
+impl onchain::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
     fn nrc_account() -> Option<AccountId> {
         Some(AccountId::new(
             primitives::cid::china::china_cb::CHINA_CB[0].fee_account,
@@ -293,7 +293,7 @@ impl onchain_transaction::NrcAccountProvider<AccountId> for RuntimeNrcAccountPro
 
 pub struct RuntimeSafetyFundAccountProvider;
 
-impl onchain_transaction::SafetyFundAccountProvider<AccountId>
+impl onchain::SafetyFundAccountProvider<AccountId>
     for RuntimeSafetyFundAccountProvider
 {
     fn safety_fund_account() -> AccountId {
@@ -317,18 +317,18 @@ impl OnUnbalanced<Credit<AccountId, Balances>> for RuntimeDustHandler {
 
 pub struct RuntimeFeeKindClassifier;
 
-impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
+impl onchain::CallFeeKind<AccountId, RuntimeCall, Balance>
     for RuntimeFeeKindClassifier
 {
     fn fee_kind(
         _who: &AccountId,
         call: &RuntimeCall,
-    ) -> onchain_transaction::FeeChargeKind<Balance> {
-        use onchain_transaction::FeeChargeKind;
+    ) -> onchain::FeeChargeKind<Balance> {
+        use onchain::FeeChargeKind;
 
         match call {
             RuntimeCall::OnchainTransaction(
-                onchain_transaction::pallet::Call::transfer_with_remark { amount, .. },
+                onchain::pallet::Call::transfer_with_remark { amount, .. },
             ) => FeeChargeKind::OnchainAmount(*amount),
             RuntimeCall::OnchainTransaction(_) => FeeChargeKind::Unknown,
             // PersonalManage 的 propose_create/propose_close 是治理提案交易，
@@ -374,15 +374,15 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // 决议发行 / 决议销毁的 propose_X 是治理提案交易，固定 1 元；
             // 维护型 Root / 系统型调用免费。
             RuntimeCall::ResolutionIssuance(ref issuance_call) => match issuance_call {
-                resolution_issuance::pallet::Call::propose_resolution_issuance { .. } => {
+                resolution_issuance::pallet::Call::propose_issuance { .. } => {
                     FeeChargeKind::VoteFlat
                 }
                 _ => FeeChargeKind::Free,
             },
-            RuntimeCall::ResolutionDestro(resolution_destro::pallet::Call::propose_destroy {
+            RuntimeCall::ResolutionDestroy(resolution_destroy::pallet::Call::propose_destroy {
                 ..
             }) => FeeChargeKind::VoteFlat,
-            RuntimeCall::ResolutionDestro(_) => FeeChargeKind::Free,
+            RuntimeCall::ResolutionDestroy(_) => FeeChargeKind::Free,
             // 投票引擎主 pallet 公开 call 共 3 个:
             //   finalize_proposal — 任意人推动超时结算,免费;
             //   retry_passed_proposal / cancel_passed_proposal — 管理员手动重试/取消,VOTE_FLAT_FEE。
@@ -415,9 +415,9 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             // 多签转账 propose_X 只是创建治理提案，交易本身固定收 1 元；
             // 真正转账执行时，multisig-transfer 内部再按转出金额 × 0.1% 收链上交易费。
             RuntimeCall::MultisigTransfer(ref dt_call) => match dt_call {
-                multisig_transfer::pallet::Call::propose_transfer { .. }
-                | multisig_transfer::pallet::Call::propose_safety_fund_transfer { .. }
-                | multisig_transfer::pallet::Call::propose_sweep_to_main { .. } => {
+                multisig::pallet::Call::propose_transfer { .. }
+                | multisig::pallet::Call::propose_safety_fund_transfer { .. }
+                | multisig::pallet::Call::propose_sweep_to_main { .. } => {
                     FeeChargeKind::VoteFlat
                 }
                 // 兜底:未来若新增非金额型管理 extrinsic 按投票统一价 1 元/次。
@@ -427,15 +427,15 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
             RuntimeCall::OffchainTransaction(ref offchain_call) => {
                 match offchain_call {
                     // L3 充值 / 提现:按金额计费(链上资金交易 0.1% 最低 0.1 元)
-                    offchain_transaction::pallet::Call::deposit { amount } => {
+                    offchain::pallet::Call::deposit { amount } => {
                         FeeChargeKind::OnchainAmount(*amount)
                     }
-                    offchain_transaction::pallet::Call::withdraw { amount } => {
+                    offchain::pallet::Call::withdraw { amount } => {
                         FeeChargeKind::OnchainAmount(*amount)
                     }
                     // 清算行批次 V2 是链下交易费，结算执行阶段已经把
                     // Σ batch[i].fee_amount 转给清算行费用账户，本层只标记类别不二次分账。
-                    offchain_transaction::pallet::Call::submit_offchain_batch_v2 {
+                    offchain::pallet::Call::submit_offchain_batch {
                         batch, ..
                     } => {
                         let mut total_fee: u128 = 0;
@@ -445,7 +445,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
                         FeeChargeKind::OffchainFee(total_fee)
                     }
                     // 全局费率上限调整(Root Origin,免费)
-                    offchain_transaction::pallet::Call::set_max_l2_fee_rate { .. } => {
+                    offchain::pallet::Call::set_max_l2_fee_rate { .. } => {
                         FeeChargeKind::Free
                     }
                     // 其他付费调用(bind_clearing_bank / switch_bank / propose_l2_fee_rate):
@@ -482,7 +482,7 @@ impl onchain_transaction::CallFeeKind<AccountId, RuntimeCall, Balance>
 
 pub struct RuntimeFeePayerExtractor;
 
-impl onchain_transaction::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
+impl onchain::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
     fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
         match call {
             // 清算行 V2 批次:链上 gas 由 institution_main 的费用账户直接承担。
@@ -494,11 +494,11 @@ impl onchain_transaction::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePay
             // 提交者(origin)是该机构的某个激活管理员(已在节点端解密私钥,自动签),
             // 但其个人钱包余额不参与 gas 扣费。
             RuntimeCall::OffchainTransaction(
-                offchain_transaction::pallet::Call::submit_offchain_batch_v2 {
+                offchain::pallet::Call::submit_offchain_batch {
                     institution_main,
                     ..
                 },
-            ) => offchain_transaction::Pallet::<Runtime>::fee_account_of(institution_main).ok(),
+            ) => offchain::Pallet::<Runtime>::fee_account_of(institution_main).ok(),
             // 其他 offchain Call 及其他 RuntimeCall 由调用者个人账户付费。
             _ => None,
         }
@@ -1253,11 +1253,11 @@ impl private_admins::Config for Runtime {
     type WeightInfo = private_admins::weights::SubstrateWeight<Runtime>;
 }
 
-impl resolution_destro::Config for Runtime {
+impl resolution_destroy::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
-    type WeightInfo = resolution_destro::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = resolution_destroy::weights::SubstrateWeight<Runtime>;
 }
 
 impl grandpakey_change::Config for Runtime {
@@ -1285,7 +1285,7 @@ impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runt
         // issue() 再铸回等额 Credit 让 router 分配，总量不变。
         let credit = <Balances as Balanced<AccountId>>::issue(value);
 
-        type FeeRouter = onchain_transaction::OnchainFeeRouter<
+        type FeeRouter = onchain::OnchainFeeRouter<
             Runtime,
             Balances,
             PowDigestAuthor,
@@ -1298,7 +1298,7 @@ impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runt
     }
 }
 
-impl multisig_transfer::Config for Runtime {
+impl multisig::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
@@ -1310,7 +1310,7 @@ impl multisig_transfer::Config for Runtime {
     // 转账治理时 multisig-transfer 通过 union 调用,先问个人侧、再问机构侧。
     type PersonalQuery = personal_manage::Pallet<Runtime>;
     type InstitutionQuery = RuntimeInstitutionQuery;
-    type WeightInfo = multisig_transfer::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = multisig::weights::SubstrateWeight<Runtime>;
 }
 
 /// 机构生命周期聚合查询。
@@ -1748,7 +1748,7 @@ impl votingengine::InternalVoteResultCallback for RuntimeAdminVoteExecutor {
 /// `admins` 模块中的管理员真源。
 pub struct MultisigCidAccountQuery;
 
-impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for MultisigCidAccountQuery {
+impl offchain::bank_check::CidAccountQuery<AccountId> for MultisigCidAccountQuery {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
         public_manage::AccountRegisteredCid::<Runtime>::get(addr)
             .map(|info| (info.cid_number.to_vec(), info.account_name.to_vec()))
@@ -1824,18 +1824,18 @@ impl offchain_transaction::bank_check::CidAccountQuery<AccountId> for MultisigCi
             Ok(b) => b,
             Err(_) => return false,
         };
-        offchain_transaction::pallet::ClearingBankNodes::<Runtime>::contains_key(&key)
+        offchain::pallet::ClearingBankNodes::<Runtime>::contains_key(&key)
     }
 }
 
-impl offchain_transaction::Config for Runtime {
+impl offchain::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type MaxBatchSize = ConstU32<100_000>;
     type MaxBatchSignatureLength = ConstU32<128>;
     type InstitutionAsset = RuntimeInstitutionAsset;
     type CidAccountQuery = MultisigCidAccountQuery;
-    type WeightInfo = offchain_transaction::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = offchain::weights::SubstrateWeight<Runtime>;
 }
 
 pub struct EnsureNrcAdmin;
@@ -2058,7 +2058,7 @@ impl votingengine::Config for Runtime {
     // 每个 Executor 通过 MODULE_TAG 前缀 + 独立存储键互斥认领本模块提案,
     // 非己方提案直接 Ok(()) skip,顺序不影响行为正确性。
     type InternalVoteResultCallback = (
-        multisig_transfer::InternalVoteExecutor<Runtime>,
+        multisig::InternalVoteExecutor<Runtime>,
         (
             public_manage::InternalVoteExecutor<Runtime>,
             private_manage::InternalVoteExecutor<Runtime>,
@@ -2068,7 +2068,7 @@ impl votingengine::Config for Runtime {
             personal_admins::InternalVoteExecutor<Runtime>,
         ),
         RuntimeAdminVoteExecutor,
-        resolution_destro::InternalVoteExecutor<Runtime>,
+        resolution_destroy::InternalVoteExecutor<Runtime>,
         grandpakey_change::InternalVoteExecutor<Runtime>,
     );
     type InternalAdminProvider = RuntimeInternalAdminProvider;
@@ -2282,7 +2282,7 @@ impl pallet_assets::Config for Runtime {
 /// onchain-issuance 拆为两个独立 trait:
 /// - `NrcMainAccountProvider` → 返回 NRC 治理多签账户 main_account(monitor 调用方校验用)
 /// - `NrcFeeAccountProvider`  → 返回 NRC 费用账户 fee_account(创建费收款用)
-/// v1 错误地复用 onchain_transaction::NrcAccountProvider(它返回 fee_account),
+/// v1 错误地复用 onchain::NrcAccountProvider(它返回 fee_account),
 /// 导致 monitor 账户身份语义错。
 
 /// NRC 治理多签账户(main_account)— monitor / 监管动作发起方校验用。
@@ -2299,11 +2299,11 @@ impl onchain_issuance::pallet::NrcMainAccountProvider<AccountId> for RuntimeNrcM
 
 /// NRC 费用账户(fee_account)— 创建费 1000 GMB 收款用。
 ///
-/// 复用既有 `RuntimeNrcAccountProvider`(它实现 onchain_transaction::NrcAccountProvider,
+/// 复用既有 `RuntimeNrcAccountProvider`(它实现 onchain::NrcAccountProvider,
 /// 也返回 fee_account),通过为同 struct 再实现 onchain_issuance 自己的 trait 完成桥接,语义一致。
 impl onchain_issuance::pallet::NrcFeeAccountProvider<AccountId> for RuntimeNrcAccountProvider {
     fn nrc_fee_account() -> Option<AccountId> {
-        <RuntimeNrcAccountProvider as onchain_transaction::NrcAccountProvider<AccountId>>::nrc_account()
+        <RuntimeNrcAccountProvider as onchain::NrcAccountProvider<AccountId>>::nrc_account()
     }
 }
 

@@ -6,7 +6,7 @@ import type { AdminAuth } from '../auth/types';
 import {
   createScanSignSecurityGrant,
   type ScanSignResolver,
-} from '../admins/admin_security_api';
+} from '../admins/securityApi';
 import { adminRequest } from '../utils/http';
 import type {
   CreateInstitutionInput,
@@ -19,7 +19,6 @@ import type {
   SearchParentsOptions,
 } from '../subjects/api';
 
-export type GovCategory = 'GOV_INSTITUTION';
 
 const SECURITY_GRANT_HEADER = 'x-cid-security-grant';
 
@@ -49,7 +48,7 @@ export async function listOfficialInstitutions(
   if (query?.page_size) params.set('page_size', String(query.page_size));
   const qs = params.toString();
   return adminRequest<PageResult<InstitutionListRow>>(
-    qs ? `/api/v1/institutions/official?${qs}` : '/api/v1/institutions/official',
+    qs ? `/api/v1/institutions/gov?${qs}` : '/api/v1/institutions/gov',
     auth,
   );
 }
@@ -64,7 +63,7 @@ export async function checkCidFullName(
   if (subject_property) params.set('subject_property', subject_property);
   if (cityName) params.set('city_name', cityName);
   return adminRequest<{ exists: boolean }>(
-    `/api/v1/institution/check-cid-full-name?${params.toString()}`,
+    `/api/v1/institutions/check-cid-full-name?${params.toString()}`,
     auth,
   );
 }
@@ -94,7 +93,7 @@ export async function createInstitution(
     admins: input.admins,
   };
   const grant = await createScanSignSecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload, signWithScan);
-  return adminRequest<CreateInstitutionOutput>('/api/v1/institution/create', auth, {
+  return adminRequest<CreateInstitutionOutput>('/api/v1/institutions/create', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
     body: JSON.stringify(input),
@@ -108,7 +107,7 @@ export async function uploadLegalRepresentativePhoto(
   const form = new FormData();
   form.append('file', file);
   return adminRequest<LegalRepresentativePhoto>(
-    '/api/v1/institution/legal-representative/photo',
+    '/api/v1/institutions/legal-representative/photo',
     auth,
     {
       method: 'POST',
@@ -130,7 +129,7 @@ export async function searchParentInstitutions(
   params.set('city_name', opts.city_name);
   if (opts.parentProperty) params.set('parent_property', opts.parentProperty);
   return adminRequest<ParentInstitutionRow[]>(
-    `/api/v1/institution/search-parents?${params.toString()}`,
+    `/api/v1/institutions/search-parents?${params.toString()}`,
     auth,
   );
 }
@@ -140,7 +139,7 @@ export async function getInstitution(
   cidNumber: string,
 ): Promise<InstitutionDetail> {
   return adminRequest<InstitutionDetail>(
-    `/api/v1/institution/${encodeURIComponent(cidNumber)}`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}`,
     auth,
   );
 }

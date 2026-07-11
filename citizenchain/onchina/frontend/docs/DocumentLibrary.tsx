@@ -15,7 +15,7 @@ import {
   uploadDocument,
 } from './api';
 import type { AdminAuth } from '../auth/types';
-import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/admin_security_api';
+import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/securityApi';
 import { notice } from '../utils/notice';
 
 interface Props {

@@ -14,7 +14,7 @@ frame-system = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 pallet-balances = { workspace = true }
 sp-runtime = { workspace = true }
-citizen-identity = { path = "../../otherpallet/citizen-identity", default-features = false }
+citizen-identity = { path = "../../misc/citizen-identity", default-features = false }
 
 primitives = { path = "../../primitives", default-features = false }
 

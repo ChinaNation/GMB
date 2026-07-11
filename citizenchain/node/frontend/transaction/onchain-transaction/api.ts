@@ -1,4 +1,4 @@
-import { invoke } from '../../core/tauri';
+import { invoke } from '../../tauri';
 import type { ColdWallet, TransferSignRequestResult, TransferSubmitResult, WalletStore } from './types';
 
 // 首页交易面板专用 Tauri API，对齐后端 src/transaction/onchain_transaction。

@@ -73,7 +73,7 @@ pub type Service = sc_service::PartialComponents<
 >;
 
 // PoW 作者密钥类型：纯 PoW 链使用独立 key type，避免与 Aura 语义混用。
-const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
+pub(crate) const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
 const POW_MINING_TIMEOUT_SECS: u64 = 2;
 const POW_PROPOSAL_BUILD_SECS: u64 = 2;
 const GRANDPA_JUSTIFICATION_PERIOD: u32 = 64;

@@ -5,7 +5,7 @@ import type { AdminAuth } from '../auth/types';
 import {
   createScanSignSecurityGrant,
   type ScanSignResolver,
-} from '../admins/admin_security_api';
+} from '../admins/securityApi';
 import { adminRequest } from '../utils/http';
 import type {
   CreateInstitutionInput,
@@ -38,7 +38,7 @@ export async function checkCidFullName(
   if (subject_property) params.set('subject_property', subject_property);
   if (cityName) params.set('city_name', cityName);
   return adminRequest<{ exists: boolean }>(
-    `/api/v1/institution/check-cid-full-name?${params.toString()}`,
+    `/api/v1/institutions/check-cid-full-name?${params.toString()}`,
     auth,
   );
 }
@@ -68,7 +68,7 @@ export async function createInstitution(
     admins: input.admins,
   };
   const grant = await createScanSignSecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload, signWithScan);
-  return adminRequest<CreateInstitutionOutput>('/api/v1/institution/create', auth, {
+  return adminRequest<CreateInstitutionOutput>('/api/v1/institutions/create', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
     body: JSON.stringify(input),
@@ -82,7 +82,7 @@ export async function uploadLegalRepresentativePhoto(
   const form = new FormData();
   form.append('file', file);
   return adminRequest<LegalRepresentativePhoto>(
-    '/api/v1/institution/legal-representative/photo',
+    '/api/v1/institutions/legal-representative/photo',
     auth,
     {
       method: 'POST',
@@ -104,7 +104,7 @@ export async function searchParentInstitutions(
   params.set('city_name', opts.city_name);
   if (opts.parentProperty) params.set('parent_property', opts.parentProperty);
   return adminRequest<ParentInstitutionRow[]>(
-    `/api/v1/institution/search-parents?${params.toString()}`,
+    `/api/v1/institutions/search-parents?${params.toString()}`,
     auth,
   );
 }
@@ -114,15 +114,15 @@ export async function listEducationInstitutions(
   query?: Omit<ListInstitutionsQuery, 'category'>,
 ): Promise<PageResult<InstitutionListRow>> {
   const params = new URLSearchParams();
-  // EDUCATION_INSTITUTION 是列表过滤维度(后端 InstitutionListFilter),不是存储 category
-  params.set('category', 'EDUCATION_INSTITUTION');
+  // EDUCATION_FORM 是列表过滤维度(后端 InstitutionListFilter),不是存储 category
+  params.set('category', 'EDUCATION_FORM');
   if (query?.province_name) params.set('province_name', query.province_name);
   if (query?.city_name) params.set('city_name', query.city_name);
   if (query?.q && query.q.trim()) params.set('q', query.q.trim());
   if (query?.cursor) params.set('cursor', query.cursor);
   if (query?.page_size) params.set('page_size', String(query.page_size));
   return adminRequest<PageResult<InstitutionListRow>>(
-    `/api/v1/institution/list?${params.toString()}`,
+    `/api/v1/institutions/list?${params.toString()}`,
     auth,
   );
 }

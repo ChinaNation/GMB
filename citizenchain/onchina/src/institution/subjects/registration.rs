@@ -774,7 +774,7 @@ async fn list_institutions_inner(
     let scope = get_visible_scope(&ctx);
     // 本路列表只服务运行期创建机构(私权/教育/手动公权)。镇级公权机构会携带
     // town_code,非镇级机构 town_code 为空;本列表仍按省/市收口,详情展示再读 town_code。
-    // JY 教育机构统一收口教育机构 tab(EDUCATION_INSTITUTION),私权/公权两路列表同步排除,
+    // JY 教育机构统一收口教育机构 tab(EDUCATION_FORM),私权/公权两路列表同步排除,
     // 过滤子句见 InstitutionListFilter。
     let filter = match query.category.as_deref() {
         Some("PRIVATE_INSTITUTION") => {
@@ -788,7 +788,7 @@ async fn list_institutions_inner(
             InstitutionListFilter::Private
         }
         Some("GOV_INSTITUTION") => InstitutionListFilter::Gov,
-        Some("EDUCATION_INSTITUTION") => InstitutionListFilter::Education,
+        Some("EDUCATION_FORM") => InstitutionListFilter::Education,
         _ => {
             return api_error(
                 StatusCode::BAD_REQUEST,

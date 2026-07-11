@@ -49,7 +49,7 @@ class SquareComposeSigners {
       payload: payload,
       action: QrActions.chain(
         SquareChainService.palletIndex,
-        SquareChainService.publishSquarePostCallIndex,
+        SquareChainService.publishPostCallIndex,
       ),
       requestPrefix: 'square-post-',
     );

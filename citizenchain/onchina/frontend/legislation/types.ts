@@ -79,7 +79,7 @@ export interface HouseRef {
   accountHex: string;
 }
 
-/** 本机构可发起的提案候选(发起菜单单源自后端 /api/legislation/proposable)。 */
+/** 本机构可发起的提案候选(发起菜单单源自后端 /api/v1/legislation/proposable)。 */
 export interface ProposableCandidate {
   category: ProposalCategory;
   tier: number;

@@ -9,7 +9,7 @@ import { ClearingBankSection } from '../transaction/offchain-transaction/section
 import { HomeNodeSection } from '../home';
 import { TransactionPanel } from '../transaction/onchain-transaction/TransactionPanel';
 import { MiningDashboardSection } from '../mining';
-import { OtherTabsSection } from '../other/other-tabs';
+import { OtherTabsSection } from '../other-tabs';
 import { settingsApi } from '../settings/api';
 import { SettingsSection } from '../settings/settings-panel';
 import { shouldShowDesktopUpdateDot } from '../settings/updateIndicator';

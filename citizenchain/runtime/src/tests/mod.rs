@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use super::*;
 use crate::configs::is_nrc_admin;
 use crate::configs::*;
-use crate::ResolutionDestro;
+use crate::ResolutionDestroy;
 use frame_support::traits::{Contains, Currency, EnsureOrigin, FindAuthor};
 use frame_support::{assert_noop, assert_ok};
 use institution_asset::{InstitutionAsset, InstitutionAssetAction};

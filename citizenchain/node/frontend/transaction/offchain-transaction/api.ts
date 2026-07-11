@@ -1,4 +1,4 @@
-import { invoke } from '../../core/tauri';
+import { invoke } from '../../tauri';
 import type { VoteSignRequestResult, VoteSubmitResult } from '../../governance/types';
 import type {
   ClearingBankNodeOnChainInfo,

@@ -12,31 +12,31 @@ pub mod types;
 
 use crate::home;
 use registry::InstitutionRef;
-use types::{GovernanceOverview, InstitutionBalanceUpdate, InstitutionDetail, OrgType};
+use types::{GovernanceOverview, InstitutionBalanceUpdate, InstitutionDetail, InstitutionType};
 
 use tauri::AppHandle;
 
-fn internal_threshold(org_type: OrgType) -> u32 {
+fn internal_threshold(org_type: InstitutionType) -> u32 {
     // 阈值单一真源 = primitives::count_const，桌面端不再硬编码。
     use primitives::count_const::{
         NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD,
     };
     match org_type {
-        OrgType::Nrc => NRC_INTERNAL_THRESHOLD,
-        OrgType::Prc => PRC_INTERNAL_THRESHOLD,
-        OrgType::Prb => PRB_INTERNAL_THRESHOLD,
+        InstitutionType::Nrc => NRC_INTERNAL_THRESHOLD,
+        InstitutionType::Prc => PRC_INTERNAL_THRESHOLD,
+        InstitutionType::Prb => PRB_INTERNAL_THRESHOLD,
     }
 }
 
-fn joint_vote_weight(org_type: OrgType) -> u32 {
+fn joint_vote_weight(org_type: InstitutionType) -> u32 {
     // 联合投票票数单一真源 = primitives::count_const。
     use primitives::count_const::{
         NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
     };
     match org_type {
-        OrgType::Nrc => NRC_JOINT_VOTE_WEIGHT,
-        OrgType::Prc => PRC_JOINT_VOTE_WEIGHT,
-        OrgType::Prb => PRB_JOINT_VOTE_WEIGHT,
+        InstitutionType::Nrc => NRC_JOINT_VOTE_WEIGHT,
+        InstitutionType::Prc => PRC_JOINT_VOTE_WEIGHT,
+        InstitutionType::Prb => PRB_JOINT_VOTE_WEIGHT,
     }
 }
 
@@ -401,7 +401,7 @@ pub async fn get_proposal_display(
 
 /// 反向索引:列出 `ProposalsByCode[institutionCode]` 下所有 proposal_id。
 #[tauri::command]
-pub async fn list_proposals_by_org(
+pub async fn list_proposals_by_institution(
     app: AppHandle,
     institution_code: String,
 ) -> Result<Vec<u64>, String> {

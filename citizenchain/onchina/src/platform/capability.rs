@@ -12,7 +12,7 @@
 //! - 其余公权/私权/非法人机构:本期只开只读「本机构管理员」位(`can_view_own_admins`);
 //!   CRUD / 录入等具体功能待各机构功能落地时再开(机制就绪、不越权)。
 //!
-//! serde 字段名用 camelCase,与前端 `platform/capabilityMap.ts` 的 RoleCapabilities 逐字段对齐。
+//! serde 字段名用 camelCase,与前端 `platform/capabilityMap.ts` 的 CapabilitySet 逐字段对齐。
 
 use serde::Serialize;
 

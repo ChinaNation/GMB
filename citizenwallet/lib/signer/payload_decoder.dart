@@ -158,7 +158,7 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.castReferendumCall) {
           return _decodeCastReferendum(bytes);
         }
-        if (callIndex == PalletRegistry.prepareJointPopulationSnapshotCall) {
+        if (callIndex == PalletRegistry.preparePopulationSnapshotCall) {
           return _decodeJointPopulationSnapshot(bytes);
         }
       }
@@ -285,14 +285,14 @@ class PayloadDecoder {
       }
 
       // ── ResolutionIssuance(8) · 决议发行联合提案 ──
-      // 人口快照由 JointVote.prepare_joint_population_snapshot 单独准备。
+      // 人口快照由 JointVote.prepare_population_snapshot 单独准备。
       if (palletIndex == PalletRegistry.resolutionIssuancePallet) {
-        if (callIndex == PalletRegistry.proposeResolutionIssuanceCall) {
+        if (callIndex == PalletRegistry.proposeIssuanceCall) {
           return _decodeProposeResolutionIssuance(bytes);
         }
       }
 
-      // ── ResolutionDestro(14) ──
+      // ── ResolutionDestroy(14) ──
       // execute_destroy 走 VotingEngine::retry_passed_proposal。
       if (palletIndex == PalletRegistry.resolutionDestroPallet) {
         if (callIndex == PalletRegistry.proposeDestroyCall) {
@@ -605,7 +605,7 @@ class PayloadDecoder {
   // InternalVote(22) / cast(0)
   // 格式：[0x16][0x00][proposal_id:u64_le][approve:bool]
   //
-  // 统一入口:所有业务 pallet(admins/resolution_destro/grandpa_key/
+  // 统一入口:所有业务 pallet(admins/resolution_destroy/grandpa_key/
   // entity_manage/multisig_transfer 五路)的管理员投票都走 InternalVote::cast(22.0),
   // 冷钱包不按业务 pallet 分路解码投票 payload。
   static DecodedPayload? _decodeInternalVote(Uint8List bytes) {
@@ -720,7 +720,7 @@ class PayloadDecoder {
     );
   }
 
-  // JointVote(23) / prepare_joint_population_snapshot(2)
+  // JointVote(23) / prepare_population_snapshot(2)
   // 格式：[0x17][0x02][scope:PopulationScope]
   static DecodedPayload? _decodeJointPopulationSnapshot(Uint8List bytes) {
     final (scopeFields, offset) = _decodePopulationScope(bytes, 2);
@@ -729,7 +729,7 @@ class PayloadDecoder {
     }
 
     return DecodedPayload(
-      action: 'prepare_joint_population_snapshot',
+      action: 'prepare_population_snapshot',
       summary: '准备联合公投人口快照（${scopeFields['scope_text']}）',
       fields: scopeFields,
     );
@@ -1032,10 +1032,10 @@ class PayloadDecoder {
     );
   }
 
-  // ResolutionIssuance(8) / propose_resolution_issuance(0)
+  // ResolutionIssuance(8) / propose_issuance(0)
   //
   // 链端签名:
-  //   pub fn propose_resolution_issuance(
+  //   pub fn propose_issuance(
   //     origin,
   //     reason: ReasonOf<T>,                  // BoundedVec<u8>
   //     total_amount: BalanceOf<T>,           // u128 LE
@@ -1043,7 +1043,7 @@ class PayloadDecoder {
   //         // BoundedVec<{ recipient: AccountId32, amount: u128 }>
   //   )
   //
-  // 人口快照由 JointVote.prepare_joint_population_snapshot 先行准备,本交易只携带发行内容。
+  // 人口快照由 JointVote.prepare_population_snapshot 先行准备,本交易只携带发行内容。
   static DecodedPayload? _decodeProposeResolutionIssuance(Uint8List bytes) {
     if (bytes.length < 3) return null;
     var offset = 2; // 跳过 pallet_index + call_index
@@ -1078,7 +1078,7 @@ class PayloadDecoder {
     final amountYuan = _fenToYuan(totalAmountFen);
 
     return DecodedPayload(
-      action: 'propose_resolution_issuance',
+      action: 'propose_issuance',
       summary: '决议发行 $amountYuan GMB（$allocLen 项分配）',
       fields: {
         'reason': reason,
@@ -1263,7 +1263,7 @@ class PayloadDecoder {
     );
   }
 
-  // ResolutionDestro(14) / propose_destroy(0)
+  // ResolutionDestroy(14) / propose_destroy(0)
   // 格式：[14][0][institution_code:[u8;4]][institution:AccountId32][amount:u128]
   static DecodedPayload? _decodeProposeDestroy(Uint8List bytes) {
     // call_data: 2 + 4 + 32 + 16 = 54

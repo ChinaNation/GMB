@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { AdminAuth } from '../../auth/types';
-import type { RoleCapabilities } from '../../auth/AuthContext';
+import type { CapabilitySet } from '../../auth/AuthContext';
 import type { CidMetaResult } from '../../china/api';
 import { loadCachedCidMeta } from '../../china/metaCache';
 import { notice } from '../../utils/notice';
@@ -34,7 +34,7 @@ type ActiveView =
 
 export type RegistryWorkspaceProps = {
   auth: AdminAuth;
-  capabilities: RoleCapabilities;
+  capabilities: CapabilitySet;
   passkeyRegistered: boolean | null;
   cidMeta: CidMetaResult | null;
   setCidMeta: (next: CidMetaResult | null) => void;
@@ -65,7 +65,7 @@ function registryAdminListView(institutionCode: string | null | undefined): Acti
   return null;
 }
 
-function firstBusinessView(capabilities: RoleCapabilities): ActiveView {
+function firstBusinessView(capabilities: CapabilitySet): ActiveView {
   if (capabilities.canViewCitizens) return 'citizens';
   if (capabilities.canViewInstitutions) return 'gov';
   if (capabilities.canViewPrivate) return 'private-sole';

@@ -24,7 +24,7 @@ interface Props {
 export const EducationCreateModal: React.FC<Props> = (props) => (
   <CreateInstitutionForm
     {...props}
-    category="EDUCATION_INSTITUTION"
+    category="EDUCATION_FORM"
     checkCidFullName={checkCidFullName}
     createInstitution={createInstitution}
     uploadLegalRepresentativePhoto={uploadLegalRepresentativePhoto}

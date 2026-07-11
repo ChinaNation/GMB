@@ -12,7 +12,7 @@ import { decodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../core/ScanAccountModal';
 import { CID_MODAL_Z_INDEX } from '../core/modalStack';
 import type { FederalRegistryAdminRow } from './api';
-import { formatAdminCreateError, type AdminActionType } from './admin_security_api';
+import { formatAdminCreateError, type AdminActionType } from './securityApi';
 import { sameHexAccount } from './adminUtils';
 import { notice } from '../utils/notice';
 import { usePasskeyRegistration } from '../auth/passkey/usePasskey';

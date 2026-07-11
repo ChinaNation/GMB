@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { sanitizeError } from '../core/tauri';
+import { sanitizeError } from '../tauri';
 import { miningApi as api } from './api';
 import type { MiningDashboard } from './types';
 import { NetworkInlineSection } from './NetworkInlineSection';

@@ -31,11 +31,11 @@ pub(crate) enum AdminOperationAuth {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminActionType {
     /// Tier1 创世注册局新增一名 Tier2 下级注册局管理员。
-    CreateSubordinateRegistry,
+    CreateCityRegistry,
     /// Tier1 删除一名 Tier2 下级注册局管理员。
-    DeleteSubordinateRegistry,
+    DeleteCityRegistry,
     /// Tier1 换届本档(创世注册局)自身一名管理员(经省组投票)。
-    ReplaceGoverningRegistry,
+    ReplaceFederalRegistry,
     InstitutionCreate,
     InstitutionUpdate,
     InstitutionCreateAccount,
@@ -78,9 +78,9 @@ pub(crate) enum AdminActionType {
 impl AdminActionType {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
-            Self::CreateSubordinateRegistry => "CREATE_SUBORDINATE_REGISTRY",
-            Self::DeleteSubordinateRegistry => "DELETE_SUBORDINATE_REGISTRY",
-            Self::ReplaceGoverningRegistry => "REPLACE_GOVERNING_REGISTRY",
+            Self::CreateCityRegistry => "CREATE_SUBORDINATE_REGISTRY",
+            Self::DeleteCityRegistry => "DELETE_SUBORDINATE_REGISTRY",
+            Self::ReplaceFederalRegistry => "REPLACE_GOVERNING_REGISTRY",
             Self::InstitutionCreate => "INSTITUTION_CREATE",
             Self::InstitutionUpdate => "INSTITUTION_UPDATE",
             Self::InstitutionCreateAccount => "INSTITUTION_CREATE_ACCOUNT",
@@ -114,9 +114,9 @@ impl AdminActionType {
             // 产生链上交易/凭证、改 Active 集合或高危治理 → passkey + 冷签特殊档。
             Self::InstitutionCreate
             | Self::InstitutionCreateAccount
-            | Self::CreateSubordinateRegistry
-            | Self::DeleteSubordinateRegistry
-            | Self::ReplaceGoverningRegistry
+            | Self::CreateCityRegistry
+            | Self::DeleteCityRegistry
+            | Self::ReplaceFederalRegistry
             | Self::InstitutionDeleteAccount
             | Self::InstitutionDeregister
             | Self::InstitutionAccountDeregister
@@ -145,9 +145,9 @@ impl AdminActionType {
     pub(crate) fn is_governance(&self) -> bool {
         matches!(
             self,
-            Self::CreateSubordinateRegistry
-                | Self::DeleteSubordinateRegistry
-                | Self::ReplaceGoverningRegistry
+            Self::CreateCityRegistry
+                | Self::DeleteCityRegistry
+                | Self::ReplaceFederalRegistry
                 | Self::InstitutionDeregister
                 | Self::InstitutionAccountDeregister
                 | Self::NodeBindingUnbind
@@ -161,9 +161,9 @@ impl AdminActionType {
     pub(crate) fn requires_governing_capability(&self) -> bool {
         matches!(
             self,
-            Self::CreateSubordinateRegistry
-                | Self::DeleteSubordinateRegistry
-                | Self::ReplaceGoverningRegistry
+            Self::CreateCityRegistry
+                | Self::DeleteCityRegistry
+                | Self::ReplaceFederalRegistry
                 | Self::InstitutionDeregister
                 | Self::InstitutionAccountDeregister
         )
@@ -174,9 +174,9 @@ pub(crate) fn parse_action_type(
     action_type: &str,
 ) -> Result<AdminActionType, axum::response::Response> {
     match action_type {
-        "CREATE_SUBORDINATE_REGISTRY" => Ok(AdminActionType::CreateSubordinateRegistry),
-        "DELETE_SUBORDINATE_REGISTRY" => Ok(AdminActionType::DeleteSubordinateRegistry),
-        "REPLACE_GOVERNING_REGISTRY" => Ok(AdminActionType::ReplaceGoverningRegistry),
+        "CREATE_SUBORDINATE_REGISTRY" => Ok(AdminActionType::CreateCityRegistry),
+        "DELETE_SUBORDINATE_REGISTRY" => Ok(AdminActionType::DeleteCityRegistry),
+        "REPLACE_GOVERNING_REGISTRY" => Ok(AdminActionType::ReplaceFederalRegistry),
         "INSTITUTION_CREATE" => Ok(AdminActionType::InstitutionCreate),
         "INSTITUTION_UPDATE" => Ok(AdminActionType::InstitutionUpdate),
         "INSTITUTION_CREATE_ACCOUNT" => Ok(AdminActionType::InstitutionCreateAccount),
@@ -258,9 +258,9 @@ mod tests {
         assert!(!AdminActionType::InstitutionUpdate.requires_governing_capability());
         assert!(!AdminActionType::InstitutionUploadDocument.requires_governing_capability());
         // 注册局新增/删除下级、换届本档与机构注销治理仍要求 Tier1 创世注册局治理能力。
-        assert!(AdminActionType::CreateSubordinateRegistry.requires_governing_capability());
-        assert!(AdminActionType::DeleteSubordinateRegistry.requires_governing_capability());
-        assert!(AdminActionType::ReplaceGoverningRegistry.requires_governing_capability());
+        assert!(AdminActionType::CreateCityRegistry.requires_governing_capability());
+        assert!(AdminActionType::DeleteCityRegistry.requires_governing_capability());
+        assert!(AdminActionType::ReplaceFederalRegistry.requires_governing_capability());
         assert!(AdminActionType::InstitutionDeregister.requires_governing_capability());
         assert!(AdminActionType::InstitutionAccountDeregister.requires_governing_capability());
         // 普通机构特殊操作(建机构/建账户/删账户/删文档)由 scope 收口,不要求治理能力。

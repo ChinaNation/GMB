@@ -24,8 +24,7 @@ use sp_keystore::Keystore;
 use sp_runtime::OpaqueExtrinsic;
 use substrate_frame_rpc_system::AccountNonceApi;
 
-/// PoW 矿工密钥类型（与 service.rs 中 POW_AUTHOR_KEY_TYPE 一致）。
-const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
+use crate::core::service::POW_AUTHOR_KEY_TYPE;
 const MAX_TRANSFER_REMARK_BYTES: usize = 99;
 static MINER_TRANSFER_TOKENS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
@@ -451,7 +450,7 @@ where
                     None::<()>,
                 ));
             }
-            let remark: onchain_transaction::pallet::TransferRemarkOf<runtime::Runtime> =
+            let remark: onchain::pallet::TransferRemarkOf<runtime::Runtime> =
                 remark_raw
                     .as_bytes()
                     .to_vec()
@@ -459,7 +458,7 @@ where
                     .map_err(|_| ErrorObject::owned(-1, "转账备注长度超过链上限制", None::<()>))?;
 
             let call = runtime::RuntimeCall::OnchainTransaction(
-                onchain_transaction::pallet::Call::transfer_with_remark {
+                onchain::pallet::Call::transfer_with_remark {
                     beneficiary: dest,
                     amount: amount_fen,
                     remark,
@@ -510,7 +509,7 @@ where
                 match &record.event {
                     // base_fee（不含 tip）
                     runtime::RuntimeEvent::OnchainTransaction(
-                        onchain_transaction::pallet::Event::FeePaid { fee, .. },
+                        onchain::pallet::Event::FeePaid { fee, .. },
                     ) => {
                         total_fee = total_fee.saturating_add(*fee);
                     }

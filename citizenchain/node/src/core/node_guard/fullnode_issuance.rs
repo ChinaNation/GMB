@@ -4,6 +4,7 @@
 //! runtime 中的累计字段只是审计落点，不是规则来源；金额、高度范围和累计公式全部由节点二进制决定。
 
 use std::collections::BTreeMap;
+use super::{MAccountData, MAccountInfo};
 
 use codec::Decode;
 use sp_core::hashing::{blake2_128, twox_128};
@@ -21,24 +22,7 @@ const BALANCES_PALLET: &[u8] = b"Balances";
 const SYSTEM_PALLET: &[u8] = b"System";
 
 /// 节点镜像的 `frame_system::AccountInfo<u32, pallet_balances::AccountData<u128>>`。
-#[derive(Decode)]
-struct MAccountInfo {
-    _nonce: u32,
-    _consumers: u32,
-    _providers: u32,
-    _sufficients: u32,
-    data: MAccountData,
-}
-
 /// 节点只读取 free；其余字段占位保持 SCALE 顺序。
-#[derive(Decode)]
-struct MAccountData {
-    free: u128,
-    _reserved: u128,
-    _frozen: u128,
-    _flags: u128,
-}
-
 #[derive(Debug, PartialEq)]
 pub enum GuardError {
     PowAuthorMissing,

@@ -246,8 +246,8 @@ pub mod pallet {
         /// 本模块只提交决议发行业务内容；人口快照、联合签名、
         /// 投票资格和计票流程全部由 votingengine 负责。
         #[pallet::call_index(0)]
-        #[pallet::weight(<T as Config>::WeightInfo::propose_resolution_issuance())]
-        pub fn propose_resolution_issuance(
+        #[pallet::weight(<T as Config>::WeightInfo::propose_issuance())]
+        pub fn propose_issuance(
             origin: OriginFor<T>,
             reason: ReasonOf<T>,
             total_amount: BalanceOf<T>,

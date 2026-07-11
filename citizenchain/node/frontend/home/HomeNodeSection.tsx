@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { sanitizeError } from '../core/tauri';
+import { sanitizeError } from '../tauri';
 import { homeNodeApi as api } from './api';
 import { ChainSection } from './components/ChainSection';
 import { IdentitySection } from './components/IdentitySection';

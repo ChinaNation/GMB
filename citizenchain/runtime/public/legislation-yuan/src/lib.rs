@@ -360,7 +360,7 @@ pub mod pallet {
 
     /// 待生效版本队列。每个区块用链上时间戳扫描,到时间即翻为 Effective。
     #[pallet::storage]
-    pub type PendingActivation<T: Config> =
+    pub type PendingActivations<T: Config> =
         StorageValue<_, BoundedVec<(u64, u32), <T as Config>::MaxPendingActivations>, ValueQuery>;
 
     /// 不可修改条款 manifest(创世冻结,无 setter,见 [`ImmutableManifest`])。
@@ -577,7 +577,7 @@ pub mod pallet {
         /// 用链上时间戳扫描待生效队列,到时间后自动切换生效版本。
         fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
             let now_ms = Self::now_ms();
-            let pending = PendingActivation::<T>::take();
+            let pending = PendingActivations::<T>::take();
             let mut remain = BoundedVec::<(u64, u32), <T as Config>::MaxPendingActivations>::new();
             let mut activated = 0u64;
             let mut retained = 0u64;
@@ -593,7 +593,7 @@ pub mod pallet {
                 }
             }
             if !remain.is_empty() {
-                PendingActivation::<T>::put(remain);
+                PendingActivations::<T>::put(remain);
             }
             T::DbWeight::get().reads_writes(
                 activated.saturating_add(retained).saturating_add(2),
@@ -831,7 +831,9 @@ pub mod pallet {
 
         /// 教委会机构码(国家教委会 NED / 市教委会 CEDU);教育类提案的唯一合法提案方。
         fn is_education_committee(code: InstitutionCode) -> bool {
-            code == *b"NED\0" || code == *b"CEDU"
+            const NED_CODE: InstitutionCode = *b"NED\0";
+            const CEDU_CODE: InstitutionCode = *b"CEDU";
+            code == NED_CODE || code == CEDU_CODE
         }
 
         /// 路由校验(ADR-027,宪法第45/46/75/79/100/106条):提案机构 ⟺ 表决类型 ⟺ 院结构 ⟺ 签署机构。
@@ -1113,7 +1115,7 @@ pub mod pallet {
             if effective_at <= Self::now_ms() {
                 Self::set_effective(law_id, version);
             } else {
-                PendingActivation::<T>::try_mutate(|v| v.try_push((law_id, version)))
+                PendingActivations::<T>::try_mutate(|v| v.try_push((law_id, version)))
                     .map_err(|_| Error::<T>::TooManyActivations)?;
             }
             Ok(())
@@ -1317,17 +1319,17 @@ pub mod pallet {
 
         // ───────── 查询(供 runtime API 调用)─────────
         /// 读取法律主体。
-        pub fn get_law(law_id: u64) -> Option<Law<T>> {
+        pub fn law(law_id: u64) -> Option<Law<T>> {
             Laws::<T>::get(law_id)
         }
 
         /// 读取法律指定版本。
-        pub fn get_law_version(law_id: u64, version: u32) -> Option<LawVersion<T>> {
+        pub fn law_version(law_id: u64, version: u32) -> Option<LawVersion<T>> {
             LawVersions::<T>::get(law_id, version)
         }
 
         /// 读取法律版本展示标签。
-        pub fn get_law_version_label(law_id: u64, version: u32) -> Option<LawVersionLabel<T>> {
+        pub fn law_version_label(law_id: u64, version: u32) -> Option<LawVersionLabel<T>> {
             LawVersionLabels::<T>::get(law_id, version)
         }
 

@@ -86,7 +86,7 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for TransferWithRemarkBuilder {
             self.client.as_ref(),
             acc,
             runtime::RuntimeCall::OnchainTransaction(
-                onchain_transaction::pallet::Call::transfer_with_remark {
+                onchain::pallet::Call::transfer_with_remark {
                     beneficiary: self.dest.clone(),
                     amount: self.value,
                     remark: Default::default(),
@@ -114,7 +114,7 @@ pub fn create_benchmark_extrinsic(
         .ok()
         .flatten()
         .expect("Genesis block exists; qed");
-    chain_signing::build_signed_extrinsic_with_pair_local_version(
+    chain_signing::build_signed_extrinsic_local(
         call,
         genesis_hash,
         nonce,

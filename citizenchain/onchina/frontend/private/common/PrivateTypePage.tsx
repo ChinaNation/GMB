@@ -12,7 +12,7 @@ import type {
   PageResult,
   PrivateType,
 } from '../../subjects/api';
-import type { ScanSignResolver } from '../../admins/admin_security_api';
+import type { ScanSignResolver } from '../../admins/securityApi';
 import { PRIVATE_TYPE_LABEL } from '../../subjects/labels';
 import { PrivateCreateModal } from './PrivateCreateModal';
 import { PrivateListTable } from './PrivateListTable';

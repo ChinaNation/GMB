@@ -402,7 +402,7 @@ pub mod pallet {
         ) -> Result<(BalanceOf<T>, BalanceOf<T>), DispatchError> {
             use sp_runtime::{traits::CheckedAdd, SaturatedConversion};
             let amount_u128: u128 = amount.saturated_into();
-            let fee_u128 = onchain_transaction::calculate_onchain_fee(amount_u128);
+            let fee_u128 = onchain::calculate_onchain_fee(amount_u128);
             let fee: BalanceOf<T> = fee_u128.saturated_into();
             let reserve_total = amount
                 .checked_add(&fee)

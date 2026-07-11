@@ -1,6 +1,6 @@
 // 机构列表：按 orgTypeFilter 过滤显示省储委会或省储行，点击进入详情。
 import { useEffect, useState } from 'react';
-import { sanitizeError } from '../core/tauri';
+import { sanitizeError } from '../tauri';
 import { governanceApi as api } from './api';
 import type { GovernanceOverview, InstitutionListItem } from './types';
 

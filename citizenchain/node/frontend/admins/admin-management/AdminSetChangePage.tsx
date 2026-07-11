@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { sanitizeError } from '../../core/tauri';
+import { sanitizeError } from '../../tauri';
 import { adminsChangeApi as api } from './api';
 import { AdminSetChangeSigningFlow } from './AdminSetChangeSigningFlow';
 import { AdminSetDiff } from './AdminSetDiff';

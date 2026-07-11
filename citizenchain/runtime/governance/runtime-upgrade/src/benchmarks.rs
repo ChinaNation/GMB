@@ -48,7 +48,7 @@ fn code_max<T: Config>() -> CodeOf<T> {
         .expect("benchmark runtime code should fit")
 }
 
-fn prepare_joint_population_snapshot<T>(who: &T::AccountId)
+fn prepare_population_snapshot<T>(who: &T::AccountId)
 where
     T: Config + joint_vote::Config,
 {
@@ -73,7 +73,7 @@ mod benchmarks {
         let proposer = nrc_admin::<T>();
         let reason = reason_max::<T>();
         let code = code_max::<T>();
-        prepare_joint_population_snapshot::<T>(&proposer);
+        prepare_population_snapshot::<T>(&proposer);
 
         #[block]
         {

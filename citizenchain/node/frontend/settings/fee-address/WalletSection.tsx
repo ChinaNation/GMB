@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { sanitizeError } from '../../core/tauri';
+import { sanitizeError } from '../../tauri';
 import { AddressScanModal } from '../../shared/qr/AddressScanModal';
 import { normalizeSs58AccountAddress } from '../../shared/ss58';
 import { settingsApi as api } from '../api';

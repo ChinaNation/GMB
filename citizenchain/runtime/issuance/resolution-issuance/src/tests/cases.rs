@@ -6,7 +6,7 @@ use super::*;
 fn only_authorized_admin_can_propose() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            ResolutionIssuance::propose_resolution_issuance(
+            ResolutionIssuance::propose_issuance(
                 RuntimeOrigin::signed(AccountId32::new([2u8; 32])),
                 reason_ok(),
                 4300,
@@ -26,7 +26,7 @@ fn reject_invalid_allocation_count() {
         }];
         let alloc: pallet::AllocationOf<Test> = one.try_into().expect("should fit");
         assert_noop!(
-            ResolutionIssuance::propose_resolution_issuance(
+            ResolutionIssuance::propose_issuance(
                 RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
                 reason_ok(),
                 1000,
@@ -40,7 +40,7 @@ fn reject_invalid_allocation_count() {
 #[test]
 fn approved_callback_executes_issuance() {
     new_test_ext().execute_with(|| {
-        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+        assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
@@ -65,7 +65,7 @@ fn approved_callback_executes_issuance() {
 #[test]
 fn callback_rejects_non_finalizable_engine_status() {
     new_test_ext().execute_with(|| {
-        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+        assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
@@ -86,7 +86,7 @@ fn callback_rejects_non_finalizable_engine_status() {
 #[test]
 fn callback_requires_votingengine_scope() {
     new_test_ext().execute_with(|| {
-        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+        assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
@@ -106,7 +106,7 @@ fn callback_requires_votingengine_scope() {
 #[test]
 fn second_callback_after_executed_is_rejected() {
     new_test_ext().execute_with(|| {
-        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+        assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
@@ -133,7 +133,7 @@ fn second_callback_after_executed_is_rejected() {
 #[test]
 fn rejected_callback_does_not_issue() {
     new_test_ext().execute_with(|| {
-        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+        assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
@@ -151,7 +151,7 @@ fn rejected_callback_does_not_issue() {
 #[test]
 fn callback_rejects_corrupted_reason_with_reason_too_long() {
     new_test_ext().execute_with(|| {
-        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+        assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
@@ -181,7 +181,7 @@ fn callback_rejects_corrupted_reason_with_reason_too_long() {
 #[test]
 fn clear_executed_does_not_allow_replay() {
     new_test_ext().execute_with(|| {
-        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+        assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
@@ -211,7 +211,7 @@ fn clear_executed_does_not_allow_replay() {
 #[test]
 fn pause_blocks_approved_execution() {
     new_test_ext().execute_with(|| {
-        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+        assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
@@ -235,7 +235,7 @@ fn pause_blocks_approved_execution() {
 #[test]
 fn set_allowed_recipients_rejected_when_voting_exists() {
     new_test_ext().execute_with(|| {
-        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+        assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
@@ -254,7 +254,7 @@ fn set_allowed_recipients_rejected_when_voting_exists() {
 #[test]
 fn issuance_event_comes_from_unified_pallet() {
     new_test_ext().execute_with(|| {
-        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+        assert_ok!(ResolutionIssuance::propose_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,

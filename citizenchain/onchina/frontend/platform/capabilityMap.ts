@@ -4,7 +4,7 @@
 // 前端只镜像渲染工作台入口,不在此硬编码权限——render-gating 非安全边界,后端始终对越权独立拒绝。
 // 新增机构类型只需在后端 capability.rs 补能力位,前端无需改动。
 
-export type RoleCapabilities = {
+export type CapabilitySet = {
   canViewCitizens: boolean;
   canViewInstitutions: boolean;
   canViewPrivate: boolean;
@@ -34,7 +34,7 @@ export type RoleCapabilities = {
 };
 
 /** 空能力:未登录、能力未下发或未知机构码时的兜底(不显示任何受限 tab)。 */
-export const EMPTY_CAPABILITIES: RoleCapabilities = {
+export const EMPTY_CAPABILITIES: CapabilitySet = {
   canViewCitizens: false,
   canViewInstitutions: false,
   canViewPrivate: false,

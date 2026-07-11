@@ -378,7 +378,7 @@ pub(crate) async fn commit_admin_action(
     if let Err(resp) = ensure_signer_on_chain_admin(&state.db, signer_pubkey).await {
         return resp;
     }
-    if action_type == AdminActionType::ReplaceGoverningRegistry {
+    if action_type == AdminActionType::ReplaceFederalRegistry {
         let input: ReplaceFederalRegistryActionPayload =
             match serde_json::from_value(challenge.request_payload.clone()) {
                 Ok(v) => v,
@@ -615,7 +615,7 @@ fn preview_action_conn(
     payload: &serde_json::Value,
 ) -> Result<ActionPreview, String> {
     match action_type {
-        AdminActionType::CreateSubordinateRegistry => {
+        AdminActionType::CreateCityRegistry => {
             let input: CreateCityRegistryAdminInput = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
             let (admin_account, admin_name, city, created_by) =
@@ -635,7 +635,7 @@ fn preview_action_conn(
                 auth_type: action_type.auth_type(),
             })
         }
-        AdminActionType::DeleteSubordinateRegistry => {
+        AdminActionType::DeleteCityRegistry => {
             let input: CityRegistryIdPayload = serde_json::from_value(payload.clone())
                 .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
             let city_registry = require_manageable_city_registry_conn(conn, ctx, input.id)?;
@@ -650,7 +650,7 @@ fn preview_action_conn(
                 auth_type: action_type.auth_type(),
             })
         }
-        AdminActionType::ReplaceGoverningRegistry => {
+        AdminActionType::ReplaceFederalRegistry => {
             let input: ReplaceFederalRegistryActionPayload =
                 serde_json::from_value(payload.clone())
                     .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
@@ -1081,19 +1081,19 @@ fn apply_action_conn(
     let action_type = parse_action_type(challenge.action_type.as_str())
         .map_err(|_| "http:bad_request:unknown action_type".to_string())?;
     match action_type {
-        AdminActionType::CreateSubordinateRegistry => {
+        AdminActionType::CreateCityRegistry => {
             let input: CreateCityRegistryAdminInput =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid create payload".to_string())?;
             apply_create_city_registry_conn(conn, ctx, &input)
         }
-        AdminActionType::DeleteSubordinateRegistry => {
+        AdminActionType::DeleteCityRegistry => {
             let input: CityRegistryIdPayload =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
             apply_delete_city_registry_conn(conn, ctx, &input)
         }
-        AdminActionType::ReplaceGoverningRegistry => {
+        AdminActionType::ReplaceFederalRegistry => {
             let input: ReplaceFederalRegistryActionPayload =
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;

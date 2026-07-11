@@ -3,7 +3,7 @@
 
 import { adminHeaders, request } from '../utils/http';
 import type { AdminAuth } from './types';
-import type { RoleCapabilities } from '../platform/capabilityMap';
+import type { CapabilitySet } from '../platform/capabilityMap';
 import type { InstitutionWorkspace } from '../workspace/types';
 
 export type AdminAuthCheck = {
@@ -11,7 +11,7 @@ export type AdminAuthCheck = {
   admin_account: string;
   institution_code: string;
   admin_level?: string | null;
-  capabilities?: RoleCapabilities;
+  capabilities?: CapabilitySet;
   workspace?: InstitutionWorkspace;
   admin_name: string;
   scope_province_name?: string | null;
@@ -24,7 +24,7 @@ export type AdminIdentifyResult = {
   admin_account: string;
   institution_code: string;
   admin_level?: string | null;
-  capabilities?: RoleCapabilities;
+  capabilities?: CapabilitySet;
   workspace?: InstitutionWorkspace;
   admin_name: string;
   scope_province_name?: string | null;

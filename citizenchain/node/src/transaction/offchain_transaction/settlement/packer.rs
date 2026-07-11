@@ -2,7 +2,7 @@
 //!
 //!
 //! - 职责:定时从 `OffchainLedger.pending` 取出待上链 `PendingPayment`,
-//!   组装为 `NodeBatchItem` 列表(字段与 runtime `OffchainBatchItemV2` 对齐),
+//!   组装为 `NodeBatchItem` 列表(字段与 runtime `OffchainBatchItem` 对齐),
 //!   由 `BatchSigner` 出 batch 签名,`BatchSubmitter` 提交 extrinsic。
 //! - 触发条件:
 //!     - 笔数 ≥ `PACK_TX_THRESHOLD`(10 万)
@@ -36,7 +36,7 @@ pub const PACK_BLOCK_THRESHOLD: u64 = 10;
 // ---------------- 节点批次项(与 runtime 结构对齐) ----------------
 
 /// `NodeBatchItem`:节点层批次项,字节级对齐 runtime 端
-/// `offchain_transaction::batch_item::OffchainBatchItemV2`。
+/// `offchain::batch_item::OffchainBatchItem`。
 ///
 /// 再定义一份而不直接引用 pallet 类型:
 /// - 避免 `node/Cargo.toml` 直接 dep 到 `offchain-transaction` pallet,
@@ -86,7 +86,7 @@ pub trait BatchSigner: Send + Sync {
 }
 
 /// Extrinsic 提交器。负责把 `(institution, batch_seq, batch_bytes, sig)` 转成
-/// `offchain_transaction::Call::submit_offchain_batch_v2` extrinsic 并提
+/// `offchain::Call::submit_offchain_batch` extrinsic 并提
 /// 交到节点的 `TransactionPool`。
 ///
 /// `PoolBatchSubmitter` 接 substrate client + `TransactionPool`;
@@ -253,7 +253,7 @@ impl OffchainPacker {
 /// `signing_message(OP_SIGN_OFFCHAIN_BATCH, institution || batch_seq_le || batch_bytes)`
 /// = `blake2_256(GMB || OP_SIGN_OFFCHAIN_BATCH || institution || batch_seq_le || batch_bytes)`。
 ///
-/// 链上 `submit_offchain_batch_v2` 会校验 batch_signature,必须与本函数产生的消息
+/// 链上 `submit_offchain_batch` 会校验 batch_signature,必须与本函数产生的消息
 /// **逐字节一致**(runtime `batch_signing_hash` 用同一原语 + 同序 scale_payload)。
 /// `AccountId32::as_ref()` 与 runtime 侧 `institution_main.encode()` 同为 32 裸字节,字节对齐。
 pub fn batch_signing_message(

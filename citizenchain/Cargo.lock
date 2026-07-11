@@ -1738,10 +1738,10 @@ dependencies = [
  "joint-vote",
  "legislation-vote",
  "legislation-yuan",
- "multisig-transfer",
- "offchain-transaction",
+ "multisig",
+ "offchain",
+ "onchain",
  "onchain-issuance",
- "onchain-transaction",
  "pallet-assets",
  "pallet-balances",
  "pallet-grandpa",
@@ -1758,7 +1758,7 @@ dependencies = [
  "provincialbank-interest",
  "public-admins",
  "public-manage",
- "resolution-destro",
+ "resolution-destroy",
  "resolution-issuance",
  "runtime-upgrade",
  "scale-info",
@@ -7603,7 +7603,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
-name = "multisig-transfer"
+name = "multisig"
 version = "1.0.0"
 dependencies = [
  "admin-primitives",
@@ -7613,7 +7613,7 @@ dependencies = [
  "frame-system",
  "institution-asset",
  "internal-vote",
- "onchain-transaction",
+ "onchain",
  "pallet-balances",
  "parity-scale-codec",
  "personal-admins",
@@ -7817,8 +7817,8 @@ dependencies = [
  "libp2p-identity",
  "log",
  "ocl",
- "offchain-transaction",
- "onchain-transaction",
+ "offchain",
+ "onchain",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
@@ -8258,7 +8258,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "offchain-transaction"
+name = "offchain"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -8312,6 +8312,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
+name = "onchain"
+version = "1.0.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "fullnode-issuance",
+ "log",
+ "pallet-balances",
+ "pallet-transaction-payment",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "onchain-issuance"
 version = "1.0.0"
 dependencies = [
@@ -8329,24 +8347,6 @@ dependencies = [
  "sp-runtime",
  "sp-std",
  "votingengine",
-]
-
-[[package]]
-name = "onchain-transaction"
-version = "1.0.0"
-dependencies = [
- "frame-support",
- "frame-system",
- "fullnode-issuance",
- "log",
- "pallet-balances",
- "pallet-transaction-payment",
- "parity-scale-codec",
- "primitives",
- "scale-info",
- "sp-io",
- "sp-runtime",
- "sp-std",
 ]
 
 [[package]]
@@ -9032,7 +9032,7 @@ dependencies = [
  "frame-system",
  "institution-asset",
  "internal-vote",
- "onchain-transaction",
+ "onchain",
  "pallet-balances",
  "parity-scale-codec",
  "personal-admins",
@@ -10036,7 +10036,7 @@ dependencies = [
  "frame-system",
  "institution-asset",
  "internal-vote",
- "onchain-transaction",
+ "onchain",
  "pallet-balances",
  "parity-scale-codec",
  "primitives",
@@ -10375,7 +10375,7 @@ dependencies = [
  "frame-system",
  "institution-asset",
  "internal-vote",
- "onchain-transaction",
+ "onchain",
  "pallet-balances",
  "parity-scale-codec",
  "primitives",
@@ -10977,7 +10977,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "resolution-destro"
+name = "resolution-destroy"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",

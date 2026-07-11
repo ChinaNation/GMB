@@ -29,8 +29,8 @@ pub fn twox_64(data: &[u8]) -> [u8; 8] {
     h.finish().to_le_bytes()
 }
 
-/// 计算 blake2b_128 哈希（Substrate StorageMap key 哈希）。
-pub fn blake2b_128(data: &[u8]) -> [u8; 16] {
+/// 计算 blake2_128 哈希（Substrate StorageMap key 哈希）。
+pub fn blake2_128(data: &[u8]) -> [u8; 16] {
     let hash = Blake2bParams::new().hash_length(16).hash(data);
     let mut out = [0u8; 16];
     out.copy_from_slice(hash.as_bytes());
@@ -50,7 +50,7 @@ pub fn system_account_key(account_hex: &str) -> Result<String, String> {
 
     let pallet_hash = twox_128(b"System");
     let storage_hash = twox_128(b"Account");
-    let blake2_hash = blake2b_128(&account_bytes);
+    let blake2_hash = blake2_128(&account_bytes);
 
     let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
     key.extend_from_slice(&pallet_hash);
@@ -77,7 +77,7 @@ pub fn value_key(pallet: &str, storage: &str) -> String {
 pub fn map_key(pallet: &str, storage: &str, key_data: &[u8]) -> String {
     let pallet_hash = twox_128(pallet.as_bytes());
     let storage_hash = twox_128(storage.as_bytes());
-    let blake2_hash = blake2b_128(key_data);
+    let blake2_hash = blake2_128(key_data);
 
     let mut key = Vec::with_capacity(16 + 16 + 16 + key_data.len());
     key.extend_from_slice(&pallet_hash);
@@ -93,8 +93,8 @@ pub fn map_key(pallet: &str, storage: &str, key_data: &[u8]) -> String {
 pub fn double_map_key(pallet: &str, storage: &str, key1: &[u8], key2: &[u8]) -> String {
     let pallet_hash = twox_128(pallet.as_bytes());
     let storage_hash = twox_128(storage.as_bytes());
-    let blake2_hash1 = blake2b_128(key1);
-    let blake2_hash2 = blake2b_128(key2);
+    let blake2_hash1 = blake2_128(key1);
+    let blake2_hash2 = blake2_128(key2);
 
     let mut key = Vec::with_capacity(16 + 16 + 16 + key1.len() + 16 + key2.len());
     key.extend_from_slice(&pallet_hash);

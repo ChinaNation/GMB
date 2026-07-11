@@ -34,7 +34,7 @@ fn enact_writes_law_and_schedules_future_activation() {
         assert_eq!(NextLawId::<Test>::get(), 1);
         assert_eq!(Lib::list_laws(Tier::Municipal, 1001), vec![0]);
         assert_eq!(
-            PendingActivation::<Test>::get().into_inner(),
+            PendingActivations::<Test>::get().into_inner(),
             vec![(0u64, 1u32)]
         );
 
@@ -42,7 +42,7 @@ fn enact_writes_law_and_schedules_future_activation() {
         Lib::on_initialize(2);
         assert_eq!(Laws::<Test>::get(0).unwrap().status, LawStatus::Pending);
         assert_eq!(
-            PendingActivation::<Test>::get().into_inner(),
+            PendingActivations::<Test>::get().into_inner(),
             vec![(0u64, 1u32)]
         );
 
@@ -53,7 +53,7 @@ fn enact_writes_law_and_schedules_future_activation() {
         assert_eq!(law.status, LawStatus::Effective);
         assert_eq!(law.effective_version, Some(1));
         assert_eq!(law.pending_version, None);
-        assert!(PendingActivation::<Test>::get().is_empty());
+        assert!(PendingActivations::<Test>::get().is_empty());
     });
 }
 

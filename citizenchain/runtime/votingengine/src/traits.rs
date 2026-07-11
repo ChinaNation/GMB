@@ -351,8 +351,8 @@ fn merge_cancel_decision(
 // 立即短路返回,后续成员不再调用——这与 `with_transaction` 内的
 // `TransactionOutcome::Rollback(Err(...))` 协作确保整个状态转换事务回滚。
 //
-// 注:注册 5 个业务模块(multisig_transfer /
-// public_manage/private_manage / RuntimeAdminAccountQuery / resolution_destro /
+// 注:注册 5 个业务模块(multisig /
+// public_manage/private_manage / RuntimeAdminAccountQuery / resolution_destroy /
 // grandpakey_change),留 6 元组余量。如未来业务模块增加,补对应元组 impl。
 impl<A: InternalVoteResultCallback> InternalVoteResultCallback for (A,) {
     fn on_internal_vote_finalized(

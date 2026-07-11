@@ -5,7 +5,7 @@ import zhCN from 'antd/locale/zh_CN';
 import App from './App';
 import { DisplayScreen } from './legislation/display/DisplayScreen';
 import ErrorBoundary from './core/ErrorBoundary';
-import { cidTheme } from './theme/theme';
+import { cidTheme } from './theme';
 import 'antd/dist/reset.css';
 
 // 大屏只读入口经 hash `#/display` 顶层分流——绕过 AuthProvider/App(免登录只读),

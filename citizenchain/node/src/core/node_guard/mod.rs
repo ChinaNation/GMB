@@ -81,16 +81,16 @@ where
 
 /// 节点镜像的 `frame_system::AccountInfo<u32, pallet_balances::AccountData<u128>>`。
 #[derive(Debug, Decode, Eq, PartialEq)]
-struct NativeAccountInfo {
+pub(super) struct MAccountInfo {
     nonce: u32,
     consumers: u32,
     providers: u32,
     sufficients: u32,
-    data: NativeAccountData,
+    data: MAccountData,
 }
 
 #[derive(Debug, Decode, Eq, PartialEq)]
-struct NativeAccountData {
+pub(super) struct MAccountData {
     free: u128,
     reserved: u128,
     frozen: u128,
@@ -129,7 +129,7 @@ fn parse_system_account_key(key: &[u8], prefix: &[u8]) -> Result<[u8; 32], Strin
     Ok(account)
 }
 
-fn account_info<F>(read: &F, account: &[u8; 32]) -> Result<Option<NativeAccountInfo>, String>
+fn account_info<F>(read: &F, account: &[u8; 32]) -> Result<Option<MAccountInfo>, String>
 where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
 {

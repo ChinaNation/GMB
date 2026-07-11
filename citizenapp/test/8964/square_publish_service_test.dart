@@ -334,7 +334,7 @@ class _FakeChainPublisher implements SquarePostChainPublisher {
   bool throwOnPublish = false;
 
   @override
-  Future<SquareChainPublishedResult> publishSquarePost({
+  Future<SquareChainPublishedResult> publishPost({
     required String fromAddress,
     required Uint8List signerPubkey,
     required String postId,

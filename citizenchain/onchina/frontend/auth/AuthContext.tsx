@@ -6,13 +6,13 @@ import type { AdminAuth } from './types';
 import { setOnUnauthorized } from '../utils/http';
 import { clearStoredAuth, readStoredAuth, writeStoredAuth } from '../utils/storedAuth';
 import { notice } from '../utils/notice';
-import { EMPTY_CAPABILITIES, type RoleCapabilities } from '../platform/capabilityMap';
+import { EMPTY_CAPABILITIES, type CapabilitySet } from '../platform/capabilityMap';
 
-// RoleCapabilities 定义在 platform/capabilityMap;此处 re-export 保持既有引用路径。
-export type { RoleCapabilities };
+// CapabilitySet 定义在 platform/capabilityMap;此处 re-export 保持既有引用路径。
+export type { CapabilitySet };
 
 /** 登录态 → 能力位:直接取后端会话下发的 capabilities(后端单源),未下发则空能力兜底。 */
-export function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilities {
+export function resolveRoleCapabilities(auth: AdminAuth | null): CapabilitySet {
   return auth?.capabilities ?? EMPTY_CAPABILITIES;
 }
 
@@ -20,7 +20,7 @@ export interface AuthContextValue {
   auth: AdminAuth | null;
   setAuth: (auth: AdminAuth | null) => void;
   logout: () => void;
-  capabilities: RoleCapabilities;
+  capabilities: CapabilitySet;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);

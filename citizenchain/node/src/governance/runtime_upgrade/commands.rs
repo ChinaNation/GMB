@@ -1,6 +1,6 @@
 use super::{call_data, signing as runtime_signing, types::ProposeUpgradeRequestResult};
 use crate::{
-    admins::admin_management::activation,
+    admins::management::activation,
     governance::registry,
     governance::signing::{self, VoteSignRequestResult, VoteSubmitResult},
     home,

@@ -4,7 +4,7 @@
 // 手动新增三个入口(普通官方公权目录由后端自动生成,不走手动创建):
 //   PRIVATE_INSTITUTION   私权 tab:按 private_type 锁定主体属性和机构码,创建阶段写入名称
 //   GOV_INSTITUTION       公权 tab:G(非自动官方目录机构)机构全称必填 / F(锁非法人组织 UNIN)挂公法人
-//   EDUCATION_INSTITUTION 教育 tab:G/S/F;institution_code 不再锁死,按 subject_property×education_type 计算
+//   EDUCATION_FORM 教育 tab:G/S/F;institution_code 不再锁死,按 subject_property×education_type 计算
 //                         (公私大学 GUN/SUN、公私中小学 GSCH/SFSC),F 分校继承本部学校码(GSCH/SFSC)
 //
 // P1 盈利属性统一按主体属性联动(见 p1LocksForSubject,与后端号码生成器/unincorporated_org 同源):
@@ -22,7 +22,7 @@ export type ChoiceItem = { value: string; label: string };
 export type CreateFormCategory =
   | 'PRIVATE_INSTITUTION'
   | 'GOV_INSTITUTION'
-  | 'EDUCATION_INSTITUTION';
+  | 'EDUCATION_FORM';
 
 export interface InstitutionFieldLocks {
   /** subject_property 的候选列表;长度=1 时锁死第一项 */
@@ -325,7 +325,7 @@ export function locksForCategory(category: CreateFormCategory): InstitutionField
         institutionChoices: GOV_MANUAL_INSTITUTIONS,
         modalTitle: '新增公权机构',
       };
-    case 'EDUCATION_INSTITUTION':
+    case 'EDUCATION_FORM':
       // G=公立学校 / S=私立学校 / F=分校(挂本部);institution_code 由
       // computeEducationInstitutionCode 按 subject_property×education_type 派生,非静态下拉。
       return {
@@ -334,7 +334,7 @@ export function locksForCategory(category: CreateFormCategory): InstitutionField
           { value: 'S', label: '私法人' },
           { value: 'F', label: '非法人' },
         ],
-        institutionChoices: institutionChoicesFor('EDUCATION_INSTITUTION', 'G'),
+        institutionChoices: institutionChoicesFor('EDUCATION_FORM', 'G'),
         modalTitle: '新增教育机构',
       };
     case 'PRIVATE_INSTITUTION':
@@ -367,7 +367,7 @@ export function institutionChoicesFor(
   category: CreateFormCategory,
   subjectProperty: string,
 ): ChoiceItem[] {
-  if (category === 'EDUCATION_INSTITUTION') {
+  if (category === 'EDUCATION_FORM') {
     // 占位默认走中小学码(GSCH/SFSC);真实值在提交时按 education_type/分校本部复算。
     const code = computeEducationInstitutionCode(subjectProperty, undefined);
     return [{ value: code, label: EDUCATION_INSTITUTION_CODE_LABEL[code] ?? code }];

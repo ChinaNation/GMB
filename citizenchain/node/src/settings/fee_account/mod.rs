@@ -168,7 +168,7 @@ fn twox_128(input: &[u8]) -> [u8; 16] {
     out
 }
 
-fn blake2b_128(input: &[u8]) -> [u8; 16] {
+fn blake2_128(input: &[u8]) -> [u8; 16] {
     let hash = blake2b_simd::Params::new().hash_length(16).hash(input);
     let mut out = [0u8; 16];
     out.copy_from_slice(hash.as_bytes());
@@ -216,7 +216,7 @@ fn reward_wallet_storage_key(miner_account: &[u8; 32]) -> Vec<u8> {
     let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
     key.extend_from_slice(&twox_128(b"FullnodeIssuance"));
     key.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
-    key.extend_from_slice(&blake2b_128(miner_account));
+    key.extend_from_slice(&blake2_128(miner_account));
     key.extend_from_slice(miner_account);
     key
 }

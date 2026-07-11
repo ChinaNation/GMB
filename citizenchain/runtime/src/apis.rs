@@ -297,15 +297,15 @@ impl_runtime_apis! {
         }
 
         fn law(law_id: u64) -> Option<Vec<u8>> {
-            LegislationYuan::get_law(law_id).map(|l| codec::Encode::encode(&l))
+            LegislationYuan::law(law_id).map(|l| codec::Encode::encode(&l))
         }
 
         fn law_version(law_id: u64, version: u32) -> Option<Vec<u8>> {
-            LegislationYuan::get_law_version(law_id, version).map(|v| codec::Encode::encode(&v))
+            LegislationYuan::law_version(law_id, version).map(|v| codec::Encode::encode(&v))
         }
 
         fn law_version_label(law_id: u64, version: u32) -> Option<Vec<u8>> {
-            LegislationYuan::get_law_version_label(law_id, version)
+            LegislationYuan::law_version_label(law_id, version)
                 .map(|v| codec::Encode::encode(&v))
         }
     }

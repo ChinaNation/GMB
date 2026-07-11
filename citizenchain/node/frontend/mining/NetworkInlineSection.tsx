@@ -6,7 +6,7 @@
 // 数据轮询：独立 5 秒间隔，与 MiningDashboardSection 的 10 秒收益轮询解耦，
 // 因为网络拓扑变化频率高于收益刷新频率。
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { sanitizeError } from '../core/tauri';
+import { sanitizeError } from '../tauri';
 import { miningApi as api } from './api';
 import type { NetworkOverview } from './types';
 

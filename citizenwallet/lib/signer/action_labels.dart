@@ -38,7 +38,7 @@ const Map<String, String> actionLabels = {
   'propose_public_admin_set_change': '管理员集合变更提案',
   'propose_private_admin_set_change': '管理员集合变更提案',
   'propose_replace_grandpa_key': 'GRANDPA 密钥提案',
-  'propose_resolution_issuance': '决议发行提案',
+  'propose_issuance': '决议发行提案',
 
   // 业务提案幂等入口
   // 手动重试/取消统一显示为 retry_passed_proposal /

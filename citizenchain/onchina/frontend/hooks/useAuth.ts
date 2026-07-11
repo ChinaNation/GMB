@@ -4,13 +4,13 @@
 // 业务子组件继续 import { useAuth } 即可。
 
 import type { AdminAuth } from '../auth/types';
-import { useAuthContext, type RoleCapabilities } from '../auth/AuthContext';
+import { useAuthContext, type CapabilitySet } from '../auth/AuthContext';
 
 export interface UseAuthResult {
   auth: AdminAuth | null;
   setAuth: (auth: AdminAuth | null) => void;
   logout: () => void;
-  capabilities: RoleCapabilities;
+  capabilities: CapabilitySet;
 }
 
 export function useAuth(): UseAuthResult {

@@ -21,7 +21,7 @@ pub(crate) fn ensure_proposer_can_afford<T: Config>(
     amount: BalanceOf<T>,
 ) -> Result<(BalanceOf<T>, BalanceOf<T>), sp_runtime::DispatchError> {
     let amount_u128: u128 = amount.saturated_into();
-    let fee_u128 = onchain_transaction::calculate_onchain_fee(amount_u128);
+    let fee_u128 = onchain::calculate_onchain_fee(amount_u128);
     let fee: BalanceOf<T> = fee_u128.saturated_into();
     let total_with_fee = amount
         .checked_add(&fee)

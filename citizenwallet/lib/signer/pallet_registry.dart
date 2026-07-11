@@ -61,8 +61,8 @@ class PalletRegistry {
   /// `cast_referendum(proposal_id, approve)` — 联合公投阶段,链上按账户读取公民身份。
   static const int castReferendumCall = 1;
 
-  /// `prepare_joint_population_snapshot(scope)` — 联合公投提案发起前准备链上人口分母。
-  static const int prepareJointPopulationSnapshotCall = 2;
+  /// `prepare_population_snapshot(scope)` — 联合公投提案发起前准备链上人口分母。
+  static const int preparePopulationSnapshotCall = 2;
 
   // ---- 业务 pallet:仅承载提案创建与幂等兜底入口 ----
   //
@@ -106,7 +106,7 @@ class PalletRegistry {
   static const int cleanupRejectedPersonalProposalCall = 2;
   static const int proposePersonalAdminSetChangeCall = 3;
 
-  // ---- ResolutionDestro (14) ----
+  // ---- ResolutionDestroy (14) ----
   // call_index 1 留洞不复用。
   static const int resolutionDestroPallet = 14;
   static const int proposeDestroyCall = 0;
@@ -134,7 +134,7 @@ class PalletRegistry {
 
   // ---- ResolutionIssuance (8) ----
   static const int resolutionIssuancePallet = 8;
-  static const int proposeResolutionIssuanceCall = 0;
+  static const int proposeIssuanceCall = 0;
 
   // ---- OnchainIssuance (25) · 链上发行代币(Plain FT) ----
   // call_index 5..=9 / 15+ 留洞不复用(永久 ABI)。

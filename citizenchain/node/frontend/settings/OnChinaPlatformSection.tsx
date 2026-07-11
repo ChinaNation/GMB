@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { sanitizeError } from '../core/tauri';
+import { sanitizeError } from '../tauri';
 import { settingsApi as api } from './api';
 import type { OnChinaPlatformState } from './types';
 

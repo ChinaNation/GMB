@@ -10,16 +10,16 @@ import type { ModalProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { normalizeScopeProvinceName } from '../hooks/useScope';
 import type { AdminAuth } from '../auth/types';
-import type { CityRegistryAdminRow } from './city_registry_admins_api';
+import type { CityRegistryAdminRow } from './cityRegistryAdminsApi';
 import type { FederalRegistryAdminRow, OwnInstitutionAdminListOutput, OwnInstitutionAdminRow } from './api';
 import type { CidCityItem } from '../china/api';
-import { listCityRegistryAdmins } from './city_registry_admins_api';
+import { listCityRegistryAdmins } from './cityRegistryAdminsApi';
 import {
   commitAdminAction,
   formatAdminCreateError,
   prepareAdminAction,
   type AdminActionType,
-} from './admin_security_api';
+} from './securityApi';
 import { listFederalRegistryAdmins, listOwnInstitutionAdmins } from './api';
 import { loadCachedCidCities, readCachedCidCities } from '../china/metaCache';
 import { decodeSs58 } from '../utils/ss58';

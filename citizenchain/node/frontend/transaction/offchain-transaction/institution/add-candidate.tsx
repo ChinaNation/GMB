@@ -2,7 +2,7 @@
 // 回车直接选第一个候选,cidNumber 字符串透传,链上判定由 check-multisig 视图统一处理。
 
 import { useEffect, useState } from 'react';
-import { sanitizeError } from '../../../core/tauri';
+import { sanitizeError } from '../../../tauri';
 import { institutionReadApi } from './api';
 import type { EligibleClearingBankCandidate } from './types';
 

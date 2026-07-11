@@ -10,7 +10,7 @@
 //    自测的远端校验形成闭环——远端必须返回与本字段相同的 PeerId 才放行)。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { sanitizeError } from '../../core/tauri';
+import { sanitizeError } from '../../tauri';
 import { adminsChangeApi } from '../../admins/admin-management/api';
 import { institutionReadApi } from './institution/api';
 import { hexToSs58 } from '../../shared/ss58';

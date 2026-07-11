@@ -33,19 +33,19 @@ use super::super::ledger::OffchainLedger;
 /// 抽象的链上事件。
 #[derive(Clone, Debug)]
 pub enum OffchainChainEvent {
-    /// `offchain_transaction::Event::Deposited`
+    /// `offchain::Event::Deposited`
     Deposited {
         user: AccountId32,
         bank: AccountId32,
         amount: u128,
     },
-    /// `offchain_transaction::Event::Withdrawn`
+    /// `offchain::Event::Withdrawn`
     Withdrawn {
         user: AccountId32,
         bank: AccountId32,
         amount: u128,
     },
-    /// `offchain_transaction::Event::PaymentSettled`
+    /// `offchain::Event::PaymentSettled`
     PaymentSettled {
         tx_id: H256,
         payer: AccountId32,
@@ -191,7 +191,7 @@ fn system_events_storage_key() -> StorageKey {
 /// 返回 `None` 表示该事件不是本 pallet 的事件(或是本 pallet 的其他事件:
 /// 费率治理 / 批次级别等在本步不触发 ledger 分发的事件)。
 pub fn convert_event(ev: runtime::RuntimeEvent) -> Option<OffchainChainEvent> {
-    use offchain_transaction::pallet::Event as OffchainEvent;
+    use offchain::pallet::Event as OffchainEvent;
     match ev {
         runtime::RuntimeEvent::OffchainTransaction(inner) => match inner {
             OffchainEvent::Deposited { user, bank, amount } => {
@@ -298,7 +298,7 @@ mod tests {
     // 覆盖 5 个本 pallet 事件变体:Deposited / Withdrawn / PaymentSettled /
     // BankBound / BankSwitched,以及非本 pallet 的事件应返回 None。
 
-    use offchain_transaction::pallet::Event as PalletEvent;
+    use offchain::pallet::Event as PalletEvent;
 
     #[test]
     fn convert_event_deposited() {

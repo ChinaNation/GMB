@@ -12,7 +12,7 @@ import {
   prepareAdminAction,
   type AdminActionType,
   type AdminSecurityGrantOutput,
-} from '../admins/admin_security_api';
+} from '../admins/securityApi';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
 import { CitizenSignatureModal } from '../core/CitizenSignatureModal';
 import {

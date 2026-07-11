@@ -5,7 +5,7 @@ import type { AdminAuth } from '../../auth/types';
 import {
   createScanSignSecurityGrant,
   type ScanSignResolver,
-} from '../../admins/admin_security_api';
+} from '../../admins/securityApi';
 import { adminRequest } from '../../utils/http';
 import type {
   CreateInstitutionInput,
@@ -47,7 +47,7 @@ export async function checkCidFullName(
   if (subject_property) params.set('subject_property', subject_property);
   if (cityName) params.set('city_name', cityName);
   return adminRequest<{ exists: boolean }>(
-    `/api/v1/institution/check-cid-full-name?${params.toString()}`,
+    `/api/v1/institutions/check-cid-full-name?${params.toString()}`,
     auth,
   );
 }
@@ -92,7 +92,7 @@ export async function uploadLegalRepresentativePhoto(
   const form = new FormData();
   form.append('file', file);
   return adminRequest<LegalRepresentativePhoto>(
-    '/api/v1/institution/legal-representative/photo',
+    '/api/v1/institutions/legal-representative/photo',
     auth,
     {
       method: 'POST',
@@ -124,7 +124,7 @@ export async function getInstitution(
   cidNumber: string,
 ): Promise<InstitutionDetail> {
   return adminRequest<InstitutionDetail>(
-    `/api/v1/institution/${encodeURIComponent(cidNumber)}`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}`,
     auth,
   );
 }
@@ -142,7 +142,7 @@ export async function searchParentInstitutions(
   params.set('city_name', opts.city_name);
   if (opts.parentProperty) params.set('parent_property', opts.parentProperty);
   return adminRequest<ParentInstitutionRow[]>(
-    `/api/v1/institution/search-parents?${params.toString()}`,
+    `/api/v1/institutions/search-parents?${params.toString()}`,
     auth,
   );
 }
@@ -154,7 +154,7 @@ export async function updateInstitution(
   input: UpdateInstitutionInput,
 ): Promise<Institution> {
   return adminRequest<Institution>(
-    `/api/v1/institution/${encodeURIComponent(cidNumber)}`,
+    `/api/v1/institutions/${encodeURIComponent(cidNumber)}`,
     auth,
     {
       method: 'PATCH',

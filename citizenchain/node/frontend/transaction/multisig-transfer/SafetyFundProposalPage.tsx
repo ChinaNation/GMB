@@ -1,6 +1,6 @@
 // 安全基金转账提案页面：表单 + QR 签名流程。
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { sanitizeError } from '../../core/tauri';
+import { sanitizeError } from '../../tauri';
 import { hexToSs58 } from '../../shared/ss58';
 import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { AddressScanModal } from '../../shared/qr/AddressScanModal';

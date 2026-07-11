@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { sanitizeError } from '../../core/tauri';
+import { sanitizeError } from '../../tauri';
 import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { transactionApi as api } from './api';
 import { calculateTransferFeeYuan } from './fee';

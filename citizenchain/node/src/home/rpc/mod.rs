@@ -285,8 +285,8 @@ pub async fn get_total_issuance(app: AppHandle) -> Result<TotalIssuance, String>
 
 // ── 永久质押金额（43 个省储行 stake_account 余额之和）──
 
-/// Substrate 标准 Blake2_128Concat：blake2b_128(data) ++ data。
-fn blake2b_128(input: &[u8]) -> [u8; 16] {
+/// Substrate 标准 Blake2_128Concat：blake2_128(data) ++ data。
+fn blake2_128(input: &[u8]) -> [u8; 16] {
     let hash = blake2b_simd::Params::new().hash_length(16).hash(input);
     let mut out = [0u8; 16];
     out.copy_from_slice(hash.as_bytes());
@@ -298,8 +298,8 @@ fn system_account_storage_key(account_id: &[u8; 32]) -> String {
     let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
     key.extend_from_slice(&twox_128(b"System"));
     key.extend_from_slice(&twox_128(b"Account"));
-    // Blake2_128Concat = blake2b_128(account) ++ account
-    key.extend_from_slice(&blake2b_128(account_id));
+    // Blake2_128Concat = blake2_128(account) ++ account
+    key.extend_from_slice(&blake2_128(account_id));
     key.extend_from_slice(account_id);
     format!("0x{}", hex::encode(key))
 }

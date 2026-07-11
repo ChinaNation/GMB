@@ -2,9 +2,9 @@
 
 import type { FormInstance } from 'antd';
 import type { CidCityItem } from '../china/api';
-import type { CityRegistryAdminRow } from './city_registry_admins_api';
+import type { CityRegistryAdminRow } from './cityRegistryAdminsApi';
 import type { FederalRegistryAdminRow } from './api';
-import type { AdminActionType } from './admin_security_api';
+import type { AdminActionType } from './securityApi';
 import type { InstitutionDetail } from '../subjects/api';
 
 export const MAX_CITY_REGISTRY_ADMINS_PER_CITY = 30;

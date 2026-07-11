@@ -11,14 +11,14 @@ use super::model::{
 };
 
 fn action(
-    workspace_action: WorkspaceAction,
-    workspace_action_title: &str,
-    workspace_action_enabled: bool,
+    action: WorkspaceAction,
+    title: &str,
+    enabled: bool,
 ) -> WorkspaceActionItem {
     WorkspaceActionItem {
-        workspace_action,
-        workspace_action_title: workspace_action_title.to_string(),
-        workspace_action_enabled,
+        action,
+        title: title.to_string(),
+        enabled,
     }
 }
 
