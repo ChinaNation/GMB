@@ -6,13 +6,11 @@ const DEFAULT_GENESIS_HASH =
   '0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971';
 const DEFAULT_STATE_ROOT =
   '0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63';
-const DEFAULT_LIGHT_SYNC_STATE_SHA256 =
-  'c5005187368b7ffbb0a95f67cf9f6f3d0dbfbe1ae91d456269198a2a311710b8';
 const DEFAULT_BOOTSTRAP_TTL_SECONDS = 300;
 
 export interface ChainBootstrapResponse {
   ok: true;
-  schema: 'citizenapp.chain.bootstrap.v1';
+  schema: 'citizenapp.chain.bootstrap.v2';
   generated_at: number;
   cache_ttl_seconds: number;
   chain: {
@@ -31,11 +29,6 @@ export interface ChainBootstrapResponse {
     truth_source: 'p2p_finalized_storage';
     api_is_truth: false;
     bundled_assets_required: ['assets/chainspec.json', 'assets/light_sync_state.json'];
-    checkpoint: {
-      source: 'bundled_asset' | 'remote_url';
-      light_sync_state_url: string | null;
-      light_sync_state_sha256: string;
-    };
   };
   p2p: {
     bootnodes: string[];
@@ -82,12 +75,11 @@ export function buildChainBootstrapResponse(
     env.CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS,
     DEFAULT_BOOTSTRAP_TTL_SECONDS
   );
-  const lightSyncStateUrl = normalizePublicUrl(env.CITIZEN_CHAIN_LIGHT_SYNC_STATE_URL);
   const relayEnabled = isChainExtrinsicRelayEnabled(env);
 
   return {
     ok: true,
-    schema: 'citizenapp.chain.bootstrap.v1',
+    schema: 'citizenapp.chain.bootstrap.v2',
     generated_at: Date.now(),
     cache_ttl_seconds: cacheTtlSeconds,
     chain: {
@@ -105,14 +97,9 @@ export function buildChainBootstrapResponse(
       mode: 'smoldot',
       truth_source: 'p2p_finalized_storage',
       api_is_truth: false,
-      bundled_assets_required: ['assets/chainspec.json', 'assets/light_sync_state.json'],
-      checkpoint: {
-        source: lightSyncStateUrl ? 'remote_url' : 'bundled_asset',
-        light_sync_state_url: lightSyncStateUrl,
-        light_sync_state_sha256:
-          normalizeSha256(env.CITIZEN_CHAIN_LIGHT_SYNC_STATE_SHA256) ??
-          DEFAULT_LIGHT_SYNC_STATE_SHA256
-      }
+      // 中文注释：checkpoint 只来自签名安装包；Worker 只声明必需资产，
+      // 不下发 URL、摘要或任何可切换轻节点信任锚的字段。
+      bundled_assets_required: ['assets/chainspec.json', 'assets/light_sync_state.json']
     },
     p2p: {
       bootnodes,
@@ -164,31 +151,9 @@ function isBootnode(value: string): boolean {
   return value.startsWith('/') && value.includes('/p2p/') && value.length <= 256;
 }
 
-function normalizePublicUrl(value: string | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-  try {
-    const url = new URL(value);
-    if (url.protocol !== 'https:') {
-      return null;
-    }
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
 function normalizeHex32(value: string | undefined, fallback: string): string {
   if (!value) {
     return fallback;
   }
   return /^0x[0-9a-fA-F]{64}$/.test(value) ? value.toLowerCase() : fallback;
-}
-
-function normalizeSha256(value: string | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-  return /^[0-9a-fA-F]{64}$/.test(value) ? value.toLowerCase() : null;
 }

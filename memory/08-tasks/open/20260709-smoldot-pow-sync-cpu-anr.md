@@ -57,27 +57,93 @@ Pixel 8a / Android 16 曾出现 `Input dispatching timed out` ANR。任务目标
 - [x] 核对客户端完整路径：优先请求并验证 GRANDPA warp fragments，随后获取目标 finalized runtime/必要 storage proof，再转回普通同步追近头；历史成本主要随 authority set 变更与 proof 体积增长，不随普通块高线性增长。
 - [x] 核对节点服务：所有节点注册 GRANDPA 协议并挂载 `warp_proof::NetworkProvider`；每次 finalized 都覆盖保存最新 justification，authority set 切换块 justification 强制持久化。
 - [x] 核对长期数据条件：当前只允许归档节点模式，生产 service 使用 `--state-pruning archive`，默认 block pruning 保留 finalized 正典链，可提供 warp 所需 header、justification 和目标 state。
-- [x] 固化唯一目标架构：正式签名 App 内置同 genesis 的发行 finalized checkpoint，Cloudflare 只更新经链身份校验的 bootnodes；高度差超过 32 自动 warp，完成后保存本机 finalized database。远端动态 checkpoint 不进入当前信任路径。
-- [ ] 正式链 finalized 到达 `#33` 或更高后，用全新 App 数据/独立测试 profile 完成真实 warp request、fragment、高度跳转、CPU 与输入响应验收。当前高度不满足触发条件，该验收保留为本步骤的运行态门禁，不得伪造为已通过。
+- [x] 固化唯一目标架构：正式签名 App 内置同 genesis 的固定 finalized checkpoint，不随链高持续更新；Cloudflare 只更新经链身份校验的 bootnodes。高度差不超过 32 时最多普通追 32 块，超过 32 自动 warp，完成后保存本机 finalized database。
+- [x] 正式链 finalized 到达 `#33` 后已用独立 Android managed test profile 执行真实 warp；确认 `warpFragments`、启动 `#0`、warp `#33`、peer finalized `#33` 和缓存落盘。第 8 步发现的首次会话完成判定与计数可观测性已在第 9 步修复；由于正式链仍只有 `#33`，修复后的两次干净重跑均被普通短链同步抢先，真实 warp 修复回归需在链高进一步增长后继续验收。
 
-第 3 步结论：未来链高增长时，新安装用户依靠 GRANDPA warp 快速接近 finalized 近头，不从创世逐块验证全链，也不下载全节点数据库。现网客户端和节点端代码路径已经具备该能力；当前唯一缺失的是正式链超过门槛后的真实运行证据与同步模式可观测性。
+第 3 步结论：未来链高增长时，新安装用户依靠 GRANDPA warp 快速接近 finalized 近头，不从创世逐块验证全链，也不下载全节点数据库。现网客户端和节点端代码路径已经具备该能力；`#33` 已取得真实 warp 证据，完成语义和计数可观测性也已修复。剩余运行门禁是等待正式链形成明显大于 32 块的高度差后，复验修复版真实 warp 全阶段及精确 request/fragment 计数。
 
 ### 第 4 步：原生资源约束
 
-- 根据第 3 步采样决定 Tokio worker 数量、线程优先级、日志/回调限速和是否需要独立 Dart isolate。
-- 目标是限制最坏情况下的 CPU 竞争，而不是只依赖链短、checkpoint 新或分叉少。
+- [x] 修复 `AllSync::status()` 长期硬编码为普通同步的问题，按真实状态输出 `regular / warpFragments / warpChainInformation`，不得用高度差推测 warp。
+- [x] 原生状态快照补齐启动 finalized、最高 peer finalized、warp finalized、warp 请求数和已验证 fragment 数；Dart 严格解析枚举和计数，未知模式直接报格式错误。
+- [x] 交易页按真实阶段展示“快速验证最终性 / 加载最新链状态 / 同步尾部区块”，warp 尚未结束时不得误报“轻节点已就绪”。
+- [x] Tokio runtime 固定为 2 个 worker；Android 原生工作线程统一设置 `nice=5`，降低同步与 Flutter 主线程争抢 CPU 的优先级。
+- [x] 原生 capability 从“每次请求新建线程”改为每 client 固定 2 个 worker、容量 64 的有界队列；队列满时返回 `native_capability_queue_full`，不得无限创建线程或堆积任务。
+- [x] Android/Rust 日志严格服从 Dart `maxLogLevel`，删除硬编码 trace；删除 Rust 未读取的 `maxChains / cpuRateLimit / wasmCpuMetering` 假配置，避免形成无效资源承诺。
+- [x] 不新增独立 Dart isolate：同步工作本身在受约束的 Rust/Tokio 线程中执行，FFI 通过异步 callback 返回；当前证据不支持再引入 isolate 生命周期和消息复制成本。
+- [x] 自动化验证：`smoldot-light cargo check`、FFI Rust `cargo check`、2 个资源约束单测、Dart 状态 codec/config 测试、8 个 Flutter 生命周期/交易页专项测试、macOS/Android 双 ABI 原生构建、arm64 profile APK 构建均通过；`flutter analyze` 只有两个既有无关 info。
+- [x] Pixel 8a / Android 16 profile 真机验收：进程中恰好存在 `cit-smol-0/1` 与 `cit-cap-0/1` 四个线程，nice 均为 5；空闲 10 秒四线程 CPU tick 增量均为 0；连续 60 秒滚动/切页后由“同步尾部区块”进入“轻节点已就绪”，无 ANR、输入超时、崩溃、panic 或队列溢出。
+
+第 4 步结论：资源约束和同步阶段类型已经落地。第 8 步已取得真实 `warpFragments` 证据并确认四个原生线程 nice 均为 5；第 9 步已统一完成语义，并把 request/fragment 精确计数写入 profile 结构化日志。正式链仍为 `#33` 时的修复版重跑均走普通同步，计数诚实输出为 0/0；真实 warp 的非零精确计数留待更高链高复验。
+
+全量 Flutter 套件复跑说明：本轮单并发执行到 229 项后卡在既有 `widget_test.dart`“无钱包启动页”用例；单独运行确认其缺少 `org.citizenapp/security.isDeviceRooted` plugin mock，并非 smoldot 回归。第 4 步相关专项测试均通过，本任务未越界修改该既有测试。
 
 ### 第 5 步：缓存单调推进
 
-- 串行化 finalized database 导出与持久化。
-- 缓存信封记录 genesis hash、finalized 高度和数据库正文，只允许更高 finalized 覆盖。
-- 覆盖异步写乱序、损坏缓存和生命周期切换测试。
+- [x] `smoldot_db_cache` 改为唯一严格信封 `citizenapp.smoldot.database.v1`，记录 genesis hash、finalized 高度/哈希和 database 正文；旧裸格式不兼容，首次读取直接删除。
+- [x] genesis hash 从安装包固定 `#0` 的 `finalizedBlockHeader` 计算，并强制 checkpoint block number 为 0；缓存链身份不依赖 Cloudflare 返回值。
+- [x] 启动时严格拒绝损坏 JSON、未知/多余字段、错误类型、超限正文和跨 genesis 数据；smoldot 拒绝有效信封正文时同样清理并回退固定 checkpoint。
+- [x] 真机确认 `addChain(databaseContent)` 返回瞬间仍可能显示安装包 `#0`；恢复校验改为最多等待 5 秒，低于声明高度继续等待，同高度必须 hash 一致，超过声明高度直接接受，持续低于或同高异 hash 才清理，避免误删有效异步恢复缓存。
+- [x] finalized database 导出前后分别读取高度和哈希，只有锚点完全一致才组成候选；导出期间推进时丢弃并最多重试一次。
+- [x] 所有导出和 SharedPreferences 写入进入单一 Future 队列；dispose 先失效代际并等待队尾收口，旧 chain/client 任务不得写入新生命周期。
+- [x] 单调覆盖规则：更低 finalized 丢弃；同高度同 hash 不重写；同高度不同 hash 清除旧值后写入当前轻节点稳定候选；只有更高 finalized 正常覆盖。
+- [x] 现有生命周期测试文件新增 7 个缓存场景，总计 13/13 通过；全 RPC 测试 31/31 通过，连同交易页专项为 33/33。`flutter analyze` 仍只有两个既有无关 info，`git diff --check` 通过。
+- [x] Pixel 8a / Android 16 profile 保留数据覆盖安装验收：检测并删除旧裸缓存，从固定 `#0` 同步到 finalized `#31`，写入 schema/genesis/finalized hash 完整的约 7 KB 信封；最终实现再次覆盖安装并冷启动，真实接受 6,973-byte `#31` 信封，异步恢复后进入“轻节点已就绪”，无 ANR、输入超时或崩溃。
 
-### 第 6 步：发行 checkpoint 与远端残留清理
+第 5 步结论：本机同步缓存现在只有一个受 genesis 绑定、finalized 单调推进的持久化真相。未来链高增加时，已安装用户从本机最高 finalized 恢复；新安装用户仍从固定 `#0` 进入 GRANDPA warp，两条路径最终都只写同一信封，不存在远端 checkpoint 或旧裸缓存双轨。
 
-- 为正式 App 发布建立发行 checkpoint 导出与验证入口：候选锚点必须绑定同一 genesis，经上一发行锚点启动的无缓存 smoldot 验证，并与至少 3 个独立归档节点 finalized hash 交叉一致后写入签名安装包。
-- 删除 Cloudflare bootstrap、Dart model、配置和测试中未进入当前信任路径的远端 checkpoint URL / SHA-256 字段，只保留经本地链身份校验的 bootnodes 清单。
-- 不保留动态 checkpoint、HTTP RPC、全节点数据库下载或双轨兼容分支。
+### 第 6 步：远端 checkpoint 残留清理
+
+- [x] bootstrap schema 从旧版直接升级为 `citizenapp.chain.bootstrap.v2`；Worker 和 Dart 只接受 v2，不保留旧 schema 兼容。
+- [x] Worker `light_client` 删除整个远端 checkpoint 字段树，只保留 `mode / truth_source / api_is_truth / bundled_assets_required`；删除相关常量、URL/摘要规范化函数和生成逻辑。
+- [x] Cloudflare `Env` 与根、staging、production 三套 Wrangler vars 删除远端轻同步资产配置；启动清单只治理冻结链身份、公开 bootnodes 和服务发现。
+- [x] Dart model 删除远端 checkpoint 属性和摘要解析器，严格校验 `light_client` 精确字段与两个签名安装包资产；任何 checkpoint 字段递归出现都直接拒绝。
+- [x] Worker/Dart 测试更新为 v2，新增旧 schema 与远端 checkpoint 拒绝断言；不保留动态 checkpoint、HTTP RPC、全节点数据库下载或双轨分支。
+- [x] 本地验收：Worker `tsc --noEmit` 通过、全量 Vitest 103/103 通过；全 RPC 与交易页 Flutter 测试 34/34 通过；profile arm64 APK 构建通过；`flutter analyze` 只有两个既有无关 info。
+- [x] 真实 Worker 运行态验收：Wrangler 4.107.0 本地启动成功，`GET /v1/chain/bootstrap` 返回 200、schema v2、6 个 bootnodes，`light_client` 只有四个允许字段；旧 checkpoint 字段不存在，`/v1/chain/rpc` 返回 404。
+
+第 6 步结论：代码、配置、测试和协议文档中只剩单一 bootstrap v2 契约。Worker 无法下发 checkpoint，App 也不会接受携带旧字段的响应；轻节点信任锚唯一来自签名安装包固定 `#0`，Cloudflare 只提供经过本地链身份校验后才使用的 bootnodes。第 6 步先完成本地实现与真实本地 HTTP 验收，远端发布记录见第 7 步。
+
+### 第 7 步：Bootstrap v2 远端发布
+
+- [x] Wrangler 4.107.0 对 staging、production 分别执行远端部署前 dry-run，确认入口、绑定和三套环境变量均可解析，旧 checkpoint 变量未进入部署绑定。
+- [x] staging `citizenapp-square-api-staging` 从版本 `cb89091f-c393-4e66-a3ad-703bdca91844` 发布到 `ff19bc46-dc17-4f77-a53f-aed2739142a0`，100% 流量；真实 HTTPS 返回 schema v2、6 个 bootnodes、四字段 `light_client`，不存在远端 checkpoint/RPC URL，`/v1/chain/rpc` 为 404。
+- [x] Pixel 8a 使用 staging base URL 的 arm64 profile 包保留数据覆盖安装：读取 v2 启动清单并注入 6 个 bootnodes，接受 finalized `#31` 的本机严格缓存信封，进入“轻节点已就绪”，无 CitizenApp ANR、输入超时或崩溃。
+- [x] production `citizenapp-square-api` 从版本 `6bf9ecd1-4a35-4bba-b8d2-418ff657b529` 发布到 `00d836aa-9c43-4561-ba33-8730d780c1a0`，100% 流量；真实 HTTPS 契约与安全断言全部通过，通用链 RPC 路由仍为 404。
+- [x] 重新构建不带 staging Dart define 的生产 arm64 profile 包并保留数据覆盖安装，确认设备已经恢复生产配置；真实读取 6 个 bootnodes、恢复 genesis 绑定的 finalized `#31` / 6,973-byte 信封并进入“轻节点已就绪”。日志中的一次 `FATAL EXCEPTION` 已定位为独立 `uiautomator dump` 进程重复注册，不属于 `org.citizenapp`；CitizenApp 无 ANR、fatal signal 或进程崩溃。
+- [x] 本步骤没有执行 D1 migration、GitHub push、PR 或 CI/CD，也没有修改 `citizenchain/runtime/`；发布前版本均已留档，可按环境独立回滚。
+
+第 7 步结论：bootstrap v2 已在 staging 和 production 全量生效，生产手机也已恢复到无测试 base URL 的正式 profile 配置。远端只下发公开 bootnodes 和服务发现，安装包固定 `#0` 仍是新安装用户唯一信任锚。正式链当前 finalized 仍为 `#31`，因此本轮只能证明 v2 发布和短尾/缓存恢复，不能冒充 `#33` 以后真实 warp 已验收。
+
+### 第 8 步：正式链 `#33` 真实 Warp 验收
+
+- [x] 正式链实时状态确认 `best #33 / finalized #33`，hash 为 `0xe3985a35f8668d74f1552be80e1e4c5c01fcce7f7c757cc0cf254ec21a1d2d9c`，满足固定 `#0` 锚点严格大于 32 的 warp 门槛。
+- [x] Pixel 8a / Android 16 创建独立 managed test profile，单独安装同一生产 arm64 profile 包并创建临时测试钱包；机主 CitizenApp 和 Private Space 数据均未读取、清除或覆盖。
+- [x] 为排除钱包创建后的 baseline 读链抢先写缓存，在测试钱包已持久化、首次 `[ChainRpc]` 刚启动而尚未保存缓存时停止测试进程；重启后广场无 client 创建，再由交易 Tab 唯一触发从固定 `#0` 启动。
+- [x] 真实阶段证据：交易页显示“轻节点正在快速验证最终性”，结构化内容为 `peer 5 / 启动 #0 / warp #33 / peer finalized #33`；`syncMode=warpFragments` 只有在原生 `warp_request_count > 0` 时才可能返回，因此已经证明发起了真实 GRANDPA warp request，而非按高度差推测。
+- [x] 时间与缓存：`18:36:58.996` 轻节点启动，`18:37:03.043` Dart `waitUntilSynced()` 返回，约 4.05 秒；`18:37:03.120` 保存 genesis 绑定的 finalized `#33` / 5,111-byte database 信封。另一轮干净 profile 同样从 `#0` 到 `#33` 并保存 7,071-byte 信封，证明结果可重复。
+- [x] 资源与响应：进程中只有 `cit-smol-0/1`、`cit-cap-0/1` 四个目标线程，nice 全为 5；采样窗口进程 CPU 最高约为单核 38%，收口后四线程 tick 不再增长、瞬时 CPU 为 0%；ADB 输入命令分别在 155/168 ms 返回，页面可继续切换，无 CitizenApp ANR、Input dispatch timeout、fatal signal、panic 或崩溃。
+- [x] 缓存可恢复：第二次启动严格验证 finalized `#33` 信封，约 0.80 秒应用 5,111-byte database，最终显示“轻节点已就绪，peer 5，best/finalized #33”。
+- [ ] 首次会话完成判定失败：`waitUntilSynced()` 只把原生 `isSyncing=false` 映射为 synced；runtime near-head heuristic 已满足时，原生同步状态机仍处于 `warpFragments`。Dart 因此提前记录“区块头同步完成”并导出缓存，但交易页连续数分钟仍显示 warp、业务状态保持未就绪，直到进程重启并从 `#33` 缓存恢复才进入 `regular`。
+- [ ] 当前 `LightClientStatusSnapshot` 已携带 `warpRequestCount/warpFragmentCount`，但 profile 日志和 `ChainProgressBanner` 不展示这两个字段；本次只能由真实 `warpFragments` 证明 request 大于 0，无法诚实记录精确请求数与已验证 fragment 数。
+
+第 8 步结论：固定 `#0` 的新安装用户确实会在链 finalized `#33` 时进入 GRANDPA warp，并能在约 4 秒内形成可在下一次启动恢复的 `#33` 本机 database；“所有新用户从创世逐块追链”的担忧已经排除。但首次会话的完成条件错误，当前用户必须重启 App 才能从 warp 状态进入可用状态，因此完整验收失败，任务不能关闭。下一步必须让同步完成同时要求 `syncMode=regular`，并把 request/fragment 计数纳入诊断输出后重新真机验收。
+
+### 第 9 步：首次 Warp 完成语义与缓存持续推进
+
+- [x] 原生 `ChainStatusSnapshot.is_syncing` 不再只等于 runtime near-head heuristic：只要 `syncMode != regular` 或 runtime 尚未近头都保持 syncing，warp fragments 和 warp chain information 阶段不得提前完成。
+- [x] `smoldot-dart` 统一以 `LightClientStatusSnapshot.isUsable` 映射 `ChainStatus` 和结束 `waitUntilSynced()`；`isSyncing=false + warpFragments` 的矛盾快照仍必须视为 syncing。
+- [x] App 在 Dart wait 返回后再次读取完整快照，只有 `regular + !isSyncing + peer/hash/高度完整` 才设置 operational、开放业务并导出 database；warp 阶段即使 runtime 已近头也不得写缓存。
+- [x] `ChainProgressBanner` 按 `isUsable` 持续轮询到 ready，并在阶段变化时输出 `mode/startup/peer_finalized/warp/requests/fragments/best/finalized` 精确结构化诊断；新增 widget 测试覆盖 `warpFragments → warpChainInformation → regular`，ready 后停止轮询。
+- [x] 本机缓存增加单实例一分钟低频刷新：只在链可用且 finalized 严格高于已持久化高度时进入原有串行稳定导出路径；同高度不导出，dispose 会取消定时器并等待进行中的刷新/写队列收口。
+- [x] 自动化验证：`smoldot-light` 2 个单测和 2 个 doctest、CitizenApp Rust 4 个单测、manager/banner 15 个测试、RPC/交易页/banner 36 个 Flutter 测试、`chain_info_test.dart` 9 个测试全部通过；目标 Flutter analyze 无问题，macOS 与 Android arm64/armv7 原生构建、生产 arm64 profile APK 构建通过。
+- [x] `smoldot-dart` 全量测试中的本地新增用例全部通过；两项既有 Westend 公开网络用例因默认 30 秒超时失败，实测 Westend 约 51 秒后才 ready，属于外部公开网络时序，不是 CitizenChain 完成语义回归。
+- [x] Pixel 8a / Android 16 在独立 managed profile 保留生物识别、清空 App 数据后两次制造“钱包已持久化但无同步缓存”的干净状态。第一次从 `#0` 到 `#33` 约 6.1 秒并在同一会话显示 ready，随后保存 7,071-byte 信封；第二次在约 12 秒时 best/finalized 已到 `#33`，但门禁继续等待到约 75 秒才记录 `regular + syncing=false`、显示 ready 并保存 9,031-byte 信封，证明高度追上不会再提前开放业务。
+- [x] 第二次启动严格验证 finalized `#33` 信封并恢复 7,071-byte database，约 3 秒完成链状态确认；运行超过一分钟且 finalized 未推进时没有重复导出或重写缓存。自动化测试另覆盖 `#31 → #33` 时只刷新一次。
+- [x] 真机结构化日志完整输出精确字段；正式链仍只有 `#33`，两次修复版干净重跑均由普通同步抢先，故真实值为 `mode=regular, requests=0, fragments=0`，未伪造非零 warp 计数。第 8 步的真实 `warpFragments` 证据继续有效，但修复版非零计数和真实 warp 首次会话回归必须等链高进一步增加后补验。
+- [x] 真机仅有 `cit-smol-0/1`、`cit-cap-0/1` 四个目标线程，nice 全为 5；稳定期进程瞬时 CPU 0.0%，页面切换后 MainActivity 仍 resumed，无 CitizenApp ANR、Input dispatch timeout、fatal signal、panic 或崩溃。
+
+第 9 步结论：代码层的提前完成、错误 ready、warp 中落缓存和已安装用户缓存不持续推进四个问题已一次性修复，短链真机也证明高度先追上时不会提前放行业务。正式链当前 `#33` 恰处于 warp 最小门槛边缘，修复版重跑没有再次进入 warp，因此任务继续保持 open；下一步只做更高链高下的真实 warp 全阶段回归和长期节点服务门禁，不再改动完成语义。
 
 ## 完成标准
 

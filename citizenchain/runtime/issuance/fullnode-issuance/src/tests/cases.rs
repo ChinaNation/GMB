@@ -63,6 +63,20 @@ fn reward_issued_within_range_when_bound() {
             Balances::free_balance(wallet.clone()),
             primitives::pow_const::FULLNODE_BLOCK_REWARD
         );
+        assert_eq!(RewardedBlockCount::<Test>::get(), 1);
+        assert_eq!(
+            TotalFullnodeIssued::<Test>::get(),
+            primitives::pow_const::FULLNODE_BLOCK_REWARD
+        );
+        assert_eq!(
+            LastRewardAudit::<Test>::get(),
+            Some((
+                1,
+                miner.clone(),
+                wallet.clone(),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD,
+            ))
+        );
 
         let has_event = System::events().iter().any(|r| {
             matches!(
@@ -104,6 +118,9 @@ fn no_reward_outside_reward_range() {
         // 区块 0 不发放
         <FullnodeIssuance as Hooks<u32>>::on_finalize(0);
         assert_eq!(Balances::free_balance(wallet.clone()), 0);
+        assert_eq!(RewardedBlockCount::<Test>::get(), 0);
+        assert_eq!(TotalFullnodeIssued::<Test>::get(), 0);
+        assert_eq!(LastRewardAudit::<Test>::get(), None);
         let has_event_block_0 = System::events().iter().any(|r| {
             matches!(
                 r.event,
@@ -117,6 +134,8 @@ fn no_reward_outside_reward_range() {
             (primitives::pow_const::FULLNODE_REWARD_END_BLOCK + 1).into(),
         );
         assert_eq!(Balances::free_balance(wallet), 0);
+        assert_eq!(RewardedBlockCount::<Test>::get(), 0);
+        assert_eq!(TotalFullnodeIssued::<Test>::get(), 0);
     });
 }
 
@@ -170,6 +189,12 @@ fn reward_accumulates_across_multiple_blocks() {
             Balances::free_balance(wallet),
             primitives::pow_const::FULLNODE_BLOCK_REWARD * 3
         );
+        assert_eq!(RewardedBlockCount::<Test>::get(), 3);
+        assert_eq!(
+            TotalFullnodeIssued::<Test>::get(),
+            primitives::pow_const::FULLNODE_BLOCK_REWARD * 3
+        );
+        assert_eq!(LastRewardAudit::<Test>::get().map(|audit| audit.0), Some(3));
     });
 }
 
@@ -179,6 +204,10 @@ fn skip_event_emitted_when_author_not_found() {
         MOCK_AUTHOR.with(|v| *v.borrow_mut() = None);
 
         <FullnodeIssuance as Hooks<u32>>::on_finalize(1);
+
+        assert_eq!(RewardedBlockCount::<Test>::get(), 0);
+        assert_eq!(TotalFullnodeIssued::<Test>::get(), 0);
+        assert_eq!(LastRewardAudit::<Test>::get(), None);
 
         let has_event = System::events().iter().any(|r| {
             matches!(

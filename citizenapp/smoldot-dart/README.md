@@ -39,7 +39,6 @@ void main() async {
   final client = SmoldotClient(
     config: SmoldotConfig(
       maxLogLevel: 3,
-      maxChains: 8,
     ),
   );
 
@@ -188,10 +187,7 @@ Represents a blockchain chain.
 
 ```dart
 SmoldotConfig(
-  maxLogLevel: 3,        // 0=off, 1=error, 2=warn, 3=info, 4=debug, 5=trace
-  maxChains: 8,          // Maximum number of chains
-  cpuRateLimit: 1.0,     // CPU rate limit (0.0 to 1.0)
-  wasmCpuMetering: false,// Enable WASM CPU metering
+  maxLogLevel: 3, // 0=off, 1=error, 2=warn, 3=info, 4=debug, 5=trace
 )
 ```
 

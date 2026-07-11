@@ -21,7 +21,7 @@
 - 白皮书正文只允许来自 `citizenweb/src/whitepaper.md`。
 - 公民宪法正文唯一真源 = 链上立法院模块（`legislation-yuan`，`law_id=0`、`tier=宪法`，
   ADR-027）；节点通过 RAW storage 读取当前生效版本的结构化法律（章>节>条>款 + 中英双语），
-  在 `node/src/core/constitution.rs` 据原 CSS 外壳重建 HTML；修改宪法走立法投票上链，不再发 runtime 升级改 HTML。
+  在 `node/src/core/constitution/render.rs` 据原 CSS 外壳重建 HTML；修改宪法走立法投票上链，不再发 runtime 升级改 HTML。
 - 节点同时 RAW 读取 `LegislationYuan.ConstitutionImmutableManifest`，只用 manifest 条号给 HTML 条标题追加
   “不可修改条款 / Immutable Clause”徽章；章、节、条标题和款正文都直接来自链上结构化正文，不在渲染层额外拼接
   “第 x 章 / 第 x 节 / 第 x 条 / 第 x 款”。

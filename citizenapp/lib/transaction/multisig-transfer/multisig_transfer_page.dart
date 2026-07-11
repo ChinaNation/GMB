@@ -389,7 +389,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       return '轻节点尚未连接到区块链网络，暂不能提交转账提案';
     }
     if (progress.isSyncing) {
-      return '轻节点仍在同步区块头，完成后才能提交转账提案';
+      return '轻节点仍在验证或同步链状态，完成后才能提交转账提案';
     }
     if (!progress.isUsable) {
       return _chainProgressError ?? '区块链状态尚未就绪，暂不能提交转账提案';

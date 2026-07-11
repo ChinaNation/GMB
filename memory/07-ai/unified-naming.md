@@ -94,6 +94,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenchain/` | 公民链 | citizenchain | runtime、节点、桌面端和打包 |
 | `citizenchain/runtime/` | 链上运行时 | runtime | pallet、runtime 配置和链上规则 |
 | `citizenchain/node/` | 节点桌面端 | node | 原生节点、Tauri 后端和桌面前端 |
+| `citizenchain/node/src/core/constitution/` | 宪法节点能力 | constitution | 宪法 RAW 数据、独立共识守卫和桌面渲染；`guard.rs` 与 `render.rs` 严格分离 |
+| `citizenchain/node/src/core/node_guard/` | 节点守卫 | node-guard | 宪法守卫之外的节点永久规则统一 `BlockImport` 边界；内部策略共享区块预执行与状态导入校验 |
 | `citizenchain/onchina/` | OnChina | onchina | 公民链内置多机构工作台、注册局业务、行政区、机构登记、管理后台和链侧凭证能力 |
 | `citizenchain/onchina/src/cid/` | 身份 ID 编码协议 | number | OnChina 身份号码格式、SubjectProperty、机构码、分类、生成和校验唯一源码目录 |
 | `citizenwallet/` | 公民钱包 | citizenwallet | 离线签名、扫码识别和钱包 UI |
@@ -146,6 +148,8 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 公权机构管理 | `public-manage` | runtime crate / pallet | 公权机构生命周期 pallet(idx32) |
 | 私权机构管理 | `private-manage` | runtime crate / pallet | 私权机构生命周期 pallet(idx33) |
 | 个人多签管理 | `personal-manage` | runtime crate / pallet | 个人多签管理 pallet |
+| 节点守卫 | `NodeGuard` / `node_guard` | `citizenchain/node/src/core/node_guard/` | 宪法外节点永久规则的唯一原生导入包装器；不得把 `ConstitutionGuard` 并入其中，也不得为内部策略另建平行包装器 |
+| 宪法守卫 | `ConstitutionGuard` / `constitution::guard` | `citizenchain/node/src/core/constitution/guard.rs` | 整条链最高优先级、独立最外层 `BlockImport` 包装器；不得并入 `NodeGuard` 或展示模块 |
 | 管理员变更 | `admins-change` | runtime crate / pallet | 管理员主体、阈值和管理员变更 |
 | 内部投票 | `internal-vote` | runtime crate / pallet | 机构内部治理投票 |
 | 联合投票 | `joint-vote` | runtime crate / pallet | 联合治理投票 |

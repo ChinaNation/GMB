@@ -1,6 +1,7 @@
 //! # 公民轻节点认证奖励发行模块 (citizen-issuance)
 //!
-//! 本模块在公民投票身份首次登记成功时，通过 `OnVotingIdentityRegistered` 回调自动发放一次性认证奖励。
+//! 本模块在公民投票身份首次登记成功时，通过 `OnVotingIdentityRegistered` 回调登记本块待发奖励，
+//! 并在同一块 `on_finalize` 中自动发放一次性认证奖励。
 //!
 //! ## 核心规则
 //! - 双重防重：按 `cid_number` 哈希 + 按账户，防止同一公民或同一账户重复领奖。
@@ -23,8 +24,9 @@ pub mod pallet {
     use frame_support::{
         pallet_prelude::*,
         traits::{Currency, Imbalance},
-        Blake2_128Concat,
+        Blake2_128Concat, Twox64Concat,
     };
+    use frame_system::pallet_prelude::BlockNumberFor;
     use scale_info::TypeInfo;
     use sp_runtime::traits::{Hash as HashT, SaturatedConversion, Zero};
     use sp_runtime::RuntimeDebug;
@@ -83,6 +85,47 @@ pub mod pallet {
     pub type AccountRewarded<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, (), ValueQuery>;
 
+    /// finalize 前可由节点读取的单笔待发奖励凭据；金额由累计序号和制度常量独立推导。
+    #[derive(
+        Clone,
+        Encode,
+        Decode,
+        DecodeWithMemTracking,
+        Eq,
+        PartialEq,
+        RuntimeDebug,
+        TypeInfo,
+        MaxEncodedLen,
+    )]
+    pub struct PendingCertificationReward<AccountId, Hash> {
+        pub who: AccountId,
+        pub cid_number_hash: Hash,
+    }
+
+    #[pallet::storage]
+    /// 本块已排队的奖励数量；`on_finalize` 必须消费后归零。
+    pub type PendingRewardCount<T> = StorageValue<_, u32, ValueQuery>;
+
+    #[pallet::storage]
+    /// 按本块登记顺序保存待发凭据，保证跨奖励档位时顺序可复算。
+    pub type PendingRewards<T: Config> = StorageMap<
+        _,
+        Twox64Concat,
+        u32,
+        PendingCertificationReward<T::AccountId, T::Hash>,
+        OptionQuery,
+    >;
+
+    #[pallet::storage]
+    /// 本块 CID 临时防重表；finalize 后必须清空，不形成第二套永久真源。
+    pub type PendingIdentityRewardClaimed<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
+
+    #[pallet::storage]
+    /// 本块账户临时防重表；finalize 后必须清空，不形成第二套永久真源。
+    pub type PendingAccountRewarded<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, (), ValueQuery>;
+
     /// 描述奖励被跳过的具体原因，用于链上事件记录和前端展示。
     #[derive(
         Clone,
@@ -132,6 +175,46 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {}
 
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_finalize(_n: BlockNumberFor<T>) {
+            let pending_count = PendingRewardCount::<T>::take();
+            for index in 0..pending_count {
+                let Some(pending) = PendingRewards::<T>::take(index) else {
+                    // 正常 runtime 不会形成空洞；节点守卫会在区块导入前 fail-closed。
+                    debug_assert!(false, "公民认证待发队列存在空洞:index={index}");
+                    continue;
+                };
+
+                let rewarded_count = RewardedCount::<T>::get();
+                let reward_amount = Self::reward_amount_at(rewarded_count);
+                let reward: BalanceOf<T> = reward_amount.saturated_into();
+                debug_assert!(!reward.is_zero(), "citizen reward must remain non-zero");
+
+                let imbalance = T::Currency::deposit_creating(&pending.who, reward);
+                debug_assert_eq!(
+                    imbalance.peek(),
+                    reward,
+                    "deposit_creating must return full citizen reward"
+                );
+                // 先结算发行凭证，使 Balances::Issued 事件稳定早于本模块业务事件。
+                drop(imbalance);
+
+                RewardedCount::<T>::put(rewarded_count.saturating_add(1));
+                IdentityRewardClaimed::<T>::insert(pending.cid_number_hash, ());
+                AccountRewarded::<T>::insert(&pending.who, ());
+                PendingIdentityRewardClaimed::<T>::remove(pending.cid_number_hash);
+                PendingAccountRewarded::<T>::remove(&pending.who);
+
+                Self::deposit_event(Event::<T>::CertificationRewardIssued {
+                    who: pending.who,
+                    cid_number_hash: pending.cid_number_hash,
+                    reward,
+                });
+            }
+        }
+    }
+
     impl<T: Config> Pallet<T> {
         /// 调用方在 weight 宏中引用此值。
         pub fn on_voting_identity_registered_weight() -> Weight {
@@ -139,31 +222,41 @@ pub mod pallet {
             T::WeightInfo::on_voting_identity_registered()
         }
 
-        fn try_issue_certification_reward(
+        fn reward_amount_at(rewarded_count: u64) -> u128 {
+            if rewarded_count < CITIZEN_ISSUANCE_HIGH_REWARD_COUNT {
+                CITIZEN_ISSUANCE_HIGH_REWARD
+            } else {
+                CITIZEN_ISSUANCE_NORMAL_REWARD
+            }
+        }
+
+        fn try_queue_certification_reward(
             who: &T::AccountId,
             cid_number_hash: T::Hash,
         ) -> Result<BalanceOf<T>, SkipReason> {
             // 先查公民身份，再查账户，优先返回更贴近业务语义的跳过原因。
-            if IdentityRewardClaimed::<T>::contains_key(cid_number_hash) {
+            if IdentityRewardClaimed::<T>::contains_key(cid_number_hash)
+                || PendingIdentityRewardClaimed::<T>::contains_key(cid_number_hash)
+            {
                 return Err(SkipReason::DuplicateCitizenIdentity);
             }
 
-            if AccountRewarded::<T>::contains_key(who) {
+            if AccountRewarded::<T>::contains_key(who)
+                || PendingAccountRewarded::<T>::contains_key(who)
+            {
                 return Err(SkipReason::AccountAlreadyRewarded);
             }
 
             let rewarded_count = RewardedCount::<T>::get();
+            let pending_count = PendingRewardCount::<T>::get();
+            let effective_count = rewarded_count.saturating_add(u64::from(pending_count));
             // 总人数达到上限后直接跳过，不再尝试铸币或写入任何领奖标记。
-            if rewarded_count >= CITIZEN_ISSUANCE_MAX_COUNT {
+            if effective_count >= CITIZEN_ISSUANCE_MAX_COUNT {
                 return Err(SkipReason::MaxCountReached);
             }
 
             // 奖励档位完全由全局累计人数决定，避免链下参与者各自推导口径不一致。
-            let reward_amount = if rewarded_count < CITIZEN_ISSUANCE_HIGH_REWARD_COUNT {
-                CITIZEN_ISSUANCE_HIGH_REWARD
-            } else {
-                CITIZEN_ISSUANCE_NORMAL_REWARD
-            };
+            let reward_amount = Self::reward_amount_at(effective_count);
 
             let reward: BalanceOf<T> = reward_amount.saturated_into();
             debug_assert!(
@@ -174,20 +267,20 @@ pub mod pallet {
             if reward.is_zero() {
                 return Err(SkipReason::ZeroRewardConfigured);
             }
+            let next_pending_count = pending_count
+                .checked_add(1)
+                .ok_or(SkipReason::MaxCountReached)?;
 
-            // 这里有意通过 deposit_creating 主动增发，并丢弃返回的 PositiveImbalance；
-            // 奖励发行本身就是本模块的职责，不需要再将该发行凭证向外传递。
-            let imbalance = T::Currency::deposit_creating(who, reward);
-            debug_assert_eq!(
-                imbalance.peek(),
-                reward,
-                "deposit_creating must return full reward"
+            PendingRewards::<T>::insert(
+                pending_count,
+                PendingCertificationReward {
+                    who: who.clone(),
+                    cid_number_hash,
+                },
             );
-
-            // 只有铸币成功进入账本后，才推进累计人数并写入双重防重标记。
-            RewardedCount::<T>::put(rewarded_count.saturating_add(1));
-            IdentityRewardClaimed::<T>::insert(cid_number_hash, ());
-            AccountRewarded::<T>::insert(who, ());
+            PendingIdentityRewardClaimed::<T>::insert(cid_number_hash, ());
+            PendingAccountRewarded::<T>::insert(who, ());
+            PendingRewardCount::<T>::put(next_pending_count);
 
             Ok(reward)
         }
@@ -197,14 +290,8 @@ pub mod pallet {
     impl<T: Config> OnVotingIdentityRegistered<T::AccountId> for Pallet<T> {
         fn on_voting_identity_registered(who: &T::AccountId, cid_number: &[u8]) {
             let cid_number_hash = T::Hashing::hash(cid_number);
-            match Self::try_issue_certification_reward(who, cid_number_hash) {
-                Ok(reward) => {
-                    Self::deposit_event(Event::<T>::CertificationRewardIssued {
-                        who: who.clone(),
-                        cid_number_hash,
-                        reward,
-                    });
-                }
+            match Self::try_queue_certification_reward(who, cid_number_hash) {
+                Ok(_reward) => {}
                 Err(reason) => {
                     Self::deposit_event(Event::<T>::CertificationRewardSkipped {
                         who: who.clone(),

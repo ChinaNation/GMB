@@ -22,7 +22,6 @@ final Map<int, Completer<int>> _globalCallbackRegistry = {};
 /// final client = SmoldotClient(
 ///   config: SmoldotConfig(
 ///     maxLogLevel: 3,
-///     maxChains: 8,
 ///   ),
 /// );
 ///
@@ -70,12 +69,13 @@ class SmoldotClient {
 
   /// Creates a new smoldot client with the given configuration
   SmoldotClient({SmoldotConfig? config})
-      : config = config ?? const SmoldotConfig() {
+    : config = config ?? const SmoldotConfig() {
     _bindings = SmoldotBindings();
 
     // Use NativeCallable.listener for callbacks from background threads
-    _nativeCallable =
-        NativeCallable<DartCallbackNative>.listener(_dartCallback);
+    _nativeCallable = NativeCallable<DartCallbackNative>.listener(
+      _dartCallback,
+    );
     _nativeCallback = _nativeCallable.nativeFunction;
   }
 
@@ -89,8 +89,9 @@ class SmoldotClient {
 
     if (error != nullptr) {
       final errorMsg = error.toDartString();
-      completer
-          .completeError(SmoldotException('FFI operation failed: $errorMsg'));
+      completer.completeError(
+        SmoldotException('FFI operation failed: $errorMsg'),
+      );
     } else {
       completer.complete(result);
     }
@@ -252,7 +253,8 @@ class SmoldotClient {
   void _ensureInitialized() {
     if (!_isInitialized) {
       throw SmoldotException(
-          'Client is not initialized. Call initialize() first.');
+        'Client is not initialized. Call initialize() first.',
+      );
     }
   }
 }

@@ -6,28 +6,9 @@ class SmoldotConfig {
   /// Maximum log level to output (0=off, 1=error, 2=warn, 3=info, 4=debug, 5=trace)
   final int maxLogLevel;
 
-  /// Maximum number of chains that can be simultaneously added
-  final int maxChains;
+  const SmoldotConfig({this.maxLogLevel = 3});
 
-  /// CPU rate limit (0.0 to 1.0, where 1.0 means no limit)
-  final double cpuRateLimit;
-
-  /// Enable WebAssembly CPU metering
-  final bool wasmCpuMetering;
-
-  const SmoldotConfig({
-    this.maxLogLevel = 3,
-    this.maxChains = 8,
-    this.cpuRateLimit = 1.0,
-    this.wasmCpuMetering = false,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'maxLogLevel': maxLogLevel,
-        'maxChains': maxChains,
-        'cpuRateLimit': cpuRateLimit,
-        'wasmCpuMetering': wasmCpuMetering,
-      };
+  Map<String, dynamic> toJson() => {'maxLogLevel': maxLogLevel};
 }
 
 /// Configuration for adding a chain to the smoldot client
@@ -53,12 +34,12 @@ class AddChainConfig {
   });
 
   Map<String, dynamic> toJson() => {
-        'chainSpec': chainSpec,
-        if (databaseContent != null) 'databaseContent': databaseContent,
-        if (potentialRelayChains != null && potentialRelayChains!.isNotEmpty)
-          'potentialRelayChains': potentialRelayChains,
-        'disableJsonRpc': disableJsonRpc,
-      };
+    'chainSpec': chainSpec,
+    if (databaseContent != null) 'databaseContent': databaseContent,
+    if (potentialRelayChains != null && potentialRelayChains!.isNotEmpty)
+      'potentialRelayChains': potentialRelayChains,
+    'disableJsonRpc': disableJsonRpc,
+  };
 }
 
 /// Result of a JSON-RPC request
@@ -73,11 +54,7 @@ class JsonRpcResponse {
   /// Error information if failed
   final JsonRpcError? error;
 
-  const JsonRpcResponse({
-    required this.id,
-    this.result,
-    this.error,
-  });
+  const JsonRpcResponse({required this.id, this.result, this.error});
 
   bool get isError => error != null;
   bool get isSuccess => error == null;
@@ -93,10 +70,10 @@ class JsonRpcResponse {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        if (result != null) 'result': result,
-        if (error != null) 'error': error!.toJson(),
-      };
+    'id': id,
+    if (result != null) 'result': result,
+    if (error != null) 'error': error!.toJson(),
+  };
 }
 
 /// JSON-RPC error information
@@ -111,11 +88,7 @@ class JsonRpcError {
   /// Additional error data
   final dynamic data;
 
-  const JsonRpcError({
-    required this.code,
-    required this.message,
-    this.data,
-  });
+  const JsonRpcError({required this.code, required this.message, this.data});
 
   factory JsonRpcError.fromJson(Map<String, dynamic> json) {
     return JsonRpcError(
@@ -126,10 +99,10 @@ class JsonRpcError {
   }
 
   Map<String, dynamic> toJson() => {
-        'code': code,
-        'message': message,
-        if (data != null) 'data': data,
-      };
+    'code': code,
+    'message': message,
+    if (data != null) 'data': data,
+  };
 
   @override
   String toString() => 'JsonRpcError(code: $code, message: $message)';
@@ -178,57 +151,115 @@ class ChainInfo {
   });
 
   Map<String, dynamic> toJson() => {
-        'chainId': chainId,
-        'name': name,
-        'status': status.name,
-        'peerCount': peerCount,
-        if (bestBlockNumber != null) 'bestBlockNumber': bestBlockNumber,
-        if (bestBlockHash != null) 'bestBlockHash': bestBlockHash,
-      };
+    'chainId': chainId,
+    'name': name,
+    'status': status.name,
+    'peerCount': peerCount,
+    if (bestBlockNumber != null) 'bestBlockNumber': bestBlockNumber,
+    if (bestBlockHash != null) 'bestBlockHash': bestBlockHash,
+  };
 }
 
-/// 中文注释：轻节点状态快照，作为 typed capability 的第一批结构化输出。
+/// 轻节点同步状态机阶段。
+enum LightClientSyncMode {
+  regular('regular'),
+  warpFragments('warpFragments'),
+  warpChainInformation('warpChainInformation');
+
+  const LightClientSyncMode(this.wireValue);
+
+  final String wireValue;
+
+  static LightClientSyncMode fromWireValue(Object? value) {
+    return switch (value) {
+      'regular' => LightClientSyncMode.regular,
+      'warpFragments' => LightClientSyncMode.warpFragments,
+      'warpChainInformation' => LightClientSyncMode.warpChainInformation,
+      _ => throw FormatException('未知轻节点同步模式: $value'),
+    };
+  }
+}
+
+/// 中文注释：轻节点状态快照，字段直接来自 Rust 同步状态机。
 @immutable
 class LightClientStatusSnapshot {
   final int peerCount;
   final bool isSyncing;
+  final LightClientSyncMode syncMode;
   final int? bestBlockNumber;
   final String? bestBlockHash;
   final int? finalizedBlockNumber;
   final String? finalizedBlockHash;
+  final int? startupFinalizedBlockNumber;
+  final int? highestPeerFinalizedBlockNumber;
+  final int? warpFinalizedBlockNumber;
+  final int warpRequestCount;
+  final int warpFragmentCount;
 
   const LightClientStatusSnapshot({
     required this.peerCount,
     required this.isSyncing,
+    required this.syncMode,
     this.bestBlockNumber,
     this.bestBlockHash,
     this.finalizedBlockNumber,
     this.finalizedBlockHash,
+    this.startupFinalizedBlockNumber,
+    this.highestPeerFinalizedBlockNumber,
+    this.warpFinalizedBlockNumber,
+    required this.warpRequestCount,
+    required this.warpFragmentCount,
   });
 
   bool get hasPeers => peerCount > 0;
 
   bool get isUsable =>
-      hasPeers && !isSyncing && finalizedBlockHash != null && finalizedBlockHash!.isNotEmpty;
+      hasPeers &&
+      !isSyncing &&
+      syncMode == LightClientSyncMode.regular &&
+      finalizedBlockHash != null &&
+      finalizedBlockHash!.isNotEmpty;
+
+  bool get isWarping => syncMode != LightClientSyncMode.regular;
+
+  /// 业务统一使用的链状态；warp 阶段即使 runtime 已近头也仍属于 syncing。
+  ChainStatus get chainStatus =>
+      isUsable ? ChainStatus.synced : ChainStatus.syncing;
 
   Map<String, dynamic> toJson() => {
-        'peerCount': peerCount,
-        'isSyncing': isSyncing,
-        if (bestBlockNumber != null) 'bestBlockNumber': bestBlockNumber,
-        if (bestBlockHash != null) 'bestBlockHash': bestBlockHash,
-        if (finalizedBlockNumber != null)
-          'finalizedBlockNumber': finalizedBlockNumber,
-        if (finalizedBlockHash != null) 'finalizedBlockHash': finalizedBlockHash,
-      };
+    'peerCount': peerCount,
+    'isSyncing': isSyncing,
+    'syncMode': syncMode.wireValue,
+    if (bestBlockNumber != null) 'bestBlockNumber': bestBlockNumber,
+    if (bestBlockHash != null) 'bestBlockHash': bestBlockHash,
+    if (finalizedBlockNumber != null)
+      'finalizedBlockNumber': finalizedBlockNumber,
+    if (finalizedBlockHash != null) 'finalizedBlockHash': finalizedBlockHash,
+    if (startupFinalizedBlockNumber != null)
+      'startupFinalizedBlockNumber': startupFinalizedBlockNumber,
+    if (highestPeerFinalizedBlockNumber != null)
+      'highestPeerFinalizedBlockNumber': highestPeerFinalizedBlockNumber,
+    if (warpFinalizedBlockNumber != null)
+      'warpFinalizedBlockNumber': warpFinalizedBlockNumber,
+    'warpRequestCount': warpRequestCount,
+    'warpFragmentCount': warpFragmentCount,
+  };
 
   factory LightClientStatusSnapshot.fromJson(Map<String, dynamic> json) {
     return LightClientStatusSnapshot(
       peerCount: json['peerCount'] as int? ?? 0,
       isSyncing: json['isSyncing'] as bool? ?? false,
+      syncMode: LightClientSyncMode.fromWireValue(json['syncMode']),
       bestBlockNumber: json['bestBlockNumber'] as int?,
       bestBlockHash: json['bestBlockHash'] as String?,
       finalizedBlockNumber: json['finalizedBlockNumber'] as int?,
       finalizedBlockHash: json['finalizedBlockHash'] as String?,
+      startupFinalizedBlockNumber: json['startupFinalizedBlockNumber'] as int?,
+      highestPeerFinalizedBlockNumber:
+          json['highestPeerFinalizedBlockNumber'] as int?,
+      warpFinalizedBlockNumber: json['warpFinalizedBlockNumber'] as int?,
+      warpRequestCount: json['warpRequestCount'] as int? ?? 0,
+      warpFragmentCount: json['warpFragmentCount'] as int? ?? 0,
     );
   }
 }
@@ -250,16 +281,15 @@ class SystemAccountSnapshot {
     this.freeFen,
   });
 
-  double? get freeYuan =>
-      freeFen == null ? null : freeFen!.toDouble() / 100.0;
+  double? get freeYuan => freeFen == null ? null : freeFen!.toDouble() / 100.0;
 
   Map<String, dynamic> toJson() => {
-        'storageKey': storageKey,
-        'exists': exists,
-        if (valueHex != null) 'valueHex': valueHex,
-        if (nonce != null) 'nonce': nonce,
-        if (freeFen != null) 'freeFen': freeFen.toString(),
-      };
+    'storageKey': storageKey,
+    'exists': exists,
+    if (valueHex != null) 'valueHex': valueHex,
+    if (nonce != null) 'nonce': nonce,
+    if (freeFen != null) 'freeFen': freeFen.toString(),
+  };
 
   factory SystemAccountSnapshot.fromJson(Map<String, dynamic> json) {
     return SystemAccountSnapshot(
@@ -360,8 +390,12 @@ class SmoldotFfiException extends SmoldotException {
 class ChainException extends SmoldotException {
   final int chainId;
 
-  ChainException(this.chainId, super.message,
-      {super.details, super.stackTrace});
+  ChainException(
+    this.chainId,
+    super.message, {
+    super.details,
+    super.stackTrace,
+  });
 
   @override
   String toString() => 'ChainException[$chainId]: $message';
@@ -371,8 +405,12 @@ class ChainException extends SmoldotException {
 class JsonRpcException extends SmoldotException {
   final JsonRpcError? error;
 
-  JsonRpcException(super.message,
-      {this.error, super.details, super.stackTrace});
+  JsonRpcException(
+    super.message, {
+    this.error,
+    super.details,
+    super.stackTrace,
+  });
 
   @override
   String toString() {

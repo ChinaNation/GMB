@@ -1,4 +1,4 @@
-# ADR-031 CID 全局唯一与链上占号体系(终稿 v3)
+# ADR-031 CID 全局唯一与链上占号体系(终稿 v3，节点永久守卫已落地)
 
 ## 标题
 
@@ -57,6 +57,26 @@ call revoke_cid(registrar_account, cid_number)               // Active→Revoked
 
 - `occupy_cid`/`occupy_cids_batch`/`revoke_cid` → **Free**(公共登记服务,滥用由链上注册局授权门槛拦截);`configs/mod.rs` 穷尽 match 显式归类(编译期强制)。
 - 创世直铸走创世块 state 写入,**不产生交易、不产生任何手续费**。
+
+### 3.4 节点永久守卫（2026-07-10 已落地）
+
+runtime 是正常业务入口，节点 `NodeGuard::cid_lifecycle` 是 runtime 升级也不能绕过的第二执行层。节点直接读取规范 RAW storage，不依赖可被升级改变的 metadata。
+
+机构生命周期统一解释为三个业务状态：
+
+1. **占号中**：`CidRegisteredAccount[cid_number, "主账户"]` 已存在，但 `Institutions[cid_number]` 尚不存在；
+2. **运行中**：`Institutions.status = Active`；
+3. **永久关闭**：`Institutions.status = Closed`，不得恢复、不得改写墓碑、不得删除机构记录后重建同一 CID。
+
+`Pending` 仅是 runtime 机构记录可能出现的中间状态，不另形成第四种产品状态；只有主账户登记而尚无机构记录的占号态同样是合法状态。机构全称、简称不是号码身份的一部分：运行中的机构可以依法改名，已关闭机构原名称也可以由另一个全新 CID 的新增机构再次使用；名称相同不等于恢复旧机构。
+
+节点永久强制：
+
+- 公民 `CidRegistry` 不得删除；注册局、档案承诺、居住省市、登记高度不得改写；只允许 `Active → Revoked`，吊销后永久终态；
+- 公私权 CID 不得跨 namespace 重复；机构码、创建高度、镇码不得换主体；主账户占号不得在关闭前删除；
+- `Institutions` 不得删除；`Closed` 不得恢复或改写；固定治理机构必须始终 `Active`，且只能来自 block#0；
+- `ProtectedGenesisAccounts` 及其正反向账户索引以 block#0 为逐字基准，runtime 升级不得隐藏、删除或改写；
+- `:code` 变化时枚举规范表做全量复核；非 block#0 状态导入无法证明 CID 历史单调性，节点严格拒绝。
 
 ## 四、公权机构国家/省/市创世直铸——卡3
 

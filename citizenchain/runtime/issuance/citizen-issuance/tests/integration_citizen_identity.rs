@@ -5,7 +5,7 @@ use citizen_identity::{
 };
 use frame_support::{
     assert_ok, derive_impl, parameter_types,
-    traits::{ConstU128, ConstU32, VariantCountOf},
+    traits::{ConstU128, ConstU32, Hooks, VariantCountOf},
 };
 use frame_system as system;
 use pallet_balances;
@@ -200,6 +200,10 @@ fn register_voting_identity_triggers_reward_issuance() {
             valid_signature(),
         ));
 
+        assert_eq!(Balances::free_balance(1), 0);
+        assert_eq!(citizen_issuance::PendingRewardCount::<Test>::get(), 1);
+        CitizenIssuance::on_finalize(System::block_number());
+
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(citizen_issuance::RewardedCount::<Test>::get(), 1);
         assert!(citizen_issuance::IdentityRewardClaimed::<Test>::contains_key(cid_number_hash));
@@ -220,12 +224,14 @@ fn updating_existing_identity_does_not_issue_second_reward() {
             payload(1, &citizen_cid_number("0001")),
             valid_signature(),
         ));
+        CitizenIssuance::on_finalize(System::block_number());
         assert_ok!(CitizenIdentity::register_voting_identity(
             RuntimeOrigin::signed(100),
             200,
             payload(1, &citizen_cid_number("0002")),
             valid_signature(),
         ));
+        CitizenIssuance::on_finalize(System::block_number());
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(citizen_issuance::RewardedCount::<Test>::get(), 1);
@@ -256,6 +262,8 @@ fn max_reward_cap_is_applied_from_identity_callback() {
             payload(1, &citizen_cid_number("CAP")),
             valid_signature(),
         ));
+
+        CitizenIssuance::on_finalize(System::block_number());
 
         assert_eq!(Balances::free_balance(1), 0);
         assert_eq!(

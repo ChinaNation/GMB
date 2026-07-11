@@ -50,6 +50,17 @@
 
 奖励去重键为公民身份号哈希，避免同一公民身份重复领奖。
 
+## CID 节点永久边界
+
+`CidRegistry` 的正常写入口仍由本 pallet 执行；节点 `core/node_guard/cid_lifecycle.rs` 以 RAW storage 独立背书下列永久规则：
+
+- CID 记录写入后不得删除；
+- `registrar_account`、`commitment`、居住省市和 `registered_at` 不得通过 runtime 升级换主体；
+- 只允许 `Active → Revoked`，`Revoked` 为不可恢复终态；
+- CID 必须持续是合法 `CTZN` 家族号，登记/吊销高度不得指向未来。
+
+因此 runtime 可以继续维护正常业务校验，但不能通过 `setCode` 恢复已吊销 CID 或复用号码。
+
 ## 验收
 
 - `cargo test -p citizen-identity`

@@ -1,6 +1,15 @@
-export type MembershipLevel = 'visitor' | 'voting' | 'candidate';
+// 会员套餐真源。会员档 `membership_level` 与身份档 `required_identity_level` 解耦：
+// 访客身份含自由(visitor $2.99)/民主(visitor_pro $9.99，权益=投票、身份匿名)两档，
+// 投票/竞选各一档。订阅资格精确匹配身份档（identityEligibleForPlan，禁止降档/越级）；
+// 发帖额度按所购套餐（membershipPlan(level).quota）。四档一改，须同步 App 卡片、官网
+// Membership.tsx、Stripe price 映射与 webhook 反查。
+export type MembershipLevel = 'visitor' | 'visitor_pro' | 'voting' | 'candidate';
 
-export type RequiredIdentityLevel = MembershipLevel;
+/// 链上身份档位（与会员档位解耦）：访客 / 投票公民 / 竞选公民。
+/// 会员档 `visitor_pro`（民主）不是身份档，其 required_identity_level 仍为 'visitor'。
+export type IdentityLevel = 'visitor' | 'voting' | 'candidate';
+
+export type RequiredIdentityLevel = IdentityLevel;
 
 export type MediaQuality = 'sd' | 'hd';
 
@@ -44,7 +53,7 @@ const gib = 1024 * mib;
 export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
   visitor: {
     membership_level: 'visitor',
-    display_name: '访客会员',
+    display_name: '自由会员',
     price_currency: 'usd',
     price_usd_cents: 299,
     price_usd_monthly: '2.99',
@@ -66,6 +75,34 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       cover_required: true,
       image_quality: 'sd',
       max_images: 50
+    }
+  },
+  // 民主会员：媒体权益与投票公民会员完全一致（仅身份不同——民主匿名、投票为
+  // 公民认证）。required_identity_level 仍为 'visitor'，访客身份即可订阅。
+  visitor_pro: {
+    membership_level: 'visitor_pro',
+    display_name: '民主会员',
+    price_currency: 'usd',
+    price_usd_cents: 999,
+    price_usd_monthly: '9.99',
+    required_identity_level: 'visitor',
+    dynamic: {
+      text_max_chars: 300,
+      image_quality: 'hd',
+      max_images: 9,
+      video_quality: 'hd',
+      max_videos: 1,
+      max_video_seconds: 30 * 60,
+      max_video_bytes: 2 * gib
+    },
+    article: {
+      title_min_chars: 10,
+      title_max_chars: 50,
+      body_max_chars: 30_000,
+      cover_quality: 'hd',
+      cover_required: true,
+      image_quality: 'hd',
+      max_images: 100
     }
   },
   voting: {
@@ -123,14 +160,19 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
 };
 
 export function assertMembershipLevel(value: unknown): MembershipLevel {
-  if (value === 'visitor' || value === 'voting' || value === 'candidate') {
+  if (
+    value === 'visitor' ||
+    value === 'visitor_pro' ||
+    value === 'voting' ||
+    value === 'candidate'
+  ) {
     return value;
   }
   throw new Error('invalid membership level');
 }
 
 export function membershipPlan(level: string): MembershipPlan {
-  if (level === 'voting' || level === 'candidate') {
+  if (level === 'voting' || level === 'candidate' || level === 'visitor_pro') {
     return membershipPlans[level];
   }
   return membershipPlans.visitor;
@@ -149,6 +191,21 @@ export function identitySatisfies(
   return identityLevelRank(actual) >= identityLevelRank(required);
 }
 
+/// 订阅资格：精确匹配——只能订阅"本身份档对应"的会员，禁止降档/越级。
+/// 例：voting 身份只能订 voting；candidate 只能订 candidate；visitor 身份可订
+/// visitor 与 visitor_pro（二者 required_identity_level 均为 'visitor'）。
+export function identityEligibleForPlan(
+  identity: RequiredIdentityLevel,
+  plan: MembershipPlan
+): boolean {
+  return plan.required_identity_level === identity;
+}
+
 export function membershipPlanList(): MembershipPlan[] {
-  return [membershipPlans.visitor, membershipPlans.voting, membershipPlans.candidate];
+  return [
+    membershipPlans.visitor,
+    membershipPlans.visitor_pro,
+    membershipPlans.voting,
+    membershipPlans.candidate
+  ];
 }

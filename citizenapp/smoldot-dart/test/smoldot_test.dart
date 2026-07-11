@@ -6,31 +6,18 @@ void main() {
     test('creates default config', () {
       const config = SmoldotConfig();
       expect(config.maxLogLevel, equals(3));
-      expect(config.maxChains, equals(8));
-      expect(config.cpuRateLimit, equals(1.0));
-      expect(config.wasmCpuMetering, equals(false));
     });
 
     test('creates custom config', () {
-      const config = SmoldotConfig(
-        maxLogLevel: 5,
-        maxChains: 16,
-        cpuRateLimit: 0.5,
-        wasmCpuMetering: true,
-      );
+      const config = SmoldotConfig(maxLogLevel: 5);
       expect(config.maxLogLevel, equals(5));
-      expect(config.maxChains, equals(16));
-      expect(config.cpuRateLimit, equals(0.5));
-      expect(config.wasmCpuMetering, equals(true));
     });
 
     test('converts to JSON', () {
-      const config = SmoldotConfig(maxLogLevel: 4, maxChains: 10);
+      const config = SmoldotConfig(maxLogLevel: 4);
       final json = config.toJson();
       expect(json['maxLogLevel'], equals(4));
-      expect(json['maxChains'], equals(10));
-      expect(json['cpuRateLimit'], equals(1.0));
-      expect(json['wasmCpuMetering'], equals(false));
+      expect(json.keys, equals(['maxLogLevel']));
     });
   });
 
@@ -89,10 +76,7 @@ void main() {
     });
 
     test('parses from JSON', () {
-      final json = {
-        'id': '1',
-        'result': 'test-result',
-      };
+      final json = {'id': '1', 'result': 'test-result'};
       final response = JsonRpcResponse.fromJson(json);
       expect(response.id, equals('1'));
       expect(response.result, equals('test-result'));
@@ -102,10 +86,7 @@ void main() {
     test('parses error from JSON', () {
       final json = {
         'id': '1',
-        'error': {
-          'code': 123,
-          'message': 'test error',
-        },
+        'error': {'code': 123, 'message': 'test error'},
       };
       final response = JsonRpcResponse.fromJson(json);
       expect(response.id, equals('1'));
@@ -136,8 +117,10 @@ void main() {
 
     test('formats toString', () {
       const error = JsonRpcError(code: 123, message: 'test error');
-      expect(error.toString(),
-          equals('JsonRpcError(code: 123, message: test error)'));
+      expect(
+        error.toString(),
+        equals('JsonRpcError(code: 123, message: test error)'),
+      );
     });
   });
 

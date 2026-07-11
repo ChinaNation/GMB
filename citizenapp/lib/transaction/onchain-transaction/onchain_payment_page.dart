@@ -886,7 +886,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       return '轻节点尚未连接到区块链网络，请等待至少 1 个 peer';
     }
     if (progress.isSyncing) {
-      return '轻节点仍在同步区块头，完成后才能签名交易';
+      return '轻节点仍在验证或同步链状态，完成后才能签名交易';
     }
     if (!progress.isUsable) {
       return _chainProgressError ?? '区块链状态尚未就绪，请稍后再试';

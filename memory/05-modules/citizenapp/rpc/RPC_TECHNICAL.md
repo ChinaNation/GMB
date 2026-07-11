@@ -58,13 +58,13 @@ lib/rpc/
 - `assets/public_institutions/` 是从创世链状态导出的公权机构快照缓存,manifest 必须包含 `snapshot_block_number / snapshot_block_hash / genesis_hash / state_root / public_institution_root / shard_hashes`。App 首屏读取本地 Isar/快照缓存,后台通过 OnChina 链上投影 BFF 按 `manifest_version` 增量刷新;`manifest_version` 必须来自链投影 finalized anchor,不得由本地同步时间单独推进。
 - 公权机构唯一真源仍是链上 `PublicManage`;CitizenApp 内置快照、Isar 缓存和 OnChina BFF 都不是授权或真源。
 - `assets/light_sync_state.json` 是安装包签名保护的 finalized 信任锚；当前锚点是创世块 `#0`，不是会随 Worker 响应静默变化的运行时配置。
-- 后续正式 App 发行可以把该锚点推进到发布前已 finalized 的块，但必须继续绑定同一 genesis；本机 finalized database 更高时始终优先使用本机进度。
+- 安装包 checkpoint 不需要随链高持续更新：高度差不超过 32 时最多普通追 32 块，超过 32 时自动 GRANDPA warp；本机 finalized database 更高时始终优先使用本机进度。
 
 ## 5. 连接与同步策略
 
 1. App 完成 `runApp()` 和首帧渲染后不自动初始化轻节点；只有主动链消费方首次调用时才进入 `SmoldotClientManager.ensureStarted()`
-2. 轻节点读取 `SharedPreferences.smoldot_db_cache`，优先通过 `AddChainConfig.databaseContent` 恢复上次 finalized database
-3. 如果缓存失效或与当前链状态不兼容，会自动清掉缓存并回退到无缓存重连，避免坏缓存永久卡死启动
+2. 轻节点读取 `SharedPreferences.smoldot_db_cache` 的 `citizenapp.smoldot.database.v1` 信封；只有 schema、内置 `#0` 推导的 genesis hash、finalized 高度/哈希和 database 正文全部通过严格校验，才通过 `AddChainConfig.databaseContent` 恢复
+3. 旧裸 database、损坏信封、未知字段、跨 genesis 数据或 smoldot 拒绝的缓存都会被清除，并回退到安装包固定 `#0` checkpoint；不保留旧格式兼容或双轨读取
 4. 主动链入口触发轻节点加入 `chainspec.json` 指定的 citizenchain 网络后，立即在后台预热同步
 5. peer/best/finalized 进度展示只等待初始化；余额、nonce、finalized storage、extrinsic 和链事件订阅必须等待轻节点完成同步
 6. 当轻节点未初始化、同步失败或链路降级时，typed capability 必须抛出真实错误，不能返回 `null` / `[]` / `{}` 伪装成“链上没有数据”
@@ -75,9 +75,11 @@ lib/rpc/
 ### 5.1 新安装用户快速同步
 
 - 当前 smoldot fork 已启用 GRANDPA warp，固定 `warp_sync_minimum_gap=32`。远端 finalized 高度必须严格大于本地锚点高度加 32 才发起 warp；从当前 `#0` 锚点出发，链高 `#32` 不触发，`#33` 起才具备触发条件。
+- 例如安装包固定锚点为 `#32`、用户安装时正式链已到 `#100000`：客户端不验证 `#33..#99998` 的每个普通区块，而是验证 GRANDPA warp proof 后直接建立接近 `#99999` 的 finalized 链信息，再普通同步最后少量区块。
 - warp 先验证 GRANDPA authority set 交接与最终性 proof，再下载目标 finalized 块的 runtime 和必要 storage proof，随后切回普通同步追赶少量近头区块。成本主要随权威集变更与 proof 体积增长，不随普通区块高度线性增长。
 - 当前节点端已经为所有节点注册 GRANDPA 协议并挂载 warp proof provider；权威节点推进 finality，普通 observer 节点也能基于本地归档数据响应 proof。
-- Cloudflare bootstrap 只补充通过本地 chain id、protocol id、genesis state root 校验的 bootnodes；远端 checkpoint URL 和同源 SHA-256 不进入当前信任路径。
+- Cloudflare bootstrap v2 只补充通过本地 chain id、protocol id、genesis state root 校验的 bootnodes；协议中不存在远端 checkpoint 或轻同步资产下载字段。
+- 2026-07-10 bootstrap v2 已发布到 staging（`ff19bc46-dc17-4f77-a53f-aed2739142a0`）和 production（`00d836aa-9c43-4561-ba33-8730d780c1a0`），两端均已真实验证 schema v2、6 个 bootnodes、无 checkpoint/RPC URL，且通用 `/v1/chain/rpc` 保持 404；生产 arm64 profile 真机已恢复无 staging Dart define 的正式配置。
 - warp 不可用时 smoldot 仍可能退化为普通逐块同步。App 必须把它视为可观测的服务降级，保持 Flutter 输入响应并告警节点运维，禁止改走 HTTP 链真源。
 - 完整发布、节点数据保留和真实验收规则见 [checkpoint 与 GRANDPA warp 快速同步方案](./SMOLDOT_CHECKPOINT_PLAN.md)。
 
@@ -88,7 +90,11 @@ lib/rpc/
 - 广场浏览、信息页和“我的”身份徽章不得调用主动链入口；这些页面没有链消费行为时，进程内不得创建 smoldot client。
 - `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0、没有提案或机构不存在
 - 当前代码已新增 `SmoldotClientManager.getStatusSnapshot()`，作为结构化轻节点状态接口；其底层已改为 Rust 原生 capability，不再由 Dart 层拼装 `system_health`
-- `ChainProgressBanner` 只展示轻节点状态快照（peer / best / finalized / syncing），文案必须使用“轻节点状态/轻节点已就绪”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。
+- 状态快照的同步阶段是严格枚举：`regular`、`warpFragments`、`warpChainInformation`；同时携带 `startupFinalizedBlockNumber`、`highestPeerFinalizedBlockNumber`、`warpFinalizedBlockNumber`、`warpRequestCount`、`warpFragmentCount`。这些字段直接来自 smoldot 同步状态机和网络事件，禁止根据 best/finalized 高度差反推阶段。
+- `ChainProgressBanner` 只展示轻节点状态快照。warp fragment 验证、目标链信息加载、普通尾部同步分别显示“轻节点正在快速验证最终性”“轻节点正在加载最新链状态”“轻节点正在同步尾部区块”；只有 `regular` 且不再 syncing 时才能显示“轻节点已就绪”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。
+- 2026-07-10 正式链 `#33` 真机证明固定 `#0` 会真实进入 `warpFragments` 并生成可恢复的 finalized `#33` database；同日已修复旧 `Chain.waitUntilSynced()` 只看 runtime `isSyncing` 而提前返回的问题。原生 `isSyncing`、Dart `ChainStatus/wait`、App operational、缓存导出和 Banner 现在统一以 `LightClientStatusSnapshot.isUsable` 为唯一完成语义。
+- profile 结构化日志会在同步阶段变化与最终完成时输出 `mode/startup/peer_finalized/warp/requests/fragments/best/finalized` 精确值。正式链仍为 `#33` 时，修复版两次干净重跑均由普通同步抢先，真实计数为 0/0；非零 request/fragment 精确值必须在链高进一步增长后的真实 warp 回归中取得，禁止伪造或用高度变化代替。
+- operational 后由单实例一分钟定时器低频检查 finalized。只有快照仍可用且 finalized 严格高于最近持久化高度时才进入既有串行稳定导出；同高度不导出，dispose 取消定时器并等待刷新/写队列，确保已安装用户的本机缓存随链增长而单调推进。
 - 连接诊断必须以有效 peer、best/finalized 状态是否可读或推进为准；未部署 bootNodes 的连接失败日志不是故障根因，不得把它解释成 citizenapp 网络不可用。
 - 本地开发期 `30334` bootnode 只是可选调试兜底，不是 citizenapp 真机连接区块链网络的必要条件；没有本地 `30334` 也不应判定为连接异常。
 - Flutter widget test 环境不具备真实 smoldot 轻节点链路，`ChainProgressBanner` 在测试中只渲染静态提示条，禁止读取链状态和创建轮询定时器，避免 `pumpAndSettle` 被后台链路轮询卡住。
@@ -103,9 +109,11 @@ lib/rpc/
   - `smoldot_get_block_hash_async`
   - `smoldot_get_block_extrinsics_async`
   - `smoldot_submit_extrinsic_async`
-  这些异步导出通过 `DartCallback` 回调模式返回结果，不阻塞 Dart 主线程。
+  这些异步导出通过 `DartCallback` 回调模式返回结果，不阻塞 Dart 主线程。每个 native client 只创建 2 个 capability worker，并使用容量 64 的有界队列；队列满时显式返回 `native_capability_queue_full`，禁止为每次请求创建原生线程。
   旧的同步版本（不带 `_async` 后缀）已标记废弃，后续将删除。
   Dart 侧通过 `NativeCapabilityHandler`（`chain.dart`）统一管理异步回调注册
+- 原生 Tokio runtime 固定使用 2 个 worker，线程名为 `cit-smol-0/1`；capability worker 为 `cit-cap-0/1`。Android 上四个线程统一设置 `nice=5`。该约束用于限制长链、warp 或异常分叉期间对 Flutter main/raster 的 CPU 竞争，不代表人为限制协议正确性或同步进度。
+- Android logger 和 macOS logger 必须服从 Dart `maxLogLevel`。`maxChains / cpuRateLimit / wasmCpuMetering` 未被 Rust 实际消费，已经从 Dart 配置面删除；不得再用无效字段声称已完成资源限制。
 - 当前代码已开始切换业务主路径：
   - ADR-017 后 `fetchBalance()`(best 视图)已删除；余额一律 `fetchFinalizedBalance()`
   - `ChainRpc.fetchFinalizedBalance()` / `fetchFinalizedBalances()` / `fetchFinalizedTotalBalance()` 统一走 finalized storage proof，页面金额展示只允许使用这些方法
@@ -289,16 +297,39 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 当前实现：
 
 ```text
-首次主动链访问时：SharedPreferences.read('smoldot_db_cache')
-        → addChain(chainSpec, databaseContent: cached)
+首次主动链访问时：从内置 #0 header 推导 genesis hash
+        → SharedPreferences.read('smoldot_db_cache')
+        → 严格解析 citizenapp.smoldot.database.v1
+        → addChain(chainSpec, databaseContent: envelope.database_content)
         → 只同步缓存之后的新区块头
 
-同步后：chain.request('chainHead_unstable_finalizedDatabase', [maxSize])
-        → SharedPreferences.write('smoldot_db_cache', result)
+保存时：读取 finalized 高度/hash A
+        → chainHead_unstable_finalizedDatabase
+        → 读取 finalized 高度/hash B
+        → A == B 才形成候选信封
+        → 串行比较 persisted/candidate finalized
+        → 只允许更高 finalized 覆盖
+```
+
+缓存信封唯一格式：
+
+```json
+{
+  "schema": "citizenapp.smoldot.database.v1",
+  "genesis_hash": "0x...",
+  "finalized_block_number": 31,
+  "finalized_block_hash": "0x...",
+  "database_content": "..."
+}
 ```
 
 补充约束：
 
+- database 导出、现有信封读取和 SharedPreferences 写入共用单一 Future 队列，不得并发落盘
+- `addChain(databaseContent)` 返回时同步状态机可能仍短暂显示安装包 `#0`；恢复校验最多等待 5 秒。低于信封高度继续等待，同高度必须 hash 一致，超过信封高度视为已安全跨过；持续低于或同高异 hash 才清理缓存
+- 导出前后 finalized 发生变化时丢弃正文并最多重试一次；不得给正文绑定无法证明的高度或哈希
+- 候选高度低于持久值时直接丢弃；同高度同 hash 不重写；同高度不同 hash 先清除无法信任的旧值，再写当前轻节点稳定导出的候选
+- dispose 先递增生命周期代际并等待缓存队尾收口，新 client 启动前旧任务不得继续写缓存
 - 缓存恢复失败时必须自动 `remove('smoldot_db_cache')` 后重试一次
 - 不允许每次启动都主动清空缓存，否则会退化成“每次冷启动全量同步”
 - 当前默认同步超时为 3 分钟；只有首次主动链访问加入网络后才会立即在后台预热同步

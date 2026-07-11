@@ -1,10 +1,8 @@
-//! 固定治理骨架守卫(档 A,L2 共识层)。
+//! 固定治理骨架节点策略(档 A)。
 //!
-//! `admins-change` 的真源 `public-admins::{AdminAccounts, FederalRegistryProvinceGroups}` 是全部
-//! 机构管理员角色的唯一真源;护宪大法官 4/7 终审等治理其可信度封顶在该真源完整性上,而它是纯
-//! runtime state,一次 setCode/恶意 runtime 可任意改写。本守卫把**永不合法变更的结构骨架**冻到
-//! 节点二进制 + 创世(block#0),在区块导入时逐块背书,违者拒块——执法在 runtime 之外,setCode
-//! 改不动。规格单源 = `primitives::governance_skeleton`(与创世播种、runtime 校验三端共读)。
+//! 本模块只负责 RAW storage key、链上结构镜像和 I1..I7 纯不变式判定；区块预执行、warp
+//! 提交前检查和 `BlockImport` 委派统一由上层 [`super::NodeGuard`] 编排。这样后续新增发行、
+//! CID 等节点永久规则时可以共用一次区块预执行，不再为每条规则叠加独立包装器。
 //!
 //! 逐块断言的不变式(I1..I7):对每个固定治理机构(NRC/PRC/PRB/NJD)与 43 个 FRG 省组——
 //!   I1 `AdminAccounts[主账户]`(FRG:`FederalRegistryProvinceGroups[省码]`)恒存在;
@@ -12,33 +10,17 @@
 //!   I5 固定名额不变(NRC=19/PRC=9/PRB=9/NJD=15/FRG 组=5);
 //!   I6 NJD `role_name==护宪大法官` 计数恒 7(补 `ConstitutionGuardVoteProof` 的 4/7 里没锚的「7」)。
 //!
-//! **只冻结构,不冻成员**:普选/互选等长换人(名额/护宪席位数不变)照常放行;稀释/灌水/删机构/
-//! 改码/关闭才拒块。**天花板**:保持席位数、整体换攻击者密钥的成员劫持不在本守卫范围(节点无独立
-//! 预言机判合法当选),留档 B(创世根验签链)。判定路径完全复刻 `constitution.rs`。
+//! **只冻结构,不冻成员**:普选/互选等长换人(名额/护宪席位数不变)照常放行；稀释、灌水、
+//! 删机构、改码和关闭才拒绝。
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use codec::{Decode, Encode};
-use sc_client_api::backend::{Backend as _, TrieCacheContext};
-use sc_client_api::StorageProvider;
-use sc_consensus::{
-    BlockCheckParams, BlockImport, BlockImportParams, ImportResult, StateAction, StorageChanges,
-};
-use sp_api::{ApiExt, Core, ProvideRuntimeApi};
-use sp_blockchain::HeaderBackend;
-use sp_consensus::Error as ConsensusError;
-use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
-use sp_storage::StorageKey;
 
 use primitives::cid::code::FRG;
 use primitives::governance_skeleton::{
     fixed_institutions, frg_province_groups, KIND_PUBLIC_INSTITUTION, STATUS_ACTIVE,
 };
-
-use citizenchain::opaque::Block;
-
-use crate::core::service::{FullBackend, FullClient};
 
 /// public-admins pallet 在 `construct_runtime` 中的名字(twox128 前缀据此推导)。
 /// 硬编码,绝不读链上 metadata —— metadata 属可升级 runtime,会被恶意升级伪造。
@@ -218,178 +200,10 @@ where
 
 /// 是否必须跑完整骨架校验。普通块只要触及 public-admins 存储或 `:code` runtime 升级,
 /// 就不能走快路径;其余块按归纳假设跳过。
-fn needs_full_check(delta: &BTreeMap<Vec<u8>, Option<Vec<u8>>>) -> bool {
+pub(super) fn needs_full_check(delta: &BTreeMap<Vec<u8>, Option<Vec<u8>>>) -> bool {
     let prefix = storage_key::pallet_prefix();
     delta.keys().any(|k| k.starts_with(&prefix))
         || delta.contains_key(sp_storage::well_known_keys::CODE)
-}
-
-/// 区块导入守卫:包住内层 `BlockImport`,在区块进入规范链之前校验固定治理骨架不变式。
-///
-/// 与 `ConstitutionGuard` 并列(互相独立)串在导入栈里。判定路径:对携带 body 的普通块,先用
-/// runtime API 在**父状态**上只读执行取后置存储变更,仅当变更触及 public-admins 存储或 `:code`
-/// 时据「变更 ∪ 父状态」比对规格;命中违规 → `Ok(KnownBad)`;通过 → 委派内层正常导入。
-pub struct GovernanceSkeletonGuard<I> {
-    inner: I,
-    client: Arc<FullClient>,
-    backend: Arc<FullBackend>,
-}
-
-impl<I> GovernanceSkeletonGuard<I> {
-    /// 装配守卫:启动即做创世双锚——从 block#0 state 读固定骨架,必须已满足编译规格,否则拒绝启动
-    /// (fail-closed;创世不合法即换链/改二进制)。
-    pub fn new(
-        inner: I,
-        client: Arc<FullClient>,
-        backend: Arc<FullBackend>,
-    ) -> Result<Self, String> {
-        let genesis_hash = client.info().genesis_hash;
-        check_skeleton_invariants(|key| {
-            client
-                .storage(genesis_hash, &StorageKey(key.to_vec()))
-                .ok()
-                .flatten()
-                .map(|data| data.0)
-        })
-        .map_err(|e| format!("骨架守卫:创世固定治理骨架基准校验失败:{e:?}"))?;
-
-        Ok(Self {
-            inner,
-            client,
-            backend,
-        })
-    }
-
-    /// **提交前**校验 warp/状态导入块携带的下载态骨架不变式(vendored GRANDPA 在 `inner.import_block`
-    /// 内即落库,post-import 拒块无法回滚,故必须在调用 inner **之前**校验)。抽 public-admins 前缀键
-    /// (仅几十 KB)跑全套不变式。`Err` = 违规或无法抽取(拒绝,fail-closed)。
-    fn verify_imported_state(&self, params: &BlockImportParams<Block>) -> Result<(), String> {
-        let imported = match &params.state_action {
-            StateAction::ApplyChanges(StorageChanges::Import(imported)) => imported,
-            _ => return Err("warp 状态非 ApplyChanges(Import) 形态,拒绝(无法提交前校验)".into()),
-        };
-        let prefix = storage_key::pallet_prefix();
-        let mut map: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
-        for (key, value) in imported
-            .state
-            .0
-            .iter()
-            .flat_map(|level| level.key_values.iter())
-        {
-            if key.starts_with(&prefix) {
-                map.insert(key.clone(), value.clone());
-            }
-        }
-        check_skeleton_invariants(|key| map.get(key).cloned()).map_err(|e| format!("{e:?}"))
-    }
-
-    /// 计算普通(执行型)区块后置状态是否违反骨架不变式。
-    /// `Ok(true)` = 确认违规(拒块);`Ok(false)` = 合规;`Err` = 无法判定(`import_block` fail-closed 拒块)。
-    fn detect_violation(&self, params: &BlockImportParams<Block>) -> Result<bool, String> {
-        let body = match &params.body {
-            Some(b) => b.clone(),
-            None => return Ok(false), // 无 body 且非状态导入,不经执行改 state,跳过
-        };
-
-        let parent_hash = *params.header.parent_hash();
-        let block = Block::new(params.header.clone(), body);
-
-        // 在父状态上只读执行该区块(不提交),取后置存储变更。
-        let api = self.client.runtime_api();
-        api.execute_block(parent_hash, block.into())
-            .map_err(|e| format!("只读执行区块失败:{e}"))?;
-        let parent_state = self
-            .backend
-            .state_at(parent_hash, TrieCacheContext::Untrusted)
-            .map_err(|e| format!("取父状态失败:{e}"))?;
-        let changes = api
-            .into_storage_changes(&parent_state, parent_hash)
-            .map_err(|e| format!("提取存储变更失败:{e}"))?;
-
-        // 快路径:本块既未动 public-admins 存储、也未升级 runtime(`:code`)→ 归纳骨架不变,合规。
-        let delta: BTreeMap<Vec<u8>, Option<Vec<u8>>> =
-            changes.main_storage_changes.into_iter().collect();
-        if !needs_full_check(&delta) {
-            return Ok(false);
-        }
-
-        // 后置状态读取器:命中变更取变更值(Some=改、None=删),否则回落父状态(已提交)。
-        let read_post = |key: &[u8]| -> Option<Vec<u8>> {
-            match delta.get(key) {
-                Some(value) => value.clone(),
-                None => self
-                    .client
-                    .storage(parent_hash, &StorageKey(key.to_vec()))
-                    .ok()
-                    .flatten()
-                    .map(|data| data.0),
-            }
-        };
-
-        match check_skeleton_invariants(read_post) {
-            Ok(()) => Ok(false),
-            Err(reason) => {
-                log::error!(
-                    target: "governance-skeleton-guard",
-                    "拒绝区块 #{} ({:?}):固定治理骨架不变式被破坏 —— {:?}",
-                    params.header.number(),
-                    params.post_hash(),
-                    reason,
-                );
-                Ok(true)
-            }
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl<I> BlockImport<Block> for GovernanceSkeletonGuard<I>
-where
-    I: BlockImport<Block, Error = ConsensusError> + Send + Sync,
-{
-    type Error = ConsensusError;
-
-    async fn check_block(
-        &self,
-        block: BlockCheckParams<Block>,
-    ) -> Result<ImportResult, Self::Error> {
-        self.inner.check_block(block).await
-    }
-
-    async fn import_block(
-        &self,
-        params: BlockImportParams<Block>,
-    ) -> Result<ImportResult, Self::Error> {
-        // warp/状态同步块:vendored GRANDPA 在 inner 内即落库,无法事后回滚,故提交前校验。
-        if params.with_state() {
-            return match self.verify_imported_state(&params) {
-                Ok(()) => self.inner.import_block(params).await,
-                Err(reason) => {
-                    log::error!(
-                        target: "governance-skeleton-guard",
-                        "拒绝 warp/状态导入 ({:?}):固定治理骨架校验未通过 —— {reason}",
-                        params.post_hash(),
-                    );
-                    Ok(ImportResult::KnownBad)
-                }
-            };
-        }
-
-        // 普通(执行型)块:执行前判定,违规 KnownBad(内层永不被调用)。
-        match self.detect_violation(&params) {
-            Ok(true) => Ok(ImportResult::KnownBad),
-            Ok(false) => self.inner.import_block(params).await,
-            // fail-closed:守卫自身取数/执行/解码失败 → 拒块,不放行未经校验的块。
-            Err(why) => {
-                log::error!(
-                    target: "governance-skeleton-guard",
-                    "守卫判定失败,fail-closed 拒块 ({:?}):{why}",
-                    params.post_hash(),
-                );
-                Ok(ImportResult::KnownBad)
-            }
-        }
-    }
 }
 
 #[cfg(test)]

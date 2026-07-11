@@ -49,6 +49,33 @@ mod standalone;
 
 pub use network_service::Role;
 
+/// 当前同步状态机所处的阶段。
+///
+/// 中文注释：该枚举直接来自 smoldot 同步状态机，不由 Dart 根据高度差猜测。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncMode {
+    /// 普通区块头同步，包含 warp 完成后的少量尾部追赶。
+    Regular,
+    /// 正在下载或验证 GRANDPA warp proof fragments。
+    WarpFragments,
+    /// 已验证目标 finalized，正在构建目标 runtime 与链信息。
+    WarpChainInformation,
+}
+
+/// 同步过程的结构化可观测快照。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncActivitySnapshot {
+    pub mode: SyncMode,
+    /// 本次 addChain 实际采用的 finalized 起点；新安装为内置 checkpoint，老用户可为本机缓存。
+    pub startup_finalized_block_number: Option<u64>,
+    /// 已连接 peer 公布的最高 GRANDPA finalized 高度。
+    pub highest_peer_finalized_block_number: Option<u64>,
+    /// 本次生命周期中 warp 已验证到的最高 finalized 高度。
+    pub warp_finalized_block_number: Option<u64>,
+    pub warp_request_count: u64,
+    pub warp_fragment_count: u64,
+}
+
 /// Configuration for a [`SyncService`].
 pub struct Config<TPlat: PlatformRef> {
     /// Name of the chain, for logging purposes.
@@ -272,6 +299,20 @@ impl<TPlat: PlatformRef> SyncService<TPlat> {
             .unwrap();
 
         rx.await.unwrap().into_iter()
+    }
+
+    /// 返回同步阶段、启动锚点和 warp 进度。
+    ///
+    /// 中文注释：这里只用于诊断和 UI 展示，不得据此参与交易、权限或链上状态判断。
+    pub async fn sync_activity_snapshot(&self) -> SyncActivitySnapshot {
+        let (send_back, rx) = oneshot::channel();
+
+        self.to_background
+            .send(ToBackground::SyncActivitySnapshot { send_back })
+            .await
+            .unwrap();
+
+        rx.await.unwrap()
     }
 
     /// Returns the list of peers from the [`network_service::NetworkService`] that are expected to
@@ -1260,6 +1301,10 @@ enum ToBackground {
     /// See [`SyncService::syncing_peers`].
     SyncingPeers {
         send_back: oneshot::Sender<Vec<(PeerId, codec::Role, u64, [u8; 32])>>,
+    },
+    /// See [`SyncService::sync_activity_snapshot`].
+    SyncActivitySnapshot {
+        send_back: oneshot::Sender<SyncActivitySnapshot>,
     },
     /// See [`SyncService::serialize_chain_information`].
     SerializeChainInformation {

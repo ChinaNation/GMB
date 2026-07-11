@@ -3,6 +3,7 @@ import { HttpError, jsonResponse, requireSession } from '../shared/http';
 import { nowMs } from '../shared/time';
 import { fetchChainIdentityState, type ChainIdentityState } from '../chain/identity';
 import {
+  identityEligibleForPlan,
   identitySatisfies,
   membershipPlan,
   membershipPlanList,
@@ -137,9 +138,11 @@ export function subscriptionIsActive(membership: MembershipRow): boolean {
   );
 }
 
+/// 可订阅档位：精确匹配本身份档（禁止降档/越级）。visitor 身份 → [visitor,
+/// visitor_pro]；voting → [voting]；candidate → [candidate]。
 export function eligibleMembershipLevels(identity: ChainIdentityState): MembershipLevel[] {
   return membershipPlanList()
-    .filter((plan) => identitySatisfies(identity.identity_level, plan.required_identity_level))
+    .filter((plan) => identityEligibleForPlan(identity.identity_level, plan))
     .map((plan) => plan.membership_level);
 }
 

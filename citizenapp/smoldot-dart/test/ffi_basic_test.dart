@@ -13,7 +13,7 @@ void main() {
       final version = bindings.getVersion();
       print('Smoldot FFI version: $version');
       expect(version, isNotEmpty);
-      expect(version, equals('0.1.0')); // From Cargo.toml
+      expect(version, equals('1.0.0')); // 与 CitizenApp 实际构建的 rust/Cargo.toml 一致。
     });
 
     test('should initialize client with config', () {

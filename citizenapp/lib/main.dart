@@ -437,9 +437,25 @@ class _AppShellState extends State<AppShell> {
             });
           },
           destinations: [
-            const NavigationDestination(
-              icon: Icon(Icons.explore_outlined),
-              selectedIcon: Icon(Icons.explore),
+            NavigationDestination(
+              icon: SvgPicture.asset(
+                'assets/icons/tank.svg',
+                width: 26,
+                height: 26,
+                colorFilter: const ColorFilter.mode(
+                  AppTheme.textTertiary,
+                  BlendMode.srcIn,
+                ),
+              ),
+              selectedIcon: SvgPicture.asset(
+                'assets/icons/tank.svg',
+                width: 26,
+                height: 26,
+                colorFilter: const ColorFilter.mode(
+                  AppTheme.primary,
+                  BlendMode.srcIn,
+                ),
+              ),
               label: '广场',
             ),
             NavigationDestination(
@@ -457,9 +473,9 @@ class _AppShellState extends State<AppShell> {
                 ),
                 label: '公民'),
             const NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline_rounded),
-              selectedIcon: Icon(Icons.chat_bubble_rounded),
-              label: '信息',
+              icon: Icon(Icons.textsms_outlined, size: 22),
+              selectedIcon: Icon(Icons.textsms_rounded, size: 22),
+              label: '聊天',
             ),
             NavigationDestination(
               icon: SvgPicture.asset(

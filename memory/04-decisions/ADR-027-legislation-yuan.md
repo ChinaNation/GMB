@@ -191,7 +191,7 @@ LawVersion {
 
 - **L1 运行时提案守卫(`legislation-yuan::ensure_immutable_preserved`)**:`propose_amend_law` 时逐条逐字比对,
   碰这 8 条即 `ImmutableArticleViolation`。第一线、报错干净,但可被 runtime 升级绕过 → 不是最终保证。
-- **L2 节点共识守卫(`node/src/core/constitution.rs::ConstitutionGuard`,最终保证)**:包住 PoW `BlockImport`,
+- **L2 节点共识守卫(`node/src/core/constitution/guard.rs::ConstitutionGuard`,最终保证)**:作为独立最外层包装器包住 `NodeGuard<PowBlockImport>`,
   对携带 body 的区块在父状态上**只读执行**得到后置存储变更,若变更触及立法院模块存储,则据「变更 ∪ 父状态」
   RAW 重建宪法相关键(`Laws[0]`/`LawVersions[0][v]`,硬编码 `Blake2_128Concat` key,**不读链上 metadata**),
   逐条比对**创世(block#0)基准**;命中违规 → `Ok(ImportResult::KnownBad)`(内层永不调用,块不入库、不成最佳块)。
@@ -207,6 +207,12 @@ LawVersion {
 改 pallet 名让 key 落空(fail-safe 拒)→ 全部 L2 拒块。`detect_violation` 自身执行/取数出错时也 fail-closed 拒块,
 不保留未经校验的导入路径。**待用户多节点真机 QA**:构造恶意改第一条的块,验证全网 orphan。
 
+2026-07-10 第二轮节点加固进一步冻结：manifest 每次全检都必须与 block#0 编码逐字一致；`Law` 内部
+`law_id/status/版本指针`、`LawVersion` 内部 `law_id/version/content_hash`、全文条号唯一性、历史版本修改、
+warp 版本集合连续性全部由节点原生复核。无 body 的 `ApplyChanges(Changes)` 不再走快路径；无 body 的执行型
+导入无法证明后置状态时 fail-closed。启动/warp 枚举真实版本 key，不按不可信 `latest_version` 做超大循环，
+避免恶意状态利用守卫制造 CPU DoS。
+
 #### 6.2 加固五项(2026-06-24,卡 `20260624-constitution-immutable-guard`,review 发现的绕过面)
 
 - **H1 守卫补 Law 元数据 + 唯一性**(堵"只校验条文字节"):`check_immutable_articles` 除 8 条条文外,断言 `Laws[0]`
@@ -216,6 +222,10 @@ LawVersion {
   ⚠️ **二次 review 修正(P1)**:vendored GRANDPA 在 `inner.import_block` 内即把状态置 finalized 落库,**post-import `KnownBad` 无法回滚**;
   故改为 `verify_imported_state` 从 `params.state_action` 的 `ImportedState` 抽立法院前缀键、**调用 inner 之前**跑全套校验,
   违规/无法抽取 → `KnownBad`(不调用 inner,什么都不落库)。
+- **H2.1 导入形态与全历史加固(2026-07-10)**:有 body 时独立预执行；无 body 但携带预计算 delta 时直接检查
+  delta；`Execute/ExecuteIfPossible` 缺 body 时 fail-closed；`Skip` 仅允许不导入状态。启动和 warp 要求
+  `LawVersions[0]` key 集严格连续为 `1..=latest_version` 并逐版本复核；普通块精确复核 delta 触及的历史版本，
+  同时禁止 `latest_version` 回退和超范围隐藏版本。
 - **H3 RPC 改 RAW 读 + 取生效版本**(堵"展示信任可升级 API" + "提前显示 Pending 版"):`constitution_getDocument` 直接
   `StorageProvider` RAW 读 `Laws[0]`/`LawVersions[0][v]`(不走 runtime API),版本取显式 `effective_version`,
   `source="legislation-raw"`。
@@ -244,7 +254,7 @@ LawVersion {
   核心章条款改动必须 `Special`(否则 `CoreClauseRequiresSpecial`)、一般章改动必须 `Major`(否则 `GeneralClauseRequiresMajor`,
   **只许 Major,不许自愿升格 Special**)、空改动拒(`EmptyAmendment`)。两处入口共用,防回调/内部路径绕过。
 
-- **第二步 node 背书(`node/src/core/constitution.rs`,setCode 改不动)**:守卫 `ImmutableReference` 从 block#0 **另派生
+- **第二步 node 背书(`node/src/core/constitution/guard.rs`,setCode 改不动)**:守卫 `ImmutableReference` 从 block#0 **另派生
   核心章非禁改条款基准** `core_articles`(无需改创世 manifest、无需重新创世);逐块校验 `check_core_chapter_tier`:
   任一创世核心条款相对基准被**修改/删除/移出核心章**,则承载它的版本必须记录 `vote_type==Special`(`LEG_VOTE_SPECIAL=4`,
   由 `enum_discriminants_match_node_guard` 钉死),否则 `CoreClauseNotSpecial(n)` 拒块。使 setCode 无法把核心章修改静默降级为重要案。
@@ -271,7 +281,8 @@ LawVersion {
   后者的真正门是 setCode 本身受治理闸(joint vote / NRC admin)+ 二进制分发/社会层。真不可伪造的只有冻结到创世的不可修改 8 条。
 
 - 验收:primitives 11(含 constitution 9)+ legislation-yuan 30(三档强制 5 + 公投凭据 fail-closed 1 + 护宪凭据 fail-closed 1)+
-  legislation-vote 29 + node 30(核心章档位 4 + 公投凭据 2 + 护宪凭据 2)+ votingengine 回归 + no_std(WASM)+ clippy(零新增告警)+ fmt 全过。
+  legislation-vote 29 + node 38(含真实 runtime 创世、manifest/身份/哈希/重复条号/历史版本/warp 恶意态)+
+  votingengine 回归 + no_std(WASM)+ clippy(零新增告警)+ fmt 全过。
 
 - **follow-up(另窗口评估)**:护宪凭据背书的强度封顶在 admins-change 真源的完整性上,而该真源本身节点层无守卫。
   「admins-change 真源本身能否加锚」已派生独立评估任务(不在本卡范围)。
@@ -290,12 +301,20 @@ LawVersion {
   `NJD_CONSTITUTION_GUARD_SEATS=7`、`KIND_PUBLIC_INSTITUTION/STATUS_ACTIVE` 判别值、`ROLE_CONSTITUTION_GUARD`
   (admin-primitives re-export、创世 role-by-index、守卫三处逐字节共用)。
 
-- **逐块不变式(I1..I7,`node/src/core/governance_skeleton.rs::GovernanceSkeletonGuard`)**:对每个固定机构与 43 个 FRG 省组——
+- **逐块不变式(I1..I7,`node/src/core/node_guard/governance_skeleton.rs`)**:对每个固定机构与 43 个 FRG 省组——
   I1 `AdminAccounts[主账户]`/`FederalRegistryProvinceGroups[省码]` 恒存在;I2 机构码不变;I3 `kind==PublicInstitution`;
   I4 `status==Active`;I5 名额不变(19/9/9/15/5);I6 **NJD 护宪计数恒 7**(补上 §6.3 里没锚的「7」)。判定路径
-  完全复刻 `ConstitutionGuard`:只读执行取后置变更 → 触 `PublicAdmins` 前缀或 `:code` 才全量校验 → 违规 `KnownBad`;
-  warp 提交前校验;守卫取数/解码失败 fail-closed 拒块;启动期从 block#0 双锚(创世 state 必须已满足规格)。与
-  `ConstitutionGuard` 并列串在导入栈(两处:常规导入 + 挖矿导入)。
+  由统一 `NodeGuard` 只读执行取后置变更 → 触 `PublicAdmins` 前缀或 `:code` 才全量校验 → 违规 `KnownBad`;
+  warp 提交前校验;守卫取数/解码失败 fail-closed 拒块;启动期从 block#0 双锚(创世 state 必须已满足规格)。
+  旧治理骨架独立包装器已删除，固定治理骨架改为 `NodeGuard` 内部纯策略；网络导入和挖矿导入均固定为
+  `ConstitutionGuard<NodeGuard<PowBlockImport>>`，宪法守卫独立、最外层、最高优先级，其他永久规则不得再新增平行包装器。
+  2026-07-10 全节点 PoW 发行作为第二个内部策略接入：`NodeGuard` 共享 finalize 前/后只读执行，从 PoW digest、
+  编译期奖励常量、累计审计和 Balances 净变化逐块复算；runtime 升级改变金额、区间、作者或停止规则时，节点按 fail-closed 拒块。
+  同日公民认证发行作为第四类内部永久策略接入：身份登记 extrinsic 只生成本块待发凭据，runtime 在同块
+  `on_finalize` 实际铸发；节点从首次身份、CID 反向索引、永久/临时双重防重、累计人数和编译期档位常量
+  独立复算。全节点与公民奖励汇总进入共享 `FinalizeIssuancePlan`，统一核对账户和总发行，禁止未登记的
+  finalize 铸发。省储行利息因现有 Root `force_advance_year` 可合法跳过到期年度，尚不具备“必须发行”的
+  永久语义；resolution/onchain 发行属于治理结果，交易费、分账与 PoW 难度也未被正式冻结，均不在本次守卫范围。
 
 - **runtime 侧同步 I6**(`public-admins::ensure_court_composition`):NJD 管理员集变更(propose + 执行终态)强制护宪恰 7,
   消除「runtime 放行、节点拒块」裂缝;新 Error `InvalidCourtComposition`。**等长换人保持 7 席即放行**(不冻成员)。
@@ -307,7 +326,7 @@ LawVersion {
 
 - **落地代价**:纯节点二进制 + primitives 只读常量 + public-admins 一条校验;守卫逻辑在 runtime 之外,**无需 migration**;
   含 public-admins 改动按链开发期规则重新创世即可。验收:primitives(governance_skeleton 4)+ admin-primitives 2(判别值/字面量交叉钉死)
-  + public-admins 回归 + node(governance_skeleton 9)+ no_std + fmt。
+  + public-admins 回归 + node(node_guard 11)+ no_std + fmt。
 
 - **遗留**:节点管理员展示解码器(`codec.rs`、`institution_read/chain.rs`)字段序疑似落后于当前 `admin-primitives`
   (缺 `cid_number` + `role_code/role_name/admin_source_ref`),非本卡引入,已派生独立任务核对 deployed↔source 后对齐。
@@ -317,7 +336,7 @@ LawVersion {
 - 宪法纳入本模块,作为 `tier = 宪法` 的最高层级法律,实现「宪法可按条修改(走特别案/重要案)」。
 - 已落地:结构化 `章>节>条>款 + 中英双语` 产物 `legislation-yuan/src/constitution.scale` 作为正式创世种子;创世注入为 `law_id=0 tier=宪法 effective_version=Some(1) latest_version=1 pending_version=None status=Effective`。
 - 唯一真源 = 链上立法院模块。旧 HTML 文件、旧 runtime API 与以 HTML 为输入的解析脚本均已按禁止兼容硬规则删除。
-- 节点桌面端「公民宪法」tab **保持原样式**:`constitution_getDocument` RPC 直接 RAW 读 `LegislationYuan::Laws[0]` 与当前生效版 `LawVersions[0][v]`(不走可升级 runtime API),`node/src/core/constitution.rs` 据链上结构化法律 + 抽出的原 CSS 外壳(单文件 `constitution_shell.html`,含 `<!--CONSTITUTION_TOC-->`/`<!--CONSTITUTION_CONTENT-->` 两占位标记,渲染时替换)重建完整 HTML,前端 iframe 零改动 → 样式与迁移前逐字一致。节点端宪法能力(渲染 + 下述守卫)统一收口此单文件。
+- 节点桌面端「公民宪法」tab **保持原样式**:`constitution_getDocument` RPC 直接 RAW 读 `LegislationYuan::Laws[0]` 与当前生效版 `LawVersions[0][v]`(不走可升级 runtime API)。`node/src/core/constitution/render.rs` 据链上结构化法律与 `constitution_shell.html` 重建完整 HTML；`guard.rs` 独立承载共识守卫，展示调整不得触碰最高规则执法。
 
 ### 8. 上链时机
 

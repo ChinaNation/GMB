@@ -102,6 +102,8 @@ mod json_rpc_service;
 mod runtime_service;
 mod sync_service;
 mod transactions_service;
+
+pub use sync_service::SyncMode as ChainSyncMode;
 mod util;
 
 pub mod network_service;
@@ -575,6 +577,40 @@ pub struct ChainStatusSnapshot {
     pub finalized_block_number: u64,
     /// Hash of the current finalized block.
     pub finalized_block_hash: [u8; 32],
+    /// 同步状态机当前阶段，直接来自 sync service。
+    pub sync_mode: ChainSyncMode,
+    /// 本次 addChain 实际采用的 finalized 起点。
+    pub startup_finalized_block_number: Option<u64>,
+    /// 已连接 peer 公布的最高 GRANDPA finalized 高度。
+    pub highest_peer_finalized_block_number: Option<u64>,
+    /// 本次生命周期中 warp 已验证到的最高 finalized 高度。
+    pub warp_finalized_block_number: Option<u64>,
+    pub warp_request_count: u64,
+    pub warp_fragment_count: u64,
+}
+
+/// 统一 runtime 近头启发式与同步状态机阶段的完成语义。
+///
+/// runtime 已接近链头只说明目标 runtime 可用；只要 GRANDPA warp 尚未回到
+/// `Regular`，上层仍必须继续轮询，不能提前保存 database 或开放业务读写。
+fn chain_status_is_syncing(runtime_is_near_head: bool, sync_mode: ChainSyncMode) -> bool {
+    !runtime_is_near_head || sync_mode != ChainSyncMode::Regular
+}
+
+#[cfg(test)]
+mod chain_status_tests {
+    use super::{ChainSyncMode, chain_status_is_syncing};
+
+    #[test]
+    fn warp_mode_remains_syncing_even_when_runtime_is_near_head() {
+        assert!(chain_status_is_syncing(true, ChainSyncMode::WarpFragments));
+        assert!(chain_status_is_syncing(
+            true,
+            ChainSyncMode::WarpChainInformation
+        ));
+        assert!(chain_status_is_syncing(false, ChainSyncMode::Regular));
+        assert!(!chain_status_is_syncing(true, ChainSyncMode::Regular));
+    }
 }
 
 /// Typed snapshot of the runtime version of the current best block.
@@ -699,10 +735,12 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
 
             let peer_count = u64::try_from(services.sync_service.syncing_peers().await.len())
                 .unwrap_or(u64::MAX);
-            let is_syncing = !services
+            let runtime_is_near_head = services
                 .runtime_service
                 .is_near_head_of_chain_heuristic()
                 .await;
+            let sync_activity = services.sync_service.sync_activity_snapshot().await;
+            let is_syncing = chain_status_is_syncing(runtime_is_near_head, sync_activity.mode);
 
             Ok(ChainStatusSnapshot {
                 peer_count,
@@ -711,6 +749,13 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                 best_block_hash,
                 finalized_block_number,
                 finalized_block_hash,
+                sync_mode: sync_activity.mode,
+                startup_finalized_block_number: sync_activity.startup_finalized_block_number,
+                highest_peer_finalized_block_number: sync_activity
+                    .highest_peer_finalized_block_number,
+                warp_finalized_block_number: sync_activity.warp_finalized_block_number,
+                warp_request_count: sync_activity.warp_request_count,
+                warp_fragment_count: sync_activity.warp_fragment_count,
             })
         }))
     }

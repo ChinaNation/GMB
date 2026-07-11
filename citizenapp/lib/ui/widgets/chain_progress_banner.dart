@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
-import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
+import 'package:smoldot/smoldot.dart'
+    show LightClientStatusSnapshot, LightClientSyncMode;
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -19,6 +20,7 @@ class ChainProgressBanner extends StatefulWidget {
     this.pollInterval = const Duration(seconds: 6),
     this.onProgressChanged,
     this.onErrorChanged,
+    this.progressLoader,
   });
 
   final EdgeInsetsGeometry margin;
@@ -26,6 +28,9 @@ class ChainProgressBanner extends StatefulWidget {
   final Duration pollInterval;
   final ValueChanged<LightClientStatusSnapshot?>? onProgressChanged;
   final ValueChanged<String?>? onErrorChanged;
+
+  /// 专项测试注入；生产固定走 [ChainRpc.fetchChainProgress]。
+  final Future<LightClientStatusSnapshot> Function()? progressLoader;
 
   @override
   State<ChainProgressBanner> createState() => _ChainProgressBannerState();
@@ -38,6 +43,7 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
   String? _error;
   bool _loading = false;
   Timer? _pollTimer;
+  String? _lastLoggedProgress;
 
   @override
   void initState() {
@@ -71,8 +77,10 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
     }
 
     try {
-      final progress = await _chainRpc.fetchChainProgress();
+      final progress = await (widget.progressLoader?.call() ??
+          _chainRpc.fetchChainProgress());
       if (!mounted) return;
+      _logProgressTransition(progress);
       setState(() {
         _progress = progress;
         _error = null;
@@ -96,15 +104,34 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
   void _scheduleNextPoll({LightClientStatusSnapshot? progress}) {
     if (_isFlutterTest) return;
     final current = progress ?? _progress;
-    final shouldPoll = current == null ||
-        !current.hasPeers ||
-        current.isSyncing ||
-        _error != null;
+    // runtime near-head 可能先于 warp 状态机收口；完整可用前必须持续轮询。
+    final shouldPoll = current == null || !current.isUsable || _error != null;
     if (!shouldPoll) return;
     _pollTimer = Timer(widget.pollInterval, () {
       if (!mounted) return;
       unawaited(_loadProgress());
     });
+  }
+
+  void _logProgressTransition(LightClientStatusSnapshot progress) {
+    final signature = '${progress.syncMode.wireValue}/'
+        '${progress.isSyncing}/'
+        '${progress.warpRequestCount}/'
+        '${progress.warpFragmentCount}/'
+        '${progress.finalizedBlockNumber}';
+    if (_lastLoggedProgress == signature) return;
+    _lastLoggedProgress = signature;
+    debugPrint(
+      '[SmoldotStatus] mode=${progress.syncMode.wireValue}, '
+      'syncing=${progress.isSyncing}, '
+      'startup=#${progress.startupFinalizedBlockNumber}, '
+      'peer_finalized=#${progress.highestPeerFinalizedBlockNumber}, '
+      'warp=#${progress.warpFinalizedBlockNumber}, '
+      'requests=${progress.warpRequestCount}, '
+      'fragments=${progress.warpFragmentCount}, '
+      'best=#${progress.bestBlockNumber}, '
+      'finalized=#${progress.finalizedBlockNumber}',
+    );
   }
 
   @override
@@ -139,10 +166,19 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
         color = AppTheme.warning;
         icon = Icons.portable_wifi_off_outlined;
         title = '轻节点正在连接网络';
+      } else if (progress.syncMode == LightClientSyncMode.warpFragments) {
+        color = AppTheme.info;
+        icon = Icons.verified_outlined;
+        title = '轻节点正在快速验证最终性';
+      } else if (progress.syncMode ==
+          LightClientSyncMode.warpChainInformation) {
+        color = AppTheme.info;
+        icon = Icons.downloading_outlined;
+        title = '轻节点正在加载最新链状态';
       } else if (progress.isSyncing) {
         color = AppTheme.info;
         icon = Icons.sync;
-        title = '轻节点正在同步区块头';
+        title = '轻节点正在同步尾部区块';
       } else {
         color = AppTheme.success;
         icon = Icons.check_circle_outline;
@@ -154,7 +190,22 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
       final finalized = progress.finalizedBlockNumber != null
           ? '#${progress.finalizedBlockNumber}'
           : '-';
-      subtitle = 'peer ${progress.peerCount}  best $best  finalized $finalized';
+      if (progress.isWarping) {
+        final startup = progress.startupFinalizedBlockNumber != null
+            ? '#${progress.startupFinalizedBlockNumber}'
+            : '-';
+        final warp = progress.warpFinalizedBlockNumber != null
+            ? '#${progress.warpFinalizedBlockNumber}'
+            : '-';
+        final peerFinalized = progress.highestPeerFinalizedBlockNumber != null
+            ? '#${progress.highestPeerFinalizedBlockNumber}'
+            : '-';
+        subtitle =
+            'peer ${progress.peerCount}  启动 $startup  warp $warp  peer finalized $peerFinalized';
+      } else {
+        subtitle =
+            'peer ${progress.peerCount}  best $best  finalized $finalized';
+      }
     } else {
       return const SizedBox.shrink();
     }
@@ -212,5 +263,7 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
     );
   }
 
-  bool get _isFlutterTest => Platform.environment.containsKey('FLUTTER_TEST');
+  bool get _isFlutterTest =>
+      widget.progressLoader == null &&
+      Platform.environment.containsKey('FLUTTER_TEST');
 }

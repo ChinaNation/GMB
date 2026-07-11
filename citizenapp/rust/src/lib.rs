@@ -13,8 +13,8 @@ use smoldot_light::{
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{mpsc, Arc};
 
 mod error;
 mod ffi_types;
@@ -34,6 +34,7 @@ static CHAINS: Lazy<Mutex<HashMap<ChainHandle, Arc<SmoldotChainWrapper>>>> =
 struct SmoldotClientWrapper {
     client: Mutex<Client<Arc<DefaultPlatform>, ()>>,
     runtime: tokio::runtime::Runtime,
+    capability_executor: NativeCapabilityExecutor,
 }
 
 /// Wrapper around Chain and ChainId
@@ -49,6 +50,79 @@ struct SmoldotChainWrapper {
 const SYSTEM_ACCOUNT_PREFIX_HEX: &str =
     "26aa394eea5630e07c48ae0c9558cef7b99d880ec681799c0cf30e8886371da9";
 const NATIVE_RPC_TIMEOUT_SECS: u64 = 30;
+const TOKIO_WORKER_THREADS: usize = 2;
+const NATIVE_CAPABILITY_WORKERS: usize = 2;
+const NATIVE_CAPABILITY_QUEUE_CAPACITY: usize = 64;
+const ANDROID_SMOLDOT_NICE: c_int = 5;
+
+type NativeCapabilityJob = Box<dyn FnOnce() + Send + 'static>;
+
+/// 固定大小的原生 capability 执行器。
+///
+/// 中文注释：旧实现每次 FFI 调用都 `std::thread::spawn`，并发查询会无上限创建
+/// OS 线程。这里用两个常驻 worker 和有界队列收口资源，同时保留在 worker 内创建
+/// `!Send` Future 并 `runtime.block_on` 的能力。
+struct NativeCapabilityExecutor {
+    sender: mpsc::SyncSender<NativeCapabilityJob>,
+}
+
+impl NativeCapabilityExecutor {
+    fn new() -> Result<Self, String> {
+        let (sender, receiver) =
+            mpsc::sync_channel::<NativeCapabilityJob>(NATIVE_CAPABILITY_QUEUE_CAPACITY);
+        let receiver = Arc::new(Mutex::new(receiver));
+
+        for worker_index in 0..NATIVE_CAPABILITY_WORKERS {
+            let receiver = Arc::clone(&receiver);
+            std::thread::Builder::new()
+                .name(format!("cit-cap-{worker_index}"))
+                .spawn(move || {
+                    lower_current_thread_priority();
+                    loop {
+                        let job = receiver.lock().recv();
+                        let Ok(job) = job else { return };
+                        job();
+                    }
+                })
+                .map_err(|error| format!("Failed to start native capability worker: {error}"))?;
+        }
+
+        Ok(Self { sender })
+    }
+
+    fn try_spawn(&self, job: NativeCapabilityJob) -> Result<(), String> {
+        self.sender.try_send(job).map_err(|error| match error {
+            mpsc::TrySendError::Full(_) => "native_capability_queue_full".to_string(),
+            mpsc::TrySendError::Disconnected(_) => "native_capability_executor_stopped".to_string(),
+        })
+    }
+}
+
+fn configured_log_level(max_log_level: u8) -> log::LevelFilter {
+    match max_log_level {
+        0 => log::LevelFilter::Off,
+        1 => log::LevelFilter::Error,
+        2 => log::LevelFilter::Warn,
+        3 => log::LevelFilter::Info,
+        4 => log::LevelFilter::Debug,
+        _ => log::LevelFilter::Trace,
+    }
+}
+
+#[cfg(target_os = "android")]
+fn lower_current_thread_priority() {
+    // 中文注释：普通 App 无权提高优先级，但允许把自身 worker 调低到 nice=5。
+    // 失败只影响调度优化，不得阻断轻节点启动或 capability 回调。
+    let result = unsafe { libc::setpriority(libc::PRIO_PROCESS, 0, ANDROID_SMOLDOT_NICE) };
+    if result != 0 {
+        log::warn!("failed to lower smoldot worker priority");
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn lower_current_thread_priority() {
+    let _ = ANDROID_SMOLDOT_NICE;
+}
 
 /// Initialize a new smoldot client
 ///
@@ -81,23 +155,35 @@ pub unsafe extern "C" fn smoldot_client_init(
         }
     };
 
+    let log_level = configured_log_level(config.max_log_level);
+
     // 初始化 Android 日志（仅首次调用生效），使 smoldot 内部日志输出到 logcat。
     #[cfg(target_os = "android")]
     {
         let _ = android_logger::init_once(
             android_logger::Config::default()
-                .with_max_level(log::LevelFilter::Trace)
+                .with_max_level(log_level)
                 .with_tag("smoldot"),
         );
     }
     // 非 Android 平台使用 env_logger
     #[cfg(not(target_os = "android"))]
     {
-        let _ = env_logger::try_init();
+        let _ = env_logger::Builder::new()
+            .filter_level(log_level)
+            .try_init();
     }
 
-    // Create Tokio runtime
+    // 中文注释：手机核心数不再直接决定同步 worker 数；两个低优先级 worker 是
+    // CitizenApp 原生同步的固定 CPU 并发上限，避免再次挤占 Flutter main/raster。
+    let tokio_thread_index = AtomicUsize::new(0);
     let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(TOKIO_WORKER_THREADS)
+        .thread_name_fn(move || {
+            let index = tokio_thread_index.fetch_add(1, Ordering::Relaxed);
+            format!("cit-smol-{index}")
+        })
+        .on_thread_start(lower_current_thread_priority)
         .enable_all()
         .build()
     {
@@ -119,9 +205,18 @@ pub unsafe extern "C" fn smoldot_client_init(
 
     let client = Client::new(platform);
 
+    let capability_executor = match NativeCapabilityExecutor::new() {
+        Ok(executor) => executor,
+        Err(error) => {
+            set_error(error_out, &error);
+            return 0;
+        }
+    };
+
     let wrapper = Arc::new(SmoldotClientWrapper {
         client: Mutex::new(client),
         runtime,
+        capability_executor,
     });
 
     // Generate handle
@@ -532,6 +627,12 @@ pub unsafe extern "C" fn smoldot_get_status_snapshot(
             "bestBlockHash": format!("0x{}", hex::encode(snapshot.best_block_hash)),
             "finalizedBlockNumber": snapshot.finalized_block_number,
             "finalizedBlockHash": format!("0x{}", hex::encode(snapshot.finalized_block_hash)),
+            "syncMode": sync_mode_name(snapshot.sync_mode),
+            "startupFinalizedBlockNumber": snapshot.startup_finalized_block_number,
+            "highestPeerFinalizedBlockNumber": snapshot.highest_peer_finalized_block_number,
+            "warpFinalizedBlockNumber": snapshot.warp_finalized_block_number,
+            "warpRequestCount": snapshot.warp_request_count,
+            "warpFragmentCount": snapshot.warp_fragment_count,
         });
         Ok(snapshot.to_string())
     }) {
@@ -1112,11 +1213,38 @@ pub unsafe extern "C" fn smoldot_get_storage_values(
 
 // ──── 异步 FFI 导出（不阻塞 Dart 主线程） ────
 
-/// 异步回调辅助：在独立线程上执行 async 闭包，完成后通过 DartCallback 回调。
+fn sync_mode_name(mode: smoldot_light::ChainSyncMode) -> &'static str {
+    match mode {
+        smoldot_light::ChainSyncMode::Regular => "regular",
+        smoldot_light::ChainSyncMode::WarpFragments => "warpFragments",
+        smoldot_light::ChainSyncMode::WarpChainInformation => "warpChainInformation",
+    }
+}
+
+fn finish_native_callback(
+    callback_id: i64,
+    callback: DartCallback,
+    result: Result<String, String>,
+) {
+    match result {
+        Ok(json_str) => {
+            let cstr = CString::new(json_str).unwrap_or_else(|_| CString::new("{}").unwrap());
+            unsafe { callback(callback_id, cstr.as_ptr() as i64, std::ptr::null()) };
+            std::mem::forget(cstr);
+        }
+        Err(message) => {
+            let cstr =
+                CString::new(message).unwrap_or_else(|_| CString::new("Unknown error").unwrap());
+            unsafe { callback(callback_id, 0, cstr.as_ptr()) };
+            std::mem::forget(cstr);
+        }
+    }
+}
+
+/// 异步回调辅助：把 async 闭包提交到固定原生 worker，完成后通过 DartCallback 回调。
 ///
-/// 使用 `std::thread::spawn` + `runtime.block_on` 而非 `tokio::spawn`，
-/// 因为 smoldot 的部分原生 API 返回的 Future 没有 `Send` 约束。
-/// 独立线程上的 `block_on` 不阻塞 Dart 主线程，同时兼容非 Send futures。
+/// Future 在 worker 内创建，因此无需实现 `Send`。任务只捕获 handle，不持有 client Arc；
+/// dispose 后尚未执行的排队任务会在重新查找 handle 时失败，不会延长旧生命周期。
 fn spawn_native_capability_async<F, Fut>(
     chain_handle: ChainHandle,
     callback_id: i64,
@@ -1128,26 +1256,23 @@ where
     Fut: std::future::Future<Output = Result<String, String>>,
 {
     let chain_wrapper = get_chain_wrapper(chain_handle)?;
-    let client_wrapper = get_client_wrapper(chain_wrapper.client_handle)?;
-    std::thread::spawn(move || {
-        let result = client_wrapper
-            .runtime
-            .block_on(f(Arc::clone(&chain_wrapper), Arc::clone(&client_wrapper)));
-        match result {
-            Ok(json_str) => {
-                let cstr = CString::new(json_str).unwrap_or_else(|_| CString::new("{}").unwrap());
-                unsafe { callback(callback_id, cstr.as_ptr() as i64, std::ptr::null()) };
-                std::mem::forget(cstr);
-            }
-            Err(msg) => {
-                let cstr =
-                    CString::new(msg).unwrap_or_else(|_| CString::new("Unknown error").unwrap());
-                unsafe { callback(callback_id, 0, cstr.as_ptr()) };
-                std::mem::forget(cstr);
-            }
-        }
-    });
-    Ok(())
+    let client_handle = chain_wrapper.client_handle;
+    let client_wrapper = get_client_wrapper(client_handle)?;
+    client_wrapper
+        .capability_executor
+        .try_spawn(Box::new(move || {
+            let result = (|| {
+                let chain_wrapper = get_chain_wrapper(chain_handle)?;
+                if chain_wrapper.client_handle != client_handle {
+                    return Err("Chain handle no longer belongs to the original client".to_string());
+                }
+                let client_wrapper = get_client_wrapper(client_handle)?;
+                client_wrapper
+                    .runtime
+                    .block_on(f(Arc::clone(&chain_wrapper), Arc::clone(&client_wrapper)))
+            })();
+            finish_native_callback(callback_id, callback, result);
+        }))
 }
 
 /// 异步 FFI 入口的错误处理宏：参数校验失败时设置 error_out 并返回 -1。
@@ -1190,6 +1315,12 @@ pub unsafe extern "C" fn smoldot_get_status_snapshot_async(
                 "bestBlockHash": format!("0x{}", hex::encode(snapshot.best_block_hash)),
                 "finalizedBlockNumber": snapshot.finalized_block_number,
                 "finalizedBlockHash": format!("0x{}", hex::encode(snapshot.finalized_block_hash)),
+                "syncMode": sync_mode_name(snapshot.sync_mode),
+                "startupFinalizedBlockNumber": snapshot.startup_finalized_block_number,
+                "highestPeerFinalizedBlockNumber": snapshot.highest_peer_finalized_block_number,
+                "warpFinalizedBlockNumber": snapshot.warp_finalized_block_number,
+                "warpRequestCount": snapshot.warp_request_count,
+                "warpFragmentCount": snapshot.warp_fragment_count,
             })
             .to_string())
         }
@@ -1477,6 +1608,56 @@ pub unsafe extern "C" fn smoldot_submit_extrinsic_async(
             Ok(tx_hash.to_string())
         }
     )
+}
+
+#[cfg(test)]
+mod resource_constraint_tests {
+    use super::{
+        configured_log_level, NativeCapabilityExecutor, NATIVE_CAPABILITY_QUEUE_CAPACITY,
+        NATIVE_CAPABILITY_WORKERS,
+    };
+    use std::sync::{Arc, Barrier};
+
+    #[test]
+    fn native_capability_executor_has_fixed_workers_and_bounded_queue() {
+        let executor = NativeCapabilityExecutor::new().expect("executor starts");
+        let started = Arc::new(Barrier::new(NATIVE_CAPABILITY_WORKERS + 1));
+        let release = Arc::new(Barrier::new(NATIVE_CAPABILITY_WORKERS + 1));
+
+        for _ in 0..NATIVE_CAPABILITY_WORKERS {
+            let started = Arc::clone(&started);
+            let release = Arc::clone(&release);
+            executor
+                .try_spawn(Box::new(move || {
+                    started.wait();
+                    release.wait();
+                }))
+                .expect("worker blocker enqueued");
+        }
+        started.wait();
+
+        for _ in 0..NATIVE_CAPABILITY_QUEUE_CAPACITY {
+            executor
+                .try_spawn(Box::new(|| {}))
+                .expect("bounded queue slot available");
+        }
+        let error = executor
+            .try_spawn(Box::new(|| {}))
+            .expect_err("queue over capacity must fail");
+        assert_eq!(error, "native_capability_queue_full");
+
+        release.wait();
+    }
+
+    #[test]
+    fn configured_log_level_matches_dart_contract() {
+        assert_eq!(configured_log_level(0), log::LevelFilter::Off);
+        assert_eq!(configured_log_level(1), log::LevelFilter::Error);
+        assert_eq!(configured_log_level(2), log::LevelFilter::Warn);
+        assert_eq!(configured_log_level(3), log::LevelFilter::Info);
+        assert_eq!(configured_log_level(4), log::LevelFilter::Debug);
+        assert_eq!(configured_log_level(5), log::LevelFilter::Trace);
+    }
 }
 
 #[no_mangle]

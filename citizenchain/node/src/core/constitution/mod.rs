@@ -11,7 +11,7 @@
 //!    编译进二进制 —— 故 setCode / migration / 改清单常量都改不动这些条文;唯一修改路径 =
 //!    改创世(创世哈希变 = 新链)或改节点二进制(硬分叉),即「只能重新创世」。详见 ADR-027 §7。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use codec::{Decode, Encode};
@@ -42,6 +42,8 @@ const GENESIS_CONSTITUTION_VERSION: u32 = 1;
 /// `Tier{Constitution=0,..}`、`LawStatus{Pending=0,Effective=1,Repealed=2}`)。
 /// 由 legislation-yuan 测试 `enum_discriminants_match_node_guard` 交叉钉死,防漂移。
 const TIER_CONSTITUTION: u8 = 0;
+const LAW_STATUS_PENDING: u8 = 0;
+const LAW_STATUS_EFFECTIVE: u8 = 1;
 const LAW_STATUS_REPEALED: u8 = 2;
 /// 表决类型「特别案」的 wire 值(`legislation-yuan::VoteType::Special.as_u8()`)。
 /// 由 legislation-yuan 测试 `enum_discriminants_match_node_guard` 交叉钉死,防漂移。
@@ -89,7 +91,7 @@ struct MChapter {
 
 /// 只解码 `LawVersion` 前缀(law_id..vote_type);其后字段(proposal_id..effective_at)顺序解码到
 /// vote_type 即停。chapters 用于条文比对,vote_type 用于核心章档位背书(第十九条)。
-#[derive(Decode)]
+#[derive(Decode, Encode)]
 #[allow(dead_code)] // law_id/version/title/title_en/content_hash 仅占位保持字段序。
 struct MLawVersionHead {
     law_id: u64,
@@ -137,172 +139,8 @@ fn find_article<'a>(chapters: &'a [MChapter], number: u32) -> Option<&'a MArticl
         .find(|a| a.number == number)
 }
 
-// ═════════════════════════════════════════════════════════════════════════
-// 一、渲染:链上结构化宪法 → HTML(供桌面端「公民宪法」tab)
-// ═════════════════════════════════════════════════════════════════════════
-
-/// 完整 HTML 外壳模板(原《公民宪法》页的 head/style/封面/目录与正文容器全保留),
-/// 内含两个占位标记,渲染时按链上结构化宪法替换:
-///   `<!--CONSTITUTION_TOC-->`     → 目录项(`toc-item`)
-///   `<!--CONSTITUTION_CONTENT-->` → 正文块(章/节/条/款)
-const SHELL: &str = include_str!("constitution_shell.html");
-const VERSION_LABEL_MARKER: &str = "<!--CONSTITUTION_VERSION_LABEL-->";
-const TOC_MARKER: &str = "<!--CONSTITUTION_TOC-->";
-const CONTENT_MARKER: &str = "<!--CONSTITUTION_CONTENT-->";
-
-fn text(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes).into_owned()
-}
-
-fn opt_text(bytes: &Option<Vec<u8>>) -> String {
-    bytes.as_ref().map(|b| text(b)).unwrap_or_default()
-}
-
-/// HTML 文本转义(纵深防御:链上文本为治理立法产出,非用户任意输入,但仍转义防外壳破坏)。
-fn esc(raw: &str) -> String {
-    raw.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
-
-/// 当前**生效中**的版本号(供桌面端展示,避免提前显示待生效版)。
-pub fn effective_version_of_law(law_scale: &[u8]) -> Result<u32, String> {
-    let law = decode_law_head(law_scale).map_err(|e| format!("宪法 Law 解码失败:{e:?}"))?;
-    law.effective_version
-        .ok_or_else(|| "宪法尚无生效版本".to_string())
-}
-
-/// 解码链上不可修改条款 manifest,供桌面端展示徽章。
-pub fn immutable_article_numbers(manifest_scale: &[u8]) -> Result<Vec<u32>, String> {
-    let manifest = MImmutableManifest::decode(&mut &manifest_scale[..])
-        .map_err(|e| format!("宪法不可修改条款 manifest 解码失败:{e}"))?;
-    Ok(manifest.article_numbers)
-}
-
-/// 把链上结构化宪法 SCALE 字节(`LawVersion` 编码)重建为完整 HTML 文档。
-pub fn render_constitution_html(
-    law_version_scale: &[u8],
-    immutable_article_numbers: &[u32],
-    law_version_label_scale: Option<&[u8]>,
-) -> Result<String, String> {
-    let law = MLawVersionHead::decode(&mut &law_version_scale[..])
-        .map_err(|e| format!("宪法 LawVersion 解码失败:{e}"))?;
-    let version_label = law_version_label_scale
-        .map(|raw| {
-            MLawVersionLabel::decode(&mut &raw[..])
-                .map_err(|e| format!("宪法 LawVersionLabel 解码失败:{e}"))
-        })
-        .transpose()?;
-    let version_label_html = render_version_label(law.version, version_label.as_ref());
-
-    let mut toc = String::new();
-    let mut content = String::new();
-
-    for chapter in &law.chapters {
-        let (c_cn, c_en) = (
-            esc(&text(&chapter.title)),
-            esc(&opt_text(&chapter.title_en)),
-        );
-        toc.push_str(&format!(
-            "        <a class=\"toc-item toc-level-1\" href=\"#chapter-{n}\"><span class=\"toc-cn\">{c_cn}</span><span class=\"toc-en\">{c_en}</span></a>\n",
-            n = chapter.number,
-        ));
-        content.push_str(&format!(
-            "<section id=\"chapter-{n}\" class=\"block chapter-block\">\n  <h1 class=\"chapter-title\">\n    <span class=\"cn heading-cn\">{c_cn}</span>\n    <span class=\"en heading-en\">{c_en}</span>\n  </h1>\n</section>\n\n",
-            n = chapter.number,
-        ));
-
-        for section in &chapter.sections {
-            let (s_cn, s_en) = (
-                esc(&text(&section.title)),
-                esc(&opt_text(&section.title_en)),
-            );
-            toc.push_str(&format!(
-                "        <a class=\"toc-item toc-level-2\" href=\"#chapter-{cn}-section-{sn}\"><span class=\"toc-cn\">{s_cn}</span><span class=\"toc-en\">{s_en}</span></a>\n",
-                cn = chapter.number, sn = section.number,
-            ));
-            content.push_str(&format!(
-                "<section id=\"chapter-{cn}-section-{sn}\" class=\"block section-block\">\n  <h2 class=\"section-title\">\n    <span class=\"cn heading-cn\">{s_cn}</span>\n    <span class=\"en heading-en\">{s_en}</span>\n  </h2>\n</section>\n\n",
-                cn = chapter.number, sn = section.number,
-            ));
-
-            for article in &section.articles {
-                let (a_cn, a_en) = (
-                    esc(&text(&article.title)),
-                    esc(&opt_text(&article.title_en)),
-                );
-                let (immutable_badge_cn, immutable_badge_en) = if immutable_article_numbers
-                    .contains(&article.number)
-                {
-                    (
-                            "<span class=\"immutable-badge immutable-badge-cn\">不可修改条款</span>",
-                            "<span class=\"immutable-badge immutable-badge-en\">Immutable Clause</span>",
-                        )
-                } else {
-                    ("", "")
-                };
-                toc.push_str(&format!(
-                    "        <a class=\"toc-item toc-level-3\" href=\"#article-{an}\"><span class=\"toc-cn\">{a_cn}</span><span class=\"toc-en\">{a_en}</span></a>\n",
-                    an = article.number,
-                ));
-
-                // 首段为条正文(必填),其后每段为款(可空)。
-                let mut paragraphs = format!(
-                    "  <p class=\"article-paragraph\">\n    <span class=\"cn body-cn\">{b_cn}</span>\n    <span class=\"en body-en\">{b_en}</span>\n  </p>\n",
-                    b_cn = esc(&text(&article.body)),
-                    b_en = esc(&opt_text(&article.body_en)),
-                );
-                for clause in &article.clauses {
-                    paragraphs.push_str(&format!(
-                        "  <p class=\"article-paragraph\">\n    <span class=\"cn body-cn\">{k_cn}</span>\n    <span class=\"en body-en\">{k_en}</span>\n  </p>\n",
-                        k_cn = esc(&text(&clause.text)),
-                        k_en = esc(&opt_text(&clause.text_en)),
-                    ));
-                }
-
-                content.push_str(&format!(
-                    "<article id=\"article-{an}\" class=\"block article-block\">\n  <h3 class=\"article-title\">\n    <span class=\"cn heading-cn\">{a_cn}{immutable_badge_cn}</span>\n    <span class=\"en heading-en\">{a_en}{immutable_badge_en}</span>\n  </h3>\n\n{paragraphs}</article>\n\n",
-                    an = article.number,
-                ));
-            }
-        }
-    }
-
-    // 把目录与正文填入外壳两个占位标记 —— 整页结构只在 constitution_shell.html 一处维护。
-    Ok(SHELL
-        .replace(VERSION_LABEL_MARKER, &version_label_html)
-        .replace(TOC_MARKER, &toc)
-        .replace(CONTENT_MARKER, &content))
-}
-
-fn render_version_label(version: u32, label: Option<&MLawVersionLabel>) -> String {
-    let fallback = format!("v{version}");
-    let (cn, en) = if let Some(label) = label {
-        let cn = text(&label.title);
-        let en = opt_text(&label.title_en);
-        (
-            if cn.trim().is_empty() {
-                fallback.clone()
-            } else {
-                cn
-            },
-            if en.trim().is_empty() {
-                fallback.clone()
-            } else {
-                en
-            },
-        )
-    } else {
-        (fallback.clone(), fallback)
-    };
-    format!(
-        "<span class=\"doc-version-cn\">{}</span><span class=\"doc-version-en\">{}</span>",
-        esc(&cn),
-        esc(&en),
-    )
-}
+mod render;
+pub use render::{effective_version_of_law, immutable_article_numbers, render_constitution_html};
 
 // ═════════════════════════════════════════════════════════════════════════
 // 二、不可修改条款守卫(L2 共识层)
@@ -317,7 +155,7 @@ const PALLET_NAME: &[u8] = b"LegislationYuan";
 /// `LawVersions: StorageDoubleMap<Blake2_128Concat u64, Blake2_128Concat u32, ..>`。
 pub mod storage_key {
     use super::PALLET_NAME;
-    use codec::Encode;
+    use codec::{Decode, Encode};
     use sp_core::hashing::{blake2_128, twox_128};
 
     fn map_prefix(storage: &[u8]) -> Vec<u8> {
@@ -346,6 +184,36 @@ pub mod storage_key {
         k.extend_from_slice(&blake2_128_concat(&law_id.encode()));
         k.extend_from_slice(&blake2_128_concat(&version.encode()));
         k
+    }
+
+    /// `LegislationYuan::LawVersions[0]` 的 RAW key 前缀，用于识别未被 `latest_version` 声明的隐藏版本。
+    pub fn constitution_versions_prefix() -> Vec<u8> {
+        let mut k = map_prefix(b"LawVersions");
+        k.extend_from_slice(&blake2_128_concat(&super::CONSTITUTION_LAW_ID.encode()));
+        k
+    }
+
+    /// 从 `LawVersions[0][version]` 完整 RAW key 解出 version；非宪法版本键返回 `None`。
+    pub fn constitution_version_from_key(key: &[u8]) -> Option<u32> {
+        let prefix = constitution_versions_prefix();
+        if !key.starts_with(&prefix) || key.len() != prefix.len() + 16 + 4 {
+            return None;
+        }
+        u32::decode(&mut &key[prefix.len() + 16..]).ok()
+    }
+
+    fn version_from_single_map_key(key: &[u8], storage: &[u8]) -> Option<u32> {
+        let prefix = map_prefix(storage);
+        if !key.starts_with(&prefix) || key.len() != prefix.len() + 16 + 4 {
+            return None;
+        }
+        u32::decode(&mut &key[prefix.len() + 16..]).ok()
+    }
+
+    /// 从两类永久修宪凭据 RAW key 解出版本号；非凭据键返回 `None`。
+    pub fn constitution_proof_version_from_key(key: &[u8]) -> Option<u32> {
+        version_from_single_map_key(key, b"ConstitutionAmendmentProof")
+            .or_else(|| version_from_single_map_key(key, b"ConstitutionGuardVoteProof"))
     }
 
     /// `LegislationYuan::LawVersionLabels[law_id][version]` 的完整存储 key。
@@ -393,7 +261,7 @@ pub mod storage_key {
 }
 
 /// 链上不可修改条款 manifest 镜像(与 `legislation-yuan::ImmutableManifest` 字段序一致)。
-#[derive(Decode)]
+#[derive(Decode, Encode)]
 struct MImmutableManifest {
     article_numbers: Vec<u32>,
     article_hashes: Vec<[u8; 32]>,
@@ -415,6 +283,9 @@ fn verify_manifest(manifest_bytes: &[u8], reference: &ImmutableReference) -> Res
             "创世 manifest 清单 {on_chain:?} 与节点二进制 {binary:?} 不一致"
         ));
     }
+    if manifest.article_hashes.len() != manifest.article_numbers.len() {
+        return Err("创世 manifest 条号与摘要数量不一致".to_string());
+    }
 
     // 2. 逐条摘要 == 节点从 block#0 派生的条文摘要(防 manifest 谎报)。
     for (number, reference_bytes) in reference.articles.iter() {
@@ -431,6 +302,23 @@ fn verify_manifest(manifest_bytes: &[u8], reference: &ImmutableReference) -> Res
     Ok(())
 }
 
+/// 从目标状态读取并复核 manifest。除语义三方一致外，编码也必须与 block#0 基准逐字一致。
+fn verify_manifest_from_reader<F>(
+    read_raw: &F,
+    reference: &ImmutableReference,
+) -> Result<(), String>
+where
+    F: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    let current = read_raw(&storage_key::manifest())
+        .ok_or_else(|| "目标状态缺不可修改条款 manifest".to_string())?;
+    verify_manifest(&current, reference)?;
+    if current != reference.manifest {
+        return Err("目标状态 manifest 与 block#0 基准编码不一致".to_string());
+    }
+    Ok(())
+}
+
 /// 不可修改条款守卫的判定失败原因(全部一律拒块/拒启,fail-safe 方向恒为「拒绝」)。
 #[derive(Debug, PartialEq)]
 pub enum GuardError {
@@ -438,10 +326,22 @@ pub enum GuardError {
     ConstitutionLawMissing,
     /// `Law` 解码失败。
     LawDecodeFailed,
+    /// `Laws[0]` 值内部的 `law_id` 不再为 0。
+    ConstitutionLawIdChanged,
     /// 当前版本 `LawVersion` 缺失。
     LawVersionMissing,
     /// `LawVersion` 解码失败。
     VersionDecodeFailed,
+    /// `LawVersion[0][version]` 值内部 `law_id` 不再为 0。
+    VersionLawIdChanged(u32),
+    /// `LawVersion[0][version]` 值内部版本号与 RAW key 不一致。
+    VersionNumberChanged { expected: u32, found: u32 },
+    /// `LawVersion.content_hash` 与章节规范 SCALE 哈希不一致。
+    VersionContentHashChanged(u32),
+    /// 存在不在 `1..=latest_version` 声明范围内的隐藏宪法版本。
+    VersionOutsideDeclaredRange(u32),
+    /// 同一版本内出现重复条号，可能隐藏第二份恶意条文。
+    DuplicateArticleNumber(u32),
     /// 某不可修改条款在状态中缺失(被删/改号)。
     ImmutableArticleMissing(u32),
     /// 基准中缺该不可修改条款(创世派生异常)。
@@ -454,10 +354,14 @@ pub enum GuardError {
     ConstitutionScopeChanged,
     /// 宪法被置为 Repealed(违反不可废止)。
     ConstitutionRepealed,
+    /// 宪法状态不是 Pending/Effective，或版本指针组合不符合状态机。
+    ConstitutionVersionStateInvalid,
     /// 宪法可修订机构(`houses`)被改(与创世不一致)。
     ConstitutionHousesChanged,
     /// 宪法层级唯一性被破坏(`LawsByScope[宪法][0]` 不再恰为 `[0]`:多出第二部宪法或 law_id=0 被隐藏)。
     ConstitutionNotUnique,
+    /// manifest 缺失、被改写或与二进制/创世条文不一致。
+    ConstitutionManifestChanged,
     /// 核心章(第一章总则,创世口径)某条被修改/删除/移出核心章,但该版本未记录为特别案表决
     /// (违反宪法第十九条:核心章条款修改须走特别案 + 强制公投)。参数为条号。
     CoreClauseNotSpecial(u32),
@@ -484,6 +388,7 @@ pub struct ImmutableReference {
     articles: BTreeMap<u32, Vec<u8>>,
     core_articles: BTreeMap<u32, Vec<u8>>,
     houses: Vec<([u8; 4], [u8; 32])>,
+    manifest: Vec<u8>,
 }
 
 impl ImmutableReference {
@@ -497,6 +402,7 @@ impl ImmutableReference {
         let law_bytes = read_raw(&storage_key::law(CONSTITUTION_LAW_ID))
             .ok_or(GuardError::ConstitutionLawMissing)?;
         let law = decode_law_head(&law_bytes)?;
+        validate_law_identity_and_state(&law)?;
 
         let version_bytes = read_raw(&storage_key::law_version(
             CONSTITUTION_LAW_ID,
@@ -505,6 +411,7 @@ impl ImmutableReference {
         .ok_or(GuardError::LawVersionMissing)?;
         let head = MLawVersionHead::decode(&mut &version_bytes[..])
             .map_err(|_| GuardError::VersionDecodeFailed)?;
+        validate_version_identity_and_structure(&head, GENESIS_CONSTITUTION_VERSION)?;
 
         // 不可修改条款基准:逐字冻结。
         let mut articles = BTreeMap::new();
@@ -522,12 +429,126 @@ impl ImmutableReference {
                 }
             }
         }
-        Ok(Self {
+        let manifest =
+            read_raw(&storage_key::manifest()).ok_or(GuardError::ConstitutionManifestChanged)?;
+        let reference = Self {
             articles,
             core_articles,
             houses: law.houses,
-        })
+            manifest,
+        };
+        verify_manifest(&reference.manifest, &reference)
+            .map_err(|_| GuardError::ConstitutionManifestChanged)?;
+        Ok(reference)
     }
+}
+
+/// 校验 `Law` 自描述身份与版本状态机。节点只承认固定 law_id=0 的单一宪法记录。
+fn validate_law_identity_and_state(law: &MLawHead) -> Result<(), GuardError> {
+    if law.law_id != CONSTITUTION_LAW_ID {
+        return Err(GuardError::ConstitutionLawIdChanged);
+    }
+    if law.tier != TIER_CONSTITUTION {
+        return Err(GuardError::ConstitutionTierChanged);
+    }
+    if law.scope_code != 0 {
+        return Err(GuardError::ConstitutionScopeChanged);
+    }
+    if law.status == LAW_STATUS_REPEALED {
+        return Err(GuardError::ConstitutionRepealed);
+    }
+    let pointers_valid = match law.status {
+        LAW_STATUS_PENDING => matches!(
+            (law.effective_version, law.pending_version),
+            (Some(effective), Some(pending))
+                if effective < pending && pending == law.latest_version
+        ),
+        LAW_STATUS_EFFECTIVE => {
+            law.effective_version == Some(law.latest_version) && law.pending_version.is_none()
+        }
+        _ => false,
+    };
+    if law.latest_version < GENESIS_CONSTITUTION_VERSION || !pointers_valid {
+        return Err(GuardError::ConstitutionVersionStateInvalid);
+    }
+    Ok(())
+}
+
+/// 校验版本值与 RAW key 的身份一致性、全文哈希和全局条号唯一性。
+fn validate_version_identity_and_structure(
+    head: &MLawVersionHead,
+    expected_version: u32,
+) -> Result<(), GuardError> {
+    if head.law_id != CONSTITUTION_LAW_ID {
+        return Err(GuardError::VersionLawIdChanged(expected_version));
+    }
+    if head.version != expected_version {
+        return Err(GuardError::VersionNumberChanged {
+            expected: expected_version,
+            found: head.version,
+        });
+    }
+    if head.content_hash != sp_core::blake2_256(&head.chapters.encode()) {
+        return Err(GuardError::VersionContentHashChanged(expected_version));
+    }
+    let mut article_numbers = BTreeSet::new();
+    for article in head
+        .chapters
+        .iter()
+        .flat_map(|chapter| chapter.sections.iter())
+        .flat_map(|section| section.articles.iter())
+    {
+        if !article_numbers.insert(article.number) {
+            return Err(GuardError::DuplicateArticleNumber(article.number));
+        }
+    }
+    Ok(())
+}
+
+/// 拒绝 delta 或完整下载态中超出 `latest_version` 的隐藏宪法版本。
+fn check_version_key_range<'a, I>(keys: I, latest_version: u32) -> Result<(), GuardError>
+where
+    I: IntoIterator<Item = &'a Vec<u8>>,
+{
+    for key in keys {
+        if let Some(version) = storage_key::constitution_version_from_key(key) {
+            if !(GENESIS_CONSTITUTION_VERSION..=latest_version).contains(&version) {
+                return Err(GuardError::VersionOutsideDeclaredRange(version));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 启动和完整状态导入必须携带连续的 `1..=latest_version` 版本集合。
+/// 只遍历真实存在的 key，不按不可信 `latest_version` 做超大范围循环，避免恶意状态制造 CPU DoS。
+fn declared_constitution_versions<'a, I>(
+    keys: I,
+    latest_version: u32,
+) -> Result<BTreeSet<u32>, GuardError>
+where
+    I: IntoIterator<Item = &'a Vec<u8>>,
+{
+    let versions: BTreeSet<u32> = keys
+        .into_iter()
+        .filter_map(|key| storage_key::constitution_version_from_key(key))
+        .collect();
+    if versions.len() as u64 != u64::from(latest_version)
+        || versions.first().copied() != Some(GENESIS_CONSTITUTION_VERSION)
+        || versions.last().copied() != Some(latest_version)
+        || versions
+            .iter()
+            .copied()
+            .scan(0u32, |previous, version| {
+                let continuous = version == previous.saturating_add(1);
+                *previous = version;
+                Some(continuous)
+            })
+            .any(|continuous| !continuous)
+    {
+        return Err(GuardError::LawVersionMissing);
+    }
+    Ok(versions)
 }
 
 /// 纯判定:给定一个指向**目标区块后置状态**的 RAW 读取闭包,校验宪法全部不变式:
@@ -548,19 +569,14 @@ where
     let law_bytes = read_raw(&storage_key::law(CONSTITUTION_LAW_ID))
         .ok_or(GuardError::ConstitutionLawMissing)?;
     let law = decode_law_head(&law_bytes)?;
-    if law.tier != TIER_CONSTITUTION {
-        return Err(GuardError::ConstitutionTierChanged);
-    }
-    if law.scope_code != 0 {
-        return Err(GuardError::ConstitutionScopeChanged);
-    }
-    if law.status == LAW_STATUS_REPEALED {
-        return Err(GuardError::ConstitutionRepealed);
-    }
-    // status 允许 Pending(0)/Effective(1):合法修宪的待生效窗口 status=Pending,不可误杀。
+    validate_law_identity_and_state(&law)?;
     if law.houses != reference.houses {
         return Err(GuardError::ConstitutionHousesChanged);
     }
+
+    // manifest 不只是启动提示；任何正常块、runtime 升级或完整状态导入都不得改写它。
+    verify_manifest_from_reader(&read_raw, reference)
+        .map_err(|_| GuardError::ConstitutionManifestChanged)?;
 
     // ── ② 层级唯一性:LawsByScope[宪法][0] 必须恰为 [0] ──
     let scope_bytes = read_raw(&storage_key::laws_by_scope_constitution())
@@ -571,8 +587,8 @@ where
         return Err(GuardError::ConstitutionNotUnique);
     }
 
-    // ── ③ 不可修改条款逐字一致 ──
-    // 生效版本必须存在；待生效版本若存在也必须立即接受同一套不可修改条款约束。
+    // ── ③ 当前有效状态逐一复核 ──
+    // 历史版本在普通块中按 delta 精确复核；启动和 warp 则枚举真实 key 做全历史复核。
     let effective_version = law.effective_version.ok_or(GuardError::LawVersionMissing)?;
     check_immutable_version(&read_raw, reference, effective_version)?;
     if let Some(pending_version) = law.pending_version {
@@ -594,6 +610,7 @@ where
         .ok_or(GuardError::LawVersionMissing)?;
     let head = MLawVersionHead::decode(&mut &version_bytes[..])
         .map_err(|_| GuardError::VersionDecodeFailed)?;
+    validate_version_identity_and_structure(&head, version)?;
     for &n in IMMUTABLE_CONSTITUTION_ARTICLES.iter() {
         let current =
             find_article(&head.chapters, n).ok_or(GuardError::ImmutableArticleMissing(n))?;
@@ -621,6 +638,9 @@ where
 /// `ConstitutionGuardVoteProof[version]`(第21条 node 背书:一切修宪须经护宪大法官 4/7 终审,含一般章)。
 /// 凭据是 legislation-yuan **永久存储**(不受 votingengine 90 天清理影响),故可对任意修宪版本随时校验。
 /// 口径复用 `primitives::constitution::guard_review_passed`(与链端结算共用单源)。
+///
+/// 信任上限：当前值只是 runtime 写入的赞成票计数，不含节点可独立验签的成员签名集合。
+/// 本守卫能冻结凭据存在性、编码和阈值口径，但不能把恶意 runtime 伪造的计数转化为密码学证明。
 fn check_guard_review_proof<F>(read_raw: &F, version: u32) -> Result<(), GuardError>
 where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
@@ -676,6 +696,7 @@ fn check_core_chapter_tier(
 /// (第十九条 node 背书的公投凭据层:不止记录 `vote_type=Special`,还须有过公投口径的计票)。
 /// 凭据是 legislation-yuan **永久存储**(不受 votingengine 90 天清理影响),故可对生效/待生效版本随时校验,
 /// 无转移块检测。口径复用 `primitives::constitution::referendum_passed`(与链端结算共用单源)。
+/// 当前三元组不携带公民签名或人口快照证明，节点只背书记录与阈值口径的一致性，不宣称独立验票。
 fn check_core_referendum_proof<F>(read_raw: &F, version: u32) -> Result<(), GuardError>
 where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
@@ -713,7 +734,18 @@ where
             map.insert(key.clone(), value.clone());
         }
     }
-    check_immutable_articles(|key| map.get(key).cloned(), reference).map_err(|e| format!("{e:?}"))
+    let read = |key: &[u8]| map.get(key).cloned();
+    check_immutable_articles(&read, reference).map_err(|e| format!("{e:?}"))?;
+    let law_bytes = read(&storage_key::law(CONSTITUTION_LAW_ID))
+        .ok_or_else(|| format!("{:?}", GuardError::ConstitutionLawMissing))?;
+    let law = decode_law_head(&law_bytes).map_err(|e| format!("{e:?}"))?;
+    check_version_key_range(map.keys(), law.latest_version).map_err(|e| format!("{e:?}"))?;
+    let versions = declared_constitution_versions(map.keys(), law.latest_version)
+        .map_err(|e| format!("{e:?}"))?;
+    for version in versions {
+        check_immutable_version(&read, reference, version).map_err(|e| format!("{e:?}"))?;
+    }
+    Ok(())
 }
 
 /// 从 warp/状态导入的完整下载态中抽出立法院模块键,在提交前执行同一套宪法不变式校验。
@@ -731,186 +763,12 @@ fn check_imported_state_immutable(
     )
 }
 
-/// 区块导入守卫:包住内层 `BlockImport`(PoW),在区块进入规范链之前校验不可修改条款。
-///
-/// 判定路径:对携带 body 的普通区块,先用 runtime API 在**父状态**上只读执行该区块得到后置存储变更,
-/// 仅当变更触及立法院模块存储时,据「变更 ∪ 父状态」重建宪法相关 RAW 值并比对基准;
-/// 命中违规 → 返回 `Ok(KnownBad)`(内层永不被调用,区块不入库、不成为最佳块);
-/// 校验通过 → 原样委派内层正常导入(只读执行不改提交路径,故安全)。
-pub struct ConstitutionGuard<I> {
-    inner: I,
-    client: Arc<FullClient>,
-    backend: Arc<FullBackend>,
-    reference: ImmutableReference,
-}
-
-impl<I> ConstitutionGuard<I> {
-    /// 装配守卫:从创世(block#0)状态派生不可修改条款基准。基准缺失即返回错误(应拒绝启动)。
-    pub fn new(
-        inner: I,
-        client: Arc<FullClient>,
-        backend: Arc<FullBackend>,
-    ) -> Result<Self, String> {
-        let genesis_hash = client.info().genesis_hash;
-        // 基准从 block#0(创世)状态 RAW 读取:创世哈希为之背书,改它即换链。
-        let reference = ImmutableReference::from_raw_reader(|key| {
-            client
-                .storage(genesis_hash, &StorageKey(key.to_vec()))
-                .ok()
-                .flatten()
-                .map(|data| data.0)
-        })
-        .map_err(|e| format!("护宪守卫:创世不可修改条款基准派生失败:{e:?}"))?;
-
-        // L3 启动交叉校验:创世 manifest ↔ 二进制清单 ↔ 创世条文三者一致,否则拒绝启动。
-        let manifest_bytes = client
-            .storage(genesis_hash, &StorageKey(storage_key::manifest()))
-            .ok()
-            .flatten()
-            .map(|data| data.0)
-            .ok_or_else(|| "护宪守卫:创世缺不可修改条款 manifest".to_string())?;
-        verify_manifest(&manifest_bytes, &reference)
-            .map_err(|e| format!("护宪守卫:启动交叉校验失败:{e}"))?;
-
-        Ok(Self {
-            inner,
-            client,
-            backend,
-            reference,
-        })
-    }
-
-    /// **提交前**校验 warp/状态导入块携带的下载态宪法不变式(P1:vendored GRANDPA 在 `inner.import_block`
-    /// 内即把状态置 finalized 落库,post-import 拒块无法回滚,故必须在调用 inner **之前**校验)。
-    /// 从 `params.state_action` 的 `ImportedState` 抽出立法院模块前缀键(仅几 KB),据此跑全套不变式。
-    /// `Ok(())` = 合规(可提交);`Err` = 违规或无法抽取(拒绝,fail-closed —— 不调用 inner,什么都不落库)。
-    fn verify_imported_state(&self, params: &BlockImportParams<Block>) -> Result<(), String> {
-        let imported = match &params.state_action {
-            StateAction::ApplyChanges(StorageChanges::Import(imported)) => imported,
-            // warp 状态形态非预期 → 无法 pre-commit 校验、post-commit 又不可回滚 → 拒绝。
-            _ => return Err("warp 状态非 ApplyChanges(Import) 形态,拒绝(无法提交前校验)".into()),
-        };
-        check_imported_state_immutable(imported, &self.reference)
-    }
-
-    /// 计算普通(执行型)区块后置状态是否违反宪法不变式。warp/状态导入块不走此路径(见 `import_block`)。
-    /// `Ok(true)` = 确认违规(拒块);`Ok(false)` = 合规;`Err` = 无法判定(`import_block` fail-closed 拒块)。
-    fn detect_violation(&self, params: &BlockImportParams<Block>) -> Result<bool, String> {
-        let body = match &params.body {
-            Some(b) => b.clone(),
-            None => return Ok(false), // 无 body 且非状态导入,不经执行改宪法,跳过
-        };
-
-        let parent_hash = *params.header.parent_hash();
-        let block = Block::new(params.header.clone(), body);
-
-        // 在父状态上只读执行该区块(不提交),取后置存储变更。
-        let api = self.client.runtime_api();
-        api.execute_block(parent_hash, block.into())
-            .map_err(|e| format!("只读执行区块失败:{e}"))?;
-        let parent_state = self
-            .backend
-            .state_at(parent_hash, TrieCacheContext::Untrusted)
-            .map_err(|e| format!("取父状态失败:{e}"))?;
-        let changes = api
-            .into_storage_changes(&parent_state, parent_hash)
-            .map_err(|e| format!("提取存储变更失败:{e}"))?;
-
-        // 快路径:本块既未动立法院模块存储、也未升级 runtime(`:code`)→ 归纳不可修改条款不变,合规。
-        // runtime 升级(setCode)是高危块:即便 delta 未触立法院前缀也强制走全量不变式校验(P2/P3)。
-        let delta: BTreeMap<Vec<u8>, Option<Vec<u8>>> =
-            changes.main_storage_changes.into_iter().collect();
-        if !needs_full_invariant_check(&delta) {
-            return Ok(false);
-        }
-
-        // 后置状态读取器:命中变更取变更值(Some=改、None=删),否则回落父状态(已提交)。
-        let read_post = |key: &[u8]| -> Option<Vec<u8>> {
-            match delta.get(key) {
-                Some(value) => value.clone(),
-                None => self
-                    .client
-                    .storage(parent_hash, &StorageKey(key.to_vec()))
-                    .ok()
-                    .flatten()
-                    .map(|data| data.0),
-            }
-        };
-
-        match check_immutable_articles(read_post, &self.reference) {
-            Ok(()) => Ok(false),
-            Err(reason) => {
-                log::error!(
-                    target: "constitution-guard",
-                    "拒绝区块 #{} ({:?}):不可修改条款被改动 —— {:?}",
-                    params.header.number(),
-                    params.post_hash(),
-                    reason,
-                );
-                Ok(true)
-            }
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl<I> BlockImport<Block> for ConstitutionGuard<I>
-where
-    I: BlockImport<Block, Error = ConsensusError> + Send + Sync,
-{
-    type Error = ConsensusError;
-
-    async fn check_block(
-        &self,
-        block: BlockCheckParams<Block>,
-    ) -> Result<ImportResult, Self::Error> {
-        self.inner.check_block(block).await
-    }
-
-    async fn import_block(
-        &self,
-        params: BlockImportParams<Block>,
-    ) -> Result<ImportResult, Self::Error> {
-        // warp/状态同步块:vendored GRANDPA 在 inner 内即把状态置 finalized 落库,无法事后回滚,
-        // 故必须**提交前**校验下载态的宪法不变式(P1)。违规/无法抽取 → KnownBad(不调用 inner,什么都不落库)。
-        if params.with_state() {
-            return match self.verify_imported_state(&params) {
-                Ok(()) => self.inner.import_block(params).await,
-                Err(reason) => {
-                    log::error!(
-                        target: "constitution-guard",
-                        "拒绝 warp/状态导入 ({:?}):宪法不变式校验未通过 —— {reason}",
-                        params.post_hash(),
-                    );
-                    Ok(ImportResult::KnownBad)
-                }
-            };
-        }
-
-        // 普通(执行型)块:执行前判定,违规 KnownBad(内层永不被调用)。
-        match self.detect_violation(&params) {
-            Ok(true) => Ok(ImportResult::KnownBad),
-            Ok(false) => self.inner.import_block(params).await,
-            // P2 fail-closed:守卫自身执行/取数失败(无法读父状态/无法执行/无法取变更)→ 拒块,
-            // 不放行未经校验的块。代价是守卫机器 bug 可能误停链,但对「不可修改条款永不可破坏」
-            // 这是刻意的安全优先取舍;宪法读取/解码/比对失败本就在 detect_violation 内 fail-closed。
-            Err(why) => {
-                log::error!(
-                    target: "constitution-guard",
-                    "守卫判定失败,fail-closed 拒块 ({:?}):{why}",
-                    params.post_hash(),
-                );
-                Ok(ImportResult::KnownBad)
-            }
-        }
-    }
-}
+mod guard;
+pub(crate) use guard::ConstitutionGuard;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const LAW_STATUS_PENDING: u8 = 0;
 
     // ---- 测试夹具:构造一份 LawVersion 字节(可指定某条文内容)----
     fn article_bytes(number: u32, body: &str) -> MArticle {
@@ -938,13 +796,15 @@ mod tests {
                 articles,
             }],
         };
+        let chapters = vec![chapter];
+        let content_hash = sp_core::blake2_256(&chapters.encode());
         let mut bytes = Vec::new();
         CONSTITUTION_LAW_ID.encode_to(&mut bytes); // law_id
         version.encode_to(&mut bytes); // version
         "公民宪法".as_bytes().to_vec().encode_to(&mut bytes); // title
         Option::<Vec<u8>>::None.encode_to(&mut bytes); // title_en
-        vec![chapter].encode_to(&mut bytes); // chapters
-        [0u8; 32].encode_to(&mut bytes); // content_hash(哑尾)
+        chapters.encode_to(&mut bytes); // chapters
+        content_hash.encode_to(&mut bytes); // content_hash
         vote_type.encode_to(&mut bytes); // vote_type
         0u64.encode_to(&mut bytes); // proposal_id
         0u64.encode_to(&mut bytes); // published_at
@@ -1034,6 +894,30 @@ mod tests {
         )
     }
 
+    /// 创世 manifest 固定引用创世版本中的不可修改条款规范 SCALE 字节。
+    fn manifest_entry() -> (Vec<u8>, Vec<u8>) {
+        let articles = genesis_articles();
+        let article_numbers = IMMUTABLE_CONSTITUTION_ARTICLES.to_vec();
+        let article_hashes = article_numbers
+            .iter()
+            .map(|number| {
+                let article = articles
+                    .iter()
+                    .find(|article| article.number == *number)
+                    .expect("创世夹具应含全部不可修改条款");
+                sp_core::blake2_256(&article.encode())
+            })
+            .collect();
+        (
+            storage_key::manifest(),
+            MImmutableManifest {
+                article_numbers,
+                article_hashes,
+            }
+            .encode(),
+        )
+    }
+
     /// 一份完整合法当前态:Laws[0] + LawVersions[0][version] + LawsByScope[宪法][0]=[0]。
     fn valid_current_state(version: u32, articles: Vec<MArticle>) -> Vec<(Vec<u8>, Vec<u8>)> {
         valid_current_state_vt(version, articles, LEG_VOTE_SPECIAL)
@@ -1054,8 +938,13 @@ mod tests {
                 law_version_scale_vt(version, articles, vote_type),
             ),
             laws_by_scope_entry(vec![CONSTITUTION_LAW_ID]),
+            manifest_entry(),
         ];
         if version > GENESIS_CONSTITUTION_VERSION {
+            entries.push((
+                storage_key::law_version(CONSTITUTION_LAW_ID, GENESIS_CONSTITUTION_VERSION),
+                law_version_scale(GENESIS_CONSTITUTION_VERSION, genesis_articles()),
+            ));
             entries.push(guard_proof_entry(version, 4));
         }
         entries
@@ -1077,6 +966,7 @@ mod tests {
                 law_version_scale(2, pending_articles),
             ),
             laws_by_scope_entry(vec![CONSTITUTION_LAW_ID]),
+            manifest_entry(),
             // 待生效版本 v2 是一次修宪 → 挂通过口径的护宪终审凭据(第21条)。
             guard_proof_entry(2, 4),
         ]
@@ -1086,6 +976,12 @@ mod tests {
     fn reader(entries: Vec<(Vec<u8>, Vec<u8>)>) -> impl Fn(&[u8]) -> Option<Vec<u8>> {
         let map: BTreeMap<Vec<u8>, Vec<u8>> = entries.into_iter().collect();
         move |k: &[u8]| map.get(k).cloned()
+    }
+
+    /// 在完整状态夹具中替换一个 RAW key，避免测试误留同键双记录。
+    fn replace_entry(entries: &mut Vec<(Vec<u8>, Vec<u8>)>, key: Vec<u8>, value: Vec<u8>) {
+        entries.retain(|(existing, _)| existing != &key);
+        entries.push((key, value));
     }
 
     // 取全部不可修改条号 + 几条可变条文,组成一份"创世"状态。
@@ -1132,6 +1028,18 @@ mod tests {
         assert!(storage_key::law(0).starts_with(&storage_key::pallet_prefix()));
         assert!(storage_key::law_version(0, 1).starts_with(&storage_key::pallet_prefix()));
         assert!(storage_key::law_version_label(0, 1).starts_with(&storage_key::pallet_prefix()));
+        assert_eq!(
+            storage_key::constitution_proof_version_from_key(
+                &storage_key::constitution_amendment_proof(7)
+            ),
+            Some(7)
+        );
+        assert_eq!(
+            storage_key::constitution_proof_version_from_key(
+                &storage_key::constitution_guard_vote_proof(8)
+            ),
+            Some(8)
+        );
     }
 
     #[test]
@@ -1290,10 +1198,15 @@ mod tests {
         let state = vec![
             (storage_key::law(CONSTITUTION_LAW_ID), law_scale(2)),
             (
+                storage_key::law_version(CONSTITUTION_LAW_ID, 1),
+                law_version_scale(1, genesis_articles()),
+            ),
+            (
                 storage_key::law_version(CONSTITUTION_LAW_ID, 2),
                 law_version_scale_vt(2, amended_articles(immutable_intact), 2 /* Major */),
             ),
             laws_by_scope_entry(vec![CONSTITUTION_LAW_ID]),
+            manifest_entry(),
         ];
         assert_eq!(
             check_immutable_articles(reader(state), &reference),
@@ -1308,10 +1221,15 @@ mod tests {
         let state = vec![
             (storage_key::law(CONSTITUTION_LAW_ID), law_scale(2)),
             (
+                storage_key::law_version(CONSTITUTION_LAW_ID, 1),
+                law_version_scale(1, genesis_articles()),
+            ),
+            (
                 storage_key::law_version(CONSTITUTION_LAW_ID, 2),
                 law_version_scale_vt(2, amended_articles(immutable_intact), 2 /* Major */),
             ),
             laws_by_scope_entry(vec![CONSTITUTION_LAW_ID]),
+            manifest_entry(),
             guard_proof_entry(2, 3),
         ];
         assert_eq!(
@@ -1330,9 +1248,8 @@ mod tests {
                 immutable_intact(n)
             }
         });
-        let state = valid_current_state(2, arts);
         assert_eq!(
-            check_immutable_articles(reader(state), &reference),
+            check_immutable_articles(reader(valid_current_state(2, arts)), &reference),
             Err(GuardError::ImmutableArticleMutated(1))
         );
     }
@@ -1442,6 +1359,157 @@ mod tests {
             ),
             Err(GuardError::ConstitutionNotUnique)
         );
+    }
+
+    #[test]
+    fn rejects_runtime_manifest_mutation() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let mut state = valid_current_state(1, genesis_articles());
+        let mut manifest = MImmutableManifest::decode(&mut &manifest_entry().1[..]).unwrap();
+        manifest.article_hashes[0] = [9u8; 32];
+        replace_entry(&mut state, storage_key::manifest(), manifest.encode());
+        assert_eq!(
+            check_immutable_articles(reader(state), &reference),
+            Err(GuardError::ConstitutionManifestChanged)
+        );
+    }
+
+    #[test]
+    fn rejects_law_value_with_wrong_identity() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let mut state = valid_current_state(1, genesis_articles());
+        let mut law = law_scale(1);
+        law[..8].copy_from_slice(&9u64.encode());
+        replace_entry(&mut state, storage_key::law(CONSTITUTION_LAW_ID), law);
+        assert_eq!(
+            check_immutable_articles(reader(state), &reference),
+            Err(GuardError::ConstitutionLawIdChanged)
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_status_or_version_pointers() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let mut invalid_status = valid_current_state(1, genesis_articles());
+        replace_entry(
+            &mut invalid_status,
+            storage_key::law(CONSTITUTION_LAW_ID),
+            law_scale_with_versions(Some(1), 1, None, 9, Vec::new()),
+        );
+        assert_eq!(
+            check_immutable_articles(reader(invalid_status), &reference),
+            Err(GuardError::ConstitutionVersionStateInvalid)
+        );
+
+        let mut invalid_pointers = valid_current_state(2, amended_articles(immutable_intact));
+        replace_entry(
+            &mut invalid_pointers,
+            storage_key::law(CONSTITUTION_LAW_ID),
+            law_scale_with_versions(Some(1), 2, None, LAW_STATUS_EFFECTIVE, Vec::new()),
+        );
+        assert_eq!(
+            check_immutable_articles(reader(invalid_pointers), &reference),
+            Err(GuardError::ConstitutionVersionStateInvalid)
+        );
+    }
+
+    #[test]
+    fn rejects_version_identity_and_content_hash_mismatch() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let key = storage_key::law_version(CONSTITUTION_LAW_ID, 1);
+
+        let mut wrong_identity = valid_current_state(1, genesis_articles());
+        let mut head = MLawVersionHead::decode(&mut &law_version_scale(1, genesis_articles())[..])
+            .expect("应能解码版本夹具");
+        head.version = 7;
+        replace_entry(&mut wrong_identity, key.clone(), head.encode());
+        assert_eq!(
+            check_immutable_articles(reader(wrong_identity), &reference),
+            Err(GuardError::VersionNumberChanged {
+                expected: 1,
+                found: 7,
+            })
+        );
+
+        let mut wrong_hash = valid_current_state(1, genesis_articles());
+        let mut head = MLawVersionHead::decode(&mut &law_version_scale(1, genesis_articles())[..])
+            .expect("应能解码版本夹具");
+        head.content_hash = [8u8; 32];
+        replace_entry(&mut wrong_hash, key, head.encode());
+        assert_eq!(
+            check_immutable_articles(reader(wrong_hash), &reference),
+            Err(GuardError::VersionContentHashChanged(1))
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_article_number() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let mut articles = genesis_articles();
+        articles.push(article_bytes(1, "伪造的第二份第一条"));
+        assert_eq!(
+            check_immutable_articles(reader(valid_current_state(1, articles)), &reference),
+            Err(GuardError::DuplicateArticleNumber(1))
+        );
+    }
+
+    #[test]
+    fn rejects_tampered_historical_constitution_version() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let mut state = valid_current_state(2, amended_articles(immutable_intact));
+        let mut historical = genesis_articles();
+        historical[0] = article_bytes(1, "历史第一条被篡改");
+        replace_entry(
+            &mut state,
+            storage_key::law_version(CONSTITUTION_LAW_ID, 1),
+            law_version_scale(1, historical),
+        );
+        let read = reader(state);
+        assert_eq!(
+            check_immutable_version(&read, &reference, 1),
+            Err(GuardError::ImmutableArticleMutated(1))
+        );
+    }
+
+    #[test]
+    fn imported_state_rejects_hidden_version_above_latest() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let mut state = valid_current_state(1, genesis_articles());
+        state.push((
+            storage_key::law_version(CONSTITUTION_LAW_ID, 9),
+            law_version_scale(9, genesis_articles()),
+        ));
+        assert_eq!(
+            check_imported_state_key_values(state.iter(), &reference),
+            Err("VersionOutsideDeclaredRange(9)".to_string())
+        );
+    }
+
+    #[test]
+    fn real_runtime_genesis_satisfies_full_constitution_guard() {
+        use sp_runtime::BuildStorage;
+        let storage = citizenchain::RuntimeGenesisConfig::default()
+            .build_storage()
+            .expect("应能构建当前 runtime 创世状态");
+        let top = storage.top;
+        let read = |key: &[u8]| top.get(key).cloned();
+        let reference = ImmutableReference::from_raw_reader(&read).expect("应能派生真实创世基准");
+        assert_eq!(check_immutable_articles(&read, &reference), Ok(()));
+        let law = decode_law_head(
+            top.get(&storage_key::law(CONSTITUTION_LAW_ID))
+                .expect("真实创世应含 Law(0)"),
+        )
+        .expect("真实创世 Law(0) 应可解码");
+        let version_keys: Vec<Vec<u8>> = top
+            .keys()
+            .filter(|key| key.starts_with(&storage_key::constitution_versions_prefix()))
+            .cloned()
+            .collect();
+        let versions = declared_constitution_versions(version_keys.iter(), law.latest_version)
+            .expect("真实创世版本集合应连续");
+        for version in versions {
+            assert_eq!(check_immutable_version(&read, &reference, version), Ok(()));
+        }
     }
 
     #[test]

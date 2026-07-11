@@ -1228,6 +1228,24 @@ impl<TPlat: PlatformRef> ParachainBackgroundTask<TPlat> {
                 }
 
                 (
+                    WakeUpReason::ForegroundMessage(ToBackground::SyncActivitySnapshot {
+                        send_back,
+                    }),
+                    _,
+                ) => {
+                    // 中文注释：parachain 同步不使用本文件的 GRANDPA warp 状态机。
+                    // 保留统一 typed 接口，但只报告 regular，warp 计数恒为零。
+                    let _ = send_back.send(super::SyncActivitySnapshot {
+                        mode: super::SyncMode::Regular,
+                        startup_finalized_block_number: None,
+                        highest_peer_finalized_block_number: None,
+                        warp_finalized_block_number: None,
+                        warp_request_count: 0,
+                        warp_fragment_count: 0,
+                    });
+                }
+
+                (
                     WakeUpReason::ForegroundMessage(ToBackground::SerializeChainInformation {
                         send_back,
                     }),

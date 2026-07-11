@@ -72,6 +72,11 @@
             <action android:name="android.intent.action.OPEN_DOCUMENT"/>
             <data android:mimeType="*/*"/>
         </intent>
+        <!-- url_launcher 需要：Android 11+ 查询能打开 https 链接的浏览器（会员页跳官网） -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.GET_CONTENT"/>
             <data android:mimeType="*/*"/>

@@ -32,7 +32,7 @@ npm run build
 
 ## 3.2. 会员订阅页
 
-- `/membership` 是 CitizenApp 官网会员订阅入口，展示访客会员、投票公民会员、竞选公民会员三档美元月费和权益说明。
+- `/membership` 是 CitizenApp 官网会员订阅入口，按 3 张身份卡展示：访客卡内含**自由会员 `visitor`($2.99) / 民主会员 `visitor_pro`($9.99) 左右切换**（默认自由，点击切换价格与权益）、投票公民会员 `voting`($9.99)、竞选公民会员 `candidate`($99.99)。订阅资格由 Worker 精确匹配身份档强校验（禁止降档/越级），官网 UI 跟随。
 - 官网页面只调用 Cloudflare Worker `POST /v1/square/membership/stripe/checkout` 创建 Stripe Checkout Session，不保存会员状态、不保存本地法币金额、不接触 Stripe secret。
 - 会员权益真源在 CitizenApp Cloudflare Worker / D1：Stripe subscription webhook 写入 `square_memberships` 后，iOS / Android / GitHub Android 版 CitizenApp 均通过同一钱包账户读取会员状态。
 - `VITE_CITIZENAPP_SQUARE_API_BASE_URL` 可在官网构建时指定 Worker API 根地址；未设置时使用 production Worker 默认地址。

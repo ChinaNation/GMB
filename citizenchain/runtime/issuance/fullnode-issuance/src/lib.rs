@@ -4,9 +4,9 @@
 //! 一、制度定位
 //! ---------------------------------------------------------------------------
 //! 1. 本模块 `fullnode-issuance` 是【系统级、制度性】的货币发行模块；
-//! 2. 用于在 Substrate PoW 共识下，对成功铸造新区块的【全节点】发放铸块奖励//!
+//! 2. 用于在 Substrate PoW 共识下，对成功铸造新区块的【全节点】发放铸块奖励；
 //! 3. 本模块不属于治理参数范畴，不接受链上治理修改；
-//! 4. 本模块仅依赖最小必要 Runtime Storage（真实出块记录、矿工身份到账户钱包绑定表）用于发奖资格判定，其发行金额与高度规则完全由常量决定。
+//! 4. 本模块只保留发奖资格、钱包绑定与节点守卫审计所需的最小 Runtime Storage；发行金额与高度规则完全由编译期常量决定。
 //!
 //! 二、发行规则（写死于 primitives::pow_const）
 //! ---------------------------------------------------------------------------
@@ -18,7 +18,7 @@
 //! 三、技术实现原则
 //! ---------------------------------------------------------------------------
 //! 1. 本模块不参与PoW共识过程，仅消费共识结果，PoW共识由Substrate框架原生实现，通过PreRuntime Digest + FindAuthor获取区块作者；
-//! 2. 本模块使用最小必要 Storage（真实出块记录、矿工身份到账户钱包的一次性绑定表），不记录已发行数量与已奖励区块；
+//! 2. 本模块不保存逐块奖励列表，只保存累计奖励块数、累计发行额和最近一次奖励审计元组，供节点原生守卫独立复算；
 //! 3. 奖励发放时机：奖励在区块执行完成后的 on_finalize 阶段发放，属于对“已完成铸块行为”的结算，而非预测性激励；
 //! 4. 区块高度作为唯一时间与次数约束，区块高度全网一致、不可篡改的事实状态，不依赖任何人为或治理输入。
 //!
@@ -28,7 +28,7 @@
 //! 2. 奖励起止区块高度；
 //! 3. 永久停止发行的规则；
 //! 4. 发行触发条件（PoW 铸块）。
-//!                                上述内容不得修改//!
+//! 上述内容不得修改。
 //! ============================================================================
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -46,7 +46,7 @@ pub mod pallet {
         traits::{Currency, FindAuthor, Imbalance},
     };
     use frame_system::pallet_prelude::*;
-    use sp_runtime::traits::SaturatedConversion;
+    use sp_runtime::traits::{SaturatedConversion, Saturating};
     // 全节点 PoW 发行制度常量（来自 primitives）
     use primitives::pow_const::{
         FULLNODE_BLOCK_REWARD, FULLNODE_REWARD_END_BLOCK, FULLNODE_REWARD_START_BLOCK,
@@ -82,6 +82,24 @@ pub mod pallet {
     #[pallet::getter(fn last_authored_block_by_miner)]
     pub type LastAuthoredBlockByMiner<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u32, OptionQuery>;
+
+    /// 已成功发放全节点 PoW 奖励的区块数量。
+    ///
+    /// 本值只提供可被节点原生守卫复算的审计落点，制度真源仍是节点二进制中的固定高度区间。
+    #[pallet::storage]
+    #[pallet::getter(fn rewarded_block_count)]
+    pub type RewardedBlockCount<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+    /// 全节点 PoW 奖励累计发行额，单位与 Balances 一致。
+    #[pallet::storage]
+    #[pallet::getter(fn total_fullnode_issued)]
+    pub type TotalFullnodeIssued<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+
+    /// 最近一次全节点奖励审计记录：`(区块高度, 矿工, 收款钱包, 金额)`。
+    #[pallet::storage]
+    #[pallet::getter(fn last_reward_audit)]
+    pub type LastRewardAudit<T: Config> =
+        StorageValue<_, (u32, T::AccountId, T::AccountId, BalanceOf<T>), OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -187,7 +205,7 @@ pub mod pallet {
             {
                 // 预申报 on_finalize 最坏路径预算：
                 // digest + 真实出块记录 + wallet map + balances/issuance + event 相关读写
-                T::DbWeight::get().reads_writes(3, 4)
+                T::DbWeight::get().reads_writes(5, 7)
             } else {
                 Weight::zero()
             }
@@ -237,6 +255,12 @@ pub mod pallet {
                 reward,
                 "deposit_creating must return full reward"
             );
+
+            // 三个审计状态由节点守卫按高度、PoW 作者和固定奖励独立复算；runtime 升级即使改写
+            // 本模块逻辑，只要产出与固定公式不一致，诚实节点仍会在 BlockImport 层拒绝该块。
+            RewardedBlockCount::<T>::mutate(|count| *count = count.saturating_add(1));
+            TotalFullnodeIssued::<T>::mutate(|total| *total = total.saturating_add(reward));
+            LastRewardAudit::<T>::put((block_number, author.clone(), recipient.clone(), reward));
             Self::deposit_event(Event::<T>::FullnodeIssuanceIssued {
                 block: block_number,
                 miner: author,

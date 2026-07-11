@@ -3,7 +3,7 @@
 use super::*;
 use frame_support::{
     derive_impl,
-    traits::{ConstU128, ConstU32, VariantCountOf},
+    traits::{ConstU128, ConstU32, Hooks, VariantCountOf},
 };
 use frame_system as system;
 use primitives::citizen_const::{
@@ -179,8 +179,13 @@ fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
     new_test_ext().execute_with(|| {
         RewardedCount::<Test>::put(CITIZEN_ISSUANCE_HIGH_REWARD_COUNT.saturating_sub(1));
 
-        let cid_number_hash_a = notify_voting_identity_registered(1, &citizen_cid_number("TIER-A"));
-        let cid_number_hash_b = notify_voting_identity_registered(2, &citizen_cid_number("TIER-B"));
+        let cid_number_hash_a = queue_voting_identity_registered(1, &citizen_cid_number("TIER-A"));
+        let cid_number_hash_b = queue_voting_identity_registered(2, &citizen_cid_number("TIER-B"));
+        assert_eq!(Balances::free_balance(1), 0);
+        assert_eq!(Balances::free_balance(2), 0);
+        assert_eq!(PendingRewardCount::<Test>::get(), 2);
+
+        CitizenIssuance::on_finalize(System::block_number());
 
         assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
         assert_eq!(Balances::free_balance(2), CITIZEN_ISSUANCE_NORMAL_REWARD);
@@ -188,6 +193,13 @@ fn consecutive_rewards_switch_from_high_to_normal_in_same_block() {
             RewardedCount::<Test>::get(),
             CITIZEN_ISSUANCE_HIGH_REWARD_COUNT.saturating_add(1)
         );
+        assert_eq!(PendingRewardCount::<Test>::get(), 0);
+        assert!(!PendingRewards::<Test>::contains_key(0));
+        assert!(!PendingRewards::<Test>::contains_key(1));
+        assert!(!PendingIdentityRewardClaimed::<Test>::contains_key(
+            cid_number_hash_a
+        ));
+        assert!(!PendingAccountRewarded::<Test>::contains_key(1));
 
         let issuance_events: Vec<_> = System::events()
             .into_iter()
@@ -303,6 +315,38 @@ fn same_account_different_citizen_identities_only_rewards_once() {
     });
 }
 
+#[test]
+fn same_block_pending_tables_prevent_duplicate_account_reward() {
+    new_test_ext().execute_with(|| {
+        let first_hash = queue_voting_identity_registered(1, &citizen_cid_number("PENDING-A"));
+        let second_hash = queue_voting_identity_registered(1, &citizen_cid_number("PENDING-B"));
+
+        assert_eq!(PendingRewardCount::<Test>::get(), 1);
+        assert!(PendingIdentityRewardClaimed::<Test>::contains_key(
+            first_hash
+        ));
+        assert!(!PendingIdentityRewardClaimed::<Test>::contains_key(
+            second_hash
+        ));
+        System::assert_last_event(RuntimeEvent::CitizenIssuance(
+            Event::<Test>::CertificationRewardSkipped {
+                who: 1,
+                cid_number_hash: second_hash,
+                reason: SkipReason::AccountAlreadyRewarded,
+            },
+        ));
+
+        CitizenIssuance::on_finalize(System::block_number());
+        assert_eq!(Balances::free_balance(1), CITIZEN_ISSUANCE_HIGH_REWARD);
+        assert_eq!(RewardedCount::<Test>::get(), 1);
+        assert_eq!(PendingRewardCount::<Test>::get(), 0);
+        assert!(!PendingIdentityRewardClaimed::<Test>::contains_key(
+            first_hash
+        ));
+        assert!(!PendingAccountRewarded::<Test>::contains_key(1));
+    });
+}
+
 /// 按 tag 生成真实规则公民 CID 号(格式/校验和/机构码全合规)。
 fn citizen_cid_number(tag: &str) -> Vec<u8> {
     primitives::cid::generator::generate_cid_number(
@@ -322,6 +366,15 @@ fn citizen_cid_number(tag: &str) -> Vec<u8> {
 }
 
 fn notify_voting_identity_registered(
+    who: u64,
+    cid_number: &[u8],
+) -> <Test as frame_system::Config>::Hash {
+    let cid_number_hash = queue_voting_identity_registered(who, cid_number);
+    CitizenIssuance::on_finalize(System::block_number());
+    cid_number_hash
+}
+
+fn queue_voting_identity_registered(
     who: u64,
     cid_number: &[u8],
 ) -> <Test as frame_system::Config>::Hash {

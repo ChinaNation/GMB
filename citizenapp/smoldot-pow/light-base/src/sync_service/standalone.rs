@@ -17,7 +17,7 @@
 
 use super::{
     BlockNotification, ConfigRelayChainRuntimeCodeHint, FinalizedBlockRuntime, Notification,
-    SubscribeAll, ToBackground,
+    SubscribeAll, SyncActivitySnapshot, SyncMode, ToBackground,
 };
 use crate::{log, network_service, platform::PlatformRef, util};
 
@@ -51,49 +51,46 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
     mut from_foreground: Pin<Box<async_channel::Receiver<ToBackground>>>,
     network_service: Arc<network_service::NetworkServiceChain<TPlat>>,
 ) {
+    let sync = all::AllSync::new(all::Config {
+        chain_information,
+        block_number_bytes,
+        // Since this module doesn't verify block bodies, any block (even invalid) is accepted
+        // as long as it comes from a legitimate validator. Consequently, validators could
+        // perform attacks by sending completely invalid blocks. Passing `false` to this
+        // option would tighten the definition of what a "legitimate" validator is, and thus
+        // reduce the feasibility of attacks, but not in a significant way. Passing `true`,
+        // on the other hand, allows supporting chains that use custom consensus engines,
+        // which is considered worth the trade-off.
+        allow_unknown_consensus_engines: true,
+        sources_capacity: 32,
+        blocks_capacity: {
+            // This is the maximum number of blocks between two consecutive justifications.
+            1024
+        },
+        max_disjoint_headers: 1024,
+        max_requests_per_block: NonZero::<u32>::new(3).unwrap(),
+        download_ahead_blocks: {
+            // Assuming a maximum verification speed of 5k blocks/sec and a 95% latency of one
+            // second, this keeps the original smoldot download-ahead bound.
+            NonZero::<u32>::new(5000).unwrap()
+        },
+        download_bodies: false,
+        download_all_chain_information_storage_proofs: false,
+        code_trie_node_hint: runtime_code_hint.map(|hint| all::ConfigCodeTrieNodeHint {
+            merkle_value: hint.merkle_value,
+            storage_value: hint.storage_value,
+            closest_ancestor_excluding: hint.closest_ancestor_excluding,
+        }),
+    });
+    let startup_finalized_block_number = sync.finalized_block_number();
+
     let mut task = Task {
-        sync: Some(all::AllSync::new(all::Config {
-            chain_information,
-            block_number_bytes,
-            // Since this module doesn't verify block bodies, any block (even invalid) is accepted
-            // as long as it comes from a legitimate validator. Consequently, validators could
-            // perform attacks by sending completely invalid blocks. Passing `false` to this
-            // option would tighten the definition of what a "legitimate" validator is, and thus
-            // reduce the feasibility of attacks, but not in a significant way. Passing `true`,
-            // on the other hand, allows supporting chains that use custom consensus engines,
-            // which is considered worth the trade-off.
-            allow_unknown_consensus_engines: true,
-            sources_capacity: 32,
-            blocks_capacity: {
-                // This is the maximum number of blocks between two consecutive justifications.
-                1024
-            },
-            max_disjoint_headers: 1024,
-            max_requests_per_block: NonZero::<u32>::new(3).unwrap(),
-            download_ahead_blocks: {
-                // Verifying a block mostly consists in:
-                //
-                // - Verifying a sr25519 signature for each block, plus a VRF output when the
-                // block is claiming a primary BABE slot.
-                // - Verifying one ed25519 signature per authority for every justification.
-                //
-                // At the time of writing, the speed of these operations hasn't been benchmarked.
-                // It is likely that it varies quite a bit between the various environments (the
-                // different browser engines, and NodeJS).
-                //
-                // Assuming a maximum verification speed of 5k blocks/sec and a 95% latency of one
-                // second, the number of blocks to download ahead of time in order to not block
-                // is 5k.
-                NonZero::<u32>::new(5000).unwrap()
-            },
-            download_bodies: false,
-            download_all_chain_information_storage_proofs: false,
-            code_trie_node_hint: runtime_code_hint.map(|hint| all::ConfigCodeTrieNodeHint {
-                merkle_value: hint.merkle_value,
-                storage_value: hint.storage_value,
-                closest_ancestor_excluding: hint.closest_ancestor_excluding,
-            }),
-        })),
+        sync: Some(sync),
+        startup_finalized_block_number,
+        peer_finalized_block_numbers: HashMap::new(),
+        last_warp_finalized_block_number: None,
+        warp_request_count: 0,
+        warp_fragment_count: 0,
         network_up_to_date_best: true,
         network_up_to_date_finalized: true,
         known_finalized_runtime: None,
@@ -324,6 +321,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 finalized_storage_code_merkle_value,
                 finalized_body: _,
             }) => {
+                task.last_warp_finalized_block_number = Some(sync.finalized_block_number());
                 log!(
                     &task.platform,
                     Debug,
@@ -639,6 +637,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 best_block_number,
                 best_block_hash,
             }) => {
+                task.peer_finalized_block_numbers.insert(peer_id.clone(), 0);
                 task.peers_source_id_map.insert(
                     peer_id.clone(),
                     task.sync
@@ -650,6 +649,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
             }
 
             WakeUpReason::NetworkEvent(network_service::Event::Disconnected { peer_id }) => {
+                task.peer_finalized_block_numbers.remove(&peer_id);
                 let sync_source_id = task.peers_source_id_map.remove(&peer_id).unwrap();
                 let (_, requests) = task
                     .sync
@@ -774,6 +774,8 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 peer_id,
                 finalized_block_height,
             }) => {
+                task.peer_finalized_block_numbers
+                    .insert(peer_id.clone(), finalized_block_height);
                 let sync_source_id = *task.peers_source_id_map.get(&peer_id).unwrap();
                 task.sync
                     .as_mut()
@@ -826,6 +828,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                         abort.abort();
                     }
                 }
+                task.peer_finalized_block_numbers.clear();
                 task.from_network_service = Some(Box::pin(
                     // As documented, `subscribe().await` is expected to return quickly.
                     task.network_service.subscribe().await,
@@ -1012,6 +1015,40 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 let _ = send_back.send(out);
             }
 
+            WakeUpReason::ForegroundMessage(ToBackground::SyncActivitySnapshot { send_back }) => {
+                let sync = task.sync.as_ref().unwrap_or_else(|| unreachable!());
+                let (mode, active_warp_finalized) = if task.warp_request_count == 0 {
+                    (SyncMode::Regular, None)
+                } else {
+                    match sync.status() {
+                        all::Status::Sync => (SyncMode::Regular, None),
+                        all::Status::WarpSyncFragments {
+                            finalized_block_number,
+                            ..
+                        } => (SyncMode::WarpFragments, Some(finalized_block_number)),
+                        all::Status::WarpSyncChainInformation {
+                            finalized_block_number,
+                            ..
+                        } => (SyncMode::WarpChainInformation, Some(finalized_block_number)),
+                    }
+                };
+                let highest_peer_finalized_block_number = task
+                    .peer_finalized_block_numbers
+                    .values()
+                    .copied()
+                    .max()
+                    .filter(|height| *height > 0);
+                let _ = send_back.send(SyncActivitySnapshot {
+                    mode,
+                    startup_finalized_block_number: Some(task.startup_finalized_block_number),
+                    highest_peer_finalized_block_number,
+                    warp_finalized_block_number: active_warp_finalized
+                        .or(task.last_warp_finalized_block_number),
+                    warp_request_count: task.warp_request_count,
+                    warp_fragment_count: task.warp_fragment_count,
+                });
+            }
+
             WakeUpReason::ForegroundMessage(ToBackground::SerializeChainInformation {
                 send_back,
             }) => {
@@ -1083,6 +1120,9 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
             WakeUpReason::RequestFinished(request_id, Ok(RequestOutcome::WarpSync(Ok(result)))) => {
                 // Successful warp sync request.
                 let decoded = result.decode();
+                task.warp_fragment_count = task
+                    .warp_fragment_count
+                    .saturating_add(u64::try_from(decoded.fragments.len()).unwrap_or(u64::MAX));
                 let fragments = decoded
                     .fragments
                     .into_iter()
@@ -1260,6 +1300,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                     // pragmatic reasons we use a lower value.
                     Duration::from_secs(24),
                 );
+                task.warp_request_count = task.warp_request_count.saturating_add(1);
 
                 let (grandpa_request, abort) = future::abortable(grandpa_request);
                 let request_id = sync.add_request(
@@ -1444,6 +1485,15 @@ struct Task<TPlat: PlatformRef> {
     ///
     /// Always `Some`, except for temporary extraction.
     sync: Option<all::AllSync<future::AbortHandle, (libp2p::PeerId, codec::Role), ()>>,
+
+    /// 本次 addChain 实际采用的 finalized 起点，用于区分固定 checkpoint 与本机缓存恢复。
+    startup_finalized_block_number: u64,
+    /// peer 最近一次 GRANDPA neighbor packet 公布的 finalized 高度。
+    peer_finalized_block_numbers: HashMap<libp2p::PeerId, u64>,
+    /// warp 完成后保留目标高度，避免切回 regular 后诊断信息立即丢失。
+    last_warp_finalized_block_number: Option<u64>,
+    warp_request_count: u64,
+    warp_fragment_count: u64,
 
     /// If `Some`, contains the runtime of the current finalized block.
     known_finalized_runtime: Option<FinalizedBlockRuntime>,

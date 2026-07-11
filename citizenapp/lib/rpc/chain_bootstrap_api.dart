@@ -107,7 +107,7 @@ class ChainBootstrapManifest {
   final ChainBootstrapSecurity security;
 
   factory ChainBootstrapManifest.fromJson(Map<String, dynamic> json) {
-    if (_string(json, 'schema') != 'citizenapp.chain.bootstrap.v1') {
+    if (_string(json, 'schema') != 'citizenapp.chain.bootstrap.v2') {
       throw const ChainBootstrapApiException('链启动清单 schema 不匹配');
     }
     if (json['ok'] != true) {
@@ -115,6 +115,9 @@ class ChainBootstrapManifest {
     }
     if (_containsForbiddenRpcUrlKey(json)) {
       throw const ChainBootstrapApiException('链启动清单不得下发 RPC URL');
+    }
+    if (_containsForbiddenCheckpointKey(json)) {
+      throw const ChainBootstrapApiException('链启动清单不得下发远端 checkpoint');
     }
 
     final manifest = ChainBootstrapManifest(
@@ -190,25 +193,43 @@ class ChainBootstrapLightClient {
     required this.mode,
     required this.truthSource,
     required this.apiIsTruth,
-    required this.lightSyncStateUrl,
-    required this.lightSyncStateSha256,
+    required this.bundledAssetsRequired,
   });
 
   final String mode;
   final String truthSource;
   final bool apiIsTruth;
-  final String? lightSyncStateUrl;
-  final String lightSyncStateSha256;
+  final List<String> bundledAssetsRequired;
 
   factory ChainBootstrapLightClient.fromJson(Map<String, dynamic> json) {
-    final checkpoint = _map(json, 'checkpoint');
-    final url = checkpoint['light_sync_state_url'];
+    const requiredKeys = {
+      'mode',
+      'truth_source',
+      'api_is_truth',
+      'bundled_assets_required',
+    };
+    if (json.length != requiredKeys.length ||
+        !requiredKeys.every(json.containsKey)) {
+      throw const ChainBootstrapApiException(
+        '链启动清单 light_client 字段不完整或包含未知字段',
+      );
+    }
+    final bundledAssets = json['bundled_assets_required'];
+    if (bundledAssets is! List ||
+        bundledAssets.length != 2 ||
+        bundledAssets[0] != 'assets/chainspec.json' ||
+        bundledAssets[1] != 'assets/light_sync_state.json') {
+      throw const ChainBootstrapApiException(
+        '链启动清单 bundled_assets_required 无效',
+      );
+    }
     return ChainBootstrapLightClient(
       mode: _string(json, 'mode'),
       truthSource: _string(json, 'truth_source'),
       apiIsTruth: _bool(json, 'api_is_truth'),
-      lightSyncStateUrl: url is String && url.trim().isNotEmpty ? url : null,
-      lightSyncStateSha256: _sha256(checkpoint, 'light_sync_state_sha256'),
+      bundledAssetsRequired: List<String>.unmodifiable(
+        bundledAssets.cast<String>(),
+      ),
     );
   }
 }
@@ -337,14 +358,6 @@ String _hex32(Map<String, dynamic> json, String key) {
   throw ChainBootstrapApiException('链启动清单字段 $key 不是 32 字节 hex');
 }
 
-String _sha256(Map<String, dynamic> json, String key) {
-  final value = _string(json, key).toLowerCase();
-  if (RegExp(r'^[0-9a-f]{64}$').hasMatch(value)) {
-    return value;
-  }
-  throw ChainBootstrapApiException('链启动清单字段 $key 不是 sha256 hex');
-}
-
 String _httpsOrLocalUrl(Map<String, dynamic> json, String key) {
   final value = _string(json, key);
   final uri = Uri.tryParse(value);
@@ -398,6 +411,26 @@ bool _containsForbiddenRpcUrlKey(Object? value) {
   }
   if (value is List) {
     return value.any(_containsForbiddenRpcUrlKey);
+  }
+  return false;
+}
+
+bool _containsForbiddenCheckpointKey(Object? value) {
+  if (value is Map) {
+    for (final entry in value.entries) {
+      final key = entry.key.toString().toLowerCase();
+      if (key == 'checkpoint' ||
+          key == 'light_sync_state_url' ||
+          key == 'light_sync_state_sha256') {
+        return true;
+      }
+      if (_containsForbiddenCheckpointKey(entry.value)) {
+        return true;
+      }
+    }
+  }
+  if (value is List) {
+    return value.any(_containsForbiddenCheckpointKey);
   }
   return false;
 }

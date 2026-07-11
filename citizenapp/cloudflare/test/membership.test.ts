@@ -32,7 +32,25 @@ describe('membership route', () => {
       identity_level: 'candidate',
       has_candidate_identity: true
     });
-    expect(body.eligible_levels).toEqual(['visitor', 'voting', 'candidate']);
+    // 精确匹配（禁止降档）：candidate 身份只能订 candidate。
+    expect(body.eligible_levels).toEqual(['candidate']);
+  });
+
+  it('offers only visitor and visitor_pro to a visitor identity (no upgrade)', async () => {
+    const env = fakeEnv({
+      membership: membershipRow({ membership_level: 'visitor' }),
+      storageResponses: [null, null]
+    });
+
+    const response = await membershipRoute(request('https://w/v1/square/membership'), env);
+    const body = (await response.json()) as {
+      eligible_levels: string[];
+      identity: { identity_level: string };
+    };
+
+    expect(body.identity.identity_level).toBe('visitor');
+    // 访客身份可订两档访客会员：黄金(visitor) + 白金(visitor_pro)。
+    expect(body.eligible_levels).toEqual(['visitor', 'visitor_pro']);
   });
 
   it('does not activate candidate membership for voting-only identity', async () => {
@@ -50,7 +68,8 @@ describe('membership route', () => {
 
     expect(body.active).toBe(false);
     expect(body.inactive_code).toBe('membership_identity_required');
-    expect(body.eligible_levels).toEqual(['visitor', 'voting']);
+    // 精确匹配（禁止降档）：voting 身份只能订 voting。
+    expect(body.eligible_levels).toEqual(['voting']);
   });
 });
 

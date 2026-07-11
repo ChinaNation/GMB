@@ -15,26 +15,33 @@ describe('chain bootstrap manifest', () => {
       env({
         CITIZEN_CHAIN_BOOTNODES: `${bootnodeA}\n${bootnodeB}\n${bootnodeA}`,
         CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS: '120',
-        CITIZEN_CHAIN_LIGHT_SYNC_STATE_URL:
-          'https://api.onchina.org/v1/chain/light-sync-state.json',
         CITIZEN_CHAIN_RPC_URL: 'https://rpc.internal.example',
         CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
         CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret'
       })
     );
 
-    expect(response.schema).toBe('citizenapp.chain.bootstrap.v1');
+    expect(response.schema).toBe('citizenapp.chain.bootstrap.v2');
     expect(response.chain.ss58_format).toBe(2027);
     expect(response.light_client.mode).toBe('smoldot');
     expect(response.light_client.api_is_truth).toBe(false);
-    expect(response.light_client.checkpoint.source).toBe('remote_url');
+    expect(response.light_client).toEqual({
+      mode: 'smoldot',
+      truth_source: 'p2p_finalized_storage',
+      api_is_truth: false,
+      bundled_assets_required: ['assets/chainspec.json', 'assets/light_sync_state.json']
+    });
     expect(response.p2p.bootnodes).toEqual([bootnodeA, bootnodeB]);
     expect(response.services.square_base_url).toBe('https://api.onchina.org/v1/square');
     expect(response.services.chat_base_url).toBe('https://api.onchina.org/v1/chat');
     expect(response.services.signed_extrinsic_relay.enabled).toBe(false);
     expect(response.services.signed_extrinsic_relay.path).toBeNull();
     expect(response.security.rpc_proxy).toBe(false);
-    expect(JSON.stringify(response)).not.toContain('rpc.internal.example');
+    const serialized = JSON.stringify(response);
+    expect(serialized).not.toContain('rpc.internal.example');
+    expect(serialized).not.toContain('checkpoint');
+    expect(serialized).not.toContain('light_sync_state_url');
+    expect(serialized).not.toContain('light_sync_state_sha256');
   });
 
   it('exposes only the signed extrinsic relay path when the relay is enabled', () => {
@@ -79,9 +86,9 @@ describe('chain bootstrap manifest', () => {
 
     expect(response.p2p.bootnodes).toEqual([]);
     expect(response.p2p.bootnodes_source).toBe('bundled_chainspec');
-    expect(response.light_client.checkpoint.source).toBe('bundled_asset');
-    expect(response.light_client.checkpoint.light_sync_state_url).toBeNull();
-    expect(response.light_client.checkpoint.light_sync_state_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(Object.keys(response.light_client).sort()).toEqual(
+      ['api_is_truth', 'bundled_assets_required', 'mode', 'truth_source'].sort()
+    );
   });
 
   it('routes GET /v1/chain/bootstrap with cache headers', async () => {
@@ -95,7 +102,7 @@ describe('chain bootstrap manifest', () => {
     const body = (await response.json()) as { schema: string; ok: boolean };
     expect(body).toMatchObject({
       ok: true,
-      schema: 'citizenapp.chain.bootstrap.v1'
+      schema: 'citizenapp.chain.bootstrap.v2'
     });
   });
 });

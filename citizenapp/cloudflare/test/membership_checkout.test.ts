@@ -149,7 +149,36 @@ describe('subscribe challenge (signed, level-bound)', () => {
         }),
         env
       )
-    ).rejects.toMatchObject({ code: 'membership_identity_required' });
+    ).rejects.toMatchObject({ code: 'membership_identity_mismatch' });
+  });
+
+  it('rejects a downgrade: voting identity cannot subscribe visitor', async () => {
+    const db = new ChallengeDb();
+    const env = fakeEnv({ db, storageResponses: [votingIdentityHex(), null] });
+    await expect(
+      subscribeChallengeRoute(
+        req('/v1/square/membership/subscribe/challenge', {
+          owner_account: owner,
+          membership_level: 'visitor'
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'membership_identity_mismatch' });
+  });
+
+  it('issues a visitor_pro (白金) challenge for a visitor identity', async () => {
+    const db = new ChallengeDb();
+    const env = fakeEnv({ db, storageResponses: [null, null] });
+    const res = await subscribeChallengeRoute(
+      req('/v1/square/membership/subscribe/challenge', {
+        owner_account: owner,
+        membership_level: 'visitor_pro'
+      }),
+      env
+    );
+    expect(((await res.json()) as { membership_level: string }).membership_level).toBe(
+      'visitor_pro'
+    );
   });
 });
 

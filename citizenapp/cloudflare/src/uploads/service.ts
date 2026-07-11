@@ -4,7 +4,7 @@ import { isSha256Hex, sha256Hex } from '../shared/hash';
 import { createId } from '../shared/ids';
 import { nowMs, secondsFromNow } from '../shared/time';
 import { requireActiveMembership } from '../membership/service';
-import { membershipPlan } from '../membership/plans';
+import { membershipPlan, type MembershipLevel } from '../membership/plans';
 import {
   createProviderUpload,
   refreshProviderAssetState,
@@ -451,8 +451,10 @@ export async function streamWebhookRoute(request: Request, env: Env): Promise<Re
 
 export { validateUploadItems, estimateUploadBytes };
 
-function normalizeMembershipLevel(value: string): 'visitor' | 'voting' | 'candidate' {
-  if (value === 'candidate' || value === 'voting') {
+function normalizeMembershipLevel(value: string): MembershipLevel {
+  // 保留 visitor_pro（民主），使 membershipPlan() 返回其对齐投票的高额度；
+  // 而竞选专属发帖闸门用 membershipLevel !== 'candidate' 仍将民主视作访客身份。
+  if (value === 'candidate' || value === 'voting' || value === 'visitor_pro') {
     return value;
   }
   return 'visitor';

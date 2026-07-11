@@ -6,7 +6,7 @@ import QrScannerModal from '../components/QrScannerModal'
 import { buildSquareActionSignRequest, parseSignResponseSignature } from '../lib/qrV1'
 
 type MembershipLevel = 'visitor' | 'visitor_pro' | 'voting' | 'candidate'
-// 链上身份档（与会员档解耦）：访客身份含黄金/白金两档会员。
+// 链上身份档（与会员档解耦）：访客身份含自由/民主两档会员。
 type IdentityTier = 'visitor' | 'voting' | 'candidate'
 type TabKey = 'subscribe' | 'cancel'
 type Tone = 'error' | 'info' | 'success'
@@ -32,17 +32,17 @@ const plans: Plan[] = [
   {
     level: 'visitor',
     requiredIdentity: 'visitor',
-    name: '黄金会员',
+    name: '自由会员',
     price: '$2.99 / 月',
     identity: '任意钱包账户',
     dynamic: '动态：300 字、9 张标清图片、1 分钟标清视频',
     article: '文章：20,000 字、50 张标清图片、1 张高清首图',
   },
   {
-    // 白金会员：访客身份的 $9.99 高权益档，权益对齐投票公民会员，唯身份匿名。
+    // 民主会员：访客身份的 $9.99 高权益档，权益对齐投票公民会员，唯身份匿名。
     level: 'visitor_pro',
     requiredIdentity: 'visitor',
-    name: '白金会员',
+    name: '民主会员',
     price: '$9.99 / 月',
     identity: '任意钱包账户',
     dynamic: '动态：300 字、9 张高清图片、30 分钟高清视频',
@@ -178,7 +178,7 @@ async function postJson(path: string, body: unknown): Promise<Record<string, unk
 export default function Membership() {
   const [activeTab, setActiveTab] = useState<TabKey>('subscribe')
   const [ownerAccount, setOwnerAccount] = useState('')
-  // null=未选中任何会员卡（取消订阅态）；订阅态默认黄金 visitor。
+  // null=未选中任何会员卡（取消订阅态）；订阅态默认自由 visitor。
   const [selectedLevel, setSelectedLevel] = useState<MembershipLevel | null>('visitor')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ tone: Tone; text: string } | null>(null)
@@ -202,7 +202,7 @@ export default function Membership() {
     setActiveTab(tab)
     setSigning(null)
     setMessage(null)
-    // 取消订阅无需选中会员档：切到「取消订阅」即释放所有卡片选中；切回订阅默认黄金。
+    // 取消订阅无需选中会员档：切到「取消订阅」即释放所有卡片选中；切回订阅默认自由。
     setSelectedLevel(tab === 'cancel' ? null : (prev) => prev ?? 'visitor')
   }, [])
 
@@ -436,7 +436,7 @@ export default function Membership() {
 
                 <div className="flex-1" />
 
-                {/* 访客档：黄金/白金分段切换（默认黄金） */}
+                {/* 访客档：自由/民主分段切换（默认自由） */}
                 {hasToggle && (
                   <div className="mt-4 flex rounded-lg bg-slate-100 p-1 text-[13px] font-bold">
                     {tierPlans.map((plan) => {

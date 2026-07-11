@@ -33,13 +33,11 @@ export interface Env {
   CITIZEN_CHAIN_RPC_URL?: string;
   CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID?: string;
   CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET?: string;
-  // 轻节点启动清单只下发公开 bootnodes / checkpoint 信息，不下发 RPC 地址。
+  // 轻节点启动清单只下发公开 bootnodes 和冻结链身份，不下发 checkpoint 或 RPC 地址。
   CITIZEN_CHAIN_BOOTNODES?: string;
   CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS?: string;
   CITIZEN_CHAIN_GENESIS_HASH?: string;
   CITIZEN_CHAIN_STATE_ROOT?: string;
-  CITIZEN_CHAIN_LIGHT_SYNC_STATE_URL?: string;
-  CITIZEN_CHAIN_LIGHT_SYNC_STATE_SHA256?: string;
   // 已签名交易兜底广播：只转发完整 signed extrinsic，不提供通用 JSON-RPC proxy。
   CHAIN_EXTRINSIC_RELAY_ENABLED?: string;
   CHAIN_EXTRINSIC_RELAY_MAX_BYTES?: string;
@@ -54,6 +52,8 @@ export interface Env {
   // Stripe secret key 只允许放 Worker Secret，用于官网创建 Checkout Session。
   STRIPE_SECRET_KEY?: string;
   STRIPE_PRICE_VISITOR?: string;
+  // 民主会员（visitor_pro）价格 ID：访客身份的 $9.99 高权益档。
+  STRIPE_PRICE_VISITOR_PRO?: string;
   STRIPE_PRICE_VOTING?: string;
   STRIPE_PRICE_CANDIDATE?: string;
   CITIZENAPP_MEMBERSHIP_SUCCESS_URL?: string;
@@ -201,8 +201,9 @@ export interface SquareFeedMediaItem {
 export interface SquarePostFeedItem extends SquarePostRow {
   media_items?: SquareFeedMediaItem[];
   // 作者徽章信号（公开）：身份档=颜色、会员匹配身份档=勾。由本页去重作者统一读链上身份+批量读会员填充。
+  // identity_level 是链上身份档；membership_level 是已购买会员档（含 visitor_pro 民主）。
   identity_level?: 'visitor' | 'voting' | 'candidate';
-  membership_level?: 'visitor' | 'voting' | 'candidate' | null;
+  membership_level?: 'visitor' | 'visitor_pro' | 'voting' | 'candidate' | null;
   membership_active?: boolean;
 }
 
@@ -244,8 +245,8 @@ export interface UserProfileResponse {
   is_certified: boolean;
   /// 链上身份档位：visitor 未认证 / voting 认证投票公民 / candidate 认证竞选公民。
   identity_level: 'visitor' | 'voting' | 'candidate';
-  /// 已购买的会员档位（公开）；未购买为 null。徽章「勾」= 会员档与链上身份档匹配且有效。
-  membership_level: 'visitor' | 'voting' | 'candidate' | null;
+  /// 已购买的会员档位（公开）；未购买为 null。含 visitor_pro（民主）。徽章「勾」= 会员有效。
+  membership_level: 'visitor' | 'visitor_pro' | 'voting' | 'candidate' | null;
   /// 会员是否当前有效（订阅生效且未过期）。
   membership_active: boolean;
   counts: UserProfileCounts;

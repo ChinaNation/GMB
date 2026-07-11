@@ -6,7 +6,7 @@ import { ownerPubkeyHex } from '../shared/ids';
 import { consumeActionSignature, issueActionChallenge } from '../account/action_challenge';
 import {
   assertMembershipLevel,
-  identitySatisfies,
+  identityEligibleForPlan,
   membershipPlan,
   type MembershipLevel
 } from './plans';
@@ -89,14 +89,16 @@ async function assertCheckoutEligibility(
   membershipLevel: MembershipLevel
 ): Promise<void> {
   const plan = membershipPlan(membershipLevel);
-  if (plan.required_identity_level === 'visitor') {
-    return;
-  }
-
+  // 精确匹配：读链身份，必须恰好等于该会员所属身份档，禁止降档/越级。
+  // 访客档（visitor / visitor_pro）也要确认账户确无 voting/candidate 身份。
   try {
     const identity = await fetchChainIdentityState(env, ownerAccount);
-    if (!identitySatisfies(identity.identity_level, plan.required_identity_level)) {
-      throw new HttpError(403, 'membership_identity_required', '当前链上身份不满足该会员等级');
+    if (!identityEligibleForPlan(identity.identity_level, plan)) {
+      throw new HttpError(
+        403,
+        'membership_identity_mismatch',
+        '当前身份不能订阅该会员（禁止降档或越级）'
+      );
     }
   } catch (error) {
     if (error instanceof HttpError) {
@@ -174,7 +176,9 @@ function priceIdForMembership(env: Env, membershipLevel: MembershipLevel): strin
       ? env.STRIPE_PRICE_CANDIDATE
       : membershipLevel === 'voting'
         ? env.STRIPE_PRICE_VOTING
-        : env.STRIPE_PRICE_VISITOR;
+        : membershipLevel === 'visitor_pro'
+          ? env.STRIPE_PRICE_VISITOR_PRO
+          : env.STRIPE_PRICE_VISITOR;
   if (!priceId) {
     throw new HttpError(503, 'stripe_price_not_configured', 'Stripe 会员价格 ID 未配置');
   }

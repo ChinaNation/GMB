@@ -462,7 +462,7 @@ class _ImHeader extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              '信息',
+              '聊天',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w700,

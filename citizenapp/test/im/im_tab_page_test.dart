@@ -8,7 +8,7 @@ import 'package:citizenapp/im/im_tab_page.dart';
 import 'package:citizenapp/im/storage/im_isar_store.dart';
 
 void main() {
-  testWidgets('信息 Tab renders conversation list for communication account',
+  testWidgets('聊天 Tab renders conversation list for communication account',
       (tester) async {
     final store = _FakeImStore(
       conversations: [
@@ -36,7 +36,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('信息'), findsOneWidget);
+    expect(find.text('聊天'), findsOneWidget);
     expect(find.text('Bob'), findsOneWidget);
     expect(find.text('bob-wallet'), findsNothing);
     expect(find.text('hello'), findsOneWidget);
@@ -46,7 +46,7 @@ void main() {
     expect(find.byIcon(Icons.qr_code_2_rounded), findsNothing);
   });
 
-  testWidgets('信息 Tab deletes one local conversation after confirmation',
+  testWidgets('聊天 Tab deletes one local conversation after confirmation',
       (tester) async {
     final store = _FakeImStore(
       conversations: [

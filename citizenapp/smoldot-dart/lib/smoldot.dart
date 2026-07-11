@@ -22,7 +22,6 @@
 ///   final client = SmoldotClient(
 ///     config: SmoldotConfig(
 ///       maxLogLevel: 3,
-///       maxChains: 8,
 ///     ),
 ///   );
 ///
@@ -126,6 +125,7 @@ export 'src/types.dart'
         JsonRpcError,
         ChainStatus,
         ChainInfo,
+        LightClientSyncMode,
         LightClientStatusSnapshot,
         SystemAccountSnapshot,
         LogLevel,

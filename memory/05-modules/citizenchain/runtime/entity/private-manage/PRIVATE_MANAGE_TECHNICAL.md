@@ -20,6 +20,8 @@
 - 不承担多签转账，转账只归 `multisig-transfer`。
 - 不承担管理员集合变更，管理员真源只归 `private-admins`。
 - 关闭机构账户时通过 `public-manage` 的封存表识别创世机构，创世机构永不可按普通私权机构关闭。
+- 机构业务状态只解释为占号中、运行中、永久关闭：主账户登记存在但尚无机构记录即占号中，`Active` 即运行中，`Closed` 即永久关闭；关闭后禁止恢复，只能用新 CID 新建机构，名称允许与历史机构相同。
+- 节点 `core/node_guard/cid_lifecycle.rs` 以 RAW storage 再次强制 CID 不删除/不复用、公私权不重复和永久关闭终态，runtime 升级不能绕过。
 
 ## 管理员写入边界
 

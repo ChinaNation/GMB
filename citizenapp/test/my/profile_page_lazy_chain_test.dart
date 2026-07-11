@@ -23,7 +23,10 @@ class _CountingMyIdService extends MyIdService {
   @override
   Future<MyIdState> getState() async {
     liveReadCount += 1;
-    return const MyIdState(identityStatus: MyIdIdentityStatus.queryFailed);
+    return const MyIdState(
+      tier: MyIdTier.visitor,
+      status: MyIdStatus.queryFailed,
+    );
   }
 }
 

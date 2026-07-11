@@ -40,6 +40,8 @@ class SquareMembershipState {
     required this.expiresAt,
     this.membershipLevel,
     this.subscriptionStatus,
+    this.subscriptionActive = false,
+    this.cancelAtPeriodEnd = false,
     this.inactiveCode,
     this.inactiveMessage,
     this.identityLevel,
@@ -52,6 +54,15 @@ class SquareMembershipState {
   final int expiresAt;
   final String? membershipLevel;
   final String? subscriptionStatus;
+
+  /// 订阅是否已支付且未过期（worker `subscription_active`）；与 [active]（含链上
+  /// 身份资格的最终权益）区分——按钮三态只看订阅本身，不看身份资格。
+  final bool subscriptionActive;
+
+  /// 是否已在官网发起「到期取消」（Stripe `cancel_at_period_end`）：true=已取消
+  /// 但当期未到期（按钮显示「续订会员」）；false=自动续费中（按钮显示「取消订阅」）。
+  final bool cancelAtPeriodEnd;
+
   final String? inactiveCode;
   final String? inactiveMessage;
   final String? identityLevel;
@@ -457,6 +468,7 @@ class SquareApiClient
     );
     final membership = data['membership'];
     final active = data['active'] == true;
+    final subscriptionActive = data['subscription_active'] == true;
     final plans = _parseMembershipPlans(data['plans']);
     final identity = data['identity'] is Map<String, dynamic>
         ? data['identity'] as Map<String, dynamic>
@@ -478,6 +490,9 @@ class SquareApiClient
       expiresAt: _asInt(membership['expires_at']),
       membershipLevel: membership['membership_level']?.toString(),
       subscriptionStatus: membership['subscription_status']?.toString(),
+      subscriptionActive: subscriptionActive,
+      cancelAtPeriodEnd: membership['cancel_at_period_end'] == true ||
+          _asInt(membership['cancel_at_period_end']) != 0,
       inactiveCode: data['inactive_code']?.toString(),
       inactiveMessage: data['inactive_message']?.toString(),
       identityLevel: identity['identity_level']?.toString(),

@@ -43,6 +43,7 @@ dependencies:
   flutter_chat_ui: ^2.11.1
   flutter_chat_core: ^2.9.0
   cryptography: ^2.9.0
+  url_launcher: ^6.3.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -69,6 +70,7 @@ flutter:
     - assets/icons/file-user.svg
     - assets/icons/message-square-text.svg
     - assets/icons/scale.svg
+    - assets/icons/tank.svg
     - assets/icons/contact-round.svg
     - assets/icons/download.svg
     - assets/icons/government-line.svg

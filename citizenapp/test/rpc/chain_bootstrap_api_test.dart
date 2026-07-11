@@ -33,6 +33,10 @@ void main() {
     expect(manifest.chain.chainId, 'citizenchain');
     expect(manifest.chain.ss58Format, 2027);
     expect(manifest.lightClient.apiIsTruth, isFalse);
+    expect(manifest.lightClient.bundledAssetsRequired, [
+      'assets/chainspec.json',
+      'assets/light_sync_state.json',
+    ]);
     expect(manifest.security.rpcProxy, isFalse);
     expect(manifest.services.signedExtrinsicRelayEnabled, isFalse);
     expect(manifest.p2p.bootnodes, [_bootnodeA, _bootnodeB]);
@@ -62,6 +66,25 @@ void main() {
 
     expect(
       () => ChainBootstrapManifest.fromJson(data),
+      throwsA(isA<ChainBootstrapApiException>()),
+    );
+  });
+
+  test('ChainBootstrapApi 拒绝 v1 和任何远端 checkpoint 字段', () {
+    final v1 = _manifest()..['schema'] = 'citizenapp.chain.bootstrap.v1';
+    expect(
+      () => ChainBootstrapManifest.fromJson(v1),
+      throwsA(isA<ChainBootstrapApiException>()),
+    );
+
+    final checkpoint = _manifest();
+    (checkpoint['light_client'] as Map<String, dynamic>)['checkpoint'] = {
+      'source': 'remote_url',
+      'light_sync_state_url': 'https://api.example/light-sync-state.json',
+      'light_sync_state_sha256': 'ab' * 32,
+    };
+    expect(
+      () => ChainBootstrapManifest.fromJson(checkpoint),
       throwsA(isA<ChainBootstrapApiException>()),
     );
   });
@@ -134,7 +157,7 @@ void main() {
 
 Map<String, dynamic> _manifest() => {
       'ok': true,
-      'schema': 'citizenapp.chain.bootstrap.v1',
+      'schema': 'citizenapp.chain.bootstrap.v2',
       'generated_at': 1800000000000,
       'cache_ttl_seconds': 300,
       'chain': {
@@ -157,12 +180,6 @@ Map<String, dynamic> _manifest() => {
           'assets/chainspec.json',
           'assets/light_sync_state.json',
         ],
-        'checkpoint': {
-          'source': 'bundled_asset',
-          'light_sync_state_url': null,
-          'light_sync_state_sha256':
-              'c5005187368b7ffbb0a95f67cf9f6f3d0dbfbe1ae91d456269198a2a311710b8',
-        },
       },
       'p2p': {
         'bootnodes': [_bootnodeA, _bootnodeB],

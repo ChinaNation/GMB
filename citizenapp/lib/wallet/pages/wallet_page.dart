@@ -170,9 +170,9 @@ class _MyWalletPageState extends State<MyWalletPage> {
           await MyIdService(walletManager: _walletService).getState();
       if (!mounted) return;
       setState(() {
-        _identityWalletAccount = identity.isCertified
-            ? identity.identityWalletAccount?.trim()
-            : null;
+        // 纯默认用户模型:身份钱包 = 默认用户(若为公民),标记该钱包。
+        _identityWalletAccount =
+            identity.isCitizen ? identity.votingAccount?.trim() : null;
       });
     } catch (e) {
       debugPrint('wallet identity marker load failed: $e');

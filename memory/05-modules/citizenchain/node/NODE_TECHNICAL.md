@@ -35,6 +35,15 @@
 - 包名约束：本地 crate 的 `name` 必须继续保持 `libp2p-websocket`，否则 Cargo patch 无法覆盖上游同名包。
 - 当前改动点：公开 `tls::Config` 的 `client` 字段，支持节点在 WSS transport 中注入自定义 TLS 客户端。TLS 层只负责传输加密，P2P 身份认证仍由 Noise 协议通过 peer ID 保证。
 
+### 1.4 节点永久规则导入层
+
+- 所有区块统一按 `ConstitutionGuard<NodeGuard<PowBlockImport>>` 导入；本地产块和网络区块没有旁路。
+- `ConstitutionGuard` 保持独立、最外层，只负责公民宪法最高规则。
+- `NodeGuard` 统一承载固定治理骨架、全节点 PoW 发行、公民认证发行和 CID/机构生命周期，不为单项规则新增平行包装器。
+- 全节点与公民认证两类 `on_finalize` 铸发进入共享发行计划，按账户汇总后统一核对余额与总发行；未登记的 finalize 发行直接拒绝。
+- CID 策略把机构解释为占号中、运行中、永久关闭三种业务状态；关闭后禁止恢复或复用 CID，但允许新 CID 使用相同机构名称。
+- 详细规则、信任上限与验收基线见 `memory/05-modules/citizenchain/node/node-guard/NODE_GUARD_TECHNICAL.md`。
+
 ## 2. 挖矿子系统
 
 ### 2.1 CPU 挖矿
@@ -95,6 +104,7 @@
 - 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、44 个权威节点 bootnode、token 属性和协议 ID。
 - 创世链状态包：`citizenchain/scripts/bake-chainspec.sh` 在临时节点完成创世物化后导出 `target/chainspec/genesis-state/`,包含 `chains/citizenchain/db` 与 `manifest.json`。正式安装包把该目录作为 `genesis-state/` 资源内置。2026-07-04 起源码创世口径为国家/省/市 49,593 个公权机构；同日已用 GitHub `CitizenChain WASM` #99 / run `28716997121` 的同提交 CI WASM 完成正式 bake。
 - 当前冻结锚点（49,593 源码口径,Git commit `42cbcb1c98cb6d69ff2e8172bed8cb2dab7e4442`,CI run `28716997121`）：`genesis_hash=0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971`、`state_root=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`、`runtime_wasm_hash=c3cf273ec78acc373020873cf51370f5e3ec867b296842b3f27fc6eb163db1bc`、`chainspec_hash=2c2557a356b99f34d9d5a42ddd10af85a7f8b6c7615550f3c7c5fc8dbaa0de89`、`public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。
+- 2026-07-10 节点守卫真实启动复核：当前源码通过 `citizenchain-fresh` 物化的新创世可启动，创世哈希为 `0xdc396b367c86adbffb29bd930ec25d2656f1fdf7fee2cf2ef5f04a4d4283dfd2`；上述冻结锚点仍使用旧 `AdminAccount` SCALE 字段模型，节点守卫在 NRC 创世记录上按 fail-closed 报 `AdminAccountDecodeFailed` 并拒绝启动。该状态沿用固定治理骨架任务已登记的部署风险，正式部署前必须按预上线重新创世流程重新烘焙 chainspec 与创世状态包；不得放宽节点守卫兼容旧字段模型。
 - 上一轮冻结锚点（49,593 旧发布锚点，仅作历史对照）：`genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`、`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`、`runtime_wasm_hash=467a031f7021f46fd18a38963d826a32e085e44503b6b1abe66535b95554fca1`、`chainspec_hash=57e8e641ba0fa371262a6cfcf5ba53a0607a6caca940d16d77729ae45b0cf3de`、`public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`。
 - 上一轮冻结锚点（49,581 旧口径，仅作历史对照，不能作为当前发布锚点）：`genesis_hash=0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`、`state_root=0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0`、`runtime_wasm_hash=70e6d1fd01b763628e8b595399487bdfe19191a44a4cfadd5255be0577b9310a`、`chainspec_hash=650c1ed8462a326e43394576eaa99f7533f9ee427cf1d80c58cd2922a82d7558`、`public_institution_root=4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`。
 - 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 加载冻结 plain JSON;[process/mod.rs](../../../../citizenchain/node/src/home/process/mod.rs) 首次启动时优先把内置 `genesis-state/chains/citizenchain/db` 复制到本机数据目录,没有内置包才回退到 runtime `GenesisBuilder` 本地物化。
@@ -265,9 +275,16 @@
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
-| `src/core/service.rs` | 830 | 服务工厂、PoW 算法、CPU 挖矿、GRANDPA 角色选择、两道 L2 共识守卫串接 |
-| `src/core/constitution.rs` | 1535 | L2 共识守卫:宪法不可修改条款/核心章档位/公投·护宪凭据逐块背书 + 桌面端宪法 HTML 渲染 |
-| `src/core/governance_skeleton.rs` | 641 | L2 共识守卫(档 A):固定治理骨架 I1..I7 逐块背书(固定机构存在性/名额/NJD 护宪 7 席),setCode 改不动 |
+| `src/core/service.rs` | 874 | 服务工厂、PoW 算法、CPU 挖矿、GRANDPA 角色选择；网络与挖矿统一装配 `ConstitutionGuard<NodeGuard<PowBlockImport>>` |
+| `src/core/constitution/mod.rs` | 1603 | 宪法 RAW key、SCALE 镜像、创世基准、严格不变式与 38 个策略/渲染测试 |
+| `src/core/constitution/guard.rs` | 214 | 独立最外层 `ConstitutionGuard`：启动全检、正常/预计算 delta、warp 提交前校验与 fail-closed |
+| `src/core/constitution/render.rs` | 164 | 桌面端宪法 HTML 渲染，与共识守卫物理分离 |
+| `src/core/constitution/constitution_shell.html` | 723 | 公民宪法桌面展示 HTML/CSS 外壳 |
+| `src/core/node_guard/mod.rs` | 688 | `NodeGuard` 统一 `BlockImport` 包装器；共享 finalize 前/后只读执行、发行计划、warp 扫描、fail-closed 与内层委派 |
+| `src/core/node_guard/cid_lifecycle.rs` | 1137 | 公民 CID 与公私权机构 CID 永久策略；占号/运行/永久关闭单调状态机、跨 namespace 唯一性、创世封存账户索引与状态导入限制 |
+| `src/core/node_guard/citizen_issuance.rs` | 535 | 公民认证发行永久策略；按首次身份、待发队列、双重防重、编译期档位及共享余额计划逐块复算 |
+| `src/core/node_guard/fullnode_issuance.rs` | 737 | 全节点 PoW 发行永久策略；按 PoW digest、编译期常量、共享发行计划和审计状态逐块复算 |
+| `src/core/node_guard/governance_skeleton.rs` | 487 | `NodeGuard` 内部固定治理骨架纯策略：I1..I7 逐块背书固定机构存在性、名额及 NJD 护宪 7 席 |
 | `src/core/rpc.rs` | 419 | 节点核心 RPC、钱包绑定签名、哈希率查询、轻节点同步 |
 | `src/mining/gpu_miner.rs` | 392 | OpenCL 初始化、GPU kernel 调度、哈希率统计 |
 | `src/core/command.rs` | 237 | CLI 子命令路由 |

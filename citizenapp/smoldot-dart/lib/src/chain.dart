@@ -176,7 +176,7 @@ class Chain {
     return ChainInfo(
       chainId: chainId,
       name: chainName.result as String,
-      status: snapshot.isSyncing ? ChainStatus.syncing : ChainStatus.synced,
+      status: snapshot.chainStatus,
       peerCount: snapshot.peerCount,
       bestBlockNumber: snapshot.bestBlockNumber,
       bestBlockHash: snapshot.bestBlockHash,
@@ -208,7 +208,7 @@ class Chain {
   Future<ChainStatus> getStatus() async {
     _ensureNotDisposed();
     final snapshot = await getStatusSnapshot();
-    return snapshot.isSyncing ? ChainStatus.syncing : ChainStatus.synced;
+    return snapshot.chainStatus;
   }
 
   /// 中文注释：把轻节点可观察状态收口成结构化对象，避免业务层继续直接拼裸 RPC。
@@ -424,9 +424,10 @@ class Chain {
     final stopwatch = Stopwatch()..start();
 
     while (stopwatch.elapsed < timeout) {
-      final status = await getStatus();
+      final snapshot = await getStatusSnapshot();
 
-      if (status == ChainStatus.synced) {
+      // runtime near-head 不等于 GRANDPA warp 已结束；只有完整可用快照才能放行。
+      if (snapshot.isUsable) {
         return;
       }
 

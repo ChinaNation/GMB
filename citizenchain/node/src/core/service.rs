@@ -374,19 +374,16 @@ pub fn new_partial(config: &Configuration) -> Result<Service, ServiceError> {
         },
     );
 
-    // 不可修改条款守卫(ADR-027 §7):在 PoW 导入之前逐块校验宪法第 1/2/3/17/19/24/34/42 条
-    // 与创世逐字一致,违者拒块。执法在 runtime 之外,setCode/migration 改不动。
-    let constitution_guard = crate::core::constitution::ConstitutionGuard::new(
-        pow_block_import,
-        client.clone(),
-        backend.clone(),
-    )
-    .map_err(ServiceError::Other)?;
+    // 节点守卫统一承载宪法以外的节点级死规则。当前首项为固定治理骨架：
+    // 逐块背书固定机构存在性、名额、护宪 7 席等结构不变式(I1..I7)。
+    let node_guard =
+        crate::core::node_guard::NodeGuard::new(pow_block_import, client.clone(), backend.clone())
+            .map_err(ServiceError::Other)?;
 
-    // 固定治理骨架守卫(档 A):与宪法守卫并列串接,逐块背书固定机构存在性/名额/护宪 7 席等
-    // 结构不变式(I1..I7),setCode 改不动。规格单源 primitives::governance_skeleton。
-    let guarded_import = crate::core::governance_skeleton::GovernanceSkeletonGuard::new(
-        constitution_guard,
+    // 宪法守卫保持独立且位于最外层(ADR-027 §7)：先执行整条链最高优先级的
+    // 不可修改条款校验，再进入节点守卫及 PoW 导入；runtime 升级无法绕过两层执法。
+    let guarded_import = crate::core::constitution::ConstitutionGuard::new(
+        node_guard,
         client.clone(),
         backend.clone(),
     )
@@ -654,18 +651,16 @@ pub fn new_full(
         let pr = pool_ready.clone();
         move || pr() > 0
     };
-    // 本地挖矿出块同样过护宪守卫:即便链上 runtime 被恶意升级,诚实矿工也绝不出
-    // 改动不可修改条款的块(ADR-027 §7)。
-    let mining_constitution_guard = crate::core::constitution::ConstitutionGuard::new(
-        pow_block_import,
-        client.clone(),
-        backend.clone(),
-    )
-    .map_err(ServiceError::Other)?;
+    // 本地挖矿导入路径与网络导入路径使用相同的节点守卫，避免诚实矿工产出
+    // 破坏固定治理骨架的区块。
+    let mining_node_guard =
+        crate::core::node_guard::NodeGuard::new(pow_block_import, client.clone(), backend.clone())
+            .map_err(ServiceError::Other)?;
 
-    // 诚实矿工同样绝不出破坏固定治理骨架的块(档 A):骨架守卫串在宪法守卫之外。
-    let guarded_mining_import = crate::core::governance_skeleton::GovernanceSkeletonGuard::new(
-        mining_constitution_guard,
+    // 宪法守卫在挖矿路径同样保持独立最外层，确保最高规则不会被普通节点守卫
+    // 的后续扩展、重排或 runtime 升级稀释。
+    let guarded_mining_import = crate::core::constitution::ConstitutionGuard::new(
+        mining_node_guard,
         client.clone(),
         backend.clone(),
     )

@@ -193,6 +193,9 @@ function resolveMembershipLevel(env: Env, subscription: StripeSubscriptionShape)
   if (subscription.price_id && subscription.price_id === env.STRIPE_PRICE_VISITOR) {
     return 'visitor';
   }
+  if (subscription.price_id && subscription.price_id === env.STRIPE_PRICE_VISITOR_PRO) {
+    return 'visitor_pro';
+  }
   if (subscription.price_id && subscription.price_id === env.STRIPE_PRICE_VOTING) {
     return 'voting';
   }
