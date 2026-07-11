@@ -23,7 +23,7 @@
 - 当前 `smoldot` Dart 绑定已从 pub.dev 依赖切换为仓库内本地 fork：`citizenapp/smoldot-dart`
 - 当前 `smoldot-light` Rust 内核位于：`citizenapp/smoldot-pow`
 - 这两层收编的目的，是为后续 PoW 专用 typed capability 改造建立可控演进入口
-- Android 真机 ABI 只支持 `arm64-v8a` 与 `armeabi-v7a`。`scripts/build-smoldot-native.sh android` 必须同时构建 `aarch64-linux-android` 与 `armv7-linux-androideabi`，并分别写入 `android/app/src/main/jniLibs/arm64-v8a/libsmoldot.so` 与 `android/app/src/main/jniLibs/armeabi-v7a/libsmoldot.so`；APK 构建入口必须显式传入 `--target-platform android-arm,android-arm64`，避免生成未适配 smoldot 的 x86 / x86_64 包内容。
+- Android 唯一支持 64 位 ARM `arm64-v8a`。`scripts/build-smoldot-native.sh android` 只构建 `aarch64-linux-android` 并写入 `android/app/src/main/jniLibs/arm64-v8a/libsmoldot.so`；APK 构建入口必须显式传入 `--target-platform android-arm64`。Gradle 的 ABI filter 只允许 `arm64-v8a`，并在 packaging 层排除插件携带的所有非 ARM64 native 库，禁止任何其他 Android ABI 进入最终 APK。
 - macOS 桌面调试库只用于 Dart FFI / `flutter test` 本机验收。`scripts/build-smoldot-native.sh macos` 必须设置 `CARGO_PROFILE_RELEASE_STRIP=false`，否则 Rust release profile 的 `strip=true` 会导致 dyld 报 `mis-aligned LINKEDIT string pool`，OpenMLS native 测试会被误判为 native 库不可用。
 
 ## 2. 目录结构
@@ -58,25 +58,27 @@ lib/rpc/
 - `assets/public_institutions/` 是从创世链状态导出的公权机构快照缓存,manifest 必须包含 `snapshot_block_number / snapshot_block_hash / genesis_hash / state_root / public_institution_root / shard_hashes`。App 首屏读取本地 Isar/快照缓存,后台通过 OnChina 链上投影 BFF 按 `manifest_version` 增量刷新;`manifest_version` 必须来自链投影 finalized anchor,不得由本地同步时间单独推进。
 - 公权机构唯一真源仍是链上 `PublicManage`;CitizenApp 内置快照、Isar 缓存和 OnChina BFF 都不是授权或真源。
 - `assets/light_sync_state.json` 是安装包签名保护的 finalized 信任锚；当前锚点是创世块 `#0`，不是会随 Worker 响应静默变化的运行时配置。
-- 安装包 checkpoint 不需要随链高持续更新：高度差不超过 32 时最多普通追 32 块，超过 32 时自动 GRANDPA warp；本机 finalized database 更高时始终优先使用本机进度。
+- 安装包 checkpoint 永久固定 `#0`，不随链高更新。新用户只要 peer finalized 高于 `#0` 就 GRANDPA warp；已安装用户先从原生验证采用的本机 finalized database 高度 `H` 启动，peer finalized 高于 `H` 时再 warp。
 
 ## 5. 连接与同步策略
 
 1. App 完成 `runApp()` 和首帧渲染后不自动初始化轻节点；只有主动链消费方首次调用时才进入 `SmoldotClientManager.ensureStarted()`
-2. 轻节点读取 `SharedPreferences.smoldot_db_cache` 的 `citizenapp.smoldot.database.v1` 信封；只有 schema、内置 `#0` 推导的 genesis hash、finalized 高度/哈希和 database 正文全部通过严格校验，才通过 `AddChainConfig.databaseContent` 恢复
-3. 旧裸 database、损坏信封、未知字段、跨 genesis 数据或 smoldot 拒绝的缓存都会被清除，并回退到安装包固定 `#0` checkpoint；不保留旧格式兼容或双轨读取
+2. 轻节点读取 `SharedPreferences.smoldot_db_cache` 的 `citizenapp.smoldot.database.v1` 信封；schema、内置 `#0` 推导的 genesis hash、完整验证 finalized 高度/哈希和 database 正文先通过严格校验，再要求 addChain 的第一份原生快照证明 `source=localDatabase` 且启动高度/hash 与信封完全一致
+3. 旧裸 database、损坏信封、未知字段、跨 genesis 数据或 smoldot 拒绝的缓存都会被清除，并回退到安装包固定 `#0`；回退后的第一份原生快照还必须证明 `source=bundledCheckpoint / startup=#0 / startupHash=genesisHash`，不保留未知 H、旧格式兼容或双轨读取
 4. 主动链入口触发轻节点加入 `chainspec.json` 指定的 citizenchain 网络后，立即在后台预热同步
-5. peer/best/finalized 进度展示只等待初始化；余额、nonce、finalized storage、extrinsic 和链事件订阅必须等待轻节点完成同步
+5. peer/best/finalized 进度展示只等待初始化；余额、nonce、finalized storage、extrinsic 和链事件订阅必须等待原生 `isUsable=true`。Dart 的历史 `_synced` 每次业务入口都会重新向原生确认，peer F 推进后不得继续沿用旧 ready
 6. 当轻节点未初始化、同步失败或链路降级时，typed capability 必须抛出真实错误，不能返回 `null` / `[]` / `{}` 伪装成“链上没有数据”
 7. `SmoldotClientManager.ensureStarted()` 是唯一启动闸口：成功幂等、进行中复用同一 Future、失败后允许重试；`initialize()` 只保留为该闸口的对外别名
 8. `dispose()` 必须异步等待 chain/client 释放；生命周期代际切换后，旧初始化、同步和后台重试不得再写回健康状态或清掉新 Future
 9. `ChainEventSubscription.connect()` 必须等待启动与同步的真实结果；失败返回 false 供交易监控重试，禁止在异步初始化完成前假报连接成功
 
-### 5.1 新安装用户快速同步
+### 5.1 统一启动锚点与快速同步
 
-- 当前 smoldot fork 已启用 GRANDPA warp，固定 `warp_sync_minimum_gap=32`。远端 finalized 高度必须严格大于本地锚点高度加 32 才发起 warp；从当前 `#0` 锚点出发，链高 `#32` 不触发，`#33` 起才具备触发条件。
-- 例如安装包固定锚点为 `#32`、用户安装时正式链已到 `#100000`：客户端不验证 `#33..#99998` 的每个普通区块，而是验证 GRANDPA warp proof 后直接建立接近 `#99999` 的 finalized 链信息，再普通同步最后少量区块。
+- 当前 smoldot fork 已启用 GRANDPA warp，固定 `warp_sync_minimum_gap=0`。对启动锚点 `H` 和 peer finalized `F`：`F > H` 必须 warp，`F == H` 不发 warp。
+- 新安装用户的 `H` 永远是签名安装包内的 `#0`。例如安装时正式链已到 `#100000`，客户端验证 GRANDPA warp proof 后直接建立 `#100000` finalized 链信息，不逐块验证 `#1..#99999`。
+- 已安装用户的 `H` 是原生层实际从本机 database 恢复的 finalized。若本机为 `#36` 且 peer 仍为 `#36`，不发 warp；peer 到 `#37` 后从 `#36` warp 到 `#37`，warp 完成后才进入普通在线跟随。
 - warp 先验证 GRANDPA authority set 交接与最终性 proof，再下载目标 finalized 块的 runtime 和必要 storage proof，随后切回普通同步追赶少量近头区块。成本主要随权威集变更与 proof 体积增长，不随普通区块高度线性增长。
+- GRANDPA neighbor packet 到达前，GRANDPA 链不允许普通 block request 抢先改变同步锚点；warp 活跃期间也只调度 warp 请求，避免普通同步与 warp 竞态造成 fragment 被错误拒绝。
 - 当前节点端已经为所有节点注册 GRANDPA 协议并挂载 warp proof provider；权威节点推进 finality，普通 observer 节点也能基于本地归档数据响应 proof。
 - Cloudflare bootstrap v2 只补充通过本地 chain id、protocol id、genesis state root 校验的 bootnodes；协议中不存在远端 checkpoint 或轻同步资产下载字段。
 - 2026-07-10 bootstrap v2 已发布到 staging（`ff19bc46-dc17-4f77-a53f-aed2739142a0`）和 production（`00d836aa-9c43-4561-ba33-8730d780c1a0`），两端均已真实验证 schema v2、6 个 bootnodes、无 checkpoint/RPC URL，且通用 `/v1/chain/rpc` 保持 404；生产 arm64 profile 真机已恢复无 staging Dart define 的正式配置。
@@ -90,11 +92,19 @@ lib/rpc/
 - 广场浏览、信息页和“我的”身份徽章不得调用主动链入口；这些页面没有链消费行为时，进程内不得创建 smoldot client。
 - `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0、没有提案或机构不存在
 - 当前代码已新增 `SmoldotClientManager.getStatusSnapshot()`，作为结构化轻节点状态接口；其底层已改为 Rust 原生 capability，不再由 Dart 层拼装 `system_health`
-- 状态快照的同步阶段是严格枚举：`regular`、`warpFragments`、`warpChainInformation`；同时携带 `startupFinalizedBlockNumber`、`highestPeerFinalizedBlockNumber`、`warpFinalizedBlockNumber`、`warpRequestCount`、`warpFragmentCount`。这些字段直接来自 smoldot 同步状态机和网络事件，禁止根据 best/finalized 高度差反推阶段。
-- `ChainProgressBanner` 只展示轻节点状态快照。warp fragment 验证、目标链信息加载、普通尾部同步分别显示“轻节点正在快速验证最终性”“轻节点正在加载最新链状态”“轻节点正在同步尾部区块”；只有 `regular` 且不再 syncing 时才能显示“轻节点已就绪”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。
-- 2026-07-10 正式链 `#33` 真机证明固定 `#0` 会真实进入 `warpFragments` 并生成可恢复的 finalized `#33` database；同日已修复旧 `Chain.waitUntilSynced()` 只看 runtime `isSyncing` 而提前返回的问题。原生 `isSyncing`、Dart `ChainStatus/wait`、App operational、缓存导出和 Banner 现在统一以 `LightClientStatusSnapshot.isUsable` 为唯一完成语义。
-- profile 结构化日志会在同步阶段变化与最终完成时输出 `mode/startup/peer_finalized/warp/requests/fragments/best/finalized` 精确值。正式链仍为 `#33` 时，修复版两次干净重跑均由普通同步抢先，真实计数为 0/0；非零 request/fragment 精确值必须在链高进一步增长后的真实 warp 回归中取得，禁止伪造或用高度变化代替。
-- operational 后由单实例一分钟定时器低频检查 finalized。只有快照仍可用且 finalized 严格高于最近持久化高度时才进入既有串行稳定导出；同高度不导出，dispose 取消定时器并等待刷新/写队列，确保已安装用户的本机缓存随链增长而单调推进。
+- 状态快照的 `syncPhase` 是严格枚举：`regular`、`warpDownloadingFragments`、`warpVerifyingFragments`、`warpDownloadingTargetState`、`warpBuildingRuntime`、`warpBuildingChainInformation`。未知值直接拒绝，禁止降级成 ready。
+- 快照分别携带启动 `H`、`currentVerifiedFinalizedBlockNumber/hash`、最高 peer finalized `F`、`warpTargetFinalizedBlockNumber`、已证明后才出现的目标 hash、fragment/storage/call-proof 当前活动请求数、累计 `warpRequestCount`、proof 收到/验证/拒绝数和最后失败。`finalizedBlock` 只代表普通订阅视图，不能代替完整验证 finalized。
+- warp 活动真相必须来自内核：发现 peer finalized 高于可信锚点时进入 fragments 下载，收到后进入本地验证，随后依次下载目标状态、构建 runtime、构建 chain information；只有完整 chain information 成功且没有更高 peer finalized 时才进入 `regular`。服务层不得用请求历史、高度差或页面计时推测阶段。
+- `isUsable` 由 Rust 原生层唯一计算：必须同时满足有 peer、runtime near-head、`syncPhase=regular`。Dart 只消费并校验该字段；原生字段相互冲突时直接抛出格式错误，不另造完成算法。
+- database 序列化在原生 warp 活跃期间直接返回无 chain information；App 只有 `isUsable=true` 才发起导出，并要求导出前后 `currentVerifiedFinalizedBlockNumber/hash` 完全一致。同步失败和重试未完成路径不再调用“保存部分进度”。
+- `ChainRpc` 的 finalized 缓存命名空间、runtime API 锚点和钱包确认高度统一读取 `currentVerifiedFinalized`；普通订阅 `finalizedBlock` 仅保留诊断展示，禁止进入业务 finalized 路径。
+- 已删除跨 fragment、storage、runtime 和 chain-information 阶段的绝对 10 秒 watchdog；各网络请求只服从自身超时。fragment/storage/call-proof 以 request id 记录实际 peer，失败只处罚该请求 peer，取消或断连只清理命中记录并恢复重调度；虚假的“warp 无进展”失败枚举已删除。新版 Android ARM64 构建已完成，真机 H/F 验收仍未完成。
+- `ChainProgressBanner` 只展示原生轻节点阶段：fragments 下载/验证、目标状态下载、runtime 构建、chain information 构建和普通尾部同步各自使用独立文案；只有原生 `isUsable=true` 才显示“轻节点已就绪”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。
+- 既有真机记录已经证明固定 `#0` 会真实进入 GRANDPA warp 并生成可恢复的本机 database；此前 `Chain.waitUntilSynced()` 只看 runtime `isSyncing` 而提前返回的问题已删除。原生 `isUsable`、Dart `ChainStatus/wait`、App operational、缓存导出和 Banner 现在使用唯一完成语义。
+- profile 结构化日志会在同步阶段变化与最终完成时输出 `phase/usable/source/startup/peer_finalized/current_verified/warp_target/active_requests/requests/received/verified/rejected/last_failure/best/surface_finalized`。第 1～5 阶段代码、本机分层自动化和 ARM64-only APK 静态验收已经完成；真实设备状态仍待后续阶段验收。
+- 2026-07-11 ARM64-only profile APK 已重建：所有 native entry 只位于 Android 官方 ARM64 ABI 目录，smoldot 为 ELF64/AArch64 且 LOAD segment 以 16 KiB 对齐；APK 内固定 `#0` 的 `light_sync_state.json`、zipalign 和 v2 签名检查均通过。
+- 同日 Pixel 8a 私密测试空间已真实验证新安装 `bundledCheckpoint/#0 → warp → peer F`，请求与 proof 计数为 `1/1/1/0`；随后 5,120-byte database 冷启动精确恢复 `localDatabase/H`，当 peer F 等于 H 时请求数为 0。断网冷启动保持 `peer=0 / usable=false` 并禁用交易，启动清单失败只回到本地 chainspec；恢复移动数据后 P2P 重新 ready。正式链在本轮观察窗口没有产生更高 F，运行中 `H < F` 仍待真实补验。
+- operational 后由单实例一分钟定时器低频检查 `currentVerifiedFinalized`。只有快照仍可用且该完整验证 finalized 严格高于最近持久化高度时才进入既有串行稳定导出；同高度不导出，dispose 取消定时器并等待刷新/写队列。下一次业务入口若发现原生重新进入 warp，会立即撤销本地 ready，完成后保存的新 F 成为下一次启动 H。
 - 连接诊断必须以有效 peer、best/finalized 状态是否可读或推进为准；未部署 bootNodes 的连接失败日志不是故障根因，不得把它解释成 citizenapp 网络不可用。
 - 本地开发期 `30334` bootnode 只是可选调试兜底，不是 citizenapp 真机连接区块链网络的必要条件；没有本地 `30334` 也不应判定为连接异常。
 - Flutter widget test 环境不具备真实 smoldot 轻节点链路，`ChainProgressBanner` 在测试中只渲染静态提示条，禁止读取链状态和创建轮询定时器，避免 `pumpAndSettle` 被后台链路轮询卡住。
@@ -177,7 +187,7 @@ ADR-017 后已无 best 视图余额接口；所有余额读取 finalized(`fetchF
 - `fetchLatestBlock() → Future<({Uint8List blockHash, int blockNumber})>` — 最新块
   - 复用 `status snapshot.bestBlockHash/bestBlockNumber`
 - `fetchFinalizedBlock() → Future<({Uint8List blockHash, int blockNumber})>` — 最新 finalized 块
-  - 复用 `status snapshot.finalizedBlockHash/finalizedBlockNumber`
+  - 复用 `status snapshot.currentVerifiedFinalizedBlockHash/currentVerifiedFinalizedBlockNumber`
   - 钱包交易流水升级为 `finalized` 时只能使用该高度
 - `fetchMetadata() → Future<RuntimeMetadata>` — 运行时 metadata（缓存，含 registry）
   - 调用原生 `smoldot_get_metadata`
@@ -301,7 +311,8 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
         → SharedPreferences.read('smoldot_db_cache')
         → 严格解析 citizenapp.smoldot.database.v1
         → addChain(chainSpec, databaseContent: envelope.database_content)
-        → 只同步缓存之后的新区块头
+        → 原生快照必须证明 localDatabase + 信封高度/hash
+        → peer finalized 更高则从本机锚点 warp，否则直接在线跟随
 
 保存时：读取 finalized 高度/hash A
         → chainHead_unstable_finalizedDatabase
@@ -326,7 +337,8 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 补充约束：
 
 - database 导出、现有信封读取和 SharedPreferences 写入共用单一 Future 队列，不得并发落盘
-- `addChain(databaseContent)` 返回时同步状态机可能仍短暂显示安装包 `#0`；恢复校验最多等待 5 秒。低于信封高度继续等待，同高度必须 hash 一致，超过信封高度视为已安全跨过；持续低于或同高异 hash 才清理缓存
+- `addChain(databaseContent)` 返回后的第一份原生快照必须已经选择 database chain information。网络后来追到或超过信封高度不能冒充缓存恢复；来源、高度或 hash 任一不符都立即释放该 chain、清理缓存并从 `#0` 重建
+- smoldot database 内部链信息只接受显式共识类型格式 v2；CitizenChain PoW 正文必须包含 `consensus=pow`。旧无标记正文不兼容，清理一次后由当前客户端重新导出
 - 导出前后 finalized 发生变化时丢弃正文并最多重试一次；不得给正文绑定无法证明的高度或哈希
 - 候选高度低于持久值时直接丢弃；同高度同 hash 不重写；同高度不同 hash 先清除无法信任的旧值，再写当前轻节点稳定导出的候选
 - dispose 先递增生命周期代际并等待缓存队尾收口，新 client 启动前旧任务不得继续写缓存
@@ -379,7 +391,7 @@ finalized head 到达
 - 不补扫导入前历史；删除钱包时删除本地流水和同步游标，再次导入从新的导入时刻重新记录。
 - 收入写入正数 `amountDeltaFen`，支出写入负数 `amountDeltaFen`；业务方向由金额正负号推导，不保存 `direction`。
 - `type` 只保存业务类型；区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，本机提交记录唯一键为 `walletPubkeyHex:pending:txHash`；写入时还要按同钱包、同区块、同发送方、同接收方、同转账本金做语义去重，防止 newHeads/finalized 重复处理同一事件。
-- finalized 补同步只能使用 `finalizedBlockNumber/finalizedBlockHash`，不能使用 `bestBlockNumber/bestBlockHash` 升级为 `finalized`；`bestBlockNumber/bestBlockHash` 只允许用于补扫未确认区块并写入 `inBlock`。
+- finalized 补同步只能使用 `currentVerifiedFinalizedBlockNumber/currentVerifiedFinalizedBlockHash`，不能使用普通订阅 finalized 或 `bestBlockNumber/bestBlockHash` 升级为 `finalized`；best 只允许用于补扫未确认区块并写入 `inBlock`。
 - finalized 单轮最多补齐 120 个区块；未确认区块单轮最多补扫 32 个区块；若 `WalletIsar` 正在处理前台读写或本地库 busy，本轮直接让路并安排短延迟重试。
 - 读取区块事件仍需要节点网络和处理器参与响应 RPC，因此 App 不做全历史扫描，避免增加全节点和手机端负担。
 

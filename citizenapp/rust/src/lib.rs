@@ -623,16 +623,28 @@ pub unsafe extern "C" fn smoldot_get_status_snapshot(
         let snapshot = json!({
             "peerCount": snapshot.peer_count,
             "isSyncing": snapshot.is_syncing,
+            "isUsable": snapshot.is_usable,
             "bestBlockNumber": snapshot.best_block_number,
             "bestBlockHash": format!("0x{}", hex::encode(snapshot.best_block_hash)),
             "finalizedBlockNumber": snapshot.finalized_block_number,
             "finalizedBlockHash": format!("0x{}", hex::encode(snapshot.finalized_block_hash)),
-            "syncMode": sync_mode_name(snapshot.sync_mode),
+            "syncPhase": sync_phase_name(snapshot.sync_phase),
+            "startupFinalizedSource": snapshot.startup_finalized_source.map(startup_finalized_source_name),
             "startupFinalizedBlockNumber": snapshot.startup_finalized_block_number,
+            "startupFinalizedBlockHash": snapshot.startup_finalized_block_hash.map(|hash| format!("0x{}", hex::encode(hash))),
             "highestPeerFinalizedBlockNumber": snapshot.highest_peer_finalized_block_number,
-            "warpFinalizedBlockNumber": snapshot.warp_finalized_block_number,
+            "currentVerifiedFinalizedBlockNumber": snapshot.current_verified_finalized_block_number,
+            "currentVerifiedFinalizedBlockHash": format!("0x{}", hex::encode(snapshot.current_verified_finalized_block_hash)),
+            "warpTargetFinalizedBlockNumber": snapshot.warp_target_finalized_block_number,
+            "warpTargetFinalizedBlockHash": snapshot.warp_target_finalized_block_hash.map(|hash| format!("0x{}", hex::encode(hash))),
             "warpRequestCount": snapshot.warp_request_count,
-            "warpFragmentCount": snapshot.warp_fragment_count,
+            "activeWarpFragmentRequestCount": snapshot.active_warp_fragment_request_count,
+            "activeWarpStorageRequestCount": snapshot.active_warp_storage_request_count,
+            "activeWarpCallProofRequestCount": snapshot.active_warp_call_proof_request_count,
+            "warpReceivedFragmentCount": snapshot.warp_received_fragment_count,
+            "warpVerifiedFragmentCount": snapshot.warp_verified_fragment_count,
+            "warpRejectedFragmentCount": snapshot.warp_rejected_fragment_count,
+            "warpLastFailure": snapshot.warp_last_failure.map(warp_failure_name),
         });
         Ok(snapshot.to_string())
     }) {
@@ -904,16 +916,16 @@ pub unsafe extern "C" fn smoldot_get_block_extrinsics(
             };
 
             let values = match native_extrinsics_future.await {
-            Ok(extrinsics) => extrinsics
-                .into_iter()
-                .map(|extrinsic| format!("0x{}", hex::encode(extrinsic)))
-                .collect::<Vec<_>>(),
-            Err(error) => {
-                return Err(format!(
-                    "Failed to download block body via light-client path for {block_hash_hex}: {error}"
-                ))
-            }
-        };
+                Ok(extrinsics) => extrinsics
+                    .into_iter()
+                    .map(|extrinsic| format!("0x{}", hex::encode(extrinsic)))
+                    .collect::<Vec<_>>(),
+                Err(error) => {
+                    return Err(format!(
+                        "Failed to download block body via light-client path for {block_hash_hex}: {error}"
+                    ));
+                }
+            };
 
             serde_json::to_string(&values)
                 .map_err(|error| format!("Failed to encode block extrinsics JSON: {error}"))
@@ -1213,11 +1225,44 @@ pub unsafe extern "C" fn smoldot_get_storage_values(
 
 // ──── 异步 FFI 导出（不阻塞 Dart 主线程） ────
 
-fn sync_mode_name(mode: smoldot_light::ChainSyncMode) -> &'static str {
-    match mode {
-        smoldot_light::ChainSyncMode::Regular => "regular",
-        smoldot_light::ChainSyncMode::WarpFragments => "warpFragments",
-        smoldot_light::ChainSyncMode::WarpChainInformation => "warpChainInformation",
+fn sync_phase_name(phase: smoldot_light::ChainSyncPhase) -> &'static str {
+    match phase {
+        smoldot_light::ChainSyncPhase::Regular => "regular",
+        smoldot_light::ChainSyncPhase::WarpDownloadingFragments => "warpDownloadingFragments",
+        smoldot_light::ChainSyncPhase::WarpVerifyingFragments => "warpVerifyingFragments",
+        smoldot_light::ChainSyncPhase::WarpDownloadingTargetState => "warpDownloadingTargetState",
+        smoldot_light::ChainSyncPhase::WarpBuildingRuntime => "warpBuildingRuntime",
+        smoldot_light::ChainSyncPhase::WarpBuildingChainInformation => {
+            "warpBuildingChainInformation"
+        }
+    }
+}
+
+fn startup_finalized_source_name(
+    source: smoldot_light::ChainStartupFinalizedSource,
+) -> &'static str {
+    match source {
+        smoldot_light::ChainStartupFinalizedSource::BundledCheckpoint => "bundledCheckpoint",
+        smoldot_light::ChainStartupFinalizedSource::LocalDatabase => "localDatabase",
+    }
+}
+
+fn warp_failure_name(failure: smoldot_light::ChainWarpFailure) -> &'static str {
+    match failure {
+        smoldot_light::ChainWarpFailure::EmptyProof => "emptyProof",
+        smoldot_light::ChainWarpFailure::InvalidHeader => "invalidHeader",
+        smoldot_light::ChainWarpFailure::InvalidJustification => "invalidJustification",
+        smoldot_light::ChainWarpFailure::BlockNumberNotIncrementing => "blockNumberNotIncrementing",
+        smoldot_light::ChainWarpFailure::TargetHashMismatch => "targetHashMismatch",
+        smoldot_light::ChainWarpFailure::JustificationVerifyFailed => "justificationVerifyFailed",
+        smoldot_light::ChainWarpFailure::NonMinimalProof => "nonMinimalProof",
+        smoldot_light::ChainWarpFailure::WarpRequestFailed => "warpRequestFailed",
+        smoldot_light::ChainWarpFailure::StorageProofRequestFailed => "storageProofRequestFailed",
+        smoldot_light::ChainWarpFailure::CallProofRequestFailed => "callProofRequestFailed",
+        smoldot_light::ChainWarpFailure::RuntimeBuildFailed => "runtimeBuildFailed",
+        smoldot_light::ChainWarpFailure::ChainInformationBuildFailed => {
+            "chainInformationBuildFailed"
+        }
     }
 }
 
@@ -1311,16 +1356,28 @@ pub unsafe extern "C" fn smoldot_get_status_snapshot_async(
             Ok(json!({
                 "peerCount": snapshot.peer_count,
                 "isSyncing": snapshot.is_syncing,
+                "isUsable": snapshot.is_usable,
                 "bestBlockNumber": snapshot.best_block_number,
                 "bestBlockHash": format!("0x{}", hex::encode(snapshot.best_block_hash)),
                 "finalizedBlockNumber": snapshot.finalized_block_number,
                 "finalizedBlockHash": format!("0x{}", hex::encode(snapshot.finalized_block_hash)),
-                "syncMode": sync_mode_name(snapshot.sync_mode),
+                "syncPhase": sync_phase_name(snapshot.sync_phase),
+                "startupFinalizedSource": snapshot.startup_finalized_source.map(startup_finalized_source_name),
                 "startupFinalizedBlockNumber": snapshot.startup_finalized_block_number,
+                "startupFinalizedBlockHash": snapshot.startup_finalized_block_hash.map(|hash| format!("0x{}", hex::encode(hash))),
                 "highestPeerFinalizedBlockNumber": snapshot.highest_peer_finalized_block_number,
-                "warpFinalizedBlockNumber": snapshot.warp_finalized_block_number,
+                "currentVerifiedFinalizedBlockNumber": snapshot.current_verified_finalized_block_number,
+                "currentVerifiedFinalizedBlockHash": format!("0x{}", hex::encode(snapshot.current_verified_finalized_block_hash)),
+                "warpTargetFinalizedBlockNumber": snapshot.warp_target_finalized_block_number,
+                "warpTargetFinalizedBlockHash": snapshot.warp_target_finalized_block_hash.map(|hash| format!("0x{}", hex::encode(hash))),
                 "warpRequestCount": snapshot.warp_request_count,
-                "warpFragmentCount": snapshot.warp_fragment_count,
+                "activeWarpFragmentRequestCount": snapshot.active_warp_fragment_request_count,
+                "activeWarpStorageRequestCount": snapshot.active_warp_storage_request_count,
+                "activeWarpCallProofRequestCount": snapshot.active_warp_call_proof_request_count,
+                "warpReceivedFragmentCount": snapshot.warp_received_fragment_count,
+                "warpVerifiedFragmentCount": snapshot.warp_verified_fragment_count,
+                "warpRejectedFragmentCount": snapshot.warp_rejected_fragment_count,
+                "warpLastFailure": snapshot.warp_last_failure.map(warp_failure_name),
             })
             .to_string())
         }
@@ -1560,7 +1617,7 @@ pub unsafe extern "C" fn smoldot_get_block_extrinsics_async(
                 Err(error) => {
                     return Err(format!(
                         "Failed to download block body for {block_hash_hex}: {error}"
-                    ))
+                    ));
                 }
             };
             serde_json::to_string(&values)

@@ -507,41 +507,82 @@ fn runtime_calls_default_value(
     list
 }
 
+/// Warp 状态机当前真实执行阶段。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    /// 当前完整验证的 finalized 已追到所有已知 peer finalized。
+    Idle,
+    /// 正在等待或下载 GRANDPA warp fragments。
+    DownloadingFragments,
+    /// 已收到 fragments，正在本地验证 GRANDPA justification。
+    VerifyingFragments,
+    /// fragments 已验证，正在下载目标状态、runtime proof 或 call proof。
+    DownloadingTargetState,
+    /// 目标 runtime proof 已下载，正在本地构建 runtime。
+    BuildingRuntime,
+    /// runtime 与必要 proof 已完成，正在构建完整 chain information。
+    BuildingChainInformation,
+}
+
 /// See [`WarpSync::status`].
 #[derive(Debug)]
-pub enum Status<'a, TSrc> {
-    /// Warp syncing algorithm is downloading Grandpa warp sync fragments containing a finality
-    /// proof.
-    Fragments {
-        /// Source from which the fragments are currently being downloaded, if any.
-        source: Option<(SourceId, &'a TSrc)>,
-        /// Hash of the highest block that is proven to be finalized.
-        ///
-        /// This isn't necessarily the same block as returned by
-        /// [`WarpSync::as_chain_information`], as this function first has to download
-        /// extra information compared to just the finalized block.
-        finalized_block_hash: [u8; 32],
-        /// Height of the block indicated by [`Status::ChainInformation::finalized_block_hash`].
-        finalized_block_number: u64,
-    },
-    /// Warp syncing algorithm has reached the head of the finalized chain and is downloading and
-    /// building the chain information.
-    ChainInformation {
-        /// Hash of the highest block that is proven to be finalized.
-        ///
-        /// This isn't necessarily the same block as returned by
-        /// [`WarpSync::as_chain_information`], as this function first has to download
-        /// extra information compared to just the finalized block.
-        finalized_block_hash: [u8; 32],
-        /// Height of the block indicated by [`Status::ChainInformation::finalized_block_hash`].
-        finalized_block_number: u64,
-    },
+pub struct Status<'a, TSrc> {
+    /// 直接由 warp 状态机内部字段推导的真实阶段。
+    pub phase: Phase,
+    /// fragments 当前使用的来源；其他阶段为 `None`。
+    pub source: Option<(SourceId, &'a TSrc)>,
+    /// fragment proof 指向的目标 finalized hash。完整 chain information 构建完成前，
+    /// 该值不能当作 [`WarpSync::as_chain_information`] 已验证完成的 finalized。
+    pub target_finalized_block_hash: [u8; 32],
+    /// `target_finalized_block_hash` 对应的高度。
+    pub target_finalized_block_number: u64,
 }
 
 impl<TSrc, TRq> WarpSync<TSrc, TRq> {
     /// Returns the value that was initially passed in [`Config::block_number_bytes`].
     pub fn block_number_bytes(&self) -> usize {
         self.block_number_bytes
+    }
+
+    /// 返回 warp 引擎的真实活动状态。该状态直接由 peer finalized、fragment 队列和
+    /// chain-information 构建状态得出，不依赖请求历史或服务层布尔值。
+    fn phase(&self) -> Phase {
+        let has_source_ahead = self
+            .sources_by_finalized_height
+            .last()
+            .is_some_and(|(height, _)| *height > self.warped_header_number);
+        let fragment_activity = if self.warp_sync_fragments_download.is_some() {
+            FragmentActivity::Downloading
+        } else if !self.verify_queue.is_empty() {
+            FragmentActivity::Verifying
+        } else {
+            FragmentActivity::None
+        };
+        let target_activity = if matches!(self.warped_block_ty, WarpedBlockTy::AlreadyVerified) {
+            TargetActivity::Verified
+        } else if matches!(self.runtime_download, RuntimeDownload::NotVerified { .. }) {
+            TargetActivity::BuildingRuntime
+        } else if matches!(self.runtime_download, RuntimeDownload::Verified { .. })
+            && matches!(
+                self.body_download,
+                BodyDownload::NotNeeded | BodyDownload::Downloaded { .. }
+            )
+            && self
+                .runtime_calls
+                .values()
+                .all(|call| matches!(call, CallProof::Downloaded { .. }))
+        {
+            TargetActivity::BuildingChainInformation
+        } else {
+            TargetActivity::Downloading
+        };
+        classify_warp_phase(has_source_ahead, fragment_activity, target_activity)
+    }
+
+    /// 只要 peer finalized 高于当前可信 anchor，或 warp 已经进入任一中间阶段，
+    /// 就必须暂停普通 finalized gap 下载，直到目标 chain information 构建完成。
+    pub fn is_active(&self) -> bool {
+        !matches!(self.phase(), Phase::Idle)
     }
 
     /// Returns the chain information that is considered verified.
@@ -594,32 +635,21 @@ impl<TSrc, TRq> WarpSync<TSrc, TRq> {
 
     /// Returns the current status of the warp syncing.
     pub fn status(&'_ self) -> Status<'_, TSrc> {
-        match &self.runtime_download {
-            RuntimeDownload::NotStarted { .. } => {
-                let finalized_block_hash = self.warped_header_hash;
+        let phase = self.phase();
+        let source_id = if matches!(phase, Phase::DownloadingFragments) {
+            self.warp_sync_fragments_download
+                .map(|request_id| self.in_progress_requests.get(request_id.0).unwrap().0)
+        } else if matches!(phase, Phase::VerifyingFragments) {
+            self.verify_queue.back().and_then(|f| f.downloaded_source)
+        } else {
+            None
+        };
 
-                let source_id =
-                    if let Some(warp_sync_fragments_download) = self.warp_sync_fragments_download {
-                        Some(
-                            self.in_progress_requests
-                                .get(warp_sync_fragments_download.0)
-                                .unwrap()
-                                .0,
-                        )
-                    } else {
-                        self.verify_queue.back().and_then(|f| f.downloaded_source)
-                    };
-
-                Status::Fragments {
-                    source: source_id.map(|id| (id, &self.sources[id.0].user_data)),
-                    finalized_block_hash,
-                    finalized_block_number: self.warped_header_number,
-                }
-            }
-            _ => Status::ChainInformation {
-                finalized_block_hash: self.warped_header_hash,
-                finalized_block_number: self.warped_header_number,
-            },
+        Status {
+            phase,
+            source: source_id.map(|id| (id, &self.sources[id.0].user_data)),
+            target_finalized_block_hash: self.warped_header_hash,
+            target_finalized_block_number: self.warped_header_number,
         }
     }
 
@@ -844,11 +874,11 @@ impl<TSrc, TRq> WarpSync<TSrc, TRq> {
                 if let Some(verify_queue_tail_block_number) = verify_queue_tail_block_number {
                     // Combine the request with every single available source.
                     either::Left(self.sources.iter().filter_map(move |(src_id, src)| {
-                        if src.finalized_block_height
-                            <= verify_queue_tail_block_number.saturating_add(
-                                u64::try_from(warp_sync_minimum_gap).unwrap_or(u64::MAX),
-                            )
-                        {
+                        if !should_request_warp(
+                            src.finalized_block_height,
+                            verify_queue_tail_block_number,
+                            warp_sync_minimum_gap,
+                        ) {
                             return None;
                         }
 
@@ -1415,6 +1445,109 @@ impl<TSrc, TRq> WarpSync<TSrc, TRq> {
         }
 
         ProcessOne::Idle(self)
+    }
+}
+
+fn should_request_warp(
+    source_finalized_block_number: u64,
+    anchor_finalized_block_number: u64,
+    minimum_gap: usize,
+) -> bool {
+    source_finalized_block_number
+        > anchor_finalized_block_number
+            .saturating_add(u64::try_from(minimum_gap).unwrap_or(u64::MAX))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FragmentActivity {
+    None,
+    Downloading,
+    Verifying,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TargetActivity {
+    Verified,
+    Downloading,
+    BuildingRuntime,
+    BuildingChainInformation,
+}
+
+fn classify_warp_phase(
+    has_source_ahead: bool,
+    fragment_activity: FragmentActivity,
+    target_activity: TargetActivity,
+) -> Phase {
+    if has_source_ahead || matches!(fragment_activity, FragmentActivity::Downloading) {
+        Phase::DownloadingFragments
+    } else if matches!(fragment_activity, FragmentActivity::Verifying) {
+        Phase::VerifyingFragments
+    } else {
+        match target_activity {
+            TargetActivity::Verified => Phase::Idle,
+            TargetActivity::Downloading => Phase::DownloadingTargetState,
+            TargetActivity::BuildingRuntime => Phase::BuildingRuntime,
+            TargetActivity::BuildingChainInformation => Phase::BuildingChainInformation,
+        }
+    }
+}
+
+#[cfg(test)]
+mod citizenapp_warp_policy_tests {
+    use super::{
+        classify_warp_phase, should_request_warp, FragmentActivity, Phase, TargetActivity,
+    };
+
+    #[test]
+    fn zero_gap_policy_warps_for_every_strictly_newer_finalized() {
+        assert!(!should_request_warp(0, 0, 0));
+        assert!(should_request_warp(1, 0, 0));
+        assert!(should_request_warp(1_000, 1, 0));
+        assert!(should_request_warp(50_000, 0, 0));
+    }
+
+    #[test]
+    fn phase_is_required_before_request_and_regular_only_after_full_verification() {
+        assert_eq!(
+            classify_warp_phase(true, FragmentActivity::None, TargetActivity::Verified),
+            Phase::DownloadingFragments
+        );
+        assert_eq!(
+            classify_warp_phase(
+                false,
+                FragmentActivity::Downloading,
+                TargetActivity::Verified
+            ),
+            Phase::DownloadingFragments
+        );
+        assert_eq!(
+            classify_warp_phase(false, FragmentActivity::Verifying, TargetActivity::Verified),
+            Phase::VerifyingFragments
+        );
+        assert_eq!(
+            classify_warp_phase(false, FragmentActivity::None, TargetActivity::Downloading),
+            Phase::DownloadingTargetState
+        );
+        assert_eq!(
+            classify_warp_phase(
+                false,
+                FragmentActivity::None,
+                TargetActivity::BuildingRuntime
+            ),
+            Phase::BuildingRuntime
+        );
+        assert_eq!(
+            classify_warp_phase(
+                false,
+                FragmentActivity::None,
+                TargetActivity::BuildingChainInformation
+            ),
+            Phase::BuildingChainInformation
+        );
+        assert_eq!(
+            classify_warp_phase(false, FragmentActivity::None, TargetActivity::Verified),
+            Phase::Idle
+        );
     }
 }
 
@@ -2167,11 +2300,9 @@ impl<TSrc, TRq> BuildChainInformation<TSrc, TRq> {
 
         let runtime_calls = mem::take(&mut self.inner.runtime_calls);
 
-        debug_assert!(
-            runtime_calls
-                .values()
-                .all(|c| matches!(c, CallProof::Downloaded { .. }))
-        );
+        debug_assert!(runtime_calls
+            .values()
+            .all(|c| matches!(c, CallProof::Downloaded { .. })));
 
         // Decode all the Merkle proofs that have been received.
         let calls = {

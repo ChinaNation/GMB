@@ -113,7 +113,7 @@ class ChainRpc {
       storageKeyHexList,
       finalizedHashProvider: () async =>
           (await SmoldotClientManager.instance.getStatusSnapshot())
-              ?.finalizedBlockHash,
+              .currentVerifiedFinalizedBlockHash,
       fetchMissing: _rawFetchFinalizedStorage,
       forceFresh: forceFresh,
     );
@@ -215,8 +215,8 @@ class ChainRpc {
   Future<({Uint8List blockHash, int blockNumber})> fetchLatestBlock() async {
     // 轻节点模式直接复用原生状态快照，减少一次 `chain_getHeader` 往返。
     final snapshot = await SmoldotClientManager.instance.getStatusSnapshot();
-    final hashHex = snapshot?.bestBlockHash;
-    final blockNumber = snapshot?.bestBlockNumber;
+    final hashHex = snapshot.bestBlockHash;
+    final blockNumber = snapshot.bestBlockNumber;
     if (hashHex == null || hashHex.isEmpty || blockNumber == null) {
       throw StateError('smoldot 轻节点尚未提供最新区块快照');
     }
@@ -229,14 +229,16 @@ class ChainRpc {
   /// 获取最新 finalized 区块的哈希和块号。
   ///
   /// 钱包交易流水的“已确认”只能来自 finalized 高度；best/latest
-  /// 只代表当前最优链头，不能用来升级 `finalized` 状态。
+  /// 只代表当前最优链头，不能用来升级 `finalized` 状态。普通订阅视图可能在
+  /// warp 收口前已经显示 F，因此这里只接受原生完整 chain information 对应的
+  /// `currentVerifiedFinalized`。
   Future<({Uint8List blockHash, int blockNumber})> fetchFinalizedBlock() async {
     final snapshot = await SmoldotClientManager.instance.getStatusSnapshot();
-    final hashHex = snapshot?.finalizedBlockHash;
-    final blockNumber = snapshot?.finalizedBlockNumber;
-    if (hashHex == null || hashHex.isEmpty || blockNumber == null) {
-      throw StateError('smoldot 轻节点尚未提供 finalized 区块快照');
+    if (!snapshot.isUsable) {
+      throw StateError('smoldot 轻节点尚未提供完整验证的 finalized 区块快照');
     }
+    final hashHex = snapshot.currentVerifiedFinalizedBlockHash;
+    final blockNumber = snapshot.currentVerifiedFinalizedBlockNumber;
     return (
       blockHash: _hexDecode(_stripHexPrefix(hashHex)),
       blockNumber: blockNumber,

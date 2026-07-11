@@ -54,7 +54,7 @@
 ### 步骤 3：配置 staging 远端变量/secret
 
 - 确认 `SQUARE_DEV_UPLOAD_PROXY=0`。
-- 配置或确认 `CITIZEN_CHAIN_RPC_URL`、两项 `CITIZEN_CHAIN_RPC_ACCESS_*`、`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME` 只在 Cloudflare 远端 Secret/变量；链 RPC 三项必须成套配置。
+- 配置或确认 `CHAIN_URL`、两项 `CHAIN_ID / CHAIN_SECRET`、`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME` 只在 Cloudflare 远端 Secret/变量；链 RPC 三项必须成套配置。
 - 如果缺少私密值且本机无法读取，记录阻塞，不伪造。
 
 ### 步骤 4：远端迁移和 staging 部署

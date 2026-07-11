@@ -80,9 +80,9 @@ function fakeEnv(input: {
   );
   return {
     DB: input.db,
-    CITIZEN_CHAIN_RPC_URL: 'https://chain.test',
-    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
-    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret',
+    CHAIN_URL: 'https://chain.test',
+    CHAIN_ID: 'worker-rpc.access',
+    CHAIN_SECRET: 'test-access-secret',
     STRIPE_SECRET_KEY: 'sk_test_secret',
     STRIPE_PRICE_VISITOR: 'price_visitor',
     STRIPE_PRICE_VOTING: 'price_voting',

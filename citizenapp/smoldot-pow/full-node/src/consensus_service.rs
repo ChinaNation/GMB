@@ -24,13 +24,14 @@
 // TODO: doc
 // TODO: re-review this once finished
 
-use crate::{LogCallback, LogLevel, database_thread, jaeger_service, network_service};
+use crate::{database_thread, jaeger_service, network_service, LogCallback, LogLevel};
 
 use futures_channel::{mpsc, oneshot};
 use futures_lite::FutureExt as _;
 use futures_util::{
-    SinkExt as _, StreamExt as _, future,
+    future,
     stream::{self, FuturesUnordered},
+    SinkExt as _, StreamExt as _,
 };
 use hashbrown::HashSet;
 use rand::seq::IteratorRandom;
@@ -1131,25 +1132,23 @@ impl SyncBackground {
                                     request: all::DesiredRequest::StorageGetMerkleProof {
                                         block_hash: missing_item.hash,
                                         state_trie_root: [0; 32], // TODO: wrong, but field value unused so it's fine temporarily
-                                        keys: vec![
-                                            trie::nibbles_to_bytes_suffix_extend(
-                                                missing_item
-                                                    .trie_node_key_nibbles
-                                                    .into_iter()
-                                                    // In order to download more than one item at a time,
-                                                    // we add some randomly-generated nibbles to the
-                                                    // requested key. The request will target the missing
-                                                    // key plus a few other random keys.
-                                                    .chain((0..32).map(|_| {
-                                                        rand::Rng::gen_range(
-                                                            &mut rand::thread_rng(),
-                                                            0..16,
-                                                        )
-                                                    }))
-                                                    .map(|n| trie::Nibble::try_from(n).unwrap()),
-                                            )
-                                            .collect::<Vec<_>>(),
-                                        ],
+                                        keys: vec![trie::nibbles_to_bytes_suffix_extend(
+                                            missing_item
+                                                .trie_node_key_nibbles
+                                                .into_iter()
+                                                // In order to download more than one item at a time,
+                                                // we add some randomly-generated nibbles to the
+                                                // requested key. The request will target the missing
+                                                // key plus a few other random keys.
+                                                .chain((0..32).map(|_| {
+                                                    rand::Rng::gen_range(
+                                                        &mut rand::thread_rng(),
+                                                        0..16,
+                                                    )
+                                                }))
+                                                .map(|n| trie::Nibble::try_from(n).unwrap()),
+                                        )
+                                        .collect::<Vec<_>>()],
                                     },
                                     database_catch_up_type: DbCatchUpType::Database,
                                 };
@@ -1292,8 +1291,7 @@ impl SyncBackground {
                     // As documented, the value returned doesn't need to be precise.
                     let result = match self.sync.status() {
                         all::Status::Sync => false,
-                        all::Status::WarpSyncFragments { .. }
-                        | all::Status::WarpSyncChainInformation { .. } => true,
+                        all::Status::WarpSync { .. } => true,
                     };
 
                     let _ = result_tx.send(result);

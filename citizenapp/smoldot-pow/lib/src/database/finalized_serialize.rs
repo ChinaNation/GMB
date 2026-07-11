@@ -59,7 +59,7 @@ pub fn encode_chain_storage<'a>(
 ) -> String {
     let information = information.into();
 
-    let decoded = defs::SerializedChainInformation::V1(defs::SerializedChainInformationV1::new(
+    let decoded = defs::SerializedChainInformation::V2(defs::SerializedChainInformationV2::new(
         information.as_ref(),
         block_number_bytes,
         finalized_storage,
@@ -113,4 +113,46 @@ enum CorruptedErrorInner {
     Deserialize(defs::DeserializeError),
     #[display("Invalid chain information: {_0}")]
     InvalidChain(chain_information::ValidityError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_chain, encode_chain};
+    use crate::{chain::chain_information, header};
+
+    #[test]
+    fn pow_chain_information_round_trips_with_explicit_consensus() {
+        let chain_information = chain_information::ValidChainInformation::try_from(
+            chain_information::ChainInformation {
+                finalized_block_header: Box::new(header::Header {
+                    parent_hash: [1; 32],
+                    number: 36,
+                    state_root: [2; 32],
+                    extrinsics_root: [3; 32],
+                    digest: header::DigestRef::empty().into(),
+                }),
+                consensus: chain_information::ChainInformationConsensus::Pow,
+                finality: chain_information::ChainInformationFinality::Outsourced,
+            },
+        )
+        .unwrap();
+
+        let encoded = encode_chain(&chain_information, 4);
+        assert!(encoded.contains("\"version\":\"2\""));
+        assert!(encoded.contains("\"consensus\":\"pow\""));
+
+        let decoded = decode_chain(&encoded, 4).unwrap();
+        assert_eq!(
+            decoded
+                .chain_information
+                .as_ref()
+                .finalized_block_header
+                .number,
+            36
+        );
+        assert!(matches!(
+            decoded.chain_information.as_ref().consensus,
+            chain_information::ChainInformationConsensusRef::Pow
+        ));
+    }
 }

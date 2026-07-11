@@ -5,7 +5,7 @@ workers_dev = true
 
 # 远端部署前必须把 database_id / kv id 替换为 Cloudflare 实际资源 ID。
 # Cloudflare API token、R2 access key、R2 secret key、Stripe secret key、Stripe webhook secret、Stream webhook secret 不得写入本文件。
-# CITIZEN_CHAIN_RPC_URL 与两项 CITIZEN_CHAIN_RPC_ACCESS_* 服务令牌必须分别使用 wrangler secret 配置，禁止写入 vars 或仓库。
+# CHAIN_URL 与两项 CHAIN_ID / CHAIN_SECRET 服务令牌必须分别使用 wrangler secret 配置，禁止写入 vars 或仓库。
 
 [[r2_buckets]]
 binding = "SQUARE_MEDIA"
@@ -160,12 +160,12 @@ STRIPE_DEV_CHECKOUT_PROXY = "0"
 VIDEO_ARCHIVE_ENABLED = "0"
 VIDEO_ARCHIVE_LAPSE_DAYS = "90"
 R2_BUCKET_NAME = "citizenapp-square-media"
-STRIPE_PRICE_VISITOR = ""
-STRIPE_PRICE_VISITOR_PRO = ""
-STRIPE_PRICE_VOTING = ""
-STRIPE_PRICE_CANDIDATE = ""
-CITIZENAPP_MEMBERSHIP_SUCCESS_URL = ""
-CITIZENAPP_MEMBERSHIP_CANCEL_URL = ""
+STRIPE_PRICE_VISITOR = "price_1TrrMkHSzSYWD2rFsabKgbxa"
+STRIPE_PRICE_VISITOR_PRO = "price_1TrrN3HSzSYWD2rFVtf8YsEY"
+STRIPE_PRICE_VOTING = "price_1TrrN8HSzSYWD2rF5A3KZ8ip"
+STRIPE_PRICE_CANDIDATE = "price_1TrrNCHSzSYWD2rFrZTsmKhl"
+CITIZENAPP_MEMBERSHIP_SUCCESS_URL = "https://www.crcfrcn.com/membership?status=success"
+CITIZENAPP_MEMBERSHIP_CANCEL_URL = "https://www.crcfrcn.com/membership?status=cancel"
 CLOUDFLARE_IMAGES_DELIVERY_BASE_URL = ""
 CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN = ""
 CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS = "300"

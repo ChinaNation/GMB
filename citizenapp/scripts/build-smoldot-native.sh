@@ -29,9 +29,8 @@ ensure_target() {
 
 build_android() {
   echo ""
-  echo "=== 编译 Android (arm64-v8a + armeabi-v7a) ==="
+  echo "=== 编译 Android (arm64-v8a) ==="
   ensure_target aarch64-linux-android
-  ensure_target armv7-linux-androideabi
 
   # 自动检测 NDK
   local ndk_home="${ANDROID_NDK_HOME:-}"
@@ -70,23 +69,15 @@ build_android() {
   export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$toolchain/bin/aarch64-linux-android24-clang"
   export CC_aarch64_linux_android="$toolchain/bin/aarch64-linux-android24-clang"
   export AR_aarch64_linux_android="$toolchain/bin/llvm-ar"
-  export CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER="$toolchain/bin/armv7a-linux-androideabi24-clang"
-  export CC_armv7_linux_androideabi="$toolchain/bin/armv7a-linux-androideabi24-clang"
-  export AR_armv7_linux_androideabi="$toolchain/bin/llvm-ar"
 
   cd "$RUST_DIR"
   cargo build --release --target aarch64-linux-android
-  cargo build --release --target armv7-linux-androideabi
 
-  # Android 真机只支持 arm64-v8a 与 armeabi-v7a 两类 ABI，
-  # 两份库必须都放入 jniLibs，否则 32 位手机会找不到 libsmoldot.so。
+  # CitizenApp Android 唯一支持 arm64-v8a；禁止重新生成任何 32 位或 x86 ABI。
   local arm64_dest="$CITIZENAPP_DIR/android/app/src/main/jniLibs/arm64-v8a"
-  local armv7_dest="$CITIZENAPP_DIR/android/app/src/main/jniLibs/armeabi-v7a"
-  mkdir -p "$arm64_dest" "$armv7_dest"
+  mkdir -p "$arm64_dest"
   cp target/aarch64-linux-android/release/libsmoldot.so "$arm64_dest/"
-  cp target/armv7-linux-androideabi/release/libsmoldot.so "$armv7_dest/"
   echo "Android arm64-v8a: $arm64_dest/libsmoldot.so ($(wc -c < "$arm64_dest/libsmoldot.so" | tr -d ' ') bytes)"
-  echo "Android armeabi-v7a: $armv7_dest/libsmoldot.so ($(wc -c < "$armv7_dest/libsmoldot.so" | tr -d ' ') bytes)"
 }
 
 build_ios() {

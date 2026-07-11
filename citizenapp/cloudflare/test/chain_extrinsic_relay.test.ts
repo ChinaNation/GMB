@@ -196,9 +196,9 @@ function fakeEnv(input: {
     DB: (input.db ?? new FakeDb()) as unknown as D1Database,
     SQUARE_MEDIA: {} as R2Bucket,
     FEED_CACHE: {} as KVNamespace,
-    CITIZEN_CHAIN_RPC_URL: 'https://rpc.internal.example',
-    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
-    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret',
+    CHAIN_URL: 'https://rpc.internal.example',
+    CHAIN_ID: 'worker-rpc.access',
+    CHAIN_SECRET: 'test-access-secret',
     CHAIN_EXTRINSIC_RELAY_ENABLED: input.enabled === false ? '0' : '1',
     CHAIN_EXTRINSIC_RELAY_MAX_PER_MINUTE: input.maxPerMinute
   };

@@ -134,6 +134,15 @@ pub enum GuardError {
     FrgGroupInvalid([u8; 2]),
 }
 
+fn decode_admin_account(raw: &[u8]) -> Result<MAdminAccount, ()> {
+    let mut input = raw;
+    let account = MAdminAccount::decode(&mut input).map_err(|_| ())?;
+    if !input.is_empty() {
+        return Err(());
+    }
+    Ok(account)
+}
+
 /// 纯判定:给定一个指向**目标状态**的 RAW 读取闭包,校验固定治理骨架全部不变式(I1..I7)。
 /// 规格来自 `primitives::governance_skeleton`(编译常量,不读链)。任一缺失/解码失败/不符 → `Err`。
 pub fn check_skeleton_invariants<F>(read_raw: F) -> Result<(), GuardError>
@@ -144,7 +153,7 @@ where
     for inst in fixed_institutions() {
         let raw = read_raw(&storage_key::admin_account(&inst.main_account))
             .ok_or(GuardError::FixedInstitutionMissing(inst.code))?;
-        let account = MAdminAccount::decode(&mut &raw[..])
+        let account = decode_admin_account(&raw)
             .map_err(|_| GuardError::AdminAccountDecodeFailed(inst.code))?;
 
         if account.institution_code != inst.code {
@@ -184,8 +193,8 @@ where
     for (province, expected_len) in frg_province_groups() {
         let raw = read_raw(&storage_key::frg_group(&province))
             .ok_or(GuardError::FrgGroupMissing(province))?;
-        let account = MAdminAccount::decode(&mut &raw[..])
-            .map_err(|_| GuardError::FrgGroupDecodeFailed(province))?;
+        let account =
+            decode_admin_account(&raw).map_err(|_| GuardError::FrgGroupDecodeFailed(province))?;
         if account.institution_code != FRG
             || account.kind != KIND_PUBLIC_INSTITUTION
             || account.status != STATUS_ACTIVE
@@ -483,5 +492,29 @@ mod tests {
             .expect("build runtime genesis storage");
         let top = storage.top;
         assert_eq!(check_skeleton_invariants(|k| top.get(k).cloned()), Ok(()));
+    }
+
+    #[test]
+    fn trailing_bytes_in_fixed_or_frg_records_are_rejected() {
+        let first = fixed_institutions()[0];
+        let fixed_key = storage_key::admin_account(&first.main_account);
+        let mut fixed_state = valid_state();
+        fixed_state
+            .get_mut(&fixed_key)
+            .expect("fixed institution")
+            .push(0xff);
+        assert_eq!(
+            check_skeleton_invariants(reader(fixed_state)),
+            Err(GuardError::AdminAccountDecodeFailed(first.code))
+        );
+
+        let province = frg_province_groups()[0].0;
+        let frg_key = storage_key::frg_group(&province);
+        let mut frg_state = valid_state();
+        frg_state.get_mut(&frg_key).expect("FRG group").push(0xff);
+        assert_eq!(
+            check_skeleton_invariants(reader(frg_state)),
+            Err(GuardError::FrgGroupDecodeFailed(province))
+        );
     }
 }

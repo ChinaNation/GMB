@@ -15,9 +15,9 @@ describe('chain bootstrap manifest', () => {
       env({
         CITIZEN_CHAIN_BOOTNODES: `${bootnodeA}\n${bootnodeB}\n${bootnodeA}`,
         CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS: '120',
-        CITIZEN_CHAIN_RPC_URL: 'https://rpc.internal.example',
-        CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
-        CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret'
+        CHAIN_URL: 'https://rpc.internal.example',
+        CHAIN_ID: 'worker-rpc.access',
+        CHAIN_SECRET: 'test-access-secret'
       })
     );
 
@@ -49,9 +49,9 @@ describe('chain bootstrap manifest', () => {
       new Request('https://api.onchina.org/v1/chain/bootstrap'),
       env({
         CHAIN_EXTRINSIC_RELAY_ENABLED: '1',
-        CITIZEN_CHAIN_RPC_URL: 'https://rpc.internal.example',
-        CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
-        CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret'
+        CHAIN_URL: 'https://rpc.internal.example',
+        CHAIN_ID: 'worker-rpc.access',
+        CHAIN_SECRET: 'test-access-secret'
       })
     );
 
@@ -67,8 +67,8 @@ describe('chain bootstrap manifest', () => {
       new Request('https://api.onchina.org/v1/chain/bootstrap'),
       env({
         CHAIN_EXTRINSIC_RELAY_ENABLED: '1',
-        CITIZEN_CHAIN_RPC_URL: 'https://rpc.internal.example',
-        CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access'
+        CHAIN_URL: 'https://rpc.internal.example',
+        CHAIN_ID: 'worker-rpc.access'
       })
     );
 

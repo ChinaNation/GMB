@@ -41,7 +41,7 @@ use smoldot::{
     executor::host,
     libp2p::PeerId,
     network::{codec, service},
-    trie::{self, Nibble, minimize_proof, prefix_proof, proof_decode},
+    trie::{self, minimize_proof, prefix_proof, proof_decode, Nibble},
 };
 
 mod parachain;
@@ -53,27 +53,82 @@ pub use network_service::Role;
 ///
 /// 中文注释：该枚举直接来自 smoldot 同步状态机，不由 Dart 根据高度差猜测。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SyncMode {
+pub enum SyncPhase {
     /// 普通区块头同步，包含 warp 完成后的少量尾部追赶。
     Regular,
-    /// 正在下载或验证 GRANDPA warp proof fragments。
-    WarpFragments,
-    /// 已验证目标 finalized，正在构建目标 runtime 与链信息。
-    WarpChainInformation,
+    /// 正在等待或下载 GRANDPA warp proof fragments。
+    WarpDownloadingFragments,
+    /// 正在本地验证已经收到的 GRANDPA warp proof fragments。
+    WarpVerifyingFragments,
+    /// fragments 已验证，正在下载目标状态、runtime proof 或 call proof。
+    WarpDownloadingTargetState,
+    /// 目标 runtime proof 已下载，正在本地构建 runtime。
+    WarpBuildingRuntime,
+    /// runtime 与必要 proof 已完成，正在构建完整 chain information。
+    WarpBuildingChainInformation,
+}
+
+/// 本次同步状态机采用的可信 finalized 起点来源。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupFinalizedSource {
+    /// 使用签名安装包内置的固定 checkpoint（CitizenApp 当前固定为创世块 `#0`）。
+    BundledCheckpoint,
+    /// 使用通过 genesis 校验的本机 finalized database。
+    LocalDatabase,
+}
+
+/// 最近一次导致 warp 无法继续的稳定错误分类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WarpFailure {
+    EmptyProof,
+    InvalidHeader,
+    InvalidJustification,
+    BlockNumberNotIncrementing,
+    TargetHashMismatch,
+    JustificationVerifyFailed,
+    NonMinimalProof,
+    WarpRequestFailed,
+    StorageProofRequestFailed,
+    CallProofRequestFailed,
+    RuntimeBuildFailed,
+    ChainInformationBuildFailed,
 }
 
 /// 同步过程的结构化可观测快照。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyncActivitySnapshot {
-    pub mode: SyncMode,
+    pub phase: SyncPhase,
+    /// 本次生命周期真实采用的 finalized 起点来源。
+    pub startup_finalized_source: Option<StartupFinalizedSource>,
     /// 本次 addChain 实际采用的 finalized 起点；新安装为内置 checkpoint，老用户可为本机缓存。
     pub startup_finalized_block_number: Option<u64>,
+    /// 本次 addChain 实际采用的 finalized 起点 hash。
+    pub startup_finalized_block_hash: Option<[u8; 32]>,
     /// 已连接 peer 公布的最高 GRANDPA finalized 高度。
     pub highest_peer_finalized_block_number: Option<u64>,
-    /// 本次生命周期中 warp 已验证到的最高 finalized 高度。
-    pub warp_finalized_block_number: Option<u64>,
+    /// 已经构建出完整 chain information 的可信 finalized 高度。
+    pub current_verified_finalized_block_number: u64,
+    /// `current_verified_finalized_block_number` 对应的 hash。
+    pub current_verified_finalized_block_hash: [u8; 32],
+    /// 当前 fragment proof 指向的 warp 目标高度；完成前不得用于持久化或可用性判断。
+    pub warp_target_finalized_block_number: Option<u64>,
+    /// `warp_target_finalized_block_number` 对应的 hash；下载 proof 前尚未知，验证 fragment
+    /// 后才填充。
+    pub warp_target_finalized_block_hash: Option<[u8; 32]>,
     pub warp_request_count: u64,
-    pub warp_fragment_count: u64,
+    /// 当前仍在网络层执行的 fragment 请求数。
+    pub active_warp_fragment_request_count: u64,
+    /// 当前仍在网络层执行的目标状态 proof 请求数。
+    pub active_warp_storage_request_count: u64,
+    /// 当前仍在网络层执行的 runtime call proof 请求数。
+    pub active_warp_call_proof_request_count: u64,
+    /// 已从网络成功解码的 fragment 数量，不代表已经验证。
+    pub warp_received_fragment_count: u64,
+    /// 已通过 GRANDPA justification 验证的 fragment 数量。
+    pub warp_verified_fragment_count: u64,
+    /// 被本地验证拒绝的 fragment 数量。
+    pub warp_rejected_fragment_count: u64,
+    pub warp_last_failure: Option<WarpFailure>,
 }
 
 /// Configuration for a [`SyncService`].
@@ -109,6 +164,9 @@ pub enum ConfigChainType<TPlat: PlatformRef> {
 pub struct ConfigRelayChain {
     /// State of the finalized chain.
     pub chain_information: chain::chain_information::ValidChainInformation,
+
+    /// `chain_information` 是来自签名安装包还是本机 database。
+    pub startup_finalized_source: StartupFinalizedSource,
 
     /// Known valid Merkle value and storage value combination for the `:code` key.
     ///
@@ -186,6 +244,7 @@ impl<TPlat: PlatformRef> SyncService<TPlat> {
                     log_target.clone(),
                     config.platform.clone(),
                     config_relay_chain.chain_information,
+                    config_relay_chain.startup_finalized_source,
                     config.block_number_bytes,
                     config_relay_chain.runtime_code_hint,
                     from_foreground,
@@ -219,7 +278,8 @@ impl<TPlat: PlatformRef> SyncService<TPlat> {
     /// [`smoldot::database::finalized_serialize::encode_chain`].
     ///
     /// Returns `None` if this information couldn't be obtained because not enough is known about
-    /// the chain.
+    /// the chain, or while warp is still active. An intermediate H must never be exported as the
+    /// target F database.
     pub async fn serialize_chain_information(
         &self,
     ) -> Option<chain::chain_information::ValidChainInformation> {

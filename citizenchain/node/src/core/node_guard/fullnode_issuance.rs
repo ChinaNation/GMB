@@ -115,21 +115,29 @@ pub mod storage_key {
 
 type RewardAudit = (u32, [u8; 32], [u8; 32], u128);
 
+fn decode_exact<T: Decode>(bytes: &[u8]) -> Result<T, ()> {
+    let mut input = bytes;
+    let value = T::decode(&mut input).map_err(|_| ())?;
+    if !input.is_empty() {
+        return Err(());
+    }
+    Ok(value)
+}
+
 fn decode_or_zero<T: Decode + Default>(raw: Option<Vec<u8>>) -> Result<T, ()> {
     match raw {
-        Some(bytes) => T::decode(&mut &bytes[..]).map_err(|_| ()),
+        Some(bytes) => decode_exact(&bytes),
         None => Ok(T::default()),
     }
 }
 
 fn decode_required<T: Decode>(raw: Option<Vec<u8>>) -> Result<T, ()> {
     let bytes = raw.ok_or(())?;
-    T::decode(&mut &bytes[..]).map_err(|_| ())
+    decode_exact(&bytes)
 }
 
 fn decode_audit(raw: Option<Vec<u8>>) -> Result<Option<RewardAudit>, ()> {
-    raw.map(|bytes| RewardAudit::decode(&mut &bytes[..]).map_err(|_| ()))
-        .transpose()
+    raw.map(|bytes| decode_exact(&bytes)).transpose()
 }
 
 fn free_balance<F>(read: &F, account: &[u8; 32]) -> Result<u128, GuardError>
@@ -137,7 +145,7 @@ where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
 {
     match read(&storage_key::system_account(account)) {
-        Some(bytes) => MAccountInfo::decode(&mut &bytes[..])
+        Some(bytes) => decode_exact::<MAccountInfo>(&bytes)
             .map(|info| info.data.free)
             .map_err(|_| GuardError::RewardAccountDecodeFailed),
         None => Ok(0),
@@ -163,7 +171,7 @@ pub fn author_from_header(header: &Header) -> Option<[u8; 32]> {
         if engine_id != sp_consensus_pow::POW_ENGINE_ID {
             return None;
         }
-        sp_core::sr25519::Public::decode(&mut &data[..])
+        decode_exact::<sp_core::sr25519::Public>(data)
             .ok()
             .map(|public| public.0)
     })
@@ -252,8 +260,9 @@ where
     }
 
     let recipient = match pre_finalize(&storage_key::reward_wallet(&author)) {
-        Some(bytes) => <[u8; 32]>::decode(&mut &bytes[..])
-            .map_err(|_| GuardError::RewardAccountDecodeFailed)?,
+        Some(bytes) => {
+            decode_exact::<[u8; 32]>(&bytes).map_err(|_| GuardError::RewardAccountDecodeFailed)?
+        }
         None => author,
     };
     let audit = decode_audit(post(&storage_key::last_reward_audit()))
@@ -342,7 +351,7 @@ where
     }
     if block <= FULLNODE_REWARD_END_BLOCK {
         let bound: Option<[u8; 32]> = read(&storage_key::reward_wallet(&miner))
-            .map(|bytes| <[u8; 32]>::decode(&mut &bytes[..]))
+            .map(|bytes| decode_exact::<[u8; 32]>(&bytes))
             .transpose()
             .map_err(|_| GuardError::RewardAuditInvalid)?;
         if bound.unwrap_or(miner) != wallet || free_balance(&read, &wallet)? < FULLNODE_BLOCK_REWARD
@@ -733,5 +742,72 @@ mod tests {
                 found: 1,
             })
         );
+    }
+
+    #[test]
+    fn scale_values_with_trailing_bytes_are_rejected() {
+        let author = [12u8; 32];
+        let wallet = [13u8; 32];
+        let (parent, pre, mut post) = valid_transition(1, author, wallet);
+        post.get_mut(&storage_key::rewarded_block_count())
+            .expect("rewarded count")
+            .push(0xff);
+        assert_eq!(
+            check_transition(
+                1,
+                Some(author),
+                |key| parent.get(key).cloned(),
+                |key| pre.get(key).cloned(),
+                |key| post.get(key).cloned(),
+            ),
+            Err(GuardError::RewardedBlockCountInvalid {
+                expected: 1,
+                found: u32::MAX,
+            })
+        );
+
+        let (parent, mut pre, post) = valid_transition(1, author, wallet);
+        pre.get_mut(&storage_key::reward_wallet(&author))
+            .expect("reward wallet")
+            .push(0xff);
+        assert_eq!(
+            check_transition(
+                1,
+                Some(author),
+                |key| parent.get(key).cloned(),
+                |key| pre.get(key).cloned(),
+                |key| post.get(key).cloned(),
+            ),
+            Err(GuardError::RewardAccountDecodeFailed)
+        );
+    }
+
+    #[test]
+    fn pow_author_digest_rejects_trailing_bytes() {
+        use sp_core::H256;
+        use sp_runtime::{Digest, DigestItem};
+
+        let author = sp_core::sr25519::Public::from_raw([42u8; 32]);
+        let mut exact_header = Header::new(
+            1,
+            H256::repeat_byte(1),
+            H256::repeat_byte(2),
+            H256::repeat_byte(3),
+            Digest {
+                logs: vec![DigestItem::PreRuntime(
+                    sp_consensus_pow::POW_ENGINE_ID,
+                    author.encode(),
+                )],
+            },
+        );
+        assert_eq!(author_from_header(&exact_header), Some(author.0));
+
+        exact_header.digest_mut().logs[0] =
+            DigestItem::PreRuntime(sp_consensus_pow::POW_ENGINE_ID, {
+                let mut bytes = author.encode();
+                bytes.push(0xff);
+                bytes
+            });
+        assert_eq!(author_from_header(&exact_header), None);
     }
 }

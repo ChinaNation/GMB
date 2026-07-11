@@ -243,9 +243,9 @@ function fakeEnv(input: {
     DB: db as unknown as D1Database,
     SQUARE_MEDIA: {} as R2Bucket,
     FEED_CACHE: kv as unknown as KVNamespace,
-    CITIZEN_CHAIN_RPC_URL: 'https://chain.test',
-    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
-    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret',
+    CHAIN_URL: 'https://chain.test',
+    CHAIN_ID: 'worker-rpc.access',
+    CHAIN_SECRET: 'test-access-secret',
     STRIPE_WEBHOOK_SECRET: input.stripeSecret
   } as unknown as Env;
 }

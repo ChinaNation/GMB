@@ -8,10 +8,10 @@ use std::{
 
 use openmls::{
     prelude::{
-        tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize},
         BasicCredential, Ciphersuite, CredentialWithKey, Extensions, GroupId, KeyPackage,
         KeyPackageBundle, KeyPackageIn, MlsGroup, MlsGroupCreateConfig, MlsMessageBodyIn,
         MlsMessageIn, ProcessedMessageContent, ProtocolVersion, RatchetTreeIn, StagedWelcome,
+        tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize},
     },
     storage::OpenMlsProvider as OpenMlsStorageProvider,
 };
@@ -19,7 +19,7 @@ use openmls_basic_credential::SignatureKeyPair;
 use openmls_memory_storage::MemoryStorage;
 use openmls_rust_crypto::{OpenMlsRustCrypto, RustCrypto};
 use openmls_traits::{
-    signatures::Signer, types::SignatureScheme, OpenMlsProvider as OpenMlsTraitsProvider,
+    OpenMlsProvider as OpenMlsTraitsProvider, signatures::Signer, types::SignatureScheme,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;

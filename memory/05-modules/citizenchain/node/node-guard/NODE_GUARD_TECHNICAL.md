@@ -77,11 +77,21 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 - 当前一次扫描同时抽取 `PublicAdmins`、`FullnodeIssuance`、`CitizenIssuance`、相关 `System::Account`、`Balances::TotalIssuance` 及 CID 规范表；后续策略必须继续复用同一份完整导入态；
 - CID 删除/复用属于历史单调性，非创世单快照不能证明，因此 CID 策略只允许 block#0 完整状态导入，严格拒绝非 block#0 状态导入。
 
+完整态实现使用一次共享分区扫描：输入 key 只遍历一次，并同时抽取治理骨架、全节点发行/账户、
+公民发行和 CID 生命周期所需状态。2026-07-11 的第 6 步单元验收已经证明分区计数与输入 key 数一致，
+并覆盖统一 `KnownBad` 返回和拒绝路径内层导入零调用；真实 warp 导入和峰值内存仍必须在任务关闭前完成。
+
 ## 6. 启动锚定
 
 `NodeGuard::new` 使用 block#0 状态校验全部已注册策略。固定治理骨架规格来自编译进节点二进制的 `primitives::governance_skeleton`；全节点发行要求创世累计块数、累计金额均为 0 且不存在最近奖励审计；公民认证发行只允许 FRAME 规范空状态，即 pallet 存储版本 0、累计数和待发数为精确零值，不得存在领取标记或队列；CID 策略枚举公民登记、公私权机构、账户占号与创世封存表，建立不可改写的创世账户索引基准。全部策略都不读取可被 runtime 升级改变的 metadata。
 
 创世状态缺少固定机构、机构码/类型/状态/名额不符、NJD 护宪席位不为 7 或 FRG 省组不完整时，节点拒绝启动。
+
+2026-07-11 使用当前 debug 节点和独立临时 base path 的真实启动基线：49,593 个创世公权机构的 fresh
+链约 47 秒后达到 `chain_getBlockHash(0)` 可用，临时数据库约 240 MiB，创世哈希为
+`0x3e3a23954fbe4301fe5ccbd9bdb96c2073626c99bfb1acc4218e0a9886fdff82`。该数据只是当前机器上的
+debug 基线，不替代 release 峰值内存和各路径性能矩阵。冻结网络仍为 `0xb57c…9971`，两者连接会因
+genesis mismatch 被拒绝；正式部署前必须重新烘焙唯一基线，不得保留双轨或旧 SCALE 兼容。
 
 ## 7. 当前策略：固定治理骨架
 

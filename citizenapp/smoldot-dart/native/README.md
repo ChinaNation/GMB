@@ -52,7 +52,7 @@ https://rust-lang.github.io/rustup/cross-compilation.html
 ### Android
 
 ```bash
-rustup target add aarch64-linux-android armv7-linux-androideabi
+rustup target add aarch64-linux-android
 cargo build --release --target aarch64-linux-android
 ```
 

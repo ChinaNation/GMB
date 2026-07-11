@@ -30,9 +30,9 @@ export interface Env {
   SQUARE_SESSION_TTL_SECONDS?: string;
   SQUARE_UPLOAD_URL_TTL_SECONDS?: string;
   // Worker 通过 Access + Tunnel 调用权威节点回环 RPC；URL 和服务令牌只放远端 Secret。
-  CITIZEN_CHAIN_RPC_URL?: string;
-  CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID?: string;
-  CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET?: string;
+  CHAIN_URL?: string;
+  CHAIN_ID?: string;
+  CHAIN_SECRET?: string;
   // 轻节点启动清单只下发公开 bootnodes 和冻结链身份，不下发 checkpoint 或 RPC 地址。
   CITIZEN_CHAIN_BOOTNODES?: string;
   CITIZEN_CHAIN_BOOTSTRAP_TTL_SECONDS?: string;

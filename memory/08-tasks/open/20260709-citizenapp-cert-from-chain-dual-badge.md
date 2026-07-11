@@ -8,7 +8,7 @@
 
 - 现状 bug：主页 `is_certified = cidNumber!==null`，cidNumber 来自 D1「最近一条带 cid 的已发布帖」（service.ts:76 + repository.ts:94 `readLatestCidNumber`）→ 没发帖=未认证，且不反映护照过期/吊销。
 - 链上真源现成：`fetchChainIdentityState`（chain/identity.ts:24）已同时读 `VotingIdentityByAccount`+`CandidateIdentityByAccount`、校验护照窗口+status=normal，返回 `identity_level`(visitor/voting/candidate)。会员校验已在用。
-- 读链成本：每次 2 个 RPC、单个 Access 保护的 HTTPS 上游；`CITIZEN_CHAIN_RPC_URL` 与两项 `CITIZEN_CHAIN_RPC_ACCESS_*` Secret 缺任一项均视为未配置。Worker 统一 RPC 层已有 3 秒超时和 4 MiB 响应上限，无缓存、无自动重试。
+- 读链成本：每次 2 个 RPC、单个 Access 保护的 HTTPS 上游；`CHAIN_URL` 与两项 `CHAIN_ID / CHAIN_SECRET` Secret 缺任一项均视为未配置。Worker 统一 RPC 层已有 3 秒超时和 4 MiB 响应上限，无缓存、无自动重试。
 - 徽章色：`AppTheme.voting=0xFF3B82F6`(蓝)、`AppTheme.danger=0xFFEF4444`(红)；现单色 `0xFF007A74`。
 - 四处认证展示点：①主页头像(profile_header_card，BFF)②我的tab头像(user.dart，MyIdService链直读，仅投票)③广场帖子作者(square_post_card，feed cid)④广场首页顶栏(square_home_page，SquareIdentityService链直读，仅投票)。当前全只认投票表、单色。
 
@@ -96,7 +96,7 @@
 - point4 广场顶栏：square_chain_service 加 fetchIdentity(投票+候选)；SquareIdentityState.identityLevel；square_home_page 非阻塞拉会员 + 顶栏 CitizenBadge。
 - 验收：`flutter analyze lib` 干净；`flutter test test/8964` 65 全绿、myid/square_chain 全绿；Worker `npm test` 67 全绿。会员一律非阻塞加载（身份先渲染，勾稍后补）。
 - 注：test/wallet/wallet_manager_test 6 失败属并行线程 seed 迁移（biometric），非本卡改动。
-- **仍缺**：生产 `CITIZEN_CHAIN_RPC_URL` 与两项 `CITIZEN_CHAIN_RPC_ACCESS_*` Secret、Access + Tunnel 部署；未配前主页/feed 颜色软降级为访客、无徽章。
+- **仍缺**：生产 `CHAIN_URL` 与两项 `CHAIN_ID / CHAIN_SECRET` Secret、Access + Tunnel 部署；未配前主页/feed 颜色软降级为访客、无徽章。
 
 ### 徽章样式二次定稿（2026-07-09 晚，用户拍板，已实现）
 推翻我擅自改的"实心圆/空心环"，改成**推特式扇贝勋章**（`CitizenBadge` 用 `_RosetteBadgePainter` CustomPaint 画：8 花瓣+中心圆，白底盘）。规则最终简化：

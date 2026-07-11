@@ -13,7 +13,7 @@ CID_DEV_USB_PORT=8899
 
 # 构造 dart-define 参数
 DART_DEFINES=(--dart-define=CITIZENAPP_ONCHINA_ENV=dev_usb)
-ANDROID_TARGET_PLATFORMS=(--target-platform android-arm,android-arm64)
+ANDROID_TARGET_PLATFORMS=(--target-platform android-arm64)
 echo "[启动模式] smoldot 轻节点"
 
 # ── chainspec.json 是从链端 plain SSOT + 创世状态包派生的轻节点创世 ──

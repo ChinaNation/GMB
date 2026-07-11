@@ -61,6 +61,24 @@ impl FinalizeIssuancePlan {
     }
 }
 
+/// 两层守卫共用的最终导入闸门：只有全部原生规则明确验证成功才允许调用内层导入器。
+///
+/// 把委派动作单独收口后，测试可以直接证明 `Err` 路径返回 `KnownBad` 且内层调用次数为零，
+/// 避免某个包装器以后在日志分支中误调用内层导入器。
+pub(super) async fn import_if_verified<I>(
+    inner: &I,
+    params: BlockImportParams<Block>,
+    verdict: Result<(), String>,
+) -> Result<ImportResult, ConsensusError>
+where
+    I: BlockImport<Block, Error = ConsensusError> + Send + Sync,
+{
+    match verdict {
+        Ok(()) => inner.import_block(params).await,
+        Err(_) => Ok(ImportResult::KnownBad),
+    }
+}
+
 /// 节点镜像的 `frame_system::AccountInfo<u32, pallet_balances::AccountData<u128>>`。
 #[derive(Debug, Decode, Eq, PartialEq)]
 struct NativeAccountInfo {
@@ -118,6 +136,48 @@ where
     read(&fullnode_issuance::storage_key::system_account(account))
         .map(|raw| decode_exact(&raw, "System::Account"))
         .transpose()
+}
+
+#[derive(Default)]
+struct ImportedPolicyState {
+    governance: BTreeMap<Vec<u8>, Vec<u8>>,
+    fullnode_issuance: BTreeMap<Vec<u8>, Vec<u8>>,
+    citizen_issuance: BTreeMap<Vec<u8>, Vec<u8>>,
+    cid: BTreeMap<Vec<u8>, Vec<u8>>,
+    scanned: usize,
+}
+
+/// 对完整下载态只遍历一次，并把所有内部策略需要的 RAW 状态分流到共享快照。
+fn partition_imported_state<'a, I>(pairs: I) -> ImportedPolicyState
+where
+    I: IntoIterator<Item = (&'a Vec<u8>, &'a Vec<u8>)>,
+{
+    let governance_prefix = governance_skeleton::storage_key::pallet_prefix();
+    let fullnode_prefix = fullnode_issuance::storage_key::pallet_prefix();
+    let system_prefix = fullnode_issuance::storage_key::system_prefix();
+    let total_issuance_key = fullnode_issuance::storage_key::total_issuance();
+    let citizen_issuance_prefix = citizen_issuance::storage_key::pallet_prefix();
+    let cid_prefixes = cid_lifecycle::storage_key::relevant_prefixes();
+    let mut state = ImportedPolicyState::default();
+    for (key, value) in pairs {
+        state.scanned = state.scanned.saturating_add(1);
+        if key.starts_with(&governance_prefix) {
+            state.governance.insert(key.clone(), value.clone());
+        }
+        if key.starts_with(&fullnode_prefix)
+            || key.starts_with(&system_prefix)
+            || key == &total_issuance_key
+        {
+            state.fullnode_issuance.insert(key.clone(), value.clone());
+        }
+        if cid_lifecycle::matches_relevant_prefixes(key, &cid_prefixes) {
+            state.cid.insert(key.clone(), value.clone());
+        }
+        if key.starts_with(&citizen_issuance_prefix) {
+            state.citizen_issuance.insert(key.clone(), value.clone());
+        }
+    }
+    state
 }
 
 /// finalize 阶段只允许已注册发行计划改变账户和 `TotalIssuance`，其余变化一律 fail-closed。
@@ -312,48 +372,33 @@ impl<I> NodeGuard<I> {
             .map_err(|e| format!("CID 生命周期:{e:?}"))?;
 
         // 所有策略复用同一遍 imported state 扫描，禁止为单项永久规则再新增包装器。
-        let governance_prefix = governance_skeleton::storage_key::pallet_prefix();
-        let fullnode_prefix = fullnode_issuance::storage_key::pallet_prefix();
-        let system_prefix = fullnode_issuance::storage_key::system_prefix();
-        let total_issuance_key = fullnode_issuance::storage_key::total_issuance();
-        let citizen_issuance_prefix = citizen_issuance::storage_key::pallet_prefix();
-        let cid_prefixes = cid_lifecycle::storage_key::relevant_prefixes();
-        let mut governance_state: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
-        let mut issuance_state: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
-        let mut cid_state: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
-        let mut citizen_issuance_state: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
-        for (key, value) in imported
-            .state
-            .0
-            .iter()
-            .flat_map(|level| level.key_values.iter())
-        {
-            if key.starts_with(&governance_prefix) {
-                governance_state.insert(key.clone(), value.clone());
-            }
-            if key.starts_with(&fullnode_prefix)
-                || key.starts_with(&system_prefix)
-                || key == &total_issuance_key
-            {
-                issuance_state.insert(key.clone(), value.clone());
-            }
-            if cid_lifecycle::matches_relevant_prefixes(key, &cid_prefixes) {
-                cid_state.insert(key.clone(), value.clone());
-            }
-            if key.starts_with(&citizen_issuance_prefix) {
-                citizen_issuance_state.insert(key.clone(), value.clone());
-            }
-        }
-        governance_skeleton::check_skeleton_invariants(|key| governance_state.get(key).cloned())
+        let state = partition_imported_state(
+            imported
+                .state
+                .0
+                .iter()
+                .flat_map(|level| level.key_values.iter())
+                .map(|(key, value)| (key, value)),
+        );
+        log::debug!(
+            target: "node-guard",
+            "完整状态单遍扫描:总键 {},治理 {},全节点发行/账户 {},公民发行 {},CID {}",
+            state.scanned,
+            state.governance.len(),
+            state.fullnode_issuance.len(),
+            state.citizen_issuance.len(),
+            state.cid.len(),
+        );
+        governance_skeleton::check_skeleton_invariants(|key| state.governance.get(key).cloned())
             .map_err(|e| format!("固定治理骨架:{e:?}"))?;
         fullnode_issuance::check_imported_state_key_values(
             *params.header.number(),
-            issuance_state.iter(),
+            state.fullnode_issuance.iter(),
         )
         .map_err(|e| format!("全节点发行:{e:?}"))?;
-        citizen_issuance::check_genesis_key_values(citizen_issuance_state.iter())
+        citizen_issuance::check_genesis_key_values(state.citizen_issuance.iter())
             .map_err(|e| format!("公民认证发行:{e:?}"))?;
-        cid_lifecycle::check_imported_genesis(cid_state.iter(), &self.cid_lifecycle)
+        cid_lifecycle::check_imported_genesis(state.cid.iter(), &self.cid_lifecycle)
             .map_err(|e| format!("CID 生命周期:{e:?}"))
     }
 
@@ -553,22 +598,20 @@ where
         params: BlockImportParams<Block>,
     ) -> Result<ImportResult, Self::Error> {
         if params.with_state() {
-            return match self.verify_imported_state(&params) {
-                Ok(()) => self.inner.import_block(params).await,
-                Err(reason) => {
-                    log::error!(
-                        target: "node-guard",
-                        "拒绝 warp/状态导入 ({:?}):节点永久规则校验未通过 —— {reason}",
-                        params.post_hash(),
-                    );
-                    Ok(ImportResult::KnownBad)
-                }
-            };
+            let verdict = self.verify_imported_state(&params);
+            if let Err(reason) = &verdict {
+                log::error!(
+                    target: "node-guard",
+                    "拒绝 warp/状态导入 ({:?}):节点永久规则校验未通过 —— {reason}",
+                    params.post_hash(),
+                );
+            }
+            return import_if_verified(&self.inner, params, verdict).await;
         }
 
-        match self.detect_violation(&params) {
-            Ok(true) => Ok(ImportResult::KnownBad),
-            Ok(false) => self.inner.import_block(params).await,
+        let verdict = match self.detect_violation(&params) {
+            Ok(true) => Err("节点永久规则明确判定为违规".to_string()),
+            Ok(false) => Ok(()),
             // 沿用现有 fail-closed 口径：无法完成节点规则检查时不导入未经验证的区块。
             Err(reason) => {
                 log::error!(
@@ -576,9 +619,10 @@ where
                     "节点守卫判定失败,fail-closed 拒块 ({:?}):{reason}",
                     params.post_hash(),
                 );
-                Ok(ImportResult::KnownBad)
+                Err(reason)
             }
-        }
+        };
+        import_if_verified(&self.inner, params, verdict).await
     }
 }
 
@@ -586,6 +630,47 @@ where
 mod finalize_issuance_tests {
     use super::*;
     use codec::Encode;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Default)]
+    struct CountingImport {
+        imports: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl BlockImport<Block> for CountingImport {
+        type Error = ConsensusError;
+
+        async fn check_block(
+            &self,
+            _block: BlockCheckParams<Block>,
+        ) -> Result<ImportResult, Self::Error> {
+            Ok(ImportResult::AlreadyInChain)
+        }
+
+        async fn import_block(
+            &self,
+            _block: BlockImportParams<Block>,
+        ) -> Result<ImportResult, Self::Error> {
+            self.imports.fetch_add(1, Ordering::SeqCst);
+            Ok(ImportResult::AlreadyInChain)
+        }
+    }
+
+    fn import_params(number: u32) -> BlockImportParams<Block> {
+        use sp_consensus::BlockOrigin;
+        use sp_core::H256;
+        use sp_runtime::Digest;
+
+        let header = citizenchain::opaque::Header::new(
+            number,
+            H256::repeat_byte(1),
+            H256::repeat_byte(2),
+            H256::repeat_byte(3),
+            Digest::default(),
+        );
+        BlockImportParams::new(BlockOrigin::NetworkInitialSync, header)
+    }
 
     const NEW_BALANCES_FLAGS: u128 = 0x80000000_00000000_00000000_00000000;
 
@@ -684,5 +769,111 @@ mod finalize_issuance_tests {
             ),
             Ok(())
         );
+    }
+
+    #[test]
+    fn guarded_import_delegates_only_after_explicit_success() {
+        let inner = CountingImport::default();
+        let accepted =
+            futures::executor::block_on(import_if_verified(&inner, import_params(1), Ok(())))
+                .expect("verified import result");
+        assert_eq!(accepted, ImportResult::AlreadyInChain);
+        assert_eq!(inner.imports.load(Ordering::SeqCst), 1);
+
+        let rejected = futures::executor::block_on(import_if_verified(
+            &inner,
+            import_params(2),
+            Err("malicious state".into()),
+        ))
+        .expect("known bad result");
+        assert_eq!(rejected, ImportResult::KnownBad);
+        assert_eq!(inner.imports.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn finalize_plan_rejects_overflow_wrong_total_and_non_free_mutation() {
+        let mut overflow = FinalizeIssuancePlan::default();
+        overflow.add([1u8; 32], u128::MAX).expect("first amount");
+        assert_eq!(overflow.add([2u8; 32], 1), Err(()));
+
+        let recipient = [4u8; 32];
+        let total_key = fullnode_issuance::storage_key::total_issuance();
+        let account_key = fullnode_issuance::storage_key::system_account(&recipient);
+        let pre = BTreeMap::from([
+            (total_key.clone(), 1_000u128.encode()),
+            (account_key.clone(), account(10, 1, NEW_BALANCES_FLAGS)),
+        ]);
+        let mut post = BTreeMap::from([
+            (total_key.clone(), 1_099u128.encode()),
+            (account_key.clone(), account(110, 1, NEW_BALANCES_FLAGS)),
+        ]);
+        let mut post_delta = post
+            .iter()
+            .map(|(key, value)| (key.clone(), Some(value.clone())))
+            .collect::<BTreeMap<_, _>>();
+        let mut plan = FinalizeIssuancePlan::default();
+        plan.add(recipient, 100).expect("reward");
+        let wrong_total = verify_finalize_issuance(
+            &BTreeMap::new(),
+            &post_delta,
+            &|key| pre.get(key).cloned(),
+            &|key| post.get(key).cloned(),
+            &plan,
+        )
+        .expect_err("wrong total must fail");
+        assert!(wrong_total.contains("总发行差额错误"));
+
+        post.insert(total_key.clone(), 1_100u128.encode());
+        let mutated = (
+            1u32,
+            0u32,
+            1u32,
+            0u32,
+            (110u128, 0u128, 0u128, NEW_BALANCES_FLAGS),
+        )
+            .encode();
+        post.insert(account_key.clone(), mutated.clone());
+        post_delta.insert(total_key, Some(1_100u128.encode()));
+        post_delta.insert(account_key, Some(mutated));
+        let non_free = verify_finalize_issuance(
+            &BTreeMap::new(),
+            &post_delta,
+            &|key| pre.get(key).cloned(),
+            &|key| post.get(key).cloned(),
+            &plan,
+        )
+        .expect_err("nonce mutation must fail");
+        assert!(non_free.contains("非 free 账户字段被改写"));
+    }
+
+    #[test]
+    fn imported_state_is_partitioned_in_one_shared_pass() {
+        let governance = governance_skeleton::storage_key::admin_account(&[1u8; 32]);
+        let fullnode = fullnode_issuance::storage_key::rewarded_block_count();
+        let citizen = citizen_issuance::storage_key::rewarded_count();
+        let cid = cid_lifecycle::storage_key::citizen_registry_prefix();
+        let unrelated = b"unrelated".to_vec();
+        let pairs = BTreeMap::from([
+            (governance.clone(), vec![1]),
+            (fullnode.clone(), vec![2]),
+            (citizen.clone(), vec![3]),
+            (cid.clone(), vec![4]),
+            (unrelated, vec![5]),
+        ]);
+        let state = partition_imported_state(pairs.iter());
+        assert_eq!(state.scanned, 5);
+        assert_eq!(
+            state.governance.keys().cloned().collect::<Vec<_>>(),
+            [governance]
+        );
+        assert_eq!(
+            state.fullnode_issuance.keys().cloned().collect::<Vec<_>>(),
+            [fullnode]
+        );
+        assert_eq!(
+            state.citizen_issuance.keys().cloned().collect::<Vec<_>>(),
+            [citizen]
+        );
+        assert_eq!(state.cid.keys().cloned().collect::<Vec<_>>(), [cid]);
     }
 }

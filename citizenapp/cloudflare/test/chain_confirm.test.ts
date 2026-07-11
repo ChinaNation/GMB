@@ -109,9 +109,9 @@ describe('square chain confirmation', () => {
         })
       }),
       FEED_CACHE: {},
-      CITIZEN_CHAIN_RPC_URL: 'https://chain.test',
-      CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
-      CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret'
+      CHAIN_URL: 'https://chain.test',
+      CHAIN_ID: 'worker-rpc.access',
+      CHAIN_SECRET: 'test-access-secret'
     } as unknown as Env;
     vi.stubGlobal(
       'fetch',
@@ -171,7 +171,7 @@ describe('square chain confirmation', () => {
 
     await expect(
       fetchChainStorage(
-        chainRpcEnv({ CITIZEN_CHAIN_RPC_URL: 'http://127.0.0.1:9944' }),
+        chainRpcEnv({ CHAIN_URL: 'http://127.0.0.1:9944' }),
         '0x1234'
       )
     ).rejects.toMatchObject({ code: 'chain_rpc_invalid_config' });
@@ -253,9 +253,9 @@ function chainRpcEnv(overrides: Partial<Env> = {}): Env {
     DB: {} as D1Database,
     SQUARE_MEDIA: {} as R2Bucket,
     FEED_CACHE: {} as KVNamespace,
-    CITIZEN_CHAIN_RPC_URL: 'https://chain.test',
-    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID: 'worker-rpc.access',
-    CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET: 'test-access-secret',
+    CHAIN_URL: 'https://chain.test',
+    CHAIN_ID: 'worker-rpc.access',
+    CHAIN_SECRET: 'test-access-secret',
     ...overrides
   };
 }

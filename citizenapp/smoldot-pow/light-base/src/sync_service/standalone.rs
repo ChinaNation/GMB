@@ -17,13 +17,15 @@
 
 use super::{
     BlockNotification, ConfigRelayChainRuntimeCodeHint, FinalizedBlockRuntime, Notification,
-    SubscribeAll, SyncActivitySnapshot, SyncMode, ToBackground,
+    StartupFinalizedSource, SubscribeAll, SyncActivitySnapshot, SyncPhase, ToBackground,
+    WarpFailure,
 };
 use crate::{log, network_service, platform::PlatformRef, util};
 
 use alloc::{
     borrow::{Cow, ToOwned as _},
     boxed::Box,
+    collections::BTreeMap,
     format,
     string::String,
     sync::Arc,
@@ -31,7 +33,7 @@ use alloc::{
 };
 use core::{cmp, iter, num::NonZero, pin::Pin, time::Duration};
 use futures_lite::FutureExt as _;
-use futures_util::{FutureExt as _, StreamExt as _, future, stream};
+use futures_util::{future, stream, StreamExt as _};
 use hashbrown::HashMap;
 use smoldot::{
     chain, header,
@@ -46,11 +48,21 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
     log_target: String,
     platform: TPlat,
     chain_information: chain::chain_information::ValidChainInformation,
+    startup_finalized_source: StartupFinalizedSource,
     block_number_bytes: usize,
     runtime_code_hint: Option<ConfigRelayChainRuntimeCodeHint>,
     mut from_foreground: Pin<Box<async_channel::Receiver<ToBackground>>>,
     network_service: Arc<network_service::NetworkServiceChain<TPlat>>,
 ) {
+    let waits_for_grandpa_neighbor = matches!(
+        chain_information.as_ref().finality,
+        chain::chain_information::ChainInformationFinalityRef::Grandpa { .. }
+    );
+    let startup_finalized_block_number = chain_information.as_ref().finalized_block_header.number;
+    let startup_finalized_block_hash = chain_information
+        .as_ref()
+        .finalized_block_header
+        .hash(block_number_bytes);
     let sync = all::AllSync::new(all::Config {
         chain_information,
         block_number_bytes,
@@ -82,23 +94,24 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
             closest_ancestor_excluding: hint.closest_ancestor_excluding,
         }),
     });
-    let startup_finalized_block_number = sync.finalized_block_number();
-
     let mut task = Task {
         sync: Some(sync),
+        startup_finalized_source,
         startup_finalized_block_number,
+        startup_finalized_block_hash,
         peer_finalized_block_numbers: HashMap::new(),
-        last_warp_finalized_block_number: None,
         warp_request_count: 0,
-        warp_fragment_count: 0,
+        warp_received_fragment_count: 0,
+        warp_verified_fragment_count: 0,
+        warp_rejected_fragment_count: 0,
+        warp_last_failure: None,
+        waits_for_grandpa_neighbor,
+        received_grandpa_neighbor: false,
         network_up_to_date_best: true,
         network_up_to_date_finalized: true,
         known_finalized_runtime: None,
         pending_requests: stream::FuturesUnordered::new(),
-        warp_sync_taking_long_time_warning: future::Either::Left(Box::pin(
-            platform.sleep(Duration::from_secs(10)),
-        ))
-        .fuse(),
+        active_warp_requests: BTreeMap::new(),
         all_notifications: Vec::<async_channel::Sender<Notification>>::new(),
         log_target,
         from_network_service: None,
@@ -138,7 +151,6 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
             StartRequest(all::SourceId, all::DesiredRequest),
             ObsoleteRequest(all::RequestId),
             RequestFinished(all::RequestId, Result<RequestOutcome, future::Aborted>),
-            WarpSyncTakingLongTimeWarning,
         }
 
         let wake_up_reason = {
@@ -182,14 +194,9 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                     future::pending().await
                 }
             })
-            .or(async {
-                (&mut task.warp_sync_taking_long_time_warning).await;
-                task.warp_sync_taking_long_time_warning =
-                    future::Either::Left(Box::pin(task.platform.sleep(Duration::from_secs(10))))
-                        .fuse();
-                WakeUpReason::WarpSyncTakingLongTimeWarning
-            })
             .or({
+                let block_requests_allowed =
+                    !task.waits_for_grandpa_neighbor || task.received_grandpa_neighbor;
                 let sync = &mut task.sync;
                 async move {
                     // `desired_requests()` returns, in decreasing order of priority, the requests
@@ -197,9 +204,16 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                     // multiple requests are returned could be used to filter out undesired one. We
                     // use this filtering to enforce a maximum of one ongoing request per source.
                     let Some(s) = &sync else { unreachable!() };
-                    if let Some((source_id, _, request_detail)) = s
-                        .desired_requests()
-                        .find(|(source_id, _, _)| s.source_num_ongoing_requests(*source_id) == 0)
+                    if let Some((source_id, _, request_detail)) =
+                        s.desired_requests().find(|(source_id, _, request_detail)| {
+                            let blocks_before_finality_anchor = !block_requests_allowed
+                                && matches!(
+                                    request_detail,
+                                    all::DesiredRequest::BlocksRequest { .. }
+                                );
+                            !blocks_before_finality_anchor
+                                && s.source_num_ongoing_requests(*source_id) == 0
+                        })
                     {
                         return WakeUpReason::StartRequest(source_id, request_detail);
                     }
@@ -251,6 +265,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                         );
                     }
                     Err(error) => {
+                        task.warp_last_failure = Some(WarpFailure::RuntimeBuildFailed);
                         log!(
                             &task.platform,
                             Debug,
@@ -286,6 +301,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                         );
                     }
                     Err(error) => {
+                        task.warp_last_failure = Some(WarpFailure::ChainInformationBuildFailed);
                         log!(
                             &task.platform,
                             Debug,
@@ -321,7 +337,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 finalized_storage_code_merkle_value,
                 finalized_body: _,
             }) => {
-                task.last_warp_finalized_block_number = Some(sync.finalized_block_number());
+                task.warp_last_failure = None;
                 log!(
                     &task.platform,
                     Debug,
@@ -334,9 +350,6 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 );
 
                 task.sync = Some(sync);
-
-                task.warp_sync_taking_long_time_warning =
-                    future::Either::Right(future::pending()).fuse();
 
                 task.known_finalized_runtime = Some(FinalizedBlockRuntime {
                     virtual_machine: finalized_block_runtime,
@@ -368,6 +381,9 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
                 match result {
                     Ok((fragment_hash, fragment_number)) => {
+                        task.warp_verified_fragment_count =
+                            task.warp_verified_fragment_count.saturating_add(1);
+                        task.warp_last_failure = None;
                         // TODO: must call `set_local_grandpa_state` and `set_local_best_block` so that other peers notify us of neighbor packets
                         log!(
                             &task.platform,
@@ -383,6 +399,29 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                         );
                     }
                     Err(err) => {
+                        task.warp_rejected_fragment_count =
+                            task.warp_rejected_fragment_count.saturating_add(1);
+                        task.warp_last_failure = Some(match &err {
+                            all::VerifyFragmentError::EmptyProof => WarpFailure::EmptyProof,
+                            all::VerifyFragmentError::InvalidHeader(_) => {
+                                WarpFailure::InvalidHeader
+                            }
+                            all::VerifyFragmentError::InvalidJustification(_) => {
+                                WarpFailure::InvalidJustification
+                            }
+                            all::VerifyFragmentError::BlockNumberNotIncrementing => {
+                                WarpFailure::BlockNumberNotIncrementing
+                            }
+                            all::VerifyFragmentError::TargetHashMismatch { .. } => {
+                                WarpFailure::TargetHashMismatch
+                            }
+                            all::VerifyFragmentError::JustificationVerify(_) => {
+                                WarpFailure::JustificationVerifyFailed
+                            }
+                            all::VerifyFragmentError::NonMinimalProof => {
+                                WarpFailure::NonMinimalProof
+                            }
+                        });
                         log!(
                             &task.platform,
                             Debug,
@@ -502,7 +541,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
             WakeUpReason::SyncProcess(all::ProcessOne::VerifyFinalityProof(verify)) => {
                 // Finality proof to verify.
-                let sender = verify.sender().1.0.clone();
+                let sender = verify.sender().1 .0.clone();
                 match verify.perform({
                     let mut seed = [0; 32];
                     task.platform.fill_random_bytes(&mut seed);
@@ -661,7 +700,10 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 // with that peer has been closed, not necessarily that the connection as a whole
                 // has been closed. As such, the in-progress network requests might continue if
                 // we don't abort them.
-                for (_, abort) in requests {
+                for (request_id, abort) in requests {
+                    if let Some(active) = task.active_warp_requests.remove(&request_id) {
+                        debug_assert_eq!(active.peer_id, peer_id);
+                    }
                     abort.abort();
                 }
             }
@@ -774,6 +816,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 peer_id,
                 finalized_block_height,
             }) => {
+                task.received_grandpa_neighbor = true;
                 task.peer_finalized_block_numbers
                     .insert(peer_id.clone(), finalized_block_height);
                 let sync_source_id = *task.peers_source_id_map.get(&peer_id).unwrap();
@@ -824,7 +867,8 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                         .as_mut()
                         .unwrap_or_else(|| unreachable!())
                         .remove_source(sync_source_id);
-                    for (_, abort) in requests {
+                    for (request_id, abort) in requests {
+                        task.active_warp_requests.remove(&request_id);
                         abort.abort();
                     }
                 }
@@ -1017,49 +1061,112 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
             WakeUpReason::ForegroundMessage(ToBackground::SyncActivitySnapshot { send_back }) => {
                 let sync = task.sync.as_ref().unwrap_or_else(|| unreachable!());
-                let (mode, active_warp_finalized) = if task.warp_request_count == 0 {
-                    (SyncMode::Regular, None)
-                } else {
-                    match sync.status() {
-                        all::Status::Sync => (SyncMode::Regular, None),
-                        all::Status::WarpSyncFragments {
-                            finalized_block_number,
-                            ..
-                        } => (SyncMode::WarpFragments, Some(finalized_block_number)),
-                        all::Status::WarpSyncChainInformation {
-                            finalized_block_number,
-                            ..
-                        } => (SyncMode::WarpChainInformation, Some(finalized_block_number)),
-                    }
-                };
+                // 完成判定只读取 warp 内核阶段和完整 chain information。fragment 暂时
+                // 指向的目标与已经完整验证的 finalized 必须分别输出，禁止再由高度猜测。
+                let (
+                    current_verified_finalized_block_number,
+                    current_verified_finalized_block_hash,
+                ) = sync.verified_finalized_block();
                 let highest_peer_finalized_block_number = task
                     .peer_finalized_block_numbers
                     .values()
                     .copied()
                     .max()
                     .filter(|height| *height > 0);
+                let (phase, warp_target_finalized_block_number, warp_target_finalized_block_hash) =
+                    match sync.status() {
+                        all::Status::Sync => (SyncPhase::Regular, None, None),
+                        all::Status::WarpSync {
+                            phase,
+                            target_finalized_block_number,
+                            target_finalized_block_hash,
+                            ..
+                        } => {
+                            let phase = match phase {
+                                all::WarpSyncPhase::Idle => unreachable!(),
+                                all::WarpSyncPhase::DownloadingFragments => {
+                                    SyncPhase::WarpDownloadingFragments
+                                }
+                                all::WarpSyncPhase::VerifyingFragments => {
+                                    SyncPhase::WarpVerifyingFragments
+                                }
+                                all::WarpSyncPhase::DownloadingTargetState => {
+                                    SyncPhase::WarpDownloadingTargetState
+                                }
+                                all::WarpSyncPhase::BuildingRuntime => {
+                                    SyncPhase::WarpBuildingRuntime
+                                }
+                                all::WarpSyncPhase::BuildingChainInformation => {
+                                    SyncPhase::WarpBuildingChainInformation
+                                }
+                            };
+                            let (
+                                warp_target_finalized_block_number,
+                                warp_target_finalized_block_hash,
+                            ) = warp_target_snapshot(
+                                highest_peer_finalized_block_number,
+                                target_finalized_block_number,
+                                target_finalized_block_hash,
+                                current_verified_finalized_block_number,
+                            );
+                            (
+                                phase,
+                                Some(warp_target_finalized_block_number),
+                                warp_target_finalized_block_hash,
+                            )
+                        }
+                    };
+                let active_warp_fragment_request_count = task
+                    .active_warp_requests
+                    .values()
+                    .filter(|request| request.kind == WarpNetworkRequestKind::Fragments)
+                    .count()
+                    .try_into()
+                    .unwrap_or(u64::MAX);
+                let active_warp_storage_request_count = task
+                    .active_warp_requests
+                    .values()
+                    .filter(|request| request.kind == WarpNetworkRequestKind::Storage)
+                    .count()
+                    .try_into()
+                    .unwrap_or(u64::MAX);
+                let active_warp_call_proof_request_count = task
+                    .active_warp_requests
+                    .values()
+                    .filter(|request| request.kind == WarpNetworkRequestKind::CallProof)
+                    .count()
+                    .try_into()
+                    .unwrap_or(u64::MAX);
                 let _ = send_back.send(SyncActivitySnapshot {
-                    mode,
+                    phase,
+                    startup_finalized_source: Some(task.startup_finalized_source),
                     startup_finalized_block_number: Some(task.startup_finalized_block_number),
+                    startup_finalized_block_hash: Some(task.startup_finalized_block_hash),
                     highest_peer_finalized_block_number,
-                    warp_finalized_block_number: active_warp_finalized
-                        .or(task.last_warp_finalized_block_number),
+                    current_verified_finalized_block_number,
+                    current_verified_finalized_block_hash,
+                    warp_target_finalized_block_number,
+                    warp_target_finalized_block_hash,
                     warp_request_count: task.warp_request_count,
-                    warp_fragment_count: task.warp_fragment_count,
+                    active_warp_fragment_request_count,
+                    active_warp_storage_request_count,
+                    active_warp_call_proof_request_count,
+                    warp_received_fragment_count: task.warp_received_fragment_count,
+                    warp_verified_fragment_count: task.warp_verified_fragment_count,
+                    warp_rejected_fragment_count: task.warp_rejected_fragment_count,
+                    warp_last_failure: task.warp_last_failure,
                 });
             }
 
             WakeUpReason::ForegroundMessage(ToBackground::SerializeChainInformation {
                 send_back,
             }) => {
-                // Frontend is querying the chain information.
-                let _ = send_back.send(Some(
-                    task.sync
-                        .as_ref()
-                        .unwrap_or_else(|| unreachable!())
-                        .as_chain_information()
-                        .into(),
-                ));
+                let sync = task.sync.as_ref().unwrap_or_else(|| unreachable!());
+                // warp 活跃时完整 chain information 仍停在 H；此时即使它本身有效，也
+                // 不能导出并贴成最新 F 的 database。只有 warp 回到 regular 后才开放。
+                let chain_information = matches!(sync.status(), all::Status::Sync)
+                    .then(|| sync.as_chain_information().into());
+                let _ = send_back.send(chain_information);
             }
 
             WakeUpReason::ForegroundClosed => {
@@ -1068,8 +1175,10 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 return;
             }
 
-            WakeUpReason::RequestFinished(_, Err(_)) => {
-                // A request has been cancelled by the sync state machine. Nothing to do.
+            WakeUpReason::RequestFinished(request_id, Err(_)) => {
+                // source 删除或请求过期时，状态机已经恢复对应请求状态；这里只清理
+                // 请求级诊断元数据，不能把取消误报为 peer 协议失败。
+                task.active_warp_requests.remove(&request_id);
             }
 
             WakeUpReason::RequestFinished(request_id, Ok(RequestOutcome::Block(Ok(v)))) => {
@@ -1119,9 +1228,15 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
             WakeUpReason::RequestFinished(request_id, Ok(RequestOutcome::WarpSync(Ok(result)))) => {
                 // Successful warp sync request.
+                let active = take_active_warp_request(
+                    &mut task.active_warp_requests,
+                    &request_id,
+                    WarpNetworkRequestKind::Fragments,
+                );
+                let _elapsed = task.platform.now() - active.started_at;
                 let decoded = result.decode();
-                task.warp_fragment_count = task
-                    .warp_fragment_count
+                task.warp_received_fragment_count = task
+                    .warp_received_fragment_count
                     .saturating_add(u64::try_from(decoded.fragments.len()).unwrap_or(u64::MAX));
                 let fragments = decoded
                     .fragments
@@ -1139,13 +1254,20 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
             WakeUpReason::RequestFinished(request_id, Ok(RequestOutcome::WarpSync(Err(_)))) => {
                 // Failed warp sync request.
+                task.warp_last_failure = Some(WarpFailure::WarpRequestFailed);
+                let active = take_active_warp_request(
+                    &mut task.active_warp_requests,
+                    &request_id,
+                    WarpNetworkRequestKind::Fragments,
+                );
+                let _elapsed = task.platform.now() - active.started_at;
                 let Some(sync) = &mut task.sync else {
                     unreachable!()
                 };
 
                 task.network_service
                     .ban_and_disconnect(
-                        sync[sync.request_source_id(request_id)].0.clone(),
+                        active.peer_id,
                         network_service::BanSeverity::Low,
                         "failed-warp-sync-request",
                     )
@@ -1156,6 +1278,12 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
             WakeUpReason::RequestFinished(request_id, Ok(RequestOutcome::Storage(Ok(r)))) => {
                 // Storage proof request.
+                let active = take_active_warp_request(
+                    &mut task.active_warp_requests,
+                    &request_id,
+                    WarpNetworkRequestKind::Storage,
+                );
+                let _elapsed = task.platform.now() - active.started_at;
                 let Some(sync) = &mut task.sync else {
                     unreachable!()
                 };
@@ -1165,13 +1293,20 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
             WakeUpReason::RequestFinished(request_id, Ok(RequestOutcome::Storage(Err(_)))) => {
                 // Storage proof request.
+                task.warp_last_failure = Some(WarpFailure::StorageProofRequestFailed);
+                let active = take_active_warp_request(
+                    &mut task.active_warp_requests,
+                    &request_id,
+                    WarpNetworkRequestKind::Storage,
+                );
+                let _elapsed = task.platform.now() - active.started_at;
                 let Some(sync) = &mut task.sync else {
                     unreachable!()
                 };
 
                 task.network_service
                     .ban_and_disconnect(
-                        sync[sync.request_source_id(request_id)].0.clone(),
+                        active.peer_id,
                         network_service::BanSeverity::Low,
                         "failed-storage-request",
                     )
@@ -1182,6 +1317,12 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
             WakeUpReason::RequestFinished(request_id, Ok(RequestOutcome::CallProof(Ok(r)))) => {
                 // Successful call proof request.
+                let active = take_active_warp_request(
+                    &mut task.active_warp_requests,
+                    &request_id,
+                    WarpNetworkRequestKind::CallProof,
+                );
+                let _elapsed = task.platform.now() - active.started_at;
                 task.sync
                     .as_mut()
                     .unwrap_or_else(|| unreachable!())
@@ -1191,13 +1332,20 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
             WakeUpReason::RequestFinished(request_id, Ok(RequestOutcome::CallProof(Err(_)))) => {
                 // Failed call proof request.
+                task.warp_last_failure = Some(WarpFailure::CallProofRequestFailed);
+                let active = take_active_warp_request(
+                    &mut task.active_warp_requests,
+                    &request_id,
+                    WarpNetworkRequestKind::CallProof,
+                );
+                let _elapsed = task.platform.now() - active.started_at;
                 let Some(sync) = &mut task.sync else {
                     unreachable!()
                 };
 
                 task.network_service
                     .ban_and_disconnect(
-                        sync[sync.request_source_id(request_id)].0.clone(),
+                        active.peer_id,
                         network_service::BanSeverity::Low,
                         "failed-call-proof-request",
                     )
@@ -1208,6 +1356,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
             WakeUpReason::ObsoleteRequest(request_id) => {
                 // We are no longer interested in the answer to that request.
+                task.active_warp_requests.remove(&request_id);
                 let Some(sync) = &mut task.sync else {
                     unreachable!()
                 };
@@ -1292,7 +1441,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 let peer_id = sync[source_id].0.clone(); // TODO: why does this require cloning? weird borrow chk issue
 
                 let grandpa_request = task.network_service.clone().grandpa_warp_sync_request(
-                    peer_id,
+                    peer_id.clone(),
                     sync_start_block_hash,
                     // The timeout needs to be long enough to potentially download the maximum
                     // response size of 16 MiB. Assuming a 128 kiB/sec connection, that's
@@ -1309,6 +1458,15 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                         sync_start_block_hash,
                     },
                     abort,
+                );
+                register_active_warp_request(
+                    &mut task.active_warp_requests,
+                    request_id,
+                    ActiveWarpRequest {
+                        kind: WarpNetworkRequestKind::Fragments,
+                        peer_id: peer_id.clone(),
+                        started_at: task.platform.now(),
+                    },
                 );
 
                 task.pending_requests.push(Box::pin(async move {
@@ -1332,7 +1490,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 let peer_id = sync[source_id].0.clone(); // TODO: why does this require cloning? weird borrow chk issue
 
                 let storage_request = task.network_service.clone().storage_proof_request(
-                    peer_id,
+                    peer_id.clone(),
                     network::codec::StorageProofRequestConfig {
                         block_hash,
                         keys: keys.clone().into_iter(),
@@ -1354,6 +1512,15 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                     source_id,
                     all::RequestDetail::StorageGet { block_hash, keys },
                     abort,
+                );
+                register_active_warp_request(
+                    &mut task.active_warp_requests,
+                    request_id,
+                    ActiveWarpRequest {
+                        kind: WarpNetworkRequestKind::Storage,
+                        peer_id: peer_id.clone(),
+                        started_at: task.platform.now(),
+                    },
                 );
 
                 task.pending_requests.push(Box::pin(async move {
@@ -1383,9 +1550,10 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                     let network_service = task.network_service.clone();
                     let parameter_vectored = parameter_vectored.clone();
                     let function_name = function_name.clone();
+                    let call_proof_peer_id = peer_id.clone();
                     async move {
                         let rq = network_service.call_proof_request(
-                            peer_id,
+                            call_proof_peer_id,
                             network::codec::CallProofRequestConfig {
                                 block_hash,
                                 method: Cow::Borrowed(&*function_name),
@@ -1411,6 +1579,15 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                     },
                     abort,
                 );
+                register_active_warp_request(
+                    &mut task.active_warp_requests,
+                    request_id,
+                    ActiveWarpRequest {
+                        kind: WarpNetworkRequestKind::CallProof,
+                        peer_id: peer_id.clone(),
+                        started_at: task.platform.now(),
+                    },
+                );
 
                 task.pending_requests.push(Box::pin(async move {
                     (
@@ -1418,53 +1595,6 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                         call_proof_request.await.map(RequestOutcome::CallProof),
                     )
                 }));
-            }
-
-            WakeUpReason::WarpSyncTakingLongTimeWarning => {
-                match task
-                    .sync
-                    .as_mut()
-                    .unwrap_or_else(|| unreachable!())
-                    .status()
-                {
-                    all::Status::Sync => {}
-                    all::Status::WarpSyncFragments {
-                        source: None,
-                        finalized_block_hash,
-                        finalized_block_number,
-                    } => {
-                        log!(
-                            &task.platform,
-                            Warn,
-                            &task.log_target,
-                            format!(
-                                "GrandPa warp sync idle at block #{} (0x{})",
-                                finalized_block_number,
-                                HashDisplay(&finalized_block_hash)
-                            ),
-                        );
-                    }
-                    all::Status::WarpSyncFragments {
-                        finalized_block_hash,
-                        finalized_block_number,
-                        ..
-                    }
-                    | all::Status::WarpSyncChainInformation {
-                        finalized_block_hash,
-                        finalized_block_number,
-                    } => {
-                        log!(
-                            &task.platform,
-                            Warn,
-                            &task.log_target,
-                            format!(
-                                "GrandPa warp sync in progress. Block: #{} (0x{}).",
-                                finalized_block_number,
-                                HashDisplay(&finalized_block_hash)
-                            )
-                        );
-                    }
-                };
             }
         }
     }
@@ -1486,14 +1616,21 @@ struct Task<TPlat: PlatformRef> {
     /// Always `Some`, except for temporary extraction.
     sync: Option<all::AllSync<future::AbortHandle, (libp2p::PeerId, codec::Role), ()>>,
 
+    /// 本次状态机真实使用的可信 finalized 起点来源。
+    startup_finalized_source: StartupFinalizedSource,
     /// 本次 addChain 实际采用的 finalized 起点，用于区分固定 checkpoint 与本机缓存恢复。
     startup_finalized_block_number: u64,
+    startup_finalized_block_hash: [u8; 32],
     /// peer 最近一次 GRANDPA neighbor packet 公布的 finalized 高度。
     peer_finalized_block_numbers: HashMap<libp2p::PeerId, u64>,
-    /// warp 完成后保留目标高度，避免切回 regular 后诊断信息立即丢失。
-    last_warp_finalized_block_number: Option<u64>,
     warp_request_count: u64,
-    warp_fragment_count: u64,
+    warp_received_fragment_count: u64,
+    warp_verified_fragment_count: u64,
+    warp_rejected_fragment_count: u64,
+    warp_last_failure: Option<WarpFailure>,
+    /// GRANDPA 链在取得首个 peer finalized 声明前禁止普通区块请求抢跑。
+    waits_for_grandpa_neighbor: bool,
+    received_grandpa_neighbor: bool,
 
     /// If `Some`, contains the runtime of the current finalized block.
     known_finalized_runtime: Option<FinalizedBlockRuntime>,
@@ -1511,12 +1648,6 @@ struct Task<TPlat: PlatformRef> {
     /// All event subscribers that are interested in events about the chain.
     all_notifications: Vec<async_channel::Sender<Notification>>,
 
-    /// Contains a `Delay` after which we print a warning about GrandPa warp sync taking a long
-    /// time. Set to `Pending` after the warp sync has finished, so that future remains pending
-    /// forever.
-    warp_sync_taking_long_time_warning:
-        future::Fuse<future::Either<Pin<Box<TPlat::Delay>>, future::Pending<()>>>,
-
     /// Chain of the network service. Used to send out requests to peers.
     network_service: Arc<network_service::NetworkServiceChain<TPlat>>,
     /// Events coming from the networking service. `None` if not subscribed yet.
@@ -1526,6 +1657,63 @@ struct Task<TPlat: PlatformRef> {
     pending_requests: stream::FuturesUnordered<
         future::BoxFuture<'static, (all::RequestId, Result<RequestOutcome, future::Aborted>)>,
     >,
+    /// 每个 warp 网络请求的真实类型、实际 peer 和启动时间。失败、取消或断连时
+    /// 只能处理命中的请求，禁止再用一个“最近 peer”代表整轮 warp。
+    active_warp_requests:
+        BTreeMap<all::RequestId, ActiveWarpRequest<libp2p::PeerId, TPlat::Instant>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WarpNetworkRequestKind {
+    Fragments,
+    Storage,
+    CallProof,
+}
+
+struct ActiveWarpRequest<TPeer, TInstant> {
+    kind: WarpNetworkRequestKind,
+    peer_id: TPeer,
+    started_at: TInstant,
+}
+
+fn register_active_warp_request<TKey: Ord, TPeer, TInstant>(
+    requests: &mut BTreeMap<TKey, ActiveWarpRequest<TPeer, TInstant>>,
+    request_id: TKey,
+    active: ActiveWarpRequest<TPeer, TInstant>,
+) {
+    assert!(
+        requests.insert(request_id, active).is_none(),
+        "warp request id registered twice"
+    );
+}
+
+fn take_active_warp_request<TKey: Ord, TPeer, TInstant>(
+    requests: &mut BTreeMap<TKey, ActiveWarpRequest<TPeer, TInstant>>,
+    request_id: &TKey,
+    expected_kind: WarpNetworkRequestKind,
+) -> ActiveWarpRequest<TPeer, TInstant> {
+    let active = requests
+        .remove(request_id)
+        .expect("warp request completion missing active request metadata");
+    assert_eq!(active.kind, expected_kind, "warp request kind mismatch");
+    active
+}
+
+/// peer 公布的 `F` 是当前 warp 目标；fragment 尚未把 `F` 的 header 证明出来前，
+/// 内核 target 仍是起点 `H`，此时禁止把 `H` 的 hash 冒充 `F` 的 hash。
+fn warp_target_snapshot(
+    highest_peer_finalized_block_number: Option<u64>,
+    proof_target_finalized_block_number: u64,
+    proof_target_finalized_block_hash: [u8; 32],
+    current_verified_finalized_block_number: u64,
+) -> (u64, Option<[u8; 32]>) {
+    let target_number = highest_peer_finalized_block_number
+        .map(|peer_target| peer_target.max(proof_target_finalized_block_number))
+        .unwrap_or(proof_target_finalized_block_number);
+    let target_hash = (target_number == proof_target_finalized_block_number
+        && proof_target_finalized_block_number > current_verified_finalized_block_number)
+        .then_some(proof_target_finalized_block_hash);
+    (target_number, target_hash)
 }
 
 enum RequestOutcome {
@@ -1553,5 +1741,82 @@ impl<TPlat: PlatformRef> Task<TPlat> {
 
             self.all_notifications.push(subscription);
         }
+    }
+}
+
+#[cfg(test)]
+mod warp_request_registry_tests {
+    use super::{
+        register_active_warp_request, take_active_warp_request, warp_target_snapshot,
+        ActiveWarpRequest, BTreeMap, WarpNetworkRequestKind,
+    };
+
+    #[test]
+    fn completing_one_request_never_consumes_another_peers_request() {
+        let mut requests = BTreeMap::new();
+        register_active_warp_request(
+            &mut requests,
+            1_u8,
+            ActiveWarpRequest {
+                kind: WarpNetworkRequestKind::Fragments,
+                peer_id: "fragment-peer",
+                started_at: 10_u64,
+            },
+        );
+        register_active_warp_request(
+            &mut requests,
+            2_u8,
+            ActiveWarpRequest {
+                kind: WarpNetworkRequestKind::Storage,
+                peer_id: "storage-peer",
+                started_at: 20_u64,
+            },
+        );
+
+        let completed =
+            take_active_warp_request(&mut requests, &1, WarpNetworkRequestKind::Fragments);
+        assert_eq!(completed.peer_id, "fragment-peer");
+        assert_eq!(completed.started_at, 10);
+        assert_eq!(requests.get(&2).unwrap().peer_id, "storage-peer");
+    }
+
+    #[test]
+    fn cancelled_request_can_be_registered_again_for_another_peer() {
+        let mut requests = BTreeMap::new();
+        register_active_warp_request(
+            &mut requests,
+            7_u8,
+            ActiveWarpRequest {
+                kind: WarpNetworkRequestKind::CallProof,
+                peer_id: "first-peer",
+                started_at: 1_u64,
+            },
+        );
+        requests.remove(&7).unwrap();
+        register_active_warp_request(
+            &mut requests,
+            8_u8,
+            ActiveWarpRequest {
+                kind: WarpNetworkRequestKind::CallProof,
+                peer_id: "second-peer",
+                started_at: 2_u64,
+            },
+        );
+
+        assert_eq!(requests.get(&8).unwrap().peer_id, "second-peer");
+    }
+
+    #[test]
+    fn peer_target_never_reuses_the_start_anchor_hash() {
+        let start_hash = [7_u8; 32];
+        let (target_number, target_hash) = warp_target_snapshot(Some(50_000), 0, start_hash, 0);
+        assert_eq!(target_number, 50_000);
+        assert_eq!(target_hash, None);
+
+        let proven_hash = [9_u8; 32];
+        let (target_number, target_hash) =
+            warp_target_snapshot(Some(50_000), 50_000, proven_hash, 0);
+        assert_eq!(target_number, 50_000);
+        assert_eq!(target_hash, Some(proven_hash));
     }
 }

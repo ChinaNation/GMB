@@ -36,14 +36,14 @@ pub(super) enum DeserializeError {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "version")]
 pub(super) enum SerializedChainInformation {
-    #[serde(rename = "1")]
-    V1(SerializedChainInformationV1),
+    #[serde(rename = "2")]
+    V2(SerializedChainInformationV2),
 }
 
 impl SerializedChainInformation {
     pub(super) fn decode(self, block_number_bytes: usize) -> Result<Decoded, DeserializeError> {
         Ok(match self {
-            SerializedChainInformation::V1(from) => from.decode(block_number_bytes)?,
+            SerializedChainInformation::V2(from) => from.decode(block_number_bytes)?,
         })
     }
 }
@@ -57,12 +57,15 @@ pub struct Decoded {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct SerializedChainInformationV1 {
+pub(super) struct SerializedChainInformationV2 {
     #[serde(
         serialize_with = "serialize_bytes",
         deserialize_with = "deserialize_bytes"
     )]
     finalized_block_header: Vec<u8>,
+    /// 共识类型必须显式落盘。仅凭 Aura/BABE 可选字段无法区分 PoW、Unknown
+    /// 与字段残缺的 BABE 数据，会导致有效的 PoW finalized database 无法恢复。
+    consensus: SerializedConsensusV2,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     aura_slot_duration: Option<NonZero<u64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -83,13 +86,22 @@ pub(super) struct SerializedChainInformationV1 {
     finalized_storage: Option<Vec<SerializedFinalizedStorageEntryV1>>,
 }
 
-impl SerializedChainInformationV1 {
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum SerializedConsensusV2 {
+    Unknown,
+    Aura,
+    Babe,
+    Pow,
+}
+
+impl SerializedChainInformationV2 {
     pub(super) fn new(
         from: chain_information::ChainInformationRef,
         block_number_bytes: usize,
         finalized_storage: Option<impl Iterator<Item = (impl AsRef<[u8]>, impl AsRef<[u8]>)>>,
     ) -> Self {
-        SerializedChainInformationV1 {
+        SerializedChainInformationV2 {
             finalized_block_header: from
                 .finalized_block_header
                 .scale_encoding(block_number_bytes)
@@ -97,6 +109,18 @@ impl SerializedChainInformationV1 {
                     a.extend_from_slice(b.as_ref());
                     a
                 }),
+            consensus: match from.consensus {
+                chain_information::ChainInformationConsensusRef::Unknown => {
+                    SerializedConsensusV2::Unknown
+                }
+                chain_information::ChainInformationConsensusRef::Aura { .. } => {
+                    SerializedConsensusV2::Aura
+                }
+                chain_information::ChainInformationConsensusRef::Babe { .. } => {
+                    SerializedConsensusV2::Babe
+                }
+                chain_information::ChainInformationConsensusRef::Pow => SerializedConsensusV2::Pow,
+            },
             aura_slot_duration: if let chain_information::ChainInformationConsensusRef::Aura {
                 slot_duration,
                 ..
@@ -187,26 +211,38 @@ impl SerializedChainInformationV1 {
     }
 }
 
-impl SerializedChainInformationV1 {
+impl SerializedChainInformationV2 {
     pub(super) fn decode(self, block_number_bytes: usize) -> Result<Decoded, DeserializeError> {
         let consensus = match (
+            self.consensus,
             self.aura_finalized_authorities,
             self.aura_slot_duration,
             self.babe_slots_per_epoch,
             self.babe_finalized_block_epoch_information,
             self.babe_finalized_next_epoch_transition,
         ) {
-            (Some(aura_authorities), Some(slot_duration), None, None, None) => {
-                chain_information::ChainInformationConsensus::Aura {
-                    finalized_authorities_list: aura_authorities
-                        .into_iter()
-                        .map(Into::into)
-                        .collect(),
-                    slot_duration,
-                }
+            (SerializedConsensusV2::Unknown, None, None, None, None, None) => {
+                chain_information::ChainInformationConsensus::Unknown
+            }
+
+            (SerializedConsensusV2::Pow, None, None, None, None, None) => {
+                chain_information::ChainInformationConsensus::Pow
             }
 
             (
+                SerializedConsensusV2::Aura,
+                Some(aura_authorities),
+                Some(slot_duration),
+                None,
+                None,
+                None,
+            ) => chain_information::ChainInformationConsensus::Aura {
+                finalized_authorities_list: aura_authorities.into_iter().map(Into::into).collect(),
+                slot_duration,
+            },
+
+            (
+                SerializedConsensusV2::Babe,
                 None,
                 None,
                 babe_slots_per_epoch,

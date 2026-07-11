@@ -4,41 +4,94 @@ import 'package:smoldot/smoldot.dart';
 
 void main() {
   group('LightClientStatusSnapshot codec', () {
-    Map<String, dynamic> snapshotJson(String syncMode) => {
+    Map<String, dynamic> snapshotJson(String syncPhase) => {
       'peerCount': 5,
-      'isSyncing': syncMode != 'regular',
-      'syncMode': syncMode,
+      'isSyncing': syncPhase != 'regular',
+      'isUsable': syncPhase == 'regular',
+      'syncPhase': syncPhase,
       'bestBlockNumber': 50000,
       'bestBlockHash': '0x${List.filled(32, '11').join()}',
       'finalizedBlockNumber': 49998,
       'finalizedBlockHash': '0x${List.filled(32, '22').join()}',
+      'startupFinalizedSource': 'bundledCheckpoint',
       'startupFinalizedBlockNumber': 0,
+      'startupFinalizedBlockHash': '0x${List.filled(32, '00').join()}',
       'highestPeerFinalizedBlockNumber': 49998,
-      'warpFinalizedBlockNumber': 49998,
+      'currentVerifiedFinalizedBlockNumber': syncPhase == 'regular' ? 49998 : 0,
+      'currentVerifiedFinalizedBlockHash':
+          '0x${List.filled(32, syncPhase == 'regular' ? '22' : '00').join()}',
+      if (syncPhase != 'regular') 'warpTargetFinalizedBlockNumber': 49998,
+      if (syncPhase != 'regular')
+        'warpTargetFinalizedBlockHash': '0x${List.filled(32, '22').join()}',
       'warpRequestCount': 1,
-      'warpFragmentCount': 2,
+      'activeWarpFragmentRequestCount': syncPhase == 'warpDownloadingFragments'
+          ? 1
+          : 0,
+      'activeWarpStorageRequestCount': syncPhase == 'warpDownloadingTargetState'
+          ? 1
+          : 0,
+      'activeWarpCallProofRequestCount': 0,
+      'warpReceivedFragmentCount': 2,
+      'warpVerifiedFragmentCount': 1,
+      'warpRejectedFragmentCount': 1,
+      'warpLastFailure': 'nonMinimalProof',
     };
 
-    test('解析 regular 与两种 warp 阶段并保留计数', () {
+    test('解析 regular 与全部真实 warp 阶段并保留计数', () {
       for (final entry in {
-        'regular': LightClientSyncMode.regular,
-        'warpFragments': LightClientSyncMode.warpFragments,
-        'warpChainInformation': LightClientSyncMode.warpChainInformation,
+        'regular': LightClientSyncPhase.regular,
+        'warpDownloadingFragments':
+            LightClientSyncPhase.warpDownloadingFragments,
+        'warpVerifyingFragments': LightClientSyncPhase.warpVerifyingFragments,
+        'warpDownloadingTargetState':
+            LightClientSyncPhase.warpDownloadingTargetState,
+        'warpBuildingRuntime': LightClientSyncPhase.warpBuildingRuntime,
+        'warpBuildingChainInformation':
+            LightClientSyncPhase.warpBuildingChainInformation,
       }.entries) {
         final snapshot = LightClientStatusSnapshot.fromJson(
           snapshotJson(entry.key),
         );
-        expect(snapshot.syncMode, entry.value);
+        expect(snapshot.syncPhase, entry.value);
         expect(snapshot.startupFinalizedBlockNumber, 0);
         expect(snapshot.highestPeerFinalizedBlockNumber, 49998);
-        expect(snapshot.warpFinalizedBlockNumber, 49998);
+        expect(
+          snapshot.currentVerifiedFinalizedBlockNumber,
+          entry.key == 'regular' ? 49998 : 0,
+        );
+        expect(
+          snapshot.warpTargetFinalizedBlockNumber,
+          entry.key == 'regular' ? isNull : 49998,
+        );
         expect(snapshot.warpRequestCount, 1);
-        expect(snapshot.warpFragmentCount, 2);
-        expect(snapshot.toJson()['syncMode'], entry.key);
+        expect(snapshot.warpReceivedFragmentCount, 2);
+        expect(snapshot.warpVerifiedFragmentCount, 1);
+        expect(snapshot.warpRejectedFragmentCount, 1);
+        expect(
+          snapshot.warpLastFailure,
+          LightClientWarpFailure.nonMinimalProof,
+        );
+        expect(snapshot.toJson()['syncPhase'], entry.key);
       }
     });
 
-    test('未知同步模式不得伪装成 regular 或已完成', () {
+    test('未知启动来源或 warp 失败类型必须拒绝', () {
+      final invalidSource = snapshotJson('regular')
+        ..['startupFinalizedSource'] = 'legacy';
+      expect(
+        () => LightClientStatusSnapshot.fromJson(invalidSource),
+        throwsFormatException,
+      );
+
+      final invalidFailure = snapshotJson('regular')
+        ..['warpLastFailure'] = 'unknown';
+      expect(
+        () => LightClientStatusSnapshot.fromJson(invalidFailure),
+        throwsFormatException,
+      );
+    });
+
+    test('未知同步阶段不得伪装成 regular 或已完成', () {
       expect(
         () => LightClientStatusSnapshot.fromJson(snapshotJson('unknown')),
         throwsFormatException,
@@ -46,16 +99,38 @@ void main() {
     });
 
     test('runtime 已近头但仍处于 warp 时不得映射为 synced', () {
-      final contradictory = snapshotJson('warpFragments')
-        ..['isSyncing'] = false;
+      final contradictory = snapshotJson('warpVerifyingFragments')
+        ..['isSyncing'] = false
+        ..['isUsable'] = false;
       final warp = LightClientStatusSnapshot.fromJson(contradictory);
       expect(warp.isUsable, isFalse);
       expect(warp.chainStatus, ChainStatus.syncing);
 
-      final regularJson = snapshotJson('regular')..['isSyncing'] = false;
+      final regularJson = snapshotJson('regular')
+        ..['isSyncing'] = false
+        ..['isUsable'] = true;
       final regular = LightClientStatusSnapshot.fromJson(regularJson);
       expect(regular.isUsable, isTrue);
       expect(regular.chainStatus, ChainStatus.synced);
+    });
+
+    test('FFI 可用性与原生阶段冲突时必须拒绝', () {
+      final forgedUsable = snapshotJson('warpBuildingRuntime')
+        ..['isSyncing'] = false
+        ..['isUsable'] = true;
+      expect(
+        () => LightClientStatusSnapshot.fromJson(forgedUsable),
+        throwsFormatException,
+      );
+
+      final staleWarpTarget = snapshotJson('regular')
+        ..['warpTargetFinalizedBlockNumber'] = 49998
+        ..['warpTargetFinalizedBlockHash'] =
+            '0x${List.filled(32, '22').join()}';
+      expect(
+        () => LightClientStatusSnapshot.fromJson(staleWarpTarget),
+        throwsFormatException,
+      );
     });
   });
 

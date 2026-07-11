@@ -178,6 +178,50 @@ void main() {
       );
     });
 
+    test('无有效 database 时真实启动锚点只能是安装包固定 #0', () {
+      final bundledStart = _snapshot(
+        0,
+        startupFinalizedBlockHash: genesisHash,
+      );
+      expect(
+        SmoldotClientManager.bundledCheckpointStartMatchesForTesting(
+          expectedGenesisHash: genesisHash,
+          snapshot: bundledStart,
+        ),
+        isTrue,
+      );
+      expect(
+        SmoldotClientManager.bundledCheckpointStartMatchesForTesting(
+          expectedGenesisHash: genesisHash,
+          snapshot: _snapshot(
+            0,
+            startupFinalizedSource:
+                LightClientStartupFinalizedSource.localDatabase,
+            startupFinalizedBlockHash: genesisHash,
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        SmoldotClientManager.bundledCheckpointStartMatchesForTesting(
+          expectedGenesisHash: genesisHash,
+          snapshot: _snapshot(
+            1,
+            startupFinalizedBlockNumber: 1,
+            startupFinalizedBlockHash: _hashForHeight(1),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        SmoldotClientManager.bundledCheckpointStartMatchesForTesting(
+          expectedGenesisHash: genesisHash,
+          snapshot: _snapshot(0),
+        ),
+        isFalse,
+      );
+    });
+
     test('旧裸格式、未知字段和跨链信封会被删除', () async {
       final manager = SmoldotClientManager.forTesting(
         initialize: () async {},
@@ -225,7 +269,7 @@ void main() {
       );
     });
 
-    test('异步恢复必须达到信封高度且同高度 hash 一致', () {
+    test('缓存恢复必须真实采用信封声明的 database anchor', () {
       final raw = _cacheEnvelopeRaw(
         genesisHash: genesisHash,
         finalizedBlockNumber: 10,
@@ -236,7 +280,7 @@ void main() {
         SmoldotClientManager.restoredDatabaseCacheReachedForTesting(
           rawEnvelope: raw,
           expectedGenesisHash: genesisHash,
-          snapshot: _snapshot(9),
+          snapshot: _snapshot(10),
         ),
         isFalse,
       );
@@ -244,7 +288,27 @@ void main() {
         SmoldotClientManager.restoredDatabaseCacheReachedForTesting(
           rawEnvelope: raw,
           expectedGenesisHash: genesisHash,
-          snapshot: _snapshot(10),
+          snapshot: _snapshot(
+            10,
+            startupFinalizedSource:
+                LightClientStartupFinalizedSource.localDatabase,
+            startupFinalizedBlockNumber: 9,
+            startupFinalizedBlockHash: _hashForHeight(9),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        SmoldotClientManager.restoredDatabaseCacheReachedForTesting(
+          rawEnvelope: raw,
+          expectedGenesisHash: genesisHash,
+          snapshot: _snapshot(
+            10,
+            startupFinalizedSource:
+                LightClientStartupFinalizedSource.localDatabase,
+            startupFinalizedBlockNumber: 10,
+            startupFinalizedBlockHash: _hashForHeight(10),
+          ),
         ),
         isTrue,
       );
@@ -252,17 +316,29 @@ void main() {
         SmoldotClientManager.restoredDatabaseCacheReachedForTesting(
           rawEnvelope: raw,
           expectedGenesisHash: genesisHash,
-          snapshot: _snapshot(11),
+          snapshot: _snapshot(
+            11,
+            startupFinalizedSource:
+                LightClientStartupFinalizedSource.localDatabase,
+            startupFinalizedBlockNumber: 10,
+            startupFinalizedBlockHash: _hashForHeight(10),
+          ),
         ),
         isTrue,
       );
       expect(
-        () => SmoldotClientManager.restoredDatabaseCacheReachedForTesting(
+        SmoldotClientManager.restoredDatabaseCacheReachedForTesting(
           rawEnvelope: raw,
           expectedGenesisHash: genesisHash,
-          snapshot: _snapshot(10, hash: _hashForHeight(11)),
+          snapshot: _snapshot(
+            11,
+            startupFinalizedSource:
+                LightClientStartupFinalizedSource.localDatabase,
+            startupFinalizedBlockNumber: 10,
+            startupFinalizedBlockHash: _hashForHeight(11),
+          ),
         ),
-        throwsFormatException,
+        isFalse,
       );
     });
 
@@ -337,12 +413,12 @@ void main() {
       await manager.dispose();
     });
 
-    test('warp 状态不落缓存，regular finalized 推进后才低频刷新', () async {
+    test('表面 finalized 已到 F 但完整验证仍为 H 时禁止落缓存', () async {
       final statusQueue = Queue<LightClientStatusSnapshot>.from([
         _snapshot(
           33,
           isSyncing: false,
-          syncMode: LightClientSyncMode.warpFragments,
+          syncPhase: LightClientSyncPhase.warpDownloadingFragments,
         ),
         _snapshot(31),
         _snapshot(31),
@@ -375,6 +451,39 @@ void main() {
       expect(saved['finalized_block_number'], 33);
       expect(saved['database_content'], 'db-2');
       expect(exportCount, 2);
+      await manager.dispose();
+    });
+
+    test('完整验证 F 落盘后下一次启动必须把同一个 F 作为 H', () async {
+      final statusQueue = Queue<LightClientStatusSnapshot>.from([
+        _snapshot(100),
+        _snapshot(100),
+      ]);
+      final manager = SmoldotClientManager.forTesting(
+        initialize: () async {},
+        cacheStatus: () async => statusQueue.removeFirst(),
+        exportDatabase: () async => 'db-f',
+        expectedGenesisHash: genesisHash,
+      );
+      await manager.ensureStarted();
+      await manager.saveDatabaseCacheForTesting();
+
+      final prefs = await SharedPreferences.getInstance();
+      final rawEnvelope = prefs.getString('smoldot_db_cache')!;
+      expect(
+        SmoldotClientManager.restoredDatabaseCacheReachedForTesting(
+          rawEnvelope: rawEnvelope,
+          expectedGenesisHash: genesisHash,
+          snapshot: _snapshot(
+            100,
+            startupFinalizedSource:
+                LightClientStartupFinalizedSource.localDatabase,
+            startupFinalizedBlockNumber: 100,
+            startupFinalizedBlockHash: _hashForHeight(100),
+          ),
+        ),
+        isTrue,
+      );
       await manager.dispose();
     });
 
@@ -458,20 +567,44 @@ LightClientStatusSnapshot _snapshot(
   int height, {
   String? hash,
   bool isSyncing = false,
-  LightClientSyncMode syncMode = LightClientSyncMode.regular,
+  LightClientSyncPhase syncPhase = LightClientSyncPhase.regular,
+  LightClientStartupFinalizedSource startupFinalizedSource =
+      LightClientStartupFinalizedSource.bundledCheckpoint,
+  int startupFinalizedBlockNumber = 0,
+  String? startupFinalizedBlockHash,
 }) {
+  final isUsable = !isSyncing && syncPhase == LightClientSyncPhase.regular;
+  final currentVerifiedHeight = isUsable ? height : startupFinalizedBlockNumber;
+  final currentVerifiedHash = isUsable
+      ? (hash ?? _hashForHeight(height))
+      : (startupFinalizedBlockHash ??
+          _hashForHeight(startupFinalizedBlockNumber));
   return LightClientStatusSnapshot(
     peerCount: 1,
     isSyncing: isSyncing,
-    syncMode: syncMode,
+    isUsable: isUsable,
+    syncPhase: syncPhase,
     bestBlockNumber: height,
     bestBlockHash: hash ?? _hashForHeight(height),
     finalizedBlockNumber: height,
     finalizedBlockHash: hash ?? _hashForHeight(height),
-    startupFinalizedBlockNumber: 0,
+    startupFinalizedSource: startupFinalizedSource,
+    startupFinalizedBlockNumber: startupFinalizedBlockNumber,
+    startupFinalizedBlockHash: startupFinalizedBlockHash ??
+        _hashForHeight(startupFinalizedBlockNumber),
     highestPeerFinalizedBlockNumber: height,
+    currentVerifiedFinalizedBlockNumber: currentVerifiedHeight,
+    currentVerifiedFinalizedBlockHash: currentVerifiedHash,
+    warpTargetFinalizedBlockNumber: isUsable ? null : height,
+    warpTargetFinalizedBlockHash:
+        isUsable ? null : (hash ?? _hashForHeight(height)),
     warpRequestCount: 0,
-    warpFragmentCount: 0,
+    activeWarpFragmentRequestCount: 0,
+    activeWarpStorageRequestCount: 0,
+    activeWarpCallProofRequestCount: 0,
+    warpReceivedFragmentCount: 0,
+    warpVerifiedFragmentCount: 0,
+    warpRejectedFragmentCount: 0,
   );
 }
 

@@ -1134,4 +1134,40 @@ mod tests {
             Err(GuardError::ProtectedGenesisValueChanged)
         );
     }
+
+    #[test]
+    fn malformed_cid_key_and_trailing_record_are_rejected() {
+        let number = cid("malformed-cid-key", "CTZN");
+        let record = citizen_record(CitizenCidStatus::Active, 1).encode();
+        let mut malformed = storage_key::citizen_registry(&number);
+        malformed[storage_key::citizen_registry_prefix().len()] ^= 1;
+        let malformed_delta = BTreeMap::from([(malformed.clone(), Some(record.clone()))]);
+        let malformed_post = BTreeMap::from([(malformed, record.clone())]);
+        assert_eq!(
+            check_transition(
+                1,
+                &malformed_delta,
+                |_| None,
+                |key| malformed_post.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::StorageKeyMalformed("CidRegistry"))
+        );
+
+        let key = storage_key::citizen_registry(&number);
+        let mut trailing = record;
+        trailing.push(0xff);
+        let trailing_delta = BTreeMap::from([(key.clone(), Some(trailing.clone()))]);
+        let trailing_post = BTreeMap::from([(key, trailing)]);
+        assert_eq!(
+            check_transition(
+                1,
+                &trailing_delta,
+                |_| None,
+                |key| trailing_post.get(key).cloned(),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::StorageValueDecodeFailed("CidRegistry"))
+        );
+    }
 }

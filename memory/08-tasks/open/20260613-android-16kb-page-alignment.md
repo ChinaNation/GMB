@@ -4,7 +4,7 @@
 - **修法**:isar 3.1(上游停更、预编译 4KB)→ 换社区维护分支 `isar_community`/`isar_community_flutter_libs`/`isar_community_generator` ^3.3.2(沿用 isar 3.x API + DB 格式,**不迁移数据**;libisar.so 已 16KB,实测下载验证 0x4000)。
 - **改动**:pubspec 3 行换包;19 文件 `package:isar/`→`package:isar_community/`(sed);`wallet_isar.dart::_resolveLocalIsarCorePath` 测试核心解析器 `isar_flutter_libs-`→`isar_community_flutter_libs-`(否则测试取旧 3.1 核心报版本不匹配);build_runner 用 isar_community_generator 重生。
 - **验证**:flutter analyze 0(API 完全兼容,零业务改动);`flutter test --concurrency=1` **232/232 全过**。注意:并行模式 2 个 Isar 测试因多 isolate 抢同一 DB 失败(isar_community 锁更严),**ECC 规则本就要求 --concurrency=1**,CI 按此跑即绿。
-- **待办**:`flutter clean` 重建让安装包用上新 16KB libisar.so;真机 16KB 页设备验证无警告。剩余(armv7/x86 等其他 ABI 已随社区包一并 16KB,无需单独处理)。
+- **待办**：`flutter clean` 后仅按 `arm64-v8a` 重建，让安装包使用新的 16KB `libisar.so`；真机 16KB 页设备验证无警告。CitizenApp 不支持其他 Android ABI。
 
 ## 背景
 - Android 15+ 支持 16KB 内存页(旧设备 4KB)。App 的原生 `.so` 必须 16KB 对齐才能在 16KB 页设备上加载;Google Play 对 targetSdk=Android 15 的应用自 2025-11 起要求 16KB 兼容。

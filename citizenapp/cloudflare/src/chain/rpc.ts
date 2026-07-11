@@ -118,7 +118,7 @@ export function isChainRpcConfigured(env: Env): boolean {
 }
 
 function requireChainRpcConfig(env: Env): ChainRpcConfig {
-  const rawUrl = env.CITIZEN_CHAIN_RPC_URL?.trim();
+  const rawUrl = env.CHAIN_URL?.trim();
   if (!rawUrl) {
     throw new HttpError(503, 'chain_rpc_not_configured', '链服务节点 RPC 未配置');
   }
@@ -138,8 +138,8 @@ function requireChainRpcConfig(env: Env): ChainRpcConfig {
     throw new HttpError(503, 'chain_rpc_invalid_config', '链服务节点 RPC 必须使用受保护的 HTTPS 地址');
   }
 
-  const accessClientId = env.CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID?.trim();
-  const accessClientSecret = env.CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET?.trim();
+  const accessClientId = env.CHAIN_ID?.trim();
+  const accessClientSecret = env.CHAIN_SECRET?.trim();
   if (!accessClientId || !accessClientSecret) {
     throw new HttpError(503, 'chain_rpc_access_not_configured', '链服务节点 Access 服务令牌未配置');
   }

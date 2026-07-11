@@ -11,21 +11,27 @@ void main() {
     final snapshots = Queue<LightClientStatusSnapshot>.from([
       _snapshot(
         isSyncing: false,
-        syncMode: LightClientSyncMode.warpFragments,
+        isUsable: false,
+        syncPhase: LightClientSyncPhase.warpVerifyingFragments,
         warpRequestCount: 1,
-        warpFragmentCount: 1,
+        warpReceivedFragmentCount: 1,
+        warpVerifiedFragmentCount: 0,
       ),
       _snapshot(
         isSyncing: true,
-        syncMode: LightClientSyncMode.warpChainInformation,
+        isUsable: false,
+        syncPhase: LightClientSyncPhase.warpBuildingChainInformation,
         warpRequestCount: 1,
-        warpFragmentCount: 1,
+        warpReceivedFragmentCount: 1,
+        warpVerifiedFragmentCount: 1,
       ),
       _snapshot(
         isSyncing: false,
-        syncMode: LightClientSyncMode.regular,
+        isUsable: true,
+        syncPhase: LightClientSyncPhase.regular,
         warpRequestCount: 1,
-        warpFragmentCount: 1,
+        warpReceivedFragmentCount: 1,
+        warpVerifiedFragmentCount: 1,
       ),
     ]);
     var loadCount = 0;
@@ -50,7 +56,7 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 10));
     await tester.pump();
-    expect(find.text('轻节点正在加载最新链状态'), findsOneWidget);
+    expect(find.text('轻节点正在构建最新链信息'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 10));
     await tester.pump();
@@ -65,24 +71,43 @@ void main() {
 
 LightClientStatusSnapshot _snapshot({
   required bool isSyncing,
-  required LightClientSyncMode syncMode,
+  required bool isUsable,
+  required LightClientSyncPhase syncPhase,
   required int warpRequestCount,
-  required int warpFragmentCount,
+  required int warpReceivedFragmentCount,
+  required int warpVerifiedFragmentCount,
 }) {
   const finalizedHash =
       '0xe3985a35f8668d74f1552be80e1e4c5c01fcce7f7c757cc0cf254ec21a1d2d9c';
   return LightClientStatusSnapshot(
     peerCount: 5,
     isSyncing: isSyncing,
-    syncMode: syncMode,
+    isUsable: isUsable,
+    syncPhase: syncPhase,
     bestBlockNumber: 33,
     bestBlockHash: finalizedHash,
     finalizedBlockNumber: 33,
     finalizedBlockHash: finalizedHash,
+    startupFinalizedSource: LightClientStartupFinalizedSource.bundledCheckpoint,
     startupFinalizedBlockNumber: 0,
+    startupFinalizedBlockHash:
+        '0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971',
     highestPeerFinalizedBlockNumber: 33,
-    warpFinalizedBlockNumber: 33,
+    currentVerifiedFinalizedBlockNumber:
+        syncPhase == LightClientSyncPhase.regular ? 33 : 0,
+    currentVerifiedFinalizedBlockHash: syncPhase == LightClientSyncPhase.regular
+        ? finalizedHash
+        : '0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971',
+    warpTargetFinalizedBlockNumber:
+        syncPhase == LightClientSyncPhase.regular ? null : 33,
+    warpTargetFinalizedBlockHash:
+        syncPhase == LightClientSyncPhase.regular ? null : finalizedHash,
     warpRequestCount: warpRequestCount,
-    warpFragmentCount: warpFragmentCount,
+    activeWarpFragmentRequestCount: 0,
+    activeWarpStorageRequestCount: 0,
+    activeWarpCallProofRequestCount: 0,
+    warpReceivedFragmentCount: warpReceivedFragmentCount,
+    warpVerifiedFragmentCount: warpVerifiedFragmentCount,
+    warpRejectedFragmentCount: 0,
   );
 }

@@ -32,9 +32,6 @@ cd "$RUST_DIR"
 # Android targets
 TARGETS=(
     "aarch64-linux-android"   # arm64-v8a
-    "armv7-linux-androideabi" # armeabi-v7a
-    "i686-linux-android"      # x86
-    "x86_64-linux-android"    # x86_64
 )
 
 # Install targets
@@ -43,13 +40,10 @@ for target in "${TARGETS[@]}"; do
     rustup target add "$target" || true
 done
 
-# Build for all architectures
-echo -e "${YELLOW}Building for all Android architectures...${NC}"
+# CitizenApp Android 只构建 64 位 ARM。
+echo -e "${YELLOW}Building Android arm64-v8a...${NC}"
 cargo ndk \
     -t arm64-v8a \
-    -t armeabi-v7a \
-    -t x86 \
-    -t x86_64 \
     -o "$NATIVE_DIR" \
     build --release
 

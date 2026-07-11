@@ -47,8 +47,8 @@ export ANDROID_NDK_HOME=/path/to/android-ndk
 # Install cargo-ndk
 cargo install cargo-ndk
 
-# Add Android targets
-rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+# CitizenApp Android 只支持 64 位 ARM
+rustup target add aarch64-linux-android
 ```
 
 #### iOS
@@ -150,9 +150,6 @@ packages/smoldot/
 │   │   └── smoldot.dll
 │   ├── android/
 │   │   ├── arm64-v8a/libsmoldot.so
-│   │   ├── armeabi-v7a/libsmoldot.so
-│   │   ├── x86/libsmoldot.so
-│   │   └── x86_64/libsmoldot.so
 │   └── ios/
 │       ├── libsmoldot_device.a
 │       ├── libsmoldot_sim.a

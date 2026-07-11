@@ -46,8 +46,8 @@ pub use crate::executor::vm::ExecHint;
 pub use blocks_tree::{CommitVerifyError, JustificationVerifyError};
 pub use warp_sync::{
     BuildChainInformationError as WarpSyncBuildChainInformationError,
-    BuildRuntimeError as WarpSyncBuildRuntimeError, ConfigCodeTrieNodeHint, VerifyFragmentError,
-    WarpSyncFragment,
+    BuildRuntimeError as WarpSyncBuildRuntimeError, ConfigCodeTrieNodeHint, Phase as WarpSyncPhase,
+    VerifyFragmentError, WarpSyncFragment,
 };
 
 use super::{all_forks::AllForksSync, warp_sync::RuntimeInformation};
@@ -145,32 +145,16 @@ pub struct RequestId(usize);
 pub enum Status<'a, TSrc> {
     /// Regular syncing mode.
     Sync,
-    /// Warp syncing algorithm is downloading Grandpa warp sync fragments containing a finality
-    /// proof.
-    WarpSyncFragments {
-        /// Source from which the fragments are currently being downloaded, if any.
+    /// Warp 同步正在执行。`phase`、目标 finalized 和可选来源全部直接来自 warp 内核。
+    WarpSync {
+        /// 当前真实执行阶段。
+        phase: warp_sync::Phase,
+        /// fragments 当前使用的来源；其他阶段为 `None`。
         source: Option<(SourceId, &'a TSrc)>,
-        /// Hash of the highest block that is proven to be finalized.
-        ///
-        /// This isn't necessarily the same block as returned by
-        /// [`AllSync::as_chain_information`], as this function first has to download extra
-        /// information compared to just the finalized block.
-        finalized_block_hash: [u8; 32],
-        /// Height of the block indicated by [`Status::WarpSyncFragments::finalized_block_hash`].
-        finalized_block_number: u64,
-    },
-    /// Warp syncing algorithm has reached the head of the finalized chain and is downloading and
-    /// building the chain information.
-    WarpSyncChainInformation {
-        /// Hash of the highest block that is proven to be finalized.
-        ///
-        /// This isn't necessarily the same block as returned by
-        /// [`AllSync::as_chain_information`], as this function first has to download extra
-        /// information compared to just the finalized block.
-        finalized_block_hash: [u8; 32],
-        /// Height of the block indicated by
-        /// [`Status::WarpSyncChainInformation::finalized_block_hash`].
-        finalized_block_number: u64,
+        /// fragment proof 当前指向的目标 finalized hash；完成前不能当作完整验证结果。
+        target_finalized_block_hash: [u8; 32],
+        /// `target_finalized_block_hash` 对应的高度。
+        target_finalized_block_number: u64,
     },
 }
 
@@ -198,8 +182,10 @@ impl<TRq, TSrc, TBl> AllSync<TRq, TSrc, TBl> {
                     .download_all_chain_information_storage_proofs,
                 code_trie_node_hint: config.code_trie_node_hint,
                 num_download_ahead_fragments: 128, // TODO: make configurable?
-                // TODO: make configurable?
-                warp_sync_minimum_gap: 32,
+                // CitizenApp 统一使用“可信 finalized anchor → peer 最新 finalized”的
+                // GRANDPA warp。设为 0 后，只要 peer finalized 严格高于 anchor 就请求
+                // proof；相等时不发起无意义的 warp。
+                warp_sync_minimum_gap: 0,
                 download_block_body: config.download_bodies,
             })
             .ok(),
@@ -243,35 +229,40 @@ impl<TRq, TSrc, TBl> AllSync<TRq, TSrc, TBl> {
         all_forks.as_chain_information()
     }
 
+    /// 返回已经构建出完整 chain information 的 finalized，而不是 warp fragment 暂时指向的
+    /// 目标。上层持久化和可用性判断必须使用该值。
+    pub fn verified_finalized_block(&self) -> (u64, [u8; 32]) {
+        let chain_information = if let Some(warp_sync) = &self.warp_sync {
+            warp_sync.as_chain_information()
+        } else {
+            self.as_chain_information()
+        };
+        let header = &chain_information.as_ref().finalized_block_header;
+        (header.number, header.hash(self.shared.block_number_bytes))
+    }
+
     /// Returns the current status of the syncing.
     pub fn status(&'_ self) -> Status<'_, TSrc> {
         let Some(warp_sync) = &self.warp_sync else {
             return Status::Sync;
         };
 
-        match warp_sync.status() {
-            warp_sync::Status::Fragments {
-                source,
-                finalized_block_hash,
-                finalized_block_number,
-            } => Status::WarpSyncFragments {
-                source: source.map(|(_, source_extra)| {
+        let status = warp_sync.status();
+        if matches!(status.phase, warp_sync::Phase::Idle) {
+            Status::Sync
+        } else {
+            Status::WarpSync {
+                phase: status.phase,
+                source: status.source.map(|(_, source_extra)| {
                     let outer_source_id = source_extra.outer_source_id;
                     (
                         outer_source_id,
                         &self.shared.sources[outer_source_id.0].user_data,
                     )
                 }),
-                finalized_block_hash,
-                finalized_block_number,
-            },
-            warp_sync::Status::ChainInformation {
-                finalized_block_hash,
-                finalized_block_number,
-            } => Status::WarpSyncChainInformation {
-                finalized_block_hash,
-                finalized_block_number,
-            },
+                target_finalized_block_hash: status.target_finalized_block_hash,
+                target_finalized_block_number: status.target_finalized_block_number,
+            }
         }
     }
 
@@ -642,6 +633,10 @@ impl<TRq, TSrc, TBl> AllSync<TRq, TSrc, TBl> {
                     )
                 });
 
+        let warp_sync_active = self
+            .warp_sync
+            .as_ref()
+            .is_some_and(|warp_sync| warp_sync.is_active());
         let warp_sync_requests =
             if let Some(warp_sync) = &self.warp_sync {
                 either::Left(warp_sync.desired_requests().map(
@@ -695,12 +690,13 @@ impl<TRq, TSrc, TBl> AllSync<TRq, TSrc, TBl> {
                 either::Right(iter::empty())
             };
 
-        // We always prioritize warp sync requests over all fork requests.
-        // The warp sync algorithm will only ever try to emit requests concerning sources that are
-        // (or pretend to be) far ahead of the local node. Given a source that is (or pretends to
-        // be) far ahead of the local node, it is more desirable to try to warp sync from it
-        // rather than download blocks that are close.
-        warp_sync_requests.chain(all_forks_requests)
+        // finalized 落后时只允许 warp 相关请求；否则普通区块请求可能在 proof 验证前
+        // 抢先追高，重新形成两套同步路径。warp 完成并重建 all-forks 后才恢复尾部同步。
+        if warp_sync_active {
+            either::Left(warp_sync_requests)
+        } else {
+            either::Right(warp_sync_requests.chain(all_forks_requests))
+        }
     }
 
     /// Inserts a new request in the data structure.

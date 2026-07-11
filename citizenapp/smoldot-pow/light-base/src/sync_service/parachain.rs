@@ -21,7 +21,7 @@ use crate::{log, network_service, platform::PlatformRef, runtime_service, util};
 use alloc::{borrow::ToOwned as _, boxed::Box, format, string::String, sync::Arc, vec::Vec};
 use core::{mem, num::NonZero, pin::Pin, time::Duration};
 use futures_lite::FutureExt as _;
-use futures_util::{StreamExt as _, future, stream};
+use futures_util::{future, stream, StreamExt as _};
 use hashbrown::HashMap;
 use itertools::Itertools as _;
 use smoldot::{
@@ -1235,13 +1235,30 @@ impl<TPlat: PlatformRef> ParachainBackgroundTask<TPlat> {
                 ) => {
                     // 中文注释：parachain 同步不使用本文件的 GRANDPA warp 状态机。
                     // 保留统一 typed 接口，但只报告 regular，warp 计数恒为零。
+                    let current_verified_finalized_block_number =
+                        header::decode(&self.obsolete_finalized_parahead, self.block_number_bytes)
+                            .expect("stored parachain finalized header must remain valid")
+                            .number;
+                    let current_verified_finalized_block_hash =
+                        header::hash_from_scale_encoded_header(&self.obsolete_finalized_parahead);
                     let _ = send_back.send(super::SyncActivitySnapshot {
-                        mode: super::SyncMode::Regular,
+                        phase: super::SyncPhase::Regular,
+                        startup_finalized_source: None,
                         startup_finalized_block_number: None,
+                        startup_finalized_block_hash: None,
                         highest_peer_finalized_block_number: None,
-                        warp_finalized_block_number: None,
+                        current_verified_finalized_block_number,
+                        current_verified_finalized_block_hash,
+                        warp_target_finalized_block_number: None,
+                        warp_target_finalized_block_hash: None,
                         warp_request_count: 0,
-                        warp_fragment_count: 0,
+                        active_warp_fragment_request_count: 0,
+                        active_warp_storage_request_count: 0,
+                        active_warp_call_proof_request_count: 0,
+                        warp_received_fragment_count: 0,
+                        warp_verified_fragment_count: 0,
+                        warp_rejected_fragment_count: 0,
+                        warp_last_failure: None,
                     });
                 }
 

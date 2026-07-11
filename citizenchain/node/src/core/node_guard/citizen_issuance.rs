@@ -532,4 +532,81 @@ mod tests {
             Err(GuardError::StorageKeyMalformed("PendingRewards"))
         );
     }
+
+    #[test]
+    fn malicious_identity_claim_and_unknown_delta_are_rejected() {
+        let (mut parent, pre, post, pre_delta, post_delta, account) = valid_transition();
+        parent.insert(
+            storage_key::voting_identity(&account),
+            voting_identity(b"GD001-CTZN1-OLD"),
+        );
+        assert_eq!(
+            check_transition(
+                2,
+                &pre_delta,
+                &post_delta,
+                &|key| parent.get(key).cloned(),
+                &|key| pre.get(key).cloned(),
+                &|key| post.get(key).cloned(),
+                &mut FinalizeIssuancePlan::default(),
+            ),
+            Err(GuardError::IdentityAlreadyExisted)
+        );
+
+        let (parent, mut pre, post, pre_delta, post_delta, account) = valid_transition();
+        pre.insert(
+            storage_key::voting_identity(&account),
+            voting_identity(b"GD001-CTZN1-TAMPERED"),
+        );
+        assert_eq!(
+            check_transition(
+                2,
+                &pre_delta,
+                &post_delta,
+                &|key| parent.get(key).cloned(),
+                &|key| pre.get(key).cloned(),
+                &|key| post.get(key).cloned(),
+                &mut FinalizeIssuancePlan::default(),
+            ),
+            Err(GuardError::IdentityHashMismatch)
+        );
+
+        let (parent, pre, post, mut pre_delta, post_delta, _) = valid_transition();
+        let mut unknown = storage_key::pallet_prefix().to_vec();
+        unknown.extend_from_slice(b"shadow-audit");
+        pre_delta.insert(unknown, Some(vec![1]));
+        assert_eq!(
+            check_transition(
+                2,
+                &pre_delta,
+                &post_delta,
+                &|key| parent.get(key).cloned(),
+                &|key| pre.get(key).cloned(),
+                &|key| post.get(key).cloned(),
+                &mut FinalizeIssuancePlan::default(),
+            ),
+            Err(GuardError::PendingQueueUnexpectedKey)
+        );
+    }
+
+    #[test]
+    fn genesis_rejects_trailing_zero_and_unknown_keys() {
+        let mut trailing = BTreeMap::new();
+        let mut zero = 0u64.encode();
+        zero.push(0xff);
+        trailing.insert(storage_key::rewarded_count(), zero);
+        assert_eq!(
+            check_genesis_key_values(trailing.iter()),
+            Err(GuardError::StorageValueDecodeFailed("RewardedCount"))
+        );
+
+        let mut unknown = BTreeMap::new();
+        let mut key = storage_key::pallet_prefix().to_vec();
+        key.extend_from_slice(b"unknown");
+        unknown.insert(key.clone(), Vec::new());
+        assert_eq!(
+            check_genesis_key_values(unknown.iter()),
+            Err(GuardError::GenesisStateNotEmpty(key))
+        );
+    }
 }

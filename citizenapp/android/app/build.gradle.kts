@@ -54,9 +54,8 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {
-            // citizenapp Android 正式支持真实手机常用 ARM ABI；
-            // smoldot native 库也只为这两类 ABI 产出，避免 APK 混入未适配 x86。
-            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+            // CitizenApp Android 唯一支持 64 位 ARM；禁止恢复其他 ABI。
+            abiFilters.add("arm64-v8a")
         }
     }
 
@@ -80,9 +79,9 @@ android {
 
     packaging {
         jniLibs {
-            // 第三方 Flutter 插件可能自带 x86/x86_64 native 库；
-            // 当前 citizenapp 不支持 x86 Android，打包阶段直接排除，避免出现半适配 APK。
-            excludes.addAll(listOf("lib/x86/**", "lib/x86_64/**"))
+            // 第三方插件可能携带非 ARM64 预编译库；打包阶段统一排除，确保 APK
+            // 物理上只保留 defaultConfig 声明的 arm64-v8a。
+            excludes.addAll(listOf("lib/armeabi*/**", "lib/x86/**", "lib/x86_64/**"))
         }
     }
 }

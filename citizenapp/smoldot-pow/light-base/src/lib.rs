@@ -103,7 +103,10 @@ mod runtime_service;
 mod sync_service;
 mod transactions_service;
 
-pub use sync_service::SyncMode as ChainSyncMode;
+pub use sync_service::{
+    StartupFinalizedSource as ChainStartupFinalizedSource, SyncPhase as ChainSyncPhase,
+    WarpFailure as ChainWarpFailure,
+};
 mod util;
 
 pub mod network_service;
@@ -569,6 +572,8 @@ pub struct ChainStatusSnapshot {
     pub peer_count: u64,
     /// Whether the client is believed to still be catching up with the head.
     pub is_syncing: bool,
+    /// 唯一业务可用性判定；上层不得再根据高度、历史状态或 UI 计时重新计算。
+    pub is_usable: bool,
     /// Number of the current best block.
     pub best_block_number: u64,
     /// Hash of the current best block.
@@ -578,38 +583,74 @@ pub struct ChainStatusSnapshot {
     /// Hash of the current finalized block.
     pub finalized_block_hash: [u8; 32],
     /// 同步状态机当前阶段，直接来自 sync service。
-    pub sync_mode: ChainSyncMode,
+    pub sync_phase: ChainSyncPhase,
+    /// 本次 addChain 真实采用的 finalized 起点来源。
+    pub startup_finalized_source: Option<ChainStartupFinalizedSource>,
     /// 本次 addChain 实际采用的 finalized 起点。
     pub startup_finalized_block_number: Option<u64>,
+    /// 本次 addChain 实际采用的 finalized 起点 hash。
+    pub startup_finalized_block_hash: Option<[u8; 32]>,
     /// 已连接 peer 公布的最高 GRANDPA finalized 高度。
     pub highest_peer_finalized_block_number: Option<u64>,
-    /// 本次生命周期中 warp 已验证到的最高 finalized 高度。
-    pub warp_finalized_block_number: Option<u64>,
+    /// 已经构建出完整 chain information 的可信 finalized 高度。
+    pub current_verified_finalized_block_number: u64,
+    /// `current_verified_finalized_block_number` 对应的 hash。
+    pub current_verified_finalized_block_hash: [u8; 32],
+    /// fragment proof 当前指向的 warp 目标高度；完成前不能作为可信 finalized。
+    pub warp_target_finalized_block_number: Option<u64>,
+    /// `warp_target_finalized_block_number` 对应的 hash；proof 尚未验证时为 `None`。
+    pub warp_target_finalized_block_hash: Option<[u8; 32]>,
     pub warp_request_count: u64,
-    pub warp_fragment_count: u64,
+    pub active_warp_fragment_request_count: u64,
+    pub active_warp_storage_request_count: u64,
+    pub active_warp_call_proof_request_count: u64,
+    pub warp_received_fragment_count: u64,
+    pub warp_verified_fragment_count: u64,
+    pub warp_rejected_fragment_count: u64,
+    pub warp_last_failure: Option<ChainWarpFailure>,
 }
 
 /// 统一 runtime 近头启发式与同步状态机阶段的完成语义。
 ///
 /// runtime 已接近链头只说明目标 runtime 可用；只要 GRANDPA warp 尚未回到
 /// `Regular`，上层仍必须继续轮询，不能提前保存 database 或开放业务读写。
-fn chain_status_is_syncing(runtime_is_near_head: bool, sync_mode: ChainSyncMode) -> bool {
-    !runtime_is_near_head || sync_mode != ChainSyncMode::Regular
+fn chain_status_is_syncing(runtime_is_near_head: bool, sync_phase: ChainSyncPhase) -> bool {
+    !runtime_is_near_head || sync_phase != ChainSyncPhase::Regular
+}
+
+fn chain_status_is_usable(
+    peer_count: u64,
+    is_syncing: bool,
+    sync_phase: ChainSyncPhase,
+) -> bool {
+    peer_count > 0 && !is_syncing && sync_phase == ChainSyncPhase::Regular
 }
 
 #[cfg(test)]
 mod chain_status_tests {
-    use super::{ChainSyncMode, chain_status_is_syncing};
+    use super::{
+        chain_status_is_syncing, chain_status_is_usable, ChainSyncPhase,
+    };
 
     #[test]
     fn warp_mode_remains_syncing_even_when_runtime_is_near_head() {
-        assert!(chain_status_is_syncing(true, ChainSyncMode::WarpFragments));
         assert!(chain_status_is_syncing(
             true,
-            ChainSyncMode::WarpChainInformation
+            ChainSyncPhase::WarpDownloadingFragments
         ));
-        assert!(chain_status_is_syncing(false, ChainSyncMode::Regular));
-        assert!(!chain_status_is_syncing(true, ChainSyncMode::Regular));
+        assert!(chain_status_is_syncing(
+            true,
+            ChainSyncPhase::WarpBuildingChainInformation
+        ));
+        assert!(chain_status_is_syncing(false, ChainSyncPhase::Regular));
+        assert!(!chain_status_is_syncing(true, ChainSyncPhase::Regular));
+        assert!(!chain_status_is_usable(
+            1,
+            true,
+            ChainSyncPhase::WarpBuildingChainInformation
+        ));
+        assert!(!chain_status_is_usable(0, false, ChainSyncPhase::Regular));
+        assert!(chain_status_is_usable(1, false, ChainSyncPhase::Regular));
     }
 }
 
@@ -740,22 +781,42 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                 .is_near_head_of_chain_heuristic()
                 .await;
             let sync_activity = services.sync_service.sync_activity_snapshot().await;
-            let is_syncing = chain_status_is_syncing(runtime_is_near_head, sync_activity.mode);
+            let is_syncing = chain_status_is_syncing(runtime_is_near_head, sync_activity.phase);
+            let is_usable =
+                chain_status_is_usable(peer_count, is_syncing, sync_activity.phase);
 
             Ok(ChainStatusSnapshot {
                 peer_count,
                 is_syncing,
+                is_usable,
                 best_block_number,
                 best_block_hash,
                 finalized_block_number,
                 finalized_block_hash,
-                sync_mode: sync_activity.mode,
+                sync_phase: sync_activity.phase,
+                startup_finalized_source: sync_activity.startup_finalized_source,
                 startup_finalized_block_number: sync_activity.startup_finalized_block_number,
+                startup_finalized_block_hash: sync_activity.startup_finalized_block_hash,
                 highest_peer_finalized_block_number: sync_activity
                     .highest_peer_finalized_block_number,
-                warp_finalized_block_number: sync_activity.warp_finalized_block_number,
+                current_verified_finalized_block_number: sync_activity
+                    .current_verified_finalized_block_number,
+                current_verified_finalized_block_hash: sync_activity
+                    .current_verified_finalized_block_hash,
+                warp_target_finalized_block_number: sync_activity
+                    .warp_target_finalized_block_number,
+                warp_target_finalized_block_hash: sync_activity.warp_target_finalized_block_hash,
                 warp_request_count: sync_activity.warp_request_count,
-                warp_fragment_count: sync_activity.warp_fragment_count,
+                active_warp_fragment_request_count: sync_activity
+                    .active_warp_fragment_request_count,
+                active_warp_storage_request_count: sync_activity
+                    .active_warp_storage_request_count,
+                active_warp_call_proof_request_count: sync_activity
+                    .active_warp_call_proof_request_count,
+                warp_received_fragment_count: sync_activity.warp_received_fragment_count,
+                warp_verified_fragment_count: sync_activity.warp_verified_fragment_count,
+                warp_rejected_fragment_count: sync_activity.warp_rejected_fragment_count,
+                warp_last_failure: sync_activity.warp_last_failure,
             })
         }))
     }
@@ -1339,6 +1400,25 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                 .light_sync_state()
                 .map(|s| s.to_chain_information());
 
+            // 启动锚点诊断只记录结构化高度，不输出 database 正文，便于确认本机
+            // finalized database 是否被成功解码以及与安装包 checkpoint 的优先级。
+            log!(
+                &self.platform,
+                Debug,
+                "smoldot",
+                format!(
+                    "Startup anchor candidates for {}. Checkpoint: {:?}. Database: {:?}",
+                    chain_spec.id(),
+                    checkpoint.as_ref().map(|checkpoint| checkpoint
+                        .as_ref()
+                        .map(|ci| ci.as_ref().finalized_block_header.number)),
+                    database.as_ref().and_then(|database| database
+                        .chain_information
+                        .as_ref()
+                        .map(|ci| ci.as_ref().finalized_block_header.number)),
+                )
+            );
+
             match (genesis_chain_information, checkpoint, database) {
                 // Use the database if it contains a more recent block than the
                 // chain spec checkpoint.
@@ -1383,6 +1463,24 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                     }),
                 ) => (None, false, known_nodes, runtime_code_hint),
                 (None, None, None) => (None, false, Vec::new(), None),
+
+                // CitizenApp 的签名安装包固定内置创世 checkpoint。该 checkpoint 在
+                // chain-spec 层以 `GenesisBlockCheckpoint` 表示，但本机 database 中
+                // 更高的 chain information 仍必须成为真实同步起点；否则每次冷启动
+                // 都会错误回到 `#0` 并重复 warp。
+                (
+                    Some(_),
+                    None
+                    | Some(Err(
+                        chain_spec::CheckpointToChainInformationError::GenesisBlockCheckpoint,
+                    )),
+                    Some(database::DatabaseContent {
+                        chain_information: Some(db_ci),
+                        known_nodes,
+                        runtime_code_hint,
+                        ..
+                    }),
+                ) => (Some(db_ci), true, known_nodes, runtime_code_hint),
 
                 // Use the genesis block if no checkpoint is available.
                 (
@@ -1597,9 +1695,14 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                                 para_id: *para_id,
                             }
                         }
-                        (None, Some(chain_information)) => {
-                            StartServicesChainTy::RelayChain { chain_information }
-                        }
+                        (None, Some(chain_information)) => StartServicesChainTy::RelayChain {
+                            chain_information,
+                            startup_finalized_source: if used_database_chain_information {
+                                sync_service::StartupFinalizedSource::LocalDatabase
+                            } else {
+                                sync_service::StartupFinalizedSource::BundledCheckpoint
+                            },
+                        },
                         (None, None) => {
                             // Checked above.
                             unreachable!()
@@ -2112,6 +2215,7 @@ pub enum AddChainError {
 enum StartServicesChainTy<'a, TPlat: platform::PlatformRef> {
     RelayChain {
         chain_information: &'a chain::chain_information::ValidChainInformation,
+        startup_finalized_source: sync_service::StartupFinalizedSource,
     },
     Parachain {
         relay_chain: &'a ChainServices<TPlat>,
@@ -2152,6 +2256,7 @@ fn start_services<TPlat: platform::PlatformRef>(
         num_out_slots: 8,
         grandpa_protocol_finalized_block_height: if let StartServicesChainTy::RelayChain {
             chain_information,
+            ..
         } = &config
         {
             if matches!(
@@ -2168,7 +2273,9 @@ fn start_services<TPlat: platform::PlatformRef>(
         },
         genesis_block_hash,
         best_block: match &config {
-            StartServicesChainTy::RelayChain { chain_information } => (
+            StartServicesChainTy::RelayChain {
+                chain_information, ..
+            } => (
                 chain_information.as_ref().finalized_block_header.number,
                 chain_information
                     .as_ref()
@@ -2233,7 +2340,10 @@ fn start_services<TPlat: platform::PlatformRef>(
 
             (sync_service, runtime_service)
         }
-        StartServicesChainTy::RelayChain { chain_information } => {
+        StartServicesChainTy::RelayChain {
+            chain_information,
+            startup_finalized_source,
+        } => {
             // Chain is a relay chain.
 
             // The sync service is leveraging the network service, downloads block headers,
@@ -2247,6 +2357,7 @@ fn start_services<TPlat: platform::PlatformRef>(
                 chain_type: sync_service::ConfigChainType::RelayChain(
                     sync_service::ConfigRelayChain {
                         chain_information: chain_information.clone(),
+                        startup_finalized_source,
                         runtime_code_hint: runtime_code_hint.map(|hint| {
                             sync_service::ConfigRelayChainRuntimeCodeHint {
                                 storage_value: hint.code,

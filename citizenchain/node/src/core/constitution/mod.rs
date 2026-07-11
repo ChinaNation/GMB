@@ -267,11 +267,20 @@ struct MImmutableManifest {
     article_hashes: Vec<[u8; 32]>,
 }
 
+fn decode_full_exact<T: Decode>(bytes: &[u8]) -> Result<T, ()> {
+    let mut input = bytes;
+    let value = T::decode(&mut input).map_err(|_| ())?;
+    if !input.is_empty() {
+        return Err(());
+    }
+    Ok(value)
+}
+
 /// 启动期交叉校验:创世 manifest 的清单必须 == 节点二进制单源,且逐条摘要 == 基准条文摘要。
 /// 任一不符 → 返回 `Err`(节点应拒绝启动)。纯函数,便于单测。
 fn verify_manifest(manifest_bytes: &[u8], reference: &ImmutableReference) -> Result<(), String> {
-    let manifest = MImmutableManifest::decode(&mut &manifest_bytes[..])
-        .map_err(|e| format!("manifest 解码失败:{e}"))?;
+    let manifest = decode_full_exact::<MImmutableManifest>(manifest_bytes)
+        .map_err(|_| "manifest 解码失败或存在尾随字节".to_string())?;
 
     // 1. 清单一致(双锚:创世 manifest ↔ 节点二进制常量)。
     let mut on_chain = manifest.article_numbers.clone();
@@ -581,8 +590,8 @@ where
     // ── ② 层级唯一性:LawsByScope[宪法][0] 必须恰为 [0] ──
     let scope_bytes = read_raw(&storage_key::laws_by_scope_constitution())
         .ok_or(GuardError::ConstitutionNotUnique)?;
-    let scope_list =
-        Vec::<u64>::decode(&mut &scope_bytes[..]).map_err(|_| GuardError::ConstitutionNotUnique)?;
+    let scope_list = decode_full_exact::<Vec<u64>>(&scope_bytes)
+        .map_err(|_| GuardError::ConstitutionNotUnique)?;
     if scope_list != [CONSTITUTION_LAW_ID] {
         return Err(GuardError::ConstitutionNotUnique);
     }
@@ -648,7 +657,7 @@ where
     let bytes = read_raw(&storage_key::constitution_guard_vote_proof(version))
         .ok_or(GuardError::GuardReviewMissing(version))?;
     let approve =
-        u32::decode(&mut &bytes[..]).map_err(|_| GuardError::GuardReviewMissing(version))?;
+        decode_full_exact::<u32>(&bytes).map_err(|_| GuardError::GuardReviewMissing(version))?;
     if !primitives::constitution::guard_review_passed(approve) {
         return Err(GuardError::GuardReviewNotPassed(version));
     }
@@ -703,7 +712,7 @@ where
 {
     let bytes = read_raw(&storage_key::constitution_amendment_proof(version))
         .ok_or(GuardError::CoreClauseReferendumMissing(version))?;
-    let (eligible, yes, no) = <(u64, u64, u64)>::decode(&mut &bytes[..])
+    let (eligible, yes, no) = decode_full_exact::<(u64, u64, u64)>(&bytes)
         .map_err(|_| GuardError::CoreClauseReferendumMissing(version))?;
     if !primitives::constitution::referendum_passed(eligible, yes, no) {
         return Err(GuardError::CoreClauseReferendumNotPassed(version));
@@ -1570,6 +1579,38 @@ mod tests {
             .collect();
         hashes[0] = [9u8; 32]; // 谎报第一条摘要
         assert!(verify_manifest(&manifest_scale(numbers, hashes), &reference).is_err());
+    }
+
+    #[test]
+    fn full_constitution_values_reject_trailing_bytes() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+        let mut manifest = correct_manifest(&reference);
+        manifest.push(0xff);
+        assert!(verify_manifest(&manifest, &reference).is_err());
+
+        let mut guard = 4u32.encode();
+        guard.push(0xff);
+        assert_eq!(
+            check_guard_review_proof(
+                &|key| (key == storage_key::constitution_guard_vote_proof(2))
+                    .then(|| guard.clone()),
+                2,
+            ),
+            Err(GuardError::GuardReviewMissing(2))
+        );
+
+        let mut referendum = (100u64, 80u64, 20u64).encode();
+        referendum.push(0xff);
+        assert_eq!(
+            check_core_referendum_proof(
+                &|key| {
+                    (key == storage_key::constitution_amendment_proof(2))
+                        .then(|| referendum.clone())
+                },
+                2,
+            ),
+            Err(GuardError::CoreClauseReferendumMissing(2))
+        );
     }
 
     #[test]

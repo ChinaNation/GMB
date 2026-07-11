@@ -79,6 +79,6 @@
 - [x] App 内置 `SquareApiConfig.prodBaseUrl = https://citizenapp-square-api.stews87-fawn.workers.dev` 为唯一默认；删除 `localDevBaseUrl`/`_isProductBuild` 与本机兜底；`normalizeBaseUrl` 保留（本机联调仍可显式 `--dart-define`）。
 - [x] `dart analyze` 无问题；`test/8964/square_feed_service_test.dart` 全过（含 normalizeBaseUrl 契约）。
 - [ ] 待用户设 production R2 预签名 secret（`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_ACCOUNT_ID`）——仅影响**发图片/附件**；纯文字聊天走 D1 已可用。
-- [ ] 待部署 Access + Tunnel，并为 production 成套设置 `CITIZEN_CHAIN_RPC_URL`、`CITIZEN_CHAIN_RPC_ACCESS_CLIENT_ID`、`CITIZEN_CHAIN_RPC_ACCESS_CLIENT_SECRET`（仅链读取与签名交易受控广播使用）。
+- [ ] 待部署 Access + Tunnel，并为 production 成套设置 `CHAIN_URL`、`CHAIN_ID`、`CHAIN_SECRET`（仅链读取与签名交易受控广播使用）。
 
 文字聊天与广场基础发帖：已可用（production 已部署，App 默认直连 Cloudflare，本机兜底已删）。

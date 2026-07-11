@@ -202,7 +202,9 @@ class SmoldotClientManager {
         debugPrint(
             '║ bestBlock: #${snapshot.bestBlockNumber} ${snapshot.bestBlockHash}');
         debugPrint(
-            '║ finalizedBlock: #${snapshot.finalizedBlockNumber} ${snapshot.finalizedBlockHash}');
+            '║ surfaceFinalized: #${snapshot.finalizedBlockNumber} ${snapshot.finalizedBlockHash}');
+        debugPrint(
+            '║ verifiedFinalized: #${snapshot.currentVerifiedFinalizedBlockNumber} ${snapshot.currentVerifiedFinalizedBlockHash}');
       } catch (e) {
         debugPrint('║ getStatusSnapshot 失败: $e');
       }
@@ -223,8 +225,6 @@ class SmoldotClientManager {
   /// 导出数据库的最大字节数（256 KB，足够存同步进度和已知 peer）。
   static const _dbExportMaxSize = 256 * 1024;
   static const _dbExportStableAttempts = 2;
-  static const _dbRestoreCheckInterval = Duration(milliseconds: 250);
-  static const _dbRestoreCheckAttempts = 20;
 
   /// 将内部诊断状态转换为用户可理解的链路错误提示。
   ///
@@ -354,10 +354,8 @@ class SmoldotClientManager {
       final withBootstrapBootnodes =
           _injectBootstrapBootnodes(withBootnode, bootstrap);
 
-      // 注入 lightSyncState checkpoint：让 smoldot 从 finalized block 开始同步，
-      // 跳过 genesis 到 finalized 之间的全部区块头验证，冷启动从分钟级降到秒级。
-      // checkpoint 由 citizenchain/scripts/bake-chainspec.sh 从冻结节点生成，
-      // 打包在 assets/light_sync_state.json 中，不修改 chainspec.json 文件。
+      // 注入签名安装包固定的创世信任锚。该资产永远只提供 #0，不随链高变化；
+      // peer 最新 finalized F 必须从本机 H 出发通过 GRANDPA warp 验证获得。
       final injectedLightSyncState =
           await _injectLightSyncState(withBootstrapBootnodes);
       final chainSpec = injectedLightSyncState.chainSpec;
@@ -376,7 +374,7 @@ class SmoldotClientManager {
             databaseContent: cachedEnvelope.databaseContent,
           );
           _ensureLifecycleCurrent(generation);
-          await _waitForRestoredDatabaseCache(
+          await _verifyRestoredDatabaseCache(
             cachedEnvelope,
             _chain!,
             generation,
@@ -400,11 +398,19 @@ class SmoldotClientManager {
           }
           await _clearCachedDatabase();
           _ensureLifecycleCurrent(generation);
-          _chain = await _addChain(chainSpec);
+          _chain = await _addChainFromBundledCheckpoint(
+            chainSpec,
+            expectedGenesisHash: injectedLightSyncState.genesisHash,
+            lifecycleGeneration: generation,
+          );
           _ensureLifecycleCurrent(generation);
         }
       } else {
-        _chain = await _addChain(chainSpec);
+        _chain = await _addChainFromBundledCheckpoint(
+          chainSpec,
+          expectedGenesisHash: injectedLightSyncState.genesisHash,
+          lifecycleGeneration: generation,
+        );
         _ensureLifecycleCurrent(generation);
       }
 
@@ -483,6 +489,14 @@ class SmoldotClientManager {
     return _restoredDatabaseCacheReached(envelope, snapshot);
   }
 
+  /// 无有效本机 database 时，验证真实启动锚点必须是安装包固定 #0。
+  @visibleForTesting
+  static bool bundledCheckpointStartMatchesForTesting({
+    required String expectedGenesisHash,
+    required LightClientStatusSnapshot snapshot,
+  }) =>
+      _bundledCheckpointStartMatches(expectedGenesisHash, snapshot);
+
   /// 固定 `#0` checkpoint 的 genesis hash 推导测试入口。
   @visibleForTesting
   static String genesisHashFromCheckpointForTesting(String headerHex) =>
@@ -518,6 +532,50 @@ class SmoldotClientManager {
         databaseContent: databaseContent,
       ),
     );
+  }
+
+  /// 无有效本机 database 时唯一允许的启动路径。
+  ///
+  /// addChain 成功不代表 smoldot 真实采用了安装包锚点；必须读取第一份原生快照，
+  /// 精确核对来源、高度和 hash。核对失败时立即释放 chain，禁止带着未知 H 继续联网。
+  Future<Chain> _addChainFromBundledCheckpoint(
+    String chainSpec, {
+    required String expectedGenesisHash,
+    required int lifecycleGeneration,
+  }) async {
+    final chain = await _addChain(chainSpec);
+    try {
+      _ensureLifecycleCurrent(lifecycleGeneration);
+      final snapshot = await chain.getStatusSnapshot();
+      _ensureLifecycleCurrent(lifecycleGeneration);
+      if (!_bundledCheckpointStartMatches(expectedGenesisHash, snapshot)) {
+        throw FormatException(
+          '轻节点没有采用安装包固定创世锚点: '
+          '来源 ${snapshot.startupFinalizedSource?.wireValue}, '
+          '启动 #${snapshot.startupFinalizedBlockNumber} '
+          '${snapshot.startupFinalizedBlockHash}',
+        );
+      }
+      return chain;
+    } catch (_) {
+      try {
+        await chain.dispose();
+      } catch (disposeError) {
+        debugPrint('[Smoldot] 释放错误启动锚点链实例失败: $disposeError');
+      }
+      rethrow;
+    }
+  }
+
+  static bool _bundledCheckpointStartMatches(
+    String expectedGenesisHash,
+    LightClientStatusSnapshot snapshot,
+  ) {
+    return snapshot.startupFinalizedSource ==
+            LightClientStartupFinalizedSource.bundledCheckpoint &&
+        snapshot.startupFinalizedBlockNumber == 0 &&
+        snapshot.startupFinalizedBlockHash?.toLowerCase() ==
+            expectedGenesisHash.toLowerCase();
   }
 
   /// 开发期 USB 桥接专用。
@@ -614,9 +672,9 @@ class SmoldotClientManager {
 
   /// 从 assets/light_sync_state.json 加载 checkpoint 并注入 chainspec。
   ///
-  /// lightSyncState 让 smoldot 从 finalized block 开始同步，跳过 genesis
-  /// 到 finalized 之间的全部区块头验证。checkpoint 由构建脚本预生成，
-  /// 即使落后几个块也不影响正确性，smoldot 会自动追赶。
+  /// lightSyncState 只提供固定 #0 的创世 header 与 GRANDPA authority set。
+  /// 最新 finalized 不写入安装包，也不从远端下载 checkpoint；客户端只能从该锚点
+  /// 或本机完整验证 database 的 H 出发，通过 GRANDPA warp 验证 peer 的 F。
   /// stateRootHash 轻形态没有 checkpoint 无法启动；资产异常时直接报错，
   /// 避免继续落到 smoldot 的底层 ChainSpecNeitherGenesisStorageNorCheckpoint。
   Future<({String chainSpec, String genesisHash})> _injectLightSyncState(
@@ -716,28 +774,24 @@ class SmoldotClientManager {
     }
   }
 
-  /// 等待 smoldot 把 databaseContent 异步应用到同步状态机。
+  /// 验证 smoldot 是否真实采用 database chain information 作为启动 anchor。
   ///
-  /// addChain 返回时可能仍短暂暴露安装包 `#0`；因此低于信封高度只代表恢复尚未
-  /// 完成。达到同高度必须哈希一致；已经超过信封高度则说明本地验证状态已安全
-  /// 跨过该锚点。持续低于声明高度才判定正文与信封不一致。
-  Future<void> _waitForRestoredDatabaseCache(
+  /// 不能再用网络实时 finalized 已经追到信封高度冒充“缓存恢复成功”；启动来源、
+  /// 高度和 hash 必须与信封完全一致，否则立即释放该 chain、删除缓存并回退 #0。
+  Future<void> _verifyRestoredDatabaseCache(
     _SmoldotDatabaseCacheEnvelope envelope,
     Chain chain,
     int lifecycleGeneration,
   ) async {
-    LightClientStatusSnapshot? lastSnapshot;
-    for (var attempt = 0; attempt < _dbRestoreCheckAttempts; attempt++) {
-      _ensureLifecycleCurrent(lifecycleGeneration);
-      lastSnapshot = await chain.getStatusSnapshot();
-      if (_restoredDatabaseCacheReached(envelope, lastSnapshot)) return;
-      await Future<void>.delayed(_dbRestoreCheckInterval);
-    }
+    _ensureLifecycleCurrent(lifecycleGeneration);
+    final snapshot = await chain.getStatusSnapshot();
+    if (_restoredDatabaseCacheReached(envelope, snapshot)) return;
     throw FormatException(
       '同步缓存信封与真实恢复锚点不一致: '
       '声明 #${envelope.finalizedBlockNumber} ${envelope.finalizedBlockHash}, '
-      '实际 #${lastSnapshot?.finalizedBlockNumber} '
-      '${lastSnapshot?.finalizedBlockHash}',
+      '启动来源 ${snapshot.startupFinalizedSource?.wireValue}, '
+      '启动 #${snapshot.startupFinalizedBlockNumber} '
+      '${snapshot.startupFinalizedBlockHash}',
     );
   }
 
@@ -745,19 +799,13 @@ class SmoldotClientManager {
     _SmoldotDatabaseCacheEnvelope envelope,
     LightClientStatusSnapshot snapshot,
   ) {
-    final restoredNumber = snapshot.finalizedBlockNumber;
-    final restoredHash = snapshot.finalizedBlockHash?.toLowerCase();
-    if (restoredNumber == null || restoredHash == null) return false;
-    if (restoredNumber < envelope.finalizedBlockNumber) return false;
-    if (restoredNumber == envelope.finalizedBlockNumber &&
-        restoredHash != envelope.finalizedBlockHash) {
-      throw FormatException(
-        '同步缓存信封与真实恢复锚点不一致: '
-        '声明 #${envelope.finalizedBlockNumber} ${envelope.finalizedBlockHash}, '
-        '实际 #$restoredNumber $restoredHash',
-      );
-    }
-    return true;
+    return snapshot.startupFinalizedSource ==
+            LightClientStartupFinalizedSource.localDatabase &&
+        snapshot.startupFinalizedBlockNumber == envelope.finalizedBlockNumber &&
+        snapshot.startupFinalizedBlockHash?.toLowerCase() ==
+            envelope.finalizedBlockHash &&
+        snapshot.currentVerifiedFinalizedBlockNumber >=
+            envelope.finalizedBlockNumber;
   }
 
   Future<void> _clearCachedDatabase() async {
@@ -815,9 +863,9 @@ class SmoldotClientManager {
     await _persistDatabaseCacheCandidate(candidate);
   }
 
-  /// 在同一个 finalized 锚点前后夹住 database 导出。
+  /// 在同一个完整验证 finalized 锚点前后夹住 database 导出。
   ///
-  /// smoldot 导出期间仍可能推进 finalized；前后高度或哈希变化时，无法证明正文
+  /// smoldot 导出期间仍可能推进 currentVerifiedFinalized；前后高度或哈希变化时，无法证明正文
   /// 与信封锚点一致，本次结果必须丢弃并有限重试，不能给较新正文贴旧高度标签。
   Future<_SmoldotDatabaseCacheEnvelope?> _captureStableDatabaseCache({
     required int lifecycleGeneration,
@@ -831,7 +879,7 @@ class SmoldotClientManager {
       if (!before.isUsable) {
         debugPrint(
           '[Smoldot] 链状态尚未 regular/可用，跳过同步缓存导出 '
-          '(mode=${before.syncMode.wireValue}, syncing=${before.isSyncing})',
+          '(phase=${before.syncPhase.wireValue}, syncing=${before.isSyncing})',
         );
         return null;
       }
@@ -847,17 +895,10 @@ class SmoldotClientManager {
         return null;
       }
 
-      final beforeNumber = before.finalizedBlockNumber;
-      final beforeHash = before.finalizedBlockHash?.toLowerCase();
-      final afterNumber = after.finalizedBlockNumber;
-      final afterHash = after.finalizedBlockHash?.toLowerCase();
-      if (beforeNumber == null ||
-          beforeHash == null ||
-          afterNumber == null ||
-          afterHash == null) {
-        debugPrint('[Smoldot] finalized 锚点不完整，跳过同步缓存导出');
-        return null;
-      }
+      final beforeNumber = before.currentVerifiedFinalizedBlockNumber;
+      final beforeHash = before.currentVerifiedFinalizedBlockHash.toLowerCase();
+      final afterNumber = after.currentVerifiedFinalizedBlockNumber;
+      final afterHash = after.currentVerifiedFinalizedBlockHash.toLowerCase();
       if (beforeNumber == afterNumber && beforeHash == afterHash) {
         return _SmoldotDatabaseCacheEnvelope(
           genesisHash: expectedGenesisHash,
@@ -939,7 +980,7 @@ class SmoldotClientManager {
     return task;
   }
 
-  /// 只在 finalized 严格推进且完整状态可用时触发昂贵的 database 导出。
+  /// 只在 currentVerifiedFinalized 严格推进且原生状态可用时触发昂贵导出。
   Future<void> _refreshDatabaseCacheIfAdvanced({
     required int lifecycleGeneration,
   }) async {
@@ -953,9 +994,8 @@ class SmoldotClientManager {
         !snapshot.isUsable) {
       return;
     }
-    final finalized = snapshot.finalizedBlockNumber;
-    if (finalized == null ||
-        finalized <= (_lastPersistedFinalizedBlockNumber ?? -1)) {
+    final finalized = snapshot.currentVerifiedFinalizedBlockNumber;
+    if (finalized <= (_lastPersistedFinalizedBlockNumber ?? -1)) {
       return;
     }
     await _saveDatabaseCache(lifecycleGeneration: lifecycleGeneration);
@@ -1054,8 +1094,8 @@ class SmoldotClientManager {
     await ensureSynced();
     _ensureReady();
     final snapshot = await getStatusSnapshotRaw();
-    final finalizedHash = snapshot.finalizedBlockHash;
-    if (finalizedHash == null || finalizedHash.isEmpty) {
+    final finalizedHash = snapshot.currentVerifiedFinalizedBlockHash;
+    if (finalizedHash.isEmpty) {
       throw Exception('轻节点未提供 finalized 块哈希，无法执行索引扫描');
     }
     final raw = await request(
@@ -1107,16 +1147,35 @@ class SmoldotClientManager {
     Duration timeout = _defaultSyncTimeout,
   }) async {
     await ensureStarted();
-    if (_synced) return;
     _ensureReady();
     final generation = _lifecycleGeneration;
+
+    // `_synced` 只代表上一次检查已经完成，不能永久缓存为链真相。运行期间 peer 的
+    // F 继续推进时，原生会重新进入 warp；每次业务入口都必须重新确认唯一 isUsable。
+    if (_synced) {
+      final snapshot = await _chain!.getStatusSnapshot();
+      _ensureLifecycleCurrent(generation);
+      if (snapshot.isUsable) return;
+      _synced = false;
+      _databaseCacheRefreshTimer?.cancel();
+      _databaseCacheRefreshTimer = null;
+      _setHealthStatus(ChainHealthStatus.syncing);
+      _lastError = null;
+      debugPrint(
+        '[Smoldot] peer finalized 已推进，重新等待完整验证: '
+        'phase=${snapshot.syncPhase.wireValue}, '
+        'H=#${snapshot.currentVerifiedFinalizedBlockNumber}, '
+        'F=#${snapshot.highestPeerFinalizedBlockNumber}',
+      );
+    }
 
     // 后台重试正在运行时，短等即可——后台会设置 _synced=true
     if (_retrySyncFuture != null) {
       for (var i = 0; i < 6; i++) {
         await Future<void>.delayed(const Duration(seconds: 5));
         _ensureLifecycleCurrent(generation);
-        if (_synced) return;
+        // 后台只写入候选状态；回到统一入口再向原生确认，禁止绕过非黏性门禁。
+        if (_synced) return ensureSynced(timeout: timeout);
       }
       throw Exception('轻节点同步中，请稍后再试');
     }
@@ -1154,13 +1213,12 @@ class SmoldotClientManager {
         rethrow;
       }
       // 同步超时不等于链不可用——smoldot 后台仍在追赶区块头。
-      // 保持 syncing 状态，保存部分进度，启动后台重试。
+      // 保持 syncing 并启动后台重试；warp 未完成时禁止导出或保存部分 database。
       _setHealthStatus(ChainHealthStatus.syncing);
       _synced = false;
       _syncFuture = null;
       _lastError = '轻节点同步中，尚未追上最新区块: $e';
       debugPrint('[Smoldot] $_lastError');
-      unawaited(_saveDatabaseCache(lifecycleGeneration: generation));
       // 后台定时重试同步检查，追上后自动恢复 operational
       unawaited(_scheduleRetrySync(generation));
       rethrow;
@@ -1203,7 +1261,6 @@ class SmoldotClientManager {
       } catch (e) {
         if (generation != _lifecycleGeneration) return;
         debugPrint('[Smoldot] 后台重试同步未完成 (第 ${i + 1}/5 次): $e');
-        unawaited(_saveDatabaseCache(lifecycleGeneration: generation));
       }
     }
     // 5 次都没成功（共等 5 分钟），标记 degraded
@@ -1222,7 +1279,7 @@ class SmoldotClientManager {
     if (!snapshot.isUsable) {
       throw StateError(
         '轻节点完成条件不一致: '
-        'mode=${snapshot.syncMode.wireValue}, '
+        'phase=${snapshot.syncPhase.wireValue}, '
         'syncing=${snapshot.isSyncing}, peers=${snapshot.peerCount}',
       );
     }
@@ -1232,14 +1289,22 @@ class SmoldotClientManager {
     _startDatabaseCacheRefresh(generation);
     debugPrint(
       '[Smoldot] 链状态同步完成: '
-      'mode=${snapshot.syncMode.wireValue}, '
+      'phase=${snapshot.syncPhase.wireValue}, '
+      'source=${snapshot.startupFinalizedSource?.wireValue}, '
       'startup=#${snapshot.startupFinalizedBlockNumber}, '
       'peer_finalized=#${snapshot.highestPeerFinalizedBlockNumber}, '
-      'warp=#${snapshot.warpFinalizedBlockNumber}, '
+      'verified=#${snapshot.currentVerifiedFinalizedBlockNumber}, '
+      'warp_target=#${snapshot.warpTargetFinalizedBlockNumber}, '
       'requests=${snapshot.warpRequestCount}, '
-      'fragments=${snapshot.warpFragmentCount}, '
+      'active_fragments=${snapshot.activeWarpFragmentRequestCount}, '
+      'active_storage=${snapshot.activeWarpStorageRequestCount}, '
+      'active_call_proof=${snapshot.activeWarpCallProofRequestCount}, '
+      'received=${snapshot.warpReceivedFragmentCount}, '
+      'verified=${snapshot.warpVerifiedFragmentCount}, '
+      'rejected=${snapshot.warpRejectedFragmentCount}, '
+      'last_failure=${snapshot.warpLastFailure?.wireValue}, '
       'best=#${snapshot.bestBlockNumber}, '
-      'finalized=#${snapshot.finalizedBlockNumber}',
+      'surface_finalized=#${snapshot.finalizedBlockNumber}',
     );
   }
 
@@ -1310,7 +1375,7 @@ class SmoldotClientManager {
   // 未同步完成时查询结果是过时的或直接失败。
 
   /// 获取轻节点状态快照（必须完整同步）。
-  Future<LightClientStatusSnapshot?> getStatusSnapshot() async {
+  Future<LightClientStatusSnapshot> getStatusSnapshot() async {
     await ensureSynced();
     _ensureReady();
     await _waitForPeer();
@@ -1516,7 +1581,8 @@ class SmoldotClientManager {
 /// 本机 smoldot finalized database 的唯一持久化格式。
 ///
 /// 该类型只存在于 RPC 边界内部，业务模块不得读取或依赖 database 正文。JSON 使用
-/// snake_case 与持久化/跨语言字段规范一致，Dart 内部属性保持 camelCase。
+/// snake_case 与持久化/跨语言字段规范一致，Dart 内部属性保持 camelCase。信封中的
+/// finalized 永远指已经构建完整 chain information 的 finalized，不接受普通订阅视图。
 class _SmoldotDatabaseCacheEnvelope {
   _SmoldotDatabaseCacheEnvelope({
     required String genesisHash,

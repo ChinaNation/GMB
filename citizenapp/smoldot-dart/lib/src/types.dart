@@ -160,23 +160,80 @@ class ChainInfo {
   };
 }
 
-/// 轻节点同步状态机阶段。
-enum LightClientSyncMode {
+/// 轻节点同步状态机真实阶段。
+enum LightClientSyncPhase {
   regular('regular'),
-  warpFragments('warpFragments'),
-  warpChainInformation('warpChainInformation');
+  warpDownloadingFragments('warpDownloadingFragments'),
+  warpVerifyingFragments('warpVerifyingFragments'),
+  warpDownloadingTargetState('warpDownloadingTargetState'),
+  warpBuildingRuntime('warpBuildingRuntime'),
+  warpBuildingChainInformation('warpBuildingChainInformation');
 
-  const LightClientSyncMode(this.wireValue);
+  const LightClientSyncPhase(this.wireValue);
 
   final String wireValue;
 
-  static LightClientSyncMode fromWireValue(Object? value) {
+  static LightClientSyncPhase fromWireValue(Object? value) {
     return switch (value) {
-      'regular' => LightClientSyncMode.regular,
-      'warpFragments' => LightClientSyncMode.warpFragments,
-      'warpChainInformation' => LightClientSyncMode.warpChainInformation,
-      _ => throw FormatException('未知轻节点同步模式: $value'),
+      'regular' => LightClientSyncPhase.regular,
+      'warpDownloadingFragments' =>
+        LightClientSyncPhase.warpDownloadingFragments,
+      'warpVerifyingFragments' => LightClientSyncPhase.warpVerifyingFragments,
+      'warpDownloadingTargetState' =>
+        LightClientSyncPhase.warpDownloadingTargetState,
+      'warpBuildingRuntime' => LightClientSyncPhase.warpBuildingRuntime,
+      'warpBuildingChainInformation' =>
+        LightClientSyncPhase.warpBuildingChainInformation,
+      _ => throw FormatException('未知轻节点同步阶段: $value'),
     };
+  }
+}
+
+/// 本次同步状态机采用的可信 finalized 起点来源。
+enum LightClientStartupFinalizedSource {
+  bundledCheckpoint('bundledCheckpoint'),
+  localDatabase('localDatabase');
+
+  const LightClientStartupFinalizedSource(this.wireValue);
+
+  final String wireValue;
+
+  static LightClientStartupFinalizedSource? fromWireValue(Object? value) {
+    return switch (value) {
+      null => null,
+      'bundledCheckpoint' =>
+        LightClientStartupFinalizedSource.bundledCheckpoint,
+      'localDatabase' => LightClientStartupFinalizedSource.localDatabase,
+      _ => throw FormatException('未知轻节点启动锚点来源: $value'),
+    };
+  }
+}
+
+/// warp 最近一次稳定失败分类；仅用于诊断，不参与链真相判断。
+enum LightClientWarpFailure {
+  emptyProof('emptyProof'),
+  invalidHeader('invalidHeader'),
+  invalidJustification('invalidJustification'),
+  blockNumberNotIncrementing('blockNumberNotIncrementing'),
+  targetHashMismatch('targetHashMismatch'),
+  justificationVerifyFailed('justificationVerifyFailed'),
+  nonMinimalProof('nonMinimalProof'),
+  warpRequestFailed('warpRequestFailed'),
+  storageProofRequestFailed('storageProofRequestFailed'),
+  callProofRequestFailed('callProofRequestFailed'),
+  runtimeBuildFailed('runtimeBuildFailed'),
+  chainInformationBuildFailed('chainInformationBuildFailed');
+
+  const LightClientWarpFailure(this.wireValue);
+
+  final String wireValue;
+
+  static LightClientWarpFailure? fromWireValue(Object? value) {
+    if (value == null) return null;
+    return LightClientWarpFailure.values.firstWhere(
+      (failure) => failure.wireValue == value,
+      orElse: () => throw FormatException('未知 warp 失败类型: $value'),
+    );
   }
 }
 
@@ -185,42 +242,61 @@ enum LightClientSyncMode {
 class LightClientStatusSnapshot {
   final int peerCount;
   final bool isSyncing;
-  final LightClientSyncMode syncMode;
+
+  /// 该值由 Rust 根据 peer、runtime 与原生同步阶段统一计算，Dart 不得重新推导。
+  final bool isUsable;
+  final LightClientSyncPhase syncPhase;
   final int? bestBlockNumber;
   final String? bestBlockHash;
   final int? finalizedBlockNumber;
   final String? finalizedBlockHash;
+  final LightClientStartupFinalizedSource? startupFinalizedSource;
   final int? startupFinalizedBlockNumber;
+  final String? startupFinalizedBlockHash;
   final int? highestPeerFinalizedBlockNumber;
-  final int? warpFinalizedBlockNumber;
+  final int currentVerifiedFinalizedBlockNumber;
+  final String currentVerifiedFinalizedBlockHash;
+  final int? warpTargetFinalizedBlockNumber;
+  final String? warpTargetFinalizedBlockHash;
   final int warpRequestCount;
-  final int warpFragmentCount;
+  final int activeWarpFragmentRequestCount;
+  final int activeWarpStorageRequestCount;
+  final int activeWarpCallProofRequestCount;
+  final int warpReceivedFragmentCount;
+  final int warpVerifiedFragmentCount;
+  final int warpRejectedFragmentCount;
+  final LightClientWarpFailure? warpLastFailure;
 
   const LightClientStatusSnapshot({
     required this.peerCount,
     required this.isSyncing,
-    required this.syncMode,
+    required this.isUsable,
+    required this.syncPhase,
+    required this.currentVerifiedFinalizedBlockNumber,
+    required this.currentVerifiedFinalizedBlockHash,
+    required this.warpRequestCount,
+    required this.activeWarpFragmentRequestCount,
+    required this.activeWarpStorageRequestCount,
+    required this.activeWarpCallProofRequestCount,
+    required this.warpReceivedFragmentCount,
+    required this.warpVerifiedFragmentCount,
+    required this.warpRejectedFragmentCount,
     this.bestBlockNumber,
     this.bestBlockHash,
     this.finalizedBlockNumber,
     this.finalizedBlockHash,
+    this.startupFinalizedSource,
     this.startupFinalizedBlockNumber,
+    this.startupFinalizedBlockHash,
     this.highestPeerFinalizedBlockNumber,
-    this.warpFinalizedBlockNumber,
-    required this.warpRequestCount,
-    required this.warpFragmentCount,
+    this.warpTargetFinalizedBlockNumber,
+    this.warpTargetFinalizedBlockHash,
+    this.warpLastFailure,
   });
 
   bool get hasPeers => peerCount > 0;
 
-  bool get isUsable =>
-      hasPeers &&
-      !isSyncing &&
-      syncMode == LightClientSyncMode.regular &&
-      finalizedBlockHash != null &&
-      finalizedBlockHash!.isNotEmpty;
-
-  bool get isWarping => syncMode != LightClientSyncMode.regular;
+  bool get isWarping => syncPhase != LightClientSyncPhase.regular;
 
   /// 业务统一使用的链状态；warp 阶段即使 runtime 已近头也仍属于 syncing。
   ChainStatus get chainStatus =>
@@ -229,38 +305,103 @@ class LightClientStatusSnapshot {
   Map<String, dynamic> toJson() => {
     'peerCount': peerCount,
     'isSyncing': isSyncing,
-    'syncMode': syncMode.wireValue,
+    'isUsable': isUsable,
+    'syncPhase': syncPhase.wireValue,
     if (bestBlockNumber != null) 'bestBlockNumber': bestBlockNumber,
     if (bestBlockHash != null) 'bestBlockHash': bestBlockHash,
     if (finalizedBlockNumber != null)
       'finalizedBlockNumber': finalizedBlockNumber,
     if (finalizedBlockHash != null) 'finalizedBlockHash': finalizedBlockHash,
+    if (startupFinalizedSource != null)
+      'startupFinalizedSource': startupFinalizedSource!.wireValue,
     if (startupFinalizedBlockNumber != null)
       'startupFinalizedBlockNumber': startupFinalizedBlockNumber,
+    if (startupFinalizedBlockHash != null)
+      'startupFinalizedBlockHash': startupFinalizedBlockHash,
     if (highestPeerFinalizedBlockNumber != null)
       'highestPeerFinalizedBlockNumber': highestPeerFinalizedBlockNumber,
-    if (warpFinalizedBlockNumber != null)
-      'warpFinalizedBlockNumber': warpFinalizedBlockNumber,
+    'currentVerifiedFinalizedBlockNumber': currentVerifiedFinalizedBlockNumber,
+    'currentVerifiedFinalizedBlockHash': currentVerifiedFinalizedBlockHash,
+    if (warpTargetFinalizedBlockNumber != null)
+      'warpTargetFinalizedBlockNumber': warpTargetFinalizedBlockNumber,
+    if (warpTargetFinalizedBlockHash != null)
+      'warpTargetFinalizedBlockHash': warpTargetFinalizedBlockHash,
     'warpRequestCount': warpRequestCount,
-    'warpFragmentCount': warpFragmentCount,
+    'activeWarpFragmentRequestCount': activeWarpFragmentRequestCount,
+    'activeWarpStorageRequestCount': activeWarpStorageRequestCount,
+    'activeWarpCallProofRequestCount': activeWarpCallProofRequestCount,
+    'warpReceivedFragmentCount': warpReceivedFragmentCount,
+    'warpVerifiedFragmentCount': warpVerifiedFragmentCount,
+    'warpRejectedFragmentCount': warpRejectedFragmentCount,
+    if (warpLastFailure != null) 'warpLastFailure': warpLastFailure!.wireValue,
   };
 
   factory LightClientStatusSnapshot.fromJson(Map<String, dynamic> json) {
-    return LightClientStatusSnapshot(
-      peerCount: json['peerCount'] as int? ?? 0,
-      isSyncing: json['isSyncing'] as bool? ?? false,
-      syncMode: LightClientSyncMode.fromWireValue(json['syncMode']),
+    final snapshot = LightClientStatusSnapshot(
+      peerCount: json['peerCount'] as int,
+      isSyncing: json['isSyncing'] as bool,
+      isUsable: json['isUsable'] as bool,
+      syncPhase: LightClientSyncPhase.fromWireValue(json['syncPhase']),
       bestBlockNumber: json['bestBlockNumber'] as int?,
       bestBlockHash: json['bestBlockHash'] as String?,
       finalizedBlockNumber: json['finalizedBlockNumber'] as int?,
       finalizedBlockHash: json['finalizedBlockHash'] as String?,
+      startupFinalizedSource: LightClientStartupFinalizedSource.fromWireValue(
+        json['startupFinalizedSource'],
+      ),
       startupFinalizedBlockNumber: json['startupFinalizedBlockNumber'] as int?,
+      startupFinalizedBlockHash: json['startupFinalizedBlockHash'] as String?,
       highestPeerFinalizedBlockNumber:
           json['highestPeerFinalizedBlockNumber'] as int?,
-      warpFinalizedBlockNumber: json['warpFinalizedBlockNumber'] as int?,
-      warpRequestCount: json['warpRequestCount'] as int? ?? 0,
-      warpFragmentCount: json['warpFragmentCount'] as int? ?? 0,
+      currentVerifiedFinalizedBlockNumber:
+          json['currentVerifiedFinalizedBlockNumber'] as int,
+      currentVerifiedFinalizedBlockHash:
+          json['currentVerifiedFinalizedBlockHash'] as String,
+      warpTargetFinalizedBlockNumber:
+          json['warpTargetFinalizedBlockNumber'] as int?,
+      warpTargetFinalizedBlockHash:
+          json['warpTargetFinalizedBlockHash'] as String?,
+      warpRequestCount: json['warpRequestCount'] as int,
+      activeWarpFragmentRequestCount:
+          json['activeWarpFragmentRequestCount'] as int,
+      activeWarpStorageRequestCount:
+          json['activeWarpStorageRequestCount'] as int,
+      activeWarpCallProofRequestCount:
+          json['activeWarpCallProofRequestCount'] as int,
+      warpReceivedFragmentCount: json['warpReceivedFragmentCount'] as int,
+      warpVerifiedFragmentCount: json['warpVerifiedFragmentCount'] as int,
+      warpRejectedFragmentCount: json['warpRejectedFragmentCount'] as int,
+      warpLastFailure: LightClientWarpFailure.fromWireValue(
+        json['warpLastFailure'],
+      ),
     );
+    final expectedUsable =
+        snapshot.hasPeers &&
+        !snapshot.isSyncing &&
+        snapshot.syncPhase == LightClientSyncPhase.regular;
+    if (snapshot.isUsable != expectedUsable) {
+      throw FormatException(
+        '原生轻节点可用性与同步阶段冲突: '
+        'usable=${snapshot.isUsable}, phase=${snapshot.syncPhase.wireValue}',
+      );
+    }
+    if (snapshot.currentVerifiedFinalizedBlockNumber < 0 ||
+        snapshot.currentVerifiedFinalizedBlockHash.isEmpty ||
+        snapshot.warpRequestCount < 0 ||
+        snapshot.activeWarpFragmentRequestCount < 0 ||
+        snapshot.activeWarpStorageRequestCount < 0 ||
+        snapshot.activeWarpCallProofRequestCount < 0) {
+      throw const FormatException('轻节点状态快照包含非法负数或空 verified finalized hash');
+    }
+    if (snapshot.isWarping) {
+      if (snapshot.warpTargetFinalizedBlockNumber == null) {
+        throw const FormatException('warp 阶段缺少目标 finalized 高度');
+      }
+    } else if (snapshot.warpTargetFinalizedBlockNumber != null ||
+        snapshot.warpTargetFinalizedBlockHash != null) {
+      throw const FormatException('regular 阶段不得残留 warp 目标');
+    }
+    return snapshot;
   }
 }
 

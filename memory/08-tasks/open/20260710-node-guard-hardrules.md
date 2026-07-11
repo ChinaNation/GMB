@@ -98,6 +98,11 @@
 - [x] 第 5 步单元、回归、真实双节点导入与余额闭环验收
 - [x] 第 5 步更新文档、完善注释、清理残留
 - [x] 输出第 6 步完整技术方案并等待确认
+- [x] 第 6 步技术方案确认
+- [ ] 第 6 步恶意状态与包装器拒绝矩阵
+- [ ] 第 6 步 warp、三节点分叉与恶意链真实验收
+- [ ] 第 6 步性能与部署基线验收
+- [ ] 第 6 步文档、注释、残留清理与任务归档
 
 ## 硬边界
 
@@ -335,7 +340,7 @@
 - 临时 chainspec、数据库、签名器、验收测试和测试密钥材料全部删除；chain-signing 与治理骨架文件
   恢复到验收前状态，没有留下辅助代码或兼容分支。
 
-## 第 6 步技术方案（待确认）
+## 第 6 步技术方案（已确认，执行中）
 
 ### 目标
 
@@ -416,3 +421,35 @@
 - 输出启动、快路径、全检、身份发行块和完整态导入的耗时/内存数据；
 - node `cargo check`、当前源码 WASM build、`cargo fmt --check`、`git diff --check` 通过；
 - 文档、中文注释和残留清理完成，任务卡移动到 done，仓库不保留任何验收辅助文件。
+
+## 第 6 步阶段执行记录（2026-07-11，执行中）
+
+### 已完成的自动化基线
+
+- `cargo test --manifest-path citizenchain/node/Cargo.toml node_guard`：47/47 通过。
+- `cargo test --manifest-path citizenchain/node/Cargo.toml constitution`：39/39 通过。
+- `cargo check --manifest-path citizenchain/node/Cargo.toml`：通过。
+- `cargo fmt --manifest-path citizenchain/node/Cargo.toml --check`：通过。
+- 守卫目录与任务卡 `git diff --check`：通过。
+- 当前第 6 步代码已覆盖完整 SCALE 消费、畸形 RAW key、未知发行 key、共享发行计划溢出、
+  总发行错误、未计划账户变化、非 free 字段变化、统一 `KnownBad` 闸门及内层导入零调用证明。
+- 完整状态已收敛为一次 `partition_imported_state` 扫描，再把同一分区结果交给治理骨架、全节点发行、
+  公民发行和 CID 生命周期策略；单元测试验证 5 个输入 key 只计数扫描 5 次，不按策略重复遍历输入。
+
+### fresh 创世真实启动基线
+
+- 使用 `CITIZENCHAIN_HEADLESS=1`、独立 `/tmp` base path、独立 P2P/RPC/Prometheus 端口启动当前
+  debug 节点，不读取用户或生产密钥。
+- 当前 49,593 个创世公权机构的 fresh 链从进程启动到 `chain_getBlockHash(0)` RPC 可用耗时约 47 秒。
+- 本次 fresh 创世哈希为
+  `0x3e3a23954fbe4301fe5ccbd9bdb96c2073626c99bfb1acc4218e0a9886fdff82`；临时数据库约 240 MiB。
+- fresh 节点连接冻结主网 bootnode 时，双方明确报告 genesis mismatch：fresh 为 `0x3e3a…ff82`，
+  冻结网络为 `0xb57c…9971`。因此当前源码不能直接加入冻结网络，正式部署基线仍未完成。
+- 节点停止后已删除 `/tmp/gmb-nodeguard-perf.*` 临时目录；仓库没有新增验收文件。
+
+### 当前仍未满足的关闭条件
+
+- 尚未完成三节点真实分叉、恶意候选链不入库及拒绝后继续跟随合法链验收。
+- 尚未完成 release 构建下的峰值内存、普通快路径、身份登记块、`:code` 全检和完整状态导入性能矩阵。
+- 尚未重新烘焙并替换正式 chainspec、创世状态包和 CitizenApp 轻客户端资产；不得增加旧格式兼容。
+- 在上述项目完成前，本任务继续保留在 `open`，不得移动到 `done`。

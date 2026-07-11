@@ -185,30 +185,29 @@ where
         params: BlockImportParams<Block>,
     ) -> Result<ImportResult, Self::Error> {
         if params.with_state() {
-            return match self.verify_imported_state(&params) {
-                Ok(()) => self.inner.import_block(params).await,
-                Err(reason) => {
-                    log::error!(
-                        target: "constitution-guard",
-                        "拒绝 warp/状态导入 ({:?}):宪法不变式校验未通过 —— {reason}",
-                        params.post_hash(),
-                    );
-                    Ok(ImportResult::KnownBad)
-                }
-            };
+            let verdict = self.verify_imported_state(&params);
+            if let Err(reason) = &verdict {
+                log::error!(
+                    target: "constitution-guard",
+                    "拒绝 warp/状态导入 ({:?}):宪法不变式校验未通过 —— {reason}",
+                    params.post_hash(),
+                );
+            }
+            return crate::core::node_guard::import_if_verified(&self.inner, params, verdict).await;
         }
 
-        match self.detect_violation(&params) {
-            Ok(true) => Ok(ImportResult::KnownBad),
-            Ok(false) => self.inner.import_block(params).await,
+        let verdict = match self.detect_violation(&params) {
+            Ok(true) => Err("宪法永久规则明确判定为违规".to_string()),
+            Ok(false) => Ok(()),
             Err(reason) => {
                 log::error!(
                     target: "constitution-guard",
                     "守卫判定失败,fail-closed 拒块 ({:?}):{reason}",
                     params.post_hash(),
                 );
-                Ok(ImportResult::KnownBad)
+                Err(reason)
             }
-        }
+        };
+        crate::core::node_guard::import_if_verified(&self.inner, params, verdict).await
     }
 }

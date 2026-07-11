@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:smoldot/smoldot.dart'
-    show LightClientStatusSnapshot, LightClientSyncMode;
+    show LightClientStatusSnapshot, LightClientSyncPhase;
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -114,23 +114,36 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
   }
 
   void _logProgressTransition(LightClientStatusSnapshot progress) {
-    final signature = '${progress.syncMode.wireValue}/'
+    final signature = '${progress.syncPhase.wireValue}/'
         '${progress.isSyncing}/'
+        '${progress.isUsable}/'
         '${progress.warpRequestCount}/'
-        '${progress.warpFragmentCount}/'
+        '${progress.warpReceivedFragmentCount}/'
+        '${progress.warpVerifiedFragmentCount}/'
+        '${progress.warpRejectedFragmentCount}/'
+        '${progress.warpLastFailure?.wireValue}/'
         '${progress.finalizedBlockNumber}';
     if (_lastLoggedProgress == signature) return;
     _lastLoggedProgress = signature;
     debugPrint(
-      '[SmoldotStatus] mode=${progress.syncMode.wireValue}, '
+      '[SmoldotStatus] phase=${progress.syncPhase.wireValue}, '
       'syncing=${progress.isSyncing}, '
+      'usable=${progress.isUsable}, '
+      'source=${progress.startupFinalizedSource?.wireValue}, '
       'startup=#${progress.startupFinalizedBlockNumber}, '
       'peer_finalized=#${progress.highestPeerFinalizedBlockNumber}, '
-      'warp=#${progress.warpFinalizedBlockNumber}, '
+      'verified=#${progress.currentVerifiedFinalizedBlockNumber}, '
+      'warp_target=#${progress.warpTargetFinalizedBlockNumber}, '
       'requests=${progress.warpRequestCount}, '
-      'fragments=${progress.warpFragmentCount}, '
+      'active_fragments=${progress.activeWarpFragmentRequestCount}, '
+      'active_storage=${progress.activeWarpStorageRequestCount}, '
+      'active_call_proof=${progress.activeWarpCallProofRequestCount}, '
+      'received=${progress.warpReceivedFragmentCount}, '
+      'verified=${progress.warpVerifiedFragmentCount}, '
+      'rejected=${progress.warpRejectedFragmentCount}, '
+      'last_failure=${progress.warpLastFailure?.wireValue}, '
       'best=#${progress.bestBlockNumber}, '
-      'finalized=#${progress.finalizedBlockNumber}',
+      'surface_finalized=#${progress.finalizedBlockNumber}',
     );
   }
 
@@ -162,46 +175,67 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
       title = '轻节点状态读取失败';
       subtitle = error;
     } else if (progress != null) {
-      if (!progress.hasPeers) {
-        color = AppTheme.warning;
-        icon = Icons.portable_wifi_off_outlined;
-        title = '轻节点正在连接网络';
-      } else if (progress.syncMode == LightClientSyncMode.warpFragments) {
-        color = AppTheme.info;
-        icon = Icons.verified_outlined;
-        title = '轻节点正在快速验证最终性';
-      } else if (progress.syncMode ==
-          LightClientSyncMode.warpChainInformation) {
-        color = AppTheme.info;
-        icon = Icons.downloading_outlined;
-        title = '轻节点正在加载最新链状态';
-      } else if (progress.isSyncing) {
-        color = AppTheme.info;
-        icon = Icons.sync;
-        title = '轻节点正在同步尾部区块';
-      } else {
+      if (progress.isUsable) {
         color = AppTheme.success;
         icon = Icons.check_circle_outline;
         title = '轻节点已就绪';
+      } else if (!progress.hasPeers) {
+        color = AppTheme.warning;
+        icon = Icons.portable_wifi_off_outlined;
+        title = '轻节点正在连接网络';
+      } else if (progress.syncPhase ==
+          LightClientSyncPhase.warpDownloadingFragments) {
+        color = AppTheme.info;
+        icon = Icons.downloading_outlined;
+        title = '轻节点正在下载最终性证明';
+      } else if (progress.syncPhase ==
+          LightClientSyncPhase.warpVerifyingFragments) {
+        color = AppTheme.info;
+        icon = Icons.verified_outlined;
+        title = '轻节点正在快速验证最终性';
+      } else if (progress.syncPhase ==
+          LightClientSyncPhase.warpDownloadingTargetState) {
+        color = AppTheme.info;
+        icon = Icons.downloading_outlined;
+        title = '轻节点正在下载最新链状态';
+      } else if (progress.syncPhase ==
+          LightClientSyncPhase.warpBuildingRuntime) {
+        color = AppTheme.info;
+        icon = Icons.memory_outlined;
+        title = '轻节点正在构建最新运行时';
+      } else if (progress.syncPhase ==
+          LightClientSyncPhase.warpBuildingChainInformation) {
+        color = AppTheme.info;
+        icon = Icons.account_tree_outlined;
+        title = '轻节点正在构建最新链信息';
+      } else {
+        color = AppTheme.info;
+        icon = Icons.sync;
+        title = '轻节点正在同步尾部区块';
       }
       final best = progress.bestBlockNumber != null
           ? '#${progress.bestBlockNumber}'
           : '-';
-      final finalized = progress.finalizedBlockNumber != null
-          ? '#${progress.finalizedBlockNumber}'
-          : '-';
+      final finalized = '#${progress.currentVerifiedFinalizedBlockNumber}';
       if (progress.isWarping) {
         final startup = progress.startupFinalizedBlockNumber != null
             ? '#${progress.startupFinalizedBlockNumber}'
             : '-';
-        final warp = progress.warpFinalizedBlockNumber != null
-            ? '#${progress.warpFinalizedBlockNumber}'
+        final warp = progress.warpTargetFinalizedBlockNumber != null
+            ? '#${progress.warpTargetFinalizedBlockNumber}'
             : '-';
         final peerFinalized = progress.highestPeerFinalizedBlockNumber != null
             ? '#${progress.highestPeerFinalizedBlockNumber}'
             : '-';
+        final failure = progress.warpLastFailure?.wireValue;
+        final verified = '#${progress.currentVerifiedFinalizedBlockNumber}';
         subtitle =
-            'peer ${progress.peerCount}  启动 $startup  warp $warp  peer finalized $peerFinalized';
+            'peer ${progress.peerCount}  启动 $startup  已验证 $verified  目标 $warp  '
+            'peer finalized $peerFinalized\n'
+            'proof 收到 ${progress.warpReceivedFragmentCount} / '
+            '验证 ${progress.warpVerifiedFragmentCount} / '
+            '拒绝 ${progress.warpRejectedFragmentCount}'
+            '${failure == null ? '' : '  失败 $failure'}';
       } else {
         subtitle =
             'peer ${progress.peerCount}  best $best  finalized $finalized';
