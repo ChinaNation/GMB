@@ -5,12 +5,15 @@ import GlowCard from '../components/GlowCard'
 import QrScannerModal from '../components/QrScannerModal'
 import { buildSquareActionSignRequest, parseSignResponseSignature } from '../lib/qrV1'
 
-type MembershipLevel = 'visitor' | 'voting' | 'candidate'
+type MembershipLevel = 'visitor' | 'visitor_pro' | 'voting' | 'candidate'
+// 链上身份档（与会员档解耦）：访客身份含黄金/白金两档会员。
+type IdentityTier = 'visitor' | 'voting' | 'candidate'
 type TabKey = 'subscribe' | 'cancel'
 type Tone = 'error' | 'info' | 'success'
 
 interface Plan {
   level: MembershipLevel
+  requiredIdentity: IdentityTier
   name: string
   price: string
   identity: string
@@ -28,14 +31,26 @@ interface Signing {
 const plans: Plan[] = [
   {
     level: 'visitor',
-    name: '访客会员',
+    requiredIdentity: 'visitor',
+    name: '黄金会员',
     price: '$2.99 / 月',
     identity: '任意钱包账户',
     dynamic: '动态：300 字、9 张标清图片、1 分钟标清视频',
     article: '文章：20,000 字、50 张标清图片、1 张高清首图',
   },
   {
+    // 白金会员：访客身份的 $9.99 高权益档，权益对齐投票公民会员，唯身份匿名。
+    level: 'visitor_pro',
+    requiredIdentity: 'visitor',
+    name: '白金会员',
+    price: '$9.99 / 月',
+    identity: '任意钱包账户',
+    dynamic: '动态：300 字、9 张高清图片、30 分钟高清视频',
+    article: '文章：30,000 字、100 张高清图片、1 张高清首图',
+  },
+  {
     level: 'voting',
+    requiredIdentity: 'voting',
     name: '投票公民会员',
     price: '$9.99 / 月',
     identity: '认证投票公民',
@@ -44,6 +59,7 @@ const plans: Plan[] = [
   },
   {
     level: 'candidate',
+    requiredIdentity: 'candidate',
     name: '竞选公民会员',
     price: '$99.99 / 月',
     identity: '认证选举公民',
@@ -51,6 +67,85 @@ const plans: Plan[] = [
     article: '文章：30,000 字、100 张高清图片、1 张高清首图',
   },
 ]
+
+// 3 张身份卡顺序：访客 / 投票公民 / 竞选公民。
+const identityTierOrder: IdentityTier[] = ['visitor', 'voting', 'candidate']
+
+// 与公民 App 身份卡统一：档色 / 顶带前景色 / 档名 / 身份名 / 链上公开身份字段。
+const tierColor: Record<IdentityTier, string> = {
+  visitor: '#E5A100',
+  voting: '#3B82F6',
+  candidate: '#EF4444',
+}
+// 访客金底用深棕保对比度，投票蓝/竞选红底用白字。
+const tierOnColor: Record<IdentityTier, string> = {
+  visitor: '#4A3000',
+  voting: '#FFFFFF',
+  candidate: '#FFFFFF',
+}
+const tierCardName: Record<IdentityTier, string> = {
+  visitor: '访客轻节点',
+  voting: '公民轻节点 · 投票',
+  candidate: '公民轻节点 · 竞选',
+}
+const tierIdentityName: Record<IdentityTier, string> = {
+  visitor: '访客',
+  voting: '投票公民',
+  candidate: '竞选公民',
+}
+// 该档在链上公开的身份字段（通用模板，非某用户真实值）。访客单独走「完全匿名」。
+const tierIdentityFields: Record<IdentityTier, string[]> = {
+  visitor: [],
+  voting: ['公民身份 CID 号', '居住选区', '投票身份有效期'],
+  candidate: ['公民身份 CID 号', '居住选区', '身份有效期', '真实姓名', '性别', '出生地'],
+}
+
+// 仓库扇贝勋章徽章（与 App identity_badge 一致）：档色底 + 中心白色小人（官网无
+// 登录用户，恒显小人），套半透明白圆底才能从同色顶带浮出。
+function RosetteBadge({ color, size = 40 }: { color: string; size?: number }) {
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: 'rgba(255,255,255,0.9)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.14)',
+      }}
+    >
+      <svg width={Math.round(size * 0.78)} height={Math.round(size * 0.78)} viewBox="0 0 24 24" aria-hidden="true">
+        <g fill={color}>
+          <circle cx="18" cy="12" r="4.3" />
+          <circle cx="16.24" cy="16.24" r="4.3" />
+          <circle cx="12" cy="18" r="4.3" />
+          <circle cx="7.76" cy="16.24" r="4.3" />
+          <circle cx="6" cy="12" r="4.3" />
+          <circle cx="7.76" cy="7.76" r="4.3" />
+          <circle cx="12" cy="6" r="4.3" />
+          <circle cx="16.24" cy="7.76" r="4.3" />
+          <circle cx="12" cy="12" r="7.6" />
+        </g>
+        <circle cx="12" cy="9.7" r="2.3" fill="#fff" />
+        <path d="M7.7 16.4 C7.7 14 9.6 12.7 12 12.7 C14.4 12.7 16.3 14 16.3 16.4 Z" fill="#fff" />
+      </svg>
+    </div>
+  )
+}
+
+function SectionLabel({ color, text }: { color: string; text: string }) {
+  return (
+    <div
+      className="flex items-center gap-1.5 text-[11px] font-bold tracking-wide"
+      style={{ color }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
+      {text}
+    </div>
+  )
+}
 
 const apiBaseUrl =
   import.meta.env.VITE_CITIZENAPP_SQUARE_API_BASE_URL?.replace(/\/+$/, '') ??
@@ -83,21 +178,32 @@ async function postJson(path: string, body: unknown): Promise<Record<string, unk
 export default function Membership() {
   const [activeTab, setActiveTab] = useState<TabKey>('subscribe')
   const [ownerAccount, setOwnerAccount] = useState('')
-  const [selectedLevel, setSelectedLevel] = useState<MembershipLevel>('visitor')
+  // null=未选中任何会员卡（取消订阅态）；订阅态默认黄金 visitor。
+  const [selectedLevel, setSelectedLevel] = useState<MembershipLevel | null>('visitor')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ tone: Tone; text: string } | null>(null)
   const [signing, setSigning] = useState<Signing | null>(null)
   const [scannerMode, setScannerMode] = useState<'address' | 'signature' | null>(null)
 
   const selectedPlan = useMemo(
-    () => plans.find((plan) => plan.level === selectedLevel) ?? plans[0],
+    () => (selectedLevel ? plans.find((plan) => plan.level === selectedLevel) ?? null : null),
     [selectedLevel],
   )
+
+  // 选中会员卡片=进入订阅意图：高亮该卡并切到「订阅会员」。
+  const handleSelectLevel = useCallback((level: MembershipLevel) => {
+    setSelectedLevel(level)
+    setActiveTab('subscribe')
+    setSigning(null)
+    setMessage(null)
+  }, [])
 
   const switchTab = useCallback((tab: TabKey) => {
     setActiveTab(tab)
     setSigning(null)
     setMessage(null)
+    // 取消订阅无需选中会员档：切到「取消订阅」即释放所有卡片选中；切回订阅默认黄金。
+    setSelectedLevel(tab === 'cancel' ? null : (prev) => prev ?? 'visitor')
   }, [])
 
   // 发起签名：取挑战 → 构建 signRequest 二维码等 CitizenApp 扫码签名。
@@ -108,11 +214,15 @@ export default function Membership() {
         setMessage({ tone: 'error', text: '请输入钱包账户地址' })
         return
       }
+      const level = selectedLevel
+      if (action === 'subscribe' && !level) {
+        setMessage({ tone: 'error', text: '请先选择会员档位' })
+        return
+      }
       setLoading(true)
       setMessage(null)
       setSigning(null)
       try {
-        const level = selectedLevel
         const data =
           action === 'subscribe'
             ? await postJson('/v1/square/membership/subscribe/challenge', {
@@ -141,7 +251,7 @@ export default function Membership() {
           action,
           challengeId,
           requestQr,
-          level: action === 'subscribe' ? level : undefined,
+          level: action === 'subscribe' ? level ?? undefined : undefined,
         })
       } catch (error) {
         setMessage({ tone: 'error', text: error instanceof Error ? error.message : '发起签名失败' })
@@ -236,28 +346,139 @@ export default function Membership() {
       </section>
 
       <section className="mx-auto grid max-w-7xl auto-rows-fr gap-6 px-6 py-20 sm:grid-cols-2 lg:grid-cols-4">
-        {plans.map((plan) => (
-            <button
-              key={plan.level}
-              type="button"
-              onClick={() => setSelectedLevel(plan.level)}
-              className={`h-full rounded-2xl border p-0 text-left transition-all ${
-                selectedLevel === plan.level
-                  ? 'border-gold-400 bg-gold-500/10'
-                  : 'border-white/[0.08] bg-white/[0.03] hover:border-white/[0.18] hover:bg-white/[0.05]'
-              }`}
+        {identityTierOrder.map((tier) => {
+          const tierPlans = plans.filter((plan) => plan.requiredIdentity === tier)
+          const shown = tierPlans.find((plan) => plan.level === selectedLevel) ?? tierPlans[0]
+          const isTierSelected =
+            selectedLevel !== null && tierPlans.some((plan) => plan.level === selectedLevel)
+          const hasToggle = tierPlans.length > 1
+          const color = tierColor[tier]
+          const onColor = tierOnColor[tier]
+          return (
+            <div
+              key={tier}
+              className="flex h-full flex-col overflow-hidden rounded-2xl bg-white"
+              style={{
+                border: isTierSelected ? `2px solid ${color}` : '1px solid rgba(255,255,255,0.12)',
+                boxShadow: isTierSelected
+                  ? `0 10px 30px ${color}55`
+                  : '0 8px 24px rgba(0,0,0,0.28)',
+              }}
             >
-              <div className="p-6">
-                <div className="text-sm font-medium text-gold-400">{plan.identity}</div>
-                <h2 className="mt-3 text-2xl font-bold text-white">{plan.name}</h2>
-                <div className="mt-4 text-3xl font-extrabold text-white">{plan.price}</div>
-                <div className="mt-6 space-y-3 text-sm leading-relaxed text-slate-300">
-                  <p>{plan.dynamic}</p>
-                  <p>{plan.article}</p>
+              {/* 档色顶带：身份名在顶 + 档名 + 右上角扇贝徽章 */}
+              <div className="relative px-5 pb-4 pt-4" style={{ background: color }}>
+                <div className="text-[11px] font-medium" style={{ color: onColor, opacity: 0.85 }}>
+                  身份 · {tierIdentityName[tier]}
+                </div>
+                <div className="mt-1 text-lg font-bold" style={{ color: onColor }}>
+                  {tierCardName[tier]}
+                </div>
+                <div className="absolute right-4 top-3.5">
+                  <RosetteBadge color={color} />
                 </div>
               </div>
-            </button>
-          ))}
+
+              {/* 卡身：链上公开身份信息 + 会员权益 + 价签 + 切换 + 订阅 */}
+              <div className="flex flex-1 flex-col p-5">
+                <SectionLabel color={color} text="链上公开的身份信息" />
+                <div className="mt-2.5">
+                  {tier === 'visitor' ? (
+                    <div className="flex items-center gap-2.5">
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#94a3b8"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="10" cy="8" r="4" />
+                        <path d="M4 21v-1a6 6 0 0 1 6-6h1" />
+                        <path d="m16 16 5 5M21 16l-5 5" />
+                      </svg>
+                      <div>
+                        <div className="text-[15px] font-bold text-slate-900">完全匿名</div>
+                        <div className="text-[11px] text-slate-400">没有链上身份</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {tierIdentityFields[tier].map((field) => (
+                        <div
+                          key={field}
+                          className="flex items-center gap-2 text-[13px] font-medium text-slate-800"
+                        >
+                          <span
+                            style={{
+                              width: 5,
+                              height: 5,
+                              borderRadius: '50%',
+                              background: color,
+                              display: 'inline-block',
+                            }}
+                          />
+                          {field}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  <SectionLabel color={color} text="会员权益" />
+                  <div className="mt-2.5 space-y-1.5 text-[12px] leading-relaxed text-slate-600">
+                    <p>{shown.dynamic}</p>
+                    <p>{shown.article}</p>
+                  </div>
+                </div>
+
+                <div className="flex-1" />
+
+                {/* 访客档：黄金/白金分段切换（默认黄金） */}
+                {hasToggle && (
+                  <div className="mt-4 flex rounded-lg bg-slate-100 p-1 text-[13px] font-bold">
+                    {tierPlans.map((plan) => {
+                      const active = selectedLevel === plan.level
+                      return (
+                        <button
+                          key={plan.level}
+                          type="button"
+                          onClick={() => handleSelectLevel(plan.level)}
+                          className="flex-1 rounded-md py-1.5 transition-colors"
+                          style={active ? { background: color, color: onColor } : { color: '#64748b' }}
+                        >
+                          {plan.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* 价格：档色填充标签 */}
+                <div className="mt-3">
+                  <span
+                    className="inline-block rounded-lg px-3 py-1 text-base font-extrabold"
+                    style={{ background: color, color: onColor }}
+                  >
+                    {shown.price}
+                  </span>
+                </div>
+
+                {/* 订阅：选中该档并切到订阅态（下方面板扫码完成） */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectLevel(shown.level)}
+                  className="mt-3 w-full rounded-lg py-2.5 text-sm font-bold transition-opacity hover:opacity-90"
+                  style={{ background: color, color: onColor }}
+                >
+                  订阅
+                </button>
+              </div>
+            </div>
+          )
+        })}
 
         <GlowCard glow="gold" className="flex flex-col">
           {/* 订阅 / 取消订阅 分段切换 */}
@@ -279,7 +500,7 @@ export default function Membership() {
           {/* 固定高度：订阅(当前选择/档位/价格)与取消(说明)内容行数不同，
               锁死高度后切换 tab 不会撑高卡片。 */}
           <div className="mt-6 min-h-[104px]">
-            {activeTab === 'subscribe' ? (
+            {activeTab === 'subscribe' && selectedPlan ? (
               <>
                 <div className="text-sm font-medium text-gold-400">当前选择</div>
                 <h2 className="mt-2 text-2xl font-bold text-white">{selectedPlan.name}</h2>
