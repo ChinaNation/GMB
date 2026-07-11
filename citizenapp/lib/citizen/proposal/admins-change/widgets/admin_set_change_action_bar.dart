@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class AdminSetChangeActionBar extends StatelessWidget {
-  const AdminSetChangeActionBar({
+class AdminsChangeActionBar extends StatelessWidget {
+  const AdminsChangeActionBar({
     super.key,
     required this.busy,
     required this.enabled,

@@ -12,10 +12,10 @@ import 'dart:io';
 ///   settlement 回执)留后续里程碑。
 /// - WebSocket(WSS)直连清算行节点;所有方法都会短时连入 → 发送 → 读首帧 → 关闭。
 /// - 调用方应根据 L3 当前绑定的清算行把 `wssUrl` 指向对应节点。
-class OffchainClearingNodeRpc {
+class OffchainClearingBankRpc {
   /// [wssUrl] 清算行节点的 WebSocket URL,例如 `wss://l2.example.com:9944`。
   /// 由调用方根据用户绑定的清算行实际地址注入。
-  OffchainClearingNodeRpc(this.wssUrl);
+  OffchainClearingBankRpc(this.wssUrl);
 
   final String wssUrl;
 

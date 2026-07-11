@@ -425,7 +425,7 @@ class _ImChatPageState extends State<ImChatPage> {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
-        backgroundColor: AppTheme.surfaceWhite,
+        backgroundColor: AppTheme.surfaceCard,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
         titleSpacing: 0,

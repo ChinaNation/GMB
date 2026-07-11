@@ -8,8 +8,8 @@ import 'chain_rpc.dart';
 import 'signed_extrinsic_builder.dart';
 
 /// onchain 模块所有 RPC 功能：extrinsic 构造与普通转账提交。
-class OnchainRpc {
-  OnchainRpc({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
+class TransferRpc {
+  TransferRpc({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
 
@@ -50,7 +50,7 @@ class OnchainRpc {
         _buildTransferWithRemarkCall(destAccountId, amountFen, remarkBytes);
     return SignedExtrinsicBuilder(
       chainRpc: _rpc,
-      logLabel: 'OnchainRpc',
+      logLabel: 'TransferRpc',
     ).signAndSubmit(
       callData: callData,
       fromAddress: fromAddress,

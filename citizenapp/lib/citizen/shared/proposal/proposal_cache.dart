@@ -11,9 +11,9 @@ class ProposalCache {
   static final Map<int, ProposalMeta> _metaCache = {};
   static final Map<int, RuntimeUpgradeProposalInfo> _runtimeUpgradeDetailCache =
       {};
-  static final Map<int, CreateMultisigProposalInfo> _createMultisigDetailCache =
+  static final Map<int, CreateProposalInfo> _createMultisigDetailCache =
       {};
-  static final Map<int, CloseMultisigProposalInfo> _closeMultisigDetailCache =
+  static final Map<int, CloseProposalInfo> _closeMultisigDetailCache =
       {};
 
   // ──── 读取 ────
@@ -26,11 +26,11 @@ class ProposalCache {
       _runtimeUpgradeDetailCache[proposalId];
 
   /// 获取创建多签提案详情。
-  static CreateMultisigProposalInfo? getCreateMultisigDetail(int proposalId) =>
+  static CreateProposalInfo? getCreateMultisigDetail(int proposalId) =>
       _createMultisigDetailCache[proposalId];
 
   /// 获取关闭多签提案详情。
-  static CloseMultisigProposalInfo? getCloseMultisigDetail(int proposalId) =>
+  static CloseProposalInfo? getCloseMultisigDetail(int proposalId) =>
       _closeMultisigDetailCache[proposalId];
 
   // ──── 写入 ────
@@ -46,12 +46,12 @@ class ProposalCache {
 
   /// 存入创建多签提案详情。
   static void putCreateMultisigDetail(
-          int proposalId, CreateMultisigProposalInfo detail) =>
+          int proposalId, CreateProposalInfo detail) =>
       _createMultisigDetailCache[proposalId] = detail;
 
   /// 存入关闭多签提案详情。
   static void putCloseMultisigDetail(
-          int proposalId, CloseMultisigProposalInfo detail) =>
+          int proposalId, CloseProposalInfo detail) =>
       _closeMultisigDetailCache[proposalId] = detail;
 
   // ──── 清除 ────

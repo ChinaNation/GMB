@@ -18,7 +18,7 @@ class OnchainAssetActions {
   static const int onchainIssuancePalletIndex = 25;
 
   /// pallet_assets 内核 pallet_index(原生 extrinsic 全部被 RuntimeCallFilter reject)。
-  static const int palletAssetsPalletIndex = 26;
+  static const int assetsPalletIndex = 26;
 
   // 业务 propose_X(call_index 0..=4)
   static const int callProposeIssue = 0;

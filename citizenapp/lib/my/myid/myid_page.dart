@@ -165,7 +165,7 @@ class _MyIdPageState extends State<MyIdPage> {
     final pill = _statusPill();
     return Row(
       children: [
-        CitizenBadge(style: style, size: 44, tooltip: _tierLabel()),
+        IdentityBadge(style: style, size: 44, tooltip: _tierLabel()),
         const SizedBox(width: 12),
         Expanded(
           child: Column(

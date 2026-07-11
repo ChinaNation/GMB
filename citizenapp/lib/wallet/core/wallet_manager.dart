@@ -5,7 +5,7 @@ import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:substrate_bip39/crypto_scheme.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 

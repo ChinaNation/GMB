@@ -28,8 +28,8 @@ class LegHouseRef {
 }
 
 /// 立法提案元数据(legislation-vote LegMeta 的客户端镜像)。
-class LegislationVoteMeta {
-  const LegislationVoteMeta({
+class LegMeta {
+  const LegMeta({
     required this.voteType,
     required this.houses,
     required this.currentHouse,
@@ -82,7 +82,7 @@ class LegislationVoteQueryService {
   }
 
   /// 立法提案元数据(不存在返回 null)。
-  Future<LegislationVoteMeta?> fetchMeta(int proposalId) async {
+  Future<LegMeta?> fetchMeta(int proposalId) async {
     final key = _mapKey(_votePallet, 'LegMeta', _u64Le(proposalId));
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
     if (data == null || data.isEmpty) return null;
@@ -103,7 +103,7 @@ class LegislationVoteQueryService {
         : LegHouseRef(
             code: _codeStr(c.bytes(4)), accountHex: _hex(c.bytes(32)));
     final needsGuard = c.u8() == 1;
-    return LegislationVoteMeta(
+    return LegMeta(
       voteType: voteType,
       houses: houses,
       currentHouse: currentHouse,

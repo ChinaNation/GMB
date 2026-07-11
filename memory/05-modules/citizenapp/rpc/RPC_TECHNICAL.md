@@ -20,8 +20,8 @@
 
 补充说明：
 
-- 当前 `smoldot` Dart 绑定已从 pub.dev 依赖切换为仓库内本地 fork：`citizenapp/smoldot-dart`
-- 当前 `smoldot-light` Rust 内核位于：`citizenapp/smoldot-pow`
+- 当前 `smoldot` Dart 绑定已从 pub.dev 依赖切换为仓库内本地 fork：`citizenapp/smoldotdart`
+- 当前 `smoldot-light` Rust 内核位于：`citizenapp/smoldotpow`
 - 这两层收编的目的，是为后续 PoW 专用 typed capability 改造建立可控演进入口
 - Android 唯一支持 64 位 ARM `arm64-v8a`。`scripts/build-smoldot-native.sh android` 只构建 `aarch64-linux-android` 并写入 `android/app/src/main/jniLibs/arm64-v8a/libsmoldot.so`；APK 构建入口必须显式传入 `--target-platform android-arm64`。Gradle 的 ABI filter 只允许 `arm64-v8a`，并在 packaging 层排除插件携带的所有非 ARM64 native 库，禁止任何其他 Android ABI 进入最终 APK。
 - macOS 桌面调试库只用于 Dart FFI / `flutter test` 本机验收。`scripts/build-smoldot-native.sh macos` 必须设置 `CARGO_PROFILE_RELEASE_STRIP=false`，否则 Rust release profile 的 `strip=true` 会导致 dyld 报 `mis-aligned LINKEDIT string pool`，OpenMLS native 测试会被误判为 native 库不可用。
@@ -98,12 +98,14 @@ lib/rpc/
 - `isUsable` 由 Rust 原生层唯一计算：必须同时满足有 peer、runtime near-head、`syncPhase=regular`。Dart 只消费并校验该字段；原生字段相互冲突时直接抛出格式错误，不另造完成算法。
 - database 序列化在原生 warp 活跃期间直接返回无 chain information；App 只有 `isUsable=true` 才发起导出，并要求导出前后 `currentVerifiedFinalizedBlockNumber/hash` 完全一致。同步失败和重试未完成路径不再调用“保存部分进度”。
 - `ChainRpc` 的 finalized 缓存命名空间、runtime API 锚点和钱包确认高度统一读取 `currentVerifiedFinalized`；普通订阅 `finalizedBlock` 仅保留诊断展示，禁止进入业务 finalized 路径。
-- 已删除跨 fragment、storage、runtime 和 chain-information 阶段的绝对 10 秒 watchdog；各网络请求只服从自身超时。fragment/storage/call-proof 以 request id 记录实际 peer，失败只处罚该请求 peer，取消或断连只清理命中记录并恢复重调度；虚假的“warp 无进展”失败枚举已删除。新版 Android ARM64 构建已完成，真机 H/F 验收仍未完成。
+- 已删除跨 fragment、storage、runtime 和 chain-information 阶段的绝对 10 秒 watchdog；各网络请求只服从自身超时。fragment/storage/call-proof 以 request id 记录实际 peer，失败只处罚该请求 peer，取消或断连只清理命中记录并恢复重调度；虚假的“warp 无进展”失败枚举已删除。新版 Android ARM64 构建已完成；真实正高度差已发生，但运行中 H/F 验收因交易验证竞态触发 native crash 而失败。
 - `ChainProgressBanner` 只展示原生轻节点阶段：fragments 下载/验证、目标状态下载、runtime 构建、chain information 构建和普通尾部同步各自使用独立文案；只有原生 `isUsable=true` 才显示“轻节点已就绪”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。
 - 既有真机记录已经证明固定 `#0` 会真实进入 GRANDPA warp 并生成可恢复的本机 database；此前 `Chain.waitUntilSynced()` 只看 runtime `isSyncing` 而提前返回的问题已删除。原生 `isUsable`、Dart `ChainStatus/wait`、App operational、缓存导出和 Banner 现在使用唯一完成语义。
 - profile 结构化日志会在同步阶段变化与最终完成时输出 `phase/usable/source/startup/peer_finalized/current_verified/warp_target/active_requests/requests/received/verified/rejected/last_failure/best/surface_finalized`。第 1～5 阶段代码、本机分层自动化和 ARM64-only APK 静态验收已经完成；真实设备状态仍待后续阶段验收。
 - 2026-07-11 ARM64-only profile APK 已重建：所有 native entry 只位于 Android 官方 ARM64 ABI 目录，smoldot 为 ELF64/AArch64 且 LOAD segment 以 16 KiB 对齐；APK 内固定 `#0` 的 `light_sync_state.json`、zipalign 和 v2 签名检查均通过。
-- 同日 Pixel 8a 私密测试空间已真实验证新安装 `bundledCheckpoint/#0 → warp → peer F`，请求与 proof 计数为 `1/1/1/0`；随后 5,120-byte database 冷启动精确恢复 `localDatabase/H`，当 peer F 等于 H 时请求数为 0。断网冷启动保持 `peer=0 / usable=false` 并禁用交易，启动清单失败只回到本地 chainspec；恢复移动数据后 P2P 重新 ready。正式链在本轮观察窗口没有产生更高 F，运行中 `H < F` 仍待真实补验。
+- 同日 Pixel 8a 私密测试空间已真实验证新安装 `bundledCheckpoint/#0 → warp → peer F`，请求与 proof 计数为 `1/1/1/0`；随后 5,120-byte database 冷启动精确恢复 `localDatabase/H`，当 peer F 等于 H 时请求数为 0。断网冷启动保持 `peer=0 / usable=false` 并禁用交易，启动清单失败只回到本地 chainspec；恢复移动数据后 P2P 重新 ready。
+- 正式链随后产生真实 `F > H`。原进程运行中追高时出现 `requests=3 / received=3 / verified=0 / rejected=3 / lastFailure=blockNumberNotIncrementing`，并在交易验证 future 调用 `pin_pinned_block_runtime()` 返回 `BlockNotPinned` 后执行 `unreachable!()`；ARM64 精确 linker map 将 panic location 定位到 `transactions_service.rs:1493`。由于 release 为 `panic=abort`，整个 App 发生 native `SIGABRT`。Android 重启进程后从已保存 H 以一次请求成功追到 F，只能证明重启恢复，不能视为运行中验收通过。
+- 根因修复必须保持职责边界：`BlockNotPinned` 是 finalized 推进使旧验证锚过期的瞬态竞态，交易服务应结束旧 validation future，并让仍待处理的交易基于当前 best block 重新验证；不得 panic、不得把单块过期升级为整条 subscription 失效、不得错误丢弃交易。修复后需重新执行既有 smoldot-light、Rust FFI、CitizenApp RPC/交易页、smoldotdart、analyzer、ARM64 APK 与旧 ABI 残留检查，并以有待处理交易时的下一次真实 finalized 推进作最终验收。
 - operational 后由单实例一分钟定时器低频检查 `currentVerifiedFinalized`。只有快照仍可用且该完整验证 finalized 严格高于最近持久化高度时才进入既有串行稳定导出；同高度不导出，dispose 取消定时器并等待刷新/写队列。下一次业务入口若发现原生重新进入 warp，会立即撤销本地 ready，完成后保存的新 F 成为下一次启动 H。
 - 连接诊断必须以有效 peer、best/finalized 状态是否可读或推进为准；未部署 bootNodes 的连接失败日志不是故障根因，不得把它解释成 citizenapp 网络不可用。
 - 本地开发期 `30334` bootnode 只是可选调试兜底，不是 citizenapp 真机连接区块链网络的必要条件；没有本地 `30334` 也不应判定为连接异常。
@@ -135,7 +137,7 @@ lib/rpc/
   - `ChainRpc.fetchNonce()` / `fetchGenesisHash()` / `fetchBlockExtrinsicHashes()` / `submitExtrinsic()` 在轻节点模式下已切到原生 capability
 - 2026-03-23 新增状态能力治理：
   - `smoldot_get_status_snapshot` 底层已不再经 `system_health` 包装，而是直接读取 `sync_service/runtime_service`
-  - 本地 `smoldot-dart` 的 `Chain.getInfo()` / `getPeerCount()` / `getStatus()` / `getBestBlock*()` 也已统一收口到原生 status snapshot
+  - 本地 `smoldotdart` 的 `Chain.getInfo()` / `getPeerCount()` / `getStatus()` / `getBestBlock*()` 也已统一收口到原生 status snapshot
 - 2026-03-23 新增链数据能力治理：
   - `smoldot_get_runtime_version` / `smoldot_get_metadata` 已改为读取 runtime service / runtime call，不再走 `state_getRuntimeVersion` / `state_getMetadata`
   - `smoldot_get_account_next_index` 已改为 runtime call `AccountNonceApi_account_nonce`，不再依赖 `system_accountNextIndex`

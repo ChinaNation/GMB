@@ -8,7 +8,7 @@
 
 - 不再依赖 pub.dev 上的只读包形态
 - 后续可在本目录内扩展 typed capability 的 Dart 绑定
-- 与 `citizenapp/rust` 和 `citizenapp/smoldot-pow` 一起纳入同一版本治理
+- 与 `citizenapp/rust` 和 `citizenapp/smoldotpow` 一起纳入同一版本治理
 
 ## 2. 收编来源
 

@@ -4,14 +4,14 @@ import 'package:polkadart/scale_codec.dart' show ByteOutput, CompactBigIntCodec;
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
-class AdminSetChangeCallCodec {
-  AdminSetChangeCallCodec._();
+class AdminsChangeCallCodec {
+  AdminsChangeCallCodec._();
 
   static const int personalAdminsPalletIndex = 7;
   static const int publicAdminsPalletIndex = 29;
   static const int privateAdminsPalletIndex = 30;
-  static const int proposeAdminSetChangeCallIndex = 0;
-  static const int proposePersonalAdminSetChangeCallIndex = 3;
+  static const int proposeAdminsChangeCallIndex = 0;
+  static const int proposePersonalAdminsChangeCallIndex = 3;
   static const String federalRegistryCode = 'FRG';
 
   static Uint8List build({
@@ -67,8 +67,8 @@ class AdminSetChangeCallCodec {
     final palletName =
         InstitutionCodeLabel.adminAccountsPalletName(institutionCode);
     return palletName == 'PersonalAdmins'
-        ? proposePersonalAdminSetChangeCallIndex
-        : proposeAdminSetChangeCallIndex;
+        ? proposePersonalAdminsChangeCallIndex
+        : proposeAdminsChangeCallIndex;
   }
 
   static int palletIndexForKind(int adminKind) {
@@ -88,7 +88,7 @@ class AdminSetChangeCallCodec {
       adminKind,
     );
     return palletName == 'PersonalAdmins'
-        ? proposePersonalAdminSetChangeCallIndex
-        : proposeAdminSetChangeCallIndex;
+        ? proposePersonalAdminsChangeCallIndex
+        : proposeAdminsChangeCallIndex;
   }
 }

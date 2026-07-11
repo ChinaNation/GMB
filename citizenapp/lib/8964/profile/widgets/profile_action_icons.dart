@@ -83,7 +83,7 @@ class _CircleIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = active ? AppTheme.primary : AppTheme.textSecondary;
     return Material(
-      color: AppTheme.surfaceWhite,
+      color: AppTheme.surfaceCard,
       shape: CircleBorder(
         side: BorderSide(
           color: active ? AppTheme.primary : AppTheme.border,

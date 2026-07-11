@@ -31,8 +31,8 @@ import 'package:citizenapp/update/update_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/wallet_page.dart';
 
-class ProfilePage extends StatefulWidget {
-  const ProfilePage({
+class MyTab extends StatefulWidget {
+  const MyTab({
     super.key,
     this.showSettingsUpdateDot = false,
     this.walletManager,
@@ -48,10 +48,10 @@ class ProfilePage extends StatefulWidget {
   final SmoldotClientManager? smoldotClientManager;
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  State<MyTab> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _ProfilePageState extends State<MyTab> {
   final UserProfileService _userProfileService = UserProfileService();
   late final WalletManager _walletManager;
   late final IdentityBadgeSnapshotStore _badgeSnapshotStore;
@@ -428,7 +428,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 title: '钱包',
                 onTap: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const MyWalletPage()),
+                    MaterialPageRoute(builder: (_) => const WalletTab()),
                   );
                 },
               ),
@@ -936,7 +936,7 @@ class _SquareAvatar extends StatelessWidget {
             Positioned(
               right: -4,
               bottom: -4,
-              child: CitizenBadge(
+              child: IdentityBadge(
                 style: badgeStyle,
                 tooltip: identityBadgeLabel(
                   identityLevel: identityLevel,

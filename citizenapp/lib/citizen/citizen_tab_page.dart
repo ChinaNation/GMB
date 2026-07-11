@@ -4,7 +4,7 @@ import 'package:citizenapp/citizen/election/election_tab.dart';
 import 'package:citizenapp/citizen/governance/governance_tab.dart';
 import 'package:citizenapp/citizen/legislation/legislation_tab.dart';
 import 'package:citizenapp/citizen/public/public_page.dart';
-import 'package:citizenapp/citizen/all/proposal_view.dart';
+import 'package:citizenapp/citizen/feed/proposal_tab.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 底部“公民”Tab 的总入口。
@@ -47,7 +47,7 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
   Widget _buildTabContent() {
     switch (_selectedTab) {
       case 0: // 提案:全局治理提案流。
-        return ProposalView(
+        return ProposalTab(
           onPendingVoteCountChanged: widget.onPendingVoteCountChanged,
         );
       case 1: // 立法(P3 接法律浏览)
@@ -57,7 +57,7 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
       case 3: // 治理:国家储委会/省储委会/省储行(统一目录按机构码过滤)
         return const GovernanceTab();
       case 4: // 公权:全部机构地理浏览
-        return const PublicPage();
+        return const PublicTab();
       default:
         return const SizedBox.shrink();
     }
@@ -98,7 +98,7 @@ class _StyledTabs extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
                     color: i == selectedIndex
-                        ? AppTheme.surfaceWhite
+                        ? AppTheme.surfaceCard
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                     boxShadow: i == selectedIndex

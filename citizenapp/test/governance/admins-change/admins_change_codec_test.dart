@@ -103,7 +103,7 @@ void main() {
 
     test('builds propose_admin_set_change call data', () {
       final accountId = Uint8List.fromList(List<int>.filled(32, 0x11));
-      final call = AdminSetChangeCallCodec.build(
+      final call = AdminsChangeCallCodec.build(
         institutionCode: 'NRC',
         adminKind: 0,
         accountId: accountId,
@@ -111,23 +111,23 @@ void main() {
         newThreshold: 13,
       );
 
-      expect(call[0], AdminSetChangeCallCodec.palletIndexForKind(0));
-      expect(call[1], AdminSetChangeCallCodec.callIndexForKind(0));
+      expect(call[0], AdminsChangeCallCodec.palletIndexForKind(0));
+      expect(call[1], AdminsChangeCallCodec.callIndexForKind(0));
       expect(call.sublist(2, 6), codeBytes('NRC'));
       expect(call.sublist(6, 38), List<int>.filled(32, 0x11));
       expect(call[38], 0x08);
       expect(call.sublist(call.length - 4), u32Le(13));
       expect(call.length, 2 + 4 + 32 + 1 + 64 + 4);
 
-      final personalCall = AdminSetChangeCallCodec.build(
+      final personalCall = AdminsChangeCallCodec.build(
         institutionCode: 'PMUL',
         adminKind: 2,
         accountId: accountId,
         admins: ['22' * 32, '33' * 32],
         newThreshold: 2,
       );
-      expect(personalCall[0], AdminSetChangeCallCodec.palletIndexForKind(2));
-      expect(personalCall[1], AdminSetChangeCallCodec.callIndexForKind(2));
+      expect(personalCall[0], AdminsChangeCallCodec.palletIndexForKind(2));
+      expect(personalCall[1], AdminsChangeCallCodec.callIndexForKind(2));
       expect(personalCall.sublist(2, 6), codeBytes('PMUL'));
     });
 
@@ -135,7 +135,7 @@ void main() {
       final accountId = Uint8List.fromList(List<int>.filled(32, 0x11));
 
       expect(
-        () => AdminSetChangeCallCodec.build(
+        () => AdminsChangeCallCodec.build(
           institutionCode: 'FRG',
           adminKind: 0,
           accountId: accountId,

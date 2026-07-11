@@ -30,7 +30,7 @@ class ProfileCategoryTabs extends StatelessWidget
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppTheme.surfaceWhite,
+      color: AppTheme.surfaceCard,
       alignment: Alignment.centerLeft,
       child: TabBar(
         controller: controller,

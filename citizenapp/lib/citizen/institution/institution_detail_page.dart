@@ -339,7 +339,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: Text(inst?.cidShortNameOrFullName ?? '机构'),
-        backgroundColor: AppTheme.surfaceWhite,
+        backgroundColor: AppTheme.surfaceCard,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
         actions: [
@@ -786,7 +786,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         proposal.closeMultisigDetail != null) {
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => InstitutionManageDetailPage(
+          builder: (_) => MultisigProposalDetailPage(
             institution: govInfo,
             proposalId: proposalId,
             proposalContext: ctx,

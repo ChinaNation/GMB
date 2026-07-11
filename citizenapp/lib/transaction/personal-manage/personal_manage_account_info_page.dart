@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_entry.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_service.dart';
@@ -48,7 +48,7 @@ class _PersonalManageAccountInfoPageState
 
   AccountInfo? _accountInfo;
   List<String> _admins = const [];
-  String _localStatus = PersonalAccountLocalState.statusPending;
+  String _localStatus = PersonalMultisigLocalState.statusPending;
   int? _lastDetailRefreshAtMillis;
   int? _lastBalanceRefreshAtMillis;
   bool _isClosed = false;
@@ -61,9 +61,9 @@ class _PersonalManageAccountInfoPageState
   void initState() {
     super.initState();
     _localStatus =
-        widget.initialLocalStatus ?? PersonalAccountLocalState.statusPending;
+        widget.initialLocalStatus ?? PersonalMultisigLocalState.statusPending;
     _admins = _normalizeAdminPubkeys(widget.initialAdminPubkeys);
-    _isClosed = _localStatus == PersonalAccountLocalState.statusClosed;
+    _isClosed = _localStatus == PersonalMultisigLocalState.statusClosed;
     _load();
   }
 
@@ -83,11 +83,11 @@ class _PersonalManageAccountInfoPageState
             .filter()
             .accountEqualTo(widget.institution.account)
             .findFirst();
-        final statuses = await PersonalAccountLocalState.readStatusSnapshots(
+        final statuses = await PersonalMultisigLocalState.readStatusSnapshots(
           isar,
           [widget.institution.account],
         );
-        final detail = await PersonalAccountLocalState.readDetail(
+        final detail = await PersonalMultisigLocalState.readDetail(
           isar,
           widget.institution.account,
         );
@@ -103,8 +103,8 @@ class _PersonalManageAccountInfoPageState
       final status = local.status?.status ??
           local.detail?.status ??
           widget.initialLocalStatus ??
-          PersonalAccountLocalState.statusPending;
-      final isClosed = status == PersonalAccountLocalState.statusClosed;
+          PersonalMultisigLocalState.statusPending;
+      final isClosed = status == PersonalMultisigLocalState.statusClosed;
       final admins = local.detail?.admins.isNotEmpty == true
           ? local.detail!.admins
           : local.entity?.matchedAdminPubkeys.isNotEmpty == true
@@ -148,14 +148,14 @@ class _PersonalManageAccountInfoPageState
     final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
       _lastDetailRefreshAtMillis!,
     );
-    final ttl = _localStatus == PersonalAccountLocalState.statusActive
+    final ttl = _localStatus == PersonalMultisigLocalState.statusActive
         ? const Duration(minutes: 60)
         : const Duration(minutes: 10);
     return DateTime.now().difference(lastSyncAt) >= ttl;
   }
 
   bool _shouldRefreshBalance() {
-    if (_localStatus != PersonalAccountLocalState.statusActive) return false;
+    if (_localStatus != PersonalMultisigLocalState.statusActive) return false;
     if (_balanceYuan == null) return true;
     if (_lastBalanceRefreshAtMillis == null) return true;
     final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
@@ -171,11 +171,11 @@ class _PersonalManageAccountInfoPageState
           await _rpc.fetchFinalizedBalance(widget.institution.account);
       final now = DateTime.now().millisecondsSinceEpoch;
       await WalletIsar.instance.writeTxn((isar) async {
-        final previous = await PersonalAccountLocalState.readDetail(
+        final previous = await PersonalMultisigLocalState.readDetail(
           isar,
           widget.institution.account,
         );
-        await PersonalAccountLocalState.putDetailInTxn(
+        await PersonalMultisigLocalState.putDetailInTxn(
           isar,
           widget.institution.account,
           MultisigLocalDetailSnapshot(
@@ -208,28 +208,28 @@ class _PersonalManageAccountInfoPageState
       );
       final info = infos[_normalizeHex(widget.institution.account)];
       final status = info == null
-          ? PersonalAccountLocalState.statusClosed
+          ? PersonalMultisigLocalState.statusClosed
           : _localStatusFromInfo(info.status);
       final balance = info == null ? null : await _resolveBalance(info.status);
       final now = DateTime.now().millisecondsSinceEpoch;
 
       await WalletIsar.instance.writeTxn((isar) async {
-        await PersonalAccountLocalState.putStatusInTxn(
+        await PersonalMultisigLocalState.putStatusInTxn(
           isar,
           widget.institution.account,
           status,
         );
         if (info == null) {
-          await PersonalAccountLocalState.deleteDetailInTxn(
+          await PersonalMultisigLocalState.deleteDetailInTxn(
             isar,
             widget.institution.account,
           );
         } else {
-          final previous = await PersonalAccountLocalState.readDetail(
+          final previous = await PersonalMultisigLocalState.readDetail(
             isar,
             widget.institution.account,
           );
-          await PersonalAccountLocalState.putDetailInTxn(
+          await PersonalMultisigLocalState.putDetailInTxn(
             isar,
             widget.institution.account,
             MultisigLocalDetailSnapshot(
@@ -251,7 +251,7 @@ class _PersonalManageAccountInfoPageState
       if (!mounted) return;
       setState(() {
         _localStatus = status;
-        _isClosed = status == PersonalAccountLocalState.statusClosed;
+        _isClosed = status == PersonalMultisigLocalState.statusClosed;
         _accountInfo = info;
         _admins = _normalizeAdminPubkeys(info?.admins);
         _balanceYuan = _isClosed ? null : balance ?? _balanceYuan;
@@ -303,12 +303,12 @@ class _PersonalManageAccountInfoPageState
 
   String _localStatusFromInfo(MultisigStatus status) {
     return status == MultisigStatus.active
-        ? PersonalAccountLocalState.statusActive
-        : PersonalAccountLocalState.statusPending;
+        ? PersonalMultisigLocalState.statusActive
+        : PersonalMultisigLocalState.statusPending;
   }
 
   MultisigStatus _statusEnumFromLocal(String status) {
-    return status == PersonalAccountLocalState.statusActive
+    return status == PersonalMultisigLocalState.statusActive
         ? MultisigStatus.active
         : MultisigStatus.pending;
   }
@@ -389,8 +389,8 @@ class _PersonalManageAccountInfoPageState
   /// 是否展示右上角三点菜单；Active 显关闭，Pending 显撤销创建，Closed 显删除。
   bool _shouldShowMenu() {
     if (_isClosed) return true;
-    return _localStatus == PersonalAccountLocalState.statusActive ||
-        _localStatus == PersonalAccountLocalState.statusPending;
+    return _localStatus == PersonalMultisigLocalState.statusActive ||
+        _localStatus == PersonalMultisigLocalState.statusPending;
   }
 
   Future<List<WalletProfile>> _getAdminWallets() async {
@@ -416,11 +416,11 @@ class _PersonalManageAccountInfoPageState
           .filter()
           .personalAccountEqualTo(widget.institution.account)
           .deleteAll();
-      await PersonalAccountLocalState.deleteStatusInTxn(
+      await PersonalMultisigLocalState.deleteStatusInTxn(
         isar,
         widget.institution.account,
       );
-      await PersonalAccountLocalState.deleteDetailInTxn(
+      await PersonalMultisigLocalState.deleteDetailInTxn(
         isar,
         widget.institution.account,
       );
@@ -465,7 +465,7 @@ class _PersonalManageAccountInfoPageState
   /// 仅个人 Pending 路径调用；Active 走 propose_close。
   /// 当前仅支持热钱包:冷钱包用户走"管理员列表" → 投反对票完成同样语义。
   Future<void> _confirmRevokeCreate() async {
-    if (_localStatus == PersonalAccountLocalState.statusActive) return;
+    if (_localStatus == PersonalMultisigLocalState.statusActive) return;
 
     var adminWallets = await _getAdminWallets();
     if (adminWallets.isEmpty) {
@@ -577,7 +577,7 @@ class _PersonalManageAccountInfoPageState
               },
               itemBuilder: (_) {
                 final isActive =
-                    _localStatus == PersonalAccountLocalState.statusActive;
+                    _localStatus == PersonalMultisigLocalState.statusActive;
                 return [
                   if (_isClosed)
                     const PopupMenuItem(
@@ -629,12 +629,12 @@ class _PersonalManageAccountInfoPageState
     final info = _accountInfo;
     final statusLabel = _isClosed
         ? '已注销'
-        : _localStatus == PersonalAccountLocalState.statusActive
+        : _localStatus == PersonalMultisigLocalState.statusActive
             ? '已激活'
             : '待激活';
     final statusColor = _isClosed
         ? AppTheme.textTertiary
-        : _localStatus == PersonalAccountLocalState.statusActive
+        : _localStatus == PersonalMultisigLocalState.statusActive
             ? AppTheme.success
             : AppTheme.warning;
 
@@ -702,7 +702,7 @@ class _PersonalManageAccountInfoPageState
             MultisigTransferEntryCard(
               institution: widget.institution,
               isPersonal: true,
-              enabled: _localStatus == PersonalAccountLocalState.statusActive,
+              enabled: _localStatus == PersonalMultisigLocalState.statusActive,
               loadAdminWallets: _getAdminWallets,
               onCreated: () => _refreshChainDetail(force: true),
             ),

@@ -11,7 +11,7 @@
 
 import 'package:isar_community/isar.dart';
 
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 import 'personal_proposal_history_service.dart';
 

@@ -1,7 +1,7 @@
 /// 跨模块共用：机构/多签账户的数据载体类型 + 身份编码工具。
 ///
 ///
-/// - 内置治理机构静态注册表（`kNationalCouncil`/`kProvincialCouncils`/`kProvincialBanks`）+
+/// - 内置治理机构静态注册表（`kNrc`/`kPrcs`/`kProvincialBanks`）+
 ///   `findInstitutionByAccountId()`/`jointVoteTotal`/`jointVotePassThreshold` 在
 ///   `lib/citizen/institution/governance_registry.dart`。
 /// - 治理主体统一为机构多签 AccountId；cid_number 只用于查找机构资料。

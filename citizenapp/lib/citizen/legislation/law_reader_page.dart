@@ -364,7 +364,7 @@ class _LawReaderPageState extends State<LawReaderPage> {
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: Text(v == null ? '法律' : _t(v.title, v.titleEn)),
-        backgroundColor: AppTheme.surfaceWhite,
+        backgroundColor: AppTheme.surfaceCard,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
         actions: [

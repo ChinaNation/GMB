@@ -19,8 +19,8 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
-class AdminSetChangePage extends StatefulWidget {
-  const AdminSetChangePage({
+class AdminsChangePage extends StatefulWidget {
+  const AdminsChangePage({
     super.key,
     required this.institution,
     required this.accountIdentity,
@@ -32,12 +32,12 @@ class AdminSetChangePage extends StatefulWidget {
   final List<WalletProfile> adminWallets;
 
   @override
-  State<AdminSetChangePage> createState() => _AdminSetChangePageState();
+  State<AdminsChangePage> createState() => _AdminsChangePageState();
 }
 
-class _AdminSetChangePageState extends State<AdminSetChangePage> {
+class _AdminsChangePageState extends State<AdminsChangePage> {
   final _accountService = AdminAccountService();
-  final _changeService = AdminSetChangeService();
+  final _changeService = AdminsChangeService();
   final _thresholdController = TextEditingController();
   AdminAccountState? _subject;
   List<String> _admins = const [];
@@ -126,7 +126,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
                 ),
       bottomNavigationBar: account == null
           ? null
-          : AdminSetChangeActionBar(
+          : AdminsChangeActionBar(
               busy: _submitting,
               enabled: _selectedWallet != null,
               onSubmit: _submit,
@@ -316,7 +316,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-            builder: (_) => AdminSetChangeConfirmPage(txHash: result.txHash)),
+            builder: (_) => AdminsChangeConfirmPage(txHash: result.txHash)),
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {

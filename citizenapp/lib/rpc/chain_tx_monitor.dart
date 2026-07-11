@@ -9,7 +9,7 @@ import 'chain_event_subscription.dart';
 import 'chain_read_cache.dart';
 import 'chain_rpc.dart';
 import 'smoldot_client.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 
 class _DecodedTransferEvent {

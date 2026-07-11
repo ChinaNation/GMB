@@ -4,7 +4,7 @@
 // 查询走唯一索引 divisionKey / scopeKey,UI 显示名零现查。
 
 import 'package:isar_community/isar.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 import 'admin_division_dto.dart';
 import 'admin_division_store.dart';

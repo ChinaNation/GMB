@@ -618,19 +618,13 @@ fn chain_status_is_syncing(runtime_is_near_head: bool, sync_phase: ChainSyncPhas
     !runtime_is_near_head || sync_phase != ChainSyncPhase::Regular
 }
 
-fn chain_status_is_usable(
-    peer_count: u64,
-    is_syncing: bool,
-    sync_phase: ChainSyncPhase,
-) -> bool {
+fn chain_status_is_usable(peer_count: u64, is_syncing: bool, sync_phase: ChainSyncPhase) -> bool {
     peer_count > 0 && !is_syncing && sync_phase == ChainSyncPhase::Regular
 }
 
 #[cfg(test)]
 mod chain_status_tests {
-    use super::{
-        chain_status_is_syncing, chain_status_is_usable, ChainSyncPhase,
-    };
+    use super::{ChainSyncPhase, chain_status_is_syncing, chain_status_is_usable};
 
     #[test]
     fn warp_mode_remains_syncing_even_when_runtime_is_near_head() {
@@ -782,8 +776,7 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                 .await;
             let sync_activity = services.sync_service.sync_activity_snapshot().await;
             let is_syncing = chain_status_is_syncing(runtime_is_near_head, sync_activity.phase);
-            let is_usable =
-                chain_status_is_usable(peer_count, is_syncing, sync_activity.phase);
+            let is_usable = chain_status_is_usable(peer_count, is_syncing, sync_activity.phase);
 
             Ok(ChainStatusSnapshot {
                 peer_count,
@@ -809,8 +802,7 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                 warp_request_count: sync_activity.warp_request_count,
                 active_warp_fragment_request_count: sync_activity
                     .active_warp_fragment_request_count,
-                active_warp_storage_request_count: sync_activity
-                    .active_warp_storage_request_count,
+                active_warp_storage_request_count: sync_activity.active_warp_storage_request_count,
                 active_warp_call_proof_request_count: sync_activity
                     .active_warp_call_proof_request_count,
                 warp_received_fragment_count: sync_activity.warp_received_fragment_count,

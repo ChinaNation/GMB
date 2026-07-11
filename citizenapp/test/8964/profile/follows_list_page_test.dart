@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/8964/profile/follows_list_page.dart';
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 
-import 'profile_test_doubles.dart';
+import 'fake_profile.dart';
 
 void main() {
   testWidgets('renders follow entries as rows', (tester) async {

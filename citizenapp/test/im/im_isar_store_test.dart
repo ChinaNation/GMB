@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/im/crypto/im_mls_session.dart';
 import 'package:citizenapp/im/im_session_models.dart';
 import 'package:citizenapp/im/storage/im_isar_store.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 void main() {
   setUp(() async {

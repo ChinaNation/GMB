@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 import 'package:citizenapp/ui/app_theme.dart';

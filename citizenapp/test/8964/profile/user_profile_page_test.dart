@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 
-import 'profile_test_doubles.dart';
+import 'fake_profile.dart';
 
 Widget _wrap({required bool isSelf}) => MaterialApp(
       home: UserProfilePage(

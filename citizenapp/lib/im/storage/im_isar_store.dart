@@ -1,6 +1,6 @@
 import 'package:isar_community/isar.dart';
 
-import '../../isar/wallet_isar.dart';
+import '../../isar/app_isar.dart';
 import '../im_session_models.dart';
 import '../proto/im_envelope.pb.dart';
 

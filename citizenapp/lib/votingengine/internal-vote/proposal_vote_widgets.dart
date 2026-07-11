@@ -94,7 +94,7 @@ class ProposalAdminVoteList extends StatelessWidget {
     required this.admins,
     required this.adminVotes,
     required this.pendingPubkeys,
-    this.proposerPubkey,
+    this.proposerSs58,
   });
 
   /// 管理员公钥列表（小写 hex，不含 0x）。
@@ -107,7 +107,7 @@ class ProposalAdminVoteList extends StatelessWidget {
   final Set<String> pendingPubkeys;
 
   /// 发起人的 SS58 地址（可选，用于显示"发起人"徽章）。
-  final String? proposerPubkey;
+  final String? proposerSs58;
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +140,7 @@ class ProposalAdminVoteList extends StatelessWidget {
               final vote = adminVotes[pubkey];
               final ss58 = _pubkeyToSS58(pubkey);
               final isProposer =
-                  proposerPubkey != null && proposerPubkey == ss58;
+                  proposerSs58 != null && proposerSs58 == ss58;
 
               return ListTile(
                 dense: true,

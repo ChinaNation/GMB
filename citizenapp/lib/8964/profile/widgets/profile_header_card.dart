@@ -66,7 +66,7 @@ class ProfileHeaderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final bio = profile?.bio.trim() ?? '';
     return ColoredBox(
-      color: AppTheme.surfaceWhite,
+      color: AppTheme.surfaceCard,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -194,7 +194,7 @@ class _Avatar extends StatelessWidget {
           height: ProfileHeaderCard._avatarSize,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppTheme.surfaceWhite, width: 4),
+            border: Border.all(color: AppTheme.surfaceCard, width: 4),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
@@ -213,7 +213,7 @@ class _Avatar extends StatelessWidget {
           Positioned(
             right: -2,
             bottom: -2,
-            child: CitizenBadge(
+            child: IdentityBadge(
               style: badgeStyle,
               tooltip: identityBadgeLabel(
                 identityLevel: identityLevel,

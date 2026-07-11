@@ -14,7 +14,7 @@ import 'package:citizenapp/citizen/public/data/public_institution_repository.dar
 import 'package:citizenapp/citizen/public/data/public_provinces.dart';
 import 'package:citizenapp/citizen/institution/governance_registry.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 class InstitutionRepository {
   InstitutionRepository({PublicInstitutionRepository? directory})
@@ -27,8 +27,8 @@ class InstitutionRepository {
   /// 用途:① 取 china 固定账户附到统一机构上;② 发起提案/管理员页需要 `InstitutionInfo`。
   static final Map<String, InstitutionInfo> _governanceInfo = {
     for (final i in <InstitutionInfo>[
-      ...kNationalCouncil,
-      ...kProvincialCouncils,
+      ...kNrc,
+      ...kPrcs,
       ...kProvincialBanks,
       ...kFixedGovernanceInstitutions,
     ])

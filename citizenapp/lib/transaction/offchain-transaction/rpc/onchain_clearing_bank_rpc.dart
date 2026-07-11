@@ -12,7 +12,7 @@ import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
 ///   `bind_clearing_bank` / `deposit` / `withdraw` / `switch_bank`。原省储行
 ///   `bind_clearing_institution` (call_index 9) 已在 Step 2b-iv-b 随老 pallet
 ///   删除。
-/// - Extrinsic 编码沿用现有 `OnchainRpc` 的 polkadart + SCALE 模式,确保与链上
+/// - Extrinsic 编码沿用现有 `TransferRpc` 的 polkadart + SCALE 模式,确保与链上
 ///   验签格式一致(sr25519 签名,immortal era,带 nonce/tip)。
 /// - 所有金额参数以**分**为单位的整数进入 SCALE 编码,与链上 `u128` 对齐。
 class OnchainClearingBankRpc {

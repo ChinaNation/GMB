@@ -9,7 +9,7 @@ import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/shared/admin_profile.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 class AdminAccountService {

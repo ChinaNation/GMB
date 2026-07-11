@@ -6,7 +6,7 @@
 // 本地缓存、再后台刷新,绝不阻塞在网络同步上(消除"一直转圈")。
 
 import 'package:flutter/foundation.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 import 'admin_division_dto.dart';
 import 'admin_division_store.dart';

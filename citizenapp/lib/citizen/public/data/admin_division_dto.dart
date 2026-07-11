@@ -6,7 +6,7 @@
 //   towns/<pcode>.json   = [{city_code, code, name}]
 // 镇 code 全国不唯一,故所有键一律带完整层级前缀。
 
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 /// 行政区层级。
 class AdminDivisionLevel {

@@ -86,7 +86,7 @@ class _LawListPageState extends State<LawListPage> {
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: Text(widget.title),
-        backgroundColor: AppTheme.surfaceWhite,
+        backgroundColor: AppTheme.surfaceCard,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),

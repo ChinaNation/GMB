@@ -14,7 +14,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:citizenapp/citizen/shared/admin_accounts_scan_service.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -78,7 +78,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
   Future<void> _readFromIsar() async {
     final snapshot = await WalletIsar.instance.read((isar) async {
       final personals = await isar.personalAccountEntitys.where().findAll();
-      final statuses = await PersonalAccountLocalState.readStatuses(
+      final statuses = await PersonalMultisigLocalState.readStatuses(
         isar,
         personals.map((p) => p.account),
       );
@@ -105,7 +105,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
   }) async {
     final snapshot = await WalletIsar.instance.read((isar) async {
       final personals = await isar.personalAccountEntitys.where().findAll();
-      final statuses = await PersonalAccountLocalState.readStatusSnapshots(
+      final statuses = await PersonalMultisigLocalState.readStatusSnapshots(
         isar,
         personals.map((p) => p.account),
       );
@@ -129,7 +129,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
     final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
       snapshot!.lastSyncAtMillis!,
     );
-    final ttl = snapshot.status == PersonalAccountLocalState.statusActive
+    final ttl = snapshot.status == PersonalMultisigLocalState.statusActive
         ? _activeStatusTtl
         : _inactiveStatusTtl;
     return DateTime.now().difference(lastSyncAt) >= ttl;
@@ -158,27 +158,27 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
           continue;
         }
         final status = info == null
-            ? PersonalAccountLocalState.statusClosed
+            ? PersonalMultisigLocalState.statusClosed
             : info.status == MultisigStatus.active
-                ? PersonalAccountLocalState.statusActive
-                : PersonalAccountLocalState.statusPending;
+                ? PersonalMultisigLocalState.statusActive
+                : PersonalMultisigLocalState.statusPending;
         await WalletIsar.instance.writeTxn((isar) async {
-          await PersonalAccountLocalState.putStatusInTxn(
+          await PersonalMultisigLocalState.putStatusInTxn(
             isar,
             personal.account,
             status,
           );
           if (info == null) {
-            await PersonalAccountLocalState.deleteDetailInTxn(
+            await PersonalMultisigLocalState.deleteDetailInTxn(
               isar,
               personal.account,
             );
           } else {
-            final previousDetail = await PersonalAccountLocalState.readDetail(
+            final previousDetail = await PersonalMultisigLocalState.readDetail(
               isar,
               personal.account,
             );
-            await PersonalAccountLocalState.putDetailInTxn(
+            await PersonalMultisigLocalState.putDetailInTxn(
               isar,
               personal.account,
               MultisigLocalDetailSnapshot(
@@ -212,11 +212,11 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
           .filter()
           .personalAccountEqualTo(personalAccountHex)
           .deleteAll();
-      await PersonalAccountLocalState.deleteStatusInTxn(
+      await PersonalMultisigLocalState.deleteStatusInTxn(
         isar,
         personalAccountHex,
       );
-      await PersonalAccountLocalState.deleteDetailInTxn(
+      await PersonalMultisigLocalState.deleteDetailInTxn(
         isar,
         personalAccountHex,
       );
@@ -436,7 +436,7 @@ class _PersonalAccountListPageState extends State<PersonalAccountListPage> {
   Widget _buildCard(PersonalAccountEntity item) {
     final ss58 = _accountAddressLabel(item.account);
     final localStatus = _statuses[_normalizeHex(item.account)];
-    final isClosed = localStatus == PersonalAccountLocalState.statusClosed;
+    final isClosed = localStatus == PersonalMultisigLocalState.statusClosed;
     final subtitleParts = <String>[
       _truncateAddress(ss58),
       if (item.discoveredViaAdmin)

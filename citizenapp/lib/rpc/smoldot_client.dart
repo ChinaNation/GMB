@@ -349,7 +349,7 @@ class SmoldotClientManager {
       // 出门后这条 bootnode 不可达 smoldot 会自动忽略，回退到 dns4 远端 bootnode。
       // 必须用 plain ws（不是 wss）—— smoldot 的 multiaddr 解析器只支持
       // `/ip4/.../tcp/.../ws`，不支持 `/ip4/.../tcp/.../wss`。
-      // 详见 citizenapp/smoldot-pow/light-base/src/platform/address_parse.rs
+      // 详见 citizenapp/smoldotpow/light-base/src/platform/address_parse.rs
       final withBootnode = _injectLocalhostBootnode(chainSpecRaw);
       final withBootstrapBootnodes =
           _injectBootstrapBootnodes(withBootnode, bootstrap);
@@ -1395,7 +1395,7 @@ class SmoldotClientManager {
   // 拉 body 按 extrinsic hash 搜索(substrate
   // `MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2` 反滥用机制会对同一
   // (peer+hash+BODY) 请求超过 2 次直接返回空并 ban peer,把轻节点打死)。
-  // smoldot-dart 层 binding 保留,避免触动跨 FFI 边界。
+  // smoldotdart 层 binding 保留,避免触动跨 FFI 边界。
 
   /// 原生提交已编码 extrinsic（必须完整同步）。
   Future<String?> submitExtrinsicHex(String extrinsicHex) async {

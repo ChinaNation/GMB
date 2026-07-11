@@ -51,8 +51,8 @@ class AdminCatalogResponse {
 ///
 /// 这是 OnChina 本地档案统计,只用于界面提示或诊断;链端投票分母由
 /// runtime `citizen-identity` 按作用域直接读取。
-class VotersCountResponse {
-  const VotersCountResponse({
+class CitizenCountResponse {
+  const CitizenCountResponse({
     required this.eligibleTotal,
     required this.who,
   });
@@ -204,7 +204,7 @@ class ApiClient {
   /// 获取 OnChina 本地合格公民人数。
   ///
   /// 链端联合投票人口快照由 runtime 自己从 citizen-identity 读取,这里不生成凭证。
-  Future<VotersCountResponse> fetchVotersCount(String accountPubkeyHex) async {
+  Future<CitizenCountResponse> fetchVotersCount(String accountPubkeyHex) async {
     final normalized = _normalizePubkeyHex(accountPubkeyHex);
     final uri = Uri.parse(
         '$_baseUrl/api/v1/app/voters/count?account_pubkey=$normalized');
@@ -238,7 +238,7 @@ class ApiClient {
       throw Exception('voters count invalid response: missing data');
     }
 
-    return VotersCountResponse(
+    return CitizenCountResponse(
       eligibleTotal: (data['eligible_total'] as num?)?.toInt() ?? 0,
       who: (data['who']?.toString() ?? '').trim(),
     );

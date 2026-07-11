@@ -9,7 +9,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:isar_community/isar.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_proposal_history_service.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
@@ -18,7 +18,7 @@ import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_servi
 import 'package:citizenapp/transaction/shared/account_balance_snapshot_store.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
-import 'package:citizenapp/rpc/onchain.dart' show OnchainRpc;
+import 'package:citizenapp/rpc/transfer_rpc.dart' show TransferRpc;
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -134,7 +134,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
     final amount = AmountFormat.tryParse(_amountController.text);
     setState(() {
       if (amount != null && amount > 0) {
-        _estimatedFee = OnchainRpc.estimateTransferFeeYuan(amount);
+        _estimatedFee = TransferRpc.estimateTransferFeeYuan(amount);
       } else {
         _estimatedFee = 0.0;
       }
@@ -184,7 +184,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
       return false;
     }
     if (_availableBalance != null) {
-      final fee = OnchainRpc.estimateTransferFeeYuan(amount);
+      final fee = TransferRpc.estimateTransferFeeYuan(amount);
       const ed = 1.11;
       if (amount + fee + ed > _availableBalance!) {
         setState(() => _amountError =
@@ -223,7 +223,7 @@ class _MultisigTransferPageState extends State<MultisigTransferPage> {
 
     final wallet = _selectedWallet;
     final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
-    final requiredAdminFee = OnchainRpc.estimateTransferFeeYuan(amountYuan);
+    final requiredAdminFee = TransferRpc.estimateTransferFeeYuan(amountYuan);
     final balanceBlockedReason =
         await MultisigTransferBalanceGuard.checkAdminWalletBalance(
       wallet: wallet,

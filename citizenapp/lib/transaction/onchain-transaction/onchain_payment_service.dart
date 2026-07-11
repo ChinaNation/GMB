@@ -3,18 +3,18 @@ import 'dart:typed_data';
 
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_models.dart';
-import 'package:citizenapp/rpc/onchain.dart';
+import 'package:citizenapp/rpc/transfer_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 class OnchainPaymentService {
   OnchainPaymentService({
     WalletManager? walletManager,
-    OnchainRpc? onchainRpc,
+    TransferRpc? onchainRpc,
   })  : _walletManager = walletManager ?? WalletManager(),
-        _onchainRpc = onchainRpc ?? OnchainRpc();
+        _onchainRpc = onchainRpc ?? TransferRpc();
 
   final WalletManager _walletManager;
-  final OnchainRpc _onchainRpc;
+  final TransferRpc _onchainRpc;
 
   Future<WalletProfile?> getCurrentWallet() {
     return _walletManager.getWallet();
@@ -39,10 +39,10 @@ class OnchainPaymentService {
         '交易草稿不合法，请检查收款地址、数量和币种',
       );
     }
-    if (remarkBytes > OnchainRpc.maxTransferRemarkBytes) {
+    if (remarkBytes > TransferRpc.maxTransferRemarkBytes) {
       throw OnchainPaymentException(
         OnchainPaymentErrorCode.invalidDraft,
-        '转账备注不能超过 ${OnchainRpc.maxTransferRemarkBytes} 字节',
+        '转账备注不能超过 ${TransferRpc.maxTransferRemarkBytes} 字节',
       );
     }
 

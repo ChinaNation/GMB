@@ -188,11 +188,14 @@ Pixel 8a / Android 16 曾出现 `Input dispatching timed out` ANR。任务目标
 - [x] 第 6 阶段真机新安装：Pixel 8a 私密测试空间清除 App 数据后安装 ARM64-only profile APK；非链首屏冷启动约 1.07 秒且不创建 smoldot。进入交易链入口后，原生精确证明 `source=bundledCheckpoint / startup=#0`，只发起 1 次 warp 请求，proof `received=1 / verified=1 / rejected=0`，最终 `phase=regular / usable=true / currentVerifiedFinalized=peer F`。
 - [x] 第 6 阶段真机本机恢复：新安装完成后保存 5,120-byte finalized database 信封；强停冷启动后精确证明 `source=localDatabase / startup=H`，peer F 与 H 相等时 `requests=0`，不重复 warp，连接 peer 后恢复 `regular + usable=true`。
 - [x] 第 6 阶段真机断网恢复：移动数据关闭后冷启动仍严格验证本机 H，但 `peer=0 / peer_finalized=null / usable=false`，交易按钮保持禁用；Cloudflare 启动清单不可用时只使用本地链规格，不存在 HTTP 链状态回退。恢复移动数据并再次冷启动后，P2P 在约 5 秒内重新达到 `regular + usable=true`。
-- [x] 第 6 阶段真机资源与故障检查：首次 warp 观察窗口进程 CPU 约 0.3%，稳定后为 0%；`cit-smol-0/1` 与 `cit-cap-0/1` 四个原生线程 nice 均为 5；未发现 CitizenApp ANR、输入分发超时、fatal signal、崩溃或 capability 队列溢出。
-- [ ] 第 6 阶段运行中推进：本轮观察窗口内 peer F 没有继续增加，无法产生 `H < F` 的真实事件；必须等待正式链自然产生更高 finalized 后验证 ready 撤销、`H → warp → F` 和新 F 落盘，不得伪造完成证据。
-- [ ] 第 7 阶段：汇总真机 CPU/ANR/交互响应证据，执行最终文档、注释、残留和完成标准收口。
+- [x] 第 6 阶段首轮资源与故障检查：首次 warp 观察窗口进程 CPU 约 0.3%，稳定后为 0%；`cit-smol-0/1` 与 `cit-cap-0/1` 四个原生线程 nice 均为 5；该窗口未发现 CitizenApp ANR、输入分发超时、fatal signal、崩溃或 capability 队列溢出。该历史结果不覆盖后续真实正高度差暴露的 native crash。
+- [ ] 第 6 阶段运行中推进：正式链已产生真实 `F > H`。原进程运行中追高时收到 3 份 warp proof，但均以 `blockNumberNotIncrementing` 拒绝；随后交易服务验证 future 在 finalized 推进期间触发 native `SIGABRT`。Android 重启进程后，原生从已保存本机 H 以 1 次请求成功追到 peer F，proof `received=1 / verified=1 / rejected=0`，进入 `regular / usable=true` 并保存新 F。进程重启后的成功不能抵消运行中崩溃，因此本项仍失败且不得关闭。
+- [x] 第 6 阶段崩溃根因定位：设备 crash buffer 为 `smoldot-light-6` 上的 `internal error: entered unreachable code`。使用与安装包 `.text` 逐字节一致的 ARM64 release 重链地址映射，调用栈精确落到 `transactions_service::validate_transaction()` 的 `transactions_service.rs:1493`。该行把 `PinPinnedBlockRuntimeError::BlockNotPinned` 写成 `unreachable!()`；同文件此前已经明确记录“选中的 best block 可能在验证 future 真正运行前被裁剪并解除 pin”的竞态。finalized 推进命中此竞态后，release 的 `panic=abort` 终止整个 App。这是本次 native crash 的确定根因，不是推测。
+- [ ] 第 6 阶段竞态修复与复验：`BlockNotPinned` 必须作为过期验证锚的瞬态结果处理，清理本次 validation future 并对仍待处理的交易改用当前 best block 重试；禁止升级成 panic，也不得把单块过期误判为整条 runtime subscription 失效。需新增确定性回归、重建 ARM64 APK，并在有待处理交易时等待下一次 finalized 自然推进，证明 App 不退出、交易状态不被错误丢弃、节点从本机 H 追到新 F 且新 F 单调落盘。
+- [x] 第 7 阶段自动化回归：smoldot-light 5 项单测和 2 项 doctest、Rust FFI 4 项测试、CitizenApp RPC/交易页 38 项测试、smoldot-dart 全量 51 项测试全部通过；5 个目标 Dart 文件 analyze 无问题，Dart 与本次 Rust 改动文件格式检查通过。
+- [ ] 第 7 阶段最终收口复验：此前 ARM64-only APK、16 KiB 对齐、签名、固定 `#0` 资产、脚本语法和旧 ABI 零残留检查均已通过，但后续真实正高度差暴露的 native crash 已使“最终无故障收口”结论失效。完成竞态修复后必须重跑全部自动化、APK 静态检查和真实 finalized 推进验收；`citizenchain/runtime/` 仍保持零改动。
 
-第 11 步当前结论：第 1～5 阶段已完成原生活动真相、错误 watchdog 删除、请求级 peer 失败恢复、跨层唯一完成语义、本机 H/F 持久化闭环和 ARM64-only Android 构建静态验收；第 6 阶段已完成新安装 `#0 → F`、本机 H 等于 peer F 时零 warp 恢复、断网 fail-closed、P2P 恢复与基础资源验收。正式链尚未在本轮观察窗口产生更高 F，因此运行中真实 `H < F` 推进仍待补验，不得提前宣称整项修复完成。
+第 11 步当前结论：第 1～5 阶段、新安装 `#0 → F`、本机 H 等于 peer F 时零 warp 恢复、断网 fail-closed、P2P 恢复和首轮 CPU/线程验收均已有真实证据。真实 `F > H` 已经发生，但运行中追高暴露交易验证与 finalized 解除 pin 的确定竞态，并以 native `SIGABRT` 终止 App；进程重启后的追高成功不算通过。当前必须先修复 `BlockNotPinned → unreachable!()`，再完成有待处理交易条件下的下一次 finalized 推进与全量收口复验，任务继续保持 open。
 
 ## 完成标准
 

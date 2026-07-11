@@ -2,7 +2,7 @@
 
 import 'package:citizenapp/citizen/public/data/admin_division_dto.dart';
 import 'package:citizenapp/citizen/public/data/admin_division_store.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 class FakeAdminDivisionStore implements AdminDivisionStore {
   /// divisionKey -> entity。

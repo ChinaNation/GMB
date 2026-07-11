@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/citizen/shared/multisig_create_amount_rules.dart';
 import 'package:citizenapp/qr/envelope.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart'
@@ -335,10 +335,10 @@ class _PersonalAccountCreatePageState extends State<PersonalAccountCreatePage> {
           ..creatorAddress = wallet.address
           ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
         await isar.personalAccountEntitys.put(entity);
-        await PersonalAccountLocalState.putStatusInTxn(
+        await PersonalMultisigLocalState.putStatusInTxn(
           isar,
           addrHex,
-          PersonalAccountLocalState.statusPending,
+          PersonalMultisigLocalState.statusPending,
         );
       });
 

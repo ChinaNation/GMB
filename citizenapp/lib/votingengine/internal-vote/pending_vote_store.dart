@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
-import 'package:citizenapp/rpc/onchain.dart';
+import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/rpc/transfer_rpc.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_service.dart';
 
 /// 待确认投票记录。
@@ -160,7 +160,7 @@ class PendingVoteStore {
   Future<List<PendingVoteRecord>> confirmAll(
     String proposalType,
     int proposalId,
-    OnchainRpc onchainRpc, {
+    TransferRpc onchainRpc, {
     PendingVoteChainLookup? chainVoteLookup,
   }) async {
     final summary = await confirmAllDetailed(
@@ -179,7 +179,7 @@ class PendingVoteStore {
   Future<PendingVoteConfirmSummary> confirmAllDetailed(
     String proposalType,
     int proposalId,
-    OnchainRpc onchainRpc, {
+    TransferRpc onchainRpc, {
     PendingVoteChainLookup? chainVoteLookup,
   }) async {
     final pending = await getPending(proposalType, proposalId);

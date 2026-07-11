@@ -1,5 +1,5 @@
-class AdminSetChangeDraft {
-  const AdminSetChangeDraft({
+class AdminsChangeDraft {
+  const AdminsChangeDraft({
     required this.accountHex,
     required this.institutionCode,
     required this.currentAdmins,

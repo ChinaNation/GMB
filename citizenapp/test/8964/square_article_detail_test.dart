@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/pages/square_article_detail_page.dart';
 
-import 'profile/profile_test_doubles.dart';
+import 'profile/fake_profile.dart';
 
 void main() {
   testWidgets('renders the article title and body', (tester) async {

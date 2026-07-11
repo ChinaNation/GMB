@@ -9,7 +9,7 @@ import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/citizen/shared/admin_account_storage_codec.dart';
 import 'package:citizenapp/citizen/shared/admin_accounts_scan_service.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 import 'personal_manage_service.dart';
@@ -136,10 +136,10 @@ class PersonalManageDiscoveryService {
         if (!exists.discoveredViaAdmin) return false;
         exists.matchedAdminPubkeys = matchedAdmins;
         await isar.personalAccountEntitys.put(exists);
-        await PersonalAccountLocalState.putStatusInTxn(
+        await PersonalMultisigLocalState.putStatusInTxn(
           isar,
           accountHex,
-          PersonalAccountLocalState.statusActive,
+          PersonalMultisigLocalState.statusActive,
         );
         return false;
       }
@@ -152,10 +152,10 @@ class PersonalManageDiscoveryService {
         ..discoveredViaAdmin = true
         ..matchedAdminPubkeys = matchedAdmins;
       await isar.personalAccountEntitys.put(entity);
-      await PersonalAccountLocalState.putStatusInTxn(
+      await PersonalMultisigLocalState.putStatusInTxn(
         isar,
         accountHex,
-        PersonalAccountLocalState.statusActive,
+        PersonalMultisigLocalState.statusActive,
       );
       return true;
     });
@@ -172,10 +172,10 @@ class PersonalManageDiscoveryService {
         if (!scannedAccounts.contains(p.account)) {
           // 链上注销后仍保留本地账户入口，只把状态标成已注销；
           // 用户在详情页点“删除”时才真正清空本机数据。
-          await PersonalAccountLocalState.putStatusInTxn(
+          await PersonalMultisigLocalState.putStatusInTxn(
             isar,
             p.account,
-            PersonalAccountLocalState.statusClosed,
+            PersonalMultisigLocalState.statusClosed,
           );
           closed++;
         }

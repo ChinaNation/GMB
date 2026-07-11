@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:isar_community/isar.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/wallet/core/wallet_secure_keys.dart';
 
 class AttestationState {

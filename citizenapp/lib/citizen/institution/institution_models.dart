@@ -5,8 +5,8 @@ import 'dart:typed_data';
 /// 链上 SCALE 布局（`pub-mgmt`/`pri-mgmt` + ACTION_CLOSE = 2 前缀之后）：
 ///   account: AccountId32(32) + beneficiary: AccountId32(32)
 ///   + proposer: AccountId32(32)
-class CloseMultisigProposalInfo {
-  const CloseMultisigProposalInfo({
+class CloseProposalInfo {
+  const CloseProposalInfo({
     required this.proposalId,
     required this.account,
     required this.beneficiary,
@@ -34,8 +34,8 @@ class CloseMultisigProposalInfo {
     return Uint8List.fromList(addrBytes);
   }
 
-  CloseMultisigProposalInfo copyWithStatus(int? newStatus) {
-    return CloseMultisigProposalInfo(
+  CloseProposalInfo copyWithStatus(int? newStatus) {
+    return CloseProposalInfo(
       proposalId: proposalId,
       account: account,
       beneficiary: beneficiary,

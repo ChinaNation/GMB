@@ -14,7 +14,7 @@ part 'governance_registry.generated.dart';
 
 /// 链上联合投票总票数。
 int get jointVoteTotal =>
-    19 + kProvincialCouncils.length + kProvincialBanks.length;
+    19 + kPrcs.length + kProvincialBanks.length;
 
 /// 链上联合投票立即通过阈值。
 const int jointVotePassThreshold = 105;
@@ -24,8 +24,8 @@ InstitutionInfo? findInstitutionByAccountId(List<int> accountIdBytes,
     {String? adminAccountCode}) {
   if (accountIdBytes.length != 32) return null;
   for (final inst in [
-    ...kNationalCouncil,
-    ...kProvincialCouncils,
+    ...kNrc,
+    ...kPrcs,
     ...kProvincialBanks,
     ...kFixedGovernanceInstitutions,
   ]) {

@@ -11,7 +11,7 @@ import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
-import 'package:citizenapp/rpc/onchain.dart' show OnchainRpc;
+import 'package:citizenapp/rpc/transfer_rpc.dart' show TransferRpc;
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_balance_guard.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_service.dart';
@@ -132,7 +132,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     final amount = AmountFormat.tryParse(_amountController.text);
     setState(() {
       if (amount != null && amount > 0) {
-        _estimatedFee = OnchainRpc.estimateTransferFeeYuan(amount);
+        _estimatedFee = TransferRpc.estimateTransferFeeYuan(amount);
       } else {
         _estimatedFee = 0.0;
       }
@@ -181,7 +181,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
       return false;
     }
     if (_availableBalance != null) {
-      final fee = OnchainRpc.estimateTransferFeeYuan(amount);
+      final fee = TransferRpc.estimateTransferFeeYuan(amount);
       const ed = 1.11;
       if (amount + fee + ed > _availableBalance!) {
         setState(() => _amountError =
@@ -220,7 +220,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
 
     final wallet = _selectedWallet;
     final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
-    final requiredAdminFee = OnchainRpc.estimateTransferFeeYuan(amountYuan);
+    final requiredAdminFee = TransferRpc.estimateTransferFeeYuan(amountYuan);
     final balanceBlockedReason =
         await MultisigTransferBalanceGuard.checkAdminWalletBalance(
       wallet: wallet,

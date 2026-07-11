@@ -6,7 +6,7 @@
 import 'dart:convert';
 
 import 'package:isar_community/isar.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 import 'public_institution_dto.dart';
 import 'public_institution_store.dart';

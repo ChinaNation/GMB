@@ -410,7 +410,7 @@ class PersonalManageService {
     }
   }
 
-  CreateMultisigProposalInfo? _decodeCreateAction(
+  CreateProposalInfo? _decodeCreateAction(
     int proposalId,
     Uint8List data,
   ) {
@@ -431,7 +431,7 @@ class PersonalManageService {
 
     final feeFen = _readU128Le(data.sublist(offset, offset + 16));
 
-    return CreateMultisigProposalInfo(
+    return CreateProposalInfo(
       proposalId: proposalId,
       account: account,
       proposer: proposerSs58,
@@ -440,7 +440,7 @@ class PersonalManageService {
     );
   }
 
-  CloseMultisigProposalInfo? _decodeCloseAction(
+  CloseProposalInfo? _decodeCloseAction(
     int proposalId,
     Uint8List data,
   ) {
@@ -460,7 +460,7 @@ class PersonalManageService {
     final proposerSs58 =
         Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
 
-    return CloseMultisigProposalInfo(
+    return CloseProposalInfo(
       proposalId: proposalId,
       account: account,
       beneficiary: beneficiarySs58,

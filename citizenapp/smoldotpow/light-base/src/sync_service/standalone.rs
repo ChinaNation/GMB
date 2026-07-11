@@ -33,7 +33,7 @@ use alloc::{
 };
 use core::{cmp, iter, num::NonZero, pin::Pin, time::Duration};
 use futures_lite::FutureExt as _;
-use futures_util::{future, stream, StreamExt as _};
+use futures_util::{StreamExt as _, future, stream};
 use hashbrown::HashMap;
 use smoldot::{
     chain, header,
@@ -541,7 +541,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
 
             WakeUpReason::SyncProcess(all::ProcessOne::VerifyFinalityProof(verify)) => {
                 // Finality proof to verify.
-                let sender = verify.sender().1 .0.clone();
+                let sender = verify.sender().1.0.clone();
                 match verify.perform({
                     let mut seed = [0; 32];
                     task.platform.fill_random_bytes(&mut seed);
@@ -1747,8 +1747,8 @@ impl<TPlat: PlatformRef> Task<TPlat> {
 #[cfg(test)]
 mod warp_request_registry_tests {
     use super::{
-        register_active_warp_request, take_active_warp_request, warp_target_snapshot,
-        ActiveWarpRequest, BTreeMap, WarpNetworkRequestKind,
+        ActiveWarpRequest, BTreeMap, WarpNetworkRequestKind, register_active_warp_request,
+        take_active_warp_request, warp_target_snapshot,
     };
 
     #[test]

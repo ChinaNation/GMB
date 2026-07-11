@@ -80,10 +80,10 @@ class ProposalWithDetail {
   final RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
 
   /// 创建多签账户提案详情。
-  final CreateMultisigProposalInfo? createMultisigDetail;
+  final CreateProposalInfo? createMultisigDetail;
 
   /// 关闭多签账户提案详情。
-  final CloseMultisigProposalInfo? closeMultisigDetail;
+  final CloseProposalInfo? closeMultisigDetail;
 
   /// 业务模块详情集合。proposal/shared 只按字符串键保存不透明对象，
   /// 具体键名、模型和页面跳转由所属业务模块自己定义。

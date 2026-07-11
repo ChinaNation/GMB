@@ -7,7 +7,7 @@ import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/city_institution_list_page.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_provinces.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -16,8 +16,8 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 左侧导航——「关注」**钉顶固定不滚**,下方 43 省可上下滚动;展示去"省"
 /// (匹配仍用全名)。右侧按选中项展示:关注=我订阅的机构(跨省扁平);某省=该省市列表
 /// (点市进机构列表)。**读全程本地优先(秒开),在线增量丢后台**,绝不阻塞转圈。
-class PublicPage extends StatefulWidget {
-  const PublicPage({super.key, this.repository, this.walletPubkeyProvider});
+class PublicTab extends StatefulWidget {
+  const PublicTab({super.key, this.repository, this.walletPubkeyProvider});
 
   /// 测试注入;生产为本地 Isar 实现。
   final PublicInstitutionRepository? repository;
@@ -26,7 +26,7 @@ class PublicPage extends StatefulWidget {
   final Future<String?> Function()? walletPubkeyProvider;
 
   @override
-  State<PublicPage> createState() => _PublicPageState();
+  State<PublicTab> createState() => _PublicPageState();
 }
 
 /// 关注分组的固定标签(置顶,非省份)。
@@ -42,7 +42,7 @@ class _CityVm {
   final String name;
 }
 
-class _PublicPageState extends State<PublicPage> {
+class _PublicPageState extends State<PublicTab> {
   late final PublicInstitutionRepository _repo =
       widget.repository ?? PublicInstitutionRepository();
 

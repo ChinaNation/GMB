@@ -86,7 +86,7 @@ class _SquarePostDetailPageState extends State<SquarePostDetailPage> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.surfaceWhite,
+              color: AppTheme.surfaceCard,
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               border: Border.all(color: AppTheme.border),
             ),

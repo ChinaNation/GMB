@@ -404,7 +404,7 @@ class InstitutionChainService {
     }
   }
 
-  CloseMultisigProposalInfo? _decodeCloseAction(
+  CloseProposalInfo? _decodeCloseAction(
       int proposalId, Uint8List data) {
     // account(32) + beneficiary(32) + proposer(32)
     if (data.length != 32 + 32 + 32) return null;
@@ -423,7 +423,7 @@ class InstitutionChainService {
     final proposerSs58 =
         Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
 
-    return CloseMultisigProposalInfo(
+    return CloseProposalInfo(
       proposalId: proposalId,
       account: account,
       beneficiary: beneficiarySs58,

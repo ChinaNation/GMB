@@ -70,7 +70,7 @@ class _AppPermissionGateState extends State<AppPermissionGate> {
     }
 
     return Scaffold(
-      backgroundColor: AppTheme.surfaceWhite,
+      backgroundColor: AppTheme.surfaceCard,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),

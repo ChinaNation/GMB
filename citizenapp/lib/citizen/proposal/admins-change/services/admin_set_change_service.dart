@@ -8,8 +8,8 @@ import 'package:citizenapp/citizen/proposal/admins-change/services/admin_set_val
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
 
-class AdminSetChangeService {
-  AdminSetChangeService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
+class AdminsChangeService {
+  AdminsChangeService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
 
@@ -25,7 +25,7 @@ class AdminSetChangeService {
       admins: admins,
       newThreshold: newThreshold,
     );
-    return AdminSetChangeCallCodec.build(
+    return AdminsChangeCallCodec.build(
       institutionCode: account.institutionCode,
       adminKind: account.kind,
       accountId: AdminAccountIdCodec.fromHex(account.accountHex),
@@ -34,7 +34,7 @@ class AdminSetChangeService {
     );
   }
 
-  Future<AdminSetChangeSubmitResult> submit({
+  Future<AdminsChangeSubmitResult> submit({
     required AdminAccountState account,
     required List<String> admins,
     required int newThreshold,
@@ -51,7 +51,7 @@ class AdminSetChangeService {
     );
     final result = await SignedExtrinsicBuilder(
       chainRpc: _rpc,
-      logLabel: 'AdminSetChange',
+      logLabel: 'AdminsChange',
     ).signAndSubmit(
       callData: callData,
       fromAddress: fromAddress,
@@ -59,7 +59,7 @@ class AdminSetChangeService {
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
-    return AdminSetChangeSubmitResult(
+    return AdminsChangeSubmitResult(
       txHash: result.txHash,
       usedNonce: result.usedNonce,
     );

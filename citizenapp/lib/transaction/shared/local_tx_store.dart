@@ -1,5 +1,5 @@
 import 'package:isar_community/isar.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 /// 本机钱包交易流水存储服务。
 ///

@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:isar_community/isar.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 /// 提案详情本地持久化读库。
 ///

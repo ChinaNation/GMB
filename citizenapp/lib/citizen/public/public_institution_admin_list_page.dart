@@ -79,7 +79,7 @@ class _PublicInstitutionAdminListPageState
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
-        backgroundColor: AppTheme.surfaceWhite,
+        backgroundColor: AppTheme.surfaceCard,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),

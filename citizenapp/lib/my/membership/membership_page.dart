@@ -542,7 +542,7 @@ class _IdentityMembershipCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: CitizenBadge(
+                child: IdentityBadge(
                   style: badgeStyle,
                   size: 34,
                   tooltip: identityBadgeLabel(

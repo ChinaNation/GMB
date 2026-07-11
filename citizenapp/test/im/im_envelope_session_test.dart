@@ -16,7 +16,7 @@ import 'package:citizenapp/im/proto/im_envelope.pb.dart';
 import 'package:citizenapp/im/storage/im_isar_store.dart';
 import 'package:citizenapp/im/transport/im_cloudflare_transport.dart';
 import 'package:citizenapp/im/transport/im_transport.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 void main() {

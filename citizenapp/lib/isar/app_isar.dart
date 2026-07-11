@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:isar_community/isar.dart';
 import 'package:path_provider/path_provider.dart';
 
-part 'wallet_isar.g.dart';
+part 'app_isar.g.dart';
 
 @collection
 class WalletProfileEntity {
@@ -194,7 +194,7 @@ class MultisigLocalDetailSnapshot {
 /// 链上注销后账户主体可能已经不存在，但用户本机仍要在账户列表
 /// 显示“已注销”，直到用户主动点“删除”清空本地数据。这里复用 AppKvEntity，
 /// 避免把状态散落到多个页面。
-class PersonalAccountLocalState {
+class PersonalMultisigLocalState {
   static const statusPending = 'pending';
   static const statusActive = 'active';
   static const statusClosed = 'closed';

@@ -169,8 +169,8 @@ void main() {
 
       final decoded = service.decodePersonalProposalData(7, raw);
 
-      expect(decoded, isA<CreateMultisigProposalInfo>());
-      final info = decoded as CreateMultisigProposalInfo;
+      expect(decoded, isA<CreateProposalInfo>());
+      final info = decoded as CreateProposalInfo;
       expect(info.proposalId, 7);
       expect(info.account, '33' * 32);
       expect(info.amountFen, BigInt.from(111));

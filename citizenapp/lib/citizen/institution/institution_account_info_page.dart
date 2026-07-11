@@ -6,7 +6,7 @@ import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_entry.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
@@ -19,8 +19,8 @@ import 'institution_chain_service.dart';
 ///
 /// 只展示和处理机构多签(公权/私权)。个人多签详情在
 /// `lib/personal-manage/personal_manage_account_info_page.dart`。
-class InstitutionAccountInfoPage extends StatefulWidget {
-  const InstitutionAccountInfoPage({
+class InstitutionAccountPage extends StatefulWidget {
+  const InstitutionAccountPage({
     super.key,
     required this.institution,
     this.initialLocalStatus,
@@ -32,12 +32,12 @@ class InstitutionAccountInfoPage extends StatefulWidget {
   final List<String> initialAdminPubkeys;
 
   @override
-  State<InstitutionAccountInfoPage> createState() =>
+  State<InstitutionAccountPage> createState() =>
       _InstitutionAccountInfoPageState();
 }
 
 class _InstitutionAccountInfoPageState
-    extends State<InstitutionAccountInfoPage> {
+    extends State<InstitutionAccountPage> {
   final InstitutionChainService _manageService = InstitutionChainService();
   final ChainRpc _rpc = ChainRpc();
 

@@ -1,7 +1,7 @@
 // 只读派生数据的版本游标存储(与 schemaVersion 解耦)。
 //
 // 行政区/公权机构是只读派生数据(无用户数据),数据新鲜度完全由本
-// helper 独立管——和 `wallet_isar.dart` 里 `schemaVersion<7` 的清表逻辑(app
+// helper 独立管——和 `app_isar.dart` 里 `schemaVersion<7` 的清表逻辑(app
 // 结构迁移)无关,绝不互相牵连。复用 [AppKvEntity](不新增 Isar schema):
 //   - `<前缀>.data_version`  = 全局包版本(string),相等即整体秒过
 //   - `<前缀>.prov_vers`     = per-province ver map 的 JSON(`{"GZ":"abc..."}`)
@@ -13,7 +13,7 @@
 import 'dart:convert';
 
 import 'package:isar_community/isar.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 /// 版本游标读写接口。
 abstract interface class DataVersionKv {

@@ -90,8 +90,8 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
   // 提交结果
   String? _resultTxId;
 
-  late final OffchainClearingNodeRpc _nodeRpc =
-      OffchainClearingNodeRpc(widget.clearingNodeWssUrl);
+  late final OffchainClearingBankRpc _nodeRpc =
+      OffchainClearingBankRpc(widget.clearingNodeWssUrl);
 
   @override
   void initState() {

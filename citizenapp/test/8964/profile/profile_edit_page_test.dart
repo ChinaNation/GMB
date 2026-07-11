@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/8964/profile/profile_edit_page.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 
-import 'profile_test_doubles.dart';
+import 'fake_profile.dart';
 
 Widget _wrap(FakeProfileApi api, {SquareSessionProvider? sessionProvider}) {
   return MaterialApp(

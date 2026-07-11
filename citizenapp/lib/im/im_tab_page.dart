@@ -26,8 +26,8 @@ typedef ImDownloadAttachmentFactory = ImDownloadAttachmentCallback? Function(
 ///
 /// 信息页只展示会话列表。联系人添加、联系人详情和转账入口统一归属
 /// “我的通讯录”；互联网 mailbox 和近场传输由 IM 运行态自动处理。
-class ImTabPage extends StatefulWidget {
-  ImTabPage({
+class ImTab extends StatefulWidget {
+  ImTab({
     super.key,
     ImIsarStore? store,
     WalletManager? walletManager,
@@ -50,10 +50,10 @@ class ImTabPage extends StatefulWidget {
   final ImRuntime? runtime;
 
   @override
-  State<ImTabPage> createState() => _ImTabPageState();
+  State<ImTab> createState() => _ImTabState();
 }
 
-class _ImTabPageState extends State<ImTabPage> {
+class _ImTabState extends State<ImTab> {
   // 信息页只做前台轻量轮询；离开页面或 App 退后台即停止，不做后台常驻扫描。
   static const _normalPollInterval = Duration(seconds: 15);
   static const _backoffPollInterval = Duration(seconds: 30);
@@ -556,7 +556,7 @@ class _ListTileShell extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: Material(
-        color: AppTheme.surfaceWhite,
+        color: AppTheme.surfaceCard,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),

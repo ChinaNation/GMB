@@ -22,7 +22,7 @@ class ProposalPlaceholderPage extends StatelessWidget {
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: AppTheme.surfaceWhite,
+        backgroundColor: AppTheme.surfaceCard,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),

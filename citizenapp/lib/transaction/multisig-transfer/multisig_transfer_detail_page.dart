@@ -16,7 +16,7 @@ import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_balan
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_models.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_service.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
-import 'package:citizenapp/rpc/onchain.dart';
+import 'package:citizenapp/rpc/transfer_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
@@ -229,7 +229,7 @@ class _MultisigTransferDetailPageState
       final pendingSummary = await PendingVoteStore.instance.confirmAllDetailed(
         _proposalTypeKey,
         widget.proposalId,
-        OnchainRpc(),
+        TransferRpc(),
       );
       for (final confirmed in pendingSummary.confirmed) {
         votes[confirmed.walletPubkey] = confirmed.approve;
@@ -802,7 +802,7 @@ class _MultisigTransferDetailPageState
             admins: _admins,
             adminVotes: _adminVotes,
             pendingPubkeys: _pendingPubkeys,
-            proposerPubkey: _proposerPubkey,
+            proposerSs58: _proposerSs58,
           ),
         ],
       ),
@@ -845,7 +845,7 @@ class _MultisigTransferDetailPageState
   // ──── 提案信息卡片 ────
 
   /// 提案创建者公钥（仅 transfer / safetyFund 有）。
-  String? get _proposerPubkey {
+  String? get _proposerSs58 {
     switch (widget.kind) {
       case MultisigTransferKind.transfer:
         return _transferInfo?.proposer;

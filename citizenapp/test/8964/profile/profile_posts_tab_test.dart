@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 
-import 'profile_test_doubles.dart';
+import 'fake_profile.dart';
 
 Widget _page(FakeProfileApi api) => MaterialApp(
       home: UserProfilePage(

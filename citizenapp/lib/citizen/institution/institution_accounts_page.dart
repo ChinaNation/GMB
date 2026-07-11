@@ -58,7 +58,7 @@ class _InstitutionAccountsPageState extends State<InstitutionAccountsPage> {
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: const Text('全部账户'),
-        backgroundColor: AppTheme.surfaceWhite,
+        backgroundColor: AppTheme.surfaceCard,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),

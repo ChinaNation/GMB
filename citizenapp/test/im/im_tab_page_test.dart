@@ -27,7 +27,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ImTabPage(
+          body: ImTab(
             store: store,
             currentUserId: 'alice-wallet',
           ),
@@ -74,7 +74,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ImTabPage(
+          body: ImTab(
             store: store,
             currentUserId: 'alice-wallet',
           ),
@@ -102,7 +102,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ImTabPage(
+          body: ImTab(
             store: _FakeImStore(),
             currentUserId: '',
           ),
@@ -122,7 +122,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ImTabPage(
+          body: ImTab(
             store: store,
             currentUserId: 'alice-wallet',
             runtime: runtime,
@@ -156,7 +156,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ImTabPage(
+          body: ImTab(
             store: store,
             currentUserId: 'alice-wallet',
             runtime: runtime,

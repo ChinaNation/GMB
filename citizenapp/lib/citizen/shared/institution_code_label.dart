@@ -5,7 +5,7 @@ import 'dart:typed_data';
 ///
 /// (铁律):
 /// 本文件逐字镜像冷钱包 `citizenwallet/lib/signer/institution_code.dart`(同一套
-/// 104 码)。链上治理统一使用 4 字节 `institution_code`
+/// 92 码)。链上治理统一使用 4 字节 `institution_code`
 /// ([u8;4] 原始码字节,3 字符码右补 `0`)。热钱包用本
 /// 文件的纯函数从机构码派生治理分类(是不是固定治理档 / 个人多签 / 机构账户)，
 /// 绝不另立第二套分类。

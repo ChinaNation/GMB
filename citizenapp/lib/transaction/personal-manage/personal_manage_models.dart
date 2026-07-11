@@ -5,8 +5,8 @@ import 'dart:typed_data';
 /// 链上 SCALE 布局（`per-mgmt` + ACTION_CREATE=0 之后）：
 ///   account: AccountId32(32) + proposer: AccountId32(32)
 ///   + amount: u128(16) + fee: u128(16)。
-class CreateMultisigProposalInfo {
-  const CreateMultisigProposalInfo({
+class CreateProposalInfo {
+  const CreateProposalInfo({
     required this.proposalId,
     required this.account,
     required this.proposer,
@@ -40,8 +40,8 @@ class CreateMultisigProposalInfo {
     return Uint8List.fromList(_hexDecode(account));
   }
 
-  CreateMultisigProposalInfo copyWithStatus(int? newStatus) {
-    return CreateMultisigProposalInfo(
+  CreateProposalInfo copyWithStatus(int? newStatus) {
+    return CreateProposalInfo(
       proposalId: proposalId,
       account: account,
       proposer: proposer,
@@ -57,8 +57,8 @@ class CreateMultisigProposalInfo {
 /// 链上 SCALE 布局（`per-mgmt` + ACTION_CLOSE=1 之后）：
 ///   account: AccountId32(32) + beneficiary: AccountId32(32)
 ///   + proposer: AccountId32(32)。
-class CloseMultisigProposalInfo {
-  const CloseMultisigProposalInfo({
+class CloseProposalInfo {
+  const CloseProposalInfo({
     required this.proposalId,
     required this.account,
     required this.beneficiary,
@@ -85,8 +85,8 @@ class CloseMultisigProposalInfo {
     return Uint8List.fromList(_hexDecode(account));
   }
 
-  CloseMultisigProposalInfo copyWithStatus(int? newStatus) {
-    return CloseMultisigProposalInfo(
+  CloseProposalInfo copyWithStatus(int? newStatus) {
+    return CloseProposalInfo(
       proposalId: proposalId,
       account: account,
       beneficiary: beneficiary,

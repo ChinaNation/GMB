@@ -64,7 +64,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: ProfilePage(
+        home: MyTab(
           walletManager: _FakeWalletManager(wallet),
           myIdService: myIdService,
           badgeSnapshotStore: snapshotStore,
@@ -76,7 +76,7 @@ void main() {
 
     expect(startCount, 0);
     expect(myIdService.liveReadCount, 0);
-    expect(find.byType(CitizenBadge), findsOneWidget);
+    expect(find.byType(IdentityBadge), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await smoldot.dispose();

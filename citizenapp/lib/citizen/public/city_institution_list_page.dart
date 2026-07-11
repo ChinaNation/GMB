@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/citizen/institution/institution_detail_page.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_repository.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 某市公权机构列表(ADR-018 §九 卡B)。
@@ -56,7 +56,7 @@ class _CityInstitutionListPageState extends State<CityInstitutionListPage> {
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: Text('${widget.cityName}公权机构'),
-        backgroundColor: AppTheme.surfaceWhite,
+        backgroundColor: AppTheme.surfaceCard,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),

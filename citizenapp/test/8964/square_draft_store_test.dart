@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/storage/square_draft_store.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

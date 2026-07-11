@@ -4,7 +4,7 @@ part of 'governance_registry.dart';
 // 中文注释：创世治理机构中英全称/简称、cid_number 和制度账户来自 runtime primitives；管理员必须动态读取链上 AdminAccounts。
 
 /// 国储会（1 个）。
-const List<InstitutionInfo> kNationalCouncil = [
+const List<InstitutionInfo> kNrc = [
   InstitutionInfo(
     cidFullName: '中华民族联邦共和国公民储备委员会',
     cidShortName: '国家储委会',
@@ -27,7 +27,7 @@ const List<InstitutionInfo> kNationalCouncil = [
 ];
 
 /// 省储会（43 个）。
-const List<InstitutionInfo> kProvincialCouncils = [
+const List<InstitutionInfo> kPrcs = [
   InstitutionInfo(
     cidFullName: '中枢省公民储备委员会',
     cidShortName: '中枢省储委会',

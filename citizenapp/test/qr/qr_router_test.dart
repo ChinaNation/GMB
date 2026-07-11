@@ -15,7 +15,7 @@ void main() {
   group('QrRouter QR_V1', () {
     test('should route login sign_request', () {
       final raw = jsonEncode({
-        'p': QrProtocols.v1,
+        'p': QrProtocol.v1,
         'k': QrKind.signRequest.code,
         'i': 'ch-0123456789abcdef',
         'e': 1090,
@@ -33,7 +33,7 @@ void main() {
 
     test('should route user_transfer', () {
       final raw = jsonEncode({
-        'p': QrProtocols.v1,
+        'p': QrProtocol.v1,
         'k': QrKind.userTransfer.code,
         'i': 'tx-0123456789abcdef',
         'e': 1600,
@@ -52,7 +52,7 @@ void main() {
 
     test('should route user_contact fixed code', () {
       final raw = jsonEncode({
-        'p': QrProtocols.v1,
+        'p': QrProtocol.v1,
         'k': QrKind.userContact.code,
         'b': {
           'address': '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
@@ -65,7 +65,7 @@ void main() {
 
     test('should route sign_request', () {
       final raw = jsonEncode({
-        'p': QrProtocols.v1,
+        'p': QrProtocol.v1,
         'k': QrKind.signRequest.code,
         'i': 'req-0123456789abcdef',
         'e': 1090,
@@ -114,7 +114,7 @@ void main() {
 
     test('should reject removed QR kind 5', () {
       final raw = jsonEncode({
-        'p': QrProtocols.v1,
+        'p': QrProtocol.v1,
         'k': 5,
         'b': {'removed': true},
       });

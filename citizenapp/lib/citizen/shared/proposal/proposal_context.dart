@@ -4,7 +4,7 @@ import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.d
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/institution/governance_registry.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_service.dart';
 import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -289,8 +289,8 @@ class ProposalContextResolver {
     List<WalletProfile> coldWallets,
   ) async {
     final allInstitutions = [
-      ...kNationalCouncil,
-      ...kProvincialCouncils,
+      ...kNrc,
+      ...kPrcs,
       ...kProvincialBanks,
     ];
 

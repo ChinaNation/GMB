@@ -120,7 +120,7 @@ class _AuthorRow extends StatelessWidget {
                           ),
                           if (_authorBadge(author) case final badge?) ...[
                             const SizedBox(width: 6),
-                            CitizenBadge(
+                            IdentityBadge(
                               style: badge,
                               size: 16,
                               tooltip: identityBadgeLabel(

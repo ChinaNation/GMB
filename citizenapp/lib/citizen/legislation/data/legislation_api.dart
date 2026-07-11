@@ -10,7 +10,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 
 import 'package:citizenapp/citizen/legislation/data/law_models.dart';
 import 'package:citizenapp/citizen/legislation/data/legislation_codec.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/runtime_api.dart';
 

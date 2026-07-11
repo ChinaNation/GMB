@@ -9,7 +9,7 @@ import 'package:citizenapp/8964/profile/user_qr_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/identity_badge.dart';
 
-import 'profile_test_doubles.dart';
+import 'fake_profile.dart';
 
 Widget _wrap({
   required bool isSelf,
@@ -42,7 +42,7 @@ void main() {
     expect(find.byIcon(Icons.person_add_alt), findsNothing);
     expect(find.byIcon(Icons.how_to_reg), findsNothing);
     // 认证以头像角的公民徽章呈现（链上身份分色 + 会员匹配带勾）。
-    expect(find.byType(CitizenBadge), findsOneWidget);
+    expect(find.byType(IdentityBadge), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
@@ -94,7 +94,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final badge = tester.widget<CitizenBadge>(find.byType(CitizenBadge));
+    final badge = tester.widget<IdentityBadge>(find.byType(IdentityBadge));
     expect(badge.style.color, AppTheme.identityVisitor);
     expect(badge.style.checked, isFalse);
   });
@@ -108,7 +108,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final badge = tester.widget<CitizenBadge>(find.byType(CitizenBadge));
+    final badge = tester.widget<IdentityBadge>(find.byType(IdentityBadge));
     expect(badge.style.color, AppTheme.identityVoting);
     expect(badge.style.checked, isFalse);
   });
@@ -125,7 +125,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final badge = tester.widget<CitizenBadge>(find.byType(CitizenBadge));
+    final badge = tester.widget<IdentityBadge>(find.byType(IdentityBadge));
     expect(badge.style.color, AppTheme.identityVoting);
     expect(badge.style.checked, isTrue);
   });
@@ -142,7 +142,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final badge = tester.widget<CitizenBadge>(find.byType(CitizenBadge));
+    final badge = tester.widget<IdentityBadge>(find.byType(IdentityBadge));
     expect(badge.style.color, AppTheme.identityCandidate);
     expect(badge.style.checked, isTrue);
   });
@@ -160,7 +160,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final badge = tester.widget<CitizenBadge>(find.byType(CitizenBadge));
+    final badge = tester.widget<IdentityBadge>(find.byType(IdentityBadge));
     expect(badge.style.color, AppTheme.identityCandidate);
     expect(badge.style.checked, isTrue);
   });

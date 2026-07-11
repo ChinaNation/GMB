@@ -53,7 +53,7 @@ class _ShimmerEffectState extends State<ShimmerEffect>
               end: end,
               colors: const [
                 AppTheme.surfaceMuted,
-                AppTheme.surfaceWhite,
+                AppTheme.surfaceCard,
                 AppTheme.surfaceMuted,
               ],
               stops: const [0.0, 0.5, 1.0],

@@ -287,7 +287,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
                           child: IconButton.outlined(
                             onPressed: () {},
                             icon: badge != null
-                                ? CitizenBadge(style: badge, size: 22)
+                                ? IdentityBadge(style: badge, size: 22)
                                 : const Icon(Icons.account_circle_outlined),
                           ),
                         );

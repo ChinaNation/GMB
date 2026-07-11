@@ -111,7 +111,7 @@ void main() {
       expiresAt: null,
       body: UserContactBody(address: wallet.address, contactName: '我的钱包'),
     ).toRawJson();
-    expect(raw.contains(QrProtocols.v1), isTrue,
+    expect(raw.contains(QrProtocol.v1), isTrue,
         reason: 'payload should include QR_V1 protocol');
     expect(raw.contains('"k":${QrKind.userContact.code}'), isTrue,
         reason: 'payload should include numeric k=3');

@@ -276,7 +276,7 @@ class _ProposalEntryPageState extends State<ProposalEntryPage> {
             enabled,
             () => _checkAndOpenProposal(
                 context,
-                () => AdminSetChangePage(
+                () => AdminsChangePage(
                     institution: widget.institution,
                     accountIdentity: AdminAccountIdentity.fromInstitution(
                         widget.institution),

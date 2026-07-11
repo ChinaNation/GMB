@@ -8,7 +8,6 @@ class AppTheme {
   // 色板
   /// 背景色系
   static const Color scaffoldBg = Color(0xFFF7F9FC);
-  static const Color surfaceWhite = Color(0xFFFFFFFF);
   static const Color surfaceCard = Color(0xFFFFFFFF);
   static const Color surfaceElevated = Color(0xFFF0F4F8);
   static const Color surfaceMuted = Color(0xFFF5F7FA);
@@ -59,23 +58,10 @@ class AppTheme {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
-
-  static const LinearGradient headerGradient = LinearGradient(
-    colors: [Color(0xFF007A74), Color(0xFF004D40)],
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-  );
-
-  static const LinearGradient subtleGradient = LinearGradient(
-    colors: [Color(0xFFF0FDF4), Color(0xFFECFDF5)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
   // 圆角 & 间距
   static const double radiusSm = 8;
   static const double radiusMd = 12;
   static const double radiusLg = 16;
-  static const double radiusXl = 24;
   // 卡片装饰
   static BoxDecoration cardDecoration({
     bool selected = false,
@@ -93,25 +79,6 @@ class AppTheme {
           color: const Color(0xFF0B3D2E).withAlpha(selected ? 16 : 8),
           blurRadius: selected ? 12 : 6,
           offset: const Offset(0, 2),
-        ),
-      ],
-    );
-  }
-
-  static BoxDecoration elevatedCard({double radius = radiusMd}) {
-    return BoxDecoration(
-      color: surfaceCard,
-      borderRadius: BorderRadius.circular(radius),
-      boxShadow: [
-        BoxShadow(
-          color: const Color(0xFF0B3D2E).withAlpha(12),
-          blurRadius: 16,
-          offset: const Offset(0, 4),
-        ),
-        BoxShadow(
-          color: const Color(0xFF0B3D2E).withAlpha(6),
-          blurRadius: 4,
-          offset: const Offset(0, 1),
         ),
       ],
     );
@@ -155,14 +122,14 @@ class AppTheme {
         onPrimary: Colors.white,
         secondary: accent,
         onSecondary: Colors.white,
-        surface: surfaceWhite,
+        surface: surfaceCard,
         onSurface: textPrimary,
         error: danger,
         onError: Colors.white,
       ),
       // AppBar
       appBarTheme: const AppBarTheme(
-        backgroundColor: surfaceWhite,
+        backgroundColor: surfaceCard,
         elevation: 0,
         scrolledUnderElevation: 0.5,
         centerTitle: true,
@@ -276,7 +243,7 @@ class AppTheme {
       ),
       // Dialog
       dialogTheme: DialogThemeData(
-        backgroundColor: surfaceWhite,
+        backgroundColor: surfaceCard,
         elevation: 8,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLg),
@@ -336,14 +303,14 @@ class AppTheme {
       ),
       // Bottom Sheet
       bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: surfaceWhite,
+        backgroundColor: surfaceCard,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(radiusLg)),
         ),
       ),
       // Popup Menu
       popupMenuTheme: PopupMenuThemeData(
-        color: surfaceWhite,
+        color: surfaceCard,
         elevation: 8,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMd),
@@ -351,7 +318,7 @@ class AppTheme {
       ),
       // Navigation Bar
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: surfaceWhite,
+        backgroundColor: surfaceCard,
         elevation: 0,
         height: 68,
         indicatorColor: primary.withAlpha(20),

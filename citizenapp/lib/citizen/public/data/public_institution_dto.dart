@@ -1,7 +1,7 @@
 // 公权机构目录 DTO —— 对应 CID BFF `PublicInstitutionRow` / `PageResult`
 // (`GET /api/v1/app/public-institutions`)。数据包 JSON 与接口响应共用本解析。
 
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 /// 公权机构目录行(白名单字段,与后端 PublicInstitutionRow 一一对应)。
 class PublicInstitutionDto {

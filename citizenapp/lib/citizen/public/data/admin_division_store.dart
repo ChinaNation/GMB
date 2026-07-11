@@ -3,7 +3,7 @@
 // 抽象出存储接口,使载入/查询逻辑可用内存 fake 单测,不依赖 Isar 真库;
 // 生产实现见 isar_admin_division_store.dart。全部本地读写,UI 显示名零链读零现查。
 
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 import 'admin_division_dto.dart';
 

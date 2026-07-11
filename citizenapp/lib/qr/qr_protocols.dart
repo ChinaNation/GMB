@@ -4,8 +4,8 @@
 /// Golden fixtures:`memory/01-architecture/qr/qr-protocol-fixtures/*.json`
 ///
 /// 本文件只有一个协议字符串和一个扫码流向枚举,禁止新增任何旧协议常量。
-class QrProtocols {
-  QrProtocols._();
+class QrProtocol {
+  QrProtocol._();
 
   /// 唯一协议版本字符串。压缩为 5 字符以降低二维码密度。
   static const String v1 = 'QR_V1';
@@ -58,7 +58,7 @@ class QrActions {
   static const int personalCreate = 0x0700;
   static const int personalClose = 0x0701;
   static const int personalCleanupRejected = 0x0702;
-  static const int personalAdminSetChange = 0x0703;
+  static const int personalAdminsChange = 0x0703;
   static const int resolutionIssuance = 0x0800;
   static const int finalizeProposal = 0x0903;
   static const int retryPassedProposal = 0x0904;
@@ -119,7 +119,7 @@ class QrActions {
         'finalize_proposal' => finalizeProposal,
         'retry_passed_proposal' => retryPassedProposal,
         'cancel_passed_proposal' => cancelPassedProposal,
-        'propose_personal_admin_set_change' => personalAdminSetChange,
+        'propose_personal_admin_set_change' => personalAdminsChange,
         'propose_public_admin_set_change' => publicAdmins,
         'propose_private_admin_set_change' => privateAdmins,
         'propose_runtime_upgrade' => proposeRuntimeUpgrade,

@@ -12,9 +12,9 @@ import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_models.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
-import 'package:citizenapp/rpc/onchain.dart';
+import 'package:citizenapp/rpc/transfer_rpc.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
@@ -264,14 +264,14 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     await _loadLocalRecords();
   }
 
-  Future<void> _openMyWalletPage() async {
+  Future<void> _openWalletTab() async {
     final picker = widget.walletPicker;
     final navigator = Navigator.of(context);
     final changed = picker != null
         ? await picker()
         : await navigator.push<bool>(
             MaterialPageRoute(
-              builder: (_) => const MyWalletPage(selectForTrade: true),
+              builder: (_) => const WalletTab(selectForTrade: true),
             ),
           );
     if (!mounted) {
@@ -315,7 +315,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('请先创建或导入钱包')));
-      await _openMyWalletPage();
+      await _openWalletTab();
       return;
     }
 
@@ -357,11 +357,11 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     }
     final remark = _remarkController.text;
     final remarkBytes = utf8.encode(remark).length;
-    if (remarkBytes > OnchainRpc.maxTransferRemarkBytes) {
+    if (remarkBytes > TransferRpc.maxTransferRemarkBytes) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '转账备注不能超过 ${OnchainRpc.maxTransferRemarkBytes} 字节，当前 $remarkBytes 字节',
+            '转账备注不能超过 ${TransferRpc.maxTransferRemarkBytes} 字节，当前 $remarkBytes 字节',
           ),
         ),
       );
@@ -369,7 +369,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     }
 
     // 预估手续费，展示确认对话框
-    final estimatedFee = OnchainRpc.estimateTransferFeeYuan(amount);
+    final estimatedFee = TransferRpc.estimateTransferFeeYuan(amount);
 
     // 余额校验：转账金额 + 手续费 ≤ 可用余额（余额 - ED）
     final availableBalance = _currentWallet!.balance - _edYuan;
@@ -681,10 +681,10 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
               decoration: InputDecoration(
                 labelText: '转账备注',
                 helperText:
-                    '$_transferRemarkBytes/${OnchainRpc.maxTransferRemarkBytes} 字节',
+                    '$_transferRemarkBytes/${TransferRpc.maxTransferRemarkBytes} 字节',
                 errorText:
-                    _transferRemarkBytes > OnchainRpc.maxTransferRemarkBytes
-                        ? '备注不能超过 ${OnchainRpc.maxTransferRemarkBytes} 字节'
+                    _transferRemarkBytes > TransferRpc.maxTransferRemarkBytes
+                        ? '备注不能超过 ${TransferRpc.maxTransferRemarkBytes} 字节'
                         : null,
               ),
             ),
@@ -795,7 +795,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                   ),
                   IconButton(
                     tooltip: '选择交易钱包',
-                    onPressed: _openMyWalletPage,
+                    onPressed: _openWalletTab,
                     icon: SvgPicture.asset(
                       'assets/icons/wallet.svg',
                       width: 22,
@@ -829,7 +829,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                               const Text('未检测到钱包，无法执行链上签名与交易广播'),
                               const SizedBox(height: 8),
                               FilledButton(
-                                onPressed: _openMyWalletPage,
+                                onPressed: _openWalletTab,
                                 child: const Text('去创建/导入钱包'),
                               ),
                             ],
@@ -874,8 +874,8 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     if (_submitting || _loadingWallet || _currentWallet == null) {
       return null;
     }
-    if (_transferRemarkBytes > OnchainRpc.maxTransferRemarkBytes) {
-      return '转账备注不能超过 ${OnchainRpc.maxTransferRemarkBytes} 字节';
+    if (_transferRemarkBytes > TransferRpc.maxTransferRemarkBytes) {
+      return '转账备注不能超过 ${TransferRpc.maxTransferRemarkBytes} 字节';
     }
 
     final progress = _chainProgress;

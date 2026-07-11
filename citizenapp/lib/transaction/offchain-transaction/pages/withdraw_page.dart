@@ -49,7 +49,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
 
   Future<void> _loadBalance() async {
     try {
-      final rpc = OffchainClearingNodeRpc(widget.wssUrl!);
+      final rpc = OffchainClearingBankRpc(widget.wssUrl!);
       final v = await rpc.queryBalance(widget.wallet.address);
       if (!mounted) return;
       setState(() => _balanceFen = v);

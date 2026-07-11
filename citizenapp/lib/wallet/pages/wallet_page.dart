@@ -10,7 +10,7 @@ import 'package:citizenapp/qr/qr_router.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/ui/widgets/bip39_input.dart';
 import 'package:citizenapp/ui/widgets/shimmer_loading.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
@@ -28,8 +28,8 @@ import 'package:citizenapp/rpc/chain_tx_monitor.dart';
 // 清算行设置属于 lib/offchain 业务域,钱包页仅保留入口展示。
 import 'package:citizenapp/transaction/offchain-transaction/pages/clearing_bank_settings_page.dart';
 
-class MyWalletPage extends StatefulWidget {
-  const MyWalletPage({
+class WalletTab extends StatefulWidget {
+  const WalletTab({
     super.key,
     this.selectForTrade = false,
   });
@@ -37,7 +37,7 @@ class MyWalletPage extends StatefulWidget {
   final bool selectForTrade;
 
   @override
-  State<MyWalletPage> createState() => _MyWalletPageState();
+  State<WalletTab> createState() => _WalletTabState();
 }
 
 /// 拖拽排序需要改变列表长度，必须先复制成可变列表；
@@ -107,7 +107,7 @@ String? extractColdWalletImportAddress(String raw) {
 /// - 三点菜单保留「重命名 / 删除钱包」2 项；
 /// - ReorderableListView 单列，长按拖拽排序；
 /// - 删除入口走三点菜单「删除钱包」+ 二次确认。
-class _MyWalletPageState extends State<MyWalletPage> {
+class _WalletTabState extends State<WalletTab> {
   final WalletManager _walletService = WalletManager();
   final ChainRpc _chainRpc = ChainRpc();
 
@@ -393,7 +393,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
 
   Future<void> _openCreatePage() async {
     final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const CreateWalletPage()),
+      MaterialPageRoute(builder: (_) => const AddWalletPage()),
     );
     if (created == true) {
       await _reload();
@@ -1211,14 +1211,14 @@ class WalletIconRegistry {
   }
 }
 
-class CreateWalletPage extends StatefulWidget {
-  const CreateWalletPage({super.key});
+class AddWalletPage extends StatefulWidget {
+  const AddWalletPage({super.key});
 
   @override
-  State<CreateWalletPage> createState() => _CreateWalletPageState();
+  State<AddWalletPage> createState() => _CreateWalletPageState();
 }
 
-class _CreateWalletPageState extends State<CreateWalletPage> {
+class _CreateWalletPageState extends State<AddWalletPage> {
   bool _isSaving = false;
   int _wordCount = 12;
 

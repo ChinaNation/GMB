@@ -8,7 +8,7 @@ import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_servic
 
 /// 投票引擎统一投票入口服务。
 ///
-/// - 所有业务 pallet(admins_change / resolution_destro /
+/// - 所有业务 pallet(admins_change / resolution_destroy /
 ///   grandpakey_change / institution_multisig / transaction 业务)的
 ///   管理员一人一票一律走
 ///   `InternalVote::cast(proposal_id, approve)` 一条路径。
@@ -27,7 +27,7 @@ class InternalVoteService {
   // ──── 常量 ────
 
   /// InternalVote sub-pallet。runtime pallet_index=22。
-  static const int votingEnginePallet = 22;
+  static const int internalVotePallet = 22;
 
   /// InternalVote::cast call_index=0。
   static const int internalVoteCallIndex = 0;
@@ -75,7 +75,7 @@ class InternalVoteService {
     required bool approve,
   }) {
     final output = ByteOutput();
-    output.pushByte(votingEnginePallet);
+    output.pushByte(internalVotePallet);
     output.pushByte(internalVoteCallIndex);
     output.write(_u64ToLeBytes(proposalId));
     output.pushByte(approve ? 1 : 0);

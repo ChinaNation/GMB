@@ -346,7 +346,7 @@ class _IdentityBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceWhite,
+        color: AppTheme.surfaceCard,
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         border: Border.all(color: AppTheme.border),
       ),
@@ -457,7 +457,7 @@ class _SelectedMediaTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceWhite,
+        color: AppTheme.surfaceCard,
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         border: Border.all(color: AppTheme.border),
       ),

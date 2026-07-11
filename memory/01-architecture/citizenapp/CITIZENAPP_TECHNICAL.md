@@ -15,7 +15,7 @@
 - App：Flutter + Dart
 - 手机机密存储：`flutter_secure_storage`（Keychain/Keystore）
 - 手机业务存储：Isar
-- 链上通信：smoldot PoW 轻节点 + Rust 原生 typed capability（异步 FFI，不阻塞主线程）（`lib/rpc/` + `smoldot-dart/` + `smoldot-pow/`）
+- 链上通信：smoldot PoW 轻节点 + Rust 原生 typed capability（异步 FFI，不阻塞主线程）（`lib/rpc/` + `smoldotdart/` + `smoldotpow/`）
 - P2P IM 路线：信息 Tab + 钱包账户聊天身份 + Cloudflare 密文 mailbox 互联网聊天 + 近场无网点对点通信；区块链节点通信节点聊天路线已删除，不再作为正式聊天链路；Android 近场模块规划为 `android/im/`，iOS 近场模块规划为 `ios/im/`
 - 外部接口：Cloudflare Worker 与 OnChina 投影 API 只承接聊天、广场、启动清单、公开目录和非链上查询场景；链上状态真源仍是 smoldot 轻节点读取的 finalized runtime storage。电子护照状态直接读取链上 `CitizenIdentity::VotingIdentityByAccount`，不再走 OnChina 本地状态接口。
 - 行政区字典：安装包内置 `assets/admin_divisions/`，由 `citizenchain/onchina/src/cid/china/china.sqlite` 直接生成；运行中只读本地包，不向 OnChina 联网更新行政区。

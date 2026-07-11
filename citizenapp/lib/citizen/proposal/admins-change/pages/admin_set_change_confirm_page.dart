@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class AdminSetChangeConfirmPage extends StatelessWidget {
-  const AdminSetChangeConfirmPage({super.key, required this.txHash});
+class AdminsChangeConfirmPage extends StatelessWidget {
+  const AdminsChangeConfirmPage({super.key, required this.txHash});
 
   final String txHash;
 

@@ -66,7 +66,7 @@ class _PersonalProposalListSectionState
     //
     // 按 view.action 分流到对应详情页:
     // - transfer → MultisigTransferDetailPage(转账提案专用页)
-    // - create / close → InstitutionManageDetailPage(多签管理提案,只懂 create/close)
+    // - create / close → MultisigProposalDetailPage(多签管理提案,只懂 create/close)
     final ctx = ProposalContext(
       institution: widget.institution,
       adminWallets: widget.adminWallets,
@@ -82,7 +82,7 @@ class _PersonalProposalListSectionState
         proposalContext: ctx,
       );
     } else {
-      page = InstitutionManageDetailPage(
+      page = MultisigProposalDetailPage(
         institution: widget.institution,
         proposalId: view.proposalId,
         proposalContext: ctx,

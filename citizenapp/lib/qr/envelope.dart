@@ -42,7 +42,7 @@ class QrEnvelope<T extends QrBody> {
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{
-      'p': QrProtocols.v1,
+      'p': QrProtocol.v1,
       'k': kind.code,
     };
     if (kind.temporary) {
@@ -73,8 +73,8 @@ class QrEnvelope<T extends QrBody> {
 
   static QrEnvelope<QrBody> fromJson(Map<String, dynamic> data) {
     final proto = data['p'];
-    if (proto != QrProtocols.v1) {
-      throw FormatException('p 必须为 ${QrProtocols.v1},实际: $proto');
+    if (proto != QrProtocol.v1) {
+      throw FormatException('p 必须为 ${QrProtocol.v1},实际: $proto');
     }
     final kindWire = data['k'];
     final kind = QrKind.fromWire(kindWire);

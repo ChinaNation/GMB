@@ -15,7 +15,7 @@ import 'dart:typed_data';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 /// 单个机构的统一信息载体(不可变)。
 class Institution {

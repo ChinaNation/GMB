@@ -5,7 +5,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:citizenapp/citizen/institution/institution_models.dart'
-    as org_models;
+    as institution_models;
 import 'package:citizenapp/citizen/institution/institution_chain_service.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_manage_models.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_manage_service.dart';
@@ -576,8 +576,8 @@ class MultisigTransferService {
     final uncachedDetailIds = <int>[];
     final cachedTransferDetails = <int, TransferProposalInfo>{};
     final cachedRuntimeUpgradeDetails = <int, RuntimeUpgradeProposalInfo>{};
-    final cachedCreateMultisigDetails = <int, CreateMultisigProposalInfo>{};
-    final cachedCloseMultisigDetails = <int, CloseMultisigProposalInfo>{};
+    final cachedCreateMultisigDetails = <int, CreateProposalInfo>{};
+    final cachedCloseMultisigDetails = <int, CloseProposalInfo>{};
 
     for (final entry in cachedMetas.entries) {
       final meta = entry.value;
@@ -637,19 +637,19 @@ class MultisigTransferService {
         // 失败后才尝试普通多签转账提案。
         final personalDetail =
             personalManageService.decodePersonalProposalData(id, raw);
-        if (personalDetail is CreateMultisigProposalInfo) {
+        if (personalDetail is CreateProposalInfo) {
           cachedCreateMultisigDetails[id] = personalDetail;
           ProposalCache.putCreateMultisigDetail(id, personalDetail);
           continue;
         }
-        if (personalDetail is CloseMultisigProposalInfo) {
+        if (personalDetail is CloseProposalInfo) {
           cachedCloseMultisigDetails[id] = personalDetail;
           ProposalCache.putCloseMultisigDetail(id, personalDetail);
           continue;
         }
         final orgManageDetail = manageService.decodeManageProposalData(id, raw);
-        if (orgManageDetail is org_models.CloseMultisigProposalInfo) {
-          final detail = CloseMultisigProposalInfo(
+        if (orgManageDetail is institution_models.CloseProposalInfo) {
+          final detail = CloseProposalInfo(
             proposalId: orgManageDetail.proposalId,
             account: orgManageDetail.account,
             beneficiary: orgManageDetail.beneficiary,

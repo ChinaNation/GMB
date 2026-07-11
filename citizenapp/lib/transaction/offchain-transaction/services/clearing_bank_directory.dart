@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/cid_public.dart';
 

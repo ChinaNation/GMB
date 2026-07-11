@@ -15,7 +15,7 @@ import 'dart:typed_data';
 import 'package:isar_community/isar.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 

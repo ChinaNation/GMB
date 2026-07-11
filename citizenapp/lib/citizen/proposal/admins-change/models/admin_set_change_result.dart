@@ -1,5 +1,5 @@
-class AdminSetChangeSubmitResult {
-  const AdminSetChangeSubmitResult({
+class AdminsChangeSubmitResult {
+  const AdminsChangeSubmitResult({
     required this.txHash,
     required this.usedNonce,
   });

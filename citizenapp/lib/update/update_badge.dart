@@ -36,7 +36,7 @@ class UpdateDotBadge extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppTheme.danger,
               shape: BoxShape.circle,
-              border: Border.all(color: AppTheme.surfaceWhite, width: 1.5),
+              border: Border.all(color: AppTheme.surfaceCard, width: 1.5),
             ),
           ),
         ),

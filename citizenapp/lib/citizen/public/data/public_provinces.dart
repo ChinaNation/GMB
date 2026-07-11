@@ -4,7 +4,7 @@
 // (对称治理 tab 的 43 省储委会编译期常量)。
 //
 // ADR-021 行政区唯一真源:机构记录只存 province/city/town code;省名走链上常量
-// (`kProvincialCouncils`,认可的省名源),市/镇名走 china.sqlite 派生字典。
+// (`kPrcs`,认可的省名源),市/镇名走 china.sqlite 派生字典。
 // 省 code 从省储委会 cidNumber 前缀派生(`ZS001-...` → `ZS`),与字典 provinces.json
 // 的 code 一一对应。`publicProvinceNamesSet()` 给单测断言「链上省名集合==字典省名集合」
 // 用,把"逐字对齐"变守卫。
@@ -47,7 +47,7 @@ String _displayOf(String provinceFullName) => provinceFullName.endsWith('省')
 
 /// 公权机构左栏的 43 个省份导航条目(code + 全名 + 展示名,来自链上省储委会常量)。
 List<PublicProvinceItem> publicProvinceItems() {
-  return kProvincialCouncils.map((c) {
+  return kPrcs.map((c) {
     final provinceFullName = _provinceFullNameOf(c.cidFullName);
     return PublicProvinceItem(
       code: _codeOf(c.cidNumber),

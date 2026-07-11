@@ -57,7 +57,7 @@ Future<void> main() async {
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.dark,
-    systemNavigationBarColor: AppTheme.surfaceWhite,
+    systemNavigationBarColor: AppTheme.surfaceCard,
     systemNavigationBarIconBrightness: Brightness.dark,
   ));
 
@@ -358,15 +358,15 @@ class _AppShellState extends State<AppShell> {
   Widget _buildTab(int index) {
     switch (index) {
       case 0:
-        return const SquareTabPage();
+        return const SquareTab();
       case 1:
         return _citizenPage;
       case 2:
-        return ImTabPage(runtime: ImRuntime());
+        return ImTab(runtime: ImRuntime());
       case 3:
         return const TransactionTabPage();
       case 4:
-        return ProfilePage(
+        return MyTab(
             showSettingsUpdateDot: _updateController.state.hasUpdate);
       default:
         return const SizedBox.shrink();
@@ -424,7 +424,7 @@ class _AppShellState extends State<AppShell> {
       ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
-          color: AppTheme.surfaceWhite,
+          color: AppTheme.surfaceCard,
           border: Border(
             top: BorderSide(color: AppTheme.border, width: 0.5),
           ),

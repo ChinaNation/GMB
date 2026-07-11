@@ -54,7 +54,7 @@ class CollapsibleHeader extends StatelessWidget {
           children: [
             // 白底铺满，头图下方即为白色资料区。
             const Positioned.fill(
-              child: ColoredBox(color: AppTheme.surfaceWhite),
+              child: ColoredBox(color: AppTheme.surfaceCard),
             ),
             // 顶部短头图：折叠时渐进虚化。
             Positioned(

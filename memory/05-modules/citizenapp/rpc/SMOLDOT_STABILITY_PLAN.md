@@ -2,7 +2,7 @@
 
 > 状态：FIX-1~7 已完成，FIX-8 不需要，FIX-9 远期待排  
 > 日期：2026-04-12  
-> 模块：smoldot-pow（Rust）+ citizenapp/lib/rpc/smoldot_client.dart（Dart）  
+> 模块：smoldotpow（Rust）+ citizenapp/lib/rpc/smoldot_client.dart（Dart）  
 
 ---
 
@@ -39,7 +39,7 @@ citizenapp 内嵌 smoldot 轻节点频繁出现 `No node available for storage q
 
 ## FIX-1~7 改动文件清单
 
-**Rust 侧（smoldot-pow）：**
+**Rust 侧（smoldotpow）：**
 - `light-base/src/sync_service.rs` — FIX-1
 - `light-base/src/sync_service/standalone.rs` — FIX-2
 - `light-base/src/lib.rs` — FIX-3

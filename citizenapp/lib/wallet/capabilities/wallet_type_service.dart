@@ -1,9 +1,9 @@
 import 'package:isar_community/isar.dart';
 import 'package:citizenapp/wallet/capabilities/api_client.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
-class WalletTypeService {
-  WalletTypeService({ApiClient? apiClient})
+class WalletLabelService {
+  WalletLabelService({ApiClient? apiClient})
       : _apiClient = apiClient ?? ApiClient();
 
   static const String defaultType = '手机钱包';
@@ -14,7 +14,7 @@ class WalletTypeService {
   Map<String, String>? _memoryAdminGroupMap;
   int? _memoryUpdatedAt;
 
-  Future<String> resolveWalletType(String pubkeyHex) async {
+  Future<String> resolveWalletLabel(String pubkeyHex) async {
     final normalized = _normalizePubkeyHex(pubkeyHex);
     if (normalized == null) {
       return defaultType;

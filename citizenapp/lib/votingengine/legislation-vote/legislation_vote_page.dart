@@ -47,7 +47,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
       widget.queryService ?? LegislationVoteQueryService();
 
   LegProposalState? _state;
-  LegislationVoteMeta? _meta;
+  LegMeta? _meta;
   ({int yes, int no}) _houseTally = (yes: 0, no: 0);
   ({int yes, int no}) _referendumTally = (yes: 0, no: 0);
 
@@ -255,7 +255,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: Text('立法提案 #${widget.proposalId}'),
-        backgroundColor: AppTheme.surfaceWhite,
+        backgroundColor: AppTheme.surfaceCard,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),
@@ -304,7 +304,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
     );
   }
 
-  Widget _infoCard(LegProposalState state, LegislationVoteMeta? meta) {
+  Widget _infoCard(LegProposalState state, LegMeta? meta) {
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,

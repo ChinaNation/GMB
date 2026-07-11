@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 
-import 'profile_test_doubles.dart';
+import 'fake_profile.dart';
 
 void main() {
   testWidgets('tapping the author region fires onAuthorTap', (tester) async {

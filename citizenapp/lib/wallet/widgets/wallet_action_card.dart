@@ -49,7 +49,7 @@ class WalletActionCardState extends State<WalletActionCard> {
 
   Future<void> _loadBalance(ClearingBankBindingSnapshot binding) async {
     try {
-      final balance = await OffchainClearingNodeRpc(
+      final balance = await OffchainClearingBankRpc(
         binding.wssUrl,
       ).queryBalance(widget.wallet.address);
       if (!mounted) return;

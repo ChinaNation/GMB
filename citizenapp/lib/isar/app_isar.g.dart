@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'wallet_isar.dart';
+part of 'app_isar.dart';
 
 // **************************************************************************
 // IsarCollectionGenerator

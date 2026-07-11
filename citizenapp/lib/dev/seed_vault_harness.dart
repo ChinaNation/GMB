@@ -1,6 +1,6 @@
 // 开发期真机验证入口（非生产入口）。驱动**生产** HardwareBoundSeedVault 的完整
 // 路径（原生桥 + flutter_secure_storage），验证严档/宽档两档信封加解密与每次一验。
-// 生产 main.dart 零改动。构建：flutter build apk --profile --target lib/dev/hw_vault_harness.dart。
+// 生产 main.dart 零改动。构建：flutter build apk --profile --target lib/dev/seed_vault_harness.dart。
 // Step 3/4 e2e 打通后删除本文件。
 import 'package:flutter/material.dart';
 

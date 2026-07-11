@@ -32,7 +32,7 @@ void main() {
       final encoded = signer.encodeRequest(request);
 
       final json = jsonDecode(encoded) as Map<String, dynamic>;
-      expect(json['p'], QrProtocols.v1);
+      expect(json['p'], QrProtocol.v1);
       expect(json['k'], QrKind.signRequest.code);
       expect(json['i'], requestId);
       expect(json['e'], isA<int>());
@@ -60,7 +60,7 @@ void main() {
       ).toJson()
         ..remove('a');
       final raw = jsonEncode({
-        'p': QrProtocols.v1,
+        'p': QrProtocol.v1,
         'k': QrKind.signRequest.code,
         'i': reqId,
         'e': now + 90,

@@ -1144,7 +1144,7 @@ packages:
   smoldot:
     dependency: "direct main"
     description:
-      path: smoldot-dart
+      path: smoldotdart
       relative: true
     source: path
     version: "0.1.1"

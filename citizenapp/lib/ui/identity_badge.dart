@@ -78,8 +78,8 @@ String identityBadgeLabel({
 
 /// 推特式扇贝勋章徽章（四处认证展示点共用）：
 /// 底为身份色扇贝勋章，中心 checked=白色对勾（有会员）/ 否则=白色小人（仅身份）。
-class CitizenBadge extends StatelessWidget {
-  const CitizenBadge({
+class IdentityBadge extends StatelessWidget {
+  const IdentityBadge({
     super.key,
     required this.style,
     this.size = 24,

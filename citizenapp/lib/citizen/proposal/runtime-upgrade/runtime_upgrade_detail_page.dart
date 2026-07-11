@@ -16,7 +16,7 @@ import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_serv
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
-import 'package:citizenapp/rpc/onchain.dart';
+import 'package:citizenapp/rpc/transfer_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -194,7 +194,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             await PendingVoteStore.instance.confirmAllDetailed(
           'runtime_upgrade',
           widget.proposalId,
-          OnchainRpc(),
+          TransferRpc(),
           chainVoteLookup: (record) => _service.fetchJointAdminVote(
             record.proposalId,
             institutionBytes,

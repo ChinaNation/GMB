@@ -38,7 +38,6 @@ typedef SignResponseEnvelope = QrEnvelope<SignResponseBody>;
 
 class QrSigner {
   static const int defaultTtlSeconds = 90;
-  static const int maxPayloadChars = 32768;
   static final RegExp _idPattern = RegExp(r'^[A-Za-z0-9_-]{16,128}$');
 
   /// 生成加密安全的随机 request id。base64url 比 hex 短,可降低二维码密度。

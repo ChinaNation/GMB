@@ -3,8 +3,8 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - "**/*.g.dart"
-    - "smoldot-dart/**"
-    - "smoldot-pow/**"
+    - "smoldotdart/**"
+    - "smoldotpow/**"
 
 linter:
   rules:

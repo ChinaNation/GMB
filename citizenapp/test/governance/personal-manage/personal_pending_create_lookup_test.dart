@@ -7,7 +7,7 @@
 // - 同地址多 entity 时按状态过滤选 create+voting
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_pending_create_lookup.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_proposal_history_service.dart';
 

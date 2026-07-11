@@ -31,8 +31,8 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 ///
 /// **分页**:cursor 模式按 `_allIds` 切分,翻页天然不会卡空页。
 /// **新区块订阅**:周期性重 fetch 可见提案 id 列表,补差异。
-class ProposalView extends StatefulWidget {
-  const ProposalView({
+class ProposalTab extends StatefulWidget {
+  const ProposalTab({
     super.key,
     this.onPendingVoteCountChanged,
   });
@@ -41,10 +41,10 @@ class ProposalView extends StatefulWidget {
   final ValueChanged<int>? onPendingVoteCountChanged;
 
   @override
-  State<ProposalView> createState() => _ProposalViewState();
+  State<ProposalTab> createState() => _ProposalViewState();
 }
 
-class _ProposalViewState extends State<ProposalView> {
+class _ProposalViewState extends State<ProposalTab> {
   static const int _pageSize = 10;
   static const Duration _newBlockIndexCheckMinInterval = Duration(seconds: 60);
 
@@ -142,7 +142,7 @@ class _ProposalViewState extends State<ProposalView> {
       return;
     }
     if (!connected) {
-      debugPrint('[ProposalView] 链事件订阅连接失败');
+      debugPrint('[ProposalTab] 链事件订阅连接失败');
     }
   }
 
@@ -709,7 +709,7 @@ class _ProposalViewState extends State<ProposalView> {
       // 多签管理提案
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => InstitutionManageDetailPage(
+          builder: (_) => MultisigProposalDetailPage(
             institution: inst,
             proposalId: proposalId,
             proposalContext: proposalContext,

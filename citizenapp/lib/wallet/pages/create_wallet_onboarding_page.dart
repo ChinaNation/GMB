@@ -297,7 +297,7 @@ class _WordCountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppTheme.surfaceWhite,
+      color: AppTheme.surfaceCard,
       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: InkWell(
         onTap: onTap,

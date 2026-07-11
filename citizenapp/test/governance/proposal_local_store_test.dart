@@ -4,11 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/citizen/institution/governance_registry.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_local_store.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
-import 'package:citizenapp/isar/wallet_isar.dart';
+import 'package:citizenapp/isar/app_isar.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  final nationalCouncil = kNationalCouncil.first;
+  final nationalCouncil = kNrc.first;
 
   setUpAll(() async {
     await WalletIsar.instance.ensureTestCoreInitialized();

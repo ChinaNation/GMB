@@ -18,7 +18,7 @@ import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
-import 'package:citizenapp/rpc/onchain.dart';
+import 'package:citizenapp/rpc/transfer_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -28,12 +28,12 @@ import 'package:citizenapp/transaction/personal-manage/personal_manage_models.da
     as personal_models;
 import 'package:citizenapp/transaction/personal-manage/personal_manage_service.dart';
 import 'package:citizenapp/citizen/institution/institution_models.dart'
-    as org_models;
+    as institution_models;
 import 'package:citizenapp/citizen/institution/institution_chain_service.dart';
 
 /// 多签管理提案详情页：展示创建/关闭提案信息、投票进度及投票操作。
-class InstitutionManageDetailPage extends StatefulWidget {
-  const InstitutionManageDetailPage({
+class MultisigProposalDetailPage extends StatefulWidget {
+  const MultisigProposalDetailPage({
     super.key,
     required this.institution,
     required this.proposalId,
@@ -47,12 +47,12 @@ class InstitutionManageDetailPage extends StatefulWidget {
   List<WalletProfile> get adminWallets => proposalContext.adminWallets;
 
   @override
-  State<InstitutionManageDetailPage> createState() =>
-      _InstitutionManageDetailPageState();
+  State<MultisigProposalDetailPage> createState() =>
+      _MultisigProposalDetailPageState();
 }
 
-class _InstitutionManageDetailPageState
-    extends State<InstitutionManageDetailPage> {
+class _MultisigProposalDetailPageState
+    extends State<MultisigProposalDetailPage> {
   static const int _statusVoting = 0;
 
   final ProposalQueryService _proposalService = ProposalQueryService();
@@ -70,8 +70,8 @@ class _InstitutionManageDetailPageState
   int? _status;
 
   // 提案详情（二选一）
-  personal_models.CreateMultisigProposalInfo? _createInfo;
-  personal_models.CloseMultisigProposalInfo? _closeInfo;
+  personal_models.CreateProposalInfo? _createInfo;
+  personal_models.CloseProposalInfo? _closeInfo;
 
   bool get _isCreateProposal => _createInfo != null;
 
@@ -161,21 +161,21 @@ class _InstitutionManageDetailPageState
       final key = _buildProposalDataStorageKey(widget.proposalId);
       final raw = await rpc.fetchStorage('0x${_hexEncode(key)}');
       debugPrint('[VoteDetail._load] step2 完成 raw.len=${raw?.length ?? 0}');
-      personal_models.CreateMultisigProposalInfo? createInfo;
-      personal_models.CloseMultisigProposalInfo? closeInfo;
+      personal_models.CreateProposalInfo? createInfo;
+      personal_models.CloseProposalInfo? closeInfo;
       if (raw != null && raw.isNotEmpty) {
         final personalDetail = _personalManageService
             .decodePersonalProposalData(widget.proposalId, raw);
-        if (personalDetail is personal_models.CreateMultisigProposalInfo) {
+        if (personalDetail is personal_models.CreateProposalInfo) {
           createInfo = personalDetail;
         } else if (personalDetail
-            is personal_models.CloseMultisigProposalInfo) {
+            is personal_models.CloseProposalInfo) {
           closeInfo = personalDetail;
         } else {
           final orgDetail =
               _manageService.decodeManageProposalData(widget.proposalId, raw);
-          if (orgDetail is org_models.CloseMultisigProposalInfo) {
-            closeInfo = personal_models.CloseMultisigProposalInfo(
+          if (orgDetail is institution_models.CloseProposalInfo) {
+            closeInfo = personal_models.CloseProposalInfo(
               proposalId: orgDetail.proposalId,
               account: orgDetail.account,
               beneficiary: orgDetail.beneficiary,
@@ -193,7 +193,7 @@ class _InstitutionManageDetailPageState
       final pendingSummary = await PendingVoteStore.instance.confirmAllDetailed(
         'institution_multisig',
         widget.proposalId,
-        OnchainRpc(),
+        TransferRpc(),
       );
       final pendingPks =
           pendingSummary.stillPending.map((r) => r.walletPubkey).toSet();
@@ -323,8 +323,8 @@ class _InstitutionManageDetailPageState
     required List<String> admins,
     required Map<String, bool?> votes,
     required Set<String> pendingPks,
-    required personal_models.CreateMultisigProposalInfo? createInfo,
-    required personal_models.CloseMultisigProposalInfo? closeInfo,
+    required personal_models.CreateProposalInfo? createInfo,
+    required personal_models.CloseProposalInfo? closeInfo,
   }) {
     return ProposalDetailSnapshot(
       proposalId: widget.proposalId,
@@ -348,7 +348,7 @@ class _InstitutionManageDetailPageState
   }
 
   Map<String, Object?> _createInfoToJson(
-    personal_models.CreateMultisigProposalInfo info,
+    personal_models.CreateProposalInfo info,
   ) {
     return {
       'kind': 'create',
@@ -361,7 +361,7 @@ class _InstitutionManageDetailPageState
   }
 
   Map<String, Object?> _closeInfoToJson(
-    personal_models.CloseMultisigProposalInfo info,
+    personal_models.CloseProposalInfo info,
   ) {
     return {
       'kind': 'close',
@@ -372,7 +372,7 @@ class _InstitutionManageDetailPageState
     };
   }
 
-  personal_models.CreateMultisigProposalInfo? _createInfoFromSnapshot(
+  personal_models.CreateProposalInfo? _createInfoFromSnapshot(
     ProposalDetailSnapshot snapshot,
   ) {
     final detail = snapshot.detail;
@@ -383,7 +383,7 @@ class _InstitutionManageDetailPageState
     if (amountFen == null || feeFen == null || account == null) {
       return null;
     }
-    return personal_models.CreateMultisigProposalInfo(
+    return personal_models.CreateProposalInfo(
       proposalId: snapshot.proposalId,
       account: account,
       proposer: detail['proposer']?.toString() ?? '',
@@ -393,14 +393,14 @@ class _InstitutionManageDetailPageState
     );
   }
 
-  personal_models.CloseMultisigProposalInfo? _closeInfoFromSnapshot(
+  personal_models.CloseProposalInfo? _closeInfoFromSnapshot(
     ProposalDetailSnapshot snapshot,
   ) {
     final detail = snapshot.detail;
     if (detail['kind'] != 'close') return null;
     final account = detail['account']?.toString();
     if (account == null) return null;
-    return personal_models.CloseMultisigProposalInfo(
+    return personal_models.CloseProposalInfo(
       proposalId: snapshot.proposalId,
       account: account,
       beneficiary: detail['beneficiary']?.toString() ?? '',
