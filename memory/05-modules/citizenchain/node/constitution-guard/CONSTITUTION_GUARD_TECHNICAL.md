@@ -69,3 +69,50 @@ ConstitutionGuard<NodeGuard<PowBlockImport>>
 - 当前源码 fresh 创世真实启动成功；
 - `chain_getBlockHash(0)` 与 `constitution_getDocument` RPC 成功；
 - 旧单文件宪法实现和旧 HTML 路径残留为 0。
+
+## 8. runtime 与 node 字段契约基线（2026-07-12）
+
+ConstitutionGuard 固定读取 `LegislationYuan` 的 `Laws`、`LawVersions`、`LawVersionLabels`、
+`LawsByScope`、`ConstitutionImmutableManifest`、`ConstitutionAmendmentProof` 和
+`ConstitutionGuardVoteProof`。map/double-map key 均使用 `Blake2_128Concat`，不读取 runtime metadata。
+
+`Law` 的 SCALE 顺序固定为：`law_id`、`tier`、`scope_code`、`houses`、`effective_version`、
+`latest_version`、`pending_version`、`status`。守卫要求 `law_id=0`、`tier=Constitution(0)`、
+`scope_code=0`，状态只允许 `Pending(0)` 或 `Effective(1)`，并冻结 block#0 houses 与合法版本指针组合。
+
+`LawVersion` 的 SCALE 顺序固定为：`law_id`、`version`、`title`、`title_en`、`chapters`、
+`content_hash`、`vote_type`、`proposal_id`、`published_at`、`effective_at`。runtime 创世测试用完整 tuple
+编码钉死顺序；node 要求历史版本从 1 连续到 `latest_version`，不存在删除、改写或隐藏版本。
+
+不可修改条款固定为第 `1/2/3/17/19/24/34/42` 条。核心章修改必须为 `Special(4)` 且公投凭据满足
+参与率至少 70%、参与者赞成率至少 70%；所有修宪必须有护宪赞成数至少 4。任一相关 delta 或
+`:code` 变化触发复核；畸形 key、缺值、解码失败和尾随字节均 fail-closed。
+
+2026-07-12 对齐验收：runtime 的 enum 判别值、创世 LawVersion 字段序定向测试和
+ConstitutionGuard `39/39` 全部通过。凭据仍是计数型状态，不是签名集合或人口快照的密码学证明。
+
+## 9. 第 6.2 步恶意状态与拒绝矩阵
+
+ConstitutionGuard 39 个定向测试已经覆盖 Law[0] 缺失/身份错误、tier/status/houses/指针异常、scope
+唯一索引、manifest 篡改、不可修改条款删除或修改、条号重复、版本身份/内容哈希、历史版本删除或
+改写、隐藏版本、核心章特别案、公投凭据、护宪凭据、SCALE 尾随字节、预计算 delta 和 `:code` 全检。
+
+本步额外加固 `LawVersions` 与两类修宪凭据的 RAW key 解析：提取版本号前必须重算并比对
+`Blake2_128Concat` 的 16 字节 hash，畸形 hasher 不再仅凭 key 长度和尾部 u32 被识别为规范版本。
+对应测试同时覆盖历史版本 key 和护宪凭据 key 的 hasher 篡改。
+
+外层 ConstitutionGuard 与 NodeGuard 共用无状态 `import_if_verified` 闸门：校验错误统一返回
+`KnownBad`，不调用下一层；连续拒绝后合法输入仍可继续委派。完整 warp、真实数据库和三节点行为
+不在本步结论内，继续由后续真实验收覆盖。
+
+## 10. 第 6.3 步完整宪法状态校验
+
+完整导入态只抽取 `LegislationYuan` RAW storage，并在提交前复用正常路径的不变式：Law[0] 身份与
+指针、scope 唯一索引、manifest、全部真实历史版本、不可修改条款、内容哈希和修宪凭据。版本集合
+必须严格连续，不依据不可信 `latest_version` 构造大循环。
+
+本步新增完整态畸形 key 拒绝：任何以 `LawVersions[0]` 或两类宪法凭据 storage 前缀开头、但长度、
+尾部编码或 Blake2_128Concat 不合法的 key，统一返回 `StorageKeyMalformed`，不能作为无关 key 忽略。
+合法状态、不可修改条款篡改、缺关键 key、隐藏版本、历史版本篡改以及畸形版本/凭据 hasher 均有
+提交前测试覆盖。2026-07-12 ConstitutionGuard `40/40` 通过；当前 fresh block#0 真实启动也通过
+ConstitutionGuard 创世基准构造。

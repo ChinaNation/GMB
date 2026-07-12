@@ -84,6 +84,28 @@ fn new_test_ext() -> sp_io::TestExternalities {
     ext
 }
 
+/// 待发凭据字段序和 Twox64Concat key 是 NodeGuard 复算同块奖励队列的跨层契约。
+#[test]
+fn pending_reward_scale_and_storage_key_match_node_guard_contract() {
+    use codec::Encode;
+    use sp_io::hashing::{twox_128, twox_64};
+    use sp_runtime::testing::H256;
+
+    let pending = PendingCertificationReward {
+        who: 7u64,
+        cid_number_hash: H256::repeat_byte(9),
+    };
+    assert_eq!(pending.encode(), (7u64, H256::repeat_byte(9)).encode());
+
+    let index = 3u32;
+    let encoded = index.encode();
+    let mut expected = twox_128(b"CitizenIssuance").to_vec();
+    expected.extend_from_slice(&twox_128(b"PendingRewards"));
+    expected.extend_from_slice(&twox_64(&encoded));
+    expected.extend_from_slice(&encoded);
+    assert_eq!(PendingRewards::<Test>::hashed_key_for(index), expected);
+}
+
 #[test]
 fn voting_identity_registered_issues_reward() {
     new_test_ext().execute_with(|| {

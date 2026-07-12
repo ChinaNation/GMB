@@ -832,6 +832,30 @@ mod tests {
     }
 
     #[test]
+    fn lifecycle_scale_contract_matches_runtime() {
+        assert_eq!(CitizenCidStatus::Active.encode(), vec![0]);
+        assert_eq!(CitizenCidStatus::Revoked.encode(), vec![1]);
+        assert_eq!(InstitutionStatus::Pending.encode(), vec![0]);
+        assert_eq!(InstitutionStatus::Active.encode(), vec![1]);
+        assert_eq!(InstitutionStatus::Closed.encode(), vec![2]);
+
+        let record = citizen_record(CitizenCidStatus::Revoked, 8);
+        assert_eq!(
+            record.encode(),
+            (
+                [1u8; 32],
+                [2u8; 32],
+                b"ZS".to_vec(),
+                b"001".to_vec(),
+                CitizenCidStatus::Revoked,
+                8u32,
+                Some(8u32),
+            )
+                .encode()
+        );
+    }
+
+    #[test]
     fn citizen_active_to_revoked_is_terminal() {
         let cid = cid("citizen-a", "CTZN");
         let key = storage_key::citizen_registry(&cid);
@@ -982,6 +1006,64 @@ mod tests {
                 &GenesisReference::default(),
             ),
             Err(GuardError::InstitutionStatusInvalid)
+        );
+    }
+
+    #[test]
+    fn institution_code_town_and_creation_height_are_immutable() {
+        let cid = cid("institution-identity", "NRC");
+        let key = storage_key::institution(Namespace::Public, &cid);
+        let main_key = storage_key::main_registration(Namespace::Public, &cid);
+        let before = institution_record(&cid, InstitutionStatus::Active, b"before");
+        let main_account = [5u8; 32].encode();
+
+        for mutate in 0..3 {
+            let mut after = institution_record(&cid, InstitutionStatus::Active, b"after");
+            match mutate {
+                0 => after.institution_code = *b"PRCG",
+                1 => after.town_code = b"999".to_vec(),
+                _ => after.created_at = 2,
+            }
+            let parent = BTreeMap::from([
+                (key.clone(), before.encode()),
+                (main_key.clone(), main_account.clone()),
+            ]);
+            let post = BTreeMap::from([
+                (key.clone(), after.encode()),
+                (main_key.clone(), main_account.clone()),
+            ]);
+            let delta = BTreeMap::from([(key.clone(), Some(after.encode()))]);
+            assert_eq!(
+                check_transition(
+                    2,
+                    &delta,
+                    map_reader(&parent),
+                    map_reader(&post),
+                    &GenesisReference::default(),
+                ),
+                Err(GuardError::InstitutionIdentityChanged)
+            );
+        }
+    }
+
+    #[test]
+    fn closed_institution_cannot_change_even_when_remaining_closed() {
+        let cid = cid("closed-institution", "CGOV");
+        let key = storage_key::institution(Namespace::Public, &cid);
+        let before = institution_record(&cid, InstitutionStatus::Closed, b"closed");
+        let after = institution_record(&cid, InstitutionStatus::Closed, b"changed");
+        let parent = BTreeMap::from([(key.clone(), before.encode())]);
+        let post = BTreeMap::from([(key.clone(), after.encode())]);
+        let delta = BTreeMap::from([(key, Some(after.encode()))]);
+        assert_eq!(
+            check_transition(
+                3,
+                &delta,
+                map_reader(&parent),
+                map_reader(&post),
+                &GenesisReference::default(),
+            ),
+            Err(GuardError::ClosedInstitutionChanged)
         );
     }
 

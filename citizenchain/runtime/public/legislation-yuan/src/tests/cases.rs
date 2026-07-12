@@ -808,6 +808,24 @@ fn genesis_seeds_constitution_as_law_zero() {
         assert_eq!(law.houses.len(), 1);
         let lv = LawVersions::<Test>::get(0, 1).expect("宪法版本 1");
         assert_eq!(lv.chapters.len(), 7, "7 章");
+        // Node 宪法守卫按声明序镜像到 vote_type，并把后三个 u64 作为固定尾部；字段重排必须测试红。
+        assert_eq!(
+            lv.encode(),
+            (
+                lv.law_id,
+                lv.version,
+                lv.title.clone(),
+                lv.title_en.clone(),
+                lv.chapters.clone(),
+                lv.content_hash,
+                lv.vote_type,
+                lv.proposal_id,
+                lv.published_at,
+                lv.effective_at,
+            )
+                .encode(),
+            "LawVersion SCALE 字段序必须与 node 守卫镜像一致"
+        );
         let label = LawVersionLabels::<Test>::get(0, 1).expect("宪法创世版本标签");
         assert_eq!(label.title.to_vec(), "创世版".as_bytes().to_vec());
         assert_eq!(

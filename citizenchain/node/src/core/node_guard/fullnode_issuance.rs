@@ -3,8 +3,8 @@
 //! 节点从 PoW digest、finalize 前后 RAW 状态和编译期常量独立复算奖励，不读取 runtime metadata。
 //! runtime 中的累计字段只是审计落点，不是规则来源；金额、高度范围和累计公式全部由节点二进制决定。
 
+use super::MAccountInfo;
 use std::collections::BTreeMap;
-use super::{MAccountData, MAccountInfo};
 
 use codec::Decode;
 use sp_core::hashing::twox_128;
@@ -411,6 +411,22 @@ mod tests {
         map.insert(key, value.encode());
     }
 
+    #[test]
+    fn raw_storage_keys_match_runtime_contract() {
+        use sp_core::hashing::{blake2_128, twox_128};
+
+        let account = [5u8; 32];
+        let mut expected_wallet = twox_128(b"FullnodeIssuance").to_vec();
+        expected_wallet.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
+        expected_wallet.extend_from_slice(&blake2_128(&account));
+        expected_wallet.extend_from_slice(&account);
+        assert_eq!(storage_key::reward_wallet(&account), expected_wallet);
+
+        let mut expected_total = twox_128(b"Balances").to_vec();
+        expected_total.extend_from_slice(&twox_128(b"TotalIssuance"));
+        assert_eq!(storage_key::total_issuance(), expected_total);
+    }
+
     fn account(free: u128) -> Vec<u8> {
         (0u32, 0u32, 1u32, 0u32, (free, 0u128, 0u128, 0u128)).encode()
     }
@@ -532,6 +548,43 @@ mod tests {
                 |key| post.get(key).cloned(),
             ),
             Err(GuardError::RewardAuditInvalid)
+        );
+    }
+
+    #[test]
+    fn wrong_audit_height_miner_and_last_authored_are_rejected() {
+        let author = [21u8; 32];
+        let wallet = [22u8; 32];
+
+        for audit in [
+            (2u32, author, wallet, FULLNODE_BLOCK_REWARD),
+            (1u32, [23u8; 32], wallet, FULLNODE_BLOCK_REWARD),
+        ] {
+            let (parent, pre, mut post) = valid_transition(1, author, wallet);
+            put(&mut post, storage_key::last_reward_audit(), audit);
+            assert_eq!(
+                check_transition(
+                    1,
+                    Some(author),
+                    |key| parent.get(key).cloned(),
+                    |key| pre.get(key).cloned(),
+                    |key| post.get(key).cloned(),
+                ),
+                Err(GuardError::RewardAuditInvalid)
+            );
+        }
+
+        let (parent, pre, mut post) = valid_transition(1, author, wallet);
+        put(&mut post, storage_key::last_authored(&author), 2u32);
+        assert_eq!(
+            check_transition(
+                1,
+                Some(author),
+                |key| parent.get(key).cloned(),
+                |key| pre.get(key).cloned(),
+                |key| post.get(key).cloned(),
+            ),
+            Err(GuardError::LastAuthoredBlockInvalid)
         );
     }
 

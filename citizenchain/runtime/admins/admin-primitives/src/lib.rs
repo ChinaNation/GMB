@@ -469,4 +469,35 @@ mod tests {
             primitives::governance_skeleton::ROLE_CONSTITUTION_GUARD
         );
     }
+
+    /// `AdminAccount` 的声明序就是 PublicAdmins 链上值格式，NodeGuard 按这一顺序完整解码。
+    #[test]
+    fn admin_account_field_order_matches_node_guard() {
+        use codec::Encode;
+
+        let value = AdminAccount {
+            cid_number: b"NRC-CID".to_vec().try_into().expect("cid"),
+            institution_code: *b"NRCG",
+            kind: AdminAccountKind::PublicInstitution,
+            admins: vec![1u8, 2u8],
+            creator: [3u8; 32],
+            created_at: 4u32,
+            updated_at: 5u32,
+            status: AdminAccountStatus::Active,
+        };
+        assert_eq!(
+            value.encode(),
+            (
+                b"NRC-CID".to_vec(),
+                *b"NRCG",
+                AdminAccountKind::PublicInstitution,
+                vec![1u8, 2u8],
+                [3u8; 32],
+                4u32,
+                5u32,
+                AdminAccountStatus::Active,
+            )
+                .encode()
+        );
+    }
 }

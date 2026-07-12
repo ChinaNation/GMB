@@ -336,3 +336,42 @@ impl<AccountId> RegistryAuthority<AccountId> for () {
         false
     }
 }
+
+#[cfg(test)]
+mod scale_contract_tests {
+    use super::*;
+    use codec::Encode;
+
+    /// NodeGuard 以单字节判别值镜像机构生命周期；枚举重排会改变链上存储编码，必须立即测试失败。
+    #[test]
+    fn institution_lifecycle_discriminants_match_node_guard() {
+        assert_eq!(InstitutionLifecycleStatus::Pending.encode(), vec![0]);
+        assert_eq!(InstitutionLifecycleStatus::Active.encode(), vec![1]);
+        assert_eq!(InstitutionLifecycleStatus::Closed.encode(), vec![2]);
+    }
+
+    /// 机构记录的声明序就是 SCALE 存储契约，NodeGuard 按同一顺序完整解码。
+    #[test]
+    fn institution_info_field_order_matches_node_guard() {
+        let value = InstitutionInfo {
+            cid_full_name: b"full".to_vec(),
+            cid_short_name: b"short".to_vec(),
+            town_code: b"001".to_vec(),
+            institution_code: *b"NRCG",
+            created_at: 7u32,
+            status: InstitutionLifecycleStatus::Active,
+        };
+        assert_eq!(
+            value.encode(),
+            (
+                b"full".to_vec(),
+                b"short".to_vec(),
+                b"001".to_vec(),
+                *b"NRCG",
+                7u32,
+                InstitutionLifecycleStatus::Active,
+            )
+                .encode()
+        );
+    }
+}

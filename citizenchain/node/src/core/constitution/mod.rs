@@ -193,13 +193,23 @@ pub mod storage_key {
         k
     }
 
+    pub fn is_constitution_version_key_candidate(key: &[u8]) -> bool {
+        key.starts_with(&constitution_versions_prefix())
+    }
+
     /// 从 `LawVersions[0][version]` 完整 RAW key 解出 version；非宪法版本键返回 `None`。
     pub fn constitution_version_from_key(key: &[u8]) -> Option<u32> {
         let prefix = constitution_versions_prefix();
         if !key.starts_with(&prefix) || key.len() != prefix.len() + 16 + 4 {
             return None;
         }
-        u32::decode(&mut &key[prefix.len() + 16..]).ok()
+        let encoded = &key[prefix.len() + 16..];
+        // Blake2_128Concat 的 hash 部分也属于共识 key 契约；只解尾部 u32 会把畸形 key
+        // 误认成规范历史版本，必须先重算 hasher 再接受版本号。
+        if blake2_128(encoded) != key[prefix.len()..prefix.len() + 16] {
+            return None;
+        }
+        u32::decode(&mut &encoded[..]).ok()
     }
 
     fn version_from_single_map_key(key: &[u8], storage: &[u8]) -> Option<u32> {
@@ -207,13 +217,22 @@ pub mod storage_key {
         if !key.starts_with(&prefix) || key.len() != prefix.len() + 16 + 4 {
             return None;
         }
-        u32::decode(&mut &key[prefix.len() + 16..]).ok()
+        let encoded = &key[prefix.len() + 16..];
+        if blake2_128(encoded) != key[prefix.len()..prefix.len() + 16] {
+            return None;
+        }
+        u32::decode(&mut &encoded[..]).ok()
     }
 
     /// 从两类永久修宪凭据 RAW key 解出版本号；非凭据键返回 `None`。
     pub fn constitution_proof_version_from_key(key: &[u8]) -> Option<u32> {
         version_from_single_map_key(key, b"ConstitutionAmendmentProof")
             .or_else(|| version_from_single_map_key(key, b"ConstitutionGuardVoteProof"))
+    }
+
+    pub fn is_constitution_proof_key_candidate(key: &[u8]) -> bool {
+        key.starts_with(&map_prefix(b"ConstitutionAmendmentProof"))
+            || key.starts_with(&map_prefix(b"ConstitutionGuardVoteProof"))
     }
 
     /// `LegislationYuan::LawVersionLabels[law_id][version]` 的完整存储 key。
@@ -331,6 +350,8 @@ where
 /// 不可修改条款守卫的判定失败原因(全部一律拒块/拒启,fail-safe 方向恒为「拒绝」)。
 #[derive(Debug, PartialEq)]
 pub enum GuardError {
+    /// 宪法版本或永久凭据 RAW key 的 Blake2_128Concat/长度/尾部编码不合法。
+    StorageKeyMalformed,
     /// 宪法 `Law(0)` 在目标状态缺失(存储被改名/删除)。
     ConstitutionLawMissing,
     /// `Law` 解码失败。
@@ -520,6 +541,16 @@ where
     I: IntoIterator<Item = &'a Vec<u8>>,
 {
     for key in keys {
+        if storage_key::is_constitution_version_key_candidate(key)
+            && storage_key::constitution_version_from_key(key).is_none()
+        {
+            return Err(GuardError::StorageKeyMalformed);
+        }
+        if storage_key::is_constitution_proof_key_candidate(key)
+            && storage_key::constitution_proof_version_from_key(key).is_none()
+        {
+            return Err(GuardError::StorageKeyMalformed);
+        }
         if let Some(version) = storage_key::constitution_version_from_key(key) {
             if !(GENESIS_CONSTITUTION_VERSION..=latest_version).contains(&version) {
                 return Err(GuardError::VersionOutsideDeclaredRange(version));
@@ -1049,6 +1080,22 @@ mod tests {
             ),
             Some(8)
         );
+
+        let mut malformed_version = storage_key::law_version(0, 9);
+        let hash_offset = storage_key::constitution_versions_prefix().len();
+        malformed_version[hash_offset] ^= 1;
+        assert_eq!(
+            storage_key::constitution_version_from_key(&malformed_version),
+            None
+        );
+
+        let mut malformed_proof = storage_key::constitution_guard_vote_proof(9);
+        let proof_hash_offset = malformed_proof.len() - 16 - 4;
+        malformed_proof[proof_hash_offset] ^= 1;
+        assert_eq!(
+            storage_key::constitution_proof_version_from_key(&malformed_proof),
+            None
+        );
     }
 
     #[test]
@@ -1491,6 +1538,31 @@ mod tests {
         assert_eq!(
             check_imported_state_key_values(state.iter(), &reference),
             Err("VersionOutsideDeclaredRange(9)".to_string())
+        );
+    }
+
+    #[test]
+    fn imported_state_rejects_malformed_version_and_proof_hashers() {
+        let reference = ImmutableReference::from_raw_reader(reader(genesis_state())).unwrap();
+
+        let mut bad_version = valid_current_state(1, genesis_articles());
+        let mut malformed_version = storage_key::law_version(CONSTITUTION_LAW_ID, 9);
+        let offset = storage_key::constitution_versions_prefix().len();
+        malformed_version[offset] ^= 1;
+        bad_version.push((malformed_version, law_version_scale(9, genesis_articles())));
+        assert_eq!(
+            check_imported_state_key_values(bad_version.iter(), &reference),
+            Err("StorageKeyMalformed".to_string())
+        );
+
+        let mut bad_proof = valid_current_state(1, genesis_articles());
+        let mut malformed_proof = storage_key::constitution_guard_vote_proof(9);
+        let offset = malformed_proof.len() - 16 - 4;
+        malformed_proof[offset] ^= 1;
+        bad_proof.push((malformed_proof, 4u32.encode()));
+        assert_eq!(
+            check_imported_state_key_values(bad_proof.iter(), &reference),
+            Err("StorageKeyMalformed".to_string())
         );
     }
 

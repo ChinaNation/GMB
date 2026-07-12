@@ -1,6 +1,39 @@
 #![cfg(test)]
 
 use super::*;
+use sp_runtime::AccountId32;
+
+/// NodeGuard 镜像 `CidRecord` 的完整字段序和状态判别值；任一变化都属于 storage 契约变化。
+#[test]
+fn cid_record_scale_contract_matches_node_guard() {
+    use codec::Encode;
+
+    assert_eq!(CidRecordStatus::Active.encode(), vec![0]);
+    assert_eq!(CidRecordStatus::Revoked.encode(), vec![1]);
+
+    let record = CidRecord {
+        registrar_account: AccountId32::new([1u8; 32]),
+        commitment: [2u8; 32],
+        residence_province_code: b"GD".to_vec().try_into().expect("province"),
+        residence_city_code: b"001".to_vec().try_into().expect("city"),
+        status: CidRecordStatus::Revoked,
+        registered_at: 8u32,
+        revoked_at: Some(9u32),
+    };
+    assert_eq!(
+        record.encode(),
+        (
+            AccountId32::new([1u8; 32]),
+            [2u8; 32],
+            b"GD".to_vec(),
+            b"001".to_vec(),
+            CidRecordStatus::Revoked,
+            8u32,
+            Some(9u32),
+        )
+            .encode()
+    );
+}
 use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types};
 use frame_system as system;
 use sp_runtime::{traits::IdentityLookup, BuildStorage};

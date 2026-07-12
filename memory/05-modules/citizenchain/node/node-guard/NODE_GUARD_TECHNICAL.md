@@ -196,3 +196,63 @@ genesis mismatch 被拒绝；正式部署前必须重新烘焙唯一基线，不
   999,800 分（PoW 999,900 - 登记费 100），Bob 新账户精确收到 999,900 分；
 - 真实启动发现并修正 FRAME pallet 存储版本 0 的合法创世表示误判，非零或未知创世状态仍 fail-closed；
 - 临时 chainspec、节点数据库、签名辅助和测试密钥材料均已删除。
+
+## 12. runtime 与 node 字段契约基线（2026-07-12）
+
+NodeGuard 不读取 runtime metadata，而是按下表硬编码 RAW key 和 SCALE 镜像；runtime 侧测试钉死
+声明序/判别值，node 侧测试钉死 pallet、storage、hasher 和 key 编码。字段重排、storage 改名、
+hasher 变化或 enum 重排必须先重新评估永久规则，不能让两端静默漂移。
+
+| 策略 | runtime storage / 类型 | node 固定标准 |
+|---|---|---|
+| 固定治理骨架 | `PublicAdmins::AdminAccounts`、`FederalRegistryProvinceGroups`；均为 `Blake2_128Concat` 的 `AdminAccount` | `institution_code/kind/admins/status` 固定为规格机构码、`PublicInstitution=0`、固定席位、`Active=1`；NJD 护宪角色恰 7，43 个 FRG 省组各 5；成员账户允许等长轮换 |
+| 全节点发行 | `RewardWalletByMiner`、`LastAuthoredBlockByMiner`、`RewardedBlockCount:u32`、`TotalFullnodeIssued:u128`、`LastRewardAudit:(u32,AccountId,AccountId,u128)` | 高度 `1..=9_999_999` 每块固定 `999_900` 分；作者、钱包、累计、审计、账户完整字段和 `Balances::TotalIssuance` 差额精确 |
+| 公民发行 | `RewardedCount:u64`、CID/账户永久墓碑、`PendingRewardCount:u32`、`PendingRewards<Twox64Concat,u32,(AccountId,Hash)>`、两张临时墓碑 | 队列 `0..count-1` 连续；finalize 后临时状态清空；前 `14_436_417` 人 `999_900` 分，其后 `99_900` 分；CID 与账户均只领一次 |
+| 公民 CID | `CitizenIdentity::CidRegistry<Blake2_128Concat,CidNumber,CidRecord>` | `registrar_account/commitment/省码/市码/registered_at` 不变；只允许 `Active=0 → Revoked=1`，吊销后冻结 |
+| 机构 CID | `PublicManage/PrivateManage::{CidRegisteredAccount,AccountRegisteredCid,Institutions,InstitutionAccounts}` | CID 不删除、不跨 namespace 复用；`town_code/institution_code/created_at` 不变；名称仅 Active 时可依法更新；`Closed=2` 永久终态 |
+| 创世封存账户 | `PublicManage::ProtectedGenesisAccounts` 及三张关联索引 | 与 block#0 逐字一致、始终 Active，不得删除、换 CID、换账户名或换地址 |
+
+共同触发口径：普通区块只检查相关 delta；`:code` 变化强制全策略复核；完整状态只扫描一次后分区；
+任一 RAW key hasher 错误、SCALE 解码失败或尾随字节均 fail-closed。`System::Account` 不能只比较
+`free`，`nonce/consumers/providers/sufficients/reserved/frozen/flags` 均不得被 finalize 发行顺带改写。
+
+防漂移测试位于 runtime 既有测试模块和 node 各策略内联测试。2026-07-12 验收：
+`admin-primitives 3/3`、`entity-primitives 2/2`、`citizen-identity 22/22`、
+`citizen-issuance 14/14 + 5/5`、`fullnode-issuance 20/20`、`node_guard 50/50`。
+
+## 13. 第 6.2 步恶意状态与包装器拒绝矩阵
+
+2026-07-12 在字段契约基线上完成最终纯策略与统一委派闸门矩阵，`node_guard` 定向测试增至 54 个：
+
+- 固定治理骨架覆盖固定机构缺失、类型/状态/席位变化、NJD 护宪席位稀释、FRG 省组异常、
+  SCALE 尾随字节、精确 RAW key 公式及 `:code` 全检触发；等人数合法轮换继续允许。
+- 全节点发行覆盖错误作者/收款人/金额/累计/审计高度/审计矿工/最近出块高度、奖励结束后继续发行、
+  SCALE 尾随字节和共享发行计划登记。
+- 公民发行覆盖队列缺号、残留、临时标记缺失、身份哈希、反向索引、永久墓碑、累计人数、未知 key、
+  Twox64Concat 篡改及共享计划溢出/总发行/未计划账户变化。
+- CID 生命周期覆盖公民删除/换主体/吊销恢复、机构码/镇码/创建高度变化、Closed 墓碑改写或恢复、
+  公私权重复、固定机构状态、创世封存索引、畸形 hasher 和尾随字节。
+- `import_if_verified` 统一闸门连续两次拒绝均返回 `KnownBad` 且内层调用数不增加；随后合法输入仍能
+  正常委派，证明闸门没有跨块污染状态。NodeGuard 与最外层 ConstitutionGuard 均只通过该闸门委派。
+
+本步不包含完整状态/warp 真实导入、数据库不入库或三节点分叉，这些进入后续独立步骤。
+
+## 14. 第 6.3 步完整状态与 warp 提交前校验
+
+完整下载态的生产校验已收敛到 `verify_imported_policy_state`：先检查 CID 导入高度，再把输入 key
+只遍历一次并分区，依次验证固定治理骨架、全节点发行、公民发行和 CID 生命周期，最后返回扫描统计。
+`NodeGuard::verify_imported_state` 直接调用该函数，测试与生产不再各保留一套判定。
+
+当前自动化证明：
+
+- 当前 runtime 真实 block#0 全 storage 可通过全部 NodeGuard 策略，且 `scanned == 输入 key 总数`；
+- 删除固定治理机构、把创世 PoW 累计改为非零、加入未知公民发行 key、删除创世封存账户，分别在
+  对应策略处提交前拒绝；
+- 任意非 block#0 完整快照在进入分区扫描前由 CID 策略返回
+  `NonGenesisStateImportForbidden`，不得为了 warp 可用性放宽历史单调性；
+- `ImportedPolicyStats` 只记录总扫描数和四个策略分区数，不缓存状态或跨区块结论。
+
+2026-07-12 验收：NodeGuard `57/57`。使用当前源码 WASM 和独立 `/tmp` base path 启动 fresh 节点，
+约 52 秒达到 `chain_getBlockHash(0)` 可用，创世哈希
+`0xbdac261dac0c76d68f7d25470d7a1332ea3a7a891f0d5d917c18afea2ec6aea4`，临时数据库约 352 MiB；
+没有守卫拒绝或 panic，临时目录已删除。该启动数据是 debug 环境观测，不替代后续专项性能结论。

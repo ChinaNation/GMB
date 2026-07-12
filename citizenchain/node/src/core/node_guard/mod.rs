@@ -147,6 +147,27 @@ struct ImportedPolicyState {
     scanned: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ImportedPolicyStats {
+    scanned: usize,
+    governance: usize,
+    fullnode_issuance: usize,
+    citizen_issuance: usize,
+    cid: usize,
+}
+
+impl ImportedPolicyState {
+    fn stats(&self) -> ImportedPolicyStats {
+        ImportedPolicyStats {
+            scanned: self.scanned,
+            governance: self.governance.len(),
+            fullnode_issuance: self.fullnode_issuance.len(),
+            citizen_issuance: self.citizen_issuance.len(),
+            cid: self.cid.len(),
+        }
+    }
+}
+
 /// 对完整下载态只遍历一次，并把所有内部策略需要的 RAW 状态分流到共享快照。
 fn partition_imported_state<'a, I>(pairs: I) -> ImportedPolicyState
 where
@@ -178,6 +199,28 @@ where
         }
     }
     state
+}
+
+/// 校验完整下载态中的全部 NodeGuard 策略，并返回单遍扫描统计供日志和回归测试核对。
+fn verify_imported_policy_state<'a, I>(
+    block: u32,
+    pairs: I,
+    cid_reference: &cid_lifecycle::GenesisReference,
+) -> Result<ImportedPolicyStats, String>
+where
+    I: IntoIterator<Item = (&'a Vec<u8>, &'a Vec<u8>)>,
+{
+    cid_lifecycle::check_state_import_height(block).map_err(|e| format!("CID 生命周期:{e:?}"))?;
+    let state = partition_imported_state(pairs);
+    governance_skeleton::check_skeleton_invariants(|key| state.governance.get(key).cloned())
+        .map_err(|e| format!("固定治理骨架:{e:?}"))?;
+    fullnode_issuance::check_imported_state_key_values(block, state.fullnode_issuance.iter())
+        .map_err(|e| format!("全节点发行:{e:?}"))?;
+    citizen_issuance::check_genesis_key_values(state.citizen_issuance.iter())
+        .map_err(|e| format!("公民认证发行:{e:?}"))?;
+    cid_lifecycle::check_imported_genesis(state.cid.iter(), cid_reference)
+        .map_err(|e| format!("CID 生命周期:{e:?}"))?;
+    Ok(state.stats())
 }
 
 /// finalize 阶段只允许已注册发行计划改变账户和 `TotalIssuance`，其余变化一律 fail-closed。
@@ -368,38 +411,27 @@ impl<I> NodeGuard<I> {
             StateAction::ApplyChanges(StorageChanges::Import(imported)) => imported,
             _ => return Err("warp 状态非 ApplyChanges(Import) 形态,无法提交前校验".into()),
         };
-        cid_lifecycle::check_state_import_height(*params.header.number())
-            .map_err(|e| format!("CID 生命周期:{e:?}"))?;
-
         // 所有策略复用同一遍 imported state 扫描，禁止为单项永久规则再新增包装器。
-        let state = partition_imported_state(
+        let stats = verify_imported_policy_state(
+            *params.header.number(),
             imported
                 .state
                 .0
                 .iter()
                 .flat_map(|level| level.key_values.iter())
                 .map(|(key, value)| (key, value)),
-        );
+            &self.cid_lifecycle,
+        )?;
         log::debug!(
             target: "node-guard",
             "完整状态单遍扫描:总键 {},治理 {},全节点发行/账户 {},公民发行 {},CID {}",
-            state.scanned,
-            state.governance.len(),
-            state.fullnode_issuance.len(),
-            state.citizen_issuance.len(),
-            state.cid.len(),
+            stats.scanned,
+            stats.governance,
+            stats.fullnode_issuance,
+            stats.citizen_issuance,
+            stats.cid,
         );
-        governance_skeleton::check_skeleton_invariants(|key| state.governance.get(key).cloned())
-            .map_err(|e| format!("固定治理骨架:{e:?}"))?;
-        fullnode_issuance::check_imported_state_key_values(
-            *params.header.number(),
-            state.fullnode_issuance.iter(),
-        )
-        .map_err(|e| format!("全节点发行:{e:?}"))?;
-        citizen_issuance::check_genesis_key_values(state.citizen_issuance.iter())
-            .map_err(|e| format!("公民认证发行:{e:?}"))?;
-        cid_lifecycle::check_imported_genesis(state.cid.iter(), &self.cid_lifecycle)
-            .map_err(|e| format!("CID 生命周期:{e:?}"))
+        Ok(())
     }
 
     /// 对正常执行型区块统一预执行一次，并检查当前已注册的全部节点永久策略。
@@ -788,6 +820,22 @@ mod finalize_issuance_tests {
         .expect("known bad result");
         assert_eq!(rejected, ImportResult::KnownBad);
         assert_eq!(inner.imports.load(Ordering::SeqCst), 1);
+
+        let rejected_again = futures::executor::block_on(import_if_verified(
+            &inner,
+            import_params(3),
+            Err("another malicious state".into()),
+        ))
+        .expect("second known bad result");
+        assert_eq!(rejected_again, ImportResult::KnownBad);
+        assert_eq!(inner.imports.load(Ordering::SeqCst), 1);
+
+        // 连续拒绝不保存污染状态；随后合法区块仍只委派一次。
+        let accepted_after_rejection =
+            futures::executor::block_on(import_if_verified(&inner, import_params(4), Ok(())))
+                .expect("verified import after rejection");
+        assert_eq!(accepted_after_rejection, ImportResult::AlreadyInChain);
+        assert_eq!(inner.imports.load(Ordering::SeqCst), 2);
     }
 
     #[test]
@@ -875,5 +923,104 @@ mod finalize_issuance_tests {
             [citizen]
         );
         assert_eq!(state.cid.keys().cloned().collect::<Vec<_>>(), [cid]);
+    }
+
+    #[test]
+    fn real_genesis_complete_state_passes_all_policies_in_one_scan() {
+        use sp_runtime::BuildStorage;
+
+        let storage = citizenchain::RuntimeGenesisConfig::default()
+            .build_storage()
+            .expect("build runtime genesis storage");
+        let top = storage.top;
+        let cid_keys: Vec<Vec<u8>> = top
+            .keys()
+            .filter(|key| cid_lifecycle::is_relevant_key(key))
+            .cloned()
+            .collect();
+        let reference =
+            cid_lifecycle::GenesisReference::from_genesis(&cid_keys, |key| top.get(key).cloned())
+                .expect("build CID genesis reference");
+        let stats = verify_imported_policy_state(0, top.iter(), &reference)
+            .expect("real block zero state must pass every policy");
+        assert_eq!(stats.scanned, top.len());
+        assert!(stats.governance > 0);
+        assert!(stats.fullnode_issuance > 0);
+        assert!(stats.cid > 0);
+    }
+
+    #[test]
+    fn complete_state_rejects_each_policy_before_inner_import() {
+        use codec::Encode;
+        use sp_runtime::BuildStorage;
+
+        let storage = citizenchain::RuntimeGenesisConfig::default()
+            .build_storage()
+            .expect("build runtime genesis storage");
+        let top = storage.top;
+        let cid_keys: Vec<Vec<u8>> = top
+            .keys()
+            .filter(|key| cid_lifecycle::is_relevant_key(key))
+            .cloned()
+            .collect();
+        let reference =
+            cid_lifecycle::GenesisReference::from_genesis(&cid_keys, |key| top.get(key).cloned())
+                .expect("build CID genesis reference");
+
+        let fixed = primitives::governance_skeleton::fixed_institutions()[0];
+        let mut missing_governance = top.clone();
+        missing_governance.remove(&governance_skeleton::storage_key::admin_account(
+            &fixed.main_account,
+        ));
+        assert!(
+            verify_imported_policy_state(0, missing_governance.iter(), &reference)
+                .expect_err("missing governance must fail")
+                .starts_with("固定治理骨架:")
+        );
+
+        let mut bad_fullnode = top.clone();
+        bad_fullnode.insert(
+            fullnode_issuance::storage_key::rewarded_block_count(),
+            1u32.encode(),
+        );
+        assert!(
+            verify_imported_policy_state(0, bad_fullnode.iter(), &reference)
+                .expect_err("non-zero genesis issuance must fail")
+                .starts_with("全节点发行:")
+        );
+
+        let mut bad_citizen = top.clone();
+        let mut unknown = citizen_issuance::storage_key::pallet_prefix().to_vec();
+        unknown.extend_from_slice(b"UnknownGuardState");
+        bad_citizen.insert(unknown, vec![1]);
+        assert!(
+            verify_imported_policy_state(0, bad_citizen.iter(), &reference)
+                .expect_err("unknown citizen issuance key must fail")
+                .starts_with("公民认证发行:")
+        );
+
+        let mut bad_cid = top.clone();
+        let protected_prefix = cid_lifecycle::storage_key::protected_prefix();
+        let protected_key = bad_cid
+            .keys()
+            .find(|key| key.starts_with(&protected_prefix))
+            .cloned()
+            .expect("protected genesis key");
+        bad_cid.remove(&protected_key);
+        assert!(verify_imported_policy_state(0, bad_cid.iter(), &reference)
+            .expect_err("missing protected account must fail")
+            .starts_with("CID 生命周期:"));
+    }
+
+    #[test]
+    fn non_genesis_complete_state_is_always_rejected_by_cid_policy() {
+        let empty = BTreeMap::<Vec<u8>, Vec<u8>>::new();
+        assert!(verify_imported_policy_state(
+            1,
+            empty.iter(),
+            &cid_lifecycle::GenesisReference::default(),
+        )
+        .expect_err("non-genesis snapshot cannot prove CID monotonicity")
+        .contains("NonGenesisStateImportForbidden"));
     }
 }

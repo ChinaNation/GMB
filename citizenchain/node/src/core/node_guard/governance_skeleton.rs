@@ -445,13 +445,25 @@ mod tests {
 
     #[test]
     fn key_derivation_is_stable_and_prefixed() {
+        use codec::Encode;
+        use sp_core::hashing::{blake2_128, twox_128};
+
         let acc = [7u8; 32];
-        assert_eq!(
-            storage_key::admin_account(&acc),
-            storage_key::admin_account(&acc)
-        );
+        let mut expected_admin = twox_128(b"PublicAdmins").to_vec();
+        expected_admin.extend_from_slice(&twox_128(b"AdminAccounts"));
+        expected_admin.extend_from_slice(&blake2_128(&acc.encode()));
+        expected_admin.extend_from_slice(&acc.encode());
+        assert_eq!(storage_key::admin_account(&acc), expected_admin);
+
+        let province = [1u8, 2u8];
+        let mut expected_frg = twox_128(b"PublicAdmins").to_vec();
+        expected_frg.extend_from_slice(&twox_128(b"FederalRegistryProvinceGroups"));
+        expected_frg.extend_from_slice(&blake2_128(&province.encode()));
+        expected_frg.extend_from_slice(&province.encode());
+        assert_eq!(storage_key::frg_group(&province), expected_frg);
+
         assert!(storage_key::admin_account(&acc).starts_with(&storage_key::pallet_prefix()));
-        assert!(storage_key::frg_group(&[1, 2]).starts_with(&storage_key::pallet_prefix()));
+        assert!(storage_key::frg_group(&province).starts_with(&storage_key::pallet_prefix()));
         assert_ne!(
             storage_key::admin_account(&acc),
             storage_key::frg_group(&[0, 0])

@@ -99,7 +99,7 @@
 - [x] 第 5 步更新文档、完善注释、清理残留
 - [x] 输出第 6 步完整技术方案并等待确认
 - [x] 第 6 步技术方案确认
-- [ ] 第 6 步恶意状态与包装器拒绝矩阵
+- [x] 第 6 步恶意状态与包装器拒绝矩阵
 - [ ] 第 6 步 warp、三节点分叉与恶意链真实验收
 - [ ] 第 6 步性能与部署基线验收
 - [ ] 第 6 步文档、注释、残留清理与任务归档
@@ -453,3 +453,75 @@
 - 尚未完成 release 构建下的峰值内存、普通快路径、身份登记块、`:code` 全检和完整状态导入性能矩阵。
 - 尚未重新烘焙并替换正式 chainspec、创世状态包和 CitizenApp 轻客户端资产；不得增加旧格式兼容。
 - 在上述项目完成前，本任务继续保留在 `open`，不得移动到 `done`。
+
+## 第 6.1 步 runtime/node 字段契约对齐结果（2026-07-12）
+
+### 代码与契约
+
+- runtime 业务逻辑、storage、制度常量和权重均未修改；仅在既有测试模块增加防漂移断言。
+- `AdminAccount` 字段序、管理员 kind/status 判别值、护宪职务单源已与治理骨架镜像对齐。
+- `InstitutionInfo` 字段序及 `Pending=0/Active=1/Closed=2` 已与机构生命周期镜像对齐。
+- `CidRecord` 七字段声明序及 `Active=0/Revoked=1` 已与公民 CID 镜像对齐。
+- `PendingCertificationReward=(who,cid_number_hash)` 与 `PendingRewards` 的 Twox64Concat key 已两端钉死。
+- `LastRewardAudit=(block,miner,wallet,amount)`、奖励钱包和 `Balances::TotalIssuance` RAW key 已钉死。
+- `LawVersion` 十字段声明序、Tier/LawStatus/VoteType 判别值和创世 Law[0] 已由 runtime 测试钉死，
+  ConstitutionGuard 真实创世测试继续验证 node 镜像。
+- NodeGuard 管理员 key 测试不再自比较，现按 pallet、storage 名和 `Blake2_128Concat` 公式构造期望值。
+- 清理 `fullnode_issuance.rs` 未使用的 `MAccountData` 导入；新增测试均有中文注释，没有新增文件。
+
+### 验收
+
+- `admin-primitives`：3/3；`entity-primitives`：2/2；`citizen-identity`：22/22。
+- `citizen-issuance`：14/14，身份集成 5/5；`fullnode-issuance`：20/20。
+- `legislation-yuan`：enum 判别值与创世 LawVersion 字段序定向测试通过。
+- `node_guard`：50/50；`constitution`：39/39。
+
+### 下一步边界
+
+- 本步只完成字段、编码和规则基线，不提前勾选“第 6 步恶意状态与包装器拒绝矩阵”。
+- 下一步单独输出第 6.2 步恶意状态与包装器拒绝矩阵方案，确认后再实施。
+
+## 第 6.2 步恶意状态与包装器拒绝矩阵结果（2026-07-12）
+
+### 安全加固
+
+- ConstitutionGuard 的历史版本 key 与两类修宪凭据 key 解析新增 Blake2_128Concat hash 重算；
+  畸形 hasher 不再仅凭长度和尾部版本号被识别为规范 key。
+- 全节点发行新增错误审计高度、错误矿工和错误最近出块高度拒绝测试。
+- 公民发行新增临时标记缺失、CID 反向索引不闭环和 `RewardedCount` 错误拒绝测试。
+- 机构生命周期新增机构码、镇码、创建高度不可变以及 Closed 墓碑保持 Closed 时也不得改写的测试。
+- 统一委派闸门新增连续两次 `KnownBad`、内层零新增调用及之后合法输入恢复委派的无污染证明。
+
+### 验收
+
+- `cargo test --manifest-path citizenchain/node/Cargo.toml node_guard`：54/54 通过。
+- `cargo test --manifest-path citizenchain/node/Cargo.toml constitution`：39/39 通过。
+- 本步没有修改 runtime、service、chainspec 或其它产品模块，没有新增文件。
+- 第 6 步“恶意状态与包装器拒绝矩阵”已完成；完整状态/warp、数据库不入库和三节点恶意链仍未完成。
+
+## 第 6.3 步完整状态与 warp 提交前校验结果（2026-07-12）
+
+### 代码与安全边界
+
+- 从 `NodeGuard::verify_imported_state` 提取 `verify_imported_policy_state` 纯校验核心；生产与测试复用
+  同一遍状态分区和四策略判定，不形成影子校验路径。
+- 新增 `ImportedPolicyStats`，只记录总扫描及治理/全节点发行/公民发行/CID 分区数，不保存跨块状态。
+- 当前 runtime 真实 block#0 全 storage 通过全部 NodeGuard 策略，且扫描计数严格等于输入 key 数。
+- 删除固定治理机构、非零 PoW 创世累计、未知 CitizenIssuance key、删除创世封存账户均在对应策略拒绝。
+- 非 block#0 完整快照继续由 CID 策略严格返回 `NonGenesisStateImportForbidden`。
+- ConstitutionGuard 对版本和凭据 storage 前缀下的畸形 Blake2_128Concat key 新增
+  `StorageKeyMalformed`，完整状态不能把畸形相关 key 当成无关 key 忽略。
+
+### 自动化与真实运行
+
+- `node_guard`：57/57；`constitution`：40/40。
+- `WASM_BUILD_FROM_SOURCE=1 cargo build --manifest-path citizenchain/node/Cargo.toml`：通过。
+- 当前源码 fresh 节点使用独立 `/tmp` base path 启动，约 52 秒达到 block#0 RPC 可用；创世哈希为
+  `0xbdac261dac0c76d68f7d25470d7a1332ea3a7a891f0d5d917c18afea2ec6aea4`，临时数据库约 352 MiB。
+- 没有 NodeGuard/ConstitutionGuard 拒绝或 panic；`/tmp/gmb-node-guard-step63.*` 已删除。
+- 本步未修改 runtime、service、chainspec 或其他产品模块，没有新增文件。
+
+### 任务状态
+
+- 完整状态/warp 的代码级提交前矩阵与 fresh block#0 真实启动已完成。
+- 任务卡中的“warp、三节点分叉与恶意链真实验收”是合并项；三节点尚未完成，因此本步不提前勾选。

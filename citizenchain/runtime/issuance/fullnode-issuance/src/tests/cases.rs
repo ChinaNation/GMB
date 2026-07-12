@@ -422,3 +422,21 @@ fn on_initialize_declares_weight_only_within_reward_range() {
         assert_eq!(w_after, Weight::zero());
     });
 }
+
+#[test]
+fn reward_audit_scale_contract_matches_node_guard() {
+    use codec::{Decode, Encode};
+
+    let miner = account(141);
+    let wallet = account(142);
+    let value = (
+        7u32,
+        miner.clone(),
+        wallet.clone(),
+        primitives::pow_const::FULLNODE_BLOCK_REWARD,
+    );
+    let encoded = value.encode();
+    let decoded = <(u32, AccountId32, AccountId32, u128)>::decode(&mut &encoded[..])
+        .expect("node mirror tuple must decode runtime audit");
+    assert_eq!(decoded, value);
+}

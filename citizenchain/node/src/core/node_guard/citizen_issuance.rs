@@ -379,6 +379,25 @@ mod tests {
         map.insert(key, value.encode());
     }
 
+    #[test]
+    fn pending_reward_key_and_value_match_runtime_contract() {
+        use sp_core::hashing::{twox_128, twox_64};
+
+        let index = 3u32;
+        let encoded_index = index.encode();
+        let mut expected = twox_128(b"CitizenIssuance").to_vec();
+        expected.extend_from_slice(&twox_128(b"PendingRewards"));
+        expected.extend_from_slice(&twox_64(&encoded_index));
+        expected.extend_from_slice(&encoded_index);
+        assert_eq!(storage_key::pending_reward(index), expected);
+
+        let pending = PendingCertificationReward {
+            who: [7u8; 32],
+            cid_number_hash: [8u8; 32],
+        };
+        assert_eq!(pending.encode(), ([7u8; 32], [8u8; 32]).encode());
+    }
+
     fn voting_identity(cid: &[u8]) -> Vec<u8> {
         (
             cid.to_vec(),
@@ -496,6 +515,61 @@ mod tests {
                 &mut FinalizeIssuancePlan::default(),
             ),
             Err(GuardError::PendingQueueNotCleared)
+        );
+    }
+
+    #[test]
+    fn missing_markers_reverse_index_and_wrong_rewarded_count_are_rejected() {
+        let (parent, mut pre, post, pre_delta, post_delta, _) = valid_transition();
+        let cid = b"GD001-CTZN1-TEST".to_vec();
+        let hash = blake2_256(&cid);
+        pre.remove(&storage_key::pending_identity(&hash));
+        assert_eq!(
+            check_transition(
+                2,
+                &pre_delta,
+                &post_delta,
+                &|key| parent.get(key).cloned(),
+                &|key| pre.get(key).cloned(),
+                &|key| post.get(key).cloned(),
+                &mut FinalizeIssuancePlan::default(),
+            ),
+            Err(GuardError::PendingMarkerMissing)
+        );
+
+        let (parent, pre, post, pre_delta, post_delta, _) = valid_transition();
+        let mut bad_reverse = pre.clone();
+        put(
+            &mut bad_reverse,
+            storage_key::account_by_cid(&cid),
+            [9u8; 32],
+        );
+        assert_eq!(
+            check_transition(
+                2,
+                &pre_delta,
+                &post_delta,
+                &|key| parent.get(key).cloned(),
+                &|key| bad_reverse.get(key).cloned(),
+                &|key| post.get(key).cloned(),
+                &mut FinalizeIssuancePlan::default(),
+            ),
+            Err(GuardError::IdentityReverseIndexMismatch)
+        );
+
+        let (parent, pre, mut post, pre_delta, post_delta, _) = valid_transition();
+        put(&mut post, storage_key::rewarded_count(), 2u64);
+        assert_eq!(
+            check_transition(
+                2,
+                &pre_delta,
+                &post_delta,
+                &|key| parent.get(key).cloned(),
+                &|key| pre.get(key).cloned(),
+                &|key| post.get(key).cloned(),
+                &mut FinalizeIssuancePlan::default(),
+            ),
+            Err(GuardError::RewardedCountInvalid)
         );
     }
 
