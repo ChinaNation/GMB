@@ -72,7 +72,8 @@ describe('square chain confirmation', () => {
         media_kind: 'image',
         provider: 'cloudflare_images',
         provider_asset_id: 'img_test',
-        upload_method: 'direct_form',
+        upload_method: 'worker',
+        resource_key: 'square_image_sd',
         content_type: 'image/webp',
         byte_size: 1024,
         asset_state: 'ready',
@@ -109,7 +110,8 @@ describe('square chain confirmation', () => {
         })
       }),
       SQUARE_CACHE: {},
-      DEV_UPLOAD_PROXY: '1',
+      IMAGES_URL: 'https://imagedelivery.net/test',
+      IMAGES_SIGNING_KEY: 'test-signing-key',
       CHAIN_URL: 'https://chain.test',
       CHAIN_ID: 'worker-rpc.access',
       CHAIN_SECRET: 'test-access-secret'
@@ -138,7 +140,7 @@ describe('square chain confirmation', () => {
     expect(post.media_items?.[0]).toMatchObject({
       provider: 'cloudflare_images',
       provider_asset_id: 'img_test',
-      url: 'http://127.0.0.1/dev-images/img_test/public',
+      url: expect.stringContaining('https://imagedelivery.net/test/img_test/public?'),
       asset_state: 'ready'
     });
     expect(db.posts.get(postId)?.post_state).toBe('published');
@@ -228,8 +230,10 @@ describe('square chain confirmation', () => {
       DB: db,
       SQUARE_MEDIA: r2,
       SQUARE_CACHE: {},
-      DEV_UPLOAD_PROXY: '1'
+      CF_ACCOUNT_ID: 'account',
+      CF_API_TOKEN: 'token'
     } as unknown as Env;
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, result: {} })));
 
     const result = await deletePostCloudflareData(env, session(), postId);
 
@@ -298,7 +302,8 @@ function imageAsset(uploadId: string): MediaAssetRow {
     media_kind: 'image',
     provider: 'cloudflare_images',
     provider_asset_id: 'img_test',
-    upload_method: 'direct_form',
+    upload_method: 'worker',
+    resource_key: 'square_image_sd',
     content_type: 'image/webp',
     byte_size: 1024,
     asset_state: 'ready',
@@ -323,7 +328,7 @@ function buildEventsHex(input: {
   const chunks = [
     Uint8Array.of(0x00),
     u32Le(0),
-    Uint8Array.of(36, 0),
+    Uint8Array.of(34, 0),
     compactBytes(postId),
     ownerAccountBytes,
     input.cidNumber === null

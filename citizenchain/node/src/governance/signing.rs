@@ -279,10 +279,10 @@ pub struct VoteSubmitResult {
 
 /// 构建内部投票（`internal_vote`）签名请求。
 ///
-/// 管理员一人一票统一走 `InternalVote::cast`(pallet=22, call=0),
+/// 管理员一人一票统一走 `InternalVote::cast`(pallet=20, call=0),
 /// 由投票引擎按 ProposalData 前缀自动分派到对应 `InternalVoteExecutor`。
 ///
-/// Call 编码: `[0x16][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
+/// Call 编码: `[0x14][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
 ///
 /// 返回 QR 签名请求 JSON + 请求 ID + 预期 payload hash。
 pub fn build_vote_sign_request(
@@ -305,9 +305,9 @@ pub fn build_vote_sign_request(
     let genesis_hash = fetch_genesis_hash()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
-    // 构建 call data: [pallet=22][call=0][proposal_id: u64_le][approve: bool]
+    // 构建 call data: [pallet=20][call=0][proposal_id: u64_le][approve: bool]
     let mut call_data = Vec::with_capacity(11);
-    call_data.push(22u8); // InternalVote sub-pallet index
+    call_data.push(20u8); // InternalVote sub-pallet index
     call_data.push(0u8); // cast call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
@@ -364,10 +364,10 @@ pub fn build_vote_sign_request(
     })
 }
 
-/// 构建 joint_vote 签名请求（联合投票内部投票阶段：pallet=23, call=0）。
+/// 构建 joint_vote 签名请求（联合投票内部投票阶段：pallet=21, call=0）。
 ///
-/// JointVote pallet:`cast_admin` 在 23.0,
-/// `cast_referendum` 在 23.1(联合公投阶段需双层凭证,本函数不覆盖)。
+/// JointVote pallet:`cast_admin` 在 21.0,
+/// `cast_referendum` 在 21.1(联合公投阶段需双层凭证,本函数不覆盖)。
 ///
 /// cid_number 用于查找机构多签 AccountId32 参数。
 pub fn build_joint_vote_sign_request(
@@ -391,9 +391,9 @@ pub fn build_joint_vote_sign_request(
     let genesis_hash = fetch_genesis_hash()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
-    // call data: [pallet=23][call=0][proposal_id:u64_le][institution_account:AccountId32][approve:bool]
+    // call data: [pallet=21][call=0][proposal_id:u64_le][institution_account:AccountId32][approve:bool]
     let mut call_data = Vec::with_capacity(1 + 1 + 8 + 32 + 1);
-    call_data.push(23u8); // JointVote sub-pallet index
+    call_data.push(21u8); // JointVote sub-pallet index
     call_data.push(0u8); // cast_admin call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.extend_from_slice(&institution_account);

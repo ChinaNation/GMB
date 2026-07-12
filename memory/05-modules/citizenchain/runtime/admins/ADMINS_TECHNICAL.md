@@ -52,7 +52,7 @@
 
 - 公权机构生命周期由 `public-manage` 发起，只写 `public-admins`；固定治理机构由创世写入，同样只在 `public-admins` 承担运行期管理员治理。
 - 私权机构生命周期由 `private-manage` 发起，只写 `private-admins`。
-- 个人多签账户生命周期由 `personal-manage` 发起，只写 `personal-admins`；管理员更换 call 为 `PersonalAdmins(7).propose_admin_set_change(3)`。
+- 个人多签账户生命周期由 `personal-manage` 发起，只写 `personal-admins`；管理员更换 call 为 `PersonalAdmins(29).propose_admin_set_change(0)`。
 - 公权/私权机构创建时，entity 模块只把机构 `cid_number` 和管理员资料交给对应 admins 模块；admins 模块落库时强制把来源写成 `Registry`。
 - 公权/私权管理员集合更换时，admins 模块在创建内部投票前强制把来源写成 `InternalVote`。
 - 国家储委会、省储委会、省储行、国家司法院固定人数；国家司法院固定 15 人、阈值 8/15，其中 7 名护宪大法官用于修宪终审 4/7 表决；联邦注册局按 43 个省级 5 人组治理。
@@ -73,10 +73,10 @@
 
 | 模块 | 管理员更换 call |
 |------|----------------|
-| `public-admins` | `29.0 propose_admin_set_change`（NRC/PRC/PRB/NJD 与普通公权机构；FRG 主账户禁止走本入口） |
-| `public-admins` | `29.2 propose_federal_registry_province_admin_set_change`（FRG 省级组） |
-| `private-admins` | `30.0 propose_admin_set_change` |
-| `personal-admins` | `7.3 propose_admin_set_change` |
+| `public-admins` | `27.0 propose_admin_set_change`（NRC/PRC/PRB/NJD 与普通公权机构；FRG 主账户禁止走本入口） |
+| `public-admins` | `27.2 propose_federal_registry_province_admin_set_change`（FRG 省级组） |
+| `private-admins` | `28.0 propose_admin_set_change` |
+| `personal-admins` | `29.0 propose_admin_set_change` |
 
 ## 验证命令
 

@@ -177,13 +177,15 @@ describe('chain signed extrinsic relay', () => {
 });
 
 function relayRequest(body: Record<string, unknown>): Request {
+  const encoded = JSON.stringify(body);
   return new Request('https://api.onchina.org/v1/chain/extrinsics/relay', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      'content-length': String(new TextEncoder().encode(encoded).byteLength),
       'cf-connecting-ip': '203.0.113.10'
     },
-    body: JSON.stringify(body)
+    body: encoded
   });
 }
 

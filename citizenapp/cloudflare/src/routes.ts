@@ -17,16 +17,15 @@ import {
   submitChatEnvelope,
   submitChatSignal,
 } from "./chat/service";
-import { createTurnCredentials } from "./chat/turn";
 import { feedRoute } from "./feeds/service";
 import { followRoute, unfollowRoute } from "./feeds/follows";
 import { mediaRoute } from "./media/service";
 import { subscribeChallengeRoute, subscribeConfirmRoute } from "./membership/subscribe";
 import { membershipRoute } from "./membership/service";
 import { stripeWebhookRoute } from "./membership/webhook";
-import { reportRoute, signalRoute } from "./moderation/service";
+import { signalRoute } from "./moderation/service";
 import { confirmPostRoute, deletePostRoute } from "./posts/confirm";
-import { devPutProfileAsset, prepareProfileAsset } from "./profiles/assets";
+import { prepareProfileAsset, putProfileAsset } from "./profiles/assets";
 import {
   getUserFollowsRoute,
   getUserPostsRoute,
@@ -35,14 +34,15 @@ import {
 } from "./profiles/service";
 import {
   completeUpload,
-  devUploadMediaAsset,
-  devPutUploadObject,
+  putManifest,
+  putMediaAsset,
   prepareUpload,
   streamWebhookRoute,
 } from "./uploads/service";
 import { HttpError, jsonResponse, optionsResponse } from "./shared/http";
 import { guardRequest, normalizeApiPath } from "./security/request_guard";
 import { turnstileConfigRoute, turnstilePageRoute } from "./security/turnstile";
+import { assertKnownRoute } from "./limits/request";
 
 export async function routeRequest(
   request: Request,
@@ -50,6 +50,7 @@ export async function routeRequest(
 ): Promise<Response> {
   const url = new URL(request.url);
   const path = normalizeApiPath(url.pathname);
+  assertKnownRoute(request.method, path);
   if (request.method === "OPTIONS") {
     return optionsResponse();
   }
@@ -114,14 +115,11 @@ export async function routeRequest(
   if (request.method === "POST" && path === "/v1/square/uploads/prepare") {
     return prepareUpload(request, env);
   }
-  if (request.method === "PUT" && path === "/v1/square/uploads/dev-put") {
-    return devPutUploadObject(request, env);
+  if (request.method === "PUT" && path === "/v1/square/uploads/manifest") {
+    return putManifest(request, env);
   }
-  if (
-    (request.method === "POST" || request.method === "PATCH") &&
-    path === "/v1/square/uploads/dev-media"
-  ) {
-    return devUploadMediaAsset(request, env);
+  if (request.method === "PUT" && path === "/v1/square/uploads/media") {
+    return putMediaAsset(request, env);
   }
   if (request.method === "POST" && path === "/v1/square/uploads/complete") {
     return completeUpload(request, env);
@@ -147,8 +145,8 @@ export async function routeRequest(
   if (request.method === "POST" && path === "/v1/square/profile/assets/prepare") {
     return prepareProfileAsset(request, env);
   }
-  if (request.method === "PUT" && path === "/v1/square/profile/assets/dev-put") {
-    return devPutProfileAsset(request, env);
+  if (request.method === "PUT" && path === "/v1/square/profile/assets") {
+    return putProfileAsset(request, env);
   }
   if (request.method === "GET" && path.startsWith("/v1/square/users/")) {
     return routeUserPath(request, env, path);
@@ -161,9 +159,6 @@ export async function routeRequest(
   }
   if (request.method === "POST" && path === "/v1/square/signals") {
     return signalRoute(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/square/reports") {
-    return reportRoute(request, env);
   }
   if (request.method === "POST" && path === "/v1/chat/devices/register") {
     return registerChatDevice(request, env);
@@ -182,9 +177,6 @@ export async function routeRequest(
   }
   if (request.method === "POST" && path === "/v1/chat/signals") {
     return submitChatSignal(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/chat/turn") {
-    return createTurnCredentials(request, env);
   }
   if (request.method === "GET" && path === "/v1/chat/ws") {
     return openChatWebSocket(request, env);

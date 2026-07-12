@@ -2,7 +2,8 @@ import { encodeAddress } from '@polkadot/util-crypto';
 import { scaleString, scaleCompact, bytesToHex, hexToBytes } from '../shared/signing_message';
 import type { PostCategory } from '../types';
 
-const squarePostPalletIndex = 36;
+// 与统一协议 P-CHAIN-SQUARE-001 固定索引一致；发布确认只接受该 pallet 事件。
+const squarePostPalletIndex = 34;
 const squarePostPublishedEventIndex = 0;
 const citizenSs58Prefix = 2027;
 

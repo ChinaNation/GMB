@@ -86,7 +86,7 @@ Runtime 配置位置：
 - 机构活跃提案数由 `votingengine` 的 `ActiveProposalsBySubject`（上限 10 个）管控
 
 ### 5.2 投票入口(由 InternalVote sub-pallet 承载)
-本模块不提供独立投票 call。投票统一走 `InternalVote::cast(proposal_id, approve)`(pallet 22.0):
+本模块不提供独立投票 call。投票统一走 `InternalVote::cast(proposal_id, approve)`(pallet 20.0):
 - 投票人必须是提案快照中的目标机构内部管理员。
 - 达到固定治理阈值后，投票引擎将提案推进到 `STATUS_PASSED` 并回调本模块自动执行。
 - 自动执行遇到 `GrandpaChangePending` 时发出 `GrandpaKeyExecutionFailed`，返回 `RetryableFailed`，提案保留在 `STATUS_PASSED` 供后续重试。

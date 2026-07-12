@@ -29,8 +29,13 @@ class _SquareTurnstilePageState extends State<SquareTurnstilePage> {
           final token = message.message.trim();
           if (token.isNotEmpty && mounted) Navigator.of(context).pop(token);
         },
-      )
-      ..loadRequest(Uri.parse('$base/v1/security/turnstile'));
+      );
+    // 先让路由出首帧再拉重 WebView + Turnstile 反爬 JS：平台线程与 UI 线程合并的构建下，
+    // 在 initState 同步 loadRequest 会把主线程占满卡首帧输入派发（ANR 同源），推迟到首帧后。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _controller.loadRequest(Uri.parse('$base/v1/security/turnstile'));
+    });
   }
 
   @override

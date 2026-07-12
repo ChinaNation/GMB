@@ -15,6 +15,7 @@ void main() {
         PalletRegistry.votingEnginePallet,
         PalletRegistry.runtimeUpgradePallet,
         PalletRegistry.resolutionDestroPallet,
+        PalletRegistry.personalManagePallet,
         PalletRegistry.personalAdminsPallet,
         PalletRegistry.publicAdminsPallet,
         PalletRegistry.privateAdminsPallet,
@@ -22,15 +23,15 @@ void main() {
         PalletRegistry.resolutionIssuancePallet,
         PalletRegistry.offchainTransactionPallet,
       };
-      expect(pallets.length, 13);
+      expect(pallets.length, 14);
     });
 
     test('投票引擎 sub-pallet call_index', () {
-      // InternalVote(22).cast=0 / JointVote(23).cast_admin=0 /
-      // JointVote(23).cast_referendum=1 / VotingEngine(9).finalize_proposal=3
-      expect(PalletRegistry.internalVotePallet, 22);
+      // InternalVote(20).cast=0 / JointVote(21).cast_admin=0 /
+      // JointVote(21).cast_referendum=1 / VotingEngine(9).finalize_proposal=3
+      expect(PalletRegistry.internalVotePallet, 20);
       expect(PalletRegistry.internalVoteCall, 0);
-      expect(PalletRegistry.jointVotePallet, 23);
+      expect(PalletRegistry.jointVotePallet, 21);
       expect(PalletRegistry.jointVoteCall, 0);
       expect(PalletRegistry.castReferendumCall, 1);
       expect(PalletRegistry.finalizeProposalCall, 3);
@@ -54,25 +55,31 @@ void main() {
 
       // Public/Private Admins: call_index=0 是管理员集合变更，call_index=1 留洞不复用。
       expect(PalletRegistry.isAdminSetChangePallet(12), isFalse);
-      expect(PalletRegistry.isAdminSetChangePallet(29), isTrue);
-      expect(PalletRegistry.isAdminSetChangePallet(30), isTrue);
+      expect(PalletRegistry.isAdminSetChangePallet(27), isTrue);
+      expect(PalletRegistry.isAdminSetChangePallet(28), isTrue);
       expect(PalletRegistry.isAdminSetChangePallet(7), isFalse);
+      // PersonalAdmins(29) 单独走 isPersonalAdminSetChangeCall,不属公权/私权集合。
+      expect(PalletRegistry.isAdminSetChangePallet(29), isFalse);
       expect(PalletRegistry.proposeAdminSetChangeCall, 0);
-      expect(PalletRegistry.isPersonalAdminSetChangeCall(7, 3), isTrue);
+      // 个人多签管理员集合变更 = PersonalAdmins(29) call 0(修正旧 [7,3] 越界误路由)。
+      expect(PalletRegistry.isPersonalAdminSetChangeCall(29, 0), isTrue);
+      expect(PalletRegistry.isPersonalAdminSetChangeCall(7, 3), isFalse);
 
-      // PublicManage(32) / PrivateManage(33):机构生命周期拆分。
-      expect(PalletRegistry.publicManagePallet, 32);
-      expect(PalletRegistry.privateManagePallet, 33);
+      // PublicManage(30) / PrivateManage(31):机构生命周期拆分。
+      expect(PalletRegistry.publicManagePallet, 30);
+      expect(PalletRegistry.privateManagePallet, 31);
       expect(PalletRegistry.proposeCloseInstitutionCall, 1);
       expect(PalletRegistry.registerCidInstitutionCall, 2);
       expect(PalletRegistry.cleanupRejectedInstitutionProposalCall, 4);
       expect(PalletRegistry.proposeCreateInstitutionCall, 5);
 
-      // PersonalAdmins(7):个人多签独立命名空间
+      // PersonalManage(7):个人多签生命周期;PersonalAdmins(29):管理员集合变更。
+      expect(PalletRegistry.personalManagePallet, 7);
       expect(PalletRegistry.proposeCreatePersonalCall, 0);
       expect(PalletRegistry.proposeClosePersonalCall, 1);
       expect(PalletRegistry.cleanupRejectedPersonalProposalCall, 2);
-      expect(PalletRegistry.proposePersonalAdminSetChangeCall, 3);
+      expect(PalletRegistry.personalAdminsPallet, 29);
+      expect(PalletRegistry.proposePersonalAdminSetChangeCall, 0);
     });
 
     test('VotingEngine 统一手动重试/取消入口', () {

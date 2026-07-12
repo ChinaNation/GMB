@@ -1,4 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../src/media/cloudflare_assets', () => ({
+  createStreamDownloadUrl: vi.fn(async () => 'https://download.test/video.mp4'),
+  deleteProviderAsset: vi.fn(async () => undefined),
+  copyStreamFromUrl: vi.fn(async () => 'str_uid_restored'),
+}));
+vi.mock('../src/storage/presigned', () => ({
+  signR2GetUrl: vi.fn(async () => 'https://r2.test/archive.mp4'),
+}));
 import type { Env } from '../src/types';
 import { restoreOwnerVideos, runVideoArchiveSweep } from '../src/membership/archive';
 
@@ -81,6 +90,16 @@ class FakeStmt {
         video.r2_archive_key = r2Key;
       }
     } else if (
+      this.sql.includes("archive_state = 'restoring'") &&
+      this.sql.includes('provider_asset_id')
+    ) {
+      const video = this.find(this.args[2] as string, this.args[3] as number);
+      if (video) {
+        video.provider_asset_id = this.args[0] as string;
+        video.archive_state = 'restoring';
+        video.asset_state = 'processing';
+      }
+    } else if (
       this.sql.includes("archive_state = 'live'") &&
       this.sql.includes('asset_state')
     ) {
@@ -119,6 +138,20 @@ class FakeDb {
   }
 }
 
+class FakeR2 {
+  private readonly sizes = new Map<string, number>();
+
+  async put(key: string, value: ReadableStream<Uint8Array>): Promise<void> {
+    const bytes = await new Response(value).arrayBuffer();
+    this.sizes.set(key, bytes.byteLength);
+  }
+
+  async head(key: string): Promise<{ size: number } | null> {
+    const size = this.sizes.get(key);
+    return size === undefined ? null : { size };
+  }
+}
+
 function video(overrides: Partial<FakeVideo> = {}): FakeVideo {
   return {
     upload_id: 'squ_1',
@@ -138,16 +171,20 @@ function video(overrides: Partial<FakeVideo> = {}): FakeVideo {
 function env(db: FakeDb, overrides: Partial<Env> = {}): Env {
   return {
     DB: db,
-    SQUARE_MEDIA: {},
+    SQUARE_MEDIA: new FakeR2(),
     ARCHIVE_ENABLED: '1',
     ARCHIVE_LAPSE_DAYS: '90',
-    // 本地验收路径：不触碰真实 Stream/R2，直接走状态机。
-    DEV_UPLOAD_PROXY: '1',
     ...overrides
   } as unknown as Env;
 }
 
 describe('video cold archive', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), {
+      headers: { 'content-length': '3', 'content-type': 'video/mp4' },
+    })));
+  });
+  afterEach(() => vi.unstubAllGlobals());
   it('archives live video of an account lapsed past the threshold', async () => {
     const db = new FakeDb();
     db.memberships.push({
@@ -194,7 +231,7 @@ describe('video cold archive', () => {
     expect(db.videos[0].archive_state).toBe('live');
   });
 
-  it('restores an archived video back to live on resubscribe', async () => {
+  it('restores an archived video into processing until Stream webhook confirms ready', async () => {
     const db = new FakeDb();
     db.videos.push(
       video({ archive_state: 'archived', r2_archive_key: 'archive/owner_1/str_uid_1.mp4' })
@@ -203,7 +240,8 @@ describe('video cold archive', () => {
     const result = await restoreOwnerVideos(env(db), 'owner_1');
 
     expect(result).toEqual({ restored: 1 });
-    expect(db.videos[0].archive_state).toBe('live');
-    expect(db.videos[0].r2_archive_key).toBeNull();
+    expect(db.videos[0].archive_state).toBe('restoring');
+    expect(db.videos[0].provider_asset_id).toBe('str_uid_restored');
+    expect(db.videos[0].r2_archive_key).toBe('archive/owner_1/str_uid_1.mp4');
   });
 });

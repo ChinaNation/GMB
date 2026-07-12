@@ -64,7 +64,7 @@ object key: profile/{sanitizeOwnerAccount(owner_account)}/profile.json
 | `GET /v1/square/users/:account` | profile + 计数 + 认证 + is_following | 1 |
 | `GET /v1/square/users/:account/posts?category=&limit=&cursor=` | 按作者分页（category ∈ all/normal/campaign） | 1 |
 | `PUT /v1/square/profile` | 本人存 display_name/bio/头像背景 key | 1 |
-| 头像/背景对象上传 | 复用现有 R2 三步闭环 prepare→dev-put/put→complete | 6 |
+| 头像/背景对象上传 | 当前统一为 prepare 后经同域 Worker 有界校验并写 R2 | 6 |
 | 关注/取关 | 已有 `POST/DELETE /v1/square/follows` | 复用 |
 
 ## 前端目标目录
@@ -196,8 +196,8 @@ lib/8964/profile/
 - 边界：仅读取通道 + 显示；头像/背景**上传**与本地迁移留 6b-2（avatar/banner key 目前仍为空，显示占位）。
 
 ### 阶段 6b-2（完成，头像/背景上传 + 本地迁移 + feed 图片切换）
-- 后端：新增 `src/profiles/assets.ts` `prepareProfileAsset`（`POST /v1/square/profile/assets/prepare`：kind avatar/banner + jpeg/png/webp + ≤15MB + sha256 校验 → object_key `profile/{owner}/{kind}_{sha}.{ext}` + 上传 URL，复用 `createUploadUrl` 生产预签名/本地 dev-put）+ `devPutProfileAsset`（仅校验本人前缀，无上传行）；接线 routes。内容不上链。
-- 前端：`SquareApiClient.prepareProfileAsset` + `uploadBytesTo`（dev-put 同源带 Bearer，生产预签名 URL 不带 Authorization）；新增 `services/profile_asset_service.dart`（算 sha256 → 授权 → PUT → 返回 key/hash）。
+- 后端：资料上传已由统一资源限制任务改为同域 Worker 有界读取，强制校验实际字节、哈希、MIME 和尺寸后写 R2；头像 512 KiB、背景 1536 KiB，不保留早期直写分支。内容不上链。
+- 前端：`SquareApiClient.prepareProfileAsset` + `uploadBytesTo` 统一发送 P-256 设备签名；`services/profile_asset_service.dart` 在上传前计算 sha256 并做客户端提前反馈。
 - 编辑页：`CitizenProfileEditPage` 加背景 + 头像 `image_picker` 选图（`Image.memory` 预览），保存时上传 R2 并随 `updateProfile` 写 key/hash；**本地迁移**：打开时若 R2 无对应 key 而本地 `UserProfileState` 有旧图，预载为待迁移资产，保存成功后清本地私有副本（best-effort，异常忽略，测试无 SharedPreferences 自动跳过）。
 - feed 图片切换：`SquareApiClient._parseMediaItem` 把 object_key 拼成 `mediaUrl`；`SquareMediaGrid` 与主页照片/视频 `_MediaTile` 改 `Image.network`（失败回落图标，视频叠播放键）——广场 feed 图片首次真显示。
 - 测试：Worker `profile_assets.test.ts`（key/kind/content_type 校验 3 例）；`profile_asset_service_test.dart`（上传返回 key/hash + 校验 sha256/byte_size/Bearer、PUT 失败抛异常 2 例）。
@@ -214,7 +214,7 @@ lib/8964/profile/
 ### 阶段 7a（完成，清理 + 文档）
 - 删残桩：`lib/my/user/user.dart` 旧 `ProfileEditPage`/`_ProfileEditPageState`（426–732 行，已被新主页 + `CitizenProfileEditPage` 取代，无人引用）整段删除；`_MyQrCodePage`/`_HollowQrPainter`/`_SquareAvatar`/`_HeaderBackground` 仍被 我的 tab 使用，保留。分析无残留未用导入。
 - 修注释：`user_profile_page.dart` 顶部类注释由「阶段 4…」更新为完整功能口径。
-- 文档：`memory/07-ai/unified-protocols.md` P-API-CITIZENAPP-002 追加 profile 六接口（users/:account、/posts、/follows、PUT /profile、assets prepare/dev-put、/media）+ R2 `profile.json` 契约；新增 `memory/05-modules/citizenapp/8964/PROFILE_TECHNICAL.md`。
+- 文档：`memory/07-ai/unified-protocols.md` P-API-CITIZENAPP-002 登记 profile 六接口和 R2 `profile.json` 契约；当前上传接口以统一协议真源为准。
 - 验收：`dart format` 通过；`flutter analyze lib/my lib/8964/profile lib/chat/open_direct_chat.dart` 干净；`flutter test test/8964 test/chat` **84 passed / 4 skipped**（native smoldot 跳过，无回归）。
 
 ### 阶段 7a 追加（二维码归属，用户拍板落地）

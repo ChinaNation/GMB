@@ -566,7 +566,7 @@ class _MultisigProposalDetailPageState
         return Uint8List.fromList(_hexDecode(response.body.signatureHex));
       }
 
-      // 创建/关闭多签的投票都走 InternalVote::cast(22.0),
+      // 创建/关闭多签的投票都走 InternalVote::cast(20.0),
       // 由 runtime 的 InternalVoteExecutor 按 MODULE_TAG+ACTION 分派。
       debugPrint('[VoteDetail] 调 InternalVoteService.submit');
       final result = await InternalVoteService().submit(

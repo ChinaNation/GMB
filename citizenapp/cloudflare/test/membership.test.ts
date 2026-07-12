@@ -298,7 +298,8 @@ async function signedRequest(body: string): Promise<Request> {
   return new Request('https://w/v1/square/membership/webhook', {
     method: 'POST',
     headers: {
-      'stripe-signature': `t=${timestamp},v1=${signature}`
+      'stripe-signature': `t=${timestamp},v1=${signature}`,
+      'content-length': String(new TextEncoder().encode(body).byteLength)
     },
     body
   });

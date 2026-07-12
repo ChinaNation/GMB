@@ -1,6 +1,6 @@
 use crate::governance::signing::encode_compact_u32;
 
-const RUNTIME_UPGRADE_PALLET_INDEX: u8 = 13;
+const RUNTIME_UPGRADE_PALLET_INDEX: u8 = 12;
 const PROPOSE_RUNTIME_UPGRADE_CALL_INDEX: u8 = 0;
 const DEVELOPER_DIRECT_UPGRADE_CALL_INDEX: u8 = 2;
 const MAX_WASM_BYTES: usize = 5 * 1_048_576;

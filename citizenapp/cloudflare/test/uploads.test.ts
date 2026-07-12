@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assertAllowedOrigin, assertRequestSize, normalizeApiPath } from '../src/security/request_guard';
+import { assertAllowedOrigin, normalizeApiPath } from '../src/security/request_guard';
+import { assertRequestBodyLimit } from '../src/limits/request';
 import { HttpError } from '../src/shared/http';
 import type { Env } from '../src/types';
 import { createStorageReceiptId, estimateUploadBytes, validateUploadItems } from '../src/uploads/service';
@@ -12,7 +13,7 @@ describe('upload validation', () => {
     ]);
 
     expect(items).toHaveLength(2);
-    expect(estimateUploadBytes(items)).toBe(512 * 1024 + 3072);
+    expect(estimateUploadBytes(items)).toBe(256 * 1024 + 3072);
   });
 
   it('rejects unsupported media content types', () => {
@@ -57,6 +58,6 @@ describe('upload validation', () => {
       method: 'POST',
       headers: { 'content-length': String(256 * 1024 + 1) }
     });
-    expect(() => assertRequestSize(request, '/v1/square/uploads/prepare')).toThrowError(HttpError);
+    expect(() => assertRequestBodyLimit(request, '/v1/square/uploads/prepare')).toThrowError(HttpError);
   });
 });

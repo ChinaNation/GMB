@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../src/auth/wallet_signature', () => ({
   verifyWalletSignature: vi.fn()
@@ -7,7 +7,7 @@ vi.mock('../src/auth/wallet_signature', () => ({
 import { verifyWalletSignature } from '../src/auth/wallet_signature';
 import { consumeActionSignature, issueActionChallenge } from '../src/account/action_challenge';
 import { purgeAccount } from '../src/account/purge';
-import type { Env } from '../src/types';
+import type { Env, MediaAssetRow } from '../src/types';
 
 const mockVerify = verifyWalletSignature as unknown as ReturnType<typeof vi.fn>;
 
@@ -184,7 +184,7 @@ class PurgeStmt {
 
 class PurgeDb {
   membership: Record<string, unknown> | null = null;
-  mediaRows: Array<{ provider: string; provider_asset_id: string }> = [];
+  mediaRows: MediaAssetRow[] = [];
   readonly deletes: string[] = [];
   prepare(sql: string): PurgeStmt {
     return new PurgeStmt(this, sql);
@@ -231,6 +231,7 @@ class FakeKv {
 }
 
 describe('purgeAccount', () => {
+  afterEach(() => vi.unstubAllGlobals());
   // 不 mock stripe_api：真 cancelStripeSubscriptionNow 在 dev 短路成功、缺密钥抛 503，
   // 直接用 env 驱动「退订成功 / 退订失败」两条路径，避免 mock spy 的报错串扰。
   function buildEnv(options?: { stripeConfigured?: boolean }): {
@@ -241,23 +242,31 @@ describe('purgeAccount', () => {
   } {
     const db = new PurgeDb();
     db.membership = { owner_account: OWNER, stripe_subscription_id: 'sub_1' };
-    db.mediaRows = [{ provider: 'cloudflare_images', provider_asset_id: 'img_1' }];
+    db.mediaRows = [{
+      upload_id: 'squ_1', post_id: 'sqp_1', owner_account: OWNER, media_index: 0,
+      media_kind: 'image', provider: 'cloudflare_images', provider_asset_id: 'img_1',
+      upload_method: 'worker', resource_key: 'square_image_sd', content_type: 'image/webp',
+      byte_size: 1024, asset_state: 'ready', declared_duration_seconds: null,
+      duration_seconds: null, width: 100, height: 100, error_code: null,
+      created_at: 1, updated_at: 1, ready_at: 1, archive_state: 'live',
+      archived_at: null, r2_archive_key: null,
+    }];
     const r2 = new FakeR2([
       `profile/${OWNER}/profile.json`,
-      `profile/${OWNER}/avatar_x.webp`,
+      `profile/${OWNER}/avatar`,
       `square/${OWNER}/posts/p1/manifest.json`
     ]);
     const kv = new FakeKv();
     kv.store.set(`square_identity:${OWNER}`, '{"identity_level":"voting"}');
     kv.store.set(`square_sessions_by_owner:${OWNER}`, JSON.stringify(['tok1']));
     kv.store.set('square_session:tok1', '{}');
-    // DEV_UPLOAD_PROXY 短路 deleteProviderAsset（无本地 Images/Stream）。
     // STRIPE_DEV_PROXY 短路真退订；不设则缺密钥 → cancel 抛 503。
     const env = {
       DB: db,
       SQUARE_MEDIA: r2,
       SQUARE_CACHE: kv,
-      DEV_UPLOAD_PROXY: '1',
+      CF_ACCOUNT_ID: 'account',
+      CF_API_TOKEN: 'token',
       ...(options?.stripeConfigured === false ? {} : { STRIPE_DEV_PROXY: '1' })
     } as unknown as Env;
     return { env, db, r2, kv };
@@ -265,6 +274,7 @@ describe('purgeAccount', () => {
 
   it('cancels Stripe, deletes all A rows and current R2 objects, and clears sessions', async () => {
     const { env, db, r2, kv } = buildEnv();
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, result: {} })));
 
     const result = await purgeAccount(env, OWNER);
 

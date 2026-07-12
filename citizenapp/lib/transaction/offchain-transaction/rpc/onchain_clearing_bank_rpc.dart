@@ -21,7 +21,7 @@ class OnchainClearingBankRpc {
   final ChainRpc _rpc;
 
   /// `OffchainTransaction` pallet index(citizenchain runtime 定义)。
-  static const int _palletIndex = 21;
+  static const int _palletIndex = 19;
 
   /// 4 个新 call_index(对应 lib.rs:586+ 中 call_index 30~33)。
   static const int _bindClearingBankCallIndex = 30;
@@ -109,7 +109,7 @@ class OnchainClearingBankRpc {
 
   /// `bind_clearing_bank` 与 `switch_bank` 都是接受单个 AccountId 参数,统一编码。
   ///
-  /// 格式:`[pallet_index=21] [call_index] [account_id: [u8;32]]`。
+  /// 格式:`[pallet_index=19] [call_index] [account_id: [u8;32]]`。
   Uint8List _buildBindClearingBankCall(Uint8List bankMainAccount) {
     return _buildAccountIdCall(_bindClearingBankCallIndex, bankMainAccount);
   }
@@ -127,7 +127,7 @@ class OnchainClearingBankRpc {
 
   /// 仅含 amount 参数的 extrinsic(deposit/withdraw 共用)。
   ///
-  /// 格式:`[pallet_index=21] [call_index] [Compact<u128>(amount_fen)]`
+  /// 格式:`[pallet_index=19] [call_index] [Compact<u128>(amount_fen)]`
   /// 与链上 `pub fn deposit(origin, amount: u128)` 严格对齐。
   Uint8List _buildAmountOnlyCall(int callIndex, BigInt amountFen) {
     if (amountFen <= BigInt.zero) {

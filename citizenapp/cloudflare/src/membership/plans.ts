@@ -3,6 +3,8 @@
 // 投票/竞选各一档。订阅资格精确匹配身份档（identityEligibleForPlan，禁止降档/越级）；
 // 发帖额度按所购套餐（membershipPlan(level).quota）。四档一改，须同步 App 卡片、官网
 // Membership.tsx、Stripe price 映射与 webhook 反查。
+import { resourceLimit } from '../limits/catalog';
+
 export type MembershipLevel = 'freedom' | 'democracy' | 'voting' | 'candidate';
 
 /// 链上身份档位（与会员档位解耦）：访客 / 投票公民 / 竞选公民。
@@ -22,7 +24,7 @@ export interface DynamicQuota {
   video_quality: MediaQuality;
   max_videos: number;
   max_video_seconds: number;
-  /// 单个视频体积上限（字节，按档）。对齐推特：访客 512MB / 投票 2GB / 竞选 10GB。
+  /// 单个视频体积上限来自 limits 唯一资源表，会员接口只负责展示同一值。
   max_video_bytes: number;
 }
 
@@ -47,9 +49,6 @@ export interface MembershipPlan {
   article: ArticleQuota;
 }
 
-const mib = 1024 * 1024;
-const gib = 1024 * mib;
-
 export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
   freedom: {
     membership_level: 'freedom',
@@ -65,7 +64,7 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       video_quality: 'sd',
       max_videos: 1,
       max_video_seconds: 60,
-      max_video_bytes: 512 * mib
+      max_video_bytes: resourceLimit('square_video_sd').max_bytes
     },
     article: {
       title_min_chars: 10,
@@ -93,7 +92,7 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       video_quality: 'hd',
       max_videos: 1,
       max_video_seconds: 30 * 60,
-      max_video_bytes: 2 * gib
+      max_video_bytes: resourceLimit('square_video_hd').max_bytes
     },
     article: {
       title_min_chars: 10,
@@ -119,7 +118,7 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       video_quality: 'hd',
       max_videos: 1,
       max_video_seconds: 30 * 60,
-      max_video_bytes: 2 * gib
+      max_video_bytes: resourceLimit('square_video_hd').max_bytes
     },
     article: {
       title_min_chars: 10,
@@ -145,7 +144,7 @@ export const membershipPlans: Record<MembershipLevel, MembershipPlan> = {
       video_quality: 'hd',
       max_videos: 1,
       max_video_seconds: 3 * 60 * 60,
-      max_video_bytes: 10 * gib
+      max_video_bytes: resourceLimit('square_video_candidate').max_bytes
     },
     article: {
       title_min_chars: 10,

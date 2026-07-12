@@ -1,6 +1,7 @@
 import { HttpError, jsonResponse } from '../shared/http';
 import { nowMs } from '../shared/time';
 import type { Env } from '../types';
+import { resourceLimit } from '../limits/catalog';
 
 export interface ChatRelayPayload {
   type: 'gmb_chat_envelope_v2' | 'gmb_chat_signal_v1';
@@ -56,6 +57,10 @@ export class ChatRealtimeObject implements DurableObject {
     const deviceId = request.headers.get('x-chat-device');
     if (!ownerAccount || !deviceId) {
       return jsonResponse({ ok: false, error_code: 'chat_connection_invalid', message: 'Chat 连接缺少设备身份' }, { status: 400 });
+    }
+    const maxSockets = resourceLimit('chat_device').max_count!;
+    if (this.state.getWebSockets().length >= maxSockets) {
+      return jsonResponse({ ok: false, error_code: 'chat_socket_limit_exceeded', message: 'Chat 连接数已达到上限' }, { status: 429 });
     }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket];

@@ -36,7 +36,7 @@
 
 ## 钱包扫码
 
-- pallet index：`33`
+- pallet index：`31`
 - 创建动作：`propose_create_private_institution`
 - 关闭动作：`propose_close_private_institution`
 - 清理动作：`cleanup_rejected_private_proposal`

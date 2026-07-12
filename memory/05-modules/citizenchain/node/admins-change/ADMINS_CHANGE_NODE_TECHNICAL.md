@@ -69,12 +69,12 @@ GMB(3B) || OP_SIGN_ACTIVATE_ADMIN(0x18)
 
 其中：
 
-- `PMUL` 个人多签 → `PersonalAdmins(7).propose_admin_set_change(3)`。
-- `NRC/PRC/PRB/NJD` 固定治理机构 → `PublicAdmins(29).propose_admin_set_change(0)`。
-- `FRG` 联邦注册局管理员 → 不走 node 通用管理员更换；必须走 OnChina 省级 5 人组入口 `PublicAdmins(29).propose_federal_registry_province_admin_set_change(2)`。
-- 普通公权机构 → `PublicAdmins(29).propose_admin_set_change(0)`。
-- 私权机构 → `PrivateAdmins(30).propose_admin_set_change(0)`。
-- 非法人机构 → 按所属法人归属路由到 `PublicAdmins(29).propose_admin_set_change(0)` 或 `PrivateAdmins(30).propose_admin_set_change(0)`。
+- `PMUL` 个人多签 → `PersonalAdmins(29).propose_admin_set_change(0)`。
+- `NRC/PRC/PRB/NJD` 固定治理机构 → `PublicAdmins(27).propose_admin_set_change(0)`。
+- `FRG` 联邦注册局管理员 → 不走 node 通用管理员更换；必须走 OnChina 省级 5 人组入口 `PublicAdmins(27).propose_federal_registry_province_admin_set_change(2)`。
+- 普通公权机构 → `PublicAdmins(27).propose_admin_set_change(0)`。
+- 私权机构 → `PrivateAdmins(28).propose_admin_set_change(0)`。
+- 非法人机构 → 按所属法人归属路由到 `PublicAdmins(27).propose_admin_set_change(0)` 或 `PrivateAdmins(28).propose_admin_set_change(0)`。
 
 ## 前端结构
 

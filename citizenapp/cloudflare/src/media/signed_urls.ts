@@ -1,5 +1,6 @@
 import type { Env, MediaAssetRow } from '../types';
-import { HttpError, parsePositiveInt } from '../shared/http';
+import { HttpError } from '../shared/http';
+import { deliveryTtl } from '../limits/delivery';
 
 export interface SignedMediaUrls {
   url: string;
@@ -11,18 +12,6 @@ export async function signedMediaUrls(
   env: Env,
   asset: Pick<MediaAssetRow, 'provider' | 'provider_asset_id'>
 ): Promise<SignedMediaUrls> {
-  if (env.DEV_UPLOAD_PROXY === '1') {
-    const prefix = asset.provider === 'cloudflare_stream' ? 'dev-stream' : 'dev-images';
-    const suffix = asset.provider === 'cloudflare_stream'
-      ? 'manifest/video.m3u8'
-      : 'public';
-    return {
-      url: `http://127.0.0.1/${prefix}/${asset.provider_asset_id}/${suffix}`,
-      thumbnail_url: asset.provider === 'cloudflare_stream'
-        ? `http://127.0.0.1/dev-stream/${asset.provider_asset_id}/thumbnails/thumbnail.jpg`
-        : null
-    };
-  }
   if (asset.provider === 'cloudflare_stream') {
     return signedStreamUrls(env, asset.provider_asset_id);
   }
@@ -39,7 +28,7 @@ export async function signedImageUrl(env: Env, imageId: string): Promise<string>
     throw new HttpError(503, 'images_signing_not_configured', 'Cloudflare Images 私有交付未配置');
   }
   const url = new URL(`${base}/${encodeURIComponent(imageId)}/public`);
-  const expiry = Math.floor(Date.now() / 1000) + parsePositiveInt(env.MEDIA_TTL_SECONDS, 300);
+  const expiry = Math.floor(Date.now() / 1000) + deliveryTtl(env);
   url.searchParams.set('exp', String(expiry));
   const payload = `${url.pathname}?${url.searchParams.toString()}`;
   const key = await crypto.subtle.importKey(

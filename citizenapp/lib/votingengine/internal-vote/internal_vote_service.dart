@@ -17,8 +17,8 @@ import 'package:citizenapp/votingengine/internal-vote/internal_vote_query_servic
 ///   投票动作统一
 ///   委托本服务,避免多处构造相同的 call。
 ///
-/// Runtime 位置: `pallet_index=22, call_index=0`(InternalVote sub-pallet)。
-/// Call 编码: `[0x16][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
+/// Runtime 位置: `pallet_index=20, call_index=0`(InternalVote sub-pallet)。
+/// Call 编码: `[0x14][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
 class InternalVoteService {
   InternalVoteService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
@@ -26,15 +26,15 @@ class InternalVoteService {
 
   // ──── 常量 ────
 
-  /// InternalVote sub-pallet。runtime pallet_index=22。
-  static const int internalVotePallet = 22;
+  /// InternalVote sub-pallet。runtime pallet_index=20。
+  static const int internalVotePallet = 20;
 
   /// InternalVote::cast call_index=0。
   static const int internalVoteCallIndex = 0;
 
   // ──── 公开 API ────
 
-  /// 提交 `InternalVote::cast(proposal_id, approve)` extrinsic(pallet 22.0)。
+  /// 提交 `InternalVote::cast(proposal_id, approve)` extrinsic(pallet 20.0)。
   ///
   /// 投票提交必须等待交易进入区块。txHash 只代表交易已提交，
   /// 不能代表 runtime 已执行 `InternalVote::cast`。
@@ -69,7 +69,7 @@ class InternalVoteService {
 
   /// 构造 InternalVote::cast call data(对外公开,便于冷钱包/热钱包复用)。
   ///
-  /// 格式: `[0x16][0x00][proposal_id:u64_le][approve:bool]`(pallet=22, call=0)。
+  /// 格式: `[0x14][0x00][proposal_id:u64_le][approve:bool]`(pallet=20, call=0)。
   static Uint8List buildCallData({
     required int proposalId,
     required bool approve,

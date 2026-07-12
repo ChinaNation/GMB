@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --local",
-    "dev:local": "wrangler dev --local --var DEV_UPLOAD_PROXY:1",
+    "dev:local": "wrangler dev --local",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:local": "wrangler d1 execute citizenapp-square-db --local --file migrations/0001_square_core.sql",

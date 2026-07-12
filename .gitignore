@@ -63,6 +63,9 @@ docs/citizenpassport/.citizenpassport_key
 **/android/.gradle/
 **/android/local.properties
 
+# Android 系统错误报告可能包含设备与网络诊断信息，禁止进入仓库。
+/bugreport-*.zip
+
 # Android signing secrets
 citizenapp/android/key.properties
 citizenapp/android/app/*.jks

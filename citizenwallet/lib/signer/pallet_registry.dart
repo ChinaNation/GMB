@@ -7,9 +7,9 @@
 /// 直接红色拒签。
 ///
 /// 投票引擎统一入口:
-/// - 业务 pallet 不承载投票,管理员投票走 `InternalVote::cast`(22.0)
-/// - 联合投票内部投票阶段走 `JointVote::cast_admin`(23.0),
-///   联合公投阶段走 `JointVote::cast_referendum`(23.1)
+/// - 业务 pallet 不承载投票,管理员投票走 `InternalVote::cast`(20.0)
+/// - 联合投票内部投票阶段走 `JointVote::cast_admin`(21.0),
+///   联合公投阶段走 `JointVote::cast_referendum`(21.1)
 /// - 引擎核心 `VotingEngine` (9) 仅承载 `finalize_proposal`(9.3) /
 ///   `retry_passed_proposal`(9.4) / `cancel_passed_proposal`(9.5)。
 ///
@@ -24,8 +24,8 @@ class PalletRegistry {
 
   // ---- VotingEngine (9) · 引擎核心 ----
   // 仅承载 lifecycle extrinsic:finalize_proposal / retry_passed_proposal /
-  // cancel_passed_proposal。mode-specific 投票 extrinsic 在 InternalVote(22) /
-  // JointVote(23) sub-pallet。
+  // cancel_passed_proposal。mode-specific 投票 extrinsic 在 InternalVote(20) /
+  // JointVote(21) sub-pallet。
   static const int votingEnginePallet = 9;
 
   /// `finalize_proposal(proposal_id)` — 任意人触发终态执行(无需签投票)。
@@ -46,14 +46,14 @@ class PalletRegistry {
   /// `upgrade_to_candidate_identity(registrar_account, payload, citizen_signature)`。
   static const int upgradeToCandidateIdentityCall = 1;
 
-  // ---- InternalVote sub-pallet (22) · 内部投票管理员一人一票 ----
-  static const int internalVotePallet = 22;
+  // ---- InternalVote sub-pallet (20) · 内部投票管理员一人一票 ----
+  static const int internalVotePallet = 20;
 
   /// `cast(proposal_id, approve)`。
   static const int internalVoteCall = 0;
 
-  // ---- JointVote sub-pallet (23) · 联合投票(内部投票阶段 + 联合公投)----
-  static const int jointVotePallet = 23;
+  // ---- JointVote sub-pallet (21) · 联合投票(内部投票阶段 + 联合公投)----
+  static const int jointVotePallet = 21;
 
   /// `cast_admin(proposal_id, institution_account, approve)` — 联合投票内部投票阶段。
   static const int jointVoteCall = 0;
@@ -66,25 +66,25 @@ class PalletRegistry {
 
   // ---- 业务 pallet:仅承载提案创建与幂等兜底入口 ----
   //
-  // 投票统一走 `InternalVote(22).cast(0)`,手动重试/取消统一走
+  // 投票统一走 `InternalVote(20).cast(0)`,手动重试/取消统一走
   // `VotingEngine(9).retry_passed_proposal(4)` / `cancel_passed_proposal(5)`。
 
-  // ---- MultisigTransfer (19) ----
+  // ---- MultisigTransfer (17) ----
   // call_index 3/4/5 留洞不复用。
-  static const int multisigTransferPallet = 19;
+  static const int multisigTransferPallet = 17;
   static const int proposeTransferCall = 0;
   static const int proposeSafetyFundCall = 1;
   static const int proposeSweepCall = 2;
 
-  // ---- 协议升级 RuntimeUpgrade (13) ----
-  static const int runtimeUpgradePallet = 13;
+  // ---- 协议升级 RuntimeUpgrade (12) ----
+  static const int runtimeUpgradePallet = 12;
   static const int proposeRuntimeUpgradeCall = 0;
   static const int developerDirectUpgradeCall = 2;
 
-  // ---- PublicManage (32) / PrivateManage (33) ----
+  // ---- PublicManage (30) / PrivateManage (31) ----
   // 公权机构与私权机构生命周期分别由两个 pallet 承载。
-  static const int publicManagePallet = 32;
-  static const int privateManagePallet = 33;
+  static const int publicManagePallet = 30;
+  static const int privateManagePallet = 31;
   static const int proposeCloseInstitutionCall = 1;
   static const int registerCidInstitutionCall = 2;
   static const int cleanupRejectedInstitutionProposalCall = 4;
@@ -95,26 +95,30 @@ class PalletRegistry {
   /// scope_*)` — 机构多签账户创建提案。
   static const int proposeCreateInstitutionCall = 5;
 
-  // ---- PersonalAdmins (7) ----
+  // ---- PersonalManage (7) · 个人多签生命周期 ----
   // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt",
   // ACTION enum 独立命名空间(ACTION_CREATE=0/ACTION_CLOSE=1)。
   // propose_create(account_name, admins, regular_threshold, amount):
   // admins_len 由 admins 长度派生,regular_threshold 由用户输入且必须严格过半。
-  static const int personalAdminsPallet = 7;
+  static const int personalManagePallet = 7;
   static const int proposeCreatePersonalCall = 0;
   static const int proposeClosePersonalCall = 1;
   static const int cleanupRejectedPersonalProposalCall = 2;
-  static const int proposePersonalAdminSetChangeCall = 3;
 
-  // ---- ResolutionDestroy (14) ----
+  // ---- PersonalAdmins (29) · 个人多签管理员集合变更 ----
+  // 独立 pallet,承载 propose_admin_set_change(call_index=0)。
+  static const int personalAdminsPallet = 29;
+  static const int proposePersonalAdminSetChangeCall = 0;
+
+  // ---- ResolutionDestroy (13) ----
   // call_index 1 留洞不复用。
-  static const int resolutionDestroPallet = 14;
+  static const int resolutionDestroPallet = 13;
   static const int proposeDestroyCall = 0;
 
-  // ---- 管理员集合变更:PublicAdmins(29) / PrivateAdmins(30) ----
-  // PersonalAdmins(7) 的管理员集合变更使用 call_index=3。
-  static const int publicAdminsPallet = 29;
-  static const int privateAdminsPallet = 30;
+  // ---- 管理员集合变更:PublicAdmins(27) / PrivateAdmins(28) ----
+  // PersonalAdmins(29) 的管理员集合变更使用 call_index=0。
+  static const int publicAdminsPallet = 27;
+  static const int privateAdminsPallet = 28;
   static const int proposeAdminSetChangeCall = 0;
 
   static bool isAdminSetChangePallet(int palletIndex) {
@@ -127,20 +131,20 @@ class PalletRegistry {
         callIndex == proposePersonalAdminSetChangeCall;
   }
 
-  // ---- GrandpaKeyChange (16) ----
+  // ---- GrandpaKeyChange (15) ----
   // call_index 1, 2 留洞不复用。
-  static const int grandpaKeyChangePallet = 16;
+  static const int grandpaKeyChangePallet = 15;
   static const int proposeReplaceGrandpaKeyCall = 0;
 
   // ---- ResolutionIssuance (8) ----
   static const int resolutionIssuancePallet = 8;
   static const int proposeIssuanceCall = 0;
 
-  // ---- OnchainIssuance (25) · 链上发行代币(Plain FT) ----
+  // ---- OnchainIssuance (23) · 链上发行代币(Plain FT) ----
   // call_index 5..=9 / 15+ 留洞不复用(永久 ABI)。
   // 业务调用走 propose_X(InternalVote),监管调用走 propose_monitor_X(JointVote)。
-  // 投票/重试/取消统一走 InternalVote(22)/JointVote(23)/VotingEngine(9.4/9.5)。
-  static const int onchainIssuancePallet = 25;
+  // 投票/重试/取消统一走 InternalVote(20)/JointVote(21)/VotingEngine(9.4/9.5)。
+  static const int onchainIssuancePallet = 23;
   // 业务 propose
   static const int proposeIssueCall = 0;
   static const int proposeMintCall = 1;
@@ -154,17 +158,17 @@ class PalletRegistry {
   static const int proposeMonitorForceTransferCall = 13;
   static const int proposeMonitorForceCloseCall = 14;
 
-  // ---- LegislationYuan (27) · 立法院(立法/修法/废法发起)----
+  // ---- LegislationYuan (25) · 立法院(立法/修法/废法发起)----
   // 法律结构化上链(章>节>条>款),发起类提案 QR 由节点端生成,冷钱包仅解码核对。
-  // 投票/签署统一走 LegislationVote(28),本 pallet 仅承载 3 条 propose_X。
-  static const int legislationYuanPallet = 27;
+  // 投票/签署统一走 LegislationVote(26),本 pallet 仅承载 3 条 propose_X。
+  static const int legislationYuanPallet = 25;
   static const int proposeEnactLawCall = 0;
   static const int proposeAmendLawCall = 1;
   static const int proposeRepealLawCall = 2;
 
-  // ---- LegislationVote (28) · 立法专属投票引擎 ----
+  // ---- LegislationVote (26) · 立法专属投票引擎 ----
   // 立法投票阶段:院内表决 / 特别案公投 / 行政签署 / 三人会签 / 护宪终审 / 准备人口快照。
-  static const int legislationVotePallet = 28;
+  static const int legislationVotePallet = 26;
   static const int prepareLegislationSnapshotCall = 0;
   static const int castHouseVoteCall = 1;
   static const int castLegislationReferendumCall = 2;
@@ -172,8 +176,8 @@ class PalletRegistry {
   static const int overrideSignCall = 4;
   static const int guardVoteCall = 5;
 
-  // ---- OffchainTransaction (21) · 清算行 L2 体系 ----
-  static const int offchainTransactionPallet = 21;
+  // ---- OffchainTransaction (19) · 清算行 L2 体系 ----
+  static const int offchainTransactionPallet = 19;
   static const int bindClearingBankCall = 30;
   static const int depositCall = 31;
   static const int withdrawCall = 32;

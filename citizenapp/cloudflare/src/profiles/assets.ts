@@ -2,16 +2,15 @@ import type { Env } from '../types';
 import {
   HttpError,
   jsonResponse,
-  parsePositiveInt,
   readJson,
   requireSession
 } from '../shared/http';
 import { isSha256Hex } from '../shared/hash';
-import { createUploadUrl } from '../storage/presigned';
-import { normalizeFileExt, profileAssetPrefix } from '../storage/r2_keys';
-
-const ALLOWED_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_ASSET_BYTES = 15 * 1024 * 1024;
+import { profileAssetPrefix } from '../storage/r2_keys';
+import { resourceLimit, type ResourceKey } from '../limits/catalog';
+import { apiRouteUrl, readLimitedBytes } from '../limits/request';
+import { assertDeclaredResource, validateUploadBytes } from '../limits/upload';
+import { putR2Object } from '../limits/storage';
 
 interface PrepareAssetRequest {
   kind?: unknown;
@@ -20,8 +19,7 @@ interface PrepareAssetRequest {
   sha256?: unknown;
 }
 
-/// 头像/背景上传授权：object_key 落本人 profile/ 前缀，文件名带 sha256 便于 CDN 缓存失效。
-/// 内容不上链（决策 2）；生产返回 R2 预签名 PUT，本地返回 dev-put。
+/// 头像/背景准备只固定本人对象 key；实际字节必须再经 Worker 有界校验后写 R2。
 export async function prepareProfileAsset(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   const body = await readJson<PrepareAssetRequest>(request);
@@ -31,34 +29,26 @@ export async function prepareProfileAsset(request: Request, env: Env): Promise<R
   if (kind === null) {
     throw new HttpError(400, 'invalid_asset_kind', '资源类型必须是 avatar 或 banner');
   }
-  if (
-    typeof body.content_type !== 'string' ||
-    !ALLOWED_CONTENT_TYPES.includes(body.content_type)
-  ) {
-    throw new HttpError(400, 'invalid_content_type', '头像/背景只支持 jpeg/png/webp');
+  const resourceKey: ResourceKey = kind === 'avatar' ? 'profile_avatar' : 'profile_banner';
+  if (typeof body.content_type !== 'string' || typeof body.byte_size !== 'number') {
+    throw new HttpError(400, 'invalid_asset_declaration', '资源文件声明不完整');
   }
-  if (
-    typeof body.byte_size !== 'number' ||
-    body.byte_size <= 0 ||
-    body.byte_size > MAX_ASSET_BYTES
-  ) {
-    throw new HttpError(400, 'invalid_byte_size', '文件大小不合法');
-  }
+  assertDeclaredResource({
+    resource_key: resourceKey,
+    byte_size: body.byte_size,
+    content_type: body.content_type,
+  });
   if (!isSha256Hex(body.sha256)) {
     throw new HttpError(400, 'invalid_sha256', 'sha256 必须是 64 位 hex');
   }
 
   const sha = (body.sha256 as string).toLowerCase();
-  const ext = normalizeFileExt(body.content_type);
-  const objectKey = `${profileAssetPrefix(session.owner_account)}${kind}_${sha}.${ext}`;
-  const expiresSeconds = parsePositiveInt(env.UPLOAD_TTL_SECONDS, 900);
-  const uploadUrl = await createUploadUrl(env, {
+  // 固定对象键让并发上传也只能覆盖同一对象，物理上不可能留下第二个头像或背景。
+  const objectKey = `${profileAssetPrefix(session.owner_account)}${kind}`;
+  const uploadUrl = apiRouteUrl(request, '/v1/square/profile/assets', {
     object_key: objectKey,
-    content_type: body.content_type,
-    expires_seconds: expiresSeconds,
-    request_url: new URL(request.url),
-    upload_id: 'profile',
-    dev_upload_path: '/v1/square/profile/assets/dev-put'
+    byte_size: String(body.byte_size),
+    sha256: sha,
   });
 
   return jsonResponse({
@@ -69,25 +59,43 @@ export async function prepareProfileAsset(request: Request, env: Env): Promise<R
   });
 }
 
-/// 本地开发上传代理：仅校验对象属本人 profile/ 前缀（无上传行），写入 R2。
-export async function devPutProfileAsset(request: Request, env: Env): Promise<Response> {
-  if (env.DEV_UPLOAD_PROXY !== '1') {
-    throw new HttpError(404, 'dev_upload_proxy_disabled', '开发上传代理未启用');
-  }
+/// 头像/背景实际上传入口：校验真实字节、文件头、尺寸和哈希，并只保留同类最新对象。
+export async function putProfileAsset(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
-  const objectKey = new URL(request.url).searchParams.get('object_key');
+  const url = new URL(request.url);
+  const objectKey = url.searchParams.get('object_key');
   if (!objectKey || !objectKey.startsWith(profileAssetPrefix(session.owner_account))) {
     throw new HttpError(403, 'asset_object_forbidden', '无权写入该资源对象');
   }
-  const contentType =
-    request.headers.get('content-type') ?? 'application/octet-stream';
-  const bytes = await request.arrayBuffer();
-  await env.SQUARE_MEDIA.put(objectKey, bytes, {
-    httpMetadata: { contentType }
+  const fileName = objectKey.slice(profileAssetPrefix(session.owner_account).length);
+  const match = /^(avatar|banner)$/.exec(fileName);
+  if (!match) throw new HttpError(400, 'asset_object_invalid', '资源对象 key 不合法');
+  const kind = match[1]!;
+  const resourceKey: ResourceKey = kind === 'avatar' ? 'profile_avatar' : 'profile_banner';
+  const expectedHash = url.searchParams.get('sha256');
+  if (!isSha256Hex(expectedHash)) {
+    throw new HttpError(400, 'invalid_sha256', '上传地址缺少合法 sha256');
+  }
+  const expectedBytes = Number.parseInt(url.searchParams.get('byte_size') ?? '', 10);
+  if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 ||
+      expectedBytes > resourceLimit(resourceKey).max_bytes) {
+    throw new HttpError(400, 'invalid_byte_size', '资源申报大小不合法');
+  }
+  const bytes = await readLimitedBytes(request, resourceKey, true);
+  const ticket = await validateUploadBytes({
+    resource_key: resourceKey,
+    bytes,
+    content_type: request.headers.get('content-type') ?? '',
+    expected_bytes: expectedBytes,
+    expected_hash: expectedHash,
   });
+  await putR2Object(env, objectKey, bytes, ticket);
   return jsonResponse({
     ok: true,
     object_key: objectKey,
-    byte_size: bytes.byteLength
+    content_hash: ticket.content_hash,
+    byte_size: ticket.byte_size,
+    width: ticket.width,
+    height: ticket.height,
   });
 }

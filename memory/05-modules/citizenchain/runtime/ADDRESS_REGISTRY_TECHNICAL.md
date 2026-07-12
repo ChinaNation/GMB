@@ -16,7 +16,7 @@ citizenchain/runtime/otherpallet/address-registry/
 
 ## 3. Runtime 挂载
 
-- pallet index：`35`
+- pallet index：`33`
 - runtime 类型名：`AddressRegistry`
 - 费用模型：`VoteFlat`
 - 权限配置：`RuntimeAddressAuthority`

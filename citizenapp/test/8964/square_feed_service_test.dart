@@ -7,6 +7,15 @@ import 'package:http/testing.dart';
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 
+// 发布会员体系后，`SquareApiClient._headers` 对带 session 的请求强制要求设备请求签名器，
+// 缺失即抛「设备请求签名器缺失」。测试用固定假签名占位；MockClient 不校验签名头。
+SquareSession _session() => SquareSession(
+      sessionToken: 'sqs_test',
+      ownerAccount: 'owner',
+      expiresAt: 1800000000000,
+      signRequest: (_) async => 'test-device-signature',
+    );
+
 void main() {
   test('SquareApiClient 解析 Worker feed 动态和媒体元数据', () async {
     final client = SquareApiClient(
@@ -105,7 +114,7 @@ void main() {
                 'byte_size': 1024,
                 'provider': 'cloudflare_images',
                 'provider_asset_id': 'img_test',
-                'upload_method': 'direct_form',
+                'upload_method': 'worker',
                 'upload_url': 'https://upload.test/image',
               }
             ],
@@ -117,11 +126,7 @@ void main() {
     );
 
     final prepared = await client.prepareUpload(
-      session: const SquareSession(
-        sessionToken: 'sqs_test',
-        ownerAccount: 'owner',
-        expiresAt: 1800000000000,
-      ),
+      session: _session(),
       postCategory: SquarePostCategory.campaign,
       contentFormat: SquarePostContentFormat.article,
       titleLength: 12,
@@ -156,11 +161,7 @@ void main() {
     );
 
     await client.deletePost(
-      session: const SquareSession(
-        sessionToken: 'sqs_test',
-        ownerAccount: 'owner',
-        expiresAt: 1800000000000,
-      ),
+      session: _session(),
       postId: 'sqp_old',
     );
   });

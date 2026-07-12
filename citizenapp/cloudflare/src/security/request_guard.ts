@@ -8,6 +8,7 @@ import {
   signingMessage
 } from '../shared/signing_message';
 import { nowMs } from '../shared/time';
+import { assertRequestBodyLimit, readLimitedBytes } from '../limits/request';
 
 const REQUEST_TIME_HEADER = 'x-device-time';
 const REQUEST_NONCE_HEADER = 'x-device-nonce';
@@ -67,22 +68,13 @@ function allowedOrigins(env: Env): Set<string> {
   );
 }
 
-/** 在进入 JSON 解析前先限制请求体，避免异常请求消耗 Worker 内存。 */
-export function assertRequestSize(request: Request, path: string): void {
-  if (path.endsWith('/webhook') || path.includes('/dev-')) return;
-  const length = Number.parseInt(request.headers.get('content-length') ?? '0', 10);
-  if (Number.isFinite(length) && length > 256 * 1024) {
-    throw new HttpError(413, 'request_too_large', '请求体超过服务端上限');
-  }
-}
-
 /**
  * 统一入口风控：预登录按 IP 粗限流，登录后按钱包精确限流；写接口和计费型读取
  * 必须提供 P-256 设备证明。Stripe/Stream webhook 使用各自签名，不重复套设备证明。
  */
 export async function guardRequest(request: Request, env: Env, path: string): Promise<void> {
   assertAllowedOrigin(request, env);
-  assertRequestSize(request, path);
+  assertRequestBodyLimit(request, path);
 
   const ipKey = await requestIpKey(request, env);
   if (path === '/v1/square/auth/challenge' || path === '/v1/square/auth/session') {
@@ -120,7 +112,9 @@ function requiresDeviceProof(path: string, method: string): boolean {
   if (path.startsWith('/v1/square/membership/subscribe')) return false;
   if (path.startsWith('/v1/square/membership/cancel')) return false;
   if (path.startsWith('/v1/square/account/delete')) return false;
-  if (path.includes('/dev-')) return false;
+  // Image.network 只能稳定携带 Bearer header；资料媒体仍由 handler 强制校验钱包
+  // session，但不要求它动态生成 P-256 请求签名。
+  if (path.startsWith('/v1/square/media/')) return false;
   if (path.startsWith('/v1/chat/')) return true;
   if (path === '/v1/chain/extrinsics/relay') return true;
   return path.startsWith('/v1/square/') && method !== 'OPTIONS';
@@ -128,7 +122,6 @@ function requiresDeviceProof(path: string, method: string): boolean {
 
 function routeRate(path: string, method: string): { key: string; limit: number; seconds: number } {
   if (path === '/v1/square/uploads/prepare') return { key: 'upload', limit: 30, seconds: 3600 };
-  if (path === '/v1/chat/turn') return { key: 'turn', limit: 6, seconds: 600 };
   if (path === '/v1/chat/ws') return { key: 'chat_ws', limit: 12, seconds: 60 };
   if (path.startsWith('/v1/chat/')) return { key: 'chat', limit: 120, seconds: 60 };
   if (method === 'GET') return { key: 'read', limit: 120, seconds: 60 };
@@ -160,7 +153,7 @@ async function requireDeviceProof(
     throw new HttpError(401, 'device_key_changed', '设备密钥已更换，请重新登录');
   }
 
-  const bodyHash = await requestBodyHash(request);
+  const bodyHash = await requestBodyHash(request, path);
   const token = request.headers.get('authorization')!.slice('Bearer '.length).trim();
   const tokenHash = await sha256Hex(token);
   const url = new URL(request.url);
@@ -189,11 +182,12 @@ async function requireDeviceProof(
   }
 }
 
-async function requestBodyHash(request: Request): Promise<string> {
+async function requestBodyHash(request: Request, path: string): Promise<string> {
   if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'DELETE') {
     return sha256Hex('');
   }
-  return sha256Hex(await request.clone().text());
+  assertRequestBodyLimit(request, path);
+  return sha256Hex(await readLimitedBytes(request.clone()));
 }
 
 async function requestIpKey(request: Request, env: Env): Promise<string> {

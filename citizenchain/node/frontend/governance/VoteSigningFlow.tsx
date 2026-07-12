@@ -50,8 +50,8 @@ export function VoteSigningFlow({
     try {
       let result: VoteSignRequestResult;
       let cdHex: string;
-      // 内部投票(管理员一人一票)统一走 InternalVote::cast(22.0),
-      // 联合投票走 JointVote::cast_admin(23.0),由 proposalKind===1 分支决定。
+      // 内部投票(管理员一人一票)统一走 InternalVote::cast(20.0),
+      // 联合投票走 JointVote::cast_admin(21.0),由 proposalKind===1 分支决定。
       if (proposalKind === 1 && cidNumber) {
         result = await api.buildJointVoteRequest(proposalId, selectedWallet.pubkeyHex, cidNumber, approve);
         cdHex = result.callDataHex;
@@ -149,15 +149,15 @@ export function VoteSigningFlow({
 }
 
 /**
- * 统一投票入口 call 编码:`[0x16][0x00][proposal_id:u64_le][approve:bool]` = 11 bytes。
+ * 统一投票入口 call 编码:`[0x14][0x00][proposal_id:u64_le][approve:bool]` = 11 bytes。
  *
- * 管理员一人一票一律走 InternalVote::cast(pallet=22, call=0)。
+ * 管理员一人一票一律走 InternalVote::cast(pallet=20, call=0)。
  */
 function buildInternalVoteCallDataHex(proposalId: number, approve: boolean): string {
   const buf = new ArrayBuffer(11);
   const view = new DataView(buf);
   const arr = new Uint8Array(buf);
-  arr[0] = 22; arr[1] = 0; // InternalVote.cast
+  arr[0] = 20; arr[1] = 0; // InternalVote.cast
   view.setUint32(2, proposalId & 0xFFFFFFFF, true);
   view.setUint32(6, Math.floor(proposalId / 0x100000000), true);
   arr[10] = approve ? 1 : 0;

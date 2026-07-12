@@ -51,6 +51,11 @@ class ChatWebrtcTransport {
 
   static const _chunkSize = 16 * 1024;
   static const _timeout = Duration(seconds: 45);
+  // 只使用 STUN 发现公网候选；不配置中继 URL、用户名或凭证，附件因此绝不会
+  // 经云端中继。直连失败时保留在发送设备，等待接收方网络条件允许后重试。
+  static const _iceServers = <Map<String, Object>>[
+    <String, Object>{'urls': <String>['stun:stun.cloudflare.com:3478']},
+  ];
 
   final String ownerAccount;
   final ChatCloudTransport cloud;
@@ -151,12 +156,7 @@ class ChatWebrtcTransport {
       String transferId, String peerAccount) async {
     final existing = _peers[transferId];
     if (existing != null) return existing;
-    final iceServers = await cloud.createIceServers();
-    final connection = await createPeerConnection({
-      'iceServers': iceServers
-          .map((server) => server.toWebRtcMap())
-          .toList(growable: false),
-    });
+    final connection = await createPeerConnection({'iceServers': _iceServers});
     final peer = _PeerTransfer(transferId, peerAccount, connection);
     _peers[transferId] = peer;
     connection.onIceCandidate = (candidate) {

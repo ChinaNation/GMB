@@ -37,7 +37,8 @@ pub const ACTION_ONCHINA_ADMIN: u16 = 3;
 
 // 链交易动作码(机构创建/管理员集合)不在此处发明扁平常量:
 // 统一用 `core::institution_call::chain_action_code(pallet,call)` 派生(b.a 与 b.d 同源),
-// 公权机构创建=0x2005、私权机构创建=0x2105、CREG federal_set=0x0c01、FRG propose=0x0c00。
+// 公权机构创建=0x1e05、私权机构创建=0x1f05、FRG 省级组管理员替换=0x1b02
+// (PublicAdmins.propose_federal_registry_province_admin_set_change)。CREG 市注册局系公权机构,创建即公权机构创建 0x1e05。
 // 详见 qr-action-registry.md「链交易动作码」。
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

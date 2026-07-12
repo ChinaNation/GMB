@@ -55,12 +55,11 @@ PALLETS=(
     "fullnode_issuance:runtime/issuance/fullnode-issuance/src/weights.rs"
     "citizen_issuance:runtime/issuance/citizen-issuance/src/weights.rs"
     "resolution_issuance:runtime/issuance/resolution-issuance/src/weights.rs"
-    "citizen_identity:runtime/otherpallet/citizen-identity/src/weights.rs"
-    "pow_difficulty:runtime/otherpallet/pow-difficulty/src/weights.rs"
-    "admins_change:runtime/governance/admins-change/src/weights.rs"
-    "resolution_destro:runtime/governance/resolution-destro/src/weights.rs"
+    "citizen_identity:runtime/misc/citizen-identity/src/weights.rs"
+    "pow_difficulty:runtime/misc/pow-difficulty/src/weights.rs"
+    "resolution_destroy:runtime/governance/resolution-destroy/src/weights.rs"
     "grandpakey_change:runtime/governance/grandpakey-change/src/weights.rs"
-    "multisig_transfer:runtime/transaction/multisig-transfer/src/weights.rs"
+    "multisig:runtime/transaction/multisig/src/weights.rs"
     "runtime_upgrade:runtime/governance/runtime-upgrade/src/weights.rs"
 )
 

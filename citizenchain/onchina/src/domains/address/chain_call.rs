@@ -12,7 +12,7 @@ use super::{
 };
 
 /// AddressRegistry pallet 在 runtime 中的索引。
-pub(crate) const ADDRESS_REGISTRY_PALLET_INDEX: u8 = 35;
+pub(crate) const ADDRESS_REGISTRY_PALLET_INDEX: u8 = 33;
 pub(crate) const CALL_SET_CATALOG_VERSION: u8 = 0;
 pub(crate) const CALL_SET_ADDRESS_NAME: u8 = 1;
 pub(crate) const CALL_REMOVE_ADDRESS_NAME: u8 = 2;

@@ -36,7 +36,7 @@ describe('citizen profile repository', () => {
       owner_account: owner,
       display_name: '轻节点',
       bio: '链上公民',
-      avatar_object_key: `profile/${owner}/avatar.webp`,
+      avatar_object_key: `profile/${owner}/avatar`,
       avatar_content_hash: '0xabc',
       banner_object_key: null,
       banner_content_hash: null,
@@ -49,7 +49,7 @@ describe('citizen profile repository', () => {
     expect(loaded).toMatchObject({
       display_name: '轻节点',
       bio: '链上公民',
-      avatar_object_key: `profile/${owner}/avatar.webp`,
+      avatar_object_key: `profile/${owner}/avatar`,
       updated_at: 123
     });
   });
@@ -202,7 +202,21 @@ describe('PUT /v1/square/profile', () => {
         request('https://w/v1/square/profile', {
           method: 'PUT',
           authToken: 'tok',
-          body: { avatar_object_key: `profile/${viewer}/avatar.webp` }
+          body: { avatar_object_key: `profile/${viewer}/avatar` }
+        }),
+        env
+      )
+    ).rejects.toMatchObject({ code: 'invalid_asset_key' });
+  });
+
+  it('rejects a non-fixed avatar key inside the owner profile directory', async () => {
+    const env = fakeEnv({ session: { token: 'tok', owner_account: owner } });
+    await expect(
+      putProfileRoute(
+        request('https://w/v1/square/profile', {
+          method: 'PUT',
+          authToken: 'tok',
+          body: { avatar_object_key: `profile/${owner}/avatar_extra` }
         }),
         env
       )
@@ -421,8 +435,15 @@ class FakeR2 {
     return value === undefined ? null : { text: async () => value };
   }
 
-  async put(key: string, value: string): Promise<void> {
-    this.store.set(key, typeof value === 'string' ? value : String(value));
+  async put(key: string, value: string | ArrayBuffer | ArrayBufferView): Promise<void> {
+    if (typeof value === 'string') {
+      this.store.set(key, value);
+      return;
+    }
+    const bytes = value instanceof ArrayBuffer
+      ? new Uint8Array(value)
+      : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    this.store.set(key, new TextDecoder().decode(bytes));
   }
 }
 

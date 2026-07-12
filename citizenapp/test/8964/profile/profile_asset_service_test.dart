@@ -9,10 +9,13 @@ import 'package:http/testing.dart';
 import 'package:citizenapp/8964/profile/services/profile_asset_service.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 
+// `_headers` 对带 session 的请求强制要求设备请求签名器（发布会员体系后新增硬校验）；
+// 测试用固定假签名占位，MockClient 不校验签名头。
 SquareSession _session() => SquareSession(
       sessionToken: 'tok',
       ownerAccount: 'acct',
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
+      signRequest: (_) async => 'test-device-signature',
     );
 
 void main() {
@@ -31,10 +34,10 @@ void main() {
           return http.Response(
             jsonEncode({
               'ok': true,
-              'object_key': 'profile/acct/avatar_$sha.webp',
+              'object_key': 'profile/acct/avatar',
               'content_hash': sha,
               'upload_url':
-                  'https://example.com/v1/square/profile/assets/dev-put',
+                  'https://example.com/v1/square/profile/assets?object_key=profile%2Facct%2Favatar&byte_size=5&sha256=$sha',
             }),
             200,
             headers: {'content-type': 'application/json'},
@@ -57,13 +60,13 @@ void main() {
       contentType: 'image/webp',
     );
 
-    expect(result.objectKey, 'profile/acct/avatar_$sha.webp');
+    expect(result.objectKey, 'profile/acct/avatar');
     expect(result.contentHash, sha);
     expect(prepareBody!['sha256'], sha);
     expect(prepareBody!['content_type'], 'image/webp');
     expect(prepareBody!['byte_size'], 5);
     expect(putBody, bytes);
-    expect(putAuth, 'Bearer tok'); // dev-put same origin → Bearer attached
+    expect(putAuth, 'Bearer tok');
   });
 
   test('throws when the upload PUT fails', () async {
@@ -74,10 +77,10 @@ void main() {
           return http.Response(
             jsonEncode({
               'ok': true,
-              'object_key': 'profile/a/avatar_x.webp',
+              'object_key': 'profile/a/avatar',
               'content_hash': 'x',
               'upload_url':
-                  'https://example.com/v1/square/profile/assets/dev-put',
+                  'https://example.com/v1/square/profile/assets?object_key=profile%2Fa%2Favatar&byte_size=1&sha256=x',
             }),
             200,
             headers: {'content-type': 'application/json'},

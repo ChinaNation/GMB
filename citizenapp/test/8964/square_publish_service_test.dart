@@ -247,7 +247,7 @@ class _FakeUploader implements SquareContentUploader {
             byteSize: 1024,
             provider: 'cloudflare_images',
             providerAssetId: 'img_test',
-            uploadMethod: 'direct_form',
+            uploadMethod: 'worker',
             uploadUrl: 'http://127.0.0.1/media',
           ),
         ],

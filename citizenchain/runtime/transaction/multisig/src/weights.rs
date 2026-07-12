@@ -18,7 +18,7 @@
 // --steps=50
 // --repeat=20
 // --template=/Users/rhett/GMB/citizenchain/scripts/benchmark-weight-template.hbs
-// --output=runtime/transaction/multisig-transfer/src/weights.rs
+// --output=runtime/transaction/multisig/src/weights.rs
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]

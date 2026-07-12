@@ -74,7 +74,7 @@ P2P 连接失败不等于整个 App 不可用。CitizenApp 运行态拆成三种
 
 ### 5. 聊天和广场
 
-聊天采用 OpenMLS + Cloudflare 瞬时密文转发 + WebRTC 设备附件 + 近场通信。消息、会话和附件只保存在设备；Cloudflare 只保存设备公钥、推送 Token、一次性 KeyPackage、防重放哈希和短期 TURN 索引。
+聊天采用 OpenMLS + Cloudflare 瞬时密文/信令转发 + WebRTC 设备直连附件 + 近场通信。消息、会话和附件只保存在设备；Cloudflare 只保存设备公钥、推送 Token、一次性 KeyPackage 和防重放哈希。附件只使用公共 STUN 发现候选地址，不经过云端中继。
 
 广场继续采用当前正式路线：媒体文件存 Cloudflare R2，CDN 分发；CitizenChain 只保存发布所需的链上元数据、哈希、索引和费用结果；Worker/D1/KV/DO 承接登录、会员、上传、feed、推荐信号和发布确认。
 

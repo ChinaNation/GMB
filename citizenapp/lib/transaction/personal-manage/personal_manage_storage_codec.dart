@@ -41,7 +41,7 @@ class PersonalManageStorageCodec {
 
   static Uint8List personalAccountsKey(String personalAccountHex) {
     return storageMapKey(
-      'PersonalAdmins',
+      'PersonalManage',
       'PersonalAccounts',
       hexDecode(personalAccountHex),
     );

@@ -41,7 +41,7 @@ class SquareChainService implements SquarePostChainPublisher {
 
   final ChainRpc _rpc;
 
-  static const int palletIndex = 36;
+  static const int palletIndex = 34;
   static const int publishPostCallIndex = 0;
   static const int maxPostIdBytes = 64;
   static const int maxStorageReceiptIdBytes = 96;

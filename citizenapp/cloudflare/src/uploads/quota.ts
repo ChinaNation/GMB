@@ -139,7 +139,7 @@ function assertDynamicQuota(input: DeclaredQuotaInput): void {
       `动态视频不能超过 ${input.plan.dynamic.max_videos} 个`
     );
   }
-  // 单视频体积按档（对齐推特：访客 512MB / 投票 2GB / 竞选 10GB）。
+  // 单视频体积直接引用会员套餐；套餐值由统一资源限制表生成，避免两套上限漂移。
   for (const item of input.mediaItems) {
     if (item.media_kind === 'video' && item.byte_size > input.plan.dynamic.max_video_bytes) {
       throw new HttpError(

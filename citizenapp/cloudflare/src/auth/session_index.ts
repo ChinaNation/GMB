@@ -1,4 +1,6 @@
 import type { Env } from '../types';
+import { putKvJson } from '../limits/storage';
+import { resourceLimit } from '../limits/catalog';
 
 /// 会话按 token 为键存 KV（square_session:{token}），无法按账户枚举。
 /// 这里额外维护「账户 → token 列表」索引，使注销时能定向失效该账户全部会话，
@@ -21,7 +23,8 @@ export async function indexSessionToken(
   if (!tokens.includes(token)) {
     tokens.push(token);
   }
-  await env.SQUARE_CACHE.put(key, JSON.stringify(tokens), {
+  const kept = tokens.slice(-(resourceLimit('session_index').max_count ?? 1));
+  await putKvJson(env, key, kept, 'session_index', {
     expirationTtl: Math.max(sessionTtlSeconds, 3600)
   });
 }

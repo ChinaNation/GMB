@@ -19,6 +19,7 @@ class ProfileHeaderCard extends StatelessWidget {
     required this.actions,
     this.fallbackName = '',
     this.avatarUrl,
+    this.avatarHeaders,
     this.onFollowing,
     this.onFollowers,
     this.onPosts,
@@ -34,6 +35,7 @@ class ProfileHeaderCard extends StatelessWidget {
 
   /// 头像图片 URL（object_key 解析后的公开媒体地址）；为空显示占位。
   final String? avatarUrl;
+  final Map<String, String>? avatarHeaders;
 
   /// 右上三图标（[ProfileActionIcons]）。
   final Widget actions;
@@ -149,6 +151,7 @@ class ProfileHeaderCard extends StatelessWidget {
               membershipLevel: _membershipLevel,
               membershipActive: _membershipActive,
               imageUrl: avatarUrl,
+              imageHeaders: avatarHeaders,
               seed: ownerAccount,
             ),
           ),
@@ -165,6 +168,7 @@ class _Avatar extends StatelessWidget {
     required this.membershipActive,
     required this.seed,
     this.imageUrl,
+    this.imageHeaders,
   });
 
   /// 链上身份档位：颜色来源（访客橙/投票蓝/竞选红/纯访客无）。
@@ -174,6 +178,7 @@ class _Avatar extends StatelessWidget {
   final String? membershipLevel;
   final bool membershipActive;
   final String? imageUrl;
+  final Map<String, String>? imageHeaders;
 
   /// 用于给未设头像的用户稳定选一张默认头像的种子（钱包地址）。
   final String seed;
@@ -202,6 +207,7 @@ class _Avatar extends StatelessWidget {
                 ? _DefaultAvatar(seed: seed)
                 : Image.network(
                     url,
+                    headers: imageHeaders,
                     fit: BoxFit.cover,
                     width: ProfileHeaderCard._avatarSize,
                     height: ProfileHeaderCard._avatarSize,

@@ -5,7 +5,7 @@
 //!
 //! **铁律**:参数顺序与 SCALE 类型必须与链端 `public-manage`/`private-manage`
 //! `propose_create_{public,private}_institution`(call index 5,A1/A2 后)逐字节一致——
-//! 两 pallet call 形态完全相同,仅 pallet 前缀不同(PublicManage=32 / PrivateManage=33),
+//! 两 pallet call 形态完全相同,仅 pallet 前缀不同(PublicManage=30 / PrivateManage=31),
 //! 由 `institution_code` 经 `is_private_legal_code` 派生(机构管理已拆分公权/私权两 pallet)——
 //! - `institution_code` 是 `[u8;4]` 裸字节,无长度前缀;
 //! - `issuer_main_account` / `signer_pubkey` / `AdminProfile.account` 是 `[u8;32]` 裸字节;
@@ -22,9 +22,9 @@
 use codec::{Compact, Encode};
 
 /// PublicManage pallet 在 runtime construct_runtime 中的索引(公权机构生命周期)。
-pub const PUBLIC_MANAGE_PALLET_INDEX: u8 = 32;
+pub const PUBLIC_MANAGE_PALLET_INDEX: u8 = 30;
 /// PrivateManage pallet 在 runtime construct_runtime 中的索引(私权机构生命周期)。
-pub const PRIVATE_MANAGE_PALLET_INDEX: u8 = 33;
+pub const PRIVATE_MANAGE_PALLET_INDEX: u8 = 31;
 /// `propose_create_{public,private}_institution` 的 call index(两 pallet 同为 5)。
 pub const PROPOSE_CREATE_INSTITUTION_CALL_INDEX: u8 = 5;
 
@@ -152,7 +152,7 @@ pub struct ChainCall {
 /// 编码完整 `propose_create_{public,private}_institution` 裸 call data。
 ///
 /// 输出 = `[pallet, 0x05]` + 16 个参数(顺序与链端逐字节一致);pallet 由 institution_code
-/// 经 `create_institution_pallet_index` 派生(公权 32→动作码 0x2005 / 私权 33→0x2105)。
+/// 经 `create_institution_pallet_index` 派生(公权 32→动作码 0x1e05 / 私权 33→0x1f05)。
 pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) -> ChainCall {
     let pallet_index = create_institution_pallet_index(&args.institution_code);
     let mut out = Vec::new();
@@ -377,18 +377,18 @@ mod tests {
         let chain = encode_propose_create_institution(&args);
         let manual = chain.call_data;
 
-        // SFLP 是私权法人码 → PrivateManage(33) call 5,前缀 [33,5]、动作码 0x2105。
+        // SFLP 是私权法人码 → PrivateManage(31) call 5,前缀 [31,5]、动作码 0x1f05。
         assert_eq!(
             &manual[..2],
             &[
                 PRIVATE_MANAGE_PALLET_INDEX,
                 PROPOSE_CREATE_INSTITUTION_CALL_INDEX
             ],
-            "私权机构创建前缀必须是 [33,5]"
+            "私权机构创建前缀必须是 [31,5]"
         );
         assert_eq!(
-            chain.action, 0x2105,
-            "私权机构创建动作码必须 = (33<<8)|5 = 0x2105"
+            chain.action, 0x1f05,
+            "私权机构创建动作码必须 = (31<<8)|5 = 0x1f05"
         );
 
         // 用链端真实类型按参数顺序逐个 .encode() 拼接出 golden(不含前缀)。
@@ -420,7 +420,7 @@ mod tests {
 
         assert_eq!(&manual[2..], &golden[..], "完整参数 SCALE 与链端类型漂移");
 
-        // 公权码分支:同一编码器换公权机构码必须路由到 PublicManage(32) call 5、动作码 0x2005。
+        // 公权码分支:同一编码器换公权机构码必须路由到 PublicManage(30) call 5、动作码 0x1e05。
         let mut public_args = args;
         public_args.institution_code = *b"PRC\0"; // 省公民储备银行(公权法人)
         assert!(!primitives::cid::code::is_private_legal_code(
@@ -436,8 +436,8 @@ mod tests {
             "公权机构创建前缀必须是 [32,5]"
         );
         assert_eq!(
-            public_chain.action, 0x2005,
-            "公权机构创建动作码必须 = (32<<8)|5 = 0x2005"
+            public_chain.action, 0x1e05,
+            "公权机构创建动作码必须 = (30<<8)|5 = 0x1e05"
         );
     }
 }

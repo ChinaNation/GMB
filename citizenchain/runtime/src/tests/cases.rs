@@ -77,7 +77,7 @@ fn runtime_version_and_block_types_are_sane() {
     );
     assert_eq!(VERSION.impl_version, 0);
     assert_eq!(VERSION.transaction_version, 0);
-    assert_eq!(VERSION.system_version, 0);
+    assert_eq!(VERSION.system_version, 1);
 
     let _opaque_block_id: opaque::BlockId = generic::BlockId::Number(0);
     let _runtime_block_id: BlockId = generic::BlockId::Number(0);

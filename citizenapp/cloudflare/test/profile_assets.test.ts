@@ -17,7 +17,6 @@ function fakeEnv(): Env {
       get: async (key: string) =>
         key === 'square_session:tok' ? session : null
     } as unknown as KVNamespace,
-    DEV_UPLOAD_PROXY: '1'
   } as unknown as Env;
 }
 
@@ -33,7 +32,7 @@ function prepareRequest(body: unknown): Request {
 }
 
 describe('profile asset upload prepare', () => {
-  it('returns an object key under the owner profile prefix with sha in the name', async () => {
+  it('returns the fixed per-owner avatar key and hash-bound upload URL', async () => {
     const response = await prepareProfileAsset(
       prepareRequest({
         kind: 'avatar',
@@ -49,9 +48,10 @@ describe('profile asset upload prepare', () => {
       upload_url: string;
     };
 
-    expect(body.object_key).toBe(`profile/${owner}/avatar_${sha}.webp`);
+    expect(body.object_key).toBe(`profile/${owner}/avatar`);
     expect(body.content_hash).toBe(sha);
-    expect(body.upload_url).toContain('/v1/square/profile/assets/dev-put');
+    expect(body.upload_url).toContain('/v1/square/profile/assets?');
+    expect(new URL(body.upload_url).searchParams.get('sha256')).toBe(sha);
   });
 
   it('rejects an unsupported content type', async () => {
@@ -65,7 +65,7 @@ describe('profile asset upload prepare', () => {
         }),
         fakeEnv()
       )
-    ).rejects.toMatchObject({ code: 'invalid_content_type' });
+    ).rejects.toMatchObject({ code: 'resource_content_type_invalid' });
   });
 
   it('rejects an invalid kind', async () => {

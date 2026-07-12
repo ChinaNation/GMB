@@ -18,6 +18,27 @@ Future<Map<String, String>> squareRequestHeaders({
   int? requestTime,
   String? nonce,
 }) async {
+  return squareRequestHeadersForBytes(
+    method: method,
+    uri: uri,
+    body: Uint8List.fromList(utf8.encode(body)),
+    sessionToken: sessionToken,
+    sign: sign,
+    requestTime: requestTime,
+    nonce: nonce,
+  );
+}
+
+/// 二进制上传沿用同一设备证明协议，但哈希必须覆盖原始字节，不能先转字符串。
+Future<Map<String, String>> squareRequestHeadersForBytes({
+  required String method,
+  required Uri uri,
+  required Uint8List body,
+  required String sessionToken,
+  required SquareDeviceSigner sign,
+  int? requestTime,
+  String? nonce,
+}) async {
   final time = requestTime ?? DateTime.now().millisecondsSinceEpoch;
   final requestNonce = nonce ?? _nonce();
   final path = _apiPath(uri);
@@ -25,7 +46,7 @@ Future<Map<String, String>> squareRequestHeaders({
     'square_request',
     method.toUpperCase(),
     uri.hasQuery ? '$path?${uri.query}' : path,
-    sha256.convert(utf8.encode(body)).toString(),
+    sha256.convert(body).toString(),
     '$time',
     requestNonce,
     sha256.convert(utf8.encode(sessionToken)).toString(),

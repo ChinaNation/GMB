@@ -1,5 +1,6 @@
 import type { Env } from '../types';
 import { HttpError } from '../shared/http';
+import { resourceLimit } from '../limits/catalog';
 
 const systemEventsStorageKey =
   '0x26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7';
@@ -7,7 +8,7 @@ const systemEventsStorageKey =
 /// 单次链 RPC 请求超时；Worker 不在请求内自动重试，避免重复广播已签名交易。
 const CHAIN_RPC_TIMEOUT_MS = 3000;
 /// System.Events 可能较大，但必须给 Worker 内存设置硬边界。
-const CHAIN_RPC_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+const CHAIN_RPC_MAX_RESPONSE_BYTES = resourceLimit('chain_rpc_response').max_bytes;
 
 type ChainRpcMethod = 'state_getStorage' | 'author_submitExtrinsic';
 type JsonRpcId = number | string;

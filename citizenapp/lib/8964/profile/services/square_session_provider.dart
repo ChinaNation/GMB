@@ -1,5 +1,4 @@
 import 'package:citizenapp/8964/services/square_api_client.dart';
-import 'package:citizenapp/8964/services/device_subkey_registrar.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -32,6 +31,9 @@ class SquareSessionProvider {
     if (wallet == null) {
       return null;
     }
+    // 后台会话流程绝不懒注册、绝不弹 Turnstile、绝不读 seed：未注册设备（旧格式钱包等）
+    // 会话直接失败按公开只读处理，用户重建钱包时才经 WalletManager.subkeyRegistrar 静默注册。
+    // 冷启动广场并发拉 feed/membership/identity 都走这里，越界懒注册会把合并主线程顶死成 ANR。
     return _client.ensureSession(
       ownerAccount: wallet.address,
       signLoginPayload: (loginMessage) async {
@@ -40,20 +42,6 @@ class SquareSessionProvider {
             await _deviceSubkey.signRawHex(wallet.walletIndex, loginMessage);
         return '0x$raw';
       },
-      onDeviceNotRegistered: () => DeviceSubkeyRegistrar(
-        apiClient: _client,
-        deviceSubkey: _deviceSubkey,
-      ).register(
-        walletIndex: wallet.walletIndex,
-        ownerAccount: wallet.address,
-        signBinding: (message) async {
-          final signature = await _walletManager.signWithWallet(
-            wallet.walletIndex,
-            message,
-          );
-          return '0x${bytesToHex(signature)}';
-        },
-      ),
     );
   }
 }

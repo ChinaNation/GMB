@@ -2,23 +2,21 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/ui/app_theme.dart';
 
-enum ProfileMenuAction { qrCode, editProfile, report, deleteAccount }
+enum ProfileMenuAction { qrCode, editProfile, deleteAccount }
 
-/// 右上角竖三点菜单（决策 4）：二维码常驻；编辑资料 / 注销用户仅本人；举报仅他人。
+/// 右上角竖三点菜单：二维码常驻；编辑资料和注销用户仅本人。
 class ProfileKebabMenu extends StatelessWidget {
   const ProfileKebabMenu({
     super.key,
     required this.isSelf,
     this.onQrCode,
     this.onEditProfile,
-    this.onReport,
     this.onDeleteAccount,
   });
 
   final bool isSelf;
   final VoidCallback? onQrCode;
   final VoidCallback? onEditProfile;
-  final VoidCallback? onReport;
 
   /// 注销用户（仅本人，破坏性）：硬删除该用户在 Cloudflare 的全部数据。
   final VoidCallback? onDeleteAccount;
@@ -35,9 +33,6 @@ class ProfileKebabMenu extends StatelessWidget {
           case ProfileMenuAction.editProfile:
             onEditProfile?.call();
             break;
-          case ProfileMenuAction.report:
-            onReport?.call();
-            break;
           case ProfileMenuAction.deleteAccount:
             onDeleteAccount?.call();
             break;
@@ -52,11 +47,6 @@ class ProfileKebabMenu extends StatelessWidget {
           const PopupMenuItem(
             value: ProfileMenuAction.editProfile,
             child: _MenuRow(icon: Icons.edit_outlined, label: '编辑资料'),
-          ),
-        if (!isSelf)
-          const PopupMenuItem(
-            value: ProfileMenuAction.report,
-            child: _MenuRow(icon: Icons.flag_outlined, label: '举报'),
           ),
         // 注销放末位（破坏性），仅本人可见，红色区分。
         if (isSelf)

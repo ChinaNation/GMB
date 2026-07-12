@@ -48,17 +48,17 @@ citizenchain/onchina/frontend/address/
 OnChina 使用 `address/chain_call.rs` 构造以下 call data：
 
 ```text
-AddressRegistry(35).set_catalog_version(0)
-AddressRegistry(35).set_address_name(1)
-AddressRegistry(35).remove_address_name(2)
-AddressRegistry(35).set_address(3)
-AddressRegistry(35).remove_address(4)
+AddressRegistry(33).set_catalog_version(0)
+AddressRegistry(33).set_address_name(1)
+AddressRegistry(33).remove_address_name(2)
+AddressRegistry(33).set_address(3)
+AddressRegistry(33).remove_address(4)
 ```
 
 链交易动作码统一为：
 
 ```text
-action = (35 << 8) | call_index
+action = (33 << 8) | call_index
 ```
 
 ## 6. 验收

@@ -1,5 +1,6 @@
 import type { Env } from '../types';
 import { nowMs } from '../shared/time';
+import { assertDeliverySize } from '../limits/delivery';
 
 type PushProvider = 'apns' | 'fcm';
 
@@ -35,6 +36,7 @@ export async function sendChatWake(
     kind: 'chat_wake',
     sender_account: senderAccount,
   };
+  assertDeliverySize('push_wake', JSON.stringify(payload));
   const outcomes = await Promise.all(
     (result.results ?? []).map((device) => sendDeviceWake(env, device, payload)),
   );

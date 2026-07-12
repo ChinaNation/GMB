@@ -1,12 +1,7 @@
 import type { PostCategory, UploadItemInput } from '../types';
 import { HttpError } from '../shared/http';
 import { isSha256Hex } from '../shared/hash';
-
-const maxImageBytes = 20 * 1024 * 1024;
-// 单视频体积的绝对硬顶（=最高档 10GB，防滥用）；精确的按档上限在 quota.ts 依会员档校验。
-const maxVideoBytes = 10 * 1024 * 1024 * 1024;
-const maxManifestBytes = 512 * 1024;
-const maxMediaItems = 101;
+import { resourceLimit } from '../limits/catalog';
 
 export function assertPostCategory(value: unknown): PostCategory {
   if (value === 'normal' || value === 'campaign') {
@@ -23,6 +18,7 @@ export function assertManifestHash(value: unknown): string {
 }
 
 export function validateUploadItems(value: unknown): UploadItemInput[] {
+  const maxMediaItems = resourceLimit('square_manifest').max_items ?? 0;
   if (!Array.isArray(value) || value.length === 0 || value.length > maxMediaItems) {
     throw new HttpError(400, 'invalid_media_items', '媒体数量必须在 1 到 101 个之间');
   }
@@ -48,7 +44,7 @@ export function validateUploadItems(value: unknown): UploadItemInput[] {
       if (!['video/mp4', 'video/webm'].includes(item.content_type)) {
         throw new HttpError(400, 'invalid_video_type', '视频只允许 mp4 或 webm');
       }
-      if (byteSize > maxVideoBytes) {
+      if (byteSize > resourceLimit('square_video_candidate').max_bytes) {
         throw new HttpError(400, 'video_too_large', '单个视频体积超出上限');
       }
       if (
@@ -62,8 +58,8 @@ export function validateUploadItems(value: unknown): UploadItemInput[] {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(item.content_type)) {
         throw new HttpError(400, 'invalid_image_type', '图片只允许 jpg、png 或 webp');
       }
-      if (byteSize > maxImageBytes) {
-        throw new HttpError(400, 'image_too_large', '单张图片不能超过 20MB');
+      if (byteSize > resourceLimit('square_image_hd').max_bytes) {
+        throw new HttpError(400, 'image_too_large', '单张图片超过统一资源上限');
       }
     }
 
@@ -78,5 +74,5 @@ export function validateUploadItems(value: unknown): UploadItemInput[] {
 }
 
 export function estimateUploadBytes(mediaItems: UploadItemInput[]): number {
-  return mediaItems.reduce((sum, item) => sum + item.byte_size, maxManifestBytes);
+  return mediaItems.reduce((sum, item) => sum + item.byte_size, resourceLimit('square_manifest').max_bytes);
 }

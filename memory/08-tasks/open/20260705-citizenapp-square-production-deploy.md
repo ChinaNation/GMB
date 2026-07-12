@@ -14,7 +14,7 @@
 
 ## 影响范围
 
-- Worker 配置：生产/预发布 D1、R2、KV 绑定命名与 dev proxy 边界。
+- Worker 配置：生产/预发布 D1、R2、KV 绑定和统一上传边界。
 - App 配置：广场 Worker base URL 的生产/开发切换方式，避免硬编码本地地址进入生产。
 - 运维文档：迁移、部署、密钥、链 RPC 环境变量和本地验收命令。
 - 残留清理：不得留下 `.dev.vars`、`.wrangler/`、`node_modules/`、`dist/`、`coverage/` 或临时 spec。
@@ -22,7 +22,7 @@
 ## 主要风险点
 
 - 把 Cloudflare token、R2 access key、R2 secret key、生产链 RPC 私密地址写入仓库。
-- 生产环境误启 `SQUARE_DEV_UPLOAD_PROXY=1`。
+- 生产环境残留仅供本地开发的上传分支。
 - App 生产包仍指向本地 Worker 地址。
 - Worker 配置环境名和 D1/R2/KV 资源名不清晰，导致部署时误连测试数据。
 - 未经二次确认修改 `citizenchain/runtime/`。
@@ -50,7 +50,7 @@
 ### 步骤 2：Worker 生产化配置
 
 - 在现有 `wrangler.toml` 中明确本地、预发布、生产的绑定边界。
-- 生产/预发布必须默认 `SQUARE_DEV_UPLOAD_PROXY=0`。
+- 生产/预发布与本地必须共用统一上传接口，不保留开发代理分支。
 - 只记录资源名和变量名，不写 Cloudflare token、R2 key 或私密 RPC。
 - 补 package scripts 以固定本地迁移、预发布部署、生产部署命令。
 
@@ -88,9 +88,9 @@
 - 已新增 `SquareApiConfig`，保留本地调试默认 `http://127.0.0.1:8787`，但生产构建未显式提供 `CITIZENAPP_SQUARE_API_BASE_URL` 时直接 fail-fast；显式配置只允许 HTTPS，或本地调试 `http://127.0.0.1` / `localhost` / `::1`。
 - 已补充 `SquareApiConfig.normalizeBaseUrl` 测试，覆盖 HTTPS 尾斜杠归一化、本地 HTTP 允许和非本地 HTTP 拒绝。
 - 已在 `package.json` 增加 `dev:local`、`migrate:staging`、`migrate:production`、`deploy:staging`、`deploy:production` 运维脚本；脚本不包含 token、R2 key 或链 RPC。
-- 已在 `wrangler.toml` 增加 staging/production 绑定模板；`SQUARE_DEV_UPLOAD_PROXY` 在默认、staging、production 中均为 `0`。D1 `database_id` 和 KV `id` 当前是不可用占位值，远端部署前必须替换为 Cloudflare 实际资源 ID。
+- 已在 `wrangler.toml` 增加 staging/production 绑定模板；后续统一资源限制任务彻底删除开发上传代理变量和分支。D1 `database_id` 和 KV `id` 使用 Cloudflare 实际资源 ID。
 - 已更新 `memory/01-architecture/citizenapp/CITIZENAPP_TECHNICAL.md`，记录 Worker 运维命令、App `--dart-define`、R2/链 RPC 密钥边界和远端资源 ID 占位规则。
-- 已更新 `memory/07-ai/unified-protocols.md`，登记 `CITIZENAPP_SQUARE_API_BASE_URL`、R2 预签名变量和生产禁用 dev proxy 边界。
+- 已更新 `memory/07-ai/unified-protocols.md`；后续统一资源限制任务已彻底替换早期上传设计，当前不保留用户 R2 写入授权或开发代理分支。
 - 本阶段未修改 `citizenchain/runtime/`，未写入 Cloudflare token、R2 access key、R2 secret key 或链 RPC 私密地址，未触碰 GitHub 远端。
 
 ## 验收结果

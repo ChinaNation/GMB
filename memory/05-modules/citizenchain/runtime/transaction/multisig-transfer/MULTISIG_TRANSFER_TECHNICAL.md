@@ -21,7 +21,7 @@
 | 1 | `propose_safety_fund_transfer` | 发起安全基金转账提案 |
 | 2 | `propose_sweep_to_main` | 发起费用账户划转主账户提案 |
 
-投票走统一入口 `InternalVote::cast`(pallet 22.0),手动重试/取消走
+投票走统一入口 `InternalVote::cast`(pallet 20.0),手动重试/取消走
 `VotingEngine::retry_passed_proposal`(9.4)/`cancel_passed_proposal`(9.5)。
 
 ## 2026-05-08 · 第5步账户级主体接入
@@ -150,7 +150,7 @@ pub fn propose_transfer(
 本模块不提供独立的投票/超时结算 extrinsic。管理员投票统一走:
 
 ```rust
-InternalVote::cast(origin, proposal_id, approve)  // pallet 22.0
+InternalVote::cast(origin, proposal_id, approve)  // pallet 20.0
 ```
 
 投票引擎根据提案创建时的管理员快照和阈值快照做权限、防双投和阈值判定。达到通过阈值后，投票引擎回调本模块的 `InternalVoteExecutor` 自动执行转账。
@@ -458,9 +458,9 @@ pub trait Config:
 
 ### 13.1 注册 pallet
 
-在 `runtime/src/lib.rs` 中注册（pallet_index = 19）：
+在 `runtime/src/lib.rs` 中注册（pallet_index = 17）：
 ```rust
-#[runtime::pallet_index(19)]
+#[runtime::pallet_index(17)]
 pub type MultisigTransfer = multisig_transfer;
 ```
 

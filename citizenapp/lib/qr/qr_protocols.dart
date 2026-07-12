@@ -57,43 +57,43 @@ class QrActions {
   static const int personalCreate = 0x0700;
   static const int personalClose = 0x0701;
   static const int personalCleanupRejected = 0x0702;
-  static const int personalAdminsChange = 0x0703;
+  static const int personalAdminsChange = 0x1d00;
   static const int resolutionIssuance = 0x0800;
   static const int finalizeProposal = 0x0903;
   static const int retryPassedProposal = 0x0904;
   static const int cancelPassedProposal = 0x0905;
-  static const int publicAdmins = 0x1d00;
-  static const int privateAdmins = 0x1e00;
-  static const int proposeRuntimeUpgrade = 0x0d00;
-  static const int developerDirectUpgrade = 0x0d02;
-  static const int resolutionDestroy = 0x0e00;
-  static const int grandpaKeyChange = 0x1000;
+  static const int publicAdmins = 0x1b00;
+  static const int privateAdmins = 0x1c00;
+  static const int proposeRuntimeUpgrade = 0x0c00;
+  static const int developerDirectUpgrade = 0x0c02;
+  static const int resolutionDestroy = 0x0d00;
+  static const int grandpaKeyChange = 0x0f00;
   // 机构创建/关闭已收归 onchina 控制台 + 冷钱包,citizenapp 不再生成机构创建/关闭签名请求,
   // 故删除旧 OrganizationManage(17) 动作码 organizationCreate/Close/CleanupRejected(0x1105/0x1101/0x1104)。
-  static const int multisigTransfer = 0x1300;
-  static const int safetyFundTransfer = 0x1301;
-  static const int sweepToMain = 0x1302;
-  static const int bindClearingBank = 0x151e;
-  static const int depositClearingBank = 0x151f;
-  static const int withdrawClearingBank = 0x1520;
-  static const int switchClearingBank = 0x1521;
-  static const int registerClearingBank = 0x1532;
-  static const int updateClearingBankEndpoint = 0x1533;
-  static const int unregisterClearingBank = 0x1534;
-  static const int internalVote = 0x1600;
-  static const int jointVote = 0x1700;
-  static const int castReferendum = 0x1701;
-  static const int preparePopulationSnapshot = 0x1702;
-  // 立法(LegislationYuan=27=0x1b 发起类节点端;LegislationVote=28=0x1c 投票/签署类)。
-  static const int legislationEnact = 0x1b00;
-  static const int legislationAmend = 0x1b01;
-  static const int legislationRepeal = 0x1b02;
-  static const int legislationPrepareSnapshot = 0x1c00;
-  static const int legislationHouseVote = 0x1c01;
-  static const int legislationReferendum = 0x1c02;
-  static const int legislationExecutiveSign = 0x1c03;
-  static const int legislationOverrideSign = 0x1c04;
-  static const int legislationGuardVote = 0x1c05;
+  static const int multisigTransfer = 0x1100;
+  static const int safetyFundTransfer = 0x1101;
+  static const int sweepToMain = 0x1102;
+  static const int bindClearingBank = 0x131e;
+  static const int depositClearingBank = 0x131f;
+  static const int withdrawClearingBank = 0x1320;
+  static const int switchClearingBank = 0x1321;
+  static const int registerClearingBank = 0x1332;
+  static const int updateClearingBankEndpoint = 0x1333;
+  static const int unregisterClearingBank = 0x1334;
+  static const int internalVote = 0x1400;
+  static const int jointVote = 0x1500;
+  static const int castReferendum = 0x1501;
+  static const int preparePopulationSnapshot = 0x1502;
+  // 立法(LegislationYuan=25=0x19 发起类节点端;LegislationVote=26=0x1a 投票/签署类)。
+  static const int legislationEnact = 0x1900;
+  static const int legislationAmend = 0x1901;
+  static const int legislationRepeal = 0x1902;
+  static const int legislationPrepareSnapshot = 0x1a00;
+  static const int legislationHouseVote = 0x1a01;
+  static const int legislationReferendum = 0x1a02;
+  static const int legislationExecutiveSign = 0x1a03;
+  static const int legislationOverrideSign = 0x1a04;
+  static const int legislationGuardVote = 0x1a05;
 
   /// 链交易动作统一按 `(pallet_index << 8) | call_index` 生成。
   static int chain(int palletIndex, int callIndex) =>

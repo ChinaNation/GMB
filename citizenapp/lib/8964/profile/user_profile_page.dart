@@ -26,7 +26,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// 推特式用户主页。
 ///
 /// 折叠虚化头部 + 圆角方形头像/背景（R2）+ 认证勾 + 展示名/地址/签名/计数 +
-/// 三图标（本人 通知/聊天/关注 · 他人 关注/消息）+ ⋮（二维码/编辑资料/举报）+
+/// 三图标（本人 通知/聊天/关注 · 他人 关注/消息）+ ⋮（二维码/编辑资料）+
 /// 帖子/竞选/照片/视频/文章五 Tab。身份 = 默认热钱包地址；cache-first 加载，
 /// 关注复用登录 session 静默签名，公开资料只进 R2、不上链。
 class UserProfilePage extends StatefulWidget {
@@ -306,11 +306,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String? _mediaUrl(String? objectKey) =>
       objectKey == null ? null : _api.mediaUrl(objectKey);
 
+  Map<String, String>? get _mediaHeaders => _session == null
+      ? null
+      : <String, String>{
+          'authorization': 'Bearer ${_session!.sessionToken}',
+        };
+
   Widget? _bannerWidget() {
     final url = _mediaUrl(_profile?.bannerObjectKey);
     if (url == null) return null;
     return Image.network(
       url,
+      headers: _mediaHeaders,
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => const SizedBox.shrink(),
     );
@@ -428,7 +435,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     isSelf: widget.isSelf,
                     onQrCode: _openQrCode,
                     onEditProfile: _openEditProfile,
-                    onReport: () => _stub('举报'),
                     onDeleteAccount: _openDeleteAccount,
                   ),
                 ],
@@ -443,6 +449,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       profile: _profile,
                       fallbackName: _walletName,
                       avatarUrl: _mediaUrl(_profile?.avatarObjectKey),
+                      avatarHeaders: _mediaHeaders,
                       onFollowing: () => _openFollows(FollowsType.following),
                       onFollowers: () => _openFollows(FollowsType.followers),
                       onPosts: () => _stub('帖子'),

@@ -13,6 +13,7 @@ import {
 } from '../chain/square_event';
 import { deleteProviderAsset } from '../media/cloudflare_assets';
 import { signedMediaUrls } from '../media/signed_urls';
+import { releaseStoredMedia } from '../limits/usage';
 import { HttpError, jsonResponse, readJson, requireSession } from '../shared/http';
 import { nowMs } from '../shared/time';
 import { sanitizeOwnerAccount } from '../storage/r2_keys';
@@ -91,6 +92,7 @@ export async function deletePostCloudflareData(
   for (const asset of mediaAssets) {
     await deleteProviderAsset(env, asset);
   }
+  await releaseStoredMedia(env, mediaAssets);
   for (const objectKey of objectKeys) {
     await env.SQUARE_MEDIA.delete(objectKey);
   }

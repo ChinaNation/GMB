@@ -52,7 +52,7 @@
 命名说明：
 - 2026-04-29 起，本模块统一使用 `runtime-upgrade` / `runtime_upgrade` / `RuntimeUpgrade`。
 - 模块位于 `citizenchain/runtime/governance/runtime-upgrade/`。
-- `pallet_index = 13`、call index 与 `MODULE_TAG = b"rt-upg"` 保持不变。
+- `pallet_index = 12`、call index 与 `MODULE_TAG = b"rt-upg"` 保持不变。
 
 节点侧边界：
 - node 后端 `runtime_upgrade` 只负责读取 wasm、构建协议升级 call data、生成签名请求、提交签名交易。

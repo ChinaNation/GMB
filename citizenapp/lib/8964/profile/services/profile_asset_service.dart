@@ -28,6 +28,12 @@ class ProfileAssetService {
     required Uint8List bytes,
     required String contentType,
   }) async {
+    final maxBytes = kind == 'avatar' ? 512 * 1024 : 1536 * 1024;
+    if (bytes.isEmpty || bytes.length > maxBytes) {
+      throw SquareApiException(
+        kind == 'avatar' ? '头像不能超过 512KB' : '背景图不能超过 1.5MB',
+      );
+    }
     final sha = sha256.convert(bytes).toString();
     final prepared = await _client.prepareProfileAsset(
       session: session,

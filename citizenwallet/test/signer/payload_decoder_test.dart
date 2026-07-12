@@ -147,12 +147,12 @@ void main() {
 
     // Phase 3(2026-04-22)「投票引擎统一入口整改」:
     // 所有业务 pallet 的 vote_X 已物理删除,所有管理员投票统一走
-    // InternalVote::cast(22.0)。
+    // InternalVote::cast(20.0)。
 
-    test('decodes internal_vote (pallet=22 call=0) approve=true', () {
-      // [0x16, 0x00, u64_le proposal_id=42, bool approve=true]
+    test('decodes internal_vote (pallet=20 call=0) approve=true', () {
+      // [0x14, 0x00, u64_le proposal_id=42, bool approve=true]
       final payload = Uint8List.fromList([
-        0x16, 0x00,
+        0x14, 0x00,
         42, 0, 0, 0, 0, 0, 0, 0,
         1, // approve = true
       ]);
@@ -165,9 +165,9 @@ void main() {
       expect(decoded.summary, contains('赞成'));
     });
 
-    test('decodes internal_vote (pallet=22 call=0) approve=false', () {
+    test('decodes internal_vote (pallet=20 call=0) approve=false', () {
       final payload = Uint8List.fromList([
-        0x16,
+        0x14,
         0x00,
         7,
         0,
@@ -185,10 +185,10 @@ void main() {
       expect(decoded.summary, contains('反对'));
     });
 
-    test('decodes joint_vote (pallet=23 call=0)', () {
-      // JointVote.cast_admin = pallet 23 / call 0，机构参数为 AccountId32。
+    test('decodes joint_vote (pallet=21 call=0)', () {
+      // JointVote.cast_admin = pallet 21 / call 0，机构参数为 AccountId32。
       final payload = Uint8List.fromList([
-        0x17,
+        0x15,
         0x00,
         7,
         0,
@@ -210,10 +210,10 @@ void main() {
       expect(decoded.summary, contains('反对'));
     });
 
-    test('decodes cast_referendum (pallet=23 call=1)', () {
-      // JointVote.cast_referendum = pallet 23 / call 1,链端按账户读取公民身份。
+    test('decodes cast_referendum (pallet=21 call=1)', () {
+      // JointVote.cast_referendum = pallet 21 / call 1,链端按账户读取公民身份。
       final payload = Uint8List.fromList([
-        0x17, 0x01,
+        0x15, 0x01,
         99, 0, 0, 0, 0, 0, 0, 0, // proposal_id = 99 u64_le
         1, // approve = true
       ]);
@@ -225,9 +225,9 @@ void main() {
       expect(decoded.fields['approve'], 'true');
     });
 
-    test('decodes prepare_joint_population_snapshot (pallet=23 call=2)', () {
+    test('decodes prepare_joint_population_snapshot (pallet=21 call=2)', () {
       final payload = Uint8List.fromList([
-        0x17, 0x02,
+        0x15, 0x02,
         2, // PopulationScope::City
         ...compactVec('GZ'),
         ...compactVec('001'),
@@ -338,7 +338,7 @@ void main() {
     test('cast_referendum 缺少 issuer/admins 字段时拒绝解码', () {
       // 当前 SCALE 必须含签发机构、签发管理员和作用域。缺字段字节流长度不足 → null。
       final payload = Uint8List.fromList([
-        0x17, 0x01,
+        0x15, 0x01,
         99, 0, 0, 0, 0, 0, 0, 0,
         ...List.filled(32, 0),
         0,
@@ -439,7 +439,7 @@ void main() {
       const peerId = '12D3KooWABCDEFG1234567890abcdefghijk';
       const domain = 'l2.example.com';
       final payload = Uint8List.fromList([
-        21,
+        19,
         50,
         ...compactVec(cidNumber),
         ...compactVec(peerId),
@@ -461,7 +461,7 @@ void main() {
       const cidNumber = 'AH001-SZG1Z-883241719-2026';
       const domain = 'new-l2.example.com';
       final payload = Uint8List.fromList([
-        21,
+        19,
         51,
         ...compactVec(cidNumber),
         ...compactVec(domain),
@@ -480,7 +480,7 @@ void main() {
     test('decodes clearing bank unregister call', () {
       const cidNumber = 'AH001-SZG1Z-883241719-2026';
       final payload = Uint8List.fromList([
-        21,
+        19,
         52,
         ...compactVec(cidNumber),
       ]);
@@ -523,7 +523,7 @@ void main() {
       expect(decoded.summary, contains('解密清算行管理员'));
     });
 
-    test('decodes propose_sweep_to_main AccountId32 (pallet=19 call=2)', () {
+    test('decodes propose_sweep_to_main AccountId32 (pallet=17 call=2)', () {
       final institutionAccount = List<int>.filled(32, 0x66);
       const amount = 10000;
       final amountBytes = List<int>.filled(16, 0);
@@ -531,7 +531,7 @@ void main() {
       amountBytes[1] = (amount >> 8) & 0xff;
 
       final payload = Uint8List.fromList([
-        0x13,
+        0x11,
         0x02,
         ...institutionAccount,
         ...amountBytes,
@@ -554,7 +554,7 @@ void main() {
       amountBytes[0] = 0x10;
 
       final payload = Uint8List.fromList([
-        0x13,
+        0x11,
         0x02,
         ...legacySubject,
         ...amountBytes,
@@ -568,7 +568,7 @@ void main() {
       final institutionAccount = List<int>.filled(32, 0x66);
       final beneficiary = List<int>.filled(32, 0x44);
       final payload = Uint8List.fromList([
-        0x13,
+        0x11,
         0x00,
         ...InstitutionCode.codeBytes('CGOV'), // 机构账户码(取代旧 org=5)
         ...institutionAccount,
@@ -594,7 +594,7 @@ void main() {
       // 旧布局 [org:u8][subject:48B]。新布局是 [institution_code:4B][account:32B],
       // 48B 主体读出的"机构码"是垃圾且非法人机构码 → null。
       final payload = Uint8List.fromList([
-        0x13,
+        0x11,
         0x00,
         0x02,
         ...List<int>.filled(48, 0x22),
@@ -700,16 +700,16 @@ void main() {
       expect(decoded.fields['reason'], '密钥不可执行');
     });
 
-    test('rejects deleted business wrappers (pallet=19/14/12/16)', () {
+    test('rejects deleted business wrappers (pallet=17/13/12/15)', () {
       // Phase 4 物理删除的 call_index 不应再被解码识别。
       final cases = <List<int>>[
-        [0x13, 0x03], // execute_transfer
-        [0x13, 0x04], // execute_safety_fund_transfer
-        [0x13, 0x05], // execute_sweep_to_main
-        [0x0e, 0x01], // execute_destroy
-        [0x0c, 0x01], // pallet 12 已废弃，call_index=1 留洞不复用
-        [0x10, 0x01], // execute_replace_grandpa_key
-        [0x10, 0x02], // cancel_failed_replace_grandpa_key
+        [0x11, 0x03], // MultisigTransfer(17) execute_transfer
+        [0x11, 0x04], // execute_safety_fund_transfer
+        [0x11, 0x05], // execute_sweep_to_main
+        [0x0d, 0x01], // ResolutionDestroy(13) execute_destroy
+        [0x0c, 0x01], // RuntimeUpgrade(12) call_index=1 留洞;冷钱包不解码协议升级
+        [0x0f, 0x01], // GrandpaKeyChange(15) execute_replace_grandpa_key
+        [0x0f, 0x02], // cancel_failed_replace_grandpa_key
       ];
       for (final c in cases) {
         final payload = buildProposalIdPayload(c[0], c[1], 999);
@@ -722,11 +722,11 @@ void main() {
     test('decodes propose_admin_set_change for all admin pallets', () {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       for (final item in [
-        (7, 3, 'PMUL', 2, 2, 'propose_personal_admin_set_change'),
-        (29, 0, 'FRG', 5, 3, 'propose_public_admin_set_change'),
-        (29, 0, 'NJD', 15, 8, 'propose_public_admin_set_change'),
-        (29, 0, 'CGOV', 2, 2, 'propose_public_admin_set_change'),
-        (30, 0, 'SFLP', 2, 2, 'propose_private_admin_set_change'),
+        (29, 0, 'PMUL', 2, 2, 'propose_personal_admin_set_change'),
+        (27, 0, 'FRG', 5, 3, 'propose_public_admin_set_change'),
+        (27, 0, 'NJD', 15, 8, 'propose_public_admin_set_change'),
+        (27, 0, 'CGOV', 2, 2, 'propose_public_admin_set_change'),
+        (28, 0, 'SFLP', 2, 2, 'propose_private_admin_set_change'),
       ]) {
         final admins = List<List<int>>.generate(
           item.$4,
@@ -779,8 +779,8 @@ void main() {
     test('rejects propose_admin_set_change without new_threshold', () {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       final payload = Uint8List.fromList([
-        0x07,
-        0x03,
+        0x1d,
+        0x00,
         ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x08,
@@ -794,8 +794,8 @@ void main() {
     test('rejects propose_admin_set_change with trailing bytes', () {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       final payload = Uint8List.fromList([
-        0x07,
-        0x03,
+        0x1d,
+        0x00,
         ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x08,
@@ -811,7 +811,7 @@ void main() {
     test('rejects propose_admin_set_change below majority threshold', () {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       final payload = Uint8List.fromList([
-        0x07, 0x03,
+        0x1d, 0x00,
         ...InstitutionCode.codeBytes('PMUL'),
         ...account,
         0x0c, // Compact(3)
@@ -873,8 +873,8 @@ void main() {
       // 公权机构账户码(CGOV)与私权机构账户码(SFLP)都属注册多签机构账户,
       // codeLabel 返回码字符串本身(非固定治理档/个人多签特化)。
       for (final item in const [
-        (0x1d, 'CGOV'),
-        (0x1e, 'SFLP'),
+        (0x1b, 'CGOV'),
+        (0x1c, 'SFLP'),
       ]) {
         final payload = Uint8List.fromList([
           item.$1,
@@ -916,8 +916,8 @@ void main() {
       expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
-    test('decodes cleanup_rejected_public_proposal (pallet=32 call=4)', () {
-      final payload = buildProposalIdPayload(0x20, 0x04, 500);
+    test('decodes cleanup_rejected_public_proposal (pallet=30 call=4)', () {
+      final payload = buildProposalIdPayload(0x1e, 0x04, 500);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cleanup_rejected_public_proposal');
@@ -925,7 +925,7 @@ void main() {
     });
 
     test('decodes public institution close action', () {
-      // 机构注销 propose_close(32.1) 携带注册局签发的注销凭证:
+      // 机构注销 propose_close(30.1) 携带注册局签发的注销凭证:
       // account + beneficiary + register_nonce(Vec) + signature(Vec)
       // + issuer_cid_number(Vec) + issuer_main_account(32) + signer_pubkey(32)。
       final registerNonce = utf8.encode('reg-nonce-001');
@@ -934,7 +934,7 @@ void main() {
       final issuerMain = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
       final signerPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
       final payload = <int>[
-        0x20, 0x01, // PublicManage.propose_close_public_institution
+        0x1e, 0x01, // PublicManage.propose_close_public_institution
         ...List<int>.filled(32, 0x11), // account
         ...List<int>.filled(32, 0x22), // beneficiary
         // register_nonce: Vec<u8>
@@ -957,9 +957,11 @@ void main() {
       expect(decoded.fields.keys.toList(), ['account', 'beneficiary']);
     });
 
-    test('rejects retired institution lifecycle pallet 17', () {
+    test('rejects unknown out-of-range pallet index', () {
+      // 新号表 pallet 连续 0..34(SquarePost=34);0x23=35 不存在 → decoder 拒签。
+      // (旧“淘汰机构生命周期 pallet 17”已随连续化消失,17 现为 MultisigTransfer。)
       final payload = Uint8List.fromList([
-        0x11,
+        0x23,
         0x01,
         ...List<int>.filled(32, 0x11),
         ...List<int>.filled(32, 0x22),
@@ -970,7 +972,7 @@ void main() {
 
     test('decodes personal close action as propose_close_personal', () {
       final payload = Uint8List.fromList([
-        0x07, 0x01, // PersonalAdmins.propose_close
+        0x07, 0x01, // PersonalManage.propose_close
         ...List<int>.filled(32, 0x33),
         ...List<int>.filled(32, 0x44),
       ]);
@@ -984,7 +986,7 @@ void main() {
     // 哈希,decoder 路径不可达)。改走 OfflineSignService 的"哈希直签例外"。
     // 相关回归测试见 citizenwallet/test/signer/offline_sign_service_*_test.dart。
     // 机构/决议创建 decoder:
-    // - propose_create_public_institution(32.5):公权机构多签账户创建提案
+    // - propose_create_public_institution(30.5):公权机构多签账户创建提案
     //   (走 CID 后端签发机构 admins 凭证)
     // - propose_issuance(8.0):决议发行联合提案
     //   (人口快照由 JointVote 单独准备)
@@ -1047,7 +1049,7 @@ void main() {
       final scopeProvince = utf8.encode('安徽省');
       final scopeCity = utf8.encode('合肥市');
       final payload = <int>[
-        0x20, 0x05, // pallet=32 call=5
+        0x1e, 0x05, // pallet=30 call=5
         // cid_number: Vec<u8>
         (cid.length << 2) & 0xff,
         ...cid,
@@ -1113,7 +1115,7 @@ void main() {
     }
 
     test(
-        'decodes propose_create_public_institution (pallet=32 call=5) 含 issuer/scope',
+        'decodes propose_create_public_institution (pallet=30 call=5) 含 issuer/scope',
         () {
       final issuerMain = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
       final signerPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
@@ -1306,9 +1308,9 @@ void main() {
       final caseEntry = (fixture['cases'] as List)
           .firstWhere((e) => e['name'] == 'cast_referendum');
       final hex = caseEntry['expected_call_data_hex'] as String;
-      expect(caseEntry['pallet_index'], 23);
+      expect(caseEntry['pallet_index'], 21);
       expect(caseEntry['call_index'], 1);
-      expect(hex.toLowerCase().startsWith('0x1701'), isTrue);
+      expect(hex.toLowerCase().startsWith('0x1501'), isTrue);
       // fixture 固化的是纯 call_data,真实 QR 还带签名扩展尾。
       final decoded =
           PayloadDecoder.decode(hexOf(withSigningTail(bytesFromHex(hex))));
@@ -1375,7 +1377,7 @@ void main() {
     // 国家储委会转账提案等 9 类提案扫码必红。本组用例锁死两端约定:
     // 带合法尾 → 解码成功;裸 call_data / 篡改尾 → null(红色拒签)。
     List<int> buildNrcTransferCallData() => [
-          0x13, 0x00,
+          0x11, 0x00,
           ...InstitutionCode.codeBytes('NRC'), // institution_code = 国家储委会
           ...List<int>.filled(32, 0x66), // institution AccountId32
           ...List<int>.filled(32, 0x44), // beneficiary
@@ -1429,9 +1431,9 @@ void main() {
     });
   });
 
-  // 立法院 LegislationYuan(27) + 立法投票 LegislationVote(28),布局逐字段对齐
+  // 立法院 LegislationYuan(25) + 立法投票 LegislationVote(26),布局逐字段对齐
   // citizenchain runtime + citizenapp legislation_codec。夹具必须带签名扩展尾。
-  group('立法 pallet 解码(LegislationYuan 27 / LegislationVote 28)', () {
+  group('立法 pallet 解码(LegislationYuan 25 / LegislationVote 26)', () {
     // 机构码 [u8;4] 右补 0。
     List<int> code4(String code) {
       final raw = utf8.encode(code);
@@ -1466,9 +1468,9 @@ void main() {
           ...compactU32(0), // 0 款
         ];
 
-    test('decodes propose_enact_law (27.0)', () {
+    test('decodes propose_enact_law (25.0)', () {
       final callData = [
-        27, 0,
+        25, 0,
         1, // tier = National(1)
         ...u32Le(110000), // scope_code
         ...compactU32(2), // houses 2 项
@@ -1496,7 +1498,7 @@ void main() {
 
     test('rejects propose_enact_law with tier=Constitution(0)', () {
       final callData = [
-        27, 0,
+        25, 0,
         0, // tier = Constitution(0) → 立法入口禁止新立宪法
         ...u32Le(0),
         ...compactU32(1),
@@ -1515,7 +1517,7 @@ void main() {
 
     test('rejects propose_enact_law with out-of-range vote_type', () {
       final callData = [
-        27, 0,
+        25, 0,
         1,
         ...u32Le(0),
         ...compactU32(1),
@@ -1532,9 +1534,9 @@ void main() {
       expect(PayloadDecoder.decode(hexOf(withSigningTail(callData))), isNull);
     });
 
-    test('decodes propose_amend_law (27.1)', () {
+    test('decodes propose_amend_law (25.1)', () {
       final callData = [
-        27, 1,
+        25, 1,
         ...u64Le(42), // law_id
         ...body('PLG'),
         ...body('PGV'),
@@ -1554,9 +1556,9 @@ void main() {
       expect(decoded.fields['effective_at'], '7777');
     });
 
-    test('decodes propose_repeal_law (27.2)', () {
+    test('decodes propose_repeal_law (25.2)', () {
       final callData = [
-        27, 2,
+        25, 2,
         ...u64Le(7), // law_id
         ...body('CLEG'),
         ...body('CGOV'),
@@ -1570,9 +1572,9 @@ void main() {
       expect(decoded.fields['vote_type'], '常规案');
     });
 
-    test('decodes prepare_population_snapshot (28.0)', () {
+    test('decodes prepare_population_snapshot (26.0)', () {
       final callData = [
-        28, 0,
+        26, 0,
         3, // PopulationScope::Town
         ...compactVec('GZ'),
         ...compactVec('001'),
@@ -1587,8 +1589,8 @@ void main() {
       expect(decoded.fields['scope_town_code'], '001001');
     });
 
-    test('decodes cast_house_vote (28.1)', () {
-      final callData = [28, 1, ...u64Le(99), 0x01];
+    test('decodes cast_house_vote (26.1)', () {
+      final callData = [26, 1, ...u64Le(99), 0x01];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cast_house_vote');
@@ -1596,9 +1598,9 @@ void main() {
       expect(decoded.fields['approve'], 'true');
     });
 
-    test('decodes cast_referendum_vote (28.2)', () {
+    test('decodes cast_referendum_vote (26.2)', () {
       final callData = [
-        28, 2,
+        26, 2,
         ...u64Le(55), // proposal_id
         0x00, // approve = false
       ];
@@ -1610,21 +1612,21 @@ void main() {
     });
 
     test(
-        'decodes executive_sign (28.3) / override_sign (28.4) / guard_vote (28.5)',
+        'decodes executive_sign (26.3) / override_sign (26.4) / guard_vote (26.5)',
         () {
       final exec = PayloadDecoder.decode(
-          hexOf(withSigningTail([28, 3, ...u64Le(1), 0x01])));
+          hexOf(withSigningTail([26, 3, ...u64Le(1), 0x01])));
       expect(exec?.action, 'executive_sign');
       final override = PayloadDecoder.decode(
-          hexOf(withSigningTail([28, 4, ...u64Le(2), 0x00])));
+          hexOf(withSigningTail([26, 4, ...u64Le(2), 0x00])));
       expect(override?.action, 'override_sign');
       final guard = PayloadDecoder.decode(
-          hexOf(withSigningTail([28, 5, ...u64Le(3), 0x01])));
+          hexOf(withSigningTail([26, 5, ...u64Le(3), 0x01])));
       expect(guard?.action, 'guard_vote');
     });
 
     test('rejects 裸 call_data 无签名尾(立法投票)', () {
-      expect(PayloadDecoder.decode(hexOf([28, 1, ...u64Le(1), 0x01])), isNull);
+      expect(PayloadDecoder.decode(hexOf([26, 1, ...u64Le(1), 0x01])), isNull);
     });
   });
 

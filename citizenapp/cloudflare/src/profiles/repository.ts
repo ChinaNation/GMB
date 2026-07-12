@@ -10,6 +10,9 @@ import type {
 import { buildFeedPostItem } from '../posts/confirm';
 import { resolveAuthorSignals } from '../social/author_signals';
 import { profileObjectKey } from '../storage/r2_keys';
+import { validateUploadBytes } from '../limits/upload';
+import { putR2Object } from '../limits/storage';
+import { resourceLimit } from '../limits/catalog';
 
 const PROFILE_SCHEMA = 'citizenapp.square.profile.v1' as const;
 
@@ -37,6 +40,10 @@ export async function readProfileDoc(
   if (!object) {
     return null;
   }
+  if (object.size > resourceLimit('profile_doc').max_bytes) {
+    await object.body.cancel();
+    return null;
+  }
   try {
     const parsed = JSON.parse(await object.text()) as Partial<CitizenProfileDoc>;
     if (parsed.schema !== PROFILE_SCHEMA) {
@@ -60,9 +67,13 @@ export async function readProfileDoc(
 
 /// 写入 R2 公开资料包。owner_account 由调用方从 session 派生，不接受客户端伪造。
 export async function writeProfileDoc(env: Env, doc: CitizenProfileDoc): Promise<void> {
-  await env.SQUARE_MEDIA.put(profileObjectKey(doc.owner_account), JSON.stringify(doc), {
-    httpMetadata: { contentType: 'application/json; charset=utf-8' }
+  const bytes = new TextEncoder().encode(JSON.stringify(doc));
+  const ticket = await validateUploadBytes({
+    resource_key: 'profile_doc',
+    bytes,
+    content_type: 'application/json',
   });
+  await putR2Object(env, profileObjectKey(doc.owner_account), bytes, ticket);
 }
 
 /// 主页三项计数，全部走 D1 实时聚合。

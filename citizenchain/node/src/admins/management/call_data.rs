@@ -6,7 +6,7 @@ use super::storage::admin_pallet_for_code;
 use super::{account_id, codec};
 
 pub const PROPOSE_ADMIN_SET_CHANGE_CALL_INDEX: u8 = 0;
-pub const PROPOSE_PERSONAL_ADMIN_SET_CHANGE_CALL_INDEX: u8 = 3;
+pub const PROPOSE_PERSONAL_ADMIN_SET_CHANGE_CALL_INDEX: u8 = 0;
 
 /// 构造对应管理员 pallet 的 `propose_admin_set_change` 完整 call data。
 pub fn build_admin_set_change_call_data(
@@ -70,7 +70,7 @@ mod tests {
         let account_id = [0x11u8; 32];
         let admins = vec!["22".repeat(32)];
         let call = build_admin_set_change_call_data(&NRC, &account_id, &admins).unwrap();
-        assert_eq!(call[0], 29);
+        assert_eq!(call[0], 27);
         assert_eq!(call[1], 0);
         // institution_code 4 字节 = b"NRC\0"。
         assert_eq!(&call[2..6], &NRC);
@@ -88,7 +88,7 @@ mod tests {
         let public_code = code_bytes("CGOV");
         let public_call =
             build_admin_set_change_call_data(&public_code, &account_id, &admins).unwrap();
-        assert_eq!(public_call[0], 29);
+        assert_eq!(public_call[0], 27);
         assert_eq!(public_call[1], PROPOSE_ADMIN_SET_CHANGE_CALL_INDEX);
         assert_eq!(&public_call[2..6], &public_code);
         assert_eq!(&public_call[6..38], &[0x55u8; 32]);
@@ -99,7 +99,7 @@ mod tests {
         let private_code = code_bytes("SFLP");
         let private_call =
             build_admin_set_change_call_data(&private_code, &account_id, &admins).unwrap();
-        assert_eq!(private_call[0], 30);
+        assert_eq!(private_call[0], 28);
         assert_eq!(private_call[1], PROPOSE_ADMIN_SET_CHANGE_CALL_INDEX);
         assert_eq!(&private_call[2..6], &private_code);
         assert_eq!(&private_call[6..38], &[0x55u8; 32]);
@@ -112,7 +112,7 @@ mod tests {
         let admins = vec!["66".repeat(32), "77".repeat(32)];
 
         let call = build_admin_set_change_call_data(&PMUL, &account_id, &admins).unwrap();
-        assert_eq!(call[0], 7);
+        assert_eq!(call[0], 29);
         assert_eq!(call[1], PROPOSE_PERSONAL_ADMIN_SET_CHANGE_CALL_INDEX);
         assert_eq!(&call[2..6], &PMUL);
         assert_eq!(&call[6..38], &[0x55u8; 32]);

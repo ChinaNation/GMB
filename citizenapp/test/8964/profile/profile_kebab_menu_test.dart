@@ -13,7 +13,6 @@ Future<void> _openMenu(WidgetTester tester, {required bool isSelf}) async {
               isSelf: isSelf,
               onQrCode: () {},
               onEditProfile: () {},
-              onReport: () {},
               onDeleteAccount: () {},
             ),
           ],
@@ -26,17 +25,16 @@ Future<void> _openMenu(WidgetTester tester, {required bool isSelf}) async {
 }
 
 void main() {
-  testWidgets('本人主页：显示「注销用户」「编辑资料」，不显示「举报」', (tester) async {
+  testWidgets('本人主页显示注销用户和编辑资料', (tester) async {
     await _openMenu(tester, isSelf: true);
     expect(find.text('注销用户'), findsOneWidget);
     expect(find.text('编辑资料'), findsOneWidget);
-    expect(find.text('举报'), findsNothing);
   });
 
-  testWidgets('他人主页：不显示「注销用户」「编辑资料」，显示「举报」', (tester) async {
+  testWidgets('他人主页只显示二维码', (tester) async {
     await _openMenu(tester, isSelf: false);
+    expect(find.text('二维码'), findsOneWidget);
     expect(find.text('注销用户'), findsNothing);
     expect(find.text('编辑资料'), findsNothing);
-    expect(find.text('举报'), findsOneWidget);
   });
 }

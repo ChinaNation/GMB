@@ -86,7 +86,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 0,
-    system_version: 0,
+    system_version: 1,
 };
 
 mod block_times {
@@ -289,7 +289,7 @@ mod runtime {
     #[runtime::pallet_index(3)]
     pub type TransactionPayment = pallet_transaction_payment;
 
-    #[runtime::pallet_index(15)]
+    #[runtime::pallet_index(14)]
     pub type Grandpa = pallet_grandpa;
 
     // 链上交易手续费模块：发出 FeePaid 事件，供客户端读取真实手续费
@@ -313,15 +313,15 @@ mod runtime {
     pub type VotingEngine = votingengine;
 
     // 内部投票 sub-pallet:管理员一人一票
-    #[runtime::pallet_index(22)]
+    #[runtime::pallet_index(20)]
     pub type InternalVote = internal_vote;
 
     // 联合投票 sub-pallet:管理员多签 + 联合公投两阶段
-    #[runtime::pallet_index(23)]
+    #[runtime::pallet_index(21)]
     pub type JointVote = joint_vote;
 
     // 选举投票 sub-pallet:选举公职人员(普选 + 机构成员互选)
-    #[runtime::pallet_index(24)]
+    #[runtime::pallet_index(22)]
     pub type ElectionVote = election_vote;
 
     // 链上公民身份：登记投票身份、参选身份并提供人口快照读取
@@ -333,15 +333,15 @@ mod runtime {
     pub type CitizenIssuance = citizen_issuance;
 
     // 运行时升级治理模块：提案与联合投票通过后触发 set_code。
-    #[runtime::pallet_index(13)]
+    #[runtime::pallet_index(12)]
     pub type RuntimeUpgrade = runtime_upgrade;
 
     // 决议销毁治理模块：本机构内部投票通过后销毁本机构交易地址余额
-    #[runtime::pallet_index(14)]
+    #[runtime::pallet_index(13)]
     pub type ResolutionDestroy = resolution_destroy;
 
     // GRANDPA 密钥治理模块：国家储委会/省储委会内部投票通过后替换 GRANDPA 投票公钥
-    #[runtime::pallet_index(16)]
+    #[runtime::pallet_index(15)]
     pub type GrandpaKeyChange = grandpakey_change;
 
     // 个人多签账户生命周期模块:创建/关闭用户自定义多签账户(无 CID 归属,creator+account_name 派生)。
@@ -349,72 +349,72 @@ mod runtime {
     pub type PersonalManage = personal_manage;
 
     // 个人多签管理员模块:只管理个人多签账户的 admins 集合与管理员变更。
-    #[runtime::pallet_index(31)]
+    #[runtime::pallet_index(29)]
     pub type PersonalAdmins = personal_admins;
 
     // PoW 动态难度调整模块：每 600 块根据实际出块速度自动调整挖矿难度
-    #[runtime::pallet_index(18)]
+    #[runtime::pallet_index(16)]
     pub type PowDifficulty = pow_difficulty;
 
     // 机构多签账户转账模块：治理机构内部投票通过后从 main_account 转账（宪法保留主账户，注册型 account）
-    #[runtime::pallet_index(19)]
+    #[runtime::pallet_index(17)]
     pub type MultisigTransfer = multisig;
 
     // 创世模块：存储创世期/运行期阶段、出块目标时间、开发者直升开关、创世常量
-    #[runtime::pallet_index(20)]
+    #[runtime::pallet_index(18)]
     pub type GenesisPallet = genesis_pallet;
 
     // 链下交易清算模块：省储行即时清算、批量上链、绑定清算行、费率治理
-    #[runtime::pallet_index(21)]
+    #[runtime::pallet_index(19)]
     pub type OffchainTransaction = offchain::pallet;
 
     // 链上发行代币(Plain FT, ADR-011):用户(CID 机构 + personal-manage 个人多签账户)发行 GMB 之外的代币。
     // 唯一外壳入口,内核挂 pallet_assets;pallet_assets 原生 extrinsic 由 BaseCallFilter 屏蔽。
     // 当前为空壳(任务卡 A/B 未实装),OnchainIssuance 自身 propose_* 也在 RuntimeCallFilter 中 reject。
-    #[runtime::pallet_index(25)]
+    #[runtime::pallet_index(23)]
     pub type OnchainIssuance = onchain_issuance;
 
     // pallet_assets 内核:多资产基础设施,所有原生 extrinsic 在 RuntimeCallFilter 中 reject。
     // 业务调用一律经由 OnchainIssuance::propose_* → InternalVote/JointVote callback → 内部 root 调用。
-    #[runtime::pallet_index(26)]
+    #[runtime::pallet_index(24)]
     pub type Assets = pallet_assets;
 
     // 立法院模块:法律结构化上链 + 修法走立法投票(ADR-027)。业务壳,只承载法律数据与提案入口;
     // 表决/计票/公投归属 legislation-vote sub-pallet。
-    #[runtime::pallet_index(27)]
+    #[runtime::pallet_index(25)]
     pub type LegislationYuan = legislation_yuan;
 
     // 立法投票 sub-pallet:立法机构专属投票(单院/两院/特别案强制公投,ADR-027)。
     // 投票引擎「头等模式」PROPOSAL_KIND_LEGISLATION,共享核心共享基础,只本地存计票账本。
-    #[runtime::pallet_index(28)]
+    #[runtime::pallet_index(26)]
     pub type LegislationVote = legislation_vote;
 
     // 公权选举业务模块骨架:只承载选举业务规则位置;投票流程归 election-vote。
-    #[runtime::pallet_index(34)]
+    #[runtime::pallet_index(32)]
     pub type Campaign = election_campaign;
 
     // 公权机构管理员模块：含创世写入的固定治理机构运行期管理员治理。
-    #[runtime::pallet_index(29)]
+    #[runtime::pallet_index(27)]
     pub type PublicAdmins = public_admins;
 
     // 私权机构管理员模块；归属私法人的非法人由上层显式路由到这里。
-    #[runtime::pallet_index(30)]
+    #[runtime::pallet_index(28)]
     pub type PrivateAdmins = private_admins;
 
     // 公权机构生命周期模块：只负责公权机构 CID 登记、创建、关闭。
-    #[runtime::pallet_index(32)]
+    #[runtime::pallet_index(30)]
     pub type PublicManage = public_manage;
 
     // 私权机构生命周期模块：只负责私权机构 CID 登记、创建、关闭。
-    #[runtime::pallet_index(33)]
+    #[runtime::pallet_index(31)]
     pub type PrivateManage = private_manage;
 
     // 地址变更上链模块：只保存地址目录版本、单条地址当前哈希和变更事件。
-    #[runtime::pallet_index(35)]
+    #[runtime::pallet_index(33)]
     pub type AddressRegistry = address_registry;
 
     // 广场动态发布索引模块：只记录 post_id/content_hash/storage_receipt_id 等链上索引。
-    #[runtime::pallet_index(36)]
+    #[runtime::pallet_index(34)]
     pub type SquarePost = square_post;
 }
 

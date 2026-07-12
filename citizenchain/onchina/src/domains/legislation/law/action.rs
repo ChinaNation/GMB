@@ -109,7 +109,7 @@ mod tests {
         byte.repeat(32)
     }
 
-    /// 提案 sign_request 承载 enact 动作码(0x1B00)与非空 b.d(base64 call_data)。
+    /// 提案 sign_request 承载 enact 动作码(0x1900)与非空 b.d(base64 call_data)。
     #[test]
     fn propose_law_sign_request_carries_enact_action_and_calldata() {
         let sign_request = build_propose_law_sign_request(
@@ -121,17 +121,17 @@ mod tests {
         .expect("build propose sign_request");
 
         let json: serde_json::Value = serde_json::from_str(&sign_request).expect("parse json");
-        assert_eq!(json["b"]["a"].as_u64().unwrap(), 0x1B00); // (27<<8)|0 = propose_enact_law
+        assert_eq!(json["b"]["a"].as_u64().unwrap(), 0x1900); // (25<<8)|0 = propose_enact_law
         assert!(!json["b"]["d"].as_str().unwrap().is_empty()); // call_data(base64)非空
     }
 
-    /// 院内表决 sign_request 承载 cast_house_vote 动作码(0x1C01)。
+    /// 院内表决 sign_request 承载 cast_house_vote 动作码(0x1A01)。
     #[test]
     fn house_vote_sign_request_targets_legislation_vote() {
         let sign_request = build_house_vote_sign_request(42, true, actor_hex("22").as_str())
             .expect("build vote sign_request");
         let json: serde_json::Value = serde_json::from_str(&sign_request).expect("parse json");
-        assert_eq!(json["b"]["a"].as_u64().unwrap(), 0x1C01); // (28<<8)|1 = cast_house_vote
+        assert_eq!(json["b"]["a"].as_u64().unwrap(), 0x1A01); // (26<<8)|1 = cast_house_vote
     }
 
     /// 越权/非法输入在组织阶段即拒(省教育案无路由 → 提案组织错误映射为 422)。

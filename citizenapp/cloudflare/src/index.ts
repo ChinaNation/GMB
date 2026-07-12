@@ -4,6 +4,7 @@ import { routeRequest } from './routes';
 import { runVideoArchiveSweep } from './membership/archive';
 import { applyCors, cleanupSecurityState } from './security/request_guard';
 import { cleanupExpiredUploads } from './uploads/service';
+import { cleanupExpiredReservations } from './limits/usage';
 
 export { ChatRealtimeObject } from './chat/realtime';
 
@@ -20,7 +21,8 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const jobs: Promise<unknown>[] = [
       cleanupExpiredUploads(env),
-      cleanupSecurityState(env)
+      cleanupSecurityState(env),
+      cleanupExpiredReservations(env),
     ];
     if (_controller.cron === '0 3 * * *') {
       jobs.push(runVideoArchiveSweep(env));

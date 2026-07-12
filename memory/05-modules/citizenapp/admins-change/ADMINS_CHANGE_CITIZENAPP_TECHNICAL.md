@@ -89,11 +89,11 @@ citizenapp/test/governance/admins-change/
 
 规则：
 
-- PMUL 个人多签走 `PersonalAdmins(7).propose_admin_set_change(3)`。
-- NRC/PRC/PRB/NJD 固定治理机构走 `PublicAdmins(29).propose_admin_set_change(0)`；FRG 省级组走 `PublicAdmins(29).propose_federal_registry_province_admin_set_change(2)`。
-- 普通公权机构走 `PublicAdmins(29).propose_admin_set_change(0)`。
-- 私权机构走 `PrivateAdmins(30).propose_admin_set_change(0)`。
-- 非法人机构按所属法人归属走 `PublicAdmins(29).propose_admin_set_change(0)` 或 `PrivateAdmins(30).propose_admin_set_change(0)`。
+- PMUL 个人多签走 `PersonalAdmins(29).propose_admin_set_change(0)`。
+- NRC/PRC/PRB/NJD 固定治理机构走 `PublicAdmins(27).propose_admin_set_change(0)`；FRG 省级组走 `PublicAdmins(27).propose_federal_registry_province_admin_set_change(2)`。
+- 普通公权机构走 `PublicAdmins(27).propose_admin_set_change(0)`。
+- 私权机构走 `PrivateAdmins(28).propose_admin_set_change(0)`。
+- 非法人机构按所属法人归属走 `PublicAdmins(27).propose_admin_set_change(0)` 或 `PrivateAdmins(28).propose_admin_set_change(0)`。
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
 - 固定治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6，NJD=8；固定人数为 NRC=19，PRC/PRB=9，NJD=15；FRG 省级组固定为 3/5。
 - 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。

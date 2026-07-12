@@ -17,30 +17,6 @@ export function profileAssetPrefix(ownerAccount: string): string {
   return `profile/${sanitizeOwnerAccount(ownerAccount)}/`;
 }
 
-export function normalizeFileExt(contentType: string, fileExt?: string): string {
-  if (fileExt && /^[a-z0-9]{2,8}$/i.test(fileExt)) {
-    return fileExt.toLowerCase();
-  }
-
-  if (contentType === 'image/jpeg') {
-    return 'jpg';
-  }
-  if (contentType === 'image/png') {
-    return 'png';
-  }
-  if (contentType === 'image/webp') {
-    return 'webp';
-  }
-  if (contentType === 'video/mp4') {
-    return 'mp4';
-  }
-  if (contentType === 'video/webm') {
-    return 'webm';
-  }
-
-  return 'bin';
-}
-
 export function buildObjectKeyPlan(
   ownerAccount: string,
   postId: string

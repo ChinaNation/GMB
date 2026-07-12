@@ -13,7 +13,7 @@
 use crate::core::institution_call::{chain_action_code, ChainCall};
 
 /// LegislationVote pallet 在 construct_runtime 的索引。
-pub const LEGISLATION_VOTE_PALLET_INDEX: u8 = 28;
+pub const LEGISLATION_VOTE_PALLET_INDEX: u8 = 26;
 /// `cast_house_vote` call index(院内表决)。
 pub const CAST_HOUSE_VOTE_CALL_INDEX: u8 = 1;
 /// `cast_referendum_vote` call index(特别案公投)。
@@ -66,12 +66,12 @@ mod tests {
     use super::*;
     use codec::Encode;
 
-    /// 院内表决编码 = `[28,1]` + `(u64 小端, bool)`,与 codec golden 逐字节一致;动作码 0x1C01。
+    /// 院内表决编码 = `[26,1]` + `(u64 小端, bool)`,与 codec golden 逐字节一致;动作码 0x1A01。
     #[test]
     fn cast_house_vote_matches_codec_golden() {
         let chain = encode_cast_house_vote(42, true);
-        assert_eq!(&chain.call_data[..2], &[28, 1]);
-        assert_eq!(chain.action, 0x1C01);
+        assert_eq!(&chain.call_data[..2], &[26, 1]);
+        assert_eq!(chain.action, 0x1A01);
 
         let mut golden = Vec::new();
         golden.extend(42u64.encode());

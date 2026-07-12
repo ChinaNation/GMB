@@ -24,7 +24,7 @@ export function turnstilePageRoute(env: Env): Response {
     headers: {
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'no-store',
-      'content-security-policy': "default-src 'none'; script-src https://challenges.cloudflare.com 'unsafe-inline'; frame-src https://challenges.cloudflare.com; style-src 'unsafe-inline'; connect-src https://challenges.cloudflare.com"
+      'content-security-policy': "default-src 'none'; script-src https://challenges.cloudflare.com https://static.cloudflareinsights.com 'unsafe-inline'; frame-src https://challenges.cloudflare.com; style-src 'unsafe-inline'; connect-src https://challenges.cloudflare.com https://cloudflareinsights.com"
     }
   });
 }
@@ -35,7 +35,6 @@ export async function verifyTurnstile(
   token: unknown
 ): Promise<void> {
   if (!env.TURNSTILE_SECRET) {
-    if (env.DEV_UPLOAD_PROXY === '1') return;
     throw new HttpError(503, 'turnstile_not_configured', '设备安全验证尚未配置');
   }
   if (typeof token !== 'string' || token.length < 20 || token.length > 2048) {

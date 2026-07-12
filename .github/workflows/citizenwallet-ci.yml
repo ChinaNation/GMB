@@ -8,7 +8,7 @@ on:
       - ".fvm/fvm_config.json"
       - "citizenwallet/**"
       - "citizenchain/runtime/src/lib.rs"
-      - "citizenchain/runtime/transaction/multisig-transfer/src/lib.rs"
+      - "citizenchain/runtime/transaction/multisig/src/lib.rs"
       - "citizenchain/runtime/votingengine/joint-vote/src/lib.rs"
       - "citizenchain/runtime/votingengine/internal-vote/src/lib.rs"
   workflow_dispatch:
@@ -47,7 +47,7 @@ jobs:
 
           RUNTIME_LIB=citizenchain/runtime/src/lib.rs
           REGISTRY=citizenwallet/lib/signer/pallet_registry.dart
-          TRANSFER_PALLET=citizenchain/runtime/transaction/multisig-transfer/src/lib.rs
+          TRANSFER_PALLET=citizenchain/runtime/transaction/multisig/src/lib.rs
           JOINT_VOTE_PALLET=citizenchain/runtime/votingengine/joint-vote/src/lib.rs
 
           ONCHAIN_TRANSACTION_IDX=$(grep -B1 'pub type OnchainTransaction' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')

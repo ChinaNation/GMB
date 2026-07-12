@@ -169,13 +169,13 @@ export async function putProfileRoute(request: Request, env: Env): Promise<Respo
     avatar_object_key: normalizeAssetKey(
       body.avatar_object_key,
       existing.avatar_object_key,
-      assetPrefix
+      `${assetPrefix}avatar`
     ),
     avatar_content_hash: normalizeOptional(body.avatar_content_hash, existing.avatar_content_hash),
     banner_object_key: normalizeAssetKey(
       body.banner_object_key,
       existing.banner_object_key,
-      assetPrefix
+      `${assetPrefix}banner`
     ),
     banner_content_hash: normalizeOptional(body.banner_content_hash, existing.banner_content_hash),
     updated_at: nowMs()
@@ -236,7 +236,7 @@ function normalizeText(value: unknown, fallback: string, max: number): string {
 function normalizeAssetKey(
   value: unknown,
   fallback: string | null,
-  assetPrefix: string
+  expectedKey: string
 ): string | null {
   if (value === undefined) {
     return fallback;
@@ -244,8 +244,8 @@ function normalizeAssetKey(
   if (value === null || value === '') {
     return null;
   }
-  if (typeof value !== 'string' || !value.startsWith(assetPrefix)) {
-    throw new HttpError(400, 'invalid_asset_key', '资源对象不属于本账户目录');
+  if (value !== expectedKey) {
+    throw new HttpError(400, 'invalid_asset_key', '资源对象不是本账户固定资料键');
   }
   return value;
 }

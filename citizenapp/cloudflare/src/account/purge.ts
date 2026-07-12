@@ -5,7 +5,7 @@ import { getMembership } from '../membership/service';
 import { cancelStripeSubscriptionNow } from '../membership/stripe_api';
 import { clearOwnerSessions } from '../auth/session_index';
 import { closeChatRealtime } from '../chat/realtime';
-import { revokeOwnerTurn } from '../chat/turn';
+import { releaseStoredMedia } from '../limits/usage';
 
 export interface PurgeAccountResult {
   stripe_canceled: boolean;
@@ -15,7 +15,7 @@ export interface PurgeAccountResult {
 }
 
 /// 硬删除某账户在 Cloudflare 的**全部**数据。原则：
-/// - Chat 不保存消息或附件；注销先断开连接、撤销 TURN 并删除全部设备路由材料。
+/// - Chat 不保存消息或附件；注销先断开连接并删除全部设备路由材料。
 /// - 所有包含 A 的账户引用都删除，不保留粉丝、消费记录或影子关联。
 /// - Stripe 或媒体提供商失败不得阻塞 Chat 隐私数据硬删除。
 export async function purgeAccount(
@@ -25,9 +25,8 @@ export async function purgeAccount(
   // 1. 先取会员，拿 stripe_subscription_id（删了就取不到了）。
   const membership = await getMembership(env, ownerAccount);
 
-  // 2. Chat 活动连接和临时 TURN 凭证先撤销；支付服务故障不能阻塞隐私删除。
+  // 2. Chat 活动连接先关闭，通信必需元数据立即硬删除；支付故障不能阻塞隐私删除。
   await closeChatRealtime(env, ownerAccount);
-  await revokeOwnerTurn(env, ownerAccount);
   await env.DB.batch([
     env.DB.prepare(`DELETE FROM chat_keypackages WHERE owner_account = ?`).bind(ownerAccount),
     env.DB.prepare(`DELETE FROM chat_devices WHERE owner_account = ?`).bind(ownerAccount),
@@ -45,14 +44,19 @@ export async function purgeAccount(
   const mediaRows =
     (
       await env.DB.prepare(
-        `SELECT provider, provider_asset_id FROM square_media_assets WHERE owner_account = ?`
+        `SELECT upload_id, post_id, owner_account, media_index, media_kind, provider,
+          provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
+          declared_duration_seconds, duration_seconds, width, height, error_code,
+          created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key
+          FROM square_media_assets WHERE owner_account = ?`
       )
         .bind(ownerAccount)
-        .all<Pick<MediaAssetRow, 'provider' | 'provider_asset_id'>>()
+        .all<MediaAssetRow>()
     ).results ?? [];
   for (const row of mediaRows) {
     await deleteProviderAsset(env, row);
   }
+  await releaseStoredMedia(env, mediaRows);
 
   // 5. R2 只清理当前允许的资料、广场和归档对象；Chat 永远不创建 R2 对象。
   const safeOwner = sanitizeOwnerAccount(ownerAccount);
@@ -72,7 +76,8 @@ export async function purgeAccount(
     bind(`DELETE FROM square_media_assets WHERE owner_account = ?`),
     env.DB.prepare(`DELETE FROM square_follows WHERE owner_account = ? OR followed_account = ?`).bind(ownerAccount, ownerAccount),
     bind(`DELETE FROM square_browse_days WHERE owner_account = ?`),
-    bind(`DELETE FROM square_usage_days WHERE owner_account = ?`),
+    bind(`DELETE FROM resource_reservations WHERE owner_account = ?`),
+    bind(`DELETE FROM resource_usage WHERE owner_account = ?`),
     bind(`DELETE FROM square_request_nonces WHERE owner_account = ?`),
     env.DB.prepare(`DELETE FROM square_rate_windows WHERE rate_key LIKE ?`).bind(`%:owner:${ownerAccount}`),
     bind(`DELETE FROM square_device_subkeys WHERE owner_account = ?`),

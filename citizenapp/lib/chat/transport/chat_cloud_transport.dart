@@ -12,20 +12,6 @@ import 'chat_transport.dart';
 
 const _chatServiceUnavailable = 'Cloudflare Chat 瞬时转发尚未配置';
 
-class ChatIceServer {
-  const ChatIceServer({required this.urls, this.username, this.credential});
-
-  final List<String> urls;
-  final String? username;
-  final String? credential;
-
-  Map<String, dynamic> toWebRtcMap() => {
-        'urls': urls,
-        if (username != null) 'username': username,
-        if (credential != null) 'credential': credential,
-      };
-}
-
 /// Cloudflare 互联网 Chat 传输，只转发当前请求中的密文和WebRTC信令。
 class ChatCloudTransport implements ChatTransport {
   ChatCloudTransport({
@@ -115,23 +101,6 @@ class ChatCloudTransport implements ChatTransport {
       throw const FormatException('Cloudflare KeyPackage 消费响应格式无效');
     }
     return _keyPackageFromJson(item);
-  }
-
-  Future<List<ChatIceServer>> createIceServers() async {
-    final json = await _postJson('/v1/chat/turn', const {});
-    final rows = json['ice_servers'];
-    if (rows is! List) throw const FormatException('TURN 响应格式无效');
-    return rows.whereType<Map<String, dynamic>>().map((row) {
-      final rawUrls = row['urls'];
-      final urls = rawUrls is List
-          ? rawUrls.map((value) => value.toString()).toList(growable: false)
-          : <String>[rawUrls.toString()];
-      return ChatIceServer(
-        urls: urls,
-        username: row['username']?.toString(),
-        credential: row['credential']?.toString(),
-      );
-    }).toList(growable: false);
   }
 
   Future<bool> sendSignal({

@@ -12,6 +12,7 @@ class FakeR2 {
     if (!object) return null;
     return {
       body: object.body,
+      size: new TextEncoder().encode(object.body).byteLength,
       httpMetadata: { contentType: object.contentType },
       httpEtag: '"etag"'
     };
@@ -41,20 +42,22 @@ function call(env: Env, path: string) {
 
 describe('media read channel', () => {
   it('streams a stored object with its content type', async () => {
+    const key = 'profile/acct/avatar';
     const env = fakeEnv({
-      'profile/acct/avatar.webp': { body: 'IMG', contentType: 'image/webp' }
+      [key]: { body: 'IMG', contentType: 'image/webp' }
     });
-    const response = await call(env, '/v1/square/media/profile/acct/avatar.webp');
+    const response = await call(env, `/v1/square/media/${key}`);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('image/webp');
-    expect(response.headers.get('cache-control')).toBe('private, max-age=300');
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(await response.text()).toBe('IMG');
   });
 
   it('404s a missing object', async () => {
+    const key = 'profile/a/avatar';
     await expect(
-      call(fakeEnv({}), '/v1/square/media/profile/a/avatar.webp')
+      call(fakeEnv({}), `/v1/square/media/${key}`)
     ).rejects.toMatchObject({ status: 404 });
   });
 

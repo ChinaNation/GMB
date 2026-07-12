@@ -1,12 +1,13 @@
 name = "citizenapp-square-api"
 main = "src/index.ts"
-compatibility_date = "2026-07-05"
+compatibility_date = "2026-07-08"
 workers_dev = false
 preview_urls = false
 stream = { binding = "STREAM" }
 
 # 远端部署前必须把 database_id / kv id 替换为 Cloudflare 实际资源 ID。
-# Cloudflare API token、R2 access key、R2 secret key、Stripe secret key、Stripe webhook secret、Stream webhook secret 不得写入本文件。
+# Cloudflare API token、R2 冷归档访问密钥、Stripe secret key、Stripe webhook secret、Stream webhook secret 不得写入本文件。
+# 用户资料、清单和图片不取得 R2 写入授权；R2 密钥只允许服务端内部冷归档使用。
 # CHAIN_URL 与两项 CHAIN_ID / CHAIN_SECRET 服务令牌必须分别使用 wrangler secret 配置，禁止写入 vars 或仓库。
 
 [[r2_buckets]]
@@ -40,7 +41,6 @@ crons = ["*/5 * * * *", "0 3 * * *"]
 [vars]
 SESSION_TTL_SECONDS = "86400"
 UPLOAD_TTL_SECONDS = "900"
-DEV_UPLOAD_PROXY = "0"
 STRIPE_DEV_PROXY = "0"
 ARCHIVE_ENABLED = "0"
 ARCHIVE_LAPSE_DAYS = "90"
@@ -106,7 +106,6 @@ crons = ["*/5 * * * *", "0 3 * * *"]
 [env.staging.vars]
 SESSION_TTL_SECONDS = "86400"
 UPLOAD_TTL_SECONDS = "900"
-DEV_UPLOAD_PROXY = "0"
 STRIPE_DEV_PROXY = "0"
 ARCHIVE_ENABLED = "0"
 ARCHIVE_LAPSE_DAYS = "90"
@@ -171,7 +170,6 @@ crons = ["*/5 * * * *", "0 3 * * *"]
 [env.production.vars]
 SESSION_TTL_SECONDS = "86400"
 UPLOAD_TTL_SECONDS = "900"
-DEV_UPLOAD_PROXY = "0"
 STRIPE_DEV_PROXY = "0"
 # 生产启用退订满 90 天视频冷归档；本地与 staging 保持关闭。
 ARCHIVE_ENABLED = "1"

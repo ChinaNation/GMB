@@ -2,8 +2,10 @@ import type { Env, LoginChallengeRow, SessionState } from '../types';
 import { HttpError, jsonResponse, parsePositiveInt, readJson } from '../shared/http';
 import { assertOwnerAccount, createId } from '../shared/ids';
 import { nowMs, secondsFromNow } from '../shared/time';
+import { putKvJson } from '../limits/storage';
 import { sha256Hex } from '../shared/hash';
 import { verifyTurnstile } from '../security/turnstile';
+import { assertOnchainWallet } from '../chain/wallet';
 import { verifyWalletSignature } from './wallet_signature';
 import { indexSessionToken } from './session_index';
 import {
@@ -140,6 +142,10 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     throw new HttpError(401, 'invalid_signature', '设备子钥签名校验失败');
   }
 
+  // 链上钱包门禁：签名钱包必须是链上活账户（free ≥ ED 111 分），否则拒发会话——彻底拦住
+  // 无链上钱包的用户使用广场/聊天。仅签发时校验一次（登录态 24h，过期重校验）；fail-closed。
+  await assertOnchainWallet(env, ownerAccount);
+
   const sessionTtlSeconds = parsePositiveInt(env.SESSION_TTL_SECONDS, 86_400);
   const sessionToken = createId('sqs');
   const session: SessionState = {
@@ -152,7 +158,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   await env.DB.prepare(`UPDATE square_login_challenges SET used_at = ? WHERE challenge_id = ?`)
     .bind(nowMs(), challenge.challenge_id)
     .run();
-  await env.SQUARE_CACHE.put(`square_session:${sessionToken}`, JSON.stringify(session), {
+  await putKvJson(env, `square_session:${sessionToken}`, session, 'session_cache', {
     expirationTtl: sessionTtlSeconds
   });
   // 记入「账户→token」索引，使注销可定向失效该账户全部会话（零残留）。

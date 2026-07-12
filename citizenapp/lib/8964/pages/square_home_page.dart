@@ -354,12 +354,20 @@ class _SquareHomePageState extends State<SquareHomePage> {
                     posts.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
+                // 非链上钱包被门禁拦截时透传后端明确文案（需充值到 ED），其余错误用通用提示。
+                final error = snapshot.error;
+                final errorMessage = !snapshot.hasError
+                    ? null
+                    : (error is SquareApiException &&
+                            error.errorCode == 'not_onchain_wallet')
+                        ? error.message
+                        : '广场内容加载失败';
                 return RefreshIndicator(
                   onRefresh: _refreshFeed,
                   child: _FeedBody(
                     feedKind: _selectedFeed,
                     posts: posts,
-                    errorMessage: snapshot.hasError ? '广场内容加载失败' : null,
+                    errorMessage: errorMessage,
                     onOpenPost: (post) => _openDetail(post),
                     onOpenAuthor: _openAuthor,
                   ),

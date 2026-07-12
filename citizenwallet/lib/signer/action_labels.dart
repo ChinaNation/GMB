@@ -48,12 +48,12 @@ const Map<String, String> actionLabels = {
   'register_cid_public_institution': '登记公权机构 CID 信息',
   'register_cid_private_institution': '登记私权机构 CID 信息',
 
-  // 立法院（pallet=27）· 立法/修法/废法发起
+  // 立法院（pallet=25）· 立法/修法/废法发起
   'propose_enact_law': '发起立法',
   'propose_amend_law': '发起修法',
   'propose_repeal_law': '发起废法',
 
-  // 立法投票（pallet=28）· 立法专属投票引擎
+  // 立法投票（pallet=26）· 立法专属投票引擎
   'prepare_legislation_snapshot': '准备人口快照',
   'cast_house_vote': '院内表决',
   'cast_referendum_vote': '特别案公投',

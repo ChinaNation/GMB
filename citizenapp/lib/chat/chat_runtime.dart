@@ -9,7 +9,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../8964/services/square_api_client.dart';
-import '../8964/services/device_subkey_registrar.dart';
 import '../wallet/core/device_subkey.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'crypto/chat_device_binding.dart';
@@ -595,23 +594,10 @@ class ChatRuntime {
     MlsKeyPackage? initialKeyPackage,
   }) async {
     // 后台会话握手绝不读 seed / 不弹窗 / 不懒注册：子钥只在钱包创建时静默注册。
+    // 未注册设备（旧格式钱包等）在此直接会话失败，按不可用降级处理，绝不在合并主线程弹 Turnstile。
     final session = await _squareApiClient.ensureSession(
       ownerAccount: account.address,
       signLoginPayload: (payload) => _signSquareLoginPayload(account, payload),
-      onDeviceNotRegistered: () => DeviceSubkeyRegistrar(
-        apiClient: _squareApiClient,
-        deviceSubkey: _deviceSubkey,
-      ).register(
-        walletIndex: account.walletIndex,
-        ownerAccount: account.address,
-        signBinding: (message) async {
-          final signature = await _walletManager.signWithWallet(
-            account.walletIndex,
-            message,
-          );
-          return '0x${bytesToHex(signature)}';
-        },
-      ),
     );
     final transport = _cloudTransportFactory?.call(
           ownerAccount: account.address,

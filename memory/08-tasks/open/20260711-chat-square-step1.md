@@ -8,7 +8,7 @@
 ## 目标
 
 - Chat 对所有钱包用户开放，会员不参与 Chat 权限。
-- Cloudflare 只保存设备公钥、一次性 KeyPackage、推送 Token、绑定防重放数据和短期 TURN 凭证。
+- Cloudflare 只保存设备公钥、一次性 KeyPackage、推送 Token 和绑定防重放数据。
 - 消息、会话、联系人关系和附件只保存在用户设备；Cloudflare 不持久化任何消息或附件。
 - 接收设备不可达时只发送无内容唤醒通知，发送设备使用本地队列重试，不要求用户同时打开 App。
 - 用户注销时立即关闭连接、撤销凭证并硬删除 Cloudflare 活动数据和本机数据。
@@ -24,7 +24,7 @@
 
 ## 实施范围
 
-- `citizenapp/cloudflare/src/chat/`：瞬时 WebSocket 转发、无内容 APNs/FCM 唤醒、TURN 凭证和旧邮箱清理。
+- `citizenapp/cloudflare/src/chat/`：瞬时 WebSocket/信令转发、无内容 APNs/FCM 唤醒和注销清理。
 - `citizenapp/cloudflare/src/feeds/`：钱包会话和每日浏览额度。
 - `citizenapp/cloudflare/src/posts/`、`uploads/`：发布全链路有效会员校验。
 - `citizenapp/cloudflare/src/account/`：注销先删 Chat，再处理订阅和广场数据；全引用硬删除。
@@ -39,7 +39,6 @@
 - `chat_devices`：账户、设备、公钥、推送服务、推送 Token、有效期。
 - `chat_keypackages`：一次性 MLS KeyPackage，消费即删。
 - `chat_device_binding_nonces`：nonce 哈希和有效期，过期即删。
-- `chat_turn_credentials`：短期 TURN 用户名和有效期，注销即撤销并删除。
 - `square_browse_days`：账户、UTC 日期、已返回内容数、更新时间。
 
 ## 验收
@@ -57,7 +56,7 @@
 
 - 已彻底删除独立 Chat 迁移文件、旧聊天内容表、云端消息状态、R2 Chat 附件接口、客户端云端附件字段和远程补拉流程；不保留迁移或兼容分支。
 - staging / production D1 已清空旧 Chat 数据并按 `0001_square_core.sql` 目标基线重建；远端迁移登记已清理；两个 R2 bucket 的 `chat/` 前缀均确认无对象。
-- Worker 已实现瞬时 WebSocket/信令转发、通用 APNs/FCM 唤醒、300 秒 TURN、注销先删 Chat、无订阅每日 100 条浏览和发布全链路会员校验。
+- Worker 已实现瞬时 WebSocket/信令转发、通用 APNs/FCM 唤醒、注销先删 Chat、无订阅每日 100 条浏览和发布全链路会员校验。
 - App 已实现消息/附件设备本地存储、本机出站重试、推送后台短时自动收发、Token 刷新重登记和 WebRTC DataChannel 附件。
 - 浏览扣量已使用 D1 原子条件更新；并发旧快照请求不能越过每日上限。
 - staging Worker 当前版本 `04dce458-9050-4fbc-bb14-13abc49ce36c` 已部署并真实验收：health 200、未登录接口 401、无订阅额度 100、额度耗尽 429、发布准备 402；临时 KV/D1 验收数据已硬删除。
@@ -65,12 +64,10 @@
 - 文档、安全规则、统一命名、协议、官网中英文白皮书、节点内置白皮书和历史任务卡已更新；旧 Chat 存储关键词与旧接口残留全仓搜索为零。
 - Firebase 项目 `citizenapp-23542`、`org.citizenapp` Android/iOS 应用和专用 FCM 服务账号已创建；服务账号仅授予 FCM API Admin。三项 staging Worker Secret 已写入，OAuth 返回 200，FCM HTTP v1 返回预期无效 Token 错误，证明服务端鉴权链路有效。
 - Firebase 客户端公开配置已作为现有代码默认值，不提交平台配置文件；不传构建参数的 Android debug APK 构建通过。本机下载的服务账号 JSON 与 `google-services.json` 已硬删除。
-- Cloudflare Realtime 已创建 `CitizenApp Staging` TURN 应用，`TURN_KEY_ID` 与 `TURN_API_TOKEN` 已写入 staging Worker Secret；实际生成 300 秒 ICE 凭证返回 201、两组 ICE servers 和完整短期凭证。失去一次性密钥的旧 `CitizenApp` 应用已永久删除，控制台无重复应用残留。
-- TURN Secret 变更后的 staging Worker 当前版本为 `7f05bf0d-98a7-420b-8f14-82e05cd7c639`，真实 `/health` 仍返回 200。
-- 后续 production 已创建独立 `CitizenApp Production` TURN 应用并写入两项 production Secret；真实 300 秒 ICE 凭证返回 201 和两组 ICE servers。
+- 2026-07-12 目标态已删除聊天附件中继：客户端只使用公共 STUN 发现候选地址，附件仅设备直连；中继接口、密钥、数据表和客户端分支不再保留。
 - production 已为同一最小权限 FCM 服务账号创建独立密钥并写入三项 Secret；Google OAuth 返回 200，FCM HTTP v1 对故意无效 Token 返回预期 `INVALID_ARGUMENT`。下载 JSON 与临时私钥均已硬删除。
 
 ## 外部阻塞
 
 - Apple Developer 尚未创建 APNs Key，无法写入 APNs Worker Secret。
-- APNs 凭证缺失使 iOS 后台推送与 Android/iOS 双真机完整闭环尚无法验收；production Android FCM、TURN、前台 Chat 与广场 API 已部署，不受 APNs 延期影响。
+- APNs 凭证缺失使 iOS 后台推送与 Android/iOS 双真机完整闭环尚无法验收；production Android FCM、前台 Chat 与广场 API 不受 APNs 延期影响。

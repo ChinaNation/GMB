@@ -1,6 +1,6 @@
 # QR_V1 Action Registry
 
-- 更新日期:2026-07-11
+- 更新日期:2026-07-12
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:`k=1` 签名请求的 `b.a` 数字动作码
 - 依赖:
@@ -41,42 +41,42 @@ a = (pallet_index << 8) | call_index
 | a(hex) | pallet.call | decoder action | payload 展示字段 | 签发方 |
 |---|---|---|---|---|
 | `0x0400` | `OnchainTransaction.transfer_with_remark` | `transfer` | `to`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
-| `0x0700` | `PersonalAdmins.propose_create` | `propose_create_personal` | `account_name`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | CitizenApp |
-| `0x0701` | `PersonalAdmins.propose_close` | `propose_close_personal` | `account`, `beneficiary` | CitizenApp |
-| `0x0702` | `PersonalAdmins.cleanup_rejected_proposal` | `cleanup_rejected_personal_proposal` | `proposal_id` | CitizenApp |
-| `0x0703` | `PersonalAdmins.propose_admin_set_change` | `propose_personal_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | CitizenApp |
+| `0x0700` | `PersonalManage.propose_create` | `propose_create_personal` | `account_name`, `admins_len`, `regular_threshold`, `create_threshold`, `amount_yuan` | CitizenApp |
+| `0x0701` | `PersonalManage.propose_close` | `propose_close_personal` | `account`, `beneficiary` | CitizenApp |
+| `0x0702` | `PersonalManage.cleanup_rejected_proposal` | `cleanup_rejected_personal_proposal` | `proposal_id` | CitizenApp |
+| `0x1d00` | `PersonalAdmins.propose_admin_set_change` | `propose_personal_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | CitizenApp |
 | `0x0800` | `ResolutionIssuance.propose_resolution_issuance` | `propose_resolution_issuance` | `reason`, `amount_yuan`, `allocation_count`, `eligible_total`, `province_name`, `signer_pubkey` | citizenchain node / CitizenApp |
 | `0x0903` | `VotingEngine.finalize_proposal` | `finalize_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0904` | `VotingEngine.retry_passed_proposal` | `retry_passed_proposal` | `proposal_id` | citizenchain node / CitizenApp |
 | `0x0905` | `VotingEngine.cancel_passed_proposal` | `cancel_passed_proposal` | `proposal_id`, `reason` | citizenchain node / CitizenApp |
 | `0x0a00` | `CitizenIdentity.register_voting_identity` | `register_voting_identity` | `registrar_account`, `cid_number`, `wallet_account`, `citizen_age_years`, `valid_range`, `citizen_status`, `residence` | OnChina |
-| `0x0d00` | `RuntimeUpgrade.propose_runtime_upgrade` | `propose_runtime_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
-| `0x0d02` | `RuntimeUpgrade.developer_direct_upgrade` | `developer_direct_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
-| `0x0e00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `institution_code`, `amount_yuan` | CitizenApp |
-| `0x1000` | `GrandpaKeyChange.propose_replace_grandpa_key` | `propose_replace_grandpa_key` | `institution`, `new_key` | citizenchain node |
-| `0x2001` | `PublicManage.propose_close_public_institution` | `propose_close_public_institution` | `account`, `beneficiary` | CitizenApp |
-| `0x2004` | `PublicManage.cleanup_rejected_public_proposal` | `cleanup_rejected_public_proposal` | `proposal_id` | CitizenApp |
-| `0x2005` | `PublicManage.propose_create_public_institution` | `propose_create_public_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
-| `0x2101` | `PrivateManage.propose_close_private_institution` | `propose_close_private_institution` | `account`, `beneficiary` | CitizenApp |
-| `0x2104` | `PrivateManage.cleanup_rejected_private_proposal` | `cleanup_rejected_private_proposal` | `proposal_id` | CitizenApp |
-| `0x2105` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
-| `0x2300` | `AddressRegistry.set_catalog_version` | `set_address_catalog_version` | `registrar_account`, `catalog_version`, `catalog_hash` | onchina |
-| `0x2301` | `AddressRegistry.set_address_name` | `set_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_name` | onchina |
-| `0x2302` | `AddressRegistry.remove_address_name` | `remove_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code` | onchina |
-| `0x2303` | `AddressRegistry.set_address` | `set_address` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_local_no`, `address_detail` | onchina |
-| `0x2304` | `AddressRegistry.remove_address` | `remove_address` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_local_no`, `address_detail` | onchina |
-| `0x1300` | `MultisigTransfer.propose_transfer` | `propose_transfer` | `institution`, `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
-| `0x1d00` | `PublicAdmins.propose_admin_set_change` | `propose_public_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
-| `0x1d02` | `PublicAdmins.propose_federal_registry_province_admin_set_change` | `propose_federal_registry_province_admin_set_change` | `province_code`, `admins`, `new_threshold` | onchina(FRG 省级 5 人组替换) |
-| `0x1e00` | `PrivateAdmins.propose_admin_set_change` | `propose_private_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
-| `0x1301` | `MultisigTransfer.propose_safety_fund` | `propose_safety_fund_transfer` | `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
-| `0x1302` | `MultisigTransfer.propose_sweep` | `propose_sweep_to_main` | `institution`, `amount_yuan` | citizenchain node / CitizenApp |
-| `0x1532` | `OffchainTransaction.register_clearing_bank` | `register_clearing_bank` | `cid_number`, `peer_id`, `rpc_domain`, `rpc_port` | citizenchain node |
-| `0x1533` | `OffchainTransaction.update_clearing_bank_endpoint` | `update_clearing_bank_endpoint` | `cid_number`, `new_domain`, `new_port` | citizenchain node |
-| `0x1534` | `OffchainTransaction.unregister_clearing_bank` | `unregister_clearing_bank` | `cid_number` | citizenchain node |
-| `0x1600` | `InternalVote.cast` | `internal_vote` | `proposal_id`, `approve` | citizenchain node / CitizenApp |
-| `0x1700` | `JointVote.cast_admin` | `joint_vote` | `proposal_id`, `approve` | citizenchain node / CitizenApp |
-| `0x1701` | `JointVote.cast_referendum` | `cast_referendum` | `proposal_id`, `approve`, `province_name`, `signer_pubkey` | CitizenApp |
+| `0x0c00` | `RuntimeUpgrade.propose_runtime_upgrade` | `propose_runtime_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
+| `0x0c02` | `RuntimeUpgrade.developer_direct_upgrade` | `developer_direct_upgrade` | `wasm_hash` | citizenchain node / CitizenApp |
+| `0x0d00` | `ResolutionDestro.propose_destroy` | `propose_destroy` | `institution_code`, `amount_yuan` | CitizenApp |
+| `0x0f00` | `GrandpaKeyChange.propose_replace_grandpa_key` | `propose_replace_grandpa_key` | `institution`, `new_key` | citizenchain node |
+| `0x1e01` | `PublicManage.propose_close_public_institution` | `propose_close_public_institution` | `account`, `beneficiary` | CitizenApp |
+| `0x1e04` | `PublicManage.cleanup_rejected_public_proposal` | `cleanup_rejected_public_proposal` | `proposal_id` | CitizenApp |
+| `0x1e05` | `PublicManage.propose_create_public_institution` | `propose_create_public_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
+| `0x1f01` | `PrivateManage.propose_close_private_institution` | `propose_close_private_institution` | `account`, `beneficiary` | CitizenApp |
+| `0x1f04` | `PrivateManage.cleanup_rejected_private_proposal` | `cleanup_rejected_private_proposal` | `proposal_id` | CitizenApp |
+| `0x1f05` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
+| `0x2100` | `AddressRegistry.set_catalog_version` | `set_address_catalog_version` | `registrar_account`, `catalog_version`, `catalog_hash` | onchina |
+| `0x2101` | `AddressRegistry.set_address_name` | `set_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_name` | onchina |
+| `0x2102` | `AddressRegistry.remove_address_name` | `remove_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code` | onchina |
+| `0x2103` | `AddressRegistry.set_address` | `set_address` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_local_no`, `address_detail` | onchina |
+| `0x2104` | `AddressRegistry.remove_address` | `remove_address` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_local_no`, `address_detail` | onchina |
+| `0x1100` | `MultisigTransfer.propose_transfer` | `propose_transfer` | `institution`, `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
+| `0x1b00` | `PublicAdmins.propose_admin_set_change` | `propose_public_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
+| `0x1b02` | `PublicAdmins.propose_federal_registry_province_admin_set_change` | `propose_federal_registry_province_admin_set_change` | `province_code`, `admins`, `new_threshold` | onchina(FRG 省级 5 人组替换) |
+| `0x1c00` | `PrivateAdmins.propose_admin_set_change` | `propose_private_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
+| `0x1101` | `MultisigTransfer.propose_safety_fund` | `propose_safety_fund_transfer` | `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
+| `0x1102` | `MultisigTransfer.propose_sweep` | `propose_sweep_to_main` | `institution`, `amount_yuan` | citizenchain node / CitizenApp |
+| `0x1332` | `OffchainTransaction.register_clearing_bank` | `register_clearing_bank` | `cid_number`, `peer_id`, `rpc_domain`, `rpc_port` | citizenchain node |
+| `0x1333` | `OffchainTransaction.update_clearing_bank_endpoint` | `update_clearing_bank_endpoint` | `cid_number`, `new_domain`, `new_port` | citizenchain node |
+| `0x1334` | `OffchainTransaction.unregister_clearing_bank` | `unregister_clearing_bank` | `cid_number` | citizenchain node |
+| `0x1400` | `InternalVote.cast` | `internal_vote` | `proposal_id`, `approve` | citizenchain node / CitizenApp |
+| `0x1500` | `JointVote.cast_admin` | `joint_vote` | `proposal_id`, `approve` | citizenchain node / CitizenApp |
+| `0x1501` | `JointVote.cast_referendum` | `cast_referendum` | `proposal_id`, `approve`, `province_name`, `signer_pubkey` | CitizenApp |
 
 ## 3. 扫码端展示规则
 

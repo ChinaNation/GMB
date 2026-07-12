@@ -10,7 +10,7 @@ void main() {
     final signature = '0x${List.filled(64, '11').join()}';
     final headers = await squareRequestHeaders(
       method: 'POST',
-      uri: Uri.parse('https://www.crcfrcn.com/api/v1/chat/turn'),
+      uri: Uri.parse('https://www.crcfrcn.com/api/v1/chat/signals'),
       body: '{}',
       sessionToken: 'session-token',
       requestTime: 1700000000000,

@@ -27,7 +27,7 @@
 - 生产地址硬编码进仓库：仅使用公开的 `https://www.crcfrcn.com/api` 自定义域，不含 Cloudflare token、R2 key、私密 RPC。
 - 部署未完成前先改默认会导致 debug 也连不上：必须**先部署拿到稳定地址，再改默认**。
 - staging 与 production 地址切换：用编译期 flag 区分，避免 debug 包误连生产写库。
-- 生产/预发布必须默认 `SQUARE_DEV_UPLOAD_PROXY=0`。
+- 生产/预发布与本地共用同一上传接口，不存在开发上传代理开关。
 - 不改 `citizenchain/runtime/`（本卡不涉及链端）。
 
 ## 是否需要先沟通

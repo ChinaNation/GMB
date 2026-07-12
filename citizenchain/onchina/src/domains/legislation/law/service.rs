@@ -207,8 +207,8 @@ mod tests {
     fn enact_national_builds_call_with_propose_prefix() {
         let input = enact_input(1, 2); // 国家·重要案
         let call = build_propose_law_call(&input, *b"NRP\0", fixture_resolver).expect("build");
-        assert_eq!(&call.call_data[..2], &[27, 0]); // pallet 27 call 0(enact)
-        assert_eq!(call.action, 0x1B00);
+        assert_eq!(&call.call_data[..2], &[25, 0]); // pallet 25 call 0(enact)
+        assert_eq!(call.action, 0x1900);
     }
 
     #[test]
@@ -216,7 +216,7 @@ mod tests {
         // 市教委会(CEDU)发起教育案:proposer ≠ houses[0](市立法会 CLEG),路由解耦成立。
         let input = enact_input(3, 1); // 市·常规教育案
         let call = build_propose_law_call(&input, *b"CEDU", fixture_resolver).expect("build");
-        assert_eq!(&call.call_data[..2], &[27, 0]);
+        assert_eq!(&call.call_data[..2], &[25, 0]);
     }
 
     #[test]
@@ -275,6 +275,6 @@ mod tests {
     #[test]
     fn house_vote_call_targets_legislation_vote_pallet() {
         let call = build_house_vote_call(42, true);
-        assert_eq!(&call.call_data[..2], &[28, 1]); // pallet 28 call 1(cast_house_vote)
+        assert_eq!(&call.call_data[..2], &[26, 1]); // pallet 26 call 1(cast_house_vote)
     }
 }

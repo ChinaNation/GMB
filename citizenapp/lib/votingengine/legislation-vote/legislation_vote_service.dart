@@ -6,7 +6,7 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/signed_extrinsic_builder.dart';
 import 'package:citizenapp/votingengine/legislation-vote/legislation_vote_query_service.dart';
 
-/// 立法投票/签署提交服务(LegislationVote sub-pallet,pallet_index=28)。
+/// 立法投票/签署提交服务(LegislationVote sub-pallet,pallet_index=26)。
 ///
 /// 院内表决/行政签署/三人会签/护宪终审四个动作都是**纯 extrinsic**
 /// (signer=origin=动作人本人,零 op_tag),统一走 [SignedExtrinsicBuilder] 标准
@@ -14,7 +14,7 @@ import 'package:citizenapp/votingengine/legislation-vote/legislation_vote_query_
 /// runtime 已记账,txHash 不代表已执行。特别案公投(referendum/snapshot)带 CID
 /// 凭证,另见 legislation_referendum_service。
 ///
-/// Call 格式统一 `[28][call_index][proposal_id:u64_le][approve:bool]`(11 字节)。
+/// Call 格式统一 `[26][call_index][proposal_id:u64_le][approve:bool]`(11 字节)。
 class LegislationVoteService {
   LegislationVoteService({ChainRpc? chainRpc})
       : _rpc = chainRpc ?? ChainRpc(),
@@ -24,7 +24,7 @@ class LegislationVoteService {
   final LegislationVoteQueryService _query;
 
   /// LegislationVote runtime pallet_index。
-  static const int legislationVotePallet = 28;
+  static const int legislationVotePallet = 26;
 
   static const int callCastHouseVote = 1;
   static const int callExecutiveSign = 3;

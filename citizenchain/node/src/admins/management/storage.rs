@@ -19,15 +19,15 @@ pub struct AdminPalletSpec {
 
 const PERSONAL_ADMINS: AdminPalletSpec = AdminPalletSpec {
     pallet_name: "PersonalAdmins",
-    pallet_index: 7,
+    pallet_index: 29,
 };
 const PUBLIC_ADMINS: AdminPalletSpec = AdminPalletSpec {
     pallet_name: "PublicAdmins",
-    pallet_index: 29,
+    pallet_index: 27,
 };
 const PRIVATE_ADMINS: AdminPalletSpec = AdminPalletSpec {
     pallet_name: "PrivateAdmins",
-    pallet_index: 30,
+    pallet_index: 28,
 };
 
 /// 按机构码选择新 runtime 管理员 pallet。

@@ -889,24 +889,24 @@ class ChainRpc {
 
   static String _describeRuntimeModuleError(int moduleIndex, int errorIndex) {
     final moduleName = switch (moduleIndex) {
-      7 => 'PersonalAdmins',
-      29 => 'PublicAdmins',
-      30 => 'PrivateAdmins',
-      32 => 'PublicManage',
-      33 => 'PrivateManage',
+      7 => 'PersonalManage',
+      27 => 'PublicAdmins',
+      28 => 'PrivateAdmins',
+      29 => 'PersonalAdmins',
+      30 => 'PublicManage',
+      31 => 'PrivateManage',
       _ => 'Module($moduleIndex)',
     };
     final errorName = switch (moduleIndex) {
       7 => _personalManageErrorName(errorIndex),
-      29 || 30 => _adminSetChangeErrorName(errorIndex),
-      32 || 33 => _institutionManageErrorName(errorIndex),
+      27 || 28 || 29 => _adminSetChangeErrorName(errorIndex),
+      30 || 31 => _institutionManageErrorName(errorIndex),
       _ => null,
     };
     final hint = switch (moduleIndex) {
       7 => _personalManageErrorHint(errorIndex),
-      12 => _adminSetChangeErrorHint(errorIndex),
-      29 || 30 => _adminSetChangeErrorHint(errorIndex),
-      32 || 33 => _institutionManageErrorHint(errorIndex),
+      27 || 28 || 29 => _adminSetChangeErrorHint(errorIndex),
+      30 || 31 => _institutionManageErrorHint(errorIndex),
       _ => null,
     };
     final code = errorName == null

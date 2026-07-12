@@ -11,7 +11,7 @@ class CitizenProfileApi {
 
   final SquareApiClient _client;
 
-  /// R2 object_key → 公开媒体读取 URL。
+  /// R2 object_key → 钱包 session 保护的资料媒体 URL。
   String mediaUrl(String objectKey) => _client.mediaUrl(objectKey);
 
   /// 拉取主页资料；[session] 存在时响应附带 is_following。

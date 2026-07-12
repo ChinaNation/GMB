@@ -66,6 +66,7 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
 
   _PendingImage? _pendingAvatar;
   _PendingImage? _pendingBanner;
+  SquareSession? _session;
   bool _migratedAvatar = false;
   bool _migratedBanner = false;
   bool _saving = false;
@@ -84,6 +85,16 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
         TextEditingController(text: widget.initialProfile?.bio ?? '');
     _loadWalletName();
     _loadLocalMigration();
+    _loadSession();
+  }
+
+  Future<void> _loadSession() async {
+    try {
+      final session = await _sessionProvider.ensureSession();
+      if (session != null && mounted) setState(() => _session = session);
+    } on Exception {
+      // 资料预览失败不阻塞本地编辑；保存时会再次获取 session 并给出明确错误。
+    }
   }
 
   /// 加载默认钱包名作为昵称真源；若后端未设 display_name，用钱包名预填。
@@ -106,6 +117,12 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
     _bioController.dispose();
     super.dispose();
   }
+
+  Map<String, String>? get _mediaHeaders => _session == null
+      ? null
+      : <String, String>{
+          'authorization': 'Bearer ${_session!.sessionToken}',
+        };
 
   /// 若 R2 尚无头像/背景、而本地存有旧图，预载为待迁移资产。best-effort，异常忽略。
   Future<void> _loadLocalMigration() async {
@@ -146,9 +163,9 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
     try {
       final picked = await _imagePicker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: isAvatar ? 1024 : 1600,
-        maxHeight: isAvatar ? 1024 : 1600,
-        imageQuality: 85,
+        maxWidth: isAvatar ? 1024 : 1920,
+        maxHeight: isAvatar ? 1024 : 720,
+        imageQuality: isAvatar ? 70 : 75,
       );
       if (picked == null || !mounted) return;
       final bytes = await picked.readAsBytes();
@@ -174,7 +191,7 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      final session = await _sessionProvider.ensureSession();
+      final session = _session ?? await _sessionProvider.ensureSession();
       if (session == null) {
         _snack('请先在「我的 → 我的钱包」创建热钱包');
         return;
@@ -299,6 +316,7 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
             radius: AppTheme.radiusMd,
             preview: _pendingBanner?.bytes,
             networkUrl: bannerKey == null ? null : _api.mediaUrl(bannerKey),
+            networkHeaders: _mediaHeaders,
             onTap: () => _pickImage(false),
           ),
           const SizedBox(height: 16),
@@ -309,6 +327,7 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
             radius: 16,
             preview: _pendingAvatar?.bytes,
             networkUrl: avatarKey == null ? null : _api.mediaUrl(avatarKey),
+            networkHeaders: _mediaHeaders,
             onTap: () => _pickImage(true),
           ),
           const SizedBox(height: 20),
@@ -344,6 +363,7 @@ class _AssetRow extends StatelessWidget {
     required this.radius,
     required this.preview,
     required this.networkUrl,
+    required this.networkHeaders,
     required this.onTap,
   });
 
@@ -353,6 +373,7 @@ class _AssetRow extends StatelessWidget {
   final double radius;
   final Uint8List? preview;
   final String? networkUrl;
+  final Map<String, String>? networkHeaders;
   final VoidCallback onTap;
 
   @override
@@ -392,6 +413,7 @@ class _AssetRow extends StatelessWidget {
     if (url != null) {
       return Image.network(
         url,
+        headers: networkHeaders,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => _placeholder(),
       );

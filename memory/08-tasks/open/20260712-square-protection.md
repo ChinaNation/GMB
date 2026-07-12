@@ -13,7 +13,7 @@
 - Cloudflare Images、Stream 改为私有交付，Feed 不保存或返回长期公开媒体地址。
 - 修复 Stream 上传预授权按会员最大时长占用容量的问题，限制活动上传并清理过期资产。
 - 按会员收入、媒体存储和播放用量实施盈利保护；Chat 对所有钱包用户开放且不保存消息或附件。
-- APNs 暂不配置，不阻塞广场、会员、Android FCM、TURN 和前台 Chat。
+- APNs 暂不配置，不阻塞广场、会员、Android FCM 和前台 Chat。
 
 ## 强制决策
 
@@ -55,7 +55,7 @@
 - Images/Stream 已改为短期私有签名交付；上传按申报视频时长授权，并强制月度媒体额度、活动上传数和收入成本熔断。
 - Stripe 与 Stream webhook 已分别切换到 production `/api` 正式路径；Stream 轮换后的签名 Secret 已同步 staging/production，临时配置令牌已删除。
 - 官网 `citizenweb` 已构建并发布到现有 Cloudflare Pages 项目，正式 `/membership` 返回 200；APNs 按已确认范围暂不配置。
-- production 已补齐独立 FCM 与 TURN Secret：FCM OAuth 200、无效 Token 返回预期 400，TURN 凭证返回 201 和两组 ICE servers；本机服务账号 JSON 已硬删除。
+- production 已补齐独立 FCM Secret：FCM OAuth 200、无效 Token 返回预期 400；本机服务账号 JSON 已硬删除。聊天附件中继 Secret 已在统一资源限制任务中删除。
 - 最终活动版本：staging `38f8ee7c-9eec-4ee8-8eca-92fb4cf1302e`，production `4db85515-9f58-4063-8829-4a0cd4e49bac`。
 - 最终自动验收：Worker typecheck、19 个测试文件 113 项、production dry-run；Flutter 定向 analyze 与 Chat/签名/Turnstile 44 项；CitizenWeb production build 全部通过。
 - 最终线上验收：production health 200、未登录 401、伪造 Origin 403、精确 Origin 200、超大请求 413、未签名 webhook 400；staging Access 302；两个旧 Worker 地址 404；官网 `/membership` 200。

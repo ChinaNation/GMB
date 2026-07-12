@@ -7,11 +7,11 @@ import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 class AdminsChangeCallCodec {
   AdminsChangeCallCodec._();
 
-  static const int personalAdminsPalletIndex = 7;
-  static const int publicAdminsPalletIndex = 29;
-  static const int privateAdminsPalletIndex = 30;
+  static const int personalAdminsPalletIndex = 29;
+  static const int publicAdminsPalletIndex = 27;
+  static const int privateAdminsPalletIndex = 28;
   static const int proposeAdminsChangeCallIndex = 0;
-  static const int proposePersonalAdminsChangeCallIndex = 3;
+  static const int proposePersonalAdminsChangeCallIndex = 0;
   static const String federalRegistryCode = 'FRG';
 
   static Uint8List build({

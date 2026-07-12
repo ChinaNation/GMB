@@ -20,7 +20,7 @@ use crate::core::institution_call::{chain_action_code, ChainCall};
 use codec::{Compact, Decode, Encode};
 
 /// LegislationYuan pallet 在 construct_runtime 的索引。
-pub const LEGISLATION_YUAN_PALLET_INDEX: u8 = 27;
+pub const LEGISLATION_YUAN_PALLET_INDEX: u8 = 25;
 /// `propose_enact_law` call index。
 pub const PROPOSE_ENACT_LAW_CALL_INDEX: u8 = 0;
 /// `propose_amend_law` call index。
@@ -125,7 +125,7 @@ fn encode_chapters(out: &mut Vec<u8>, chapters: &[ChapterArg]) {
     }
 }
 
-/// 立法(新法):pallet 27 call 0。
+/// 立法(新法):pallet 25 call 0。
 #[allow(clippy::too_many_arguments)]
 pub fn encode_propose_enact_law(
     tier: u8,
@@ -158,7 +158,7 @@ pub fn encode_propose_enact_law(
     }
 }
 
-/// 修法:pallet 27 call 1(`law_id` 取代 `tier`/`scope_code`)。
+/// 修法:pallet 25 call 1(`law_id` 取代 `tier`/`scope_code`)。
 #[allow(clippy::too_many_arguments)]
 pub fn encode_propose_amend_law(
     law_id: u64,
@@ -187,7 +187,7 @@ pub fn encode_propose_amend_law(
     }
 }
 
-/// 废法:pallet 27 call 2(无 `title`/`chapters`/`effective_at`)。
+/// 废法:pallet 25 call 2(无 `title`/`chapters`/`effective_at`)。
 pub fn encode_propose_repeal_law(
     law_id: u64,
     proposer_body: &LegHouse,
@@ -296,9 +296,9 @@ mod tests {
             1000,
         );
 
-        // 前缀 [27,0] + QR 动作码 0x1B00 = (27<<8)|0。
-        assert_eq!(&chain.call_data[..2], &[27, 0]);
-        assert_eq!(chain.action, 0x1B00);
+        // 前缀 [25,0] + QR 动作码 0x1900 = (25<<8)|0。
+        assert_eq!(&chain.call_data[..2], &[25, 0]);
+        assert_eq!(chain.action, 0x1900);
 
         let mut golden = Vec::new();
         golden.extend(Tier::National.encode());
@@ -338,12 +338,12 @@ mod tests {
             &sample_chapters(),
             50,
         );
-        assert_eq!(&amend.call_data[..2], &[27, 1]);
-        assert_eq!(amend.action, 0x1B01);
+        assert_eq!(&amend.call_data[..2], &[25, 1]);
+        assert_eq!(amend.action, 0x1901);
         assert_eq!(&amend.call_data[2..10], &7u64.to_le_bytes());
 
         let repeal = encode_propose_repeal_law(7, &proposer, &executive, None, 4);
-        assert_eq!(&repeal.call_data[..2], &[27, 2]);
+        assert_eq!(&repeal.call_data[..2], &[25, 2]);
         assert_eq!(&repeal.call_data[2..10], &7u64.to_le_bytes());
         // 废法尾 = legislature(None=0x00) + vote_type(4) 两字节,无 chapters/effective_at。
         let mut golden_tail = Vec::new();

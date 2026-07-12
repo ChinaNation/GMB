@@ -45,3 +45,6 @@
 - Cloudflare WAF 规则 `citizenapp-api-edge-limit` 对 production/staging API 按 IP 执行 60 次/10 秒的边缘阻断，阻断持续 10 秒；Stripe 与 Stream 签名 webhook 必须排除，避免提供商回调被普通客户端限流误伤。
 - Cloudflare Images 必须启用签名交付，Cloudflare Stream 必须启用 signed URL；D1、R2 manifest 和 Feed 禁止保存长期公开媒体 URL。
 - 媒体上传必须在服务端同时校验单帖权益、月度图片/视频额度、活动上传数和全局媒体成本熔断；Chat 不进入媒体用量预算，也不得把消息或附件保存到 Cloudflare。
+- `citizenapp/cloudflare/src/limits/catalog.ts` 是 Cloudflare 资源硬上限唯一真源；环境变量只能收紧，不能放宽。所有外部路由必须在 D1 前完成路由白名单和 `Content-Length` 检查，并在读取阶段继续按实际字节截断。
+- 头像、背景、manifest 和广场图片必须经 Worker 校验实际字节、MIME、图片文件头、尺寸与 sha256 后才能写 R2/Images；禁止向客户端签发 R2 PUT 或 Images 直传地址。视频必须统一使用绑定精确 `Upload-Length` 和最长时长的 Stream TUS，并在 webhook 按实际时长、分辨率复核。
+- Chat 附件只允许 WebRTC 设备直连；仅使用 STUN 发现候选，禁止配置、签发或保存附件中继凭证。直连失败时附件继续保留发送设备本机，不得回退 Cloudflare 中继或存储。

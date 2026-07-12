@@ -24,7 +24,7 @@ Map<String, dynamic> _profileJson({
     'owner_account': _owner,
     'display_name': displayName,
     'bio': '链上公民',
-    'avatar_object_key': 'profile/$_owner/avatar.webp',
+    'avatar_object_key': 'profile/$_owner/avatar',
     'banner_object_key': null,
     'cid_number': cidNumber,
     'is_certified': cidNumber != null,
@@ -44,10 +44,13 @@ http.Response _ok(Map<String, dynamic> body) => http.Response(
       headers: {'content-type': 'application/json; charset=utf-8'},
     );
 
+// `_headers` 对带 session 的请求强制要求设备请求签名器（发布会员体系后新增硬校验）；
+// 测试用固定假签名占位，MockClient 不校验签名头。
 SquareSession _session() => SquareSession(
       sessionToken: 'tok',
       ownerAccount: _owner,
       expiresAt: DateTime.now().millisecondsSinceEpoch + 60000,
+      signRequest: (_) async => 'test-device-signature',
     );
 
 void main() {
@@ -209,11 +212,11 @@ void main() {
       expect(seen!.queryParameters['content_format'], 'article');
     });
 
-    test('mediaUrl builds an encoded public media url', () {
+    test('mediaUrl builds an encoded wallet media url', () {
       final client = _client(MockClient((_) async => http.Response('', 200)));
       expect(
-        client.mediaUrl('profile/acct/avatar.webp'),
-        'https://example.com/v1/square/media/profile/acct/avatar.webp',
+        client.mediaUrl('profile/acct/avatar'),
+        'https://example.com/v1/square/media/profile/acct/avatar',
       );
     });
 

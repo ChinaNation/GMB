@@ -10,7 +10,7 @@ export type FeedKind = 'recommended' | 'following' | 'campaign';
 
 export type MediaProvider = 'cloudflare_images' | 'cloudflare_stream';
 
-export type MediaUploadMethod = 'direct_form' | 'tus';
+export type MediaUploadMethod = 'worker' | 'tus';
 
 export type MediaAssetState = 'prepared' | 'uploaded' | 'processing' | 'ready' | 'error';
 
@@ -32,10 +32,7 @@ export interface Env {
   FCM_PROJECT?: string;
   FCM_EMAIL?: string;
   FCM_KEY?: string;
-  // TURN API 凭证只在 Worker 端生成五分钟临时用户，绝不下发长期密钥。
-  TURN_KEY_ID?: string;
-  TURN_API_TOKEN?: string;
-  // Cloudflare 账户由 R2、Images、Stream 共用；R2 S3 密钥绝不下发到 CitizenApp。
+  // Cloudflare 账户由 R2 冷归档、Images、Stream 共用；S3 密钥只用于内部归档读取。
   CF_ACCOUNT_ID?: string;
   R2_ACCESS_ID?: string;
   R2_SECRET_KEY?: string;
@@ -55,8 +52,6 @@ export interface Env {
   RELAY_ENABLED?: string;
   RELAY_MAX_BYTES?: string;
   RELAY_PER_MINUTE?: string;
-  // 只允许本地 Miniflare 验证使用；生产环境必须保持关闭。
-  DEV_UPLOAD_PROXY?: string;
   // Stripe webhook secret 必须使用 Cloudflare secret/变量配置，不能写入仓库或下发 App。
   STRIPE_HOOK_SECRET?: string;
   STRIPE_HOOK_WINDOW?: string;
@@ -162,6 +157,7 @@ export interface MediaAssetRow {
   provider: MediaProvider;
   provider_asset_id: string;
   upload_method: MediaUploadMethod;
+  resource_key: string;
   content_type: string;
   byte_size: number;
   asset_state: MediaAssetState;

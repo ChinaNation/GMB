@@ -144,13 +144,13 @@ class PayloadDecoder {
         return _decodeTransferWithRemark(bytes);
       }
 
-      // ── InternalVote sub-pallet (22) · 内部投票管理员一人一票 ──
+      // ── InternalVote sub-pallet (20) · 内部投票管理员一人一票 ──
       if (palletIndex == PalletRegistry.internalVotePallet &&
           callIndex == PalletRegistry.internalVoteCall) {
         return _decodeInternalVote(bytes);
       }
 
-      // ── JointVote sub-pallet (23) · 联合投票(内部投票阶段 + 联合公投)──
+      // ── JointVote sub-pallet (21) · 联合投票(内部投票阶段 + 联合公投)──
       if (palletIndex == PalletRegistry.jointVotePallet) {
         if (callIndex == PalletRegistry.jointVoteCall) {
           return _decodeJointVote(bytes);
@@ -191,8 +191,8 @@ class PayloadDecoder {
         }
       }
 
-      // ── MultisigTransfer(19) ──
-      // 投票入口统一到 InternalVote::cast(22.0),
+      // ── MultisigTransfer(17) ──
+      // 投票入口统一到 InternalVote::cast(20.0),
       // 手动重试入口统一到 VotingEngine::retry_passed_proposal(9.4),
       // 本 pallet 仅保留 3 条 propose_X。
       if (palletIndex == PalletRegistry.multisigTransferPallet) {
@@ -207,14 +207,14 @@ class PayloadDecoder {
         }
       }
 
-      // ── 协议升级 RuntimeUpgrade(13) ──
+      // ── 协议升级 RuntimeUpgrade(12) ──
       // 路由分支删除:propose_runtime_upgrade / developer_direct_upgrade 的
       // call_data 含完整 WASM(600KB+),物理上塞不进 QR。server 在 QR 里只放
       // blake2_256(payload) = 32 字节哈希,decoder 拿不到 call_data,无法
       // SCALE 解析。改走 OfflineSignService.verifyPayload 的"哈希直签例外":
       // 用户在冷钱包屏幕上核对 32 字节哈希后放行。
 
-      // ── PublicManage(32) / PrivateManage(33) ──
+      // ── PublicManage(30) / PrivateManage(31) ──
       // 公权机构与私权机构生命周期分别由两个 pallet 承载。
       if (palletIndex == PalletRegistry.publicManagePallet ||
           palletIndex == PalletRegistry.privateManagePallet) {
@@ -255,10 +255,10 @@ class PayloadDecoder {
         }
       }
 
-      // ── PersonalAdmins(7) ──
-      // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
+      // ── PersonalManage(7) ──
+      // 个人多签生命周期 pallet,MODULE_TAG = b"per-mgmt"。
       // ACTION enum 独立(ACTION_CREATE=0/ACTION_CLOSE=1),与实体生命周期模块互不干扰。
-      if (palletIndex == PalletRegistry.personalAdminsPallet) {
+      if (palletIndex == PalletRegistry.personalManagePallet) {
         if (callIndex == PalletRegistry.proposeCreatePersonalCall) {
           return _decodeProposeCreatePersonal(bytes);
         }
@@ -276,12 +276,12 @@ class PayloadDecoder {
             summaryTemplate: '清理被拒个人多签提案 #{id} 残留',
           );
         }
-        if (PalletRegistry.isPersonalAdminSetChangeCall(
-          palletIndex,
-          callIndex,
-        )) {
-          return _decodeProposeAdminSetChange(bytes);
-        }
+      }
+
+      // ── PersonalAdmins(29) ──
+      // 个人多签管理员集合变更独立 pallet,propose_admin_set_change(call_index=0)。
+      if (PalletRegistry.isPersonalAdminSetChangeCall(palletIndex, callIndex)) {
+        return _decodeProposeAdminSetChange(bytes);
       }
 
       // ── ResolutionIssuance(8) · 决议发行联合提案 ──
@@ -292,7 +292,7 @@ class PayloadDecoder {
         }
       }
 
-      // ── ResolutionDestroy(14) ──
+      // ── ResolutionDestroy(13) ──
       // execute_destroy 走 VotingEngine::retry_passed_proposal。
       if (palletIndex == PalletRegistry.resolutionDestroPallet) {
         if (callIndex == PalletRegistry.proposeDestroyCall) {
@@ -300,7 +300,7 @@ class PayloadDecoder {
         }
       }
 
-      // ── PublicAdmins(29) / PrivateAdmins(30) ──
+      // ── PublicAdmins(27) / PrivateAdmins(28) ──
       // 管理员集合变更走 propose_admin_set_change；执行统一由 VotingEngine 重试。
       if (PalletRegistry.isAdminSetChangePallet(palletIndex)) {
         if (callIndex == PalletRegistry.proposeAdminSetChangeCall) {
@@ -308,7 +308,7 @@ class PayloadDecoder {
         }
       }
 
-      // ── GrandpaKeyChange(16) ──
+      // ── GrandpaKeyChange(15) ──
       // execute_replace_grandpa_key / cancel_failed_replace_grandpa_key
       // 分别走 VotingEngine::retry_passed_proposal / cancel_passed_proposal。
       if (palletIndex == PalletRegistry.grandpaKeyChangePallet) {
@@ -317,7 +317,7 @@ class PayloadDecoder {
         }
       }
 
-      // ── OffchainTransaction(21) · 清算行 L2 体系 ──
+      // ── OffchainTransaction(19) · 清算行 L2 体系 ──
       if (palletIndex == PalletRegistry.offchainTransactionPallet) {
         if (callIndex == PalletRegistry.bindClearingBankCall) {
           return _decodeAccountIdCall(
@@ -360,13 +360,13 @@ class PayloadDecoder {
         }
       }
 
-      // ── OnchainIssuance(25) · 链上发行代币(Plain FT) ──
+      // ── OnchainIssuance(23) · 链上发行代币(Plain FT) ──
       // 当前未实现完整 SCALE 字段解析,不能独立验证业务内容,因此红色拒签。
       if (palletIndex == PalletRegistry.onchainIssuancePallet) {
         return null;
       }
 
-      // ── LegislationYuan(27) · 立法/修法/废法发起 ──
+      // ── LegislationYuan(25) · 立法/修法/废法发起 ──
       // 发起类 QR 由节点端生成(法律全文 SCALE 入 payload),冷钱包逐字段解码核对。
       if (palletIndex == PalletRegistry.legislationYuanPallet) {
         if (callIndex == PalletRegistry.proposeEnactLawCall) {
@@ -380,7 +380,7 @@ class PayloadDecoder {
         }
       }
 
-      // ── LegislationVote(28) · 立法专属投票引擎 ──
+      // ── LegislationVote(26) · 立法专属投票引擎 ──
       // 院内表决/公投/行政签署/三人会签/护宪终审走 proposal_id+approve;
       // 人口快照只携带作用域,链端直接读取 citizen-identity。
       if (palletIndex == PalletRegistry.legislationVotePallet) {
@@ -547,7 +547,7 @@ class PayloadDecoder {
     );
   }
 
-  // MultisigTransfer(19) / propose_transfer(0)
+  // MultisigTransfer(17) / propose_transfer(0)
   // 格式：[0x13][0x00][institution_code:[u8;4]][institution:AccountId32][beneficiary:32][amount:u128_le][Vec remark]
   static DecodedPayload? _decodeProposeTransfer(Uint8List bytes) {
     // 最小长度：2 + 4 + 32 + 32 + 16 + 1 = 87
@@ -602,11 +602,11 @@ class PayloadDecoder {
 
   // 业务 pallet 的 finalize_X / vote_X 全部下线,
   // 冷钱包统一通过 `_decodeInternalVote` 解码一人一票的管理员投票 payload。
-  // InternalVote(22) / cast(0)
-  // 格式：[0x16][0x00][proposal_id:u64_le][approve:bool]
+  // InternalVote(20) / cast(0)
+  // 格式：[0x14][0x00][proposal_id:u64_le][approve:bool]
   //
   // 统一入口:所有业务 pallet(admins/resolution_destroy/grandpa_key/
-  // entity_manage/multisig_transfer 五路)的管理员投票都走 InternalVote::cast(22.0),
+  // entity_manage/multisig_transfer 五路)的管理员投票都走 InternalVote::cast(20.0),
   // 冷钱包不按业务 pallet 分路解码投票 payload。
   static DecodedPayload? _decodeInternalVote(Uint8List bytes) {
     // call_data: 2 + 8 + 1 = 11
@@ -681,8 +681,8 @@ class PayloadDecoder {
     );
   }
 
-  // JointVote(23) / cast_admin(0)
-  // 格式：[0x17][0x00][proposal_id:u64_le][institution:AccountId32][approve:bool]
+  // JointVote(21) / cast_admin(0)
+  // 格式：[0x15][0x00][proposal_id:u64_le][institution:AccountId32][approve:bool]
   static DecodedPayload? _decodeJointVote(Uint8List bytes) {
     // call_data: 2 + 8 + 32 + 1 = 43
     if (bytes.length < 43 || !_hasValidSigningTail(bytes, 43)) return null;
@@ -702,8 +702,8 @@ class PayloadDecoder {
     );
   }
 
-  // JointVote(23) / cast_referendum(1)
-  // 格式：[0x17][0x01][proposal_id:u64_le][approve:bool]
+  // JointVote(21) / cast_referendum(1)
+  // 格式：[0x15][0x01][proposal_id:u64_le][approve:bool]
   static DecodedPayload? _decodeCastReferendum(Uint8List bytes) {
     if (bytes.length < 11 || !_hasValidSigningTail(bytes, 11)) return null;
     final proposalId = _readU64Le(bytes, 2);
@@ -720,8 +720,8 @@ class PayloadDecoder {
     );
   }
 
-  // JointVote(23) / prepare_joint_population_snapshot(2)
-  // 格式：[0x17][0x02][scope:PopulationScope]
+  // JointVote(21) / prepare_joint_population_snapshot(2)
+  // 格式：[0x15][0x02][scope:PopulationScope]
   static DecodedPayload? _decodeJointPopulationSnapshot(Uint8List bytes) {
     final (scopeFields, offset) = _decodePopulationScope(bytes, 2);
     if (scopeFields == null || !_hasValidSigningTail(bytes, offset)) {
@@ -735,7 +735,7 @@ class PayloadDecoder {
     );
   }
 
-  // 协议升级 RuntimeUpgrade(13) / propose_runtime_upgrade(0) / developer_direct_upgrade(2)
+  // 协议升级 RuntimeUpgrade(12) / propose_runtime_upgrade(0) / developer_direct_upgrade(2)
   //
   // 无 SCALE decoder:
   //   - call_data 含完整 WASM(600KB+),物理上塞不进 QR
@@ -810,7 +810,7 @@ class PayloadDecoder {
     );
   }
 
-  // PublicManage(32) / PrivateManage(33) / propose_create_*_institution(5)
+  // PublicManage(30) / PrivateManage(31) / propose_create_*_institution(5)
   //
   // 链端签名(签发机构 admins 凭证):
   //   pub fn propose_create_*_institution(
@@ -1092,7 +1092,7 @@ class PayloadDecoder {
     );
   }
 
-  // PersonalAdmins(7) / propose_create(0)
+  // PersonalManage(7) / propose_create(0)
   // 格式：[7][0][BoundedVec account_name][BoundedVec<AccountId32> admins][u32 regular_threshold][u128 amount]
   // 个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
   // 机构生命周期模块 call=3 留洞不复用。
@@ -1147,8 +1147,8 @@ class PayloadDecoder {
     );
   }
 
-  // PublicManage(32) / PrivateManage(33) / propose_close_*_institution(1)
-  // PersonalAdmins(7) / propose_close(1)
+  // PublicManage(30) / PrivateManage(31) / propose_close_*_institution(1)
+  // PersonalManage(7) / propose_close(1)
   // 格式：[17][1][account:32][beneficiary:32]
   /// 机构注销 propose_close。
   /// call_data:[2][account:32][beneficiary:32]
@@ -1213,7 +1213,7 @@ class PayloadDecoder {
     );
   }
 
-  // MultisigTransfer(19) / propose_safety_fund(1)
+  // MultisigTransfer(17) / propose_safety_fund(1)
   // 格式：[19][1][beneficiary:32][amount:u128][BoundedVec remark]
   static DecodedPayload? _decodeProposeSafetyFund(Uint8List bytes) {
     if (bytes.length < 50) return null;
@@ -1246,7 +1246,7 @@ class PayloadDecoder {
     );
   }
 
-  // MultisigTransfer(19) / propose_sweep(2)
+  // MultisigTransfer(17) / propose_sweep(2)
   // 格式：[19][2][institution:AccountId32][amount:u128]
   static DecodedPayload? _decodeProposeSweep(Uint8List bytes) {
     // call_data: 2 + 32 + 16 = 50
@@ -1267,7 +1267,7 @@ class PayloadDecoder {
     );
   }
 
-  // ResolutionDestroy(14) / propose_destroy(0)
+  // ResolutionDestroy(13) / propose_destroy(0)
   // 格式：[14][0][institution_code:[u8;4]][institution:AccountId32][amount:u128]
   static DecodedPayload? _decodeProposeDestroy(Uint8List bytes) {
     // call_data: 2 + 4 + 32 + 16 = 54
@@ -1293,7 +1293,7 @@ class PayloadDecoder {
     );
   }
 
-  // PersonalAdmins(7.3) / PublicAdmins(29.0) / PrivateAdmins(30.0)
+  // PersonalAdmins(29.0) / PublicAdmins(27.0) / PrivateAdmins(28.0)
   // 格式：[pallet][call][institution_code:[u8;4]][account:AccountId32][Compact<N>][admins:N*32][new_threshold:u32_le]
   static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
     if (bytes.length < 75) return null;
@@ -1351,7 +1351,7 @@ class PayloadDecoder {
     );
   }
 
-  // GrandpaKeyChange(16) / propose_key_change(0)
+  // GrandpaKeyChange(15) / propose_key_change(0)
   // 格式：[16][0][institution:AccountId32][new_key:32]
   static DecodedPayload? _decodeProposeKeyChange(Uint8List bytes) {
     // call_data: 2 + 32 + 32 = 66
@@ -1373,7 +1373,7 @@ class PayloadDecoder {
     );
   }
 
-  // LegislationYuan(27) 立法全文章节(章>节>条>款)SCALE 跳读 + 摘要统计。
+  // LegislationYuan(25) 立法全文章节(章>节>条>款)SCALE 跳读 + 摘要统计。
   //
   // 布局逐字段对齐 legislation-yuan(ADR-027):
   //   ChaptersOf = Compact(count) + 每个 Chapter
@@ -1595,7 +1595,7 @@ class PayloadDecoder {
     }
   }
 
-  // LegislationYuan(27) / propose_enact_law(0)
+  // LegislationYuan(25) / propose_enact_law(0)
   // SCALE: [27][0][tier:u8][scope_code:u32_le][houses][proposer_body:36]
   //        [executive:36][legislature:Option<36>][vote_type:u8]
   //        [title:BoundedVec][title_en:Option<BoundedVec>][chapters][effective_at:u32_le]
@@ -1679,7 +1679,7 @@ class PayloadDecoder {
     );
   }
 
-  // LegislationYuan(27) / propose_amend_law(1)
+  // LegislationYuan(25) / propose_amend_law(1)
   // SCALE: [27][1][law_id:u64_le][proposer_body:36][executive:36]
   //        [legislature:Option<36>][vote_type:u8][title:BoundedVec]
   //        [title_en:Option<BoundedVec>][chapters][effective_at:u32_le]
@@ -1742,7 +1742,7 @@ class PayloadDecoder {
     );
   }
 
-  // LegislationYuan(27) / propose_repeal_law(2)
+  // LegislationYuan(25) / propose_repeal_law(2)
   // SCALE: [27][2][law_id:u64_le][proposer_body:36][executive:36]
   //        [legislature:Option<36>][vote_type:u8]
   static DecodedPayload? _decodeProposeRepealLaw(Uint8List bytes) {
@@ -1779,7 +1779,7 @@ class PayloadDecoder {
     );
   }
 
-  // LegislationVote(28) 通用:proposal_id:u64_le + approve:bool。
+  // LegislationVote(26) 通用:proposal_id:u64_le + approve:bool。
   // 院内表决(1)/行政签署(3)/三人会签(4)/护宪终审(5) 同形。
   // SCALE: [28][call][proposal_id:u64_le][approve:bool]
   static DecodedPayload? _decodeProposalApprove(
@@ -1804,7 +1804,7 @@ class PayloadDecoder {
     );
   }
 
-  // LegislationVote(28) / prepare_population_snapshot(0)
+  // LegislationVote(26) / prepare_population_snapshot(0)
   // SCALE: [28][0][scope:PopulationScope]
   static DecodedPayload? _decodePrepareLegislationSnapshot(Uint8List bytes) {
     final (scopeFields, offset) = _decodePopulationScope(bytes, 2);
@@ -1819,7 +1819,7 @@ class PayloadDecoder {
     );
   }
 
-  // LegislationVote(28) / cast_referendum_vote(2)
+  // LegislationVote(26) / cast_referendum_vote(2)
   // SCALE: [28][2][proposal_id:u64_le][approve:bool]
   static DecodedPayload? _decodeCastLegislationReferendum(Uint8List bytes) {
     if (bytes.length < 11 || !_hasValidSigningTail(bytes, 11)) return null;
@@ -2117,7 +2117,7 @@ class PayloadDecoder {
     );
   }
 
-  // OffchainTransaction(21) / bind_clearing_bank(30), switch_bank(33)
+  // OffchainTransaction(19) / bind_clearing_bank(30), switch_bank(33)
   // 格式：[21][call][AccountId32]
   static DecodedPayload? _decodeAccountIdCall(
     Uint8List bytes, {
@@ -2138,7 +2138,7 @@ class PayloadDecoder {
     );
   }
 
-  // OffchainTransaction(21) / deposit(31), withdraw(32)
+  // OffchainTransaction(19) / deposit(31), withdraw(32)
   // 格式：[21][call][Compact<u128> amount]
   static DecodedPayload? _decodeAmountOnlyCall(
     Uint8List bytes, {
@@ -2159,7 +2159,7 @@ class PayloadDecoder {
     );
   }
 
-  // OffchainTransaction(21) / register_clearing_bank(50)
+  // OffchainTransaction(19) / register_clearing_bank(50)
   // 格式：[21][50][Vec cid_number][Vec peer_id][Vec rpc_domain][u16 rpc_port]
   static DecodedPayload? _decodeRegisterClearingBank(Uint8List bytes) {
     var offset = 2;
@@ -2188,7 +2188,7 @@ class PayloadDecoder {
     );
   }
 
-  // OffchainTransaction(21) / update_clearing_bank_endpoint(51)
+  // OffchainTransaction(19) / update_clearing_bank_endpoint(51)
   // 格式：[21][51][Vec cid_number][Vec new_domain][u16 new_port]
   static DecodedPayload? _decodeUpdateClearingBankEndpoint(Uint8List bytes) {
     var offset = 2;
@@ -2213,7 +2213,7 @@ class PayloadDecoder {
     );
   }
 
-  // OffchainTransaction(21) / unregister_clearing_bank(52)
+  // OffchainTransaction(19) / unregister_clearing_bank(52)
   // 格式：[21][52][Vec cid_number]
   static DecodedPayload? _decodeUnregisterClearingBank(Uint8List bytes) {
     final (cidNumber, cidEnd) = _readUtf8Vec(bytes, 2);

@@ -26,16 +26,16 @@ import 'package:citizenapp/votingengine/internal-vote/proposal_vote_widgets.dart
 /// 详情页展示/投票的三种提案类型。
 ///
 /// 决定：读哪个 storage map 与 QR 签名如何展示。
-/// 投票动作统一走 `InternalVote::cast`(9.0);`kind` 仅影响"创建提案"
+/// 投票动作统一走 `InternalVote::cast`(20.0);`kind` 仅影响"创建提案"
 /// 路径与详情展示逻辑。
 enum MultisigTransferKind {
-  /// 机构转账提案（propose_transfer, pallet=19 call=0）。
+  /// 机构转账提案（propose_transfer, pallet=17 call=0）。
   transfer,
 
-  /// 安全基金转账提案（propose_safety_fund_transfer, pallet=19 call=1）。
+  /// 安全基金转账提案（propose_safety_fund_transfer, pallet=17 call=1）。
   safetyFund,
 
-  /// 手续费划转提案（propose_sweep_to_main, pallet=19 call=2）。
+  /// 手续费划转提案（propose_sweep_to_main, pallet=17 call=2）。
   sweep,
 }
 
@@ -624,7 +624,7 @@ class _MultisigTransferDetailPageState
         return Uint8List.fromList(_hexDecode(response.body.signatureHex));
       }
 
-      // 所有管理员投票统一走 InternalVote::cast(22.0)。
+      // 所有管理员投票统一走 InternalVote::cast(20.0)。
       // 业务 kind 仅用于 QR 展示的文案与 storage 读取。
       final result = await InternalVoteService().submit(
         proposalId: widget.proposalId,

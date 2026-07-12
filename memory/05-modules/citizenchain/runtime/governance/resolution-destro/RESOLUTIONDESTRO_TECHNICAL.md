@@ -25,7 +25,7 @@
 命名说明：
 - 2026-04-29 起，本模块统一使用 `resolution-destro` / `resolution_destro` / `ResolutionDestro`。
 - 模块位于 `citizenchain/runtime/governance/resolution-destro/`。
-- `pallet_index = 14`、call index 与 `MODULE_TAG = b"res-dst"` 保持不变。
+- `pallet_index = 13`、call index 与 `MODULE_TAG = b"res-dst"` 保持不变。
 
 ---
 
@@ -92,7 +92,7 @@ pub struct DestroyAction<Balance> {
 ### 4.2 投票入口
 本模块不提供独立投票 call。管理员投票统一走:
 
-- `InternalVote::cast(proposal_id, approve)`(pallet 22.0)
+- `InternalVote::cast(proposal_id, approve)`(pallet 20.0)
 
 投票通过后由 `InternalVoteExecutor` 回调本模块自动执行销毁;自动执行失败时保持投票引擎状态为 `STATUS_PASSED`,并发出 `DestroyExecutionFailed` 事件,不回滚已通过投票。
 

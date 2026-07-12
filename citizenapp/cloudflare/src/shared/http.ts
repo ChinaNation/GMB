@@ -1,4 +1,5 @@
 import type { Env, SessionState } from '../types';
+import { readLimitedJson } from '../limits/request';
 
 export class HttpError extends Error {
   readonly status: number;
@@ -45,11 +46,7 @@ export function errorResponse(error: unknown): Response {
 }
 
 export async function readJson<T>(request: Request): Promise<T> {
-  try {
-    return (await request.json()) as T;
-  } catch {
-    throw new HttpError(400, 'invalid_json', '请求体不是合法 JSON');
-  }
+  return readLimitedJson<T>(request);
 }
 
 export function parsePositiveInt(value: string | undefined, fallback: number): number {

@@ -5,7 +5,7 @@
 
 use crate::governance;
 
-/// 构建 propose_transfer 签名请求（创建转账提案：pallet=19, call=0）。
+/// 构建 propose_transfer 签名请求（创建转账提案：pallet=17, call=0）。
 pub fn build_propose_transfer_sign_request(
     pubkey_hex: &str,
     cid_number: &str,
@@ -61,7 +61,7 @@ pub fn build_propose_transfer_sign_request(
     governance::signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
 }
 
-/// 构建安全基金转账提案签名请求（pallet=19, call=1）。
+/// 构建安全基金转账提案签名请求（pallet=17, call=1）。
 pub fn build_propose_safety_fund_sign_request(
     pubkey_hex: &str,
     beneficiary_address: &str,
@@ -75,7 +75,7 @@ pub fn build_propose_safety_fund_sign_request(
     governance::signing::build_sign_request_from_call_data(&pubkey_clean, &pubkey_bytes, &call_data)
 }
 
-/// 构建手续费划转提案签名请求（pallet=19, call=2）。
+/// 构建手续费划转提案签名请求（pallet=17, call=2）。
 pub fn build_propose_sweep_sign_request(
     pubkey_hex: &str,
     cid_number: &str,
@@ -109,7 +109,7 @@ pub(crate) fn build_safety_fund_call_data(
     let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
 
     let mut call_data = Vec::with_capacity(2 + 32 + 16 + remark_compact.len() + remark_bytes.len());
-    call_data.push(19u8);
+    call_data.push(17u8);
     call_data.push(1u8);
     call_data.extend_from_slice(&beneficiary_bytes);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
@@ -136,7 +136,7 @@ pub(crate) fn build_transfer_call_data(
     let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
     let mut call_data =
         Vec::with_capacity(2 + 4 + 32 + 32 + 16 + remark_compact.len() + remark_bytes.len());
-    call_data.push(19u8);
+    call_data.push(17u8);
     call_data.push(0u8);
     // 机构码 [u8;4](与 runtime propose_transfer 线格式一致)。
     call_data.extend_from_slice(institution_code);
@@ -157,7 +157,7 @@ pub(crate) fn build_sweep_call_data(cid_number: &str, amount_yuan: f64) -> Resul
     let institution_account = super::account_id::account_id_from_transfer_identity(cid_number)?;
 
     let mut call_data = Vec::with_capacity(2 + 32 + 16);
-    call_data.push(19u8);
+    call_data.push(17u8);
     call_data.push(2u8);
     call_data.extend_from_slice(&institution_account);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());

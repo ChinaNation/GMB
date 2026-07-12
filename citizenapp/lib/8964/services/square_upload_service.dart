@@ -193,8 +193,8 @@ class SquareUploadService implements SquareContentUploader {
     await _api.uploadObject(
       uploadUrl: preparedUpload.manifestUploadUrl,
       contentType: 'application/json; charset=utf-8',
-      contentLength: prepared.manifestBytes.length,
-      body: Stream<List<int>>.value(prepared.manifestBytes),
+      body: prepared.manifestBytes,
+      session: prepared.session,
     );
     for (var i = 0; i < mediaDrafts.length; i++) {
       final draft = mediaDrafts[i];
@@ -202,7 +202,6 @@ class SquareUploadService implements SquareContentUploader {
       await _api.uploadMediaAsset(
         upload: upload,
         filePath: draft.path,
-        fileName: draft.fileName,
         session: prepared.session,
       );
     }

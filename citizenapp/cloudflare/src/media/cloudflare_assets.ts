@@ -1,8 +1,6 @@
 import type { Env, MediaAssetRow, MediaProvider, MediaUploadMethod } from '../types';
 import { HttpError } from '../shared/http';
-
-// Cloudflare Stream 200MB 以上必须走 tus；Worker 只签发一次性 URL，不接收视频正文。
-const streamTusThresholdBytes = 200 * 1024 * 1024;
+import { LimitTicket } from '../limits/upload';
 
 export interface ProviderUploadInput {
   ownerAccount: string;
@@ -13,7 +11,7 @@ export interface ProviderUploadInput {
   contentType: string;
   byteSize: number;
   maxDurationSeconds: number;
-  requestOrigin: string;
+  workerUploadUrl: string;
 }
 
 export interface ProviderUploadPlan {
@@ -28,11 +26,6 @@ interface CloudflareApiResult<T> {
   success?: boolean;
   result?: T;
   errors?: Array<{ message?: string; code?: number | string }>;
-}
-
-interface ImagesDirectUploadResult {
-  id?: string;
-  uploadURL?: string;
 }
 
 interface ImageDetailsResult {
@@ -71,23 +64,23 @@ export async function createProviderUpload(
   env: Env,
   input: ProviderUploadInput
 ): Promise<ProviderUploadPlan> {
-  // 本地 Miniflare 没有真实 Images / Stream，使用同源 dev-media 端点验证完整控制流。
-  if (env.DEV_UPLOAD_PROXY === '1') {
-    return createDevProviderUpload(input);
-  }
   if (input.mediaKind === 'video') {
-    return createStreamUpload(env, input);
+    return createStreamTusUpload(env, input);
   }
-  return createImagesUpload(env, input);
+  return {
+    provider: 'cloudflare_images',
+    provider_asset_id: `pending:${input.uploadId}:${input.mediaIndex}`,
+    upload_method: 'worker',
+    upload_url: input.workerUploadUrl,
+    asset_state: 'prepared',
+  };
 }
 
 export async function refreshProviderAssetState(
   env: Env,
   row: MediaAssetRow
 ): Promise<Partial<MediaAssetRow>> {
-  if (env.DEV_UPLOAD_PROXY === '1') {
-    return {};
-  }
+  if (row.asset_state === 'ready' || row.asset_state === 'error') return {};
   if (row.provider === 'cloudflare_stream') {
     return refreshStreamAsset(env, row.provider_asset_id);
   }
@@ -98,10 +91,6 @@ export async function deleteProviderAsset(
   env: Env,
   row: Pick<MediaAssetRow, 'provider' | 'provider_asset_id'>
 ): Promise<void> {
-  // 本地验收环境没有真实 Images / Stream 资源，删除动作由 D1/R2 清理覆盖。
-  if (env.DEV_UPLOAD_PROXY === '1') {
-    return;
-  }
   if (row.provider === 'cloudflare_stream') {
     await deleteStreamAsset(env, row.provider_asset_id);
     return;
@@ -109,10 +98,24 @@ export async function deleteProviderAsset(
   await deleteImageAsset(env, row.provider_asset_id);
 }
 
-async function createImagesUpload(env: Env, input: ProviderUploadInput): Promise<ProviderUploadPlan> {
+/** 图片先由 Worker 校验真实字节和尺寸，再使用服务端 token 写入 Cloudflare Images。 */
+export async function uploadImageAsset(
+  env: Env,
+  input: ProviderUploadInput,
+  bytes: Uint8Array,
+  ticket: LimitTicket,
+): Promise<{ provider_asset_id: string }> {
+  ticket.assertValid();
+  if (ticket.byte_size !== bytes.byteLength || !ticket.content_type.startsWith('image/')) {
+    throw new HttpError(500, 'image_limit_ticket_mismatch', '图片限制凭证与上传内容不一致');
+  }
   const config = requireCloudflareApiConfig(env);
   const form = new FormData();
-  // 图片只能通过 Worker 短期签名交付，原始 image id 不具备公开读取权限。
+  form.set(
+    'file',
+    new Blob([Uint8Array.from(bytes).buffer], { type: ticket.content_type }),
+    `${input.postId}-${input.mediaIndex}`,
+  );
   form.set('requireSignedURLs', 'true');
   form.set(
     'metadata',
@@ -125,61 +128,16 @@ async function createImagesUpload(env: Env, input: ProviderUploadInput): Promise
   );
 
   const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/images/v2/direct_upload`,
+    `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/images/v1`,
     {
       method: 'POST',
       headers: { authorization: `Bearer ${config.apiToken}` },
       body: form
     }
   );
-  const result = await parseCloudflareJson<ImagesDirectUploadResult>(response, 'images_direct_upload_failed');
-  if (!result.id || !result.uploadURL) {
-    throw new HttpError(502, 'images_direct_upload_incomplete', 'Cloudflare Images 上传授权响应不完整');
-  }
-
-  return {
-    provider: 'cloudflare_images',
-    provider_asset_id: result.id,
-    upload_method: 'direct_form',
-    upload_url: result.uploadURL,
-    asset_state: 'prepared'
-  };
-}
-
-async function createStreamUpload(env: Env, input: ProviderUploadInput): Promise<ProviderUploadPlan> {
-  if (input.byteSize > streamTusThresholdBytes) {
-    return createStreamTusUpload(env, input);
-  }
-  // 200MB 以下视频使用 Stream basic direct upload；App 以 multipart form 直传到 Cloudflare。
-  const config = requireCloudflareApiConfig(env);
-  const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/stream/direct_upload`,
-    {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${config.apiToken}`,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        maxDurationSeconds: input.maxDurationSeconds,
-        requireSignedURLs: true,
-        allowedOrigins: ['www.crcfrcn.com'],
-        creator: input.ownerAccount,
-        expiry: new Date(Date.now() + 15 * 60 * 1000).toISOString()
-      })
-    }
-  );
-  const result = await parseCloudflareJson<StreamDirectUploadResult>(response, 'stream_direct_upload_failed');
-  if (!result.uid || !result.uploadURL) {
-    throw new HttpError(502, 'stream_direct_upload_incomplete', 'Cloudflare Stream 上传授权响应不完整');
-  }
-  return {
-    provider: 'cloudflare_stream',
-    provider_asset_id: result.uid,
-    upload_method: 'direct_form',
-    upload_url: result.uploadURL,
-    asset_state: 'prepared'
-  };
+  const result = await parseCloudflareJson<ImageDetailsResult>(response, 'images_upload_failed');
+  if (!result.id) throw new HttpError(502, 'images_upload_incomplete', 'Cloudflare Images 上传响应不完整');
+  return { provider_asset_id: result.id };
 }
 
 async function createStreamTusUpload(env: Env, input: ProviderUploadInput): Promise<ProviderUploadPlan> {
@@ -205,7 +163,7 @@ async function createStreamTusUpload(env: Env, input: ProviderUploadInput): Prom
     }
   );
   if (!response.ok) {
-    throw new HttpError(response.status, 'stream_tus_upload_failed', await response.text());
+    throw new HttpError(response.status, 'stream_tus_upload_failed', 'Cloudflare Stream tus 授权失败');
   }
   const uploadUrl = response.headers.get('location');
   const uid = response.headers.get('stream-media-id');
@@ -217,23 +175,6 @@ async function createStreamTusUpload(env: Env, input: ProviderUploadInput): Prom
     provider_asset_id: uid,
     upload_method: 'tus',
     upload_url: uploadUrl,
-    asset_state: 'prepared'
-  };
-}
-
-function createDevProviderUpload(input: ProviderUploadInput): ProviderUploadPlan {
-  const provider = providerForMediaKind(input.mediaKind);
-  const assetId = `${provider === 'cloudflare_stream' ? 'str' : 'img'}_${input.uploadId}_${input.mediaIndex}`;
-  const url = new URL('/v1/square/uploads/dev-media', input.requestOrigin);
-  url.searchParams.set('upload_id', input.uploadId);
-  url.searchParams.set('media_index', String(input.mediaIndex));
-  return {
-    provider,
-    provider_asset_id: assetId,
-    upload_method: provider === 'cloudflare_stream' && input.byteSize > streamTusThresholdBytes
-      ? 'tus'
-      : 'direct_form',
-    upload_url: url.toString(),
     asset_state: 'prepared'
   };
 }

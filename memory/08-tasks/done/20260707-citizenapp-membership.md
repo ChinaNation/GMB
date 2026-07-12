@@ -217,7 +217,7 @@
 - 只读复查确认：`square-post` 链上仍只记录 `post_id`、`owner_account`、可空 `cid_number`、`post_category`、`content_hash`、`storage_receipt_id`、`storage_until`、`created_block`。
 - 只读复查确认：当前 runtime 的 `Campaign` 发布只要求有效 `VotingIdentityByAccount`，不要求 `CandidateIdentityByAccount`；本任务先由 Cloudflare 强制竞选公民会员才能发布竞选内容，默认不改 runtime。
 - 只读复查确认：Cloudflare 当前会员表只有 `owner_account`、`membership_level`、存储容量、已用容量、到期时间；没有 Stripe webhook、官网订阅、三档资格、权益快照。
-- 只读复查确认：Cloudflare 当前媒体主流程仍是 R2 预签名上传和 R2 读取；尚未接入 Cloudflare Images / Stream。
+- 该阶段的媒体结论已由 2026-07-12 统一资源限制目标态彻底替换：图片使用 Cloudflare Images，视频使用 Stream TUS，资料和 manifest 经同域 Worker 有界校验。
 - 只读复查确认：Worker 当前只有链上事件确认读取能力，没有通用 `VotingIdentityByAccount` / `CandidateIdentityByAccount` 查询服务。
 - 只读复查确认：App 当前只读 `VotingIdentityByAccount` 作为 `isCertified`；没有 Candidate 身份状态。
 - 只读复查确认：动态发布页和文章发布页当时仍是旧硬编码，未按会员额度驱动。
@@ -239,7 +239,7 @@
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run typecheck` 通过。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test` 通过：9 个测试文件，37 个测试。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run db:local` 通过，本地 D1 按唯一目标基线重建成功。
-  - 真实本地 Worker HTTP 验收通过：`wrangler dev --local --port 8787 --var DEV_UPLOAD_PROXY:1 --var STRIPE_HOOK_SECRET:whsec_test` 启动后，带 Stripe 签名的 freedom subscription webhook 返回 200，D1 查询确认 `sub_http` 写入 `membership_level=freedom`、`subscription_status=active`、`identity_level=visitor`。
+  - 当时的会员 webhook 验收已完成；当前本地、staging、production 共用同一上传实现，不再需要媒体开发代理变量。
 - 边界：第 1 步未修改 CitizenApp Flutter UI，未切换 Images / Stream，未改 runtime；竞选公民会员的业务权限已由 Worker 会员系统具备强制校验基础，发布侧接入留到第 3 步。
 
 ### 第 1 步补充（完成，美元计价与 USDC 支付口径）
@@ -257,7 +257,7 @@
 ### 第 2 步（完成，Cloudflare Images / Stream 上传）
 
 - `square_media_assets` 表和 provider asset / post / state 索引当前已并入唯一 D1 基线 `citizenapp/cloudflare/migrations/0001_square_core.sql`。
-- 新增 `citizenapp/cloudflare/src/media/cloudflare_assets.ts`：封装 Cloudflare Images Direct Creator Upload、Cloudflare Stream basic direct upload、Stream tus direct upload、Images / Stream 状态刷新和播放 URL 生成；本地 `DEV_UPLOAD_PROXY=1` 时使用同源 `dev-media` 端点验证完整流程。
+- `citizenapp/cloudflare/src/media/cloudflare_assets.ts` 当前只允许 Worker 校验后服务端写 Images，以及为全部视频创建精确长度的 Stream TUS 上传；状态刷新和私有播放地址仍由服务端管理。
 - 更新 `citizenapp/cloudflare/src/uploads/service.ts`：prepare 只为 manifest 生成 R2 上传 URL，图片生成 `cloudflare_images` 上传授权，视频生成 `cloudflare_stream` 上传授权；200MB 以上视频走 tus；complete 校验 manifest 与 provider asset 状态，视频转码未完成时返回 `storage_state=processing`；新增 Stream webhook 签名校验并更新视频 ready/error 状态。
 - 更新 `citizenapp/cloudflare/src/posts/confirm.ts` 和 feed hydrate：feed 媒体项从 `square_media_assets` 读取 provider、asset id、状态、Images delivery URL、Stream playback URL、缩略图、时长、宽高。
 - 更新 `citizenapp/cloudflare/src/media/service.ts`：公开 R2 读取通道收窄为 `profile/` 资料资产；广场主媒体不再从 R2 公开读取。
@@ -270,7 +270,7 @@
   - 本地 D1 已按唯一 `0001_square_core.sql` 目标基线重建成功。
   - `flutter analyze lib/8964/services/square_api_client.dart lib/8964/services/square_upload_service.dart lib/8964/models/square_models.dart test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart` 通过。
   - `flutter test --concurrency=1 test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart` 通过。
-  - 真实本地 Worker HTTP 验收通过：真实 sr25519 登录拿 session，Stripe visitor webhook 写会员，`uploads/prepare` 返回 `cloudflare_images` / `cloudflare_stream` provider，manifest 走 R2 `dev-put`，图片/视频走 `dev-media`，`complete` 返回 `storage_state=processing`，签名 Stream webhook 后 D1 中视频 asset 更新为 `ready`、`duration_seconds=4.5`、`width=1280`、`height=720`。
+  - 早期上传 smoke 已废弃；当前真实验收覆盖同域 manifest/图片入口、Stream TUS、实际尺寸/时长回写和统一额度预留。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run typecheck` 当前被未跟踪的 `citizenapp/cloudflare/src/chain/extrinsic_relay.ts` 中 `Uint8Array<ArrayBufferLike>` / `BufferSource` 类型错误阻塞；该文件不属于本步骤新增或修改范围，本步骤未改动。
 - 边界：第 2 步未修改 `citizenchain/runtime/`；当时尚未接入真实 Cloudflare 远端 Images / Stream 配置，当前已统一使用 `CF_ACCOUNT_ID`、`CF_API_TOKEN`、`IMAGES_URL`、`STREAM_URL`、`STREAM_HOOK_SECRET`。
 
@@ -319,7 +319,7 @@
 
 ### 第 5 步（完成，修改与删除流程）
 
-- 更新 `citizenapp/cloudflare/src/media/cloudflare_assets.ts`：新增 Images / Stream provider asset 删除封装；生产环境调用 Cloudflare API 删除真实媒体，`DEV_UPLOAD_PROXY=1` 本地验收环境跳过外部 API。
+- `citizenapp/cloudflare/src/media/cloudflare_assets.ts` 保留 Images / Stream provider asset 删除封装；本地测试使用依赖替身，不保留生产代码分支。
 - 更新 `citizenapp/cloudflare/src/posts/confirm.ts`：新增 `deletePostRoute` / `deletePostCloudflareData`；仅作者本人可删除，删除顺序为 provider asset、R2 manifest、D1 媒体索引、上传任务和帖子行；链上发布索引保持不变。
 - 更新 `citizenapp/cloudflare/src/routes.ts`：新增 `DELETE /v1/square/posts/{post_id}`。
 - 更新 `citizenapp/lib/8964/services/square_api_client.dart`：新增 `SquarePostDeletionService` 与 `deletePost`，App 调 Worker 删除接口。
@@ -337,7 +337,7 @@
   - `flutter test test/8964/square_publish_service_test.dart` 通过：5 个测试。
   - `flutter test test/8964/square_article_detail_test.dart` 通过：1 个测试。
   - `dart analyze lib/8964/pages/square_post_detail_page.dart lib/8964/pages/square_article_detail_page.dart lib/8964/pages/square_home_page.dart lib/8964/profile/user_profile_page.dart lib/8964/pages/square_compose_page.dart lib/8964/pages/square_article_compose_page.dart lib/8964/services/square_api_client.dart lib/8964/services/square_publish_service.dart test/8964/square_feed_service_test.dart test/8964/square_publish_service_test.dart test/8964/square_article_detail_test.dart` 通过。
-  - 真实本地 Worker HTTP 删除验收通过：`wrangler dev --local --port 8787 --var DEV_UPLOAD_PROXY:1` 启动后，本地 KV 写入测试 session，本地 D1/R2 写入测试帖子；`DELETE /v1/square/posts/{post_id}` 返回 `post_state=deleted`、`deleted_media_assets=1`、`deleted_r2_objects=1`，D1 查询确认帖子、媒体索引和上传任务均已硬删除。
+  - 删除验收确认帖子、媒体索引、上传任务和云端对象均硬删除；当前实现不依赖开发代理。
   - `flutter analyze` 当前仅报无关既有提示 `lib/transaction/onchain-transaction/onchain_payment_service.dart:43:13 prefer_const_constructors`；该文件无本轮 diff，本轮未修改无关交易模块。
   - `git diff -- citizenchain/runtime` 为空，未修改 runtime。
 - 清理：本轮未新增文件或目录；未写入 Stripe / Cloudflare secret；未保留“旧帖原地修改”兼容分支；删除接口不改链上记录、不接触 runtime；真实 HTTP smoke 后已删除 `sqp_delete_smoke` / `squ_delete_smoke` / `sqs_delete_smoke` 测试数据和临时 R2 manifest。
@@ -373,7 +373,7 @@
 - Worker、CitizenWeb、CitizenApp 的当前配置已改为 `memory/07-ai/unified-naming.md` 第 5.5 节短名；App 共用 Worker 编译变量补充登记为 `SQUARE_API_URL`，不保留旧变量 fallback。
 - Worker `typecheck` 和 18 个测试文件共 112 项测试通过；staging / production dry-run 均通过。Flutter 目标文件 analyze 无问题，会员页 7 项测试通过；CitizenWeb lint / build 通过。
 - 本地真实 Worker HTTP 验收通过：`GET /health` 返回 200，会员和聊天未登录接口均返回 401；带 `STRIPE_HOOK_SECRET` 签名的 `democracy` subscription webhook 返回 200，D1 写入 `membership_level=democracy`、`subscription_status=active`、`stripe_price_id=price_democracy`、`identity_level=visitor`，随后测试记录已删除。
-- staging 和 production 后续均已按目标基线彻底重建；只保留设备、一次性 KeyPackage、防重放摘要和短期 TURN 表，不存在聊天内容表。
+- staging 和 production 后续均已按目标基线彻底重建；Chat 只保留设备、一次性 KeyPackage 和防重放摘要，不存在聊天内容表或附件中继表。
 - staging 与 production 的链、R2、Cloudflare 媒体、Stripe Secret 已统一为短名；远端旧 Secret 已删除。production 已配置 `STREAM_HOOK_SECRET`，密钥只存在 Cloudflare Secret，不落盘、不进仓库。
 - Cloudflare Images/Stream Starter 套餐已启用；staging/production `IMAGES_URL`、`STREAM_URL` 已指向真实交付域名。Stream 账户唯一 webhook 已指向 production `/v1/square/uploads/stream/webhook`。
 - staging 发布版本 `b0d3e5c3-20ec-4b90-823c-863fdd8a6730`；production 最终发布版本 `58572220-5154-4fda-8520-3d2b5cf1df5c`。两环境 health/bootstrap 返回 200，会员和聊天未登录返回 401，开发上传入口返回 404；production Stripe/Stream 未签名回调返回 400。

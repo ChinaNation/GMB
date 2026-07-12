@@ -48,11 +48,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('二维码'), findsOneWidget);
     expect(find.text('编辑资料'), findsOneWidget);
-    expect(find.text('举报'), findsNothing);
   });
 
-  testWidgets('other profile shows subscribe + chat + follow, report in kebab',
-      (tester) async {
+  testWidgets('other profile shows subscribe, chat and follow', (tester) async {
     await tester.pumpWidget(
       _wrap(
           isSelf: false, api: FakeProfileApi(sampleProfile(following: false))),
@@ -66,7 +64,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
-    expect(find.text('举报'), findsOneWidget);
+    expect(find.text('二维码'), findsOneWidget);
     expect(find.text('编辑资料'), findsNothing);
   });
 
@@ -76,13 +74,19 @@ void main() {
       _wrap(
         isSelf: false,
         api: FakeProfileApi(
-          sampleProfile(avatarKey: 'profile/acct/avatar.webp'),
+          sampleProfile(avatarKey: 'profile/acct/avatar'),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.byType(Image), findsWidgets);
+    final networkImage = tester
+        .widgetList<Image>(find.byType(Image))
+        .map((image) => image.image)
+        .whereType<NetworkImage>()
+        .single;
+    expect(networkImage.headers?['authorization'], 'Bearer tok');
     expect(tester.takeException(), isNull);
   });
 

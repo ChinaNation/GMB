@@ -2,7 +2,7 @@
 // call_data 重建。复用 `governance::signing::build_sign_request_from_call_data`
 // 与 `verify_and_submit`,只在本模块构造 call_data。
 //
-// pallet_index = 21(OffchainTransaction,见 runtime/src/lib.rs:366)
+// pallet_index = 19(OffchainTransaction,见 runtime/src/lib.rs:366)
 // call_index:
 //   50 = register_clearing_bank(cid_number, peer_id, rpc_domain, rpc_port)
 //   51 = update_clearing_bank_endpoint(cid_number, new_domain, new_port)
@@ -16,8 +16,8 @@ use crate::governance::signing::{
     build_sign_request_from_call_data, encode_compact_u32_pub, VoteSignRequestResult,
 };
 
-/// pallet_index = 21(OffchainTransaction)。
-const PALLET_INDEX: u8 = 21;
+/// pallet_index = 19(OffchainTransaction)。
+const PALLET_INDEX: u8 = 19;
 
 const CALL_REGISTER: u8 = 50;
 const CALL_UPDATE_ENDPOINT: u8 = 51;

@@ -7,6 +7,9 @@ import {
   createStreamDownloadUrl,
   deleteProviderAsset
 } from '../media/cloudflare_assets';
+import { resourceLimit } from '../limits/catalog';
+import { validateStreamDeclaration } from '../limits/upload';
+import { putR2Stream } from '../limits/storage';
 
 // 退订视频冷归档（任务卡 20260710-membership-video-archive-revamp）：
 // 会员失效满 N 月 → 视频从 Stream 导出到 R2 冷存(IA)、删 Stream、对所有人不可播；
@@ -16,11 +19,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LAPSE_DAYS = 90; // 退订满 3 个月
 const MAX_OWNERS_PER_SWEEP = 20; // 单次 Cron 限流，防 Worker 超时
 const MAX_VIDEOS_PER_SWEEP = 100;
-const RESTORE_MAX_DURATION_SECONDS = 4 * 60 * 60; // 回灌时长上限（覆盖最高档 3h）
+const RESTORE_MAX_DURATION_SECONDS = resourceLimit('square_video_candidate').max_seconds!;
 const ARCHIVE_READ_URL_TTL_SECONDS = 3600;
 
 const MEDIA_COLUMNS = `upload_id, post_id, owner_account, media_index, media_kind, provider,
-  provider_asset_id, upload_method, content_type, byte_size, asset_state,
+  provider_asset_id, upload_method, resource_key, content_type, byte_size, asset_state,
   declared_duration_seconds, duration_seconds, width, height,
   error_code, created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key`;
 
@@ -104,11 +107,6 @@ async function archiveVideoAsset(env: Env, video: MediaAssetRow): Promise<boolea
   const uid = video.provider_asset_id;
   const r2Key = archiveObjectKey(video.owner_account, uid);
   try {
-    // 本地验收无真实 Stream/R2：直接落归档态，验证状态机与 DB 迁移。
-    if (env.DEV_UPLOAD_PROXY === '1') {
-      await markArchived(env, video, r2Key);
-      return true;
-    }
     // 1) Stream 导出编码版 MP4（无冷层）。仍在生成则本轮跳过，下次扫描再归档。
     const mp4Url = await createStreamDownloadUrl(env, uid);
     if (!mp4Url) return false;
@@ -117,10 +115,17 @@ async function archiveVideoAsset(env: Env, video: MediaAssetRow): Promise<boolea
     if (!response.ok || !response.body) {
       throw new Error(`stream download failed: ${response.status}`);
     }
-    await env.SQUARE_MEDIA.put(r2Key, response.body, {
-      storageClass: 'InfrequentAccess',
-      httpMetadata: { contentType: 'video/mp4' }
+    const byteSize = Number.parseInt(response.headers.get('content-length') ?? '', 10);
+    if (!Number.isSafeInteger(byteSize) || byteSize <= 0) {
+      await response.body.cancel();
+      throw new Error('stream download missing content-length');
+    }
+    const ticket = validateStreamDeclaration({
+      resource_key: 'square_video_candidate',
+      byte_size: byteSize,
+      content_type: 'video/mp4',
     });
+    await putR2Stream(env, r2Key, response.body, ticket);
     // 3) 无损铁律：确认 R2 落成才删 Stream。
     const head = await env.SQUARE_MEDIA.head(r2Key);
     if (!head || head.size <= 0) {
@@ -143,11 +148,6 @@ async function restoreVideoAsset(env: Env, video: MediaAssetRow): Promise<boolea
   // 先切「恢复中」，客户端显示占位。
   await setArchiveState(env, video, 'restoring');
   try {
-    // 本地验收：直接落回 live（无真实回灌）。
-    if (env.DEV_UPLOAD_PROXY === '1') {
-      await markRestoredLive(env, video, video.provider_asset_id);
-      return true;
-    }
     // 从 R2 冷存签发短期只读 URL，供 Stream copy-from-URL 回灌。
     const sourceUrl = await signR2GetUrl(env, video.r2_archive_key, ARCHIVE_READ_URL_TTL_SECONDS);
     if (!sourceUrl) {

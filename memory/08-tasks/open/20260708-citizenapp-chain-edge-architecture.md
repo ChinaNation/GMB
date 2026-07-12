@@ -17,7 +17,7 @@
 架构目标固定为“四层协作”：
 
 1. CitizenApp：内置 smoldot 轻节点，连接 CitizenChain P2P 网络；端上私钥只在本机签名。
-2. Cloudflare 边缘层：提供 DNS/WAF/限流、聊天瞬时信封与信令转发、无内容推送、短期 TURN、广场媒体与 feed、轻节点启动清单和受控签名交易转发。
+2. Cloudflare 边缘层：提供 DNS/WAF/限流、聊天瞬时信封与信令转发、无内容推送、广场媒体与 feed、轻节点启动清单和受控签名交易转发；聊天附件只允许设备直连。
 3. Citizen API / OnChina 投影能力：承接非链上查询、公开目录、业务聚合、受控链上事件投影和签名交易广播。
 4. CitizenChain 云节点网络：由 `citizenchain/node + runtime + onchina` 安装包运行，Oracle Cloud 等服务器承载 bootnode/full node/archive/indexer/RPC 服务节点。
 

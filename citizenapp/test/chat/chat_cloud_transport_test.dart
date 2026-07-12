@@ -101,36 +101,22 @@ void main() {
     expect(package.keyPackageBytes, [1, 2, 3]);
   });
 
-  test('TURN 与 WebRTC 信令使用独立瞬时接口', () async {
+  test('WebRTC 只向 Worker 发送瞬时信令', () async {
     final paths = <String>[];
     final transport = _transport((request) async {
       paths.add(request.url.path);
-      if (request.url.path == '/v1/chat/turn') {
-        return _json({
-          'ok': true,
-          'ice_servers': [
-            {
-              'urls': ['turn:turn.example:3478'],
-              'username': 'user',
-              'credential': 'secret',
-            }
-          ],
-        });
-      }
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       expect(body['signal'], {'kind': 'offer'});
       return _json({'ok': true, 'delivery_state': 'sent'});
     });
 
-    final servers = await transport.createIceServers();
     final sent = await transport.sendSignal(
       recipientAccount: 'bob-wallet',
       signal: const {'kind': 'offer'},
     );
 
-    expect(servers.single.urls, ['turn:turn.example:3478']);
     expect(sent, isTrue);
-    expect(paths, ['/v1/chat/turn', '/v1/chat/signals']);
+    expect(paths, ['/v1/chat/signals']);
   });
 }
 

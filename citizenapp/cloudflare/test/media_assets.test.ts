@@ -8,8 +8,8 @@ describe('Cloudflare media assets', () => {
     vi.unstubAllGlobals();
   });
 
-  it('creates a local Images direct upload plan in dev mode', async () => {
-    const plan = await createProviderUpload(devEnv(), {
+  it('routes image bytes through the bounded Worker upload endpoint', async () => {
+    const plan = await createProviderUpload({} as Env, {
       ownerAccount: 'owner',
       uploadId: 'squ_dev',
       postId: 'sqp_dev',
@@ -18,19 +18,19 @@ describe('Cloudflare media assets', () => {
       contentType: 'image/webp',
       byteSize: 1024,
       maxDurationSeconds: 60,
-      requestOrigin: 'http://127.0.0.1:8787'
+      workerUploadUrl: 'https://worker.test/v1/square/uploads/media?upload_id=squ_dev&media_index=0'
     });
 
     expect(plan).toMatchObject({
       provider: 'cloudflare_images',
-      provider_asset_id: 'img_squ_dev_0',
-      upload_method: 'direct_form',
+      provider_asset_id: 'pending:squ_dev:0',
+      upload_method: 'worker',
       asset_state: 'prepared'
     });
-    expect(plan.upload_url).toContain('/v1/square/uploads/dev-media');
+    expect(plan.upload_url).toContain('/v1/square/uploads/media');
   });
 
-  it('uses Stream tus direct upload for videos over 200MB', async () => {
+  it('uses Stream TUS for every video size', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
@@ -51,9 +51,9 @@ describe('Cloudflare media assets', () => {
       mediaIndex: 0,
       mediaKind: 'video',
       contentType: 'video/mp4',
-      byteSize: 201 * 1024 * 1024,
+      byteSize: 40 * 1024 * 1024,
       maxDurationSeconds: 10_800,
-      requestOrigin: 'https://worker.test'
+      workerUploadUrl: 'https://worker.test/v1/square/uploads/media'
     });
 
     expect(plan).toMatchObject({
@@ -68,7 +68,7 @@ describe('Cloudflare media assets', () => {
         method: 'POST',
         headers: expect.objectContaining({
           'tus-resumable': '1.0.0',
-          'upload-length': String(201 * 1024 * 1024)
+          'upload-length': String(40 * 1024 * 1024)
         })
       })
     );
@@ -133,12 +133,6 @@ describe('Cloudflare media assets', () => {
     expect(urls.url).not.toContain('/stream_uid/');
   });
 });
-
-function devEnv(): Env {
-  return {
-    DEV_UPLOAD_PROXY: '1'
-  } as unknown as Env;
-}
 
 function prodEnv(): Env {
   return {

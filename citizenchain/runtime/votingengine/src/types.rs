@@ -40,7 +40,7 @@ pub const STAGE_JOINT: u8 = 1;
 /// 联合投票 pallet 的联合公投阶段(jointreferendum):内部投票阶段未全票通过或超时进入,
 /// 由 CID 持有者按 >50% 严格多数投票。
 ///
-/// 注意:这是联合投票的第二阶段,与独立的 election-vote pallet(pallet_index=24)
+/// 注意:这是联合投票的第二阶段,与独立的 election-vote pallet(pallet_index=22)
 /// 是两个不同概念。election-vote pallet 用于选举公职人员(普选 + 机构成员互选)。
 pub const STAGE_REFERENDUM: u8 = 2;
 

@@ -12,7 +12,7 @@
 
 当前版本只做 runtime 可见骨架：
 
-- pallet index 固定为 `34`。
+- pallet index 固定为 `32`。
 - 模块标识为 `ele-camp1`。
 - 不开放真实选举创建入口。
 - 不调用 `election-vote`。

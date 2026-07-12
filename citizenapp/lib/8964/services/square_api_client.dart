@@ -559,29 +559,15 @@ class SquareApiClient
   Future<void> uploadObject({
     required String uploadUrl,
     required String contentType,
-    required int contentLength,
-    required Stream<List<int>> body,
+    required Uint8List body,
+    required SquareSession session,
   }) async {
-    final request = http.StreamedRequest('PUT', Uri.parse(uploadUrl))
-      ..headers['content-type'] = contentType
-      ..contentLength = contentLength;
-    await request.sink.addStream(body);
-    await request.sink.close();
-    final response =
-        await _http.send(request).timeout(const Duration(minutes: 10));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final text = await response.stream.bytesToString();
-      throw SquareApiException(
-        '存储对象上传失败：${response.statusCode} $text',
-        statusCode: response.statusCode,
-      );
-    }
+    await uploadBytesTo(uploadUrl, body, contentType, session: session);
   }
 
   Future<void> uploadMediaAsset({
     required SquarePreparedMediaUpload upload,
     required String filePath,
-    required String fileName,
     required SquareSession session,
   }) async {
     if (upload.uploadMethod == 'tus') {
@@ -589,17 +575,18 @@ class SquareApiClient
         uploadUrl: upload.uploadUrl,
         filePath: filePath,
         contentLength: upload.byteSize,
-        session: session,
       );
       return;
     }
-    await _uploadMultipartMedia(
-      uploadUrl: upload.uploadUrl,
-      filePath: filePath,
-      fileName: fileName,
-      contentLength: upload.byteSize,
-      session: session,
-    );
+    if (upload.uploadMethod != 'worker') {
+      throw const SquareApiException('媒体上传方式不受支持');
+    }
+    final bytes = await File(filePath).readAsBytes();
+    if (bytes.length != upload.byteSize) {
+      throw const SquareApiException('媒体实际大小与上传授权不一致');
+    }
+    await uploadBytesTo(upload.uploadUrl, bytes, upload.contentType,
+        session: session);
   }
 
   Future<SquareCompletedUpload> completeUpload({
@@ -681,7 +668,8 @@ class SquareApiClient
         .toList(growable: false);
   }
 
-  /// 把头像/背景等 R2 object_key 拼成公开读取 URL；广场主媒体直接使用 Images / Stream URL。
+  /// 把头像/背景等 R2 object_key 拼成钱包 session 保护的读取 URL；调用方必须
+  /// 在 Image.network headers 中携带 Bearer。广场主媒体直接使用 Images / Stream URL。
   String mediaUrl(String objectKey) {
     final encoded = objectKey.split('/').map(Uri.encodeComponent).join('/');
     return '$baseUrl/v1/square/media/$encoded';
@@ -768,7 +756,7 @@ class SquareApiClient
     );
   }
 
-  /// 把字节 PUT 到上传 URL。dev-put 同源需 Bearer；生产预签名 URL 绝不能带 Authorization。
+  /// 用户小文件只允许 PUT 到同域 Worker，并对原始字节生成设备请求签名。
   Future<void> uploadBytesTo(
     String uploadUrl,
     List<int> bytes,
@@ -776,12 +764,27 @@ class SquareApiClient
     SquareSession? session,
   }) async {
     final uri = Uri.parse(uploadUrl);
-    final headers = <String, String>{'content-type': contentType};
-    if (session != null && uri.origin == baseUri.origin) {
-      headers['authorization'] = 'Bearer ${session.sessionToken}';
+    if (session == null || uri.origin != baseUri.origin) {
+      throw const SquareApiException('资源上传地址必须是当前 Worker 且携带钱包会话');
     }
+    final signer = session.signRequest;
+    if (signer == null) {
+      throw const SquareApiException('设备请求签名器缺失，请重新登录');
+    }
+    final body = Uint8List.fromList(bytes);
+    final headers = <String, String>{
+      'content-type': contentType,
+      'authorization': 'Bearer ${session.sessionToken}',
+      ...await squareRequestHeadersForBytes(
+        method: 'PUT',
+        uri: uri,
+        body: body,
+        sessionToken: session.sessionToken,
+        sign: signer,
+      ),
+    };
     final response = await _http
-        .put(uri, headers: headers, body: bytes)
+        .put(uri, headers: headers, body: body)
         .timeout(const Duration(seconds: 60));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw SquareApiException(
@@ -1090,44 +1093,10 @@ class SquareApiClient
     );
   }
 
-  Future<void> _uploadMultipartMedia({
-    required String uploadUrl,
-    required String filePath,
-    required String fileName,
-    required int contentLength,
-    required SquareSession session,
-  }) async {
-    if (contentLength <= 0) {
-      throw const SquareApiException('媒体文件大小不合法');
-    }
-    final uri = Uri.parse(uploadUrl);
-    final request = http.MultipartRequest('POST', uri);
-    if (uri.origin == baseUri.origin) {
-      request.headers['authorization'] = 'Bearer ${session.sessionToken}';
-    }
-    request.files.add(
-      await http.MultipartFile.fromPath(
-        'file',
-        filePath,
-        filename: fileName,
-      ),
-    );
-    final response =
-        await _http.send(request).timeout(const Duration(hours: 4));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final text = await response.stream.bytesToString();
-      throw SquareApiException(
-        '媒体上传失败：${response.statusCode} $text',
-        statusCode: response.statusCode,
-      );
-    }
-  }
-
   Future<void> _uploadTusMedia({
     required String uploadUrl,
     required String filePath,
     required int contentLength,
-    required SquareSession session,
   }) async {
     final uri = Uri.parse(uploadUrl);
     final request = http.StreamedRequest('PATCH', uri)
@@ -1135,9 +1104,6 @@ class SquareApiClient
       ..headers['upload-offset'] = '0'
       ..headers['content-type'] = 'application/offset+octet-stream'
       ..contentLength = contentLength;
-    if (uri.origin == baseUri.origin) {
-      request.headers['authorization'] = 'Bearer ${session.sessionToken}';
-    }
     await request.sink.addStream(File(filePath).openRead());
     await request.sink.close();
     final response =

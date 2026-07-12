@@ -36,11 +36,11 @@ class MultisigTransferService {
 
   // ──── 常量 ────
 
-  /// MultisigTransfer pallet index（runtime pallet_index=19）。
+  /// MultisigTransfer pallet index（runtime pallet_index=17）。
   ///
   /// 本 pallet 只保留 propose_X(0/1/2)；管理员投票一律走
-  /// InternalVote(22).cast(0)，手动重试走 VotingEngine(9).retry_passed_proposal(4)。
-  static const _palletIndex = 19;
+  /// InternalVote(20).cast(0)，手动重试走 VotingEngine(9).retry_passed_proposal(4)。
+  static const _palletIndex = 17;
 
   /// propose_transfer call_index=0。
   static const _proposeCallIndex = 0;

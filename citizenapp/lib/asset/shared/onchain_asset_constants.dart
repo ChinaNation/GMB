@@ -15,10 +15,10 @@ class OnchainAssetActions {
   // ---------- pallet_index / call_index(与链端 + citizenwallet PalletRegistry 同步) ----------
 
   /// OnchainIssuance pallet_index(与 citizenchain runtime/src/lib.rs::construct_runtime 一致)。
-  static const int onchainIssuancePalletIndex = 25;
+  static const int onchainIssuancePalletIndex = 23;
 
   /// pallet_assets 内核 pallet_index(原生 extrinsic 全部被 RuntimeCallFilter reject)。
-  static const int assetsPalletIndex = 26;
+  static const int assetsPalletIndex = 24;
 
   // 业务 propose_X(call_index 0..=4)
   static const int callProposeIssue = 0;

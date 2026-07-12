@@ -4,11 +4,11 @@ import { HttpError, jsonResponse, parsePositiveInt, readJson } from '../shared/h
 import { createId } from '../shared/ids';
 import { nowMs } from '../shared/time';
 import { callChainRpc, isChainRpcConfigured } from './rpc';
+import { resourceLimit } from '../limits/catalog';
 
 export const CHAIN_EXTRINSIC_RELAY_PATH = '/v1/chain/extrinsics/relay';
 
 const RELAY_SCHEMA = 'citizenapp.chain.extrinsic_relay.v1';
-const DEFAULT_MAX_EXTRINSIC_BYTES = 64 * 1024;
 const DEFAULT_MAX_PER_MINUTE = 20;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const DEDUPE_WINDOW_MS = 10 * 60_000;
@@ -38,9 +38,10 @@ export async function relaySignedExtrinsicRoute(
     throw new HttpError(503, 'chain_extrinsic_relay_disabled', '签名交易广播兜底未启用');
   }
 
-  const maxBytes = parsePositiveInt(
-    env.RELAY_MAX_BYTES,
-    DEFAULT_MAX_EXTRINSIC_BYTES
+  // 环境变量只允许进一步收紧，不能突破统一资源表硬上限。
+  const maxBytes = Math.min(
+    parsePositiveInt(env.RELAY_MAX_BYTES, resourceLimit('chain_extrinsic').max_bytes),
+    resourceLimit('chain_extrinsic').max_bytes,
   );
   assertReasonableContentLength(request, maxBytes);
 

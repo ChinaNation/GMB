@@ -19,8 +19,8 @@ class RuntimeUpgradeService {
 
   // ──── 常量 ────
 
-  /// JointVote sub-pallet pallet_index=23。
-  static const _jointVotePalletIndex = 23;
+  /// JointVote sub-pallet pallet_index=21。
+  static const _jointVotePalletIndex = 21;
 
   /// JointVote::cast_admin call_index=0。
   static const _jointVoteCallIndex = 0;

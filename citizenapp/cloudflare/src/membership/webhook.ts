@@ -11,6 +11,7 @@ import {
 } from './plans';
 import { markStripeMembershipInactive, upsertStripeMembership } from './service';
 import { restoreOwnerVideos } from './archive';
+import { readLimitedText } from '../limits/request';
 
 interface StripeEvent {
   id: string;
@@ -40,7 +41,7 @@ export async function stripeWebhookRoute(request: Request, env: Env): Promise<Re
   if (!secret) {
     throw new HttpError(503, 'stripe_webhook_not_configured', 'Stripe webhook secret 未配置');
   }
-  const rawBody = await request.text();
+  const rawBody = await readLimitedText(request, 'stripe_webhook');
   const signature = request.headers.get('stripe-signature');
   const toleranceSeconds = parsePositiveInt(env.STRIPE_HOOK_WINDOW, 300);
   await verifyStripeSignature(rawBody, signature, secret, undefined, toleranceSeconds);

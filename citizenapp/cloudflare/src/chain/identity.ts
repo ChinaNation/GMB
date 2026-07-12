@@ -1,8 +1,8 @@
-import { blake2AsU8a, decodeAddress, xxhashAsU8a } from '@polkadot/util-crypto';
 import { bytesToHex, hexToBytes } from '../shared/signing_message';
 import type { Env } from '../types';
-import { HttpError } from '../shared/http';
+import { decodeOwnerAccount, storageMapKey } from './storage_key';
 import { nowMs } from '../shared/time';
+import { putKvJson } from '../limits/storage';
 import { fetchChainStorage } from './rpc';
 import type { RequiredIdentityLevel } from '../membership/plans';
 
@@ -56,7 +56,7 @@ export async function fetchChainIdentityStateCached(
   try {
     const state = await fetchChainIdentityState(env, ownerAccount);
     try {
-      await env.SQUARE_CACHE.put(cacheKey, JSON.stringify(state), {
+      await putKvJson(env, cacheKey, state, 'identity_cache', {
         expirationTtl: IDENTITY_CACHE_TTL_SECONDS
       });
     } catch {
@@ -98,25 +98,6 @@ export async function fetchChainIdentityState(
     cid_number: hasVotingIdentity ? votingIdentity?.cid_number ?? null : null,
     checked_at: nowMs()
   };
-}
-
-function decodeOwnerAccount(ownerAccount: string): Uint8Array {
-  try {
-    return decodeAddress(ownerAccount);
-  } catch {
-    throw new HttpError(400, 'invalid_owner_account', '钱包账户地址不合法');
-  }
-}
-
-function storageMapKey(
-  palletName: string,
-  storageName: string,
-  keyData: Uint8Array
-): Uint8Array {
-  const palletHash = xxhashAsU8a(palletName, 128);
-  const storageHash = xxhashAsU8a(storageName, 128);
-  const keyHash = blake2AsU8a(keyData, 128);
-  return concat([palletHash, storageHash, keyHash, keyData]);
 }
 
 function decodeVotingIdentity(data: Uint8Array): VotingIdentity | null {
@@ -205,15 +186,4 @@ function readU32Le(data: Uint8Array, offset: number): number {
 
 function utf8(bytes: Uint8Array): string {
   return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-}
-
-function concat(chunks: Uint8Array[]): Uint8Array {
-  const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const out = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
 }

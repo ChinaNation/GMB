@@ -94,6 +94,7 @@ CREATE TABLE square_media_assets (
   provider TEXT NOT NULL,
   provider_asset_id TEXT NOT NULL,
   upload_method TEXT NOT NULL,
+  resource_key TEXT NOT NULL,
   content_type TEXT NOT NULL,
   byte_size INTEGER NOT NULL,
   asset_state TEXT NOT NULL,
@@ -168,14 +169,41 @@ CREATE TABLE square_browse_days (
   PRIMARY KEY(owner_account, browse_day)
 );
 
-CREATE TABLE square_usage_days (
+CREATE TABLE resource_reservations (
+  reservation_id TEXT PRIMARY KEY,
   owner_account TEXT NOT NULL,
-  usage_day TEXT NOT NULL,
-  image_count INTEGER NOT NULL DEFAULT 0,
-  video_seconds INTEGER NOT NULL DEFAULT 0,
-  blocked_count INTEGER NOT NULL DEFAULT 0,
+  resource_key TEXT NOT NULL,
+  period_start INTEGER NOT NULL,
+  period_end INTEGER NOT NULL,
+  byte_size INTEGER NOT NULL,
+  image_count INTEGER NOT NULL,
+  video_seconds INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  reservation_state TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  used_at INTEGER
+);
+CREATE INDEX idx_resource_reservations_owner
+  ON resource_reservations(owner_account, resource_key, reservation_state, expires_at);
+
+CREATE TABLE resource_usage (
+  owner_account TEXT NOT NULL,
+  resource_key TEXT NOT NULL,
+  period_start INTEGER NOT NULL,
+  period_end INTEGER NOT NULL,
+  byte_size INTEGER NOT NULL,
+  image_count INTEGER NOT NULL,
+  video_seconds INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  PRIMARY KEY(owner_account, usage_day)
+  PRIMARY KEY(owner_account, resource_key, period_start)
+);
+
+CREATE TABLE resource_totals (
+  resource_key TEXT PRIMARY KEY,
+  byte_size INTEGER NOT NULL,
+  object_count INTEGER NOT NULL,
+  video_seconds INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
 );
 
 CREATE TABLE chain_extrinsic_relays (
@@ -233,12 +261,3 @@ CREATE TABLE chat_device_binding_nonces (
 );
 CREATE INDEX idx_chat_device_binding_nonces_expires
   ON chat_device_binding_nonces(expires_at);
-
-CREATE TABLE chat_turn_credentials (
-  owner_account TEXT NOT NULL,
-  username TEXT PRIMARY KEY,
-  expires_at INTEGER NOT NULL,
-  created_at INTEGER NOT NULL
-);
-CREATE INDEX idx_chat_turn_credentials_owner
-  ON chat_turn_credentials(owner_account, expires_at);
