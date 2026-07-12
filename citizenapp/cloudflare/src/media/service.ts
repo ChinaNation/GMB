@@ -35,8 +35,8 @@ export async function mediaRoute(
     'content-type',
     object.httpMetadata?.contentType ?? 'application/octet-stream'
   );
-  headers.set('cache-control', 'public, max-age=31536000, immutable');
-  headers.set('access-control-allow-origin', '*');
+  // 资料对象也必须经过钱包会话；禁止共享缓存把已授权响应泄露给其他访问者。
+  headers.set('cache-control', 'private, max-age=300');
   if (object.httpEtag) {
     headers.set('etag', object.httpEtag);
   }

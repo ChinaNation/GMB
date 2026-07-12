@@ -126,7 +126,7 @@ lib/8964/profile/
 - 修改 `src/types.ts`：新增 `CitizenProfileDoc` / `UserProfileCounts` / `UserProfileResponse` / `AuthorPostCategory`。
 - 修改 `src/storage/r2_keys.ts`：新增 `profileObjectKey` / `profileAssetPrefix`。
 - 修改 `src/shared/http.ts`：新增可复用 `maybeSession`。
-- 新增 `migrations/0003_profile_indexes.sql`：`square_posts(owner_account,post_state,created_at)`、`square_follows(followed_account)` 索引。
+- 资料页所需 `square_posts(owner_account,post_state,created_at)`、`square_follows(followed_account)` 索引当前已并入唯一 `migrations/0001_square_core.sql` 基线。
 - 新增 `test/profiles.test.ts`：8 例（R2 往返、缺失/非法 schema 回 null、计数+认证+is_following、未登录公开可读、PUT 持久化、越权 asset key 拒绝、超长拒绝、按作者 category+cursor 分页）。
 - 边界：未改 `citizenchain/runtime`；未写任何 secret；认证以链上确认 `cid_number` 为真源，不信任自报。
 - 验收：`npm run typecheck` 通过；`npm test` 6 文件 23 例全绿（新增 8 例）；`npm run migrate:local` 0003 应用成功（3 commands）。

@@ -5,8 +5,7 @@ import { signR2GetUrl } from '../storage/presigned';
 import {
   copyStreamFromUrl,
   createStreamDownloadUrl,
-  deleteProviderAsset,
-  streamPlaybackUrls
+  deleteProviderAsset
 } from '../media/cloudflare_assets';
 
 // 退订视频冷归档（任务卡 20260710-membership-video-archive-revamp）：
@@ -21,8 +20,8 @@ const RESTORE_MAX_DURATION_SECONDS = 4 * 60 * 60; // 回灌时长上限（覆盖
 const ARCHIVE_READ_URL_TTL_SECONDS = 3600;
 
 const MEDIA_COLUMNS = `upload_id, post_id, owner_account, media_index, media_kind, provider,
-  provider_asset_id, upload_method, content_type, byte_size, asset_state, delivery_url,
-  playback_hls_url, playback_dash_url, thumbnail_url, duration_seconds, width, height,
+  provider_asset_id, upload_method, content_type, byte_size, asset_state,
+  declared_duration_seconds, duration_seconds, width, height,
   error_code, created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key`;
 
 export function videoArchiveEnabled(env: Env): boolean {
@@ -171,7 +170,7 @@ async function markArchived(env: Env, video: MediaAssetRow, r2Key: string): Prom
   await env.DB.prepare(
     `UPDATE square_media_assets
       SET archive_state = 'archived', archived_at = ?, r2_archive_key = ?,
-        playback_hls_url = NULL, playback_dash_url = NULL, updated_at = ?
+        updated_at = ?
       WHERE upload_id = ? AND media_index = ?`
   )
     .bind(now, r2Key, now, video.upload_id, video.media_index)
@@ -179,18 +178,14 @@ async function markArchived(env: Env, video: MediaAssetRow, r2Key: string): Prom
 }
 
 async function markRestoring(env: Env, video: MediaAssetRow, newUid: string): Promise<void> {
-  const playback = streamPlaybackUrls(env, newUid);
   await env.DB.prepare(
     `UPDATE square_media_assets
       SET provider_asset_id = ?, archive_state = 'restoring', asset_state = 'processing',
-        playback_hls_url = ?, playback_dash_url = ?, thumbnail_url = ?, updated_at = ?
+        updated_at = ?
       WHERE upload_id = ? AND media_index = ?`
   )
     .bind(
       newUid,
-      playback.playback_hls_url,
-      playback.playback_dash_url,
-      playback.thumbnail_url,
       nowMs(),
       video.upload_id,
       video.media_index
@@ -199,19 +194,15 @@ async function markRestoring(env: Env, video: MediaAssetRow, newUid: string): Pr
 }
 
 async function markRestoredLive(env: Env, video: MediaAssetRow, uid: string): Promise<void> {
-  const playback = streamPlaybackUrls(env, uid);
   const now = nowMs();
   await env.DB.prepare(
     `UPDATE square_media_assets
       SET provider_asset_id = ?, archive_state = 'live', asset_state = 'ready',
-        playback_hls_url = ?, playback_dash_url = ?, thumbnail_url = ?, updated_at = ?, ready_at = ?
+        updated_at = ?, ready_at = ?
       WHERE upload_id = ? AND media_index = ?`
   )
     .bind(
       uid,
-      playback.playback_hls_url,
-      playback.playback_dash_url,
-      playback.thumbnail_url,
       now,
       now,
       video.upload_id,

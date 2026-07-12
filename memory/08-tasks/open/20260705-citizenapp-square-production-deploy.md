@@ -58,7 +58,7 @@
 
 - 检查 `SquareApiClient` 或同等入口的 base URL 来源。
 - 如果存在硬编码本地地址，改为通过编译期 define 或集中配置读取。
-- ~~保留默认安全行为：生产包必须显式提供 HTTPS Worker URL；本地调试才使用 `http://127.0.0.1:8787`。~~ **已被卡 20260705-citizenapp-worker-prod-url-no-fallback 覆盖**：App 内置生产 URL `https://citizenapp-square-api.stews87-fawn.workers.dev` 为唯一默认，删除本机兜底与 fail-fast；本机联调仅在显式 `--dart-define` 时启用。
+- ~~保留默认安全行为：生产包必须显式提供 HTTPS Worker URL；本地调试才使用 `http://127.0.0.1:8787`。~~ 当前目标状态由广场安全任务覆盖：App 内置唯一 production API `https://www.crcfrcn.com/api`，旧 `workers.dev` 已关闭；本机联调仅在显式 `--dart-define` 时启用。
 
 ### 步骤 4：文档与残留清理
 

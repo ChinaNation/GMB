@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:citizenapp/8964/services/square_request_signer.dart';
 
 import '../chat_models.dart';
 import '../crypto/mls_boundary.dart';
@@ -32,6 +33,7 @@ class ChatCloudTransport implements ChatTransport {
     required this.ownerDeviceId,
     this.serviceBaseUrl,
     this.sessionToken,
+    this.requestSigner,
     http.Client? httpClient,
     this.requestTimeout = const Duration(seconds: 12),
   }) : _httpClient = httpClient ?? http.Client();
@@ -40,6 +42,7 @@ class ChatCloudTransport implements ChatTransport {
   final String ownerDeviceId;
   final Uri? serviceBaseUrl;
   final String? sessionToken;
+  final SquareDeviceSigner? requestSigner;
   final Duration requestTimeout;
   final http.Client _httpClient;
 
@@ -152,7 +155,8 @@ class ChatCloudTransport implements ChatTransport {
     final uri = _wsUri('/v1/chat/ws');
     WebSocket socket;
     try {
-      socket = await WebSocket.connect(uri.toString(), headers: _wsHeaders())
+      socket = await WebSocket.connect(uri.toString(),
+              headers: await _wsHeaders(uri))
           .timeout(requestTimeout);
     } catch (_) {
       return null;
@@ -236,16 +240,18 @@ class ChatCloudTransport implements ChatTransport {
   Future<Map<String, dynamic>> _getJson(String path,
       {Map<String, String>? queryParameters}) async {
     final uri = _uri(path, queryParameters: queryParameters);
-    final response =
-        await _httpClient.get(uri, headers: _headers()).timeout(requestTimeout);
+    final response = await _httpClient
+        .get(uri, headers: await _headers('GET', uri, ''))
+        .timeout(requestTimeout);
     return _decodeResponse(response, uri);
   }
 
   Future<Map<String, dynamic>> _postJson(
       String path, Map<String, Object?> body) async {
     final uri = _uri(path);
+    final encoded = jsonEncode(body);
     final response = await _httpClient
-        .post(uri, headers: _headers(), body: jsonEncode(body))
+        .post(uri, headers: await _headers('POST', uri, encoded), body: encoded)
         .timeout(requestTimeout);
     return _decodeResponse(response, uri);
   }
@@ -255,7 +261,9 @@ class ChatCloudTransport implements ChatTransport {
     if (base == null || (sessionToken ?? '').trim().isEmpty) {
       throw StateError(_chatServiceUnavailable);
     }
-    final uri = base.resolve(path);
+    // 正式 API 使用同域 `/api` 前缀，不能用 Uri.resolve 丢掉该前缀。
+    final root = base.toString().replaceFirst(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$root$path');
     return queryParameters == null
         ? uri
         : uri.replace(queryParameters: queryParameters);
@@ -266,16 +274,32 @@ class ChatCloudTransport implements ChatTransport {
     return uri.replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws');
   }
 
-  Map<String, String> _headers() => {
-        'authorization': 'Bearer ${sessionToken?.trim() ?? ''}',
-        'content-type': 'application/json; charset=utf-8',
-        'accept': 'application/json',
-      };
+  Future<Map<String, String>> _headers(
+      String method, Uri uri, String body) async {
+    final token = sessionToken?.trim() ?? '';
+    final headers = <String, String>{
+      'authorization': 'Bearer $token',
+      'content-type': 'application/json; charset=utf-8',
+      'accept': 'application/json',
+    };
+    final signer = requestSigner;
+    if (signer != null) {
+      headers.addAll(await squareRequestHeaders(
+        method: method,
+        uri: uri,
+        body: body,
+        sessionToken: token,
+        sign: signer,
+      ));
+    }
+    return headers;
+  }
 
-  Map<String, String> _wsHeaders() => {
-        'authorization': 'Bearer ${sessionToken?.trim() ?? ''}',
-        'x-chat-device': ownerDeviceId,
-      };
+  Future<Map<String, String>> _wsHeaders(Uri uri) async {
+    final headers = await _headers('GET', uri, '');
+    headers['x-chat-device'] = ownerDeviceId;
+    return headers;
+  }
 }
 
 Map<String, dynamic> _decodeResponse(http.Response response, Uri uri) {

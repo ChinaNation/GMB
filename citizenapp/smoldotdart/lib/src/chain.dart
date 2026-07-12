@@ -31,7 +31,7 @@ void _capabilityCallback(int callbackId, int result, Pointer<Utf8> error) {
 
 /// 原生 capability 异步调度器。
 ///
-/// 复用 smoldot-dart 已有的 NativeCallable.listener + Completer 模式，
+/// 复用 smoldotdart 已有的 NativeCallable.listener + Completer 模式，
 /// 为所有 typed capability API 提供不阻塞 Dart 主线程的异步 FFI 调用。
 class NativeCapabilityHandler {
   late final NativeCallable<DartCallbackNative> _nativeCallable;

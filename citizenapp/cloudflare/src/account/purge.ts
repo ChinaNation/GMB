@@ -72,6 +72,9 @@ export async function purgeAccount(
     bind(`DELETE FROM square_media_assets WHERE owner_account = ?`),
     env.DB.prepare(`DELETE FROM square_follows WHERE owner_account = ? OR followed_account = ?`).bind(ownerAccount, ownerAccount),
     bind(`DELETE FROM square_browse_days WHERE owner_account = ?`),
+    bind(`DELETE FROM square_usage_days WHERE owner_account = ?`),
+    bind(`DELETE FROM square_request_nonces WHERE owner_account = ?`),
+    env.DB.prepare(`DELETE FROM square_rate_windows WHERE rate_key LIKE ?`).bind(`%:owner:${ownerAccount}`),
     bind(`DELETE FROM square_device_subkeys WHERE owner_account = ?`),
     bind(`DELETE FROM square_login_challenges WHERE owner_account = ?`)
   ]);

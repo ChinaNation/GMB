@@ -9,6 +9,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../8964/services/square_api_client.dart';
+import '../8964/services/device_subkey_registrar.dart';
 import '../wallet/core/device_subkey.dart';
 import '../wallet/core/wallet_manager.dart';
 import 'crypto/chat_device_binding.dart';
@@ -554,6 +555,7 @@ class ChatRuntime {
           ownerDeviceId: deviceId,
           serviceBaseUrl: service.baseUri,
           sessionToken: service.session.sessionToken,
+          requestSigner: service.session.signRequest,
         );
     final webrtc = ChatWebrtcTransport(
       ownerAccount: account.address,
@@ -596,6 +598,20 @@ class ChatRuntime {
     final session = await _squareApiClient.ensureSession(
       ownerAccount: account.address,
       signLoginPayload: (payload) => _signSquareLoginPayload(account, payload),
+      onDeviceNotRegistered: () => DeviceSubkeyRegistrar(
+        apiClient: _squareApiClient,
+        deviceSubkey: _deviceSubkey,
+      ).register(
+        walletIndex: account.walletIndex,
+        ownerAccount: account.address,
+        signBinding: (message) async {
+          final signature = await _walletManager.signWithWallet(
+            account.walletIndex,
+            message,
+          );
+          return '0x${bytesToHex(signature)}';
+        },
+      ),
     );
     final transport = _cloudTransportFactory?.call(
           ownerAccount: account.address,
@@ -608,6 +624,7 @@ class ChatRuntime {
           ownerDeviceId: identity.deviceId,
           serviceBaseUrl: _squareApiClient.baseUri,
           sessionToken: session.sessionToken,
+          requestSigner: session.signRequest,
         );
 
     await _ensureDeviceRegistered(

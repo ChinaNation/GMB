@@ -19,8 +19,7 @@ class ChainBootstrapApiConfig {
   /// 这里复用广场 API define，避免 App 出现两个 Worker 根地址配置。
   static const edgeBaseUrlDefineName = 'SQUARE_API_URL';
 
-  static const prodBaseUrl =
-      'https://citizenapp-square-api.stews87-fawn.workers.dev';
+  static const prodBaseUrl = 'https://www.crcfrcn.com/api';
 
   static const _configuredBaseUrl =
       String.fromEnvironment(edgeBaseUrlDefineName);

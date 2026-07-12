@@ -58,6 +58,7 @@ describe('square chain confirmation', () => {
       estimated_bytes: 1024,
       object_keys_json: JSON.stringify([`square/${ownerAccount}/posts/${postId}/manifest.json`]),
       status: 'completed',
+      expires_at: Date.now() + 60_000,
       created_at: 1,
       completed_at: 2
     };
@@ -75,10 +76,7 @@ describe('square chain confirmation', () => {
         content_type: 'image/webp',
         byte_size: 1024,
         asset_state: 'ready',
-        delivery_url: 'https://imagedelivery.net/account/img_test/public',
-        playback_hls_url: null,
-        playback_dash_url: null,
-        thumbnail_url: null,
+        declared_duration_seconds: null,
         duration_seconds: null,
         width: 1200,
         height: 800,
@@ -111,6 +109,7 @@ describe('square chain confirmation', () => {
         })
       }),
       SQUARE_CACHE: {},
+      DEV_UPLOAD_PROXY: '1',
       CHAIN_URL: 'https://chain.test',
       CHAIN_ID: 'worker-rpc.access',
       CHAIN_SECRET: 'test-access-secret'
@@ -139,7 +138,7 @@ describe('square chain confirmation', () => {
     expect(post.media_items?.[0]).toMatchObject({
       provider: 'cloudflare_images',
       provider_asset_id: 'img_test',
-      url: 'https://imagedelivery.net/account/img_test/public',
+      url: 'http://127.0.0.1/dev-images/img_test/public',
       asset_state: 'ready'
     });
     expect(db.posts.get(postId)?.post_state).toBe('published');
@@ -266,6 +265,7 @@ function chainRpcEnv(overrides: Partial<Env> = {}): Env {
 function session(): SessionState {
   return {
     owner_account: ownerAccount,
+    device_key_hash: 'a'.repeat(64),
     created_at: 1,
     expires_at: Date.now() + 100000
   };
@@ -283,6 +283,7 @@ function completedUpload(manifestKey: string): PreparedUploadRow {
     estimated_bytes: 1024,
     object_keys_json: JSON.stringify([manifestKey]),
     status: 'completed',
+    expires_at: Date.now() + 60_000,
     created_at: 1,
     completed_at: 2
   };
@@ -301,10 +302,7 @@ function imageAsset(uploadId: string): MediaAssetRow {
     content_type: 'image/webp',
     byte_size: 1024,
     asset_state: 'ready',
-    delivery_url: 'https://imagedelivery.net/account/img_test/public',
-    playback_hls_url: null,
-    playback_dash_url: null,
-    thumbnail_url: null,
+    declared_duration_seconds: null,
     duration_seconds: null,
     width: 1200,
     height: 800,

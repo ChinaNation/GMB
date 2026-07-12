@@ -8,6 +8,7 @@ import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/signer/signing.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart' show hexToBytes;
+import 'package:citizenapp/8964/services/square_request_signer.dart';
 
 class SquareApiException implements Exception {
   const SquareApiException(this.message, {this.statusCode, this.errorCode});
@@ -25,11 +26,13 @@ class SquareSession {
     required this.sessionToken,
     required this.ownerAccount,
     required this.expiresAt,
+    this.signRequest,
   });
 
   final String sessionToken;
   final String ownerAccount;
   final int expiresAt;
+  final SquareDeviceSigner? signRequest;
 
   bool get isUsable => expiresAt > DateTime.now().millisecondsSinceEpoch;
 }
@@ -150,17 +153,20 @@ class SquareUploadMediaRequest {
     required this.contentType,
     required this.byteSize,
     required this.fileExt,
+    this.durationSeconds,
   });
 
   final SquareMediaKind mediaKind;
   final String contentType;
   final int byteSize;
   final String fileExt;
+  final int? durationSeconds;
 
   Map<String, Object?> toJson() => {
         'media_kind': mediaKind.workerValue,
         'content_type': contentType,
         'byte_size': byteSize,
+        if (durationSeconds != null) 'duration_seconds': durationSeconds,
         if (fileExt.isNotEmpty) 'file_ext': fileExt,
       };
 }
@@ -174,10 +180,6 @@ class SquarePreparedMediaUpload {
     required this.providerAssetId,
     required this.uploadMethod,
     required this.uploadUrl,
-    this.deliveryUrl,
-    this.playbackHlsUrl,
-    this.playbackDashUrl,
-    this.thumbnailUrl,
   });
 
   final SquareMediaKind mediaKind;
@@ -187,10 +189,6 @@ class SquarePreparedMediaUpload {
   final String providerAssetId;
   final String uploadMethod;
   final String uploadUrl;
-  final String? deliveryUrl;
-  final String? playbackHlsUrl;
-  final String? playbackDashUrl;
-  final String? thumbnailUrl;
 }
 
 class SquarePreparedUpload {
@@ -286,8 +284,7 @@ class SquareApiConfig {
   /// 线上 Worker 唯一默认地址：聊天瞬时转发与广场共用同一个 Cloudflare Worker。
   /// 默认即连生产 Cloudflare，绝不回落本机；开发者要连本机 wrangler dev 时，
   /// 显式传 --dart-define=SQUARE_API_URL=http://127.0.0.1:8787。
-  static const prodBaseUrl =
-      'https://citizenapp-square-api.stews87-fawn.workers.dev';
+  static const prodBaseUrl = 'https://www.crcfrcn.com/api';
 
   static const _configuredBaseUrl = String.fromEnvironment(baseUrlDefineName);
 
@@ -395,6 +392,7 @@ class SquareApiClient
       sessionToken: token,
       ownerAccount: ownerAccount,
       expiresAt: expiresAt,
+      signRequest: signLoginPayload,
     );
     _sessions[ownerAccount] = next;
     return next;
@@ -467,12 +465,14 @@ class SquareApiClient
     required String p256PubkeyHex,
     required int issuedAt,
     required String bindingSignatureHex,
+    String? turnstileToken,
   }) async {
     await _postJson('/v1/square/auth/device/register', {
       'owner_account': ownerAccount,
       'p256_pubkey': p256PubkeyHex,
       'issued_at': issuedAt,
       'binding_signature': bindingSignatureHex,
+      if (turnstileToken != null) 'turnstile_token': turnstileToken,
     });
   }
 
@@ -876,8 +876,9 @@ class SquareApiClient
     String path, {
     SquareSession? session,
   }) async {
+    final uri = _uri(path);
     final response = await _http
-        .get(_uri(path), headers: _headers(session))
+        .get(uri, headers: await _headers('GET', uri, '', session))
         .timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
   }
@@ -887,11 +888,13 @@ class SquareApiClient
     Map<String, Object?> body, {
     SquareSession? session,
   }) async {
+    final encoded = jsonEncode(body);
+    final uri = _uri(path);
     final response = await _http
         .post(
-          _uri(path),
-          headers: _headers(session),
-          body: jsonEncode(body),
+          uri,
+          headers: await _headers('POST', uri, encoded, session),
+          body: encoded,
         )
         .timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
@@ -902,11 +905,13 @@ class SquareApiClient
     Map<String, Object?> body, {
     SquareSession? session,
   }) async {
+    final encoded = jsonEncode(body);
+    final uri = _uri(path);
     final response = await _http
         .put(
-          _uri(path),
-          headers: _headers(session),
-          body: jsonEncode(body),
+          uri,
+          headers: await _headers('PUT', uri, encoded, session),
+          body: encoded,
         )
         .timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
@@ -916,18 +921,39 @@ class SquareApiClient
     String path, {
     SquareSession? session,
   }) async {
+    final uri = _uri(path);
     final response = await _http
-        .delete(_uri(path), headers: _headers(session))
+        .delete(uri, headers: await _headers('DELETE', uri, '', session))
         .timeout(const Duration(seconds: 20));
     return _decodeResponse(response);
   }
 
   Uri _uri(String path) => Uri.parse('$baseUrl$path');
 
-  Map<String, String> _headers(SquareSession? session) => {
-        'content-type': 'application/json; charset=utf-8',
-        if (session != null) 'authorization': 'Bearer ${session.sessionToken}',
-      };
+  Future<Map<String, String>> _headers(
+    String method,
+    Uri uri,
+    String body,
+    SquareSession? session,
+  ) async {
+    final headers = <String, String>{
+      'content-type': 'application/json; charset=utf-8',
+    };
+    if (session == null) return headers;
+    headers['authorization'] = 'Bearer ${session.sessionToken}';
+    final signer = session.signRequest;
+    if (signer == null) {
+      throw const SquareApiException('设备请求签名器缺失，请重新登录');
+    }
+    headers.addAll(await squareRequestHeaders(
+      method: method,
+      uri: uri,
+      body: body,
+      sessionToken: session.sessionToken,
+      sign: signer,
+    ));
+    return headers;
+  }
 
   Map<String, dynamic> _decodeResponse(http.Response response) {
     final dynamic decoded;
@@ -968,10 +994,6 @@ class SquareApiClient
       providerAssetId: _requireString(item, 'provider_asset_id'),
       uploadMethod: _requireString(item, 'upload_method'),
       uploadUrl: _requireString(item, 'upload_url'),
-      deliveryUrl: item['delivery_url']?.toString(),
-      playbackHlsUrl: item['playback_hls_url']?.toString(),
-      playbackDashUrl: item['playback_dash_url']?.toString(),
-      thumbnailUrl: item['thumbnail_url']?.toString(),
     );
   }
 

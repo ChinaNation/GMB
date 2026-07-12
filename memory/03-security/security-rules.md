@@ -35,3 +35,13 @@
 - 文档未更新视为未完成
 - 主要 review 问题未处理不能发布
 - 目标结构和真实运行态验收未完成时不能发布
+
+## 5. CitizenApp API 与媒体安全
+
+- CitizenApp production API 唯一入口为 `https://www.crcfrcn.com/api/*`；staging 唯一入口为受 Cloudflare Access 保护的 `https://www.crcfrcn.com/api-staging/*`，禁止恢复 `workers.dev`、Preview URL 或独立 API 子域名。
+- 官网浏览器请求只允许精确 Origin `https://www.crcfrcn.com`；原生 App 无 Origin 时必须使用钱包 Session、P-256 设备逐请求签名、时间窗和一次性 nonce，不能仅凭 User-Agent、IP 或客户端声明授权。
+- 首次设备绑定、设备换钥和风险升级必须通过 Turnstile；Stripe 与 Stream webhook 分别使用提供商签名，不叠加设备签名。
+- Worker 必须在解析 JSON 前限制请求体，并按 IP 哈希、钱包账户、接口类别分层限流；staging 还必须由 Cloudflare Access 限定维护账户。
+- Cloudflare WAF 规则 `citizenapp-api-edge-limit` 对 production/staging API 按 IP 执行 60 次/10 秒的边缘阻断，阻断持续 10 秒；Stripe 与 Stream 签名 webhook 必须排除，避免提供商回调被普通客户端限流误伤。
+- Cloudflare Images 必须启用签名交付，Cloudflare Stream 必须启用 signed URL；D1、R2 manifest 和 Feed 禁止保存长期公开媒体 URL。
+- 媒体上传必须在服务端同时校验单帖权益、月度图片/视频额度、活动上传数和全局媒体成本熔断；Chat 不进入媒体用量预算，也不得把消息或附件保存到 Cloudflare。

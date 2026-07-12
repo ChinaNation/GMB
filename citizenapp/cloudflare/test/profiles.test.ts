@@ -349,6 +349,7 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
   if (!options.session) {
     const defaultSession: SessionState = {
       owner_account: viewer,
+      device_key_hash: 'a'.repeat(64),
       created_at: 0,
       expires_at: Date.now() + 60_000
     };
@@ -357,6 +358,7 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
   if (options.session) {
     const session: SessionState = {
       owner_account: options.session.owner_account,
+      device_key_hash: 'a'.repeat(64),
       created_at: 0,
       expires_at: Date.now() + 60_000
     };

@@ -22,10 +22,6 @@ export interface ProviderUploadPlan {
   upload_method: MediaUploadMethod;
   upload_url: string;
   asset_state: MediaAssetRow['asset_state'];
-  delivery_url: string | null;
-  playback_hls_url: string | null;
-  playback_dash_url: string | null;
-  thumbnail_url: string | null;
 }
 
 interface CloudflareApiResult<T> {
@@ -113,39 +109,11 @@ export async function deleteProviderAsset(
   await deleteImageAsset(env, row.provider_asset_id);
 }
 
-export function streamPlaybackUrls(
-  env: Env,
-  uid: string
-): {
-  playback_hls_url: string | null;
-  playback_dash_url: string | null;
-  thumbnail_url: string | null;
-} {
-  const base = trimTrailingSlash(env.STREAM_URL);
-  if (!base) {
-    return {
-      playback_hls_url: null,
-      playback_dash_url: null,
-      thumbnail_url: null
-    };
-  }
-  return {
-    playback_hls_url: `${base}/${uid}/manifest/video.m3u8`,
-    playback_dash_url: `${base}/${uid}/manifest/video.mpd`,
-    thumbnail_url: `${base}/${uid}/thumbnails/thumbnail.jpg`
-  };
-}
-
-export function imageDeliveryUrl(env: Env, imageId: string): string | null {
-  const base = trimTrailingSlash(env.IMAGES_URL);
-  return base ? `${base}/${imageId}/public` : null;
-}
-
 async function createImagesUpload(env: Env, input: ProviderUploadInput): Promise<ProviderUploadPlan> {
   const config = requireCloudflareApiConfig(env);
   const form = new FormData();
-  // 广场图片是公开内容，使用公开 variant；访问控制由帖子可见性和 feed 控制承担。
-  form.set('requireSignedURLs', 'false');
+  // 图片只能通过 Worker 短期签名交付，原始 image id 不具备公开读取权限。
+  form.set('requireSignedURLs', 'true');
   form.set(
     'metadata',
     JSON.stringify({
@@ -174,11 +142,7 @@ async function createImagesUpload(env: Env, input: ProviderUploadInput): Promise
     provider_asset_id: result.id,
     upload_method: 'direct_form',
     upload_url: result.uploadURL,
-    asset_state: 'prepared',
-    delivery_url: imageDeliveryUrl(env, result.id),
-    playback_hls_url: null,
-    playback_dash_url: null,
-    thumbnail_url: null
+    asset_state: 'prepared'
   };
 }
 
@@ -197,7 +161,11 @@ async function createStreamUpload(env: Env, input: ProviderUploadInput): Promise
         'content-type': 'application/json'
       },
       body: JSON.stringify({
-        maxDurationSeconds: input.maxDurationSeconds
+        maxDurationSeconds: input.maxDurationSeconds,
+        requireSignedURLs: true,
+        allowedOrigins: ['www.crcfrcn.com'],
+        creator: input.ownerAccount,
+        expiry: new Date(Date.now() + 15 * 60 * 1000).toISOString()
       })
     }
   );
@@ -205,16 +173,12 @@ async function createStreamUpload(env: Env, input: ProviderUploadInput): Promise
   if (!result.uid || !result.uploadURL) {
     throw new HttpError(502, 'stream_direct_upload_incomplete', 'Cloudflare Stream 上传授权响应不完整');
   }
-  const playback = streamPlaybackUrls(env, result.uid);
-
   return {
     provider: 'cloudflare_stream',
     provider_asset_id: result.uid,
     upload_method: 'direct_form',
     upload_url: result.uploadURL,
-    asset_state: 'prepared',
-    delivery_url: null,
-    ...playback
+    asset_state: 'prepared'
   };
 }
 
@@ -232,6 +196,8 @@ async function createStreamTusUpload(env: Env, input: ProviderUploadInput): Prom
         'upload-creator': input.ownerAccount,
         'upload-metadata': uploadMetadata({
           maxDurationSeconds: String(input.maxDurationSeconds),
+          requiresignedurls: null,
+          expiry: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           name: `${input.postId}-${input.mediaIndex}`,
           filetype: input.contentType
         })
@@ -246,16 +212,12 @@ async function createStreamTusUpload(env: Env, input: ProviderUploadInput): Prom
   if (!uploadUrl || !uid) {
     throw new HttpError(502, 'stream_tus_upload_incomplete', 'Cloudflare Stream tus 上传授权响应不完整');
   }
-  const playback = streamPlaybackUrls(env, uid);
-
   return {
     provider: 'cloudflare_stream',
     provider_asset_id: uid,
     upload_method: 'tus',
     upload_url: uploadUrl,
-    asset_state: 'prepared',
-    delivery_url: null,
-    ...playback
+    asset_state: 'prepared'
   };
 }
 
@@ -265,18 +227,6 @@ function createDevProviderUpload(input: ProviderUploadInput): ProviderUploadPlan
   const url = new URL('/v1/square/uploads/dev-media', input.requestOrigin);
   url.searchParams.set('upload_id', input.uploadId);
   url.searchParams.set('media_index', String(input.mediaIndex));
-  const playback = provider === 'cloudflare_stream'
-    ? {
-        playback_hls_url: `${input.requestOrigin}/dev-stream/${assetId}/manifest/video.m3u8`,
-        playback_dash_url: `${input.requestOrigin}/dev-stream/${assetId}/manifest/video.mpd`,
-        thumbnail_url: `${input.requestOrigin}/dev-stream/${assetId}/thumbnails/thumbnail.jpg`
-      }
-    : {
-        playback_hls_url: null,
-        playback_dash_url: null,
-        thumbnail_url: null
-      };
-
   return {
     provider,
     provider_asset_id: assetId,
@@ -284,11 +234,7 @@ function createDevProviderUpload(input: ProviderUploadInput): ProviderUploadPlan
       ? 'tus'
       : 'direct_form',
     upload_url: url.toString(),
-    asset_state: 'prepared',
-    delivery_url: provider === 'cloudflare_images'
-      ? `${input.requestOrigin}/dev-images/${assetId}/public`
-      : null,
-    ...playback
+    asset_state: 'prepared'
   };
 }
 
@@ -307,7 +253,6 @@ async function refreshImageAsset(
   const result = await parseCloudflareJson<ImageDetailsResult>(response, 'images_status_failed');
   return {
     asset_state: result.draft ? 'prepared' : 'ready',
-    delivery_url: imageDeliveryUrl(env, result.id ?? imageId) ?? result.variants?.[0] ?? null,
     updated_at: Date.now(),
     ready_at: result.draft ? null : Date.now()
   };
@@ -416,13 +361,8 @@ export function streamDetailsToAssetUpdate(
   const state = result.status?.state;
   const isReady = result.readyToStream === true && state === 'ready';
   const isError = state === 'error';
-  const playback = streamPlaybackUrls(env, result.uid ?? fallbackUid);
-
   return {
     asset_state: isError ? 'error' : isReady ? 'ready' : 'processing',
-    playback_hls_url: result.playback?.hls ?? playback.playback_hls_url,
-    playback_dash_url: result.playback?.dash ?? playback.playback_dash_url,
-    thumbnail_url: result.thumbnail ?? playback.thumbnail_url,
     duration_seconds: typeof result.duration === 'number' ? result.duration : null,
     width: typeof result.input?.width === 'number' ? result.input.width : null,
     height: typeof result.input?.height === 'number' ? result.input.height : null,
@@ -465,9 +405,9 @@ function requireCloudflareApiConfig(env: Env): { accountId: string; apiToken: st
   };
 }
 
-function uploadMetadata(values: Record<string, string>): string {
+function uploadMetadata(values: Record<string, string | null>): string {
   return Object.entries(values)
-    .map(([key, value]) => `${key} ${base64(value)}`)
+    .map(([key, value]) => value === null ? key : `${key} ${base64(value)}`)
     .join(',');
 }
 
@@ -478,8 +418,4 @@ function base64(value: string): string {
     binary += String.fromCharCode(byte);
   }
   return btoa(binary);
-}
-
-function trimTrailingSlash(value?: string): string {
-  return value?.trim().replace(/\/+$/, '') ?? '';
 }

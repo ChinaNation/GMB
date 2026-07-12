@@ -7,6 +7,7 @@ import { requireActiveMembership } from '../membership/service';
 import { membershipPlan, type MembershipLevel } from '../membership/plans';
 import {
   createProviderUpload,
+  deleteProviderAsset,
   refreshProviderAssetState,
   streamDetailsToAssetUpdate
 } from '../media/cloudflare_assets';
@@ -19,6 +20,7 @@ import {
   assertDeclaredLength,
   assertManifestQuota
 } from './quota';
+import { assertUploadUsage, recordCompletedMedia } from '../security/usage';
 
 interface PrepareUploadRequest {
   post_category?: unknown;
@@ -76,7 +78,7 @@ export async function createStorageReceiptId(input: {
 async function getPreparedUpload(env: Env, uploadId: string): Promise<PreparedUploadRow> {
   const upload = await env.DB.prepare(
     `SELECT upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
-        storage_receipt_id, estimated_bytes, object_keys_json, status, created_at, completed_at
+        storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
       FROM square_uploads
       WHERE upload_id = ?`
   )
@@ -114,10 +116,18 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
     textLength,
     mediaItems
   });
+  const imageCount = mediaItems.filter((item) => item.media_kind !== 'video').length;
+  const videoSeconds = mediaItems
+    .filter((item) => item.media_kind === 'video')
+    .reduce((sum, item) => sum + (item.duration_seconds ?? 0), 0);
+  await assertUploadUsage(env, session.owner_account, membershipLevel, imageCount, videoSeconds);
 
   const uploadId = createId('squ');
   const postId = createId('sqp');
-  const expiresSeconds = parsePositiveInt(env.UPLOAD_TTL_SECONDS, 900);
+  const hasTusVideo = mediaItems.some(
+    (item) => item.media_kind === 'video' && item.byte_size > 200 * 1024 * 1024
+  );
+  const expiresSeconds = hasTusVideo ? 3600 : parsePositiveInt(env.UPLOAD_TTL_SECONDS, 900);
   const expiresAt = secondsFromNow(expiresSeconds);
   const objectKeyPlan = buildObjectKeyPlan(session.owner_account, postId);
   const requestUrl = new URL(request.url);
@@ -145,7 +155,9 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
         mediaKind: item.media_kind,
         contentType: item.content_type,
         byteSize: item.byte_size,
-        maxDurationSeconds: plan.dynamic.max_video_seconds,
+        maxDurationSeconds: item.media_kind === 'video'
+          ? Math.min(plan.dynamic.max_video_seconds, (item.duration_seconds ?? 1) + 5)
+          : 1,
         requestOrigin: requestUrl.origin
       })
     )
@@ -156,8 +168,8 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
     env.DB.prepare(
       `INSERT INTO square_uploads
         (upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
-          storage_receipt_id, estimated_bytes, object_keys_json, status, created_at, completed_at)
-        VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, 'prepared', ?, NULL)`
+          storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at)
+        VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, 'prepared', ?, ?, NULL)`
     ).bind(
       uploadId,
       postId,
@@ -167,6 +179,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
       storageReceiptId,
       estimatedBytes,
       JSON.stringify(objectKeyPlan.object_keys),
+      expiresAt,
       createdAt
     ),
     ...mediaUploads.map((asset, index) => {
@@ -175,9 +188,10 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
         `INSERT INTO square_media_assets
           (upload_id, post_id, owner_account, media_index, media_kind, provider,
             provider_asset_id, upload_method, content_type, byte_size, asset_state,
-            delivery_url, playback_hls_url, playback_dash_url, thumbnail_url,
-            duration_seconds, width, height, error_code, created_at, updated_at, ready_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, NULL)`
+            declared_duration_seconds, duration_seconds, width, height, error_code,
+            created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, NULL,
+            'live', NULL, NULL)`
       ).bind(
         uploadId,
         postId,
@@ -190,10 +204,7 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
         item.content_type,
         item.byte_size,
         asset.asset_state,
-        asset.delivery_url,
-        asset.playback_hls_url,
-        asset.playback_dash_url,
-        asset.thumbnail_url,
+        item.media_kind === 'video' ? item.duration_seconds ?? null : null,
         createdAt,
         createdAt
       );
@@ -217,10 +228,6 @@ export async function prepareUpload(request: Request, env: Env): Promise<Respons
       provider_asset_id: mediaUploads[index].provider_asset_id,
       upload_method: mediaUploads[index].upload_method,
       asset_state: mediaUploads[index].asset_state,
-      delivery_url: mediaUploads[index].delivery_url,
-      playback_hls_url: mediaUploads[index].playback_hls_url,
-      playback_dash_url: mediaUploads[index].playback_dash_url,
-      thumbnail_url: mediaUploads[index].thumbnail_url,
       upload_url: mediaUploads[index].upload_url
     }))
   });
@@ -317,6 +324,9 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
   if (upload.status !== 'prepared') {
     throw new HttpError(409, 'upload_already_completed', '上传任务已完成');
   }
+  if (upload.expires_at <= nowMs()) {
+    throw new HttpError(410, 'upload_expired', '上传任务已过期');
+  }
   if (upload.manifest_hash !== manifestHash) {
     throw new HttpError(409, 'manifest_hash_mismatch', 'manifest_hash 与准备上传时不一致');
   }
@@ -363,6 +373,11 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
   });
 
   const refreshedAssets = await Promise.all(mediaAssets.map((asset) => refreshMediaAsset(env, asset)));
+  await assertActualVideoDurations(
+    env,
+    refreshedAssets,
+    membershipPlan(membershipLevel).dynamic.max_video_seconds
+  );
   const hasProcessingMedia = refreshedAssets.some((asset) => asset.asset_state === 'processing');
   const hasPreparedMedia = refreshedAssets.some((asset) => asset.asset_state === 'prepared');
   const failedMedia = refreshedAssets.find((asset) => asset.asset_state === 'error');
@@ -382,6 +397,7 @@ export async function completeUpload(request: Request, env: Env): Promise<Respon
   )
     .bind(contentHash, completedAt, upload.upload_id)
     .run();
+  await recordCompletedMedia(env, upload.owner_account, refreshedAssets);
 
   return jsonResponse({
     ok: true,
@@ -412,15 +428,12 @@ export async function streamWebhookRoute(request: Request, env: Env): Promise<Re
   const update = streamDetailsToAssetUpdate(env, body, uid);
   const result = await env.DB.prepare(
     `UPDATE square_media_assets
-      SET asset_state = ?, playback_hls_url = ?, playback_dash_url = ?, thumbnail_url = ?,
-        duration_seconds = ?, width = ?, height = ?, error_code = ?, updated_at = ?, ready_at = ?
+      SET asset_state = ?, duration_seconds = ?, width = ?, height = ?, error_code = ?,
+        updated_at = ?, ready_at = ?
       WHERE provider = 'cloudflare_stream' AND provider_asset_id = ?`
   )
     .bind(
       update.asset_state,
-      update.playback_hls_url,
-      update.playback_dash_url,
-      update.thumbnail_url,
       update.duration_seconds,
       update.width,
       update.height,
@@ -463,8 +476,8 @@ async function loadMediaAsset(env: Env, uploadId: string, mediaIndex: number): P
   const asset = await env.DB.prepare(
     `SELECT upload_id, post_id, owner_account, media_index, media_kind, provider,
         provider_asset_id, upload_method, content_type, byte_size, asset_state,
-        delivery_url, playback_hls_url, playback_dash_url, thumbnail_url,
-        duration_seconds, width, height, error_code, created_at, updated_at, ready_at
+        declared_duration_seconds, duration_seconds, width, height, error_code,
+        created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key
       FROM square_media_assets
       WHERE upload_id = ? AND media_index = ?`
   )
@@ -480,8 +493,8 @@ export async function loadMediaAssets(env: Env, uploadId: string): Promise<Media
   const result = await env.DB.prepare(
     `SELECT upload_id, post_id, owner_account, media_index, media_kind, provider,
         provider_asset_id, upload_method, content_type, byte_size, asset_state,
-        delivery_url, playback_hls_url, playback_dash_url, thumbnail_url,
-        duration_seconds, width, height, error_code, created_at, updated_at, ready_at
+        declared_duration_seconds, duration_seconds, width, height, error_code,
+        created_at, updated_at, ready_at, archive_state, archived_at, r2_archive_key
       FROM square_media_assets
       WHERE upload_id = ?
       ORDER BY media_index ASC`
@@ -499,17 +512,12 @@ async function refreshMediaAsset(env: Env, asset: MediaAssetRow): Promise<MediaA
   const next: MediaAssetRow = { ...asset, ...update };
   await env.DB.prepare(
     `UPDATE square_media_assets
-      SET asset_state = ?, delivery_url = ?, playback_hls_url = ?, playback_dash_url = ?,
-        thumbnail_url = ?, duration_seconds = ?, width = ?, height = ?, error_code = ?,
+      SET asset_state = ?, duration_seconds = ?, width = ?, height = ?, error_code = ?,
         updated_at = ?, ready_at = ?
       WHERE upload_id = ? AND media_index = ?`
   )
     .bind(
       next.asset_state,
-      next.delivery_url,
-      next.playback_hls_url,
-      next.playback_dash_url,
-      next.thumbnail_url,
       next.duration_seconds,
       next.width,
       next.height,
@@ -521,6 +529,46 @@ async function refreshMediaAsset(env: Env, asset: MediaAssetRow): Promise<MediaA
     )
     .run();
   return next;
+}
+
+async function assertActualVideoDurations(
+  env: Env,
+  assets: MediaAssetRow[],
+  planMaxSeconds: number
+): Promise<void> {
+  for (const asset of assets) {
+    if (asset.media_kind !== 'video' || asset.duration_seconds === null) continue;
+    const declared = asset.declared_duration_seconds ?? 0;
+    if (asset.duration_seconds <= planMaxSeconds && asset.duration_seconds <= declared + 5) continue;
+    await deleteProviderAsset(env, asset);
+    await env.DB.prepare(
+      `UPDATE square_media_assets SET asset_state = 'error', error_code = 'video_duration_exceeded',
+        updated_at = ? WHERE upload_id = ? AND media_index = ?`
+    ).bind(nowMs(), asset.upload_id, asset.media_index).run();
+    throw new HttpError(409, 'video_duration_exceeded', '视频真实时长超过申报或会员上限');
+  }
+}
+
+/** 定时硬删除未完成的上传、R2 manifest 和提供商草稿，释放 Stream 预占分钟。 */
+export async function cleanupExpiredUploads(env: Env): Promise<{ deleted: number }> {
+  const result = await env.DB.prepare(
+    `SELECT upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
+        storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
+      FROM square_uploads WHERE status = 'prepared' AND expires_at <= ? LIMIT 100`
+  ).bind(nowMs()).all<PreparedUploadRow>();
+  let deleted = 0;
+  for (const upload of result.results ?? []) {
+    const assets = await loadMediaAssets(env, upload.upload_id);
+    for (const asset of assets) await deleteProviderAsset(env, asset);
+    const objectKeys = parseObjectKeys(upload);
+    if (objectKeys.length > 0) await env.SQUARE_MEDIA.delete(objectKeys);
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM square_media_assets WHERE upload_id = ?').bind(upload.upload_id),
+      env.DB.prepare("DELETE FROM square_uploads WHERE upload_id = ? AND status = 'prepared'").bind(upload.upload_id)
+    ]);
+    deleted += 1;
+  }
+  return { deleted };
 }
 
 async function verifyStreamWebhookSignature(

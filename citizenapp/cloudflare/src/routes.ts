@@ -41,17 +41,19 @@ import {
   streamWebhookRoute,
 } from "./uploads/service";
 import { HttpError, jsonResponse, optionsResponse } from "./shared/http";
+import { guardRequest, normalizeApiPath } from "./security/request_guard";
+import { turnstileConfigRoute, turnstilePageRoute } from "./security/turnstile";
 
 export async function routeRequest(
   request: Request,
   env: Env,
 ): Promise<Response> {
+  const url = new URL(request.url);
+  const path = normalizeApiPath(url.pathname);
   if (request.method === "OPTIONS") {
     return optionsResponse();
   }
-
-  const url = new URL(request.url);
-  const path = url.pathname;
+  await guardRequest(request, env, path);
 
   if (request.method === "GET" && path === "/health") {
     return jsonResponse({
@@ -65,6 +67,12 @@ export async function routeRequest(
 
   if (request.method === "GET" && path === "/v1/chain/bootstrap") {
     return chainBootstrapRoute(request, env);
+  }
+  if (request.method === "GET" && path === "/v1/security/turnstile") {
+    return turnstilePageRoute(env);
+  }
+  if (request.method === "GET" && path === "/v1/security/config") {
+    return turnstileConfigRoute(env);
   }
   if (request.method === "POST" && path === "/v1/chain/extrinsics/relay") {
     return relaySignedExtrinsicRoute(request, env);

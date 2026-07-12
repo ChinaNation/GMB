@@ -67,8 +67,10 @@
 - Firebase 客户端公开配置已作为现有代码默认值，不提交平台配置文件；不传构建参数的 Android debug APK 构建通过。本机下载的服务账号 JSON 与 `google-services.json` 已硬删除。
 - Cloudflare Realtime 已创建 `CitizenApp Staging` TURN 应用，`TURN_KEY_ID` 与 `TURN_API_TOKEN` 已写入 staging Worker Secret；实际生成 300 秒 ICE 凭证返回 201、两组 ICE servers 和完整短期凭证。失去一次性密钥的旧 `CitizenApp` 应用已永久删除，控制台无重复应用残留。
 - TURN Secret 变更后的 staging Worker 当前版本为 `7f05bf0d-98a7-420b-8f14-82e05cd7c639`，真实 `/health` 仍返回 200。
+- 后续 production 已创建独立 `CitizenApp Production` TURN 应用并写入两项 production Secret；真实 300 秒 ICE 凭证返回 201 和两组 ICE servers。
+- production 已为同一最小权限 FCM 服务账号创建独立密钥并写入三项 Secret；Google OAuth 返回 200，FCM HTTP v1 对故意无效 Token 返回预期 `INVALID_ARGUMENT`。下载 JSON 与临时私钥均已硬删除。
 
 ## 外部阻塞
 
 - Apple Developer 尚未创建 APNs Key，无法写入 APNs Worker Secret。
-- APNs 凭证缺失使 iOS 后台推送与 Android/iOS 双真机完整闭环尚无法验收；TURN 已具备真实凭证生成条件。production Worker 按本步骤边界未部署。
+- APNs 凭证缺失使 iOS 后台推送与 Android/iOS 双真机完整闭环尚无法验收；production Android FCM、TURN、前台 Chat 与广场 API 已部署，不受 APNs 延期影响。

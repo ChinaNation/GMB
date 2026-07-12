@@ -136,7 +136,7 @@
 ## 落地记录（2026-07-10）
 
 ### Worker（citizenapp/cloudflare）
-- 迁移 `migrations/0009_membership_video_archive.sql`：DROP `storage_quota_bytes`/`storage_used_bytes`；ADD `entitlement_lapsed_at`（membership）、`archive_state`/`archived_at`/`r2_archive_key`（media_assets）+ 两索引。
+- 归档目标字段已直接并入唯一 `migrations/0001_square_core.sql`：不再包含 `storage_quota_bytes`/`storage_used_bytes`，保留 `entitlement_lapsed_at`（membership）、`archive_state`/`archived_at`/`r2_archive_key`（media_assets）及索引。
 - `membership/plans.ts`：`DynamicQuota` 加 `max_video_bytes`（自由 512MiB、民主/投票 2GiB、竞选 10GiB）；删 `legacy_storage_quota_bytes`。
 - `membership/service.ts`：`requireActiveMembership` 去容量校验+去 `requiredBytes` 参；删 `addStorageUsage`；`upsertStripeMembership` 删储存列+置 `entitlement_lapsed_at=NULL`；`markStripeMembershipInactive` 置 `entitlement_lapsed_at=COALESCE(...,now)`；两处 SELECT 改列。
 - `uploads/validation.ts`：单视频绝对硬顶 500MB→10GB；`uploads/quota.ts`：`assertDynamicQuota` 加按档 `max_video_bytes` 校验（错误码 `dynamic_video_too_large`）。
@@ -158,7 +158,7 @@
 - **零改动**：视频文案「1分钟标清/30分钟高清/3小时高清」与 Plan B 时长一致；体积不展示、储存维度已删。
 
 ### 部署与开关（2026-07-11 完成）
-- `0009_membership_video_archive.sql` 已应用到 staging/production，远端迁移均无待执行项。
+- staging/production 已清空并按唯一 `0001_square_core.sql` 重建，不保留独立归档迁移或旧迁移历史。
 - production `ARCHIVE_ENABLED="1"`、`ARCHIVE_LAPSE_DAYS="90"`，每日 UTC 03:00 扫描；staging 和本地保持 `0`。
 - production 已配置 `CF_ACCOUNT_ID`、`CF_API_TOKEN`、`R2_ACCESS_ID`、`R2_SECRET_KEY`、`STREAM_HOOK_SECRET`，回灌和 Stream 回调所需凭证齐备。
 - production 发布版本 `58572220-5154-4fda-8520-3d2b5cf1df5c`；使用 production 远端 D1/R2 绑定触发 `__scheduled` 空扫描返回 200，无错误日志。

@@ -173,8 +173,9 @@ Worker 推送 Secret：
 
 FCM 服务端使用专用账号
 `citizenapp-push@citizenapp-23542.iam.gserviceaccount.com`，只授予
-`Firebase Cloud Messaging API Admin`。私钥只保存在 Cloudflare staging
-Worker Secret，不写入 App、仓库或本机长期文件。
+`Firebase Cloud Messaging API Admin`。staging 与 production 使用独立 Google
+服务账号密钥，私钥只保存在对应 Cloudflare Worker Secret，不写入 App、仓库或
+本机长期文件。
 
 iOS 已启用 `remote-notification` 后台模式和 `aps-environment` entitlement。Android 已声明通知权限；Firebase Messaging 插件负责 FCM service。
 
@@ -208,10 +209,11 @@ Chat 与广场权限分离：
 - Protobuf、Isar 和测试生成物中的云端内容存储字段清理。
 - staging Worker 部署和真实 HTTP 验收。
 - staging/production D1 目标结构重建与 R2 Chat 前缀实查清空。
-- Firebase 项目、Android/iOS 应用和最小权限 FCM 服务账号已创建；staging
-  Worker 已配置 FCM Secret，OAuth 与 FCM HTTP v1 已真实鉴权通过。
-- Cloudflare Realtime 已创建独立的 `CitizenApp Staging` TURN 应用；长期密钥
-  只保存在 staging Worker Secret，300 秒 ICE 凭证生成接口已真实验证通过。
+- Firebase 项目、Android/iOS 应用和最小权限 FCM 服务账号已创建；staging 与
+  production Worker 均已配置独立 FCM Secret，OAuth 与 FCM HTTP v1 已真实鉴权通过。
+- Cloudflare Realtime 已创建独立的 `CitizenApp Staging`、`CitizenApp Production`
+  TURN 应用；长期密钥只保存在对应 Worker Secret，两个环境的 300 秒 ICE 凭证
+  生成链路均已真实验证。
 
 外部控制台待完成：
 
@@ -225,7 +227,7 @@ Chat 与广场权限分离：
 - staging `/health` 返回 200。
 - FCM 服务账号 OAuth 返回 200；FCM HTTP v1 对故意无效 Token 返回预期的 `INVALID_ARGUMENT`，排除鉴权和 API 配置错误。
 - TURN 凭证接口返回 201、两组 ICE servers，并包含短期 username 与 credential；
-  staging Worker Secret 只保存长期 Token ID 和 API Token。
+  staging/production Worker Secret 各自只保存对应环境的长期 Token ID 和 API Token。
 - 不传 Firebase 构建参数时 Android debug APK 构建通过。
 - 未登录广场和 Chat 接口返回 401。
 - 无订阅 session 返回 `browse_limit=100`，额度用尽返回 429，发布准备返回 402。

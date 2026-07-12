@@ -127,6 +127,7 @@ class SquareLocalMediaDraft {
     required this.fileName,
     required this.contentType,
     required this.byteSize,
+    this.durationSeconds,
   });
 
   final SquareMediaKind mediaKind;
@@ -134,6 +135,7 @@ class SquareLocalMediaDraft {
   final String fileName;
   final String contentType;
   final int byteSize;
+  final int? durationSeconds;
 
   String get fileExt {
     final dot = fileName.lastIndexOf('.');

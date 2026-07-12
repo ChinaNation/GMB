@@ -86,7 +86,7 @@
 
 **目标**：后台握手（广场 session / Chat 设备绑定）不再静默读 sr25519 seed（硬件绑定后会弹），改用 per-wallet **P-256 硬件子钥**（Keystore/SE，`PURPOSE_SIGN`、**无 user-auth** → 静默硬件 ECDSA，私钥永不出硬件；passkey 式）。
 
-**现有后端**（`citizenapp/cloudflare`，live worker `citizenapp-square-api.stews87-fawn.workers.dev`）：
+**现有后端**（`citizenapp/cloudflare`，唯一 production API `https://www.crcfrcn.com/api`）：
 - `POST /v1/square/auth/challenge` → `buildLoginPayload`（`GMB_SQUARE_LOGIN_V1\nowner_account:..\nchallenge_id:..\nexpires_at:..`）存 D1 `square_login_challenges`。
 - `POST /v1/square/auth/session` → `verifyWalletSignature(payload,sig,owner)` = `@polkadot/util-crypto` `signatureVerify`（sr25519）。
 - 路由手写于 `src/routes.ts`；migrations 顺序编号 `0001..0007`；Env 有 `DB:D1Database` / `FEED_CACHE:KVNamespace`。
@@ -96,13 +96,13 @@
 2. **绑定（一次性，钱包创建时 seed 在内存零额外弹窗）**：sr25519 签 `GMB_SQUARE_DEVICE_BIND_V1\nowner_account:{addr}\np256_pubkey:{hex}\nissued_at:{ms}` → `POST /v1/square/auth/device/register {owner_account,p256_pubkey,issued_at,binding_signature}`；后端复用 `verifyWalletSignature`（sr25519）验绑定后存 D1。
 3. **握手（静默 P-256）**：challenge 不变；client 用 P-256 子钥签 `signing_payload`（静默）；`session` 查该 owner 已注册 p256_pubkey → **Web Crypto ES256** 验（`subtle.verify({name:ECDSA,hash:SHA-256})`）；无绑定 → 401 `device_not_registered` → client 注册后重试。
 4. **格式**：pubkey=裸未压缩点 65B(`0x04||X||Y`) hex；sig=裸 `r||s` 64B hex（client 把平台 DER→raw）。
-5. **D1**：新 `migrations/0008_device_subkeys.sql` 表 `square_device_subkeys(owner_account PK,p256_pubkey,issued_at,created_at,updated_at)`（一账户一活跃子钥，重注册覆盖=换机/轮换）。
+5. **D1**：`square_device_subkeys(owner_account PK,p256_pubkey,issued_at,created_at,updated_at)` 已并入唯一 `migrations/0001_square_core.sql` 基线（一账户一活跃子钥，重注册覆盖=换机/轮换）。
 6. **client 接入**：3 处静默 `signWithWallet(requireAuth:false)`（`square_session_provider`/`square_compose_signers`/`chat_runtime`）换 `DeviceSubkey.sign`。子钥 P-256 gen+sign 需**原生**（Android 加桥；iOS 卡硬件）。
 
 **决策（已定 2026-07-09）**：A=**不单开 ADR**（任务卡为准）；B=**clean cutover**（worker+新 App 同发，session 直接 ES256，旧 App 短暂断登可接受）；C=钱包创建时注册（seed 新鲜零额外弹窗）+ 遇 401 `device_not_registered` 懒注册兜底。
 
 **后端实现（2026-07-09，本地完成，⚠️未部署 / 未 apply migration）**：
-- `migrations/0008_device_subkeys.sql`（表 `square_device_subkeys`，owner_account PK，一账户一活跃子钥重注册覆盖）。
+- `migrations/0001_square_core.sql`（表 `square_device_subkeys`，owner_account PK，一账户一活跃子钥重注册覆盖）。
 - `src/auth/device_subkey.ts`：`buildDeviceBindingPayload`（`GMB_SQUARE_DEVICE_BIND_V1\nowner\np256_pubkey\nissued_at`）+ `assertP256PublicKeyHex`（65B 裸点 0x04）+ `verifyP256Signature`（Workers Web Crypto ES256，sig 裸 r||s 64B）。
 - `src/auth/service.ts`：`registerDeviceSubkey`（sr25519 验绑定证明 → upsert）；`createSession` 验签 **sr25519 → ES256**（查子钥，无则 401 `device_not_registered`）。
 - `src/routes.ts` 挂 `POST /v1/square/auth/device/register`；`types.ts` 加 `DeviceSubkeyRow`。

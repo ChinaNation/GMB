@@ -149,7 +149,7 @@ function SectionLabel({ color, text }: { color: string; text: string }) {
 
 const apiBaseUrl =
   import.meta.env.VITE_API_URL?.replace(/\/+$/, '') ??
-  'https://citizenapp-square-api.stews87-fawn.workers.dev'
+  '/api'
 
 /**
  * 从二维码文本中提取钱包地址：兼容纯地址与 substrate:地址:哈希 之类的 URI。

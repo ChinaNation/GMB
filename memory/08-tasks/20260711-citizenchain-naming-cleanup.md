@@ -160,3 +160,23 @@ widget 真失败**单独立项 task_7ff5cfe0**(新窗口)。第2步方案B(Isar 
 **关键:须保留的非路径旧令牌(未动,故意):** ①命令函数名 `build_multisig_transfer_request`/`submit_multisig_transfer`(tauri 命令名,须与前端 invoke 键锁步);②测试函数名 `..._uses_onchain_transaction_pallet`(语义描述);③runtime construct_runtime 实例名 `OnchainTransaction`/`OffchainTransaction`——benchmarking.rs 的 pallet 字符串 `"onchain_transaction"` 与 reserve.rs `const PALLET_NAME=b"OffchainTransaction"`(storage 前缀 twox_128 依赖它,改了读不到链上值)、及 listener.rs 4 处「监听/订阅/过滤 runtime pallet 事件」注释。只修了 2 处**指 node 模块位置**的残桩注释(endpoint.rs/settlement/mod.rs 的「放在/留在 offchain_transaction 下」→`offchain`)。
 
 **验证:** `cargo check -p node` EXIT=0(无 unused import `multisig`、无撞名报错;2 条既有死导入 warning 与本次无关);前端 `tsc --noEmit` EXIT=0;残留终检 11 处旧令牌全属上述合法保留四类,零残桩。三端 `transaction/` 目录现逐字一致。改动在主检出、未提交、供 review。
+
+## 阶段 L onchina 收尾 + 管理员变更模型深挖(2026-07-11)
+
+onchina 独立会话(task_b6c1a9f8)被删除,冷签编码任务回到主会话。勘察确认:**onchina 主检出已 131/131 绿——原"冷签 AdminProfile 编码漂移"任务实际已完成**(删除前成果仍在盘,未提交)。四端 AdminProfile/AdminAccount 布局勘察 + 综合 + 对抗证伪(两轮 workflow)后,把范围翻大,定位一组同源欠账。用户拍板:**①②本会话修;③④ + 管理员变更模型整体推迟到链端确定实现之后**。
+
+**已完成(主检出·未提交·测试绿):**
+- **① onchina AdminSource 补第 6 变体 NominationAppointment**(institution_call.rs:48-54 AdminSourceTag 原仅 5 变体)+ 更正失真注释 + 把 `admin_source_tag_matches_runtime_enum_index` 升级成**穷尽 match 守卫**(链端再加/重排变体则编译失败,根除"少变体仍全绿"盲区);补第 6 变体时 `real_admin_profile` 的 tag→AdminSource 转换 match 同步补臂。验证 `cargo test -p onchina` **131 passed**。
+- **② CitizenApp 第 5 解码器补前导 cid_number**(citizen/shared/admin_account_storage_codec.dart::tryDecode 原从 offset 0 读 institution_code、漏前导 cid_number → 个人多签空 cid=0x00 前移 1 字节 → kind 读成机构码末字符 → 个人多签发现失效)+ 类文档 u64→u32 + 夹具重生(每条补前导 cid 字节);扫描服务测试只测 filterMine 纯函数、不受影响。验证 `flutter test` **13 passed**。该解码器唯一调用方=admin_accounts_scan_service(只扫 PersonalAdmins),故 admins 恒裸 AccountId、N×32 正确。
+
+**推迟(等链端确定实现后做)——管理员变更模型深挖结论:**
+- 现 `propose_admin_set_change`(public/private/personal-admins call_index 0)**无条件把 admin_source 覆盖成 InternalVote**(public-admins:320-322/FRG:413-415、private-admins:239-241),假设所有机构都能内部投票换。这是模型缺陷。
+- **6 种 AdminSource 只有 3 条真链路**:Genesis(仅创世 seeding genesis/institution.rs:406)、Registry(仅注册期 direct-set,public-admins:810/private:552 强制 Registry)、InternalVote(唯一治理换人)。**MutualElection/PopularElection**:election-vote(idx24)能选出 winner 落 ElectionResults,但**无写回 admins 桥接**(winner 被 cleanup.rs:42 删),election-campaign(idx34)is_enabled=false。**NominationAppointment 零实现**(仅枚举+node 解码显示+夹具)。
+- **`admin_source` 是 per-admin provenance,不是 per-机构策略输入**(同机构可混来源)→ 机制判据必须**机构级**。现有分类判据只有 CID 机构码谓词(`is_fixed_governance_code` NRC/PRC/PRB/FRG/NJD、`is_registered_multisig_code`、`admin_level==National` code.rs:955),无显式"机构→机制"表;election-campaign CampaignMeta.rule_id/office_code 是本该承载的映射真源但为空。
+- **③ 公权/私权换届跨端**:CitizenApp `admin_set_change_call_codec.dart:40-47` 编裸 AccountId、CitizenWallet `_decodeProposeAdminSetChange`(payload_decoder.dart:1298)跳裸 N×32,链端要 9 字段 AdminProfile → 公私权换届链端拒收。属 feature 级(UI 只有公钥,新增管理员缺 cid/name/role,须链查实名)。
+- **④ 个人多签换届当前 production 断链**:客户端发 pallet 7/call 3,但 runtime **PersonalAdmins=pallet 31**(lib.rs:352)、propose_admin_set_change=call 0;pallet 7 是 PersonalManage(call 0/1/2,无 3)→ dispatch 失败。修法=客户端+CitizenWallet 常量 7.3→31.0(payload 参数体正确)。实现窗口优先。
+- **证伪校正(别冻错)**:①不能把固定治理从 CitizenApp 换人入口移除——onchina 无 propose_admin_set_change 编码器且封锁 NRC/PRC/PRB 登录,CitizenApp 现是固定治理唯一链上换人编码器,移除会让 NJD 护宪 7 席四端无门(违"只冻结构不冻成员");②机制门禁的 fail-closed 应用 `admin_level==National`(国家级非固定治理默认禁内部投票直到映射填充),否则空映射=fail-open。
+- **链端实现方案(下一窗口,四步)**:删三 pallet 无条件覆盖 source→机制判据上提机构级(方案 A 机构码谓词+admin_level+election-campaign 映射 vs 方案 B AdminAccount 加机构级 governance_mechanism 字段[runtime breaking 四端镜像],**待拍板**)→propose_admin_set_change 加机构级 source 门禁→补写回路径(election-vote finalize→admins 任命桥接、任免走新 pallet 或 legislation-vote idx28 任免提案回写)。
+- **待拍板政策**:一府两会三院除 NJD 外(PRS/NLG/NSN/NRP/NSP)各归互选/普选/任免;固定治理换人保内部投票还是改选举/任免;NominationAppointment 落地路线。用户已决定这些留到链端实现阶段再定。
+
+单源见 [[project_admin_change_source_model_2026_07_11]]。改动均在主检出、未提交、供 review。

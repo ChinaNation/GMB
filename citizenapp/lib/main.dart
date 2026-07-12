@@ -18,16 +18,26 @@ import 'package:citizenapp/security/app_permission_gate.dart';
 import 'package:citizenapp/update/app_update.dart';
 import 'package:citizenapp/update/update_badge.dart';
 import 'package:citizenapp/8964/services/device_subkey_registrar.dart';
+import 'package:citizenapp/8964/pages/square_turnstile_page.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/wallet_gate.dart';
 
 import 'ui/app_theme.dart';
+
+final appNavigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FirebaseMessaging.onBackgroundMessage(chatRuntimeBackgroundHandler);
 
   // 钱包创建后注册 P-256 设备子钥（8964 层实现，避免 wallet/core 反向依赖）。
+  DeviceSubkeyRegistrar.turnstileTokenProvider = () async {
+    final navigator = appNavigatorKey.currentState;
+    if (navigator == null) return null;
+    return navigator.push<String>(
+      MaterialPageRoute(builder: (_) => const SquareTurnstilePage()),
+    );
+  };
   WalletManager.subkeyRegistrar = DeviceSubkeyRegistrar().register;
 
   // 诊断 — 把所有 framework / widget 静默吞掉的异常都打到 logcat。
@@ -76,6 +86,7 @@ class CitizenApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: '公民',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

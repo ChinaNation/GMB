@@ -35,7 +35,7 @@
 ## 执行记录
 
 ### 阶段 1（完成，后端）
-- 新增 `migrations/0004_article.sql`：`square_posts` 加 `content_format TEXT NOT NULL DEFAULT 'normal'`、`title TEXT` + `idx_square_posts_owner_format` 索引。
+- 文章字段当前已并入唯一 `migrations/0001_square_core.sql` 目标基线，不保留独立迁移文件。
 - `types.ts`：加 `PostContentFormat`、`AuthorContentFormat`；`SquarePostRow` 加 `content_format`/`title`。
 - `posts/confirm.ts`：manifest 接口加 `content_format`/`title`；confirm 从 manifest 读取（默认 normal）写入 D1 INSERT（新列）+ 返回体带上；`nowMs()` 统一取一次。
 - `posts/repository.ts`（feed 三查询）+ `profiles/repository.ts` `listAuthorPosts`：SELECT 加 `content_format`/`title` 列；`listAuthorPosts` 加 `contentFormat` 过滤参数。

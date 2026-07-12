@@ -51,6 +51,13 @@ export function validateUploadItems(value: unknown): UploadItemInput[] {
       if (byteSize > maxVideoBytes) {
         throw new HttpError(400, 'video_too_large', '单个视频体积超出上限');
       }
+      if (
+        !Number.isInteger(item.duration_seconds) ||
+        item.duration_seconds === undefined ||
+        item.duration_seconds <= 0
+      ) {
+        throw new HttpError(400, 'invalid_video_duration', '视频必须提供真实 duration_seconds');
+      }
     } else {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(item.content_type)) {
         throw new HttpError(400, 'invalid_image_type', '图片只允许 jpg、png 或 webp');
@@ -64,6 +71,7 @@ export function validateUploadItems(value: unknown): UploadItemInput[] {
       media_kind: item.media_kind,
       content_type: item.content_type,
       byte_size: byteSize,
+      duration_seconds: item.media_kind === 'video' ? item.duration_seconds : undefined,
       file_ext: typeof item.file_ext === 'string' ? item.file_ext : undefined
     };
   });

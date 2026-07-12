@@ -1,4 +1,5 @@
 import 'package:citizenapp/8964/services/square_api_client.dart';
+import 'package:citizenapp/8964/services/device_subkey_registrar.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
@@ -39,6 +40,20 @@ class SquareSessionProvider {
             await _deviceSubkey.signRawHex(wallet.walletIndex, loginMessage);
         return '0x$raw';
       },
+      onDeviceNotRegistered: () => DeviceSubkeyRegistrar(
+        apiClient: _client,
+        deviceSubkey: _deviceSubkey,
+      ).register(
+        walletIndex: wallet.walletIndex,
+        ownerAccount: wallet.address,
+        signBinding: (message) async {
+          final signature = await _walletManager.signWithWallet(
+            wallet.walletIndex,
+            message,
+          );
+          return '0x${bytesToHex(signature)}';
+        },
+      ),
     );
   }
 }

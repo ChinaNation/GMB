@@ -104,6 +104,8 @@ class SquareUploadService implements SquareContentUploader {
         'content_type': draft.contentType,
         'byte_size': draft.byteSize,
         'sha256': digest.toString(),
+        if (draft.durationSeconds != null)
+          'duration_seconds': draft.durationSeconds,
       });
     }
 
@@ -153,6 +155,7 @@ class SquareUploadService implements SquareContentUploader {
               contentType: draft.contentType,
               byteSize: draft.byteSize,
               fileExt: draft.fileExt,
+              durationSeconds: draft.durationSeconds,
             ),
           )
           .toList(growable: false),
@@ -281,6 +284,14 @@ class SquareUploadService implements SquareContentUploader {
     }
     if (videoCount > plan.dynamicMaxVideos) {
       throw SquareApiException('动态视频不能超过 ${plan.dynamicMaxVideos} 个');
+    }
+    for (final draft in mediaDrafts) {
+      if (draft.mediaKind == SquareMediaKind.video &&
+          (draft.durationSeconds ?? 0) > plan.dynamicMaxVideoSeconds) {
+        throw SquareApiException(
+          '单个视频不能超过 ${plan.dynamicMaxVideoSeconds} 秒',
+        );
+      }
     }
   }
 

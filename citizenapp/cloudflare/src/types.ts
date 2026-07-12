@@ -22,6 +22,7 @@ export interface Env {
   SQUARE_MEDIA: R2Bucket;
   SQUARE_CACHE: KVNamespace;
   CHAT_REALTIME?: DurableObjectNamespace;
+  STREAM?: StreamBinding;
   // 平台推送只发送无内容 Chat 唤醒；私钥只允许使用 Worker Secret 配置。
   APNS_KEY?: string;
   APNS_KID?: string;
@@ -75,6 +76,12 @@ export interface Env {
   IMAGES_URL?: string;
   STREAM_URL?: string;
   STREAM_HOOK_SECRET?: string;
+  MEDIA_TTL_SECONDS?: string;
+  IMAGES_SIGNING_KEY?: string;
+  TURNSTILE_SITEKEY?: string;
+  TURNSTILE_SECRET?: string;
+  WEB_ORIGIN?: string;
+  HASH_KEY?: string;
   // 退订视频冷归档：开关（'1' 开）与阈值（天，缺省 90）。关闭时 Cron 不做任何归档。
   ARCHIVE_ENABLED?: string;
   ARCHIVE_LAPSE_DAYS?: string;
@@ -82,6 +89,7 @@ export interface Env {
 
 export interface SessionState {
   owner_account: string;
+  device_key_hash: string;
   created_at: number;
   expires_at: number;
 }
@@ -125,6 +133,7 @@ export interface UploadItemInput {
   media_kind: MediaKind;
   content_type: string;
   byte_size: number;
+  duration_seconds?: number;
   file_ext?: string;
 }
 
@@ -139,6 +148,7 @@ export interface PreparedUploadRow {
   estimated_bytes: number;
   object_keys_json: string;
   status: UploadStatus;
+  expires_at: number;
   created_at: number;
   completed_at: number | null;
 }
@@ -155,10 +165,7 @@ export interface MediaAssetRow {
   content_type: string;
   byte_size: number;
   asset_state: MediaAssetState;
-  delivery_url: string | null;
-  playback_hls_url: string | null;
-  playback_dash_url: string | null;
-  thumbnail_url: string | null;
+  declared_duration_seconds: number | null;
   duration_seconds: number | null;
   width: number | null;
   height: number | null;
@@ -197,8 +204,7 @@ export interface SquareFeedMediaItem {
   provider: MediaProvider;
   provider_asset_id: string;
   asset_state: MediaAssetState;
-  playback_hls_url?: string | null;
-  playback_dash_url?: string | null;
+  thumbnail_url?: string | null;
   content_type: string;
   byte_size: number;
   sha256: string;

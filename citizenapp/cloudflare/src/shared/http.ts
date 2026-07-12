@@ -14,9 +14,7 @@ export class HttpError extends Error {
 export function jsonResponse(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set('content-type', 'application/json; charset=utf-8');
-  headers.set('access-control-allow-origin', '*');
-  headers.set('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  headers.set('access-control-allow-headers', 'authorization,content-type');
+  if (!headers.has('cache-control')) headers.set('cache-control', 'no-store');
 
   return new Response(JSON.stringify(data), {
     ...init,
@@ -96,5 +94,5 @@ export async function maybeSession(request: Request, env: Env): Promise<SessionS
 }
 
 export function optionsResponse(): Response {
-  return jsonResponse({ ok: true });
+  return new Response(null, { status: 204 });
 }

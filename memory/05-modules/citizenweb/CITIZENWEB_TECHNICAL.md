@@ -35,7 +35,7 @@ npm run build
 - `/membership` 是 CitizenApp 官网会员订阅入口，共四档会员、三张身份卡：访客卡内含**自由会员 `freedom`($2.99) / 民主会员 `democracy`($9.99) 左右切换**（默认自由，点击切换价格与权益）、投票公民会员 `voting`($9.99)、竞选公民会员 `candidate`($99.99)。订阅资格由 Worker 精确匹配身份档强校验（禁止降档/越级），官网 UI 跟随。
 - 官网订阅先调用 `POST /v1/square/membership/subscribe/challenge`，CitizenApp 钱包扫码签名后调用 `POST /v1/square/membership/subscribe` 创建 Stripe Checkout Session；取消使用 `/cancel/challenge` 与 `/cancel`，续订重新走订阅链路。官网不保存会员状态、不保存本地法币金额、不接触 Stripe secret。
 - 会员权益真源在 CitizenApp Cloudflare Worker / D1：Stripe subscription webhook 写入 `square_memberships` 后，iOS / Android / GitHub Android 版 CitizenApp 均通过同一钱包账户读取会员状态。
-- `VITE_API_URL` 可在官网构建时指定 Worker API 根地址；未设置时使用 production Worker 默认地址。
+- 官网与 API 统一使用 `www.crcfrcn.com`：production 默认同源调用 `/api`，不得恢复 `workers.dev` 或独立 API 子域名；`VITE_API_URL` 仅用于明确的本地联调构建。
 
 ## 3.1. 白皮书结构维护记录
 
@@ -44,6 +44,10 @@ npm run build
 - 后续更新白皮书时，应继续以 `citizenweb/src/whitepaper.md` 为唯一正文真源，并保持目录锚点与正文标题同步。
 
 ## 4. 线上部署口径
+
+当前官网由 Cloudflare Pages 项目 `citizenweb` 承载，正式域名为 `https://www.crcfrcn.com`；`/membership` 与同源 `/api` 共同组成官网订阅入口。发布使用 `npx wrangler pages deploy dist --project-name citizenweb --branch main`，发布后必须真实访问 `/membership` 验证页面与同源 API。
+
+以下 Nginx 流程是 2026-04-30 的历史部署记录，不是当前 production 发布入口：
 
 当前已确认 `64.181.239.233` 的 HTTP 80 端口由 Nginx 提供官网静态页，但仓库内尚无官网专用部署脚本。
 

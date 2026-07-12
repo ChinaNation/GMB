@@ -2,6 +2,8 @@ import type { Env, LoginChallengeRow, SessionState } from '../types';
 import { HttpError, jsonResponse, parsePositiveInt, readJson } from '../shared/http';
 import { assertOwnerAccount, createId } from '../shared/ids';
 import { nowMs, secondsFromNow } from '../shared/time';
+import { sha256Hex } from '../shared/hash';
+import { verifyTurnstile } from '../security/turnstile';
 import { verifyWalletSignature } from './wallet_signature';
 import { indexSessionToken } from './session_index';
 import {
@@ -34,6 +36,7 @@ interface DeviceRegisterRequest {
   p256_pubkey?: unknown;
   issued_at?: unknown;
   binding_signature?: unknown;
+  turnstile_token?: unknown;
 }
 
 /// 登录挑战的 SCALE payload：`owner ‖ challenge_id ‖ expires_at`。
@@ -141,6 +144,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
   const sessionToken = createId('sqs');
   const session: SessionState = {
     owner_account: ownerAccount,
+    device_key_hash: await sha256Hex(subkey.p256_pubkey),
     created_at: nowMs(),
     expires_at: secondsFromNow(sessionTtlSeconds)
   };
@@ -168,6 +172,7 @@ export async function createSession(request: Request, env: Env): Promise<Respons
 /// 重注册覆盖 = 换机/轮换）。此后登录挑战改由该子钥静默签名。
 export async function registerDeviceSubkey(request: Request, env: Env): Promise<Response> {
   const body = await readJson<DeviceRegisterRequest>(request);
+  await verifyTurnstile(request, env, body.turnstile_token);
   let ownerAccount: string;
   try {
     ownerAccount = assertOwnerAccount(body.owner_account);

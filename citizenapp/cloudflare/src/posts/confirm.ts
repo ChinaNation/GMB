@@ -12,6 +12,7 @@ import {
   type SquarePostPublishedEvent
 } from '../chain/square_event';
 import { deleteProviderAsset } from '../media/cloudflare_assets';
+import { signedMediaUrls } from '../media/signed_urls';
 import { HttpError, jsonResponse, readJson, requireSession } from '../shared/http';
 import { nowMs } from '../shared/time';
 import { sanitizeOwnerAccount } from '../storage/r2_keys';
@@ -163,7 +164,7 @@ export async function confirmPublishedPost(
     manifestText: JSON.stringify(manifest),
     mediaAssets
   });
-  const mediaItems = manifestMediaItems(manifest, mediaAssets);
+  const mediaItems = await manifestMediaItems(env, manifest, mediaAssets);
   const contentFormat = manifest.content_format === 'article' ? 'article' : 'normal';
   const title = typeof manifest.title === 'string' ? manifest.title : null;
   const createdAt = nowMs();
@@ -215,7 +216,9 @@ export async function buildFeedPostItem(env: Env, row: SquarePostFeedItem): Prom
   const manifest = await readManifest(env, manifestObjectKey).catch(() => null);
   return {
     ...row,
-    media_items: manifest && upload ? manifestMediaItems(manifest, await loadMediaAssets(env, upload.upload_id)) : []
+    media_items: manifest && upload
+      ? await manifestMediaItems(env, manifest, await loadMediaAssets(env, upload.upload_id))
+      : []
   };
 }
 
@@ -238,7 +241,7 @@ function findMatchingEvent(
 async function loadCompletedUpload(env: Env, postId: string): Promise<PreparedUploadRow> {
   const upload = await env.DB.prepare(
     `SELECT upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
-        storage_receipt_id, estimated_bytes, object_keys_json, status, created_at, completed_at
+        storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
       FROM square_uploads
       WHERE post_id = ?`
   )
@@ -256,7 +259,7 @@ async function loadCompletedUpload(env: Env, postId: string): Promise<PreparedUp
 async function loadUploadForPost(env: Env, postId: string): Promise<PreparedUploadRow | null> {
   return env.DB.prepare(
     `SELECT upload_id, post_id, owner_account, post_category, manifest_hash, content_hash,
-        storage_receipt_id, estimated_bytes, object_keys_json, status, created_at, completed_at
+        storage_receipt_id, estimated_bytes, object_keys_json, status, expires_at, created_at, completed_at
       FROM square_uploads
       WHERE post_id = ?`
   )
@@ -317,26 +320,26 @@ function validateManifest(manifest: SquarePostManifest, upload: PreparedUploadRo
   }
 }
 
-function manifestMediaItems(
+async function manifestMediaItems(
+  env: Env,
   manifest: SquarePostManifest,
   mediaAssets: MediaAssetRow[]
-): SquareFeedMediaItem[] {
+): Promise<SquareFeedMediaItem[]> {
   const items = Array.isArray(manifest.media_items) ? manifest.media_items : [];
-  return items.map((item, index) => {
+  return Promise.all(items.map(async (item, index) => {
     const asset = mediaAssets[index];
     const mediaKind = item.media_kind === 'video' ? 'video' as const : 'image' as const;
-    const primaryUrl = mediaKind === 'video'
-      ? asset?.playback_hls_url ?? asset?.delivery_url ?? ''
-      : asset?.delivery_url ?? '';
+    const signed = asset && asset.asset_state === 'ready' && asset.archive_state === 'live'
+      ? await signedMediaUrls(env, asset)
+      : { url: '', thumbnail_url: null };
     return {
       media_kind: mediaKind,
       object_key: asset?.provider_asset_id ?? '',
-      url: primaryUrl,
+      url: signed.url,
       provider: asset?.provider ?? (mediaKind === 'video' ? 'cloudflare_stream' : 'cloudflare_images'),
       provider_asset_id: asset?.provider_asset_id ?? '',
       asset_state: asset?.asset_state ?? 'prepared',
-      playback_hls_url: asset?.playback_hls_url ?? null,
-      playback_dash_url: asset?.playback_dash_url ?? null,
+      thumbnail_url: signed.thumbnail_url,
       content_type: item.content_type ?? asset?.content_type ?? 'application/octet-stream',
       byte_size: item.byte_size ?? asset?.byte_size ?? 0,
       sha256: item.sha256 ?? '',
@@ -345,7 +348,7 @@ function manifestMediaItems(
       height: asset?.height ?? null,
       archive_state: asset?.archive_state ?? 'live'
     };
-  });
+  }));
 }
 
 function normalizeHash(value: string): string {

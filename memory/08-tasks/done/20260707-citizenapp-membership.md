@@ -56,7 +56,7 @@
 ## 第 2 步新增文件确认记录
 
 - 用户已在当前任务明确允许创建以下第 2 步文件：
-  - `citizenapp/cloudflare/migrations/0006_media_provider_assets.sql`
+  - `citizenapp/cloudflare/migrations/0001_square_core.sql`（媒体结构已合并）
     - 用途：新增 `square_media_assets` 表，记录 Images / Stream provider asset、上传方式、状态、播放地址、时长和尺寸。
     - 原因：旧 `square_uploads.object_keys_json` 只适合 R2 object key，不适合作为 Images / Stream 状态真源。
     - 是否会被 Git 跟踪：是。
@@ -225,7 +225,7 @@
 
 ### 第 1 步（完成，Cloudflare 会员系统）
 
-- 新增 D1 迁移 `citizenapp/cloudflare/migrations/0005_membership_subscriptions.sql`：`square_memberships` 增加官网 Stripe 订阅字段、订阅状态、周期字段、链上身份等级快照和索引。
+- `square_memberships` 的 Stripe 订阅字段、订阅状态、周期字段、链上身份等级快照和索引当前已并入唯一 D1 基线 `citizenapp/cloudflare/migrations/0001_square_core.sql`。
 - `citizenapp/cloudflare/src/membership/plans.ts`：四档会员 `freedom` / `democracy` / `voting` / `candidate` 的价格、身份要求、动态额度和文章额度收口为单一配置。
 - 新增 `citizenapp/cloudflare/src/chain/identity.ts`：Worker 通过 `state_getStorage` 读取 `CitizenIdentity::VotingIdentityByAccount` 与 `CandidateIdentityByAccount`；投票身份需状态 normal 且护照有效期覆盖当前日期，竞选身份必须在有效投票身份基础上存在 Candidate storage。
 - 更新 `citizenapp/cloudflare/src/chain/rpc.ts`：抽出通用 `fetchChainStorage`，既服务链上发布事件确认，也服务会员身份资格读取。
@@ -238,7 +238,7 @@
 - 验收：
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run typecheck` 通过。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test` 通过：9 个测试文件，37 个测试。
-  - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run migrate:local` 通过，`0005_membership_subscriptions.sql` 本地 D1 迁移成功。
+  - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run db:local` 通过，本地 D1 按唯一目标基线重建成功。
   - 真实本地 Worker HTTP 验收通过：`wrangler dev --local --port 8787 --var DEV_UPLOAD_PROXY:1 --var STRIPE_HOOK_SECRET:whsec_test` 启动后，带 Stripe 签名的 freedom subscription webhook 返回 200，D1 查询确认 `sub_http` 写入 `membership_level=freedom`、`subscription_status=active`、`identity_level=visitor`。
 - 边界：第 1 步未修改 CitizenApp Flutter UI，未切换 Images / Stream，未改 runtime；竞选公民会员的业务权限已由 Worker 会员系统具备强制校验基础，发布侧接入留到第 3 步。
 
@@ -256,7 +256,7 @@
 
 ### 第 2 步（完成，Cloudflare Images / Stream 上传）
 
-- 新增 D1 迁移 `citizenapp/cloudflare/migrations/0006_media_provider_assets.sql`：建立 `square_media_assets` 表和 provider asset / post / state 索引。
+- `square_media_assets` 表和 provider asset / post / state 索引当前已并入唯一 D1 基线 `citizenapp/cloudflare/migrations/0001_square_core.sql`。
 - 新增 `citizenapp/cloudflare/src/media/cloudflare_assets.ts`：封装 Cloudflare Images Direct Creator Upload、Cloudflare Stream basic direct upload、Stream tus direct upload、Images / Stream 状态刷新和播放 URL 生成；本地 `DEV_UPLOAD_PROXY=1` 时使用同源 `dev-media` 端点验证完整流程。
 - 更新 `citizenapp/cloudflare/src/uploads/service.ts`：prepare 只为 manifest 生成 R2 上传 URL，图片生成 `cloudflare_images` 上传授权，视频生成 `cloudflare_stream` 上传授权；200MB 以上视频走 tus；complete 校验 manifest 与 provider asset 状态，视频转码未完成时返回 `storage_state=processing`；新增 Stream webhook 签名校验并更新视频 ready/error 状态。
 - 更新 `citizenapp/cloudflare/src/posts/confirm.ts` 和 feed hydrate：feed 媒体项从 `square_media_assets` 读取 provider、asset id、状态、Images delivery URL、Stream playback URL、缩略图、时长、宽高。
@@ -267,7 +267,7 @@
 - 验收：
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test -- media_assets.test.ts uploads.test.ts r2_keys.test.ts chain_confirm.test.ts media.test.ts` 通过：5 个测试文件，12 个测试。
   - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare test` 通过：12 个测试文件，51 个测试。
-  - `npm --prefix /Users/rhett/GMB/citizenapp/cloudflare run migrate:local` 通过，`0006_media_provider_assets.sql` 本地 D1 迁移成功。
+  - 本地 D1 已按唯一 `0001_square_core.sql` 目标基线重建成功。
   - `flutter analyze lib/8964/services/square_api_client.dart lib/8964/services/square_upload_service.dart lib/8964/models/square_models.dart test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart` 通过。
   - `flutter test --concurrency=1 test/8964/square_publish_service_test.dart test/8964/square_feed_service_test.dart` 通过。
   - 真实本地 Worker HTTP 验收通过：真实 sr25519 登录拿 session，Stripe visitor webhook 写会员，`uploads/prepare` 返回 `cloudflare_images` / `cloudflare_stream` provider，manifest 走 R2 `dev-put`，图片/视频走 `dev-media`，`complete` 返回 `storage_state=processing`，签名 Stream webhook 后 D1 中视频 asset 更新为 `ready`、`duration_seconds=4.5`、`width=1280`、`height=720`。

@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
+import 'package:video_player/video_player.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
 
@@ -10,12 +13,28 @@ Future<SquareLocalMediaDraft> buildSquareMediaDraft(
 ) async {
   final name = file.name.isNotEmpty ? file.name : path.basename(file.path);
   final contentType = file.mimeType ?? _inferContentType(name, mediaKind);
+  int? durationSeconds;
+  if (mediaKind == SquareMediaKind.video) {
+    final controller = VideoPlayerController.file(File(file.path));
+    try {
+      await controller.initialize();
+      durationSeconds = controller.value.duration.inMilliseconds <= 0
+          ? null
+          : (controller.value.duration.inMilliseconds / 1000).ceil();
+    } finally {
+      await controller.dispose();
+    }
+    if (durationSeconds == null) {
+      throw const FormatException('无法读取视频时长');
+    }
+  }
   return SquareLocalMediaDraft(
     mediaKind: mediaKind,
     path: file.path,
     fileName: name,
     contentType: contentType,
     byteSize: await file.length(),
+    durationSeconds: durationSeconds,
   );
 }
 

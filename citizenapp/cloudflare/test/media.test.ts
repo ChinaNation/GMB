@@ -48,7 +48,7 @@ describe('media read channel', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('image/webp');
-    expect(response.headers.get('cache-control')).toContain('public');
+    expect(response.headers.get('cache-control')).toBe('private, max-age=300');
     expect(await response.text()).toBe('IMG');
   });
 

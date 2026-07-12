@@ -24,7 +24,7 @@
 
 ## 主要风险点
 
-- 生产地址硬编码进仓库：仅是公开的 `workers.dev`/自定义域，不含 Cloudflare token、R2 key、私密 RPC，可接受。
+- 生产地址硬编码进仓库：仅使用公开的 `https://www.crcfrcn.com/api` 自定义域，不含 Cloudflare token、R2 key、私密 RPC。
 - 部署未完成前先改默认会导致 debug 也连不上：必须**先部署拿到稳定地址，再改默认**。
 - staging 与 production 地址切换：用编译期 flag 区分，避免 debug 包误连生产写库。
 - 生产/预发布必须默认 `SQUARE_DEV_UPLOAD_PROXY=0`。
@@ -75,8 +75,8 @@
 - [x] 用户在 Cloudflare 新建 production R2 桶 `citizenapp-square-media`。
 - [x] wrangler 建 production D1 `citizenapp-square-db-production`（`0c5a0924-83ef-4347-bacc-b3f6f36da460`）与 KV `citizenapp-square-production-FEED_CACHE`（`b72bbbcb36d240acb317fdaf79ce46f4`），真实 ID 写入 `wrangler.toml` env.production。
 - [x] 远端 D1 迁移 `0001/0002` 应用成功；`wrangler deploy --env production` 部署成功。
-- [x] production 上线并 smoke：`https://citizenapp-square-api.stews87-fawn.workers.dev/health` 返回 ok；未登录 `/v1/square/membership` 返回 401。
-- [x] App 内置 `SquareApiConfig.prodBaseUrl = https://citizenapp-square-api.stews87-fawn.workers.dev` 为唯一默认；删除 `localDevBaseUrl`/`_isProductBuild` 与本机兜底；`normalizeBaseUrl` 保留（本机联调仍可显式 `--dart-define`）。
+- [x] production 当前唯一入口已彻底改为 `https://www.crcfrcn.com/api`；旧 `workers.dev` 已关闭，不再作为历史可用入口。
+- [x] App 内置 `SquareApiConfig.prodBaseUrl = https://www.crcfrcn.com/api` 为唯一默认；删除本机兜底，`normalizeBaseUrl` 仅保留显式本地联调用途。
 - [x] `dart analyze` 无问题；`test/8964/square_feed_service_test.dart` 全过（含 normalizeBaseUrl 契约）。
 - Chat 不使用 R2；图片/视频发布分别使用 Cloudflare Images/Stream，R2 只承担广场 manifest、资料和既定归档对象。
 - [ ] 待部署 Access + Tunnel，并为 production 成套设置 `CHAIN_URL`、`CHAIN_ID`、`CHAIN_SECRET`（仅链读取与签名交易受控广播使用）。

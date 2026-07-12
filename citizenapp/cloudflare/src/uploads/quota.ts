@@ -39,6 +39,7 @@ interface SquareManifestMediaItem {
   content_type?: unknown;
   byte_size?: unknown;
   sha256?: unknown;
+  duration_seconds?: unknown;
 }
 
 export function assertContentFormat(value: unknown): PostContentFormat {
@@ -147,6 +148,16 @@ function assertDynamicQuota(input: DeclaredQuotaInput): void {
         `单个视频不能超过 ${formatMaxVideoBytes(input.plan.dynamic.max_video_bytes)}`
       );
     }
+    if (
+      item.media_kind === 'video' &&
+      (item.duration_seconds ?? 0) > input.plan.dynamic.max_video_seconds
+    ) {
+      throw new HttpError(
+        400,
+        'dynamic_video_too_long',
+        `单个视频不能超过 ${input.plan.dynamic.max_video_seconds} 秒`
+      );
+    }
   }
 }
 
@@ -230,7 +241,10 @@ function parseManifestMediaItems(value: unknown): UploadItemInput[] {
     return {
       media_kind: item.media_kind,
       content_type: item.content_type,
-      byte_size: item.byte_size
+      byte_size: item.byte_size,
+      duration_seconds: item.media_kind === 'video' && typeof item.duration_seconds === 'number'
+        ? item.duration_seconds
+        : undefined
     };
   });
 }
@@ -248,7 +262,9 @@ function assertManifestMatchesAssets(mediaItems: UploadItemInput[], mediaAssets:
     if (
       asset.media_kind !== manifestKind ||
       asset.content_type !== item.content_type ||
-      asset.byte_size !== item.byte_size
+      asset.byte_size !== item.byte_size ||
+      (manifestKind === 'video' &&
+        asset.declared_duration_seconds !== item.duration_seconds)
     ) {
       throw new HttpError(409, 'manifest_media_mismatch', `第 ${index + 1} 个媒体与上传授权不一致`);
     }

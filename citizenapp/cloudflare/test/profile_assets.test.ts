@@ -8,6 +8,7 @@ const sha = 'a'.repeat(64);
 function fakeEnv(): Env {
   const session: SessionState = {
     owner_account: owner,
+    device_key_hash: 'a'.repeat(64),
     created_at: 0,
     expires_at: Date.now() + 60_000
   };

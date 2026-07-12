@@ -8,9 +8,9 @@
     "dev:local": "wrangler dev --local --var DEV_UPLOAD_PROXY:1",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "migrate:local": "wrangler d1 migrations apply citizenapp-square-db --local",
-    "migrate:staging": "wrangler d1 migrations apply citizenapp-square-db-staging --env staging --remote",
-    "migrate:production": "wrangler d1 migrations apply citizenapp-square-db-production --env production --remote",
+    "db:local": "wrangler d1 execute citizenapp-square-db --local --file migrations/0001_square_core.sql",
+    "db:staging": "wrangler d1 execute citizenapp-square-db-staging --env staging --remote --file migrations/0001_square_core.sql",
+    "db:production": "wrangler d1 execute citizenapp-square-db-production --env production --remote --file migrations/0001_square_core.sql",
     "deploy:staging": "wrangler deploy --env staging",
     "deploy:production": "wrangler deploy --env production"
   },
