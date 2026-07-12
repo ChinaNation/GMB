@@ -52,7 +52,7 @@ Future<void> openDirectChat(
           conversationId: conversationId,
           controlPlaintext: controlPlaintext,
         ),
-        onSync: runtime.syncPending,
+        onSync: runtime.retryOutgoing,
         onStartRealtime: runtime.startRealtimeSync,
         onDeleteConversation: () =>
             runtime.deleteLocalConversation(conversationId),

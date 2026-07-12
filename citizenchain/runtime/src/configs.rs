@@ -613,8 +613,8 @@ impl primitives::multisig::ProtectedSourceChecker<AccountId> for RuntimeProtecte
     }
 }
 
-impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset {
-    fn can_spend(source: &AccountId, action: institution_asset::InstitutionAssetAction) -> bool {
+impl primitives::institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset {
+    fn can_spend(source: &AccountId, action: primitives::institution_asset::InstitutionAssetAction) -> bool {
         // 匹配顺序很重要——更具体的账户类型必须放在更宽泛的类型之前。
         // fee_account 同时出现在 CHINA_RESERVED_MAIN_ACCOUNTS 列表中（同由 BLAKE2 派生且统一保留），
         // 如果 is_reserved_main_account 先匹配，fee_account 会被错误地按主账户规则放行。
@@ -628,7 +628,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
         if is_reserved_fee_account(source) {
             return matches!(
                 action,
-                institution_asset::InstitutionAssetAction::OffchainFeeSweepExecute
+                primitives::institution_asset::InstitutionAssetAction::OffchainFeeSweepExecute
             );
         }
 
@@ -636,7 +636,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
         if is_cb_fee_account(source) {
             return matches!(
                 action,
-                institution_asset::InstitutionAssetAction::OffchainFeeSweepExecute
+                primitives::institution_asset::InstitutionAssetAction::OffchainFeeSweepExecute
             );
         }
 
@@ -644,7 +644,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
         if source == &AccountId::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT) {
             return matches!(
                 action,
-                institution_asset::InstitutionAssetAction::NrcSafetyFundTransfer
+                primitives::institution_asset::InstitutionAssetAction::NrcSafetyFundTransfer
             );
         }
 
@@ -652,8 +652,8 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
         if is_reserved_main_account(source) {
             return matches!(
                 action,
-                institution_asset::InstitutionAssetAction::MultisigTransferExecute
-                    | institution_asset::InstitutionAssetAction::MultisigCloseExecute
+                primitives::institution_asset::InstitutionAssetAction::MultisigTransferExecute
+                    | primitives::institution_asset::InstitutionAssetAction::MultisigCloseExecute
             );
         }
 
@@ -2120,15 +2120,27 @@ impl legislation_vote::Config for Runtime {
 
 impl pow_difficulty::Config for Runtime {
     type WeightInfo = pow_difficulty::weights::SubstrateWeight<Runtime>;
+    type BlockTime = GenesisPallet;
 }
 
 frame_support::parameter_types! {
     pub const MaxDeclarationLen: u32 = 2048;
 }
 
+/// 创世机构 seeding 注入实现:runtime 侧调用 institution::build。
+/// Runtime 本就实现 public_manage/public_admins::Config,天然满足 build 的治理 where 约束,
+/// 因此治理耦合留在 runtime 层,不再作为 genesis pallet Config 的 supertrait。
+pub struct RuntimeGenesisSeeder;
+impl genesis_pallet::GenesisInstitutionSeeder for RuntimeGenesisSeeder {
+    fn seed() {
+        genesis_pallet::institution::build::<Runtime>();
+    }
+}
+
 impl genesis_pallet::Config for Runtime {
     type WeightInfo = genesis_pallet::weights::SubstrateWeight<Runtime>;
     type MaxDeclarationLen = MaxDeclarationLen;
+    type InstitutionSeeder = RuntimeGenesisSeeder;
 }
 
 pub struct RuntimeInternalAdminProvider;

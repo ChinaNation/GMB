@@ -95,9 +95,14 @@ class PersonalManageStorageCodec {
   }
 
   static PersonalManageAdminSnapshot? decodeAdminAccount(Uint8List data) {
-    // institution_code: [u8;4] + kind: u8 = 5 bytes minimum before admins
+    // 链端 AdminAccount 前导 cid_number: BoundedVec<u8>(个人多签为空)+ institution_code[u8;4]
+    // + kind: u8 = 至少 5 字节后才是 admins。
     if (data.length <= 5) return null;
     var offset = 0;
+    // cid_number: BoundedVec<u8>(个人多签为空);仅消费字节。
+    final (cidLen, cidLenSize) = readCompactU32(data, offset);
+    offset += cidLenSize + cidLen;
+    if (offset + 5 > data.length) return null;
     final institutionCode =
         InstitutionCodeLabel.codeToString(data.sublist(offset, offset + 4));
     offset += 4;

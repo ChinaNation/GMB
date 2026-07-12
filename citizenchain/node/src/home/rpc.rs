@@ -5,7 +5,6 @@ use crate::shared::{constants::EXPECTED_SS58_PREFIX, rpc};
 use primitives::cid::china::china_ch::CHINA_CH;
 use serde::Serialize;
 use serde_json::Value;
-use std::hash::Hasher;
 use std::sync::OnceLock;
 use std::{thread, time::Duration};
 use tauri::AppHandle;
@@ -180,25 +179,13 @@ pub async fn get_chain_status(app: AppHandle) -> Result<ChainStatus, String> {
 
 static TOTAL_ISSUANCE_STORAGE_KEY_CACHE: OnceLock<String> = OnceLock::new();
 
-fn twox_128(input: &[u8]) -> [u8; 16] {
-    let mut h1 = twox_hash::XxHash64::with_seed(0);
-    h1.write(input);
-    let mut h2 = twox_hash::XxHash64::with_seed(1);
-    h2.write(input);
-
-    let mut out = [0u8; 16];
-    out[..8].copy_from_slice(&h1.finish().to_le_bytes());
-    out[8..].copy_from_slice(&h2.finish().to_le_bytes());
-    out
-}
-
 fn total_issuance_storage_key() -> String {
     TOTAL_ISSUANCE_STORAGE_KEY_CACHE
         .get_or_init(|| {
-            let mut key = Vec::with_capacity(32);
-            key.extend_from_slice(&twox_128(b"Balances"));
-            key.extend_from_slice(&twox_128(b"TotalIssuance"));
-            format!("0x{}", hex::encode(key))
+            crate::shared::storage_keys::to_hex(&crate::shared::storage_keys::prefix(
+                b"Balances",
+                b"TotalIssuance",
+            ))
         })
         .clone()
 }
@@ -285,23 +272,13 @@ pub async fn get_total_issuance(app: AppHandle) -> Result<TotalIssuance, String>
 
 // ── 永久质押金额（43 个省储行 stake_account 余额之和）──
 
-/// Substrate 标准 Blake2_128Concat：blake2_128(data) ++ data。
-fn blake2_128(input: &[u8]) -> [u8; 16] {
-    let hash = blake2b_simd::Params::new().hash_length(16).hash(input);
-    let mut out = [0u8; 16];
-    out.copy_from_slice(hash.as_bytes());
-    out
-}
-
-/// 构造 System.Account 的完整 storage key（Blake2_128Concat hasher）。
+/// 构造 System.Account 的完整 storage key（Blake2_128Concat hasher，委托 shared 单源）。
 fn system_account_storage_key(account_id: &[u8; 32]) -> String {
-    let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
-    key.extend_from_slice(&twox_128(b"System"));
-    key.extend_from_slice(&twox_128(b"Account"));
-    // Blake2_128Concat = blake2_128(account) ++ account
-    key.extend_from_slice(&blake2_128(account_id));
-    key.extend_from_slice(account_id);
-    format!("0x{}", hex::encode(key))
+    crate::shared::storage_keys::to_hex(&crate::shared::storage_keys::blake2_map(
+        b"System",
+        b"Account",
+        account_id,
+    ))
 }
 
 /// 从 System.Account SCALE 编码中提取 free balance（u128，小端，偏移 16 字节）。

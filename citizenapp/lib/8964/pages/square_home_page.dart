@@ -22,6 +22,8 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 enum _ComposeKind { post, article }
 
+typedef SquareMembershipLoader = Future<SquareMembershipState?> Function();
+
 class SquareHomePage extends StatefulWidget {
   const SquareHomePage({
     super.key,
@@ -31,6 +33,7 @@ class SquareHomePage extends StatefulWidget {
     this.initialFeed = SquareFeedKind.recommended,
     this.seedPosts = const <SquarePost>[],
     this.smoldotClientManager,
+    this.membershipLoader,
   });
 
   final SquareIdentityService identityService;
@@ -40,6 +43,7 @@ class SquareHomePage extends StatefulWidget {
   final SquareFeedKind initialFeed;
   final List<SquarePost> seedPosts;
   final SmoldotClientManager? smoldotClientManager;
+  final SquareMembershipLoader? membershipLoader;
 
   @override
   State<SquareHomePage> createState() => _SquareHomePageState();
@@ -59,6 +63,7 @@ class _SquareHomePageState extends State<SquareHomePage> {
   /// 顶栏徽章的会员信号（勾），随身份一起加载；best-effort。
   final SquareApiClient _squareApi = SquareApiClient();
   SquareMembershipState? _membership;
+  int? _browseLeft;
   late final SmoldotClientManager _smoldotClientManager;
 
   /// 同一次 operational 状态下，同一默认钱包只触发一次真实链刷新。
@@ -131,14 +136,23 @@ class _SquareHomePageState extends State<SquareHomePage> {
     }
   }
 
-  Future<void> _refreshMembership() async {
+  Future<SquareMembershipState?> _refreshMembership() async {
     try {
-      final session = await SquareSessionProvider.instance.ensureSession();
-      final membership =
-          session != null ? await _squareApi.fetchMembership(session) : null;
+      final loader = widget.membershipLoader;
+      final membership = loader != null
+          ? await loader()
+          : await () async {
+              final session =
+                  await SquareSessionProvider.instance.ensureSession();
+              return session != null
+                  ? _squareApi.fetchMembership(session)
+                  : null;
+            }();
       if (mounted) setState(() => _membership = membership);
+      return membership;
     } on Exception {
       // 会员拉取失败不影响顶栏身份显示（无勾）。
+      return null;
     }
   }
 
@@ -161,6 +175,14 @@ class _SquareHomePageState extends State<SquareHomePage> {
   }
 
   Future<void> _openCompose() async {
+    final membership = await _refreshMembership();
+    if (!mounted) return;
+    if (membership?.active != true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('需要有效会员才能发布广场内容')),
+      );
+      return;
+    }
     final choice = await showModalBottomSheet<_ComposeKind>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -250,11 +272,11 @@ class _SquareHomePageState extends State<SquareHomePage> {
               children: [
                 Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             '广场',
                             style: TextStyle(
                               color: AppTheme.textPrimary,
@@ -262,10 +284,10 @@ class _SquareHomePageState extends State<SquareHomePage> {
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          SizedBox(height: 2),
+                          const SizedBox(height: 2),
                           Text(
-                            '推荐',
-                            style: TextStyle(
+                            _browseLeft == null ? '推荐' : '今日剩余 $_browseLeft 条',
+                            style: const TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 13,
                             ),
@@ -350,8 +372,23 @@ class _SquareHomePageState extends State<SquareHomePage> {
     );
   }
 
-  Future<List<SquarePost>> _loadFeed() {
-    return _feedSource.fetchFeed(feedKind: _selectedFeed);
+  Future<List<SquarePost>> _loadFeed() async {
+    SquareSession? session;
+    if (_feedSource is SquareApiClient) {
+      session = await SquareSessionProvider.instance.ensureSession();
+      if (session == null) {
+        throw const SquareApiException('需要钱包账户才能浏览广场');
+      }
+    }
+    final posts = await _feedSource.fetchFeed(
+      feedKind: _selectedFeed,
+      session: session,
+    );
+    final source = _feedSource;
+    if (mounted && source is SquareApiClient) {
+      setState(() => _browseLeft = source.lastBrowseState?.browseLeft);
+    }
+    return posts;
   }
 
   Future<void> _refreshFeed() async {

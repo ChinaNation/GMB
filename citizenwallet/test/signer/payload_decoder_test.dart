@@ -986,7 +986,7 @@ void main() {
     // 机构/决议创建 decoder:
     // - propose_create_public_institution(32.5):公权机构多签账户创建提案
     //   (走 CID 后端签发机构 admins 凭证)
-    // - propose_resolution_issuance(8.0):决议发行联合提案
+    // - propose_issuance(8.0):决议发行联合提案
     //   (人口快照由 JointVote 单独准备)
     List<int> buildProposeCreateInstitutionPayload({
       bool extraTail = false,
@@ -1011,16 +1011,19 @@ void main() {
         List<int> account,
         String adminCidNumber,
         String name,
-        String adminRole,
+        String roleName,
       ) {
+        // 链端 AdminProfile 9 字段:role_code/admin_source_ref 空(与注册局创建/创世同)。
         return <int>[
           ...account,
-          ...boundedBytes(adminCidNumber),
-          ...boundedBytes(name),
-          ...boundedBytes(adminRole),
+          ...boundedBytes(adminCidNumber), // admin_cid_number
+          ...boundedBytes(name), // admin_name
+          ...boundedBytes(''), // role_code(空)
+          ...boundedBytes(roleName), // role_name
           0, 0, 0, 0, // term_start
           0, 0, 0, 0, // term_end
-          1, // AdminSource::Registry
+          1, // admin_source::Registry
+          ...boundedBytes(''), // admin_source_ref(空)
         ];
       }
 
@@ -1318,21 +1321,21 @@ void main() {
     // 协议升级 fixture step2d propose_runtime_upgrade decoder 用例已删:同上,SCALE decoder
     // 整体下线,fixture 走 OfflineSignService.verifyPayload 的哈希直签例外。
 
-    test('fixture step2d propose_resolution_issuance: decoder 解出新字段', () {
+    test('fixture step2d propose_issuance: decoder 解出新字段', () {
       final fixture = readFixture();
       final caseEntry = (fixture['cases'] as List)
-          .firstWhere((e) => e['name'] == 'propose_resolution_issuance');
+          .firstWhere((e) => e['name'] == 'propose_issuance');
       final hex = caseEntry['expected_call_data_hex'] as String;
       // fixture 固化的是纯 call_data,真实 QR 还带签名扩展尾。
       final decoded =
           PayloadDecoder.decode(hexOf(withSigningTail(bytesFromHex(hex))));
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_resolution_issuance');
+      expect(decoded!.action, 'propose_issuance');
       expect(decoded.fields['allocation_count'], '2');
       expect(decoded.fields.containsKey('eligible_total'), isFalse);
     });
 
-    test('decodes propose_resolution_issuance (pallet=8 call=0) 当前字段', () {
+    test('decodes propose_issuance (pallet=8 call=0) 当前字段', () {
       final reason = utf8.encode('紧急救灾');
       final totalFen = BigInt.from(50000000); // 500_000.00 GMB
       final totalLe = List<int>.filled(16, 0);
@@ -1362,7 +1365,7 @@ void main() {
       ]);
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_resolution_issuance');
+      expect(decoded!.action, 'propose_issuance');
       expect(decoded.fields['reason'], '紧急救灾');
       expect(decoded.fields['allocation_count'], '2');
       expect(decoded.fields.containsKey('eligible_total'), isFalse);

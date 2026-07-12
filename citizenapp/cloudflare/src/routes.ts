@@ -9,20 +9,15 @@ import { createLoginChallenge, createSession, registerDeviceSubkey } from "./aut
 import { chainBootstrapRoute } from "./chain/bootstrap";
 import { relaySignedExtrinsicRoute } from "./chain/extrinsic_relay";
 import {
-  ackChatEnvelope,
-  completeChatAttachmentUpload,
   consumeChatKeyPackage,
-  devGetChatAttachmentObject,
-  devPutChatAttachmentObject,
   fetchChatKeyPackages,
-  fetchPendingChatEnvelopes,
   openChatWebSocket,
-  prepareChatAttachmentDownload,
-  prepareChatAttachmentUpload,
   publishChatKeyPackage,
   registerChatDevice,
   submitChatEnvelope,
+  submitChatSignal,
 } from "./chat/service";
+import { createTurnCredentials } from "./chat/turn";
 import { feedRoute } from "./feeds/service";
 import { followRoute, unfollowRoute } from "./feeds/follows";
 import { mediaRoute } from "./media/service";
@@ -177,29 +172,14 @@ export async function routeRequest(
   if (request.method === "POST" && path === "/v1/chat/envelopes") {
     return submitChatEnvelope(request, env);
   }
+  if (request.method === "POST" && path === "/v1/chat/signals") {
+    return submitChatSignal(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/chat/turn") {
+    return createTurnCredentials(request, env);
+  }
   if (request.method === "GET" && path === "/v1/chat/ws") {
     return openChatWebSocket(request, env);
-  }
-  if (request.method === "GET" && path === "/v1/chat/envelopes/pending") {
-    return fetchPendingChatEnvelopes(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/chat/envelopes/ack") {
-    return ackChatEnvelope(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/chat/attachments/prepare") {
-    return prepareChatAttachmentUpload(request, env);
-  }
-  if (request.method === "PUT" && path === "/v1/chat/attachments/dev-put") {
-    return devPutChatAttachmentObject(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/chat/attachments/complete") {
-    return completeChatAttachmentUpload(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/chat/attachments/download") {
-    return prepareChatAttachmentDownload(request, env);
-  }
-  if (request.method === "GET" && path === "/v1/chat/attachments/dev-get") {
-    return devGetChatAttachmentObject(request, env);
   }
 
   throw new HttpError(404, "route_not_found", "广场接口不存在");

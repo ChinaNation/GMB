@@ -121,6 +121,7 @@ fn registered_account_transfer_executes_when_internal_vote_reaches_threshold() {
         personal_admins::AdminAccounts::<Test>::insert(
             personal_account.clone(),
             admin_primitives::AdminAccount {
+                cid_number: Default::default(),
                 institution_code: PERSONAL_CODE,
                 kind: admin_primitives::AdminAccountKind::PersonalMultisig,
                 admins,

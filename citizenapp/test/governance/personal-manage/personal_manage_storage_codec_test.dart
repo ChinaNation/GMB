@@ -54,6 +54,7 @@ void main() {
       final admin1 = List<int>.filled(32, 0xaa);
       final admin2 = List<int>.filled(32, 0xbb);
       final data = Uint8List.fromList([
+        0x00, // cid_number(AdminAccount 前导字段;个人多签为空)
         ...codeBytes('PMUL'),
         2,
         (2 << 2) & 0xff,

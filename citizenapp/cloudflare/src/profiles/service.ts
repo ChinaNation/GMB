@@ -8,7 +8,6 @@ import type {
 import {
   HttpError,
   jsonResponse,
-  maybeSession,
   parsePositiveInt,
   readJson,
   requireSession
@@ -18,6 +17,7 @@ import { nowMs } from '../shared/time';
 import { fetchChainIdentityStateCached } from '../chain/identity';
 import { getMembership, subscriptionIsActive } from '../membership/service';
 import type { MembershipLevel } from '../membership/plans';
+import { addBrowseCount, assertBrowseAvailable, getBrowseState } from '../feeds/browse';
 import { profileAssetPrefix } from '../storage/r2_keys';
 import {
   countUserStats,
@@ -42,15 +42,15 @@ interface ProfileUpdateRequest {
   banner_content_hash?: unknown;
 }
 
-/// GET /v1/square/users/:account —— 公开可读；带登录态时附带 is_following。
+/// GET /v1/square/users/:account —— 仅钱包用户可读，并附带当前账户的关注状态。
 export async function getUserProfileRoute(
   request: Request,
   env: Env,
   accountRaw: string
 ): Promise<Response> {
   const ownerAccount = parseAccount(accountRaw);
-  const viewer = await maybeSession(request, env);
-  const profile = await buildProfileResponse(env, ownerAccount, viewer?.owner_account ?? null);
+  const viewer = await requireSession(request, env);
+  const profile = await buildProfileResponse(env, ownerAccount, viewer.owner_account);
   return jsonResponse({ ok: true, profile });
 }
 
@@ -96,13 +96,15 @@ export async function getUserPostsRoute(
   accountRaw: string
 ): Promise<Response> {
   const ownerAccount = parseAccount(accountRaw);
+  const viewer = await requireSession(request, env);
+  const before = await getBrowseState(env, viewer.owner_account);
   const url = new URL(request.url);
   const category = parseCategory(url.searchParams.get('category'));
   const contentFormat = parseContentFormat(url.searchParams.get('content_format'));
-  const limit = parsePositiveInt(
+  const limit = Math.min(parsePositiveInt(
     url.searchParams.get('limit') ?? undefined,
     DEFAULT_AUTHOR_POST_LIMIT
-  );
+  ), assertBrowseAvailable(before));
   const cursor = parseCursor(url.searchParams.get('cursor'));
 
   const posts = await listAuthorPosts(
@@ -115,6 +117,7 @@ export async function getUserPostsRoute(
   );
   const nextCursor =
     posts.length >= limit ? posts[posts.length - 1]?.created_at ?? null : null;
+  const browse = await addBrowseCount(env, viewer.owner_account, before, posts.length);
 
   return jsonResponse({
     ok: true,
@@ -122,7 +125,8 @@ export async function getUserPostsRoute(
     category,
     content_format: contentFormat,
     posts,
-    next_cursor: nextCursor
+    next_cursor: nextCursor,
+    ...browse
   });
 }
 
@@ -133,6 +137,7 @@ export async function getUserFollowsRoute(
   accountRaw: string
 ): Promise<Response> {
   const ownerAccount = parseAccount(accountRaw);
+  await requireSession(request, env);
   const url = new URL(request.url);
   const type = url.searchParams.get('type') === 'followers' ? 'followers' : 'following';
   const limit = parsePositiveInt(

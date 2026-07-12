@@ -611,7 +611,7 @@ fn submit_joint_vote(
 
 fn prepare_population_snapshot_for(who: AccountId32, eligible_total: u64) {
     TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = eligible_total);
-    assert_ok!(JointVote::prepare_population_snapshot(
+    assert_ok!(JointVote::prepare_joint_population_snapshot(
         RuntimeOrigin::signed(who),
         votingengine::PopulationScope::Country,
     ));

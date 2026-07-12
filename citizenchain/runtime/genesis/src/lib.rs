@@ -37,6 +37,23 @@ pub trait DeveloperUpgradeCheck {
     fn is_enabled() -> bool;
 }
 
+// ─── GenesisInstitutionSeeder trait ─────────────────────────────────────────
+// 创世机构/管理员 seeding 注入口。把「写 public_manage/public_admins 治理存储」这件事
+// 从本 pallet 的 Config supertrait 解耦成 runtime 注入,消费者与本 pallet 单测因此
+// 不必 mock 整套治理栈;seeding 逻辑仍在 institution::build,由 runtime 的实现调用。
+pub trait GenesisInstitutionSeeder {
+    /// 执行创世机构/管理员 seeding。
+    fn seed();
+}
+
+// ─── TargetBlockTime trait ──────────────────────────────────────────────────
+// 供 pow-difficulty 等只读出块时间的消费者用,不硬耦合整个 genesis Config(同
+// DeveloperUpgradeCheck 范式)。
+pub trait TargetBlockTime {
+    /// 当前链上出块目标时间(毫秒)。
+    fn target_block_time_ms() -> u64;
+}
+
 #[frame_support::pallet]
 #[allow(dead_code)] // Events 预留给 on_runtime_upgrade 迁移使用，当前 deposit_event 暂未调用
 pub mod pallet {
@@ -47,16 +64,15 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::config]
-    pub trait Config:
-        frame_system::Config<RuntimeEvent: From<Event<Self>>>
-        + public_manage::Config
-        + public_admins::Config
-    {
+    pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
         type WeightInfo: crate::weights::WeightInfo;
 
         /// 创世宣言和国名宣言的最大字节长度。
         #[pallet::constant]
         type MaxDeclarationLen: Get<u32>;
+
+        /// 创世机构/管理员 seeding 注入(治理存储写入从本 Config 解耦,由 runtime 提供实现)。
+        type InstitutionSeeder: super::GenesisInstitutionSeeder;
     }
 
     // ─── 类型 ──────────────────────────────────────────────────────────────
@@ -165,7 +181,9 @@ pub mod pallet {
             CitizensDeclaration::<T>::put(citizens);
             CountryDeclaration::<T>::put(country);
             CitizenMax::<T>::put(self.citizen_max);
-            crate::institution::build::<T>();
+            // 创世机构 seeding 通过注入执行(治理存储写入的宿主是 institution::build,
+            // 由 runtime 的 InstitutionSeeder 实现调用)。
+            <T::InstitutionSeeder as super::GenesisInstitutionSeeder>::seed();
         }
     }
 
@@ -191,6 +209,13 @@ pub mod pallet {
 impl<T: pallet::Config> DeveloperUpgradeCheck for pallet::Pallet<T> {
     fn is_enabled() -> bool {
         pallet::DeveloperUpgradeEnabled::<T>::get()
+    }
+}
+
+// ─── TargetBlockTime 实现 ──────────────────────────────────────────────────
+impl<T: pallet::Config> TargetBlockTime for pallet::Pallet<T> {
+    fn target_block_time_ms() -> u64 {
+        pallet::TargetBlockTimeMs::<T>::get()
     }
 }
 

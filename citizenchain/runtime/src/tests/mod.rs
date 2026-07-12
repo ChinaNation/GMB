@@ -9,7 +9,7 @@ use crate::configs::*;
 use crate::ResolutionDestroy;
 use frame_support::traits::{Contains, Currency, EnsureOrigin, FindAuthor};
 use frame_support::{assert_noop, assert_ok};
-use institution_asset::{InstitutionAsset, InstitutionAssetAction};
+use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::multisig::ReservedAccountGuard;
 use sp_core::{sr25519, Pair};

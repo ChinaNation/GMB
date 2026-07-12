@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../8964/services/square_api_client.dart';
@@ -14,9 +17,11 @@ import 'crypto/mls_native.dart';
 import 'crypto/mls_state_store.dart';
 import 'chat_flow.dart';
 import 'chat_models.dart';
+import 'chat_push_service.dart';
 import 'storage/chat_store.dart';
 import 'transport/chat_cloud_transport.dart';
 import 'transport/chat_transport.dart';
+import 'transport/chat_webrtc_transport.dart';
 
 typedef ChatLoginSigner = Future<String> Function({
   required int walletIndex,
@@ -33,14 +38,46 @@ typedef ChatDeviceBindingSigner = Future<String> Function({
 typedef ChatCloudTransportFactory = ChatCloudTransport Function({
   required String ownerAccount,
   required String ownerDeviceId,
-  Uri? mailboxBaseUrl,
+  Uri? serviceBaseUrl,
   String? sessionToken,
 });
+
+typedef ChatPushTokenProvider = Future<ChatPushToken> Function();
 
 typedef MlsStateStoreFactory = Future<MlsStateStore> Function(
   String ownerAccount,
   String deviceId,
 );
+
+/// 系统推送唤醒后的短时后台收发窗口。
+///
+/// Cloudflare 不代存消息，因此接收设备被唤醒后必须主动建立瞬时连接。若发送设备
+/// 此刻离线，`peer_ready` 会反向唤醒发送设备，由其本机队列继续投递。
+@pragma('vm:entry-point')
+Future<void> chatRuntimeBackgroundHandler(RemoteMessage message) async {
+  final sender = ChatPushService.wakeSenderFromData(message.data);
+  if (sender == null) return;
+  await ChatPushService.storeWakeSender(sender);
+
+  final push = ChatPushService();
+  try {
+    await ensureChatFirebaseReady();
+    final runtime = ChatRuntime(
+      pushService: push,
+      pushTokenProvider: () => push.readToken(requestPermission: false),
+    );
+    final owner = await runtime.readOwnerAccount();
+    if (owner == null) return;
+    final stop = await runtime.startRealtimeSync(onNotice: () async {});
+    if (stop == null) return;
+    await Future<void>.delayed(const Duration(seconds: 20));
+    await stop();
+  } catch (_) {
+    // 后台执行时间由系统控制；失败后保留发送方提示，前台恢复时继续重试。
+  } finally {
+    await push.dispose();
+  }
+}
 
 class _ChatOwnerContext {
   const _ChatOwnerContext({
@@ -49,6 +86,7 @@ class _ChatOwnerContext {
     required this.devicePublicKeyHex,
     required this.crypto,
     required this.transport,
+    required this.webrtc,
     required this.sessionExpiresAt,
   });
 
@@ -57,6 +95,7 @@ class _ChatOwnerContext {
   final String devicePublicKeyHex;
   final MlsCrypto crypto;
   final ChatCloudTransport transport;
+  final ChatWebrtcTransport webrtc;
   final int sessionExpiresAt;
 
   bool get isUsable =>
@@ -84,7 +123,7 @@ class _ChatOwner {
 
 /// 公民 Chat 运行态编排服务。
 ///
-/// 页面层不直接操作 OpenMLS、Cloudflare mailbox、近场通道和 Isar。
+/// 页面层不直接操作 OpenMLS、Cloudflare 瞬时转发、近场通道和 Isar。
 /// 这个服务负责读取默认用户钱包、建立设备身份，并把聊天发送
 /// /同步接到正式 transport。登录和设备绑定只使用硬件 P-256 设备子钥；钱包
 /// seed、钱包主私钥和生物识别不得进入任何 Chat 初始化或收发路径。
@@ -103,6 +142,8 @@ class ChatRuntime {
       MlsStateStore stateStore,
     )? cryptoFactory,
     ChatCloudTransportFactory? cloudTransportFactory,
+    ChatPushService? pushService,
+    ChatPushTokenProvider? pushTokenProvider,
   })  : _store = store ?? ChatStore(),
         _walletManager = walletManager ?? WalletManager(),
         _preferences = preferences,
@@ -112,14 +153,17 @@ class ChatRuntime {
         _deviceSubkey = deviceSubkey ?? DeviceSubkey(),
         _stateStoreFactory = stateStoreFactory,
         _cryptoFactory = cryptoFactory,
-        _cloudTransportFactory = cloudTransportFactory;
+        _cloudTransportFactory = cloudTransportFactory,
+        _pushService = pushService ?? ChatPushService(),
+        _pushTokenProvider = pushTokenProvider;
 
   static const _kDeviceId = 'chat.device.id';
   static const _kDevicePublicKeyHex = 'chat.device.public_key_hex';
   static const _kDeviceBindingPrefix = 'chat.cloudflare.device_binding';
+  static const _kPushTokenPrefix = 'chat.push.token';
   static const _kKeyPackagePublishedPrefix =
       'chat.cloudflare.key_package_until';
-  static const _mailboxBindingTtl = Duration(days: 90);
+  static const _deviceBindingTtl = Duration(days: 90);
   static const _keyPackageRefreshSkewMillis = 24 * 60 * 60 * 1000;
   static const _sessionRefreshSkewMillis = 60 * 1000;
 
@@ -136,6 +180,8 @@ class ChatRuntime {
     MlsStateStore stateStore,
   )? _cryptoFactory;
   final ChatCloudTransportFactory? _cloudTransportFactory;
+  final ChatPushService _pushService;
+  final ChatPushTokenProvider? _pushTokenProvider;
 
   /// 同一账户/设备只允许一条初始化链。成功上下文复用到 session 临近过期；
   /// 失败只释放命中的 future，不得误删后来创建的新初始化。
@@ -159,9 +205,7 @@ class ChatRuntime {
   }) async {
     final account = ownerAccount ?? await readOwnerAccount();
     return ChatInboxOverview(
-      mailboxStatus: ChatMailboxStatus.unavailable,
       ownerAccount: account,
-      mailboxEndpoint: null,
       pendingOutgoing: pendingOutgoing,
       unreadCount: unreadCount,
     );
@@ -252,9 +296,7 @@ class ChatRuntime {
         recipientAccount: peerAccount,
         senderDeviceId: context.deviceId,
         attachment: attachment,
-        prepareAttachmentUpload: context.transport.prepareAttachmentUpload,
-        uploadAttachmentObject: context.transport.uploadAttachmentObject,
-        completeAttachmentUpload: context.transport.completeAttachmentUpload,
+        sendDeviceAttachment: context.webrtc.sendAttachment,
         saveLocalAttachment: _saveAttachmentBytesToCache,
       );
     } catch (error) {
@@ -280,9 +322,7 @@ class ChatRuntime {
         senderDeviceId: context.deviceId,
         recipientKeyPackage: consumed,
         attachment: attachment,
-        prepareAttachmentUpload: context.transport.prepareAttachmentUpload,
-        uploadAttachmentObject: context.transport.uploadAttachmentObject,
-        completeAttachmentUpload: context.transport.completeAttachmentUpload,
+        sendDeviceAttachment: context.webrtc.sendAttachment,
         saveLocalAttachment: _saveAttachmentBytesToCache,
       );
     }
@@ -292,14 +332,11 @@ class ChatRuntime {
     required String conversationId,
     required String controlPlaintext,
   }) async {
-    final context = await _readyContext(await _readOwner());
     final dir = await getApplicationDocumentsDirectory();
     return ChatFlow.downloadAttachment(
       conversationId: conversationId,
       controlPlaintext: controlPlaintext,
       cacheDirectory: Directory('${dir.path}/chat/attachments'),
-      prepareAttachmentDownload: context.transport.prepareAttachmentDownload,
-      downloadAttachmentObject: context.transport.downloadAttachmentObject,
     );
   }
 
@@ -314,27 +351,26 @@ class ChatRuntime {
     }
   }
 
-  Future<int> syncPending() async {
+  /// 重试发送设备本机队列中的密文。成功转交在线接收设备后立即删队列项。
+  Future<int> retryOutgoing({String? recipientAccount}) async {
     final context = await _readyContext(await _readOwner());
-    final flow = ChatFlow(
-      crypto: context.crypto,
-      store: _store,
-      deliverer: (envelope, _) async => ChatDeliveryResult(
-        envelopeId: envelope.envelopeId,
-        transportType: ChatTransportType.cloudflare,
-        state: ChatMessageDeliveryState.failed,
-        errorMessage: '入站同步不执行投递',
-      ),
+    final queued = await _store.readQueuedEnvelopes(
+      recipientAccount: recipientAccount,
     );
-    return flow.fetchAndProcessPending(
-      fetchPending: context.transport.fetchPending,
-      ackEnvelope: context.transport.ackEnvelope,
-      cacheIncomingAttachment: (conversationId, controlPlaintext) =>
-          downloadAttachment(
-        conversationId: conversationId,
-        controlPlaintext: controlPlaintext,
-      ),
-    );
+    var sent = 0;
+    for (final item in queued) {
+      final result = await context.transport.sendEncryptedEnvelope(
+        envelopeId: item.envelopeId,
+        envelopeBytes: item.envelopeBytes,
+      );
+      await _store.markOutgoingDelivery(
+        envelopeId: item.envelopeId,
+        state: result.state,
+        errorMessage: result.errorMessage,
+      );
+      if (result.state == ChatMessageDeliveryState.sent) sent += 1;
+    }
+    return sent;
   }
 
   Future<void> _saveAttachmentBytesToCache({
@@ -360,15 +396,70 @@ class ChatRuntime {
     Future<void> Function()? onDisconnected,
   }) async {
     final context = await _readyContext(await _readOwner());
-    return context.transport.connectRealtime(
-      onNotification: (message) async {
-        // WebSocket 只作为新密文提醒；正式拉取、解密、ack 仍走 syncPending。
-        if (message['type'] == 'gmb_chat_new_envelope_v1') {
+    final stopSocket = await context.transport.connectRealtime(
+      onMessage: (message) async {
+        final type = message['type'];
+        if (type == 'gmb_chat_envelope_v2') {
+          final encoded = message['envelope'];
+          if (encoded is! String || encoded.isEmpty) return;
+          await _messageFlow(context).processIncomingEnvelopeBytes(
+            _base64UrlDecode(encoded),
+          );
           await onNotice();
+          return;
+        }
+        if (type == 'gmb_chat_signal_v1') {
+          final sender = message['sender_account'];
+          final signal = message['signal'];
+          if (sender is! String || signal is! Map<String, dynamic>) return;
+          if (signal['kind'] == 'peer_ready') {
+            await retryOutgoing(recipientAccount: sender);
+          } else {
+            await context.webrtc.handleSignal(sender, signal);
+          }
         }
       },
       onDisconnected: onDisconnected,
     );
+    if (stopSocket == null) return null;
+
+    Future<void> notifySenderReady(String senderAccount) async {
+      if (senderAccount.isEmpty) return;
+      await context.transport.sendSignal(
+        recipientAccount: senderAccount,
+        signal: const {'kind': 'peer_ready'},
+      );
+    }
+
+    final pushSubscription = _pushService.wakeSenders.listen(
+      (sender) => unawaited(notifySenderReady(sender)),
+    );
+    final pendingSenders = await _pushService.takePendingWakeSenders();
+    for (final sender in pendingSenders) {
+      await notifySenderReady(sender);
+    }
+    final tokenSubscription = _pushService.tokenChanges.listen(
+      (_) => unawaited(_refreshPushRegistration(context)),
+    );
+    await retryOutgoing();
+    return () async {
+      await pushSubscription.cancel();
+      await tokenSubscription.cancel();
+      await stopSocket();
+    };
+  }
+
+  Future<void> _refreshPushRegistration(_ChatOwnerContext context) async {
+    try {
+      await _ensureDeviceRegistered(
+        account: context.account,
+        identity: context.identity,
+        prefs: await _prefs,
+        transport: context.transport,
+      );
+    } catch (_) {
+      // Token 刷新失败不会删除旧登记；下一次平台回调或 Chat 初始化继续重试。
+    }
   }
 
   Future<_ChatOwnerContext> _readyContext(_ChatOwner account) {
@@ -445,7 +536,7 @@ class ChatRuntime {
     }
     final finalCrypto = _cryptoFactory?.call(identity, stateStore) ??
         NativeMlsCrypto(identity: identity, stateStore: stateStore);
-    final mailbox = await _ensureMailboxReady(
+    final service = await _ensureServiceReady(
       account: account,
       identity: identity,
       crypto: finalCrypto,
@@ -455,26 +546,46 @@ class ChatRuntime {
     final transport = _cloudTransportFactory?.call(
           ownerAccount: account.address,
           ownerDeviceId: deviceId,
-          mailboxBaseUrl: mailbox.baseUri,
-          sessionToken: mailbox.session.sessionToken,
+          serviceBaseUrl: service.baseUri,
+          sessionToken: service.session.sessionToken,
         ) ??
         ChatCloudTransport(
           ownerAccount: account.address,
           ownerDeviceId: deviceId,
-          mailboxBaseUrl: mailbox.baseUri,
-          sessionToken: mailbox.session.sessionToken,
+          serviceBaseUrl: service.baseUri,
+          sessionToken: service.session.sessionToken,
         );
+    final webrtc = ChatWebrtcTransport(
+      ownerAccount: account.address,
+      cloud: transport,
+      onAttachment: ({
+        required senderAccount,
+        required conversationId,
+        required attachmentId,
+        required fileName,
+        required contentType,
+        required bytes,
+      }) =>
+          _saveAttachmentBytesToCache(
+        conversationId: conversationId,
+        attachmentId: attachmentId,
+        fileName: fileName,
+        contentType: contentType,
+        bytes: bytes,
+      ),
+    );
     return _ChatOwnerContext(
       account: account,
       deviceId: deviceId,
       devicePublicKeyHex: identity.devicePublicKeyHex,
       crypto: finalCrypto,
       transport: transport,
-      sessionExpiresAt: mailbox.session.expiresAt,
+      webrtc: webrtc,
+      sessionExpiresAt: service.session.expiresAt,
     );
   }
 
-  Future<_ChatMailboxContext> _ensureMailboxReady({
+  Future<_ChatServiceContext> _ensureServiceReady({
     required _ChatOwner account,
     required ChatDevice identity,
     required MlsCrypto crypto,
@@ -489,13 +600,13 @@ class ChatRuntime {
     final transport = _cloudTransportFactory?.call(
           ownerAccount: account.address,
           ownerDeviceId: identity.deviceId,
-          mailboxBaseUrl: _squareApiClient.baseUri,
+          serviceBaseUrl: _squareApiClient.baseUri,
           sessionToken: session.sessionToken,
         ) ??
         ChatCloudTransport(
           ownerAccount: account.address,
           ownerDeviceId: identity.deviceId,
-          mailboxBaseUrl: _squareApiClient.baseUri,
+          serviceBaseUrl: _squareApiClient.baseUri,
           sessionToken: session.sessionToken,
         );
 
@@ -512,7 +623,7 @@ class ChatRuntime {
       transport: transport,
       initialKeyPackage: initialKeyPackage,
     );
-    return _ChatMailboxContext(
+    return _ChatServiceContext(
       baseUri: _squareApiClient.baseUri,
       session: session,
     );
@@ -527,11 +638,14 @@ class ChatRuntime {
     final cacheKey = _deviceBindingCacheKey(identity);
     final cachedExpiresAt = prefs.getInt(cacheKey) ?? 0;
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (cachedExpiresAt - _keyPackageRefreshSkewMillis > now) {
+    final pushToken = await _readPushToken();
+    final pushCacheKey = _pushTokenCacheKey(identity);
+    if (cachedExpiresAt - _keyPackageRefreshSkewMillis > now &&
+        prefs.getString(pushCacheKey) == pushToken.token) {
       return;
     }
 
-    final expiresAt = DateTime.now().toUtc().add(_mailboxBindingTtl);
+    final expiresAt = DateTime.now().toUtc().add(_deviceBindingTtl);
     final binding = ChatDeviceBinding(
       ownerAccount: account.address,
       deviceId: identity.deviceId,
@@ -545,11 +659,18 @@ class ChatRuntime {
     );
     await transport.registerDevice(
       devicePublicKeyHex: identity.devicePublicKeyHex,
+      pushProvider: pushToken.provider,
+      pushToken: pushToken.token,
       bindingSignature: signatureHex,
       expiresAtMillis: expiresAt.millisecondsSinceEpoch,
       nonce: binding.nonce,
     );
     await prefs.setInt(cacheKey, expiresAt.millisecondsSinceEpoch);
+    await prefs.setString(pushCacheKey, pushToken.token);
+  }
+
+  Future<ChatPushToken> _readPushToken() {
+    return _pushTokenProvider?.call() ?? _pushService.initialize();
   }
 
   Future<void> _ensureOwnKeyPackagePublished({
@@ -665,8 +786,8 @@ class ChatRuntime {
   }
 }
 
-class _ChatMailboxContext {
-  const _ChatMailboxContext({
+class _ChatServiceContext {
+  const _ChatServiceContext({
     required this.baseUri,
     required this.session,
   });
@@ -704,4 +825,14 @@ String _keyPackageCacheKey(ChatDevice identity) {
   return '${ChatRuntime._kKeyPackagePublishedPrefix}.'
       '${_safePath(identity.ownerAccount)}.'
       '${_safePath(identity.deviceId)}.${identity.devicePublicKeyHex}';
+}
+
+String _pushTokenCacheKey(ChatDevice identity) {
+  return '${ChatRuntime._kPushTokenPrefix}.'
+      '${_safePath(identity.ownerAccount)}.${_safePath(identity.deviceId)}';
+}
+
+List<int> _base64UrlDecode(String value) {
+  final normalized = value.padRight((value.length + 3) ~/ 4 * 4, '=');
+  return base64Url.decode(normalized);
 }

@@ -32,7 +32,7 @@ class AdminProfile {
     required this.account,
     this.cidNumber = '',
     this.name = '',
-    this.adminRole = '',
+    this.roleName = '',
     this.termStartDay = 0,
     this.termEndDay = 0,
     this.source = AdminProfileSource.unknown,
@@ -43,7 +43,7 @@ class AdminProfile {
         account: (j['account'] ?? '').toString(),
         cidNumber: (j['cid'] ?? '').toString(),
         name: (j['name'] ?? '').toString(),
-        adminRole: (j['admin_role'] ?? '').toString(),
+        roleName: (j['role'] ?? '').toString(),
         termStartDay: (j['ts'] as num?)?.toInt() ?? 0,
         termEndDay: (j['te'] as num?)?.toInt() ?? 0,
         source: _sourceFromByte((j['src'] as num?)?.toInt() ?? 5),
@@ -58,8 +58,8 @@ class AdminProfile {
   /// 姓名快照(来自注册局-公民列表)。
   final String name;
 
-  /// 对外法定职务。
-  final String adminRole;
+  /// 对外法定职务(链上 `AdminProfile::role_name`)。
+  final String roleName;
 
   /// 任期开始(天数自纪元;0=无任期)。
   final int termStartDay;
@@ -72,14 +72,14 @@ class AdminProfile {
 
   /// 是否带实名资料(用于 UI 区分"实名管理员" vs 仅账户的个人多签/创世空 meta)。
   bool get hasIdentity =>
-      cidNumber.isNotEmpty || name.isNotEmpty || adminRole.isNotEmpty;
+      cidNumber.isNotEmpty || name.isNotEmpty || roleName.isNotEmpty;
 
   /// 持久化缓存序列化(键缩写省空间;source 存枚举序号)。
   Map<String, Object?> toJson() => {
         'account': account,
         'cid': cidNumber,
         'name': name,
-        'admin_role': adminRole,
+        'role': roleName,
         'ts': termStartDay,
         'te': termEndDay,
         'src': source.index,
@@ -116,9 +116,10 @@ class AdminProfile {
   ///
   /// 逐字节对齐链端 `admin-primitives`:
   /// - `isPersonal`(kind==PersonalMultisig=2):每项裸 `AccountId[32]`(无资料);
-  /// - 否则每项 `AdminProfile` = `account[32]` + `admin_cid_number`(Compact<len>+UTF8)
-  ///   + `name`(Compact) + `admin_role`(Compact) + `term_start`(u32 LE) + `term_end`(u32 LE)
-  ///   + `source`(u8)。
+  /// - 否则每项 `AdminProfile`(链端 9 字段)= `admin_account[32]`
+  ///   + `admin_cid_number`(Compact<len>+UTF8) + `admin_name`(Compact) + `role_code`(Compact)
+  ///   + `role_name`(Compact) + `term_start`(u32 LE) + `term_end`(u32 LE) + `admin_source`(u8)
+  ///   + `admin_source_ref`(Compact)。
   ///
   /// 字节越界返回 null(让调用方按"解码失败"处理)。
   static (List<AdminProfile>, int)? decodeAdminsVec(
@@ -142,9 +143,12 @@ class AdminProfile {
       final name = _readCompactBytes(data, offset);
       if (name == null) return null;
       offset = name.$2;
-      final adminRole = _readCompactBytes(data, offset);
-      if (adminRole == null) return null;
-      offset = adminRole.$2;
+      final roleCode = _readCompactBytes(data, offset); // role_code:仅消费字节
+      if (roleCode == null) return null;
+      offset = roleCode.$2;
+      final roleName = _readCompactBytes(data, offset);
+      if (roleName == null) return null;
+      offset = roleName.$2;
       if (offset + 4 + 4 + 1 > data.length) return null;
       final termStart = _readU32(data, offset);
       offset += 4;
@@ -152,11 +156,14 @@ class AdminProfile {
       offset += 4;
       final source = _sourceFromByte(data[offset]);
       offset += 1;
+      final sourceRef = _readCompactBytes(data, offset); // admin_source_ref:仅消费字节
+      if (sourceRef == null) return null;
+      offset = sourceRef.$2;
       out.add(AdminProfile(
         account: account,
         cidNumber: utf8.decode(cid.$1, allowMalformed: true),
         name: utf8.decode(name.$1, allowMalformed: true),
-        adminRole: utf8.decode(adminRole.$1, allowMalformed: true),
+        roleName: utf8.decode(roleName.$1, allowMalformed: true),
         termStartDay: termStart,
         termEndDay: termEnd,
         source: source,

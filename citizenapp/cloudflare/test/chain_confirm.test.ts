@@ -51,7 +51,7 @@ describe('square chain confirmation', () => {
       upload_id: 'squ_test',
       post_id: postId,
       owner_account: ownerAccount,
-      post_category: 'campaign',
+      post_category: 'normal',
       manifest_hash: contentHash.slice(2),
       content_hash: contentHash.slice(2),
       storage_receipt_id: storageReceiptId,
@@ -97,15 +97,15 @@ describe('square chain confirmation', () => {
         [`square/${ownerAccount}/posts/${postId}/manifest.json`]: JSON.stringify({
           schema: 'citizenapp.square.post.v1',
           owner_account: ownerAccount,
-          post_category: 'campaign',
-          text: '竞选动态',
+          post_category: 'normal',
+          text: '普通动态',
           media_items: [
             {
               media_kind: 'image',
               file_name: 'a.webp',
               content_type: 'image/webp',
               byte_size: 1024,
-              sha256: 'aa'
+              sha256: 'aa'.repeat(32)
             }
           ]
         })
@@ -122,7 +122,8 @@ describe('square chain confirmation', () => {
           jsonrpc: '2.0',
           id: 1,
           result: buildEventsHex({
-            cidNumber: 'CN001-CTZN-000000001-2026'
+            cidNumber: 'CN001-CTZN-000000001-2026',
+            postCategory: 'normal'
           })
         })
       )
@@ -133,7 +134,7 @@ describe('square chain confirmation', () => {
       block_hash: blockHash
     });
 
-    expect(post.text).toBe('竞选动态');
+    expect(post.text).toBe('普通动态');
     expect(post.cid_number).toBe('CN001-CTZN-000000001-2026');
     expect(post.media_items?.[0]).toMatchObject({
       provider: 'cloudflare_images',
@@ -317,7 +318,10 @@ function imageAsset(uploadId: string): MediaAssetRow {
   };
 }
 
-function buildEventsHex(input: { cidNumber: string | null }): string {
+function buildEventsHex(input: {
+  cidNumber: string | null;
+  postCategory?: 'normal' | 'campaign';
+}): string {
   const chunks = [
     Uint8Array.of(0x00),
     u32Le(0),
@@ -327,7 +331,7 @@ function buildEventsHex(input: { cidNumber: string | null }): string {
     input.cidNumber === null
       ? Uint8Array.of(0)
       : concat([Uint8Array.of(1), compactBytes(input.cidNumber)]),
-    Uint8Array.of(1),
+    Uint8Array.of(input.postCategory === 'normal' ? 0 : 1),
     bytes(contentHash),
     compactBytes(storageReceiptId),
     u64Le(1800000000000),
@@ -389,6 +393,25 @@ class FakeStmt {
   }
 
   async first<T>() {
+    if (this.sql.includes('FROM square_memberships')) {
+      return {
+        owner_account: ownerAccount,
+        membership_level: 'democracy',
+        expires_at: Date.now() + 60_000,
+        updated_at: Date.now(),
+        subscription_source: 'stripe',
+        stripe_customer_id: 'cus_test',
+        stripe_subscription_id: 'sub_test',
+        stripe_price_id: 'price_test',
+        subscription_status: 'active',
+        current_period_start: Date.now(),
+        current_period_end: Date.now() + 60_000,
+        cancel_at_period_end: 0,
+        identity_level: 'visitor',
+        identity_checked_at: Date.now(),
+        entitlement_lapsed_at: null
+      } as T;
+    }
     if (this.sql.includes('FROM square_uploads')) {
       return (this.db.uploads.get(this.args[0] as string) ?? null) as T | null;
     }

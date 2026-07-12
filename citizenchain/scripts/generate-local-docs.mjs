@@ -7,7 +7,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url)); // citizenchain/
 const chainRoot = path.resolve(scriptDir, '..');                // citizenchain
 const frontendRoot = path.resolve(chainRoot, 'node/frontend');  // citizenchain/node/frontend
 const repoRoot = path.resolve(chainRoot, '..');                 // 仓库根
-const outputPath = path.resolve(frontendRoot, 'generated/local-docs.generated.ts');
+const outputPath = path.resolve(frontendRoot, 'local-docs.generated.ts');
 
 const sources = [
   {

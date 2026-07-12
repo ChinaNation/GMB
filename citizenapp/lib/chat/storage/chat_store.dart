@@ -29,6 +29,19 @@ class ChatStoredMessage {
   final String? plaintext;
 }
 
+/// 仅保存在发送设备上的待重试密文。
+class ChatQueuedEnvelope {
+  const ChatQueuedEnvelope({
+    required this.envelopeId,
+    required this.recipientAccount,
+    required this.envelopeBytes,
+  });
+
+  final String envelopeId;
+  final String recipientAccount;
+  final List<int> envelopeBytes;
+}
+
 /// Chat 路由缓存记录。
 class ChatRoute {
   const ChatRoute({
@@ -37,7 +50,6 @@ class ChatRoute {
     required this.deviceId,
     required this.devicePublicKeyHex,
     required this.safetyNumber,
-    this.cloudflareMailboxId,
     this.nearbyPeerHint,
     this.note,
     this.createdAtMillis,
@@ -49,7 +61,6 @@ class ChatRoute {
   final String deviceId;
   final String devicePublicKeyHex;
   final String safetyNumber;
-  final String? cloudflareMailboxId;
   final String? nearbyPeerHint;
   final String? note;
   final int? createdAtMillis;
@@ -60,7 +71,7 @@ class ChatRoute {
 
 /// 公民 Chat 的 Isar 持久化仓库。
 ///
-/// 本仓库只保存手机本地状态。Cloudflare 和近场 transport 只拿到完整
+/// 本仓库只保存手机本地状态。Cloudflare 瞬时转发和近场 transport 只拿到完整
 /// Protobuf envelope bytes，不会接触 [plaintext]。
 class ChatStore {
   ChatStore({
@@ -122,7 +133,6 @@ class ChatStore {
         ..deviceId = route.deviceId
         ..devicePublicKeyHex = route.devicePublicKeyHex
         ..safetyNumber = route.safetyNumber
-        ..cloudflareMailboxId = route.cloudflareMailboxId
         ..nearbyPeerHint = route.nearbyPeerHint
         ..note = route.note
         ..createdAtMillis =
@@ -148,8 +158,8 @@ class ChatStore {
 
   /// 彻底删除本机会话记录。
   ///
-  /// Cloudflare 只做临时投递队列；用户删除聊天记录时，本地 Isar 是唯一
-  /// 需要清理的聊天历史真源。附件缓存目录由运行态在同一操作中删除。
+  /// Cloudflare 不保存聊天内容；用户删除聊天记录时，本地 Isar 是唯一
+  /// 需要清理的聊天历史真源，附件缓存目录由运行态在同一操作中删除。
   Future<void> deleteConversation(String conversationId) {
     return _walletIsar.writeTxn((isar) async {
       final messages = await isar.chatMessageEntitys
@@ -196,7 +206,7 @@ class ChatStore {
 
   /// 注销用户：清除该 owner 在本机的全部 Chat 历史（会话/消息/出入站队列）。
   ///
-  /// Cloudflare 端 A 的 Chat 数据由 Worker purge 删除；本地 Isar 是 A 私信**明文**
+  /// Cloudflare 端 A 的设备登记由 Worker purge 删除；本地 Isar 是 A 私信**明文**
   /// 的唯一残留处，须一并清空以做到零残留。路由缓存（imRouteCacheEntity）是设备级
   /// 对端路由、非 owner 归属，不在此清除。
   Future<void> clearAllForOwner(String ownerAccount) {
@@ -352,12 +362,17 @@ class ChatStore {
       final queue =
           await isar.chatOutboundQueueEntitys.getByEnvelopeId(envelopeId);
       if (queue != null) {
-        queue
-          ..deliveryState = state.name
-          ..attemptCount = queue.attemptCount + 1
-          ..lastError = errorMessage
-          ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
-        await isar.chatOutboundQueueEntitys.putByEnvelopeId(queue);
+        if (state == ChatMessageDeliveryState.sent ||
+            state == ChatMessageDeliveryState.receivedByDevice) {
+          await isar.chatOutboundQueueEntitys.delete(queue.id);
+        } else {
+          queue
+            ..deliveryState = state.name
+            ..attemptCount = queue.attemptCount + 1
+            ..lastError = errorMessage
+            ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
+          await isar.chatOutboundQueueEntitys.putByEnvelopeId(queue);
+        }
       }
       final message = await isar.chatMessageEntitys.getByEnvelopeId(envelopeId);
       if (message != null) {
@@ -430,6 +445,33 @@ class ChatStore {
     });
   }
 
+  /// 读取发送设备上的待重试密文；Cloudflare 不提供远程补拉。
+  Future<List<ChatQueuedEnvelope>> readQueuedEnvelopes({
+    String? recipientAccount,
+  }) {
+    return _walletIsar.read((isar) async {
+      final rows = await isar.chatOutboundQueueEntitys
+          .filter()
+          .idGreaterThan(0, include: true)
+          .findAll();
+      final matched = recipientAccount == null
+          ? rows
+          : rows
+              .where((row) => row.recipientAccount == recipientAccount)
+              .toList(growable: false);
+      matched.sort((a, b) => a.updatedAtMillis.compareTo(b.updatedAtMillis));
+      return matched
+          .map(
+            (row) => ChatQueuedEnvelope(
+              envelopeId: row.envelopeId,
+              recipientAccount: row.recipientAccount,
+              envelopeBytes: _hexToBytes(row.envelopeBytesHex),
+            ),
+          )
+          .toList(growable: false);
+    });
+  }
+
   Future<void> _putConversationInTxn({
     required Isar isar,
     required String conversationId,
@@ -491,7 +533,6 @@ ChatRoute _routeFromEntity(ChatRouteCacheEntity row) {
     deviceId: row.deviceId,
     devicePublicKeyHex: row.devicePublicKeyHex,
     safetyNumber: row.safetyNumber,
-    cloudflareMailboxId: row.cloudflareMailboxId,
     nearbyPeerHint: row.nearbyPeerHint,
     note: row.note,
     createdAtMillis: row.createdAtMillis,

@@ -18,7 +18,6 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 admin-primitives = { path = "../../admins/admin-primitives", default-features = false }
 votingengine = { path = "../../votingengine", default-features = false }
-institution-asset = { path = "../../transaction/institution-asset", default-features = false }
 onchain = { path = "../../transaction/onchain", default-features = false }
 primitives = { path = "../../primitives", default-features = false }
 
@@ -42,7 +41,6 @@ std = [
     "sp-std/std",
     "admin-primitives/std",
     "votingengine/std",
-    "institution-asset/std",
     "onchain/std",
     "primitives/std",
 ]

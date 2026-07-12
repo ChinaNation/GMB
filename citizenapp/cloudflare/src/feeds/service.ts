@@ -1,6 +1,7 @@
 import type { Env, FeedKind } from '../types';
 import { jsonResponse, requireSession } from '../shared/http';
 import { listFeedPosts } from '../posts/repository';
+import { addBrowseCount, assertBrowseAvailable, getBrowseState } from './browse';
 
 function parseLimit(url: URL): number {
   const value = Number.parseInt(url.searchParams.get('limit') ?? '20', 10);
@@ -13,20 +14,16 @@ export async function feedRoute(
   feedKind: FeedKind
 ): Promise<Response> {
   const url = new URL(request.url);
-  const session = await maybeSession(request, env);
-  const posts = await listFeedPosts(env, feedKind, session?.owner_account ?? null, parseLimit(url));
+  const session = await requireSession(request, env);
+  const before = await getBrowseState(env, session.owner_account);
+  const limit = Math.min(parseLimit(url), assertBrowseAvailable(before));
+  const posts = await listFeedPosts(env, feedKind, session.owner_account, limit);
+  const browse = await addBrowseCount(env, session.owner_account, before, posts.length);
 
   return jsonResponse({
     ok: true,
     feed_kind: feedKind,
-    posts
+    posts,
+    ...browse,
   });
-}
-
-async function maybeSession(request: Request, env: Env) {
-  const authorization = request.headers.get('authorization');
-  if (!authorization?.startsWith('Bearer ')) {
-    return null;
-  }
-  return requireSession(request, env);
 }

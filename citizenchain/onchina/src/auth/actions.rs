@@ -1027,7 +1027,7 @@ fn federal_registry_row_value(
         admin_name: admin.admin_name.clone(),
         admin_cid_number: String::new(),
         name: String::new(),
-        admin_role: String::new(),
+        role_name: String::new(),
         term_start: 0,
         term_end: 0,
         origin: u8::MAX,

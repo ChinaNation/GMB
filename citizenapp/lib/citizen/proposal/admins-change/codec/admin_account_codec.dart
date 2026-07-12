@@ -10,6 +10,10 @@ class AdminAccountCodec {
   static AdminAccountState? decode(Uint8List accountId, Uint8List data) {
     if (data.length < 5) return null;
     var offset = 0;
+    // 链端 AdminAccount 前导字段 cid_number: BoundedVec<u8>(个人多签为空);仅消费字节。
+    final (cidLen, cidLenSize) = readCompactU32(data, offset);
+    offset += cidLenSize + cidLen;
+    if (offset + 5 > data.length) return null;
     final institutionCode = String.fromCharCodes(
       data.sublist(offset, offset + 4).where((b) => b != 0),
     );

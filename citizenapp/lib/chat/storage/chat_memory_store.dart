@@ -21,7 +21,7 @@ class ChatMemoryStore {
   List<ChatConversationPreview> get conversations =>
       List.unmodifiable(_conversations);
 
-  /// 更新互联网 mailbox / 近场聊天概览。
+  /// 更新本机聊天概览。
   void updateOverview(ChatInboxOverview overview) {
     _overview = overview;
   }

@@ -108,7 +108,7 @@ describe('GET /v1/square/users/:account', () => {
       membership: { membership_level: 'voting' }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${owner}`),
+      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
       env,
       owner
     );
@@ -127,7 +127,7 @@ describe('GET /v1/square/users/:account', () => {
       membership: { membership_level: 'voting', expires_at: 1 }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${owner}`),
+      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
       env,
       owner
     );
@@ -144,7 +144,7 @@ describe('GET /v1/square/users/:account', () => {
       identity: { identity_level: 'candidate', cid_number: 'CN001-CTZN-000000009-2026' }
     });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${owner}`),
+      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
       env,
       owner
     );
@@ -157,11 +157,11 @@ describe('GET /v1/square/users/:account', () => {
     });
   });
 
-  it('is publicly readable, unverified visitor when no chain identity', async () => {
+  it('is wallet-readable and reports an unverified visitor when no chain identity', async () => {
     // 无身份桩 + 未配 RPC → 软降级为访客（未认证），不因链上不可用而报错。
     const env = fakeEnv({ posts: [], follows: [] });
     const response = await getUserProfileRoute(
-      request(`https://w/v1/square/users/${owner}`),
+      request(`https://w/v1/square/users/${owner}`, { authToken: 'tok' }),
       env,
       owner
     );
@@ -266,7 +266,7 @@ describe('GET /v1/square/users/:account/posts', () => {
     query: string
   ): Promise<{ posts: Array<{ post_id: string }>; next_cursor: number | null }> {
     const response = await getUserPostsRoute(
-      request(`https://w/v1/square/users/${owner}/posts?${query}`),
+      request(`https://w/v1/square/users/${owner}/posts?${query}`, { authToken: 'tok' }),
       env,
       owner
     );
@@ -305,7 +305,7 @@ describe('GET /v1/square/users/:account/follows', () => {
     next_cursor: number | null;
   }> {
     const response = await getUserFollowsRoute(
-      request(`https://w/v1/square/users/${owner}/follows?${query}`),
+      request(`https://w/v1/square/users/${owner}/follows?${query}`, { authToken: 'tok' }),
       env,
       owner
     );
@@ -346,6 +346,14 @@ function fakeEnv(options: FakeEnvOptions = {}): Env {
   const posts = options.posts ?? [];
   const follows = options.follows ?? [];
   const kv = new Map<string, unknown>();
+  if (!options.session) {
+    const defaultSession: SessionState = {
+      owner_account: viewer,
+      created_at: 0,
+      expires_at: Date.now() + 60_000
+    };
+    kv.set('square_session:tok', defaultSession);
+  }
   if (options.session) {
     const session: SessionState = {
       owner_account: options.session.owner_account,
@@ -544,5 +552,9 @@ class FakeStmt {
       .slice(0, limit);
 
     return { results: results as unknown as T[] };
+  }
+
+  async run(): Promise<{ meta: { changes: number } }> {
+    return { meta: { changes: 1 } };
   }
 }

@@ -26959,58 +26959,53 @@ const ChatRouteCacheEntitySchema = CollectionSchema(
   name: r'ChatRouteCacheEntity',
   id: -1879395959909772186,
   properties: {
-    r'cloudflareMailboxId': PropertySchema(
-      id: 0,
-      name: r'cloudflareMailboxId',
-      type: IsarType.string,
-    ),
     r'createdAtMillis': PropertySchema(
-      id: 1,
+      id: 0,
       name: r'createdAtMillis',
       type: IsarType.long,
     ),
     r'deviceId': PropertySchema(
-      id: 2,
+      id: 1,
       name: r'deviceId',
       type: IsarType.string,
     ),
     r'devicePublicKeyHex': PropertySchema(
-      id: 3,
+      id: 2,
       name: r'devicePublicKeyHex',
       type: IsarType.string,
     ),
     r'nearbyPeerHint': PropertySchema(
-      id: 4,
+      id: 3,
       name: r'nearbyPeerHint',
       type: IsarType.string,
     ),
     r'note': PropertySchema(
-      id: 5,
+      id: 4,
       name: r'note',
       type: IsarType.string,
     ),
     r'peerAccount': PropertySchema(
-      id: 6,
+      id: 5,
       name: r'peerAccount',
       type: IsarType.string,
     ),
     r'routeDisplayName': PropertySchema(
-      id: 7,
+      id: 6,
       name: r'routeDisplayName',
       type: IsarType.string,
     ),
     r'routeId': PropertySchema(
-      id: 8,
+      id: 7,
       name: r'routeId',
       type: IsarType.string,
     ),
     r'safetyNumber': PropertySchema(
-      id: 9,
+      id: 8,
       name: r'safetyNumber',
       type: IsarType.string,
     ),
     r'updatedAtMillis': PropertySchema(
-      id: 10,
+      id: 9,
       name: r'updatedAtMillis',
       type: IsarType.long,
     )
@@ -27062,12 +27057,6 @@ int _chatRouteCacheEntityEstimateSize(
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
-  {
-    final value = object.cloudflareMailboxId;
-    if (value != null) {
-      bytesCount += 3 + value.length * 3;
-    }
-  }
   bytesCount += 3 + object.deviceId.length * 3;
   bytesCount += 3 + object.devicePublicKeyHex.length * 3;
   {
@@ -27095,17 +27084,16 @@ void _chatRouteCacheEntitySerialize(
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  writer.writeString(offsets[0], object.cloudflareMailboxId);
-  writer.writeLong(offsets[1], object.createdAtMillis);
-  writer.writeString(offsets[2], object.deviceId);
-  writer.writeString(offsets[3], object.devicePublicKeyHex);
-  writer.writeString(offsets[4], object.nearbyPeerHint);
-  writer.writeString(offsets[5], object.note);
-  writer.writeString(offsets[6], object.peerAccount);
-  writer.writeString(offsets[7], object.routeDisplayName);
-  writer.writeString(offsets[8], object.routeId);
-  writer.writeString(offsets[9], object.safetyNumber);
-  writer.writeLong(offsets[10], object.updatedAtMillis);
+  writer.writeLong(offsets[0], object.createdAtMillis);
+  writer.writeString(offsets[1], object.deviceId);
+  writer.writeString(offsets[2], object.devicePublicKeyHex);
+  writer.writeString(offsets[3], object.nearbyPeerHint);
+  writer.writeString(offsets[4], object.note);
+  writer.writeString(offsets[5], object.peerAccount);
+  writer.writeString(offsets[6], object.routeDisplayName);
+  writer.writeString(offsets[7], object.routeId);
+  writer.writeString(offsets[8], object.safetyNumber);
+  writer.writeLong(offsets[9], object.updatedAtMillis);
 }
 
 ChatRouteCacheEntity _chatRouteCacheEntityDeserialize(
@@ -27115,18 +27103,17 @@ ChatRouteCacheEntity _chatRouteCacheEntityDeserialize(
   Map<Type, List<int>> allOffsets,
 ) {
   final object = ChatRouteCacheEntity();
-  object.cloudflareMailboxId = reader.readStringOrNull(offsets[0]);
-  object.createdAtMillis = reader.readLong(offsets[1]);
-  object.deviceId = reader.readString(offsets[2]);
-  object.devicePublicKeyHex = reader.readString(offsets[3]);
+  object.createdAtMillis = reader.readLong(offsets[0]);
+  object.deviceId = reader.readString(offsets[1]);
+  object.devicePublicKeyHex = reader.readString(offsets[2]);
   object.id = id;
-  object.nearbyPeerHint = reader.readStringOrNull(offsets[4]);
-  object.note = reader.readStringOrNull(offsets[5]);
-  object.peerAccount = reader.readString(offsets[6]);
-  object.routeDisplayName = reader.readString(offsets[7]);
-  object.routeId = reader.readString(offsets[8]);
-  object.safetyNumber = reader.readString(offsets[9]);
-  object.updatedAtMillis = reader.readLong(offsets[10]);
+  object.nearbyPeerHint = reader.readStringOrNull(offsets[3]);
+  object.note = reader.readStringOrNull(offsets[4]);
+  object.peerAccount = reader.readString(offsets[5]);
+  object.routeDisplayName = reader.readString(offsets[6]);
+  object.routeId = reader.readString(offsets[7]);
+  object.safetyNumber = reader.readString(offsets[8]);
+  object.updatedAtMillis = reader.readLong(offsets[9]);
   return object;
 }
 
@@ -27138,17 +27125,17 @@ P _chatRouteCacheEntityDeserializeProp<P>(
 ) {
   switch (propertyId) {
     case 0:
-      return (reader.readStringOrNull(offset)) as P;
-    case 1:
       return (reader.readLong(offset)) as P;
+    case 1:
+      return (reader.readString(offset)) as P;
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 4:
       return (reader.readStringOrNull(offset)) as P;
     case 5:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 6:
       return (reader.readString(offset)) as P;
     case 7:
@@ -27156,8 +27143,6 @@ P _chatRouteCacheEntityDeserializeProp<P>(
     case 8:
       return (reader.readString(offset)) as P;
     case 9:
-      return (reader.readString(offset)) as P;
-    case 10:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -27463,162 +27448,6 @@ extension ChatRouteCacheEntityQueryWhere
 
 extension ChatRouteCacheEntityQueryFilter on QueryBuilder<ChatRouteCacheEntity,
     ChatRouteCacheEntity, QFilterCondition> {
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> cloudflareMailboxIdIsNull() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'cloudflareMailboxId',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> cloudflareMailboxIdIsNotNull() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'cloudflareMailboxId',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> cloudflareMailboxIdEqualTo(
-    String? value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'cloudflareMailboxId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> cloudflareMailboxIdGreaterThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'cloudflareMailboxId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> cloudflareMailboxIdLessThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'cloudflareMailboxId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> cloudflareMailboxIdBetween(
-    String? lower,
-    String? upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'cloudflareMailboxId',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> cloudflareMailboxIdStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'cloudflareMailboxId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> cloudflareMailboxIdEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'cloudflareMailboxId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-          QAfterFilterCondition>
-      cloudflareMailboxIdContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'cloudflareMailboxId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-          QAfterFilterCondition>
-      cloudflareMailboxIdMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'cloudflareMailboxId',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> cloudflareMailboxIdIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'cloudflareMailboxId',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
-      QAfterFilterCondition> cloudflareMailboxIdIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'cloudflareMailboxId',
-        value: '',
-      ));
-    });
-  }
-
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity,
       QAfterFilterCondition> createdAtMillisEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
@@ -28937,20 +28766,6 @@ extension ChatRouteCacheEntityQueryLinks on QueryBuilder<ChatRouteCacheEntity,
 extension ChatRouteCacheEntityQuerySortBy
     on QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QSortBy> {
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      sortByCloudflareMailboxId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'cloudflareMailboxId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      sortByCloudflareMailboxIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'cloudflareMailboxId', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
       sortByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAtMillis', Sort.asc);
@@ -29093,20 +28908,6 @@ extension ChatRouteCacheEntityQuerySortBy
 
 extension ChatRouteCacheEntityQuerySortThenBy
     on QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QSortThenBy> {
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      thenByCloudflareMailboxId() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'cloudflareMailboxId', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
-      thenByCloudflareMailboxIdDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'cloudflareMailboxId', Sort.desc);
-    });
-  }
-
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QAfterSortBy>
       thenByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
@@ -29265,14 +29066,6 @@ extension ChatRouteCacheEntityQuerySortThenBy
 extension ChatRouteCacheEntityQueryWhereDistinct
     on QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QDistinct> {
   QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QDistinct>
-      distinctByCloudflareMailboxId({bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'cloudflareMailboxId',
-          caseSensitive: caseSensitive);
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, ChatRouteCacheEntity, QDistinct>
       distinctByCreatedAtMillis() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAtMillis');
@@ -29351,13 +29144,6 @@ extension ChatRouteCacheEntityQueryProperty on QueryBuilder<
   QueryBuilder<ChatRouteCacheEntity, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
-    });
-  }
-
-  QueryBuilder<ChatRouteCacheEntity, String?, QQueryOperations>
-      cloudflareMailboxIdProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'cloudflareMailboxId');
     });
   }
 

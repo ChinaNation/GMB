@@ -250,13 +250,13 @@
 
 ### 9.2 Chat 聊天承载边界
 
-2026-07-05 起，CitizenApp 私密聊天正式路线只保留 Cloudflare 密文 mailbox 互联网聊天和手机近场聊天，区块链节点软件不再承载聊天投递、聊天 mailbox、KeyPackage 池或手机配对入口。
+CitizenApp 私密聊天只保留 Cloudflare 瞬时转发、WebRTC 设备附件和手机近场聊天，区块链节点软件不承载聊天投递、密钥池或手机配对入口。
 
 - 删除边界：已删除 `citizenchain/node/src/chat/`、`src/settings/communication-node/`、`frontend/settings/communication-node/`、已删除的节点聊天协议 注册、通信节点 Tauri 命令、桌面通信节点二维码和 `citizenchain/scripts/im-two-node-smoke.sh`。
 - 全节点边界：归档全节点和普通全节点只描述链数据保存方式；节点同步、挖矿、治理、交易和链上中国平台启动不受 Chat 方案调整影响。
-- App 聊天边界：CitizenApp 私聊和群聊继续使用钱包地址作为聊天账户、OpenMLS 端到端加密和 `GMB_CHAT_V1` / `ChatEnvelope` 外层协议；互联网投递由 Cloudflare Worker / D1 / R2 的密文 mailbox 承接，近场由手机蓝牙 / Wi-Fi 直连承接。
+- App 聊天边界：CitizenApp 私聊和群聊使用钱包地址、OpenMLS 和 `GMB_CHAT_V1`；互联网密文由 Worker/DO 瞬时转发，附件由 WebRTC 设备间传输，近场由手机蓝牙/Wi-Fi 直连。
 - 二维码边界：`QR_V1/k=5 chat_node_pairing` 已删除，扫码解析端应按未知类型拒绝；桌面节点不再生成聊天配对二维码。
-- 禁止恢复：不得把聊天功能重新接回节点 RPC、`sc-network/libp2p` request-response、通信节点开关或区块链节点 mailbox；后续 Chat 运行态验收以 CitizenApp + Cloudflare Worker 本地/预发环境和近场真机收发为准。
+- 禁止恢复：不得把聊天功能接回节点 RPC、`sc-network/libp2p` request-response 或通信节点开关；Chat 验收以 CitizenApp + Cloudflare staging 和双真机为准。
 
 ## 10. 桌面同步守护边界
 

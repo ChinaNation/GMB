@@ -677,7 +677,7 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
         // 外部人员不能创建联合提案
         let outsider = AccountId32::new([9u8; 32]);
         assert_noop!(
-            JointVote::prepare_population_snapshot(
+            JointVote::prepare_joint_population_snapshot(
                 RuntimeOrigin::signed(outsider),
                 votingengine::PopulationScope::Country,
             ),
@@ -897,7 +897,7 @@ fn population_snapshot_can_be_prepared_for_each_joint_proposal() {
         );
 
         TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = 11);
-        assert_ok!(JointVote::prepare_population_snapshot(
+        assert_ok!(JointVote::prepare_joint_population_snapshot(
             RuntimeOrigin::signed(nrc_admin(0)),
             votingengine::PopulationScope::Country,
         ));

@@ -1733,7 +1733,6 @@ dependencies = [
  "grandpakey-change",
  "hex",
  "hex-literal",
- "institution-asset",
  "internal-vote",
  "joint-vote",
  "legislation-vote",
@@ -5708,14 +5707,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "institution-asset"
-version = "1.0.0"
-dependencies = [
- "parity-scale-codec",
- "scale-info",
-]
-
-[[package]]
 name = "integer-sqrt"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7615,7 +7606,6 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "institution-asset",
  "internal-vote",
  "onchain",
  "pallet-balances",
@@ -8268,7 +8258,6 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "institution-asset",
  "log",
  "pallet-balances",
  "parity-scale-codec",
@@ -9034,7 +9023,6 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "institution-asset",
  "internal-vote",
  "onchain",
  "pallet-balances",
@@ -10038,7 +10026,6 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "institution-asset",
  "internal-vote",
  "onchain",
  "pallet-balances",
@@ -10377,7 +10364,6 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "institution-asset",
  "internal-vote",
  "onchain",
  "pallet-balances",

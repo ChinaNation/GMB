@@ -73,7 +73,7 @@ fn build_active_proposal_view(
         .map(|p| SeatView {
             admin_account: p.account_hex.clone(),
             name: p.name.clone(),
-            title: p.title.clone(),
+            role_name: p.role_name.clone(),
             vote: ballots.get(&p.account_hex).copied(),
         })
         .collect();
@@ -99,8 +99,7 @@ mod tests {
             account_hex: format!("0x{hex_tail}"),
             admin_cid_number: String::new(),
             name: name.to_string(),
-            admin_role: "委员".to_string(),
-            title: "委员".to_string(),
+            role_name: "委员".to_string(),
             term_start: 0,
             term_end: 0,
             origin: 255,

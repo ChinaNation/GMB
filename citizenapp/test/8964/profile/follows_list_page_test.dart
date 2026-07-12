@@ -3,10 +3,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/8964/profile/follows_list_page.dart';
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
+import 'package:citizenapp/8964/services/square_api_client.dart';
 
 import 'fake_profile.dart';
 
 void main() {
+  const session = SquareSession(
+    sessionToken: 'test-session',
+    ownerAccount: 'viewer',
+    expiresAt: 9999999999999,
+  );
   testWidgets('renders follow entries as rows', (tester) async {
     final api = FakeProfileApi(
       sampleProfile(),
@@ -20,6 +26,7 @@ void main() {
         home: FollowsListPage(
           ownerAccount: kOwner,
           type: FollowsType.following,
+          session: session,
           api: api,
         ),
       ),
@@ -36,6 +43,7 @@ void main() {
         home: FollowsListPage(
           ownerAccount: kOwner,
           type: FollowsType.followers,
+          session: session,
           api: FakeProfileApi(sampleProfile()),
         ),
       ),

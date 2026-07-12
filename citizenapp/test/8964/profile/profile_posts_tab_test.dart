@@ -12,7 +12,7 @@ Widget _page(FakeProfileApi api) => MaterialApp(
         isSelf: true,
         api: api,
         cache: FakeProfileCache(),
-        sessionProvider: FakeSessionProvider(null),
+        sessionProvider: FakeSessionProvider(fakeSession()),
       ),
     );
 

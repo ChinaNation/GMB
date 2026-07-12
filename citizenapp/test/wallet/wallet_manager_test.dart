@@ -1,13 +1,11 @@
-import 'dart:typed_data';
-
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
-import 'package:citizenapp/isar/app_isar.dart';
 
 import '../support/fake_secure_seed_store.dart';
+import '../support/isar_test_env.dart';
 
 const _mnemonicA =
     'legal winner thank year wave sausage worth useful legal winner thank yellow';
@@ -18,6 +16,7 @@ const _mnemonicB =
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  useIsolatedIsar();
 
   late FakeSecureSeedStore fakeStore;
 
@@ -26,13 +25,8 @@ void main() {
   // 自愈分支（否则纯 Dart 环境无插件实现，authenticate 抛 MissingPluginException）。
   const localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');
 
-  setUpAll(() async {
-    await WalletIsar.instance.ensureTestCoreInitialized();
-  });
-
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    await WalletIsar.instance.resetForTest();
     fakeStore = FakeSecureSeedStore();
     WalletManager.debugSeedStore = fakeStore;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

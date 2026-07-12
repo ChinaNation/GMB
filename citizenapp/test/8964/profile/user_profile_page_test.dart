@@ -11,7 +11,7 @@ Widget _wrap({required bool isSelf}) => MaterialApp(
         isSelf: isSelf,
         api: FakeProfileApi(sampleProfile()),
         cache: FakeProfileCache(),
-        sessionProvider: FakeSessionProvider(null),
+        sessionProvider: FakeSessionProvider(fakeSession()),
       ),
     );
 

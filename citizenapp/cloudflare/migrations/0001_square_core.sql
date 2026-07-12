@@ -70,3 +70,61 @@ CREATE TABLE IF NOT EXISTS square_user_signals (
 
 CREATE INDEX IF NOT EXISTS idx_square_user_signals_owner
   ON square_user_signals(owner_account, created_at);
+
+-- Chat 只保存建立设备间端到端通道所需的最小公开材料。
+-- 消息、会话、联系人和附件禁止进入 D1、KV、R2 或 Durable Object Storage。
+CREATE TABLE IF NOT EXISTS chat_devices (
+  owner_account TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  device_public_key_hex TEXT NOT NULL,
+  push_provider TEXT NOT NULL,
+  push_token TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(owner_account, device_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_devices_owner
+  ON chat_devices(owner_account, expires_at);
+
+CREATE TABLE IF NOT EXISTS chat_keypackages (
+  owner_account TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  key_package_id TEXT PRIMARY KEY,
+  key_package TEXT NOT NULL,
+  cipher_suite TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_keypackages_available
+  ON chat_keypackages(owner_account, expires_at, created_at);
+
+CREATE TABLE IF NOT EXISTS chat_device_binding_nonces (
+  owner_account TEXT NOT NULL,
+  nonce_hash TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(owner_account, nonce_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_device_binding_nonces_expires
+  ON chat_device_binding_nonces(expires_at);
+
+CREATE TABLE IF NOT EXISTS chat_turn_credentials (
+  owner_account TEXT NOT NULL,
+  username TEXT PRIMARY KEY,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_turn_credentials_owner
+  ON chat_turn_credentials(owner_account, expires_at);
+
+CREATE TABLE IF NOT EXISTS square_browse_days (
+  owner_account TEXT NOT NULL,
+  browse_day TEXT NOT NULL,
+  browse_count INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(owner_account, browse_day)
+);

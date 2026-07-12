@@ -16,6 +16,9 @@ import { HttpError, jsonResponse, readJson, requireSession } from '../shared/htt
 import { nowMs } from '../shared/time';
 import { sanitizeOwnerAccount } from '../storage/r2_keys';
 import { loadMediaAssets } from '../uploads/service';
+import { requireActiveMembership } from '../membership/service';
+import { assertMembershipLevel, membershipPlan } from '../membership/plans';
+import { assertManifestQuota } from '../uploads/quota';
 
 interface ConfirmRequest {
   post_id?: unknown;
@@ -120,6 +123,8 @@ export async function confirmPublishedPost(
   session: SessionState,
   body: ConfirmRequest
 ): Promise<SquarePostFeedItem> {
+  // 发布确认是最后一道服务端闸门；会员在上传后失效也不得把链上事件投影为广场内容。
+  const membership = await requireActiveMembership(env, session.owner_account);
   if (typeof body.post_id !== 'string' || body.post_id.trim().length === 0) {
     throw new HttpError(400, 'invalid_post_id', '动态编号不合法');
   }
@@ -148,7 +153,17 @@ export async function confirmPublishedPost(
   }
   const manifest = await readManifest(env, manifestObjectKey);
   validateManifest(manifest, upload);
-  const mediaItems = manifestMediaItems(manifest, await loadMediaAssets(env, upload.upload_id));
+  const mediaAssets = await loadMediaAssets(env, upload.upload_id);
+  const membershipLevel = assertMembershipLevel(membership.membership_level);
+  // 发布确认再次按当前会员档校验完整内容，套餐在上传后变化也不能绕过权益。
+  await assertManifestQuota({
+    membershipLevel,
+    plan: membershipPlan(membershipLevel),
+    upload,
+    manifestText: JSON.stringify(manifest),
+    mediaAssets
+  });
+  const mediaItems = manifestMediaItems(manifest, mediaAssets);
   const contentFormat = manifest.content_format === 'article' ? 'article' : 'normal';
   const title = typeof manifest.title === 'string' ? manifest.title : null;
   const createdAt = nowMs();

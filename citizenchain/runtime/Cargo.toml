@@ -90,7 +90,6 @@ election-campaign = { path = "public/election-campaign", default-features = fals
 legislation-yuan = { path = "public/legislation-yuan", default-features = false }
 resolution-destroy = { path = "governance/resolution-destroy", default-features = false }
 multisig = { path = "transaction/multisig", default-features = false }
-institution-asset = { path = "transaction/institution-asset", default-features = false }
 offchain = { path = "transaction/offchain", default-features = false }
 genesis-pallet = { path = "genesis", default-features = false }
 
@@ -141,7 +140,6 @@ std = [
 	"legislation-yuan/std",
 	"resolution-destroy/std",
 	"multisig/std",
-	"institution-asset/std",
 	"offchain/std",
 	"genesis-pallet/std",
 	"pallet-timestamp/std",
@@ -201,7 +199,6 @@ runtime-benchmarks = [
 	"election-campaign/runtime-benchmarks",
 	"resolution-destroy/runtime-benchmarks",
 	"multisig/runtime-benchmarks",
-	"institution-asset/runtime-benchmarks",
 	"offchain/runtime-benchmarks",
 	"genesis-pallet/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
@@ -241,7 +238,6 @@ try-runtime = [
 	"election-campaign/try-runtime",
 	"resolution-destroy/try-runtime",
 	"multisig/try-runtime",
-	"institution-asset/try-runtime",
 	"offchain/try-runtime",
 	"genesis-pallet/try-runtime",
 	"sp-runtime/try-runtime",

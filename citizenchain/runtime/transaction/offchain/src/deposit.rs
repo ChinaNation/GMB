@@ -13,7 +13,7 @@ use frame_support::{
     ensure,
     traits::{Currency, ExistenceRequirement::KeepAlive},
 };
-use institution_asset::{InstitutionAsset, InstitutionAssetAction};
+use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use sp_runtime::{traits::SaturatedConversion, DispatchError, DispatchResult};
 
 use crate::{

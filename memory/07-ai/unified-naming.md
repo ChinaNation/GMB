@@ -105,7 +105,7 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | `citizenapp/lib/chat/` | CitizenApp 聊天 | citizenapp-chat | 公民聊天 Tab、聊天详情、统一消息层、端到端加密、消息存储、发送队列和传输抽象 |
 | `citizenapp/lib/chat/crypto/` | CitizenApp 聊天加密 | citizenapp-chat-crypto | P-256 会话认证、OpenMLS、KeyPackage、安全码和设备绑定 |
 | `citizenapp/lib/chat/storage/` | CitizenApp 聊天本地存储 | citizenapp-chat-storage | Chat 会话、路由缓存、消息、发送队列和附件缓存的本地存储边界 |
-| `citizenapp/lib/chat/transport/` | CitizenApp 聊天传输 | citizenapp-chat-transport | Cloudflare 密文 mailbox 传输、自动路由和去重；近场原生 transport 尚未落地 |
+| `citizenapp/lib/chat/transport/` | CitizenApp 聊天传输 | citizenapp-chat-transport | Cloudflare 瞬时 WebSocket 信封转发、WebRTC 设备间附件和本机重试；云端不保存消息或附件 |
 | `citizenweb/` | 官网 | citizenweb | GMB 官网前端工程 |
 | `docs/` | 文库 | docs | 白皮书唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
 | `citizenchain/runtime/public/legislation-yuan/` | 立法院模块 | legislation-yuan | 公民宪法唯一真源（`law_id=0`、`tier=宪法`，创世注入 `constitution.scale` + 立法投票修订）；所有法律统一章>节>条>款，展示端从链上结构化法律重建 HTML（ADR-027） |
@@ -120,20 +120,20 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 | 统一协议文件 | `unified-protocols.md` | `memory/07-ai/` | 管理协议、载荷格式和接口契约 |
 | 统一必读文件 | `unified-required-reading.md` | `memory/07-ai/` | 管理每次设计和编程前必须读取的文档 |
 | GMB Chat 协议 | `GMB_CHAT_V1` | `memory/07-ai/unified-protocols.md` / `citizenapp/chat/proto/chat_envelope.proto` / `citizenapp/lib/chat/` / `citizenapp/cloudflare/src/chat/` | 公民私密聊天的 Protobuf 外层协议，统一承载 Cloudflare 互联网聊天和未来近场聊天的 OpenMLS 密文 |
-| Chat Envelope | `ChatEnvelope` | `GMB_CHAT_V1` / `citizenapp/lib/chat/` | Chat 外层消息信封，承载 OpenMLS wire bytes、MLS 消息类型、ratchet tree、附件引用和 ack 策略 |
-| Chat 路由记录 | `ChatRoute` | `GMB_CHAT_V1` / `citizenapp/lib/chat/storage/chat_store.dart` / `citizenapp/lib/isar/app_isar.dart` | Chat 内部路由缓存，保存对方钱包聊天账户、设备公钥、安全码、Cloudflare mailbox 标识和近场提示，不替代“我的通讯录” |
-| Chat KeyPackage | `ChatKeyPackage` / `MlsKeyPackage` | `GMB_CHAT_V1` / `citizenapp/lib/chat/crypto/` / `citizenapp/cloudflare/src/chat/` | OpenMLS 设备预密钥包，发布到 Cloudflare 密文 mailbox 的对应钱包账号池并一次性消费 |
+| Chat Envelope | `ChatEnvelope` | `GMB_CHAT_V1` / `citizenapp/lib/chat/` | Chat 外层瞬时信封，只承载 OpenMLS wire bytes、MLS 消息类型和 ratchet tree；不含云端附件引用或确认状态 |
+| Chat 路由记录 | `ChatRoute` | `GMB_CHAT_V1` / `citizenapp/lib/chat/storage/chat_store.dart` / `citizenapp/lib/isar/app_isar.dart` | Chat 设备本地路由缓存，保存对方钱包聊天账户、设备公钥、安全码和近场提示，不替代“我的通讯录” |
+| Chat KeyPackage | `ChatKeyPackage` / `MlsKeyPackage` | `GMB_CHAT_V1` / `citizenapp/lib/chat/crypto/` / `citizenapp/cloudflare/src/chat/` | OpenMLS 设备预密钥包，发布到对应钱包账户的一次性池并在消费时硬删除 |
 | Chat OpenMLS native 实现 | `NativeMlsCrypto` / `MlsNativeBindings` | `citizenapp/lib/chat/crypto/mls_native.dart` | Dart 侧调用现有 `libsmoldot` native 库中的 OpenMLS C ABI，生成真实 KeyPackage、执行 OpenMLS smoke、创建/恢复持久化 MLS 会话 |
 | Chat OpenMLS 会话模型 | `MlsWireMessage` / `MlsOutboundMessage` / `MlsInboundMessage` / `MlsMessageKind` | `citizenapp/lib/chat/crypto/mls_session.dart` | Dart 侧描述 Welcome/application wire message、首次会话输出顺序和入站处理结果，不实现密码学 |
 | Chat OpenMLS 状态目录 | `MlsStateStore` | `citizenapp/lib/chat/crypto/mls_state_store.dart` | App 私有 MLS 状态目录和 pending inbound 队列边界，OpenMLS provider storage 仍由 Rust native 写入 |
 | Chat OpenMLS Rust FFI | `gmb_chat_mls_create_key_package_json` / `gmb_chat_mls_two_party_smoke_json` / `gmb_chat_mls_encrypt_json` / `gmb_chat_mls_decrypt_json` | `citizenapp/rust/src/chat_mls.rs` | 现有 `libsmoldot` native 库内的 OpenMLS C ABI 边界，不新增第二套 native 库 |
-| Chat 消息流状态机 | `ChatFlow` | `citizenapp/lib/chat/chat_flow.dart` | Cloudflare 互联网聊天和近场聊天的发送、接收、pending 重放和 ack 编排 |
-| Chat 运行态编排 | `ChatRuntime` | `citizenapp/lib/chat/chat_runtime.dart` | Chat 默认运行态入口，读取用户资料聊天账户，连接 OpenMLS、本地 Isar、Cloudflare mailbox 传输和近场传输 |
+| Chat 消息流状态机 | `ChatFlow` | `citizenapp/lib/chat/chat_flow.dart` | 瞬时互联网聊天和近场聊天的发送、接收、设备本地排队与重试编排 |
+| Chat 运行态编排 | `ChatRuntime` | `citizenapp/lib/chat/chat_runtime.dart` | Chat 默认运行态入口，连接 OpenMLS、本地 Isar、瞬时 WebSocket、通用推送唤醒和 WebRTC 附件传输 |
 | Chat Isar 消息库 | `ChatStore` / `ChatConversationEntity` / `ChatRouteCacheEntity` / `ChatMessageEntity` / `ChatOutboundQueueEntity` / `ChatPendingInboundEntity` | `citizenapp/lib/chat/storage/chat_store.dart` / `citizenapp/lib/isar/app_isar.dart` | 公民端本地会话、路由缓存、消息、出站队列和待处理入站 envelope 持久化 |
-| Chat 路由缓存记录 | `ChatRoute` | `citizenapp/lib/chat/storage/chat_store.dart` | 公民端 Chat 路由缓存模型，保存对方钱包聊天账户、Chat 设备公钥、安全码、Cloudflare mailbox 标识和近场提示 |
+| Chat 路由缓存记录 | `ChatRoute` | `citizenapp/lib/chat/storage/chat_store.dart` | 公民端设备本地 Chat 路由缓存模型，保存对方钱包聊天账户、Chat 设备公钥、安全码和近场提示 |
 | Chat 聊天页面 | `ChatPage` | `citizenapp/lib/chat/chat_page.dart` | 通讯录详情“消息”按钮和聊天 Tab 会话列表共用的聊天详情页，使用 `flutter_chat_ui` 展示本地消息，默认由 `ChatRuntime` 注入真实 P2P/MLS 发送和同步回调 |
 | Chat 聊天 UI 适配器 | `storedMessageToChatMessage` / `storedMessagesToChatMessages` | `citizenapp/lib/chat/chat_ui_adapter.dart` | 将本地 Chat 消息记录转换为 `flutter_chat_core.Message`，避免 UI 层直接读取 Isar entity |
-| Chat Cloudflare 传输 | `ChatCloudTransport` | `citizenapp/lib/chat/transport/` / `citizenapp/cloudflare/src/chat/` | 互联网聊天正式传输，向 Cloudflare 密文 mailbox 投递、拉取和 ack `ChatEnvelope` |
+| Chat Cloudflare 传输 | `ChatCloudTransport` | `citizenapp/lib/chat/transport/` / `citizenapp/cloudflare/src/chat/` | 互联网聊天的瞬时 `ChatEnvelope` 与 SDP/ICE 转发；接收方不可达时仅触发通用推送，密文留在发送设备本地队列 |
 | Chat 近场传输 | `ChatNearbyTransport` | 规划中的 Android / iOS 原生 transport | 无互联网近场聊天通过蓝牙和 Wi-Fi 手机直连传输同一种 `ChatEnvelope`；未落地前不保留占位目录或空壳 |
 | Chat 设备绑定 | `ChatDeviceBinding` / `OP_SIGN_CHAT_DEVICE_BIND` | `citizenapp/lib/chat/crypto/chat_device_binding.dart` / `citizenapp/cloudflare/src/chat/binding.ts` | session owner、MLS 设备标识和设备公钥的 P-256 绑定载荷；不得使用钱包主私钥或客户端账户字段作为授权真源 |
 | Step2D 凭证载荷 fixture | `step2d_credential_payload.json` | `memory/06-quality/fixtures/` | CitizenWallet / CitizenApp 共享的 ADR-008 Step2D SCALE 字节一致性测试数据 |

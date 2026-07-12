@@ -22,12 +22,21 @@ function fakeEnv(
   objects: Record<string, { body: string; contentType: string }>
 ): Env {
   return {
-    SQUARE_MEDIA: new FakeR2(objects) as unknown as R2Bucket
+    SQUARE_MEDIA: new FakeR2(objects) as unknown as R2Bucket,
+    SQUARE_CACHE: {
+      get: async (key: string) => key === 'square_session:test' ? {
+        owner_account: '5GrwvaEF5zXb26Fz9rcQpDWS7u4m6DXb6T6TQvF9j5uQ8g6U',
+        created_at: 0,
+        expires_at: Date.now() + 60_000
+      } : null
+    } as unknown as KVNamespace
   } as unknown as Env;
 }
 
 function call(env: Env, path: string) {
-  return mediaRoute(new Request(`https://worker${path}`), env, path);
+  return mediaRoute(new Request(`https://worker${path}`, {
+    headers: { authorization: 'Bearer test' }
+  }), env, path);
 }
 
 describe('media read channel', () => {

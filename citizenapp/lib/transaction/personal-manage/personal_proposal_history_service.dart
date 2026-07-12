@@ -104,6 +104,10 @@ class PersonalProposalHistoryService {
   ) async {
     final activeIds = await _safeFetchActiveProposalIds(personalAccountHex);
 
+    // 链可达性正向探针:只有确认链已同步可达时,才允许把「链上查不到」判为幽灵
+    // 并清理本机记录;离线/未同步一律保留本机 Isar 历史(容错回退→仅返回 Isar)。
+    final chainReachable = await _rpc.isFinalizedChainReachable();
+
     // Step 1: 链上活跃提案逐个同步到 Isar(防止其他设备发起的提案在本机无记录)。
     for (final pid in activeIds) {
       await _syncActiveProposalToIsar(personalAccountHex, pid);
@@ -111,7 +115,7 @@ class PersonalProposalHistoryService {
 
     // Step 2: 重查本机 Isar 中 status='voting' 的 entity,即使它们已不在 active 列表
     // (提案终态后就从 active 列表移除,但本机 entity 还停在 voting)。
-    await _refreshLocalVotingEntities(personalAccountHex);
+    await _refreshLocalVotingEntities(personalAccountHex, chainReachable);
 
     return _readAllFromIsar(personalAccountHex);
   }
@@ -124,6 +128,8 @@ class PersonalProposalHistoryService {
     String personalAccountHex,
   ) async {
     try {
+      // 离线/未同步无法确认提案是否真在链上,一律不判幽灵,避免误删本机记录。
+      if (!await _rpc.isFinalizedChainReachable()) return false;
       final entities = await WalletIsar.instance.read((isar) {
         return isar.personalAccountProposalEntitys
             .filter()
@@ -147,7 +153,10 @@ class PersonalProposalHistoryService {
   /// 链上若已终态(passed/executed/rejected/execution_failed),upsert 为终态;
   /// 链上仍 voting 则只刷新 yesVotes/noVotes;链上 storage 不存在(已被 90 天清理)
   /// 也只刷新 vote tally(取现有值)— 不强制覆盖为终态,等本机其他渠道写入历史。
-  Future<void> _refreshLocalVotingEntities(String personalAccountHex) async {
+  Future<void> _refreshLocalVotingEntities(
+    String personalAccountHex,
+    bool chainReachable,
+  ) async {
     try {
       final votingEntities = await WalletIsar.instance.read((isar) {
         return isar.personalAccountProposalEntitys
@@ -162,7 +171,9 @@ class PersonalProposalHistoryService {
           final chainStatus =
               await _proposalService.fetchProposalStatus(e.proposalId);
           if (chainStatus == null) {
-            if (e.action == PersonalProposalAction.create) {
+            // 仅当链确认可达却查不到该提案时,才判为「本机幽灵创建提案」并清理;
+            // 离线/未同步则保留本机记录,避免误删待投票提案(数据丢失)。
+            if (chainReachable && e.action == PersonalProposalAction.create) {
               await _deleteProposalEntity(
                 personalAccountHex: personalAccountHex,
                 proposalId: e.proposalId,

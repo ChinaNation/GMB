@@ -35,7 +35,8 @@ class SquareSessionProvider {
       ownerAccount: wallet.address,
       signLoginPayload: (loginMessage) async {
         // 会话握手 = 非用户动权 → P-256 硬件子钥静默签名 signing_message 摘要（后端 ES256 验，不读 seed）。
-        final raw = await _deviceSubkey.signRawHex(wallet.walletIndex, loginMessage);
+        final raw =
+            await _deviceSubkey.signRawHex(wallet.walletIndex, loginMessage);
         return '0x$raw';
       },
     );

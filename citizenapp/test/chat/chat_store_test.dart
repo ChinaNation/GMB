@@ -2,16 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/chat/crypto/mls_session.dart';
 import 'package:citizenapp/chat/chat_models.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
-import 'package:citizenapp/isar/app_isar.dart';
+
+import '../support/isar_test_env.dart';
 
 void main() {
-  setUp(() async {
-    await WalletIsar.instance.resetForTest();
-  });
-
-  tearDown(() async {
-    await WalletIsar.instance.resetForTest();
-  });
+  useIsolatedIsar();
 
   test('Isar store persists outgoing, pending, and incoming Chat records',
       () async {

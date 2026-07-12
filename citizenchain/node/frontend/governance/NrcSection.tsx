@@ -1,12 +1,12 @@
 // 国家储委会顶级 Section：直接渲染国家储委会机构详情页（单机构，无列表层）。
 // 特权动作：协议升级、开发升级、安全基金转账提案 — 仅国家储委会管理员可发起。
 import { useState } from 'react';
-import { AdminListPage, AdminSetChangePage } from '../admins/admin-management';
+import { AdminListPage, AdminSetChangePage } from '../admins';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
-import { CreateMultisigTransferPage } from '../transaction/multisig-transfer/CreateProposalPage';
-import { SafetyFundProposalPage } from '../transaction/multisig-transfer/SafetyFundProposalPage';
-import { SweepProposalPage } from '../transaction/multisig-transfer/SweepProposalPage';
+import { CreateMultisigTransferPage } from '../transaction/multisig/CreateProposalPage';
+import { SafetyFundProposalPage } from '../transaction/multisig/SafetyFundProposalPage';
+import { SweepProposalPage } from '../transaction/multisig/SweepProposalPage';
 import { DeveloperUpgradePage, ProtocolUpgradeProposalPage } from './runtime-upgrade';
 import type { AdminWalletMatch } from './types';
 

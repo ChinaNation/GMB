@@ -1,11 +1,11 @@
 // 省储委会顶级 Section：列表（orgType=1）→ 机构详情 两级导航。
 import { useState } from 'react';
-import { AdminListPage, AdminSetChangePage } from '../admins/admin-management';
+import { AdminListPage, AdminSetChangePage } from '../admins';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
-import { CreateMultisigTransferPage } from '../transaction/multisig-transfer/CreateProposalPage';
-import { SweepProposalPage } from '../transaction/multisig-transfer/SweepProposalPage';
+import { CreateMultisigTransferPage } from '../transaction/multisig/CreateProposalPage';
+import { SweepProposalPage } from '../transaction/multisig/SweepProposalPage';
 import { ProtocolUpgradeProposalPage } from './runtime-upgrade';
 import type { AdminWalletMatch } from './types';
 

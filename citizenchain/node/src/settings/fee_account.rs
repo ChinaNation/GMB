@@ -10,9 +10,8 @@ use crate::{
     },
 };
 use serde::{Deserialize, Serialize};
-use std::{fs, hash::Hasher, io::ErrorKind, path::PathBuf};
+use std::{fs, io::ErrorKind, path::PathBuf};
 use tauri::{AppHandle, Emitter};
-use twox_hash::XxHash64;
 
 const POWR_KEY_TYPE_HEX_PREFIX: &str = "706f7772";
 const REWARD_BIND_TIMEOUT_SECS: u64 = 45;
@@ -156,25 +155,6 @@ fn account_id_from_address(address: &str) -> Result<[u8; 32], String> {
     decode_ss58_account_id(address)
 }
 
-fn twox_128(input: &[u8]) -> [u8; 16] {
-    let mut h1 = XxHash64::with_seed(0);
-    h1.write(input);
-    let mut h2 = XxHash64::with_seed(1);
-    h2.write(input);
-
-    let mut out = [0u8; 16];
-    out[..8].copy_from_slice(&h1.finish().to_le_bytes());
-    out[8..].copy_from_slice(&h2.finish().to_le_bytes());
-    out
-}
-
-fn blake2_128(input: &[u8]) -> [u8; 16] {
-    let hash = blake2b_simd::Params::new().hash_length(16).hash(input);
-    let mut out = [0u8; 16];
-    out.copy_from_slice(hash.as_bytes());
-    out
-}
-
 fn ensure_expected_reward_wallet_rpc_node() -> Result<(), String> {
     let properties = rpc::rpc_post(
         "system_properties",
@@ -213,12 +193,7 @@ fn ensure_expected_reward_wallet_rpc_node() -> Result<(), String> {
 }
 
 fn reward_wallet_storage_key(miner_account: &[u8; 32]) -> Vec<u8> {
-    let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
-    key.extend_from_slice(&twox_128(b"FullnodeIssuance"));
-    key.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
-    key.extend_from_slice(&blake2_128(miner_account));
-    key.extend_from_slice(miner_account);
-    key
+    crate::shared::storage_keys::blake2_map(b"FullnodeIssuance", b"RewardWalletByMiner", miner_account)
 }
 
 fn decode_storage_account_id(raw: &[u8]) -> Result<[u8; 32], String> {

@@ -114,7 +114,9 @@ class _MediaTile extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              restoring ? Icons.hourglass_top_rounded : Icons.inventory_2_outlined,
+              restoring
+                  ? Icons.hourglass_top_rounded
+                  : Icons.inventory_2_outlined,
               size: 34,
               color: Colors.white70,
             ),

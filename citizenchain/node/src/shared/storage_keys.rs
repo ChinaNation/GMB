@@ -5,9 +5,10 @@
 //! `twox_64(k) ++ k`),DoubleMap 依次追加两段。全部返回裸 `Vec<u8>`;需要 RPC 十六进制键时
 //! 用 [`to_hex`] 包一层(`"0x" + hex`)。
 //!
-//! 本模块是节点侧全部存储 key 构造的**唯一实现**:
-//! - `core::node_guard::*`(区块守卫,消费裸字节)委托这里;
-//! - `governance::storage_keys`(RPC String 门面)委托这里 + [`to_hex`]。
+//! 本模块是节点侧存储 key 构造的**唯一实现**,以下调用方全部委托这里:
+//! - `core::node_guard::*`(区块守卫,消费裸字节);
+//! - `governance::storage_keys`(RPC String 门面,委托 + [`to_hex`]);
+//! - `home::rpc` / `mining::dashboard` / `settings::fee_account`(各自 RPC 读键)。
 //!
 //! hasher 统一取 `sp_core::hashing`(Substrate 规范实现),与链端逐字节一致;原来 governance 侧
 //! 手搓的 `twox_hash` / `blake2b_simd` 实现由此单源取代。

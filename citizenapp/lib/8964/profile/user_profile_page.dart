@@ -132,7 +132,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Future<SquareSession?> _ensureSession() async {
     try {
       final session = await _sessionProvider.ensureSession();
-      if (mounted) _session = session;
+      if (mounted) setState(() => _session = session);
       return session;
     } on Exception {
       return null;
@@ -267,11 +267,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   void _openFollows(FollowsType type) {
+    final session = _session;
+    if (session == null) {
+      _snack('需要钱包账户才能浏览关注列表');
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => FollowsListPage(
           ownerAccount: widget.ownerAccount,
           type: type,
+          session: session,
           api: _api,
         ),
       ),
@@ -339,6 +345,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Widget _tabBody(ProfileTab tab) {
+    final session = _session;
+    if (session == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
     switch (tab) {
       case ProfileTab.posts:
         return ProfilePostsTab(
@@ -348,6 +358,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           category: SquarePostCategory.normal,
           contentFormat: SquarePostContentFormat.normal,
           emptyLabel: '还没有帖子',
+          session: session,
           onOpenPost: _openPost,
         );
       case ProfileTab.campaign:
@@ -357,6 +368,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           api: _api,
           category: SquarePostCategory.campaign,
           emptyLabel: '还没有竞选内容',
+          session: session,
           onOpenPost: _openPost,
         );
       case ProfileTab.photos:
@@ -366,6 +378,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           api: _api,
           mediaKind: SquareMediaKind.image,
           emptyLabel: '还没有照片',
+          session: session,
           onOpenPost: _openPost,
         );
       case ProfileTab.videos:
@@ -375,6 +388,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           api: _api,
           mediaKind: SquareMediaKind.video,
           emptyLabel: '还没有视频',
+          session: session,
           onOpenPost: _openPost,
         );
       case ProfileTab.articles:
@@ -384,6 +398,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           api: _api,
           contentFormat: SquarePostContentFormat.article,
           emptyLabel: '还没有文章',
+          session: session,
           onOpenPost: _openArticle,
         );
     }

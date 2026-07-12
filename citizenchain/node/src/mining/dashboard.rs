@@ -5,7 +5,6 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::hash::Hasher;
 use std::{
     cmp,
     collections::{HashMap, VecDeque},
@@ -400,43 +399,23 @@ fn decode_hex_account_id_32(hex: &str) -> Option<[u8; 32]> {
     Some(out)
 }
 
-fn twox_128(input: &[u8]) -> [u8; 16] {
-    let mut h1 = twox_hash::XxHash64::with_seed(0);
-    h1.write(input);
-    let mut h2 = twox_hash::XxHash64::with_seed(1);
-    h2.write(input);
-
-    let mut out = [0u8; 16];
-    out[..8].copy_from_slice(&h1.finish().to_le_bytes());
-    out[8..].copy_from_slice(&h2.finish().to_le_bytes());
-    out
-}
-
-fn blake2_128(input: &[u8]) -> [u8; 16] {
-    let hash = blake2b_simd::Params::new().hash_length(16).hash(input);
-    let mut out = [0u8; 16];
-    out.copy_from_slice(hash.as_bytes());
-    out
-}
-
 fn timestamp_now_storage_key() -> String {
     TIMESTAMP_NOW_STORAGE_KEY_CACHE
         .get_or_init(|| {
-            let mut key = Vec::with_capacity(32);
-            key.extend_from_slice(&twox_128(b"Timestamp"));
-            key.extend_from_slice(&twox_128(b"Now"));
-            format!("0x{}", hex::encode(key))
+            crate::shared::storage_keys::to_hex(&crate::shared::storage_keys::prefix(
+                b"Timestamp",
+                b"Now",
+            ))
         })
         .clone()
 }
 
 fn reward_wallet_storage_key(miner_account: &[u8; 32]) -> String {
-    let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
-    key.extend_from_slice(&twox_128(b"FullnodeIssuance"));
-    key.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
-    key.extend_from_slice(&blake2_128(miner_account));
-    key.extend_from_slice(miner_account);
-    format!("0x{}", hex::encode(key))
+    crate::shared::storage_keys::to_hex(&crate::shared::storage_keys::blake2_map(
+        b"FullnodeIssuance",
+        b"RewardWalletByMiner",
+        miner_account,
+    ))
 }
 
 fn reward_wallet_bound_at_block(miner_account_hex: &str, block_hash: &str) -> Result<bool, String> {

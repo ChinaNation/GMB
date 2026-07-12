@@ -826,32 +826,40 @@ pub(crate) const PERSONAL_MULTISIG_LOGIN_UNSUPPORTED: &str =
 /// `AdminAccountStatus::Active` 的 SCALE 判别式(Pending=0 / Active=1 / Closed=2)。
 const ADMIN_STATUS_ACTIVE: u8 = 1;
 
-/// 链上机构管理员资料解码镜像(对齐 runtime `admin-primitives::AdminProfile`)。
+/// 链上机构管理员资料解码镜像(对齐 runtime `admin-primitives::AdminProfile` 9 字段)。
 ///
 /// **铁律**:字段顺序与类型必须与 runtime `AdminProfile` 逐字节一致——
-/// `account=[u8;32]` 无前缀;`admin_cid_number`/`name`/`admin_role` 为 `BoundedVec<u8>`,
-/// 与 `Vec<u8>` SCALE 编码相同(Compact 长度 + 字节);`term_start`/`term_end=u32`;
-/// `AdminSource` 枚举 1 字节判别。membership 只取 `account`,资料字段供展示。
+/// `account=[u8;32]` 无前缀;`admin_cid_number`/`name`/`role_code`/`role_name`/`admin_source_ref`
+/// 为 `BoundedVec<u8>`,与 `Vec<u8>` SCALE 编码相同(Compact 长度 + 字节);
+/// `term_start`/`term_end=u32`;`AdminSource` 枚举 1 字节判别(其后紧跟 `admin_source_ref`)。
+/// membership 只取 `account`,资料字段供展示。
 #[derive(Debug, Decode)]
 struct OnChainAdminProfile {
     account: [u8; 32],
     admin_cid_number: Vec<u8>,
-    // name/admin_role 供管理员列表与大屏只读看板席位展示读取。
+    // name/role_name 供管理员列表与大屏只读看板席位展示读取。
     name: Vec<u8>,
-    admin_role: Vec<u8>,
+    #[allow(dead_code)]
+    role_code: Vec<u8>,
+    role_name: Vec<u8>,
     term_start: u32,
     term_end: u32,
     source: u8,
+    #[allow(dead_code)]
+    admin_source_ref: Vec<u8>,
 }
 
 /// 链上 `AdminAccount` 解码镜像。
 ///
 /// **铁律**:字段顺序与类型必须与 runtime `admin-primitives::AdminAccount` 逐字节一致——
-/// `InstitutionCode=[u8;4]` 无前缀;`AdminAccountKind`/`AdminAccountStatus` 枚举各 1 字节判别;
-/// 机构(public/private)管理员集合为 `BoundedVec<AdminProfile>`(A2);
-/// `BlockNumberFor=u32`。任一字段宽度/顺序漂移都会解码错位 → membership 误判。
+/// 前导 `cid_number=BoundedVec<u8>`(Compact 长度前缀;个人多签为空);`InstitutionCode=[u8;4]`
+/// 无前缀;`AdminAccountKind`/`AdminAccountStatus` 枚举各 1 字节判别;机构(public/private)
+/// 管理员集合为 `BoundedVec<AdminProfile>`(A2);`BlockNumberFor=u32`。任一字段宽度/顺序漂移
+/// 都会解码错位 → membership 误判。
 #[derive(Debug, Decode)]
 struct OnChainAdminAccount {
+    #[allow(dead_code)]
+    cid_number: Vec<u8>,
     #[allow(dead_code)]
     institution_code: [u8; 4],
     #[allow(dead_code)]
@@ -1500,12 +1508,10 @@ pub(crate) struct OnChainAdminProfileView {
     pub(crate) account_hex: String,
     /// 管理员实名锚:注册局签发的 CID 号。
     pub(crate) admin_cid_number: String,
-    /// 姓名快照(链上 `AdminProfile::name`)。
+    /// 姓名快照(链上 `AdminProfile::admin_name`)。
     pub(crate) name: String,
-    /// 对外法定职务(链上 `AdminProfile::admin_role`)。
-    pub(crate) admin_role: String,
-    /// 旧看板字段名,由 `admin_role` 同步赋值;管理员列表不得使用此字段。
-    pub(crate) title: String,
+    /// 对外法定职务(链上 `AdminProfile::role_name`)。
+    pub(crate) role_name: String,
     /// 任期开始(天数自纪元;无任期为 0)。
     pub(crate) term_start: u32,
     /// 任期结束(天数自纪元;无任期为 0)。
@@ -1547,8 +1553,7 @@ fn admin_profile_views(decoded: &OnChainAdminAccount) -> Vec<OnChainAdminProfile
             account_hex: format!("0x{}", hex::encode(profile.account)),
             admin_cid_number: String::from_utf8_lossy(&profile.admin_cid_number).to_string(),
             name: String::from_utf8_lossy(&profile.name).to_string(),
-            admin_role: String::from_utf8_lossy(&profile.admin_role).to_string(),
-            title: String::from_utf8_lossy(&profile.admin_role).to_string(),
+            role_name: String::from_utf8_lossy(&profile.role_name).to_string(),
             term_start: profile.term_start,
             term_end: profile.term_end,
             origin: profile.source,
@@ -1685,15 +1690,18 @@ mod tests {
         use frame_support::BoundedVec;
 
         let profile = AdminProfile::<[u8; 32]> {
-            account: [0x42; 32],
+            admin_account: [0x42; 32],
             admin_cid_number: BoundedVec::try_from(b"LN001-AAAAA-000000001-2026".to_vec()).unwrap(),
-            name: BoundedVec::try_from("张三".as_bytes().to_vec()).unwrap(),
-            admin_role: BoundedVec::try_from("局长".as_bytes().to_vec()).unwrap(),
+            admin_name: BoundedVec::try_from("张三".as_bytes().to_vec()).unwrap(),
+            role_code: BoundedVec::try_from(b"R01".to_vec()).unwrap(),
+            role_name: BoundedVec::try_from("局长".as_bytes().to_vec()).unwrap(),
             term_start: 20_100,
             term_end: 21_561,
-            source: AdminSource::Registry,
+            admin_source: AdminSource::Registry,
+            admin_source_ref: BoundedVec::try_from(b"REG-1".to_vec()).unwrap(),
         };
         let account = AdminAccount::<Vec<AdminProfile<[u8; 32]>>, [u8; 32], u32> {
+            cid_number: BoundedVec::try_from(b"CREG-AAAAA-000000001-2026".to_vec()).unwrap(),
             institution_code: *b"CREG",
             kind: AdminAccountKind::PublicInstitution,
             admins: vec![profile],

@@ -61,7 +61,7 @@ class PalletRegistry {
   /// `cast_referendum(proposal_id, approve)` — 联合公投阶段,链上按账户读取公民身份。
   static const int castReferendumCall = 1;
 
-  /// `prepare_population_snapshot(scope)` — 联合公投提案发起前准备链上人口分母。
+  /// `prepare_joint_population_snapshot(scope)` — 联合公投提案发起前准备链上人口分母。
   static const int preparePopulationSnapshotCall = 2;
 
   // ---- 业务 pallet:仅承载提案创建与幂等兜底入口 ----

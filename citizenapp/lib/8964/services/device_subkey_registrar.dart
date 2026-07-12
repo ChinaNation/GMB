@@ -29,7 +29,8 @@ class DeviceSubkeyRegistrar {
   }) async {
     final pubkey = await _subkey.publicKeyHex(walletIndex);
     final issuedAt = issuedAtMillis ?? DateTime.now().millisecondsSinceEpoch;
-    final message = buildDeviceBindingSigningMessage(ownerAccount, pubkey, issuedAt);
+    final message =
+        buildDeviceBindingSigningMessage(ownerAccount, pubkey, issuedAt);
     final signatureHex = await signBinding(message);
     await _api.registerDeviceSubkey(
       ownerAccount: ownerAccount,

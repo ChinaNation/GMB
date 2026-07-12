@@ -57,7 +57,6 @@ class MlsKeyPackage {
     required this.createdAtMillis,
     required this.expiresAtMillis,
     this.devicePublicKeyHex = '',
-    this.consumedAtMillis,
   });
 
   /// KeyPackage 所属的钱包聊天账户。
@@ -83,9 +82,6 @@ class MlsKeyPackage {
 
   /// 过期时间，毫秒。
   final int expiresAtMillis;
-
-  /// 被远端消费的时间。
-  final int? consumedAtMillis;
 
   /// OpenMLS FFI 使用的 KeyPackage 十六进制编码。
   String get keyPackageHex => _bytesToHex(keyPackageBytes);

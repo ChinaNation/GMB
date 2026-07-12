@@ -23,7 +23,7 @@ Widget _wrap({
       isSelf: isSelf,
       api: api,
       cache: cache ?? FakeProfileCache(),
-      sessionProvider: sessionProvider ?? FakeSessionProvider(null),
+      sessionProvider: sessionProvider ?? FakeSessionProvider(fakeSession()),
     ),
   );
 }
@@ -228,7 +228,7 @@ void main() {
           isSelf: false,
           api: FakeProfileApi(sampleProfile(displayName: '轻节点')),
           cache: FakeProfileCache(),
-          sessionProvider: FakeSessionProvider(null),
+          sessionProvider: FakeSessionProvider(fakeSession()),
           onOpenDirectChat: (context, {required peerAddress, required title}) {
             peer = peerAddress;
             chatTitle = title;

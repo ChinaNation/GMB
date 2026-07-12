@@ -4,19 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/citizen/institution/governance_registry.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_local_store.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_models.dart';
-import 'package:citizenapp/isar/app_isar.dart';
+
+import '../support/isar_test_env.dart';
 
 void main() {
+  useIsolatedIsar();
   TestWidgetsFlutterBinding.ensureInitialized();
   final nationalCouncil = kNrc.first;
-
-  setUpAll(() async {
-    await WalletIsar.instance.ensureTestCoreInitialized();
-  });
-
-  setUp(() async {
-    await WalletIsar.instance.resetForTest();
-  });
 
   test('提案摘要按 ID 持久化读取', () async {
     final summary = LocalProposalSummary.fromProposal(

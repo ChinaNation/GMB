@@ -347,6 +347,11 @@ class _PersistedAdminAccount {
     required this.updatedAtMillis,
   });
 
+  /// 缓存 schema 版本。链端 AdminAccount/AdminProfile SCALE 布局变更(前导 cid_number +
+  /// AdminProfile 拆 role_code/role_name + admin_source_ref)后必须 bump:旧版本缓存
+  /// 是用错误旧布局解出的字节,一律作废重新链读。见 memory feedback-dto-field-rename-bump-cache-version。
+  static const int _schemaVersion = 2;
+
   final AdminAccountState state;
   final int updatedAtMillis;
 
@@ -356,6 +361,7 @@ class _PersistedAdminAccount {
   }
 
   Map<String, Object?> toJson() => {
+        'schema_version': _schemaVersion,
         'updated_at_millis': updatedAtMillis,
         'state': {
           'account_id_hex': state.accountHex,
@@ -375,6 +381,8 @@ class _PersistedAdminAccount {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return null;
+      // 版本不符(旧布局缓存)一律作废,回退链读用新解码器重建。
+      if (_toInt(decoded['schema_version']) != _schemaVersion) return null;
       final stateRaw = decoded['state'];
       if (stateRaw is! Map<String, dynamic>) return null;
       final accountHex = stateRaw['account_id_hex']?.toString();

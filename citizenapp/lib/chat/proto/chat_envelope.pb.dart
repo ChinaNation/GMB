@@ -29,7 +29,6 @@ class ChatRoute extends $pb.GeneratedMessage {
     $core.String? deviceId,
     $core.String? devicePublicKeyHex,
     $core.String? safetyNumber,
-    $core.String? cloudflareMailboxId,
     $core.String? nearbyPeerHint,
     $fixnum.Int64? createdAtMillis,
     $fixnum.Int64? expiresAtMillis,
@@ -42,8 +41,6 @@ class ChatRoute extends $pb.GeneratedMessage {
     if (devicePublicKeyHex != null)
       result.devicePublicKeyHex = devicePublicKeyHex;
     if (safetyNumber != null) result.safetyNumber = safetyNumber;
-    if (cloudflareMailboxId != null)
-      result.cloudflareMailboxId = cloudflareMailboxId;
     if (nearbyPeerHint != null) result.nearbyPeerHint = nearbyPeerHint;
     if (createdAtMillis != null) result.createdAtMillis = createdAtMillis;
     if (expiresAtMillis != null) result.expiresAtMillis = expiresAtMillis;
@@ -70,13 +67,12 @@ class ChatRoute extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'deviceId')
     ..aOS(5, _omitFieldNames ? '' : 'devicePublicKeyHex')
     ..aOS(6, _omitFieldNames ? '' : 'safetyNumber')
-    ..aOS(7, _omitFieldNames ? '' : 'cloudflareMailboxId')
-    ..aOS(8, _omitFieldNames ? '' : 'nearbyPeerHint')
+    ..aOS(7, _omitFieldNames ? '' : 'nearbyPeerHint')
     ..a<$fixnum.Int64>(
-        9, _omitFieldNames ? '' : 'createdAtMillis', $pb.PbFieldType.OU6,
+        8, _omitFieldNames ? '' : 'createdAtMillis', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..a<$fixnum.Int64>(
-        10, _omitFieldNames ? '' : 'expiresAtMillis', $pb.PbFieldType.OU6,
+        9, _omitFieldNames ? '' : 'expiresAtMillis', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
@@ -153,40 +149,31 @@ class ChatRoute extends $pb.GeneratedMessage {
   void clearSafetyNumber() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $core.String get cloudflareMailboxId => $_getSZ(6);
+  $core.String get nearbyPeerHint => $_getSZ(6);
   @$pb.TagNumber(7)
-  set cloudflareMailboxId($core.String value) => $_setString(6, value);
+  set nearbyPeerHint($core.String value) => $_setString(6, value);
   @$pb.TagNumber(7)
-  $core.bool hasCloudflareMailboxId() => $_has(6);
+  $core.bool hasNearbyPeerHint() => $_has(6);
   @$pb.TagNumber(7)
-  void clearCloudflareMailboxId() => $_clearField(7);
+  void clearNearbyPeerHint() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $core.String get nearbyPeerHint => $_getSZ(7);
+  $fixnum.Int64 get createdAtMillis => $_getI64(7);
   @$pb.TagNumber(8)
-  set nearbyPeerHint($core.String value) => $_setString(7, value);
+  set createdAtMillis($fixnum.Int64 value) => $_setInt64(7, value);
   @$pb.TagNumber(8)
-  $core.bool hasNearbyPeerHint() => $_has(7);
+  $core.bool hasCreatedAtMillis() => $_has(7);
   @$pb.TagNumber(8)
-  void clearNearbyPeerHint() => $_clearField(8);
+  void clearCreatedAtMillis() => $_clearField(8);
 
   @$pb.TagNumber(9)
-  $fixnum.Int64 get createdAtMillis => $_getI64(8);
+  $fixnum.Int64 get expiresAtMillis => $_getI64(8);
   @$pb.TagNumber(9)
-  set createdAtMillis($fixnum.Int64 value) => $_setInt64(8, value);
+  set expiresAtMillis($fixnum.Int64 value) => $_setInt64(8, value);
   @$pb.TagNumber(9)
-  $core.bool hasCreatedAtMillis() => $_has(8);
+  $core.bool hasExpiresAtMillis() => $_has(8);
   @$pb.TagNumber(9)
-  void clearCreatedAtMillis() => $_clearField(9);
-
-  @$pb.TagNumber(10)
-  $fixnum.Int64 get expiresAtMillis => $_getI64(9);
-  @$pb.TagNumber(10)
-  set expiresAtMillis($fixnum.Int64 value) => $_setInt64(9, value);
-  @$pb.TagNumber(10)
-  $core.bool hasExpiresAtMillis() => $_has(9);
-  @$pb.TagNumber(10)
-  void clearExpiresAtMillis() => $_clearField(10);
+  void clearExpiresAtMillis() => $_clearField(9);
 }
 
 class ChatEnvelope extends $pb.GeneratedMessage {
@@ -199,11 +186,8 @@ class ChatEnvelope extends $pb.GeneratedMessage {
     $core.String? senderDeviceId,
     $core.List<$core.int>? mlsWireMessage,
     $core.List<$core.int>? encryptedMetadata,
-    $core.String? attachmentManifestHash,
-    $core.Iterable<$core.String>? chunkRefs,
     $fixnum.Int64? createdAtMillis,
     $fixnum.Int64? ttlMillis,
-    $core.String? ackPolicy,
     MlsWireMessageKind? mlsMessageKind,
     $core.List<$core.int>? ratchetTree,
   }) {
@@ -216,12 +200,8 @@ class ChatEnvelope extends $pb.GeneratedMessage {
     if (senderDeviceId != null) result.senderDeviceId = senderDeviceId;
     if (mlsWireMessage != null) result.mlsWireMessage = mlsWireMessage;
     if (encryptedMetadata != null) result.encryptedMetadata = encryptedMetadata;
-    if (attachmentManifestHash != null)
-      result.attachmentManifestHash = attachmentManifestHash;
-    if (chunkRefs != null) result.chunkRefs.addAll(chunkRefs);
     if (createdAtMillis != null) result.createdAtMillis = createdAtMillis;
     if (ttlMillis != null) result.ttlMillis = ttlMillis;
-    if (ackPolicy != null) result.ackPolicy = ackPolicy;
     if (mlsMessageKind != null) result.mlsMessageKind = mlsMessageKind;
     if (ratchetTree != null) result.ratchetTree = ratchetTree;
     return result;
@@ -251,19 +231,16 @@ class ChatEnvelope extends $pb.GeneratedMessage {
         7, _omitFieldNames ? '' : 'mlsWireMessage', $pb.PbFieldType.OY)
     ..a<$core.List<$core.int>>(
         8, _omitFieldNames ? '' : 'encryptedMetadata', $pb.PbFieldType.OY)
-    ..aOS(9, _omitFieldNames ? '' : 'attachmentManifestHash')
-    ..pPS(10, _omitFieldNames ? '' : 'chunkRefs')
     ..a<$fixnum.Int64>(
-        11, _omitFieldNames ? '' : 'createdAtMillis', $pb.PbFieldType.OU6,
+        9, _omitFieldNames ? '' : 'createdAtMillis', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..a<$fixnum.Int64>(
-        12, _omitFieldNames ? '' : 'ttlMillis', $pb.PbFieldType.OU6,
+        10, _omitFieldNames ? '' : 'ttlMillis', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
-    ..aOS(13, _omitFieldNames ? '' : 'ackPolicy')
-    ..aE<MlsWireMessageKind>(14, _omitFieldNames ? '' : 'mlsMessageKind',
+    ..aE<MlsWireMessageKind>(11, _omitFieldNames ? '' : 'mlsMessageKind',
         enumValues: MlsWireMessageKind.values)
     ..a<$core.List<$core.int>>(
-        15, _omitFieldNames ? '' : 'ratchetTree', $pb.PbFieldType.OY)
+        12, _omitFieldNames ? '' : 'ratchetTree', $pb.PbFieldType.OY)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -358,127 +335,40 @@ class ChatEnvelope extends $pb.GeneratedMessage {
   void clearEncryptedMetadata() => $_clearField(8);
 
   @$pb.TagNumber(9)
-  $core.String get attachmentManifestHash => $_getSZ(8);
+  $fixnum.Int64 get createdAtMillis => $_getI64(8);
   @$pb.TagNumber(9)
-  set attachmentManifestHash($core.String value) => $_setString(8, value);
+  set createdAtMillis($fixnum.Int64 value) => $_setInt64(8, value);
   @$pb.TagNumber(9)
-  $core.bool hasAttachmentManifestHash() => $_has(8);
+  $core.bool hasCreatedAtMillis() => $_has(8);
   @$pb.TagNumber(9)
-  void clearAttachmentManifestHash() => $_clearField(9);
+  void clearCreatedAtMillis() => $_clearField(9);
 
   @$pb.TagNumber(10)
-  $pb.PbList<$core.String> get chunkRefs => $_getList(9);
+  $fixnum.Int64 get ttlMillis => $_getI64(9);
+  @$pb.TagNumber(10)
+  set ttlMillis($fixnum.Int64 value) => $_setInt64(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasTtlMillis() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearTtlMillis() => $_clearField(10);
 
   @$pb.TagNumber(11)
-  $fixnum.Int64 get createdAtMillis => $_getI64(10);
+  MlsWireMessageKind get mlsMessageKind => $_getN(10);
   @$pb.TagNumber(11)
-  set createdAtMillis($fixnum.Int64 value) => $_setInt64(10, value);
+  set mlsMessageKind(MlsWireMessageKind value) => $_setField(11, value);
   @$pb.TagNumber(11)
-  $core.bool hasCreatedAtMillis() => $_has(10);
+  $core.bool hasMlsMessageKind() => $_has(10);
   @$pb.TagNumber(11)
-  void clearCreatedAtMillis() => $_clearField(11);
+  void clearMlsMessageKind() => $_clearField(11);
 
   @$pb.TagNumber(12)
-  $fixnum.Int64 get ttlMillis => $_getI64(11);
+  $core.List<$core.int> get ratchetTree => $_getN(11);
   @$pb.TagNumber(12)
-  set ttlMillis($fixnum.Int64 value) => $_setInt64(11, value);
+  set ratchetTree($core.List<$core.int> value) => $_setBytes(11, value);
   @$pb.TagNumber(12)
-  $core.bool hasTtlMillis() => $_has(11);
+  $core.bool hasRatchetTree() => $_has(11);
   @$pb.TagNumber(12)
-  void clearTtlMillis() => $_clearField(12);
-
-  @$pb.TagNumber(13)
-  $core.String get ackPolicy => $_getSZ(12);
-  @$pb.TagNumber(13)
-  set ackPolicy($core.String value) => $_setString(12, value);
-  @$pb.TagNumber(13)
-  $core.bool hasAckPolicy() => $_has(12);
-  @$pb.TagNumber(13)
-  void clearAckPolicy() => $_clearField(13);
-
-  @$pb.TagNumber(14)
-  MlsWireMessageKind get mlsMessageKind => $_getN(13);
-  @$pb.TagNumber(14)
-  set mlsMessageKind(MlsWireMessageKind value) => $_setField(14, value);
-  @$pb.TagNumber(14)
-  $core.bool hasMlsMessageKind() => $_has(13);
-  @$pb.TagNumber(14)
-  void clearMlsMessageKind() => $_clearField(14);
-
-  @$pb.TagNumber(15)
-  $core.List<$core.int> get ratchetTree => $_getN(14);
-  @$pb.TagNumber(15)
-  set ratchetTree($core.List<$core.int> value) => $_setBytes(14, value);
-  @$pb.TagNumber(15)
-  $core.bool hasRatchetTree() => $_has(14);
-  @$pb.TagNumber(15)
-  void clearRatchetTree() => $_clearField(15);
-}
-
-class ChatEnvelopeAck extends $pb.GeneratedMessage {
-  factory ChatEnvelopeAck({
-    $core.String? envelopeId,
-    $core.String? state,
-  }) {
-    final result = create();
-    if (envelopeId != null) result.envelopeId = envelopeId;
-    if (state != null) result.state = state;
-    return result;
-  }
-
-  ChatEnvelopeAck._();
-
-  factory ChatEnvelopeAck.fromBuffer($core.List<$core.int> data,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromBuffer(data, registry);
-  factory ChatEnvelopeAck.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
-      create()..mergeFromJson(json, registry);
-
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ChatEnvelopeAck',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'gmb.chat.v1'),
-      createEmptyInstance: create)
-    ..aOS(1, _omitFieldNames ? '' : 'envelopeId')
-    ..aOS(2, _omitFieldNames ? '' : 'state')
-    ..hasRequiredFields = false;
-
-  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ChatEnvelopeAck clone() => deepCopy();
-  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ChatEnvelopeAck copyWith(void Function(ChatEnvelopeAck) updates) =>
-      super.copyWith((message) => updates(message as ChatEnvelopeAck))
-          as ChatEnvelopeAck;
-
-  @$core.override
-  $pb.BuilderInfo get info_ => _i;
-
-  @$core.pragma('dart2js:noInline')
-  static ChatEnvelopeAck create() => ChatEnvelopeAck._();
-  @$core.override
-  ChatEnvelopeAck createEmptyInstance() => create();
-  @$core.pragma('dart2js:noInline')
-  static ChatEnvelopeAck getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ChatEnvelopeAck>(create);
-  static ChatEnvelopeAck? _defaultInstance;
-
-  @$pb.TagNumber(1)
-  $core.String get envelopeId => $_getSZ(0);
-  @$pb.TagNumber(1)
-  set envelopeId($core.String value) => $_setString(0, value);
-  @$pb.TagNumber(1)
-  $core.bool hasEnvelopeId() => $_has(0);
-  @$pb.TagNumber(1)
-  void clearEnvelopeId() => $_clearField(1);
-
-  @$pb.TagNumber(2)
-  $core.String get state => $_getSZ(1);
-  @$pb.TagNumber(2)
-  set state($core.String value) => $_setString(1, value);
-  @$pb.TagNumber(2)
-  $core.bool hasState() => $_has(1);
-  @$pb.TagNumber(2)
-  void clearState() => $_clearField(2);
+  void clearRatchetTree() => $_clearField(12);
 }
 
 class ChatKeyPackage extends $pb.GeneratedMessage {
@@ -492,7 +382,6 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
     $core.String? cipherSuite,
     $fixnum.Int64? createdAtMillis,
     $fixnum.Int64? expiresAtMillis,
-    $fixnum.Int64? consumedAtMillis,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -505,7 +394,6 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
     if (cipherSuite != null) result.cipherSuite = cipherSuite;
     if (createdAtMillis != null) result.createdAtMillis = createdAtMillis;
     if (expiresAtMillis != null) result.expiresAtMillis = expiresAtMillis;
-    if (consumedAtMillis != null) result.consumedAtMillis = consumedAtMillis;
     return result;
   }
 
@@ -536,9 +424,6 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..a<$fixnum.Int64>(
         9, _omitFieldNames ? '' : 'expiresAtMillis', $pb.PbFieldType.OU6,
-        defaultOrMaker: $fixnum.Int64.ZERO)
-    ..a<$fixnum.Int64>(
-        10, _omitFieldNames ? '' : 'consumedAtMillis', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
@@ -641,15 +526,6 @@ class ChatKeyPackage extends $pb.GeneratedMessage {
   $core.bool hasExpiresAtMillis() => $_has(8);
   @$pb.TagNumber(9)
   void clearExpiresAtMillis() => $_clearField(9);
-
-  @$pb.TagNumber(10)
-  $fixnum.Int64 get consumedAtMillis => $_getI64(9);
-  @$pb.TagNumber(10)
-  set consumedAtMillis($fixnum.Int64 value) => $_setInt64(9, value);
-  @$pb.TagNumber(10)
-  $core.bool hasConsumedAtMillis() => $_has(9);
-  @$pb.TagNumber(10)
-  void clearConsumedAtMillis() => $_clearField(10);
 }
 
 class PublishChatKeyPackageRequest extends $pb.GeneratedMessage {

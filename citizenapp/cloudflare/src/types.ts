@@ -22,6 +22,18 @@ export interface Env {
   SQUARE_MEDIA: R2Bucket;
   SQUARE_CACHE: KVNamespace;
   CHAT_REALTIME?: DurableObjectNamespace;
+  // 平台推送只发送无内容 Chat 唤醒；私钥只允许使用 Worker Secret 配置。
+  APNS_KEY?: string;
+  APNS_KID?: string;
+  APNS_TEAM?: string;
+  APNS_TOPIC?: string;
+  APNS_ENV?: string;
+  FCM_PROJECT?: string;
+  FCM_EMAIL?: string;
+  FCM_KEY?: string;
+  // TURN API 凭证只在 Worker 端生成五分钟临时用户，绝不下发长期密钥。
+  TURN_KEY_ID?: string;
+  TURN_API_TOKEN?: string;
   // Cloudflare 账户由 R2、Images、Stream 共用；R2 S3 密钥绝不下发到 CitizenApp。
   CF_ACCOUNT_ID?: string;
   R2_ACCESS_ID?: string;

@@ -219,9 +219,9 @@ pub const VALID_DOC_TYPES: &[&str] =
 pub struct CreateInstitutionAdminInput {
     /// 机构初始管理员进链账户。注册局创建机构时一次性提交,不再由新机构管理员投票确认。
     pub admin_account: String,
-    /// 对外法定职务,写入链上 AdminProfile。
+    /// 对外法定职务,写入链上 AdminProfile.role_name。
     #[serde(default)]
-    pub admin_role: Option<String>,
+    pub role_name: Option<String>,
     /// 任期开始(天数自纪元;无任期填 0)。
     #[serde(default)]
     pub term_start: Option<u32>,

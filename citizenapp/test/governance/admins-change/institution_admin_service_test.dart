@@ -54,8 +54,9 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
-  // A2:`AdminAccounts.admins` = `Vec<AdminProfile>`(机构 kind≠2:account[32] + cid/name/admin_role
-  // 各 Compact(0) 空 + term_start/term_end u32 + source u8);个人多签 kind==2 仍是裸 `Vec<AccountId>`。
+  // A2:AdminAccount 前导 cid_number,随后 institution_code/kind;`admins` = `Vec<AdminProfile>`
+  // (机构 kind≠2:account[32] + cid/name/role_code/role_name 各 Compact(0) 空 + term_start/term_end
+  // u32 + source u8 + admin_source_ref Compact(0));个人多签 kind==2 仍是裸 `Vec<AccountId>`。
   // 逐字节对齐 lib/citizen/shared/admin_profile.dart::decodeAdminsVec。
   Uint8List adminAccountBytes({
     required String institutionCode,
@@ -66,14 +67,17 @@ void main() {
     if (kind != 2) {
       adminEntry.addAll([
         0x00, // admin_cid_number: Compact(0) 空
-        0x00, // name: Compact(0) 空
-        0x00, // admin_role: Compact(0) 空
+        0x00, // admin_name: Compact(0) 空
+        0x00, // role_code: Compact(0) 空
+        0x00, // role_name: Compact(0) 空
         ...u32Le(0), // term_start
         ...u32Le(0), // term_end
         0x00, // source: Genesis(0)
+        0x00, // admin_source_ref: Compact(0) 空
       ]);
     }
     return Uint8List.fromList([
+      0x00, // cid_number(AdminAccount 前导字段;测试留空)
       ...codeBytes(institutionCode),
       kind,
       (1 << 2) & 0xff, // admins Vec: Compact(1)

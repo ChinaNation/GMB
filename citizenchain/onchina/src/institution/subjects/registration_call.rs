@@ -7,7 +7,8 @@
 //! AdminProfile 组装规则(ADR-030/A2):
 //! - `account`:管理员进链账户(institution_admins.admin_account);
 //! - `admin_cid_number` / `name`:来自注册局公民记录(citizens 关联 subjects.cid_full_name);
-//! - `admin_role` / `term_start` / `term_end`:来自创建表单;`source` 固定 `Registry`。
+//! - `role_name`(职务)/ `term_start` / `term_end`:来自创建表单;`role_code`/`admin_source_ref`
+//!   注册局创建暂留空(与创世同);`source` 固定 `Registry`。
 //! 机构 `cid_short_name` 只取 subjects.cid_short_name,与 `cid_full_name` 同源上链。
 
 use postgres::Client;
@@ -112,8 +113,8 @@ pub(crate) fn build_create_institution_call_data(
         return Err("http:conflict:at least one account_name is required".to_string());
     }
 
-    // ── 管理员集合(AdminProfile)。account 来自 institution_admins;admin_role/term 来自表单;
-    //    admin_cid_number/name 联表派生;source 固定 Registry。
+    // ── 管理员集合(AdminProfile)。account 来自 institution_admins;role_name/term 来自表单;
+    //    admin_cid_number/name 联表派生;role_code/admin_source_ref 留空;source 固定 Registry。
     let db_admins =
         crate::institution::admins::repo::list_institution_admins_by_cid_conn(conn, cid_number)?;
     if db_admins.len() < 2 {
@@ -139,13 +140,16 @@ pub(crate) fn build_create_institution_call_data(
             account,
             admin_cid_number: identity.admin_cid_number,
             name: identity.name,
-            admin_role: form
-                .and_then(|f| f.admin_role.clone())
+            // 注册局创建:表单单一职务写入 role_name;role_code/admin_source_ref 留空(与创世同)。
+            role_code: Vec::new(),
+            role_name: form
+                .and_then(|f| f.role_name.clone())
                 .unwrap_or_default()
                 .into_bytes(),
             term_start: form.and_then(|f| f.term_start).unwrap_or(0),
             term_end: form.and_then(|f| f.term_end).unwrap_or(0),
             source: AdminSourceTag::Registry,
+            admin_source_ref: Vec::new(),
         });
     }
 

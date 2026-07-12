@@ -4,7 +4,7 @@
 
 - 把 `citizenapp/cloudflare/square_worker/` 下的内容上移到 `citizenapp/cloudflare/`，去掉冗余的单层目录。
 - `citizenapp/cloudflare/` 下当前只有 `square_worker/` 一个子目录（外加待清理的 `.DS_Store`），没有第二个 Worker，嵌套无意义。
-- 这套 Worker 已同时承载广场（`src/`）和聊天 mailbox（`src/chat/`），`square_worker` 命名已不准确；扁平化后 `citizenapp/cloudflare/` 本身即“这套 Cloudflare 后端”。
+- 这套 Worker 已同时承载广场（`src/`）和聊天瞬时转发/设备服务（`src/chat/`），`square_worker` 命名已不准确；扁平化后 `citizenapp/cloudflare/` 本身即“这套 Cloudflare 后端”。
 
 ## 建议模块
 

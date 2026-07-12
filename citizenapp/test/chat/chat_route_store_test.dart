@@ -1,15 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
-import 'package:citizenapp/isar/app_isar.dart';
+
+import '../support/isar_test_env.dart';
 
 void main() {
-  setUp(() async {
-    await WalletIsar.instance.resetForTest();
-  });
-
-  tearDown(() async {
-    await WalletIsar.instance.resetForTest();
-  });
+  useIsolatedIsar();
 
   test('Chat route cache creates, reads, and replaces route records', () async {
     final store = ChatStore();
@@ -21,7 +16,6 @@ void main() {
         deviceId: 'bob-phone',
         devicePublicKeyHex: '0a0b',
         safetyNumber: '12 34',
-        cloudflareMailboxId: 'bob-wallet',
         nearbyPeerHint: 'bob-nearby',
         note: 'first',
       ),
@@ -30,7 +24,6 @@ void main() {
     final created = await store.getRouteRecord('bob-wallet');
     expect(created, isNotNull);
     expect(created!.routeDisplayName, 'Bob');
-    expect(created.cloudflareMailboxId, 'bob-wallet');
     expect(created.nearbyPeerHint, 'bob-nearby');
 
     await store.upsertRouteRecord(
@@ -40,7 +33,6 @@ void main() {
         deviceId: created.deviceId,
         devicePublicKeyHex: created.devicePublicKeyHex,
         safetyNumber: created.safetyNumber,
-        cloudflareMailboxId: created.cloudflareMailboxId,
         nearbyPeerHint: created.nearbyPeerHint,
         createdAtMillis: created.createdAtMillis,
       ),

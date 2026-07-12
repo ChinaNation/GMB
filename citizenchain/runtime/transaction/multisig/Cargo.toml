@@ -24,7 +24,6 @@ public-manage = { path = "../../entity/public-manage", default-features = false 
 private-manage = { path = "../../entity/private-manage", default-features = false }
 personal-manage = { path = "../../entity/personal-manage", default-features = false }
 onchain = { path = "../onchain", default-features = false }
-institution-asset = { path = "../institution-asset", default-features = false }
 
 [features]
 default = ["std"]
@@ -45,7 +44,6 @@ std = [
     "private-manage/std",
     "personal-manage/std",
     "onchain/std",
-    "institution-asset/std",
 ]
 runtime-benchmarks = [
     "frame-benchmarking/runtime-benchmarks",

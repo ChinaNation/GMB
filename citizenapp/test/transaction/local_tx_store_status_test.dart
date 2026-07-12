@@ -1,22 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 
+import '../support/isar_test_env.dart';
+
 void main() {
+  useIsolatedIsar();
+
   const fromPubkey =
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   const toPubkey =
       'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   const fromAddress = 'from-wallet';
   const toAddress = 'to-wallet';
-
-  setUpAll(() async {
-    await WalletIsar.instance.ensureTestCoreInitialized();
-  });
-
-  tearDown(() async {
-    await WalletIsar.instance.resetForTest();
-  });
 
   test('本机转出记录按 pending -> inBlock -> finalized 升级且不重复', () async {
     await LocalTxStore.upsertLocalSubmitTransfer(

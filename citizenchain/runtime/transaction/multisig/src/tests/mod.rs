@@ -504,6 +504,18 @@ impl admin_primitives::AdminAccountQuery<AccountId32> for TestAdminAccountQuery 
 thread_local! {
     static PROTECTED_ACCOUNT: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
     static DENIED_SPEND_SOURCE: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
+    static EXTRA_ADMINS: core::cell::RefCell<
+        std::collections::BTreeMap<(InstitutionCode, AccountId32), Vec<AccountId32>>,
+    > = core::cell::RefCell::new(std::collections::BTreeMap::new());
+}
+
+/// 测试注入:按 (机构码, 机构账户) 注入 sr25519 派生 admin 集合。
+/// `TestInternalAdminProvider` 优先读取,未注入时 fallback 到 CHINA_CB/CHINA_CH 硬编码。
+fn set_extra_admins(code: InstitutionCode, institution: AccountId32, admins: Vec<AccountId32>) {
+    EXTRA_ADMINS.with(|m| m.borrow_mut().insert((code, institution), admins));
+}
+fn get_extra_admins(code: InstitutionCode, institution: &AccountId32) -> Option<Vec<AccountId32>> {
+    EXTRA_ADMINS.with(|m| m.borrow().get(&(code, institution.clone())).cloned())
 }
 
 pub struct TestProtectedSourceChecker;
@@ -514,8 +526,8 @@ impl public_manage::ProtectedSourceChecker<AccountId32> for TestProtectedSourceC
 }
 
 pub struct TestInstitutionAsset;
-impl institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
-    fn can_spend(source: &AccountId32, _action: institution_asset::InstitutionAssetAction) -> bool {
+impl primitives::institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
+    fn can_spend(source: &AccountId32, _action: primitives::institution_asset::InstitutionAssetAction) -> bool {
         DENIED_SPEND_SOURCE.with(|blocked| blocked.borrow().as_ref() != Some(source))
     }
 }
@@ -584,6 +596,7 @@ impl public_manage::pallet::Config for Test {
     type CidInstitutionVerifier = TestCidInstitutionVerifier;
     type AdminLifecycle = PublicAdmins;
     type SiblingInstitutionQuery = ();
+    type RegistryAuthority = ();
     type AdminAccountQuery = TestAdminAccountQuery;
     type FeeRouter = ();
     type MaxAdmins = ConstU32<10>;
@@ -601,6 +614,7 @@ impl public_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type InstitutionQuery = public_manage::Pallet<Test>;
     type WeightInfo = ();
 }
 
@@ -608,6 +622,7 @@ impl private_admins::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
+    type InstitutionQuery = public_manage::Pallet<Test>;
     type WeightInfo = ();
 }
 
@@ -795,6 +810,7 @@ fn insert_active_registered_institution_account(
     private_admins::AdminAccounts::<Test>::insert(
         account.clone(),
         admin_primitives::AdminAccount {
+            cid_number: Default::default(),
             institution_code: PRIVATE_CODE,
             kind: admin_primitives::AdminAccountKind::PrivateInstitution,
             // 机构管理员集合存 AdminProfile(测试种子用空 meta、来源 Registry)。
@@ -802,13 +818,15 @@ fn insert_active_registered_institution_account(
                 .iter()
                 .cloned()
                 .map(|account| admin_primitives::AdminProfile {
-                    account,
+                    admin_account: account,
                     admin_cid_number: Default::default(),
-                    name: Default::default(),
-                    admin_role: Default::default(),
+                    admin_name: Default::default(),
+                    role_code: Default::default(),
+                    role_name: Default::default(),
                     term_start: 0,
                     term_end: 0,
-                    source: admin_primitives::AdminSource::Registry,
+                    admin_source: admin_primitives::AdminSource::Registry,
+                    admin_source_ref: Default::default(),
                 })
                 .collect::<Vec<_>>()
                 .try_into()

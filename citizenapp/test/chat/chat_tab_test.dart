@@ -153,8 +153,7 @@ void main() {
     expect(find.text('请先在「我的 → 我的钱包」创建热钱包'), findsOneWidget);
   });
 
-  testWidgets('聊天 Tab opens and polls Cloudflare mailbox automatically',
-      (tester) async {
+  testWidgets('聊天 Tab 打开后自动重试本机发送队列', (tester) async {
     final runtime = _FakeRuntime(address: 'alice-wallet');
     final store = _FakeChatStore();
 
@@ -225,8 +224,7 @@ void main() {
     expect(runtime.realtimeStopCount, 1);
   });
 
-  testWidgets('聊天页 opens and polls pending mailbox automatically',
-      (tester) async {
+  testWidgets('聊天页打开后自动重试本机发送队列', (tester) async {
     var syncCount = 0;
     final store = _FakeChatStore();
 
@@ -358,7 +356,7 @@ void main() {
           deliveryState: ChatMessageDeliveryState.receivedByDevice,
           createdAtMillis: 3000,
           plaintext:
-              '{"type":"gmb_chat_attachment_v1","file_name":"photo.txt"}',
+              '{"type":"gmb_chat_attachment_v2","file_name":"photo.txt"}',
         ),
       ],
     );
@@ -391,7 +389,7 @@ void main() {
     await tester.tap(find.text('[附件] photo.txt'));
     await tester.pumpAndSettle();
 
-    expect(downloadedPlaintext, contains('gmb_chat_attachment_v1'));
+    expect(downloadedPlaintext, contains('gmb_chat_attachment_v2'));
     expect(find.text('附件已保存：photo.txt'), findsOneWidget);
   });
 
@@ -529,7 +527,7 @@ class _FakeRuntime extends ChatRuntime {
   }
 
   @override
-  Future<int> syncPending() async {
+  Future<int> retryOutgoing({String? recipientAccount}) async {
     syncCount += 1;
     return 0;
   }

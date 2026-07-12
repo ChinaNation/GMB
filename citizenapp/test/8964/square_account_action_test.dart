@@ -7,7 +7,8 @@ import 'package:http/testing.dart';
 
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/signer/signing.dart';
-import 'package:citizenapp/wallet/core/device_subkey.dart' show bytesToHex, hexToBytes;
+import 'package:citizenapp/wallet/core/device_subkey.dart'
+    show bytesToHex, hexToBytes;
 
 const _owner = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 const _payloadHex = '73712d616374696f6e';

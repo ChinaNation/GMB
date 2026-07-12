@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { adminsChangeApi } from '../../admins/admin-management/api';
+import { adminsChangeApi } from '../../admins/api';
 import { homeNodeApi } from '../../home/api';
 import { settingsApi } from '../api';
 import { WalletSection } from '../WalletSection';

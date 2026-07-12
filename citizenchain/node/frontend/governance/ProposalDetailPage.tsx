@@ -3,13 +3,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { sanitizeError } from '../tauri';
 import { hexToSs58 } from '../shared/ss58';
-import { MultisigTransferProposalDetailSection } from '../transaction/multisig-transfer/ProposalDetailSection';
-import { adminsChangeApi } from '../admins/admin-management/api';
-import { AdminProfileCard } from '../admins/admin-management/AdminProfileCard';
+import { MultisigTransferProposalDetailSection } from '../transaction/multisig/ProposalDetailSection';
+import { adminsChangeApi } from '../admins/api';
+import { AdminProfileCard } from '../admins/AdminProfileCard';
 import { governanceApi as api } from './api';
 import type { ProposalFullInfo, AdminWalletMatch, UserVoteStatus, InstitutionDetail } from './types';
 import { VoteSigningFlow } from './VoteSigningFlow';
-import '../admins/admin-management/styles.css';
+import '../admins/styles.css';
 
 type Props = {
   proposalId: number;

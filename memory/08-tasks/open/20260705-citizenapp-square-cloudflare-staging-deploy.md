@@ -94,9 +94,9 @@
 - 已创建 staging KV namespace：`staging-FEED_CACHE`，`id=91133becebc24f27bf10a00cb001f27e`。
 - 已把 staging D1/KV 公开资源 ID 写入 `citizenapp/cloudflare/wrangler.toml`；R2 bucket 使用资源名绑定，不需要 secret 写仓库。
 - 已在 staging vars 中显式配置 `R2_BUCKET_NAME=citizenapp-square-media-staging`，避免后续 R2 预签名误指向 production bucket。
-- 已执行 `npm --prefix citizenapp/cloudflare run migrate:staging`：远端 D1 已应用 `0001_square_core.sql` 和 `0002_chat_mailbox.sql`。
+- staging D1 已按当前 `0001_square_core.sql` 目标基线彻底重建，不保留独立 Chat 迁移链。
 - 已执行 `npm --prefix citizenapp/cloudflare run deploy:staging`：staging Worker 已部署到 `https://citizenapp-square-api-staging.stews87-fawn.workers.dev`，当前版本 `d1b0f4b2-1cc8-4cd8-88f4-a5ac9a969211`。
-- 已执行远端 D1 表检查：`square_login_challenges`、`square_memberships`、`square_uploads`、`square_posts`、`square_follows`、`square_user_signals`、`chat_devices`、`chat_keypackages`、`chat_envelopes` 等表均存在。
+- 已执行远端 D1 表检查：广场业务表、`chat_devices`、`chat_keypackages`、`chat_device_binding_nonces`、`chat_turn_credentials` 和 `square_browse_days` 存在，不存在聊天内容表。
 - 已执行远端 smoke：`GET /health` 返回 200，`content_on_chain=false`；未登录访问 `/v1/square/membership` 返回 401 `missing_session`；`PUT /v1/square/uploads/dev-put` 返回 404 `dev_upload_proxy_disabled`，证明 staging 未开启本地开发上传代理。
 - 已执行 `npm --prefix citizenapp/cloudflare run typecheck`：通过。
 - 已执行 `npm --prefix citizenapp/cloudflare test`：通过，5 个测试文件、11 个测试用例通过。

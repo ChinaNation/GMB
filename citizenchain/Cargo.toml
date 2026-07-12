@@ -40,7 +40,6 @@ members = [
     "runtime/entity/private-manage",             # 实体模组-私权机构生命周期
     "runtime/entity/personal-manage",            # 实体模组-个人多签账户生命周期
     "runtime/transaction/multisig",     # 交易-机构多签名地址转账模块 pallet
-    "runtime/transaction/institution-asset",  # 交易-机构账户资金白名单公共模块
 
 ]
 resolver = "2"

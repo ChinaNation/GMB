@@ -4,8 +4,8 @@ package gmb.chat.v1;
 
 // GMB_CHAT_V1 的跨端 Chat 信封真源。
 //
-// OpenMLS 标准 wire bytes 放在内层；本文件只定义外层投递、Chat 路由记录、
-// KeyPackage 发布与确认结构。钱包账户只作为聊天账户和转账收款标识，
+// OpenMLS 标准 wire bytes 放在内层；本文件只定义外层瞬时投递、Chat 路由记录、
+// KeyPackage 发布结构。钱包账户只作为聊天账户和转账收款标识，
 // 不代表 Chat 设备身份密钥。
 
 message ChatRoute {
@@ -15,10 +15,9 @@ message ChatRoute {
   string device_id = 4;
   string device_public_key_hex = 5;
   string safety_number = 6;
-  string cloudflare_mailbox_id = 7;
-  string nearby_peer_hint = 8;
-  uint64 created_at_millis = 9;
-  uint64 expires_at_millis = 10;
+  string nearby_peer_hint = 7;
+  uint64 created_at_millis = 8;
+  uint64 expires_at_millis = 9;
 }
 
 enum MlsWireMessageKind {
@@ -36,18 +35,10 @@ message ChatEnvelope {
   string sender_device_id = 6;
   bytes mls_wire_message = 7;
   bytes encrypted_metadata = 8;
-  string attachment_manifest_hash = 9;
-  repeated string chunk_refs = 10;
-  uint64 created_at_millis = 11;
-  uint64 ttl_millis = 12;
-  string ack_policy = 13;
-  MlsWireMessageKind mls_message_kind = 14;
-  bytes ratchet_tree = 15;
-}
-
-message ChatEnvelopeAck {
-  string envelope_id = 1;
-  string state = 2;
+  uint64 created_at_millis = 9;
+  uint64 ttl_millis = 10;
+  MlsWireMessageKind mls_message_kind = 11;
+  bytes ratchet_tree = 12;
 }
 
 message ChatKeyPackage {
@@ -60,7 +51,6 @@ message ChatKeyPackage {
   string cipher_suite = 7;
   uint64 created_at_millis = 8;
   uint64 expires_at_millis = 9;
-  uint64 consumed_at_millis = 10;
 }
 
 message PublishChatKeyPackageRequest {

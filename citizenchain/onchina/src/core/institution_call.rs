@@ -11,10 +11,10 @@
 //! - `issuer_main_account` / `signer_pubkey` / `AdminProfile.account` 是 `[u8;32]` 裸字节;
 //! - 所有 `Vec<u8>` / `BoundedVec<u8>`(cid_number / cid_full_name / cid_short_name / town_code /
 //!   register_nonce / signature / issuer_cid_number / scope_*,以及每个 AdminProfile 的
-//!   admin_cid_number / name / admin_role)带 `Compact<u32>` 长度前缀;
+//!   admin_cid_number / name / role_code / role_name / admin_source_ref)带 `Compact<u32>` 长度前缀;
 //! - `accounts` / `admins` 这类项目列表带 `Compact<u32>` 数量前缀;
 //! - `admins_len` / `threshold` / `term_start` / `term_end` 是 u32 小端;
-//! - `source` 是单字节枚举序号(`AdminSource::Registry` = 1)。
+//! - `source` 是单字节枚举序号(`AdminSource::Registry` = 1),其后紧跟 `admin_source_ref`。
 //!
 //! `tests` 模块用真实的 `admin_primitives::AdminProfile` 与真实参数类型 `.encode()`
 //! 做逐字节交叉校验,杜绝本编码器与链端 SCALE 静默漂移。
@@ -41,8 +41,8 @@ pub fn create_institution_pallet_index(institution_code: &[u8; 4]) -> u8 {
 }
 
 /// `AdminSource` 枚举序号(必须与 admin-primitives 的变体顺序一致)。
-/// Genesis=0 / Registry=1 / InternalVote=2 / MutualElection=3 / PopularElection=4。
-/// 全变体保留以锁死链端枚举序号(交叉校验测试逐个比对),生产路径只用 Registry。
+/// Genesis=0 / Registry=1 / InternalVote=2 / MutualElection=3 / PopularElection=4 / NominationAppointment=5。
+/// 全变体保留以锁死链端枚举序号(交叉校验测试逐变体比对 + 穷尽 match 守卫),生产路径只用 Registry。
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdminSourceTag {
@@ -51,6 +51,7 @@ pub enum AdminSourceTag {
     InternalVote = 2,
     MutualElection = 3,
     PopularElection = 4,
+    NominationAppointment = 5,
 }
 
 impl AdminSourceTag {
@@ -76,14 +77,18 @@ pub struct AdminProfileArg {
     pub admin_cid_number: Vec<u8>,
     /// 姓名快照(来自注册局公民记录)。
     pub name: Vec<u8>,
-    /// 对外法定职务。
-    pub admin_role: Vec<u8>,
+    /// 岗位代码,引用 entity 模块岗位定义;注册局创建暂留空(与创世同)。
+    pub role_code: Vec<u8>,
+    /// 岗位名称快照(对外法定职务),来自创建表单。
+    pub role_name: Vec<u8>,
     /// 任期开始(天数自纪元;无任期填 0)。
     pub term_start: u32,
     /// 任期结束(天数自纪元;无任期填 0)。
     pub term_end: u32,
     /// 职务/任期来源。
     pub source: AdminSourceTag,
+    /// 来源追溯 ID(注册局操作/投票/选举/任免记录);注册局创建暂留空。
+    pub admin_source_ref: Vec<u8>,
 }
 
 /// `propose_create_institution` 的完整参数集合。
@@ -109,18 +114,22 @@ pub struct ProposeCreateInstitutionArgs {
     pub scope_city_name: Vec<u8>,
 }
 
-/// 把单个 `AdminProfile` 追加进输出缓冲(字段顺序锁死链端结构)。
+/// 把单个 `AdminProfile` 追加进输出缓冲(字段顺序锁死链端 9 字段结构)。
 fn encode_admin_profile(out: &mut Vec<u8>, profile: &AdminProfileArg) {
-    out.extend_from_slice(&profile.account); // account: [u8;32] 裸字节
+    out.extend_from_slice(&profile.account); // admin_account: [u8;32] 裸字节
     out.extend(Compact(profile.admin_cid_number.len() as u32).encode());
     out.extend_from_slice(&profile.admin_cid_number);
-    out.extend(Compact(profile.name.len() as u32).encode());
+    out.extend(Compact(profile.name.len() as u32).encode()); // admin_name
     out.extend_from_slice(&profile.name);
-    out.extend(Compact(profile.admin_role.len() as u32).encode());
-    out.extend_from_slice(&profile.admin_role);
+    out.extend(Compact(profile.role_code.len() as u32).encode());
+    out.extend_from_slice(&profile.role_code);
+    out.extend(Compact(profile.role_name.len() as u32).encode());
+    out.extend_from_slice(&profile.role_name);
     out.extend(profile.term_start.to_le_bytes()); // u32 小端
     out.extend(profile.term_end.to_le_bytes()); // u32 小端
-    out.push(profile.source.index()); // 枚举单字节序号
+    out.push(profile.source.index()); // admin_source: 枚举单字节序号
+    out.extend(Compact(profile.admin_source_ref.len() as u32).encode());
+    out.extend_from_slice(&profile.admin_source_ref);
 }
 
 /// QR_V1 链交易动作码:`a = (pallet_index << 8) | call_index`。
@@ -232,21 +241,26 @@ mod tests {
     /// 用 `[u8;32]` 作 AccountId 即可复用链端 SCALE,无需 sp-runtime AccountId32。
     fn real_admin_profile(arg: &AdminProfileArg) -> AdminProfile<[u8; 32]> {
         AdminProfile {
-            account: arg.account,
+            admin_account: arg.account,
             admin_cid_number: BoundedVec::try_from(arg.admin_cid_number.clone())
                 .expect("admin_cid_number within bound"),
-            name: BoundedVec::try_from(arg.name.clone()).expect("name within bound"),
-            admin_role: BoundedVec::try_from(arg.admin_role.clone())
-                .expect("admin_role within bound"),
+            admin_name: BoundedVec::try_from(arg.name.clone()).expect("name within bound"),
+            role_code: BoundedVec::try_from(arg.role_code.clone())
+                .expect("role_code within bound"),
+            role_name: BoundedVec::try_from(arg.role_name.clone())
+                .expect("role_name within bound"),
             term_start: arg.term_start,
             term_end: arg.term_end,
-            source: match arg.source {
+            admin_source: match arg.source {
                 AdminSourceTag::Genesis => AdminSource::Genesis,
                 AdminSourceTag::Registry => AdminSource::Registry,
                 AdminSourceTag::InternalVote => AdminSource::InternalVote,
                 AdminSourceTag::MutualElection => AdminSource::MutualElection,
                 AdminSourceTag::PopularElection => AdminSource::PopularElection,
+                AdminSourceTag::NominationAppointment => AdminSource::NominationAppointment,
             },
+            admin_source_ref: BoundedVec::try_from(arg.admin_source_ref.clone())
+                .expect("admin_source_ref within bound"),
         }
     }
 
@@ -255,31 +269,44 @@ mod tests {
             account: [seed; 32],
             admin_cid_number: format!("CID{seed:03}").into_bytes(),
             name: "张三".as_bytes().to_vec(),
-            admin_role: "主任".as_bytes().to_vec(),
+            role_code: format!("R{seed:02}").into_bytes(),
+            role_name: "主任".as_bytes().to_vec(),
             term_start: 19_700 + seed as u32,
             term_end: 28_900 + seed as u32,
             source: AdminSourceTag::Registry,
+            admin_source_ref: format!("REG-{seed}").into_bytes(),
         }
     }
 
     /// `AdminSourceTag` 序号必须与链端 `AdminSource` 变体 `.encode()` 单字节一致。
+    ///
+    /// 穷尽 `match` 守卫:链端 `AdminSource` 若新增/重排变体,`tag_for` 非穷尽即
+    /// 编译失败,强制 `AdminSourceTag` 同步——堵住"少一个变体测试仍全绿"的盲区。
     #[test]
     fn admin_source_tag_matches_runtime_enum_index() {
+        fn tag_for(src: AdminSource) -> AdminSourceTag {
+            match src {
+                AdminSource::Genesis => AdminSourceTag::Genesis,
+                AdminSource::Registry => AdminSourceTag::Registry,
+                AdminSource::InternalVote => AdminSourceTag::InternalVote,
+                AdminSource::MutualElection => AdminSourceTag::MutualElection,
+                AdminSource::PopularElection => AdminSourceTag::PopularElection,
+                AdminSource::NominationAppointment => AdminSourceTag::NominationAppointment,
+            }
+        }
         let cases = [
-            (AdminSourceTag::Genesis, AdminSource::Genesis),
-            (AdminSourceTag::Registry, AdminSource::Registry),
-            (AdminSourceTag::InternalVote, AdminSource::InternalVote),
-            (AdminSourceTag::MutualElection, AdminSource::MutualElection),
-            (
-                AdminSourceTag::PopularElection,
-                AdminSource::PopularElection,
-            ),
+            AdminSource::Genesis,
+            AdminSource::Registry,
+            AdminSource::InternalVote,
+            AdminSource::MutualElection,
+            AdminSource::PopularElection,
+            AdminSource::NominationAppointment,
         ];
-        for (tag, real) in cases {
+        for real in cases {
             assert_eq!(
-                vec![tag.index()],
+                vec![tag_for(real).index()],
                 real.encode(),
-                "AdminSource 序号漂移: {tag:?}"
+                "AdminSource 序号漂移: {real:?}"
             );
         }
     }

@@ -96,6 +96,7 @@ void main() {
     required List<int> admin2,
   }) {
     return Uint8List.fromList([
+      0x00, // cid_number(AdminAccount 前导字段;个人多签为空)
       ...codeBytes('PMUL'),
       2, // AdminAccountKind::PersonalMultisig
       (2 << 2) & 0xff,

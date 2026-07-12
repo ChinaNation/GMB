@@ -49,6 +49,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -66,13 +70,13 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-		<key>NSCameraUsageDescription</key>
+	<key>NSCameraUsageDescription</key>
 	<string>公民 需要使用摄像头扫描二维码登录和转账。</string>
-		<key>NSPhotoLibraryUsageDescription</key>
+	<key>NSPhotoLibraryUsageDescription</key>
 	<string>公民 需要访问相册以设置用户头像。</string>
-		<key>NSPhotoLibraryAddUsageDescription</key>
+	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>公民 需要保存二维码或头像到相册。</string>
-		<key>NSFaceIDUsageDescription</key>
+	<key>NSFaceIDUsageDescription</key>
 	<string>公民 使用 Face ID 确认登录签名操作。</string>
 </dict>
 </plist>

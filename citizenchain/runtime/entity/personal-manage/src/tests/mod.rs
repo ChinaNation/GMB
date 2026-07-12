@@ -107,10 +107,10 @@ impl primitives::multisig::ProtectedSourceChecker<AccountId32> for TestProtected
 }
 
 pub struct TestInstitutionAsset;
-impl institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
+impl primitives::institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
     fn can_spend(
         _source: &AccountId32,
-        _action: institution_asset::InstitutionAssetAction,
+        _action: primitives::institution_asset::InstitutionAssetAction,
     ) -> bool {
         INSTITUTION_CAN_SPEND.with(|value| *value.borrow())
     }

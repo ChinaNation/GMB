@@ -29,20 +29,15 @@ void main() {
       expect(_style('visitor', 'visitor').checkColor, Colors.white);
     });
 
-    test('竞选身份 + 投票会员 → 红扇贝 + 蓝勾', () {
-      final s = _style('candidate', 'voting');
-      expect(s.color, AppTheme.identityCandidate);
-      expect(s.checkColor, AppTheme.identityVoting);
-    });
-
-    test('竞选身份 + 访客会员 → 橙勾', () {
-      expect(_style('candidate', 'visitor').checkColor, AppTheme.identityVisitor);
-    });
-
-    test('投票身份 + 访客会员 → 蓝扇贝 + 橙勾', () {
-      final s = _style('voting', 'visitor');
-      expect(s.color, AppTheme.identityVoting);
-      expect(s.checkColor, AppTheme.identityVisitor);
+    test('传入低于身份的会员档：底色仍随身份、勾恒白（精确匹配已无降档）', () {
+      // exact-match 禁降档后不存在「身份高于会员」的真实组合；即便被喂入，
+      // 底色只取身份档，勾色统一白（不再按会员档着色）。
+      final s1 = _style('candidate', 'voting');
+      expect(s1.color, AppTheme.identityCandidate);
+      expect(s1.checkColor, Colors.white);
+      final s2 = _style('voting', 'visitor');
+      expect(s2.color, AppTheme.identityVoting);
+      expect(s2.checkColor, Colors.white);
     });
 
     test('无生效会员 → 小人(checked=false)，勾色不参与', () {

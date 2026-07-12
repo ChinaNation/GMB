@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:citizenapp/8964/square_tab_page.dart';
 import 'package:citizenapp/citizen/citizen_tab_page.dart';
@@ -24,6 +25,7 @@ import 'ui/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FirebaseMessaging.onBackgroundMessage(chatRuntimeBackgroundHandler);
 
   // 钱包创建后注册 P-256 设备子钥（8964 层实现，避免 wallet/core 反向依赖）。
   WalletManager.subkeyRegistrar = DeviceSubkeyRegistrar().register;

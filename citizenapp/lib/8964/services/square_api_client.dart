@@ -231,6 +231,20 @@ class SquareCompletedUpload {
   final String storageState;
 }
 
+class SquareBrowseState {
+  const SquareBrowseState({
+    required this.browseDay,
+    required this.browseCount,
+    required this.browseLimit,
+    required this.browseLeft,
+  });
+
+  final String browseDay;
+  final int browseCount;
+  final int? browseLimit;
+  final int? browseLeft;
+}
+
 abstract class SquareFeedSource {
   Future<List<SquarePost>> fetchFeed({
     required SquareFeedKind feedKind,
@@ -269,7 +283,7 @@ class SquareApiConfig {
 
   static const baseUrlDefineName = 'SQUARE_API_URL';
 
-  /// 线上 Worker 唯一默认地址：聊天 mailbox 与广场共用同一个 Cloudflare Worker。
+  /// 线上 Worker 唯一默认地址：聊天瞬时转发与广场共用同一个 Cloudflare Worker。
   /// 默认即连生产 Cloudflare，绝不回落本机；开发者要连本机 wrangler dev 时，
   /// 显式传 --dart-define=SQUARE_API_URL=http://127.0.0.1:8787。
   static const prodBaseUrl =
@@ -319,9 +333,10 @@ class SquareApiClient
 
   final String baseUrl;
   final http.Client _http;
+  SquareBrowseState? lastBrowseState;
   final Map<String, SquareSession> _sessions = {};
 
-  /// Worker API 根地址。Chat Cloudflare mailbox 复用同一个 Worker 登录态。
+  /// Worker API 根地址。Chat 瞬时转发复用同一个 Worker 登录态。
   Uri get baseUri => Uri.parse(baseUrl);
 
   Future<SquareSession> ensureSession({
@@ -659,6 +674,7 @@ class SquareApiClient
     if (posts is! List) {
       throw const SquareApiException('广场 feed 响应缺少动态列表');
     }
+    lastBrowseState = _parseBrowseState(data);
     return posts
         .whereType<Map<String, dynamic>>()
         .map(_parsePost)
@@ -717,6 +733,7 @@ class SquareApiClient
     if (posts is! List) {
       throw const SquareApiException('用户主页响应缺少动态列表');
     }
+    lastBrowseState = _parseBrowseState(data);
     return (
       posts: posts.whereType<Map<String, dynamic>>().map(_parsePost).toList(
             growable: false,
@@ -1142,6 +1159,17 @@ class SquareApiClient
   static int? _nullableInt(Object? value) {
     if (value == null) return null;
     return _asInt(value);
+  }
+
+  static SquareBrowseState? _parseBrowseState(Map<String, dynamic> data) {
+    final day = data['browse_day'];
+    if (day is! String || day.isEmpty) return null;
+    return SquareBrowseState(
+      browseDay: day,
+      browseCount: _asInt(data['browse_count']),
+      browseLimit: _nullableInt(data['browse_limit']),
+      browseLeft: _nullableInt(data['browse_left']),
+    );
   }
 
   void close() => _http.close();

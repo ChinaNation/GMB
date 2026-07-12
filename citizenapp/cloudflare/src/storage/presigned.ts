@@ -72,7 +72,7 @@ export async function createUploadUrl(env: Env, input: UploadUrlInput): Promise<
 export async function createDownloadUrl(env: Env, input: DownloadUrlInput): Promise<string> {
   if (canCreateRealPresignedUrl(env)) {
     const bucketName = env.R2_BUCKET ?? 'citizenapp-square-media';
-    // 下载同样只签短期 R2 URL；Worker 不代理或解密聊天附件内容。
+    // 下载同样只签短期 R2 URL；Worker 不代理或解密广场媒体内容。
     const endpoint = new URL(`https://${env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com/${bucketName}/${encodeObjectPath(
       input.object_key
     )}`);

@@ -7,20 +7,14 @@
 // - 同地址多 entity 时按状态过滤选 create+voting
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_pending_create_lookup.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_proposal_history_service.dart';
 
+import '../../support/isar_test_env.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() async {
-    await WalletIsar.instance.ensureTestCoreInitialized();
-  });
-
-  setUp(() async {
-    await WalletIsar.instance.resetForTest();
-  });
+  useIsolatedIsar();
 
   const personalAccount = '11223344556677889900aabbccddeeff'
       'ffeeddccbbaa00998877665544332211';

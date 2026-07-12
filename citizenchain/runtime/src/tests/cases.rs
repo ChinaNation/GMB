@@ -1117,7 +1117,7 @@ fn ordinary_account_allows_all_actions() {
 #[test]
 fn genesis_public_institutions_full_mint_counts() {
     new_test_ext().execute_with(|| {
-        genesis::institution::build::<Runtime>();
+        genesis_pallet::institution::build::<Runtime>();
 
         let builtin_count = primitives::cid::china::china_cb::CHINA_CB.len()
             + primitives::cid::china::china_ch::CHINA_CH.len()

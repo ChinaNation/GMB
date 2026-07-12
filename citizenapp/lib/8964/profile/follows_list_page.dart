@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
+import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 enum FollowsType {
@@ -22,11 +23,13 @@ class FollowsListPage extends StatefulWidget {
     super.key,
     required this.ownerAccount,
     required this.type,
+    required this.session,
     this.api,
   });
 
   final String ownerAccount;
   final FollowsType type;
+  final SquareSession session;
   final CitizenProfileApi? api;
 
   @override
@@ -58,6 +61,7 @@ class _FollowsListPageState extends State<FollowsListPage> {
         widget.ownerAccount,
         type: widget.type.workerValue,
         limit: 20,
+        session: widget.session,
       );
       if (!mounted) return;
       setState(() {
@@ -86,6 +90,7 @@ class _FollowsListPageState extends State<FollowsListPage> {
         type: widget.type.workerValue,
         limit: 20,
         cursor: _cursor,
+        session: widget.session,
       );
       if (!mounted) return;
       setState(() {

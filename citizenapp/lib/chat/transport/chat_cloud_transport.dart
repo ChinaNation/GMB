@@ -2,87 +2,82 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../crypto/mls_boundary.dart';
-import '../chat_models.dart';
-import '../proto/chat_envelope.pb.dart';
-import 'chat_transport.dart';
 import 'package:http/http.dart' as http;
 
-const _cloudflareMailboxPendingMessage = 'Cloudflare 密文 mailbox 尚未配置';
+import '../chat_models.dart';
+import '../crypto/mls_boundary.dart';
+import '../proto/chat_envelope.pb.dart';
+import 'chat_transport.dart';
 
-/// Cloudflare 密文 mailbox 传输。
-///
-/// 本类是互联网聊天的唯一正式远程 transport。Cloudflare 只能接收完整
-/// GMB_CHAT_V1 Protobuf envelope bytes、KeyPackage 和 ack 元数据，不能接触
-/// 私聊或群聊明文。
+const _chatServiceUnavailable = 'Cloudflare Chat 瞬时转发尚未配置';
+
+class ChatIceServer {
+  const ChatIceServer({required this.urls, this.username, this.credential});
+
+  final List<String> urls;
+  final String? username;
+  final String? credential;
+
+  Map<String, dynamic> toWebRtcMap() => {
+        'urls': urls,
+        if (username != null) 'username': username,
+        if (credential != null) 'credential': credential,
+      };
+}
+
+/// Cloudflare 互联网 Chat 传输，只转发当前请求中的密文和WebRTC信令。
 class ChatCloudTransport implements ChatTransport {
   ChatCloudTransport({
     required this.ownerAccount,
     required this.ownerDeviceId,
-    this.mailboxBaseUrl,
+    this.serviceBaseUrl,
     this.sessionToken,
     http.Client? httpClient,
     this.requestTimeout = const Duration(seconds: 12),
   }) : _httpClient = httpClient ?? http.Client();
 
-  /// 当前手机正在使用的钱包聊天账户。
   final String ownerAccount;
-
-  /// 当前手机本地 Chat 设备 ID。
   final String ownerDeviceId;
-
-  /// 后续接入的 Worker API 地址；为空表示还未配置正式远程 mailbox。
-  final Uri? mailboxBaseUrl;
-
-  /// Worker 钱包登录态 token。该 token 只授权访问自己的密文 mailbox。
+  final Uri? serviceBaseUrl;
   final String? sessionToken;
-
-  /// HTTP 请求超时时间。
   final Duration requestTimeout;
-
   final http.Client _httpClient;
 
   @override
   ChatTransportType get type => ChatTransportType.cloudflare;
 
-  /// 登记当前 Chat 设备。账户只来自 Bearer session，绑定摘要由已登记的
-  /// 硬件 P-256 设备子钥静默签名；请求体不得提交 owner 真源。
   Future<void> registerDevice({
     required String devicePublicKeyHex,
+    required String pushProvider,
+    required String pushToken,
     required String bindingSignature,
     required int expiresAtMillis,
     required String nonce,
   }) async {
-    await _postJson(
-      '/v1/chat/devices/register',
-      {
-        'device_id': ownerDeviceId,
-        'device_public_key_hex': devicePublicKeyHex,
-        'binding_signature': bindingSignature,
-        'expires_at': expiresAtMillis,
-        'nonce': nonce,
-      },
-    );
+    await _postJson('/v1/chat/devices/register', {
+      'device_id': ownerDeviceId,
+      'device_public_key_hex': devicePublicKeyHex,
+      'push_provider': pushProvider,
+      'push_token': pushToken,
+      'binding_signature': bindingSignature,
+      'expires_at': expiresAtMillis,
+      'nonce': nonce,
+    });
   }
 
-  /// 发布本设备 OpenMLS KeyPackage。
   Future<void> publishKeyPackage(MlsKeyPackage keyPackage) async {
-    await _postJson(
-      '/v1/chat/keypackages',
-      {
-        'owner_account': keyPackage.ownerAccount,
-        'device_id': keyPackage.deviceId,
-        'device_public_key_hex': keyPackage.devicePublicKeyHex,
-        'key_package_id': keyPackage.keyPackageId,
-        'key_package': _base64UrlEncode(keyPackage.keyPackageBytes),
-        'cipher_suite': keyPackage.cipherSuite,
-        'created_at': keyPackage.createdAtMillis,
-        'expires_at': keyPackage.expiresAtMillis,
-      },
-    );
+    await _postJson('/v1/chat/keypackages', {
+      'owner_account': keyPackage.ownerAccount,
+      'device_id': keyPackage.deviceId,
+      'device_public_key_hex': keyPackage.devicePublicKeyHex,
+      'key_package_id': keyPackage.keyPackageId,
+      'key_package': _base64UrlEncode(keyPackage.keyPackageBytes),
+      'cipher_suite': keyPackage.cipherSuite,
+      'created_at': keyPackage.createdAtMillis,
+      'expires_at': keyPackage.expiresAtMillis,
+    });
   }
 
-  /// 从 Cloudflare mailbox 拉取对方账号可用的 OpenMLS KeyPackage。
   Future<List<MlsKeyPackage>> fetchKeyPackages({
     required String ownerAccount,
     required String requesterAccount,
@@ -102,20 +97,16 @@ class ChatCloudTransport implements ChatTransport {
         .toList(growable: false);
   }
 
-  /// 声明消费对方的一次性 KeyPackage。
   Future<MlsKeyPackage> consumeKeyPackage({
     required String ownerAccount,
     required String keyPackageId,
     required String requesterAccount,
   }) async {
-    final json = await _postJson(
-      '/v1/chat/keypackages/consume',
-      {
-        'owner_account': ownerAccount,
-        'key_package_id': keyPackageId,
-        'requester_account': requesterAccount,
-      },
-    );
+    final json = await _postJson('/v1/chat/keypackages/consume', {
+      'owner_account': ownerAccount,
+      'key_package_id': keyPackageId,
+      'requester_account': requesterAccount,
+    });
     final item = json['key_package'];
     if (item is! Map<String, dynamic>) {
       throw const FormatException('Cloudflare KeyPackage 消费响应格式无效');
@@ -123,216 +114,56 @@ class ChatCloudTransport implements ChatTransport {
     return _keyPackageFromJson(item);
   }
 
-  /// 拉取当前设备待收密文 envelope。
-  Future<List<ChatPendingEncryptedEnvelope>> fetchPending() async {
-    final json = await _getJson(
-      '/v1/chat/envelopes/pending',
-      queryParameters: {
-        'owner_account': ownerAccount,
-        'device_id': ownerDeviceId,
-        'limit': '100',
-      },
-    );
-    final items = json['envelopes'];
-    if (items is! List) {
-      throw const FormatException('Cloudflare pending envelope 响应格式无效');
-    }
-    return items.whereType<Map<String, dynamic>>().map((item) {
-      final envelopeId = (item['envelope_id'] ?? '').toString();
-      final envelope = (item['envelope'] ?? '').toString();
-      return ChatPendingEncryptedEnvelope(
-        envelopeId: envelopeId,
-        envelopeBytes: _base64UrlDecode(envelope),
+  Future<List<ChatIceServer>> createIceServers() async {
+    final json = await _postJson('/v1/chat/turn', const {});
+    final rows = json['ice_servers'];
+    if (rows is! List) throw const FormatException('TURN 响应格式无效');
+    return rows.whereType<Map<String, dynamic>>().map((row) {
+      final rawUrls = row['urls'];
+      final urls = rawUrls is List
+          ? rawUrls.map((value) => value.toString()).toList(growable: false)
+          : <String>[rawUrls.toString()];
+      return ChatIceServer(
+        urls: urls,
+        username: row['username']?.toString(),
+        credential: row['credential']?.toString(),
       );
     }).toList(growable: false);
   }
 
-  /// 确认当前设备已经处理某个密文 envelope。
-  Future<void> ackEnvelope(String envelopeId) async {
-    await _postJson(
-      '/v1/chat/envelopes/ack',
-      {
-        'owner_account': ownerAccount,
-        'device_id': ownerDeviceId,
-        'envelope_id': envelopeId,
-      },
-    );
-  }
-
-  /// 为 Chat 加密附件申请 manifest 和分片上传地址。
-  Future<ChatAttachmentUploadPlan> prepareAttachmentUpload({
-    required String conversationId,
-    required String attachmentId,
-    required int manifestByteSize,
-    required List<ChatAttachmentChunkDraft> chunks,
+  Future<bool> sendSignal({
+    required String recipientAccount,
+    String? recipientDeviceId,
+    required Map<String, dynamic> signal,
   }) async {
-    final json = await _postJson(
-      '/v1/chat/attachments/prepare',
-      {
-        'owner_account': ownerAccount,
-        'device_id': ownerDeviceId,
-        'conversation_id': conversationId,
-        'attachment_id': attachmentId,
-        'manifest_byte_size': manifestByteSize,
-        'chunks': chunks
-            .map(
-              (chunk) => {
-                'chunk_id': chunk.chunkId,
-                'byte_size': chunk.byteSize,
-              },
-            )
-            .toList(growable: false),
-      },
-    );
-    final rawChunks = json['chunks'];
-    if (rawChunks is! List) {
-      throw const FormatException('Cloudflare 附件上传计划响应格式无效');
-    }
-    return ChatAttachmentUploadPlan(
-      attachmentId: (json['attachment_id'] ?? '').toString(),
-      manifestObjectKey: (json['manifest_object_key'] ?? '').toString(),
-      manifestUploadUrl:
-          Uri.parse((json['manifest_upload_url'] ?? '').toString()),
-      chunks: rawChunks
-          .whereType<Map<String, dynamic>>()
-          .map(
-            (item) => ChatAttachmentUploadTarget(
-              chunkId: (item['chunk_id'] ?? '').toString(),
-              objectKey: (item['object_key'] ?? '').toString(),
-              uploadUrl: Uri.parse((item['upload_url'] ?? '').toString()),
-            ),
-          )
-          .toList(growable: false),
-    );
+    final json = await _postJson('/v1/chat/signals', {
+      'sender_device_id': ownerDeviceId,
+      'recipient_account': recipientAccount,
+      'recipient_device_id': recipientDeviceId ?? '',
+      'signal': signal,
+    });
+    return json['delivery_state'] == 'sent';
   }
 
-  /// 上传单个加密附件对象。这里的 [bytes] 必须已经在手机本地加密。
-  Future<void> uploadAttachmentObject({
-    required Uri uploadUrl,
-    required List<int> bytes,
-    required String contentType,
-  }) async {
-    final headers = <String, String>{
-      'content-type': contentType,
-    };
-    if (uploadUrl.path.endsWith('/v1/chat/attachments/dev-put')) {
-      headers['authorization'] = 'Bearer ${sessionToken ?? ''}';
-    }
-    final response = await _httpClient
-        .put(
-          uploadUrl,
-          headers: headers,
-          body: bytes,
-        )
-        .timeout(requestTimeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      _decodeResponse(response, uploadUrl);
-    }
-  }
-
-  /// 完成 Chat 加密附件上传。Worker 只校验 R2 密文对象存在。
-  Future<void> completeAttachmentUpload(
-      ChatAttachmentCompleteRequest input) async {
-    await _postJson(
-      '/v1/chat/attachments/complete',
-      {
-        'owner_account': ownerAccount,
-        'device_id': ownerDeviceId,
-        'conversation_id': input.conversationId,
-        'attachment_id': input.attachmentId,
-        'manifest_object_key': input.manifestObjectKey,
-        'manifest_hash': input.manifestHash,
-        'chunk_refs': input.chunkObjectKeys,
-      },
-    );
-  }
-
-  /// 为 Chat 加密附件申请 manifest 和分片下载地址。
-  Future<ChatAttachmentDownloadPlan> prepareAttachmentDownload(
-      ChatAttachmentDownloadRequest input) async {
-    final json = await _postJson(
-      '/v1/chat/attachments/download',
-      {
-        'owner_account': ownerAccount,
-        'device_id': ownerDeviceId,
-        'conversation_id': input.conversationId,
-        'attachment_id': input.attachmentId,
-        'manifest_object_key': input.manifestObjectKey,
-        'manifest_hash': input.manifestHash,
-        'chunk_refs': input.chunkObjectKeys,
-      },
-    );
-    final rawChunks = json['chunks'];
-    if (rawChunks is! List) {
-      throw const FormatException('Cloudflare 附件下载计划响应格式无效');
-    }
-    return ChatAttachmentDownloadPlan(
-      attachmentId: (json['attachment_id'] ?? '').toString(),
-      manifestObjectKey: (json['manifest_object_key'] ?? '').toString(),
-      manifestDownloadUrl:
-          Uri.parse((json['manifest_download_url'] ?? '').toString()),
-      chunks: rawChunks
-          .whereType<Map<String, dynamic>>()
-          .map(
-            (item) => ChatAttachmentDownloadTarget(
-              objectKey: (item['object_key'] ?? '').toString(),
-              downloadUrl: Uri.parse((item['download_url'] ?? '').toString()),
-            ),
-          )
-          .toList(growable: false),
-    );
-  }
-
-  /// 下载单个加密附件对象。返回值仍是密文字节，由上层本地解密。
-  Future<List<int>> downloadAttachmentObject(Uri downloadUrl) async {
-    final headers = <String, String>{};
-    if (downloadUrl.path.endsWith('/v1/chat/attachments/dev-get')) {
-      headers['authorization'] = 'Bearer ${sessionToken ?? ''}';
-    }
-    final response = await _httpClient
-        .get(downloadUrl, headers: headers)
-        .timeout(requestTimeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      _decodeResponse(response, downloadUrl);
-    }
-    return response.bodyBytes;
-  }
-
-  /// 连接 Cloudflare mailbox 的实时通知通道。
-  ///
-  /// WebSocket 只通知“有新密文”，不会推送明文或密文正文；页面收到通知后
-  /// 仍调用 pending/ack 旧流程同步，断线时由页面恢复轮询兜底。
   Future<Future<void> Function()?> connectRealtime({
-    required Future<void> Function(Map<String, dynamic> notification)
-        onNotification,
+    required Future<void> Function(Map<String, dynamic> message) onMessage,
     Future<void> Function()? onDisconnected,
   }) async {
-    final uri = _wsUri(
-      '/v1/chat/ws',
-      queryParameters: {
-        'owner_account': ownerAccount,
-        'device_id': ownerDeviceId,
-      },
-    );
+    final uri = _wsUri('/v1/chat/ws');
     WebSocket socket;
     try {
-      socket = await WebSocket.connect(
-        uri.toString(),
-        headers: _wsHeaders(),
-      ).timeout(requestTimeout);
+      socket = await WebSocket.connect(uri.toString(), headers: _wsHeaders())
+          .timeout(requestTimeout);
     } catch (_) {
       return null;
     }
-
     var closedByClient = false;
     late final StreamSubscription<dynamic> subscription;
     subscription = socket.listen(
       (event) {
         final text = event is List<int> ? utf8.decode(event) : event.toString();
         final decoded = jsonDecode(text);
-        if (decoded is Map<String, dynamic>) {
-          unawaited(onNotification(decoded));
-        }
+        if (decoded is Map<String, dynamic>) unawaited(onMessage(decoded));
       },
       onDone: () {
         if (!closedByClient) {
@@ -346,7 +177,6 @@ class ChatCloudTransport implements ChatTransport {
       },
       cancelOnError: true,
     );
-
     return () async {
       closedByClient = true;
       await subscription.cancel();
@@ -359,67 +189,52 @@ class ChatCloudTransport implements ChatTransport {
     required String envelopeId,
     required List<int> envelopeBytes,
   }) async {
+    ChatEnvelope envelope;
     try {
-      ChatEnvelope.fromBuffer(envelopeBytes);
+      envelope = ChatEnvelope.fromBuffer(envelopeBytes);
     } catch (error) {
       return ChatDeliveryResult(
         envelopeId: envelopeId,
         transportType: type,
         state: ChatMessageDeliveryState.failed,
-        errorMessage: '密文 envelope 格式无效: $error',
+        errorMessage: '密文 Envelope 格式无效: $error',
       );
     }
-
-    if (mailboxBaseUrl == null || (sessionToken ?? '').trim().isEmpty) {
+    if (serviceBaseUrl == null || (sessionToken ?? '').trim().isEmpty) {
       return ChatDeliveryResult(
         envelopeId: envelopeId,
         transportType: type,
-        state: ChatMessageDeliveryState.failed,
-        errorMessage: _cloudflareMailboxPendingMessage,
+        state: ChatMessageDeliveryState.queued,
+        errorMessage: _chatServiceUnavailable,
       );
     }
-
-    final envelope = ChatEnvelope.fromBuffer(envelopeBytes);
     try {
-      await _postJson(
-        '/v1/chat/envelopes',
-        {
-          'envelope_id': envelope.envelopeId,
-          'conversation_id': envelope.conversationId,
-          'sender_account': envelope.senderAccount,
-          'sender_device_id': envelope.senderDeviceId,
-          'recipient_account': envelope.recipientAccount,
-          'recipient_device_id': '',
-          'mls_message_kind': _mlsKindName(envelope.mlsMessageKind),
-          'envelope': _base64UrlEncode(envelopeBytes),
-          'attachment_manifest_key': envelope.attachmentManifestHash.isEmpty ||
-                  envelope.chunkRefs.isEmpty
-              ? ''
-              : envelope.chunkRefs.first,
-          'created_at': envelope.createdAtMillis.toInt(),
-          'expires_at':
-              envelope.createdAtMillis.toInt() + envelope.ttlMillis.toInt(),
-        },
-      );
+      final json = await _postJson('/v1/chat/envelopes', {
+        'envelope_id': envelope.envelopeId,
+        'sender_device_id': envelope.senderDeviceId,
+        'recipient_account': envelope.recipientAccount,
+        'recipient_device_id': '',
+        'envelope': _base64UrlEncode(envelopeBytes),
+      });
       return ChatDeliveryResult(
         envelopeId: envelopeId,
         transportType: type,
-        state: ChatMessageDeliveryState.sent,
+        state: json['delivery_state'] == 'sent'
+            ? ChatMessageDeliveryState.sent
+            : ChatMessageDeliveryState.queued,
       );
     } catch (error) {
       return ChatDeliveryResult(
         envelopeId: envelopeId,
         transportType: type,
-        state: ChatMessageDeliveryState.failed,
+        state: ChatMessageDeliveryState.queued,
         errorMessage: error.toString(),
       );
     }
   }
 
-  Future<Map<String, dynamic>> _getJson(
-    String path, {
-    Map<String, String>? queryParameters,
-  }) async {
+  Future<Map<String, dynamic>> _getJson(String path,
+      {Map<String, String>? queryParameters}) async {
     final uri = _uri(path, queryParameters: queryParameters);
     final response =
         await _httpClient.get(uri, headers: _headers()).timeout(requestTimeout);
@@ -427,9 +242,7 @@ class ChatCloudTransport implements ChatTransport {
   }
 
   Future<Map<String, dynamic>> _postJson(
-    String path,
-    Map<String, Object?> body,
-  ) async {
+      String path, Map<String, Object?> body) async {
     final uri = _uri(path);
     final response = await _httpClient
         .post(uri, headers: _headers(), body: jsonEncode(body))
@@ -438,10 +251,9 @@ class ChatCloudTransport implements ChatTransport {
   }
 
   Uri _uri(String path, {Map<String, String>? queryParameters}) {
-    final base = mailboxBaseUrl;
-    final token = sessionToken?.trim() ?? '';
-    if (base == null || token.isEmpty) {
-      throw StateError(_cloudflareMailboxPendingMessage);
+    final base = serviceBaseUrl;
+    if (base == null || (sessionToken ?? '').trim().isEmpty) {
+      throw StateError(_chatServiceUnavailable);
     }
     final uri = base.resolve(path);
     return queryParameters == null
@@ -449,72 +261,52 @@ class ChatCloudTransport implements ChatTransport {
         : uri.replace(queryParameters: queryParameters);
   }
 
-  Uri _wsUri(String path, {Map<String, String>? queryParameters}) {
-    final uri = _uri(path, queryParameters: queryParameters);
-    final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
-    return uri.replace(scheme: scheme);
+  Uri _wsUri(String path) {
+    final uri = _uri(path);
+    return uri.replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws');
   }
 
-  Map<String, String> _headers() {
-    final token = sessionToken?.trim() ?? '';
-    return {
-      'authorization': 'Bearer $token',
-      'content-type': 'application/json; charset=utf-8',
-      'accept': 'application/json',
-    };
-  }
+  Map<String, String> _headers() => {
+        'authorization': 'Bearer ${sessionToken?.trim() ?? ''}',
+        'content-type': 'application/json; charset=utf-8',
+        'accept': 'application/json',
+      };
 
-  Map<String, String> _wsHeaders() {
-    final token = sessionToken?.trim() ?? '';
-    return {
-      'authorization': 'Bearer $token',
-    };
-  }
+  Map<String, String> _wsHeaders() => {
+        'authorization': 'Bearer ${sessionToken?.trim() ?? ''}',
+        'x-chat-device': ownerDeviceId,
+      };
 }
 
 Map<String, dynamic> _decodeResponse(http.Response response, Uri uri) {
   final decoded = jsonDecode(response.body);
   if (decoded is! Map<String, dynamic>) {
-    throw FormatException('Cloudflare mailbox 响应不是 JSON 对象', response.body);
+    throw FormatException('Cloudflare Chat 响应不是JSON对象', response.body);
   }
-  if (response.statusCode < 200 || response.statusCode >= 300) {
+  if (response.statusCode < 200 ||
+      response.statusCode >= 300 ||
+      decoded['ok'] != true) {
     final message =
         (decoded['message'] ?? decoded['error_code'] ?? '').toString();
     throw StateError(
-        'Cloudflare mailbox 请求失败 ${response.statusCode}: $message (${uri.path})');
-  }
-  if (decoded['ok'] != true) {
-    throw StateError(
-        'Cloudflare mailbox 返回失败: ${decoded['error_code'] ?? 'unknown'}');
+        'Cloudflare Chat 请求失败 ${response.statusCode}: $message (${uri.path})');
   }
   return decoded;
 }
 
-MlsKeyPackage _keyPackageFromJson(Map<String, dynamic> json) {
-  return MlsKeyPackage(
-    ownerAccount: (json['owner_account'] ?? '').toString(),
-    deviceId: (json['device_id'] ?? '').toString(),
-    devicePublicKeyHex: (json['device_public_key_hex'] ?? '').toString(),
-    keyPackageId: (json['key_package_id'] ?? '').toString(),
-    keyPackageBytes: _base64UrlDecode((json['key_package'] ?? '').toString()),
-    cipherSuite: (json['cipher_suite'] ?? '').toString(),
-    createdAtMillis: (json['created_at'] as num?)?.toInt() ?? 0,
-    expiresAtMillis: (json['expires_at'] as num?)?.toInt() ?? 0,
-    consumedAtMillis: (json['consumed_at'] as num?)?.toInt(),
-  );
-}
+MlsKeyPackage _keyPackageFromJson(Map<String, dynamic> json) => MlsKeyPackage(
+      ownerAccount: (json['owner_account'] ?? '').toString(),
+      deviceId: (json['device_id'] ?? '').toString(),
+      devicePublicKeyHex: (json['device_public_key_hex'] ?? '').toString(),
+      keyPackageId: (json['key_package_id'] ?? '').toString(),
+      keyPackageBytes: _base64UrlDecode((json['key_package'] ?? '').toString()),
+      cipherSuite: (json['cipher_suite'] ?? '').toString(),
+      createdAtMillis: (json['created_at'] as num?)?.toInt() ?? 0,
+      expiresAtMillis: (json['expires_at'] as num?)?.toInt() ?? 0,
+    );
 
-String _mlsKindName(MlsWireMessageKind kind) {
-  return switch (kind) {
-    MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_WELCOME => 'welcome',
-    MlsWireMessageKind.MLS_WIRE_MESSAGE_KIND_APPLICATION => 'application',
-    _ => 'unspecified',
-  };
-}
-
-String _base64UrlEncode(List<int> bytes) {
-  return base64Url.encode(bytes).replaceAll('=', '');
-}
+String _base64UrlEncode(List<int> bytes) =>
+    base64Url.encode(bytes).replaceAll('=', '');
 
 List<int> _base64UrlDecode(String value) {
   final normalized = value.padRight((value.length + 3) ~/ 4 * 4, '=');

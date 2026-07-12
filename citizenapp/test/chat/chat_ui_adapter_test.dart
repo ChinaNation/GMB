@@ -61,7 +61,7 @@ void main() {
         messageKind: ChatMessageKind.attachment,
         deliveryState: ChatMessageDeliveryState.failed,
         createdAtMillis: 3000,
-        plaintext: '{"type":"gmb_chat_attachment_v1","file_name":"photo.txt"}',
+        plaintext: '{"type":"gmb_chat_attachment_v2","file_name":"photo.txt"}',
       ),
       ownerAccount: 'alice-wallet',
     ) as TextMessage;
@@ -70,7 +70,7 @@ void main() {
     expect(attachment.metadata?['message_kind'], 'attachment');
     expect(
       attachment.metadata?['attachment_control_plaintext'],
-      contains('gmb_chat_attachment_v1'),
+      contains('gmb_chat_attachment_v2'),
     );
     expect(attachment.status, MessageStatus.error);
     expect(attachment.failedAt, isNotNull);

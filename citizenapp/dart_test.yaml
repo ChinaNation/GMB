@@ -1,0 +1,6 @@
+# CitizenApp 测试配置。
+# Isar(isar_community / MDBX)是进程级 native;跨文件隔离由 test/support/isar_test_env.dart
+# 的唯一临时目录保证,此处再钉死串行执行 + 合理超时作保险(默认并发会让多 isolate 抢
+# 同一 native 层、更慢且易 flaky)。
+concurrency: 1
+timeout: 90s

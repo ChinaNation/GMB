@@ -13,7 +13,7 @@ CitizenApp 是手机软件，需要在移动网络下快速、稳定地连接 Ci
 - CitizenWallet 不参与本架构讨论；CitizenWallet 只做离线冷钱包和扫码签名。
 - CitizenChain 是一个整体安装包，由 `node`、`runtime`、`onchina` 组成。
 - CitizenApp 必须保留内置轻节点能力，不能改成只访问 HTTP API 的中心化客户端。
-- Cloudflare 只承接边缘入口、缓存、媒体、聊天 mailbox、启动清单和受控转发，不运行 Substrate 节点，不保存用户私钥，不成为链上状态真源。
+- Cloudflare 只承接边缘入口、缓存、广场媒体、Chat 瞬时转发、启动清单和受控转发，不运行 Substrate 节点，不保存用户私钥，不成为链上状态真源。
 
 ## 决策
 
@@ -34,7 +34,7 @@ CitizenChain 云节点网络
 各层职责固定如下：
 
 - CitizenApp：内置 smoldot 轻节点，连接 CitizenChain P2P 网络；端上私钥只在本机签名；链上关键判断以 finalized 链状态为准。
-- Cloudflare 边缘层：提供 DNS/WAF/限流、Worker API Gateway、R2 媒体存储、D1/KV/DO 边缘数据、聊天密文 mailbox、广场 feed、轻节点启动清单和服务健康信息。
+- Cloudflare 边缘层：提供 DNS/WAF/限流、Worker API Gateway、广场 R2 媒体存储、D1/KV/DO 边缘数据、Chat 瞬时密文/信令转发、广场 feed、轻节点启动清单和服务健康信息。
 - Citizen API / OnChina 投影能力：提供非链上查询、公开目录、业务聚合、受控链事件投影和已签名交易广播；不托管私钥，不替用户签名。
 - CitizenChain 云节点网络：运行 `citizenchain/node + runtime + onchina` 安装包，承担 bootnode/full node/archive/indexer/RPC service node 等角色。
 
@@ -74,7 +74,7 @@ P2P 连接失败不等于整个 App 不可用。CitizenApp 运行态拆成三种
 
 ### 5. 聊天和广场
 
-聊天继续采用当前正式路线：OpenMLS + Cloudflare 密文 mailbox + 近场通信。Cloudflare 只保存密文信封、加密附件和必要投递元数据，不保存聊天明文或 OpenMLS 私钥。
+聊天采用 OpenMLS + Cloudflare 瞬时密文转发 + WebRTC 设备附件 + 近场通信。消息、会话和附件只保存在设备；Cloudflare 只保存设备公钥、推送 Token、一次性 KeyPackage、防重放哈希和短期 TURN 索引。
 
 广场继续采用当前正式路线：媒体文件存 Cloudflare R2，CDN 分发；CitizenChain 只保存发布所需的链上元数据、哈希、索引和费用结果；Worker/D1/KV/DO 承接登录、会员、上传、feed、推荐信号和发布确认。
 
@@ -92,7 +92,7 @@ OnChina 是 CitizenChain 安装包内置能力，不是第五个产品。OnChina
 - 禁止把 API 广播成功显示成链上交易成功。
 - 禁止把 CitizenWallet 写入在线链连接、聊天或广场架构。
 - 禁止把 Matrix 写成当前聊天目标路线。
-- 禁止恢复区块链节点聊天、通信节点 mailbox 或旧 Chat 节点配对流程。
+- 禁止恢复区块链节点聊天、云端聊天内容存储或节点配对流程。
 
 ## 影响
 

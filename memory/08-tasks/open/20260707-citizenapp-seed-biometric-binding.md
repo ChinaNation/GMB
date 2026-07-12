@@ -134,7 +134,7 @@ abstract interface class SecureSeedStore {
 
 ### 签名真相核实（2026-07-08，纠正早前误判）
 
-- **聊天消息不做钱包签名**：chat_runtime 的钱包签名仅用于 ① mailbox 后端会话认证 ② Chat 设备绑定（MLS key package），聊天消息本体走 MLS 端到端加密（设备密钥，非 seed）。**发消息无每条签名**。
+- **聊天消息不做钱包签名**：Chat 只复用钱包会话并用设备子钥完成设备绑定，聊天消息本体走 MLS 端到端加密（设备密钥，非 seed）。**发消息无每条签名**。
 - **"登录"= 后端会话握手**：square_session_provider 对广场/Chat Cloudflare Worker 签 challenge 证明钱包所有权，约一次/会话，无用户登录界面。
 - **广场发布 = 链上交易**：`publish_square_post` extrinsic（square_compose_signers.signChain），故扣费；费种见「广场发布费率」。
 
@@ -147,7 +147,7 @@ abstract interface class SecureSeedStore {
 - **发布按钮改「签名发布」**：点击→弹验证→直接发布，用户仍一步。
 - **切换身份**无签名负载 → `verifyWalletAccess(walletIndex)`（读 seed 触发验证即弃）。
 - **废弃理由**：seed 是全权私钥，发动态与转账同一把钥匙，"发动态免验证"和"转账必验证"不可兼得；会话密钥又因 App 进程被杀掉内存而退化成"每次开 App 验证"，而开 App 比发动态频繁，得不偿失。
-- **Chat 聊天不签名**（仅 mailbox 会话 + MLS 设备绑定，罕见、令牌缓存过期才重签，不拦浏览）。
+- **Chat 聊天不签名**（仅钱包会话 + MLS 设备绑定，令牌缓存过期才静默续签，不拦浏览）。
 - 若日后要"发动态真正零验证"，唯一干净解 = 链上"发帖专用子钥"（低权限、不能转账、低摩擦存储）——用户当前选择不做，维持统一。
 
 ---

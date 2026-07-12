@@ -2,18 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/storage/square_draft_store.dart';
-import 'package:citizenapp/isar/app_isar.dart';
+
+import '../support/isar_test_env.dart';
 
 void main() {
+  useIsolatedIsar();
+
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() async {
-    await WalletIsar.instance.ensureTestCoreInitialized();
-  });
-
-  setUp(() async {
-    await WalletIsar.instance.resetForTest();
-  });
 
   test('广场发布草稿可按钱包账户持久化和删除', () async {
     final draft = SquarePublishDraft(

@@ -4,26 +4,39 @@
 // snapshot JSON 序列化反序列化)。链上拉取依赖 smoldot,在测试环境下走容错回退,
 // 等价于"链上失败 → 仅返回 Isar"路径。
 
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/citizen/shared/proposal/proposal_query_service.dart';
+import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/transaction/personal-manage/personal_proposal_history_service.dart';
+import '../../support/isar_test_env.dart';
+
+/// 离线 ChainRpc:本单测只验证 Isar 持久层,注入它切断真链依赖——链读一律空、
+/// 可达探针为 false(等价「链不可达 → 仅返回本机 Isar」)。避免本机是否连着真链
+/// 造成 flaky;配合服务端「链不可达不删幽灵」的容错回退,写入的历史必被完整读回。
+class _OfflineChainRpc extends ChainRpc {
+  @override
+  Future<bool> isFinalizedChainReachable() async => false;
+
+  @override
+  Future<Uint8List?> fetchStorage(String storageKeyHex) async => null;
+}
+
+PersonalProposalHistoryService _service() => PersonalProposalHistoryService(
+      chainRpc: _OfflineChainRpc(),
+      proposalService: ProposalQueryService(chainRpc: _OfflineChainRpc()),
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() async {
-    await WalletIsar.instance.ensureTestCoreInitialized();
-  });
-
-  setUp(() async {
-    await WalletIsar.instance.resetForTest();
-  });
+  useIsolatedIsar();
 
   const personalAccount = 'aabbccddeeff00112233445566778899'
       '00112233445566778899aabbccddeeff';
 
   test('recordOrUpdate inserts new entity then readAllFromIsar 返回单条', () async {
-    final service = PersonalProposalHistoryService();
+    final service = _service();
     await service.recordOrUpdate(
       personalAccountHex: personalAccount,
       proposalId: 42,
@@ -50,7 +63,7 @@ void main() {
   test(
       'recordOrUpdate 同 proposalId upsert,createdAt 保留首次值,'
       'snapshot 沿用旧值若新调用未传', () async {
-    final service = PersonalProposalHistoryService();
+    final service = _service();
     await service.recordOrUpdate(
       personalAccountHex: personalAccount,
       proposalId: 7,
@@ -85,7 +98,7 @@ void main() {
   });
 
   test('voting → executed 转换会写入 finalStatusAtMillis', () async {
-    final service = PersonalProposalHistoryService();
+    final service = _service();
     await service.recordOrUpdate(
       personalAccountHex: personalAccount,
       proposalId: 1,
@@ -112,7 +125,7 @@ void main() {
   });
 
   test('多个 proposal 按 createdAt desc 排序', () async {
-    final service = PersonalProposalHistoryService();
+    final service = _service();
     await service.recordOrUpdate(
       personalAccountHex: personalAccount,
       proposalId: 100,

@@ -12,7 +12,7 @@ use frame_support::{
     ensure,
     traits::{Currency, ExistenceRequirement, OnUnbalanced, ReservableCurrency},
 };
-use institution_asset::{InstitutionAsset, InstitutionAssetAction};
+use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use sp_runtime::{
     traits::{CheckedSub, Saturating, Zero},
     DispatchResult, SaturatedConversion,

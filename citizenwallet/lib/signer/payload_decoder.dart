@@ -285,7 +285,7 @@ class PayloadDecoder {
       }
 
       // ── ResolutionIssuance(8) · 决议发行联合提案 ──
-      // 人口快照由 JointVote.prepare_population_snapshot 单独准备。
+      // 人口快照由 JointVote.prepare_joint_population_snapshot 单独准备。
       if (palletIndex == PalletRegistry.resolutionIssuancePallet) {
         if (callIndex == PalletRegistry.proposeIssuanceCall) {
           return _decodeProposeResolutionIssuance(bytes);
@@ -720,7 +720,7 @@ class PayloadDecoder {
     );
   }
 
-  // JointVote(23) / prepare_population_snapshot(2)
+  // JointVote(23) / prepare_joint_population_snapshot(2)
   // 格式：[0x17][0x02][scope:PopulationScope]
   static DecodedPayload? _decodeJointPopulationSnapshot(Uint8List bytes) {
     final (scopeFields, offset) = _decodePopulationScope(bytes, 2);
@@ -729,7 +729,7 @@ class PayloadDecoder {
     }
 
     return DecodedPayload(
-      action: 'prepare_population_snapshot',
+      action: 'prepare_joint_population_snapshot',
       summary: '准备联合公投人口快照（${scopeFields['scope_text']}）',
       fields: scopeFields,
     );
@@ -921,22 +921,26 @@ class PayloadDecoder {
         (bytes[offset + 3] << 24);
     offset += 4;
 
-    // admins: BoundedVec<AdminProfile<AccountId32>>
+    // admins: BoundedVec<AdminProfile<AccountId32>>(链端 9 字段,逐字节对齐 admin-primitives)。
     final (adminsVecLen, adminsVecLenSize) = _decodeCompactU32(bytes, offset);
     offset += adminsVecLenSize;
     for (var i = 0; i < adminsVecLen; i++) {
       if (offset + 32 > bytes.length) return null;
-      offset += 32; // account
+      offset += 32; // admin_account
       offset = _skipBoundedBytes(bytes, offset); // admin_cid_number
       if (offset < 0) return null;
-      offset = _skipBoundedBytes(bytes, offset); // name
+      offset = _skipBoundedBytes(bytes, offset); // admin_name
       if (offset < 0) return null;
-      offset = _skipBoundedBytes(bytes, offset); // admin_role
+      offset = _skipBoundedBytes(bytes, offset); // role_code
+      if (offset < 0) return null;
+      offset = _skipBoundedBytes(bytes, offset); // role_name
       if (offset < 0) return null;
       if (offset + 9 > bytes.length) return null;
       offset += 4; // term_start
       offset += 4; // term_end
-      offset += 1; // source
+      offset += 1; // admin_source
+      offset = _skipBoundedBytes(bytes, offset); // admin_source_ref
+      if (offset < 0) return null;
     }
 
     // threshold: u32 (LE)
@@ -1043,7 +1047,7 @@ class PayloadDecoder {
   //         // BoundedVec<{ recipient: AccountId32, amount: u128 }>
   //   )
   //
-  // 人口快照由 JointVote.prepare_population_snapshot 先行准备,本交易只携带发行内容。
+  // 人口快照由 JointVote.prepare_joint_population_snapshot 先行准备,本交易只携带发行内容。
   static DecodedPayload? _decodeProposeResolutionIssuance(Uint8List bytes) {
     if (bytes.length < 3) return null;
     var offset = 2; // 跳过 pallet_index + call_index

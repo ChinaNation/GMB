@@ -669,6 +669,22 @@ class ChainRpc {
     );
   }
 
+  /// 链是否可达且已同步到 finalized 区块。
+  ///
+  /// 读 `System.Number`（任意已同步链上必然存在的 plain StorageValue）：能读到即
+  /// 证明链可用。用于把「链不可达 / 未同步」与「链上确认不存在」区分开——离线时
+  /// 一律返回 false，避免把本机记录误判成链上幽灵而误删。
+  Future<bool> isFinalizedChainReachable() async {
+    try {
+      final keyHex =
+          '0x${_hexEncode(_buildStorageValueKey('System', 'Number'))}';
+      final data = await fetchStorage(keyHex);
+      return data != null && data.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 查询指定区块的 `System.Events` 原始 SCALE 数据。
   Future<Uint8List?> fetchSystemEventsAtBlock(String blockHashHex) async {
     final keyHex = '0x${_hexEncode(_buildStorageValueKey('System', 'Events'))}';

@@ -98,7 +98,7 @@ pub mod pallet {
         type MaxBatchSignatureLength: Get<u32>;
 
         /// 资金白名单 / 制度保留地址保护,由 runtime 接入 `institution-asset`。
-        type InstitutionAsset: institution_asset::InstitutionAsset<Self::AccountId>;
+        type InstitutionAsset: primitives::institution_asset::InstitutionAsset<Self::AccountId>;
 
         /// CID 机构登记表查询抽象。runtime 层应委托给实体生命周期聚合查询;
         /// 测试可用 `()` 的默认空实现(一律返回未登记)。

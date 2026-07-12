@@ -38,8 +38,9 @@ void main() {
       expect(key.length, 16 + 16 + 16 + 32);
     });
 
-    // A2 金标:AdminAccounts.admins 为 Vec<AdminProfile>(account + cid + name + admin_role
-    // + term_start + term_end + source),逐字节与链端 admin-primitives::AdminProfile 对齐。
+    // A2 金标:AdminAccount 前导 cid_number,随后 institution_code/kind;admins 为
+    // Vec<AdminProfile>(account + cid + name + role_code + role_name + term_start
+    // + term_end + source + admin_source_ref),逐字节与链端 admin-primitives 对齐。
     List<int> boundedUtf8(String s) {
       final b = utf8.encode(s);
       return [b.length << 2, ...b]; // len<64 → 单字节 Compact(mode 0)
@@ -48,6 +49,7 @@ void main() {
     test('decodes full AdminAccount value with AdminProfile (A2)', () {
       final accountId = AdminAccountIdCodec.fromAccountHex('11' * 32);
       final data = Uint8List.fromList([
+        ...boundedUtf8('PRC-INST-CID'), // cid_number(AdminAccount 前导字段)
         ...codeBytes('PRC'), // institution_code
         0, // kind = PublicInstitution(非个人多签 → Vec<AdminProfile>)
         0x08, // Compact count = 2
@@ -55,14 +57,18 @@ void main() {
         ...List<int>.filled(32, 0xaa),
         ...boundedUtf8('CID-A'),
         ...boundedUtf8('张三'),
-        ...boundedUtf8('主任'),
+        ...boundedUtf8(''), // role_code(空)
+        ...boundedUtf8('主任'), // role_name
         ...u32Le(100), ...u32Le(200), 1, // term + source=registry(1)
+        ...boundedUtf8(''), // admin_source_ref(空)
         // admin 1:空 meta(如创世)
         ...List<int>.filled(32, 0xbb),
         ...boundedUtf8(''),
         ...boundedUtf8(''),
-        ...boundedUtf8(''),
+        ...boundedUtf8(''), // role_code
+        ...boundedUtf8(''), // role_name
         ...u32Le(0), ...u32Le(0), 0, // source=genesis(0)
+        ...boundedUtf8(''), // admin_source_ref
         // trailer:creator + created_at + updated_at + status
         ...List<int>.filled(32, 0xcc),
         ...u32Le(7), ...u32Le(9), 1,
@@ -73,7 +79,7 @@ void main() {
       expect(decoded.profiles.length, 2);
       expect(decoded.profiles[0].cidNumber, 'CID-A');
       expect(decoded.profiles[0].name, '张三');
-      expect(decoded.profiles[0].adminRole, '主任');
+      expect(decoded.profiles[0].roleName, '主任');
       expect(decoded.profiles[0].termStartDay, 100);
       expect(decoded.profiles[0].termEndDay, 200);
       expect(decoded.profiles[0].source, AdminProfileSource.registry);
@@ -87,6 +93,7 @@ void main() {
         () {
       final accountId = AdminAccountIdCodec.fromAccountHex('11' * 32);
       final data = Uint8List.fromList([
+        ...boundedUtf8(''), // cid_number(个人多签为空)
         ...codeBytes('PMUL'),
         2, // kind = PersonalMultisig → 裸 Vec<AccountId>
         0x08, // count = 2

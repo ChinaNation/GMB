@@ -151,7 +151,7 @@ class QrActions {
         'internal_vote' => internalVote,
         'joint_vote' => jointVote,
         'cast_referendum' => castReferendum,
-        'prepare_population_snapshot' => preparePopulationSnapshot,
+        'prepare_joint_population_snapshot' => preparePopulationSnapshot,
         'propose_enact_law' => proposeEnactLaw,
         'propose_amend_law' => proposeAmendLaw,
         'propose_repeal_law' => proposeRepealLaw,

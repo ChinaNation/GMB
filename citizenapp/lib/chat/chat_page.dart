@@ -68,7 +68,7 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
-  // 聊天页停留时短轮询当前 mailbox；失败后退避，避免弱网下持续压请求。
+  // 实时连接不可用时只重试发送设备本机队列；失败后退避，避免弱网持续请求。
   static const _normalPollInterval = Duration(seconds: 8);
   static const _backoffPollInterval = Duration(seconds: 30);
   // 实时已连时仍保留的低频心跳兜底：即使 WS 推送静默丢失，也能在此间隔内收到。
@@ -111,7 +111,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   /// 首次打开和 resume 共享同一个同步 future，系统生命周期抖动不得重复建立
-  /// WebSocket 或重复拉取 mailbox。
+  /// WebSocket 或重复重试本机发送队列。
   void _requestOpenCoordinate() {
     if (!mounted || !_appResumed || _openCoordinatorInFlight != null) {
       return;

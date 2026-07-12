@@ -1,15 +1,18 @@
 // 分类管理员模块 `AdminAccounts` value 的最小 SCALE 解码器(req 3 反向索引依赖)。
+// 仅用于 `PersonalAdmins.AdminAccounts` 扫描:个人多签 admins 是裸 AccountId 列表。
+// 公权/私权机构的 admins 是 9 字段 AdminProfile,须走 admin_account_codec.dart。
 //
 // 链上 [AdminAccount<AdminList, AccountId, BlockNumber>] SCALE 字节布局:
-//   institution_code: [u8;4]                      (4B)
+//   cid_number: BoundedVec<u8>                     (Compact<u32> + N 字节;前导,个人多签空=0x00)
+//   institution_code: [u8;4]                       (4B)
 //   kind: AdminAccountKind                         (1B,Enum 0/1/2)
-//   admins: BoundedVec<AccountId, MaxAdmins>       (Compact<u32> + N×AccountId(32B))
+//   admins: BoundedVec<AccountId, MaxAdmins>       (Compact<u32> + N×AccountId(32B);个人多签=裸账户)
 //   creator: AccountId                             (32B)
-//   created_at: BlockNumber(u64)                   (8B)
-//   updated_at: BlockNumber(u64)                   (8B)
+//   created_at: BlockNumber(u32)                   (4B)
+//   updated_at: BlockNumber(u32)                   (4B)
 //   status: AdminAccountStatus                     (1B,Enum 0/1/2)
 //
-// 反向索引只需 (institutionCode, kind, admins) 三字段过滤,后面字段都跳过。
+// 反向索引只需 (institutionCode, kind, admins) 三字段过滤,前导 cid_number 消费后即跳过其余字段。
 //
 // 链端定义参考:
 // - [admin-primitives/src/lib.rs::AdminAccount]
@@ -53,14 +56,23 @@ class AdminAccountStorageCodec {
   /// 解码 AdminAccount SCALE bytes;格式不符返回 null(容错,不抛异常)。
   static AdminAccountStorageDecoded? tryDecode(Uint8List bytes) {
     try {
-      // institution_code: [u8;4] + kind: u8 = 5 bytes minimum before admins
-      if (bytes.length < 5) return null;
-      final institutionCode =
-          InstitutionCodeLabel.codeToString(bytes.sublist(0, 4));
-      final kind = bytes[4];
+      if (bytes.isEmpty) return null;
+      // cid_number: BoundedVec<u8>(Compact<u32> 长度 + N 字节)。前导字段;
+      // 个人多签无机构 CID 时为空 = 单字节 0x00。本扫描恒为个人多签,故此处
+      // 通常为空,但仍须消费该字节以对齐后续 institution_code/kind/admins 偏移。
+      var offset = 0;
+      final (cidLen, cidLenBytes) = _decodeCompactU32(bytes, offset);
+      offset += cidLenBytes + cidLen;
 
-      // admins: Compact<u32> 长度前缀 + N × 32B
-      var offset = 5;
+      // institution_code: [u8;4] + kind: u8
+      if (offset + 5 > bytes.length) return null;
+      final institutionCode =
+          InstitutionCodeLabel.codeToString(bytes.sublist(offset, offset + 4));
+      offset += 4;
+      final kind = bytes[offset];
+      offset += 1;
+
+      // admins: Compact<u32> 长度前缀 + N × 32B(个人多签 = 裸 AccountId)
       final (count, lenBytesRead) = _decodeCompactU32(bytes, offset);
       offset += lenBytesRead;
       if (offset + count * 32 > bytes.length) return null;

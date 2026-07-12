@@ -345,8 +345,8 @@ fn match_event(
             })
         }
 
-        // ─── resolution_destro (index 14) ───────────────────────
-        ("ResolutionDestro", "DestroyExecuted") => {
+        // ─── resolution_destroy (index 14) ───────────────────────
+        ("ResolutionDestroy", "DestroyExecuted") => {
             let amount = fields.at("amount").and_then(extract_balance)?;
             Some(TxRecordInsert {
                 block_number,

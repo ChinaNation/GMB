@@ -6,22 +6,20 @@ import 'package:citizenapp/wallet/capabilities/attestation_service.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/core/wallet_secure_keys.dart';
+import '../support/isar_test_env.dart';
 
 void main() {
+  useIsolatedIsar();
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const secureStorageChannel =
       MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
   final secureStorage = <String, String>{};
 
-  setUpAll(() async {
-    await WalletIsar.instance.ensureTestCoreInitialized();
-  });
-
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     secureStorage.clear();
-    await WalletIsar.instance.resetForTest();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(secureStorageChannel, (call) async {
       final args = (call.arguments as Map?)?.cast<String, dynamic>() ??

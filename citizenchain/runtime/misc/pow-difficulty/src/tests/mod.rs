@@ -39,8 +39,6 @@ mod runtime {
     pub type Timestamp = pallet_timestamp;
     #[runtime::pallet_index(2)]
     pub type PowDifficulty = super;
-    #[runtime::pallet_index(3)]
-    pub type GenesisPallet = genesis_pallet;
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -57,30 +55,27 @@ impl pallet_timestamp::Config for Test {
     type WeightInfo = ();
 }
 
-frame_support::parameter_types! {
-    pub const MaxDeclarationLen: u32 = 2048;
-}
-
-impl genesis_pallet::Config for Test {
-    type WeightInfo = ();
-    type MaxDeclarationLen = MaxDeclarationLen;
+/// 测试用出块目标时间来源:与 genesis 默认 30_000ms(= MILLISECS_PER_BLOCK)对齐,
+/// 通过窄 trait 注入,pow-difficulty 单测因此无需注册 genesis pallet、无需 mock 治理栈。
+pub struct MockBlockTime;
+impl genesis_pallet::TargetBlockTime for MockBlockTime {
+    fn target_block_time_ms() -> u64 {
+        MILLISECS_PER_BLOCK
+    }
 }
 
 impl Config for Test {
     type WeightInfo = ();
+    type BlockTime = MockBlockTime;
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("frame system genesis_pallet storage should build");
-    let mut ext = sp_io::TestExternalities::new(storage);
-    ext.execute_with(|| {
-        // 测试环境下把 genesis_pallet-pallet 的出块目标时间
-        // 与 pow_const::MILLISECS_PER_BLOCK 对齐，确保难度调整逻辑一致。
-        genesis_pallet::TargetBlockTimeMs::<Test>::put(MILLISECS_PER_BLOCK);
-    });
-    ext
+    // 出块目标时间由 MockBlockTime 窄 trait 直接提供(= MILLISECS_PER_BLOCK),
+    // 不再依赖 genesis pallet 的 storage,故无需在此写入。
+    sp_io::TestExternalities::new(storage)
 }
 
 fn run_blocks(count: u32, block_time_ms: u64) {

@@ -637,7 +637,7 @@ class PublicInstitutionSubscriptionEntity {
 
 /// Chat 会话本地索引。
 ///
-/// 聊天明文只允许在公民手机本地保存；Cloudflare mailbox 与近场 transport
+/// 聊天明文只允许在公民手机本地保存；Cloudflare 瞬时转发与近场 transport
 /// 只承载密文 envelope。本表负责会话列表首屏，不参与链上状态。
 @collection
 class ChatConversationEntity {
@@ -744,7 +744,7 @@ class ChatPendingInboundEntity {
 /// Chat 路由缓存记录。
 ///
 /// Chat 路由缓存只保存在公民手机本地，用于把联系人钱包地址映射到
-/// OpenMLS 设备、Cloudflare mailbox 和近场提示；用户联系人仍以“我的通讯录”为准。
+/// OpenMLS 设备和近场提示；用户联系人仍以“我的通讯录”为准。
 @collection
 class ChatRouteCacheEntity {
   Id id = Isar.autoIncrement;
@@ -762,7 +762,6 @@ class ChatRouteCacheEntity {
   late String deviceId;
   late String devicePublicKeyHex;
   late String safetyNumber;
-  String? cloudflareMailboxId;
   String? nearbyPeerHint;
   String? note;
   late int createdAtMillis;
@@ -872,6 +871,10 @@ class WalletIsar {
   WalletIsar._();
 
   static final WalletIsar instance = WalletIsar._();
+
+  /// 仅测试用:覆盖测试期 Isar 目录。让每个测试文件(独立 isolate)用唯一临时目录,
+  /// 从物理上根除跨文件共享同一磁盘库导致的并发锁竞争与残留污染。生产恒为 null。
+  static String? debugTestDirectoryOverride;
 
   Isar? _isar;
   Future<Isar>? _opening;
@@ -1100,7 +1103,7 @@ class WalletIsar {
       return '.';
     }
     if (_isFlutterTest()) {
-      return Directory.systemTemp.path;
+      return debugTestDirectoryOverride ?? Directory.systemTemp.path;
     }
     final appDir = await getApplicationSupportDirectory();
     return appDir.path;

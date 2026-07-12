@@ -174,9 +174,6 @@ class PurgeStmt {
     if (this.sql.includes('FROM square_media_assets') && this.sql.includes('provider_asset_id')) {
       return { results: this.db.mediaRows as T[] };
     }
-    if (this.sql.includes('attachment_manifest_key FROM chat_envelopes')) {
-      return { results: this.db.survivingRefs as T[] };
-    }
     return { results: [] };
   }
   async run(): Promise<{ meta: { changes: number } }> {
@@ -188,7 +185,6 @@ class PurgeStmt {
 class PurgeDb {
   membership: Record<string, unknown> | null = null;
   mediaRows: Array<{ provider: string; provider_asset_id: string }> = [];
-  survivingRefs: Array<{ attachment_manifest_key: string }> = [];
   readonly deletes: string[] = [];
   prepare(sql: string): PurgeStmt {
     return new PurgeStmt(this, sql);
@@ -246,17 +242,10 @@ describe('purgeAccount', () => {
     const db = new PurgeDb();
     db.membership = { owner_account: OWNER, stripe_subscription_id: 'sub_1' };
     db.mediaRows = [{ provider: 'cloudflare_images', provider_asset_id: 'img_1' }];
-    db.survivingRefs = [
-      { attachment_manifest_key: `chat/${OWNER}/conversations/c1/attachments/a1/manifest.enc` }
-    ];
     const r2 = new FakeR2([
       `profile/${OWNER}/profile.json`,
       `profile/${OWNER}/avatar_x.webp`,
-      `square/${OWNER}/posts/p1/manifest.json`,
-      // 被 B 未 ack 信封引用（A 发给 B 未收到）→ 保留。
-      `chat/${OWNER}/conversations/c1/attachments/a1/chunk_000.bin`,
-      // A 自己的其它附件 → 删。
-      `chat/${OWNER}/conversations/c2/attachments/a2/chunk_000.bin`
+      `square/${OWNER}/posts/p1/manifest.json`
     ]);
     const kv = new FakeKv();
     kv.store.set(`square_identity:${OWNER}`, '{"identity_level":"voting"}');
@@ -274,28 +263,25 @@ describe('purgeAccount', () => {
     return { env, db, r2, kv };
   }
 
-  it('cancels Stripe, deletes A rows + R2, keeps B-referenced attachment, clears sessions', async () => {
+  it('cancels Stripe, deletes all A rows and current R2 objects, and clears sessions', async () => {
     const { env, db, r2, kv } = buildEnv();
 
     const result = await purgeAccount(env, OWNER);
 
     expect(result.stripe_canceled).toBe(true);
 
-    // A 的各表都在删除清单（含只删 recipient=A 的收件箱、只删 owner=A 的关注）。
+    // A 的 Chat 路由、浏览、关注两端引用和业务表全部进入硬删除清单。
     const joined = db.deletes.join('\n');
     expect(joined).toContain('DELETE FROM square_memberships WHERE owner_account = ?');
     expect(joined).toContain('DELETE FROM square_posts WHERE owner_account = ?');
     expect(joined).toContain('DELETE FROM square_follows WHERE owner_account = ?');
     expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE owner_account = ?');
-    expect(joined).toContain('DELETE FROM chat_envelopes WHERE recipient_account = ?');
+    expect(joined).toContain('DELETE FROM chat_devices WHERE owner_account = ?');
+    expect(joined).toContain('DELETE FROM square_browse_days WHERE owner_account = ?');
 
-    // R2：profile / posts 全删；chat 里 c2 删、c1（B 未收到）保留。
+    // R2：只存在并删除 profile / posts 等当前业务对象，Chat 不使用 R2。
     expect(r2.deleted).toContain(`profile/${OWNER}/profile.json`);
     expect(r2.deleted).toContain(`square/${OWNER}/posts/p1/manifest.json`);
-    expect(r2.deleted).toContain(`chat/${OWNER}/conversations/c2/attachments/a2/chunk_000.bin`);
-    expect(r2.deleted).not.toContain(
-      `chat/${OWNER}/conversations/c1/attachments/a1/chunk_000.bin`
-    );
 
     // KV：身份缓存 + 会话都清。
     expect(kv.store.has(`square_identity:${OWNER}`)).toBe(false);
@@ -303,14 +289,13 @@ describe('purgeAccount', () => {
     expect(kv.store.has(`square_sessions_by_owner:${OWNER}`)).toBe(false);
   });
 
-  it('aborts without deleting anything if Stripe cancel fails', async () => {
-    // 缺密钥 + 未开 dev 短路 → 真退订抛 503，purge 在第 2 步中止，绝不删任何数据。
+  it('deletes Chat privacy data before reporting a Stripe cancellation failure', async () => {
     const { env, db, r2 } = buildEnv({ stripeConfigured: false });
 
     await expect(purgeAccount(env, OWNER)).rejects.toMatchObject({
       code: 'stripe_not_configured'
     });
-    expect(db.deletes).toHaveLength(0);
+    expect(db.deletes.join('\n')).toContain('DELETE FROM chat_devices WHERE owner_account = ?');
     expect(r2.deleted).toHaveLength(0);
   });
 });

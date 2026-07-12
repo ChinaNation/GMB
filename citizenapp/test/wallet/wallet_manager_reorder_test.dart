@@ -3,10 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
+import '../support/isar_test_env.dart';
 
 /// 验证 WalletManager.reorderWallets 是否正确写入 sortOrder,
 /// 并检查 sortBySortOrder().thenByWalletIndex() 排序顺序。
 void main() {
+  useIsolatedIsar();
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const secureStorageChannel =
@@ -14,14 +17,9 @@ void main() {
   const localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');
   final secureStorage = <String, String>{};
 
-  setUpAll(() async {
-    await WalletIsar.instance.ensureTestCoreInitialized();
-  });
-
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     secureStorage.clear();
-    await WalletIsar.instance.resetForTest();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(secureStorageChannel, (call) async {
       final args = (call.arguments as Map?)?.cast<String, dynamic>() ??
@@ -73,14 +71,6 @@ void main() {
         .setMockMethodCallHandler(secureStorageChannel, null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(localAuthChannel, null);
-  });
-
-  /// 每个 test 文件结束后必须 close 并删除磁盘 db,
-  /// 否则同物理目录下其他 test 文件的 setUp 在新 isolate 中
-  /// 看到的是「未初始化的 _isar 但磁盘有残留」,resetForTest 不会清盘,
-  /// _openAndMigrate 会复用残留 → walletIndex 索引被占,后续 test 失败。
-  tearDownAll(() async {
-    await WalletIsar.instance.resetForTest();
   });
 
   /// 在 Isar 中直接构造 3 个钱包 entity,避开 createWallet 的生物认证 + 助记词派生,

@@ -20,10 +20,17 @@ void main() {
     return out;
   }
 
+  // 前导 cid_number: Compact<u32> 长度(<64 → 单字节 mode0)+ UTF8 字节;空 = [0x00]。
+  List<int> cidPrefix(String cid) {
+    final raw = cid.codeUnits;
+    return [raw.length << 2, ...raw];
+  }
+
   group('tryDecode', () {
-    test('成功解码 PublicInstitution(0 admins)', () {
-      // institution_code=NRC, kind=0, admins=Compact(0)=0x00, 后续字段忽略。
+    test('成功解码 PublicInstitution(0 admins,非空前导 cid)', () {
+      // cid_number=NRC01, institution_code=NRC, kind=0, admins=Compact(0)=0x00。
       final bytes = Uint8List.fromList([
+        ...cidPrefix('NRC01'),
         ...codeBytes('NRC'),
         AdminAccountStorageCodec.kindPublicInstitution,
         0,
@@ -34,11 +41,12 @@ void main() {
       expect(r.adminsHex, isEmpty);
     });
 
-    test('成功解码 Personal 含 3 个 admin', () {
+    test('成功解码 Personal 含 3 个 admin(空前导 cid=0x00)', () {
       final a1 = List.filled(32, 0x11);
       final a2 = List.filled(32, 0x22);
       final a3 = List.filled(32, 0x33);
       final bytes = Uint8List.fromList([
+        ...cidPrefix(''), // 个人多签前导 cid 为空
         ...codeBytes('PMUL'),
         AdminAccountStorageCodec.kindPersonal,
         0x0C, // Compact(3): (3<<2) | 0 = 12
@@ -47,6 +55,7 @@ void main() {
         ...a3,
       ]);
       final r = AdminAccountStorageCodec.tryDecode(bytes)!;
+      expect(r.institutionCode, 'PMUL');
       expect(r.kind, AdminAccountStorageCodec.kindPersonal);
       expect(r.adminsHex, ['11' * 32, '22' * 32, '33' * 32]);
     });
@@ -55,6 +64,7 @@ void main() {
       final a1 = List.filled(32, 0x44);
       final a2 = List.filled(32, 0x55);
       final bytes = Uint8List.fromList([
+        ...cidPrefix('CGOV9'),
         ...codeBytes('CGOV'),
         AdminAccountStorageCodec.kindPublicInstitution,
         0x08, // Compact(2)
@@ -69,12 +79,14 @@ void main() {
 
     test('字节不足返回 null,不抛异常', () {
       expect(AdminAccountStorageCodec.tryDecode(Uint8List(0)), isNull);
+      // 仅前导 cid 空字节、无 institution_code/kind → null。
       expect(
           AdminAccountStorageCodec.tryDecode(Uint8List.fromList([0])), isNull);
     });
 
     test('admins 数量超过实际字节返回 null', () {
       final bytes = Uint8List.fromList([
+        ...cidPrefix(''),
         ...codeBytes('NRC'),
         AdminAccountStorageCodec.kindPublicInstitution,
         0x08, // 声明 2 个 admin 但只给 1 个的字节。
@@ -87,6 +99,7 @@ void main() {
       const adminsLen = 64;
       final admins = List.generate(adminsLen, (_) => List.filled(32, 0xDD));
       final bytes = <int>[
+        ...cidPrefix(''),
         ...codeBytes('PMUL'),
         AdminAccountStorageCodec.kindPersonal,
         0x01,

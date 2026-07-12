@@ -165,7 +165,7 @@ pub(crate) fn city_registry_row_from_user_conn(
         admin_name: city_registry_display_name(city_registry),
         admin_cid_number: String::new(),
         name: String::new(),
-        admin_role: String::new(),
+        role_name: String::new(),
         term_start: 0,
         term_end: 0,
         origin: u8::MAX,

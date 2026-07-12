@@ -27,7 +27,7 @@ typedef ChatDownloadAttachmentFactory = ChatDownloadAttachmentCallback?
 /// 公民“聊天”Tab。
 ///
 /// 聊天页只展示会话列表。联系人添加、联系人详情和转账入口统一归属
-/// “我的通讯录”；互联网 mailbox 和近场传输由 Chat 运行态自动处理。
+/// “我的通讯录”；互联网瞬时转发和近场传输由 Chat 运行态自动处理。
 class ChatTab extends StatefulWidget {
   ChatTab({
     super.key,
@@ -151,7 +151,7 @@ class _ChatTabState extends State<ChatTab> {
 
   Future<void> _onWalletsChanged() async {
     // 先廉价比对(纯 Isar 读):默认聊天身份没变的钱包操作(重命名/导入
-    // 未置顶钱包)不触发全量邮箱同步,避免整页转圈与无谓网络请求。
+    // 未置顶钱包)不触发发送队列重试,避免整页转圈与无谓网络请求。
     final address = await _readOwnerAccount();
     if (!mounted || address == _ownerAccount) return;
     if (_ownerAccount.isNotEmpty) {
@@ -180,7 +180,7 @@ class _ChatTabState extends State<ChatTab> {
         return;
       }
       if (syncFirst && activeWallet.isNotEmpty) {
-        await _syncPendingSilently();
+        await _retryOutgoingSilently();
       }
       final conversations = await widget.store.readConversationPreviews(
         ownerAccount: activeWallet.isEmpty ? null : activeWallet,
@@ -208,7 +208,7 @@ class _ChatTabState extends State<ChatTab> {
     }
   }
 
-  Future<bool> _syncPendingSilently() async {
+  Future<bool> _retryOutgoingSilently() async {
     if (!_isActive) {
       return false;
     }
@@ -217,7 +217,7 @@ class _ChatTabState extends State<ChatTab> {
       return true;
     }
     try {
-      await runtime.syncPending();
+      await runtime.retryOutgoing();
       return true;
     } catch (_) {
       return false;
@@ -283,7 +283,7 @@ class _ChatTabState extends State<ChatTab> {
     if (!_isActive) {
       return;
     }
-    await _syncPendingSilently();
+    await _retryOutgoingSilently();
     final conversations = await widget.store.readConversationPreviews(
       ownerAccount: ownerAccount,
     );
@@ -334,7 +334,7 @@ class _ChatTabState extends State<ChatTab> {
     _polling = true;
     var ok = true;
     try {
-      ok = await _syncPendingSilently();
+      ok = await _retryOutgoingSilently();
       final conversations = await widget.store.readConversationPreviews(
         ownerAccount: _ownerAccount,
       );
@@ -459,7 +459,7 @@ class _ChatTabState extends State<ChatTab> {
               onSync: widget.syncFactory?.call(preview.peerAccount) ??
                   (widget.runtime == null
                       ? null
-                      : () => widget.runtime!.syncPending()),
+                      : () => widget.runtime!.retryOutgoing()),
               onStartRealtime: widget.runtime?.startRealtimeSync,
               onDeleteConversation: () => _deleteLocalConversation(
                 preview.conversationId,

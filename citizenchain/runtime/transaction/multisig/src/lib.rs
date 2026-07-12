@@ -152,7 +152,7 @@ pub mod pallet {
     use entity_primitives::ProtectedSourceChecker;
     use frame_support::traits::ExistenceRequirement;
     use frame_support::traits::OnUnbalanced;
-    use institution_asset::{InstitutionAsset, InstitutionAssetAction};
+    use primitives::institution_asset::{InstitutionAsset, InstitutionAssetAction};
     use votingengine::InternalAdminProvider;
     use votingengine::InternalVoteEngine;
 
@@ -168,7 +168,7 @@ pub mod pallet {
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         /// 资金白名单检查器。
-        type InstitutionAsset: institution_asset::InstitutionAsset<Self::AccountId>;
+        type InstitutionAsset: primitives::institution_asset::InstitutionAsset<Self::AccountId>;
 
         /// 资金源保护检查器。
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;

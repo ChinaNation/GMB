@@ -47,16 +47,19 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    /// Pallet 配置：需要 frame_system、pallet_timestamp、genesis_pallet 作为超特征。
+    /// Pallet 配置：需要 frame_system、pallet_timestamp 作为超特征。
     /// pallet_timestamp：读取当前块时间戳。
-    /// genesis_pallet：读取链上动态出块目标时间（替代编译期常量）。
+    /// 出块目标时间通过 `BlockTime` 窄 trait 注入(由 genesis pallet 实现),不再硬耦合整个
+    /// `genesis_pallet::Config`,消费者与本 pallet 单测因此无需 mock 治理栈。
     #[pallet::config]
     pub trait Config:
         frame_system::Config<RuntimeEvent: From<Event<Self>>>
         + pallet_timestamp::Config
-        + genesis_pallet::Config
     {
         type WeightInfo: crate::weights::WeightInfo;
+
+        /// 链上动态出块目标时间来源(genesis pallet 实现 `TargetBlockTime`)。
+        type BlockTime: genesis_pallet::TargetBlockTime;
     }
 
     // ─── Storage ──────────────────────────────────────────────────────────────
@@ -164,7 +167,8 @@ pub mod pallet {
                     // 替代编译期常量 DIFFICULTY_TARGET_WINDOW_MS。
                     // .max(1) 防御 genesis_pallet-pallet 返回 0 导致 target_window_ms 为 0。
                     let target_block_time =
-                        genesis_pallet::Pallet::<T>::target_block_time_ms().max(1);
+                        <T::BlockTime as genesis_pallet::TargetBlockTime>::target_block_time_ms()
+                            .max(1);
                     let target_window_ms =
                         DIFFICULTY_ADJUSTMENT_INTERVAL as u64 * target_block_time;
                     let old_difficulty = CurrentDifficulty::<T>::get();

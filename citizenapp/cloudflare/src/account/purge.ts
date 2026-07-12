@@ -4,6 +4,8 @@ import { deleteProviderAsset } from '../media/cloudflare_assets';
 import { getMembership } from '../membership/service';
 import { cancelStripeSubscriptionNow } from '../membership/stripe_api';
 import { clearOwnerSessions } from '../auth/session_index';
+import { closeChatRealtime } from '../chat/realtime';
+import { revokeOwnerTurn } from '../chat/turn';
 
 export interface PurgeAccountResult {
   stripe_canceled: boolean;
@@ -13,9 +15,9 @@ export interface PurgeAccountResult {
 }
 
 /// 硬删除某账户在 Cloudflare 的**全部**数据。原则：
-/// - 只删 A 自己的：B 的数据（B 收到 A 发的密文、别人关注 A 的关注行）绝不碰。
-/// - 顺序：先退 Stripe（失败即中止，绝不「删了库还在扣费」）→ 先删 Images/Stream
-///   provider 再删 D1（否则丢 provider_asset_id 成永久孤儿）→ R2 前缀 → D1 → KV。
+/// - Chat 不保存消息或附件；注销先断开连接、撤销 TURN 并删除全部设备路由材料。
+/// - 所有包含 A 的账户引用都删除，不保留粉丝、消费记录或影子关联。
+/// - Stripe 或媒体提供商失败不得阻塞 Chat 隐私数据硬删除。
 export async function purgeAccount(
   env: Env,
   ownerAccount: string
@@ -23,14 +25,23 @@ export async function purgeAccount(
   // 1. 先取会员，拿 stripe_subscription_id（删了就取不到了）。
   const membership = await getMembership(env, ownerAccount);
 
-  // 2. Stripe 立即退订；失败则抛出、整个 purge 中止，用户可重试，绝不留订阅继续扣费。
+  // 2. Chat 活动连接和临时 TURN 凭证先撤销；支付服务故障不能阻塞隐私删除。
+  await closeChatRealtime(env, ownerAccount);
+  await revokeOwnerTurn(env, ownerAccount);
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM chat_keypackages WHERE owner_account = ?`).bind(ownerAccount),
+    env.DB.prepare(`DELETE FROM chat_devices WHERE owner_account = ?`).bind(ownerAccount),
+    env.DB.prepare(`DELETE FROM chat_device_binding_nonces WHERE owner_account = ?`).bind(ownerAccount),
+  ]);
+
+  // 3. Stripe 立即退订；Chat 已先删除，失败时账户可用主钥签名再次执行剩余清理。
   let stripeCanceled = false;
   if (membership?.stripe_subscription_id) {
     await cancelStripeSubscriptionNow(env, membership.stripe_subscription_id);
     stripeCanceled = true;
   }
 
-  // 3. Images/Stream：先按 owner 取 provider_asset_id 删 provider 本体，再删 D1 行。
+  // 4. Images/Stream：先按 owner 取 provider_asset_id 删 provider 本体，再删 D1 行。
   const mediaRows =
     (
       await env.DB.prepare(
@@ -43,29 +54,15 @@ export async function purgeAccount(
     await deleteProviderAsset(env, row);
   }
 
-  // 4. R2 前缀清扫。chat/{A}/ 下「A 发给 B 但 B 未 ack」的附件属于 B，保留。
+  // 5. R2 只清理当前允许的资料、广场和归档对象；Chat 永远不创建 R2 对象。
   const safeOwner = sanitizeOwnerAccount(ownerAccount);
-  const survivingRefs =
-    (
-      await env.DB.prepare(
-        `SELECT attachment_manifest_key FROM chat_envelopes
-          WHERE sender_account = ? AND recipient_account != ? AND attachment_manifest_key IS NOT NULL`
-      )
-        .bind(ownerAccount, ownerAccount)
-        .all<{ attachment_manifest_key: string }>()
-    ).results ?? [];
-  const keepPrefixes = new Set(
-    survivingRefs.map((ref) => attachmentDirPrefix(ref.attachment_manifest_key))
-  );
-
   let deletedR2 = 0;
   deletedR2 += await deleteR2Prefix(env, `profile/${safeOwner}/`);
   deletedR2 += await deleteR2Prefix(env, `square/${safeOwner}/posts/`);
-  deletedR2 += await deleteR2Prefix(env, `chat/${safeOwner}/`, keepPrefixes);
   // 视频冷归档的 R2 冷存原片一并硬删（注销才删；退订只归档不删）。
   deletedR2 += await deleteR2Prefix(env, `archive/${safeOwner}/`);
 
-  // 5. D1 批删（只删 A 的）。保留：chat_envelopes(recipient!=A)、square_follows(followed_account=A)。
+  // 6. D1 批删账户全部引用。
   const bind = (sql: string) => env.DB.prepare(sql).bind(ownerAccount);
   const results = await env.DB.batch([
     bind(`DELETE FROM square_memberships WHERE owner_account = ?`),
@@ -73,19 +70,14 @@ export async function purgeAccount(
     bind(`DELETE FROM square_posts WHERE owner_account = ?`),
     bind(`DELETE FROM square_user_signals WHERE owner_account = ?`),
     bind(`DELETE FROM square_media_assets WHERE owner_account = ?`),
-    // A 关注别人（owner=A）删；别人关注 A（followed_account=A）是别人的，保留。
-    bind(`DELETE FROM square_follows WHERE owner_account = ?`),
-    bind(`DELETE FROM chat_devices WHERE owner_account = ?`),
-    bind(`DELETE FROM chat_device_binding_nonces WHERE owner_account = ?`),
-    bind(`DELETE FROM chat_keypackages WHERE owner_account = ?`),
-    // 只删 A 的收件箱（recipient=A）；A 发给 B（recipient=B）是 B 的，保留。
-    bind(`DELETE FROM chat_envelopes WHERE recipient_account = ?`),
+    env.DB.prepare(`DELETE FROM square_follows WHERE owner_account = ? OR followed_account = ?`).bind(ownerAccount, ownerAccount),
+    bind(`DELETE FROM square_browse_days WHERE owner_account = ?`),
     bind(`DELETE FROM square_device_subkeys WHERE owner_account = ?`),
     bind(`DELETE FROM square_login_challenges WHERE owner_account = ?`)
   ]);
   const deletedRows = results.reduce((sum, result) => sum + (result.meta?.changes ?? 0), 0);
 
-  // 6. KV：身份缓存 + 该账户全部会话。
+  // 7. KV：身份缓存 + 该账户全部会话。
   await env.SQUARE_CACHE.delete(`square_identity:${ownerAccount}`);
   await clearOwnerSessions(env, ownerAccount);
 
@@ -97,26 +89,16 @@ export async function purgeAccount(
   };
 }
 
-/// 附件 manifest key → 其所在附件目录前缀（保留整目录，含分片）。
-function attachmentDirPrefix(manifestKey: string): string {
-  const lastSlash = manifestKey.lastIndexOf('/');
-  return lastSlash >= 0 ? manifestKey.slice(0, lastSlash + 1) : manifestKey;
-}
-
-/// 翻页删除某 R2 前缀下全部对象；keepPrefixes 命中的对象跳过（保留 B 的数据）。
+/// 翻页硬删除某 R2 前缀下全部对象。
 async function deleteR2Prefix(
   env: Env,
-  prefix: string,
-  keepPrefixes?: Set<string>
+  prefix: string
 ): Promise<number> {
-  const keep = keepPrefixes ? [...keepPrefixes] : [];
   let deleted = 0;
   let cursor: string | undefined;
   do {
     const listed = await env.SQUARE_MEDIA.list({ prefix, cursor, limit: 1000 });
-    const keys = listed.objects
-      .map((object) => object.key)
-      .filter((key) => !keep.some((keepPrefix) => key.startsWith(keepPrefix)));
+    const keys = listed.objects.map((object) => object.key);
     if (keys.length > 0) {
       await env.SQUARE_MEDIA.delete(keys);
       deleted += keys.length;

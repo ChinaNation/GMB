@@ -1,18 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_detail_local_store.dart';
-import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/transaction/shared/account_balance_snapshot_store.dart';
+import '../support/isar_test_env.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() async {
-    await WalletIsar.instance.ensureTestCoreInitialized();
-  });
-
-  setUp(() async {
-    await WalletIsar.instance.resetForTest();
-  });
+  useIsolatedIsar();
 
   test('提案详情快照可持久化管理员投票和业务详情', () async {
     final snapshot = ProposalDetailSnapshot(

@@ -38,9 +38,17 @@ frame_support::parameter_types! {
     pub const MaxDeclarationLen: u32 = 2048;
 }
 
+/// 测试用空 seeder:genesis 单测只碰非治理 storage(Phase/TargetBlockTime/declarations),
+/// 不触发机构 seeding,故给空实现即可,无需 mock 整套治理栈。
+pub struct NoopSeeder;
+impl GenesisInstitutionSeeder for NoopSeeder {
+    fn seed() {}
+}
+
 impl pallet::Config for Test {
     type WeightInfo = ();
     type MaxDeclarationLen = MaxDeclarationLen;
+    type InstitutionSeeder = NoopSeeder;
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {

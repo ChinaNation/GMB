@@ -75,7 +75,7 @@ pub mod pallet {
         type AccountValidator: primitives::multisig::AccountValidator<Self::AccountId>;
         type ReservedAccountChecker: primitives::multisig::ReservedAccountGuard<Self::AccountId>;
         type ProtectedSourceChecker: primitives::multisig::ProtectedSourceChecker<Self::AccountId>;
-        type InstitutionAsset: institution_asset::InstitutionAsset<Self::AccountId>;
+        type InstitutionAsset: primitives::institution_asset::InstitutionAsset<Self::AccountId>;
 
         /// 个人多签管理员生命周期写入口。
         ///

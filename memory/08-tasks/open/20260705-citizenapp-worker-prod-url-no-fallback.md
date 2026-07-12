@@ -10,7 +10,7 @@
 ## 建议模块
 
 - App 地址入口：`citizenapp/lib/8964/services/square_api_client.dart`（`SquareApiConfig`）
-- 聊天 mailbox（复用同一 baseUri，自动跟随）：`citizenapp/lib/chat/chat_runtime.dart`
+- 聊天瞬时转发接口（复用同一 baseUri，自动跟随）：`citizenapp/lib/chat/chat_runtime.dart`
 - 部署：既有 `20260705-citizenapp-square-cloudflare-staging-deploy.md` / `20260705-citizenapp-square-production-deploy.md`
 
 > 注：若目录扁平化卡（`20260705-cloudflare-worker-flatten-dir.md`）已执行，Worker 路径以 `citizenapp/cloudflare/` 为准。
@@ -19,7 +19,7 @@
 
 - `SquareApiConfig.defaultBaseUrl`：删掉 `localDevBaseUrl` 兜底，改为内置 `kProdBaseUrl` 常量作默认。
 - `normalizeBaseUrl`：默认不再放行本机；仅在显式 dev 开关（`--dart-define`）传入时才允许本机地址，不做任何隐式回落。
-- 聊天 mailbox 经 `_squareApiClient.baseUri` 复用同地址，无需单独改。
+- 聊天瞬时转发接口经 `_squareApiClient.baseUri` 复用同地址，无需单独改。
 - 现在真机聊天/广场的红色 `ClientException`（连 `127.0.0.1:8787` 失败）随部署+内置默认一起消失。
 
 ## 主要风险点
@@ -78,7 +78,7 @@
 - [x] production 上线并 smoke：`https://citizenapp-square-api.stews87-fawn.workers.dev/health` 返回 ok；未登录 `/v1/square/membership` 返回 401。
 - [x] App 内置 `SquareApiConfig.prodBaseUrl = https://citizenapp-square-api.stews87-fawn.workers.dev` 为唯一默认；删除 `localDevBaseUrl`/`_isProductBuild` 与本机兜底；`normalizeBaseUrl` 保留（本机联调仍可显式 `--dart-define`）。
 - [x] `dart analyze` 无问题；`test/8964/square_feed_service_test.dart` 全过（含 normalizeBaseUrl 契约）。
-- [ ] 待用户设 production R2 预签名 secret（`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_ACCOUNT_ID`）——仅影响**发图片/附件**；纯文字聊天走 D1 已可用。
+- Chat 不使用 R2；图片/视频发布分别使用 Cloudflare Images/Stream，R2 只承担广场 manifest、资料和既定归档对象。
 - [ ] 待部署 Access + Tunnel，并为 production 成套设置 `CHAIN_URL`、`CHAIN_ID`、`CHAIN_SECRET`（仅链读取与签名交易受控广播使用）。
 
 文字聊天与广场基础发帖：已可用（production 已部署，App 默认直连 Cloudflare，本机兜底已删）。

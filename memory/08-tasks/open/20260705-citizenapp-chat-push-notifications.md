@@ -1,53 +1,20 @@
-# CitizenApp 聊天后台系统通知（FCM/APNs，红点/声音/静默）
+# CitizenApp 聊天通用唤醒推送
 
-> 功能 B（暂缓）。先做前台实时修复卡 `20260705-citizenapp-chat-realtime-delivery-fix`，本卡待用户具备 Firebase/APNs 资源后再排。
+- 状态：代码已并入 `20260711-chat-square-step1.md`，外部凭证待配置
+- 模块：`citizenapp`
 
-## 任务需求
+## 最终方案
 
-- App 未打开/后台/被杀时，收到新消息按用户系统通知权限展示：红点（角标）/ 声音 / 不提醒。
-- 推送只带信号（"有新消息" + 会话 id），**绝不带明文或密文正文**，正文由 App 前台拉取 mailbox 后本地解密（沿用现有 E2E "notice only" 设计）。
+- Android 使用 FCM，iOS 使用 APNs。
+- 推送载荷固定为 `kind=chat_wake` 与 `sender_account`，禁止增加消息正文、密文、附件、会话摘要和预览。
+- 推送只唤醒接收设备；消息仍由发送设备经瞬时连接投递，不从 Cloudflare 拉取聊天内容。
+- App 获取平台 Token 后，通过钱包会话和设备绑定签名登记到 Worker；Token 刷新时覆盖当前设备记录。
+- 用户注销时立即硬删除推送 Token 和设备登记。
 
-## 建议模块
+## 外部配置
 
-- 推送基础设施：Android FCM、iOS APNs。
-- 设备 token 注册：`citizenapp/cloudflare/`（新增 push token 表 + 注册/注销接口）+ `citizenapp/lib/chat/`（客户端注册）。
-- Worker 推送发送：`citizenapp/cloudflare/src/chat/`（新 envelope 时向收件方离线设备发推送）。
-- 客户端通知：`citizenapp/lib/chat/` + `lib/security/`（权限）+ Android/iOS 原生通道。
+- Firebase 项目需提供 Android/iOS 应用参数和 FCM 服务账号凭证。
+- Apple Developer 需提供 APNs Key、Key ID、Team ID 和 Topic。
+- 密钥只写入 Cloudflare Worker Secrets，不进入仓库。
 
-## 影响范围
-
-- 新增 D1 表 `chat_push_tokens`（owner_account, device_id, platform, token, updated_at）+ 注册/注销/失效清理接口。
-- Worker envelope POST：WS 推送之外，额外向收件方**离线设备**发 FCM/APNs（在线设备已由 WS 覆盖，避免重复打扰）。
-- 客户端引入 `firebase_messaging` + `flutter_local_notifications`；申请通知权限（已在首启权限说明页有通知权限申请入口，见 CITIZENAPP_TECHNICAL 2.3）。
-- 点击通知深链到对应会话。
-
-## 主要风险点
-
-- 推送 payload 泄漏明文：铁律只带信号 + 会话 id。
-- 在线/离线重复通知：在线走 WS、离线走推送，需按 DO 在线设备集合去重。
-- 外部依赖前置：iOS 需 Apple 开发者证书 + APNs Auth Key；Android 需 Firebase 项目 + `google-services.json`。缺任一，对应平台 B 卡停摆。
-- token 失效/轮换：注册 token 需幂等更新 + 失效清理。
-- 与现有首启通知权限策略（`lib/security/app_permission_bootstrap.dart`）对齐，不重复弹窗。
-
-## 是否需要先沟通
-
-- 是。前置资源未定：用户是否已有 Firebase 项目（Android FCM）与 Apple 开发者证书 + APNs key（iOS）。未具备则本卡挂起。
-
-## 预计修改目录
-
-- `citizenapp/cloudflare/`：push token 表 + 注册接口 + envelope 发推送；配置/代码。
-- `citizenapp/lib/chat/`：客户端 token 注册、通知展示、点击深链；代码。
-- `citizenapp/android/`、`citizenapp/ios/`：FCM/APNs 原生接入与证书配置。
-- `memory/05-modules/citizenapp/chat/`：架构文档补后台推送。
-
-## 分步骤技术方案（待前置资源确认后细化）
-
-1. 前置：确认/创建 Firebase 项目 + APNs key。
-2. Worker：`chat_push_tokens` 表 + 注册/注销接口 + envelope 离线推送发送（去重在线设备）。
-3. 客户端：集成 `firebase_messaging`/`flutter_local_notifications`，注册 token，按系统权限展示红点/声音/静默。
-4. 深链：点击通知进入对应会话。
-5. 验收：真机前台（走 WS）/ 后台（走推送）/ 杀进程（走推送）三态；权限拒绝时静默不崩。
-
-## 当前执行状态
-
-- [ ] 暂缓，待前置资源确认后启动。
+当前实现与验收真源见 `memory/05-modules/citizenapp/chat/CHAT_TECHNICAL.md`。

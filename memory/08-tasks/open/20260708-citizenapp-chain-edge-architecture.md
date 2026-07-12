@@ -17,7 +17,7 @@
 架构目标固定为“四层协作”：
 
 1. CitizenApp：内置 smoldot 轻节点，连接 CitizenChain P2P 网络；端上私钥只在本机签名。
-2. Cloudflare 边缘层：提供 DNS/WAF/限流、聊天密文 mailbox、广场媒体与 feed、轻节点启动清单和受控签名交易转发。
+2. Cloudflare 边缘层：提供 DNS/WAF/限流、聊天瞬时信封与信令转发、无内容推送、短期 TURN、广场媒体与 feed、轻节点启动清单和受控签名交易转发。
 3. Citizen API / OnChina 投影能力：承接非链上查询、公开目录、业务聚合、受控链上事件投影和签名交易广播。
 4. CitizenChain 云节点网络：由 `citizenchain/node + runtime + onchina` 安装包运行，Oracle Cloud 等服务器承载 bootnode/full node/archive/indexer/RPC 服务节点。
 
@@ -75,7 +75,7 @@
 - 如果把 CitizenApp 改成 API-only，会削弱轻节点可信边界，并与既有 ADR-004 冲突。
 - 如果把国储会核心节点 RPC 暴露到公网，会显著增加攻击面。
 - 如果 Cloudflare Worker 变成链上真源，会破坏链上最终性和端上签名边界。
-- 如果引入 Matrix 替代当前 OpenMLS + Cloudflare 密文 mailbox，会与现有 Chat 技术路线冲突。
+- 如果引入 Matrix 替代当前 OpenMLS + 瞬时 WebSocket/WebRTC，会引入云端消息存储并与现有 Chat 技术路线冲突。
 - 如果把公民钱包纳入在线链路，会破坏公民钱包冷钱包定位。
 
 ## 6. 分步实施方案

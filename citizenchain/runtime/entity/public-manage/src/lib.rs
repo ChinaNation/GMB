@@ -75,7 +75,7 @@ pub mod pallet {
         type AccountValidator: AccountValidator<Self::AccountId>;
         type ReservedAccountChecker: ReservedAccountGuard<Self::AccountId>;
         type ProtectedSourceChecker: ProtectedSourceChecker<Self::AccountId>;
-        type InstitutionAsset: institution_asset::InstitutionAsset<Self::AccountId>;
+        type InstitutionAsset: primitives::institution_asset::InstitutionAsset<Self::AccountId>;
         type CidInstitutionVerifier: CidInstitutionVerifier<
             Self::AccountId,
             AccountNameOf<Self>,

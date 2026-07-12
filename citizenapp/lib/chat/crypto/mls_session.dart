@@ -58,7 +58,7 @@ class MlsWireMessage {
   /// 转为 GMB_CHAT_V1 外层 envelope。
   ///
   /// OpenMLS wire bytes 和 ratchet tree 都是密文/协议字节，
-  /// 节点只负责保存与转发，不解析其中内容。
+  /// Cloudflare 只在当前请求中转发，不解析也不保存其中内容。
   ChatEnvelope toEnvelope({
     required String envelopeId,
     required String senderAccount,
@@ -66,10 +66,7 @@ class MlsWireMessage {
     required String senderDeviceId,
     required int createdAtMillis,
     required int ttlMillis,
-    String ackPolicy = 'account_ack',
     List<int> encryptedMetadata = const [],
-    String attachmentManifestHash = '',
-    List<String> chunkRefs = const [],
   }) {
     return ChatEnvelope(
       protocolVersion: 1,
@@ -80,11 +77,8 @@ class MlsWireMessage {
       senderDeviceId: senderDeviceId,
       mlsWireMessage: wireBytes,
       encryptedMetadata: encryptedMetadata,
-      attachmentManifestHash: attachmentManifestHash,
-      chunkRefs: chunkRefs,
       createdAtMillis: Int64(createdAtMillis),
       ttlMillis: Int64(ttlMillis),
-      ackPolicy: ackPolicy,
       mlsMessageKind: _toProtoMessageKind(messageKind),
       ratchetTree: ratchetTreeBytes ?? const [],
     );

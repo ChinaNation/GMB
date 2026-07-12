@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
+import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/widgets/square_article_card.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -16,6 +17,7 @@ class ProfilePostsTab extends StatefulWidget {
     required this.ownerAccount,
     required this.api,
     required this.emptyLabel,
+    required this.session,
     this.category,
     this.contentFormat,
     this.mediaKind,
@@ -25,6 +27,7 @@ class ProfilePostsTab extends StatefulWidget {
   final String ownerAccount;
   final CitizenProfileApi api;
   final String emptyLabel;
+  final SquareSession session;
   final SquarePostCategory? category;
   final SquarePostContentFormat? contentFormat;
   final SquareMediaKind? mediaKind;
@@ -60,6 +63,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
         category: widget.category,
         contentFormat: widget.contentFormat,
         limit: _pageSize,
+        session: widget.session,
       );
       if (!mounted) return;
       setState(() {
@@ -89,6 +93,7 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
         contentFormat: widget.contentFormat,
         limit: _pageSize,
         cursor: _cursor,
+        session: widget.session,
       );
       if (!mounted) return;
       setState(() {

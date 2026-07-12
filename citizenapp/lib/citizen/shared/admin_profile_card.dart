@@ -62,7 +62,7 @@ class AdminProfileCard extends StatelessWidget {
           const SizedBox(height: 8),
           _ProfilePairRow(
             left: _ProfileInlineField(label: '姓名', value: profile.name),
-            right: _ProfileInlineField(label: '职务', value: profile.adminRole),
+            right: _ProfileInlineField(label: '职务', value: profile.roleName),
           ),
           _ProfilePairRow(
             left: _ProfileInlineField(label: '任期', value: profile.termLabel),

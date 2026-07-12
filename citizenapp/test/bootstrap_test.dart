@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +7,7 @@ import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/main.dart';
 import 'package:citizenapp/security/app_permission_bootstrap.dart';
 
+import 'support/isar_test_env.dart';
 import 'support/smoldot_native_probe.dart';
 
 /// 直插一条热钱包记录（绕开 createWallet 的设备锁屏前置），让账户门禁放行。
@@ -42,6 +45,7 @@ Future<void> pumpUntilFound(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  useIsolatedIsar();
 
   const secureStorageChannel =
       MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
@@ -126,8 +130,10 @@ void main() {
     expect(find.text('消息'), findsNothing);
     // app 启动会初始化链 RPC(smoldot);libsmoldot 不可用(纯 Dart CI 无宿主 .so)
     // 则跳过此全量启动冒烟,真机/集成构建照跑(首启权限引导用例不依赖 native,仍跑)。
-    // testWidgets 的 skip 仅接受 bool,故以「有无 skip 原因」转 bool。
-  }, skip: smoldotNativeSkipReason() != null);
+    // testWidgets 的 skip 仅接受 bool。连活链的全量启动冒烟默认跳过(离线会 hang 到超时);
+    // 本地设 RUN_BOOTSTRAP_CHAIN_SMOKE=1 且 libsmoldot native 可用时才跑,由集成 / APK 测试覆盖。
+  }, skip: Platform.environment['RUN_BOOTSTRAP_CHAIN_SMOKE'] == null ||
+      smoldotNativeSkipReason() != null);
 
   testWidgets('no wallet: bootstraps into forced create-wallet page',
       (tester) async {

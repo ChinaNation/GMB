@@ -612,7 +612,7 @@ fn validate_initial_admins(
         }
         normalized.push(CreateInstitutionAdminInput {
             admin_account,
-            admin_role: admin.admin_role.clone(),
+            role_name: admin.role_name.clone(),
             term_start: admin.term_start,
             term_end: admin.term_end,
         });
