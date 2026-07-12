@@ -9,10 +9,8 @@ TARGET_DIR="$APP_ROOT/target"
 TARGET_APK="$TARGET_DIR/公民.apk"
 cd "$APP_ROOT"
 
-CID_DEV_USB_PORT=8899
-
 # 构造 dart-define 参数
-DART_DEFINES=(--dart-define=CITIZENAPP_ONCHINA_ENV=dev_usb)
+DART_DEFINES=()
 ANDROID_TARGET_PLATFORMS=(--target-platform android-arm64)
 echo "[启动模式] smoldot 轻节点"
 
@@ -71,25 +69,6 @@ echo "==> 清空构建缓存..."
 flutter clean
 echo "==> 获取依赖..."
 flutter pub get
-
-# ── OnChina 本地开发路径：只允许 Android USB adb reverse ──
-# 开发版 App 内部固定访问 http://127.0.0.1:8899；该地址必须由
-# adb reverse 转发到本机 OnChina 后端，禁止改走局域网 IP 或其他自定义 URL。
-if [[ "$DEVICE_LINE" != "android" ]]; then
-  echo "错误：citizenapp 本地开发访问 OnChina 只支持 Android USB adb reverse。"
-  exit 1
-fi
-ADB_BIN="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
-if [[ ! -x "$ADB_BIN" ]]; then
-  echo "错误：未找到 adb：$ADB_BIN"
-  exit 1
-fi
-if ! "$ADB_BIN" get-state >/dev/null 2>&1; then
-  echo "错误：未检测到可用 Android USB 设备。"
-  exit 1
-fi
-"$ADB_BIN" reverse "tcp:$CID_DEV_USB_PORT" "tcp:$CID_DEV_USB_PORT"
-echo "==> Android USB: adb reverse tcp:$CID_DEV_USB_PORT, citizenapp CID 环境=dev_usb"
 
 # ── 开发期 USB 桥接：自动检测本地诊断节点并打开 ADB reverse + 注入 dart-define ──
 # 远端 prczss/nrcgch 偶发 SubstreamReset 时，本地节点 (--listen-addr ws/30334)

@@ -2,10 +2,11 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/transaction/offchain-transaction/rpc/offchain_clearing_rpc.dart';
-import 'package:citizenapp/rpc/cid_public.dart';
 import 'package:citizenapp/transaction/offchain-transaction/models/payment_intent.dart';
+import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_directory.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 扫码支付清算体系付款确认页。
@@ -18,8 +19,8 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 /// - 流程:
 ///   1. 连清算行节点 RPC,查 `offchain_queryUserBank(user)` 得付款方清算行
 ///      `payer_bank` SS58(未绑定 → 结束);
-///   2. 通过 CID `/api/v1/app/clearing-banks/search` 把 QR 里的收款方
-///      `cid_number` 解析为 `recipient_bank` 主账户 hex;
+///   2. 重读 finalized `ClearingBankNodes[cid_number]`，再按链统一派生规则计算
+///      `recipient_bank` 主账户 hex;
 ///   3. 同行校验(`payer_bank` == `recipient_bank` hex → SS58 对比);
 ///   4. 查 `offchain_queryFeeRate(payer_bank)` 得 `(rate_bp, min_fee_fen)`,本地
 ///      计算 `fee_fen`(与 runtime 一致的四舍五入);
@@ -35,7 +36,6 @@ class OffchainClearingPayPage extends StatefulWidget {
     required this.toAddress,
     required this.recipientBankCidNumber,
     required this.clearingNodeWssUrl,
-    required this.cidBaseUrl,
     this.initialAmountYuan,
     this.memo,
   });
@@ -51,9 +51,6 @@ class OffchainClearingPayPage extends StatefulWidget {
 
   /// 收款方清算行节点 WSS URL。
   final String clearingNodeWssUrl;
-
-  /// OnChina 后端 baseUrl(用于按 `cid_number` 查收款方清算行主账户)。
-  final String cidBaseUrl;
 
   /// 商户 QR 预填金额(元,字符串)。空 → 由用户输入。
   final String? initialAmountYuan;
@@ -115,26 +112,16 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         return;
       }
 
-      // 2. 收款方清算行(通过 CID 按 cid_number 查)
-      final cid = CidPublicApi(baseUrl: widget.cidBaseUrl);
-      try {
-        final search = await cid.searchClearingBanks(
-          keyword: widget.recipientBankCidNumber,
-        );
-        final match = search.items.firstWhere(
-          (b) => b.cidNumber == widget.recipientBankCidNumber,
-          orElse: () => throw Exception(
-              '收款方清算行 ${widget.recipientBankCidNumber} 未在身份注册局查到'),
-        );
-        final recHex = match.mainAccount;
-        if (recHex == null || recHex.isEmpty) {
-          _setError('收款方清算行未上链,无法付款');
-          return;
-        }
-        _recipientBankHex = recHex;
-      } finally {
-        cid.close();
+      // 2. 付款前重新确认收款方仍有链上清算行声明，主账户只按链统一原语派生。
+      final endpoint = await ClearingBankDirectory()
+          .fetchEndpoint(widget.recipientBankCidNumber);
+      if (endpoint == null) {
+        _setError('收款方清算行未在链上声明节点,无法付款');
+        return;
       }
+      _recipientBankHex = hexFromAccountId(
+        deriveInstitutionMainAccountId(widget.recipientBankCidNumber),
+      );
 
       _payerBankSs58 = payerBank;
       _recipientBankSs58 = Keyring().encodeAddress(

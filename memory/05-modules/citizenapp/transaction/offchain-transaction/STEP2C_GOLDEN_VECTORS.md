@@ -104,7 +104,7 @@ No issues found!
 
 E2E 冒烟第二层(启 dev chain + 走真实 bind/deposit/pay)需要:
 - `chain_spec.rs` dev preset 预置清算行 + 费率
-- OnChina 后端 mock 或 skip
+- 真实本地链节点或可重现的链 storage fixture
 - 进程管理 test harness
 
 工作量 1-2 天。本步**先不做**,第一层协议字节锁定已经覆盖当前付款页引入的

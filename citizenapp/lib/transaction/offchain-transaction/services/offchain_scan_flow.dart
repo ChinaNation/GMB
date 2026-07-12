@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/offchain_pay_page.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_directory.dart';
 import 'package:citizenapp/qr/pages/qr_scan_page.dart';
-import 'package:citizenapp/cid_api_config.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 链下支付尾段：已拿到收款码解析结果后，校验清算行 → 查节点 → 跳付款确认页。
@@ -22,8 +21,7 @@ Future<void> proceedOffchainPayment({
     return;
   }
 
-  final cidBaseUrl = CidApiConfig.defaultBaseUrl;
-  final directory = ClearingBankDirectory(cidBaseUrl: cidBaseUrl);
+  final directory = ClearingBankDirectory();
   final endpoint = await directory.fetchEndpoint(result.bank!);
   if (!context.mounted) return;
   if (endpoint == null) {
@@ -40,7 +38,6 @@ Future<void> proceedOffchainPayment({
         toAddress: result.toAddress,
         recipientBankCidNumber: result.bank!,
         clearingNodeWssUrl: endpoint.wssUrl,
-        cidBaseUrl: cidBaseUrl,
         initialAmountYuan: result.amount,
         memo: result.memo,
       ),

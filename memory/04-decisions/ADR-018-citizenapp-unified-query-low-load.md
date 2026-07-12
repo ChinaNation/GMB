@@ -1,9 +1,7 @@
 # ADR-018:citizenapp 全应用统一字段查询 + 降低全节点依赖
 
-- 状态:实施中(2026-06-13)。卡①③④⑦ 已完工并真机验证(机构详情提案显示/广场去重/投票确认/降载全部生效);**卡②⑤ 代码完工**(②双发现服务合一+批量反查+删死代码;⑤ ChainReadCache 挂 fetchStorageBatch 咽喉+按 finalizedHash 块内缓存+tx_monitor 即时失效+forceFresh 旁路;analyze 0 + test 204/204,真机 logcat 待 user 跑);卡⑥ 待做。
-- **修订(2026-06-13)**:经全栈架构审计,账户发现按"三仓库 + 共享底座"重构(详见 §九)。卡② 由"listCidAccounts 整表化"重定义为"删死代码 + 合并双发现服务单次扫描 + AccountRegisteredCid 反查命名";卡⑥ 增列"公权机构目录走 CID 后端 catalog";新增 [[ADR-019]](ADR-019-adminaccounts-by-member-index.md)(链端成员反向索引,L2)。
-- **公权机构界面定案(2026-06-13,混合模式)**:① 数据来源=发布期生成数据包打底 + CID 公开接口版本/增量同步(不是纯接口、不是纯数据包);② 落点修订——功能域归 `citizenapp/lib/citizen/public/`(不放 governance,公权≠治理),仅借 `citizen/shared/` 共享原语(派生/账户卡/缓存/提案查询);③ CID 侧新建 `citizencode/backend/citizenapp/` BFF 目录(匿名只读,薄 handler;领域逻辑留 gov),公权目录接口落此;④ 账户发现 100% 本地派生,目录行带 `custom_account_names`(空占绝大多数,近零成本),只余额联网批量+ChainReadCache 缓存;⑤ 原 v1“发起提案/换管理员下一期”已被 ADR-028 与 2026-06-27 `ProposalSubject + ProposalCapabilityRegistry` 覆盖。拆 5 张卡:`20260613-cid-citizenapp-bff-public-catalog`(跨模块前置)+ `card0-derivation-base` + `cardA-data-sync` + `cardB-nav-ui` + `cardC-detail`。
-- **混合模式 v2 修订(2026-07-03 当前口径)**:公权机构 BFF 仍采用“发布期完整数据包打底 + 在线 keyset 增量”,但数据源已改为 OnChina 链投影(`PublicManage::Institutions/InstitutionAccounts` → `subjects/gov/accounts`),真实版本号来自 `chain_projection_state(public-gov)`。客户端若本地版本等于投影版本则跳过;版本不同则按 `after_cid` 拉取窗口刷新。省导航仍来自行政区字典,行政区只负责 code→名称展示 join,不得反向生成公权机构。
+- 状态:当前。提案统一查询、批量读取、finalized 缓存、管理员扫描和机构目录降载均已落地。
+- **2026-07-12 最终修订**:公权机构目录采用“发布期 finalized 链快照 + Isar 本地索引”。生成器直接读取 `PublicManage::Institutions/InstitutionAccounts`；公民、管理员和清算行读取各自链上 storage。
 - 关联:[[ADR-017]](ADR-017-finalized-unification.md)
 - 触发:机构详情提案列表为空(根因实测:轻节点对长前缀 keysPaged 返回空);user 要求把"统一字段 + 降载"作为基础规则,整改整个 citizenapp。
 
@@ -27,7 +25,7 @@
 
 - **R1 统一字段查询**:列表类一律"短 key 索引(`ProposalsByYear`/整表)取一次 → 客户端按已解码字段过滤"。**禁止**业务代码对嵌 32B account / `blake2(x)+x` 的长 K1 做 keysPaged 前缀扫描。精确整键读取不受限,可继续用。
 - **R2 降低全节点依赖**:① 多 key 一律 `fetchStorageBatch`/`fetchFinalizedBalances`,禁止循环内逐条;② 同一数据跨页面取一次进共享缓存复用;③ 链状态页用 finalized 订阅驱动,禁止 Timer 轮询查链;④ 能本地算的不联网。豁免=交易提交管线(nonce/dry-run/submit/runtime-version/genesis)+ UI 倒计时。
-- **R3 外部后端(CID/HTTP)缓存**:health/catalog/机构注册证/电子护照状态等读取加 Isar + TTL 缓存,不每次现查。
+- **R3 外部 HTTP 缓存**:仅 Cloudflare Worker、GitHub 更新等真实外部服务允许按业务设置 TTL；公民、机构、管理员和清算行身份不得以 HTTP 缓存替代链读取。
 
 ---
 
@@ -90,13 +88,12 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 | `governance/.../institution_account_info_page.dart:150/254`、`personal_manage_account_info_page.dart:171/274` | 同地址多次单查 | 去重/缓存 |
 | 创建/关闭/转账前各页 `fetchFinalizedBalance` 单查 | 无缓存 | ChainReadCache |
 
-### E. R3 应改 — HTTP/CID 后端缓存(37 处无缓存)
+### E. R3 应改 — 外部 HTTP 缓存
 | 位置 | 改法 |
 |---|---|
-| `wallet/capabilities/api_client.dart`(health/admin catalog/机构注册证 等) | 各接口加 Isar+TTL(health 5min / catalog 1d / 证书 7d) |
-| `my/myid/myid_api.dart:50` 电子护照状态 | Isar 缓存 + 15min 刷新 |
-| `rpc/cid_public.dart:51` 清算行搜索 | 已部分缓存,补 TTL |
 | `update/app_update_service.dart:92` GitHub release | 低频,加短缓存即可 |
+
+公民、机构、管理员和清算行不属于 E 类：它们已经统一为 finalized 链读取，目录型机构数据由发布期链快照和 Isar 提供首屏。
 
 ### 豁免(不改)
 交易提交管线:`fetchNonce`/`fetchRuntimeVersion`/`fetchGenesisHash`/`fetchLatestBlock`/`fetchFinalizedBlock`(提交用)/`submitExtrinsic*`/dry-run;`ChainTxMonitor` finalized 订阅;UI 倒计时 Timer。精确整键 `fetchStorage`(ActiveProposalsBySubject/InternalTallies/AdminSnapshot/clearing-bank 等)正常,只在被循环调用时归入 B 类批量,本身不动口径。
@@ -117,7 +114,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 - 卡③(B)全部 N+1 改批量(余额/storage/投票)。
 - 卡④(C)三处轮询改 finalized 订阅。
 - 卡⑤(D)`ChainReadCache` 余额/storage 共享缓存层。
-- 卡⑥(E + §九)HTTP/CID 后端 Isar+TTL 缓存;**增列**公权机构目录走 CID 后端 catalog(分页+搜索)+ Isar/TTL,轻节点不扫链(公权机构界面"下一步再做",随界面落地)。
+- 卡⑥ 已被 2026-07-12 链数据统一方案取代：机构目录使用 finalized 链快照，管理员与清算行直接读链。
 - 卡⑦ 规则 R1/R2/R3 写入 `memory/07-ai/agent-rules.md` + `memory/05-modules/citizenapp/`。
 
 ## 八、风险与回滚
@@ -137,7 +134,7 @@ ProposalsByYear[currentYear](短key,可用) → getKeysPagedFinalized → ids
 | 类别 | 范围语义 | 发现来源 | 缓存模型 | 新鲜度 | 链改空间 |
 |---|---|---|---|---|---|
 | 治理机构(87:国家储委会1+省储委会43+省储行43) | 目录·全集(与用户无关) | 编译期注册表 `governance_institution_registry.generated.dart` | 静态写死 | 永不变 | 无 |
-| 公权机构(动态注册) | 目录·全集(与用户无关) | **CID 后端 catalog**(分页+搜索) | HTTP+Isar/TTL(天级) | 慢 | 无 |
+| 公权机构(动态注册) | 目录·全集(与用户无关) | 发布期 finalized 链快照 | Isar 本地索引 | 随 App 快照发布 | 无 |
 | 多签(机构多签+个人多签) | **我的**(我的钱包某钱包是管理员才显示) | 链上扫 `AdminsChange::AdminAccounts` | Isar 永久+增量 | 随钱包/出块变 | ADR-019 反向索引 |
 
 账户类型注记(用户口径,2026-06-13):
@@ -161,7 +158,7 @@ lib/governance/
 │   ├── account_registered_cid 反查     ← AccountRegisteredCid[addr]→(cid,name) 精确整键
 │   └── admin_account_storage_codec.dart ← 已存在(两发现服务共用解码器)
 ├── organization-manage/                 ← 治理机构目录 repo(读注册表,零链查) + 机构多签 repo(kind=2)
-├── public-institution/(下一步,卡⑥)     ← 公权机构目录 repo(CID 后端 catalog + Isar/TTL)
+├── citizen/public/                     ← 公权机构 finalized 链快照 + Isar 目录
 └── personal-manage/                     ← 个人多签 repo(kind=1/org=3)
     （shared/admin_accounts_scan_service.dart：单次全表扫 AdminAccounts,emit {kind,addr,org,admins};
       organization-manage 与 personal-manage 各自订阅过滤,不再各扫一遍——既消双扫,又不破模块边界）
@@ -169,9 +166,7 @@ lib/governance/
 
 ### 2. 关键结论(纠正原 §四A 对卡②的判断)
 - **治理机构目录**:已 100% 注册表驱动,零链查(最优,不动);仅余额走精确整键批量 + 卡⑤ 缓存。
-- **公权机构目录**:不扫链。CID 后端是机构身份签发方,"列出全部公权机构"是其天职 → 后端 catalog +
-  Isar/TTL;点进详情用已知 cid_number 本地派生主/费地址 + 精确整键读余额/状态;自定义账户清单由
-  catalog 带出。**不碰 `CidRegisteredAccount` 长前缀**。(归卡⑥)
+- **公权机构目录**:App 运行时不全量扫链。发布期生成器在同一个 finalized 块读取机构与账户表，生成分省快照；App 以 Isar 建立本地索引。点进详情和关键操作使用已知 cid_number 精确读取链状态。
 - **多签(我的)**:
   - L1(卡②,纯客户端零链改):① `InstitutionDiscoveryService` + `PersonalManageDiscoveryService` 对
     同一张 `AdminAccounts` 的双扫合并为 `shared/admin_accounts_scan_service.dart` 单次扫,按 kind 分流;

@@ -96,7 +96,7 @@ class _PublicPageState extends State<PublicTab> {
     await _selectGroup(_kFollowGroup);
   }
 
-  /// 后台增量同步数据包 + 行政区字典,**完成后回刷当前视图**。
+  /// 后台对账 finalized 链快照数据包 + 行政区字典,**完成后回刷当前视图**。
   ///
   /// `ensureSynced` 首装要把 4.2 万条行政区字典灌进 Isar(秒级~十几秒),
   /// 期间 `cityNameMap` 查到的是空字典 → 市名回退 code。等灌完后丢弃「字典未就绪时
@@ -104,15 +104,10 @@ class _PublicPageState extends State<PublicTab> {
   Future<void> _syncThenRefresh() async {
     try {
       await _repo.ensureSynced();
-    } on Object catch (e, st) {
-      // [DIAG-admindiv] 临时诊断:抓被静默吞掉的同步异常(真机失败极可能藏这)。
-      debugPrint(
-          '[DIAG-admindiv] _syncThenRefresh ensureSynced ERROR: $e\n$st');
+    } on Object {
       return;
     }
     if (!mounted) return;
-    debugPrint(
-        '[DIAG-admindiv] _syncThenRefresh done → reload selected=$_selected');
     _cityCache.clear(); // 关键:清掉灌库未完成时缓存的脏市名(001)。
     await _selectGroup(_selected);
   }
@@ -173,10 +168,6 @@ class _PublicPageState extends State<PublicTab> {
     if (codes.isEmpty) return const [];
     // 一次取全省市名映射,避免逐市查字典的 N+1(ADR-018 R2)。
     final nameMap = await _repo.cityNameMap(provinceCode);
-    // [DIAG-admindiv] 临时诊断:看真机 listCities 与字典 cityNameMap 各返回多少。
-    debugPrint('[DIAG-admindiv] _loadCityVms($provinceCode): '
-        'codes=${codes.length} nameMap=${nameMap.length} '
-        'sample=${codes.isNotEmpty ? '${codes.first}->${nameMap[codes.first]}' : '-'}');
     return codes.map((code) {
       // 字典名缺失(null)或为空串都回退 code,绝不渲染留白(ADR-021 字典 join)。
       final joined = nameMap[code];
@@ -187,8 +178,7 @@ class _PublicPageState extends State<PublicTab> {
     }).toList(growable: false);
   }
 
-  /// 后台增量刷新某省(provinceCode);成功后静默刷新市列表,失败仅在本地空时提示。
-  /// 同步接口仍按省**名**问后端(后端 province_code_by_name),由 code 反解全名。
+  /// 按省 code 刷新本地 finalized 链快照索引；省名只用于展示。
   Future<void> _refreshProvince(String provinceCode) async {
     try {
       await _repo.refreshProvince(provinceFullNameByCode(provinceCode));

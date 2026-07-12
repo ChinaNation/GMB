@@ -3,7 +3,7 @@
 - 状态：accepted
 - 日期：2026-04-24
 - 决策人：Architect 主入口（Claude）+ 用户
-- 进度:Step 1(2026-04-24)✅,Step 2 阶段 A+B+C+D(2026-04-27)✅,Step 3 待启动
+- 进度:Step 1(2026-04-24)✅,Step 2 阶段 A+B+C+D(2026-04-27)✅,Step 3 CitizenApp 链上目录切换(2026-07-12)✅
 
 ## 上下文
 
@@ -17,16 +17,11 @@
 
 把清算行体系实现拆为 **3 个独立阶段**，每阶段独立可发布、可验收：
 
-### Step 1：身份注册局端（本任务卡 20260424-step1-cid-clearing-bank-eligibility）
+### Step 1：身份注册与资格写链
 
-**只动 citizencode/backend + citizencode/frontend**：
-- 资格白名单判定函数：`is_clearing_bank_eligible(inst, parent) -> bool`
-- 收紧 `GET /api/v1/app/clearing-banks/search` 到资格白名单（已激活的 `K1=S + JOINT_STOCK` 与其下属 `K1=F`）
-- 新增 `GET /api/v1/app/clearing-banks/eligible-search`（桌面节点"添加清算行"用，含未激活机构）
-- CID 前端机构列表 / 详情页显示"可作为清算行"badge
-- PrivateInstitutionLayout 选择 sub_type=JOINT_STOCK 时增加提示文案
-
-**不做**：runtime 改动、citizenwallet/citizenapp 改动、链上 ClearingBankNodes storage、PeerId 绑定。
+- 身份注册流程校验机构属性、机构码、上级机构和股份公司资格。
+- 符合条件的机构身份、账户与管理员最终写入链上 storage。
+- CitizenApp 不使用注册系统的查询投影，安装包索引和运行时精确判断均以 finalized 链数据为准。
 
 ### Step 2：区块链端（citizenchain，2026-04-27 完工）
 
@@ -48,9 +43,9 @@
 
 **C. 机构注册凭证收口（Required，开发期彻底切换）**
 
-- 机构注册凭证只包含 `cid_number / cid_full_name / account_names[]` 与省级签名凭证字段
-- `subject_property / sub_type / parent_cid_number` 只在 CID `eligible-search` 候选资格判定中使用
-- 链上不保存 CID 内部机构属性副本，开发期 fresh genesis 重建数据
+- 机构注册凭证只包含 `cid_number / cid_full_name / account_names[]` 与省级签名凭证字段。
+- `subject_property / sub_type / parent_cid_number` 只在注册端资格判定中使用。
+- 链上只保存运行时需要的机构身份与账户关系，不保存注册库内部投影。
 
 **D. 资格白名单链上二次校验**
 
@@ -76,7 +71,7 @@
 
 新增 Tauri command（2026-05-02 起按业务拆到 `citizenchain/node/src/offchain/{organization_manage,offchain_transaction,settlement}/commands.rs`）：
 
-- `search_eligible_clearing_banks(query, limit)`：转发 CID `/clearing-banks/eligible-search`
+- `search_eligible_clearing_banks(query, limit)`：从 finalized 链上机构和资格 storage 筛选候选项
 - `query_clearing_bank_node_info(cid_number)`：链上查 `ClearingBankNodes[cid_number]`
 - `query_local_peer_id()`：调 RPC `system_localPeerId` 拿本机 PeerId
 - `test_clearing_bank_endpoint_connectivity(domain, port, expected_peer_id)`：连通性自测（DNS + wss 连接 + 链 ID 匹配 + system_localPeerId 匹配）
@@ -107,26 +102,26 @@
 - 新增"节点信息"长卡片：peer_id / rpc_domain:rpc_port / 注册管理员 + 端点更新/注销入口
 - 提交 register_clearing_bank 前**强制桌面节点连通性自测**
 
-#### 2.4 身份注册局端 Step 2 末尾联动
+#### 2.4 链上目录收口
 
-- `citizencode/backend/subjects/chain_multisig_info.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
-  - `AND cid_number IN (SELECT cid_number FROM clearing_bank_nodes_cache)`
-- 新建 `citizencode/backend/indexer/worker.rs`：常驻 tokio task 订阅链上 `ClearingBankRegistered/Updated/Unregistered` 事件 + 全量启动 scan + SQLite 缓存（按 [feedback_no_dns_peerid_firewall](../feedback_no_dns_peerid_firewall.md) 不假设网络问题）
-- CID 后端不向链端注册 payload 透传 `subject_property/sub_type/parent_cid_number`
+- `ClearingBankNodes` 同时是节点声明、端点查询和 CitizenApp 清算行目录的唯一真源。
+- 候选机构名称来自同一 finalized 块生成的公权机构链快照，绑定前再精确读取当前链状态。
+- 不维护链外清算行目录、事件投影或搜索缓存。
 
 ### Step 3：公民端（citizenwallet + citizenapp）
 
 - citizenwallet 公民钱包 decoder 补 `register_clearing_bank` / `update_clearing_bank_endpoint` / `unregister_clearing_bank` 扫码签名分支
 - citizenwallet pallet_registry action_labels 补对应中文标签
-- citizenapp `bind_clearing_bank_page.dart` 调整：搜索来源切换为新 search API；绑定前查链上 ClearingBankNodes 取 RPC 域名+端口
-- citizenapp `clearing_bank_settings_page.dart` 占位页落地（用户视角的"我的清算行配置"）
-- 端到端验证清单（创建机构 → CID 注册 → 链上注册清算行 → citizenapp 绑定 → 充值 → 跨行支付 → 提现）
+- citizenapp `clearing_bank_directory.dart` 枚举 finalized `ClearingBankNodes`，按机构编号或链快照名称搜索。
+- citizenapp `bind_clearing_bank_page.dart` 绑定前精确重读节点端点，主账户和费用账户由机构编号确定性派生。
+- citizenapp `clearing_bank_settings_page.dart` 展示当前 `UserBank` 绑定和链上候选清算行。
+- 端到端验证清单（创建机构 → 身份上链 → 声明清算节点 → CitizenApp 绑定 → 充值 → 跨行支付 → 提现）。
 
 ## 链上准入设计（Step 2 锁定）
 
 清算行准入用 **3 层卡口**：
 
-1. **CID 身份（Step 1 落地）**：机构必须在 CID 后端注册成功（subject_property/机构码/sub_type/parent 校验）
+1. **链上机构身份（Step 1 落地）**：机构已完成注册校验，身份和账户关系已写入链上 storage
 2. **链上资格白名单（Step 2）**：`(K1=S ∧ JOINT_STOCK) ∨ (K1=F ∧ parent.K1=S ∧ parent.JOINT_STOCK)`，链端只确认账户已注册且 Active
 3. **节点-机构绑定（Step 2）**：管理员私钥签名 + node PeerId 上链；同时配置 RPC 域名供 citizenapp 可达
 
@@ -165,21 +160,21 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
 **优点**：
 - 清算行接入门槛低（任意符合条件的私法人股份公司及其下属非法人都能加入），可扩到银行/分支行/第三方支付/大企业
 - 不需要新增链上机构类型 / 新 orgType / 新 institution_code，runtime 改动最小化
-- 资格判定在 CID 后端 + 链上双层校验，单层故障不影响整体安全
+- 资格、账户状态与节点声明在链上统一校验，CitizenApp 不引入第二授权真源
 - 三阶段独立发布，每阶段可验收，降低风险
 
 **取舍**：
-- CID 后端的"清算行候选"语义会随 Step 2 完成而进一步收窄（加入"已加入清算网络"过滤），是预期演进
-- 跨省 parent 查询需要二段读 shard，性能依赖 sharded_store 的并发读能力（已有）
+- CitizenApp 枚举目录时使用分页和批量 storage 读取，并用安装包链快照补充名称。
+- 节点端点、用户绑定、主账户和费用账户在业务操作前均以 finalized 链状态重新确认。
 
-## 与现存设计的兼容性
+## 与现存设计的关系
 
 - [project_institution_create_rules.md](../project_institution_create_rules.md):56 的"清算行概念彻底废除"应理解为"`is_clearing_bank` 字段废除（省储行兼任清算行的历史模型废除）"，与本 ADR 的"清算行作为 K1=S 股份公司 + K1=F 子集的视图归类"不冲突
-- [feedback_no_compatibility.md](../feedback_no_compatibility.md)：本 ADR 的 3 阶段切换不保留兼容窗口，每步直接切换
+- [feedback_no_compatibility.md](../feedback_no_compatibility.md)：本 ADR 的 3 阶段每步直接切换，不保留旧查询或旧数据管线
 - [feedback_chainspec_frozen.md](../feedback_chainspec_frozen.md)：Step 2 的 spec_version 升级走链上 `propose_runtime_upgrade`，不重建 chainspec
 
 ## 引用
 
 - 现有清算 pallet：[citizenchain/runtime/transaction/offchain-transaction/src/lib.rs](../../citizenchain/runtime/transaction/offchain-transaction/src/lib.rs)
-- 现有 CID 公开 API：[citizencode/backend/subjects/chain_multisig_info.rs](../../citizencode/backend/subjects/chain_multisig_info.rs)（app_search_clearing_banks）
+- 清算行目录：CitizenApp 直接枚举 finalized `OffchainTransaction::ClearingBankNodes`
 - ParentInstitutionRow 已含 sub_type 字段：[citizencode/backend/subjects/model.rs](../../citizencode/backend/subjects/model.rs)

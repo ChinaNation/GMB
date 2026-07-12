@@ -67,10 +67,10 @@ RELAY_PER_MINUTE = "20"
 CHAIN_BOOTNODES = """
 /dns4/nrcgch.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWHepcMGD3h9VC1XNWmrac3pXo63RimV5jhTU2nC2TLAyS
 /dns4/prczss.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWPjWNXvCzPv6PPuiGnF3J5uToW3ySfaB7rKkwUrN2CALv
-/dns4/prclns.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWD9EpWCRceAQBc5rxq8pMS75ke9ovDyqAF8ZjoVQVD3tt
-/dns4/prcgds.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWJKT8iE9guv4wfem1L9Xd91bNC9CTcLmZyRgUuWkpmEqf
-/dns4/prcgxs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWAxCE4TpEkDKibtQBzFtEuTAvxrDp1JXabhXPY7tAp9qx
-/dns4/prcfjs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWJdGUANuEpVCmarfH2gi23GodbbbBBabuw9Eb4raBabt8
+/dns4/prchbs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWMXQoZ9F6nxMuoC2ZnzxEKAn4z2qPKAugP2CZFEcXDqkT
+/dns4/prches.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWSkKBEJ2KZXckFhzLvrqqbhpq4PVKeFuWsxdTF7hfzoGc
+/dns4/prcsds.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWFgD8cFDqherjpiuRkHwHfAcCwaqXcBjTS2G3LkwUBTsq
+/dns4/prcsxs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWQY3DEaJy9wEBE2bQ9gG1B8XByfVaz839jf1ov75kRmD9
 """
 
 [env.staging]
@@ -131,10 +131,10 @@ RELAY_PER_MINUTE = "20"
 CHAIN_BOOTNODES = """
 /dns4/nrcgch.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWHepcMGD3h9VC1XNWmrac3pXo63RimV5jhTU2nC2TLAyS
 /dns4/prczss.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWPjWNXvCzPv6PPuiGnF3J5uToW3ySfaB7rKkwUrN2CALv
-/dns4/prclns.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWD9EpWCRceAQBc5rxq8pMS75ke9ovDyqAF8ZjoVQVD3tt
-/dns4/prcgds.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWJKT8iE9guv4wfem1L9Xd91bNC9CTcLmZyRgUuWkpmEqf
-/dns4/prcgxs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWAxCE4TpEkDKibtQBzFtEuTAvxrDp1JXabhXPY7tAp9qx
-/dns4/prcfjs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWJdGUANuEpVCmarfH2gi23GodbbbBBabuw9Eb4raBabt8
+/dns4/prchbs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWMXQoZ9F6nxMuoC2ZnzxEKAn4z2qPKAugP2CZFEcXDqkT
+/dns4/prches.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWSkKBEJ2KZXckFhzLvrqqbhpq4PVKeFuWsxdTF7hfzoGc
+/dns4/prcsds.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWFgD8cFDqherjpiuRkHwHfAcCwaqXcBjTS2G3LkwUBTsq
+/dns4/prcsxs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWQY3DEaJy9wEBE2bQ9gG1B8XByfVaz839jf1ov75kRmD9
 """
 
 [env.production]
@@ -196,8 +196,8 @@ RELAY_PER_MINUTE = "20"
 CHAIN_BOOTNODES = """
 /dns4/nrcgch.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWHepcMGD3h9VC1XNWmrac3pXo63RimV5jhTU2nC2TLAyS
 /dns4/prczss.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWPjWNXvCzPv6PPuiGnF3J5uToW3ySfaB7rKkwUrN2CALv
-/dns4/prclns.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWD9EpWCRceAQBc5rxq8pMS75ke9ovDyqAF8ZjoVQVD3tt
-/dns4/prcgds.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWJKT8iE9guv4wfem1L9Xd91bNC9CTcLmZyRgUuWkpmEqf
-/dns4/prcgxs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWAxCE4TpEkDKibtQBzFtEuTAvxrDp1JXabhXPY7tAp9qx
-/dns4/prcfjs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWJdGUANuEpVCmarfH2gi23GodbbbBBabuw9Eb4raBabt8
+/dns4/prchbs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWMXQoZ9F6nxMuoC2ZnzxEKAn4z2qPKAugP2CZFEcXDqkT
+/dns4/prches.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWSkKBEJ2KZXckFhzLvrqqbhpq4PVKeFuWsxdTF7hfzoGc
+/dns4/prcsds.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWFgD8cFDqherjpiuRkHwHfAcCwaqXcBjTS2G3LkwUBTsq
+/dns4/prcsxs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWQY3DEaJy9wEBE2bQ9gG1B8XByfVaz839jf1ov75kRmD9
 """

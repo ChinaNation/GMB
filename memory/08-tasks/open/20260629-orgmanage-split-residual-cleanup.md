@@ -16,7 +16,6 @@
 ### A. node 链端(CRITICAL,用户优先)—— ✅ 完成(2026-06-29,cargo check -p node 绿)
 - [x] `chain.rs` 新增 `institution_manage_pallet(cid_number)`(经 `institution_code_from_cid_number`+`is_private_legal_code` 派生 PublicManage/PrivateManage),Institutions map_key + InstitutionAccounts 前缀(fetch_institution_accounts 加 `manage_pallet` 参)全切;doc 注释同步。
 - [x] `proposal.rs` MODULE_TAG `b"org-mgmt"`→双常量 `TAG_PUBLIC_MANAGE=b"pub-mgmt"`/`TAG_PRIVATE_MANAGE=b"pri-mgmt"`,`is_organization_manage_proposal`→`is_institution_manage_proposal` 双前缀 OR(两调用点已改)。
-- [ ] `api_client.dart:376` 注释旧 call 名(随 citizenapp phase C 一并)。
 
 ### B. 文档 + 脚本 + onchina 注释 —— ✅ 权威文档完成(2026-06-29)
 - [x] unified-protocols.md:P-TX-001(本轮早先)+ P-STORAGE-002 整节 + P-CRED-001 + P-STORAGE-004 真源/生产者/消费者/必跑测试改 public-manage/private-manage(顺手修 `runtime/private/personal-manage`→`entity/personal-manage`)。剩 12 处为**故意保留**的禁止/历史行 + citizenapp 目录(归 phase C)。

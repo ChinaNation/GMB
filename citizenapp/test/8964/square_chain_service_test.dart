@@ -22,7 +22,7 @@ void main() {
     );
 
     final expected = <int>[
-      36,
+      34,
       0,
       ...CompactBigIntCodec.codec.encode(BigInt.from(7)),
       ...utf8.encode('sqp_abc'),

@@ -10,12 +10,12 @@ class CidDirectoryInfo {
   final String? legalRepName;
 }
 
-/// 机构目录只读反查:复用公权目录本地 Isar 库(与 CID subjects 同源),按
+/// 机构目录只读反查:复用 finalized 链快照建立的公权目录本地 Isar 库,按
 /// `cid_number` 取省/市/法定代表人。
 ///
 /// 治理详情借此与公权详情**统一展示「法定代表人 / 所属地」**——治理内置
 /// 机构(国家储委会/省储委会/省储行)都带真实 CID 号且在公权确定性目录内,可直接反查。
-/// 反查前先 `ensureSynced`(版本驱动增量同步,版本没变秒过);反查不到(如链上
+/// 反查前先 `ensureSynced`(链快照版本一致时秒过);反查不到(如链上
 /// 注册机构账户不在确定性目录)返回 null,调用方留空。
 class CidDirectoryLookup {
   CidDirectoryLookup({PublicInstitutionRepository? repository})

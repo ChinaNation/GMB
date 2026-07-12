@@ -73,7 +73,7 @@
   - `STRIPE_PRICE_VOTING = price_1TrrN8HSzSYWD2rF5A3KZ8ip`（投票 $9.99）
   - `STRIPE_PRICE_CANDIDATE = price_1TrrNCHSzSYWD2rFrZTsmKhl`（竞选 $99.99）
   - `MEMBERSHIP_SUCCESS_URL/CANCEL_URL = https://www.crcfrcn.com/membership?status=success|cancel`
-- 生产 5 个 secret：`CHAIN_URL` / `CHAIN_ID` / `CHAIN_SECRET`（链 RPC，经 Cloudflare Access Service Token + Tunnel `nrcgch-rpc.crcfrcn.com → 127.0.0.1:9944`）+ `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`。
+- 生产 5 个 secret：`CHAIN_URL` / `CHAIN_ID` / `CHAIN_SECRET`（链服务经 Cloudflare Access + `chain` Tunnel 路径到固定方法网关）+ `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`。
   - **命名统一决定**：worker 链 RPC 三项 secret 统一短名 `CHAIN_URL/CHAIN_ID/CHAIN_SECRET`（取代旧 `CITIZEN_CHAIN_RPC_*`）；代码 `src/types.ts`+`src/chain/rpc.ts`、5 个 test、`wrangler.toml` 注释、6 个 memory 文档全库对齐，`CITIZEN_CHAIN_RPC` 全库清零。其余 `CITIZEN_CHAIN_*`（bootnodes/genesis/state/bootstrap_ttl）未改。
 - `wrangler deploy --env production` → 版本 `c2959b09`。四档 subscribe/challenge 实测（访客测试地址，prefix 2027）：自由 `visitor`/民主 `visitor_pro` 出订阅挑战 op_tag 29；投票 `voting`/竞选 `candidate` 越级精确匹配 `membership_identity_mismatch`。
 - 官网 `www.crcfrcn.com`（Cloudflare Pages）已上线渲染自由/民主卡。

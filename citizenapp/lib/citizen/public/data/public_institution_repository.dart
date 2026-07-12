@@ -1,11 +1,10 @@
-// 公权机构快照缓存 repo 门面(ADR-018 §九,混合模式)。
+// 公权机构 finalized 链快照缓存 repo 门面。
 //
 // card B/C 的统一入口。**读全部走本地 store(零链读零网络、秒开)**;
-// 创世快照包由 [ensureSynced] 在首启后台导入/对账;某省链上投影增量由
-// [refreshProvince] 后台跑(TTL 节流 + 失败上抛供 UI 决定提示)。UI 一律先读
-// 本地缓存、再后台刷新,绝不阻塞在网络同步上(消除"一直转圈")。
+// finalized 链快照包由 [ensureSynced] 在首启后台导入/对账。目录缓存随 App 发布的
+// 链快照更新；涉及身份、绑定、付款或权限的操作必须再读取 finalized 链状态，不能把
+// 本地目录当作授权真源。
 
-import 'package:flutter/foundation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 
 import 'admin_division_dto.dart';
@@ -15,20 +14,17 @@ import 'isar_admin_division_store.dart';
 import 'isar_public_institution_store.dart';
 import 'public_institution_bundle_loader.dart';
 import 'public_institution_store.dart';
-import 'public_institution_sync_service.dart';
 import 'public_provinces.dart';
 
 class PublicInstitutionRepository {
   PublicInstitutionRepository({
     PublicInstitutionStore? store,
     AdminDivisionStore? divisionStore,
-    PublicInstitutionSyncService? sync,
     PublicInstitutionBundleLoader? loader,
     Duration? syncTtl,
   })  : store = store ?? IsarPublicInstitutionStore(),
         divisionStore = divisionStore ?? IsarAdminDivisionStore(),
         _syncTtl = syncTtl ?? const Duration(minutes: 2) {
-    this.sync = sync ?? PublicInstitutionSyncService(store: this.store);
     this.loader = loader ??
         PublicInstitutionBundleLoader(
           store: this.store,
@@ -40,7 +36,6 @@ class PublicInstitutionRepository {
 
   /// 行政区字典(ADR-021 行政区唯一真源):机构显示名按 code join 此字典。
   final AdminDivisionStore divisionStore;
-  late final PublicInstitutionSyncService sync;
   late final PublicInstitutionBundleLoader loader;
 
   final Duration _syncTtl;
@@ -147,19 +142,15 @@ class PublicInstitutionRepository {
   /// 非阻塞调用方:UI 先读本地缓存再调本方法。
   Future<bool> ensureSynced() => loader.ensureSynced();
 
-  /// 后台刷新某省的在线增量。**非阻塞调用方**:UI 先读本地再调本方法。
-  /// TTL 内重复调跳过;失败上抛(UI 自行 catch 决定是否提示),失败不计入节流以便重试。
+  /// 后台重新对账当前安装包携带的 finalized 链快照。
+  ///
+  /// TTL 只用于避免页面切换时重复读取 asset；链上关键状态由对应业务服务在操作前
+  /// 精确读取。
   Future<void> refreshProvince(String province) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final last = _lastSyncMs[province];
     if (last != null && now - last < _syncTtl.inMilliseconds) return;
     _lastSyncMs[province] = now;
-    try {
-      await sync.syncProvince(province);
-    } on Exception catch (e) {
-      _lastSyncMs.remove(province);
-      debugPrint('[public-institution] sync "$province" failed: $e');
-      rethrow;
-    }
+    await loader.ensureSynced();
   }
 }

@@ -1,9 +1,9 @@
-// 个人多签:分类管理员模块 `PersonalAdmins.AdminAccounts` 扫描。
+// 分类管理员模块 `AdminAccounts` 链上扫描。
 //
-// 个人多签发现依赖链上 `PersonalAdmins.AdminAccounts` 反向索引。本服务把
+// 管理员身份和个人多签发现都依赖链上 `AdminAccounts` 反向索引。本服务把
 // "翻页 getKeysPaged + 批量 fetchStorageBatch + 解码 + 提取账户"收敛为一次扫描,
-// 产出已解码条目。机构账户登记不走 CitizenApp 多签入口,因此这里不再扫描
-// PublicAdmins / PrivateAdmins。
+// 产出已解码条目。调用方必须显式选择要扫描的分类管理员 pallet，个人多签只扫
+// `PersonalAdmins`，钱包管理员标签则扫描公权、私权和个人三类。
 //
 // 扫描走轻节点 smoldot 的**短前缀整表**(prefix = twox128(pallet) || twox128(storage),
 // 无嵌长 K1)。
@@ -62,12 +62,27 @@ class AdminAccountsScanResult {
   );
 }
 
-/// `PersonalAdmins.AdminAccounts` 单次扫描服务。
+/// 分类管理员 `AdminAccounts` 单次扫描服务。
 class AdminAccountsScanService {
-  AdminAccountsScanService({ChainRpc? chainRpc})
-      : _rpc = chainRpc ?? ChainRpc();
+  AdminAccountsScanService({
+    ChainRpc? chainRpc,
+    this.palletNames = const ['PersonalAdmins'],
+  }) : _rpc = chainRpc ?? ChainRpc() {
+    if (palletNames.isEmpty) {
+      throw ArgumentError.value(palletNames, 'palletNames', '不能为空');
+    }
+  }
 
   final ChainRpc _rpc;
+
+  /// 本次扫描的分类管理员 pallet；只允许当前链上三张管理员表。
+  final List<String> palletNames;
+
+  static const Set<String> _allowedPalletNames = {
+    'PublicAdmins',
+    'PrivateAdmins',
+    'PersonalAdmins',
+  };
 
   /// 翻页大小。
   static const _pageSize = 256;
@@ -173,7 +188,17 @@ class AdminAccountsScanService {
 
   /// `PersonalAdmins.AdminAccounts` 双 prefix(twox128 || twox128)的 hex 形式。
   List<String> _adminAccountsPrefixHexList() {
-    return const ['PersonalAdmins']
+    final invalid =
+        palletNames.where((name) => !_allowedPalletNames.contains(name));
+    if (invalid.isNotEmpty) {
+      throw ArgumentError.value(
+        invalid.join(','),
+        'palletNames',
+        '包含未知分类管理员 pallet',
+      );
+    }
+    return palletNames
+        .toSet()
         .map(_adminAccountsPrefixHex)
         .toList(growable: false);
   }

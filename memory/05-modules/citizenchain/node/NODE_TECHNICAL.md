@@ -145,7 +145,7 @@
 
 - runtime 本地 release WASM blake2:`f213cdc476fb0d1e723421a5bd1f5afafc792b5180852d2266346b967386e680`
 - 当时产物为历史 raw 形态;2026-07-04 后不再作为当前部署口径。
-- bootNodes 保持 44 个;伊犁省权威节点域名为 `prcyls.crcfrcn.com`。
+- 该历史阶段曾预登记 44 个计划节点；2026-07-12 已按实际部署状态收口为 6 个 bootnode，未部署域名不再进入 chainspec。
 
 历史:2026-05-06 首次冻结,源 nrcgch.crcfrcn.com,sha256 `2b9f46e4aefb66f892d5dc170b2c2bfc33b6b12a88192617b06c18e8ea38a2db`。
 

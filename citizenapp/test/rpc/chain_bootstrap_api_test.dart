@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -11,10 +12,32 @@ const _bootnodeA =
     '/dns4/nrcgch.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWHepcMGD3h9VC1XNWmrac3pXo63RimV5jhTU2nC2TLAyS';
 const _bootnodeB =
     '/dns4/prczss.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWPjWNXvCzPv6PPuiGnF3J5uToW3ySfaB7rKkwUrN2CALv';
+const _bootnodeHbs =
+    '/dns4/prchbs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWMXQoZ9F6nxMuoC2ZnzxEKAn4z2qPKAugP2CZFEcXDqkT';
+const _bootnodeHes =
+    '/dns4/prches.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWSkKBEJ2KZXckFhzLvrqqbhpq4PVKeFuWsxdTF7hfzoGc';
+const _bootnodeSds =
+    '/dns4/prcsds.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWFgD8cFDqherjpiuRkHwHfAcCwaqXcBjTS2G3LkwUBTsq';
+const _bootnodeSxs =
+    '/dns4/prcsxs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWQY3DEaJy9wEBE2bQ9gG1B8XByfVaz839jf1ov75kRmD9';
 const _stateRoot =
     '0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63';
 
 void main() {
+  test('安装包 chainspec 只登记当前六个已部署 bootnode', () async {
+    final spec = jsonDecode(await File('assets/chainspec.json').readAsString())
+        as Map<String, dynamic>;
+
+    expect(spec['bootNodes'], [
+      _bootnodeA,
+      _bootnodeB,
+      _bootnodeSds,
+      _bootnodeSxs,
+      _bootnodeHes,
+      _bootnodeHbs,
+    ]);
+  });
+
   test('ChainBootstrapApi 拉取并解析安全启动清单', () async {
     final api = ChainBootstrapApi(
       baseUrl: 'http://127.0.0.1:8787',

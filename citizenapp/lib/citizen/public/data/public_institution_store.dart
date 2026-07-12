@@ -2,7 +2,7 @@
 //
 // 抽象出存储接口,使同步/载入服务的逻辑可用内存 fake 单测,
 // 不依赖 Isar 真库;生产实现见 isar_public_institution_store.dart。
-// 全部为本地读写,UI 导航零链读零现查;数据权威性来自链上快照和后续链投影刷新。
+// 全部为本地读写,UI 导航零链读零现查;数据内容来自 finalized 链快照。
 
 import 'package:citizenapp/isar/app_isar.dart';
 

@@ -50,7 +50,7 @@ citizenapp/lib/citizen/
 │   ├── institution_detail_page.dart   # 统一详情页(替代公权/治理两套)
 │   ├── institution_accounts_page.dart # 机构账户页
 │   ├── institution_admin_list_page.dart
-│   └── data/                          # 目录仓库(CID-BFF+Isar) + 链态服务(由现 public/data 迁入归并)
+│   └── data/                          # finalized 链快照目录 + Isar + 链态服务
 ├── square/                            # 【改名自 vote/】广场:订阅+地区+管理员 动态流
 │   └── square_view.dart               # 由 vote_view.dart 重构
 ├── legislation/                       # 【新增】立法 tab 视图(机构码过滤)

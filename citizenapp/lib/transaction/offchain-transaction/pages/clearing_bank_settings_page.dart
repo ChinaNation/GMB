@@ -3,15 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_directory.dart';
 import 'package:citizenapp/transaction/offchain-transaction/pages/bind_clearing_bank_page.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
-import 'package:citizenapp/cid_api_config.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 「设置清算行」真实入口。
 ///
 ///
-/// - CID 负责搜索机构资料;链上 `ClearingBankNodes` 负责确认该机构是否已经声明
-///   可连接的清算行节点。
+/// - finalized `ClearingBankNodes` 是清算行目录和资格的唯一来源，机构链快照只补名称。
 /// - 页面只缓存绑定快照,不把本地缓存当作权威状态;绑定、切换和支付仍以链上校验为准。
 class ClearingBankSettingsPage extends StatefulWidget {
   const ClearingBankSettingsPage({
@@ -29,12 +27,10 @@ class ClearingBankSettingsPage extends StatefulWidget {
 }
 
 class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
-  final String _cidBaseUrl = CidApiConfig.defaultBaseUrl;
-
   final TextEditingController _searchCtrl = TextEditingController();
 
   late final ClearingBankDirectory _directory =
-      widget.directory ?? ClearingBankDirectory(cidBaseUrl: _cidBaseUrl);
+      widget.directory ?? ClearingBankDirectory();
 
   ClearingBankBindingSnapshot? _current;
   List<ClearingBankCandidate> _items = const [];
@@ -83,17 +79,14 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
   }
 
   Future<void> _openBind(ClearingBankCandidate item) async {
-    if (!item.canBind) return;
     final current = _current;
-    final isSwitch =
-        current != null && current.cidNumber != item.info.cidNumber;
+    final isSwitch = current != null && current.cidNumber != item.cidNumber;
     final changed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => BindClearingBankPage(
           wallet: widget.wallet,
-          bank: item.info,
-          endpoint: item.endpoint,
+          bank: item,
           switchMode: isSwitch,
         ),
       ),
@@ -202,26 +195,24 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
   }
 
   Widget _candidateTile(ClearingBankCandidate item) {
-    final info = item.info;
     final endpoint = item.endpoint;
-    final title = info.displayTitle.isEmpty ? '(未设置全称)' : info.displayTitle;
+    final title = item.displayTitle.isEmpty ? '(未设置全称)' : item.displayTitle;
     final current = _current;
-    final isCurrent = current?.cidNumber == info.cidNumber;
+    final isCurrent = current?.cidNumber == item.cidNumber;
     final buttonText = isCurrent ? '已绑定' : (current == null ? '绑定' : '切换');
 
     return ListTile(
-      leading: Icon(
-        item.canBind ? Icons.verified_outlined : Icons.block,
-        color: item.canBind ? Colors.green : AppTheme.textTertiary,
+      leading: const Icon(
+        Icons.verified_outlined,
+        color: Colors.green,
       ),
       title: Text(title),
       subtitle: Text(
-        '${info.cidNumber}\n'
-        '${endpoint == null ? '未查询到链上节点声明' : endpoint.wssUrl}',
+        '${item.cidNumber}\n${endpoint.wssUrl}',
       ),
       isThreeLine: true,
       trailing: FilledButton(
-        onPressed: item.canBind && !isCurrent ? () => _openBind(item) : null,
+        onPressed: !isCurrent ? () => _openBind(item) : null,
         child: Text(buttonText),
       ),
     );

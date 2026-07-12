@@ -1,16 +1,24 @@
 import 'package:isar_community/isar.dart';
-import 'package:citizenapp/wallet/capabilities/api_client.dart';
+import 'package:citizenapp/citizen/shared/admin_accounts_scan_service.dart';
+import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 
 class WalletLabelService {
-  WalletLabelService({ApiClient? apiClient})
-      : _apiClient = apiClient ?? ApiClient();
+  WalletLabelService({AdminAccountsScanService? scanService})
+      : _scanService = scanService ??
+            AdminAccountsScanService(
+              palletNames: const [
+                'PublicAdmins',
+                'PrivateAdmins',
+                'PersonalAdmins',
+              ],
+            );
 
   static const String defaultType = '手机钱包';
   static const int _catalogTtlSeconds = 300;
-  static const String _kUpdatedAtKey = 'wallet.admin_catalog.updated_at';
+  static const String _kUpdatedAtKey = 'wallet.admin_chain_catalog.updated_at';
 
-  final ApiClient _apiClient;
+  final AdminAccountsScanService _scanService;
   Map<String, String>? _memoryAdminGroupMap;
   int? _memoryUpdatedAt;
 
@@ -36,14 +44,27 @@ class WalletLabelService {
       }
     }
 
-    final catalog = await _apiClient.fetchAdminCatalog();
-    final next = <String, String>{};
-    for (final entry in catalog.entries) {
-      final normalized = _normalizePubkeyHex(entry.pubkeyHex);
-      if (normalized == null) {
-        continue;
+    final scan = await _scanService.scanAll();
+    if (scan.partialFailure) {
+      throw StateError('链上管理员目录扫描不完整，拒绝覆盖完整缓存');
+    }
+
+    // 同一管理员可能同时属于多个机构。链上扫描完成后按机构码去重并稳定排序，
+    // 缓存只保存派生展示标签，不参与任何权限判断。
+    final labelsByAdmin = <String, Set<String>>{};
+    for (final account in scan.accounts) {
+      final label = InstitutionCodeLabel.codeLabel(account.institutionCode);
+      for (final admin in account.adminsHex) {
+        final normalized = _normalizePubkeyHex(admin);
+        if (normalized != null) {
+          labelsByAdmin.putIfAbsent(normalized, () => <String>{}).add(label);
+        }
       }
-      next[normalized] = entry.adminGroupName.trim();
+    }
+    final next = <String, String>{};
+    for (final entry in labelsByAdmin.entries) {
+      final labels = entry.value.toList(growable: false)..sort();
+      next[entry.key] = labels.join(' / ');
     }
 
     await WalletIsar.instance.writeTxn((isar) async {
@@ -82,7 +103,7 @@ class WalletLabelService {
     try {
       await refreshCatalog(force: true);
     } catch (_) {
-      // Keep local cache/fallback when backend or chain is unavailable.
+      // 链暂不可用时只保留最近一次链派生缓存；缓存永远不参与权限判断。
     }
   }
 

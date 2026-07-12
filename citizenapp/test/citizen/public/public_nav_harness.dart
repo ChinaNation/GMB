@@ -6,38 +6,13 @@
 import 'package:flutter/services.dart';
 import 'package:citizenapp/citizen/public/data/admin_division_bundle_loader.dart';
 import 'package:citizenapp/citizen/public/data/admin_division_dto.dart';
-import 'package:citizenapp/citizen/public/data/public_institution_api.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_bundle_loader.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_dto.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_repository.dart';
-import 'package:citizenapp/citizen/public/data/public_institution_sync_service.dart';
 
 import 'fake_admin_division_store.dart';
 import 'fake_data_version_kv.dart';
 import 'fake_public_institution_store.dart';
-
-class _NoopApi extends PublicInstitutionApi {
-  _NoopApi() : super(baseUrl: 'http://test');
-
-  @override
-  Future<PublicInstitutionVersion> fetchVersion({
-    required String provinceName,
-    String? cityName,
-  }) async =>
-      // 版本恒为 'seed',与 seeded store 版本一致 → syncProvince 跳过,不发网络。
-      PublicInstitutionVersion(
-          provinceName: provinceName, manifestVersion: 'seed');
-
-  @override
-  Future<PublicInstitutionPage> fetchPage({
-    required String provinceName,
-    String? cityName,
-    String? sinceVersion,
-    String? afterCid,
-    int pageSize = 500,
-  }) async =>
-      const PublicInstitutionPage(items: [], hasMore: false);
-}
 
 class _EmptyBundle extends AssetBundle {
   @override
@@ -67,7 +42,7 @@ PublicInstitutionDto seedDto(
       'account_count': 2,
     });
 
-/// 构造 seeded 仓库:省顺序(省 code)+ 机构 + 各省版本戳(=seed,使同步跳过)+
+/// 构造 seeded 仓库:省顺序(省 code)+ 机构 + 各省链快照版本戳+
 /// 行政区字典(市/镇名 join)。
 ///
 /// [provinceOrder] 传省 code(如 ['ZS']);[cityNames] = `cityCode -> 市名`,
@@ -123,7 +98,6 @@ Future<PublicInstitutionRepository> buildSeededRepo({
   return PublicInstitutionRepository(
     store: store,
     divisionStore: divisionStore,
-    sync: PublicInstitutionSyncService(store: store, api: _NoopApi()),
     loader: PublicInstitutionBundleLoader(
       store: store,
       bundle: _EmptyBundle(),
@@ -141,7 +115,6 @@ class LateDictRepo extends PublicInstitutionRepository {
   LateDictRepo({
     required super.store,
     required super.divisionStore,
-    required super.sync,
     required super.loader,
     required this.gate,
     required this.lateCityNames,
@@ -194,7 +167,6 @@ Future<LateDictRepo> buildLateDictRepo({
   return LateDictRepo(
     store: store,
     divisionStore: divisionStore,
-    sync: PublicInstitutionSyncService(store: store, api: _NoopApi()),
     loader: PublicInstitutionBundleLoader(
       store: store,
       bundle: _EmptyBundle(),

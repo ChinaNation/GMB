@@ -1,24 +1,15 @@
 #!/usr/bin/env node
-// 公权机构创世快照包生成器(ADR-018 §九 混合模式 ①)。
+// CitizenApp 公权机构 finalized 链快照生成器。
 //
-// 发布期从 OnChina 链上投影公开接口**keyset 翻页**拉创世公权机构目录,
-// 写成 CitizenApp 内置快照缓存:
-//   assets/public_institutions/manifest.json =
-//     { schema_version, chain_id, snapshot_block_number, snapshot_block_hash,
-//       genesis_hash, state_root, public_institution_root, shard_hashes, provinces }
-//   assets/public_institutions/<省全名>.json  = { province_name, manifest_version, count, institutions: [...] }
-// App 启动后按省级 manifest_version 做本地 reconcile:只写变化行,并删除包内已消失的 cid。
-// 快照只作本地缓存,公权机构唯一真源仍是链上状态。
+// 从节点 JSON-RPC 的同一 finalized 块读取 `PublicManage.Institutions` 与
+// `PublicManage.InstitutionAccounts`，直接生成链快照索引。
+// 生成结果只是 App 本地查询索引；身份、绑定、付款和权限仍在操作前精确读链。
 //
-// 量级:创世快照只含国家/省/市公权机构,镇级和新增机构由注册局运行期上链后增量同步。
-// 即使当前快照为 49,593 条,仍必须用 keyset(after_cid),避免以后增量扩容时 OFFSET 深翻 O(n²)。
-//
-// 用法(需 OnChina 后端在跑):
-//   ONCHINA_BASE_URL=https://onchina.local:8964 node tools/generate_public_institution_bundle.mjs
-//   可选 --provinces 中枢省,岭南省 只生成部分省;--version 2026-06-13 指定包版本。
-//   必填 --state-root <块0 state root>;--snapshot-block-hash / --genesis-hash 默认取 BFF 链投影。
-//
-// 省全名(含"省")与 china.sqlite / OnChina `province` 字段逐字对齐;展示去"省"由客户端做。
+// 用法:
+//   CHAIN_RPC_URL=http://127.0.0.1:9944 node tools/generate_public_institution_bundle.mjs
+//   CHAIN_RPC_URL=ws://127.0.0.1:9944 node tools/generate_public_institution_bundle.mjs
+// Cloudflare Access HTTP 入口可选从环境读取 `CF_ACCESS_CLIENT_ID` 和
+// `CF_ACCESS_CLIENT_SECRET`，脚本不会把凭据写入产物或日志。
 
 import { createHash } from 'node:crypto';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
@@ -28,28 +19,38 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, '..', 'assets', 'public_institutions');
 const CHAIN_SPEC = join(__dirname, '..', 'assets', 'chainspec.json');
-const BASE_URL = process.env.ONCHINA_BASE_URL || 'https://onchina.local:8964';
+const CHAIN_RPC_URL = process.env.CHAIN_RPC_URL || 'http://127.0.0.1:9944';
 const PAGE_SIZE = 500;
-// 后端默认限流 120 请求/分钟/IP。页间默认延时 550ms(≈109/min,留余量)+ 429 退避重试。
-// 后端临时调高限流(ONCHINA_RATE_LIMIT_PER_MIN=大值)时可设 GEN_DELAY_MS=0 跑满速。
-const DELAY_MS = Number(process.env.GEN_DELAY_MS ?? '550');
-const MAX_RETRY_429 = 8;
+const BATCH_SIZE = 200;
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// twox128("PublicManage") + twox128(storage)。名称变化时必须同时更新链元数据契约。
+const INSTITUTIONS_PREFIX =
+  '0x3fdf0b7e6001a27b1f4c2913ca162bf72ef145c44f710c6fe55cae381219f7b2';
+const ACCOUNTS_PREFIX =
+  '0x3fdf0b7e6001a27b1f4c2913ca162bf7ca63afb529001c3370b9aa5ba2bd1fd7';
 
-// 43 省规范全名(含中枢省,与 china.sqlite provinces 表逐字对齐,含"省")。
-const DEFAULT_PROVINCES = [
-  '中枢省', '岭南省', '广东省', '广西省', '福建省', '海南省', '云南省', '贵州省',
-  '湖南省', '江西省', '浙江省', '江苏省', '山东省', '山西省', '河南省', '河北省',
-  '湖北省', '陕西省', '重庆省', '四川省', '甘肃省', '北平省', '海滨省', '松江省',
-  '龙江省', '吉林省', '辽宁省', '宁夏省', '青海省', '安徽省', '台湾省', '西藏省',
-  '新疆省', '西康省', '阿里省', '葱岭省', '伊犁省', '河西省', '昆仑省', '河套省',
-  '热河省', '兴安省', '合江省',
+const PROVINCES = [
+  ['ZS', '中枢省'], ['LN', '岭南省'], ['GD', '广东省'], ['GX', '广西省'],
+  ['FJ', '福建省'], ['HN', '海南省'], ['YN', '云南省'], ['GZ', '贵州省'],
+  ['HU', '湖南省'], ['JX', '江西省'], ['ZJ', '浙江省'], ['JS', '江苏省'],
+  ['SD', '山东省'], ['SX', '山西省'], ['HE', '河南省'], ['HB', '河北省'],
+  ['HI', '湖北省'], ['SI', '陕西省'], ['CQ', '重庆省'], ['SC', '四川省'],
+  ['GS', '甘肃省'], ['BP', '北平省'], ['HA', '海滨省'], ['SJ', '松江省'],
+  ['LJ', '龙江省'], ['JL', '吉林省'], ['LI', '辽宁省'], ['NX', '宁夏省'],
+  ['QH', '青海省'], ['AH', '安徽省'], ['TW', '台湾省'], ['XZ', '西藏省'],
+  ['XJ', '新疆省'], ['XK', '西康省'], ['AL', '阿里省'], ['CL', '葱岭省'],
+  ['YL', '伊犁省'], ['HX', '河西省'], ['KL', '昆仑省'], ['HT', '河套省'],
+  ['RH', '热河省'], ['XA', '兴安省'], ['HJ', '合江省'],
 ];
+const RESERVED_ACCOUNT_NAMES = new Set([
+  '主账户', '费用账户', '永久质押', '安全基金', '两和基金',
+]);
 
 function arg(name, fallback) {
-  const i = process.argv.indexOf(name);
-  return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : fallback;
+  const index = process.argv.indexOf(name);
+  return index >= 0 && index + 1 < process.argv.length
+    ? process.argv[index + 1]
+    : fallback;
 }
 
 function sha256Text(text) {
@@ -60,142 +61,259 @@ function sha256File(path) {
   return existsSync(path) ? sha256Text(readFileSync(path)) : '';
 }
 
-async function fetchPage(province, afterCid) {
-  const url = new URL(`${BASE_URL}/api/v1/app/public-institutions`);
-  url.searchParams.set('province_name', province);
-  url.searchParams.set('page_size', String(PAGE_SIZE));
-  if (afterCid) url.searchParams.set('after_cid', afterCid);
-
-  // 429 限流退避重试:读 Retry-After,否则指数退避(2s/4s/8s… 上限 30s)。
-  for (let attempt = 0; ; attempt++) {
-    if (DELAY_MS > 0) await sleep(DELAY_MS);
-    const res = await fetch(url);
-    if (res.ok) return (await res.json()).data;
-    if (res.status === 429 && attempt < MAX_RETRY_429) {
-      const retryAfter = Number(res.headers.get('retry-after'));
-      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
-        ? retryAfter * 1000
-        : Math.min(2000 * 2 ** attempt, 30000);
-      console.log(`    ${province} 限流 429,等待 ${(waitMs / 1000).toFixed(0)}s 重试…`);
-      await sleep(waitMs);
-      continue;
-    }
-    throw new Error(`${province} page failed: ${res.status}`);
-  }
+function bytes(hex) {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  return Buffer.from(clean, 'hex');
 }
 
-async function fetchVersion(province) {
-  const url = new URL(`${BASE_URL}/api/v1/app/public-institutions/version`);
-  url.searchParams.set('province_name', province);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${province} version failed: ${res.status}`);
-  return (await res.json()).data ?? {};
+function readCompact(data, offset) {
+  const first = data[offset];
+  const mode = first & 3;
+  if (mode === 0) return [first >> 2, 1];
+  if (mode === 1) return [data.readUInt16LE(offset) >> 2, 2];
+  if (mode === 2) return [data.readUInt32LE(offset) >>> 2, 4];
+  throw new Error('不支持大整数 SCALE compact 长度');
 }
 
-async function fetchProvince(province) {
-  const institutions = [];
-  let afterCid = '';
-  let manifestVersion = null;
-  // keyset:每页用上一页末尾 cid 作游标,恒定快。
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const data = await fetchPage(province, afterCid);
-    manifestVersion = data.manifest_version ?? manifestVersion;
-    const items = data.items ?? [];
-    institutions.push(...items);
-    if (!data.has_more || items.length === 0) break;
-    afterCid = data.next_cursor || items[items.length - 1].cid_number;
-  }
+function readVec(data, offset) {
+  const [length, lengthBytes] = readCompact(data, offset);
+  const start = offset + lengthBytes;
+  const end = start + length;
+  if (end > data.length) throw new Error('SCALE Vec 越界');
+  return [data.subarray(start, end), end];
+}
+
+function decodeInstitutionKey(keyHex) {
+  const key = bytes(keyHex);
+  const [cid] = readVec(key, 48);
+  return cid.toString('utf8');
+}
+
+function decodeAccountKey(keyHex) {
+  const key = bytes(keyHex);
+  const [cid, afterCid] = readVec(key, 48);
+  const [accountName] = readVec(key, afterCid + 16);
+  return [cid.toString('utf8'), accountName.toString('utf8')];
+}
+
+function decodeInstitution(cidNumber, valueHex) {
+  const value = bytes(valueHex);
+  let offset = 0;
+  const [fullName, afterFullName] = readVec(value, offset);
+  offset = afterFullName;
+  const [shortName, afterShortName] = readVec(value, offset);
+  offset = afterShortName;
+  const [townCode, afterTownCode] = readVec(value, offset);
+  offset = afterTownCode;
+  if (offset + 9 > value.length) throw new Error(`机构 ${cidNumber} 链值长度不足`);
+  const institutionCode = value.subarray(offset, offset + 4)
+    .toString('utf8').replace(/\0+$/u, '');
+  offset += 4;
+  const createdAt = value.readUInt32LE(offset);
+  offset += 4;
+  const statusByte = value[offset];
+  const match = /^([A-Z]{2})(\d{3})-/u.exec(cidNumber);
+  if (!match) throw new Error(`机构号格式无效: ${cidNumber}`);
   return {
-    province_name: province,
-    manifest_version: manifestVersion ?? '',
-    count: institutions.length,
-    institutions,
+    cid_number: cidNumber,
+    cid_full_name: fullName.toString('utf8'),
+    cid_short_name: shortName.toString('utf8'),
+    status: statusByte === 1 ? 'ACTIVE' : statusByte === 2 ? 'CLOSED' : 'PENDING',
+    province_code: match[1],
+    city_code: match[2],
+    town_code: townCode.toString('utf8'),
+    institution_code: institutionCode,
+    account_count: 0,
+    custom_account_names: [],
+    created_at_block: createdAt,
   };
 }
 
-async function main() {
-  const provincesArg = arg('--provinces', '');
-  const chainId = arg('--chain-id', 'citizenchain');
-  const provinces = provincesArg
-    ? provincesArg.split(',').map((s) => s.trim()).filter(Boolean)
-    : DEFAULT_PROVINCES;
-  const projection = await fetchVersion(provinces[0]);
-  const version = arg('--version', projection.manifest_version || new Date().toISOString());
-  const snapshotBlockNumber = Number(
-    arg('--snapshot-block-number', projection.chain_block_number?.toString() ?? '0'),
-  );
-  const snapshotBlockHash = arg(
-    '--snapshot-block-hash',
-    projection.chain_block_hash || projection.chain_genesis_hash || '',
-  );
-  const genesisHash = arg('--genesis-hash', projection.chain_genesis_hash || snapshotBlockHash);
-  const stateRoot = arg('--state-root', '');
-  const chainspecHash = arg('--chainspec-hash', sha256File(CHAIN_SPEC));
-  const adminDivisionRoot = arg('--admin-division-root', '');
-  if (!snapshotBlockHash || !genesisHash || !stateRoot) {
-    throw new Error(
-      'public institution bundle requires genesis_hash, snapshot_block_hash and state_root; pass --state-root from genesis-state manifest',
-    );
+class JsonRpc {
+  constructor(url) {
+    this.url = url;
+    this.nextId = 1;
+    this.socket = null;
+    this.pending = new Map();
   }
 
-  mkdirSync(OUT_DIR, { recursive: true });
-  let total = 0;
-  // 省级版本表(增量同步用):[{ province_name, manifest_version }]。
-  // 客户端逐省比对 manifest_version,只重灌版本变了的省,没变的省连分片都不读。
-  const provinceVersions = [];
-  const shardHashes = {};
-  const rootParts = [];
-  for (const province of provinces) {
-    const t0 = Date.now();
-    const shard = await fetchProvince(province);
-    const shardJson = `${JSON.stringify(shard, null, 0)}\n`;
-    writeFileSync(join(OUT_DIR, `${province}.json`), shardJson);
-    const shardHash = sha256Text(shardJson);
-    shardHashes[province] = shardHash;
-    provinceVersions.push({
-      province_name: province,
-      manifest_version: shard.manifest_version,
-      shard_hash: shardHash,
-      count: shard.count,
-    });
-    rootParts.push({
-      province_name: province,
-      manifest_version: shard.manifest_version,
-      shard_hash: shardHash,
-      count: shard.count,
-    });
-    total += shard.count;
-    console.log(
-      `  ${province}: ${shard.count} 机构 (mv=${shard.manifest_version}) ${((Date.now() - t0) / 1000).toFixed(1)}s`,
-    );
+  async request(method, params = []) {
+    if (this.url.startsWith('http://') || this.url.startsWith('https://')) {
+      return this.requestHttp(method, params);
+    }
+    return this.requestWebSocket(method, params);
   }
-  writeFileSync(
-    join(OUT_DIR, 'manifest.json'),
-    JSON.stringify(
-      {
-        schema_version: 1,
-        chain_id: chainId,
-        snapshot_block_number: Number.isFinite(snapshotBlockNumber) ? snapshotBlockNumber : 0,
-        snapshot_block_hash: snapshotBlockHash,
-        genesis_hash: genesisHash,
-        state_root: stateRoot,
-        chainspec_hash: chainspecHash,
-        admin_division_root: adminDivisionRoot,
-        public_institution_root: sha256Text(JSON.stringify(rootParts)),
-        version,
-        generated_at: version,
-        shard_hashes: shardHashes,
-        provinces: provinceVersions,
-      },
-      null,
-      2,
-    ),
-  );
-  console.log(`manifest.json 写入完成,version=${version},${provinces.length} 省,共 ${total} 机构。`);
+
+  async requestHttp(method, params) {
+    const id = this.nextId++;
+    const headers = { 'content-type': 'application/json' };
+    if (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET) {
+      headers['CF-Access-Client-Id'] = process.env.CF_ACCESS_CLIENT_ID;
+      headers['CF-Access-Client-Secret'] = process.env.CF_ACCESS_CLIENT_SECRET;
+    }
+    const response = await fetch(this.url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+    });
+    if (!response.ok) throw new Error(`${method} HTTP ${response.status}`);
+    const payload = await response.json();
+    if (payload.error) throw new Error(`${method}: ${JSON.stringify(payload.error)}`);
+    return payload.result;
+  }
+
+  async requestWebSocket(method, params) {
+    await this.ensureSocket();
+    const id = this.nextId++;
+    const result = new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+    });
+    this.socket.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
+    return result;
+  }
+
+  async ensureSocket() {
+    if (this.socket?.readyState === WebSocket.OPEN) return;
+    this.socket = new WebSocket(this.url);
+    this.socket.addEventListener('message', (event) => {
+      const payload = JSON.parse(event.data.toString());
+      const pending = this.pending.get(payload.id);
+      if (!pending) return;
+      this.pending.delete(payload.id);
+      if (payload.error) pending.reject(new Error(JSON.stringify(payload.error)));
+      else pending.resolve(payload.result);
+    });
+    await new Promise((resolve, reject) => {
+      this.socket.addEventListener('open', resolve, { once: true });
+      this.socket.addEventListener('error', reject, { once: true });
+    });
+  }
+
+  close() {
+    this.socket?.close();
+  }
 }
 
-main().catch((e) => {
-  console.error(e);
+async function readKeys(rpc, prefix, blockHash) {
+  const keys = [];
+  let startKey = null;
+  for (;;) {
+    const page = await rpc.request('state_getKeysPaged', [
+      prefix, PAGE_SIZE, startKey, blockHash,
+    ]);
+    if (!page?.length) break;
+    keys.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    startKey = page.at(-1);
+  }
+  return keys;
+}
+
+async function readValues(rpc, keys, blockHash) {
+  const values = new Map();
+  for (let start = 0; start < keys.length; start += BATCH_SIZE) {
+    const batch = keys.slice(start, start + BATCH_SIZE);
+    const result = await rpc.request('state_queryStorageAt', [batch, blockHash]);
+    for (const [key, value] of result?.[0]?.changes ?? []) values.set(key, value);
+  }
+  return values;
+}
+
+async function main() {
+  const selectedNames = new Set(
+    arg('--provinces', '').split(',').map((value) => value.trim()).filter(Boolean),
+  );
+  const provinces = selectedNames.size === 0
+    ? PROVINCES
+    : PROVINCES.filter(([, name]) => selectedNames.has(name));
+  if (provinces.length === 0) throw new Error('没有匹配的省份');
+
+  const rpc = new JsonRpc(CHAIN_RPC_URL);
+  try {
+    const snapshotBlockHash = await rpc.request('chain_getFinalizedHead');
+    const header = await rpc.request('chain_getHeader', [snapshotBlockHash]);
+    const genesisHash = await rpc.request('chain_getBlockHash', [0]);
+    const snapshotBlockNumber = Number.parseInt(header.number, 16);
+
+    const institutionKeys = await readKeys(rpc, INSTITUTIONS_PREFIX, snapshotBlockHash);
+    const institutionValues = await readValues(rpc, institutionKeys, snapshotBlockHash);
+    const accountKeys = await readKeys(rpc, ACCOUNTS_PREFIX, snapshotBlockHash);
+
+    const accountNames = new Map();
+    for (const key of accountKeys) {
+      const [cidNumber, accountName] = decodeAccountKey(key);
+      if (!accountNames.has(cidNumber)) accountNames.set(cidNumber, []);
+      accountNames.get(cidNumber).push(accountName);
+    }
+
+    const institutions = [];
+    for (const key of institutionKeys) {
+      const value = institutionValues.get(key);
+      if (!value) continue;
+      const institution = decodeInstitution(decodeInstitutionKey(key), value);
+      const names = [...new Set(accountNames.get(institution.cid_number) ?? [])];
+      institution.account_count = names.length;
+      institution.custom_account_names = names
+        .filter((name) => !RESERVED_ACCOUNT_NAMES.has(name))
+        .sort();
+      institutions.push(institution);
+    }
+    institutions.sort((a, b) => a.cid_number.localeCompare(b.cid_number));
+
+    mkdirSync(OUT_DIR, { recursive: true });
+    const shardHashes = {};
+    const provinceVersions = [];
+    const rootParts = [];
+    let total = 0;
+    for (const [provinceCode, provinceName] of provinces) {
+      const rows = institutions.filter((row) => row.province_code === provinceCode);
+      const manifestVersion = sha256Text(JSON.stringify(rows));
+      const shard = {
+        province_name: provinceName,
+        manifest_version: manifestVersion,
+        count: rows.length,
+        institutions: rows,
+      };
+      const shardJson = `${JSON.stringify(shard)}\n`;
+      writeFileSync(join(OUT_DIR, `${provinceName}.json`), shardJson);
+      const shardHash = sha256Text(shardJson);
+      shardHashes[provinceName] = shardHash;
+      const item = {
+        province_name: provinceName,
+        manifest_version: manifestVersion,
+        shard_hash: shardHash,
+        count: rows.length,
+      };
+      provinceVersions.push(item);
+      rootParts.push(item);
+      total += rows.length;
+      console.log(`  ${provinceName}: ${rows.length} 机构`);
+    }
+
+    const publicInstitutionRoot = sha256Text(JSON.stringify(rootParts));
+    writeFileSync(
+      join(OUT_DIR, 'manifest.json'),
+      `${JSON.stringify({
+        schema_version: 2,
+        chain_id: arg('--chain-id', 'citizenchain'),
+        snapshot_block_number: snapshotBlockNumber,
+        snapshot_block_hash: snapshotBlockHash,
+        genesis_hash: genesisHash,
+        state_root: header.stateRoot,
+        chainspec_hash: sha256File(CHAIN_SPEC),
+        public_institution_root: publicInstitutionRoot,
+        version: `${snapshotBlockHash}:${publicInstitutionRoot}`,
+        shard_hashes: shardHashes,
+        provinces: provinceVersions,
+      }, null, 2)}\n`,
+    );
+    console.log(`finalized #${snapshotBlockNumber}: ${provinces.length} 省，共 ${total} 机构`);
+  } finally {
+    rpc.close();
+  }
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });

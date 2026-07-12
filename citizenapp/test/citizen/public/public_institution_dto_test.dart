@@ -65,26 +65,4 @@ void main() {
       expect(e.updatedAtMillis, 123);
     });
   });
-
-  group('PublicInstitutionPage.fromData', () {
-    test('解析分页元数据', () {
-      final page = PublicInstitutionPage.fromData(<String, dynamic>{
-        'items': [
-          {
-            'cid_number': 'A',
-            'province_code': 'ZS',
-            'city_code': '001',
-            'institution_code': 'ZF',
-            'account_count': 2,
-          }
-        ],
-        'has_more': true,
-        'next_cursor': '1',
-        'manifest_version': 'mv-1',
-      });
-      expect(page.items, hasLength(1));
-      expect(page.hasMore, isTrue);
-      expect(page.manifestVersion, 'mv-1');
-    });
-  });
 }

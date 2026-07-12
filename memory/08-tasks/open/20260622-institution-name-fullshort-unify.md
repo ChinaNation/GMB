@@ -124,7 +124,7 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - 真实库 `reconcile-gov --changed-only`:通过,`scopes=33 inserted=0 updated=174947 account_inserted=349927 removed=0`。
 - 真实库 `check-gov --strict`:通过,`ok=true manifest_current=true target_count=245016 active_count=245016 missing=0 mismatched=0 missing_accounts=0 obsolete=0`。
 - 真实库 SQL 抽样: `PSN/PRP/CGOV/CEDU/TGOV` 的 `cid_full_name = cid_short_name` 均为 0;旧简称尾缀均为 0。
-- 本地 CID HTTP 运行态验证:临时启动 `127.0.0.1:8901`,`/api/v1/app/institutions/search` 返回 `瑶海市公民教育委员会 / 瑶海市教委会`、`明光路镇自治政府 / 明光路镇政府`;`/api/v1/app/public-institutions` 返回 `province_code=AH city_code=001` 与 `CEDU` 的新简称。验证后已关闭临时服务。
+- finalized 链状态验证：`PublicManage::Institutions` 中的机构全称、简称、行政区 code 与机构码逐字段解码正确，CitizenApp 链快照生成器输出相同结果。
 - 白皮书 `docs/《白皮书》.md` 与公民宪法 `citizenchain/runtime/primitives/src/旧宪法 HTML`:仅扫描待统一项,未修改;需用户二次确认后执行。
 
 ## 验收记录(2026-06-22)
@@ -139,5 +139,5 @@ PUBLIC 共 245,016,其中 `cid_short_name == cid_full_name` = 50,795,结构 = **
 - `scripts/sync-derive-vectors.sh --write`:通过,同步 Rust/citizenapp golden。
 - 真实库 `reconcile-gov --changed-only`:通过,`scopes=43 inserted=245016 updated=0 account_inserted=490077 removed=245016`。
 - 真实库 `check-gov --strict`:通过,`ok=true manifest_current=true target_count=245016 active_count=245016 missing=0 mismatched=0 missing_accounts=0 obsolete=0`。
-- 临时启动当前 CID 后端 `127.0.0.1:8898`:健康检查 200;`/api/v1/app/institutions/search` 与 `/api/v1/app/public-institutions` 返回 `cid_full_name/cid_short_name`。
+- 使用真实本地节点重建 43 省机构 finalized 快照，`cid_full_name/cid_short_name` 与链存储逐字段一致。
 - 残留扫描:未发现旧展示缓存列、旧简称字段、旧查重接口/函数或旧中文命名等机构全称/简称残留。`InstitutionNamed` 仅属于账户派生中的“自定义账户名”枚举,不是机构全称/简称字段。

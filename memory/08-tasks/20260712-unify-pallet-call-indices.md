@@ -47,6 +47,7 @@ runtime+node `cargo check`;App/Wallet `dart analyze` + 字节向量测试(pallet
 - 客户端:CitizenApp/CitizenWallet 活常量 + qr 0xPPCC + 注释;canonical `qr-action-registry.md` 第2节整表重写;~9 个 memory 技术文档同步。
 - 验证结果:node `cargo test` 248/0;onchina 131/0;CitizenWallet signer 106/106;primitives golden(account_derive/sign)通过;runtime/node `cargo check` 通过;全 rust `*PALLET_INDEX*` 常量逐一核对=新表。
 - CitizenApp:dart analyze 全绿;链相关测试(signer/governance/rpc/qr/transaction/legislation/citizen)通过。批量跑有 2 个失败(institution_detail「订阅按钮」等),经隔离复跑 All tests passed → 确认为已知 smoldot hermetic flaky([[project_citizenapp_test_smoldot_hermetic]]),与本次改号无关。
+- 2026-07-12 后续全量验收发现并清理 3 条漏改测试：`SquarePost 36→34`、pallet `7` 错标为 `PersonalAdmins`、pallet `29` 错标为 `PublicAdmins`。修正后又增加安装包六节点守卫测试，CitizenApp 全量 `flutter test` 为 511 passed / 5 skipped / 0 failed。
 - 待办:chainspec 用 CI WASM 重生(点 2)。
 - flag1:onchina `core/qr/mod.rs:40` 注释 `CREG federal_set=0x0c01 / FRG propose=0x0c00` 无对应代码常量、非本次改号引入的陈旧注释,未动,待查清。
 - flag2:历史 ADR/任务卡的 pallet 号预留已过期——ADR-022 account-keys 预留=27(现=PublicAdmins)、ADR-027 立法预留 27/28(现=25/26);且"下一个空号"从旧 37 变为 35(0..34 全占)。未改历史档,新增 pallet 须用 ≥35 并更新预留档。

@@ -40,7 +40,6 @@ lib/
     │   ├── wallet_manager.dart         ← 钱包生命周期 + seed 读取守卫
     │   └── wallet_secure_keys.dart
     ├── capabilities/
-    │   ├── api_client.dart         ← 管理员目录、机构信息等非链上查询
     │   ├── attestation_service.dart
     │   └── wallet_type_service.dart
     ├── pages/
@@ -75,10 +74,8 @@ lib/
 
 ### 3.2 `capabilities`
 
-- `api_client.dart`
-  - 非链上查询的外部服务接口（管理员目录、机构信息等）
 - `wallet_type_service.dart`
-  - 管理员目录缓存与角色识别
+  - 扫描三张链上 `AdminAccounts`，生成管理员展示标签缓存
 - `attestation_service.dart`
   - 证明 token（secure）+ 元信息（Isar）
 
@@ -363,12 +360,11 @@ mnemonic
 - 钱包模块负责提供签名账户上下文，不负责生成投票资格或人口凭证。
 - 钱包模块必须保证"登录签名"和"转账/治理签名"使用不同签名 payload。
 
-## 12. CID 联调约束
+## 12. 管理员链读取约束
 
-- `ApiClient` 的 `baseUrl` 统一来自 `CidApiConfig.defaultBaseUrl`。
-- 生产版固定访问 `https://cid.crcfrcn.com`。
-- 本地开发版固定访问 `http://127.0.0.1:8899`，必须由 `adb reverse tcp:8899 tcp:8899` 转发到本电脑运行的 OnChina 后端。
-- 不允许钱包模块自行读取或拼接 CID API URL，也不允许从本地开发失败自动回退到生产。
+- 钱包管理员展示标签直接扫描 `PublicAdmins`、`PrivateAdmins`、`PersonalAdmins` 的 `AdminAccounts`。
+- `AdminGroupCacheEntity` 只保存链数据派生的展示标签，TTL 为 5 分钟，不参与任何管理员权限判断。
+- 扫描出现分页或批量读取失败时拒绝覆盖完整缓存；链不可用时回退普通“手机钱包”标签。
 
 ## 13. PQC 抗量子签名升级(设计,待实现)
 

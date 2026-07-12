@@ -1,9 +1,8 @@
-// 公权机构目录 DTO —— 对应 CID BFF `PublicInstitutionRow` / `PageResult`
-// (`GET /api/v1/app/public-institutions`)。数据包 JSON 与接口响应共用本解析。
+// 公权机构 finalized 链快照 DTO。
 
 import 'package:citizenapp/isar/app_isar.dart';
 
-/// 公权机构目录行(白名单字段,与后端 PublicInstitutionRow 一一对应)。
+/// 公权机构目录行；只解析发布期从 finalized 链状态生成的数据包。
 class PublicInstitutionDto {
   const PublicInstitutionDto({
     required this.cidNumber,
@@ -38,7 +37,7 @@ class PublicInstitutionDto {
   final String? parentCidNumber;
   final bool? hasLegalPersonality;
 
-  /// 法定代表人姓名(公开目录字段,来自 CID subjects.legal_rep_name);无则 null → 留空。
+  /// 法定代表人姓名；当前链快照没有该字段时为 null。
   final String? legalRepName;
   final int accountCount;
   final List<String> customAccountNames;
@@ -87,32 +86,5 @@ class PublicInstitutionDto {
       ..customAccountNames = customAccountNames
       ..catalogVersion = catalogVersion
       ..updatedAtMillis = updatedAtMillis;
-  }
-}
-
-/// 目录分页结果(对应后端 PageResult)。
-class PublicInstitutionPage {
-  const PublicInstitutionPage({
-    required this.items,
-    required this.hasMore,
-    this.nextCursor,
-    this.manifestVersion,
-  });
-
-  final List<PublicInstitutionDto> items;
-  final bool hasMore;
-  final String? nextCursor;
-  final String? manifestVersion;
-
-  static PublicInstitutionPage fromData(Map<String, dynamic> data) {
-    final rawItems = data['items'] as List<dynamic>? ?? const [];
-    return PublicInstitutionPage(
-      items: rawItems
-          .map((e) => PublicInstitutionDto.fromJson(e as Map<String, dynamic>))
-          .toList(growable: false),
-      hasMore: data['has_more'] as bool? ?? false,
-      nextCursor: data['next_cursor'] as String?,
-      manifestVersion: data['manifest_version'] as String?,
-    );
   }
 }

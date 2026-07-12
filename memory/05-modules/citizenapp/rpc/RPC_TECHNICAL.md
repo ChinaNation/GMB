@@ -55,8 +55,8 @@ lib/rpc/
 - 如果打进 App 的 chainspec 错了，轻节点即使“连上了”，也可能连到错误链或错误引导节点
 - `bootNodes` 的来源应以 `citizenchain/node/src/chain_spec.rs` 为准
 - 正式创世后,CitizenApp 的 `assets/chainspec.json` 使用轻节点形态,只承载链身份、bootNodes 和 `stateRootHash`;不得内置全节点链数据库或 GB 级 raw state。
-- `assets/public_institutions/` 是从创世链状态导出的公权机构快照缓存,manifest 必须包含 `snapshot_block_number / snapshot_block_hash / genesis_hash / state_root / public_institution_root / shard_hashes`。App 首屏读取本地 Isar/快照缓存,后台通过 OnChina 链上投影 BFF 按 `manifest_version` 增量刷新;`manifest_version` 必须来自链投影 finalized anchor,不得由本地同步时间单独推进。
-- 公权机构唯一真源仍是链上 `PublicManage`;CitizenApp 内置快照、Isar 缓存和 OnChina BFF 都不是授权或真源。
+- `assets/public_institutions/` 从同一个 finalized 块直接读取 `PublicManage::Institutions` 与 `InstitutionAccounts` 后生成，manifest 必须包含 `snapshot_block_number / snapshot_block_hash / genesis_hash / state_root / public_institution_root / shard_hashes`。
+- 公权机构唯一真源是链上 `PublicManage`；CitizenApp 内置快照和 Isar 只服务目录首屏，不是授权真源。身份、绑定、付款和权限操作必须精确读取 finalized storage。
 - `assets/light_sync_state.json` 是安装包签名保护的 finalized 信任锚；当前锚点是创世块 `#0`，不是会随 Worker 响应静默变化的运行时配置。
 - 安装包 checkpoint 永久固定 `#0`，不随链高更新。新用户只要 peer finalized 高于 `#0` 就 GRANDPA warp；已安装用户先从原生验证采用的本机 finalized database 高度 `H` 启动，peer finalized 高于 `H` 时再 warp。
 
@@ -81,7 +81,7 @@ lib/rpc/
 - GRANDPA neighbor packet 到达前，GRANDPA 链不允许普通 block request 抢先改变同步锚点；warp 活跃期间也只调度 warp 请求，避免普通同步与 warp 竞态造成 fragment 被错误拒绝。
 - 当前节点端已经为所有节点注册 GRANDPA 协议并挂载 warp proof provider；权威节点推进 finality，普通 observer 节点也能基于本地归档数据响应 proof。
 - Cloudflare bootstrap v2 只补充通过本地 chain id、protocol id、genesis state root 校验的 bootnodes；协议中不存在远端 checkpoint 或轻同步资产下载字段。
-- 2026-07-10 bootstrap v2 已发布到 staging（`ff19bc46-dc17-4f77-a53f-aed2739142a0`）和 production（`00d836aa-9c43-4561-ba33-8730d780c1a0`），两端均已真实验证 schema v2、6 个 bootnodes、无 checkpoint/RPC URL，且通用 `/v1/chain/rpc` 保持 404；生产 arm64 profile 真机已恢复无 staging Dart define 的正式配置。
+- 2026-07-12 bootstrap v2 已重新发布到 staging（`692d472a-49ec-47e5-912d-51cf6e178545`）和 production（`418f3d65-ea13-4d40-a045-a66ba84822cc`），两端统一为 6 个已部署 bootnodes，旧节点和未部署节点不再下发。production 已真实验证 schema v2、无 checkpoint/RPC URL；staging 未登录请求返回预期 302 Access 跳转。
 - warp 不可用时 smoldot 仍可能退化为普通逐块同步。App 必须把它视为可观测的服务降级，保持 Flutter 输入响应并告警节点运维，禁止改走 HTTP 链真源。
 - 完整发布、节点数据保留和真实验收规则见 [checkpoint 与 GRANDPA warp 快速同步方案](./SMOLDOT_CHECKPOINT_PLAN.md)。
 
