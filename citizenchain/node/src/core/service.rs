@@ -21,7 +21,11 @@ use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_consensus::{NoNetwork, SyncOracle};
-use sp_core::{crypto::KeyTypeId, hashing::{blake2_256, twox_128}, sr25519, Pair as _, U256};
+use sp_core::{
+    crypto::KeyTypeId,
+    hashing::{blake2_256, twox_128},
+    sr25519, Pair as _, U256,
+};
 use sp_keystore::Keystore;
 use sp_runtime::traits::Block as BlockT;
 use sp_storage::StorageKey;
@@ -514,16 +518,15 @@ pub fn new_full(
     };
 
     // 清算行启动细节归入 `transaction::offchain::settlement::bootstrap`,service.rs 只做节点通用接线。
-    let clearing_rpc_impl =
-        crate::transaction::offchain::settlement::bootstrap::start_from_cli(
-            clearing_bank.as_deref(),
-            clearing_bank_password.as_deref(),
-            clearing_reserve_monitor_interval_secs,
-            config.base_path.path(),
-            client.clone(),
-            transaction_pool.clone(),
-            &task_manager,
-        );
+    let clearing_rpc_impl = crate::transaction::offchain::settlement::bootstrap::start_from_cli(
+        clearing_bank.as_deref(),
+        clearing_bank_password.as_deref(),
+        clearing_reserve_monitor_interval_secs,
+        config.base_path.path(),
+        client.clone(),
+        transaction_pool.clone(),
+        &task_manager,
+    );
 
     let rpc_extensions_builder = {
         let client = client.clone();
@@ -785,6 +788,10 @@ pub fn new_full(
 
     Ok(task_manager)
 }
+
+#[cfg(test)]
+#[path = "service/p2p_bad_block_tests.rs"]
+mod p2p_bad_block_tests;
 
 #[cfg(test)]
 mod tests {

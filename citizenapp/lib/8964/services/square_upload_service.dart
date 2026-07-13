@@ -58,6 +58,7 @@ abstract class SquareContentUploader {
     required SquareLoginSigner signLoginPayload,
     SquarePostContentFormat contentFormat,
     String? title,
+    List<Map<String, Object?>>? contentBlocks,
     void Function(SquarePublishStage stage)? onStage,
   });
 
@@ -82,6 +83,7 @@ class SquareUploadService implements SquareContentUploader {
     required SquareLoginSigner signLoginPayload,
     SquarePostContentFormat contentFormat = SquarePostContentFormat.normal,
     String? title,
+    List<Map<String, Object?>>? contentBlocks,
     void Function(SquarePublishStage stage)? onStage,
   }) async {
     if (mediaDrafts.isEmpty) {
@@ -119,6 +121,9 @@ class SquareUploadService implements SquareContentUploader {
         'content_format': contentFormat.workerValue,
       if (trimmedTitle.isNotEmpty) 'title': trimmedTitle,
       'text': text,
+      // 文章正文图文块（内联图按 media_index 引用 media_items）；动态不写。
+      if (contentBlocks != null && contentBlocks.isNotEmpty)
+        'content_blocks': contentBlocks,
       'media_items': mediaManifests,
     });
     final manifestHash = sha256.convert(manifestBytes).toString();

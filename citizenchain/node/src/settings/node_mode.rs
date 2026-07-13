@@ -190,15 +190,9 @@ mod tests {
             .find(|option| option.mode == NodeMode::Normal)
             .expect("normal option exists");
 
-        assert_eq!(
-            archive.implementation_status,
-            NodeModeStatus::Active
-        );
+        assert_eq!(archive.implementation_status, NodeModeStatus::Active);
         assert!(archive.enabled);
-        assert_eq!(
-            normal.implementation_status,
-            NodeModeStatus::Pending
-        );
+        assert_eq!(normal.implementation_status, NodeModeStatus::Pending);
         assert!(!normal.enabled);
         assert_eq!(state.options.len(), 2);
     }

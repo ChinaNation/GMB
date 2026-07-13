@@ -221,6 +221,7 @@ class _FakeUploader implements SquareContentUploader {
     required SquareLoginSigner signLoginPayload,
     SquarePostContentFormat contentFormat = SquarePostContentFormat.normal,
     String? title,
+    List<Map<String, Object?>>? contentBlocks,
     void Function(SquarePublishStage stage)? onStage,
   }) async {
     called = true;

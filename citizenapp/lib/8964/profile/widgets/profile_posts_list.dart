@@ -160,16 +160,27 @@ class _ProfilePostsTabState extends State<ProfilePostsTab> {
           separatorBuilder: (_, __) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
             final post = _posts[index];
+            final avatarKey = post.author.avatarObjectKey;
+            final avatarUrl =
+                avatarKey == null ? null : widget.api.mediaUrl(avatarKey);
+            final avatarHeaders = {
+              'authorization': 'Bearer ${widget.session.sessionToken}',
+            };
             if (widget.contentFormat == SquarePostContentFormat.article) {
               return SquareArticleCard(
                 post: post,
                 onTap: () => widget.onOpenPost?.call(post),
+                onAuthorTap: () => widget.onOpenPost?.call(post),
+                avatarUrl: avatarUrl,
+                avatarHeaders: avatarHeaders,
               );
             }
             return SquarePostCard(
               post: post,
               onTap: () => widget.onOpenPost?.call(post),
               onAuthorTap: () => widget.onOpenPost?.call(post),
+              avatarUrl: avatarUrl,
+              avatarHeaders: avatarHeaders,
             );
           },
         ),

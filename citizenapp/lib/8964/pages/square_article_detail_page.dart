@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
-import 'package:citizenapp/8964/pages/square_article_compose_page.dart';
+import 'package:citizenapp/8964/compose/compose_page.dart';
+import 'package:citizenapp/8964/compose/compose_type.dart';
 import 'package:citizenapp/8964/pages/square_post_detail_page.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
@@ -45,7 +46,6 @@ class _SquareArticleDetailPageState extends State<SquareArticleDetailPage> {
   Widget build(BuildContext context) {
     final media = post.mediaItems;
     final cover = media.isNotEmpty ? media.first : null;
-    final bodyImages = media.length > 1 ? media.sublist(1) : const [];
     final title = post.title?.trim();
 
     return Scaffold(
@@ -107,28 +107,7 @@ class _SquareArticleDetailPageState extends State<SquareArticleDetailPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (post.text.trim().isNotEmpty)
-                  Text(
-                    post.text.trim(),
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 16,
-                      height: 1.7,
-                    ),
-                  ),
-                for (final image in bodyImages)
-                  if (image.url.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                        child: Image.network(
-                          image.url,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                        ),
-                      ),
-                    ),
+                ..._buildBody(media),
               ],
             ),
           ),
@@ -136,6 +115,67 @@ class _SquareArticleDetailPageState extends State<SquareArticleDetailPage> {
       ),
     );
   }
+
+  /// 正文渲染：有 content_blocks 按图文块（内联图横屏）；否则纯文本 + 扁平正文图降级。
+  List<Widget> _buildBody(List<SquareMediaItem> media) {
+    final blocks = post.contentBlocks;
+    if (blocks.isEmpty) {
+      final bodyImages = media.length > 1
+          ? media.sublist(1)
+          : const <SquareMediaItem>[];
+      return [
+        if (post.text.trim().isNotEmpty) _bodyText(post.text.trim()),
+        for (final image in bodyImages)
+          if (image.url.isNotEmpty) _bodyImage(image),
+      ];
+    }
+    final widgets = <Widget>[];
+    for (final block in blocks) {
+      switch (block) {
+        case ArticleTextBlock(:final text):
+          if (text.trim().isNotEmpty) widgets.add(_bodyText(text.trim()));
+        case ArticleImageBlock(:final mediaIndex):
+          if (mediaIndex >= 0 && mediaIndex < media.length) {
+            final item = media[mediaIndex];
+            if (item.url.isNotEmpty) widgets.add(_bodyImage(item, landscape: true));
+          }
+      }
+    }
+    return widgets;
+  }
+
+  Widget _bodyText(String text) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 16,
+            height: 1.7,
+          ),
+        ),
+      );
+
+  Widget _bodyImage(SquareMediaItem item, {bool landscape = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          child: landscape
+              ? AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.network(
+                    item.url,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                )
+              : Image.network(
+                  item.url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+        ),
+      );
 
   Future<void> _handleAction(_ArticleDetailAction action) async {
     switch (action) {
@@ -151,10 +191,13 @@ class _SquareArticleDetailPageState extends State<SquareArticleDetailPage> {
   Future<void> _editArticle() async {
     final replacement = await Navigator.of(context).push<SquarePost>(
       MaterialPageRoute<SquarePost>(
-        builder: (_) => SquareArticleComposePage(
+        builder: (_) => SquareComposePage(
+          initialType: SquareComposeType.fromPost(
+            isArticle: true,
+            isCampaign: post.postCategory == SquarePostCategory.campaign,
+          ),
           initialTitle: post.title,
-          initialBody: post.text,
-          initialCategory: post.postCategory,
+          initialText: post.text,
           replacePostId: post.postId,
         ),
       ),

@@ -36,6 +36,13 @@ interface SquareManifestMediaItem {
   sha256?: string;
 }
 
+// 文章正文图文块（内联图按 media_index 引用 media_items）；动态无此字段。
+interface SquareManifestContentBlock {
+  t: 'text' | 'image';
+  text?: string;
+  media_index?: number;
+}
+
 interface SquarePostManifest {
   schema?: string;
   owner_account?: string;
@@ -43,6 +50,7 @@ interface SquarePostManifest {
   content_format?: 'normal' | 'article';
   title?: string;
   text?: string;
+  content_blocks?: SquareManifestContentBlock[];
   media_items?: SquareManifestMediaItem[];
 }
 
@@ -200,6 +208,7 @@ export async function confirmPublishedPost(
     content_format: contentFormat,
     title,
     text: manifest.text ?? '',
+    content_blocks: manifest.content_blocks ?? null,
     content_hash: normalizeHash(upload.content_hash),
     storage_receipt_id: upload.storage_receipt_id,
     chain_block: event.created_block,
@@ -218,6 +227,8 @@ export async function buildFeedPostItem(env: Env, row: SquarePostFeedItem): Prom
   const manifest = await readManifest(env, manifestObjectKey).catch(() => null);
   return {
     ...row,
+    // 文章正文图文块随 feed/详情回传（阅读侧按块渲染，内联图 media_index 引用 media_items）。
+    content_blocks: manifest?.content_blocks ?? null,
     media_items: manifest && upload
       ? await manifestMediaItems(env, manifest, await loadMediaAssets(env, upload.upload_id))
       : []

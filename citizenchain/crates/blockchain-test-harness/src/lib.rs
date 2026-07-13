@@ -4,7 +4,74 @@
 //! runtime 或业务模块依赖。放在 `citizenchain/crates/` 下，是为了把测试专用
 //! 能力沉淀为可复用工具，同时避免把坏块构造逻辑混入生产路径。
 
-use sp_core::{sr25519, H256, Pair};
+use sp_core::{sr25519, Pair, H256};
+
+/// 完整导入态必须拒绝的 NodeGuard 永久规则坏样本。
+///
+/// harness 只定义“应当覆盖哪些坏样本”和“应由哪个守卫前缀拒绝”，具体 runtime
+/// storage key 的构造仍留在 node 内部测试里，避免测试工具反向依赖生产节点私有实现。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ImportedStateBadCaseKind {
+    /// 固定治理骨架缺失固定机构管理员账户。
+    MissingGovernanceAdmin,
+    /// 创世完整态里全节点发行计数不是零。
+    NonZeroFullnodeIssued,
+    /// 公民认证发行 pallet 下出现未知 storage key。
+    UnknownCitizenIssuanceKey,
+    /// 创世模块固定人口上限被改写。
+    ChangedGenesisCitizenMax,
+    /// 省储行创立发行质押本金账户缺失。
+    MissingProvincialBankStake,
+    /// 省储行固定发行 pallet 下出现未知 storage key。
+    UnknownProvincialBankStorage,
+    /// CID 生命周期保护的创世账户状态缺失。
+    MissingProtectedGenesisAccount,
+}
+
+/// NodeGuard 永久规则坏样本矩阵。
+pub const IMPORTED_STATE_BAD_CASES: [ImportedStateBadCaseKind; 7] = [
+    ImportedStateBadCaseKind::MissingGovernanceAdmin,
+    ImportedStateBadCaseKind::NonZeroFullnodeIssued,
+    ImportedStateBadCaseKind::UnknownCitizenIssuanceKey,
+    ImportedStateBadCaseKind::ChangedGenesisCitizenMax,
+    ImportedStateBadCaseKind::MissingProvincialBankStake,
+    ImportedStateBadCaseKind::UnknownProvincialBankStorage,
+    ImportedStateBadCaseKind::MissingProtectedGenesisAccount,
+];
+
+impl ImportedStateBadCaseKind {
+    /// 返回全部永久规则坏样本。
+    pub fn all() -> &'static [Self] {
+        &IMPORTED_STATE_BAD_CASES
+    }
+
+    /// 供日志、CLI 和文档复用的稳定标签。
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::MissingGovernanceAdmin => "missing_governance_admin",
+            Self::NonZeroFullnodeIssued => "non_zero_fullnode_issued",
+            Self::UnknownCitizenIssuanceKey => "unknown_citizen_issuance_key",
+            Self::ChangedGenesisCitizenMax => "changed_genesis_citizen_max",
+            Self::MissingProvincialBankStake => "missing_provincial_bank_stake",
+            Self::UnknownProvincialBankStorage => "unknown_provincial_bank_storage",
+            Self::MissingProtectedGenesisAccount => "missing_protected_genesis_account",
+        }
+    }
+
+    /// NodeGuard 拒绝该坏样本时必须命中的守卫类别前缀。
+    pub fn expected_error_prefix(self) -> &'static str {
+        match self {
+            Self::MissingGovernanceAdmin => "固定治理骨架:",
+            Self::NonZeroFullnodeIssued => "全节点发行:",
+            Self::UnknownCitizenIssuanceKey => "公民认证发行:",
+            Self::ChangedGenesisCitizenMax => "创世模块:",
+            Self::MissingProvincialBankStake | Self::UnknownProvincialBankStorage => {
+                "省储行固定发行:"
+            }
+            Self::MissingProtectedGenesisAccount => "CID 生命周期:",
+        }
+    }
+}
 
 /// `export-blocks` JSON 行格式的轻量摘要。
 ///
@@ -83,8 +150,8 @@ pub fn summarize_exported_blocks_json(input: &str) -> Result<Vec<ExportedBlockSu
     }
 
     if trimmed.starts_with('[') {
-        let values: Vec<serde_json::Value> =
-            serde_json::from_str(trimmed).map_err(|e| format!("导出块 JSON array 解析失败: {e}"))?;
+        let values: Vec<serde_json::Value> = serde_json::from_str(trimmed)
+            .map_err(|e| format!("导出块 JSON array 解析失败: {e}"))?;
         values
             .iter()
             .enumerate()
@@ -119,8 +186,8 @@ pub fn tamper_first_state_root_json(
         return Err("导出块 JSON 为空，无法篡改 stateRoot".to_string());
     }
     if trimmed.starts_with('[') {
-        let mut values: Vec<serde_json::Value> =
-            serde_json::from_str(trimmed).map_err(|e| format!("导出块 JSON array 解析失败: {e}"))?;
+        let mut values: Vec<serde_json::Value> = serde_json::from_str(trimmed)
+            .map_err(|e| format!("导出块 JSON array 解析失败: {e}"))?;
         let first = values
             .first_mut()
             .ok_or_else(|| "导出块 JSON array 为空".to_string())?;
@@ -251,6 +318,24 @@ mod tests {
     }
 
     #[test]
+    fn imported_state_bad_case_matrix_is_stable() {
+        let labels = ImportedStateBadCaseKind::all()
+            .iter()
+            .map(|case| case.label())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(labels.len(), ImportedStateBadCaseKind::all().len());
+        assert!(labels.contains("missing_provincial_bank_stake"));
+        for case in ImportedStateBadCaseKind::all() {
+            assert!(
+                case.expected_error_prefix().ends_with(':'),
+                "{} must expose a NodeGuard category prefix",
+                case.label()
+            );
+        }
+    }
+
+    #[test]
     fn summarize_exported_blocks_json_reads_json_lines() {
         let summary = summarize_exported_blocks_json(BLOCK0_JSON_LINE)
             .expect("exported block line should summarize");
@@ -263,8 +348,7 @@ mod tests {
 
     #[test]
     fn tamper_first_state_root_json_rewrites_only_state_root() {
-        let replacement =
-            "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0";
+        let replacement = "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0";
         let tampered = tamper_first_state_root_json(BLOCK0_JSON_LINE, replacement)
             .expect("state root should be tampered");
         let summary = summarize_exported_blocks_json(&tampered)
@@ -272,7 +356,10 @@ mod tests {
 
         assert_eq!(summary[0].state_root, replacement);
         assert_eq!(summary[0].number_hex, "0x0");
-        assert_eq!(summary[0].extrinsics_root, "0x03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314");
+        assert_eq!(
+            summary[0].extrinsics_root,
+            "0x03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314"
+        );
     }
 
     #[test]

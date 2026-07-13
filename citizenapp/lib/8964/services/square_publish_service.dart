@@ -88,6 +88,7 @@ class SquarePublishService {
     required SquareChainSigner signChainPayload,
     SquarePostContentFormat contentFormat = SquarePostContentFormat.normal,
     String? title,
+    List<Map<String, Object?>>? contentBlocks,
     String? replacePostId,
     void Function(SquarePublishStage stage)? onStage,
     TxPoolWatchCallback? onWatchEvent,
@@ -120,6 +121,7 @@ class SquarePublishService {
         signLoginPayload: signLoginPayload,
         contentFormat: contentFormat,
         title: title,
+        contentBlocks: contentBlocks,
         onStage: onStage,
       );
 

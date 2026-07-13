@@ -107,6 +107,7 @@ sp-keystore = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch 
 sp-offchain = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-citizenapp-grandpa", default-features = false }
 sp-runtime = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-citizenapp-grandpa", default-features = false }
 sp-session = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-citizenapp-grandpa", default-features = false }
+sp-state-machine = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-citizenapp-grandpa", default-features = false }
 sp-storage = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-citizenapp-grandpa", default-features = false }
 sp-std = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-citizenapp-grandpa", default-features = false }
 sp-tracing = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-citizenapp-grandpa", default-features = false }

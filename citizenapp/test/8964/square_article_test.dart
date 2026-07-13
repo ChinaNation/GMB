@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:citizenapp/8964/pages/square_article_compose_page.dart';
+import 'package:citizenapp/8964/compose/article/article_blocks.dart';
 
 String? _validate({
   String title = '标题标题标题标题标题',

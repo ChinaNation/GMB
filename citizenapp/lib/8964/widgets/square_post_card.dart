@@ -2,22 +2,23 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/widgets/square_media_grid.dart';
+import 'package:citizenapp/8964/widgets/square_post_actions.dart';
+import 'package:citizenapp/8964/widgets/square_post_header.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/ui/identity_badge.dart';
 
-/// 作者徽章样式：颜色=链上身份、勾=会员匹配；返回 null 表示不显示徽章。
-IdentityBadgeStyle? _authorBadge(SquareAuthor author) => identityBadgeStyle(
-      identityLevel: author.identityLevel,
-      membershipLevel: author.membershipLevel,
-      membershipActive: author.membershipActive,
-    );
-
+/// 广场图片/视频动态卡（含竞选变体）。
+///
+/// 版式：作者头部 → 正文 + 媒体 → 互动栏。媒体按横竖屏 + 数量出图：
+/// - 竖屏单图/单视频：左媒体（约 40%，3:4）+ 右正文；
+/// - 其余：正文在上、下面走 [SquareMediaGrid]（横屏 16:9 单块 / 2 图 / 3 图以上前两张）。
 class SquarePostCard extends StatelessWidget {
   const SquarePostCard({
     super.key,
     required this.post,
     this.onTap,
     this.onAuthorTap,
+    this.avatarUrl,
+    this.avatarHeaders,
   });
 
   final SquarePost post;
@@ -25,6 +26,14 @@ class SquarePostCard extends StatelessWidget {
 
   /// 点击作者头像/名进入其用户主页。
   final VoidCallback? onAuthorTap;
+
+  /// 作者真头像地址与鉴权头（由页面据 avatarObjectKey + session 生成）。
+  final String? avatarUrl;
+  final Map<String, String>? avatarHeaders;
+
+  /// 竖屏单图/单视频走"左媒体右文字"布局。
+  bool get _isPortraitSingle =>
+      post.mediaItems.length == 1 && post.mediaItems.first.isPortrait;
 
   @override
   Widget build(BuildContext context) {
@@ -37,141 +46,81 @@ class SquarePostCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _AuthorRow(post: post, onAuthorTap: onAuthorTap),
-              if (post.text.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  post.text,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 15,
-                    height: 1.45,
-                  ),
-                ),
-              ],
-              if (post.mediaItems.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                SquareMediaGrid(mediaItems: post.mediaItems),
-              ],
-              const SizedBox(height: 12),
-              const Row(
-                children: [
-                  Icon(Icons.thumb_up_alt_outlined,
-                      size: 18, color: AppTheme.textTertiary),
-                  SizedBox(width: 18),
-                  Icon(Icons.mode_comment_outlined,
-                      size: 18, color: AppTheme.textTertiary),
-                  SizedBox(width: 18),
-                  Icon(Icons.bookmark_border_rounded,
-                      size: 18, color: AppTheme.textTertiary),
-                ],
+              SquarePostHeader(
+                post: post,
+                onAuthorTap: onAuthorTap,
+                avatarUrl: avatarUrl,
+                avatarHeaders: avatarHeaders,
               ),
+              _buildBody(),
+              const SizedBox(height: 12),
+              const SquarePostActions(),
             ],
           ),
         ),
       ),
     );
   }
-}
 
-class _AuthorRow extends StatelessWidget {
-  const _AuthorRow({required this.post, this.onAuthorTap});
+  Widget _buildBody() {
+    final media = post.mediaItems;
+    final caption = post.text;
 
-  final SquarePost post;
-  final VoidCallback? onAuthorTap;
+    if (media.isEmpty) {
+      if (caption.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: _caption(caption),
+      );
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    final author = post.author;
-    return Row(
-      children: [
-        Expanded(
-          child: GestureDetector(
-            onTap: onAuthorTap,
-            behavior: HitTestBehavior.opaque,
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: AppTheme.primary.withAlpha(20),
-                  child: const Icon(
-                    Icons.account_circle_rounded,
-                    color: AppTheme.primary,
-                    size: 20,
-                  ),
+    if (_isPortraitSingle) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 2,
+              child: AspectRatio(
+                aspectRatio: 3 / 4,
+                child: SquareMediaTile(
+                  item: media.first,
+                  radius: BorderRadius.circular(AppTheme.radiusMd),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              author.title,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: AppTheme.textPrimary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          if (_authorBadge(author) case final badge?) ...[
-                            const SizedBox(width: 6),
-                            IdentityBadge(
-                              style: badge,
-                              size: 16,
-                              tooltip: identityBadgeLabel(
-                                identityLevel: author.identityLevel,
-                                checked: badge.checked,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _formatCreatedAt(post.createdAt),
-                        style: const TextStyle(
-                          color: AppTheme.textTertiary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (post.postCategory == SquarePostCategory.campaign)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.gold.withAlpha(24),
-              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            ),
-            child: const Text(
-              '竞选',
-              style: TextStyle(
-                color: AppTheme.gold,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
               ),
             ),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 3,
+              child: caption.isEmpty
+                  ? const SizedBox.shrink()
+                  : _caption(caption),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (caption.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _caption(caption),
+        ],
+        const SizedBox(height: 12),
+        SquareMediaGrid(mediaItems: media),
       ],
     );
   }
 
-  String _formatCreatedAt(DateTime createdAt) {
-    final now = DateTime.now();
-    final diff = now.difference(createdAt);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
-    if (diff.inDays < 1) return '${diff.inHours} 小时前';
-    return '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')}';
-  }
+  Widget _caption(String text) => Text(
+        text,
+        style: const TextStyle(
+          color: AppTheme.textPrimary,
+          fontSize: 15,
+          height: 1.45,
+        ),
+      );
 }

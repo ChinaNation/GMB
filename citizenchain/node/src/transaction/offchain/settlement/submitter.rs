@@ -158,10 +158,7 @@ pub fn decode_batch_items(
 pub fn encode_bounded_sig<T: offchain::pallet::Config>(
     sig: &[u8; 64],
 ) -> Result<
-    frame_support::BoundedVec<
-        u8,
-        <T as offchain::pallet::Config>::MaxBatchSignatureLength,
-    >,
+    frame_support::BoundedVec<u8, <T as offchain::pallet::Config>::MaxBatchSignatureLength>,
     String,
 > {
     sig.to_vec()
@@ -223,14 +220,12 @@ pub fn build_signed_extrinsic(
         .map_err(|e| format!("读取 genesis_hash 失败:{e}"))?
         .ok_or_else(|| "Genesis block 尚未可用".to_string())?;
 
-    Ok(
-        chain_signing::build_signed_extrinsic_local(
-            call,
-            genesis_hash,
-            nonce,
-            sender,
-        ),
-    )
+    Ok(chain_signing::build_signed_extrinsic_local(
+        call,
+        genesis_hash,
+        nonce,
+        sender,
+    ))
 }
 
 // ---------------- 单元测试 ----------------

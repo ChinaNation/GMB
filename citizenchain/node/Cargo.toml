@@ -122,6 +122,14 @@ tauri-plugin-process = "2.3.1"
 # 金标向量测试用:直接 encode 真链上类型 admin-primitives::{AdminAccount, AdminProfile},
 # 喂给节点端解码器断言逐字段对齐,任何字段序漂移即测试红(仅测试编译,不进发布二进制)。
 admin-primitives = { path = "../runtime/admins/admin-primitives" }
+# 区块链测试 harness 只进 dev-dependencies，用于复用坏块/坏导入态验收矩阵。
+blockchain-test-harness = { path = "../crates/blockchain-test-harness" }
+# 普通块坏注入验收专用：按真实 BlockBuilder 生成合法 proposal，再篡改预计算状态变更。
+sc-block-builder = { workspace = true, default-features = true }
+# P2P 坏块注入验收专用：读取真实同步服务连接数、请求数并主动广播测试坏块。
+sc-network-sync = { workspace = true, default-features = true }
+# 普通块坏注入验收专用：基于父状态重算篡改后的 state root 与 backend transaction。
+sp-state-machine = { workspace = true, default-features = true }
 
 [build-dependencies]
 substrate-build-script-utils = { workspace = true, default-features = true }

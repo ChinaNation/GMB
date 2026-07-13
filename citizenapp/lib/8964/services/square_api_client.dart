@@ -1045,6 +1045,14 @@ class SquareApiClient
       author: SquareAuthor(
         ownerAccount: _requireString(data, 'owner_account'),
         cidNumber: data['cid_number']?.toString(),
+        // 展示名与头像来自作者 profile.json（Worker feed 按去重作者回填）；缺失走地址/首字占位。
+        displayName: (data['display_name']?.toString().trim().isNotEmpty ?? false)
+            ? data['display_name'].toString().trim()
+            : null,
+        avatarObjectKey:
+            (data['avatar_object_key']?.toString().isNotEmpty ?? false)
+                ? data['avatar_object_key'].toString()
+                : null,
         // 作者徽章信号（Worker feed 已按去重作者读链身份+会员回填）。
         identityLevel: data['identity_level']?.toString(),
         membershipLevel: data['membership_level']?.toString(),
@@ -1057,6 +1065,7 @@ class SquareApiClient
       title: (data['title']?.toString().trim().isNotEmpty ?? false)
           ? data['title'].toString().trim()
           : null,
+      contentBlocks: parseArticleContentBlocks(data['content_blocks']),
       text: data['text']?.toString() ?? '',
       createdAt:
           DateTime.fromMillisecondsSinceEpoch(_asInt(data['created_at'])),
@@ -1090,6 +1099,9 @@ class SquareApiClient
       byteSize: _nullableInt(data['byte_size']),
       assetState: data['asset_state']?.toString(),
       archiveState: data['archive_state']?.toString(),
+      // 横竖屏判定所需原始尺寸；Worker feed 已随 media_items 回传。
+      width: _nullableInt(data['width']),
+      height: _nullableInt(data['height']),
     );
   }
 

@@ -218,6 +218,11 @@ export interface SquarePostFeedItem extends SquarePostRow {
   identity_level?: 'visitor' | 'voting' | 'candidate';
   membership_level?: 'freedom' | 'democracy' | 'voting' | 'candidate' | null;
   membership_active?: boolean;
+  // 作者展示名与头像对象键（取自作者 profile.json），供 feed 直出真名和真头像。
+  display_name?: string;
+  avatar_object_key?: string | null;
+  // 文章正文图文块（内联图 media_index 引用 media_items）；动态/旧文章为 null。
+  content_blocks?: { t: 'text' | 'image'; text?: string; media_index?: number }[] | null;
 }
 
 /// 按作者拉帖的分类过滤维度。'all' 表示不过滤。

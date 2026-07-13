@@ -449,12 +449,11 @@ where
                     None::<()>,
                 ));
             }
-            let remark: onchain::pallet::TransferRemarkOf<runtime::Runtime> =
-                remark_raw
-                    .as_bytes()
-                    .to_vec()
-                    .try_into()
-                    .map_err(|_| ErrorObject::owned(-1, "转账备注长度超过链上限制", None::<()>))?;
+            let remark: onchain::pallet::TransferRemarkOf<runtime::Runtime> = remark_raw
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .map_err(|_| ErrorObject::owned(-1, "转账备注长度超过链上限制", None::<()>))?;
 
             let call = runtime::RuntimeCall::OnchainTransaction(
                 onchain::pallet::Call::transfer_with_remark {

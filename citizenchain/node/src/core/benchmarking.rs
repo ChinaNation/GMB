@@ -85,13 +85,11 @@ impl frame_benchmarking_cli::ExtrinsicBuilder for TransferWithRemarkBuilder {
         let extrinsic: OpaqueExtrinsic = create_benchmark_extrinsic(
             self.client.as_ref(),
             acc,
-            runtime::RuntimeCall::OnchainTransaction(
-                onchain::pallet::Call::transfer_with_remark {
-                    beneficiary: self.dest.clone(),
-                    amount: self.value,
-                    remark: Default::default(),
-                },
-            ),
+            runtime::RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
+                beneficiary: self.dest.clone(),
+                amount: self.value,
+                remark: Default::default(),
+            }),
             nonce,
         )
         .into();
@@ -114,12 +112,7 @@ pub fn create_benchmark_extrinsic(
         .ok()
         .flatten()
         .expect("Genesis block exists; qed");
-    chain_signing::build_signed_extrinsic_local(
-        call,
-        genesis_hash,
-        nonce,
-        &sender,
-    )
+    chain_signing::build_signed_extrinsic_local(call, genesis_hash, nonce, &sender)
 }
 
 /// Generates inherent data for the `benchmark overhead` command.

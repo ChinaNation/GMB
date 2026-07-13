@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
-import 'package:citizenapp/8964/pages/square_article_compose_page.dart';
-import 'package:citizenapp/8964/pages/square_compose_page.dart';
+import 'package:citizenapp/8964/compose/compose_page.dart';
+import 'package:citizenapp/8964/compose/compose_type.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
@@ -133,18 +133,15 @@ class _SquarePostDetailPageState extends State<SquarePostDetailPage> {
   Future<void> _editPost() async {
     final replacement = await Navigator.of(context).push<SquarePost>(
       MaterialPageRoute<SquarePost>(
-        builder: (_) => post.contentFormat == SquarePostContentFormat.article
-            ? SquareArticleComposePage(
-                initialTitle: post.title,
-                initialBody: post.text,
-                initialCategory: post.postCategory,
-                replacePostId: post.postId,
-              )
-            : SquareComposePage(
-                initialText: post.text,
-                initialCategory: post.postCategory,
-                replacePostId: post.postId,
-              ),
+        builder: (_) => SquareComposePage(
+          initialType: SquareComposeType.fromPost(
+            isArticle: post.contentFormat == SquarePostContentFormat.article,
+            isCampaign: post.postCategory == SquarePostCategory.campaign,
+          ),
+          initialTitle: post.title,
+          initialText: post.text,
+          replacePostId: post.postId,
+        ),
       ),
     );
     if (replacement == null || !mounted) return;

@@ -193,7 +193,11 @@ fn ensure_expected_reward_wallet_rpc_node() -> Result<(), String> {
 }
 
 fn reward_wallet_storage_key(miner_account: &[u8; 32]) -> Vec<u8> {
-    crate::shared::storage_keys::blake2_map(b"FullnodeIssuance", b"RewardWalletByMiner", miner_account)
+    crate::shared::storage_keys::blake2_map(
+        b"FullnodeIssuance",
+        b"RewardWalletByMiner",
+        miner_account,
+    )
 }
 
 fn decode_storage_account_id(raw: &[u8]) -> Result<[u8; 32], String> {

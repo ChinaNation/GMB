@@ -7,9 +7,7 @@
 use tauri::AppHandle;
 
 use crate::home;
-use crate::transaction::offchain::types::{
-    DecryptAdminRequestResult, DecryptedAdminInfo,
-};
+use crate::transaction::offchain::types::{DecryptAdminRequestResult, DecryptedAdminInfo};
 
 use super::admin_unlock::VerifyDecryptAdminInput;
 

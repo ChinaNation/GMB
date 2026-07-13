@@ -355,6 +355,36 @@ where
     Ok(())
 }
 
+/// 对普通块导入方携带的预计算 storage changes 做自证一致性校验。
+///
+/// 本链 CPU/GPU 矿工会沿用 Substrate PoW worker 的 `ApplyChanges(Changes)` 快路径，
+/// 但该字段来自导入方本地构块产物，不能被节点守卫信任。守卫已经用本节点 runtime
+/// 只读重放同一块；若导入方携带的预计算变更与重放结果不一致，即使 header/state_root
+/// 自洽，也必须在委派内层 import 前 fail-closed。
+fn verify_precomputed_changes(
+    params: &BlockImportParams<Block>,
+    executed: &sp_state_machine::StorageChanges<sp_runtime::traits::HashingFor<Block>>,
+) -> Result<(), String> {
+    let StateAction::ApplyChanges(StorageChanges::Changes(precomputed)) = &params.state_action
+    else {
+        return Ok(());
+    };
+
+    if precomputed.transaction_storage_root != executed.transaction_storage_root {
+        return Err("普通块预计算 state root 与本节点重放结果不一致".into());
+    }
+    if precomputed.main_storage_changes != executed.main_storage_changes {
+        return Err("普通块预计算主存储变更与本节点重放结果不一致".into());
+    }
+    if precomputed.child_storage_changes != executed.child_storage_changes {
+        return Err("普通块预计算子存储变更与本节点重放结果不一致".into());
+    }
+    if precomputed.offchain_storage_changes != executed.offchain_storage_changes {
+        return Err("普通块预计算 offchain 存储变更与本节点重放结果不一致".into());
+    }
+    Ok(())
+}
+
 impl<I> NodeGuard<I> {
     /// 装配节点守卫，并用 block#0 状态校验当前所有已注册永久策略的创世基准。
     pub fn new(
@@ -477,21 +507,7 @@ impl<I> NodeGuard<I> {
 
     /// 提交前校验 warp/状态导入携带的完整下载态；无法抽取或不满足策略时一律拒绝导入。
     fn verify_imported_state(&self, params: &BlockImportParams<Block>) -> Result<(), String> {
-        let imported = match &params.state_action {
-            StateAction::ApplyChanges(StorageChanges::Import(imported)) => imported,
-            _ => return Err("warp 状态非 ApplyChanges(Import) 形态,无法提交前校验".into()),
-        };
-        // 所有策略复用同一遍 imported state 扫描，禁止为单项永久规则再新增包装器。
-        let stats = verify_imported_policy_state(
-            *params.header.number(),
-            imported
-                .state
-                .0
-                .iter()
-                .flat_map(|level| level.key_values.iter())
-                .map(|(key, value)| (key, value)),
-            &self.cid_lifecycle,
-        )?;
+        let stats = verify_imported_state_params(params, &self.cid_lifecycle)?;
         log::debug!(
             target: "node-guard",
             "完整状态单遍扫描:总键 {},治理 {},全节点发行/账户 {},公民发行 {},创世模块 {},PoW 动态难度 {},省储行固定发行 {},CID {}",
@@ -556,6 +572,7 @@ impl<I> NodeGuard<I> {
         let changes = api
             .into_storage_changes(&parent_state, parent_hash)
             .map_err(|e| format!("提取存储变更失败:{e}"))?;
+        verify_precomputed_changes(params, &changes)?;
         let post_delta: BTreeMap<Vec<u8>, Option<Vec<u8>>> =
             changes.main_storage_changes.into_iter().collect();
 
@@ -765,6 +782,31 @@ impl<I> NodeGuard<I> {
     }
 }
 
+/// 校验导入队列/warp 携带的完整状态包，并返回共享单遍扫描统计。
+///
+/// 该函数不读取节点数据库，方便测试直接构造 `BlockImportParams::state_action` 证明
+/// 完整状态导入路径会在委派内层导入前执行永久规则。
+fn verify_imported_state_params(
+    params: &BlockImportParams<Block>,
+    cid_reference: &cid_lifecycle::GenesisReference,
+) -> Result<ImportedPolicyStats, String> {
+    let imported = match &params.state_action {
+        StateAction::ApplyChanges(StorageChanges::Import(imported)) => imported,
+        _ => return Err("warp 状态非 ApplyChanges(Import) 形态,无法提交前校验".into()),
+    };
+    // 所有策略复用同一遍 imported state 扫描，禁止为单项永久规则再新增包装器。
+    verify_imported_policy_state(
+        *params.header.number(),
+        imported
+            .state
+            .0
+            .iter()
+            .flat_map(|level| level.key_values.iter())
+            .map(|(key, value)| (key, value)),
+        cid_reference,
+    )
+}
+
 #[async_trait::async_trait]
 impl<I> BlockImport<Block> for NodeGuard<I>
 where
@@ -827,7 +869,29 @@ mod finalize_issuance_tests {
             .expect("build complete runtime genesis storage")
     }
     use codec::Encode;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use sc_chain_spec::{ChainType, Properties};
+    use sc_network::config::NetworkConfiguration;
+    use sc_service::config::{
+        ExecutorConfiguration, KeystoreConfig, RpcBatchRequestConfig, RpcConfiguration,
+    };
+    use sc_service::{
+        BasePath, BlocksPruning, Configuration, DatabaseSource, PruningMode, Role,
+        TransactionPoolOptions,
+    };
+    use sp_api::ProvideRuntimeApi;
+    use sp_consensus::BlockOrigin;
+    use sp_consensus_pow::POW_ENGINE_ID;
+    use sp_core::{
+        crypto::{Ss58AddressFormat, Ss58Codec},
+        sr25519, Pair as _,
+    };
+    use sp_keyring::Sr25519Keyring;
+    use sp_state_machine::Backend as _;
+    use sp_storage::ChildInfo;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
 
     #[test]
     fn block_requires_timestamp_and_at_least_one_user_transaction() {
@@ -861,6 +925,237 @@ mod finalize_issuance_tests {
         }
     }
 
+    #[derive(Clone, Default)]
+    struct SharedCountingImport {
+        imports: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl BlockImport<Block> for SharedCountingImport {
+        type Error = ConsensusError;
+
+        async fn check_block(
+            &self,
+            _block: BlockCheckParams<Block>,
+        ) -> Result<ImportResult, Self::Error> {
+            Ok(ImportResult::AlreadyInChain)
+        }
+
+        async fn import_block(
+            &self,
+            _block: BlockImportParams<Block>,
+        ) -> Result<ImportResult, Self::Error> {
+            self.imports.fetch_add(1, Ordering::SeqCst);
+            Ok(ImportResult::AlreadyInChain)
+        }
+    }
+
+    fn test_chain_spec() -> crate::core::chain_spec::ChainSpec {
+        let wasm = citizenchain::WASM_BINARY.expect("test requires embedded runtime WASM");
+        let mut genesis_patch = citizenchain::genesis::genesis_config();
+        let alice = Sr25519Keyring::Alice
+            .to_account_id()
+            .to_ss58check_with_version(Ss58AddressFormat::custom(
+                primitives::core_const::SS58_FORMAT,
+            ));
+        genesis_patch["balances"]["balances"]
+            .as_array_mut()
+            .expect("genesis balances array")
+            .push(serde_json::json!([alice, 1_000_000_000_000u128]));
+
+        let mut properties = Properties::new();
+        properties.insert(
+            "ss58Format".into(),
+            serde_json::json!(primitives::core_const::SS58_FORMAT),
+        );
+        properties.insert("tokenDecimals".into(), serde_json::json!(2));
+        properties.insert("tokenSymbol".into(), serde_json::json!("GMB"));
+
+        crate::core::chain_spec::ChainSpec::builder(wasm, None)
+            .with_name("CitizenChain NodeGuard Test")
+            .with_id("citizenchain-node-guard-test")
+            .with_chain_type(ChainType::Development)
+            .with_protocol_id("citizenchain-node-guard-test")
+            .with_properties(properties)
+            .with_genesis_config_patch(genesis_patch)
+            .build()
+    }
+
+    fn test_config(tokio_handle: tokio::runtime::Handle) -> Configuration {
+        let base_path = BasePath::new_temp_dir().expect("create node guard bad-block temp base");
+        let root = base_path.path().to_path_buf();
+        let network = NetworkConfiguration::new(
+            "node-guard-bad-block-test",
+            "citizenchain-node-guard-test/0.1",
+            Default::default(),
+            None,
+        );
+
+        Configuration {
+            impl_name: "citizenchain-node-guard-test".into(),
+            impl_version: "0.1".into(),
+            role: Role::Full,
+            tokio_handle,
+            transaction_pool: TransactionPoolOptions::default(),
+            network,
+            keystore: KeystoreConfig::InMemory,
+            database: DatabaseSource::RocksDb {
+                path: root.join("db"),
+                cache_size: 128,
+            },
+            trie_cache_maximum_size: Some(16 * 1024 * 1024),
+            warm_up_trie_cache: None,
+            state_pruning: Some(PruningMode::ArchiveAll),
+            blocks_pruning: BlocksPruning::KeepAll,
+            chain_spec: Box::new(test_chain_spec()),
+            executor: ExecutorConfiguration::default(),
+            wasm_runtime_overrides: None,
+            rpc: RpcConfiguration {
+                addr: None,
+                max_connections: Default::default(),
+                cors: None,
+                methods: Default::default(),
+                max_request_size: Default::default(),
+                max_response_size: Default::default(),
+                id_provider: Default::default(),
+                max_subs_per_conn: Default::default(),
+                port: 9944,
+                message_buffer_capacity: Default::default(),
+                batch_config: RpcBatchRequestConfig::Unlimited,
+                rate_limit: None,
+                rate_limit_whitelisted_ips: Default::default(),
+                rate_limit_trust_proxy_headers: Default::default(),
+                request_logger_limit: 1024,
+            },
+            prometheus_config: None,
+            telemetry_endpoints: None,
+            offchain_worker: Default::default(),
+            force_authoring: false,
+            disable_grandpa: false,
+            dev_key_seed: None,
+            tracing_targets: None,
+            tracing_receiver: Default::default(),
+            announce_block: true,
+            data_path: root,
+            base_path,
+        }
+    }
+
+    fn skip_without_wasm_binary(test_name: &str) -> bool {
+        if citizenchain::WASM_BINARY.is_some() {
+            return false;
+        }
+        eprintln!("{test_name}: 跳过真实服务级坏块验收；当前测试构建未内置 WASM_BINARY");
+        true
+    }
+
+    fn remark_extrinsic(genesis_hash: <Block as BlockT>::Hash) -> <Block as BlockT>::Extrinsic {
+        let hex = blockchain_test_harness::alice_system_remark_extrinsic_hex(
+            &format!("{genesis_hash:?}"),
+            0,
+            citizenchain::VERSION.spec_version,
+            citizenchain::VERSION.transaction_version,
+            b"node-guard-bad-block",
+        )
+        .expect("build signed remark extrinsic");
+        let raw = hex::decode(hex.trim_start_matches("0x")).expect("decode remark extrinsic hex");
+        sp_runtime::OpaqueExtrinsic::try_from_encoded_extrinsic(&raw)
+            .expect("decode opaque remark extrinsic")
+    }
+
+    fn timestamp_extrinsic(now: u64) -> <Block as BlockT>::Extrinsic {
+        let xt = citizenchain::UncheckedExtrinsic::new_bare(citizenchain::RuntimeCall::Timestamp(
+            citizenchain::TimestampCall::set { now },
+        ));
+        xt.into()
+    }
+
+    fn legal_remark_block_params(client: &Arc<FullClient>) -> BlockImportParams<Block> {
+        let parent_hash = client.info().genesis_hash;
+        let pow_author =
+            sr25519::Pair::from_string("//Alice//pow", None).expect("derive test pow author");
+        let mut digest = sp_runtime::Digest::default();
+        digest.push(sp_runtime::DigestItem::PreRuntime(
+            POW_ENGINE_ID,
+            pow_author.public().encode(),
+        ));
+        let mut builder = sc_block_builder::BlockBuilderBuilder::new(&**client)
+            .on_parent_block(parent_hash)
+            .fetch_parent_block_number(&**client)
+            .expect("fetch genesis number")
+            .with_inherent_digests(digest)
+            .build()
+            .expect("create block builder");
+
+        builder
+            .push(timestamp_extrinsic(1_782_950_406_000))
+            .expect("push timestamp inherent");
+        builder
+            .push(remark_extrinsic(parent_hash))
+            .expect("push signed remark");
+
+        let built = builder.build().expect("build legal remark block");
+        let (block, storage_changes, _) = built.into_inner();
+        let (header, body) = block.deconstruct();
+        let mut params = BlockImportParams::new(BlockOrigin::Own, header);
+        params.body = Some(body);
+        params.state_action = StateAction::ApplyChanges(StorageChanges::Changes(storage_changes));
+        params
+    }
+
+    fn mutate_precomputed_changes_to_guarded_state(
+        params: &mut BlockImportParams<Block>,
+        client: &Arc<FullClient>,
+        backend: &Arc<FullBackend>,
+        update_header_root: bool,
+    ) {
+        let parent_hash = *params.header.parent_hash();
+        let StateAction::ApplyChanges(StorageChanges::Changes(changes)) = &mut params.state_action
+        else {
+            panic!("legal remark block must carry precomputed storage changes");
+        };
+        assert!(
+            changes.child_storage_changes.is_empty(),
+            "本坏块样本只篡改主存储，若出现 child delta 必须显式扩展重算逻辑"
+        );
+
+        let guarded_key = genesis_pallet::storage_key::citizen_max();
+        let guarded_value = 1_443_497_379u64.encode();
+        if let Some((_, value)) = changes
+            .main_storage_changes
+            .iter_mut()
+            .find(|(key, _)| key == &guarded_key)
+        {
+            *value = Some(guarded_value);
+        } else {
+            changes
+                .main_storage_changes
+                .push((guarded_key, Some(guarded_value)));
+        }
+
+        let parent_state = backend
+            .state_at(parent_hash, TrieCacheContext::Untrusted)
+            .expect("open parent state");
+        let state_version = client
+            .runtime_api()
+            .version(parent_hash)
+            .expect("read runtime version")
+            .state_version();
+        let (bad_root, bad_transaction) = parent_state.full_storage_root(
+            changes
+                .main_storage_changes
+                .iter()
+                .map(|(key, value)| (&key[..], value.as_deref())),
+            std::iter::empty::<(&ChildInfo, std::iter::Empty<(&[u8], Option<&[u8]>)>)>(),
+            state_version,
+        );
+        changes.transaction_storage_root = bad_root;
+        changes.transaction = bad_transaction;
+        if update_header_root {
+            params.header.set_state_root(bad_root);
+        }
+    }
+
     fn import_params(number: u32) -> BlockImportParams<Block> {
         use sp_consensus::BlockOrigin;
         use sp_core::H256;
@@ -874,6 +1169,36 @@ mod finalize_issuance_tests {
             Digest::default(),
         );
         BlockImportParams::new(BlockOrigin::NetworkInitialSync, header)
+    }
+
+    /// 构造真实完整状态导入形态，覆盖 `params.with_state()` 分支。
+    fn import_params_with_state(
+        number: u32,
+        state: BTreeMap<Vec<u8>, Vec<u8>>,
+    ) -> BlockImportParams<Block> {
+        let mut params = import_params(number);
+        let block = params.header.hash();
+        let key_values = state.into_iter().collect::<Vec<_>>();
+        let state = sc_client_api::KeyValueStates::from([(
+            Vec::new(),
+            (key_values, Vec::<Vec<u8>>::new()),
+        )]);
+        params.state_action =
+            StateAction::ApplyChanges(StorageChanges::Import(sc_consensus::ImportedState {
+                block,
+                state,
+            }));
+        params
+    }
+
+    fn cid_genesis_reference(top: &BTreeMap<Vec<u8>, Vec<u8>>) -> cid_lifecycle::GenesisReference {
+        let cid_keys: Vec<Vec<u8>> = top
+            .keys()
+            .filter(|key| cid_lifecycle::is_relevant_key(key))
+            .cloned()
+            .collect();
+        cid_lifecycle::GenesisReference::from_genesis(&cid_keys, |key| top.get(key).cloned())
+            .expect("build CID genesis reference")
     }
 
     const NEW_BALANCES_FLAGS: u128 = 0x80000000_00000000_00000000_00000000;
@@ -1011,6 +1336,133 @@ mod finalize_issuance_tests {
     }
 
     #[test]
+    fn imported_state_bad_cases_return_known_bad_before_inner_import() {
+        let storage = full_runtime_genesis_storage();
+        let top = storage.top;
+        let reference = cid_genesis_reference(&top);
+
+        for case in blockchain_test_harness::ImportedStateBadCaseKind::all() {
+            let inner = CountingImport::default();
+            let params = import_params_with_state(0, imported_state_bad_case(*case, &top));
+            assert!(
+                params.with_state(),
+                "{} must enter with_state path",
+                case.label()
+            );
+
+            let verdict = verify_imported_state_params(&params, &reference);
+            let err = verdict
+                .as_ref()
+                .expect_err("bad imported state must fail before inner import");
+            assert!(
+                err.starts_with(case.expected_error_prefix()),
+                "{} must fail with prefix {}, actual {err}",
+                case.label(),
+                case.expected_error_prefix()
+            );
+
+            let result = futures::executor::block_on(import_if_verified(
+                &inner,
+                params,
+                verdict.map(|_| ()),
+            ))
+            .expect("known bad import result");
+            assert_eq!(result, ImportResult::KnownBad);
+            assert_eq!(
+                inner.imports.load(Ordering::SeqCst),
+                0,
+                "{} must not delegate inner import",
+                case.label()
+            );
+        }
+    }
+
+    #[test]
+    fn legal_block_zero_imported_state_delegates_after_guard_success() {
+        let storage = full_runtime_genesis_storage();
+        let top = storage.top;
+        let reference = cid_genesis_reference(&top);
+        let inner = CountingImport::default();
+        let params = import_params_with_state(0, top.clone());
+
+        let stats = verify_imported_state_params(&params, &reference)
+            .expect("legal block zero complete state must pass");
+        assert_eq!(stats.scanned, top.len());
+
+        let result = futures::executor::block_on(import_if_verified(&inner, params, Ok(())))
+            .expect("legal imported state should delegate");
+        assert_eq!(result, ImportResult::AlreadyInChain);
+        assert_eq!(inner.imports.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn precomputed_changes_must_match_reexecuted_normal_block() {
+        if skip_without_wasm_binary("precomputed_changes_must_match_reexecuted_normal_block") {
+            return;
+        }
+        let runtime = tokio::runtime::Runtime::new().expect("create tokio runtime");
+        let config = test_config(runtime.handle().clone());
+        let sc_service::PartialComponents {
+            client,
+            backend,
+            task_manager: _task_manager,
+            ..
+        } = crate::core::service::new_partial(&config).expect("create partial node service");
+        let guard = NodeGuard::new(CountingImport::default(), client.clone(), backend.clone())
+            .expect("create node guard");
+
+        let legal = legal_remark_block_params(&client);
+        assert_eq!(
+            guard.detect_violation(&legal),
+            Ok(false),
+            "真实 BlockBuilder 产物的预计算 changes 必须与节点重放结果一致"
+        );
+
+        let mut malicious = legal_remark_block_params(&client);
+        mutate_precomputed_changes_to_guarded_state(&mut malicious, &client, &backend, false);
+        let err = guard
+            .detect_violation(&malicious)
+            .expect_err("篡改预计算 changes 必须被节点守卫 fail-closed");
+        assert!(
+            err.contains("预计算"),
+            "应由预计算 changes 一致性检查拒绝，实际错误: {err}"
+        );
+    }
+
+    #[test]
+    fn self_consistent_bad_precomputed_block_is_known_bad_before_inner_import() {
+        if skip_without_wasm_binary(
+            "self_consistent_bad_precomputed_block_is_known_bad_before_inner_import",
+        ) {
+            return;
+        }
+        let runtime = tokio::runtime::Runtime::new().expect("create tokio runtime");
+        let config = test_config(runtime.handle().clone());
+        let sc_service::PartialComponents {
+            client,
+            backend,
+            task_manager: _task_manager,
+            ..
+        } = crate::core::service::new_partial(&config).expect("create partial node service");
+        let inner = SharedCountingImport::default();
+        let imports = inner.imports.clone();
+        let guard =
+            NodeGuard::new(inner, client.clone(), backend.clone()).expect("create node guard");
+
+        let mut malicious = legal_remark_block_params(&client);
+        mutate_precomputed_changes_to_guarded_state(&mut malicious, &client, &backend, true);
+        let result = runtime
+            .block_on(guard.import_block(malicious))
+            .expect("node guard import result");
+        assert_eq!(result, ImportResult::KnownBad);
+        assert_eq!(
+            imports.load(Ordering::SeqCst),
+            0,
+            "自洽坏块必须在委派 inner import 前被拒绝"
+        );
+    }
+
+    #[test]
     fn finalize_plan_rejects_overflow_wrong_total_and_non_free_mutation() {
         let mut overflow = FinalizeIssuancePlan::default();
         overflow.add([1u8; 32], u128::MAX).expect("first amount");
@@ -1137,8 +1589,6 @@ mod finalize_issuance_tests {
 
     #[test]
     fn complete_state_rejects_each_policy_before_inner_import() {
-        use codec::Encode;
-
         let storage = full_runtime_genesis_storage();
         let top = storage.top;
         let cid_keys: Vec<Vec<u8>> = top
@@ -1150,82 +1600,78 @@ mod finalize_issuance_tests {
             cid_lifecycle::GenesisReference::from_genesis(&cid_keys, |key| top.get(key).cloned())
                 .expect("build CID genesis reference");
 
-        let fixed = primitives::governance_skeleton::fixed_institutions()[0];
-        let mut missing_governance = top.clone();
-        missing_governance.remove(&governance_skeleton::storage_key::admin_account(
-            &fixed.main_account,
-        ));
-        assert!(
-            verify_imported_policy_state(0, missing_governance.iter(), &reference)
-                .expect_err("missing governance must fail")
-                .starts_with("固定治理骨架:")
-        );
+        for case in blockchain_test_harness::ImportedStateBadCaseKind::all() {
+            let bad_state = imported_state_bad_case(*case, &top);
+            let err = verify_imported_policy_state(0, bad_state.iter(), &reference)
+                .expect_err(&format!("{} must fail", case.label()));
+            assert!(
+                err.starts_with(case.expected_error_prefix()),
+                "{} must fail with prefix {}, actual {err}",
+                case.label(),
+                case.expected_error_prefix()
+            );
+        }
+    }
 
-        let mut bad_fullnode = top.clone();
-        bad_fullnode.insert(
-            fullnode_issuance::storage_key::rewarded_block_count(),
-            1u32.encode(),
-        );
-        assert!(
-            verify_imported_policy_state(0, bad_fullnode.iter(), &reference)
-                .expect_err("non-zero genesis issuance must fail")
-                .starts_with("全节点发行:")
-        );
+    /// 按 harness 定义的坏样本矩阵构造完整导入态。
+    ///
+    /// 这里故意只放在 node 内部测试中：harness 负责枚举制度坏样本，node 测试负责
+    /// 使用私有 storage key 精确改写真实创世态，避免生产守卫为了测试而扩大公开接口。
+    fn imported_state_bad_case(
+        case: blockchain_test_harness::ImportedStateBadCaseKind,
+        top: &BTreeMap<Vec<u8>, Vec<u8>>,
+    ) -> BTreeMap<Vec<u8>, Vec<u8>> {
+        use codec::Encode;
 
-        let mut bad_citizen = top.clone();
-        let mut unknown = citizen_issuance::storage_key::pallet_prefix().to_vec();
-        unknown.extend_from_slice(b"UnknownGuardState");
-        bad_citizen.insert(unknown, vec![1]);
-        assert!(
-            verify_imported_policy_state(0, bad_citizen.iter(), &reference)
-                .expect_err("unknown citizen issuance key must fail")
-                .starts_with("公民认证发行:")
-        );
-
-        let mut bad_genesis = top.clone();
-        bad_genesis.insert(
-            genesis_pallet::storage_key::citizen_max(),
-            1_443_497_379u64.encode(),
-        );
-        assert!(
-            verify_imported_policy_state(0, bad_genesis.iter(), &reference)
-                .expect_err("changed genesis population must fail")
-                .starts_with("创世模块:")
-        );
-
-        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
-        let mut bad_provincialbank = top.clone();
-        bad_provincialbank.remove(&provincialbank_interest::storage_key::system_account(
-            &first_bank.stake_account,
-        ));
-        assert!(
-            verify_imported_policy_state(0, bad_provincialbank.iter(), &reference)
-                .expect_err("missing provincial bank principal must fail")
-                .starts_with("省储行固定发行:")
-        );
-
-        let mut unknown_provincialbank = top.clone();
-        let mut unknown_interest_key =
-            provincialbank_interest::storage_key::pallet_prefix().to_vec();
-        unknown_interest_key.extend_from_slice(&sp_core::hashing::twox_128(b"ShadowInterest"));
-        unknown_provincialbank.insert(unknown_interest_key, 1u32.encode());
-        assert!(
-            verify_imported_policy_state(0, unknown_provincialbank.iter(), &reference)
-                .expect_err("unknown provincial bank storage must fail")
-                .starts_with("省储行固定发行:")
-        );
-
-        let mut bad_cid = top.clone();
-        let protected_prefix = cid_lifecycle::storage_key::protected_prefix();
-        let protected_key = bad_cid
-            .keys()
-            .find(|key| key.starts_with(&protected_prefix))
-            .cloned()
-            .expect("protected genesis key");
-        bad_cid.remove(&protected_key);
-        assert!(verify_imported_policy_state(0, bad_cid.iter(), &reference)
-            .expect_err("missing protected account must fail")
-            .starts_with("CID 生命周期:"));
+        let mut bad_state = top.clone();
+        match case {
+            blockchain_test_harness::ImportedStateBadCaseKind::MissingGovernanceAdmin => {
+                let fixed = primitives::governance_skeleton::fixed_institutions()[0];
+                bad_state.remove(&governance_skeleton::storage_key::admin_account(
+                    &fixed.main_account,
+                ));
+            }
+            blockchain_test_harness::ImportedStateBadCaseKind::NonZeroFullnodeIssued => {
+                bad_state.insert(
+                    fullnode_issuance::storage_key::rewarded_block_count(),
+                    1u32.encode(),
+                );
+            }
+            blockchain_test_harness::ImportedStateBadCaseKind::UnknownCitizenIssuanceKey => {
+                let mut unknown = citizen_issuance::storage_key::pallet_prefix().to_vec();
+                unknown.extend_from_slice(b"UnknownGuardState");
+                bad_state.insert(unknown, vec![1]);
+            }
+            blockchain_test_harness::ImportedStateBadCaseKind::ChangedGenesisCitizenMax => {
+                bad_state.insert(
+                    genesis_pallet::storage_key::citizen_max(),
+                    1_443_497_379u64.encode(),
+                );
+            }
+            blockchain_test_harness::ImportedStateBadCaseKind::MissingProvincialBankStake => {
+                let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
+                bad_state.remove(&provincialbank_interest::storage_key::system_account(
+                    &first_bank.stake_account,
+                ));
+            }
+            blockchain_test_harness::ImportedStateBadCaseKind::UnknownProvincialBankStorage => {
+                let mut unknown_interest_key =
+                    provincialbank_interest::storage_key::pallet_prefix().to_vec();
+                unknown_interest_key
+                    .extend_from_slice(&sp_core::hashing::twox_128(b"ShadowInterest"));
+                bad_state.insert(unknown_interest_key, 1u32.encode());
+            }
+            blockchain_test_harness::ImportedStateBadCaseKind::MissingProtectedGenesisAccount => {
+                let protected_prefix = cid_lifecycle::storage_key::protected_prefix();
+                let protected_key = bad_state
+                    .keys()
+                    .find(|key| key.starts_with(&protected_prefix))
+                    .cloned()
+                    .expect("protected genesis key");
+                bad_state.remove(&protected_key);
+            }
+        }
+        bad_state
     }
 
     #[test]

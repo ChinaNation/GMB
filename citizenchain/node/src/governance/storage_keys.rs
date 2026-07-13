@@ -36,7 +36,11 @@ pub fn value_key(pallet: &str, storage: &str) -> String {
 /// 构造 StorageMap key：twox_128(pallet) + twox_128(storage) + blake2_128_concat(key_data)。
 /// blake2_128_concat = blake2_128(data) + data。
 pub fn map_key(pallet: &str, storage: &str, key_data: &[u8]) -> String {
-    skeys::to_hex(&skeys::blake2_map(pallet.as_bytes(), storage.as_bytes(), key_data))
+    skeys::to_hex(&skeys::blake2_map(
+        pallet.as_bytes(),
+        storage.as_bytes(),
+        key_data,
+    ))
 }
 
 /// 构造 DoubleMap key：twox_128(pallet) + twox_128(storage)
@@ -57,7 +61,11 @@ pub fn double_map_key(pallet: &str, storage: &str, key1: &[u8], key2: &[u8]) -> 
 /// 对应 votingengine v1 的 `ProposalsByCode / ProposalsByCid / ByOwner / ByYear`
 /// 4 张反向索引的列举前缀。
 pub fn twox64_concat_prefix(pallet: &str, storage: &str, key1: &[u8]) -> String {
-    skeys::to_hex(&skeys::twox64_map(pallet.as_bytes(), storage.as_bytes(), key1))
+    skeys::to_hex(&skeys::twox64_map(
+        pallet.as_bytes(),
+        storage.as_bytes(),
+        key1,
+    ))
 }
 
 #[cfg(test)]

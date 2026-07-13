@@ -170,7 +170,9 @@ export async function listAuthorPosts(
       ...item,
       identity_level: signal?.identity_level ?? 'visitor',
       membership_level: signal?.membership_level ?? null,
-      membership_active: signal?.membership_active ?? false
+      membership_active: signal?.membership_active ?? false,
+      display_name: signal?.display_name ?? '',
+      avatar_object_key: signal?.avatar_object_key ?? null
     };
   });
 }

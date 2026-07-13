@@ -2,14 +2,18 @@ import type { Env } from '../types';
 import { fetchChainIdentityStateCached } from '../chain/identity';
 import { batchMemberships, subscriptionIsActive } from '../membership/service';
 import type { IdentityLevel, MembershipLevel } from '../membership/plans';
+import { readProfileDoc } from '../profiles/repository';
 
-/// 帖子作者徽章信号（公开）：身份档=颜色、会员匹配身份档且有效=勾。
+/// 帖子作者展示信号（公开）：徽章身份/会员 + 展示名 + 头像对象键。
 /// identity_level 是链上身份档（visitor/voting/candidate）；membership_level 是
 /// 已购买会员档（freedom/democracy/voting/candidate），二者已解耦。
+/// display_name / avatar_object_key 取自作者 profile.json（链下公开资料），供 feed 直出真名和真头像。
 export interface AuthorSignals {
   identity_level: IdentityLevel;
   membership_level: MembershipLevel | null;
   membership_active: boolean;
+  display_name: string;
+  avatar_object_key: string | null;
 }
 
 /// 为一页帖子的去重作者集统一解析徽章信号。
@@ -25,16 +29,21 @@ export async function resolveAuthorSignals(
   if (distinct.length === 0) {
     return map;
   }
-  const [identities, membershipMap] = await Promise.all([
+  const [identities, membershipMap, profiles] = await Promise.all([
     Promise.all(distinct.map((owner) => fetchChainIdentityStateCached(env, owner))),
-    batchMemberships(env, distinct)
+    batchMemberships(env, distinct),
+    // 去重作者的 profile.json 并行读；缺失（未建资料）软降级为空名 + 无头像。
+    Promise.all(distinct.map((owner) => readProfileDoc(env, owner).catch(() => null)))
   ]);
   distinct.forEach((owner, index) => {
     const membership = membershipMap.get(owner);
+    const profile = profiles[index];
     map.set(owner, {
       identity_level: identities[index].identity_level,
       membership_level: (membership?.membership_level ?? null) as MembershipLevel | null,
-      membership_active: membership ? subscriptionIsActive(membership) : false
+      membership_active: membership ? subscriptionIsActive(membership) : false,
+      display_name: profile?.display_name ?? '',
+      avatar_object_key: profile?.avatar_object_key ?? null
     });
   });
   return map;

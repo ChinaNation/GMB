@@ -26,9 +26,7 @@ use crate::governance::signing::{
 };
 use primitives::sign::{binary_domain_prefix, BINARY_PREFIX_LEN, OP_SIGN_DECRYPT};
 
-use crate::transaction::offchain::types::{
-    DecryptAdminRequestResult, DecryptedAdminInfo,
-};
+use crate::transaction::offchain::types::{DecryptAdminRequestResult, DecryptedAdminInfo};
 
 // 解密 challenge payload 前缀 = GMB || OP_SIGN_DECRYPT(4B 二进制前缀，单一真源
 // primitives::sign)。

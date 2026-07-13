@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/pages/square_article_detail_page.dart';
-import 'package:citizenapp/8964/pages/square_article_compose_page.dart';
-import 'package:citizenapp/8964/pages/square_compose_page.dart';
+import 'package:citizenapp/8964/compose/compose_page.dart';
 import 'package:citizenapp/8964/pages/square_post_detail_page.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
@@ -14,13 +13,12 @@ import 'package:citizenapp/8964/services/square_identity_state.dart';
 import 'package:citizenapp/8964/storage/square_draft_store.dart';
 import 'package:citizenapp/8964/widgets/square_empty_state.dart';
 import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
+import 'package:citizenapp/8964/widgets/square_article_card.dart';
 import 'package:citizenapp/8964/widgets/square_post_card.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/identity_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
-
-enum _ComposeKind { post, article }
 
 typedef SquareMembershipLoader = Future<SquareMembershipState?> Function();
 
@@ -64,6 +62,9 @@ class _SquareHomePageState extends State<SquareHomePage> {
   final SquareApiClient _squareApi = SquareApiClient();
   SquareMembershipState? _membership;
   int? _browseLeft;
+
+  /// 最近一次 feed 加载的 session token，供卡片头像鉴权头复用。
+  String? _feedSessionToken;
   late final SmoldotClientManager _smoldotClientManager;
 
   /// 同一次 operational 状态下，同一默认钱包只触发一次真实链刷新。
@@ -183,41 +184,11 @@ class _SquareHomePageState extends State<SquareHomePage> {
       );
       return;
     }
-    final choice = await showModalBottomSheet<_ComposeKind>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.dynamic_feed_outlined),
-              title: const Text('发动态'),
-              subtitle: const Text('短文 + 图片/视频'),
-              onTap: () => Navigator.of(sheetContext).pop(_ComposeKind.post),
-            ),
-            ListTile(
-              leading: const Icon(Icons.article_outlined),
-              title: const Text('发文章'),
-              subtitle: const Text('长文：标题 + 首图 + 正文'),
-              onTap: () => Navigator.of(sheetContext).pop(_ComposeKind.article),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (choice == null || !mounted) return;
-
+    // 类型（动态/文章/竞选）在统一发布页内经头像旁下拉选择，不再底部分流。
     final post = await Navigator.of(context).push<SquarePost>(
       MaterialPageRoute<SquarePost>(
-        builder: (_) => switch (choice) {
-          _ComposeKind.post => SquareComposePage(
-              identityService: widget.identityService,
-              draftStore: widget.draftStore,
-            ),
-          _ComposeKind.article => SquareArticleComposePage(
-              identityService: widget.identityService,
-            ),
-        },
+        builder: (_) =>
+            SquareComposePage(identityService: widget.identityService),
       ),
     );
     if (post == null || !mounted) return;
@@ -370,6 +341,10 @@ class _SquareHomePageState extends State<SquareHomePage> {
                     errorMessage: errorMessage,
                     onOpenPost: (post) => _openDetail(post),
                     onOpenAuthor: _openAuthor,
+                    mediaUrlOf: _squareApi.mediaUrl,
+                    avatarHeaders: _feedSessionToken == null
+                        ? null
+                        : {'authorization': 'Bearer $_feedSessionToken'},
                   ),
                 );
               },
@@ -392,6 +367,8 @@ class _SquareHomePageState extends State<SquareHomePage> {
       feedKind: _selectedFeed,
       session: session,
     );
+    // 存 session token 供 feed 卡片头像 Image.network 带鉴权头（读任意作者头像同域可读）。
+    _feedSessionToken = session?.sessionToken;
     final source = _feedSource;
     if (mounted && source is SquareApiClient) {
       setState(() => _browseLeft = source.lastBrowseState?.browseLeft);
@@ -426,6 +403,8 @@ class _FeedBody extends StatelessWidget {
     required this.errorMessage,
     required this.onOpenPost,
     required this.onOpenAuthor,
+    required this.mediaUrlOf,
+    required this.avatarHeaders,
   });
 
   final SquareFeedKind feedKind;
@@ -433,6 +412,17 @@ class _FeedBody extends StatelessWidget {
   final String? errorMessage;
   final ValueChanged<SquarePost> onOpenPost;
   final ValueChanged<String> onOpenAuthor;
+
+  /// 把 object_key 解析成可读媒体地址（作者头像等）。
+  final String Function(String objectKey) mediaUrlOf;
+
+  /// 头像 `Image.network` 鉴权头（钱包 session Bearer）；未登录为空。
+  final Map<String, String>? avatarHeaders;
+
+  String? _avatarUrl(SquareAuthor author) {
+    final key = author.avatarObjectKey;
+    return key == null ? null : mediaUrlOf(key);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -463,10 +453,23 @@ class _FeedBody extends StatelessWidget {
         }
         final postIndex = errorMessage == null ? index : index - 1;
         final post = posts[postIndex];
+        final avatarUrl = _avatarUrl(post.author);
+        // 文章走标题/正文在上、强制横屏首图在下的文章卡；其余走图文卡。
+        if (post.contentFormat == SquarePostContentFormat.article) {
+          return SquareArticleCard(
+            post: post,
+            onTap: () => onOpenPost(post),
+            onAuthorTap: () => onOpenAuthor(post.author.ownerAccount),
+            avatarUrl: avatarUrl,
+            avatarHeaders: avatarHeaders,
+          );
+        }
         return SquarePostCard(
           post: post,
           onTap: () => onOpenPost(post),
           onAuthorTap: () => onOpenAuthor(post.author.ownerAccount),
+          avatarUrl: avatarUrl,
+          avatarHeaders: avatarHeaders,
         );
       },
       separatorBuilder: (_, __) => const SizedBox(height: 10),

@@ -32,6 +32,8 @@ void main() {
                 "post_id": "sqp_001",
                 "owner_account": "owner_001",
                 "cid_number": "CN001-CTZN-000000001-2026",
+                "display_name": "林正华",
+                "avatar_object_key": "profile/owner_001/avatar",
                 "post_category": "campaign",
                 "text": "竞选动态",
                 "content_hash": "0x1111",
@@ -46,7 +48,9 @@ void main() {
                     "provider_asset_id": "img_001",
                     "asset_state": "ready",
                     "url": "https://imagedelivery.net/account/img_001/public",
-                    "byte_size": 1024
+                    "byte_size": 1024,
+                    "width": 1080,
+                    "height": 1920
                   }
                 ]
               }
@@ -64,11 +68,16 @@ void main() {
     expect(posts, hasLength(1));
     expect(posts.first.postCategory, SquarePostCategory.campaign);
     expect(posts.first.author.cidNumber, 'CN001-CTZN-000000001-2026');
+    // 真数据：作者展示名与头像键随 feed 回传并解析。
+    expect(posts.first.author.displayName, '林正华');
+    expect(posts.first.author.avatarObjectKey, 'profile/owner_001/avatar');
     expect(posts.first.chainBlock, 88);
     expect(posts.first.mediaItems.single.mediaKind, SquareMediaKind.image);
     expect(posts.first.mediaItems.single.url,
         'https://imagedelivery.net/account/img_001/public');
     expect(posts.first.mediaItems.single.byteSize, 1024);
+    // 横竖屏所需宽高解析：高>宽 → 竖屏。
+    expect(posts.first.mediaItems.single.isPortrait, isTrue);
   });
 
   test('SquareApiConfig 只允许 HTTPS 或本地调试 HTTP', () {

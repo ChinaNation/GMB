@@ -100,7 +100,9 @@
 - [x] 输出第 6 步完整技术方案并等待确认
 - [x] 第 6 步技术方案确认
 - [x] 第 6 步恶意状态与包装器拒绝矩阵
-- [ ] 第 6 步 warp、三节点分叉与恶意链真实验收
+- [x] 第 6 步方案 A：普通块预计算坏块导入层 harness 与不委派验收
+- [x] 第 6 步方案 B：P2P 测试态自洽坏块传播拒绝验收
+- [ ] 第 6 步 warp、三节点分叉与恶意链扩展验收
 - [ ] 第 6 步性能与部署基线验收
 - [ ] 第 6 步文档、注释、残留清理与任务归档
 - [x] 省储行固定发行方案、runtime 路径及 NodeGuard 新文件确认
@@ -479,7 +481,7 @@
   真实网络部分证明合法链在矩阵后继续推进并保持三节点哈希一致。
 - 三节点、临时 chainspec、数据库、keystore、签名器和日志全部删除，确认无临时验收进程残留。
 
-### P2P 恶意候选块注入专项尝试（2026-07-12，未完成）
+### P2P 恶意候选块注入专项尝试（2026-07-12，方案 A 前置结论）
 
 - 已按确认口径创建并删除 `/tmp/gmb-nodeguard-badblock-injection/`；目录只用于临时 chainspec、
   探测节点 base-path 和导出块文件，不进入 Git。
@@ -491,8 +493,8 @@
 - 不能把“篡改 JSON 导致 header/root/编码错误”当作 NodeGuard 恶意候选验收；那只能证明基础
   block 解码或 state root 校验失败，不能证明永久规则守卫拒绝。
 - 真实 P2P 坏块注入需要一个临时恶意块生产器：能构造结构完整、PoW seal 完整、state root 可重算、
-  但执行后违反 NodeGuard 永久规则的候选块，并通过网络或导入队列提交给诚实节点。当前仓库没有
-  这个入口，本轮未新增仓库测试工具或修改节点服务结构。
+  但执行后违反 NodeGuard 永久规则的候选块，并通过网络或导入队列提交给诚实节点。当前生产节点不提供
+  这个入口；后续只能在测试/导入层 harness 中补齐，不得为生产 RPC/P2P 暴露任意块提交能力。
 
 ### 区块链测试 harness crate（2026-07-12，已创建）
 
@@ -506,14 +508,65 @@
 - 使用 `/tmp/gmb-blockchain-test-harness-import/` 执行真实导入队列基线：合法 block#0 文件导入成功；
   篡改 stateRoot 后的 block#0 文件被 `import-blocks` 以退出码 1 拒绝，报错为 unknown parent（篡改
   header 后 genesis hash 改变）。临时目录已删除。
+- 新增 `src/bin/harness.rs` 命令行入口，支持生成 Alice remark extrinsic、摘要导出块文件和生成
+  stateRoot 篡改文件；后续验收不再需要临时签名器或 Python 篡改脚本。
+- 使用 `/tmp/gmb-harness-block1-import/` 执行结构完整 block#1 导入基线：双节点产出合法 block#1，
+  用 `export-blocks --from 1 --to 1` 导出后，合法 block#1 可导入新的临时数据库；同一 block#1
+  仅篡改 `stateRoot` 后，parent 仍为 genesis、extrinsics=2、digest_logs=2，`import-blocks`
+  执行 runtime 后因 `Storage root must match that calculated` 触发只读执行失败，NodeGuard 包装路径
+  fail-closed，退出码 1，日志为 `bad block`。临时目录已删除。
+- 第三阶段新增完整导入态永久规则坏样本矩阵：harness 提供稳定 case 清单和期望守卫前缀，node 内部测试
+  使用真实创世 storage 构造坏状态并验证导入前拒绝。当前覆盖固定治理骨架、全节点发行、公民认证发行、
+  创世模块、省储行固定发行和 CID 生命周期，不扩大 NodeGuard 生产接口。
+- 第四阶段补齐导入层包装器验收：直接构造 `BlockImportParams::state_action =
+  ApplyChanges(Import(...))` 的完整状态导入形态，坏状态返回 `KnownBad` 且 inner import 计数保持 0；
+  合法 block#0 完整状态校验成功后 inner import 计数为 1。该验收覆盖真实导入队列/warp 的 `with_state`
+  入口，但仍不冒充 P2P 手工伪造块注入。
+- 方案 A 补齐普通块预计算坏块导入层验收：NodeGuard 新增 `ApplyChanges(Changes(...))` 一致性校验，
+  导入方携带的预计算 state root、主存储变更、子存储变更和 offchain 存储变更必须与本节点 runtime
+  只读重放结果一致，不一致即 fail-closed。node 内部 test-only harness 使用真实 `BlockBuilder`
+  生成 timestamp + Alice remark 合法 block#1，随后篡改 `GenesisPallet::citizen_max` 预计算 delta，
+  基于父状态重算自洽 state root 与 backend transaction；合法 proposal 通过，自洽坏 proposal
+  返回 `KnownBad` 且 inner import 计数保持 0。该能力不进入生产节点 RPC/P2P 接口。
+- 方案 B 补齐 P2P 测试态坏块传播拒绝验收：新增 `citizenchain/node/src/core/service/p2p_bad_block_tests.rs`
+  test-only 服务级 harness，由恶意测试节点使用裸 `PowBlockImport<GrandpaBlockImport>` 将“PoW 合法、
+  state root 自洽、但篡改 `GenesisPallet::citizen_max`”的 block#1 写入本地 DB，模拟改节点代码绕过
+  `NodeGuard/ConstitutionGuard` 的攻击者；诚实测试节点使用生产同构 guarded import queue 和真实
+  `build_network` 通过 P2P reserved peer 连接恶意节点，观察到恶意 peer 的 `best_hash/best_number`
+  后仍保持 best=genesis，且本地数据库不存在坏块 header。该测试不新增生产伪造块接口。
 - crate 内已用中文注释标明边界：测试 harness 可以构造验收交易和未来坏块材料，但不能成为生产路径。
-- 验收：`cargo check -p blockchain-test-harness` 通过；`cargo test -p blockchain-test-harness` 5/5 通过。
+- 验收：`cargo check -p blockchain-test-harness` 通过；`cargo test -p blockchain-test-harness` 6/6 通过；
+  `cargo test -p node node_guard` 81/81 通过；`WASM_BUILD_FROM_SOURCE=1 cargo test -p node
+  precomputed_changes_must_match_reexecuted_normal_block -- --nocapture` 通过；`WASM_BUILD_FROM_SOURCE=1
+  cargo test -p node self_consistent_bad_precomputed_block_is_known_bad_before_inner_import -- --nocapture` 通过；
+  `WASM_BUILD_FROM_SOURCE=1 cargo test -p node p2p_sync_rejects_self_consistent_bad_node_guard_block -- --nocapture`
+  1/1 通过，耗时 115.92s。失败重跑残留的 `/tmp/gmb-p2p-bad-block-*` 已清理，成功路径会自动删除
+  两节点唯一临时 base path。
+
+### Release 性能与运行态矩阵（2026-07-12，已完成，第 3 步资产烘焙除外）
+
+- 普通 release build：`cargo build --release -p node --bin citizenchain` 通过，耗时 101.38s，编译过程最大
+  RSS 5,488,820,224 bytes。
+- 带 WASM 的 release build：`WASM_BUILD_FROM_SOURCE=1 cargo build --release -p node --bin citizenchain`
+  通过，耗时 46.11s，编译过程最大 RSS 5,686,214,656 bytes；该产物可导出 `citizenchain-fresh`。
+- release NodeGuard 矩阵：`cargo test --release -p node node_guard` 78/78 通过；测试运行耗时 2.27s，
+  `/usr/bin/time -l` 最大 RSS 3,998,023,680 bytes。
+- release ConstitutionGuard 矩阵：`cargo test --release -p node constitution` 40/40 通过；测试运行耗时
+  0.65s，最大 RSS 413,581,312 bytes。
+- release 身份登记与公民发行路径：`cargo test --release -p citizen-identity` 22/22 通过；`cargo test
+  --release -p citizen-issuance` 14/14、身份集成 5/5 通过。
+- release 真实普通快路径：使用带 WASM release binary 导出临时 `citizenchain-fresh`，清空临时
+  bootNodes，仅资助标准测试账户 Alice；A/B 双节点本地 `/ws` 互联均 `peers=1`，Alice
+  `System::remark` 进入 block#1，A/B 最佳哈希一致为
+  `0xdcda6a5958434dcffd7e9fa1e8cde583e9cfacc177005d1d66722e3480266be9`，block#1
+  extrinsics=2、digest_logs=2，Alice nonce 0→1，pending=0，采样节点 RSS 峰值 A=1,927,568 KB、
+  B=2,654,480 KB，守卫拒绝日志 0。临时目录 `/tmp/gmb-release-matrix` 已删除。
 
 ### 当前仍未满足的关闭条件
 
-- 尚未完成 P2P 层手工注入恶意候选块、拒绝后数据库最佳链不变的真实网络注入验收；当前已有包装器
-  `KnownBad` 矩阵和真实三节点合法链继续推进证据。
-- 尚未完成 release 构建下的峰值内存、普通快路径、身份登记块、`:code` 全检和完整状态导入性能矩阵。
+- 尚未完成更强的 warp/多恶意节点/坏链多高度扩展验收；当前已完成方案 A 的导入层预计算坏块
+  `KnownBad`/不委派证据、方案 B 的 P2P 测试态自洽坏块传播拒绝证据、`with_state` 拒绝不委派证据、
+  包装器 `KnownBad` 矩阵、完整导入态永久规则坏样本矩阵和真实多节点合法链继续推进证据。
 - 尚未重新烘焙并替换正式 chainspec、创世状态包和 CitizenApp 轻客户端资产；不得增加旧格式兼容。
 - 在上述项目完成前，本任务继续保留在 `open`，不得移动到 `done`。
 

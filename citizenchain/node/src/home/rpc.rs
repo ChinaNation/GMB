@@ -275,9 +275,7 @@ pub async fn get_total_issuance(app: AppHandle) -> Result<TotalIssuance, String>
 /// 构造 System.Account 的完整 storage key（Blake2_128Concat hasher，委托 shared 单源）。
 fn system_account_storage_key(account_id: &[u8; 32]) -> String {
     crate::shared::storage_keys::to_hex(&crate::shared::storage_keys::blake2_map(
-        b"System",
-        b"Account",
-        account_id,
+        b"System", b"Account", account_id,
     ))
 }
 
