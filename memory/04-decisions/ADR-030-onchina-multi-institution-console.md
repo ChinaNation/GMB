@@ -6,6 +6,8 @@
 
 2026-07-03 修订：全机构控制台统一命名为 `workspace` 机构工作台。注册局只是 `workspace_kind=registry` 的一类；司法院、立法机构和普通机构分别进入自己的工作台壳，非注册局机构不复用注册局 UI。
 
+2026-07-12 修订：所有机构都必须具有链上法定代表人公开信息；机构工作台的权限不再由管理员资料快照推导，而由链上机构岗位权限与当前有效任职关系决定。一个管理员钱包账户可在多个机构任职，同一机构可有多个管理员。
+
 ## 背景
 
 registry 后端最初只服务联邦注册局 + 市注册局两类管理员（前端 `registry_org_code` 二值枚举、后端曾以本机节点机构身份预判登录边界）。随着立法院、监察院、政府、储备、私权公司等机构都要在电脑端登录发起提案，需要一套统一工作台：同一套软件、同一登录入口，按链上管理员所属机构显示不同机构工作台和不同权限。
@@ -26,14 +28,14 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 | 机构类别 | 判定 | 链上真源 | OnChina 准入 |
 |---|---|---|
 | 联邦注册局 FRG | `== FRG` | `PublicAdmins::FederalRegistryProvinceGroups`（29） | 可登录，完整注册局能力 |
-| 市注册局 CREG | `== CREG` | `PublicAdmins::AdminAccounts`（29） | 可登录，本市业务能力 + 只读本省联邦注册局 |
-| 国家司法院 NJD | `== NJD` | `PublicAdmins::AdminAccounts`（29） | 可登录，进入 `judicial` 工作台 |
-| 其它公权法人（政府/立法/监察/司法/教育/公安等） | `is_public_legal_code` | `PublicAdmins::AdminAccounts`（29） | 可登录，按机构能力进入专属或通用工作台 |
-| 私权法人（股权/股份/有限合伙/公益/协会/私立学校等） | `is_private_legal_code` | `PrivateAdmins::AdminAccounts`（30） | 可登录，按机构能力进入专属或通用工作台 |
+| 市注册局 CREG | `== CREG` | `PublicAdmins::AdminAccounts`（27） | 可登录，本市业务能力 + 只读本省联邦注册局 |
+| 国家司法院 NJD | `== NJD` | `PublicAdmins::AdminAccounts`（27） | 可登录，进入 `judicial` 工作台 |
+| 其它公权法人（政府/立法/监察/司法/教育/公安等） | `is_public_legal_code` | `PublicAdmins::AdminAccounts`（27） | 可登录，按机构能力进入专属或通用工作台 |
+| 私权法人（股权/股份/有限合伙/公益/协会/私立学校等） | `is_private_legal_code` | `PrivateAdmins::AdminAccounts`（28） | 可登录，按机构能力进入专属或通用工作台 |
 | 非法人组织 | `is_unincorporated_code` | `PublicAdmins::AdminAccounts` / `PrivateAdmins::AdminAccounts` 双探测 | 可登录，按机构能力进入通用工作台 |
-| 国家储委会 / 省储委会 / 省储行 | `NRC` / `PRC` / `PRB` | `PublicAdmins::AdminAccounts`（29） | 不登录 OnChina，使用节点桌面端 |
+| 国家储委会 / 省储委会 / 省储行 | `NRC` / `PRC` / `PRB` | `PublicAdmins::AdminAccounts`（27） | 不登录 OnChina，使用节点桌面端 |
 
-个人多签 PMUL（personal-admins，idx7）**不登录控制台**：无 CID、不跑节点，纯 CitizenApp 客户端功能。
+个人多签 PMUL（personal-manage，idx7）**不登录控制台**：无 CID、不跑节点，纯 CitizenApp 客户端功能。
 
 ### 4. 登录绑定与权限模型
 
@@ -58,7 +60,7 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 固定三档：`Session`（一般操作）/ `Passkey`（重要操作，WebAuthn）/ `PasskeyColdSign`（特殊操作/链上提案，叠冷签）。每个 action 必穷尽 `match` 标注其一，漏标编译失败；三档之外一律拒绝，无第四档、无 `_ =>` 兜底。
 
 ### 7. Web 端复杂提案
-onchina web 端承接复杂提案（立法投票等），走 `PasskeyColdSign`：web 构造 extrinsic → 冷钱包扫码签 → 提交链，复用 legislation-yuan（idx27）/legislation-vote（idx28），链端零改动。移动端本期不动。
+onchina web 端承接复杂提案（立法投票等），走 `PasskeyColdSign`：web 构造 extrinsic → 冷钱包扫码签 → 提交链，复用 legislation-yuan（idx25）/legislation-vote（idx26），链端零改动。移动端本期不动。
 
 ### 8. 改名边界
 目录/crate `registry → onchina` 触及 registry 以外 9 个文件（workspace Cargo.toml、node/registry_proc、tauri.conf.json、scripts/{prepack,run,clean-run}.sh + env 改名）。功能改造（卡 01–16）全部锁在 `citizenchain/registry/` 内；改名作为独立最后一步（卡 17），外部文件一次性平移。

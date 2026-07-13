@@ -128,7 +128,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  /// 默认热钱包静默登录换 session；无热钱包或异常返回 null（按公开只读处理）。
+  /// 默认热钱包静默登录换 session；无热钱包或异常返回 null（按不可用降级处理）。
   Future<SquareSession?> _ensureSession() async {
     try {
       final session = await _sessionProvider.ensureSession();

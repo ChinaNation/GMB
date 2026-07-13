@@ -40,7 +40,7 @@ Step 2a 只做 **Runtime 新增**,与旧"省储行清算"代码路径**共存**:
 
 清算行费率自治:
 - `L2_FEE_RATE_BP_MIN = 1` / `L2_FEE_RATE_BP_MAX = 10`(bp)
-- `RATE_CHANGE_DELAY_BLOCKS = 20_160`(约 7 天,30 秒/块)
+- `RATE_CHANGE_DELAY_BLOCKS = 1_680`（7 × 240 块；按六分钟平均目标换算，不承诺自然日最晚出块）
 - `do_propose_l2_fee_rate(who, bank, new_rate)`:管理员提案,写 `L2FeeRateProposed`
 - `do_set_max_l2_fee_rate(new_max)`:设全局上限(Step 2b 改为联合投票回调)
 - `activate_pending_rates(now)`:`on_initialize` 调用,搬到期提案到 `L2FeeRateBp`

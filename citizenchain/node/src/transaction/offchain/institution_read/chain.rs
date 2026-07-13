@@ -334,7 +334,7 @@ fn fetch_active_threshold(
 
 /// 机构生命周期 storage 所在 pallet 名:私权法人码→`PrivateManage`,否则→`PublicManage`。
 ///
-/// 链端机构管理已拆分 `PublicManage`(idx32)/`PrivateManage`(idx33),storage 名
+/// 链端机构管理已拆分 `PublicManage`(idx30)/`PrivateManage`(idx31),storage 名
 /// (`Institutions`/`InstitutionAccounts`)不变但前缀(twox_128(pallet 名))随之变;前缀由
 /// cid_number 派生的 institution_code 经 `is_private_legal_code` 路由(与链端单源一致),
 /// 取代已删的 `OrganizationManage`。

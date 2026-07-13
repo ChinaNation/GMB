@@ -6,7 +6,7 @@ import { hexToSs58 } from '../../shared/ss58';
 import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { runtimeUpgradeApi as api } from './api';
 import type { AdminWalletMatch } from '../types';
-import type { ProposeUpgradeRequestResult } from './api';
+import type { PowDifficultyParams, ProposeUpgradeRequestResult } from './api';
 
 type FlowStep = 'form' | 'qr' | 'submit' | 'done' | 'error';
 
@@ -30,15 +30,24 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
+  const [powParams, setPowParams] = useState<PowDifficultyParams | null>(null);
 
   const signRequestRef = useRef(signRequest);
   const selectedPubkeyRef = useRef(selectedPubkey);
   const wasmPathRef = useRef(wasmPath);
   const reasonRef = useRef(reason);
+  const powParamsRef = useRef(powParams);
   signRequestRef.current = signRequest;
   selectedPubkeyRef.current = selectedPubkey;
   wasmPathRef.current = wasmPath;
   reasonRef.current = reason;
+  powParamsRef.current = powParams;
+
+  useEffect(() => {
+    api.getPowDifficultyParams()
+      .then(setPowParams)
+      .catch((e) => setError(sanitizeError(e)));
+  }, []);
 
   useEffect(() => {
     if (step !== 'qr') return;
@@ -66,7 +75,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
   }, []);
 
   const handleBuildRequest = useCallback(async () => {
-    if (!wasmPath.trim() || !selectedPubkey || !reason.trim()) return;
+    if (!wasmPath.trim() || !selectedPubkey || !reason.trim() || !powParams) return;
     setBuilding(true);
     setError(null);
     try {
@@ -74,6 +83,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
         selectedPubkey,
         wasmPath.trim(),
         reason.trim(),
+        powParams,
       );
       setSignRequest(result);
       setRequestJson(result.requestJson);
@@ -85,19 +95,20 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
     } finally {
       setBuilding(false);
     }
-  }, [wasmPath, selectedPubkey, reason]);
+  }, [wasmPath, selectedPubkey, reason, powParams]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
     const pubkey = selectedPubkeyRef.current;
     const path = wasmPathRef.current;
     const reasonVal = reasonRef.current;
-    if (!req || !pubkey) { setError('签名请求数据丢失，请重试'); setStep('error'); return; }
+    const params = powParamsRef.current;
+    if (!req || !pubkey || !params) { setError('签名请求数据丢失，请重试'); setStep('error'); return; }
     setStep('submit');
     try {
       const result = await api.submitProposeUpgrade(
         req.requestId, pubkey, req.expectedPayloadHash,
-        path, reasonVal,
+        path, reasonVal, params,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -108,7 +119,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
     }
   }, []);
 
-  const canSubmit = wasmPath.trim() && selectedPubkey && reason.trim();
+  const canSubmit = wasmPath.trim() && selectedPubkey && reason.trim() && powParams;
 
   return (
     <div className="governance-section">
@@ -146,6 +157,33 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
               </span>
             </div>
           </div>
+
+          {powParams && (
+            <div className="wallet-form-field">
+              <label>PoW 参数（与 runtime code 一起进入联合投票）</label>
+              {([
+                ['paramsVersion', '参数版本'],
+                ['algorithmVersion', '算法版本'],
+                ['targetBlockTimeMs', '平均目标时间（毫秒）'],
+                ['adjustmentInterval', '调整窗口（块）'],
+                ['maxAdjustUpFactor', '最大上调倍率'],
+                ['maxAdjustDownDivisor', '最大下调分母'],
+              ] as const).map(([field, label]) => (
+                <label key={field}>{label}
+                  <input
+                    type="number"
+                    min={1}
+                    value={powParams[field]}
+                    onChange={(e) => setPowParams({
+                      ...powParams,
+                      [field]: Number(e.target.value),
+                    })}
+                    disabled={building}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
 
           <div className="wallet-form-field">
             <label>发起管理员</label>

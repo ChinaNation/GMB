@@ -7,7 +7,7 @@
 use crate::core::service::SimplePow;
 use citizenchain::opaque::Block;
 use codec::Encode;
-use ocl::{Buffer, Kernel, MemFlags, ProQue, Queue};
+use ocl::{Buffer, MemFlags, ProQue};
 use sc_consensus_pow::MiningHandle;
 use sp_core::U256;
 use std::{
@@ -207,26 +207,18 @@ fn difficulty_to_target_be(difficulty: U256) -> [u64; 4] {
     words
 }
 
-/// CPU 矿工的提交门控时刻（纳秒），GPU 矿工共享同一个门控。
-/// 在 service.rs 中由 start_cpu_miner 定义和更新。
-use crate::core::service::LAST_SUBMIT_NS;
-
 /// Try to start the GPU miner. Spawns a background thread.
 /// Returns Ok(()) if GPU initialization succeeded, Err otherwise.
 pub fn try_start<Proof: Send + 'static>(
     worker: MiningHandle<Block, SimplePow, (), Proof>,
     device_index: usize,
-    epoch: Instant,
     pool_ready: std::sync::Arc<dyn Fn() -> usize + Send + Sync>,
-    target_block_time_ms: u64,
     keystore: sp_keystore::KeystorePtr,
     author_public: sp_core::sr25519::Public,
 ) -> Result<(), String> {
     let miner = GpuMiner::try_init(device_index)?;
 
     thread::spawn(move || {
-        // 出块目标时间从 genesis-pallet Runtime API 读取，替代编译期常量。
-        let min_submit_interval = Duration::from_millis(target_block_time_ms);
         let batch_size = miner.batch_size;
 
         loop {
@@ -266,20 +258,7 @@ pub fn try_start<Proof: Send + 'static>(
                             let hr = batch_size as f64 / elapsed.as_secs_f64();
                             GPU_HASHRATE.store(hr.to_bits(), Ordering::Relaxed);
                         }
-                        // 无锁提交门控，与 CPU 矿工共享 LAST_SUBMIT_NS。
-                        // u64::MAX 表示"从未提交过"，首次直接放行。
-                        let last_ns = LAST_SUBMIT_NS.load(Ordering::Acquire);
-                        if last_ns != u64::MAX {
-                            let now_ns = epoch.elapsed().as_nanos() as u64;
-                            let interval_ns = min_submit_interval.as_nanos() as u64;
-                            let deadline_ns = last_ns.saturating_add(interval_ns);
-                            if now_ns < deadline_ns {
-                                let wait = Duration::from_nanos(deadline_ns - now_ns);
-                                thread::sleep(wait);
-                            }
-                        }
-
-                        // sleep 后检查 build 是否仍有效。
+                        // 有效工作量证明找到后立即提交；只防止提交已经过期的工作。
                         if worker.version() != build_version {
                             break;
                         }
@@ -297,18 +276,7 @@ pub fn try_start<Proof: Send + 'static>(
                             }
                         };
                         let seal = (nonce, sp_core::sr25519::Signature::from(signature)).encode();
-                        let submitted = futures::executor::block_on(worker.submit(seal));
-                        if submitted {
-                            let submit_ns = epoch.elapsed().as_nanos() as u64;
-                            if pool_ready() > 0 {
-                                // 与 CPU 矿工同理：空块后缩短门控为 MinPeriod。
-                                let half_ns = min_submit_interval.as_nanos() as u64 / 2;
-                                LAST_SUBMIT_NS
-                                    .store(submit_ns.saturating_sub(half_ns), Ordering::Release);
-                            } else {
-                                LAST_SUBMIT_NS.store(submit_ns, Ordering::Release);
-                            }
-                        }
+                        let _submitted = futures::executor::block_on(worker.submit(seal));
                         break;
                     }
                     Ok(None) => {

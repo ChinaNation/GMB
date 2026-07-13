@@ -87,7 +87,7 @@ AccountPqcKey[AccountId] = { alg:0x02(ML-DSA-65), key_version:u32, pubkey:Bounde
 PqcPolicy = { phase, bootstrap_deadline:Option<BlockNumber>, reject_sr25519_when_bound:bool, allow_bootstrap_unbound:bool }
 ```
 - 删除 `bootstrap_mode` 字段(M15:无第二变体、无消费方、疑似违反 per-account-state 禁令)。
-- `account-keys` **pallet_index=27**(契约真源在此登记;已核实当前 runtime 用 0..=26,27 空闲;**pallet 集属永久地基,创世前冻结**)。
+- `account-keys` **pallet_index=35**(契约真源在此登记;2026-07-12 全仓号段连续化后当前 runtime 用 0..=34,35 空闲;原登记 27 已被 PublicAdmins 占用;**pallet 集属永久地基,创世前冻结**)。
 - 🔴 **(v5)PqcPolicy 建表初值 = `phase=A`/`reject_sr25519_when_bound=false`/`allow_bootstrap_unbound=false`/`bootstrap_deadline=None`**(account-keys pallet 在"启用 PQC 的 setCode"才加入,建表即起步 phase=A;创世前根本无此 pallet)。**该 setCode 后治理推进**才进入 Phase B 运营值(`allow_bootstrap_unbound=true`、已绑定账户 `reject_sr25519_when_bound=true`,见 §6)。**decode 失败/storage 缺失的瞬态 fallback 同 phase=A 安全态**(§3 M10)。`2048` 上限只覆盖 ML-DSA-65,ML-DSA-87 须新 alg+新 schema(§2)。
 - **绑定规则**:未绑定→允许首笔 bootstrap;已绑定→拒再次 sr25519 覆盖(first-bind-wins,冲突在 validate 拒)。
 - 🔴 **(H3)密钥轮换双签**:轮换 = ① 当前 PQC 私钥授权 + ② **新 PQC 私钥对 `(新公钥+新 key_version+account+genesis_hash)` 自签(PoP)**,两签皆过才 `key_version++` 写新 `AccountPqcKey`。

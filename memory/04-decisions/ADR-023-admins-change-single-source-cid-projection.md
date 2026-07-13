@@ -11,6 +11,8 @@
 
 所有管理员(治理机构 / 个人多签 / 公权机构 / 私权机构)的唯一真源 = 链上 `admins-change::AdminAccounts`。CID(citizencode)是它的**纯投影**:postgres `admins` 表只是登录缓存,不再是第二真源。china_zf 只喂链创世,绝不进 CID 运行时。
 
+2026-07-12 当前目标补充：机构管理员真源只保存管理员钱包账户集合 `admins`；机构岗位定义、岗位权限与岗位任职归 `entity`。机构管理员是“管理员钱包账户与某机构岗位的有效绑定”，不再由 `AdminProfile` 同时承载姓名、CID、岗位、任期和来源。个人多签保持独立，不纳入机构岗位模型。
+
 ## 1. 钉死的模型(经多轮收敛,不得回退)
 
 - **org 分类用现有 6 类**(`citizenchain/runtime/votingengine/src/types.rs:16-27`),不新增:

@@ -1,260 +1,170 @@
 #![cfg(test)]
 
 use super::*;
+use codec::{Decode, Encode};
+
+fn annual_total(year: u32) -> u128 {
+    let rate = 100u128 - u128::from(year - 1);
+    primitives::cid::china::china_ch::CHINA_CH
+        .iter()
+        .map(|bank| bank.stake_amount * rate / 10_000)
+        .sum()
+}
 
 #[test]
-fn first_year_should_mint_and_settle() {
+fn first_year_mints_all_banks_and_writes_exact_audit() {
     new_test_ext().execute_with(|| {
         run_to_block(10);
+
+        let expected_total = annual_total(1);
         assert_eq!(LastSettledYear::<Test>::get(), 1);
+        assert_eq!(
+            TotalProvincialBankInterestIssued::<Test>::get(),
+            expected_total
+        );
+        assert_eq!(Balances::total_issuance(), expected_total);
+        assert_eq!(
+            LastProvincialBankInterestAudit::<Test>::get(),
+            Some(ProvincialBankInterestAudit {
+                year: 1,
+                bank_count: 43,
+                total_interest: expected_total,
+            })
+        );
 
-        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
-        let account = provincialbank_account(0);
-        let expected = first_bank.stake_amount * 100u128 / 10_000u128;
-        assert_eq!(Balances::free_balance(account), expected);
-
-        let has_settled_event = System::events().iter().any(|r| {
-            matches!(
-                r.event,
-                RuntimeEvent::ProvincialBankInterest(Event::ProvincialBankYearSettled { year: 1 })
-            )
-        });
-        assert!(has_settled_event);
+        for (index, bank) in primitives::cid::china::china_ch::CHINA_CH
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(
+                Balances::free_balance(provincialbank_account(index)),
+                bank.stake_amount * 100 / 10_000
+            );
+        }
     });
 }
 
 #[test]
-fn later_boundary_auto_settles_only_next_unsettled_year() {
+fn settlement_only_happens_in_finalize() {
     new_test_ext().execute_with(|| {
-        // 直接跳到第 2 年边界时，自动路径也只补下一个未结算年度。
-        System::set_block_number(20);
-        ProvincialBankInterest::on_initialize(20);
+        System::set_block_number(10);
+        let _ = ProvincialBankInterest::on_initialize(10);
+        assert_eq!(LastSettledYear::<Test>::get(), 0);
+        assert_eq!(Balances::total_issuance(), 0);
 
+        ProvincialBankInterest::on_finalize(10);
         assert_eq!(LastSettledYear::<Test>::get(), 1);
-
-        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
-        let account = provincialbank_account(0);
-        let year1 = first_bank.stake_amount * 100u128 / 10_000u128;
-        assert_eq!(Balances::free_balance(account), year1);
+        assert_eq!(Balances::total_issuance(), annual_total(1));
     });
 }
 
 #[test]
-fn second_year_should_use_decayed_rate() {
+fn second_year_uses_decayed_rate_and_cumulative_audit() {
     new_test_ext().execute_with(|| {
         run_to_block(20);
+        let year_1 = annual_total(1);
+        let year_2 = annual_total(2);
         assert_eq!(LastSettledYear::<Test>::get(), 2);
-
-        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
-        let account = provincialbank_account(0);
-        let year1 = first_bank.stake_amount * 100u128 / 10_000u128;
-        let year2 = first_bank.stake_amount * 99u128 / 10_000u128;
-        assert_eq!(Balances::free_balance(account), year1 + year2);
-    });
-}
-
-#[test]
-fn should_stop_settling_after_duration_years() {
-    new_test_ext().execute_with(|| {
-        LastSettledYear::<Test>::put(
-            primitives::core_const::PROVINCIALBANK_INTEREST_DURATION_YEARS,
-        );
-        let account = provincialbank_account(0);
-        assert_eq!(Balances::free_balance(account.clone()), 0);
-
-        // current_year = 101（边界块），但因已到年限上限，不应继续发放。
-        System::set_block_number(1010);
-        ProvincialBankInterest::on_initialize(1010);
-
         assert_eq!(
-            LastSettledYear::<Test>::get(),
-            primitives::core_const::PROVINCIALBANK_INTEREST_DURATION_YEARS
+            TotalProvincialBankInterestIssued::<Test>::get(),
+            year_1 + year_2
         );
-        assert_eq!(Balances::free_balance(account), 0);
+        assert_eq!(Balances::total_issuance(), year_1 + year_2);
+        assert_eq!(
+            LastProvincialBankInterestAudit::<Test>::get(),
+            Some(ProvincialBankInterestAudit {
+                year: 2,
+                bank_count: 43,
+                total_interest: year_2,
+            })
+        );
     });
 }
 
 #[test]
-fn root_can_force_advance_year_for_recovery() {
+fn missing_previous_year_rolls_back_entire_settlement() {
     new_test_ext().execute_with(|| {
-        System::set_block_number(50); // current_year = 5
-        assert_ok!(ProvincialBankInterest::force_advance_year(
-            RuntimeOrigin::root(),
-            5
-        ));
-        assert_eq!(LastSettledYear::<Test>::get(), 5);
+        System::set_block_number(20);
+        ProvincialBankInterest::on_finalize(20);
+
+        assert_eq!(LastSettledYear::<Test>::get(), 0);
+        assert_eq!(TotalProvincialBankInterestIssued::<Test>::get(), 0);
+        assert_eq!(LastProvincialBankInterestAudit::<Test>::get(), None);
+        assert_eq!(Balances::total_issuance(), 0);
+        for index in 0..primitives::cid::china::china_ch::CHINA_CH.len() {
+            assert_eq!(Balances::free_balance(provincialbank_account(index)), 0);
+        }
     });
 }
 
 #[test]
-fn force_advance_year_rejects_noop_and_invalid() {
+fn non_boundary_and_zero_period_never_mint() {
     new_test_ext().execute_with(|| {
-        System::set_block_number(50); // current_year = 5
-        LastSettledYear::<Test>::put(5);
-        assert_noop!(
-            ProvincialBankInterest::force_advance_year(RuntimeOrigin::root(), 5),
-            Error::<Test>::InvalidYear
-        );
-        assert_noop!(
-            ProvincialBankInterest::force_advance_year(RuntimeOrigin::root(), 101),
-            Error::<Test>::InvalidYear
-        );
+        System::set_block_number(9);
+        ProvincialBankInterest::on_finalize(9);
+        assert_eq!(Balances::total_issuance(), 0);
+
+        set_blocks_per_year(0);
+        System::set_block_number(10);
+        ProvincialBankInterest::on_finalize(10);
+        assert_eq!(LastSettledYear::<Test>::get(), 0);
+        assert_eq!(Balances::total_issuance(), 0);
     });
 }
 
 #[test]
-fn force_advance_year_rejects_future_years() {
-    new_test_ext().execute_with(|| {
-        System::set_block_number(20); // current_year = 2
-        assert_noop!(
-            ProvincialBankInterest::force_advance_year(RuntimeOrigin::root(), 3),
-            Error::<Test>::InvalidYear
-        );
-    });
-}
-
-#[test]
-fn interest_always_goes_to_hardcoded_multisig_account() {
+fn interest_goes_to_main_account_not_permanent_stake_account() {
     new_test_ext().execute_with(|| {
         run_to_block(10);
-        // 利息只能发到 CHINA_CH 中硬编码的省储行多签账户
-        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
-        let account = provincialbank_account(0);
-        let expected = first_bank.stake_amount * 100u128 / 10_000u128;
-        assert_eq!(Balances::free_balance(account), expected);
-    });
-}
-
-#[test]
-fn force_settle_years_can_backfill_multiple_years() {
-    new_test_ext().execute_with(|| {
-        System::set_block_number(50); // current_year = 5
-        assert_ok!(ProvincialBankInterest::force_settle_years(
-            RuntimeOrigin::root(),
-            3
-        ));
-        assert_eq!(LastSettledYear::<Test>::get(), 3);
-    });
-}
-
-#[test]
-fn force_settle_years_rejects_zero_and_oversized_count() {
-    new_test_ext().execute_with(|| {
-        assert_noop!(
-            ProvincialBankInterest::force_settle_years(RuntimeOrigin::root(), 0),
-            Error::<Test>::InvalidOperationCount
+        let bank = &primitives::cid::china::china_ch::CHINA_CH[0];
+        let main = provincialbank_account(0);
+        let stake = AccountId32::new(bank.stake_account);
+        assert_eq!(
+            Balances::free_balance(main),
+            bank.stake_amount * 100 / 10_000
         );
-        assert_noop!(
-            ProvincialBankInterest::force_settle_years(RuntimeOrigin::root(), 9),
-            Error::<Test>::InvalidOperationCount
-        );
+        assert_eq!(Balances::free_balance(stake), 0);
     });
 }
 
 #[test]
-fn force_settle_years_allows_max_batch() {
+fn year_100_is_last_and_uses_one_basis_point() {
     new_test_ext().execute_with(|| {
-        System::set_block_number(100); // current_year = 10
-        assert_ok!(ProvincialBankInterest::force_settle_years(
-            RuntimeOrigin::root(),
-            8
-        ));
-        assert_eq!(LastSettledYear::<Test>::get(), 8);
-    });
-}
-
-#[test]
-fn non_root_calls_are_rejected() {
-    new_test_ext().execute_with(|| {
-        let caller = RuntimeOrigin::signed(AccountId32::new([1u8; 32]));
-
-        assert_noop!(
-            ProvincialBankInterest::force_settle_years(caller.clone(), 1),
-            sp_runtime::DispatchError::BadOrigin
-        );
-        assert_noop!(
-            ProvincialBankInterest::force_advance_year(caller, 1),
-            sp_runtime::DispatchError::BadOrigin
-        );
-    });
-}
-
-#[test]
-fn on_initialize_settles_only_one_year_per_boundary() {
-    new_test_ext().execute_with(|| {
-        System::set_block_number(100); // current_year = 10
-        ProvincialBankInterest::on_initialize(100);
-        assert_eq!(LastSettledYear::<Test>::get(), 1); // AUTO_BACKFILL_MAX_YEARS_PER_BLOCK
-    });
-}
-
-#[test]
-fn blocks_per_year_zero_disables_settlement() {
-    new_test_ext().execute_with(|| {
-        set_blocks_per_year(0);
-        run_to_block(50);
-        assert_eq!(LastSettledYear::<Test>::get(), 0);
-        assert_eq!(Balances::free_balance(provincialbank_account(0)), 0);
-    });
-}
-
-#[test]
-fn force_advance_then_settle_resumes() {
-    // 模拟故障恢复场景：前两年因故障被 force_advance 跳过，
-    // 验证自动结算从第 3 年正常恢复。
-    new_test_ext().execute_with(|| {
-        System::set_block_number(50); // current_year = 5
-                                      // 模拟 Root 已跳过前两年故障
-        LastSettledYear::<Test>::put(2);
-        // 自动结算应从第 3 年开始恢复，但单个边界块只结算 1 年。
-        ProvincialBankInterest::on_initialize(50);
-        assert_eq!(LastSettledYear::<Test>::get(), 3);
-        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
-        let account = provincialbank_account(0);
-        // 第 3 年利率为 98 BP。
-        let year3 = first_bank.stake_amount * 98u128 / 10_000u128;
-        assert_eq!(Balances::free_balance(account), year3);
-    });
-}
-
-#[test]
-fn force_settle_years_caps_at_current_year() {
-    // 在 current_year=3 时请求补结算 8 年，验证只结算 3 年。
-    new_test_ext().execute_with(|| {
-        System::set_block_number(30); // current_year = 3
-        assert_ok!(ProvincialBankInterest::force_settle_years(
-            RuntimeOrigin::root(),
-            8
-        ));
-        assert_eq!(LastSettledYear::<Test>::get(), 3);
-    });
-}
-
-#[test]
-fn year_100_boundary_settles_with_minimum_rate() {
-    // 验证第 100 年（最后一年）的利率为 1 BP (0.01%)，且发放正确。
-    new_test_ext().execute_with(|| {
+        // 构造第 99 年已经完整结算的规范审计基准，只定向验证最后一个年度边界。
+        let total_99: u128 = (1..=99).map(annual_total).sum();
         LastSettledYear::<Test>::put(99);
-        System::set_block_number(1000); // current_year = 100
-        ProvincialBankInterest::on_initialize(1000);
-        assert_eq!(LastSettledYear::<Test>::get(), 100);
+        TotalProvincialBankInterestIssued::<Test>::put(total_99);
+        LastProvincialBankInterestAudit::<Test>::put(ProvincialBankInterestAudit {
+            year: 99,
+            bank_count: 43,
+            total_interest: annual_total(99),
+        });
 
-        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
-        let account = provincialbank_account(0);
-        // 第 100 年利率 = 100 - (100-1)*1 = 1 BP
-        let expected = first_bank.stake_amount * 1u128 / 10_000u128;
-        assert_eq!(Balances::free_balance(account), expected);
-        assert!(expected > 0, "最后一年利息不应为零");
-
-        // 推进到第 101 年边界，验证不再发放
-        let balance_after_100 = Balances::free_balance(provincialbank_account(0));
-        System::set_block_number(1010); // current_year = 101
-        ProvincialBankInterest::on_initialize(1010);
-        // LastSettledYear 不应前进，余额不应变化
+        System::set_block_number(1_000);
+        ProvincialBankInterest::on_finalize(1_000);
         assert_eq!(LastSettledYear::<Test>::get(), 100);
         assert_eq!(
-            Balances::free_balance(provincialbank_account(0)),
-            balance_after_100
+            TotalProvincialBankInterestIssued::<Test>::get(),
+            total_99 + annual_total(100)
         );
+        assert!(annual_total(100) > 0);
+
+        let total_after_100 = Balances::total_issuance();
+        System::set_block_number(1_010);
+        ProvincialBankInterest::on_finalize(1_010);
+        assert_eq!(LastSettledYear::<Test>::get(), 100);
+        assert_eq!(Balances::total_issuance(), total_after_100);
     });
+}
+
+#[test]
+fn audit_scale_field_order_is_stable_for_node_guard() {
+    let audit = ProvincialBankInterestAudit {
+        year: 7,
+        bank_count: 43,
+        total_interest: 123_456,
+    };
+    let encoded = audit.encode();
+    let decoded = <(u32, u32, u128)>::decode(&mut &encoded[..]).expect("字段序必须可解码");
+    assert_eq!(decoded, (7, 43, 123_456));
 }

@@ -605,8 +605,8 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         // 引擎核心仅承载生命周期 extrinsic(超时结算 / 重试 / 取消)。
         // mode-specific 投票 extrinsic 由各 sub-pallet 提供:
-        //   - InternalVote::cast(22.0)
-        //   - JointVote::cast_admin(23.0)
+        //   - InternalVote::cast(20.0)
+        //   - JointVote::cast_admin(21.0)
         //   - JointVote::cast_referendum(23.1)
         // call_index 从 3 起,0/1/2 留空。
 

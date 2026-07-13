@@ -19,6 +19,7 @@ primitives = { path = "../../primitives", default-features = false }
 votingengine = { path = "../../votingengine", default-features = false }
 joint-vote = { path = "../../votingengine/joint-vote", default-features = false }
 genesis-pallet = { path = "../../genesis", default-features = false }
+pow-difficulty = { path = "../../misc/pow-difficulty", default-features = false }
 
 [features]
 default = ["std"]
@@ -34,6 +35,7 @@ std = [
     "votingengine/std",
     "joint-vote/std",
     "genesis-pallet/std",
+    "pow-difficulty/std",
 ]
 runtime-benchmarks = [
     "frame-benchmarking/runtime-benchmarks",
@@ -45,3 +47,4 @@ try-runtime = []
 
 [dev-dependencies]
 internal-vote = { path = "../../votingengine/internal-vote", default-features = false }
+pallet-timestamp = { workspace = true }

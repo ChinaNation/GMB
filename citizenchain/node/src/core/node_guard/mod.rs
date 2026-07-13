@@ -2,13 +2,16 @@
 //!
 //! 公民宪法是整条链最高规则，继续由独立的 `ConstitutionGuard` 在本包装器外层先行检查。
 //! 本模块只收口**除宪法外**的节点永久规则：统一预执行正常区块、统一提取后置 storage delta，
-//! 再把同一份检查上下文交给内部策略。当前已注册固定治理骨架、全节点 PoW 发行、公民认证发行
-//! 与 CID 生命周期；后续非宪法永久规则仍必须加在本包装器内部，不得再新增平行 `BlockImport` 包装器。
+//! 再把同一份检查上下文交给内部策略。当前已注册固定治理骨架、三类固定发行、GenesisPallet
+//! 五字段与 CID 生命周期；后续非宪法永久规则仍必须加在本包装器内部，不得新增平行包装器。
 
 mod cid_lifecycle;
 mod citizen_issuance;
 mod fullnode_issuance;
+mod genesis_pallet;
 mod governance_skeleton;
+mod pow_difficulty;
+mod provincialbank_interest;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -114,6 +117,11 @@ fn signed_delta(before: u128, after: u128) -> i128 {
     }
 }
 
+/// timestamp inherent 之外必须至少有一笔用户交易；在执行 runtime 前判断，避免空提案触发 panic。
+fn has_user_transaction(extrinsic_count: usize) -> bool {
+    extrinsic_count > 1
+}
+
 fn parse_system_account_key(key: &[u8], prefix: &[u8]) -> Result<[u8; 32], String> {
     if !key.starts_with(prefix) || key.len() != prefix.len() + 48 {
         return Err("System::Account RAW key 形态错误".into());
@@ -143,6 +151,9 @@ struct ImportedPolicyState {
     governance: BTreeMap<Vec<u8>, Vec<u8>>,
     fullnode_issuance: BTreeMap<Vec<u8>, Vec<u8>>,
     citizen_issuance: BTreeMap<Vec<u8>, Vec<u8>>,
+    genesis_pallet: BTreeMap<Vec<u8>, Vec<u8>>,
+    pow_difficulty: BTreeMap<Vec<u8>, Vec<u8>>,
+    provincialbank_interest: BTreeMap<Vec<u8>, Vec<u8>>,
     cid: BTreeMap<Vec<u8>, Vec<u8>>,
     scanned: usize,
 }
@@ -153,6 +164,9 @@ struct ImportedPolicyStats {
     governance: usize,
     fullnode_issuance: usize,
     citizen_issuance: usize,
+    genesis_pallet: usize,
+    pow_difficulty: usize,
+    provincialbank_interest: usize,
     cid: usize,
 }
 
@@ -163,6 +177,9 @@ impl ImportedPolicyState {
             governance: self.governance.len(),
             fullnode_issuance: self.fullnode_issuance.len(),
             citizen_issuance: self.citizen_issuance.len(),
+            genesis_pallet: self.genesis_pallet.len(),
+            pow_difficulty: self.pow_difficulty.len(),
+            provincialbank_interest: self.provincialbank_interest.len(),
             cid: self.cid.len(),
         }
     }
@@ -178,6 +195,10 @@ where
     let system_prefix = fullnode_issuance::storage_key::system_prefix();
     let total_issuance_key = fullnode_issuance::storage_key::total_issuance();
     let citizen_issuance_prefix = citizen_issuance::storage_key::pallet_prefix();
+    let genesis_pallet_prefix = genesis_pallet::storage_key::pallet_prefix();
+    let pow_difficulty_prefix = pow_difficulty::storage_key::pallet_prefix();
+    let provincialbank_prefix = provincialbank_interest::storage_key::pallet_prefix();
+    let provincialbank_keys = provincialbank_interest::relevant_import_keys();
     let cid_prefixes = cid_lifecycle::storage_key::relevant_prefixes();
     let mut state = ImportedPolicyState::default();
     for (key, value) in pairs {
@@ -196,6 +217,17 @@ where
         }
         if key.starts_with(&citizen_issuance_prefix) {
             state.citizen_issuance.insert(key.clone(), value.clone());
+        }
+        if key.starts_with(&genesis_pallet_prefix) {
+            state.genesis_pallet.insert(key.clone(), value.clone());
+        }
+        if key.starts_with(&pow_difficulty_prefix) {
+            state.pow_difficulty.insert(key.clone(), value.clone());
+        }
+        if key.starts_with(&provincialbank_prefix) || provincialbank_keys.contains(key) {
+            state
+                .provincialbank_interest
+                .insert(key.clone(), value.clone());
         }
     }
     state
@@ -218,6 +250,12 @@ where
         .map_err(|e| format!("全节点发行:{e:?}"))?;
     citizen_issuance::check_genesis_key_values(state.citizen_issuance.iter())
         .map_err(|e| format!("公民认证发行:{e:?}"))?;
+    genesis_pallet::check_imported_state(state.genesis_pallet.iter())
+        .map_err(|e| format!("创世模块:{e:?}"))?;
+    pow_difficulty::check_imported_genesis(state.pow_difficulty.iter())
+        .map_err(|e| format!("PoW 动态难度:{e:?}"))?;
+    provincialbank_interest::check_imported_genesis(state.provincialbank_interest.iter())
+        .map_err(|e| format!("省储行固定发行:{e:?}"))?;
     cid_lifecycle::check_imported_genesis(state.cid.iter(), cid_reference)
         .map_err(|e| format!("CID 生命周期:{e:?}"))?;
     Ok(state.stats())
@@ -341,6 +379,24 @@ impl<I> NodeGuard<I> {
                 .map(|data| data.0)
         })
         .map_err(|e| format!("节点守卫:创世全节点发行审计状态校验失败:{e:?}"))?;
+        let mut provincialbank_state = Self::pallet_state(
+            &client,
+            genesis_hash,
+            provincialbank_interest::storage_key::pallet_prefix(),
+        )?;
+        for key in provincialbank_interest::relevant_import_keys() {
+            if key.starts_with(&provincialbank_interest::storage_key::pallet_prefix()) {
+                continue;
+            }
+            if let Some(value) = client
+                .storage(genesis_hash, &StorageKey(key.clone()))
+                .map_err(|e| format!("读取创世省储行质押本金失败:{e}"))?
+            {
+                provincialbank_state.insert(key, value.0);
+            }
+        }
+        provincialbank_interest::check_imported_genesis(provincialbank_state.iter())
+            .map_err(|e| format!("节点守卫:创世省储行固定发行校验失败:{e:?}"))?;
         let citizen_issuance_state = Self::pallet_state(
             &client,
             genesis_hash,
@@ -348,6 +404,20 @@ impl<I> NodeGuard<I> {
         )?;
         citizen_issuance::check_genesis_key_values(citizen_issuance_state.iter())
             .map_err(|e| format!("节点守卫:创世公民认证发行状态校验失败:{e:?}"))?;
+        let genesis_pallet_state = Self::pallet_state(
+            &client,
+            genesis_hash,
+            genesis_pallet::storage_key::pallet_prefix(),
+        )?;
+        genesis_pallet::check_genesis(|key| genesis_pallet_state.get(key).cloned())
+            .map_err(|e| format!("节点守卫:GenesisPallet 创世事实校验失败:{e:?}"))?;
+        let pow_difficulty_state = Self::pallet_state(
+            &client,
+            genesis_hash,
+            pow_difficulty::storage_key::pallet_prefix(),
+        )?;
+        pow_difficulty::check_genesis(|key| pow_difficulty_state.get(key).cloned())
+            .map_err(|e| format!("节点守卫:PoW 动态难度创世状态校验失败:{e:?}"))?;
         let cid_keys = Self::cid_state_keys(&client, genesis_hash)?;
         let cid_lifecycle = cid_lifecycle::GenesisReference::from_genesis(&cid_keys, |key| {
             client
@@ -424,11 +494,14 @@ impl<I> NodeGuard<I> {
         )?;
         log::debug!(
             target: "node-guard",
-            "完整状态单遍扫描:总键 {},治理 {},全节点发行/账户 {},公民发行 {},CID {}",
+            "完整状态单遍扫描:总键 {},治理 {},全节点发行/账户 {},公民发行 {},创世模块 {},PoW 动态难度 {},省储行固定发行 {},CID {}",
             stats.scanned,
             stats.governance,
             stats.fullnode_issuance,
             stats.citizen_issuance,
+            stats.genesis_pallet,
+            stats.pow_difficulty,
+            stats.provincialbank_interest,
             stats.cid,
         );
         Ok(())
@@ -441,6 +514,15 @@ impl<I> NodeGuard<I> {
             .clone()
             .ok_or_else(|| "普通区块缺少 body,无法复算 finalize 前后发行状态".to_string())?;
         let extrinsic_count = body.len();
+        if !has_user_transaction(extrinsic_count) {
+            log::error!(
+                target: "node-guard",
+                "拒绝区块 #{} ({:?}):空块不允许上链",
+                params.header.number(),
+                params.post_hash(),
+            );
+            return Ok(true);
+        }
 
         let parent_hash = *params.header.parent_hash();
         let parent_state = self
@@ -498,6 +580,34 @@ impl<I> NodeGuard<I> {
         };
 
         let mut issuance_plan = FinalizeIssuancePlan::default();
+        if let Err(reason) = pow_difficulty::check_transition(
+            *params.header.number(),
+            &post_delta,
+            &read_parent,
+            &read_post,
+        ) {
+            log::error!(
+                target: "node-guard",
+                "拒绝区块 #{} ({:?}):PoW 动态难度永久规则被破坏 —— {:?}",
+                params.header.number(),
+                params.post_hash(),
+                reason,
+            );
+            return Ok(true);
+        }
+
+        if let Err(reason) = genesis_pallet::check_transition(&post_delta, &read_parent, &read_post)
+        {
+            log::error!(
+                target: "node-guard",
+                "拒绝区块 #{} ({:?}):创世模块永久规则被破坏 —— {:?}",
+                params.header.number(),
+                params.post_hash(),
+                reason,
+            );
+            return Ok(true);
+        }
+
         if let Err(reason) = fullnode_issuance::check_transition(
             *params.header.number(),
             fullnode_issuance::author_from_header(&params.header),
@@ -528,6 +638,25 @@ impl<I> NodeGuard<I> {
             log::error!(
                 target: "node-guard",
                 "拒绝区块 #{} ({:?}):公民认证发行永久规则被破坏 —— {:?}",
+                params.header.number(),
+                params.post_hash(),
+                reason,
+            );
+            return Ok(true);
+        }
+
+        if let Err(reason) = provincialbank_interest::check_transition(
+            *params.header.number(),
+            &pre_delta,
+            &post_delta,
+            &read_parent,
+            &read_pre,
+            &read_post,
+            &mut issuance_plan,
+        ) {
+            log::error!(
+                target: "node-guard",
+                "拒绝区块 #{} ({:?}):省储行固定发行永久规则被破坏 —— {:?}",
                 params.header.number(),
                 params.post_hash(),
                 reason,
@@ -586,6 +715,31 @@ impl<I> NodeGuard<I> {
                 log::error!(
                     target: "node-guard",
                     "拒绝区块 #{} ({:?}):runtime 升级后的 CID 规范表全检失败 —— {:?}",
+                    params.header.number(),
+                    params.post_hash(),
+                    reason,
+                );
+                return Ok(true);
+            }
+        }
+
+        if post_delta.contains_key(sp_storage::well_known_keys::CODE) {
+            if let Err(reason) = genesis_pallet::check_full_state(&read_post) {
+                log::error!(
+                    target: "node-guard",
+                    "拒绝区块 #{} ({:?}):runtime 升级后的创世模块全检失败 —— {:?}",
+                    params.header.number(),
+                    params.post_hash(),
+                    reason,
+                );
+                return Ok(true);
+            }
+            if let Err(reason) =
+                provincialbank_interest::check_full_state(*params.header.number(), &read_post)
+            {
+                log::error!(
+                    target: "node-guard",
+                    "拒绝区块 #{} ({:?}):runtime 升级后的省储行固定发行全检失败 —— {:?}",
                     params.header.number(),
                     params.post_hash(),
                     reason,
@@ -661,8 +815,26 @@ where
 #[cfg(test)]
 mod finalize_issuance_tests {
     use super::*;
+
+    fn full_runtime_genesis_storage() -> sp_runtime::Storage {
+        use sp_runtime::BuildStorage;
+
+        let config: citizenchain::RuntimeGenesisConfig =
+            serde_json::from_value(citizenchain::genesis::genesis_config())
+                .expect("decode complete runtime genesis config");
+        config
+            .build_storage()
+            .expect("build complete runtime genesis storage")
+    }
     use codec::Encode;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn block_requires_timestamp_and_at_least_one_user_transaction() {
+        assert!(!has_user_transaction(0));
+        assert!(!has_user_transaction(1));
+        assert!(has_user_transaction(2));
+    }
 
     #[derive(Default)]
     struct CountingImport {
@@ -899,17 +1071,21 @@ mod finalize_issuance_tests {
         let governance = governance_skeleton::storage_key::admin_account(&[1u8; 32]);
         let fullnode = fullnode_issuance::storage_key::rewarded_block_count();
         let citizen = citizen_issuance::storage_key::rewarded_count();
+        let genesis = genesis_pallet::storage_key::citizen_max();
+        let provincialbank = provincialbank_interest::storage_key::last_settled_year();
         let cid = cid_lifecycle::storage_key::citizen_registry_prefix();
         let unrelated = b"unrelated".to_vec();
         let pairs = BTreeMap::from([
             (governance.clone(), vec![1]),
             (fullnode.clone(), vec![2]),
             (citizen.clone(), vec![3]),
+            (genesis.clone(), vec![4]),
+            (provincialbank.clone(), vec![4]),
             (cid.clone(), vec![4]),
             (unrelated, vec![5]),
         ]);
         let state = partition_imported_state(pairs.iter());
-        assert_eq!(state.scanned, 5);
+        assert_eq!(state.scanned, 7);
         assert_eq!(
             state.governance.keys().cloned().collect::<Vec<_>>(),
             [governance]
@@ -922,16 +1098,24 @@ mod finalize_issuance_tests {
             state.citizen_issuance.keys().cloned().collect::<Vec<_>>(),
             [citizen]
         );
+        assert_eq!(
+            state.genesis_pallet.keys().cloned().collect::<Vec<_>>(),
+            [genesis]
+        );
+        assert_eq!(
+            state
+                .provincialbank_interest
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            [provincialbank]
+        );
         assert_eq!(state.cid.keys().cloned().collect::<Vec<_>>(), [cid]);
     }
 
     #[test]
     fn real_genesis_complete_state_passes_all_policies_in_one_scan() {
-        use sp_runtime::BuildStorage;
-
-        let storage = citizenchain::RuntimeGenesisConfig::default()
-            .build_storage()
-            .expect("build runtime genesis storage");
+        let storage = full_runtime_genesis_storage();
         let top = storage.top;
         let cid_keys: Vec<Vec<u8>> = top
             .keys()
@@ -946,17 +1130,16 @@ mod finalize_issuance_tests {
         assert_eq!(stats.scanned, top.len());
         assert!(stats.governance > 0);
         assert!(stats.fullnode_issuance > 0);
+        assert!(stats.genesis_pallet > 0);
+        assert!(stats.provincialbank_interest > 0);
         assert!(stats.cid > 0);
     }
 
     #[test]
     fn complete_state_rejects_each_policy_before_inner_import() {
         use codec::Encode;
-        use sp_runtime::BuildStorage;
 
-        let storage = citizenchain::RuntimeGenesisConfig::default()
-            .build_storage()
-            .expect("build runtime genesis storage");
+        let storage = full_runtime_genesis_storage();
         let top = storage.top;
         let cid_keys: Vec<Vec<u8>> = top
             .keys()
@@ -997,6 +1180,39 @@ mod finalize_issuance_tests {
             verify_imported_policy_state(0, bad_citizen.iter(), &reference)
                 .expect_err("unknown citizen issuance key must fail")
                 .starts_with("公民认证发行:")
+        );
+
+        let mut bad_genesis = top.clone();
+        bad_genesis.insert(
+            genesis_pallet::storage_key::citizen_max(),
+            1_443_497_379u64.encode(),
+        );
+        assert!(
+            verify_imported_policy_state(0, bad_genesis.iter(), &reference)
+                .expect_err("changed genesis population must fail")
+                .starts_with("创世模块:")
+        );
+
+        let first_bank = &primitives::cid::china::china_ch::CHINA_CH[0];
+        let mut bad_provincialbank = top.clone();
+        bad_provincialbank.remove(&provincialbank_interest::storage_key::system_account(
+            &first_bank.stake_account,
+        ));
+        assert!(
+            verify_imported_policy_state(0, bad_provincialbank.iter(), &reference)
+                .expect_err("missing provincial bank principal must fail")
+                .starts_with("省储行固定发行:")
+        );
+
+        let mut unknown_provincialbank = top.clone();
+        let mut unknown_interest_key =
+            provincialbank_interest::storage_key::pallet_prefix().to_vec();
+        unknown_interest_key.extend_from_slice(&sp_core::hashing::twox_128(b"ShadowInterest"));
+        unknown_provincialbank.insert(unknown_interest_key, 1u32.encode());
+        assert!(
+            verify_imported_policy_state(0, unknown_provincialbank.iter(), &reference)
+                .expect_err("unknown provincial bank storage must fail")
+                .starts_with("省储行固定发行:")
         );
 
         let mut bad_cid = top.clone();

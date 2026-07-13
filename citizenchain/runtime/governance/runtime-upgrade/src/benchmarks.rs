@@ -2,14 +2,11 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use codec::Decode;
 use frame_benchmarking::v2::*;
-use frame_support::traits::Get;
-use frame_system::RawOrigin;
-use primitives::cid::china::china_cb::CHINA_CB;
+use frame_support::traits::{EnsureOrigin, Get};
 use sp_runtime::{
     sp_std::vec,
-    traits::{Hash, SaturatedConversion, Saturating},
+    traits::{SaturatedConversion, Saturating},
 };
 
 use crate::pallet::{CodeOf, Config, ReasonOf};
@@ -17,14 +14,6 @@ use crate::Pallet;
 
 const BENCH_MAX_REASON_LEN: u32 = 1024;
 const BENCH_MAX_CODE_SIZE: u32 = 5 * 1024 * 1024;
-
-fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
-    T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
-}
-
-fn nrc_admin<T: Config>() -> T::AccountId {
-    decode_account::<T>(CHINA_CB[0].admins[0])
-}
 
 fn reason_max<T: Config>() -> ReasonOf<T> {
     assert_eq!(
@@ -70,15 +59,23 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_runtime_upgrade() {
-        let proposer = nrc_admin::<T>();
+        let origin = T::ProposeOrigin::try_successful_origin()
+            .expect("benchmark proposer origin must be available");
+        let proposer = frame_system::EnsureSigned::<T::AccountId>::try_origin(origin.clone())
+            .unwrap_or_else(|_| panic!("benchmark proposer origin must be signed"));
         let reason = reason_max::<T>();
         let code = code_max::<T>();
         prepare_population_snapshot::<T>(&proposer);
 
         #[block]
         {
-            Pallet::<T>::propose_runtime_upgrade(RawOrigin::Signed(proposer).into(), reason, code)
-                .expect("benchmark runtime upgrade proposal should succeed");
+            Pallet::<T>::propose_runtime_upgrade(
+                origin,
+                reason,
+                code,
+                pow_difficulty::ActiveParams::<T>::get(),
+            )
+            .expect("benchmark runtime upgrade proposal should succeed");
         }
 
         let proposal_id = votingengine::Pallet::<T>::next_proposal_id().saturating_sub(1);

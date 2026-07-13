@@ -41,9 +41,8 @@ use sp_version::RuntimeVersion;
 
 // Local module imports
 use super::{
-    AccountId, Balance, Block, Executive, GenesisPallet, Grandpa, InherentDataExt, LegislationYuan,
-    Nonce, PowDifficulty, Runtime, RuntimeCall, RuntimeGenesisConfig, System, TransactionPayment,
-    VERSION,
+    AccountId, Balance, Block, Executive, Grandpa, InherentDataExt, LegislationYuan, Nonce,
+    Runtime, RuntimeCall, RuntimeGenesisConfig, System, TransactionPayment, VERSION,
 };
 
 impl_runtime_apis! {
@@ -270,18 +269,6 @@ impl_runtime_apis! {
             // NOTE: intentional unwrap: we don't want to propagate the error backwards, and want to
             // have a backtrace here.
             Executive::try_execute_block(block, state_root_check, signature_check, select).expect("execute-block failed")
-        }
-    }
-
-    impl pow_difficulty::PowDifficultyApi<Block> for Runtime {
-        fn current_pow_difficulty() -> u64 {
-            PowDifficulty::current_difficulty()
-        }
-    }
-
-    impl genesis_pallet::GenesisPalletApi<Block> for Runtime {
-        fn target_block_time_ms() -> u64 {
-            GenesisPallet::target_block_time_ms()
         }
     }
 

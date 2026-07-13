@@ -27,7 +27,7 @@ citizenchain/node/src/admins/admin_management/
 ├── activation.rs       # 管理员激活：生成激活签名请求、验证签名、本地加密存储
 ├── types.rs            # AdminAccountState DTO 与标签
 ├── account_id.rs       # AccountId / 管理员公钥 hex 规范化
-├── codec.rs            # AdminAccount SCALE 解码；机构管理员按 AdminProfile 解码，个人多签按 BoundedVec<AccountId32> 解码
+├── codec.rs            # AdminAccount SCALE 解码；机构目标按 admins 账户集合解码，个人多签保持独立解码
 ├── call_data.rs        # propose_admin_set_change call data 构造
 ├── validation.rs       # 桌面端前置校验
 ├── storage.rs          # Personal/Public/Private AdminAccounts storage key 与 RPC 读取
@@ -113,7 +113,7 @@ citizenchain/node/frontend/admins/admin-management/
 
 管理员资料展示：
 
-- `AdminAccounts.admins` 在公权/私权模块中按链上 `AdminProfile` 解码，返回 `account / admin_cid_number / name / admin_role / term_start / term_end / source`；个人多签仍是 account-only。
+- `AdminAccounts.admins` 在公权/私权模块中的目标布局为账户集合；机构岗位、权限、任期和任职来源必须从 entity 读取。个人多签保持独立。
 - 前端所有管理员列表、管理员集合编辑、变更差异、治理提案投票状态和清算行管理员解锁都复用 `AdminProfileCard.tsx`。
 - UI 固定为顶部“序号/操作状态”、第 1 行“姓名:/职务:”、第 2 行“任期:/来源:”、第 3 行“身份CID:”、第 4 行“账户:”、第 5 行“余额:”；字段值为空时值区域留空，不隐藏标签。余额真实读取 finalized `System.Account.free`，0 余额正常显示，查询失败才留空，不能替代管理员身份资料。
 

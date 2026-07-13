@@ -2,11 +2,13 @@ use super::*;
 // 簇 1:Runtime 整体自检(4 个用例)
 #[test]
 fn time_and_currency_constants_are_consistent() {
+    use frame_support::traits::Get;
+
     assert_eq!(YUAN, 100 * FEN);
     assert_eq!(UNIT, YUAN);
-    assert_eq!(HOURS, MINUTES * 60);
-    assert_eq!(DAYS, HOURS * 24);
-    assert_eq!(SLOT_DURATION, MILLI_SECS_PER_BLOCK);
+    assert_eq!(primitives::pow_const::POW_TARGET_BLOCK_TIME_MS, 360_000);
+    let minimum_period: u64 = <Runtime as pallet_timestamp::Config>::MinimumPeriod::get();
+    assert_eq!(minimum_period, 1);
 }
 
 #[test]
@@ -244,13 +246,12 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
                 b"ordinary transfer remark".to_vec(),
             )
             .expect("remark should fit");
-        let transfer_with_remark_call = RuntimeCall::OnchainTransaction(
-            onchain::pallet::Call::transfer_with_remark {
+        let transfer_with_remark_call =
+            RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
                 beneficiary: recipient,
                 amount: 456,
                 remark,
-            },
-        );
+            });
         let amount_with_remark = <RuntimeFeeKindClassifier as onchain::CallFeeKind<
             AccountId,
             RuntimeCall,
@@ -285,10 +286,7 @@ fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &resolution_destro_call);
-        assert_eq!(
-            resolution_kind,
-            onchain::FeeChargeKind::VoteFlat
-        );
+        assert_eq!(resolution_kind, onchain::FeeChargeKind::VoteFlat);
 
         let unknown_balances_call =
             RuntimeCall::Balances(pallet_balances::Call::upgrade_accounts {
@@ -840,10 +838,7 @@ fn runtime_square_post_fee_kind_uses_onchain_minimum_fee() {
             RuntimeCall,
             Balance,
         >>::fee_kind(&who, &call);
-        assert_eq!(
-            fee_kind,
-            onchain::FeeChargeKind::OnchainAmount(0)
-        );
+        assert_eq!(fee_kind, onchain::FeeChargeKind::OnchainAmount(0));
         assert_eq!(
             onchain::calculate_onchain_fee(0),
             primitives::fee_policy::ONCHAIN_MIN_FEE

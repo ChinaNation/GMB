@@ -1,4 +1,4 @@
-//! 立法投票 `cast_house_vote` 等裸 SCALE call-data 编码器(pallet idx 28)。
+//! 立法投票 `cast_house_vote` 等裸 SCALE call-data 编码器(pallet idx 26)。
 //!
 //! 链端 `legislation-vote` 的 5 个表决/签署 call 形态完全相同——
 //! `(proposal_id: u64, approve: bool)`(lib.rs:317/329/342/355/367)。
@@ -25,7 +25,7 @@ pub const OVERRIDE_SIGN_CALL_INDEX: u8 = 4;
 /// `guard_vote` call index(护宪大法官终审)。
 pub const GUARD_VOTE_CALL_INDEX: u8 = 5;
 
-/// 编码 `(proposal_id: u64 小端, approve: bool 0x01/0x00)` + `[28, call_index]` 前缀。
+/// 编码 `(proposal_id: u64 小端, approve: bool 0x01/0x00)` + `[26, call_index]` 前缀。
 fn encode_vote(call_index: u8, proposal_id: u64, approve: bool) -> ChainCall {
     let mut out = vec![LEGISLATION_VOTE_PALLET_INDEX, call_index];
     out.extend(proposal_id.to_le_bytes());

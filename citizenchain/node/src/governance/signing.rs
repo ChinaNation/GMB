@@ -21,6 +21,8 @@ use std::{
 pub(crate) const PROTOCOL_VERSION: &str = "QR_V1";
 pub(crate) const DEFAULT_TTL_SECS: u64 = 90;
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+/// 提交后给本地交易池更新 next-index 的短暂观察延迟，与 PoW 出块时间无关。
+const POST_SUBMIT_AUDIT_DELAY: Duration = Duration::from_secs(10);
 use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 /// SS58 前缀 2027。
 const SS58_PREFIX: u16 = 2027;
@@ -671,15 +673,14 @@ fn classify_invalid_tx(result_bytes: &[u8]) -> String {
     chain_signing::classify_invalid_tx(result_bytes)
 }
 
-/// 提交后的后台核对：延迟一个出块周期后检查账户 nonce 是否前进。
+/// 提交后的后台核对：短暂等待交易池更新后检查账户 nonce 是否前进。
 ///
 /// `system_accountNextIndex` 包含就绪队列中的交易——nonce 未前进
-/// 说明交易既不在就绪队列也未上链（丢失或卡 future 队列），打告警日志供排查；
+/// 说明当前观察没有确认交易进入就绪队列或已上链，打告警日志供排查；
 /// 该核对纯观测，不影响提交结果，沿用"submit-only + 后台观察"的既定模式。
 fn spawn_post_submit_audit(pubkey_hex: String, sign_nonce: u32, tx_hash: String) {
     std::thread::spawn(move || {
-        // 创世期目标块时 30 秒，留 3 个周期余量再核对。
-        std::thread::sleep(std::time::Duration::from_secs(90));
+        std::thread::sleep(POST_SUBMIT_AUDIT_DELAY);
         match fetch_nonce(&pubkey_hex) {
             Ok(next) if next > sign_nonce => {
                 eprintln!(
@@ -688,7 +689,7 @@ fn spawn_post_submit_audit(pubkey_hex: String, sign_nonce: u32, tx_hash: String)
             }
             Ok(next) => {
                 eprintln!(
-                    "[签名提交][后台核对] ⚠ {tx_hash} 提交 90 秒后 nonce 仍未消费(next={next}, 期望 >{sign_nonce})：交易已丢失或卡在 future 队列，不会上链，需要重新提交"
+                    "[签名提交][后台核对] ⚠ {tx_hash} 尚未在交易池或链上确认 nonce 消费(next={next}, 期望 >{sign_nonce})，请继续查询交易状态"
                 );
             }
             Err(e) => {
@@ -731,13 +732,7 @@ pub(crate) fn build_signing_payloads(
     spec_version: u32,
     tx_version: u32,
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
-    chain_signing::build_signing_payloads(
-        call_data,
-        genesis_hash,
-        nonce,
-        spec_version,
-        tx_version,
-    )
+    chain_signing::build_signing_payloads(call_data, genesis_hash, nonce, spec_version, tx_version)
 }
 
 pub(crate) fn fetch_genesis_hash() -> Result<[u8; 32], String> {

@@ -1,16 +1,14 @@
 //! 创世模块=genesis-pallet
 //!
 //! # 职责
-//! 1. 存储链的当前运行阶段（创世期 Genesis / 运行期 Operation）及对应参数：
-//!    - 出块目标时间（TargetBlockTimeMs）
-//!    - 开发者直升 runtime 开关（DeveloperUpgradeEnabled）
+//! 1. 存储链的当前运行阶段（创世期 Genesis / 运行期 Operation）及开发者直升开关。
 //! 2. 存储创世常量（创世宣言、国名宣言、创世人口），在创世区块中初始化。
 //! 3. 创世写入内置公权机构和创世公职人员，只写初始 storage，不承载运行期治理。
 //!
 //! # 设计原则
 //! - 纯存储 + getter + trait，不暴露 extrinsic。
 //! - 阶段切换仅通过 runtime 升级迁移（OnRuntimeUpgrade）一次性写入，不设链上调用。
-//! - 其他模块（难度调整、矿工门控、runtime-upgrade）各自读本模块的链上值。
+//! - PoW 平均目标固定在 primitives 核心常量中，不属于阶段状态，也不得由本模块修改。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -20,15 +18,6 @@ pub mod institution;
 pub mod weights;
 
 pub use pallet::*;
-
-// ─── Runtime API ────────────────────────────────────────────────────────────
-// 节点层矿工门控通过此 API 读取链上动态出块时间，替代编译期常量。
-sp_api::decl_runtime_apis! {
-    pub trait GenesisPalletApi {
-        /// 返回当前链上出块目标时间（毫秒）。
-        fn target_block_time_ms() -> u64;
-    }
-}
 
 // ─── DeveloperUpgradeCheck trait ────────────────────────────────────────────
 // 供 runtime-upgrade 通过关联类型读取开发者直升开关，不硬耦合。
@@ -46,16 +35,7 @@ pub trait GenesisInstitutionSeeder {
     fn seed();
 }
 
-// ─── TargetBlockTime trait ──────────────────────────────────────────────────
-// 供 pow-difficulty 等只读出块时间的消费者用,不硬耦合整个 genesis Config(同
-// DeveloperUpgradeCheck 范式)。
-pub trait TargetBlockTime {
-    /// 当前链上出块目标时间(毫秒)。
-    fn target_block_time_ms() -> u64;
-}
-
 #[frame_support::pallet]
-#[allow(dead_code)] // Events 预留给 on_runtime_upgrade 迁移使用，当前 deposit_event 暂未调用
 pub mod pallet {
     use alloc::vec::Vec;
     use frame_support::pallet_prelude::*;
@@ -64,7 +44,7 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::config]
-    pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
+    pub trait Config: frame_system::Config {
         type WeightInfo: crate::weights::WeightInfo;
 
         /// 创世宣言和国名宣言的最大字节长度。
@@ -91,10 +71,10 @@ pub mod pallet {
         Default,
     )]
     pub enum ChainPhase {
-        /// 创世期：单权威、30 秒出块、开发者可直升 runtime。
+        /// 创世期：开发者可直接升级 runtime。
         #[default]
         Genesis,
-        /// 运行期：44 权威、6 分钟出块、升级必须走联合投票。
+        /// 运行期：开发者直升永久关闭，升级必须走治理授权。
         Operation,
     }
 
@@ -104,19 +84,6 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn phase)]
     pub type Phase<T> = StorageValue<_, ChainPhase, ValueQuery>;
-
-    /// 出块目标时间（毫秒）。创世默认 30,000（30 秒）。
-    #[pallet::storage]
-    #[pallet::getter(fn target_block_time_ms)]
-    pub type TargetBlockTimeMs<T> = StorageValue<_, u64, ValueQuery, DefaultTargetBlockTime>;
-
-    /// 出块目标时间默认值（ValueQuery 的 OnEmpty 实现）。
-    pub struct DefaultTargetBlockTime;
-    impl Get<u64> for DefaultTargetBlockTime {
-        fn get() -> u64 {
-            30_000
-        }
-    }
 
     /// 开发者直升 runtime 开关。创世默认 true（开启）。
     #[pallet::storage]
@@ -187,21 +154,6 @@ pub mod pallet {
         }
     }
 
-    // ─── Events ────────────────────────────────────────────────────────────
-    // Events 预留给 on_runtime_upgrade 迁移代码使用（阶段切换时触发）。
-    // 当前迁移未实现，deposit_event 暂未被调用。
-
-    #[pallet::event]
-    #[pallet::generate_deposit(pub(super) fn deposit_event)]
-    pub enum Event<T: Config> {
-        /// 链阶段已切换。
-        PhaseChanged { from: ChainPhase, to: ChainPhase },
-        /// 出块目标时间已变更。
-        TargetBlockTimeChanged { old_ms: u64, new_ms: u64 },
-        /// 开发者直升开关已变更。
-        DeveloperUpgradeToggled { enabled: bool },
-    }
-
     // 本 pallet 不暴露 extrinsic。阶段切换仅通过 OnRuntimeUpgrade 迁移执行。
 }
 
@@ -209,13 +161,6 @@ pub mod pallet {
 impl<T: pallet::Config> DeveloperUpgradeCheck for pallet::Pallet<T> {
     fn is_enabled() -> bool {
         pallet::DeveloperUpgradeEnabled::<T>::get()
-    }
-}
-
-// ─── TargetBlockTime 实现 ──────────────────────────────────────────────────
-impl<T: pallet::Config> TargetBlockTime for pallet::Pallet<T> {
-    fn target_block_time_ms() -> u64 {
-        pallet::TargetBlockTimeMs::<T>::get()
     }
 }
 

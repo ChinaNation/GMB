@@ -108,10 +108,10 @@ sync_android_artifact() {
 if [[ "$DEVICE_LINE" == "android" ]]; then
   # 启动脚本固定把本地 APK 产物沉淀到项目根 target/，便于离线安装和回滚。
   echo "==> 生成 Android 产物..."
-  flutter build apk --debug "${ANDROID_TARGET_PLATFORMS[@]}" "${DART_DEFINES[@]}"
+  flutter build apk --debug "${ANDROID_TARGET_PLATFORMS[@]}" ${DART_DEFINES[@]+"${DART_DEFINES[@]}"}
   sync_android_artifact
 fi
 
 echo "==> 编译并启动 App..."
-flutter run "${DART_DEFINES[@]}"
+flutter run ${DART_DEFINES[@]+"${DART_DEFINES[@]}"}
 sync_android_artifact

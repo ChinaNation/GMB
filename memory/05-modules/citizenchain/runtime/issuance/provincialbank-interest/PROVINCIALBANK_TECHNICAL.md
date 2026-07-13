@@ -1,183 +1,129 @@
-# PROVINCIALBANK Interest Technical Notes
+# 省储行创立质押与固定年度利息技术文档
 
-## 0. 功能需求
-`provincialbank-interest` 的功能需求是：按年度向 `CHINA_CH` 中固定 43 家省储行的多签账户发放质押利息，并把结算结果、失败原因和补救动作全部体现在链上。
+## 1. 制度定位
 
-模块必须满足以下要求：
-- 利息接收账户只能是 `CHINA_CH` 中硬编码的省储行多签账户，不能由外部调用临时改写。
-- 结算按照年度执行，基于 runtime 注入的 `BlocksPerYear` 在年度边界自动触发。
-- 每年只允许顺序结算，不能跳过前一年直接结算后一年。
-- 利率按制度常量执行：固定启用首年利率和逐年递减，到制度年限后自动归零。
-- 只有当 43 家省储行在某一年度全部成功处理后，该年度才算真正 settled。
-- 自动结算失败时必须保留在当前年度，等待 Root 手动补结算或强制推进，不允许静默跳过。
-- Root 可以手动补结算若干已到期年度，也可以在故障无法修复时强制推进到某个已到期年度。
-- 所有异常情况都要链上可审计，包括地址解码失败、身份编码失败、金额转换溢出和年度结算失败。
+`provincialbank-interest` 只执行一项不可由治理或 runtime 升级改变的原生货币规则：以
+`primitives::cid::china::china_ch::CHINA_CH` 中固定 43 家省储行的创立质押本金为基数，
+在连续 100 个制度年度向各省储行 `main_account` 发放固定递减利息。
 
-## 1. 模块定位
-`provincialbank-interest` 是一个 FRAME pallet，用于按年度向 `CHINA_CH` 省储行账户发放质押利息。
+该规则与 `resolution-issuance`、`onchain-issuance` 边界明确：后两者继续属于治理发行和
+非治理链上资产发行；省储行创立质押及其利息属于 NodeGuard 可独立复算的永久发行。
 
-核心目标：
-- 年度自动结算，在年度边界区块触发。
-- 失败链上可审计，不依赖节点本地日志。
-- 运行期可恢复，支持 Root 补结算和故障年度跳过。
-- 收款地址固定，不依赖运行期治理修改。
+## 2. 固定规则
 
-代码位置：
-- `/Users/rhett/GMB/citizenchain/runtime/issuance/provincialbank-interest/src/lib.rs`
+- 省储行集合：`CHINA_CH` 中 43 家，不允许增加、删除、替换或重复。
+- 创立质押账户：每家的 `stake_account`。
+- 创立质押本金：每家的 `stake_amount`，创世逐户写入且后续永久不得变化。
+- 利息收款账户：每家的 `main_account`，不是 `stake_account`。
+- 第一年利率：`100 BP`（1.00%）。
+- 每年递减：`1 BP`（0.01%）。
+- 发放年限：100 年，第 100 年利率为 `1 BP`，第 101 年起不再发行。
+- 年度周期：`87,600` 区块。
+- 单户公式：`stake_amount × rate_bp(year) ÷ 10,000`。
+- 全部 `stake_amount` 均可被 10,000 整除，节点可无舍入误差复算累计值。
 
-## 2. 关键常量与配置
-模块内常量：
-- `AUTO_BACKFILL_MAX_YEARS_PER_BLOCK = 1`
-- `MAX_FORCE_SETTLE_YEARS = 8`
+制度常量位于：
 
-制度常量：
-- `ENABLE_PROVINCIALBANK_INTEREST_DECAY` — 通过编译期断言锁定为 `true`，模块不保留关闭递减的运行时分支。
-- `PROVINCIALBANK_INITIAL_INTEREST_BP`
-- `PROVINCIALBANK_INTEREST_DECREASE_BP`
-- `PROVINCIALBANK_INTEREST_DURATION_YEARS`
+- `citizenchain/runtime/primitives/src/core_const.rs`
+- `citizenchain/runtime/primitives/src/pow_const.rs`
+- `citizenchain/runtime/primitives/cid/china/china_ch.rs`
 
-Runtime 注入：
-- `Config::Currency = Balances`
-- `Config::BlocksPerYear = ConstU64<{ primitives::pow_const::BLOCKS_PER_YEAR }>` — 白皮书定义 87,600 块/年，与出块时间无关（空块不允许上链，区块高度仅在有交易时推进）
-- `Config::WeightInfo = provincialbank_interest::weights::SubstrateWeight<Runtime>`
+## 3. 创世本金
 
-Runtime 接线：
-- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs:522`
+`citizenchain/runtime/src/genesis.rs` 把 43 笔创立发行逐户写入无私钥 `stake_account`。
+创世总注入仍按三类独立来源核算：
 
-## 3. 存储结构
-- `LastSettledYear: u32`
-  说明：记录已经完整结算成功的最后年度，`0` 表示尚未结算任何一年。
+```text
+GENESIS_ISSUANCE
++ 43 家省储行 stake_amount 合计
++ HE_FUND_ISSUANCE
+```
 
-当前实现没有“账户覆盖表”或其他可变地址存储，收款地址完全来自 `CHINA_CH` 常量。
+Runtime 测试逐户核对 `stake_account` 和 `stake_amount`；NodeGuard 启动、完整状态导入和
+runtime 升级全检会复核完整 `System::Account`，不仅比较 free balance，也冻结 nonce、引用计数、
+reserved、frozen 和 flags。任何本金增减、账户删除或字段改写均拒块。
 
-## 4. 事件与错误
-主要事件：
-- `ProvincialBankInterestMinted { year, pallet_id, account, amount }`
-- `ProvincialBankDecodeFailed { year, pallet_id }`
-- `ProvincialBankIdEncodeFailed { year, index }`
-- `ProvincialBankPrincipalOverflow { year, pallet_id }`
-- `ProvincialBankInterestOverflow { year, pallet_id }` — 本金乘利率发生溢出，跳过该省储行并让年度结算失败（链上可审计）
-- `ProvincialBankYearSettled { year }`
-- `ProvincialBankYearSettlementFailed { year, success_count, total_count }`
-- `ProvincialBankYearForceAdvanced { year }`
-- `ProvincialBankInterestBelowED { year, pallet_id, amount }` — 利息低于 Existential Deposit，跳过发币（链上可审计）
+## 4. Runtime 状态
 
-主要错误：
-- `InvalidOperationCount`
-- `InvalidYear`
+模块只保留三项审计 storage：
 
-## 5. 自动结算流程
-入口：`Hooks::on_initialize`
+- `LastSettledYear: u32`：最后完整结算年度，创世为 0。
+- `TotalProvincialBankInterestIssued: u128`：省储行利息累计发行量，创世为 0。
+- `LastProvincialBankInterestAudit: Option<ProvincialBankInterestAudit>`：最近年度、银行数量和年度总利息；首个年度前不存在。
 
-触发条件：
-- `BlocksPerYear != 0`
-- 当前区块非 0
-- `block % BlocksPerYear == 0`
+FRAME pallet `StorageVersion` 保持 0；NodeGuard 同时校验该规范 key，非零版本或同 pallet 前缀下的
+任何未知影子 key 都会 fail-closed。
 
-流程：
-1. 计算 `current_year` 和 `last_settled_year`。
-2. 若当前已经进入更高年度，且尚未达到制度年限，则调用 `settle_next_years(...)`。
-3. 自动补结算单个区块最多推进 1 年，避免多年历史欠账集中压进同一个年度边界块。
-4. 若存在多年未结算历史欠账，自动路径只处理下一年，剩余年度由 Root 通过 `force_settle_years` 分批补救。
-5. 若在年度边界块但当前没有待结算年度，则只走 `on_initialize_boundary_noop` 权重。
+`ProvincialBankInterestAudit` 的 SCALE 字段序固定为：
 
-## 6. 年度结算逻辑
-入口：`settle_next_years(current_year, max_years, block)`
+```text
+(year: u32, bank_count: u32, total_interest: u128)
+```
 
-约束：
-- 从 `last_settled_year + 1` 开始顺序推进。
-- 任一年失败后立刻停止后续年度，避免出现跨年错位。
-- 只有 `success_count == total_count` 才会把该年写入 `LastSettledYear`。
+Runtime 与 node 均有字段序防漂移测试。
 
-单年发放：`mint_interest_for_year(year)`
+## 5. 执行阶段与原子性
 
-利率计算：
-- `settle_next_years` 只会传入 `year <= PROVINCIALBANK_INTEREST_DURATION_YEARS` 的年度。
-- `interest_bp_for_year` 不再保留 `!ENABLE_PROVINCIALBANK_INTEREST_DECAY` 和超出制度年限的不可达返回分支；前者由编译期断言锁定，后者由年度结算边界保证。
+`on_initialize` 只判断是否为第 1..=100 个年度边界，并预留 benchmark 权重；实际铸发统一在
+`on_finalize` 执行，使 NodeGuard 能把省储行利息与全节点、公民认证奖励合并到同一份
+`FinalizeIssuancePlan`，同时与 extrinsic 阶段允许的决议发行、链上发行隔离。
 
-对每家省储行执行：
-1. 将 `cid_number` 编码成固定 48 字节 `pallet_id`。
-2. 由 `main_account` 解码出固定收款账户。
-3. 将 `stake_amount` 转成运行时 `Balance`，并做回写校验防止饱和截断。
-4. 使用 `checked_mul` 计算 `principal * rate_bp` 后再除以 `10_000`；若乘法溢出，发出 `ProvincialBankInterestOverflow` 并让该年度结算失败。
-5. `interest == 0` 时视为成功但不发币。
-6. `interest < minimum_balance` 时视为成功但跳过发币，作为 dust 防御兜底。
-7. 其他情况用 `deposit_creating` 直接增发到省储行多签账户，并记录 `ProvincialBankInterestMinted`。
+年度结算必须满足：
 
-## 7. Root 补救接口
-### 7.1 `force_settle_years(max_years)`（call index = 0）
-- 作用：手动补结算若干已到期年度。
-- 约束：`0 < max_years <= MAX_FORCE_SETTLE_YEARS`，当前 `MAX_FORCE_SETTLE_YEARS = 8`。
-- 权重：使用声明的 benchmark 权重，不再按运行时手写读写计数回填 `actual_weight`，避免低报真实执行成本。
+1. `LastSettledYear == year - 1`；
+2. 逐户从固定 `stake_amount` 计算利息；
+3. 利息只进入对应 `main_account`；
+4. 43 笔全部成功后才更新累计量、年度和最近审计；
+5. 任一解码或算术错误使整个存储事务回滚，不保留部分发行；
+6. NodeGuard 因缺少精确固定发行计划而拒绝该区块。
 
-### 7.2 `force_advance_year(year)`（call index = 1）
-- 作用：跳过已经到期但无法修复的故障年度。
-- 约束：
-  - `year > last_settled_year`
-  - `year <= current_year`
-  - `year <= PROVINCIALBANK_INTEREST_DURATION_YEARS`
+模块不再暴露任何 `Call`。旧 `force_settle_years`、`force_advance_year`、跳年、批量补年和
+Root 恢复分支均已删除，不保留兼容调用或影子流程。年度边界若失败，链停在边界前，必须修复
+runtime 后重新正确执行该年度，不能跳过应发利息。
 
-说明：
-- 该接口不能提前跳过未来尚未到期的年度，避免误操作直接抹掉未来若干年的利息发放。
+## 6. 事件
 
-## 8. 权重策略
-当前 `WeightInfo` 提供：
-- `force_settle_years(max_years)`
-- `force_advance_year()`
-- `on_initialize_boundary_noop()`
-- `on_initialize_settlement()`
+- `ProvincialBankInterestMinted { year, account, amount }`：单户固定利息到账。
+- `ProvincialBankYearSettled { year, bank_count, total_interest }`：43 家全部到账并推进审计。
 
-当前策略：
-- 非年度边界块直接返回 `Weight::zero()`，不读取存储。
-- 年度边界但无待结算年度返回 `T::WeightInfo::on_initialize_boundary_noop()`。
-- 年度边界且存在待结算年度时，自动路径固定只结算 1 年，并返回 `T::WeightInfo::on_initialize_settlement()`。
-- `force_settle_years` 的声明权重仍来自 benchmark，执行完成后不再用手写读写计数覆盖实际权重。
+失败事务会整体回滚，错误只写 runtime 日志；链上不会保留“失败但部分发行”的事件或状态。
 
-已知待改进：
-- `on_initialize_settlement` 当前复用单年 `force_settle_years(1)` 的 benchmark 权重并额外加一次 `LastSettledYear` 读取作为保守上界；后续重新跑 benchmark 时，应由 `on_initialize_settlement` 和 `on_initialize_boundary_noop` 独立生成权重。
-- `weights.rs` 硬编码 43 个省储行的读写次数，如果 `CHINA_CH` 数量变化需要重新跑 benchmark。
+## 7. NodeGuard 边界
 
-补充说明：
-- `weights.rs` 当前为 `frame-benchmarking` 生成产物。
-- `benchmarks.rs` 覆盖两个 Root 调用和两个 `on_initialize` 路径（单年结算路径 + 年度边界无待结算路径），`force_settle_years` 的组件范围应与 `MAX_FORCE_SETTLE_YEARS` 保持一致。
-- 若 benchmark 组件范围、执行路径或常量边界发生变化，需要重新生成 `weights.rs`，不是历史上跑过一次就可以永久沿用。
-- Cargo feature：`runtime-benchmarks` 会向测试/benchmark runtime 使用的 `pallet-balances` 传播；`primitives` 当前不暴露 benchmark feature，不在传播列表中。
+节点策略位于：
 
-## 9. try-runtime 支持
-Cargo.toml 已启用 `try-runtime` feature，依赖链：
-- `frame-support/try-runtime`
-- `frame-system/try-runtime`
-- `sp-runtime/try-runtime`
+- `citizenchain/node/src/core/node_guard/provincialbank_interest.rs`
 
-Hooks 中实现了 `try_state` 钩子，校验：
-- `LastSettledYear <= PROVINCIALBANK_INTEREST_DURATION_YEARS`
+节点不读取 runtime metadata/API，独立固定 RAW key、SCALE 镜像和公式，并检查：
 
-## 10. 测试覆盖
-执行命令：
-- `cargo test -p provincialbank-interest`
+- block#0 的 43 笔永久质押本金；
+- 普通块父状态、finalize 前和 finalize 后审计；
+- 年度连续性、年度总额、累计量和最近审计；
+- 43 个 `main_account` 的精确利息计划；
+- `Balances::TotalIssuance` 与所有固定 finalize 发行的合计；
+- 未登记收款账户、错误金额、错误账户、提前发行、重复发行和跳年；
+- `:code` 变化后的全量本金与当前年度审计；
+- block#0 完整状态导入中的本金、规范空审计和未知 pallet key。
 
-当前覆盖（19 个业务测试）：
-- 第 1 / 2 年正常发放与利率递减。
-- 晚到边界时自动只补下一个未结算年度。
-- 年限达到上限后停止继续发放。
-- Root 手动补结算。
-- Root 强制推进恢复。
-- 非 Root 调用拒绝。
-- `force_settle_years` 参数校验和 8 年批处理上限。
-- 自动补结算上限为 1 年。
-- `BlocksPerYear == 0` 时禁用自动结算。
-- 未来年度不能被 `force_advance_year` 提前跳过。
-- 故障恢复后自动结算恢复（`force_advance_then_settle_resumes`）。
-- `force_settle_years` 不超过当前年度（`force_settle_years_caps_at_current_year`）。
-- 第 100 年边界利率 1 BP 正确发放，第 101 年不再发放（`year_100_boundary_settles_with_minimum_rate`）。
+## 8. 权重
 
-已知待补充：
-- 6 个审计/失败事件（`ProvincialBankDecodeFailed`、`ProvincialBankIdEncodeFailed`、`ProvincialBankPrincipalOverflow`、`ProvincialBankInterestOverflow`、`ProvincialBankYearSettlementFailed`、`ProvincialBankInterestBelowED`）缺少显式触发和断言的回归测试。当前测试覆盖正常流程和边界条件，未覆盖错误分支。修改 CHINA_CH、账户解码、ED 兜底或结算中止逻辑时应优先补充。
+正式 pallet benchmark：
 
-## 11. 审查结论与建议
-本轮已修复自动补结算单块权重尖峰风险：自动路径从 8 年/块收敛为 1 年/块，Root 补结算上限收敛为 8 年/笔，并让 `on_initialize` 返回 `WeightInfo` 权重，避免继续依赖手写读写估算。
+- 命令参数：50 steps / 20 repeats；
+- `on_finalize_settlement`：45 reads / 46 writes；
+- 实测执行时间模型约 569 ms；
+- 估算 proof size 112,919 bytes；
+- 生成文件：`src/weights.rs`。
 
-建议：
-1. 若调整 benchmark 组件范围、年度上限或结算路径，应同步重新跑 benchmark 并更新 `weights.rs`。
-2. `force_advance_year` 属于恢复型 Root 接口，运维上应优先修复故障再跳过年度，只把它当成最后手段。
-3. 利息乘法已由 `checked_mul` 和 `ProvincialBankInterestOverflow` 审计事件兜底；若未来 `CHINA_CH` 的 `stake_amount` 或运行时 `Balance` 精度发生变化，应重新跑相关测试和 benchmark。
+非年度边界和第 101 年后的区块返回零额外权重；年度边界在 `on_initialize` 预留
+`on_finalize_settlement()` 权重。
+
+## 9. 验收基线（2026-07-12）
+
+- `provincialbank-interest`：10/10；带 `runtime-benchmarks`：11/11。
+- runtime 创世测试逐户验证 43 个 `stake_account` 和 `stake_amount`。
+- NodeGuard 全量：64/64；省储行策略定向：8/8。
+- 当前源码 production WASM 与 node build 通过。
+- fresh headless 节点使用独立 `/tmp` 数据库启动到 block#0，创世哈希
+  `0x6fc42816b55ce22f204d0dbddbf38a9ab4d3a1c78005b90e1fcbe376ef8585b1`，临时数据库约 352 MiB。
+- NodeGuard 没有误拒绝当前真实创世本金；临时数据库已删除。

@@ -220,6 +220,21 @@ mod tests {
         // + 1 个国家储委会两和基金账户。
         let nrc_admins_len = CHINA_CB.first().map(|n| n.admins.len()).unwrap_or(0);
         assert_eq!(balances.len(), 1 + nrc_admins_len + CHINA_CH.len() + 1);
+
+        // 每家省储行的创立发行必须逐户精确进入无私钥 stake_account，不能改发主账户或汇总账户。
+        for bank in CHINA_CH {
+            let stake_ss58 = account_to_genesis_ss58(&AccountId::new(bank.stake_account));
+            let amount = balances
+                .iter()
+                .find_map(|entry| {
+                    let fields = entry.as_array()?;
+                    (fields.first()?.as_str()? == stake_ss58)
+                        .then(|| fields.get(1).and_then(json_amount_to_u128))
+                        .flatten()
+                })
+                .expect("每家省储行 stake_account 都必须有创立发行余额");
+            assert_eq!(amount, bank.stake_amount);
+        }
     }
 
     #[test]

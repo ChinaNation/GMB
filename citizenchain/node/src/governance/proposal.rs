@@ -1,6 +1,7 @@
 // 提案查询：提案列表、详情、投票计数，通过 RPC 读取 VotingEngine 链上存储。
 
 use crate::shared::proposal_business;
+use codec::Decode;
 use primitives::cid::code::InstitutionCode;
 use serde::Serialize;
 
@@ -80,6 +81,8 @@ pub struct RuntimeUpgradeDetail {
     pub proposer_hex: String,
     pub reason: String,
     pub code_hash_hex: String,
+    pub expected_pow_params_hash_hex: String,
+    pub pow_params: pow_difficulty::PowDifficultyParams,
 }
 
 /// 投票计数。
@@ -777,6 +780,19 @@ fn decode_runtime_upgrade_action(proposal_id: u64, data: &[u8]) -> Option<Runtim
     let code_hash_hex = hex::encode(&data[offset..offset + 32]);
     offset += 32;
 
+    // expected_pow_params_hash: [u8;32]
+    if offset + 32 > data.len() {
+        return None;
+    }
+    let expected_pow_params_hash_hex = hex::encode(&data[offset..offset + 32]);
+    offset += 32;
+
+    // new_pow_params: 固定字段 SCALE 编码。
+    let mut params_input = &data[offset..];
+    let pow_params = pow_difficulty::PowDifficultyParams::decode(&mut params_input).ok()?;
+    let consumed = data[offset..].len().saturating_sub(params_input.len());
+    offset += consumed;
+
     // 协议升级摘要不保存业务状态，真实状态只读 VotingEngine::Proposals.status。
     if offset != data.len() {
         return None;
@@ -787,6 +803,8 @@ fn decode_runtime_upgrade_action(proposal_id: u64, data: &[u8]) -> Option<Runtim
         proposer_hex,
         reason,
         code_hash_hex,
+        expected_pow_params_hash_hex,
+        pow_params,
     })
 }
 
@@ -1285,6 +1303,7 @@ fn fetch_option_bool(storage_key: &str) -> Result<Option<bool>, String> {
 #[cfg(test)]
 mod format_summary_tests {
     use super::*;
+    use codec::Encode;
 
     fn compact_bytes_for_test(bytes: &[u8]) -> Vec<u8> {
         assert!(bytes.len() < 64, "test helper only supports short vectors");
@@ -1320,6 +1339,8 @@ mod format_summary_tests {
             proposer_hex: String::new(),
             reason: long,
             code_hash_hex: String::new(),
+            expected_pow_params_hash_hex: String::new(),
+            pow_params: pow_difficulty::PowDifficultyParams::genesis_default(),
         };
         let summary = format_runtime_upgrade_summary(&d);
         assert!(summary.starts_with("协议升级："));
@@ -1332,6 +1353,8 @@ mod format_summary_tests {
         data.extend_from_slice(&[7u8; 32]);
         data.extend_from_slice(&compact_bytes_for_test("升级".as_bytes()));
         data.extend_from_slice(&[9u8; 32]);
+        data.extend_from_slice(&[8u8; 32]);
+        data.extend_from_slice(&pow_difficulty::PowDifficultyParams::genesis_default().encode());
 
         let detail =
             decode_runtime_upgrade_action(10, &data).expect("current layout should decode");
@@ -1397,6 +1420,8 @@ mod format_summary_tests {
             proposer_hex: String::new(),
             reason: "升级".to_string(),
             code_hash_hex: String::new(),
+            expected_pow_params_hash_hex: String::new(),
+            pow_params: pow_difficulty::PowDifficultyParams::genesis_default(),
         };
         let (dq, ru, ri, rd, fr) =
             split_action_into_details(ProposalAction::RuntimeUpgrade(Box::new(detail)));

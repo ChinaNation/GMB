@@ -1,8 +1,8 @@
 //! 法律案(本轮实现):章节条款提案 + 院内/两院表决 + 签署。
 //!
 //! Phase 1 增量交付裸 SCALE call-data 编码器——
-//! - `chain_propose`:`propose_enact/amend/repeal_law`(pallet 27);
-//! - `chain_vote`:`cast_house_vote` 等表决/签署(pallet 28)。
+//! - `chain_propose`:`propose_enact/amend/repeal_law`(pallet 25);
+//! - `chain_vote`:`cast_house_vote` 等表决/签署(pallet 26)。
 //! 复用 `core::institution_call` 的「构造 call data → origin 冷签 → CitizenWallet 提交」通道,
 //! 逐字节交叉校验链端 SCALE。HTTP DTO(model)、`service` 组织提案数据、链读(`chain_read`)、
 //! 冷签 prepare/commit 随 Phase 1B 后续增量落地。

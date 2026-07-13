@@ -49,5 +49,12 @@ runtime+node `cargo check`;App/Wallet `dart analyze` + 字节向量测试(pallet
 - CitizenApp:dart analyze 全绿;链相关测试(signer/governance/rpc/qr/transaction/legislation/citizen)通过。批量跑有 2 个失败(institution_detail「订阅按钮」等),经隔离复跑 All tests passed → 确认为已知 smoldot hermetic flaky([[project_citizenapp_test_smoldot_hermetic]]),与本次改号无关。
 - 2026-07-12 后续全量验收发现并清理 3 条漏改测试：`SquarePost 36→34`、pallet `7` 错标为 `PersonalAdmins`、pallet `29` 错标为 `PublicAdmins`。修正后又增加安装包六节点守卫测试，CitizenApp 全量 `flutter test` 为 511 passed / 5 skipped / 0 failed。
 - 待办:chainspec 用 CI WASM 重生(点 2)。
-- flag1:onchina `core/qr/mod.rs:40` 注释 `CREG federal_set=0x0c01 / FRG propose=0x0c00` 无对应代码常量、非本次改号引入的陈旧注释,未动,待查清。
-- flag2:历史 ADR/任务卡的 pallet 号预留已过期——ADR-022 account-keys 预留=27(现=PublicAdmins)、ADR-027 立法预留 27/28(现=25/26);且"下一个空号"从旧 37 变为 35(0..34 全占)。未改历史档,新增 pallet 须用 ≥35 并更新预留档。
+
+## 收尾清残 + ADR 订正(2026-07-12,独立审计 7 员发现后清理)
+- **独立审计抓出功能性漏改**(已全修+验证):runtime `cases.rs:80` system_version 断言 0→1;node/frontend `VoteSigningFlow.tsx:160` 兜底 22→20;cloudflare `square_event.ts:6`+`chain_confirm.test.ts:331` square 36→34(App agent曾误报已改实未改)。另修 pre-existing 命名 bug:`personal_manage_storage_codec.dart:44` PersonalAccounts 存储键 PersonalAdmins→PersonalManage。
+- **注释/文档清残**(A,工作流 4 区域):node/onchina rust 注释、CitizenWallet `payload_decoder`/`action_labels`、CitizenApp `personal_manage_*` 称谓、memory 文档(unified-protocols/CITIZENCHAIN_TECHNICAL/unified-naming/citizenapp-vs-citizenwallet/ADR-030);终检又补 4 处审计漏网(multisig benchmarks、votingengine lib.rs、institution_pallet_router、multisig_storage_codec)+ ADR-030:63。
+- **flag1 已闭环**:qr/mod.rs 注释改对为 FRG=0x1b02(PublicAdmins.propose_federal_registry_province_admin_set_change)、CREG=公权机构创建 0x1e05。
+- **flag2 已闭环**:ADR-022 account-keys 预留 27→35、ADR-027 立法 27/28→25/26、ADR-030 号订正,均注明 2026-07-12 重排;下一空号=35。
+- 验证:runtime 35/0、node 248/0、onchina 131/0、CitizenWallet 106/106、cloudflare 6/6、primitives golden、dart analyze;全仓终检 grep 活代码(rs/dart/ts)零残留。
+- 任务卡旧 idx 也已订正(用户要求不删只修):6 张卡(20260711、done/20260630、open/20260629、open/20260628、open/20260626-runtime-admins、open/20260626-election-vote)内旧 idx(24/27/28/32/33/34)与 PersonalAdmins[7,3] 历史描述全部改为新号;文件保留。
+- **最终全仓终检 grep:活代码 + 文档 + 任务卡零残留**(仅本迁移记录卡与上游 smoldot 夹具保留旧→新对照,属正常)。

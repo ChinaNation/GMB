@@ -6,7 +6,7 @@ import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 /// 个人多签账户生命周期快照。
 ///
-/// `PersonalAdmins::PersonalAccounts` 只保存个人账户生命周期元数据；
+/// `PersonalManage::PersonalAccounts` 只保存个人账户生命周期元数据；
 /// 管理员真源在 `PersonalAdmins::AdminAccounts`，动态阈值真源在 `InternalVote`。
 class PersonalManageAccountSnapshot {
   const PersonalManageAccountSnapshot({
@@ -35,7 +35,7 @@ class PersonalManageAdminSnapshot {
   final List<String> admins;
 }
 
-/// PersonalAdmins 专属 storage codec。
+/// PersonalManage 专属 storage codec。
 class PersonalManageStorageCodec {
   PersonalManageStorageCodec._();
 

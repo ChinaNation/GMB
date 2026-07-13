@@ -152,7 +152,7 @@ pub struct ChainCall {
 /// 编码完整 `propose_create_{public,private}_institution` 裸 call data。
 ///
 /// 输出 = `[pallet, 0x05]` + 16 个参数(顺序与链端逐字节一致);pallet 由 institution_code
-/// 经 `create_institution_pallet_index` 派生(公权 32→动作码 0x1e05 / 私权 33→0x1f05)。
+/// 经 `create_institution_pallet_index` 派生(公权 30→动作码 0x1e05 / 私权 31→0x1f05)。
 pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) -> ChainCall {
     let pallet_index = create_institution_pallet_index(&args.institution_code);
     let mut out = Vec::new();
@@ -433,7 +433,7 @@ mod tests {
                 PUBLIC_MANAGE_PALLET_INDEX,
                 PROPOSE_CREATE_INSTITUTION_CALL_INDEX
             ],
-            "公权机构创建前缀必须是 [32,5]"
+            "公权机构创建前缀必须是 [30,5]"
         );
         assert_eq!(
             public_chain.action, 0x1e05,

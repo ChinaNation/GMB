@@ -44,13 +44,13 @@
 
 #### 1a. 业务壳:`citizenchain/runtime/public/legislation-yuan`
 
-- 与宪法「立法院」、用户命名字面一致;`pallet_index = 27`;`MODULE_TAG = b"leg-yuan"`;对外类型名 `LegislationYuan`。
+- 与宪法「立法院」、用户命名字面一致;`pallet_index = 25`(原定 27,2026-07-12 号段连续化后为 25);`MODULE_TAG = b"leg-yuan"`;对外类型名 `LegislationYuan`。
 - 只承载法律数据:Law/LawVersion storage、状态机、`propose_*`(admin 入口)、Executor(投票通过后按 MODULE_TAG 认领、写新法律版本)、runtime 查询 API、不可修改条款硬拒。
 - 严守投票职责边界硬规则:本壳绝不自实现投票/计票/快照,一律调下面的立法投票 sub-pallet 接口。
 
 #### 1b. 立法专属投票 sub-pallet:`citizenchain/runtime/votingengine/legislation-vote`
 
-- 新增投票引擎 sub-pallet,与 internal-vote / joint-vote / election-vote 平级;`pallet_index = 28`(待实现时确认空号);对外类型名 `LegislationVote`。
+- 新增投票引擎 sub-pallet,与 internal-vote / joint-vote / election-vote 平级;`pallet_index = 26`(原定 28,2026-07-12 号段连续化后为 26);对外类型名 `LegislationVote`。
 - 定位:立法机构专属投票,承载宪法第四十五/四十六条五类表决类型 + 两院顺序 + 强制公投 + 行政签署/会签救济,一处集中。
 - `Config: frame_system::Config + votingengine::Config`,复用核心 crate 全部共享基础设施(见第 5 节),只本地保管自己的计票账本。
 - **完全不修改 internal-vote / joint-vote / election-vote 三个 sub-pallet 的逻辑**:三者零改动、零回归;election-vote 空骨架原样保留供未来公职人员选举用。
@@ -340,7 +340,7 @@ warp 版本集合连续性全部由节点原生复核。无 body 的 `ApplyChang
 
 ### 8. 上链时机
 
-- 新增 pallet = runtime 变更,新增 `pallet_index=27`。
+- 新增 pallet = runtime 变更,新增 `pallet_index=25`(原定 27,2026-07-12 重排)。
 - 两条路径:搭车现有待重新创世队列(CID T3/T4、两和基金、账户派生等),或走 setCode 链上升级。
 - 一切 `citizenchain/runtime/` 改动遵守 runtime 二次确认硬规则:实现前单独报完整路径 + 改动内容 + 原因,取得第二次确认。
 
@@ -407,6 +407,6 @@ warp 版本集合连续性全部由节点原生复核。无 body 的 `ApplyChang
 
 ## 待确认问题(review 时拍板)
 
-- 两个新 pallet 的 `pallet_index`(暂定业务壳 27 / sub-pallet 28),实现时确认空号。
+- 两个新 pallet 的 `pallet_index`(业务壳 25 / sub-pallet 26;原暂定 27/28,2026-07-12 号段连续化后重排)。
 - 任务卡执行顺序:建议卡1(legislation-vote)先行,业务壳依赖其 Engine trait。
 - 上链时机:搭车现有待重新创世队列,还是独立 setCode。

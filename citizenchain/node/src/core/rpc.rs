@@ -19,7 +19,6 @@ use sp_api::Core as CoreApi;
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
-use sp_core::crypto::KeyTypeId;
 use sp_keystore::Keystore;
 use sp_runtime::OpaqueExtrinsic;
 use substrate_frame_rpc_system::AccountNonceApi;

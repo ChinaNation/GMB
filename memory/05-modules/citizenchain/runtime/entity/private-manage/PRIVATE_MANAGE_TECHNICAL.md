@@ -25,9 +25,9 @@
 
 ## 管理员写入边界
 
-- 本模块创建私权机构时把机构 `cid_number`、机构码、主账户和 `AdminProfile` 列表传给 `private-admins`。
-- 具体管理员本人、姓名、个人 CID、岗位快照、任期和来源只落在 `private-admins::AdminAccounts`。
-- 本模块不保存管理员真源，也不判断岗位产生方式；后续岗位制度只能作为 entity 侧规则供 admins 模块校验。
+- 所有私权机构的 `InstitutionInfo` 必须保存 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account` 三个链上公开字段。
+- 本模块管理机构岗位定义、岗位权限和机构管理员任职关系；任职关系绑定 `cid_number + admin_account + role_code`。
+- 创建机构时只把管理员钱包账户集合 `admins` 传给 `private-admins`；姓名、CID、岗位、任期和来源不再内嵌到管理员集合。
 - 通过本模块创建机构时，对应管理员来源由 `private-admins` 统一落为 `Registry`。
 
 ## MODULE_TAG

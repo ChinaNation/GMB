@@ -13,8 +13,9 @@
 //! # 时序说明
 //! - 窗口起始时间戳在调整周期首块的 on_finalize 中记录（此时 pallet_timestamp 已完成时间戳注入）。
 //! - 窗口终止时间戳在调整周期末块的 on_finalize 中读取并触发调整。
-//! - 节点层通过 PowDifficultyApi Runtime API 读取当前链上难度，替代固定常量。
+//! - 节点层直接读取 CurrentDifficulty RAW storage，避免 Runtime API 成为守卫绕路点。
 //! - 当前算法只取窗口首尾两个时间点，不对窗口内每一块做采样；因此制度安全仍依赖时间戳 inherent 的有效性。
+//! - runtime 在难度状态变更前拒绝只有 timestamp inherent 的空块；NodeGuard 的提前拒绝不能替代该共识规则。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -24,42 +25,152 @@ pub mod weights;
 
 pub use pallet::*;
 
-// PoW 难度 Runtime API：节点层 SimplePow::difficulty() 通过此接口读取链上实时难度。
-sp_api::decl_runtime_apis! {
-    pub trait PowDifficultyApi {
-        /// 返回当前链上 PoW 挖矿难度值。
-        fn current_pow_difficulty() -> u64;
+use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use scale_info::TypeInfo;
+use sp_runtime::RuntimeDebug;
+
+/// 可随合法 runtime 升级变更的 PoW 难度参数。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    Copy,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct PowDifficultyParams {
+    pub params_version: u32,
+    pub algorithm_version: u16,
+    pub target_block_time_ms: u64,
+    pub adjustment_interval: u32,
+    pub max_adjust_up_factor: u64,
+    pub max_adjust_down_divisor: u64,
+}
+
+impl PowDifficultyParams {
+    /// 当前链创世默认值；这些数值不是节点永久常量，运行后以 ActiveParams 为唯一真源。
+    pub const fn genesis_default() -> Self {
+        Self {
+            params_version: primitives::pow_const::POW_PARAMS_VERSION,
+            algorithm_version: primitives::pow_const::POW_ALGORITHM_VERSION,
+            target_block_time_ms: primitives::pow_const::POW_TARGET_BLOCK_TIME_MS,
+            adjustment_interval: primitives::pow_const::DIFFICULTY_ADJUSTMENT_INTERVAL,
+            max_adjust_up_factor: primitives::pow_const::DIFFICULTY_MAX_ADJUST_FACTOR,
+            max_adjust_down_divisor: primitives::pow_const::DIFFICULTY_MIN_ADJUST_FACTOR,
+        }
     }
+
+    /// 只固定代数安全边界，不在节点和 runtime 中重复写死可治理的数值范围。
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.params_version == 0 {
+            return Err("params_version 不得为 0");
+        }
+        if self.algorithm_version == 0 {
+            return Err("algorithm_version 不得为 0");
+        }
+        if self.target_block_time_ms == 0 {
+            return Err("target_block_time_ms 不得为 0");
+        }
+        if self.adjustment_interval == 0 {
+            return Err("adjustment_interval 不得为 0");
+        }
+        if self.max_adjust_up_factor == 0 || self.max_adjust_down_divisor == 0 {
+            return Err("难度调整倍率不得为 0");
+        }
+        self.target_block_time_ms
+            .checked_mul(self.adjustment_interval as u64)
+            .ok_or("目标窗口溢出")?;
+        Ok(())
+    }
+
+    pub fn target_window_ms(&self) -> Option<u64> {
+        self.target_block_time_ms
+            .checked_mul(self.adjustment_interval as u64)
+    }
+
+    fn same_values_except_version(&self, other: &Self) -> bool {
+        self.algorithm_version == other.algorithm_version
+            && self.target_block_time_ms == other.target_block_time_ms
+            && self.adjustment_interval == other.adjustment_interval
+            && self.max_adjust_up_factor == other.max_adjust_up_factor
+            && self.max_adjust_down_divisor == other.max_adjust_down_divisor
+    }
+}
+
+impl Default for PowDifficultyParams {
+    fn default() -> Self {
+        Self::genesis_default()
+    }
+}
+
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    Copy,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub struct PendingPowDifficultyParams {
+    pub params: PowDifficultyParams,
+    pub activate_at: u32,
+}
+
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    Copy,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub struct DifficultyAdjustmentAudit {
+    pub block: u32,
+    pub params_version: u32,
+    pub old_difficulty: u64,
+    pub new_difficulty: u64,
+    pub window_start_block: u32,
+    pub actual_window_ms: u64,
 }
 
 #[frame_support::pallet]
 pub mod pallet {
+    use super::{DifficultyAdjustmentAudit, PendingPowDifficultyParams, PowDifficultyParams};
     use frame_support::{pallet_prelude::*, traits::Time};
     use frame_system::pallet_prelude::*;
-    use primitives::pow_const::{
-        DIFFICULTY_ADJUSTMENT_INTERVAL, DIFFICULTY_MAX_ADJUST_FACTOR, DIFFICULTY_MIN_ADJUST_FACTOR,
-        POW_INITIAL_DIFFICULTY,
-    };
+    use primitives::pow_const::POW_INITIAL_DIFFICULTY;
     use sp_runtime::traits::SaturatedConversion;
 
     use crate::weights::WeightInfo as PowDifficultyWeightInfo;
 
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
     #[pallet::pallet]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     /// Pallet 配置：需要 frame_system、pallet_timestamp 作为超特征。
-    /// pallet_timestamp：读取当前块时间戳。
-    /// 出块目标时间通过 `BlockTime` 窄 trait 注入(由 genesis pallet 实现),不再硬耦合整个
-    /// `genesis_pallet::Config`,消费者与本 pallet 单测因此无需 mock 治理栈。
+    /// pallet_timestamp 用于读取当前块时间戳；目标窗口固定取核心常量，禁止由链上状态修改。
     #[pallet::config]
     pub trait Config:
-        frame_system::Config<RuntimeEvent: From<Event<Self>>>
-        + pallet_timestamp::Config
+        frame_system::Config<RuntimeEvent: From<Event<Self>>> + pallet_timestamp::Config
     {
         type WeightInfo: crate::weights::WeightInfo;
-
-        /// 链上动态出块目标时间来源(genesis pallet 实现 `TargetBlockTime`)。
-        type BlockTime: genesis_pallet::TargetBlockTime;
     }
 
     // ─── Storage ──────────────────────────────────────────────────────────────
@@ -83,6 +194,50 @@ pub mod pallet {
     #[pallet::storage]
     pub type WindowStartMs<T> = StorageValue<_, u64, OptionQuery>;
 
+    /// 当前窗口起始高度；参数升级激活时与时间窗口一起重置。
+    #[pallet::storage]
+    pub type WindowStartBlock<T> = StorageValue<_, u32, OptionQuery>;
+
+    /// 当前生效的唯一 PoW 参数真源。
+    #[pallet::storage]
+    #[pallet::getter(fn active_params)]
+    pub type ActiveParams<T> = StorageValue<_, PowDifficultyParams, ValueQuery>;
+
+    /// runtime 升级块写入、下一块原子激活的参数。
+    #[pallet::storage]
+    pub type PendingParams<T> = StorageValue<_, PendingPowDifficultyParams, OptionQuery>;
+
+    /// 最近一次难度调整审计，供节点守卫与运维复核。
+    #[pallet::storage]
+    pub type LastAdjustment<T> = StorageValue<_, DifficultyAdjustmentAudit, OptionQuery>;
+
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        pub params: PowDifficultyParams,
+        pub initial_difficulty: u64,
+        pub _marker: PhantomData<T>,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            Self {
+                params: PowDifficultyParams::genesis_default(),
+                initial_difficulty: POW_INITIAL_DIFFICULTY,
+                _marker: PhantomData,
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            assert!(self.params.validate().is_ok(), "PoW 创世参数无效");
+            assert!(self.initial_difficulty > 0, "PoW 创世难度不得为 0");
+            ActiveParams::<T>::put(self.params);
+            CurrentDifficulty::<T>::put(self.initial_difficulty);
+        }
+    }
+
     // ─── Events ───────────────────────────────────────────────────────────────
 
     #[pallet::event]
@@ -103,11 +258,48 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_runtime_upgrade() -> Weight {
+            let onchain = StorageVersion::get::<Pallet<T>>();
+            if onchain >= STORAGE_VERSION {
+                return T::DbWeight::get().reads(1);
+            }
+
+            // 从旧编译期参数模型迁移到链上版本化参数。保留真实当前难度，
+            // 但丢弃无法证明起始高度的旧时间窗口，下一合法块重新建立完整窗口。
+            let current = CurrentDifficulty::<T>::get().max(1);
+            ActiveParams::<T>::put(PowDifficultyParams::genesis_default());
+            CurrentDifficulty::<T>::put(current);
+            PendingParams::<T>::kill();
+            WindowStartBlock::<T>::kill();
+            WindowStartMs::<T>::kill();
+            LastAdjustment::<T>::kill();
+            STORAGE_VERSION.put::<Pallet<T>>();
+            T::DbWeight::get().reads_writes(2, 7)
+        }
+
         /// try-runtime 状态校验：确保 CurrentDifficulty 始终为正数。
         #[cfg(feature = "try-runtime")]
         fn try_state(_n: BlockNumberFor<T>) -> Result<(), sp_runtime::TryRuntimeError> {
             let diff = CurrentDifficulty::<T>::get();
             frame_support::ensure!(diff > 0, "CurrentDifficulty 不得为 0");
+            let params = ActiveParams::<T>::get();
+            frame_support::ensure!(params.validate().is_ok(), "ActiveParams 无效");
+            frame_support::ensure!(
+                params.algorithm_version == primitives::pow_const::POW_ALGORITHM_VERSION,
+                "ActiveParams 算法版本不受当前 runtime 支持"
+            );
+            if let Some(pending) = PendingParams::<T>::get() {
+                frame_support::ensure!(pending.params.validate().is_ok(), "PendingParams 无效");
+                frame_support::ensure!(
+                    pending.params.algorithm_version
+                        == primitives::pow_const::POW_ALGORITHM_VERSION,
+                    "PendingParams 算法版本不受当前 runtime 支持"
+                );
+                frame_support::ensure!(
+                    pending.params.params_version == params.params_version.saturating_add(1),
+                    "PendingParams 版本必须精确加一"
+                );
+            }
             Ok(())
         }
 
@@ -117,9 +309,23 @@ pub mod pallet {
                 return Weight::zero();
             }
 
-            let interval = DIFFICULTY_ADJUSTMENT_INTERVAL;
-            // 首个调整块是 interval + 1，因为窗口从 block 1 的时间戳开始计时。
-            let is_adjustment_block = block_num > 1 && (block_num - 1) % interval == 0;
+            if let Some(pending) = PendingParams::<T>::get() {
+                assert!(pending.activate_at >= block_num, "PoW 待生效参数已过期");
+                if pending.activate_at == block_num {
+                    ActiveParams::<T>::put(pending.params);
+                    PendingParams::<T>::kill();
+                    WindowStartBlock::<T>::kill();
+                    WindowStartMs::<T>::kill();
+                    // 参数激活块会在 on_finalize 以当前块重新建立窗口；单独返回
+                    // 激活路径权重，完整覆盖参数切换和窗口重置产生的读写。
+                    return <T as Config>::WeightInfo::on_initialize_activate_params();
+                }
+            }
+
+            let params = ActiveParams::<T>::get();
+            let is_adjustment_block = WindowStartBlock::<T>::get()
+                .map(|start| block_num.saturating_sub(start) == params.adjustment_interval)
+                .unwrap_or(false);
 
             if is_adjustment_block {
                 // 实际重点在 on_finalize，但 FRAME 只能在 on_initialize 预申报预算。
@@ -142,35 +348,38 @@ pub mod pallet {
                 return;
             }
 
-            // 拒绝空块。每个区块至少包含 1 个固有交易（timestamp::set），
-            // 若 extrinsic 总数 ≤ 1 说明没有用户交易，属于空块。
-            // 创世块（block 0）无时间戳注入，已在上方 now_ms == 0 处跳过。
-            if block_num > 0 {
-                let extrinsic_count = frame_system::Pallet::<T>::extrinsic_count();
-                assert!(
-                    extrinsic_count > 1,
-                    "空块不允许上链：区块必须包含至少一笔用户交易"
-                );
-            }
+            // runtime 是空块规则的最终共识闸门：即使出块节点删除或绕过 NodeGuard，
+            // 诚实节点重新执行正式 runtime WASM 时仍会拒绝只有 timestamp inherent 的区块。
+            // 此检查必须先于窗口起点或当前难度写入，确保无效空块不能推进难度状态。
+            let extrinsic_count = frame_system::Pallet::<T>::extrinsic_count();
+            assert!(
+                extrinsic_count > 1,
+                "空块不允许上链：区块必须包含 timestamp 之外的交易"
+            );
 
-            let interval = DIFFICULTY_ADJUSTMENT_INTERVAL;
-
-            // 以 block 1 的时间戳作为首窗口起点，则首个有效窗口应在 block (interval + 1)
-            // 触发调整，确保窗口跨度恰好覆盖 interval 个区块间隔。
-            let is_adjustment_block = block_num > 1 && (block_num - 1) % interval == 0;
+            let params = ActiveParams::<T>::get();
+            assert!(params.validate().is_ok(), "链上 PoW 参数无效");
+            assert_eq!(
+                params.algorithm_version,
+                primitives::pow_const::POW_ALGORITHM_VERSION,
+                "链上 PoW 算法版本不受当前 runtime 支持"
+            );
+            let target_window_ms = params.target_window_ms().expect("PoW 目标窗口已校验");
+            let window_start_block = WindowStartBlock::<T>::get();
+            let elapsed_blocks = window_start_block.map(|start| block_num.saturating_sub(start));
+            assert!(
+                elapsed_blocks
+                    .map(|elapsed| elapsed <= params.adjustment_interval)
+                    .unwrap_or(true),
+                "PoW 难度调整窗口被跳过"
+            );
+            let is_adjustment_block = elapsed_blocks == Some(params.adjustment_interval);
 
             if is_adjustment_block {
                 // ── 调整块：计算新难度 ────────────────────────────────────────
                 if let Some(start_ms) = WindowStartMs::<T>::get() {
                     let actual_window_ms = now_ms.saturating_sub(start_ms).max(1);
-                    // 从 genesis_pallet-pallet 链上存储读取动态出块目标时间，
-                    // 替代编译期常量 DIFFICULTY_TARGET_WINDOW_MS。
-                    // .max(1) 防御 genesis_pallet-pallet 返回 0 导致 target_window_ms 为 0。
-                    let target_block_time =
-                        <T::BlockTime as genesis_pallet::TargetBlockTime>::target_block_time_ms()
-                            .max(1);
-                    let target_window_ms =
-                        DIFFICULTY_ADJUSTMENT_INTERVAL as u64 * target_block_time;
+                    // 六分钟仅是全链固定的平均目标；PoW 找到即出块，不设置最短或最晚期限。
                     let old_difficulty = CurrentDifficulty::<T>::get();
                     // 正常情况下 old_difficulty 不会为 0；这里做兜底是为了防止
                     // 迁移错误或脏状态把 clamp 的上下界反转，进而在调整块上触发 panic。
@@ -185,12 +394,20 @@ pub mod pallet {
 
                     // 单次调整幅度限制按“参与计算的安全难度”夹紧；
                     // 即便存储里出现 0，也只会被修复为 >= 1，而不会把链直接打崩。
-                    let max_diff = calc_difficulty.saturating_mul(DIFFICULTY_MAX_ADJUST_FACTOR);
-                    let min_diff = (calc_difficulty / DIFFICULTY_MIN_ADJUST_FACTOR).max(1);
+                    let max_diff = calc_difficulty.saturating_mul(params.max_adjust_up_factor);
+                    let min_diff = (calc_difficulty / params.max_adjust_down_divisor).max(1);
                     let new_diff = new_diff_u128.saturated_into::<u64>();
                     let new_difficulty = new_diff.clamp(min_diff, max_diff);
 
                     CurrentDifficulty::<T>::put(new_difficulty);
+                    LastAdjustment::<T>::put(DifficultyAdjustmentAudit {
+                        block: block_num,
+                        params_version: params.params_version,
+                        old_difficulty,
+                        new_difficulty,
+                        window_start_block: window_start_block.unwrap_or(block_num),
+                        actual_window_ms,
+                    });
 
                     Self::deposit_event(Event::DifficultyAdjusted {
                         block: n,
@@ -202,12 +419,47 @@ pub mod pallet {
                 }
                 // 以当前调整块时间戳作为下一窗口起点，避免少算 1 个区块间隔。
                 WindowStartMs::<T>::put(now_ms);
+                WindowStartBlock::<T>::put(block_num);
             } else {
                 // ── 非调整块：若窗口起始未记录，以当前块时间戳为起点 ──────────
-                if WindowStartMs::<T>::get().is_none() {
+                if WindowStartMs::<T>::get().is_none() || WindowStartBlock::<T>::get().is_none() {
                     WindowStartMs::<T>::put(now_ms);
+                    WindowStartBlock::<T>::put(block_num);
                 }
             }
+        }
+    }
+
+    impl<T: Config> Pallet<T> {
+        /// 仅供 runtime-upgrade 的原子升级执行器调用；本 pallet 不暴露普通 extrinsic。
+        pub fn stage_params(new_params: PowDifficultyParams, activate_at: u32) -> DispatchResult {
+            new_params
+                .validate()
+                .map_err(|_| DispatchError::Other("invalid pow difficulty params"))?;
+            ensure!(
+                new_params.algorithm_version == primitives::pow_const::POW_ALGORITHM_VERSION,
+                "当前 runtime 不支持该 PoW 算法版本"
+            );
+            ensure!(PendingParams::<T>::get().is_none(), "已有待生效 PoW 参数");
+
+            let active = ActiveParams::<T>::get();
+            if active.same_values_except_version(&new_params) {
+                ensure!(
+                    new_params.params_version == active.params_version,
+                    "参数未变时版本不得变化"
+                );
+                return Ok(());
+            }
+
+            ensure!(
+                new_params.params_version == active.params_version.saturating_add(1),
+                "PoW 参数版本必须精确加一"
+            );
+            PendingParams::<T>::put(PendingPowDifficultyParams {
+                params: new_params,
+                activate_at,
+            });
+            Ok(())
         }
     }
 }

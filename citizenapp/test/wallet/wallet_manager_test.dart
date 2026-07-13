@@ -128,6 +128,58 @@ void main() {
     });
   });
 
+  group('门禁0 fail-closed：设备子钥注册强绑定', () {
+    tearDown(() => WalletManager.subkeyRegistrar = null);
+
+    Future<void> failingRegistrar({
+      required int walletIndex,
+      required String ownerAccount,
+      required Future<String> Function(Uint8List bindingMessage) signBinding,
+    }) async {
+      throw Exception('设备子钥注册失败：网络不可用');
+    }
+
+    test('createWallet 注册失败 → 整笔回滚，无残留', () async {
+      WalletManager.subkeyRegistrar = failingRegistrar;
+      final manager = WalletManager();
+      await expectLater(manager.createWallet(), throwsA(isA<Exception>()));
+      // 钱包未落库、seed/助记词无残留 → WalletGate 维持 needsWallet。
+      expect(await manager.getWallets(), isEmpty);
+      expect(fakeStore.seeds, isEmpty);
+      expect(fakeStore.mnemonics, isEmpty);
+    });
+
+    test('importWallet 注册失败 → 整笔回滚，无残留', () async {
+      WalletManager.subkeyRegistrar = failingRegistrar;
+      final manager = WalletManager();
+      await expectLater(
+        manager.importWallet(_mnemonicA),
+        throwsA(isA<Exception>()),
+      );
+      expect(await manager.getWallets(), isEmpty);
+      expect(fakeStore.seeds, isEmpty);
+      expect(fakeStore.mnemonics, isEmpty);
+    });
+
+    test('createWallet 注册成功 → 落库并用主钥对绑定证明签名', () async {
+      String? seenOwner;
+      WalletManager.subkeyRegistrar = ({
+        required int walletIndex,
+        required String ownerAccount,
+        required Future<String> Function(Uint8List bindingMessage) signBinding,
+      }) async {
+        seenOwner = ownerAccount;
+        final signature = await signBinding(Uint8List(32));
+        expect(signature.startsWith('0x'), isTrue);
+      };
+      final manager = WalletManager();
+      final created = await manager.createWallet();
+      expect(seenOwner, created.profile.address);
+      expect((await manager.getWallets()).length, 1);
+      expect(fakeStore.seeds[created.profile.walletIndex], isNotNull);
+    });
+  });
+
   group('WalletManager — 统一签名', () {
     final payload = Uint8List.fromList(List<int>.generate(32, (i) => i));
 

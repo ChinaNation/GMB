@@ -165,7 +165,7 @@ No issues found!  (全项目)
 | 风险 | 等级 | 缓解 |
 |---|---|---|
 | `NodePaymentIntent` 字段变动 → 跨端布局错位 → 签名失败 | **P0** | 本文档第 4 节与 `payment_intent.dart` 注释双处锁布局;`scaleEncode` 末尾 `assert(bytes.length == 204)` 立即抛 |
-| `expires_at` 设为 `currentBlockNumber + 100`,签名到节点打包约 30s,但用户看到确认页到点提交可能>10min | **P2** | 100 块 ≈ 10 分钟(6s 出块)。极慢用户可能遇到 `ExpiredIntent`,此时报错提示重扫;后续可把缓冲改为 200 块或查询 runtime `target_block_time_ms` 动态算 |
+| `expires_at` 使用固定区块高度，真实墙钟时间随 PoW 波动 | **P2** | 当前 `+100` 块按六分钟平均目标约 10 小时，但没有最晚出块保证；协议只认区块高度，不再查询已删除的动态出块时间 API |
 | 费率查询 / 提交走独立 WSS 连接,RTT 叠加 | **P2** | 每次方法连→发→收首帧→断开,确认流程总 5 次 RTT;Step 2c-ii 考虑复用长连接 |
 | 跨行支付提交到收款方节点后,付款方余额/nonce 不在收款方本地 ledger | **已修复** | node RPC 会读链上 `DepositBalance[payer_bank][payer]` 与 `L3PaymentNonce[payer]`,并叠加本节点 pending 做早拒,不创建付款方 ghost 账户 |
 | `offchain_queryFeeRate` 返回 `rate_bp==0` 时 UI 仅显示错误,用户体验欠缺 | **P3** | 本步先 hard-fail 提示联系运维,后续可引导到"查看清算行详情"页面 |

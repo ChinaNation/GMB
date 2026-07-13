@@ -12,8 +12,12 @@ use votingengine::JointVoteResultCallback;
 pub const MODULE_TAG: &[u8] = b"rt-upg";
 
 pub trait RuntimeCodeExecutor {
-    /// 由 Runtime 注入真正的 set_code 执行器，pallet 本身只负责编排治理状态机。
-    fn execute_runtime_code(code: &[u8]) -> DispatchResult;
+    /// 由 Runtime 原子暂存 PoW 参数并执行 set_code。
+    fn execute_runtime_code(
+        code: &[u8],
+        pow_params: pow_difficulty::PowDifficultyParams,
+        activate_at: u32,
+    ) -> DispatchResult;
 }
 
 #[frame_support::pallet]
@@ -22,12 +26,55 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use genesis_pallet::DeveloperUpgradeCheck;
-    use sp_runtime::{traits::Hash, DispatchError};
+    use sp_runtime::{
+        traits::{Hash, SaturatedConversion},
+        DispatchError,
+    };
     use votingengine::JointVoteEngine;
 
     pub type ReasonOf<T> = BoundedVec<u8, <T as Config>::MaxReasonLen>;
     pub type CodeOf<T> = BoundedVec<u8, <T as Config>::MaxRuntimeCodeSize>;
     pub const PROPOSAL_OBJECT_KIND_RUNTIME_WASM: u8 = 1;
+
+    #[derive(
+        Encode,
+        Decode,
+        DecodeWithMemTracking,
+        Clone,
+        Copy,
+        RuntimeDebug,
+        TypeInfo,
+        MaxEncodedLen,
+        PartialEq,
+        Eq,
+    )]
+    pub enum UpgradeExecutionPath {
+        JointVote,
+        DeveloperDirect,
+    }
+
+    #[derive(
+        Encode,
+        Decode,
+        DecodeWithMemTracking,
+        Clone,
+        RuntimeDebug,
+        TypeInfo,
+        MaxEncodedLen,
+        PartialEq,
+        Eq,
+    )]
+    #[scale_info(skip_type_params(T))]
+    pub struct RuntimeUpgradeAudit<T: Config> {
+        pub proposal_id: Option<u64>,
+        pub execution_path: UpgradeExecutionPath,
+        pub code_hash: T::Hash,
+        pub old_pow_params_hash: T::Hash,
+        pub new_pow_params_hash: T::Hash,
+        pub executed_at: u32,
+        pub activate_at: u32,
+        pub developer: Option<T::AccountId>,
+    }
 
     /// 提案摘要数据：序列化后存入 votingengine 的 ProposalData。
     /// 大对象 wasm code 单独写入 votingengine 的 ProposalObject。
@@ -50,12 +97,16 @@ pub mod pallet {
         pub reason: ReasonOf<T>,
         /// 代码哈希，便于事件与链下审计对齐
         pub code_hash: T::Hash,
+        /// 提案创建时生效参数的哈希，防止投票期间参数基线被替换。
+        pub expected_pow_params_hash: T::Hash,
+        /// 与 runtime code 一起表决的完整 PoW 参数。
+        pub new_pow_params: pow_difficulty::PowDifficultyParams,
     }
 
     use crate::weights::WeightInfo;
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + votingengine::Config {
+    pub trait Config: frame_system::Config + votingengine::Config + pow_difficulty::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -83,7 +134,10 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    // 提案数据、元数据均已移至 votingengine 统一管控，本模块不再持有任何 Storage。
+    /// 最近一次成功升级的永久审计；NodeGuard 用它把 :code 与 PoW 参数原子绑定。
+    #[pallet::storage]
+    pub type LastRuntimeUpgradeAudit<T: Config> =
+        StorageValue<_, RuntimeUpgradeAudit<T>, OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -92,6 +146,7 @@ pub mod pallet {
             proposal_id: u64,
             proposer: T::AccountId,
             code_hash: T::Hash,
+            pow_params_hash: T::Hash,
         },
         JointVoteFinalized {
             proposal_id: u64,
@@ -135,18 +190,27 @@ pub mod pallet {
             origin: OriginFor<T>,
             reason: ReasonOf<T>,
             code: CodeOf<T>,
+            new_pow_params: pow_difficulty::PowDifficultyParams,
         ) -> DispatchResult {
             let proposer = T::ProposeOrigin::ensure_origin(origin)?;
 
             ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
             ensure!(!code.is_empty(), Error::<T>::EmptyRuntimeCode);
+            new_pow_params
+                .validate()
+                .map_err(|_| DispatchError::Other("invalid pow difficulty params"))?;
 
             let code_vec = code.into_inner();
             let code_hash = T::Hashing::hash(code_vec.as_slice());
+            let expected_pow_params_hash =
+                T::Hashing::hash_of(&pow_difficulty::ActiveParams::<T>::get());
+            let pow_params_hash = T::Hashing::hash_of(&new_pow_params);
             let proposal = Proposal::<T> {
                 proposer: proposer.clone(),
                 reason,
                 code_hash,
+                expected_pow_params_hash,
+                new_pow_params,
             };
             let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&proposal.encode());
@@ -163,6 +227,7 @@ pub mod pallet {
                 proposal_id,
                 proposer,
                 code_hash,
+                pow_params_hash,
             });
             Ok(())
         }
@@ -174,15 +239,28 @@ pub mod pallet {
         #[pallet::weight(
             <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code()
         )]
-        pub fn developer_direct_upgrade(origin: OriginFor<T>, code: CodeOf<T>) -> DispatchResult {
+        pub fn developer_direct_upgrade(
+            origin: OriginFor<T>,
+            code: CodeOf<T>,
+            new_pow_params: pow_difficulty::PowDifficultyParams,
+        ) -> DispatchResult {
             let who = T::DeveloperUpgradeOrigin::ensure_origin(origin)?;
             ensure!(
                 T::DeveloperUpgradeCheck::is_enabled(),
                 Error::<T>::DeveloperUpgradeDisabled
             );
             ensure!(!code.is_empty(), Error::<T>::EmptyRuntimeCode);
+            new_pow_params
+                .validate()
+                .map_err(|_| DispatchError::Other("invalid pow difficulty params"))?;
             let code_hash = T::Hashing::hash(code.as_slice());
-            T::RuntimeCodeExecutor::execute_runtime_code(code.as_slice())?;
+            Self::execute_upgrade_bundle(
+                code.as_slice(),
+                new_pow_params,
+                None,
+                UpgradeExecutionPath::DeveloperDirect,
+                Some(who.clone()),
+            )?;
             Self::deposit_event(Event::<T>::DeveloperDirectUpgradeExecuted { who, code_hash });
             Ok(())
         }
@@ -192,6 +270,36 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        #[frame_support::transactional]
+        fn execute_upgrade_bundle(
+            code: &[u8],
+            new_pow_params: pow_difficulty::PowDifficultyParams,
+            proposal_id: Option<u64>,
+            execution_path: UpgradeExecutionPath,
+            developer: Option<T::AccountId>,
+        ) -> DispatchResult {
+            let active = pow_difficulty::ActiveParams::<T>::get();
+            let old_pow_params_hash = T::Hashing::hash_of(&active);
+            let new_pow_params_hash = T::Hashing::hash_of(&new_pow_params);
+            let executed_at: u32 = frame_system::Pallet::<T>::block_number().saturated_into();
+            let activate_at = executed_at
+                .checked_add(1)
+                .ok_or(DispatchError::Other("pow params activation overflow"))?;
+
+            T::RuntimeCodeExecutor::execute_runtime_code(code, new_pow_params, activate_at)?;
+            LastRuntimeUpgradeAudit::<T>::put(RuntimeUpgradeAudit::<T> {
+                proposal_id,
+                execution_path,
+                code_hash: T::Hashing::hash(code),
+                old_pow_params_hash,
+                new_pow_params_hash,
+                executed_at,
+                activate_at,
+                developer,
+            });
+            Ok(())
+        }
+
         /// 快速判断 proposal_id 是否属于本模块（通过 ProposalOwner 匹配）。
         pub fn owns_proposal(proposal_id: u64) -> bool {
             votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
@@ -248,9 +356,20 @@ pub mod pallet {
 
             if approved {
                 let code_to_execute = Self::load_runtime_code(proposal_id)?;
-                let exec_ok =
-                    T::RuntimeCodeExecutor::execute_runtime_code(code_to_execute.as_slice())
-                        .is_ok();
+                let current_params_hash =
+                    T::Hashing::hash_of(&pow_difficulty::ActiveParams::<T>::get());
+                ensure!(
+                    current_params_hash == proposal.expected_pow_params_hash,
+                    DispatchError::Other("pow params changed while upgrade vote was open")
+                );
+                let exec_ok = Self::execute_upgrade_bundle(
+                    code_to_execute.as_slice(),
+                    proposal.new_pow_params,
+                    Some(proposal_id),
+                    UpgradeExecutionPath::JointVote,
+                    None,
+                )
+                .is_ok();
 
                 Self::deposit_event(Event::<T>::JointVoteFinalized {
                     proposal_id,

@@ -59,7 +59,7 @@ citizenchain/onchina/frontend/
 - “投票身份”提交 `identity_level=voting`,链交易为 `CitizenIdentity.register_voting_identity(10.0)`;“参选身份”提交 `identity_level=candidate`,链交易为 `CitizenIdentity.upgrade_to_candidate_identity(10.1)`。
 - 公民详情页底部必须显示公民独立资料库,资料类型固定为“护照相片 / 出生证明 / 监护人护照 / 其他材料”。该区域只调用 `citizens/api.ts` 的公民资料接口,不得复用机构资料库 `docs/DocumentLibrary.tsx`。
 - 投票账户只有一个输入框,用于填写 SS58 地址或点击扫码图标回填账户;提交后列表和详情只显示 SS58 地址。
-- 联邦注册局、市注册局和本机构管理员列表统一使用 `frontend/admins/AdminProfileCard.tsx` 展示链上 `AdminProfile` 投影；卡片固定为顶部“序号/操作状态”、第 1 行“姓名:/职务:”、第 2 行“任期:/来源:”、第 3 行“身份CID:”、第 4 行“账户:”、第 5 行“余额:”。字段值为空时只留空值区域，不隐藏标签；余额来自 finalized `System.Account.free`，账户不存在或查询失败时仅余额值留空。
+- 机构管理员列表的目标真源是链上 `admins` 账户集合与 entity 机构岗位任职关系。当前 `AdminProfileCard.tsx` 只是待改造的旧展示实现；后续必须分别展示管理员账户、岗位、权限、任期和任职来源，不得继续从 `AdminProfile` 投影。
 - 注册局管理员列表保持既有表格布局。非注册局机构的本机构管理员列表必须使用卡片墙，桌面端一行两张管理员卡片，小屏一行一张；不得再显示“管理员信息 / 操作”两列表头。
 - 非注册局本机构管理员卡片中，当前登录管理员自己的 passkey 按钮文案固定为“密钥”，按钮放在“余额”行右侧靠右；未设置 passkey 时继续用红点提示。
 - 管理员列表不得再提供本地 `admin_name` 编辑入口；联邦注册局管理员只允许更换，市注册局管理员只允许新增/删除，本地姓名字段不作为管理员展示真源。

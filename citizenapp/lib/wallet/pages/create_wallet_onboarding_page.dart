@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_flow.dart';
+import 'package:citizenapp/wallet/pages/import_wallet_page.dart';
 
-/// 首启强制创建钱包页。
+/// 首启强制账户门禁页。
 ///
 /// 公民 App 用户的唯一账户是钱包账户，发消息、发动态、发起交易都依赖热钱包
-/// 签名，因此本页只允许创建 12/24 个助记词的热钱包：无返回、无导入、无冷
-/// 钱包入口。创建成功后经 [onCreated] 通知 WalletGate 放行主界面。
+/// 签名。本页提供两条**二元 fail-closed** 入口：创建新热钱包，或用助记词导入
+/// 已有钱包（复用 [ImportWalletPage]）。两者都必须「钱包 + 子钥注册」全部成功
+/// 才经 [onCreated] 通知 WalletGate 放行，任一失败即回滚并留在门禁。不提供冷
+/// 钱包入口（冷钱包不能作默认账户、过不了 WalletGate）；PopScope 禁止退出门禁。
 class CreateWalletOnboardingPage extends StatefulWidget {
   const CreateWalletOnboardingPage({
     super.key,
@@ -15,7 +18,7 @@ class CreateWalletOnboardingPage extends StatefulWidget {
     this.deviceSecureProbe,
   });
 
-  /// 创建成功回调（WalletGate 收到后翻转到主界面）。
+  /// 钱包就绪回调（创建或导入成功后触发，WalletGate 收到翻转到主界面）。
   final VoidCallback onCreated;
 
   /// 系统锁屏可用性探测，测试注入用；默认走 local_auth 的 isDeviceSupported。
@@ -84,10 +87,37 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
       setState(() => _error = walletOperationErrorMessage(e));
       // 创建失败常见原因是锁屏状态变化，顺手复检刷新警示卡。
       _probeDeviceSecure();
+      // fail-closed：钱包+子钥注册任一失败即已回滚，弹窗提示后停留创建页可重试。
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('创建钱包失败'),
+          content: Text(walletOperationErrorMessage(e)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _creating = false);
       }
+    }
+  }
+
+  Future<void> _openImport() async {
+    // 复用 ImportWalletPage：其内部 importWallet 为二元 fail-closed（导入 + 子钥注册
+    // 都成功才 pop(true)，失败弹窗并保留助记词）。返回 true 即钱包就绪，放行进 App。
+    final imported = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const ImportWalletPage()),
+    );
+    if (!mounted) return;
+    if (imported == true) {
+      widget.onCreated();
     }
   }
 
@@ -122,7 +152,7 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    '创建你的公民钱包',
+                    '设置你的公民钱包',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 20,
@@ -214,6 +244,11 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
                       fontSize: 11,
                       color: AppTheme.textTertiary,
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: canCreate ? _openImport : null,
+                    child: const Text('已有钱包？导入助记词'),
                   ),
                 ],
               ),

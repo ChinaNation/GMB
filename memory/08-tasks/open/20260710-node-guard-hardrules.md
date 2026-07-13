@@ -103,6 +103,11 @@
 - [ ] 第 6 步 warp、三节点分叉与恶意链真实验收
 - [ ] 第 6 步性能与部署基线验收
 - [ ] 第 6 步文档、注释、残留清理与任务归档
+- [x] 省储行固定发行方案、runtime 路径及 NodeGuard 新文件确认
+- [x] 删除 Root 跳年/补发并把固定利息迁入 finalize
+- [x] 43 家创立质押本金和 100 年固定利息接入 `NodeGuard`
+- [x] 省储行固定发行测试、benchmark 与 fresh block#0 真实验收
+- [x] 省储行固定发行文档、中文注释与残留清理
 
 ## 硬边界
 
@@ -271,7 +276,8 @@
 
 ### 剩余候选规则归类
 
-- **省储行利息**：固定账户、利率和年限具备候选价值，但当前 `force_advance_year` 允许 Root 合法跳过到期年度，因此现状不是“必须发行”的永久规则。本步只登记冲突，不接入守卫；需用户另行决定保留故障跳过权，还是把年度利息改成不可跳过后再单独设计。
+- **省储行利息（当时评估，现已解决）**：第 5 步因 Root 可跳过到期年度而暂不接入；后续用户正式确认
+  其为不可跳过固定规则，Root 跳年/补发入口已经删除，本金与年度利息现已接入 NodeGuard。
 - **resolution/onchain 发行**：本质是治理决议结果，不冻结为固定发行。
 - **交易费、分账比例、PoW 难度算法**：当前没有“永不可改”的正式确认，且存在演进需要，不接入。
 - **创世发行**：只存在于 block#0，已经由冻结创世锚点与启动校验约束，不重复增加运行期策略。
@@ -311,7 +317,8 @@
   同一账户同时领取两类奖励也必须精确相加。
 - 创世公民发行只接受 FRAME 规范空状态：pallet 存储版本 0、累计/待发计数零值；任何领取标记、
   队列、非零计数或未知 key 仍 fail-closed。
-- 省储行利息因 Root 可跳年而不具备“必须发行”语义；resolution/onchain 发行是治理结果；交易费、
+- 第 5 步当时因 Root 可跳年而暂缓省储行利息；该冲突现已通过删除 Root 出口并接入 NodeGuard 解决。
+  resolution/onchain 发行仍是治理/非治理资产结果；交易费、
   分账、PoW 难度没有永久冻结确认。本步均不擅自纳入守卫。
 
 ### 自动化与 benchmark
@@ -422,12 +429,12 @@
 - node `cargo check`、当前源码 WASM build、`cargo fmt --check`、`git diff --check` 通过；
 - 文档、中文注释和残留清理完成，任务卡移动到 done，仓库不保留任何验收辅助文件。
 
-## 第 6 步阶段执行记录（2026-07-11，执行中）
+## 第 6 步阶段执行记录（2026-07-11 起，执行中）
 
 ### 已完成的自动化基线
 
-- `cargo test --manifest-path citizenchain/node/Cargo.toml node_guard`：47/47 通过。
-- `cargo test --manifest-path citizenchain/node/Cargo.toml constitution`：39/39 通过。
+- `cargo test --manifest-path citizenchain/node/Cargo.toml node_guard`：76/76 通过。
+- `cargo test --manifest-path citizenchain/node/Cargo.toml constitution`：40/40 通过。
 - `cargo check --manifest-path citizenchain/node/Cargo.toml`：通过。
 - `cargo fmt --manifest-path citizenchain/node/Cargo.toml --check`：通过。
 - 守卫目录与任务卡 `git diff --check`：通过。
@@ -447,9 +454,65 @@
   冻结网络为 `0xb57c…9971`。因此当前源码不能直接加入冻结网络，正式部署基线仍未完成。
 - 节点停止后已删除 `/tmp/gmb-nodeguard-perf.*` 临时目录；仓库没有新增验收文件。
 
+### 真实三节点最终验收（2026-07-12）
+
+- 已按确认口径创建并删除 `/tmp/gmb-nodeguard-final-acceptance/`；目录只用于临时 fresh chainspec、
+  三节点 base-path、keystore、日志和一次性 Alice 签名器，不进入 Git。
+- 使用普通 release WASM 导出 fresh chainspec，清空临时 bootNodes，并仅额外资助标准测试账户 Alice；
+  启动 A/B/C 三个本地隔离节点，其中 A `--mining-threads 1`，B/C `--mining-threads 0`。
+- 三节点成功互联：A/B/C 均为 `peers=2`、`isSyncing=false`；A 作为无外部 bootnode 的本地引导节点，
+  B/C 通过 A 的本地 WSS peer 地址加入。
+- 第一笔真实 Alice `System::remark` 交易 hash：
+  `0xfdde2768a593917f18984d9c197facecb1454305afe14b6998367f18c6fc1ff1`；
+  A/B/C 均同步到 block#1，三端哈希一致：
+  `0xe0fccc0790f9761226865a2fa96a5eb9e19eb34169191f49faf3afee4817b3c8`。
+- 恶意拒绝矩阵在三节点网络保持运行期间重跑：NodeGuard `76/76`、ConstitutionGuard `40/40`；
+  覆盖空块、固定治理骨架、全节点发行、公民发行、省储行固定发行、CID 生命周期、PoW 动态难度、
+  runtime upgrade audit、完整状态导入和护宪规则的拒绝路径。矩阵证明拒绝返回 `KnownBad` 且不委派内层导入。
+- 第二笔真实 Alice `System::remark` 交易 hash：
+  `0x89179977bd67be499ee5aa38031c9c8ecc6da851436208e21a2048b0887b571e`；
+  拒绝矩阵后 A/B/C 继续同步到 block#2，三端哈希一致：
+  `0x961012a973cf9695367037b7f9554df2ef541cda17ed5315a7c72b2600bd2a0a`。
+- block#1 与 block#2 均包含 2 条 extrinsics（timestamp + Alice remark）和 2 条 digest logs；
+  Alice nonce 从 0 推进到 2，pending extrinsics 清零。
+- 本次未在 P2P 网络中手工注入伪造坏块；恶意候选“不委派内层、不入库”的证据来自包装器矩阵测试，
+  真实网络部分证明合法链在矩阵后继续推进并保持三节点哈希一致。
+- 三节点、临时 chainspec、数据库、keystore、签名器和日志全部删除，确认无临时验收进程残留。
+
+### P2P 恶意候选块注入专项尝试（2026-07-12，未完成）
+
+- 已按确认口径创建并删除 `/tmp/gmb-nodeguard-badblock-injection/`；目录只用于临时 chainspec、
+  探测节点 base-path 和导出块文件，不进入 Git。
+- 运行节点 RPC 能力探测：当前 RPC 仅提供 `author_submitExtrinsic`、`chain_*`、`state_*`、
+  `system_*` 等交易与查询接口，没有 `engine_*`、manual-seal、dev block submit 或任意 block
+  注入接口，因此不能通过 RPC/P2P 直接提交伪造块。
+- 试跑 CLI 文件导入层：`export-blocks --from 0 --to 0` 可导出合法 block#0 JSON；
+  `import-blocks` 可将该合法 block 文件导入新的临时数据库，证明文件导入队列入口可用。
+- 不能把“篡改 JSON 导致 header/root/编码错误”当作 NodeGuard 恶意候选验收；那只能证明基础
+  block 解码或 state root 校验失败，不能证明永久规则守卫拒绝。
+- 真实 P2P 坏块注入需要一个临时恶意块生产器：能构造结构完整、PoW seal 完整、state root 可重算、
+  但执行后违反 NodeGuard 永久规则的候选块，并通过网络或导入队列提交给诚实节点。当前仓库没有
+  这个入口，本轮未新增仓库测试工具或修改节点服务结构。
+
+### 区块链测试 harness crate（2026-07-12，已创建）
+
+- 按确认在 `citizenchain/crates/blockchain-test-harness/` 新增专用测试工具 crate，并加入
+  `citizenchain/Cargo.toml` workspace；该 crate 只用于真实验收、导入路径验证和后续恶意候选块构造，
+  不得被生产 node、runtime 或业务模块依赖。
+- 第一阶段沉淀已验证过的 Alice `System::remark` signed extrinsic 构造能力，后续三节点真实交易
+  验收不再需要在 `/tmp` 反复生成一次性签名器。
+- 第二阶段新增 `export-blocks` JSON lines 摘要解析和基础 stateRoot 篡改样本生成；该能力仅用于证明
+  `import-blocks` / import queue 基础坏文件拒绝，不代表 NodeGuard 永久规则坏块。
+- 使用 `/tmp/gmb-blockchain-test-harness-import/` 执行真实导入队列基线：合法 block#0 文件导入成功；
+  篡改 stateRoot 后的 block#0 文件被 `import-blocks` 以退出码 1 拒绝，报错为 unknown parent（篡改
+  header 后 genesis hash 改变）。临时目录已删除。
+- crate 内已用中文注释标明边界：测试 harness 可以构造验收交易和未来坏块材料，但不能成为生产路径。
+- 验收：`cargo check -p blockchain-test-harness` 通过；`cargo test -p blockchain-test-harness` 5/5 通过。
+
 ### 当前仍未满足的关闭条件
 
-- 尚未完成三节点真实分叉、恶意候选链不入库及拒绝后继续跟随合法链验收。
+- 尚未完成 P2P 层手工注入恶意候选块、拒绝后数据库最佳链不变的真实网络注入验收；当前已有包装器
+  `KnownBad` 矩阵和真实三节点合法链继续推进证据。
 - 尚未完成 release 构建下的峰值内存、普通快路径、身份登记块、`:code` 全检和完整状态导入性能矩阵。
 - 尚未重新烘焙并替换正式 chainspec、创世状态包和 CitizenApp 轻客户端资产；不得增加旧格式兼容。
 - 在上述项目完成前，本任务继续保留在 `open`，不得移动到 `done`。
@@ -504,8 +567,8 @@
 ### 代码与安全边界
 
 - 从 `NodeGuard::verify_imported_state` 提取 `verify_imported_policy_state` 纯校验核心；生产与测试复用
-  同一遍状态分区和四策略判定，不形成影子校验路径。
-- 新增 `ImportedPolicyStats`，只记录总扫描及治理/全节点发行/公民发行/CID 分区数，不保存跨块状态。
+  同一遍状态分区和五策略判定，不形成影子校验路径。
+- 新增 `ImportedPolicyStats`，只记录总扫描及治理/全节点发行/公民发行/省储行固定发行/CID 分区数，不保存跨块状态。
 - 当前 runtime 真实 block#0 全 storage 通过全部 NodeGuard 策略，且扫描计数严格等于输入 key 数。
 - 删除固定治理机构、非零 PoW 创世累计、未知 CitizenIssuance key、删除创世封存账户均在对应策略拒绝。
 - 非 block#0 完整快照继续由 CID 策略严格返回 `NonGenesisStateImportForbidden`。
@@ -525,3 +588,150 @@
 
 - 完整状态/warp 的代码级提交前矩阵与 fresh block#0 真实启动已完成。
 - 任务卡中的“warp、三节点分叉与恶意链真实验收”是合并项；三节点尚未完成，因此本步不提前勾选。
+
+## 省储行固定发行守卫结果（2026-07-12）
+
+### 永久规则与实现
+
+- `CHINA_CH` 的 43 组 `main_account/stake_account/stake_amount` 成为节点编译期真源；创世逐户质押本金
+  必须精确写入 `stake_account`，完整 `System::Account` 后续永久不变。
+- 年度规则固定为 87,600 块、首年 100 BP、逐年递减 1 BP、连续 100 年；利息只进入对应
+  `main_account`，第 101 年起不再发行。
+- runtime 删除 `force_settle_years`、`force_advance_year`、Root 跳年、批量补发和失败年度跳过；
+  不保留旧 Call 或兼容分支。
+- 固定利息迁到 `on_finalize`，新增 `TotalProvincialBankInterestIssued` 和
+  `LastProvincialBankInterestAudit(year,bank_count,total_interest)`；43 笔发行与审计在同一存储事务原子提交。
+- NodeGuard 新增 `provincialbank_interest` 策略，逐块核对年度审计并把 43 笔利息加入共享
+  `FinalizeIssuancePlan`；决议发行和链上发行继续留在 extrinsic 阶段，不被误冻结。
+- `:code` 变化强制复核全部质押本金和当前年度审计；block#0 完整状态分区同步纳入省储行策略，
+  未知省储行 storage key、缺失本金、错误金额、跳年、提前或重复发行均 fail-closed。
+
+### 自动化、benchmark 与真实运行
+
+- `provincialbank-interest`：10/10；带 `runtime-benchmarks`：11/11。
+- runtime 创世测试逐户验证 43 个质押地址与本金；primitives 测试钉死本金人口基数、整 BP 可除性、
+  `stake_account` 唯一且不与任何 `main_account` 重合。
+- NodeGuard：64/64；省储行定向策略：8/8；ConstitutionGuard：40/40；node `cargo check` 和 production WASM build 通过。
+- 正式 pallet benchmark 以 50 steps / 20 repeats 重生权重：45 reads / 46 writes，时间模型约 569 ms，
+  proof size 估算 112,919 bytes。
+- 当前源码 fresh headless 节点在独立 `/tmp` base path 启动到 block#0，创世哈希
+  `0x6fc42816b55ce22f204d0dbddbf38a9ab4d3a1c78005b90e1fcbe376ef8585b1`，数据库约 352 MiB；
+  无 NodeGuard/ConstitutionGuard 拒绝或 panic，全部 `/tmp/gmb-node-guard-provincial.*` 已删除。
+
+## 固定平均六分钟与 GenesisPallet 守卫（2026-07-12，已完成）
+
+### 已完成代码
+
+- PoW 时间语义统一为 `POW_TARGET_BLOCK_TIME_MS=360_000`：它只表示难度调整的长期平均目标，
+  有效 PoW 找到后立即提交，没有最短等待或最晚出块期限。
+- CPU/GPU 删除 `LAST_SUBMIT_NS`、目标时间参数、Runtime API 读取和全部 sleep 提交门控；
+  `pallet_timestamp::MinimumPeriod` 固定为 1ms，只要求时间戳严格递增。
+- 删除旧 `MILLISECS_PER_BLOCK`、`SLOT_DURATION`、runtime `MINUTES/HOURS/DAYS`，避免六分钟整数换算
+  产生 `MINUTES=0`；制度日历继续使用明确的 `BLOCKS_PER_*` 固定区块数。
+- `pow-difficulty` 不再依赖 GenesisPallet，固定使用 600 块 × 360,000ms = 60 小时目标窗口；
+  旧目标时间 runtime API、trait、Cargo 依赖和 storage proof 全部删除。
+- GenesisPallet 删除 `TargetBlockTimeMs`、动态时间 API/trait 和未使用事件，只保留三个创世事实、
+  `Phase` 与 `DeveloperUpgradeEnabled` 五个字段。
+- 新增 node `genesis_pallet` 策略：三个事实逐字冻结；阶段状态只允许含 `:code` 的
+  `(Genesis,true) → (Operation,false)` 原子单向转换；旧时间 key、未知同前缀 key、畸形 SCALE、
+  显式写回默认值、部分/反向/二次转换全部 fail-closed。
+- GenesisPallet 已接入 NodeGuard 启动锚定、普通区块、runtime 升级全检和完整状态共享单遍分区。
+- 空块最初被错误地从 `pow-difficulty` runtime 移到 NodeGuard；复核后已恢复三层规则：
+  本地交易池门控避免构造、NodeGuard 在 runtime 前返回 `KnownBad`、runtime 最终共识断言独立拒绝。
+- 清算行费率变更“7 天”按六分钟平均制度日历修正为 `1_680` 块；OnChina 上链等待改为
+  20 分钟客户端确认观察窗口，窗口结束不再解释为 PoW 超过最晚时间或交易必然失效。
+
+### 已完成自动化与真实运行
+
+- runtime 时间口径测试通过；`pow-difficulty` 带 `runtime-benchmarks` 12/12；
+  `genesis-pallet` 7/7；NodeGuard 71/71；ConstitutionGuard 40/40；OnChina chain_submit 2/2。
+- PoW 正式 benchmark 50 steps / 20 repeats 完成：调整路径从 4 reads / 2 writes 降为
+  3 reads / 2 writes，实测模型 7µs，旧 GenesisPallet proof 已清除。
+- node GPU feature、pow/genesis try-runtime、production WASM build 均通过。
+- `citizenchain-fresh` 独立 `/tmp` 数据库真实启动成功，GenesisPallet NodeGuard 未拒绝；创世哈希
+  `0x6d1ae7386793e966fe2f17f73446f433b3a1aecfd4dd4b9bce2764ca44d98e84`，数据库约 352 MiB。
+- 默认冻结 chainspec 仍因旧管理员 SCALE 被治理骨架正确拒绝，不增加兼容；全部启动临时目录已删除。
+- 临时双节点使用同一当前源码 chainspec、Alice `powr` 测试密钥和真实签名交易：两端在线后，
+  block#1 从提交到可见约 1.988 秒，block#2 约 1.897 秒；两端 block#2 哈希一致为
+  `0x993d572e4d18bdea30441c5212df76699db16b0c1bacedc3c47db0bcf9814102`。
+- block#2 前的竞态空 proposal 被 NodeGuard 记录为“空块不允许上链”，随后合法 block#2 正常传播。
+  该结果只证明节点提前闸门有效，不能替代 runtime 最终拒绝；runtime 断言现已恢复。临时 chainspec、
+  测试 keystore 和两份数据库均已删除。
+
+## runtime 空块最终拒绝恢复（2026-07-12，已完成）
+
+- `pow-difficulty::on_finalize` 在读取时间戳并确认非创世块后、任何难度窗口写入前检查
+  `System::extrinsic_count()`；数量不大于 1 时以共识断言拒绝，错误空块不能推进
+  `WindowStartMs` 或 `CurrentDifficulty`。
+- NodeGuard 的 body 预检查继续保留，外部空块在 runtime 执行前返回 `KnownBad`；节点
+  `should_propose` 与 CPU/GPU ready 交易池门控继续阻止诚实节点主动构造空 proposal。
+- runtime 单元测试验证只有 timestamp 的区块独立失败且状态不变，timestamp 加交易正常完成；
+  `pow-difficulty` 10/10、runtime-benchmarks 13/13、try-runtime 10/10、NodeGuard 71/71、
+  ConstitutionGuard 40/40。
+- 正式 benchmark 50 steps / 20 repeats 已重生：调整 3 reads / 2 writes、7µs；建窗
+  2 reads / 1 write、4µs；普通路径 2 reads、5µs。
+- 当前源码双节点真实运行：无交易且两端联网时持续停在 block#0；Alice 提交真实绑定交易后产出
+  含 timestamp 和交易两笔 extrinsic 的 block#1，两端哈希一致为
+  `0x1c0667425cf339697b7d803e9fcab15ddfc22c8aa2e44f903e870946c3991a51`。
+- 首轮真实运行暴露最佳块切换与交易池维护竞态：runtime 正确拒绝了本地空 block#2 proposal，空块
+  未入库。节点随后增加新链头稳定门控，并让 `mining_threads=0` 且无 GPU 的节点完全不 proposal。
+- 修正后 Alice 提交真实重绑定交易，block#2 精确包含两笔 extrinsic；两端哈希一致为
+  `0x040bddac4957705eb86b5f3637078ac90a34f95d9cf379398b35a06de87cb86f`。交易池清空后持续停在
+  block#2，不再构造空 proposal，也没有 runtime panic；临时 chainspec、数据库、测试 keystore
+  和日志验收后全部删除。
+
+## PoW 动态难度、可升级参数与 NodeGuard 守卫（2026-07-12，已完成）
+
+### 已完成代码
+
+- `pow-difficulty` 新增版本化 `PowDifficultyParams`、`ActiveParams`、`PendingParams` 和
+  `DifficultyAdjustmentAudit`；`CurrentDifficulty` 仍只能由算法推进，治理不能直接设置难度。
+- `target_block_time_ms`、`adjustment_interval`、`max_adjust_up_factor`、
+  `max_adjust_down_divisor` 允许随 runtime 升级原子变更；参数暂存后下一块激活，激活时保留当前难度并重置窗口。
+- `stage_params` 与 `try_state/on_finalize` 均校验 `algorithm_version`，当前节点/runtime 只接受
+  `POW_ALGORITHM_VERSION`，未来算法升级必须先让 runtime 与节点守卫共同支持新版本。
+- `runtime-upgrade` 的提案和开发者直升路径均携带新 PoW 参数，并在执行成功时写入
+  `LastRuntimeUpgradeAudit`；NodeGuard 用审计把 `:code`、旧/新参数 hash 和激活高度绑定。
+- 节点挖矿改为直接读取 `PowDifficulty::CurrentDifficulty` RAW storage，不再保留
+  `PowDifficultyApi` Runtime API 或固定难度兜底。
+- 新增 node `pow_difficulty` 守卫策略，覆盖创世、普通调整、参数激活、runtime 升级审计和完整状态导入；
+  未知 key、畸形 SCALE、普通区块改参数、非法版本、审计缺失或 hash 不一致全部 fail-closed。
+- runtime 空块最终拒绝继续保留；NodeGuard 预执行拒绝和本地交易池门控只作为前置防线。
+
+### benchmark 与清理
+
+- `pow-difficulty` 正式 benchmark 50 steps / 20 repeats 重生权重，新增
+  `on_initialize_activate_params`；调整路径为 6 reads / 4 writes，参数激活路径为 2 reads / 4 writes。
+- `runtime-upgrade` 正式 benchmark 50 steps / 20 repeats 通过真实 extrinsic 路径，权重为
+  270 reads / 364 writes，时间模型约 9.023 ms。
+- benchmark 环境暴露默认状态仍有旧 `AdminAccount` 编码；已在 `runtime-benchmarks` feature 下按当前结构种下
+  NRC、43 个 PRC、43 个 PRB 管理员表，仅用于 benchmark，不增加生产兼容。
+- 已清理旧 `PowDifficultyApi` 文档/注释口径，更新 `pow-difficulty`、`runtime-upgrade`、Node、NodeGuard、
+  primitives 技术文档。
+
+### 已完成自动化
+
+- `pow-difficulty` runtime-benchmarks：17/17。
+- `runtime-upgrade` runtime-benchmarks：18/18。
+- `WASM_BUILD_FROM_SOURCE=1 cargo build --manifest-path Cargo.toml --release --features runtime-benchmarks --bin citizenchain`：通过。
+- `pow_difficulty` 和 `runtime_upgrade` 两组正式 pallet benchmark 均已通过并覆盖现有 `weights.rs`。
+- node `cargo check`：通过。
+- NodeGuard：76/76；ConstitutionGuard：40/40。
+- node frontend `npm run build`：通过；Vite 仅提示现有大 chunk 警告。
+- CitizenApp `runtime_upgrade_service_test.dart`：3/3。
+
+### 真实运行态验收
+
+- 已按确认口径创建并删除 `/tmp/gmb-pow-difficulty-acceptance/`，目录只用于临时 chainspec、base-path、
+  keystore、日志和一次性 Alice 签名器，不进入 Git。
+- 当前普通 release WASM 重新导出 fresh chainspec 后，额外资助标准测试账户 Alice；
+  单节点启动后 20 秒持续停在 block#0，验证无交易时不产空块。
+- Alice 提交真实 `System::remark` signed extrinsic 后，交易池接受 hash
+  `0x2aefe7b403a973a43daee7fbff501a5076acc2842e4c2c084743dfa6e49ec92b`；
+  因节点挖矿门控要求非离线网络，第二个本地陪跑节点连入后，节点 1 立即产出 block#1。
+- block#1 哈希
+  `0xaaf286249a775bcac3bb107b7e7f4c15ccb3fb2eaebb8d0cf87e81464d7ae7fb`，
+  区块包含 2 条 extrinsics（timestamp + Alice remark）和 2 条 digest logs；Alice nonce 从 0 变为 1，
+  pending extrinsics 清零，节点 2 同步到 block#1。
+- 验收期间无 NodeGuard / ConstitutionGuard / PoW 难度守卫拒绝合法 block#1；临时节点、chainspec、
+  签名器、数据库和日志已全部删除。

@@ -11,7 +11,6 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
 import 'package:citizenapp/isar/app_isar.dart';
-import 'package:citizenapp/ui/widgets/bip39_input.dart';
 import 'package:citizenapp/ui/widgets/shimmer_loading.dart';
 import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/my/util/screenshot_guard.dart';
@@ -20,6 +19,7 @@ import 'package:citizenapp/ui/widgets/chain_progress_banner.dart';
 import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_flow.dart';
+import 'package:citizenapp/wallet/pages/import_wallet_page.dart';
 import 'package:citizenapp/wallet/widgets/wallet_action_card.dart';
 import 'package:citizenapp/wallet/widgets/wallet_identity_card.dart';
 import 'package:citizenapp/wallet/widgets/wallet_onchain_balance_card.dart';
@@ -1281,83 +1281,6 @@ class _CreateWalletPageState extends State<AddWalletPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class ImportWalletPage extends StatefulWidget {
-  const ImportWalletPage({super.key});
-
-  @override
-  State<ImportWalletPage> createState() => _ImportWalletPageState();
-}
-
-class _ImportWalletPageState extends State<ImportWalletPage> {
-  final TextEditingController _mnemonicController = TextEditingController();
-  bool _isImporting = false;
-  String? _error;
-
-  Future<void> _import() async {
-    setState(() {
-      _error = null;
-      _isImporting = true;
-    });
-    try {
-      final profile =
-          await WalletManager().importWallet(_mnemonicController.text);
-      unawaited(ChainTxMonitor.instance.initBaselineBalance(
-        profile.address,
-        profile.pubkeyHex,
-      ));
-      _mnemonicController.clear();
-      if (!mounted) {
-        return;
-      }
-      Navigator.of(context).pop(true);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = walletOperationErrorMessage(e);
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isImporting = false;
-        });
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _mnemonicController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('导入热钱包')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text('逐个输入单词，从候选列表中选择匹配项'),
-          const SizedBox(height: 8),
-          const Text('仅使用默认派生路径，不暴露自定义路径。'),
-          const SizedBox(height: 12),
-          Bip39InputField(controller: _mnemonicController, wordCount: 0),
-          const SizedBox(height: 12),
-          if (_error != null)
-            Text(
-              _error!,
-              style: const TextStyle(color: AppTheme.danger),
-            ),
-          FilledButton(
-            onPressed: _isImporting ? null : _import,
-            child: Text(_isImporting ? '导入中...' : '确认导入'),
-          ),
-        ],
       ),
     );
   }

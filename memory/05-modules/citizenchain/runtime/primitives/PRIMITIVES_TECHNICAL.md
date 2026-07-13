@@ -90,7 +90,7 @@
 - 投票交易费 VoteFlat(`VOTE_FLAT_FEE = 1 元`):VotingEngine 手动重试/取消 + InternalVote/JointVote 投票 + 业务 pallet propose_X / cleanup_X + PublicManage/PrivateManage 注册机构 CID + ResolutionIssuance::propose_resolution_issuance + ResolutionDestro::propose_destroy + CitizenIdentity + FullnodeIssuance bind/rebind + OnchainIssuance propose_X。
 - 链上交易费 OnchainAmount(`max(amount × 0.1%, 0.1 元)`):Balances 明确金额调用 + OffchainTransaction deposit/withdraw。治理提案内的真实执行手续费由业务 pallet 在执行阶段按同一公式另行扣取。
 - 链下交易费 OffchainFee:OffchainTransaction::submit_offchain_batch_v2 标记为链下清算费，实际手续费在清算结算阶段按 `OFFCHAIN_*` 转账，不进入链上 80/10/10 分账。
-- 免费 Free:System / Timestamp / ProvincialBankInterest / CitizenIssuance / ResolutionIssuance 维护型调用 / VotingEngine::finalize_proposal / OffchainTransaction::set_max_l2_fee_rate / Assets 编译期兜底。
+- 免费 Free:System / Timestamp / CitizenIssuance / ResolutionIssuance 维护型调用 / VotingEngine::finalize_proposal / OffchainTransaction::set_max_l2_fee_rate / Assets 编译期兜底。ProvincialBankInterest 已无公开 Call，只在年度边界 finalize 自动执行。
 - 未知 Unknown:未归入前 4 类的调用拒绝交易,不入块。
 
 ### 2.7 投票治理
@@ -132,14 +132,18 @@
 ## 5. 区块计数口径说明
 | 常量 | 值 | 来源 | 用途 |
 |------|-----|------|------|
-| SECONDS_PER_BLOCK | 360 | 运行期 6 分钟出块 | 派生基础 |
+| POW_TARGET_BLOCK_TIME_MS | 360,000 | 创世默认平均 6 分钟 | PoW 难度目标窗口，运行期以 `pow-difficulty::ActiveParams` 为真源 |
+| SECONDS_PER_BLOCK | 360 | 目标平均 6 分钟 | 制度期限换算基础 |
 | BLOCKS_PER_HOUR | 10 | 3,600 / 360 | 链下交易打包阈值、密钥轮转延迟 |
 | BLOCKS_PER_DAY | 240 | 10 × 24 | 投票到期计算 |
 | BLOCKS_PER_YEAR | 87,600 | 白皮书固定值 | 省储行利息结算周期 |
 | VOTING_DURATION_BLOCKS | 7,200 | 240 × 30 | 投票到期门槛（30 天） |
-| MILLISECS_PER_BLOCK | 30,000 | 创世期占位 | 仅用于 benchmark/test 和 node 层 fallback |
 
-注意：SECONDS_PER_BLOCK / BLOCKS_PER_HOUR / BLOCKS_PER_DAY 按运行期 6 分钟出块计算。MILLISECS_PER_BLOCK 保留为创世期 30 秒占位值，仅 benchmark/test 和难度调整窗口常量引用。
+注意：六分钟是难度调整的长期平均目标，不是最短间隔或最晚期限。有效 PoW 找到后立即出块。
+`POW_TARGET_BLOCK_TIME_MS / DIFFICULTY_ADJUSTMENT_INTERVAL / DIFFICULTY_MAX_ADJUST_FACTOR /
+DIFFICULTY_MIN_ADJUST_FACTOR` 是创世默认和节点守卫基线，运行期可随 runtime 升级原子写入
+`PowDifficultyParams`；`CurrentDifficulty` 不允许直接治理修改，只能由算法推进。
+`SECONDS_PER_BLOCK / BLOCKS_PER_HOUR / BLOCKS_PER_DAY` 是制度日历常量，不随 PoW 参数调整而变化。
 
 ---
 

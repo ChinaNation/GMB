@@ -71,7 +71,8 @@ class RuntimeUpgradeService {
   /// ProposalData 是 BoundedVec<u8>，SCALE 编码为 Compact 长度前缀 + 原始字节。
   /// 原始字节布局：
   ///   proposer: AccountId32(32) + reason: Vec<u8>(Compact len + bytes)
-  ///   + code_hash: [u8;32]。真实状态只读取 VotingEngine::Proposals.status。
+  ///   + code_hash: [u8;32] + expected_pow_params_hash: [u8;32]
+  ///   + PowDifficultyParams 固定字段。真实状态只读取 VotingEngine::Proposals.status。
   Future<RuntimeUpgradeProposalInfo?> fetchRuntimeUpgradeProposal(
       int proposalId) async {
     final key = _buildStorageKey(
@@ -356,6 +357,22 @@ class RuntimeUpgradeService {
       final codeHashBytes = data.sublist(offset, offset + 32);
       offset += 32;
 
+      if (offset + 32 + 34 > data.length) return null;
+      final expectedPowParamsHashBytes = data.sublist(offset, offset + 32);
+      offset += 32;
+      final paramsVersion = _decodeU32(data, offset);
+      offset += 4;
+      final algorithmVersion = data[offset] | (data[offset + 1] << 8);
+      offset += 2;
+      final targetBlockTimeMs = _decodeU64(data.sublist(offset, offset + 8));
+      offset += 8;
+      final adjustmentInterval = _decodeU32(data, offset);
+      offset += 4;
+      final maxAdjustUpFactor = _decodeU64(data.sublist(offset, offset + 8));
+      offset += 8;
+      final maxAdjustDownDivisor = _decodeU64(data.sublist(offset, offset + 8));
+      offset += 8;
+
       // 协议升级摘要不保存业务状态，避免与投票引擎终态脱节。
       if (offset != data.length) return null;
 
@@ -368,6 +385,14 @@ class RuntimeUpgradeService {
         proposer: proposerSs58,
         reason: reason,
         codeHashHex: codeHashHex,
+        expectedPowParamsHashHex:
+            _hexEncode(Uint8List.fromList(expectedPowParamsHashBytes)),
+        paramsVersion: paramsVersion,
+        algorithmVersion: algorithmVersion,
+        targetBlockTimeMs: targetBlockTimeMs,
+        adjustmentInterval: adjustmentInterval,
+        maxAdjustUpFactor: maxAdjustUpFactor,
+        maxAdjustDownDivisor: maxAdjustDownDivisor,
       );
     } catch (_) {
       return null;

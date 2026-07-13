@@ -368,6 +368,13 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       'proposer': info.proposer,
       'reason': info.reason,
       'code_hash_hex': info.codeHashHex,
+      'expected_pow_params_hash_hex': info.expectedPowParamsHashHex,
+      'params_version': info.paramsVersion,
+      'algorithm_version': info.algorithmVersion,
+      'target_block_time_ms': info.targetBlockTimeMs,
+      'adjustment_interval': info.adjustmentInterval,
+      'max_adjust_up_factor': info.maxAdjustUpFactor,
+      'max_adjust_down_divisor': info.maxAdjustDownDivisor,
     };
   }
 
@@ -376,12 +383,34 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   ) {
     final detail = snapshot.detail;
     final codeHash = detail['code_hash_hex']?.toString();
-    if (codeHash == null || codeHash.isEmpty) return null;
+    final paramsHash = detail['expected_pow_params_hash_hex']?.toString();
+    final paramsVersion = _toInt(detail['params_version']);
+    final algorithmVersion = _toInt(detail['algorithm_version']);
+    final targetBlockTimeMs = _toInt(detail['target_block_time_ms']);
+    final adjustmentInterval = _toInt(detail['adjustment_interval']);
+    final maxAdjustUpFactor = _toInt(detail['max_adjust_up_factor']);
+    final maxAdjustDownDivisor = _toInt(detail['max_adjust_down_divisor']);
+    if (codeHash == null ||
+        codeHash.isEmpty ||
+        paramsHash == null ||
+        paramsVersion == null ||
+        algorithmVersion == null ||
+        targetBlockTimeMs == null ||
+        adjustmentInterval == null ||
+        maxAdjustUpFactor == null ||
+        maxAdjustDownDivisor == null) return null;
     return RuntimeUpgradeProposalInfo(
       proposalId: snapshot.proposalId,
       proposer: detail['proposer']?.toString() ?? '',
       reason: detail['reason']?.toString() ?? '',
       codeHashHex: codeHash,
+      expectedPowParamsHashHex: paramsHash,
+      paramsVersion: paramsVersion,
+      algorithmVersion: algorithmVersion,
+      targetBlockTimeMs: targetBlockTimeMs,
+      adjustmentInterval: adjustmentInterval,
+      maxAdjustUpFactor: maxAdjustUpFactor,
+      maxAdjustDownDivisor: maxAdjustDownDivisor,
     );
   }
 

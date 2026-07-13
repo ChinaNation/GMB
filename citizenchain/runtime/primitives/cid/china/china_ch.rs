@@ -1028,6 +1028,10 @@ mod tests {
         let citizens_sum: u128 = CHINA_CH.iter().map(|n| n.citizens_number as u128).sum();
         let stake_sum: u128 = CHINA_CH.iter().map(|n| n.stake_amount).sum();
         assert_eq!(stake_sum, citizens_sum * 10_000u128);
+        assert!(
+            CHINA_CH.iter().all(|n| n.stake_amount % 10_000 == 0),
+            "每家省储行创立质押本金必须按整人口基数计算，保证逐年 BP 利息可精确复算"
+        );
     }
 
     #[test]
@@ -1038,5 +1042,17 @@ mod tests {
         addrs.sort();
         addrs.dedup();
         assert_eq!(addrs.len(), total, "main_account duplicate found");
+    }
+
+    #[test]
+    fn all_stake_accounts_are_unique_and_separate_from_main_accounts() {
+        let mut stake_accounts: Vec<[u8; 32]> = CHINA_CH.iter().map(|n| n.stake_account).collect();
+        let total = stake_accounts.len();
+        stake_accounts.sort();
+        stake_accounts.dedup();
+        assert_eq!(stake_accounts.len(), total, "stake_account duplicate found");
+        assert!(CHINA_CH.iter().all(|bank| !CHINA_CH
+            .iter()
+            .any(|entry| entry.main_account == bank.stake_account)));
     }
 }

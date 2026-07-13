@@ -281,12 +281,14 @@ class WalletManager {
     try {
       await _store.putMnemonic(profile.walletIndex, mnemonic);
       await _verifyWalletPersisted(profile);
+      // fail-closed：设备子钥注册必须成功，失败连同钱包一起回滚，绝不留"建了没注册"的中间态。
+      // 注册成功后才由 runCreateWalletFlow 展示助记词、进入 App。
+      await _registerDeviceSubkey(profile.walletIndex, profile.address, seed);
     } catch (_) {
       await _rollbackWalletCreation(profile.walletIndex);
       rethrow;
     }
     _bumpWalletsRevision();
-    await _tryRegisterDeviceSubkey(profile.walletIndex, profile.address, seed);
     return WalletCreationResult(profile: profile, mnemonic: mnemonic);
   }
 
@@ -313,12 +315,14 @@ class WalletManager {
     try {
       await _store.putMnemonic(profile.walletIndex, trimmed);
       await _verifyWalletPersisted(profile);
+      // fail-closed：导入一律注册本设备子钥（幂等 upsert），失败连同钱包回滚——导入页保留
+      // 助记词供重试。换设备导入必然是本设备新子钥，注册成功即把账户登录迁到本设备。
+      await _registerDeviceSubkey(profile.walletIndex, profile.address, seed);
     } catch (_) {
       await _rollbackWalletCreation(profile.walletIndex);
       rethrow;
     }
     _bumpWalletsRevision();
-    await _tryRegisterDeviceSubkey(profile.walletIndex, profile.address, seed);
     return profile;
   }
 
@@ -639,9 +643,10 @@ class WalletManager {
     return _store.readMnemonic(walletIndex);
   }
 
-  /// best-effort 注册 P-256 设备子钥：用**内存里刚派生的 sr25519 keypair** 对绑定
-  /// 证明签名（零额外弹窗）。失败不阻塞创建；首次广场 / Chat 握手会明确提示重新注册。
-  Future<void> _tryRegisterDeviceSubkey(
+  /// 注册 P-256 设备子钥（硬绑定）：用**内存里刚派生的 sr25519 keypair** 对绑定证明
+  /// 签名（零额外弹窗）。**fail-closed**：注册失败向上抛，由 createWallet / importWallet
+  /// 连同钱包一起回滚——绝不留"建了钱包却没注册"的中间态。registrar 未接线（测试）时跳过。
+  Future<void> _registerDeviceSubkey(
     int walletIndex,
     String address,
     List<int> seed,
@@ -650,20 +655,16 @@ class WalletManager {
     if (registrar == null) {
       return;
     }
-    try {
-      await registrar(
-        walletIndex: walletIndex,
-        ownerAccount: address,
-        signBinding: (message) async {
-          final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(seed));
-          pair.ss58Format = _ss58Format;
-          final signature = pair.sign(message);
-          return '0x${_toHex(signature.toList(growable: false))}';
-        },
-      );
-    } catch (_) {
-      // best-effort：注册失败不阻塞创建。
-    }
+    await registrar(
+      walletIndex: walletIndex,
+      ownerAccount: address,
+      signBinding: (message) async {
+        final pair = Keyring.sr25519.fromSeed(Uint8List.fromList(seed));
+        pair.ss58Format = _ss58Format;
+        final signature = pair.sign(message);
+        return '0x${_toHex(signature.toList(growable: false))}';
+      },
+    );
   }
 
   /// 前置检查：设备必须有锁屏（生物识别 / 数字 / 图案 / PIN），否则拒绝

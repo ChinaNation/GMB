@@ -31,7 +31,7 @@
 ## 主要风险点
 
 - `createWallet` 前置要求设备已开启系统锁屏（`_ensureDeviceSecure`，wallet_manager.dart:714），未开锁屏的新设备会在强制创建页失败——页面需给出页面级明确指引（当前只有 SnackBar 一闪而过）。
-- 强制创建页不提供导入入口：重装 App 的老用户在门禁处只能新建，导入仍在进入主界面后的钱包页——字面需求如此，已记录为默认口径。
+- 强制创建页不提供导入入口：重装 App 的老用户在门禁处只能新建，导入仍在进入主界面后的钱包页——字面需求如此，已记录为默认口径。**（此口径已于 2026-07-12 反转：首启门禁页补齐"导入已有钱包"入口,复用 ImportWalletPage,二元 fail-closed;见 20260712-citizenapp-onboarding-import-wallet。）**
 - 助记词备份弹窗防截屏逻辑（ScreenshotGuard）在 onboarding 模式下必须原样保留。
 
 ## 是否需要先沟通

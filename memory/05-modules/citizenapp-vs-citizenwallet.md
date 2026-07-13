@@ -38,7 +38,7 @@
 
 2026-06-26 个人多签创建交易口径：
 
-- citizenapp 生产 `PersonalAdmins(7).propose_create(0)` 时只使用
+- citizenapp 生产 `PersonalManage(7).propose_create(0)` 时只使用
   `account_name / admins / regular_threshold / amount` 新载荷。
 - citizenwallet 公民钱包只解析上述新载荷；缺少 `regular_threshold` 的旧个人多签创建载荷直接拒绝。
 - `regular_threshold` 必须在 `floor(admins_len / 2) + 1 ..= admins_len` 范围内。
@@ -49,7 +49,7 @@
 - 管理员更换载荷固定为 `institution_code / account_id / admins / new_threshold`。
 - citizenwallet 公民钱包只解析上述新载荷；缺少 `new_threshold` 或尾部有多余字节的旧/错载荷直接拒绝。
 - 国家储委会、省储委会、省储行、国家司法院携带固定制度阈值；国家司法院固定 15 人、阈值 8/15；联邦注册局、个人多签、公权机构和私权机构使用严格过半动态阈值。
-- 冷钱包必须校验 pallet 与机构码匹配：`PMUL` 只能是 `29.0`，创世管理员只能是 `12.0`，公权只能是 `27.0`，私权只能是 `28.0`；非法人按所属法人归属校验为 `27.0` 或 `28.0`。
+- 冷钱包必须校验 pallet 与机构码匹配：`PMUL` 只能是 `29.0`，创世管理员只能是 `27.0`，公权只能是 `27.0`，私权只能是 `28.0`；非法人按所属法人归属校验为 `27.0` 或 `28.0`。
 
 ## 实现约束
 

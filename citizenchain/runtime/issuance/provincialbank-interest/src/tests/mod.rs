@@ -3,7 +3,7 @@
 use super::pallet::*;
 use codec::Decode;
 use frame_support::{
-    assert_noop, assert_ok, derive_impl,
+    derive_impl,
     traits::{Get, OnFinalize, OnInitialize, VariantCountOf},
 };
 use frame_system as system;
@@ -91,18 +91,18 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .build_storage()
         .expect("frame system genesis storage should build");
     let mut ext = sp_io::TestExternalities::new(storage);
-    ext.execute_with(|| System::set_block_number(1));
+    ext.execute_with(|| System::set_block_number(0));
     ext
 }
 
 fn run_to_block(n: u64) {
     while System::block_number() < n {
-        let b = System::block_number();
-        ProvincialBankInterest::on_finalize(b);
-        System::on_finalize(b);
-        System::set_block_number(b + 1);
-        System::on_initialize(b + 1);
-        ProvincialBankInterest::on_initialize(b + 1);
+        let block = System::block_number() + 1;
+        System::set_block_number(block);
+        System::on_initialize(block);
+        ProvincialBankInterest::on_initialize(block);
+        ProvincialBankInterest::on_finalize(block);
+        System::on_finalize(block);
     }
 }
 

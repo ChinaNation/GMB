@@ -6,7 +6,7 @@
   2. 联合投票 joint-vote：仅治理机构（国家储委会/省储委会/省储行）跨机构共同治理（含联合公投阶段）
   3. 立法投票 legislation-vote：仅立法机构修法表决（市自治会/市教委会/市立法会/省联邦立法院参议会和众议会/国家立法院参议会和众议会/国家教委会）
   4. 选举投票 election-vote：选举公职人员=普选（公民选）+互选（机构成员互选）
-- 独立选举 pallet 统一为 `election-vote`（crate/目录/标识符/construct_runtime `ElectionVote` idx24；历史空骨架已接入选举框架）
+- 独立选举 pallet 统一为 `election-vote`（crate/目录/标识符/construct_runtime `ElectionVote` idx22；历史空骨架已接入选举框架）
 - 白皮书 5.2 + 官网 citizenweb（Governance.tsx/Technology.tsx）同步四种投票，CitizenApp 只描述为投票交互入口
 - 修残留：旧 HTML 解析脚本 OUT 路径 governance/legislation-yuan → public/legislation-yuan
 - 2026-06-28 追加：`election-vote` 已从空骨架接入普选/互选框架，新增候选人/选民快照、投票、计票、超时结算、终态回调和清理状态机。

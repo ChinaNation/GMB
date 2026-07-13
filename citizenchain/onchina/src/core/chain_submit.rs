@@ -11,8 +11,8 @@ use sp_core::crypto::Ss58Codec;
 use super::chain_url::chain_http_url;
 
 const RPC_TIMEOUT_SECS: u64 = 10;
-/// 等交易进块上限:创世期 30 秒出块 × 3 块 + 余量。
-const WAIT_INCLUSION_SECS: u64 = 95;
+/// 客户端等待确认的观察窗口，不是 PoW 最晚出块期限；窗口结束后交易仍可能继续等待进块。
+const WAIT_CONFIRMATION_OBSERVATION_SECS: u64 = 20 * 60;
 /// nonce 消费轮询间隔。
 const WAIT_POLL_INTERVAL_SECS: u64 = 3;
 
@@ -185,12 +185,14 @@ pub(crate) async fn assemble_and_submit(
 }
 
 /// 等交易进块:immortal + 显式 nonce 下,accountNextIndex 越过提交 nonce
-/// 即已被打包(InBestBlock 可靠代理);超时视为失败上抛。
+/// 即已被打包(InBestBlock 可靠代理)。观察窗口结束只表示本次请求尚未确认，
+/// 不得解释为 PoW 已超过最晚出块时间或交易必然失效。
 pub(crate) async fn wait_nonce_consumed(
     pubkey_hex: &str,
     submitted_nonce: u32,
 ) -> Result<(), String> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(WAIT_INCLUSION_SECS);
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_secs(WAIT_CONFIRMATION_OBSERVATION_SECS);
     loop {
         let current = fetch_nonce(pubkey_hex).await?;
         if current > submitted_nonce {
@@ -198,7 +200,7 @@ pub(crate) async fn wait_nonce_consumed(
         }
         if std::time::Instant::now() >= deadline {
             return Err(format!(
-                "等待交易进块超时({WAIT_INCLUSION_SECS} 秒):nonce {submitted_nonce} 尚未消费"
+                "交易确认观察窗口已结束({WAIT_CONFIRMATION_OBSERVATION_SECS} 秒):nonce {submitted_nonce} 尚未消费，交易仍可能继续等待进块"
             ));
         }
         tokio::time::sleep(std::time::Duration::from_secs(WAIT_POLL_INTERVAL_SECS)).await;

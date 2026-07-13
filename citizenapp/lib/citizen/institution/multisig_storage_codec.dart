@@ -86,7 +86,7 @@ class MultisigStorageCodec {
     );
   }
 
-  // 机构身份/账户 storage 已拆 PublicManage(idx32)/PrivateManage(idx33),storage 名不变但
+  // 机构身份/账户 storage 已拆 PublicManage(idx30)/PrivateManage(idx31),storage 名不变但
   // 前缀 twox_128(pallet 名) 随之变;`palletName` 由调用方经 InstitutionPalletRouter 决定
   // (反查类双查取命中;cid 键贯穿命中 pallet),取代已删的 `OrganizationManage`。
   static Uint8List accountRegisteredCidKey(

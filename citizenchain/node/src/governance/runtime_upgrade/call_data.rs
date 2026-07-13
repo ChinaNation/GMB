@@ -1,4 +1,5 @@
 use crate::governance::signing::encode_compact_u32;
+use codec::Encode;
 
 const RUNTIME_UPGRADE_PALLET_INDEX: u8 = 12;
 const PROPOSE_RUNTIME_UPGRADE_CALL_INDEX: u8 = 0;
@@ -19,24 +20,35 @@ pub(crate) fn read_wasm(wasm_path: &str) -> Result<(Vec<u8>, f64), String> {
 }
 
 /// 构建开发期直接升级 call_data: RuntimeUpgrade.developer_direct_upgrade(code)。
-pub(crate) fn developer_direct_upgrade(wasm_code: &[u8]) -> Vec<u8> {
+pub(crate) fn developer_direct_upgrade(
+    wasm_code: &[u8],
+    pow_params: pow_difficulty::PowDifficultyParams,
+) -> Vec<u8> {
     let wasm_len_compact = encode_compact_u32(wasm_code.len() as u32);
     let mut call_data = Vec::with_capacity(2 + wasm_len_compact.len() + wasm_code.len());
     call_data.push(RUNTIME_UPGRADE_PALLET_INDEX);
     call_data.push(DEVELOPER_DIRECT_UPGRADE_CALL_INDEX);
     call_data.extend_from_slice(&wasm_len_compact);
     call_data.extend_from_slice(wasm_code);
+    call_data.extend_from_slice(&pow_params.encode());
     call_data
 }
 
 /// 从文件重建开发期直接升级 call_data,用于签名响应提交阶段。
-pub(crate) fn developer_direct_upgrade_from_file(wasm_path: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn developer_direct_upgrade_from_file(
+    wasm_path: &str,
+    pow_params: pow_difficulty::PowDifficultyParams,
+) -> Result<Vec<u8>, String> {
     let (wasm_code, _) = read_wasm(wasm_path)?;
-    Ok(developer_direct_upgrade(&wasm_code))
+    Ok(developer_direct_upgrade(&wasm_code, pow_params))
 }
 
 /// 构建运行期协议升级提案 call_data: RuntimeUpgrade.propose_runtime_upgrade(...)。
-pub(crate) fn propose_runtime_upgrade(wasm_code: &[u8], reason: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn propose_runtime_upgrade(
+    wasm_code: &[u8],
+    reason: &str,
+    pow_params: pow_difficulty::PowDifficultyParams,
+) -> Result<Vec<u8>, String> {
     let reason_bytes = reason.as_bytes();
     if reason_bytes.is_empty() {
         return Err("升级理由不能为空".to_string());
@@ -54,6 +66,7 @@ pub(crate) fn propose_runtime_upgrade(wasm_code: &[u8], reason: &str) -> Result<
     call_data.extend_from_slice(reason_bytes);
     call_data.extend_from_slice(&wasm_compact);
     call_data.extend_from_slice(wasm_code);
+    call_data.extend_from_slice(&pow_params.encode());
     Ok(call_data)
 }
 
@@ -61,7 +74,30 @@ pub(crate) fn propose_runtime_upgrade(wasm_code: &[u8], reason: &str) -> Result<
 pub(crate) fn propose_runtime_upgrade_from_file(
     wasm_path: &str,
     reason: &str,
+    pow_params: pow_difficulty::PowDifficultyParams,
 ) -> Result<Vec<u8>, String> {
     let (wasm_code, _) = read_wasm(wasm_path)?;
-    propose_runtime_upgrade(&wasm_code, reason)
+    propose_runtime_upgrade(&wasm_code, reason, pow_params)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use codec::DecodeAll;
+
+    #[test]
+    fn manual_call_encoding_matches_runtime_metadata_contract() {
+        let code = vec![1u8, 2, 3];
+        let params = pow_difficulty::PowDifficultyParams::genesis_default();
+        let developer_call = developer_direct_upgrade(&code, params);
+        let decoded = citizenchain::RuntimeCall::decode_all(&mut developer_call.as_slice())
+            .expect("开发期升级 call_data 必须被真实 RuntimeCall 完整解码");
+        assert_eq!(decoded.encode(), developer_call);
+
+        let reason = "升级参数";
+        let proposal_call = propose_runtime_upgrade(&code, reason, params).expect("call data");
+        let decoded = citizenchain::RuntimeCall::decode_all(&mut proposal_call.as_slice())
+            .expect("治理升级 call_data 必须被真实 RuntimeCall 完整解码");
+        assert_eq!(decoded.encode(), proposal_call);
+    }
 }

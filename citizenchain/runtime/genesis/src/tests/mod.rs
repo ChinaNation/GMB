@@ -38,7 +38,7 @@ frame_support::parameter_types! {
     pub const MaxDeclarationLen: u32 = 2048;
 }
 
-/// 测试用空 seeder:genesis 单测只碰非治理 storage(Phase/TargetBlockTime/declarations),
+/// 测试用空 seeder:genesis 单测只碰非治理 storage(Phase/declarations),
 /// 不触发机构 seeding,故给空实现即可,无需 mock 整套治理栈。
 pub struct NoopSeeder;
 impl GenesisInstitutionSeeder for NoopSeeder {
@@ -66,13 +66,6 @@ fn default_phase_is_genesis() {
 }
 
 #[test]
-fn default_target_block_time_is_30s() {
-    new_test_ext().execute_with(|| {
-        assert_eq!(GenesisPallet::target_block_time_ms(), 30_000);
-    });
-}
-
-#[test]
 fn default_developer_upgrade_enabled() {
     new_test_ext().execute_with(|| {
         assert!(GenesisPallet::developer_upgrade_enabled());
@@ -94,11 +87,9 @@ fn storage_can_be_switched_to_operation() {
     new_test_ext().execute_with(|| {
         // 模拟 on_runtime_upgrade 迁移写入
         pallet::Phase::<Test>::put(pallet::ChainPhase::Operation);
-        pallet::TargetBlockTimeMs::<Test>::put(360_000u64);
         pallet::DeveloperUpgradeEnabled::<Test>::put(false);
 
         assert_eq!(GenesisPallet::phase(), pallet::ChainPhase::Operation);
-        assert_eq!(GenesisPallet::target_block_time_ms(), 360_000);
         assert!(!GenesisPallet::developer_upgrade_enabled());
         assert!(!<GenesisPallet as DeveloperUpgradeCheck>::is_enabled());
     });

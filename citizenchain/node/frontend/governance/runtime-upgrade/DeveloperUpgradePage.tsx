@@ -5,6 +5,7 @@ import { sanitizeError } from '../../tauri';
 import { hexToSs58 } from '../../shared/ss58';
 import { CitizenSignaturePanel } from '../../shared/qr/CitizenSignaturePanel';
 import { runtimeUpgradeApi as api } from './api';
+import type { PowDifficultyParams } from './api';
 import type { AdminWalletMatch, VoteSignRequestResult } from '../types';
 
 type FlowStep = 'form' | 'qr' | 'submit' | 'done' | 'error';
@@ -28,13 +29,22 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
+  const [powParams, setPowParams] = useState<PowDifficultyParams | null>(null);
 
   const signRequestRef = useRef(signRequest);
   const selectedPubkeyRef = useRef(selectedPubkey);
   const wasmPathRef = useRef(wasmPath);
+  const powParamsRef = useRef(powParams);
   signRequestRef.current = signRequest;
   selectedPubkeyRef.current = selectedPubkey;
   wasmPathRef.current = wasmPath;
+  powParamsRef.current = powParams;
+
+  useEffect(() => {
+    api.getPowDifficultyParams()
+      .then(setPowParams)
+      .catch((e) => setError(sanitizeError(e)));
+  }, []);
 
   useEffect(() => {
     if (step !== 'qr') return;
@@ -62,11 +72,15 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
   }, []);
 
   const handleBuildRequest = useCallback(async () => {
-    if (!wasmPath.trim() || !selectedPubkey) return;
+    if (!wasmPath.trim() || !selectedPubkey || !powParams) return;
     setBuilding(true);
     setError(null);
     try {
-      const result = await api.buildDeveloperUpgradeRequest(selectedPubkey, wasmPath.trim());
+      const result = await api.buildDeveloperUpgradeRequest(
+        selectedPubkey,
+        wasmPath.trim(),
+        powParams,
+      );
       setSignRequest(result);
       setRequestJson(result.requestJson);
       setCountdown(90);
@@ -77,18 +91,19 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
     } finally {
       setBuilding(false);
     }
-  }, [wasmPath, selectedPubkey]);
+  }, [wasmPath, selectedPubkey, powParams]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
     const pubkey = selectedPubkeyRef.current;
     const path = wasmPathRef.current;
-    if (!req || !pubkey) { setError('签名请求数据丢失，请重试'); setStep('error'); return; }
+    const params = powParamsRef.current;
+    if (!req || !pubkey || !params) { setError('签名请求数据丢失，请重试'); setStep('error'); return; }
     setStep('submit');
     try {
       const result = await api.submitDeveloperUpgrade(
         req.requestId, pubkey, req.expectedPayloadHash,
-        path, req.signNonce, req.signBlockNumber, responseText,
+        path, params, req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
       setStep('done');
@@ -122,6 +137,33 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
             </div>
           </div>
 
+          {powParams && (
+            <div className="wallet-form-field">
+              <label>PoW 参数（与本次 runtime 升级原子绑定）</label>
+              {([
+                ['paramsVersion', '参数版本'],
+                ['algorithmVersion', '算法版本'],
+                ['targetBlockTimeMs', '平均目标时间（毫秒）'],
+                ['adjustmentInterval', '调整窗口（块）'],
+                ['maxAdjustUpFactor', '最大上调倍率'],
+                ['maxAdjustDownDivisor', '最大下调分母'],
+              ] as const).map(([field, label]) => (
+                <label key={field}>{label}
+                  <input
+                    type="number"
+                    min={1}
+                    value={powParams[field]}
+                    onChange={(e) => setPowParams({
+                      ...powParams,
+                      [field]: Number(e.target.value),
+                    })}
+                    disabled={building}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+
           <div className="wallet-form-field">
             <label>发起管理员</label>
             {adminWallets.length === 0 ? (
@@ -148,7 +190,7 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
 
           <button
             className="vote-signing-confirm"
-            disabled={!wasmPath.trim() || !selectedPubkey || building}
+            disabled={!wasmPath.trim() || !selectedPubkey || !powParams || building}
             onClick={handleBuildRequest}
           >
             {building ? '构建中…' : '生成签名请求'}

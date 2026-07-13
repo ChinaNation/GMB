@@ -27,9 +27,9 @@ pub const L2_FEE_RATE_BP_MIN: u32 =
 pub const L2_FEE_RATE_BP_MAX: u32 =
     primitives::fee_policy::OFFCHAIN_FEE_RATE_MAX.deconstruct() / PERBILL_PARTS_PER_BP;
 
-/// 费率变更延迟生效期,沿用 `primitives::pow_const` 里 30 秒/块的定义。
-/// 7 天 × 24 × 120 = **20160 块**。
-pub const RATE_CHANGE_DELAY_BLOCKS: u64 = 20_160;
+/// 费率变更延迟生效期：按 PoW 固定平均六分钟口径换算为七天。
+/// 该值是制度上的固定区块数，不承诺七个自然日内必然产生足够区块。
+pub const RATE_CHANGE_DELAY_BLOCKS: u64 = 7 * primitives::pow_const::BLOCKS_PER_DAY;
 
 /// 提案新费率:清算行管理员发起,延迟 `RATE_CHANGE_DELAY_BLOCKS` 后生效。
 ///
@@ -71,6 +71,17 @@ pub fn do_propose_l2_fee_rate<T: Config>(
         effective_at,
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod delay_tests {
+    use super::*;
+
+    #[test]
+    fn seven_day_delay_uses_fixed_six_minute_block_calendar() {
+        assert_eq!(primitives::pow_const::BLOCKS_PER_DAY, 240);
+        assert_eq!(RATE_CHANGE_DELAY_BLOCKS, 1_680);
+    }
 }
 
 /// `on_initialize` 钩子激活到期提案:把 `L2FeeRateProposed` 里 `effective_at <= now`

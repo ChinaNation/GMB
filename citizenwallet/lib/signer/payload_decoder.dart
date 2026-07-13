@@ -548,7 +548,7 @@ class PayloadDecoder {
   }
 
   // MultisigTransfer(17) / propose_transfer(0)
-  // 格式：[0x13][0x00][institution_code:[u8;4]][institution:AccountId32][beneficiary:32][amount:u128_le][Vec remark]
+  // 格式：[0x11][0x00][institution_code:[u8;4]][institution:AccountId32][beneficiary:32][amount:u128_le][Vec remark]
   static DecodedPayload? _decodeProposeTransfer(Uint8List bytes) {
     // 最小长度：2 + 4 + 32 + 32 + 16 + 1 = 87
     if (bytes.length < 87) return null;
@@ -1149,7 +1149,7 @@ class PayloadDecoder {
 
   // PublicManage(30) / PrivateManage(31) / propose_close_*_institution(1)
   // PersonalManage(7) / propose_close(1)
-  // 格式：[17][1][account:32][beneficiary:32]
+  // 格式：[30]/[31][1][account:32][beneficiary:32]
   /// 机构注销 propose_close。
   /// call_data:[2][account:32][beneficiary:32]
   ///   [register_nonce:Vec][signature:Vec][issuer_cid_number:Vec]
@@ -1214,7 +1214,7 @@ class PayloadDecoder {
   }
 
   // MultisigTransfer(17) / propose_safety_fund(1)
-  // 格式：[19][1][beneficiary:32][amount:u128][BoundedVec remark]
+  // 格式：[17][1][beneficiary:32][amount:u128][BoundedVec remark]
   static DecodedPayload? _decodeProposeSafetyFund(Uint8List bytes) {
     if (bytes.length < 50) return null;
     var offset = 2;
@@ -1247,7 +1247,7 @@ class PayloadDecoder {
   }
 
   // MultisigTransfer(17) / propose_sweep(2)
-  // 格式：[19][2][institution:AccountId32][amount:u128]
+  // 格式：[17][2][institution:AccountId32][amount:u128]
   static DecodedPayload? _decodeProposeSweep(Uint8List bytes) {
     // call_data: 2 + 32 + 16 = 50
     if (bytes.length < 50 || !_hasValidSigningTail(bytes, 50)) return null;
@@ -1268,7 +1268,7 @@ class PayloadDecoder {
   }
 
   // ResolutionDestroy(13) / propose_destroy(0)
-  // 格式：[14][0][institution_code:[u8;4]][institution:AccountId32][amount:u128]
+  // 格式：[13][0][institution_code:[u8;4]][institution:AccountId32][amount:u128]
   static DecodedPayload? _decodeProposeDestroy(Uint8List bytes) {
     // call_data: 2 + 4 + 32 + 16 = 54
     if (bytes.length < 54 || !_hasValidSigningTail(bytes, 54)) return null;
@@ -1352,7 +1352,7 @@ class PayloadDecoder {
   }
 
   // GrandpaKeyChange(15) / propose_key_change(0)
-  // 格式：[16][0][institution:AccountId32][new_key:32]
+  // 格式：[15][0][institution:AccountId32][new_key:32]
   static DecodedPayload? _decodeProposeKeyChange(Uint8List bytes) {
     // call_data: 2 + 32 + 32 = 66
     if (bytes.length < 66 || !_hasValidSigningTail(bytes, 66)) return null;
@@ -1596,7 +1596,7 @@ class PayloadDecoder {
   }
 
   // LegislationYuan(25) / propose_enact_law(0)
-  // SCALE: [27][0][tier:u8][scope_code:u32_le][houses][proposer_body:36]
+  // SCALE: [25][0][tier:u8][scope_code:u32_le][houses][proposer_body:36]
   //        [executive:36][legislature:Option<36>][vote_type:u8]
   //        [title:BoundedVec][title_en:Option<BoundedVec>][chapters][effective_at:u32_le]
   static DecodedPayload? _decodeProposeEnactLaw(Uint8List bytes) {
@@ -1680,7 +1680,7 @@ class PayloadDecoder {
   }
 
   // LegislationYuan(25) / propose_amend_law(1)
-  // SCALE: [27][1][law_id:u64_le][proposer_body:36][executive:36]
+  // SCALE: [25][1][law_id:u64_le][proposer_body:36][executive:36]
   //        [legislature:Option<36>][vote_type:u8][title:BoundedVec]
   //        [title_en:Option<BoundedVec>][chapters][effective_at:u32_le]
   static DecodedPayload? _decodeProposeAmendLaw(Uint8List bytes) {
@@ -1743,7 +1743,7 @@ class PayloadDecoder {
   }
 
   // LegislationYuan(25) / propose_repeal_law(2)
-  // SCALE: [27][2][law_id:u64_le][proposer_body:36][executive:36]
+  // SCALE: [25][2][law_id:u64_le][proposer_body:36][executive:36]
   //        [legislature:Option<36>][vote_type:u8]
   static DecodedPayload? _decodeProposeRepealLaw(Uint8List bytes) {
     if (bytes.length < 10) return null;
@@ -1781,7 +1781,7 @@ class PayloadDecoder {
 
   // LegislationVote(26) 通用:proposal_id:u64_le + approve:bool。
   // 院内表决(1)/行政签署(3)/三人会签(4)/护宪终审(5) 同形。
-  // SCALE: [28][call][proposal_id:u64_le][approve:bool]
+  // SCALE: [26][call][proposal_id:u64_le][approve:bool]
   static DecodedPayload? _decodeProposalApprove(
     Uint8List bytes, {
     required String action,
@@ -1805,7 +1805,7 @@ class PayloadDecoder {
   }
 
   // LegislationVote(26) / prepare_population_snapshot(0)
-  // SCALE: [28][0][scope:PopulationScope]
+  // SCALE: [26][0][scope:PopulationScope]
   static DecodedPayload? _decodePrepareLegislationSnapshot(Uint8List bytes) {
     final (scopeFields, offset) = _decodePopulationScope(bytes, 2);
     if (scopeFields == null || !_hasValidSigningTail(bytes, offset)) {
@@ -1820,7 +1820,7 @@ class PayloadDecoder {
   }
 
   // LegislationVote(26) / cast_referendum_vote(2)
-  // SCALE: [28][2][proposal_id:u64_le][approve:bool]
+  // SCALE: [26][2][proposal_id:u64_le][approve:bool]
   static DecodedPayload? _decodeCastLegislationReferendum(Uint8List bytes) {
     if (bytes.length < 11 || !_hasValidSigningTail(bytes, 11)) return null;
     final proposalId = _readU64Le(bytes, 2);
@@ -2118,7 +2118,7 @@ class PayloadDecoder {
   }
 
   // OffchainTransaction(19) / bind_clearing_bank(30), switch_bank(33)
-  // 格式：[21][call][AccountId32]
+  // 格式：[19][call][AccountId32]
   static DecodedPayload? _decodeAccountIdCall(
     Uint8List bytes, {
     required String action,
@@ -2139,7 +2139,7 @@ class PayloadDecoder {
   }
 
   // OffchainTransaction(19) / deposit(31), withdraw(32)
-  // 格式：[21][call][Compact<u128> amount]
+  // 格式：[19][call][Compact<u128> amount]
   static DecodedPayload? _decodeAmountOnlyCall(
     Uint8List bytes, {
     required String action,
@@ -2160,7 +2160,7 @@ class PayloadDecoder {
   }
 
   // OffchainTransaction(19) / register_clearing_bank(50)
-  // 格式：[21][50][Vec cid_number][Vec peer_id][Vec rpc_domain][u16 rpc_port]
+  // 格式：[19][50][Vec cid_number][Vec peer_id][Vec rpc_domain][u16 rpc_port]
   static DecodedPayload? _decodeRegisterClearingBank(Uint8List bytes) {
     var offset = 2;
     final (cidNumber, cidNext) = _readUtf8Vec(bytes, offset);
@@ -2189,7 +2189,7 @@ class PayloadDecoder {
   }
 
   // OffchainTransaction(19) / update_clearing_bank_endpoint(51)
-  // 格式：[21][51][Vec cid_number][Vec new_domain][u16 new_port]
+  // 格式：[19][51][Vec cid_number][Vec new_domain][u16 new_port]
   static DecodedPayload? _decodeUpdateClearingBankEndpoint(Uint8List bytes) {
     var offset = 2;
     final (cidNumber, cidNext) = _readUtf8Vec(bytes, offset);
@@ -2214,7 +2214,7 @@ class PayloadDecoder {
   }
 
   // OffchainTransaction(19) / unregister_clearing_bank(52)
-  // 格式：[21][52][Vec cid_number]
+  // 格式：[19][52][Vec cid_number]
   static DecodedPayload? _decodeUnregisterClearingBank(Uint8List bytes) {
     final (cidNumber, cidEnd) = _readUtf8Vec(bytes, 2);
     if (cidNumber == null) return null;

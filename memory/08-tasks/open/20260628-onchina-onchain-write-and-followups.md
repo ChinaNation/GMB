@@ -49,7 +49,7 @@
 - FRG 创世引导(china_zf 215 人 → 本地投影)抽象成 Tier1 seed;明确非 FRG 机构只从链上读、不走 china_zf 播种。
 
 ### 4. card 12 governance web 提案（本次重定位核心目标；与 1 共用链写基座，建议先做以建立链写通道）
-- web 端构造 legislation extrinsic(对接链上 `legislation-yuan` idx27 / `legislation-vote` idx28)→ `PasskeyColdSign` 冷签 → 提交链;SCALE 逐字段对齐,零 runtime 改动。
+- web 端构造 legislation extrinsic(对接链上 `legislation-yuan` idx25 / `legislation-vote` idx26)→ `PasskeyColdSign` 冷签 → 提交链;SCALE 逐字段对齐,零 runtime 改动。
 
 ### 5. R4 实例覆盖位链上配置真源（单独 ADR）
 - 同机构码同层级跨地区能力可不同;`capability.rs` 覆盖位本期仅签名占位,配置真源(宪法/治理派生)留后续 ADR。
@@ -81,7 +81,7 @@
 - [x] **1 链写凭证基座 + 机构/管理员上链录入(2026-06-30 口径修正)**:`core/institution_call.rs` 只保留 `propose_create_institution` 公私双 pallet 编码；注册局创建机构时在创建输入携带 `admins` + `threshold`，创建接口返回链交易二维码，机构与初始管理员由同一笔链交易写入。市注册局管理员旧直设通道已由 20260630 卡清理；验收"创建管理员能真正登录"仍待重新创世后实跑。
 - [x] **2 card 09 admin 泛化 —— 完成(2026-06-29)**:见 [20260629-onchina-09-10-admin-seed-generalization](20260629-onchina-09-10-admin-seed-generalization.md)。Tier 谓词单点(is_tier1/subordinate_registry + 前端 registryTier.ts)+ AdminActionType→Tier 中性名 + capability 加 can_view_own_admins;零 `=="FRG"/"CREG"` 字面。
 - [x] **3 card 10 seed 泛化 —— 完成(2026-06-29,re-scope 为退役)**:删 seed.rs/run_seed_federal_admins/SeedFederalAdmins CLI/federal_registry_scope+provinces 表;FRG 管理员 + 省映射全走链读 FederalRegistryProvinceGroups(每节点单省);含 P0 修 FRG 登录。
-- [ ] 4 card 12 governance web 提案 —— **未做**(单独窗口线程;核实:onchina src/frontend 零 legislation extrinsic 构造;立法 web 提案对接 legislation-yuan idx27/legislation-vote idx28 未建)
+- [ ] 4 card 12 governance web 提案 —— **未做**(单独窗口线程;核实:onchina src/frontend 零 legislation extrinsic 构造;立法 web 提案对接 legislation-yuan idx25/legislation-vote idx26 未建)
 - [x] **5 R4 收尾 —— 完成(2026-06-29)**:09/10 完成后对抗审计(29 agent)确认无回归;capability.rs 已按机构类分发(非空能力占位)。覆盖位若需单独 ADR 可另起。
 
 **逐项核对结论(2026-06-29)**:item 1 = 代码完成(本会话 B2/B3,链上往返待重新创世);**真未做 = 09 admin 泛化 / 10 seed 泛化 / 12 立法 web 提案 / R4 覆盖位 ADR**(共 4 项)。姊妹卡 console-refactor 的 09/10/12 即本卡 2/3/4(同物,延后),其余 01-08/11/13-17 已完工。文档迁移卡 20260629-ai-system-onchina-doc-migration 已完成(onchina arch/module 文档 + checklist/DoD 已建,citizencode 目录已删,07-ai 无旧产品口径残留)。

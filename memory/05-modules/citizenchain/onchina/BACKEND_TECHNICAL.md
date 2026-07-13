@@ -131,7 +131,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 联邦注册局机构 `admins` 不允许本地新增或删除，只允许在同省范围内替换。市注册局机构 `admins` 每省每市最多 30 人，统计必须同时带省和市，不能只按市名统计。NJD、普通公权机构、私权机构和非法人组织本期只能查看本机构链上 active admin 列表，不能在 OnChina 内维护管理员集合。
 
-管理员列表 API 的展示字段统一来自链上 `AdminProfile` 投影：`admin_cid_number / name / admin_role / term_start / term_end / source / source_label`。本地 `admins.admin_name` 只用于登录态缓存、创建市注册局管理员和审计历史，不作为联邦注册局、市注册局、本机构管理员列表的展示真源；旧的本地管理员姓名 PATCH 动作和前端入口不得恢复。
+机构管理员列表 API 的目标真源是链上 `admins` 账户集合与 entity 机构岗位任职关系。当前 `AdminProfile` 投影字段是待清理旧实现；后续 API 必须分别读取管理员账户、岗位、权限、任期和任职来源。本地姓名、联系方式、照片和 Passkey 不得成为管理员资格或岗位真源。
 
 ## 10. 机构工作台能力映射
 
@@ -151,7 +151,7 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 - `GET /api/v1/admin/own-institution` 返回当前 active binding 对应机构的 `InstitutionDetailOutput`，用于非注册局工作台“显示”页。
 - 本接口不接受前端传入 `cid_number`；后端只从当前节点 active binding 的 `institution_cid_number` 定位本机构，避免变成任意机构详情读取入口。
 - 返回数据仍来自结构化 `subjects/accounts` 投影；管理员资格由登录守卫、节点绑定和链上 active admins 校验决定。
-- `GET /api/v1/admin/own-institution-admins` 继续只返回链上 active admin 列表，展示字段来自链上 `AdminProfile` 投影。
+- `GET /api/v1/admin/own-institution-admins` 目标返回链上 active `admins` 账户与 entity 有效机构岗位任职的联合结果。
 
 ### 10.2 CitizenApp 公权机构只读接口
 

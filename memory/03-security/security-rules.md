@@ -3,7 +3,9 @@
 ## 1. 基础红线
 
 - CID 不保存原始实名数据
-- CitizenChain 不保存真实身份
+- CitizenChain 不保存普通公民的原始实名档案和非公开隐私信息
+- 依法公开的机构法定代表人、机构岗位任职和竞选公开资料可以上链；不得因公开职务身份而附带公开护照号、出生日期、住址等私密档案
+- 所有机构必须将 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account` 作为公开机构信息上链
 - permit 必须短期有效
 - CitizenApp 私密聊天消息、会话、联系人关系和附件只能保存在通信双方设备，禁止写入 Cloudflare D1、R2、KV 或 Durable Object Storage
 - Chat 推送只能发送固定唤醒类型和发送方钱包账户，禁止携带明文、密文、附件地址、会话摘要或通知预览

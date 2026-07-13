@@ -3,7 +3,7 @@
 //! 复用 `core::institution_call` 的「构造裸 call data → origin 冷钱包(CitizenWallet)
 //! 冷签 → CitizenWallet 提交链」通道;onchina **不**拼签名扩展尾、**不**提交 extrinsic。
 //!
-//! **铁律**:参数顺序与 SCALE 类型必须与链端 `legislation-yuan`(pallet idx 27)逐字节一致:
+//! **铁律**:参数顺序与 SCALE 类型必须与链端 `legislation-yuan`(pallet idx 25)逐字节一致:
 //! - `tier` / `vote_type` 是单字节枚举序号(Tier:0宪法/1国家/2省/3市;VoteType:0常规/1常规教育/2重要/3重要教育/4特别);
 //! - `houses` = `Vec<(InstitutionCode[u8;4], AccountId[u8;32])>`,带 `Compact<u32>` 数量前缀,元素裸 36 字节;
 //! - `proposer_body` / `executive` = `(InstitutionCode, AccountId)` 裸 36 字节;

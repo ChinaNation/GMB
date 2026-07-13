@@ -1,7 +1,7 @@
 # 20260629 organization-manage 拆分残留清理 + citizenapp 三分
 
 - 状态:进行中(2026-06-29)
-- 触发:用户身份系统重构把链端 `organization-manage` crate 删→拆 `public-manage`(idx32)/`private-manage`(idx33);全仓审计(6 面 33 agent)发现 node/citizenapp/文档/脚本多处残留。
+- 触发:用户身份系统重构把链端 `organization-manage` crate 删→拆 `public-manage`(idx30)/`private-manage`(idx31);全仓审计(6 面 33 agent)发现 node/citizenapp/文档/脚本多处残留。
 - 关联:[[project_institution_admin_field_model_2026_06_28]]、ADR-030、`memory/07-ai/unified-protocols.md`、`qr-action-registry.md`。
 
 ## 背景事实(锁定)

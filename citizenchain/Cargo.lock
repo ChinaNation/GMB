@@ -1288,6 +1288,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "blockchain-test-harness"
+version = "1.0.0"
+dependencies = [
+ "chain-signing",
+ "clap",
+ "hex",
+ "serde_json",
+ "sp-core",
+]
+
+[[package]]
 name = "blocking"
 version = "1.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4574,7 +4585,6 @@ dependencies = [
  "public-admins",
  "public-manage",
  "scale-info",
- "sp-api",
  "sp-io",
  "sp-runtime",
 ]
@@ -7803,7 +7813,6 @@ dependencies = [
  "frame-system-rpc-runtime-api",
  "fullnode-issuance",
  "futures 0.3.32",
- "genesis-pallet",
  "hex",
  "hex-literal",
  "jsonrpsee",
@@ -9885,12 +9894,11 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "genesis-pallet",
  "pallet-timestamp",
  "parity-scale-codec",
  "primitives",
  "scale-info",
- "sp-api",
+ "serde",
  "sp-io",
  "sp-runtime",
  "sp-std",
@@ -11146,7 +11154,9 @@ dependencies = [
  "genesis-pallet",
  "internal-vote",
  "joint-vote",
+ "pallet-timestamp",
  "parity-scale-codec",
+ "pow-difficulty",
  "primitives",
  "scale-info",
  "sp-io",

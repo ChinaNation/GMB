@@ -1,223 +1,128 @@
-# PoW Difficulty Module Technical Notes
+# PoW Difficulty 技术文档
 
-## 0. 功能需求
-### 0.1 模块职责
-`pow-difficulty` 在一期链路中的功能需求是：
-- 作为 PoW 共识难度的链上唯一来源，维护当前生效难度值。
-- 通过 Runtime API 向节点挖矿与验块逻辑提供可读取的最新难度。
-- 采用窗口化调整而不是逐块调整，避免难度随短期抖动来回摆动。
-- 把每次难度变更落链并产生审计事件，便于运维和事后追溯。
+## 1. 固定时间语义
 
-### 0.2 状态与不变量需求
-- `CurrentDifficulty` 必须始终表示一个正数难度值，正常运行中不得写入 0。
-- `WindowStartMs` 用于记录当前调整窗口的起点时间；仅在窗口尚未建立时允许为空。
-- 模块不提供外部 extrinsic，外部账户不能直接改写难度或窗口状态。
-- 出现异常存储值或脏状态时，模块不得直接 panic 停链。
-
-### 0.3 难度调整规则需求
-- 首个有效窗口必须从 `block 1` 的时间戳开始，在 `block(interval + 1)` 首次结算。
-- 每个窗口只允许结算一次；结算完成后必须立即把当前调整块时间戳推进为下一窗口起点。
-- 新难度必须按 `old_difficulty * target_window_ms / actual_window_ms` 计算。
-- 单次调整幅度必须限制在 `[old/4, old*4]` 区间内，避免因极端算力或时间抖动导致剧烈跳变。
-- 难度调整只依赖窗口首尾时间点，因此时间戳制度本身必须可靠；本模块不负责额外校正时间源。
-
-### 0.4 安全与鲁棒性需求
-- 任何情况下都不得因为分母为 0、整数溢出或 `u128 -> u64` 强转回绕生成异常难度值。
-- 即便当前窗口耗时极小或极大，输出也必须被夹紧到制度允许范围内。
-- 即便存储中的旧难度异常为 0，模块也必须优先自修复到最小正难度，而不是在调整块触发 panic。
-- 若窗口状态缺失导致本轮无法结算，模块至少要保持链继续出块，并重建下一窗口起点。
-- 当前实现仍保留“空块直接 `assert!` 拒绝”的 runtime 断言，这属于已知高风险点：节点层虽会尽量避免挖空块，但 runtime 不应把运营策略实现成 panic。
-
-### 0.5 生命周期与计重需求
-- 业务逻辑全部由 `on_initialize` 和 `on_finalize` 驱动，不能依赖人工触发。
-- `on_finalize` 必须在读取到当前块时间戳后执行难度调整。
-- `on_initialize` 必须按真实执行路径预申报预算，至少覆盖：
-  - 调整块路径
-  - 首次建立窗口路径
-  - 普通空转路径
-
-### 0.6 集成与可观测性需求
-- Runtime 必须挂载本 pallet，并向节点暴露 `PowDifficultyApi::current_pow_difficulty()`。
-- 节点侧获取 Runtime API 失败时，可回退到初始难度启动，但正常运行应以链上值为准。
-- 运维侧必须能够通过 `DifficultyAdjusted` 事件观察窗口耗时、旧难度和新难度的变化轨迹。
-
----
-
-## 1. 模块定位
-`pow-difficulty` 是一个 FRAME pallet，用于在链上动态维护 PoW 挖矿难度。
-
-核心目标：
-- 难度不再固定常量，而是按实际出块速度自动调节。
-- 采用窗口化调整，避免每块抖动。
-- 单次调整有上下限，避免难度剧烈跳变。
-- 节点侧通过 Runtime API 读取链上当前难度，实现共识参数链上治理化。
-
-代码位置：
-- `/Users/rhett/GMB/citizenchain/runtime/otherpallet/pow-difficulty/src/lib.rs`
-
----
-
-## 2. 关键常量
-常量统一来自 `primitives::pow_const`：
-- `POW_INITIAL_DIFFICULTY`：创世默认难度。
-- `DIFFICULTY_ADJUSTMENT_INTERVAL`：难度调整间隔（当前 600）。
-- `DIFFICULTY_TARGET_WINDOW_MS`：目标窗口时长（`interval * MILLISECS_PER_BLOCK`）。
-- `DIFFICULTY_MAX_ADJUST_FACTOR`：单次上调倍率上限（当前 4）。
-- `DIFFICULTY_MIN_ADJUST_FACTOR`：单次下调倍率下限（当前 4，对应最低为 `old/4`）。
-- `MILLISECS_PER_BLOCK`：编译期占位值（30 秒），仅用于 benchmark 和 test。运行期目标出块时间从 genesis-pallet 链上存储动态读取（创世期 30 秒 / 运行期 6 分钟）。
-
----
-
-## 3. 存储结构
-- `CurrentDifficulty: StorageValue<u64>`
-  - 当前生效难度。
-  - 默认值由 `DefaultInitialDifficulty` 提供（`POW_INITIAL_DIFFICULTY`）。
-- `WindowStartMs: StorageValue<u64, OptionQuery>`
-  - 当前调整窗口起点时间戳（毫秒）。
-  - `None` 表示尚未建立窗口起点。
-
----
-
-## 4. 事件与 Runtime API
-### 4.1 事件
-- `DifficultyAdjusted { block, old_difficulty, new_difficulty, actual_window_ms, target_window_ms }`
-  - 在调整块触发，记录本次调整的核心审计字段。
-
-### 4.2 Runtime API
-在本模块声明：
-- `PowDifficultyApi::current_pow_difficulty() -> u64`
-
-Runtime 中实现后，节点可读取链上难度用于 PoW 校验和挖矿目标计算。
-
----
-
-## 5. 生命周期逻辑（on_initialize + on_finalize）
-核心执行逻辑位于 `Pallet::<T>::on_finalize(n)`，对应预算由 `Pallet::<T>::on_initialize(n)` 预申报。
-
-### 5.1 触发判定
-- 先读取：
-  - `block_num: u32`
-  - `now_ms: u64`（来自 `pallet_timestamp::Pallet::<T>::now()`）
-- `now_ms == 0` 直接返回（跳过无时间戳场景）。
-
-### 5.2 调整块条件（已修复）
-当前条件为：
+全链唯一口径：
 
 ```text
-block_num > 1 && (block_num - 1) % interval == 0
+POW_TARGET_BLOCK_TIME_MS = 360_000
 ```
 
-即首个调整块是 `interval + 1`。  
-以 `interval = 600` 为例：
-- `block 1`：记录首窗口起点
-- `block 601`：首次调整（窗口跨度为 `t601 - t1`，正好覆盖 600 个区块间隔）
-- `block 1201`：第二次调整（跨度为 `t1201 - t601`）
+六分钟是 PoW 难度调整追踪的长期平均目标，不是最短出块间隔，也不是最晚出块期限：
 
-### 5.3 难度计算
+- 有效 PoW 提前找到就立即提交；
+- 晚于六分钟找到仍是合法区块；
+- 协议无法在矿工离线或算力不足时保证六分钟内出块；
+- `pallet_timestamp::MinimumPeriod = 1ms`，时间戳只负责严格递增，不承担节流职责；
+- Genesis 和 Operation 使用完全相同的 PoW 目标。
+
+旧 `MILLISECS_PER_BLOCK = 30_000`、GenesisPallet 动态时间存储、目标时间 Runtime API、
+CPU/GPU 提交等待和 runtime 的 `MINUTES/HOURS/DAYS` 派生常量已删除。
+
+## 2. 难度状态
+
+| 存储项 | 类型 | 说明 |
+|---|---|---|
+| `CurrentDifficulty` | `u64` | 当前 PoW 难度，只能由算法推进，必须大于 0 |
+| `WindowStartMs` | `Option<u64>` | 当前调整窗口起点时间戳 |
+| `ActiveParams` | `PowDifficultyParams` | 当前生效的版本化难度参数 |
+| `PendingParams` | `Option<PendingPowDifficultyParams>` | runtime 升级暂存的下一块生效参数 |
+| `LastAdjustment` | `Option<DifficultyAdjustmentAudit>` | 最近一次难度调整审计 |
+
+本 pallet 没有 extrinsic。节点直接读取 `CurrentDifficulty` RAW storage；读不到、解码失败或
+难度为 0 均 fail-closed，不再保留 Runtime API 或固定难度兜底。
+
+## 3. 版本化参数与调整规则
+
+创世默认值来自 `primitives::pow_const`：
+
+- `POW_INITIAL_DIFFICULTY = 100`；
+- `DIFFICULTY_ADJUSTMENT_INTERVAL = 600`；
+- `POW_TARGET_BLOCK_TIME_MS = 360_000`；
+- `DIFFICULTY_TARGET_WINDOW_MS = 216_000_000`，即 60 小时；
+- 单次调整范围 `[old / 4, old × 4]`，最低难度为 1；
+- `POW_PARAMS_VERSION` 与 `POW_ALGORITHM_VERSION` 固定描述当前参数结构和算法版本。
+
+运行期唯一允许通过 runtime 升级原子变更的是 `PowDifficultyParams`：
+
+- `params_version` 必须随参数值变化而递增；
+- `algorithm_version` 必须等于当前 runtime 支持的 `POW_ALGORITHM_VERSION`；
+- `target_block_time_ms`、`adjustment_interval`、`max_adjust_up_factor`、
+  `max_adjust_down_divisor` 必须一次性随 runtime code 一起表决；
+- `CurrentDifficulty` 不能被治理直接设置，只能由算法按 `ActiveParams` 推进；
+- 参数在升级块暂存到 `PendingParams`，下一块激活并重置窗口，不修改当前难度。
+
+首窗口在 block#1 建立，block#601 首次调整，此后每 600 个区块调整一次：
 
 ```text
-new_difficulty_raw = old_difficulty * target_window_ms / actual_window_ms
+actual_window_ms = max(now_ms - window_start_ms, 1)
+target_window_ms = target_block_time_ms × adjustment_interval
+raw = old_difficulty × target_window_ms / actual_window_ms
+new = clamp(raw, max(old / 4, 1), old × 4)
 ```
 
-其中：
-- `actual_window_ms = max(now_ms - start_ms, 1)`，防止分母为 0。
-- 若出块过快（`actual < target`），难度上升。
-- 若出块过慢（`actual > target`），难度下降。
+实际窗口短于 60 小时则提高难度，长于 60 小时则降低难度。计算使用饱和算术和
+`saturated_into::<u64>()`，避免除零、溢出和截断回绕。旧难度异常为 0 时修复到至少 1。
 
-### 5.4 单次变更夹紧
-- 上限：`old * DIFFICULTY_MAX_ADJUST_FACTOR`
-- 下限：`max(old / DIFFICULTY_MIN_ADJUST_FACTOR, 1)`
+## 4. 生命周期与空块共识边界
 
-最终：
-- `new_diff_u128` 先做 `saturated_into::<u64>()`（防截断回绕）
-- 再 `clamp(min, max)`
+- `on_initialize` 按参数激活、调整、建窗、普通四条真实路径预申报权重；
+- `on_finalize` 在 timestamp inherent 已执行后读取时间戳并更新状态；
+- 调整完成后立即把当前时间戳写为下一窗口起点；
+- 在任何窗口或难度状态写入前，runtime 要求 extrinsic count 大于 1，即 timestamp inherent 之外
+  至少存在一笔交易；否则断言失败，整块成为共识无效块，难度状态不推进；
+- NodeGuard 同时在 runtime 执行前返回 `KnownBad`，本地 mining worker 和 CPU/GPU 再以 ready
+  交易池门控 proposal；最佳块变化后先跳过一轮等待交易池维护完成，无本地矿工的节点不构造
+  proposal。节点前置防护不能替代 runtime 最终拒绝。
 
-### 5.5 窗口推进（已修复）
-调整完成后：
-- 直接写 `WindowStartMs = now_ms` 作为下一窗口起点。
+## 5. 节点挖矿行为
 
-这避免了“清空后下个块再重建窗口”导致少算一个区块间隔的问题。
+CPU 和 GPU 使用同一规则：
 
----
+```text
+取得当前 proposal 与难度
+→ 搜索 nonce
+→ 找到有效工作量证明
+→ 确认 proposal 版本仍有效
+→ 使用 powr 密钥签名
+→ 立即提交
+```
 
-## 6. 算法边界与安全性
-- 使用 `saturating_*` 防算术溢出。
-- 使用 `max(1)` 保证分母安全。
-- 使用 `saturated_into::<u64>()` 防止 `u128 -> u64` 强转回绕。
-- 使用区间夹紧防极端网络抖动导致难度暴涨/暴跌。
+节点不再读取目标时间，不保存上次提交时刻，也不 sleep 补齐六分钟。六分钟只参与下一次
+难度计算，不能被矿工本地配置解释成提交门控。
 
----
+## 6. 权重与测试
 
-## 7. 跨组件接线
-### 7.1 Runtime 挂载
-- `/Users/rhett/GMB/citizenchain/runtime/src/lib.rs`
-  - `pub type PowDifficulty = pow_difficulty;`
+`weights.rs` 由真实 benchmark 重新生成。删除 `GenesisPallet::TargetBlockTimeMs` 读取后，
+调整路径不再包含旧 GenesisPallet storage proof；新增 `on_initialize_activate_params`
+覆盖参数激活路径。
 
-### 7.2 Runtime 配置
-- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs`
-  - `impl pow_difficulty::Config for Runtime`
-  - `type WeightInfo = pow_difficulty::weights::SubstrateWeight<Runtime>`
+单元测试覆盖：
 
-### 7.3 Runtime API 实现
-- `/Users/rhett/GMB/citizenchain/runtime/src/apis.rs`
-  - `current_pow_difficulty()` 返回 `PowDifficulty::current_difficulty()`
+- block#601 首次调整和精确窗口；
+- 快块提高难度、慢块降低难度；
+- 4 倍上下限；
+- 饱和转换和零难度修复；
+- 只有 timestamp 的空块被 runtime 独立拒绝，且失败前不改变窗口和当前难度；
+- timestamp 加一笔交易的非空块正常完成；
+- 参数暂存下一块激活且不改变当前难度；
+- 不支持的算法版本拒绝暂存；
+- benchmark 四条路径。
 
-### 7.4 Node 侧消费
-- `/Users/rhett/GMB/citizenchain/node/src/service.rs`
-  - `SimplePow::difficulty()` 调用 Runtime API 获取链上难度。
-  - 调用失败时回退到 `POW_INITIAL_DIFFICULTY`。
+NodeGuard 已纳入 PoW 动态难度守卫：逐块复算 `CurrentDifficulty`、窗口推进、参数激活和
+runtime 升级审计，禁止普通区块篡改难度、参数或窗口；`:code` 变化必须同时具备
+`RuntimeUpgradeAudit` 与 `PendingParams` 的原子绑定。当前自动化基线：
+`pow-difficulty` runtime-benchmarks 17/17、NodeGuard 76/76、ConstitutionGuard 40/40。
+2026-07-12 真实运行态复核：普通 release WASM 的 fresh 双节点临时链中，无交易时持续停在
+block#0；Alice 提交真实 `System::remark` signed extrinsic 后产出 block#1
+`0xaaf286249a775bcac3bb107b7e7f4c15ccb3fb2eaebb8d0cf87e81464d7ae7fb`，
+包含 timestamp + remark 两条 extrinsics，pending 清零且陪跑节点同步到 block#1。
 
----
+## 7. 文件索引
 
-## 8. Weight 与 Benchmark
-- `WeightInfo` 当前拆成 3 条预算路径：
-  - `on_initialize_adjustment`
-  - `on_initialize_start_window`
-  - `on_initialize_idle`
-- 预算语义是“本 pallet 在该区块内 `on_initialize + on_finalize` 的总成本”，而不是只计 `on_initialize` 自身。
-- `runtime-benchmarks` 已提供 3 个对应 benchmark 入口，分别覆盖：
-  - 调整块路径
-  - 首次建立窗口路径
-  - 普通空转路径
-- 当前 `weights.rs` 为 benchmark CLI 生成产物（2026-03-17），但生成时 benchmark 未设置 `ExtrinsicCount`（空块断言会 panic），因此 proof-size 注释缺少 `System::ExtrinsicCount` 和 `GenesisPallet::TargetBlockTimeMs` 两项读取。benchmark 修复后（已加 `mock_extrinsic_count`）需重跑 CLI 更新 `weights.rs`。
-- 每个 benchmark 均设置 `ExtrinsicCount = 2` 以绕过空块拒绝断言。
-- `impl_benchmark_test_suite!` 已配置，可通过 `cargo test --features runtime-benchmarks` 验证。
-
----
-
-## 9. try-runtime 支持
-Cargo.toml 已启用 `try-runtime` feature，依赖链：
-- `frame-support/try-runtime`
-- `frame-system/try-runtime`
-- `sp-runtime/try-runtime`
-
-Hooks 中实现了 `try_state` 钩子，校验：
-- `CurrentDifficulty > 0`（难度不得为零）
-
----
-
-## 10. 测试覆盖（当前）
-`cargo test -p pow-difficulty` 当前覆盖 9 项：
-- `first_adjustment_happens_at_interval_plus_one_and_window_is_exact`
-- `raises_difficulty_when_blocks_are_too_fast`
-- `lowers_difficulty_when_blocks_are_too_slow`
-- `clamps_to_adjustment_bounds`
-- `saturating_cast_prevents_u128_to_u64_wraparound`
-- `zero_difficulty_storage_is_repaired_without_panic`
-- `rejects_empty_block` — 空块拒绝断言（`#[should_panic]`）
-- `test_genesis_config_builds`
-- `runtime_integrity_tests`
-
-另外做过 runtime 侧回归：
-- `cargo test -p citizenchain pow`
-
----
-
-## 11. 运维观察与审计建议
-- 监控 `DifficultyAdjusted` 事件，重点看：
-  - `actual_window_ms / target_window_ms` 比值趋势
-  - `new_difficulty` 连续窗口变化幅度
-- 若长期触发上下限夹紧，说明网络算力/出块时钟与目标参数偏离较大，应复核：
-  - `MILLISECS_PER_BLOCK`
-  - `DIFFICULTY_ADJUSTMENT_INTERVAL`
-  - 节点时钟同步状态（NTP）
+- `citizenchain/runtime/primitives/src/pow_const.rs`：固定 PoW 常量；
+- `citizenchain/runtime/misc/pow-difficulty/src/lib.rs`：难度算法；
+- `citizenchain/runtime/misc/pow-difficulty/src/benchmarks.rs`：三条 benchmark；
+- `citizenchain/runtime/misc/pow-difficulty/src/weights.rs`：生成权重；
+- `citizenchain/node/src/core/service.rs`：CPU 挖矿和 PoW 验证；
+- `citizenchain/node/src/mining/gpu_miner.rs`：GPU 挖矿。

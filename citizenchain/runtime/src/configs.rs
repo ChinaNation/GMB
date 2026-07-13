@@ -66,7 +66,7 @@ use super::{
     GenesisPallet, Hash, InternalVote, JointVote, LegislationVote, LegislationYuan, Nonce,
     PalletInfo, PrivateAdmins, PrivateManage, PublicAdmins, PublicManage, Runtime, RuntimeCall,
     RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
-    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, VERSION,
 };
 #[cfg(not(feature = "runtime-benchmarks"))]
 use super::{ResolutionIssuance, RuntimeUpgrade};
@@ -209,7 +209,8 @@ impl pallet_timestamp::Config for Runtime {
     type Moment = u64;
     // 纯 PoW 共识：时间戳不再依赖 Aura 插槽回调。
     type OnTimestampSet = ();
-    type MinimumPeriod = ConstU64<{ SLOT_DURATION / 2 }>;
+    // PoW 找到即出块；这里只要求时间戳至少递增 1ms，不用时间戳人为节流。
+    type MinimumPeriod = ConstU64<1>;
     type WeightInfo = pallet_timestamp::weights::SubstrateWeight<Runtime>;
 }
 
@@ -293,9 +294,7 @@ impl onchain::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
 
 pub struct RuntimeSafetyFundAccountProvider;
 
-impl onchain::SafetyFundAccountProvider<AccountId>
-    for RuntimeSafetyFundAccountProvider
-{
+impl onchain::SafetyFundAccountProvider<AccountId> for RuntimeSafetyFundAccountProvider {
     fn safety_fund_account() -> AccountId {
         AccountId::new(primitives::cid::china::china_cb::SAFETY_FUND_ACCOUNT)
     }
@@ -317,19 +316,15 @@ impl OnUnbalanced<Credit<AccountId, Balances>> for RuntimeDustHandler {
 
 pub struct RuntimeFeeKindClassifier;
 
-impl onchain::CallFeeKind<AccountId, RuntimeCall, Balance>
-    for RuntimeFeeKindClassifier
-{
-    fn fee_kind(
-        _who: &AccountId,
-        call: &RuntimeCall,
-    ) -> onchain::FeeChargeKind<Balance> {
+impl onchain::CallFeeKind<AccountId, RuntimeCall, Balance> for RuntimeFeeKindClassifier {
+    fn fee_kind(_who: &AccountId, call: &RuntimeCall) -> onchain::FeeChargeKind<Balance> {
         use onchain::FeeChargeKind;
 
         match call {
-            RuntimeCall::OnchainTransaction(
-                onchain::pallet::Call::transfer_with_remark { amount, .. },
-            ) => FeeChargeKind::OnchainAmount(*amount),
+            RuntimeCall::OnchainTransaction(onchain::pallet::Call::transfer_with_remark {
+                amount,
+                ..
+            }) => FeeChargeKind::OnchainAmount(*amount),
             RuntimeCall::OnchainTransaction(_) => FeeChargeKind::Unknown,
             // PersonalManage 的 propose_create/propose_close 是治理提案交易，
             // 交易本身固定收 1 元；执行阶段的资金手续费由对应 pallet 内部按金额另行处理。
@@ -362,10 +357,10 @@ impl onchain::CallFeeKind<AccountId, RuntimeCall, Balance>
             )
             | RuntimeCall::PrivateManage(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::AddressRegistry(_) => FeeChargeKind::VoteFlat,
-            // 免费调用交易：系统内部 / 自动化 / 货币政策类
+            // 免费调用交易：系统内部 / 自动化类。省储行固定利息已无公开 Call，
+            // 只在年度边界 finalize 自动执行，因此不再占用交易费分类分支。
             RuntimeCall::System(_) => FeeChargeKind::Free,
             RuntimeCall::Timestamp(_) => FeeChargeKind::Free,
-            RuntimeCall::ProvincialBankInterest(_) => FeeChargeKind::Free,
             RuntimeCall::CitizenIssuance(_) => FeeChargeKind::Free,
             // GRANDPA pallet:report_equivocation(签名版)/ report_equivocation_unsigned(unsigned 路径
             // 不走 ChargeTransactionPayment) / note_stalled(Root,本链无 sudo 实际不可达)。
@@ -417,9 +412,7 @@ impl onchain::CallFeeKind<AccountId, RuntimeCall, Balance>
             RuntimeCall::MultisigTransfer(ref dt_call) => match dt_call {
                 multisig::pallet::Call::propose_transfer { .. }
                 | multisig::pallet::Call::propose_safety_fund_transfer { .. }
-                | multisig::pallet::Call::propose_sweep_to_main { .. } => {
-                    FeeChargeKind::VoteFlat
-                }
+                | multisig::pallet::Call::propose_sweep_to_main { .. } => FeeChargeKind::VoteFlat,
                 // 兜底:未来若新增非金额型管理 extrinsic 按投票统一价 1 元/次。
                 _ => FeeChargeKind::VoteFlat,
             },
@@ -435,9 +428,7 @@ impl onchain::CallFeeKind<AccountId, RuntimeCall, Balance>
                     }
                     // 清算行批次 V2 是链下交易费，结算执行阶段已经把
                     // Σ batch[i].fee_amount 转给清算行费用账户，本层只标记类别不二次分账。
-                    offchain::pallet::Call::submit_offchain_batch {
-                        batch, ..
-                    } => {
+                    offchain::pallet::Call::submit_offchain_batch { batch, .. } => {
                         let mut total_fee: u128 = 0;
                         for item in batch.iter() {
                             total_fee = total_fee.saturating_add(item.fee_amount);
@@ -445,9 +436,7 @@ impl onchain::CallFeeKind<AccountId, RuntimeCall, Balance>
                         FeeChargeKind::OffchainFee(total_fee)
                     }
                     // 全局费率上限调整(Root Origin,免费)
-                    offchain::pallet::Call::set_max_l2_fee_rate { .. } => {
-                        FeeChargeKind::Free
-                    }
+                    offchain::pallet::Call::set_max_l2_fee_rate { .. } => FeeChargeKind::Free,
                     // 其他付费调用(bind_clearing_bank / switch_bank / propose_l2_fee_rate):
                     // 按投票统一价 1 元/次
                     _ => FeeChargeKind::VoteFlat,
@@ -493,12 +482,10 @@ impl onchain::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor 
             //
             // 提交者(origin)是该机构的某个激活管理员(已在节点端解密私钥,自动签),
             // 但其个人钱包余额不参与 gas 扣费。
-            RuntimeCall::OffchainTransaction(
-                offchain::pallet::Call::submit_offchain_batch {
-                    institution_main,
-                    ..
-                },
-            ) => offchain::Pallet::<Runtime>::fee_account_of(institution_main).ok(),
+            RuntimeCall::OffchainTransaction(offchain::pallet::Call::submit_offchain_batch {
+                institution_main,
+                ..
+            }) => offchain::Pallet::<Runtime>::fee_account_of(institution_main).ok(),
             // 其他 offchain Call 及其他 RuntimeCall 由调用者个人账户付费。
             _ => None,
         }
@@ -614,7 +601,10 @@ impl primitives::multisig::ProtectedSourceChecker<AccountId> for RuntimeProtecte
 }
 
 impl primitives::institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset {
-    fn can_spend(source: &AccountId, action: primitives::institution_asset::InstitutionAssetAction) -> bool {
+    fn can_spend(
+        source: &AccountId,
+        action: primitives::institution_asset::InstitutionAssetAction,
+    ) -> bool {
         // 匹配顺序很重要——更具体的账户类型必须放在更宽泛的类型之前。
         // fee_account 同时出现在 CHINA_RESERVED_MAIN_ACCOUNTS 列表中（同由 BLAKE2 派生且统一保留），
         // 如果 is_reserved_main_account 先匹配，fee_account 会被错误地按主账户规则放行。
@@ -1840,6 +1830,74 @@ impl offchain::Config for Runtime {
 
 pub struct EnsureNrcAdmin;
 
+#[cfg(feature = "runtime-benchmarks")]
+fn seed_benchmark_public_admin_account(
+    main_account: [u8; 32],
+    institution_code: primitives::cid::code::InstitutionCode,
+    raw_admins: &[[u8; 32]],
+) -> Result<AccountId, ()> {
+    let institution = AccountId::new(main_account);
+    let creator = AccountId::new(raw_admins.first().copied().ok_or(())?);
+    let admins: public_admins::AdminProfilesOf<Runtime> = raw_admins
+        .iter()
+        .map(|raw_admin| AdminProfile {
+            admin_account: AccountId::new(*raw_admin),
+            admin_cid_number: Default::default(),
+            admin_name: Default::default(),
+            role_code: Default::default(),
+            role_name: Default::default(),
+            term_start: 0,
+            term_end: 0,
+            admin_source: admin_primitives::AdminSource::Genesis,
+            admin_source_ref: Default::default(),
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .map_err(|_| ())?;
+    public_admins::AdminAccounts::<Runtime>::insert(
+        institution,
+        admin_primitives::AdminAccount {
+            institution_code,
+            kind: admin_primitives::AdminAccountKind::PublicInstitution,
+            cid_number: Default::default(),
+            admins,
+            creator: creator.clone(),
+            created_at: Default::default(),
+            updated_at: Default::default(),
+            status: admin_primitives::AdminAccountStatus::Active,
+        },
+    );
+    Ok(creator)
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+fn seed_benchmark_joint_admins_origin() -> Result<RuntimeOrigin, ()> {
+    let nrc = primitives::cid::china::china_cb::CHINA_CB
+        .first()
+        .ok_or(())?;
+    let admin = seed_benchmark_public_admin_account(
+        nrc.main_account,
+        primitives::cid::code::NRC,
+        nrc.admins,
+    )?;
+    for entry in primitives::cid::china::china_cb::CHINA_CB.iter().skip(1) {
+        seed_benchmark_public_admin_account(
+            entry.main_account,
+            primitives::cid::code::PRC,
+            entry.admins,
+        )?;
+    }
+    for entry in primitives::cid::china::china_ch::CHINA_CH.iter() {
+        seed_benchmark_public_admin_account(
+            entry.main_account,
+            primitives::cid::code::PRB,
+            entry.admins,
+        )?;
+    }
+
+    Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
+}
+
 impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
     type Success = AccountId;
 
@@ -1854,8 +1912,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 
     #[cfg(feature = "runtime-benchmarks")]
     fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
-        let admin = AccountId::new(primitives::cid::china::china_cb::CHINA_CB[0].admins[0]);
-        Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
+        seed_benchmark_joint_admins_origin()
     }
 }
 
@@ -1890,8 +1947,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureJointProposer {
 
     #[cfg(feature = "runtime-benchmarks")]
     fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
-        let admin = AccountId::new(primitives::cid::china::china_cb::CHINA_CB[0].admins[0]);
-        Ok(RuntimeOrigin::from(frame_system::RawOrigin::Signed(admin)))
+        seed_benchmark_joint_admins_origin()
     }
 }
 
@@ -1942,12 +1998,16 @@ impl runtime_upgrade::Config for Runtime {
 pub struct RuntimeSetCodeExecutor;
 
 impl runtime_upgrade::RuntimeCodeExecutor for RuntimeSetCodeExecutor {
-    fn execute_runtime_code(code: &[u8]) -> DispatchResult {
+    fn execute_runtime_code(
+        code: &[u8],
+        pow_params: pow_difficulty::PowDifficultyParams,
+        activate_at: u32,
+    ) -> DispatchResult {
         #[cfg(feature = "runtime-benchmarks")]
         {
             // benchmark 需要衡量治理编排本身的真实路径，
             // 但不应真的改写 runtime :code 存储，因此这里使用成功的 no-op 执行器。
-            return if code.is_empty() {
+            return if code.is_empty() || pow_params.validate().is_err() || activate_at == 0 {
                 Err(sp_runtime::DispatchError::Other("empty runtime code"))
             } else {
                 Ok(())
@@ -1956,6 +2016,7 @@ impl runtime_upgrade::RuntimeCodeExecutor for RuntimeSetCodeExecutor {
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
+            super::PowDifficulty::stage_params(pow_params, activate_at)?;
             let set_code_call = frame_system::Call::<Runtime>::set_code {
                 code: code.to_vec(),
             };
@@ -2120,7 +2181,6 @@ impl legislation_vote::Config for Runtime {
 
 impl pow_difficulty::Config for Runtime {
     type WeightInfo = pow_difficulty::weights::SubstrateWeight<Runtime>;
-    type BlockTime = GenesisPallet;
 }
 
 frame_support::parameter_types! {

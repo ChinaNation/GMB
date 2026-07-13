@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/create_wallet_onboarding_page.dart';
+import 'package:citizenapp/wallet/pages/import_wallet_page.dart';
 import 'package:citizenapp/wallet/wallet_gate.dart';
 
 WalletProfile _hotProfile() {
@@ -50,16 +51,17 @@ void main() {
   }
 
   group('WalletGate', () {
-    testWidgets('无钱包时进入强制创建页，且无导入入口', (tester) async {
+    testWidgets('无钱包时进入门禁页，含创建与导入入口', (tester) async {
       useTallViewport(tester);
       await tester.pumpWidget(_gate(loader: () async => null));
       await tester.pumpAndSettle();
 
-      expect(find.text('创建你的公民钱包'), findsOneWidget);
+      expect(find.text('设置你的公民钱包'), findsOneWidget);
       expect(find.text('main-shell'), findsNothing);
-      // 只创建不导入：页面上不允许出现任何导入入口。
-      expect(find.textContaining('导入'), findsNothing);
-      // 无 AppBar 返回键。
+      // 门禁页提供创建与导入两条入口。
+      expect(find.widgetWithText(FilledButton, '创建钱包'), findsOneWidget);
+      expect(find.text('已有钱包？导入助记词'), findsOneWidget);
+      // 门禁页自身无 AppBar 返回键（PopScope 禁止退出门禁）。
       expect(find.byType(BackButton), findsNothing);
     });
 
@@ -166,6 +168,18 @@ void main() {
 
       expect(selectedIconIn('24 个助记词'), findsOneWidget);
       expect(selectedIconIn('12 个助记词'), findsNothing);
+    });
+
+    testWidgets('点导入入口进入 ImportWalletPage', (tester) async {
+      useTallViewport(tester);
+      await tester.pumpWidget(_onboarding(probe: () async => true));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('已有钱包？导入助记词'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ImportWalletPage), findsOneWidget);
+      expect(find.text('导入热钱包'), findsOneWidget);
     });
   });
 }

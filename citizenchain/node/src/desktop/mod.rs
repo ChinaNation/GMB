@@ -85,6 +85,7 @@ pub fn run_desktop() {
             crate::transaction::multisig::commands::build_multisig_sweep_request,
             crate::transaction::multisig::commands::submit_multisig_sweep,
             governance::runtime_upgrade::commands::build_developer_upgrade_request,
+            governance::runtime_upgrade::commands::get_pow_difficulty_params,
             governance::runtime_upgrade::commands::submit_developer_upgrade,
             governance::runtime_upgrade::commands::build_propose_upgrade_request,
             governance::runtime_upgrade::commands::submit_propose_upgrade,

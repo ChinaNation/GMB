@@ -104,7 +104,9 @@ Runtime 配置位置：
 - `MODULE_TAG = b"rt-upg"`：存入 ProposalData 的前缀，用于区分不同业务模块，防止跨模块误解码。
 
 ## 4. 存储模型
-本模块无本地存储。所有提案数据、投票数据、元数据均存储在 `votingengine`：
+本模块只保留一项本地审计，其余提案数据、投票数据、元数据均存储在 `votingengine`：
+- `LastRuntimeUpgradeAudit`：最近一次成功执行的 runtime 升级审计，记录执行路径、code hash、
+  旧/新 PoW 参数 hash、执行高度和参数激活高度，供 NodeGuard 验证 `:code` 与 PoW 参数原子绑定。
 - `ProposalData`：存放 `MODULE_TAG + Proposal<T>` 摘要的 SCALE 编码
 - `ProposalObjectMeta`：存放 runtime wasm 的对象元数据（kind / len / hash）
 - `ProposalObject`：存放 runtime wasm 原始字节
@@ -115,13 +117,15 @@ Runtime 配置位置：
 ### 5.1 `propose_runtime_upgrade`（call index = 0）
 流程：
 1. 校验 `ProposeOrigin`（`EnsureJointProposer`）。
-2. 校验 `reason` 与 `code` 非空。
-3. 计算 `code_hash`，构造摘要 `Proposal` 并加 `MODULE_TAG` 序列化。
+2. 校验 `reason` 与 `code` 非空，并校验 `new_pow_params` 的参数/算法版本合法。
+3. 计算 `code_hash`、当前 `ActiveParams` hash 与新 PoW 参数 hash，构造摘要 `Proposal`
+   并加 `MODULE_TAG` 序列化。
 4. 调用 `JointVoteEngine::create_joint_proposal_with_data_and_object` 创建联合投票，并在同一事务中写入 owner/data/meta 和 runtime wasm 对象。
 5. 发出 `RuntimeUpgradeProposed` 事件。
 
 边界：
-- 该接口只接收 `origin / reason / code`。
+- 该接口接收 `origin / reason / code / new_pow_params`。
+- PoW 参数只能随 runtime code 一起表决；`CurrentDifficulty` 不进入提案参数，仍由算法推进。
 - 人口快照、联合签名、投票资格、计票与终态推进均由投票引擎内部流程负责。
 
 ### 5.2 call index 1 空缺
@@ -152,7 +156,7 @@ Runtime 配置位置：
 1. 校验 `DeveloperUpgradeOrigin`（`EnsureNrcAdmin`）。
 2. 校验 `DeveloperUpgradeCheck::is_enabled()`，关闭则拒绝（`DeveloperUpgradeDisabled`）。
 3. 校验 `code` 非空。
-4. 计算 `code_hash`，调用 `RuntimeCodeExecutor::execute_runtime_code`。
+4. 计算 `code_hash`，调用 `RuntimeCodeExecutor::execute_runtime_code`，同样原子暂存 PoW 参数并写审计。
 5. 发出 `DeveloperDirectUpgradeExecuted` 事件。
 
 权重：使用 `frame_system::set_code()` 的系统权重。
@@ -229,7 +233,9 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 旧版 benchmark 存在偏差。现已修复：
 - `propose_runtime_upgrade` benchmark 改为真实 extrinsic
 - `propose_runtime_upgrade` benchmark 已删除人口快照、联合签名、省份和签名管理员公钥参数。
-- 权重数值与生成注释不手工改，按项目规则交给 CI benchmark 流程重算。
+- benchmark 环境按当前 `AdminAccount` 编码种下 NRC、43 个 PRC、43 个 PRB 管理员表，
+  让真实联合投票快照路径可执行。
+- 权重已用当前源码 WASM、50 steps / 20 repeats 重算：270 reads / 364 writes，时间模型约 9.023 ms。
 - `finalize_joint_vote` benchmark 与权重项已删除，终结执行成本由 `votingengine` 的联合投票终态回调路径覆盖。
 
 ### 7.5 已收口入口
@@ -244,7 +250,7 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - `on_joint_vote_finalized` 回调入口
 
 ## 9. 测试覆盖
-已覆盖（当前单测与框架完整性检查共 17 个测试）：
+已覆盖（当前单测与框架完整性检查共 18 个测试）：
 - 国家储委会和省储委会管理员均可发起提案，非联合提案发起人拒绝
 - 提案摘要与对象数据正确分别存入 votingengine
 - 联合投票拒绝时保持 votingengine `STATUS_REJECTED`（含 wasm 对象保留到统一清理）

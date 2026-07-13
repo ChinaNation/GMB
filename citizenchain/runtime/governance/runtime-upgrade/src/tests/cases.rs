@@ -7,7 +7,8 @@ fn joint_proposers_can_propose_runtime_upgrade() {
             RuntimeUpgrade::propose_runtime_upgrade(
                 RuntimeOrigin::signed(outsider()),
                 reason_ok(),
-                code_ok()
+                code_ok(),
+                pow_difficulty::PowDifficultyParams::genesis_default()
             ),
             sp_runtime::DispatchError::BadOrigin
         );
@@ -15,13 +16,15 @@ fn joint_proposers_can_propose_runtime_upgrade() {
         assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(nrc_admin()),
             reason_ok(),
-            code_ok()
+            code_ok(),
+            pow_difficulty::PowDifficultyParams::genesis_default()
         ));
 
         assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(prc_admin()),
             reason_ok(),
-            code_ok()
+            code_ok(),
+            pow_difficulty::PowDifficultyParams::genesis_default()
         ));
 
         assert!(
@@ -82,6 +85,37 @@ fn approved_joint_vote_executes_runtime_upgrade() {
         );
         let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
         assert!(code_executed, "runtime code executor should be called");
+    });
+}
+
+#[test]
+fn approved_upgrade_atomically_stages_versioned_pow_params() {
+    new_test_ext().execute_with(|| {
+        System::set_block_number(5);
+        let mut next = pow_difficulty::PowDifficultyParams::genesis_default();
+        next.params_version += 1;
+        next.adjustment_interval = 20;
+        next.target_block_time_ms = 120_000;
+        assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
+            RuntimeOrigin::signed(nrc_admin()),
+            reason_ok(),
+            code_ok(),
+            next,
+        ));
+        insert_engine_proposal(100);
+        assert_ok!(call_joint_callback(100, true));
+
+        assert_eq!(
+            pow_difficulty::PendingParams::<Test>::get(),
+            Some(pow_difficulty::PendingPowDifficultyParams {
+                params: next,
+                activate_at: 6,
+            })
+        );
+        let audit = pallet::LastRuntimeUpgradeAudit::<Test>::get().expect("upgrade audit");
+        assert_eq!(audit.proposal_id, Some(100));
+        assert_eq!(audit.executed_at, 5);
+        assert_eq!(audit.activate_at, 6);
     });
 }
 
@@ -183,6 +217,7 @@ fn developer_direct_upgrade_allows_nrc_admin_when_enabled() {
         assert_ok!(RuntimeUpgrade::developer_direct_upgrade(
             RuntimeOrigin::signed(nrc_admin()),
             code_ok(),
+            pow_difficulty::PowDifficultyParams::genesis_default(),
         ));
         let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
         assert!(code_executed, "runtime code executor should be called");
@@ -197,6 +232,7 @@ fn developer_direct_upgrade_fails_when_disabled() {
             RuntimeUpgrade::developer_direct_upgrade(
                 RuntimeOrigin::signed(nrc_admin()),
                 code_ok(),
+                pow_difficulty::PowDifficultyParams::genesis_default(),
             ),
             pallet::Error::<Test>::DeveloperUpgradeDisabled
         );
@@ -207,7 +243,11 @@ fn developer_direct_upgrade_fails_when_disabled() {
 fn developer_direct_upgrade_rejects_prc_admin() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            RuntimeUpgrade::developer_direct_upgrade(RuntimeOrigin::signed(prc_admin()), code_ok(),),
+            RuntimeUpgrade::developer_direct_upgrade(
+                RuntimeOrigin::signed(prc_admin()),
+                code_ok(),
+                pow_difficulty::PowDifficultyParams::genesis_default(),
+            ),
             sp_runtime::DispatchError::BadOrigin
         );
     });
@@ -217,7 +257,11 @@ fn developer_direct_upgrade_rejects_prc_admin() {
 fn developer_direct_upgrade_rejects_non_nrc_admin() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            RuntimeUpgrade::developer_direct_upgrade(RuntimeOrigin::signed(outsider()), code_ok(),),
+            RuntimeUpgrade::developer_direct_upgrade(
+                RuntimeOrigin::signed(outsider()),
+                code_ok(),
+                pow_difficulty::PowDifficultyParams::genesis_default(),
+            ),
             sp_runtime::DispatchError::BadOrigin
         );
     });
@@ -231,6 +275,7 @@ fn developer_direct_upgrade_rejects_empty_code() {
             RuntimeUpgrade::developer_direct_upgrade(
                 RuntimeOrigin::signed(nrc_admin()),
                 empty_code,
+                pow_difficulty::PowDifficultyParams::genesis_default(),
             ),
             pallet::Error::<Test>::EmptyRuntimeCode
         );

@@ -8,29 +8,27 @@
 //! - CPU 多线程挖矿，各线程 nonce 不重叠（stride = 线程数）。
 //! - GPU 挖矿（可选 `gpu-mining` feature），使用 nonce 高半区（bit63=1）。
 //! - 空交易池时不挖矿（避免空块），离线或 major sync 时禁止出块（防分叉）。
-//! - 出块目标时间从 genesis-pallet 链上存储读取，启动时获取一次。
+//! - PoW 有效解找到后立即提交；六分钟只是难度调整追踪的长期平均目标。
 
 use citizenchain::{self, apis::RuntimeApi, opaque::Block};
 use codec::{Decode, Encode};
 use futures::FutureExt;
-use genesis_pallet::GenesisPalletApi;
-use pow_difficulty::PowDifficultyApi;
-use sc_client_api::{Backend, BlockBackend};
+use sc_client_api::{Backend, BlockBackend, StorageProvider};
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
 use sc_network::NetworkBackend as _;
 use sc_service::WarpSyncConfig;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
-use sp_api::ProvideRuntimeApi;
 use sp_consensus::{NoNetwork, SyncOracle};
-use sp_core::{crypto::KeyTypeId, hashing::blake2_256, sr25519, Pair as _, U256};
+use sp_core::{crypto::KeyTypeId, hashing::{blake2_256, twox_128}, sr25519, Pair as _, U256};
 use sp_keystore::Keystore;
 use sp_runtime::traits::Block as BlockT;
+use sp_storage::StorageKey;
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     thread,
     time::{Duration, Instant},
@@ -39,12 +37,7 @@ use std::{
 /// CPU 全线程合计哈希率（hashes/sec），以 f64 bits 存入 AtomicU64。
 static CPU_HASHRATE: AtomicU64 = AtomicU64::new(0);
 
-// 空块 propose 防护在 start_mining_worker_no_empty 中实现。
-
-/// 上次成功提交区块的时刻（自 epoch 起的纳秒数）。
-/// CPU 和 GPU 矿工共享此门控，防止出块频率超过 MILLISECS_PER_BLOCK。
-/// 初始值 u64::MAX 表示"从未提交过"，首次提交直接放行。
-pub static LAST_SUBMIT_NS: AtomicU64 = AtomicU64::new(u64::MAX);
+// 空块 proposal 防护由 mining worker 的 should_propose 与 CPU/GPU 交易池门控共同实现。
 
 /// 获取当前 CPU 哈希率（hashes/sec）。
 pub(crate) fn cpu_hashrate() -> f64 {
@@ -80,7 +73,7 @@ const GRANDPA_JUSTIFICATION_PERIOD: u32 = 64;
 
 #[derive(Clone)]
 pub(crate) struct SimplePow {
-    /// 持有 client 引用，用于通过 Runtime API 读取链上最新难度值。
+    /// 持有 client 引用，直接读取父块 RAW 难度，避免信任可升级 Runtime API。
     client: Arc<FullClient>,
 }
 
@@ -93,17 +86,36 @@ impl SimplePow {
 impl PowAlgorithm<Block> for SimplePow {
     type Difficulty = U256;
 
-    /// 从链上读取当前 PoW 难度。
-    /// 若 Runtime API 调用失败（如节点启动初期），回退到 POW_INITIAL_DIFFICULTY 初始值。
+    /// 从父块状态读取当前 PoW 难度；缺失、畸形、尾随字节或零值全部 fail-closed。
     fn difficulty(
         &self,
         parent: <Block as BlockT>::Hash,
     ) -> Result<Self::Difficulty, sc_consensus_pow::Error<Block>> {
-        let difficulty = self
+        let key = [
+            twox_128(b"PowDifficulty").as_slice(),
+            twox_128(b"CurrentDifficulty").as_slice(),
+        ]
+        .concat();
+        let raw = self
             .client
-            .runtime_api()
-            .current_pow_difficulty(parent)
-            .unwrap_or(primitives::pow_const::POW_INITIAL_DIFFICULTY);
+            .storage(parent, &StorageKey(key))
+            .map_err(|e| sc_consensus_pow::Error::BlockProposingError(e.to_string()))?
+            .ok_or_else(|| {
+                sc_consensus_pow::Error::BlockProposingError(
+                    "父块缺少 PowDifficulty::CurrentDifficulty".into(),
+                )
+            })?;
+        let mut input = raw.0.as_slice();
+        let difficulty = u64::decode(&mut input).map_err(|_| {
+            sc_consensus_pow::Error::BlockProposingError(
+                "PowDifficulty::CurrentDifficulty SCALE 解码失败".into(),
+            )
+        })?;
+        if !input.is_empty() || difficulty == 0 {
+            return Err(sc_consensus_pow::Error::BlockProposingError(
+                "PowDifficulty::CurrentDifficulty 非规范或为零".into(),
+            ));
+        }
         Ok(U256::from(difficulty))
     }
 
@@ -182,22 +194,14 @@ fn ensure_powr_key(keystore: &sp_keystore::KeystorePtr) -> Result<(), ServiceErr
 fn start_cpu_miner<Proof: Send + 'static>(
     worker: MiningHandle<Block, SimplePow, (), Proof>,
     num_threads: usize,
-    epoch: Instant,
     pool_ready: Arc<dyn Fn() -> usize + Send + Sync>,
-    target_block_time_ms: u64,
     keystore: sp_keystore::KeystorePtr,
     author_public: sr25519::Public,
 ) {
-    // 提交门控，防止"早产块"触发 timestamp inherent 的 future 校验失败。
-    // 使用全局 AtomicU64 (LAST_SUBMIT_NS) 存储上次成功提交的时刻（自 epoch 的纳秒数），
-    // 避免 Mutex 在 sleep 期间持锁阻塞其他线程。CPU 和 GPU 矿工共享此门控。
-    // 出块目标时间从 genesis-pallet Runtime API 读取，替代编译期常量。
-    let min_submit_interval = Duration::from_millis(target_block_time_ms);
     let stride = (num_threads as u64).max(1);
 
     for thread_id in 0..num_threads {
         let worker = worker.clone();
-        let epoch = epoch;
         let pool_ready = pool_ready.clone();
         let keystore = keystore.clone();
         let author_public = author_public;
@@ -253,21 +257,7 @@ fn start_cpu_miner<Proof: Send + 'static>(
 
                     let hash = pow_hash(metadata.pre_hash.as_ref(), nonce);
                     if hash_meets_difficulty(&hash, metadata.difficulty) {
-                        // ── 提交门控（无锁版）──────────────────────────────
-                        // 读取上次成功提交的时刻，不足间隔则 sleep 补齐（不持锁）。
-                        // u64::MAX 表示"从未提交过"，首次直接放行。
-                        let last_ns = LAST_SUBMIT_NS.load(Ordering::Acquire);
-                        if last_ns != u64::MAX {
-                            let now_ns = epoch.elapsed().as_nanos() as u64;
-                            let interval_ns = min_submit_interval.as_nanos() as u64;
-                            let deadline_ns = last_ns.saturating_add(interval_ns);
-                            if now_ns < deadline_ns {
-                                let wait = Duration::from_nanos(deadline_ns - now_ns);
-                                thread::sleep(wait);
-                            }
-                        }
-
-                        // sleep 后 build 可能已更新，先检查版本是否仍匹配。
+                        // 有效工作量证明找到后立即提交；只防止提交已经过期的工作。
                         if worker.version() != build_version {
                             break; // nonce 已过期，回外层重新获取 metadata
                         }
@@ -285,23 +275,7 @@ fn start_cpu_miner<Proof: Send + 'static>(
                             }
                         };
                         let seal = (nonce, sr25519::Signature::from(signature)).encode();
-                        let submitted = futures::executor::block_on(worker.submit(seal));
-
-                        if submitted {
-                            let submit_ns = epoch.elapsed().as_nanos() as u64;
-                            if pool_ready() > 0 {
-                                // 提交后交易池仍有待处理交易 → 当前块是旧 Proposal（不含新交易）。
-                                // 将门控起点前移半个周期，使下一个块只需等 MinPeriod
-                                // （target_block_time / 2）即可提交，而非完整出块间隔。
-                                // 这既保证 timestamp inherent 校验通过（MinPeriod ≤ MAX_DRIFT + elapsed），
-                                // 又让包含交易的真实块能尽快上链。
-                                let half_ns = min_submit_interval.as_nanos() as u64 / 2;
-                                LAST_SUBMIT_NS
-                                    .store(submit_ns.saturating_sub(half_ns), Ordering::Release);
-                            } else {
-                                LAST_SUBMIT_NS.store(submit_ns, Ordering::Release);
-                            }
-                        }
+                        let _submitted = futures::executor::block_on(worker.submit(seal));
                         break;
                     }
 
@@ -645,11 +619,35 @@ pub fn new_full(
         })
     };
 
-    // PoW mining worker：在 propose 前检查 pool_ready，交易池为空时跳过 propose，
-    // 避免触发 runtime 的空块 assert panic。
+    // PoW mining worker：在 propose 前检查 pool_ready，交易池为空时跳过 propose。
+    // 新最佳块刚导入时，交易池维护可能尚未移除已打包交易；此时即使 ready 暂时非零，
+    // 也必须先跳过一轮，等待交易池在新链头上稳定，避免构造只有 timestamp 的空 proposal。
+    // runtime 的空块断言仍是最终共识闸门，本地门控只负责减少诚实节点的无效提案。
     let should_propose = {
         let pr = pool_ready.clone();
-        move || pr() > 0
+        use sp_blockchain::HeaderBackend;
+
+        let client = client.clone();
+        let mining_enabled =
+            mining_threads > 0 || cfg!(feature = "gpu-mining") && gpu_device.is_some();
+        let stable_best_hash = Arc::new(Mutex::new(client.info().best_hash));
+
+        move || {
+            if !mining_enabled {
+                return false;
+            }
+
+            let current_best = client.info().best_hash;
+            let mut observed_best = stable_best_hash
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if *observed_best != current_best {
+                *observed_best = current_best;
+                return false;
+            }
+
+            pr() > 0
+        }
     };
     // 本地挖矿导入路径与网络导入路径使用相同的节点守卫，避免诚实矿工产出
     // 破坏固定治理骨架的区块。
@@ -690,27 +688,11 @@ pub fn new_full(
         worker_task.boxed(),
     );
 
-    // 所有矿工线程共享的时间基准，用于无锁提交门控。
-    let miner_epoch = Instant::now();
-
-    // 从 genesis-pallet 链上存储读取动态出块目标时间，
-    // 替代编译期常量 MILLISECS_PER_BLOCK。若 API 调用失败，回退到常量默认值。
-    let target_block_time_ms = {
-        use sp_blockchain::HeaderBackend;
-        let best = client.info().best_hash;
-        client
-            .runtime_api()
-            .target_block_time_ms(best)
-            .unwrap_or(primitives::pow_const::MILLISECS_PER_BLOCK)
-    };
-
     if mining_threads > 0 {
         start_cpu_miner(
             worker.clone(),
             mining_threads,
-            miner_epoch,
             pool_ready.clone(),
-            target_block_time_ms,
             keystore.clone(),
             author_public,
         );
@@ -722,9 +704,7 @@ pub fn new_full(
         match crate::mining::gpu_miner::try_start(
             worker.clone(),
             device,
-            miner_epoch,
             pool_ready.clone(),
-            target_block_time_ms,
             keystore.clone(),
             author_public,
         ) {

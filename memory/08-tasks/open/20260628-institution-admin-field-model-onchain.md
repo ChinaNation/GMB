@@ -1,163 +1,146 @@
-# 任务卡：机构 / 机构管理员 字段模型定稿 + 链上链下重构
+# 任务卡：机构、岗位与管理员链上模型收口
 
-> 字段方案经 2026-06-28 多轮需求分析定稿（链上越精简越好；公开实名资料必须上链供 CitizenApp 跨机构查看）。
-> 本卡是 [20260628-onchina-onchain-write-and-followups](20260628-onchina-onchain-write-and-followups.md) 的**数据契约前置**：该卡 step1 原假设「零 runtime 改动」，本卡用户已显式授权链端改动（管理员资料上链 + 机构 pallet 精简），**该假设在机构/管理员存储范围内被本卡取代**。
+## 当前状态
 
-## 任务需求
+- 状态：进行中
+- 当前步骤：第一步已完成，等待用户确认第二步 runtime 技术方案
+- 最新业务确认：2026-07-12
+- 实施方式：逐步输出技术方案，用户确认后才执行；每步完成后立即更新文档、完善中文注释、删除残留，再输出下一步方案
 
-把「机构 + 机构管理员」字段模型按定稿方案落地：链上只存全国可见的权威/公开实名事实并极致精简，链下存私密/大文件/审计/同步索引/派生缓存。链上承载管理员公开实名资料（CID 号/姓名/职务/任期/来源），使 CitizenApp 能跨机构查看任一机构管理员，无需查各市本地库。
+## 任务目标
 
-## 所属模块
+将机构信息、机构岗位、机构管理员任职与管理员集合彻底拆分到正确模块：
 
-- 链端 runtime（Blockchain Agent）：`citizenchain/runtime/private/organization-manage`、`citizenchain/runtime/admins/{admin-primitives,public-admins,private-admins}`（`personal-admins` 不动）。
-- onchina 后端（CID Agent）：`citizenchain/onchina/src/`（postgres schema + repo + DTO + 链写通道）。
-- 客户端：`citizenwallet`（decoder）、`citizenapp`（管理员资料展示）。
-- 协议登记：`memory/07-ai/unified-protocols.md`。
+- 机构信息、机构岗位、岗位权限和机构管理员任职归 `entity`。
+- 机构管理员钱包账户集合 `admins` 及其生命周期归 `admins`。
+- 投票引擎只决定普选、互选、提名任免等任职结果，不保存第二份管理员或岗位真源。
+- 所有机构都必须有链上公开法定代表人。
+- 个人多签及 `personal-admins` 完全排除在本机构岗位模型之外。
 
-## 定稿字段方案（权威契约）
+## 强制领域关系
 
-### 设计四原则
-1. `cid_number` = 机构唯一身份主键，编码省/市/机构码/法人资格/盈利位，是一切派生的唯一源。
-2. 链上 ≠ SQL 表，是 pallet 存储（SCALE、有界、按键直取、无 join）；链下 = postgres，按实体分表。
-3. 同一字段绝不在两层都权威；postgres 的 `chain_*` 列只是只读投影。
-4. 管理员链上实名锚 = `admin_cid_number`（账户是密码学身份不实名、姓名会重名，只有注册局 CID 号与真人一对一绑定）。
+```text
+公民 cid_number 1 ─── 1 钱包账户
 
-### 链上存储（pallet）
-| 存储 | 键 | 值 |
-|---|---|---|
-| `Institutions` | `cid_number` | `cid_full_name`(仅公权)、`cid_short_name`(仅公权)、`status`、`created_at` |
-| `InstitutionAccounts` | `(cid_number, account_name)` | `address`(=derive(cid,name))、`is_default`、`status`；+反向索引 `address → cid_number` |
-| 机构管理员集合 | `cid_number` | `Vec<AdminProfile{ account, admin_cid_number, name, admin_role, term_start, term_end, source }>` |
+机构 1 ─── N 机构岗位
+机构 N ─── N 管理员钱包账户
+机构 + 管理员钱包账户 + 机构岗位 = 机构管理员任职
+```
 
-### 机构（Institution）字段
-**机构主体**
+- 一个公民只有一个 `cid_number`，且只能绑定一个钱包账户。
+- 一个钱包账户只能绑定一个公民 CID。
+- 一个机构管理员就是一个取得机构管理资格的钱包账户，不新建管理员身份 ID。
+- 一个管理员钱包账户可在多个机构任职，同一机构可有多个管理员。
+- 管理员的当前机构权限由“机构 + 有效岗位 + 有效任职 + 岗位权限”确定。
 
-| 字段 | 链上/链下 | 注释 |
-|---|---|---|
-| `cid_number` | 链上 | 机构唯一身份主键 |
-| `cid_full_name` | 链上(公权)/链下(私权) | 公权全称上链供 CitizenApp 直读；私权存注册市本地 |
-| `cid_short_name` | 链上(公权)/链下(私权) | 同上 |
-| `institution_status` | 链上 | 生命周期 Pending/Active/Closed |
-| `created_at` | 链上 | 创建区块号 |
-| `institution_code` | 派生 | 由 cid_number 机构码段 |
-| `province_code`/`city_code` | 派生 | cid_number r5 切片 |
-| `province_name`/`city_name`/`town_name` | 派生 | code 经 china.sqlite 单源(ADR-021) |
-| `has_legal_personality`/盈利位 | 派生 | 由机构码 / cid_number |
-| `town_code` | 链下 | 不在 cid_number，仅镇级机构 |
-| `parent_cid_number` | 链下 | CID 归属层，链上 payload 禁带 |
-| `legal_representative_account` | 链下 | 标"哪个 admin 是法人代表" |
-| `legal_rep_cid_number` | 链下 | account↔citizen 归 CID |
-| `legal_rep_name` | 派生 | 法人代表 ∈ admins 时经 admin_name |
-| `legal_rep_photo_*`(path/name/mime/size) | 链下 | 照片大文件 |
-| `institution_document_*`(path/type) | 链下 | 材料大文件 |
-| `institution_source_type` | 链下 | 创世性链上 kind 已含；FRG建/CREG建细分链下 |
-| `issuer_cid_number` | 链下 | 签发注册局来源，链上验签不存 |
-| `issuer_main_account` | 派生 | = derive(issuer_cid_number,"main_account") |
-| `register_proposal_id` | 链下 | 注册提案审计索引 |
-| `updated_at`/`created_by`/`updated_by` | 链下 | 本地编辑时间 + 操作员审计 |
-| `chain_status`/`chain_tx_hash`/`chain_block_number` | 链下 | 链投影 + 索引 |
-| `operation_log_id` | 链下 | 审计日志 |
+## 当前权威字段契约
 
-**机构账户**（每个 = `cid_number + account_name`）
+### 机构信息
 
-| 字段 | 链上/链下 | 注释 |
-|---|---|---|
-| `account_name` | 链上 | 账户名（键）：main_account/fee_account/自定义 |
-| `account_address` | 链上 | =derive(cid_number, account_name)，注册+反向索引，供转账/反查归属 |
-| `is_default` | 链上 | 主/费账户标记 |
-| `account_status` | 链上 | 账户生命周期 |
-| 余额 | 链上 | System.Account 原生账本，非自定义字段 |
+`InstitutionInfo` 保留当前机构公开信息，并对所有公权、私权、创世、非创世机构强制增加：
 
-### 管理员（Admin）字段
-| 字段 | 链上/链下 | 注释 |
-|---|---|---|
-| `cid_number` | 链上 | 管理员所属机构（唯一身份键） |
-| `admin_account` | 链上 | 管理员账户 ∈ 机构 admins |
-| `admin_cid_number` | 链上 | 管理员本人实名锚（注册局 CID 号，一对一绑真人） |
-| `admin_name` | 链上 | 姓名快照，来自注册局-公民列表的公民信息 |
-| `admin_title` | 链上 | 对外职务（总统/议员/董事/局长），短串 |
-| `admin_term_start_at`/`admin_term_end_at` | 链上 | 任期起止（类型见下方待确认项） |
-| `admin_source_type` | 链上(1字节枚举) | 来源：创世/注册局/内部投票/互选/普选 |
-| `admin_source_id` | 链下 | 选举/提案/登记明细 ID |
-| `admin_profile_status` | 派生 | 在任由「∈admins + term」判定 |
-| `admin_profile_updated_at` | 链下 | 链上 admin set 已带 updated_at 块高 |
-| `admin_photo_*`(path/name/mime/size) | 链下 | 照片大文件 |
-| `admin_department`/`admin_job` | 链下 | 内部部门/岗位（≠对外职务 admin_title） |
-| `admin_contact_phone`/`admin_contact_email` | 链下 | 私密联系方式 |
-| `admin_passkey_id` | 链下 | 登录安全（passkey 模块） |
-| `admin_operation_log_id` | 链下 | 审计 |
-| `chain_tx_hash`/`chain_block_number`/`chain_status` | 链下 | 同步索引 |
+| 字段 | 中文注释 |
+|---|---|
+| `legal_representative_name` | 法定代表人公开姓名 |
+| `legal_representative_cid_number` | 法定代表人唯一公民 CID |
+| `legal_representative_account` | 法定代表人唯一钱包账户 |
 
-### 链下 postgres 三表（按实体分表，勿合并；1机构:N管理员）
-- `institutions`（键 `cid_number`）：机构主体链下列。
-- `institution_admins`（键 `(cid_number, admin_account)`）：管理员资料链下列。
-- `institution_documents`（键 `cid_number` 或 `(cid_number, admin_account)`）：材料/照片。
-- 统一同步审计列模式：`chain_status`/`chain_tx_hash`/`chain_block_number`/`created_by`/`operation_log_id`，各表共用。
+目标结构废弃 `legal_rep_name` 和 `legal_rep_cid_number`，全仓统一使用 `legal_representative_*`。法定代表人照片、联系方式和原始身份档案不上链。
 
-### 上链录入路径（2026-06-30 修正）
-PasskeyColdSign（三档鉴权最严档）：onchina 构造 extrinsic SCALE → passkey 二因子 → CitizenWallet 冷签 → 提交链 → 回写。签名人=注册局管理员本人(origin)，零 op_tag，符合签名铁律①。机构注册统一走 `propose_create_institution`，同一笔交易携带机构主体、账户和初始 `admins` + `threshold`；创建后的管理员变更再按机构自治规则进入对应管理员模块/投票引擎。
+### 机构岗位
 
-### 待确认实现细节（A2 开工前定）
-- `term_start/term_end` 类型：推荐紧凑日期（u32，如天数自纪元）而非区块号——任期是日历语义、CitizenApp 按日期展示；区块号需换算且有出块漂移。
+`InstitutionRole` 归 `entity`：
 
-## 必须遵守
-- 不碰：`QR_V1`、签名域 `GMB`、`primitives/cid/code.rs` 机构码表、`china.sqlite`、`CID_*` 身份 env、`personal-admins`。
-- 链开发期：彻底改 + 不兼容 + 零残留；breaking 改走重新创世，不问 migration/spec_version。
-- 改 extrinsic/storage 必先更新 `unified-protocols.md` 对应条目，再四方逐字节对齐（runtime/onchina/citizenwallet decoder/citizenapp）。
-- 后端是唯一鉴权执行者；前端 capabilities 仅 UX 镜像。
-- 注释描述当前实现，禁「从X改Y/原来/之前」历史措辞。
+| 字段 | 中文注释 |
+|---|---|
+| `role_code` | 机构内唯一岗位代码 |
+| `role_name` | 岗位名称 |
+| `role_permissions` | 岗位权限代码集合 |
+| `term_required` | 该岗位是否强制任期 |
+| `role_status` | 岗位是否有效 |
 
-## 分步任务（建议顺序；A 是基座）
+### 机构管理员任职
 
-### Phase A · 链端契约（基座，Blockchain Agent）
-- **A1 机构 pallet 精简**：机构管理已拆到 `public-manage` / `private-manage`；`InstitutionInfo` 保留名称、机构码、创建时间、状态等链上事实，管理员集合真源在对应 admins pallet，账户真源在 InstitutionAccounts。
-- **A2 admin pallet 资料化**：`admin-primitives` + genesis/public/private —— admins 从 `Vec<AccountId>` → `Vec<AdminProfile{account, admin_cid_number, name, admin_role, term_start, term_end, source}>`；机构类按 `cid_number` 建键（personal 保持 AccountId）；`source` 枚举；`term` 类型定稿。
-- **A3 协议登记 + 重新创世**：更新 `unified-protocols.md`（机构/账户/管理员 storage 契约 + `propose_create_institution`/`propose_admin_set_change` 载荷格式）；`cargo test` 全绿；重新创世。
+`InstitutionAdminAssignment` 归 `entity`：
 
-### Phase B · onchina 链写 + 链下表（CID Agent）
-> 架构定调（2026-06-28）：机构管理归 onchina，**onchina 独占机构读（subxt dynamic，与 `fetch_active_admins_onchain` 同风格）+ 写（PasskeyColdSign）**；node 桌面端 = 纯矿工不承接机构业务。
-- **B0 机构管理下沉 onchina + 删 node 残留**：onchina 实现机构读（subxt dynamic，取代 node 手写 `OnChainInstitution` 镜像）；**删** `citizenchain/node/src/private/organization_manage/` + `citizenchain/node/frontend/private/organization-manage/`（清算行命名已废、ADR-030 前遗留）；删前核 node 桌面无活引用。**保留**：node `transaction/offchain_transaction/`（清算结算）、`governance/proposal.rs`（提案生命周期）。
-- **B1 postgres 三表 + repo + DTO**：`institutions`/`institution_admins`/`institution_documents` + 统一同步审计列；删现 `subjects` 中派生字段冗余列（province_name 等）。
-- **B2 机构链写通道**：复用注销凭证模式，构造 `propose_create_institution` 新载荷 SCALE → PasskeyColdSign 冷签 → 提交 → 回写 `chain_*`。
-- **B3 管理员上链录入**：初始管理员随机构创建交易上链；后续管理员变更按公权/私权/创世机构自己的自治规则进入对应管理员模块和投票引擎。验收 = console 创建的管理员能登录（进链上 Active 集合）。
+| 字段 | 中文注释 |
+|---|---|
+| `cid_number` | 任职机构 CID |
+| `admin_account` | 管理员唯一钱包账户 |
+| `role_code` | 在该机构担任的岗位 |
+| `term_start` | 任期开始日期，自纪元以来天数 |
+| `term_end` | 任期结束日期，自纪元以来天数 |
+| `assignment_source` | 任职制度来源 |
+| `assignment_source_ref` | 选举、投票、登记或任免记录 ID |
+| `assignment_status` | 任职是否有效 |
 
-### Phase C · 客户端
-- **C1 CitizenWallet decoder**（Wallet）：新机构注册 / admin set 载荷逐字节解码，无剩余字节。
-- **C2 CitizenApp 展示**（Mobile Agent）：读链上管理员资料展示姓名/职务/任期/CID/来源。
+`assignment_source` 只允许：
 
-### Phase D · 收尾
-- **D1 残留清理 + 回写**：零残留校验；`unified-protocols.md`、本卡、ADR（如需）、长期记忆回写。
+- `Genesis`
+- `Registry`
+- `PopularElection`
+- `MutualElection`
+- `NominationAppointment`
 
-## 输入文档
-- [ADR-030 onchina 多机构统一控制台](../04-decisions/ADR-030-onchina-multi-institution-console.md)
-- [20260628-onchina-onchain-write-and-followups](20260628-onchina-onchain-write-and-followups.md)
-- `memory/07-ai/unified-protocols.md`（P-STORAGE-001/002、P-TX-001/007）
-- 长期记忆：`project_onchina_console_adr030`、`project_registry_onchain_auth_3b`、`feedback_signing_layer_selection_rule`、`project_institution_name_single_source_2026_06_21`、`feedback_china_code_immutable`。
+任职不保存 `creator`；来源由 `assignment_source + assignment_source_ref` 唯一表达。
 
-## 验收标准
-- 每阶段 `cargo test`（runtime / `-p onchina`）+ `cargo check -p node` + 客户端 decoder/UI 测试绿。
-- 链上管理员可读到 cid/姓名/职务/任期/来源；CitizenApp 跨机构查看任一机构管理员成功。
-- console 创建的机构/管理员真正上链，创建后能登录（过 onchain_gate）。
-- 四方载荷逐字节一致；decoder 无剩余字节。
-- 零残留：无冗余链上快照、无派生字段第二真源、无历史化注释。
+### 管理员集合
 
-## 进度
-- [x] 字段模型需求分析 + 定稿（2026-06-28）
-- [x] A1 机构 pallet 精简（2026-06-28）：`InstitutionInfo` 11→5 字段(cid_full_name/cid_short_name 仅公权 + institution_code + created_at + status)；删 main_account/fee_account/admins/admins_len/threshold/creator/account_count；`propose_create_institution` payload 加 cid_short_name；名称分档 `is_public_legal_code`；`resolve_admin_account_for_account` 改派生主账户；事件改用 stored_full_name(私权不上链)；协议登记 P-TX-001/P-STORAGE-002 已更；`cargo test -p organization-manage` 32 passed(含公权存名/私权空名/公权拒空简称三新例)。node 镜像随 B0 删。**遗留待 B2**：CID 凭证签名需纳入 cid_short_name。
-- [~] A2 admin pallet 资料化（进行中）：
-  - [x] A2.1 admin-primitives 基座（2026-06-28，compiles，workspace 仍绿因向后兼容）：新增 `AdminProfile<AccountId>{account,admin_cid_number,name,admin_role,term_start,term_end,source}` + `AdminSource{Genesis/Registry/InternalVote/MutualElection/PopularElection}` + 常量 `ADMIN_NAME_MAX_BYTES=128`/`ADMIN_CID_NUMBER_MAX_BYTES=CID_NUMBER_MAX_BYTES`；`AdminAccountLifecycle<AccountId, AdminItem=AccountId>` 泛型化(create_pending/set_active_direct 收 `Vec<AdminItem>`，personal 走默认 AccountId 不动)；`AdminAccountQuery` 加默认 `active_account_admin_profiles→None`(institution 覆盖)。`active_account_admins` 签名不变(出 `Vec<AccountId>`)→投票/多签/阈值消费方零改。
-  - [x] A2.2 三机构 pallet（genesis/public/private）：`AdminProfilesOf<T>=BoundedVec<AdminProfile>` 作 storage；`active_account_admins` 抽 `.account`(投票/多签/阈值零改)；新增 `active_account_admin_profiles`；`propose_admin_set_change`/`federal_set` 收 profiles；callback decode/apply profiles。**personal-admins 未动**(仍 Vec<AccountId>，走 trait 默认 AdminItem=AccountId)。
-  - [x] A2.3 机构创建载荷：`propose_create_institution` admins→profiles，create.rs 写入 profiles，Config 绑定 `AdminAccountLifecycle<_, AdminProfile>`。
-  - [x] A2.4 genesis 种子 `genesis_build`(CHINA_ZF→Genesis-source 空 meta profiles，逐人资料留后期上链充实)。
-  - [x] A2.5 测试：public/private/genesis 各 6、机构创建 profiles 往返和 account 路径不变用例；`cargo check -p citizenchain` 绿；fmt 绿。
-  - 协议登记已更：P-STORAGE-001(admins→AdminProfile/personal 仍 AccountId) + P-TX-007(机构布局 AdminProfile) + P-TX-001(admins→profiles)。
-  - [x] A2.6 残留(全 workspace 验证发现):workflow 只测 4 crate,遗漏 `multisig-transfer/src/tests/mod.rs` + `runtime/src/tests/mod.rs` 的旧形态 `InstitutionInfo`(11字段)/`AdminAccount`(Vec<AccountId>) 测试种子;已改新 5 字段 InstitutionInfo + 机构 AdminAccount 存 profiles。`cargo test --workspace --no-run` 绿;`cargo test -p citizenchain`(35)/votingengine(87)/multisig-transfer(23) 全过。
-- [x] A2 admin pallet 资料化（2026-06-28，完成并全 workspace 对抗式验证）
-- [x] A3 协议登记（随 A1/A2/B2/B3 增量完成 + 2026-06-30 修正）：qr-action-registry.md / unified-protocols.md 以 PublicManage/PrivateManage 创建机构交易为准，公权前缀 0x2005、私权前缀 0x2105；市注册局初始管理员不再使用单独直设动作。
-- [ ] 重新创世（= D 步，runtime breaking 改动累积后一次性,现网客户端未更新前不重生）
-- [x] B0 node 清算行/机构 解耦（2026-06-28，完成并对抗式验证）：用户澄清 **清算行=链下支付(L2/L3 结算)=node 保留**、**机构管理→onchina**、两者不同业务。落地：① 删机构创建(build/submit_propose_create_institution + 前端 create-multisig，→onchina)；② 清算行要的 4 个机构**读**命令(search_eligible_clearing_banks/fetch_clearing_bank_institution_detail/proposals/registration_info)+SCALE 镜像 **移入** `node/src/transaction/offchain_transaction/institution_read/`，**链上直读**；③ 镜像更新到 A1(InstitutionInfo 5字段)+A2(AdminAccount profiles)，institution-detail 的 admins/threshold/account_count 改从 admin pallet/internal-vote/InstitutionAccounts 派生(**顺带清掉 A1 欠的 node 镜像债**)；④ 前端 3 读页移入 `offchain-transaction/institution/`，section.tsx 重连，check-multisig 缺失分支引导去 onchina，删 wait-vote 死视图；⑤ 删 `node/src/private/`(organization_manage+mod)+`node/frontend/private/`+main.rs `mod private`。**验证**:`cargo check -p node` 绿 + institution_read 测试 4/4 + 前端 tsc 0 + 零残留 + 清算/结算命令全在。3-agent 对抗式审查全 sound + 自查通过。**清算行(链下支付)完整保留不删**。
-- [x] B1 onchina 机构链下 schema 对齐（2026-06-28，完成并对抗式验证）：摸清真实结构=`subjects`(三 kind 共享身份核心) + `citizens`(公民人,独立不碰) + `gov`/`private`(公权/私权明细) + `accounts`/`docs` + `admins`(控制台登录,不碰)。落地:① `subjects` 删派生地名 `province_name`/`city_name`/`town_name`(ADR-021,改 DTO 层经 china.sqlite `area_display_names` 派生,前端名称字段不变);② `subjects` 加 `updated_by`/`issuer_cid_number`/`institution_source_type`/`register_proposal_id`/`legal_representative_account`/`chain_status`/`chain_tx_hash`/`chain_block_number`;③ **新建 `institution_admins` 表**(PK `(province_code,cid_number,admin_account)` 分区)只存链下私密资料(department/job/contact/photo/passkey_credential_id/source_id/profile_status/profile_updated_at + 同步审计),**姓名/职务/任期/CID/来源在 A2 已上链不进此表**;④ repo+DTO+前端类型+缓存版本 bump+自愈。**坑(对抗式审查 CRITICAL 抓到,我修)**:`admin.rs check_cid_full_name` 公权查重残留**裸 `city_name`**(非 `s.city_name`,agent grep 漏)迁移后运行时 `column does not exist`→改用 ctx 省级作用域转 `province_code+city_code` 比对。**决策**:subjects 与 private 重复列(private_type 等)**保留+注释标记**(读路径全直读 subjects,改 join 风险大,private 表仍单源权威,留后续)。验证:`cargo check/test -p onchina` 68 过+前端 tsc 0+fmt 绿+零地名 SQL 残留。3-agent 审查(1 sound,2 CRITICAL 同一处已修)。`citizens`/`admins` 隔离不碰。
-- [x] B2/B3 机构链写与初始管理员上链（2026-06-30 修正完成）：`core/institution_call.rs` 保留公权/私权机构创建 SCALE 编码器，`registration_call.rs` 组装注册凭证、账户、初始 AdminProfile。OnChina 创建接口提交 `admins` + `threshold`，本地写入机构、账户、管理员后返回 0x2005/0x2105 链交易二维码；旧的独立 admin-set 编码器、prepare 输出字段和市注册局管理员直设路径已清理。OnChina 仍零 extrinsic 提交，提交动作在 CitizenWallet。
-- [x] C1 CitizenWallet decoder（已完成，2026-06-29 核实）：`citizenwallet/lib/qr/qr_protocols.dart` 有 publicInstitutionCreate=0x2005 / privateInstitutionCreate=0x2105；`payload_decoder.dart` + `action_labels.dart` 解码 propose_create_public/private_institution（公私机构创建多签账户）。冷钱包侧已与链端公私拆分对齐。
-- [x] C2 CitizenApp 展示（完成,2026-06-29）：链上 `AdminAccounts.admins` 从 Vec<AccountId>→Vec<AdminProfile>(A2)的**端侧解码 + 展示**全部落地。① 新建共享模型 `lib/citizen/shared/admin_profile.dart`(AdminProfile+AdminProfileSource+解码 decodeAdminsVec,kind==3 个人多签裸账户分流)；② **两个解码器升级**(admins-change `AdminAccountCodec` + institution `MultisigStorageCodec.decodeAdminAccount`,修 A2 latent 错位)+ 顺带修 `decodeInstitutionInfo` 的 A1 5 字段(原读 main/fee/admins 已错位)；③ `AdminAccountState` 加 `profiles`(admins 改 getter,~19 account-only consumer 零改)；④ 服务 `fetchAdminProfiles` + `institution_chain_state.adminProfiles` + `institution_detail_page` 双加载路径取 profiles；⑤ 展示页 `institution_admin_list_page`/`public_institution_admin_list_page` 渲染 姓名/职务/任期/来源/实名cid + SS58(public 去"待对接"占位)；⑥ 持久化缓存改存 profiles(旧缓存 'admins' 降级 account-only 自愈)。**验证**:新增 AdminProfile 金标解码测试(逐字节,含个人多签分流)+ 改写旧测;`dart analyze` 绿;codec 6 测 + 详情 widget 4 测全过(含管理员入口)。冷钱包侧 C1 已先完成。
-- [ ] D1 残留清理 + 回写
+`public-admins` 和 `private-admins` 中的目标字段为：
+
+```text
+admins: BoundedVec<AccountId>
+```
+
+- 不再内嵌 `AdminProfile`。
+- 管理员集合目标记录不保存 `creator`、`created_at`、`updated_at`；链上来源和时间由对应任职关系、事件及区块确定。
+- 不保存 `admin_name`、`admin_cid_number`、`role_code`、`role_name`、`term_start`、`term_end`、`admin_source`、`admin_source_ref`。
+- 当前 runtime 中的 `AdminProfile` 是待拆除旧实现，不是目标契约。
+
+## 信任与隐私边界
+
+- 普通公民的原始实名档案、护照号、出生日期、住址等非公开信息不上链。
+- 机构法定代表人、机构岗位任职和竞选资料属于依法公开或主动公开的身份事实，可以上链。
+- 所有机构都必须有法定代表人，三个统一字段必须上链。
+
+## 实施步骤
+
+1. 冻结领域模型、字段命名、协议和任务边界。
+2. 实现 runtime 基础数据结构。
+3. 实现创世机构、岗位和任职。
+4. 实现运行期机构注册和任职写入。
+5. 改造 OnChina。
+6. 改造 CitizenApp 和公民钱包。
+7. 全仓残留清理、重新创世和真实运行态验收。
+
+## 各步确认规则
+
+- 每一步必须先输出完整技术方案和预计修改目录。
+- 用户确认后才能执行该步骤。
+- 涉及 `citizenchain/runtime/` 的每一步都必须单独获得 runtime 二次确认。
+- 每步代码执行完成后，必须立即更新文档、完善中文注释、删除旧代码、旧字段、旧注释、旧协议和旧文档口径。
+
+## 第一步执行记录
+
+- [x] 修正“链上不保存真实身份”过宽口径，区分普通公民隐私与依法公开身份。
+- [x] 确认所有机构的法定代表人三个字段必须上链。
+- [x] 确认机构岗位和任职关系归 `entity`，管理员账户集合归 `admins`。
+- [x] 确认任职只记录制度来源，不存在 `creator`。
+- [x] 确认个人多签完全排除在本任务的机构岗位模型之外。
+- [x] 统一登记新字段命名和目标协议。
+
+## 历史实现事实
+
+2026-06-28 至 2026-06-30 曾经实现机构 `AdminProfile`，将管理员姓名、CID、岗位、任期和来源内嵌到 `AdminAccounts.admins`，并同步实现 OnChina、CitizenApp 和公民钱包解码。该布局已被 2026-07-12 用户确认的目标模型取代，后续步骤必须彻底删除相关代码、协议、缓存、注释和展示残留。
+
+## 完成标准
+
+- runtime 中不再存在机构管理员 `AdminProfile` 内嵌布局。
+- 所有机构都有可查询的链上法定代表人三字段。
+- 机构岗位、岗位权限和机构管理员任职关系有唯一 entity 真源。
+- `admins` 只保存管理员钱包账户集合。
+- 一个管理员可在多个机构任职，一个机构可有多个管理员。
+- 无有效岗位任职或任期失效的账户不具有对应机构权限。
+- 个人多签行为和存储不受本机构岗位改造影响。
+- OnChina、CitizenApp、公民钱包与 runtime SCALE 字节完全一致。
+- 重新创世后通过真实节点、真实 PostgreSQL、真实 HTTP、真实页面和真实冷签验收。

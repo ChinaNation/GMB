@@ -8,7 +8,7 @@
 
 ## 所属模块
 
-`citizenchain/onchina`（OnChina Agent：后端 `domains/legislation/` + 鉴权/能力扩展点 + 前端 `frontend/legislation/`）。链端 `legislation-yuan`(idx27)/`legislation-vote`(idx28) **本轮只读核对，零改动**（改 = runtime 二次确认）。
+`citizenchain/onchina`（OnChina Agent：后端 `domains/legislation/` + 鉴权/能力扩展点 + 前端 `frontend/legislation/`）。链端 `legislation-yuan`(idx25)/`legislation-vote`(idx26) **本轮只读核对，零改动**（改 = runtime 二次确认）。
 
 ## 输入文档
 

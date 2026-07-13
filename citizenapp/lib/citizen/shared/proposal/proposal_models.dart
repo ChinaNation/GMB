@@ -54,12 +54,26 @@ class RuntimeUpgradeProposalInfo {
     required this.proposer,
     required this.reason,
     required this.codeHashHex,
+    required this.expectedPowParamsHashHex,
+    required this.paramsVersion,
+    required this.algorithmVersion,
+    required this.targetBlockTimeMs,
+    required this.adjustmentInterval,
+    required this.maxAdjustUpFactor,
+    required this.maxAdjustDownDivisor,
   });
 
   final int proposalId;
   final String proposer; // SS58 (ss58Format 2027)
   final String reason; // UTF-8 decoded
   final String codeHashHex; // 32-byte hash as hex
+  final String expectedPowParamsHashHex;
+  final int paramsVersion;
+  final int algorithmVersion;
+  final int targetBlockTimeMs;
+  final int adjustmentInterval;
+  final int maxAdjustUpFactor;
+  final int maxAdjustDownDivisor;
 }
 
 /// 提案 + 业务详情（用于全局提案列表与机构投票事件展示）。

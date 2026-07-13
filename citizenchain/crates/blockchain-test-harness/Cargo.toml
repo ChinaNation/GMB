@@ -1,0 +1,20 @@
+[package]
+name = "blockchain-test-harness"
+description = "CitizenChain blockchain acceptance and malicious block test harness utilities."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+chain-signing = { path = "../chain-signing" }
+clap = { workspace = true }
+hex = "0.4"
+serde_json = { workspace = true, default-features = true }
+sp-core = { workspace = true, default-features = true }

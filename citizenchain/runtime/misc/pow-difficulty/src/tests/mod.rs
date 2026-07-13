@@ -1,7 +1,6 @@
 #![cfg(test)]
 
 use super::*;
-use codec::Encode;
 use frame_support::{
     derive_impl,
     traits::{Hooks, Time},
@@ -9,14 +8,12 @@ use frame_support::{
 use frame_system as system;
 use primitives::pow_const::{
     DIFFICULTY_ADJUSTMENT_INTERVAL, DIFFICULTY_MAX_ADJUST_FACTOR, DIFFICULTY_MIN_ADJUST_FACTOR,
-    MILLISECS_PER_BLOCK, POW_INITIAL_DIFFICULTY,
+    DIFFICULTY_TARGET_WINDOW_MS, POW_INITIAL_DIFFICULTY, POW_TARGET_BLOCK_TIME_MS,
 };
 use sp_runtime::{traits::IdentityLookup, BuildStorage};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 type Block = frame_system::mocking::MockBlock<Test>;
-/// 测试用目标窗口时长：与 genesis_pallet-pallet 默认的 30_000ms 对齐。
-const DIFFICULTY_TARGET_WINDOW_MS: u64 =
-    DIFFICULTY_ADJUSTMENT_INTERVAL as u64 * MILLISECS_PER_BLOCK;
 const FIRST_ADJUST_BLOCK: u64 = DIFFICULTY_ADJUSTMENT_INTERVAL as u64 + 1;
 const SECOND_ADJUST_BLOCK: u64 = FIRST_ADJUST_BLOCK + DIFFICULTY_ADJUSTMENT_INTERVAL as u64;
 
@@ -55,26 +52,14 @@ impl pallet_timestamp::Config for Test {
     type WeightInfo = ();
 }
 
-/// 测试用出块目标时间来源:与 genesis 默认 30_000ms(= MILLISECS_PER_BLOCK)对齐,
-/// 通过窄 trait 注入,pow-difficulty 单测因此无需注册 genesis pallet、无需 mock 治理栈。
-pub struct MockBlockTime;
-impl genesis_pallet::TargetBlockTime for MockBlockTime {
-    fn target_block_time_ms() -> u64 {
-        MILLISECS_PER_BLOCK
-    }
-}
-
 impl Config for Test {
     type WeightInfo = ();
-    type BlockTime = MockBlockTime;
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
-        .expect("frame system genesis_pallet storage should build");
-    // 出块目标时间由 MockBlockTime 窄 trait 直接提供(= MILLISECS_PER_BLOCK),
-    // 不再依赖 genesis pallet 的 storage,故无需在此写入。
+        .expect("frame system genesis storage should build");
     sp_io::TestExternalities::new(storage)
 }
 
@@ -84,14 +69,17 @@ fn run_blocks(count: u32, block_time_ms: u64) {
         let now_ms = Timestamp::now().saturating_add(block_time_ms);
         System::set_block_number(block);
         Timestamp::set_timestamp(now_ms);
-        // 模拟区块含有 2 个 extrinsic（1 inherent + 1 用户交易），绕过空块拒绝检查
-        // 模拟 2 个 extrinsic（1 inherent + 1 用户交易）
-        sp_io::storage::set(
-            frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount").as_ref(),
-            &2u32.encode(),
-        );
+        set_extrinsic_count(2);
         PowDifficulty::on_finalize(block);
     }
+}
+
+/// 模拟 Executive 在进入 on_finalize 前记录的区块 extrinsic 数量。
+fn set_extrinsic_count(count: u32) {
+    for _ in 0..count {
+        System::note_applied_extrinsic(&Ok(().into()), Default::default());
+    }
+    System::note_finished_extrinsics();
 }
 
 fn difficulty_adjusted_events() -> Vec<Event<Test>> {
@@ -107,11 +95,11 @@ fn difficulty_adjusted_events() -> Vec<Event<Test>> {
 #[test]
 fn first_adjustment_happens_at_interval_plus_one_and_window_is_exact() {
     new_test_ext().execute_with(|| {
-        run_blocks(DIFFICULTY_ADJUSTMENT_INTERVAL, MILLISECS_PER_BLOCK);
+        run_blocks(DIFFICULTY_ADJUSTMENT_INTERVAL, POW_TARGET_BLOCK_TIME_MS);
         assert_eq!(PowDifficulty::current_difficulty(), POW_INITIAL_DIFFICULTY);
         assert!(difficulty_adjusted_events().is_empty());
 
-        run_blocks(1, MILLISECS_PER_BLOCK);
+        run_blocks(1, POW_TARGET_BLOCK_TIME_MS);
         assert_eq!(PowDifficulty::current_difficulty(), POW_INITIAL_DIFFICULTY);
 
         System::assert_last_event(RuntimeEvent::PowDifficulty(Event::DifficultyAdjusted {
@@ -129,7 +117,10 @@ fn first_adjustment_happens_at_interval_plus_one_and_window_is_exact() {
 #[test]
 fn raises_difficulty_when_blocks_are_too_fast() {
     new_test_ext().execute_with(|| {
-        run_blocks(DIFFICULTY_ADJUSTMENT_INTERVAL + 1, MILLISECS_PER_BLOCK / 2);
+        run_blocks(
+            DIFFICULTY_ADJUSTMENT_INTERVAL + 1,
+            POW_TARGET_BLOCK_TIME_MS / 2,
+        );
         assert_eq!(
             PowDifficulty::current_difficulty(),
             POW_INITIAL_DIFFICULTY * 2
@@ -140,7 +131,10 @@ fn raises_difficulty_when_blocks_are_too_fast() {
 #[test]
 fn lowers_difficulty_when_blocks_are_too_slow() {
     new_test_ext().execute_with(|| {
-        run_blocks(DIFFICULTY_ADJUSTMENT_INTERVAL + 1, MILLISECS_PER_BLOCK * 2);
+        run_blocks(
+            DIFFICULTY_ADJUSTMENT_INTERVAL + 1,
+            POW_TARGET_BLOCK_TIME_MS * 2,
+        );
         assert_eq!(
             PowDifficulty::current_difficulty(),
             POW_INITIAL_DIFFICULTY / 2
@@ -154,13 +148,10 @@ fn clamps_to_adjustment_bounds() {
         let old = 100u64;
         CurrentDifficulty::<Test>::put(old);
         WindowStartMs::<Test>::put(999);
+        WindowStartBlock::<Test>::put(1);
         System::set_block_number(FIRST_ADJUST_BLOCK);
         Timestamp::set_timestamp(1_000);
-        // 模拟 2 个 extrinsic（1 inherent + 1 用户交易）
-        sp_io::storage::set(
-            frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount").as_ref(),
-            &2u32.encode(),
-        );
+        set_extrinsic_count(2);
         PowDifficulty::on_finalize(FIRST_ADJUST_BLOCK);
         assert_eq!(
             PowDifficulty::current_difficulty(),
@@ -169,13 +160,10 @@ fn clamps_to_adjustment_bounds() {
 
         CurrentDifficulty::<Test>::put(old);
         WindowStartMs::<Test>::put(0);
+        WindowStartBlock::<Test>::put(FIRST_ADJUST_BLOCK as u32);
         System::set_block_number(SECOND_ADJUST_BLOCK);
         Timestamp::set_timestamp(1_000_000_000);
-        // 模拟 2 个 extrinsic（1 inherent + 1 用户交易）
-        sp_io::storage::set(
-            frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount").as_ref(),
-            &2u32.encode(),
-        );
+        set_extrinsic_count(2);
         PowDifficulty::on_finalize(SECOND_ADJUST_BLOCK);
         assert_eq!(
             PowDifficulty::current_difficulty(),
@@ -189,14 +177,10 @@ fn saturating_cast_prevents_u128_to_u64_wraparound() {
     new_test_ext().execute_with(|| {
         CurrentDifficulty::<Test>::put(u64::MAX - 1);
         WindowStartMs::<Test>::put(999);
+        WindowStartBlock::<Test>::put(1);
         System::set_block_number(FIRST_ADJUST_BLOCK);
         Timestamp::set_timestamp(1_000);
-        // 模拟 2 个 extrinsic（1 inherent + 1 用户交易）
-        sp_io::storage::set(
-            frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount").as_ref(),
-            &2u32.encode(),
-        );
-
+        set_extrinsic_count(2);
         PowDifficulty::on_finalize(FIRST_ADJUST_BLOCK);
 
         assert_eq!(PowDifficulty::current_difficulty(), u64::MAX);
@@ -208,14 +192,10 @@ fn zero_difficulty_storage_is_repaired_without_panic() {
     new_test_ext().execute_with(|| {
         CurrentDifficulty::<Test>::put(0);
         WindowStartMs::<Test>::put(0);
+        WindowStartBlock::<Test>::put(1);
         System::set_block_number(FIRST_ADJUST_BLOCK);
         Timestamp::set_timestamp(DIFFICULTY_TARGET_WINDOW_MS);
-        // 模拟 2 个 extrinsic（1 inherent + 1 用户交易）
-        sp_io::storage::set(
-            frame_support::storage::storage_prefix(b"System", b"ExtrinsicCount").as_ref(),
-            &2u32.encode(),
-        );
-
+        set_extrinsic_count(2);
         PowDifficulty::on_finalize(FIRST_ADJUST_BLOCK);
 
         assert_eq!(PowDifficulty::current_difficulty(), 1);
@@ -230,12 +210,86 @@ fn zero_difficulty_storage_is_repaired_without_panic() {
 }
 
 #[test]
-#[should_panic(expected = "空块不允许上链")]
-fn rejects_empty_block() {
+fn runtime_rejects_empty_block_before_difficulty_state_changes() {
     new_test_ext().execute_with(|| {
         System::set_block_number(1);
         Timestamp::set_timestamp(30_000);
-        // 测试环境 extrinsic_count 为 0，触发空块拒绝
+        set_extrinsic_count(1);
+
+        let rejected = catch_unwind(AssertUnwindSafe(|| PowDifficulty::on_finalize(1)));
+        assert!(
+            rejected.is_err(),
+            "runtime 必须独立拒绝只有 timestamp 的空块"
+        );
+        assert_eq!(PowDifficulty::current_difficulty(), POW_INITIAL_DIFFICULTY);
+        assert_eq!(WindowStartMs::<Test>::get(), None);
+    });
+}
+
+#[test]
+fn runtime_accepts_timestamp_plus_transaction() {
+    new_test_ext().execute_with(|| {
+        System::set_block_number(1);
+        Timestamp::set_timestamp(30_000);
+        set_extrinsic_count(2);
+
         PowDifficulty::on_finalize(1);
+        assert_eq!(WindowStartMs::<Test>::get(), Some(30_000));
+    });
+}
+
+#[test]
+fn staged_params_activate_next_block_without_changing_current_difficulty() {
+    new_test_ext().execute_with(|| {
+        let old_difficulty = PowDifficulty::current_difficulty();
+        WindowStartBlock::<Test>::put(1);
+        WindowStartMs::<Test>::put(10_000);
+
+        let mut next = PowDifficultyParams::genesis_default();
+        next.params_version += 1;
+        next.target_block_time_ms = 120_000;
+        next.adjustment_interval = 20;
+        assert!(PowDifficulty::stage_params(next, 2).is_ok());
+
+        System::set_block_number(2);
+        let _ = PowDifficulty::on_initialize(2);
+        assert_eq!(PowDifficulty::active_params(), next);
+        assert_eq!(PendingParams::<Test>::get(), None);
+        assert_eq!(PowDifficulty::current_difficulty(), old_difficulty);
+        assert_eq!(WindowStartBlock::<Test>::get(), None);
+        assert_eq!(WindowStartMs::<Test>::get(), None);
+
+        Timestamp::set_timestamp(20_000);
+        set_extrinsic_count(2);
+        PowDifficulty::on_finalize(2);
+        assert_eq!(WindowStartBlock::<Test>::get(), Some(2));
+        assert_eq!(WindowStartMs::<Test>::get(), Some(20_000));
+        assert_eq!(PowDifficulty::current_difficulty(), old_difficulty);
+    });
+}
+
+#[test]
+fn params_version_must_match_whether_values_changed() {
+    new_test_ext().execute_with(|| {
+        let active = PowDifficultyParams::genesis_default();
+        let mut wrong = active;
+        wrong.target_block_time_ms = 120_000;
+        assert!(PowDifficulty::stage_params(wrong, 2).is_err());
+
+        let mut unchanged_with_new_version = active;
+        unchanged_with_new_version.params_version += 1;
+        assert!(PowDifficulty::stage_params(unchanged_with_new_version, 2).is_err());
+        assert_eq!(PendingParams::<Test>::get(), None);
+    });
+}
+
+#[test]
+fn unsupported_algorithm_version_is_rejected_before_staging() {
+    new_test_ext().execute_with(|| {
+        let mut next = PowDifficultyParams::genesis_default();
+        next.params_version += 1;
+        next.algorithm_version += 1;
+        assert!(PowDifficulty::stage_params(next, 2).is_err());
+        assert_eq!(PendingParams::<Test>::get(), None);
     });
 }

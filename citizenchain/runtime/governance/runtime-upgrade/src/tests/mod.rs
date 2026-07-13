@@ -40,6 +40,12 @@ mod runtime {
 
     #[runtime::pallet_index(2)]
     pub type RuntimeUpgrade = super;
+
+    #[runtime::pallet_index(3)]
+    pub type Timestamp = pallet_timestamp;
+
+    #[runtime::pallet_index(4)]
+    pub type PowDifficulty = pow_difficulty;
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -47,6 +53,17 @@ impl system::Config for Test {
     type Block = Block;
     type AccountId = AccountId32;
     type Lookup = IdentityLookup<Self::AccountId>;
+}
+
+impl pallet_timestamp::Config for Test {
+    type Moment = u64;
+    type OnTimestampSet = ();
+    type MinimumPeriod = frame_support::traits::ConstU64<1>;
+    type WeightInfo = ();
+}
+
+impl pow_difficulty::Config for Test {
+    type WeightInfo = ();
 }
 
 pub struct EnsureJointProposerForTest;
@@ -245,11 +262,16 @@ thread_local! {
 
 pub struct TestRuntimeCodeExecutor;
 impl RuntimeCodeExecutor for TestRuntimeCodeExecutor {
-    fn execute_runtime_code(_code: &[u8]) -> DispatchResult {
+    fn execute_runtime_code(
+        _code: &[u8],
+        params: pow_difficulty::PowDifficultyParams,
+        activate_at: u32,
+    ) -> DispatchResult {
         let should_fail = EXEC_SHOULD_FAIL.with(|v| *v.borrow());
         if should_fail {
             return Err(DispatchError::Other("set_code failed"));
         }
+        pow_difficulty::Pallet::<Test>::stage_params(params, activate_at)?;
         RUNTIME_CODE_EXECUTED.with(|v| *v.borrow_mut() = true);
         Ok(())
     }
@@ -310,7 +332,8 @@ fn propose_ok() {
     assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
         RuntimeOrigin::signed(nrc_admin()),
         reason_ok(),
-        code_ok()
+        code_ok(),
+        pow_difficulty::PowDifficultyParams::genesis_default()
     ));
 }
 
