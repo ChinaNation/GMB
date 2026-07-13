@@ -49,7 +49,12 @@ type PublicBalanceOf<T> = <<T as public_manage::Config>::Currency as Currency<
 >>::Balance;
 type PublicCidNumberOf<T> = BoundedVec<u8, <T as public_manage::Config>::MaxCidNumberLength>;
 type PublicAccountNameOf<T> = BoundedVec<u8, <T as public_manage::Config>::MaxAccountNameLength>;
-type PublicInstitutionInfoOf<T> = InstitutionInfo<BlockNumberFor<T>, PublicAccountNameOf<T>>;
+type PublicInstitutionInfoOf<T> = InstitutionInfo<
+    BlockNumberFor<T>,
+    PublicAccountNameOf<T>,
+    PublicCidNumberOf<T>,
+    <T as frame_system::Config>::AccountId,
+>;
 type PublicInstitutionAccountInfoOf<T> = InstitutionAccountInfo<
     <T as frame_system::Config>::AccountId,
     PublicBalanceOf<T>,
@@ -167,6 +172,10 @@ fn insert_derived_public_institution<T: public_manage::Config>(
             cid_full_name: bounded_name(cid_full_name),
             cid_short_name: bounded_name(cid_short_name),
             town_code: BoundedVec::new(),
+            // 创世没有真实任免资料时保持尚未任命，禁止用首位管理员占位。
+            legal_representative_name: None,
+            legal_representative_cid_number: None,
+            legal_representative_account: None,
             institution_code: parts.institution,
             created_at: BlockNumberFor::<T>::default(),
             status: InstitutionLifecycleStatus::Active,
@@ -249,6 +258,10 @@ fn insert_public_institution<T: public_manage::Config>(
             cid_full_name: bounded_static_name::<T>(cid_full_name, "cid_full_name", cid_number),
             cid_short_name: bounded_static_name::<T>(cid_short_name, "cid_short_name", cid_number),
             town_code: BoundedVec::new(),
+            // 固定创世机构同样不得伪造法定代表人公开信息。
+            legal_representative_name: None,
+            legal_representative_cid_number: None,
+            legal_representative_account: None,
             institution_code,
             created_at: BlockNumberFor::<T>::default(),
             status: InstitutionLifecycleStatus::Active,

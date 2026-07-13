@@ -100,6 +100,34 @@ pub(crate) fn build_create_institution_call_data(
             "http:conflict:cid_short_name is required before chain registration".to_string(),
         );
     }
+    let legal_representative_name = inst.legal_representative_name.clone().unwrap_or_default();
+    if legal_representative_name.trim().is_empty() {
+        return Err(
+            "http:conflict:legal_representative_name is required before chain registration"
+                .to_string(),
+        );
+    }
+    let legal_representative_cid_number = inst
+        .legal_representative_cid_number
+        .clone()
+        .unwrap_or_default();
+    if legal_representative_cid_number.trim().is_empty() {
+        return Err(
+            "http:conflict:legal_representative_cid_number is required before chain registration"
+                .to_string(),
+        );
+    }
+    let legal_representative_account_text = inst
+        .legal_representative_account
+        .clone()
+        .unwrap_or_default();
+    let legal_representative_account = parse_sr25519_pubkey_bytes(
+        legal_representative_account_text.as_str(),
+    )
+    .ok_or_else(|| {
+        "http:conflict:legal_representative_account is required before chain registration"
+            .to_string()
+    })?;
 
     let account_args: Vec<InitialAccountArg> = accounts
         .iter()
@@ -159,11 +187,14 @@ pub(crate) fn build_create_institution_call_data(
         .map(|a| a.account_name.clone())
         .collect();
     let register_nonce = Uuid::new_v4().to_string();
-    let credential = crate::core::chain_runtime::build_institution_registration_credential(
+    let credential = crate::core::chain_runtime::build_institution_creation_credential(
         state,
         cid_number,
         cid_full_name.as_str(),
         cid_short_name.as_str(),
+        legal_representative_name.as_str(),
+        legal_representative_cid_number.as_str(),
+        &legal_representative_account,
         &account_names,
         register_nonce.clone(),
         inst.province_name.as_str(),
@@ -183,6 +214,9 @@ pub(crate) fn build_create_institution_call_data(
         cid_full_name: cid_full_name.trim().as_bytes().to_vec(),
         cid_short_name: cid_short_name.trim().as_bytes().to_vec(),
         town_code: inst.town_code.trim().as_bytes().to_vec(),
+        legal_representative_name: legal_representative_name.trim().as_bytes().to_vec(),
+        legal_representative_cid_number: legal_representative_cid_number.trim().as_bytes().to_vec(),
+        legal_representative_account,
         accounts: account_args,
         institution_code: code_bytes,
         admins_len,

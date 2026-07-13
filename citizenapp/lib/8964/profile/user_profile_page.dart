@@ -21,6 +21,8 @@ import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/chat/open_direct_chat.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/wallet/core/device_subkey.dart' show bytesToHex;
+import 'package:citizenapp/wallet/core/secure_seed_store.dart';
+import 'package:citizenapp/wallet/core/seed_sign_error.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 推特式用户主页。
@@ -237,8 +239,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
     } on SquareApiException catch (e) {
       if (mounted) _snack('注销失败：${e.message}');
       return;
+    } on SecureSeedException catch (e) {
+      // 生物识别取消 / 无锁屏 / 金库错误：不属 WalletAuthException，
+      // 此前会逃逸成无声失败（点注销后无反应）。
+      if (mounted) _snack(seedSignErrorMessage(e));
+      return;
     } on WalletAuthException catch (e) {
       if (mounted) _snack('注销已取消：${e.message}');
+      return;
+    } on Exception catch (e) {
+      // 兜底：注销签名的任何异常都必须有反馈，永不静默。
+      if (mounted) _snack('注销失败：$e');
       return;
     }
 

@@ -29,7 +29,9 @@ class Institution {
     this.cityCode = '',
     this.townCode = '',
     this.parentCidNumber,
-    this.legalRepName,
+    this.legalRepresentativeName,
+    this.legalRepresentativeCidNumber,
+    this.legalRepresentativeAccount,
     this.accountCount = 0,
     this.customAccountNames = const [],
     this.builtinAccounts,
@@ -58,7 +60,9 @@ class Institution {
   final String? parentCidNumber;
 
   /// 法定代表人姓名(公开目录字段,无则 null → 详情页留空)。
-  final String? legalRepName;
+  final String? legalRepresentativeName;
+  final String? legalRepresentativeCidNumber;
+  final String? legalRepresentativeAccount;
 
   final int accountCount;
   final List<String> customAccountNames;
@@ -118,7 +122,9 @@ class Institution {
         cityCode: cityCode,
         townCode: townCode,
         parentCidNumber: parentCidNumber,
-        legalRepName: legalRepName,
+        legalRepresentativeName: legalRepresentativeName,
+        legalRepresentativeCidNumber: legalRepresentativeCidNumber,
+        legalRepresentativeAccount: legalRepresentativeAccount,
         accountCount: accountCount,
         customAccountNames: customAccountNames,
         builtinAccounts: accounts,
@@ -154,7 +160,9 @@ class Institution {
       cityCode: e.cityCode,
       townCode: e.townCode,
       parentCidNumber: e.parentCidNumber,
-      legalRepName: e.legalRepName,
+      legalRepresentativeName: e.legalRepresentativeName,
+      legalRepresentativeCidNumber: e.legalRepresentativeCidNumber,
+      legalRepresentativeAccount: e.legalRepresentativeAccount,
       accountCount: e.accountCount,
       customAccountNames: e.customAccountNames,
     );

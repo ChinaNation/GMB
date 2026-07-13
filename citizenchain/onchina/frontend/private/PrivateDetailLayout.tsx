@@ -84,12 +84,12 @@ interface InfoFormValues {
   cid_full_name: string;
   /** 需挂靠的非法人所属法人 cid_number */
   parent_cid_number?: string;
-  legal_rep_name: string;
-  legal_rep_cid_number: string;
-  legal_rep_photo_path: string;
-  legal_rep_photo_name: string;
-  legal_rep_photo_mime: string;
-  legal_rep_photo_size?: number;
+  legal_representative_name: string;
+  legal_representative_cid_number: string;
+  legal_representative_photo_path: string;
+  legal_representative_photo_name: string;
+  legal_representative_photo_mime: string;
+  legal_representative_photo_size?: number;
 }
 
 export const PrivateDetailLayout: React.FC<Props> = ({
@@ -121,7 +121,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const [legalRepSearching, setLegalRepSearching] = useState(false);
   const [legalRepOptions, setLegalRepOptions] = useState<string[]>([]);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [photoName, setPhotoName] = useState<string>(inst.legal_rep_photo_name ?? '');
+  const [photoName, setPhotoName] = useState<string>(inst.legal_representative_photo_name ?? '');
 
   const isF = inst.subject_property === 'F';
   const requiresParent = isF && !['GT', 'GP'].includes(inst.institution_code);
@@ -129,9 +129,9 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   const needsCompletion =
     !inst.cid_full_name ||
     (requiresParent && !inst.parent_cid_number) ||
-    !inst.legal_rep_name ||
-    !inst.legal_rep_cid_number ||
-    !inst.legal_rep_photo_path;
+    !inst.legal_representative_name ||
+    !inst.legal_representative_cid_number ||
+    !inst.legal_representative_photo_path;
 
   // ── 需挂靠非法人所属法人搜索 ──
   const [parentSearchOpts, setParentSearchOpts] = useState<ParentInstitutionRow[]>([]);
@@ -207,22 +207,22 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     form.setFieldsValue({
       cid_full_name: inst.cid_full_name ?? '',
       parent_cid_number: inst.parent_cid_number ?? undefined,
-      legal_rep_name: inst.legal_rep_name ?? '',
-      legal_rep_cid_number: inst.legal_rep_cid_number ?? '',
-      legal_rep_photo_path: inst.legal_rep_photo_path ?? '',
-      legal_rep_photo_name: inst.legal_rep_photo_name ?? '',
-      legal_rep_photo_mime: inst.legal_rep_photo_mime ?? '',
-      legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
+      legal_representative_name: inst.legal_representative_name ?? '',
+      legal_representative_cid_number: inst.legal_representative_cid_number ?? '',
+      legal_representative_photo_path: inst.legal_representative_photo_path ?? '',
+      legal_representative_photo_name: inst.legal_representative_photo_name ?? '',
+      legal_representative_photo_mime: inst.legal_representative_photo_mime ?? '',
+      legal_representative_photo_size: inst.legal_representative_photo_size ?? undefined,
     });
-    setPhotoName(inst.legal_rep_photo_name ?? '');
+    setPhotoName(inst.legal_representative_photo_name ?? '');
     setLegalRepOptions([]);
   }, [
     inst.cid_number,
     inst.cid_full_name,
     inst.parent_cid_number,
-    inst.legal_rep_name,
-    inst.legal_rep_cid_number,
-    inst.legal_rep_photo_path,
+    inst.legal_representative_name,
+    inst.legal_representative_cid_number,
+    inst.legal_representative_photo_path,
   ]);
 
   const onClickEdit = () => {
@@ -231,14 +231,14 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     form.setFieldsValue({
       cid_full_name: inst.cid_full_name ?? '',
       parent_cid_number: inst.parent_cid_number ?? undefined,
-      legal_rep_name: inst.legal_rep_name ?? '',
-      legal_rep_cid_number: inst.legal_rep_cid_number ?? '',
-      legal_rep_photo_path: inst.legal_rep_photo_path ?? '',
-      legal_rep_photo_name: inst.legal_rep_photo_name ?? '',
-      legal_rep_photo_mime: inst.legal_rep_photo_mime ?? '',
-      legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
+      legal_representative_name: inst.legal_representative_name ?? '',
+      legal_representative_cid_number: inst.legal_representative_cid_number ?? '',
+      legal_representative_photo_path: inst.legal_representative_photo_path ?? '',
+      legal_representative_photo_name: inst.legal_representative_photo_name ?? '',
+      legal_representative_photo_mime: inst.legal_representative_photo_mime ?? '',
+      legal_representative_photo_size: inst.legal_representative_photo_size ?? undefined,
     });
-    setPhotoName(inst.legal_rep_photo_name ?? '');
+    setPhotoName(inst.legal_representative_photo_name ?? '');
     setCurrentCidFullName(inst.cid_full_name ?? '');
   };
 
@@ -248,14 +248,14 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     form.setFieldsValue({
       cid_full_name: inst.cid_full_name ?? '',
       parent_cid_number: inst.parent_cid_number ?? undefined,
-      legal_rep_name: inst.legal_rep_name ?? '',
-      legal_rep_cid_number: inst.legal_rep_cid_number ?? '',
-      legal_rep_photo_path: inst.legal_rep_photo_path ?? '',
-      legal_rep_photo_name: inst.legal_rep_photo_name ?? '',
-      legal_rep_photo_mime: inst.legal_rep_photo_mime ?? '',
-      legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
+      legal_representative_name: inst.legal_representative_name ?? '',
+      legal_representative_cid_number: inst.legal_representative_cid_number ?? '',
+      legal_representative_photo_path: inst.legal_representative_photo_path ?? '',
+      legal_representative_photo_name: inst.legal_representative_photo_name ?? '',
+      legal_representative_photo_mime: inst.legal_representative_photo_mime ?? '',
+      legal_representative_photo_size: inst.legal_representative_photo_size ?? undefined,
     });
-    setPhotoName(inst.legal_rep_photo_name ?? '');
+    setPhotoName(inst.legal_representative_photo_name ?? '');
     setCurrentCidFullName(inst.cid_full_name ?? '');
   };
 
@@ -302,7 +302,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
   };
 
   const triggerLegalRepSearch = async () => {
-    const q = (form.getFieldValue('legal_rep_cid_number') ?? '').trim();
+    const q = (form.getFieldValue('legal_representative_cid_number') ?? '').trim();
     if (!q) {
       notice.warning('请先输入法定代表人身份ID关键字');
       return;
@@ -346,10 +346,10 @@ export const PrivateDetailLayout: React.FC<Props> = ({
     try {
       const photo = await uploadLegalRepresentativePhoto(auth, file);
       form.setFieldsValue({
-        legal_rep_photo_path: photo.file_path,
-        legal_rep_photo_name: photo.file_name,
-        legal_rep_photo_mime: photo.mime_type,
-        legal_rep_photo_size: photo.file_size,
+        legal_representative_photo_path: photo.file_path,
+        legal_representative_photo_name: photo.file_name,
+        legal_representative_photo_mime: photo.mime_type,
+        legal_representative_photo_size: photo.file_size,
       });
       setPhotoName(photo.file_name);
       notice.success('证件照已上传');
@@ -371,9 +371,13 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       notice.error('请选择所属法人机构');
       return;
     }
-    const legalRepName = values.legal_rep_name?.trim();
-    const legalRepCid = values.legal_rep_cid_number?.trim();
-    if (!legalRepName || !legalRepCid || !values.legal_rep_photo_path) {
+    const legalRepresentativeName = values.legal_representative_name?.trim();
+    const legalRepresentativeCidNumber = values.legal_representative_cid_number?.trim();
+    if (
+      !legalRepresentativeName ||
+      !legalRepresentativeCidNumber ||
+      !values.legal_representative_photo_path
+    ) {
       notice.error('请完整填写法定代表人姓名、身份ID和证件照');
       return;
     }
@@ -387,12 +391,12 @@ export const PrivateDetailLayout: React.FC<Props> = ({
       await updateInstitution(auth, inst.cid_number, {
         cid_full_name: cidFullName,
         parent_cid_number: requiresParent ? values.parent_cid_number : undefined,
-        legal_rep_name: legalRepName,
-        legal_rep_cid_number: legalRepCid,
-        legal_rep_photo_path: values.legal_rep_photo_path,
-        legal_rep_photo_name: values.legal_rep_photo_name,
-        legal_rep_photo_mime: values.legal_rep_photo_mime,
-        legal_rep_photo_size: values.legal_rep_photo_size,
+        legal_representative_name: legalRepresentativeName,
+        legal_representative_cid_number: legalRepresentativeCidNumber,
+        legal_representative_photo_path: values.legal_representative_photo_path,
+        legal_representative_photo_name: values.legal_representative_photo_name,
+        legal_representative_photo_mime: values.legal_representative_photo_mime,
+        legal_representative_photo_size: values.legal_representative_photo_size,
       });
       notice.success('机构信息已保存');
       setEditing(false);
@@ -513,12 +517,12 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                   initialValues={{
                     cid_full_name: inst.cid_full_name ?? '',
                     parent_cid_number: inst.parent_cid_number ?? undefined,
-                    legal_rep_name: inst.legal_rep_name ?? '',
-                    legal_rep_cid_number: inst.legal_rep_cid_number ?? '',
-                    legal_rep_photo_path: inst.legal_rep_photo_path ?? '',
-                    legal_rep_photo_name: inst.legal_rep_photo_name ?? '',
-                    legal_rep_photo_mime: inst.legal_rep_photo_mime ?? '',
-                    legal_rep_photo_size: inst.legal_rep_photo_size ?? undefined,
+                    legal_representative_name: inst.legal_representative_name ?? '',
+                    legal_representative_cid_number: inst.legal_representative_cid_number ?? '',
+                    legal_representative_photo_path: inst.legal_representative_photo_path ?? '',
+                    legal_representative_photo_name: inst.legal_representative_photo_name ?? '',
+                    legal_representative_photo_mime: inst.legal_representative_photo_mime ?? '',
+                    legal_representative_photo_size: inst.legal_representative_photo_size ?? undefined,
                   }}
                 >
                   <Form.Item
@@ -605,7 +609,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                   )}
                   <Form.Item
                     label="法定代表人姓名"
-                    name="legal_rep_name"
+                    name="legal_representative_name"
                     rules={[
                       { required: true, message: '请输入法定代表人姓名' },
                       { max: 30, message: '最多 30 个字' },
@@ -615,7 +619,7 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                   </Form.Item>
                   <Form.Item
                     label="法定代表人身份ID"
-                    name="legal_rep_cid_number"
+                    name="legal_representative_cid_number"
                     rules={[{ required: true, message: '请选择法定代表人身份ID' }]}
                   >
                     <AutoComplete
@@ -659,15 +663,15 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                     )}
                   </Form.Item>
                   <Form.Item
-                    name="legal_rep_photo_path"
+                    name="legal_representative_photo_path"
                     rules={[{ required: true, message: '请上传法定代表人证件照' }]}
                     hidden
                   >
                     <Input />
                   </Form.Item>
-                  <Form.Item name="legal_rep_photo_name" hidden><Input /></Form.Item>
-                  <Form.Item name="legal_rep_photo_mime" hidden><Input /></Form.Item>
-                  <Form.Item name="legal_rep_photo_size" hidden><Input type="number" /></Form.Item>
+                  <Form.Item name="legal_representative_photo_name" hidden><Input /></Form.Item>
+                  <Form.Item name="legal_representative_photo_mime" hidden><Input /></Form.Item>
+                  <Form.Item name="legal_representative_photo_size" hidden><Input type="number" /></Form.Item>
                 </Form>
               ) : (
                 // 只读展示
@@ -719,19 +723,19 @@ export const PrivateDetailLayout: React.FC<Props> = ({
                     </Descriptions.Item>
                   )}
                   <Descriptions.Item label="法定代表人姓名">
-                    {inst.legal_rep_name || <span style={{ color: '#999' }}>(未填写)</span>}
+                    {inst.legal_representative_name || <span style={{ color: '#999' }}>(未填写)</span>}
                   </Descriptions.Item>
                   <Descriptions.Item label="法定代表人身份ID">
-                    {inst.legal_rep_cid_number ? (
+                    {inst.legal_representative_cid_number ? (
                       <Typography.Text style={{ fontSize: 12, wordBreak: 'break-all' }}>
-                        {inst.legal_rep_cid_number}
+                        {inst.legal_representative_cid_number}
                       </Typography.Text>
                     ) : (
                       <span style={{ color: '#999' }}>(未填写)</span>
                     )}
                   </Descriptions.Item>
                   <Descriptions.Item label="法定代表人证件照">
-                    {inst.legal_rep_photo_name || <span style={{ color: '#999' }}>(未上传)</span>}
+                    {inst.legal_representative_photo_name || <span style={{ color: '#999' }}>(未上传)</span>}
                   </Descriptions.Item>
                 </Descriptions>
               )}

@@ -93,6 +93,29 @@ struct RuntimeSigningContext {
     scope_city_name: String,
 }
 
+fn finish_institution_credential(
+    state: &AppState,
+    genesis_hash: [u8; 32],
+    register_nonce: String,
+    signing_ctx: RuntimeSigningContext,
+    payload_digest: [u8; 32],
+) -> Result<RuntimeInstitutionRegistrationCredential, String> {
+    let signature = sign_runtime_digest(state, &payload_digest)?;
+    Ok(RuntimeInstitutionRegistrationCredential {
+        genesis_hash: hex::encode(genesis_hash),
+        register_nonce,
+        issuer_cid_number: signing_ctx.issuer_cid_number,
+        issuer_main_account: signing_ctx.issuer_main_account_hex,
+        signer_pubkey: signing_ctx.signer_pubkey_hex,
+        scope_province_name: signing_ctx.scope_province_name,
+        scope_city_name: signing_ctx.scope_city_name,
+        signature,
+        payload_digest: hex::encode(payload_digest),
+        meta: runtime_signature_meta(state),
+    })
+}
+
+/// 签发 call_index=2 的机构账户登记凭证，不包含尚未写入 Institutions 的公开资料。
 pub(crate) fn build_institution_registration_credential(
     state: &AppState,
     cid_number: &str,
@@ -104,14 +127,11 @@ pub(crate) fn build_institution_registration_credential(
     scope_city_name: &str,
     town_code: &str,
 ) -> Result<RuntimeInstitutionRegistrationCredential, String> {
-    if cid_number.trim().is_empty() {
-        return Err("cid_number is required".to_string());
-    }
-    if cid_full_name.trim().is_empty() {
-        return Err("cid_full_name is required".to_string());
-    }
-    if cid_short_name.trim().is_empty() {
-        return Err("cid_short_name is required".to_string());
+    if cid_number.trim().is_empty()
+        || cid_full_name.trim().is_empty()
+        || cid_short_name.trim().is_empty()
+    {
+        return Err("institution identity fields are required".to_string());
     }
     if account_names.is_empty() || account_names.iter().any(|name| name.trim().is_empty()) {
         return Err("account_names are required".to_string());
@@ -125,9 +145,6 @@ pub(crate) fn build_institution_registration_credential(
         .iter()
         .map(|name| name.trim().as_bytes().to_vec())
         .collect::<Vec<_>>();
-    // 字段顺序必须与 RuntimeCidInstitutionVerifier 完全一致:
-    // genesis_hash + cid_number + cid_full_name + cid_short_name + account_names[]
-    // + nonce + 签发机构 + 作用域 + town_code。
     let payload = (
         GMB,
         OP_SIGN_INST,
@@ -145,19 +162,87 @@ pub(crate) fn build_institution_registration_credential(
         town_code.trim().as_bytes(),
     );
     let payload_digest = blake2_256(&payload.encode());
-    let signature = sign_runtime_digest(state, &payload_digest)?;
-    Ok(RuntimeInstitutionRegistrationCredential {
-        genesis_hash: hex::encode(genesis_hash),
+    finish_institution_credential(
+        state,
+        genesis_hash,
         register_nonce,
-        issuer_cid_number: signing_ctx.issuer_cid_number,
-        issuer_main_account: signing_ctx.issuer_main_account_hex,
-        signer_pubkey: signing_ctx.signer_pubkey_hex,
-        scope_province_name: signing_ctx.scope_province_name,
-        scope_city_name: signing_ctx.scope_city_name,
-        signature,
-        payload_digest: hex::encode(payload_digest),
-        meta: runtime_signature_meta(state),
-    })
+        signing_ctx,
+        payload_digest,
+    )
+}
+
+/// 签发 call_index=5 的机构创建凭证，法定代表人三字段必须进入签名域。
+pub(crate) fn build_institution_creation_credential(
+    state: &AppState,
+    cid_number: &str,
+    cid_full_name: &str,
+    cid_short_name: &str,
+    legal_representative_name: &str,
+    legal_representative_cid_number: &str,
+    legal_representative_account: &[u8; 32],
+    account_names: &[String],
+    register_nonce: String,
+    scope_province_name: &str,
+    scope_city_name: &str,
+    town_code: &str,
+) -> Result<RuntimeInstitutionRegistrationCredential, String> {
+    if cid_number.trim().is_empty() {
+        return Err("cid_number is required".to_string());
+    }
+    if cid_full_name.trim().is_empty() {
+        return Err("cid_full_name is required".to_string());
+    }
+    if cid_short_name.trim().is_empty() {
+        return Err("cid_short_name is required".to_string());
+    }
+    if legal_representative_name.trim().is_empty() {
+        return Err("legal_representative_name is required".to_string());
+    }
+    if legal_representative_cid_number.trim().is_empty() {
+        return Err("legal_representative_cid_number is required".to_string());
+    }
+    if account_names.is_empty() || account_names.iter().any(|name| name.trim().is_empty()) {
+        return Err("account_names are required".to_string());
+    }
+    if register_nonce.trim().is_empty() {
+        return Err("register_nonce is required".to_string());
+    }
+    let genesis_hash = resolve_chain_genesis_hash()?;
+    let signing_ctx = runtime_signing_context(Some(scope_province_name), Some(scope_city_name))?;
+    let account_name_payload = account_names
+        .iter()
+        .map(|name| name.trim().as_bytes().to_vec())
+        .collect::<Vec<_>>();
+    // 字段顺序必须与 RuntimeCidInstitutionVerifier 完全一致:
+    // genesis_hash + cid_number + cid_full_name + cid_short_name + 法定代表人三字段 + account_names[]
+    // + nonce + 签发机构 + 作用域 + town_code。
+    let payload = (
+        GMB,
+        OP_SIGN_INST,
+        genesis_hash,
+        cid_number.trim().as_bytes(),
+        cid_full_name.trim().as_bytes(),
+        cid_short_name.trim().as_bytes(),
+        legal_representative_name.trim().as_bytes(),
+        legal_representative_cid_number.trim().as_bytes(),
+        legal_representative_account,
+        &account_name_payload,
+        register_nonce.trim().as_bytes(),
+        signing_ctx.issuer_cid_number.as_bytes(),
+        &signing_ctx.issuer_main_account,
+        &signing_ctx.signer_pubkey,
+        signing_ctx.scope_province_name.as_bytes(),
+        signing_ctx.scope_city_name.as_bytes(),
+        town_code.trim().as_bytes(),
+    );
+    let payload_digest = blake2_256(&payload.encode());
+    finish_institution_credential(
+        state,
+        genesis_hash,
+        register_nonce,
+        signing_ctx,
+        payload_digest,
+    )
 }
 
 /// 注销凭证签名 payload 的 blake2_256 摘要(纯函数,便于 golden 测试锁字节)。
@@ -1117,6 +1202,9 @@ pub(crate) struct OnChainInstitution {
     pub(crate) cid_full_name: Vec<u8>,
     pub(crate) cid_short_name: Vec<u8>,
     pub(crate) town_code: Vec<u8>,
+    pub(crate) legal_representative_name: Option<Vec<u8>>,
+    pub(crate) legal_representative_cid_number: Option<Vec<u8>>,
+    pub(crate) legal_representative_account: Option<[u8; 32]>,
     pub(crate) institution_code: [u8; 4],
     pub(crate) created_at: u32,
     /// InstitutionLifecycleStatus 判别值:0=Pending 1=Active 2=Closed。
@@ -1139,6 +1227,9 @@ struct RawInstitutionInfo {
     cid_full_name: Vec<u8>,
     cid_short_name: Vec<u8>,
     town_code: Vec<u8>,
+    legal_representative_name: Option<Vec<u8>>,
+    legal_representative_cid_number: Option<Vec<u8>>,
+    legal_representative_account: Option<[u8; 32]>,
     institution_code: [u8; 4],
     created_at: u32,
     status: u8,
@@ -1186,6 +1277,9 @@ pub(crate) async fn institution_lookup(
         cid_full_name: info.cid_full_name,
         cid_short_name: info.cid_short_name,
         town_code: info.town_code,
+        legal_representative_name: info.legal_representative_name,
+        legal_representative_cid_number: info.legal_representative_cid_number,
+        legal_representative_account: info.legal_representative_account,
         institution_code: info.institution_code,
         created_at: info.created_at,
         status: info.status,
@@ -1228,6 +1322,9 @@ pub(crate) async fn for_each_chain_institution(
                 cid_full_name: info.cid_full_name,
                 cid_short_name: info.cid_short_name,
                 town_code: info.town_code,
+                legal_representative_name: info.legal_representative_name,
+                legal_representative_cid_number: info.legal_representative_cid_number,
+                legal_representative_account: info.legal_representative_account,
                 institution_code: info.institution_code,
                 created_at: info.created_at,
                 status: info.status,

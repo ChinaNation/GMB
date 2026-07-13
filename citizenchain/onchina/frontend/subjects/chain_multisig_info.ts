@@ -23,6 +23,9 @@ export interface InstitutionInfoDetail {
   partnership_kind?: string | null;
   has_legal_personality?: boolean | null;
   parent_cid_number?: string | null;
+  legal_representative_name?: string | null;
+  legal_representative_cid_number?: string | null;
+  legal_representative_account?: string | null;
 }
 
 export interface InstitutionRegistrationCredential {

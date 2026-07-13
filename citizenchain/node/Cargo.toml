@@ -68,6 +68,7 @@ sp-inherents = { workspace = true, default-features = true }
 sp-io = { workspace = true, default-features = true }
 sp-keyring = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
+sp-state-machine = { workspace = true, default-features = true }
 sp-storage = { workspace = true, default-features = true }
 sp-timestamp = { workspace = true, default-features = true }
 async-trait = { workspace = true }
@@ -128,8 +129,6 @@ blockchain-test-harness = { path = "../crates/blockchain-test-harness" }
 sc-block-builder = { workspace = true, default-features = true }
 # P2P 坏块注入验收专用：读取真实同步服务连接数、请求数并主动广播测试坏块。
 sc-network-sync = { workspace = true, default-features = true }
-# 普通块坏注入验收专用：基于父状态重算篡改后的 state root 与 backend transaction。
-sp-state-machine = { workspace = true, default-features = true }
 
 [build-dependencies]
 substrate-build-script-utils = { workspace = true, default-features = true }

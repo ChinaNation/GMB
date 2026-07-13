@@ -27,17 +27,17 @@ void main() {
         'city_code': '001',
         'institution_code': 'GCB',
         'account_count': 2,
-        'legal_rep_name': '程伟',
+        'legal_representative_name': '程伟',
       }),
     ]);
     final info = await lookup.lookup(cid);
     expect(info, isNotNull);
     expect(info!.provinceName, '广东省');
     expect(info.cityName, '广州市');
-    expect(info.legalRepName, '程伟');
+    expect(info.legalRepresentativeName, '程伟');
   });
 
-  test('命中但无法定代表人:legalRepName 为 null', () async {
+  test('命中但无法定代表人:legalRepresentativeName 为 null', () async {
     final lookup = await seedLookup([
       PublicInstitutionDto.fromJson(<String, dynamic>{
         'cid_number': cid,
@@ -49,7 +49,7 @@ void main() {
       }),
     ]);
     final info = await lookup.lookup(cid);
-    expect(info?.legalRepName, isNull);
+    expect(info?.legalRepresentativeName, isNull);
     expect(info?.provinceName, '广东省');
   });
 

@@ -46,7 +46,7 @@ pub const MAX_LEGAL_REP_NAME_BYTES: usize = 128;
 pub const MAX_LEGAL_REP_PHOTO_BYTES: u64 = 5 * 1024 * 1024;
 
 pub struct LegalRepresentativeFields {
-    pub legal_rep_name: String,
+    pub legal_representative_name: String,
     pub cid_number: String,
     pub photo_path: String,
     pub photo_name: String,
@@ -83,7 +83,7 @@ impl LegalRepresentativeCitizenScope {
         }
     }
 
-    pub fn legal_rep_error_message(&self) -> &'static str {
+    pub fn legal_representative_error_message(&self) -> &'static str {
         match self {
             Self::Nationwide => "法定代表人身份ID必须选择正常状态公民",
             Self::Province { .. } => "该机构法定代表人必须是本省正常状态公民",
@@ -252,12 +252,12 @@ pub fn validate_legal_representative_required(
     photo_mime: Option<&str>,
     photo_size: Option<u64>,
 ) -> Result<LegalRepresentativeFields, ServiceError> {
-    let legal_rep_name = name
+    let legal_representative_name = name
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .ok_or(ServiceError::BadInput("法定代表人姓名不能为空"))?;
-    if legal_rep_name.chars().count() > MAX_LEGAL_REP_NAME_CHARS
-        || legal_rep_name.len() > MAX_LEGAL_REP_NAME_BYTES
+    if legal_representative_name.chars().count() > MAX_LEGAL_REP_NAME_CHARS
+        || legal_representative_name.len() > MAX_LEGAL_REP_NAME_BYTES
     {
         return Err(ServiceError::BadInput("法定代表人姓名过长"));
     }
@@ -291,7 +291,7 @@ pub fn validate_legal_representative_required(
         .filter(|v| *v > 0 && *v <= MAX_LEGAL_REP_PHOTO_BYTES)
         .ok_or(ServiceError::BadInput("法定代表人证件照大小非法"))?;
     Ok(LegalRepresentativeFields {
-        legal_rep_name: legal_rep_name.to_string(),
+        legal_representative_name: legal_representative_name.to_string(),
         cid_number,
         photo_path: photo_path.to_string(),
         photo_name: photo_name.to_string(),

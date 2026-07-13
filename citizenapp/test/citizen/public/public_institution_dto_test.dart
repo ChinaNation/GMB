@@ -16,7 +16,7 @@ void main() {
         'town_code': '',
         'institution_code': 'ZF',
         'account_count': 3,
-        'legal_rep_name': '李大民',
+        'legal_representative_name': '李大民',
         'custom_account_names': ['业务专户A', '业务专户B'],
       });
       expect(dto.cidNumber, 'AH001-ZF000-123456789-2026');
@@ -25,13 +25,13 @@ void main() {
       expect(dto.cityCode, '001');
       expect(dto.townCode, '');
       expect(dto.accountCount, 3);
-      expect(dto.legalRepName, '李大民');
+      expect(dto.legalRepresentativeName, '李大民');
       expect(dto.customAccountNames, ['业务专户A', '业务专户B']);
       // 行政区 code + 法定代表人随实体落库。
       final entity = dto.toEntity(catalogVersion: 'v', updatedAtMillis: 0);
       expect(entity.provinceCode, 'AH');
       expect(entity.cityCode, '001');
-      expect(entity.legalRepName, '李大民');
+      expect(entity.legalRepresentativeName, '李大民');
     });
 
     test('缺省行政区 code → 空串;缺省 custom/法定代表人 → 空/null(无名字 fallback)', () {
@@ -47,7 +47,7 @@ void main() {
       expect(dto.townCode, ''); // 缺省镇 code → 空串
       expect(dto.customAccountNames, isEmpty);
       expect(dto.status, 'ACTIVE');
-      expect(dto.legalRepName, isNull);
+      expect(dto.legalRepresentativeName, isNull);
     });
 
     test('toEntity 填 catalogVersion + 名称回退', () {

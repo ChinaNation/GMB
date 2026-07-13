@@ -639,8 +639,8 @@ pub trait InternalAdminProvider<AccountId> {
         false
     }
 
-    /// 获取机构法定代表人(机构首脑,必为该机构 admins 之一;ADR-027 立法签署人)。
-    /// 默认 None(个人账户/无代表人语境);机构由 admins 模块 提供并保证 ∈ admins。
+    /// 获取机构法定代表人(ADR-027 立法签署人)。
+    /// 默认 None(个人账户/尚未任命);机构公开事实由 entity 的 `InstitutionInfo` 提供。
     fn legal_representative(
         _institution_code: InstitutionCode,
         _institution: AccountId,

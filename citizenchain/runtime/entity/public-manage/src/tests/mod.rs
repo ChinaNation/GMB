@@ -395,25 +395,6 @@ impl admin_primitives::AdminAccountQuery<AccountId32> for TestAdminAccountQuery 
         }
         None
     }
-
-    fn legal_representative(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> Option<AccountId32> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::legal_representative(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::legal_representative(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        None
-    }
 }
 
 pub struct TestTimeProvider;
@@ -581,6 +562,18 @@ pub fn empty_town_code() -> pallet::AccountNameOf<Test> {
 
 pub fn town_code(s: &[u8]) -> pallet::AccountNameOf<Test> {
     BoundedVec::try_from(s.to_vec()).expect("town_code fits")
+}
+
+pub fn legal_representative_name() -> pallet::AccountNameOf<Test> {
+    cid_full_name("测试法人".as_bytes())
+}
+
+pub fn legal_representative_cid_number() -> pallet::CidNumberOf<Test> {
+    cid_number(b"GD001-CTZN1-000000001-2026")
+}
+
+pub fn legal_representative_account() -> AccountId32 {
+    admin(99)
 }
 
 pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {

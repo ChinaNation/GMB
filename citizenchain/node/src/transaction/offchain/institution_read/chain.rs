@@ -59,13 +59,15 @@ fn encode_cid_key_data(cid_number: &str) -> Result<Vec<u8>, String> {
 
 // ─── 机构最小集镜像(PublicManage/PrivateManage::Institutions) ──────
 
-/// 链端 `InstitutionInfo<BlockNumber, AccountName>` 在节点端的 SCALE 镜像。
+/// 链端 `InstitutionInfo<BlockNumber, AccountName, CidNumber, AccountId>` 的 SCALE 镜像。
 /// 字段顺序必须与 `runtime/entity/{public,private}-manage/src/institution/types.rs::InstitutionInfo`
 /// 严格一致(两 pallet 同形态;Encode/Decode 派生按声明顺序)。
 ///
 /// runtime 实例化的具体类型:
 /// - `BlockNumber = u32`(citizenchain runtime)
 /// - `AccountName = BoundedVec<u8, ConstU32<128>>`
+/// - `CidNumber = BoundedVec<u8, ConstU32<96>>`
+/// - `AccountId = AccountId32`
 #[derive(Decode)]
 struct OnChainInstitution {
     cid_full_name: BoundedVec<u8, ConstU32<128>>,
@@ -73,6 +75,12 @@ struct OnChainInstitution {
     cid_short_name: BoundedVec<u8, ConstU32<128>>,
     #[allow(dead_code)]
     town_code: BoundedVec<u8, ConstU32<128>>,
+    #[allow(dead_code)]
+    legal_representative_name: Option<BoundedVec<u8, ConstU32<128>>>,
+    #[allow(dead_code)]
+    legal_representative_cid_number: Option<BoundedVec<u8, ConstU32<96>>>,
+    #[allow(dead_code)]
+    legal_representative_account: Option<AccountId32>,
     institution_code: InstitutionCode,
     created_at: u32,
     status: OnChainInstitutionStatus,

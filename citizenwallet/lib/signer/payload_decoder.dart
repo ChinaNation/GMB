@@ -819,6 +819,9 @@ class PayloadDecoder {
   //     cid_full_name: AccountNameOf<T>,   // BoundedVec<u8>
   //     cid_short_name: AccountNameOf<T>,  // BoundedVec<u8>
   //     town_code: AccountNameOf<T>,       // BoundedVec<u8>
+  //     legal_representative_name: AccountNameOf<T>,
+  //     legal_representative_cid_number: CidNumberOf<T>,
+  //     legal_representative_account: AccountId32,
   //     accounts: InstitutionInitialAccountsOf<T>,
   //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
   //     institution_code: [u8; 4],      // 注册多签机构码(公权/私权/非法人法人)
@@ -880,6 +883,29 @@ class PayloadDecoder {
       allowMalformed: true,
     );
     offset += townCodeLen;
+
+    // 法定代表人三字段是机构公开链上事实，冷钱包必须完整展示并拒绝空值。
+    final (legalNameLen, legalNameLenSize) = _decodeCompactU32(bytes, offset);
+    offset += legalNameLenSize;
+    if (legalNameLen == 0 || offset + legalNameLen > bytes.length) return null;
+    final legalRepresentativeName = utf8.decode(
+      bytes.sublist(offset, offset + legalNameLen),
+      allowMalformed: true,
+    );
+    offset += legalNameLen;
+
+    final (legalCidLen, legalCidLenSize) = _decodeCompactU32(bytes, offset);
+    offset += legalCidLenSize;
+    if (legalCidLen == 0 || offset + legalCidLen > bytes.length) return null;
+    final legalRepresentativeCidNumber = utf8.decode(
+      bytes.sublist(offset, offset + legalCidLen),
+      allowMalformed: true,
+    );
+    offset += legalCidLen;
+
+    if (offset + 32 > bytes.length) return null;
+    final legalRepresentativeAccount = bytes.sublist(offset, offset + 32);
+    offset += 32;
 
     // accounts: BoundedVec<InstitutionInitialAccount>
     //   每项 = (account_name: Vec<u8>, amount: u128)
@@ -1011,6 +1037,9 @@ class PayloadDecoder {
       'cid_number': cidNumber,
       'cid_full_name': cidFullName,
       'cid_short_name': cidShortName,
+      'legal_representative_name': legalRepresentativeName,
+      'legal_representative_cid_number': legalRepresentativeCidNumber,
+      'legal_representative_account': _bytesToSs58(legalRepresentativeAccount),
       'institution_code': InstitutionCode.codeLabel(code),
       'admins_len': adminsLen.toString(),
       'threshold': '$threshold/$adminsLen',

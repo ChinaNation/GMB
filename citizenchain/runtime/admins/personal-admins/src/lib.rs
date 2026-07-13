@@ -703,13 +703,6 @@ impl<T: pallet::Config> AdminAccountQuery<T::AccountId> for pallet::Pallet<T> {
     ) -> Option<u32> {
         Self::pending_account_admins_len_for_snapshot(institution_code, admin_root_account_id)
     }
-
-    fn legal_representative(
-        _institution_code: InstitutionCode,
-        _admin_root_account_id: T::AccountId,
-    ) -> Option<T::AccountId> {
-        None
-    }
 }
 
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);

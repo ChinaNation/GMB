@@ -63,6 +63,9 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
     cid_full_name: AccountNameOf<T>,
     cid_short_name: AccountNameOf<T>,
     town_code: AccountNameOf<T>,
+    legal_representative_name: AccountNameOf<T>,
+    legal_representative_cid_number: CidNumberOf<T>,
+    legal_representative_account: T::AccountId,
     accounts: InstitutionInitialAccountsOf<T>,
     institution_code: InstitutionCode,
     admins_len: u32,
@@ -95,6 +98,14 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
     // public-manage 只管理公权机构,公权机构全称/简称必须上链供 App 直读。
     ensure!(!cid_full_name.is_empty(), Error::<T>::EmptyAccountName);
     ensure!(!cid_short_name.is_empty(), Error::<T>::EmptyAccountName);
+    ensure!(
+        !legal_representative_name.is_empty(),
+        Error::<T>::EmptyLegalRepresentativeName
+    );
+    ensure!(
+        !legal_representative_cid_number.is_empty(),
+        Error::<T>::EmptyLegalRepresentativeCidNumber
+    );
     ensure_public_town_code::<T>(&institution_code, &town_code)?;
     let (stored_full_name, stored_short_name, stored_town_code) = (
         cid_full_name.clone(),
@@ -127,10 +138,13 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
     );
     let account_name_payload = account_names_payload_from_initial_accounts::<T>(&accounts)?;
     ensure!(
-        T::CidInstitutionVerifier::verify_institution_registration(
+        T::CidInstitutionVerifier::verify_institution_creation(
             cid_number.as_slice(),
             &cid_full_name,
             cid_short_name.as_slice(),
+            legal_representative_name.as_slice(),
+            legal_representative_cid_number.as_slice(),
+            &legal_representative_account,
             &account_name_payload,
             &register_nonce,
             &signature,
@@ -202,6 +216,9 @@ pub(crate) fn do_propose_create_public_institution<T: Config>(
                 cid_full_name: stored_full_name.clone(),
                 cid_short_name: stored_short_name.clone(),
                 town_code: stored_town_code.clone(),
+                legal_representative_name: Some(legal_representative_name.clone()),
+                legal_representative_cid_number: Some(legal_representative_cid_number.clone()),
+                legal_representative_account: Some(legal_representative_account.clone()),
                 institution_code,
                 created_at: now,
                 status: InstitutionLifecycleStatus::Active,

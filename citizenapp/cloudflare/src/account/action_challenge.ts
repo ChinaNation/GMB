@@ -127,7 +127,29 @@ export async function consumeActionSignature(
     throw new HttpError(401, 'invalid_signature', '钱包签名校验失败');
   }
 
-  await env.DB.prepare(`UPDATE square_login_challenges SET used_at = ? WHERE challenge_id = ?`)
+  const claimed = await env.DB.prepare(
+    `UPDATE square_login_challenges SET used_at = ? WHERE challenge_id = ? AND used_at IS NULL`
+  )
     .bind(nowMs(), challenge.challenge_id)
+    .run();
+  // 原子占位：并发下只有一方能把 used_at 从 NULL 翻成非空；命中 0 行说明已被
+  // 抢先消费（含 SELECT 判空与本 UPDATE 之间的竞态），按已用处理。
+  if ((claimed.meta?.changes ?? 0) !== 1) {
+    throw new HttpError(401, 'used_challenge', '签名挑战已使用');
+  }
+}
+
+/// 释放（回滚）一个已消费的动作挑战：used_at 重置为 NULL，供下游副作用
+/// （Stripe 建单 / 取消、purge）失败后原地重试，避免烧掉签名逼用户重签。
+/// 仅应在 consumeActionSignature 成功、随后副作用失败时调用；expires_at 不变，
+/// 因此释放不延长挑战寿命、不放大重放窗口。
+export async function releaseActionChallenge(
+  env: Env,
+  challengeId: string
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE square_login_challenges SET used_at = NULL WHERE challenge_id = ?`
+  )
+    .bind(challengeId)
     .run();
 }

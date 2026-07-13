@@ -155,15 +155,6 @@ pub mod pallet {
     pub type FederalRegistryProvinceGroupAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, ProvinceCode, OptionQuery>;
 
-    /// 机构法定代表人(机构首脑;ADR-027 立法签署人)。键 = 机构账户,值 = 法定代表人账户。
-    ///
-    /// 必为该机构 Active admins 之一(写入时校验)。未显式设置时,
-    /// `legal_representative()` 回退到 admins[0](创世首位管理员=机构首脑占位),
-    /// 由治理(public-admins)显式指定后覆盖。仅治理/签署语境读取。
-    #[pallet::storage]
-    pub type LegalRepresentatives<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, T::AccountId, OptionQuery>;
-
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub _phantom: core::marker::PhantomData<T>,
@@ -999,38 +990,6 @@ pub mod pallet {
             Some(account.admins.into_inner())
         }
 
-        /// 读取机构法定代表人(机构首脑;ADR-027 立法签署人)。
-        ///
-        /// 优先取显式指定的法定代表人(校验仍为 Active admins 之一);
-        /// 未指定则回退到 admins[0](创世首位=机构首脑占位)。Active 账户专用。
-        pub fn legal_representative(
-            institution_code: InstitutionCode,
-            institution: T::AccountId,
-        ) -> Option<T::AccountId> {
-            let admins = Self::active_account_admins(institution_code, institution.clone())?;
-            match LegalRepresentatives::<T>::get(&institution) {
-                // 显式指定且仍在现任 admins 内 → 采用;否则回退首位(换届后旧代表人失效)。
-                Some(rep) if admins.iter().any(|a| a == &rep) => Some(rep),
-                _ => admins.into_iter().next(),
-            }
-        }
-
-        /// 设置机构法定代表人(治理通过后写入;校验必为 Active admins 之一)。
-        pub fn set_legal_representative(
-            institution_code: InstitutionCode,
-            institution: T::AccountId,
-            representative: T::AccountId,
-        ) -> DispatchResult {
-            let admins = Self::active_account_admins(institution_code, institution.clone())
-                .ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                admins.iter().any(|a| a == &representative),
-                Error::<T>::UnauthorizedAdmin
-            );
-            LegalRepresentatives::<T>::insert(&institution, &representative);
-            Ok(())
-        }
-
         /// 读取 Active 账户管理员数量。普通业务阈值兜底判断只能使用 Active 账户。
         pub fn active_account_admins_len(
             institution_code: InstitutionCode,
@@ -1384,13 +1343,6 @@ impl<T: pallet::Config> admin_primitives::AdminAccountQuery<T::AccountId> for pa
         admin_root_account_id: T::AccountId,
     ) -> Option<u32> {
         Self::pending_account_admins_len_for_snapshot(institution_code, admin_root_account_id)
-    }
-
-    fn legal_representative(
-        institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
-    ) -> Option<T::AccountId> {
-        Self::legal_representative(institution_code, admin_root_account_id)
     }
 }
 

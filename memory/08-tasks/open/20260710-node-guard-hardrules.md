@@ -110,6 +110,7 @@
 - [x] 43 家创立质押本金和 100 年固定利息接入 `NodeGuard`
 - [x] 省储行固定发行测试、benchmark 与 fresh block#0 真实验收
 - [x] 省储行固定发行文档、中文注释与残留清理
+- [x] 修复 `sp-state-machine` 误放开发依赖导致的 CitizenChain Tauri 生产打包失败
 
 ## 硬边界
 

@@ -122,22 +122,25 @@ pub struct Institution {
     pub parent_cid_number: Option<String>,
     /// 法定代表人姓名。初始化目录机构允许为空;机构资料编辑保存时必须补齐。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legal_rep_name: Option<String>,
+    pub legal_representative_name: Option<String>,
     /// 法定代表人身份ID,必须指向正常状态公民的 cid_number。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legal_rep_cid_number: Option<String>,
+    pub legal_representative_cid_number: Option<String>,
+    /// 法定代表人唯一钱包账户。由注册局公民记录派生，不接受表单另填。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legal_representative_account: Option<String>,
     /// 法定代表人证件照服务端存储路径。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legal_rep_photo_path: Option<String>,
+    pub legal_representative_photo_path: Option<String>,
     /// 法定代表人证件照原始文件名。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legal_rep_photo_name: Option<String>,
+    pub legal_representative_photo_name: Option<String>,
     /// 法定代表人证件照 MIME 类型。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legal_rep_photo_mime: Option<String>,
+    pub legal_representative_photo_mime: Option<String>,
     /// 法定代表人证件照大小(字节)。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legal_rep_photo_size: Option<u64>,
+    pub legal_representative_photo_size: Option<u64>,
     /// 创建人 pubkey。
     pub created_by: String,
     pub created_at: DateTime<Utc>,
@@ -257,19 +260,19 @@ pub struct CreateInstitutionInput {
     pub partnership_kind: Option<String>,
     /// 法定代表人姓名,新增机构必填。
     #[serde(default)]
-    pub legal_rep_name: Option<String>,
+    pub legal_representative_name: Option<String>,
     /// 法定代表人身份ID,新增机构必填,且必须选择正常状态公民。
     #[serde(default)]
-    pub legal_rep_cid_number: Option<String>,
+    pub legal_representative_cid_number: Option<String>,
     /// 证件照上传接口返回的服务端路径,新增机构必填。
     #[serde(default)]
-    pub legal_rep_photo_path: Option<String>,
+    pub legal_representative_photo_path: Option<String>,
     #[serde(default)]
-    pub legal_rep_photo_name: Option<String>,
+    pub legal_representative_photo_name: Option<String>,
     #[serde(default)]
-    pub legal_rep_photo_mime: Option<String>,
+    pub legal_representative_photo_mime: Option<String>,
     #[serde(default)]
-    pub legal_rep_photo_size: Option<u64>,
+    pub legal_representative_photo_size: Option<u64>,
     /// 初始管理员阈值。必须满足严格过半,并且不超过 admins 数量。
     pub threshold: u32,
     /// 初始管理员合集。注册局创建机构的同一笔链交易会把这些管理员写成 Active。
@@ -299,17 +302,17 @@ pub struct UpdateInstitutionInput {
     pub parent_cid_number: Option<String>,
     /// 法定代表人三项资料在机构编辑保存时必填。
     #[serde(default)]
-    pub legal_rep_name: Option<String>,
+    pub legal_representative_name: Option<String>,
     #[serde(default)]
-    pub legal_rep_cid_number: Option<String>,
+    pub legal_representative_cid_number: Option<String>,
     #[serde(default)]
-    pub legal_rep_photo_path: Option<String>,
+    pub legal_representative_photo_path: Option<String>,
     #[serde(default)]
-    pub legal_rep_photo_name: Option<String>,
+    pub legal_representative_photo_name: Option<String>,
     #[serde(default)]
-    pub legal_rep_photo_mime: Option<String>,
+    pub legal_representative_photo_mime: Option<String>,
     #[serde(default)]
-    pub legal_rep_photo_size: Option<u64>,
+    pub legal_representative_photo_size: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

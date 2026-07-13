@@ -318,7 +318,7 @@ pub(crate) async fn admin_search_legal_representative_citizens(
         })
         .into_response();
     }
-    let legal_rep_scope = match query
+    let legal_representative_scope = match query
         .target_cid_number
         .as_deref()
         .map(str::trim)
@@ -343,7 +343,7 @@ pub(crate) async fn admin_search_legal_representative_citizens(
     let rows = match state.db.search_legal_representative_citizens_in_scope(
         &q,
         page_size,
-        &legal_rep_scope,
+        &legal_representative_scope,
     ) {
         Ok(v) => v,
         Err(e) => {

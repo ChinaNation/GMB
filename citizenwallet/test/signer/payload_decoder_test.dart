@@ -1033,6 +1033,10 @@ void main() {
       final instName = utf8.encode('安徽省储行');
       final instShortName = utf8.encode('安徽储行');
       final townCode = utf8.encode('');
+      final legalRepresentativeName = utf8.encode('王法人');
+      final legalRepresentativeCidNumber =
+          utf8.encode('AH001-CTZN1-000000001-2026');
+      final legalRepresentativeAccount = List<int>.filled(32, 0x33);
       final mainAccount = utf8.encode('主账户');
       final feeAccount = utf8.encode(secondAccountName);
       final mainAmount = u128Le(BigInt.from(1000000)); // 10,000.00 GMB
@@ -1062,6 +1066,12 @@ void main() {
         // town_code: Vec<u8>，非镇级机构为空。
         (townCode.length << 2) & 0xff,
         ...townCode,
+        // 法定代表人三字段：姓名、唯一公民 CID、唯一钱包账户。
+        (legalRepresentativeName.length << 2) & 0xff,
+        ...legalRepresentativeName,
+        (legalRepresentativeCidNumber.length << 2) & 0xff,
+        ...legalRepresentativeCidNumber,
+        ...legalRepresentativeAccount,
         // accounts: Vec<{name, amount}> count=2
         (2 << 2) & 0xff,
         (mainAccount.length << 2) & 0xff,
@@ -1128,6 +1138,15 @@ void main() {
       expect(decoded.fields['cid_number'], 'AH001-SCB0N-202605010-2026');
       expect(decoded.fields['cid_full_name'], '安徽省储行');
       expect(decoded.fields['cid_short_name'], '安徽储行');
+      expect(decoded.fields['legal_representative_name'], '王法人');
+      expect(
+        decoded.fields['legal_representative_cid_number'],
+        'AH001-CTZN1-000000001-2026',
+      );
+      expect(
+        decoded.fields['legal_representative_account'],
+        ss58FromBytes(List<int>.filled(32, 0x33)),
+      );
       expect(decoded.fields.containsKey('town_code'), isFalse);
       expect(decoded.fields['institution_code'], 'CGOV');
       expect(decoded.fields['admins_len'], '2');

@@ -16,7 +16,9 @@ class PublicInstitutionDto {
     this.townCode = '',
     this.parentCidNumber,
     this.hasLegalPersonality,
-    this.legalRepName,
+    this.legalRepresentativeName,
+    this.legalRepresentativeCidNumber,
+    this.legalRepresentativeAccount,
     this.customAccountNames = const [],
   });
 
@@ -38,7 +40,9 @@ class PublicInstitutionDto {
   final bool? hasLegalPersonality;
 
   /// 法定代表人姓名；当前链快照没有该字段时为 null。
-  final String? legalRepName;
+  final String? legalRepresentativeName;
+  final String? legalRepresentativeCidNumber;
+  final String? legalRepresentativeAccount;
   final int accountCount;
   final List<String> customAccountNames;
 
@@ -56,7 +60,11 @@ class PublicInstitutionDto {
       institutionCode: json['institution_code'] as String? ?? '',
       parentCidNumber: json['parent_cid_number'] as String?,
       hasLegalPersonality: json['has_legal_personality'] as bool?,
-      legalRepName: json['legal_rep_name'] as String?,
+      legalRepresentativeName: json['legal_representative_name'] as String?,
+      legalRepresentativeCidNumber:
+          json['legal_representative_cid_number'] as String?,
+      legalRepresentativeAccount:
+          json['legal_representative_account'] as String?,
       accountCount: (json['account_count'] as num?)?.toInt() ?? 0,
       customAccountNames:
           (json['custom_account_names'] as List<dynamic>? ?? const [])
@@ -81,7 +89,9 @@ class PublicInstitutionDto {
       ..institutionCode = institutionCode
       ..parentCidNumber = parentCidNumber
       ..hasLegalPersonality = hasLegalPersonality
-      ..legalRepName = legalRepName
+      ..legalRepresentativeName = legalRepresentativeName
+      ..legalRepresentativeCidNumber = legalRepresentativeCidNumber
+      ..legalRepresentativeAccount = legalRepresentativeAccount
       ..accountCount = accountCount
       ..customAccountNames = customAccountNames
       ..catalogVersion = catalogVersion

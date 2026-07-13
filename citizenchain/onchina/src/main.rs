@@ -302,12 +302,13 @@ fn institution_row_from_pg_row(
         partnership_kind: row.get(10),
         has_legal_personality: row.get(11),
         parent_cid_number: row.get(12),
-        legal_rep_name: None,
-        legal_rep_cid_number: None,
-        legal_rep_photo_path: None,
-        legal_rep_photo_name: None,
-        legal_rep_photo_mime: None,
-        legal_rep_photo_size: None,
+        legal_representative_name: None,
+        legal_representative_cid_number: None,
+        legal_representative_account: None,
+        legal_representative_photo_path: None,
+        legal_representative_photo_name: None,
+        legal_representative_photo_mime: None,
+        legal_representative_photo_size: None,
         created_by: row.get(13),
         created_at: row.get(14),
     };
@@ -332,8 +333,8 @@ fn institution_from_subject_row(
     let education_type: Option<String> = row.get(19);
     let status: String = row.get(20);
     // 字段顺序必须与 get_institution_with_accounts 的 SELECT 保持一致;
-    // legal_rep_photo_size 是第 27 列,下标为 26,越界会在持有数据库锁时 panic。
-    let legal_rep_photo_size_i64: Option<i64> = row.get(26);
+    // legal_representative_photo_size 是第 27 列,下标为 26,越界会在持有数据库锁时 panic。
+    let legal_representative_photo_size_i64: Option<i64> = row.get(26);
     // 省/市/镇名字按 code 现场从 china.sqlite 派生,DTO 仍带名字,库里不存名字副本(ADR-021)。
     let province_code: String = row.get(6);
     let city_code: Option<String> = row.get(7);
@@ -362,12 +363,14 @@ fn institution_from_subject_row(
         partnership_kind: row.get(10),
         has_legal_personality: row.get(11),
         parent_cid_number: row.get(12),
-        legal_rep_name: row.get(21),
-        legal_rep_cid_number: row.get(22),
-        legal_rep_photo_path: row.get(23),
-        legal_rep_photo_name: row.get(24),
-        legal_rep_photo_mime: row.get(25),
-        legal_rep_photo_size: legal_rep_photo_size_i64.and_then(|v| u64::try_from(v).ok()),
+        legal_representative_name: row.get(21),
+        legal_representative_cid_number: row.get(22),
+        legal_representative_account: row.get(27),
+        legal_representative_photo_path: row.get(23),
+        legal_representative_photo_name: row.get(24),
+        legal_representative_photo_mime: row.get(25),
+        legal_representative_photo_size: legal_representative_photo_size_i64
+            .and_then(|v| u64::try_from(v).ok()),
         created_by: row.get(13),
         created_at: row.get(14),
     })
@@ -496,9 +499,10 @@ impl Db {
                             s.parent_cid_number, s.created_by, s.created_at,
                             s.cid_full_name, s.cid_short_name,
                             ''::text AS town_name, COALESCE(s.town_code, ''),
-                            s.education_type, s.status, s.legal_rep_name, s.legal_rep_cid_number,
-	                            s.legal_rep_photo_path, s.legal_rep_photo_name,
-	                            s.legal_rep_photo_mime, s.legal_rep_photo_size
+                            s.education_type, s.status, s.legal_representative_name, s.legal_representative_cid_number,
+	                            s.legal_representative_photo_path, s.legal_representative_photo_name,
+	                            s.legal_representative_photo_mime, s.legal_representative_photo_size,
+	                            s.legal_representative_account
 		                     FROM subjects s
 		                     LEFT JOIN gov g ON g.province_code = s.province_code AND g.cid_number = s.cid_number
 	                     WHERE s.kind IN ('PUBLIC', 'PRIVATE') AND s.cid_number = $1
@@ -830,28 +834,28 @@ impl Db {
         })
     }
 
-    pub(crate) fn legal_representative_citizen_exists_in_scope(
+    pub(crate) fn legal_representative_account_in_scope(
         &self,
         cid_number: &str,
         scope: &crate::institution::subjects::service::LegalRepresentativeCitizenScope,
-    ) -> Result<bool, String> {
+    ) -> Result<Option<String>, String> {
         let cid_number = cid_number.trim().to_string();
         let province_code = scope.province_code().map(str::to_string);
         let city_code = scope.city_code().map(str::to_string);
         self.with_client(move |conn| {
             let row = conn
-                .query_one(
-                    "SELECT EXISTS (
-                        SELECT 1 FROM citizens
-                        WHERE cid_number = $1
-                          AND citizen_status = 'NORMAL'
-                          AND ($2::text IS NULL OR province_code = $2)
-                          AND ($3::text IS NULL OR city_code = $3)
-                     )",
+                .query_opt(
+                    "SELECT wallet_pubkey FROM citizens
+                     WHERE cid_number = $1
+                       AND citizen_status = 'NORMAL'
+                       AND NULLIF(BTRIM(wallet_pubkey), '') IS NOT NULL
+                       AND ($2::text IS NULL OR province_code = $2)
+                       AND ($3::text IS NULL OR city_code = $3)
+                     LIMIT 1",
                     &[&cid_number, &province_code, &city_code],
                 )
                 .map_err(|e| format!("query legal representative citizen failed: {e}"))?;
-            Ok(row.get(0))
+            Ok(row.map(|value| value.get(0)))
         })
     }
 
@@ -920,8 +924,8 @@ impl Db {
             province_code.as_str(),
         )?;
         let category = institution_category_text(inst.category);
-        let legal_rep_photo_size = inst
-            .legal_rep_photo_size
+        let legal_representative_photo_size = inst
+            .legal_representative_photo_size
             .and_then(|v| i64::try_from(v).ok());
         // 行政区名字不入库(china.sqlite 单源),只写 province_code/city_code/town_code。
         conn.execute(
@@ -930,13 +934,14 @@ impl Db {
                 status, category, p1,
                 province_code, city_code, town_code, institution_code,
                 education_type, private_type, partnership_kind, has_legal_personality,
-                parent_cid_number, legal_rep_name, legal_rep_cid_number,
-                legal_rep_photo_path, legal_rep_photo_name, legal_rep_photo_mime,
-                legal_rep_photo_size, created_by, created_at, updated_at
+                parent_cid_number, legal_representative_name, legal_representative_cid_number,
+                legal_representative_account,
+                legal_representative_photo_path, legal_representative_photo_name, legal_representative_photo_mime,
+                legal_representative_photo_size, created_by, created_at, updated_at
              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15, $16, $17, $18, $19,
-                $20, $21, $22, $23, $24, now()
+                $20, $21, $22, $23, $24, $25, now()
              )
              ON CONFLICT (province_code, cid_number) DO UPDATE SET
                 kind = EXCLUDED.kind,
@@ -954,12 +959,13 @@ impl Db {
                 partnership_kind = EXCLUDED.partnership_kind,
                 has_legal_personality = EXCLUDED.has_legal_personality,
                 parent_cid_number = EXCLUDED.parent_cid_number,
-                legal_rep_name = EXCLUDED.legal_rep_name,
-                legal_rep_cid_number = EXCLUDED.legal_rep_cid_number,
-                legal_rep_photo_path = EXCLUDED.legal_rep_photo_path,
-                legal_rep_photo_name = EXCLUDED.legal_rep_photo_name,
-                legal_rep_photo_mime = EXCLUDED.legal_rep_photo_mime,
-                legal_rep_photo_size = EXCLUDED.legal_rep_photo_size,
+                legal_representative_name = EXCLUDED.legal_representative_name,
+                legal_representative_cid_number = EXCLUDED.legal_representative_cid_number,
+                legal_representative_account = EXCLUDED.legal_representative_account,
+                legal_representative_photo_path = EXCLUDED.legal_representative_photo_path,
+                legal_representative_photo_name = EXCLUDED.legal_representative_photo_name,
+                legal_representative_photo_mime = EXCLUDED.legal_representative_photo_mime,
+                legal_representative_photo_size = EXCLUDED.legal_representative_photo_size,
                 created_by = EXCLUDED.created_by,
                 updated_at = now()",
             &[
@@ -979,12 +985,13 @@ impl Db {
                 &inst.partnership_kind,
                 &inst.has_legal_personality,
                 &inst.parent_cid_number,
-                &inst.legal_rep_name,
-                &inst.legal_rep_cid_number,
-                &inst.legal_rep_photo_path,
-                &inst.legal_rep_photo_name,
-                &inst.legal_rep_photo_mime,
-                &legal_rep_photo_size,
+                &inst.legal_representative_name,
+                &inst.legal_representative_cid_number,
+                &inst.legal_representative_account,
+                &inst.legal_representative_photo_path,
+                &inst.legal_representative_photo_name,
+                &inst.legal_representative_photo_mime,
+                &legal_representative_photo_size,
                 &inst.created_by,
                 &inst.created_at,
             ],

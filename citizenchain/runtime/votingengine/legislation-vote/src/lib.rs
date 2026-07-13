@@ -764,7 +764,7 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 实时查机构法定代表人(机构首脑;ADR-027 签署人)。
-    fn legal_rep_of(body: &(InstitutionCode, T::AccountId)) -> Option<T::AccountId> {
+    fn legal_representative_of(body: &(InstitutionCode, T::AccountId)) -> Option<T::AccountId> {
         <T as votingengine::Config>::InternalAdminProvider::legal_representative(
             body.0,
             body.1.clone(),
@@ -784,7 +784,8 @@ impl<T: Config> Pallet<T> {
             Error::<T>::NotInExpectedStage
         );
         let meta = pallet::LegMeta::<T>::get(proposal_id).ok_or(Error::<T>::ProposalMetaMissing)?;
-        let rep = Self::legal_rep_of(&meta.executive).ok_or(Error::<T>::NotLegalRepresentative)?;
+        let rep = Self::legal_representative_of(&meta.executive)
+            .ok_or(Error::<T>::NotLegalRepresentative)?;
         ensure!(who == rep, Error::<T>::NotLegalRepresentative);
         Self::deposit_event(pallet::Event::<T>::LegislationExecutiveSigned {
             proposal_id,
@@ -808,12 +809,12 @@ impl<T: Config> Pallet<T> {
     ) -> sp_runtime::sp_std::vec::Vec<T::AccountId> {
         let mut out = sp_runtime::sp_std::vec::Vec::new();
         if let Some(leg) = meta.legislature.as_ref() {
-            if let Some(rep) = Self::legal_rep_of(leg) {
+            if let Some(rep) = Self::legal_representative_of(leg) {
                 out.push(rep);
             }
         }
         for h in meta.houses.iter() {
-            if let Some(rep) = Self::legal_rep_of(h) {
+            if let Some(rep) = Self::legal_representative_of(h) {
                 out.push(rep);
             }
         }

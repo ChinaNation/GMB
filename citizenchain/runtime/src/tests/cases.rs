@@ -894,6 +894,9 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
         let cid_short_name: &[u8] = b"test-inst";
         let account_names: Vec<Vec<u8>> = vec![b"main-account".to_vec(), b"fee-account".to_vec()];
         let town_code: &[u8] = b"";
+        let legal_representative_name: &[u8] = "测试代表".as_bytes();
+        let legal_representative_cid_number: &[u8] = b"CID-LEGAL-REP-001";
+        let legal_representative_account = AccountId::new([77u8; 32]);
 
         let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
             let payload = (
@@ -941,6 +944,82 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 town_code,
             ),
             "main admin signature should pass"
+        );
+
+        let creation_payload = (
+            primitives::core_const::GMB,
+            primitives::core_const::OP_SIGN_INST,
+            frame_system::Pallet::<Runtime>::block_hash(0),
+            cid_number,
+            cid_full_name.as_slice(),
+            cid_short_name,
+            legal_representative_name,
+            legal_representative_cid_number,
+            &legal_representative_account,
+            &account_names,
+            register_nonce.as_slice(),
+            issuer_cid_number.as_slice(),
+            &issuer_main_account,
+            &main_admin_pubkey,
+            province_bytes.as_slice(),
+            scope_city_name.as_slice(),
+            town_code,
+        );
+        let creation_signature: public_manage::pallet::RegisterSignatureOf<Runtime> = main_pair
+            .sign(&blake2_256(&creation_payload.encode()))
+            .0
+            .to_vec()
+            .try_into()
+            .expect("creation signature should fit");
+        assert!(
+            <RuntimeCidInstitutionVerifier as entity_primitives::CidInstitutionVerifier<
+                AccountId,
+                public_manage::pallet::AccountNameOf<Runtime>,
+                public_manage::pallet::RegisterNonceOf<Runtime>,
+                public_manage::pallet::RegisterSignatureOf<Runtime>,
+            >>::verify_institution_creation(
+                cid_number,
+                &cid_full_name,
+                cid_short_name,
+                legal_representative_name,
+                legal_representative_cid_number,
+                &legal_representative_account,
+                &account_names,
+                &register_nonce,
+                &creation_signature,
+                issuer_cid_number.as_slice(),
+                &issuer_main_account,
+                &main_admin_pubkey,
+                province_bytes.as_slice(),
+                scope_city_name.as_slice(),
+                town_code,
+            ),
+            "institution creation signature covering legal representative fields should pass"
+        );
+        assert!(
+            !<RuntimeCidInstitutionVerifier as entity_primitives::CidInstitutionVerifier<
+                AccountId,
+                public_manage::pallet::AccountNameOf<Runtime>,
+                public_manage::pallet::RegisterNonceOf<Runtime>,
+                public_manage::pallet::RegisterSignatureOf<Runtime>,
+            >>::verify_institution_creation(
+                cid_number,
+                &cid_full_name,
+                cid_short_name,
+                legal_representative_name,
+                legal_representative_cid_number,
+                &AccountId::new([78u8; 32]),
+                &account_names,
+                &register_nonce,
+                &creation_signature,
+                issuer_cid_number.as_slice(),
+                &issuer_main_account,
+                &main_admin_pubkey,
+                province_bytes.as_slice(),
+                scope_city_name.as_slice(),
+                town_code,
+            ),
+            "tampered legal representative account must reject"
         );
 
         let backup_signature = make_signature(&backup_pair, &backup_admin_pubkey);

@@ -3,7 +3,11 @@ import type { Env } from '../types';
 import { fetchChainIdentityState } from '../chain/identity';
 import { HttpError, jsonResponse, readJson } from '../shared/http';
 import { ownerPubkeyHex } from '../shared/ids';
-import { consumeActionSignature, issueActionChallenge } from '../account/action_challenge';
+import {
+  consumeActionSignature,
+  issueActionChallenge,
+  releaseActionChallenge
+} from '../account/action_challenge';
 import {
   assertMembershipLevel,
   identityEligibleForPlan,
@@ -73,14 +77,20 @@ export async function subscribeConfirmRoute(request: Request, env: Env): Promise
     signature: body.signature,
     context: membershipLevel
   });
-  await assertCheckoutEligibility(env, ownerAccount, membershipLevel);
-  const session = await createStripeCheckoutSession(env, ownerAccount, membershipLevel);
-  return jsonResponse({
-    ok: true,
-    checkout_session_id: session.id,
-    checkout_url: session.url,
-    membership_level: membershipLevel
-  });
+  try {
+    await assertCheckoutEligibility(env, ownerAccount, membershipLevel);
+    const session = await createStripeCheckoutSession(env, ownerAccount, membershipLevel);
+    return jsonResponse({
+      ok: true,
+      checkout_session_id: session.id,
+      checkout_url: session.url,
+      membership_level: membershipLevel
+    });
+  } catch (error) {
+    // 资格校验 / 建单失败：挑战未真正兑现，释放回未用，用户可原地重试而不必重签。
+    await releaseActionChallenge(env, body.challenge_id);
+    throw error;
+  }
 }
 
 async function assertCheckoutEligibility(

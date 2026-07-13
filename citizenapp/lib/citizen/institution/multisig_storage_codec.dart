@@ -212,8 +212,9 @@ class MultisigStorageCodec {
 
   static AdminSnapshot? decodeInstitutionInfo(Uint8List data) {
     var offset = 0;
-    // A1 精简:InstitutionInfo = cid_full_name + cid_short_name(BoundedVec)
+    // InstitutionInfo = 全称 + 简称 + town_code + 法定代表人三字段
     //   + institution_code[u8;4] + created_at(u32 BlockNumber) + status(u8)。
+    // 法定代表人三字段分别用 Option 编码，必须全部存在或全部为空。
     // 已删 main_account/fee_account/admins/admins_len/threshold/creator。
     // 本镜像只需 institution_code(供 adminAccountKey 按机构码路由管理员 pallet)。
     final fullName = readBoundedBytes(data, offset);
@@ -222,6 +223,28 @@ class MultisigStorageCodec {
     final shortName = readBoundedBytes(data, offset);
     if (shortName == null) return null;
     offset = shortName.nextOffset;
+    final townCode = readBoundedBytes(data, offset);
+    if (townCode == null) return null;
+    offset = townCode.nextOffset;
+
+    for (var index = 0; index < 2; index++) {
+      if (offset >= data.length) return null;
+      final optionTag = data[offset++];
+      if (optionTag == 0) continue;
+      if (optionTag != 1) return null;
+      final value = readBoundedBytes(data, offset);
+      if (value == null) return null;
+      offset = value.nextOffset;
+    }
+    if (offset >= data.length) return null;
+    final accountOptionTag = data[offset++];
+    if (accountOptionTag == 1) {
+      if (offset + 32 > data.length) return null;
+      offset += 32;
+    } else if (accountOptionTag != 0) {
+      return null;
+    }
+
     if (offset + 4 + 4 + 1 > data.length) return null;
     final code = InstitutionCodeLabel.codeToString(
       data.sublist(offset, offset + 4),

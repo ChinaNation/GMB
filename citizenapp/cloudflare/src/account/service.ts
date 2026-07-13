@@ -4,7 +4,11 @@ import { assertOwnerAccount, ownerPubkeyHex } from '../shared/ids';
 import { nowMs } from '../shared/time';
 import { getMembership } from '../membership/service';
 import { cancelStripeSubscriptionAtPeriodEnd } from '../membership/stripe_api';
-import { consumeActionSignature, issueActionChallenge } from './action_challenge';
+import {
+  consumeActionSignature,
+  issueActionChallenge,
+  releaseActionChallenge
+} from './action_challenge';
 import { purgeAccount } from './purge';
 
 interface ChallengeRequest {
@@ -63,8 +67,14 @@ export async function deleteAccountRoute(request: Request, env: Env): Promise<Re
     challengeId: parsed.challengeId,
     signature: parsed.signature
   });
-  const deleted = await purgeAccount(env, parsed.ownerAccount);
-  return jsonResponse({ ok: true, owner_account: parsed.ownerAccount, deleted });
+  try {
+    const deleted = await purgeAccount(env, parsed.ownerAccount);
+    return jsonResponse({ ok: true, owner_account: parsed.ownerAccount, deleted });
+  } catch (error) {
+    // purge 失败：释放挑战，用户可原地重试而不必重签（purge 幂等）。
+    await releaseActionChallenge(env, parsed.challengeId);
+    throw error;
+  }
 }
 
 /// POST /v1/square/membership/cancel/challenge —— 下发取消订阅签名挑战。
@@ -94,17 +104,23 @@ export async function cancelMembershipRoute(request: Request, env: Env): Promise
     signature: parsed.signature
   });
 
-  const membership = await getMembership(env, parsed.ownerAccount);
-  if (!membership?.stripe_subscription_id) {
-    throw new HttpError(404, 'no_active_subscription', '没有可取消的订阅');
-  }
-  await cancelStripeSubscriptionAtPeriodEnd(env, membership.stripe_subscription_id);
-  // 本地即时反映「到期取消」；最终失效以 Stripe subscription 事件回调为准。
-  await env.DB.prepare(
-    `UPDATE square_memberships SET cancel_at_period_end = 1, updated_at = ? WHERE owner_account = ?`
-  )
-    .bind(nowMs(), parsed.ownerAccount)
-    .run();
+  try {
+    const membership = await getMembership(env, parsed.ownerAccount);
+    if (!membership?.stripe_subscription_id) {
+      throw new HttpError(404, 'no_active_subscription', '没有可取消的订阅');
+    }
+    await cancelStripeSubscriptionAtPeriodEnd(env, membership.stripe_subscription_id);
+    // 本地即时反映「到期取消」；最终失效以 Stripe subscription 事件回调为准。
+    await env.DB.prepare(
+      `UPDATE square_memberships SET cancel_at_period_end = 1, updated_at = ? WHERE owner_account = ?`
+    )
+      .bind(nowMs(), parsed.ownerAccount)
+      .run();
 
-  return jsonResponse({ ok: true, owner_account: parsed.ownerAccount });
+    return jsonResponse({ ok: true, owner_account: parsed.ownerAccount });
+  } catch (error) {
+    // 无订阅 / Stripe 取消失败：释放挑战，用户可原地重试而不必重签。
+    await releaseActionChallenge(env, parsed.challengeId);
+    throw error;
+  }
 }

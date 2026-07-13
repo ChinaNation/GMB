@@ -90,9 +90,9 @@ async fn create_institution_inner(
         "parent_cid_number": input.parent_cid_number.clone(),
         "private_type": input.private_type.clone(),
         "partnership_kind": input.partnership_kind.clone(),
-        "legal_rep_name": input.legal_rep_name.clone(),
-        "legal_rep_cid_number": input.legal_rep_cid_number.clone(),
-        "legal_rep_photo_path": input.legal_rep_photo_path.clone(),
+        "legal_representative_name": input.legal_representative_name.clone(),
+        "legal_representative_cid_number": input.legal_representative_cid_number.clone(),
+        "legal_representative_photo_path": input.legal_representative_photo_path.clone(),
         "threshold": input.threshold,
         "admins": input.admins.clone(),
     });
@@ -346,7 +346,7 @@ async fn create_institution_inner(
             None
         }
     };
-    let mut parent_for_legal_rep_scope: Option<Institution> = None;
+    let mut parent_for_legal_representative_scope: Option<Institution> = None;
     if let Some(ref parent_cid) = parent_cid_number {
         let Some((parent, _)) = (match state.db.get_institution_with_accounts(parent_cid) {
             Ok(v) => v,
@@ -390,7 +390,7 @@ async fn create_institution_inner(
                 "非法人盈利属性必须继承所属法人",
             );
         }
-        parent_for_legal_rep_scope = Some(parent);
+        parent_for_legal_representative_scope = Some(parent);
     }
     let Some(province_code_for_legal_rep) = province_code_by_name(&province) else {
         return api_error(StatusCode::BAD_REQUEST, 1001, "unknown province");
@@ -399,40 +399,40 @@ async fn create_institution_inner(
         return api_error(StatusCode::BAD_REQUEST, 1001, "unknown city");
     };
     let legal_rep = match validate_legal_representative_required(
-        input.legal_rep_name.as_deref(),
-        input.legal_rep_cid_number.as_deref(),
-        input.legal_rep_photo_path.as_deref(),
-        input.legal_rep_photo_name.as_deref(),
-        input.legal_rep_photo_mime.as_deref(),
-        input.legal_rep_photo_size,
+        input.legal_representative_name.as_deref(),
+        input.legal_representative_cid_number.as_deref(),
+        input.legal_representative_photo_path.as_deref(),
+        input.legal_representative_photo_name.as_deref(),
+        input.legal_representative_photo_mime.as_deref(),
+        input.legal_representative_photo_size,
     ) {
         Ok(v) => v,
         Err(e) => return service_error_to_response(e),
     };
-    let legal_rep_scope = resolve_legal_representative_scope_for_codes(
+    let legal_representative_scope = resolve_legal_representative_scope_for_codes(
         institution_code.as_str(),
         education_type.as_deref(),
         province_code_for_legal_rep,
         city_code_for_legal_rep,
-        parent_for_legal_rep_scope.as_ref(),
+        parent_for_legal_representative_scope.as_ref(),
     );
-    match state.db.legal_representative_citizen_exists_in_scope(
+    let legal_representative_account = match state.db.legal_representative_account_in_scope(
         legal_rep.cid_number.as_str(),
-        &legal_rep_scope,
+        &legal_representative_scope,
     ) {
-        Ok(true) => {}
-        Ok(false) => {
+        Ok(Some(account)) => account,
+        Ok(None) => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                legal_rep_scope.legal_rep_error_message(),
+                legal_representative_scope.legal_representative_error_message(),
             );
         }
         Err(err) => {
             let message = format!("query legal representative failed: {err}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
-    }
+    };
     if let Some(ref cid_full_name_value) = cid_full_name {
         let conflict = match state
             .db
@@ -503,12 +503,13 @@ async fn create_institution_inner(
                 .map(|kind| kind.as_code().to_string()),
             has_legal_personality: private_rule.map(|rule| rule.has_legal_personality),
             parent_cid_number: parent_cid_number.clone(),
-            legal_rep_name: Some(legal_rep.legal_rep_name.clone()),
-            legal_rep_cid_number: Some(legal_rep.cid_number.clone()),
-            legal_rep_photo_path: Some(legal_rep.photo_path.clone()),
-            legal_rep_photo_name: Some(legal_rep.photo_name.clone()),
-            legal_rep_photo_mime: Some(legal_rep.photo_mime.clone()),
-            legal_rep_photo_size: Some(legal_rep.photo_size),
+            legal_representative_name: Some(legal_rep.legal_representative_name.clone()),
+            legal_representative_cid_number: Some(legal_rep.cid_number.clone()),
+            legal_representative_account: Some(legal_representative_account),
+            legal_representative_photo_path: Some(legal_rep.photo_path.clone()),
+            legal_representative_photo_name: Some(legal_rep.photo_name.clone()),
+            legal_representative_photo_mime: Some(legal_rep.photo_mime.clone()),
+            legal_representative_photo_size: Some(legal_rep.photo_size),
             created_by: ctx.admin_account.clone(),
             created_at: Utc::now(),
         };

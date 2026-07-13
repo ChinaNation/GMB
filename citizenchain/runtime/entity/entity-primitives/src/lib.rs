@@ -86,13 +86,19 @@ pub enum InstitutionLifecycleStatus {
     PartialEq,
     Eq,
 )]
-pub struct InstitutionInfo<BlockNumber, AccountName> {
+pub struct InstitutionInfo<BlockNumber, AccountName, CidNumber, AccountId> {
     /// 机构全称。
     pub cid_full_name: AccountName,
     /// 机构简称。
     pub cid_short_name: AccountName,
     /// 所属镇代码。非镇行政区机构与当前私权机构写空值;镇行政区公权机构由注册局创建时写入。
     pub town_code: AccountName,
+    /// 法定代表人公开姓名。创世没有真实任免资料时为 None。
+    pub legal_representative_name: Option<AccountName>,
+    /// 法定代表人唯一公民 CID。必须与姓名、账户同时存在或同时为空。
+    pub legal_representative_cid_number: Option<CidNumber>,
+    /// 法定代表人唯一钱包账户。不得从机构管理员首位账户回退生成。
+    pub legal_representative_account: Option<AccountId>,
     /// 管理员更换/路由使用的机构码:机构账户只能是公权/私权法人机构码。
     pub institution_code: InstitutionCode,
     /// 机构注册创建区块号。
@@ -207,9 +213,30 @@ pub trait InstitutionCidQuery<CidNumber> {
     fn cid_exists(cid_number: &CidNumber) -> bool;
 }
 
+/// 机构法定代表人查询接口。
+///
+/// 法定代表人是机构公开信息，唯一真源位于 entity 的 `InstitutionInfo`；
+/// admins 模块不得保存副本，也不得以首位管理员作为回退值。
+pub trait InstitutionLegalRepresentativeQuery<AccountId> {
+    /// 按机构码和任一机构账户读取当前已任命的法定代表人钱包账户。
+    fn legal_representative(
+        institution_code: InstitutionCode,
+        institution: AccountId,
+    ) -> Option<AccountId>;
+}
+
 impl<CidNumber> InstitutionCidQuery<CidNumber> for () {
     fn cid_exists(_cid_number: &CidNumber) -> bool {
         false
+    }
+}
+
+impl<AccountId> InstitutionLegalRepresentativeQuery<AccountId> for () {
+    fn legal_representative(
+        _institution_code: InstitutionCode,
+        _institution: AccountId,
+    ) -> Option<AccountId> {
+        None
     }
 }
 
@@ -253,6 +280,44 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         scope_city_name: &[u8],
         town_code: &[u8],
     ) -> bool;
+
+    /// 校验机构创建凭证。法定代表人三字段必须被同一签名覆盖，防止冷签前后被替换。
+    fn verify_institution_creation(
+        cid_number: &[u8],
+        cid_full_name: &AccountName,
+        cid_short_name: &[u8],
+        legal_representative_name: &[u8],
+        legal_representative_cid_number: &[u8],
+        legal_representative_account: &AccountId,
+        account_names: &[Vec<u8>],
+        nonce: &Nonce,
+        signature: &Signature,
+        issuer_cid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
+        town_code: &[u8],
+    ) -> bool {
+        if legal_representative_name.is_empty() || legal_representative_cid_number.is_empty() {
+            return false;
+        }
+        let _ = legal_representative_account;
+        Self::verify_institution_registration(
+            cid_number,
+            cid_full_name,
+            cid_short_name,
+            account_names,
+            nonce,
+            signature,
+            issuer_cid_number,
+            issuer_main_account,
+            signer_pubkey,
+            scope_province_name,
+            scope_city_name,
+            town_code,
+        )
+    }
 
     /// 校验 CID 机构注销凭证。
     fn verify_institution_deregistration(
@@ -357,6 +422,9 @@ mod scale_contract_tests {
             cid_full_name: b"full".to_vec(),
             cid_short_name: b"short".to_vec(),
             town_code: b"001".to_vec(),
+            legal_representative_name: Some(b"representative".to_vec()),
+            legal_representative_cid_number: Some(b"citizen-cid".to_vec()),
+            legal_representative_account: Some([9u8; 32]),
             institution_code: *b"NRCG",
             created_at: 7u32,
             status: InstitutionLifecycleStatus::Active,
@@ -367,6 +435,9 @@ mod scale_contract_tests {
                 b"full".to_vec(),
                 b"short".to_vec(),
                 b"001".to_vec(),
+                Some(b"representative".to_vec()),
+                Some(b"citizen-cid".to_vec()),
+                Some([9u8; 32]),
                 *b"NRCG",
                 7u32,
                 InstitutionLifecycleStatus::Active,

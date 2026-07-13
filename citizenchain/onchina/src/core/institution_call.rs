@@ -1,6 +1,6 @@
 //! `propose_create_institution` SCALE call-data 编码器(onchina 侧唯一真源)。
 //!
-//! onchina 只构造**裸 call data**(pallet/call 前缀 + 16 个参数),
+//! onchina 只构造**裸 call data**(pallet/call 前缀 + 19 个参数),
 //! 不拼签名扩展尾、不提交 extrinsic;冷钱包对 origin 冷签后由 CitizenWallet 提交。
 //!
 //! **铁律**:参数顺序与 SCALE 类型必须与链端 `public-manage`/`private-manage`
@@ -10,6 +10,7 @@
 //! - `institution_code` 是 `[u8;4]` 裸字节,无长度前缀;
 //! - `issuer_main_account` / `signer_pubkey` / `AdminProfile.account` 是 `[u8;32]` 裸字节;
 //! - 所有 `Vec<u8>` / `BoundedVec<u8>`(cid_number / cid_full_name / cid_short_name / town_code /
+//!   legal_representative_name / legal_representative_cid_number /
 //!   register_nonce / signature / issuer_cid_number / scope_*,以及每个 AdminProfile 的
 //!   admin_cid_number / name / role_code / role_name / admin_source_ref)带 `Compact<u32>` 长度前缀;
 //! - `accounts` / `admins` 这类项目列表带 `Compact<u32>` 数量前缀;
@@ -100,6 +101,12 @@ pub struct ProposeCreateInstitutionArgs {
     pub cid_short_name: Vec<u8>,
     /// 所属镇代码。非镇级机构为空;镇级公权机构由注册局创建时填 3 字节代码。
     pub town_code: Vec<u8>,
+    /// 法定代表人公开姓名。
+    pub legal_representative_name: Vec<u8>,
+    /// 法定代表人唯一公民 CID。
+    pub legal_representative_cid_number: Vec<u8>,
+    /// 法定代表人唯一钱包账户。
+    pub legal_representative_account: [u8; 32],
     pub accounts: Vec<InitialAccountArg>,
     pub institution_code: [u8; 4],
     pub admins_len: u32,
@@ -151,7 +158,7 @@ pub struct ChainCall {
 
 /// 编码完整 `propose_create_{public,private}_institution` 裸 call data。
 ///
-/// 输出 = `[pallet, 0x05]` + 16 个参数(顺序与链端逐字节一致);pallet 由 institution_code
+/// 输出 = `[pallet, 0x05]` + 19 个参数(顺序与链端逐字节一致);pallet 由 institution_code
 /// 经 `create_institution_pallet_index` 派生(公权 30→动作码 0x1e05 / 私权 31→0x1f05)。
 pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) -> ChainCall {
     let pallet_index = create_institution_pallet_index(&args.institution_code);
@@ -174,6 +181,13 @@ pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) ->
     // town_code: BoundedVec<u8>
     out.extend(Compact(args.town_code.len() as u32).encode());
     out.extend_from_slice(&args.town_code);
+
+    // 法定代表人三字段是机构公开信息，必须由冷钱包逐项核对。
+    out.extend(Compact(args.legal_representative_name.len() as u32).encode());
+    out.extend_from_slice(&args.legal_representative_name);
+    out.extend(Compact(args.legal_representative_cid_number.len() as u32).encode());
+    out.extend_from_slice(&args.legal_representative_cid_number);
+    out.extend_from_slice(&args.legal_representative_account);
 
     // accounts: BoundedVec<InstitutionInitialAccount> = Compact<N> + N × (name + amount)
     out.extend(Compact(args.accounts.len() as u32).encode());
@@ -245,10 +259,8 @@ mod tests {
             admin_cid_number: BoundedVec::try_from(arg.admin_cid_number.clone())
                 .expect("admin_cid_number within bound"),
             admin_name: BoundedVec::try_from(arg.name.clone()).expect("name within bound"),
-            role_code: BoundedVec::try_from(arg.role_code.clone())
-                .expect("role_code within bound"),
-            role_name: BoundedVec::try_from(arg.role_name.clone())
-                .expect("role_name within bound"),
+            role_code: BoundedVec::try_from(arg.role_code.clone()).expect("role_code within bound"),
+            role_name: BoundedVec::try_from(arg.role_name.clone()).expect("role_name within bound"),
             term_start: arg.term_start,
             term_end: arg.term_end,
             admin_source: match arg.source {
@@ -351,6 +363,9 @@ mod tests {
             cid_full_name: "北京市某某有限公司".as_bytes().to_vec(),
             cid_short_name: "某某公司".as_bytes().to_vec(),
             town_code: Vec::new(),
+            legal_representative_name: "李法人".as_bytes().to_vec(),
+            legal_representative_cid_number: b"110000CTZN1000000001".to_vec(),
+            legal_representative_account: [0x22u8; 32],
             accounts: vec![
                 InitialAccountArg {
                     account_name: "主账户".to_string(),
@@ -405,6 +420,9 @@ mod tests {
         golden.extend(args.cid_full_name.encode());
         golden.extend(args.cid_short_name.encode());
         golden.extend(args.town_code.encode());
+        golden.extend(args.legal_representative_name.encode());
+        golden.extend(args.legal_representative_cid_number.encode());
+        golden.extend(args.legal_representative_account.encode());
         golden.extend(real_accounts.encode());
         golden.extend(args.institution_code.encode()); // [u8;4] 裸 4 字节
         golden.extend(args.admins_len.encode());

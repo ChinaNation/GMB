@@ -414,12 +414,12 @@ impl Db {
                 partnership_kind TEXT,
                 has_legal_personality BOOLEAN,
                 parent_cid_number TEXT,
-                legal_rep_name TEXT,
-                legal_rep_cid_number TEXT,
-                legal_rep_photo_path TEXT,
-                legal_rep_photo_name TEXT,
-                legal_rep_photo_mime TEXT,
-                legal_rep_photo_size BIGINT,
+                legal_representative_name TEXT,
+                legal_representative_cid_number TEXT,
+                legal_representative_photo_path TEXT,
+                legal_representative_photo_name TEXT,
+                legal_representative_photo_mime TEXT,
+                legal_representative_photo_size BIGINT,
                 legal_representative_account TEXT,
                 issuer_cid_number TEXT,
                 institution_source_type TEXT,
@@ -779,6 +779,30 @@ impl Db {
                 )
             })?;
 
+        // 旧法定代表人字段不保留兼容或双轨数据，启动时先删除再建立唯一目标字段。
+        conn.batch_execute(
+            "ALTER TABLE subjects
+                DROP COLUMN IF EXISTS legal_rep_name,
+                DROP COLUMN IF EXISTS legal_rep_cid_number,
+                DROP COLUMN IF EXISTS legal_rep_photo_path,
+                DROP COLUMN IF EXISTS legal_rep_photo_name,
+                DROP COLUMN IF EXISTS legal_rep_photo_mime,
+                DROP COLUMN IF EXISTS legal_rep_photo_size;
+             ALTER TABLE subjects
+                ADD COLUMN IF NOT EXISTS legal_representative_name TEXT,
+                ADD COLUMN IF NOT EXISTS legal_representative_cid_number TEXT,
+                ADD COLUMN IF NOT EXISTS legal_representative_photo_path TEXT,
+                ADD COLUMN IF NOT EXISTS legal_representative_photo_name TEXT,
+                ADD COLUMN IF NOT EXISTS legal_representative_photo_mime TEXT,
+                ADD COLUMN IF NOT EXISTS legal_representative_photo_size BIGINT;",
+        )
+        .map_err(|e| {
+            format!(
+                "replace deprecated legal representative columns failed: {}",
+                postgres_error_text(&e)
+            )
+        })?;
+
         // subjects 机构级链投影 + 溯源补列(幂等增列,可重复执行)。
         conn.batch_execute(
             "ALTER TABLE subjects
@@ -848,7 +872,7 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_subjects_exact_lookup
                 ON subjects (category, province_code, city_code, cid_number, cid_full_name, cid_short_name);
              CREATE INDEX IF NOT EXISTS idx_subjects_legal_rep
-                ON subjects (province_code, legal_rep_cid_number);
+                ON subjects (province_code, legal_representative_cid_number);
              CREATE INDEX IF NOT EXISTS idx_subjects_education
                 ON subjects (province_code, city_code, institution_code, education_type, status);
              CREATE INDEX IF NOT EXISTS idx_citizens_scope_created
@@ -951,12 +975,12 @@ impl Db {
         for column in [
             "cid_full_name",
             "cid_short_name",
-            "legal_rep_name",
-            "legal_rep_cid_number",
-            "legal_rep_photo_path",
-            "legal_rep_photo_name",
-            "legal_rep_photo_mime",
-            "legal_rep_photo_size",
+            "legal_representative_name",
+            "legal_representative_cid_number",
+            "legal_representative_photo_path",
+            "legal_representative_photo_name",
+            "legal_representative_photo_mime",
+            "legal_representative_photo_size",
             "private_type",
             "partnership_kind",
             "has_legal_personality",

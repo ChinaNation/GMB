@@ -85,7 +85,7 @@ void main() {
           'city_code': '001',
           'institution_code': 'CREG',
           'account_count': 4,
-          'legal_rep_name': '王法人',
+          'legal_representative_name': '王法人',
           'custom_account_names': ['业务专户'],
         }),
       ],

@@ -948,6 +948,80 @@ where
         }
     }
 
+    fn verify_institution_creation(
+        cid_number: &[u8],
+        cid_full_name: &AccountName,
+        cid_short_name: &[u8],
+        legal_representative_name: &[u8],
+        legal_representative_cid_number: &[u8],
+        legal_representative_account: &AccountId,
+        account_names: &[Vec<u8>],
+        nonce: &NonceBytes,
+        signature: &SignatureBytes,
+        issuer_cid_number: &[u8],
+        issuer_main_account: &AccountId,
+        signer_pubkey: &[u8; 32],
+        scope_province_name: &[u8],
+        scope_city_name: &[u8],
+        town_code: &[u8],
+    ) -> bool {
+        #[cfg(feature = "runtime-benchmarks")]
+        {
+            let _ = (
+                issuer_cid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
+                cid_short_name,
+                legal_representative_account,
+                town_code,
+            );
+            return !cid_number.is_empty()
+                && !cid_full_name.as_ref().is_empty()
+                && !legal_representative_name.is_empty()
+                && !legal_representative_cid_number.is_empty()
+                && !account_names.is_empty()
+                && !nonce.as_ref().is_empty()
+                && !signature.as_ref().is_empty();
+        }
+
+        #[cfg(not(feature = "runtime-benchmarks"))]
+        {
+            let Some(public) = issuer_admin_public(issuer_main_account, signer_pubkey) else {
+                return false;
+            };
+            let Some(signature) = sr25519_signature_from_bytes(signature.as_ref()) else {
+                return false;
+            };
+
+            // 机构创建凭证必须同时覆盖法定代表人三字段，防止冷签前后被替换。
+            let payload = (
+                frame_system::Pallet::<Runtime>::block_hash(0),
+                cid_number,
+                cid_full_name.as_ref(),
+                cid_short_name,
+                legal_representative_name,
+                legal_representative_cid_number,
+                legal_representative_account,
+                account_names,
+                nonce.as_ref(),
+                issuer_cid_number,
+                issuer_main_account,
+                signer_pubkey,
+                scope_province_name,
+                scope_city_name,
+                town_code,
+            );
+            let msg = primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_INST,
+                &payload.encode(),
+            );
+
+            sr25519_verify(&signature, &msg, &public)
+        }
+    }
+
     fn verify_institution_deregistration(
         scope: u8,
         cid_number: &[u8],
@@ -1672,32 +1746,39 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
         }
         None
     }
+}
 
+/// 机构法定代表人聚合查询。公开事实只从 entity 读取，不再经过 admins。
+pub struct RuntimeInstitutionLegalRepresentativeQuery;
+
+impl entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>
+    for RuntimeInstitutionLegalRepresentativeQuery
+{
     fn legal_representative(
         institution_code: primitives::cid::code::InstitutionCode,
-        admin_root_account_id: AccountId,
+        institution: AccountId,
     ) -> Option<AccountId> {
         if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Runtime>::legal_representative(
+            return <public_manage::Pallet<Runtime> as entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>>::legal_representative(
                 institution_code,
-                admin_root_account_id,
+                institution,
             );
         }
         if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Runtime>::legal_representative(
+            return <private_manage::Pallet<Runtime> as entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>>::legal_representative(
                 institution_code,
-                admin_root_account_id,
+                institution,
             );
         }
         if admin_primitives::is_unincorporated_admin_code(&institution_code) {
-            return public_admins::Pallet::<Runtime>::legal_representative(
+            return <public_manage::Pallet<Runtime> as entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>>::legal_representative(
                 institution_code,
-                admin_root_account_id.clone(),
+                institution.clone(),
             )
             .or_else(|| {
-                private_admins::Pallet::<Runtime>::legal_representative(
+                <private_manage::Pallet<Runtime> as entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>>::legal_representative(
                     institution_code,
-                    admin_root_account_id,
+                    institution,
                 )
             });
         }
@@ -2244,7 +2325,10 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
         institution_code: votingengine::types::InstitutionCode,
         institution: AccountId,
     ) -> Option<AccountId> {
-        RuntimeAdminAccountQuery::legal_representative(institution_code, institution)
+        <RuntimeInstitutionLegalRepresentativeQuery as entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>>::legal_representative(
+            institution_code,
+            institution,
+        )
     }
 
     fn constitution_guard_members() -> Vec<AccountId> {

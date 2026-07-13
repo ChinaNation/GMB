@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：第一步已完成，等待用户确认第二步 runtime 技术方案
+- 当前步骤：第二步已完成，等待用户确认第三步技术方案
 - 最新业务确认：2026-07-12
 - 实施方式：逐步输出技术方案，用户确认后才执行；每步完成后立即更新文档、完善中文注释、删除残留，再输出下一步方案
 
@@ -130,6 +130,18 @@ admins: BoundedVec<AccountId>
 - [x] 确认任职只记录制度来源，不存在 `creator`。
 - [x] 确认个人多签完全排除在本任务的机构岗位模型之外。
 - [x] 统一登记新字段命名和目标协议。
+
+## 第二步执行记录
+
+- [x] `InstitutionInfo` 新增 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account`，公权与私权机构使用同一字段顺序。
+- [x] 运行期机构创建强制三字段非空，并将三字段纳入 call index 5 注册局签名域；原 call index 2 登记凭证保持自身现行字段契约，不建立兼容分支。
+- [x] 创世机构没有真实任免资料时三字段全部为 `None`，没有伪造值或首位管理员回退。
+- [x] 删除 `public-admins`、`private-admins` 中法定代表人 storage、setter、getter 和个人多签占位实现；立法签署改为读取 entity 唯一真源。
+- [x] 对齐 node、OnChina、CitizenApp、公民钱包的 SCALE 解码、DTO、数据库字段、签名构造和公开展示字段。
+- [x] 删除目标代码中的 `legal_rep_*` 旧命名；OnChina 仅保留启动时删除旧数据库列的清理 SQL，不读取或兼容旧列。
+- [x] 验证：runtime 相关 148 项单元测试通过；node CID 生命周期守卫 14 项测试通过；OnChina 131 项测试通过；OnChina 前端构建通过；CitizenApp 目标 10 项测试通过；CitizenWallet 69 项测试通过；node、runtime、OnChina 编译通过。
+- [x] 真实运行态：使用当前源码重建 WASM 并启动 `citizenchain-fresh`，节点守卫与 RPC 正常；RPC 读取 NRC `InstitutionInfo` 确认法定代表人三字段全部为 `None`。临时 PostgreSQL 完成 49,593 个机构和 99,186 个账户的真实链投影，旧 `legal_rep_*` 列为 0；真实 HTTP 接口返回三字段，前端首页返回 200。验收后已停止进程并删除临时数据库。
+- [x] 整 runtime lib 测试被仓库既有 `runtime_upgrade::Proposal` 测试缺少 `expected_pow_params_hash/new_pow_params` 阻断，该错误不属于本步骤，未越界修改。
 
 ## 历史实现事实
 

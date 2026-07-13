@@ -427,7 +427,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             _infoTile(
                 icon: Icons.person_outline,
                 label: '法定代表人',
-                value: inst.legalRepName ?? ''),
+                value: inst.legalRepresentativeName ?? ''),
             const Divider(height: 18),
             _infoTile(
                 icon: Icons.place_outlined, label: '所属地', value: _areaPath),

@@ -474,31 +474,6 @@ impl admin_primitives::AdminAccountQuery<AccountId32> for TestAdminAccountQuery 
         }
         None
     }
-
-    fn legal_representative(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId32,
-    ) -> Option<AccountId32> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Test>::legal_representative(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Test>::legal_representative(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_personal_admin_code(&institution_code) {
-            return personal_admins::Pallet::<Test>::legal_representative(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        None
-    }
 }
 
 thread_local! {
@@ -527,7 +502,10 @@ impl public_manage::ProtectedSourceChecker<AccountId32> for TestProtectedSourceC
 
 pub struct TestInstitutionAsset;
 impl primitives::institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
-    fn can_spend(source: &AccountId32, _action: primitives::institution_asset::InstitutionAssetAction) -> bool {
+    fn can_spend(
+        source: &AccountId32,
+        _action: primitives::institution_asset::InstitutionAssetAction,
+    ) -> bool {
         DENIED_SPEND_SOURCE.with(|blocked| blocked.borrow().as_ref() != Some(source))
     }
 }
@@ -791,6 +769,9 @@ fn insert_active_registered_institution_account(
             cid_full_name: Default::default(),
             cid_short_name: Default::default(),
             town_code: Default::default(),
+            legal_representative_name: None,
+            legal_representative_cid_number: None,
+            legal_representative_account: None,
             institution_code: PRIVATE_CODE,
             created_at: 1,
             status: public_manage::InstitutionLifecycleStatus::Active,

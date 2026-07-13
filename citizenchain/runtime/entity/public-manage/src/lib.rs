@@ -51,7 +51,7 @@ pub(crate) type BalanceOf<T> =
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -158,7 +158,12 @@ pub mod pallet {
     pub type CreateInstitutionAccountsOf<T> =
         BoundedVec<CreateInstitutionAccountOf<T>, <T as Config>::MaxInstitutionAccounts>;
     /// 机构级信息(链上最小集)。
-    pub type InstitutionInfoOf<T> = InstitutionInfo<BlockNumberFor<T>, AccountNameOf<T>>;
+    pub type InstitutionInfoOf<T> = InstitutionInfo<
+        BlockNumberFor<T>,
+        AccountNameOf<T>,
+        CidNumberOf<T>,
+        <T as frame_system::Config>::AccountId,
+    >;
     /// 机构账户信息。
     pub type InstitutionAccountInfoOf<T> = InstitutionAccountInfo<
         <T as frame_system::Config>::AccountId,
@@ -411,6 +416,10 @@ pub mod pallet {
         UnauthorizedAdmin,
         /// 机构账户名为空
         EmptyAccountName,
+        /// 法定代表人公开姓名为空
+        EmptyLegalRepresentativeName,
+        /// 法定代表人公民 CID 为空
+        EmptyLegalRepresentativeCidNumber,
         /// 机构级创建缺少主账户
         MissingMainAccount,
         /// 机构级创建缺少费用账户
@@ -513,6 +522,9 @@ pub mod pallet {
             cid_full_name: AccountNameOf<T>,
             cid_short_name: AccountNameOf<T>,
             town_code: AccountNameOf<T>,
+            legal_representative_name: AccountNameOf<T>,
+            legal_representative_cid_number: CidNumberOf<T>,
+            legal_representative_account: T::AccountId,
             accounts: InstitutionInitialAccountsOf<T>,
             institution_code: InstitutionCode,
             admins_len: u32,
@@ -533,6 +545,9 @@ pub mod pallet {
                 cid_full_name,
                 cid_short_name,
                 town_code,
+                legal_representative_name,
+                legal_representative_cid_number,
+                legal_representative_account,
                 accounts,
                 institution_code,
                 admins_len,
@@ -954,6 +969,24 @@ impl<T: pallet::Config> traits::InstitutionCidQuery<pallet::CidNumberOf<T>> for 
             || pallet::CidRegisteredAccount::<T>::iter_prefix(cid_number)
                 .next()
                 .is_some()
+    }
+}
+
+impl<T: pallet::Config> traits::InstitutionLegalRepresentativeQuery<T::AccountId>
+    for pallet::Pallet<T>
+{
+    fn legal_representative(
+        institution_code: InstitutionCode,
+        institution: T::AccountId,
+    ) -> Option<T::AccountId> {
+        let registered = pallet::AccountRegisteredCid::<T>::get(&institution)?;
+        let info = pallet::Institutions::<T>::get(&registered.cid_number)?;
+        if info.institution_code != institution_code
+            || info.status != institution::types::InstitutionLifecycleStatus::Active
+        {
+            return None;
+        }
+        info.legal_representative_account
     }
 }
 

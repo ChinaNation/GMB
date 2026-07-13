@@ -39,6 +39,9 @@ class ChallengeStmt {
         expires_at: this.binds[3] as number,
         used_at: null
       });
+    } else if (this.sql.includes('UPDATE square_login_challenges SET used_at = NULL')) {
+      const row = this.db.challenges.get(this.binds[0] as string);
+      if (row) row.used_at = null;
     } else if (this.sql.includes('UPDATE square_login_challenges SET used_at')) {
       const row = this.db.challenges.get(this.binds[1] as string);
       if (row) row.used_at = this.binds[0] as number;
@@ -261,6 +264,52 @@ describe('subscribe confirm (signed)', () => {
         env
       )
     ).rejects.toMatchObject({ code: 'invalid_signature' });
+  });
+
+  it('Stripe 建单失败 → 释放挑战，同一 challenge 重试成功', async () => {
+    const db = new ChallengeDb();
+    mockVerify.mockResolvedValue(true);
+    const failingEnv = fakeEnv({
+      db,
+      stripeResponse: { error: { message: 'boom' } },
+      stripeStatus: 502
+    });
+    const challengeId = await issue(failingEnv, 'freedom');
+
+    await expect(
+      subscribeConfirmRoute(
+        req('/v1/square/membership/subscribe', {
+          owner_account: owner,
+          membership_level: 'freedom',
+          challenge_id: challengeId,
+          signature: '0xSIG'
+        }),
+        failingEnv
+      )
+    ).rejects.toMatchObject({ code: 'stripe_checkout_failed' });
+    // 挑战已释放：used_at 回到 null，未被烧掉。
+    expect(db.challenges.get(challengeId)?.used_at).toBeNull();
+
+    // Stripe 恢复正常 → 同一 challenge 重试直接成功，无需重新扫码签名。
+    const okEnv = fakeEnv({
+      db,
+      stripeResponse: {
+        id: 'cs_freedom',
+        url: 'https://checkout.stripe.com/c/pay/cs_freedom'
+      }
+    });
+    const res = await subscribeConfirmRoute(
+      req('/v1/square/membership/subscribe', {
+        owner_account: owner,
+        membership_level: 'freedom',
+        challenge_id: challengeId,
+        signature: '0xSIG'
+      }),
+      okEnv
+    );
+    expect(((await res.json()) as Record<string, unknown>).checkout_url).toBe(
+      'https://checkout.stripe.com/c/pay/cs_freedom'
+    );
   });
 });
 

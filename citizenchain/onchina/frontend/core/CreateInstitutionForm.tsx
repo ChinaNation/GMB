@@ -57,12 +57,12 @@ interface FormValues {
   cid_short_name?: string;
   /** 需挂靠的非法人必填;个体经营/无限合伙不接受所属法人。 */
   parent_cid_number?: string;
-  legal_rep_name: string;
-  legal_rep_cid_number: string;
-  legal_rep_photo_path: string;
-  legal_rep_photo_name: string;
-  legal_rep_photo_mime: string;
-  legal_rep_photo_size?: number;
+  legal_representative_name: string;
+  legal_representative_cid_number: string;
+  legal_representative_photo_path: string;
+  legal_representative_photo_name: string;
+  legal_representative_photo_mime: string;
+  legal_representative_photo_size?: number;
   threshold: number;
   admins: {
     admin_account: string;
@@ -245,12 +245,12 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       cid_full_name: defaultCollectName ? '' : undefined,
       cid_short_name: defaultCollectName ? '' : undefined,
       parent_cid_number: undefined,
-      legal_rep_name: '',
-      legal_rep_cid_number: '',
-      legal_rep_photo_path: '',
-      legal_rep_photo_name: '',
-      legal_rep_photo_mime: '',
-      legal_rep_photo_size: undefined,
+      legal_representative_name: '',
+      legal_representative_cid_number: '',
+      legal_representative_photo_path: '',
+      legal_representative_photo_name: '',
+      legal_representative_photo_mime: '',
+      legal_representative_photo_size: undefined,
       threshold: 2,
       admins: [
         { admin_account: '', admin_role: '管理员' },
@@ -468,7 +468,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   // ── 法定代表人 ───────────────────────────────────────────
 
   const triggerLegalRepSearch = async () => {
-    const q = (form.getFieldValue('legal_rep_cid_number') ?? '').trim();
+    const q = (form.getFieldValue('legal_representative_cid_number') ?? '').trim();
     if (!q) {
       notice.warning('请先输入法定代表人身份ID关键字');
       return;
@@ -512,10 +512,10 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     try {
       const photo = await uploadLegalRepresentativePhoto(auth, file);
       form.setFieldsValue({
-        legal_rep_photo_path: photo.file_path,
-        legal_rep_photo_name: photo.file_name,
-        legal_rep_photo_mime: photo.mime_type,
-        legal_rep_photo_size: photo.file_size,
+        legal_representative_photo_path: photo.file_path,
+        legal_representative_photo_name: photo.file_name,
+        legal_representative_photo_mime: photo.mime_type,
+        legal_representative_photo_size: photo.file_size,
       });
       setPhotoName(photo.file_name);
       notice.success('证件照已上传');
@@ -589,12 +589,12 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         partnership_kind: isPrivate && privateType === 'PARTNERSHIP'
           ? values.partnership_kind
           : undefined,
-        legal_rep_name: values.legal_rep_name.trim(),
-        legal_rep_cid_number: values.legal_rep_cid_number.trim(),
-        legal_rep_photo_path: values.legal_rep_photo_path,
-        legal_rep_photo_name: values.legal_rep_photo_name,
-        legal_rep_photo_mime: values.legal_rep_photo_mime,
-        legal_rep_photo_size: values.legal_rep_photo_size,
+        legal_representative_name: values.legal_representative_name.trim(),
+        legal_representative_cid_number: values.legal_representative_cid_number.trim(),
+        legal_representative_photo_path: values.legal_representative_photo_path,
+        legal_representative_photo_name: values.legal_representative_photo_name,
+        legal_representative_photo_mime: values.legal_representative_photo_mime,
+        legal_representative_photo_size: values.legal_representative_photo_size,
         threshold: values.threshold,
         admins,
       }, signWithScan);
@@ -882,7 +882,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
           <Col span={12}>
             <Form.Item
               label="法定代表人姓名"
-              name="legal_rep_name"
+              name="legal_representative_name"
               rules={[
                 { required: true, message: '请输入法定代表人姓名' },
                 { max: 30, message: '最多 30 个字' },
@@ -912,7 +912,7 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
         </Row>
         <Form.Item
           label="法定代表人身份ID"
-          name="legal_rep_cid_number"
+          name="legal_representative_cid_number"
           rules={[{ required: true, message: '请选择法定代表人身份ID' }]}
         >
           <AutoComplete
@@ -940,15 +940,15 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
           </AutoComplete>
         </Form.Item>
         <Form.Item
-          name="legal_rep_photo_path"
+          name="legal_representative_photo_path"
           rules={[{ required: true, message: '请上传法定代表人证件照' }]}
           hidden
         >
           <Input />
         </Form.Item>
-        <Form.Item name="legal_rep_photo_name" hidden><Input /></Form.Item>
-        <Form.Item name="legal_rep_photo_mime" hidden><Input /></Form.Item>
-        <Form.Item name="legal_rep_photo_size" hidden><Input type="number" /></Form.Item>
+        <Form.Item name="legal_representative_photo_name" hidden><Input /></Form.Item>
+        <Form.Item name="legal_representative_photo_mime" hidden><Input /></Form.Item>
+        <Form.Item name="legal_representative_photo_size" hidden><Input type="number" /></Form.Item>
         <Form.List name="admins">
           {(fields, { add, remove }) => (
             <div style={{ marginTop: 8 }}>

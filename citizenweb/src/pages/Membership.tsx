@@ -162,6 +162,16 @@ function extractWalletAddress(raw: string): string | null {
   return match ? match[0] : null
 }
 
+/** 携带 Worker error_code 的请求错误，供上层按 code 分支（如挑战过期回退）。 */
+class ApiError extends Error {
+  readonly code: string
+
+  constructor(code: string, message: string) {
+    super(message)
+    this.code = code
+  }
+}
+
 async function postJson(path: string, body: unknown): Promise<Record<string, unknown>> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: 'POST',
@@ -170,7 +180,8 @@ async function postJson(path: string, body: unknown): Promise<Record<string, unk
   })
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>
   if (!response.ok) {
-    throw new Error(typeof data.message === 'string' ? data.message : '请求失败')
+    const code = typeof data.error_code === 'string' ? data.error_code : 'error'
+    throw new ApiError(code, typeof data.message === 'string' ? data.message : '请求失败')
   }
   return data
 }
@@ -297,7 +308,17 @@ export default function Membership() {
         setSigning(null)
         setMessage({ tone: 'success', text: '已提交取消订阅，当期结束后生效' })
       } catch (error) {
-        setMessage({ tone: 'error', text: error instanceof Error ? error.message : '提交失败' })
+        // 挑战过期 / 已用 / 不存在：关掉扫码弹层回到发起态，提示重新发起，
+        // 而不是停在「等扫码」界面让用户反复扫一张已作废的二维码。
+        if (
+          error instanceof ApiError &&
+          ['expired_challenge', 'used_challenge', 'invalid_challenge'].includes(error.code)
+        ) {
+          setSigning(null)
+          setMessage({ tone: 'error', text: '签名挑战已过期或已使用，请重新发起' })
+        } else {
+          setMessage({ tone: 'error', text: error instanceof Error ? error.message : '提交失败' })
+        }
       } finally {
         setLoading(false)
       }

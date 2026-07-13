@@ -76,6 +76,8 @@ class _QrScanPageState extends State<QrScanPage> {
   final UserContactService _contactService = UserContactService();
   bool _handled = false;
   bool _torchOn = false;
+  // 本页正在 pop/dispose 时置真，阻止 _handleCode 的 finally 重启相机（避免与 dispose 竞态）。
+  bool _closing = false;
 
   @override
   void initState() {
@@ -154,7 +156,7 @@ class _QrScanPageState extends State<QrScanPage> {
         case QrScanMode.raw:
           // 通用扫码:直接返回原始字符串
           if (!mounted) return;
-          Navigator.of(context).pop(raw);
+          _popPage(raw);
         case QrScanMode.dispatch:
           // 统一扫一扫:收款/裸地址→支付结果;signRequest→原始串交调用方签名
           if (result.type == QrRouteType.userTransfer) {
@@ -163,7 +165,7 @@ class _QrScanPageState extends State<QrScanPage> {
             _handleLegacyAddress(result.extractedAddress!);
           } else if (result.type == QrRouteType.signRequest) {
             if (!mounted) return;
-            Navigator.of(context).pop(raw);
+            _popPage(raw);
           } else {
             await _showUnrecognized();
           }
@@ -186,11 +188,18 @@ class _QrScanPageState extends State<QrScanPage> {
         ),
       );
     } finally {
-      if (mounted) {
+      if (mounted && !_closing) {
         _handled = false;
         await _controller.start();
       }
     }
+  }
+
+  /// 页级返回：先置 _closing，让 _handleCode 的 finally 不再重启相机
+  /// （本页正在 pop/dispose，重启相机会与 dispose 竞争抛错）。
+  void _popPage([Object? result]) {
+    _closing = true;
+    Navigator.of(context).pop(result);
   }
 
   // 收款码
@@ -199,7 +208,7 @@ class _QrScanPageState extends State<QrScanPage> {
       return;
     }
     final body = result.envelope!.body as UserTransferBody;
-    Navigator.of(context).pop(QrScanTransferResult(
+    _popPage(QrScanTransferResult(
       toAddress: body.address,
       amount: body.amount.isEmpty ? null : body.amount,
       symbol: body.symbol.isEmpty ? null : body.symbol,
@@ -211,7 +220,7 @@ class _QrScanPageState extends State<QrScanPage> {
   void _handleContactAsRecipient(QrRouteResult result) {
     if (!mounted) return;
     final body = result.envelope!.body as UserContactBody;
-    Navigator.of(context).pop(QrScanTransferResult(toAddress: body.address));
+    _popPage(QrScanTransferResult(toAddress: body.address));
   }
 
   // 裸地址（向后兼容）
@@ -219,7 +228,7 @@ class _QrScanPageState extends State<QrScanPage> {
     if (!mounted) {
       return;
     }
-    Navigator.of(context).pop(QrScanTransferResult(toAddress: address));
+    _popPage(QrScanTransferResult(toAddress: address));
   }
 
   // 收款码 → 添加通讯录
@@ -259,7 +268,7 @@ class _QrScanPageState extends State<QrScanPage> {
           ),
         ),
       );
-      Navigator.of(context).pop();
+      _popPage();
     } catch (e) {
       if (!mounted) return;
       await showDialog<void>(
@@ -298,7 +307,7 @@ class _QrScanPageState extends State<QrScanPage> {
           ),
         ),
       );
-      Navigator.of(context).pop();
+      _popPage();
     } catch (e) {
       if (!mounted) return;
       await showDialog<void>(

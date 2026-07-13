@@ -5,7 +5,11 @@ vi.mock('../src/auth/wallet_signature', () => ({
 }));
 
 import { verifyWalletSignature } from '../src/auth/wallet_signature';
-import { consumeActionSignature, issueActionChallenge } from '../src/account/action_challenge';
+import {
+  consumeActionSignature,
+  issueActionChallenge,
+  releaseActionChallenge
+} from '../src/account/action_challenge';
 import { purgeAccount } from '../src/account/purge';
 import type { Env, MediaAssetRow } from '../src/types';
 
@@ -37,6 +41,9 @@ class ChallengeStmt {
         expires_at: this.binds[3] as number,
         used_at: null
       });
+    } else if (this.sql.includes('UPDATE square_login_challenges SET used_at = NULL')) {
+      const record = this.db.challenges.get(this.binds[0] as string);
+      if (record) record.used_at = null;
     } else if (this.sql.includes('UPDATE square_login_challenges SET used_at')) {
       const record = this.db.challenges.get(this.binds[1] as string);
       if (record) record.used_at = this.binds[0] as number;
@@ -154,6 +161,30 @@ describe('consumeActionSignature', () => {
         signature: 'bad'
       })
     ).rejects.toMatchObject({ code: 'invalid_signature' });
+  });
+});
+
+describe('releaseActionChallenge', () => {
+  beforeEach(() => mockVerify.mockReset());
+
+  it('resets used_at to null so a consumed challenge can be retried', async () => {
+    const { env, db } = challengeEnv();
+    mockVerify.mockResolvedValue(true);
+    const challenge = await issueActionChallenge(env, OWNER, 'delete_account');
+    const input = {
+      ownerAccount: OWNER,
+      action: 'delete_account' as const,
+      challengeId: challenge.challengeId,
+      signature: 'sig'
+    };
+    await consumeActionSignature(env, input);
+    expect(db.challenges.get(challenge.challengeId)?.used_at).not.toBeNull();
+
+    await releaseActionChallenge(env, challenge.challengeId);
+    expect(db.challenges.get(challenge.challengeId)?.used_at).toBeNull();
+
+    // 释放后可再次消费同一 challenge（下游副作用失败后原地重试）。
+    await expect(consumeActionSignature(env, input)).resolves.toBeUndefined();
   });
 });
 

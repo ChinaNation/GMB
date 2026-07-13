@@ -73,6 +73,10 @@ struct InstitutionRecord {
     cid_full_name: Vec<u8>,
     cid_short_name: Vec<u8>,
     town_code: Vec<u8>,
+    /// 法定代表人三字段必须与 entity `InstitutionInfo` 同序，并且同时存在或同时为空。
+    legal_representative_name: Option<Vec<u8>>,
+    legal_representative_cid_number: Option<Vec<u8>>,
+    legal_representative_account: Option<[u8; 32]>,
     institution_code: InstitutionCode,
     created_at: u32,
     status: InstitutionStatus,
@@ -114,6 +118,7 @@ pub enum GuardError {
     CitizenCidRevocationHeightInvalid,
     InstitutionDeleted,
     InstitutionIdentityChanged,
+    InstitutionLegalRepresentativeInvalid,
     InstitutionStatusInvalid,
     ClosedInstitutionChanged,
     FixedInstitutionNotActive,
@@ -412,6 +417,16 @@ fn validate_institution_record(
     let code = validate_cid_namespace(cid, namespace)?;
     if code != record.institution_code {
         return Err(GuardError::InstitutionIdentityChanged);
+    }
+    let legal_representative_fields = [
+        record.legal_representative_name.is_some(),
+        record.legal_representative_cid_number.is_some(),
+        record.legal_representative_account.is_some(),
+    ];
+    if legal_representative_fields.iter().any(|present| *present)
+        && !legal_representative_fields.iter().all(|present| *present)
+    {
+        return Err(GuardError::InstitutionLegalRepresentativeInvalid);
     }
     if is_fixed_governance_code(&code) && record.status != InstitutionStatus::Active {
         return Err(GuardError::FixedInstitutionNotActive);
@@ -821,6 +836,9 @@ mod tests {
             cid_full_name: name.to_vec(),
             cid_short_name: name.to_vec(),
             town_code: Vec::new(),
+            legal_representative_name: None,
+            legal_representative_cid_number: None,
+            legal_representative_account: None,
             institution_code: parse_cid(cid).unwrap(),
             created_at: 1,
             status,
@@ -839,6 +857,27 @@ mod tests {
         assert_eq!(InstitutionStatus::Active.encode(), vec![1]);
         assert_eq!(InstitutionStatus::Closed.encode(), vec![2]);
 
+        let institution = institution_record(
+            &cid("institution-scale", "CGOV"),
+            InstitutionStatus::Active,
+            b"institution",
+        );
+        assert_eq!(
+            institution.encode(),
+            (
+                b"institution".to_vec(),
+                b"institution".to_vec(),
+                Vec::<u8>::new(),
+                Option::<Vec<u8>>::None,
+                Option::<Vec<u8>>::None,
+                Option::<[u8; 32]>::None,
+                institution.institution_code,
+                1u32,
+                InstitutionStatus::Active,
+            )
+                .encode()
+        );
+
         let record = citizen_record(CitizenCidStatus::Revoked, 8);
         assert_eq!(
             record.encode(),
@@ -852,6 +891,24 @@ mod tests {
                 Some(8u32),
             )
                 .encode()
+        );
+    }
+
+    #[test]
+    fn institution_legal_representative_fields_must_be_complete() {
+        let cid = cid("institution-legal-representative", "CGOV");
+        let mut record = institution_record(&cid, InstitutionStatus::Active, b"institution");
+        record.legal_representative_name = Some("测试代表".as_bytes().to_vec());
+        assert_eq!(
+            validate_institution_record(Namespace::Public, &cid, &record),
+            Err(GuardError::InstitutionLegalRepresentativeInvalid)
+        );
+
+        record.legal_representative_cid_number = Some(b"CID-LEGAL-001".to_vec());
+        record.legal_representative_account = Some([7u8; 32]);
+        assert_eq!(
+            validate_institution_record(Namespace::Public, &cid, &record),
+            Ok(())
         );
     }
 

@@ -223,9 +223,9 @@ pub(crate) async fn update_institution(
         "cid_number": cid_number.clone(),
         "cid_full_name": input.cid_full_name.clone(),
         "parent_cid_number": input.parent_cid_number.clone(),
-        "legal_rep_name": input.legal_rep_name.clone(),
-        "legal_rep_cid_number": input.legal_rep_cid_number.clone(),
-        "legal_rep_photo_path": input.legal_rep_photo_path.clone(),
+        "legal_representative_name": input.legal_representative_name.clone(),
+        "legal_representative_cid_number": input.legal_representative_cid_number.clone(),
+        "legal_representative_photo_path": input.legal_representative_photo_path.clone(),
     });
     if let Err(resp) = require_admin_security_grant(
         &state,
@@ -341,17 +341,17 @@ pub(crate) async fn update_institution(
         existing.parent_cid_number = Some(raw);
     }
     let legal_rep = match validate_legal_representative_required(
-        input.legal_rep_name.as_deref(),
-        input.legal_rep_cid_number.as_deref(),
-        input.legal_rep_photo_path.as_deref(),
-        input.legal_rep_photo_name.as_deref(),
-        input.legal_rep_photo_mime.as_deref(),
-        input.legal_rep_photo_size,
+        input.legal_representative_name.as_deref(),
+        input.legal_representative_cid_number.as_deref(),
+        input.legal_representative_photo_path.as_deref(),
+        input.legal_representative_photo_name.as_deref(),
+        input.legal_representative_photo_mime.as_deref(),
+        input.legal_representative_photo_size,
     ) {
         Ok(v) => v,
         Err(e) => return service_error_to_response(e),
     };
-    let parent_for_legal_rep_scope = match existing.parent_cid_number.as_deref() {
+    let parent_for_legal_representative_scope = match existing.parent_cid_number.as_deref() {
         Some(parent_cid) if !parent_cid.trim().is_empty() => {
             match state.db.get_institution_with_accounts(parent_cid) {
                 Ok(v) => v.map(|(parent, _)| parent),
@@ -363,33 +363,34 @@ pub(crate) async fn update_institution(
         }
         _ => None,
     };
-    let legal_rep_scope = resolve_legal_representative_scope_for_institution(
+    let legal_representative_scope = resolve_legal_representative_scope_for_institution(
         &existing,
-        parent_for_legal_rep_scope.as_ref(),
+        parent_for_legal_representative_scope.as_ref(),
     );
-    match state.db.legal_representative_citizen_exists_in_scope(
+    let legal_representative_account = match state.db.legal_representative_account_in_scope(
         legal_rep.cid_number.as_str(),
-        &legal_rep_scope,
+        &legal_representative_scope,
     ) {
-        Ok(true) => {}
-        Ok(false) => {
+        Ok(Some(account)) => account,
+        Ok(None) => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                legal_rep_scope.legal_rep_error_message(),
+                legal_representative_scope.legal_representative_error_message(),
             );
         }
         Err(err) => {
             let message = format!("query legal representative failed: {err}");
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
-    }
-    existing.legal_rep_name = Some(legal_rep.legal_rep_name);
-    existing.legal_rep_cid_number = Some(legal_rep.cid_number);
-    existing.legal_rep_photo_path = Some(legal_rep.photo_path);
-    existing.legal_rep_photo_name = Some(legal_rep.photo_name);
-    existing.legal_rep_photo_mime = Some(legal_rep.photo_mime);
-    existing.legal_rep_photo_size = Some(legal_rep.photo_size);
+    };
+    existing.legal_representative_name = Some(legal_rep.legal_representative_name);
+    existing.legal_representative_cid_number = Some(legal_rep.cid_number);
+    existing.legal_representative_account = Some(legal_representative_account);
+    existing.legal_representative_photo_path = Some(legal_rep.photo_path);
+    existing.legal_representative_photo_name = Some(legal_rep.photo_name);
+    existing.legal_representative_photo_mime = Some(legal_rep.photo_mime);
+    existing.legal_representative_photo_size = Some(legal_rep.photo_size);
     if let Err(err) = state.db.upsert_institution_row(&existing) {
         let message = format!("update institution failed: {err}");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
@@ -405,8 +406,8 @@ pub(crate) async fn update_institution(
             "new_cid_full_name": existing.cid_full_name.clone().unwrap_or_default(),
             "old_parent_cid_number": old_parent_cid_number,
             "parent_cid_number": existing.parent_cid_number.clone().unwrap_or_default(),
-            "legal_rep_name": existing.legal_rep_name.clone().unwrap_or_default(),
-            "legal_rep_cid_number": existing.legal_rep_cid_number.clone().unwrap_or_default(),
+            "legal_representative_name": existing.legal_representative_name.clone().unwrap_or_default(),
+            "legal_representative_cid_number": existing.legal_representative_cid_number.clone().unwrap_or_default(),
         }),
     );
     Json(ApiResponse {

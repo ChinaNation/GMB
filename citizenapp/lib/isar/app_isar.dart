@@ -602,8 +602,14 @@ class PublicInstitutionEntity {
   String? parentCidNumber;
   bool? hasLegalPersonality;
 
-  /// 法定代表人姓名(公开目录字段,来自 CID subjects.legal_rep_name);无则 null → 留空。
-  String? legalRepName;
+  /// 法定代表人姓名(公开目录字段,来自 CID subjects.legal_representative_name);无则 null → 留空。
+  String? legalRepresentativeName;
+
+  /// 法定代表人唯一公民 CID；与姓名、账户同时存在或同时为空。
+  String? legalRepresentativeCidNumber;
+
+  /// 法定代表人唯一钱包账户。
+  String? legalRepresentativeAccount;
   late int accountCount;
 
   /// 自定义账户名(op_tag=0x06);主/费可本地派生不入库。空占绝大多数。

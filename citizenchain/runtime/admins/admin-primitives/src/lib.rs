@@ -319,11 +319,6 @@ pub trait AdminAccountQuery<AccountId> {
         institution_code: InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> Option<u32>;
-
-    fn legal_representative(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId,
-    ) -> Option<AccountId>;
 }
 
 impl<AccountId> AdminAccountQuery<AccountId> for () {
@@ -382,13 +377,6 @@ impl<AccountId> AdminAccountQuery<AccountId> for () {
         _institution_code: InstitutionCode,
         _admin_root_account_id: AccountId,
     ) -> Option<u32> {
-        None
-    }
-
-    fn legal_representative(
-        _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
-    ) -> Option<AccountId> {
         None
     }
 }

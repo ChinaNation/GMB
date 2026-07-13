@@ -44,6 +44,12 @@ pub(crate) struct AppInstitutionDetail {
     pub(crate) has_legal_personality: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_cid_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) legal_representative_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) legal_representative_cid_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) legal_representative_account: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -216,6 +222,9 @@ pub(crate) async fn app_get_institution(
             partnership_kind: inst.partnership_kind,
             has_legal_personality: inst.has_legal_personality,
             parent_cid_number: inst.parent_cid_number,
+            legal_representative_name: inst.legal_representative_name,
+            legal_representative_cid_number: inst.legal_representative_cid_number,
+            legal_representative_account: inst.legal_representative_account,
         },
     })
     .into_response()

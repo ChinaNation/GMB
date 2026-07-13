@@ -233,19 +233,19 @@ export const GovDetailPage: React.FC<Props> = ({ auth, cidNumber, canWrite, onBa
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="法定代表人姓名">
-                {inst.legal_rep_name || <span style={{ color: '#999' }}>(未填写)</span>}
+                {inst.legal_representative_name || <span style={{ color: '#999' }}>(未填写)</span>}
               </Descriptions.Item>
               <Descriptions.Item label="法定代表人身份ID">
-                {inst.legal_rep_cid_number ? (
+                {inst.legal_representative_cid_number ? (
                   <Typography.Text style={{ fontSize: 12, wordBreak: 'break-all' }}>
-                    {inst.legal_rep_cid_number}
+                    {inst.legal_representative_cid_number}
                   </Typography.Text>
                 ) : (
                   <span style={{ color: '#999' }}>(未填写)</span>
                 )}
               </Descriptions.Item>
               <Descriptions.Item label="法定代表人证件照">
-                {inst.legal_rep_photo_name || <span style={{ color: '#999' }}>(未上传)</span>}
+                {inst.legal_representative_photo_name || <span style={{ color: '#999' }}>(未上传)</span>}
               </Descriptions.Item>
               <Descriptions.Item label="创建时间">
                 {new Date(inst.created_at).toLocaleString('zh-CN')}

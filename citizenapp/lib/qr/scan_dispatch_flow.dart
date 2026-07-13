@@ -4,6 +4,8 @@ import 'package:citizenapp/qr/pages/qr_scan_page.dart';
 import 'package:citizenapp/qr/pages/qr_sign_response_page.dart';
 import 'package:citizenapp/signer/square_action_sign_service.dart';
 import 'package:citizenapp/transaction/offchain-transaction/services/offchain_scan_flow.dart';
+import 'package:citizenapp/wallet/core/secure_seed_store.dart';
+import 'package:citizenapp/wallet/core/seed_sign_error.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 交易 tab「扫一扫」统一入口：扫码 → 按协议分派。
@@ -16,7 +18,8 @@ Future<void> openScanDispatchFlow({
   required WalletProfile? paymentWallet,
 }) async {
   final scanned = await Navigator.of(context).push<Object?>(
-    MaterialPageRoute(builder: (_) => const QrScanPage(mode: QrScanMode.dispatch)),
+    MaterialPageRoute(
+        builder: (_) => const QrScanPage(mode: QrScanMode.dispatch)),
   );
   if (scanned == null || !context.mounted) return;
 
@@ -38,7 +41,8 @@ Future<void> openScanDispatchFlow({
   }
 }
 
-Future<void> _handleSquareActionSignRequest(BuildContext context, String raw) async {
+Future<void> _handleSquareActionSignRequest(
+    BuildContext context, String raw) async {
   final service = SquareActionSignService();
   final walletManager = WalletManager();
 
@@ -58,8 +62,17 @@ Future<void> _handleSquareActionSignRequest(BuildContext context, String raw) as
   try {
     // 动钱动权 → 读硬件金库、弹一次生物识别。
     responseJson = await service.sign(prep, walletManager);
+  } on SecureSeedException catch (e) {
+    // 生物识别取消 / 无锁屏 / 金库错误：此前只捕 WalletAuthException，
+    // 这类异常会逃逸成无声失败（点签名后无任何反应）。
+    if (context.mounted) _snack(context, seedSignErrorMessage(e));
+    return;
   } on WalletAuthException catch (e) {
-    if (context.mounted) _snack(context, '签名已取消：${e.message}');
+    if (context.mounted) _snack(context, e.message);
+    return;
+  } on Exception catch (e) {
+    // 兜底：任何签名异常都必须有反馈，永不静默。
+    if (context.mounted) _snack(context, '签名失败：$e');
     return;
   }
   if (!context.mounted) return;
@@ -74,7 +87,8 @@ Future<void> _handleSquareActionSignRequest(BuildContext context, String raw) as
   );
 }
 
-Future<bool?> _showActionConfirm(BuildContext context, SquareActionSignPrep prep) {
+Future<bool?> _showActionConfirm(
+    BuildContext context, SquareActionSignPrep prep) {
   return showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(

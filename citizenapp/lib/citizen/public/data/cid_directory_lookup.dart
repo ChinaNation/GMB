@@ -3,11 +3,19 @@ import 'package:citizenapp/citizen/public/data/public_provinces.dart';
 
 /// 机构目录只读反查结果(省/市/法定代表人),源自公权目录本地 Isar 库。
 class CidDirectoryInfo {
-  const CidDirectoryInfo({this.provinceName, this.cityName, this.legalRepName});
+  const CidDirectoryInfo({
+    this.provinceName,
+    this.cityName,
+    this.legalRepresentativeName,
+    this.legalRepresentativeCidNumber,
+    this.legalRepresentativeAccount,
+  });
 
   final String? provinceName;
   final String? cityName;
-  final String? legalRepName;
+  final String? legalRepresentativeName;
+  final String? legalRepresentativeCidNumber;
+  final String? legalRepresentativeAccount;
 }
 
 /// 机构目录只读反查:复用 finalized 链快照建立的公权目录本地 Isar 库,按
@@ -35,7 +43,9 @@ class CidDirectoryLookup {
     return CidDirectoryInfo(
       provinceName: provinceFullNameByCode(entity.provinceCode),
       cityName: await _repo.cityName(entity.provinceCode, entity.cityCode),
-      legalRepName: entity.legalRepName,
+      legalRepresentativeName: entity.legalRepresentativeName,
+      legalRepresentativeCidNumber: entity.legalRepresentativeCidNumber,
+      legalRepresentativeAccount: entity.legalRepresentativeAccount,
     );
   }
 }
