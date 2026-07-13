@@ -3,8 +3,7 @@
 //! 复用 chain_runtime 读链范式(subxt dynamic + 镜像 decode + `storage_key_suffix`)。
 //! - 活跃提案:点查 `VotingEngine::ActiveProposalsBySubject[InstitutionCid(cid_number)]`
 //!   → `BoundedVec<u64>`(与 `Vec<u64>` 同编码)。
-//! - 逐席投票:按 `proposal_id` **部分键**迭代双 Map `LegislationVote::LegHouseVotesByAdmin`,
-//!   尾部 32 字节即账户(Blake2_128Concat 二级键=16 字节哈希 + 32 字节原始账户),value=bool。
+//! - 逐席投票：按 `proposal_id` 迭代 `RepresentativeVotesByAccount`，再按当前代表机构索引过滤。
 
 use std::collections::HashMap;
 
@@ -59,15 +58,17 @@ fn proposal_subject_institution_cid_key(cid_number: &str) -> Result<Vec<u8>, Str
     Ok(key)
 }
 
-/// 读取某提案的逐席院内投票(`LegHouseVotesByAdmin[proposal_id][account] → bool`)。
+/// 读取某提案当前代表机构的逐席投票。
 ///
-/// 按 `proposal_id` 部分键迭代双 Map,尾部 32 字节为账户;返回 `账户 0x hex → 赞成/反对`。
-/// 未在映射内的席位=未投(上层置 `None`)。两院议员账户互不重叠,同一提案两院票据可并存。
-pub(crate) async fn fetch_house_ballots(proposal_id: u64) -> Result<HashMap<String, bool>, String> {
+/// 二级键是 `(body_index, account)`；同一钱包在多个机构有席位时，每个机构的票据独立保留。
+pub(crate) async fn fetch_representative_ballots(
+    proposal_id: u64,
+    current_body: u32,
+) -> Result<HashMap<String, bool>, String> {
     let ws_url = chain_url::chain_ws_url()?;
     let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
         .await
-        .map_err(|e| format!("connect chain ws for house ballots failed: {e}"))?;
+        .map_err(|e| format!("connect chain ws for representative ballots failed: {e}"))?;
     let storage = client
         .storage()
         .at_latest()
@@ -76,21 +77,30 @@ pub(crate) async fn fetch_house_ballots(proposal_id: u64) -> Result<HashMap<Stri
     // 部分键 = proposal_id(u64);迭代其下所有 (account → bool) 二级键。
     let query = dynamic::storage(
         "LegislationVote",
-        "LegHouseVotesByAdmin",
+        "RepresentativeVotesByAccount",
         vec![dynamic::Value::u128(proposal_id as u128)],
     );
     let mut iter = storage
         .iter(query)
         .await
-        .map_err(|e| format!("iterate LegHouseVotesByAdmin failed: {e}"))?;
+        .map_err(|e| format!("iterate RepresentativeVotesByAccount failed: {e}"))?;
     let mut ballots = HashMap::new();
     while let Some(entry) = iter.next().await {
-        let kv = entry.map_err(|e| format!("read LegHouseVotesByAdmin failed: {e}"))?;
-        // 尾部 32 字节 = 账户(二级键 Blake2_128Concat:16 哈希 + 32 原始账户)。
-        let account = storage_key_suffix::<32>(&kv.key_bytes)?;
+        let kv = entry.map_err(|e| format!("read RepresentativeVotesByAccount failed: {e}"))?;
+        // 元组原始键位于尾部 36 字节：body_index(u32 LE) + AccountId32。
+        let key = storage_key_suffix::<36>(&kv.key_bytes)?;
+        let body_index = u32::from_le_bytes(
+            key[..4]
+                .try_into()
+                .map_err(|_| "invalid representative ballot body index".to_string())?,
+        );
+        if body_index != current_body {
+            continue;
+        }
+        let account = &key[4..];
         let mut raw = kv.value.encoded();
         let approve = bool::decode(&mut raw)
-            .map_err(|e| format!("decode LegHouseVotesByAdmin value failed: {e}"))?;
+            .map_err(|e| format!("decode RepresentativeVotesByAccount value failed: {e}"))?;
         ballots.insert(format!("0x{}", hex::encode(account)), approve);
     }
     Ok(ballots)

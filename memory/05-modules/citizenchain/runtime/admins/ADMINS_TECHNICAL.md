@@ -1,26 +1,26 @@
 # runtime admins 技术文档
 
-最新更新：2026-07-12。`citizenchain/runtime/admins/` 由四个 crate 组成，管理员链上状态按管理员类型分别保存在各自 pallet。
+最新更新：2026-07-13。`citizenchain/runtime/admins/` 由四个 crate 组成，管理员链上状态按管理员类型分别保存在各自 pallet。
 
 ## 模块边界
 
 | 模块 | 职责 |
 |------|------|
 | `admin-primitives` | 管理员共用类型、生命周期 trait、统一查询 trait 和机构码分类策略；不放业务 storage。 |
-| `public-admins` | 公权机构管理员：立法院、政府、学校、公立机构，以及 NRC/PRC/PRB/FRG/NJD 固定治理机构。FRG 省级组也在本模块保存和治理。 |
+| `public-admins` | 公权机构管理员钱包集合，包括 NRC/PRC/PRB/FRG/NJD 固定治理机构；不保存岗位或 FRG 虚拟省组。 |
 | `private-admins` | 私法人及私权侧/独立非法人机构管理员：公司、协会、私立学校、个体经营、无限合伙等；公法人下属非法人不得被描述为私法人附属类型。 |
 | `personal-admins` | 个人多签管理员和个人多签管理员集合变更。个人多签账户生命周期归 `runtime/entity/personal-manage`。 |
 
 ## 唯一真源
 
-- 管理员集合目标字段统一由 `admin-primitives::AdminAccount` 表达：`cid_number`、`institution_code`、`kind`、`admins`、`status`。当前实现中的 `creator`、`created_at`、`updated_at` 随第二步 runtime 改造删除；管理员或任职来源不得用创建人替代。
-- 机构管理员真源只管理钱包账户集合 `admins`及集合生命周期，不再保存管理员姓名、公民 CID、岗位、任期和任职来源。
+- 机构管理员集合由 `admin-primitives::InstitutionAdminAccount` 表达：`cid_number`、`institution_code`、`admins`、`status`；没有 `kind`、`creator`、`created_at`、`updated_at`。
+- 机构 `admins` 只管理钱包账户集合及集合生命周期，不再保存管理员姓名、公民 CID、岗位、任期和任职来源；机构岗位任职真源在 `entity`。
 - 机构岗位定义和机构管理员任职关系归 `entity`；`admins` 只向下游提供当前有效管理员账户。具体岗位职责与授权由业务模块硬规则判定。
 - 个人多签管理员保持 `personal-admins` 独立模型，不使用机构岗位或机构任职关系。
 - 各类管理员的链上管理员集合分别保存在各自 pallet 的 `AdminAccounts`。
 - runtime 只通过 `RuntimeAdminAccountQuery` 聚合读取各管理员模块，业务 pallet 不直接扫多个 storage。
 - 注册个人多签和注册机构账户的动态阈值由 `votingengine/internal-vote` 的动态阈值表保存；NRC/PRC/PRB/FRG/NJD 固定治理阈值来自代码级固定阈值。
-- 创世机构本体、主账户、费用账户和不可注销封存表由 `genesis-pallet/src/institution.rs` 在创世时写入 `public-manage`；固定治理机构初始管理员由同一文件写入 `public-admins`。
+- 创世机构本体、主账户、费用账户、固定岗位和创世任职由 `runtime/genesis/src/institution/seeder.rs` 写入 `public-manage`；由任职钱包去重得到的管理员集合写入 `public-admins`。
 - 旧创世机构/管理员运行期模块已删除，不允许恢复为运行期治理模块或影子真源。
 
 ## 管理员集合目标字段
@@ -40,9 +40,9 @@
 |------|----------|
 | `Genesis` | 创世写入的固定治理机构管理员。 |
 | `Registry` | 注册局或机构生命周期直接设置的管理员。 |
-| `MutualElection` | 互选流程产生；流程尚未在本步骤实现。 |
-| `PopularElection` | 普选流程产生；流程尚未在本步骤实现。 |
-| `NominationAppointment` | 提名任免流程产生；本步骤只补齐枚举，不实现流程。 |
+| `MutualElection` | `election-vote` 互选终态结果经 runtime 路由写入 entity。 |
+| `PopularElection` | `election-vote` 普选终态结果经 runtime 路由写入 entity。 |
+| `NominationAppointment` | 提名任免最终结果；当前只有强类型来源，尚无合法流程生产者。 |
 
 这些来源由 entity 的 `assignment_source` 保存；admins 不复制来源字段。
 
@@ -52,34 +52,30 @@
 - 私权机构生命周期由 `private-manage` 发起，只写 `private-admins`。
 - 个人多签账户生命周期由 `personal-manage` 发起，只写 `personal-admins`；管理员更换 call 为 `PersonalAdmins(29).propose_admin_set_change(0)`。
 - 公权/私权机构创建时，entity 模块只把机构 `cid_number` 和管理员钱包账户集合交给对应 admins 模块；对应的 `Registry` 任职来源由 entity 任职关系保存。
-- 公权/私权管理员集合更换由投票引擎产出结果；admins 更新账户集合，entity 写入或终止对应岗位任职，admins 不复制投票或任职来源。
-- 国家储委会、省储委会、省储行、国家司法院固定人数；国家司法院固定 15 人、阈值 8/15，其中 7 名护宪大法官用于修宪终审 4/7 表决；联邦注册局按 43 个省级 5 人组治理。
-- 联邦注册局管理员更换必须走省级组入口：目标省 5 人组内部投票，阈值来自代码级固定阈值 `FRG=3`；不允许再用全 FRG 215 人平铺集合发起换届。
-- FRG 主机构账户在读侧可聚合 43 个省级组，用于验签和身份展示；管理员更换投票根账户是链端按省码派生的省级组虚拟账户。
-- 所有管理员集合变更仍经 `votingengine` 内部投票；各管理员模块用自己的 `MODULE_TAG` 绑定提案 owner。
-- **固定治理骨架加锚（档 A，ADR-027 §6.4）**：NJD 护宪恰 7 席由 `public-admins::ensure_court_composition` runtime 强制（变更 + 执行终态，Error `InvalidCourtComposition`），并由节点 `core/governance_skeleton.rs` 守卫逐块背书（I1..I7：固定机构存在性/机构码/类型/Active/名额/NJD 护宪 7，setCode 改不动）。护宪 role 字面量 `ADMIN_ROLE_CONSTITUTION_GUARD` re-export 自 `primitives::governance_skeleton::ROLE_CONSTITUTION_GUARD`（与创世 role-by-index、节点守卫逐字节共用）。**只冻席位数不冻成员**：等长换人保持 7 席即放行。
+- 普选/互选终态结果先写 entity 目标岗位任职；entity 再从机构全部有效任职派生 admins 钱包集合，并在同一事务内调用对应 admins 同步入口。
+- 动态机构同步时沿用既有 Active 多签阈值；固定治理机构继续使用代码级固定阈值，任职结果不能修改阈值制度。
+- 国家储委会、省储委会、省储行、国家司法院固定人数；国家司法院岗位为 7 护宪、1 首席、2 次席、5 大法官。
+- FRG 在 `public-admins` 只有一个含 215 个钱包的机构管理员集合；43 个省专员岗位、每岗5人的分组真源在 entity 任职 storage，不存在虚拟省组账户。
+- 机构管理员更换必须由岗位任职结果驱动；public/private admins 不暴露机构管理员集合变更 extrinsic。
+- Node Guard 同时保护固定机构 `InstitutionAdminAccount`、entity 岗位和任职：岗位目录与席位固定，任职钱包去重集合必须与 `admins` 完全一致；成员可依法原子轮换。
+- `public-admins`、`private-admins` 没有 `WeightInfo` 和 `weights.rs`；其写入仅由 entity 生命周期内部接口调用。
 
 ## MODULE_TAG
 
 | 模块 | MODULE_TAG |
 |------|------------|
-| `public-admins` | `b"pub-adm1"` |
-| `private-admins` | `b"pri-adm1"` |
 | `personal-admins` | `b"per-mgmt"` |
 
 ## Call Index
 
 | 模块 | 管理员更换 call |
 |------|----------------|
-| `public-admins` | `27.0 propose_admin_set_change`（NRC/PRC/PRB/NJD 与普通公权机构；FRG 主账户禁止走本入口） |
-| `public-admins` | `27.2 propose_federal_registry_province_admin_set_change`（FRG 省级组） |
-| `private-admins` | `28.0 propose_admin_set_change` |
 | `personal-admins` | `29.0 propose_admin_set_change` |
 
 ## 验证命令
 
 ```bash
 cargo check --manifest-path citizenchain/Cargo.toml -p node
-cargo test --manifest-path citizenchain/Cargo.toml -p public-admins -p private-admins -p personal-admins -p public-manage -p private-manage -p personal-manage -p multisig-transfer --lib
+cargo test --manifest-path citizenchain/Cargo.toml -p public-admins -p private-admins -p personal-admins -p public-manage -p private-manage -p personal-manage -p multisig --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p citizenchain --lib
 ```

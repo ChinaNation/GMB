@@ -1,15 +1,9 @@
-//! 提案进度只读投影:链上 votingengine `Proposal` + legislation-vote `LegMeta`/tally → `LegProposalState`。
+//! 提案进度只读投影：链上 `Proposal` + `RepresentativeMetas` + `LegislationMetas` + 计票。
 //!
-//! onchina 只读链装配只读投影,**绝不计票**(计票/状态推进全归投票引擎)。镜像字段顺序
-//! 锁死链端:`votingengine::Proposal`(types.rs:253)、`legislation-vote::LegislationMeta`(lib.rs:88)、
-//! `VoteCountU32/U64`(types.rs:250/258)。`referendum_scope`(Option<PopulationScope>)是 `LegislationMeta`
-//! **末字段**且进度投影不需要,故用**前缀解码镜像**(SCALE decode 只读声明字段、忽略尾部字节),
-//! 无需引入 `PopulationScope` 结构。
-//!
-//! 取数复用 chain_runtime 读链范式(iterate + `storage_key_suffix::<8>` 取 proposal_id + 镜像 decode);
+//! OnChina 只搬运链上事实，绝不计票或判断通过。代表表决和法律专属元数据必须分别
+//! 解码，避免任免、预算等代表表决被误认为法律业务。
 
 use super::law::model::{house_ref, HouseRef};
-use crate::core::chain_runtime::storage_key_suffix;
 use crate::core::chain_url;
 use codec::Decode;
 use serde::Serialize;
@@ -39,22 +33,70 @@ pub struct OnChainProposal {
     pub citizen_eligible_total: u64,
 }
 
-/// legislation-vote `LegislationMeta<T>` **前缀**解码镜像(略 `referendum_scope` 末字段,进度投影不需要)。
-// executive/legislature 仅为 SCALE 布局对齐,LegProposalState 投影暂不读,保留以锁死解码字段序。
-#[allow(dead_code)]
+type RepresentativeBody = ([u8; 4], [u8; 32]);
+
+/// `RepresentativeRoute<AccountId>` SCALE 镜像。
 #[derive(Debug, Decode)]
-pub struct OnChainLegMeta {
-    pub vote_type: u8,
-    pub houses: Vec<([u8; 4], [u8; 32])>,
-    pub current_house: u32,
-    pub referendum_required: bool,
-    pub executive: ([u8; 4], [u8; 32]),
-    pub legislature: Option<([u8; 4], [u8; 32])>,
-    pub needs_guard: bool,
-    // referendum_scope: Option<PopulationScope> —— 末字段,前缀解码略过(尾部字节被忽略)。
+pub enum OnChainRepresentativeRoute {
+    Single(RepresentativeBody),
+    Sequential(Vec<RepresentativeBody>),
 }
 
-/// `VoteCountU32` 解码镜像(院内表决计票)。
+impl OnChainRepresentativeRoute {
+    fn bodies(&self) -> Vec<RepresentativeBody> {
+        match self {
+            Self::Single(body) => vec![*body],
+            Self::Sequential(bodies) => bodies.clone(),
+        }
+    }
+}
+
+/// `RepresentativeVoteRule` SCALE 镜像。
+#[derive(Debug, Decode, Clone, Copy)]
+pub enum OnChainRepresentativeRule {
+    Regular,
+    Major,
+    Special,
+}
+
+impl OnChainRepresentativeRule {
+    fn index(self) -> u8 {
+        self as u8
+    }
+}
+
+/// `VoteProcedure` SCALE 镜像。
+#[derive(Debug, Decode, Clone, Copy)]
+pub enum OnChainVoteProcedure {
+    RepresentativeOnly,
+    Legislation,
+}
+
+impl OnChainVoteProcedure {
+    fn index(self) -> u8 {
+        self as u8
+    }
+}
+
+/// legislation-vote `RepresentativeMeta<T>` 完整解码镜像。
+#[derive(Debug, Decode)]
+pub struct OnChainRepresentativeMeta {
+    pub route: OnChainRepresentativeRoute,
+    pub current_body: u32,
+    pub rule: OnChainRepresentativeRule,
+    pub procedure: OnChainVoteProcedure,
+}
+
+/// legislation-vote `LegislationMeta<T>` 前缀镜像；公投作用域为尾字段且本投影不读取。
+#[allow(dead_code)]
+#[derive(Debug, Decode)]
+pub struct OnChainLegislationMeta {
+    pub executive: RepresentativeBody,
+    pub legislature: Option<RepresentativeBody>,
+    pub needs_guard: bool,
+}
+
+/// `VoteCountU32` 解码镜像（代表机构计票）。
 #[derive(Debug, Decode, Default)]
 pub struct OnChainVoteCount32 {
     pub yes: u32,
@@ -87,27 +129,31 @@ pub struct LegProposalState {
     pub stage: u8,
     /// 状态(投票中 / 通过 / 否决)。
     pub status: u8,
-    pub vote_type: u8,
-    pub current_house: u32,
-    pub referendum_required: bool,
+    /// 常规、重要、特别三类数学规则索引。
+    pub representative_rule: u8,
+    /// 当前代表机构索引。
+    pub current_body: u32,
+    /// 0=代表表决终局，1=继续法律专属程序。
+    pub vote_procedure: u8,
     pub needs_guard: bool,
-    /// 表决院序列(机构码 + 账户)。
-    pub houses: Vec<HouseRef>,
+    /// 代表机构路线（机构码 + 账户）。
+    pub representative_bodies: Vec<HouseRef>,
     /// 阶段起止块。
     pub start_block: u32,
     pub end_block: u32,
-    /// 院内表决计票。
-    pub house_tally: VoteTally,
+    /// 当前代表机构计票。
+    pub representative_tally: VoteTally,
     /// 公投计票(非特别案为 0/0)。
     pub referendum_tally: VoteTally,
 }
 
-/// 链上 Proposal + LegMeta + tally → 只读投影 `LegProposalState`。
+/// 链上 Proposal + 分离元数据 + tally → 只读投影 `LegProposalState`。
 pub fn build_leg_proposal_state(
     proposal_id: u64,
     proposal: &OnChainProposal,
-    meta: &OnChainLegMeta,
-    house_tally: &OnChainVoteCount32,
+    representative_meta: &OnChainRepresentativeMeta,
+    legislation_meta: &OnChainLegislationMeta,
+    representative_tally: &OnChainVoteCount32,
     referendum_tally: &OnChainVoteCount64,
 ) -> LegProposalState {
     LegProposalState {
@@ -115,20 +161,21 @@ pub fn build_leg_proposal_state(
         kind: proposal.kind,
         stage: proposal.stage,
         status: proposal.status,
-        vote_type: meta.vote_type,
-        current_house: meta.current_house,
-        referendum_required: meta.referendum_required,
-        needs_guard: meta.needs_guard,
-        houses: meta
-            .houses
+        representative_rule: representative_meta.rule.index(),
+        current_body: representative_meta.current_body,
+        vote_procedure: representative_meta.procedure.index(),
+        needs_guard: legislation_meta.needs_guard,
+        representative_bodies: representative_meta
+            .route
+            .bodies()
             .iter()
             .map(|(code, account)| house_ref(*code, *account))
             .collect(),
         start_block: proposal.start,
         end_block: proposal.end,
-        house_tally: VoteTally {
-            yes: house_tally.yes as u64,
-            no: house_tally.no as u64,
+        representative_tally: VoteTally {
+            yes: representative_tally.yes as u64,
+            no: representative_tally.no as u64,
         },
         referendum_tally: VoteTally {
             yes: referendum_tally.yes,
@@ -137,14 +184,11 @@ pub fn build_leg_proposal_state(
     }
 }
 
-/// 从某 pallet 的按 proposal_id(u64,Blake2_128Concat)存储项取单条 value 并镜像 decode。
-///
-/// iterate + `storage_key_suffix::<8>`(u64 key LE 尾部)匹配 proposal_id;proposal 数量少,
-/// 整表扫描一次即可(符合 ADR-018 短键取一次)。
-async fn fetch_value_by_proposal_id<V: Decode>(
+/// 按明确存储键点查并解码，双 Map 的代表计票同时传入提案 ID 和机构索引。
+async fn fetch_value<V: Decode>(
     pallet: &str,
     item: &str,
-    proposal_id: u64,
+    keys: Vec<dynamic::Value>,
 ) -> Result<Option<V>, String> {
     let ws_url = chain_url::chain_ws_url()?;
     let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
@@ -155,57 +199,67 @@ async fn fetch_value_by_proposal_id<V: Decode>(
         .at_latest()
         .await
         .map_err(|e| format!("get latest chain storage failed: {e}"))?;
-    let query = dynamic::storage(pallet, item, Vec::<dynamic::Value>::new());
-    let mut iter = storage
-        .iter(query)
+    let query = dynamic::storage(pallet, item, keys);
+    let Some(value) = storage
+        .fetch(&query)
         .await
-        .map_err(|e| format!("iterate {pallet}::{item} failed: {e}"))?;
-    while let Some(entry) = iter.next().await {
-        let kv = entry.map_err(|e| format!("read {pallet}::{item} failed: {e}"))?;
-        let suffix = storage_key_suffix::<8>(&kv.key_bytes)?;
-        if u64::from_le_bytes(suffix) == proposal_id {
-            let mut raw = kv.value.encoded();
-            return Ok(Some(
-                V::decode(&mut raw).map_err(|e| format!("decode {pallet}::{item} failed: {e}"))?,
-            ));
-        }
-    }
-    Ok(None)
+        .map_err(|e| format!("fetch {pallet}::{item} failed: {e}"))?
+    else {
+        return Ok(None);
+    };
+    let mut raw = value.encoded();
+    V::decode(&mut raw)
+        .map(Some)
+        .map_err(|e| format!("decode {pallet}::{item} failed: {e}"))
 }
 
-/// 读取某提案的完整进度投影(Proposal + LegMeta 必存,tally 缺省 0/0)。
+/// 读取法律提案完整投影（两类元数据必存，tally 缺省 0/0）。
 pub async fn fetch_proposal_state(proposal_id: u64) -> Result<Option<LegProposalState>, String> {
+    let proposal_key = || vec![dynamic::Value::u128(proposal_id as u128)];
     let Some(proposal) =
-        fetch_value_by_proposal_id::<OnChainProposal>("VotingEngine", "Proposals", proposal_id)
-            .await?
+        fetch_value::<OnChainProposal>("VotingEngine", "Proposals", proposal_key()).await?
     else {
         return Ok(None);
     };
-    let Some(meta) =
-        fetch_value_by_proposal_id::<OnChainLegMeta>("LegislationVote", "LegMeta", proposal_id)
-            .await?
+    let Some(representative_meta) = fetch_value::<OnChainRepresentativeMeta>(
+        "LegislationVote",
+        "RepresentativeMetas",
+        proposal_key(),
+    )
+    .await?
     else {
         return Ok(None);
     };
-    let house_tally = fetch_value_by_proposal_id::<OnChainVoteCount32>(
+    // 本接口只投影法律提案；纯代表表决没有 LegislationMetas，直接跳过。
+    let Some(legislation_meta) = fetch_value::<OnChainLegislationMeta>(
         "LegislationVote",
-        "LegHouseTally",
-        proposal_id,
+        "LegislationMetas",
+        proposal_key(),
+    )
+    .await?
+    else {
+        return Ok(None);
+    };
+    let representative_tally = fetch_value::<OnChainVoteCount32>(
+        "LegislationVote",
+        "RepresentativeTallies",
+        vec![
+            dynamic::Value::u128(proposal_id as u128),
+            dynamic::Value::u128(representative_meta.current_body as u128),
+        ],
     )
     .await?
     .unwrap_or_default();
-    let referendum_tally = fetch_value_by_proposal_id::<OnChainVoteCount64>(
-        "LegislationVote",
-        "LegReferendumTally",
-        proposal_id,
-    )
-    .await?
-    .unwrap_or_default();
+    let referendum_tally =
+        fetch_value::<OnChainVoteCount64>("LegislationVote", "LegReferendumTally", proposal_key())
+            .await?
+            .unwrap_or_default();
     Ok(Some(build_leg_proposal_state(
         proposal_id,
         &proposal,
-        &meta,
-        &house_tally,
+        &representative_meta,
+        &legislation_meta,
+        &representative_tally,
         &referendum_tally,
     )))
 }
@@ -237,28 +291,35 @@ mod tests {
         assert_eq!(proposal.start, 100);
     }
 
-    /// LegMeta 前缀镜像:即使尾部有 referendum_scope 字节,也正确解码到 needs_guard 为止。
+    /// 代表元数据与法律元数据按两个独立存储布局解码。
     #[test]
-    fn leg_meta_prefix_mirror_ignores_trailing_referendum_scope() {
-        let houses: Vec<([u8; 4], [u8; 32])> = vec![(*b"NRP\0", [1u8; 32]), (*b"NSN\0", [2u8; 32])];
-        let mut golden = Vec::new();
-        golden.extend(2u8.encode()); // vote_type
-        golden.extend(houses.encode());
-        golden.extend(0u32.encode()); // current_house
-        golden.extend(false.encode()); // referendum_required
-        golden.extend((*b"PRS\0", [3u8; 32]).encode()); // executive
-        golden.extend(Some((*b"NLG\0", [4u8; 32])).encode()); // legislature
-        golden.extend(false.encode()); // needs_guard
-        golden.extend(Option::<()>::None.encode()); // referendum_scope=None(尾部,前缀镜像忽略)
+    fn split_meta_mirrors_decode_independently() {
+        let bodies: Vec<RepresentativeBody> = vec![(*b"NRP\0", [1u8; 32]), (*b"NSN\0", [2u8; 32])];
+        let mut representative_golden = Vec::new();
+        representative_golden.extend(1u8.encode()); // Sequential
+        representative_golden.extend(bodies.encode());
+        representative_golden.extend(0u32.encode()); // current_body
+        representative_golden.extend(1u8.encode()); // Major
+        representative_golden.extend(1u8.encode()); // Legislation
+        let representative = OnChainRepresentativeMeta::decode(&mut &representative_golden[..])
+            .expect("decode RepresentativeMeta");
+        assert_eq!(representative.current_body, 0);
+        assert_eq!(representative.rule.index(), 1);
+        assert_eq!(representative.route.bodies().len(), 2);
 
-        let meta = OnChainLegMeta::decode(&mut &golden[..]).expect("decode LegMeta prefix");
-        assert_eq!(meta.vote_type, 2);
-        assert_eq!(meta.houses.len(), 2);
-        assert_eq!(meta.current_house, 0);
-        assert!(!meta.referendum_required);
-        assert_eq!(meta.executive.0, *b"PRS\0");
-        assert_eq!(meta.legislature.as_ref().map(|l| l.0), Some(*b"NLG\0"));
-        assert!(!meta.needs_guard);
+        let mut legislation_golden = Vec::new();
+        legislation_golden.extend((*b"PRS\0", [3u8; 32]).encode());
+        legislation_golden.extend(Some((*b"NLG\0", [4u8; 32])).encode());
+        legislation_golden.extend(false.encode());
+        legislation_golden.extend(Option::<()>::None.encode()); // referendum_scope 尾字段
+        let legislation = OnChainLegislationMeta::decode(&mut &legislation_golden[..])
+            .expect("decode LegislationMeta prefix");
+        assert_eq!(legislation.executive.0, *b"PRS\0");
+        assert_eq!(
+            legislation.legislature.as_ref().map(|body| body.0),
+            Some(*b"NLG\0")
+        );
+        assert!(!legislation.needs_guard);
     }
 
     /// VoteCount 镜像解码 + 组装 LegProposalState(计票加宽、houses→HouseRef)。
@@ -275,26 +336,38 @@ mod tests {
             end: 200,
             citizen_eligible_total: 0,
         };
-        let meta = OnChainLegMeta {
-            vote_type: 2,
-            houses: vec![(*b"NRP\0", [1u8; 32]), (*b"NSN\0", [2u8; 32])],
-            current_house: 1,
-            referendum_required: false,
+        let representative_meta = OnChainRepresentativeMeta {
+            route: OnChainRepresentativeRoute::Sequential(vec![
+                (*b"NRP\0", [1u8; 32]),
+                (*b"NSN\0", [2u8; 32]),
+            ]),
+            current_body: 1,
+            rule: OnChainRepresentativeRule::Major,
+            procedure: OnChainVoteProcedure::Legislation,
+        };
+        let legislation_meta = OnChainLegislationMeta {
             executive: (*b"PRS\0", [3u8; 32]),
             legislature: Some((*b"NLG\0", [4u8; 32])),
             needs_guard: false,
         };
-        let house_tally = OnChainVoteCount32 { yes: 220, no: 30 };
+        let representative_tally = OnChainVoteCount32 { yes: 220, no: 30 };
         let referendum_tally = OnChainVoteCount64::default();
 
-        let state = build_leg_proposal_state(7, &proposal, &meta, &house_tally, &referendum_tally);
+        let state = build_leg_proposal_state(
+            7,
+            &proposal,
+            &representative_meta,
+            &legislation_meta,
+            &representative_tally,
+            &referendum_tally,
+        );
         assert_eq!(state.proposal_id, 7);
         assert_eq!(state.stage, 10);
-        assert_eq!(state.current_house, 1);
-        assert_eq!(state.houses.len(), 2);
-        assert_eq!(state.houses[1].code, "NSN");
-        assert_eq!(state.house_tally.yes, 220);
-        assert_eq!(state.house_tally.no, 30);
+        assert_eq!(state.current_body, 1);
+        assert_eq!(state.representative_bodies.len(), 2);
+        assert_eq!(state.representative_bodies[1].code, "NSN");
+        assert_eq!(state.representative_tally.yes, 220);
+        assert_eq!(state.representative_tally.no, 30);
         assert_eq!(state.referendum_tally.yes, 0);
     }
 }

@@ -790,31 +790,16 @@ fn insert_active_registered_institution_account(
     );
     private_admins::AdminAccounts::<Test>::insert(
         account.clone(),
-        admin_primitives::AdminAccount {
+        admin_primitives::InstitutionAdminAccount {
             cid_number: Default::default(),
             institution_code: PRIVATE_CODE,
-            kind: admin_primitives::AdminAccountKind::PrivateInstitution,
-            // 机构管理员集合存 AdminProfile(测试种子用空 meta、来源 Registry)。
+            // 机构 admins 只保存钱包账户；岗位任职归 entity。
             admins: admins
                 .iter()
                 .cloned()
-                .map(|account| admin_primitives::AdminProfile {
-                    admin_account: account,
-                    admin_cid_number: Default::default(),
-                    admin_name: Default::default(),
-                    role_code: Default::default(),
-                    role_name: Default::default(),
-                    term_start: 0,
-                    term_end: 0,
-                    admin_source: admin_primitives::AdminSource::Registry,
-                    admin_source_ref: Default::default(),
-                })
                 .collect::<Vec<_>>()
                 .try_into()
-                .expect("institution profiles should fit"),
-            creator: registered_institution_admin(0),
-            created_at: 1,
-            updated_at: 1,
+                .expect("institution admins should fit"),
             status: admin_primitives::AdminAccountStatus::Active,
         },
     );

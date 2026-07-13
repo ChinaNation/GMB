@@ -17,6 +17,7 @@ sp-io = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
 votingengine = { path = "../../votingengine", default-features = false }
+legislation-vote = { path = "../../votingengine/legislation-vote", default-features = false }
 
 [features]
 default = ["std"]
@@ -30,6 +31,7 @@ std = [
     "sp-io/std",
     "primitives/std",
     "votingengine/std",
+    "legislation-vote/std",
 ]
 try-runtime = []
 

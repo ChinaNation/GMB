@@ -1,8 +1,8 @@
-//! 创世机构与创世公职人员写入。
+//! 创世机构、固定岗位任职与管理员钱包集合写入。
 //!
-//! 本文件只服务创世构建：把常量库内置机构写入 `public-manage`，把初始
-//! 公职人员写入 `public-admins`。运行期的机构生命周期、管理员更换、
-//! 法定代表人与内部投票回调均归对应业务 pallet，不在 genesis 模块承载。
+//! 本文件只服务创世构建：机构、岗位和任职写入 `public-manage`，由任职钱包
+//! 去重得到的管理员集合写入 `public-admins`。运行期机构生命周期、管理员更换、
+//! 法定代表人任命与内部投票回调均归对应业务 pallet，不在 genesis 模块承载。
 
 extern crate alloc;
 
@@ -22,27 +22,20 @@ use primitives::{
             china_sf::{CHINA_SF, NATIONAL_JUDICIAL_YUAN_ADMINS},
             china_zf::{CHINA_ZF, FEDERAL_REGISTRY_ADMINS},
         },
-        code::{
-            institution_code_from_cid_number, InstitutionCode, ProvinceCode, FRG, NJD,
-            PROVINCE_CODE_INFOS,
-        },
+        code::{institution_code_from_cid_number, InstitutionCode, FRG, NJD},
     },
 };
 use sp_runtime::traits::Zero;
 
-use admin_primitives::{
-    AdminAccount, AdminAccountKind, AdminAccountStatus, AdminProfile, AdminSource,
-    ADMIN_ROLE_CHIEF_JUSTICE, ADMIN_ROLE_CONSTITUTION_GUARD, ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE,
-    ADMIN_ROLE_JUSTICE,
-};
+use admin_primitives::{AdminAccountStatus, InstitutionAdminAccount};
 use public_manage::{
-    InstitutionAccountInfo, InstitutionInfo, InstitutionLifecycleStatus, RegisteredInstitution,
-    RESERVED_NAME_FEE as PUBLIC_RESERVED_NAME_FEE, RESERVED_NAME_MAIN as PUBLIC_RESERVED_NAME_MAIN,
+    InstitutionAccountInfo, InstitutionAdminAssignment, InstitutionAssignmentSource,
+    InstitutionAssignmentStatus, InstitutionInfo, InstitutionLifecycleStatus, InstitutionRole,
+    InstitutionRoleStatus, RegisteredInstitution, RESERVED_NAME_FEE as PUBLIC_RESERVED_NAME_FEE,
+    RESERVED_NAME_MAIN as PUBLIC_RESERVED_NAME_MAIN,
 };
 
-const FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE: usize =
-    primitives::count_const::FRG_PROVINCE_GROUP_ADMIN_COUNT as usize;
-const FEDERAL_REGISTRY_PROVINCE_ACCOUNT_PREFIX: &[u8] = b"GMB:FRG-PROVINCE:";
+use super::fixed_roles;
 
 type PublicBalanceOf<T> = <<T as public_manage::Config>::Currency as Currency<
     <T as frame_system::Config>::AccountId,
@@ -62,15 +55,11 @@ type PublicInstitutionAccountInfoOf<T> = InstitutionAccountInfo<
 >;
 type PublicRegisteredInstitutionOf<T> =
     RegisteredInstitution<PublicCidNumberOf<T>, PublicAccountNameOf<T>>;
-type PublicAdminProfilesOf<T> = BoundedVec<
-    AdminProfile<<T as frame_system::Config>::AccountId>,
+type PublicAdminsOf<T> = BoundedVec<
+    <T as frame_system::Config>::AccountId,
     <T as public_admins::Config>::MaxAdminsPerInstitution,
 >;
-type PublicAdminAccountOf<T> = AdminAccount<
-    PublicAdminProfilesOf<T>,
-    <T as frame_system::Config>::AccountId,
-    BlockNumberFor<T>,
->;
+type PublicAdminAccountOf<T> = InstitutionAdminAccount<PublicAdminsOf<T>>;
 
 fn decode_account<T: frame_system::Config>(raw: &[u8; 32], label: &str) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..])
@@ -172,7 +161,8 @@ fn insert_derived_public_institution<T: public_manage::Config>(
             cid_full_name: bounded_name(cid_full_name),
             cid_short_name: bounded_name(cid_short_name),
             town_code: BoundedVec::new(),
-            // 创世没有真实任免资料时保持尚未任命，禁止用首位管理员占位。
+            // 法定代表人不是创世必填项：创世三字段全空，后续依法任命时原子写入。
+            // 禁止用首位管理员、机构主账户或其它钱包占位。
             legal_representative_name: None,
             legal_representative_cid_number: None,
             legal_representative_account: None,
@@ -258,7 +248,7 @@ fn insert_public_institution<T: public_manage::Config>(
             cid_full_name: bounded_static_name::<T>(cid_full_name, "cid_full_name", cid_number),
             cid_short_name: bounded_static_name::<T>(cid_short_name, "cid_short_name", cid_number),
             town_code: BoundedVec::new(),
-            // 固定创世机构同样不得伪造法定代表人公开信息。
+            // 固定创世机构同样允许尚未任命法定代表人；三字段必须保持全空。
             legal_representative_name: None,
             legal_representative_cid_number: None,
             legal_representative_account: None,
@@ -285,126 +275,87 @@ fn insert_public_institution<T: public_manage::Config>(
     assert_eq!(RESERVED_NAME_FEE, PUBLIC_RESERVED_NAME_FEE);
 }
 
-fn bounded_role<T: public_admins::Config>(
-    cid_number: &'static str,
-    role: &'static [u8],
-) -> BoundedVec<u8, frame_support::traits::ConstU32<{ admin_primitives::ADMIN_NAME_MAX_BYTES }>> {
-    role.to_vec().try_into().unwrap_or_else(|_| {
-        panic!(
-            "genesis institution: cid_number {} 管理员职务过长",
-            cid_number
-        )
-    })
-}
-
-fn national_judicial_yuan_admin_role(index: usize) -> Option<&'static [u8]> {
-    // 护宪席位数单源 primitives::governance_skeleton(与节点骨架守卫 I6 同源;i<7 即原 0..=6)。
-    let guard_seats = primitives::governance_skeleton::NJD_CONSTITUTION_GUARD_SEATS as usize;
-    match index {
-        i if i < guard_seats => Some(ADMIN_ROLE_CONSTITUTION_GUARD),
-        7 => Some(ADMIN_ROLE_CHIEF_JUSTICE),
-        8..=9 => Some(ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE),
-        10..=14 => Some(ADMIN_ROLE_JUSTICE),
-        _ => None,
-    }
-}
-
-fn build_admin_account<T, F>(
+fn insert_fixed_admins<T>(
+    main_account: [u8; 32],
     cid_number: &'static str,
     institution_code: InstitutionCode,
     raw_admins: &[[u8; 32]],
-    role_for_index: F,
-) -> PublicAdminAccountOf<T>
-where
-    T: public_admins::Config,
-    F: Fn(usize) -> Option<&'static [u8]>,
+) where
+    T: public_manage::Config + public_admins::Config,
 {
-    let admins: Vec<AdminProfile<T::AccountId>> = raw_admins
-        .iter()
-        .enumerate()
-        .map(|(index, raw)| {
-            let role_name = role_for_index(index)
-                .map(|role| bounded_role::<T>(cid_number, role))
-                .unwrap_or_else(BoundedVec::new);
-            AdminProfile {
-                admin_account: decode_account::<T>(raw, "管理员"),
-                admin_cid_number: BoundedVec::new(),
-                admin_name: BoundedVec::new(),
-                role_code: Default::default(),
+    fixed_roles::assert_fixed_admin_count(institution_code, raw_admins.len());
+    let cid = bounded_cid::<T>(cid_number);
+    let mut roles: Vec<public_manage::institution::role::InstitutionRoleOf<T>> = Vec::new();
+    let mut assignments: Vec<public_manage::institution::role::InstitutionAdminAssignmentOf<T>> =
+        Vec::new();
+    let mut admin_accounts: Vec<T::AccountId> = Vec::new();
+
+    for (index, raw) in raw_admins.iter().enumerate() {
+        let (role_code_raw, role_name_raw) =
+            fixed_roles::role_for_fixed_admin(institution_code, index);
+        let role_code: public_manage::institution::role::RoleCodeOf = role_code_raw
+            .try_into()
+            .unwrap_or_else(|_| panic!("genesis institution: {} 岗位代码过长", cid_number));
+        let role_name = bounded_account_name::<T>(&role_name_raw, "岗位名称", cid_number);
+        if !roles.iter().any(|role| role.role_code == role_code) {
+            roles.push(InstitutionRole {
+                cid_number: cid.clone(),
+                role_code: role_code.clone(),
                 role_name,
-                term_start: 0,
-                term_end: 0,
-                admin_source: AdminSource::Genesis,
-                admin_source_ref: Default::default(),
-            }
-        })
-        .collect();
-    let bounded: PublicAdminProfilesOf<T> = admins.try_into().unwrap_or_else(|_| {
+                term_required: false,
+                role_status: InstitutionRoleStatus::Active,
+            });
+        }
+        let admin_account = decode_account::<T>(raw, "管理员");
+        assignments.push(InstitutionAdminAssignment {
+            cid_number: cid.clone(),
+            admin_account: admin_account.clone(),
+            role_code,
+            term_start: 0,
+            term_end: 0,
+            assignment_source: InstitutionAssignmentSource::Genesis,
+            assignment_source_ref: Default::default(),
+            assignment_status: InstitutionAssignmentStatus::Active,
+        });
+        if !admin_accounts.contains(&admin_account) {
+            admin_accounts.push(admin_account);
+        }
+    }
+
+    let roles: public_manage::institution::role::InstitutionRolesOf<T> = roles
+        .try_into()
+        .unwrap_or_else(|_| panic!("genesis institution: {} 岗位数量超限", cid_number));
+    let assignments: public_manage::institution::role::InstitutionAdminAssignmentsOf<T> =
+        assignments
+            .try_into()
+            .unwrap_or_else(|_| panic!("genesis institution: {} 任职数量超限", cid_number));
+    public_manage::Pallet::<T>::store_genesis_roles_and_assignments(&cid, &roles, &assignments)
+        .unwrap_or_else(|_| panic!("genesis institution: {} 岗位任职写入失败", cid_number));
+
+    assert_eq!(
+        admin_accounts.len(),
+        raw_admins.len(),
+        "genesis institution: 固定岗位钱包常量不得重复"
+    );
+
+    let admins: PublicAdminsOf<T> = admin_accounts.try_into().unwrap_or_else(|_| {
         panic!(
             "genesis institution: cid_number {} 管理员数量超过 MaxAdminsPerInstitution",
             cid_number
         )
     });
-    let creator = bounded
-        .first()
-        .map(|p| p.admin_account.clone())
-        .unwrap_or_else(|| {
-            panic!(
-                "genesis institution: cid_number {} 内置机构必须至少 1 个管理员",
-                cid_number
-            )
-        });
-    PublicAdminAccountOf::<T> {
+    let account = decode_account::<T>(&main_account, "固定治理机构主账户");
+    let admin_account = PublicAdminAccountOf::<T> {
         cid_number: cid_number
             .as_bytes()
             .to_vec()
             .try_into()
-            .unwrap_or_else(|_| {
-                panic!(
-                    "genesis institution: cid_number {} 超过管理员集合 CID 长度上限",
-                    cid_number
-                )
-            }),
+            .unwrap_or_else(|_| panic!("genesis institution: {} 管理员CID过长", cid_number)),
         institution_code,
-        kind: AdminAccountKind::PublicInstitution,
-        admins: bounded,
-        creator,
-        created_at: BlockNumberFor::<T>::default(),
-        updated_at: BlockNumberFor::<T>::default(),
+        admins,
         status: AdminAccountStatus::Active,
-    }
-}
-
-fn federal_registry_province_group_account<T: frame_system::Config>(
-    province_code: ProvinceCode,
-) -> T::AccountId {
-    let mut payload = Vec::with_capacity(
-        FEDERAL_REGISTRY_PROVINCE_ACCOUNT_PREFIX
-            .len()
-            .saturating_add(province_code.len()),
-    );
-    payload.extend_from_slice(FEDERAL_REGISTRY_PROVINCE_ACCOUNT_PREFIX);
-    payload.extend_from_slice(&province_code);
-    let raw = sp_io::hashing::blake2_256(&payload);
-    T::AccountId::decode(&mut &raw[..])
-        .unwrap_or_else(|_| panic!("genesis institution: FRG 省行政区组账户 decode 失败"))
-}
-
-fn insert_fixed_admins<T, F>(
-    main_account: [u8; 32],
-    cid_number: &'static str,
-    institution_code: InstitutionCode,
-    raw_admins: &[[u8; 32]],
-    role_for_index: F,
-) where
-    T: public_admins::Config,
-    F: Fn(usize) -> Option<&'static [u8]>,
-{
-    let account = decode_account::<T>(&main_account, "固定治理机构主账户");
-    public_admins::AdminAccounts::<T>::insert(
-        account,
-        build_admin_account::<T, _>(cid_number, institution_code, raw_admins, role_for_index),
-    );
+    };
+    public_admins::AdminAccounts::<T>::insert(account, admin_account);
 }
 
 /// 创世写入内置公权机构和创世公职人员。
@@ -430,12 +381,11 @@ where
         );
         let institution_code = institution_code_from_cid_number(node.cid_number)
             .expect("china_cb cid_number must encode institution code");
-        insert_fixed_admins::<T, _>(
+        insert_fixed_admins::<T>(
             node.main_account,
             node.cid_number,
             institution_code,
             node.admins,
-            |_| None,
         );
     }
 
@@ -449,12 +399,11 @@ where
         );
         let institution_code = institution_code_from_cid_number(node.cid_number)
             .expect("china_ch cid_number must encode institution code");
-        insert_fixed_admins::<T, _>(
+        insert_fixed_admins::<T>(
             node.main_account,
             node.cid_number,
             institution_code,
             node.admins,
-            |_| None,
         );
     }
 
@@ -511,40 +460,24 @@ where
         .iter()
         .find(|node| institution_code_from_cid_number(node.cid_number) == Some(NJD))
         .expect("china_sf must include NJD");
-    insert_fixed_admins::<T, _>(
+    insert_fixed_admins::<T>(
         njd_node.main_account,
         njd_node.cid_number,
         NJD,
         NATIONAL_JUDICIAL_YUAN_ADMINS,
-        national_judicial_yuan_admin_role,
     );
 
-    // FRG 省行政区 5 人组管理员特例。
+    // FRG 是一个机构、215 名管理员、43 个省专员岗位；省级分组由 entity 任职表达。
     let frg_node = CHINA_ZF
         .iter()
         .find(|node| institution_code_from_cid_number(node.cid_number) == Some(FRG))
         .expect("china_zf must include FRG");
-    assert!(
-        FEDERAL_REGISTRY_ADMINS.len()
-            == PROVINCE_CODE_INFOS.len() * FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE,
-        "genesis institution: FRG 管理员数量必须等于省数 * 5 人"
+    insert_fixed_admins::<T>(
+        frg_node.main_account,
+        frg_node.cid_number,
+        FRG,
+        FEDERAL_REGISTRY_ADMINS,
     );
-    for (index, province) in PROVINCE_CODE_INFOS.iter().enumerate() {
-        let group_account = federal_registry_province_group_account::<T>(province.province_code);
-        let start = index * FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE;
-        let end = start + FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE;
-        let account = build_admin_account::<T, _>(
-            frg_node.cid_number,
-            FRG,
-            &FEDERAL_REGISTRY_ADMINS[start..end],
-            |_| None,
-        );
-        public_admins::FederalRegistryProvinceGroups::<T>::insert(province.province_code, account);
-        public_admins::FederalRegistryProvinceGroupAccounts::<T>::insert(
-            group_account,
-            province.province_code,
-        );
-    }
 
     // 创世直铸当前国家/省/市公权机构(ADR-031 v3):常量 296 + 派生 49,297。
     build_template_institutions::<T>();

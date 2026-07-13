@@ -6279,6 +6279,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "internal-vote",
+ "legislation-vote",
  "pallet-timestamp",
  "parity-scale-codec",
  "primitives",
@@ -10016,7 +10017,6 @@ version = "1.0.0"
 dependencies = [
  "admin-primitives",
  "entity-primitives",
- "frame-benchmarking",
  "frame-support",
  "frame-system",
  "internal-vote",
@@ -10354,7 +10354,6 @@ version = "1.0.0"
 dependencies = [
  "admin-primitives",
  "entity-primitives",
- "frame-benchmarking",
  "frame-support",
  "frame-system",
  "internal-vote",

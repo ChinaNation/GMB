@@ -35,8 +35,7 @@ frame_benchmarking::define_benchmarks!(
     [resolution_issuance, ResolutionIssuance]
     // citizen-identity 权重为手工保守上界(见其 weights.rs),暂不注册基准。
     [pow_difficulty, PowDifficulty]
-    [public_admins, PublicAdmins]
-    [private_admins, PrivateAdmins]
+    // public/private-admins 已无外部 extrinsic 和 WeightInfo，仅由 entity 内部同步钱包集合。
     [resolution_destroy, ResolutionDestroy]
     [grandpakey_change, GrandpaKeyChange]
     [public_manage, PublicManage]

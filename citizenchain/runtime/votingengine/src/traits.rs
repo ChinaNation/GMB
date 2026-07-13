@@ -51,70 +51,6 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
     }
 }
 
-/// 立法事项(立法/修法/废法)接入立法投票时,统一由投票引擎 legislation-vote 创建提案并返回真实提案 ID。
-///
-/// (ADR-027):业务壳 legislation-yuan 只传"立法语义"——发起机构、机构码、表决类型、
-/// 法律载荷;表决规则(参与率/赞成率)、两院顺序、强制公投、行政签署、护宪终审、计票与通过判定
-/// 全部归属投票引擎 legislation-vote sub-pallet,业务壳不得自行处理。
-/// runtime 装配为真实 `LegislationVote`;未实装语境(如其它 pallet 的测试 mock)装 `()` 返回 NotConfigured。
-pub trait LegislationVoteEngine<AccountId> {
-    /// 创建立法投票提案。
-    /// - `houses`:院序列 `[(机构码, 机构账户), ...]`,发起院在前、终审院在后。
-    ///   单院(市立法会)= 1 项;两院(国家/省立法院)= `[众议会, 参议会]`;教委会模式 = `[教委会, 参议会]`。
-    ///   发起人 `who` 必须是 `houses[0]`(发起院)的现任议员/委员(admin)。
-    /// - `vote_type`:表决类型 u8(常规 0 / 常规教育 1 / 重要 2 / 重要教育 3 / 特别 4,ADR-027 修订),
-    ///   用 u8 保持引擎与业务枚举解耦。特别案(4)内部全过后强制进入公投阶段(发起前须由 `who` 准备人口快照),
-    ///   公投通过即生效不签署;非特别案内部全过后进入行政签署阶段(`executive` 机构法定代表人签署)。
-    /// - `executive`:行政签署机构 `(机构码, 机构账户)`——市政府(市)/省政府(省)/总统府(国);其法定代表人=市长/省长/总统。
-    /// - `legislature`:两院级的立法院机构 `(机构码, 机构账户)`(国家/省立法院,其法定代表人=院长,供三人会签);单院(市)= `None`。
-    /// - `data`:MODULE_TAG 前缀 + 提案摘要(law_id/tier/version/content_hash)。
-    /// - `object_data`:法律全文大对象(整部条文 SCALE),供通过回调读回写入新版本。
-    #[allow(clippy::too_many_arguments)]
-    fn create_legislation_proposal(
-        who: AccountId,
-        houses: sp_std::vec::Vec<(InstitutionCode, AccountId)>,
-        vote_type: u8,
-        executive: (InstitutionCode, AccountId),
-        legislature: Option<(InstitutionCode, AccountId)>,
-        needs_guard: bool,
-        module_tag: &[u8],
-        data: sp_std::vec::Vec<u8>,
-        object_data: sp_std::vec::Vec<u8>,
-    ) -> Result<u64, DispatchError>;
-
-    /// 读取某立法提案的强制公投结果 `(eligible, yes, no)`;无公投(非特别案 / 提案不存在)返回 `None`。
-    /// 供立法业务壳在写入核心修宪版本时落**永久公投凭据**(公民宪法第十九条节点守卫背书的数据源,ADR-027 §6.3)。
-    fn referendum_result(proposal_id: u64) -> Option<(u64, u64, u64)>;
-
-    /// 读取某修宪提案的护宪大法官终审赞成票数;无终审记录(非修宪 / 未进终审)返回 `None`。
-    /// 供立法业务壳在写入修宪版本时落**永久护宪终审凭据**(公民宪法第21条节点守卫背书的数据源,ADR-027 §6.3)。
-    fn guard_review_result(proposal_id: u64) -> Option<u32>;
-}
-
-impl<AccountId> LegislationVoteEngine<AccountId> for () {
-    fn create_legislation_proposal(
-        _who: AccountId,
-        _houses: sp_std::vec::Vec<(InstitutionCode, AccountId)>,
-        _vote_type: u8,
-        _executive: (InstitutionCode, AccountId),
-        _legislature: Option<(InstitutionCode, AccountId)>,
-        _needs_guard: bool,
-        _module_tag: &[u8],
-        _data: sp_std::vec::Vec<u8>,
-        _object_data: sp_std::vec::Vec<u8>,
-    ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other("LegislationVoteEngineNotConfigured"))
-    }
-
-    fn referendum_result(_proposal_id: u64) -> Option<(u64, u64, u64)> {
-        None
-    }
-
-    fn guard_review_result(_proposal_id: u64) -> Option<u32> {
-        None
-    }
-}
-
 /// 事项模块接入内部投票时,统一由投票引擎创建提案并返回真实提案 ID。
 ///
 /// 业务模块只能选择“提案语义”，不能传入“本次投票通过阈值”。
@@ -819,10 +755,10 @@ impl JointCleanupHandler for () {
 // 核心 votingengine 按 PROPOSAL_KIND_LEGISLATION / STAGE_LEG_* 分发到这些 trait。
 // 内部/联合/选举投票 sub-pallet 逻辑零改动。
 /// 立法投票超时结算入口。legislation-vote sub-pallet 实现。
-/// 四阶段(ADR-027 修订 2026-06-25):内部表决(STAGE_LEG_HOUSE,单院一段/两院顺序两段)
+/// 代表机构表决阶段支持单机构和多机构顺序推进，法律专属阶段继续处理公投、签署和护宪终审。
 /// + 强制公投(STAGE_LEG_REFERENDUM)+ 行政签署(STAGE_LEG_SIGN)+ 三人会签(STAGE_LEG_OVERRIDE)。
 pub trait LegislationProposalFinalizer<BlockNumber, AccountId> {
-    fn finalize_legislation_house_timeout(
+    fn finalize_legislation_representative_timeout(
         proposal: &crate::Proposal<BlockNumber, AccountId>,
         proposal_id: u64,
     ) -> DispatchResult;
@@ -858,7 +794,7 @@ pub trait LegislationProposalFinalizer<BlockNumber, AccountId> {
 }
 
 impl<BlockNumber, AccountId> LegislationProposalFinalizer<BlockNumber, AccountId> for () {
-    fn finalize_legislation_house_timeout(
+    fn finalize_legislation_representative_timeout(
         _proposal: &crate::Proposal<BlockNumber, AccountId>,
         _proposal_id: u64,
     ) -> DispatchResult {
@@ -878,21 +814,27 @@ impl<BlockNumber, AccountId> LegislationProposalFinalizer<BlockNumber, AccountId
 }
 
 /// 立法投票 mode 的 chunked cleanup 入口。
-/// legislation-vote 自有账本(LegHouseVotesByAdmin / LegReferendumVotesByAccount /
-/// LegHouseTally / LegReferendumTally / LegMeta 等)住在 sub-pallet,核心通过本 trait 派发清理。
+/// legislation-vote 自有账本（RepresentativeVotesByAccount / RepresentativeTallies /
+/// LegReferendumVotesByAccount 等）住在 sub-pallet，核心通过本 trait 派发清理。
 pub trait LegislationCleanupHandler {
-    fn cleanup_legislation_house_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
+    fn cleanup_legislation_representative_votes_chunk(
+        proposal_id: u64,
+        limit: u32,
+    ) -> CleanupChunkResult;
     fn cleanup_legislation_referendum_votes_chunk(
         proposal_id: u64,
         limit: u32,
     ) -> CleanupChunkResult;
 
-    /// 终态清理:删 LegMeta + LegHouseTally + LegReferendumTally 等小 storage(单步)。
+    /// 终态清理：删除代表元数据、法律元数据和各计票小 storage（单步）。
     fn cleanup_legislation_terminal(proposal_id: u64);
 }
 
 impl LegislationCleanupHandler for () {
-    fn cleanup_legislation_house_votes_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
+    fn cleanup_legislation_representative_votes_chunk(
+        _proposal_id: u64,
+        _limit: u32,
+    ) -> CleanupChunkResult {
         (0, false)
     }
     fn cleanup_legislation_referendum_votes_chunk(
@@ -929,6 +871,91 @@ impl LegislationVoteResultCallback for () {
         _approved: bool,
     ) -> Result<ProposalExecutionOutcome, DispatchError> {
         Ok(ProposalExecutionOutcome::Ignored)
+    }
+}
+
+// 立法投票模块同时承载法律、任免和预算等业务的代表表决；各业务回调必须先以
+// ProposalOwner/MODULE_TAG 认领提案。元组只负责聚合，不在投票引擎中理解业务载荷。
+impl<A: LegislationVoteResultCallback> LegislationVoteResultCallback for (A,) {
+    fn on_legislation_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        A::on_legislation_vote_finalized(proposal_id, approved)
+    }
+
+    fn can_cancel_passed_proposal(
+        proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        A::can_cancel_passed_proposal(proposal_id)
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        A::on_execution_failed_terminal(proposal_id)
+    }
+}
+
+impl<A: LegislationVoteResultCallback, B: LegislationVoteResultCallback>
+    LegislationVoteResultCallback for (A, B)
+{
+    fn on_legislation_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        let a = A::on_legislation_vote_finalized(proposal_id, approved)?;
+        let b = B::on_legislation_vote_finalized(proposal_id, approved)?;
+        Ok(merge_execution_outcome(a, b))
+    }
+
+    fn can_cancel_passed_proposal(
+        proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        let a = A::can_cancel_passed_proposal(proposal_id)?;
+        let b = B::can_cancel_passed_proposal(proposal_id)?;
+        Ok(merge_cancel_decision(a, b))
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        A::on_execution_failed_terminal(proposal_id)?;
+        B::on_execution_failed_terminal(proposal_id)
+    }
+}
+
+impl<
+        A: LegislationVoteResultCallback,
+        B: LegislationVoteResultCallback,
+        C: LegislationVoteResultCallback,
+    > LegislationVoteResultCallback for (A, B, C)
+{
+    fn on_legislation_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        let mut outcome = A::on_legislation_vote_finalized(proposal_id, approved)?;
+        outcome = merge_execution_outcome(
+            outcome,
+            B::on_legislation_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            C::on_legislation_vote_finalized(proposal_id, approved)?,
+        );
+        Ok(outcome)
+    }
+
+    fn can_cancel_passed_proposal(
+        proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        let mut decision = A::can_cancel_passed_proposal(proposal_id)?;
+        decision = merge_cancel_decision(decision, B::can_cancel_passed_proposal(proposal_id)?);
+        decision = merge_cancel_decision(decision, C::can_cancel_passed_proposal(proposal_id)?);
+        Ok(decision)
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        A::on_execution_failed_terminal(proposal_id)?;
+        B::on_execution_failed_terminal(proposal_id)?;
+        C::on_execution_failed_terminal(proposal_id)
     }
 }
 // 选举投票(election-vote)mode trait

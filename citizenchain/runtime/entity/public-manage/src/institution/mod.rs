@@ -9,6 +9,7 @@ pub mod accounts;
 pub mod create;
 pub mod maintain;
 pub mod register;
+pub mod role;
 pub mod types;
 
 pub use types::*;

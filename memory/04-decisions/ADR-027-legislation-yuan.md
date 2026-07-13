@@ -4,7 +4,9 @@
 
 立法院模块:法律结构化上链 + 修法一律走投票引擎 + 严格按公民宪法表决模型落地。
 
-状态:已接受,大部分已落地(2026-06-24)。立法院业务壳(idx=27)+ 立法投票 sub-pallet(idx=28)+ 宪法迁移(章>节>条>款 统一 + 创世注入 + 节点桌面端 re-point)均已实现验证;**双客户端 CitizenApp/CitizenWallet(另线程卡)与立法机构选举体系(election-vote 选举→admins 通道,独立卡)待续**。下文方向与边界已据实现校准。**OnChina 控制台「立法与表决」落地(2026-06-30,见第 10 节 + 卡 `20260630-onchina-legislation-console-framework`)**:法律案全链路(发起/表决/进度)operator 端 + 免登录大屏 display 端已交付;任免案/预算案链下 schema 预留(链端 kind 待另卡)。**正式创世冻结收口(2026-07-01,卡 `20260701-constitution-genesis-freeze-step1`)**:Law 主记录版本指针改为 `effective_version/latest_version/pending_version`,立法/修法 `effective_at` 改为毫秒时间戳;创世宪法 law_id=0、v1 直接生效且无待生效版;旧 HTML 真源与解析脚本删除;GitHub WASM run `28492547251` 成功后已用 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>` 烘焙正式 raw,genesis hash `0x6c88667d43f5a2690f2cb176f5883e051a057db6bee5fa56bc8337becbf23417`。
+状态：已接受并持续校准。当前 pallet index 为 `legislation-yuan=25`、`legislation-vote=26`。法律数据、宪法迁移、法律投票、双客户端和 OnChina 操作/展示链路均已接入；任免、预算业务仍待独立业务模块实现，但其表决统一复用本 ADR 固定的代表机构表决框架，不新增投票模块或提案 kind。
+
+> **架构收口（2026-07-13，第四步 B1）**：投票引擎只保留一个 `legislation-vote`。模块内部用 `RepresentativeRoute::Single/Sequential` 表达单机构或顺序多机构，用 `RepresentativeVoteRule::Regular/Major/Special` 表达三类数学规则，用 `VoteProcedure::RepresentativeOnly/Legislation` 区分“表决后直接回业务”与“继续法律专属公投/签署/护宪”。法律、任免、预算正文全部留在各自业务模块；终局由 `ProposalOwner/MODULE_TAG` 路由，不新增 `personnel-vote`、`representative-vote` pallet，也不新增 PERSONNEL/BUDGET proposal kind。
 
 > **重大修订(2026-06-25,用户逐条确认,见 `08-tasks/open/20260625-legislation-signing-5type-revision.md`)**:
 > 1. **删除已废弃的重复表决流程**:本轮已改立法表决、教育类法案与签署救济相关条款,官员任免另立专案。正文只保留当前流程口径。
@@ -51,11 +53,11 @@
 #### 1b. 立法专属投票 sub-pallet:`citizenchain/runtime/votingengine/legislation-vote`
 
 - 新增投票引擎 sub-pallet,与 internal-vote / joint-vote / election-vote 平级;`pallet_index = 26`(原定 28,2026-07-12 号段连续化后为 26);对外类型名 `LegislationVote`。
-- 定位:立法机构专属投票,承载宪法第四十五/四十六条五类表决类型 + 两院顺序 + 强制公投 + 行政签署/会签救济,一处集中。
+- 定位：立法机关表决的唯一投票模块。代表表决可被法律、任免、预算等业务复用；强制公投、行政签署、共同签署和护宪终审只属于法律程序。
 - `Config: frame_system::Config + votingengine::Config`,复用核心 crate 全部共享基础设施(见第 5 节),只本地保管自己的计票账本。
 - **完全不修改 internal-vote / joint-vote / election-vote 三个 sub-pallet 的逻辑**:三者零改动、零回归;election-vote 空骨架原样保留供未来公职人员选举用。
 - **更正(2026-06-24,第2步精读核心后)**:核心 `votingengine` crate 按 `kind`/`stage` 硬编码分发,未知 kind 直接 `Err`。要让立法投票成为头等模式并真正共享核心基础,**第2步必须扩展核心 crate**(新增 `PROPOSAL_KIND_LEGISLATION` + 立法 stage + Config 三关联类型 `LegislationFinalizer`/`LegislationCleanup`/`LegislationVoteResultCallback` + 分发分支),并在所有 `votingengine::Config` 实现补这三类型(测试 mock 装 `()`)。这是 additive 扩展,不改三个 sub-pallet 逻辑,但"纯加 sub-pallet 零核心改动"的说法作废。详见任务卡第2步 2a。
-- legislation-yuan 业务壳通过本 sub-pallet 对外的 Engine trait(如 `LegislationVoteEngine`)创建/绑定投票,投票终态回调写回业务壳 Executor。
+- 各业务壳通过 `LegislationVoteEngine` 创建表决；法律调用 `create_legislation_vote`，任免/预算调用 `create_representative_vote`。业务结果按 `ProposalOwner/MODULE_TAG` 认领。
 
 ### 2. 立法机构权限矩阵(第十七条 / 立法院章节)
 
@@ -145,18 +147,24 @@ LawVersion {
 | 重要教育案 | > 90% 现任委员参与,≥ 70% 赞成 | 否 |
 | 特别案 | 全体参与,≥ 70% 赞成 | 是,且必须通过(国家级:全国 ≥70% 投票权公民参与 + ≥70% 赞成;省级:本省;市级:本市) |
 
-全部立法表决统一走新 `legislation-vote` sub-pallet,由它按"立法院院制 + 表决类型"内部分流(表决院=立法院下设单院/两院,议员=admins):
+五类是 `legislation-yuan` 的法律业务分类；进入 `legislation-vote` 时只映射为三类数学规则：
+
+- 常规案、常规教育案 → `RepresentativeVoteRule::Regular`。
+- 重要案、重要教育案 → `RepresentativeVoteRule::Major`。
+- 特别案 → `RepresentativeVoteRule::Special`。
+
+教育属性只决定提案机构和代表机构路线，不复制一套数学规则。全部法律表决统一走 `legislation-vote`：
 
 - 市立法会(单院):常规/重要 → 单院模式,一段内部表决(委员,按参与率/赞成率计票)。
 - 国家立法院 / 省立法院(下设众议会→参议会):常规/重要 → 两院模式,两段顺序内部表决(众议会按表决类型通过 → 参议会按表决类型终审通过),无公投。
 - 教育类法案:教委会(发起,内部表决) → 对应立法院终审院(国家/省为参议会,市级为市立法会) → 按常规教育案/重要教育案阈值表决。
 - 特别案 + 核心修宪 → 特别案模式:内部阶段(单院=委员;两院=众→参,全员 ≥70% 赞成) + 强制公投阶段(人口快照,国家=全国、省=本省、市=本市,≥70% 参与 + ≥70% 赞成),两阶段都必须通过。
 
-关键:这三种模式(单院 / 两院 / 特别案)全部在 `legislation-vote` 一个 sub-pallet 内实现,复用核心 crate 的提案生命周期、`AdminSnapshot`、人口快照验签 trait、清理、反向索引(第 5 节),只本地写自己的计票账本。现有 internal-vote / joint-vote / election-vote 零改动。
+关键：单机构、顺序多机构和特别案都在同一个 `legislation-vote` 内实现。路线使用 `Single/Sequential`，因此国家教委会→参议会可以准确表达为两个代表机构顺序表决，而不是伪称“双院”。
 
 结论(回应"是否只用内部/联合投票"):常规案/常规教育案/重要案/重要教育案只有内部表决(单院一段、两院两段);特别案与核心修宪按宪法第四十五/四十六条、第十九条强制叠加立法公投且通过 → 由 legislation-vote 特别案模式的"内部阶段 + 强制公投阶段"承载。五类档位同壳,不借用也不修改其它投票模块。
 
-### 5. 新增 legislation-vote sub-pallet(本项目核心,additive 不改存量)
+### 5. legislation-vote 固定内部框架
 
 不修改 internal-vote / joint-vote / election-vote;新增一个立法专属投票 sub-pallet,把宪法第四十五/四十六条的表决规则集中实现,复用核心 crate 共享基础。
 
@@ -167,15 +175,27 @@ LawVersion {
 - 公投基础:`PopulationSnapshotVerifier` 人口快照验签 trait + `CidEligibility` 资格 trait。
 - 到期清理、反向索引(`ProposalsByCid / ByOwner / ByYear`)、互斥锁、ID 生成。
 
-(B) 本 sub-pallet 本地新增(只是计票账本,对标 joint-vote 的 `JointTallies` / `ReferendumTallies` / `UsedPopulationSnapshotNonce`):
+(B) 稳定目录与强类型协议：
 
-- `VoteType=Regular/RegularEducation/Major/MajorEducation/Special`,五类表决类型与投票引擎 `LEG_VOTE_*` 常量一一对应。
-- 立法内部表决计票账本:按 `AdminSnapshot` 现任 admins 总数算参与率/赞成率;提前否决只做"现有票数已使赞成永不可能达标"的数学短路,不保留额外反对率条件。
-- 两院顺序内部阶段:可配置「机构阶段序列」,单院 = 一段,两院 = 众议会段 → 参议会段,每段独立计票 + 独立阈值。
-- 强制公投计票账本:内部阶段全部通过后强制进入(AND,不是否决救济);门槛 ≥70% 参与 + ≥70% 赞成;作用域全国/省/市;复用核心人口快照验签。
-- 立法专属 Engine trait(如 `LegislationVoteEngine`)+ 终态回调,供 legislation-yuan 业务壳调用与回写。
+```text
+legislation-vote/src/
+├── representative/{single,sequential,tally}.rs
+├── legislation/{referendum,signing,guard}.rs
+├── types.rs
+├── rules.rs
+├── result.rs
+└── cleanup.rs
+```
 
-(C) 与存量关系:internal-vote / joint-vote / election-vote 零改动零回归。joint-vote 的三储机构加权模式与本 sub-pallet 各管各的,不存在"两套模式并存于一 pallet"的问题。
+- `RepresentativeRoute::Single/Sequential`：一个或多个代表机构的推进顺序。
+- `RepresentativeVoteRule::Regular/Major/Special`：投票引擎唯一三类数学门槛。
+- `VoteProcedure::RepresentativeOnly/Legislation`：表决后直接回业务，或继续法律专属程序。
+- `RepresentativeMetas` 保存路线、当前机构、规则和程序；`LegislationMetas` 只保存法律签署、公投和护宪参数。
+- `RepresentativeTallies[proposal_id][body_index]` 每机构独立计票。
+- `RepresentativeVotesByAccount[proposal_id][(body_index, account)]` 按机构席位去重；同一钱包在多个机构任职时可分别投票。
+- 终局回调以元组扩展，由法律、任免、预算业务分别按 `ProposalOwner/MODULE_TAG` 认领。
+
+(C) 与存量关系：internal-vote、joint-vote、election-vote 职责不变。任免和预算是业务模块，不得在这些模块或 `legislation-vote` 中保存业务正文、复刻表决流程或新增投票 pallet。
 
 ### 6. 修宪特别约束(第十九条)
 
@@ -256,7 +276,7 @@ warp 版本集合连续性全部由节点原生复核。无 body 的 `ApplyChang
 
 - **第二步 node 背书(`node/src/core/constitution/guard.rs`,setCode 改不动)**:守卫 `ImmutableReference` 从 block#0 **另派生
   核心章非禁改条款基准** `core_articles`(无需改创世 manifest、无需重新创世);逐块校验 `check_core_chapter_tier`:
-  任一创世核心条款相对基准被**修改/删除/移出核心章**,则承载它的版本必须记录 `vote_type==Special`(`LEG_VOTE_SPECIAL=4`,
+  任一创世核心条款相对基准被**修改/删除/移出核心章**,则承载它的版本必须记录 `vote_type==Special`（业务 SCALE 索引 4，
   由 `enum_discriminants_match_node_guard` 钉死),否则 `CoreClauseNotSpecial(n)` 拒块。使 setCode 无法把核心章修改静默降级为重要案。
 
 - **第三步 公投凭据背书(设计 B,2026-07-09 同批落地)**:仅记录 `vote_type==Special` 可被撒谎的 runtime 伪造,
@@ -296,14 +316,18 @@ warp 版本集合连续性全部由节点原生复核。无 body 的 `ApplyChang
 - **根本不对称**:宪法不可修改 8 条能冻创世是因为**永不合法变更**;管理员集**天生要变**(普选/互选/联邦特权/阈值票),
   故只能冻**结构**、不能冻**成员**。档 A 冻的是"有几把椅子、椅子归谁管、多少人",不是"椅子上坐着谁"。
 
-- **规格单源**:`primitives::governance_skeleton`(编译常量,genesis 播种 / runtime 校验 / node 守卫三端共读):
-  `fixed_institutions()`(NRC/PRC/PRB/NJD 主账户 + 名额 + NJD 护宪席位)、`frg_province_groups()`、
-  `NJD_CONSTITUTION_GUARD_SEATS=7`、`KIND_PUBLIC_INSTITUTION/STATUS_ACTIVE` 判别值、`ROLE_CONSTITUTION_GUARD`
-  (admin-primitives re-export、创世 role-by-index、守卫三处逐字节共用)。
+- **职责分层**：`primitives::governance_skeleton` 是跨端编译期协议清单，保存五类固定机构、
+  岗位代码/名称、席位和 Node Guard 所需的 SCALE 锚点；`runtime/genesis::institution` 是唯一
+  实际写入岗位、任职和机构管理员账户的创世执行模块，并且只消费该清单。runtime 业务校验和
+  native Node Guard 同样消费清单。岗位数据确实在 genesis 写入，但不可把协议清单只放在
+  genesis pallet：Node Guard 必须脱离可升级 runtime 独立校验 setCode 和区块后置状态，
+  否则只能手抄第二份常量并产生漂移。
 
-- **逐块不变式(I1..I7,`node/src/core/node_guard/governance_skeleton.rs`)**:对每个固定机构与 43 个 FRG 省组——
-  I1 `AdminAccounts[主账户]`/`FederalRegistryProvinceGroups[省码]` 恒存在;I2 机构码不变;I3 `kind==PublicInstitution`;
-  I4 `status==Active`;I5 名额不变(19/9/9/15/5);I6 **NJD 护宪计数恒 7**(补上 §6.3 里没锚的「7」)。判定路径
+- **逐块不变式(`node/src/core/node_guard/governance_skeleton.rs`)**:对五个固定机构——
+  I1 `AdminAccounts[主账户]` 恒存在;I2 机构码不变;I3 `status==Active`;
+  I4 管理员总数不变(19/9/9/15/215)。FRG 的 43 个省专员岗位与每岗 5 席由 entity 岗位/任职真源
+  保存，不再维护 `FederalRegistryProvinceGroups` 虚拟账户；NJD 的 7/1/2/5 岗位席位由 genesis
+  写入并由 runtime entity 规则校验。判定路径
   由统一 `NodeGuard` 只读执行取后置变更 → 触 `PublicAdmins` 前缀或 `:code` 才全量校验 → 违规 `KnownBad`;
   warp 提交前校验;守卫取数/解码失败 fail-closed 拒块;启动期从 block#0 双锚(创世 state 必须已满足规格)。
   旧治理骨架独立包装器已删除，固定治理骨架改为 `NodeGuard` 内部纯策略；网络导入和挖矿导入均固定为
@@ -356,11 +380,11 @@ warp 版本集合连续性全部由节点原生复核。无 body 的 `ApplyChang
 
 立法院的**管理端 + 大屏**在 OnChina 控制台落地(链端 `legislation-yuan`/`legislation-vote` 本轮**零改动**,只读核对)。核心决策:
 
-- **提案三分类维度(`ProposalCategory`)**:法律案(Law)/ 任免案(Personnel)/ 预算案(Budget),以提案类型为可扩展维度。
+- **提案三分类维度(`ProposalCategory`)**：法律案 / 任免案 / 预算案是业务分类，不是三种投票模式。
   - **法律案**:本轮**全链路实现**——发起(章>节>条>款编辑器 + 冷签 QR)→ 院内/两院表决(一人一票冷签)→ 进度(六阶段 + 计票)。后端 `domains/legislation/{law,chain_read_proposal}`,前端 `legislation/operator/law/`。
-  - **任免案 / 预算案**:本轮**仅锁链下 schema**(`personnel/model.rs` = 任免职书;`budget/model.rs` = 类>款>项>目,金额分 u128 字符串出线防 JS 精度丢失)。**链端现状核实:无 `PROPOSAL_KIND_PERSONNEL/BUDGET`、无任免/预算 pallet/extrinsic**(仅 kind 0-3);**禁**借道 `PROPOSAL_KIND_LEGISLATION`(会污染 leg-yuan 回调,该回调只写 `LawVersion`)。发起/表决/读链待链端支持后**另卡**(新增 kind + 业务 pallet + 重新创世,含 runtime 二次确认)。
+  - **任免案 / 预算案**：由各自业务模块保存任免职书或预算正文，通过 `create_representative_vote` 复用代表机构表决。终局按 `ProposalOwner/MODULE_TAG` 路由，不新增 PERSONNEL/BUDGET kind，也不会进入 `LegislationMetas` 或法律回调。
 - **不改宪法(结论性前提)**:法律提案权宪法只给立法机关;政府的**人事任免**由宪法第 100/106 条直授(提交人事任免职书 → 参议会/立法会常规案表决任免),**预算**由《预算法》(普通法)授权——二者走独立提案类型,非法律案。给政府普通立法提案权才需修宪(不必要)。
-- **operator / display 双路由(契合 ADR-030)**:`operator/`(议员登录鉴权操作端)+ `display/`(大厅大屏**免登录只读**;经 `#/display` 顶层分流,机构由节点绑定 `active_node_binding` 唯一确定、**不接受请求参数**、fail-closed;单飞 + 短 TTL 缓存抑制无鉴权链读放大;逐席投票读 `LegHouseVotesByAdmin` 双 Map 部分键迭代 + `storage_key_suffix::<32>` 还原议员账户)。
+- **operator / display 双路由(契合 ADR-030)**：逐席投票读取 `RepresentativeVotesByAccount`，二级键为 `(body_index, account)`；大屏只展示当前代表机构索引的票据，不能把同一钱包在不同机构的票据互相覆盖。
 - **onchina 职责边界**:只做「组织提案数据 + 扫码冷签 + 提交 extrinsic + 读链展示」,**绝不计票/推进状态机**(全归投票引擎);读路径 scope fail-closed。
 - **遗留(均有卡/已登记)**:双客户端 CitizenApp/CitizenWallet(卡 `20260624-legislation-dual-client`,端到端 scan+submit)、任免/预算链端(`PROPOSAL_KIND_PERSONNEL/BUDGET` 另卡)、行政签署人登录 + `executive_sign`、议员 admins 灌入(election-vote)、大屏跨院活跃提案可见性细化、前端 ESLint(react-hooks/jsx-a11y)。
 
@@ -388,20 +412,19 @@ warp 版本集合连续性全部由节点原生复核。无 body 的 `ApplyChang
 - 简化阈值模型(不做参与率/反对率精确计票):被否。用户明确要求「按宪法完整实现」。
 - 法律存为整块文本 blob:被否。无法按条修改、diff 不清晰、不利渲染。
 
-## 后续动作(任务卡拆分,待 ADR 定稿后逐张创建)
+## 后续动作
 
-1. 卡1 新增 legislation-vote sub-pallet(核心,先行):`Config: votingengine::Config` 复用核心共享基础 + 本地五类表决计票账本 + 单院/两院/特别案三模式 + 强制公投 + `LegislationVoteEngine` trait + 测试;internal-vote / joint-vote / election-vote 零改动。
-2. 卡2 legislation-yuan 业务壳:数据模型 + 状态机 + `propose_*`(admin 入口) + Executor + runtime API + 不可修改条款硬拒;调 legislation-vote。
-3. 卡3 双客户端:CitizenApp(浏览+投票)+ CitizenWallet(decoder+签名,ADR-026 新 op_tag)。
-4. 卡4 宪法迁移:HTML → 结构化条文(中英双语),清理旧 include_str!/API。
-5. 上链:按 runtime 二次确认,协调重新创世 / setCode。
+1. 第四步 B2：建立提名任免业务模块，只保存任免职书、法定程序和结果写回；表决调用 `create_representative_vote`。
+2. 后续预算业务同样只保存预算数据和业务状态，复用代表机构表决。
+3. 两类业务接入 runtime 回调元组，由 `ProposalOwner/MODULE_TAG` 唯一认领。
+4. 每步按 runtime 二次确认执行，并完成跨端、fresh genesis 与真实运行态验收。
 
 ## 已拍板(2026-06-24)
 
 - 新增立法专属投票 sub-pallet `votingengine/legislation-vote`,不修改 internal-vote / joint-vote / election-vote;立法投票共享投票引擎核心基础设施,只本地存计票账本。
 - 议员/委员 = 机构 admins,不另建名册;换届走 admins-change。
 - 众议会/参议会 = 立法院下设两院;两院法案 = 两段顺序内部表决(众→参)。
-- 特别案/核心修宪 = legislation-vote 特别案模式(内部阶段 + 强制公投),不借用 election-vote。
+- 特别案/核心修宪 = 代表机构特别规则 + 法律专属强制公投，不借用 election-vote。
 - 提案恒由 admin 发起;市立法会公民联署门槛为现实前置,不做链上联署入口。
 - 投票引擎按宪法完整实现(参与率%/赞成率%/强制公投/行政签署与会签救济/护宪终审)。
 

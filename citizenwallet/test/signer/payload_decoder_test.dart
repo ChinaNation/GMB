@@ -1608,11 +1608,11 @@ void main() {
       expect(decoded.fields['scope_town_code'], '001001');
     });
 
-    test('decodes cast_house_vote (26.1)', () {
+    test('decodes cast_representative_vote (26.1)', () {
       final callData = [26, 1, ...u64Le(99), 0x01];
       final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'cast_house_vote');
+      expect(decoded!.action, 'cast_representative_vote');
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
     });

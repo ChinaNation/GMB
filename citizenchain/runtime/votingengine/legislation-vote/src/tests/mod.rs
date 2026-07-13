@@ -59,12 +59,16 @@ impl system::Config for Test {
 /// 院码(占位,TestInternalAdminProvider 不按码区分,只按机构账户)。
 pub const HOUSE1_CODE: InstitutionCode = *b"NLH0"; // 众议会式
 pub const HOUSE2_CODE: InstitutionCode = *b"NLS0"; // 参议会式
+pub const HOUSE3_CODE: InstitutionCode = *b"EDU0"; // 与第一机构共享部分管理员的教育委员会式机构
 
 pub fn house1() -> AccountId32 {
     AccountId32::new([91u8; 32])
 }
 pub fn house2() -> AccountId32 {
     AccountId32::new([92u8; 32])
+}
+pub fn house3() -> AccountId32 {
+    AccountId32::new([93u8; 32])
 }
 /// house1 议员 = 账户 [1..=10];house2 议员 = 账户 [11..=20]。
 pub fn member(idx: u8) -> AccountId32 {
@@ -138,6 +142,8 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             Some((1u8..=10).map(member).collect())
         } else if institution == house2() {
             Some((11u8..=20).map(member).collect())
+        } else if institution == house3() {
+            Some((1u8..=10).map(member).collect())
         } else {
             None
         }
@@ -151,6 +157,8 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
             Some(member(1))
         } else if institution == house2() {
             Some(member(11))
+        } else if institution == house3() {
+            Some(member(1))
         } else if institution == leg_body() {
             Some(leg_rep())
         } else if institution == exec_body() {
@@ -238,7 +246,7 @@ impl votingengine::Config for Test {
     type InternalCleanup = InternalVote;
     type JointFinalizer = ();
     type JointCleanup = ();
-    type LegislationVoteResultCallback = TestLegislationCallback;
+    type LegislationVoteResultCallback = (TestLegislationCallback,);
     type LegislationFinalizer = LegislationVote;
     type LegislationCleanup = LegislationVote;
     type ElectionVoteResultCallback = ();
@@ -271,45 +279,58 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 
 // ───────── 测试 helper ─────────
 pub type Lib = crate::pallet::Pallet<Test>;
-pub use crate::pallet::LegMeta;
+pub use crate::pallet::RepresentativeMetas;
+use crate::{RepresentativeBodies, RepresentativeRoute, RepresentativeVoteRule, VoteProcedure};
 
 /// 创建立法提案并注册 ProposalData(设置 ProposalOwner,终态回调需要),不自动投票。
 pub fn create(
     proposer: AccountId32,
-    houses: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
-    vote_type: u8,
+    bodies: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
+    rule: RepresentativeVoteRule,
 ) -> u64 {
-    create_inner(proposer, houses, vote_type, false)
+    create_inner(proposer, bodies, rule, false)
 }
 
 /// 修宪提案(needs_guard=true):现有流程通过后进护宪大法官终审。
 pub fn create_guard(
     proposer: AccountId32,
-    houses: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
-    vote_type: u8,
+    bodies: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
+    rule: RepresentativeVoteRule,
 ) -> u64 {
-    create_inner(proposer, houses, vote_type, true)
+    create_inner(proposer, bodies, rule, true)
 }
 
 fn create_inner(
     proposer: AccountId32,
-    houses: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
-    vote_type: u8,
+    bodies: sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)>,
+    rule: RepresentativeVoteRule,
     needs_guard: bool,
 ) -> u64 {
     // 单院(市)=无 legislature;两院(国/省)=携带立法院。行政签署机构恒携带。
-    let legislature = if houses.len() >= 2 {
+    let legislature = if bodies.len() >= 2 {
         Some((LEG_CODE, leg_body()))
     } else {
         None
     };
-    let pid = Lib::do_create_legislation_proposal(
+    let bounded: RepresentativeBodies<AccountId32> =
+        bodies.try_into().expect("representative route bounded");
+    let route = if bounded.len() == 1 {
+        RepresentativeRoute::Single(bounded.first().cloned().expect("single body"))
+    } else {
+        RepresentativeRoute::Sequential(bounded)
+    };
+    let pid = Lib::do_create_representative_proposal(
         proposer,
-        houses,
-        vote_type,
-        (EXEC_CODE, exec_body()),
-        legislature,
-        needs_guard,
+        route,
+        rule,
+        VoteProcedure::Legislation,
+        Default::default(),
+        Some(crate::pallet::LegislationMeta {
+            executive: (EXEC_CODE, exec_body()),
+            legislature,
+            needs_guard,
+            referendum_scope: None,
+        }),
     )
     .expect("proposal created");
     let now = System::block_number();
@@ -332,6 +353,11 @@ pub fn two_houses() -> sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId3
     sp_runtime::sp_std::vec![(HOUSE1_CODE, house1()), (HOUSE2_CODE, house2())]
 }
 
+/// 两个管理员名册重叠的代表机构，用于验证同一钱包按机构席位分别投票。
+pub fn overlapping_bodies() -> sp_runtime::sp_std::vec::Vec<(InstitutionCode, AccountId32)> {
+    sp_runtime::sp_std::vec![(HOUSE1_CODE, house1()), (HOUSE3_CODE, house3())]
+}
+
 /// 当前提案状态(从核心读)。
 pub fn status(pid: u64) -> u8 {
     votingengine::pallet::Proposals::<Test>::get(pid)
@@ -348,7 +374,7 @@ pub fn stage(pid: u64) -> u8 {
 pub fn cast(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchResult {
     frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
-            match Lib::do_cast_house_vote(who, pid, approve) {
+            match Lib::do_cast_representative_vote(who, pid, approve) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }

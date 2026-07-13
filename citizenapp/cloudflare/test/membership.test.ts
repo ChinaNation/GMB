@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { scaleCompact as compactU32 } from '../src/shared/signing_message';
 import { encodeAddress } from '@polkadot/util-crypto';
-import { membershipRoute } from '../src/membership/service';
+import { membershipRoute, subscriptionIsActive } from '../src/membership/service';
 import { stripeWebhookRoute, verifyStripeSignature } from '../src/membership/webhook';
 import { routeRequest } from '../src/routes';
 import type { Env, MembershipRow, SessionState } from '../src/types';
@@ -64,14 +64,50 @@ describe('membership route', () => {
     const response = await membershipRoute(request('https://w/v1/square/membership'), env);
     const body = (await response.json()) as {
       active: boolean;
+      frozen: boolean;
       inactive_code: string;
       eligible_levels: string[];
     };
 
     expect(body.active).toBe(false);
-    expect(body.inactive_code).toBe('membership_identity_required');
+    expect(body.frozen).toBe(true);
+    expect(body.inactive_code).toBe('membership_frozen_identity_mismatch');
     // 精确匹配（禁止降档）：voting 身份只能订 voting。
     expect(body.eligible_levels).toEqual(['voting']);
+  });
+
+  it('freezes a freedom membership held by a voting identity（身份升级未换档，双向冻结）', async () => {
+    const env = fakeEnv({
+      membership: membershipRow({ membership_level: 'freedom' }),
+      storageResponses: [votingIdentityHex(), null]
+    });
+
+    const response = await membershipRoute(request('https://w/v1/square/membership'), env);
+    const body = (await response.json()) as {
+      active: boolean;
+      frozen: boolean;
+      inactive_code: string;
+    };
+
+    // 会员 < 身份 也算不匹配：freedom(访客档) 被 voting 身份持有 → 冻结。
+    expect(body.active).toBe(false);
+    expect(body.frozen).toBe(true);
+    expect(body.inactive_code).toBe('membership_frozen_identity_mismatch');
+  });
+
+  it('does not freeze on transient chain read failure（回退上次已知身份，不误冻）', async () => {
+    const env = fakeEnv({
+      membership: membershipRow({ membership_level: 'candidate', identity_level: 'candidate' }),
+      storageResponses: [],
+      storageThrows: true
+    });
+
+    const response = await membershipRoute(request('https://w/v1/square/membership'), env);
+    const body = (await response.json()) as { active: boolean; frozen: boolean };
+
+    // 回链失败 → 回退持久 identity_level='candidate' → 与 candidate 会员匹配 → 不冻。
+    expect(body.active).toBe(true);
+    expect(body.frozen).toBe(false);
   });
 });
 
@@ -169,6 +205,28 @@ describe('stripe membership webhook', () => {
     });
   });
 
+  it('upserts from a new-API event with item-level current_period_end（顶层为空也不报错）', async () => {
+    const db = new FakeDb();
+    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
+    const body = stripeEvent({
+      membership_level: 'freedom',
+      status: 'active',
+      periodEnd: 1_893_456_000,
+      periodOnItem: true
+    });
+
+    const response = await stripeWebhookRoute(await signedRequest(body), env);
+    const json = (await response.json()) as { action: string };
+
+    // 不再因顶层 current_period_end 为空抛 invalid_stripe_subscription。
+    expect(json.action).toBe('subscription_upserted');
+    expect(db.memberships.get(owner)).toMatchObject({
+      membership_level: 'freedom',
+      subscription_status: 'active',
+      expires_at: 1_893_456_000 * 1000
+    });
+  });
+
   it('records identity_required instead of activating an ineligible candidate subscription', async () => {
     const db = new FakeDb();
     const env = fakeEnv({
@@ -242,12 +300,201 @@ describe('stripe membership webhook', () => {
       verifyStripeSignature('{"id":"evt"}', 't=123,v1=bad', stripeSecret, 123, 300)
     ).rejects.toMatchObject({ code: 'stripe_signature_mismatch' });
   });
+
+  it('grants USDC prepaid duration from a paid prepaid checkout.session.completed', async () => {
+    const db = new FakeDb();
+    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
+    const body = JSON.stringify({
+      id: 'evt_prepaid',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_prepaid_freedom_quarter',
+          payment_status: 'paid',
+          payment_intent: 'pi_test',
+          metadata: {
+            route: 'usdc_prepaid',
+            owner_account: owner,
+            membership_level: 'freedom',
+            duration: 'quarter'
+          }
+        }
+      }
+    });
+
+    const response = await stripeWebhookRoute(await signedRequest(body), env);
+    const json = (await response.json()) as { action: string; membership_level: string };
+
+    expect(json).toMatchObject({ action: 'prepaid_granted', membership_level: 'freedom' });
+    const row = db.memberships.get(owner);
+    expect(row?.subscription_source).toBe('usdc_prepaid');
+    expect(row?.membership_level).toBe('freedom');
+    // 从 now 起叠 3 个月 → 到期在未来。
+    expect((row?.expires_at ?? 0) > Date.now()).toBe(true);
+    expect(row?.prepaid_payment_ref).toBe('pi_test');
+  });
+
+  it('applies USDC upgrade (level only, keeps expires) from a paid usdc_prepaid_upgrade checkout', async () => {
+    const db = new FakeDb();
+    const env = fakeEnv({
+      db,
+      membership: membershipRow({
+        subscription_source: 'usdc_prepaid',
+        membership_level: 'freedom',
+        stripe_subscription_id: null,
+        expires_at: Date.now() + 30 * 86_400_000
+      }),
+      storageResponses: [],
+      stripeSecret
+    });
+    const body = JSON.stringify({
+      id: 'evt_upgrade',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_prepaid_upgrade_democracy',
+          payment_status: 'paid',
+          payment_intent: 'pi_up',
+          metadata: {
+            route: 'usdc_prepaid_upgrade',
+            owner_account: owner,
+            membership_level: 'democracy'
+          }
+        }
+      }
+    });
+
+    const response = await stripeWebhookRoute(await signedRequest(body), env);
+    const json = (await response.json()) as { action: string; membership_level: string };
+    expect(json).toMatchObject({ action: 'prepaid_upgraded', membership_level: 'democracy' });
+  });
+
+  it('卡→USDC 切换：预付授权益前设卡到期取消，行转 usdc_prepaid 从卡到期日往后叠', async () => {
+    const db = new FakeDb();
+    const cardEnd = Date.now() + 20 * 86_400_000;
+    const env = fakeEnv({
+      db,
+      membership: membershipRow({
+        subscription_source: 'stripe',
+        membership_level: 'freedom',
+        stripe_subscription_id: 'sub_card',
+        expires_at: cardEnd
+      }),
+      storageResponses: [],
+      stripeSecret
+    });
+    const body = JSON.stringify({
+      id: 'evt_switch',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_prepaid_freedom_quarter',
+          payment_status: 'paid',
+          payment_intent: 'pi_sw',
+          metadata: {
+            route: 'usdc_prepaid',
+            owner_account: owner,
+            membership_level: 'freedom',
+            duration: 'quarter'
+          }
+        }
+      }
+    });
+
+    const response = await stripeWebhookRoute(await signedRequest(body), env);
+    const json = (await response.json()) as { action: string };
+    expect(json.action).toBe('prepaid_granted');
+    const row = db.memberships.get(owner);
+    expect(row?.subscription_source).toBe('usdc_prepaid');
+    // 从卡到期日往后叠 3 个月 → 到期晚于卡到期。
+    expect((row?.expires_at ?? 0) > cardEnd).toBe(true);
+  });
+
+  it('异档并存兜底：已有 freedom USDC，candidate 预付按价值折算而非直贴档差', async () => {
+    const db = new FakeDb();
+    const freedomEnd = Date.now() + 90 * 86_400_000;
+    const env = fakeEnv({
+      db,
+      membership: membershipRow({
+        subscription_source: 'usdc_prepaid',
+        membership_level: 'freedom',
+        stripe_subscription_id: null,
+        current_period_start: Date.now(),
+        expires_at: freedomEnd
+      }),
+      storageResponses: [],
+      stripeSecret
+    });
+    const body = JSON.stringify({
+      id: 'evt_fold',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_prepaid_candidate_quarter',
+          payment_status: 'paid',
+          payment_intent: 'pi_fold',
+          metadata: {
+            route: 'usdc_prepaid',
+            owner_account: owner,
+            membership_level: 'candidate',
+            duration: 'quarter'
+          }
+        }
+      }
+    });
+
+    const response = await stripeWebhookRoute(await signedRequest(body), env);
+    expect(((await response.json()) as { action: string }).action).toBe('prepaid_granted');
+    const row = db.memberships.get(owner);
+    expect(row?.membership_level).toBe('candidate');
+    // 兜底：now+3月 + 折算(90×299/9999≈3天)，绝非朴素的 freedom 到期(now+90d)再叠 3 月(≈180d)。
+    const naiveEnd = freedomEnd + 3 * 30 * 86_400_000;
+    expect((row?.expires_at ?? 0) < naiveEnd).toBe(true);
+    expect((row?.expires_at ?? 0) < Date.now() + 120 * 86_400_000).toBe(true);
+    // 至少含买到的 3 个日历月。
+    expect((row?.expires_at ?? 0) > Date.now() + 85 * 86_400_000).toBe(true);
+  });
+
+  it('does not grant on a card checkout.session.completed (no prepaid route)', async () => {
+    const db = new FakeDb();
+    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
+    const body = JSON.stringify({
+      id: 'evt_card_checkout',
+      type: 'checkout.session.completed',
+      data: { object: { id: 'cs_card', payment_status: 'paid', metadata: {} } }
+    });
+
+    const response = await stripeWebhookRoute(await signedRequest(body), env);
+    const json = (await response.json()) as { action: string };
+    expect(json.action).toBe('checkout_session_observed');
+    expect(db.memberships.get(owner)).toBeUndefined();
+  });
+});
+
+describe('subscriptionIsActive (USDC 预付)', () => {
+  it('usdc_prepaid 只看 expires_at：未到期=有效、过期=无效（不看 status）', () => {
+    const future = membershipRow({
+      subscription_source: 'usdc_prepaid',
+      subscription_status: 'active',
+      stripe_subscription_id: null,
+      expires_at: Date.now() + 86_400_000
+    });
+    const past = membershipRow({
+      subscription_source: 'usdc_prepaid',
+      subscription_status: 'active',
+      stripe_subscription_id: null,
+      expires_at: Date.now() - 1000
+    });
+    expect(subscriptionIsActive(future)).toBe(true);
+    expect(subscriptionIsActive(past)).toBe(false);
+  });
 });
 
 function fakeEnv(input: {
   db?: FakeDb;
   membership?: MembershipRow | null;
   storageResponses: Array<string | null>;
+  storageThrows?: boolean;
   stripeSecret?: string;
 }): Env {
   const db = input.db ?? new FakeDb();
@@ -264,13 +511,17 @@ function fakeEnv(input: {
   const responses = [...input.storageResponses];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () =>
-      Response.json({
-        jsonrpc: '2.0',
-        id: 1,
-        result: responses.shift() ?? null
-      })
-    )
+    input.storageThrows
+      ? vi.fn(async () => {
+          throw new Error('rpc down');
+        })
+      : vi.fn(async () =>
+          Response.json({
+            jsonrpc: '2.0',
+            id: 1,
+            result: responses.shift() ?? null
+          })
+        )
   );
 
   return {
@@ -280,7 +531,8 @@ function fakeEnv(input: {
     CHAIN_URL: 'https://chain.test',
     CHAIN_ID: 'worker-rpc.access',
     CHAIN_SECRET: 'test-access-secret',
-    STRIPE_HOOK_SECRET: input.stripeSecret
+    STRIPE_HOOK_SECRET: input.stripeSecret,
+    STRIPE_DEV_PROXY: '1'
   } as unknown as Env;
 }
 
@@ -311,36 +563,37 @@ function stripeEvent(input: {
   periodEnd: number;
   priceCurrency?: string;
   priceUnitAmount?: number;
+  periodOnItem?: boolean;
 }): string {
   const price = stripePriceForMembership(input.membership_level);
+  const periodStart = 1_800_000_000;
+  const item: Record<string, unknown> = {
+    price: {
+      id: price.id,
+      currency: input.priceCurrency ?? price.currency,
+      unit_amount: input.priceUnitAmount ?? price.unit_amount
+    }
+  };
+  const object: Record<string, unknown> = {
+    id: 'sub_test',
+    customer: 'cus_test',
+    status: input.status,
+    cancel_at_period_end: false,
+    metadata: { owner_account: owner, membership_level: input.membership_level }
+  };
+  // 新版 API：计费周期在 item 上、订阅顶层缺省；旧版：在顶层。
+  if (input.periodOnItem) {
+    item.current_period_start = periodStart;
+    item.current_period_end = input.periodEnd;
+  } else {
+    object.current_period_start = periodStart;
+    object.current_period_end = input.periodEnd;
+  }
+  object.items = { data: [item] };
   return JSON.stringify({
     id: 'evt_test',
     type: 'customer.subscription.updated',
-    data: {
-      object: {
-        id: 'sub_test',
-        customer: 'cus_test',
-        status: input.status,
-        current_period_start: 1_800_000_000,
-        current_period_end: input.periodEnd,
-        cancel_at_period_end: false,
-        metadata: {
-          owner_account: owner,
-          membership_level: input.membership_level
-        },
-        items: {
-          data: [
-            {
-              price: {
-                id: price.id,
-                currency: input.priceCurrency ?? price.currency,
-                unit_amount: input.priceUnitAmount ?? price.unit_amount
-              }
-            }
-          ]
-        }
-      }
-    }
+    data: { object }
   });
 }
 
@@ -379,6 +632,9 @@ function membershipRow(overrides: Partial<MembershipRow> = {}): MembershipRow {
     identity_level: 'visitor',
     identity_checked_at: Date.now(),
     entitlement_lapsed_at: null,
+    frozen_at: null,
+    collection_paused: 0,
+    prepaid_payment_ref: null,
     ...overrides
   };
 }
@@ -473,23 +729,45 @@ class FakeStmt {
   async run(): Promise<{ success: boolean }> {
     if (this.sql.includes('INSERT INTO square_memberships')) {
       const ownerAccount = this.args[0] as string;
-      this.db.memberships.set(ownerAccount, {
-        owner_account: ownerAccount,
-        membership_level: this.args[1] as string,
-        expires_at: this.args[2] as number,
-        updated_at: this.args[3] as number,
-        subscription_source: 'stripe',
-        stripe_customer_id: this.args[4] as string | null,
-        stripe_subscription_id: this.args[5] as string,
-        stripe_price_id: this.args[6] as string | null,
-        subscription_status: this.args[7] as string,
-        current_period_start: this.args[8] as number | null,
-        current_period_end: this.args[9] as number,
-        cancel_at_period_end: this.args[10] as number,
-        identity_level: this.args[11] as string,
-        identity_checked_at: this.args[12] as number,
-        entitlement_lapsed_at: null
-      });
+      if (this.sql.includes("'usdc_prepaid'")) {
+        // USDC 预付 binds: [owner, level, expires, updated, start, end, identity, checked_at, ref]
+        this.db.memberships.set(
+          ownerAccount,
+          membershipRow({
+            owner_account: ownerAccount,
+            membership_level: this.args[1] as string,
+            expires_at: this.args[2] as number,
+            subscription_source: 'usdc_prepaid',
+            stripe_subscription_id: null,
+            subscription_status: 'active',
+            current_period_start: this.args[4] as number,
+            current_period_end: this.args[5] as number,
+            identity_level: this.args[6] as string,
+            prepaid_payment_ref: this.args[8] as string | null
+          })
+        );
+      } else {
+        this.db.memberships.set(ownerAccount, {
+          owner_account: ownerAccount,
+          membership_level: this.args[1] as string,
+          expires_at: this.args[2] as number,
+          updated_at: this.args[3] as number,
+          subscription_source: 'stripe',
+          stripe_customer_id: this.args[4] as string | null,
+          stripe_subscription_id: this.args[5] as string,
+          stripe_price_id: this.args[6] as string | null,
+          subscription_status: this.args[7] as string,
+          current_period_start: this.args[8] as number | null,
+          current_period_end: this.args[9] as number,
+          cancel_at_period_end: this.args[10] as number,
+          identity_level: this.args[11] as string,
+          identity_checked_at: this.args[12] as number,
+          entitlement_lapsed_at: null,
+          frozen_at: null,
+          collection_paused: 0,
+          prepaid_payment_ref: null
+        });
+      }
     }
     if (this.sql.includes('UPDATE square_memberships') && this.sql.includes('stripe_subscription_id')) {
       const status = this.args[0] as string;

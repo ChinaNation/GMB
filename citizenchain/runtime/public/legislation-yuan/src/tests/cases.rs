@@ -212,9 +212,12 @@ fn enum_discriminants_match_node_guard() {
     assert_eq!(LawStatus::Pending.encode(), vec![0u8]);
     assert_eq!(LawStatus::Effective.encode(), vec![1u8]);
     assert_eq!(LawStatus::Repealed.encode(), vec![2u8]);
-    // 特别案 wire 值 = 4:节点守卫 `LEG_VOTE_SPECIAL` 据此判定核心章档位背书(第十九条)。
-    assert_eq!(VoteType::Special.as_u8(), 4);
+    // 特别案业务 wire 值 = 4：节点守卫据此判定核心章档位背书（第十九条）。
     assert_eq!(VoteType::Special.encode(), vec![4u8]);
+    assert_eq!(
+        VoteType::Special.representative_rule(),
+        legislation_vote::RepresentativeVoteRule::Special
+    );
 }
 
 #[test]

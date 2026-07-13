@@ -1,10 +1,10 @@
-// 提案进度纯展示件——六阶段步骤条 + 状态/表决类型/当前院 Tag + 院内/公投计票条。
+// 提案进度纯展示件——阶段、状态、规则、当前代表机构和计票。
 // 只读投影(接收已取好的 LegProposalState,不含取数/鉴权),操作端进度页与大屏看板共用。
 
 import React from 'react';
 import { Progress, Space, Steps, Tag } from 'antd';
 import type { LegProposalState } from '../types';
-import { voteTypeLabel } from './labels';
+import { representativeRuleLabel } from './labels';
 import { STAGES, approvalPercent, statusTag } from './proposalStageUtils';
 
 interface Props {
@@ -19,10 +19,10 @@ export function ProposalTallyPanel({ state }: Props) {
     <div>
       <Space wrap style={{ marginBottom: 12 }}>
         <Tag color={status.color}>{status.text}</Tag>
-        <span>表决类型:{voteTypeLabel(state.voteType)}</span>
-        <span>当前院:第 {state.currentHouse + 1} 院</span>
+        <span>表决规则:{representativeRuleLabel(state.representativeRule)}</span>
+        <span>当前代表机构:第 {state.currentBody + 1} 个</span>
         {state.needsGuard && <Tag color="volcano">需护宪终审</Tag>}
-        {state.referendumRequired && <Tag color="gold">需立法公投</Tag>}
+        {state.representativeRule === 2 && <Tag color="gold">特别案公投</Tag>}
       </Space>
 
       <Steps
@@ -33,10 +33,10 @@ export function ProposalTallyPanel({ state }: Props) {
 
       <div style={{ marginTop: 16 }}>
         <div>
-          院内计票(赞成 {state.houseTally.yes} / 反对 {state.houseTally.no}):
+          当前代表机构计票(赞成 {state.representativeTally.yes} / 反对 {state.representativeTally.no}):
         </div>
-        <Progress percent={approvalPercent(state.houseTally.yes, state.houseTally.no)} />
-        {state.referendumRequired && (
+        <Progress percent={approvalPercent(state.representativeTally.yes, state.representativeTally.no)} />
+        {state.representativeRule === 2 && (
           <>
             <div style={{ marginTop: 8 }}>
               公投计票(赞成 {state.referendumTally.yes} / 反对 {state.referendumTally.no}):

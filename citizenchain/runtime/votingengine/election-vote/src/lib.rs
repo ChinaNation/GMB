@@ -10,8 +10,8 @@
 //! - 互选:由机构现任成员在成员快照内互选院长、主席、参议长、众议长等职位。
 //! - 同票、补选、递补、重选等细节不写死在本 pallet,后续由选举法规则接入。
 //!
-//! `popular.rs` 承载普选,`mutual.rs` 承载互选。两者都只做选举投票编排,
-//! 当前阶段只生成当选结果快照;最终管理员写入仍必须回到 admins 权限真源。
+//! `popular.rs` 承载普选,`mutual.rs` 承载互选。两者只做选举投票编排和结果快照；
+//! 结果终态经 runtime 路由到 entity 写入岗位任职，再由 entity 派生 admins 钱包集合。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -58,11 +58,8 @@ pub mod pallet {
     pub type MaxElectionCandidatesOf<T> = <T as Config>::MaxElectionCandidates;
     pub type MaxElectionVotersOf<T> = <T as Config>::MaxElectionVoters;
     pub type ElectionOfficeCodeOf<T> = BoundedVec<u8, MaxElectionOfficeCodeOf<T>>;
-    pub type ElectionMetaOf<T> = ElectionMeta<
-        <T as frame_system::Config>::AccountId,
-        BlockNumberFor<T>,
-        ElectionOfficeCodeOf<T>,
-    >;
+    pub type ElectionMetaOf<T> =
+        ElectionMeta<<T as frame_system::Config>::AccountId, ElectionOfficeCodeOf<T>>;
     pub type ElectionWinnerOf<T> = ElectionWinner<<T as frame_system::Config>::AccountId>;
 
     #[pallet::config]
@@ -86,6 +83,11 @@ pub mod pallet {
 
         /// 机构账户 → CID 查询入口。选举提案用 CID 记录组织机构和目标机构。
         type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
+
+        /// 选举结果写入 entity 的唯一出口；election-vote 不直接持有岗位或 admins storage。
+        type InstitutionAssignmentResultHandler: entity_primitives::InstitutionAssignmentResultHandler<
+            Self::AccountId,
+        >;
     }
 
     #[pallet::pallet]
@@ -133,7 +135,7 @@ pub mod pallet {
     pub type ElectionTallyStore<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, ElectionTallyData, ValueQuery>;
 
-    /// 当选结果快照。后续 admins/法定代表人模块只能消费该结果,不得反向改票。
+    /// 当选结果快照。终态只交给 entity 任职入口消费，业务模块不得反向改票。
     #[pallet::storage]
     pub type ElectionResults<T: Config> = StorageMap<
         _,
@@ -213,8 +215,8 @@ pub mod pallet {
             office_code: ElectionOfficeCodeOf<T>,
             rule_id: u32,
             seat_count: u16,
-            term_start: BlockNumberFor<T>,
-            term_end: BlockNumberFor<T>,
+            term_start: u32,
+            term_end: u32,
             candidates: Vec<T::AccountId>,
             voters: Vec<T::AccountId>,
         ) -> DispatchResult {
@@ -249,8 +251,8 @@ pub mod pallet {
             office_code: ElectionOfficeCodeOf<T>,
             rule_id: u32,
             seat_count: u16,
-            term_start: BlockNumberFor<T>,
-            term_end: BlockNumberFor<T>,
+            term_start: u32,
+            term_end: u32,
             candidates: Vec<T::AccountId>,
             voters: Vec<T::AccountId>,
         ) -> DispatchResult {
@@ -335,8 +337,8 @@ pub mod pallet {
             office_code: ElectionOfficeCodeOf<T>,
             rule_id: u32,
             seat_count: u16,
-            term_start: BlockNumberFor<T>,
-            term_end: BlockNumberFor<T>,
+            term_start: u32,
+            term_end: u32,
             candidates: Vec<T::AccountId>,
             voters: Vec<T::AccountId>,
         ) -> Result<u64, DispatchError> {
@@ -515,6 +517,28 @@ impl<T: pallet::Config> votingengine::ElectionVoteResultCallback for pallet::Pal
         }
         if approved && !pallet::ElectionResults::<T>::contains_key(vote_proposal_id) {
             return Ok(votingengine::ProposalExecutionOutcome::FatalFailed);
+        }
+        if approved {
+            use codec::Encode as _;
+            use entity_primitives::InstitutionAssignmentResultHandler as _;
+
+            let meta = pallet::ElectionMetaStore::<T>::get(vote_proposal_id)
+                .ok_or(pallet::Error::<T>::ElectionMetaMissing)?;
+            let winners = pallet::ElectionResults::<T>::get(vote_proposal_id)
+                .ok_or(pallet::Error::<T>::EmptyCandidateSnapshot)?;
+            let assignment_source = meta.mode.assignment_source();
+            T::InstitutionAssignmentResultHandler::apply_institution_assignment_result(
+                entity_primitives::InstitutionAssignmentResult {
+                    institution_code: meta.target_code,
+                    institution_account: meta.target,
+                    role_code: meta.office_code.into_inner(),
+                    admin_accounts: winners.into_iter().map(|winner| winner.account).collect(),
+                    term_start: meta.term_start,
+                    term_end: meta.term_end,
+                    assignment_source,
+                    assignment_source_ref: vote_proposal_id.encode(),
+                },
+            )?;
         }
         Ok(votingengine::ProposalExecutionOutcome::Executed)
     }

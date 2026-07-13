@@ -1,38 +1,25 @@
 use super::account_id::normalize_pubkey_hex;
-use super::types::{source_label, AdminAccountDecoded, AdminProfileInfo};
+use super::types::{AdminAccountDecoded, AdminProfileInfo};
 
-/// 解码各管理员 pallet `AdminAccounts` 的完整核心字段。
+/// 解码机构管理员模块的 `InstitutionAdminAccount`。
 ///
-/// 链上布局(逐字段对齐 `admin-primitives::AdminAccount`,SCALE 按声明序):
-/// cid_number:BoundedVec<u8>(Compact 长度 + 字节)+ institution_code:[u8;4] + kind:u8
-/// + admins:BoundedVec<AdminProfile> + creator:AccountId32 + created_at:u32
-/// + updated_at:u32 + status:u8。
-///
-/// 单个 `AdminProfile`(kind≠2):admin_account:[u8;32] + admin_cid_number + admin_name
-/// + role_code + role_name(四个 `BoundedVec<u8>` 均 Compact 长度 + 字节)+ term_start:u32
-/// + term_end:u32 + admin_source:u8 + admin_source_ref:BoundedVec<u8>。
-/// 个人多签(kind=2)的 admins 仍是裸 `BoundedVec<AccountId32>`,无 profile 附加字段。
-///
-/// 展示层 `admin_role` 取链上 `role_name`(对外岗位名称);`role_code`/`admin_source_ref`
-/// 展示层不用,仅解析以对齐后续字段偏移。头部 `cid_number` 同理跳过(展示用查询入参)。
-/// created_at/updated_at 是 BlockNumberFor<T>,citizenchain runtime 配置为 u32。
+/// SCALE 布局固定为 `cid_number + institution_code + admins(AccountId[]) + status`。
+/// 岗位、任期、来源和姓名不在 admins 值中，桌面端需另查 entity 岗位任职表；个人
+/// 多签使用独立账户模型，不通过此机构解码器读取。
 pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> {
     // 头部 cid_number: BoundedVec<u8> = Compact(len) + bytes。个人多签无机构 cid → Compact(0)。
     // 展示层用查询入参里的 cid,这里只需跳过以对齐后续字段偏移。
     let (cid_len, cid_len_size) = read_compact_u32(data, 0)?;
     let mut offset = cid_len_size + cid_len as usize;
 
-    // institution_code: [u8;4] 定长(4 裸字节无长度前缀)+ kind: u8。
-    if offset + 4 + 1 > data.len() {
-        return Err("AdminAccount 机构码/kind 数据不足".to_string());
+    // institution_code: [u8;4] 定长(4 裸字节，无 kind 字段)。
+    if offset + 4 > data.len() {
+        return Err("InstitutionAdminAccount 机构码数据不足".to_string());
     }
     let institution_code: [u8; 4] = data[offset..offset + 4]
         .try_into()
         .map_err(|_| "AdminAccount 机构码数据不足".to_string())?;
     offset += 4;
-    let kind = data[offset];
-    offset += 1;
-
     let (count, len_size) = read_compact_u32(data, offset)?;
     offset += len_size;
     let mut admins = Vec::with_capacity(count as usize);
@@ -42,75 +29,28 @@ pub fn decode_admin_account(data: &[u8]) -> Result<AdminAccountDecoded, String> 
         }
         let account = hex::encode(&data[offset..offset + 32]);
         offset += 32;
-        if kind == 2 {
-            admins.push(AdminProfileInfo::account_only(account));
-            continue;
-        }
-        // AdminProfile 四字符串:admin_cid_number / admin_name / role_code / role_name。
-        let (admin_cid_number, next) = read_compact_string(data, offset, "admin_cid_number")?;
-        offset = next;
-        let (name, next) = read_compact_string(data, offset, "admin_name")?;
-        offset = next;
-        // role_code 仅内部引用,展示层不用;解析以对齐偏移。
-        let (_role_code, next) = read_compact_string(data, offset, "role_code")?;
-        offset = next;
-        // role_name = 对外岗位名称,展示层 admin_role 取此字段。
-        let (role_name, next) = read_compact_string(data, offset, "role_name")?;
-        offset = next;
-        if offset + 4 + 4 + 1 > data.len() {
-            return Err("AdminProfile 任期/来源数据不足".to_string());
-        }
-        let term_start = read_u32_le(data, offset);
-        offset += 4;
-        let term_end = read_u32_le(data, offset);
-        offset += 4;
-        let source = data[offset];
-        offset += 1;
-        // admin_source_ref: 尾部来源追溯串;展示层不用,解析以对齐偏移。
-        let (_admin_source_ref, next) = read_compact_string(data, offset, "admin_source_ref")?;
-        offset = next;
-        admins.push(AdminProfileInfo {
-            account,
-            admin_cid_number,
-            name,
-            admin_role: role_name,
-            term_start,
-            term_end,
-            source,
-            source_label: source_label(source).to_string(),
-        });
+        admins.push(AdminProfileInfo::account_only(account));
     }
-
-    if offset + 32 > data.len() {
-        return Err("AdminAccount creator 数据不足".to_string());
-    }
-    let creator_hex = hex::encode(&data[offset..offset + 32]);
-    offset += 32;
-
-    if offset + 4 > data.len() {
-        return Err("AdminAccount created_at 数据不足".to_string());
-    }
-    let created_at = read_u32_le(data, offset);
-    offset += 4;
-
-    if offset + 4 > data.len() {
-        return Err("AdminAccount updated_at 数据不足".to_string());
-    }
-    let updated_at = read_u32_le(data, offset);
-    offset += 4;
 
     if offset >= data.len() {
-        return Err("AdminAccount status 数据不足".to_string());
+        return Err("InstitutionAdminAccount status 数据不足".to_string());
     }
     let status = data[offset];
+    let kind = if primitives::cid::code::is_private_legal_code(&institution_code) {
+        1 // PrivateInstitution
+    } else if primitives::cid::code::is_public_legal_code(&institution_code) {
+        0 // PublicInstitution
+    } else {
+        2 // 仅作为未知/个人路由的展示兜底；个人多签不走本解码器。
+    };
 
     Ok(AdminAccountDecoded {
         institution_code,
         kind,
         admins,
-        creator_hex,
-        created_at,
-        updated_at,
+        creator_hex: String::new(),
+        created_at: 0,
+        updated_at: 0,
         status,
     })
 }
@@ -167,29 +107,6 @@ pub fn read_compact_u32(data: &[u8], offset: usize) -> Result<(u32, usize), Stri
     }
 }
 
-fn read_compact_string(
-    data: &[u8],
-    offset: usize,
-    field_name: &str,
-) -> Result<(String, usize), String> {
-    let (len, len_size) = read_compact_u32(data, offset)?;
-    let start = offset + len_size;
-    let end = start + len as usize;
-    if end > data.len() {
-        return Err(format!("AdminProfile {field_name} 数据不足"));
-    }
-    Ok((String::from_utf8_lossy(&data[start..end]).to_string(), end))
-}
-
-fn read_u32_le(data: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes([
-        data[offset],
-        data[offset + 1],
-        data[offset + 2],
-        data[offset + 3],
-    ])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,7 +118,14 @@ mod tests {
         assert_eq!(encode_compact_u32(64), vec![0x01, 0x01]);
     }
 
-    // ── 金标向量:直接 encode 真链上类型 `admin-primitives::AdminAccount`,喂给解码器断言 ──
+    // 机构管理员链上值已收口为 entity 外部的纯账户集合；旧 AdminProfile 金标向量已删除。
+    // 岗位/任职 SCALE 金标由 public-manage/entity 测试维护，避免在节点端复制第二份模型。
+    #[test]
+    fn compact_encoder_matches_account_list_prefix() {
+        assert_eq!(encode_admins(&["aa".repeat(32)]).unwrap()[0], 0x04);
+    }
+
+    /* 旧 AdminProfile 金标已随 admins/entity 模型迁移删除。
     // 逐字段对齐。任一字段序漂移(改 admin-primitives 布局)→ encode 字节变 → 本测试红。
     use admin_primitives::{
         AdminAccount, AdminAccountKind, AdminAccountStatus, AdminProfile, AdminSource,
@@ -284,4 +208,5 @@ mod tests {
         assert_eq!(decoded.creator_hex, "bb".repeat(32));
         assert_eq!(decoded.status, 1);
     }
+    */
 }

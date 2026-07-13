@@ -1,6 +1,6 @@
 //! 立法冷签动作:组织 `ChainCall` → 构造扫码上链 `sign_request`(复用机构创建同款 `build_sign_request_bytes`)。
 //!
-//! 立法提案/院内表决是**链上 extrinsic**(议员 origin 冷签提交),走链交易 QR 路径
+//! 立法提案/代表机构表决是链上 extrinsic（管理员 origin 冷签提交），走链交易 QR 路径。
 //! (`b.a = chain_action_code(pallet, call)`、`b.d = SCALE call_data`),**不走** `onchina_admin_governance`
 //! 文本 QR 路径,故不经 `auth/actions.rs` 的 prepare/commit 治理流。范式与
 //! `institution::subjects::registration::build_institution_create_sign_request` 完全一致。
@@ -11,7 +11,7 @@
 //!
 
 use super::model::ProposeLawInput;
-use super::service::{build_house_vote_call, build_propose_law_call};
+use super::service::{build_propose_law_call, build_representative_vote_call};
 use crate::api_error;
 use crate::core::qr::build_sign_request_bytes;
 use axum::http::StatusCode;
@@ -36,15 +36,15 @@ pub(crate) fn build_propose_law_sign_request(
     build_chain_sign_request("leg-propose", actor_pubkey, &chain.call_data, chain.action)
 }
 
-/// 立法院内表决冷签 `sign_request`(actor_pubkey = 投票议员/委员)。
-pub(crate) fn build_house_vote_sign_request(
+/// 代表机构表决冷签 `sign_request`（actor_pubkey = 投票管理员）。
+pub(crate) fn build_representative_vote_sign_request(
     proposal_id: u64,
     approve: bool,
     actor_pubkey: &str,
 ) -> Result<String, Response> {
-    let chain = build_house_vote_call(proposal_id, approve);
+    let chain = build_representative_vote_call(proposal_id, approve);
     build_chain_sign_request(
-        "leg-house-vote",
+        "leg-representative-vote",
         actor_pubkey,
         &chain.call_data,
         chain.action,
@@ -125,13 +125,14 @@ mod tests {
         assert!(!json["b"]["d"].as_str().unwrap().is_empty()); // call_data(base64)非空
     }
 
-    /// 院内表决 sign_request 承载 cast_house_vote 动作码(0x1A01)。
+    /// 代表机构表决 sign_request 承载 cast_representative_vote 动作码（0x1A01）。
     #[test]
-    fn house_vote_sign_request_targets_legislation_vote() {
-        let sign_request = build_house_vote_sign_request(42, true, actor_hex("22").as_str())
-            .expect("build vote sign_request");
+    fn representative_vote_sign_request_targets_legislation_vote() {
+        let sign_request =
+            build_representative_vote_sign_request(42, true, actor_hex("22").as_str())
+                .expect("build vote sign_request");
         let json: serde_json::Value = serde_json::from_str(&sign_request).expect("parse json");
-        assert_eq!(json["b"]["a"].as_u64().unwrap(), 0x1A01); // (26<<8)|1 = cast_house_vote
+        assert_eq!(json["b"]["a"].as_u64().unwrap(), 0x1A01); // (26<<8)|1 = cast_representative_vote
     }
 
     /// 越权/非法输入在组织阶段即拒(省教育案无路由 → 提案组织错误映射为 422)。

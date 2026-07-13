@@ -1,7 +1,19 @@
 import SectionTitle from '../components/SectionTitle'
 import GlowCard from '../components/GlowCard'
+import DownloadButton, { type DownloadOption } from '../components/DownloadButton'
 
-const systems = [
+interface ProductSystem {
+  name: string
+  subtitle: string
+  desc: string
+  features: string[]
+  tech: string
+  color: string
+  fullWidth?: boolean
+  downloads: DownloadOption[]
+}
+
+const systems: ProductSystem[] = [
   {
     name: 'CitizenApp 公民',
     subtitle: 'CitizenApp 公民移动客户端',
@@ -18,6 +30,10 @@ const systems = [
     ],
     tech: 'Dart / Flutter / iOS / Android',
     color: 'gold',
+    downloads: [
+      { label: 'iOS', kind: 'store', message: '请前往 App Store 搜索「公民 CitizenApp」下载安装。' },
+      { label: 'Android', kind: 'file', asset: 'citizenapp-android.apk' },
+    ],
   },
   {
     name: 'CitizenWallet 公民钱包',
@@ -36,6 +52,10 @@ const systems = [
     tech: 'Dart / Flutter / 完全离线 / 独立应用',
     color: 'gold',
     fullWidth: false,
+    downloads: [
+      { label: 'iOS', kind: 'store', message: '请前往 App Store 搜索「公民钱包 CitizenWallet」下载安装。' },
+      { label: 'Android', kind: 'file', asset: 'citizenwallet-android.apk' },
+    ],
   },
   {
     name: 'CitizenChain 公民链',
@@ -54,6 +74,12 @@ const systems = [
     tech: 'Rust / polkadot-sdk / Tauri / Axum / PostgreSQL',
     color: 'blue',
     fullWidth: true,
+    downloads: [
+      { label: 'macOS', kind: 'file', asset: 'citizenchain-macos-arm64.dmg' },
+      { label: 'Windows', kind: 'file', asset: 'citizenchain-windows-x64.msi' },
+      { label: 'Linux-arm', kind: 'file', asset: 'citizenchain-linux-arm64.deb' },
+      { label: 'Linux-amd', kind: 'file', asset: 'citizenchain-linux-amd64.deb' },
+    ],
   },
 ]
 
@@ -104,8 +130,13 @@ export default function Ecosystem() {
               glow={s.color === 'gold' ? 'gold' : 'blue'}
               className={`flex flex-col ${s.fullWidth ? 'md:col-span-2' : ''}`}
             >
-              <div className="mb-1 text-xs font-medium uppercase tracking-wider text-gold-400">{s.subtitle}</div>
-              <h3 className="mb-3 text-2xl font-bold text-white">{s.name}</h3>
+              <div className="mb-3 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="mb-1 text-xs font-medium uppercase tracking-wider text-gold-400">{s.subtitle}</div>
+                  <h3 className="text-2xl font-bold text-white">{s.name}</h3>
+                </div>
+                <DownloadButton productLabel={s.name} options={s.downloads} />
+              </div>
               <p className="mb-6 text-sm leading-relaxed text-slate-400">{s.desc}</p>
 
               <div className={`mb-6 grid gap-2 grid-cols-2 ${s.fullWidth ? 'md:grid-cols-4' : ''}`}>

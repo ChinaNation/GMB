@@ -5,6 +5,7 @@
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::RuntimeDebug;
+use legislation_vote::RepresentativeVoteRule;
 use scale_info::TypeInfo;
 
 /// 法律层级。宪法为最高层级,只能由国家立法院按宪法第十九条修改。
@@ -57,9 +58,8 @@ pub enum LawStatus {
     Repealed,
 }
 
-/// 表决类型(公民宪法第45/46条,ADR-027 当前五类立法表决)。
-/// 映射为投票引擎接口的 `u8`,保持引擎与业务枚举解耦。教育变体阈值同非教育同级,
-/// 仅提案机构(教委会)与表决院路由不同。
+/// 立法业务表决类型（公民宪法第45/46条规定的五类）。
+/// 教育变体只决定提案机构和代表机构路由，数学规则复用同级强类型规则。
 #[derive(
     Encode,
     Decode,
@@ -86,15 +86,12 @@ pub enum VoteType {
 }
 
 impl VoteType {
-    /// 转为投票引擎接口使用的 u8,值与 `votingengine::types::LEG_VOTE_*` 对齐
-    /// (常规 0 / 常规教育 1 / 重要 2 / 重要教育 3 / 特别 4)。
-    pub fn as_u8(&self) -> u8 {
+    /// 映射到投票引擎唯一负责的三类数学规则。
+    pub fn representative_rule(&self) -> RepresentativeVoteRule {
         match self {
-            VoteType::Regular => 0,
-            VoteType::RegularEducation => 1,
-            VoteType::Major => 2,
-            VoteType::MajorEducation => 3,
-            VoteType::Special => 4,
+            VoteType::Regular | VoteType::RegularEducation => RepresentativeVoteRule::Regular,
+            VoteType::Major | VoteType::MajorEducation => RepresentativeVoteRule::Major,
+            VoteType::Special => RepresentativeVoteRule::Special,
         }
     }
 

@@ -2318,7 +2318,7 @@ fn main() {
                 "/api/v1/institutions/gov",
                 get(domains::gov::handler::list_official_institutions),
             )
-            // 立法与表决:发起/院内表决(返回扫码上链 sign_request)+ 读法律/读提案进度。
+            // 立法与表决：发起/代表机构表决（返回扫码上链 sign_request）+ 读法律/读提案进度。
             .route(
                 "/api/v1/legislation/proposable",
                 get(domains::legislation::handler::list_proposable),
@@ -2328,8 +2328,8 @@ fn main() {
                 post(domains::legislation::handler::propose_legislation),
             )
             .route(
-                "/api/v1/legislation/house-vote",
-                post(domains::legislation::handler::cast_house_vote),
+                "/api/v1/legislation/representative-vote",
+                post(domains::legislation::handler::cast_representative_vote),
             )
             .route(
                 "/api/v1/legislation/laws",

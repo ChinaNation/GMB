@@ -10,11 +10,7 @@ use super::model::{
     WorkspaceSectionKind,
 };
 
-fn action(
-    action: WorkspaceAction,
-    title: &str,
-    enabled: bool,
-) -> WorkspaceActionItem {
+fn action(action: WorkspaceAction, title: &str, enabled: bool) -> WorkspaceActionItem {
     WorkspaceActionItem {
         action,
         title: title.to_string(),
@@ -158,9 +154,9 @@ fn legislation_sections(capabilities: CapabilitySet) -> Vec<WorkspaceSection> {
                     capabilities.can_propose_legislation,
                 ),
                 action(
-                    WorkspaceAction::CastHouseVote,
-                    "院内表决",
-                    capabilities.can_cast_house_vote,
+                    WorkspaceAction::CastRepresentativeVote,
+                    "代表机构表决",
+                    capabilities.can_cast_representative_vote,
                 ),
             ],
         ),

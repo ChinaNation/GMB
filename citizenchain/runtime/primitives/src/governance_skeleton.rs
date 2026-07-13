@@ -1,26 +1,31 @@
 //! 固定治理骨架冻结规格(档 A 单源)。
 //!
-//! `admins-change`(`public-admins::AdminAccounts` + `FederalRegistryProvinceGroups`)是全部
-//! 机构管理员角色的唯一真源,但节点层零守卫,一次 setCode/恶意 runtime 可任意改写。本模块把
-//! **永不合法变更的结构骨架**收敛为编译常量单源,供三端共读、逐字节防漂移:
-//!   1. 创世播种(`runtime/genesis`):写入固定机构管理员集与护宪席位;
-//!   2. runtime 校验(`public-admins`):NJD 管理员集变更强制护宪恰 7 席(I6);
-//!   3. 节点守卫(`node/src/core/governance_skeleton.rs`):逐块背书 I1..I7,setCode 改不动。
+//! `public-admins::AdminAccounts` 保存固定机构管理员钱包，`public-manage` 保存岗位与任职。
+//! 本模块把**永不合法变更的结构骨架**收敛为编译常量清单，供三端共读、防止规格漂移:
+//!   1. 创世播种(`runtime/genesis`):写入固定机构、岗位、任职与管理员钱包;
+//!   2. runtime 查询(`public-manage`):按稳定岗位代码读取有效任职;
+//!   3. 节点守卫(`node/src/core/node_guard/governance_skeleton.rs`):读取固定账户骨架；
+//!      entity 岗位与席位的逐块 RAW 守卫按后续步骤接入。
 //!
-//! **只冻结构,不冻成员**:固定机构的存在性/机构码/类型/名额/护宪席位数是永不合法变更的
+//! 本文件是跨 runtime、genesis 和 native node 的协议清单，不负责写入 storage。
+//! 实际创世写入唯一发生在 `runtime/genesis::institution`；runtime/node 只消费这里的
+//! 编译期规格。这样 Node Guard 不需要依赖可升级 runtime，也不会因 runtime/genesis
+//! 的实现变化而手抄另一份席位常量。
+//!
+//! **只冻结构,不冻成员**:固定机构的存在性/机构码/名额/护宪席位数是永不合法变更的
 //! 结构量;而"座位上坐的是谁"由普选/互选/阈值票合法轮换,不在本规格内(等长换座即过)。
 //! **不含阈值**:固定治理阈值是 `fixed_governance_pass_threshold` 计票逻辑、不落 state,守卫
 //! 锚不到,故不在本规格。成员劫持(保持席位数、整体换攻击者密钥)属档 B(创世根验签链),不在此。
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 use crate::cid::china::china_cb::CHINA_CB;
 use crate::cid::china::china_ch::CHINA_CH;
-use crate::cid::china::china_sf::CHINA_SF;
+use crate::cid::china::{china_sf::CHINA_SF, china_zf::CHINA_ZF};
 use crate::cid::code::{
-    institution_code_from_cid_number, InstitutionCode, ProvinceCode, NJD, NRC, PRB, PRC,
+    institution_code_from_cid_number, InstitutionCode, ProvinceCode, FRG, NJD, NRC, PRB, PRC,
     PROVINCE_CODE_INFOS,
 };
 use crate::count_const::{
@@ -28,48 +33,81 @@ use crate::count_const::{
     PRC_ADMIN_COUNT,
 };
 
-/// 护宪大法官职务字面量单源。`admin-primitives::ADMIN_ROLE_CONSTITUTION_GUARD` re-export 本常量,
-/// 创世 role-by-index 与节点守卫 I6 逐字节共用,禁止各处手写字符串。
+/// 护宪大法官公开岗位名单源。创世与节点守卫逐字节共用，禁止各处手写字符串。
 pub const ROLE_CONSTITUTION_GUARD: &[u8] = "护宪大法官".as_bytes();
+
+/// 固定创世岗位代码。岗位代码是授权键，中文岗位名只用于公开展示。
+pub const ROLE_CODE_COMMITTEE_MEMBER: &[u8] = b"COMMITTEE_MEMBER";
+pub const ROLE_CODE_DIRECTOR: &[u8] = b"DIRECTOR";
+pub const ROLE_CODE_CONSTITUTION_GUARD: &[u8] = b"CONSTITUTION_GUARD";
+pub const ROLE_CODE_CHIEF_JUSTICE: &[u8] = b"CHIEF_JUSTICE";
+pub const ROLE_CODE_DEPUTY_CHIEF_JUSTICE: &[u8] = b"DEPUTY_CHIEF_JUSTICE";
+pub const ROLE_CODE_JUSTICE: &[u8] = b"JUSTICE";
+pub const ROLE_CODE_PROVINCE_COMMISSIONER_PREFIX: &[u8] = b"PROVINCE_COMMISSIONER_";
+
+/// 固定创世岗位公开名称。
+pub const ROLE_NAME_COMMITTEE_MEMBER: &[u8] = "委员".as_bytes();
+pub const ROLE_NAME_DIRECTOR: &[u8] = "董事".as_bytes();
+pub const ROLE_NAME_CHIEF_JUSTICE: &[u8] = "首席大法官".as_bytes();
+pub const ROLE_NAME_DEPUTY_CHIEF_JUSTICE: &[u8] = "次席大法官".as_bytes();
+pub const ROLE_NAME_JUSTICE: &[u8] = "大法官".as_bytes();
+
+/// 联邦注册局省专员岗位代码：`PROVINCE_COMMISSIONER_<两位省码>`。
+pub fn province_commissioner_role_code(province_code: ProvinceCode) -> Vec<u8> {
+    let mut out = Vec::with_capacity(ROLE_CODE_PROVINCE_COMMISSIONER_PREFIX.len() + 2);
+    out.extend_from_slice(ROLE_CODE_PROVINCE_COMMISSIONER_PREFIX);
+    out.extend_from_slice(&province_code);
+    out
+}
+
+/// 联邦注册局省专员岗位名称：`<省行政区名称>专员`。
+pub fn province_commissioner_role_name(province_name: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(province_name.len() + "专员".len());
+    out.extend_from_slice(province_name.as_bytes());
+    out.extend_from_slice("专员".as_bytes());
+    out
+}
 
 /// NJD 护宪大法官法庭固定席位数 = 公民宪法第 21 条 4/7 终审的「7」。
 ///
-/// 创世 `national_judicial_yuan_admin_role` 的 role-by-index 0..=6 落 7 名护宪,本常量即其规格单源;
-/// 节点骨架守卫 I6 逐块断言护宪计数恒等于本值,补上宪法守卫 `guard_review_passed(approve>=4)`
-/// 里从未被锚定的「7」(见 ADR-027 §6.3)。
+/// 创世 `fixed_roles` 的钱包索引 0..=6 落 7 名护宪，本常量即其规格单源；
+/// 创世岗位映射与后续 entity 岗位守卫都使用本值，补上宪法守卫
+/// `guard_review_passed(approve>=4)` 里从未被锚定的「7」(见 ADR-027 §6.3)。
 pub const NJD_CONSTITUTION_GUARD_SEATS: u32 = 7;
-
-/// `AdminAccountKind::PublicInstitution` 的 SCALE 判别值(声明序第 0 位)。
-/// 由 `admin-primitives` 测试 `scale_discriminants_match_governance_skeleton` 交叉钉死。
-pub const KIND_PUBLIC_INSTITUTION: u8 = 0;
 
 /// `AdminAccountStatus::Active` 的 SCALE 判别值(声明序 Pending=0/Active=1/Closed=2)。
 /// 由 `admin-primitives` 测试交叉钉死。
 pub const STATUS_ACTIVE: u8 = 1;
 
-/// 某固定治理机构的法庭角色构成约束(当前仅 NJD 有护宪席位约束)。
+/// `InstitutionRoleStatus::Active` 与 `InstitutionAssignmentStatus::Active` 的判别值。
+pub const ROLE_STATUS_ACTIVE: u8 = 0;
+pub const ASSIGNMENT_STATUS_ACTIVE: u8 = 0;
+
+/// 固定机构岗位与席位规格。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct CourtSpec {
-    /// 受约束的职务名(逐字节比对 `AdminProfile.role_name`)。
+pub struct FixedRoleSpec {
+    /// 稳定岗位代码。
+    pub role_code: &'static [u8],
+    /// 公开岗位名。
     pub role_name: &'static [u8],
-    /// 该职务的固定席位数。
-    pub exact_count: u32,
+    /// 固定席位数。
+    pub seats: u32,
 }
 
 /// 单个固定治理机构的冻结规格。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FixedInstitution {
-    /// 机构码(NRC/PRC/PRB/NJD)。
+    /// 机构码(NRC/PRC/PRB/NJD/FRG)。
     pub code: InstitutionCode,
     /// 机构主账户 = `AdminAccounts` 键(来自 `CHINA_*` 创世常量,编译进二进制)。
     pub main_account: [u8; 32],
+    /// 机构 CID = entity 岗位与任职双映射的第一层键。
+    pub cid_number: &'static str,
     /// 固定管理员总数(仅允许等长换人)。
     pub expected_len: u32,
-    /// 法庭角色约束(仅 NJD 为 `Some`)。
-    pub court: Option<CourtSpec>,
 }
 
-/// 枚举全部固定治理机构冻结规格(纯编译常量,不读链)。
+/// 枚举全部五类固定治理机构冻结规格(纯编译常量,不读链)。
 ///
 /// NRC/PRC 来自 `CHINA_CB`,PRB 来自 `CHINA_CH`,NJD 来自 `CHINA_SF`;三者创世即
 /// `insert_fixed_admins` 写入 `AdminAccounts`,故 block#0 state 与本规格双锚。
@@ -83,15 +121,15 @@ pub fn fixed_institutions() -> Vec<FixedInstitution> {
             out.push(FixedInstitution {
                 code: NRC,
                 main_account: node.main_account,
+                cid_number: node.cid_number,
                 expected_len: NRC_ADMIN_COUNT,
-                court: None,
             });
         } else if code == PRC {
             out.push(FixedInstitution {
                 code: PRC,
                 main_account: node.main_account,
+                cid_number: node.cid_number,
                 expected_len: PRC_ADMIN_COUNT,
-                court: None,
             });
         }
     }
@@ -100,8 +138,8 @@ pub fn fixed_institutions() -> Vec<FixedInstitution> {
             out.push(FixedInstitution {
                 code: PRB,
                 main_account: node.main_account,
+                cid_number: node.cid_number,
                 expected_len: PRB_ADMIN_COUNT,
-                court: None,
             });
         }
     }
@@ -110,20 +148,92 @@ pub fn fixed_institutions() -> Vec<FixedInstitution> {
             out.push(FixedInstitution {
                 code: NJD,
                 main_account: node.main_account,
+                cid_number: node.cid_number,
                 expected_len: NJD_ADMIN_COUNT,
-                court: Some(CourtSpec {
-                    role_name: ROLE_CONSTITUTION_GUARD,
-                    exact_count: NJD_CONSTITUTION_GUARD_SEATS,
-                }),
             });
         }
     }
+    // FRG 是一个机构；43 个省专员岗位的 5 人席位由 entity 任职表达，
+    // admins 账户集合在 public-admins 中聚合为 215 人，不再生成虚拟省组账户。
+    out.push(federal_registry_institution());
     out
 }
 
-/// FRG 省行政区治理组冻结规格:每省一条 `(省码, 固定人数=5)`。
+/// 固定机构的岗位与席位。FRG 的 43 个省专员岗位由省码动态生成，不走本函数。
+pub fn fixed_role_specs(code: InstitutionCode) -> Vec<FixedRoleSpec> {
+    match code {
+        NRC | PRC => vec![FixedRoleSpec {
+            role_code: ROLE_CODE_COMMITTEE_MEMBER,
+            role_name: ROLE_NAME_COMMITTEE_MEMBER,
+            seats: if code == NRC {
+                NRC_ADMIN_COUNT
+            } else {
+                PRC_ADMIN_COUNT
+            },
+        }],
+        PRB => vec![FixedRoleSpec {
+            role_code: ROLE_CODE_DIRECTOR,
+            role_name: ROLE_NAME_DIRECTOR,
+            seats: PRB_ADMIN_COUNT,
+        }],
+        NJD => vec![
+            FixedRoleSpec {
+                role_code: ROLE_CODE_CONSTITUTION_GUARD,
+                role_name: ROLE_CONSTITUTION_GUARD,
+                seats: NJD_CONSTITUTION_GUARD_SEATS,
+            },
+            FixedRoleSpec {
+                role_code: ROLE_CODE_CHIEF_JUSTICE,
+                role_name: ROLE_NAME_CHIEF_JUSTICE,
+                seats: 1,
+            },
+            FixedRoleSpec {
+                role_code: ROLE_CODE_DEPUTY_CHIEF_JUSTICE,
+                role_name: ROLE_NAME_DEPUTY_CHIEF_JUSTICE,
+                seats: 2,
+            },
+            FixedRoleSpec {
+                role_code: ROLE_CODE_JUSTICE,
+                role_name: ROLE_NAME_JUSTICE,
+                seats: 5,
+            },
+        ],
+        _ => Vec::new(),
+    }
+}
+
+/// 查询固定机构某岗位的法定席位数；非固定机构或清单外岗位返回 `None`。
 ///
-/// 键 = `FederalRegistryProvinceGroups[省码]`(不是聚合账户);守卫据省码直接读该组。
+/// entity 在应用选举结果前使用本函数执行 runtime 侧前置拒绝，Node Guard 再从节点层
+/// 独立复核同一清单。FRG 的 43 个省专员岗位按稳定省码逐一匹配。
+pub fn fixed_role_seats(code: InstitutionCode, role_code: &[u8]) -> Option<u32> {
+    if code == FRG {
+        return PROVINCE_CODE_INFOS.iter().find_map(|province| {
+            (province_commissioner_role_code(province.province_code) == role_code)
+                .then_some(FRG_PROVINCE_GROUP_ADMIN_COUNT)
+        });
+    }
+    fixed_role_specs(code)
+        .into_iter()
+        .find(|role| role.role_code == role_code)
+        .map(|role| role.seats)
+}
+
+/// 联邦注册局固定机构规格。FRG 只有一个管理员账户，省级边界由 43 个岗位表达。
+pub fn federal_registry_institution() -> FixedInstitution {
+    let node = CHINA_ZF
+        .iter()
+        .find(|node| institution_code_from_cid_number(node.cid_number) == Some(FRG))
+        .expect("CHINA_ZF must contain FRG");
+    FixedInstitution {
+        code: FRG,
+        main_account: node.main_account,
+        cid_number: node.cid_number,
+        expected_len: PROVINCE_CODE_INFOS.len() as u32 * FRG_PROVINCE_GROUP_ADMIN_COUNT,
+    }
+}
+
+/// FRG 省专员岗位冻结规格：每省一条 `(省码, 固定人数=5)`。
 pub fn frg_province_groups() -> Vec<(ProvinceCode, u32)> {
     PROVINCE_CODE_INFOS
         .iter()
@@ -143,13 +253,15 @@ mod tests {
 
         let nrc = list.iter().find(|f| f.code == NRC).expect("NRC 必须在册");
         assert_eq!(nrc.expected_len, NRC_ADMIN_COUNT);
-        assert!(nrc.court.is_none());
 
         let njd = list.iter().find(|f| f.code == NJD).expect("NJD 必须在册");
         assert_eq!(njd.expected_len, NJD_ADMIN_COUNT);
-        let court = njd.court.expect("NJD 必须有护宪法庭约束");
+        let court = fixed_role_specs(NJD)
+            .into_iter()
+            .find(|role| role.role_code == ROLE_CODE_CONSTITUTION_GUARD)
+            .expect("NJD 必须有护宪岗位");
         assert_eq!(court.role_name, ROLE_CONSTITUTION_GUARD);
-        assert_eq!(court.exact_count, NJD_CONSTITUTION_GUARD_SEATS);
+        assert_eq!(court.seats, NJD_CONSTITUTION_GUARD_SEATS);
 
         assert!(list
             .iter()
@@ -157,6 +269,14 @@ mod tests {
         assert!(list
             .iter()
             .any(|f| f.code == PRB && f.expected_len == PRB_ADMIN_COUNT));
+        let frg = list
+            .iter()
+            .find(|f| f.code == FRG)
+            .expect("FRG 必须作为第五类固定机构在册");
+        assert_eq!(
+            frg.expected_len,
+            PROVINCE_CODE_INFOS.len() as u32 * FRG_PROVINCE_GROUP_ADMIN_COUNT
+        );
     }
 
     #[test]
@@ -177,5 +297,19 @@ mod tests {
     #[test]
     fn role_literal_is_stable() {
         assert_eq!(ROLE_CONSTITUTION_GUARD, "护宪大法官".as_bytes());
+    }
+
+    #[test]
+    fn fixed_role_seat_lookup_covers_judicial_and_federal_registry_roles() {
+        assert_eq!(fixed_role_seats(NJD, ROLE_CODE_CONSTITUTION_GUARD), Some(7));
+        let first_province = PROVINCE_CODE_INFOS[0];
+        assert_eq!(
+            fixed_role_seats(
+                FRG,
+                &province_commissioner_role_code(first_province.province_code)
+            ),
+            Some(FRG_PROVINCE_GROUP_ADMIN_COUNT)
+        );
+        assert_eq!(fixed_role_seats(NJD, b"UNKNOWN"), None);
     }
 }

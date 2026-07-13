@@ -4,19 +4,6 @@ use primitives::cid::code::{
 };
 use serde::Serialize;
 
-/// 管理员资料来源。判别值与链端 `admin-primitives::AdminSource` 对齐。
-pub fn source_label(source: u8) -> &'static str {
-    match source {
-        0 => "创世",
-        1 => "注册局",
-        2 => "内部投票",
-        3 => "互选",
-        4 => "普选",
-        5 => "提名任免",
-        _ => "",
-    }
-}
-
 /// 链上机构管理员公开资料，逐字段镜像 `admin-primitives::AdminProfile`。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

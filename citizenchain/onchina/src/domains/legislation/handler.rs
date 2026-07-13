@@ -31,10 +31,10 @@ pub(crate) struct LawListQuery {
     pub scope_code: u32,
 }
 
-/// 院内表决请求体。
+/// 代表机构表决请求体。
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct CastHouseVoteInput {
+pub(crate) struct CastRepresentativeVoteInput {
     pub proposal_id: u64,
     pub approve: bool,
 }
@@ -345,17 +345,17 @@ pub(crate) async fn propose_legislation(
     }
 }
 
-/// POST /api/v1/legislation/house-vote —— 院内表决,返回扫码上链 sign_request。
-pub(crate) async fn cast_house_vote(
+/// POST /api/v1/legislation/representative-vote —— 当前代表机构表决。
+pub(crate) async fn cast_representative_vote(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(input): Json<CastHouseVoteInput>,
+    Json(input): Json<CastRepresentativeVoteInput>,
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    // 只有能参与院内表决的机构可投:发起院/复议院可投,教委会/自治会(仅提案)不可。
+    // 只有当前制度允许参加代表表决的机构可投；仅提案机构不可投。
     let can_vote = matches!(
         legislation_role(&ctx.institution_code),
         Some(LegislationRole::ProposerHouse | LegislationRole::ReviewHouse)
@@ -364,10 +364,10 @@ pub(crate) async fn cast_house_vote(
         return api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "institution cannot cast house vote",
+            "institution cannot cast representative vote",
         );
     }
-    match action::build_house_vote_sign_request(
+    match action::build_representative_vote_sign_request(
         input.proposal_id,
         input.approve,
         ctx.admin_account.as_str(),

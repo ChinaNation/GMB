@@ -11,6 +11,7 @@ import Ecosystem from './pages/Ecosystem'
 import Membership from './pages/Membership'
 
 const Whitepaper = lazy(() => import('./pages/Whitepaper'))
+const Constitution = lazy(() => import('./pages/Constitution'))
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -36,6 +37,14 @@ export default function App() {
             element={(
               <Suspense fallback={<div className="min-h-screen bg-navy-950 px-6 py-16 text-slate-300">白皮书加载中...</div>}>
                 <Whitepaper />
+              </Suspense>
+            )}
+          />
+          <Route
+            path="/constitution"
+            element={(
+              <Suspense fallback={<div className="min-h-screen bg-navy-950 px-6 py-16 text-slate-300">公民宪法加载中...</div>}>
+                <Constitution />
               </Suspense>
             )}
           />

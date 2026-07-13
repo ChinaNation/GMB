@@ -23,8 +23,8 @@ export type CapabilitySet = {
   canViewLegislation: boolean;
   /** 立法:发起法律案(发起院/教委会/自治会;参议会无此位)。 */
   canProposeLegislation: boolean;
-  /** 立法:院内表决(发起院/参议会/国家教委会;市教委会、市自治会无此位)。 */
-  canCastHouseVote: boolean;
+  /** 立法：当前代表机构表决；仅提案机构无此能力。 */
+  canCastRepresentativeVote: boolean;
   /** 立法:行政签署/三人会签/护宪终审(另线程接入,本轮恒 false)。 */
   canSignLegislation: boolean;
   /** 立法:发起任免案(政府;Phase 4 接入,本轮恒 false)。 */
@@ -50,7 +50,7 @@ export const EMPTY_CAPABILITIES: CapabilitySet = {
   canViewFederalRegistry: false,
   canViewLegislation: false,
   canProposeLegislation: false,
-  canCastHouseVote: false,
+  canCastRepresentativeVote: false,
   canSignLegislation: false,
   canProposePersonnel: false,
   canProposeBudget: false,

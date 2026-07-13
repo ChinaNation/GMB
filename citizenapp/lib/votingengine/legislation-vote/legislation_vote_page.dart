@@ -15,7 +15,7 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 立法提案表决页(LegislationVote sub-pallet)。
 ///
-/// 按提案当前阶段渲染对应动作——院内表决 / 行政签署 / 三人会签 /
+/// 按提案当前阶段渲染对应动作——代表机构表决 / 行政签署 / 三人会签 /
 /// 护宪终审,均为纯 extrinsic(signer=origin),走标准交易签名 + 冷钱包 QR。
 /// 特别案公投(referendum 阶段)走公民 CID 凭证流程(citizen 投票入口),本页只提示。
 /// 发起立法不在手机端(见 legislation_intro_page,类B)。
@@ -47,8 +47,9 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
       widget.queryService ?? LegislationVoteQueryService();
 
   LegProposalState? _state;
-  LegMeta? _meta;
-  ({int yes, int no}) _houseTally = (yes: 0, no: 0);
+  LegRepresentativeMeta? _representativeMeta;
+  LegislationMeta? _legislationMeta;
+  ({int yes, int no}) _representativeTally = (yes: 0, no: 0);
   ({int yes, int no}) _referendumTally = (yes: 0, no: 0);
 
   List<WalletProfile> _votableWallets = const [];
@@ -67,18 +68,28 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
     if (showSpinner && mounted) setState(() => _loading = true);
     try {
       final state = await _query.fetchProposalState(widget.proposalId);
-      final meta = await _query.fetchMeta(widget.proposalId);
-      final houseTally = await _query.fetchHouseTally(widget.proposalId);
-      final refTally = meta?.referendumRequired == true
+      final representativeMeta =
+          await _query.fetchRepresentativeMeta(widget.proposalId);
+      final legislationMeta =
+          await _query.fetchLegislationMeta(widget.proposalId);
+      final representativeTally = representativeMeta == null
+          ? (yes: 0, no: 0)
+          : await _query.fetchRepresentativeTally(
+              widget.proposalId, representativeMeta.currentBody);
+      final refTally = representativeMeta?.rule == 2
           ? await _query.fetchReferendumTally(widget.proposalId)
           : (yes: 0, no: 0);
 
-      // 院内表决阶段:列出尚未投票的管理员钱包供选择;其余阶段交由链端校验身份。
+      // 代表机构阶段按 body_index 检查席位票据，其余阶段交由链端校验身份。
       final votable = <WalletProfile>[];
-      if (state?.stage == LegStage.house) {
+      if (state?.stage == LegStage.representative &&
+          representativeMeta != null) {
         for (final w in widget.adminWallets) {
-          final voted = await _query.fetchHouseVote(
-              widget.proposalId, _normalize(w.pubkeyHex));
+          final voted = await _query.fetchRepresentativeVote(
+            widget.proposalId,
+            representativeMeta.currentBody,
+            _normalize(w.pubkeyHex),
+          );
           if (voted == null) votable.add(w);
         }
       } else {
@@ -88,8 +99,9 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
       if (!mounted) return;
       setState(() {
         _state = state;
-        _meta = meta;
-        _houseTally = houseTally;
+        _representativeMeta = representativeMeta;
+        _legislationMeta = legislationMeta;
+        _representativeTally = representativeTally;
         _referendumTally = refTally;
         _votableWallets = votable;
         _selectedWallet = votable.isNotEmpty ? votable.first : null;
@@ -195,8 +207,8 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
       sign: sign,
     );
     switch (stage) {
-      case LegStage.house:
-        return _vote.castHouseVote(
+      case LegStage.representative:
+        return _vote.castRepresentativeVote(
           proposalId: common.proposalId,
           approve: common.approve,
           fromAddress: common.fromAddress,
@@ -233,7 +245,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
   }
 
   int _qrAction(int stage) => switch (stage) {
-        LegStage.house => QrActions.legislationHouseVote,
+        LegStage.representative => QrActions.legislationRepresentativeVote,
         LegStage.sign => QrActions.legislationExecutiveSign,
         LegStage.override_ => QrActions.legislationOverrideSign,
         LegStage.guard => QrActions.legislationGuardVote,
@@ -241,7 +253,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
       };
 
   String _stageLabel(int stage) => switch (stage) {
-        LegStage.house => '院内表决',
+        LegStage.representative => '代表机构表决',
         LegStage.referendum => '特别案公投',
         LegStage.sign => '行政首长签署',
         LegStage.override_ => '三人会签',
@@ -285,7 +297,8 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
             style: const TextStyle(color: AppTheme.textTertiary)),
       );
     }
-    final meta = _meta;
+    final representativeMeta = _representativeMeta;
+    final legislationMeta = _legislationMeta;
     final isReferendum = state.stage == LegStage.referendum;
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -293,7 +306,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
         ProposalStatusBadge(
             status: state.status, proposalId: widget.proposalId),
         const SizedBox(height: 16),
-        _infoCard(state, meta),
+        _infoCard(state, representativeMeta, legislationMeta),
         const SizedBox(height: 12),
         _tallyCard(isReferendum),
         if (isReferendum) ...[
@@ -304,7 +317,11 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
     );
   }
 
-  Widget _infoCard(LegProposalState state, LegMeta? meta) {
+  Widget _infoCard(
+    LegProposalState state,
+    LegRepresentativeMeta? representativeMeta,
+    LegislationMeta? legislationMeta,
+  ) {
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -318,12 +335,13 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _kv('当前阶段', _stageLabel(state.stage)),
-            if (meta != null) ...[
+            if (representativeMeta != null) ...[
               const SizedBox(height: 6),
-              _kv('表决类型', _voteTypeLabel(meta.voteType)),
+              _kv('表决规则', _representativeRuleLabel(representativeMeta.rule)),
               const SizedBox(height: 6),
-              _kv('院序列', meta.houses.map((h) => h.code).join(' → ')),
-              if (meta.needsGuard) ...[
+              _kv('代表机构',
+                  representativeMeta.bodies.map((b) => b.code).join(' → ')),
+              if (legislationMeta?.needsGuard == true) ...[
                 const SizedBox(height: 6),
                 _kv('修宪', '通过后需护宪大法官终审'),
               ],
@@ -335,7 +353,7 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
   }
 
   Widget _tallyCard(bool isReferendum) {
-    final t = isReferendum ? _referendumTally : _houseTally;
+    final t = isReferendum ? _referendumTally : _representativeTally;
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -399,12 +417,10 @@ class _LegislationVotePageState extends State<LegislationVotePage> {
     );
   }
 
-  static String _voteTypeLabel(int t) => switch (t) {
-        0 => '常规案',
-        1 => '常规教育案',
-        2 => '重要案',
-        3 => '重要教育案',
-        4 => '特别案',
+  static String _representativeRuleLabel(int rule) => switch (rule) {
+        0 => '常规规则',
+        1 => '重要规则',
+        2 => '特别规则',
         _ => '未知',
       };
 

@@ -4,12 +4,19 @@ import { nowMs } from '../shared/time';
 import { fetchChainIdentityState, type ChainIdentityState } from '../chain/identity';
 import {
   assertMembershipLevel,
-  identitySatisfies,
+  identityEligibleForPlan,
   membershipPlan,
   type MembershipPlan,
   type MembershipLevel
 } from './plans';
-import { markStripeMembershipInactive, upsertStripeMembership } from './service';
+import {
+  applyPrepaidTierChange,
+  getMembership,
+  markStripeMembershipInactive,
+  upsertStripeMembership,
+  upsertPrepaidMembership
+} from './service';
+import { cancelStripeSubscriptionAtPeriodEnd } from './stripe_api';
 import { restoreOwnerVideos } from './archive';
 import { readLimitedText } from '../limits/request';
 
@@ -73,9 +80,10 @@ export async function handleStripeEvent(
     return { action: 'subscription_inactivated' };
   }
 
-  // Checkout 完成事件不直接授予权益；正式权益以 subscription 事件为准，避免误用 checkout 过期时间。
+  // 卡订阅的 checkout 不直接授权益（以 subscription 事件为准）；USDC 预付无 subscription，
+  // 必须在此按 metadata.route=usdc_prepaid 授时长（ADR-034）。
   if (event.type === 'checkout.session.completed') {
-    return { action: 'checkout_session_observed' };
+    return processPrepaidCheckout(env, event.data.object);
   }
 
   return { action: 'ignored' };
@@ -96,8 +104,9 @@ async function processSubscription(
   const identity = plan.required_identity_level === 'visitor'
     ? visitorIdentity(ownerAccount)
     : await fetchChainIdentityState(env, ownerAccount);
+  // 精确匹配（ADR-033 规则5）：身份≠会员档位即视为待换档（identity_required）。
   const status = activeStripeStatuses.has(subscription.status) &&
-    !identitySatisfies(identity.identity_level, plan.required_identity_level)
+    !identityEligibleForPlan(identity.identity_level, plan)
     ? 'identity_required'
     : subscription.status;
 
@@ -134,6 +143,78 @@ async function processSubscription(
   };
 }
 
+/// USDC 预付授权益（ADR-034）：checkout.session.completed 且 metadata.route=usdc_prepaid 且已付款
+/// → 按 level|duration 授对应月数时长（叠加从当前到期日往后）。
+async function processPrepaidCheckout(
+  env: Env,
+  raw: Record<string, unknown>
+): Promise<{ action: string; owner_account?: string; membership_level?: MembershipLevel }> {
+  const metadata = metadataValue(raw.metadata);
+  const route = metadata.route;
+  if (route !== 'usdc_prepaid' && route !== 'usdc_prepaid_upgrade') {
+    return { action: 'checkout_session_observed' };
+  }
+  if (stringValue(raw.payment_status) !== 'paid') {
+    return { action: 'prepaid_unpaid' };
+  }
+  const ownerAccount = metadata.owner_account?.trim();
+  if (!ownerAccount) {
+    throw new HttpError(400, 'stripe_owner_account_missing', 'Stripe metadata 缺少 owner_account');
+  }
+  let membershipLevel: MembershipLevel;
+  try {
+    membershipLevel = assertMembershipLevel(metadata.membership_level);
+  } catch {
+    throw new HttpError(400, 'invalid_membership_level', '会员等级 metadata 不合法');
+  }
+  const plan = membershipPlan(membershipLevel);
+  const identity =
+    plan.required_identity_level === 'visitor'
+      ? visitorIdentity(ownerAccount)
+      : await fetchChainIdentityState(env, ownerAccount);
+
+  if (route === 'usdc_prepaid_upgrade') {
+    // 升档补差价已付 → 只切 level，expires_at 不变（沿用现有到期）。
+    const existing = await getMembership(env, ownerAccount);
+    if (!existing) {
+      return { action: 'prepaid_upgrade_no_membership' };
+    }
+    await applyPrepaidTierChange(env, {
+      ownerAccount,
+      membershipLevel,
+      expiresAt: existing.expires_at,
+      identity
+    });
+    return {
+      action: 'prepaid_upgraded',
+      owner_account: ownerAccount,
+      membership_level: membershipLevel
+    };
+  }
+
+  // route === 'usdc_prepaid'：购买 / 续买授时长（从当前到期日往后叠）。
+  // 切换支付 卡→USDC：若原是卡订阅，先设其到期取消（用到当期末不再续），upsert 会清
+  // stripe_subscription_id 解耦，USDC 从卡到期日往后叠（ADR-034 段3）。
+  const existingBeforeGrant = await getMembership(env, ownerAccount);
+  if (existingBeforeGrant?.stripe_subscription_id) {
+    await cancelStripeSubscriptionAtPeriodEnd(env, existingBeforeGrant.stripe_subscription_id);
+  }
+  await upsertPrepaidMembership(env, {
+    ownerAccount,
+    membershipLevel,
+    months: prepaidMonthsFromMeta(metadata.duration),
+    paymentRef: stripeId(raw.payment_intent),
+    identity
+  });
+  return { action: 'prepaid_granted', owner_account: ownerAccount, membership_level: membershipLevel };
+}
+
+function prepaidMonthsFromMeta(value: string | undefined): number {
+  if (value === 'year') return 12;
+  if (value === 'quarter') return 3;
+  throw new HttpError(400, 'invalid_prepaid_duration', '预付时长 metadata 不合法');
+}
+
 function visitorIdentity(ownerAccount: string): ChainIdentityState {
   return {
     owner_account: ownerAccount,
@@ -145,10 +226,25 @@ function visitorIdentity(ownerAccount: string): ChainIdentityState {
   };
 }
 
+/// 取订阅第一个 item。新版 Stripe API 把计费周期(current_period_start/end)与价都放在
+/// item 上、订阅对象顶层为 null；价与周期解析统一从这里取。
+function firstItem(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const items = raw.items;
+  const data = items && typeof items === 'object' ? (items as { data?: unknown }).data : null;
+  return Array.isArray(data) && data[0] && typeof data[0] === 'object'
+    ? (data[0] as Record<string, unknown>)
+    : null;
+}
+
 function normalizeSubscription(raw: Record<string, unknown>): StripeSubscriptionShape {
   const id = stringValue(raw.id);
   const status = stringValue(raw.status);
-  const currentPeriodEnd = numberValue(raw.current_period_end);
+  const item = firstItem(raw);
+  // 计费周期：item 层优先、顶层兜底，兼容新旧两个 API 版本（新版顶层为 null）。
+  const currentPeriodEnd =
+    numberValue(raw.current_period_end) ?? numberValue(item?.current_period_end);
+  const currentPeriodStart =
+    numberValue(raw.current_period_start) ?? numberValue(item?.current_period_start);
   if (!id || !status || !currentPeriodEnd) {
     throw new HttpError(400, 'invalid_stripe_subscription', 'Stripe subscription 事件字段不完整');
   }
@@ -156,7 +252,7 @@ function normalizeSubscription(raw: Record<string, unknown>): StripeSubscription
     id,
     customer: stripeId(raw.customer),
     status,
-    current_period_start: numberValue(raw.current_period_start),
+    current_period_start: currentPeriodStart,
     current_period_end: currentPeriodEnd,
     cancel_at_period_end: raw.cancel_at_period_end === true,
     metadata: metadataValue(raw.metadata),
@@ -300,16 +396,8 @@ function priceValue(raw: Record<string, unknown>): {
   price_currency: string | null;
   price_unit_amount: number | null;
 } {
-  const items = raw.items;
-  if (!items || typeof items !== 'object') {
-    return { price_id: null, price_currency: null, price_unit_amount: null };
-  }
-  const data = (items as { data?: unknown }).data;
-  if (!Array.isArray(data) || data.length === 0) {
-    return { price_id: null, price_currency: null, price_unit_amount: null };
-  }
-  const first = data[0];
-  if (!first || typeof first !== 'object') {
+  const first = firstItem(raw);
+  if (!first) {
     return { price_id: null, price_currency: null, price_unit_amount: null };
   }
   const price = (first as { price?: unknown }).price;

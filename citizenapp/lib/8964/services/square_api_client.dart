@@ -45,6 +45,9 @@ class SquareMembershipState {
     this.subscriptionStatus,
     this.subscriptionActive = false,
     this.cancelAtPeriodEnd = false,
+    this.frozen = false,
+    this.currentPeriodStart = 0,
+    this.subscriptionSource,
     this.inactiveCode,
     this.inactiveMessage,
     this.identityLevel,
@@ -66,6 +69,16 @@ class SquareMembershipState {
   /// 但当期未到期（按钮显示「续订会员」）；false=自动续费中（按钮显示「取消订阅」）。
   final bool cancelAtPeriodEnd;
 
+  /// 链上身份与会员档位不匹配被冻结（ADR-033 规则5）：权益不可用、已暂停收款，
+  /// 需到官网换档到与身份匹配的会员档才解冻。
+  final bool frozen;
+
+  /// 本期订阅开始（毫秒）；与 [expiresAt] 组成会员卡「订阅起止」展示（ADR-034 段4）。
+  final int currentPeriodStart;
+
+  /// 支付路线：`usdc_prepaid`=预付、`stripe`=自动续费；null=无订阅。
+  final String? subscriptionSource;
+
   final String? inactiveCode;
   final String? inactiveMessage;
   final String? identityLevel;
@@ -85,6 +98,13 @@ class SquareMembershipState {
       active ? planForLevel(membershipLevel) : null;
 
   bool get isCandidateMembership => active && membershipLevel == 'candidate';
+
+  /// USDC 预付路线（无自动续、到期自然失效）。
+  bool get isPrepaid => subscriptionSource == 'usdc_prepaid';
+
+  /// 有可展示的订阅起止窗口（已支付且起止时间齐备）。
+  bool get hasSubscriptionWindow =>
+      subscriptionActive && currentPeriodStart > 0 && expiresAt > 0;
 }
 
 class SquareMembershipPlan {
@@ -508,6 +528,9 @@ class SquareApiClient
       subscriptionActive: subscriptionActive,
       cancelAtPeriodEnd: membership['cancel_at_period_end'] == true ||
           _asInt(membership['cancel_at_period_end']) != 0,
+      frozen: data['frozen'] == true,
+      currentPeriodStart: _asInt(membership['current_period_start']),
+      subscriptionSource: membership['subscription_source']?.toString(),
       inactiveCode: data['inactive_code']?.toString(),
       inactiveMessage: data['inactive_message']?.toString(),
       identityLevel: identity['identity_level']?.toString(),
@@ -1046,9 +1069,10 @@ class SquareApiClient
         ownerAccount: _requireString(data, 'owner_account'),
         cidNumber: data['cid_number']?.toString(),
         // 展示名与头像来自作者 profile.json（Worker feed 按去重作者回填）；缺失走地址/首字占位。
-        displayName: (data['display_name']?.toString().trim().isNotEmpty ?? false)
-            ? data['display_name'].toString().trim()
-            : null,
+        displayName:
+            (data['display_name']?.toString().trim().isNotEmpty ?? false)
+                ? data['display_name'].toString().trim()
+                : null,
         avatarObjectKey:
             (data['avatar_object_key']?.toString().isNotEmpty ?? false)
                 ? data['avatar_object_key'].toString()

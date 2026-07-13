@@ -81,7 +81,13 @@ export async function guardRequest(request: Request, env: Env, path: string): Pr
     await enforceRateLimit(env, `auth:${ipKey}`, 10, 60);
     return;
   }
-  if (isWebhook(path) || path === '/health' || path === '/v1/chain/bootstrap') {
+  if (
+    isWebhook(path) ||
+    path === '/health' ||
+    path === '/v1/chain/bootstrap' ||
+    path === '/v1/constitution'
+  ) {
+    // 宪法公开只读，无会话门禁；重复访问由 KV 短缓存 + 边缘缓存兜住，不做逐请求限流。
     return;
   }
   // relay 已在模块内按 IP 哈希做原子限流，交易本体也已由钱包签名；避免双重计数。

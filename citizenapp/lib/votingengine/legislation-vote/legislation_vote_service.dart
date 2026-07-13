@@ -8,7 +8,7 @@ import 'package:citizenapp/votingengine/legislation-vote/legislation_vote_query_
 
 /// 立法投票/签署提交服务(LegislationVote sub-pallet,pallet_index=26)。
 ///
-/// 院内表决/行政签署/三人会签/护宪终审四个动作都是**纯 extrinsic**
+/// 代表机构表决/行政签署/三人会签/护宪终审四个动作都是**纯 extrinsic**
 /// (signer=origin=动作人本人,零 op_tag),统一走 [SignedExtrinsicBuilder] 标准
 /// 交易签名,范式照搬 internal-vote。提交后必须回读 legislation-vote storage 确认
 /// runtime 已记账,txHash 不代表已执行。特别案公投(referendum/snapshot)带 CID
@@ -26,15 +26,16 @@ class LegislationVoteService {
   /// LegislationVote runtime pallet_index。
   static const int legislationVotePallet = 26;
 
-  static const int callCastHouseVote = 1;
+  static const int callCastRepresentativeVote = 1;
   static const int callExecutiveSign = 3;
   static const int callOverrideSign = 4;
   static const int callGuardVote = 5;
 
   // ──── 公开 API ────
 
-  /// 院内表决(议员/委员一人一票)。
-  Future<({String txHash, int usedNonce, String blockHashHex})> castHouseVote({
+  /// 当前代表机构表决；同一钱包在不同机构的席位分别记票。
+  Future<({String txHash, int usedNonce, String blockHashHex})>
+      castRepresentativeVote({
     required int proposalId,
     required bool approve,
     required String fromAddress,
@@ -42,8 +43,11 @@ class LegislationVoteService {
     required Future<Uint8List> Function(Uint8List payload) sign,
     TxPoolWatchCallback? onWatchEvent,
   }) async {
+    final meta = await _query.fetchRepresentativeMeta(proposalId);
+    if (meta == null) throw StateError('代表机构表决元数据不存在');
+    final bodyIndex = meta.currentBody;
     final result = await _signAndSubmit(
-      callIndex: callCastHouseVote,
+      callIndex: callCastRepresentativeVote,
       proposalId: proposalId,
       approve: approve,
       fromAddress: fromAddress,
@@ -51,8 +55,13 @@ class LegislationVoteService {
       sign: sign,
       onWatchEvent: onWatchEvent,
     );
-    await _confirmHouseVote(
-        proposalId, approve, signerPubkey, result.blockHashHex);
+    await _confirmRepresentativeVote(
+      proposalId,
+      bodyIndex,
+      approve,
+      signerPubkey,
+      result.blockHashHex,
+    );
     return result;
   }
 
@@ -177,15 +186,20 @@ class LegislationVoteService {
 
   // ──── 内部:入块后确认 ────
 
-  Future<void> _confirmHouseVote(
+  Future<void> _confirmRepresentativeVote(
     int proposalId,
+    int bodyIndex,
     bool approve,
     Uint8List signerPubkey,
     String blockHashHex,
   ) async {
     final pubkeyHex = _hexEncode(signerPubkey);
     for (var attempt = 0; attempt < 6; attempt++) {
-      final vote = await _query.fetchHouseVote(proposalId, pubkeyHex);
+      final vote = await _query.fetchRepresentativeVote(
+        proposalId,
+        bodyIndex,
+        pubkeyHex,
+      );
       if (vote == approve) return;
       if (vote != null && vote != approve) {
         throw StateError('runtime 投票记录与本次投票方向不一致');

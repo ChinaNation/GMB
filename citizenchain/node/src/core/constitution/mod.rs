@@ -48,7 +48,7 @@ const LAW_STATUS_REPEALED: u8 = 2;
 /// 表决类型「特别案」的 wire 值(`legislation-yuan::VoteType::Special.as_u8()`)。
 /// 由 legislation-yuan 测试 `enum_discriminants_match_node_guard` 交叉钉死,防漂移。
 /// 用途:核心章(第一章总则)条款改动必须记录为特别案(宪法第十九条 node 背书)。
-const LEG_VOTE_SPECIAL: u8 = 4;
+const LAW_VOTE_TYPE_SPECIAL: u8 = 4;
 
 // ───────── 链上结构镜像 ─────────
 // 字段序必须与 legislation-yuan 链端 `LawVersion / Chapter / Section / Article / Clause` 一致。
@@ -697,7 +697,7 @@ where
 
 /// 核心章(第一章总则,创世口径)条款的档位背书(宪法第十九条 node 侧强制)。
 /// 对每个创世核心条款:若其相对创世基准被**修改/删除/移出核心章**,则本版本必须记录为
-/// 特别案表决(`vote_type == LEG_VOTE_SPECIAL`),否则拒块;核心条款未变则不约束档位
+/// 特别案表决（`vote_type == LAW_VOTE_TYPE_SPECIAL`），否则拒块；核心条款未变则不约束档位。
 /// (一般章条款可走重要案)。仅盯创世核心集且按条号定位,故不受章节重排影响。
 ///
 /// 返回 `true` 表示本版本相对创世核心基准**有改动**(调用方据此再校验公投凭据)。
@@ -724,7 +724,7 @@ fn check_core_chapter_tier(
         // 修改(内容变)/删除(找不到)/移出核心章(不在 chapters[0])任一 → 有改动,且须特别案。
         if !content_same || !in_core_chapter {
             core_changed = true;
-            if head.vote_type != LEG_VOTE_SPECIAL {
+            if head.vote_type != LAW_VOTE_TYPE_SPECIAL {
                 return Err(GuardError::CoreClauseNotSpecial(n));
             }
         }
@@ -854,7 +854,7 @@ mod tests {
 
     /// 默认版本编码:vote_type = 特别案(与创世宪法 `VoteType::Special` 一致)。
     fn law_version_scale(version: u32, articles: Vec<MArticle>) -> Vec<u8> {
-        law_version_scale_vt(version, articles, LEG_VOTE_SPECIAL)
+        law_version_scale_vt(version, articles, LAW_VOTE_TYPE_SPECIAL)
     }
 
     fn law_version_label_scale(title: &str, title_en: Option<&str>) -> Vec<u8> {
@@ -960,7 +960,7 @@ mod tests {
 
     /// 一份完整合法当前态:Laws[0] + LawVersions[0][version] + LawsByScope[宪法][0]=[0]。
     fn valid_current_state(version: u32, articles: Vec<MArticle>) -> Vec<(Vec<u8>, Vec<u8>)> {
-        valid_current_state_vt(version, articles, LEG_VOTE_SPECIAL)
+        valid_current_state_vt(version, articles, LAW_VOTE_TYPE_SPECIAL)
     }
 
     /// 同 `valid_current_state`,但显式指定生效版本记录的 `vote_type`(测核心章档位背书)。
@@ -1204,7 +1204,7 @@ mod tests {
         // 改核心章第 5 条 + 特别案 + 挂通过公投凭据 → 合法。
         let mut arts = amended_articles(immutable_intact);
         arts[IMMUTABLE_CONSTITUTION_ARTICLES.len()] = article_bytes(5, "核心条经特别案修改");
-        let mut state = valid_current_state_vt(2, arts, LEG_VOTE_SPECIAL);
+        let mut state = valid_current_state_vt(2, arts, LAW_VOTE_TYPE_SPECIAL);
         state.push(amendment_proof_entry(2, 100, 80, 5));
         assert_eq!(check_immutable_articles(reader(state), &reference), Ok(()));
     }
@@ -1215,7 +1215,7 @@ mod tests {
         // 核心章第 5 条改动 + 特别案,但缺永久公投凭据 → 拒。
         let mut arts = amended_articles(immutable_intact);
         arts[IMMUTABLE_CONSTITUTION_ARTICLES.len()] = article_bytes(5, "核心条改但无公投凭据");
-        let state = valid_current_state_vt(2, arts, LEG_VOTE_SPECIAL); // 不挂 proof
+        let state = valid_current_state_vt(2, arts, LAW_VOTE_TYPE_SPECIAL); // 不挂 proof
         assert_eq!(
             check_immutable_articles(reader(state), &reference),
             Err(GuardError::CoreClauseReferendumMissing(2))
@@ -1228,7 +1228,7 @@ mod tests {
         // 核心章第 5 条改动 + 特别案 + 公投未过口径(参与 45% <70%)→ 拒。
         let mut arts = amended_articles(immutable_intact);
         arts[IMMUTABLE_CONSTITUTION_ARTICLES.len()] = article_bytes(5, "核心条改但公投未过");
-        let mut state = valid_current_state_vt(2, arts, LEG_VOTE_SPECIAL);
+        let mut state = valid_current_state_vt(2, arts, LAW_VOTE_TYPE_SPECIAL);
         state.push(amendment_proof_entry(2, 100, 40, 5));
         assert_eq!(
             check_immutable_articles(reader(state), &reference),

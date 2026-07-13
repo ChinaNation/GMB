@@ -17,7 +17,7 @@ pub mod weights;
 mod tests;
 
 use admin_primitives::{
-    is_private_admin_code, AdminAccountKind, AdminAccountLifecycle, AdminAccountQuery, AdminProfile,
+    is_private_admin_code, AdminAccountKind, AdminAccountQuery, InstitutionAdminAccountLifecycle,
 };
 use codec::{Decode, Encode};
 use frame_support::{
@@ -38,6 +38,14 @@ use votingengine::{
     ProposalExecutionOutcome, STATUS_REJECTED,
 };
 
+pub use entity_primitives::{
+    InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
+    InstitutionRole, InstitutionRoleStatus,
+};
+pub use institution::role::{
+    InstitutionAdminAssignmentOf, InstitutionAdminAssignmentsOf, InstitutionRoleOf,
+    InstitutionRolesOf, RoleCodeOf,
+};
 pub use institution::types::{
     CloseInstitutionAction, CreateInstitutionAccount, InstitutionAccountInfo, InstitutionInfo,
     InstitutionInitialAccount, InstitutionLifecycleStatus, RegisteredInstitution,
@@ -51,7 +59,7 @@ pub(crate) type BalanceOf<T> =
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -64,7 +72,7 @@ pub mod pallet {
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         /// 私权机构管理员生命周期写入口。
-        type AdminLifecycle: AdminAccountLifecycle<Self::AccountId, AdminProfile<Self::AccountId>>;
+        type AdminLifecycle: InstitutionAdminAccountLifecycle<Self::AccountId>;
 
         /// 兄弟机构生命周期查询入口，用于禁止同一 CID 在公权模块重复登记。
         type SiblingInstitutionQuery: InstitutionCidQuery<CidNumberOf<Self>>;
@@ -130,10 +138,6 @@ pub mod pallet {
 
     pub type AdminsOf<T> =
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdmins>;
-
-    /// 私权机构管理员资料集合(注册交易携带:每个管理员一条 `AdminProfile`)。
-    pub type AdminProfilesOf<T> =
-        BoundedVec<AdminProfile<<T as frame_system::Config>::AccountId>, <T as Config>::MaxAdmins>;
 
     pub type CidNumberOf<T> = BoundedVec<u8, <T as Config>::MaxCidNumberLength>;
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
@@ -207,6 +211,32 @@ pub mod pallet {
     #[pallet::getter(fn institution_of)]
     pub type Institutions<T: Config> =
         StorageMap<_, Blake2_128Concat, CidNumberOf<T>, InstitutionInfoOf<T>, OptionQuery>;
+
+    /// 私权机构自己的动态岗位目录。
+    #[pallet::storage]
+    #[pallet::getter(fn institution_role_of)]
+    pub type InstitutionRoles<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        CidNumberOf<T>,
+        Blake2_128Concat,
+        crate::institution::role::RoleCodeOf,
+        crate::institution::role::InstitutionRoleOf<T>,
+        OptionQuery,
+    >;
+
+    /// 私权机构岗位上的管理员任职集合。
+    #[pallet::storage]
+    #[pallet::getter(fn institution_role_assignments)]
+    pub type InstitutionRoleAssignments<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        CidNumberOf<T>,
+        Blake2_128Concat,
+        crate::institution::role::RoleCodeOf,
+        crate::institution::role::RoleAssignmentsOf<T>,
+        ValueQuery,
+    >;
 
     /// 机构账户表：(cid_number, account_name) -> 账户地址与激活状态。
     #[pallet::storage]
@@ -308,6 +338,15 @@ pub mod pallet {
             account_count: u32,
             initial_total: BalanceOf<T>,
             fee: BalanceOf<T>,
+        },
+        /// 已完成的治理结果写入目标岗位任职，并同步机构 admins 钱包集合。
+        InstitutionAssignmentsApplied {
+            cid_number: CidNumberOf<T>,
+            institution_account: T::AccountId,
+            role_code: crate::institution::role::RoleCodeOf,
+            admins_len: u32,
+            assignment_source: InstitutionAssignmentSource,
+            assignment_source_ref: crate::institution::role::AssignmentSourceRefOf,
         },
         /// CID 机构登记
         CidInstitutionRegistered {
@@ -452,6 +491,44 @@ pub mod pallet {
         InvalidDeregisterCredential,
         /// 注销凭证 nonce 已使用(防重放)
         DeregisterNonceAlreadyUsed,
+        /// 机构创建必须至少定义一个岗位。
+        InstitutionRolesEmpty,
+        /// 机构创建必须至少绑定一条管理员任职。
+        InstitutionAssignmentsEmpty,
+        /// 岗位所属 CID 与创建目标不一致。
+        RoleCidMismatch,
+        /// 岗位代码为空或超过边界。
+        InvalidRoleCode,
+        /// 岗位名称为空。
+        InvalidRoleName,
+        /// 初始岗位必须直接处于有效状态。
+        InitialRoleMustBeActive,
+        /// 同一机构内岗位代码重复。
+        DuplicateRoleCode,
+        /// 任职所属 CID 与创建目标不一致。
+        AssignmentCidMismatch,
+        /// 任职来源与当前写入流程不一致。
+        InvalidAssignmentSource,
+        /// 初始任职必须直接处于有效状态。
+        InitialAssignmentMustBeActive,
+        /// 任职引用的岗位不存在。
+        AssignmentRoleNotFound,
+        /// 必须设置任期的岗位没有合法任期。
+        InvalidAssignmentTerm,
+        /// 无任期岗位携带了任期值。
+        UnexpectedAssignmentTerm,
+        /// 同一管理员在同一岗位存在重复任职。
+        DuplicateAssignment,
+        /// 初始岗位没有任何管理员任职。
+        RoleHasNoAssignment,
+        /// 任职去重后的管理员数量超过机构上限。
+        TooManyInstitutionAdmins,
+        /// 治理结果目标不是机构主账户或与机构码不匹配。
+        InvalidAssignmentResultInstitution,
+        /// 治理结果没有管理员或包含重复管理员。
+        InvalidAssignmentResultAdmins,
+        /// 治理结果缺少投票、选举或任命追溯引用。
+        AssignmentSourceRefEmpty,
     }
 
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节。
@@ -522,8 +599,8 @@ pub mod pallet {
             legal_representative_account: T::AccountId,
             accounts: InstitutionInitialAccountsOf<T>,
             institution_code: InstitutionCode,
-            admins_len: u32,
-            admins: AdminProfilesOf<T>,
+            roles: crate::institution::role::InstitutionRolesOf<T>,
+            assignments: crate::institution::role::InstitutionAdminAssignmentsOf<T>,
             threshold: u32,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
@@ -545,8 +622,8 @@ pub mod pallet {
                 legal_representative_account,
                 accounts,
                 institution_code,
-                admins_len,
-                admins,
+                roles,
+                assignments,
                 threshold,
                 register_nonce,
                 signature,
@@ -787,17 +864,10 @@ pub mod pallet {
             Ok(Sr25519Public::from_raw(arr))
         }
 
-        pub(crate) fn ensure_admin_config(
-            admins_len: u32,
-            admins: &AdminProfilesOf<T>,
-            threshold: u32,
-        ) -> DispatchResult {
+        pub(crate) fn ensure_admin_config(admins: &AdminsOf<T>, threshold: u32) -> DispatchResult {
             ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
+            let admins_len = admins.len() as u32;
             ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
-            ensure!(
-                admins.len() as u32 == admins_len,
-                Error::<T>::AdminsLenMismatch
-            );
             ensure!(
                 threshold > 0
                     && threshold <= admins_len
@@ -806,9 +876,7 @@ pub mod pallet {
             );
             // 账户语义校验取 profile.admin_account:注册局代创建时,发起人是注册局管理员,
             // 目标 admins 是新机构管理员集合,这里只校验目标集合自身合法。
-            let admin_accounts: Vec<T::AccountId> =
-                admins.iter().map(|p| p.admin_account.clone()).collect();
-            Self::ensure_unique_admins(&admin_accounts)?;
+            Self::ensure_unique_admins(admins.as_slice())?;
             Ok(())
         }
 
@@ -816,12 +884,11 @@ pub mod pallet {
             cid_number: &CidNumberOf<T>,
             institution_code: InstitutionCode,
             institution_id: T::AccountId,
-            admins: &AdminProfilesOf<T>,
+            admins: &AdminsOf<T>,
             threshold: u32,
-            creator: &T::AccountId,
         ) -> DispatchResult {
             Self::ensure_lifecycle_institution_code(&institution_code)?;
-            T::AdminLifecycle::set_active_admin_account_direct(
+            T::AdminLifecycle::set_active_institution_admin_account(
                 crate::MODULE_TAG,
                 institution_id,
                 cid_number.to_vec(),
@@ -829,7 +896,6 @@ pub mod pallet {
                 AdminAccountKind::PrivateInstitution,
                 admins.iter().cloned().collect(),
                 threshold,
-                creator.clone(),
             )
         }
 
@@ -839,7 +905,7 @@ pub mod pallet {
             institution_id: T::AccountId,
         ) -> DispatchResult {
             Self::ensure_lifecycle_institution_code(&institution_code)?;
-            T::AdminLifecycle::close_admin_account_for_proposal(
+            T::AdminLifecycle::close_institution_admin_account_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,

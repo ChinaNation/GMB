@@ -10,22 +10,47 @@ type MembershipLevel = 'freedom' | 'democracy' | 'voting' | 'candidate'
 type IdentityLevel = 'visitor' | 'voting' | 'candidate'
 type TabKey = 'subscribe' | 'cancel'
 type Tone = 'error' | 'info' | 'success'
+// 支付方式：银行卡（Stripe 自动续订）或 USDC（预付固定时长、无自动续）。
+type PaymentMethod = 'card' | 'usdc'
+// USDC 两类操作：购买/续费（选季/年）或换档（补钱/补时长，不选时长）。
+type UsdcMode = 'purchase' | 'change'
+type PrepaidDuration = 'quarter' | 'year'
 
 interface Plan {
   level: MembershipLevel
   requiredIdentity: IdentityLevel
   name: string
   price: string
+  /// 月费（分），供 USDC 季/年金额（月数×月费，无折扣）计算。
+  priceCents: number
   identity: string
   dynamic: string
   article: string
 }
 
+interface TierChangePreview {
+  kind: 'upgrade' | 'downgrade' | 'switch'
+  amountCents: number
+}
+
+/// USDC 换档预览：升档带补差价（分），降/平档带折算后剩余天数。
+interface PrepaidChangePreview {
+  kind: 'upgrade' | 'downgrade' | 'switch'
+  amountCents?: number
+  newDays?: number
+}
+
+/// 签名弹窗承载的操作类型，决定验签后走哪条提交路径。
+type SigningKind = 'card-subscribe' | 'usdc-purchase' | 'usdc-change' | 'cancel'
+
 interface Signing {
-  action: TabKey
+  kind: SigningKind
   challengeId: string
   requestQr: string
   level?: MembershipLevel
+  duration?: PrepaidDuration
+  preview?: TierChangePreview | null
+  changePreview?: PrepaidChangePreview | null
 }
 
 const plans: Plan[] = [
@@ -34,6 +59,7 @@ const plans: Plan[] = [
     requiredIdentity: 'visitor',
     name: '自由会员',
     price: '$2.99 / 月',
+    priceCents: 299,
     identity: '任意钱包账户',
     dynamic: '动态：300 字、9 张标清图片、1 分钟标清视频',
     article: '文章：20,000 字、50 张标清图片、1 张高清首图',
@@ -44,6 +70,7 @@ const plans: Plan[] = [
     requiredIdentity: 'visitor',
     name: '民主会员',
     price: '$9.99 / 月',
+    priceCents: 999,
     identity: '任意钱包账户',
     dynamic: '动态：300 字、9 张高清图片、30 分钟高清视频',
     article: '文章：30,000 字、100 张高清图片、1 张高清首图',
@@ -53,6 +80,7 @@ const plans: Plan[] = [
     requiredIdentity: 'voting',
     name: '投票公民会员',
     price: '$9.99 / 月',
+    priceCents: 999,
     identity: '认证投票公民',
     dynamic: '动态：300 字、9 张高清图片、30 分钟高清视频',
     article: '文章：30,000 字、100 张高清图片、1 张高清首图',
@@ -62,6 +90,7 @@ const plans: Plan[] = [
     requiredIdentity: 'candidate',
     name: '竞选公民会员',
     price: '$99.99 / 月',
+    priceCents: 9999,
     identity: '认证选举公民',
     dynamic: '动态：300 字、9 张高清图片、3 小时高清视频',
     article: '文章：30,000 字、100 张高清图片、1 张高清首图',
@@ -186,6 +215,158 @@ async function postJson(path: string, body: unknown): Promise<Record<string, unk
   return data
 }
 
+/// 解析挑战响应里的换档金额预览（Worker 本地估算 { kind, amount_cents }）。
+function parseSubscribePreview(raw: unknown): TierChangePreview | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const record = raw as Record<string, unknown>
+  const kind = record.kind
+  const amount = record.amount_cents
+  if (
+    (kind === 'upgrade' || kind === 'downgrade' || kind === 'switch') &&
+    typeof amount === 'number'
+  ) {
+    return { kind, amountCents: amount }
+  }
+  return null
+}
+
+/// 签名前展示的换档金额文案（估算，实际以 Stripe proration 为准）。
+function previewText(preview: TierChangePreview): string | null {
+  const dollars = `$${(preview.amountCents / 100).toFixed(2)}`
+  if (preview.kind === 'upgrade') return `升档：需按当期剩余天数补差价约 ${dollars}`
+  if (preview.kind === 'downgrade') return `降档：约 ${dollars} 剩余价值将转为会员权益抵扣后续账单`
+  return null
+}
+
+/// 换档即时生效时的成功文案（升档已扣 / 降档转权益 / 续订 / 无操作）。
+function subscribeResultMessage(action: unknown): string {
+  switch (action) {
+    case 'upgraded':
+      return '已升档，差价已按剩余天数结算'
+    case 'downgraded':
+      return '已降档，剩余价值转为会员权益抵扣后续账单'
+    case 'switched':
+      return '已切换会员档位'
+    case 'resumed':
+      return '已续订，订阅恢复'
+    case 'already_subscribed':
+      return '你已是该会员'
+    default:
+      return '订阅已更新'
+  }
+}
+
+const PREPAID_MONTHS: Record<PrepaidDuration, number> = { quarter: 3, year: 12 }
+
+/// 分转美元展示。
+function formatUsd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`
+}
+
+/// USDC 预付总额（分）= 月数 × 月费（无折扣，与 Worker 一致）。
+function prepaidTotalCents(plan: Plan, duration: PrepaidDuration): number {
+  return plan.priceCents * PREPAID_MONTHS[duration]
+}
+
+/// 解析 USDC 换档预览（Worker `{ kind, amount_cents?, new_days? }`）。
+function parsePrepaidChangePreview(raw: unknown): PrepaidChangePreview | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const record = raw as Record<string, unknown>
+  const kind = record.kind
+  if (kind !== 'upgrade' && kind !== 'downgrade' && kind !== 'switch') return null
+  return {
+    kind,
+    amountCents: typeof record.amount_cents === 'number' ? record.amount_cents : undefined,
+    newDays: typeof record.new_days === 'number' ? record.new_days : undefined,
+  }
+}
+
+/// USDC 换档签名前文案：升档补差价、降/平档折算剩余天数。
+function prepaidChangePreviewText(preview: PrepaidChangePreview, targetName: string): string | null {
+  if (preview.kind === 'upgrade' && typeof preview.amountCents === 'number') {
+    return `升档到${targetName}：需补差价约 ${formatUsd(preview.amountCents)}`
+  }
+  if (preview.kind === 'downgrade' && typeof preview.newDays === 'number') {
+    return `降档到${targetName}：剩余价值折算为约 ${preview.newDays} 天`
+  }
+  if (preview.kind === 'switch' && typeof preview.newDays === 'number') {
+    return `平价换档到${targetName}：保留剩余约 ${preview.newDays} 天`
+  }
+  return null
+}
+
+/// USDC 换档即时生效文案（降/平档本地切档、升档待付差价另跳转）。
+function prepaidChangeResultMessage(action: unknown): string {
+  switch (action) {
+    case 'downgraded':
+      return '已降档，剩余价值已折算为更长会员时长'
+    case 'switched':
+      return '已平价换档，剩余时长保留'
+    case 'upgraded':
+      return '已升档'
+    default:
+      return '换档已完成'
+  }
+}
+
+/// 取消订阅结果文案：卡（连续订阅）到期取消 / USDC 预付到期自然失效。
+function cancelResultMessage(cancelKind: unknown): string {
+  return cancelKind === 'usdc_prepaid'
+    ? 'USDC 预付无自动续费，将于到期日自然失效，无需取消'
+    : '已提交取消订阅，当前计费周期结束后生效'
+}
+
+/// 各操作对应的挑战 / 确认接口路径。
+const CHALLENGE_PATH: Record<SigningKind, string> = {
+  'card-subscribe': '/v1/square/membership/subscribe/challenge',
+  'usdc-purchase': '/v1/square/membership/prepaid/challenge',
+  'usdc-change': '/v1/square/membership/prepaid/change/challenge',
+  cancel: '/v1/square/membership/cancel/challenge',
+}
+const CONFIRM_PATH: Record<SigningKind, string> = {
+  'card-subscribe': '/v1/square/membership/subscribe',
+  'usdc-purchase': '/v1/square/membership/prepaid',
+  'usdc-change': '/v1/square/membership/prepaid/change',
+  cancel: '/v1/square/membership/cancel',
+}
+
+function challengePath(kind: SigningKind): string {
+  return CHALLENGE_PATH[kind]
+}
+
+/// 签名弹窗与按钮标题（按操作类型）。
+function signingTitle(kind: SigningKind): string {
+  switch (kind) {
+    case 'usdc-purchase':
+      return '扫码签名并购买'
+    case 'usdc-change':
+      return '扫码签名并换档'
+    case 'cancel':
+      return '扫码签名并取消'
+    default:
+      return '扫码签名并订阅'
+  }
+}
+
+/// 档位对应的会员名（换档预览文案用）。
+function levelName(level: MembershipLevel | undefined): string {
+  return plans.find((plan) => plan.level === level)?.name ?? '目标档'
+}
+
+/// 挑战请求体：卡订阅/换档带档位，USDC 购买另带时长，取消只带钱包。
+function challengeBody(
+  kind: SigningKind,
+  owner: string,
+  level: MembershipLevel | null,
+  duration: PrepaidDuration,
+): Record<string, unknown> {
+  if (kind === 'cancel') return { owner_account: owner }
+  if (kind === 'usdc-purchase') {
+    return { owner_account: owner, membership_level: level, duration }
+  }
+  return { owner_account: owner, membership_level: level }
+}
+
 export default function Membership() {
   const [activeTab, setActiveTab] = useState<TabKey>('subscribe')
   const [ownerAccount, setOwnerAccount] = useState('')
@@ -195,6 +376,10 @@ export default function Membership() {
   const [message, setMessage] = useState<{ tone: Tone; text: string } | null>(null)
   const [signing, setSigning] = useState<Signing | null>(null)
   const [scannerMode, setScannerMode] = useState<'address' | 'signature' | null>(null)
+  // 支付方式 / USDC 操作 / 预付时长（仅订阅态用）。
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card')
+  const [usdcMode, setUsdcMode] = useState<UsdcMode>('purchase')
+  const [prepaidDuration, setPrepaidDuration] = useState<PrepaidDuration>('quarter')
 
   const selectedPlan = useMemo(
     () => (selectedLevel ? plans.find((plan) => plan.level === selectedLevel) ?? null : null),
@@ -217,7 +402,7 @@ export default function Membership() {
     setSelectedLevel(tab === 'cancel' ? null : (prev) => prev ?? 'freedom')
   }, [])
 
-  // 发起签名：取挑战 → 构建 signRequest 二维码等 CitizenApp 扫码签名。
+  // 发起签名：按 tab + 支付方式取对应挑战 → 构建 signRequest 二维码等 CitizenApp 扫码签名。
   const beginSigning = useCallback(
     async (action: TabKey) => {
       const owner = ownerAccount.trim()
@@ -230,19 +415,20 @@ export default function Membership() {
         setMessage({ tone: 'error', text: '请先选择会员档位' })
         return
       }
+      // 订阅态按 支付方式 + USDC 操作 决定路径；取消态统一走 cancel。
+      const kind: SigningKind =
+        action === 'cancel'
+          ? 'cancel'
+          : paymentMethod === 'card'
+            ? 'card-subscribe'
+            : usdcMode === 'change'
+              ? 'usdc-change'
+              : 'usdc-purchase'
       setLoading(true)
       setMessage(null)
       setSigning(null)
       try {
-        const data =
-          action === 'subscribe'
-            ? await postJson('/v1/square/membership/subscribe/challenge', {
-                owner_account: owner,
-                membership_level: level,
-              })
-            : await postJson('/v1/square/membership/cancel/challenge', {
-                owner_account: owner,
-              })
+        const data = await postJson(challengePath(kind), challengeBody(kind, owner, level, prepaidDuration))
         const challengeId = data.challenge_id
         const signingPayloadHex = data.signing_payload_hex
         const ownerPubkeyHex = data.owner_pubkey_hex
@@ -259,10 +445,13 @@ export default function Membership() {
           signingPayloadHex,
         })
         setSigning({
-          action,
+          kind,
           challengeId,
           requestQr,
           level: action === 'subscribe' ? level ?? undefined : undefined,
+          duration: kind === 'usdc-purchase' ? prepaidDuration : undefined,
+          preview: kind === 'card-subscribe' ? parseSubscribePreview(data.preview) : null,
+          changePreview: kind === 'usdc-change' ? parsePrepaidChangePreview(data.preview) : null,
         })
       } catch (error) {
         setMessage({ tone: 'error', text: error instanceof Error ? error.message : '发起签名失败' })
@@ -270,10 +459,10 @@ export default function Membership() {
         setLoading(false)
       }
     },
-    [ownerAccount, selectedLevel],
+    [ownerAccount, selectedLevel, paymentMethod, usdcMode, prepaidDuration],
   )
 
-  // 扫回 App 的 signResponse → 提交 Worker 验签 → 订阅转 Stripe / 取消提示成功。
+  // 扫回 App 的 signResponse → 提交 Worker 验签 → 按操作类型跳付款 / 提示结果。
   const submitSignature = useCallback(
     async (raw: string) => {
       const active = signing
@@ -287,26 +476,43 @@ export default function Membership() {
       setLoading(true)
       setMessage(null)
       try {
-        if (active.action === 'subscribe') {
-          const data = await postJson('/v1/square/membership/subscribe', {
-            owner_account: owner,
-            membership_level: active.level,
-            challenge_id: active.challengeId,
-            signature,
-          })
-          if (typeof data.checkout_url !== 'string') {
-            throw new Error('订阅创建失败')
-          }
-          window.location.assign(data.checkout_url)
-          return
-        }
-        await postJson('/v1/square/membership/cancel', {
+        const body: Record<string, unknown> = {
           owner_account: owner,
           challenge_id: active.challengeId,
           signature,
-        })
+        }
+        if (active.kind !== 'cancel') body.membership_level = active.level
+        if (active.kind === 'usdc-purchase') body.duration = active.duration
+        const data = await postJson(CONFIRM_PATH[active.kind], body)
+
+        // 需付款则跳转：卡全新订阅 checkout_url / 卡升档待付 payment_url /
+        // USDC 购买 checkout_url / USDC 升档待付 checkout_url。
+        const redirectUrl =
+          typeof data.checkout_url === 'string'
+            ? data.checkout_url
+            : data.action === 'upgrade_pending' && typeof data.payment_url === 'string'
+              ? data.payment_url
+              : null
+        if (redirectUrl) {
+          window.location.assign(redirectUrl)
+          return
+        }
+
         setSigning(null)
-        setMessage({ tone: 'success', text: '已提交取消订阅，当期结束后生效' })
+        // 待付差价却没拿到付款链接：报错而非误报成功，避免用户以为升档完成却从未去付账单。
+        if (data.action === 'upgrade_pending') {
+          setMessage({ tone: 'error', text: '升档需支付差价，但未获取到付款链接，请重新发起' })
+          return
+        }
+        // 无需跳转：即时生效 / 信息提示。按操作类型出对应文案。
+        if (active.kind === 'cancel') {
+          setMessage({ tone: 'success', text: cancelResultMessage(data.cancel_kind) })
+        } else if (active.kind === 'usdc-change') {
+          setMessage({ tone: 'success', text: prepaidChangeResultMessage(data.action) })
+        } else {
+          setMessage({ tone: 'success', text: subscribeResultMessage(data.action) })
+        }
+        return
       } catch (error) {
         // 挑战过期 / 已用 / 不存在：关掉扫码弹层回到发起态，提示重新发起，
         // 而不是停在「等扫码」界面让用户反复扫一张已作废的二维码。
@@ -353,6 +559,23 @@ export default function Membership() {
       : message?.tone === 'info'
         ? 'border-white/15 bg-white/5 text-slate-200'
         : 'border-red-400/30 bg-red-500/10 text-red-100'
+
+  // 「当前选择」价格行：卡按月费；USDC 购买按所选时长总额；USDC 换档按剩余折算。
+  const priceLine =
+    paymentMethod === 'card'
+      ? selectedPlan?.price ?? ''
+      : usdcMode === 'change'
+        ? 'USDC 换档 · 按当前剩余时长折算'
+        : selectedPlan
+          ? `USDC ${prepaidDuration === 'year' ? '年付' : '季付'} · ${formatUsd(prepaidTotalCents(selectedPlan, prepaidDuration))}`
+          : ''
+
+  const subscribeButtonLabel =
+    paymentMethod === 'card'
+      ? '扫码签名并订阅'
+      : usdcMode === 'change'
+        ? '扫码签名并换档'
+        : '扫码签名并购买'
 
   return (
     <>
@@ -525,14 +748,107 @@ export default function Membership() {
               <>
                 <div className="text-sm font-medium text-gold-400">当前选择</div>
                 <h2 className="mt-2 text-2xl font-bold text-white">{selectedPlan.name}</h2>
-                <p className="mt-2 text-sm text-slate-400">{selectedPlan.price}</p>
+                <p className="mt-2 text-sm text-slate-400">{priceLine}</p>
               </>
             ) : (
               <p className="text-sm leading-relaxed text-slate-300">
-                取消订阅将在当前计费周期结束后生效；期间会员权益不变。
+                取消订阅将在当前计费周期结束后生效；USDC 预付则到期自然失效（无自动续费）。
               </p>
             )}
           </div>
+
+          {/* 支付方式 / USDC 操作 / 预付时长：仅订阅态显示 */}
+          {activeTab === 'subscribe' && selectedPlan && (
+            <div className="mt-5 space-y-4">
+              <div>
+                <div className="mb-2 text-xs font-semibold text-slate-400">支付方式</div>
+                <div className="flex rounded-lg border border-white/10 bg-navy-950 p-1 text-sm font-semibold">
+                  {(
+                    [
+                      ['card', '银行卡 · 自动续订'],
+                      ['usdc', 'USDC · 预付'],
+                    ] as const
+                  ).map(([method, label]) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setPaymentMethod(method)}
+                      className={`flex-1 rounded-md py-2 transition-colors ${
+                        paymentMethod === method
+                          ? 'bg-gold-500 text-navy-950'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {paymentMethod === 'usdc' && (
+                <div>
+                  <div className="mb-2 text-xs font-semibold text-slate-400">USDC 操作</div>
+                  <div className="flex rounded-lg border border-white/10 bg-navy-950 p-1 text-sm font-semibold">
+                    {(
+                      [
+                        ['purchase', '购买 / 续费'],
+                        ['change', '换档'],
+                      ] as const
+                    ).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setUsdcMode(mode)}
+                        className={`flex-1 rounded-md py-2 transition-colors ${
+                          usdcMode === mode
+                            ? 'bg-gold-500 text-navy-950'
+                            : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {paymentMethod === 'usdc' && usdcMode === 'purchase' && (
+                <div>
+                  <div className="mb-2 text-xs font-semibold text-slate-400">预付时长（无折扣）</div>
+                  <div className="flex gap-2">
+                    {(['quarter', 'year'] as const).map((duration) => {
+                      const label = duration === 'year' ? '年付 · 12 个月' : '季付 · 3 个月'
+                      const total = prepaidTotalCents(selectedPlan, duration)
+                      const active = prepaidDuration === duration
+                      return (
+                        <button
+                          key={duration}
+                          type="button"
+                          onClick={() => setPrepaidDuration(duration)}
+                          className={`flex-1 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                            active
+                              ? 'border-gold-400 bg-gold-500/10'
+                              : 'border-white/10 bg-navy-950 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="text-[13px] font-bold text-white">{label}</div>
+                          <div className="mt-0.5 text-sm font-extrabold text-gold-300">
+                            {formatUsd(total)}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {paymentMethod === 'usdc' && usdcMode === 'change' && (
+                <p className="text-xs leading-relaxed text-slate-400">
+                  换档基于当前 USDC 会员剩余时长折算：升档补差价、降档补时长，金额在扫码前显示；仅对已有有效 USDC 会员生效。
+                </p>
+              )}
+            </div>
+          )}
 
           <label className="mt-8 block text-sm font-semibold text-slate-200" htmlFor="owner-account">
             钱包账户地址
@@ -580,7 +896,7 @@ export default function Membership() {
             {loading
               ? '正在处理...'
               : activeTab === 'subscribe'
-                ? '扫码签名并订阅'
+                ? subscribeButtonLabel
                 : '扫码签名并取消'}
           </button>
 
@@ -604,9 +920,7 @@ export default function Membership() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-white">
-                {signing.action === 'subscribe' ? '扫码签名并订阅' : '扫码签名并取消'}
-              </h3>
+              <h3 className="text-lg font-semibold text-white">{signingTitle(signing.kind)}</h3>
               <button
                 type="button"
                 onClick={() => setSigning(null)}
@@ -621,6 +935,18 @@ export default function Membership() {
             <p className="text-xs leading-relaxed text-slate-400">
               打开CitizenApp → 交易 → 扫一扫，扫描下方二维码并确认，再点「扫描签名结果」。
             </p>
+            {(() => {
+              const text = signing.preview
+                ? previewText(signing.preview)
+                : signing.changePreview
+                  ? prepaidChangePreviewText(signing.changePreview, levelName(signing.level))
+                  : null
+              return text ? (
+                <div className="mt-3 rounded-lg border border-gold-400/30 bg-gold-500/10 px-3 py-2 text-xs leading-relaxed text-gold-200">
+                  {text}
+                </div>
+              ) : null
+            })()}
             <div className="mt-4 flex justify-center">
               <div className="rounded-xl bg-white p-3">
                 <QRCodeSVG value={signing.requestQr} size={220} level="M" />

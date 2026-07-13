@@ -11,7 +11,6 @@ codec = { workspace = true }
 scale-info = { workspace = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
-frame-benchmarking = { workspace = true, optional = true }
 sp-runtime = { workspace = true }
 sp-io = { workspace = true }
 sp-std = { workspace = true }
@@ -23,17 +22,12 @@ votingengine = { path = "../../votingengine", default-features = false }
 
 [features]
 default = ["std"]
-runtime-benchmarks = [
-    "frame-benchmarking/runtime-benchmarks",
-    "frame-support/runtime-benchmarks",
-    "frame-system/runtime-benchmarks",
-    "votingengine/runtime-benchmarks",
-]
+# 保留空 feature 供 runtime 统一转发；本 pallet 无外部 call，不注册 benchmark。
+runtime-benchmarks = []
 try-runtime = []
 std = [
     "codec/std",
     "scale-info/std",
-    "frame-benchmarking?/std",
     "frame-support/std",
     "frame-system/std",
     "sp-runtime/std",

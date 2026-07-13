@@ -51,7 +51,10 @@ CREATE TABLE square_memberships (
   cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
   identity_level TEXT NOT NULL DEFAULT 'visitor',
   identity_checked_at INTEGER,
-  entitlement_lapsed_at INTEGER
+  entitlement_lapsed_at INTEGER,
+  frozen_at INTEGER,
+  collection_paused INTEGER NOT NULL DEFAULT 0,
+  prepaid_payment_ref TEXT
 );
 CREATE UNIQUE INDEX idx_square_memberships_stripe_subscription
   ON square_memberships(stripe_subscription_id)

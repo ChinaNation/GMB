@@ -21,98 +21,8 @@ use sp_runtime::{DispatchError, RuntimeDebug};
 /// 固定治理公权机构码,唯一真源在 `primitives::cid::code`。
 pub use primitives::cid::code::{FRG, NJD};
 
-/// 管理员资料里姓名/职务的最大字节长度(与实体生命周期模块 `MaxAccountNameLength` 一致)。
-pub const ADMIN_NAME_MAX_BYTES: u32 = 128;
-
-/// 管理员岗位代码最大字节长度。
-pub const ADMIN_ROLE_CODE_MAX_BYTES: u32 = 64;
-
-/// 管理员任职来源追溯 ID 最大字节长度。
-pub const ADMIN_SOURCE_REF_MAX_BYTES: u32 = 128;
-
-/// 护宪大法官职务字面量。护宪成员解析只认本常量,禁止各处手写字符串。
-/// 单源 = [`primitives::governance_skeleton::ROLE_CONSTITUTION_GUARD`](与节点骨架守卫 I6、
-/// 创世 role-by-index 逐字节共用),消除多份字面量。
-pub use primitives::governance_skeleton::ROLE_CONSTITUTION_GUARD as ADMIN_ROLE_CONSTITUTION_GUARD;
-/// 首席大法官职务字面量。
-pub const ADMIN_ROLE_CHIEF_JUSTICE: &[u8] = "首席大法官".as_bytes();
-/// 次席大法官职务字面量。
-pub const ADMIN_ROLE_DEPUTY_CHIEF_JUSTICE: &[u8] = "次席大法官".as_bytes();
-/// 大法官职务字面量。
-pub const ADMIN_ROLE_JUSTICE: &[u8] = "大法官".as_bytes();
-
-/// 管理员资料里实名 CID 号最大字节长度(与全仓 `CID_NUMBER_MAX_BYTES` 一致)。
-pub const ADMIN_CID_NUMBER_MAX_BYTES: u32 = CID_NUMBER_MAX_BYTES;
-
 /// 管理员集合所属机构 CID 号类型。
 pub type AdminCidNumber = BoundedVec<u8, ConstU32<CID_NUMBER_MAX_BYTES>>;
-
-/// 管理员任职事实的来源。
-///
-/// 佐证 `AdminProfile` 的岗位/任期/姓名由哪条治理路径产生;供 CitizenApp 展示。
-#[derive(
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    Clone,
-    Copy,
-    RuntimeDebug,
-    TypeInfo,
-    MaxEncodedLen,
-    PartialEq,
-    Eq,
-)]
-pub enum AdminSource {
-    /// 创世写入。
-    Genesis,
-    /// 注册局录入。
-    Registry,
-    /// 内部投票产生。
-    InternalVote,
-    /// 机构内部互选产生。
-    MutualElection,
-    /// 普选产生。
-    PopularElection,
-    /// 提名任免产生。
-    NominationAppointment,
-}
-
-/// 单个机构管理员的链上公开资料。
-///
-/// `admin_account` 是密码学账户(投票/多签资格本身);`admin_cid_number`
-/// 是注册局签发、与真人一一绑定的实名锚。岗位制度归 entity 模块,
-/// 本结构只记录某个具体管理员正在担任哪个岗位以及这次任职事实的来源。
-#[derive(
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    Clone,
-    RuntimeDebug,
-    TypeInfo,
-    MaxEncodedLen,
-    PartialEq,
-    Eq,
-)]
-pub struct AdminProfile<AccountId> {
-    /// 管理员密码学账户,∈ 机构管理员集合。
-    pub admin_account: AccountId,
-    /// 管理员实名锚:注册局签发的 CID 号。
-    pub admin_cid_number: BoundedVec<u8, ConstU32<ADMIN_CID_NUMBER_MAX_BYTES>>,
-    /// 姓名快照,来自注册局-公民列表。
-    pub admin_name: BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>,
-    /// 岗位代码,引用 entity 模块中该机构的岗位定义。
-    pub role_code: BoundedVec<u8, ConstU32<ADMIN_ROLE_CODE_MAX_BYTES>>,
-    /// 岗位名称快照,用于跨端展示和历史留痕。
-    pub role_name: BoundedVec<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>,
-    /// 任期开始(天数自纪元;无任期填 0)。
-    pub term_start: u32,
-    /// 任期结束(天数自纪元;无任期填 0)。
-    pub term_end: u32,
-    /// 本次任职事实的来源。
-    pub admin_source: AdminSource,
-    /// 来源追溯 ID:注册局操作、投票提案、选举或提名任免记录。
-    pub admin_source_ref: BoundedVec<u8, ConstU32<ADMIN_SOURCE_REF_MAX_BYTES>>,
-}
 
 /// 管理员集合所属类型。
 #[derive(
@@ -159,6 +69,33 @@ pub enum AdminAccountStatus {
     Active,
     /// 已关闭，管理员集合不再有效。
     Closed,
+}
+
+/// 机构管理员账户集合。
+///
+/// 本结构只保存机构管理员钱包账户及必要路由状态；姓名、CID、岗位、任期和来源
+/// 全部归 `entity` 的岗位任职存储。机构管理员没有“创建人、创建时间、更新时间”字段。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+#[scale_info(skip_type_params(AdminList))]
+pub struct InstitutionAdminAccount<AdminList> {
+    /// 管理员集合所属机构 CID。
+    pub cid_number: AdminCidNumber,
+    /// 机构码，用于把查询路由到对应公权或私权业务。
+    pub institution_code: InstitutionCode,
+    /// 去重后的管理员钱包账户集合。
+    pub admins: AdminList,
+    /// 管理员集合生命周期。
+    pub status: AdminAccountStatus,
 }
 
 /// 管理员集合记录。
@@ -257,6 +194,42 @@ pub trait AdminAccountLifecycle<AccountId, AdminItem = AccountId> {
     }
 }
 
+/// 机构管理员账户生命周期写入口。
+///
+/// 机构的来源、岗位和任职全部由 entity 表达，因此该接口不接收 `creator`，也不承担
+/// 个人多签的创建语义。公权与私权 entity 只通过本接口原子写入纯钱包账户集合。
+pub trait InstitutionAdminAccountLifecycle<AccountId> {
+    /// 注册局直设机构的有效管理员账户，并同步登记动态投票阈值。
+    fn set_active_institution_admin_account(
+        module_tag: &[u8],
+        admin_root_account_id: AccountId,
+        cid_number: Vec<u8>,
+        institution_code: InstitutionCode,
+        kind: AdminAccountKind,
+        admins: Vec<AccountId>,
+        threshold: u32,
+    ) -> DispatchResult;
+
+    /// entity 任职结果生效后同步机构管理员钱包集合。
+    ///
+    /// 调用方不传阈值：固定机构继续使用编译期固定阈值，动态机构继续使用当前 Active
+    /// 动态阈值，避免岗位任职结果越权修改投票制度。
+    fn sync_active_institution_admins_from_assignments(
+        module_tag: &[u8],
+        admin_root_account_id: AccountId,
+        cid_number: Vec<u8>,
+        institution_code: InstitutionCode,
+        admins: Vec<AccountId>,
+    ) -> DispatchResult;
+
+    /// 机构注销提案通过后关闭管理员账户。
+    fn close_institution_admin_account_for_proposal(
+        proposal_id: u64,
+        module_tag: &[u8],
+        admin_root_account_id: AccountId,
+    ) -> DispatchResult;
+}
+
 /// 管理员集合统一查询口。
 ///
 /// runtime 用一个路由实现把读请求分发到 public/private/personal
@@ -283,42 +256,39 @@ pub trait AdminAccountQuery<AccountId> {
         admin_root_account_id: AccountId,
     ) -> Option<Vec<AccountId>>;
 
-    /// 读取活跃机构管理员的完整公开资料(姓名/职务/任期/实名 CID)。
-    ///
-    /// 仅公权/私权机构管理员模块返回资料;个人多签与默认实现返回 None。
-    /// 投票/多签资格判定仍用 `active_account_admins`(只取账户),本方法专供展示。
-    fn active_account_admin_profiles(
-        _institution_code: InstitutionCode,
-        _admin_root_account_id: AccountId,
-    ) -> Option<Vec<AdminProfile<AccountId>>> {
-        None
-    }
-
     fn active_account_admins_len(
         institution_code: InstitutionCode,
         admin_root_account_id: AccountId,
     ) -> Option<u32>;
 
     fn pending_account_exists_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId,
-    ) -> bool;
+        _institution_code: InstitutionCode,
+        _admin_root_account_id: AccountId,
+    ) -> bool {
+        false
+    }
 
     fn is_pending_account_admin_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId,
-        who: &AccountId,
-    ) -> bool;
+        _institution_code: InstitutionCode,
+        _admin_root_account_id: AccountId,
+        _who: &AccountId,
+    ) -> bool {
+        false
+    }
 
     fn pending_account_admins_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId,
-    ) -> Option<Vec<AccountId>>;
+        _institution_code: InstitutionCode,
+        _admin_root_account_id: AccountId,
+    ) -> Option<Vec<AccountId>> {
+        None
+    }
 
     fn pending_account_admins_len_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: AccountId,
-    ) -> Option<u32>;
+        _institution_code: InstitutionCode,
+        _admin_root_account_id: AccountId,
+    ) -> Option<u32> {
+        None
+    }
 }
 
 impl<AccountId> AdminAccountQuery<AccountId> for () {
@@ -415,7 +385,8 @@ pub fn is_personal_admin_code(code: &InstitutionCode) -> bool {
 
 /// 固定治理公权机构的固定管理员人数。
 ///
-/// FRG 的固定人数语义是"单个省行政区组 5 人",不是全局 215 人平铺账户。
+/// FRG 在 `admins` 中保存联邦注册局全部 215 名管理员；43 个省级 5 人岗位组
+/// 由 `entity` 任职关系表达，不再维护第二套管理员分组 storage。
 pub fn expected_fixed_governance_admins_len(code: InstitutionCode) -> Option<u32> {
     use primitives::count_const::{
         FRG_PROVINCE_GROUP_ADMIN_COUNT, NJD_ADMIN_COUNT, NRC_ADMIN_COUNT, PRB_ADMIN_COUNT,
@@ -425,7 +396,10 @@ pub fn expected_fixed_governance_admins_len(code: InstitutionCode) -> Option<u32
         NRC => Some(NRC_ADMIN_COUNT),
         PRC => Some(PRC_ADMIN_COUNT),
         PRB => Some(PRB_ADMIN_COUNT),
-        FRG => Some(FRG_PROVINCE_GROUP_ADMIN_COUNT),
+        FRG => Some(
+            FRG_PROVINCE_GROUP_ADMIN_COUNT
+                * primitives::cid::code::PROVINCE_CODE_INFOS.len() as u32,
+        ),
         NJD => Some(NJD_ADMIN_COUNT),
         _ => None,
     }
@@ -435,42 +409,25 @@ pub fn expected_fixed_governance_admins_len(code: InstitutionCode) -> Option<u32
 mod tests {
     use super::*;
 
-    /// 节点骨架守卫按声明序解码 `kind`/`status`(单字节判别值),此处与
-    /// `primitives::governance_skeleton` 的共享常量交叉钉死:任一枚举重排即测试红。
+    /// 节点骨架守卫按声明序解码机构管理员 `status`，与协议清单交叉钉死。
+    /// 机构管理员新布局没有 `kind`；个人多签的独立 `AdminAccountKind` 不属于该镜像。
     #[test]
-    fn scale_discriminants_match_governance_skeleton() {
-        assert_eq!(
-            AdminAccountKind::PublicInstitution as u8,
-            primitives::governance_skeleton::KIND_PUBLIC_INSTITUTION
-        );
+    fn institution_admin_status_discriminant_matches_governance_skeleton() {
         assert_eq!(
             AdminAccountStatus::Active as u8,
             primitives::governance_skeleton::STATUS_ACTIVE
         );
     }
 
-    /// 护宪职务字面量单源(re-export 自 primitives)。
+    /// `InstitutionAdminAccount` 的声明序就是机构 admins 链上值格式。
     #[test]
-    fn constitution_guard_role_is_single_sourced() {
-        assert_eq!(
-            ADMIN_ROLE_CONSTITUTION_GUARD,
-            primitives::governance_skeleton::ROLE_CONSTITUTION_GUARD
-        );
-    }
-
-    /// `AdminAccount` 的声明序就是 PublicAdmins 链上值格式，NodeGuard 按这一顺序完整解码。
-    #[test]
-    fn admin_account_field_order_matches_node_guard() {
+    fn institution_admin_account_field_order_matches_node_guard() {
         use codec::Encode;
 
-        let value = AdminAccount {
+        let value = InstitutionAdminAccount {
             cid_number: b"NRC-CID".to_vec().try_into().expect("cid"),
             institution_code: *b"NRCG",
-            kind: AdminAccountKind::PublicInstitution,
             admins: vec![1u8, 2u8],
-            creator: [3u8; 32],
-            created_at: 4u32,
-            updated_at: 5u32,
             status: AdminAccountStatus::Active,
         };
         assert_eq!(
@@ -478,11 +435,7 @@ mod tests {
             (
                 b"NRC-CID".to_vec(),
                 *b"NRCG",
-                AdminAccountKind::PublicInstitution,
                 vec![1u8, 2u8],
-                [3u8; 32],
-                4u32,
-                5u32,
                 AdminAccountStatus::Active,
             )
                 .encode()

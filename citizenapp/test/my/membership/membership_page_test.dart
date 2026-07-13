@@ -33,7 +33,10 @@ SquareMembershipState _state({
   bool active = false,
   bool subscriptionActive = false,
   bool cancelAtPeriodEnd = false,
+  bool frozen = false,
   String? membershipLevel,
+  int currentPeriodStart = 0,
+  String? subscriptionSource,
 }) {
   return SquareMembershipState(
     active: active,
@@ -41,6 +44,9 @@ SquareMembershipState _state({
     membershipLevel: membershipLevel,
     subscriptionActive: subscriptionActive,
     cancelAtPeriodEnd: cancelAtPeriodEnd,
+    frozen: frozen,
+    currentPeriodStart: currentPeriodStart,
+    subscriptionSource: subscriptionSource,
     identityLevel: identityLevel,
     plans: const [],
   );
@@ -135,6 +141,98 @@ void main() {
 
     expect(find.text('续订会员'), findsOneWidget);
     expect(find.text('取消订阅'), findsNothing);
+  });
+
+  testWidgets('USDC 预付会员显示订阅起止 + 预付路线横幅', (tester) async {
+    await _pump(
+      tester,
+      _state(
+        identityLevel: 'voting',
+        active: true,
+        subscriptionActive: true,
+        membershipLevel: 'voting',
+        currentPeriodStart: DateTime.now().millisecondsSinceEpoch,
+        subscriptionSource: 'usdc_prepaid',
+      ),
+    );
+
+    expect(find.textContaining('预付 · 到期失效'), findsOneWidget);
+    expect(find.textContaining('订阅 '), findsOneWidget);
+  });
+
+  testWidgets('卡连续订阅会员显示自动续费横幅', (tester) async {
+    await _pump(
+      tester,
+      _state(
+        identityLevel: 'voting',
+        active: true,
+        subscriptionActive: true,
+        membershipLevel: 'voting',
+        currentPeriodStart: DateTime.now().millisecondsSinceEpoch,
+        subscriptionSource: 'stripe',
+      ),
+    );
+
+    expect(find.textContaining('自动续费'), findsOneWidget);
+  });
+
+  testWidgets('卡已发起到期取消 → 横幅标签「到期终止」而非自动续费', (tester) async {
+    await _pump(
+      tester,
+      _state(
+        identityLevel: 'voting',
+        active: true,
+        subscriptionActive: true,
+        cancelAtPeriodEnd: true,
+        membershipLevel: 'voting',
+        currentPeriodStart: DateTime.now().millisecondsSinceEpoch,
+        subscriptionSource: 'stripe',
+      ),
+    );
+
+    expect(find.textContaining('已取消 · 到期终止'), findsOneWidget);
+    expect(find.textContaining('自动续费'), findsNothing);
+  });
+
+  testWidgets('冻结态只显示冻结横幅，不叠加订阅起止横幅', (tester) async {
+    await _pump(
+      tester,
+      _state(
+        identityLevel: 'voting',
+        active: true,
+        subscriptionActive: true,
+        frozen: true,
+        membershipLevel: 'voting',
+        currentPeriodStart: DateTime.now().millisecondsSinceEpoch,
+        subscriptionSource: 'usdc_prepaid',
+      ),
+    );
+
+    // 冻结横幅在（雪花图标），起止横幅（"订阅 "文案）不显示。
+    expect(find.byIcon(Icons.ac_unit), findsOneWidget);
+    expect(find.textContaining('订阅 '), findsNothing);
+  });
+
+  test('SquareMembershipState 路线 / 订阅窗口 getter', () {
+    const prepaid = SquareMembershipState(
+      active: true,
+      expiresAt: 2000,
+      subscriptionActive: true,
+      currentPeriodStart: 1000,
+      subscriptionSource: 'usdc_prepaid',
+    );
+    expect(prepaid.isPrepaid, isTrue);
+    expect(prepaid.hasSubscriptionWindow, isTrue);
+
+    const noWindow = SquareMembershipState(
+      active: true,
+      expiresAt: 2000,
+      subscriptionActive: true,
+      subscriptionSource: 'stripe',
+    );
+    // 缺 current_period_start（=0）→ 无可展示窗口。
+    expect(noWindow.isPrepaid, isFalse);
+    expect(noWindow.hasSubscriptionWindow, isFalse);
   });
 
   testWidgets('visitor card toggles between 自由 and 民主 plans', (tester) async {

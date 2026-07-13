@@ -1,4 +1,4 @@
-//! 立法投票 `cast_house_vote` 等裸 SCALE call-data 编码器(pallet idx 26)。
+//! 立法投票 `cast_representative_vote` 等裸 SCALE call-data 编码器（pallet 26）。
 //!
 //! 链端 `legislation-vote` 的 5 个表决/签署 call 形态完全相同——
 //! `(proposal_id: u64, approve: bool)`(lib.rs:317/329/342/355/367)。
@@ -6,7 +6,7 @@
 //!
 //! `prepare_population_snapshot`(call 0,参数 `PopulationScope` 枚举)随特别案公投落地时单独增量,本文件不含。
 //!
-//! `cast_house_vote` 已接入 handler;`cast_referendum_vote`/`executive_sign`/`override_sign`/
+//! `cast_representative_vote` 已接入 handler；`cast_referendum_vote`/`executive_sign`/`override_sign`/
 //! `guard_vote` 及其 call index 为公投/行政签署/护宪终审流预留(本轮读展示 + 另线程),暂无生产消费方。
 #![allow(dead_code)]
 
@@ -14,8 +14,8 @@ use crate::core::institution_call::{chain_action_code, ChainCall};
 
 /// LegislationVote pallet 在 construct_runtime 的索引。
 pub const LEGISLATION_VOTE_PALLET_INDEX: u8 = 26;
-/// `cast_house_vote` call index(院内表决)。
-pub const CAST_HOUSE_VOTE_CALL_INDEX: u8 = 1;
+/// `cast_representative_vote` call index（代表机构表决）。
+pub const CAST_REPRESENTATIVE_VOTE_CALL_INDEX: u8 = 1;
 /// `cast_referendum_vote` call index(特别案公投)。
 pub const CAST_REFERENDUM_VOTE_CALL_INDEX: u8 = 2;
 /// `executive_sign` call index(行政签署/否决)。
@@ -36,9 +36,9 @@ fn encode_vote(call_index: u8, proposal_id: u64, approve: bool) -> ChainCall {
     }
 }
 
-/// 院内表决:立法机构议员/委员对当前院投票(一人一票)。
-pub fn encode_cast_house_vote(proposal_id: u64, approve: bool) -> ChainCall {
-    encode_vote(CAST_HOUSE_VOTE_CALL_INDEX, proposal_id, approve)
+/// 当前代表机构的管理员按其机构席位投票。
+pub fn encode_cast_representative_vote(proposal_id: u64, approve: bool) -> ChainCall {
+    encode_vote(CAST_REPRESENTATIVE_VOTE_CALL_INDEX, proposal_id, approve)
 }
 
 /// 特别案立法公投。
@@ -66,10 +66,10 @@ mod tests {
     use super::*;
     use codec::Encode;
 
-    /// 院内表决编码 = `[26,1]` + `(u64 小端, bool)`,与 codec golden 逐字节一致;动作码 0x1A01。
+    /// 代表机构表决编码 = `[26,1]` + `(u64 小端, bool)`；动作码 0x1A01。
     #[test]
-    fn cast_house_vote_matches_codec_golden() {
-        let chain = encode_cast_house_vote(42, true);
+    fn cast_representative_vote_matches_codec_golden() {
+        let chain = encode_cast_representative_vote(42, true);
         assert_eq!(&chain.call_data[..2], &[26, 1]);
         assert_eq!(chain.action, 0x1A01);
 
@@ -79,7 +79,7 @@ mod tests {
         assert_eq!(
             &chain.call_data[2..],
             &golden[..],
-            "cast_house_vote SCALE 漂移"
+            "cast_representative_vote SCALE 漂移"
         );
     }
 
@@ -87,7 +87,10 @@ mod tests {
     #[test]
     fn all_vote_calls_share_shape_and_call_index() {
         let cases = [
-            (encode_cast_house_vote(1, false), CAST_HOUSE_VOTE_CALL_INDEX),
+            (
+                encode_cast_representative_vote(1, false),
+                CAST_REPRESENTATIVE_VOTE_CALL_INDEX,
+            ),
             (
                 encode_cast_referendum_vote(2, false),
                 CAST_REFERENDUM_VOTE_CALL_INDEX,

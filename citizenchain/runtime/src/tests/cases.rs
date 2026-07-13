@@ -46,9 +46,7 @@ fn fee_payer_returns_none_for_transfer() {
 #[test]
 fn governance_module_tags_are_globally_unique() {
     use std::collections::HashSet;
-    let tags: [(&str, &[u8]); 11] = [
-        ("public_admins", public_admins::MODULE_TAG),
-        ("private_admins", private_admins::MODULE_TAG),
+    let tags: [(&str, &[u8]); 9] = [
         ("grandpakey_change", grandpakey_change::MODULE_TAG),
         ("resolution_destroy", resolution_destroy::MODULE_TAG),
         ("resolution_issuance", resolution_issuance::MODULE_TAG),
@@ -509,6 +507,8 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
             proposer,
             reason,
             code_hash,
+            expected_pow_params_hash: Default::default(),
+            new_pow_params: Default::default(),
         };
         let mut encoded = Vec::from(runtime_upgrade::MODULE_TAG);
         encoded.extend_from_slice(&codec::Encode::encode(&proposal));
@@ -900,8 +900,6 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
 
         let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
             let payload = (
-                primitives::core_const::GMB,
-                primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 cid_number,
                 cid_full_name.as_slice(),
@@ -915,7 +913,11 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 scope_city_name.as_slice(),
                 town_code,
             );
-            let msg = blake2_256(&payload.encode());
+            // 注册凭证与生产 verifier 共用 signing_message 域，禁止测试保留旧双域头。
+            let msg = primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_INST,
+                &payload.encode(),
+            );
             let sig = signing_pair.sign(&msg);
             let bounded: public_manage::pallet::RegisterSignatureOf<Runtime> =
                 sig.0.to_vec().try_into().expect("signature should fit");
@@ -947,8 +949,6 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
         );
 
         let creation_payload = (
-            primitives::core_const::GMB,
-            primitives::core_const::OP_SIGN_INST,
             frame_system::Pallet::<Runtime>::block_hash(0),
             cid_number,
             cid_full_name.as_slice(),
@@ -957,6 +957,8 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             legal_representative_cid_number,
             &legal_representative_account,
             &account_names,
+            b"test-roles".as_slice(),
+            b"test-assignments".as_slice(),
             register_nonce.as_slice(),
             issuer_cid_number.as_slice(),
             &issuer_main_account,
@@ -966,7 +968,10 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
             town_code,
         );
         let creation_signature: public_manage::pallet::RegisterSignatureOf<Runtime> = main_pair
-            .sign(&blake2_256(&creation_payload.encode()))
+            .sign(&primitives::sign::signing_message(
+                primitives::sign::OP_SIGN_INST,
+                &creation_payload.encode(),
+            ))
             .0
             .to_vec()
             .try_into()
@@ -985,6 +990,8 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 legal_representative_cid_number,
                 &legal_representative_account,
                 &account_names,
+                b"test-roles".as_slice(),
+                b"test-assignments".as_slice(),
                 &register_nonce,
                 &creation_signature,
                 issuer_cid_number.as_slice(),
@@ -1010,6 +1017,8 @@ fn runtime_cid_institution_verifier_runtime_admin_account_query_lookup() {
                 legal_representative_cid_number,
                 &AccountId::new([78u8; 32]),
                 &account_names,
+                b"test-roles".as_slice(),
+                b"test-assignments".as_slice(),
                 &register_nonce,
                 &creation_signature,
                 issuer_cid_number.as_slice(),
@@ -1276,5 +1285,360 @@ fn genesis_public_institutions_full_mint_counts() {
         let njd_main: AccountId =
             codec::Decode::decode(&mut njd.main_account.as_slice()).expect("decode");
         assert!(public_admins::AdminAccounts::<Runtime>::get(njd_main).is_some());
+    });
+}
+
+/// 五类固定创世机构的岗位、席位和任职必须由 genesis 构建直接写入 entity/admins。
+#[test]
+fn genesis_fixed_institution_roles_and_assignments_are_complete() {
+    new_test_ext().execute_with(|| {
+        let role_code = |raw: &[u8]| -> public_manage::RoleCodeOf {
+            raw.to_vec().try_into().expect("fixed role code fits")
+        };
+        let cid = |raw: &str| -> public_manage::pallet::CidNumberOf<Runtime> {
+            raw.as_bytes().to_vec().try_into().expect("fixed cid fits")
+        };
+
+        // 法定代表人不是创世必填项。固定机构创世时三字段必须保持全空，
+        // 不得从管理员首位、机构主账户或其它钱包推导占位值。
+        for institution in primitives::governance_skeleton::fixed_institutions() {
+            let info = public_manage::Institutions::<Runtime>::get(cid(institution.cid_number))
+                .expect("fixed genesis institution exists");
+            assert!(info.legal_representative_name.is_none());
+            assert!(info.legal_representative_cid_number.is_none());
+            assert!(info.legal_representative_account.is_none());
+        }
+
+        // 国家储委会、省储委会统一为“委员”。
+        for node in primitives::cid::china::china_cb::CHINA_CB.iter() {
+            let cid_number = cid(node.cid_number);
+            let code = role_code(primitives::governance_skeleton::ROLE_CODE_COMMITTEE_MEMBER);
+            let role = public_manage::InstitutionRoles::<Runtime>::get(&cid_number, &code)
+                .expect("committee role exists");
+            assert_eq!(role.cid_number, cid_number);
+            assert_eq!(role.role_name.as_slice(), "委员".as_bytes());
+            assert!(!role.term_required);
+            assert_eq!(
+                role.role_status,
+                entity_primitives::InstitutionRoleStatus::Active
+            );
+            let assignments =
+                public_manage::InstitutionRoleAssignments::<Runtime>::get(&cid_number, &code);
+            assert_eq!(assignments.len(), node.admins.len());
+            assert_eq!(
+                assignments
+                    .iter()
+                    .map(|assignment| assignment.admin_account.clone())
+                    .collect::<Vec<_>>(),
+                node.admins
+                    .iter()
+                    .copied()
+                    .map(AccountId::new)
+                    .collect::<Vec<_>>()
+            );
+            assert!(assignments.iter().all(|assignment| {
+                assignment.assignment_source
+                    == entity_primitives::InstitutionAssignmentSource::Genesis
+                    && assignment.assignment_source_ref.is_empty()
+                    && assignment.assignment_status
+                        == entity_primitives::InstitutionAssignmentStatus::Active
+                    && assignment.term_start == 0
+                    && assignment.term_end == 0
+                    && assignment.cid_number == cid_number
+                    && assignment.role_code == code
+            }));
+
+            let admin_account =
+                public_admins::AdminAccounts::<Runtime>::get(AccountId::new(node.main_account))
+                    .expect("committee admin account exists");
+            assert_eq!(
+                admin_account.cid_number.as_slice(),
+                node.cid_number.as_bytes()
+            );
+            assert_eq!(
+                admin_account.institution_code,
+                primitives::cid::code::institution_code_from_cid_number(node.cid_number)
+                    .expect("committee code")
+            );
+            assert_eq!(
+                admin_account.status,
+                admin_primitives::AdminAccountStatus::Active
+            );
+            assert_eq!(
+                admin_account.admins.into_inner(),
+                node.admins
+                    .iter()
+                    .copied()
+                    .map(AccountId::new)
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        // 省储行为“董事”。
+        for node in primitives::cid::china::china_ch::CHINA_CH.iter() {
+            let cid_number = cid(node.cid_number);
+            let code = role_code(primitives::governance_skeleton::ROLE_CODE_DIRECTOR);
+            let role = public_manage::InstitutionRoles::<Runtime>::get(&cid_number, &code)
+                .expect("director role exists");
+            assert_eq!(role.role_name.as_slice(), "董事".as_bytes());
+            assert!(!role.term_required);
+            assert_eq!(
+                role.role_status,
+                entity_primitives::InstitutionRoleStatus::Active
+            );
+            let assignments =
+                public_manage::InstitutionRoleAssignments::<Runtime>::get(&cid_number, &code);
+            assert_eq!(assignments.len(), node.admins.len());
+            assert_eq!(
+                assignments
+                    .iter()
+                    .map(|assignment| assignment.admin_account.clone())
+                    .collect::<Vec<_>>(),
+                node.admins
+                    .iter()
+                    .copied()
+                    .map(AccountId::new)
+                    .collect::<Vec<_>>()
+            );
+            assert!(assignments.iter().all(|assignment| {
+                assignment.assignment_source
+                    == entity_primitives::InstitutionAssignmentSource::Genesis
+                    && assignment.assignment_source_ref.is_empty()
+                    && assignment.assignment_status
+                        == entity_primitives::InstitutionAssignmentStatus::Active
+                    && assignment.term_start == 0
+                    && assignment.term_end == 0
+                    && assignment.cid_number == cid_number
+                    && assignment.role_code == code
+            }));
+            let admin_account =
+                public_admins::AdminAccounts::<Runtime>::get(AccountId::new(node.main_account))
+                    .expect("director admin account exists");
+            assert_eq!(
+                admin_account.admins.into_inner(),
+                node.admins
+                    .iter()
+                    .copied()
+                    .map(AccountId::new)
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        // 国家司法院固定 7 护宪、1 首席、2 次席、5 大法官。
+        let njd = primitives::cid::china::china_sf::CHINA_SF
+            .iter()
+            .find(|node| {
+                primitives::cid::code::institution_code_from_cid_number(node.cid_number)
+                    == Some(primitives::cid::code::NJD)
+            })
+            .expect("NJD genesis node exists");
+        let njd_cid = cid(njd.cid_number);
+        for (raw_code, seats) in [
+            (
+                primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD,
+                7usize,
+            ),
+            (primitives::governance_skeleton::ROLE_CODE_CHIEF_JUSTICE, 1),
+            (
+                primitives::governance_skeleton::ROLE_CODE_DEPUTY_CHIEF_JUSTICE,
+                2,
+            ),
+            (primitives::governance_skeleton::ROLE_CODE_JUSTICE, 5),
+        ] {
+            let code = role_code(raw_code);
+            let spec =
+                primitives::governance_skeleton::fixed_role_specs(primitives::cid::code::NJD)
+                    .into_iter()
+                    .find(|spec| spec.role_code == raw_code)
+                    .expect("NJD role spec exists");
+            let role = public_manage::InstitutionRoles::<Runtime>::get(&njd_cid, &code)
+                .expect("NJD role exists");
+            assert_eq!(role.role_name.as_slice(), spec.role_name);
+            assert!(!role.term_required);
+            assert_eq!(
+                role.role_status,
+                entity_primitives::InstitutionRoleStatus::Active
+            );
+            let assignments =
+                public_manage::InstitutionRoleAssignments::<Runtime>::get(&njd_cid, &code);
+            assert_eq!(assignments.len(), seats);
+            assert!(assignments.iter().all(|assignment| {
+                assignment.assignment_source
+                    == entity_primitives::InstitutionAssignmentSource::Genesis
+                    && assignment.assignment_source_ref.is_empty()
+                    && assignment.assignment_status
+                        == entity_primitives::InstitutionAssignmentStatus::Active
+                    && assignment.term_start == 0
+                    && assignment.term_end == 0
+                    && assignment.cid_number == njd_cid
+                    && assignment.role_code == code
+            }));
+        }
+        let njd_accounts = [
+            primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD,
+            primitives::governance_skeleton::ROLE_CODE_CHIEF_JUSTICE,
+            primitives::governance_skeleton::ROLE_CODE_DEPUTY_CHIEF_JUSTICE,
+            primitives::governance_skeleton::ROLE_CODE_JUSTICE,
+        ]
+        .into_iter()
+        .flat_map(|raw_code| {
+            public_manage::InstitutionRoleAssignments::<Runtime>::get(&njd_cid, role_code(raw_code))
+                .into_iter()
+                .map(|assignment| assignment.admin_account)
+        })
+        .collect::<Vec<_>>();
+        assert_eq!(
+            njd_accounts,
+            primitives::cid::china::china_sf::NATIONAL_JUDICIAL_YUAN_ADMINS
+                .iter()
+                .copied()
+                .map(AccountId::new)
+                .collect::<Vec<_>>()
+        );
+
+        // 联邦注册局是一个机构、43 个省专员岗位，每岗位固定 5 人。
+        let frg = primitives::cid::china::china_zf::CHINA_ZF
+            .iter()
+            .find(|node| {
+                primitives::cid::code::institution_code_from_cid_number(node.cid_number)
+                    == Some(primitives::cid::code::FRG)
+            })
+            .expect("FRG genesis node exists");
+        let frg_cid = cid(frg.cid_number);
+        let mut frg_assignments = 0usize;
+        for (province_index, province) in primitives::cid::code::PROVINCE_CODE_INFOS
+            .iter()
+            .enumerate()
+        {
+            let code = role_code(
+                &primitives::governance_skeleton::province_commissioner_role_code(
+                    province.province_code,
+                ),
+            );
+            let role = public_manage::InstitutionRoles::<Runtime>::get(&frg_cid, &code)
+                .expect("FRG province commissioner role exists");
+            assert_eq!(
+                role.role_name.as_slice(),
+                primitives::governance_skeleton::province_commissioner_role_name(
+                    province.province_name,
+                )
+            );
+            assert!(!role.term_required);
+            assert_eq!(
+                role.role_status,
+                entity_primitives::InstitutionRoleStatus::Active
+            );
+            let assignments =
+                public_manage::InstitutionRoleAssignments::<Runtime>::get(&frg_cid, &code);
+            assert_eq!(
+                assignments.len(),
+                primitives::count_const::FRG_PROVINCE_GROUP_ADMIN_COUNT as usize
+            );
+            let group_size = primitives::count_const::FRG_PROVINCE_GROUP_ADMIN_COUNT as usize;
+            let start = province_index * group_size;
+            let expected = primitives::cid::china::china_zf::FEDERAL_REGISTRY_ADMINS
+                [start..start + group_size]
+                .iter()
+                .copied()
+                .map(AccountId::new)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                assignments
+                    .iter()
+                    .map(|assignment| assignment.admin_account.clone())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            assert!(assignments.iter().all(|assignment| {
+                assignment.assignment_source
+                    == entity_primitives::InstitutionAssignmentSource::Genesis
+                    && assignment.assignment_source_ref.is_empty()
+                    && assignment.assignment_status
+                        == entity_primitives::InstitutionAssignmentStatus::Active
+                    && assignment.term_start == 0
+                    && assignment.term_end == 0
+                    && assignment.cid_number == frg_cid
+                    && assignment.role_code == code
+            }));
+            frg_assignments += assignments.len();
+        }
+        assert_eq!(
+            frg_assignments,
+            primitives::cid::china::china_zf::FEDERAL_REGISTRY_ADMINS.len()
+        );
+        let frg_admin_account =
+            public_admins::AdminAccounts::<Runtime>::get(AccountId::new(frg.main_account))
+                .expect("FRG admin account exists");
+        assert_eq!(frg_admin_account.admins.len(), frg_assignments);
+    });
+}
+
+/// runtime 必须把选举结果路由到 public-manage，并在写入前拒绝固定岗位席位漂移。
+#[test]
+fn runtime_assignment_result_router_enforces_fixed_role_seats() {
+    new_test_ext().execute_with(|| {
+        let njd = primitives::cid::china::china_sf::CHINA_SF
+            .iter()
+            .find(|node| {
+                primitives::cid::code::institution_code_from_cid_number(node.cid_number)
+                    == Some(primitives::cid::code::NJD)
+            })
+            .expect("NJD genesis node exists");
+        let main = AccountId::new(njd.main_account);
+        let result = |accounts: Vec<AccountId>| entity_primitives::InstitutionAssignmentResult {
+            institution_code: primitives::cid::code::NJD,
+            institution_account: main.clone(),
+            role_code: primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD.to_vec(),
+            admin_accounts: accounts,
+            term_start: 0,
+            term_end: 0,
+            assignment_source: entity_primitives::InstitutionAssignmentSource::MutualElection,
+            assignment_source_ref: 700u64.encode(),
+        };
+
+        assert_noop!(
+            <RuntimeInstitutionAssignmentResultHandler as entity_primitives::InstitutionAssignmentResultHandler<AccountId>>::apply_institution_assignment_result(
+                result(vec![AccountId::new([61u8; 32])])
+            ),
+            public_manage::Error::<Runtime>::FixedRoleSeatsMismatch
+        );
+
+        let replacement = (70u8..77)
+            .map(|seed| AccountId::new([seed; 32]))
+            .collect::<Vec<_>>();
+        assert_ok!(
+            <RuntimeInstitutionAssignmentResultHandler as entity_primitives::InstitutionAssignmentResultHandler<AccountId>>::apply_institution_assignment_result(
+                result(replacement.clone())
+            )
+        );
+
+        let cid_number: public_manage::pallet::CidNumberOf<Runtime> = njd
+            .cid_number
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("NJD cid fits");
+        let role_code: public_manage::RoleCodeOf = primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD
+            .to_vec()
+            .try_into()
+            .expect("NJD role code fits");
+        let stored = public_manage::InstitutionRoleAssignments::<Runtime>::get(
+            cid_number,
+            role_code,
+        );
+        assert_eq!(
+            stored
+                .into_iter()
+                .map(|assignment| assignment.admin_account)
+                .collect::<Vec<_>>(),
+            replacement
+        );
+        assert_eq!(
+            internal_vote::ActiveDynamicThresholds::<Runtime>::get(
+                primitives::cid::code::NJD,
+                main,
+            ),
+            None
+        );
     });
 }

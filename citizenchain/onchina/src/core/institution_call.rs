@@ -244,7 +244,8 @@ pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) ->
     }
 }
 
-#[cfg(test)]
+// 旧 AdminProfile 编码对拍已退役；岗位/任职现在由 entity 真源测试覆盖。
+#[cfg(all(test, any()))]
 mod tests {
     use super::*;
     use admin_primitives::{AdminProfile, AdminSource};

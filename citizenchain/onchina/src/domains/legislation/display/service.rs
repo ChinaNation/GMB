@@ -10,7 +10,7 @@ use crate::core::chain_runtime::{
 };
 use crate::domains::legislation::chain_read_proposal::{fetch_proposal_state, LegProposalState};
 
-use super::chain_read::{fetch_active_proposal_ids, fetch_house_ballots};
+use super::chain_read::{fetch_active_proposal_ids, fetch_representative_ballots};
 use super::model::{ActiveProposalView, DisplayBoard, SeatView};
 
 /// 立法提案种类判别式(对齐链端 votingengine `PROPOSAL_KIND_LEGISLATION`)。
@@ -19,7 +19,7 @@ const PROPOSAL_KIND_LEGISLATION: u8 = 2;
 /// 装配本节点机构的大屏看板:名册 + 活跃立法提案(逐席投票)。
 ///
 /// 活跃提案来自 `ActiveProposalsBySubject[InstitutionCid(cid_number)]`;逐个取进度投影,
-/// 非立法提案(无 `LegMeta` → `fetch_proposal_state` 返回 `None`)或已清理者跳过。
+/// 非法律提案（无 `LegislationMetas`）或已清理者跳过。
 pub(crate) async fn build_display_board(
     identity: &NodeInstitutionIdentity,
     institution_code: String,
@@ -49,7 +49,7 @@ pub(crate) async fn build_display_board(
         if state.kind != PROPOSAL_KIND_LEGISLATION {
             continue;
         }
-        let ballots = fetch_house_ballots(proposal_id).await?;
+        let ballots = fetch_representative_ballots(proposal_id, state.current_body).await?;
         active_proposals.push(build_active_proposal_view(state, &roster, &ballots));
     }
 
@@ -113,14 +113,14 @@ mod tests {
             kind: 2,
             stage: 10,
             status: 0,
-            vote_type: 2,
-            current_house: 0,
-            referendum_required: false,
+            representative_rule: 1,
+            current_body: 0,
+            vote_procedure: 1,
             needs_guard: false,
-            houses: vec![],
+            representative_bodies: vec![],
             start_block: 100,
             end_block: 200,
-            house_tally: VoteTally { yes: 1, no: 1 },
+            representative_tally: VoteTally { yes: 1, no: 1 },
             referendum_tally: VoteTally { yes: 0, no: 0 },
         }
     }

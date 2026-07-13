@@ -7,6 +7,7 @@ import {
 } from "./account/service";
 import { createLoginChallenge, createSession, registerDeviceSubkey } from "./auth/service";
 import { chainBootstrapRoute } from "./chain/bootstrap";
+import { constitutionRoute } from "./chain/constitution";
 import { relaySignedExtrinsicRoute } from "./chain/extrinsic_relay";
 import {
   consumeChatKeyPackage,
@@ -21,6 +22,12 @@ import { feedRoute } from "./feeds/service";
 import { followRoute, unfollowRoute } from "./feeds/follows";
 import { mediaRoute } from "./media/service";
 import { subscribeChallengeRoute, subscribeConfirmRoute } from "./membership/subscribe";
+import {
+  prepaidChallengeRoute,
+  prepaidChangeChallengeRoute,
+  prepaidChangeConfirmRoute,
+  prepaidConfirmRoute
+} from "./membership/prepaid";
 import { membershipRoute } from "./membership/service";
 import { stripeWebhookRoute } from "./membership/webhook";
 import { signalRoute } from "./moderation/service";
@@ -69,6 +76,9 @@ export async function routeRequest(
   if (request.method === "GET" && path === "/v1/chain/bootstrap") {
     return chainBootstrapRoute(request, env);
   }
+  if (request.method === "GET" && path === "/v1/constitution") {
+    return constitutionRoute(request, env);
+  }
   if (request.method === "GET" && path === "/v1/security/turnstile") {
     return turnstilePageRoute(env);
   }
@@ -96,6 +106,18 @@ export async function routeRequest(
   }
   if (request.method === "POST" && path === "/v1/square/membership/subscribe") {
     return subscribeConfirmRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/membership/prepaid/challenge") {
+    return prepaidChallengeRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/membership/prepaid") {
+    return prepaidConfirmRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/membership/prepaid/change/challenge") {
+    return prepaidChangeChallengeRoute(request, env);
+  }
+  if (request.method === "POST" && path === "/v1/square/membership/prepaid/change") {
+    return prepaidChangeConfirmRoute(request, env);
   }
   if (request.method === "POST" && path === "/v1/square/membership/webhook") {
     return stripeWebhookRoute(request, env);

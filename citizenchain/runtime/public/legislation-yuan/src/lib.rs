@@ -39,6 +39,10 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_support::traits::Time;
     use frame_system::pallet_prelude::*;
+    use legislation_vote::{
+        LegislationProcedureConfig, LegislationVoteEngine, RepresentativeBodies,
+        RepresentativeRoute,
+    };
     use primitives::cid::china::china_lf::CHINA_LF;
     use primitives::cid::code::InstitutionCode;
     use primitives::constitution::{self, AmendmentScope, CONSTITUTION_CORE_CHAPTER_INDEX};
@@ -46,7 +50,7 @@ pub mod pallet {
     use primitives::genesis::GENESIS_LAW_VERSION_LABELS;
     use sp_runtime::sp_std::vec::Vec;
     use sp_runtime::DispatchError;
-    use votingengine::{InternalAdminProvider, LegislationVoteEngine, ProposalExecutionOutcome};
+    use votingengine::{InternalAdminProvider, ProposalExecutionOutcome};
 
     // 受 Config 常量约束的有界字符串别名。
     pub type TitleOf<T> = BoundedVec<u8, <T as Config>::MaxTitleLen>;
@@ -56,7 +60,7 @@ pub mod pallet {
     /// 单院(市立法会)= 1 项;两院(国家/省立法院)= `[众议会, 参议会]`;教委会模式 = `[教委会, 参议会]`。
     pub type HousesOf<T> = BoundedVec<
         (InstitutionCode, <T as frame_system::Config>::AccountId),
-        ConstU32<{ votingengine::types::MAX_LEGISLATION_HOUSES }>,
+        ConstU32<{ legislation_vote::MAX_REPRESENTATIVE_BODIES }>,
     >;
 
     /// 法律内容统一结构:章 > 节 > 条 > 款(ADR-027)。
@@ -1060,7 +1064,7 @@ pub mod pallet {
         }
 
         /// 编码载荷并调立法投票引擎建提案,返回真实提案 ID。
-        /// 院序列(houses)由提案携带,发起人资格与各院表决全部归属立法投票引擎。
+        /// 代表机构序列由提案携带；单机构与顺序多机构路由均由立法投票引擎执行。
         #[allow(clippy::too_many_arguments)]
         fn dispatch_to_engine(
             who: &T::AccountId,
@@ -1076,13 +1080,31 @@ pub mod pallet {
             let object = chapters.encode();
             // 修宪(tier=宪法)走护宪大法官终审(宪法第21条)。
             let needs_guard = summary.tier == Tier::Constitution;
-            let proposal_id = T::LegislationVoteEngine::create_legislation_proposal(
-                who.clone(),
-                houses.clone().into_inner(),
-                vote_type.as_u8(),
+            let bodies: RepresentativeBodies<T::AccountId> = houses
+                .clone()
+                .into_inner()
+                .try_into()
+                .map_err(|_| Error::<T>::VoteEngineCreateFailed)?;
+            let route = if bodies.len() == 1 {
+                RepresentativeRoute::Single(
+                    bodies
+                        .first()
+                        .cloned()
+                        .ok_or(Error::<T>::VoteEngineCreateFailed)?,
+                )
+            } else {
+                RepresentativeRoute::Sequential(bodies)
+            };
+            let procedure = LegislationProcedureConfig {
                 executive,
                 legislature,
                 needs_guard,
+            };
+            let proposal_id = T::LegislationVoteEngine::create_legislation_vote(
+                who.clone(),
+                route,
+                vote_type.representative_rule(),
+                procedure,
                 MODULE_TAG,
                 data,
                 object,

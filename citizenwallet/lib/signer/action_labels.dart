@@ -55,7 +55,7 @@ const Map<String, String> actionLabels = {
 
   // 立法投票（pallet=26）· 立法专属投票引擎
   'prepare_legislation_snapshot': '准备人口快照',
-  'cast_house_vote': '院内表决',
+  'cast_representative_vote': '代表机构表决',
   'cast_referendum_vote': '特别案公投',
   'executive_sign': '行政签署',
   'override_sign': '三人会签',

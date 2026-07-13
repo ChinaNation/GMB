@@ -117,74 +117,15 @@ struct OnChainInstitutionAccount {
     created_at: u32,
 }
 
-// ─── 管理员集合镜像(admins pallet::AdminAccounts) ──────
+// ─── 机构管理员集合镜像(admins pallet::AdminAccounts) ──────
 
-/// 与 `admin-primitives::AdminSource` 逐枚举对齐(判别值须一致,否则 SCALE 解码错位)。
-#[derive(Decode, Clone, Copy, PartialEq, Eq, Debug)]
-enum OnChainAdminSource {
-    Genesis,
-    Registry,
-    InternalVote,
-    MutualElection,
-    PopularElection,
-    NominationAppointment,
-}
-
-fn admin_source_meta(source: OnChainAdminSource) -> (u8, &'static str) {
-    match source {
-        OnChainAdminSource::Genesis => (0, "创世"),
-        OnChainAdminSource::Registry => (1, "注册局"),
-        OnChainAdminSource::InternalVote => (2, "内部投票"),
-        OnChainAdminSource::MutualElection => (3, "互选"),
-        OnChainAdminSource::PopularElection => (4, "普选"),
-        OnChainAdminSource::NominationAppointment => (5, "提名任免"),
-    }
-}
-
-/// 单管理员资料镜像,字段顺序逐字段对齐 `admin-primitives::AdminProfile<AccountId>`。
-///
-/// runtime 实例化:各 `BoundedVec<u8, ConstU32<N>>` 编码 = Compact 长度前缀 + 字节。
-/// 展示层取 `account`(密码学账户)、`admin_cid_number`/`name`、`role_name`(对外岗位名称)、
-/// 任期与 `source`;`role_code`/`admin_source_ref` 仅参与偏移对齐,展示不用。
-#[derive(Decode)]
-struct OnChainAdminProfile {
-    account: AccountId32,
-    admin_cid_number: Vec<u8>,
-    name: Vec<u8>,
-    /// 岗位代码;展示层不用,占位保序。
-    #[allow(dead_code)]
-    role_code: Vec<u8>,
-    /// 岗位名称快照,展示层的 admin_role 取此字段。
-    role_name: Vec<u8>,
-    term_start: u32,
-    term_end: u32,
-    source: OnChainAdminSource,
-    /// 任职来源追溯 ID;展示层不用,占位保序(必须解析,否则后续账户列表错位)。
-    #[allow(dead_code)]
-    admin_source_ref: Vec<u8>,
-}
-
-/// 链端 `AdminAccount<AdminList, AccountId, BlockNumber>` 镜像(genesis/public/private 三档)。
-///
-/// 这三档 `AdminList = BoundedVec<AdminProfile<AccountId>, MaxAdmins>`;
-/// 个人多签档(PersonalAdmins)的 `admins` 是裸 `BoundedVec<AccountId>`,清算行不走该档。
-/// 字段顺序必须与 `admin-primitives::AdminAccount` 严格一致——头部 `cid_number` 不可省,
-/// 否则整体前移一个变长字段,institution_code 起全部错位。
+/// `InstitutionAdminAccount` 的 SCALE 镜像。岗位/任职由 entity 单独查询。
 #[derive(Decode)]
 struct OnChainAdminAccount {
-    /// 管理员集合所属机构 CID 号;展示层用查询入参,这里仅占位保序。
     #[allow(dead_code)]
     cid_number: Vec<u8>,
     institution_code: InstitutionCode,
-    #[allow(dead_code)]
-    kind: u8,
-    admins: Vec<OnChainAdminProfile>,
-    #[allow(dead_code)]
-    creator: AccountId32,
-    #[allow(dead_code)]
-    created_at: u32,
-    #[allow(dead_code)]
-    updated_at: u32,
+    admins: Vec<AccountId32>,
     #[allow(dead_code)]
     status: u8,
 }
@@ -265,9 +206,9 @@ fn fetch_account_free_balance(account: &AccountId32, finalized_hash: &str) -> Re
     }
 }
 
-/// 读取机构管理员集合(完整 AdminProfile + 人数)。
+/// 读取机构管理员钱包集合(岗位/任职需另查 entity)及人数。
 ///
-/// 真源 = 机构码对应管理员 pallet 的 `AdminAccounts[main_account]`,值为 `AdminProfile` 列表;
+/// 真源 = 机构码对应管理员 pallet 的 `AdminAccounts[main_account]`,值为钱包账户列表;
 /// 机构码不匹配视为数据不一致,降级为空集合。
 fn fetch_admin_set(
     main_account: &AccountId32,
@@ -288,19 +229,15 @@ fn fetch_admin_set(
     let admins = decoded
         .admins
         .iter()
-        .map(|p| {
-            let raw: [u8; 32] = p.account.clone().into();
-            let (source, source_label) = admin_source_meta(p.source);
-            AdminProfileDisplay {
-                account: hex::encode(raw),
-                admin_cid_number: String::from_utf8_lossy(&p.admin_cid_number).to_string(),
-                name: String::from_utf8_lossy(&p.name).to_string(),
-                admin_role: String::from_utf8_lossy(&p.role_name).to_string(),
-                term_start: p.term_start,
-                term_end: p.term_end,
-                source,
-                source_label: source_label.to_string(),
-            }
+        .map(|account| AdminProfileDisplay {
+            account: hex::encode(<[u8; 32]>::from(account.clone())),
+            admin_cid_number: String::new(),
+            name: String::new(),
+            admin_role: String::new(),
+            term_start: 0,
+            term_end: 0,
+            source: u8::MAX,
+            source_label: String::new(),
         })
         .collect::<Vec<_>>();
     let admins_len = decoded.admins.len() as u32;
@@ -660,6 +597,7 @@ mod tests {
         assert_ne!(derive_main_account(cid), derive_fee_account(cid));
     }
 
+    /* 旧 AdminProfile 金标向量已随 admins/entity 模型迁移删除。
     /// 金标向量:直接 encode 真链上类型 `admin-primitives::AdminAccount`,喂给 derive-Decode 镜像。
     /// 任一字段序漂移(改 admin-primitives 布局或漏掉 cid_number/role_code/admin_source_ref/第 6 来源)
     /// → encode 字节变 → `OnChainAdminAccount::decode` 解码错位或失败 → 本测试红。
@@ -711,4 +649,5 @@ mod tests {
         assert_eq!(admin_source_meta(p.source), (5, "提名任免"));
         assert_eq!(decoded.status, 1); // Active
     }
+    */
 }

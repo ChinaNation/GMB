@@ -79,7 +79,7 @@ pub enum CampaignStatus {
     scale_info::TypeInfo,
     frame_support::pallet_prelude::MaxEncodedLen,
 )]
-pub struct CampaignMeta<AccountId, BlockNumber, OfficeCode> {
+pub struct CampaignMeta<AccountId, OfficeCode> {
     pub vote_proposal_id: u64,
     pub campaign_mode: CampaignMode,
     pub organizer_code: primitives::cid::code::InstitutionCode,
@@ -89,8 +89,10 @@ pub struct CampaignMeta<AccountId, BlockNumber, OfficeCode> {
     pub office_code: OfficeCode,
     pub rule_id: u32,
     pub seat_count: u16,
-    pub term_start: BlockNumber,
-    pub term_end: BlockNumber,
+    /// 任期开始日（自纪元起天数），与 entity 和 election-vote 保持同一单位。
+    pub term_start: u32,
+    /// 任期结束日（自纪元起天数），与 entity 和 election-vote 保持同一单位。
+    pub term_end: u32,
     pub campaign_status: CampaignStatus,
 }
 

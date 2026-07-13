@@ -35,3 +35,13 @@ export function voteTypeLabel(voteType: number): string {
       return '—';
   }
 }
+
+/** 投票引擎三类强类型数学规则，不包含教育等立法业务分类。 */
+export function representativeRuleLabel(rule: number): string {
+  switch (rule) {
+    case 0: return '常规规则';
+    case 1: return '重要规则';
+    case 2: return '特别规则';
+    default: return `未知规则(${rule})`;
+  }
+}

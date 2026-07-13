@@ -21,6 +21,14 @@ use sp_runtime::RuntimeDebug;
 // 仍以 primitives::multisig 为唯一真源，entity-primitives 只做实体侧统一出口。
 pub use primitives::multisig::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 
+pub mod institution_role;
+pub use institution_role::{
+    InstitutionAdminAssignment, InstitutionAssignmentResult, InstitutionAssignmentResultHandler,
+    InstitutionAssignmentSource, InstitutionAssignmentStatus, InstitutionRole,
+    InstitutionRoleQuery, InstitutionRoleStatus, ASSIGNMENT_SOURCE_REF_MAX_BYTES,
+    INSTITUTION_ROLE_CODE_MAX_BYTES,
+};
+
 // ===== 机构生命周期共用 storage 值类型(唯一真源) =====
 // public-manage / private-manage 逐字段一致地复用以下类型;两 pallet 各自
 // `pub use entity_primitives::{...}` 出口,保持既有对外 API(`public_manage::InstitutionInfo` 等)不变。
@@ -290,6 +298,8 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         legal_representative_cid_number: &[u8],
         legal_representative_account: &AccountId,
         account_names: &[Vec<u8>],
+        roles_payload: &[u8],
+        assignments_payload: &[u8],
         nonce: &Nonce,
         signature: &Signature,
         issuer_cid_number: &[u8],
@@ -302,7 +312,11 @@ pub trait CidInstitutionVerifier<AccountId, AccountName, Nonce, Signature> {
         if legal_representative_name.is_empty() || legal_representative_cid_number.is_empty() {
             return false;
         }
-        let _ = legal_representative_account;
+        let _ = (
+            legal_representative_account,
+            roles_payload,
+            assignments_payload,
+        );
         Self::verify_institution_registration(
             cid_number,
             cid_full_name,

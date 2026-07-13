@@ -190,7 +190,6 @@ fn partition_imported_state<'a, I>(pairs: I) -> ImportedPolicyState
 where
     I: IntoIterator<Item = (&'a Vec<u8>, &'a Vec<u8>)>,
 {
-    let governance_prefix = governance_skeleton::storage_key::pallet_prefix();
     let fullnode_prefix = fullnode_issuance::storage_key::pallet_prefix();
     let system_prefix = fullnode_issuance::storage_key::system_prefix();
     let total_issuance_key = fullnode_issuance::storage_key::total_issuance();
@@ -203,7 +202,7 @@ where
     let mut state = ImportedPolicyState::default();
     for (key, value) in pairs {
         state.scanned = state.scanned.saturating_add(1);
-        if key.starts_with(&governance_prefix) {
+        if governance_skeleton::storage_key::is_relevant(key) {
             state.governance.insert(key.clone(), value.clone());
         }
         if key.starts_with(&fullnode_prefix)
@@ -244,6 +243,8 @@ where
 {
     cid_lifecycle::check_state_import_height(block).map_err(|e| format!("CID 生命周期:{e:?}"))?;
     let state = partition_imported_state(pairs);
+    governance_skeleton::check_catalog_keys(state.governance.keys())
+        .map_err(|e| format!("固定治理岗位目录:{e:?}"))?;
     governance_skeleton::check_skeleton_invariants(|key| state.governance.get(key).cloned())
         .map_err(|e| format!("固定治理骨架:{e:?}"))?;
     fullnode_issuance::check_imported_state_key_values(block, state.fullnode_issuance.iter())
@@ -393,6 +394,13 @@ impl<I> NodeGuard<I> {
         backend: Arc<FullBackend>,
     ) -> Result<Self, String> {
         let genesis_hash = client.info().genesis_hash;
+        let governance_catalog_keys = Self::state_keys_for_prefixes(
+            &client,
+            genesis_hash,
+            governance_skeleton::storage_key::fixed_catalog_prefixes(),
+        )?;
+        governance_skeleton::check_catalog_keys(&governance_catalog_keys)
+            .map_err(|e| format!("节点守卫:创世固定治理岗位目录校验失败:{e:?}"))?;
         governance_skeleton::check_skeleton_invariants(|key| {
             client
                 .storage(genesis_hash, &StorageKey(key.to_vec()))
@@ -477,6 +485,25 @@ impl<I> NodeGuard<I> {
             let iter = client
                 .storage_keys(at, Some(&prefix), None)
                 .map_err(|e| format!("枚举 CID 规范表失败:{e}"))?;
+            for key in iter {
+                keys.insert(key.0, ());
+            }
+        }
+        Ok(keys.into_keys().collect())
+    }
+
+    /// 枚举若干精确 storage 子树；固定治理岗位只扫描固定机构 CID，不扫描全部机构。
+    fn state_keys_for_prefixes(
+        client: &Arc<FullClient>,
+        at: <Block as BlockT>::Hash,
+        prefixes: Vec<Vec<u8>>,
+    ) -> Result<Vec<Vec<u8>>, String> {
+        let mut keys = BTreeMap::<Vec<u8>, ()>::new();
+        for prefix in prefixes {
+            let prefix = StorageKey(prefix);
+            let iter = client
+                .storage_keys(at, Some(&prefix), None)
+                .map_err(|e| format!("枚举节点永久策略 storage 子树失败:{e}"))?;
             for key in iter {
                 keys.insert(key.0, ());
             }
@@ -765,8 +792,18 @@ impl<I> NodeGuard<I> {
             }
         }
 
-        // 治理骨架只在相关 storage 或 `:code` 变化时全量复核，避免每块重复解码全部管理员集合。
+        // 治理骨架只在三张目标 storage 或 `:code` 变化时全量复核。
         if governance_skeleton::needs_full_check(&post_delta) {
+            if let Err(reason) = governance_skeleton::check_catalog_keys(post_delta.keys()) {
+                log::error!(
+                    target: "node-guard",
+                    "拒绝区块 #{} ({:?}):固定治理岗位目录被破坏 —— {:?}",
+                    params.header.number(),
+                    params.post_hash(),
+                    reason,
+                );
+                return Ok(true);
+            }
             if let Err(reason) = governance_skeleton::check_skeleton_invariants(read_post) {
                 log::error!(
                     target: "node-guard",
@@ -1585,6 +1622,43 @@ mod finalize_issuance_tests {
         assert!(stats.genesis_pallet > 0);
         assert!(stats.provincialbank_interest > 0);
         assert!(stats.cid > 0);
+    }
+
+    #[test]
+    fn complete_state_rejects_missing_and_extra_fixed_roles() {
+        let storage = full_runtime_genesis_storage();
+        let top = storage.top;
+        let cid_keys: Vec<Vec<u8>> = top
+            .keys()
+            .filter(|key| cid_lifecycle::is_relevant_key(key))
+            .cloned()
+            .collect();
+        let reference =
+            cid_lifecycle::GenesisReference::from_genesis(&cid_keys, |key| top.get(key).cloned())
+                .expect("build CID genesis reference");
+        let institution = primitives::governance_skeleton::fixed_institutions()[0];
+        let role = primitives::governance_skeleton::fixed_role_specs(institution.code)[0];
+
+        let mut missing = top.clone();
+        missing.remove(&governance_skeleton::storage_key::institution_role(
+            institution.cid_number.as_bytes(),
+            role.role_code,
+        ));
+        let err = verify_imported_policy_state(0, missing.iter(), &reference)
+            .expect_err("missing fixed role must fail");
+        assert!(err.starts_with("固定治理骨架:RoleMissing"));
+
+        let mut extra = top;
+        extra.insert(
+            governance_skeleton::storage_key::institution_role(
+                institution.cid_number.as_bytes(),
+                b"EXTRA_ROLE",
+            ),
+            Vec::new(),
+        );
+        let err = verify_imported_policy_state(0, extra.iter(), &reference)
+            .expect_err("extra fixed role must fail");
+        assert!(err.starts_with("固定治理岗位目录:UnknownFixedRole"));
     }
 
     #[test]

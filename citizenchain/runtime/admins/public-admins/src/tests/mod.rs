@@ -1,11 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use admin_primitives::{
-    AdminAccountKind, AdminAccountStatus, AdminProfile, AdminSource, ADMIN_CID_NUMBER_MAX_BYTES,
-    ADMIN_NAME_MAX_BYTES,
-};
-use frame_support::BoundedVec;
+use admin_primitives::{AdminAccountKind, AdminAccountStatus};
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
     traits::{ConstU32, ConstU64},
@@ -134,7 +130,6 @@ impl Config for Test {
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type InstitutionQuery = TestInstitutionQuery;
-    type WeightInfo = ();
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
@@ -150,90 +145,43 @@ fn account(seed: u8) -> AccountId32 {
     AccountId32::new([seed; 32])
 }
 
-/// 构造仅账户、空元数据(姓名/职务/任期空)的管理员资料集合。
-fn admins(count: u8) -> Vec<AdminProfile<AccountId32>> {
-    (0..count).map(|i| profile(account(i))).collect()
-}
-
-/// 构造一条空元数据(Registry 来源)的管理员资料。
-fn profile(acc: AccountId32) -> AdminProfile<AccountId32> {
-    AdminProfile {
-        admin_account: acc,
-        admin_cid_number: BoundedVec::new(),
-        admin_name: BoundedVec::new(),
-        role_code: Default::default(),
-        role_name: BoundedVec::new(),
-        term_start: 0,
-        term_end: 0,
-        admin_source: AdminSource::Registry,
-        admin_source_ref: Default::default(),
-    }
-}
-
-/// 构造带姓名/职务/任期/实名 CID 的管理员资料。
-fn profile_full(
-    acc: AccountId32,
-    cid: &[u8],
-    admin_name: &[u8],
-    role_name: &[u8],
-    term_start: u32,
-    term_end: u32,
-) -> AdminProfile<AccountId32> {
-    AdminProfile {
-        admin_account: acc,
-        admin_cid_number: BoundedVec::<u8, ConstU32<ADMIN_CID_NUMBER_MAX_BYTES>>::try_from(
-            cid.to_vec(),
-        )
-        .expect("cid fits"),
-        admin_name: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(admin_name.to_vec())
-            .expect("name fits"),
-        role_code: Default::default(),
-        role_name: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(role_name.to_vec())
-            .expect("title fits"),
-        term_start,
-        term_end,
-        admin_source: AdminSource::Registry,
-        admin_source_ref: Default::default(),
-    }
+/// admins 只保存钱包账户；岗位、任期、来源等由 entity 管理。
+fn admins(count: u8) -> Vec<AccountId32> {
+    (0..count).map(account).collect()
 }
 
 #[test]
 fn public_admins_accept_public_codes_and_reject_private_codes() {
     new_test_ext().execute_with(|| {
         let root = account(10);
-        assert_ok!(PublicAdmins::do_create_pending_admin_account(
+        assert_ok!(PublicAdmins::do_set_active_admin_account_direct(
             root.clone(),
             b"TEST-CID".to_vec(),
             code_bytes("PRS"),
             AdminAccountKind::PublicInstitution,
             admins(3),
-            account(1),
+            2,
         ));
-        let stored = AdminAccounts::<Test>::get(root.clone()).expect("pending public admins");
-        assert_eq!(stored.kind, AdminAccountKind::PublicInstitution);
-        assert_eq!(stored.status, AdminAccountStatus::Pending);
-        assert!(PublicAdmins::pending_account_exists_for_snapshot(
-            code_bytes("PRS"),
-            root
-        ));
+        let stored = AdminAccounts::<Test>::get(root).expect("active public admins");
+        assert_eq!(stored.status, AdminAccountStatus::Active);
 
-        assert_ok!(PublicAdmins::do_create_pending_admin_account(
+        assert_ok!(PublicAdmins::do_set_active_admin_account_direct(
             account(11),
             b"TEST-CID".to_vec(),
             code_bytes("UNIN"),
             AdminAccountKind::PublicInstitution,
             admins(2),
-            account(1),
+            2,
         ));
 
         assert_noop!(
-            PublicAdmins::do_create_pending_admin_account(
+            PublicAdmins::do_set_active_admin_account_direct(
                 account(12),
                 b"TEST-CID".to_vec(),
                 code_bytes("SFLP"),
                 AdminAccountKind::PublicInstitution,
                 admins(3),
-                account(1),
+                2,
             ),
             Error::<Test>::InvalidAdminAccountKind
         );
@@ -244,15 +192,14 @@ fn public_admins_accept_public_codes_and_reject_private_codes() {
 fn public_admins_activate_and_query_active_admins() {
     new_test_ext().execute_with(|| {
         let root = account(20);
-        assert_ok!(PublicAdmins::do_create_pending_admin_account(
+        assert_ok!(PublicAdmins::do_set_active_admin_account_direct(
             root.clone(),
             b"TEST-CID".to_vec(),
             code_bytes("CGOV"),
             AdminAccountKind::PublicInstitution,
             admins(3),
-            account(1),
+            2,
         ));
-        assert_ok!(PublicAdmins::do_activate_admin_account(root.clone()));
 
         assert!(PublicAdmins::is_active_account_admin(
             code_bytes("CGOV"),
@@ -267,132 +214,65 @@ fn public_admins_activate_and_query_active_admins() {
 }
 
 #[test]
-fn public_admins_store_and_query_admin_profiles() {
-    new_test_ext().execute_with(|| {
-        let root = account(40);
-        let profiles = alloc::vec![
-            profile_full(
-                account(0),
-                b"GD000-CTZN8-191941078-2026",
-                b"Alice",
-                b"Director",
-                10,
-                20
-            ),
-            profile_full(
-                account(1),
-                b"GD000-CTZN2-141250905-2026",
-                b"Bob",
-                b"Deputy",
-                11,
-                21
-            ),
-        ];
-        assert_ok!(PublicAdmins::do_create_pending_admin_account(
-            root.clone(),
-            b"TEST-CID".to_vec(),
-            code_bytes("CGOV"),
-            AdminAccountKind::PublicInstitution,
-            profiles.clone(),
-            account(1),
-        ));
-        assert_ok!(PublicAdmins::do_activate_admin_account(root.clone()));
-
-        // 账户语义路径仍只返回账户(一人一票/多签/查配置零改动)。
-        assert_eq!(
-            PublicAdmins::active_account_admins(code_bytes("CGOV"), root.clone()),
-            Some(alloc::vec![account(0), account(1)])
-        );
-
-        // 展示路径返回完整资料,姓名/职务/任期/实名 CID 全字段往返。
-        let stored = PublicAdmins::active_account_admin_profiles(code_bytes("CGOV"), root)
-            .expect("profiles present");
-        assert_eq!(stored, profiles);
-        assert_eq!(stored[0].admin_name.to_vec(), b"Alice".to_vec());
-        assert_eq!(stored[0].role_name.to_vec(), b"Director".to_vec());
-        assert_eq!(
-            stored[0].admin_cid_number.to_vec(),
-            b"GD000-CTZN8-191941078-2026".to_vec()
-        );
-        assert_eq!(stored[1].term_start, 11);
-        assert_eq!(stored[1].term_end, 21);
-        assert_eq!(stored[1].admin_source, AdminSource::Registry);
-    });
-}
-
-#[test]
 fn public_admins_accept_fixed_governance_codes_with_fixed_size() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            PublicAdmins::do_create_pending_admin_account(
-                account(30),
-                b"TEST-CID".to_vec(),
-                code_bytes("NRC"),
+            PublicAdmins::validate_admin_set_for_account(
                 AdminAccountKind::PublicInstitution,
-                admins(3),
-                account(1),
+                code_bytes("NRC"),
+                &admins(3),
             ),
             Error::<Test>::InvalidAdminsLen
         );
 
-        assert_ok!(PublicAdmins::do_create_pending_admin_account(
-            account(31),
-            b"TEST-CID".to_vec(),
-            code_bytes("NRC"),
+        assert_ok!(PublicAdmins::validate_admin_set_for_account(
             AdminAccountKind::PublicInstitution,
-            admins(NRC_ADMIN_COUNT as u8),
-            account(1),
+            code_bytes("NRC"),
+            &admins(NRC_ADMIN_COUNT as u8),
         ));
-        assert_ok!(PublicAdmins::do_activate_admin_account(account(31)));
-        assert_eq!(
-            PublicAdmins::active_account_admins_len(code_bytes("NRC"), account(31)),
-            Some(NRC_ADMIN_COUNT)
-        );
     });
 }
 
-/// 构造 NJD 管理员集:前 `guard_count` 名 role_name=护宪、其余大法官,共 `total` 人。
-fn njd_admins(guard_count: u8, total: u8) -> Vec<AdminProfile<AccountId32>> {
-    (0..total)
-        .map(|i| {
-            let role: &[u8] = if i < guard_count {
-                admin_primitives::ADMIN_ROLE_CONSTITUTION_GUARD
-            } else {
-                "大法官".as_bytes()
-            };
-            profile_full(account(i), b"", b"", role, 0, 0)
-        })
-        .collect()
-}
-
-/// I6:NJD 护宪大法官必须恰 7 席(与节点骨架守卫同源),等长换人保持 7 席即过。
 #[test]
-fn njd_court_requires_exactly_seven_guards() {
-    use admin_primitives::NJD;
-    use primitives::count_const::NJD_ADMIN_COUNT;
-    use primitives::governance_skeleton::NJD_CONSTITUTION_GUARD_SEATS as SEATS;
-
+fn fixed_governance_assignment_sync_uses_compile_time_threshold_only() {
     new_test_ext().execute_with(|| {
-        let total = NJD_ADMIN_COUNT as u8;
-        // 恰 7 护宪 → 通过。
-        assert_ok!(PublicAdmins::ensure_court_composition(
-            NJD,
-            &njd_admins(SEATS as u8, total)
-        ));
-        // 6 护宪(稀释)→ 拒。
-        assert_noop!(
-            PublicAdmins::ensure_court_composition(NJD, &njd_admins(6, total)),
-            Error::<Test>::InvalidCourtComposition
+        let root = account(30);
+        let code = code_bytes("NRC");
+        let cid_number: AdminCidNumber = b"GENESIS-NRC".to_vec().try_into().expect("cid fits");
+        let initial: AdminsOf<Test> = admins(NRC_ADMIN_COUNT as u8)
+            .try_into()
+            .expect("fixed admins fit");
+        AdminAccounts::<Test>::insert(
+            root.clone(),
+            admin_primitives::InstitutionAdminAccount {
+                cid_number: cid_number.clone(),
+                institution_code: code,
+                admins: initial,
+                status: AdminAccountStatus::Active,
+            },
         );
-        // 8 护宪(灌水)→ 拒。
-        assert_noop!(
-            PublicAdmins::ensure_court_composition(NJD, &njd_admins(8, total)),
-            Error::<Test>::InvalidCourtComposition
-        );
-        // 非 NJD(NRC)不受护宪席位约束 → 通过(哪怕 0 护宪)。
-        assert_ok!(PublicAdmins::ensure_court_composition(
-            code_bytes("NRC"),
-            &njd_admins(0, NRC_ADMIN_COUNT as u8)
+
+        let replacement = (40..40 + NRC_ADMIN_COUNT as u8)
+            .map(account)
+            .collect::<Vec<_>>();
+        assert_ok!(PublicAdmins::do_sync_active_admins_from_assignments(
+            root.clone(),
+            cid_number.to_vec(),
+            code,
+            replacement.clone(),
         ));
+
+        assert_eq!(
+            AdminAccounts::<Test>::get(root.clone())
+                .expect("fixed admin account remains")
+                .admins
+                .to_vec(),
+            replacement
+        );
+        // 固定治理阈值来自 institution_code 常量，不创建动态阈值 storage。
+        assert_eq!(
+            internal_vote::ActiveDynamicThresholds::<Test>::get(code, root),
+            None
+        );
     });
 }

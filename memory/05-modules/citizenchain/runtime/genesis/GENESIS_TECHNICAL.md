@@ -7,11 +7,25 @@
 - 保存 `Genesis` / `Operation` 链阶段；
 - 保存开发者能否直接升级 runtime 的一次性开关；
 - 在 block#0 写入创世宣言、国家宣言和创世人口；
-- 调用 runtime 注入的机构 seeder 写入创世机构和管理员。
+- 调用 runtime 注入的机构 seeder 写入创世机构、固定岗位、创世任职和管理员钱包集合。
 
 本模块不提供 extrinsic，不保存 PoW 出块时间，也不向节点提供出块时间 Runtime API。
 PoW 六分钟是 `primitives::pow_const::POW_TARGET_BLOCK_TIME_MS` 固定的难度调整平均目标，
 与链阶段无关；有效工作量证明找到后立即出块，没有最短等待或最晚期限。
+
+### 创世机构子模块
+
+```text
+runtime/genesis/src/institution/
+├── mod.rs          # 对外只暴露 build 入口，声明职责边界
+├── fixed_roles.rs  # 五类固定岗位、席位与既有钱包索引映射；不写 storage
+└── seeder.rs       # 唯一写入方：机构/岗位/任职写 public-manage，钱包集合写 public-admins
+```
+
+- 岗位协议常量来自 `primitives::governance_skeleton`，钱包来自既有 `CHINA_*` 常量；
+- 构建前断言固定钱包数量等于席位总数，且固定岗位钱包不得重复；
+- 法定代表人不是创世必填项，创世三字段保持全空；不得从管理员首位、机构主账户或其它钱包推导；
+- 后续依法任命法定代表人属于 entity 运行期流程，不属于 genesis 职责。
 
 ## 2. 五个受守卫字段
 
@@ -93,6 +107,8 @@ pub trait DeveloperUpgradeCheck {
 ## 8. 文件索引
 
 - `citizenchain/runtime/genesis/src/lib.rs`：类型、存储、创世构建和开发者升级查询；
+- `citizenchain/runtime/genesis/src/institution/fixed_roles.rs`：五类固定岗位、席位和钱包索引映射；
+- `citizenchain/runtime/genesis/src/institution/seeder.rs`：创世机构、岗位、任职和管理员钱包唯一写入方；
 - `citizenchain/runtime/genesis/src/tests/mod.rs`：pallet 单元测试；
 - `citizenchain/runtime/primitives/src/genesis.rs`：三个创世事实的固定真源；
 - `citizenchain/runtime/src/genesis.rs`：真实 runtime genesis patch；

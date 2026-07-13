@@ -1,84 +1,139 @@
 //! 立法投票单测:阈值纯函数 + 单院/两院/特别案投票机制。
 
 use super::*;
-use crate::Error;
-use frame_support::{assert_noop, assert_ok};
-use votingengine::types::{
-    legislation_house_decided, legislation_house_final_passed, legislation_referendum_final_passed,
-    LEG_VOTE_MAJOR, LEG_VOTE_MAJOR_EDU, LEG_VOTE_REGULAR, LEG_VOTE_REGULAR_EDU, LEG_VOTE_SPECIAL,
+use crate::{
+    rules::{referendum_final_passed, representative_decided, representative_final_passed},
+    Error, RepresentativeVoteRule,
 };
+use frame_support::{assert_noop, assert_ok};
 use votingengine::{
-    STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_HOUSE, STAGE_LEG_OVERRIDE, STAGE_LEG_REFERENDUM,
-    STAGE_LEG_SIGN, STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING,
+    STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_OVERRIDE, STAGE_LEG_REFERENDUM,
+    STAGE_LEG_REPRESENTATIVE, STAGE_LEG_SIGN, STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING,
 };
 
 // ───────────────── 阈值纯函数(宪法第45/46条精确端点,五类立法表决)─────────────────
 
 #[test]
-fn house_final_passed_thresholds() {
+fn representative_final_passed_thresholds() {
     // 常规案:>80% 参与 且 ≥60% 赞成(参与者基数)。total=10。
-    assert!(legislation_house_final_passed(LEG_VOTE_REGULAR, 10, 6, 3)); // casted=9>8, 6/9≥60%
-    assert!(!legislation_house_final_passed(LEG_VOTE_REGULAR, 10, 5, 3)); // 5/8=62.5%但 casted=8 不>8
-    assert!(!legislation_house_final_passed(LEG_VOTE_REGULAR, 10, 5, 4)); // 5/9=55%<60%
-                                                                          // 常规教育案:阈值同常规案。
-    assert!(legislation_house_final_passed(
-        LEG_VOTE_REGULAR_EDU,
+    assert!(representative_final_passed(
+        RepresentativeVoteRule::Regular,
         10,
         6,
         3
-    ));
-    assert!(!legislation_house_final_passed(
-        LEG_VOTE_REGULAR_EDU,
+    )); // casted=9>8, 6/9≥60%
+    assert!(!representative_final_passed(
+        RepresentativeVoteRule::Regular,
+        10,
+        5,
+        3
+    )); // 5/8=62.5%但 casted=8 不>8
+    assert!(!representative_final_passed(
+        RepresentativeVoteRule::Regular,
         10,
         5,
         4
-    ));
-    // 重要案:>90% 参与 且 ≥70% 赞成。
-    assert!(legislation_house_final_passed(LEG_VOTE_MAJOR, 10, 7, 3)); // casted=10>9, 7/10≥70%
-    assert!(!legislation_house_final_passed(LEG_VOTE_MAJOR, 10, 8, 1)); // casted=9 不>9
-                                                                        // 重要教育案:阈值同重要案。
-    assert!(legislation_house_final_passed(LEG_VOTE_MAJOR_EDU, 10, 7, 3));
-    assert!(!legislation_house_final_passed(
-        LEG_VOTE_MAJOR_EDU,
+    )); // 5/9=55%<60%
+        // 重要案:>90% 参与 且 ≥70% 赞成。
+    assert!(representative_final_passed(
+        RepresentativeVoteRule::Major,
+        10,
+        7,
+        3
+    )); // casted=10>9, 7/10≥70%
+    assert!(!representative_final_passed(
+        RepresentativeVoteRule::Major,
         10,
         8,
         1
-    ));
-    // 特别案内部:全员 且 ≥70% 赞成。
-    assert!(legislation_house_final_passed(LEG_VOTE_SPECIAL, 10, 7, 3)); // 全员10,7赞成
-    assert!(!legislation_house_final_passed(LEG_VOTE_SPECIAL, 10, 6, 4)); // 6<70%
+    )); // casted=9 不>9
+        // 特别案内部:全员 且 ≥70% 赞成。
+    assert!(representative_final_passed(
+        RepresentativeVoteRule::Special,
+        10,
+        7,
+        3
+    )); // 全员10,7赞成
+    assert!(!representative_final_passed(
+        RepresentativeVoteRule::Special,
+        10,
+        6,
+        4
+    )); // 6<70%
 }
 
 #[test]
-fn house_decided_early() {
+fn representative_decided_early() {
     // 全员已投 → 立即判定。
     assert_eq!(
-        legislation_house_decided(LEG_VOTE_REGULAR, 10, 7, 3),
+        representative_decided(RepresentativeVoteRule::Regular, 10, 7, 3),
         Some(true)
     );
     // 结果已无法达到常规案赞成阈值 → 提前否决。
     assert_eq!(
-        legislation_house_decided(LEG_VOTE_REGULAR, 10, 0, 5),
+        representative_decided(RepresentativeVoteRule::Regular, 10, 0, 5),
         Some(false)
     ); // 5>4
        // 未全员、未超限 → 未决。
-    assert_eq!(legislation_house_decided(LEG_VOTE_REGULAR, 10, 3, 2), None);
+    assert_eq!(
+        representative_decided(RepresentativeVoteRule::Regular, 10, 3, 2),
+        None
+    );
 }
 
 #[test]
 fn referendum_threshold() {
     // ≥70% 参与 且 ≥70% 赞成。eligible=100。
-    assert!(legislation_referendum_final_passed(100, 56, 14)); // 参与70,赞成56/70=80%
-    assert!(!legislation_referendum_final_passed(100, 50, 19)); // 参与69<70
-    assert!(!legislation_referendum_final_passed(100, 48, 22)); // 参与70,赞成48/70≈68%<70%
+    assert!(referendum_final_passed(100, 56, 14)); // 参与70,赞成56/70=80%
+    assert!(!referendum_final_passed(100, 50, 19)); // 参与69<70
+    assert!(!referendum_final_passed(100, 48, 22)); // 参与70,赞成48/70≈68%<70%
 }
 
 // ───────────────── 单院投票 ─────────────────
 
 #[test]
+fn representative_only_finishes_without_law_procedure() {
+    new_test_ext().execute_with(|| {
+        let pid = <Lib as crate::LegislationVoteEngine<AccountId32>>::create_representative_vote(
+            member(1),
+            crate::RepresentativeRoute::Single((HOUSE1_CODE, house1())),
+            RepresentativeVoteRule::Regular,
+            Default::default(),
+            b"personnel",
+            vec![1],
+        )
+        .expect("representative-only proposal");
+        // 发起人属于当前机构，创建时已经自动投下第一张赞成票。
+        for i in 2u8..=7 {
+            assert_ok!(cast(member(i), pid, true));
+        }
+        for i in 8u8..=10 {
+            assert_ok!(cast(member(i), pid, false));
+        }
+        assert_eq!(status(pid), STATUS_EXECUTED);
+        assert!(crate::pallet::LegislationMetas::<Test>::get(pid).is_none());
+    });
+}
+
+#[test]
+fn representative_only_rejects_special_rule() {
+    new_test_ext().execute_with(|| {
+        let result = <Lib as crate::LegislationVoteEngine<AccountId32>>::create_representative_vote(
+            member(1),
+            crate::RepresentativeRoute::Single((HOUSE1_CODE, house1())),
+            RepresentativeVoteRule::Special,
+            Default::default(),
+            b"personnel",
+            vec![1],
+        );
+        assert_eq!(result, Err(Error::<Test>::InvalidRepresentativeRule.into()));
+    });
+}
+
+#[test]
 fn single_house_regular_passes_then_mayor_signs() {
     new_test_ext().execute_with(|| {
-        let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Regular);
         // 10 名议员全投:7 赞成 3 反对 → 院通过 → 进入行政签署阶段(市行政区)。
         for i in 1u8..=7 {
             assert_ok!(cast(member(i), pid, true));
@@ -97,7 +152,7 @@ fn single_house_regular_passes_then_mayor_signs() {
 #[test]
 fn single_house_mayor_veto_rejects_without_rescue() {
     new_test_ext().execute_with(|| {
-        let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Regular);
         for i in 1u8..=7 {
             assert_ok!(cast(member(i), pid, true));
         }
@@ -114,7 +169,7 @@ fn single_house_mayor_veto_rejects_without_rescue() {
 #[test]
 fn single_house_sign_timeout_passes() {
     new_test_ext().execute_with(|| {
-        let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Regular);
         for i in 1u8..=7 {
             assert_ok!(cast(member(i), pid, true));
         }
@@ -131,7 +186,7 @@ fn single_house_sign_timeout_passes() {
 #[test]
 fn executive_sign_rejected_for_non_representative() {
     new_test_ext().execute_with(|| {
-        let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Regular);
         for i in 1u8..=10 {
             assert_ok!(cast(member(i), pid, i <= 7));
         }
@@ -145,7 +200,7 @@ fn executive_sign_rejected_for_non_representative() {
 #[test]
 fn single_house_regular_rejected_when_result_cannot_pass() {
     new_test_ext().execute_with(|| {
-        let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Regular);
         // 剩余赞成票已不足以达到常规案阈值 → 提前否决。
         for i in 1u8..=5 {
             assert_ok!(cast(member(i), pid, false));
@@ -157,10 +212,10 @@ fn single_house_regular_rejected_when_result_cannot_pass() {
 #[test]
 fn double_vote_rejected() {
     new_test_ext().execute_with(|| {
-        let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Regular);
         assert_ok!(cast(member(1), pid, true));
         assert_noop!(
-            Lib::do_cast_house_vote(member(1), pid, true),
+            Lib::do_cast_representative_vote(member(1), pid, true),
             votingengine::Error::<Test>::AlreadyVoted
         );
     });
@@ -169,10 +224,10 @@ fn double_vote_rejected() {
 #[test]
 fn non_member_cannot_vote() {
     new_test_ext().execute_with(|| {
-        let pid = create(member(1), single_house(), LEG_VOTE_REGULAR);
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Regular);
         // member(15) 属 house2,不在 house1 快照内。
         assert_noop!(
-            Lib::do_cast_house_vote(member(15), pid, true),
+            Lib::do_cast_representative_vote(member(15), pid, true),
             votingengine::Error::<Test>::NoPermission
         );
     });
@@ -183,8 +238,8 @@ fn create_no_longer_authorizes_proposer_at_vote_layer() {
     new_test_ext().execute_with(|| {
         // ADR-027 修订:发起人资格由 legislation-yuan 对 proposer_body 校验,提案方与表决院解耦;
         // legislation-vote 层不再卡 who(市行政区 市自治会/市教委会 委员可提案,不属表决院 houses[0])。
-        let pid = create(member(50), single_house(), LEG_VOTE_REGULAR);
-        assert_eq!(stage(pid), STAGE_LEG_HOUSE);
+        let pid = create(member(50), single_house(), RepresentativeVoteRule::Regular);
+        assert_eq!(stage(pid), STAGE_LEG_REPRESENTATIVE);
     });
 }
 
@@ -192,15 +247,18 @@ fn create_no_longer_authorizes_proposer_at_vote_layer() {
 
 /// 两院全过后推进至行政签署阶段(辅助):返回处于 STAGE_LEG_SIGN 的提案。
 fn two_houses_passed_to_sign() -> u64 {
-    let pid = create(member(1), two_houses(), LEG_VOTE_MAJOR);
+    let pid = create(member(1), two_houses(), RepresentativeVoteRule::Major);
     for i in 1u8..=8 {
         assert_ok!(cast(member(i), pid, true));
     }
     for i in 9u8..=10 {
         assert_ok!(cast(member(i), pid, false));
     }
-    assert_eq!(stage(pid), STAGE_LEG_HOUSE);
-    assert_eq!(LegMeta::<Test>::get(pid).unwrap().current_house, 1);
+    assert_eq!(stage(pid), STAGE_LEG_REPRESENTATIVE);
+    assert_eq!(
+        RepresentativeMetas::<Test>::get(pid).unwrap().current_body,
+        1
+    );
     for i in 11u8..=18 {
         assert_ok!(cast(member(i), pid, true));
     }
@@ -219,6 +277,34 @@ fn two_houses_pass_then_governor_signs() {
         let pid = two_houses_passed_to_sign();
         assert_ok!(exec_sign(exec_rep(), pid, true));
         assert_eq!(status(pid), STATUS_EXECUTED);
+    });
+}
+
+#[test]
+fn same_wallet_can_vote_once_in_each_representative_body() {
+    new_test_ext().execute_with(|| {
+        let pid = create(
+            member(1),
+            overlapping_bodies(),
+            RepresentativeVoteRule::Major,
+        );
+        for i in 1u8..=10 {
+            assert_ok!(cast(member(i), pid, i <= 8));
+        }
+        assert_eq!(
+            RepresentativeMetas::<Test>::get(pid)
+                .expect("representative meta")
+                .current_body,
+            1
+        );
+        // 同一钱包在第二个机构具有独立席位，不受第一机构去重记录影响。
+        assert_ok!(cast(member(1), pid, true));
+        assert!(
+            crate::pallet::RepresentativeVotesByAccount::<Test>::contains_key(pid, (0, member(1)))
+        );
+        assert!(
+            crate::pallet::RepresentativeVotesByAccount::<Test>::contains_key(pid, (1, member(1)))
+        );
     });
 }
 
@@ -299,7 +385,7 @@ fn special_case_advances_to_referendum_then_passes() {
     new_test_ext().execute_with(|| {
         // 特别案:发起前准备人口快照(同一区块),分母 100。
         prepare_snapshot(member(1), 100);
-        let pid = create(member(1), single_house(), LEG_VOTE_SPECIAL);
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Special);
         // 全员 10:8 赞成 2 反对 → 内部段通过(≥70%)→ 推进至公投阶段。
         for i in 1u8..=8 {
             assert_ok!(cast(member(i), pid, true));
@@ -356,7 +442,7 @@ fn finalize_referendum(pid: u64) {
 
 /// 修宪重要案(单院)推进到护宪大法官终审阶段(辅助)。
 fn constitution_amend_to_guard() -> u64 {
-    let pid = create_guard(member(1), single_house(), LEG_VOTE_MAJOR);
+    let pid = create_guard(member(1), single_house(), RepresentativeVoteRule::Major);
     // 重要案:>90% 参与 + ≥70% 赞成 → 全员 10 投,8 赞成 2 反对 → 院通过 → 行政签署。
     for i in 1u8..=8 {
         assert_ok!(cast(member(i), pid, true));
@@ -484,7 +570,7 @@ fn guard_member_cannot_vote_twice() {
 fn non_amend_skips_guard() {
     new_test_ext().execute_with(|| {
         // 非修宪(needs_guard=false)单院重要案:院通过→签署→直接生效,不进护宪阶段。
-        let pid = create(member(1), single_house(), LEG_VOTE_MAJOR);
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Major);
         for i in 1u8..=8 {
             assert_ok!(cast(member(i), pid, true));
         }

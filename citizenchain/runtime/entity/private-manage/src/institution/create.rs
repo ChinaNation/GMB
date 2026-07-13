@@ -9,6 +9,8 @@
 
 extern crate alloc;
 
+use codec::Encode;
+
 use crate::institution::accounts::{
     account_names_payload_from_initial_accounts, validate_initial_accounts,
 };
@@ -16,9 +18,9 @@ use crate::institution::types::{
     InstitutionAccountInfo, InstitutionInfo, InstitutionLifecycleStatus,
 };
 use crate::pallet::{
-    AccountNameOf, AccountRegisteredCid, AdminProfilesOf, CidNumberOf, CidRegisteredAccount,
-    Config, Error, Event, InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet,
-    RegisterNonceOf, RegisterSignatureOf, UsedRegisterNonce,
+    AccountNameOf, AccountRegisteredCid, CidNumberOf, CidRegisteredAccount, Config, Error, Event,
+    InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet, RegisterNonceOf,
+    RegisterSignatureOf, UsedRegisterNonce,
 };
 use crate::traits::{
     CidInstitutionVerifier, InstitutionCidQuery, ProtectedSourceChecker, RegistryAuthority,
@@ -48,8 +50,8 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
     legal_representative_account: T::AccountId,
     accounts: InstitutionInitialAccountsOf<T>,
     institution_code: InstitutionCode,
-    admins_len: u32,
-    admins: AdminProfilesOf<T>,
+    roles: crate::institution::role::InstitutionRolesOf<T>,
+    assignments: crate::institution::role::InstitutionAdminAssignmentsOf<T>,
     threshold: u32,
     register_nonce: RegisterNonceOf<T>,
     signature: RegisterSignatureOf<T>,
@@ -110,7 +112,6 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
         !T::SiblingInstitutionQuery::cid_exists(&cid_number),
         Error::<T>::InstitutionAlreadyExists
     );
-    Pallet::<T>::ensure_admin_config(admins_len, &admins, threshold)?;
     Pallet::<T>::ensure_lifecycle_institution_code(&institution_code)?;
 
     let register_nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
@@ -128,6 +129,8 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
             legal_representative_cid_number.as_slice(),
             &legal_representative_account,
             &account_name_payload,
+            &roles.encode(),
+            &assignments.encode(),
             &register_nonce,
             &signature,
             issuer_cid_number.as_slice(),
@@ -164,6 +167,18 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
     let institution = main_account.clone();
 
     with_transaction(|| {
+        let admins = match Pallet::<T>::store_initial_roles_and_assignments(
+            &cid_number,
+            &roles,
+            &assignments,
+            entity_primitives::InstitutionAssignmentSource::Registry,
+        ) {
+            Ok(admins) => admins,
+            Err(err) => return TransactionOutcome::Rollback(Err(err)),
+        };
+        if let Err(err) = Pallet::<T>::ensure_admin_config(&admins, threshold) {
+            return TransactionOutcome::Rollback(Err(err));
+        }
         if !fee.is_zero() {
             let fee_imbalance = match T::Currency::withdraw(
                 &who,
@@ -236,7 +251,6 @@ pub(crate) fn do_propose_create_private_institution<T: Config>(
             institution.clone(),
             &admins,
             threshold,
-            &who,
         ) {
             return TransactionOutcome::Rollback(Err(err));
         }

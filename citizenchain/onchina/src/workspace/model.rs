@@ -36,7 +36,7 @@ pub(crate) enum WorkspaceAction {
     ViewOwnAdmins,
     ViewLegislation,
     ProposeLegislation,
-    CastHouseVote,
+    CastRepresentativeVote,
     SignLegislation,
     ViewInstitutionProfile,
     ViewOperationRecords,

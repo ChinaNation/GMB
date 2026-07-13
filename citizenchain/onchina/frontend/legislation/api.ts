@@ -58,13 +58,13 @@ export async function proposeLegislation(
   });
 }
 
-/** POST 院内表决(一人一票),返回扫码上链 sign_request。 */
-export async function castHouseVote(
+/** POST 当前代表机构表决，返回扫码上链 sign_request。 */
+export async function castRepresentativeVote(
   auth: AdminAuth,
   proposalId: number,
   approve: boolean,
 ): Promise<string> {
-  return adminRequest<string>('/api/v1/legislation/house-vote', auth, {
+  return adminRequest<string>('/api/v1/legislation/representative-vote', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ proposalId, approve }),

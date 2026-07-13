@@ -197,6 +197,10 @@ class _MembershipPageState extends State<MembershipPage>
 
     return Column(
       children: [
+        if (state.frozen) _FrozenMembershipBanner(state: state),
+        // 冻结时只显示冻结横幅（权益已停），不再叠加"有效订阅"横幅制造矛盾信息。
+        if (state.hasSubscriptionWindow && !state.frozen)
+          _ActiveMembershipBanner(state: state),
         Expanded(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -432,8 +436,8 @@ class _IdentityMembershipCard extends StatelessWidget {
                   ],
                   // 价格统一：档色填充标签。
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
                       color: tierColor,
                       borderRadius: BorderRadius.circular(8),
@@ -881,6 +885,109 @@ class _PageDots extends StatelessWidget {
   }
 }
 
+/// 冻结横幅（ADR-033 规则5）：链上身份与会员档位不匹配 → 权益已冻结、已暂停收款，
+/// 提示到官网换档到与身份匹配的会员档解冻（各身份卡的订阅按钮即换档入口）。
+class _FrozenMembershipBanner extends StatelessWidget {
+  const _FrozenMembershipBanner({required this.state});
+
+  final SquareMembershipState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final message = (state.inactiveMessage?.isNotEmpty ?? false)
+        ? state.inactiveMessage!
+        : '链上身份已变更，会员权益已冻结，请到官网换档到与身份匹配的会员档。';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: AppTheme.bannerDecoration(AppTheme.danger),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.ac_unit, size: 18, color: AppTheme.danger),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: AppTheme.danger,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 订阅起止横幅（ADR-034 段4）：展示当前有效会员的档位、支付路线与订阅起止日期。
+/// 会员操作（订阅 / 取消 / 换档）在官网完成，App 只读展示。
+class _ActiveMembershipBanner extends StatelessWidget {
+  const _ActiveMembershipBanner({required this.state});
+
+  final SquareMembershipState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final plan = state.planForLevel(state.membershipLevel);
+    final name = plan?.displayName ?? '会员';
+    // 路线标签直白点出续费行为：预付到期失效、卡已取消到期终止、卡在续则自动续费。
+    final route = state.isPrepaid
+        ? '预付 · 到期失效'
+        : state.cancelAtPeriodEnd
+            ? '已取消 · 到期终止'
+            : '自动续费';
+    final window =
+        '订阅 ${_formatYmd(state.currentPeriodStart)} ~ ${_formatYmd(state.expiresAt)}';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: AppTheme.bannerDecoration(AppTheme.info),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.event_available, size: 18, color: AppTheme.info),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$name · $route',
+                  style: const TextStyle(
+                    color: AppTheme.info,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  window,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 毫秒时间戳格式化为本地 YYYY-MM-DD。
+String _formatYmd(int ms) {
+  final d = DateTime.fromMillisecondsSinceEpoch(ms).toLocal();
+  final mm = d.month.toString().padLeft(2, '0');
+  final dd = d.day.toString().padLeft(2, '0');
+  return '${d.year}-$mm-$dd';
+}
+
 class _MembershipMessage extends StatelessWidget {
   const _MembershipMessage({
     required this.title,
@@ -1006,7 +1113,8 @@ const List<SquareMembershipPlan> _fallbackMembershipPlans = [
 /// 按身份档聚合套餐（3 张卡）：每档取 required_identity_level 匹配的套餐，档内按价
 /// 升序（自由在前）。访客档 → [自由 freedom, 民主 democracy]；投票/竞选各一档。
 /// worker 缺档用兜底补齐。
-List<List<SquareMembershipPlan>> _plansByTier(List<SquareMembershipPlan> plans) {
+List<List<SquareMembershipPlan>> _plansByTier(
+    List<SquareMembershipPlan> plans) {
   return _tierOrder.map((tier) {
     final tierPlans =
         plans.where((plan) => plan.requiredIdentityLevel == tier).toList();

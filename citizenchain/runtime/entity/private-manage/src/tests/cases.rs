@@ -239,8 +239,8 @@ fn propose_create_private_institution_registers_active_without_vote() {
             legal_representative_account(),
             typical_accounts(),
             code_bytes("SFLP"),
-            3,
-            admin_profiles_vec(3),
+            institution_roles_vec(),
+            institution_assignments_vec(3),
             2,
             register_nonce(b"nonce-cr-1"),
             valid_signature(),
@@ -319,8 +319,8 @@ fn private_institution_stores_full_and_short_name_onchain() {
             legal_representative_account(),
             typical_accounts(),
             code_bytes("SFLP"),
-            3,
-            admin_profiles_vec(3),
+            institution_roles_vec(),
+            institution_assignments_vec(3),
             2,
             register_nonce(b"nonce-pri-1"),
             valid_signature(),
@@ -358,8 +358,8 @@ fn private_institution_rejects_empty_short_name() {
                 legal_representative_account(),
                 typical_accounts(),
                 code_bytes("SFLP"),
-                3,
-                admin_profiles_vec(3),
+                institution_roles_vec(),
+                institution_assignments_vec(3),
                 2,
                 register_nonce(b"nonce-pri-2"),
                 valid_signature(),
@@ -390,8 +390,8 @@ fn private_institution_rejects_nonempty_town_code() {
                 legal_representative_account(),
                 typical_accounts(),
                 code_bytes("SFLP"),
-                3,
-                admin_profiles_vec(3),
+                institution_roles_vec(),
+                institution_assignments_vec(3),
                 2,
                 register_nonce(b"nonce-pri-town-1"),
                 valid_signature(),
@@ -422,8 +422,8 @@ fn propose_create_rejects_unincorporated_without_parent_routing() {
                 legal_representative_account(),
                 typical_accounts(),
                 code_bytes("UNIN"),
-                3,
-                admin_profiles_vec(3),
+                institution_roles_vec(),
+                institution_assignments_vec(3),
                 2,
                 register_nonce(b"nonce-unin-1"),
                 valid_signature(),
@@ -455,8 +455,8 @@ fn create_directly_funds_initial_accounts() {
             legal_representative_account(),
             typical_accounts(),
             code_bytes("SFLP"),
-            3,
-            admin_profiles_vec(3),
+            institution_roles_vec(),
+            institution_assignments_vec(3),
             2,
             register_nonce(b"nonce-cr-2"),
             valid_signature(),
@@ -502,8 +502,8 @@ fn propose_create_rejects_below_create_amount_minimum() {
                 legal_representative_account(),
                 bad_accounts,
                 code_bytes("SFLP"),
-                3,
-                admin_profiles_vec(3),
+                institution_roles_vec(),
+                institution_assignments_vec(3),
                 2,
                 register_nonce(b"nonce-min"),
                 valid_signature(),
@@ -540,8 +540,8 @@ fn propose_create_rejects_duplicate_account_name() {
                 legal_representative_account(),
                 dup,
                 code_bytes("SFLP"),
-                3,
-                admin_profiles_vec(3),
+                institution_roles_vec(),
+                institution_assignments_vec(3),
                 2,
                 register_nonce(b"nonce-dup"),
                 valid_signature(),
@@ -608,8 +608,8 @@ fn propose_create_rejects_reserved_system_account_name() {
                 legal_representative_account(),
                 bad,
                 code_bytes("SFLP"),
-                3,
-                admin_profiles_vec(3),
+                institution_roles_vec(),
+                institution_assignments_vec(3),
                 2,
                 register_nonce(b"nonce-rsv"),
                 valid_signature(),
@@ -641,8 +641,8 @@ fn propose_create_rejects_missing_main_account() {
                 legal_representative_account(),
                 no_main,
                 code_bytes("SFLP"),
-                3,
-                admin_profiles_vec(3),
+                institution_roles_vec(),
+                institution_assignments_vec(3),
                 2,
                 register_nonce(b"nonce-nm"),
                 valid_signature(),
@@ -674,8 +674,8 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 legal_representative_account(),
                 typical_accounts(),
                 code_bytes("SFLP"),
-                3,
-                admin_profiles_vec(3),
+                institution_roles_vec(),
+                institution_assignments_vec(3),
                 1,
                 register_nonce(b"nonce-t1"),
                 valid_signature(),
@@ -700,8 +700,8 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 legal_representative_account(),
                 typical_accounts(),
                 code_bytes("SFLP"),
-                3,
-                admin_profiles_vec(3),
+                institution_roles_vec(),
+                institution_assignments_vec(3),
                 4,
                 register_nonce(b"nonce-t2"),
                 valid_signature(),
@@ -734,8 +734,8 @@ fn propose_create_rejects_when_institution_already_exists() {
             legal_representative_account(),
             typical_accounts(),
             code_bytes("SFLP"),
-            3,
-            admin_profiles_vec(3),
+            institution_roles_vec(),
+            institution_assignments_vec(3),
             2,
             register_nonce(b"nonce-ae1"),
             valid_signature(),
@@ -758,8 +758,8 @@ fn propose_create_rejects_when_institution_already_exists() {
                 legal_representative_account(),
                 typical_accounts(),
                 code_bytes("SFLP"),
-                3,
-                admin_profiles_vec(3),
+                institution_roles_vec(),
+                institution_assignments_vec(3),
                 2,
                 register_nonce(b"nonce-ae2"),
                 valid_signature(),
@@ -793,8 +793,8 @@ fn create_and_activate_institution(
         legal_representative_account(),
         typical_accounts(),
         code_bytes("SFLP"),
-        admins_len as u32,
-        admin_profiles_vec(admins_len),
+        institution_roles_vec(),
+        institution_assignments_vec(admins_len),
         admins_len.saturating_add(1) as u32 / 2 + 1, // m-of-n 治理阈值,取一个能通过的
         register_nonce(cid_tag.as_bytes()),
         valid_signature(),
@@ -977,8 +977,8 @@ fn registry_creator_need_not_be_target_admin() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
         let cid = generated_cid("CID-NA", "SFLP");
-        // 注册局代创建:交易发起人不要求进入新机构 admins 集合。
-        let admins_no_creator = admin_profiles_from(&[admin(1), admin(2), admin(3)]);
+        // 注册局代创建：交易发起人不要求进入新机构 admins 集合。
+        let assignments_no_creator = institution_assignments_from(&[admin(1), admin(2), admin(3)]);
         assert_ok!(PrivateManage::propose_create_private_institution(
             RuntimeOrigin::signed(c),
             cid.clone(),
@@ -990,8 +990,8 @@ fn registry_creator_need_not_be_target_admin() {
             legal_representative_account(),
             typical_accounts(),
             code_bytes("SFLP"),
-            3,
-            admins_no_creator,
+            institution_roles_vec(),
+            assignments_no_creator,
             2,
             register_nonce(b"nonce-na"),
             valid_signature(),
@@ -1006,12 +1006,10 @@ fn registry_creator_need_not_be_target_admin() {
             .0;
         let stored = private_admins::AdminAccounts::<Test>::get(main)
             .expect("private admin account present");
-        let stored_accounts: alloc::vec::Vec<AccountId32> = stored
-            .admins
-            .iter()
-            .map(|p| p.admin_account.clone())
-            .collect();
-        assert_eq!(stored_accounts, alloc::vec![admin(1), admin(2), admin(3)]);
+        assert_eq!(
+            stored.admins.to_vec(),
+            alloc::vec![admin(1), admin(2), admin(3)]
+        );
     });
 }
 
@@ -1038,18 +1036,27 @@ fn existential_deposit_is_preserved_after_close() {
 }
 
 #[test]
-fn created_institution_stores_admin_profiles_and_accounts_path_intact() {
+fn created_institution_stores_roles_assignments_and_pure_admin_accounts() {
     new_test_ext().execute_with(|| {
         let (cid, main) = create_and_activate_institution("CID-PROF", 3);
-        let _ = cid;
-
-        // 激活后管理员资料落 private-admins(SFLP=私权);存的是 AdminProfile。
+        // admins 只保存由有效任职去重派生的钱包账户。
         let stored = private_admins::AdminAccounts::<Test>::get(main.clone())
             .expect("private admin account present");
-        assert_eq!(stored.admins.len(), 3);
-        for (i, profile) in stored.admins.iter().enumerate() {
-            assert_eq!(profile.admin_account, admin(i as u8));
-        }
+        assert_eq!(
+            stored.admins.to_vec(),
+            alloc::vec![admin(0), admin(1), admin(2)]
+        );
+
+        // 岗位和任职由 entity 按机构 CID 保存。
+        let role_code: crate::RoleCodeOf =
+            BoundedVec::try_from(b"TEST_ADMIN".to_vec()).expect("role code fits");
+        assert!(pallet::InstitutionRoles::<Test>::contains_key(
+            &cid, &role_code
+        ));
+        assert_eq!(
+            pallet::InstitutionRoleAssignments::<Test>::get(&cid, &role_code).len(),
+            3
+        );
 
         // 一人一票/多签路径仍读账户:active_account_admins 返回 account 列表。
         let code = code_bytes("SFLP");
@@ -1059,52 +1066,81 @@ fn created_institution_stores_admin_profiles_and_accounts_path_intact() {
     });
 }
 
-fn create_and_activate_institution_with_profiles(
-    cid_tag: &str,
-    profiles: pallet::AdminProfilesOf<Test>,
-) -> AccountId32 {
-    let c = creator();
-    let _ = Balances::deposit_creating(&c, SEED_BALANCE);
-    let cid = generated_cid(cid_tag, "SFLP");
-    let admins_len = profiles.len() as u8;
+#[test]
+fn election_result_replaces_role_assignments_and_preserves_admin_threshold() {
+    new_test_ext().execute_with(|| {
+        let (cid, main) = create_and_activate_institution("CID-ELECT", 3);
+        let code = code_bytes("SFLP");
 
-    assert_ok!(PrivateManage::propose_create_private_institution(
-        RuntimeOrigin::signed(c.clone()),
-        cid.clone(),
-        cid_full_name(b"X"),
-        cid_short_name("简称".as_bytes()),
-        empty_town_code(),
-        legal_representative_name(),
-        legal_representative_cid_number(),
-        legal_representative_account(),
-        typical_accounts(),
-        code_bytes("SFLP"),
-        admins_len as u32,
-        profiles,
-        admins_len.saturating_add(1) as u32 / 2 + 1,
-        register_nonce(cid_tag.as_bytes()),
-        valid_signature(),
-        province_name(),
-        creator(),
-        signer_pubkey(),
-        province_name(),
-        b"city".to_vec(),
-    ));
+        assert_ok!(PrivateManage::apply_institution_assignment_result(
+            entity_primitives::InstitutionAssignmentResult {
+                institution_code: code,
+                institution_account: main.clone(),
+                role_code: b"TEST_ADMIN".to_vec(),
+                admin_accounts: alloc::vec![admin(4), admin(1), admin(5)],
+                term_start: 0,
+                term_end: 0,
+                assignment_source: entity_primitives::InstitutionAssignmentSource::MutualElection,
+                assignment_source_ref: 93u64.to_le_bytes().to_vec(),
+            }
+        ));
 
-    PrivateManage::derive_registered_account(cid.as_slice(), RESERVED_NAME_MAIN)
-        .unwrap()
-        .0
+        let role_code: crate::RoleCodeOf =
+            BoundedVec::try_from(b"TEST_ADMIN".to_vec()).expect("role code fits");
+        let assignments =
+            pallet::InstitutionRoleAssignments::<Test>::get(&cid, &role_code).to_vec();
+        assert_eq!(assignments.len(), 3);
+        assert_eq!(assignments[0].admin_account, admin(4));
+        assert_eq!(assignments[1].admin_account, admin(1));
+        assert_eq!(assignments[2].admin_account, admin(5));
+        assert!(assignments.iter().all(|assignment| {
+            assignment.assignment_source
+                == entity_primitives::InstitutionAssignmentSource::MutualElection
+        }));
+
+        let stored = private_admins::AdminAccounts::<Test>::get(main.clone())
+            .expect("private admin account present");
+        assert_eq!(
+            stored.admins.to_vec(),
+            alloc::vec![admin(1), admin(4), admin(5)]
+        );
+        assert_eq!(
+            internal_vote::ActiveDynamicThresholds::<Test>::get(code, main),
+            Some(3)
+        );
+    });
 }
 
 #[test]
-fn registry_create_preserves_admin_profile_metadata() {
+fn assignment_and_admin_sync_roll_back_together_when_threshold_is_missing() {
     new_test_ext().execute_with(|| {
-        let expected = admin_profiles_with_meta();
-        let main = create_and_activate_institution_with_profiles("CID-META", expected.clone());
-        // 私权管理员 pallet 存储:非空 姓名/职务/任期/实名CID/来源 必须逐字段幸存。
-        let stored = private_admins::AdminAccounts::<Test>::get(main)
-            .expect("private admin account present");
-        assert_eq!(stored.admins.to_vec(), expected.to_vec());
+        let (cid, main) = create_and_activate_institution("CID-ELECT-RB", 3);
+        let code = code_bytes("SFLP");
+        let role_code: crate::RoleCodeOf =
+            BoundedVec::try_from(b"TEST_ADMIN".to_vec()).expect("role code fits");
+        let before = pallet::InstitutionRoleAssignments::<Test>::get(&cid, &role_code);
+        internal_vote::ActiveDynamicThresholds::<Test>::remove(code, main.clone());
+
+        assert_noop!(
+            PrivateManage::apply_institution_assignment_result(
+                entity_primitives::InstitutionAssignmentResult {
+                    institution_code: code,
+                    institution_account: main,
+                    role_code: b"TEST_ADMIN".to_vec(),
+                    admin_accounts: alloc::vec![admin(5), admin(6)],
+                    term_start: 0,
+                    term_end: 0,
+                    assignment_source:
+                        entity_primitives::InstitutionAssignmentSource::PopularElection,
+                    assignment_source_ref: 94u64.to_le_bytes().to_vec(),
+                }
+            ),
+            private_admins::Error::<Test>::MissingDynamicThreshold
+        );
+        assert_eq!(
+            pallet::InstitutionRoleAssignments::<Test>::get(&cid, &role_code),
+            before
+        );
     });
 }
 
@@ -1238,8 +1274,8 @@ fn update_institution_info_changes_names_only() {
             legal_representative_account(),
             typical_accounts(),
             code_bytes("SFLP"),
-            3,
-            admin_profiles_vec(3),
+            institution_roles_vec(),
+            institution_assignments_vec(3),
             2,
             register_nonce(b"nonce-upd-c"),
             valid_signature(),
@@ -1308,8 +1344,8 @@ fn add_institution_account_derives_and_registers() {
             legal_representative_account(),
             typical_accounts(),
             code_bytes("SFLP"),
-            3,
-            admin_profiles_vec(3),
+            institution_roles_vec(),
+            institution_assignments_vec(3),
             2,
             register_nonce(b"nonce-add-c"),
             valid_signature(),

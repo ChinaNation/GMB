@@ -6,7 +6,7 @@ import 'package:citizenapp/rpc/chain_rpc.dart';
 
 /// 立法投票阶段(链端 votingengine STAGE_LEG_*,Proposal.stage 字节)。
 class LegStage {
-  static const int house = 10; // 院内表决
+  static const int representative = 10; // 代表机构表决
   static const int referendum = 11; // 特别案公投
   static const int sign = 12; // 行政首长签署
   static const int override_ = 13; // 三人会签
@@ -21,30 +21,39 @@ class LegProposalStatus {
 }
 
 /// 院/机构引用(机构码 + 账户 hex)。
-class LegHouseRef {
-  const LegHouseRef({required this.code, required this.accountHex});
+class LegRepresentativeBody {
+  const LegRepresentativeBody({required this.code, required this.accountHex});
   final String code;
   final String accountHex;
 }
 
-/// 立法提案元数据(legislation-vote LegMeta 的客户端镜像)。
-class LegMeta {
-  const LegMeta({
-    required this.voteType,
-    required this.houses,
-    required this.currentHouse,
-    required this.referendumRequired,
+/// 代表机构表决元数据（RepresentativeMetas 镜像）。
+class LegRepresentativeMeta {
+  const LegRepresentativeMeta({
+    required this.sequential,
+    required this.bodies,
+    required this.currentBody,
+    required this.rule,
+    required this.procedure,
+  });
+
+  final bool sequential;
+  final List<LegRepresentativeBody> bodies;
+  final int currentBody;
+  final int rule; // 0常规/1重要/2特别
+  final int procedure; // 0代表表决终局/1法律专属程序
+}
+
+/// 法律专属元数据（LegislationMetas 镜像）。
+class LegislationMeta {
+  const LegislationMeta({
     required this.executive,
     required this.legislature,
     required this.needsGuard,
   });
 
-  final int voteType; // 0常规/1常规教育/2重要/3重要教育/4特别
-  final List<LegHouseRef> houses; // houses[0]=发起院
-  final int currentHouse;
-  final bool referendumRequired;
-  final LegHouseRef executive; // 行政签署机构
-  final LegHouseRef? legislature; // 两院级立法院(单院=null)
+  final LegRepresentativeBody executive;
+  final LegRepresentativeBody? legislature;
   final bool needsGuard; // 修宪→护宪终审
 }
 
@@ -60,10 +69,10 @@ class LegProposalState {
   final int status;
 }
 
-/// 立法投票查询服务(legislation-vote LegMeta/计票/签署账本 + 核心 Proposals 阶段)。
+/// 立法投票查询服务：代表表决、法律程序、计票和签署账本分别读取。
 ///
-/// 立法专属投票状态(LegMeta/各 tally/签署记录)集中在本服务,
-/// 不借用 internal-vote 查询(账本结构不同)。核心 Proposal 阶段/状态读
+/// 代表元数据、法律元数据、各 tally 与签署记录集中在本服务，
+/// 不借用 internal-vote 查询。核心 Proposal 阶段/状态读
 /// VotingEngine.Proposals。
 class LegislationVoteQueryService {
   LegislationVoteQueryService({ChainRpc? chainRpc})
@@ -81,42 +90,57 @@ class LegislationVoteQueryService {
     return LegProposalState(kind: data[0], stage: data[1], status: data[2]);
   }
 
-  /// 立法提案元数据(不存在返回 null)。
-  Future<LegMeta?> fetchMeta(int proposalId) async {
-    final key = _mapKey(_votePallet, 'LegMeta', _u64Le(proposalId));
+  Future<LegRepresentativeMeta?> fetchRepresentativeMeta(int proposalId) async {
+    final key = _mapKey(_votePallet, 'RepresentativeMetas', _u64Le(proposalId));
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
     if (data == null || data.isEmpty) return null;
     final c = _Cursor(data);
-    final voteType = c.u8();
-    final houses = c.vec(() => LegHouseRef(
+    final routeVariant = c.u8();
+    LegRepresentativeBody readBody() => LegRepresentativeBody(
           code: _codeStr(c.bytes(4)),
           accountHex: _hex(c.bytes(32)),
-        ));
-    final currentHouse = c.u32();
-    final referendumRequired = c.u8() == 1;
-    final executive = LegHouseRef(
+        );
+    final bodies = routeVariant == 0 ? [readBody()] : c.vec(readBody);
+    if (routeVariant > 1) throw const FormatException('未知代表机构路线');
+    return LegRepresentativeMeta(
+      sequential: routeVariant == 1,
+      bodies: bodies,
+      currentBody: c.u32(),
+      rule: c.u8(),
+      procedure: c.u8(),
+    );
+  }
+
+  Future<LegislationMeta?> fetchLegislationMeta(int proposalId) async {
+    final key = _mapKey(_votePallet, 'LegislationMetas', _u64Le(proposalId));
+    final data = await _rpc.fetchStorage('0x${_hex(key)}');
+    if (data == null || data.isEmpty) return null;
+    final c = _Cursor(data);
+    final executive = LegRepresentativeBody(
       code: _codeStr(c.bytes(4)),
       accountHex: _hex(c.bytes(32)),
     );
     final legislature = c.u8() == 0
         ? null
-        : LegHouseRef(
+        : LegRepresentativeBody(
             code: _codeStr(c.bytes(4)), accountHex: _hex(c.bytes(32)));
     final needsGuard = c.u8() == 1;
-    return LegMeta(
-      voteType: voteType,
-      houses: houses,
-      currentHouse: currentHouse,
-      referendumRequired: referendumRequired,
+    return LegislationMeta(
       executive: executive,
       legislature: legislature,
       needsGuard: needsGuard,
     );
   }
 
-  /// 当前院计票(VoteCountU32:yes u32 + no u32)。
-  Future<({int yes, int no})> fetchHouseTally(int proposalId) async {
-    final key = _mapKey(_votePallet, 'LegHouseTally', _u64Le(proposalId));
+  /// 当前代表机构计票，按 body_index 独立保存。
+  Future<({int yes, int no})> fetchRepresentativeTally(
+      int proposalId, int bodyIndex) async {
+    final key = _doubleMapKey(
+      _votePallet,
+      'RepresentativeTallies',
+      _u64Le(proposalId),
+      _u32Le(bodyIndex),
+    );
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
     if (data == null || data.length < 8) return (yes: 0, no: 0);
     return (yes: _u32(data, 0), no: _u32(data, 4));
@@ -130,13 +154,18 @@ class LegislationVoteQueryService {
     return (yes: _u64(data, 0), no: _u64(data, 8));
   }
 
-  /// 某议员/委员对某提案的院内投票(null=未投/true=赞成/false=反对)。
-  Future<bool?> fetchHouseVote(int proposalId, String pubkeyHex) async {
+  /// 某钱包在指定代表机构席位的投票。
+  Future<bool?> fetchRepresentativeVote(
+      int proposalId, int bodyIndex, String pubkeyHex) async {
+    final tupleKey = Uint8List.fromList([
+      ..._u32Le(bodyIndex),
+      ..._hexDecode(pubkeyHex),
+    ]);
     final key = _doubleMapKey(
       _votePallet,
-      'LegHouseVotesByAdmin',
+      'RepresentativeVotesByAccount',
       _u64Le(proposalId),
-      _hexDecode(pubkeyHex),
+      tupleKey,
     );
     final data = await _rpc.fetchStorage('0x${_hex(key)}');
     if (data == null || data.isEmpty) return null;
@@ -196,6 +225,12 @@ class LegislationVoteQueryService {
   Uint8List _u64Le(int value) {
     final bytes = Uint8List(8);
     ByteData.sublistView(bytes).setUint64(0, value, Endian.little);
+    return bytes;
+  }
+
+  Uint8List _u32Le(int value) {
+    final bytes = Uint8List(4);
+    ByteData.sublistView(bytes).setUint32(0, value, Endian.little);
     return bytes;
   }
 

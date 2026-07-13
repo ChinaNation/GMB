@@ -382,3 +382,71 @@ body {
     font-size: 22px;
   }
 }
+
+/* ── 公民宪法页：复用白皮书样式 + 章节/徽章/版本增补 ── */
+.constitution-message {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+  color: #b8c5d8;
+  font-size: 16px;
+  text-align: center;
+}
+
+/* 顶部版本标签（居中，紧随文档标题）。 */
+.constitution-version {
+  margin: 6px 0 10px;
+  color: var(--color-gold-300);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.constitution-version > span {
+  display: block;
+}
+
+.constitution-version-no {
+  margin-left: 10px;
+  color: #92a4bd;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 章标题是各自 section 的 first-child，会误命中白皮书的 h1:first-child 英雄样式，
+   这里显式复位为普通章标题（下划线、左对齐）；只有文档标题才保留英雄样式。 */
+.constitution-page .whitepaper-body .constitution-chapter > h1 {
+  border-bottom: 1px solid rgb(229 176 32 / 36%);
+  margin: 42px 0 16px;
+  padding-bottom: 12px;
+  color: #ffffff;
+  font-size: clamp(28px, 4vw, 44px);
+  text-align: left;
+}
+
+/* 「不可修改条款」徽章：条标题内的金色内联标记。 */
+.constitution-immutable-badge {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 10px;
+  border: 1px solid rgb(229 176 32 / 55%);
+  border-radius: 999px;
+  background: rgb(229 176 32 / 12%);
+  color: var(--color-gold-300);
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* 底部链上内容摘要（可核对四端一致）。 */
+.constitution-hash {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid rgb(255 255 255 / 12%);
+  color: #7788a1;
+  font-size: 12px;
+  word-break: break-all;
+}

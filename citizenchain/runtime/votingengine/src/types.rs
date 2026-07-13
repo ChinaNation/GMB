@@ -44,9 +44,8 @@ pub const STAGE_JOINT: u8 = 1;
 /// 是两个不同概念。election-vote pallet 用于选举公职人员(普选 + 机构成员互选)。
 pub const STAGE_REFERENDUM: u8 = 2;
 
-/// 立法投票内部表决阶段(legislation-vote,ADR-027):立法机构议员/委员一人一票。
-/// 单院 = 一段;两院 = 众议会段→参议会段在本 stage 内顺序推进(by current_house)。
-pub const STAGE_LEG_HOUSE: u8 = 10;
+/// 立法机关代表表决阶段：单机构一段，顺序机构按 `current_body` 逐段推进。
+pub const STAGE_LEG_REPRESENTATIVE: u8 = 10;
 /// 立法投票强制公投阶段(legislation-vote,特别案/核心修宪):内部全过后强制进入。
 /// 与联合投票 `STAGE_REFERENDUM` 区分,阈值为宪法 ≥70% 参与 + ≥70% 赞成。
 pub const STAGE_LEG_REFERENDUM: u8 = 11;
@@ -74,82 +73,9 @@ pub const STATUS_REJECTED: u8 = 2;
 pub const STATUS_EXECUTED: u8 = 3;
 /// 投票通过但业务执行失败（终态）。只由投票引擎在重试耗尽、超时或业务永久失败时写入。
 pub const STATUS_EXECUTION_FAILED: u8 = 4;
-// 立法表决阈值(公民宪法第45/46条,ADR-027)。全整数运算,按宪法精确取端点。
-// 5 类提案:常规/常规教育/重要/重要教育/特别。教育变体阈值同非教育同级,
-// 仅提案机构与表决院路由不同。投票引擎侧用 u8 表决类型解耦,值与 legislation-yuan::VoteType::as_u8 对齐。
-/// 常规案(>80% 参与,≥60% 赞成)
-pub const LEG_VOTE_REGULAR: u8 = 0;
-/// 常规教育案(教委会;阈值同常规案)
-pub const LEG_VOTE_REGULAR_EDU: u8 = 1;
-/// 重要案(>90% 参与,≥70% 赞成)
-pub const LEG_VOTE_MAJOR: u8 = 2;
-/// 重要教育案(教委会;阈值同重要案)
-pub const LEG_VOTE_MAJOR_EDU: u8 = 3;
-/// 特别案(全员参与,≥70% 赞成 + 强制公投)
-pub const LEG_VOTE_SPECIAL: u8 = 4;
 
-/// 单部法律最多院数(单院 1 / 两院 2 / 留余量)。立法投票与立法院模块共享此上限(单一真源)。
-pub const MAX_LEGISLATION_HOUSES: u32 = 4;
-
-/// 立法内部表决期满计票:按现任议员/委员快照总数 `total` + 已投 `yes`/`no` 判定是否通过。
-/// "参与表决"= casted = yes+no;赞成率基数为 casted(参与表决者),非 total。
-pub fn legislation_house_final_passed(vote_type: u8, total: u32, yes: u32, no: u32) -> bool {
-    let casted = yes.saturating_add(no);
-    if total == 0 || casted == 0 {
-        return false;
-    }
-    let (total, yes, casted) = (u64::from(total), u64::from(yes), u64::from(casted));
-    match vote_type {
-        // 常规案/常规教育案:>80% 参与 且 ≥60% 赞成(参与者基数)
-        LEG_VOTE_REGULAR | LEG_VOTE_REGULAR_EDU => {
-            casted * 100 > total * 80 && yes * 100 >= casted * 60
-        }
-        // 重要案/重要教育案:>90% 参与 且 ≥70% 赞成
-        LEG_VOTE_MAJOR | LEG_VOTE_MAJOR_EDU => {
-            casted * 100 > total * 90 && yes * 100 >= casted * 70
-        }
-        // 特别案内部:全员参与 且 ≥70% 赞成
-        LEG_VOTE_SPECIAL => casted == total && yes * 100 >= total * 70,
-        _ => false,
-    }
-}
-
-/// 立法内部表决提前判定(只做绝对安全的提前决,避免误判):
-/// - 全员已投 → 立即按期满规则判定;
-/// - 反对票已使赞成不可能达标 → 提前否决;
-/// - 其余 → None(继续等票,期满再计)。
-pub fn legislation_house_decided(vote_type: u8, total: u32, yes: u32, no: u32) -> Option<bool> {
-    let casted = yes.saturating_add(no);
-    if total == 0 {
-        return Some(false);
-    }
-    if casted >= total {
-        return Some(legislation_house_final_passed(vote_type, total, yes, no));
-    }
-    let (total_u, no_u) = (u64::from(total), u64::from(no));
-    // 反对票上限:超过即赞成永不可能达标(即使剩余全投赞成)。
-    let reject_locked = match vote_type {
-        // 常规系:需赞成≥60%参与 → 反对>40% 即锁死
-        LEG_VOTE_REGULAR | LEG_VOTE_REGULAR_EDU => no_u * 100 > total_u * 40,
-        // 重要系:需赞成≥70%参与 → 反对>30% 即锁死
-        LEG_VOTE_MAJOR | LEG_VOTE_MAJOR_EDU => no_u * 100 > total_u * 30,
-        // 特别案:赞成需≥70%(全员)→ 反对>30% 即锁死
-        LEG_VOTE_SPECIAL => no_u * 100 > total_u * 30,
-        _ => true,
-    };
-    if reject_locked {
-        Some(false)
-    } else {
-        None
-    }
-}
-
-/// 立法公投期满计票(特别案/核心修宪,宪法 ≥70% 参与 + ≥70% 赞成)。
-/// `eligible` = 作用域内拥有投票权的公民总数(人口快照);`yes`/`no` = 已投票数。
-/// 口径单源在 `primitives::constitution::referendum_passed`(与节点守卫核心章公投背书共用),此处仅转发。
-pub fn legislation_referendum_final_passed(eligible: u64, yes: u64, no: u64) -> bool {
-    primitives::constitution::referendum_passed(eligible, yes, no)
-}
+/// 单个提案最多串联的代表机构数量；当前宪法路线最多两个，预留扩展空间。
+pub const MAX_REPRESENTATIVE_BODIES: u32 = 4;
 
 /// 业务模块统一执行结果。
 ///
@@ -301,8 +227,8 @@ pub enum PendingCleanupStage {
     JointInstitutionTallies,
     /// 联合投票公投阶段投票账本(ReferendumVotesByAccount)分块清理。
     JointReferendumVotes,
-    /// 立法投票内部表决投票账本(LegHouseVotesByAdmin)分块清理。
-    LegislationHouseVotes,
+    /// 立法机关代表表决账本按 proposal_id 分块清理。
+    LegislationRepresentativeVotes,
     /// 立法投票公投账本(LegReferendumVotesByAccount)分块清理。
     LegislationReferendumVotes,
     /// 选举投票投票账本(ElectionVotesByVoter)分块清理。

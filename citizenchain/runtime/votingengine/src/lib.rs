@@ -7,7 +7,7 @@
 //! - **联合投票**（JOINT）：国家储委会/省储委会/省储行管理员按票权加权投票，
 //!   105 票全票通过直接执行，任一机构反对立即进入联合公投，30 天超时进入联合公投。
 
-//! - **立法投票**（LEGISLATION）：由 legislation-vote sub-pallet 承载院内表决、
+//! - **立法机关表决**（LEGISLATION）：由 legislation-vote sub-pallet 承载代表机构表决、
 //!   特别案/核心修宪立法公投、行政签署、三人会签和护宪终审。
 //!
 //! - **选举投票**（ELECTION）：由 election-vote sub-pallet 承载普选/互选选人流程，
@@ -177,7 +177,7 @@ pub mod pallet {
         /// 核心在 PROPOSAL_KIND_LEGISLATION 提案达终态时按 kind 广播。第1步装 `()`。
         type LegislationVoteResultCallback: LegislationVoteResultCallback;
 
-        /// 立法投票 mode 超时结算回调,覆盖内部表决(STAGE_LEG_HOUSE)与强制公投(STAGE_LEG_REFERENDUM),
+        /// 立法投票 mode 超时结算回调，覆盖代表表决与法律专属阶段。
         /// 由 legislation-vote pallet 实现。未实装时装 `()`。
         type LegislationFinalizer: crate::traits::LegislationProposalFinalizer<
             BlockNumberFor<Self>,
@@ -640,11 +640,11 @@ pub mod pallet {
                         &proposal, proposal_id
                     )?;
                 }
-                STAGE_LEG_HOUSE => {
+                STAGE_LEG_REPRESENTATIVE => {
                     <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
                         BlockNumberFor<T>,
                         T::AccountId,
-                    >>::finalize_legislation_house_timeout(
+                    >>::finalize_legislation_representative_timeout(
                         &proposal, proposal_id
                     )?;
                 }
@@ -833,11 +833,11 @@ pub mod pallet {
                             &proposal, proposal_id
                         )
                     }
-                    STAGE_LEG_HOUSE => {
+                    STAGE_LEG_REPRESENTATIVE => {
                         <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
                             BlockNumberFor<T>,
                             T::AccountId,
-                        >>::finalize_legislation_house_timeout(
+                        >>::finalize_legislation_representative_timeout(
                             &proposal, proposal_id
                         )
                     }
@@ -1727,18 +1727,18 @@ pub mod pallet {
                     let next = if has_remaining {
                         Some(PendingCleanupStage::JointReferendumVotes)
                     } else {
-                        Some(PendingCleanupStage::LegislationHouseVotes)
+                        Some(PendingCleanupStage::LegislationRepresentativeVotes)
                     };
                     (next, weight)
                 }
-                PendingCleanupStage::LegislationHouseVotes => {
+                PendingCleanupStage::LegislationRepresentativeVotes => {
                     let (removed, has_remaining) =
-                        <T::LegislationCleanup as crate::traits::LegislationCleanupHandler>::cleanup_legislation_house_votes_chunk(
+                        <T::LegislationCleanup as crate::traits::LegislationCleanupHandler>::cleanup_legislation_representative_votes_chunk(
                             proposal_id, cleanup_limit,
                         );
                     let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
                     let next = if has_remaining {
-                        Some(PendingCleanupStage::LegislationHouseVotes)
+                        Some(PendingCleanupStage::LegislationRepresentativeVotes)
                     } else {
                         Some(PendingCleanupStage::LegislationReferendumVotes)
                     };

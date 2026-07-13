@@ -138,14 +138,14 @@ export interface LegProposalState {
   kind: number;
   stage: number;
   status: number;
-  voteType: number;
-  currentHouse: number;
-  referendumRequired: boolean;
+  representativeRule: number;
+  currentBody: number;
+  voteProcedure: number;
   needsGuard: boolean;
-  houses: HouseRef[];
+  representativeBodies: HouseRef[];
   startBlock: number;
   endBlock: number;
-  houseTally: VoteTally;
+  representativeTally: VoteTally;
   referendumTally: VoteTally;
 }
 

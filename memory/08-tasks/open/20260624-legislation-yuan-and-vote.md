@@ -24,7 +24,7 @@
 1. 新建 crate `governance/legislation-yuan`(Cargo.toml + src/lib.rs + src/types.rs + src/executor.rs + src/tests/)。
 2. 数据模型(types.rs):Tier(宪法/国/省/市)、LawStatus(Pending/Effective/Repealed)、VoteType(常规/常规教育/重要/重要教育/特别)、Article/Clause(条/款)、Law、LawVersion(整部全文快照 + content_hash + published_at + effective_at)。
 3. Storage:NextLawId、Laws、LawVersions、LawsByScope(列表索引)、PendingActivation(生效调度)。in-flight 提案载荷沿用 votingengine ProposalData/ProposalObject(对标 runtime-upgrade,不本地存)。
-4. 提案入口 propose_enact_law / propose_amend_law / propose_repeal_law:校验 origin 为 owner_body 机构 admin(走 votingengine InternalAdminProvider)→ 校验 tier/vote_type → 不可修改条款硬拒 → 编码 MODULE_TAG 载荷 → 调 `T::LegislationVoteEngine::create_legislation_proposal`。
+4. 提案入口校验发起机构、层级、业务表决类型与不可修改条款后，调用 `create_legislation_vote`。
 5. 通过回调 executor:按 MODULE_TAG 认领 → approved 写新 LawVersion + effective_version/latest_version/pending_version+1 + 入 PendingActivation;否决丢弃。拆 `write_law_version` 纯写入 helper 供第1步单测。
 6. on_initialize:到 effective_at 把 Pending 翻 Effective,旧版本转 Superseded。
 7. 不可修改条款:`primitives` 单一源 `IMMUTABLE_CONSTITUTION_ARTICLES = [1,2,3,17,19,24,34,42]`;tier=宪法且命中即 reject。
@@ -40,33 +40,33 @@
 **定稿设计(2026-06-24,精读核心后):legislation 作为投票引擎「头等模式」,需扩展核心 crate(不是纯加 sub-pallet)。三个投票 sub-pallet 逻辑零改动,但核心按 kind/stage 硬编码分发,未知 kind 直接 Err,故必须扩展核心。** 用户已拍板:① 认可按头等模式扩展核心;② 院结构由提案携带。
 
 ### 2a. 核心扩展(votingengine crate,additive)
-- `src/types.rs`:`PROPOSAL_KIND_LEGISLATION=2`、`STAGE_LEG_HOUSE=10`、`STAGE_LEG_REFERENDUM=11`、`STAGE_LEG_SIGN=12`、`STAGE_LEG_OVERRIDE=13`、`STAGE_LEG_CONSTITUTION_GUARD=14`、五类 `LEG_VOTE_*` + 立法表决/公投阈值纯函数(全整数,按宪法精确端点)。
+- `src/types.rs`：`PROPOSAL_KIND_LEGISLATION=2` 与立法各阶段；代表阶段统一为 `STAGE_LEG_REPRESENTATIVE=10`，三类数学规则归 `legislation-vote::rules`。
 - `src/traits.rs`:`LegislationProposalFinalizer` / `LegislationCleanupHandler` / `LegislationVoteResultCallback`(+ `()` 默认)。
 - `src/lib.rs`:`Config` 加 `LegislationFinalizer` / `LegislationCleanup` / `LegislationVoteResultCallback`;分发分支补 legislation arm(`invoke_execution_callback` / `can_cancel...` / `notify_execution_failed_terminal` 按 kind;超时 finalize 按 stage;cleanup 按 kind)。
 - **所有 `votingengine::Config` 实现(runtime + 各 pallet 测试 mock 约 12 处)补 3 个关联类型;mock 一律装 `()`**(机械)。
 
 ### 2b. 新 sub-pallet `votingengine/legislation-vote`(pallet_index=28)
 - `Config: votingengine::Config`,复用核心 Proposals/allocate_proposal_id/AdminSnapshot/snapshot_institution_admins/schedule_proposal_expiry/set_status_and_emit/register_proposal_data/CitizenIdentityReader。
-- 本地账本:`LegMeta`(vote_type/mode/houses/current_house/referendum_required/scope)、`LegHouseTally`+`LegHouseVotesByAdmin`、`LegReferendumTally`+`LegReferendumVotesByAccount`、`PendingPopulationSnapshots`。
+- 本地账本：`RepresentativeMetas`、`LegislationMetas`、`RepresentativeTallies`、`RepresentativeVotesByAccount`、公投账本和人口快照。
 - 三模式:单院(市)/ 两院顺序(众→参;教委会→参议会)/ 特别案(内部全过→强制公投)。
-- extrinsics:`prepare_population_snapshot`(特别案)/ `cast_house_vote` / `cast_referendum_vote`。
+- extrinsics：`prepare_population_snapshot` / `cast_representative_vote` / `cast_referendum_vote`。
 - trait impl:`LegislationVoteEngine`(create)、`LegislationProposalFinalizer`、`LegislationCleanupHandler`。
 - 五类阈值按 AdminSnapshot 现任 admins 总数算,投票期满 finalize 统一计票(赞成已不可能达标时可提前否决)。
 
 ### 2c. 院结构=提案携带(用户拍板)
-- 扩展第1步 `LegislationVoteEngine::create_legislation_proposal` 签名携带院列表 `houses=[(code,account)]`;`legislation-yuan` 的 `Law` / `LawProposalSummary` 加院组成字段;`propose_*` 入口收集院列表。
+- `create_legislation_vote` 接收强类型 `RepresentativeRoute` 与法律专属程序参数；`Law` / `LawProposalSummary` 保留业务院组成字段。
 - 单院=1 项,两院=[众议会, 参议会](发起院在前、终审院在后),教委会模式=[教委会, 参议会]。
 
 ### 2d. runtime 装配
-- 注册 `LegislationVote` idx=28;`legislation_yuan::Config::LegislationVoteEngine` 由 `()` 换 `LegislationVote`;`votingengine::Config` 补 `LegislationFinalizer=LegislationVote` / `LegislationCleanup=LegislationVote` / `LegislationVoteResultCallback=LegislationYuan`;费率 cast_house_vote/cast_referendum_vote/prepare_population_snapshot → VoteFlat。
+- 注册 `LegislationVote` idx=26；runtime 装配 finalizer、cleanup 和按 ProposalOwner 认领的回调元组；三类投票调用使用 VoteFlat。
 
 ### 五类表决阈值(宪法第四十五/四十六条,精确端点)
 - 常规案/常规教育案:`casted*100 > total*80` 且 `yes*100 >= casted*60`;重要案/重要教育案:`casted*100 > total*90` 且 `yes*100 >= casted*70`;特别案内部:`casted==total` 且 `yes*100 >= total*70`;特别案公投:`(yes+no)*100 >= eligible*70` 且 `yes*100 >= (yes+no)*70`。
 
 ### 第2步落地进度
 
-- [x] **Phase A 核心扩展(2026-06-24 完成)**:`votingengine/src/types.rs`(PROPOSAL_KIND_LEGISLATION=2 / STAGE_LEG_HOUSE=10 / STAGE_LEG_REFERENDUM=11 / LEG_VOTE_* + `legislation_house_final_passed`/`legislation_house_decided`/`legislation_referendum_final_passed` 纯函数 + PendingCleanupStage 两阶段);`traits.rs`(LegislationProposalFinalizer / LegislationCleanupHandler / LegislationVoteResultCallback + `()` 默认);`lib.rs`(Config +3 类型 + 两处 finalize 按 stage 加臂 + 三处回调按 kind 加臂 + 清理状态机插 legislation 两阶段 + FinalCleanup 补 cleanup_legislation_terminal);**11 处 `votingengine::Config` 实现(runtime + 10 mock)补 3 类型暂装 `()`**。验收:`cargo check -p votingengine`/`-p citizenchain` 通过,legislation-yuan 14 + grandpakey 17 测试无回归(行为中性,legislation kind 尚未被创建)。
-- [x] **Phase B 新 sub-pallet `votingengine/legislation-vote`(2026-06-24 完成)**:Cargo.toml + src/{lib.rs,weights.rs,tests/}。本地账本 LegMeta/LegHouseTally/LegHouseVotesByAdmin/LegReferendumTally/LegReferendumVotesByAccount/PendingPopulationSnapshots;三 extrinsic(prepare_population_snapshot/cast_house_vote/cast_referendum_vote);三模式(单院/两院顺序众→参/特别案强制公投);实现 LegislationVoteEngine(create,院携带)+ LegislationProposalFinalizer + LegislationCleanupHandler;MAX_HOUSES 单一源 votingengine。
+- [x] **Phase A 核心扩展**：核心登记立法 proposal kind、代表/公投/签署阶段、finalizer、cleanup 和结果回调；数学规则现已下沉到 legislation-vote 强类型模块。
+- [x] **Phase B legislation-vote**：本地账本已收口为代表元数据/法律元数据、逐机构计票、按 `(body_index, account)` 去重、公投和人口快照；单机构/顺序多机构/法律专属程序使用强类型接口。
 - [x] **Phase C legislation-yuan 院携带(2026-06-24 完成)**:Law/LawProposalSummary `owner_body+owner_code` → `houses: HousesOf`(单一真源,houses[0]=发起院);propose_enact_law 入参 houses;ensure_legislator 校验 houses[0];dispatch_to_engine 传 houses;新增 EmptyHouses 错误;加 `impl LegislationVoteResultCallback for Pallet`(回调接 apply_legislation_vote_result);测试 houses() helper。
 - [x] **Phase D runtime 装配(2026-06-24 完成)**:construct_runtime 注册 LegislationVote idx=28;configs `legislation_yuan::Config::LegislationVoteEngine = LegislationVote` + `votingengine::Config` 三类型改接(LegislationVoteResultCallback=LegislationYuan / LegislationFinalizer=LegislationVote / LegislationCleanup=LegislationVote)+ impl legislation_vote::Config;费率 `RuntimeCall::LegislationVote(_) => VoteFlat`;Cargo.toml/workspace/std 注册。
 

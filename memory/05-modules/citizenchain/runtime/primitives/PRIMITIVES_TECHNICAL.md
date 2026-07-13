@@ -21,7 +21,7 @@
 | `src/citizen_const.rs` | 公民认证发行常量 |
 | `src/count_const.rs` | 投票治理常量（机构数量、投票阈值、期限、不可修改条款清单） |
 | `src/constitution.rs` | 修宪「章→档位」分类判定单源（第十九条 `classify`/`AmendmentScope`，runtime 与节点守卫共用） |
-| `src/governance_skeleton.rs` | 固定治理骨架冻结规格单源（档 A）：`fixed_institutions()`/`frg_province_groups()`/`NJD_CONSTITUTION_GUARD_SEATS=7`/kind·status 判别值/护宪 role 字面量，genesis 播种·runtime 校验·node 守卫三端共读 |
+| `src/governance_skeleton.rs` | 固定治理协议清单（档 A）：五类固定机构、岗位代码/名称、席位、管理员状态判别值和 Node Guard 所需 SCALE 锚点；不写 storage。创世钱包索引映射在 `runtime/genesis/src/institution/fixed_roles.rs`，实际写入唯一在 `seeder.rs` |
 | `src/genesis.rs` | 创世宣言、创世人口、创世发行总量 |
 | `china/mod.rs` | 机构常量模块声明 |
 | `china/china_ch.rs` | 43 个省储行（人口、质押、多签账户） |

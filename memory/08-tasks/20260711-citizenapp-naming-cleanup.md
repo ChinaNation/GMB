@@ -15,7 +15,7 @@
 ## 执行批次
 
 1. 删除死残留:app_theme 死令牌(headerGradient/subtleGradient/radiusXl/elevatedCard)、`qr/signature_message.dart`、`signer/signer.dart` 桶文件、`QrSigner.maxPayloadChars`、`_SimpleScanner`、空测试目录(test/proposal、offchain/onchain-transaction、多余 .gitkeep)。
-2. 纯符号改名(~30 项):*Tab 页族、CitizenBadge→IdentityBadge、LegislationVoteMeta→LegMeta、OnchainRpc→TransferRpc、proposerPubkey→proposerSs58、VotersCountResponse→CitizenCountResponse 等。
+2. 纯符号改名(~30 项):*Tab 页族、CitizenBadge→IdentityBadge、立法查询模型、OnchainRpc→TransferRpc、proposerPubkey→proposerSs58、VotersCountResponse→CitizenCountResponse 等。
 3. 文件/目录改名:onchain.dart→transfer_rpc.dart、wallet_isar.dart→app_isar.dart、hw_vault_harness→seed_vault_harness、citizen/all→citizen/feed;smoldot-dart→smoldotdart、smoldot-pow→smoldotpow(第2级目录禁分隔,含 build/pubspec/FFI 引用同步)。
 4. 语义合并:InstitutionInfo→Institution、OrgType/orgType→InstitutionClassification、Institution.status 字符串→InstitutionStatus 枚举、PersonalProposalStatus→枚举、identityLevel→tier、_ss58Format/_ss58Prefix→单源 kSs58Prefix、surfaceWhite→surfaceCard、SignRequestBody.sigAlg→alg、_truncateWalletAddress→_truncateAddress、重复 _ScanOverlayPainter/_ScanCornerPainter 抽单份。
 5. 注释/文档:resolution_destro→resolution_destroy、InstitutionCodeLabel「104/88」→「92」、AppLockService._hash 类注释 SHA-256→PBKDF2;同步 memory/05-modules 相关模块文档。
@@ -37,7 +37,7 @@
 
 `flutter analyze` = 2 issues(与改动前基线完全一致的既有 info-lint,零新增错误)。`flutter test` = 482 通过,39 失败——全部为 `bootstrap_test`/`wallet_manager_test` 的 `Isar.initializeIsarCore` 原生库 TimeoutException(headless VR 环境不能起 isar native),非本次改动引入(零编译/符号错误,所有被改名区域测试全绿)。改动 493 文件(删 5 / 改 153 / 改名 328)。
 
-**已执行:** 全部删除(死令牌 4、死文件 signature_message/signer 桶、死常量 maxPayloadChars、空测试目录/gitkeep)+ 约 30 项符号改名(*Tab 页族、CitizenBadge→IdentityBadge、OnchainRpc→TransferRpc、LegMeta、AdminSetChange→AdminsChange、kNationalCouncil→kNrc/kProvincialCouncils→kPrcs 含生成器、proposerPubkey→proposerSs58 定向)+ 文件/目录改名(onchain→transfer_rpc、wallet_isar→app_isar、hw_vault_harness→seed_vault_harness、citizen/all→feed、widget_test→bootstrap_test、profile_test_doubles→fake_profile;**smoldot-dart→smoldotdart、smoldot-pow→smoldotpow**,pubspec/analysis/Cargo/FFI 全部改到位,`flutter pub get` + `cargo metadata` 均通过)+ 安全合并(surfaceWhite→surfaceCard、org_models→institution_models、sigAlg→alg)+ 注释/文档(resolution_destroy、PIN 哈希 PBKDF2、机构码 104→92、模块文档 smoldot 路径)。**`8964`/`test/8964` 目录名按用户要求保留。**
+**已执行:** 全部删除死令牌/死文件/死常量/空测试目录并完成约 30 项符号、文件和目录改名；立法查询模型后来继续拆分为代表元数据与法律元数据。**`8964`/`test/8964` 目录名按用户要求保留。**
 
 **未执行(经读源码核实为错误建议或行为级重构,不属命名精简,已向用户报告):**
 1. `OrgType→InstitutionClassification`——错:前者是 NRC/PRC/PRB/account 分类常量类,后者是 tab 分组谓词工具,概念不同。

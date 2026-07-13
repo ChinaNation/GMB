@@ -6,7 +6,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 ///
 /// 立法 / 修法 / 废法提案只在电脑节点端(citizenchain 桌面端)发起,
 /// 因为条 / 款结构化编辑不便在手机操作。citizenapp 端只负责说明、查看法律和
-/// 参与院内表决 / 签署 / 会签 / 护宪终审 / 特别案公投。范式同协议升级介绍页。
+/// 参与代表机构表决 / 签署 / 会签 / 护宪终审 / 特别案公投。
 class LegislationIntroPage extends StatelessWidget {
   const LegislationIntroPage({super.key});
 
@@ -47,7 +47,7 @@ class LegislationIntroPage extends StatelessWidget {
           _buildInfoCard(
             icon: Icons.how_to_vote_outlined,
             title: '表决流程',
-            body: '提案创建后出现在立法机构详情页。议员 / 委员可在院内表决；通过后由行政首长签署，'
+            body: '提案创建后出现在立法机构详情页。管理员按代表机构席位表决；通过后由行政首长签署，'
                 '否决或超时进入三人会签；修宪还需护宪大法官终审；特别案叠加公民公投。',
           ),
           const SizedBox(height: 12),

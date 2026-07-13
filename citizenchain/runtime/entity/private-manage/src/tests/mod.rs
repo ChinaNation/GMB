@@ -12,6 +12,13 @@ use frame_support::{
 use frame_system as system;
 use sp_core::{sr25519, Pair as PairT};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+
+std::thread_local! {
+    /// 当前测试线程最近生成的机构 CID；岗位夹具必须与创建交易中的 CID 完全一致。
+    static CURRENT_INSTITUTION_CID: std::cell::RefCell<Option<pallet::CidNumberOf<Test>>> = const {
+        std::cell::RefCell::new(None)
+    };
+}
 use votingengine::types::{code_bytes, is_registered_multisig_code, InstitutionCode};
 
 type Balance = u128;
@@ -458,7 +465,6 @@ impl public_admins::Config for Test {
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type InstitutionQuery = ();
-    type WeightInfo = ();
 }
 
 impl private_admins::Config for Test {
@@ -466,7 +472,6 @@ impl private_admins::Config for Test {
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type InstitutionQuery = ();
-    type WeightInfo = ();
 }
 
 impl pallet::Config for Test {
@@ -541,7 +546,9 @@ pub fn generated_cid_bytes(tag: &str, institution: &str) -> alloc::vec::Vec<u8> 
 
 /// 指定机构码的真 CID 号夹具。
 pub fn generated_cid(tag: &str, institution: &str) -> pallet::CidNumberOf<Test> {
-    BoundedVec::try_from(generated_cid_bytes(tag, institution)).expect("cid_number fits")
+    let cid = BoundedVec::try_from(generated_cid_bytes(tag, institution)).expect("cid_number fits");
+    CURRENT_INSTITUTION_CID.with(|current| *current.borrow_mut() = Some(cid.clone()));
+    cid
 }
 
 pub fn cid_number(s: &[u8]) -> pallet::CidNumberOf<Test> {
@@ -600,74 +607,54 @@ pub fn province_name() -> alloc::vec::Vec<u8> {
     b"liaoning".to_vec()
 }
 
-/// 构造机构创建用的管理员资料集合(account = admin(i),空元数据,来源 Registry)。
-pub fn admin_profiles_vec(count: u8) -> pallet::AdminProfilesOf<Test> {
-    let accounts: alloc::vec::Vec<AccountId32> = (0..count).map(|i| admin(i)).collect();
-    admin_profiles_from(&accounts)
+fn current_institution_cid() -> pallet::CidNumberOf<Test> {
+    CURRENT_INSTITUTION_CID.with(|current| {
+        current
+            .borrow()
+            .clone()
+            .expect("generated_cid must run before role fixtures")
+    })
 }
 
-/// 从给定账户列表构造空元数据(来源 Registry)的管理员资料集合。
-pub fn admin_profiles_from(accounts: &[AccountId32]) -> pallet::AdminProfilesOf<Test> {
-    let v: alloc::vec::Vec<admin_primitives::AdminProfile<AccountId32>> = accounts
+/// 构造一个机构自定义岗位。岗位属于 entity，不再放入 admins。
+pub fn institution_roles_vec() -> crate::InstitutionRolesOf<Test> {
+    let role = entity_primitives::InstitutionRole {
+        cid_number: current_institution_cid(),
+        role_code: BoundedVec::try_from(b"TEST_ADMIN".to_vec()).expect("role code fits"),
+        role_name: account_name("管理员岗位".as_bytes()),
+        term_required: false,
+        role_status: entity_primitives::InstitutionRoleStatus::Active,
+    };
+    BoundedVec::try_from(alloc::vec![role]).expect("roles fit")
+}
+
+/// 从给定账户构造注册局来源的有效任职；admins 账户集合由这些任职去重派生。
+pub fn institution_assignments_from(
+    accounts: &[AccountId32],
+) -> crate::InstitutionAdminAssignmentsOf<Test> {
+    let cid_number = current_institution_cid();
+    let assignments = accounts
         .iter()
         .cloned()
-        .map(|account| admin_primitives::AdminProfile {
-            admin_account: account,
-            admin_cid_number: BoundedVec::new(),
-            admin_name: BoundedVec::new(),
-            role_code: Default::default(),
-            role_name: BoundedVec::new(),
-            term_start: 0,
-            term_end: 0,
-            admin_source: admin_primitives::AdminSource::Registry,
-            admin_source_ref: Default::default(),
-        })
-        .collect();
-    BoundedVec::try_from(v).expect("admin profiles fit")
+        .map(
+            |admin_account| entity_primitives::InstitutionAdminAssignment {
+                cid_number: cid_number.clone(),
+                admin_account,
+                role_code: BoundedVec::try_from(b"TEST_ADMIN".to_vec()).expect("role code fits"),
+                term_start: 0,
+                term_end: 0,
+                assignment_source: entity_primitives::InstitutionAssignmentSource::Registry,
+                assignment_source_ref: BoundedVec::new(),
+                assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+            },
+        )
+        .collect::<alloc::vec::Vec<_>>();
+    BoundedVec::try_from(assignments).expect("assignments fit")
 }
 
-/// 构造带非空 姓名/职务/任期/实名CID 的管理员资料集合(3 人,末位留空元数据)。
-///
-/// 专供验证注册局创建机构时直写的管理员 profile 不丢字段。
-pub fn admin_profiles_with_meta() -> pallet::AdminProfilesOf<Test> {
-    let mut v: alloc::vec::Vec<admin_primitives::AdminProfile<AccountId32>> =
-        alloc::vec::Vec::new();
-    v.push(admin_primitives::AdminProfile {
-        admin_account: admin(0),
-        admin_cid_number: BoundedVec::try_from(b"LN001-AAAAA-000000001-2026".to_vec())
-            .expect("cid fits"),
-        admin_name: BoundedVec::try_from("张三".as_bytes().to_vec()).expect("name fits"),
-        role_code: Default::default(),
-        role_name: BoundedVec::try_from("董事长".as_bytes().to_vec()).expect("admin_role fits"),
-        term_start: 20_100,
-        term_end: 21_561,
-        admin_source: admin_primitives::AdminSource::Registry,
-        admin_source_ref: Default::default(),
-    });
-    v.push(admin_primitives::AdminProfile {
-        admin_account: admin(1),
-        admin_cid_number: BoundedVec::try_from(b"LN001-BBBBB-000000002-2026".to_vec())
-            .expect("cid fits"),
-        admin_name: BoundedVec::try_from("李四".as_bytes().to_vec()).expect("name fits"),
-        role_code: Default::default(),
-        role_name: BoundedVec::try_from("董事".as_bytes().to_vec()).expect("admin_role fits"),
-        term_start: 20_100,
-        term_end: 21_561,
-        admin_source: admin_primitives::AdminSource::Registry,
-        admin_source_ref: Default::default(),
-    });
-    v.push(admin_primitives::AdminProfile {
-        admin_account: admin(2),
-        admin_cid_number: BoundedVec::new(),
-        admin_name: BoundedVec::new(),
-        role_code: Default::default(),
-        role_name: BoundedVec::new(),
-        term_start: 0,
-        term_end: 0,
-        admin_source: admin_primitives::AdminSource::Registry,
-        admin_source_ref: Default::default(),
-    });
-    BoundedVec::try_from(v).expect("admin profiles fit")
+pub fn institution_assignments_vec(count: u8) -> crate::InstitutionAdminAssignmentsOf<Test> {
+    let accounts = (0..count).map(admin).collect::<alloc::vec::Vec<_>>();
+    institution_assignments_from(&accounts)
 }
 
 pub fn account_names_bv(names: &[&[u8]]) -> pallet::InstitutionAccountNamesOf<Test> {

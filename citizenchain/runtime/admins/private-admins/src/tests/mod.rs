@@ -1,11 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use admin_primitives::{
-    AdminAccountKind, AdminAccountStatus, AdminProfile, AdminSource, ADMIN_CID_NUMBER_MAX_BYTES,
-    ADMIN_NAME_MAX_BYTES,
-};
-use frame_support::BoundedVec;
+use admin_primitives::{AdminAccountKind, AdminAccountStatus};
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
     traits::{ConstU32, ConstU64},
@@ -133,7 +129,6 @@ impl Config for Test {
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type InstitutionQuery = TestInstitutionQuery;
-    type WeightInfo = ();
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
@@ -149,80 +144,33 @@ fn account(seed: u8) -> AccountId32 {
     AccountId32::new([seed; 32])
 }
 
-/// 构造仅账户、空元数据(姓名/职务/任期空)的管理员资料集合。
-fn admins(count: u8) -> Vec<AdminProfile<AccountId32>> {
-    (0..count).map(|i| profile(account(i))).collect()
-}
-
-/// 构造一条空元数据(Registry 来源)的管理员资料。
-fn profile(acc: AccountId32) -> AdminProfile<AccountId32> {
-    AdminProfile {
-        admin_account: acc,
-        admin_cid_number: BoundedVec::new(),
-        admin_name: BoundedVec::new(),
-        role_code: Default::default(),
-        role_name: BoundedVec::new(),
-        term_start: 0,
-        term_end: 0,
-        admin_source: AdminSource::Registry,
-        admin_source_ref: Default::default(),
-    }
-}
-
-/// 构造带姓名/职务/任期/实名 CID 的管理员资料。
-fn profile_full(
-    acc: AccountId32,
-    cid: &[u8],
-    admin_name: &[u8],
-    role_name: &[u8],
-    term_start: u32,
-    term_end: u32,
-) -> AdminProfile<AccountId32> {
-    AdminProfile {
-        admin_account: acc,
-        admin_cid_number: BoundedVec::<u8, ConstU32<ADMIN_CID_NUMBER_MAX_BYTES>>::try_from(
-            cid.to_vec(),
-        )
-        .expect("cid fits"),
-        admin_name: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(admin_name.to_vec())
-            .expect("name fits"),
-        role_code: Default::default(),
-        role_name: BoundedVec::<u8, ConstU32<ADMIN_NAME_MAX_BYTES>>::try_from(role_name.to_vec())
-            .expect("title fits"),
-        term_start,
-        term_end,
-        admin_source: AdminSource::Registry,
-        admin_source_ref: Default::default(),
-    }
+/// admins 只保存钱包账户；岗位、任期、来源等由 entity 管理。
+fn admins(count: u8) -> Vec<AccountId32> {
+    (0..count).map(account).collect()
 }
 
 #[test]
 fn private_admins_accept_private_codes_and_private_owned_unincorporated_codes() {
     new_test_ext().execute_with(|| {
         let root = account(10);
-        assert_ok!(PrivateAdmins::do_create_pending_admin_account(
+        assert_ok!(PrivateAdmins::do_set_active_admin_account_direct(
             root.clone(),
             b"TEST-CID".to_vec(),
             code_bytes("SFLP"),
             AdminAccountKind::PrivateInstitution,
             admins(3),
-            account(1),
+            2,
         ));
-        let stored = AdminAccounts::<Test>::get(root.clone()).expect("pending private admins");
-        assert_eq!(stored.kind, AdminAccountKind::PrivateInstitution);
-        assert_eq!(stored.status, AdminAccountStatus::Pending);
-        assert!(PrivateAdmins::pending_account_exists_for_snapshot(
-            code_bytes("SFLP"),
-            root
-        ));
+        let stored = AdminAccounts::<Test>::get(root).expect("active private admins");
+        assert_eq!(stored.status, AdminAccountStatus::Active);
 
-        assert_ok!(PrivateAdmins::do_create_pending_admin_account(
+        assert_ok!(PrivateAdmins::do_set_active_admin_account_direct(
             account(11),
             b"TEST-CID".to_vec(),
             code_bytes("UNIN"),
             AdminAccountKind::PrivateInstitution,
             admins(2),
-            account(1),
+            2,
         ));
     });
 }
@@ -231,15 +179,14 @@ fn private_admins_accept_private_codes_and_private_owned_unincorporated_codes() 
 fn private_admins_activate_and_query_active_admins() {
     new_test_ext().execute_with(|| {
         let root = account(20);
-        assert_ok!(PrivateAdmins::do_create_pending_admin_account(
+        assert_ok!(PrivateAdmins::do_set_active_admin_account_direct(
             root.clone(),
             b"TEST-CID".to_vec(),
             code_bytes("JSCH"),
             AdminAccountKind::PrivateInstitution,
             admins(3),
-            account(1),
+            2,
         ));
-        assert_ok!(PrivateAdmins::do_activate_admin_account(root.clone()));
 
         assert!(PrivateAdmins::is_active_account_admin(
             code_bytes("JSCH"),
@@ -254,64 +201,16 @@ fn private_admins_activate_and_query_active_admins() {
 }
 
 #[test]
-fn private_admins_store_and_query_admin_profiles() {
-    new_test_ext().execute_with(|| {
-        let root = account(40);
-        let profiles = alloc::vec![
-            profile_full(
-                account(0),
-                b"GD000-CTZN8-191941078-2026",
-                b"Alice",
-                b"Chair",
-                10,
-                20
-            ),
-            profile_full(
-                account(1),
-                b"GD000-CTZN2-141250905-2026",
-                b"Bob",
-                b"Member",
-                11,
-                21
-            ),
-        ];
-        assert_ok!(PrivateAdmins::do_create_pending_admin_account(
-            root.clone(),
-            b"TEST-CID".to_vec(),
-            code_bytes("JSCH"),
-            AdminAccountKind::PrivateInstitution,
-            profiles.clone(),
-            account(1),
-        ));
-        assert_ok!(PrivateAdmins::do_activate_admin_account(root.clone()));
-
-        // 账户语义路径仍只返回账户。
-        assert_eq!(
-            PrivateAdmins::active_account_admins(code_bytes("JSCH"), root.clone()),
-            Some(alloc::vec![account(0), account(1)])
-        );
-
-        // 展示路径返回完整资料,全字段往返。
-        let stored = PrivateAdmins::active_account_admin_profiles(code_bytes("JSCH"), root)
-            .expect("profiles present");
-        assert_eq!(stored, profiles);
-        assert_eq!(stored[0].admin_name.to_vec(), b"Alice".to_vec());
-        assert_eq!(stored[1].role_name.to_vec(), b"Member".to_vec());
-        assert_eq!(stored[1].admin_source, AdminSource::Registry);
-    });
-}
-
-#[test]
 fn private_admins_reject_public_codes() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            PrivateAdmins::do_create_pending_admin_account(
+            PrivateAdmins::do_set_active_admin_account_direct(
                 account(30),
                 b"TEST-CID".to_vec(),
                 code_bytes("PRS"),
                 AdminAccountKind::PrivateInstitution,
                 admins(3),
-                account(1),
+                2,
             ),
             Error::<Test>::InvalidAdminAccountKind
         );

@@ -381,17 +381,17 @@ class PayloadDecoder {
       }
 
       // ── LegislationVote(26) · 立法专属投票引擎 ──
-      // 院内表决/公投/行政签署/三人会签/护宪终审走 proposal_id+approve;
+      // 代表机构表决/公投/行政签署/三人会签/护宪终审走 proposal_id+approve；
       // 人口快照只携带作用域,链端直接读取 citizen-identity。
       if (palletIndex == PalletRegistry.legislationVotePallet) {
         if (callIndex == PalletRegistry.prepareLegislationSnapshotCall) {
           return _decodePrepareLegislationSnapshot(bytes);
         }
-        if (callIndex == PalletRegistry.castHouseVoteCall) {
+        if (callIndex == PalletRegistry.castRepresentativeVoteCall) {
           return _decodeProposalApprove(
             bytes,
-            action: 'cast_house_vote',
-            summaryTemplate: '院内表决 立法提案 #{id}：{vote}',
+            action: 'cast_representative_vote',
+            summaryTemplate: '代表机构表决 立法提案 #{id}：{vote}',
           );
         }
         if (callIndex == PalletRegistry.castLegislationReferendumCall) {
@@ -1809,7 +1809,7 @@ class PayloadDecoder {
   }
 
   // LegislationVote(26) 通用:proposal_id:u64_le + approve:bool。
-  // 院内表决(1)/行政签署(3)/三人会签(4)/护宪终审(5) 同形。
+  // 代表机构表决(1)/行政签署(3)/三人会签(4)/护宪终审(5) 同形。
   // SCALE: [26][call][proposal_id:u64_le][approve:bool]
   static DecodedPayload? _decodeProposalApprove(
     Uint8List bytes, {

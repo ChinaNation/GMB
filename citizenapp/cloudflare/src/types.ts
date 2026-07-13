@@ -46,6 +46,8 @@ export interface Env {
   // 轻节点启动清单只下发公开 bootnodes 和冻结链身份，不下发 checkpoint 或 RPC 地址。
   CHAIN_BOOTNODES?: string;
   BOOT_TTL_SECONDS?: string;
+  // 官网「公民宪法」tab 读链文档的 KV 短缓存 TTL（秒，缺省 300）。修宪后一个 TTL 内自动刷新。
+  CONSTITUTION_TTL_SECONDS?: string;
   CHAIN_GENESIS_HASH?: string;
   CHAIN_STATE_ROOT?: string;
   // 已签名交易兜底广播：只转发完整 signed extrinsic，不提供通用 JSON-RPC proxy。
@@ -122,6 +124,12 @@ export interface MembershipRow {
   identity_checked_at: number | null;
   // 会员权益失效时刻（退订满 N 月冷归档的时钟起点；重订置 NULL）。
   entitlement_lapsed_at: number | null;
+  // 身份≠档位时的冻结时点（NULL=未冻结；审计用，冻结态本身由身份不符派生）。
+  frozen_at: number | null;
+  // 是否已因冻结暂停 Stripe 收款（防止懒判定重复调用 Stripe pause）。
+  collection_paused: number;
+  // USDC 预付路线的支付凭证（Stripe payment_intent id）；卡订阅为 NULL（ADR-034）。
+  prepaid_payment_ref: string | null;
 }
 
 export interface UploadItemInput {

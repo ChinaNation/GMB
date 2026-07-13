@@ -10,6 +10,7 @@ const navItems = [
   { path: '/membership', label: '会员订阅' },
   { path: '/governance', label: '治理体系' },
   { path: '/whitepaper', label: '白皮书' },
+  { path: '/constitution', label: '公民宪法' },
   { path: '/about', label: '关于我们' },
 ]
 

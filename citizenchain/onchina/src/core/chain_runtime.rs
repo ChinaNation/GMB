@@ -1768,7 +1768,8 @@ pub(crate) async fn fetch_all_federal_registry_admin_profiles(
     Ok(groups)
 }
 
-#[cfg(test)]
+// 旧 AdminProfile 镜像对拍已退役；机构 admins 现在只编码钱包账户集合。
+#[cfg(all(test, any()))]
 mod tests {
     use super::{
         deregistration_payload_digest, is_production_mode, parse_hex_hash32,

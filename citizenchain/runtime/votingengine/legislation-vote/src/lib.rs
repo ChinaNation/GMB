@@ -6,7 +6,7 @@
 //! sub-pallet 逻辑零改动。
 //!
 //! 阶段(ADR-027,当前五类提案 + 特别案公投 + 行政签署/三人会签/护宪终审):
-//! - `STAGE_LEG_HOUSE` 内部表决:单院(市立法会)一段;两院(国家/省立法院 众→参;教委会→参议会)顺序两段。
+//! - `STAGE_LEG_REPRESENTATIVE` 代表表决：单机构一段，多机构按声明顺序逐段推进。
 //! - `STAGE_LEG_REFERENDUM` 强制公投:仅特别案(含核心修宪),内部全过后强制进入,公投通过即生效不签署。
 //! - `STAGE_LEG_SIGN` 行政签署:非特别案内部全过后,行政机构法定代表人(市长/省长/总统)签署。
 //!   市行政区无救济(否决=否决/30天超时=通过);省行政区/国家否决或超时 → 会签。
@@ -17,12 +17,22 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod cleanup;
+pub mod legislation;
+pub mod representative;
+pub mod result;
+pub mod rules;
+pub mod types;
 pub mod weights;
 
 #[cfg(test)]
 mod tests;
 
 pub use pallet::*;
+pub use types::{
+    LegislationProcedureConfig, LegislationVoteEngine, RepresentativeBodies, RepresentativeRoute,
+    RepresentativeVoteRule, VoteProcedure, MAX_REPRESENTATIVE_BODIES,
+};
 
 use entity_primitives::InstitutionMultisigQuery;
 use frame_support::{
@@ -37,22 +47,17 @@ use primitives::count_const::VOTING_DURATION_BLOCKS;
 
 use votingengine::{
     pallet::{Proposals, ProposalsByExpiry},
-    types::{
-        legislation_house_decided, legislation_house_final_passed,
-        legislation_referendum_final_passed, InstitutionCode, ProposalSubjectCidNumbers,
-        LEG_VOTE_SPECIAL,
-    },
+    types::{InstitutionCode, ProposalSubjectCidNumbers},
     CitizenIdentityReader, InternalAdminProvider, InternalProposalMutexKind, PopulationScope,
-    Proposal, PROPOSAL_KIND_LEGISLATION, STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_HOUSE,
-    STAGE_LEG_OVERRIDE, STAGE_LEG_REFERENDUM, STAGE_LEG_SIGN, STATUS_PASSED, STATUS_REJECTED,
+    Proposal, PROPOSAL_KIND_LEGISLATION, STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_OVERRIDE,
+    STAGE_LEG_REFERENDUM, STAGE_LEG_REPRESENTATIVE, STAGE_LEG_SIGN, STATUS_PASSED, STATUS_REJECTED,
     STATUS_VOTING,
 };
 
+use crate::rules::{referendum_final_passed, representative_decided, representative_final_passed};
+
 /// 法律全文大对象类型标记(写入 votingengine `ProposalObject`),与 legislation-yuan 对齐。
 pub const PROPOSAL_OBJECT_KIND_LAW_TEXT: u8 = 2;
-
-/// 单部法律最多院数,单一真源在 `votingengine::types::MAX_LEGISLATION_HOUSES`。
-pub const MAX_HOUSES: u32 = votingengine::types::MAX_LEGISLATION_HOUSES;
 
 /// 护宪大法官法定人数(宪法第20条):7 人。
 pub const CONSTITUTION_GUARD_MEMBERS: u32 = 7;
@@ -69,14 +74,34 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
 
-    /// pallet 自身 StorageVersion(全新创世口径,恒 v1)。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    /// v2：代表表决元数据与法律专属元数据拆分，旧布局不迁移，开发期重新创世。
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
-    /// 院序列别名:`[(机构码, 机构账户), ...]`,发起院在前、终审院在后。
-    pub type HousesOf<T> =
-        BoundedVec<(InstitutionCode, <T as frame_system::Config>::AccountId), ConstU32<MAX_HOUSES>>;
+    /// 代表机构表决元数据。所有法律、任免、预算等立法机关表决共用这一份状态。
+    #[derive(
+        Encode,
+        Decode,
+        DecodeWithMemTracking,
+        CloneNoBound,
+        PartialEqNoBound,
+        EqNoBound,
+        RuntimeDebugNoBound,
+        TypeInfo,
+        MaxEncodedLen,
+    )]
+    #[scale_info(skip_type_params(T))]
+    pub struct RepresentativeMeta<T: Config> {
+        /// 单机构或多机构顺序表决路线。
+        pub route: RepresentativeRoute<T::AccountId>,
+        /// 当前正在表决的机构索引。
+        pub current_body: u32,
+        /// 常规、重要或特别三种数学门槛。
+        pub rule: RepresentativeVoteRule,
+        /// 代表表决完成后直接终局，或继续法律专属程序。
+        pub procedure: VoteProcedure,
+    }
 
-    /// 立法提案元数据(核心 `Proposal` 装不下的立法专属部分)。
+    /// 法律专属元数据。任免和预算提案不得创建本记录。
     #[derive(
         Encode,
         Decode,
@@ -90,21 +115,13 @@ pub mod pallet {
     )]
     #[scale_info(skip_type_params(T))]
     pub struct LegislationMeta<T: Config> {
-        /// 表决类型(常规 0 / 常规教育 1 / 重要 2 / 重要教育 3 / 特别 4,ADR-027 修订)
-        pub vote_type: u8,
-        /// 院序列
-        pub houses: HousesOf<T>,
-        /// 当前正在表决的院索引(单院恒 0;两院 0→1)
-        pub current_house: u32,
-        /// 是否需要强制公投(= 特别案)
-        pub referendum_required: bool,
         /// 行政签署机构(总统府/省联邦政府/市政府);其法定代表人=总统/省长/市长。非特别案末段签署。
         pub executive: (InstitutionCode, T::AccountId),
         /// 两院级的立法院机构(国家/省立法院);其法定代表人=院长,供三人会签。单院(市)=None。
         pub legislature: Option<(InstitutionCode, T::AccountId)>,
         /// 是否修宪(tier=宪法):为真时,现有流程通过后最后进护宪大法官终审(宪法第21条)。
         pub needs_guard: bool,
-        /// 特别案公投作用域。非特别案为 None。
+        /// 特别案公投作用域；常规案和重要案为 None。
         pub referendum_scope: Option<PopulationScope>,
     }
 
@@ -139,24 +156,37 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 立法提案元数据:proposal_id → LegislationMeta。
+    /// 代表机构表决元数据：proposal_id → RepresentativeMeta。
     #[pallet::storage]
-    pub type LegMeta<T: Config> =
+    pub type RepresentativeMetas<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, RepresentativeMeta<T>, OptionQuery>;
+
+    /// 法律专属元数据：只有 `VoteProcedure::Legislation` 提案存在。
+    #[pallet::storage]
+    pub type LegislationMetas<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, LegislationMeta<T>, OptionQuery>;
 
-    /// 当前院内部表决计票(院推进时重置)。
+    /// 每个代表机构阶段独立计票：(proposal_id, body_index) → yes/no。
     #[pallet::storage]
-    pub type LegHouseTally<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU32, ValueQuery>;
-
-    /// 内部表决去重:(proposal_id, 议员/委员) → 赞成/反对。两院议员账户互不重叠。
-    #[pallet::storage]
-    pub type LegHouseVotesByAdmin<T: Config> = StorageDoubleMap<
+    pub type RepresentativeTallies<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        T::AccountId,
+        u32,
+        votingengine::VoteCountU32,
+        ValueQuery,
+    >;
+
+    /// 代表表决去重：(proposal_id, (body_index, account)) → 赞成/反对。
+    /// `body_index` 允许同一账户在不同机构阶段分别依法投票。
+    #[pallet::storage]
+    pub type RepresentativeVotesByAccount<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        Blake2_128Concat,
+        (u32, T::AccountId),
         bool,
         OptionQuery,
     >;
@@ -213,20 +243,22 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 立法提案已创建(进入第一院内部表决)。
-        LegislationProposalCreated {
+        /// 立法机关代表表决提案已创建。
+        RepresentativeProposalCreated {
             proposal_id: u64,
-            vote_type: u8,
-            houses: u32,
+            rule: RepresentativeVoteRule,
+            bodies: u32,
+            procedure: VoteProcedure,
         },
         /// 某议员/委员投出一票。
-        LegislationHouseVoteCast {
+        RepresentativeVoteCast {
             proposal_id: u64,
+            body_index: u32,
             who: T::AccountId,
             approve: bool,
         },
-        /// 某院通过,推进至下一院。
-        LegislationHouseAdvanced { proposal_id: u64, next_house: u32 },
+        /// 当前代表机构通过，推进至下一代表机构。
+        RepresentativeBodyAdvanced { proposal_id: u64, next_body: u32 },
         /// 内部全过,推进至强制公投阶段。
         LegislationAdvancedToReferendum {
             proposal_id: u64,
@@ -272,10 +304,10 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 院序列为空或超上限
-        InvalidHouses,
-        /// 表决类型不合法
-        InvalidVoteType,
+        /// 代表机构路线为空、重复、单机构误用顺序路线或超过上限。
+        InvalidRepresentativeRoute,
+        /// 特别门槛与直接终局程序组合非法。
+        InvalidRepresentativeRule,
         /// 提案元数据缺失
         ProposalMetaMissing,
         /// 人口快照未准备
@@ -319,16 +351,16 @@ pub mod pallet {
             Self::do_prepare_population_snapshot(who, scope)
         }
 
-        /// 立法机构议员/委员对当前院投票(一人一票)。
+        /// 管理员按当前代表机构席位投票。
         #[pallet::call_index(1)]
-        #[pallet::weight(<T as Config>::WeightInfo::cast_house_vote())]
-        pub fn cast_house_vote(
+        #[pallet::weight(<T as Config>::WeightInfo::cast_representative_vote())]
+        pub fn cast_representative_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_cast_house_vote(who, proposal_id, approve)
+            Self::do_cast_representative_vote(who, proposal_id, approve)
         }
 
         /// 公民对特别案公投投票(链上公民身份持有者,链上按账户去重计票)。
@@ -346,7 +378,7 @@ pub mod pallet {
         /// 行政首长(机构法定代表人:市长/省长/总统)对终审通过的非特别案签署或否决。
         /// 批准=生效;否决:市行政区=否决,省行政区/国家=退回三人会签。
         #[pallet::call_index(3)]
-        #[pallet::weight(<T as Config>::WeightInfo::cast_house_vote())]
+        #[pallet::weight(<T as Config>::WeightInfo::executive_sign())]
         pub fn executive_sign(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -359,7 +391,7 @@ pub mod pallet {
         /// 三人会签(省行政区/国家:立法院院长 + 参议长 + 众议长)签署或否决。
         /// 三人全批准=生效;任一否决=否决。
         #[pallet::call_index(4)]
-        #[pallet::weight(<T as Config>::WeightInfo::cast_house_vote())]
+        #[pallet::weight(<T as Config>::WeightInfo::override_sign())]
         pub fn override_sign(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -371,7 +403,7 @@ pub mod pallet {
 
         /// 护宪大法官对修宪提案终审表决(宪法第21条):一人一票,4名及以上赞成→生效。
         #[pallet::call_index(5)]
-        #[pallet::weight(<T as Config>::WeightInfo::cast_house_vote())]
+        #[pallet::weight(<T as Config>::WeightInfo::guard_vote())]
         pub fn guard_vote(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
             let who = ensure_signed(origin)?;
             Self::do_guard_vote(who, proposal_id, approve)
@@ -398,19 +430,44 @@ impl<T: Config> Pallet<T> {
     }
 
     fn resolve_subject_cid_numbers(
-        houses: &sp_runtime::sp_std::vec::Vec<(InstitutionCode, T::AccountId)>,
-        executive: &(InstitutionCode, T::AccountId),
-        legislature: &Option<(InstitutionCode, T::AccountId)>,
+        route: &RepresentativeRoute<T::AccountId>,
+        additional_subjects: ProposalSubjectCidNumbers,
+        additional_institutions: &[(InstitutionCode, T::AccountId)],
     ) -> Result<ProposalSubjectCidNumbers, DispatchError> {
-        let mut raw = sp_runtime::sp_std::vec::Vec::new();
-        for (_, account) in houses.iter() {
-            Self::push_subject_cid(&mut raw, account)?;
+        let mut raw: sp_runtime::sp_std::vec::Vec<sp_runtime::sp_std::vec::Vec<u8>> =
+            additional_subjects
+                .into_iter()
+                .map(|cid| cid.into_inner())
+                .collect();
+        for (_, account) in route.bodies() {
+            Self::push_subject_cid(&mut raw, &account)?;
         }
-        Self::push_subject_cid(&mut raw, &executive.1)?;
-        if let Some((_, account)) = legislature.as_ref() {
+        for (_, account) in additional_institutions {
             Self::push_subject_cid(&mut raw, account)?;
         }
         <votingengine::Pallet<T>>::bound_subject_cid_numbers(raw)
+    }
+
+    /// 校验路线并返回首个表决机构。路线中的机构不得重复。
+    fn validate_representative_route(
+        route: &RepresentativeRoute<T::AccountId>,
+    ) -> Result<(InstitutionCode, T::AccountId), DispatchError> {
+        let bodies = route.bodies();
+        ensure!(!bodies.is_empty(), Error::<T>::InvalidRepresentativeRoute);
+        match route {
+            RepresentativeRoute::Single(_) => {}
+            RepresentativeRoute::Sequential(sequence) => ensure!(
+                sequence.len() >= 2 && sequence.len() <= MAX_REPRESENTATIVE_BODIES as usize,
+                Error::<T>::InvalidRepresentativeRoute
+            ),
+        }
+        for (index, body) in bodies.iter().enumerate() {
+            ensure!(
+                !bodies[..index].iter().any(|existing| existing == body),
+                Error::<T>::InvalidRepresentativeRoute
+            );
+        }
+        Ok(bodies[0].clone())
     }
 
     /// 准备特别案公投人口快照:从链上公民身份模块读取并缓存分母。
@@ -438,48 +495,65 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    /// 创建立法提案:锁定发起院管理员快照,建核心提案进入第一院内部表决。
+    /// 创建通用代表机构表决提案。业务模块只提供路线、门槛、受影响主体和 owner 数据。
     #[allow(clippy::too_many_arguments)]
-    pub fn do_create_legislation_proposal(
+    pub fn do_create_representative_proposal(
         who: T::AccountId,
-        houses: sp_runtime::sp_std::vec::Vec<(InstitutionCode, T::AccountId)>,
-        vote_type: u8,
-        executive: (InstitutionCode, T::AccountId),
-        legislature: Option<(InstitutionCode, T::AccountId)>,
-        needs_guard: bool,
+        route: RepresentativeRoute<T::AccountId>,
+        rule: RepresentativeVoteRule,
+        procedure: VoteProcedure,
+        additional_subjects: ProposalSubjectCidNumbers,
+        mut legislation_meta: Option<pallet::LegislationMeta<T>>,
     ) -> Result<u64, DispatchError> {
-        ensure!(!houses.is_empty(), Error::<T>::InvalidHouses);
-        ensure!(vote_type <= LEG_VOTE_SPECIAL, Error::<T>::InvalidVoteType);
-        let bounded_houses: pallet::HousesOf<T> = houses
-            .clone()
-            .try_into()
-            .map_err(|_| Error::<T>::InvalidHouses)?;
-        let (first_code, first_account) = houses[0].clone();
-        let subject_cid_numbers =
-            Self::resolve_subject_cid_numbers(&houses, &executive, &legislature)?;
-        // ADR-027 修订:提案方与表决院解耦——发起人资格由 legislation-yuan 对 proposer_body 校验,
-        // 本层只锁定 houses[0](表决院)管理员快照;发起人若属表决院则自动赞成一票(国家/省两院),
-        // 市行政区 市自治会/市教委会 委员提案时发起人不在表决院,不自动投票(市立法会从零计票)。
+        let (first_code, first_account) = Self::validate_representative_route(&route)?;
+        ensure!(
+            !(procedure == VoteProcedure::RepresentativeOnly
+                && rule == RepresentativeVoteRule::Special),
+            Error::<T>::InvalidRepresentativeRule
+        );
+        ensure!(
+            (procedure == VoteProcedure::Legislation) == legislation_meta.is_some(),
+            Error::<T>::ProposalMetaMissing
+        );
 
-        let referendum_required = vote_type == LEG_VOTE_SPECIAL;
+        let mut additional_institutions = sp_runtime::sp_std::vec::Vec::new();
+        if let Some(meta) = legislation_meta.as_ref() {
+            additional_institutions.push(meta.executive.clone());
+            if let Some(legislature) = meta.legislature.as_ref() {
+                additional_institutions.push(legislature.clone());
+            }
+        }
+        let subject_cid_numbers = Self::resolve_subject_cid_numbers(
+            &route,
+            additional_subjects,
+            &additional_institutions,
+        )?;
+
         let now = <frame_system::Pallet<T>>::block_number();
-        // 特别案:消费已准备的人口快照作为公投分母。
-        let (eligible_total, referendum_scope) = if referendum_required {
+        // 特别案消费同一区块准备的人口快照；普通和重要案不得残留公投作用域。
+        let eligible_total = if rule == RepresentativeVoteRule::Special {
             let prepared = pallet::PendingPopulationSnapshots::<T>::get(&who)
                 .ok_or(Error::<T>::PopulationSnapshotNotPrepared)?;
             if prepared.prepared_at != now {
                 pallet::PendingPopulationSnapshots::<T>::remove(&who);
                 return Err(Error::<T>::PopulationSnapshotNotCurrent.into());
             }
-            (prepared.eligible_total, Some(prepared.scope))
+            let meta = legislation_meta
+                .as_mut()
+                .ok_or(Error::<T>::ProposalMetaMissing)?;
+            meta.referendum_scope = Some(prepared.scope);
+            prepared.eligible_total
         } else {
-            (0, None)
+            if let Some(meta) = legislation_meta.as_mut() {
+                meta.referendum_scope = None;
+            }
+            0
         };
 
         let end = now.saturating_add(Self::stage_duration());
         let proposal = Proposal {
             kind: PROPOSAL_KIND_LEGISLATION,
-            stage: STAGE_LEG_HOUSE,
+            stage: STAGE_LEG_REPRESENTATIVE,
             status: STATUS_VOTING,
             internal_code: Some(first_code),
             account_context: Some(first_account.clone()),
@@ -517,22 +591,21 @@ impl<T: Config> Pallet<T> {
             ) {
                 return TransactionOutcome::Rollback(Err(err));
             }
-            if referendum_required {
+            if rule == RepresentativeVoteRule::Special {
                 pallet::PendingPopulationSnapshots::<T>::remove(&who);
             }
-            pallet::LegMeta::<T>::insert(
+            pallet::RepresentativeMetas::<T>::insert(
                 id,
-                pallet::LegislationMeta {
-                    vote_type,
-                    houses: bounded_houses,
-                    current_house: 0,
-                    referendum_required,
-                    executive,
-                    legislature,
-                    needs_guard,
-                    referendum_scope,
+                pallet::RepresentativeMeta {
+                    route,
+                    current_body: 0,
+                    rule,
+                    procedure,
                 },
             );
+            if let Some(meta) = legislation_meta {
+                pallet::LegislationMetas::<T>::insert(id, meta);
+            }
             Proposals::<T>::insert(id, proposal);
             if let Err(err) = <votingengine::Pallet<T>>::schedule_proposal_expiry(id, end) {
                 return TransactionOutcome::Rollback(Err(err));
@@ -540,15 +613,23 @@ impl<T: Config> Pallet<T> {
             <votingengine::Pallet<T>>::emit_proposal_created(
                 id,
                 PROPOSAL_KIND_LEGISLATION,
-                STAGE_LEG_HOUSE,
+                STAGE_LEG_REPRESENTATIVE,
                 end,
             );
+            Self::deposit_event(pallet::Event::<T>::RepresentativeProposalCreated {
+                proposal_id: id,
+                rule,
+                bodies: pallet::RepresentativeMetas::<T>::get(id)
+                    .map(|meta| meta.route.len() as u32)
+                    .unwrap_or_default(),
+                procedure,
+            });
             TransactionOutcome::Commit(Ok(id))
         })
     }
 
-    /// 当前院投票:计票并按表决类型判定(通过→推进/否决)。
-    pub fn do_cast_house_vote(
+    /// 对当前代表机构投票；同一账户可在不同机构阶段分别依法投票。
+    pub fn do_cast_representative_vote(
         who: T::AccountId,
         proposal_id: u64,
         approve: bool,
@@ -559,17 +640,18 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::InvalidProposalKind
         );
         ensure!(
-            proposal.stage == STAGE_LEG_HOUSE,
+            proposal.stage == STAGE_LEG_REPRESENTATIVE,
             votingengine::Error::<T>::InvalidProposalStage
         );
-        let meta = pallet::LegMeta::<T>::get(proposal_id).ok_or(Error::<T>::ProposalMetaMissing)?;
+        let meta = pallet::RepresentativeMetas::<T>::get(proposal_id)
+            .ok_or(Error::<T>::ProposalMetaMissing)?;
         let (_code, institution) = meta
-            .houses
-            .get(meta.current_house as usize)
-            .cloned()
-            .ok_or(Error::<T>::InvalidHouses)?;
+            .route
+            .body(meta.current_body)
+            .ok_or(Error::<T>::InvalidRepresentativeRoute)?;
+        let vote_key = (meta.current_body, who.clone());
         ensure!(
-            !pallet::LegHouseVotesByAdmin::<T>::contains_key(proposal_id, &who),
+            !pallet::RepresentativeVotesByAccount::<T>::contains_key(proposal_id, &vote_key),
             votingengine::Error::<T>::AlreadyVoted
         );
         ensure!(
@@ -577,25 +659,34 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::NoPermission
         );
 
-        pallet::LegHouseVotesByAdmin::<T>::insert(proposal_id, &who, approve);
-        let tally = pallet::LegHouseTally::<T>::mutate(proposal_id, |t| {
-            if approve {
-                t.yes = t.yes.saturating_add(1);
-            } else {
-                t.no = t.no.saturating_add(1);
-            }
-            *t
-        });
-        Self::deposit_event(pallet::Event::<T>::LegislationHouseVoteCast {
+        pallet::RepresentativeVotesByAccount::<T>::insert(proposal_id, vote_key, approve);
+        let tally =
+            pallet::RepresentativeTallies::<T>::mutate(proposal_id, meta.current_body, |t| {
+                if approve {
+                    t.yes = t.yes.saturating_add(1);
+                } else {
+                    t.no = t.no.saturating_add(1);
+                }
+                *t
+            });
+        Self::deposit_event(pallet::Event::<T>::RepresentativeVoteCast {
             proposal_id,
+            body_index: meta.current_body,
             who,
             approve,
         });
 
         let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution)
             .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
-        match legislation_house_decided(meta.vote_type, admins_len, tally.yes, tally.no) {
-            Some(true) => Self::advance_house_or_finalize(proposal_id, meta),
+        match representative_decided(meta.rule, admins_len, tally.yes, tally.no) {
+            Some(true) => match meta.route {
+                RepresentativeRoute::Single(_) => {
+                    Self::finish_single_representative_vote(proposal_id)
+                }
+                RepresentativeRoute::Sequential(_) => {
+                    Self::advance_sequential_representative_vote(proposal_id)
+                }
+            },
             Some(false) => {
                 <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
             }
@@ -603,22 +694,23 @@ impl<T: Config> Pallet<T> {
         }
     }
 
-    /// 某院通过后:还有下一院则推进,否则(特别案进公投 / 其余直接 PASSED)。
-    fn advance_house_or_finalize(
-        proposal_id: u64,
-        meta: pallet::LegislationMeta<T>,
-    ) -> DispatchResult {
-        let next = meta.current_house.saturating_add(1);
-        if (next as usize) < meta.houses.len() {
-            let (next_code, next_account) = meta.houses[next as usize].clone();
+    /// 顺序路线推进至下一个代表机构；全部完成后进入配置的后续程序。
+    pub(crate) fn advance_representative_body_or_finish(proposal_id: u64) -> DispatchResult {
+        let meta = pallet::RepresentativeMetas::<T>::get(proposal_id)
+            .ok_or(Error::<T>::ProposalMetaMissing)?;
+        let next = meta.current_body.saturating_add(1);
+        if (next as usize) < meta.route.len() {
+            let (next_code, next_account) = meta
+                .route
+                .body(next)
+                .ok_or(Error::<T>::InvalidRepresentativeRoute)?;
             let now = <frame_system::Pallet<T>>::block_number();
             let end = now.saturating_add(Self::stage_duration());
             with_transaction(|| {
-                // 重置当前院计票(去重表保留,两院议员账户不重叠)。
-                pallet::LegHouseTally::<T>::remove(proposal_id);
-                pallet::LegMeta::<T>::mutate(proposal_id, |maybe| {
+                // 各机构计票按 body_index 永久隔离到提案清理，不删除前一阶段审计记录。
+                pallet::RepresentativeMetas::<T>::mutate(proposal_id, |maybe| {
                     if let Some(m) = maybe {
-                        m.current_house = next;
+                        m.current_body = next;
                     }
                 });
                 if let Err(err) = <votingengine::Pallet<T>>::snapshot_institution_admins(
@@ -657,17 +749,29 @@ impl<T: Config> Pallet<T> {
                 {
                     return TransactionOutcome::Rollback(Err(err));
                 }
-                Self::deposit_event(pallet::Event::<T>::LegislationHouseAdvanced {
+                Self::deposit_event(pallet::Event::<T>::RepresentativeBodyAdvanced {
                     proposal_id,
-                    next_house: next,
+                    next_body: next,
                 });
                 TransactionOutcome::Commit(Ok(()))
             })
-        } else if meta.referendum_required {
-            Self::advance_to_referendum(proposal_id)
         } else {
-            // 非特别案:内部全过 → 进入行政签署阶段(市长/省长/总统)。
-            Self::advance_to_sign(proposal_id)
+            Self::finish_representative_route(proposal_id)
+        }
+    }
+
+    /// 所有代表机构通过后按强类型程序进入终局或法律专属阶段。
+    pub(crate) fn finish_representative_route(proposal_id: u64) -> DispatchResult {
+        let meta = pallet::RepresentativeMetas::<T>::get(proposal_id)
+            .ok_or(Error::<T>::ProposalMetaMissing)?;
+        match meta.procedure {
+            VoteProcedure::RepresentativeOnly => {
+                <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)
+            }
+            VoteProcedure::Legislation if meta.rule == RepresentativeVoteRule::Special => {
+                Self::advance_to_referendum(proposal_id)
+            }
+            VoteProcedure::Legislation => Self::advance_to_sign(proposal_id),
         }
     }
 
@@ -783,7 +887,8 @@ impl<T: Config> Pallet<T> {
             proposal.stage == STAGE_LEG_SIGN,
             Error::<T>::NotInExpectedStage
         );
-        let meta = pallet::LegMeta::<T>::get(proposal_id).ok_or(Error::<T>::ProposalMetaMissing)?;
+        let meta = pallet::LegislationMetas::<T>::get(proposal_id)
+            .ok_or(Error::<T>::ProposalMetaMissing)?;
         let rep = Self::legal_representative_of(&meta.executive)
             .ok_or(Error::<T>::NotLegalRepresentative)?;
         ensure!(who == rep, Error::<T>::NotLegalRepresentative);
@@ -804,7 +909,8 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 三人会签合法身份(院长 + 众议长 + 参议长 = 立法院/众议会/参议会三机构法定代表人)。
-    fn override_signers(
+    fn override_signers_for_proposal(
+        proposal_id: u64,
         meta: &pallet::LegislationMeta<T>,
     ) -> sp_runtime::sp_std::vec::Vec<T::AccountId> {
         let mut out = sp_runtime::sp_std::vec::Vec::new();
@@ -813,8 +919,11 @@ impl<T: Config> Pallet<T> {
                 out.push(rep);
             }
         }
-        for h in meta.houses.iter() {
-            if let Some(rep) = Self::legal_representative_of(h) {
+        let Some(representative) = pallet::RepresentativeMetas::<T>::get(proposal_id) else {
+            return out;
+        };
+        for body in representative.route.bodies() {
+            if let Some(rep) = Self::legal_representative_of(&body) {
                 out.push(rep);
             }
         }
@@ -833,8 +942,9 @@ impl<T: Config> Pallet<T> {
             proposal.stage == STAGE_LEG_OVERRIDE,
             Error::<T>::NotInExpectedStage
         );
-        let meta = pallet::LegMeta::<T>::get(proposal_id).ok_or(Error::<T>::ProposalMetaMissing)?;
-        let signers = Self::override_signers(&meta);
+        let meta = pallet::LegislationMetas::<T>::get(proposal_id)
+            .ok_or(Error::<T>::ProposalMetaMissing)?;
+        let signers = Self::override_signers_for_proposal(proposal_id, &meta);
         ensure!(
             signers.iter().any(|s| s == &who),
             Error::<T>::NotOverrideSigner
@@ -879,7 +989,8 @@ impl<T: Config> Pallet<T> {
             proposal.status == STATUS_VOTING,
             votingengine::Error::<T>::ProposalAlreadyFinalized
         );
-        let meta = pallet::LegMeta::<T>::get(proposal_id).ok_or(Error::<T>::ProposalMetaMissing)?;
+        let meta = pallet::LegislationMetas::<T>::get(proposal_id)
+            .ok_or(Error::<T>::ProposalMetaMissing)?;
         if meta.legislature.is_some() {
             Self::advance_to_override(proposal_id)
         } else {
@@ -991,13 +1102,13 @@ impl<T: Config> Pallet<T> {
         <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
     }
 
-    /// 内部表决阶段超时结算:按表决类型期满计票,通过→推进,否则否决。
-    pub fn do_finalize_house_timeout(
+    /// 当前代表机构阶段超时结算：按强类型门槛计票，通过则推进，否则否决。
+    pub fn do_finalize_representative_timeout(
         proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
         proposal_id: u64,
     ) -> DispatchResult {
         ensure!(
-            proposal.stage == STAGE_LEG_HOUSE,
+            proposal.stage == STAGE_LEG_REPRESENTATIVE,
             votingengine::Error::<T>::InvalidProposalStage
         );
         ensure!(
@@ -1008,17 +1119,24 @@ impl<T: Config> Pallet<T> {
             <frame_system::Pallet<T>>::block_number() > proposal.end,
             votingengine::Error::<T>::VoteNotExpired
         );
-        let meta = pallet::LegMeta::<T>::get(proposal_id).ok_or(Error::<T>::ProposalMetaMissing)?;
+        let meta = pallet::RepresentativeMetas::<T>::get(proposal_id)
+            .ok_or(Error::<T>::ProposalMetaMissing)?;
         let (_code, institution) = meta
-            .houses
-            .get(meta.current_house as usize)
-            .cloned()
-            .ok_or(Error::<T>::InvalidHouses)?;
+            .route
+            .body(meta.current_body)
+            .ok_or(Error::<T>::InvalidRepresentativeRoute)?;
         let admins_len = <votingengine::Pallet<T>>::snapshot_admins_len(proposal_id, institution)
             .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
-        let tally = pallet::LegHouseTally::<T>::get(proposal_id);
-        if legislation_house_final_passed(meta.vote_type, admins_len, tally.yes, tally.no) {
-            Self::advance_house_or_finalize(proposal_id, meta)
+        let tally = pallet::RepresentativeTallies::<T>::get(proposal_id, meta.current_body);
+        if representative_final_passed(meta.rule, admins_len, tally.yes, tally.no) {
+            match meta.route {
+                RepresentativeRoute::Single(_) => {
+                    Self::finish_single_representative_vote(proposal_id)
+                }
+                RepresentativeRoute::Sequential(_) => {
+                    Self::advance_sequential_representative_vote(proposal_id)
+                }
+            }
         } else {
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
         }
@@ -1043,7 +1161,8 @@ impl<T: Config> Pallet<T> {
             proposal.citizen_eligible_total > 0,
             Error::<T>::CitizenEligibleTotalNotSet
         );
-        let meta = pallet::LegMeta::<T>::get(proposal_id).ok_or(Error::<T>::ProposalMetaMissing)?;
+        let meta = pallet::LegislationMetas::<T>::get(proposal_id)
+            .ok_or(Error::<T>::ProposalMetaMissing)?;
         let scope = meta
             .referendum_scope
             .ok_or(Error::<T>::PopulationScopeMissing)?;
@@ -1090,11 +1209,10 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::VoteNotExpired
         );
         let tally = pallet::LegReferendumTally::<T>::get(proposal_id);
-        if legislation_referendum_final_passed(proposal.citizen_eligible_total, tally.yes, tally.no)
-        {
+        if referendum_final_passed(proposal.citizen_eligible_total, tally.yes, tally.no) {
             // 公投通过:修宪(特别案)转护宪大法官终审,否则直接生效。
-            let meta =
-                pallet::LegMeta::<T>::get(proposal_id).ok_or(Error::<T>::ProposalMetaMissing)?;
+            let meta = pallet::LegislationMetas::<T>::get(proposal_id)
+                .ok_or(Error::<T>::ProposalMetaMissing)?;
             Self::finalize_or_guard(proposal_id, meta.needs_guard)
         } else {
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_REJECTED)
@@ -1102,31 +1220,68 @@ impl<T: Config> Pallet<T> {
     }
 }
 // trait 实现(供 votingengine 核心 + 业务壳接入)
-impl<T: Config> votingengine::LegislationVoteEngine<T::AccountId> for Pallet<T> {
-    fn create_legislation_proposal(
+impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
+    fn create_representative_vote(
         who: T::AccountId,
-        houses: sp_runtime::sp_std::vec::Vec<(InstitutionCode, T::AccountId)>,
-        vote_type: u8,
-        executive: (InstitutionCode, T::AccountId),
-        legislature: Option<(InstitutionCode, T::AccountId)>,
-        needs_guard: bool,
+        route: RepresentativeRoute<T::AccountId>,
+        rule: RepresentativeVoteRule,
+        subject_cid_numbers: ProposalSubjectCidNumbers,
+        module_tag: &[u8],
+        data: sp_runtime::sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let first_account = Self::validate_representative_route(&route)?.1;
+        with_transaction(|| {
+            let id = match Self::do_create_representative_proposal(
+                who.clone(),
+                route,
+                rule,
+                VoteProcedure::RepresentativeOnly,
+                subject_cid_numbers,
+                None,
+            ) {
+                Ok(id) => id,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
+            let now = <frame_system::Pallet<T>>::block_number();
+            if let Err(err) =
+                <votingengine::Pallet<T>>::register_proposal_data(id, module_tag, data, now)
+            {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            if <votingengine::Pallet<T>>::is_admin_in_snapshot(id, first_account, &who) {
+                match Self::do_cast_representative_vote(who, id, true) {
+                    Ok(()) => TransactionOutcome::Commit(Ok(id)),
+                    Err(err) => TransactionOutcome::Rollback(Err(err)),
+                }
+            } else {
+                TransactionOutcome::Commit(Ok(id))
+            }
+        })
+    }
+
+    fn create_legislation_vote(
+        who: T::AccountId,
+        route: RepresentativeRoute<T::AccountId>,
+        rule: RepresentativeVoteRule,
+        procedure: LegislationProcedureConfig<T::AccountId>,
         module_tag: &[u8],
         data: sp_runtime::sp_std::vec::Vec<u8>,
         object_data: sp_runtime::sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        // 表决院 houses[0] 账户(发起院/市立法会),供自动投票判定。
-        let first_account = match houses.first() {
-            Some((_, acct)) => acct.clone(),
-            None => return Err(Error::<T>::InvalidHouses.into()),
-        };
+        let first_account = Self::validate_representative_route(&route)?.1;
         with_transaction(|| {
-            let id = match Self::do_create_legislation_proposal(
+            let id = match Self::do_create_representative_proposal(
                 who.clone(),
-                houses,
-                vote_type,
-                executive,
-                legislature,
-                needs_guard,
+                route,
+                rule,
+                VoteProcedure::Legislation,
+                ProposalSubjectCidNumbers::new(),
+                Some(pallet::LegislationMeta {
+                    executive: procedure.executive,
+                    legislature: procedure.legislature,
+                    needs_guard: procedure.needs_guard,
+                    referendum_scope: None,
+                }),
             ) {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
@@ -1147,7 +1302,7 @@ impl<T: Config> votingengine::LegislationVoteEngine<T::AccountId> for Pallet<T> 
             // 发起人若属表决院(国家/省两院:发起院=众议会/教委会)则自动赞成一票;
             // 市行政区 市自治会/市教委会 委员提案时发起人不在表决院(市立法会),不自动投票。
             if <votingengine::Pallet<T>>::is_admin_in_snapshot(id, first_account, &who) {
-                match Self::do_cast_house_vote(who, id, true) {
+                match Self::do_cast_representative_vote(who, id, true) {
                     Ok(()) => TransactionOutcome::Commit(Ok(id)),
                     Err(err) => TransactionOutcome::Rollback(Err(err)),
                 }
@@ -1186,11 +1341,11 @@ impl<T: Config>
         T::AccountId,
     > for Pallet<T>
 {
-    fn finalize_legislation_house_timeout(
+    fn finalize_legislation_representative_timeout(
         proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
         proposal_id: u64,
     ) -> DispatchResult {
-        Self::do_finalize_house_timeout(proposal, proposal_id)
+        Self::do_finalize_representative_timeout(proposal, proposal_id)
     }
 
     fn finalize_legislation_referendum_timeout(
@@ -1223,11 +1378,12 @@ impl<T: Config>
 }
 
 impl<T: Config> votingengine::traits::LegislationCleanupHandler for Pallet<T> {
-    fn cleanup_legislation_house_votes_chunk(
+    fn cleanup_legislation_representative_votes_chunk(
         proposal_id: u64,
         limit: u32,
     ) -> votingengine::traits::CleanupChunkResult {
-        let result = pallet::LegHouseVotesByAdmin::<T>::clear_prefix(proposal_id, limit, None);
+        let result =
+            pallet::RepresentativeVotesByAccount::<T>::clear_prefix(proposal_id, limit, None);
         (result.unique, result.maybe_cursor.is_some())
     }
 
@@ -1241,8 +1397,13 @@ impl<T: Config> votingengine::traits::LegislationCleanupHandler for Pallet<T> {
     }
 
     fn cleanup_legislation_terminal(proposal_id: u64) {
-        pallet::LegMeta::<T>::remove(proposal_id);
-        pallet::LegHouseTally::<T>::remove(proposal_id);
+        pallet::RepresentativeMetas::<T>::remove(proposal_id);
+        pallet::LegislationMetas::<T>::remove(proposal_id);
+        let _ = pallet::RepresentativeTallies::<T>::clear_prefix(
+            proposal_id,
+            MAX_REPRESENTATIVE_BODIES,
+            None,
+        );
         pallet::LegReferendumTally::<T>::remove(proposal_id);
         pallet::LegOverrideSigns::<T>::remove(proposal_id);
         pallet::LegGuardSigns::<T>::remove(proposal_id);

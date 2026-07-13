@@ -1,5 +1,5 @@
 // 提案进度看板(操作端)。输入提案 ID → getProposalState → 复用共享 ProposalTallyPanel 呈现
-// 六阶段 + 当前院 + 计票 + 状态。只读投影(链上事实搬运,不做计票判定)。
+// 六阶段 + 当前代表机构 + 计票 + 状态。只读投影，不做计票判定。
 
 import React, { useState } from 'react';
 import { Alert, Button, InputNumber, Space, Spin } from 'antd';

@@ -3,14 +3,15 @@
 // 视觉复用注册局同款 glassCard 毛玻璃卡片,与控制台其它模块一致。
 
 import React, { useState } from 'react';
-import { Card, Tag } from 'antd';
+import { Button, Card, InputNumber, Space, Tag, message } from 'antd';
 import type { AdminAuth } from '../../auth/types';
 import { glassCardStyle, glassCardHeadStyle } from '../../core/cardStyles';
 import { LawListTable } from './law/LawListTable';
 import { LawDetailView } from './law/LawDetailView';
 import { ProposeMenu } from './law/ProposeMenu';
-import { HouseVotePanel } from './law/HouseVotePanel';
 import { ProposalProgressView } from './law/ProposalProgressView';
+import { SignRequestModal } from './law/SignRequestModal';
+import { castRepresentativeVote } from '../api';
 
 interface Props {
   auth: AdminAuth;
@@ -33,17 +34,70 @@ function tierLabel(level?: string | null): string {
 /** 由能力位派生立法角色文案(单源自后端能力位下发,前端只镜像展示)。 */
 function roleTag(auth: AdminAuth): { text: string; color: string } {
   const canPropose = !!auth.capabilities?.canProposeLegislation;
-  const canVote = !!auth.capabilities?.canCastHouseVote;
+  const canVote = !!auth.capabilities?.canCastRepresentativeVote;
   if (canPropose && canVote) {
-    return { text: '发起院 · 发起 + 院内表决', color: 'geekblue' };
+    return { text: '发起机构 · 发起 + 代表机构表决', color: 'geekblue' };
   }
   if (!canPropose && canVote) {
-    return { text: '复议/终审院 · 只院内表决', color: 'purple' };
+    return { text: '复议/终审机构 · 只参加代表机构表决', color: 'purple' };
   }
   if (canPropose && !canVote) {
     return { text: '提案机构 · 向表决院提案', color: 'green' };
   }
   return { text: '只读', color: 'default' };
+}
+
+/** 当前代表机构表决；后端再次按机构角色校验。 */
+function RepresentativeVotePanel({ auth }: Props) {
+  const [proposalId, setProposalId] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [signRequest, setSignRequest] = useState<string | null>(null);
+
+  const vote = async (approve: boolean) => {
+    if (proposalId === null) return;
+    setSubmitting(true);
+    try {
+      setSignRequest(await castRepresentativeVote(auth, proposalId, approve));
+    } catch (error: unknown) {
+      message.error(error instanceof Error ? error.message : '表决提交失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div>
+      <Space wrap>
+        <span>提案 ID:</span>
+        <InputNumber
+          min={0}
+          value={proposalId ?? undefined}
+          onChange={(value) => setProposalId(value ?? null)}
+        />
+        <Button
+          type="primary"
+          loading={submitting}
+          disabled={proposalId === null}
+          onClick={() => vote(true)}
+        >
+          赞成
+        </Button>
+        <Button
+          danger
+          loading={submitting}
+          disabled={proposalId === null}
+          onClick={() => vote(false)}
+        >
+          反对
+        </Button>
+      </Space>
+      <SignRequestModal
+        signRequest={signRequest}
+        onClose={() => setSignRequest(null)}
+        title="扫码签署表决并提交上链"
+      />
+    </div>
+  );
 }
 
 /** 立法与表决操作端页面壳。 */
@@ -53,7 +107,7 @@ export function LegislationView({ auth }: Props) {
   const scope =
     [auth.scope_province_name, auth.scope_city_name].filter(Boolean).join(' · ') || '全国';
   const canPropose = !!auth.capabilities?.canProposeLegislation;
-  const canVote = !!auth.capabilities?.canCastHouseVote;
+  const canVote = !!auth.capabilities?.canCastRepresentativeVote;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -95,7 +149,7 @@ export function LegislationView({ auth }: Props) {
       )}
 
       <Card style={glassCardStyle} headStyle={glassCardHeadStyle} title="表决与进度">
-        {canVote && <HouseVotePanel auth={auth} />}
+        {canVote && <RepresentativeVotePanel auth={auth} />}
         <div style={{ marginTop: canVote ? 16 : 0 }}>
           <ProposalProgressView auth={auth} />
         </div>

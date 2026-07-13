@@ -26,7 +26,7 @@
 - **scope fail-closed**：立法 list 必过 `scope::filter_by_scope`；提案 `scope_code` 越权在写入边界（onchain_gate + prepare 预检）拒绝，读路径绝不放行。
 - **投票职责边界**：onchina 只做「组织提案数据 + 扫码冷签 + 提交 extrinsic + 读链展示」，**绝不计票/推进状态机**（全归投票引擎）。
 - **金额单位分**（u128 整数，禁浮点）；公钥内部 0x 小写 hex，展示 SS58(prefix=2027)。
-- 全仓字段同名：沿用 `cid_number/houses/proposer_body/vote_type/current_house/content_hash/law_id/version/scope_code/admin_account` 等，禁造别名。
+- 全仓字段同名：业务层沿用 `cid_number/houses/proposer_body/vote_type/content_hash/law_id/version/scope_code/admin_account`；引擎层统一 `current_body`。
 - 注释描述当前实现，禁「从 X 改 Y / 原来 / 之前」历史措辞。
 
 ## 已核实事实（宪法 + 链端源码）
@@ -49,8 +49,8 @@
 | 类型 | 表决类型 | 表决机构 | 流程 |
 |---|---|---|---|
 | 法律案 | 5 种(常规/常规教育/重要/重要教育/特别) | 两院/单院 | 院内→[公投]→签署→[会签]→[护宪] |
-| 任免案 | 常规案(默认)/重要案(3 次驳回升级,第55/57/64条) | 参议会/市立法会 单院 | 院内表决→通过即任免(无公投/签署/护宪) |
-| 预算案 | 常规案 | 立法机关 单院 | 院内表决→通过(细节由《预算法》定) |
+| 任免案 | 常规案(默认)/重要案(3 次驳回升级,第55/57/64条) | 参议会/市立法会 单机构 | 代表机构表决→通过即任免(无公投/签署/护宪) |
+| 预算案 | 常规案 | 立法机关 单机构 | 代表机构表决→通过(细节由《预算法》定) |
 
 ### 部署模型
 
@@ -66,7 +66,7 @@ model.rs                统一信封 + ProposalCategory + HouseRef/LegProposalSt
 category.rs             提案类型维度:本节点机构码→可发起 category×tier×vote_type 候选(扩展点)
 handler.rs / service.rs HTTP 入口 / 组织提案数据(不计票)
 chain_read_proposal.rs  通用链读 LegProposalState + 各 tally(三类共用)
-law/{mod,model,chain_propose,chain_house_vote,chain_referendum_vote,chain_executive_sign,chain_override_sign,chain_guard_vote,chain_read}.rs   法律案(本轮实现)
+law/{mod,model,action,routing,chain_propose,chain_vote,chain_read,service}.rs   法律案与代表机构表决入口
 personnel/{mod,model}.rs   任免案(本轮:PersonnelDecision 结构,链路预留)
 budget/{mod,model}.rs      预算案(本轮:BudgetPlan 结构,链路预留)
 display/{mod,handler,service}.rs   大屏只读聚合(在线席位+实时计票+提案进度)
@@ -78,7 +78,8 @@ display/{mod,handler,service}.rs   大屏只读聚合(在线席位+实时计票+
 ```
 api.ts / types.ts / index.ts
 operator/  LegislationView.tsx / ProposeMenu.tsx(唯一发起入口)
-  law/     LawEditorModal / ProposeLawModal / HouseVotePanel / SignActionModal / ProposalProgressView / LawListTable
+  law/     LawEditorModal / LawDetailView / ProposalProgressView / SignRequestModal / LawListTable
+  shared/  ProposalTallyPanel / labels / proposalStageUtils（代表机构表决共用展示）
   personnel/ PersonnelDecisionModal.tsx(预留)
   budget/    BudgetPlanModal.tsx(预留)
 display/   LegislationBoardView / SeatGrid / LiveTallyBoard / ProposalTicker(只读,独立路由)
@@ -87,13 +88,13 @@ display/   LegislationBoardView / SeatGrid / LiveTallyBoard / ProposalTicker(只
 
 ### 字段（snake/camel 三端一致，详见对话定稿）
 
-- 通用：`proposal_category`(law/personnel/budget)、`HouseRef{code, account_hex}`、`LegProposalState{proposal_id, proposal_category, tier, scope_code, proposer_body, houses, vote_type, current_house, stage, status, content_hash}`。
+- 通用：法律/任免/预算为业务分类；引擎进度投影使用 `representative_rule/current_body/vote_procedure/representative_bodies`。
 - 法律案：`ProposeLawInput{law_action, tier, scope_code, proposer_body, houses, executive, legislature, vote_type, title, title_en, chapters, effective_at}`；`LawChapter>LawSection>LawArticle>LawClause`(章>节>条>款,`number/title/title_en/body/body_en/text/text_en`)。
 - 任免案：`PersonnelAction{Appoint,Dismiss,Replace}`；`PersonnelDecision{action, office_institution_code, office_title, office_seat, nominee_cid_number, nominee_name, term_index, term_years, reason}`；`ProposePersonnelInput{tier, scope_code, proposer_body, houses, vote_type, decision}`。
 - 预算案：`BudgetPlan{budget_entity_code, fiscal_year, categories, total_revenue, total_expenditure}`；`BudgetClass>BudgetSection>BudgetItem>BudgetSubitem`(类>款>项>目,`code/name`，`revenue/expenditure` u128 分)；`ProposeBudgetInput{...}`。
-- 大屏：`LegislationBoard{institution_code, online_seats, live_tally, proposals}`、`SeatPresence{seat, admin_account, admin_name, online}`、`HouseTallyRow{proposal_id, current_house, approve, reject}`。
-- 能力位：`can_view_legislation/can_propose_legislation/can_cast_house_vote/can_sign_legislation/can_propose_personnel/can_propose_budget`(后两预留)。
-- 动作：`ProposeEnactLaw/ProposeAmendLaw/ProposeRepealLaw/CastHouseVote/CastReferendumVote/ExecutiveSign/OverrideSign/GuardVote`(写类 PASSKEY_COLD_SIGN)，`ProposePersonnel/ProposeBudget`(预留)。
+- 大屏按当前 `body_index` 展示代表机构席位和实时计票。
+- 能力位：`can_view_legislation/can_propose_legislation/can_cast_representative_vote/can_sign_legislation/can_propose_personnel/can_propose_budget`。
+- 动作：法律提案、`CastRepresentativeVote`、公投、签署、会签和护宪均为 PASSKEY_COLD_SIGN；任免/预算待业务模块接入。
 
 ## 分步卡
 
@@ -105,13 +106,13 @@ display/   LegislationBoardView / SeatGrid / LiveTallyBoard / ProposalTicker(只
 ### Phase 1 · 法律案后端
 - **04** `law/model.rs`：`ProposeLawInput` + `LawChapter/Section/Article/Clause`（章节条款）。依赖:01。风险:低。
 - **05** `law/chain_propose.rs` + `service.rs`：组织 houses/proposer_body/executive/vote_type，对齐链端 `propose_enact/amend/repeal_law` SCALE 逐字段 + `precheck_legislation_scope`（写入边界 fail-closed）。依赖:03/04。风险:高。
-- **06** `law/chain_house_vote.rs` + `chain_referendum_vote.rs` + `chain_*_sign.rs` + `chain_guard_vote.rs`：提交各表决/签署 extrinsic（冷签）。依赖:05。风险:中。
+- **06** `law/chain_vote.rs`：统一提交代表机构表决、公投、签署、会签和护宪 extrinsic（冷签）。依赖:05。风险:中。
 - **07** `law/chain_read.rs` + `chain_read_proposal.rs`：链读 get_law/list_laws + LegProposalState/tally（过 scope）。依赖:01。风险:中。
 
 ### Phase 2 · 法律案前端 operator
 - **08** `operator/LegislationView.tsx` + `ProposeMenu.tsx`（按本机构码 + category 渲染；唯一发起入口；能力位门控）。依赖:02/03。风险:中。
 - **09** `operator/law/LawEditorModal.tsx`（章节条款编辑→contentHash）+ `ProposeLawModal.tsx`（冷签复用 CitizenSignatureModal→propose）。依赖:05/08。风险:中。
-- **10** `operator/law/HouseVotePanel.tsx`（cast_house_vote）+ `SignActionModal.tsx`（只读展示签署/会签/护宪进度，本轮不做发起入口）+ `ProposalProgressView.tsx` + `LawListTable.tsx`。依赖:06/07。风险:中。
+- **10** 代表机构表决面板（`cast_representative_vote`）+ 签署/会签/护宪进度 + 提案进度与法律列表。
 
 ### Phase 3 · 大屏 display
 - **11** 后端 `display/{handler,service}.rs`：`/api/legislation/display/*` 聚合在线席位 + 实时 tally + 提案进度（纯读链，会话只读）。依赖:07。风险:中。
@@ -157,7 +158,7 @@ display/   LegislationBoardView / SeatGrid / LiveTallyBoard / ProposalTicker(只
 - [x] **Phase 1A 法律案链交互编码器完成（2026-06-30）**：
   - 新建 `domains/legislation/law/{mod,chain_propose,chain_vote}.rs`：裸 SCALE call-data 编码器,**复用 `core::institution_call` 的「构造 call data → origin 冷签 → CitizenWallet 提交」通道**(onchina 不拼签名尾、不提交)。
   - `chain_propose.rs`：`propose_enact/amend/repeal_law`(pallet **27** call 0/1/2)+ 章>节>条>款 SCALE 镜像(`ChapterArg` 等派生 Encode,字段顺序锁死链端 Chapter/Section/Article/Clause)。
-  - `chain_vote.rs`：`cast_house_vote`/`cast_referendum_vote`/`executive_sign`/`override_sign`/`guard_vote`(pallet **28** call 1–5,均 `(proposal_id:u64, approve:bool)`)。`prepare_population_snapshot`(call 0,`PopulationScope`)随公投增量。
+  - `chain_vote.rs`：`cast_representative_vote`/公投/签署/会签/护宪（pallet **26** call 1–5）。
   - **交叉校验**:`tests` 用链端真实 `legislation_yuan::{Tier,VoteType}` + codec `.encode()` 逐字节比对(新增 dev-dep `legislation-yuan`);确认 enact 全参数、amend/repeal 前缀+law_id、vote `(u64,bool)` 形态字节级一致。
   - **验收**:`cargo test -p onchina` **93 passed**(+5,0 回归)· `cargo check` **零警告** · 改动仅 onchina + Cargo.lock(未触 runtime)。
 - [x] **Phase 1B 组织逻辑层完成（2026-06-30）**：
@@ -181,12 +182,12 @@ display/   LegislationBoardView / SeatGrid / LiveTallyBoard / ProposalTicker(只
   - **待续(转 runtime 验收)**:`resolve_house_account` 全链路 = 「机构码+scope → cid_number(subjects 表既有查询)→ `derive_house_account`」;subjects 查 + scope_code↔省市码换算在 handler(1B-5)组合,需运行态 onchina+DB+链实测(读出 genesis 宪法、解出立法机构账户)。
   - 注:本轮全库另有 citizens/db/main/runtime-citizen-identity 等**非本任务外部改动**(并发进程/hook),未触碰。
 - [x] **Phase 1B-2c 提案进度链读完成（2026-06-30）**：
-  - 新建 `legislation/chain_read_proposal.rs`:`OnChainProposal`/`OnChainLegMeta`/`OnChainVoteCount32/64` **Decode 镜像**(字段序锁死 votingengine `Proposal`、legislation-vote `LegislationMeta`、`VoteCountU32/U64`)+ `LegProposalState`/`VoteTally` 只读 DTO(serde camelCase)+ `build_leg_proposal_state`(**只搬运,绝不计票**)。
+  - `chain_read_proposal.rs` 现按 `OnChainRepresentativeMeta` 与 `OnChainLegislationMeta` 分离解码，只搬运链上事实。
   - **PopulationScope 规避**:`referendum_scope: Option<PopulationScope>` 是 `LegislationMeta` 末字段且投影不需要 → 用**前缀解码镜像**(SCALE decode 只读声明字段、忽略尾部字节),无需引入 `PopulationScope` 结构。单测 `leg_meta_prefix_mirror_ignores_trailing_referendum_scope` 验证成立。
-  - subxt `fetch_proposal_state(proposal_id)`:泛型 `fetch_value_by_proposal_id::<V>`(iterate + `storage_key_suffix::<8>` 取 u64 key + 镜像 decode)读 Proposal/LegMeta/两 tally 装配;`chain_runtime::storage_key_suffix` 改 `pub(crate)` 复用(onchina 内,零 runtime 触碰)。compile-verified。
+  - subxt 按明确键点查 Proposal、两类元数据和 `(proposal_id, body_index)` 代表计票。
   - **验收**:`cargo test -p onchina` **115 passed**(+3 提案 golden,0 回归)· 立法模块**零警告** · fmt clean · runtime 未触。
 - [x] **Phase 1B-4 冷签 sign_request 完成（2026-06-30）**：
-  - **核实纠正**:立法提案/院内表决是**链上 extrinsic**(议员 origin 冷签提交),走**链交易 QR 路径**(`b.a=chain_action_code`、`b.d=SCALE call_data`,`build_sign_request_bytes`),**不走** `onchina_admin_governance` 文本路径 → **不经 `auth/actions.rs` 的 prepare/commit 治理流,零改 actions/action_sign/operation_auth**。范式与 `institution::subjects::registration::build_institution_create_sign_request` 完全一致。
+  - **核实纠正**:立法提案/代表机构表决是**链上 extrinsic**(议员 origin 冷签提交),走**链交易 QR 路径**(`b.a=chain_action_code`、`b.d=SCALE call_data`,`build_sign_request_bytes`),**不走** `onchina_admin_governance` 文本路径 → **不经 `auth/actions.rs` 的 prepare/commit 治理流,零改 actions/action_sign/operation_auth**。范式与 `institution::subjects::registration::build_institution_create_sign_request` 完全一致。
   - 新建 `law/action.rs`:`build_propose_law_sign_request`(input+proposer_code+actor_pubkey+`resolve_account` 注入 → `build_propose_law_call` → `build_sign_request_bytes`)+ `build_house_vote_sign_request`。`resolve_account` 闭包注入保持**与 DB 解耦、可单测**。
   - **验收(单测)**:`cargo test -p onchina` **118 passed**(+3,0 回归)——sign_request 承载正确动作码(enact 0x1B00 / house-vote 0x1C01)+ 非空 b.d(call_data base64)+ 越权路由 422 早拒;立法模块**零警告** · fmt clean · runtime 未触。
   - **待续(1B-5 组合)**:handler 注入真实 `resolve_account` = 「机构码+scope → subjects 查 cid_number → `derive_house_account`」;`precheck_legislation_scope` 在 handler 先拦截。
@@ -197,20 +198,20 @@ display/   LegislationBoardView / SeatGrid / LiveTallyBoard / ProposalTicker(只
   - **脚手架清理**:移除全 `legislation/*` 模块级 `#![allow(dead_code)]`;`fetch_*` 改用 `decode_law/decode_law_version`(DRY,decoder 转生产消费);仅对**真预留** API 加定点 `allow`(公投/签署/护宪编码器+call index、`as_u8`、decode 镜像布局字段、候选 `category` 字段),各附「预留原因」注释。
   - **验收**:`cargo test -p onchina` **118 passed**(0 回归)· 立法模块**零警告** · fmt clean · runtime 未触(chain_runtime 仅 `storage_key_suffix` 转 pub(crate))。
   - **🔴 待真实运行态验收(需环境)**:running onchina + PostgreSQL + 链 + genesis 宪法——`GET /laws` 读出宪法(law_id=0)、`resolve_house_account` 解出立法机构账户、`POST /propose` 产正确 sign_request、`GET /proposals/:id` 读活跃 stage/tally。首个需核对:subjects 对国家/省/市机构的 `province_code/city_code` 取值(空/`000`)。端到端上链等 CitizenWallet(既定)。
-- [x] **Phase 2A 前端数据层完成（2026-06-30）**：新建 `frontend/legislation/{types,api,index}.ts`——`types.ts` camelCase 逐字镜像后端 DTO(LawView/HouseRef/LawChapter…/ProposeLawInput/LegProposalState/VoteTally)+ 层级/表决/状态/阶段数值常量(对齐链端);`api.ts` 五个客户端(`listLaws`/`getLaw`/`getProposalState`/`proposeLegislation`/`castHouseVote`,走 `utils/http.ts::adminRequest`,发起/表决返回 sign_request)。`tsc --noEmit` **0 error**。
+- [x] **Phase 2A 前端数据层完成**：法律 DTO 与引擎代表进度 DTO 分离；表决客户端使用 `castRepresentativeVote`。
 - [x] **Phase 2B 界面壳 + 路由完成（2026-06-30）**:新建 `legislation/operator/LegislationView.tsx`(院身份头 + 立法角色 Tag[由能力位派生:发起院/复议院/仅提案] + 层级/辖区/机构码 + 按能力位分区占位:本级法律/发起提案/表决进度,复用 glassCard 毛玻璃卡);`App.tsx` 接入——`ActiveView` 增 `'legislation'`、`firstBusinessView` 增分支、Tab「立法与表决」(`canViewLegislation` 门控)、render 分支。`tsc --noEmit` **0 error** + `npm run build` ✓。
 - [x] **Phase 2C-后端 `list_my_laws` 完成（2026-06-30）**:`handler.rs` 加 `list_my_laws`——由 `ctx.admin_level`+`scope_codes(ctx)` **会话派生 tier+scope**(国家级 tier[0,1] 并入宪法、省 tier2 本省、市 tier3 本市),前端不传码(解掉 2B 遗留:前端拿不到 china scope_code);`build_law_views` 抽为 `list_laws`/`list_my_laws` 共用 helper;`main.rs` 挂 `GET /api/legislation/laws/mine`(静态段先于 `:law_id`)。`cargo test -p onchina` **118 passed** · 零警告 · fmt clean。**运行态待核对**:scope 派生 china 码口径(与 resolve_house_account 同一核对点)。
 - [x] **Phase 2C-前端 法律读界面完成（2026-06-30）**:`api.ts` 加 `listMyLaws`;新建 `operator/law/{labels.tsx,LawListTable.tsx,LawDetailView.tsx}`——`labels` 层级/表决类型中文 + 语义色状态 Tag(生效绿/待生效金/废止灰);`LawListTable` antd Table(会话派生 scope,行→详情,取消标志取数,空态友好);`LawDetailView` 章>节>条>款 编辑体只读渲染 + 宪法双语切换 + **零发起入口**(阅读页铁律);`LegislationView` 法律区块接列表/详情切换。`tsc` **0 error** + `npm run build` ✓。
 - [x] **Phase 2D-1 发起 UI 完成（2026-06-30）**:后端 `GET /api/legislation/proposable`(单源 `proposable_candidates`,读 category → 去掉预留 allow)+ 挂路由;前端 `api.getProposable`+`ProposableCandidate` 类型;新建 `operator/law/{ProposeMenu.tsx,LawEditorModal.tsx}`——`ProposeMenu`(唯一发起入口:表决类型 Select 单源自 proposable + 立法/修法/废法);`LawEditorModal`(章>节>条>款 嵌套编辑器,structuredClone 不可变更新,立法/修法带正文·废法只 law_id,**onOk 组装 ProposeLawInput 并预览**);`LegislationView` 发起区块接入。`cargo test` 118 passed·零警告;`tsc` 0·`build` ✓。
 - [x] **Phase 2D-2 发起提交 + 冷签完成（2026-06-30）**:后端 `propose_legislation` **会话派生 scope_code 覆盖前端**(防越权伪造辖区)+ can_propose 改判 vote_type 成员(放行国家级修宪 tier 0,层级由 precheck 校验);前端 `LawEditorModal` onOk → `api.proposeLegislation` → 得 sign_request → **antd `<QRCode>` 弹窗**(用公民钱包扫码冷签并提交上链)。`cargo test` 118 passed·零警告·fmt clean;`tsc` 0·`build` ✓。**端到端 scan+submit 依赖 CitizenWallet 立法支持(卡 20260624-legislation-dual-client,另线程)**。
-- [x] **Phase 2E 院内表决 + 冷签完成（2026-06-30）**:抽 `operator/law/SignRequestModal.tsx`(sign_request→QR 弹窗,发起/表决共用;`LawEditorModal` 改用它);新建 `HouseVotePanel.tsx`(提案 ID + 赞成/反对 → `api.castHouseVote` → sign_request → 共用 QR 弹窗);`LegislationView`「表决与进度」区块接入(`canCastHouseVote` 门控,后端 role 二次校验)。`tsc` 0·`build` ✓。端到端 scan+submit 依赖 CitizenWallet(另线程)。
-- [x] **Phase 2F 提案进度看板完成（2026-06-30）**:新建 `operator/law/ProposalProgressView.tsx`(提案 ID 输入 → `api.getProposalState` → antd `Steps` 六阶段[院内表决/公民投票/行政签署/三人会签/护宪终审,`current` 由 `state.stage` 对齐 `STAGE_LEG_*` 定位] + 状态 Tag[投票中蓝/通过绿/否决红/已执行绿/执行失败橙,对齐链端 `STATUS_*`] + 当前院 + `Progress` 计票条[院内始终显示;公投仅 `referendumRequired` 时] + 需护宪/需公投 Tag);`LegislationView`「表决与进度」区块接入(表决面板下方),移除已用尽的 `placeholderStyle`。`tsc --noEmit` **0 error** + `npm run build` ✓。**只读投影**:计票/阶段判定全在链端,前端只搬运。**运行态待核对**:活跃提案 stage/tally 实际读数(与 1B-5 同一核对点)。
+- [x] **Phase 2E 代表机构表决 + 冷签完成**：表决面板调用 `castRepresentativeVote`，由 `canCastRepresentativeVote` 门控并经后端角色复核。
+- [x] **Phase 2F 提案进度看板完成（2026-06-30）**:新建 `operator/law/ProposalProgressView.tsx`(提案 ID 输入 → `api.getProposalState` → antd `Steps` 展示代表机构表决、公民投票、行政签署、三人会签和护宪终审 + 状态 Tag + 当前代表机构 + 当前机构计票条);`LegislationView`「表决与进度」区块接入。`tsc --noEmit` **0 error** + `npm run build` ✓。**只读投影**:计票/阶段判定全在链端,前端只搬运。
 - [x] **Phase 2(操作端 operator)整体完工**:读(列表/详情)+ 发起(菜单/编辑器/冷签)+ 表决(院内一人一票/冷签)+ 进度(六阶段看板),法律案最小闭环 UI 齐备。端到端 scan+submit 依赖 CitizenWallet(另线程),真实运行态验收待环境。
 - [x] **Phase 3 大屏 display 完工（2026-06-30,understand+implement+adversarial-review 三段工作流)**:
-  - **后端(免登录只读,fail-closed)**:新建 `domains/legislation/display/{mod,model,chain_read,service,handler}.rs`——`model` DTO(`SeatView{adminAccount,name,title,vote:Some/None}`/`ActiveProposalView{state:LegProposalState,seats,approved/rejected/pendingCount}`/`DisplayBoard{institutionCode,cidShortName,scopeLabel,rosterTotal,activeProposals}`,camelCase,嵌入既有 `LegProposalState` 不重定义);`chain_read` 两读——`fetch_active_proposal_ids`(点查 `VotingEngine::ActiveProposalsBySubject[InstitutionCid(cid_number)]`→`Vec<u64>`≡BoundedVec)+ `fetch_house_ballots`(按 proposal_id **部分键迭代**双 Map `LegislationVote::LegHouseVotesByAdmin`,尾 32B=账户 via `storage_key_suffix::<32>`,value=bool→`HashMap<0x账户,bool>`);`service::build_display_board` 名册×活跃立法提案(kind=2 过滤)×逐席左连接投票+聚合计数;`handler` 由 `active_node_binding` 定本机构(**无请求参数**)。`chain_runtime.rs` 加 `fetch_active_admin_profiles_onchain`+`OnChainAdminProfileView`(复用 AdminAccounts 读,保留 name/admin_role 展示字段)。`main.rs` 挂 `GET /api/public/legislation/display/board` 于 **public_routes(无 login 中间件)**。
+  - **后端免登录只读**：逐席读取 `RepresentativeVotesByAccount`，按当前 `body_index` 过滤后与本机构管理员名册左连接；同钱包跨机构票据不会覆盖。
   - **前端(hash `#/display` 分流,免登录)**:`main.tsx` 顶层 `#/display`→`<DisplayScreen/>`(绕过 AuthProvider);抽共享叶子层 `shared/{proposalStageUtils.ts(STAGES/statusTag/approvalPercent),ProposalTallyPanel.tsx(六阶段纯展示),labels.ts(tierLabel/voteTypeLabel)}`,`ProposalProgressView` 改用之(操作端/大屏共用);新建 `display/{types,api(publicRequest),SeatsBoard(逐席色块赞成绿/反对红/未投灰),DisplayScreen(轮询 12s+院头+每提案 TallyPanel+SeatsBoard)}`;`utils/http.ts` 加 `publicRequest=request` 别名。
   - **对抗式评审(4 维×独立复核,27 agent)+ 落地修复 6 项**:① FRG 哨兵 main_account → `service` 加 `frg_province_code.is_some()` 跳过无意义点查;② 无鉴权链读放大 → `handler` 加**单飞+3s TTL 缓存**(tokio 异步锁串行化构建,并发/高频轮询合并为每窗口一次扇出);③ 内部错误细节泄露 → 公开端点回**固定文案+错误码**,细节仅 `tracing` 落日志;④ `shared/`→`operator/` 反向依赖 → `voteTypeLabel/tierLabel` 下沉 `shared/labels.ts`,operator re-export;⑤ antd5 `Spin tip` 空 render → 改 spinner+同级文案;⑥ a11y → 院名 `<h1>`/提案标题 `<h2>`/section `aria-label`。**遗留(deferred,已开 task chip)**:前端无 ESLint(react-hooks/jsx-a11y 全项目未启用,预存问题)。
-  - **验收**:`cargo test -p onchina` **126 passed**(+8:chain_read 3/service 2/handler scope_label 3)·零警告·fmt clean·runtime 未触;`tsc --noEmit` 0·`build` ✓·shared 无向上 import。**🔴 运行态待环境**:立法节点开 `#/display` → 名册出席、活跃提案实时刷新、逐席色块反映 `LegHouseVotesByAdmin`;首核对点=`ActiveProposalsBySubject` 是否含两院参与提案(当前仅读本机构 owned 活跃列表,跨院可见为潜在细化点)+ subxt 部分键迭代双 Map 实读。
+  - **当前验收口径**：立法节点打开 `#/display`，逐席色块读取当前代表机构的 `RepresentativeVotesByAccount`。
 - [x] **Phase 4 任免案/预算案预留结构完工（2026-06-30,understand 工作流 + 落地 + 复核)**:
   - **链端现状核实(工作流侦察)**:链上**无** `PROPOSAL_KIND_PERSONNEL/BUDGET`、无任免/预算 extrinsic/pallet(仅 kind 0-3=INTERNAL/JOINT/LEGISLATION/ELECTION;legislation-yuan 仅 enact/amend/repeal)。**禁**借道 PROPOSAL_KIND_LEGISLATION(会污染 leg-yuan 回调只写 LawVersion)。故 Phase 4 **仅锁链下 schema**,发起/表决/读链链端支持后另卡(新增 kind + pallet + 重新创世,含 runtime 二次确认)。
   - **任免案(宪法第100/106条,政府提任免职书→参议会/市立法会单院常规案)**:新建 `personnel/{mod,model}.rs`——`PersonnelAction{Appoint,Dismiss,Replace}`(snake_case)+ `PersonnelDecision{action,office_institution_code,office_title,office_seat,nominee_cid_number,nominee_name,term_index,term_years,reason}`(camelCase,取任务卡定稿)+ `ProposePersonnelInput{tier,scope_code,vote_type,decision}`(houses/scope 后端解析,对齐 ProposeLawInput 纪律)。**待定项**:职位码表 office(当前机构码+自由文本职务)、升级路径字段化 reject_count/escalated(第53/55/57/64条,随链路上线不投机引入)。

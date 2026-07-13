@@ -177,19 +177,6 @@ export function membershipPlan(level: string): MembershipPlan {
   return membershipPlans.freedom;
 }
 
-export function identityLevelRank(level: RequiredIdentityLevel): number {
-  if (level === 'candidate') return 2;
-  if (level === 'voting') return 1;
-  return 0;
-}
-
-export function identitySatisfies(
-  actual: RequiredIdentityLevel,
-  required: RequiredIdentityLevel
-): boolean {
-  return identityLevelRank(actual) >= identityLevelRank(required);
-}
-
 /// 订阅资格：精确匹配——只能订阅"本身份档对应"的会员，禁止降档/越级。
 /// 例：voting 身份只能订 voting；candidate 只能订 candidate；visitor 身份可订
 /// freedom 与 democracy（二者 required_identity_level 均为 'visitor'）。

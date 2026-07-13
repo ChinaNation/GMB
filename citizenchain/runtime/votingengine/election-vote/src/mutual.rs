@@ -4,7 +4,6 @@
 //! 后续可接业务 provider 自动生成。
 
 use frame_support::pallet_prelude::DispatchResult;
-use frame_system::pallet_prelude::BlockNumberFor;
 
 use crate::pallet::{Config, MaxElectionOfficeCodeOf, Pallet};
 
@@ -19,8 +18,8 @@ impl<T: Config> Pallet<T> {
         office_code: frame_support::pallet_prelude::BoundedVec<u8, MaxElectionOfficeCodeOf<T>>,
         rule_id: u32,
         seat_count: u16,
-        term_start: BlockNumberFor<T>,
-        term_end: BlockNumberFor<T>,
+        term_start: u32,
+        term_end: u32,
         candidates: sp_std::vec::Vec<T::AccountId>,
         voters: sp_std::vec::Vec<T::AccountId>,
     ) -> Result<u64, sp_runtime::DispatchError> {

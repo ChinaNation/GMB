@@ -94,7 +94,7 @@ class QrActions {
 
   // 立法投票 LegislationVote(26 = 0x1a)
   static const int prepareLegislationSnapshot = 0x1a00;
-  static const int castHouseVote = 0x1a01;
+  static const int castRepresentativeVote = 0x1a01;
   static const int castLegislationReferendum = 0x1a02;
   static const int executiveSign = 0x1a03;
   static const int overrideSign = 0x1a04;
@@ -156,7 +156,7 @@ class QrActions {
         'propose_amend_law' => proposeAmendLaw,
         'propose_repeal_law' => proposeRepealLaw,
         'prepare_legislation_snapshot' => prepareLegislationSnapshot,
-        'cast_house_vote' => castHouseVote,
+        'cast_representative_vote' => castRepresentativeVote,
         'cast_referendum_vote' => castLegislationReferendum,
         'executive_sign' => executiveSign,
         'override_sign' => overrideSign,

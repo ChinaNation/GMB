@@ -14,7 +14,7 @@ export type WorkspaceAction =
   | 'view_own_admins'
   | 'view_legislation'
   | 'propose_legislation'
-  | 'cast_house_vote'
+  | 'cast_representative_vote'
   | 'sign_legislation'
   | 'view_institution_profile'
   | 'view_operation_records';
@@ -36,4 +36,3 @@ export type InstitutionWorkspace = {
   workspace_title: string;
   workspace_sections: WorkspaceSection[];
 };
-

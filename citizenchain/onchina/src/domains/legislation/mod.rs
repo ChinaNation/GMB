@@ -10,7 +10,7 @@
 /// 预算案(类>款>项>目)字段 schema(Phase 4 预留;链端无 PROPOSAL_KIND_BUDGET,发起/表决/读链另卡)。
 pub(crate) mod budget;
 pub(crate) mod category;
-/// 提案进度只读投影(votingengine Proposal + legislation-vote LegMeta/tally → LegProposalState)。
+/// 提案进度只读投影（Proposal + 代表/法律元数据 + tally）。
 pub(crate) mod chain_read_proposal;
 /// 大屏只读看板(Phase 3)——本节点机构名册 × 活跃提案 × 逐席投票聚合,免登录只读。
 pub(crate) mod display;

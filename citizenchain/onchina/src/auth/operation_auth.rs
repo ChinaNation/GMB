@@ -56,8 +56,8 @@ pub(crate) enum AdminActionType {
     ProposeAmendLaw,
     /// 发起废法法律案。
     ProposeRepealLaw,
-    /// 院内表决(议员/委员对当前院投票)。
-    CastHouseVote,
+    /// 代表机构表决（管理员按当前机构席位投票）。
+    CastRepresentativeVote,
     /// 特别案立法公投。
     CastReferendumVote,
     /// 行政签署 / 否决(总统/省长/市长;另线程接入)。
@@ -93,7 +93,7 @@ impl AdminActionType {
             Self::ProposeEnactLaw => "PROPOSE_ENACT_LAW",
             Self::ProposeAmendLaw => "PROPOSE_AMEND_LAW",
             Self::ProposeRepealLaw => "PROPOSE_REPEAL_LAW",
-            Self::CastHouseVote => "CAST_HOUSE_VOTE",
+            Self::CastRepresentativeVote => "CAST_REPRESENTATIVE_VOTE",
             Self::CastReferendumVote => "CAST_REFERENDUM_VOTE",
             Self::ExecutiveSign => "EXECUTIVE_SIGN",
             Self::OverrideSign => "OVERRIDE_SIGN",
@@ -126,7 +126,7 @@ impl AdminActionType {
             | Self::ProposeEnactLaw
             | Self::ProposeAmendLaw
             | Self::ProposeRepealLaw
-            | Self::CastHouseVote
+            | Self::CastRepresentativeVote
             | Self::CastReferendumVote
             | Self::ExecutiveSign
             | Self::OverrideSign
@@ -189,7 +189,7 @@ pub(crate) fn parse_action_type(
         "PROPOSE_ENACT_LAW" => Ok(AdminActionType::ProposeEnactLaw),
         "PROPOSE_AMEND_LAW" => Ok(AdminActionType::ProposeAmendLaw),
         "PROPOSE_REPEAL_LAW" => Ok(AdminActionType::ProposeRepealLaw),
-        "CAST_HOUSE_VOTE" => Ok(AdminActionType::CastHouseVote),
+        "CAST_REPRESENTATIVE_VOTE" => Ok(AdminActionType::CastRepresentativeVote),
         "CAST_REFERENDUM_VOTE" => Ok(AdminActionType::CastReferendumVote),
         "EXECUTIVE_SIGN" => Ok(AdminActionType::ExecutiveSign),
         "OVERRIDE_SIGN" => Ok(AdminActionType::OverrideSign),
@@ -290,7 +290,7 @@ mod tests {
             AdminActionType::ProposeEnactLaw,
             AdminActionType::ProposeAmendLaw,
             AdminActionType::ProposeRepealLaw,
-            AdminActionType::CastHouseVote,
+            AdminActionType::CastRepresentativeVote,
             AdminActionType::CastReferendumVote,
             AdminActionType::ExecutiveSign,
             AdminActionType::OverrideSign,

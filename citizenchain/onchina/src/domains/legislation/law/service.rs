@@ -8,7 +8,7 @@
 use super::chain_propose::{
     encode_propose_amend_law, encode_propose_enact_law, encode_propose_repeal_law, LegHouse,
 };
-use super::chain_vote::encode_cast_house_vote;
+use super::chain_vote::encode_cast_representative_vote;
 use super::model::{to_chapter_args, LawActionInput, ProposeLawInput};
 use super::routing::{routing_for, vote_type_is_education};
 use crate::core::institution_call::ChainCall;
@@ -164,9 +164,9 @@ fn ensure_title_and_chapters(input: &ProposeLawInput) -> Result<(), LegislationE
     Ok(())
 }
 
-/// 组织一次院内表决 → 裸 SCALE call-data。
-pub fn build_house_vote_call(proposal_id: u64, approve: bool) -> ChainCall {
-    encode_cast_house_vote(proposal_id, approve)
+/// 组织一次代表机构表决 → 裸 SCALE call-data。
+pub fn build_representative_vote_call(proposal_id: u64, approve: bool) -> ChainCall {
+    encode_cast_representative_vote(proposal_id, approve)
 }
 
 #[cfg(test)]
@@ -273,8 +273,8 @@ mod tests {
     }
 
     #[test]
-    fn house_vote_call_targets_legislation_vote_pallet() {
-        let call = build_house_vote_call(42, true);
-        assert_eq!(&call.call_data[..2], &[26, 1]); // pallet 26 call 1(cast_house_vote)
+    fn representative_vote_call_targets_legislation_vote_pallet() {
+        let call = build_representative_vote_call(42, true);
+        assert_eq!(&call.call_data[..2], &[26, 1]); // pallet 26 call 1(cast_representative_vote)
     }
 }

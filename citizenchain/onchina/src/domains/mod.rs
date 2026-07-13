@@ -7,6 +7,6 @@ pub(crate) mod address;
 pub(crate) mod citizens;
 pub(crate) mod docs;
 pub(crate) mod gov;
-/// 立法与表决域(立法机构发起提案 / 院内表决 / 大屏只读)。
+/// 立法与表决域（业务提案 / 代表机构表决 / 大屏只读）。
 pub(crate) mod legislation;
 pub(crate) mod private;

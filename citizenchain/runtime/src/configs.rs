@@ -24,12 +24,13 @@
 // For more information, please refer to <http://unlicense.org>
 
 // Substrate and Polkadot dependencies
-use admin_primitives::{AdminAccountQuery, AdminProfile, ADMIN_ROLE_CONSTITUTION_GUARD};
+use admin_primitives::AdminAccountQuery;
 use alloc::vec::Vec;
 use codec::Decode;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use codec::Encode;
 use entity_primitives::InstitutionMultisigQuery;
+use entity_primitives::InstitutionRoleQuery;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use frame_support::traits::UnfilteredDispatchable;
 use frame_support::{
@@ -401,7 +402,6 @@ impl onchain::CallFeeKind<AccountId, RuntimeCall, Balance> for RuntimeFeeKindCla
             // 手动重试/取消统一收口至 votingengine::retry_passed_proposal /
             // cancel_passed_proposal(在 RuntimeCall::VotingEngine 分支按 VOTE_FLAT_FEE 处理)。
             // 业务 pallet 的 propose_X / cleanup_X 全部按 VOTE_FLAT_FEE 收费(1 元/次)。
-            RuntimeCall::PublicAdmins(_) | RuntimeCall::PrivateAdmins(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::RuntimeUpgrade(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::GrandpaKeyChange(_) => FeeChargeKind::VoteFlat,
             // 立法院模块 propose_enact_law / propose_amend_law / propose_repeal_law 是治理提案交易,
@@ -446,7 +446,7 @@ impl onchain::CallFeeKind<AccountId, RuntimeCall, Balance> for RuntimeFeeKindCla
             //   InternalVote::cast / JointVote::cast_admin / JointVote::cast_referendum
             RuntimeCall::InternalVote(_) => FeeChargeKind::VoteFlat,
             RuntimeCall::JointVote(_) => FeeChargeKind::VoteFlat,
-            // 立法投票 3 个 extrinsic(prepare_population_snapshot / cast_house_vote /
+            // 立法投票 3 个 extrinsic(prepare_population_snapshot / cast_representative_vote /
             // cast_referendum_vote)按投票统一价 1 元/次(ADR-027)。
             RuntimeCall::LegislationVote(_) => FeeChargeKind::VoteFlat,
             // 选举投票创建/投票 extrinsic 按投票统一价 1 元/次。
@@ -708,6 +708,35 @@ fn cid_scope_codes(cid_number: &[u8]) -> Option<([u8; 2], [u8; 3])> {
     Some((province_code, city_code))
 }
 
+/// 联邦注册局省专员权限只认 entity 中的有效岗位任职。
+///
+/// `admins` 只回答“是否为联邦注册局管理员”，省级业务边界由
+/// `PROVINCE_COMMISSIONER_<省码>` 岗位确定，不再读取独立省级管理员表。
+fn is_active_frg_province_commissioner(
+    frg_main_account: &AccountId,
+    admin: &AccountId,
+    province_code: &[u8],
+) -> bool {
+    if province_code.len() != 2
+        || RuntimeAdminAccountQuery::resolve_institution_code_for_account(frg_main_account)
+            != Some(primitives::cid::code::FRG)
+    {
+        return false;
+    }
+    let Some(registered) = public_manage::AccountRegisteredCid::<Runtime>::get(frg_main_account)
+    else {
+        return false;
+    };
+    let mut code = [0_u8; 2];
+    code.copy_from_slice(province_code);
+    let role_code = primitives::governance_skeleton::province_commissioner_role_code(code);
+    <public_manage::Pallet<Runtime> as InstitutionRoleQuery<AccountId>>::is_active_assignment(
+        registered.cid_number.as_slice(),
+        admin,
+        role_code.as_slice(),
+    )
+}
+
 impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthority {
     fn can_register_institution(
         registrar: &AccountId,
@@ -760,13 +789,11 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
 
         const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
         if issuer_code == admin_primitives::FRG {
-            let Some(group_province_code) = public_admins::FederalRegistryProvinceGroupAccounts::<
-                Runtime,
-            >::get(issuer_main_account) else {
-                return false;
-            };
-            // FRG 省行政区组只能登记本省 CID;FRG 主账户聚合 215 人不携带省码,不得用于登记。
-            return group_province_code == target_province_code;
+            return is_active_frg_province_commissioner(
+                issuer_main_account,
+                &signer_account,
+                &target_province_code,
+            );
         }
 
         if issuer_code == CITY_REGISTRY_CODE {
@@ -790,12 +817,9 @@ pub struct RuntimeAddressAuthority;
 
 impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAuthority {
     fn can_update_catalog(who: &AccountId, registrar_account: &AccountId) -> bool {
-        if public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
-            .is_none()
-        {
-            return false;
-        }
-        RuntimeAdminAccountQuery::is_active_admin_of_account(registrar_account, who)
+        RuntimeAdminAccountQuery::resolve_institution_code_for_account(registrar_account)
+            == Some(primitives::cid::code::FRG)
+            && RuntimeAdminAccountQuery::is_active_admin_of_account(registrar_account, who)
     }
 
     fn can_update_address(
@@ -811,11 +835,10 @@ impl address_registry::AddressUpdateAuthority<AccountId> for RuntimeAddressAutho
             return false;
         }
 
-        if let Some(group_province_code) =
-            public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
+        if RuntimeAdminAccountQuery::resolve_institution_code_for_account(registrar_account)
+            == Some(primitives::cid::code::FRG)
         {
-            // FRG 省行政区组管理员可以更新本省任意地址,不能跨省改地址。
-            return group_province_code.as_ref() == province_code;
+            return is_active_frg_province_commissioner(registrar_account, who, province_code);
         }
 
         const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
@@ -956,6 +979,8 @@ where
         legal_representative_cid_number: &[u8],
         legal_representative_account: &AccountId,
         account_names: &[Vec<u8>],
+        roles_payload: &[u8],
+        assignments_payload: &[u8],
         nonce: &NonceBytes,
         signature: &SignatureBytes,
         issuer_cid_number: &[u8],
@@ -975,6 +1000,8 @@ where
                 scope_city_name,
                 cid_short_name,
                 legal_representative_account,
+                roles_payload,
+                assignments_payload,
                 town_code,
             );
             return !cid_number.is_empty()
@@ -982,6 +1009,8 @@ where
                 && !legal_representative_name.is_empty()
                 && !legal_representative_cid_number.is_empty()
                 && !account_names.is_empty()
+                && !roles_payload.is_empty()
+                && !assignments_payload.is_empty()
                 && !nonce.as_ref().is_empty()
                 && !signature.as_ref().is_empty();
         }
@@ -1005,6 +1034,8 @@ where
                 legal_representative_cid_number,
                 legal_representative_account,
                 account_names,
+                roles_payload,
+                assignments_payload,
                 nonce.as_ref(),
                 issuer_cid_number,
                 issuer_main_account,
@@ -1180,11 +1211,14 @@ impl
             return false;
         }
 
-        if let Some(group_province_code) =
-            public_admins::FederalRegistryProvinceGroupAccounts::<Runtime>::get(registrar_account)
+        if RuntimeAdminAccountQuery::resolve_institution_code_for_account(registrar_account)
+            == Some(primitives::cid::code::FRG)
         {
-            // FRG 省行政区组管理员可登记、更新、撤销本省任意公民身份。
-            return group_province_code.as_ref() == residence_province_code;
+            return is_active_frg_province_commissioner(
+                registrar_account,
+                registrar,
+                residence_province_code,
+            );
         }
 
         const CITY_REGISTRY_CODE: primitives::cid::code::InstitutionCode = *b"CREG";
@@ -1306,7 +1340,6 @@ impl public_admins::Config for Runtime {
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type InternalVoteEngine = InternalVote;
     type InstitutionQuery = RuntimeInstitutionQuery;
-    type WeightInfo = public_admins::weights::SubstrateWeight<Runtime>;
 }
 
 impl private_admins::Config for Runtime {
@@ -1314,7 +1347,6 @@ impl private_admins::Config for Runtime {
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type InternalVoteEngine = InternalVote;
     type InstitutionQuery = RuntimeInstitutionQuery;
-    type WeightInfo = private_admins::weights::SubstrateWeight<Runtime>;
 }
 
 impl resolution_destroy::Config for Runtime {
@@ -1406,6 +1438,30 @@ impl entity_primitives::InstitutionMultisigQuery<AccountId> for RuntimeInstituti
     }
 }
 
+/// 选举引擎终态结果路由。
+///
+/// 投票引擎只负责产生不可变结果；runtime 按机构码把结果交给对应 entity 模组。
+/// entity 负责校验机构、岗位、席位与任期，并在同一事务内同步 admins 钱包集合。
+pub struct RuntimeInstitutionAssignmentResultHandler;
+
+impl entity_primitives::InstitutionAssignmentResultHandler<AccountId>
+    for RuntimeInstitutionAssignmentResultHandler
+{
+    fn apply_institution_assignment_result(
+        result: entity_primitives::InstitutionAssignmentResult<AccountId>,
+    ) -> DispatchResult {
+        if admin_primitives::is_public_admin_code(&result.institution_code) {
+            return public_manage::Pallet::<Runtime>::apply_institution_assignment_result(result);
+        }
+        if admin_primitives::is_private_admin_code(&result.institution_code) {
+            return private_manage::Pallet::<Runtime>::apply_institution_assignment_result(result);
+        }
+        Err(sp_runtime::DispatchError::Other(
+            "UnsupportedInstitutionAssignmentResultCode",
+        ))
+    }
+}
+
 pub struct RuntimeAdminAccountQuery;
 
 impl RuntimeAdminAccountQuery {
@@ -1428,16 +1484,7 @@ impl RuntimeAdminAccountQuery {
             return Self::is_active_account_admin(institution_code, account.clone(), who);
         }
 
-        // FRG 省行政区虚拟组账户不属于机构生命周期账户，只能按固定治理码查公权管理员模块。
-        [
-            admin_primitives::FRG,
-            primitives::cid::code::NRC,
-            primitives::cid::code::PRC,
-            primitives::cid::code::PRB,
-            primitives::cid::code::NJD,
-        ]
-        .iter()
-        .any(|code| Self::is_active_account_admin(*code, account.clone(), who))
+        false
     }
 }
 
@@ -1557,37 +1604,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
         None
     }
 
-    fn active_account_admin_profiles(
-        institution_code: primitives::cid::code::InstitutionCode,
-        admin_root_account_id: AccountId,
-    ) -> Option<Vec<AdminProfile<AccountId>>> {
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Runtime>::active_account_admin_profiles(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Runtime>::active_account_admin_profiles(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
-            return public_admins::Pallet::<Runtime>::active_account_admin_profiles(
-                institution_code,
-                admin_root_account_id.clone(),
-            )
-            .or_else(|| {
-                private_admins::Pallet::<Runtime>::active_account_admin_profiles(
-                    institution_code,
-                    admin_root_account_id,
-                )
-            });
-        }
-        None
-    }
-
     fn active_account_admins_len(
         institution_code: primitives::cid::code::InstitutionCode,
         admin_root_account_id: AccountId,
@@ -1645,31 +1661,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 who,
             );
         }
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
-        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
-            return public_admins::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
-                institution_code,
-                admin_root_account_id.clone(),
-                who,
-            ) || private_admins::Pallet::<Runtime>::is_pending_account_admin_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-                who,
-            );
-        }
         false
     }
 
@@ -1683,30 +1674,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 admin_root_account_id,
             );
         }
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Runtime>::pending_account_admins_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Runtime>::pending_account_admins_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
-            return public_admins::Pallet::<Runtime>::pending_account_admins_for_snapshot(
-                institution_code,
-                admin_root_account_id.clone(),
-            )
-            .or_else(|| {
-                private_admins::Pallet::<Runtime>::pending_account_admins_for_snapshot(
-                    institution_code,
-                    admin_root_account_id,
-                )
-            });
-        }
         None
     }
 
@@ -1719,30 +1686,6 @@ impl AdminAccountQuery<AccountId> for RuntimeAdminAccountQuery {
                 institution_code,
                 admin_root_account_id,
             );
-        }
-        if admin_primitives::is_public_admin_code(&institution_code) {
-            return public_admins::Pallet::<Runtime>::pending_account_admins_len_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_private_admin_code(&institution_code) {
-            return private_admins::Pallet::<Runtime>::pending_account_admins_len_for_snapshot(
-                institution_code,
-                admin_root_account_id,
-            );
-        }
-        if admin_primitives::is_unincorporated_admin_code(&institution_code) {
-            return public_admins::Pallet::<Runtime>::pending_account_admins_len_for_snapshot(
-                institution_code,
-                admin_root_account_id.clone(),
-            )
-            .or_else(|| {
-                private_admins::Pallet::<Runtime>::pending_account_admins_len_for_snapshot(
-                    institution_code,
-                    admin_root_account_id,
-                )
-            });
         }
         None
     }
@@ -1786,37 +1729,11 @@ impl entity_primitives::InstitutionLegalRepresentativeQuery<AccountId>
     }
 }
 
-pub struct RuntimeAdminVoteExecutor;
-
-impl votingengine::InternalVoteResultCallback for RuntimeAdminVoteExecutor {
-    fn on_internal_vote_finalized(
-        proposal_id: u64,
-        approved: bool,
-    ) -> Result<votingengine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
-        let callbacks = [
-            public_admins::InternalVoteExecutor::<Runtime>::on_internal_vote_finalized(
-                proposal_id,
-                approved,
-            )?,
-            private_admins::InternalVoteExecutor::<Runtime>::on_internal_vote_finalized(
-                proposal_id,
-                approved,
-            )?,
-        ];
-        if callbacks
-            .iter()
-            .any(|outcome| *outcome != votingengine::ProposalExecutionOutcome::Ignored)
-        {
-            return Ok(votingengine::ProposalExecutionOutcome::Executed);
-        }
-        Ok(votingengine::ProposalExecutionOutcome::Ignored)
-    }
-}
 // 链下交易清算模块配置
 /// CID 机构登记表查询实现。
 ///
-/// 委托给 runtime 的公权/私权机构生命周期聚合查询；管理员校验再统一转给
-/// `admins` 模块中的管理员真源。
+/// 委托给 runtime 的公权/私权机构生命周期聚合查询；管理员钱包校验统一转给
+/// `admins` 集合查询，岗位任职事实仍只读取 entity。
 pub struct MultisigCidAccountQuery;
 
 impl offchain::bank_check::CidAccountQuery<AccountId> for MultisigCidAccountQuery {
@@ -1918,37 +1835,23 @@ fn seed_benchmark_public_admin_account(
     raw_admins: &[[u8; 32]],
 ) -> Result<AccountId, ()> {
     let institution = AccountId::new(main_account);
-    let creator = AccountId::new(raw_admins.first().copied().ok_or(())?);
-    let admins: public_admins::AdminProfilesOf<Runtime> = raw_admins
+    let first_admin = AccountId::new(raw_admins.first().copied().ok_or(())?);
+    let admins: public_admins::AdminsOf<Runtime> = raw_admins
         .iter()
-        .map(|raw_admin| AdminProfile {
-            admin_account: AccountId::new(*raw_admin),
-            admin_cid_number: Default::default(),
-            admin_name: Default::default(),
-            role_code: Default::default(),
-            role_name: Default::default(),
-            term_start: 0,
-            term_end: 0,
-            admin_source: admin_primitives::AdminSource::Genesis,
-            admin_source_ref: Default::default(),
-        })
+        .map(|raw_admin| AccountId::new(*raw_admin))
         .collect::<Vec<_>>()
         .try_into()
         .map_err(|_| ())?;
     public_admins::AdminAccounts::<Runtime>::insert(
         institution,
-        admin_primitives::AdminAccount {
+        admin_primitives::InstitutionAdminAccount {
             institution_code,
-            kind: admin_primitives::AdminAccountKind::PublicInstitution,
             cid_number: Default::default(),
             admins,
-            creator: creator.clone(),
-            created_at: Default::default(),
-            updated_at: Default::default(),
             status: admin_primitives::AdminAccountStatus::Active,
         },
     );
-    Ok(creator)
+    Ok(first_admin)
 }
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -2193,7 +2096,7 @@ impl votingengine::Config for Runtime {
     type CleanupKeysPerStep = ConstU32<256>;
     type CitizenIdentityReader = RuntimeCitizenIdentityReader;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
-    // 内部投票终态回调注册 6 个顶层槽位;公权/私权机构生命周期共用一个 tuple 槽位,
+    // 内部投票终态回调注册 5 个顶层槽位；公权/私权机构生命周期共用一个 tuple 槽位，
     // 个人多签生命周期和个人多签管理员共用一个 tuple 槽位。
     // 顺序按调用频率降序:transfer / multisig manage 类业务最频繁,
     // grandpa key 替换最稀有放最后(tuple iterate 时命中越早越省 gas)。
@@ -2209,7 +2112,6 @@ impl votingengine::Config for Runtime {
             personal_manage::InternalVoteExecutor<Runtime>,
             personal_admins::InternalVoteExecutor<Runtime>,
         ),
-        RuntimeAdminVoteExecutor,
         resolution_destroy::InternalVoteExecutor<Runtime>,
         grandpakey_change::InternalVoteExecutor<Runtime>,
     );
@@ -2224,7 +2126,8 @@ impl votingengine::Config for Runtime {
     type JointFinalizer = JointVote;
     type JointCleanup = JointVote;
     // 立法投票(ADR-027):终态回调接业务壳 legislation-yuan;超时结算/清理接 legislation-vote。
-    type LegislationVoteResultCallback = LegislationYuan;
+    // ProposalOwner 决定由法律、任免或预算业务认领；B1 先装配法律业务壳。
+    type LegislationVoteResultCallback = (LegislationYuan,);
     type LegislationFinalizer = LegislationVote;
     type LegislationCleanup = LegislationVote;
     type ElectionVoteResultCallback = ElectionVote;
@@ -2250,6 +2153,7 @@ impl election_vote::Config for Runtime {
     type MaxElectionCandidates = ConstU32<256>;
     type MaxElectionVoters = ConstU32<4096>;
     type InstitutionQuery = RuntimeInstitutionQuery;
+    type InstitutionAssignmentResultHandler = RuntimeInstitutionAssignmentResultHandler;
 }
 
 impl election_campaign::Config for Runtime {}
@@ -2332,21 +2236,12 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
     }
 
     fn constitution_guard_members() -> Vec<AccountId> {
-        let Some(national_judicial_yuan) =
-            AccountId::decode(&mut &primitives::cid::china::china_sf::CHINA_SF[0].main_account[..])
-                .ok()
-        else {
-            return Vec::new();
-        };
-        RuntimeAdminAccountQuery::active_account_admin_profiles(
-            primitives::cid::code::NJD,
-            national_judicial_yuan,
+        <public_manage::Pallet<Runtime> as InstitutionRoleQuery<AccountId>>::active_accounts_for_role(
+            primitives::cid::china::china_sf::CHINA_SF[0]
+                .cid_number
+                .as_bytes(),
+            primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD,
         )
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|profile| profile.role_name.as_slice() == ADMIN_ROLE_CONSTITUTION_GUARD)
-        .map(|profile| profile.admin_account)
-        .collect()
     }
 }
 

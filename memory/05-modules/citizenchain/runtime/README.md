@@ -18,7 +18,7 @@ runtime/
 
 实体生命周期边界：
 
-- `genesis/src/institution.rs`：创世时写入内置公权机构与初始管理员；不提供 extrinsic。
+- `genesis/src/institution/`：创世时写入内置公权机构、固定岗位、创世任职和管理员钱包集合；不提供 extrinsic。
 - `entity/public-manage`：公权机构生命周期，并保存创世机构封存表。
 - `entity/private-manage`：创世后私权机构生命周期。
 - `entity/personal-manage`：个人多签账户生命周期。

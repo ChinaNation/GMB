@@ -3,8 +3,8 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：第二步已完成，等待用户确认第三步技术方案
-- 最新业务确认：2026-07-12
+- 当前步骤：第四步 B1（立法机关表决通用框架）已完成，等待确认第四步 B2 技术方案
+- 最新业务确认：2026-07-13
 - 实施方式：逐步输出技术方案，用户确认后才执行；每步完成后立即更新文档、完善中文注释、删除残留，再输出下一步方案
 
 ## 任务目标
@@ -96,7 +96,7 @@ admins: BoundedVec<AccountId>
 - 不再内嵌 `AdminProfile`。
 - 管理员集合目标记录不保存 `creator`、`created_at`、`updated_at`；链上来源和时间由对应任职关系、事件及区块确定。
 - 不保存 `admin_name`、`admin_cid_number`、`role_code`、`role_name`、`term_start`、`term_end`、`admin_source`、`admin_source_ref`。
-- 当前 runtime 中的 `AdminProfile` 是待拆除旧实现，不是目标契约。
+- runtime 中的机构 `AdminProfile` 已删除；跨端旧解码和旧界面仍按第五步清理。
 
 ## 信任与隐私边界
 
@@ -135,13 +135,68 @@ admins: BoundedVec<AccountId>
 
 - [x] `InstitutionInfo` 新增 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account`，公权与私权机构使用同一字段顺序。
 - [x] 运行期机构创建强制三字段非空，并将三字段纳入 call index 5 注册局签名域；原 call index 2 登记凭证保持自身现行字段契约，不建立兼容分支。
-- [x] 创世机构没有真实任免资料时三字段全部为 `None`，没有伪造值或首位管理员回退。
+- [x] 法定代表人不是创世必填项；创世阶段三字段允许全部为 `None`，不准备法代资料常量，
+  不从 `admins[0]`、机构主账户或其它现有钱包推导占位值。后续依法任命时再原子写入三字段。
 - [x] 删除 `public-admins`、`private-admins` 中法定代表人 storage、setter、getter 和个人多签占位实现；立法签署改为读取 entity 唯一真源。
 - [x] 对齐 node、OnChina、CitizenApp、公民钱包的 SCALE 解码、DTO、数据库字段、签名构造和公开展示字段。
 - [x] 删除目标代码中的 `legal_rep_*` 旧命名；OnChina 仅保留启动时删除旧数据库列的清理 SQL，不读取或兼容旧列。
 - [x] 验证：runtime 相关 148 项单元测试通过；node CID 生命周期守卫 14 项测试通过；OnChina 131 项测试通过；OnChina 前端构建通过；CitizenApp 目标 10 项测试通过；CitizenWallet 69 项测试通过；node、runtime、OnChina 编译通过。
 - [x] 真实运行态：使用当前源码重建 WASM 并启动 `citizenchain-fresh`，节点守卫与 RPC 正常；RPC 读取 NRC `InstitutionInfo` 确认法定代表人三字段全部为 `None`。临时 PostgreSQL 完成 49,593 个机构和 99,186 个账户的真实链投影，旧 `legal_rep_*` 列为 0；真实 HTTP 接口返回三字段，前端首页返回 200。验收后已停止进程并删除临时数据库。
 - [x] 整 runtime lib 测试被仓库既有 `runtime_upgrade::Proposal` 测试缺少 `expected_pow_params_hash/new_pow_params` 阻断，该错误不属于本步骤，未越界修改。
+
+## 第三步执行记录
+
+- [x] 在 `entity-primitives` 建立 `InstitutionRole`、`InstitutionAdminAssignment`、岗位/任职状态和五类任职来源的统一 SCALE 类型。
+- [x] 公权与私权 `entity` 新增按“机构 CID + 岗位代码”存储的岗位目录和任职关系；初始管理员钱包集合由有效任职去重派生，不再由调用方重复提交第二份名单。
+- [x] 机构创建签名域加入完整岗位与任职载荷，注册创建只接受 `Registry` 来源；创世写入只接受 `Genesis` 来源。
+- [x] `public-admins`、`private-admins` 的机构记录收口为 `cid_number + institution_code + admins + status`，其中 `admins` 只编码钱包账户；删除 `AdminProfile`、机构管理员创建人、创建/更新时间、岗位资料和任职来源副本。
+- [x] 新增不含 `creator` 的机构管理员生命周期接口；个人多签继续使用其独立账户模型和管理员变更流程，不与机构管理员接口混用。
+- [x] 删除公权/私权 admins 中旧机构管理员集合变更 extrinsic、投票回调、Pending 创建路径、旧事件和错误；机构管理员变更必须在第四步由任职结果驱动。
+- [x] 五类固定创世机构由 `runtime/genesis/src/institution/seeder.rs` 实际写入岗位、任职和纯管理员账户：国家/省储委会为委员，省储行为董事，国家司法院为 7 护宪大法官、1 首席、2 次席、5 大法官，联邦注册局为 43 个省专员岗位且每岗 5 人。
+- [x] 联邦注册局不再保存 43 个虚拟管理员组；省级权限统一按 FRG 机构 CID、稳定省专员岗位代码和有效任职查询。
+- [x] Node Guard 与创世共用 `primitives/governance_skeleton.rs` 中的固定机构、岗位代码和席位协议清单；
+  `runtime/genesis/src/institution/fixed_roles.rs` 负责五类岗位、席位与既有钱包索引映射，
+  `runtime/genesis/src/institution/seeder.rs` 是岗位/任职/管理员账户的唯一实际写入方；清单和映射均不写 storage。
+- [x] Node Guard 已按新的 `InstitutionAdminAccount`（cid、机构码、钱包账户集合、状态）镜像校验；
+  删除旧 `AdminProfile`、creator/时间字段和不存在的 FRG 虚拟省组规则。FRG 省专员席位仍由 entity 任职真源表达。
+- [x] runtime 新增创世逐项验收，核对固定岗位席位、`Genesis` 来源及每个常量钱包账户；公权/私权 entity、admins、multisig 和 runtime 测试已恢复编译并通过目标测试。
+- [x] 创世模块已拆分为 `institution/mod.rs + fixed_roles.rs + seeder.rs`；构建前断言钱包数量等于席位总数、固定钱包无重复，创世法定代表人三字段保持全空。
+- [x] 第三步创世收口验收：补齐 `no_std` 的 `alloc::vec` 宏导入；固定岗位映射 4 项、管理员 SCALE 契约 2 项、协议清单 4 项、真实 runtime 创世 1 项测试通过，runtime/node 全目标编译通过。
+- [x] 第三步真实运行态：使用当前源码 production WASM 启动 `citizenchain-fresh` headless 临时节点，NodeGuard 通过、RPC 正常、block#0 可查询；创世哈希为 `0x1a3de5fdfdf75f37480b1964d7339ec7a7d38cd0716abf672dbf3ae7a4ed257e`，验收后节点正常退出。
+- [x] Node Guard 已接入 `PublicManage::InstitutionRoles` 与 `InstitutionRoleAssignments`：固定机构岗位目录、NJD 7/1/2/5、FRG 43×5、任职状态/任期及任职钱包与 `admins` 集合一致性均纳入启动、普通区块、`:code` 和完整状态导入校验。
+- [x] Node Guard 允许管理员、任职来源、来源引用和合法任期原子轮换；禁止固定岗位缺失、改名、停用、额外岗位、席位变化、重复占席、畸形 RAW key 和 SCALE 尾随字节；不读取法定代表人。
+- [x] 固定岗位 Node Guard 验收：纯策略 8/8、`entity-primitives` 5/5、真实 block#0 完整状态和缺失/额外岗位拒绝测试通过，runtime/node 全目标编译及 production WASM 构建通过。
+- [x] 固定岗位 Node Guard 真实运行态：fresh headless 临时节点启动和 RPC 正常，block#0 为 `0x1a3de5fdfdf75f37480b1964d7339ec7a7d38cd0716abf672dbf3ae7a4ed257e`，验收后节点正常退出。
+- [x] `public-admins/src/weights.rs`、`private-admins/src/weights.rs`、旧 benchmark 及对应 `WeightInfo`/runtime benchmark 注册已删除；机构 admins 不再暴露可计权的管理员集合变更 extrinsic，`runtime-benchmarks` 特性编译通过。
+- [ ] OnChina、CitizenApp、公民钱包的旧 `AdminProfile` 协议和界面按第五步改造，不在第三步越界实现。
+
+## 第四步 A 执行记录
+
+- [x] `entity-primitives` 新增强类型 `InstitutionAssignmentResult` 和唯一结果处理 trait；结果携带机构码、机构主账户、岗位代码、当选钱包、任期、来源及来源引用。
+- [x] `election-vote` 的普选、互选元数据任期统一为自纪元起 `u32` 天；终态当选结果分别映射为 `PopularElection`、`MutualElection`，以 `proposal_id` SCALE 编码作为 `assignment_source_ref`。
+- [x] runtime 新增结果路由：公权机构交 `public-manage`，私权机构交 `private-manage`；未知机构码关闭失败，不建立第三份任职或管理员真源。
+- [x] entity 在写入前校验目标机构、主账户、岗位状态、任期、结果账户唯一性；固定创世岗位额外按治理骨架强制法定席位数。
+- [x] 目标岗位任职整体替换后，entity 从该机构全部有效岗位任职重新派生去重 admins；岗位任职和 admins 钱包集合在同一 storage transaction 内提交，任一失败全部回滚。
+- [x] 动态机构保持既有 Active 多签阈值，结果无权修改阈值；固定治理机构继续使用代码级固定阈值且不创建动态阈值 storage。
+- [x] `public-admins`、`private-admins` 只保留 entity 内部同步入口，不恢复旧机构管理员变更 call、投票回调、Pending 或兼容分支。
+- [x] `NominationAppointment` 仍只有强类型来源，仓库当前没有合法任免流程生产者和制度规则，本步骤未伪造任免 workflow。
+- [x] 单元与 runtime 路由测试覆盖公权/私权结果替换、阈值保持、失败原子回滚、固定岗位席位拒绝、固定治理无动态阈值。
+- [x] 第四步 A 验收：`entity-primitives` 5、`public-admins` 6、`private-admins` 5、`public-manage` 41、`private-manage` 39、`election-vote` 3 项测试全部通过；runtime 37/37 通过。
+- [x] 第四步 A 真实运行态：使用当前源码重建 production WASM，fresh headless 临时节点成功通过 Node Guard 并启动 RPC；block#0 为 `0x2fe0183ac10abe7574c9821fa17490c5114d591df56f36d985edac358893205f`，`system_health.isSyncing=false`，验收后节点正常退出。
+
+## 第四步 B1 执行记录
+
+- [x] 投票引擎保持唯一 `legislation-vote` 模块；其内部固定拆为 `representative/`（单机构、顺序多机构、计票）和 `legislation/`（公投、签署、护宪）两个程序边界。
+- [x] 代表机构路线使用 `RepresentativeRoute::Single/Sequential`，数学规则使用 `RepresentativeVoteRule::Regular/Major/Special`，后续程序使用 `VoteProcedure::RepresentativeOnly/Legislation`；删除引擎中的五类业务 `u8` 常量。
+- [x] `legislation-yuan` 继续保存常规、常规教育、重要、重要教育、特别五类法律业务类型；教育属性只决定提案机构和代表机构路线，映射到投票引擎时复用常规/重要数学规则。
+- [x] 代表元数据与法律专属元数据分离为 `RepresentativeMetas`、`LegislationMetas`；任免和预算只能创建代表表决，不写法律签署、公投和护宪元数据。
+- [x] 代表计票按 `(proposal_id, body_index)` 保存，票据按 `(proposal_id, (body_index, account))` 去重；同一管理员钱包在多个机构任职时，可按各机构席位分别投票。
+- [x] 业务结果继续使用同一个 `PROPOSAL_KIND_LEGISLATION` 生命周期，但 runtime 回调改为可扩展元组；法律、任免、预算分别依据 `ProposalOwner/MODULE_TAG` 认领，不新增 PERSONNEL/BUDGET 投票 kind。
+- [x] call index 1 和二维码动作码 `0x1A01` 保持字节不变，业务名统一为 `cast_representative_vote`；不保留旧 API、旧动作名或旧存储兼容。
+- [x] OnChina、CitizenApp、CitizenWallet 已同步新存储镜像、双 Map 键和动作名称；OnChina 大屏只读取当前 `body_index` 的票据，避免跨机构同钱包票据覆盖。
+- [x] 完整回归通过：runtime 37、`legislation-vote` 32、`legislation-yuan` 30、OnChina 120、CitizenWallet 71 项测试均为 0 失败；node、runtime `no_std`、OnChina 生产构建通过，CitizenWallet 静态检查为 0 问题，CitizenApp 仅保留 2 个与本步无关的既有 info lint。
+- [x] 文档和残留清理完成：固定框架已写入投票引擎技术文档与 ADR；旧调用、旧存储、旧阶段、旧 API、旧二维码动作和旧界面组件标识全仓搜索为 0，不保留兼容分支。
+- [x] fresh runtime 真实运行态验收通过：使用当前源码 production WASM 启动 headless 临时节点，Node Guard 与 RPC 正常，`system_health.isSyncing=false`，block#0 为 `0xf5f7bb30535ead9b5cd5b0159b61124dd0116635ebe78b6b550eb3aa7dc169fe`；真实 metadata 包含 `RepresentativeMetas`、`LegislationMetas`、`RepresentativeTallies`、`RepresentativeVotesByAccount` 和 `cast_representative_vote`，且旧标识不存在。验收后节点正常退出，`--tmp` 临时数据已清理。
 
 ## 历史实现事实
 

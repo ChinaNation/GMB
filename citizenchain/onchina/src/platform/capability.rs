@@ -39,8 +39,8 @@ pub(crate) struct CapabilitySet {
     pub(crate) can_view_legislation: bool,
     /// 立法:发起法律案(发起院 / 教委会 / 自治会;参议会无此位)。
     pub(crate) can_propose_legislation: bool,
-    /// 立法:院内表决(发起院 / 参议会 / 国家教委会;市教委会、市自治会无此位)。
-    pub(crate) can_cast_house_vote: bool,
+    /// 立法：当前代表机构表决（发起院 / 参议会 / 国家教委会）。
+    pub(crate) can_cast_representative_vote: bool,
     /// 立法:行政签署 / 三人会签 / 护宪终审(行政签署人 / 大法官;另线程接入时置位,本轮恒 false)。
     pub(crate) can_sign_legislation: bool,
     /// 立法:发起任免案(政府;Phase 4 接入时置位,本轮恒 false)。
@@ -65,7 +65,7 @@ const EMPTY: CapabilitySet = CapabilitySet {
     can_view_federal_registry: false,
     can_view_legislation: false,
     can_propose_legislation: false,
-    can_cast_house_vote: false,
+    can_cast_representative_vote: false,
     can_sign_legislation: false,
     can_propose_personnel: false,
     can_propose_budget: false,
@@ -116,7 +116,7 @@ const OWN_ADMINS_READONLY: CapabilitySet = CapabilitySet {
 // 发起/表决两个位由立法角色决定(发起院=发起+表决;参议会=只表决;教委会/自治会=只提案)。
 // 签署/任免/预算位本轮恒 false,分别由行政签署线程与 Phase 4 接入时置位。
 fn legislation_capabilities(role: LegislationRole) -> CapabilitySet {
-    let (can_propose_legislation, can_cast_house_vote) = match role {
+    let (can_propose_legislation, can_cast_representative_vote) = match role {
         LegislationRole::ProposerHouse => (true, true),
         LegislationRole::ReviewHouse => (false, true),
         LegislationRole::ProposerOnly => (true, false),
@@ -125,7 +125,7 @@ fn legislation_capabilities(role: LegislationRole) -> CapabilitySet {
         can_view_own_admins: true,
         can_view_legislation: true,
         can_propose_legislation,
-        can_cast_house_vote,
+        can_cast_representative_vote,
         ..EMPTY
     }
 }
@@ -210,22 +210,22 @@ mod tests {
 
     #[test]
     fn legislative_institutions_get_role_based_legislation_capabilities() {
-        // 发起院(国家众议会):发起 + 院内表决;同时保留本机构管理员只读位。
+        // 发起机构（国家众议会）：发起 + 代表机构表决；同时保留本机构管理员只读位。
         let house = capabilities_for("NRP");
         assert!(house.can_view_legislation);
         assert!(house.can_propose_legislation);
-        assert!(house.can_cast_house_vote);
+        assert!(house.can_cast_representative_vote);
         assert!(house.can_view_own_admins);
 
         // 参议会:只表决,无发起权(权力分离硬约束)。
         let senate = capabilities_for("NSN");
-        assert!(senate.can_cast_house_vote);
+        assert!(senate.can_cast_representative_vote);
         assert!(!senate.can_propose_legislation);
 
-        // 市教委会:只提案,不参与院内表决(由市立法会表决)。
+        // 市教委会：只提案，不参加代表机构表决（由市立法会表决）。
         let city_education = capabilities_for("CEDU");
         assert!(city_education.can_propose_legislation);
-        assert!(!city_education.can_cast_house_vote);
+        assert!(!city_education.can_cast_representative_vote);
 
         // 本轮任免/预算/签署位均未接入。
         assert!(!house.can_propose_personnel);

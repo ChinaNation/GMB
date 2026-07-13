@@ -1,14 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-//! 管理员权限治理模块（public-admins）
-//! - 本模块只负责“管理员集合变更”这一类业务事项
-//! - 投票流程本身由 votingengine 提供（内部投票）
-//! - 约束：治理机构固定人数，仅允许等长更换；动态账户允许增删改。
-//!   阈值校验、保存和更新统一由 votingengine/internal-vote 负责。
+//! 公权机构管理员钱包集合模块（public-admins）。
+//!
+//! 岗位和任职归 entity，投票流程归 votingengine；本模块只保存由有效任职派生的
+//! `admins` 钱包集合，并在任职结果生效时保持既有投票阈值不变。
 
 extern crate alloc;
 
 use alloc::vec::Vec;
-use codec::{Decode, Encode};
 use frame_support::{
     ensure,
     pallet_prelude::*,
@@ -17,86 +15,24 @@ use frame_support::{
     Blake2_128Concat,
 };
 use frame_system::pallet_prelude::*;
-use sp_runtime::DispatchError;
 use sp_std::collections::btree_set::BTreeSet;
 
 use admin_primitives::{
-    can_store_public_admin_code, AdminAccount, AdminAccountKind, AdminAccountLifecycle,
-    AdminAccountStatus, AdminCidNumber, AdminProfile, AdminSetChangeAction, AdminSource,
+    can_store_public_admin_code, AdminAccountKind, AdminAccountStatus, AdminCidNumber,
+    InstitutionAdminAccount, InstitutionAdminAccountLifecycle,
 };
 use entity_primitives::InstitutionMultisigQuery;
-use primitives::cid::{
-    china::china_zf::CHINA_ZF,
-    code::PROVINCE_CODE_INFOS,
-    code::{institution_code_from_cid_number, ProvinceCode, FRG},
-};
-use votingengine::{
-    types::InstitutionCode, InternalVoteResultCallback, ProposalExecutionOutcome, ProposalSubject,
-    PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED,
-    STATUS_REJECTED, STATUS_VOTING,
-};
+use votingengine::{types::InstitutionCode, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED};
 
 pub use pallet::*;
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarks;
-pub mod weights;
-
-/// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
-/// tag 带 schema 版本号。
-pub const MODULE_TAG: &[u8] = b"pub-admin";
 
 /// public-admins pallet on-chain storage 版本。
-/// 全新创世口径:创世即终态布局,storage 版本恒为 v1,不承载任何历史迁移。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
-const FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE: usize =
-    primitives::count_const::FRG_PROVINCE_GROUP_ADMIN_COUNT as usize;
-const FEDERAL_REGISTRY_PROVINCE_GROUP_THRESHOLD: u32 =
-    primitives::count_const::FRG_INTERNAL_THRESHOLD;
-const FEDERAL_REGISTRY_PROVINCE_ACCOUNT_PREFIX: &[u8] = b"GMB:FRG-PROVINCE:";
-
-fn decode_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::AccountId> {
-    T::AccountId::decode(&mut &raw[..]).ok()
-}
-
-/// 联邦注册局省行政区治理组虚拟账户。
-///
-/// 该账户不是机构资金账户,只作为投票引擎的内部投票根账户使用。
-/// 同一省 5 名 FRG 管理员围绕此账户创建管理员更换提案,代码级固定阈值 3/5。
-fn federal_registry_province_group_account<T: frame_system::Config>(
-    province_code: ProvinceCode,
-) -> Option<T::AccountId> {
-    let mut payload = Vec::with_capacity(
-        FEDERAL_REGISTRY_PROVINCE_ACCOUNT_PREFIX
-            .len()
-            .saturating_add(province_code.len()),
-    );
-    payload.extend_from_slice(FEDERAL_REGISTRY_PROVINCE_ACCOUNT_PREFIX);
-    payload.extend_from_slice(&province_code);
-    let raw = sp_io::hashing::blake2_256(&payload);
-    decode_account::<T>(&raw)
-}
-
-/// 联邦注册局机构主账户(创世内置:`CHINA_ZF` 中 FRG 节点的 `main_account`)。
-fn federal_registry_account<T: frame_system::Config>() -> Option<T::AccountId> {
-    CHINA_ZF.iter().find_map(
-        |node| match institution_code_from_cid_number(node.cid_number) {
-            Some(code) if code == FRG => decode_account::<T>(&node.main_account),
-            _ => None,
-        },
-    )
-}
-
-fn federal_registry_cid() -> Option<Vec<u8>> {
-    CHINA_ZF
-        .iter()
-        .find(|node| institution_code_from_cid_number(node.cid_number) == Some(FRG))
-        .map(|node| node.cid_number.as_bytes().to_vec())
-}
+/// 全新创世直接使用纯账户布局，不承载机构岗位资料或省级分组副本。
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use crate::weights::WeightInfo;
     use votingengine::InternalVoteEngine;
 
     #[pallet::config]
@@ -112,9 +48,6 @@ pub mod pallet {
 
         /// 机构账户 → CID 查询入口。机构管理员变更提案必须以 CID 为主体真源。
         type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
-
-        /// 该 pallet 的可配置权重实现。
-        type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]
@@ -125,14 +58,7 @@ pub mod pallet {
     pub type AdminsOf<T> =
         BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdminsPerInstitution>;
 
-    /// 管理员资料集合(链上真存储:每个管理员一条 `AdminProfile`)。
-    pub type AdminProfilesOf<T> = BoundedVec<
-        AdminProfile<<T as frame_system::Config>::AccountId>,
-        <T as Config>::MaxAdminsPerInstitution,
-    >;
-
-    pub type AdminAccountOf<T> =
-        AdminAccount<AdminProfilesOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
+    pub type AdminAccountOf<T> = InstitutionAdminAccount<AdminsOf<T>>;
 
     /// 公权机构管理员表：保存所有公权机构管理员集合。
     ///
@@ -141,19 +67,6 @@ pub mod pallet {
     #[pallet::getter(fn admin_account_of)]
     pub type AdminAccounts<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, AdminAccountOf<T>, OptionQuery>;
-
-    /// 联邦注册局省行政区管理员组：province_code -> 5 人管理员集合。
-    ///
-    /// FRG 总计 215 名管理员按 43 省拆成 43 个 5 人组。
-    /// 每个省行政区组单独作为内部投票根账户,换本省管理员只由本省 5 人组 3/5 投票。
-    #[pallet::storage]
-    pub type FederalRegistryProvinceGroups<T: Config> =
-        StorageMap<_, Blake2_128Concat, ProvinceCode, AdminAccountOf<T>, OptionQuery>;
-
-    /// 联邦注册局省行政区管理员组账户反向索引：group_account -> province_code。
-    #[pallet::storage]
-    pub type FederalRegistryProvinceGroupAccounts<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, ProvinceCode, OptionQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -185,43 +98,6 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 已发起管理员集合变更提案（并已在投票引擎创建内部提案）
-        AdminSetChangeProposed {
-            proposal_id: u64,
-            institution_code: InstitutionCode,
-            account: T::AccountId,
-            proposer: T::AccountId,
-            old_admins_len: u32,
-            new_admins_len: u32,
-            new_threshold: u32,
-        },
-        /// 提案达到通过状态但自动执行失败（投票不回滚）
-        AdminSetChangeExecutionFailed { proposal_id: u64 },
-        /// 管理员集合已完成执行
-        AdminSetChanged {
-            proposal_id: u64,
-            account: T::AccountId,
-            admins_len: u32,
-            threshold: u32,
-        },
-        /// 多签账户管理员配置已写入 Pending。
-        AdminAccountPendingCreated {
-            account: T::AccountId,
-            institution_code: InstitutionCode,
-            kind: AdminAccountKind,
-            creator: T::AccountId,
-            admins_len: u32,
-        },
-        /// 多签账户管理员配置已激活。
-        AdminAccountActivated {
-            account: T::AccountId,
-            institution_code: InstitutionCode,
-        },
-        /// Pending 多签账户管理员配置已清理。
-        AdminAccountPendingRemoved {
-            account: T::AccountId,
-            institution_code: InstitutionCode,
-        },
         /// 多签账户管理员配置已关闭。
         AdminAccountClosed {
             account: T::AccountId,
@@ -231,20 +107,16 @@ pub mod pallet {
         AdminAccountRegistryDirectSet {
             account: T::AccountId,
             institution_code: InstitutionCode,
-            creator: T::AccountId,
             admins_len: u32,
             threshold: u32,
             created: bool,
         },
-        /// 联邦注册局省行政区管理员组更换提案已发起。
-        FederalRegistryProvinceAdminSetChangeProposed {
-            proposal_id: u64,
-            province_code: ProvinceCode,
+        /// entity 岗位任职结果已同步到纯管理员钱包集合。
+        AdminAccountsSyncedFromAssignments {
             account: T::AccountId,
-            proposer: T::AccountId,
-            old_admins_len: u32,
-            new_admins_len: u32,
-            new_threshold: u32,
+            institution_code: InstitutionCode,
+            admins_len: u32,
+            threshold: u32,
         },
     }
 
@@ -256,26 +128,10 @@ pub mod pallet {
         InstitutionCodeMismatch,
         /// 管理员数量不符合固定人数约束
         InvalidAdminsLen,
-        /// 非该机构管理员，无权限
-        UnauthorizedAdmin,
-        /// 管理员集合没有发生变化
-        AdminSetUnchanged,
-        /// 找不到与投票提案绑定的管理员集合变更动作
-        ProposalActionNotFound,
-        /// 投票尚未通过，不能执行替换
-        ProposalNotPassed,
-        /// 提案类型不是内部投票
-        InvalidProposalKind,
-        /// 提案阶段不是内部投票阶段
-        InvalidProposalStage,
         /// 提案绑定机构与管理员更换动作不一致
         ProposalInstitutionMismatch,
         /// 提案绑定组织与管理员账户不一致
         ProposalCodeMismatch,
-        /// 管理员账户已存在
-        InstitutionAlreadyExists,
-        /// 管理员账户状态不是 Pending
-        AdminAccountNotPending,
         /// 管理员账户状态不是 Active
         AdminAccountNotActive,
         /// 内置治理机构永远不可关闭
@@ -284,197 +140,12 @@ pub mod pallet {
         InvalidAdminAccountKind,
         /// 阈值不合法
         InvalidThreshold,
+        /// 动态机构缺少既有 Active 投票阈值，禁止任职结果暗中创建新制度。
+        MissingDynamicThreshold,
         /// 管理员重复
         DuplicateAdmin,
         /// 管理员账户生命周期写入缺少有效 votingengine 提案作用域
         InvalidAdminAccountLifecycleScope,
-        /// 联邦注册局管理员更换必须走省行政区 5 人组治理入口
-        FederalRegistryRequiresProvinceGroup,
-        /// 省行政区代码不存在或没有对应联邦注册局管理员组
-        InvalidProvinceGroup,
-        /// NJD 护宪大法官席位数不符(公民宪法第21条:必须恰 7 席)
-        InvalidCourtComposition,
-    }
-
-    #[pallet::call]
-    impl<T: Config> Pallet<T> {
-        #[pallet::call_index(0)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_admin_set_change())]
-        pub fn propose_admin_set_change(
-            origin: OriginFor<T>,
-            institution_code: InstitutionCode,
-            account: T::AccountId,
-            mut admins: AdminProfilesOf<T>,
-            new_threshold: u32,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            admins
-                .iter_mut()
-                .for_each(|profile| profile.admin_source = AdminSource::InternalVote);
-            ensure!(
-                institution_code != FRG,
-                Error::<T>::FederalRegistryRequiresProvinceGroup
-            );
-
-            // 1) 校验管理员账户已激活且机构码匹配。
-            let current =
-                AdminAccounts::<T>::get(account.clone()).ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                current.status == AdminAccountStatus::Active,
-                Error::<T>::AdminAccountNotActive
-            );
-            ensure!(
-                current.institution_code == institution_code,
-                Error::<T>::InstitutionCodeMismatch
-            );
-
-            // 2) 校验发起人与目标管理员集合合法性(账户语义校验取 profile.admin_account)。
-            let current_admins: Vec<T::AccountId> = current
-                .admins
-                .iter()
-                .map(|p| p.admin_account.clone())
-                .collect();
-            let new_admins: Vec<T::AccountId> =
-                admins.iter().map(|p| p.admin_account.clone()).collect();
-            ensure!(current_admins.contains(&who), Error::<T>::UnauthorizedAdmin);
-            Self::validate_admin_set_for_account(
-                current.kind,
-                current.institution_code,
-                new_admins.as_slice(),
-            )?;
-            // I6:NJD 护宪席位数恒 7(等长换人保持 7 席即过;稀释/灌水拒)。
-            Self::ensure_court_composition(institution_code, &admins)?;
-            ensure!(
-                !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
-                Error::<T>::AdminSetUnchanged
-            );
-            let subject_cid_numbers =
-                alloc::vec![T::InstitutionQuery::lookup_cid(&account)
-                    .ok_or(Error::<T>::InvalidInstitution)?];
-            // 3) 在同一个链上事务中创建投票提案、互斥锁和业务数据。
-            with_transaction(|| {
-                let action = AdminSetChangeAction {
-                    admin_root_account_id: account.clone(),
-                    admins: admins.clone(),
-                    new_threshold,
-                };
-                let encoded = action.encode();
-                let proposal_id =
-                    match T::InternalVoteEngine::create_admin_change_internal_proposal_with_data(
-                        who.clone(),
-                        institution_code,
-                        account.clone(),
-                        subject_cid_numbers,
-                        admins.len() as u32,
-                        new_threshold,
-                        crate::MODULE_TAG,
-                        encoded,
-                    ) {
-                        Ok(proposal_id) => proposal_id,
-                        Err(err) => return TransactionOutcome::Rollback(Err(err)),
-                    };
-
-                Self::deposit_event(Event::<T>::AdminSetChangeProposed {
-                    proposal_id,
-                    institution_code,
-                    account,
-                    proposer: who,
-                    old_admins_len: current_admins.len() as u32,
-                    new_admins_len: new_admins.len() as u32,
-                    new_threshold,
-                });
-                TransactionOutcome::Commit(Ok(()))
-            })
-        }
-
-        /// 联邦注册局省行政区管理员组更换提案。
-        ///
-        /// FRG 管理员按省分成 43 个 5 人组。本入口只允许
-        /// 本省组内管理员发起本省组的管理员更换,投票引擎快照为该省 5 人组,
-        /// 阈值固定严格过半 3/5,不会再让全联邦注册局 215 人一起投票。
-        #[pallet::call_index(2)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_admin_set_change())]
-        pub fn propose_federal_registry_province_admin_set_change(
-            origin: OriginFor<T>,
-            province_code: ProvinceCode,
-            mut admins: AdminProfilesOf<T>,
-            new_threshold: u32,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            admins
-                .iter_mut()
-                .for_each(|profile| profile.admin_source = AdminSource::InternalVote);
-            let group_account = federal_registry_province_group_account::<T>(province_code)
-                .ok_or(Error::<T>::InvalidProvinceGroup)?;
-            let current = FederalRegistryProvinceGroups::<T>::get(province_code)
-                .ok_or(Error::<T>::InvalidProvinceGroup)?;
-            ensure!(
-                current.status == AdminAccountStatus::Active,
-                Error::<T>::AdminAccountNotActive
-            );
-            ensure!(
-                current.institution_code == FRG,
-                Error::<T>::InstitutionCodeMismatch
-            );
-            ensure!(
-                FederalRegistryProvinceGroupAccounts::<T>::get(group_account.clone())
-                    == Some(province_code),
-                Error::<T>::InvalidProvinceGroup
-            );
-
-            let current_admins: Vec<T::AccountId> = current
-                .admins
-                .iter()
-                .map(|p| p.admin_account.clone())
-                .collect();
-            let new_admins: Vec<T::AccountId> =
-                admins.iter().map(|p| p.admin_account.clone()).collect();
-            ensure!(current_admins.contains(&who), Error::<T>::UnauthorizedAdmin);
-            Self::validate_federal_registry_province_admin_set(
-                new_admins.as_slice(),
-                new_threshold,
-            )?;
-            ensure!(
-                !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
-                Error::<T>::AdminSetUnchanged
-            );
-            let subject_cid_numbers =
-                alloc::vec![federal_registry_cid().ok_or(Error::<T>::InvalidInstitution)?];
-
-            with_transaction(|| {
-                let action = AdminSetChangeAction {
-                    admin_root_account_id: group_account.clone(),
-                    admins: admins.clone(),
-                    new_threshold,
-                };
-                let encoded = action.encode();
-                let proposal_id =
-                    match T::InternalVoteEngine::create_admin_change_internal_proposal_with_data(
-                        who.clone(),
-                        FRG,
-                        group_account.clone(),
-                        subject_cid_numbers,
-                        admins.len() as u32,
-                        new_threshold,
-                        crate::MODULE_TAG,
-                        encoded,
-                    ) {
-                        Ok(proposal_id) => proposal_id,
-                        Err(err) => return TransactionOutcome::Rollback(Err(err)),
-                    };
-
-                Self::deposit_event(Event::<T>::FederalRegistryProvinceAdminSetChangeProposed {
-                    proposal_id,
-                    province_code,
-                    account: group_account,
-                    proposer: who,
-                    old_admins_len: current_admins.len() as u32,
-                    new_admins_len: admins.len() as u32,
-                    new_threshold,
-                });
-                TransactionOutcome::Commit(Ok(()))
-            })
-        }
     }
 
     impl<T: Config> Pallet<T> {
@@ -505,61 +176,13 @@ pub mod pallet {
             Ok(())
         }
 
-        fn validate_admin_set_for_account(
+        pub(crate) fn validate_admin_set_for_account(
             kind: AdminAccountKind,
             institution_code: InstitutionCode,
             admins: &[T::AccountId],
         ) -> DispatchResult {
             Self::ensure_account_kind_matches_org(kind, institution_code)?;
-            ensure!(
-                institution_code != FRG,
-                Error::<T>::FederalRegistryRequiresProvinceGroup
-            );
             Self::validate_admins_len_for_account(kind, institution_code, admins.len())?;
-            Self::ensure_unique_admins(admins)?;
-            Ok(())
-        }
-
-        /// I6:NJD 护宪大法官法庭固定席位背书(公民宪法第21条 4/7 终审的「7」)。
-        ///
-        /// 仅约束 NJD;任何管理员集变更(换届/直设)其护宪计数必须恰 7,否则拒绝。与节点骨架
-        /// 守卫 I6 同源(`primitives::governance_skeleton::NJD_CONSTITUTION_GUARD_SEATS`),消除
-        /// 「runtime 放行、节点拒块」裂缝。**只冻席位数,不冻是谁**:等长换人保持 7 席即放行。
-        /// 非 NJD 直接通过。
-        pub(crate) fn ensure_court_composition(
-            institution_code: InstitutionCode,
-            admins: &[AdminProfile<T::AccountId>],
-        ) -> DispatchResult {
-            if institution_code != admin_primitives::NJD {
-                return Ok(());
-            }
-            let guard_seats = admins
-                .iter()
-                .filter(|p| {
-                    p.role_name.as_slice() == admin_primitives::ADMIN_ROLE_CONSTITUTION_GUARD
-                })
-                .count() as u32;
-            ensure!(
-                guard_seats == primitives::governance_skeleton::NJD_CONSTITUTION_GUARD_SEATS,
-                Error::<T>::InvalidCourtComposition
-            );
-            Ok(())
-        }
-
-        fn validate_federal_registry_province_admin_set(
-            admins: &[T::AccountId],
-            new_threshold: u32,
-        ) -> DispatchResult {
-            // FRG 省行政区组是制度固定的 5 人治理单元；
-            // 阈值来自代码级固定阈值 FRG=3，不会扩大到 215 人全局投票。
-            ensure!(
-                admins.len() == FEDERAL_REGISTRY_PROVINCE_GROUP_SIZE,
-                Error::<T>::InvalidAdminsLen
-            );
-            ensure!(
-                new_threshold == FEDERAL_REGISTRY_PROVINCE_GROUP_THRESHOLD,
-                Error::<T>::InvalidThreshold
-            );
             Self::ensure_unique_admins(admins)?;
             Ok(())
         }
@@ -572,26 +195,6 @@ pub mod pallet {
             Ok(())
         }
 
-        fn same_admin_set(left: &[T::AccountId], right: &[T::AccountId]) -> bool {
-            if left.len() != right.len() {
-                return false;
-            }
-            let left_set: BTreeSet<T::AccountId> = left.iter().cloned().collect();
-            let right_set: BTreeSet<T::AccountId> = right.iter().cloned().collect();
-            left_set == right_set
-        }
-
-        fn institution_subject_from_cid(
-            cid_number: Vec<u8>,
-        ) -> Result<ProposalSubject<T::AccountId>, DispatchError> {
-            let mut bounded =
-                votingengine::Pallet::<T>::bound_subject_cid_numbers(alloc::vec![cid_number])?;
-            let cid_number = bounded
-                .pop()
-                .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
-            Ok(ProposalSubject::InstitutionCid(cid_number))
-        }
-
         fn ensure_account_kind_matches_org(
             kind: AdminAccountKind,
             institution_code: InstitutionCode,
@@ -602,40 +205,6 @@ pub mod pallet {
                 Error::<T>::InvalidAdminAccountKind
             );
             Ok(())
-        }
-
-        fn aggregate_federal_registry_admin_account() -> Option<AdminAccountOf<T>> {
-            let mut admins: Vec<AdminProfile<T::AccountId>> = Vec::new();
-            let cid_number: AdminCidNumber = federal_registry_cid()?.try_into().ok()?;
-            for province in PROVINCE_CODE_INFOS.iter() {
-                let group = FederalRegistryProvinceGroups::<T>::get(province.province_code)?;
-                if group.status != AdminAccountStatus::Active || group.institution_code != FRG {
-                    return None;
-                }
-                admins.extend(group.admins.into_iter());
-            }
-            let bounded: AdminProfilesOf<T> = admins.try_into().ok()?;
-            let creator = bounded.first()?.admin_account.clone();
-            Some(AdminAccount {
-                cid_number,
-                institution_code: FRG,
-                kind: AdminAccountKind::PublicInstitution,
-                admins: bounded,
-                creator,
-                created_at: BlockNumberFor::<T>::default(),
-                updated_at: BlockNumberFor::<T>::default(),
-                status: AdminAccountStatus::Active,
-            })
-        }
-
-        fn account_for_mutation(
-            account: T::AccountId,
-        ) -> Option<(AdminAccountOf<T>, Option<ProvinceCode>)> {
-            if let Some(province_code) = FederalRegistryProvinceGroupAccounts::<T>::get(&account) {
-                let group = FederalRegistryProvinceGroups::<T>::get(province_code)?;
-                return Some((group, Some(province_code)));
-            }
-            AdminAccounts::<T>::get(account).map(|admin_account| (admin_account, None))
         }
 
         pub(crate) fn ensure_lifecycle_proposal(
@@ -681,99 +250,6 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 写入 Pending 管理员账户。
-        ///
-        /// 生命周期写入只能经 `AdminAccountLifecycle` trait 做提案上下文校验后进入。
-        pub(crate) fn do_create_pending_admin_account(
-            institution: T::AccountId,
-            cid_number: Vec<u8>,
-            institution_code: InstitutionCode,
-            kind: AdminAccountKind,
-            mut admins: Vec<AdminProfile<T::AccountId>>,
-            creator: T::AccountId,
-        ) -> DispatchResult {
-            ensure!(
-                !AdminAccounts::<T>::contains_key(institution.clone()),
-                Error::<T>::InstitutionAlreadyExists
-            );
-            admins
-                .iter_mut()
-                .for_each(|profile| profile.admin_source = AdminSource::Registry);
-            let cid_number: AdminCidNumber = cid_number
-                .try_into()
-                .map_err(|_| Error::<T>::InvalidInstitution)?;
-            let admin_accounts: Vec<T::AccountId> =
-                admins.iter().map(|p| p.admin_account.clone()).collect();
-            Self::validate_admin_set_for_account(kind, institution_code, &admin_accounts)?;
-
-            let bounded: AdminProfilesOf<T> = admins
-                .try_into()
-                .map_err(|_| Error::<T>::InvalidAdminsLen)?;
-            let now = frame_system::Pallet::<T>::block_number();
-            let admins_len = bounded.len() as u32;
-            AdminAccounts::<T>::insert(
-                institution.clone(),
-                AdminAccount {
-                    cid_number,
-                    institution_code,
-                    kind,
-                    admins: bounded,
-                    creator: creator.clone(),
-                    created_at: now,
-                    updated_at: now,
-                    status: AdminAccountStatus::Pending,
-                },
-            );
-            Self::deposit_event(Event::<T>::AdminAccountPendingCreated {
-                account: institution,
-                institution_code,
-                kind,
-                creator,
-                admins_len,
-            });
-            Ok(())
-        }
-
-        /// 将 Pending 管理员账户激活。
-        pub(crate) fn do_activate_admin_account(institution: T::AccountId) -> DispatchResult {
-            let institution_code = AdminAccounts::<T>::try_mutate(
-                institution.clone(),
-                |maybe| -> Result<InstitutionCode, DispatchError> {
-                    let account = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
-                    ensure!(
-                        account.status == AdminAccountStatus::Pending,
-                        Error::<T>::AdminAccountNotPending
-                    );
-                    account.status = AdminAccountStatus::Active;
-                    account.updated_at = frame_system::Pallet::<T>::block_number();
-                    Ok(account.institution_code)
-                },
-            )?;
-            Self::deposit_event(Event::<T>::AdminAccountActivated {
-                account: institution,
-                institution_code,
-            });
-            Ok(())
-        }
-
-        /// 清理尚未激活的 Pending 管理员账户。
-        pub(crate) fn do_remove_pending_admin_account(institution: T::AccountId) -> DispatchResult {
-            // Pending 清理必须命中真实账户，避免不存在账户被静默当作清理成功。
-            let account = AdminAccounts::<T>::get(institution.clone())
-                .ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                account.status == AdminAccountStatus::Pending,
-                Error::<T>::AdminAccountNotPending
-            );
-            let institution_code = account.institution_code;
-            AdminAccounts::<T>::remove(institution.clone());
-            Self::deposit_event(Event::<T>::AdminAccountPendingRemoved {
-                account: institution,
-                institution_code,
-            });
-            Ok(())
-        }
-
         /// 关闭已激活管理员账户。
         pub(crate) fn do_close_admin_account(institution: T::AccountId) -> DispatchResult {
             let account = AdminAccounts::<T>::get(institution.clone())
@@ -803,25 +279,18 @@ pub mod pallet {
             cid_number: Vec<u8>,
             institution_code: InstitutionCode,
             kind: AdminAccountKind,
-            mut admins: Vec<AdminProfile<T::AccountId>>,
+            admins: Vec<T::AccountId>,
             threshold: u32,
-            creator: T::AccountId,
         ) -> DispatchResult {
-            // 1) 机构类型 / 管理员集合(人数、唯一、类型)边界校验(账户语义取 profile.admin_account)。
-            admins
-                .iter_mut()
-                .for_each(|profile| profile.admin_source = AdminSource::Registry);
+            // 1) 机构类型和管理员钱包集合边界校验。
             let cid_number: AdminCidNumber = cid_number
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidInstitution)?;
-            let admin_accounts: Vec<T::AccountId> =
-                admins.iter().map(|p| p.admin_account.clone()).collect();
-            Self::validate_admin_set_for_account(kind, institution_code, &admin_accounts)?;
-            let bounded: AdminProfilesOf<T> = admins
+            Self::validate_admin_set_for_account(kind, institution_code, &admins)?;
+            let bounded: AdminsOf<T> = admins
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidAdminsLen)?;
             let admins_len = bounded.len() as u32;
-            let now = frame_system::Pallet::<T>::block_number();
 
             with_transaction(|| {
                 // 2) 先注册动态阈值(内部按严格过半校验);失败整体回滚。
@@ -847,16 +316,10 @@ pub mod pallet {
                                 Error::<T>::InstitutionCodeMismatch.into(),
                             ));
                         }
-                        if existing.kind != kind {
-                            return TransactionOutcome::Rollback(Err(
-                                Error::<T>::InvalidAdminAccountKind.into(),
-                            ));
-                        }
                         AdminAccounts::<T>::mutate(institution.clone(), |maybe| {
                             if let Some(account) = maybe {
                                 account.admins = bounded.clone();
                                 account.status = AdminAccountStatus::Active;
-                                account.updated_at = now;
                             }
                         });
                         false
@@ -864,14 +327,10 @@ pub mod pallet {
                     None => {
                         AdminAccounts::<T>::insert(
                             institution.clone(),
-                            AdminAccount {
+                            InstitutionAdminAccount {
                                 cid_number: cid_number.clone(),
                                 institution_code,
-                                kind,
                                 admins: bounded.clone(),
-                                creator: creator.clone(),
-                                created_at: now,
-                                updated_at: now,
                                 status: AdminAccountStatus::Active,
                             },
                         );
@@ -882,10 +341,83 @@ pub mod pallet {
                 Self::deposit_event(Event::<T>::AdminAccountRegistryDirectSet {
                     account: institution.clone(),
                     institution_code,
-                    creator: creator.clone(),
                     admins_len,
                     threshold,
                     created,
+                });
+                TransactionOutcome::Commit(Ok(()))
+            })
+        }
+
+        /// entity 任职结果生效后，同步管理员钱包并保持现有阈值制度。
+        pub(crate) fn do_sync_active_admins_from_assignments(
+            institution: T::AccountId,
+            cid_number: Vec<u8>,
+            institution_code: InstitutionCode,
+            admins: Vec<T::AccountId>,
+        ) -> DispatchResult {
+            let cid_number: AdminCidNumber = cid_number
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidInstitution)?;
+            Self::validate_admin_set_for_account(
+                AdminAccountKind::PublicInstitution,
+                institution_code,
+                &admins,
+            )?;
+            let bounded: AdminsOf<T> = admins
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidAdminsLen)?;
+            let admins_len = bounded.len() as u32;
+            let fixed_threshold =
+                primitives::cid::code::fixed_governance_pass_threshold(&institution_code);
+            let threshold = fixed_threshold
+                .or_else(|| {
+                    T::InternalVoteEngine::active_dynamic_threshold(
+                        institution_code,
+                        institution.clone(),
+                    )
+                })
+                .ok_or(Error::<T>::MissingDynamicThreshold)?;
+
+            with_transaction(|| {
+                let Some(existing) = AdminAccounts::<T>::get(institution.clone()) else {
+                    return TransactionOutcome::Rollback(
+                        Err(Error::<T>::InvalidInstitution.into()),
+                    );
+                };
+                if existing.cid_number != cid_number
+                    || existing.institution_code != institution_code
+                {
+                    return TransactionOutcome::Rollback(Err(
+                        Error::<T>::InstitutionCodeMismatch.into()
+                    ));
+                }
+                if existing.status != AdminAccountStatus::Active {
+                    return TransactionOutcome::Rollback(Err(
+                        Error::<T>::AdminAccountNotActive.into()
+                    ));
+                }
+                if fixed_threshold.is_none()
+                    && T::InternalVoteEngine::register_active_dynamic_threshold_direct(
+                        institution_code,
+                        institution.clone(),
+                        admins_len,
+                        threshold,
+                    )
+                    .is_err()
+                {
+                    return TransactionOutcome::Rollback(Err(Error::<T>::InvalidThreshold.into()));
+                }
+                AdminAccounts::<T>::mutate(institution.clone(), |maybe| {
+                    if let Some(account) = maybe {
+                        account.admins = bounded.clone();
+                    }
+                });
+                Self::deposit_event(Event::<T>::AdminAccountsSyncedFromAssignments {
+                    account: institution,
+                    institution_code,
+                    admins_len,
+                    threshold,
                 });
                 TransactionOutcome::Commit(Ok(()))
             })
@@ -896,27 +428,17 @@ pub mod pallet {
             institution: T::AccountId,
             status: AdminAccountStatus,
         ) -> Option<AdminAccountOf<T>> {
-            let account = AdminAccounts::<T>::get(institution.clone()).or_else(|| {
-                if institution_code != FRG {
-                    return None;
-                }
-                if let Some(province_code) =
-                    FederalRegistryProvinceGroupAccounts::<T>::get(&institution)
-                {
-                    return FederalRegistryProvinceGroups::<T>::get(province_code);
-                }
-                if federal_registry_account::<T>() == Some(institution) {
-                    return Self::aggregate_federal_registry_admin_account();
-                }
-                None
-            })?;
+            let account = AdminAccounts::<T>::get(institution)?;
             if account.institution_code != institution_code || account.status != status {
                 return None;
             }
             // 读侧也要执行账户类型边界校验，避免升级前写入的旧脏数据
             // 继续通过 active/pending 查询 API 被其他业务模块当作有效管理员账户。
-            if Self::ensure_account_kind_matches_org(account.kind, account.institution_code)
-                .is_err()
+            if Self::ensure_account_kind_matches_org(
+                AdminAccountKind::PublicInstitution,
+                account.institution_code,
+            )
+            .is_err()
             {
                 return None;
             }
@@ -949,39 +471,14 @@ pub mod pallet {
             ) else {
                 return false;
             };
-            account
-                .admins
-                .iter()
-                .any(|admin| &admin.admin_account == who)
+            account.admins.iter().any(|admin| admin == who)
         }
 
-        /// 读取 Active 账户管理员账户列表(投票/多签资格语义,取 profile.admin_account)。
-        ///
-        /// 普通业务提案创建和投票快照默认使用此 API;返回的是账户而非资料,
-        /// 内部投票一人一票、多签转账、组织管理查配置全部零改动。
+        /// 读取 Active 账户管理员钱包列表。
         pub fn active_account_admins(
             institution_code: InstitutionCode,
             institution: T::AccountId,
         ) -> Option<Vec<T::AccountId>> {
-            let account = Self::admin_account_with_status(
-                institution_code,
-                institution,
-                AdminAccountStatus::Active,
-            )?;
-            Some(
-                account
-                    .admins
-                    .iter()
-                    .map(|p| p.admin_account.clone())
-                    .collect(),
-            )
-        }
-
-        /// 读取 Active 账户管理员完整资料列表(展示路径,含姓名/职务/任期/实名 CID)。
-        pub fn active_account_admin_profiles(
-            institution_code: InstitutionCode,
-            institution: T::AccountId,
-        ) -> Option<Vec<AdminProfile<T::AccountId>>> {
             let account = Self::admin_account_with_status(
                 institution_code,
                 institution,
@@ -1002,244 +499,11 @@ pub mod pallet {
             )?;
             Some(account.admins.len() as u32)
         }
-
-        /// 查询 Pending 账户是否存在。仅用于创建/激活该账户时判断账户合法性。
-        pub fn pending_account_exists_for_snapshot(
-            institution_code: InstitutionCode,
-            institution: T::AccountId,
-        ) -> bool {
-            Self::admin_account_with_status(
-                institution_code,
-                institution,
-                AdminAccountStatus::Pending,
-            )
-            .is_some()
-        }
-
-        /// 查询 Pending 账户管理员权限。仅用于创建/激活该账户时锁定投票快照。
-        pub fn is_pending_account_admin_for_snapshot(
-            institution_code: InstitutionCode,
-            institution: T::AccountId,
-            who: &T::AccountId,
-        ) -> bool {
-            let Some(account) = Self::admin_account_with_status(
-                institution_code,
-                institution,
-                AdminAccountStatus::Pending,
-            ) else {
-                return false;
-            };
-            account
-                .admins
-                .iter()
-                .any(|admin| &admin.admin_account == who)
-        }
-
-        /// 读取 Pending 账户管理员账户列表(取 profile.admin_account)。仅供投票引擎 Pending 创建入口写快照。
-        pub fn pending_account_admins_for_snapshot(
-            institution_code: InstitutionCode,
-            institution: T::AccountId,
-        ) -> Option<Vec<T::AccountId>> {
-            let account = Self::admin_account_with_status(
-                institution_code,
-                institution,
-                AdminAccountStatus::Pending,
-            )?;
-            Some(
-                account
-                    .admins
-                    .iter()
-                    .map(|p| p.admin_account.clone())
-                    .collect(),
-            )
-        }
-
-        /// 读取 Pending 账户管理员数量。仅用于创建/激活该账户的快照语义。
-        pub fn pending_account_admins_len_for_snapshot(
-            institution_code: InstitutionCode,
-            institution: T::AccountId,
-        ) -> Option<u32> {
-            let account = Self::admin_account_with_status(
-                institution_code,
-                institution,
-                AdminAccountStatus::Pending,
-            )?;
-            Some(account.admins.len() as u32)
-        }
-
-        pub(crate) fn try_execute_set_change_from_action(
-            proposal_id: u64,
-            action: AdminSetChangeAction<T::AccountId, AdminProfilesOf<T>>,
-        ) -> DispatchResult {
-            // 执行前同时校验投票引擎元数据与业务 action，避免跨模块误消费。
-            let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            ensure!(
-                proposal.kind == PROPOSAL_KIND_INTERNAL,
-                Error::<T>::InvalidProposalKind
-            );
-            ensure!(
-                proposal.stage == STAGE_INTERNAL,
-                Error::<T>::InvalidProposalStage
-            );
-            ensure!(
-                proposal.status == STATUS_PASSED,
-                Error::<T>::ProposalNotPassed
-            );
-
-            let (account, province_group) =
-                Self::account_for_mutation(action.admin_root_account_id.clone())
-                    .ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                account.status == AdminAccountStatus::Active,
-                Error::<T>::AdminAccountNotActive
-            );
-            ensure!(
-                proposal.account_context == Some(action.admin_root_account_id.clone()),
-                Error::<T>::ProposalInstitutionMismatch
-            );
-            ensure!(
-                proposal.internal_code == Some(account.institution_code),
-                Error::<T>::ProposalCodeMismatch
-            );
-            let cid_number = if province_group.is_some() {
-                federal_registry_cid().ok_or(Error::<T>::InvalidInstitution)?
-            } else {
-                T::InstitutionQuery::lookup_cid(&action.admin_root_account_id)
-                    .ok_or(Error::<T>::InvalidInstitution)?
-            };
-            let subject = Self::institution_subject_from_cid(cid_number)?;
-            votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(subject, proposal_id)?;
-            let current_admins: Vec<T::AccountId> = account
-                .admins
-                .iter()
-                .map(|p| p.admin_account.clone())
-                .collect();
-            let new_admins: Vec<T::AccountId> = action
-                .admins
-                .iter()
-                .map(|p| p.admin_account.clone())
-                .collect();
-            if province_group.is_some() {
-                Self::validate_federal_registry_province_admin_set(
-                    new_admins.as_slice(),
-                    action.new_threshold,
-                )?;
-            } else {
-                Self::validate_admin_set_for_account(
-                    account.kind,
-                    account.institution_code,
-                    new_admins.as_slice(),
-                )?;
-            }
-            // I6:执行终态也复校验 NJD 护宪席位数,防提案期与执行期状态漂移。
-            Self::ensure_court_composition(account.institution_code, &action.admins)?;
-            ensure!(
-                !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
-                Error::<T>::AdminSetUnchanged
-            );
-            if let Some(province_code) = province_group {
-                FederalRegistryProvinceGroups::<T>::mutate(province_code, |maybe| {
-                    if let Some(account) = maybe {
-                        account.admins = action.admins.clone();
-                        account.updated_at = frame_system::Pallet::<T>::block_number();
-                    }
-                });
-            } else {
-                AdminAccounts::<T>::mutate(action.admin_root_account_id.clone(), |maybe| {
-                    if let Some(account) = maybe {
-                        account.admins = action.admins.clone();
-                        account.updated_at = frame_system::Pallet::<T>::block_number();
-                    }
-                });
-            }
-
-            Self::deposit_event(Event::<T>::AdminSetChanged {
-                proposal_id,
-                account: action.admin_root_account_id,
-                admins_len: action.admins.len() as u32,
-                threshold: action.new_threshold,
-            });
-
-            Ok(())
-        }
     }
 }
 
-impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, AdminProfile<T::AccountId>>
-    for pallet::Pallet<T>
-{
-    fn create_pending_admin_account_for_proposal(
-        proposal_id: u64,
-        module_tag: &[u8],
-        institution: T::AccountId,
-        cid_number: Vec<u8>,
-        institution_code: InstitutionCode,
-        kind: AdminAccountKind,
-        admins: Vec<AdminProfile<T::AccountId>>,
-        creator: T::AccountId,
-    ) -> DispatchResult {
-        Self::ensure_lifecycle_proposal(
-            proposal_id,
-            module_tag,
-            institution.clone(),
-            institution_code,
-            STATUS_VOTING,
-            false,
-        )?;
-        Self::do_create_pending_admin_account(
-            institution,
-            cid_number,
-            institution_code,
-            kind,
-            admins,
-            creator,
-        )
-    }
-
-    fn activate_admin_account_for_proposal(
-        proposal_id: u64,
-        module_tag: &[u8],
-        institution: T::AccountId,
-    ) -> DispatchResult {
-        let account = pallet::AdminAccounts::<T>::get(institution.clone())
-            .ok_or(pallet::Error::<T>::InvalidInstitution)?;
-        Self::ensure_lifecycle_proposal(
-            proposal_id,
-            module_tag,
-            institution.clone(),
-            account.institution_code,
-            STATUS_PASSED,
-            true,
-        )?;
-        Self::do_activate_admin_account(institution)
-    }
-
-    fn remove_pending_admin_account_for_proposal(
-        proposal_id: u64,
-        module_tag: &[u8],
-        institution: T::AccountId,
-    ) -> DispatchResult {
-        let account = pallet::AdminAccounts::<T>::get(institution.clone())
-            .ok_or(pallet::Error::<T>::InvalidInstitution)?;
-        let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
-            .ok_or(pallet::Error::<T>::InvalidAdminAccountLifecycleScope)?;
-        ensure!(
-            matches!(proposal.status, STATUS_REJECTED | STATUS_EXECUTION_FAILED),
-            pallet::Error::<T>::InvalidAdminAccountLifecycleScope
-        );
-        Self::ensure_lifecycle_proposal(
-            proposal_id,
-            module_tag,
-            institution.clone(),
-            account.institution_code,
-            proposal.status,
-            false,
-        )?;
-        Self::do_remove_pending_admin_account(institution)
-    }
-
-    fn close_admin_account_for_proposal(
+impl<T: pallet::Config> InstitutionAdminAccountLifecycle<T::AccountId> for pallet::Pallet<T> {
+    fn close_institution_admin_account_for_proposal(
         proposal_id: u64,
         module_tag: &[u8],
         institution: T::AccountId,
@@ -1257,15 +521,14 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, AdminProfile<T::Acco
         Self::do_close_admin_account(institution)
     }
 
-    fn set_active_admin_account_direct(
+    fn set_active_institution_admin_account(
         _module_tag: &[u8],
         admin_root_account_id: T::AccountId,
         cid_number: Vec<u8>,
         institution_code: InstitutionCode,
         kind: AdminAccountKind,
-        admins: Vec<AdminProfile<T::AccountId>>,
+        admins: Vec<T::AccountId>,
         threshold: u32,
-        creator: T::AccountId,
     ) -> DispatchResult {
         Self::do_set_active_admin_account_direct(
             admin_root_account_id,
@@ -1274,7 +537,21 @@ impl<T: pallet::Config> AdminAccountLifecycle<T::AccountId, AdminProfile<T::Acco
             kind,
             admins,
             threshold,
-            creator,
+        )
+    }
+
+    fn sync_active_institution_admins_from_assignments(
+        _module_tag: &[u8],
+        admin_root_account_id: T::AccountId,
+        cid_number: Vec<u8>,
+        institution_code: InstitutionCode,
+        admins: Vec<T::AccountId>,
+    ) -> DispatchResult {
+        Self::do_sync_active_admins_from_assignments(
+            admin_root_account_id,
+            cid_number,
+            institution_code,
+            admins,
         )
     }
 }
@@ -1302,96 +579,11 @@ impl<T: pallet::Config> admin_primitives::AdminAccountQuery<T::AccountId> for pa
         Self::active_account_admins(institution_code, admin_root_account_id)
     }
 
-    fn active_account_admin_profiles(
-        institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
-    ) -> Option<Vec<AdminProfile<T::AccountId>>> {
-        Self::active_account_admin_profiles(institution_code, admin_root_account_id)
-    }
-
     fn active_account_admins_len(
         institution_code: InstitutionCode,
         admin_root_account_id: T::AccountId,
     ) -> Option<u32> {
         Self::active_account_admins_len(institution_code, admin_root_account_id)
-    }
-
-    fn pending_account_exists_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
-    ) -> bool {
-        Self::pending_account_exists_for_snapshot(institution_code, admin_root_account_id)
-    }
-
-    fn is_pending_account_admin_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
-        who: &T::AccountId,
-    ) -> bool {
-        Self::is_pending_account_admin_for_snapshot(institution_code, admin_root_account_id, who)
-    }
-
-    fn pending_account_admins_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
-    ) -> Option<Vec<T::AccountId>> {
-        Self::pending_account_admins_for_snapshot(institution_code, admin_root_account_id)
-    }
-
-    fn pending_account_admins_len_for_snapshot(
-        institution_code: InstitutionCode,
-        admin_root_account_id: T::AccountId,
-    ) -> Option<u32> {
-        Self::pending_account_admins_len_for_snapshot(institution_code, admin_root_account_id)
-    }
-}
-
-// ──── 投票终态回调:把已通过的管理员集合变更提案落地到链上 ────
-//
-// 投票统一由投票引擎承担,提案通过(或否决)经
-// [`votingengine::InternalVoteResultCallback`] 广播回来。
-// 本 Executor 按 `ProposalOwner` 认领本模块提案，`ProposalData` 只保存裸业务 action。
-//
-// 设计要点:
-// - `approved = true` 时执行 `try_execute_set_change`,失败发 `AdminSetChangeExecutionFailed`
-//   事件但不返回 Err(否则投票引擎会回滚状态,票数白投);
-// - `approved = false` 下本模块没有独立存储需要清理,直接 Ok(()) 返回;
-// - 数据层异常(ProposalOwner 匹配但 data 缺失/解码失败)返回 Err,触发 set_status_and_emit 回滚,
-//   避免错误状态被提交。
-pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
-
-impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
-    fn on_internal_vote_finalized(
-        proposal_id: u64,
-        approved: bool,
-    ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
-        // Step 1:认领 — 检查 ProposalOwner，避免再依赖 ProposalData 的 MODULE_TAG 前缀。
-        if !votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG) {
-            return Ok(ProposalExecutionOutcome::Ignored);
-        }
-        let raw = votingengine::Pallet::<T>::get_proposal_data(proposal_id)
-            .ok_or(pallet::Error::<T>::ProposalActionNotFound)?;
-
-        if !approved {
-            // 否决:无独立存储需清理(ProposalData 由投票引擎延迟清理)。
-            return Ok(ProposalExecutionOutcome::Executed);
-        }
-
-        // Step 2:解码 action。异常视为数据层问题,回滚投票状态。
-        let action =
-            AdminSetChangeAction::<T::AccountId, pallet::AdminProfilesOf<T>>::decode(&mut &raw[..])
-                .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-
-        // Step 3:执行替换。管理员集合变更失败属于数据/状态已不匹配，直接交给投票引擎失败终态。
-        match pallet::Pallet::<T>::try_execute_set_change_from_action(proposal_id, action) {
-            Ok(()) => Ok(ProposalExecutionOutcome::Executed),
-            Err(_) => {
-                pallet::Pallet::<T>::deposit_event(
-                    pallet::Event::<T>::AdminSetChangeExecutionFailed { proposal_id },
-                );
-                Ok(ProposalExecutionOutcome::FatalFailed)
-            }
-        }
     }
 }
 
