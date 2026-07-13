@@ -4,9 +4,9 @@
 
 本节是后续 runtime 改造的当前目标契约；文件中尚未实施完成的 `AdminProfile` 内嵌岗位旧布局只描述当前链上实现，不得作为新代码设计依据。每一实施步骤必须在改 runtime 前先把本文件对应的实际 SCALE 布局更新到位。
 
-- 所有机构的 `InstitutionInfo` 必须包含 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account`。
+- 机构法定代表人任免生效后，`InstitutionInfo` 必须公开 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account`；创世时没有真实任免资料的机构保持“尚未任命”，不得伪造法定代表人或回退到 `admins[0]`。
 - 机构管理员集合 `admins` 的目标值为钱包账户列表，不再内嵌姓名、CID、岗位、任期和来源。
-- 机构岗位 `InstitutionRole` 归 entity，字段为 `role_code`、`role_name`、`role_permissions`、`term_required`、`role_status`。
+- 机构岗位 `InstitutionRole` 归 entity，只保存岗位身份和制度事实，不设置 `role_permissions` 或通用权限表；具体职责和操作权限由对应业务模块依据“机构 + 有效岗位 + 业务动作”的硬规则判定。
 - 机构管理员任职 `InstitutionAdminAssignment` 归 entity，字段为 `cid_number`、`admin_account`、`role_code`、`term_start`、`term_end`、`assignment_source`、`assignment_source_ref`、`assignment_status`。
 - `assignment_source` 只允许 `Genesis`、`Registry`、`PopularElection`、`MutualElection`、`NominationAppointment`；由创世、注册局或对应投票引擎结果写入。
 - 任职不保存 `creator`；来源由 `assignment_source + assignment_source_ref` 唯一表达。

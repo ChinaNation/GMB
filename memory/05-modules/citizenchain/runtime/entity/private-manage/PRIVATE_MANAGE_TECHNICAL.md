@@ -25,8 +25,8 @@
 
 ## 管理员写入边界
 
-- 所有私权机构的 `InstitutionInfo` 必须保存 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account` 三个链上公开字段。
-- 本模块管理机构岗位定义、岗位权限和机构管理员任职关系；任职关系绑定 `cid_number + admin_account + role_code`。
+- 私权机构法定代表人任免生效后，`InstitutionInfo` 必须保存 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account` 三个链上公开字段；创世无真实任免资料时保持尚未任命，不得伪造或回退到首位管理员。
+- 本模块管理机构岗位定义和机构管理员任职关系；任职关系绑定 `cid_number + admin_account + role_code`。岗位的具体职责由对应业务模块硬规则判定，不存通用岗位权限表。
 - 创建机构时只把管理员钱包账户集合 `admins` 传给 `private-admins`；姓名、CID、岗位、任期和来源不再内嵌到管理员集合。
 - 通过本模块创建机构时，对应管理员来源由 `private-admins` 统一落为 `Registry`。
 

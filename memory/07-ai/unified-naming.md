@@ -117,17 +117,18 @@ Runtime pallet / crate 的目录名最多两段，例如 `multisig-transfer`、`
 
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|
-| 法定代表人姓名 | `legal_representative_name` | runtime / OnChina / CitizenApp / CitizenWallet | 所有机构的链上公开法定代表人姓名；废弃 `legal_rep_name` |
+| 法定代表人姓名 | `legal_representative_name` | runtime / OnChina / CitizenApp / CitizenWallet | 任免生效后的链上公开法定代表人姓名；废弃 `legal_rep_name` |
 | 法定代表人 CID 号 | `legal_representative_cid_number` | runtime / OnChina / CitizenApp / CitizenWallet | 法定代表人唯一公民 CID；废弃 `legal_rep_cid_number` |
 | 法定代表人账户 | `legal_representative_account` | runtime / OnChina / CitizenApp / CitizenWallet | 法定代表人唯一钱包账户 |
-| 机构岗位 | `InstitutionRole` | runtime entity / 跨端模型 | 某机构内的岗位定义和权限真源 |
-| 岗位权限 | `role_permissions` | runtime entity / API / 跨端 | 岗位可执行的明确权限代码集合 |
+| 机构岗位 | `InstitutionRole` | runtime entity / 跨端模型 | 某机构内的岗位身份和制度事实 |
 | 机构管理员任职 | `InstitutionAdminAssignment` | runtime entity / 跨端模型 | 绑定机构、管理员钱包账户、岗位、任期和来源 |
 | 任职来源 | `assignment_source` | runtime entity / API / 跨端 | 创世、注册局、普选、互选或提名任免 |
 | 任职来源记录 | `assignment_source_ref` | runtime entity / API / 跨端 | 对应的选举、投票、登记或任免记录 ID |
 | 管理员集合 | `admins` | runtime admins / 跨端 | 当前有效管理员钱包账户集合，机构类不再内嵌 `AdminProfile` |
 
 上述字段不得用 `legal_rep_*`、`admin_role`、`admin_title`、`admin_term_*`、`admin_source_*` 或其他局部别名进入新目标结构。
+
+机构岗位不保存 `role_permissions` 或通用权限代码集合。具体职责和操作权限由对应业务模块依据“机构 + 有效岗位 + 业务动作”的硬规则判定，不建立脱离现有业务规则的通用权限表。
 
 | 中文名称 | English name | 使用位置 | 简介 |
 |---|---|---|---|

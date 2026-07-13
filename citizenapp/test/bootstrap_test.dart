@@ -146,11 +146,11 @@ void main() {
     await tester.runAsync(() => WalletIsar.instance.resetForTest());
 
     await tester.pumpWidget(const CitizenApp());
-    await pumpUntilFound(tester, find.text('创建你的公民钱包'));
+    await pumpUntilFound(tester, find.text('创建钱包'));
     await tester.pump();
 
-    expect(find.text('创建你的公民钱包'), findsOneWidget);
-    expect(find.text('创建钱包'), findsOneWidget);
+    // 标题与创建按钮同为"创建钱包"（两处 Text），故 findsWidgets（≥1）。
+    expect(find.text('创建钱包'), findsWidgets);
     expect(find.text('广场'), findsNothing);
   });
 }

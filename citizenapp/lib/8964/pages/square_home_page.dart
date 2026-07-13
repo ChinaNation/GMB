@@ -10,7 +10,6 @@ import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
-import 'package:citizenapp/8964/storage/square_draft_store.dart';
 import 'package:citizenapp/8964/widgets/square_empty_state.dart';
 import 'package:citizenapp/8964/widgets/square_feed_tabs.dart';
 import 'package:citizenapp/8964/widgets/square_article_card.dart';
@@ -27,7 +26,6 @@ class SquareHomePage extends StatefulWidget {
     super.key,
     this.identityService = const SquareIdentityService(),
     this.feedSource,
-    this.draftStore,
     this.initialFeed = SquareFeedKind.recommended,
     this.seedPosts = const <SquarePost>[],
     this.smoldotClientManager,
@@ -36,8 +34,6 @@ class SquareHomePage extends StatefulWidget {
 
   final SquareIdentityService identityService;
   final SquareFeedSource? feedSource;
-  // 页面测试可注入空草稿仓库；正式运行由发布页使用默认本机草稿存储。
-  final SquareDraftRepository? draftStore;
   final SquareFeedKind initialFeed;
   final List<SquarePost> seedPosts;
   final SmoldotClientManager? smoldotClientManager;

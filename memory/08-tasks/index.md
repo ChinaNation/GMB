@@ -130,7 +130,6 @@
 - `memory/08-tasks/open/20260704-registry-admin-list-table.md`
 - `memory/08-tasks/open/20260704-runtime-division-wording.md`
 - `memory/08-tasks/open/20260704-unify-flutter-and-onchain-transfer.md`
-- `memory/08-tasks/open/20260705-admin-role-source-model.md`
 - `memory/08-tasks/open/20260705-citizenapp-chat-push-notifications.md`
 - `memory/08-tasks/open/20260705-citizenapp-chat-realtime-delivery-fix.md`
 - `memory/08-tasks/open/20260705-citizenapp-default-wallet-identity.md`

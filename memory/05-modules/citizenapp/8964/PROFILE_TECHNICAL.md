@@ -50,8 +50,9 @@ D1   (Worker)        square_posts / square_follows / 计数聚合
     `square.compose.draft.{owner}.{draftId}`、按 updated_at 新→旧、**上限 100 淘汰最旧**）、`drafts_page.dart`
     （缩略卡、右滑删除、点击恢复）。行为：**持续防抖自动保存**（编辑中 800ms + 退出/取消 flush，空内容不存/删）、
     发布成功删草稿、发布失败保留可重发。壳持 `_draftId`、向 body 注入 `persistMedia`/`onChanged`，body 加
-    `snapshot()/restore()`。旧 `storage/square_draft_store.dart` 的失败恢复草稿（每人一条）仍供发布服务内部
-    重试状态，未退役。
+    `snapshot()/restore()`。旧"每人一条失败恢复草稿"（`storage/square_draft_store.dart` +
+    发布服务 `_saveDraftAfterFailure`/`_deleteDraftAfterSuccess` + home `draftStore` 参数）**已彻底删除**——
+    失败内容由草稿箱持续自动保存兜底；发布失败仅上抛错误消息。
 - `follows_list_page.dart`：关注/粉丝列表。
 - `profile_edit_page.dart`：`CitizenProfileEditPage` 展示名/签名/头像/背景编辑；保存上传 R2 + `PUT /profile`；本地旧图迁移后清空。
 - `models/citizen_profile.dart`、`services/citizen_profile_api.dart`、`citizen_profile_cache.dart`、`profile_asset_service.dart`、`square_session_provider.dart`。

@@ -8,7 +8,6 @@ import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
 import 'package:citizenapp/8964/services/square_publish_service.dart';
 import 'package:citizenapp/8964/services/square_upload_service.dart';
-import 'package:citizenapp/8964/storage/square_draft_store.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 void main() {
@@ -27,7 +26,6 @@ void main() {
       chainService: chain,
       publicationConfirmer: _FakePublicationConfirmer(),
       balanceReader: _FakeBalanceReader(order),
-      draftStore: _FakeDraftStore(),
     );
 
     await expectLater(
@@ -50,14 +48,12 @@ void main() {
     final order = <String>[];
     final upload = _FakeUploader(order);
     final chain = _FakeChainPublisher(order);
-    final draftStore = _FakeDraftStore();
     final stages = <SquarePublishStage>[];
     final service = SquarePublishService(
       uploadService: upload,
       chainService: chain,
       publicationConfirmer: _FakePublicationConfirmer(order),
       balanceReader: _FakeBalanceReader(order),
-      draftStore: draftStore,
     );
 
     final result = await service.publish(
@@ -76,7 +72,6 @@ void main() {
     expect(chain.storageReceiptId, 'sqr_test');
     expect(result.post.contentHash, '11' * 32);
     expect(order, ['balance', 'prepare', 'chain', 'upload', 'confirm']);
-    expect(draftStore.deletedOwnerAccount, 'gmb_test_owner_account');
     expect(
         stages,
         containsAllInOrder([
@@ -100,7 +95,6 @@ void main() {
       publicationConfirmer: _FakePublicationConfirmer(order),
       postDeletionService: oldPostDeleter,
       balanceReader: _FakeBalanceReader(order),
-      draftStore: _FakeDraftStore(),
     );
 
     final result = await service.publish(
@@ -119,17 +113,15 @@ void main() {
         ['balance', 'prepare', 'chain', 'upload', 'confirm', 'delete_old']);
   });
 
-  test('余额不足时不准备媒体、不提交链上，并保存本地草稿', () async {
+  test('余额不足时不准备媒体、不提交链上', () async {
     final order = <String>[];
     final upload = _FakeUploader(order);
     final chain = _FakeChainPublisher(order);
-    final draftStore = _FakeDraftStore();
     final service = SquarePublishService(
       uploadService: upload,
       chainService: chain,
       publicationConfirmer: _FakePublicationConfirmer(order),
       balanceReader: _FakeBalanceReader(order, balanceYuan: 1.20),
-      draftStore: draftStore,
     );
 
     await expectLater(
@@ -147,21 +139,17 @@ void main() {
     expect(order, ['balance']);
     expect(upload.called, isFalse);
     expect(chain.called, isFalse);
-    expect(draftStore.savedDraft?.draftState, SquareDraftState.localOnly);
-    expect(draftStore.savedDraft?.text, '余额不足的动态');
   });
 
-  test('链上扣费未入块时不上传媒体，并保存可再次发布的草稿', () async {
+  test('链上扣费未入块时不上传媒体', () async {
     final order = <String>[];
     final upload = _FakeUploader(order);
     final chain = _FakeChainPublisher(order)..throwOnPublish = true;
-    final draftStore = _FakeDraftStore();
     final service = SquarePublishService(
       uploadService: upload,
       chainService: chain,
       publicationConfirmer: _FakePublicationConfirmer(order),
       balanceReader: _FakeBalanceReader(order),
-      draftStore: draftStore,
     );
 
     await expectLater(
@@ -178,9 +166,6 @@ void main() {
 
     expect(order, ['balance', 'prepare', 'chain']);
     expect(upload.uploadCalled, isFalse);
-    expect(draftStore.savedDraft?.draftState, SquareDraftState.localOnly);
-    expect(draftStore.savedDraft?.postId, 'sqp_test');
-    expect(draftStore.savedDraft?.storageReceiptId, 'sqr_test');
   });
 }
 
@@ -377,26 +362,5 @@ class _FakeBalanceReader implements SquarePublishBalanceReader {
   Future<double> fetchFreshFinalizedBalanceYuan(String pubkeyHex) async {
     order.add('balance');
     return balanceYuan;
-  }
-}
-
-class _FakeDraftStore implements SquareDraftRepository {
-  SquarePublishDraft? savedDraft;
-  String? deletedOwnerAccount;
-
-  @override
-  Future<void> delete(String ownerAccount) async {
-    deletedOwnerAccount = ownerAccount;
-    savedDraft = null;
-  }
-
-  @override
-  Future<SquarePublishDraft?> read(String ownerAccount) async {
-    return savedDraft;
-  }
-
-  @override
-  Future<void> save(SquarePublishDraft draft) async {
-    savedDraft = draft;
   }
 }

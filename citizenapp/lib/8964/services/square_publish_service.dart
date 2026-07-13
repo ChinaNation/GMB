@@ -5,7 +5,6 @@ import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/8964/services/square_identity_state.dart';
 import 'package:citizenapp/8964/services/square_upload_service.dart';
-import 'package:citizenapp/8964/storage/square_draft_store.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 class SquarePublishException implements Exception {
@@ -58,20 +57,17 @@ class SquarePublishService {
     SquarePublicationConfirmer? publicationConfirmer,
     SquarePostDeletionService? postDeletionService,
     SquarePublishBalanceReader? balanceReader,
-    SquareDraftRepository? draftStore,
   })  : _uploadService = uploadService ?? SquareUploadService(),
         _chainService = chainService ?? SquareChainService(),
         _publicationConfirmer = publicationConfirmer ?? SquareApiClient(),
         _postDeletionService = postDeletionService ?? SquareApiClient(),
-        _balanceReader = balanceReader ?? SquareChainBalanceReader(),
-        _draftStore = draftStore ?? SquareDraftStore.instance;
+        _balanceReader = balanceReader ?? SquareChainBalanceReader();
 
   final SquareContentUploader _uploadService;
   final SquarePostChainPublisher _chainService;
   final SquarePublicationConfirmer _publicationConfirmer;
   final SquarePostDeletionService _postDeletionService;
   final SquarePublishBalanceReader _balanceReader;
-  final SquareDraftRepository _draftStore;
 
   /// 广场发布统一按链上最低费用收费：10 分 = 0.1 元。
   static const int publishFeeFen = 10;
@@ -156,7 +152,6 @@ class SquarePublishService {
         txHash: chainResult.txHash,
       );
 
-      await _deleteDraftAfterSuccess(identity.ownerAccount);
       final cleanupWarning = await _deleteReplacedPostAfterSuccess(
         session: uploaded.session,
         newPostId: uploaded.postId,
@@ -171,16 +166,8 @@ class SquarePublishService {
         cleanupWarning: cleanupWarning,
       );
     } catch (e) {
-      await _saveDraftAfterFailure(
-        identity: identity,
-        postCategory: postCategory,
-        text: trimmedText,
-        mediaDrafts: mediaDrafts,
-        prepared: prepared,
-        chainResult: chainResult,
-        error: e,
-      );
-      throw SquarePublishException('${_messageOf(e)}，已保存到草稿箱');
+      // 失败内容由发布页的持续自动保存兜底进草稿箱；此处只规整错误消息后上抛。
+      throw SquarePublishException(_messageOf(e));
     }
   }
 
@@ -216,49 +203,6 @@ class SquarePublishService {
         '（账户保留 ${_formatFen(accountExistentialDepositFen)} 元 + 发布费 '
         '${_formatFen(publishFeeFen)} 元）',
       );
-    }
-  }
-
-  Future<void> _saveDraftAfterFailure({
-    required SquareIdentityState identity,
-    required SquarePostCategory postCategory,
-    required String text,
-    required List<SquareLocalMediaDraft> mediaDrafts,
-    required SquarePreparedContent? prepared,
-    required SquareChainPublishedResult? chainResult,
-    required Object error,
-  }) async {
-    try {
-      await _draftStore.save(
-        SquarePublishDraft(
-          ownerAccount: identity.ownerAccount,
-          postCategory: postCategory,
-          text: text,
-          mediaDrafts: mediaDrafts,
-          draftState: chainResult == null
-              ? SquareDraftState.localOnly
-              : SquareDraftState.chainInBlockUploadPending,
-          updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
-          lastError: _messageOf(error),
-          uploadId: prepared?.preparedUpload.uploadId,
-          postId: prepared?.postId,
-          contentHash: prepared?.contentHash,
-          storageReceiptId: prepared?.storageReceiptId,
-          storageUntil: prepared?.storageUntil,
-          txHash: chainResult?.txHash,
-          blockHashHex: chainResult?.blockHashHex,
-        ),
-      );
-    } catch (draftError) {
-      debugPrint('[SquarePublishService] 保存发布草稿失败: $draftError');
-    }
-  }
-
-  Future<void> _deleteDraftAfterSuccess(String ownerAccount) async {
-    try {
-      await _draftStore.delete(ownerAccount);
-    } catch (draftError) {
-      debugPrint('[SquarePublishService] 清理已发布草稿失败: $draftError');
     }
   }
 

@@ -56,7 +56,8 @@ void main() {
       await tester.pumpWidget(_gate(loader: () async => null));
       await tester.pumpAndSettle();
 
-      expect(find.text('设置你的公民钱包'), findsOneWidget);
+      // 标题与创建按钮同为"创建钱包"，故 findsWidgets（≥1）。
+      expect(find.text('创建钱包'), findsWidgets);
       expect(find.text('main-shell'), findsNothing);
       // 门禁页提供创建与导入两条入口。
       expect(find.widgetWithText(FilledButton, '创建钱包'), findsOneWidget);

@@ -88,8 +88,12 @@ lib/8964/compose/
 - 两 body 加 `snapshot()`（不校验、可空首图）/`restore()`（文章按块或降级重建首图+图文块）。
 - 验证：`flutter analyze lib` 仅 2 条无关既有 info；compose 测试 13 全过（含 Isar store save/list、模型往返）；
   回归 home/publish/widgets/feed 25 全过；Worker `tsc` 通过。
-- 旧 `storage/square_draft_store.dart`（每人一条失败恢复）**未退役**：仍被发布服务内部重试状态与 2 个发布服务
-  测试使用；其 restore 已随旧页移除（新页由持续自动保存进箱），属可选后续退役。
+- 旧"每人一条失败恢复草稿"**已彻底删除**（用户确认草稿箱已覆盖）：删 `storage/square_draft_store.dart`
+  （SquarePublishDraft/SquareDraftState/SquareDraftRepository/SquareDraftStore）+ 发布服务
+  `_saveDraftAfterFailure`/`_deleteDraftAfterSuccess`/`_draftStore`/`draftStore` 参数 +
+  home `draftStore` 参数 + 旧 store 测试；发布失败仅 `throw SquarePublishException(_messageOf(e))`，
+  失败内容由草稿箱持续自动保存兜底。2 个发布服务测试改为只断言"不准备媒体/不上传"（去草稿断言）。
+  全仓零残留，publish/home/compose 测试 22 全过。
 
 **草稿箱（阶段5，技术方案，已确认）：**
 - 目录 `lib/8964/compose/drafts/`：`compose_draft.dart`（SquareComposeDraft 全类型模型+JSON，含文章

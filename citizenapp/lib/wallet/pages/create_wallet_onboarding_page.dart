@@ -152,7 +152,7 @@ class _CreateWalletOnboardingPageState extends State<CreateWalletOnboardingPage>
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    '设置你的公民钱包',
+                    '创建钱包',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 20,

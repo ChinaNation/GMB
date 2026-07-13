@@ -15,7 +15,7 @@
 
 - 管理员集合目标字段统一由 `admin-primitives::AdminAccount` 表达：`cid_number`、`institution_code`、`kind`、`admins`、`status`。当前实现中的 `creator`、`created_at`、`updated_at` 随第二步 runtime 改造删除；管理员或任职来源不得用创建人替代。
 - 机构管理员真源只管理钱包账户集合 `admins`及集合生命周期，不再保存管理员姓名、公民 CID、岗位、任期和任职来源。
-- 机构岗位定义、岗位权限和机构管理员任职关系归 `entity`；`admins` 只向下游提供当前有效管理员账户。
+- 机构岗位定义和机构管理员任职关系归 `entity`；`admins` 只向下游提供当前有效管理员账户。具体岗位职责与授权由业务模块硬规则判定。
 - 个人多签管理员保持 `personal-admins` 独立模型，不使用机构岗位或机构任职关系。
 - 各类管理员的链上管理员集合分别保存在各自 pallet 的 `AdminAccounts`。
 - runtime 只通过 `RuntimeAdminAccountQuery` 聚合读取各管理员模块，业务 pallet 不直接扫多个 storage。
