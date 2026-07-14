@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>部署控制台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>部署控制台</h1>
+        <section id="overview" class="overview"></section>
+        <button id="refresh" class="ghost">刷新状态</button>
+      </header>
+      <section id="cards" class="cards" aria-label="部署模块"></section>
+      <dialog id="moduleDialog">
+        <button id="closeDialog" class="close" aria-label="关闭">×</button>
+        <div id="moduleDetail"></div>
+      </dialog>
+      <section class="terminal" aria-live="polite">
+        <div class="terminal-head"><span></span><span></span><span></span><strong>部署日志</strong></div>
+        <pre id="logs">等待执行部署任务…</pre>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -11,13 +11,12 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 执行 CI、正式发布或服务器部署
+        description: 执行 CI 或正式发布
         required: true
         type: choice
         options:
           - ci
           - release
-          - deploy
 
 permissions:
   contents: read
@@ -469,117 +468,3 @@ jobs:
           else
             gh release create "$tag" "${assets[@]}" --repo "$CURRENT_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes"
           fi
-
-  deploy-linux-servers:
-    name: 部署公民链-Linux-amd.deb 到 6 台服务器
-    needs: build-desktop
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy' }}
-    runs-on: ubuntu-latest
-    env:
-      GMB_SSH_USER: ubuntu
-      GMB_SSH_PORT: "22"
-      GMB_SSH_KEY: ${{ secrets.GMB_SSH_KEY }}
-      GMB_DEPLOY_SERVERS: |
-        147.224.14.117
-        64.181.239.233
-        158.180.91.13
-        168.110.119.55
-        140.83.56.145
-        217.142.255.172
-    steps:
-      - name: 拉取部署配置
-        uses: actions/checkout@v5
-
-      - name: 下载本次 Linux 安装包
-        uses: actions/download-artifact@v4
-        with:
-          name: 公民链-Linux-amd
-          path: linux-package
-
-      - name: 滚动部署到服务器
-        run: |
-          set -euo pipefail
-
-          if [ -z "${GMB_SSH_KEY:-}" ]; then
-            echo "::error::缺少 GMB_SSH_KEY，无法部署服务器。"
-            exit 1
-          fi
-
-          deb_file="linux-package/公民链-Linux-amd.deb"
-          if [ ! -f "$deb_file" ]; then
-            echo "::error::未找到本次 Linux amd CI 产出的 deb 安装包: $deb_file"
-            exit 1
-          fi
-          deb_arch="$(dpkg-deb -f "$deb_file" Architecture)"
-          if [ "$deb_arch" != "amd64" ]; then
-            echo "::error::服务器部署只能使用 amd64 deb，当前为: $deb_arch"
-            exit 1
-          fi
-
-          ssh_dir="$RUNNER_TEMP/citizenchain-linux-deploy-ssh"
-          mkdir -p "$ssh_dir"
-          key_file="$ssh_dir/id_ed25519"
-          known_hosts_file="$ssh_dir/known_hosts"
-          printf '%s\n' "$GMB_SSH_KEY" | tr -d '\r' > "$key_file"
-          chmod 600 "$key_file"
-          : > "$known_hosts_file"
-
-          for server_ip in $GMB_DEPLOY_SERVERS; do
-            ssh-keyscan -p "$GMB_SSH_PORT" -H "$server_ip" >> "$known_hosts_file"
-          done
-
-          ssh_opts=(
-            -i "$key_file"
-            -p "$GMB_SSH_PORT"
-            -o BatchMode=yes
-            -o StrictHostKeyChecking=yes
-            -o UserKnownHostsFile="$known_hosts_file"
-            -o ConnectTimeout=30
-            -o ServerAliveInterval=10
-            -o ServerAliveCountMax=6
-          )
-
-          # 中文注释：先确认 6 台服务器都认可同一把部署密钥，避免前几台已升级、后几台因 SSH 失败留下半部署状态。
-          for server_ip in $GMB_DEPLOY_SERVERS; do
-            ssh_target="$GMB_SSH_USER@$server_ip"
-            echo "::group::预检查 $ssh_target"
-            ssh "${ssh_opts[@]}" "$ssh_target" "echo deploy-ready:\$(hostname):\$(whoami)"
-            echo "::endgroup::"
-          done
-
-          # 中文注释：预检查全部通过后，再顺序滚动部署，避免同时重启导致链服务整体抖动。
-          for server_ip in $GMB_DEPLOY_SERVERS; do
-            ssh_target="$GMB_SSH_USER@$server_ip"
-            echo "::group::部署 $ssh_target"
-
-            ssh "${ssh_opts[@]}" "$ssh_target" "
-              set -e
-              sudo useradd --system --no-create-home --shell /usr/sbin/nologin citizenchain 2>/dev/null || true
-              sudo mkdir -p /opt/citizenchain/data
-              sudo chown -R citizenchain:citizenchain /opt/citizenchain
-              sudo iptables -C INPUT -p tcp --dport 30333 -j ACCEPT 2>/dev/null || sudo iptables -I INPUT -p tcp --dport 30333 -j ACCEPT
-              sudo sh -c 'iptables-save > /etc/iptables/rules.v4' 2>/dev/null || true
-            "
-
-            scp "${ssh_opts[@]}" citizenchain/scripts/citizenchain-node.service "$ssh_target:/tmp/citizenchain-node.service"
-            ssh "${ssh_opts[@]}" "$ssh_target" "
-              set -e
-              sudo mv /tmp/citizenchain-node.service /etc/systemd/system/citizenchain-node.service
-              sudo systemctl daemon-reload
-              sudo systemctl enable citizenchain-node
-              sudo systemctl stop citizenchain-node 2>/dev/null || true
-            "
-
-            scp "${ssh_opts[@]}" "$deb_file" "$ssh_target:/tmp/citizenchain.deb"
-            ssh "${ssh_opts[@]}" "$ssh_target" "
-              set -e
-              sudo dpkg -i /tmp/citizenchain.deb || sudo apt-get install -f -y
-              rm -f /tmp/citizenchain.deb
-              sudo systemctl start citizenchain-node
-              sleep 5
-              sudo systemctl is-active --quiet citizenchain-node
-            "
-
-            echo "部署完成: $ssh_target"
-            echo "::endgroup::"
-          done

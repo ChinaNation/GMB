@@ -11,6 +11,7 @@ ExecStart=/usr/bin/citizenchain \
   --chain citizenchain \
   --base-path /opt/citizenchain/data \
   --node-key-file /opt/citizenchain/data/node-key/secret_ed25519 \
+  --validator \
   --rpc-port 9944 \
   --rpc-methods Safe \
   --no-prometheus \

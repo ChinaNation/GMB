@@ -160,23 +160,19 @@ GMB/
 ├── citizenwallet/     # 公民钱包代码
 ├── citizenweb/           # 官方网站代码
 ├── memory/            # AI 编程系统与正式文档真源
-├── scripts/           # 本机私密脚本区，必须被 Git 忽略
+├── scripts/           # 非部署仓库工具，本机目录
+├── deploy/            # 可追踪的本机部署控制台源码，.runtime 与私密材料忽略
 ├── docs/              # 展示资料与静态发布资料
 └── .github/           # CI/CD、审查和安装包流水线
 ```
 
 ## 8. 发布边界
 
-本机统一发布入口固定为根目录私密脚本，全部由 Git 忽略：
+本机统一发布入口固定为 `deploy/` 可视化控制台。不含密钥的控制台源码由 Git 追踪，`.runtime/`、日志、编译产物和私密材料精确忽略。控制台用六个模块图标分别承载 CitizenApp Cloudflare、CitizenWeb、CitizenApp、CitizenWallet、CitizenChain 和 CitizenChain WASM；模块详情显示可执行操作、Keychain/GitHub Secrets 状态和每项密钥的简短中文用途，但绝不读取到浏览器或显示密钥明文。
 
-- `scripts/cloudflare.sh`：`c` 部署 CitizenApp Cloudflare staging，`s` 部署 production。
-- `scripts/citizenweb.sh`：`c` 部署 `citizenweb-staging` Pages，`s` 部署 production `citizenweb` Pages。
-- `scripts/citizenapp.sh`：`c` 自动触发并等待 CitizenApp CI，`s` 自动触发并等待正式 Release。
-- `scripts/citizenwallet.sh`：`c` 自动触发并等待 CitizenWallet CI，`s` 自动触发并等待正式 Release。
-- `scripts/citizenchain.sh`：`c` 自动触发并等待桌面端 CI，`s` 自动发布正式安装包，`b` 用本次成功构建的 Linux amd64 产物滚动部署六台服务器。
-- `scripts/citizenchainwasm.sh`：自动触发并等待 Runtime WASM CI，只构建校验，不自动执行链上升级。
+测试部署和 CI 无需密码；production、Release 和服务器部署每次执行前必须通过 macOS Touch ID，失败时不得启动目标命令。部署 Secret 只保存在 macOS Keychain 或 GitHub Secrets，根目录不得恢复明文 Secret 文件。GitHub `workflow_dispatch` 继续使用显式 `mode=ci/release/deploy` 隔离动作；CI 模式不得读取签名密钥、创建 Release 或部署服务器。
 
-GitHub `workflow_dispatch` 必须使用显式 `mode=ci/release/deploy` 隔离动作。CI 模式不得读取签名密钥、创建 Release 或部署服务器；脚本选择本身就是本次操作授权，不再要求到 GitHub 页面手动点击或做第二次确认。
+CitizenWeb 的“测试部署”只在本机构建并启动 `http://127.0.0.1:41732`，不创建测试 Pages 项目；“关闭测试部署”停止该本地进程。生产部署只更新已经存在的 `citizenweb` Pages 项目，并继续使用 `https://www.crcfrcn.com` 做真实健康检查。
 
 - Runtime 升级：修改 `citizenchain/runtime/**` 或被 runtime 直接依赖且影响链上行为的 primitives。
 - Native Node / 桌面安装包：修改 `citizenchain/node/**`、桌面前端、Tauri、打包或发布脚本。

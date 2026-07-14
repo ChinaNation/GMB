@@ -38,6 +38,7 @@ GMB/
 - `citizenweb/`：GMB 官网前端工程，当前使用 React + TypeScript + Vite 构建静态站点
 - `docs/`：静态发布文档和展示资产，不承载系统权威记忆
 - `scripts/`：仓库级脚本、生成器和自动化工具
+- `deploy/`：Git 追踪的本机部署控制台源码；集中保存网页、后端、部署动作和 Keychain 桥接。`.runtime/` 与所有私密材料被精确忽略，目录内不得保存明文密钥
 
 根入口文件职责：
 

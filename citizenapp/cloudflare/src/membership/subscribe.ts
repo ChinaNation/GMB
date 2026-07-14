@@ -292,6 +292,7 @@ async function createStripeCheckoutSession(
     params.set('subscription_data[trial_end]', String(trialEndSeconds));
   }
 
+  const startedAt = Date.now();
   const response = await fetch(stripeCheckoutUrl, {
     method: 'POST',
     headers: {
@@ -300,14 +301,35 @@ async function createStripeCheckoutSession(
     },
     body: params
   });
-  const data = (await response.json().catch(() => ({}))) as StripeCheckoutSession & {
-    error?: { message?: string };
-  };
+  const elapsedMs = Date.now() - startedAt;
+  // 读原始文本再解析：不再把 Stripe 的真实错误吞成通用文案（含非 JSON 网关响应）。
+  const rawBody = await response.text();
+  let data: StripeCheckoutSession & { error?: { message?: string } } = {};
+  try {
+    data = JSON.parse(rawBody) as typeof data;
+  } catch {
+    // 非 JSON 响应：保留原始片段，交由下方带状态回报。
+  }
   if (!response.ok) {
+    // 出口诊断（仅失败时，与 USDC 路径同规格）：cf-ray/耗时/server，供追出口与 TLS 失败链路。
+    const cfRay = response.headers.get('cf-ray');
+    console.error(
+      '[stripe-egress-fail]',
+      JSON.stringify({
+        endpoint: 'card_subscribe_checkout',
+        status: response.status,
+        ms: elapsedMs,
+        cf_ray: cfRay,
+        server: response.headers.get('server'),
+        cf_cache: response.headers.get('cf-cache-status'),
+        body: rawBody.slice(0, 200)
+      })
+    );
     throw new HttpError(
       502,
       'stripe_checkout_failed',
-      data.error?.message ?? 'Stripe Checkout 创建失败'
+      data.error?.message ??
+        `Stripe ${response.status} cf-ray=${cfRay ?? '无'} ${elapsedMs}ms：${rawBody.slice(0, 120) || '(空响应体)'}`
     );
   }
   if (!data.id || !data.url) {

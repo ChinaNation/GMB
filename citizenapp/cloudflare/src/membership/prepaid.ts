@@ -366,6 +366,7 @@ async function createOneTimeCheckout(
     form.set(`payment_intent_data[metadata][${key}]`, value);
   }
 
+  const startedAt = Date.now();
   const response = await fetch(stripeCheckoutUrl, {
     method: 'POST',
     headers: {
@@ -374,13 +375,36 @@ async function createOneTimeCheckout(
     },
     body: form
   });
-  const data = (await response.json().catch(() => ({}))) as {
-    id?: string;
-    url?: string | null;
-    error?: { message?: string };
-  };
+  const elapsedMs = Date.now() - startedAt;
+  // 读原始文本再解析：不再把 Stripe 的真实错误吞成通用文案（含非 JSON 网关响应）。
+  const rawBody = await response.text();
+  let data: { id?: string; url?: string | null; error?: { message?: string } } = {};
+  try {
+    data = JSON.parse(rawBody) as typeof data;
+  } catch {
+    // 非 JSON 响应：保留原始片段，交由下方带状态回报。
+  }
   if (!response.ok) {
-    throw new HttpError(502, 'stripe_checkout_failed', data.error?.message ?? 'Stripe Checkout 创建失败');
+    // 出口诊断（仅失败时）：打印 CF-Ray/耗时/响应头，供追出口 POP 与 TLS 失败链路。
+    const cfRay = response.headers.get('cf-ray');
+    console.error(
+      '[stripe-egress-fail]',
+      JSON.stringify({
+        endpoint: 'prepaid_checkout',
+        status: response.status,
+        ms: elapsedMs,
+        cf_ray: cfRay,
+        server: response.headers.get('server'),
+        cf_cache: response.headers.get('cf-cache-status'),
+        body: rawBody.slice(0, 200)
+      })
+    );
+    throw new HttpError(
+      502,
+      'stripe_checkout_failed',
+      data.error?.message ??
+        `Stripe ${response.status} cf-ray=${cfRay ?? '无'} ${elapsedMs}ms：${rawBody.slice(0, 120) || '(空响应体)'}`
+    );
   }
   if (!data.id || !data.url) {
     throw new HttpError(502, 'stripe_checkout_invalid_response', 'Stripe Checkout 响应不完整');
