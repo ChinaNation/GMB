@@ -67,6 +67,31 @@ fn prb_destroy_executes_when_yes_votes_reach_threshold() {
 }
 
 #[test]
+fn destroy_business_rejects_other_internal_vote_institutions() {
+    new_test_ext().execute_with(|| {
+        let njd_code = votingengine::types::NJD;
+        let njd = primitives::cid::china::china_sf::CHINA_SF
+            .iter()
+            .find(|node| {
+                votingengine::types::institution_code_from_cid_number(node.cid_number)
+                    == Some(njd_code)
+            })
+            .map(|node| AccountId32::new(node.main_account))
+            .expect("NJD must exist in CHINA_SF");
+
+        assert_noop!(
+            ResolutionDestroy::propose_destroy(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                njd_code,
+                njd,
+                100,
+            ),
+            Error::<Test>::InvalidInstitution
+        );
+    });
+}
+
+#[test]
 fn non_admin_cannot_propose_or_vote() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();

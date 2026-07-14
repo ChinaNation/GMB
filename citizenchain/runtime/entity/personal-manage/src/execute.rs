@@ -32,6 +32,15 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
     proposal_id: u64,
     action: &PersonalCreateAction<T::AccountId, BalanceOf<T>>,
 ) -> DispatchResult {
+    // 资金释放前先证明通过的是当前个人多签账户的创建提案，不能只信任
+    // ProposalData 中可解码出的 action。
+    Pallet::<T>::ensure_lifecycle_proposal(
+        proposal_id,
+        crate::MODULE_TAG,
+        action.account.clone(),
+        votingengine::STATUS_PASSED,
+        true,
+    )?;
     let fee = action.fee;
     let reserve_total = action.amount.saturating_add(fee);
 
@@ -92,6 +101,17 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     proposal_id: u64,
     action: &PersonalCloseAction<T::AccountId>,
 ) -> DispatchResult {
+    Pallet::<T>::ensure_lifecycle_proposal(
+        proposal_id,
+        crate::MODULE_TAG,
+        action.account.clone(),
+        votingengine::STATUS_PASSED,
+        true,
+    )?;
+    ensure!(
+        PendingCloseProposal::<T>::get(&action.account) == Some(proposal_id),
+        Error::<T>::ProposalActionNotFound
+    );
     ensure!(
         T::InstitutionAsset::can_spend(
             &action.account,

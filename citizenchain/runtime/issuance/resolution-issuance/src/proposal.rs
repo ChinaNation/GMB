@@ -15,7 +15,8 @@ use sp_runtime::traits::Zero;
 use sp_runtime::DispatchError;
 use sp_std::vec::Vec;
 use votingengine::{
-    JointVoteEngine, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED, STATUS_REJECTED,
+    JointVoteEngine, PROPOSAL_KIND_JOINT, STAGE_JOINT, STAGE_REFERENDUM, STATUS_PASSED,
+    STATUS_REJECTED,
 };
 
 #[derive(
@@ -206,7 +207,14 @@ impl<T: Config> Pallet<T> {
         let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
             .ok_or(Error::<T>::ProposalNotFound)?;
         ensure!(
-            proposal.kind == PROPOSAL_KIND_JOINT && proposal.stage == STAGE_JOINT,
+            votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG),
+            Error::<T>::ProposalNotFinalizable
+        );
+        // 联合机构全票通过时停留在 STAGE_JOINT；非全票转公投后，合法通过
+        // 状态是 STAGE_REFERENDUM。业务回调必须同时接受这两条法定终局路径。
+        ensure!(
+            proposal.kind == PROPOSAL_KIND_JOINT
+                && matches!(proposal.stage, STAGE_JOINT | STAGE_REFERENDUM),
             Error::<T>::ProposalNotFinalizable
         );
         let expected_status = if approved {

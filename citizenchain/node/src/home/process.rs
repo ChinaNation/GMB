@@ -40,7 +40,7 @@ const DEFAULT_CHAIN_ID: &str = "citizenchain";
 pub enum NodeLifecycleState {
     Stopped,
     Starting,
-    GenesisPreparing,
+    Initializing,
     Running,
     Stopping,
     Restarting,
@@ -54,7 +54,7 @@ impl NodeLifecycleState {
         match self {
             Self::Stopped => "stopped",
             Self::Starting => "starting",
-            Self::GenesisPreparing => "genesis_preparing",
+            Self::Initializing => "initializing",
             Self::Running => "running",
             Self::Stopping => "stopping",
             Self::Restarting => "restarting",
@@ -277,6 +277,14 @@ fn install_genesis_state_if_available(
     Ok(())
 }
 
+fn needs_local_chain_initialization(base_path: &std::path::Path) -> Result<bool, String> {
+    let target_db = local_chain_db_dir(base_path);
+    if !target_db.exists() {
+        return Ok(true);
+    }
+    dir_has_entries(&target_db).map(|has_entries| !has_entries)
+}
+
 fn set_runtime_state(
     app: &AppHandle,
     node_state: NodeLifecycleState,
@@ -419,6 +427,10 @@ fn start_node_with_policy(app: AppHandle, restart_existing: bool) -> Result<Node
 
         // 准备启动参数。
         let base_path = node_data_dir(&app)?;
+        let initializing = needs_local_chain_initialization(&base_path)?;
+        if initializing {
+            set_runtime_state(&app, NodeLifecycleState::Initializing, None)?;
+        }
         install_genesis_state_if_available(&app, &base_path)?;
         // clean-run 本机重新创世时注入 fresh plain chainspec；普通启动仍用冻结主网 spec。
         let chain_spec = std::env::var("CITIZENCHAIN_CHAIN_SPEC")
@@ -439,8 +451,7 @@ fn start_node_with_policy(app: AppHandle, restart_existing: bool) -> Result<Node
             mining_threads,
         )?;
 
-        // 存储句柄。此时只说明后台线程已存在,不能说明创世 state 已物化完成。
-        // 大创世包场景下 RPC 端口会在 GenesisBuilder 完成后才真正可用。
+        // 存储句柄。首次准备本地数据保留“初始化中”，已有数据库保持“启动中”。
         {
             let app_state = app.state::<AppState>();
             let mut state = app_state
@@ -448,12 +459,38 @@ fn start_node_with_policy(app: AppHandle, restart_existing: bool) -> Result<Node
                 .lock()
                 .map_err(|_| "acquire process state failed".to_string())?;
             state.node_handle = Some(handle);
-            state.node_state = NodeLifecycleState::GenesisPreparing;
+            state.node_state = if initializing {
+                NodeLifecycleState::Initializing
+            } else if restart_existing {
+                NodeLifecycleState::Restarting
+            } else {
+                NodeLifecycleState::Starting
+            };
             state.last_error = None;
         }
 
         // 等待 RPC 就绪:只有能读到 chain_getBlockHash(0),首页和 OnChina 才能认为链可用。
-        rpc::wait_for_local_rpc_ready(NODE_RPC_READY_TIMEOUT).map_err(|err| {
+        rpc::wait_for_local_rpc_ready(NODE_RPC_READY_TIMEOUT, || {
+            let app_state = app.state::<AppState>();
+            let state = app_state
+                .0
+                .lock()
+                .map_err(|_| "acquire process state failed".to_string())?;
+            let Some(handle) = state.node_handle.as_ref() else {
+                return Err(state
+                    .last_error
+                    .clone()
+                    .unwrap_or_else(|| "节点句柄在 RPC 就绪前丢失，且未保留退出详情".to_string()));
+            };
+            if handle.is_alive() {
+                Ok(())
+            } else {
+                Err(handle
+                    .take_exit_error()
+                    .unwrap_or_else(|| "节点线程在 RPC 就绪前退出，但未返回退出详情".to_string()))
+            }
+        })
+        .map_err(|err| {
             let bad_handle = match app.state::<AppState>().0.lock() {
                 Ok(mut state) => {
                     state.node_state = NodeLifecycleState::Failed;
@@ -463,7 +500,7 @@ fn start_node_with_policy(app: AppHandle, restart_existing: bool) -> Result<Node
                 Err(_) => None,
             };
             drop(bad_handle);
-            format!("节点创世状态准备失败: {err}")
+            format!("节点初始化或启动失败: {err}")
         })?;
 
         {

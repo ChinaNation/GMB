@@ -6,6 +6,21 @@
 
 业务模块只提交提案语义，不能自行实现投票流程、人口快照、投票资格、计票、通过判定或清理状态机。
 
+## 内部投票与业务权限
+
+- `internal-vote` 是所有机构与个人多签共用的管理员投票程序，负责内部投票模式准入、有效账户上下文、管理员快照、计票、阈值快照和终态。
+- “机构可以使用内部投票”不等于“机构可以发起所有接入内部投票的业务”。有效准入 = 投票引擎模式准入 + 业务 pallet 具体权限，两层任一拒绝都不能创建或执行提案。
+- `multisig` 转账允许所有 active 机构账户和个人多签账户；机构身份统一从 entity 生命周期真源解析，不维护 NRC/PRC/PRB 专用转账白名单。
+- `resolution-destroy` 只允许 NRC、PRC、PRB；`grandpakey-change` 只允许 NRC、PRC。业务限制不得下沉到 `internal-vote`。
+- FRG 是一个机构、一个主账户和 215 名管理员；省域 5 人岗位组属于注册业务权限，通用内部投票只校验 FRG 规范账户身份和管理员快照。
+
+### 内部投票阈值
+
+- NRC、PRC、PRB、NJD、FRG 使用代码级永久固定阈值，不写账户级动态阈值。
+- PRS、NLG、NSN、NRP、NSP、NED 六个国家单例没有机构级动态阈值；普通内部事项在创建提案时按当前 admins 快照计算 `floor(N/2)+1`，只写 `InternalThresholdSnapshot`。
+- 六个国家单例禁止注册、生命周期和管理员变更通用入口写入 `PendingDynamicThresholds`、`ActiveDynamicThresholds` 或待变更阈值。
+- 普通注册机构与个人多签继续使用账户级动态阈值；生命周期关闭使用全员快照，具体业务权限仍由业务 pallet 校验。
+
 ## 公民身份真源
 
 投票资格和参选资格统一通过 `CitizenIdentityReader` 读取 `citizen-identity`：
@@ -33,6 +48,7 @@ OnChina 本地数据库只能用于注册局录入和界面提示，不能作为
 - 联合公投阶段：`JointVote::cast_referendum(proposal_id, approve)`。
 - 联合公投按 `proposal_id + who` 去重。
 - 联合公投资格由 `CitizenIdentityReader::can_vote(who, scope)` 判定。
+- 联合业务回调必须同时绑定 `ProposalOwner`、联合 proposal kind、`STAGE_JOINT/STAGE_REFERENDUM`、业务摘要和对象摘要；联合阶段直接通过与转入公投后通过都必须执行同一项已绑定业务。
 
 ## 立法投票
 
@@ -40,6 +56,7 @@ OnChina 本地数据库只能用于注册局录入和界面提示，不能作为
 - 代表机构表决：`cast_representative_vote(proposal_id, approve)`。
 - 特别案公投：`cast_referendum_vote(proposal_id, approve)`。
 - 行政签署、三人会签、护宪终审继续按账户和机构管理员快照判定。
+- `legislation-yuan` 在创建提案和投票通过写入前分别复核一次法定路由：固定院序、发起机构、行政签署机构、会签机构、active 账户和 CID 行政区必须全部一致。客户端携带的路由字段不是授权真源。
 
 ### 固定框架
 
@@ -65,10 +82,10 @@ legislation-vote/
 
 - `election-vote` 统一承载普选、互选的提案、选民/候选快照、投票、计票、结果快照和清理。
 - `term_start`、`term_end` 使用自纪元起 `u32` 天，不使用区块高度表达法定任期。
-- 普选终态映射为 `PopularElection`，互选终态映射为 `MutualElection`；每位当选人的任职都以 `proposal_id` 的 SCALE 编码写入 `assignment_source_ref`。
-- `election-vote` 只把单个目标岗位的完整当选集合封装为 `InstitutionGovernanceResult`；runtime 只按机构码路由，entity 负责校验并从全部有效任职派生 admins 钱包集合。
-- `election-vote` 不直接写 `InstitutionRoles`、`InstitutionRoleAssignments` 或 admins storage，不保存第二份岗位/管理员真源。
-- 底层创建 extrinsic 仍由 RuntimeCallFilter 禁止；真实创建规则必须由 `election-campaign` 业务壳提供。
+- `election-vote` 只产生不可变当选结果快照，不解释职位、席位、任期或目标机构业务规则，也不得构造 `InstitutionGovernanceResult` 直写 entity。
+- 普选/互选底层创建 extrinsic 已物理删除；当前外部只保留 `cast_popular_vote` 与 `cast_mutual_vote`。
+- 真实创建必须由 `election-campaign` 校验组织者、职位、候选人、选民、席位和任期后调用引擎；结果也必须先回到该业务模块复核，再由业务模块调用 entity 任职入口。
+- 当前 `election-campaign` 尚未实现真实规则，因此创建和结果写入都保持 fail-closed，不能用 RuntimeCallFilter 或 runtime 结果路由伪装成完整业务。
 
 ## 清理
 
@@ -88,6 +105,12 @@ WASM 的 fresh 临时节点正常启动，block#0 为
 `0xf5f7bb30535ead9b5cd5b0159b61124dd0116635ebe78b6b550eb3aa7dc169fe`；真实 metadata
 已确认新代表机构存储与 `cast_representative_vote` 生效，被替换的旧存储和旧调用名不存在。
 
-2026-07-13 第四步 B2：`election-vote` 已改用 entity 的通用 `InstitutionGovernanceResult`，
-只提交单个目标岗位的完整当选集合；每位当选人的任期、来源和引用独立编码。该改造没有改变
-选举提案、资格、计票或通过规则，也没有新增业务模块、外部调用或投票 kind。
+2026-07-13 第四步 B2 曾把 `election-vote` 结果直接封装为 entity 的通用
+`InstitutionGovernanceResult`；该过渡实现缺少选举业务层复核，已在 2026-07-14 治理职责第 3 步撤销，
+不得恢复为投票引擎直写任职。
+
+2026-07-14 治理职责收口第 1 步：内部投票与业务权限完成分层。FRG 账户上下文不再错误绑定省域 5 人组；多签转账统一从 entity 解析所有机构；销毁仍由业务模块固定 NRC/PRC/PRB，GRANDPA 密钥仍固定 NRC/PRC。专项测试通过：`internal-vote` 88、`multisig` 24、`resolution-destroy` 15、`grandpakey-change` 17，runtime 整体 `cargo check` 通过。
+
+2026-07-14 治理职责收口第 2 步：六个国家单例删除账户级动态阈值，普通内部事项改为按提案管理员快照派生严格过半；首次组成只原子写岗位、任职和 admins。`internal-vote` 89、`public-admins` 8、`public-manage` 42、runtime 集成 40 项测试通过。
+
+2026-07-14 治理职责收口第 3 步：业务执行端新增 owner/kind/stage/code/account/CID/action 全绑定；联合业务接受联合阶段或公投阶段的合法通过终态；立法路由改为链端双重复校验；选举引擎删除外部创建入口和直写 entity 路径。投票引擎继续只负责投票流程，业务权限与执行前复核留在业务 pallet。

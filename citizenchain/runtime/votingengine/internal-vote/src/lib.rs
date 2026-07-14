@@ -1,6 +1,10 @@
 //! # 内部投票 pallet (internal-vote)
 //!
-//! 治理机构 / 注册多签的"管理员一人一票"投票模式。
+//! 所有机构与个人多签共用的“管理员一人一票”投票程序。
+//!
+//! 本模块负责内部投票模式准入、机构上下文、管理员快照、计票和终态，不判断
+//! 某个机构能否发起转账、销毁或密钥变更等具体业务。有效准入必须同时通过
+//! 投票引擎的模式校验与调用方业务 pallet 的业务权限校验。
 //!
 //! 共用基础设施(Proposals 主 storage / 双层 ID / 反向索引 / 状态机骨架 / 快照 / 锁 / 清理)
 //! 仍归 [`votingengine`] 引擎核心,本 pallet 通过 `Config: votingengine::Config` 直接访问。
@@ -30,7 +34,8 @@ use sp_runtime::{DispatchError, RuntimeDebug};
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
 use primitives::cid::china::china_sf::CHINA_SF;
-use primitives::count_const::{FRG_PROVINCE_GROUP_ADMIN_COUNT, VOTING_DURATION_BLOCKS};
+use primitives::cid::china::china_zf::CHINA_ZF;
+use primitives::count_const::VOTING_DURATION_BLOCKS;
 
 use votingengine::{
     pallet::{AdminSnapshot, Proposals},
@@ -221,11 +226,14 @@ fn is_valid_account_context<T: Config>(
             .iter()
             .filter_map(|n| decode_account::<T>(&n.main_account))
             .any(|pid| pid == account_context),
-        FRG => {
-            <T as votingengine::Config>::InternalAdminProvider::get_admin_list(FRG, account_context)
-                .map(|admins| admins.len() == FRG_PROVINCE_GROUP_ADMIN_COUNT as usize)
-                .unwrap_or(false)
-        }
+        // FRG 是一个机构、一个主账户、215 名管理员。省域 5 人岗位组属于具体
+        // 注册业务权限，不得在通用内部投票引擎中把 FRG 误判成“管理员恰好 5 人”。
+        FRG => CHINA_ZF
+            .iter()
+            .find(|n| institution_code_from_cid_number(n.cid_number) == Some(FRG))
+            .and_then(|n| decode_account::<T>(&n.main_account))
+            .map(|frg| account_context == frg)
+            .unwrap_or(false),
         NJD => CHINA_SF
             .iter()
             .find(|n| institution_code_from_cid_number(n.cid_number) == Some(NJD))
@@ -258,6 +266,7 @@ fn active_internal_threshold<T: Config>(
 ) -> Option<u32> {
     match institution_code {
         NRC | PRC | PRB | FRG | NJD => fixed_governance_pass_threshold(&institution_code),
+        c if primitives::institution_constraints::is_permanent_singleton_code(&c) => None,
         c if is_registered_multisig_code(&c) => ActiveDynamicThresholds::<T>::get(c, institution),
         _ => None,
     }
@@ -334,7 +343,10 @@ impl<T: Config> Pallet<T> {
         dynamic_threshold: u32,
     ) -> Result<u64, DispatchError> {
         ensure!(
-            is_registered_multisig_code(&institution_code),
+            is_registered_multisig_code(&institution_code)
+                && !primitives::institution_constraints::is_permanent_singleton_code(
+                    &institution_code
+                ),
             Error::<T>::InvalidInternalCode
         );
         ensure!(
@@ -440,7 +452,10 @@ impl<T: Config> Pallet<T> {
         subject_cid_numbers: sp_std::vec::Vec<sp_std::vec::Vec<u8>>,
     ) -> Result<u64, DispatchError> {
         ensure!(
-            is_registered_multisig_code(&institution_code),
+            is_registered_multisig_code(&institution_code)
+                && !primitives::institution_constraints::is_permanent_singleton_code(
+                    &institution_code
+                ),
             Error::<T>::InvalidInternalCode
         );
         Self::do_create_active_account_internal_proposal(
@@ -462,6 +477,10 @@ impl<T: Config> Pallet<T> {
         new_admins_len: u32,
         new_threshold: u32,
     ) -> Result<u64, DispatchError> {
+        ensure!(
+            !primitives::institution_constraints::is_permanent_singleton_code(&institution_code),
+            Error::<T>::InvalidInternalCode
+        );
         if is_registered_multisig_code(&institution_code) {
             Self::ensure_dynamic_threshold(new_admins_len, new_threshold)?;
         } else {
@@ -514,10 +533,6 @@ impl<T: Config> Pallet<T> {
             is_internal_admin::<T>(institution_code, institution.clone(), &who),
             votingengine::Error::<T>::NoPermission
         );
-        let active_threshold =
-            active_internal_threshold::<T>(institution_code, institution.clone())
-                .ok_or(Error::<T>::InvalidInternalCode)?;
-
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::internal_stage_duration());
         let subject_cid_numbers =
@@ -576,11 +591,31 @@ impl<T: Config> Pallet<T> {
             };
             let threshold = if force_all_admin_threshold.unwrap_or(false) {
                 snapshot_size
+            } else if let Some(fixed_threshold) = fixed_governance_pass_threshold(&institution_code)
+            {
+                fixed_threshold
+            } else if primitives::institution_constraints::is_permanent_singleton_code(
+                &institution_code,
+            ) {
+                // 六个国家级永久单例没有账户级动态阈值；普通内部事项在提案创建时
+                // 直接对当前 admins 快照计算最小严格过半，并只写提案阈值快照。
+                snapshot_size / 2 + 1
             } else {
-                active_threshold
+                match active_internal_threshold::<T>(institution_code, institution.clone()) {
+                    Some(threshold) => threshold,
+                    None => {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::InvalidInternalCode.into()
+                        ))
+                    }
+                }
             };
             let threshold_check = if force_all_admin_threshold.unwrap_or(false) {
                 Self::ensure_all_admin_threshold(snapshot_size, threshold)
+            } else if primitives::institution_constraints::is_permanent_singleton_code(
+                &institution_code,
+            ) {
+                Self::ensure_dynamic_threshold(snapshot_size, threshold)
             } else if is_registered_multisig_code(&institution_code) {
                 Self::ensure_dynamic_threshold(snapshot_size, threshold)
             } else {
@@ -875,9 +910,13 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         admins_len: u32,
         threshold: u32,
     ) -> DispatchResult {
-        // 直设阈值只针对注册动态多签主体；创世治理机构统一走代码级固定阈值。
+        // 直设阈值只针对注册动态多签主体；固定治理机构走代码级阈值，六个国家
+        // 单例按每个提案的 admins 快照计算严格过半，二者都不允许写本 storage。
         ensure!(
-            is_registered_multisig_code(&institution_code),
+            is_registered_multisig_code(&institution_code)
+                && !primitives::institution_constraints::is_permanent_singleton_code(
+                    &institution_code
+                ),
             Error::<T>::InvalidInternalCode
         );
         Self::ensure_dynamic_threshold(admins_len, threshold)?;
@@ -889,6 +928,9 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         institution_code: InstitutionCode,
         institution: T::AccountId,
     ) -> Option<u32> {
+        if primitives::institution_constraints::is_permanent_singleton_code(&institution_code) {
+            return None;
+        }
         ActiveDynamicThresholds::<T>::get(institution_code, institution)
     }
 
@@ -896,6 +938,9 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
         institution_code: InstitutionCode,
         institution: T::AccountId,
     ) -> Option<u32> {
+        if primitives::institution_constraints::is_permanent_singleton_code(&institution_code) {
+            return None;
+        }
         ActiveDynamicThresholds::<T>::get(institution_code, institution.clone())
             .or_else(|| PendingDynamicThresholds::<T>::get(institution_code, institution))
     }

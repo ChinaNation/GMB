@@ -153,6 +153,28 @@ interface StripeSubscriptionApi {
   error?: { message?: string };
 }
 
+/// Webhook 收到 subscription.created/updated 后回读 Stripe 当前对象。
+/// 迟到事件携带的旧快照不参与落库，避免乱序投递把新档位或新周期回滚。
+export async function retrieveStripeSubscription(
+  env: Env,
+  subscriptionId: string
+): Promise<Record<string, unknown>> {
+  const key = requireStripeKey(env);
+  const response = await fetch(
+    `${STRIPE_API_BASE}/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    { headers: { authorization: `Bearer ${key}` } }
+  );
+  const raw = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new HttpError(
+      502,
+      'stripe_subscription_read_failed',
+      `Stripe 订阅读取失败：${response.status}`
+    );
+  }
+  return raw;
+}
+
 /// 换档结果：applied=变更是否已即时生效；paymentUrl=升档需用户主动付差价时的托管账单地址。
 export interface TierChangeResult {
   applied: boolean;

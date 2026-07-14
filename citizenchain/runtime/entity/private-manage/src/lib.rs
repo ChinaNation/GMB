@@ -1093,7 +1093,6 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                         match crate::close::execute_institution_close_with_finalizer::<T>(
                             proposal_id,
                             &action,
-                            true,
                         ) {
                             Ok(()) => TransactionOutcome::Commit(Ok(())),
                             Err(e) => TransactionOutcome::Rollback(Err(e)),

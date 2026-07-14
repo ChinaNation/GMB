@@ -150,6 +150,16 @@ fn admins(count: u8) -> Vec<AccountId32> {
     (0..count).map(account).collect()
 }
 
+fn indexed_admins(count: u32) -> Vec<AccountId32> {
+    (0..count)
+        .map(|index| {
+            let mut raw = [0u8; 32];
+            raw[..4].copy_from_slice(&index.to_le_bytes());
+            AccountId32::new(raw)
+        })
+        .collect()
+}
+
 #[test]
 fn public_admins_accept_public_codes_and_reject_private_codes() {
     new_test_ext().execute_with(|| {
@@ -157,7 +167,7 @@ fn public_admins_accept_public_codes_and_reject_private_codes() {
         assert_ok!(PublicAdmins::do_set_active_admin_account_direct(
             root.clone(),
             b"TEST-CID".to_vec(),
-            code_bytes("PRS"),
+            code_bytes("CGOV"),
             AdminAccountKind::PublicInstitution,
             admins(3),
             2,
@@ -214,12 +224,18 @@ fn public_admins_activate_and_query_active_admins() {
 }
 
 #[test]
-fn public_admins_accept_fixed_governance_codes_with_fixed_size() {
+fn public_admins_fix_size_only_for_full_genesis_identity() {
     new_test_ext().execute_with(|| {
+        let fixed = primitives::governance_skeleton::fixed_institutions()
+            .into_iter()
+            .find(|institution| institution.code == code_bytes("NRC"))
+            .expect("NRC genesis identity");
         assert_noop!(
             PublicAdmins::validate_admin_set_for_account(
                 AdminAccountKind::PublicInstitution,
                 code_bytes("NRC"),
+                fixed.cid_number.as_bytes(),
+                &fixed.main_account,
                 &admins(3),
             ),
             Error::<Test>::InvalidAdminsLen
@@ -228,8 +244,76 @@ fn public_admins_accept_fixed_governance_codes_with_fixed_size() {
         assert_ok!(PublicAdmins::validate_admin_set_for_account(
             AdminAccountKind::PublicInstitution,
             code_bytes("NRC"),
+            fixed.cid_number.as_bytes(),
+            &fixed.main_account,
             &admins(NRC_ADMIN_COUNT as u8),
         ));
+
+        // 机构码相同但不是创世 CID + 主账户时，不得扩大固定人数保护范围。
+        assert_ok!(PublicAdmins::validate_admin_set_for_account(
+            AdminAccountKind::PublicInstitution,
+            code_bytes("NRC"),
+            b"runtime-institution",
+            &[9u8; 32],
+            &admins(3),
+        ));
+    });
+}
+
+#[test]
+fn member_body_range_only_applies_to_exact_genesis_identity() {
+    new_test_ext().execute_with(|| {
+        let spec = primitives::institution_constraints::member_composition_specs()[0];
+        assert_noop!(
+            PublicAdmins::validate_admin_set_for_account(
+                AdminAccountKind::PublicInstitution,
+                spec.institution.code,
+                spec.institution.cid_number.as_bytes(),
+                &spec.institution.main_account,
+                &indexed_admins(spec.min_members - 1),
+            ),
+            Error::<Test>::InvalidAdminsLen
+        );
+        assert_ok!(PublicAdmins::validate_admin_set_for_account(
+            AdminAccountKind::PublicInstitution,
+            spec.institution.code,
+            spec.institution.cid_number.as_bytes(),
+            &spec.institution.main_account,
+            &indexed_admins(spec.min_members),
+        ));
+        assert_ok!(PublicAdmins::validate_admin_set_for_account(
+            AdminAccountKind::PublicInstitution,
+            spec.institution.code,
+            b"ordinary-runtime-cid",
+            &[9u8; 32],
+            &admins(3),
+        ));
+    });
+}
+
+#[test]
+fn first_member_body_composition_atomically_creates_admins_without_dynamic_threshold() {
+    new_test_ext().execute_with(|| {
+        let spec = primitives::institution_constraints::member_composition_specs()[0];
+        let root = AccountId32::new(spec.institution.main_account);
+        let members = indexed_admins(spec.min_members);
+        assert_ok!(PublicAdmins::do_sync_active_admins_from_assignments(
+            root.clone(),
+            spec.institution.cid_number.as_bytes().to_vec(),
+            spec.institution.code,
+            members.clone(),
+        ));
+        assert_eq!(
+            AdminAccounts::<Test>::get(root.clone())
+                .expect("first composition creates admins")
+                .admins
+                .to_vec(),
+            members
+        );
+        assert_eq!(
+            internal_vote::ActiveDynamicThresholds::<Test>::get(spec.institution.code, root),
+            None
+        );
     });
 }
 

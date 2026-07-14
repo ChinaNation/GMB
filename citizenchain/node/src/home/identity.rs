@@ -1,6 +1,6 @@
 // 身份管理子模块：节点身份信息、状态查询。
 
-use crate::settings::bootnodes_address;
+use crate::{desktop::node_runner::NodeHandle, settings::bootnodes_address};
 use serde::Serialize;
 use serde_json::Value;
 use tauri::AppHandle;
@@ -16,6 +16,7 @@ pub struct NodeStatus {
     pub running: bool,
     pub state: String,
     pub pid: Option<u32>,
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -52,11 +53,17 @@ pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
             .unwrap_or(false);
         if stale {
             state.node_state = NodeLifecycleState::Exited;
-            state.last_error = Some("node thread exited unexpectedly".to_string());
+            state.last_error = Some(
+                state
+                    .node_handle
+                    .as_ref()
+                    .and_then(NodeHandle::take_exit_error)
+                    .unwrap_or_else(|| "节点线程异常退出，但未返回退出详情".to_string()),
+            );
             state.node_handle.take()
         } else {
             if state.node_handle.is_some() {
-                // 线程存活不代表 RPC 已可用。保留 starting / genesis_preparing /
+                // 线程存活不代表 RPC 已可用。保留 starting / initializing /
                 // restarting 等中间态,只修正“不一致的 stopped + handle 存在”状态。
                 if state.node_state == NodeLifecycleState::Stopped {
                     state.node_state = NodeLifecycleState::Running;
@@ -69,7 +76,7 @@ pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
     // 异常退出的线程句柄在释放 state 锁后 drop，避免状态查询阻塞其它命令。
     drop(stale_handle);
 
-    let (managed_running, state_label) = {
+    let (managed_running, state_label, last_error) = {
         let app_state = app.state::<AppState>();
         let state = app_state
             .0
@@ -80,13 +87,18 @@ pub(crate) fn current_status(app: &AppHandle) -> Result<NodeStatus, String> {
             .as_ref()
             .map(|handle| handle.is_alive() && state.node_state == NodeLifecycleState::Running)
             .unwrap_or(false);
-        (running, state.node_state.as_str().to_string())
+        (
+            running,
+            state.node_state.as_str().to_string(),
+            state.last_error.clone(),
+        )
     };
     let managed_pid: Option<u32> = None;
     Ok(NodeStatus {
         running: managed_running,
         state: state_label,
         pid: managed_pid,
+        last_error,
     })
 }
 

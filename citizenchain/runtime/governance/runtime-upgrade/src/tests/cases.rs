@@ -89,6 +89,23 @@ fn approved_joint_vote_executes_runtime_upgrade() {
 }
 
 #[test]
+fn approved_referendum_executes_runtime_upgrade() {
+    new_test_ext().execute_with(|| {
+        propose_ok();
+        insert_engine_proposal_with_stage_and_status(
+            100,
+            votingengine::STAGE_REFERENDUM,
+            votingengine::STATUS_PASSED,
+        );
+        assert_ok!(call_joint_callback(100, true));
+        assert!(
+            RUNTIME_CODE_EXECUTED.with(|executed| *executed.borrow()),
+            "联合公投通过后必须继续执行绑定的 runtime code"
+        );
+    });
+}
+
+#[test]
 fn approved_upgrade_atomically_stages_versioned_pow_params() {
     new_test_ext().execute_with(|| {
         System::set_block_number(5);

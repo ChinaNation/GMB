@@ -354,6 +354,8 @@ async function createOneTimeCheckout(
 
   const form = new URLSearchParams();
   form.set('mode', 'payment');
+  // 强制 Stripe Crypto：USDC 入口不得回落到银行卡或其它动态支付方式。
+  form.set('payment_method_types[0]', 'crypto');
   form.set('line_items[0][price_data][currency]', 'usd');
   form.set('line_items[0][price_data][unit_amount]', String(params.amountCents));
   form.set('line_items[0][price_data][product_data][name]', params.productName);

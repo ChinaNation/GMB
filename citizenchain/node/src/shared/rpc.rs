@@ -247,9 +247,16 @@ pub(crate) fn verify_genesis_hash() -> Result<(), String> {
 /// 进程内节点线程存活不等于创世状态已经物化完成;大创世场景下 RPC 端口可能很久
 /// 才会监听。所有 UI 可用态和 OnChina 启动前置检查都以本函数成功读到
 /// `chain_getBlockHash(0)` 为准。
-pub(crate) fn wait_for_local_rpc_ready(timeout: Duration) -> Result<String, String> {
+pub(crate) fn wait_for_local_rpc_ready<F>(
+    timeout: Duration,
+    should_continue: F,
+) -> Result<String, String>
+where
+    F: Fn() -> Result<(), String>,
+{
     let started_at = Instant::now();
     loop {
+        should_continue()?;
         let last_error = match fetch_local_genesis_hash() {
             Ok(hash) => {
                 let mutex = CACHED_GENESIS_HASH.get_or_init(|| Mutex::new(None));

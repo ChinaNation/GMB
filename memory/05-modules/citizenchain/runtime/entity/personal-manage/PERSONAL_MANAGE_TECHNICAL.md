@@ -10,6 +10,7 @@
 - 个人多签转账归 `multisig-transfer`。
 - 个人多签机构码为 `PMUL`。
 - 不承担公权机构、私权机构生命周期。
+- 创建与关闭执行器只接受投票引擎 callback scope 内、owner/kind/stage/status 与本模块生命周期提案完全绑定的回调；关闭还必须匹配 `PendingCloseProposal[account]`，不能拿其它已通过内部提案复用。
 
 ## MODULE_TAG
 

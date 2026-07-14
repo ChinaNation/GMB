@@ -68,6 +68,30 @@ CREATE INDEX idx_square_memberships_lapsed
   ON square_memberships(entitlement_lapsed_at)
   WHERE entitlement_lapsed_at IS NOT NULL;
 
+-- Stripe webhook 事件先以 event_id 原子占位，重复投递只允许一个处理者进入业务写入。
+CREATE TABLE square_stripe_webhook_events (
+  event_id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  stripe_object_id TEXT,
+  event_created_at INTEGER NOT NULL,
+  received_at INTEGER NOT NULL,
+  processed_at INTEGER
+);
+CREATE INDEX idx_square_stripe_webhook_events_processed
+  ON square_stripe_webhook_events(processed_at, received_at);
+
+-- 一次性 Stripe Crypto 付款永久去重；同一 payment_intent 不能重复授时长或重复换档。
+CREATE TABLE square_stripe_payments (
+  stripe_payment_intent_id TEXT PRIMARY KEY,
+  checkout_session_id TEXT NOT NULL,
+  owner_account TEXT NOT NULL,
+  membership_level TEXT NOT NULL,
+  payment_route TEXT NOT NULL,
+  granted_at INTEGER NOT NULL
+);
+CREATE INDEX idx_square_stripe_payments_owner
+  ON square_stripe_payments(owner_account, granted_at);
+
 CREATE TABLE square_uploads (
   upload_id TEXT PRIMARY KEY,
   post_id TEXT NOT NULL UNIQUE,

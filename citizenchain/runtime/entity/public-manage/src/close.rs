@@ -99,7 +99,8 @@ pub(crate) fn do_propose_institution_close<T: Config>(
         Error::<T>::CannotCloseProtectedInstitution
     );
     ensure!(
-        !is_fixed_governance_code(&institution_code),
+        !is_fixed_governance_code(&institution_code)
+            && !primitives::institution_constraints::is_permanent_singleton_code(&institution_code,),
         Error::<T>::CannotCloseGovernance
     );
 
@@ -210,7 +211,6 @@ pub(crate) fn do_propose_institution_close<T: Config>(
 pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     proposal_id: u64,
     action: &CloseInstitutionAction<T::AccountId>,
-    _callback_context: bool,
 ) -> DispatchResult {
     use frame_support::traits::{ExistenceRequirement, OnUnbalanced, WithdrawReasons};
 
@@ -228,6 +228,57 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     let registered =
         AccountRegisteredCid::<T>::get(&action.account).ok_or(Error::<T>::AccountNotFound)?;
     let cid_number = registered.cid_number.clone();
+    let account_info = InstitutionAccounts::<T>::get(&cid_number, &registered.account_name)
+        .ok_or(Error::<T>::AccountNotFound)?;
+    ensure!(
+        matches!(account_info.status, InstitutionLifecycleStatus::Active),
+        Error::<T>::AccountNotActive
+    );
+    let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
+        .ok_or(Error::<T>::ProposalActionNotFound)?;
+    ensure!(
+        votingengine::Pallet::<T>::is_callback_execution_scope(proposal_id)
+            && votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
+            && proposal.kind == votingengine::PROPOSAL_KIND_INTERNAL
+            && proposal.stage == votingengine::STAGE_INTERNAL
+            && proposal.status == votingengine::STATUS_PASSED
+            && proposal.internal_code == Some(institution_code)
+            && proposal.account_context == Some(admin_account.clone())
+            && proposal
+                .subject_cid_numbers
+                .iter()
+                .any(|subject| subject.as_slice() == cid_number.as_slice())
+            && InstitutionPendingClose::<T>::get(&action.account) == Some(proposal_id),
+        Error::<T>::ProposalActionNotFound
+    );
+    ensure!(
+        !T::AdminAccountQuery::is_genesis_protected(&action.account)
+            && !is_fixed_governance_code(&institution_code)
+            && !primitives::institution_constraints::is_permanent_singleton_code(&institution_code,),
+        Error::<T>::CannotCloseGovernance
+    );
+    ensure!(
+        action.beneficiary != action.account
+            && !T::ReservedAccountChecker::is_reserved(&action.beneficiary)
+            && T::AccountValidator::is_valid(&action.beneficiary)
+            && !T::ProtectedSourceChecker::is_protected(&action.beneficiary),
+        Error::<T>::InvalidBeneficiary
+    );
+    let is_main = primitives::account_derive::institution_kind_by_name(
+        cid_number.as_slice(),
+        registered.account_name.as_slice(),
+    )
+    .map(|kind| Pallet::<T>::is_main_account(&kind))
+    .unwrap_or(false);
+    let expected_scope = if is_main {
+        SCOPE_INSTITUTION
+    } else {
+        SCOPE_ACCOUNT
+    };
+    ensure!(
+        action.scope == expected_scope,
+        Error::<T>::ProposalActionNotFound
+    );
 
     // 整机构注销=该 cid 下全部账户;单账户注销=仅本账户。
     // 先 collect 再处理,避免边遍历 StorageDoubleMap 边删。

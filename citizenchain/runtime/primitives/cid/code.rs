@@ -309,6 +309,18 @@ pub const PRB: InstitutionCode = *b"PRB\0";
 pub const FRG: InstitutionCode = *b"FRG\0";
 /// 国家司法院。
 pub const NJD: InstitutionCode = *b"NJD\0";
+/// 总统府。
+pub const PRS: InstitutionCode = *b"PRS\0";
+/// 国家立法院。
+pub const NLG: InstitutionCode = *b"NLG\0";
+/// 国家参议会。
+pub const NSN: InstitutionCode = *b"NSN\0";
+/// 国家众议会。
+pub const NRP: InstitutionCode = *b"NRP\0";
+/// 国家监察院。
+pub const NSP: InstitutionCode = *b"NSP\0";
+/// 国家教委会。
+pub const NED: InstitutionCode = *b"NED\0";
 
 /// 个人多签账户,不发 CID 号。
 pub const PMUL: InstitutionCode = *b"PMUL";
@@ -317,7 +329,7 @@ pub const PMUL: InstitutionCode = *b"PMUL";
 pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
     // A 国家码单体(38,3 位,公法人,非盈利)
     InstitutionCodeInfo {
-        institution_code: *b"PRS\0",
+        institution_code: PRS,
         institution_code_text: "PRS",
         institution_code_label: "总统府",
     },
@@ -458,17 +470,17 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
         institution_code_label: "交通部",
     },
     InstitutionCodeInfo {
-        institution_code: *b"NLG\0",
+        institution_code: NLG,
         institution_code_text: "NLG",
         institution_code_label: "国家立法院",
     },
     InstitutionCodeInfo {
-        institution_code: *b"NSN\0",
+        institution_code: NSN,
         institution_code_text: "NSN",
         institution_code_label: "国家参议会",
     },
     InstitutionCodeInfo {
-        institution_code: *b"NRP\0",
+        institution_code: NRP,
         institution_code_text: "NRP",
         institution_code_label: "国家众议会",
     },
@@ -478,7 +490,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
         institution_code_label: "国家司法院",
     },
     InstitutionCodeInfo {
-        institution_code: *b"NSP\0",
+        institution_code: NSP,
         institution_code_text: "NSP",
         institution_code_label: "国家监察院",
     },
@@ -498,7 +510,7 @@ pub const INSTITUTION_CODE_INFOS: [InstitutionCodeInfo; 104] = [
         institution_code_label: "联邦调查署",
     },
     InstitutionCodeInfo {
-        institution_code: *b"NED\0",
+        institution_code: NED,
         institution_code_text: "NED",
         institution_code_label: "国家教委会",
     },

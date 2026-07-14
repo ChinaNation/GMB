@@ -1,0 +1,194 @@
+//! 国家级单例机构与法定成员组成的永久约束真源。
+//!
+//! 本模块只固定不可由 runtime 升级改变的制度边界：六个国家机构的创世身份、
+//! 参议会/众议会/国家教委会的法定成员岗位及人数区间，以及立法院的组成关系。
+//! 六个单例的管理员随合法治理结果运行期增删改；它们没有账户级动态阈值，
+//! 普通内部事项由投票引擎按每次提案的管理员快照计算严格过半。
+
+extern crate alloc;
+
+use alloc::{vec, vec::Vec};
+
+use crate::cid::china::{
+    china_jc::CHINA_JC, china_jy::CHINA_JY, china_lf::CHINA_LF, china_zf::CHINA_ZF,
+};
+use crate::cid::code::{
+    institution_code_from_cid_number, InstitutionCode, NED, NLG, NRP, NSN, NSP, PRS,
+};
+
+/// 国家参议会法定成员岗位代码。
+pub const ROLE_CODE_SENATOR: &[u8] = b"SENATOR";
+/// 国家众议会法定成员岗位代码。
+pub const ROLE_CODE_REPRESENTATIVE: &[u8] = b"REPRESENTATIVE";
+/// 国家教委会法定委员岗位代码。
+pub const ROLE_CODE_COMMITTEE_MEMBER: &[u8] = b"COMMITTEE_MEMBER";
+
+/// 法定成员岗位公开名称。
+pub const ROLE_NAME_SENATOR: &[u8] = "参议员".as_bytes();
+pub const ROLE_NAME_REPRESENTATIVE: &[u8] = "众议员".as_bytes();
+pub const ROLE_NAME_COMMITTEE_MEMBER: &[u8] = "委员".as_bytes();
+
+/// 国家级永久单例机构的精确创世身份。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SingletonInstitution {
+    pub code: InstitutionCode,
+    pub cid_number: &'static str,
+    pub main_account: [u8; 32],
+}
+
+/// 指定机构的法定成员组成区间。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MemberCompositionSpec {
+    pub institution: SingletonInstitution,
+    pub role_code: &'static [u8],
+    pub role_name: &'static [u8],
+    pub min_members: u32,
+    pub max_members: u32,
+}
+
+fn singleton_from_lf(code: InstitutionCode) -> SingletonInstitution {
+    let item = CHINA_LF
+        .iter()
+        .find(|item| institution_code_from_cid_number(item.cid_number) == Some(code))
+        .expect("CHINA_LF must contain national legislature singleton");
+    SingletonInstitution {
+        code,
+        cid_number: item.cid_number,
+        main_account: item.main_account,
+    }
+}
+
+/// 六个国家级永久单例，身份直接引用创世 CID 常量表。
+pub fn singleton_institutions() -> Vec<SingletonInstitution> {
+    let prs = &CHINA_ZF[0];
+    let nsp = &CHINA_JC[0];
+    let ned = &CHINA_JY[0];
+    vec![
+        SingletonInstitution {
+            code: PRS,
+            cid_number: prs.cid_number,
+            main_account: prs.main_account,
+        },
+        singleton_from_lf(NLG),
+        singleton_from_lf(NSN),
+        singleton_from_lf(NRP),
+        SingletonInstitution {
+            code: NSP,
+            cid_number: nsp.cid_number,
+            main_account: nsp.main_account,
+        },
+        SingletonInstitution {
+            code: NED,
+            cid_number: ned.cid_number,
+            main_account: ned.main_account,
+        },
+    ]
+}
+
+/// 机构码是否属于只能由创世身份占用的六个国家级单例码。
+pub fn is_permanent_singleton_code(code: &InstitutionCode) -> bool {
+    matches!(*code, PRS | NLG | NSN | NRP | NSP | NED)
+}
+
+/// 按完整身份查询国家级永久单例；仅机构码相同不会命中。
+pub fn singleton_by_identity(
+    code: InstitutionCode,
+    cid_number: &[u8],
+    main_account: &[u8],
+) -> Option<SingletonInstitution> {
+    singleton_institutions().into_iter().find(|institution| {
+        institution.code == code
+            && institution.cid_number.as_bytes() == cid_number
+            && institution.main_account.as_slice() == main_account
+    })
+}
+
+/// 按 CID 查询国家级永久单例。
+pub fn singleton_by_cid(cid_number: &[u8]) -> Option<SingletonInstitution> {
+    singleton_institutions()
+        .into_iter()
+        .find(|institution| institution.cid_number.as_bytes() == cid_number)
+}
+
+/// 按主账户查询国家级永久单例。
+pub fn singleton_by_main_account(main_account: &[u8; 32]) -> Option<SingletonInstitution> {
+    singleton_institutions()
+        .into_iter()
+        .find(|institution| &institution.main_account == main_account)
+}
+
+/// 三个法定成员机构的人数区间和唯一成员岗位。
+pub fn member_composition_specs() -> Vec<MemberCompositionSpec> {
+    vec![
+        MemberCompositionSpec {
+            institution: singleton_from_lf(NSN),
+            role_code: ROLE_CODE_SENATOR,
+            role_name: ROLE_NAME_SENATOR,
+            min_members: 105,
+            max_members: 155,
+        },
+        MemberCompositionSpec {
+            institution: singleton_from_lf(NRP),
+            role_code: ROLE_CODE_REPRESENTATIVE,
+            role_name: ROLE_NAME_REPRESENTATIVE,
+            min_members: 305,
+            max_members: 355,
+        },
+        MemberCompositionSpec {
+            institution: singleton_institutions()
+                .into_iter()
+                .find(|item| item.code == NED)
+                .expect("singleton list must contain NED"),
+            role_code: ROLE_CODE_COMMITTEE_MEMBER,
+            role_name: ROLE_NAME_COMMITTEE_MEMBER,
+            min_members: 105,
+            max_members: 155,
+        },
+    ]
+}
+
+/// 按完整身份查询法定成员组成约束。
+pub fn member_composition_by_identity(
+    code: InstitutionCode,
+    cid_number: &[u8],
+    main_account: &[u8],
+) -> Option<MemberCompositionSpec> {
+    member_composition_specs().into_iter().find(|spec| {
+        spec.institution.code == code
+            && spec.institution.cid_number.as_bytes() == cid_number
+            && spec.institution.main_account.as_slice() == main_account
+    })
+}
+
+/// 国家立法院由国家参议会和国家众议会组成，不额外冻结 NLG 自身岗位。
+pub fn national_legislature_components() -> [SingletonInstitution; 2] {
+    [singleton_from_lf(NSN), singleton_from_lf(NRP)]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn singleton_identities_and_codes_are_unique() {
+        let list = singleton_institutions();
+        assert_eq!(list.len(), 6);
+        for (index, item) in list.iter().enumerate() {
+            assert!(is_permanent_singleton_code(&item.code));
+            assert!(!list[..index].iter().any(|other| other.code == item.code
+                || other.cid_number == item.cid_number
+                || other.main_account == item.main_account));
+        }
+    }
+
+    #[test]
+    fn member_composition_ranges_match_institutional_design() {
+        let specs = member_composition_specs();
+        assert_eq!(specs.len(), 3);
+        assert_eq!((specs[0].min_members, specs[0].max_members), (105, 155));
+        assert_eq!((specs[1].min_members, specs[1].max_members), (305, 355));
+        assert_eq!((specs[2].min_members, specs[2].max_members), (105, 155));
+        assert_eq!(national_legislature_components()[0].code, NSN);
+        assert_eq!(national_legislature_components()[1].code, NRP);
+    }
+}

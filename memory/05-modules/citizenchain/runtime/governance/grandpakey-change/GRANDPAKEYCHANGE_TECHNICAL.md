@@ -1,5 +1,9 @@
 # GRANDPA_KEY_GOV Technical Notes
 
+## 2026-07-14 投票与执行绑定
+
+GRANDPA 密钥变更只允许 NRC、PRC 的内部投票业务。执行回调必须同时匹配 callback scope、`ProposalOwner`、内部投票 kind/stage、当前机构码、机构账户、CID 和密钥变更 action；手动重试不得绕过这些复校验。
+
 ## 0. 功能需求
 ### 0.1 模块职责
 `grandpakey-change` 负责把“机构 GRANDPA 公钥替换”包装成受治理约束的链上流程，要求：

@@ -261,11 +261,15 @@ fn insert_engine_proposal(proposal_id: u64) {
 }
 
 fn insert_engine_proposal_with_status(proposal_id: u64, status: u8) {
+    insert_engine_proposal_with_stage_and_status(proposal_id, votingengine::STAGE_JOINT, status);
+}
+
+fn insert_engine_proposal_with_stage_and_status(proposal_id: u64, stage: u8, status: u8) {
     votingengine::pallet::Proposals::<Test>::insert(
         proposal_id,
         votingengine::Proposal {
             kind: votingengine::PROPOSAL_KIND_JOINT,
-            stage: votingengine::STAGE_JOINT,
+            stage,
             status,
             internal_code: None,
             account_context: None,

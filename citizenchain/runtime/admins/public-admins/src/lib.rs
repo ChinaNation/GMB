@@ -116,7 +116,6 @@ pub mod pallet {
             account: T::AccountId,
             institution_code: InstitutionCode,
             admins_len: u32,
-            threshold: u32,
         },
     }
 
@@ -152,26 +151,43 @@ pub mod pallet {
         fn validate_admins_len_for_account(
             kind: AdminAccountKind,
             institution_code: InstitutionCode,
+            cid_number: &[u8],
+            main_account: &[u8],
             admins_len: usize,
         ) -> DispatchResult {
             ensure!(
                 kind == AdminAccountKind::PublicInstitution,
                 Error::<T>::InvalidAdminAccountKind
             );
-            match admin_primitives::expected_fixed_governance_admins_len(institution_code) {
+            match admin_primitives::expected_fixed_governance_admins_len(
+                institution_code,
+                cid_number,
+                main_account,
+            ) {
                 Some(expected) => {
                     ensure!(
                         admins_len == expected as usize,
                         Error::<T>::InvalidAdminsLen
                     )
                 }
-                None => {
-                    ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
-                    ensure!(
-                        admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
+                None => match primitives::institution_constraints::member_composition_by_identity(
+                    institution_code,
+                    cid_number,
+                    main_account,
+                ) {
+                    Some(spec) => ensure!(
+                        admins_len >= spec.min_members as usize
+                            && admins_len <= spec.max_members as usize,
                         Error::<T>::InvalidAdminsLen
-                    );
-                }
+                    ),
+                    None => {
+                        ensure!(admins_len >= 2, Error::<T>::InvalidAdminsLen);
+                        ensure!(
+                            admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
+                            Error::<T>::InvalidAdminsLen
+                        );
+                    }
+                },
             }
             Ok(())
         }
@@ -179,10 +195,18 @@ pub mod pallet {
         pub(crate) fn validate_admin_set_for_account(
             kind: AdminAccountKind,
             institution_code: InstitutionCode,
+            cid_number: &[u8],
+            main_account: &[u8],
             admins: &[T::AccountId],
         ) -> DispatchResult {
             Self::ensure_account_kind_matches_org(kind, institution_code)?;
-            Self::validate_admins_len_for_account(kind, institution_code, admins.len())?;
+            Self::validate_admins_len_for_account(
+                kind,
+                institution_code,
+                cid_number,
+                main_account,
+                admins.len(),
+            )?;
             Self::ensure_unique_admins(admins)?;
             Ok(())
         }
@@ -286,7 +310,14 @@ pub mod pallet {
             let cid_number: AdminCidNumber = cid_number
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidInstitution)?;
-            Self::validate_admin_set_for_account(kind, institution_code, &admins)?;
+            let main_account = institution.encode();
+            Self::validate_admin_set_for_account(
+                kind,
+                institution_code,
+                cid_number.as_slice(),
+                &main_account,
+                &admins,
+            )?;
             let bounded: AdminsOf<T> = admins
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidAdminsLen)?;
@@ -359,9 +390,12 @@ pub mod pallet {
             let cid_number: AdminCidNumber = cid_number
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidInstitution)?;
+            let main_account = institution.encode();
             Self::validate_admin_set_for_account(
                 AdminAccountKind::PublicInstitution,
                 institution_code,
+                cid_number.as_slice(),
+                &main_account,
                 &admins,
             )?;
             let bounded: AdminsOf<T> = admins
@@ -370,54 +404,83 @@ pub mod pallet {
             let admins_len = bounded.len() as u32;
             let fixed_threshold =
                 primitives::cid::code::fixed_governance_pass_threshold(&institution_code);
-            let threshold = fixed_threshold
-                .or_else(|| {
+            let permanent_singleton = primitives::institution_constraints::singleton_by_identity(
+                institution_code,
+                cid_number.as_slice(),
+                &main_account,
+            )
+            .is_some();
+            let first_composition =
+                AdminAccounts::<T>::get(institution.clone()).is_none() && permanent_singleton;
+            // 固定五类机构使用代码级固定阈值；六个国家单例不保存账户级阈值，
+            // 普通内部事项由 internal-vote 在创建提案时按 admins 快照计算严格过半。
+            let dynamic_threshold = if fixed_threshold.is_none() && !permanent_singleton {
+                Some(
                     T::InternalVoteEngine::active_dynamic_threshold(
                         institution_code,
                         institution.clone(),
                     )
-                })
-                .ok_or(Error::<T>::MissingDynamicThreshold)?;
+                    .ok_or(Error::<T>::MissingDynamicThreshold)?,
+                )
+            } else {
+                None
+            };
 
             with_transaction(|| {
-                let Some(existing) = AdminAccounts::<T>::get(institution.clone()) else {
+                let existing = AdminAccounts::<T>::get(institution.clone());
+                if let Some(existing) = &existing {
+                    if existing.cid_number != cid_number
+                        || existing.institution_code != institution_code
+                    {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::InstitutionCodeMismatch.into(),
+                        ));
+                    }
+                    if existing.status != AdminAccountStatus::Active {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::AdminAccountNotActive.into(),
+                        ));
+                    }
+                } else if !first_composition {
                     return TransactionOutcome::Rollback(
                         Err(Error::<T>::InvalidInstitution.into()),
                     );
-                };
-                if existing.cid_number != cid_number
-                    || existing.institution_code != institution_code
-                {
-                    return TransactionOutcome::Rollback(Err(
-                        Error::<T>::InstitutionCodeMismatch.into()
-                    ));
                 }
-                if existing.status != AdminAccountStatus::Active {
-                    return TransactionOutcome::Rollback(Err(
-                        Error::<T>::AdminAccountNotActive.into()
-                    ));
-                }
-                if fixed_threshold.is_none()
-                    && T::InternalVoteEngine::register_active_dynamic_threshold_direct(
+                if let Some(threshold) = dynamic_threshold {
+                    if T::InternalVoteEngine::register_active_dynamic_threshold_direct(
                         institution_code,
                         institution.clone(),
                         admins_len,
                         threshold,
                     )
                     .is_err()
-                {
-                    return TransactionOutcome::Rollback(Err(Error::<T>::InvalidThreshold.into()));
-                }
-                AdminAccounts::<T>::mutate(institution.clone(), |maybe| {
-                    if let Some(account) = maybe {
-                        account.admins = bounded.clone();
+                    {
+                        return TransactionOutcome::Rollback(Err(
+                            Error::<T>::InvalidThreshold.into()
+                        ));
                     }
-                });
+                }
+                if existing.is_some() {
+                    AdminAccounts::<T>::mutate(institution.clone(), |maybe| {
+                        if let Some(account) = maybe {
+                            account.admins = bounded.clone();
+                        }
+                    });
+                } else {
+                    AdminAccounts::<T>::insert(
+                        institution.clone(),
+                        InstitutionAdminAccount {
+                            cid_number: cid_number.clone(),
+                            institution_code,
+                            admins: bounded.clone(),
+                            status: AdminAccountStatus::Active,
+                        },
+                    );
+                }
                 Self::deposit_event(Event::<T>::AdminAccountsSyncedFromAssignments {
                     account: institution,
                     institution_code,
                     admins_len,
-                    threshold,
                 });
                 TransactionOutcome::Commit(Ok(()))
             })

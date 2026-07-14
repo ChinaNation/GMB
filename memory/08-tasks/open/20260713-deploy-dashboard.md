@@ -5,6 +5,7 @@
 - 首页用图标展示 CitizenApp、CitizenWallet、CitizenChain、CitizenChain WASM、CitizenWeb 和 CitizenApp Cloudflare Worker。
 - CitizenWeb 测试部署在本地构建并启动 `127.0.0.1:41732`，同时提供“关闭测试部署”；生产部署只更新现有 `citizenweb` Pages 项目。
 - 测试操作无需密码；生产、Release 和服务器部署必须先完成本机 Touch ID 指纹验证。
+- CitizenApp Cloudflare 模块提供“会员真实测试”：由官方 `cloudflared` 打开 Access 批准窗口，通过后才访问真实 staging API、远端 D1、sr25519 签名和 Stripe 测试环境。
 - 部署密钥迁入 macOS Keychain，网页只显示状态，不显示、返回或记录密钥明文。
 - 完成后删除根 `scripts/` 中旧六个部署入口和两份明文 Secret 文件，不保留旧流程。
 
@@ -14,6 +15,7 @@
 
 用户当前任务特批：
 - `deploy/` 中不含密钥的部署脚本和本地网页进入 Git；`.runtime/`、日志、编译产物和私密文件不进入 Git。
+- 用户于 2026-07-14 明确允许新增 `deploy/.runtime/cloudflared`；仅安装官方 Darwin ARM64 二进制，继续由根 `.gitignore` 排除，不进入 Git。
 - 本任务不沿用“密钥相关入口必须留在根 scripts”的旧规则；根 scripts 只保留 AI 与仓库工具。
 
 安全边界：
@@ -41,6 +43,8 @@
 - [x] 迁移并验证 Keychain 密钥。
 - [x] 删除旧部署入口和明文 Secret。
 - [x] 完成 CitizenWeb 本地测试网站启动、真实页面访问和关闭验收。
+- [x] 增加 CitizenApp Cloudflare“会员真实测试”按钮、Access 交互登录和逐项 PASS/BLOCKED/FAIL 日志；测试完成文案不再冒充部署成功。
+- [x] 完成会员真实测试的 Access 人工批准及全矩阵运行态验收；业务断言 14 项通过、4 项仅在 Worker→Stripe 525 阻断，环境与清理 3 项通过，FAIL=0。
 - [ ] 完成生产动作 Touch ID 成功路径验收；不得在验收中执行真实远端部署。
 
 执行记录：
@@ -54,3 +58,5 @@
 - 2026-07-14：对 `deploy/` 源码执行明文密钥、私钥头、高熵长值、服务器IP和本机路径扫描，未发现密钥材料。目录改为Git追踪源码，`.runtime/`、日志、编译二进制、`.env`、`secrets/`和常见私钥文件继续忽略。
 - 2026-07-13：顶部标题改为“部署控制台”并缩小字号、固定左对齐；部署模块、生产就绪、执行状态三个概览卡压缩后移入同一行，刷新按钮固定右侧；真实页面检查确认布局与文案生效。
 - 2026-07-13：部署控制台增加macOS launchd socket按需唤醒：平时Node服务不常驻，浏览器访问 `127.0.0.1:41731` 时启动，空闲15分钟且没有部署任务时退出；手动启动仍保留自动打开浏览器。
+- 2026-07-14：经用户明确授权，在被忽略的 `deploy/.runtime/` 安装官方 `cloudflared 2026.7.1` Darwin ARM64 二进制并校验发布 SHA256；控制台新增“会员真实测试”，首次网页点击已验证会打开可见的 Cloudflare Access `Approve` 窗口。
+- 2026-07-14：用户在可见 Access 窗口批准后，从部署控制台真实执行 staging 全矩阵；修复 launchd Node PATH、Wrangler D1 登录态和 Stripe 测试夹具后，最终结果为 PASS=17、BLOCKED=4、FAIL=0。PASS 包含 14 个业务断言、真实 Stripe active 订阅夹具、Stripe 两项资源清理和 D1 零残留；B3/D2/E1/F1 均真实到达 Worker 的 Stripe 调用点并返回 525。

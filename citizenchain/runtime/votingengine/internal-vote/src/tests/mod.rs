@@ -9,6 +9,7 @@ use frame_system as system;
 // 引擎核心 storage / 类型 / trait(住在 votingengine 主 crate)。
 // `use super::*` 拉进 internal-vote 自有的 pallet items(Pallet/Event/Error/Config/InternalVotesByAccount/...);
 // 这里追加 votingengine 的 storage 与 trait 名,让测试代码用短名引用。
+use primitives::cid::code::PRS;
 use votingengine::pallet::{
     CleanupQueue, CurrentProposalYear, ExecutionRetryDeadlines, NextProposalId,
     PendingExecutionRetryExpirations, PendingExpiryBucket, PendingProposalCleanups,
@@ -21,6 +22,8 @@ use votingengine::types::{code_bytes, InstitutionCode, NJD, PMUL};
 const PERSONAL_CODE: InstitutionCode = PMUL;
 const PUBLIC_CODE: InstitutionCode = code_bytes("CGOV");
 const PRIVATE_CODE: InstitutionCode = code_bytes("SFLP");
+// 六个永久国家单例中的总统府：用于验证“无账户级动态阈值、按提案快照过半”。
+const PERMANENT_SINGLETON_CODE: InstitutionCode = PRS;
 // joint mode storage 在 joint-vote sub-pallet
 use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
@@ -189,6 +192,18 @@ fn registered_account_admin(index: usize) -> AccountId32 {
     }
 }
 
+fn permanent_singleton_institution() -> AccountId32 {
+    let singleton = primitives::institution_constraints::singleton_institutions()
+        .into_iter()
+        .find(|item| item.code == PERMANENT_SINGLETON_CODE)
+        .expect("PRS singleton must exist");
+    AccountId32::new(singleton.main_account)
+}
+
+fn permanent_singleton_admin(index: usize) -> AccountId32 {
+    AccountId32::new([101u8.saturating_add(index as u8); 32])
+}
+
 fn set_registered_account_threshold(threshold: u32) {
     for institution_code in [PERSONAL_CODE, PUBLIC_CODE, PRIVATE_CODE] {
         ActiveDynamicThresholds::<Test>::insert(
@@ -244,6 +259,9 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                         .any(|admin| *admin == who_arr)
                 })
                 .unwrap_or(false),
+            PERMANENT_SINGLETON_CODE if institution == permanent_singleton_institution() => {
+                (0..3).any(|index| permanent_singleton_admin(index) == *who)
+            }
             PERSONAL_CODE | PUBLIC_CODE | PRIVATE_CODE => {
                 institution == registered_account_institution()
                     && [
@@ -281,6 +299,9 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                         .map(AccountId32::new)
                         .collect()
                 }),
+            PERMANENT_SINGLETON_CODE if institution == permanent_singleton_institution() => {
+                Some((0..3).map(permanent_singleton_admin).collect())
+            }
             PERSONAL_CODE | PUBLIC_CODE | PRIVATE_CODE
                 if institution == registered_account_institution() =>
             {
@@ -469,6 +490,11 @@ fn subject_cids_for(
             .iter()
             .find(|entry| AccountId32::new(entry.main_account) == *institution)
             .map(|entry| sp_std::vec![entry.cid_number.as_bytes().to_vec()])
+            .unwrap_or_default(),
+        PERMANENT_SINGLETON_CODE => primitives::institution_constraints::singleton_institutions()
+            .into_iter()
+            .find(|item| item.code == PERMANENT_SINGLETON_CODE)
+            .map(|item| sp_std::vec![item.cid_number.as_bytes().to_vec()])
             .unwrap_or_default(),
         PERSONAL_CODE => sp_std::vec::Vec::new(),
         PUBLIC_CODE => sp_std::vec![b"TEST-PUBLIC-CID".to_vec()],

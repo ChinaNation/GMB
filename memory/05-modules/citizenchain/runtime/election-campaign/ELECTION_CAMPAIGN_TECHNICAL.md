@@ -31,6 +31,8 @@
 
 真实选举功能必须从 `election-campaign` 创建业务活动，再由它调用 `election-vote` 创建投票提案。
 
-`election-vote` 终态已经通过 runtime 结果路由接入 entity；当前缺口是本业务壳尚未实现“谁能按什么规则创建哪类选举”，不得通过开放底层创建 extrinsic 绕过该缺口。
+`election-vote` 只形成结果快照，不再通过 runtime 结果路由直写 entity。当前缺口是本业务壳尚未实现“谁能按什么规则创建哪类选举”以及“如何复核结果并形成任职业务结果”，因此创建与任职写入都保持关闭。
 
-外部不得直接调用 `ElectionVote::create_popular_election` 或 `ElectionVote::create_mutual_election` 绕过业务规则；外部只保留 `ElectionVote::cast_popular_vote` 和 `ElectionVote::cast_mutual_vote` 用于实际投票。
+`ElectionVote::create_popular_election` 与 `ElectionVote::create_mutual_election` 外部调用已物理删除；外部只保留 `ElectionVote::cast_popular_vote` 和 `ElectionVote::cast_mutual_vote` 用于已经由合法业务活动创建的投票。
+
+后续接入必须保证活动、投票提案和 entity 结果三者绑定同一个 `proposal_id`，并在业务层复核组织者、目标机构、职位、候选资格、席位数、任期和当选集合。不得把“投票通过”直接解释为“任职合法”。

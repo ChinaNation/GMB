@@ -149,6 +149,42 @@ fn governance_internal_proposal_snapshots_fixed_threshold_not_provider() {
 }
 
 #[test]
+fn permanent_singleton_snapshots_strict_majority_without_dynamic_threshold() {
+    new_test_ext().execute_with(|| {
+        let institution = permanent_singleton_institution();
+        // 即使存在旧脏值，永久单例也不得读取账户级动态阈值。
+        ActiveDynamicThresholds::<Test>::insert(
+            PERMANENT_SINGLETON_CODE,
+            institution.clone(),
+            3,
+        );
+
+        let proposal_id = create_internal_proposal_via_engine(
+            permanent_singleton_admin(0),
+            PERMANENT_SINGLETON_CODE,
+            institution.clone(),
+        );
+        assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(2));
+        assert_eq!(
+            <InternalVote as InternalVoteEngine<AccountId32>>::active_dynamic_threshold(
+                PERMANENT_SINGLETON_CODE,
+                institution.clone(),
+            ),
+            None
+        );
+        assert_noop!(
+            <InternalVote as InternalVoteEngine<AccountId32>>::register_active_dynamic_threshold_direct(
+                PERMANENT_SINGLETON_CODE,
+                institution,
+                3,
+                2,
+            ),
+            Error::<Test>::InvalidInternalCode
+        );
+    });
+}
+
+#[test]
 fn pending_account_proposal_uses_pending_snapshot_and_threshold() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_pending_account_proposal_via_engine(

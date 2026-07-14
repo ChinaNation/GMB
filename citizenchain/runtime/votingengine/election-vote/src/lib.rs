@@ -11,7 +11,7 @@
 //! - 同票、补选、递补、重选等细节不写死在本 pallet,后续由选举法规则接入。
 //!
 //! `popular.rs` 承载普选,`mutual.rs` 承载互选。两者只做选举投票编排和结果快照；
-//! 结果终态经 runtime 路由到 entity 写入岗位任职，再由 entity 派生 admins 钱包集合。
+//! 选举业务模块必须复核结果与业务规则后，才能调用 entity 任职入口。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -28,7 +28,6 @@ pub use pallet::*;
 
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 use frame_system::pallet_prelude::BlockNumberFor;
-use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -84,11 +83,6 @@ pub mod pallet {
 
         /// 机构账户 → CID 查询入口。选举提案用 CID 记录组织机构和目标机构。
         type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
-
-        /// 选举结果写入 entity 的唯一出口；election-vote 不直接持有岗位或 admins storage。
-        type InstitutionGovernanceResultHandler: entity_primitives::InstitutionGovernanceResultHandler<
-            Self::AccountId,
-        >;
     }
 
     #[pallet::pallet]
@@ -136,7 +130,7 @@ pub mod pallet {
     pub type ElectionTallyStore<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, ElectionTallyData, ValueQuery>;
 
-    /// 当选结果快照。终态只交给 entity 任职入口消费，业务模块不得反向改票。
+    /// 当选结果快照。业务模块只读消费并复核，投票引擎不得直接写入 entity。
     #[pallet::storage]
     pub type ElectionResults<T: Config> = StorageMap<
         _,
@@ -200,81 +194,6 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 创建普选提案。
-        ///
-        /// 职位、任期、候选/选民范围由调用方解释并传入快照；
-        /// election-vote 不在这里硬编码总统、议员、任期等业务规则。
-        #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(10_000, 0))]
-        #[allow(clippy::too_many_arguments)]
-        pub fn create_popular_election(
-            origin: OriginFor<T>,
-            organizer_code: votingengine::InstitutionCode,
-            organizer: T::AccountId,
-            target_code: votingengine::InstitutionCode,
-            target: T::AccountId,
-            office_code: ElectionOfficeCodeOf<T>,
-            rule_id: u32,
-            seat_count: u16,
-            term_start: u32,
-            term_end: u32,
-            candidates: Vec<T::AccountId>,
-            voters: Vec<T::AccountId>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            Self::do_create_popular_election(
-                who,
-                organizer_code,
-                organizer,
-                target_code,
-                target,
-                office_code,
-                rule_id,
-                seat_count,
-                term_start,
-                term_end,
-                candidates,
-                voters,
-            )?;
-            Ok(())
-        }
-
-        /// 创建机构内部互选提案。
-        #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0))]
-        #[allow(clippy::too_many_arguments)]
-        pub fn create_mutual_election(
-            origin: OriginFor<T>,
-            organizer_code: votingengine::InstitutionCode,
-            organizer: T::AccountId,
-            target_code: votingengine::InstitutionCode,
-            target: T::AccountId,
-            office_code: ElectionOfficeCodeOf<T>,
-            rule_id: u32,
-            seat_count: u16,
-            term_start: u32,
-            term_end: u32,
-            candidates: Vec<T::AccountId>,
-            voters: Vec<T::AccountId>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            Self::do_create_mutual_election(
-                who,
-                organizer_code,
-                organizer,
-                target_code,
-                target,
-                office_code,
-                rule_id,
-                seat_count,
-                term_start,
-                term_end,
-                candidates,
-                voters,
-            )?;
-            Ok(())
-        }
-
         /// 普选投票。
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0))]
@@ -519,41 +438,8 @@ impl<T: pallet::Config> votingengine::ElectionVoteResultCallback for pallet::Pal
         if approved && !pallet::ElectionResults::<T>::contains_key(vote_proposal_id) {
             return Ok(votingengine::ProposalExecutionOutcome::FatalFailed);
         }
-        if approved {
-            use codec::Encode as _;
-            use entity_primitives::InstitutionGovernanceResultHandler as _;
-
-            let meta = pallet::ElectionMetaStore::<T>::get(vote_proposal_id)
-                .ok_or(pallet::Error::<T>::ElectionMetaMissing)?;
-            let winners = pallet::ElectionResults::<T>::get(vote_proposal_id)
-                .ok_or(pallet::Error::<T>::EmptyCandidateSnapshot)?;
-            let assignment_source = meta.mode.assignment_source();
-            let result_source_ref = vote_proposal_id.encode();
-            let assignments = winners
-                .into_iter()
-                .map(|winner| entity_primitives::InstitutionAssignmentTarget {
-                    admin_account: winner.account,
-                    term_start: meta.term_start,
-                    term_end: meta.term_end,
-                    assignment_source,
-                    assignment_source_ref: result_source_ref.clone(),
-                    assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
-                })
-                .collect();
-            T::InstitutionGovernanceResultHandler::apply_institution_governance_result(
-                entity_primitives::InstitutionGovernanceResult {
-                    institution_code: meta.target_code,
-                    institution_account: meta.target,
-                    role_changes: Vec::new(),
-                    assignment_changes: vec![entity_primitives::InstitutionRoleAssignmentChange {
-                        role_code: meta.office_code.into_inner(),
-                        assignments,
-                    }],
-                    legal_representative_change: None,
-                    result_source_ref,
-                },
-            )?;
-        }
+        // 这里只确认投票引擎已形成完整结果快照。候选资格、职位、席位、任期和
+        // 目标机构都属于 election-campaign 的业务规则，未经业务复核不得写 entity。
         Ok(votingengine::ProposalExecutionOutcome::Executed)
     }
 }

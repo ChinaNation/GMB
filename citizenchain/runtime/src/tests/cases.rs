@@ -557,8 +557,10 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
         );
 
         // 回调拒绝后，业务摘要保持创建时快照，终态由 votingengine 统一维护。
+        votingengine::CallbackExecutionScopes::<Runtime>::insert(proposal_id, ());
         let outcome = RuntimeJointVoteResultCallback::on_joint_vote_finalized(proposal_id, false)
             .expect("runtime-upgrade callback should succeed");
+        votingengine::CallbackExecutionScopes::<Runtime>::remove(proposal_id);
         assert_eq!(outcome, votingengine::ProposalExecutionOutcome::Executed);
         let raw = votingengine::Pallet::<Runtime>::get_proposal_data(proposal_id)
             .expect("proposal data should exist");
@@ -1288,7 +1290,244 @@ fn genesis_public_institutions_full_mint_counts() {
     });
 }
 
-/// 五类固定创世机构的岗位、席位和任职必须由 genesis 构建直接写入 entity/admins。
+/// 六个国家级单例在 block#0 精确占用约定身份；三个成员机构保持完整的“尚未组成”状态。
+#[test]
+fn genesis_national_singletons_exist_and_member_bodies_are_unconstituted() {
+    new_test_ext().execute_with(|| {
+        genesis_pallet::institution::build::<Runtime>();
+        for singleton in primitives::institution_constraints::singleton_institutions() {
+            let cid: public_manage::pallet::CidNumberOf<Runtime> = singleton
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("singleton CID fits");
+            let info = public_manage::Institutions::<Runtime>::get(&cid)
+                .expect("national singleton exists at block zero");
+            assert_eq!(info.institution_code, singleton.code);
+            assert_eq!(
+                info.status,
+                entity_primitives::InstitutionLifecycleStatus::Active
+            );
+            let main_name: public_manage::pallet::AccountNameOf<Runtime> =
+                primitives::account_derive::RESERVED_NAME_MAIN
+                    .to_vec()
+                    .try_into()
+                    .expect("main name fits");
+            assert_eq!(
+                public_manage::CidRegisteredAccount::<Runtime>::get(&cid, main_name),
+                Some(AccountId::new(singleton.main_account))
+            );
+            let main = AccountId::new(singleton.main_account);
+            assert!(public_admins::AdminAccounts::<Runtime>::get(main.clone()).is_none());
+            assert!(
+                internal_vote::ActiveDynamicThresholds::<Runtime>::get(singleton.code, main)
+                    .is_none()
+            );
+        }
+
+        for spec in primitives::institution_constraints::member_composition_specs() {
+            let cid: public_manage::pallet::CidNumberOf<Runtime> = spec
+                .institution
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("member body CID fits");
+            let role_code: public_manage::RoleCodeOf = spec
+                .role_code
+                .to_vec()
+                .try_into()
+                .expect("member role code fits");
+            assert!(public_manage::InstitutionRoles::<Runtime>::get(&cid, &role_code).is_none());
+            assert!(
+                public_manage::InstitutionRoleAssignments::<Runtime>::get(&cid, &role_code)
+                    .is_empty()
+            );
+            assert!(public_admins::AdminAccounts::<Runtime>::get(AccountId::new(
+                spec.institution.main_account
+            ))
+            .is_none());
+        }
+    });
+}
+
+/// 参议会首次组成必须原子满足法定岗位、人数区间和 admins 闭环，之后不得跌破下限。
+#[test]
+fn national_member_body_first_composition_and_permanent_range_are_enforced() {
+    new_test_ext().execute_with(|| {
+        genesis_pallet::institution::build::<Runtime>();
+        let spec = primitives::institution_constraints::member_composition_specs()[0];
+        let main = AccountId::new(spec.institution.main_account);
+        let members = |count: u32| {
+            (0..count)
+                .map(|index| {
+                    let mut raw = [0u8; 32];
+                    raw[..4].copy_from_slice(&index.to_le_bytes());
+                    AccountId::new(raw)
+                })
+                .collect::<Vec<_>>()
+        };
+        let result = |accounts: Vec<AccountId>, include_role: bool| {
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: spec.institution.code,
+                institution_account: main.clone(),
+                role_changes: include_role
+                    .then(|| {
+                        vec![entity_primitives::InstitutionRoleChange {
+                            role_code: spec.role_code.to_vec(),
+                            role_name: spec.role_name.to_vec(),
+                            term_required: false,
+                            role_status: entity_primitives::InstitutionRoleStatus::Active,
+                        }]
+                    })
+                    .unwrap_or_default(),
+                assignment_changes: vec![entity_primitives::InstitutionRoleAssignmentChange {
+                    role_code: spec.role_code.to_vec(),
+                    assignments: accounts
+                        .into_iter()
+                        .map(
+                            |admin_account| entity_primitives::InstitutionAssignmentTarget {
+                                admin_account,
+                                term_start: 0,
+                                term_end: 0,
+                                assignment_source:
+                                    entity_primitives::InstitutionAssignmentSource::PopularElection,
+                                assignment_source_ref: b"national-election".to_vec(),
+                                assignment_status:
+                                    entity_primitives::InstitutionAssignmentStatus::Active,
+                            },
+                        )
+                        .collect(),
+                }],
+                legal_representative_change: None,
+                result_source_ref: b"national-election".to_vec(),
+            }
+        };
+
+        assert_noop!(
+            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
+                members(spec.min_members - 1),
+                true,
+            )),
+            public_manage::Error::<Runtime>::RequiredMemberCountOutOfRange
+        );
+        assert_ok!(
+            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
+                members(spec.min_members),
+                true,
+            ))
+        );
+        let account = public_admins::AdminAccounts::<Runtime>::get(main.clone())
+            .expect("first composition creates admins");
+        assert_eq!(account.admins.len() as u32, spec.min_members);
+        assert_eq!(
+            internal_vote::ActiveDynamicThresholds::<Runtime>::get(
+                spec.institution.code,
+                main.clone()
+            ),
+            None
+        );
+        let proposal_id = internal_vote::Pallet::<Runtime>::do_create_general_internal_proposal(
+            members(1)[0].clone(),
+            spec.institution.code,
+            main.clone(),
+            vec![spec.institution.cid_number.as_bytes().to_vec()],
+        )
+        .expect("composed singleton can create internal proposal");
+        assert_eq!(
+            internal_vote::InternalThresholdSnapshot::<Runtime>::get(proposal_id),
+            Some(spec.min_members / 2 + 1)
+        );
+        use entity_primitives::InstitutionMultisigQuery;
+        assert_eq!(
+            public_manage::Pallet::<Runtime>::lookup_admin_config(&main)
+                .expect("composed singleton exposes current admin snapshot")
+                .threshold,
+            spec.min_members / 2 + 1
+        );
+
+        assert_noop!(
+            public_manage::Pallet::<Runtime>::apply_institution_governance_result(result(
+                members(spec.min_members - 1),
+                false,
+            )),
+            public_manage::Error::<Runtime>::RequiredMemberCountOutOfRange
+        );
+        assert_eq!(
+            public_admins::AdminAccounts::<Runtime>::get(main)
+                .expect("failed change rolls back")
+                .admins
+                .len() as u32,
+            spec.min_members
+        );
+    });
+}
+
+/// 立法院、监察院、总统府创世只占用唯一身份，首次治理结果再原子组成岗位、任职和 admins。
+#[test]
+fn national_singletons_without_member_ranges_can_be_composed_once() {
+    new_test_ext().execute_with(|| {
+        genesis_pallet::institution::build::<Runtime>();
+        for singleton in primitives::institution_constraints::singleton_institutions()
+            .into_iter()
+            .filter(|item| {
+                matches!(
+                    item.code,
+                    primitives::cid::code::NLG
+                        | primitives::cid::code::NSP
+                        | primitives::cid::code::PRS
+                )
+            })
+        {
+            let main = AccountId::new(singleton.main_account);
+            let role_code_raw = b"RUNTIME_MEMBER".to_vec();
+            let admins = vec![AccountId::new([91u8; 32]), AccountId::new([92u8; 32])];
+            let result = entity_primitives::InstitutionGovernanceResult {
+                institution_code: singleton.code,
+                institution_account: main.clone(),
+                role_changes: vec![entity_primitives::InstitutionRoleChange {
+                    role_code: role_code_raw.clone(),
+                    role_name: "运行期成员".as_bytes().to_vec(),
+                    term_required: false,
+                    role_status: entity_primitives::InstitutionRoleStatus::Active,
+                }],
+                assignment_changes: vec![entity_primitives::InstitutionRoleAssignmentChange {
+                    role_code: role_code_raw.clone(),
+                    assignments: admins
+                        .iter()
+                        .cloned()
+                        .map(|admin_account| entity_primitives::InstitutionAssignmentTarget {
+                            admin_account,
+                            term_start: 0,
+                            term_end: 0,
+                            assignment_source:
+                                entity_primitives::InstitutionAssignmentSource::NominationAppointment,
+                            assignment_source_ref: b"first-composition".to_vec(),
+                            assignment_status:
+                                entity_primitives::InstitutionAssignmentStatus::Active,
+                        })
+                        .collect(),
+                }],
+                legal_representative_change: None,
+                result_source_ref: b"first-composition".to_vec(),
+            };
+
+            assert_ok!(
+                public_manage::Pallet::<Runtime>::apply_institution_governance_result(result)
+            );
+            let account = public_admins::AdminAccounts::<Runtime>::get(main.clone())
+                .expect("first composition creates admins");
+            assert_eq!(account.admins.to_vec(), admins);
+            assert_eq!(
+                internal_vote::ActiveDynamicThresholds::<Runtime>::get(singleton.code, main),
+                None
+            );
+        }
+    });
+}
+
+/// 89 个受保护创世机构的岗位、席位和任职必须由 genesis 构建直接写入 entity/admins。
 #[test]
 fn genesis_fixed_institution_roles_and_assignments_are_complete() {
     new_test_ext().execute_with(|| {

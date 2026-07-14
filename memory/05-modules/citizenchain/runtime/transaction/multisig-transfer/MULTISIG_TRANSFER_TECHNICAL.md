@@ -55,13 +55,14 @@
   - `personal-manage` 注册并处于 Active 状态的个人多签账户（个人多签码 `PMUL`，`is_personal_code`）
   - 实体生命周期模块注册并处于 Active 状态的机构账户（机构账户码 `is_institution_code`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
-- 联邦注册局 `FRG` 虽属于固定治理码，但其主账户只做身份/特权校验，不暴露 `215/3` 多签配置；FRG 管理员更换只走省级 5 人组内部投票。
+- 联邦注册局 `FRG` 是一个机构、一个主账户和 215 名管理员，属于可发起多签转账内部提案的机构；省域 5 人岗位组只约束具体注册业务权限，不得阻断 FRG 的通用内部投票和机构账户配置查询。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
+- 执行回调不是单凭 `proposal_id + PASSED` 放行：必须处于投票引擎 callback scope，并同时匹配 `ProposalOwner`、内部投票 kind/stage、业务 action、机构码、资金账户和 CID 集合。执行前还会重新读取当前 entity 生命周期与业务权限，防止提案创建后账户失活或上下文被替换。
 - 本模块不负责个人多签账户创建、关闭、清理或管理员集合变更；这些职责分别归属 `personal-manage` 和 `personal-admins`。
 
 补充说明：
 - 只要某类内置机构被本模块的 `institution_code()` / 主账户解析逻辑正式识别，
-- 且对应管理员已接入 runtime 的 `RuntimeInternalAdminProvider`，固定阈值或动态阈值已由投票引擎自身提供，
+- 且对应管理员已接入 runtime 的 `RuntimeInternalAdminProvider`；固定阈值、普通账户动态阈值或六个单例的提案快照严格过半均由投票引擎自身提供，
 - 这类机构就可以直接复用本模块和内部投票引擎发起转账提案，不需要新增转账 pallet。
 
 ### 0.3 与多签管理模块的关系

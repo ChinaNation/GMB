@@ -1,6 +1,6 @@
 # runtime admins 技术文档
 
-最新更新：2026-07-13。`citizenchain/runtime/admins/` 由四个 crate 组成，管理员链上状态按管理员类型分别保存在各自 pallet。
+最新更新：2026-07-14。`citizenchain/runtime/admins/` 由四个 crate 组成，管理员链上状态按管理员类型分别保存在各自 pallet。
 
 ## 模块边界
 
@@ -19,7 +19,7 @@
 - 个人多签管理员保持 `personal-admins` 独立模型，不使用机构岗位或机构任职关系。
 - 各类管理员的链上管理员集合分别保存在各自 pallet 的 `AdminAccounts`。
 - runtime 只通过 `RuntimeAdminAccountQuery` 聚合读取各管理员模块，业务 pallet 不直接扫多个 storage。
-- 注册个人多签和注册机构账户的动态阈值由 `votingengine/internal-vote` 的动态阈值表保存；NRC/PRC/PRB/FRG/NJD 固定治理阈值来自代码级固定阈值。
+- 注册个人多签和普通注册机构账户的动态阈值由 `votingengine/internal-vote` 的动态阈值表保存；NRC/PRC/PRB/FRG/NJD 使用代码级固定阈值；PRS/NLG/NSN/NRP/NSP/NED 不保存账户级阈值，由每个内部提案按 admins 快照派生严格过半。
 - 创世机构本体、主账户、费用账户、固定岗位和创世任职由 `runtime/genesis/src/institution/seeder.rs` 写入 `public-manage`；由任职钱包去重得到的管理员集合写入 `public-admins`。
 - 旧创世机构/管理员运行期模块已删除，不允许恢复为运行期治理模块或影子真源。
 
@@ -40,8 +40,8 @@
 |------|----------|
 | `Genesis` | 创世写入的固定治理机构管理员。 |
 | `Registry` | 注册局或机构生命周期直接设置的管理员。 |
-| `MutualElection` | `election-vote` 互选终态结果经 runtime 路由写入 entity。 |
-| `PopularElection` | `election-vote` 普选终态结果经 runtime 路由写入 entity。 |
+| `MutualElection` | 互选结果经选举业务模块复核后形成 entity 任职结果。 |
+| `PopularElection` | 普选结果经选举业务模块复核后形成 entity 任职结果。 |
 | `NominationAppointment` | 提名任免最终结果；当前只有强类型来源，尚无合法流程生产者。 |
 
 这些来源由 entity 的 `assignment_source` 保存；admins 不复制来源字段。

@@ -95,6 +95,29 @@ fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
 }
 
 #[test]
+fn frg_and_njd_can_create_multisig_transfer_internal_proposals() {
+    new_test_ext().execute_with(|| {
+        for (institution_code, institution, proposer) in [
+            (FRG, frg_pallet_id(), frg_admin(0)),
+            (NJD, njd_pallet_id(), njd_admin(0)),
+        ] {
+            assert_ok!(MultisigTransfer::propose_transfer(
+                RuntimeOrigin::signed(proposer),
+                institution_code,
+                institution,
+                beneficiary(),
+                1_000,
+                BoundedVec::default(),
+            ));
+            let proposal = votingengine::Pallet::<Test>::proposals(last_proposal_id())
+                .expect("transfer proposal should exist");
+            assert_eq!(proposal.internal_code, Some(institution_code));
+            assert_eq!(proposal.status, STATUS_VOTING);
+        }
+    });
+}
+
+#[test]
 fn registered_account_transfer_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
         let personal_account = registered_account();

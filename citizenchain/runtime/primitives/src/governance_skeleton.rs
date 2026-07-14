@@ -107,7 +107,7 @@ pub struct FixedInstitution {
     pub expected_len: u32,
 }
 
-/// 枚举全部五类固定治理机构冻结规格(纯编译常量,不读链)。
+/// 枚举全部 89 个受保护创世治理机构(纯编译常量,不读链)。
 ///
 /// NRC/PRC 来自 `CHINA_CB`,PRB 来自 `CHINA_CH`,NJD 来自 `CHINA_SF`;三者创世即
 /// `insert_fixed_admins` 写入 `AdminAccounts`,故 block#0 state 与本规格双锚。
@@ -157,6 +157,36 @@ pub fn fixed_institutions() -> Vec<FixedInstitution> {
     // admins 账户集合在 public-admins 中聚合为 215 人，不再生成虚拟省组账户。
     out.push(federal_registry_institution());
     out
+}
+
+/// 按创世完整身份查询受保护治理机构。
+///
+/// 机构码只表示业务类别，不能单独把运行期机构升级为原生保护对象；必须同时匹配
+/// 创世 CID 和主账户，才能应用固定管理员人数与岗位骨架。
+pub fn fixed_institution_by_identity(
+    code: InstitutionCode,
+    cid_number: &[u8],
+    main_account: &[u8],
+) -> Option<FixedInstitution> {
+    fixed_institutions().into_iter().find(|institution| {
+        institution.code == code
+            && institution.cid_number.as_bytes() == cid_number
+            && institution.main_account.as_slice() == main_account
+    })
+}
+
+/// 按创世主账户查询受保护治理机构，供节点解析精确 `AdminAccounts` key。
+pub fn fixed_institution_by_main_account(main_account: &[u8; 32]) -> Option<FixedInstitution> {
+    fixed_institutions()
+        .into_iter()
+        .find(|institution| &institution.main_account == main_account)
+}
+
+/// 按创世 CID 查询受保护治理机构，供节点解析岗位与任职双映射 key。
+pub fn fixed_institution_by_cid(cid_number: &[u8]) -> Option<FixedInstitution> {
+    fixed_institutions()
+        .into_iter()
+        .find(|institution| institution.cid_number.as_bytes() == cid_number)
 }
 
 /// 固定机构的岗位与席位。FRG 的 43 个省专员岗位由省码动态生成，不走本函数。
@@ -219,6 +249,17 @@ pub fn fixed_role_seats(code: InstitutionCode, role_code: &[u8]) -> Option<u32> 
         .map(|role| role.seats)
 }
 
+/// 查询具体受保护创世机构的岗位席位；仅机构码相同不会命中。
+pub fn fixed_role_seats_by_identity(
+    code: InstitutionCode,
+    cid_number: &[u8],
+    main_account: &[u8],
+    role_code: &[u8],
+) -> Option<u32> {
+    fixed_institution_by_identity(code, cid_number, main_account)?;
+    fixed_role_seats(code, role_code)
+}
+
 /// 联邦注册局固定机构规格。FRG 只有一个管理员账户，省级边界由 43 个岗位表达。
 pub fn federal_registry_institution() -> FixedInstitution {
     let node = CHINA_ZF
@@ -251,6 +292,25 @@ mod tests {
     fn fixed_institutions_cover_fixed_codes_with_expected_counts() {
         let list = fixed_institutions();
 
+        assert_eq!(list.len(), 89, "受保护创世治理机构必须精确为 89 个");
+        assert_eq!(list.iter().filter(|item| item.code == NRC).count(), 1);
+        assert_eq!(list.iter().filter(|item| item.code == PRC).count(), 43);
+        assert_eq!(list.iter().filter(|item| item.code == PRB).count(), 43);
+        assert_eq!(list.iter().filter(|item| item.code == NJD).count(), 1);
+        assert_eq!(list.iter().filter(|item| item.code == FRG).count(), 1);
+
+        let mut cids = list.iter().map(|item| item.cid_number).collect::<Vec<_>>();
+        cids.sort_unstable();
+        cids.dedup();
+        assert_eq!(cids.len(), list.len(), "保护清单 CID 不得重复");
+        let mut accounts = list
+            .iter()
+            .map(|item| item.main_account)
+            .collect::<Vec<_>>();
+        accounts.sort_unstable();
+        accounts.dedup();
+        assert_eq!(accounts.len(), list.len(), "保护清单主账户不得重复");
+
         let nrc = list.iter().find(|f| f.code == NRC).expect("NRC 必须在册");
         assert_eq!(nrc.expected_len, NRC_ADMIN_COUNT);
 
@@ -272,11 +332,34 @@ mod tests {
         let frg = list
             .iter()
             .find(|f| f.code == FRG)
-            .expect("FRG 必须作为第五类固定机构在册");
+            .expect("FRG 必须作为受保护创世机构在册");
         assert_eq!(
             frg.expected_len,
             PROVINCE_CODE_INFOS.len() as u32 * FRG_PROVINCE_GROUP_ADMIN_COUNT
         );
+    }
+
+    #[test]
+    fn fixed_identity_requires_code_cid_and_main_account_to_match() {
+        let institution = fixed_institutions()[0];
+        assert!(fixed_institution_by_identity(
+            institution.code,
+            institution.cid_number.as_bytes(),
+            &institution.main_account,
+        )
+        .is_some());
+        assert!(fixed_institution_by_identity(
+            institution.code,
+            b"not-genesis-cid",
+            &institution.main_account,
+        )
+        .is_none());
+        assert!(fixed_institution_by_identity(
+            institution.code,
+            institution.cid_number.as_bytes(),
+            &[9u8; 32],
+        )
+        .is_none());
     }
 
     #[test]

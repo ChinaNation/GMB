@@ -21,6 +21,7 @@
 - 联合投票通过时，模块必须尝试执行 runtime code。
 - 联合投票结束后，投票引擎侧状态保持真实业务结果：执行成功写为 `STATUS_EXECUTED`，否决保持 `STATUS_REJECTED`，执行失败写为 `STATUS_EXECUTION_FAILED`。
 - 回调直接使用投票引擎的 `proposal_id`，无需映射反查。
+- 回调还必须校验 callback scope、`ProposalOwner`、联合 kind、`STAGE_JOINT/STAGE_REFERENDUM`，并复算 `ProposalObject` 中 runtime code 的哈希与提案摘要一致；任何一项不符都不得执行 `set_code`。
 
 ### 0.4 执行失败处理
 - 若联合投票已通过但 `set_code` 执行失败，投票引擎状态进入 `STATUS_EXECUTION_FAILED`。

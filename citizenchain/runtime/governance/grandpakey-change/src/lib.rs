@@ -23,7 +23,8 @@ use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use votingengine::{
     types::{InstitutionCode, NRC, PRC},
-    InternalVoteResultCallback, ProposalCancelDecision, ProposalExecutionOutcome, STATUS_PASSED,
+    InternalVoteResultCallback, ProposalCancelDecision, ProposalExecutionOutcome,
+    PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
 };
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
@@ -310,8 +311,22 @@ pub mod pallet {
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
+            let actual_org = account_org::<T>(action.institution.clone())
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            let cid =
+                account_cid::<T>(&action.institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                proposal.status == STATUS_PASSED,
+                votingengine::Pallet::<T>::is_callback_execution_scope(proposal_id)
+                    && votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG,)
+                    && proposal.kind == PROPOSAL_KIND_INTERNAL
+                    && proposal.stage == STAGE_INTERNAL
+                    && proposal.status == STATUS_PASSED
+                    && proposal.internal_code == Some(actual_org)
+                    && proposal.account_context == Some(action.institution.clone())
+                    && proposal
+                        .subject_cid_numbers
+                        .iter()
+                        .any(|subject| subject.as_slice() == cid.as_slice()),
                 Error::<T>::ProposalNotPassed
             );
 
@@ -397,7 +412,12 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         approved: bool,
     ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
         let raw = match votingengine::Pallet::<T>::get_proposal_data(proposal_id) {
-            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
+            Some(raw)
+                if votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
+                    && raw.starts_with(crate::MODULE_TAG) =>
+            {
+                raw
+            }
             _ => return Ok(ProposalExecutionOutcome::Ignored),
         };
         if !approved {

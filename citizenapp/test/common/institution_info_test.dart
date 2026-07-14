@@ -76,7 +76,7 @@ void main() {
       expect(result, contains(ProposalKind.safetyFundTransfer));
       expect(result, contains(ProposalKind.resolutionIssuance));
       expect(result, contains(ProposalKind.runtimeUpgrade));
-      expect(result, contains(ProposalKind.adminsChange));
+      expect(result, isNot(contains(ProposalKind.adminsChange)));
     });
 
     test('city registry is public institution, not governance', () {
@@ -86,7 +86,7 @@ void main() {
       );
       final result = kinds(subject);
       expect(result, contains(ProposalKind.transfer));
-      expect(result, contains(ProposalKind.adminsChange));
+      expect(result, isNot(contains(ProposalKind.adminsChange)));
       expect(result, isNot(contains(ProposalKind.feeTransfer)));
       expect(result, isNot(contains(ProposalKind.runtimeUpgrade)));
     });
@@ -99,8 +99,23 @@ void main() {
       );
       final result = kinds(subject);
       expect(result, contains(ProposalKind.transfer));
-      expect(result, contains(ProposalKind.adminsChange));
+      expect(result, isNot(contains(ProposalKind.adminsChange)));
       expect(result, isNot(contains(ProposalKind.resolutionIssuance)));
+    });
+
+    test('personal multisig exposes admins change capability', () {
+      final account = '77' * 32;
+      final subject = ProposalSubject.fromInstitution(
+        institution: info(
+          code: 'PMUL',
+          account: account,
+          cidNumber: registeredAccountIdentity(account),
+        ),
+        institutionCode: 'PMUL',
+      );
+      final result = kinds(subject);
+      expect(result, contains(ProposalKind.transfer));
+      expect(result, contains(ProposalKind.adminsChange));
     });
 
     test('unincorporated code does not auto-enable admins change', () {

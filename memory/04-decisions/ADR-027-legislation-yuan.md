@@ -8,6 +8,8 @@
 
 > **架构收口（2026-07-13，第四步 B1）**：投票引擎只保留一个 `legislation-vote`。模块内部用 `RepresentativeRoute::Single/Sequential` 表达单机构或顺序多机构，用 `RepresentativeVoteRule::Regular/Major/Special` 表达三类数学规则，用 `VoteProcedure::RepresentativeOnly/Legislation` 区分“表决后直接回业务”与“继续法律专属公投/签署/护宪”。法律、任免、预算正文全部留在各自业务模块；终局由 `ProposalOwner/MODULE_TAG` 路由，不新增 `personnel-vote`、`representative-vote` pallet，也不新增 PERSONNEL/BUDGET proposal kind。
 
+> **路由收口（2026-07-14，治理职责第 3 步）**：法律案载荷字段和顺序不变，但 `houses/proposer_body/executive/legislature` 只是待验证输入。`legislation-yuan` 按 `tier + scope_code + vote_type` 固定法定机构码与院序，从 entity 真源复核每个账户的 active 状态、机构码和 CID；省、市级整条路由必须属于同一 CID R5。完整路由写入提案摘要，投票通过写法律版本前再次复校验，禁止通过伪造账户、跨行政区拼接或篡改回调摘要绕过。
+
 > **重大修订(2026-06-25,用户逐条确认,见 `08-tasks/open/20260625-legislation-signing-5type-revision.md`)**:
 > 1. **删除已废弃的重复表决流程**:本轮已改立法表决、教育类法案与签署救济相关条款,官员任免另立专案。正文只保留当前流程口径。
 > 2. **提案类型 4→5 类**:常规案/常规教育案/重要案/重要教育案/特别案(教育属性编进 vote_type,不另设内容分类字段)。`VoteType=Regular/RegularEducation/Major/MajorEducation/Special`(Important→Major)。阈值:常规系 >80%/≥60%、重要系 >90%/≥70%、特别 全员≥70%+公投。

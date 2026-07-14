@@ -206,7 +206,8 @@ pub mod pallet {
     ///
     /// 只保存全国可见的机构身份事实:名称(仅公权)、机构码、创建块号、生命周期状态。
     /// 主账户/费用账户由 (cid_number, 保留名) 派生且常驻 InstitutionAccounts,不在此重复;
-    /// 管理员集合长期真源在 admins 模块,动态阈值长期真源在 internal-vote,均不在此存快照。
+    /// 管理员集合长期真源在 admins 模块；普通注册机构动态阈值在 internal-vote，
+    /// 六个国家单例则只在提案创建时按 admins 快照派生严格过半，均不在此存快照。
     #[pallet::storage]
     #[pallet::getter(fn institution_of)]
     pub type Institutions<T: Config> =
@@ -545,10 +546,18 @@ pub mod pallet {
         DuplicateGovernanceRoleChange,
         /// 同一治理结果重复提交同一个岗位任职集合。
         DuplicateGovernanceAssignmentChange,
-        /// 五类固定创世机构的岗位定义不可由运行期业务修改。
+        /// 89 个受保护创世机构的岗位定义不可由运行期业务修改。
         FixedRoleDefinitionImmutable,
         /// 已停用岗位仍有有效任职。
         InactiveRoleHasAssignments,
+        /// 法定成员机构缺少唯一指定成员岗位，或该岗位已被停用。
+        RequiredMemberRoleMissing,
+        /// 法定成员岗位名称不符合永久规格。
+        RequiredMemberRoleNameMismatch,
+        /// 法定成员岗位及 admins 人数超出永久区间。
+        RequiredMemberCountOutOfRange,
+        /// 辅助岗位引入了法定成员岗位之外的 admin 钱包。
+        NonMemberAdminForbidden,
     }
 
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节。
@@ -1008,21 +1017,28 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
         addr: &T::AccountId,
     ) -> Option<primitives::multisig::MultisigConfigSnapshot<T::AccountId>> {
         let institution_code = Self::lookup_org(addr)?;
-        if institution_code == admin_primitives::FRG {
-            // FRG 固定阈值 3 只属于省行政区 5 人组内部投票；
-            // 主账户聚合 215 人仅用于身份/特权校验，不作为 215/3 多签配置。
-            return None;
-        }
         let account = pallet::Pallet::<T>::resolve_admin_account_for_account(addr)?;
         let admins =
             T::AdminAccountQuery::active_account_admins(institution_code, account.clone())?;
-        let threshold = fixed_governance_pass_threshold(&institution_code).or_else(|| {
-            <T as Config>::InternalVoteEngine::active_dynamic_threshold(
-                institution_code,
-                account.clone(),
-            )
-        })?;
         let admins_len = admins.len() as u32;
+        let cid_number = Self::lookup_cid(addr)?;
+        let account_bytes = account.encode();
+        let permanent_singleton = primitives::institution_constraints::singleton_by_identity(
+            institution_code,
+            cid_number.as_slice(),
+            &account_bytes,
+        )
+        .is_some();
+        let threshold = fixed_governance_pass_threshold(&institution_code)
+            // 这里只返回当前管理员快照对应的一般内部事项门槛，不建立机构级阈值；
+            // 真正提案仍由 internal-vote 对自己的管理员快照重新计算并落提案快照。
+            .or_else(|| permanent_singleton.then_some(admins_len / 2 + 1))
+            .or_else(|| {
+                <T as Config>::InternalVoteEngine::active_dynamic_threshold(
+                    institution_code,
+                    account.clone(),
+                )
+            })?;
         Some(primitives::multisig::MultisigConfigSnapshot {
             admins,
             admins_len,
@@ -1106,7 +1122,6 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                         match crate::close::execute_institution_close_with_finalizer::<T>(
                             proposal_id,
                             &action,
-                            true,
                         ) {
                             Ok(()) => TransactionOutcome::Commit(Ok(())),
                             Err(e) => TransactionOutcome::Rollback(Err(e)),

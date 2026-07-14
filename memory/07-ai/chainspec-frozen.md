@@ -69,7 +69,7 @@
    轻形态 chainspec 与 `light_sync_state.json` 是否匹配；正式发布设置
    `CITIZENAPP_REQUIRE_STATE_ROOT=1`。
 2. `citizenchain/node/src/home/process/mod.rs` 在启动节点前尝试安装内置
-   `genesis-state/`，并在 RPC `chain_getBlockHash(0)` 成功前保持“创世准备中”。
+   `genesis-state/`，并在 RPC `chain_getBlockHash(0)` 成功前保持首次“初始化中”或普通“启动中”。
 3. `citizenchain/node/src/onchina_proc/mod.rs` 启动 OnChina 前必须确认本机链 RPC 已就绪。
 4. `citizenchain/scripts/prepack.sh` / `prepack.ps1` 负责把正式创世状态包放入安装包资源。
 

@@ -26,6 +26,7 @@
 - 关闭机构账户时通过 `public-manage` 的封存表识别创世机构，创世机构永不可按普通私权机构关闭。
 - 机构业务状态只解释为占号中、运行中、永久关闭：主账户登记存在但尚无机构记录即占号中，`Active` 即运行中，`Closed` 即永久关闭；关闭后禁止恢复，只能用新 CID 新建机构，名称允许与历史机构相同。
 - 节点 `core/node_guard/cid_lifecycle.rs` 以 RAW storage 再次强制 CID 不删除/不复用、公私权不重复和永久关闭终态，runtime 升级不能绕过。
+- 关闭执行器必须处于投票引擎 callback scope，并绑定本模块 owner、内部投票 kind/stage、机构码、管理员根账户、CID、目标账户作用域和 `PendingCloseProposal`；执行时重新检查 active 状态、受保护身份和受益人。
 
 ## 法定代表人与管理员边界
 

@@ -65,7 +65,7 @@
 
 `election-campaign` 是公权选举业务壳，负责后续承载“什么机构能组织什么职位选举、普选/互选如何选择、候选人和选民快照从哪里生成、结果写回哪个业务真源”等规则。
 
-`election-vote` 是选举投票模块，负责选举投票提案、投票去重、计票、超时结算、结果快照和清理。外部不得直接调用 `ElectionVote::create_popular_election` 或 `ElectionVote::create_mutual_election` 绕过业务壳；runtime 入口只保留 `cast_popular_vote` 和 `cast_mutual_vote` 作为投票动作。
+`election-vote` 是选举投票模块，负责选举投票提案、投票去重、计票、超时结算、结果快照和清理。`ElectionVote::create_popular_election` 与 `ElectionVote::create_mutual_election` 外部入口已删除；runtime 只保留 `cast_popular_vote` 和 `cast_mutual_vote` 作为投票动作。结果快照必须由 `election-campaign` 复核业务规则后才能形成 entity 任职结果。
 
 ## 交易费用流
 

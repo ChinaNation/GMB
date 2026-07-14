@@ -8,9 +8,14 @@ use frame_support::{
     traits::{ConstU128, ConstU32},
 };
 use frame_system as system;
+use primitives::cid::china::china_sf::CHINA_SF;
+use primitives::cid::china::china_zf::CHINA_ZF;
 use sp_core::{sr25519, Pair as PairT};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-use votingengine::types::{code_bytes, is_registered_multisig_code, InstitutionCode};
+use votingengine::types::{
+    code_bytes, institution_code_from_cid_number, is_registered_multisig_code, InstitutionCode,
+    FRG, NJD, PRC,
+};
 use votingengine::{STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING};
 
 // 测试用机构码:个人多签 / 私权法人,均属"注册多签动态账户"。
@@ -593,7 +598,6 @@ impl public_admins::Config for Test {
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type InstitutionQuery = public_manage::Pallet<Test>;
-    type WeightInfo = ();
 }
 
 impl private_admins::Config for Test {
@@ -601,7 +605,6 @@ impl private_admins::Config for Test {
     type MaxAdminsPerInstitution = ConstU32<1989>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type InstitutionQuery = public_manage::Pallet<Test>;
-    type WeightInfo = ();
 }
 
 impl personal_manage::pallet::Config for Test {
@@ -677,6 +680,14 @@ fn prb_admin(index: usize) -> AccountId32 {
     derive_admin_pair(PRB, &prb_pallet_id(), index as u8).0
 }
 
+fn frg_admin(index: usize) -> AccountId32 {
+    derive_admin_pair(FRG, &frg_pallet_id(), index as u8).0
+}
+
+fn njd_admin(index: usize) -> AccountId32 {
+    derive_admin_pair(NJD, &njd_pallet_id(), index as u8).0
+}
+
 // 统一状态机整改:业务模块不再持有独立 vote/finalize call,投票统一走
 // `InternalVote::cast`;`cast_transfer_votes_n` 直接用 admin 账户逐个投票。
 
@@ -690,6 +701,28 @@ fn prc_pallet_id() -> AccountId32 {
 
 fn prb_pallet_id() -> AccountId32 {
     AccountId32::new(CHINA_CH[0].main_account)
+}
+
+fn frg_node() -> &'static primitives::cid::china::china_zf::ChinaZf {
+    CHINA_ZF
+        .iter()
+        .find(|node| institution_code_from_cid_number(node.cid_number) == Some(FRG))
+        .expect("FRG must exist in CHINA_ZF")
+}
+
+fn frg_pallet_id() -> AccountId32 {
+    AccountId32::new(frg_node().main_account)
+}
+
+fn njd_node() -> &'static primitives::cid::china::china_sf::ChinaSf {
+    CHINA_SF
+        .iter()
+        .find(|node| institution_code_from_cid_number(node.cid_number) == Some(NJD))
+        .expect("NJD must exist in CHINA_SF")
+}
+
+fn njd_pallet_id() -> AccountId32 {
+    AccountId32::new(njd_node().main_account)
 }
 
 fn institution_account(institution: &AccountId32) -> AccountId32 {
@@ -806,6 +839,51 @@ fn insert_active_registered_institution_account(
     internal_vote::ActiveDynamicThresholds::<Test>::insert(PRIVATE_CODE, account.clone(), 2);
 }
 
+/// 为固定治理机构写入 entity 生命周期身份；管理员快照由测试 Provider 注入。
+fn insert_active_fixed_institution_identity(
+    institution_code: InstitutionCode,
+    account: &AccountId32,
+    cid_number_raw: &[u8],
+) {
+    let cid_number: public_manage::CidNumberOf<Test> = cid_number_raw
+        .to_vec()
+        .try_into()
+        .expect("fixed institution cid should fit");
+    let account_name = test_account_name();
+    public_manage::AccountRegisteredCid::<Test>::insert(
+        account,
+        public_manage::RegisteredInstitution {
+            cid_number: cid_number.clone(),
+            account_name: account_name.clone(),
+        },
+    );
+    public_manage::Institutions::<Test>::insert(
+        &cid_number,
+        public_manage::InstitutionInfo {
+            cid_full_name: Default::default(),
+            cid_short_name: Default::default(),
+            town_code: Default::default(),
+            legal_representative_name: None,
+            legal_representative_cid_number: None,
+            legal_representative_account: None,
+            institution_code,
+            created_at: 1,
+            status: public_manage::InstitutionLifecycleStatus::Active,
+        },
+    );
+    public_manage::InstitutionAccounts::<Test>::insert(
+        &cid_number,
+        &account_name,
+        public_manage::InstitutionAccountInfo {
+            address: account.clone(),
+            initial_balance: 0,
+            status: public_manage::InstitutionLifecycleStatus::Active,
+            is_default: true,
+            created_at: 1,
+        },
+    );
+}
+
 /// 收款人：使用一个不是管理员也不是机构的普通地址
 fn beneficiary() -> AccountId32 {
     AccountId32::new([99u8; 32])
@@ -893,6 +971,8 @@ fn new_test_ext() -> sp_io::TestExternalities {
         (institution_account(&nrc_pallet_id()), 10_000),
         (institution_account(&prc_pallet_id()), 10_000),
         (institution_account(&prb_pallet_id()), 10_000),
+        (institution_account(&frg_pallet_id()), 10_000),
+        (institution_account(&njd_pallet_id()), 10_000),
     ];
     pallet_balances::GenesisConfig::<Test> {
         balances,
@@ -909,13 +989,40 @@ fn new_test_ext() -> sp_io::TestExternalities {
         let nrc = nrc_pallet_id();
         let prc = prc_pallet_id();
         let prb = prb_pallet_id();
+        let frg = frg_pallet_id();
+        let njd = njd_pallet_id();
         let dq = registered_account();
         let nrc_accts: Vec<AccountId32> = nrc_pass_pairs().into_iter().map(|(a, _)| a).collect();
         let prc_accts: Vec<AccountId32> = prc_pass_pairs().into_iter().map(|(a, _)| a).collect();
         let prb_accts: Vec<AccountId32> = prb_pass_pairs().into_iter().map(|(a, _)| a).collect();
+        let frg_accts: Vec<AccountId32> = (0..primitives::count_const::FRG_INTERNAL_THRESHOLD)
+            .map(|index| frg_admin(index as usize))
+            .collect();
+        let njd_accts: Vec<AccountId32> = (0..primitives::count_const::NJD_INTERNAL_THRESHOLD)
+            .map(|index| njd_admin(index as usize))
+            .collect();
         set_extra_admins(NRC, nrc, nrc_accts);
         set_extra_admins(PRC, prc, prc_accts);
         set_extra_admins(PRB, prb, prb_accts);
+        set_extra_admins(FRG, frg.clone(), frg_accts);
+        set_extra_admins(NJD, njd.clone(), njd_accts);
+        insert_active_fixed_institution_identity(
+            NRC,
+            &nrc_pallet_id(),
+            CHINA_CB[0].cid_number.as_bytes(),
+        );
+        insert_active_fixed_institution_identity(
+            PRC,
+            &prc_pallet_id(),
+            CHINA_CB[1].cid_number.as_bytes(),
+        );
+        insert_active_fixed_institution_identity(
+            PRB,
+            &prb_pallet_id(),
+            CHINA_CH[0].cid_number.as_bytes(),
+        );
+        insert_active_fixed_institution_identity(FRG, &frg, frg_node().cid_number.as_bytes());
+        insert_active_fixed_institution_identity(NJD, &njd, njd_node().cid_number.as_bytes());
         // PERSONAL_CODE/PUBLIC_CODE/PRIVATE_CODE 的 admin 从 personal/public/private-admins 读；
         // 动态阈值真源在 internal-vote::ActiveDynamicThresholds。
         // personal-manage / public-manage 只保存账户生命周期状态和 org 归属。

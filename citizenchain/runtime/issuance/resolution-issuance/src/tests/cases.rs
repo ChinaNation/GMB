@@ -63,6 +63,28 @@ fn approved_callback_executes_issuance() {
 }
 
 #[test]
+fn approved_referendum_callback_executes_issuance() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(ResolutionIssuance::propose_issuance(
+            RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            reason_ok(),
+            4300,
+            allocations_ok(4300)
+        ));
+
+        // 联合投票未直接通过、进入公投后，终态 stage 会保留为 REFERENDUM。
+        insert_engine_proposal_with_stage_and_status(
+            100,
+            votingengine::STAGE_REFERENDUM,
+            votingengine::STATUS_PASSED,
+        );
+        assert_ok!(call_joint_callback(100, true));
+        assert_eq!(pallet::TotalIssued::<Test>::get(), 4300);
+        assert!(pallet::EverExecuted::<Test>::contains_key(100));
+    });
+}
+
+#[test]
 fn callback_rejects_non_finalizable_engine_status() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_issuance(

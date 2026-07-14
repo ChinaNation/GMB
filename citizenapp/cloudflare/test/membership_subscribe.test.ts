@@ -522,6 +522,43 @@ describe('prepaid — USDC 预付购买', () => {
     expect(json.duration).toBe('quarter');
   });
 
+  it('真实建单参数只允许 Stripe Crypto，不允许银行卡回落', async () => {
+    const db = new ChallengeDb();
+    mockVerify.mockResolvedValue(true);
+    let capturedBody = '';
+    const env = fakeEnv({
+      db,
+      stripeResponse: { id: 'cs_crypto', url: 'https://checkout.stripe.com/c/pay/cs_crypto' },
+      onStripeBody: (body) => {
+        capturedBody = body;
+      }
+    });
+    const challengeRes = await prepaidChallengeRoute(
+      req('/v1/square/membership/prepaid/challenge', {
+        owner_account: owner,
+        membership_level: 'freedom',
+        duration: 'quarter'
+      }),
+      env
+    );
+    const challengeId = ((await challengeRes.json()) as { challenge_id: string }).challenge_id;
+
+    await prepaidConfirmRoute(
+      req('/v1/square/membership/prepaid', {
+        owner_account: owner,
+        membership_level: 'freedom',
+        duration: 'quarter',
+        challenge_id: challengeId,
+        signature: '0xSIG'
+      }),
+      env
+    );
+
+    const form = new URLSearchParams(capturedBody);
+    expect(form.get('mode')).toBe('payment');
+    expect(form.get('payment_method_types[0]')).toBe('crypto');
+  });
+
   it('时长不合法 → invalid_prepaid_duration', async () => {
     const db = new ChallengeDb();
     const env = fakeEnv({ db, stripeDevProxy: true });

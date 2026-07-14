@@ -1,6 +1,6 @@
 //! # 多签资金账户转账模块 (multisig-transfer)
 //!
-//! 本模块为储备治理三档、注册机构多签账户和个人多签账户提供链上转账治理流程：
+//! 本模块为所有机构多签账户和个人多签账户提供链上转账治理流程：
 //! - 管理员发起转账提案，经内部投票通过后自动执行转账并扣取手续费。
 //! - 自动执行失败时保留提案状态，可通过 `VotingEngine::retry_passed_proposal` 手动重试。
 //! - 余额在提案创建和执行两个时点双重检查，含手续费和 ED 保留。
@@ -23,8 +23,9 @@ use alloc::{vec, vec::Vec};
 use primitives::cid::china::china_cb::{CHINA_CB, SAFETY_FUND_ACCOUNT};
 use primitives::cid::china::china_ch::CHINA_CH;
 use votingengine::{
-    types::{is_institution_code, InstitutionCode, NRC, PMUL, PRB, PRC},
-    InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
+    types::{is_personal_code, is_valid_governance_code, InstitutionCode, NRC, PMUL, PRB},
+    InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
+    STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -98,34 +99,6 @@ fn decode_raw_account<T: frame_system::Config>(raw: &[u8; 32]) -> Option<T::Acco
 
 fn raw_account_matches<T: frame_system::Config>(raw: &[u8; 32], account: &T::AccountId) -> bool {
     decode_raw_account::<T>(raw).as_ref() == Some(account)
-}
-
-/// 本资金治理路径只覆盖储备治理三档；注册多签由链上存储判断。
-fn builtin_org<T: frame_system::Config>(institution: &T::AccountId) -> Option<InstitutionCode> {
-    if CHINA_CB
-        .first()
-        .map(|n| raw_account_matches::<T>(&n.main_account, institution))
-        .unwrap_or(false)
-    {
-        return Some(NRC);
-    }
-
-    if CHINA_CB
-        .iter()
-        .skip(1)
-        .any(|n| raw_account_matches::<T>(&n.main_account, institution))
-    {
-        return Some(PRC);
-    }
-
-    if CHINA_CH
-        .iter()
-        .any(|n| raw_account_matches::<T>(&n.main_account, institution))
-    {
-        return Some(PRB);
-    }
-
-    None
 }
 
 fn builtin_cid<T: frame_system::Config>(institution: &T::AccountId) -> Option<Vec<u8>> {
@@ -291,7 +264,7 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 资金账户不属于 NRC/PRC/PRB、个人多签或注册机构账户。
+        /// 资金账户不属于有效机构或个人多签账户。
         InvalidInstitution,
         /// 调用者声明的机构码与资金账户实际分类不一致。
         InstitutionCodeMismatch,
@@ -600,15 +573,12 @@ pub mod pallet {
             use entity_primitives::InstitutionMultisigQuery;
             use personal_manage::traits::PersonalMultisigQuery;
 
-            if let Some(actual_org) = builtin_org::<T>(&institution) {
-                let cid = builtin_cid::<T>(&institution).ok_or(Error::<T>::InvalidInstitution)?;
-                return Ok((actual_org, institution, vec![cid]));
-            }
-
             if <T as Config>::PersonalQuery::is_active(&institution) {
                 return Ok((PMUL, institution, Vec::new()));
             }
 
+            // 多签转账是所有机构共有的账户业务。机构身份统一从 entity 生命周期
+            // 真源解析，不再另外维护并列的内置机构白名单。
             ensure!(
                 <T as Config>::InstitutionQuery::is_active(&institution),
                 Error::<T>::InvalidInstitution
@@ -616,7 +586,7 @@ pub mod pallet {
             let institution_code = <T as Config>::InstitutionQuery::lookup_org(&institution)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                is_institution_code(&institution_code),
+                is_valid_governance_code(&institution_code) && !is_personal_code(&institution_code),
                 Error::<T>::InvalidInstitution
             );
             let cid = <T as Config>::InstitutionQuery::lookup_cid(&institution)
@@ -634,6 +604,38 @@ pub mod pallet {
                 institution,
                 who,
             )
+        }
+
+        /// 复核内部投票提案与具体资金业务的完整绑定。
+        ///
+        /// 投票引擎只证明内部投票已经通过；资金模块仍须证明通过的是当前机构、
+        /// 当前账户和当前 CID 的本模块提案。自动执行与统一重试共用本校验。
+        fn ensure_internal_business_proposal(
+            proposal_id: u64,
+            institution_code: InstitutionCode,
+            institution: &T::AccountId,
+            subject_cid_numbers: &[Vec<u8>],
+        ) -> DispatchResult {
+            let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::ProposalActionNotFound)?;
+            ensure!(
+                votingengine::Pallet::<T>::is_callback_execution_scope(proposal_id)
+                    && votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG,)
+                    && proposal.kind == PROPOSAL_KIND_INTERNAL
+                    && proposal.stage == STAGE_INTERNAL
+                    && proposal.status == STATUS_PASSED
+                    && proposal.internal_code == Some(institution_code)
+                    && proposal.account_context.as_ref() == Some(institution)
+                    && proposal.subject_cid_numbers.len() == subject_cid_numbers.len()
+                    && subject_cid_numbers.iter().all(|expected| {
+                        proposal
+                            .subject_cid_numbers
+                            .iter()
+                            .any(|actual| actual.as_slice() == expected.as_slice())
+                    }),
+                Error::<T>::ProposalNotPassed
+            );
+            Ok(())
         }
 
         /// 判断治理机构码类型用于 sweep 提案。
@@ -684,19 +686,19 @@ pub mod pallet {
             Ok(institution)
         }
 
-        pub(crate) fn try_execute_sweep_from_callback(
-            proposal_id: u64,
-            _callback_context: bool,
-        ) -> DispatchResult {
+        pub(crate) fn try_execute_sweep_from_callback(proposal_id: u64) -> DispatchResult {
             let action = SweepProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SweepProposalNotFound)?;
 
-            let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::SweepProposalNotFound)?;
-            ensure!(
-                proposal.status == STATUS_PASSED,
-                Error::<T>::SweepProposalNotPassed
-            );
+            let institution_code = Self::resolve_sweep_org(&action.institution)?;
+            let cid = Self::resolve_sweep_cid(&action.institution)?;
+            Self::ensure_internal_business_proposal(
+                proposal_id,
+                institution_code,
+                &action.institution,
+                &[cid],
+            )
+            .map_err(|_| Error::<T>::SweepProposalNotPassed)?;
 
             let fee_account = Self::resolve_fee_account(&action.institution)?;
             let main_account = Self::resolve_main_account(action.institution.clone())?;
@@ -762,19 +764,18 @@ pub mod pallet {
             Ok(())
         }
 
-        pub(crate) fn try_execute_safety_fund_from_callback(
-            proposal_id: u64,
-            _callback_context: bool,
-        ) -> DispatchResult {
+        pub(crate) fn try_execute_safety_fund_from_callback(proposal_id: u64) -> DispatchResult {
             let action = SafetyFundProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
 
-            let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
-            ensure!(
-                proposal.status == STATUS_PASSED,
-                Error::<T>::SafetyFundProposalNotPassed
-            );
+            let nrc_institution = Self::decode_institution_account(&CHINA_CB[0].main_account)?;
+            Self::ensure_internal_business_proposal(
+                proposal_id,
+                NRC,
+                &nrc_institution,
+                &[nrc_cid()],
+            )
+            .map_err(|_| Error::<T>::SafetyFundProposalNotPassed)?;
 
             let safety_fund_account = T::AccountId::decode(&mut &SAFETY_FUND_ACCOUNT[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
@@ -833,17 +834,7 @@ pub mod pallet {
             Ok(())
         }
 
-        pub(crate) fn try_execute_transfer_from_callback(
-            proposal_id: u64,
-            _callback_context: bool,
-        ) -> DispatchResult {
-            let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            ensure!(
-                proposal.status == STATUS_PASSED,
-                Error::<T>::ProposalNotPassed
-            );
-
+        pub(crate) fn try_execute_transfer_from_callback(proposal_id: u64) -> DispatchResult {
             let raw = votingengine::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             let tag = crate::MODULE_TAG;
@@ -855,14 +846,34 @@ pub mod pallet {
                 &mut &raw[tag.len()..],
             )
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
-            let (_, institution_account, _) =
+            let (institution_code, institution_account, subject_cid_numbers) =
                 Self::resolve_institution_account(action.institution.clone())?;
+            Self::ensure_internal_business_proposal(
+                proposal_id,
+                institution_code,
+                &action.institution,
+                &subject_cid_numbers,
+            )?;
             ensure!(
                 <T as Config>::InstitutionAsset::can_spend(
                     &institution_account,
                     InstitutionAssetAction::MultisigTransferExecute,
                 ),
                 Error::<T>::InstitutionSpendNotAllowed
+            );
+            ensure!(action.amount > Zero::zero(), Error::<T>::ZeroAmount);
+            let ed = <T as Config>::Currency::minimum_balance();
+            ensure!(
+                action.amount >= ed,
+                Error::<T>::AmountBelowExistentialDeposit
+            );
+            ensure!(
+                action.beneficiary != institution_account,
+                Error::<T>::SelfTransferNotAllowed
+            );
+            ensure!(
+                !<T as Config>::ProtectedSourceChecker::is_protected(&action.beneficiary),
+                Error::<T>::BeneficiaryIsProtectedAddress
             );
 
             // ── 计算手续费（复用 onchain-transaction 公共接口） ──
@@ -876,7 +887,6 @@ pub mod pallet {
 
             // ── 余额检查：需要 total + ED ──
             let free = <T as Config>::Currency::free_balance(&institution_account);
-            let ed = <T as Config>::Currency::minimum_balance();
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
@@ -957,11 +967,11 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
 
         if approved {
             let exec_result = if is_transfer {
-                pallet::Pallet::<T>::try_execute_transfer_from_callback(proposal_id, true)
+                pallet::Pallet::<T>::try_execute_transfer_from_callback(proposal_id)
             } else if is_safety_fund {
-                pallet::Pallet::<T>::try_execute_safety_fund_from_callback(proposal_id, true)
+                pallet::Pallet::<T>::try_execute_safety_fund_from_callback(proposal_id)
             } else {
-                pallet::Pallet::<T>::try_execute_sweep_from_callback(proposal_id, true)
+                pallet::Pallet::<T>::try_execute_sweep_from_callback(proposal_id)
             };
             if let Err(_e) = exec_result {
                 // 执行失败:发事件,提案保留 PASSED,供 VotingEngine 统一重试入口处理。

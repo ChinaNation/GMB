@@ -158,15 +158,6 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
             // 保留 pallet 与 storage;日后启用只需删除对应分支并走一次 setCode,无需重新创世。
             RuntimeCall::OnchainIssuance(_) => false,
             RuntimeCall::OffchainTransaction(_) => false,
-            // 选举创建只能经 election-campaign 业务壳解释规则后进入 election-vote。
-            // 当前 election-campaign 只接入 runtime 骨架,因此外部禁止直接创建选举提案;
-            // cast_popular_vote / cast_mutual_vote 仍保留给后续已创建提案投票使用。
-            RuntimeCall::ElectionVote(election_vote::pallet::Call::create_popular_election {
-                ..
-            })
-            | RuntimeCall::ElectionVote(election_vote::pallet::Call::create_mutual_election {
-                ..
-            }) => false,
             _ => true,
         }
     }
@@ -767,6 +758,9 @@ impl entity_primitives::RegistryAuthority<AccountId> for RuntimeRegistryAuthorit
         };
         if parsed_target_code != target_institution_code
             || primitives::cid::code::is_fixed_governance_code(&target_institution_code)
+            || primitives::institution_constraints::is_permanent_singleton_code(
+                &target_institution_code,
+            )
         {
             return false;
         }
@@ -1438,10 +1432,10 @@ impl entity_primitives::InstitutionMultisigQuery<AccountId> for RuntimeInstituti
     }
 }
 
-/// 选举引擎终态结果路由。
+/// 通用机构治理结果路由适配器。
 ///
-/// 投票引擎只负责产生不可变结果；runtime 按机构码把结果交给对应 entity 模组。
-/// entity 负责校验机构、岗位、席位与任期，并在同一事务内同步 admins 钱包集合。
+/// 已完成自身业务校验的任免/治理模块可用它按机构码选择 entity 模组；
+/// `election-vote` 不使用本适配器，选举结果必须先回到 election-campaign 复核。
 pub struct RuntimeInstitutionGovernanceResultHandler;
 
 impl entity_primitives::InstitutionGovernanceResultHandler<AccountId>
@@ -2028,6 +2022,7 @@ impl legislation_yuan::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     // 立法投票引擎接真实 legislation-vote sub-pallet(ADR-027 第2步),投票端到端流程打通。
     type LegislationVoteEngine = LegislationVote;
+    type InstitutionQuery = RuntimeInstitutionQuery;
     type MaxTitleLen = LegislationMaxTitleLen;
     type MaxTextLen = LegislationMaxTextLen;
     type MaxClausesPerArticle = LegislationMaxClausesPerArticle;
@@ -2153,7 +2148,6 @@ impl election_vote::Config for Runtime {
     type MaxElectionCandidates = ConstU32<256>;
     type MaxElectionVoters = ConstU32<4096>;
     type InstitutionQuery = RuntimeInstitutionQuery;
-    type InstitutionGovernanceResultHandler = RuntimeInstitutionGovernanceResultHandler;
 }
 
 impl election_campaign::Config for Runtime {}

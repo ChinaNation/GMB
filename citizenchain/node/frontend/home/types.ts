@@ -4,6 +4,7 @@ export type NodeStatus = {
   running: boolean;
   state: string;
   pid: number | null;
+  lastError: string | null;
 };
 
 export type ChainStatus = {

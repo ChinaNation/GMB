@@ -6276,6 +6276,7 @@ dependencies = [
 name = "legislation-yuan"
 version = "1.0.0"
 dependencies = [
+ "entity-primitives",
  "frame-support",
  "frame-system",
  "internal-vote",
@@ -7797,6 +7798,7 @@ checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 name = "node"
 version = "1.0.0"
 dependencies = [
+ "admin-primitives",
  "async-channel 1.9.0",
  "async-trait",
  "base64 0.22.1",
@@ -7879,6 +7881,7 @@ dependencies = [
  "tokio",
  "twox-hash 2.1.2",
  "unicode-normalization",
+ "votingengine",
  "zeroize",
 ]
 

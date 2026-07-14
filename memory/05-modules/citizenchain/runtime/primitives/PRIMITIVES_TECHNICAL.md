@@ -21,7 +21,8 @@
 | `src/citizen_const.rs` | 公民认证发行常量 |
 | `src/count_const.rs` | 投票治理常量（机构数量、投票阈值、期限、不可修改条款清单） |
 | `src/constitution.rs` | 修宪「章→档位」分类判定单源（第十九条 `classify`/`AmendmentScope`，runtime 与节点守卫共用） |
-| `src/governance_skeleton.rs` | 固定治理协议清单（档 A）：五类固定机构、岗位代码/名称、席位、管理员状态判别值和 Node Guard 所需 SCALE 锚点；不写 storage。创世钱包索引映射在 `runtime/genesis/src/institution/fixed_roles.rs`，实际写入唯一在 `seeder.rs` |
+| `src/governance_skeleton.rs` | 创世治理保护清单：精确枚举 89 个机构及其机构码、CID、主账户、管理员人数、岗位代码/名称和席位；完整身份查询禁止只按机构码扩大保护范围。实际 storage 写入唯一在 genesis seeder，Node Guard 使用共享管理员/entity 类型解码 |
+| `src/institution_constraints.rs` | 国家级单例与成员组成永久约束：精确枚举 PRS/NLG/NSN/NRP/NSP/NED 六个创世身份，固定 NSN `SENATOR` 105–155、NRP `REPRESENTATIVE` 305–355、NED `COMMITTEE_MEMBER` 105–155，并声明 NLG 由 NSN、NRP 组成；不冻结 NLG/NSP/PRS 的岗位或 admins，六个单例的内部投票规则由投票引擎按提案类型处理 |
 | `src/genesis.rs` | 创世宣言、创世人口、创世发行总量 |
 | `china/mod.rs` | 机构常量模块声明 |
 | `china/china_ch.rs` | 43 个省储行（人口、质押、多签账户） |
@@ -103,6 +104,8 @@
 | JOINT_VOTE_PASS_THRESHOLD | 105 | 全票通过立即执行 |
 | VOTING_DURATION_BLOCKS | 7,200 | 投票到期区块数（240 × 30 天） |
 | ACCOUNT_EXISTENTIAL_DEPOSIT | 111 分 | 账户最低余额 |
+
+投票能力与业务权限必须分层：内部投票程序面向所有有效机构；转账、销毁、密钥变更等具体业务由各业务 pallet 按机构权限独立限制。`primitives` 只保存确需跨模块复用的制度常量，不建立把机构和全部业务绑定在一起的全局能力表。
 
 ---
 

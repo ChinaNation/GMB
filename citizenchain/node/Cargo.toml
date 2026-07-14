@@ -81,6 +81,8 @@ pallet-transaction-payment-rpc = { workspace = true, default-features = true }
 substrate-frame-rpc-system = { workspace = true, default-features = true }
 codec = { workspace = true, default-features = true }
 entity-primitives = { path = "../runtime/entity/entity-primitives", default-features = true }
+admin-primitives = { path = "../runtime/admins/admin-primitives", default-features = true }
+votingengine = { path = "../runtime/votingengine", default-features = true }
 
 # These dependencies are used for runtime benchmarking
 frame-benchmarking-cli = { workspace = true, default-features = true }

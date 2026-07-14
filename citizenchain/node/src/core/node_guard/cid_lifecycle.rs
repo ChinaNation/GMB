@@ -122,6 +122,8 @@ pub enum GuardError {
     InstitutionStatusInvalid,
     ClosedInstitutionChanged,
     FixedInstitutionNotActive,
+    SingletonInstitutionIdentityMismatch,
+    SingletonInstitutionMissing,
     MainReservationMissing,
     MainReservationDeletedBeforeClosed,
     RegistrationChanged,
@@ -323,6 +325,18 @@ fn validate_cid_namespace(cid: &[u8], namespace: Namespace) -> Result<Institutio
         Namespace::Private => is_private_legal_code(&code) || is_unincorporated_code(&code),
     };
     if valid {
+        if is_fixed_governance_code(&code)
+            && primitives::governance_skeleton::fixed_institution_by_cid(cid)
+                .is_none_or(|institution| institution.code != code)
+        {
+            return Err(GuardError::InstitutionIdentityChanged);
+        }
+        if primitives::institution_constraints::is_permanent_singleton_code(&code)
+            && primitives::institution_constraints::singleton_by_cid(cid)
+                .is_none_or(|institution| institution.code != code)
+        {
+            return Err(GuardError::SingletonInstitutionIdentityMismatch);
+        }
         Ok(code)
     } else {
         Err(GuardError::InvalidCidNamespace)
@@ -431,6 +445,13 @@ fn validate_institution_record(
     if is_fixed_governance_code(&code) && record.status != InstitutionStatus::Active {
         return Err(GuardError::FixedInstitutionNotActive);
     }
+    if primitives::institution_constraints::is_permanent_singleton_code(&code) {
+        let singleton = primitives::institution_constraints::singleton_by_cid(cid)
+            .ok_or(GuardError::SingletonInstitutionIdentityMismatch)?;
+        if singleton.code != code || record.status != InstitutionStatus::Active {
+            return Err(GuardError::SingletonInstitutionIdentityMismatch);
+        }
+    }
     Ok(())
 }
 
@@ -453,7 +474,11 @@ where
         return Err(GuardError::CrossNamespaceDuplicate);
     }
     let Some(parent_raw) = parent_raw else {
-        if is_fixed_governance_code(&post_record.institution_code) {
+        if is_fixed_governance_code(&post_record.institution_code)
+            || primitives::institution_constraints::is_permanent_singleton_code(
+                &post_record.institution_code,
+            )
+        {
             return Err(GuardError::FixedInstitutionNotActive);
         }
         if post_record.status != InstitutionStatus::Closed
@@ -671,6 +696,24 @@ where
         .any(|cid| occupied_private.contains(cid))
     {
         return Err(GuardError::CrossNamespaceDuplicate);
+    }
+
+    // 六个国家级单例必须始终由约定的创世 CID 和主账户占用；机构码相同但 CID 不同、
+    // 删除、关闭或替换主账户都在完整状态检查中 fail-closed。
+    for singleton in primitives::institution_constraints::singleton_institutions() {
+        let cid = singleton.cid_number.as_bytes();
+        let raw = read(&storage_key::institution(Namespace::Public, cid))
+            .ok_or(GuardError::SingletonInstitutionMissing)?;
+        let record: InstitutionRecord = decode_exact(&raw, "Institutions")?;
+        if record.institution_code != singleton.code || record.status != InstitutionStatus::Active {
+            return Err(GuardError::SingletonInstitutionIdentityMismatch);
+        }
+        let main_raw = read(&storage_key::main_registration(Namespace::Public, cid))
+            .ok_or(GuardError::SingletonInstitutionMissing)?;
+        let main_account: [u8; 32] = decode_exact(&main_raw, "CidRegisteredAccount")?;
+        if main_account != singleton.main_account {
+            return Err(GuardError::SingletonInstitutionIdentityMismatch);
+        }
     }
 
     if let Some(reference) = reference {
@@ -1209,7 +1252,10 @@ mod tests {
 
     #[test]
     fn fixed_governance_institution_cannot_leave_active() {
-        let cid = cid("fixed-nrc", "NRC");
+        let cid = primitives::governance_skeleton::fixed_institutions()[0]
+            .cid_number
+            .as_bytes()
+            .to_vec();
         let pending = institution_record(&cid, InstitutionStatus::Pending, b"NRC");
         assert_eq!(
             validate_institution_record(Namespace::Public, &cid, &pending),
@@ -1219,6 +1265,25 @@ mod tests {
         assert_eq!(
             validate_institution_record(Namespace::Public, &cid, &closed),
             Err(GuardError::FixedInstitutionNotActive)
+        );
+    }
+
+    #[test]
+    fn fixed_and_singleton_codes_cannot_reserve_noncanonical_cids() {
+        let fake_fixed = cid("fake-fixed", "NRC");
+        assert_eq!(
+            validate_cid_namespace(&fake_fixed, Namespace::Public),
+            Err(GuardError::InstitutionIdentityChanged)
+        );
+        let fake_singleton = cid("fake-singleton", "NSN");
+        assert_eq!(
+            validate_cid_namespace(&fake_singleton, Namespace::Public),
+            Err(GuardError::SingletonInstitutionIdentityMismatch)
+        );
+        let canonical = primitives::institution_constraints::singleton_institutions()[0];
+        assert_eq!(
+            validate_cid_namespace(canonical.cid_number.as_bytes(), Namespace::Public),
+            Ok(canonical.code)
         );
     }
 

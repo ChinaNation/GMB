@@ -344,6 +344,16 @@ pub mod pallet {
             let proposal = Self::load_proposal(proposal_id)?;
             let engine_proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalNotFound)?;
+            ensure!(
+                votingengine::Pallet::<T>::is_callback_execution_scope(proposal_id)
+                    && votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG,)
+                    && engine_proposal.kind == votingengine::PROPOSAL_KIND_JOINT
+                    && matches!(
+                        engine_proposal.stage,
+                        votingengine::STAGE_JOINT | votingengine::STAGE_REFERENDUM
+                    ),
+                Error::<T>::ProposalNotVoting
+            );
             let expected_status = if approved {
                 votingengine::STATUS_PASSED
             } else {
@@ -356,6 +366,10 @@ pub mod pallet {
 
             if approved {
                 let code_to_execute = Self::load_runtime_code(proposal_id)?;
+                ensure!(
+                    T::Hashing::hash(code_to_execute.as_slice()) == proposal.code_hash,
+                    Error::<T>::RuntimeCodeMissing
+                );
                 let current_params_hash =
                     T::Hashing::hash_of(&pow_difficulty::ActiveParams::<T>::get());
                 ensure!(

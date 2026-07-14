@@ -10,6 +10,7 @@ mod citizen_issuance;
 mod fullnode_issuance;
 mod genesis_pallet;
 mod governance_skeleton;
+mod national_body_composition;
 mod pow_difficulty;
 mod provincialbank_interest;
 
@@ -149,6 +150,7 @@ where
 #[derive(Default)]
 struct ImportedPolicyState {
     governance: BTreeMap<Vec<u8>, Vec<u8>>,
+    national_body_composition: BTreeMap<Vec<u8>, Vec<u8>>,
     fullnode_issuance: BTreeMap<Vec<u8>, Vec<u8>>,
     citizen_issuance: BTreeMap<Vec<u8>, Vec<u8>>,
     genesis_pallet: BTreeMap<Vec<u8>, Vec<u8>>,
@@ -162,6 +164,7 @@ struct ImportedPolicyState {
 struct ImportedPolicyStats {
     scanned: usize,
     governance: usize,
+    national_body_composition: usize,
     fullnode_issuance: usize,
     citizen_issuance: usize,
     genesis_pallet: usize,
@@ -175,6 +178,7 @@ impl ImportedPolicyState {
         ImportedPolicyStats {
             scanned: self.scanned,
             governance: self.governance.len(),
+            national_body_composition: self.national_body_composition.len(),
             fullnode_issuance: self.fullnode_issuance.len(),
             citizen_issuance: self.citizen_issuance.len(),
             genesis_pallet: self.genesis_pallet.len(),
@@ -204,6 +208,11 @@ where
         state.scanned = state.scanned.saturating_add(1);
         if governance_skeleton::storage_key::is_relevant(key) {
             state.governance.insert(key.clone(), value.clone());
+        }
+        if national_body_composition::storage_key::is_relevant(key) {
+            state
+                .national_body_composition
+                .insert(key.clone(), value.clone());
         }
         if key.starts_with(&fullnode_prefix)
             || key.starts_with(&system_prefix)
@@ -247,6 +256,8 @@ where
         .map_err(|e| format!("固定治理岗位目录:{e:?}"))?;
     governance_skeleton::check_skeleton_invariants(|key| state.governance.get(key).cloned())
         .map_err(|e| format!("固定治理骨架:{e:?}"))?;
+    national_body_composition::check_imported_state(&state.national_body_composition)
+        .map_err(|e| format!("国家机构组成:{e:?}"))?;
     fullnode_issuance::check_imported_state_key_values(block, state.fullnode_issuance.iter())
         .map_err(|e| format!("全节点发行:{e:?}"))?;
     citizen_issuance::check_genesis_key_values(state.citizen_issuance.iter())
@@ -409,6 +420,30 @@ impl<I> NodeGuard<I> {
                 .map(|data| data.0)
         })
         .map_err(|e| format!("节点守卫:创世固定治理骨架校验失败:{e:?}"))?;
+        national_body_composition::check_full_state(|key| {
+            client
+                .storage(genesis_hash, &StorageKey(key.to_vec()))
+                .ok()
+                .flatten()
+                .map(|data| data.0)
+        })
+        .map_err(|e| format!("节点守卫:创世国家机构组成校验失败:{e:?}"))?;
+        let vote_state_keys = Self::state_keys_for_prefixes(
+            &client,
+            genesis_hash,
+            vec![
+                national_body_composition::storage_key::threshold_prefix(),
+                national_body_composition::storage_key::proposal_prefix(),
+            ],
+        )?;
+        national_body_composition::check_vote_state_keys(&vote_state_keys, |key| {
+            client
+                .storage(genesis_hash, &StorageKey(key.to_vec()))
+                .ok()
+                .flatten()
+                .map(|data| data.0)
+        })
+        .map_err(|e| format!("节点守卫:创世固定治理阈值校验失败:{e:?}"))?;
         fullnode_issuance::check_genesis(|key| {
             client
                 .storage(genesis_hash, &StorageKey(key.to_vec()))
@@ -537,9 +572,10 @@ impl<I> NodeGuard<I> {
         let stats = verify_imported_state_params(params, &self.cid_lifecycle)?;
         log::debug!(
             target: "node-guard",
-            "完整状态单遍扫描:总键 {},治理 {},全节点发行/账户 {},公民发行 {},创世模块 {},PoW 动态难度 {},省储行固定发行 {},CID {}",
+            "完整状态单遍扫描:总键 {},治理 {},国家组成/固定阈值 {},全节点发行/账户 {},公民发行 {},创世模块 {},PoW 动态难度 {},省储行固定发行 {},CID {}",
             stats.scanned,
             stats.governance,
+            stats.national_body_composition,
             stats.fullnode_issuance,
             stats.citizen_issuance,
             stats.genesis_pallet,
@@ -792,7 +828,7 @@ impl<I> NodeGuard<I> {
             }
         }
 
-        // 治理骨架只在三张目标 storage 或 `:code` 变化时全量复核。
+        // 治理骨架只在受保护机构精确 key 变化时按机构复核；`:code` 变化才全量复核。
         if governance_skeleton::needs_full_check(&post_delta) {
             if let Err(reason) = governance_skeleton::check_catalog_keys(post_delta.keys()) {
                 log::error!(
@@ -804,7 +840,9 @@ impl<I> NodeGuard<I> {
                 );
                 return Ok(true);
             }
-            if let Err(reason) = governance_skeleton::check_skeleton_invariants(read_post) {
+            if let Err(reason) =
+                governance_skeleton::check_affected_institutions(&post_delta, read_post)
+            {
                 log::error!(
                     target: "node-guard",
                     "拒绝区块 #{} ({:?}):固定治理骨架不变式被破坏 —— {:?}",
@@ -814,6 +852,47 @@ impl<I> NodeGuard<I> {
                 );
                 return Ok(true);
             }
+        }
+        // runtime 升级必须复核升级前已存在、升级后仍存在以及本块新增/删除的全部内部
+        // 提案和阈值快照，防止新 WASM 通过移走旧 storage 绕过五类固定治理阈值语义。
+        let runtime_upgrade_vote_keys = if post_delta
+            .contains_key(sp_storage::well_known_keys::CODE)
+        {
+            let mut keys = Self::state_keys_for_prefixes(
+                &self.client,
+                parent_hash,
+                vec![
+                    national_body_composition::storage_key::threshold_prefix(),
+                    national_body_composition::storage_key::proposal_prefix(),
+                ],
+            )?
+            .into_iter()
+            .map(|key| (key, ()))
+            .collect::<BTreeMap<_, _>>();
+            for key in post_delta.keys().filter(|key| {
+                key.starts_with(&national_body_composition::storage_key::threshold_prefix())
+                    || key.starts_with(&national_body_composition::storage_key::proposal_prefix())
+            }) {
+                keys.insert(key.clone(), ());
+            }
+            Some(keys.into_keys().collect::<Vec<_>>())
+        } else {
+            None
+        };
+        if let Err(reason) = national_body_composition::check_transition(
+            &post_delta,
+            &read_parent,
+            &read_post,
+            runtime_upgrade_vote_keys.as_deref(),
+        ) {
+            log::error!(
+                target: "node-guard",
+                "拒绝区块 #{} ({:?}):国家机构组成或固定治理阈值被破坏 —— {:?}",
+                params.header.number(),
+                params.post_hash(),
+                reason,
+            );
+            return Ok(true);
         }
         Ok(false)
     }
@@ -1557,7 +1636,13 @@ mod finalize_issuance_tests {
 
     #[test]
     fn imported_state_is_partitioned_in_one_shared_pass() {
-        let governance = governance_skeleton::storage_key::admin_account(&[1u8; 32]);
+        let protected = primitives::governance_skeleton::fixed_institutions()[0];
+        let governance = governance_skeleton::storage_key::admin_account(&protected.main_account);
+        let ordinary_governance = governance_skeleton::storage_key::admin_account(&[1u8; 32]);
+        let composition = national_body_composition::storage_key::composition_keys(
+            &primitives::institution_constraints::member_composition_specs()[0],
+        )[0]
+        .clone();
         let fullnode = fullnode_issuance::storage_key::rewarded_block_count();
         let citizen = citizen_issuance::storage_key::rewarded_count();
         let genesis = genesis_pallet::storage_key::citizen_max();
@@ -1566,6 +1651,8 @@ mod finalize_issuance_tests {
         let unrelated = b"unrelated".to_vec();
         let pairs = BTreeMap::from([
             (governance.clone(), vec![1]),
+            (ordinary_governance, vec![1]),
+            (composition.clone(), vec![1]),
             (fullnode.clone(), vec![2]),
             (citizen.clone(), vec![3]),
             (genesis.clone(), vec![4]),
@@ -1574,10 +1661,18 @@ mod finalize_issuance_tests {
             (unrelated, vec![5]),
         ]);
         let state = partition_imported_state(pairs.iter());
-        assert_eq!(state.scanned, 7);
+        assert_eq!(state.scanned, 9);
         assert_eq!(
             state.governance.keys().cloned().collect::<Vec<_>>(),
             [governance]
+        );
+        assert_eq!(
+            state
+                .national_body_composition
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            [composition]
         );
         assert_eq!(
             state.fullnode_issuance.keys().cloned().collect::<Vec<_>>(),

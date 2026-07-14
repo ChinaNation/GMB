@@ -1,20 +1,30 @@
 //! 固定治理机构的管理员、岗位与任职节点策略（档 A）。
 //!
 //! `PublicAdmins::AdminAccounts` 只保存管理员钱包集合，`PublicManage` 保存岗位与任职。
-//! 本策略按 `primitives::governance_skeleton` 的编译期清单校验五类固定机构：固定岗位
-//! 目录和席位不允许漂移，具体管理员、任职来源和任期允许依法原子轮换。
+//! 本策略按 `primitives::governance_skeleton` 的编译期清单校验 89 个受保护创世机构：
+//! 固定岗位目录和席位不允许漂移，具体管理员允许依法原子轮换。任职来源、引用和任期
+//! 属于 runtime 业务合法性，不在原生组织结构守卫中重复解释。
 //! 法定代表人不属于本策略，也不是创世必填项。
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use codec::{Decode, Encode};
+use admin_primitives::{AdminAccountStatus, InstitutionAdminAccount};
+use codec::Decode;
+#[cfg(test)]
+use codec::Encode;
+#[cfg(test)]
+use entity_primitives::InstitutionAssignmentSource;
+use entity_primitives::{
+    InstitutionAdminAssignment as SharedInstitutionAdminAssignment, InstitutionAssignmentStatus,
+    InstitutionRole as SharedInstitutionRole, InstitutionRoleStatus,
+};
 
 use primitives::{
     cid::code::{InstitutionCode, FRG, PROVINCE_CODE_INFOS},
     count_const::FRG_PROVINCE_GROUP_ADMIN_COUNT,
     governance_skeleton::{
         fixed_institutions, fixed_role_specs, province_commissioner_role_code,
-        province_commissioner_role_name, FixedInstitution, STATUS_ACTIVE,
+        province_commissioner_role_name, FixedInstitution,
     },
 };
 
@@ -51,8 +61,12 @@ fn expected_roles(code: InstitutionCode) -> Vec<ExpectedRole> {
 
 /// 三张受保护 storage 的完整 RAW key 和精确前缀。
 pub mod storage_key {
-    use super::{fixed_institutions, PUBLIC_ADMINS_PALLET, PUBLIC_MANAGE_PALLET};
+    use super::{fixed_institutions, FixedInstitution, PUBLIC_ADMINS_PALLET, PUBLIC_MANAGE_PALLET};
     use codec::Encode;
+    use primitives::governance_skeleton::{
+        fixed_institution_by_cid, fixed_institution_by_main_account,
+    };
+    use sp_core::hashing::blake2_128;
 
     fn storage_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
         crate::shared::storage_keys::prefix(pallet, storage)
@@ -78,6 +92,15 @@ pub mod storage_key {
         let mut key = admin_accounts_prefix();
         key.extend_from_slice(&blake2_128_concat(account));
         key
+    }
+
+    fn admin_account_from_key(key: &[u8]) -> Option<[u8; 32]> {
+        let prefix = admin_accounts_prefix();
+        let encoded = key.strip_prefix(prefix.as_slice())?;
+        if encoded.len() != 48 || blake2_128(&encoded[16..]) != encoded[..16] {
+            return None;
+        }
+        encoded[16..].try_into().ok()
     }
 
     fn double_map_key(storage_prefix: Vec<u8>, cid_number: &[u8], role_code: &[u8]) -> Vec<u8> {
@@ -112,70 +135,33 @@ pub mod storage_key {
         prefixes
     }
 
-    /// 普通区块和完整状态分区只关注三张目标 storage，不扩大到整个 pallet。
+    /// 返回 RAW key 对应的受保护创世机构；普通机构治理 key 明确返回 `None`。
+    pub fn protected_institution_for_key(key: &[u8]) -> Option<FixedInstitution> {
+        if let Some(account) = admin_account_from_key(key) {
+            return fixed_institution_by_main_account(&account);
+        }
+        let parsed = if key.starts_with(&institution_roles_prefix()) {
+            super::parse_double_map_key(key, &institution_roles_prefix())
+        } else if key.starts_with(&institution_role_assignments_prefix()) {
+            super::parse_double_map_key(key, &institution_role_assignments_prefix())
+        } else {
+            return None;
+        };
+        let (cid_number, _) = parsed.ok()?;
+        fixed_institution_by_cid(&cid_number)
+    }
+
+    /// 普通区块和完整状态分区只关注 89 个受保护机构，不收集一般机构治理状态。
     pub fn is_relevant(key: &[u8]) -> bool {
-        key.starts_with(&admin_accounts_prefix())
-            || key.starts_with(&institution_roles_prefix())
-            || key.starts_with(&institution_role_assignments_prefix())
+        protected_institution_for_key(key).is_some()
     }
 }
 
-/// `admin-primitives::InstitutionAdminAccount` 的 SCALE 镜像。
-#[derive(Decode, Encode)]
-struct MInstitutionAdminAccount {
-    cid_number: Vec<u8>,
-    institution_code: [u8; 4],
-    admins: Vec<[u8; 32]>,
-    status: u8,
-}
-
-/// `entity-primitives::InstitutionRoleStatus` 的 SCALE 镜像。
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
-enum MInstitutionRoleStatus {
-    Active,
-    Inactive,
-}
-
-/// `entity-primitives::InstitutionAssignmentSource` 的 SCALE 镜像。
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
-enum MInstitutionAssignmentSource {
-    Genesis,
-    Registry,
-    PopularElection,
-    MutualElection,
-    NominationAppointment,
-}
-
-/// `entity-primitives::InstitutionAssignmentStatus` 的 SCALE 镜像。
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
-enum MInstitutionAssignmentStatus {
-    Active,
-    Ended,
-}
-
-/// `entity-primitives::InstitutionRole` 的 SCALE 镜像。
-#[derive(Decode, Encode)]
-struct MInstitutionRole {
-    cid_number: Vec<u8>,
-    role_code: Vec<u8>,
-    role_name: Vec<u8>,
-    term_required: bool,
-    role_status: MInstitutionRoleStatus,
-}
-
-/// `entity-primitives::InstitutionAdminAssignment` 的 SCALE 镜像。
-#[derive(Clone, Decode, Encode)]
-struct MInstitutionAdminAssignment {
-    cid_number: Vec<u8>,
-    admin_account: [u8; 32],
-    role_code: Vec<u8>,
-    term_start: u32,
-    term_end: u32,
-    assignment_source: MInstitutionAssignmentSource,
-    assignment_source_ref: Vec<u8>,
-    assignment_status: MInstitutionAssignmentStatus,
-}
+/// 节点直接使用共享协议类型解码，避免维护第二份字段顺序和枚举判别值。
+type DecodedInstitutionAdminAccount = InstitutionAdminAccount<Vec<[u8; 32]>>;
+type DecodedInstitutionRole = SharedInstitutionRole<Vec<u8>, Vec<u8>, Vec<u8>>;
+type DecodedInstitutionAdminAssignment =
+    SharedInstitutionAdminAssignment<Vec<u8>, [u8; 32], Vec<u8>, Vec<u8>>;
 
 /// 固定治理骨架校验失败原因。
 #[derive(Debug, PartialEq)]
@@ -241,13 +227,8 @@ pub enum GuardError {
         code: [u8; 4],
         role_code: Vec<u8>,
     },
-    InvalidAssignmentTerm {
-        code: [u8; 4],
-        role_code: Vec<u8>,
-    },
     DuplicateAssignmentWallet([u8; 4]),
     AdminAssignmentSetMismatch([u8; 4]),
-    MalformedRoleStorageKey,
     UnknownFixedRole {
         code: [u8; 4],
         role_code: Vec<u8>,
@@ -290,7 +271,7 @@ fn parse_double_map_key(key: &[u8], prefix: &[u8]) -> Result<(Vec<u8>, Vec<u8>),
     Ok((cid_number, role_code))
 }
 
-fn fixed_institution_by_cid<'a>(
+fn fixed_institution_in<'a>(
     fixed: &'a [FixedInstitution],
     cid_number: &[u8],
 ) -> Option<&'a FixedInstitution> {
@@ -321,8 +302,12 @@ where
         let Some(parsed) = parsed else {
             continue;
         };
-        let (cid_number, role_code) = parsed.map_err(|_| GuardError::MalformedRoleStorageKey)?;
-        let Some(institution) = fixed_institution_by_cid(&fixed, &cid_number) else {
+        // 无法解析的额外 key 不会成为 FRAME 规范岗位；只要受保护机构的规范 key
+        // 仍完整存在，它不属于原生治理骨架。通用 storage 合法性由 runtime 负责。
+        let Ok((cid_number, role_code)) = parsed else {
+            continue;
+        };
+        let Some(institution) = fixed_institution_in(&fixed, &cid_number) else {
             continue;
         };
         if !expected_roles(institution.code)
@@ -338,143 +323,167 @@ where
     Ok(())
 }
 
-/// 校验五类固定机构的管理员集合、固定岗位和任职席位。
+/// 校验全部 89 个受保护创世机构的管理员集合、固定岗位和任职席位。
 ///
-/// 固定岗位代码、名称、所属机构和席位数不可改变；管理员钱包、任职来源、来源引用和
-/// 任期可依法更新。岗位要求任期时必须满足 `0 < start < end`，否则起止日必须同时为 0。
+/// 固定岗位代码、名称、所属机构和席位数不可改变；管理员钱包可以依法更新。任职来源、
+/// 来源引用与任期只要求共享 SCALE 能完整解码，具体业务合法性由 runtime 与投票引擎负责。
 pub fn check_skeleton_invariants<F>(read_raw: F) -> Result<(), GuardError>
 where
     F: Fn(&[u8]) -> Option<Vec<u8>>,
 {
     for institution in fixed_institutions() {
-        let expected_cid = institution.cid_number.as_bytes();
-        let raw = read_raw(&storage_key::admin_account(&institution.main_account))
-            .ok_or(GuardError::FixedInstitutionMissing(institution.code))?;
-        let account: MInstitutionAdminAccount = decode_exact(&raw)
-            .map_err(|_| GuardError::AdminAccountDecodeFailed(institution.code))?;
-        if account.cid_number != expected_cid {
-            return Err(GuardError::AdminCidChanged(institution.code));
-        }
-        if account.institution_code != institution.code {
-            return Err(GuardError::InstitutionCodeChanged(institution.code));
-        }
-        if account.status != STATUS_ACTIVE {
-            return Err(GuardError::NotActive(institution.code));
-        }
-        let found = account.admins.len() as u32;
-        if found != institution.expected_len {
-            return Err(GuardError::AdminsLenChanged {
-                code: institution.code,
-                expected: institution.expected_len,
-                found,
-            });
-        }
-        let admin_set = account.admins.iter().copied().collect::<BTreeSet<_>>();
-        if admin_set.len() != account.admins.len() {
-            return Err(GuardError::DuplicateAdminWallet(institution.code));
-        }
-
-        let mut assigned_wallets = BTreeSet::new();
-        for expected_role in expected_roles(institution.code) {
-            let role_key = storage_key::institution_role(expected_cid, &expected_role.role_code);
-            let role_raw = read_raw(&role_key).ok_or_else(|| GuardError::RoleMissing {
-                code: institution.code,
-                role_code: expected_role.role_code.clone(),
-            })?;
-            let role: MInstitutionRole =
-                decode_exact(&role_raw).map_err(|_| GuardError::RoleDecodeFailed {
-                    code: institution.code,
-                    role_code: expected_role.role_code.clone(),
-                })?;
-            if role.cid_number != expected_cid {
-                return Err(GuardError::RoleCidChanged {
-                    code: institution.code,
-                    role_code: expected_role.role_code,
-                });
-            }
-            if role.role_code != expected_role.role_code {
-                return Err(GuardError::RoleCodeChanged {
-                    code: institution.code,
-                    role_code: expected_role.role_code,
-                });
-            }
-            if role.role_name != expected_role.role_name {
-                return Err(GuardError::RoleNameChanged {
-                    code: institution.code,
-                    role_code: expected_role.role_code,
-                });
-            }
-            if role.role_status != MInstitutionRoleStatus::Active {
-                return Err(GuardError::RoleNotActive {
-                    code: institution.code,
-                    role_code: expected_role.role_code,
-                });
-            }
-
-            let assignments_key =
-                storage_key::institution_role_assignments(expected_cid, &expected_role.role_code);
-            let assignments_raw =
-                read_raw(&assignments_key).ok_or_else(|| GuardError::AssignmentsMissing {
-                    code: institution.code,
-                    role_code: expected_role.role_code.clone(),
-                })?;
-            let assignments: Vec<MInstitutionAdminAssignment> = decode_exact(&assignments_raw)
-                .map_err(|_| GuardError::AssignmentsDecodeFailed {
-                    code: institution.code,
-                    role_code: expected_role.role_code.clone(),
-                })?;
-            let found = assignments.len() as u32;
-            if found != expected_role.seats {
-                return Err(GuardError::SeatsChanged {
-                    code: institution.code,
-                    role_code: expected_role.role_code,
-                    expected: expected_role.seats,
-                    found,
-                });
-            }
-            for assignment in assignments {
-                if assignment.cid_number != expected_cid {
-                    return Err(GuardError::AssignmentCidChanged {
-                        code: institution.code,
-                        role_code: expected_role.role_code,
-                    });
-                }
-                if assignment.role_code != expected_role.role_code {
-                    return Err(GuardError::AssignmentRoleChanged {
-                        code: institution.code,
-                        role_code: expected_role.role_code,
-                    });
-                }
-                if assignment.assignment_status != MInstitutionAssignmentStatus::Active {
-                    return Err(GuardError::AssignmentNotActive {
-                        code: institution.code,
-                        role_code: expected_role.role_code,
-                    });
-                }
-                let valid_term = if role.term_required {
-                    assignment.term_start > 0 && assignment.term_end > assignment.term_start
-                } else {
-                    assignment.term_start == 0 && assignment.term_end == 0
-                };
-                if !valid_term {
-                    return Err(GuardError::InvalidAssignmentTerm {
-                        code: institution.code,
-                        role_code: expected_role.role_code,
-                    });
-                }
-                if !assigned_wallets.insert(assignment.admin_account) {
-                    return Err(GuardError::DuplicateAssignmentWallet(institution.code));
-                }
-            }
-        }
-        if assigned_wallets != admin_set {
-            return Err(GuardError::AdminAssignmentSetMismatch(institution.code));
-        }
+        check_institution_invariants(&institution, &read_raw)?;
     }
     Ok(())
 }
 
-/// 触及三张目标 storage 或 runtime code 时必须跑完整治理骨架校验。
+/// 只校验一个受保护创世机构，供普通区块按受影响身份精确执行。
+fn check_institution_invariants<F>(
+    institution: &FixedInstitution,
+    read_raw: &F,
+) -> Result<(), GuardError>
+where
+    F: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    let expected_cid = institution.cid_number.as_bytes();
+    let raw = read_raw(&storage_key::admin_account(&institution.main_account))
+        .ok_or(GuardError::FixedInstitutionMissing(institution.code))?;
+    let account: DecodedInstitutionAdminAccount =
+        decode_exact(&raw).map_err(|_| GuardError::AdminAccountDecodeFailed(institution.code))?;
+    if account.cid_number.as_slice() != expected_cid {
+        return Err(GuardError::AdminCidChanged(institution.code));
+    }
+    if account.institution_code != institution.code {
+        return Err(GuardError::InstitutionCodeChanged(institution.code));
+    }
+    if account.status != AdminAccountStatus::Active {
+        return Err(GuardError::NotActive(institution.code));
+    }
+    let found = account.admins.len() as u32;
+    if found != institution.expected_len {
+        return Err(GuardError::AdminsLenChanged {
+            code: institution.code,
+            expected: institution.expected_len,
+            found,
+        });
+    }
+    let admin_set = account.admins.iter().copied().collect::<BTreeSet<_>>();
+    if admin_set.len() != account.admins.len() {
+        return Err(GuardError::DuplicateAdminWallet(institution.code));
+    }
+
+    let mut assigned_wallets = BTreeSet::new();
+    for expected_role in expected_roles(institution.code) {
+        let role_key = storage_key::institution_role(expected_cid, &expected_role.role_code);
+        let role_raw = read_raw(&role_key).ok_or_else(|| GuardError::RoleMissing {
+            code: institution.code,
+            role_code: expected_role.role_code.clone(),
+        })?;
+        let role: DecodedInstitutionRole =
+            decode_exact(&role_raw).map_err(|_| GuardError::RoleDecodeFailed {
+                code: institution.code,
+                role_code: expected_role.role_code.clone(),
+            })?;
+        if role.cid_number != expected_cid {
+            return Err(GuardError::RoleCidChanged {
+                code: institution.code,
+                role_code: expected_role.role_code,
+            });
+        }
+        if role.role_code != expected_role.role_code {
+            return Err(GuardError::RoleCodeChanged {
+                code: institution.code,
+                role_code: expected_role.role_code,
+            });
+        }
+        if role.role_name != expected_role.role_name {
+            return Err(GuardError::RoleNameChanged {
+                code: institution.code,
+                role_code: expected_role.role_code,
+            });
+        }
+        if role.role_status != InstitutionRoleStatus::Active {
+            return Err(GuardError::RoleNotActive {
+                code: institution.code,
+                role_code: expected_role.role_code,
+            });
+        }
+
+        let assignments_key =
+            storage_key::institution_role_assignments(expected_cid, &expected_role.role_code);
+        let assignments_raw =
+            read_raw(&assignments_key).ok_or_else(|| GuardError::AssignmentsMissing {
+                code: institution.code,
+                role_code: expected_role.role_code.clone(),
+            })?;
+        let assignments: Vec<DecodedInstitutionAdminAssignment> = decode_exact(&assignments_raw)
+            .map_err(|_| GuardError::AssignmentsDecodeFailed {
+                code: institution.code,
+                role_code: expected_role.role_code.clone(),
+            })?;
+        let found = assignments.len() as u32;
+        if found != expected_role.seats {
+            return Err(GuardError::SeatsChanged {
+                code: institution.code,
+                role_code: expected_role.role_code,
+                expected: expected_role.seats,
+                found,
+            });
+        }
+        for assignment in assignments {
+            if assignment.cid_number != expected_cid {
+                return Err(GuardError::AssignmentCidChanged {
+                    code: institution.code,
+                    role_code: expected_role.role_code,
+                });
+            }
+            if assignment.role_code != expected_role.role_code {
+                return Err(GuardError::AssignmentRoleChanged {
+                    code: institution.code,
+                    role_code: expected_role.role_code,
+                });
+            }
+            if assignment.assignment_status != InstitutionAssignmentStatus::Active {
+                return Err(GuardError::AssignmentNotActive {
+                    code: institution.code,
+                    role_code: expected_role.role_code,
+                });
+            }
+            if !assigned_wallets.insert(assignment.admin_account) {
+                return Err(GuardError::DuplicateAssignmentWallet(institution.code));
+            }
+        }
+    }
+    if assigned_wallets != admin_set {
+        return Err(GuardError::AdminAssignmentSetMismatch(institution.code));
+    }
+    Ok(())
+}
+
+/// 普通区块仅复核实际被修改的受保护创世机构；runtime 升级仍全量复核。
+pub(super) fn check_affected_institutions<F>(
+    delta: &BTreeMap<Vec<u8>, Option<Vec<u8>>>,
+    read_raw: F,
+) -> Result<(), GuardError>
+where
+    F: Fn(&[u8]) -> Option<Vec<u8>>,
+{
+    if delta.contains_key(sp_storage::well_known_keys::CODE) {
+        return check_skeleton_invariants(read_raw);
+    }
+    let mut affected = BTreeMap::new();
+    for key in delta.keys() {
+        if let Some(institution) = storage_key::protected_institution_for_key(key) {
+            affected.insert(institution.main_account, institution);
+        }
+    }
+    for institution in affected.values() {
+        check_institution_invariants(institution, &read_raw)?;
+    }
+    Ok(())
+}
+
+/// 只有受保护机构治理 key 或 runtime code 变化时才复核治理骨架。
 pub(super) fn needs_full_check(delta: &BTreeMap<Vec<u8>, Option<Vec<u8>>>) -> bool {
     delta.keys().any(|key| storage_key::is_relevant(key))
         || delta.contains_key(sp_storage::well_known_keys::CODE)
@@ -487,7 +496,8 @@ mod tests {
     use super::*;
     use sp_core::hashing::{blake2_128, twox_128};
 
-    const STATUS_PENDING: u8 = 0;
+    const STATUS_PENDING: AdminAccountStatus = AdminAccountStatus::Pending;
+    const STATUS_ACTIVE: AdminAccountStatus = AdminAccountStatus::Active;
 
     fn accounts_for(institution: &FixedInstitution) -> Vec<[u8; 32]> {
         (0..institution.expected_len)
@@ -495,9 +505,18 @@ mod tests {
             .collect()
     }
 
-    fn account_bytes(institution: &FixedInstitution, status: u8, admins: Vec<[u8; 32]>) -> Vec<u8> {
-        MInstitutionAdminAccount {
-            cid_number: institution.cid_number.as_bytes().to_vec(),
+    fn account_bytes(
+        institution: &FixedInstitution,
+        status: AdminAccountStatus,
+        admins: Vec<[u8; 32]>,
+    ) -> Vec<u8> {
+        InstitutionAdminAccount {
+            cid_number: institution
+                .cid_number
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("fixed CID fits AdminCidNumber"),
             institution_code: institution.code,
             admins,
             status,
@@ -506,12 +525,12 @@ mod tests {
     }
 
     fn role_bytes(institution: &FixedInstitution, role: &ExpectedRole) -> Vec<u8> {
-        MInstitutionRole {
+        DecodedInstitutionRole {
             cid_number: institution.cid_number.as_bytes().to_vec(),
             role_code: role.role_code.clone(),
             role_name: role.role_name.clone(),
             term_required: false,
-            role_status: MInstitutionRoleStatus::Active,
+            role_status: InstitutionRoleStatus::Active,
         }
         .encode()
     }
@@ -520,16 +539,16 @@ mod tests {
         institution: &FixedInstitution,
         role: &ExpectedRole,
         admin_account: [u8; 32],
-    ) -> MInstitutionAdminAssignment {
-        MInstitutionAdminAssignment {
+    ) -> DecodedInstitutionAdminAssignment {
+        DecodedInstitutionAdminAssignment {
             cid_number: institution.cid_number.as_bytes().to_vec(),
             admin_account,
             role_code: role.role_code.clone(),
             term_start: 0,
             term_end: 0,
-            assignment_source: MInstitutionAssignmentSource::Genesis,
+            assignment_source: InstitutionAssignmentSource::Genesis,
             assignment_source_ref: Vec::new(),
-            assignment_status: MInstitutionAssignmentStatus::Active,
+            assignment_status: InstitutionAssignmentStatus::Active,
         }
     }
 
@@ -584,8 +603,11 @@ mod tests {
     fn institution_admin_account_layout_is_exact() {
         let institution = fixed_institutions()[0];
         let raw = account_bytes(&institution, STATUS_ACTIVE, accounts_for(&institution));
-        let decoded: MInstitutionAdminAccount = decode_exact(&raw).expect("layout decodes");
-        assert_eq!(decoded.cid_number, institution.cid_number.as_bytes());
+        let decoded: DecodedInstitutionAdminAccount = decode_exact(&raw).expect("layout decodes");
+        assert_eq!(
+            decoded.cid_number.as_slice(),
+            institution.cid_number.as_bytes()
+        );
         assert_eq!(decoded.institution_code, institution.code);
         assert_eq!(decoded.admins.len() as u32, institution.expected_len);
         assert_eq!(decoded.status, STATUS_ACTIVE);
@@ -630,7 +652,7 @@ mod tests {
         );
 
         let mut state = valid_state();
-        let mut renamed: MInstitutionRole =
+        let mut renamed: DecodedInstitutionRole =
             decode_exact(state.get(&role_key).expect("role exists")).expect("role decodes");
         renamed.role_name = "攻击者岗位".as_bytes().to_vec();
         state.insert(role_key, renamed.encode());
@@ -666,7 +688,7 @@ mod tests {
         );
 
         let mut state = valid_state();
-        let mut assignments: Vec<MInstitutionAdminAssignment> =
+        let mut assignments: Vec<DecodedInstitutionAdminAssignment> =
             decode_exact(state.get(&assignments_key).expect("assignments exist"))
                 .expect("assignments decode");
         assignments.pop();
@@ -682,7 +704,7 @@ mod tests {
         );
 
         let mut state = valid_state();
-        let mut assignments: Vec<MInstitutionAdminAssignment> =
+        let mut assignments: Vec<DecodedInstitutionAdminAssignment> =
             decode_exact(state.get(&assignments_key).expect("assignments exist"))
                 .expect("assignments decode");
         assignments[0].admin_account = [250u8; 32];
@@ -694,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn lawful_member_source_and_term_rotation_passes() {
+    fn member_source_and_term_fields_are_outside_native_structure_guard() {
         let institution = fixed_institutions()[0];
         let role = expected_roles(institution.code)[0].clone();
         let role_key =
@@ -706,24 +728,24 @@ mod tests {
         let admin_key = storage_key::admin_account(&institution.main_account);
         let mut state = valid_state();
 
-        let mut role_value: MInstitutionRole =
+        let mut role_value: DecodedInstitutionRole =
             decode_exact(state.get(&role_key).expect("role exists")).expect("role decodes");
         role_value.term_required = true;
         state.insert(role_key, role_value.encode());
 
-        let mut assignments: Vec<MInstitutionAdminAssignment> =
+        let mut assignments: Vec<DecodedInstitutionAdminAssignment> =
             decode_exact(state.get(&assignments_key).expect("assignments exist"))
                 .expect("assignments decode");
         for assignment in &mut assignments {
             assignment.term_start = 10;
-            assignment.term_end = 20;
-            assignment.assignment_source = MInstitutionAssignmentSource::PopularElection;
+            assignment.term_end = 5;
+            assignment.assignment_source = InstitutionAssignmentSource::PopularElection;
             assignment.assignment_source_ref = b"VOTE-1".to_vec();
         }
         assignments[0].admin_account = [250u8; 32];
         state.insert(assignments_key, assignments.encode());
 
-        let mut account: MInstitutionAdminAccount =
+        let mut account: DecodedInstitutionAdminAccount =
             decode_exact(state.get(&admin_key).expect("admin account exists"))
                 .expect("admin account decodes");
         account.admins[0] = [250u8; 32];
@@ -756,18 +778,51 @@ mod tests {
 
         let mut delta = BTreeMap::new();
         delta.insert(expected_role, Some(Vec::new()));
+        assert!(
+            !needs_full_check(&delta),
+            "普通机构岗位变化不得触发创世治理骨架"
+        );
+        let protected = fixed_institutions()[0];
+        delta.insert(
+            storage_key::institution_role(
+                protected.cid_number.as_bytes(),
+                &expected_roles(protected.code)[0].role_code,
+            ),
+            Some(Vec::new()),
+        );
         assert!(needs_full_check(&delta));
         assert!(storage_key::fixed_catalog_prefixes().len() >= 2);
     }
 
     #[test]
-    fn malformed_role_key_and_trailing_value_are_rejected() {
+    fn ordinary_block_checks_only_the_affected_protected_institution() {
+        let fixed = fixed_institutions();
+        let affected = fixed[0];
+        let unrelated = fixed[1];
+        let mut state = valid_state();
+        state.remove(&storage_key::admin_account(&unrelated.main_account));
+
+        let delta = BTreeMap::from([(
+            storage_key::admin_account(&affected.main_account),
+            state
+                .get(&storage_key::admin_account(&affected.main_account))
+                .cloned(),
+        )]);
+        assert_eq!(
+            check_affected_institutions(&delta, |key| state.get(key).cloned()),
+            Ok(())
+        );
+        assert_eq!(
+            check_skeleton_invariants(|key| state.get(key).cloned()),
+            Err(GuardError::FixedInstitutionMissing(unrelated.code))
+        );
+    }
+
+    #[test]
+    fn malformed_extra_role_key_is_ignored_but_trailing_value_is_rejected() {
         let mut malformed = storage_key::institution_roles_prefix();
         malformed.extend_from_slice(b"bad");
-        assert_eq!(
-            check_catalog_keys([malformed]),
-            Err(GuardError::MalformedRoleStorageKey)
-        );
+        assert_eq!(check_catalog_keys([malformed]), Ok(()));
 
         let institution = fixed_institutions()[0];
         let role = expected_roles(institution.code)[0].clone();

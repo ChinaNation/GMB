@@ -227,6 +227,40 @@ describe('stripe membership webhook', () => {
     });
   });
 
+  it('迟到的旧 subscription.updated 会回读 Stripe 当前对象，不回滚新档位', async () => {
+    const db = new FakeDb();
+    const currentEvent = JSON.parse(
+      stripeEvent({
+        membership_level: 'democracy',
+        status: 'active',
+        periodEnd: 1_903_456_000
+      })
+    ) as { data: { object: Record<string, unknown> } };
+    const env = fakeEnv({
+      db,
+      membership: null,
+      storageResponses: [],
+      stripeSecret,
+      stripeDevProxy: false,
+      stripeSubscription: currentEvent.data.object
+    });
+    // 投递快照仍是旧 freedom；真实 Stripe 当前对象已是 democracy。
+    const staleBody = stripeEvent({
+      membership_level: 'freedom',
+      status: 'active',
+      periodEnd: 1_893_456_000
+    });
+
+    const response = await stripeWebhookRoute(await signedRequest(staleBody), env);
+    expect(((await response.json()) as { membership_level: string }).membership_level).toBe(
+      'democracy'
+    );
+    expect(db.memberships.get(owner)).toMatchObject({
+      membership_level: 'democracy',
+      expires_at: 1_903_456_000 * 1000
+    });
+  });
+
   it('records identity_required instead of activating an ineligible candidate subscription', async () => {
     const db = new FakeDb();
     const env = fakeEnv({
@@ -307,10 +341,12 @@ describe('stripe membership webhook', () => {
     const body = JSON.stringify({
       id: 'evt_prepaid',
       type: 'checkout.session.completed',
+      created: Math.floor(Date.now() / 1000),
       data: {
         object: {
           id: 'cs_prepaid_freedom_quarter',
           payment_status: 'paid',
+          payment_method_types: ['crypto'],
           payment_intent: 'pi_test',
           metadata: {
             route: 'usdc_prepaid',
@@ -334,6 +370,71 @@ describe('stripe membership webhook', () => {
     expect(row?.prepaid_payment_ref).toBe('pi_test');
   });
 
+  it('重复投递同一 Stripe 事件不会重复延长 USDC 时长', async () => {
+    const db = new FakeDb();
+    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
+    const body = JSON.stringify({
+      id: 'evt_prepaid_replay',
+      type: 'checkout.session.completed',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'cs_prepaid_replay',
+          payment_status: 'paid',
+          payment_method_types: ['crypto'],
+          payment_intent: 'pi_replay',
+          metadata: {
+            route: 'usdc_prepaid',
+            owner_account: owner,
+            membership_level: 'freedom',
+            duration: 'quarter'
+          }
+        }
+      }
+    });
+
+    const first = await stripeWebhookRoute(await signedRequest(body), env);
+    expect(((await first.json()) as { action: string }).action).toBe('prepaid_granted');
+    const firstExpires = db.memberships.get(owner)?.expires_at;
+
+    const repeated = await stripeWebhookRoute(await signedRequest(body), env);
+    expect(((await repeated.json()) as { action: string }).action).toBe(
+      'stripe_event_duplicate'
+    );
+    expect(db.memberships.get(owner)?.expires_at).toBe(firstExpires);
+    expect(db.stripePayments.size).toBe(1);
+  });
+
+  it('USDC webhook 若不是 Stripe Crypto 支付则拒绝授权', async () => {
+    const db = new FakeDb();
+    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
+    const body = JSON.stringify({
+      id: 'evt_prepaid_card',
+      type: 'checkout.session.completed',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'cs_prepaid_card',
+          payment_status: 'paid',
+          payment_method_types: ['card'],
+          payment_intent: 'pi_card',
+          metadata: {
+            route: 'usdc_prepaid',
+            owner_account: owner,
+            membership_level: 'freedom',
+            duration: 'quarter'
+          }
+        }
+      }
+    });
+
+    await expect(stripeWebhookRoute(await signedRequest(body), env)).rejects.toMatchObject({
+      code: 'stripe_crypto_required'
+    });
+    expect(db.memberships.get(owner)).toBeUndefined();
+    expect(db.stripeWebhookEvents.has('evt_prepaid_card')).toBe(false);
+  });
+
   it('applies USDC upgrade (level only, keeps expires) from a paid usdc_prepaid_upgrade checkout', async () => {
     const db = new FakeDb();
     const env = fakeEnv({
@@ -350,10 +451,12 @@ describe('stripe membership webhook', () => {
     const body = JSON.stringify({
       id: 'evt_upgrade',
       type: 'checkout.session.completed',
+      created: Math.floor(Date.now() / 1000),
       data: {
         object: {
           id: 'cs_prepaid_upgrade_democracy',
           payment_status: 'paid',
+          payment_method_types: ['crypto'],
           payment_intent: 'pi_up',
           metadata: {
             route: 'usdc_prepaid_upgrade',
@@ -386,10 +489,12 @@ describe('stripe membership webhook', () => {
     const body = JSON.stringify({
       id: 'evt_switch',
       type: 'checkout.session.completed',
+      created: Math.floor(Date.now() / 1000),
       data: {
         object: {
           id: 'cs_prepaid_freedom_quarter',
           payment_status: 'paid',
+          payment_method_types: ['crypto'],
           payment_intent: 'pi_sw',
           metadata: {
             route: 'usdc_prepaid',
@@ -428,10 +533,12 @@ describe('stripe membership webhook', () => {
     const body = JSON.stringify({
       id: 'evt_fold',
       type: 'checkout.session.completed',
+      created: Math.floor(Date.now() / 1000),
       data: {
         object: {
           id: 'cs_prepaid_candidate_quarter',
           payment_status: 'paid',
+          payment_method_types: ['crypto'],
           payment_intent: 'pi_fold',
           metadata: {
             route: 'usdc_prepaid',
@@ -461,6 +568,7 @@ describe('stripe membership webhook', () => {
     const body = JSON.stringify({
       id: 'evt_card_checkout',
       type: 'checkout.session.completed',
+      created: Math.floor(Date.now() / 1000),
       data: { object: { id: 'cs_card', payment_status: 'paid', metadata: {} } }
     });
 
@@ -496,6 +604,8 @@ function fakeEnv(input: {
   storageResponses: Array<string | null>;
   storageThrows?: boolean;
   stripeSecret?: string;
+  stripeDevProxy?: boolean;
+  stripeSubscription?: Record<string, unknown>;
 }): Env {
   const db = input.db ?? new FakeDb();
   if (input.membership !== undefined && input.membership !== null) {
@@ -515,13 +625,16 @@ function fakeEnv(input: {
       ? vi.fn(async () => {
           throw new Error('rpc down');
         })
-      : vi.fn(async () =>
-          Response.json({
+      : vi.fn(async (request: RequestInfo | URL) => {
+          if (request.toString().startsWith('https://api.stripe.com/')) {
+            return Response.json(input.stripeSubscription ?? {});
+          }
+          return Response.json({
             jsonrpc: '2.0',
             id: 1,
             result: responses.shift() ?? null
-          })
-        )
+          });
+        })
   );
 
   return {
@@ -532,7 +645,12 @@ function fakeEnv(input: {
     CHAIN_ID: 'worker-rpc.access',
     CHAIN_SECRET: 'test-access-secret',
     STRIPE_HOOK_SECRET: input.stripeSecret,
-    STRIPE_DEV_PROXY: '1'
+    STRIPE_API_KEY: 'sk_test_secret',
+    STRIPE_DEV_PROXY: input.stripeDevProxy === false ? '0' : '1',
+    FREEDOM_PRICE_ID: 'price_freedom',
+    DEMOCRACY_PRICE_ID: 'price_democracy',
+    VOTING_PRICE_ID: 'price_voting',
+    CANDIDATE_PRICE_ID: 'price_candidate'
   } as unknown as Env;
 }
 
@@ -593,6 +711,7 @@ function stripeEvent(input: {
   return JSON.stringify({
     id: 'evt_test',
     type: 'customer.subscription.updated',
+    created: Math.floor(Date.now() / 1000),
     data: { object }
   });
 }
@@ -695,9 +814,32 @@ class FakeKv {
 
 class FakeDb {
   memberships = new Map<string, MembershipRow>();
+  stripeWebhookEvents = new Map<
+    string,
+    { processed_at: number | null; received_at: number }
+  >();
+  stripePayments = new Set<string>();
 
   prepare(sql: string): FakeStmt {
     return new FakeStmt(this, sql);
+  }
+
+  async batch(statements: FakeStmt[]): Promise<Array<{ success: boolean }>> {
+    const membershipsBefore = new Map(
+      [...this.memberships].map(([key, value]) => [key, { ...value }])
+    );
+    const eventsBefore = new Map(
+      [...this.stripeWebhookEvents].map(([key, value]) => [key, { ...value }])
+    );
+    const paymentsBefore = new Set(this.stripePayments);
+    try {
+      return await Promise.all(statements.map((statement) => statement.run()));
+    } catch (error) {
+      this.memberships = membershipsBefore;
+      this.stripeWebhookEvents = eventsBefore;
+      this.stripePayments = paymentsBefore;
+      throw error;
+    }
   }
 }
 
@@ -718,6 +860,15 @@ class FakeStmt {
     if (this.sql.includes('FROM square_memberships')) {
       return (this.db.memberships.get(this.args[0] as string) ?? null) as T | null;
     }
+    if (this.sql.includes('FROM square_stripe_webhook_events')) {
+      return (this.db.stripeWebhookEvents.get(this.args[0] as string) ?? null) as T | null;
+    }
+    if (this.sql.includes('FROM square_stripe_payments')) {
+      const paymentIntentId = this.args[0] as string;
+      return (this.db.stripePayments.has(paymentIntentId)
+        ? { stripe_payment_intent_id: paymentIntentId }
+        : null) as T | null;
+    }
     return null;
   }
 
@@ -726,7 +877,52 @@ class FakeStmt {
     return { results: [], success: true };
   }
 
-  async run(): Promise<{ success: boolean }> {
+  async run(): Promise<{ success: boolean; meta: { changes: number } }> {
+    if (this.sql.includes('INSERT OR IGNORE INTO square_stripe_webhook_events')) {
+      const eventId = this.args[0] as string;
+      if (this.db.stripeWebhookEvents.has(eventId)) {
+        return { success: true, meta: { changes: 0 } };
+      }
+      this.db.stripeWebhookEvents.set(eventId, {
+        processed_at: null,
+        received_at: this.args[4] as number
+      });
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (
+      this.sql.includes('UPDATE square_stripe_webhook_events') &&
+      this.sql.includes('SET processed_at')
+    ) {
+      const eventId = this.args[1] as string;
+      const event = this.db.stripeWebhookEvents.get(eventId);
+      if (event) event.processed_at = this.args[0] as number;
+      return { success: true, meta: { changes: event ? 1 : 0 } };
+    }
+    if (
+      this.sql.includes('UPDATE square_stripe_webhook_events') &&
+      this.sql.includes('SET received_at')
+    ) {
+      const eventId = this.args[1] as string;
+      const event = this.db.stripeWebhookEvents.get(eventId);
+      const canReclaim = event != null && event.processed_at == null && event.received_at < (this.args[2] as number);
+      if (canReclaim) event.received_at = this.args[0] as number;
+      return { success: true, meta: { changes: canReclaim ? 1 : 0 } };
+    }
+    if (this.sql.includes('DELETE FROM square_stripe_webhook_events')) {
+      const eventId = this.args[0] as string;
+      const event = this.db.stripeWebhookEvents.get(eventId);
+      const deleted = event != null && event.processed_at == null;
+      if (deleted) this.db.stripeWebhookEvents.delete(eventId);
+      return { success: true, meta: { changes: deleted ? 1 : 0 } };
+    }
+    if (this.sql.includes('INSERT INTO square_stripe_payments')) {
+      const paymentIntentId = this.args[0] as string;
+      if (this.db.stripePayments.has(paymentIntentId)) {
+        throw new Error('UNIQUE constraint failed: square_stripe_payments.stripe_payment_intent_id');
+      }
+      this.db.stripePayments.add(paymentIntentId);
+      return { success: true, meta: { changes: 1 } };
+    }
     if (this.sql.includes('INSERT INTO square_memberships')) {
       const ownerAccount = this.args[0] as string;
       if (this.sql.includes("'usdc_prepaid'")) {
@@ -784,6 +980,6 @@ class FakeStmt {
         }
       }
     }
-    return { success: true };
+    return { success: true, meta: { changes: 1 } };
   }
 }

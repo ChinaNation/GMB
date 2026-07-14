@@ -15,6 +15,7 @@ pub mod fee_policy; // 费率规则常量
 pub mod genesis; // 创世常量
 pub mod governance_skeleton; // 固定治理骨架冻结规格(档 A)
 pub mod institution_asset; // 机构账户资金操作白名单 trait 与动作枚举
+pub mod institution_constraints; // 国家级单例身份与法定成员组成约束
 pub mod multisig; // 多签共用 trait 与类型
 pub mod pow_const; // 全节点铸块与发行常量
 pub mod sign; // QR_V1 签名消息原语

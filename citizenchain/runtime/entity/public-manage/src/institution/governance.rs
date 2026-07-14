@@ -8,6 +8,7 @@ extern crate alloc;
 
 use admin_primitives::{AdminAccountQuery as _, InstitutionAdminAccountLifecycle as _};
 use alloc::{collections::BTreeMap, vec::Vec};
+use codec::Encode as _;
 use entity_primitives::{
     InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
     InstitutionGovernanceResult, InstitutionRole, InstitutionRoleStatus,
@@ -73,14 +74,33 @@ impl<T: Config> Pallet<T> {
                 && institution.status == entity_primitives::InstitutionLifecycleStatus::Active,
             Error::<T>::InvalidAssignmentResultInstitution
         );
+        let main_account_bytes = main_account.encode();
+        let protected_institution = primitives::governance_skeleton::fixed_institution_by_identity(
+            result.institution_code,
+            cid_number.as_slice(),
+            &main_account_bytes,
+        )
+        .is_some();
+        let member_composition =
+            primitives::institution_constraints::member_composition_by_identity(
+                result.institution_code,
+                cid_number.as_slice(),
+                &main_account_bytes,
+            );
+        let permanent_singleton = primitives::institution_constraints::singleton_by_identity(
+            result.institution_code,
+            cid_number.as_slice(),
+            &main_account_bytes,
+        );
 
         let mut final_roles = InstitutionRoles::<T>::iter_prefix(&cid_number)
             .collect::<BTreeMap<RoleCodeOf, InstitutionRoleOf<T>>>();
         let mut role_changes = BTreeMap::<RoleCodeOf, InstitutionRoleOf<T>>::new();
         for change in result.role_changes {
-            // 五类创世机构岗位定义由治理骨架固定；依法轮换只改变任职账户。
+            // 89 个受保护创世机构的岗位定义由治理骨架固定；依法轮换只改变任职账户。
+            // 其他机构即使机构类型相同，也由 runtime 治理结果动态调整岗位结构。
             ensure!(
-                !primitives::cid::code::is_fixed_governance_code(&result.institution_code),
+                !protected_institution,
                 Error::<T>::FixedRoleDefinitionImmutable
             );
             ensure!(!change.role_code.is_empty(), Error::<T>::InvalidRoleCode);
@@ -204,9 +224,11 @@ impl<T: Config> Pallet<T> {
                     assignment_order.push(assignment.admin_account.clone());
                 }
             }
-            if primitives::cid::code::is_fixed_governance_code(&result.institution_code) {
-                let seats = primitives::governance_skeleton::fixed_role_seats(
+            if protected_institution {
+                let seats = primitives::governance_skeleton::fixed_role_seats_by_identity(
                     result.institution_code,
+                    cid_number.as_slice(),
+                    &main_account_bytes,
                     role_code.as_slice(),
                 )
                 .ok_or(Error::<T>::InvalidRoleCode)?;
@@ -225,11 +247,52 @@ impl<T: Config> Pallet<T> {
             Error::<T>::TooManyInstitutionAdmins
         );
 
+        if let Some(spec) = member_composition {
+            let required_role_code: RoleCodeOf = spec
+                .role_code
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidRoleCode)?;
+            let required_role = final_roles
+                .get(&required_role_code)
+                .ok_or(Error::<T>::RequiredMemberRoleMissing)?;
+            ensure!(
+                required_role.role_status == InstitutionRoleStatus::Active,
+                Error::<T>::RequiredMemberRoleMissing
+            );
+            ensure!(
+                required_role.role_name.as_slice() == spec.role_name,
+                Error::<T>::RequiredMemberRoleNameMismatch
+            );
+            let required_assignments = assignment_changes
+                .get(&required_role_code)
+                .cloned()
+                .unwrap_or_else(|| {
+                    InstitutionRoleAssignments::<T>::get(&cid_number, &required_role_code)
+                });
+            ensure!(
+                required_assignments.len() >= spec.min_members as usize
+                    && required_assignments.len() <= spec.max_members as usize,
+                Error::<T>::RequiredMemberCountOutOfRange
+            );
+            let required_admins = required_assignments
+                .iter()
+                .map(|assignment| assignment.admin_account.clone())
+                .collect::<BTreeSet<_>>();
+            ensure!(
+                required_admins == desired_admins,
+                Error::<T>::NonMemberAdminForbidden
+            );
+        }
+
         // 尽量保留既有 admins 顺序，只在尾部追加新账户；管理员真源仍是最终任职集合。
         let current_admins = T::AdminAccountQuery::active_account_admins(
             result.institution_code,
             main_account.clone(),
         )
+        // 六个国家单例在创世时保持“尚未组成”；首次有效治理结果允许从空 admins
+        // 原子写入岗位、任职和管理员。只有三个法定成员机构额外受岗位与人数区间约束。
+        .or_else(|| permanent_singleton.map(|_| Vec::new()))
         .ok_or(Error::<T>::InvalidAssignmentResultInstitution)?;
         let mut remaining = desired_admins;
         let mut derived_admins = Vec::new();

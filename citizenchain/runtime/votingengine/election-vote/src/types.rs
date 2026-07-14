@@ -35,16 +35,6 @@ impl ElectionMode {
             ElectionMode::Mutual => votingengine::STAGE_ELECTION_MUTUAL,
         }
     }
-
-    /// 把选举制度映射为 entity 使用的强类型任职来源。
-    pub const fn assignment_source(self) -> entity_primitives::InstitutionAssignmentSource {
-        match self {
-            ElectionMode::Popular => {
-                entity_primitives::InstitutionAssignmentSource::PopularElection
-            }
-            ElectionMode::Mutual => entity_primitives::InstitutionAssignmentSource::MutualElection,
-        }
-    }
 }
 
 /// 创建选举时固化的职位快照。
@@ -79,21 +69,4 @@ pub struct ElectionWinner<AccountId> {
     pub account: AccountId,
     pub votes: u32,
     pub seat_index: u16,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn election_modes_map_to_distinct_assignment_sources() {
-        assert_eq!(
-            ElectionMode::Popular.assignment_source(),
-            entity_primitives::InstitutionAssignmentSource::PopularElection
-        );
-        assert_eq!(
-            ElectionMode::Mutual.assignment_source(),
-            entity_primitives::InstitutionAssignmentSource::MutualElection
-        );
-    }
 }

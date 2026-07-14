@@ -13,7 +13,8 @@ use primitives::cid::china::china_cb::CHINA_CB;
 use primitives::cid::china::china_ch::CHINA_CH;
 use votingengine::{
     types::{InstitutionCode, NRC, PRB, PRC},
-    InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
+    InternalVoteResultCallback, ProposalExecutionOutcome, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
+    STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -23,6 +24,11 @@ pub mod weights;
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
 pub const MODULE_TAG: &[u8] = b"res-dst";
+
+/// 决议销毁是储备治理三档专属业务；内部投票引擎本身不承担这项业务限权。
+fn can_propose_destroy(institution_code: InstitutionCode) -> bool {
+    matches!(institution_code, NRC | PRC | PRB)
+}
 
 type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -166,6 +172,10 @@ pub mod pallet {
             let actual_org =
                 account_org::<T>(institution.clone()).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
+                can_propose_destroy(actual_org),
+                Error::<T>::InvalidInstitution
+            );
+            ensure!(
                 actual_org == institution_code,
                 Error::<T>::InstitutionCodeMismatch
             );
@@ -222,10 +232,29 @@ pub mod pallet {
         ) -> DispatchResult {
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            // PASSED 是可执行/可重试态；终态进入后不允许再执行。
+            let actual_org = account_org::<T>(action.institution.clone())
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            let cid =
+                account_cid::<T>(&action.institution).ok_or(Error::<T>::InvalidInstitution)?;
+            // PASSED 是可执行/可重试态；每次自动执行和统一重试都重新绑定
+            // owner、投票模式、机构码、机构账户和 CID，不能只信任业务载荷。
             ensure!(
-                proposal.status == STATUS_PASSED,
+                votingengine::Pallet::<T>::is_callback_execution_scope(proposal_id)
+                    && votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG,)
+                    && proposal.kind == PROPOSAL_KIND_INTERNAL
+                    && proposal.stage == STAGE_INTERNAL
+                    && proposal.status == STATUS_PASSED
+                    && proposal.internal_code == Some(actual_org)
+                    && proposal.account_context == Some(action.institution.clone())
+                    && proposal
+                        .subject_cid_numbers
+                        .iter()
+                        .any(|subject| subject.as_slice() == cid.as_slice()),
                 Error::<T>::ProposalNotPassed
+            );
+            ensure!(
+                can_propose_destroy(actual_org),
+                Error::<T>::InvalidInstitution
             );
 
             let free = T::Currency::free_balance(&action.institution);
@@ -265,7 +294,12 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         approved: bool,
     ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
         let raw = match votingengine::Pallet::<T>::get_proposal_data(proposal_id) {
-            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
+            Some(raw)
+                if votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
+                    && raw.starts_with(crate::MODULE_TAG) =>
+            {
+                raw
+            }
             _ => return Ok(ProposalExecutionOutcome::Ignored),
         };
         if !approved {

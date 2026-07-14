@@ -1,5 +1,11 @@
 # resolution-issuance 技术文档
 
+## 2026-07-14 投票与执行绑定
+
+- 决议发行继续只由联合投票引擎推进；业务模块不实现计票或公投。
+- 回调执行必须匹配本模块 `ProposalOwner`、联合 proposal kind、`STAGE_JOINT` 或 `STAGE_REFERENDUM`、通过状态和原始发行摘要。
+- 联合机构直接一致通过与转入联合公投后通过都执行同一份绑定发行决议；公投阶段不得因 stage 不同被误判为异常执行失败。
+
 ## 1. 模块定位
 
 `resolution-issuance` 是 CitizenChain 的决议发行完整流程 pallet，统一承载：

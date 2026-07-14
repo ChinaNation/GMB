@@ -44,6 +44,7 @@
 - [x] 段4 前端 + 取消识别：官网加支付方式(卡/USDC)切换、USDC 购买(季/年金额)、USDC 换档(预览补钱/补时长)；取消入口按支付方式出文案(卡=到期取消 cancel_kind=stripe / USDC=到期自然失效 cancel_kind=usdc_prepaid)。后端 cancelMembershipRoute 按 subscription_source 分派 + /prepaid 异档拒(prepaid_tier_change_required 引导换档)。App SquareMembershipState 加 currentPeriodStart+subscriptionSource,会员卡 _ActiveMembershipBanner 显示订阅起止+路线(预付/自动续)。测试:后端 vitest 160(+5:异档拒/同档续费/3 取消)、App flutter 10(+3:预付/卡横幅/getter)、官网 tsc+eslint(无测试框架,金额逻辑后端已覆盖)
 - [x] 段4 对抗性审查(12 agent 工作流)4 项 CONFIRMED 全修:①webhook 结算 HIGH——异档并存(两档挑战在 confirm→webhook 窗口都过守卫)时旧便宜档时长被直贴贵档少收档差 → upsertPrepaidMembership 加**价值守恒折算**(异档按 剩余天×旧月费÷新月费 折成本档等值天数追加,同档续费仍日历月叠加);②官网 upgrade_pending 无 payment_url 误报成功 → 加显式报错分支;③App 冻结态与订阅横幅共存矛盾 → 横幅加 !frozen;④App 取消标签忽略 cancelAtPeriodEnd → 加"已取消·到期终止"。低级项(USDC 按钮走取消入口=用户明确设计/日期时区=起止同移非真差/cancel 顺序=旧码良性)按分析保留。测试补:后端 161(+折算兜底)、App 12(+取消标签/冻结隐藏)
 - [x] 文档：CITIZENWEB 会员章节 + ADR-034 段4 + 任务卡；残留已清(无死码/未用导入,三端 tsc/analyze/eslint 净)
+- [x] 通过根 `deploy/` 控制台“会员真实测试”完成 staging 全矩阵运行态复核：真实 Access、Visitor 身份判定、真实 sr25519、远端 D1 和 Stripe test；14 个业务断言 PASS，B3/D2/E1/F1 四项仅在 Worker→Stripe 525 BLOCKED，业务 FAIL=0；另有 Stripe active 夹具、Stripe 两资源清理及 D1 零残留 3 项 PASS。
 
 ## 先决/待核
 - 真实 USDC Checkout 是否落可用 payment_intent 凭证以入库绑定（沙箱定向验证）

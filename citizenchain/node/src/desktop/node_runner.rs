@@ -10,13 +10,14 @@
 use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, Mutex,
 };
 use std::thread::JoinHandle;
 use std::time::Duration;
 use tokio::sync::oneshot;
 
 const NODE_RUNTIME_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
+const NODE_SERVICE_START_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 struct NodeThreadAliveGuard(Arc<AtomicBool>);
 
@@ -31,12 +32,21 @@ pub struct NodeHandle {
     shutdown_tx: Option<oneshot::Sender<()>>,
     thread: Option<JoinHandle<()>>,
     alive: Arc<AtomicBool>,
+    exit_error: Arc<Mutex<Option<String>>>,
 }
 
 impl NodeHandle {
     /// 返回后台 Substrate 线程是否仍存活，用于把异常退出同步到首页状态。
     pub fn is_alive(&self) -> bool {
         self.alive.load(Ordering::Acquire)
+    }
+
+    /// 取出后台必要任务退出时保留的真实原因。
+    pub fn take_exit_error(&self) -> Option<String> {
+        self.exit_error
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
     }
 }
 
@@ -101,7 +111,10 @@ pub fn start_node_in_process(
         args.push("--validator".into());
     }
 
-    let (error_tx, error_rx) = std::sync::mpsc::channel::<String>();
+    let (startup_tx, startup_rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    let exit_error = Arc::new(Mutex::new(None));
+    let thread_exit_error = Arc::clone(&exit_error);
+    let task_exit_error = Arc::clone(&exit_error);
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let alive = Arc::new(AtomicBool::new(true));
     let thread_alive = Arc::clone(&alive);
@@ -109,96 +122,138 @@ pub fn start_node_in_process(
     let thread = std::thread::Builder::new()
         .name("substrate-node".into())
         .spawn(move || {
-            use clap::Parser;
-            use sc_cli::CliConfiguration;
-
+            // 存活标记必须在线程最终退出时才清除，确保 panic 原因先写入通道。
             let _alive_guard = NodeThreadAliveGuard(thread_alive);
+            let thread_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                use clap::Parser;
+                use sc_cli::CliConfiguration;
 
-            // 设置 SS58 地址前缀。
-            let _ = sp_core::crypto::set_default_ss58_version(
-                sp_core::crypto::Ss58AddressFormat::custom(primitives::core_const::SS58_FORMAT),
-            );
+                // 设置 SS58 地址前缀。
+                let _ = sp_core::crypto::set_default_ss58_version(
+                    sp_core::crypto::Ss58AddressFormat::custom(primitives::core_const::SS58_FORMAT),
+                );
 
-            let cli = match crate::core::cli::Cli::try_parse_from(&args) {
-                Ok(c) => c,
-                Err(e) => {
-                    let _ = error_tx.send(format!("解析节点参数失败: {e}"));
-                    return;
-                }
-            };
-
-            // 构建 tokio runtime（不用 create_runner，因为它会初始化日志导致冲突）。
-            let tokio_runtime = match tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    let _ = error_tx.send(format!("创建 tokio runtime 失败: {e}"));
-                    return;
-                }
-            };
-
-            // 直接构造 Configuration，跳过日志初始化。
-            let config = match cli
-                .run
-                .create_configuration(&cli, tokio_runtime.handle().clone())
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    let _ = error_tx.send(format!("创建配置失败: {e}"));
-                    return;
-                }
-            };
-
-            // 在 tokio runtime 中启动节点服务。
-            // UI 启动路径暂不支持清算行角色,
-            // 全部透传 None(bank / password / reserve_monitor_interval);生产用户
-            // 通过 CLI 的 `--clearing-bank` 进入无 UI 模式启动清算行节点。
-            tokio_runtime.block_on(async {
-                match crate::core::service::new_full(
-                    config,
-                    mining_threads,
-                    gpu_device,
-                    None,
-                    None,
-                    None,
-                ) {
-                    Ok(mut task_manager) => {
-                        // drop error_tx 表示启动成功。
-                        drop(error_tx);
-                        // 退出条件二选一：essential task 失败 / 收到外部 shutdown 信号。
-                        tokio::select! {
-                            _ = task_manager.future() => {},
-                            _ = shutdown_rx => {},
-                        }
-                        // 显式 drop task_manager 触发 Backend 释放（含 RocksDB LOCK）。
-                        // 必须发生在 tokio_runtime 仍存活时，否则 drop 内的异步 cleanup 无法执行。
-                        drop(task_manager);
-                    }
+                let mut cli = match crate::core::cli::Cli::try_parse_from(&args) {
+                    Ok(c) => c,
                     Err(e) => {
-                        let _ = error_tx.send(format!("节点启动失败: {e}"));
+                        let _ = startup_tx.send(Err(format!("解析节点参数失败: {e}")));
+                        return;
                     }
-                }
-            });
-            // 等待 tokio runtime 内残余任务退出（包括 Backend flush）。
-            tokio_runtime.shutdown_timeout(NODE_RUNTIME_SHUTDOWN_TIMEOUT);
+                };
+
+                // 桌面路径不经过 core::command::run，必须在这里采用同一交易池基线。
+                // fork-aware 后台任务会在本链普通启动时提前结束并关闭整个服务。
+                cli.run.pool_config.pool_type = sc_cli::TransactionPoolType::SingleState;
+
+                // 构建 tokio runtime（不用 create_runner，因为它会初始化日志导致冲突）。
+                let tokio_runtime = match tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(r) => r,
+                    Err(e) => {
+                        let _ = startup_tx.send(Err(format!("创建 tokio runtime 失败: {e}")));
+                        return;
+                    }
+                };
+
+                // 直接构造 Configuration，跳过日志初始化。
+                let config = match cli
+                    .run
+                    .create_configuration(&cli, tokio_runtime.handle().clone())
+                {
+                    Ok(c) => c,
+                    Err(e) => {
+                        let _ = startup_tx.send(Err(format!("创建配置失败: {e}")));
+                        return;
+                    }
+                };
+
+                // 在 tokio runtime 中启动节点服务。
+                // UI 启动路径暂不支持清算行角色,
+                // 全部透传 None(bank / password / reserve_monitor_interval);生产用户
+                // 通过 CLI 的 `--clearing-bank` 进入无 UI 模式启动清算行节点。
+                tokio_runtime.block_on(async {
+                    match crate::core::service::new_full(
+                        config,
+                        mining_threads,
+                        gpu_device,
+                        None,
+                        None,
+                        None,
+                    ) {
+                        Ok(mut task_manager) => {
+                            // 明确通知调用线程服务已构建完成，禁止用固定 sleep 猜测启动结果。
+                            let _ = startup_tx.send(Ok(()));
+                            // 退出条件二选一：essential task 失败 / 收到外部 shutdown 信号。
+                            tokio::select! {
+                            result = task_manager.future() => {
+                                *task_exit_error
+                                    .lock()
+                                    .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                                    Some(format!("节点必要后台任务退出: {result:?}"));
+                                },
+                            result = shutdown_rx => {
+                                *task_exit_error
+                                    .lock()
+                                    .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(
+                                    format!("节点后台线程收到停机信号: {result:?}")
+                                );
+                            },
+                            }
+                            // 显式 drop task_manager 触发 Backend 释放（含 RocksDB LOCK）。
+                            // 必须发生在 tokio_runtime 仍存活时，否则 drop 内的异步 cleanup 无法执行。
+                            drop(task_manager);
+                        }
+                        Err(e) => {
+                            let _ = startup_tx.send(Err(format!("节点启动失败: {e}")));
+                        }
+                    }
+                });
+                // 等待 tokio runtime 内残余任务退出（包括 Backend flush）。
+                tokio_runtime.shutdown_timeout(NODE_RUNTIME_SHUTDOWN_TIMEOUT);
+            }));
+            if let Err(payload) = thread_result {
+                let detail = payload
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| {
+                        payload
+                            .downcast_ref::<&str>()
+                            .map(|value| (*value).to_string())
+                    })
+                    .unwrap_or_else(|| "未知 panic payload".to_string());
+                *thread_exit_error
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                    Some(format!("节点后台线程 panic: {detail}"));
+            }
         })
         .map_err(|e| format!("启动节点线程失败: {e}"))?;
 
-    // 等待一段时间检查是否有启动错误。
-    std::thread::sleep(Duration::from_secs(5));
-
-    match error_rx.try_recv() {
-        Ok(err) => {
+    // 等待节点服务明确完成构建。旧实现固定等待 5 秒，会丢失耗时更长的真实错误。
+    match startup_rx.recv_timeout(NODE_SERVICE_START_TIMEOUT) {
+        Ok(Err(err)) => {
             let _ = thread.join();
             Err(err)
         }
-        Err(std::sync::mpsc::TryRecvError::Empty)
-        | Err(std::sync::mpsc::TryRecvError::Disconnected) => Ok(NodeHandle {
+        Ok(Ok(())) => Ok(NodeHandle {
             shutdown_tx: Some(shutdown_tx),
             thread: Some(thread),
             alive,
+            exit_error,
         }),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            let _ = shutdown_tx.send(());
+            let _ = thread.join();
+            Err(format!(
+                "节点服务在 {} 秒内未完成构建",
+                NODE_SERVICE_START_TIMEOUT.as_secs()
+            ))
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            let _ = thread.join();
+            Err("节点服务构建线程提前断开，且未返回结果".to_string())
+        }
     }
 }

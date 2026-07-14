@@ -62,6 +62,14 @@ const modules = [
     secrets: { keychain: secretNames, github: [] },
     actions: [
       { id: 'staging', title: '测试部署', mode: 'staging', production: false },
+      {
+        id: 'membership-test', title: '会员逻辑真实测试', mode: 'membership-test', production: false,
+        keychain: ['CF_ACCOUNT_ID', 'CF_API_TOKEN', 'STRIPE_API_KEY'],
+      },
+      {
+        id: 'membership-e2e', title: 'Stripe Sandbox 全链路验收', mode: 'membership-e2e', production: false,
+        keychain: ['CF_ACCOUNT_ID', 'CF_API_TOKEN', 'STRIPE_API_KEY', 'STRIPE_HOOK_SECRET'],
+      },
       { id: 'production', title: '生产部署', mode: 'production', production: true },
     ],
   },
@@ -291,7 +299,10 @@ function finishRun(run, code) {
   run.exitCode = code;
   run.finishedAt = new Date().toISOString();
   activeRunId = null;
-  emit(run, 'log', code === 0 ? '[完成] 部署任务执行成功。' : '[失败] 部署任务已停止，请查看上方步骤。');
+  const successMessage = run.actionId === 'membership-test'
+    ? '[完成] 会员真实测试已执行完毕，请以上方逐项报告为准。'
+    : '[完成] 部署任务执行成功。';
+  emit(run, 'log', code === 0 ? successMessage : '[失败] 任务已停止，请查看上方步骤。');
   emit(run, 'done', { state: run.state, exitCode: code });
 }
 
@@ -307,7 +318,14 @@ function startRun(module, action, options = {}) {
 
   const environment = action.mode === 'production' ? 'production' : 'staging';
   const secretValues = [];
-  const childEnv = { ...process.env, GMB_ROOT: rootDir };
+  // 中文注释：launchd 的 PATH 很精简，动作脚本必须复用当前控制台的 Node 工具链绝对路径。
+  const childEnv = {
+    ...process.env,
+    PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ''}`,
+    GMB_ROOT: rootDir,
+    GMB_NODE_BIN: process.execPath,
+    GMB_NPX_BIN: join(dirname(process.execPath), 'npx'),
+  };
   try {
     if (action.production) {
       emit(run, 'log', '正在请求 Touch ID 指纹授权…');

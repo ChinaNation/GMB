@@ -142,9 +142,9 @@ fn propose_enact_by_legislator_reaches_engine_notconfigured() {
                 RuntimeOrigin::signed(legislator()),
                 Tier::Municipal,
                 1001,
-                houses(),
-                proposer_body(),
-                executive(),
+                municipal_houses(),
+                municipal_proposer_body(),
+                municipal_executive(),
                 None,
                 VoteType::Regular,
                 title(b"law"),
@@ -158,6 +158,55 @@ fn propose_enact_by_legislator_reaches_engine_notconfigured() {
 }
 
 #[test]
+fn municipal_education_route_reaches_engine_notconfigured() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            Lib::propose_enact_law(
+                RuntimeOrigin::signed(legislator()),
+                Tier::Municipal,
+                1001,
+                municipal_houses(),
+                municipal_education_proposer_body(),
+                municipal_executive(),
+                None,
+                VoteType::RegularEducation,
+                title(b"education law"),
+                None,
+                one_chapter(),
+                100,
+            ),
+            Error::<Test>::VoteEngineCreateFailed
+        );
+    });
+}
+
+#[test]
+fn routing_rejects_code_account_mismatch() {
+    new_test_ext().execute_with(|| {
+        // 字段声称是市立法会，账户却属于市政府；不能只看调用方传入的机构码。
+        let forged_houses = BoundedVec::try_from(vec![(*b"CLEG", municipal_executive().1)])
+            .expect("forged houses within bound");
+        assert_noop!(
+            Lib::propose_enact_law(
+                RuntimeOrigin::signed(legislator()),
+                Tier::Municipal,
+                1001,
+                forged_houses,
+                municipal_proposer_body(),
+                municipal_executive(),
+                None,
+                VoteType::Regular,
+                title(b"forged route"),
+                None,
+                one_chapter(),
+                100,
+            ),
+            Error::<Test>::RoutingMismatch
+        );
+    });
+}
+
+#[test]
 fn propose_enact_by_non_legislator_rejected() {
     new_test_ext().execute_with(|| {
         assert_noop!(
@@ -165,9 +214,9 @@ fn propose_enact_by_non_legislator_rejected() {
                 RuntimeOrigin::signed(outsider()),
                 Tier::Municipal,
                 1001,
-                houses(),
-                proposer_body(),
-                executive(),
+                municipal_houses(),
+                municipal_proposer_body(),
+                municipal_executive(),
                 None,
                 VoteType::Regular,
                 title(b"law"),
@@ -228,9 +277,9 @@ fn propose_enact_empty_title_and_articles_rejected() {
                 RuntimeOrigin::signed(legislator()),
                 Tier::Municipal,
                 1001,
-                houses(),
-                proposer_body(),
-                executive(),
+                municipal_houses(),
+                municipal_proposer_body(),
+                municipal_executive(),
                 None,
                 VoteType::Regular,
                 title(b""),
@@ -245,9 +294,9 @@ fn propose_enact_empty_title_and_articles_rejected() {
                 RuntimeOrigin::signed(legislator()),
                 Tier::Municipal,
                 1001,
-                houses(),
-                proposer_body(),
-                executive(),
+                municipal_houses(),
+                municipal_proposer_body(),
+                municipal_executive(),
                 None,
                 VoteType::Regular,
                 title(b"law"),
@@ -309,7 +358,7 @@ fn amend_constitution_immutable_article_rejected() {
                 0,
                 proposer_body(),
                 executive(),
-                None,
+                legislature(),
                 VoteType::Special,
                 title(b"constitution-v2"),
                 None,
@@ -378,7 +427,7 @@ fn amend_core_chapter_with_major_rejected() {
                 0,
                 proposer_body(),
                 executive(),
-                None,
+                legislature(),
                 VoteType::Major,
                 title(b"c-v2"),
                 None,
@@ -408,7 +457,7 @@ fn amend_core_chapter_with_special_passes_gate() {
                 0,
                 proposer_body(),
                 executive(),
-                None,
+                legislature(),
                 VoteType::Special,
                 title(b"c-v2"),
                 None,
@@ -438,7 +487,7 @@ fn amend_general_chapter_with_special_rejected() {
                 0,
                 proposer_body(),
                 executive(),
-                None,
+                legislature(),
                 VoteType::Special,
                 title(b"c-v2"),
                 None,
@@ -468,7 +517,7 @@ fn amend_general_chapter_with_major_passes_gate() {
                 0,
                 proposer_body(),
                 executive(),
-                None,
+                legislature(),
                 VoteType::Major,
                 title(b"c-v2"),
                 None,
@@ -498,7 +547,7 @@ fn amend_constitution_no_change_rejected() {
                 0,
                 proposer_body(),
                 executive(),
-                None,
+                legislature(),
                 VoteType::Special,
                 title(b"c-v2"),
                 None,
@@ -678,7 +727,7 @@ fn amend_constitution_preserving_immutable_reaches_engine() {
                 0,
                 proposer_body(),
                 executive(),
-                None,
+                legislature(),
                 VoteType::Special,
                 title(b"constitution-v2"),
                 None,

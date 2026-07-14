@@ -53,7 +53,7 @@
 ## 执行记录
 
 - 节点启动流程:
-  - 新增 `genesis_preparing` 生命周期状态。
+  - 当时新增的链初始状态准备生命周期已在 2026-07-14 修正为用户可理解的首次“初始化中”和普通“启动中”。
   - 首启优先识别安装包资源 `genesis-state/` 或 `CITIZENCHAIN_GENESIS_STATE_DIR` 指向的创世链状态包。
   - 只复制 `chains/citizenchain/db`,不复制 keystore / network key。
   - 空资源占位目录会被忽略;出现 `manifest.json` 或 `chains/` 但包不完整时 fail-fast。

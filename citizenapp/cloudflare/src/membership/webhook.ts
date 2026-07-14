@@ -16,13 +16,17 @@ import {
   upsertStripeMembership,
   upsertPrepaidMembership
 } from './service';
-import { cancelStripeSubscriptionAtPeriodEnd } from './stripe_api';
+import {
+  cancelStripeSubscriptionAtPeriodEnd,
+  retrieveStripeSubscription
+} from './stripe_api';
 import { restoreOwnerVideos } from './archive';
 import { readLimitedText } from '../limits/request';
 
 interface StripeEvent {
   id: string;
   type: string;
+  created: number;
   data: {
     object: Record<string, unknown>;
   };
@@ -42,6 +46,7 @@ interface StripeSubscriptionShape {
 }
 
 const activeStripeStatuses = new Set(['active', 'trialing']);
+const STRIPE_EVENT_CLAIM_STALE_MS = 5 * 60 * 1000;
 
 export async function stripeWebhookRoute(request: Request, env: Env): Promise<Response> {
   const secret = env.STRIPE_HOOK_SECRET;
@@ -54,13 +59,29 @@ export async function stripeWebhookRoute(request: Request, env: Env): Promise<Re
   await verifyStripeSignature(rawBody, signature, secret, undefined, toleranceSeconds);
 
   const event = parseStripeEvent(rawBody);
-  const result = await handleStripeEvent(env, event);
-  return jsonResponse({
-    ok: true,
-    event_id: event.id,
-    event_type: event.type,
-    ...result
-  });
+  const claimed = await claimStripeEvent(env, event);
+  if (!claimed) {
+    return jsonResponse({
+      ok: true,
+      event_id: event.id,
+      event_type: event.type,
+      action: 'stripe_event_duplicate'
+    });
+  }
+  try {
+    const result = await handleStripeEvent(env, event);
+    await markStripeEventProcessed(env, event.id);
+    return jsonResponse({
+      ok: true,
+      event_id: event.id,
+      event_type: event.type,
+      ...result
+    });
+  } catch (error) {
+    // 失败事件释放占位，Stripe 下一次投递可以重试；成功事件永久保留 event_id 防重放。
+    await releaseStripeEventClaim(env, event.id);
+    throw error;
+  }
 }
 
 export async function handleStripeEvent(
@@ -71,7 +92,16 @@ export async function handleStripeEvent(
     event.type === 'customer.subscription.created' ||
     event.type === 'customer.subscription.updated'
   ) {
-    return processSubscription(env, event.data.object);
+    const subscriptionId = stripeId(event.data.object.id);
+    if (!subscriptionId) {
+      throw new HttpError(400, 'invalid_stripe_subscription', 'Stripe subscription 事件缺少 id');
+    }
+    // 乱序事件不直接采用旧快照：真实环境回读 Stripe 当前订阅，避免迟到 updated 回滚新状态。
+    const currentSubscription =
+      env.STRIPE_DEV_PROXY === '1'
+        ? event.data.object
+        : await retrieveStripeSubscription(env, subscriptionId);
+    return processSubscription(env, currentSubscription);
   }
 
   if (event.type === 'customer.subscription.deleted') {
@@ -157,6 +187,16 @@ async function processPrepaidCheckout(
   if (stringValue(raw.payment_status) !== 'paid') {
     return { action: 'prepaid_unpaid' };
   }
+  const paymentMethodTypes = Array.isArray(raw.payment_method_types)
+    ? raw.payment_method_types.filter((value): value is string => typeof value === 'string')
+    : [];
+  if (!paymentMethodTypes.includes('crypto')) {
+    throw new HttpError(
+      400,
+      'stripe_crypto_required',
+      'USDC 预付只能由 Stripe Crypto Checkout 完成'
+    );
+  }
   const ownerAccount = metadata.owner_account?.trim();
   if (!ownerAccount) {
     throw new HttpError(400, 'stripe_owner_account_missing', 'Stripe metadata 缺少 owner_account');
@@ -172,6 +212,11 @@ async function processPrepaidCheckout(
     plan.required_identity_level === 'visitor'
       ? visitorIdentity(ownerAccount)
       : await fetchChainIdentityState(env, ownerAccount);
+  const paymentIntentId = stripeId(raw.payment_intent);
+  const checkoutSessionId = stringValue(raw.id);
+  if (!paymentIntentId || !checkoutSessionId) {
+    throw new HttpError(400, 'stripe_payment_reference_missing', 'Stripe 一次性付款凭证不完整');
+  }
 
   if (route === 'usdc_prepaid_upgrade') {
     // 升档补差价已付 → 只切 level，expires_at 不变（沿用现有到期）。
@@ -179,12 +224,20 @@ async function processPrepaidCheckout(
     if (!existing) {
       return { action: 'prepaid_upgrade_no_membership' };
     }
-    await applyPrepaidTierChange(env, {
+    const applied = await applyPrepaidTierChange(env, {
       ownerAccount,
       membershipLevel,
       expiresAt: existing.expires_at,
-      identity
+      identity,
+      stripePayment: {
+        paymentIntentId,
+        checkoutSessionId,
+        paymentRoute: 'usdc_prepaid_upgrade'
+      }
     });
+    if (!applied) {
+      return { action: 'prepaid_payment_duplicate', owner_account: ownerAccount, membership_level: membershipLevel };
+    }
     return {
       action: 'prepaid_upgraded',
       owner_account: ownerAccount,
@@ -199,14 +252,73 @@ async function processPrepaidCheckout(
   if (existingBeforeGrant?.stripe_subscription_id) {
     await cancelStripeSubscriptionAtPeriodEnd(env, existingBeforeGrant.stripe_subscription_id);
   }
-  await upsertPrepaidMembership(env, {
+  const granted = await upsertPrepaidMembership(env, {
     ownerAccount,
     membershipLevel,
     months: prepaidMonthsFromMeta(metadata.duration),
-    paymentRef: stripeId(raw.payment_intent),
+    stripePayment: {
+      paymentIntentId,
+      checkoutSessionId,
+      paymentRoute: 'usdc_prepaid'
+    },
     identity
   });
+  if (!granted) {
+    return { action: 'prepaid_payment_duplicate', owner_account: ownerAccount, membership_level: membershipLevel };
+  }
   return { action: 'prepaid_granted', owner_account: ownerAccount, membership_level: membershipLevel };
+}
+
+async function claimStripeEvent(env: Env, event: StripeEvent): Promise<boolean> {
+  const receivedAt = nowMs();
+  const stripeObjectId = stripeId(event.data.object.id);
+  const inserted = await env.DB.prepare(
+    `INSERT OR IGNORE INTO square_stripe_webhook_events
+      (event_id, event_type, stripe_object_id, event_created_at, received_at, processed_at)
+     VALUES (?, ?, ?, ?, ?, NULL)`
+  )
+    .bind(event.id, event.type, stripeObjectId, event.created, receivedAt)
+    .run();
+  if ((inserted.meta?.changes ?? 0) === 1) {
+    return true;
+  }
+  const existing = await env.DB.prepare(
+    `SELECT processed_at, received_at
+       FROM square_stripe_webhook_events
+      WHERE event_id = ?`
+  )
+    .bind(event.id)
+    .first<{ processed_at: number | null; received_at: number }>();
+  if (existing?.processed_at != null) {
+    return false;
+  }
+  const reclaimed = await env.DB.prepare(
+    `UPDATE square_stripe_webhook_events
+        SET received_at = ?
+      WHERE event_id = ? AND processed_at IS NULL AND received_at < ?`
+  )
+    .bind(receivedAt, event.id, receivedAt - STRIPE_EVENT_CLAIM_STALE_MS)
+    .run();
+  if ((reclaimed.meta?.changes ?? 0) === 1) {
+    return true;
+  }
+  throw new HttpError(503, 'stripe_event_processing', 'Stripe webhook 事件正在处理，请稍后重试');
+}
+
+async function markStripeEventProcessed(env: Env, eventId: string): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE square_stripe_webhook_events SET processed_at = ? WHERE event_id = ?`
+  )
+    .bind(nowMs(), eventId)
+    .run();
+}
+
+async function releaseStripeEventClaim(env: Env, eventId: string): Promise<void> {
+  await env.DB.prepare(
+    `DELETE FROM square_stripe_webhook_events WHERE event_id = ? AND processed_at IS NULL`
+  )
+    .bind(eventId)
+    .run();
 }
 
 function prepaidMonthsFromMeta(value: string | undefined): number {
@@ -331,7 +443,13 @@ export async function verifyStripeSignature(
 function parseStripeEvent(rawBody: string): StripeEvent {
   try {
     const event = JSON.parse(rawBody) as StripeEvent;
-    if (!event.id || !event.type || !event.data?.object) {
+    if (
+      !event.id ||
+      !event.type ||
+      !Number.isInteger(event.created) ||
+      event.created <= 0 ||
+      !event.data?.object
+    ) {
       throw new Error('missing fields');
     }
     return event;

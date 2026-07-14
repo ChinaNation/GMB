@@ -15,7 +15,7 @@ const EMPTY_STAKE: TotalStake = { totalStake: null };
 
 // 节点打开软件时自动启动；首页按钮仅提供手动停止和再次启动。
 export function HomeNodeSection() {
-  const [status, setStatus] = useState<NodeStatus>({ running: false, state: 'stopped', pid: null });
+  const [status, setStatus] = useState<NodeStatus>({ running: false, state: 'stopped', pid: null, lastError: null });
   const [chain, setChain] = useState<ChainStatus>(EMPTY_CHAIN);
   const [identity, setIdentity] = useState<NodeIdentity>(EMPTY_IDENTITY);
   const [issuance, setIssuance] = useState<TotalIssuance>(EMPTY_ISSUANCE);
@@ -26,7 +26,7 @@ export function HomeNodeSection() {
   const refreshInFlightRef = useRef(false);
   const lifecycleBusy = nodeAction !== null
     || status.state === 'starting'
-    || status.state === 'genesis_preparing'
+    || status.state === 'initializing'
     || status.state === 'stopping'
     || status.state === 'restarting';
 
@@ -163,7 +163,7 @@ export function HomeNodeSection() {
     ? '启动中...'
     : nodeAction === 'stopping'
       ? '关闭中...'
-      : status.state === 'starting' || status.state === 'genesis_preparing' || status.state === 'restarting'
+      : status.state === 'starting' || status.state === 'initializing' || status.state === 'restarting'
         ? '启动中...'
         : status.state === 'stopping'
           ? '关闭中...'
@@ -172,8 +172,8 @@ export function HomeNodeSection() {
             : '启动';
   const statusLabel = status.running
     ? '运行中'
-    : status.state === 'genesis_preparing'
-      ? '创世准备中'
+    : status.state === 'initializing'
+      ? '初始化中'
       : status.state === 'starting' || status.state === 'restarting'
         ? '启动中'
         : status.state === 'stopping'
@@ -211,6 +211,7 @@ export function HomeNodeSection() {
       <ChainSection chain={chain} nodeRunning={status.running} />
       <IdentitySection identity={identity} />
       <IssuanceSection issuance={issuance} stake={stake} />
+      {status.lastError ? <pre className="error">{status.lastError}</pre> : null}
       {error ? <pre className="error">{error}</pre> : null}
       {pendingNodeAction ? (
         <div className="node-lifecycle-confirm-mask" onClick={closeNodeConfirm}>

@@ -72,7 +72,9 @@ mod tests {
             InstitutionAssetAction::L2ClearingDebit,
             InstitutionAssetAction::L2FeeCollect,
         ] {
-            assert!(<() as InstitutionAsset<[u8; 32]>>::can_spend(&account, action));
+            assert!(<() as InstitutionAsset<[u8; 32]>>::can_spend(
+                &account, action
+            ));
         }
     }
 }

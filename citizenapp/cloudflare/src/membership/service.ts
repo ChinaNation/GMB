@@ -296,8 +296,49 @@ export interface PrepaidGrantInput {
   ownerAccount: string;
   membershipLevel: MembershipLevel;
   months: number;
-  paymentRef: string | null;
+  stripePayment: StripePaymentGrant;
   identity: ChainIdentityState;
+}
+
+export interface StripePaymentGrant {
+  paymentIntentId: string;
+  checkoutSessionId: string;
+  paymentRoute: 'usdc_prepaid' | 'usdc_prepaid_upgrade';
+}
+
+async function stripePaymentAlreadyGranted(env: Env, paymentIntentId: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT stripe_payment_intent_id
+       FROM square_stripe_payments
+      WHERE stripe_payment_intent_id = ?`
+  )
+    .bind(paymentIntentId)
+    .first<{ stripe_payment_intent_id: string }>();
+  return row !== null;
+}
+
+function stripePaymentInsert(
+  env: Env,
+  input: {
+    ownerAccount: string;
+    membershipLevel: MembershipLevel;
+    stripePayment: StripePaymentGrant;
+    grantedAt: number;
+  }
+): D1PreparedStatement {
+  return env.DB.prepare(
+    `INSERT INTO square_stripe_payments
+      (stripe_payment_intent_id, checkout_session_id, owner_account,
+       membership_level, payment_route, granted_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
+    input.stripePayment.paymentIntentId,
+    input.stripePayment.checkoutSessionId,
+    input.ownerAccount,
+    input.membershipLevel,
+    input.stripePayment.paymentRoute,
+    input.grantedAt
+  );
 }
 
 /// USDC 预付授时长（ADR-034）：expires_at 从 max(now, 现expires_at) 起叠 N 个日历月，
@@ -306,8 +347,11 @@ export interface PrepaidGrantInput {
 export async function upsertPrepaidMembership(
   env: Env,
   input: PrepaidGrantInput
-): Promise<void> {
+): Promise<boolean> {
   const now = nowMs();
+  if (await stripePaymentAlreadyGranted(env, input.stripePayment.paymentIntentId)) {
+    return false;
+  }
   const existing = await getMembership(env, input.ownerAccount);
 
   // 结算侧兜底守卫（ADR-034 段4）：不同档 USDC 并存时——用户分别签两档挑战、在 confirm→
@@ -347,7 +391,7 @@ export async function upsertPrepaidMembership(
     !differentTierActive
       ? existing.current_period_start
       : now;
-  await env.DB.prepare(
+  const membershipWrite = env.DB.prepare(
     `INSERT INTO square_memberships
       (owner_account, membership_level, expires_at, updated_at, subscription_source,
        stripe_customer_id, stripe_subscription_id, stripe_price_id, subscription_status,
@@ -382,9 +426,27 @@ export async function upsertPrepaidMembership(
       expiresAt,
       input.identity.identity_level,
       input.identity.checked_at,
-      input.paymentRef
-    )
-    .run();
+      input.stripePayment.paymentIntentId
+    );
+  try {
+    // D1 batch 具备事务语义：付款凭证占位与会员授时长同成同败，重放不能重复延长。
+    await env.DB.batch([
+      stripePaymentInsert(env, {
+        ownerAccount: input.ownerAccount,
+        membershipLevel: input.membershipLevel,
+        stripePayment: input.stripePayment,
+        grantedAt: now
+      }),
+      membershipWrite
+    ]);
+    return true;
+  } catch (error) {
+    // 并发重复事件可能同时通过前置查询；唯一 payment_intent 由 D1 决胜，后来者按幂等成功处理。
+    if (await stripePaymentAlreadyGranted(env, input.stripePayment.paymentIntentId)) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 /// USDC 预付换档落库（ADR-034 段2）：切 level + 设新到期（降档=折算后的新到期、
@@ -397,10 +459,17 @@ export async function applyPrepaidTierChange(
     membershipLevel: MembershipLevel;
     expiresAt: number;
     identity: ChainIdentityState;
+    stripePayment?: StripePaymentGrant;
   }
-): Promise<void> {
+): Promise<boolean> {
   const now = nowMs();
-  await env.DB.prepare(
+  if (
+    input.stripePayment &&
+    (await stripePaymentAlreadyGranted(env, input.stripePayment.paymentIntentId))
+  ) {
+    return false;
+  }
+  const membershipWrite = env.DB.prepare(
     `UPDATE square_memberships
        SET membership_level = ?, expires_at = ?, current_period_start = ?, current_period_end = ?,
            subscription_source = 'usdc_prepaid', stripe_subscription_id = NULL,
@@ -418,8 +487,29 @@ export async function applyPrepaidTierChange(
       input.identity.checked_at,
       now,
       input.ownerAccount
-    )
-    .run();
+    );
+  if (!input.stripePayment) {
+    await membershipWrite.run();
+    return true;
+  }
+  try {
+    // 升档付款与切档同一事务落库；重复 payment_intent 永远不会二次切档。
+    await env.DB.batch([
+      stripePaymentInsert(env, {
+        ownerAccount: input.ownerAccount,
+        membershipLevel: input.membershipLevel,
+        stripePayment: input.stripePayment,
+        grantedAt: now
+      }),
+      membershipWrite
+    ]);
+    return true;
+  } catch (error) {
+    if (await stripePaymentAlreadyGranted(env, input.stripePayment.paymentIntentId)) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 /// 可订阅档位：精确匹配本身份档（禁止降档/越级）。visitor 身份 → [freedom,

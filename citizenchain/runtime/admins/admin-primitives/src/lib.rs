@@ -12,7 +12,7 @@ use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::{dispatch::DispatchResult, traits::ConstU32, BoundedVec};
 use primitives::cid::code::{
     is_fixed_governance_code, is_private_legal_code, is_public_legal_code, is_unincorporated_code,
-    InstitutionCode, NRC, PMUL, PRB, PRC,
+    InstitutionCode, PMUL,
 };
 use primitives::core_const::CID_NUMBER_MAX_BYTES;
 use scale_info::TypeInfo;
@@ -383,26 +383,17 @@ pub fn is_personal_admin_code(code: &InstitutionCode) -> bool {
     *code == PMUL
 }
 
-/// 固定治理公权机构的固定管理员人数。
+/// 受保护创世治理机构的固定管理员人数；必须完整匹配机构码、CID 和主账户。
 ///
 /// FRG 在 `admins` 中保存联邦注册局全部 215 名管理员；43 个省级 5 人岗位组
 /// 由 `entity` 任职关系表达，不再维护第二套管理员分组 storage。
-pub fn expected_fixed_governance_admins_len(code: InstitutionCode) -> Option<u32> {
-    use primitives::count_const::{
-        FRG_PROVINCE_GROUP_ADMIN_COUNT, NJD_ADMIN_COUNT, NRC_ADMIN_COUNT, PRB_ADMIN_COUNT,
-        PRC_ADMIN_COUNT,
-    };
-    match code {
-        NRC => Some(NRC_ADMIN_COUNT),
-        PRC => Some(PRC_ADMIN_COUNT),
-        PRB => Some(PRB_ADMIN_COUNT),
-        FRG => Some(
-            FRG_PROVINCE_GROUP_ADMIN_COUNT
-                * primitives::cid::code::PROVINCE_CODE_INFOS.len() as u32,
-        ),
-        NJD => Some(NJD_ADMIN_COUNT),
-        _ => None,
-    }
+pub fn expected_fixed_governance_admins_len(
+    code: InstitutionCode,
+    cid_number: &[u8],
+    main_account: &[u8],
+) -> Option<u32> {
+    primitives::governance_skeleton::fixed_institution_by_identity(code, cid_number, main_account)
+        .map(|institution| institution.expected_len)
 }
 
 #[cfg(test)]
