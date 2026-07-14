@@ -25,7 +25,7 @@ use crate::governance::storage_keys;
 use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
 
 use super::types::{
-    AccountWithBalance, AdminProfileDisplay, InstitutionDetail, InstitutionProposalPage,
+    AccountWithBalance, InstitutionAdminDisplay, InstitutionDetail, InstitutionProposalPage,
 };
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
@@ -117,19 +117,6 @@ struct OnChainInstitutionAccount {
     created_at: u32,
 }
 
-// ─── 机构管理员集合镜像(admins pallet::AdminAccounts) ──────
-
-/// `InstitutionAdminAccount` 的 SCALE 镜像。岗位/任职由 entity 单独查询。
-#[derive(Decode)]
-struct OnChainAdminAccount {
-    #[allow(dead_code)]
-    cid_number: Vec<u8>,
-    institution_code: InstitutionCode,
-    admins: Vec<AccountId32>,
-    #[allow(dead_code)]
-    status: u8,
-}
-
 /// `frame_system::AccountInfo` 头部 16 字节(nonce/consumers/providers/sufficients
 /// 4 个 u32),紧接 16 字节 `data.free` u128。
 const ACCOUNT_INFO_HEADER_LEN: usize = 16;
@@ -213,35 +200,24 @@ fn fetch_account_free_balance(account: &AccountId32, finalized_hash: &str) -> Re
 fn fetch_admin_set(
     main_account: &AccountId32,
     institution_code: &InstitutionCode,
-) -> Result<(Vec<AdminProfileDisplay>, u32), String> {
+    cid_number: &str,
+    finalized_hash: &str,
+) -> Result<(Vec<InstitutionAdminDisplay>, u32), String> {
     let main_bytes: [u8; 32] = (*main_account).clone().into();
-    let storage_key = admins_storage::admin_accounts_key(institution_code, &main_bytes)?;
-    let Some(hex_data) = chain_query::fetch_finalized_storage(&storage_key)? else {
+    let Some(state) = admins_storage::fetch_admin_account_for_code_at(
+        &main_bytes,
+        *institution_code,
+        Some(cid_number.to_string()),
+        finalized_hash,
+    )?
+    else {
         return Ok((Vec::new(), 0));
     };
-    let clean = hex_data.strip_prefix("0x").unwrap_or(&hex_data);
-    let bytes = hex::decode(clean).map_err(|e| format!("AdminAccounts hex 解码失败:{e}"))?;
-    let decoded = OnChainAdminAccount::decode(&mut &bytes[..])
-        .map_err(|e| format!("AdminAccounts SCALE 解码失败:{e}"))?;
-    if &decoded.institution_code != institution_code {
+    if &state.institution_code != institution_code {
         return Ok((Vec::new(), 0));
     }
-    let admins = decoded
-        .admins
-        .iter()
-        .map(|account| AdminProfileDisplay {
-            account: hex::encode(<[u8; 32]>::from(account.clone())),
-            admin_cid_number: String::new(),
-            name: String::new(),
-            admin_role: String::new(),
-            term_start: 0,
-            term_end: 0,
-            source: u8::MAX,
-            source_label: String::new(),
-        })
-        .collect::<Vec<_>>();
-    let admins_len = decoded.admins.len() as u32;
-    Ok((admins, admins_len))
+    let admins_len = state.admins.len() as u32;
+    Ok((state.admins, admins_len))
 }
 
 /// 读取机构内部投票动态阈值。
@@ -369,7 +345,12 @@ pub fn fetch_institution_detail(cid_number: &str) -> Result<Option<InstitutionDe
         }
     });
 
-    let (admins, admins_len) = fetch_admin_set(&main_account_id, &inst.institution_code)?;
+    let (admins, admins_len) = fetch_admin_set(
+        &main_account_id,
+        &inst.institution_code,
+        cid_number,
+        &finalized_hash,
+    )?;
     let threshold =
         fetch_active_threshold(&main_account_id, &inst.institution_code, &finalized_hash)?;
 
@@ -596,58 +577,4 @@ mod tests {
         let cid = "LN001-NRC0G-944805165-2026";
         assert_ne!(derive_main_account(cid), derive_fee_account(cid));
     }
-
-    /* 旧 AdminProfile 金标向量已随 admins/entity 模型迁移删除。
-    /// 金标向量:直接 encode 真链上类型 `admin-primitives::AdminAccount`,喂给 derive-Decode 镜像。
-    /// 任一字段序漂移(改 admin-primitives 布局或漏掉 cid_number/role_code/admin_source_ref/第 6 来源)
-    /// → encode 字节变 → `OnChainAdminAccount::decode` 解码错位或失败 → 本测试红。
-    #[test]
-    fn on_chain_admin_account_matches_admin_primitives_encode() {
-        use admin_primitives::{
-            AdminAccount, AdminAccountKind, AdminAccountStatus, AdminProfile, AdminSource,
-        };
-        use primitives::cid::code::PRC;
-
-        let profile = AdminProfile::<AccountId32> {
-            admin_account: AccountId32::new([0x11; 32]),
-            admin_cid_number: b"CID-9".to_vec().try_into().unwrap(),
-            admin_name: "李四".as_bytes().to_vec().try_into().unwrap(),
-            role_code: b"C1".to_vec().try_into().unwrap(),
-            role_name: "主任".as_bytes().to_vec().try_into().unwrap(),
-            term_start: 3,
-            term_end: 4,
-            // 第 6 枚举:旧镜像缺 NominationAppointment,遇此值会解码失败。
-            admin_source: AdminSource::NominationAppointment,
-            admin_source_ref: b"appt-1".to_vec().try_into().unwrap(),
-        };
-        let profiles: BoundedVec<AdminProfile<AccountId32>, ConstU32<64>> =
-            vec![profile].try_into().unwrap();
-        let account = AdminAccount::<_, AccountId32, u32> {
-            cid_number: b"PRC-X".to_vec().try_into().unwrap(),
-            institution_code: PRC,
-            kind: AdminAccountKind::PublicInstitution,
-            admins: profiles,
-            creator: AccountId32::new([0x22; 32]),
-            created_at: 10,
-            updated_at: 20,
-            status: AdminAccountStatus::Active,
-        };
-
-        let decoded = OnChainAdminAccount::decode(&mut &account.encode()[..]).unwrap();
-        assert_eq!(decoded.institution_code, PRC);
-        assert_eq!(decoded.kind, 0); // PublicInstitution
-        assert_eq!(decoded.admins.len(), 1);
-        let p = &decoded.admins[0];
-        let raw: [u8; 32] = p.account.clone().into();
-        assert_eq!(hex::encode(raw), "11".repeat(32));
-        assert_eq!(p.admin_cid_number.as_slice(), b"CID-9");
-        assert_eq!(p.name.as_slice(), "李四".as_bytes());
-        // 展示 admin_role 取链上 role_name(对外岗位名称)。
-        assert_eq!(p.role_name.as_slice(), "主任".as_bytes());
-        assert_eq!(p.term_start, 3);
-        assert_eq!(p.term_end, 4);
-        assert_eq!(admin_source_meta(p.source), (5, "提名任免"));
-        assert_eq!(decoded.status, 1); // Active
-    }
-    */
 }

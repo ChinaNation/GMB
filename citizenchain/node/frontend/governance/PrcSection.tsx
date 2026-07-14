@@ -1,6 +1,6 @@
 // 省储委会顶级 Section：列表（orgType=1）→ 机构详情 两级导航。
 import { useState } from 'react';
-import { AdminListPage, AdminSetChangePage } from '../admins';
+import { AdminListPage } from '../admins';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
@@ -13,7 +13,6 @@ type PrcView =
   | { page: 'list' }
   | { page: 'detail'; cidNumber: string }
   | { page: 'admin-list'; cidNumber: string; orgType: number }
-  | { page: 'admin-set-change'; cidNumber: string; orgType: number; cidFullName: string; adminWallets: AdminWalletMatch[] }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; cidNumber?: string; originCidNumber: string }
   | { page: 'create-proposal'; cidNumber: string; orgType: number; cidFullName: string; mainAccount: string; adminWallets: AdminWalletMatch[] }
   | { page: 'protocol-upgrade'; cidNumber: string; adminWallets: AdminWalletMatch[] }
@@ -60,18 +59,6 @@ export function PrcSection() {
     );
   }
 
-  if (view.page === 'admin-set-change') {
-    return (
-      <AdminSetChangePage
-        accountRef={{ cidNumber: view.cidNumber }}
-        cidFullName={view.cidFullName}
-        adminWallets={view.adminWallets}
-        onBack={() => backToDetail(view.cidNumber)}
-        onSuccess={() => backToDetail(view.cidNumber)}
-      />
-    );
-  }
-
   if (view.page === 'protocol-upgrade') {
     return (
       <ProtocolUpgradeProposalPage
@@ -106,9 +93,6 @@ export function PrcSection() {
         }
         onCreateProposal={(sid, orgType, cidFullName, mainAccount, aw) =>
           setView({ page: 'create-proposal', cidNumber: sid, orgType, cidFullName, mainAccount, adminWallets: aw })
-        }
-        onCreateAdminSetChange={(sid, orgType, cidFullName, aw) =>
-          setView({ page: 'admin-set-change', cidNumber: sid, orgType, cidFullName, adminWallets: aw })
         }
         onCreateProtocolUpgrade={(aw) =>
           setView({ page: 'protocol-upgrade', cidNumber, adminWallets: aw })

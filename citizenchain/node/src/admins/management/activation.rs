@@ -18,7 +18,8 @@ use crate::home;
 use crate::settings::device_password;
 use crate::shared::security;
 use primitives::cid::code::{
-    code_bytes, is_fixed_governance_code, is_institution_code, is_personal_code, InstitutionCode,
+    code_bytes, is_fixed_governance_code, is_private_legal_code, is_public_legal_code,
+    is_unincorporated_code, InstitutionCode,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -80,7 +81,7 @@ pub struct ActivatedAdmin {
     pub account_hex: String,
     /// 链上机构码（CID institution_code，[u8;4]）。
     pub institution_code: InstitutionCode,
-    /// 链上 AdminAccountKind 编码。
+    /// Node 按实际命中的机构管理员 pallet 派生的机构类型编码。
     pub kind: u8,
     /// 激活时间（毫秒时间戳）。
     pub activated_at_ms: u64,
@@ -96,7 +97,7 @@ struct StoredActivation {
     account_hex: String,
     /// 链上机构码（CID institution_code，[u8;4]）。
     institution_code: InstitutionCode,
-    /// 链上 AdminAccountKind 编码。
+    /// Node 按实际命中的机构管理员 pallet 派生的机构类型编码。
     kind: u8,
     /// 激活时间（毫秒时间戳）。
     activated_at_ms: u64,
@@ -257,14 +258,22 @@ fn validate_activation_account(
         return Err("管理员账户不是已激活状态，不能激活本地管理员身份".to_string());
     }
     match state.kind {
-        0 if is_fixed_governance_code(&state.institution_code) => Ok(()),
-        1 if is_personal_code(&state.institution_code) => Ok(()),
-        2 if is_institution_code(&state.institution_code) => Ok(()),
+        0 if is_fixed_governance_code(&state.institution_code)
+            || is_public_legal_code(&state.institution_code)
+            || is_unincorporated_code(&state.institution_code) =>
+        {
+            Ok(())
+        }
+        1 if is_private_legal_code(&state.institution_code)
+            || is_unincorporated_code(&state.institution_code) =>
+        {
+            Ok(())
+        }
         _ => Err("管理员账户类型与机构码不匹配，不能激活".to_string()),
     }
 }
 
-/// 动态机构码(个人多签 / 机构账户)激活必须提供 accountHex,内置 cidNumber 无法定位。
+/// 动态机构账户激活必须提供 accountHex，内置 cidNumber 只能定位固定治理机构。
 fn requires_account_hex(expected_code: Option<InstitutionCode>) -> bool {
     matches!(expected_code, Some(code) if !is_fixed_governance_code(&code))
 }
@@ -280,7 +289,7 @@ fn fetch_chain_account(
             .ok_or_else(|| "链上不存在该管理员账户".to_string())?
     } else {
         if requires_account_hex(expected_code) {
-            return Err("个人多签或机构账户管理员激活必须提供 accountHex".to_string());
+            return Err("动态机构管理员激活必须提供 accountHex".to_string());
         }
         storage::fetch_admin_account_by_cid_number(cid_number)?
             .ok_or_else(|| "链上不存在该管理员账户".to_string())?
@@ -299,7 +308,7 @@ fn resolve_activation_account_hex(
         return Ok(hex::encode(account_id));
     }
     if requires_account_hex(expected_code) {
-        return Err("个人多签或机构账户管理员激活必须提供 accountHex".to_string());
+        return Err("动态机构管理员激活必须提供 accountHex".to_string());
     }
     let account_id = account_id::account_id_from_builtin_cid(cid_number)?;
     Ok(hex::encode(account_id))

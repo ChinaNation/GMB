@@ -42,8 +42,8 @@ pub(crate) fn legislation_role(institution_code: &str) -> Option<LegislationRole
 /// 一条可发起候选:提案类型 + 层级 + 该类型下本机构可选的表决类型集合。
 ///
 /// 由发起菜单候选 API(`handler::list_proposable`)消费;当前 `category` 恒 `Law`。
-/// 任免案/预算案 schema 已于 Phase 4 锁定(`personnel`/`budget` 子域),但**候选发起**待链端
-/// `PROPOSAL_KIND_PERSONNEL/BUDGET` 上线后经此表达——无链上提交路径前不列候选,避免半桩入口。
+/// 任免案/预算案 schema 已于 Phase 4 锁定（`personnel`/`budget` 子域），但候选发起必须等
+/// 对应业务模块和代表机构表决接线完成；无链上提交路径前不列候选，避免半桩入口。
 pub(crate) struct ProposableCandidate {
     /// 提案类型(本轮仅 `Law`)。
     pub(crate) category: ProposalCategory,
@@ -55,8 +55,8 @@ pub(crate) struct ProposableCandidate {
 
 /// 本节点机构码 → 可发起候选清单。
 ///
-/// 参议会(NSN/PSN)无发起权返回空;政府任免/预算案候选(Personnel/Budget)
-/// 待链端 `PROPOSAL_KIND_PERSONNEL/BUDGET` 上线后接入(schema 已于 Phase 4 锁定,但无提交路径前不列候选)。
+/// 参议会（NSN/PSN）无发起权返回空；政府任免/预算案候选待对应业务模块接入后增加，
+/// schema 已于 Phase 4 锁定，但无提交路径前不列候选。
 /// 最终合法性以链端 `ensure_routing` 为准。Phase 0 落地并单测;Phase 1 起由发起菜单候选 API 消费。
 pub(crate) fn proposable_candidates(institution_code: &str) -> Vec<ProposableCandidate> {
     // 非教育表决类型:常规/重要/特别(众议会、市立法会、市自治会)。

@@ -1,4 +1,3 @@
-import 'package:citizenapp/citizen/shared/admin_profile.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
@@ -181,7 +180,7 @@ class AdminAccountState {
     required this.accountHex,
     required this.institutionCode,
     required this.kind,
-    required this.profiles,
+    required this.admins,
     required this.threshold,
     required this.creatorHex,
     required this.createdAt,
@@ -195,12 +194,8 @@ class AdminAccountState {
   final String institutionCode;
   final int kind;
 
-  /// 管理员完整资料(A2:链上 AdminProfile;个人多签只有 account)。
-  final List<AdminProfile> profiles;
-
-  /// 管理员账户列表(从 profiles 抽取;向后兼容只需账户的消费方:转账/投票/校验/激活匹配)。
-  List<String> get admins =>
-      profiles.map((p) => p.account).toList(growable: false);
+  /// 管理员钱包账户集合；机构岗位不在 admins 模块重复保存。
+  final List<String> admins;
 
   final int threshold;
   final String creatorHex;
@@ -215,7 +210,7 @@ class AdminAccountState {
       accountHex: accountHex,
       institutionCode: institutionCode,
       kind: kind,
-      profiles: profiles,
+      admins: admins,
       threshold: threshold ?? this.threshold,
       creatorHex: creatorHex,
       createdAt: createdAt,
@@ -225,10 +220,9 @@ class AdminAccountState {
   }
 
   String get kindLabel => switch (kind) {
-        0 => '内置治理机构',
-        1 => '公权机构',
-        2 => '私权机构',
-        3 => '个人多签',
+        0 => '公权机构',
+        1 => '私权机构',
+        2 => '个人多签',
         _ => '未知账户',
       };
 

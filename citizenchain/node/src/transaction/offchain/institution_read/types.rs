@@ -41,27 +41,8 @@ pub struct AccountWithBalance {
     pub is_default: bool,
 }
 
-/// 链上机构管理员公开资料，字段与 `admin-primitives::AdminProfile` 展示语义一致。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AdminProfileDisplay {
-    /// 管理员密码学账户，hex 不含 0x。
-    pub account: String,
-    /// 管理员实名锚:注册局签发的 CID 号。
-    pub admin_cid_number: String,
-    /// 姓名快照。
-    pub name: String,
-    /// 对外法定职务。
-    pub admin_role: String,
-    /// 任期开始(天数自纪元;无任期为 0)。
-    pub term_start: u32,
-    /// 任期结束(天数自纪元;无任期为 0)。
-    pub term_end: u32,
-    /// 职务/任期来源判别值。
-    pub source: u8,
-    /// 来源中文标签；未知来源留空。
-    pub source_label: String,
-}
+/// 机构管理员钱包及其全部有效岗位任职，与管理员管理模块共用同一 DTO。
+pub type InstitutionAdminDisplay = crate::admins::management::types::InstitutionAdminInfo;
 
 /// 机构详情 = `PublicManage/PrivateManage::Institutions[cid_number]`(机构最小集)
 /// + 派生的主/费账户余额 + 管理员模块管理员集合 + internal-vote 动态阈值。
@@ -70,9 +51,9 @@ pub struct AdminProfileDisplay {
 pub struct InstitutionDetail {
     pub cid_number: String,
     pub cid_full_name: String,
-    /// 管理员更换使用的机构多签 AccountId。清算行以主账户作为机构管理员账户。
+    /// 机构管理员账户主键。清算行以主账户作为机构管理员账户。
     pub admin_account_hex: String,
-    /// 管理员更换使用的机构码(CID institution_code,[u8;4])。清算行属于私权法人机构码。
+    /// 机构码（CID institution_code，[u8;4]）。清算行属于私权法人机构码。
     pub institution_code: InstitutionCode,
     pub main_account: AccountWithBalance,
     pub fee_account: AccountWithBalance,
@@ -80,8 +61,8 @@ pub struct InstitutionDetail {
     pub other_accounts: Vec<AccountWithBalance>,
     pub admins_len: u32,
     pub threshold: u32,
-    /// 管理员完整公开资料。
-    pub admins: Vec<AdminProfileDisplay>,
+    /// 管理员钱包及其有效岗位任职。
+    pub admins: Vec<InstitutionAdminDisplay>,
     /// 机构生命周期:Pending(投票中)/ Active(已生效)/ Closed(已注销)。
     pub status: String,
     pub created_at: u64,

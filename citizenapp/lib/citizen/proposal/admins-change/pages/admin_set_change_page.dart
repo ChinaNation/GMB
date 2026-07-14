@@ -105,7 +105,6 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
                     const SizedBox(height: 12),
                     AdminSetEditor(
                       admins: _admins,
-                      profiles: account.profiles,
                       balances: _balanceByAccount,
                       onChanged: (value) => _setNewAdmins(account, value),
                     ),
@@ -115,7 +114,6 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
                     AdminSetDiffCard(
                       currentAdmins: account.admins,
                       admins: _admins,
-                      currentProfiles: account.profiles,
                       balances: _balanceByAccount,
                     ),
                     if (_error != null) ...[
@@ -182,29 +180,6 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
   }
 
   Widget _buildThresholdCard(AdminAccountState account) {
-    final fixed =
-        AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
-    if (account.kind == 0 && fixed != null) {
-      return Card(
-        elevation: 0,
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('阈值规则',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 6),
-              Text(
-                '固定阈值 $fixed/${_admins.length}，不允许修改',
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
     final min = _admins.isEmpty
         ? 0
         : AdminSetValidation.minimumDynamicThreshold(_admins.length);
@@ -227,12 +202,6 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
   }
 
   void _syncThresholdInput(AdminAccountState account, int adminsLen) {
-    final fixed =
-        AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
-    if (account.kind == 0 && fixed != null) {
-      _thresholdController.text = fixed.toString();
-      return;
-    }
     if (adminsLen <= 0) {
       _thresholdController.clear();
       return;
@@ -245,9 +214,6 @@ class _AdminsChangePageState extends State<AdminsChangePage> {
   }
 
   int _readNewThreshold(AdminAccountState account) {
-    final fixed =
-        AdminSetValidation.fixedGovernanceThreshold(account.institutionCode);
-    if (account.kind == 0 && fixed != null) return fixed;
     final value = int.tryParse(_thresholdController.text.trim());
     if (value == null) throw StateError('请输入有效阈值');
     return value;

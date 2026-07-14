@@ -74,8 +74,6 @@ pub fn run_desktop() {
             admins::management::activation::has_any_activated_admin,
             admins::management::commands::get_admin_account_state,
             admins::management::commands::get_admin_account_balances,
-            admins::management::commands::build_admin_set_change_request,
-            admins::management::commands::submit_admin_set_change,
             governance::build_vote_request,
             governance::build_joint_vote_request,
             crate::transaction::multisig::commands::build_multisig_transfer_request,

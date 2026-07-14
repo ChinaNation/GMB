@@ -10,13 +10,10 @@
 //                                顶部按钮:未声明节点 → declare-node;已声明 → 内联展示节点信息
 //   other-accounts-list          子页:其他账户列表
 //   admin-list                   子页:管理员列表
-//   admin-set-change             子页:复用 admins 更换管理员流程
 //   declare-node                 多签 Active 但本机未声明节点 → 填 RPC + 自测 + 签名声明
 
 import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../../tauri';
-import { AdminSetChangePage } from '../../admins';
-import { adminsChangeApi } from '../../admins/api';
 import { institutionReadApi } from './institution/api';
 import { ClearingBankAddPage } from './institution/add-candidate';
 import { ClearingBankInstitutionDetailPage } from './institution/institution-detail';
@@ -26,7 +23,6 @@ import type {
   EligibleClearingBankCandidate,
   InstitutionDetail,
 } from './institution/types';
-import { hexToSs58 } from '../../shared/ss58';
 import { offchainApi } from './api';
 import type { ClearingBankView } from './types';
 import { ClearingBankDeclareNodePage } from './node-register';
@@ -93,29 +89,6 @@ export function ClearingBankSection() {
     setView({ kind: 'institution-detail', cidNumber });
   }, []);
 
-  const goAdminSetChange = useCallback(async (detail: InstitutionDetail) => {
-    const accountRef = {
-      cidNumber: detail.cidNumber,
-      accountHex: detail.adminAccountHex,
-    };
-    try {
-      const activatedAdmins = await adminsChangeApi.getActivatedAdmins(detail.cidNumber, accountRef);
-      setView({
-        kind: 'admin-set-change',
-        cidNumber: detail.cidNumber,
-        cidFullName: detail.cidFullName,
-        adminAccountHex: detail.adminAccountHex,
-        adminWallets: activatedAdmins.map((admin) => ({
-          address: hexToSs58(admin.pubkeyHex),
-          pubkeyHex: admin.pubkeyHex,
-          walletLabel: '',
-        })),
-      });
-    } catch (e) {
-      window.alert(sanitizeError(e));
-    }
-  }, []);
-
   return (
     <div className="governance-section clearing-bank-section">
       {view.kind === 'empty' && (
@@ -166,20 +139,6 @@ export function ClearingBankSection() {
           onDeclareNode={(cidNumber, cidFullName) =>
             setView({ kind: 'declare-node', cidNumber, cidFullName })
           }
-          onCreateAdminSetChange={goAdminSetChange}
-        />
-      )}
-
-      {view.kind === 'admin-set-change' && (
-        <AdminSetChangePage
-          accountRef={{
-            cidNumber: view.cidNumber,
-            accountHex: view.adminAccountHex,
-          }}
-          cidFullName={view.cidFullName}
-          adminWallets={view.adminWallets}
-          onBack={() => setView({ kind: 'institution-detail', cidNumber: view.cidNumber })}
-          onSuccess={() => setView({ kind: 'institution-detail', cidNumber: view.cidNumber })}
         />
       )}
 

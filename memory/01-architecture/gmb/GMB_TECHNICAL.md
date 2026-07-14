@@ -167,6 +167,17 @@ GMB/
 
 ## 8. 发布边界
 
+本机统一发布入口固定为根目录私密脚本，全部由 Git 忽略：
+
+- `scripts/cloudflare.sh`：`c` 部署 CitizenApp Cloudflare staging，`s` 部署 production。
+- `scripts/citizenweb.sh`：`c` 部署 `citizenweb-staging` Pages，`s` 部署 production `citizenweb` Pages。
+- `scripts/citizenapp.sh`：`c` 自动触发并等待 CitizenApp CI，`s` 自动触发并等待正式 Release。
+- `scripts/citizenwallet.sh`：`c` 自动触发并等待 CitizenWallet CI，`s` 自动触发并等待正式 Release。
+- `scripts/citizenchain.sh`：`c` 自动触发并等待桌面端 CI，`s` 自动发布正式安装包，`b` 用本次成功构建的 Linux amd64 产物滚动部署六台服务器。
+- `scripts/citizenchainwasm.sh`：自动触发并等待 Runtime WASM CI，只构建校验，不自动执行链上升级。
+
+GitHub `workflow_dispatch` 必须使用显式 `mode=ci/release/deploy` 隔离动作。CI 模式不得读取签名密钥、创建 Release 或部署服务器；脚本选择本身就是本次操作授权，不再要求到 GitHub 页面手动点击或做第二次确认。
+
 - Runtime 升级：修改 `citizenchain/runtime/**` 或被 runtime 直接依赖且影响链上行为的 primitives。
 - Native Node / 桌面安装包：修改 `citizenchain/node/**`、桌面前端、Tauri、打包或发布脚本。
 - OnChina 服务发布：修改 `citizenchain/onchina/src/**`、`citizenchain/onchina/frontend/**`、数据库、权限、扫码或公开接口。

@@ -89,10 +89,8 @@ class PalletRegistry {
   static const int registerCidInstitutionCall = 2;
   static const int cleanupRejectedInstitutionProposalCall = 4;
 
-  /// `propose_create_*_institution(cid_number, cid_full_name, accounts,
-  /// institution_code, admins_len, admins, threshold, register_nonce,
-  /// signature, issuer_cid_number, issuer_main_account, signer_pubkey,
-  /// scope_*)` — 机构多签账户创建提案。
+  /// `propose_create_*_institution` 携带机构公开信息、初始账户、岗位定义、
+  /// 岗位任职、阈值和注册局凭证；管理员钱包集合由 entity 从有效任职派生。
   static const int proposeCreateInstitutionCall = 5;
 
   // ---- PersonalManage (7) · 个人多签生命周期 ----
@@ -114,17 +112,6 @@ class PalletRegistry {
   // call_index 1 留洞不复用。
   static const int resolutionDestroPallet = 13;
   static const int proposeDestroyCall = 0;
-
-  // ---- 管理员集合变更:PublicAdmins(27) / PrivateAdmins(28) ----
-  // PersonalAdmins(29) 的管理员集合变更使用 call_index=0。
-  static const int publicAdminsPallet = 27;
-  static const int privateAdminsPallet = 28;
-  static const int proposeAdminSetChangeCall = 0;
-
-  static bool isAdminSetChangePallet(int palletIndex) {
-    return palletIndex == publicAdminsPallet ||
-        palletIndex == privateAdminsPallet;
-  }
 
   static bool isPersonalAdminSetChangeCall(int palletIndex, int callIndex) {
     return palletIndex == personalAdminsPallet &&

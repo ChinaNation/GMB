@@ -1,6 +1,5 @@
 // 分类管理员模块 `AdminAccounts` value 的最小 SCALE 解码器(req 3 反向索引依赖)。
-// 仅用于 `PersonalAdmins.AdminAccounts` 扫描:个人多签 admins 是裸 AccountId 列表。
-// 公权/私权机构的 admins 是 9 字段 AdminProfile,须走 admin_account_codec.dart。
+// 机构记录为 cid + institution_code + 裸钱包集合 + status；个人多签继续使用其独立旧布局。
 //
 // 链上 [AdminAccount<AdminList, AccountId, BlockNumber>] SCALE 字节布局:
 //   cid_number: BoundedVec<u8>                     (Compact<u32> + N 字节;前导,个人多签空=0x00)
@@ -24,6 +23,7 @@
 
 import 'dart:typed_data';
 
+import 'package:citizenapp/citizen/institution/institution_role_storage_codec.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 /// SCALE 解码后的 AdminAccount 关键字段。
@@ -57,6 +57,15 @@ class AdminAccountStorageCodec {
   static AdminAccountStorageDecoded? tryDecode(Uint8List bytes) {
     try {
       if (bytes.isEmpty) return null;
+      final institution = InstitutionRoleStorageCodec.decodeAdminAccount(bytes);
+      if (institution != null) {
+        return AdminAccountStorageDecoded(
+          institutionCode: institution.institutionCode,
+          kind: InstitutionCodeLabel.adminAccountKind(
+              institution.institutionCode),
+          adminsHex: institution.admins,
+        );
+      }
       // cid_number: BoundedVec<u8>(Compact<u32> 长度 + N 字节)。前导字段;
       // 个人多签无机构 CID 时为空 = 单字节 0x00。本扫描恒为个人多签,故此处
       // 通常为空,但仍须消费该字节以对齐后续 institution_code/kind/admins 偏移。

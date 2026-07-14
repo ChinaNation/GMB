@@ -27,7 +27,7 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 
 | 机构类别 | 判定 | 链上真源 | OnChina 准入 |
 |---|---|---|
-| 联邦注册局 FRG | `== FRG` | `PublicAdmins::FederalRegistryProvinceGroups`（29） | 可登录，完整注册局能力 |
+| 联邦注册局 FRG | `== FRG` | `PublicAdmins::AdminAccounts`（27）+ `PublicManage` 省专员岗位任职 | 可登录，完整注册局能力 |
 | 市注册局 CREG | `== CREG` | `PublicAdmins::AdminAccounts`（27） | 可登录，本市业务能力 + 只读本省联邦注册局 |
 | 国家司法院 NJD | `== NJD` | `PublicAdmins::AdminAccounts`（27） | 可登录，进入 `judicial` 工作台 |
 | 其它公权法人（政府/立法/监察/司法/教育/公安等） | `is_public_legal_code` | `PublicAdmins::AdminAccounts`（27） | 可登录，按机构能力进入专属或通用工作台 |
@@ -46,7 +46,7 @@ registry 重定位为通用 CID 机构控制台，产品名 **onchina**（链上
 - 本节点已绑定机构后：后续登录只允许该绑定机构的 active admin；管理员被链上移除后由后台复查清退会话。
 - 本节点解绑 / 换机构：必须由当前本机会话管理员发起 `NODE_BINDING_UNBIND` 安全动作，并由冷钱包签名确认；commit 成功后 active binding 置为 `INACTIVE` 并清退本节点管理员会话。换机构不走影子兼容流程，必须先解绑，再由新机构 active admin 重新扫码登录并确认绑定。
 - 本地 `node_institution_bindings` 只保存“本节点已绑定哪个机构”的结果与缓存展示字段，不是权限真源；权限真源始终是链上 active admin 关系。
-- FRG 省组管理员绑定仍然只代表一个 FRG 机构身份；省级办理范围来自 `FederalRegistryProvinceGroups` 的省码，机构 `cid_number`、`cid_full_name`、`cid_short_name` 和机构主账户必须从本地链上投影的 FRG 主体与“主账户”补齐。`node_institution_bindings` 不允许写入只有省组 scope、没有 FRG 主账户的半截绑定；读取旧 active binding 时必须按链投影自愈并回写缺失字段。
+- FRG 管理员绑定只代表一个 FRG 机构身份；省级办理范围来自该钱包在 `PublicManage::InstitutionRoleAssignments` 中有效的 `PROVINCE_COMMISSIONER_<省码>` 任职。机构 `cid_number`、全称、简称和主账户必须从本地链上投影补齐；`node_institution_bindings` 不允许写入只有省域、没有 FRG 主账户的半截绑定。
 - 登录后 UI 由后端 `workspace` + `capabilities` 单源下发：FRG/CREG 进入注册局工作台；NJD 进入司法院工作台；普通公权、私权和非法人组织进入专属或通用工作台。当前未接入专属业务的机构至少可在显示页只读查看本机构链上 active admin 列表，并允许管理员在自己的行设置 / 更新 passkey。
 
 ### 5. 权限模型 = CID 码（主）+ CID 号（辅）+ 实例覆盖

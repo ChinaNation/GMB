@@ -7,7 +7,6 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:citizenapp/citizen/proposal/admins-change/codec/admin_account_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
-import 'package:citizenapp/citizen/shared/admin_profile.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -91,21 +90,33 @@ class AdminAccountService {
         );
         final data =
             await _rpc.fetchStorage('0x${AdminAccountIdCodec.hexEncode(key)}');
-        decoded =
-            data == null ? null : AdminAccountCodec.decode(accountId, data);
+        decoded = data == null
+            ? null
+            : AdminAccountCodec.decode(
+                accountId,
+                data,
+                personalMultisig: institutionCode.toUpperCase() == 'PMUL',
+                institutionKind: adminKind,
+              );
       } else {
         final keys = AdminAccountIdCodec.adminAccountStorageKeys(accountId);
         final keyHexList = keys
             .map((key) => '0x${AdminAccountIdCodec.hexEncode(key)}')
             .toList(growable: false);
         final values = await _rpc.fetchStorageBatch(keyHexList);
-        for (final keyHex in keyHexList) {
+        for (var index = 0; index < keyHexList.length; index++) {
+          final keyHex = keyHexList[index];
           final data = values[keyHex];
           if (data == null) continue;
           if (decoded != null) {
             throw StateError('同一账户在多个管理员模块中存在，链上状态不一致');
           }
-          decoded = AdminAccountCodec.decode(accountId, data);
+          decoded = AdminAccountCodec.decode(
+            accountId,
+            data,
+            personalMultisig: index == 0,
+            institutionKind: index == 0 ? null : index - 1,
+          );
         }
       }
       final threshold =
@@ -131,12 +142,6 @@ class AdminAccountService {
 
   Future<List<String>> fetchAdmins(AdminAccountIdentity identity) async {
     return (await fetchByIdentity(identity))?.admins ?? const [];
-  }
-
-  /// 取管理员**完整资料**(cid/姓名/职务/任期/来源,A2)。供机构详情管理员展示页。
-  Future<List<AdminProfile>> fetchAdminProfiles(
-      AdminAccountIdentity identity) async {
-    return (await fetchByIdentity(identity))?.profiles ?? const [];
   }
 
   Future<int?> fetchThreshold(AdminAccountIdentity identity) async {
@@ -347,10 +352,8 @@ class _PersistedAdminAccount {
     required this.updatedAtMillis,
   });
 
-  /// 缓存 schema 版本。链端 AdminAccount/AdminProfile SCALE 布局变更(前导 cid_number +
-  /// AdminProfile 拆 role_code/role_name + admin_source_ref)后必须 bump:旧版本缓存
-  /// 是用错误旧布局解出的字节,一律作废重新链读。见 memory feedback-dto-field-rename-bump-cache-version。
-  static const int _schemaVersion = 2;
+  /// 机构管理员改为钱包集合后旧资料缓存必须整体作废。
+  static const int _schemaVersion = 3;
 
   final AdminAccountState state;
   final int updatedAtMillis;
@@ -367,7 +370,7 @@ class _PersistedAdminAccount {
           'account_id_hex': state.accountHex,
           'institution_code': state.institutionCode,
           'kind': state.kind,
-          'profiles': state.profiles.map((p) => p.toJson()).toList(),
+          'admins': state.admins,
           'threshold': state.threshold,
           'creator_hex': state.creatorHex,
           'created_at': state.createdAt,
@@ -409,7 +412,7 @@ class _PersistedAdminAccount {
           accountHex: AdminAccountIdCodec.normalizeHex(accountHex),
           institutionCode: institutionCode,
           kind: kind,
-          profiles: _profilesFromRaw(stateRaw),
+          admins: _stringList(stateRaw['admins']),
           threshold: threshold,
           creatorHex: stateRaw['creator_hex']?.toString() ?? '',
           createdAt: createdAt,
@@ -433,21 +436,6 @@ class _PersistedAdminAccount {
     return value
         .map((item) => AdminAccountIdCodec.normalizeHex(item.toString()))
         .where((item) => item.isNotEmpty)
-        .toList(growable: false);
-  }
-
-  /// 从缓存还原管理员资料:优先读 'profiles'(A2 完整资料);旧缓存仅 'admins'(账户)
-  /// 时降级为仅账户 AdminProfile(实名等下次链刷新补全)。
-  static List<AdminProfile> _profilesFromRaw(Map<String, dynamic> stateRaw) {
-    final raw = stateRaw['profiles'];
-    if (raw is List) {
-      return raw
-          .whereType<Map>()
-          .map((m) => AdminProfile.fromJson(m.cast<String, dynamic>()))
-          .toList(growable: false);
-    }
-    return _stringList(stateRaw['admins'])
-        .map((a) => AdminProfile(account: a))
         .toList(growable: false);
   }
 }

@@ -2731,7 +2731,6 @@ fn onchina_error_code(status: StatusCode, message: &str) -> &'static str {
             "ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY"
         }
         "city admin city limit reached" => "ONCHINA_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED",
-        "replacement admin is not an on-chain admin" => "ONCHINA_ADMIN_REPLACEMENT_NOT_ONCHAIN",
         "not an on-chain admin" => "ONCHINA_LOGIN_ADMIN_NOT_ONCHAIN",
         "security grant required" => "ONCHINA_ADMIN_SECURITY_GRANT_REQUIRED",
         _ if message.starts_with("insert qr sign request failed") => {

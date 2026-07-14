@@ -54,7 +54,7 @@ citizenchain/onchina/src/
 - 管理员写入只进入 `admins`(本地元数据缓存)和短生命周期安全运行态表;成员资格真源在链上(`federal_registry_scope` 表已退役,见 [[project_onchina_registry_tier_chainread_2026_06_29]])。
 - 公权机构唯一真源是链上 `PublicManage`;`subjects/gov/accounts` 中的公权行只是本地查询投影,投影版本只记录在 `chain_projection_state`。
 - 链上状态字段只作本地投影缓存(`subjects.chain_status`、`accounts.chain_status`),不得成为第二授权真源。
-- `node_institution_bindings` 只缓存本节点当前绑定机构。FRG 省组绑定是一个 FRG 机构身份,不得拆成多个身份或多个钱包:省级办理范围来自链上省组 key,机构 CID/全称/简称/主账户来自链上 FRG 主体投影和 `accounts.account_name='主账户'`。读取旧 active binding 时必须自动补齐并回写缺失的 FRG 主账户,否则公民占号和身份上链不得继续。
+- `node_institution_bindings` 只缓存本节点当前绑定机构。FRG 绑定始终是一个 FRG 机构身份，不得拆成虚拟省组身份；省级办理范围来自管理员钱包在 entity 中有效的 `PROVINCE_COMMISSIONER_<省码>` 任职，机构 CID/全称/简称/主账户来自 FRG 主体投影。绑定缺少 FRG 主账户时必须关闭失败。
 - 审计写入统一走结构化审计入口，详情字段只保存事实，不保存 UI 文案。
 
 ### 4.1 公权机构链投影
@@ -125,13 +125,13 @@ CA 有效期固定到 2036-01-01；服务证书每次 OnChina 启动时用当前
 
 ## 9. 管理员写操作
 
-管理员新增、替换、Passkey 更新、节点解绑和链写动作必须使用 `PASSKEY_COLD_SIGN` 二次确认。业务 handler 只负责构造业务动作，二维码协议包装和签名结果识别归 `core/qr/`。
+市注册局本地目录维护、Passkey 更新、节点解绑和链写动作必须使用相应安全档。业务 handler 只负责构造业务动作，二维码协议包装和签名结果识别归 `core/qr/`。
 
 公民身份上链(`CITIZEN_ONCHAIN_PUSH`)属注册局上链操作,同归 `PASSKEY_COLD_SIGN` 最严档:`prepare` 与 `complete` 各消费一次一次性 grant,grant 载荷绑定 `{cid_number, wallet_account}` 且 target = cid_number,与业务请求逐字段一致才放行。
 
-联邦注册局机构 `admins` 不允许本地新增或删除，只允许在同省范围内替换。市注册局机构 `admins` 每省每市最多 30 人，统计必须同时带省和市，不能只按市名统计。NJD、普通公权机构、私权机构和非法人组织本期只能查看本机构链上 active admin 列表，不能在 OnChina 内维护管理员集合。
+联邦注册局机构 `admins` 和岗位任职在 OnChina 完全只读，换届只能由治理业务写入 entity，不允许本地新增、删除或替换。市注册局本地登记目录每省每市最多 30 人，统计必须同时带省和市，但该目录不是链上管理员资格真源。NJD、普通公权机构、私权机构和非法人组织本期只能查看本机构链上 active admin 与岗位任职，不能在 OnChina 内维护管理员集合。
 
-机构管理员列表 API 的目标真源是链上 `admins` 账户集合与 entity 机构岗位任职关系。当前 `AdminProfile` 投影字段是待清理旧实现；后续 API 必须分别读取管理员账户、岗位、权限、任期和任职来源。本地姓名、联系方式、照片和 Passkey 不得成为管理员资格或岗位真源。
+机构管理员列表 API 联合读取链上 `admins` 钱包集合与 entity 岗位定义、有效任职。`institution/admins/chain_roles.rs` 负责公权/私权岗位路由、任职合并和 FRG 省专员范围解析；本地姓名、联系方式、照片和 Passkey 不得成为管理员资格或岗位真源。岗位权限不建立通用表，具体业务模块按“机构 + 有效岗位 + 业务动作”硬规则判定。
 
 ## 10. 机构工作台能力映射
 

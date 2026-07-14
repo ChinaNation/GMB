@@ -13,7 +13,7 @@
 
 内部结果入口（不是外部 extrinsic）：
 
-- `apply_institution_assignment_result`：消费普选、互选或合法任免终态结果。
+- `apply_institution_governance_result`：消费已经完成业务流程的通用机构治理结果。
 
 ## 边界
 
@@ -32,8 +32,9 @@
 - `InstitutionInfo` 已直接保存 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account` 三个链上公开字段；运行期注册创建三项必填且全部进入注册局签名域。
 - 法定代表人查询唯一读取本模块 `InstitutionInfo`；`private-admins` 不再保存法定代表人副本或 setter。
 - 机构岗位和任职关系的唯一真源是本模块 `InstitutionRoles` 与 `InstitutionRoleAssignments`；`private-admins` 只保存由有效任职去重得到的钱包账户集合。
-- 普选/互选终态结果由 runtime 路由到本模块；本模块校验机构主账户、岗位状态、任期和账户唯一性，再整体替换目标岗位任职。
-- 写入目标岗位后，从机构全部有效岗位任职重新派生 admins；任职与 admins 同事务提交，失败整体回滚，并保持机构既有 Active 动态阈值。
+- runtime 按机构码把 `InstitutionGovernanceResult` 路由到本模块；单个结果可原子包含动态岗位定义变化、多个岗位的完整目标任职集合和法定代表人三字段整体更新。
+- 每条任职独立携带任期、制度来源和追溯引用；未出现在结果中的岗位保持不变，动态岗位允许暂时空缺，停用岗位必须清空任职。
+- 完整校验后，从机构全部有效岗位任职重新派生 admins；岗位、任职、法定代表人和 admins 同事务提交，失败整体回滚，并保持机构既有 Active 动态阈值。
 
 ## MODULE_TAG
 

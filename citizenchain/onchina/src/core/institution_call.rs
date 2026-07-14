@@ -1,38 +1,19 @@
-//! `propose_create_institution` SCALE call-data 编码器(onchina 侧唯一真源)。
+//! `propose_create_institution` SCALE call-data 编码器。
 //!
-//! onchina 只构造**裸 call data**(pallet/call 前缀 + 19 个参数),
-//! 不拼签名扩展尾、不提交 extrinsic;冷钱包对 origin 冷签后由 CitizenWallet 提交。
-//!
-//! **铁律**:参数顺序与 SCALE 类型必须与链端 `public-manage`/`private-manage`
-//! `propose_create_{public,private}_institution`(call index 5,A1/A2 后)逐字节一致——
-//! 两 pallet call 形态完全相同,仅 pallet 前缀不同(PublicManage=30 / PrivateManage=31),
-//! 由 `institution_code` 经 `is_private_legal_code` 派生(机构管理已拆分公权/私权两 pallet)——
-//! - `institution_code` 是 `[u8;4]` 裸字节,无长度前缀;
-//! - `issuer_main_account` / `signer_pubkey` / `AdminProfile.account` 是 `[u8;32]` 裸字节;
-//! - 所有 `Vec<u8>` / `BoundedVec<u8>`(cid_number / cid_full_name / cid_short_name / town_code /
-//!   legal_representative_name / legal_representative_cid_number /
-//!   register_nonce / signature / issuer_cid_number / scope_*,以及每个 AdminProfile 的
-//!   admin_cid_number / name / role_code / role_name / admin_source_ref)带 `Compact<u32>` 长度前缀;
-//! - `accounts` / `admins` 这类项目列表带 `Compact<u32>` 数量前缀;
-//! - `admins_len` / `threshold` / `term_start` / `term_end` 是 u32 小端;
-//! - `source` 是单字节枚举序号(`AdminSource::Registry` = 1),其后紧跟 `admin_source_ref`。
-//!
-//! `tests` 模块用真实的 `admin_primitives::AdminProfile` 与真实参数类型 `.encode()`
-//! 做逐字节交叉校验,杜绝本编码器与链端 SCALE 静默漂移。
+//! OnChina 只构造裸 call data，不提交 extrinsic。机构初始管理员只通过
+//! 机构岗位 `roles` 与管理员任职 `assignments` 编码，
+//! `admins` 由 entity 从有效任职去重派生。
 
 use codec::{Compact, Encode};
 
-/// PublicManage pallet 在 runtime construct_runtime 中的索引(公权机构生命周期)。
+/// PublicManage pallet 索引。
 pub const PUBLIC_MANAGE_PALLET_INDEX: u8 = 30;
-/// PrivateManage pallet 在 runtime construct_runtime 中的索引(私权机构生命周期)。
+/// PrivateManage pallet 索引。
 pub const PRIVATE_MANAGE_PALLET_INDEX: u8 = 31;
-/// `propose_create_{public,private}_institution` 的 call index(两 pallet 同为 5)。
+/// 公私权机构创建 call index。
 pub const PROPOSE_CREATE_INSTITUTION_CALL_INDEX: u8 = 5;
 
-/// 按机构码派生机构创建调用的目标 pallet 索引:私权法人码→PrivateManage,否则→PublicManage。
-///
-/// 与链端 `is_private_legal_code` 单源一致;前缀由 call data 内的 institution_code
-/// 派生,杜绝调用方手填 pallet 索引导致漂移。
+/// 按机构码派生机构创建目标 pallet。
 pub fn create_institution_pallet_index(institution_code: &[u8; 4]) -> u8 {
     if primitives::cid::code::is_private_legal_code(institution_code) {
         PRIVATE_MANAGE_PALLET_INDEX
@@ -41,76 +22,77 @@ pub fn create_institution_pallet_index(institution_code: &[u8; 4]) -> u8 {
     }
 }
 
-/// `AdminSource` 枚举序号(必须与 admin-primitives 的变体顺序一致)。
-/// Genesis=0 / Registry=1 / InternalVote=2 / MutualElection=3 / PopularElection=4 / NominationAppointment=5。
-/// 全变体保留以锁死链端枚举序号(交叉校验测试逐变体比对 + 穷尽 match 守卫),生产路径只用 Registry。
-#[allow(dead_code)]
+/// 机构岗位状态 SCALE 判别值。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AdminSourceTag {
+#[allow(dead_code)]
+pub enum InstitutionRoleStatusTag {
+    Active = 0,
+    Inactive = 1,
+}
+
+/// 机构任职来源 SCALE 判别值。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum InstitutionAssignmentSourceTag {
     Genesis = 0,
     Registry = 1,
-    InternalVote = 2,
+    PopularElection = 2,
     MutualElection = 3,
-    PopularElection = 4,
-    NominationAppointment = 5,
+    NominationAppointment = 4,
 }
 
-impl AdminSourceTag {
-    fn index(self) -> u8 {
-        self as u8
-    }
+/// 机构任职状态 SCALE 判别值。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum InstitutionAssignmentStatusTag {
+    Active = 0,
+    Ended = 1,
 }
 
-/// 单个创建账户项(链端 `InstitutionInitialAccount`)。
-/// `account_name` 是进链 name 字段;`amount` 是初始余额(分,u128)。
+/// 单个机构初始账户。
 #[derive(Debug, Clone)]
 pub struct InitialAccountArg {
     pub account_name: String,
     pub amount: u128,
 }
 
-/// 单个管理员资料项(链端 `AdminProfile<AccountId>`)。
+/// 单个机构岗位定义，对齐 `entity_primitives::InstitutionRole` 字段顺序。
 #[derive(Debug, Clone)]
-pub struct AdminProfileArg {
-    /// 管理员密码学账户,32 字节裸编码。
-    pub account: [u8; 32],
-    /// 实名锚:注册局签发的 CID 号。
-    pub admin_cid_number: Vec<u8>,
-    /// 姓名快照(来自注册局公民记录)。
-    pub name: Vec<u8>,
-    /// 岗位代码,引用 entity 模块岗位定义;注册局创建暂留空(与创世同)。
+pub struct InstitutionRoleArg {
+    pub cid_number: Vec<u8>,
     pub role_code: Vec<u8>,
-    /// 岗位名称快照(对外法定职务),来自创建表单。
     pub role_name: Vec<u8>,
-    /// 任期开始(天数自纪元;无任期填 0)。
-    pub term_start: u32,
-    /// 任期结束(天数自纪元;无任期填 0)。
-    pub term_end: u32,
-    /// 职务/任期来源。
-    pub source: AdminSourceTag,
-    /// 来源追溯 ID(注册局操作/投票/选举/任免记录);注册局创建暂留空。
-    pub admin_source_ref: Vec<u8>,
+    pub term_required: bool,
+    pub role_status: InstitutionRoleStatusTag,
 }
 
-/// `propose_create_institution` 的完整参数集合。
+/// 单条管理员任职，对齐 `entity_primitives::InstitutionAdminAssignment` 字段顺序。
+#[derive(Debug, Clone)]
+pub struct InstitutionAssignmentArg {
+    pub cid_number: Vec<u8>,
+    pub admin_account: [u8; 32],
+    pub role_code: Vec<u8>,
+    pub term_start: u32,
+    pub term_end: u32,
+    pub assignment_source: InstitutionAssignmentSourceTag,
+    pub assignment_source_ref: Vec<u8>,
+    pub assignment_status: InstitutionAssignmentStatusTag,
+}
+
+/// `propose_create_{public,private}_institution` 完整参数。
 #[derive(Debug, Clone)]
 pub struct ProposeCreateInstitutionArgs {
     pub cid_number: Vec<u8>,
     pub cid_full_name: Vec<u8>,
-    /// 机构简称只取 cid_short_name。
     pub cid_short_name: Vec<u8>,
-    /// 所属镇代码。非镇级机构为空;镇级公权机构由注册局创建时填 3 字节代码。
     pub town_code: Vec<u8>,
-    /// 法定代表人公开姓名。
     pub legal_representative_name: Vec<u8>,
-    /// 法定代表人唯一公民 CID。
     pub legal_representative_cid_number: Vec<u8>,
-    /// 法定代表人唯一钱包账户。
     pub legal_representative_account: [u8; 32],
     pub accounts: Vec<InitialAccountArg>,
     pub institution_code: [u8; 4],
-    pub admins_len: u32,
-    pub admins: Vec<AdminProfileArg>,
+    pub roles: Vec<InstitutionRoleArg>,
+    pub assignments: Vec<InstitutionAssignmentArg>,
     pub threshold: u32,
     pub register_nonce: Vec<u8>,
     pub signature: Vec<u8>,
@@ -121,122 +103,78 @@ pub struct ProposeCreateInstitutionArgs {
     pub scope_city_name: Vec<u8>,
 }
 
-/// 把单个 `AdminProfile` 追加进输出缓冲(字段顺序锁死链端 9 字段结构)。
-fn encode_admin_profile(out: &mut Vec<u8>, profile: &AdminProfileArg) {
-    out.extend_from_slice(&profile.account); // admin_account: [u8;32] 裸字节
-    out.extend(Compact(profile.admin_cid_number.len() as u32).encode());
-    out.extend_from_slice(&profile.admin_cid_number);
-    out.extend(Compact(profile.name.len() as u32).encode()); // admin_name
-    out.extend_from_slice(&profile.name);
-    out.extend(Compact(profile.role_code.len() as u32).encode());
-    out.extend_from_slice(&profile.role_code);
-    out.extend(Compact(profile.role_name.len() as u32).encode());
-    out.extend_from_slice(&profile.role_name);
-    out.extend(profile.term_start.to_le_bytes()); // u32 小端
-    out.extend(profile.term_end.to_le_bytes()); // u32 小端
-    out.push(profile.source.index()); // admin_source: 枚举单字节序号
-    out.extend(Compact(profile.admin_source_ref.len() as u32).encode());
-    out.extend_from_slice(&profile.admin_source_ref);
+fn encode_bytes(out: &mut Vec<u8>, value: &[u8]) {
+    out.extend(Compact(value.len() as u32).encode());
+    out.extend_from_slice(value);
 }
 
-/// QR_V1 链交易动作码:`a = (pallet_index << 8) | call_index`。
-///
-/// 扫码端(CitizenWallet)按 `b.a` 路由 decoder,链交易统一用本公式
-/// (见 `memory/01-architecture/qr/qr-action-registry.md`「链交易动作码」)。
-/// 禁止再为链交易另发明扁平小整数动作码(会与非链动作码 1..7 冲突)。
+fn encode_role(out: &mut Vec<u8>, role: &InstitutionRoleArg) {
+    encode_bytes(out, &role.cid_number);
+    encode_bytes(out, &role.role_code);
+    encode_bytes(out, &role.role_name);
+    out.push(u8::from(role.term_required));
+    out.push(role.role_status as u8);
+}
+
+fn encode_assignment(out: &mut Vec<u8>, assignment: &InstitutionAssignmentArg) {
+    encode_bytes(out, &assignment.cid_number);
+    out.extend_from_slice(&assignment.admin_account);
+    encode_bytes(out, &assignment.role_code);
+    out.extend(assignment.term_start.to_le_bytes());
+    out.extend(assignment.term_end.to_le_bytes());
+    out.push(assignment.assignment_source as u8);
+    encode_bytes(out, &assignment.assignment_source_ref);
+    out.push(assignment.assignment_status as u8);
+}
+
+/// QR 链动作码：`(pallet_index << 8) | call_index`。
 pub const fn chain_action_code(pallet_index: u8, call_index: u8) -> u16 {
-    ((pallet_index as u16) << 8) | (call_index as u16)
+    ((pallet_index as u16) << 8) | call_index as u16
 }
 
-/// 一条链上调用的 QR 动作码 + 裸 SCALE call data。
-///
-/// `action`(b.a)与 `call_data`(b.d)由同一 pallet/call 派生,杜绝两者漂移。
+/// 一条待冷签链调用。
 pub struct ChainCall {
     pub action: u16,
     pub call_data: Vec<u8>,
 }
 
-/// 编码完整 `propose_create_{public,private}_institution` 裸 call data。
-///
-/// 输出 = `[pallet, 0x05]` + 19 个参数(顺序与链端逐字节一致);pallet 由 institution_code
-/// 经 `create_institution_pallet_index` 派生(公权 30→动作码 0x1e05 / 私权 31→0x1f05)。
+/// 编码机构创建调用。字段顺序与 runtime call index 5 完全一致。
 pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) -> ChainCall {
     let pallet_index = create_institution_pallet_index(&args.institution_code);
-    let mut out = Vec::new();
-    out.push(pallet_index);
-    out.push(PROPOSE_CREATE_INSTITUTION_CALL_INDEX);
+    let mut out = vec![pallet_index, PROPOSE_CREATE_INSTITUTION_CALL_INDEX];
 
-    // cid_number: BoundedVec<u8>
-    out.extend(Compact(args.cid_number.len() as u32).encode());
-    out.extend_from_slice(&args.cid_number);
-
-    // cid_full_name: BoundedVec<u8>
-    out.extend(Compact(args.cid_full_name.len() as u32).encode());
-    out.extend_from_slice(&args.cid_full_name);
-
-    // cid_short_name: BoundedVec<u8>
-    out.extend(Compact(args.cid_short_name.len() as u32).encode());
-    out.extend_from_slice(&args.cid_short_name);
-
-    // town_code: BoundedVec<u8>
-    out.extend(Compact(args.town_code.len() as u32).encode());
-    out.extend_from_slice(&args.town_code);
-
-    // 法定代表人三字段是机构公开信息，必须由冷钱包逐项核对。
-    out.extend(Compact(args.legal_representative_name.len() as u32).encode());
-    out.extend_from_slice(&args.legal_representative_name);
-    out.extend(Compact(args.legal_representative_cid_number.len() as u32).encode());
-    out.extend_from_slice(&args.legal_representative_cid_number);
+    encode_bytes(&mut out, &args.cid_number);
+    encode_bytes(&mut out, &args.cid_full_name);
+    encode_bytes(&mut out, &args.cid_short_name);
+    encode_bytes(&mut out, &args.town_code);
+    encode_bytes(&mut out, &args.legal_representative_name);
+    encode_bytes(&mut out, &args.legal_representative_cid_number);
     out.extend_from_slice(&args.legal_representative_account);
 
-    // accounts: BoundedVec<InstitutionInitialAccount> = Compact<N> + N × (name + amount)
     out.extend(Compact(args.accounts.len() as u32).encode());
     for account in &args.accounts {
-        out.extend(Compact(account.account_name.len() as u32).encode());
-        out.extend_from_slice(account.account_name.as_bytes());
-        out.extend(account.amount.to_le_bytes()); // u128 小端
+        encode_bytes(&mut out, account.account_name.as_bytes());
+        out.extend(account.amount.to_le_bytes());
     }
 
-    // institution_code: [u8;4] 裸字节(无长度前缀)
     out.extend_from_slice(&args.institution_code);
-
-    // admins_len: u32 小端
-    out.extend(args.admins_len.to_le_bytes());
-
-    // admins: BoundedVec<AdminProfile> = Compact<N> + N × AdminProfile
-    out.extend(Compact(args.admins.len() as u32).encode());
-    for profile in &args.admins {
-        encode_admin_profile(&mut out, profile);
+    out.extend(Compact(args.roles.len() as u32).encode());
+    for role in &args.roles {
+        encode_role(&mut out, role);
+    }
+    out.extend(Compact(args.assignments.len() as u32).encode());
+    for assignment in &args.assignments {
+        encode_assignment(&mut out, assignment);
     }
 
-    // threshold: u32 小端
     out.extend(args.threshold.to_le_bytes());
-
-    // register_nonce: BoundedVec<u8>
-    out.extend(Compact(args.register_nonce.len() as u32).encode());
-    out.extend_from_slice(&args.register_nonce);
-
-    // signature: BoundedVec<u8>
-    out.extend(Compact(args.signature.len() as u32).encode());
-    out.extend_from_slice(&args.signature);
-
-    // issuer_cid_number: Vec<u8>
-    out.extend(Compact(args.issuer_cid_number.len() as u32).encode());
-    out.extend_from_slice(&args.issuer_cid_number);
-
-    // issuer_main_account: AccountId(32 字节裸)
+    encode_bytes(&mut out, &args.register_nonce);
+    encode_bytes(&mut out, &args.signature);
+    encode_bytes(&mut out, &args.issuer_cid_number);
     out.extend_from_slice(&args.issuer_main_account);
-
-    // signer_pubkey: [u8;32] 裸字节
     out.extend_from_slice(&args.signer_pubkey);
-
-    // scope_province_name: Vec<u8>
-    out.extend(Compact(args.scope_province_name.len() as u32).encode());
-    out.extend_from_slice(&args.scope_province_name);
-
-    // scope_city_name: Vec<u8>
-    out.extend(Compact(args.scope_city_name.len() as u32).encode());
-    out.extend_from_slice(&args.scope_city_name);
+    encode_bytes(&mut out, &args.scope_province_name);
+    encode_bytes(&mut out, &args.scope_city_name);
 
     ChainCall {
         action: chain_action_code(pallet_index, PROPOSE_CREATE_INSTITUTION_CALL_INDEX),
@@ -244,219 +182,185 @@ pub fn encode_propose_create_institution(args: &ProposeCreateInstitutionArgs) ->
     }
 }
 
-// 旧 AdminProfile 编码对拍已退役；岗位/任职现在由 entity 真源测试覆盖。
-#[cfg(all(test, any()))]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use admin_primitives::{AdminProfile, AdminSource};
-    use frame_support::BoundedVec;
+    use entity_primitives::{
+        InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
+        InstitutionRole, InstitutionRoleStatus,
+    };
 
-    /// 用真实链端 `AdminProfile<[u8;32]>` 构造并 `.encode()`,与本编码器的
-    /// `encode_admin_profile` 输出逐字节比对。`AdminProfile` 对 AccountId 泛型,
-    /// 用 `[u8;32]` 作 AccountId 即可复用链端 SCALE,无需 sp-runtime AccountId32。
-    fn real_admin_profile(arg: &AdminProfileArg) -> AdminProfile<[u8; 32]> {
-        AdminProfile {
-            admin_account: arg.account,
-            admin_cid_number: BoundedVec::try_from(arg.admin_cid_number.clone())
-                .expect("admin_cid_number within bound"),
-            admin_name: BoundedVec::try_from(arg.name.clone()).expect("name within bound"),
-            role_code: BoundedVec::try_from(arg.role_code.clone()).expect("role_code within bound"),
-            role_name: BoundedVec::try_from(arg.role_name.clone()).expect("role_name within bound"),
-            term_start: arg.term_start,
-            term_end: arg.term_end,
-            admin_source: match arg.source {
-                AdminSourceTag::Genesis => AdminSource::Genesis,
-                AdminSourceTag::Registry => AdminSource::Registry,
-                AdminSourceTag::InternalVote => AdminSource::InternalVote,
-                AdminSourceTag::MutualElection => AdminSource::MutualElection,
-                AdminSourceTag::PopularElection => AdminSource::PopularElection,
-                AdminSourceTag::NominationAppointment => AdminSource::NominationAppointment,
-            },
-            admin_source_ref: BoundedVec::try_from(arg.admin_source_ref.clone())
-                .expect("admin_source_ref within bound"),
+    fn sample_role() -> InstitutionRoleArg {
+        InstitutionRoleArg {
+            cid_number: b"GD001-COMPANY-0001".to_vec(),
+            role_code: b"DIRECTOR".to_vec(),
+            role_name: "董事".as_bytes().to_vec(),
+            term_required: true,
+            role_status: InstitutionRoleStatusTag::Active,
         }
     }
 
-    fn sample_admin(seed: u8) -> AdminProfileArg {
-        AdminProfileArg {
-            account: [seed; 32],
-            admin_cid_number: format!("CID{seed:03}").into_bytes(),
-            name: "张三".as_bytes().to_vec(),
-            role_code: format!("R{seed:02}").into_bytes(),
-            role_name: "主任".as_bytes().to_vec(),
-            term_start: 19_700 + seed as u32,
-            term_end: 28_900 + seed as u32,
-            source: AdminSourceTag::Registry,
-            admin_source_ref: format!("REG-{seed}").into_bytes(),
+    fn sample_assignment(seed: u8) -> InstitutionAssignmentArg {
+        InstitutionAssignmentArg {
+            cid_number: b"GD001-COMPANY-0001".to_vec(),
+            admin_account: [seed; 32],
+            role_code: b"DIRECTOR".to_vec(),
+            term_start: 20_000,
+            term_end: 21_825,
+            assignment_source: InstitutionAssignmentSourceTag::Registry,
+            assignment_source_ref: b"registry-record-1".to_vec(),
+            assignment_status: InstitutionAssignmentStatusTag::Active,
         }
     }
 
-    /// `AdminSourceTag` 序号必须与链端 `AdminSource` 变体 `.encode()` 单字节一致。
-    ///
-    /// 穷尽 `match` 守卫:链端 `AdminSource` 若新增/重排变体,`tag_for` 非穷尽即
-    /// 编译失败,强制 `AdminSourceTag` 同步——堵住"少一个变体测试仍全绿"的盲区。
     #[test]
-    fn admin_source_tag_matches_runtime_enum_index() {
-        fn tag_for(src: AdminSource) -> AdminSourceTag {
-            match src {
-                AdminSource::Genesis => AdminSourceTag::Genesis,
-                AdminSource::Registry => AdminSourceTag::Registry,
-                AdminSource::InternalVote => AdminSourceTag::InternalVote,
-                AdminSource::MutualElection => AdminSourceTag::MutualElection,
-                AdminSource::PopularElection => AdminSourceTag::PopularElection,
-                AdminSource::NominationAppointment => AdminSourceTag::NominationAppointment,
-            }
-        }
-        let cases = [
-            AdminSource::Genesis,
-            AdminSource::Registry,
-            AdminSource::InternalVote,
-            AdminSource::MutualElection,
-            AdminSource::PopularElection,
-            AdminSource::NominationAppointment,
+    fn role_and_assignment_tags_match_entity_enums() {
+        assert_eq!(
+            InstitutionRoleStatusTag::Active as u8,
+            InstitutionRoleStatus::Active.encode()[0]
+        );
+        assert_eq!(
+            InstitutionRoleStatusTag::Inactive as u8,
+            InstitutionRoleStatus::Inactive.encode()[0]
+        );
+        let sources = [
+            (
+                InstitutionAssignmentSourceTag::Genesis,
+                InstitutionAssignmentSource::Genesis,
+            ),
+            (
+                InstitutionAssignmentSourceTag::Registry,
+                InstitutionAssignmentSource::Registry,
+            ),
+            (
+                InstitutionAssignmentSourceTag::PopularElection,
+                InstitutionAssignmentSource::PopularElection,
+            ),
+            (
+                InstitutionAssignmentSourceTag::MutualElection,
+                InstitutionAssignmentSource::MutualElection,
+            ),
+            (
+                InstitutionAssignmentSourceTag::NominationAppointment,
+                InstitutionAssignmentSource::NominationAppointment,
+            ),
         ];
-        for real in cases {
-            assert_eq!(
-                vec![tag_for(real).index()],
-                real.encode(),
-                "AdminSource 序号漂移: {real:?}"
-            );
+        for (tag, real) in sources {
+            assert_eq!(tag as u8, real.encode()[0]);
         }
+        assert_eq!(
+            InstitutionAssignmentStatusTag::Active as u8,
+            InstitutionAssignmentStatus::Active.encode()[0]
+        );
+        assert_eq!(
+            InstitutionAssignmentStatusTag::Ended as u8,
+            InstitutionAssignmentStatus::Ended.encode()[0]
+        );
     }
 
-    /// 单个 AdminProfile 编码必须与链端真实类型 `.encode()` 逐字节一致。
     #[test]
-    fn admin_profile_encoding_matches_runtime_type() {
-        let arg = sample_admin(7);
-        let mut manual = Vec::new();
-        encode_admin_profile(&mut manual, &arg);
-        let golden = real_admin_profile(&arg).encode();
-        assert_eq!(manual, golden, "AdminProfile SCALE 漂移");
-    }
-
-    /// AdminProfile 列表(BoundedVec<AdminProfile>)整体编码与链端一致(含 Compact 数量前缀)。
-    #[test]
-    fn admin_profile_vec_encoding_matches_runtime_type() {
-        let args = vec![sample_admin(1), sample_admin(2), sample_admin(3)];
-
-        // 本编码器:Compact<N> + N × AdminProfile。
-        let mut manual = Vec::new();
-        manual.extend(Compact(args.len() as u32).encode());
-        for arg in &args {
-            encode_admin_profile(&mut manual, arg);
-        }
-
-        // 链端真实类型:Vec<AdminProfile<[u8;32]>>(SCALE 与 BoundedVec 同布局)。
-        let real: Vec<AdminProfile<[u8; 32]>> = args.iter().map(real_admin_profile).collect();
-        let golden = real.encode();
-
-        assert_eq!(manual, golden, "AdminProfile 列表 SCALE 漂移");
-    }
-
-    /// 完整参数元组按链端参数顺序用真实类型 `.encode()` 拼接,与本编码器去掉 [0x11,0x05]
-    /// 前缀后的输出逐字节一致。这把 cid_short_name 插入位置、accounts(name+amount)、
-    /// institution_code 裸 4 字节、admins(AdminProfile)、issuer/signer 裸 32 字节、
-    /// 各 Vec<u8> 的 Compact 前缀全部锁死到链端 SCALE。
-    #[test]
-    fn full_args_encoding_matches_runtime_tuple_and_prefix() {
-        let args = ProposeCreateInstitutionArgs {
-            cid_number: b"110000200001011234".to_vec(),
-            cid_full_name: "北京市某某有限公司".as_bytes().to_vec(),
-            cid_short_name: "某某公司".as_bytes().to_vec(),
-            town_code: Vec::new(),
-            legal_representative_name: "李法人".as_bytes().to_vec(),
-            legal_representative_cid_number: b"110000CTZN1000000001".to_vec(),
-            legal_representative_account: [0x22u8; 32],
-            accounts: vec![
-                InitialAccountArg {
-                    account_name: "主账户".to_string(),
-                    amount: 1_000_00,
-                },
-                InitialAccountArg {
-                    account_name: "费用账户".to_string(),
-                    amount: 250_50,
-                },
-            ],
-            institution_code: *b"SFLP",
-            admins_len: 2,
-            admins: vec![sample_admin(11), sample_admin(22)],
-            threshold: 2,
-            register_nonce: b"nonce-xyz".to_vec(),
-            signature: vec![0xABu8; 64],
-            issuer_cid_number: b"FRG000000000000001".to_vec(),
-            issuer_main_account: [0x33u8; 32],
-            signer_pubkey: [0x44u8; 32],
-            scope_province_name: "北京市".as_bytes().to_vec(),
-            scope_city_name: "北京市".as_bytes().to_vec(),
+    fn role_and_assignment_encoding_match_entity_types() {
+        let role = sample_role();
+        let mut encoded_role = Vec::new();
+        encode_role(&mut encoded_role, &role);
+        let real_role = InstitutionRole {
+            cid_number: role.cid_number.clone(),
+            role_code: role.role_code.clone(),
+            role_name: role.role_name.clone(),
+            term_required: role.term_required,
+            role_status: InstitutionRoleStatus::Active,
         };
+        assert_eq!(encoded_role, real_role.encode());
 
-        let chain = encode_propose_create_institution(&args);
-        let manual = chain.call_data;
+        let assignment = sample_assignment(7);
+        let mut encoded_assignment = Vec::new();
+        encode_assignment(&mut encoded_assignment, &assignment);
+        let real_assignment = InstitutionAdminAssignment {
+            cid_number: assignment.cid_number.clone(),
+            admin_account: assignment.admin_account,
+            role_code: assignment.role_code.clone(),
+            term_start: assignment.term_start,
+            term_end: assignment.term_end,
+            assignment_source: InstitutionAssignmentSource::Registry,
+            assignment_source_ref: assignment.assignment_source_ref.clone(),
+            assignment_status: InstitutionAssignmentStatus::Active,
+        };
+        assert_eq!(encoded_assignment, real_assignment.encode());
+    }
 
-        // SFLP 是私权法人码 → PrivateManage(31) call 5,前缀 [31,5]、动作码 0x1f05。
-        assert_eq!(
-            &manual[..2],
-            &[
-                PRIVATE_MANAGE_PALLET_INDEX,
-                PROPOSE_CREATE_INSTITUTION_CALL_INDEX
-            ],
-            "私权机构创建前缀必须是 [31,5]"
-        );
-        assert_eq!(
-            chain.action, 0x1f05,
-            "私权机构创建动作码必须 = (31<<8)|5 = 0x1f05"
-        );
+    #[test]
+    fn full_create_payload_uses_roles_and_assignments() {
+        let args = ProposeCreateInstitutionArgs {
+            cid_number: b"GD001-COMPANY-0001".to_vec(),
+            cid_full_name: "测试机构".as_bytes().to_vec(),
+            cid_short_name: "测试".as_bytes().to_vec(),
+            town_code: Vec::new(),
+            legal_representative_name: "法人".as_bytes().to_vec(),
+            legal_representative_cid_number: b"GD001-CTZN-1".to_vec(),
+            legal_representative_account: [9; 32],
+            accounts: vec![InitialAccountArg {
+                account_name: "主账户".to_string(),
+                amount: 111,
+            }],
+            institution_code: *b"SFLP",
+            roles: vec![sample_role()],
+            assignments: vec![sample_assignment(1), sample_assignment(2)],
+            threshold: 2,
+            register_nonce: b"nonce".to_vec(),
+            signature: vec![3; 64],
+            issuer_cid_number: b"issuer".to_vec(),
+            issuer_main_account: [4; 32],
+            signer_pubkey: [5; 32],
+            scope_province_name: "广东省".as_bytes().to_vec(),
+            scope_city_name: "广州市".as_bytes().to_vec(),
+        };
+        let encoded = encode_propose_create_institution(&args);
+        assert_eq!(&encoded.call_data[..2], &[31, 5]);
+        assert_eq!(encoded.action, 0x1f05);
 
-        // 用链端真实类型按参数顺序逐个 .encode() 拼接出 golden(不含前缀)。
-        let real_accounts: Vec<(Vec<u8>, u128)> = args
-            .accounts
+        let real_roles = vec![InstitutionRole {
+            cid_number: args.roles[0].cid_number.clone(),
+            role_code: args.roles[0].role_code.clone(),
+            role_name: args.roles[0].role_name.clone(),
+            term_required: true,
+            role_status: InstitutionRoleStatus::Active,
+        }];
+        let real_assignments = args
+            .assignments
             .iter()
-            .map(|a| (a.account_name.clone().into_bytes(), a.amount))
-            .collect();
-        let real_admins: Vec<AdminProfile<[u8; 32]>> =
-            args.admins.iter().map(real_admin_profile).collect();
+            .map(|assignment| InstitutionAdminAssignment {
+                cid_number: assignment.cid_number.clone(),
+                admin_account: assignment.admin_account,
+                role_code: assignment.role_code.clone(),
+                term_start: assignment.term_start,
+                term_end: assignment.term_end,
+                assignment_source: InstitutionAssignmentSource::Registry,
+                assignment_source_ref: assignment.assignment_source_ref.clone(),
+                assignment_status: InstitutionAssignmentStatus::Active,
+            })
+            .collect::<Vec<_>>();
 
-        let mut golden = Vec::new();
-        golden.extend(args.cid_number.encode());
-        golden.extend(args.cid_full_name.encode());
-        golden.extend(args.cid_short_name.encode());
-        golden.extend(args.town_code.encode());
-        golden.extend(args.legal_representative_name.encode());
-        golden.extend(args.legal_representative_cid_number.encode());
-        golden.extend(args.legal_representative_account.encode());
-        golden.extend(real_accounts.encode());
-        golden.extend(args.institution_code.encode()); // [u8;4] 裸 4 字节
-        golden.extend(args.admins_len.encode());
-        golden.extend(real_admins.encode());
-        golden.extend(args.threshold.encode());
-        golden.extend(args.register_nonce.encode());
-        golden.extend(args.signature.encode());
-        golden.extend(args.issuer_cid_number.encode());
-        golden.extend(args.issuer_main_account.encode()); // [u8;32] 裸 32 字节
-        golden.extend(args.signer_pubkey.encode());
-        golden.extend(args.scope_province_name.encode());
-        golden.extend(args.scope_city_name.encode());
-
-        assert_eq!(&manual[2..], &golden[..], "完整参数 SCALE 与链端类型漂移");
-
-        // 公权码分支:同一编码器换公权机构码必须路由到 PublicManage(30) call 5、动作码 0x1e05。
-        let mut public_args = args;
-        public_args.institution_code = *b"PRC\0"; // 省公民储备银行(公权法人)
-        assert!(!primitives::cid::code::is_private_legal_code(
-            &public_args.institution_code
-        ));
-        let public_chain = encode_propose_create_institution(&public_args);
-        assert_eq!(
-            &public_chain.call_data[..2],
-            &[
-                PUBLIC_MANAGE_PALLET_INDEX,
-                PROPOSE_CREATE_INSTITUTION_CALL_INDEX
-            ],
-            "公权机构创建前缀必须是 [30,5]"
-        );
-        assert_eq!(
-            public_chain.action, 0x1e05,
-            "公权机构创建动作码必须 = (30<<8)|5 = 0x1e05"
-        );
+        let real_accounts = vec![("主账户".as_bytes().to_vec(), 111_u128)];
+        let mut expected = vec![31, 5];
+        expected.extend(args.cid_number.encode());
+        expected.extend(args.cid_full_name.encode());
+        expected.extend(args.cid_short_name.encode());
+        expected.extend(args.town_code.encode());
+        expected.extend(args.legal_representative_name.encode());
+        expected.extend(args.legal_representative_cid_number.encode());
+        expected.extend(args.legal_representative_account.encode());
+        expected.extend(real_accounts.encode());
+        expected.extend(args.institution_code.encode());
+        expected.extend(real_roles.encode());
+        expected.extend(real_assignments.encode());
+        expected.extend(args.threshold.encode());
+        expected.extend(args.register_nonce.encode());
+        expected.extend(args.signature.encode());
+        expected.extend(args.issuer_cid_number.encode());
+        expected.extend(args.issuer_main_account.encode());
+        expected.extend(args.signer_pubkey.encode());
+        expected.extend(args.scope_province_name.encode());
+        expected.extend(args.scope_city_name.encode());
+        assert_eq!(encoded.call_data, expected);
     }
 }

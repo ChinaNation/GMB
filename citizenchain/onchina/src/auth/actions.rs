@@ -106,13 +106,6 @@ struct CityRegistryIdPayload {
     id: u64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ReplaceFederalRegistryActionPayload {
-    id: u64,
-    admin_account: String,
-}
-
 struct ActionPreview {
     before_hash: String,
     after_hash: String,
@@ -180,18 +173,6 @@ async fn ensure_signer_on_chain_admin(
     signer_pubkey: &str,
 ) -> Result<(), axum::response::Response> {
     ensure_pubkey_on_chain_admin(db, signer_pubkey, "not an on-chain admin").await
-}
-
-async fn ensure_replace_target_on_chain_admin(
-    db: &Db,
-    input: &ReplaceFederalRegistryActionPayload,
-) -> Result<(), axum::response::Response> {
-    ensure_pubkey_on_chain_admin(
-        db,
-        input.admin_account.as_str(),
-        "replacement admin is not an on-chain admin",
-    )
-    .await
 }
 
 pub(crate) async fn prepare_admin_action(
@@ -377,22 +358,6 @@ pub(crate) async fn commit_admin_action(
     }
     if let Err(resp) = ensure_signer_on_chain_admin(&state.db, signer_pubkey).await {
         return resp;
-    }
-    if action_type == AdminActionType::ReplaceFederalRegistry {
-        let input: ReplaceFederalRegistryActionPayload =
-            match serde_json::from_value(challenge.request_payload.clone()) {
-                Ok(v) => v,
-                Err(_) => {
-                    return api_error(
-                        StatusCode::BAD_REQUEST,
-                        1001,
-                        "invalid federal admin replacement payload",
-                    );
-                }
-            };
-        if let Err(resp) = ensure_replace_target_on_chain_admin(&state.db, &input).await {
-            return resp;
-        }
     }
     // 闭包 move 会拿走 action_type,克隆一份供注销动作的 commit 后处理用。
     let action_type_for_credential = action_type.clone();
@@ -647,18 +612,6 @@ fn preview_action_conn(
                 before_hash,
                 after_hash,
                 target: city_registry.admin_account,
-                auth_type: action_type.auth_type(),
-            })
-        }
-        AdminActionType::ReplaceFederalRegistry => {
-            let input: ReplaceFederalRegistryActionPayload =
-                serde_json::from_value(payload.clone())
-                    .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
-            let (before, after, target) = preview_replace_federal_registry_conn(conn, ctx, &input)?;
-            Ok(ActionPreview {
-                before_hash: hash_serialized(&before),
-                after_hash: hash_serialized(&after),
-                target: target.clone(),
                 auth_type: action_type.auth_type(),
             })
         }
@@ -964,101 +917,6 @@ fn require_manageable_city_registry_conn(
     Ok(city_registry)
 }
 
-fn validate_replacement_federal_registry_account_conn(
-    conn: &mut Client,
-    current: &AdminUser,
-    input: &ReplaceFederalRegistryActionPayload,
-) -> Result<String, String> {
-    let Some(admin_account) = normalize_admin_account(input.admin_account.as_str()) else {
-        return Err("http:bad_request:admin_account format invalid".to_string());
-    };
-    if same_admin_account(admin_account.as_str(), current.admin_account.as_str()) {
-        return Err("http:bad_request:replacement admin_account must be different".to_string());
-    }
-    if let Some(existing) = repo::resolve_admin_account_key_conn(conn, admin_account.as_str())? {
-        let institution_code = repo::get_admin_by_account_conn(conn, existing.as_str())?
-            .map(|v| v.institution_code)
-            .unwrap_or_else(|| "FRG".to_string());
-        return Err(duplicate_admin_account_error(&institution_code));
-    }
-    Ok(admin_account)
-}
-
-fn find_federal_registry_by_id_conn(
-    conn: &mut Client,
-    id: u64,
-) -> Result<Option<AdminUser>, String> {
-    repo::get_admin_by_id_and_registry_org_conn(conn, id, "FRG")
-}
-
-fn require_manageable_federal_registry_conn(
-    conn: &mut Client,
-    ctx: &AdminAuthContext,
-    id: u64,
-) -> Result<(AdminUser, String), String> {
-    let actor_province_name = ctx
-        .scope_province_name
-        .clone()
-        .ok_or_else(|| "http:forbidden:admin province scope missing".to_string())?;
-    let admin = find_federal_registry_by_id_conn(conn, id)?
-        .ok_or_else(|| "http:not_found:federal admin not found".to_string())?;
-    let target_province = repo::province_scope_for_registry_org_conn(
-        conn,
-        &admin.admin_account,
-        &admin.institution_code,
-    )?
-    .ok_or_else(|| "http:conflict:federal admin province missing".to_string())?;
-    if target_province != actor_province_name {
-        return Err(
-            "http:forbidden:cannot manage other province federal registry admins".to_string(),
-        );
-    }
-    Ok((admin, target_province))
-}
-
-fn federal_registry_row_value(
-    admin: &AdminUser,
-    province_name: String,
-) -> Result<serde_json::Value, String> {
-    serde_json::to_value(FederalRegistryAdminRow {
-        id: admin.id,
-        province_name,
-        admin_account: admin.admin_account.clone(),
-        admin_name: admin.admin_name.clone(),
-        admin_cid_number: String::new(),
-        name: String::new(),
-        role_name: String::new(),
-        term_start: 0,
-        term_end: 0,
-        origin: u8::MAX,
-        origin_label: String::new(),
-        balance_fen: None,
-        built_in: admin.built_in,
-        created_at: admin.created_at,
-        updated_at: admin.updated_at,
-    })
-    .map_err(|e| format!("encode federal admin failed: {e}"))
-}
-
-fn preview_replace_federal_registry_conn(
-    conn: &mut Client,
-    ctx: &AdminAuthContext,
-    input: &ReplaceFederalRegistryActionPayload,
-) -> Result<(serde_json::Value, serde_json::Value, String), String> {
-    let (admin, province) = require_manageable_federal_registry_conn(conn, ctx, input.id)?;
-    let replacement_account =
-        validate_replacement_federal_registry_account_conn(conn, &admin, input)?;
-    let before = federal_registry_row_value(&admin, province.clone())?;
-    let after = json!({
-        "replaced": true,
-        "id": input.id,
-        "province_name": province,
-        "old_admin_account": admin.admin_account.clone(),
-        "new_admin_account": replacement_account,
-    });
-    Ok((before, after, admin.admin_account))
-}
-
 fn recheck_preview_conn(
     conn: &mut Client,
     ctx: &AdminAuthContext,
@@ -1092,12 +950,6 @@ fn apply_action_conn(
                 serde_json::from_value(challenge.request_payload.clone())
                     .map_err(|_| "http:bad_request:invalid delete payload".to_string())?;
             apply_delete_city_registry_conn(conn, ctx, &input)
-        }
-        AdminActionType::ReplaceFederalRegistry => {
-            let input: ReplaceFederalRegistryActionPayload =
-                serde_json::from_value(challenge.request_payload.clone())
-                    .map_err(|_| "http:bad_request:invalid federal admin payload".to_string())?;
-            apply_replace_federal_registry_conn(conn, ctx, &input)
         }
         AdminActionType::InstitutionDeregister | AdminActionType::InstitutionAccountDeregister => {
             let target = validate_institution_deregister_conn(
@@ -1216,51 +1068,6 @@ fn apply_delete_city_registry_conn(
     )
     .map_err(|e| format!("delete city admin failed: {e}"))?;
     Ok(json!({ "deleted": true, "admin_account": admin_account }))
-}
-
-fn apply_replace_federal_registry_conn(
-    conn: &mut Client,
-    ctx: &AdminAuthContext,
-    input: &ReplaceFederalRegistryActionPayload,
-) -> Result<serde_json::Value, String> {
-    let (mut admin, province) = require_manageable_federal_registry_conn(conn, ctx, input.id)?;
-    let old_account = admin.admin_account.clone();
-    let replacement_account =
-        validate_replacement_federal_registry_account_conn(conn, &admin, input)?;
-    repo::delete_admin_runtime_state_conn(conn, old_account.as_str())?;
-    for mut city_registry in
-        repo::list_city_registry_admins_by_creator_conn(conn, old_account.as_str())?
-    {
-        city_registry.created_by = replacement_account.clone();
-        city_registry.updated_at = Some(Utc::now());
-        repo::upsert_admin_conn(conn, &city_registry)?;
-    }
-    admin.admin_account = replacement_account.clone();
-    admin.admin_name = String::new();
-    admin.built_in = false;
-    admin.created_by = ctx.admin_account.clone();
-    admin.updated_at = Some(Utc::now());
-    conn.execute(
-        "UPDATE admins
-         SET admin_account = $1, admin_name = $2, built_in = $3, created_by = $4, updated_at = $5
-         WHERE admin_id = $6",
-        &[
-            &admin.admin_account,
-            &admin.admin_name,
-            &admin.built_in,
-            &admin.created_by,
-            &admin.updated_at,
-            &(admin.id as i64),
-        ],
-    )
-    .map_err(|e| format!("replace federal admin failed: {e}"))?;
-    repo::replace_federal_registry_admin_scope_conn(
-        conn,
-        old_account.as_str(),
-        replacement_account.as_str(),
-        province.as_str(),
-    )?;
-    federal_registry_row_value(&admin, province)
 }
 
 fn hash_serialized<T: Serialize>(value: &T) -> String {

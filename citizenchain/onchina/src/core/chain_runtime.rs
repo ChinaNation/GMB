@@ -893,7 +893,7 @@ fn blake2_256(input: &[u8]) -> [u8; 32] {
 // 链上管理员集合读取(去中心化鉴权)
 //
 // 真源:机构 Active 管理员集合落链端两个机构 pallet 的 `AdminAccounts` storage——
-// `PublicAdmins`(公权法人,含固定治理档 NRC/PRC/PRB/NJD 与 FRG 省级组)、
+// `PublicAdmins`(公权法人,含固定治理档 NRC/PRC/PRB/NJD/FRG)、
 // `PrivateAdmins`(私权法人:股权/股份/有限合伙/公益/协会/私立学校等)。
 // 节点按自身机构码路由到对应 pallet,登录验签后比对该集合放行,
 // 本地 admins 表仅作元数据/省映射缓存。个人多签 PMUL 不在控制台范围。
@@ -911,51 +911,14 @@ pub(crate) const PERSONAL_MULTISIG_LOGIN_UNSUPPORTED: &str =
 /// `AdminAccountStatus::Active` 的 SCALE 判别式(Pending=0 / Active=1 / Closed=2)。
 const ADMIN_STATUS_ACTIVE: u8 = 1;
 
-/// 链上机构管理员资料解码镜像(对齐 runtime `admin-primitives::AdminProfile` 9 字段)。
+/// 链上机构 `InstitutionAdminAccount` 解码镜像。
 ///
-/// **铁律**:字段顺序与类型必须与 runtime `AdminProfile` 逐字节一致——
-/// `account=[u8;32]` 无前缀;`admin_cid_number`/`name`/`role_code`/`role_name`/`admin_source_ref`
-/// 为 `BoundedVec<u8>`,与 `Vec<u8>` SCALE 编码相同(Compact 长度 + 字节);
-/// `term_start`/`term_end=u32`;`AdminSource` 枚举 1 字节判别(其后紧跟 `admin_source_ref`)。
-/// membership 只取 `account`,资料字段供展示。
-#[derive(Debug, Decode)]
-struct OnChainAdminProfile {
-    account: [u8; 32],
-    admin_cid_number: Vec<u8>,
-    // name/role_name 供管理员列表与大屏只读看板席位展示读取。
-    name: Vec<u8>,
-    #[allow(dead_code)]
-    role_code: Vec<u8>,
-    role_name: Vec<u8>,
-    term_start: u32,
-    term_end: u32,
-    source: u8,
-    #[allow(dead_code)]
-    admin_source_ref: Vec<u8>,
-}
-
-/// 链上 `AdminAccount` 解码镜像。
-///
-/// **铁律**:字段顺序与类型必须与 runtime `admin-primitives::AdminAccount` 逐字节一致——
-/// 前导 `cid_number=BoundedVec<u8>`(Compact 长度前缀;个人多签为空);`InstitutionCode=[u8;4]`
-/// 无前缀;`AdminAccountKind`/`AdminAccountStatus` 枚举各 1 字节判别;机构(public/private)
-/// 管理员集合为 `BoundedVec<AdminProfile>`(A2);`BlockNumberFor=u32`。任一字段宽度/顺序漂移
-/// 都会解码错位 → membership 误判。
+/// 字段固定为 CID、机构码、去重钱包集合、生命周期；岗位资料只在 entity storage。
 #[derive(Debug, Decode)]
 struct OnChainAdminAccount {
-    #[allow(dead_code)]
     cid_number: Vec<u8>,
-    #[allow(dead_code)]
     institution_code: [u8; 4],
-    #[allow(dead_code)]
-    kind: u8,
-    admins: Vec<OnChainAdminProfile>,
-    #[allow(dead_code)]
-    creator: [u8; 32],
-    #[allow(dead_code)]
-    created_at: u32,
-    #[allow(dead_code)]
-    updated_at: u32,
+    admins: Vec<[u8; 32]>,
     status: u8,
 }
 
@@ -970,7 +933,7 @@ pub(crate) enum AdminPallet {
 
 impl AdminPallet {
     /// construct_runtime 中的 pallet 名(subxt dynamic storage 寻址用)。
-    fn pallet_name(self) -> &'static str {
+    pub(crate) fn pallet_name(self) -> &'static str {
         match self {
             AdminPallet::PublicAdmins => "PublicAdmins",
             AdminPallet::PrivateAdmins => "PrivateAdmins",
@@ -988,8 +951,7 @@ pub(crate) struct NodeInstitutionIdentity {
     pub(crate) main_account: [u8; 32],
     /// 联邦注册局专用:本节点所辖省的链上省码([u8;2]);其它机构为 `None`。
     ///
-    /// 链上 FRG 215 人按 43 省切组,Active 集合落 `PublicAdmins::FederalRegistryProvinceGroups`
-    /// (键=`ProvinceCode`),**不在** `AdminAccounts`。本字段来自绑定候选的链上省组键。
+    /// 联邦注册局节点辖省。管理员集合仍是唯一 FRG `AdminAccounts`，省界由 entity 岗位表达。
     pub(crate) frg_province_code: Option<[u8; 2]>,
 }
 
@@ -1083,19 +1045,15 @@ pub(crate) fn identity_from_binding_parts(
         .map(parse_hex_2)
         .transpose()
         .map_err(|_| "binding frg_province_code must be 2-byte hex".to_string())?;
-    let main_account = if frg_code.is_some() {
-        [0_u8; 32]
-    } else {
-        let raw = institution_main_account
-            .ok_or_else(|| "binding institution_main_account is required".to_string())?;
-        parse_sr25519_pubkey_bytes(raw)
-            .ok_or_else(|| "binding institution_main_account must be 32-byte hex".to_string())?
-    };
+    let raw = institution_main_account
+        .ok_or_else(|| "binding institution_main_account is required".to_string())?;
+    let main_account = parse_sr25519_pubkey_bytes(raw)
+        .ok_or_else(|| "binding institution_main_account must be 32-byte hex".to_string())?;
     let cid_number = institution_cid_number
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .map(str::to_string);
-    if frg_code.is_none() && cid_number.is_none() {
+    if cid_number.is_none() {
         return Err("binding institution_cid_number is required".to_string());
     }
     Ok(NodeInstitutionIdentity {
@@ -1186,10 +1144,7 @@ pub(crate) fn storage_key_suffix<const N: usize>(key_bytes: &[u8]) -> Result<[u8
 }
 
 fn contains_admin(decoded: &OnChainAdminAccount, target: &[u8; 32]) -> bool {
-    decoded
-        .admins
-        .iter()
-        .any(|profile| &profile.account == target)
+    decoded.admins.iter().any(|account| account == target)
 }
 
 /// 用冷钱包签名账户反查其所属的链上 active admin 机构集合。
@@ -1458,30 +1413,6 @@ pub(crate) async fn find_active_admin_memberships(
 
     let mut memberships = Vec::new();
     let mut blocked_login_reason: Option<&'static str> = None;
-    let frg_query = dynamic::storage(
-        AdminPallet::PublicAdmins.pallet_name(),
-        "FederalRegistryProvinceGroups",
-        Vec::<dynamic::Value>::new(),
-    );
-    let mut frg_iter = storage
-        .iter(frg_query)
-        .await
-        .map_err(|e| format!("iterate federal registry province groups failed: {e}"))?;
-    while let Some(item) = frg_iter.next().await {
-        let kv = item.map_err(|e| format!("read federal registry province group failed: {e}"))?;
-        let mut raw = kv.value.encoded();
-        let decoded = OnChainAdminAccount::decode(&mut raw)
-            .map_err(|e| format!("decode federal registry province group failed: {e}"))?;
-        if decoded.status == ADMIN_STATUS_ACTIVE && contains_admin(&decoded, &target) {
-            let province_code = storage_key_suffix::<2>(&kv.key_bytes)?;
-            memberships.push(ActiveAdminMembership {
-                institution_code: FRG_CODE,
-                main_account: None,
-                frg_province_code: Some(province_code),
-            });
-        }
-    }
-
     for pallet in [AdminPallet::PublicAdmins, AdminPallet::PrivateAdmins] {
         let query = dynamic::storage(
             pallet.pallet_name(),
@@ -1511,6 +1442,22 @@ pub(crate) async fn find_active_admin_memberships(
                 continue;
             }
             let main_account = storage_key_suffix::<32>(&kv.key_bytes)?;
+            if decoded.institution_code == FRG_CODE {
+                let province_codes =
+                    crate::institution::admins::chain_roles::fetch_frg_province_codes_for_admin(
+                        &decoded.cid_number,
+                        target,
+                    )
+                    .await?;
+                for province_code in province_codes {
+                    memberships.push(ActiveAdminMembership {
+                        institution_code: FRG_CODE,
+                        main_account: Some(main_account),
+                        frg_province_code: Some(province_code),
+                    });
+                }
+                continue;
+            }
             memberships.push(ActiveAdminMembership {
                 institution_code: decoded.institution_code,
                 main_account: Some(main_account),
@@ -1531,10 +1478,7 @@ pub(crate) async fn find_active_admin_memberships(
 
 /// 读取本节点机构的链上 Active 管理员公钥集合(0x 小写 hex 列表)。
 ///
-/// 定位口径按机构分流:
-/// - **联邦注册局(FRG)**:Active 集合落 `PublicAdmins::FederalRegistryProvinceGroups`
-///   (键=本节点省码 `ProvinceCode`),**不在** `AdminAccounts`——读单一省组。
-/// - **其它机构**:按候选 pallet 顺序探测 `<Pallet>::AdminAccounts`(键=机构主账户,全局唯一),
+/// 按候选 pallet 顺序探测 `<Pallet>::AdminAccounts`(键=机构主账户,全局唯一),
 ///   命中首个存在且 Active 的集合即返回。
 ///
 /// 返回:`Ok(Some(set))`=命中 Active 集合;`Ok(None)`=不存在或非 Active;`Err`=链不可达或解码失败。
@@ -1552,26 +1496,17 @@ pub(crate) async fn fetch_active_admins_onchain(
         .await
         .map_err(|e| format!("get latest chain storage failed: {e}"))?;
 
-    // 候选 storage 地址:FRG → 省级组(键=省码);其它 → 各候选 pallet 的 AdminAccounts(键=主账户)。
-    let addresses = if let Some(province_code) = identity.frg_province_code {
-        vec![dynamic::storage(
-            AdminPallet::PublicAdmins.pallet_name(),
-            "FederalRegistryProvinceGroups",
-            vec![dynamic::Value::from_bytes(province_code)],
-        )]
-    } else {
-        identity
-            .admin_pallets
-            .iter()
-            .map(|pallet| {
-                dynamic::storage(
-                    pallet.pallet_name(),
-                    "AdminAccounts",
-                    vec![dynamic::Value::from_bytes(identity.main_account)],
-                )
-            })
-            .collect::<Vec<_>>()
-    };
+    let addresses = identity
+        .admin_pallets
+        .iter()
+        .map(|pallet| {
+            dynamic::storage(
+                pallet.pallet_name(),
+                "AdminAccounts",
+                vec![dynamic::Value::from_bytes(identity.main_account)],
+            )
+        })
+        .collect::<Vec<_>>();
 
     for address in &addresses {
         let Some(thunk) = storage
@@ -1587,237 +1522,51 @@ pub(crate) async fn fetch_active_admins_onchain(
         if decoded.status != ADMIN_STATUS_ACTIVE {
             continue;
         }
-        // membership 只认账户:从 AdminProfile 取 account,资料字段(姓名/职务/任期)不参与登录闸。
-        let admins = decoded
-            .admins
+        let cid_number = decoded.cid_number;
+        let mut admin_accounts = decoded.admins;
+        if let Some(province_code) = identity.frg_province_code {
+            let province_admins =
+                crate::institution::admins::chain_roles::fetch_frg_admins_for_province(
+                    &cid_number,
+                    province_code,
+                )
+                .await?;
+            admin_accounts.retain(|account| province_admins.contains(account));
+        }
+        let admins = admin_accounts
             .iter()
-            .map(|profile| format!("0x{}", hex::encode(profile.account)))
+            .map(|account| format!("0x{}", hex::encode(account)))
             .collect();
         return Ok(Some(admins));
     }
     Ok(None)
 }
 
-/// 链上管理员资料只读投影(供大屏看板席位展示;姓名/职务/任期为 UTF-8 有损解码)。
-#[derive(Debug, Clone)]
-pub(crate) struct OnChainAdminProfileView {
-    /// 管理员账户(0x 小写 hex)。
-    pub(crate) account_hex: String,
-    /// 管理员实名锚:注册局签发的 CID 号。
-    pub(crate) admin_cid_number: String,
-    /// 姓名快照(链上 `AdminProfile::admin_name`)。
-    pub(crate) name: String,
-    /// 对外法定职务(链上 `AdminProfile::role_name`)。
-    pub(crate) role_name: String,
-    /// 任期开始(天数自纪元;无任期为 0)。
-    pub(crate) term_start: u32,
-    /// 任期结束(天数自纪元;无任期为 0)。
-    pub(crate) term_end: u32,
-    /// 职务/任期来源判别值。
-    pub(crate) origin: u8,
-    /// 来源中文标签;未知来源留空。
-    pub(crate) origin_label: String,
-}
-
-/// 联邦注册局单省 5 人组的链上只读投影。
-///
-/// `province_code` 是 `PublicAdmins::FederalRegistryProvinceGroups` 的链上键,
-/// `province_name` 来自 `PROVINCE_CODE_INFOS`。这组字段只服务列表展示和同省操作校验,
-/// 不改变管理员集合的链上唯一真源。
-#[derive(Debug, Clone)]
-pub(crate) struct FederalRegistryProvinceAdminProfiles {
-    pub(crate) province_code: [u8; 2],
-    pub(crate) province_name: String,
-    pub(crate) profiles: Vec<OnChainAdminProfileView>,
-}
-
-fn admin_origin_label(source: u8) -> &'static str {
-    match source {
-        0 => "创世",
-        1 => "注册局",
-        2 => "内部投票",
-        3 => "互选",
-        4 => "普选",
-        _ => "",
-    }
-}
-
-fn admin_profile_views(decoded: &OnChainAdminAccount) -> Vec<OnChainAdminProfileView> {
-    decoded
-        .admins
-        .iter()
-        .map(|profile| OnChainAdminProfileView {
-            account_hex: format!("0x{}", hex::encode(profile.account)),
-            admin_cid_number: String::from_utf8_lossy(&profile.admin_cid_number).to_string(),
-            name: String::from_utf8_lossy(&profile.name).to_string(),
-            role_name: String::from_utf8_lossy(&profile.role_name).to_string(),
-            term_start: profile.term_start,
-            term_end: profile.term_end,
-            origin: profile.source,
-            origin_label: admin_origin_label(profile.source).to_string(),
-        })
-        .collect()
-}
-
-/// 读取本节点机构的链上 Active 管理员**资料**集合(账户 + 姓名 + 职务 + 任期)。
-///
-/// 与 `fetch_active_admins_onchain`(只取账户,用于登录闸)同一 storage 定位口径,
-/// 但保留 `AdminProfile` 的展示字段供大屏席位板呈现。定位分流:FRG→省级组;其它→候选 pallet
-/// 的 `AdminAccounts`(键=机构主账户)。`Ok(Some(set))`=命中 Active 集合;`Ok(None)`=不存在/非 Active。
-pub(crate) async fn fetch_active_admin_profiles_onchain(
-    identity: &NodeInstitutionIdentity,
-) -> Result<Option<Vec<OnChainAdminProfileView>>, String> {
-    let ws_url = super::chain_url::chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("connect chain ws for admin profiles failed: {e}"))?;
-    let storage = client
-        .storage()
-        .at_latest()
-        .await
-        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
-
-    let addresses = if let Some(province_code) = identity.frg_province_code {
-        vec![dynamic::storage(
-            AdminPallet::PublicAdmins.pallet_name(),
-            "FederalRegistryProvinceGroups",
-            vec![dynamic::Value::from_bytes(province_code)],
-        )]
-    } else {
-        identity
-            .admin_pallets
-            .iter()
-            .map(|pallet| {
-                dynamic::storage(
-                    pallet.pallet_name(),
-                    "AdminAccounts",
-                    vec![dynamic::Value::from_bytes(identity.main_account)],
-                )
-            })
-            .collect::<Vec<_>>()
-    };
-
-    for address in &addresses {
-        let Some(thunk) = storage
-            .fetch(address)
-            .await
-            .map_err(|e| format!("fetch on-chain admin profiles failed: {e}"))?
-        else {
-            continue;
-        };
-        let mut raw = thunk.encoded();
-        let decoded = OnChainAdminAccount::decode(&mut raw)
-            .map_err(|e| format!("decode on-chain admin profiles failed: {e}"))?;
-        if decoded.status != ADMIN_STATUS_ACTIVE {
-            continue;
-        }
-        let profiles = admin_profile_views(&decoded);
-        return Ok(Some(profiles));
-    }
-    Ok(None)
-}
-
-/// 读取全部联邦注册局省级 5 人组管理员资料。
-///
-/// FRG 的链上 Active 集合不是一个全局 `AdminAccounts`,而是按 43 个
-/// `ProvinceCode` 拆在 `FederalRegistryProvinceGroups`。列表页需要全量目录,
-/// 所以这里逐省读取;任一省组缺失会以空组返回,调用方按链上现状展示。
-pub(crate) async fn fetch_all_federal_registry_admin_profiles(
-) -> Result<Vec<FederalRegistryProvinceAdminProfiles>, String> {
-    let ws_url = super::chain_url::chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("connect chain ws for all federal registry profiles failed: {e}"))?;
-    let storage = client
-        .storage()
-        .at_latest()
-        .await
-        .map_err(|e| format!("get latest chain storage failed: {e}"))?;
-
-    let mut groups = Vec::with_capacity(primitives::cid::code::PROVINCE_CODE_INFOS.len());
-    for info in primitives::cid::code::PROVINCE_CODE_INFOS {
-        let address = dynamic::storage(
-            AdminPallet::PublicAdmins.pallet_name(),
-            "FederalRegistryProvinceGroups",
-            vec![dynamic::Value::from_bytes(info.province_code)],
-        );
-        let profiles = match storage
-            .fetch(&address)
-            .await
-            .map_err(|e| format!("fetch all federal registry province profiles failed: {e}"))?
-        {
-            Some(thunk) => {
-                let mut raw = thunk.encoded();
-                let decoded = OnChainAdminAccount::decode(&mut raw).map_err(|e| {
-                    format!("decode all federal registry province profiles failed: {e}")
-                })?;
-                if decoded.status == ADMIN_STATUS_ACTIVE {
-                    admin_profile_views(&decoded)
-                } else {
-                    Vec::new()
-                }
-            }
-            None => Vec::new(),
-        };
-        groups.push(FederalRegistryProvinceAdminProfiles {
-            province_code: info.province_code,
-            province_name: info.province_name.to_string(),
-            profiles,
-        });
-    }
-    Ok(groups)
-}
-
-// 旧 AdminProfile 镜像对拍已退役；机构 admins 现在只编码钱包账户集合。
-#[cfg(all(test, any()))]
+#[cfg(test)]
 mod tests {
     use super::{
         deregistration_payload_digest, is_production_mode, parse_hex_hash32,
         trusted_production_chain_by_hash,
     };
 
-    /// 跨真类型对拍:用真 runtime `AdminAccount<Vec<AdminProfile>>` 编码,经 onchina
-    /// `OnChainAdminAccount` 镜像解码,断言取出的 account/status 正确——锁死登录闸读
-    /// A2 后管理员资料形态的字节对齐,任何字段漂移此断言立即红。
+    /// 锁定机构管理员账户的四字段 SCALE 布局；岗位字段不得重新塞回管理员集合。
     #[test]
-    fn onchain_admin_account_mirror_matches_runtime_adminprofile() {
-        use admin_primitives::{
-            AdminAccount, AdminAccountKind, AdminAccountStatus, AdminProfile, AdminSource,
-        };
+    fn onchain_institution_admin_account_decodes_wallets_only() {
         use codec::{Decode, Encode};
-        use frame_support::BoundedVec;
 
-        let profile = AdminProfile::<[u8; 32]> {
-            admin_account: [0x42; 32],
-            admin_cid_number: BoundedVec::try_from(b"LN001-AAAAA-000000001-2026".to_vec()).unwrap(),
-            admin_name: BoundedVec::try_from("张三".as_bytes().to_vec()).unwrap(),
-            role_code: BoundedVec::try_from(b"R01".to_vec()).unwrap(),
-            role_name: BoundedVec::try_from("局长".as_bytes().to_vec()).unwrap(),
-            term_start: 20_100,
-            term_end: 21_561,
-            admin_source: AdminSource::Registry,
-            admin_source_ref: BoundedVec::try_from(b"REG-1".to_vec()).unwrap(),
-        };
-        let account = AdminAccount::<Vec<AdminProfile<[u8; 32]>>, [u8; 32], u32> {
-            cid_number: BoundedVec::try_from(b"CREG-AAAAA-000000001-2026".to_vec()).unwrap(),
-            institution_code: *b"CREG",
-            kind: AdminAccountKind::PublicInstitution,
-            admins: vec![profile],
-            creator: [0x01; 32],
-            created_at: 7,
-            updated_at: 9,
-            status: AdminAccountStatus::Active,
-        };
-        let bytes = account.encode();
+        let bytes = (
+            b"CREG-AAAAA-000000001-2026".to_vec(),
+            *b"CREG",
+            vec![[0x42u8; 32]],
+            super::ADMIN_STATUS_ACTIVE,
+        )
+            .encode();
         let decoded = super::OnChainAdminAccount::decode(&mut &bytes[..])
-            .expect("onchina mirror must decode runtime AdminAccount<AdminProfile>");
+            .expect("institution admin account mirror must decode wallet-only layout");
         assert_eq!(decoded.institution_code, *b"CREG");
-        assert_eq!(decoded.creator, [0x01; 32]);
-        assert_eq!(decoded.created_at, 7);
-        assert_eq!(decoded.updated_at, 9);
         assert_eq!(decoded.status, super::ADMIN_STATUS_ACTIVE);
         assert_eq!(decoded.admins.len(), 1);
-        assert_eq!(decoded.admins[0].account, [0x42; 32]);
+        assert_eq!(decoded.admins[0], [0x42; 32]);
     }
 
     #[test]

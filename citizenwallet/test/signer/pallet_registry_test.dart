@@ -17,13 +17,11 @@ void main() {
         PalletRegistry.resolutionDestroPallet,
         PalletRegistry.personalManagePallet,
         PalletRegistry.personalAdminsPallet,
-        PalletRegistry.publicAdminsPallet,
-        PalletRegistry.privateAdminsPallet,
         PalletRegistry.grandpaKeyChangePallet,
         PalletRegistry.resolutionIssuancePallet,
         PalletRegistry.offchainTransactionPallet,
       };
-      expect(pallets.length, 14);
+      expect(pallets.length, 12);
     });
 
     test('投票引擎 sub-pallet call_index', () {
@@ -53,15 +51,7 @@ void main() {
       expect(PalletRegistry.proposeSafetyFundCall, 1);
       expect(PalletRegistry.proposeSweepCall, 2);
 
-      // Public/Private Admins: call_index=0 是管理员集合变更，call_index=1 留洞不复用。
-      expect(PalletRegistry.isAdminSetChangePallet(12), isFalse);
-      expect(PalletRegistry.isAdminSetChangePallet(27), isTrue);
-      expect(PalletRegistry.isAdminSetChangePallet(28), isTrue);
-      expect(PalletRegistry.isAdminSetChangePallet(7), isFalse);
-      // PersonalAdmins(29) 单独走 isPersonalAdminSetChangeCall,不属公权/私权集合。
-      expect(PalletRegistry.isAdminSetChangePallet(29), isFalse);
-      expect(PalletRegistry.proposeAdminSetChangeCall, 0);
-      // 个人多签管理员集合变更 = PersonalAdmins(29) call 0(修正旧 [7,3] 越界误路由)。
+      // 机构管理员由 entity 任职结果管理；只有个人多签保留管理员集合变更调用。
       expect(PalletRegistry.isPersonalAdminSetChangeCall(29, 0), isTrue);
       expect(PalletRegistry.isPersonalAdminSetChangeCall(7, 3), isFalse);
 

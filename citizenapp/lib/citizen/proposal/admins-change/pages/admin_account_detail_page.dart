@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/widgets/admin_account_card.dart';
-import 'package:citizenapp/citizen/shared/admin_profile_card.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 class AdminAccountDetailPage extends StatefulWidget {
@@ -35,15 +34,14 @@ class _AdminAccountDetailPageState extends State<AdminAccountDetailPage> {
 
   Future<void> _loadBalances() async {
     final accounts = {
-      for (final profile in widget.account.profiles)
-        _balanceKey(profile.account),
+      for (final account in widget.account.admins) _balanceKey(account),
     }.where((account) => account.isNotEmpty).toList(growable: false);
     if (accounts.isEmpty) return;
     try {
       final balances = await ChainRpc().fetchFinalizedBalances(accounts);
       if (mounted) setState(() => _balanceByAccount = balances);
     } catch (_) {
-      // 详情页余额失败只让余额值留空,不影响管理员资料展示。
+      // 详情页余额失败只让余额值留空，不影响个人多签管理员账户展示。
     }
   }
 
@@ -56,12 +54,12 @@ class _AdminAccountDetailPageState extends State<AdminAccountDetailPage> {
         children: [
           AdminAccountCard(account: widget.account),
           const SizedBox(height: 12),
-          for (var i = 0; i < widget.account.profiles.length; i++) ...[
-            AdminProfileCard(
-              profile: widget.account.profiles[i],
-              index: i + 1,
-              balanceYuan: _balanceByAccount[
-                  _balanceKey(widget.account.profiles[i].account)],
+          for (var i = 0; i < widget.account.admins.length; i++) ...[
+            ListTile(
+              leading: Text('${i + 1}'),
+              title: Text(widget.account.admins[i]),
+              subtitle: Text(
+                  '余额：${_balanceByAccount[_balanceKey(widget.account.admins[i])]?.toStringAsFixed(2) ?? '-'} 元'),
             ),
             const SizedBox(height: 8),
           ],

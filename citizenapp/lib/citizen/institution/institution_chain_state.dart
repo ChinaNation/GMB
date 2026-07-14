@@ -11,7 +11,7 @@ import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/institution/institution_classification.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/institution_admin_service.dart';
-import 'package:citizenapp/citizen/shared/admin_profile.dart';
+import 'package:citizenapp/citizen/institution/institution_role_models.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 import 'package:citizenapp/transaction/multisig-transfer/multisig_transfer_proposal_adapter.dart';
@@ -47,8 +47,8 @@ abstract interface class InstitutionChainState {
   /// 机构主账户管理员公钥列表(按机构码读取 Public/Private/Personal Admins)。
   Future<List<String>> admins(Institution institution);
 
-  /// 机构主账户管理员**完整资料**(cid/姓名/职务/任期/来源,A2;个人多签仅 account)。
-  Future<List<AdminProfile>> adminProfiles(Institution institution);
+  /// 机构岗位与管理员任职；普通公民姓名/CID 不属于管理员链上字段。
+  Future<List<InstitutionAdminAssignment>> assignments(Institution institution);
 
   /// 该机构当年提案(按 subject_cid_numbers 包含机构 CID 过滤当年缓存)。
   Future<List<InstitutionProposalSummary>> proposals(Institution institution);
@@ -80,8 +80,12 @@ class LiveInstitutionChainState implements InstitutionChainState {
   }
 
   @override
-  Future<List<AdminProfile>> adminProfiles(Institution institution) {
-    return _adminService.fetchAdminProfiles(adminIdentityOf(institution));
+  Future<List<InstitutionAdminAssignment>> assignments(
+      Institution institution) {
+    return _adminService.fetchAssignments(
+      adminIdentityOf(institution),
+      institution.cidNumber,
+    );
   }
 
   @override

@@ -109,8 +109,7 @@ fn persist_binding_candidate_metadata_conn(
 }
 
 // Tier1 创世注册局管理员「全走链读」(决策③):权威集合在链上
-// `PublicAdmins::FederalRegistryProvinceGroups[省码]`,由链上读取并回填本地缓存;
-// 省维度由链上省级组和节点 active binding 共同派生。
+// 管理员钱包来自 FRG AdminAccounts，省维度由 entity 省专员岗位派生后回填本地缓存。
 
 pub(crate) fn get_admin_by_id_and_registry_org_conn(
     conn: &mut Client,
@@ -203,23 +202,6 @@ pub(crate) fn count_city_registry_admins_by_city_conn(
     Ok(usize::try_from(count).unwrap_or(0))
 }
 
-pub(crate) fn list_city_registry_admins_by_creator_conn(
-    conn: &mut Client,
-    creator_account: &str,
-) -> Result<Vec<AdminUser>, String> {
-    let code = crate::core::chain_runtime::TIER2_REGISTRY_CODE;
-    let rows = conn
-        .query(
-            "SELECT admin_id, admin_account, admin_name, institution_code, built_in, created_by, created_at, updated_at, city_name
-             FROM admins
-             WHERE institution_code = $1 AND lower(created_by) = lower($2)
-             ORDER BY admin_id ASC",
-            &[&code, &creator_account],
-        )
-        .map_err(|e| format!("query city registry admins by creator failed: {e}"))?;
-    rows.iter().map(admin_from_row).collect()
-}
-
 pub(crate) fn get_admin_by_account(
     db: &Db,
     admin_account: &str,
@@ -278,8 +260,7 @@ pub(crate) fn province_scope_for_registry_org_conn(
 
 /// 写入联邦注册局管理员的链上省级组归属缓存。
 ///
-/// 该缓存由 `FederalRegistryProvinceGroups[ProvinceCode]` 全量链读派生,只供列表显示
-/// 和同省操作预检使用;管理员成员资格仍以链上 Active 集合为唯一真源。
+/// 该缓存由 FRG 省专员岗位全量链读派生，只供列表显示和同省操作预检使用。
 pub(crate) fn upsert_federal_registry_admin_scope_conn(
     conn: &mut Client,
     admin_account: &str,
@@ -315,20 +296,6 @@ pub(crate) fn federal_registry_admin_scope_conn(
         )
         .map_err(|e| format!("query federal registry admin scope failed: {e}"))?;
     Ok(row.map(|r| r.get(0)))
-}
-
-pub(crate) fn replace_federal_registry_admin_scope_conn(
-    conn: &mut Client,
-    old_account: &str,
-    new_account: &str,
-    province_name: &str,
-) -> Result<(), String> {
-    conn.execute(
-        "DELETE FROM federal_registry_admin_scopes WHERE lower(admin_account) = lower($1)",
-        &[&old_account],
-    )
-    .map_err(|e| format!("delete old federal registry admin scope failed: {e}"))?;
-    upsert_federal_registry_admin_scope_conn(conn, new_account, province_name)
 }
 
 /// 派生管理员的省/市/镇作用域。**登录签发(onchain_gate)与会话重建(guards)共用此唯一来源**,

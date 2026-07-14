@@ -71,18 +71,23 @@ export type GovernanceOverview = {
   warning: string | null;
 };
 
-export type AdminProfileInfo = {
-  account: string;
-  adminCidNumber: string;
-  name: string;
-  adminRole: string;
+export type InstitutionRoleAssignmentInfo = {
+  roleCode: string;
+  roleName: string;
+  termRequired: boolean;
   termStart: number;
   termEnd: number;
-  source: number;
-  sourceLabel: string;
+  assignmentSource: number;
+  assignmentSourceLabel: string;
+  assignmentSourceRef: string;
 };
 
-export type AdminInfo = AdminProfileInfo & {
+export type InstitutionAdminInfo = {
+  account: string;
+  assignments: InstitutionRoleAssignmentInfo[];
+};
+
+export type AdminInfo = InstitutionAdminInfo & {
   balanceFen: string | null;
 };
 

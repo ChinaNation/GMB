@@ -719,14 +719,10 @@ void main() {
       }
     });
 
-    test('decodes propose_admin_set_change for all admin pallets', () {
+    test('decodes personal propose_admin_set_change only', () {
       final account = List<int>.generate(32, (i) => 0x80 + i);
       for (final item in [
         (29, 0, 'PMUL', 2, 2, 'propose_personal_admin_set_change'),
-        (27, 0, 'FRG', 5, 3, 'propose_public_admin_set_change'),
-        (27, 0, 'NJD', 15, 8, 'propose_public_admin_set_change'),
-        (27, 0, 'CGOV', 2, 2, 'propose_public_admin_set_change'),
-        (28, 0, 'SFLP', 2, 2, 'propose_private_admin_set_change'),
       ]) {
         final admins = List<List<int>>.generate(
           item.$4,
@@ -824,8 +820,7 @@ void main() {
       expect(PayloadDecoder.decode(hexOf(withSigningTail(payload))), isNull);
     });
 
-    test('rejects builtin governance admin change with wrong fixed threshold',
-        () {
+    test('rejects deleted institution admin change call', () {
       final account = List<int>.generate(32, (i) => 0x40 + i);
       final payload = Uint8List.fromList([
         0x0c, 0x00,
@@ -864,14 +859,11 @@ void main() {
       expect(decoded.reviewFields['pubkey'], ss58FromBytes(pubkey));
     });
 
-    test('decodes institution-account admin set change institution_code labels',
-        () {
+    test('rejects institution-account admin set change calls', () {
       final account = List<int>.generate(32, (i) => 0x30 + i);
       final admin1 = List<int>.filled(32, 0x44);
       final admin2 = List<int>.filled(32, 0x55);
 
-      // 公权机构账户码(CGOV)与私权机构账户码(SFLP)都属注册多签机构账户,
-      // codeLabel 返回码字符串本身(非固定治理档/个人多签特化)。
       for (final item in const [
         (0x1b, 'CGOV'),
         (0x1c, 'SFLP'),
@@ -889,9 +881,7 @@ void main() {
 
         final decoded = PayloadDecoder.decode(hexOf(withSigningTail(payload)));
 
-        expect(decoded, isNotNull);
-        expect(decoded!.fields['institution_code'], item.$2);
-        expect(decoded.fields['account'], '0x${hexLower(account)}');
+        expect(decoded, isNull);
       }
     });
 
@@ -1009,23 +999,26 @@ void main() {
         return <int>[(bytes.length << 2) & 0xff, ...bytes];
       }
 
-      List<int> adminProfile(
-        List<int> account,
-        String adminCidNumber,
-        String name,
-        String roleName,
-      ) {
-        // 链端 AdminProfile 9 字段:role_code/admin_source_ref 空(与注册局创建/创世同)。
+      List<int> role(String cid, String roleCode, String roleName) {
         return <int>[
+          ...boundedBytes(cid),
+          ...boundedBytes(roleCode),
+          ...boundedBytes(roleName),
+          0, // term_required=false
+          0, // role_status=Active
+        ];
+      }
+
+      List<int> assignment(List<int> account, String cid, String roleCode) {
+        return <int>[
+          ...boundedBytes(cid),
           ...account,
-          ...boundedBytes(adminCidNumber), // admin_cid_number
-          ...boundedBytes(name), // admin_name
-          ...boundedBytes(''), // role_code(空)
-          ...boundedBytes(roleName), // role_name
+          ...boundedBytes(roleCode),
           0, 0, 0, 0, // term_start
           0, 0, 0, 0, // term_end
-          1, // admin_source::Registry
-          ...boundedBytes(''), // admin_source_ref(空)
+          1, // assignment_source=Registry
+          ...boundedBytes('reg-nonce-001'),
+          0, // assignment_status=Active
         ];
       }
 
@@ -1082,12 +1075,13 @@ void main() {
         ...feeAmount,
         // institution_code: [u8;4] 机构账户码(取代旧 org=ORG_OTH=5)
         ...InstitutionCode.codeBytes('CGOV'),
-        // admins_len: u32 LE
-        2, 0, 0, 0,
-        // admins: BoundedVec<AdminProfile<AccountId32>> count=2
+        // roles: Vec<InstitutionRole> count=1
+        (1 << 2) & 0xff,
+        ...role('AH001-SCB0N-202605010-2026', 'DIRECTOR', '董事'),
+        // assignments: Vec<InstitutionAdminAssignment> count=2
         (2 << 2) & 0xff,
-        ...adminProfile(admins[0], 'AH000-CTZN1-000000001-2026', '甲管理员', '管理员'),
-        ...adminProfile(admins[1], 'AH000-CTZN1-000000002-2026', '乙管理员', '管理员'),
+        ...assignment(admins[0], 'AH001-SCB0N-202605010-2026', 'DIRECTOR'),
+        ...assignment(admins[1], 'AH001-SCB0N-202605010-2026', 'DIRECTOR'),
         // threshold: u32 LE = 2
         2, 0, 0, 0,
         // register_nonce: Vec<u8>

@@ -78,16 +78,16 @@ B2/B3 实现要点:
   - 重生 `constitution.scale` 217626 字节(7章28节140条132款)。**验证(独立复核)**:废弃重复表决流程 0/0、不可修改 8 条逐字节 vs 原始版一致、140 条连续、任免改写通顺、命名修复生效、legislation-yuan 23 测试全过。原文件备份 /tmp。**改后 scale 须重新创世/setCode 生效**。
 - [x] **F 护宪大法官修宪最终否决(2026-06-29 完成,2026-07-02 按 7 人制更新,宪法第21条)**:
   - **宪法 HTML 已改**(子代理执行+6验证):新增**第二十一条**(护宪大法官对修宪享最终否决权:重要案总统签署后/特别案公投后→4名及以上护宪大法官赞成生效,未获4名及以上赞成或30天超时否决)、**原21~140顺延为22~141(共141条)**、**第19条冻结条款引用顺延至24/34/42**(创世前重定基准,用户拍板)。
-  - **链端护宪状态机已落地验证**:votingengine `STAGE_LEG_CONSTITUTION_GUARD=14` + `InternalAdminProvider::constitution_guard_members()` 生产按国家司法院 `NJD` 的 `AdminProfile.admin_role=护宪大法官` 过滤 7 人 + finalizer/dispatch 加 guard 臂;legislation-vote `needs_guard`字段 + `LegGuardSigns`存储 + `advance_to_guard`/`finalize_or_guard`(4成功终态点 exec签/会签/签署超时/公投 经此分流)+ `do_guard_vote`(4名及以上赞成生效/4名及以上反对否决)+ `do_finalize_guard_timeout`(超时否决)+ `guard_vote`extrinsic(idx5);legislation-yuan `dispatch_to_engine` 算 `needs_guard=tier==宪法` 透传。验证:legislation-vote **29**、internal-vote **88**、公权管理员相关回归、整 runtime cargo check 全过。
+  - **链端护宪状态机已落地验证**：国家司法院护宪成员从 entity 的“护宪大法官”有效岗位任职读取并由 Node Guard 保证 7 席；legislation-vote 负责护宪表决与终态推进。
   - **护宪守卫改名**:node 宪法守卫→**护宪守卫**(4处字符串)。
-  - **成员解析**:护宪大法官归口国家司法院,生产按 `AdminProfile.admin_role=护宪大法官` 过滤 `NJD` admins 且必须恰好 7 人;测试 mock 注 7 人。
+  - **成员解析**：护宪大法官归口国家司法院，生产按 NJD 有效岗位任职读取且必须恰好 7 人。
   - **统一重生已完成(2026-06-25,见下 §E 统一重生 scale 批)**:`constitution.scale` 已重生(磁盘 219711 字节,7章141条)、不可修改常量已为 `[1,2,3,17,19,24,34,42]`(`count_const.rs:45`)、legislation-yuan 测试已断言 141 条、节点守卫条号已对齐 24/34/42。**HTML 与 scale 已统一到 141,原"有意分叉"状态已闭合。**护宪生产成员解析已闭合:国家司法院进入创世机构,15 名创世治理账户按 7 名护宪大法官、1 名首席大法官、2 名次席大法官、5 名大法官写入角色;国家司法院固定阈值 8/15。
 - [~] **D 双客户端**(2026-06-25 核心落地,双端 analyze 0 + CitizenWallet 92 测试;详见 `20260624-legislation-dual-client.md`):CitizenApp 读层补齐(5类VoteType+版本史)+ 类B发起展示页+「发起立法」FAB + 院内/签署/会签/护宪投票服务+查询+表决页(冷钱包QR) + 9 立法 QrActions;CitizenWallet 9 call 解码/标签/两色(零新增op_tag,两色码逐一对齐)。**遗留**:特别案公投(referendum 阶段端到端)未接、vote 页接全局提案列表(kind=2 路由)未做、真机验收待重新创世。原拍板定稿:
   - **立法发起在 CitizenApp 按 B 类实现**:app 内**只投票+查看,不发起**;发起在区块链节点端(node 桌面端,本批不管)。提案分两类——类A(admins-change/organization-manage/personal-manage,app 可提案)、类B(立法/协议升级,只投票查看;点「发起」弹展示页,范式照搬 `runtime_upgrade_page.dart`)。
   - CitizenApp:法律列表/详情/版本史 + 代表机构表决(`cast_representative_vote`) + 行政签署/三人会签/护宪终审 + 特别案公投。**不做 app 内发起编辑器。**
   - CitizenWallet:pallet 25/26 注册 + call decoder + 动作标签 + 两色拒签。`cast_representative_vote` 等动作全部走标准交易签名；人口快照只展示 `PopulationScope`。
 - [~] **E 收尾**(2026-06-25 重新拆分):
-  - **E1+E2 管理员字段扩展 + 护宪成员解析 → 已拆独立卡** `20260625-admin-fields-and-guard-members.md`(用户指定 E1/E2 合并一卡)。admins 从「账户/SS58」扩为 `AdminProfile{account, admin_cid_number, name, admin_role, term_start, term_end, source}`;护宪成员解析=过滤 `NJD` admins 中 `admin_role=护宪大法官` 的 7 人。
+  - **E1+E2 最终结果**：admins 收口为钱包集合，岗位与任职归 entity；护宪成员从 NJD“护宪大法官”有效任职取得。详见 `20260625-admin-fields-and-guard-members.md`。
   - **E3 重新创世 + 真机 QA → 用户指定本批跳过**,随整套上链统一处理。
   - **[x] E4 残留文档清理(2026-06-25 完成;2026-07-02 复核补正条号)**:① F `[~]` 陈旧 bullet「HTML141 vs scale140 有意分叉」闭合(磁盘已统一 141);② 立法代码注释「省政府」→「省联邦政府」(legislation-vote `lib.rs:94` + `tests/mod.rs:73`,与 china_zf.rs 规范名一致);③ ADR-027 已按创世正文补正条号:五类表决第45/46条,教育第75/79条,签署/会签第100/106条。
   - **[x] 统一重生 scale 批(2026-06-25 完成并验证)**:

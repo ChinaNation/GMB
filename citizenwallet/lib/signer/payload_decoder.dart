@@ -300,14 +300,6 @@ class PayloadDecoder {
         }
       }
 
-      // ── PublicAdmins(27) / PrivateAdmins(28) ──
-      // 管理员集合变更走 propose_admin_set_change；执行统一由 VotingEngine 重试。
-      if (PalletRegistry.isAdminSetChangePallet(palletIndex)) {
-        if (callIndex == PalletRegistry.proposeAdminSetChangeCall) {
-          return _decodeProposeAdminSetChange(bytes);
-        }
-      }
-
       // ── GrandpaKeyChange(15) ──
       // execute_replace_grandpa_key / cancel_failed_replace_grandpa_key
       // 分别走 VotingEngine::retry_passed_proposal / cancel_passed_proposal。
@@ -825,8 +817,8 @@ class PayloadDecoder {
   //     accounts: InstitutionInitialAccountsOf<T>,
   //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
   //     institution_code: [u8; 4],      // 注册多签机构码(公权/私权/非法人法人)
-  //     admins_len: u32,
-  //     admins: AdminProfilesOf<T>,   // BoundedVec<AdminProfile<AccountId32>>
+  //     roles: InstitutionRolesOf<T>,
+  //     assignments: InstitutionAssignmentsOf<T>,
   //     threshold: u32,
   //     register_nonce: RegisterNonceOf<T>,   // BoundedVec<u8>
   //     signature: RegisterSignatureOf<T>,    // BoundedVec<u8> (64B sr25519)
@@ -939,35 +931,77 @@ class PayloadDecoder {
     if (!InstitutionCode.isInstitution(code)) return null;
     offset += 4;
 
-    // admins_len: u32 (LE)
-    if (offset + 4 > bytes.length) return null;
-    final adminsLen = bytes[offset] |
-        (bytes[offset + 1] << 8) |
-        (bytes[offset + 2] << 16) |
-        (bytes[offset + 3] << 24);
-    offset += 4;
-
-    // admins: BoundedVec<AdminProfile<AccountId32>>(链端 9 字段,逐字节对齐 admin-primitives)。
-    final (adminsVecLen, adminsVecLenSize) = _decodeCompactU32(bytes, offset);
-    offset += adminsVecLenSize;
-    for (var i = 0; i < adminsVecLen; i++) {
-      if (offset + 32 > bytes.length) return null;
-      offset += 32; // admin_account
-      offset = _skipBoundedBytes(bytes, offset); // admin_cid_number
-      if (offset < 0) return null;
-      offset = _skipBoundedBytes(bytes, offset); // admin_name
-      if (offset < 0) return null;
-      offset = _skipBoundedBytes(bytes, offset); // role_code
-      if (offset < 0) return null;
-      offset = _skipBoundedBytes(bytes, offset); // role_name
-      if (offset < 0) return null;
-      if (offset + 9 > bytes.length) return null;
-      offset += 4; // term_start
-      offset += 4; // term_end
-      offset += 1; // admin_source
-      offset = _skipBoundedBytes(bytes, offset); // admin_source_ref
-      if (offset < 0) return null;
+    // roles: 每项 = cid + role_code + role_name + term_required + role_status。
+    final (rolesLen, rolesLenSize) = _decodeCompactU32(bytes, offset);
+    offset += rolesLenSize;
+    if (rolesLen == 0) return null;
+    final roleNames = <String, String>{};
+    final termRules = <String, bool>{};
+    for (var i = 0; i < rolesLen; i++) {
+      final roleCidRead = _readBoundedUtf8(bytes, offset);
+      if (roleCidRead == null || roleCidRead.$1 != cidNumber) return null;
+      offset = roleCidRead.$2;
+      final roleCodeRead = _readBoundedUtf8(bytes, offset);
+      if (roleCodeRead == null || roleCodeRead.$1.isEmpty) return null;
+      offset = roleCodeRead.$2;
+      final roleNameRead = _readBoundedUtf8(bytes, offset);
+      if (roleNameRead == null || roleNameRead.$1.isEmpty) return null;
+      offset = roleNameRead.$2;
+      if (offset + 2 > bytes.length) return null;
+      final termRequired = bytes[offset++] != 0;
+      final roleStatus = bytes[offset++];
+      if (roleStatus != 0 || roleNames.containsKey(roleCodeRead.$1)) {
+        return null;
+      }
+      roleNames[roleCodeRead.$1] = roleNameRead.$1;
+      termRules[roleCodeRead.$1] = termRequired;
     }
+
+    // assignments: 管理员钱包与岗位绑定；管理员人数由钱包账户去重派生。
+    final (assignmentsLen, assignmentsLenSize) =
+        _decodeCompactU32(bytes, offset);
+    offset += assignmentsLenSize;
+    if (assignmentsLen == 0) return null;
+    final adminAccounts = <String>{};
+    final roleAssignments = <String>[];
+    for (var i = 0; i < assignmentsLen; i++) {
+      final assignmentCidRead = _readBoundedUtf8(bytes, offset);
+      if (assignmentCidRead == null || assignmentCidRead.$1 != cidNumber) {
+        return null;
+      }
+      offset = assignmentCidRead.$2;
+      if (offset + 32 > bytes.length) return null;
+      final adminHex = bytes
+          .sublist(offset, offset + 32)
+          .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+          .join();
+      adminAccounts.add(adminHex);
+      offset += 32;
+      final roleCodeRead = _readBoundedUtf8(bytes, offset);
+      if (roleCodeRead == null || !roleNames.containsKey(roleCodeRead.$1)) {
+        return null;
+      }
+      offset = roleCodeRead.$2;
+      if (offset + 10 > bytes.length) return null;
+      final termStart = _readU32Le(bytes, offset);
+      offset += 4;
+      final termEnd = _readU32Le(bytes, offset);
+      offset += 4;
+      final source = bytes[offset++];
+      final sourceRefOffset = _skipBoundedBytes(bytes, offset);
+      if (sourceRefOffset < 0) return null;
+      offset = sourceRefOffset;
+      final assignmentStatus = bytes[offset++];
+      final termRequired = termRules[roleCodeRead.$1] ?? false;
+      if (assignmentStatus != 0 || source > 4) return null;
+      if (termRequired
+          ? (termStart == 0 || termEnd <= termStart)
+          : (termStart != 0 || termEnd != 0)) {
+        return null;
+      }
+      roleAssignments.add('${roleNames[roleCodeRead.$1]}(${roleCodeRead.$1})');
+    }
+    final adminsLen = adminAccounts.length;
 
     // threshold: u32 (LE)
     if (offset + 4 > bytes.length) return null;
@@ -1042,6 +1076,9 @@ class PayloadDecoder {
       'legal_representative_account': _bytesToSs58(legalRepresentativeAccount),
       'institution_code': InstitutionCode.codeLabel(code),
       'admins_len': adminsLen.toString(),
+      'roles_len': rolesLen.toString(),
+      'assignments_len': assignmentsLen.toString(),
+      'assignments': roleAssignments.join('、'),
       'threshold': '$threshold/$adminsLen',
       'total_amount_yuan': '$amountYuan GMB',
     };
@@ -1423,6 +1460,17 @@ class PayloadDecoder {
     offset += lenSize + len;
     if (offset > bytes.length) return -1;
     return offset;
+  }
+
+  /// 读取 UTF-8 `BoundedVec<u8>`，成功返回文本与新偏移。
+  static (String, int)? _readBoundedUtf8(Uint8List bytes, int offset) {
+    if (offset >= bytes.length) return null;
+    final (len, lenSize) = _decodeCompactU32(bytes, offset);
+    if (lenSize == 0) return null;
+    final start = offset + lenSize;
+    final end = start + len;
+    if (end > bytes.length) return null;
+    return (utf8.decode(bytes.sublist(start, end), allowMalformed: true), end);
   }
 
   /// 解码 runtime `citizen_identity::PopulationScope`。
@@ -2448,16 +2496,6 @@ class PayloadDecoder {
       return callIndex == PalletRegistry.proposePersonalAdminSetChangeCall &&
           InstitutionCode.isPersonal(code);
     }
-    if (palletIndex == PalletRegistry.publicAdminsPallet) {
-      return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
-          (InstitutionCode.isPublicLegal(code) ||
-              InstitutionCode.isFixedGovernance(code));
-    }
-    if (palletIndex == PalletRegistry.privateAdminsPallet) {
-      return callIndex == PalletRegistry.proposeAdminSetChangeCall &&
-          (InstitutionCode.isPrivateLegal(code) ||
-              InstitutionCode.isUnincorporated(code));
-    }
     return false;
   }
 
@@ -2465,8 +2503,6 @@ class PayloadDecoder {
     return switch (palletIndex) {
       PalletRegistry.personalAdminsPallet =>
         'propose_personal_admin_set_change',
-      PalletRegistry.publicAdminsPallet => 'propose_public_admin_set_change',
-      PalletRegistry.privateAdminsPallet => 'propose_private_admin_set_change',
       _ => 'propose_unknown_admin_set_change',
     };
   }

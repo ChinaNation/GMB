@@ -1,12 +1,12 @@
 //! 机构管理员「链下私密资料」数据模型。
 //!
-//! 管理员姓名/职务/任期/cid/来源属链上 AdminProfile(ADR-030/A2),
-//! **不在本模型**。本模型只承接链下私密档案(部门/岗位/联系方式/证件照/passkey 绑定等)
+//! 管理员链上身份只有钱包账户；岗位、任期和来源归 entity 任职真源。
+//! 本模型只承接链下私密档案(部门/联系方式/证件照/passkey 绑定等)
 //! 与链投影字段,落库到 `institution_admins` 省级分区表。
 //!
 //! 复合 key = (province_code, cid_number, admin_account):
 //! - cid_number:管理员所属机构身份 ID;
-//! - admin_account:进链的管理员账户(链上 AdminProfile 主键的一部分)。
+//! - admin_account:进链的管理员钱包账户。
 
 #![allow(dead_code)]
 
@@ -25,7 +25,7 @@ pub struct InstitutionAdmin {
     /// 市代码。市级及以下机构填写;省/国家级机构可空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub city_code: Option<String>,
-    /// 进链的管理员账户(链上 AdminProfile 主键的一部分)。
+    /// 进链的管理员钱包账户。
     pub admin_account: String,
     /// 部门。链下私密档案。
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,10 +59,10 @@ pub struct InstitutionAdmin {
     pub admin_source_id: Option<String>,
     /// 链下资料状态。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub admin_profile_status: Option<String>,
+    pub admin_status: Option<String>,
     /// 链下资料最近更新时间。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub admin_profile_updated_at: Option<DateTime<Utc>>,
+    pub admin_updated_at: Option<DateTime<Utc>>,
     /// 创建人 pubkey。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,

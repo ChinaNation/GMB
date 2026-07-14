@@ -8,7 +8,7 @@
 //       搜索范围由后端按地域规则预过滤(分校→本市学校本部;公权→本市市级/本省省级/国家级)
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { AutoComplete, Button, Col, Form, Input, InputNumber, Modal, QRCode, Row, Select, Spin, Typography, Upload } from 'antd';
+import { AutoComplete, Button, Col, Form, Input, InputNumber, Modal, QRCode, Row, Select, Spin, Switch, Typography, Upload } from 'antd';
 import { DeleteOutlined, PlusOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../auth/types';
 import { listCidTowns, type CidCityItem, type CidTownItem } from '../china/api';
@@ -66,7 +66,9 @@ interface FormValues {
   threshold: number;
   admins: {
     admin_account: string;
-    admin_role?: string;
+    role_code: string;
+    role_name: string;
+    term_required: boolean;
     term_start?: number;
     term_end?: number;
   }[];
@@ -253,8 +255,8 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
       legal_representative_photo_size: undefined,
       threshold: 2,
       admins: [
-        { admin_account: '', admin_role: '管理员' },
-        { admin_account: '', admin_role: '管理员' },
+        { admin_account: '', role_code: '', role_name: '', term_required: false, term_start: 0, term_end: 0 },
+        { admin_account: '', role_code: '', role_name: '', term_required: false, term_start: 0, term_end: 0 },
       ],
     });
     setLegalRepOptions([]);
@@ -550,18 +552,21 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
     const admins = (values.admins ?? [])
       .map((admin) => ({
         admin_account: admin.admin_account.trim(),
-        admin_role: admin.admin_role?.trim() || undefined,
-        term_start: admin.term_start,
-        term_end: admin.term_end,
+        role_code: admin.role_code.trim(),
+        role_name: admin.role_name.trim(),
+        term_required: admin.term_required,
+        term_start: admin.term_required ? admin.term_start : 0,
+        term_end: admin.term_required ? admin.term_end : 0,
       }))
       .filter((admin) => admin.admin_account);
-    const minThreshold = Math.floor(admins.length / 2) + 1;
-    if (admins.length < 2) {
+    const uniqueAdminCount = new Set(admins.map((admin) => admin.admin_account)).size;
+    const minThreshold = Math.floor(uniqueAdminCount / 2) + 1;
+    if (uniqueAdminCount < 2) {
       notice.warning('请至少填写 2 名初始管理员');
       return;
     }
-    if (!values.threshold || values.threshold < minThreshold || values.threshold > admins.length) {
-      notice.warning(`管理员阈值必须在 ${minThreshold} 到 ${admins.length} 之间`);
+    if (!values.threshold || values.threshold < minThreshold || values.threshold > uniqueAdminCount) {
+      notice.warning(`管理员阈值必须在 ${minThreshold} 到 ${uniqueAdminCount} 之间`);
       return;
     }
     if (requiresTown && !(values.town_name ?? '').trim()) {
@@ -626,7 +631,11 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
   const subjectPropertyDisabled = isPrivate || subjectPropertyChoices.length === 1;
   const instDisabled = visibleInstChoices.length === 1;
   const cidFullNameCheckPassed = !collectNameInModal || cidFullNameAvailable === true;
-  const adminsCount = watchedAdmins?.length ?? 0;
+  const adminsCount = new Set(
+    (watchedAdmins ?? [])
+      .map((admin) => admin.admin_account?.trim())
+      .filter((account): account is string => !!account),
+  ).size;
   const minThreshold = Math.floor(adminsCount / 2) + 1;
   const closeChainModal = () => {
     if (!createdResult) return;
@@ -953,11 +962,11 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
           {(fields, { add, remove }) => (
             <div style={{ marginTop: 8 }}>
               <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-                初始管理员
+                初始管理员与岗位
               </Typography.Text>
               {fields.map((field, index) => (
                 <Row gutter={8} key={field.key} align="top">
-                  <Col span={13}>
+                  <Col span={8}>
                     <Form.Item
                       {...field}
                       label={index === 0 ? '管理员账户' : undefined}
@@ -967,16 +976,40 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                       <Input placeholder="0x 公钥或 SS58 地址" />
                     </Form.Item>
                   </Col>
-                  <Col span={7}>
+                  <Col span={5}>
                     <Form.Item
                       {...field}
-                      label={index === 0 ? '职务' : undefined}
-                      name={[field.name, 'admin_role']}
+                      label={index === 0 ? '岗位码' : undefined}
+                      name={[field.name, 'role_code']}
+                      rules={[
+                        { required: true, message: '请输入岗位码' },
+                        { pattern: /^[A-Z0-9_]+$/, message: '仅限大写字母、数字和下划线' },
+                      ]}
                     >
-                      <Input placeholder="管理员" />
+                      <Input placeholder="ROLE_CODE" maxLength={64} />
                     </Form.Item>
                   </Col>
-                  <Col span={4}>
+                  <Col span={5}>
+                    <Form.Item
+                      {...field}
+                      label={index === 0 ? '岗位名称' : undefined}
+                      name={[field.name, 'role_name']}
+                      rules={[{ required: true, message: '请输入岗位名称' }]}
+                    >
+                      <Input placeholder="公开岗位名称" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={3}>
+                    <Form.Item
+                      {...field}
+                      label={index === 0 ? '有任期' : undefined}
+                      name={[field.name, 'term_required']}
+                      valuePropName="checked"
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                  <Col span={3}>
                     <Button
                       danger
                       icon={<DeleteOutlined />}
@@ -985,10 +1018,36 @@ export const CreateInstitutionForm: React.FC<CreateInstitutionFormProps> = ({
                       style={{ marginTop: index === 0 ? 30 : 0, width: '100%' }}
                     />
                   </Col>
+                  <Form.Item noStyle shouldUpdate={(prev, next) => prev.admins?.[field.name]?.term_required !== next.admins?.[field.name]?.term_required}>
+                    {({ getFieldValue }) => getFieldValue(['admins', field.name, 'term_required']) ? (
+                      <>
+                        <Col span={8}>
+                          <Form.Item
+                            {...field}
+                            label="任期开始日序"
+                            name={[field.name, 'term_start']}
+                            rules={[{ required: true, message: '请输入开始日序' }]}
+                          >
+                            <InputNumber min={1} precision={0} style={{ width: '100%' }} />
+                          </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                          <Form.Item
+                            {...field}
+                            label="任期结束日序"
+                            name={[field.name, 'term_end']}
+                            rules={[{ required: true, message: '请输入结束日序' }]}
+                          >
+                            <InputNumber min={1} precision={0} style={{ width: '100%' }} />
+                          </Form.Item>
+                        </Col>
+                      </>
+                    ) : null}
+                  </Form.Item>
                 </Row>
               ))}
-              <Button icon={<PlusOutlined />} onClick={() => add({ admin_account: '', admin_role: '管理员' })}>
-                管理员
+              <Button icon={<PlusOutlined />} onClick={() => add({ admin_account: '', role_code: '', role_name: '', term_required: false, term_start: 0, term_end: 0 })}>
+                添加管理员岗位
               </Button>
             </div>
           )}

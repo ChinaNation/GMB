@@ -5,11 +5,9 @@ import type {
   AdminAccountRef,
   AdminAccountState,
   InstitutionDetail,
-  VoteSignRequestResult,
-  VoteSubmitResult,
 } from './types';
 
-// 管理员更换模块前端 API。激活、更换与账户读取统一聚合到 admins-change。
+// 管理员只读与本机激活 API；岗位任职变更由对应业务模块提交，不在 Node 直接改集合。
 const accountRefParams = (accountRef: AdminAccountRef) => ({
   cidNumber: accountRef.cidNumber ?? null,
   accountHex: accountRef.accountHex ?? null,
@@ -59,30 +57,4 @@ export const adminsChangeApi = {
     invoke<AdminAccountState | null>('get_admin_account_state', accountRefParams(accountRef)),
   getAdminAccountBalances: (accountHexes: string[]) =>
     invoke<Record<string, string | null>>('get_admin_account_balances', { accountHexes }),
-  buildAdminSetChangeRequest: (pubkeyHex: string, accountRef: AdminAccountRef, admins: string[]) =>
-    invoke<VoteSignRequestResult>('build_admin_set_change_request', {
-      pubkeyHex,
-      ...accountRefParams(accountRef),
-      admins,
-    }),
-  submitAdminSetChange: (
-    requestId: string,
-    expectedPubkeyHex: string,
-    expectedPayloadHash: string,
-    accountRef: AdminAccountRef,
-    admins: string[],
-    signNonce: number,
-    signBlockNumber: number,
-    responseJson: string,
-  ) =>
-    invoke<VoteSubmitResult>('submit_admin_set_change', {
-      requestId,
-      expectedPubkeyHex,
-      expectedPayloadHash,
-      ...accountRefParams(accountRef),
-      admins,
-      signNonce,
-      signBlockNumber,
-      responseJson,
-    }),
 };

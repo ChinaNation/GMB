@@ -10,7 +10,7 @@ import 'package:citizenapp/citizen/institution/institution_chain_state.dart';
 import 'package:citizenapp/citizen/institution/institution_detail_page.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/data/public_institution_dto.dart';
-import 'package:citizenapp/citizen/shared/admin_profile.dart';
+import 'package:citizenapp/citizen/institution/institution_role_models.dart';
 import 'package:citizenapp/citizen/shared/account_derivation.dart';
 import 'package:citizenapp/isar/app_isar.dart';
 
@@ -31,8 +31,21 @@ class _FakeChainState implements InstitutionChainState {
   Future<List<String>> admins(Institution institution) async => adminList;
 
   @override
-  Future<List<AdminProfile>> adminProfiles(Institution institution) async =>
-      adminList.map((a) => AdminProfile(account: a)).toList();
+  Future<List<InstitutionAdminAssignment>> assignments(
+          Institution institution) async =>
+      adminList
+          .map((account) => InstitutionAdminAssignment(
+                cidNumber: institution.cidNumber,
+                adminAccount: account,
+                roleCode: 'MEMBER',
+                roleName: '委员',
+                termStart: 0,
+                termEnd: 0,
+                source: InstitutionAssignmentSource.genesis,
+                sourceRef: '',
+                active: true,
+              ))
+          .toList();
 
   @override
   Future<List<InstitutionProposalSummary>> proposals(

@@ -5,7 +5,7 @@ import { sanitizeError } from '../tauri';
 import { hexToSs58 } from '../shared/ss58';
 import { MultisigTransferProposalDetailSection } from '../transaction/multisig/ProposalDetailSection';
 import { adminsChangeApi } from '../admins/api';
-import { AdminProfileCard } from '../admins/AdminProfileCard';
+import { InstitutionAssignmentCard } from '../admins/InstitutionAssignmentCard';
 import { governanceApi as api } from './api';
 import type { ProposalFullInfo, AdminWalletMatch, UserVoteStatus, InstitutionDetail } from './types';
 import { VoteSigningFlow } from './VoteSigningFlow';
@@ -253,9 +253,9 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
               const canVote = myWallet && meta.status === 0 && !hasVoted && !isPending;
 
               return (
-                <AdminProfileCard
+                <InstitutionAssignmentCard
                   key={pubkey}
-                  profile={admin}
+                  admin={admin}
                   index={i + 1}
                   balanceFen={admin.balanceFen}
                   className={hasVoted ? (voted ? 'admin-card-voted-yes' : 'admin-card-voted-no') : ''}

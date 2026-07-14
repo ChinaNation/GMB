@@ -7,6 +7,7 @@
 
 pub mod accounts;
 pub mod create;
+pub mod governance;
 pub mod maintain;
 pub mod register;
 pub mod role;

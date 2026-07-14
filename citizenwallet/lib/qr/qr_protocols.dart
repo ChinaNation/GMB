@@ -60,8 +60,6 @@ class QrActions {
   static const int retryPassedProposal = 0x0904;
   static const int cancelPassedProposal = 0x0905;
   static const int registerVotingIdentity = 0x0a00;
-  static const int publicAdmins = 0x1b00;
-  static const int privateAdmins = 0x1c00;
   static const int proposeRuntimeUpgrade = 0x0c00;
   static const int developerDirectUpgrade = 0x0c02;
   static const int resolutionDestroy = 0x0d00;
@@ -125,8 +123,6 @@ class QrActions {
         'cancel_passed_proposal' => cancelPassedProposal,
         'register_voting_identity' => registerVotingIdentity,
         'propose_personal_admin_set_change' => personalAdminSetChange,
-        'propose_public_admin_set_change' => publicAdmins,
-        'propose_private_admin_set_change' => privateAdmins,
         'propose_runtime_upgrade' => proposeRuntimeUpgrade,
         'developer_direct_upgrade' => developerDirectUpgrade,
         'propose_destroy' => resolutionDestroy,

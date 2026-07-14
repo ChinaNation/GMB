@@ -54,26 +54,19 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
-  // A2:AdminAccount 前导 cid_number,随后 institution_code/kind;`admins` = `Vec<AdminProfile>`
-  // (机构 kind≠2:account[32] + cid/name/role_code/role_name 各 Compact(0) 空 + term_start/term_end
-  // u32 + source u8 + admin_source_ref Compact(0));个人多签 kind==2 仍是裸 `Vec<AccountId>`。
-  // 逐字节对齐 lib/citizen/shared/admin_profile.dart::decodeAdminsVec。
+  // 机构记录只含 CID、机构码、钱包集合、状态；个人多签保持独立账户布局。
   Uint8List adminAccountBytes({
     required String institutionCode,
     required int kind,
     required List<int> admin,
   }) {
-    final adminEntry = <int>[...admin];
     if (kind != 2) {
-      adminEntry.addAll([
-        0x00, // admin_cid_number: Compact(0) 空
-        0x00, // admin_name: Compact(0) 空
-        0x00, // role_code: Compact(0) 空
-        0x00, // role_name: Compact(0) 空
-        ...u32Le(0), // term_start
-        ...u32Le(0), // term_end
-        0x00, // source: Genesis(0)
-        0x00, // admin_source_ref: Compact(0) 空
+      return Uint8List.fromList([
+        0x00,
+        ...codeBytes(institutionCode),
+        (1 << 2) & 0xff,
+        ...admin,
+        1,
       ]);
     }
     return Uint8List.fromList([
@@ -81,7 +74,7 @@ void main() {
       ...codeBytes(institutionCode),
       kind,
       (1 << 2) & 0xff, // admins Vec: Compact(1)
-      ...adminEntry,
+      ...admin,
       ...List<int>.filled(32, 0xcc), // creator
       ...u32Le(1), // created_at
       ...u32Le(2), // updated_at

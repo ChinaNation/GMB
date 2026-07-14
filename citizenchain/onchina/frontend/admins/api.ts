@@ -1,5 +1,4 @@
-// 联邦注册局管理员目录 API。
-// 更换联邦注册局管理员走 REPLACE_GOVERNING_REGISTRY 冷钱包扫码签名动作,不走普通 PATCH。
+// 联邦注册局管理员目录 API；岗位换届由治理业务写入 entity，本页只读。
 
 import type { AdminAuth } from '../auth/types';
 import type { InstitutionDetail } from '../subjects/api';
@@ -12,14 +11,14 @@ export type FederalRegistryAdminRow = {
   id: number;
   province_name: string;
   admin_account: string;
-  admin_name: string;
-  admin_cid_number: string;
-  name: string;
-  admin_role: string;
+  role_code: string;
+  role_name: string;
+  term_required: boolean;
   term_start: number;
   term_end: number;
-  origin: number;
-  origin_label: string;
+  assignment_source: number;
+  assignment_source_label: string;
+  assignment_source_ref: string;
   balance_fen?: string | null;
   built_in: boolean;
   created_at: string;
@@ -29,14 +28,14 @@ export type FederalRegistryAdminRow = {
 
 export type OwnInstitutionAdminRow = {
   admin_account: string;
-  admin_name: string;
-  admin_cid_number: string;
-  name: string;
-  admin_role: string;
+  role_code: string;
+  role_name: string;
+  term_required: boolean;
   term_start: number;
   term_end: number;
-  origin: number;
-  origin_label: string;
+  assignment_source: number;
+  assignment_source_label: string;
+  assignment_source_ref: string;
   balance_fen?: string | null;
   is_self: boolean;
 };

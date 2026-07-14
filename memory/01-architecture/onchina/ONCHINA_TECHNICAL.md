@@ -116,9 +116,9 @@ OnChina 高并发目标建立在结构化表、组合索引、省分区和省市
 
 管理员唯一字段统一为 `admins`。OnChina 不恢复独立管理员身份表、授权真源或授权分支。
 
-- 机构管理员列表以链上 `admins` 账户集合与 entity 机构岗位任职关系联合查询为真源。岗位、权限、任期和来源不再从 `AdminProfile` 读取；本地联系方式、照片和 Passkey 仅是私密资料，不得成为管理员资格或岗位真源。
-- 联邦注册局管理员目录从链上 `PublicAdmins::FederalRegistryProvinceGroups` 全量读取 43 个省级组；本省 5 人置顶且可更换，其它省份只读。`federal_registry_admin_scopes` 只缓存省级组归属用于展示和同省预检，不是权限真源。
-- 联邦注册局和市注册局不再提供“编辑本地管理员姓名”的前端入口或 PATCH 动作；联邦注册局管理员更换、下级市注册局新增/删除仍走安全动作和冷钱包确认。
+- 机构管理员列表联合读取链上 `admins` 钱包集合与 entity 机构岗位任职；本地联系方式、照片和 Passkey 仅是私密资料，不得成为管理员资格或岗位真源。
+- 联邦注册局管理员目录从 `PublicAdmins::AdminAccounts` 读取 215 个钱包，并从 `PublicManage::InstitutionRoleAssignments` 的 `PROVINCE_COMMISSIONER_<省码>` 岗位取得 43 省归属；本地不保存第二份省组权限真源。
+- 联邦注册局和市注册局不提供“编辑本地管理员姓名”的入口。联邦注册局岗位任职目录完全只读，换届由治理业务写入 entity；下级市注册局本地登记目录新增/删除仍走安全动作，但不能替代链上管理员资格校验。
 - 登录态：用于普通读取和低风险操作。
 - `PASSKEY_COLD_SIGN`：用于管理员安全写操作、Passkey 更新、管理员集合变更、节点解绑和链写入二次确认。
 - 扫码请求：统一使用 `QR_V1 / k=1 sign_request`。

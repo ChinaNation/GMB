@@ -18,6 +18,14 @@ on:
       - "citizenapp/scripts/check-chainspec-frozen.sh"
       - "citizenchain/node/chainspecs/**"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 执行 CI 或正式发布
+        required: true
+        type: choice
+        options:
+          - ci
+          - release
 
 concurrency:
   group: citizenapp-ci-${{ github.ref }}
@@ -30,6 +38,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  GMB_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'release' }}
 
 jobs:
   # ── 代码检查 ──
@@ -42,7 +51,7 @@ jobs:
 
       - name: 校验 chainspec.json 冻结
         run: |
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+          if [ "${GMB_RELEASE_MODE}" = "true" ]; then
             export CITIZENAPP_REQUIRE_STATE_ROOT=1
           fi
           bash citizenapp/scripts/check-chainspec-frozen.sh
@@ -127,7 +136,7 @@ jobs:
       # 详见 memory/07-ai/chainspec-frozen.md
       - name: 再次校验 chainspec.json 冻结
         run: |
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+          if [ "${GMB_RELEASE_MODE}" = "true" ]; then
             export CITIZENAPP_REQUIRE_STATE_ROOT=1
           fi
           bash citizenapp/scripts/check-chainspec-frozen.sh
@@ -158,7 +167,7 @@ jobs:
       # push / PR 只验证 Android 工程能构建，不读取正式签名密钥。
       # 只有 GitHub 页面手动 Run workflow 才生成可分发的正式签名 APK。
       - name: 写入 Android release keystore
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         env:
           GMB_APP_KEY: ${{ secrets.GMB_APP_KEY }}
         run: |
@@ -211,21 +220,21 @@ jobs:
           PY
 
       - name: 打包 Debug APK（push / PR 检查）
-        if: ${{ github.event_name != 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE != 'true' }}
         working-directory: citizenapp
         run: flutter build apk --debug --target-platform android-arm,android-arm64
 
       - name: 打包正式签名 APK
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         working-directory: citizenapp
         run: flutter build apk --release --target-platform android-arm,android-arm64
 
       - name: 重命名为公民.apk
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         run: cp citizenapp/build/app/outputs/flutter-apk/app-release.apk citizenapp/build/app/outputs/flutter-apk/公民.apk
 
       - name: 生成 Android 更新清单
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         run: |
           set -euo pipefail
 
@@ -255,7 +264,7 @@ jobs:
           echo "CITIZENAPP_ANDROID_RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
 
       - name: 发布 GitHub Release
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -284,7 +293,7 @@ jobs:
 
       # 只有 GitHub 页面手动运行时才维护 APK 产物。
       - name: 清理旧版 APK artifact
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -296,7 +305,7 @@ jobs:
             done
 
       - name: 上传公民.apk
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
@@ -305,7 +314,7 @@ jobs:
           retention-days: 30
 
       - name: 上传 Android 更新清单
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:

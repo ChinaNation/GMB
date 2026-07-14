@@ -175,9 +175,8 @@ impl Db {
              CREATE INDEX IF NOT EXISTS idx_admins_account_lower ON admins(lower(admin_account));
              CREATE INDEX IF NOT EXISTS idx_admins_created_by_lower ON admins(lower(created_by));
 
-             -- 联邦注册局 215 名管理员按链上省级 5 人组归属缓存。
-             -- 权限真源仍是 `PublicAdmins::FederalRegistryProvinceGroups`;本表只保存
-             -- 列表展示和同省更换预检所需的省名。
+             -- 联邦注册局管理员按 entity 省专员岗位派生的省归属缓存。
+             -- 管理员真源为 FRG AdminAccounts，省界真源为 InstitutionRoleAssignments。
              CREATE TABLE IF NOT EXISTS federal_registry_admin_scopes (
                 admin_account TEXT PRIMARY KEY,
                 province_name TEXT NOT NULL,
@@ -434,9 +433,8 @@ impl Db {
                 PRIMARY KEY (province_code, cid_number)
              ) PARTITION BY LIST (province_code);
 
-             -- 机构管理员「链下私密资料」唯一归属表(ADR-030/A2)。
-             -- 管理员姓名/职务/任期/cid/来源属链上 AdminProfile,**不在本表**;
-             -- 本表只承接链下私密档案(部门/岗位/联系方式/证件照/passkey 绑定等)+ 链投影。
+             -- 机构管理员链下私密资料唯一归属表。
+             -- 岗位、任期和来源由 entity 链上任职保存；本表只承接联系方式、证件照、passkey 等。
              -- 按 province_code 省级分区,复合主键 (province_code, cid_number, admin_account)。
              CREATE TABLE IF NOT EXISTS institution_admins (
                 cid_number TEXT NOT NULL,
@@ -453,8 +451,8 @@ impl Db {
                 admin_photo_size BIGINT,
                 admin_passkey_credential_id TEXT,
                 admin_source_id TEXT,
-                admin_profile_status TEXT,
-                admin_profile_updated_at TIMESTAMPTZ,
+                admin_status TEXT,
+                admin_updated_at TIMESTAMPTZ,
                 created_by TEXT,
                 chain_status TEXT,
                 chain_tx_hash TEXT,

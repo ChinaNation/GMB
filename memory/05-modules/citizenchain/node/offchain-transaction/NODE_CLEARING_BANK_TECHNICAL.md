@@ -155,7 +155,7 @@ signer_pubkey: [u8; 32]       = 32B 原始公钥
 | F2 | 节点桌面"扫码添加管理员"接 CitizenWallet user_contact / user_multisig QR | 当前 create-multisig 用粘贴兜底 |
 | F3 | 创建机构 extrinsic 提交后冷钱包两段握手实际接入(`VoteSigningFlow` 复用) | 当前 alert 占位 |
 | F4 | CitizenWallet decoder 加新版 `propose_create_institution` action 分支 | 已按 11 字段新布局同步，后续字段变更仍需三端同时更新 |
-| F5 | 发起提案按钮组的具体提案类型(转账 / 关闭多签 / 换管理员 / 手续费划转) | 当前全部 disabled "即将上线" |
+| F5 | 发起提案按钮组的具体业务类型（转账 / 关闭机构 / 手续费划转） | 按对应业务模块接口逐项接入；岗位任职变更不在此处直接实现 |
 | F6 | 节点端"管理员激活"机制(冷钱包列表的来源)集成到 create-multisig 选签名钱包 | 当前 coldWallets={[]} 占位 |
 
 ## 7. 验收标准达成情况

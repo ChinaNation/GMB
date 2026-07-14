@@ -1,14 +1,11 @@
 // 管理员管理桌面端后端模块。
 //
-// 本目录只承载管理员模块相关的账户读取、管理员激活、管理员集合变更 call 编码、
-// QR 签名请求和提交逻辑；治理通用签名/RPC 能力继续复用上层公共模块。
+// 本目录只承载机构管理员账户、entity 岗位任职读取和管理员钱包激活。
+// 机构管理员变化只能由治理业务结果驱动，Node 不构造管理员集合变更调用。
 
 pub mod account_id;
 pub mod activation;
-pub mod call_data;
 pub mod codec;
 pub mod commands;
-pub mod signing;
 pub mod storage;
 pub mod types;
-pub mod validation;

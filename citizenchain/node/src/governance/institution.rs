@@ -19,11 +19,11 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     )
 }
 
-/// 查询指定机构的管理员完整资料。
-pub fn fetch_admin_profiles(
+/// 查询指定机构的管理员钱包及其全部有效岗位任职。
+pub fn fetch_institution_admins(
     cid_number: &str,
-) -> Result<Vec<management::types::AdminProfileInfo>, String> {
-    management::storage::fetch_admin_profiles_by_cid_number(cid_number)
+) -> Result<Vec<management::types::InstitutionAdminInfo>, String> {
+    management::storage::fetch_institution_admins_by_cid_number(cid_number)
 }
 
 /// 查询 finalized 块上的账户余额（返回 free 余额，单位为最小精度）。

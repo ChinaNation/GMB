@@ -150,8 +150,8 @@ export interface LegProposalState {
 }
 
 // ── 任免案 / 预算案预留类型(Phase 4)──
-// 镜像后端 personnel/budget 子域 schema。链端 PROPOSAL_KIND_PERSONNEL/BUDGET 未上线,
-// 当前仅锁 schema;ProposeMenu 仅渲染 category==='law',不 surface 这些类型,发起/表决 UI 待链路上线另卡。
+// 镜像后端 personnel/budget 子域 schema。对应业务模块尚未实现，当前仅锁 schema；
+// ProposeMenu 仅渲染 category==='law'，发起/表决 UI 待业务模块接入代表机构表决后增加。
 
 /** 任免动作(对齐后端 PersonnelAction)。 */
 export type PersonnelActionInput = 'appoint' | 'dismiss' | 'replace';

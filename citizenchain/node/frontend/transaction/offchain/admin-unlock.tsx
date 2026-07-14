@@ -2,13 +2,13 @@
 //
 import { useEffect, useMemo, useState } from 'react';
 import { adminsChangeApi } from '../../admins/api';
-import { AdminProfileCard } from '../../admins/AdminProfileCard';
-import type { AdminProfileInfo } from '../../governance/types';
+import { InstitutionAssignmentCard } from '../../admins/InstitutionAssignmentCard';
+import type { InstitutionAdminInfo } from '../../governance/types';
 import '../../admins/styles.css';
 
 type Props = {
   cidNumber: string;
-  admins: AdminProfileInfo[];
+  admins: InstitutionAdminInfo[];
   threshold: number;
   adminsLen: number;
   onBack: () => void;
@@ -59,9 +59,9 @@ export function ClearingBankAdminListPage({
       ) : (
         <div className="admin-grid">
           {admins.map((profile, idx) => (
-            <AdminProfileCard
+            <InstitutionAssignmentCard
               key={profile.account}
-              profile={profile}
+              admin={profile}
               index={idx + 1}
               balanceFen={balanceByAccount[profile.account.trim().replace(/^0x/i, '').toLowerCase()] ?? null}
             />

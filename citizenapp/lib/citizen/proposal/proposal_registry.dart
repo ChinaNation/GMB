@@ -163,10 +163,10 @@ class ProposalCapabilityRegistry {
     ProposalCapability(
       kind: ProposalKind.adminsChange,
       enabled: true,
-      pallet: 'Public/Private/PersonalAdmins',
+      pallet: 'PersonalAdmins',
       call: 'propose_admin_set_change',
       voteEngine: 'InternalVote',
-      allows: (subject) => subject.hasResolvedAdminModule,
+      allows: (subject) => subject.institutionCode == 'PMUL',
     ),
     ProposalCapability(
       kind: ProposalKind.safetyFundTransfer,

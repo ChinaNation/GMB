@@ -1575,7 +1575,7 @@ fn genesis_fixed_institution_roles_and_assignments_are_complete() {
 
 /// runtime 必须把选举结果路由到 public-manage，并在写入前拒绝固定岗位席位漂移。
 #[test]
-fn runtime_assignment_result_router_enforces_fixed_role_seats() {
+fn runtime_governance_result_router_enforces_fixed_role_seats() {
     new_test_ext().execute_with(|| {
         let njd = primitives::cid::china::china_sf::CHINA_SF
             .iter()
@@ -1585,19 +1585,53 @@ fn runtime_assignment_result_router_enforces_fixed_role_seats() {
             })
             .expect("NJD genesis node exists");
         let main = AccountId::new(njd.main_account);
-        let result = |accounts: Vec<AccountId>| entity_primitives::InstitutionAssignmentResult {
-            institution_code: primitives::cid::code::NJD,
-            institution_account: main.clone(),
-            role_code: primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD.to_vec(),
-            admin_accounts: accounts,
-            term_start: 0,
-            term_end: 0,
-            assignment_source: entity_primitives::InstitutionAssignmentSource::MutualElection,
-            assignment_source_ref: 700u64.encode(),
+        let result_source_ref = 700u64.encode();
+        let result = |accounts: Vec<AccountId>| {
+            let assignments = accounts
+                .into_iter()
+                .map(|admin_account| entity_primitives::InstitutionAssignmentTarget {
+                    admin_account,
+                    term_start: 0,
+                    term_end: 0,
+                    assignment_source:
+                        entity_primitives::InstitutionAssignmentSource::MutualElection,
+                    assignment_source_ref: result_source_ref.clone(),
+                    assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+                })
+                .collect();
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: primitives::cid::code::NJD,
+                institution_account: main.clone(),
+                role_changes: vec![],
+                assignment_changes: vec![
+                    entity_primitives::InstitutionRoleAssignmentChange {
+                        role_code:
+                            primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD
+                                .to_vec(),
+                        assignments,
+                    },
+                ],
+                legal_representative_change: None,
+                result_source_ref: result_source_ref.clone(),
+            }
         };
 
+        let mut role_change = result(vec![]);
+        role_change.role_changes = vec![entity_primitives::InstitutionRoleChange {
+            role_code: primitives::governance_skeleton::ROLE_CODE_CONSTITUTION_GUARD.to_vec(),
+            role_name: "修改固定岗位".as_bytes().to_vec(),
+            term_required: false,
+            role_status: entity_primitives::InstitutionRoleStatus::Active,
+        }];
         assert_noop!(
-            <RuntimeInstitutionAssignmentResultHandler as entity_primitives::InstitutionAssignmentResultHandler<AccountId>>::apply_institution_assignment_result(
+            <RuntimeInstitutionGovernanceResultHandler as entity_primitives::InstitutionGovernanceResultHandler<AccountId>>::apply_institution_governance_result(
+                role_change
+            ),
+            public_manage::Error::<Runtime>::FixedRoleDefinitionImmutable
+        );
+
+        assert_noop!(
+            <RuntimeInstitutionGovernanceResultHandler as entity_primitives::InstitutionGovernanceResultHandler<AccountId>>::apply_institution_governance_result(
                 result(vec![AccountId::new([61u8; 32])])
             ),
             public_manage::Error::<Runtime>::FixedRoleSeatsMismatch
@@ -1607,7 +1641,7 @@ fn runtime_assignment_result_router_enforces_fixed_role_seats() {
             .map(|seed| AccountId::new([seed; 32]))
             .collect::<Vec<_>>();
         assert_ok!(
-            <RuntimeInstitutionAssignmentResultHandler as entity_primitives::InstitutionAssignmentResultHandler<AccountId>>::apply_institution_assignment_result(
+            <RuntimeInstitutionGovernanceResultHandler as entity_primitives::InstitutionGovernanceResultHandler<AccountId>>::apply_institution_governance_result(
                 result(replacement.clone())
             )
         );

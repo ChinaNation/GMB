@@ -27,7 +27,7 @@ fn balance_fen(balances: &BTreeMap<String, Option<String>>, account: &str) -> Op
 
 /// Tier1 创世注册局管理员列表(全量省级组,「全走链读」决策③)。
 ///
-/// 权威集合在链上 `PublicAdmins::FederalRegistryProvinceGroups[省码]`;本接口逐省直读链上账户,
+/// 权威管理员集合在 FRG 唯一 `AdminAccounts`，43 省边界来自 entity 省专员岗位；
 /// 回填本地缓存(缺失即补,保证有本地 id 供换届按 id 定位),并同步
 /// `federal_registry_admin_scopes` 作为同省操作预检缓存。成员资格仍以链上 Active 集合为唯一真源。
 pub(crate) async fn list_federal_registry_admins(
@@ -51,23 +51,47 @@ pub(crate) async fn list_federal_registry_admins(
         let message = format!("province '{province}' is not a valid chain province");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
     }
-    // 全走链读:43 个省级 Tier1 创世注册局 5 人组的权威资料集合。
-    let province_groups = match chain_runtime::fetch_all_federal_registry_admin_profiles().await {
-        Ok(v) => v,
+    let binding = match repo::active_node_binding(&state.db) {
+        Ok(Some(binding)) => binding,
+        Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin"),
         Err(err) => {
-            tracing::warn!(error = %err, "chain unreachable listing all federal registry admins");
-            return api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable");
+            let message = format!("query node binding failed: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
+    let identity = match chain_runtime::identity_from_binding_parts(
+        &binding.candidate.institution_code,
+        binding.candidate.institution_cid_number.as_deref(),
+        binding.candidate.institution_main_account.as_deref(),
+        None,
+    ) {
+        Ok(identity) => identity,
+        Err(err) => {
+            let message = format!("node binding invalid: {err}");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
+        }
+    };
+    let province_groups =
+        match crate::institution::admins::chain_roles::fetch_all_federal_registry_assignments(
+            &identity,
+        )
+        .await
+        {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::warn!(error = %err, "chain unreachable listing all federal registry admins");
+                return api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable");
+            }
+        };
     let now = Utc::now();
     let tier1_code = chain_runtime::TIER1_REGISTRY_CODE.to_string();
     let balance_accounts = province_groups
         .iter()
         .flat_map(|group| {
             group
-                .profiles
+                .assignments
                 .iter()
-                .map(|profile| profile.account_hex.clone())
+                .map(|assignment| assignment.account_hex.clone())
         })
         .collect::<Vec<_>>();
     let balance_by_account = match chain_runtime::fetch_account_balances_onchain(&balance_accounts)
@@ -84,8 +108,8 @@ pub(crate) async fn list_federal_registry_admins(
         for group in &province_groups {
             let province_name = group.province_name.clone();
             let _province_code = group.province_code;
-            for profile in &group.profiles {
-                let account = &profile.account_hex;
+            for assignment in &group.assignments {
+                let account = &assignment.account_hex;
                 repo::upsert_federal_registry_admin_scope_conn(conn, account, &province_name)?;
                 // 缓存缺失即补一条 built_in 行(名字空→显示回退),保证有本地 id 供换届定位。
                 let admin = match repo::get_admin_by_account_conn(conn, account)? {
@@ -111,14 +135,14 @@ pub(crate) async fn list_federal_registry_admins(
                     id: admin.id,
                     province_name: province_name.clone(),
                     admin_account: admin.admin_account,
-                    admin_name: profile.name.clone(),
-                    admin_cid_number: profile.admin_cid_number.clone(),
-                    name: profile.name.clone(),
-                    role_name: profile.role_name.clone(),
-                    term_start: profile.term_start,
-                    term_end: profile.term_end,
-                    origin: profile.origin,
-                    origin_label: profile.origin_label.clone(),
+                    role_code: assignment.role_code.clone(),
+                    role_name: assignment.role_name.clone(),
+                    term_required: assignment.term_required,
+                    term_start: assignment.term_start,
+                    term_end: assignment.term_end,
+                    assignment_source: assignment.assignment_source,
+                    assignment_source_label: assignment.assignment_source_label.clone(),
+                    assignment_source_ref: assignment.assignment_source_ref.clone(),
                     balance_fen: balance_fen(&balance_by_account, account),
                     built_in: admin.built_in,
                     created_at: admin.created_at,
@@ -181,27 +205,29 @@ pub(crate) async fn list_own_institution_admins(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 5001, message.as_str());
         }
     };
-    let chain_profiles = match chain_runtime::fetch_active_admin_profiles_onchain(&identity).await {
-        Ok(Some(profiles)) => profiles,
-        Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin"),
-        Err(err) => {
-            tracing::warn!(error = %err, "chain unreachable listing own institution admins");
-            return api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable");
-        }
-    };
+    let chain_assignments =
+        match crate::institution::admins::chain_roles::fetch_active_assignments_onchain(&identity)
+            .await
+        {
+            Ok(Some(assignments)) => assignments,
+            Ok(None) => return api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin"),
+            Err(err) => {
+                tracing::warn!(error = %err, "chain unreachable listing own institution admins");
+                return api_error(StatusCode::BAD_GATEWAY, 5002, "chain unreachable");
+            }
+        };
     // 列表展示也做一次链上 active 复查,避免后台清退窗口内的失效管理员继续读取。
-    if !chain_profiles
-        .iter()
-        .any(|profile| same_admin_account(profile.account_hex.as_str(), ctx.admin_account.as_str()))
-    {
+    if !chain_assignments.iter().any(|assignment| {
+        same_admin_account(assignment.account_hex.as_str(), ctx.admin_account.as_str())
+    }) {
         return api_error(StatusCode::FORBIDDEN, 2002, "not an on-chain admin");
     }
     let actor_account = ctx.admin_account.clone();
     let institution_code = ctx.institution_code.clone();
     let cid_short_name = ctx.cid_short_name.clone();
-    let balance_accounts = chain_profiles
+    let balance_accounts = chain_assignments
         .iter()
-        .map(|profile| profile.account_hex.clone())
+        .map(|assignment| assignment.account_hex.clone())
         .collect::<Vec<_>>();
     let balance_by_account = match chain_runtime::fetch_account_balances_onchain(&balance_accounts)
         .await
@@ -213,20 +239,21 @@ pub(crate) async fn list_own_institution_admins(
         }
     };
     let result = {
-        let mut rows = Vec::with_capacity(chain_profiles.len());
-        for profile in chain_profiles {
-            let is_self = same_admin_account(profile.account_hex.as_str(), actor_account.as_str());
-            let balance = balance_fen(&balance_by_account, profile.account_hex.as_str());
+        let mut rows = Vec::with_capacity(chain_assignments.len());
+        for assignment in chain_assignments {
+            let is_self =
+                same_admin_account(assignment.account_hex.as_str(), actor_account.as_str());
+            let balance = balance_fen(&balance_by_account, assignment.account_hex.as_str());
             rows.push(OwnInstitutionAdminRow {
-                admin_account: profile.account_hex.clone(),
-                admin_name: profile.name.clone(),
-                admin_cid_number: profile.admin_cid_number,
-                name: profile.name,
-                role_name: profile.role_name,
-                term_start: profile.term_start,
-                term_end: profile.term_end,
-                origin: profile.origin,
-                origin_label: profile.origin_label,
+                admin_account: assignment.account_hex,
+                role_code: assignment.role_code,
+                role_name: assignment.role_name,
+                term_required: assignment.term_required,
+                term_start: assignment.term_start,
+                term_end: assignment.term_end,
+                assignment_source: assignment.assignment_source,
+                assignment_source_label: assignment.assignment_source_label,
+                assignment_source_ref: assignment.assignment_source_ref,
                 balance_fen: balance,
                 is_self,
             });

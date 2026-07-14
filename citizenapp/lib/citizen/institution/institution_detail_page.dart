@@ -18,7 +18,7 @@ import 'package:citizenapp/citizen/proposal/proposal_entry_page.dart';
 import 'package:citizenapp/citizen/shared/institution_manage_detail_page.dart';
 import 'package:citizenapp/citizen/institution/institution_admin_list_page.dart';
 import 'package:citizenapp/citizen/proposal/runtime-upgrade/runtime_upgrade_detail_page.dart';
-import 'package:citizenapp/citizen/shared/admin_profile.dart';
+import 'package:citizenapp/citizen/institution/institution_role_models.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_context.dart';
 import 'package:citizenapp/citizen/shared/proposal/proposal_local_store.dart';
@@ -92,7 +92,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   bool _mainBalanceLoading = true;
 
   List<String> _admins = const [];
-  List<AdminProfile> _adminProfiles = const [];
+  List<InstitutionAdminAssignment> _adminAssignments = const [];
 
   // 治理路径专用(管理员角色 / 激活 / 富提案列表)。
   List<WalletProfile> _adminWallets = const [];
@@ -222,11 +222,11 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _activationService
             .getActivatedAdmins(identity)
             .catchError((_) => <ActivatedAdmin>[]),
-        _adminService.fetchAdminProfiles(identity),
+        _adminService.fetchAssignments(identity, _inst!.cidNumber),
       ]);
       final admins = results[0] as List<String>;
       final ctx = results[1] as ProposalContext;
-      final adminProfiles = results[3] as List<AdminProfile>;
+      final adminAssignments = results[3] as List<InstitutionAdminAssignment>;
       final activated = results[2] as List<ActivatedAdmin>;
       final coldPubkeys = await _loadImportedColdPubkeys(admins);
       if (ctx.isAdmin) {
@@ -240,7 +240,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       setState(() {
         if (shouldUpdateAdmins) {
           _admins = admins;
-          _adminProfiles = adminProfiles;
+          _adminAssignments = adminAssignments;
         }
         _govInfo = ctx.institution ?? govInfo;
         _adminWallets = ctx.adminWallets;
@@ -301,11 +301,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Future<void> _loadPublicDynamics(Institution inst) async {
     try {
-      final profiles = await _chainState.adminProfiles(inst);
+      final assignments = await _chainState.assignments(inst);
       if (mounted) {
         setState(() {
-          _adminProfiles = profiles;
-          _admins = profiles.map((p) => p.account).toList(growable: false);
+          _adminAssignments = assignments;
+          _admins = assignments
+              .map((item) => item.adminAccount)
+              .toSet()
+              .toList(growable: false);
         });
       }
     } on Exception {
@@ -563,7 +566,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         builder: (_) => AdminListPage(
           institution: govInfo,
           accountIdentity: identity,
-          admins: _adminProfiles,
+          admins: _adminAssignments,
           importedColdPubkeys: _importedColdPubkeys,
           activatedPubkeys: _activatedPubkeys,
           badgeColor: AppTheme.primary,
@@ -580,7 +583,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   void _openPublicAdminList() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PublicInstitutionAdminListPage(admins: _adminProfiles),
+        builder: (_) =>
+            PublicInstitutionAdminListPage(admins: _adminAssignments),
       ),
     );
   }

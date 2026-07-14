@@ -12,6 +12,17 @@ on:
       - "citizenchain/runtime/votingengine/joint-vote/src/lib.rs"
       - "citizenchain/runtime/votingengine/internal-vote/src/lib.rs"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 执行 CI 或正式发布
+        required: true
+        type: choice
+        options:
+          - ci
+          - release
+
+env:
+  GMB_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'release' }}
 
 concurrency:
   group: citizenwallet-ci-${{ github.ref }}
@@ -82,7 +93,7 @@ jobs:
         run: flutter pub get
 
       - name: 写入 Android release keystore
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         env:
           GMB_APP_KEY: ${{ secrets.GMB_APP_KEY }}
         run: |
@@ -144,23 +155,23 @@ jobs:
 
       # 中文注释：push 自动 CI 只做工程构建检查，不读取正式签名 keystore。
       - name: 构建 Debug APK（push 检查）
-        if: ${{ github.event_name != 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE != 'true' }}
         working-directory: citizenwallet
         run: flutter build apk --debug
 
       - name: 构建正式 APK
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         working-directory: citizenwallet
         run: flutter build apk --release
 
       - name: 重命名产物
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         run: |
           cp citizenwallet/build/app/outputs/flutter-apk/app-release.apk citizenwallet/build/app/outputs/flutter-apk/公民钱包.apk
           echo "产出: 公民钱包.apk"
 
       - name: 上传 公民钱包.apk
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ env.GMB_RELEASE_MODE == 'true' }}
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:

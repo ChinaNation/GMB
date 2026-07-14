@@ -2,12 +2,34 @@ import 'dart:typed_data';
 
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
-import 'package:citizenapp/citizen/shared/admin_profile.dart';
+import 'package:citizenapp/citizen/institution/institution_role_storage_codec.dart';
+import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 class AdminAccountCodec {
   AdminAccountCodec._();
 
-  static AdminAccountState? decode(Uint8List accountId, Uint8List data) {
+  static AdminAccountState? decode(
+    Uint8List accountId,
+    Uint8List data, {
+    required bool personalMultisig,
+    int? institutionKind,
+  }) {
+    if (!personalMultisig) {
+      final decoded = InstitutionRoleStorageCodec.decodeAdminAccount(data);
+      if (decoded == null) return null;
+      return AdminAccountState(
+        accountHex: AdminAccountIdCodec.hexEncode(accountId),
+        institutionCode: decoded.institutionCode,
+        kind: institutionKind ??
+            InstitutionCodeLabel.adminAccountKind(decoded.institutionCode),
+        admins: decoded.admins,
+        threshold: 0,
+        creatorHex: '',
+        createdAt: 0,
+        updatedAt: 0,
+        status: decoded.status,
+      );
+    }
     if (data.length < 5) return null;
     var offset = 0;
     // 链端 AdminAccount 前导字段 cid_number: BoundedVec<u8>(个人多签为空);仅消费字节。
@@ -21,16 +43,13 @@ class AdminAccountCodec {
     final kind = data[offset++];
     final (count, countLen) = readCompactU32(data, offset);
     offset += countLen;
-    // A2:`AdminAccounts.admins` 为 `Vec<AdminProfile>`(个人多签 kind=2 为裸 `Vec<AccountId>`)。
-    final adminsRead = AdminProfile.decodeAdminsVec(
-      data,
-      offset,
-      count,
-      isPersonal: kind == 2,
-    );
-    if (adminsRead == null) return null;
-    final (profiles, afterAdmins) = adminsRead;
-    offset = afterAdmins;
+    final admins = <String>[];
+    for (var i = 0; i < count; i++) {
+      if (offset + 32 > data.length) return null;
+      admins.add(
+          AdminAccountIdCodec.hexEncode(data.sublist(offset, offset + 32)));
+      offset += 32;
+    }
     if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     final creatorHex =
         AdminAccountIdCodec.hexEncode(data.sublist(offset, offset + 32));
@@ -44,7 +63,7 @@ class AdminAccountCodec {
       accountHex: AdminAccountIdCodec.hexEncode(accountId),
       institutionCode: institutionCode,
       kind: kind,
-      profiles: profiles,
+      admins: admins,
       // runtime 的各管理员 `AdminAccounts` 已不再保存阈值；
       // 调用方必须从 internal-vote 动态阈值 storage 或治理固定常量补齐。
       threshold: 0,

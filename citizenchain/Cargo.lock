@@ -7797,7 +7797,6 @@ checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 name = "node"
 version = "1.0.0"
 dependencies = [
- "admin-primitives",
  "async-channel 1.9.0",
  "async-trait",
  "base64 0.22.1",
@@ -7808,6 +7807,7 @@ dependencies = [
  "citizenchain",
  "clap",
  "ed25519-dalek",
+ "entity-primitives",
  "frame-benchmarking-cli",
  "frame-metadata-hash-extension",
  "frame-support",
@@ -8360,7 +8360,6 @@ dependencies = [
 name = "onchina"
 version = "1.0.0"
 dependencies = [
- "admin-primitives",
  "aes-gcm",
  "async-trait",
  "axum",
@@ -8372,6 +8371,7 @@ dependencies = [
  "chrono",
  "citizenchain",
  "dashmap 6.2.1",
+ "entity-primitives",
  "frame-metadata-hash-extension",
  "frame-support",
  "frame-system",

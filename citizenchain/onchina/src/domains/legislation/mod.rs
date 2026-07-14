@@ -7,7 +7,7 @@
 //! Phase 0 仅落地数据地基:提案类型枚举(`model`)+ 提案候选与立法角色解析(`category`)。
 //! 链交互(`law/chain_*`)、HTTP 入口(`handler`/`service`)、大屏聚合(`display`)在后续 Phase 落地。
 
-/// 预算案(类>款>项>目)字段 schema(Phase 4 预留;链端无 PROPOSAL_KIND_BUDGET,发起/表决/读链另卡)。
+/// 预算案（类>款>项>目）字段 schema；未来由预算业务模块接入代表机构表决。
 pub(crate) mod budget;
 pub(crate) mod category;
 /// 提案进度只读投影（Proposal + 代表/法律元数据 + tally）。
@@ -19,5 +19,5 @@ pub(crate) mod handler;
 /// 法律案——章节条款提案 + 院内/两院表决 + 签署的链交互编码器(Phase 1)。
 pub(crate) mod law;
 pub(crate) mod model;
-/// 任免案(人事任免职书)字段 schema(Phase 4 预留;链端无 PROPOSAL_KIND_PERSONNEL,发起/表决/读链另卡)。
+/// 任免案（人事任免职书）字段 schema；未来由任免业务模块接入代表机构表决。
 pub(crate) mod personnel;

@@ -871,6 +871,40 @@ fn create_and_activate_institution(
     (cid, main)
 }
 
+fn governance_assignment_result(
+    code: primitives::cid::code::InstitutionCode,
+    main: AccountId32,
+    role_code: &[u8],
+    accounts: alloc::vec::Vec<AccountId32>,
+    assignment_source: entity_primitives::InstitutionAssignmentSource,
+    source_ref: alloc::vec::Vec<u8>,
+) -> entity_primitives::InstitutionGovernanceResult<AccountId32> {
+    let assignments = accounts
+        .into_iter()
+        .map(
+            |admin_account| entity_primitives::InstitutionAssignmentTarget {
+                admin_account,
+                term_start: 0,
+                term_end: 0,
+                assignment_source,
+                assignment_source_ref: source_ref.clone(),
+                assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+            },
+        )
+        .collect();
+    entity_primitives::InstitutionGovernanceResult {
+        institution_code: code,
+        institution_account: main,
+        role_changes: alloc::vec![],
+        assignment_changes: alloc::vec![entity_primitives::InstitutionRoleAssignmentChange {
+            role_code: role_code.to_vec(),
+            assignments,
+        }],
+        legal_representative_change: None,
+        result_source_ref: source_ref,
+    }
+}
+
 #[test]
 fn propose_close_writes_pending() {
     new_test_ext().execute_with(|| {
@@ -1132,17 +1166,15 @@ fn election_result_replaces_role_assignments_and_preserves_admin_threshold() {
         let (cid, main) = create_and_activate_institution("CID-ELECT", 3);
         let code = code_bytes("CGOV");
 
-        assert_ok!(PublicManage::apply_institution_assignment_result(
-            entity_primitives::InstitutionAssignmentResult {
-                institution_code: code,
-                institution_account: main.clone(),
-                role_code: b"TEST_ADMIN".to_vec(),
-                admin_accounts: alloc::vec![admin(4), admin(1), admin(5)],
-                term_start: 0,
-                term_end: 0,
-                assignment_source: entity_primitives::InstitutionAssignmentSource::PopularElection,
-                assignment_source_ref: 91u64.to_le_bytes().to_vec(),
-            }
+        assert_ok!(PublicManage::apply_institution_governance_result(
+            governance_assignment_result(
+                code,
+                main.clone(),
+                b"TEST_ADMIN",
+                alloc::vec![admin(4), admin(1), admin(5)],
+                entity_primitives::InstitutionAssignmentSource::PopularElection,
+                91u64.to_le_bytes().to_vec(),
+            )
         ));
 
         let role_code: crate::RoleCodeOf =
@@ -1174,34 +1206,143 @@ fn election_result_replaces_role_assignments_and_preserves_admin_threshold() {
 }
 
 #[test]
-fn assignment_and_admin_sync_roll_back_together_when_threshold_is_missing() {
+fn governance_result_applies_dynamic_role_assignments_and_legal_representative_atomically() {
+    new_test_ext().execute_with(|| {
+        let (cid, main) = create_and_activate_institution("CID-GOV-ALL", 3);
+        let code = code_bytes("CGOV");
+        let role_code: crate::RoleCodeOf =
+            BoundedVec::try_from(b"TERM_BOARD".to_vec()).expect("role code fits");
+        let result_source_ref = b"governance-result-101".to_vec();
+
+        assert_ok!(PublicManage::apply_institution_governance_result(
+            entity_primitives::InstitutionGovernanceResult {
+                institution_code: code,
+                institution_account: main.clone(),
+                role_changes: alloc::vec![entity_primitives::InstitutionRoleChange {
+                    role_code: role_code.to_vec(),
+                    role_name: "任期委员".as_bytes().to_vec(),
+                    term_required: true,
+                    role_status: entity_primitives::InstitutionRoleStatus::Active,
+                }],
+                assignment_changes: alloc::vec![
+                    entity_primitives::InstitutionRoleAssignmentChange {
+                        role_code: role_code.to_vec(),
+                        assignments: alloc::vec![
+                            entity_primitives::InstitutionAssignmentTarget {
+                                admin_account: admin(4),
+                                term_start: 10,
+                                term_end: 20,
+                                assignment_source:
+                                    entity_primitives::InstitutionAssignmentSource::PopularElection,
+                                assignment_source_ref: b"election-4".to_vec(),
+                                assignment_status:
+                                    entity_primitives::InstitutionAssignmentStatus::Active,
+                            },
+                            entity_primitives::InstitutionAssignmentTarget {
+                                admin_account: admin(5),
+                                term_start: 30,
+                                term_end: 40,
+                                assignment_source:
+                                    entity_primitives::InstitutionAssignmentSource::NominationAppointment,
+                                assignment_source_ref: b"appointment-5".to_vec(),
+                                assignment_status:
+                                    entity_primitives::InstitutionAssignmentStatus::Active,
+                            },
+                        ],
+                    },
+                ],
+                legal_representative_change: Some(
+                    entity_primitives::InstitutionLegalRepresentativeChange {
+                        legal_representative_name: "新法定代表人".as_bytes().to_vec(),
+                        legal_representative_cid_number:
+                            b"GD001-CTZN1-000000088-2026".to_vec(),
+                        legal_representative_account: admin(88),
+                    },
+                ),
+                result_source_ref,
+            }
+        ));
+
+        let role = pallet::InstitutionRoles::<Test>::get(&cid, &role_code)
+            .expect("dynamic role stored");
+        assert!(role.term_required);
+        let assignments =
+            pallet::InstitutionRoleAssignments::<Test>::get(&cid, &role_code).to_vec();
+        assert_eq!(assignments.len(), 2);
+        assert_eq!((assignments[0].term_start, assignments[0].term_end), (10, 20));
+        assert_eq!(assignments[0].assignment_source_ref.as_slice(), b"election-4");
+        assert_eq!((assignments[1].term_start, assignments[1].term_end), (30, 40));
+        assert_eq!(
+            assignments[1].assignment_source_ref.as_slice(),
+            b"appointment-5"
+        );
+
+        let institution = pallet::Institutions::<Test>::get(&cid).expect("institution exists");
+        assert_eq!(
+            institution
+                .legal_representative_name
+                .expect("legal representative name")
+                .as_slice(),
+            "新法定代表人".as_bytes()
+        );
+        assert_eq!(institution.legal_representative_account, Some(admin(88)));
+        let stored = public_admins::AdminAccounts::<Test>::get(main)
+            .expect("public admin account present");
+        assert_eq!(
+            stored.admins.to_vec(),
+            alloc::vec![admin(0), admin(1), admin(2), admin(4), admin(5)]
+        );
+    });
+}
+
+#[test]
+fn governance_result_rolls_back_role_representative_and_admins_when_sync_fails() {
     new_test_ext().execute_with(|| {
         let (cid, main) = create_and_activate_institution("CID-ELECT-RB", 3);
         let code = code_bytes("CGOV");
         let role_code: crate::RoleCodeOf =
             BoundedVec::try_from(b"TEST_ADMIN".to_vec()).expect("role code fits");
         let before = pallet::InstitutionRoleAssignments::<Test>::get(&cid, &role_code);
+        let institution_before = pallet::Institutions::<Test>::get(&cid).expect("institution");
+        let new_role_code: crate::RoleCodeOf =
+            BoundedVec::try_from(b"ROLLBACK_ROLE".to_vec()).expect("role code fits");
         internal_vote::ActiveDynamicThresholds::<Test>::remove(code, main.clone());
 
+        let mut result = governance_assignment_result(
+            code,
+            main,
+            b"TEST_ADMIN",
+            alloc::vec![admin(5), admin(6)],
+            entity_primitives::InstitutionAssignmentSource::MutualElection,
+            92u64.to_le_bytes().to_vec(),
+        );
+        result.role_changes = alloc::vec![entity_primitives::InstitutionRoleChange {
+            role_code: new_role_code.to_vec(),
+            role_name: "回滚岗位".as_bytes().to_vec(),
+            term_required: false,
+            role_status: entity_primitives::InstitutionRoleStatus::Active,
+        }];
+        result.legal_representative_change =
+            Some(entity_primitives::InstitutionLegalRepresentativeChange {
+                legal_representative_name: "不应写入".as_bytes().to_vec(),
+                legal_representative_cid_number: b"GD001-CTZN1-000000077-2026".to_vec(),
+                legal_representative_account: admin(77),
+            });
         assert_noop!(
-            PublicManage::apply_institution_assignment_result(
-                entity_primitives::InstitutionAssignmentResult {
-                    institution_code: code,
-                    institution_account: main,
-                    role_code: b"TEST_ADMIN".to_vec(),
-                    admin_accounts: alloc::vec![admin(5), admin(6)],
-                    term_start: 0,
-                    term_end: 0,
-                    assignment_source:
-                        entity_primitives::InstitutionAssignmentSource::MutualElection,
-                    assignment_source_ref: 92u64.to_le_bytes().to_vec(),
-                }
-            ),
+            PublicManage::apply_institution_governance_result(result),
             public_admins::Error::<Test>::MissingDynamicThreshold
         );
         assert_eq!(
             pallet::InstitutionRoleAssignments::<Test>::get(&cid, &role_code),
             before
+        );
+        assert!(!pallet::InstitutionRoles::<Test>::contains_key(
+            &cid,
+            &new_role_code
+        ));
+        assert_eq!(
+            pallet::Institutions::<Test>::get(&cid),
+            Some(institution_before)
         );
     });
 }

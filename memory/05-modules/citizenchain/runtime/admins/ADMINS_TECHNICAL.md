@@ -52,7 +52,8 @@
 - 私权机构生命周期由 `private-manage` 发起，只写 `private-admins`。
 - 个人多签账户生命周期由 `personal-manage` 发起，只写 `personal-admins`；管理员更换 call 为 `PersonalAdmins(29).propose_admin_set_change(0)`。
 - 公权/私权机构创建时，entity 模块只把机构 `cid_number` 和管理员钱包账户集合交给对应 admins 模块；对应的 `Registry` 任职来源由 entity 任职关系保存。
-- 普选/互选终态结果先写 entity 目标岗位任职；entity 再从机构全部有效任职派生 admins 钱包集合，并在同一事务内调用对应 admins 同步入口。
+- 已完成业务把通用机构治理结果交给 entity；entity 原子校验岗位定义、各岗位目标任职和法定代表人三字段，再从全部有效任职派生 admins 钱包集合，并在同一事务内调用对应 admins 同步入口。
+- admins 不接收业务结果、不解释岗位变化，也不保存任职来源；唯一写入内容仍是机构当前有效管理员钱包集合。
 - 动态机构同步时沿用既有 Active 多签阈值；固定治理机构继续使用代码级固定阈值，任职结果不能修改阈值制度。
 - 国家储委会、省储委会、省储行、国家司法院固定人数；国家司法院岗位为 7 护宪、1 首席、2 次席、5 大法官。
 - FRG 在 `public-admins` 只有一个含 215 个钱包的机构管理员集合；43 个省专员岗位、每岗5人的分组真源在 entity 任职 storage，不存在虚拟省组账户。

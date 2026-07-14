@@ -4,11 +4,11 @@
 //! 对齐的 `ProposeCreateInstitutionArgs`,再交 `core::institution_call` 编码。
 //! onchina 只产 call data,不拼签名扩展尾、不提交 extrinsic。
 //!
-//! AdminProfile 组装规则(ADR-030/A2):
-//! - `account`:管理员进链账户(institution_admins.admin_account);
-//! - `admin_cid_number` / `name`:来自注册局公民记录(citizens 关联 subjects.cid_full_name);
-//! - `role_name`(职务)/ `term_start` / `term_end`:来自创建表单;`role_code`/`admin_source_ref`
-//!   注册局创建暂留空(与创世同);`source` 固定 `Registry`。
+//! 管理员与岗位组装规则:
+//! - `admins` 由任职记录中的钱包账户去重后在 runtime 派生，不在本调用重复编码；
+//! - `roles` 保存机构岗位定义；
+//! - `assignments` 保存管理员钱包与岗位的绑定，来源固定为注册局；
+//! - 管理员公民身份和姓名不进入机构管理员链上结构。
 //! 机构 `cid_short_name` 只取 subjects.cid_short_name,与 `cid_full_name` 同源上链。
 
 use postgres::Client;
@@ -16,46 +16,15 @@ use uuid::Uuid;
 
 use crate::auth::login::parse_sr25519_pubkey_bytes;
 use crate::core::institution_call::{
-    encode_propose_create_institution, AdminProfileArg, AdminSourceTag, ChainCall,
-    InitialAccountArg, ProposeCreateInstitutionArgs,
+    encode_propose_create_institution, ChainCall, InitialAccountArg, InstitutionAssignmentArg,
+    InstitutionAssignmentSourceTag, InstitutionAssignmentStatusTag, InstitutionRoleArg,
+    InstitutionRoleStatusTag, ProposeCreateInstitutionArgs,
 };
 use crate::institution::subjects::model::CreateInstitutionAdminInput;
 use crate::AppState;
 
 /// 默认初始余额(分)。链端 MinCreateAmount=111,这里按最小值构造注册交易。
 const DEFAULT_INITIAL_ACCOUNT_AMOUNT_FEN: u128 = 111;
-
-/// 一个管理员的实名锚信息(admin_cid_number + name),由 DB 联表派生。
-pub(crate) struct AdminIdentity {
-    pub(crate) admin_cid_number: Vec<u8>,
-    pub(crate) name: Vec<u8>,
-}
-
-/// 在已有连接上,按管理员进链账户联表派生其实名锚(cid_number + 姓名)。
-/// 链:institution_admins.admin_account → citizens.wallet_pubkey → citizens.cid_number
-/// → subjects(kind='CITIZEN').cid_full_name。查不到则留空(链端接受空 BoundedVec)。
-pub(crate) fn resolve_admin_identity_conn(conn: &mut Client, admin_account: &str) -> AdminIdentity {
-    let sql = "SELECT c.cid_number, s.cid_full_name
-               FROM citizens c
-               LEFT JOIN subjects s
-                 ON s.cid_number = c.cid_number AND s.kind = 'CITIZEN'
-               WHERE c.wallet_pubkey = $1
-               LIMIT 1";
-    match conn.query_opt(sql, &[&admin_account]) {
-        Ok(Some(row)) => {
-            let cid: Option<String> = row.get(0);
-            let name: Option<String> = row.get(1);
-            AdminIdentity {
-                admin_cid_number: cid.unwrap_or_default().into_bytes(),
-                name: name.unwrap_or_default().into_bytes(),
-            }
-        }
-        _ => AdminIdentity {
-            admin_cid_number: Vec::new(),
-            name: Vec::new(),
-        },
-    }
-}
 
 /// 组装并编码 `propose_create_institution` 裸 call data(进 QR `b.d`)。
 ///
@@ -141,44 +110,33 @@ pub(crate) fn build_create_institution_call_data(
         return Err("http:conflict:at least one account_name is required".to_string());
     }
 
-    // ── 管理员集合(AdminProfile)。account 来自 institution_admins;role_name/term 来自表单;
-    //    admin_cid_number/name 联表派生;role_code/admin_source_ref 留空;source 固定 Registry。
+    // ── 本地管理员表只核对钱包集合；岗位与任职以本次表单为唯一创建载荷。
     let db_admins =
         crate::institution::admins::repo::list_institution_admins_by_cid_conn(conn, cid_number)?;
     if db_admins.len() < 2 {
         return Err("http:conflict:at least two admins are required".to_string());
     }
-    let admins_len = db_admins.len() as u32;
+    let mut db_accounts = std::collections::HashSet::new();
+    for admin in &db_admins {
+        let account = parse_sr25519_pubkey_bytes(admin.admin_account.as_str())
+            .ok_or_else(|| "http:bad_request:admin_account format invalid".to_string())?;
+        db_accounts.insert(account);
+    }
+    let mut form_accounts = std::collections::HashSet::new();
+    for form in admin_forms {
+        let account = parse_sr25519_pubkey_bytes(form.admin_account.as_str())
+            .ok_or_else(|| "http:bad_request:admin_account format invalid".to_string())?;
+        form_accounts.insert(account);
+    }
+    if db_accounts != form_accounts {
+        return Err("http:conflict:admin wallet set changed before call encoding".to_string());
+    }
+    let admins_len = form_accounts.len() as u32;
     let min_threshold = admins_len / 2 + 1;
     if threshold < min_threshold || threshold > admins_len {
         return Err(format!(
             "http:bad_request:threshold must be in {min_threshold}..={admins_len}"
         ));
-    }
-
-    let mut admin_args: Vec<AdminProfileArg> = Vec::with_capacity(db_admins.len());
-    for admin in &db_admins {
-        let account = parse_sr25519_pubkey_bytes(admin.admin_account.as_str())
-            .ok_or_else(|| "http:bad_request:admin_account format invalid".to_string())?;
-        let form = admin_forms
-            .iter()
-            .find(|f| accounts_match(f.admin_account.as_str(), admin.admin_account.as_str()));
-        let identity = resolve_admin_identity_conn(conn, admin.admin_account.as_str());
-        admin_args.push(AdminProfileArg {
-            account,
-            admin_cid_number: identity.admin_cid_number,
-            name: identity.name,
-            // 注册局创建:表单单一职务写入 role_name;role_code/admin_source_ref 留空(与创世同)。
-            role_code: Vec::new(),
-            role_name: form
-                .and_then(|f| f.role_name.clone())
-                .unwrap_or_default()
-                .into_bytes(),
-            term_start: form.and_then(|f| f.term_start).unwrap_or(0),
-            term_end: form.and_then(|f| f.term_end).unwrap_or(0),
-            source: AdminSourceTag::Registry,
-            admin_source_ref: Vec::new(),
-        });
     }
 
     // ── 注册局签发凭证(复用唯一原语;不在此处重写签名逻辑)。
@@ -209,6 +167,33 @@ pub(crate) fn build_create_institution_call_data(
     let signature = hex_to_vec(credential.signature.as_str())
         .ok_or_else(|| "http:internal:signature parse failed".to_string())?;
 
+    // 岗位按 role_code 去重，任职逐条保留；注册 nonce 是本次注册局任职来源引用。
+    let mut role_codes = std::collections::HashSet::new();
+    let mut roles = Vec::new();
+    let mut assignments = Vec::with_capacity(admin_forms.len());
+    for form in admin_forms {
+        if role_codes.insert(form.role_code.clone()) {
+            roles.push(InstitutionRoleArg {
+                cid_number: cid_number.as_bytes().to_vec(),
+                role_code: form.role_code.as_bytes().to_vec(),
+                role_name: form.role_name.as_bytes().to_vec(),
+                term_required: form.term_required,
+                role_status: InstitutionRoleStatusTag::Active,
+            });
+        }
+        assignments.push(InstitutionAssignmentArg {
+            cid_number: cid_number.as_bytes().to_vec(),
+            admin_account: parse_sr25519_pubkey_bytes(form.admin_account.as_str())
+                .ok_or_else(|| "http:bad_request:admin_account format invalid".to_string())?,
+            role_code: form.role_code.as_bytes().to_vec(),
+            term_start: form.term_start.unwrap_or(0),
+            term_end: form.term_end.unwrap_or(0),
+            assignment_source: InstitutionAssignmentSourceTag::Registry,
+            assignment_source_ref: credential.register_nonce.as_bytes().to_vec(),
+            assignment_status: InstitutionAssignmentStatusTag::Active,
+        });
+    }
+
     let args = ProposeCreateInstitutionArgs {
         cid_number: cid_number.as_bytes().to_vec(),
         cid_full_name: cid_full_name.trim().as_bytes().to_vec(),
@@ -219,8 +204,8 @@ pub(crate) fn build_create_institution_call_data(
         legal_representative_account,
         accounts: account_args,
         institution_code: code_bytes,
-        admins_len,
-        admins: admin_args,
+        roles,
+        assignments,
         threshold,
         register_nonce: credential.register_nonce.into_bytes(),
         signature,
@@ -232,17 +217,6 @@ pub(crate) fn build_create_institution_call_data(
     };
 
     Ok(encode_propose_create_institution(&args))
-}
-
-/// 两个账户标识(hex/SS58 任一形态)解析为同一 32 字节即视为相等。
-fn accounts_match(left: &str, right: &str) -> bool {
-    match (
-        parse_sr25519_pubkey_bytes(left),
-        parse_sr25519_pubkey_bytes(right),
-    ) {
-        (Some(l), Some(r)) => l == r,
-        _ => left.trim() == right.trim(),
-    }
 }
 
 /// 0x/裸 hex → 32 字节定长。

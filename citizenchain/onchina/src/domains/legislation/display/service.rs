@@ -5,10 +5,11 @@
 
 use std::collections::HashMap;
 
-use crate::core::chain_runtime::{
-    fetch_active_admin_profiles_onchain, NodeInstitutionIdentity, OnChainAdminProfileView,
-};
+use crate::core::chain_runtime::NodeInstitutionIdentity;
 use crate::domains::legislation::chain_read_proposal::{fetch_proposal_state, LegProposalState};
+use crate::institution::admins::chain_roles::{
+    fetch_active_assignments_onchain, InstitutionAssignmentView,
+};
 
 use super::chain_read::{fetch_active_proposal_ids, fetch_representative_ballots};
 use super::model::{ActiveProposalView, DisplayBoard, SeatView};
@@ -26,7 +27,7 @@ pub(crate) async fn build_display_board(
     cid_short_name: Option<String>,
     scope_label: String,
 ) -> Result<DisplayBoard, String> {
-    let roster = fetch_active_admin_profiles_onchain(identity)
+    let roster = fetch_active_assignments_onchain(identity)
         .await?
         .unwrap_or_default();
     // FRG 等非立法机构:`main_account` 为 `[0u8;32]` 哨兵(身份走 frg_province_code 分流),
@@ -65,14 +66,15 @@ pub(crate) async fn build_display_board(
 /// 名册左连接逐席投票 → 席位板 + 聚合计数(纯装配,可单测)。
 fn build_active_proposal_view(
     state: LegProposalState,
-    roster: &[OnChainAdminProfileView],
+    roster: &[InstitutionAssignmentView],
     ballots: &HashMap<String, bool>,
 ) -> ActiveProposalView {
     let seats: Vec<SeatView> = roster
         .iter()
         .map(|p| SeatView {
             admin_account: p.account_hex.clone(),
-            name: p.name.clone(),
+            // 管理员链上不保存公民姓名；席位展示只使用钱包和机构岗位。
+            name: String::new(),
             role_name: p.role_name.clone(),
             vote: ballots.get(&p.account_hex).copied(),
         })
@@ -94,16 +96,17 @@ mod tests {
     use super::*;
     use crate::domains::legislation::chain_read_proposal::VoteTally;
 
-    fn profile(hex_tail: &str, name: &str) -> OnChainAdminProfileView {
-        OnChainAdminProfileView {
+    fn profile(hex_tail: &str, _name: &str) -> InstitutionAssignmentView {
+        InstitutionAssignmentView {
             account_hex: format!("0x{hex_tail}"),
-            admin_cid_number: String::new(),
-            name: name.to_string(),
+            role_code: "MEMBER".to_string(),
             role_name: "委员".to_string(),
+            term_required: false,
             term_start: 0,
             term_end: 0,
-            origin: 255,
-            origin_label: String::new(),
+            assignment_source: 0,
+            assignment_source_label: "创世".to_string(),
+            assignment_source_ref: String::new(),
         }
     }
 

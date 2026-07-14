@@ -165,13 +165,17 @@ export interface LegalRepresentativePhoto {
 }
 
 export interface CreateInstitutionAdminInput {
-  /** 机构初始管理员进链账户。注册局创建机构时一次性提交。 */
+  /** 机构初始管理员钱包账户；同一账户可绑定多个岗位。 */
   admin_account: string;
-  /** 对外法定职务,写入链上 AdminProfile。 */
-  admin_role?: string;
-  /** 任期开始(天数自纪元;无任期填 0)。 */
+  /** 机构内稳定岗位码。 */
+  role_code: string;
+  /** 机构公开岗位名称。 */
+  role_name: string;
+  /** 岗位是否要求任期。 */
+  term_required: boolean;
+  /** 任期开始日（自纪元起天数）；无任期岗位填 0。 */
   term_start?: number;
-  /** 任期结束(天数自纪元;无任期填 0)。 */
+  /** 任期结束日（自纪元起天数）；无任期岗位填 0。 */
   term_end?: number;
 }
 

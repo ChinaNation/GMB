@@ -220,15 +220,19 @@ pub const VALID_DOC_TYPES: &[&str] =
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateInstitutionAdminInput {
-    /// 机构初始管理员进链账户。注册局创建机构时一次性提交,不再由新机构管理员投票确认。
+    /// 机构初始管理员钱包账户。同一账户可以担任同一机构的多个不同岗位。
     pub admin_account: String,
-    /// 对外法定职务,写入链上 AdminProfile.role_name。
+    /// 机构内稳定岗位码，只允许大写 ASCII、数字和下划线。
+    pub role_code: String,
+    /// 机构公开岗位名称。
+    pub role_name: String,
+    /// 岗位是否要求任期。
     #[serde(default)]
-    pub role_name: Option<String>,
-    /// 任期开始(天数自纪元;无任期填 0)。
+    pub term_required: bool,
+    /// 任期开始日（自纪元起天数）；无任期岗位必须为 0。
     #[serde(default)]
     pub term_start: Option<u32>,
-    /// 任期结束(天数自纪元;无任期填 0)。
+    /// 任期结束日（自纪元起天数）；无任期岗位必须为 0。
     #[serde(default)]
     pub term_end: Option<u32>,
 }

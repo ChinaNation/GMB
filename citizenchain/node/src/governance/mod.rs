@@ -113,7 +113,7 @@ fn collect_admins(
     block_hash: Option<&str>,
     warnings: &mut Vec<String>,
 ) -> Vec<types::AdminInfo> {
-    let profiles = match institution::fetch_admin_profiles(cid_number) {
+    let admins = match institution::fetch_institution_admins(cid_number) {
         Ok(items) => items,
         Err(e) => {
             warnings.push(format!("查询管理员失败: {e}"));
@@ -121,22 +121,16 @@ fn collect_admins(
         }
     };
 
-    profiles
+    admins
         .into_iter()
-        .map(|profile| {
+        .map(|admin| {
             let balance_fen = block_hash
-                .and_then(|hash| institution::fetch_balance_at(&profile.account, Some(hash)).ok())
+                .and_then(|hash| institution::fetch_balance_at(&admin.account, Some(hash)).ok())
                 .flatten()
                 .map(|value| value.to_string());
             types::AdminInfo {
-                account: profile.account,
-                admin_cid_number: profile.admin_cid_number,
-                name: profile.name,
-                admin_role: profile.admin_role,
-                term_start: profile.term_start,
-                term_end: profile.term_end,
-                source: profile.source,
-                source_label: profile.source_label,
+                account: admin.account,
+                assignments: admin.assignments,
                 balance_fen,
             }
         })

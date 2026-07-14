@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../tauri';
 import { CitizenSignatureModal } from '../shared/qr/CitizenSignatureModal';
 import { adminsChangeApi as api } from './api';
-import { AdminProfileCard } from './AdminProfileCard';
+import { InstitutionAssignmentCard } from './InstitutionAssignmentCard';
 import type {
   ActivateRequestResult,
   ActivatedAdmin,
@@ -136,9 +136,9 @@ export function AdminListPage({ cidNumber, accountRef, onBack }: Props) {
               a => a.pubkeyHex.toLowerCase() === pubkey.toLowerCase()
             );
             return (
-              <AdminProfileCard
+              <InstitutionAssignmentCard
                 key={pubkey}
-                profile={admin}
+                admin={admin}
                 index={i + 1}
                 balanceFen={admin.balanceFen}
                 className={isActivated ? 'admin-card-activated' : ''}

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
-import 'package:citizenapp/citizen/shared/admin_profile.dart';
+import 'package:citizenapp/citizen/institution/institution_role_storage_codec.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
 /// `PublicManage/PrivateManage::AccountRegisteredCid` 反查结果。
@@ -173,40 +173,14 @@ class MultisigStorageCodec {
   }
 
   static AdminSnapshot? decodeAdminAccount(Uint8List data) {
-    if (data.length <= 5) return null;
-    var offset = 0;
-    // 链端 AdminAccount 前导字段 cid_number: BoundedVec<u8>(个人多签为空);仅消费字节。
-    final (cidLen, cidLenSize) = readCompactU32(data, offset);
-    offset += cidLenSize + cidLen;
-    if (offset + 5 > data.length) return null;
-    // institution_code: [u8;4]
-    final code = InstitutionCodeLabel.codeToString(
-      data.sublist(offset, offset + 4),
-    );
-    offset += 4;
-    final kind = data[offset++]; // AdminAccountKind
-    final (count, lenSize) = readCompactU32(data, offset);
-    offset += lenSize;
-    // A2:admins 为 `Vec<AdminProfile>`(个人多签 kind=2 裸 `Vec<AccountId>`);本机构账户镜像
-    // 只取账户(数量+account),仍须按 AdminProfile 形态正确解码以拿到正确账户与偏移。
-    final adminsRead = AdminProfile.decodeAdminsVec(
-      data,
-      offset,
-      count,
-      isPersonal: kind == 2,
-    );
-    if (adminsRead == null) return null;
-    final (profiles, afterAdmins) = adminsRead;
-    offset = afterAdmins;
-    // 分类管理员模块的 AdminAccounts 后续字段是 creator/时间/status，
-    // 动态阈值不在这里保存，必须按 institution_code + account 从 InternalVote 查询。
-    if (offset + 32 + 4 + 4 + 1 > data.length) return null;
+    final decoded = InstitutionRoleStorageCodec.decodeAdminAccount(data);
+    if (decoded == null) return null;
     return AdminSnapshot(
-      institutionCode: code,
-      adminsLen: count,
+      institutionCode: decoded.institutionCode,
+      adminsLen: decoded.admins.length,
       threshold: null,
-      admins: profiles.map((p) => p.account).toList(growable: false),
-      statusByte: 0,
+      admins: decoded.admins,
+      statusByte: decoded.status,
     );
   }
 

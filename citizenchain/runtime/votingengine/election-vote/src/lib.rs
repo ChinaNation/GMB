@@ -28,6 +28,7 @@ pub use pallet::*;
 
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 use frame_system::pallet_prelude::BlockNumberFor;
+use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -85,7 +86,7 @@ pub mod pallet {
         type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
 
         /// 选举结果写入 entity 的唯一出口；election-vote 不直接持有岗位或 admins storage。
-        type InstitutionAssignmentResultHandler: entity_primitives::InstitutionAssignmentResultHandler<
+        type InstitutionGovernanceResultHandler: entity_primitives::InstitutionGovernanceResultHandler<
             Self::AccountId,
         >;
     }
@@ -520,23 +521,36 @@ impl<T: pallet::Config> votingengine::ElectionVoteResultCallback for pallet::Pal
         }
         if approved {
             use codec::Encode as _;
-            use entity_primitives::InstitutionAssignmentResultHandler as _;
+            use entity_primitives::InstitutionGovernanceResultHandler as _;
 
             let meta = pallet::ElectionMetaStore::<T>::get(vote_proposal_id)
                 .ok_or(pallet::Error::<T>::ElectionMetaMissing)?;
             let winners = pallet::ElectionResults::<T>::get(vote_proposal_id)
                 .ok_or(pallet::Error::<T>::EmptyCandidateSnapshot)?;
             let assignment_source = meta.mode.assignment_source();
-            T::InstitutionAssignmentResultHandler::apply_institution_assignment_result(
-                entity_primitives::InstitutionAssignmentResult {
-                    institution_code: meta.target_code,
-                    institution_account: meta.target,
-                    role_code: meta.office_code.into_inner(),
-                    admin_accounts: winners.into_iter().map(|winner| winner.account).collect(),
+            let result_source_ref = vote_proposal_id.encode();
+            let assignments = winners
+                .into_iter()
+                .map(|winner| entity_primitives::InstitutionAssignmentTarget {
+                    admin_account: winner.account,
                     term_start: meta.term_start,
                     term_end: meta.term_end,
                     assignment_source,
-                    assignment_source_ref: vote_proposal_id.encode(),
+                    assignment_source_ref: result_source_ref.clone(),
+                    assignment_status: entity_primitives::InstitutionAssignmentStatus::Active,
+                })
+                .collect();
+            T::InstitutionGovernanceResultHandler::apply_institution_governance_result(
+                entity_primitives::InstitutionGovernanceResult {
+                    institution_code: meta.target_code,
+                    institution_account: meta.target,
+                    role_changes: Vec::new(),
+                    assignment_changes: vec![entity_primitives::InstitutionRoleAssignmentChange {
+                        role_code: meta.office_code.into_inner(),
+                        assignments,
+                    }],
+                    legal_representative_change: None,
+                    result_source_ref,
                 },
             )?;
         }

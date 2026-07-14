@@ -21,11 +21,15 @@ use sp_runtime::RuntimeDebug;
 // 仍以 primitives::multisig 为唯一真源，entity-primitives 只做实体侧统一出口。
 pub use primitives::multisig::{AccountValidator, ProtectedSourceChecker, ReservedAccountGuard};
 
+pub mod institution_governance;
 pub mod institution_role;
+pub use institution_governance::{
+    InstitutionAssignmentTarget, InstitutionGovernanceResult, InstitutionGovernanceResultHandler,
+    InstitutionLegalRepresentativeChange, InstitutionRoleAssignmentChange, InstitutionRoleChange,
+};
 pub use institution_role::{
-    InstitutionAdminAssignment, InstitutionAssignmentResult, InstitutionAssignmentResultHandler,
-    InstitutionAssignmentSource, InstitutionAssignmentStatus, InstitutionRole,
-    InstitutionRoleQuery, InstitutionRoleStatus, ASSIGNMENT_SOURCE_REF_MAX_BYTES,
+    InstitutionAdminAssignment, InstitutionAssignmentSource, InstitutionAssignmentStatus,
+    InstitutionRole, InstitutionRoleQuery, InstitutionRoleStatus, ASSIGNMENT_SOURCE_REF_MAX_BYTES,
     INSTITUTION_ROLE_CODE_MAX_BYTES,
 };
 

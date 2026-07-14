@@ -1,19 +1,17 @@
 import type {
   ActivateRequestResult,
   ActivatedAdmin,
-  AdminProfileInfo,
+  InstitutionAdminInfo,
+  InstitutionRoleAssignmentInfo,
   InstitutionDetail,
-  VoteSignRequestResult,
-  VoteSubmitResult,
 } from '../governance/types';
 
 export type {
   ActivateRequestResult,
   ActivatedAdmin,
-  AdminProfileInfo,
+  InstitutionAdminInfo,
+  InstitutionRoleAssignmentInfo,
   InstitutionDetail,
-  VoteSignRequestResult,
-  VoteSubmitResult,
 };
 
 export type AdminAccountState = {
@@ -23,10 +21,7 @@ export type AdminAccountState = {
   institutionCodeLabel: string;
   kind: number;
   kindLabel: string;
-  admins: AdminProfileInfo[];
-  creatorHex: string;
-  createdAt: number;
-  updatedAt: number;
+  admins: InstitutionAdminInfo[];
   status: number;
   statusLabel: string;
 };

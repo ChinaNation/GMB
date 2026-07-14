@@ -1,59 +1,18 @@
-.admin-set-change-summary {
+.institution-assignment-card {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px;
-  margin: 12px 0;
-}
-
-.admin-set-editor {
-  display: grid;
-  gap: 10px;
-}
-
-.admin-set-list {
-  display: grid;
-  gap: 8px;
-}
-
-.admin-set-row,
-.admin-set-add-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-}
-
-.admin-set-row code,
-.admin-set-diff code {
-  overflow-wrap: anywhere;
-}
-
-.admin-set-diff {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
-}
-
-.admin-set-diff > div {
-  display: grid;
-  gap: 6px;
-}
-
-.admin-profile-card {
-  display: grid;
-  gap: 8px;
   min-width: 0;
 }
 
-.admin-profile-top {
+.institution-assignment-top {
   display: flex;
+  min-height: 28px;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 28px;
 }
 
-.admin-profile-card .admin-card-index {
+.institution-assignment-card .admin-card-index {
   display: inline-flex;
   min-width: 28px;
   height: 28px;
@@ -66,7 +25,7 @@
   font-weight: 700;
 }
 
-.admin-profile-top-action {
+.institution-assignment-top-action {
   display: inline-flex;
   min-height: 28px;
   align-items: center;
@@ -75,63 +34,63 @@
   margin-left: auto;
 }
 
-.admin-profile-top-action .activated-tag,
-.admin-profile-top-action .activate-button,
-.admin-profile-top-action .vote-result-tag,
-.admin-profile-top-action .vote-button-inline {
+.institution-assignment-top-action .activated-tag,
+.institution-assignment-top-action .activate-button,
+.institution-assignment-top-action .vote-result-tag,
+.institution-assignment-top-action .vote-button-inline {
   display: inline-flex;
   min-height: 28px;
   align-items: center;
   margin-left: 0;
 }
 
-.admin-profile-fields {
+.institution-assignment-account,
+.institution-assignment-list {
+  display: grid;
+  gap: 7px;
+}
+
+.institution-assignment-item {
   display: grid;
   gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
 }
 
-.admin-profile-field-pair {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.institution-assignment-role {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #f8fafc;
+  font-weight: 700;
 }
 
-.admin-profile-field {
+.institution-assignment-role code {
+  color: #93c5fd;
+  font-size: 11px;
+}
+
+.institution-assignment-field {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  gap: 4px;
-  align-items: start;
+  gap: 6px;
   min-height: 20px;
+  align-items: start;
 }
 
-.admin-profile-field-wide {
-  grid-template-columns: max-content minmax(0, 1fr);
-}
-
-.admin-profile-label {
+.institution-assignment-label {
   color: #93a4b8;
   font-size: 12px;
   line-height: 1.45;
   white-space: nowrap;
 }
 
-.admin-profile-value {
+.institution-assignment-value {
   min-height: 18px;
   overflow-wrap: anywhere;
+  color: #e5edf6;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.45;
-  color: #e5edf6;
-}
-
-.admin-set-card-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: start;
-}
-
-.admin-set-diff-list {
-  display: grid;
-  gap: 8px;
 }

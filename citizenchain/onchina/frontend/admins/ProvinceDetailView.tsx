@@ -22,10 +22,10 @@ import { usePasskeyRegistration } from '../auth/passkey/usePasskey';
 import { AddCityRegistryAdminModal } from './AddCityRegistryAdminModal';
 import { FederalRegistryAdminSubTab } from './FederalRegistryAdminSubTab';
 import {
-  AdminProfileDetails,
-  adminDisplayName,
+  InstitutionAssignmentDetails,
+  assignmentDisplayLabel,
   formatAdminBalanceFen,
-} from './AdminProfileCard';
+} from './InstitutionAssignmentCard';
 import { GovDetailPage } from '../gov/GovDetailPage';
 import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
 import type { InstitutionListRow } from '../subjects/api';
@@ -90,8 +90,6 @@ export function FederalRegistryView({ state }: RegistryViewProps) {
           selectedFederalRegistry={selectedFederalRegistry}
           federalRegistryAdmins={federalRegistryAdmins}
           federalRegistryAdminsLoading={federalRegistryAdminsLoading}
-          refreshFederalRegistryAdmins={state.refreshFederalRegistryAdmins}
-          runSecuredAction={state.runSecuredAction}
           federalRegistryCidShortName={federalRegistryDetail.institution.cid_short_name}
         />
       ) : null}
@@ -396,7 +394,7 @@ function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins,
             {
               title: '姓名',
               dataIndex: 'name',
-              render: (_v, row) => adminDisplayName(row) || '-',
+              render: (_v, row) => assignmentDisplayLabel(row) || '-',
             },
             {
               title: '余额',
@@ -441,7 +439,7 @@ function CityRegistryAdminsView({ canEditCityRegistryAdmins, cityRegistryAdmins,
           zIndex={CID_MODAL_Z_INDEX.business}
         >
           {detailTarget ? (
-            <AdminProfileDetails profile={detailTarget} areaLabel="城市" areaValue={detailTarget.city_name} />
+            <InstitutionAssignmentDetails assignment={detailTarget} areaLabel="城市" areaValue={detailTarget.city_name} />
           ) : null}
         </Modal>
       </>

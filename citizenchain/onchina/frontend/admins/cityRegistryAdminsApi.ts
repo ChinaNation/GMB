@@ -8,13 +8,6 @@ export type CityRegistryAdminRow = {
   id: number;
   admin_account: string;
   admin_name: string;
-  admin_cid_number: string;
-  name: string;
-  admin_role: string;
-  term_start: number;
-  term_end: number;
-  origin: number;
-  origin_label: string;
   balance_fen?: string | null;
   institution_code: string;
   built_in: boolean;

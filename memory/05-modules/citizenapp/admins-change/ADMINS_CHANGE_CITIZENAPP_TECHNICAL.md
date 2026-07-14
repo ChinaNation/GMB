@@ -1,10 +1,10 @@
 # citizenapp 管理员更换模块技术文档
 
-最新更新：2026-07-01。
+最新更新：2026-07-13。
 
 ## 模块定位
 
-`citizenapp` 是 Flutter 客户端，不区分传统前端 / 后端，不新建 `backend/`。管理员更换作为一级业务模块放在：
+`citizenapp` 是 Flutter 客户端，不区分传统前端 / 后端，不新建 `backend/`。个人多签管理员更换作为一级业务模块放在：
 
 ```text
 /Users/rhett/GMB/citizenapp/lib/citizen/proposal/admins-change/
@@ -56,15 +56,12 @@ citizenapp/test/governance/admins-change/
 
 ## 业务流程
 
-1. `proposal_entry_page.dart` 的“换管理员”入口进入 `AdminSetChangePage`。
-2. 入口页或调用方先构造 `AdminAccountIdentity`，再交给 `AdminAccountService` 查询目标 `AccountId`：
-   - 内置治理机构：`0x01 Builtin + cidNumber`。
-   - 个人多签：`PersonalAccount AccountId + AccountId`。
-   - 机构账户：`InstitutionAccount AccountId + AccountId`。
-3. 按机构码读取 `PersonalAdmins / PublicAdmins / PrivateAdmins` 的 `AdminAccounts` 并解码完整 `AdminAccount`；固定治理机构也读 `PublicAdmins`。
+1. 只有 `PMUL` 个人多签显示“换管理员”入口并进入 `AdminsChangePage`。
+2. 调用方构造 `personalAccount` 类型的 `AdminAccountIdentity`，由 `AdminAccountService` 读取 `PersonalAdmins::AdminAccounts`。
+3. 机构账户页面只读取 `PublicAdmins / PrivateAdmins::AdminAccounts` 钱包集合，并通过 `InstitutionAdminService` 联合读取 entity 岗位任职，不进入管理员集合编辑流程。
 4. 用户选择管理员钱包、编辑完整管理员集合。
 5. `AdminSetValidation` 做端上前置校验，同时校验目标阈值。
-6. `AdminSetChangeCallCodec` 按机构码构造对应管理员 pallet 的 `propose_admin_set_change` call data。
+6. `PersonalAdminsChangeCallCodec` 固定构造 `PersonalAdmins.propose_admin_set_change` call data。
 7. `AdminSetChangeService` 通过 `SignedExtrinsicBuilder` 走热钱包或公民钱包签名并提交。
 
 ## 主体身份与查询门面
@@ -81,7 +78,7 @@ citizenapp/test/governance/admins-change/
 
 ## 管理员更换载荷与阈值
 
-当前管理员更换载荷固定为：
+个人多签管理员更换载荷固定为：
 
 ```text
 [pallet][call][institution_code:[u8;4]][account_id:32][admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]
@@ -89,15 +86,11 @@ citizenapp/test/governance/admins-change/
 
 规则：
 
-- PMUL 个人多签走 `PersonalAdmins(29).propose_admin_set_change(0)`。
-- NRC/PRC/PRB/NJD 固定治理机构走 `PublicAdmins(27).propose_admin_set_change(0)`；FRG 省级组走 `PublicAdmins(27).propose_federal_registry_province_admin_set_change(2)`。
-- 普通公权机构走 `PublicAdmins(27).propose_admin_set_change(0)`。
-- 私权机构走 `PrivateAdmins(28).propose_admin_set_change(0)`。
-- 非法人机构按所属法人归属走 `PublicAdmins(27).propose_admin_set_change(0)` 或 `PrivateAdmins(28).propose_admin_set_change(0)`。
+- 只允许 PMUL 个人多签走 `PersonalAdmins(29).propose_admin_set_change(0)`；codec 和 service 对其它 `AdminAccountKind` 关闭失败。
+- 公权、私权、非法人及固定治理机构的管理员变化只能由 entity 治理结果从有效岗位任职派生；CitizenApp 不构造对应管理员集合变更调用。
 - `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
-- 固定治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6，NJD=8；固定人数为 NRC=19，PRC/PRB=9，NJD=15；FRG 省级组固定为 3/5。
-- 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
-- 阈值真源不在各管理员 `AdminAccounts`；治理固定阈值来自制度常量，动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存。
+- 个人多签显示动态阈值输入框，端上前置校验：`threshold * 2 > admins_len && threshold <= admins_len`。
+- 个人多签动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存；机构治理阈值不属于本页面。
 - QR_V1 只携带 `b.a + b.d`；扫码端从 `b.d` 解码出的展示字段必须与冷钱包 decoder 逐项一致：`institution_code / subject / admins / new_threshold`。
 
 ## 管理员激活
@@ -108,11 +101,11 @@ citizenapp/test/governance/admins-change/
 
 激活 QR 与 node 桌面端统一使用 QR_V1 `a=5 activate_admin_account`；payload 前缀为 `GMB || 0x18`，扫码端解码展示字段为 `institution_code / subject / pubkey`。
 
-## 管理员资料展示
+## 管理员与岗位展示
 
-- `AdminAccountService` 返回的 `AdminAccountState.profiles` 是管理员展示真源；`admins` 只从 profiles 抽取账户，供签名、权限和投票校验使用。
-- 机构管理员列表、公开机构管理员列表、管理员账户详情、管理员集合编辑器和变更差异卡统一使用 `/Users/rhett/GMB/citizenapp/lib/citizen/shared/admin_profile_card.dart`。
-- UI 固定为顶部“序号/激活状态”、第 1 行“姓名:/职务:”、第 2 行“任期:/来源:”、第 3 行“身份CID:”、第 4 行“账户:”、第 5 行“余额:”；字段值为空时值区域留空，不隐藏标签、不用本地姓名兜底。余额通过 `ChainRpc.fetchFinalizedBalances` 批量读取 finalized `System.Account.free`，0 余额正常显示，查询失败才留空。个人多签只有账户时按 account-only 资料展示。
+- `AdminAccountService` 对机构账户只解码 `admins` 钱包集合；`InstitutionAdminService` 再从对应 entity pallet 联合读取岗位定义和有效任职，并校验每个管理员钱包都有有效岗位。
+- 机构管理员列表和公开机构管理员列表统一使用 `/Users/rhett/GMB/citizenapp/lib/citizen/institution/institution_assignment_card.dart`；展示岗位、任期、来源、账户和余额，不保存管理员姓名或公民 CID 副本。
+- 个人多签仍由独立 `AdminAccount` 布局和个人管理员集合页面处理；`PersonalAdmins.propose_admin_set_change` 是 CitizenApp 唯一保留的管理员集合变更调用，公权/私权机构不得从客户端直接改写管理员集合。
 
 ## 2026-05-10 修复记录
 

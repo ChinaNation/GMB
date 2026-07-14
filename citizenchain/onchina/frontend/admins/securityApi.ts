@@ -8,7 +8,6 @@ import { ApiError, adminRequest } from '../utils/http';
 export type AdminActionType =
   | 'CREATE_SUBORDINATE_REGISTRY'
   | 'DELETE_SUBORDINATE_REGISTRY'
-  | 'REPLACE_GOVERNING_REGISTRY'
   | 'INSTITUTION_CREATE'
   | 'INSTITUTION_UPDATE'
   | 'INSTITUTION_CREATE_ACCOUNT'
@@ -21,7 +20,6 @@ export type AdminActionType =
   | 'CITIZEN_ONCHAIN_PUSH';
 
 export type AdminOperationAuth = 'SESSION' | 'PASSKEY' | 'PASSKEY_COLD_SIGN';
-export type RegistryOrgCodeTarget = 'FEDERAL_REGISTRY' | 'CITY_REGISTRY';
 
 export type PrepareAdminActionOutput = {
   action_id: string;
@@ -40,23 +38,16 @@ export type AdminSecurityGrantOutput = {
   expires_at: number;
 };
 
-export function formatAdminCreateError(error: unknown, targetRegistryOrgCode: RegistryOrgCodeTarget, fallback: string): string {
+export function formatAdminCreateError(error: unknown, fallback: string): string {
   if (!(error instanceof ApiError)) {
     return error instanceof Error ? error.message : fallback;
   }
   // 管理员新增失败统一按稳定 error_code 显示,不解析后端 message。
   if (error.errorCode === 'ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_FEDERAL_REGISTRY') {
-    return targetRegistryOrgCode === 'FEDERAL_REGISTRY'
-      ? '该账户已是联邦注册局管理员，不能作为新账户使用'
-      : '该账户已是联邦注册局管理员，不能新增为市注册局管理员';
+    return '该账户已是联邦注册局管理员，不能新增为市注册局管理员';
   }
   if (error.errorCode === 'ONCHINA_ADMIN_ACCOUNT_EXISTS_AS_CITY_REGISTRY') {
-    return targetRegistryOrgCode === 'FEDERAL_REGISTRY'
-      ? '该账户已是市注册局管理员，不能作为联邦注册局管理员新账户'
-      : '该账户已是市注册局管理员，不能重复新增';
-  }
-  if (error.errorCode === 'ONCHINA_ADMIN_REPLACEMENT_NOT_ONCHAIN') {
-    return '新账户还不是链上有效管理员，不能完成更换';
+    return '该账户已是市注册局管理员，不能重复新增';
   }
   if (error.errorCode === 'ONCHINA_ADMIN_CITY_REGISTRY_CITY_LIMIT_REACHED') {
     return '本市市注册局管理员已满 30 人，不能继续新增';

@@ -12,9 +12,9 @@ use crate::domains::legislation::chain_read_proposal::LegProposalState;
 pub(crate) struct SeatView {
     /// 议员账户(0x 小写 hex)。
     pub(crate) admin_account: String,
-    /// 姓名(链上 `AdminProfile::admin_name`;缺省回退占位由前端处理)。
+    /// 管理员姓名不在链上保存，保留空值仅供既有席位 DTO 布局使用。
     pub(crate) name: String,
-    /// 对外法定职务(链上 `AdminProfile::role_name`)。
+    /// 机构岗位名称(链上 entity 任职关系)。
     pub(crate) role_name: String,
     /// 该席位对本提案的院内投票:`Some(true)`=赞成 / `Some(false)`=反对 / `None`=未投。
     pub(crate) vote: Option<bool>,

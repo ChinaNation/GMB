@@ -4,15 +4,11 @@ import 'package:polkadart/scale_codec.dart' show ByteOutput, CompactBigIntCodec;
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
 import 'package:citizenapp/citizen/shared/institution_code_label.dart';
 
-class AdminsChangeCallCodec {
-  AdminsChangeCallCodec._();
+class PersonalAdminsChangeCallCodec {
+  PersonalAdminsChangeCallCodec._();
 
   static const int personalAdminsPalletIndex = 29;
-  static const int publicAdminsPalletIndex = 27;
-  static const int privateAdminsPalletIndex = 28;
-  static const int proposeAdminsChangeCallIndex = 0;
   static const int proposePersonalAdminsChangeCallIndex = 0;
-  static const String federalRegistryCode = 'FRG';
 
   static Uint8List build({
     required String institutionCode,
@@ -24,15 +20,15 @@ class AdminsChangeCallCodec {
     if (accountId.length != 32) {
       throw ArgumentError('accountId 必须为 32 字节');
     }
+    if (institutionCode != 'PMUL' || adminKind != 2) {
+      throw ArgumentError('机构管理员由 entity 任职结果管理；本调用只允许个人多签');
+    }
     if (newThreshold <= 0) {
       throw ArgumentError('newThreshold 必须大于 0');
     }
-    if (institutionCode == federalRegistryCode) {
-      throw ArgumentError('联邦注册局管理员更换必须走 OnChina 省级 5 人组流程');
-    }
     final output = ByteOutput();
-    output.pushByte(palletIndexForKind(adminKind));
-    output.pushByte(callIndexForKind(adminKind));
+    output.pushByte(personalAdminsPalletIndex);
+    output.pushByte(proposePersonalAdminsChangeCallIndex);
     // institution_code: [u8;4]
     output.write(
         Uint8List.fromList(InstitutionCodeLabel.codeBytes(institutionCode)));
@@ -50,45 +46,5 @@ class AdminsChangeCallCodec {
         .setUint32(0, newThreshold, Endian.little);
     output.write(thresholdBytes);
     return output.toBytes();
-  }
-
-  static int palletIndexForCode(String institutionCode) {
-    final palletName =
-        InstitutionCodeLabel.adminAccountsPalletName(institutionCode);
-    return switch (palletName) {
-      'PersonalAdmins' => personalAdminsPalletIndex,
-      'PublicAdmins' => publicAdminsPalletIndex,
-      'PrivateAdmins' => privateAdminsPalletIndex,
-      _ => throw ArgumentError('该机构码没有管理员更换 call: $institutionCode'),
-    };
-  }
-
-  static int callIndexForCode(String institutionCode) {
-    final palletName =
-        InstitutionCodeLabel.adminAccountsPalletName(institutionCode);
-    return palletName == 'PersonalAdmins'
-        ? proposePersonalAdminsChangeCallIndex
-        : proposeAdminsChangeCallIndex;
-  }
-
-  static int palletIndexForKind(int adminKind) {
-    final palletName = InstitutionCodeLabel.adminAccountsPalletNameForKind(
-      adminKind,
-    );
-    return switch (palletName) {
-      'PersonalAdmins' => personalAdminsPalletIndex,
-      'PublicAdmins' => publicAdminsPalletIndex,
-      'PrivateAdmins' => privateAdminsPalletIndex,
-      _ => throw ArgumentError('该管理员类型没有管理员更换 call: $adminKind'),
-    };
-  }
-
-  static int callIndexForKind(int adminKind) {
-    final palletName = InstitutionCodeLabel.adminAccountsPalletNameForKind(
-      adminKind,
-    );
-    return palletName == 'PersonalAdmins'
-        ? proposePersonalAdminsChangeCallIndex
-        : proposeAdminsChangeCallIndex;
   }
 }

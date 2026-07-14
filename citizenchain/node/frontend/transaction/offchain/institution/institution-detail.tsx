@@ -20,7 +20,6 @@ type Props = {
   onOpenOtherAccounts: (detail: InstitutionDetail) => void;
   onOpenAdminList: (detail: InstitutionDetail) => void;
   onDeclareNode: (cidNumber: string, cidFullName: string) => void;
-  onCreateAdminSetChange: (detail: InstitutionDetail) => void;
 };
 
 const PROPOSAL_PAGE_SIZE = 10;
@@ -31,7 +30,6 @@ export function ClearingBankInstitutionDetailPage({
   onOpenOtherAccounts,
   onOpenAdminList,
   onDeclareNode,
-  onCreateAdminSetChange,
 }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [nodeInfo, setNodeInfo] = useState<ClearingBankNodeOnChainInfo | null>(null);
@@ -202,19 +200,11 @@ export function ClearingBankInstitutionDetailPage({
         </div>
       </div>
 
-      {/* 发起提案按钮组:管理员更换转入 admins-change,其它提案按后续模块接入。 */}
+      {/* 这里只保留已接入业务；岗位任职变更必须由对应业务模块生成结果。 */}
       <div className="institution-info-section">
         <h3>发起提案</h3>
         <div className="proposal-type-grid">
           <button className="proposal-type-button" disabled title="即将上线">转账</button>
-          <button
-            className="proposal-type-button"
-            disabled={detail.status !== 'Active'}
-            title={detail.status === 'Active' ? '进入管理员更换' : '机构生效后可更换管理员'}
-            onClick={() => onCreateAdminSetChange(detail)}
-          >
-            换管理员
-          </button>
           <button className="proposal-type-button" disabled title="即将上线">关闭多签</button>
           <button className="proposal-type-button" disabled title="即将上线">手续费划转</button>
         </div>

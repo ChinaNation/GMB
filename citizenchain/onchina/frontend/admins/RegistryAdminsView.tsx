@@ -35,11 +35,11 @@ import { getFederalRegistry, listOfficialInstitutions } from '../gov/api';
 import type { InstitutionDetail } from '../subjects/api';
 import { usePasskeyRegistration } from '../auth/passkey/usePasskey';
 import {
-  AdminProfileCard,
-  AdminProfileDetails,
-  adminDisplayName,
+  InstitutionAssignmentCard,
+  InstitutionAssignmentDetails,
+  assignmentDisplayLabel,
   formatAdminBalanceFen,
-} from './AdminProfileCard';
+} from './InstitutionAssignmentCard';
 
 export interface RegistryAdminsViewProps {
   /// 'city-registry' = 市注册局 tab(城市表格→市注册局机构详情页);
@@ -189,9 +189,9 @@ export function OwnInstitutionAdminsView({ layout = 'table' }: OwnInstitutionAdm
               }}
             >
               {rows.map((row, index) => (
-                <AdminProfileCard
+                <InstitutionAssignmentCard
                   key={row.admin_account}
-                  profile={row}
+                  assignment={row}
                   index={index + 1}
                   action={passkeyAction(row)}
                   actionPlacement="balance-row"
@@ -214,9 +214,9 @@ export function OwnInstitutionAdminsView({ layout = 'table' }: OwnInstitutionAdm
               render: (_value: string, _row, index) => index + 1,
             },
             {
-              title: '姓名',
-              dataIndex: 'name',
-              render: (_value: string, row) => adminDisplayName(row) || '-',
+              title: '岗位',
+              dataIndex: 'role_name',
+              render: (_value: string, row) => assignmentDisplayLabel(row) || '-',
             },
             {
               title: '余额',
@@ -248,7 +248,7 @@ export function OwnInstitutionAdminsView({ layout = 'table' }: OwnInstitutionAdm
         onCancel={() => setDetailTarget(null)}
         zIndex={CID_MODAL_Z_INDEX.business}
       >
-        {detailTarget ? <AdminProfileDetails profile={detailTarget} /> : null}
+        {detailTarget ? <InstitutionAssignmentDetails assignment={detailTarget} /> : null}
       </Modal>
     </Card>
   );
@@ -569,7 +569,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       });
       await refreshCityRegistryAdmins();
     } catch (err) {
-      const msg = formatAdminCreateError(err, 'CITY_REGISTRY', '新增管理员失败');
+      const msg = formatAdminCreateError(err, '新增管理员失败');
       notice.error(msg);
     } finally {
       setAddCityRegistryLoading(false);
@@ -587,7 +587,7 @@ export function RegistryAdminsView({ mode }: RegistryAdminsViewProps) {
       content: (
         <div>
           <Typography.Paragraph style={{ marginBottom: 8 }}>确认删除该市注册局管理员?</Typography.Paragraph>
-          <AdminProfileDetails profile={row} areaLabel="城市" areaValue={row.city_name} />
+          <InstitutionAssignmentDetails assignment={row} areaLabel="城市" areaValue={row.city_name} />
         </div>
       ),
       okText: '确认删除',

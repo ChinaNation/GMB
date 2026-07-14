@@ -7,9 +7,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::dispatch::DispatchResult;
 use frame_support::pallet_prelude::DecodeWithMemTracking;
-use primitives::cid::code::InstitutionCode;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
@@ -139,47 +137,6 @@ pub struct InstitutionAdminAssignment<CidNumber, AccountId, RoleCode, SourceRef>
     pub assignment_source_ref: SourceRef,
     /// 任职当前状态。
     pub assignment_status: InstitutionAssignmentStatus,
-}
-
-/// 已完成治理流程交给 entity 的机构岗位任职结果。
-///
-/// 投票引擎只产生结果，不直接写 entity/admins storage。entity 校验机构和岗位后，
-/// 把 `admin_accounts` 写成目标岗位的最新有效任职，再从全部有效任职派生机构 `admins`。
-#[derive(Encode, Decode, DecodeWithMemTracking, Clone, RuntimeDebug, TypeInfo, PartialEq, Eq)]
-pub struct InstitutionAssignmentResult<AccountId> {
-    /// 目标机构码，用于公权/私权路由及固定岗位席位校验。
-    pub institution_code: InstitutionCode,
-    /// 目标机构主账户，即 admins 模组中机构管理员集合的键。
-    pub institution_account: AccountId,
-    /// 目标岗位稳定代码。
-    pub role_code: Vec<u8>,
-    /// 本次结果产生的岗位管理员钱包，按结果顺序写入。
-    pub admin_accounts: Vec<AccountId>,
-    /// 任期开始日（自纪元起天数）。
-    pub term_start: u32,
-    /// 任期结束日（自纪元起天数）。
-    pub term_end: u32,
-    /// 任职制度来源。
-    pub assignment_source: InstitutionAssignmentSource,
-    /// 投票、选举或任命结果的追溯引用。
-    pub assignment_source_ref: Vec<u8>,
-}
-
-/// 已完成治理结果写入 entity 的唯一跨模块入口。
-pub trait InstitutionAssignmentResultHandler<AccountId> {
-    fn apply_institution_assignment_result(
-        result: InstitutionAssignmentResult<AccountId>,
-    ) -> DispatchResult;
-}
-
-impl<AccountId> InstitutionAssignmentResultHandler<AccountId> for () {
-    fn apply_institution_assignment_result(
-        _result: InstitutionAssignmentResult<AccountId>,
-    ) -> DispatchResult {
-        Err(sp_runtime::DispatchError::Other(
-            "InstitutionAssignmentResultHandlerNotConfigured",
-        ))
-    }
 }
 
 /// 机构岗位与任职只读接口。

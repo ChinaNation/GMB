@@ -29,11 +29,16 @@ pub(crate) fn fetch_finalized_head() -> Result<String, String> {
 /// 读的是 best 头,分叉窗口内会看到尚未固化(可能被裁掉)的状态。
 pub(crate) fn fetch_finalized_storage(key: &str) -> Result<Option<String>, String> {
     let finalized_hash = fetch_finalized_head()?;
+    fetch_storage_at(key, &finalized_hash)
+}
+
+/// 在调用方指定的 finalized 哈希读取 storage，供同一聚合查询复用单一快照。
+pub(crate) fn fetch_storage_at(key: &str, finalized_hash: &str) -> Result<Option<String>, String> {
     let result = signing::rpc_post(
         "state_getStorage",
         Value::Array(vec![
             Value::String(key.to_string()),
-            Value::String(finalized_hash),
+            Value::String(finalized_hash.to_string()),
         ]),
     )?;
     match result {
@@ -53,6 +58,16 @@ pub(crate) fn fetch_finalized_keys_paged(
     start_key: Option<&str>,
 ) -> Result<Vec<String>, String> {
     let finalized_hash = fetch_finalized_head()?;
+    fetch_keys_paged_at(prefix, count, start_key, &finalized_hash)
+}
+
+/// 在调用方指定的 finalized 哈希枚举 storage key，避免翻页期间快照漂移。
+pub(crate) fn fetch_keys_paged_at(
+    prefix: &str,
+    count: u32,
+    start_key: Option<&str>,
+    finalized_hash: &str,
+) -> Result<Vec<String>, String> {
     let start = match start_key {
         Some(s) => Value::String(s.to_string()),
         None => Value::Null,
@@ -63,7 +78,7 @@ pub(crate) fn fetch_finalized_keys_paged(
             Value::String(prefix.to_string()),
             Value::Number(count.into()),
             start,
-            Value::String(finalized_hash),
+            Value::String(finalized_hash.to_string()),
         ]),
     )?;
     let arr = result

@@ -1,4 +1,4 @@
-import type { AdminProfileInfo } from '../../../governance/types';
+import type { InstitutionAdminInfo } from '../../../governance/types';
 
 // 清算行机构身份只读 DTO,与 Tauri 后端 transaction/offchain_transaction/institution_read/types.rs 对齐。
 
@@ -32,9 +32,9 @@ export type AccountWithBalance = {
 export type InstitutionDetail = {
   cidNumber: string;
   cidFullName: string;
-  /** 管理员更换使用的机构多签 AccountId,清算行指向主账户。 */
+  /** 机构管理员读取使用的机构多签 AccountId，清算行指向主账户。 */
   adminAccountHex: string;
-  /** 管理员更换使用的机构码(CID institution_code,[u8;4] 序列化为数字数组)。 */
+  /** 机构码（CID institution_code，[u8;4] 序列化为数字数组）。 */
   institutionCode: number[];
 
   mainAccount: AccountWithBalance;
@@ -44,8 +44,8 @@ export type InstitutionDetail = {
 
   adminsLen: number;
   threshold: number;
-  /** 管理员完整公开资料。 */
-  admins: AdminProfileInfo[];
+  /** 管理员钱包及其全部有效岗位任职。 */
+  admins: InstitutionAdminInfo[];
 
   /** 机构生命周期:Pending(投票中)/ Active(已生效)/ Closed(已注销)。 */
   status: 'Pending' | 'Active' | 'Closed';

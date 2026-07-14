@@ -1,3 +1,3 @@
 export { AdminListPage } from './AdminListPage';
-export { AdminSetChangePage } from './AdminSetChangePage';
+export { InstitutionAssignmentCard } from './InstitutionAssignmentCard';
 export type { AdminAccountState } from './types';

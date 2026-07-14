@@ -56,19 +56,16 @@ a = (pallet_index << 8) | call_index
 | `0x0f00` | `GrandpaKeyChange.propose_replace_grandpa_key` | `propose_replace_grandpa_key` | `institution`, `new_key` | citizenchain node |
 | `0x1e01` | `PublicManage.propose_close_public_institution` | `propose_close_public_institution` | `account`, `beneficiary` | CitizenApp |
 | `0x1e04` | `PublicManage.cleanup_rejected_public_proposal` | `cleanup_rejected_public_proposal` | `proposal_id` | CitizenApp |
-| `0x1e05` | `PublicManage.propose_create_public_institution` | `propose_create_public_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
+| `0x1e05` | `PublicManage.propose_create_public_institution` | `propose_create_public_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `legal_representative_*`, `accounts`, `institution_code`, `roles`, `assignments`, `threshold`, `register_nonce`, `signature`, `issuer_*`, `signer_pubkey`, `scope_*` | OnChina（注册局录入） |
 | `0x1f01` | `PrivateManage.propose_close_private_institution` | `propose_close_private_institution` | `account`, `beneficiary` | CitizenApp |
 | `0x1f04` | `PrivateManage.cleanup_rejected_private_proposal` | `cleanup_rejected_private_proposal` | `proposal_id` | CitizenApp |
-| `0x1f05` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `admins`(AdminProfile), `admins_len`, `threshold`, `amounts`, `scope`, `signer_pubkey` | CitizenApp / onchina(注册局录入) |
+| `0x1f05` | `PrivateManage.propose_create_private_institution` | `propose_create_private_institution` | `cid_number`, `cid_full_name`, `cid_short_name`, `town_code`, `legal_representative_*`, `accounts`, `institution_code`, `roles`, `assignments`, `threshold`, `register_nonce`, `signature`, `issuer_*`, `signer_pubkey`, `scope_*` | OnChina（注册局录入） |
 | `0x2100` | `AddressRegistry.set_catalog_version` | `set_address_catalog_version` | `registrar_account`, `catalog_version`, `catalog_hash` | onchina |
 | `0x2101` | `AddressRegistry.set_address_name` | `set_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_name` | onchina |
 | `0x2102` | `AddressRegistry.remove_address_name` | `remove_address_name` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code` | onchina |
 | `0x2103` | `AddressRegistry.set_address` | `set_address` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_local_no`, `address_detail` | onchina |
 | `0x2104` | `AddressRegistry.remove_address` | `remove_address` | `registrar_account`, `province_code`, `city_code`, `town_code`, `address_name_code`, `address_local_no`, `address_detail` | onchina |
 | `0x1100` | `MultisigTransfer.propose_transfer` | `propose_transfer` | `institution`, `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
-| `0x1b00` | `PublicAdmins.propose_admin_set_change` | `propose_public_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
-| `0x1b02` | `PublicAdmins.propose_federal_registry_province_admin_set_change` | `propose_federal_registry_province_admin_set_change` | `province_code`, `admins`, `new_threshold` | onchina(FRG 省级 5 人组替换) |
-| `0x1c00` | `PrivateAdmins.propose_admin_set_change` | `propose_private_admin_set_change` | `institution_code`, `account`, `admins`, `new_threshold` | citizenchain node / CitizenApp |
 | `0x1101` | `MultisigTransfer.propose_safety_fund` | `propose_safety_fund_transfer` | `beneficiary`, `amount_yuan`, `remark` | citizenchain node / CitizenApp |
 | `0x1102` | `MultisigTransfer.propose_sweep` | `propose_sweep_to_main` | `institution`, `amount_yuan` | citizenchain node / CitizenApp |
 | `0x1332` | `OffchainTransaction.register_clearing_bank` | `register_clearing_bank` | `cid_number`, `peer_id`, `rpc_domain`, `rpc_port` | citizenchain node |

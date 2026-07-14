@@ -339,14 +339,15 @@ pub mod pallet {
             initial_total: BalanceOf<T>,
             fee: BalanceOf<T>,
         },
-        /// 已完成的治理结果写入目标岗位任职，并同步机构 admins 钱包集合。
-        InstitutionAssignmentsApplied {
+        /// 已完成的业务结果原子更新机构岗位、任职、法定代表人和 admins。
+        InstitutionGovernanceApplied {
             cid_number: CidNumberOf<T>,
             institution_account: T::AccountId,
-            role_code: crate::institution::role::RoleCodeOf,
+            role_changes: u32,
+            assignment_changes: u32,
             admins_len: u32,
-            assignment_source: InstitutionAssignmentSource,
-            assignment_source_ref: crate::institution::role::AssignmentSourceRefOf,
+            legal_representative_updated: bool,
+            result_source_ref: crate::institution::role::AssignmentSourceRefOf,
         },
         /// CID 机构登记
         CidInstitutionRegistered {
@@ -529,6 +530,16 @@ pub mod pallet {
         InvalidAssignmentResultAdmins,
         /// 治理结果缺少投票、选举或任命追溯引用。
         AssignmentSourceRefEmpty,
+        /// 治理结果没有岗位、任职或法定代表人变化。
+        GovernanceResultEmpty,
+        /// 单次治理结果包含的岗位或任职变化超过机构上限。
+        TooManyGovernanceChanges,
+        /// 同一治理结果重复提交同一个岗位定义。
+        DuplicateGovernanceRoleChange,
+        /// 同一治理结果重复提交同一个岗位任职集合。
+        DuplicateGovernanceAssignmentChange,
+        /// 已停用岗位仍有有效任职。
+        InactiveRoleHasAssignments,
     }
 
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节。

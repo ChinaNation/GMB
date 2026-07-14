@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/services/admin_activation_service.dart';
-import 'package:citizenapp/citizen/shared/admin_profile.dart';
-import 'package:citizenapp/citizen/shared/admin_profile_card.dart';
+import 'package:citizenapp/citizen/institution/institution_assignment_card.dart';
+import 'package:citizenapp/citizen/institution/institution_role_models.dart';
 import 'package:citizenapp/citizen/shared/institution_info.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
@@ -31,8 +31,8 @@ class AdminListPage extends StatefulWidget {
   final InstitutionInfo institution;
   final AdminAccountIdentity accountIdentity;
 
-  /// 管理员完整资料(A2:cid/姓名/职务/任期/来源;个人多签仅 account)。
-  final List<AdminProfile> admins;
+  /// 机构管理员岗位任职；同一钱包可出现多条不同岗位记录。
+  final List<InstitutionAdminAssignment> admins;
 
   /// 用户已导入的冷钱包公钥集合（小写 hex，不含 0x）。
   final Set<String> importedColdPubkeys;
@@ -77,7 +77,8 @@ class _AdminListPageState extends State<AdminListPage> {
 
   Future<void> _loadBalances() async {
     final accounts = {
-      for (final profile in widget.admins) _balanceKey(profile.account),
+      for (final assignment in widget.admins)
+        _balanceKey(assignment.adminAccount),
     }.where((account) => account.isNotEmpty).toList(growable: false);
     if (accounts.isEmpty) {
       if (mounted) setState(() => _balanceByAccount = const {});
@@ -140,13 +141,13 @@ class _AdminListPageState extends State<AdminListPage> {
             )
           else
             ...List.generate(widget.admins.length, (index) {
-              final profile = widget.admins[index];
-              final pubkey = profile.account;
+              final assignment = widget.admins[index];
+              final pubkey = assignment.adminAccount;
               final isImported = widget.importedColdPubkeys.contains(pubkey);
               final isActivated = _activatedPubkeys.contains(pubkey);
               return _AdminTile(
                 index: index + 1,
-                profile: profile,
+                assignment: assignment,
                 isImported: isImported,
                 isActivated: isActivated,
                 institution: widget.institution,
@@ -206,7 +207,7 @@ class _AdminListPageState extends State<AdminListPage> {
 class _AdminTile extends StatelessWidget {
   const _AdminTile({
     required this.index,
-    required this.profile,
+    required this.assignment,
     required this.isImported,
     required this.isActivated,
     required this.institution,
@@ -217,11 +218,10 @@ class _AdminTile extends StatelessWidget {
 
   final int index;
 
-  /// 管理员资料(account + 实名 cid/姓名/职务/任期/来源)。
-  final AdminProfile profile;
+  final InstitutionAdminAssignment assignment;
 
   /// 管理员账户(小写 hex);激活/匹配仍按账户。
-  String get pubkeyHex => profile.account;
+  String get pubkeyHex => assignment.adminAccount;
 
   /// 用户是否已导入此公钥的冷钱包。
   final bool isImported;
@@ -303,17 +303,10 @@ class _AdminTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: AdminProfileCard(
-        profile: profile,
+      child: InstitutionAssignmentCard(
+        assignment: assignment,
         index: index,
-        compact: true,
         balanceYuan: balanceYuan,
-        backgroundColor: isActivated
-            ? AppTheme.success.withValues(alpha: 0.06)
-            : AppTheme.surfaceMuted,
-        borderColor: isActivated
-            ? AppTheme.success.withValues(alpha: 0.3)
-            : AppTheme.border,
         trailing: _buildActivationControl(context),
       ),
     );
@@ -324,7 +317,7 @@ class _AdminTile extends StatelessWidget {
     if (!isImported) return null;
     if (isActivated) {
       return Container(
-        height: AdminProfileCard.actionHeight,
+        height: InstitutionAssignmentCard.actionHeight,
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -344,7 +337,7 @@ class _AdminTile extends StatelessWidget {
     return GestureDetector(
       onTap: () => _startActivation(context),
       child: Container(
-        height: AdminProfileCard.actionHeight,
+        height: InstitutionAssignmentCard.actionHeight,
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(

@@ -1442,22 +1442,22 @@ impl entity_primitives::InstitutionMultisigQuery<AccountId> for RuntimeInstituti
 ///
 /// 投票引擎只负责产生不可变结果；runtime 按机构码把结果交给对应 entity 模组。
 /// entity 负责校验机构、岗位、席位与任期，并在同一事务内同步 admins 钱包集合。
-pub struct RuntimeInstitutionAssignmentResultHandler;
+pub struct RuntimeInstitutionGovernanceResultHandler;
 
-impl entity_primitives::InstitutionAssignmentResultHandler<AccountId>
-    for RuntimeInstitutionAssignmentResultHandler
+impl entity_primitives::InstitutionGovernanceResultHandler<AccountId>
+    for RuntimeInstitutionGovernanceResultHandler
 {
-    fn apply_institution_assignment_result(
-        result: entity_primitives::InstitutionAssignmentResult<AccountId>,
+    fn apply_institution_governance_result(
+        result: entity_primitives::InstitutionGovernanceResult<AccountId>,
     ) -> DispatchResult {
         if admin_primitives::is_public_admin_code(&result.institution_code) {
-            return public_manage::Pallet::<Runtime>::apply_institution_assignment_result(result);
+            return public_manage::Pallet::<Runtime>::apply_institution_governance_result(result);
         }
         if admin_primitives::is_private_admin_code(&result.institution_code) {
-            return private_manage::Pallet::<Runtime>::apply_institution_assignment_result(result);
+            return private_manage::Pallet::<Runtime>::apply_institution_governance_result(result);
         }
         Err(sp_runtime::DispatchError::Other(
-            "UnsupportedInstitutionAssignmentResultCode",
+            "UnsupportedInstitutionGovernanceResultCode",
         ))
     }
 }
@@ -2153,7 +2153,7 @@ impl election_vote::Config for Runtime {
     type MaxElectionCandidates = ConstU32<256>;
     type MaxElectionVoters = ConstU32<4096>;
     type InstitutionQuery = RuntimeInstitutionQuery;
-    type InstitutionAssignmentResultHandler = RuntimeInstitutionAssignmentResultHandler;
+    type InstitutionGovernanceResultHandler = RuntimeInstitutionGovernanceResultHandler;
 }
 
 impl election_campaign::Config for Runtime {}

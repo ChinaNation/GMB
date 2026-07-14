@@ -131,7 +131,7 @@ display/   LegislationBoardView / SeatGrid / LiveTallyBoard / ProposalTicker(只
 - **职位码表 `office`**（任免案职位真源）—— 待用户定清单或我按宪法整理草案。
 - 预算 `类/款/项/目` code 编码规则（国标政府收支分类 vs 自定义）—— 待用户定。
 - ~~国家级行政签署人（总统府）机构码~~ —— **已核实 = PRS**（`code.rs:338`），Phase 1B 路由表已落地。
-- 任免案/预算案链端 `PROPOSAL_KIND_PERSONNEL/BUDGET` —— 另卡（含 runtime 二次确认）。
+- 任免案/预算案具体业务模块及其代表机构表决接线——另卡（含 runtime 二次确认）；不新增业务专属投票 kind。
 
 ## 验收标准
 
@@ -140,7 +140,7 @@ display/   LegislationBoardView / SeatGrid / LiveTallyBoard / ProposalTicker(只
 - **真实运行态**：真实本地 onchina 服务 + PostgreSQL + 真实页面，跑通「立法机构管理员扫码登录 → 发起法律案(章节条款) → 院内/两院表决 → 查看进度」，大屏只读展示在线席位与实时投票。
 - scope fail-closed：省管理员不能发起全国法律、市不能发起省法律（写入边界拒绝）。
 - 法律案 SCALE 与链端逐字节一致（冷签可过）。
-- 任免案/预算案结构编译通过、不可误触发链提交。**决策更新(2026-06-30,用户确认「零 UI」方案 A)**:任免/预算前端**不建占位灰显 Modal**——仅后端 `personnel/budget/model.rs` schema + 前端 `types.ts` 预留接口,`ProposeMenu` 仅渲染 `category==='law'`、不 surface 任免/预算入口(避免半桩)。原「UI 占位灰显」一条以此为准作废;占位与发起 UI 随任免/预算链路(`PROPOSAL_KIND_PERSONNEL/BUDGET`)上线时统一建。
+- 任免案/预算案结构编译通过、不可误触发链提交。任免/预算前端不建占位灰显 Modal——仅后端 `personnel/budget/model.rs` schema + 前端 `types.ts` 预留接口，`ProposeMenu` 仅渲染 `category==='law'`；发起 UI 随对应业务模块和代表机构表决接线一并实现。
 - 零残留：无未用别名、无历史化注释、education 模块无立法残留。
 
 ## 进度
@@ -213,15 +213,15 @@ display/   LegislationBoardView / SeatGrid / LiveTallyBoard / ProposalTicker(只
   - **对抗式评审(4 维×独立复核,27 agent)+ 落地修复 6 项**:① FRG 哨兵 main_account → `service` 加 `frg_province_code.is_some()` 跳过无意义点查;② 无鉴权链读放大 → `handler` 加**单飞+3s TTL 缓存**(tokio 异步锁串行化构建,并发/高频轮询合并为每窗口一次扇出);③ 内部错误细节泄露 → 公开端点回**固定文案+错误码**,细节仅 `tracing` 落日志;④ `shared/`→`operator/` 反向依赖 → `voteTypeLabel/tierLabel` 下沉 `shared/labels.ts`,operator re-export;⑤ antd5 `Spin tip` 空 render → 改 spinner+同级文案;⑥ a11y → 院名 `<h1>`/提案标题 `<h2>`/section `aria-label`。**遗留(deferred,已开 task chip)**:前端无 ESLint(react-hooks/jsx-a11y 全项目未启用,预存问题)。
   - **当前验收口径**：立法节点打开 `#/display`，逐席色块读取当前代表机构的 `RepresentativeVotesByAccount`。
 - [x] **Phase 4 任免案/预算案预留结构完工（2026-06-30,understand 工作流 + 落地 + 复核)**:
-  - **链端现状核实(工作流侦察)**:链上**无** `PROPOSAL_KIND_PERSONNEL/BUDGET`、无任免/预算 extrinsic/pallet(仅 kind 0-3=INTERNAL/JOINT/LEGISLATION/ELECTION;legislation-yuan 仅 enact/amend/repeal)。**禁**借道 PROPOSAL_KIND_LEGISLATION(会污染 leg-yuan 回调只写 LawVersion)。故 Phase 4 **仅锁链下 schema**,发起/表决/读链链端支持后另卡(新增 kind + pallet + 重新创世,含 runtime 二次确认)。
+  - **链端现状核实**：链上没有任免/预算业务 extrinsic 或 pallet，`legislation-yuan` 只处理法律正文。故 Phase 4 仅锁链下 schema；后续由独立业务模块保存业务正文，通过 `ProposalOwner/MODULE_TAG` 复用现有代表机构表决和统一 proposal kind，不新增业务专属投票 kind。
   - **任免案(宪法第100/106条,政府提任免职书→参议会/市立法会单院常规案)**:新建 `personnel/{mod,model}.rs`——`PersonnelAction{Appoint,Dismiss,Replace}`(snake_case)+ `PersonnelDecision{action,office_institution_code,office_title,office_seat,nominee_cid_number,nominee_name,term_index,term_years,reason}`(camelCase,取任务卡定稿)+ `ProposePersonnelInput{tier,scope_code,vote_type,decision}`(houses/scope 后端解析,对齐 ProposeLawInput 纪律)。**待定项**:职位码表 office(当前机构码+自由文本职务)、升级路径字段化 reject_count/escalated(第53/55/57/64条,随链路上线不投机引入)。
   - **预算案(《预算法》授权,政府提→立法机关单院常规案)**:新建 `budget/{mod,model}.rs`——四级收支科目 `BudgetClass>Section>Item>Subitem`(类>款>项>目,`code/name`)+ `BudgetPlan{budget_entity_code,fiscal_year(公历年 u16),categories,total_revenue,total_expenditure}` + `ProposeBudgetInput`。**金额单位分(u128)**;**仅「目」叶子携额**,类/款/项 金额由子项汇总(不冗余存储,避免重复计数);**金额序列化为字符串**(国家级预算 ~10^16 分超 JS 2^53,`fen_string` serde 适配器防精度丢失,前端 types 亦用 string)。**待定项**:类/款/项/目 code 编码规则(国标 vs 自定义,当前自由文本)。
-  - **零残桩**:`ProposalCategory{Law,Personnel,Budget}` 已存(Phase 0),`category()` 判别单源;**不入** `proposable_candidates`(无链上提交路径前不列候选,ProposeMenu 仅渲染 category==='law',不 surface 半桩入口);category.rs 三处 stale 注释校正为「候选待链端 kind 上线」。前端 `types.ts` 加镜像 reserved 接口(PersonnelDecision/ProposePersonnelInput/Budget*)。
+  - **零残桩**：`ProposalCategory{Law,Personnel,Budget}` 已存，`category()` 判别单源；无对应业务提交路径前不进入 `proposable_candidates`，`ProposeMenu` 仅渲染 `category==='law'`。前端 `types.ts` 只保存镜像预留接口。
   - **验收**:`cargo test -p onchina` **130 passed**(+4:personnel 2/budget 2,含 camelCase + 金额 string 出线 + u128 round-trip 保精度 + as_u8 判别)·零警告(reserved 模块级 `#![allow(dead_code)]` 附预留原因)·fmt clean·runtime 未触;`tsc` 0·`build` ✓;DTO camelCase 双端逐字段核对一致。
 - [x] **Phase 5 收尾完工（2026-06-30）**:
   - **15 文档回写**:ADR-027 补第 10 节「OnChina 控制台『立法与表决』落地」(提案三分类维度 + 法律案全链路 operator+display + 任免/预算链下预留 + 不改宪法结论 + 双路由 + onchina 职责边界 + 遗留清单)+ 状态行标注 console 落地;memory `project_legislation_console_framework_2026_06_30` 补交付终态。
   - **15 残留清理核查**:`education` 模块零立法残留(grep `legislation/NED/CEDU/propose/proposable` 于 `domains/education/` 无命中——NED/CEDU 立法分类唯一落 `legislation/category.rs`);全 `legislation/*` 注释描述当前实现、无历史化措辞、无未用别名;reserved 模块 `#![allow(dead_code)]` 均附预留原因。
-  - **遗留全部有卡承接**:双客户端已存卡 `20260624-legislation-dual-client`;任免/预算链端 `PROPOSAL_KIND_PERSONNEL/BUDGET`、行政签署人登录、议员 admins 灌入、大屏跨院可见性细化、前端 ESLint(已开 task chip)—— 均登记于本卡「待确认/待后续」+ ADR-027 第 10 节遗留清单。
+  - **遗留全部有卡承接**：双客户端已存卡 `20260624-legislation-dual-client`；任免/预算业务模块、行政签署人登录、议员 admins 灌入、大屏跨院可见性细化、前端 ESLint 均登记于本卡待后续和 ADR-027 第 10 节。
   - **本卡完结**:五个 Phase(0/1/2/3/4/5)全交付;`cargo test -p onchina` **130 passed** · 零警告 · fmt clean;前端 `tsc` 0 · `build` ✓。**🔴 运行态验收(需环境)归入部署验收批**:operator 五端点实读 + `#/display` 大屏实读 + subxt 双 Map 部分键实读 + scope 派生 china 码口径。
 
 ## 本卡状态:已完成（2026-06-30,移入 done/)

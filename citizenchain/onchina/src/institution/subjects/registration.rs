@@ -10,6 +10,7 @@ use axum::{
     Json,
 };
 use chrono::{Duration, Utc};
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::auth::actions::require_admin_security_grant;
@@ -576,22 +577,9 @@ fn validate_initial_admins(
     admins: &[CreateInstitutionAdminInput],
     threshold: u32,
 ) -> Result<Vec<CreateInstitutionAdminInput>, Response> {
-    if admins.len() < 2 {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "机构初始管理员至少需要 2 人",
-        ));
-    }
-    let admins_len = admins.len() as u32;
-    let min_threshold = admins_len / 2 + 1;
-    if threshold < min_threshold || threshold > admins_len {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "管理员阈值必须严格过半且不超过管理员人数",
-        ));
-    }
+    let mut unique_accounts = HashSet::new();
+    let mut role_definitions: HashMap<String, (String, bool)> = HashMap::new();
+    let mut assignment_keys = HashSet::new();
     let mut normalized = Vec::with_capacity(admins.len());
     for admin in admins {
         let Some(admin_account) = normalize_admin_account(admin.admin_account.as_str()) else {
@@ -601,22 +589,83 @@ fn validate_initial_admins(
                 "admin_account format invalid",
             ));
         };
-        if normalized
-            .iter()
-            .any(|item: &CreateInstitutionAdminInput| item.admin_account == admin_account)
+        let role_code = admin.role_code.trim().to_string();
+        if role_code.is_empty()
+            || role_code.len() > 64
+            || !role_code
+                .bytes()
+                .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
         {
             return Err(api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "管理员账户不能重复",
+                "岗位码只能包含大写字母、数字、下划线，且不得超过 64 字节",
             ));
         }
+        let role_name = admin.role_name.trim().to_string();
+        if role_name.is_empty() {
+            return Err(api_error(StatusCode::BAD_REQUEST, 1001, "岗位名称不能为空"));
+        }
+        let term_start = admin.term_start.unwrap_or(0);
+        let term_end = admin.term_end.unwrap_or(0);
+        if admin.term_required {
+            if term_start == 0 || term_end <= term_start {
+                return Err(api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "有任期岗位必须填写有效的开始和结束日序",
+                ));
+            }
+        } else if term_start != 0 || term_end != 0 {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "无任期岗位的开始和结束日序必须为 0",
+            ));
+        }
+        if let Some((known_name, known_term_required)) = role_definitions.get(&role_code) {
+            if known_name != &role_name || *known_term_required != admin.term_required {
+                return Err(api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "同一岗位码的岗位名称和任期规则必须一致",
+                ));
+            }
+        } else {
+            role_definitions.insert(role_code.clone(), (role_name.clone(), admin.term_required));
+        }
+        if !assignment_keys.insert((admin_account.clone(), role_code.clone())) {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "同一管理员账户不能重复绑定同一岗位",
+            ));
+        }
+        unique_accounts.insert(admin_account.clone());
         normalized.push(CreateInstitutionAdminInput {
             admin_account,
-            role_name: admin.role_name.clone(),
-            term_start: admin.term_start,
-            term_end: admin.term_end,
+            role_code,
+            role_name,
+            term_required: admin.term_required,
+            term_start: Some(term_start),
+            term_end: Some(term_end),
         });
+    }
+    if unique_accounts.len() < 2 {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "机构初始管理员至少需要 2 人",
+        ));
+    }
+    let admins_len = unique_accounts.len() as u32;
+    let min_threshold = admins_len / 2 + 1;
+    if threshold < min_threshold || threshold > admins_len {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "管理员阈值必须严格过半且不超过管理员人数",
+        ));
     }
     Ok(normalized)
 }
@@ -628,7 +677,12 @@ fn insert_initial_admins(
     created_by: &str,
 ) -> Result<(), String> {
     let now = Utc::now();
+    let mut inserted_accounts = HashSet::new();
     for admin in admins {
+        // 本地表只缓存管理员钱包；同一钱包的多个岗位只在链上 entity 任职关系保存。
+        if !inserted_accounts.insert(admin.admin_account.as_str()) {
+            continue;
+        }
         upsert_institution_admin(
             &state.db,
             &InstitutionAdmin {
@@ -646,8 +700,8 @@ fn insert_initial_admins(
                 admin_photo_size: None,
                 admin_passkey_credential_id: None,
                 admin_source_id: None,
-                admin_profile_status: Some("ACTIVE".to_string()),
-                admin_profile_updated_at: Some(now),
+                admin_status: Some("ACTIVE".to_string()),
+                admin_updated_at: Some(now),
                 created_by: Some(created_by.to_string()),
                 chain_status: Some("PENDING_ON_CHAIN".to_string()),
                 chain_tx_hash: None,

@@ -55,7 +55,7 @@
 - 新增投票引擎 sub-pallet,与 internal-vote / joint-vote / election-vote 平级;`pallet_index = 26`(原定 28,2026-07-12 号段连续化后为 26);对外类型名 `LegislationVote`。
 - 定位：立法机关表决的唯一投票模块。代表表决可被法律、任免、预算等业务复用；强制公投、行政签署、共同签署和护宪终审只属于法律程序。
 - `Config: frame_system::Config + votingengine::Config`,复用核心 crate 全部共享基础设施(见第 5 节),只本地保管自己的计票账本。
-- **完全不修改 internal-vote / joint-vote / election-vote 三个 sub-pallet 的逻辑**:三者零改动、零回归;election-vote 空骨架原样保留供未来公职人员选举用。
+- **不复用 internal-vote / joint-vote / election-vote 承载立法表决**：三者职责独立；现有 `election-vote` 继续只负责普选/互选并把终态交给 entity。
 - **更正(2026-06-24,第2步精读核心后)**:核心 `votingengine` crate 按 `kind`/`stage` 硬编码分发,未知 kind 直接 `Err`。要让立法投票成为头等模式并真正共享核心基础,**第2步必须扩展核心 crate**(新增 `PROPOSAL_KIND_LEGISLATION` + 立法 stage + Config 三关联类型 `LegislationFinalizer`/`LegislationCleanup`/`LegislationVoteResultCallback` + 分发分支),并在所有 `votingengine::Config` 实现补这三类型(测试 mock 装 `()`)。这是 additive 扩展,不改三个 sub-pallet 逻辑,但"纯加 sub-pallet 零核心改动"的说法作废。详见任务卡第2步 2a。
 - 各业务壳通过 `LegislationVoteEngine` 创建表决；法律调用 `create_legislation_vote`，任免/预算调用 `create_representative_vote`。业务结果按 `ProposalOwner/MODULE_TAG` 认领。
 
@@ -75,14 +75,14 @@
 
 机构与议员建模(用户拍板,2026-06-24):
 
-- 「议员 / 委员」是现实世界表达;系统内只有一种身份 = 机构 admins。议员 / 委员 = 立法机构的 admins,不另建议员名册。
-- 议员换届 = admins-change 模块换管理员,复用机构管理员单一真源,不新造换届机制。
-- 众议会 / 参议会 = 立法院下设两院(各自 admins=议员,各自作为链上表决院):
+- 「议员 / 委员」是机构岗位及有效任职，不新建第二套人员身份；对应管理员钱包集合由 entity 任职派生。
+- 议员换届由普选、互选或依法任免业务形成机构治理结果，entity 原子更新岗位任职与 admins；不得直接改管理员集合。
+- 众议会 / 参议会 = 立法院下设两院（各自岗位任职钱包作为链上表决席位）：
   - 国家立法院 = 国家立法院众议会 + 国家立法院参议会
   - 省立法院(每省) = 省联邦立法院众议会 + 省联邦立法院参议会
-  - 市立法会(每市) = 单一 institution(admins=委员)
-  - 国家教委会 = institution(admins=委员),教育类法案起草方
-- 法案的链上提案恒由对应立法机构的 admin 发起,所有 `propose_*` 入口只认 admin,与其它治理模块一致。
+  - 市立法会（每市）= 单一 institution（委员岗位任职）
+  - 国家教委会 = institution（委员岗位任职），教育类法案起草方
+- 法案链上提案由对应立法机构的有效岗位任职管理员钱包发起；业务权限按机构、岗位、有效任职和法案类型硬规则校验。
 - 市立法会公民提案门槛(≥1000 该市公民 + ≥5 公民团体联署,或集会单日参与 > 该市人口 10%)是现实世界前置义务——满足时市立法会委员有义务在链上发起提案;链上不做公民联署入口。
 
 ### 3. 法律层级与数据模型
@@ -386,7 +386,7 @@ warp 版本集合连续性全部由节点原生复核。无 body 的 `ApplyChang
 - **不改宪法(结论性前提)**:法律提案权宪法只给立法机关;政府的**人事任免**由宪法第 100/106 条直授(提交人事任免职书 → 参议会/立法会常规案表决任免),**预算**由《预算法》(普通法)授权——二者走独立提案类型,非法律案。给政府普通立法提案权才需修宪(不必要)。
 - **operator / display 双路由(契合 ADR-030)**：逐席投票读取 `RepresentativeVotesByAccount`，二级键为 `(body_index, account)`；大屏只展示当前代表机构索引的票据，不能把同一钱包在不同机构的票据互相覆盖。
 - **onchina 职责边界**:只做「组织提案数据 + 扫码冷签 + 提交 extrinsic + 读链展示」,**绝不计票/推进状态机**(全归投票引擎);读路径 scope fail-closed。
-- **遗留(均有卡/已登记)**:双客户端 CitizenApp/CitizenWallet(卡 `20260624-legislation-dual-client`,端到端 scan+submit)、任免/预算链端(`PROPOSAL_KIND_PERSONNEL/BUDGET` 另卡)、行政签署人登录 + `executive_sign`、议员 admins 灌入(election-vote)、大屏跨院活跃提案可见性细化、前端 ESLint(react-hooks/jsx-a11y)。
+- **后续业务**：任免、预算等业务按实际细则独立增加，只保存业务正文和状态；表决复用现有代表机构框架，终态调用 entity 通用治理结果协议，不新增投票 kind 或投票 pallet。
 
 ## 影响
 
@@ -414,10 +414,10 @@ warp 版本集合连续性全部由节点原生复核。无 body 的 `ApplyChang
 
 ## 后续动作
 
-1. 第四步 B2：建立提名任免业务模块，只保存任免职书、法定程序和结果写回；表决调用 `create_representative_vote`。
-2. 后续预算业务同样只保存预算数据和业务状态，复用代表机构表决。
-3. 两类业务接入 runtime 回调元组，由 `ProposalOwner/MODULE_TAG` 唯一认领。
-4. 每步按 runtime 二次确认执行，并完成跨端、fresh genesis 与真实运行态验收。
+1. 先完成 entity 机构岗位、任职、法定代表人与 admins 派生的通用治理结果底座。
+2. 先完成投票引擎通用表决机制和业务结果回调边界，不预设任免、预算等业务细则。
+3. 后续有明确业务时再增加独立业务模块；业务正文归业务模块，表决归投票引擎，机构最终状态归 entity。
+4. 新增或删除具体业务不得改变上述基础模块边界；每步仍按 runtime 二次确认和真实运行态验收执行。
 
 ## 已拍板(2026-06-24)
 

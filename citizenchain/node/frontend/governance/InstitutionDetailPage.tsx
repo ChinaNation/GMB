@@ -24,12 +24,11 @@ type Props = {
   onCreateDeveloperUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSafetyFund?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSweep?: (cidNumber: string, cidFullName: string, adminWallets: AdminWalletMatch[]) => void;
-  onCreateAdminSetChange?: (cidNumber: string, orgType: number, cidFullName: string, adminWallets: AdminWalletMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateProtocolUpgrade, onCreateDeveloperUpgrade, onCreateSafetyFund, onCreateSweep, onCreateAdminSetChange, hideBackButton }: Props) {
+export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateProtocolUpgrade, onCreateDeveloperUpgrade, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [proposalHasMore, setProposalHasMore] = useState(false);
@@ -271,11 +270,6 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
               cidNumber, detail.orgType, detail.cidFullName, detail.mainAccount, adminWallets
             )}
           >转账</button>
-          <button
-            className="proposal-type-button"
-            disabled={!isAdmin}
-            onClick={() => isAdmin && detail && onCreateAdminSetChange?.(cidNumber, detail.orgType, detail.cidFullName, adminWallets)}
-          >换管理员</button>
           <button className="proposal-type-button" disabled title="即将上线">决议销毁</button>
           {(detail.orgType === 0 || detail.orgType === 2) && (
             <button

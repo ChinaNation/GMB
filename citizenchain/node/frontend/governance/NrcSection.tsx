@@ -1,7 +1,7 @@
 // 国家储委会顶级 Section：直接渲染国家储委会机构详情页（单机构，无列表层）。
 // 特权动作：协议升级、开发升级、安全基金转账提案 — 仅国家储委会管理员可发起。
 import { useState } from 'react';
-import { AdminListPage, AdminSetChangePage } from '../admins';
+import { AdminListPage } from '../admins';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateMultisigTransferPage } from '../transaction/multisig/CreateProposalPage';
@@ -16,7 +16,6 @@ const NRC_CID_NUMBER = 'LN001-NRC0G-944805165-2026';
 type NrcView =
   | { page: 'detail' }
   | { page: 'admin-list' }
-  | { page: 'admin-set-change'; cidFullName: string; adminWallets: AdminWalletMatch[] }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; cidNumber?: string }
   | { page: 'create-proposal'; orgType: number; cidFullName: string; mainAccount: string; adminWallets: AdminWalletMatch[] }
   | { page: 'protocol-upgrade'; adminWallets: AdminWalletMatch[] }
@@ -46,18 +45,6 @@ export function NrcSection() {
         adminWallets={view.adminWallets}
         cidNumber={view.cidNumber}
         onBack={backToDetail}
-      />
-    );
-  }
-
-  if (view.page === 'admin-set-change') {
-    return (
-      <AdminSetChangePage
-        accountRef={{ cidNumber: NRC_CID_NUMBER, institutionCode: 'NRC' }}
-        cidFullName={view.cidFullName}
-        adminWallets={view.adminWallets}
-        onBack={backToDetail}
-        onSuccess={backToDetail}
       />
     );
   }
@@ -130,9 +117,6 @@ export function NrcSection() {
       }
       onCreateProposal={(_sid, orgType, cidFullName, mainAccount, aw) =>
         setView({ page: 'create-proposal', orgType, cidFullName, mainAccount, adminWallets: aw })
-      }
-      onCreateAdminSetChange={(_sid, _orgType, cidFullName, aw) =>
-        setView({ page: 'admin-set-change', cidFullName, adminWallets: aw })
       }
       onCreateProtocolUpgrade={(aw) =>
         setView({ page: 'protocol-upgrade', adminWallets: aw })

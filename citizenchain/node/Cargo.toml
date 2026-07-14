@@ -80,6 +80,7 @@ pallet-transaction-payment = { workspace = true, default-features = true }
 pallet-transaction-payment-rpc = { workspace = true, default-features = true }
 substrate-frame-rpc-system = { workspace = true, default-features = true }
 codec = { workspace = true, default-features = true }
+entity-primitives = { path = "../runtime/entity/entity-primitives", default-features = true }
 
 # These dependencies are used for runtime benchmarking
 frame-benchmarking-cli = { workspace = true, default-features = true }
@@ -120,9 +121,6 @@ tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 
 [dev-dependencies]
-# 金标向量测试用:直接 encode 真链上类型 admin-primitives::{AdminAccount, AdminProfile},
-# 喂给节点端解码器断言逐字段对齐,任何字段序漂移即测试红(仅测试编译,不进发布二进制)。
-admin-primitives = { path = "../runtime/admins/admin-primitives" }
 # 区块链测试 harness 只进 dev-dependencies，用于复用坏块/坏导入态验收矩阵。
 blockchain-test-harness = { path = "../crates/blockchain-test-harness" }
 # 普通块坏注入验收专用：按真实 BlockBuilder 生成合法 proposal，再篡改预计算状态变更。

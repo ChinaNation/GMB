@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 状态：进行中
-- 当前步骤：第四步 B1（立法机关表决通用框架）已完成，等待确认第四步 B2 技术方案
+- 当前步骤：第六步除重新创世外已完成；等待用户另行确认重新创世
 - 最新业务确认：2026-07-13
 - 实施方式：逐步输出技术方案，用户确认后才执行；每步完成后立即更新文档、完善中文注释、删除残留，再输出下一步方案
 
@@ -96,7 +96,7 @@ admins: BoundedVec<AccountId>
 - 不再内嵌 `AdminProfile`。
 - 管理员集合目标记录不保存 `creator`、`created_at`、`updated_at`；链上来源和时间由对应任职关系、事件及区块确定。
 - 不保存 `admin_name`、`admin_cid_number`、`role_code`、`role_name`、`term_start`、`term_end`、`admin_source`、`admin_source_ref`。
-- runtime 中的机构 `AdminProfile` 已删除；跨端旧解码和旧界面仍按第五步清理。
+- runtime、Node、OnChina、CitizenApp 和公民钱包中的机构 `AdminProfile` 协议及机构管理员直接变更入口均已删除。
 
 ## 信任与隐私边界
 
@@ -110,9 +110,9 @@ admins: BoundedVec<AccountId>
 1. 纠正文档和任务卡中的通用岗位权限、创世法定代表人错误口径。
 2. 将法定代表人三个公开字段迁移到 `entity`，并完成全端契约对齐。
 3. 在 `entity` 建立机构岗位和任职，`admins` 收口为管理员账户集合。
-4. 接通创世、注册局、普选、互选、提名任免等任职来源。
+4. 接通创世、注册局和现有普选/互选来源，建立可供未来业务调用的通用机构治理结果底座；不提前实现具体业务细则。
 5. 改造 OnChina、CitizenApp 和公民钱包的管理与展示。
-6. 全仓残留清理、重新创世和真实运行态验收。
+6. Node 模型改造、全仓残留清理与真实运行态验收；重新创世单独执行。
 
 ## 各步确认规则
 
@@ -168,11 +168,11 @@ admins: BoundedVec<AccountId>
 - [x] 固定岗位 Node Guard 验收：纯策略 8/8、`entity-primitives` 5/5、真实 block#0 完整状态和缺失/额外岗位拒绝测试通过，runtime/node 全目标编译及 production WASM 构建通过。
 - [x] 固定岗位 Node Guard 真实运行态：fresh headless 临时节点启动和 RPC 正常，block#0 为 `0x1a3de5fdfdf75f37480b1964d7339ec7a7d38cd0716abf672dbf3ae7a4ed257e`，验收后节点正常退出。
 - [x] `public-admins/src/weights.rs`、`private-admins/src/weights.rs`、旧 benchmark 及对应 `WeightInfo`/runtime benchmark 注册已删除；机构 admins 不再暴露可计权的管理员集合变更 extrinsic，`runtime-benchmarks` 特性编译通过。
-- [ ] OnChina、CitizenApp、公民钱包的旧 `AdminProfile` 协议和界面按第五步改造，不在第三步越界实现。
+- [x] OnChina、CitizenApp、公民钱包的机构管理员协议和界面已在第五步改为“管理员钱包集合 + entity 岗位任职”。
 
 ## 第四步 A 执行记录
 
-- [x] `entity-primitives` 新增强类型 `InstitutionAssignmentResult` 和唯一结果处理 trait；结果携带机构码、机构主账户、岗位代码、当选钱包、任期、来源及来源引用。
+- [x] `entity-primitives` 首先建立单岗位任职结果和唯一结果处理边界，第四步 B2 再彻底收口为通用复合治理结果协议。
 - [x] `election-vote` 的普选、互选元数据任期统一为自纪元起 `u32` 天；终态当选结果分别映射为 `PopularElection`、`MutualElection`，以 `proposal_id` SCALE 编码作为 `assignment_source_ref`。
 - [x] runtime 新增结果路由：公权机构交 `public-manage`，私权机构交 `private-manage`；未知机构码关闭失败，不建立第三份任职或管理员真源。
 - [x] entity 在写入前校验目标机构、主账户、岗位状态、任期、结果账户唯一性；固定创世岗位额外按治理骨架强制法定席位数。
@@ -198,6 +198,46 @@ admins: BoundedVec<AccountId>
 - [x] 文档和残留清理完成：固定框架已写入投票引擎技术文档与 ADR；旧调用、旧存储、旧阶段、旧 API、旧二维码动作和旧界面组件标识全仓搜索为 0，不保留兼容分支。
 - [x] fresh runtime 真实运行态验收通过：使用当前源码 production WASM 启动 headless 临时节点，Node Guard 与 RPC 正常，`system_health.isSyncing=false`，block#0 为 `0xf5f7bb30535ead9b5cd5b0159b61124dd0116635ebe78b6b550eb3aa7dc169fe`；真实 metadata 包含 `RepresentativeMetas`、`LegislationMetas`、`RepresentativeTallies`、`RepresentativeVotesByAccount` 和 `cast_representative_vote`，且旧标识不存在。验收后节点正常退出，`--tmp` 临时数据已清理。
 
+## 第四步 B2 执行记录
+
+- [x] 单岗位整体同任期结果协议已删除，统一替换为 `InstitutionGovernanceResult`；不保留旧 trait、旧事件或兼容路由。
+- [x] 单个治理结果可同时包含动态岗位定义变化、多个岗位的完整目标任职集合，以及可选的法定代表人姓名、CID、钱包账户三字段整体更新。
+- [x] 每条任职独立携带任期、制度来源、来源引用和状态；不再把一个岗位内所有管理员错误压成同一任期或同一来源。
+- [x] 公权、私权 entity 先校验完整目标状态，再在同一 storage transaction 写入岗位、任职、法定代表人与 admins；任一环节失败全部回滚。
+- [x] 动态机构岗位允许新增、名称/任期要求变化、停用和暂时空缺；停用岗位必须同时清空任职。岗位代码作为稳定键，不提供改码路径。
+- [x] 五类固定创世机构的岗位定义不可由运行期业务修改，岗位任职可以依法轮换但必须保持治理骨架法定席位。
+- [x] runtime 只按机构码路由结果；`election-vote` 已改为通用协议的现有生产者，不改变普选/互选业务规则，也不新增提名任免等具体业务模块。
+- [x] 治理结果没有外部 extrinsic，不改变 call index、二维码动作或现有 storage SCALE 布局；法定代表人仍不要求等于管理员。
+- [x] 新增测试覆盖动态岗位、多任职独立任期/来源、动态岗位空缺、停用岗位约束、法定代表人整体更新、admins 派生、四类状态同事务回滚及固定岗位定义/席位保护。
+- [x] B2 回归验收：entity/admins/选举/立法/runtime 共 200 项测试全部通过；node、runtime `no_std`、`runtime-benchmarks` 和 OnChina 编译通过。benchmark 检查仅保留仓库既有 `resolution-issuance` 未使用 `Hash` 警告。
+- [x] B2 真实运行态：当前源码 production WASM 构建成功，压缩产物 SHA-256 为 `ce23906e713ff629d7d777f0f9905e834c49e444f6de08f8b8a722b78a5e465e`；嵌入该 WASM 的 fresh headless 节点通过 Node Guard 并启动 RPC，`system_health.isSyncing=false`，block#0 为 `0xc6d08c02c14c77305680e024e66a7226804e2cda5bb9dfd718e18868ea61c104`。真实 metadata 含 `InstitutionGovernanceApplied`、`InstitutionRoles`、`InstitutionRoleAssignments`，旧任职结果事件不存在；验收后节点和临时数据均已清理。
+
+## 第五步执行记录
+
+- [x] OnChina 机构创建表单和冷签编码改为显式提交岗位定义 `roles` 与任职关系 `assignments`；`admins` 只由 entity 从有效任职去重派生，不再提交人数或管理员资料副本。
+- [x] OnChina 链读改为联合读取 `PublicAdmins/PrivateAdmins::AdminAccounts` 钱包集合与 `PublicManage/PrivateManage` 岗位、任职；联邦注册局省域从稳定的 `PROVINCE_COMMISSIONER_<省码>` 岗位取得，不再读取虚拟省组。
+- [x] OnChina 管理员展示统一改为 `InstitutionAssignmentCard`，删除旧资料卡、旧姓名/CID/岗位内嵌投影和本地管理员姓名编辑依赖；同一钱包可展示多个有效任职。
+- [x] 删除 OnChina 旧 `REPLACE_GOVERNING_REGISTRY` 本地替换动作及其后端预检/写库、scope 迁移、错误码和前端按钮；FRG 岗位任职目录只读，禁止用本地投影冒充换届结果。
+- [x] CitizenApp 新增机构岗位、任职强类型模型和严格 SCALE 解码；机构管理员页面联合展示钱包、岗位、任期和来源，个人多签继续使用独立账户布局。
+- [x] CitizenApp 与公民钱包删除公权/私权机构管理员集合变更入口、动作码和解码分支；管理员集合变更只保留个人多签，机构管理员变化必须由 entity 治理结果原子派生。
+- [x] 公民钱包机构创建冷签复核已按岗位和任职字段解码并校验岗位引用、任期、来源、状态及管理员钱包去重数量。
+- [x] 验证：OnChina Rust 130/130、前端生产构建、CitizenApp 目标 15/15、公民钱包 77/77 全部通过；公民钱包静态分析 0 问题，CitizenApp 无新增问题，仅保留仓库既有 2 条 info lint。
+- [x] 第五步真实运行态：fresh 无头节点通过 Node Guard 并提供 RPC，`system_health.isSyncing=false`，block#0 为 `0xc6d08c02c14c77305680e024e66a7226804e2cda5bb9dfd718e18868ea61c104`；真实 metadata 含 `InstitutionRoles` 与 `InstitutionRoleAssignments` 且不含旧 FRG 虚拟省组。OnChina 生产包经本地预览返回 HTTP 200，实际 JS 产物包含岗位码、任职来源、来源引用和管理员账户字段，且旧 FRG 本地替换动作标识不存在。验收后临时节点和预览服务均已停止。
+- [x] 第五步未修改 `citizenchain/runtime/`；Node 桌面端迁移和最终残留清理已在第六步完成。
+
+## 第六步执行记录（不含重新创世）
+
+- [x] Node 机构管理员账户严格解码为 `cid_number + institution_code + admins + status`；删除机构姓名、公民 CID、岗位、来源、创建人和创建/更新时间内嵌镜像。
+- [x] Node 在同一个 finalized block hash 上联合读取 public/private admins 钱包集合与对应 entity 岗位、任职；非法人按实际命中的 admins pallet 决定 entity 路由，不按机构码猜测归属。
+- [x] Node 输出按钱包唯一聚合的 `InstitutionAdminInfo + InstitutionRoleAssignmentInfo[]`；每条任职展示岗位代码、岗位名称、任期、来源及来源引用，二进制来源引用统一显示为 hex。
+- [x] Node 新增 `frontend/admins/InstitutionAssignmentCard.tsx`，治理机构、提案投票状态和清算行管理员列表统一复用；同一钱包多个岗位只显示一张卡片，投票仍按钱包唯一计算。
+- [x] 删除 Node 机构管理员直接变更后端 call data、校验、签名和提交命令，删除前端集合编辑、差异、钱包选择、签名页以及所有“换管理员”入口。
+- [x] Node 不再承接个人多签管理员管理；个人多签继续只由 CitizenApp 的独立 personal-admins 流程处理。
+- [x] 更新 Node 管理员技术文档、ADR、MODULE_TAG 注册表、CitizenApp 技术文档和已被新模型替代的活动任务卡；旧机构管理员直接变更和资料内嵌代码在 Node、OnChina、CitizenApp、公民钱包源代码中搜索为 0。
+- [x] 验证：Node `cargo check` 通过，Node 全量 273 项测试 0 失败，前端 TypeScript/Vite 生产构建通过；生产预览 HTTP 200，实际 JS 包含管理员账户、岗位任期和来源依据展示。
+- [x] 本步骤没有修改 `citizenchain/runtime/`，没有生成或改写链规格，也没有初始化临时 fresh 链。本机当前没有运行中的 9944 RPC，故未伪造链上在线验收结果。
+- [ ] 重新创世、真实 RPC/storage/页面联动和全端最终验收按用户要求暂缓，必须在用户另行确认后执行。
+
 ## 历史实现事实
 
 2026-06-28 至 2026-06-30 曾经实现机构 `AdminProfile`，将管理员姓名、CID、岗位、任期和来源内嵌到 `AdminAccounts.admins`，并同步实现 OnChina、CitizenApp 和公民钱包解码。该布局已被 2026-07-12 用户确认的目标模型取代，后续步骤必须彻底删除相关代码、协议、缓存、注释和展示残留。
@@ -212,4 +252,4 @@ admins: BoundedVec<AccountId>
 - 无有效岗位任职或任期失效的账户不具有对应机构权限。
 - 个人多签行为和存储不受本机构岗位改造影响。
 - OnChina、CitizenApp、公民钱包与 runtime SCALE 字节完全一致。
-- 重新创世后通过真实节点、真实 PostgreSQL、真实 HTTP、真实页面和真实冷签验收。
+- 用户另行确认重新创世后，通过真实节点、真实 PostgreSQL、真实 HTTP、真实页面和真实冷签完成最终验收。

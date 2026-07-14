@@ -98,7 +98,7 @@
   - 解密 = citizenwallet 扫码签 challenge → 节点验签 → 解密本地加密存储的私钥到内存
   - 内存中密钥永久驻留至节点重启，无时间限制
   - 解密后 packer 攒批可直接用内存中密钥签 `submit_offchain_batch_v2`
-- 提案按钮：转账 / 手续费划转启用；换管理员 / 费率设置 disabled "即将上线"
+- 提案按钮：转账 / 手续费划转启用；费率设置按业务模块进度开放。机构岗位任职变更不在清算行页面直接编辑。
 - 新增"节点信息"长卡片：peer_id / rpc_domain:rpc_port / 注册管理员 + 端点更新/注销入口
 - 提交 register_clearing_bank 前**强制桌面节点连通性自测**
 
