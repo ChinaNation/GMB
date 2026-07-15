@@ -77,6 +77,7 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
     let admins_len = Pallet::<T>::active_account_admins_len(institution_code, account.clone())
         .ok_or(Error::<T>::PersonalNotFound)?;
     let threshold = <T as Config>::InternalVoteEngine::configured_dynamic_threshold(
+        proposal_id,
         institution_code,
         account.clone(),
     )

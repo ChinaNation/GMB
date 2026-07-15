@@ -28,7 +28,7 @@ pub use pallet::*;
 
 /// public-admins pallet on-chain storage 版本。
 /// 全新创世直接使用纯账户布局，不承载机构岗位资料或省级分组副本。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 #[frame_support::pallet]
 pub mod pallet {

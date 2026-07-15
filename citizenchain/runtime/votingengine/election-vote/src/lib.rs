@@ -15,6 +15,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
 pub mod cleanup;
 pub mod mutual;
 pub mod popular;
@@ -23,6 +25,7 @@ pub mod tally;
 #[cfg(test)]
 mod tests;
 pub mod types;
+pub mod weights;
 
 pub use pallet::*;
 
@@ -36,7 +39,6 @@ pub mod pallet {
     use frame_support::{
         pallet_prelude::*,
         storage::{with_transaction, TransactionOutcome},
-        weights::Weight,
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::*;
@@ -46,11 +48,12 @@ pub mod pallet {
         DispatchError,
     };
     use sp_std::vec::Vec;
-    use votingengine::InternalAdminProvider;
+    use votingengine::{CitizenIdentityReader, InternalAdminProvider};
 
     use crate::types::{
         ElectionMeta, ElectionMode, ElectionTally as ElectionTallyData, ElectionWinner,
     };
+    use crate::weights::WeightInfo;
 
     pub const MODULE_TAG: &[u8] = b"election-vote";
 
@@ -83,9 +86,16 @@ pub mod pallet {
 
         /// 机构账户 → CID 查询入口。选举提案用 CID 记录组织机构和目标机构。
         type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
+
+        /// 选举写票和候选人计票路径的实测权重。
+        type WeightInfo: crate::weights::WeightInfo;
     }
 
+    /// 重新创世直接使用含人口作用域的最终选举元数据布局。
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
     #[pallet::pallet]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     /// 选举职位与规则快照。
@@ -188,6 +198,16 @@ pub mod pallet {
         VoterNotInSnapshot,
         /// 候选人不在候选快照内。
         CandidateNotInSnapshot,
+        /// 普选选民不具备 citizen-identity 投票资格。
+        VoterNotEligible,
+        /// 普选候选人不具备 citizen-identity 参选资格。
+        CandidateNotEligible,
+        /// 选举缺少与模式匹配的资格作用域。
+        ElectionScopeMissing,
+        /// 选举管理员快照缺失。
+        AdminSnapshotMissing,
+        /// 人口分母与选民快照数量不一致。
+        ElectionSnapshotMismatch,
         /// 组织机构或目标机构无法解析到唯一 CID。
         InvalidInstitutionCid,
     }
@@ -196,7 +216,11 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 普选投票。
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0))]
+        #[pallet::weight(<T as Config>::WeightInfo::cast_popular_vote(
+            ElectionCandidates::<T>::get(*proposal_id)
+                .map(|items| items.len() as u32)
+                .unwrap_or_default()
+        ))]
         pub fn cast_popular_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -208,7 +232,11 @@ pub mod pallet {
 
         /// 互选投票。
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0))]
+        #[pallet::weight(<T as Config>::WeightInfo::cast_mutual_vote(
+            ElectionCandidates::<T>::get(*proposal_id)
+                .map(|items| items.len() as u32)
+                .unwrap_or_default()
+        ))]
         pub fn cast_mutual_vote(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -259,6 +287,7 @@ pub mod pallet {
             seat_count: u16,
             term_start: u32,
             term_end: u32,
+            population_scope: Option<votingengine::PopulationScope>,
             candidates: Vec<T::AccountId>,
             voters: Vec<T::AccountId>,
         ) -> Result<u64, DispatchError> {
@@ -281,6 +310,57 @@ pub mod pallet {
             );
             let bounded_voters = Self::bounded_voters(voters)?;
 
+            match (mode, population_scope.as_ref()) {
+                (ElectionMode::Popular, Some(scope)) => {
+                    ensure!(
+                        bounded_voters.iter().all(|voter| {
+                            <T as votingengine::Config>::CitizenIdentityReader::can_vote(
+                                voter, scope,
+                            )
+                        }),
+                        Error::<T>::VoterNotEligible
+                    );
+                    ensure!(
+                        bounded_candidates.iter().all(|candidate| {
+                            <T as votingengine::Config>::CitizenIdentityReader::can_be_candidate(
+                                candidate, scope,
+                            )
+                        }),
+                        Error::<T>::CandidateNotEligible
+                    );
+                    ensure!(
+                        <T as votingengine::Config>::CitizenIdentityReader::population_count(scope)
+                            == bounded_voters.len() as u64,
+                        Error::<T>::ElectionSnapshotMismatch
+                    );
+                }
+                (ElectionMode::Mutual, None) => {
+                    let admins =
+                        <T as votingengine::Config>::InternalAdminProvider::get_admin_list(
+                            target_code,
+                            target.clone(),
+                        )
+                        .ok_or(Error::<T>::AdminSnapshotMissing)?;
+                    ensure!(
+                        admins.len() == bounded_voters.len(),
+                        Error::<T>::ElectionSnapshotMismatch
+                    );
+                    ensure!(
+                        bounded_voters
+                            .iter()
+                            .all(|voter| admins.iter().any(|admin| admin == voter)),
+                        Error::<T>::VoterNotEligible
+                    );
+                    ensure!(
+                        bounded_candidates
+                            .iter()
+                            .all(|candidate| admins.iter().any(|admin| admin == candidate)),
+                        Error::<T>::CandidateNotEligible
+                    );
+                }
+                _ => return Err(Error::<T>::ElectionScopeMissing.into()),
+            }
+
             let now = frame_system::Pallet::<T>::block_number();
             let end = now.saturating_add(Self::stage_duration());
             let stage = mode.stage();
@@ -298,6 +378,7 @@ pub mod pallet {
             };
             let meta = ElectionMeta {
                 mode,
+                population_scope,
                 organizer_code,
                 organizer,
                 target_code,

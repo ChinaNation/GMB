@@ -45,6 +45,11 @@ USDC 走一条**预付固定时长**路线,与卡路线并存,一钱包同时只
 
 **9. 购买异档守卫(段4)**:`/prepaid` 购买对「已有活跃 USDC 且档不同」拒(`prepaid_tier_change_required`,挑战前+确认后两处),强制走换档折算,防旧时长被贴成新档漏收;新购 / 同档续费 / 跨支付切换(原为卡)放行。
 
+**10. webhook 幂等与跨路线乱序保护**
+- `square_stripe_webhook_events` 先按 `event_id` 原子占位，处理成功后写 `processed_at`；处理中失败释放占位，允许 Stripe 重试。`square_stripe_payments` 以 `stripe_payment_intent_id` 永久去重，一次性付款事件重放不得重复授时长。
+- 卡→USDC 后，旧卡的 `customer.subscription.updated/deleted` 可能晚于 Crypto Checkout 到达。`square_memberships.subscription_source='usdc_prepaid'` 是当前真源；普通旧卡事件的 D1 upsert 必须原子拒绝并返回 `subscription_superseded`，不得覆盖预付行。
+- USDC→卡只能由服务端创建的新订阅越过上述守卫：Checkout 写入 `subscription_data.metadata.payment_switch=usdc_to_stripe`，webhook 校验该精确标志后才允许把行切回 `stripe`。客户端不得自行提供此标志。
+
 ## 影响
 
 - 影响产品:Cloudflare Worker(预付购买路由、webhook checkout 授时长分支、换挡重算、切换支付、subscriptionIsActive 对 usdc 分支)、官网(USDC 选时长 + 预付发起 + 换挡预览)、CitizenApp(会员卡起止时间 + USDC 入口)。
@@ -61,6 +66,7 @@ USDC 走一条**预付固定时长**路线,与卡路线并存,一钱包同时只
 ## 后续动作
 
 - 任务卡:`memory/08-tasks/open/20260713-usdc-prepaid-membership-route.md`(购买 / 换挡 / 切换 / 前端四段**全部完成**)。
-- 先决:确认真实 USDC Checkout 是否落下可用凭证(payment_intent)以入库绑定(部署后沙箱定向验)。
+- 真实验收:2026-07-14 已在独立 Stripe Sandbox + Sepolia USDC 完成 8.97 美元 Crypto Checkout，确认可取得 `payment_intent` 并落入付款去重表；真实 event 连续重放两次未延长 D1 时长。随后 USDC→卡 Checkout 以 122 天 trial 完成切换，真签名取消通过，整车日志为 `PASS=8 / BLOCKED=0 / FAIL=0`。
+- 未覆盖:voting/candidate 成功身份与身份不匹配冻结/解冻仍需真实链上身份钱包，不得引用本次访客钱包结果替代。
 - 已同步:CITIZENWEB 会员章节、App 会员卡、本 ADR。
 - 部署:Worker `wrangler deploy`;D1 基线重建含 `prepaid_payment_ref`;官网 `wrangler pages deploy`。

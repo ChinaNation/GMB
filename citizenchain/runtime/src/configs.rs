@@ -2075,6 +2075,9 @@ impl votingengine::Config for Runtime {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<2_048>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Runtime, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Runtime, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Runtime, 8>;
     type MaxProposalsPerExpiry = ConstU32<2_048>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
@@ -2086,8 +2089,7 @@ impl votingengine::Config for Runtime {
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<2_048>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<256>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
-    type MaxCleanupQueueBucketLimit = ConstU32<512>;
-    type MaxCleanupScheduleOffset = ConstU32<1_024>;
+    type MaxCleanupActivationsPerBlock = ConstU32<64>;
     type CleanupKeysPerStep = ConstU32<256>;
     type CitizenIdentityReader = RuntimeCitizenIdentityReader;
     type JointVoteResultCallback = RuntimeJointVoteResultCallback;
@@ -2115,19 +2117,15 @@ impl votingengine::Config for Runtime {
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type TimeProvider = pallet_timestamp::Pallet<Runtime>;
     type WeightInfo = votingengine::weights::SubstrateWeight<Runtime>;
-    // mode-specific finalize / cleanup 通过 trait 派发到对应 sub-pallet。
-    type InternalFinalizer = InternalVote;
-    type InternalCleanup = InternalVote;
-    type JointFinalizer = JointVote;
-    type JointCleanup = JointVote;
-    // 立法投票(ADR-027):终态回调接业务壳 legislation-yuan;超时结算/清理接 legislation-vote。
+    // 四类 timeout / cleanup / mode 终态副作用通过递归 Track tuple 派发。
+    type TrackHandlers = (
+        InternalVote,
+        (JointVote, (LegislationVote, (ElectionVote, ()))),
+    );
+    // 立法投票(ADR-027):终态业务回调接 legislation-yuan，Track 接 legislation-vote。
     // ProposalOwner 决定由法律、任免或预算业务认领；B1 先装配法律业务壳。
     type LegislationVoteResultCallback = (LegislationYuan,);
-    type LegislationFinalizer = LegislationVote;
-    type LegislationCleanup = LegislationVote;
     type ElectionVoteResultCallback = ElectionVote;
-    type ElectionFinalizer = ElectionVote;
-    type ElectionCleanup = ElectionVote;
 }
 
 // Sub-pallet Config 注入。共用基础设施 votingengine::Config 已 impl 完;
@@ -2148,6 +2146,7 @@ impl election_vote::Config for Runtime {
     type MaxElectionCandidates = ConstU32<256>;
     type MaxElectionVoters = ConstU32<4096>;
     type InstitutionQuery = RuntimeInstitutionQuery;
+    type WeightInfo = election_vote::weights::SubstrateWeight<Runtime>;
 }
 
 impl election_campaign::Config for Runtime {}
@@ -2155,7 +2154,7 @@ impl election_campaign::Config for Runtime {}
 impl legislation_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type InstitutionQuery = RuntimeInstitutionQuery;
-    type WeightInfo = ();
+    type WeightInfo = legislation_vote::weights::SubstrateWeight<Runtime>;
 }
 
 impl pow_difficulty::Config for Runtime {
@@ -2269,6 +2268,56 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
         <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
             AccountId,
         >>::population_count(scope)
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    fn benchmark_seed_identity(who: &AccountId, scope: &citizen_identity::PopulationScope) {
+        use citizen_identity::{
+            CandidateIdentity, CandidateIdentityByAccount, CitizenStatus, CountryVotingCount,
+            VotingIdentity, VotingIdentityByAccount,
+        };
+
+        // citizen-identity 按 timestamp 校验护照窗口；benchmark externalities 的
+        // 创世时间为 0，先推进到稳定的 2027 年时间点。
+        pallet_timestamp::Pallet::<Runtime>::set_timestamp(1_800_000_000_000);
+        let now = frame_system::Pallet::<Runtime>::block_number();
+        let identity = VotingIdentity {
+            cid_number: b"benchmark-citizen"
+                .to_vec()
+                .try_into()
+                .expect("bounded CID"),
+            passport_valid_from: 19700101,
+            passport_valid_until: 29991231,
+            citizen_status: CitizenStatus::Normal,
+            residence_province_code: Default::default(),
+            residence_city_code: Default::default(),
+            residence_town_code: Default::default(),
+            updated_at: now,
+        };
+        VotingIdentityByAccount::<Runtime>::insert(who, identity);
+        CandidateIdentityByAccount::<Runtime>::insert(
+            who,
+            CandidateIdentity {
+                birth_province_code: Default::default(),
+                birth_city_code: Default::default(),
+                birth_town_code: Default::default(),
+                citizen_full_name: b"benchmark".to_vec().try_into().expect("bounded name"),
+                citizen_sex: citizen_identity::CitizenSex::Male,
+                updated_at: now,
+            },
+        );
+        match scope {
+            citizen_identity::PopulationScope::Country => CountryVotingCount::<Runtime>::put(1),
+            citizen_identity::PopulationScope::Province(province) => {
+                citizen_identity::ProvinceVotingCount::<Runtime>::insert(province, 1)
+            }
+            citizen_identity::PopulationScope::City(province, city) => {
+                citizen_identity::CityVotingCount::<Runtime>::insert((province, city), 1)
+            }
+            citizen_identity::PopulationScope::Town(province, city, town) => {
+                citizen_identity::TownVotingCount::<Runtime>::insert((province, city, town), 1)
+            }
+        }
     }
 }
 // pallet_assets 内核接入(ADR-011 第八节)+ OnchainIssuance 外壳配置

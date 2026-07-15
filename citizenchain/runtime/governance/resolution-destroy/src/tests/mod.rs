@@ -4,7 +4,7 @@ use super::*;
 use codec::Encode;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
-    traits::{ConstU128, ConstU32},
+    traits::{ConstU128, ConstU32, Hooks},
 };
 use frame_system as system;
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
@@ -146,6 +146,9 @@ impl votingengine::Config for Test {
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAdminsPerInstitution = ConstU32<32>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
@@ -157,8 +160,7 @@ impl votingengine::Config for Test {
     type MaxManualExecutionAttempts = ConstU32<3>;
     type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
-    type MaxCleanupQueueBucketLimit = ConstU32<50>;
-    type MaxCleanupScheduleOffset = ConstU32<100>;
+    type MaxCleanupActivationsPerBlock = ConstU32<50>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
     type CitizenIdentityReader = TestCitizenIdentityReader;
     type JointVoteResultCallback = ();
@@ -168,16 +170,9 @@ impl votingengine::Config for Test {
     type InternalAdminsLenProvider = ();
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
-    type InternalFinalizer = InternalVote;
-    type InternalCleanup = InternalVote;
-    type JointFinalizer = ();
-    type JointCleanup = ();
+    type TrackHandlers = (InternalVote, ());
     type LegislationVoteResultCallback = ();
-    type LegislationFinalizer = ();
-    type LegislationCleanup = ();
     type ElectionVoteResultCallback = ();
-    type ElectionFinalizer = ();
-    type ElectionCleanup = ();
 }
 
 impl internal_vote::Config for Test {
@@ -227,14 +222,22 @@ fn last_proposal_id() -> u64 {
 
 /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(统一入口)。
 fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
-    frame_support::storage::with_transaction(
+    let result = frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<DispatchResult> {
             match internal_vote::Pallet::<Test>::do_internal_vote(who, proposal_id, approve) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }
         },
-    )
+    );
+    if result.is_ok()
+        && VotingEngine::proposals(proposal_id)
+            .map(|proposal| proposal.status != votingengine::STATUS_VOTING)
+            .unwrap_or(false)
+    {
+        <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
+    }
+    result
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {

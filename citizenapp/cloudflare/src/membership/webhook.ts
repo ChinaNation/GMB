@@ -140,7 +140,7 @@ async function processSubscription(
     ? 'identity_required'
     : subscription.status;
 
-  await upsertStripeMembership(env, {
+  const applied = await upsertStripeMembership(env, {
     ownerAccount,
     membershipLevel,
     stripeCustomerId: subscription.customer,
@@ -152,8 +152,18 @@ async function processSubscription(
       : null,
     currentPeriodEnd: subscription.current_period_end * 1000,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    identity
+    identity,
+    allowPrepaidSwitch: subscription.metadata.payment_switch === 'usdc_to_stripe'
   });
+
+  // 卡→USDC 后，旧卡 cancel/update 事件可能迟到；D1 原子守卫拒绝其覆盖预付真源。
+  if (!applied) {
+    return {
+      action: 'subscription_superseded',
+      owner_account: ownerAccount,
+      membership_level: membershipLevel
+    };
+  }
 
   // 重订解冻：订阅重新生效 → 回灌该 owner 已归档的视频（幂等，失败不阻断权益落地）。
   if (status === 'active' || status === 'trialing') {

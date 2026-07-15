@@ -557,10 +557,11 @@ export async function upsertStripeMembership(
     currentPeriodEnd: number;
     cancelAtPeriodEnd: boolean;
     identity: ChainIdentityState;
+    allowPrepaidSwitch: boolean;
   }
-): Promise<void> {
+): Promise<boolean> {
   const now = nowMs();
-  await env.DB.prepare(
+  const result = await env.DB.prepare(
     `INSERT INTO square_memberships
       (owner_account, membership_level, expires_at,
         updated_at, subscription_source, stripe_customer_id, stripe_subscription_id,
@@ -581,7 +582,8 @@ export async function upsertStripeMembership(
         cancel_at_period_end = excluded.cancel_at_period_end,
         identity_level = excluded.identity_level,
         identity_checked_at = excluded.identity_checked_at,
-        entitlement_lapsed_at = NULL`
+        entitlement_lapsed_at = NULL
+      WHERE square_memberships.subscription_source <> 'usdc_prepaid' OR ? = 1`
   )
     .bind(
       input.ownerAccount,
@@ -596,9 +598,11 @@ export async function upsertStripeMembership(
       input.currentPeriodEnd,
       input.cancelAtPeriodEnd ? 1 : 0,
       input.identity.identity_level,
-      input.identity.checked_at
+      input.identity.checked_at,
+      input.allowPrepaidSwitch ? 1 : 0
     )
     .run();
+  return (result.meta?.changes ?? 0) === 1;
 }
 
 export async function markStripeMembershipInactive(

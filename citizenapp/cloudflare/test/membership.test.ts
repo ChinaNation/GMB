@@ -286,6 +286,64 @@ describe('stripe membership webhook', () => {
     });
   });
 
+  it('旧卡迟到 updated 不得覆盖已生效的 USDC 预付会员', async () => {
+    const db = new FakeDb();
+    db.memberships.set(owner, membershipRow({
+      subscription_source: 'usdc_prepaid',
+      stripe_customer_id: null,
+      stripe_subscription_id: null,
+      stripe_price_id: null,
+      prepaid_payment_ref: 'pi_new_usdc'
+    }));
+    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
+    const body = stripeEvent({
+      membership_level: 'freedom',
+      status: 'active',
+      periodEnd: 1_893_456_000
+    });
+
+    const response = await stripeWebhookRoute(await signedRequest(body), env);
+    expect(((await response.json()) as { action: string }).action).toBe(
+      'subscription_superseded'
+    );
+    expect(db.memberships.get(owner)).toMatchObject({
+      subscription_source: 'usdc_prepaid',
+      stripe_subscription_id: null,
+      prepaid_payment_ref: 'pi_new_usdc'
+    });
+  });
+
+  it('带服务器切换标志的新卡订阅可以覆盖 USDC 预付会员', async () => {
+    const db = new FakeDb();
+    db.memberships.set(owner, membershipRow({
+      subscription_source: 'usdc_prepaid',
+      stripe_customer_id: null,
+      stripe_subscription_id: null,
+      stripe_price_id: null,
+      prepaid_payment_ref: 'pi_old_usdc'
+    }));
+    const env = fakeEnv({ db, membership: null, storageResponses: [], stripeSecret });
+    const parsed = JSON.parse(stripeEvent({
+      membership_level: 'freedom',
+      status: 'trialing',
+      periodEnd: 1_893_456_000
+    })) as { data: { object: { metadata: Record<string, string> } } };
+    parsed.data.object.metadata.payment_switch = 'usdc_to_stripe';
+
+    const response = await stripeWebhookRoute(
+      await signedRequest(JSON.stringify(parsed)),
+      env
+    );
+    expect(((await response.json()) as { action: string }).action).toBe(
+      'subscription_upserted'
+    );
+    expect(db.memberships.get(owner)).toMatchObject({
+      subscription_source: 'stripe',
+      stripe_subscription_id: 'sub_test',
+      subscription_status: 'trialing'
+    });
+  });
+
   it('rejects a subscription whose Stripe Price is not USD', async () => {
     const db = new FakeDb();
     const env = fakeEnv({
@@ -925,7 +983,7 @@ class FakeStmt {
     }
     if (this.sql.includes('INSERT INTO square_memberships')) {
       const ownerAccount = this.args[0] as string;
-      if (this.sql.includes("'usdc_prepaid'")) {
+      if (this.sql.includes("VALUES (?, ?, ?, ?, 'usdc_prepaid'")) {
         // USDC 预付 binds: [owner, level, expires, updated, start, end, identity, checked_at, ref]
         this.db.memberships.set(
           ownerAccount,
@@ -943,6 +1001,11 @@ class FakeStmt {
           })
         );
       } else {
+        const existing = this.db.memberships.get(ownerAccount);
+        const allowPrepaidSwitch = this.args[13] === 1;
+        if (existing?.subscription_source === 'usdc_prepaid' && !allowPrepaidSwitch) {
+          return { success: true, meta: { changes: 0 } };
+        }
         this.db.memberships.set(ownerAccount, {
           owner_account: ownerAccount,
           membership_level: this.args[1] as string,
@@ -964,6 +1027,7 @@ class FakeStmt {
           prepaid_payment_ref: null
         });
       }
+      return { success: true, meta: { changes: 1 } };
     }
     if (this.sql.includes('UPDATE square_memberships') && this.sql.includes('stripe_subscription_id')) {
       const status = this.args[0] as string;

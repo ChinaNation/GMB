@@ -47,6 +47,11 @@ impl<T: Config> Pallet<T> {
             !ReferendumVotesByAccount::<T>::contains_key(proposal_id, &who),
             votingengine::Error::<T>::AlreadyVoted
         );
+        let current_tally = ReferendumTallies::<T>::get(proposal_id);
+        ensure!(
+            current_tally.yes.saturating_add(current_tally.no) < proposal.citizen_eligible_total,
+            Error::<T>::ReferendumSnapshotExhausted
+        );
 
         ReferendumVotesByAccount::<T>::insert(proposal_id, &who, approve);
         let tally = ReferendumTallies::<T>::mutate(proposal_id, |tally| {

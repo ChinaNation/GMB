@@ -11,6 +11,9 @@
 //! - 不调用 `election-vote`；
 //! - 不写入 `public-admins` 或法定代表人；
 //! - 不实现普选/互选的具体规则。
+//!
+//! 资格边界：普选由 `citizen-identity` 提供人口作用域和资格校验，
+//! 互选由对应 admins provider 提供机构管理员快照；本业务壳不得自行维护第二份资格真源。
 
 pub use pallet::*;
 

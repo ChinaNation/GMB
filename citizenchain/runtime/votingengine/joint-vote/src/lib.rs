@@ -91,6 +91,31 @@ pub fn is_jointreferendum_vote_rejected(no_votes: u64, eligible_total: u64) -> b
     }
     (no_votes as u128).saturating_mul(100) >= (eligible_total as u128).saturating_mul(50)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn joint_internal_requires_all_105_weight() {
+        assert!(!is_joint_unanimous(JOINT_VOTE_PASS_THRESHOLD - 1));
+        assert!(is_joint_unanimous(JOINT_VOTE_PASS_THRESHOLD));
+    }
+
+    #[test]
+    fn joint_referendum_uses_strict_majority() {
+        assert!(!is_jointreferendum_vote_passed(50, 100));
+        assert!(is_jointreferendum_vote_passed(51, 100));
+        assert!(is_jointreferendum_vote_rejected(50, 100));
+        assert!(!is_jointreferendum_vote_rejected(49, 100));
+    }
+
+    #[test]
+    fn joint_referendum_fails_closed_without_population() {
+        assert!(!is_jointreferendum_vote_passed(1, 0));
+        assert!(!is_jointreferendum_vote_rejected(1, 0));
+    }
+}
 // pallet block(Config / storage / event / error / extrinsic)
 #[frame_support::pallet]
 pub mod pallet {
@@ -251,6 +276,8 @@ pub mod pallet {
         CitizenNotEligible,
         /// 公投作用域缺失。
         PopulationScopeMissing,
+        /// 已投票人数达到创建时人口快照分母，拒绝分子超过 100%。
+        ReferendumSnapshotExhausted,
     }
 
     use crate::weights::WeightInfo;
@@ -416,5 +443,121 @@ impl<T: Config> votingengine::traits::JointCleanupHandler for Pallet<T> {
         JointTallies::<T>::remove(proposal_id);
         ReferendumTallies::<T>::remove(proposal_id);
         ReferendumScopes::<T>::remove(proposal_id);
+    }
+}
+
+impl<T: Config>
+    votingengine::ProposalTrackHandler<
+        frame_system::pallet_prelude::BlockNumberFor<T>,
+        T::AccountId,
+    > for Pallet<T>
+{
+    fn handles(kind: u8) -> bool {
+        kind == votingengine::PROPOSAL_KIND_JOINT
+    }
+
+    fn finalize_timeout(
+        proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>, T::AccountId>,
+        proposal_id: u64,
+    ) -> Option<DispatchResult> {
+        if !Self::handles(proposal.kind) {
+            return None;
+        }
+        Some(match proposal.stage {
+            votingengine::STAGE_JOINT => Self::do_finalize_joint_timeout(proposal, proposal_id),
+            votingengine::STAGE_REFERENDUM => {
+                Self::do_finalize_jointreferendum_timeout(proposal, proposal_id)
+            }
+            _ => Err(votingengine::Error::<T>::InvalidProposalStage.into()),
+        })
+    }
+
+    fn cleanup_chunk(
+        kind: u8,
+        proposal_id: u64,
+        limit: u32,
+    ) -> Option<votingengine::CleanupChunkResult> {
+        if !Self::handles(kind) {
+            return None;
+        }
+        let limit = limit.max(1);
+        let mut removed = 0u32;
+        let result = <Self as votingengine::JointCleanupHandler>::cleanup_joint_admin_votes_chunk(
+            proposal_id,
+            limit,
+        );
+        removed = removed.saturating_add(result.0);
+        if result.1 || removed >= limit {
+            return Some((removed, true));
+        }
+        let result =
+            <Self as votingengine::JointCleanupHandler>::cleanup_joint_institution_votes_chunk(
+                proposal_id,
+                limit.saturating_sub(removed),
+            );
+        removed = removed.saturating_add(result.0);
+        if result.1 || removed >= limit {
+            return Some((removed, true));
+        }
+        let result =
+            <Self as votingengine::JointCleanupHandler>::cleanup_joint_institution_tallies_chunk(
+                proposal_id,
+                limit.saturating_sub(removed),
+            );
+        removed = removed.saturating_add(result.0);
+        if result.1 || removed >= limit {
+            return Some((removed, true));
+        }
+        let result = <Self as votingengine::JointCleanupHandler>::cleanup_referendum_votes_chunk(
+            proposal_id,
+            limit.saturating_sub(removed),
+        );
+        removed = removed.saturating_add(result.0);
+        if result.1 {
+            return Some((removed, true));
+        }
+        Some((removed, false))
+    }
+
+    fn cleanup_terminal(kind: u8, proposal_id: u64) -> Option<()> {
+        Self::handles(kind).then(|| {
+            <Self as votingengine::JointCleanupHandler>::cleanup_joint_terminal(proposal_id)
+        })
+    }
+
+    fn timeout_weight(stage: u8) -> Option<frame_support::weights::Weight> {
+        use crate::weights::WeightInfo;
+        match stage {
+            votingengine::STAGE_JOINT => Some(<T as Config>::WeightInfo::finalize_joint_timeout()),
+            votingengine::STAGE_REFERENDUM => {
+                Some(<T as Config>::WeightInfo::finalize_jointreferendum_timeout())
+            }
+            u8::MAX => Some(
+                <T as Config>::WeightInfo::finalize_joint_timeout()
+                    .max(<T as Config>::WeightInfo::finalize_jointreferendum_timeout()),
+            ),
+            _ => None,
+        }
+    }
+
+    fn cleanup_chunk_weight(kind: u8, limit: u32) -> Option<frame_support::weights::Weight> {
+        use frame_support::traits::Get;
+        matches!(kind, votingengine::PROPOSAL_KIND_JOINT | u8::MAX).then(|| {
+            let limit = u64::from(limit.max(1));
+            frame_support::weights::Weight::from_parts(12_000_000, 6_000)
+                .saturating_add(
+                    frame_support::weights::Weight::from_parts(1_200_000, 2_700)
+                        .saturating_mul(limit),
+                )
+                .saturating_add(T::DbWeight::get().reads_writes(limit.saturating_add(4), limit))
+        })
+    }
+
+    fn cleanup_terminal_weight(kind: u8) -> Option<frame_support::weights::Weight> {
+        use frame_support::traits::Get;
+        matches!(kind, votingengine::PROPOSAL_KIND_JOINT | u8::MAX).then(|| {
+            frame_support::weights::Weight::from_parts(10_000_000, 8_000)
+                .saturating_add(T::DbWeight::get().writes(3))
+        })
     }
 }

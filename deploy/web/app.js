@@ -3,6 +3,8 @@ let secretComments = {};
 let citizenwebLocalRunning = false;
 let statusById = new Map();
 let chainNodes = [];
+let displayedRunId = null;
+let runEvents = null;
 const cards = document.querySelector('#cards');
 const overview = document.querySelector('#overview');
 const dialog = document.querySelector('#moduleDialog');
@@ -145,25 +147,36 @@ async function saveNode(nodeId) {
 }
 
 async function runAction(moduleId, actionId, options = {}) {
-  logs.textContent = '正在创建部署任务…\n';
   const response = await fetch('/api/run', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ moduleId, actionId, ...options }),
   });
   const result = await response.json();
-  if (!response.ok) { logs.textContent += `${result.error}\n`; return; }
+  if (!response.ok) {
+    // 中文注释：启动冲突不能覆盖正在执行或最近一次任务的验收证据。
+    logs.textContent += `\n${result.error}\n`;
+    return;
+  }
   dialog.close();
-  const events = new EventSource(`/api/runs/${result.runId}/events`);
-  events.addEventListener('log', (event) => {
+  logs.textContent = '';
+  displayedRunId = result.runId;
+  connectRunEvents(result.runId);
+}
+
+function connectRunEvents(runId) {
+  if (runEvents) runEvents.close();
+  runEvents = new EventSource(`/api/runs/${runId}/events`);
+  runEvents.addEventListener('log', (event) => {
     const item = JSON.parse(event.data);
     logs.textContent += item.data;
     if (!String(item.data).endsWith('\n')) logs.textContent += '\n';
     logs.scrollTop = logs.scrollHeight;
   });
-  events.addEventListener('done', async (event) => {
+  runEvents.addEventListener('done', async (event) => {
     const item = JSON.parse(event.data);
     logs.textContent += `\n任务结束：${item.data.state}\n`;
-    events.close();
+    runEvents.close();
+    runEvents = null;
     await loadStatus();
   });
 }
@@ -180,6 +193,25 @@ async function loadStatus() {
   statusById = new Map(status.modules.map((item) => [item.id, item]));
   const ready = status.modules.filter((item) => configured(item.keychain.production) && configured(item.github)).length;
   overview.innerHTML = `<article><strong>${catalog.length}</strong><span>部署模块</span></article><article><strong>${ready}</strong><span>生产就绪</span></article><article><strong>${status.activeRunId ? '运行中' : '空闲'}</strong><span>执行状态</span></article>`;
+  if (status.latestRun) {
+    const running = status.latestRun.state === 'running' || status.latestRun.state === 'starting';
+    if (running && status.latestRun.id !== displayedRunId) {
+      displayedRunId = status.latestRun.id;
+      // 中文注释：SSE 会重放当前任务的完整事件，先清空可避免恢复连接后出现重复日志。
+      logs.textContent = '';
+      connectRunEvents(status.latestRun.id);
+    } else if (!running) {
+      // 中文注释：标签交接可能中断 SSE；已结束任务每次刷新都以服务端完整事件重建结果。
+      displayedRunId = status.latestRun.id;
+      if (runEvents) runEvents.close();
+      runEvents = null;
+      logs.textContent = status.latestRun.events
+        .filter((item) => item.event === 'log')
+        .map((item) => item.data)
+        .join('\n');
+      logs.textContent += `\n\n任务结束：${status.latestRun.state}\n`;
+    }
+  }
   renderCards();
 }
 

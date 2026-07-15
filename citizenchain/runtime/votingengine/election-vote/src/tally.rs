@@ -1,7 +1,7 @@
 //! 多候选、多席位计票。
 //!
-//! 当前只实现“得票多数当选”的最小可用规则。若最后一个席位出现同票，
-//! 本 pallet 先拒绝本次结果，后续由《选举法》接入同票处理规则后再扩展。
+//! 当前实现“得票多数当选”的最小规则：并列组能够完整落入剩余席位时，
+//! 并列账户共同当选；只有并列组跨越席位边界时才拒绝结果。
 
 use frame_support::pallet_prelude::*;
 use sp_std::vec::Vec;
@@ -20,7 +20,8 @@ pub(crate) fn select_winners<AccountId: Clone + PartialEq>(
     let mut remaining: Vec<(AccountId, u32)> = candidates.to_vec();
     let mut winners: Vec<ElectionWinner<AccountId>> = Vec::new();
 
-    for seat_index in 0..seat_count {
+    let mut seat_index = 0u16;
+    while seat_index < seat_count {
         let Some(max_votes) = remaining.iter().map(|(_, votes)| *votes).max() else {
             return Err(());
         };
@@ -33,17 +34,21 @@ pub(crate) fn select_winners<AccountId: Clone + PartialEq>(
             .enumerate()
             .filter_map(|(idx, (_, votes))| (*votes == max_votes).then_some(idx))
             .collect();
-        if tied.len() != 1 {
+        let remaining_seats = seat_count.saturating_sub(seat_index) as usize;
+        if tied.len() > remaining_seats {
             return Err(());
         }
 
-        let idx = tied[0];
-        let (account, votes) = remaining.remove(idx);
-        winners.push(ElectionWinner {
-            account,
-            votes,
-            seat_index,
-        });
+        let tied_count = tied.len() as u16;
+        for (offset, idx) in tied.into_iter().enumerate() {
+            let (account, votes) = remaining.remove(idx - offset);
+            winners.push(ElectionWinner {
+                account,
+                votes,
+                seat_index: seat_index + offset as u16,
+            });
+        }
+        seat_index = seat_index.saturating_add(tied_count);
     }
 
     Ok(winners)
@@ -99,7 +104,15 @@ mod tests {
     }
 
     #[test]
-    fn rejects_tie_for_open_seat() {
-        assert!(select_winners(&[(1u8, 9), (2, 7), (3, 7)], 2).is_err());
+    fn accepts_tie_that_fits_remaining_seats() {
+        let winners = select_winners(&[(1u8, 9), (2, 9), (3, 1)], 2).expect("tie fits");
+        assert_eq!(winners.len(), 2);
+        assert_eq!(winners[0].seat_index, 0);
+        assert_eq!(winners[1].seat_index, 1);
+    }
+
+    #[test]
+    fn rejects_tie_that_crosses_seat_boundary() {
+        assert!(select_winners(&[(1u8, 9), (2, 8), (3, 8)], 2).is_err());
     }
 }

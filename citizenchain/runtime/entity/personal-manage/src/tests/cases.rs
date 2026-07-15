@@ -1,12 +1,20 @@
 use super::*;
 use codec::Encode;
-use frame_support::{assert_noop, assert_ok, traits::Currency, BoundedVec};
+use frame_support::{
+    assert_noop, assert_ok,
+    traits::{Currency, Hooks},
+    BoundedVec,
+};
 use sp_runtime::DispatchError;
 use votingengine::{STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_REJECTED, STATUS_VOTING};
 
 const CREATE_AMOUNT: Balance = 1_000;
 const CREATE_FEE: Balance = 10; // calculate_onchain_fee(1000) = max(1000*0.001, 10) = 10
 const SEED_BALANCE: Balance = 5_000;
+
+fn process_pending_execution() {
+    <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
+}
 
 fn setup_creator_balance() -> AccountId32 {
     let c = creator();
@@ -101,9 +109,8 @@ fn propose_create_writes_pending_and_reserves_fee() {
         let pending_account = pallet::PersonalAccounts::<Test>::get(&dq).unwrap();
         assert_eq!(pending_account.status, types::PersonalStatus::Pending);
         assert_eq!(pending_account.account_name, name);
-        let account = dq.clone();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(PMUL, account),
+            internal_vote::PendingDynamicThresholds::<Test>::get(pid),
             Some(2)
         );
         assert_eq!(
@@ -145,6 +152,7 @@ fn create_executes_when_internal_vote_reaches_threshold() {
 
         // 创建提案要求"全员通过"——投票引擎 threshold = admins.len() = 3
         assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
+        process_pending_execution();
 
         // 提案进入 EXECUTED
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
@@ -227,7 +235,6 @@ fn propose_create_rejects_duplicate_personal_account() {
 fn propose_create_stores_regular_threshold_and_uses_all_admin_create_threshold() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"derived-threshold");
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             account_name(b"derived-threshold"),
@@ -236,9 +243,8 @@ fn propose_create_stores_regular_threshold_and_uses_all_admin_create_threshold()
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
-        let account = dq.clone();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(PMUL, account),
+            internal_vote::PendingDynamicThresholds::<Test>::get(pid),
             Some(2)
         );
         assert_eq!(
@@ -252,7 +258,6 @@ fn propose_create_stores_regular_threshold_and_uses_all_admin_create_threshold()
 fn two_admin_personal_create_uses_two_of_two_for_regular_and_create_threshold() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"two-admin");
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c),
             account_name(b"two-admin"),
@@ -261,9 +266,8 @@ fn two_admin_personal_create_uses_two_of_two_for_regular_and_create_threshold() 
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
-        let account = dq.clone();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(PMUL, account),
+            internal_vote::PendingDynamicThresholds::<Test>::get(pid),
             Some(2)
         );
         assert_eq!(
@@ -277,7 +281,6 @@ fn two_admin_personal_create_uses_two_of_two_for_regular_and_create_threshold() 
 fn sixty_four_admin_personal_create_is_allowed_and_uses_full_create_threshold() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        let dq = proposed_account(&c, b"sixty-four-admins");
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c),
             account_name(b"sixty-four-admins"),
@@ -286,9 +289,8 @@ fn sixty_four_admin_personal_create_is_allowed_and_uses_full_create_threshold() 
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
-        let account = dq.clone();
         assert_eq!(
-            internal_vote::PendingDynamicThresholds::<Test>::get(PMUL, account),
+            internal_vote::PendingDynamicThresholds::<Test>::get(pid),
             Some(33)
         );
         assert_eq!(
@@ -429,6 +431,7 @@ fn close_executes_when_internal_vote_reaches_threshold() {
 
         // 关闭提案要求全员通过(3 票)
         assert_ok!(cast_yes_votes(&admins_acc[1..], 2, pid));
+        process_pending_execution();
 
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
         assert_eq!(proposal.status, STATUS_EXECUTED);
@@ -559,6 +562,7 @@ fn create_execution_failed_terminal_cleans_pending_and_emits_once() {
         overwrite_create_proposal_fee(pid, CREATE_FEE + 1);
 
         assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
+        process_pending_execution();
 
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
         assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
@@ -588,6 +592,7 @@ fn close_execution_failed_terminal_keeps_account_and_clears_pending() {
         set_institution_can_spend(false);
 
         assert_ok!(cast_yes_votes(&admins_acc[1..], 2, pid));
+        process_pending_execution();
 
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
         assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
@@ -673,6 +678,7 @@ fn existential_deposit_is_preserved_after_close() {
         ));
         let pid = last_proposal_id();
         assert_ok!(cast_yes_votes(&admins_acc[1..], 2, pid));
+        process_pending_execution();
 
         // 多签账户应已被销户(转出后余额 < ED 直接 reap),beneficiary 拿到剩余金额
         assert_eq!(Balances::free_balance(&dq), 0);

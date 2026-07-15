@@ -200,6 +200,9 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
                 true,
             ));
         }
+        // 投票判定与业务执行已解耦；当前区块维护钩子消费 PASSED 执行队列。
+        let now = System::block_number();
+        <VotingEngine as frame_support::traits::Hooks<BlockNumber>>::on_initialize(now);
 
         // 提案数据由 votingengine 延迟清理，执行后仍保留
         assert!(VotingEngine::get_proposal_data(pid).is_some());

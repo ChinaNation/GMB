@@ -1,7 +1,7 @@
 //! 互选入口。
 //!
-//! 互选的选民快照通常来自机构现任成员/admins。当前由调用方传入并冻结，
-//! 后续可接业务 provider 自动生成。
+//! 互选的选民列表由业务调用方提交，但创建时必须与 admins provider 返回的
+//! 目标机构完整管理员快照等长且逐成员一致，调用方不能删减或夹带账户。
 
 use frame_support::pallet_prelude::DispatchResult;
 
@@ -35,6 +35,7 @@ impl<T: Config> Pallet<T> {
             seat_count,
             term_start,
             term_end,
+            None,
             candidates,
             voters,
         )

@@ -93,8 +93,10 @@ fn run() -> Result<(), String> {
         } => {
             let raw = fs::read_to_string(&input)
                 .map_err(|e| format!("读取导出块文件失败 {}: {e}", input.display()))?;
-            let tampered =
-                blockchain_test_harness::tamper_first_state_root_json(&raw, &replacement_state_root)?;
+            let tampered = blockchain_test_harness::tamper_first_state_root_json(
+                &raw,
+                &replacement_state_root,
+            )?;
             fs::write(&output, tampered)
                 .map_err(|e| format!("写入篡改块文件失败 {}: {e}", output.display()))?;
         }

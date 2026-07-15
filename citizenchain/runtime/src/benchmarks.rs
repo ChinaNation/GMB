@@ -44,12 +44,10 @@ frame_benchmarking::define_benchmarks!(
     // 不挂载到 list_benchmarks 避免 Benchmarking trait 缺失编译错误。
     // [personal_admins, PersonalAdmins]
     [multisig, MultisigTransfer]
-    // internal-vote / joint-vote 删除 migration benchmark 后暂无 benchmark fn,
-    // cast / finalize 权重待补;votingengine 引擎核心 + election-vote 同样暂无。
-    // 无 benchmark fn 的 pallet 不挂载,避免 Benchmarking trait 缺失编译错误。
-    // [internal_vote, InternalVote]
-    // [joint_vote, JointVote]
-    // [votingengine, VotingEngine]
-    // [election_vote, ElectionVote]
+    [internal_vote, InternalVote]
+    [joint_vote, JointVote]
+    [votingengine, VotingEngine]
+    [legislation_vote, LegislationVote]
+    [election_vote, ElectionVote]
     [runtime_upgrade, RuntimeUpgrade]
 );

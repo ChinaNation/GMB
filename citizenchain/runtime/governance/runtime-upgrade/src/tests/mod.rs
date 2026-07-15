@@ -194,12 +194,14 @@ impl votingengine::Config for Test {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
-    type MaxCleanupQueueBucketLimit = ConstU32<50>;
-    type MaxCleanupScheduleOffset = ConstU32<100>;
+    type MaxCleanupActivationsPerBlock = ConstU32<50>;
     type CleanupKeysPerStep = ConstU32<64>;
     type MaxProposalDataLen = ConstU32<{ 100 * 1024 }>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
@@ -216,16 +218,9 @@ impl votingengine::Config for Test {
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
-    type InternalFinalizer = InternalVote;
-    type InternalCleanup = InternalVote;
-    type JointFinalizer = ();
-    type JointCleanup = ();
+    type TrackHandlers = (InternalVote, ());
     type LegislationVoteResultCallback = ();
-    type LegislationFinalizer = ();
-    type LegislationCleanup = ();
     type ElectionVoteResultCallback = ();
-    type ElectionFinalizer = ();
-    type ElectionCleanup = ();
 }
 
 impl internal_vote::Config for Test {

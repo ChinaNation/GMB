@@ -192,6 +192,7 @@ runtime-benchmarks = [
 	"internal-vote/runtime-benchmarks",
 	"joint-vote/runtime-benchmarks",
 	"election-vote/runtime-benchmarks",
+	"legislation-vote/runtime-benchmarks",
 	"public-admins/runtime-benchmarks",
 	"private-admins/runtime-benchmarks",
 	"grandpakey-change/runtime-benchmarks",

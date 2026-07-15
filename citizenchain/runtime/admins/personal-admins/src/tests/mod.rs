@@ -3,7 +3,7 @@
 use super::*;
 use frame_support::{
     assert_ok, derive_impl,
-    traits::{ConstU32, UnixTime},
+    traits::{ConstU32, Hooks, UnixTime},
     BoundedVec,
 };
 use frame_system as system;
@@ -117,6 +117,9 @@ impl votingengine::Config for Test {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
@@ -134,21 +137,13 @@ impl votingengine::Config for Test {
     type MaxManualExecutionAttempts = ConstU32<3>;
     type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
-    type MaxCleanupQueueBucketLimit = ConstU32<50>;
-    type MaxCleanupScheduleOffset = ConstU32<100>;
+    type MaxCleanupActivationsPerBlock = ConstU32<50>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
-    type InternalFinalizer = InternalVote;
-    type InternalCleanup = InternalVote;
-    type JointFinalizer = ();
-    type JointCleanup = ();
+    type TrackHandlers = (InternalVote, ());
     type LegislationVoteResultCallback = ();
-    type LegislationFinalizer = ();
-    type LegislationCleanup = ();
     type ElectionVoteResultCallback = ();
-    type ElectionFinalizer = ();
-    type ElectionCleanup = ();
 }
 
 impl internal_vote::Config for Test {
@@ -227,6 +222,8 @@ fn propose_admin_set_change_updates_personal_admins_and_threshold() {
             proposal_id,
             true
         ));
+        // 通过判定只入队；管理员集合更新由维护管线异步执行。
+        <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
 
         let admin_account = pallet::AdminAccounts::<Test>::get(account.clone())
             .expect("admin account should exist");

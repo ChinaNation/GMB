@@ -244,8 +244,6 @@ fn institution_account_orgs_use_dynamic_pending_snapshot_and_threshold() {
 #[test]
 fn pending_account_provider_threshold_requires_all_admins() {
     new_test_ext().execute_with(|| {
-        set_pending_account_threshold(1);
-
         assert_noop!(
             <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_account_create_proposal_with_data(
                 pending_account_admin(0),
@@ -1008,6 +1006,23 @@ fn joint_referendum_rejects_when_eligible_total_not_set_in_proposal() {
 }
 
 #[test]
+fn joint_referendum_rejects_votes_beyond_population_snapshot_denominator() {
+    new_test_ext().execute_with(|| {
+        insert_joint_referendum_proposal(0, 10, 100);
+        joint_vote::ReferendumTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 5 });
+
+        assert_noop!(
+            <joint_vote::Pallet<Test>>::do_jointreferendum_vote(nrc_admin(0), 0, true),
+            joint_vote::Error::<Test>::ReferendumSnapshotExhausted
+        );
+        assert!(!joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
+            0,
+            nrc_admin(0)
+        ));
+    });
+}
+
+#[test]
 fn joint_referendum_timeout_with_half_or_less_is_rejected() {
     new_test_ext().execute_with(|| {
         insert_joint_referendum_proposal(0, 10, 5);
@@ -1124,6 +1139,7 @@ fn joint_referendum_passes_immediately_when_yes_exceeds_half() {
             0,
             true
         ));
+        process_current_block();
 
         let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
         assert_eq!(proposal.status, STATUS_EXECUTED);
@@ -1141,6 +1157,7 @@ fn delayed_cleanup_cleans_referendum_votes_after_retention() {
             0,
             true
         ));
+        process_current_block();
 
         let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
         assert_eq!(proposal.status, STATUS_EXECUTED);
@@ -1339,6 +1356,7 @@ fn joint_vote_timeout_with_unanimous_tally_passes() {
             RuntimeOrigin::signed(nrc_admin(0)),
             proposal_id
         ));
+        process_current_block();
 
         let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
         assert_eq!(proposal.status, STATUS_EXECUTED);
@@ -1347,16 +1365,24 @@ fn joint_vote_timeout_with_unanimous_tally_passes() {
 }
 
 #[test]
-fn joint_vote_callback_failure_rolls_back_final_status() {
+fn joint_vote_callback_failure_defers_execution_without_reverting_vote_result() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal_for(nrc_admin(0), 100);
 
         set_joint_callback_should_fail(true);
-        assert!(VotingEngine::set_status_and_emit(proposal_id, STATUS_PASSED).is_err());
+        assert_ok!(VotingEngine::set_status_and_emit(
+            proposal_id,
+            STATUS_PASSED
+        ));
+        process_current_block();
 
         let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
-        assert_eq!(proposal.status, STATUS_VOTING);
+        assert_eq!(proposal.status, STATUS_PASSED);
         assert_eq!(proposal.stage, STAGE_JOINT);
+        let pending = votingengine::pallet::PendingProposalExecutions::<Test>::get(proposal_id)
+            .expect("failed callback should remain queued");
+        assert_eq!(pending.attempts, 1);
+        assert!(pending.next_attempt_at > System::block_number());
     });
 }
 
@@ -1367,12 +1393,13 @@ fn joint_vote_callback_failure_does_not_cleanup_referendum_votes() {
         joint_vote::ReferendumVotesByAccount::<Test>::insert(0, nrc_admin(0), true);
         set_joint_callback_should_fail(true);
 
-        assert!(VotingEngine::set_status_and_emit(0, STATUS_PASSED).is_err());
+        assert_ok!(VotingEngine::set_status_and_emit(0, STATUS_PASSED));
+        process_current_block();
         assert_eq!(
             Proposals::<Test>::get(0)
                 .expect("proposal should exist")
                 .status,
-            STATUS_VOTING
+            STATUS_PASSED
         );
         assert!(joint_vote::ReferendumVotesByAccount::<Test>::contains_key(
             0,
@@ -1391,6 +1418,7 @@ fn proposal_finalized_event_uses_status_after_joint_callback_override() {
             proposal_id,
             STATUS_PASSED
         ));
+        process_current_block();
 
         let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
         assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
@@ -1419,12 +1447,12 @@ fn proposal_finalized_event_uses_status_after_joint_callback_override() {
                 )
             })
             .count();
-        assert_eq!(finalized_count, 1);
+        assert_eq!(finalized_count, 2);
     });
 }
 
 #[test]
-fn auto_finalize_requeues_failed_joint_callback() {
+fn auto_finalize_drops_failed_joint_callback_from_expiry_bucket() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_joint_proposal_for(nrc_admin(0), 66);
 
@@ -1447,27 +1475,58 @@ fn auto_finalize_requeues_failed_joint_callback() {
             Proposals::<Test>::get(proposal_id)
                 .expect("proposal should exist")
                 .status,
-            STATUS_VOTING
+            STATUS_PASSED
         );
-        assert_eq!(PendingExpiryBucket::<Test>::get(), Some(expired_at));
-        assert_eq!(
-            ProposalsByExpiry::<Test>::get(expired_at),
-            vec![proposal_id]
-        );
-
-        set_joint_callback_should_fail(false);
-        let next_block = expired_at + 1;
-        System::set_block_number(next_block);
-        <VotingEngine as Hooks<u64>>::on_initialize(next_block);
-
-        assert_eq!(
-            Proposals::<Test>::get(proposal_id)
-                .expect("proposal should exist")
-                .status,
-            STATUS_EXECUTED
-        );
+        assert!(votingengine::pallet::PendingProposalExecutions::<Test>::contains_key(proposal_id));
         assert!(PendingExpiryBucket::<Test>::get().is_none());
         assert!(ProposalsByExpiry::<Test>::get(expired_at).is_empty());
+    });
+}
+
+#[test]
+fn auto_finalize_errors_back_off_then_enter_dead_letter_without_starving_hooks() {
+    new_test_ext().execute_with(|| {
+        reset_internal_callback_state();
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        let first_attempt_at = VotingEngine::proposals(proposal_id)
+            .expect("proposal should exist")
+            .end
+            + 1;
+        INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = true);
+
+        System::set_block_number(first_attempt_at);
+        <VotingEngine as Hooks<u64>>::on_initialize(first_attempt_at);
+        let first = AutoFinalizeRetryStates::<Test>::get(proposal_id)
+            .expect("first auto-finalize error should defer");
+        assert_eq!(first.attempts, 1);
+        assert!(ProposalsByExpiry::<Test>::get(first.next_attempt_at).contains(&proposal_id));
+
+        System::set_block_number(first.next_attempt_at);
+        <VotingEngine as Hooks<u64>>::on_initialize(first.next_attempt_at);
+        let second = AutoFinalizeRetryStates::<Test>::get(proposal_id)
+            .expect("second auto-finalize error should defer");
+        assert_eq!(second.attempts, 2);
+
+        System::set_block_number(second.next_attempt_at);
+        <VotingEngine as Hooks<u64>>::on_initialize(second.next_attempt_at);
+
+        assert!(AutoFinalizeRetryStates::<Test>::get(proposal_id).is_none());
+        assert_eq!(AutoFinalizeDeadLetters::<Test>::get(proposal_id), Some(3));
+        assert_eq!(
+            VotingEngine::proposals(proposal_id)
+                .expect("dead-letter proposal remains available for manual finalization")
+                .status,
+            STATUS_VOTING
+        );
+        assert!(System::events().into_iter().any(|record| matches!(
+            record.event,
+            RuntimeEvent::VotingEngine(
+                votingengine::Event::ProposalAutoFinalizeDeadLettered {
+                    proposal_id: event_id,
+                    attempts: 3,
+                }
+            ) if event_id == proposal_id
+        )));
     });
 }
 
@@ -1518,40 +1577,91 @@ fn schedule_proposal_expiry_rejects_bucket_overflow() {
 }
 
 #[test]
-fn cleanup_queue_processes_full_due_bucket_without_orphaning_remaining_items() {
+fn scheduled_cleanup_fifo_activates_all_due_items_without_orphaning() {
     new_test_ext().execute_with(|| {
         let cleanup_block = 77u64;
-        let ids: BoundedVec<u64, ConstU32<50>> = (0..50u64)
-            .collect::<Vec<_>>()
-            .try_into()
-            .expect("cleanup queue should fit");
-        for proposal_id in ids.iter().copied() {
+        for proposal_id in 0..50u64 {
             insert_joint_referendum_proposal(proposal_id, 10, 100);
+            ScheduledCleanups::<Test>::insert(
+                proposal_id,
+                votingengine::ScheduledCleanup {
+                    cleanup_at: cleanup_block,
+                    proposal_id,
+                },
+            );
         }
-        CleanupQueue::<Test>::insert(cleanup_block, ids);
+        ScheduledCleanupTail::<Test>::put(50);
 
         System::set_block_number(cleanup_block);
         <VotingEngine as Hooks<u64>>::on_initialize(cleanup_block);
 
-        assert!(CleanupQueue::<Test>::get(cleanup_block).is_empty());
+        assert_eq!(ScheduledCleanupHead::<Test>::get(), 50);
         for proposal_id in 0..50u64 {
-            assert_eq!(
-                PendingProposalCleanups::<Test>::get(proposal_id),
-                Some(PendingCleanupStage::AdminSnapshots)
-            );
+            assert!(PendingProposalCleanups::<Test>::contains_key(proposal_id));
         }
     });
 }
 
 #[test]
-fn schedule_cleanup_returns_error_when_all_candidate_buckets_are_full() {
+fn pending_cleanup_fifo_rotates_large_and_small_proposals_fairly() {
+    new_test_ext().execute_with(|| {
+        let large = 40u64;
+        let small = 41u64;
+        insert_joint_referendum_proposal(large, 10, 100);
+        insert_joint_referendum_proposal(small, 10, 100);
+        for seed in 1..=5u8 {
+            AdminSnapshot::<Test>::insert(
+                large,
+                AccountId32::new([seed; 32]),
+                BoundedVec::<AccountId32, ConstU32<32>>::default(),
+            );
+        }
+        PendingProposalCleanups::<Test>::insert(large, PendingCleanupStage::AdminSnapshots);
+        PendingProposalCleanups::<Test>::insert(small, PendingCleanupStage::AdminSnapshots);
+        PendingCleanupQueue::<Test>::insert(0, large);
+        PendingCleanupQueue::<Test>::insert(1, small);
+        PendingCleanupQueueTail::<Test>::put(2);
+
+        <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
+
+        assert!(PendingProposalCleanups::<Test>::contains_key(large));
+        assert_eq!(
+            PendingProposalCleanups::<Test>::get(small),
+            Some(PendingCleanupStage::TrackData)
+        );
+        assert_eq!(PendingCleanupQueueHead::<Test>::get(), 3);
+        assert_eq!(PendingCleanupQueueTail::<Test>::get(), 5);
+    });
+}
+
+#[test]
+fn cleanup_dispatches_only_to_the_proposal_track() {
+    new_test_ext().execute_with(|| {
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+        joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, nrc_pid(), true);
+        PendingProposalCleanups::<Test>::insert(proposal_id, PendingCleanupStage::TrackData);
+        PendingCleanupQueue::<Test>::insert(0, proposal_id);
+        PendingCleanupQueueTail::<Test>::put(1);
+
+        <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
+
+        assert!(Proposals::<Test>::get(proposal_id).is_none());
+        assert!(joint_vote::JointVotesByInstitution::<Test>::contains_key(
+            proposal_id,
+            nrc_pid()
+        ));
+    });
+}
+
+#[test]
+fn schedule_cleanup_returns_error_when_fifo_sequence_is_exhausted() {
     new_test_ext().execute_with(|| {
         let now = System::block_number();
-        fill_cleanup_schedule_window(now);
+        exhaust_cleanup_sequence(now);
 
         assert_noop!(
             votingengine::cleanup::schedule_cleanup::<Test>(9_999, now),
-            votingengine::Error::<Test>::CleanupQueueFull
+            votingengine::Error::<Test>::CleanupQueueSequenceExhausted
         );
     });
 }
@@ -1562,11 +1672,11 @@ fn terminal_status_rolls_back_when_cleanup_cannot_be_scheduled() {
         let proposal_id = 9_999u64;
         let now = System::block_number();
         insert_joint_referendum_proposal(proposal_id, 10, now + 100);
-        fill_cleanup_schedule_window(now);
+        exhaust_cleanup_sequence(now);
 
         assert_noop!(
             VotingEngine::set_status_and_emit(proposal_id, STATUS_REJECTED),
-            votingengine::Error::<Test>::CleanupQueueFull
+            votingengine::Error::<Test>::CleanupQueueSequenceExhausted
         );
         assert_eq!(
             Proposals::<Test>::get(proposal_id)
@@ -1588,10 +1698,11 @@ fn retry_deadline_keeps_retry_state_when_cleanup_scheduling_fails() {
             proposal_id,
             STATUS_PASSED
         ));
+        process_current_block();
         let deadline = ProposalExecutionRetryStates::<Test>::get(proposal_id)
             .expect("retry state should exist")
             .retry_deadline;
-        fill_cleanup_schedule_window(deadline);
+        exhaust_cleanup_sequence(deadline);
 
         System::set_block_number(deadline);
         <VotingEngine as Hooks<u64>>::on_initialize(deadline);
@@ -1620,10 +1731,11 @@ fn retry_deadline_enters_pending_queue_when_reschedule_window_is_full() {
             proposal_id,
             STATUS_PASSED
         ));
+        process_current_block();
         let deadline = ProposalExecutionRetryStates::<Test>::get(proposal_id)
             .expect("retry state should exist")
             .retry_deadline;
-        fill_cleanup_schedule_window(deadline);
+        exhaust_cleanup_sequence(deadline);
         fill_retry_deadline_window(deadline + 1);
 
         System::set_block_number(deadline);
@@ -1641,7 +1753,7 @@ fn retry_deadline_enters_pending_queue_when_reschedule_window_is_full() {
             STATUS_PASSED
         );
 
-        clear_cleanup_schedule_window(deadline + 1);
+        reset_cleanup_sequence(deadline + 1);
         clear_retry_deadline_window(deadline + 1);
         System::set_block_number(deadline + 1);
         <VotingEngine as Hooks<u64>>::on_initialize(deadline + 1);
@@ -1680,7 +1792,8 @@ fn delayed_cleanup_chunks_cleanup_across_blocks() {
             proposal_id,
             STATUS_PASSED
         ));
-        // 此时 PendingProposalCleanups 尚未设置（要等 90 天后 process_cleanup_queue 触发）
+        process_current_block();
+        // 此时 PendingProposalCleanups 尚未设置（要等 90 天后延迟 FIFO 激活）
         assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
 
         // set_status_and_emit 在 block 0 调用，cleanup_at = 0 + retention
@@ -1848,7 +1961,7 @@ fn internal_vote_callback_not_called_before_threshold() {
 }
 
 #[test]
-fn internal_vote_callback_err_rolls_back_status() {
+fn internal_vote_callback_err_defers_execution_without_reverting_vote() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
         let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
@@ -1862,22 +1975,75 @@ fn internal_vote_callback_err_rolls_back_status() {
             ));
         }
 
-        // 第 13 票达阈值,回调会被触发;置 SHOULD_FAIL 让回调返回 Err。
+        // 第 13 票达阈值后先提交投票结果；异步回调失败只进入退避重试。
         INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = true);
-        assert!(cast_internal_vote_via_extrinsic(nrc_admin(12), proposal_id, true).is_err());
+        assert_ok!(cast_internal_vote_via_extrinsic(
+            nrc_admin(12),
+            proposal_id,
+            true
+        ));
 
-        // 提案状态、票数必须整体回滚到投票中 + 12 票。
+        // 投票判定不可被业务执行故障撤销；最后一票和 PASSED 状态都保留。
         assert_eq!(
             VotingEngine::proposals(proposal_id)
                 .expect("proposal exists")
                 .status,
-            STATUS_VOTING
+            STATUS_PASSED
         );
-        assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 12);
-        assert!(!InternalVotesByAccount::<Test>::contains_key(
+        assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 13);
+        assert!(InternalVotesByAccount::<Test>::contains_key(
             proposal_id,
             &nrc_admin(12)
         ));
+        let pending = votingengine::pallet::PendingProposalExecutions::<Test>::get(proposal_id)
+            .expect("failed callback should remain queued");
+        assert_eq!(pending.attempts, 1);
+    });
+}
+
+#[test]
+fn asynchronous_callback_errors_dead_letter_after_bounded_retries() {
+    new_test_ext().execute_with(|| {
+        reset_internal_callback_state();
+        INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = true);
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+
+        assert_ok!(VotingEngine::set_status_and_emit(
+            proposal_id,
+            STATUS_PASSED
+        ));
+        process_current_block();
+        let second_attempt_at =
+            votingengine::pallet::PendingProposalExecutions::<Test>::get(proposal_id)
+                .expect("first failure should defer")
+                .next_attempt_at;
+
+        System::set_block_number(second_attempt_at);
+        process_current_block();
+        let third_attempt_at =
+            votingengine::pallet::PendingProposalExecutions::<Test>::get(proposal_id)
+                .expect("second failure should defer")
+                .next_attempt_at;
+
+        System::set_block_number(third_attempt_at);
+        process_current_block();
+
+        assert!(
+            votingengine::pallet::PendingProposalExecutions::<Test>::get(proposal_id).is_none()
+        );
+        assert_eq!(
+            VotingEngine::proposals(proposal_id)
+                .expect("proposal should remain until retention cleanup")
+                .status,
+            STATUS_EXECUTION_FAILED
+        );
+        assert!(System::events().into_iter().any(|record| matches!(
+            record.event,
+            RuntimeEvent::VotingEngine(votingengine::Event::ProposalExecutionDeadLettered {
+                proposal_id: event_id,
+                attempts: 3,
+            }) if event_id == proposal_id
+        )));
     });
 }
 
@@ -1891,6 +2057,7 @@ fn manual_retry_third_failure_marks_execution_failed() {
             proposal_id,
             STATUS_PASSED
         ));
+        process_current_block();
         assert_eq!(
             ProposalExecutionRetryStates::<Test>::get(proposal_id)
                 .expect("retry state should exist")
@@ -1964,6 +2131,7 @@ fn default_cancel_callback_rejects_passed_retry_proposal() {
             proposal_id,
             STATUS_PASSED
         ));
+        process_current_block();
         assert_noop!(
             VotingEngine::cancel_passed_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
@@ -1995,6 +2163,7 @@ fn automatic_fatal_failed_runs_execution_failed_terminal_hook() {
             proposal_id,
             STATUS_PASSED
         ));
+        process_current_block();
         assert_eq!(
             VotingEngine::proposals(proposal_id)
                 .expect("proposal exists")
@@ -2019,6 +2188,7 @@ fn execution_failed_terminal_cleanup_error_is_queued_and_retried() {
             proposal_id,
             STATUS_PASSED
         ));
+        process_current_block();
         assert_eq!(
             VotingEngine::proposals(proposal_id)
                 .expect("proposal exists")
@@ -2054,6 +2224,7 @@ fn joint_retryable_outcome_is_forced_to_execution_failed() {
             proposal_id,
             STATUS_PASSED
         ));
+        process_current_block();
         assert_eq!(
             VotingEngine::proposals(proposal_id)
                 .expect("proposal exists")
@@ -2077,6 +2248,7 @@ fn execution_retry_deadline_expires_to_execution_failed() {
             proposal_id,
             STATUS_PASSED
         ));
+        process_current_block();
         let deadline = ProposalExecutionRetryStates::<Test>::get(proposal_id)
             .expect("retry state should exist")
             .retry_deadline;

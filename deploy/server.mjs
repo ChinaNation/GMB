@@ -294,6 +294,21 @@ function emit(run, event, data) {
   for (const listener of run.listeners) listener(item);
 }
 
+function runSnapshot(run) {
+  if (!run) return null;
+  // 中文注释：任务输出在进入事件列表前已经脱敏；状态接口只返回可恢复控制台所需字段。
+  return {
+    id: run.id,
+    moduleId: run.moduleId,
+    actionId: run.actionId,
+    state: run.state,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt ?? null,
+    exitCode: run.exitCode,
+    events: run.events,
+  };
+}
+
 function finishRun(run, code) {
   run.state = code === 0 ? 'success' : 'failed';
   run.exitCode = code;
@@ -419,7 +434,13 @@ const server = createServer(async (req, res) => {
         ])),
         github: Object.fromEntries(module.secrets.github.map((name) => [name, github.has(name)])),
       }));
-      return json(res, 200, { modules: statusModules, activeRunId, citizenwebLocalRunning: citizenwebLocalRunning() });
+      const latestRun = [...runs.values()].at(-1);
+      return json(res, 200, {
+        modules: statusModules,
+        activeRunId,
+        latestRun: runSnapshot(latestRun),
+        citizenwebLocalRunning: citizenwebLocalRunning(),
+      });
     }
     if (req.method === 'POST' && url.pathname === '/api/run') {
       if (!validOrigin(req)) return json(res, 403, { error: '来源校验失败' });

@@ -5,7 +5,7 @@ use admin_primitives::AdminAccountQuery;
 use codec::Encode;
 use frame_support::{
     assert_noop, assert_ok, derive_impl,
-    traits::{ConstU128, ConstU32},
+    traits::{ConstU128, ConstU32, Hooks},
 };
 use frame_system as system;
 use primitives::cid::china::china_sf::CHINA_SF;
@@ -527,6 +527,9 @@ impl votingengine::Config for Test {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
@@ -546,21 +549,13 @@ impl votingengine::Config for Test {
     type MaxManualExecutionAttempts = ConstU32<3>;
     type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
-    type MaxCleanupQueueBucketLimit = ConstU32<50>;
-    type MaxCleanupScheduleOffset = ConstU32<100>;
+    type MaxCleanupActivationsPerBlock = ConstU32<50>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
-    type InternalFinalizer = InternalVote;
-    type InternalCleanup = InternalVote;
-    type JointFinalizer = ();
-    type JointCleanup = ();
+    type TrackHandlers = (InternalVote, ());
     type LegislationVoteResultCallback = ();
-    type LegislationFinalizer = ();
-    type LegislationCleanup = ();
     type ElectionVoteResultCallback = ();
-    type ElectionFinalizer = ();
-    type ElectionCleanup = ();
 }
 
 impl internal_vote::Config for Test {
@@ -958,6 +953,13 @@ fn cast_transfer_votes_n(
         {
             break;
         }
+    }
+    if VotingEngine::proposals(pid)
+        .map(|proposal| proposal.status != STATUS_VOTING)
+        .unwrap_or(false)
+    {
+        // 通过判定只入队；转账回调由 votingengine 维护管线异步执行。
+        <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
     }
     Ok(())
 }

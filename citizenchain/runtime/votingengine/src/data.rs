@@ -86,7 +86,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         Ok(())
     }
 
-    /// 存储提案业务数据(仅保留给 votingengine crate 内部测试/迁移使用)。
+    /// 存储提案业务数据（供 votingengine crate 内部测试与统一登记流程使用）。
     #[cfg(test)]
     pub fn store_proposal_data(proposal_id: u64, data: sp_std::vec::Vec<u8>) -> DispatchResult {
         let bounded: BoundedVec<u8, T::MaxProposalDataLen> = data

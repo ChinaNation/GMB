@@ -3,13 +3,13 @@
 //! 立法投票 sub-pallet 单测 mock runtime。
 //!
 //! System + VotingEngine + InternalVote(供 votingengine 必填 finalizer)+ LegislationVote。
-//! votingengine::Config 把 LegislationFinalizer/LegislationCleanup 接 LegislationVote,
+//! votingengine::Config 通过 TrackHandlers 注册 LegislationVote，
 //! LegislationVoteResultCallback 装 `()`(本 sub-pallet 单测只验投票机制,不验业务写法律)。
 //! TestInternalAdminProvider 定义两院议员名册;公投公民资格从测试用 CitizenIdentityReader 返回。
 
 use frame_support::{
     derive_impl,
-    traits::{ConstU32, ConstU64},
+    traits::{ConstU32, ConstU64, Hooks},
 };
 use frame_system as system;
 use primitives::cid::code::InstitutionCode;
@@ -220,6 +220,9 @@ impl votingengine::Config for Test {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
@@ -231,8 +234,7 @@ impl votingengine::Config for Test {
     type MaxManualExecutionAttempts = ConstU32<3>;
     type ExecutionRetryGraceBlocks = ConstU64<216>;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
-    type MaxCleanupQueueBucketLimit = ConstU32<50>;
-    type MaxCleanupScheduleOffset = ConstU32<100>;
+    type MaxCleanupActivationsPerBlock = ConstU32<50>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
     type CitizenIdentityReader = TestCitizenIdentityReader;
     type JointVoteResultCallback = ();
@@ -242,16 +244,9 @@ impl votingengine::Config for Test {
     type MaxAdminsPerInstitution = ConstU32<64>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
-    type InternalFinalizer = InternalVote;
-    type InternalCleanup = InternalVote;
-    type JointFinalizer = ();
-    type JointCleanup = ();
+    type TrackHandlers = (InternalVote, (LegislationVote, ()));
     type LegislationVoteResultCallback = (TestLegislationCallback,);
-    type LegislationFinalizer = LegislationVote;
-    type LegislationCleanup = LegislationVote;
     type ElectionVoteResultCallback = ();
-    type ElectionFinalizer = ();
-    type ElectionCleanup = ();
 }
 
 impl internal_vote::Config for Test {
@@ -372,55 +367,76 @@ pub fn stage(pid: u64) -> u8 {
 
 /// 投一票(事务内,因 set_status_and_emit 需在事务中)。
 pub fn cast(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchResult {
-    frame_support::storage::with_transaction(
+    let result = frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
             match Lib::do_cast_representative_vote(who, pid, approve) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }
         },
-    )
+    );
+    if result.is_ok() {
+        process_current_block();
+    }
+    result
 }
 
 /// 行政签署(事务内)。
 pub fn exec_sign(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchResult {
-    frame_support::storage::with_transaction(
+    let result = frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
             match Lib::do_executive_sign(who, pid, approve) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }
         },
-    )
+    );
+    if result.is_ok() {
+        process_current_block();
+    }
+    result
 }
 
 /// 三人会签(事务内)。
 pub fn override_sign(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchResult {
-    frame_support::storage::with_transaction(
+    let result = frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
             match Lib::do_override_sign(who, pid, approve) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }
         },
-    )
+    );
+    if result.is_ok() {
+        process_current_block();
+    }
+    result
 }
 
 /// 护宪大法官终审表决(事务内)。
 pub fn guard_vote(who: AccountId32, pid: u64, approve: bool) -> sp_runtime::DispatchResult {
-    frame_support::storage::with_transaction(
+    let result = frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<sp_runtime::DispatchResult> {
             match Lib::do_guard_vote(who, pid, approve) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }
         },
-    )
+    );
+    if result.is_ok() {
+        process_current_block();
+    }
+    result
+}
+
+/// 执行当前区块维护钩子，让 PASSED 立法提案完成一次异步业务执行。
+pub fn process_current_block() {
+    let now = System::block_number();
+    votingengine::Pallet::<Test>::on_initialize(now);
 }
 
 /// 推进到提案 end 之后并触发到期结算(用于签署/会签超时测试)。
 pub fn run_to_expiry(pid: u64) {
-    use frame_support::traits::Hooks;
     let end = votingengine::pallet::Proposals::<Test>::get(pid)
         .expect("proposal exists")
         .end;

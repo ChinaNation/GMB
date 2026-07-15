@@ -643,6 +643,11 @@ describe('切换支付 USDC→卡', () => {
     expect(new URLSearchParams(capturedBody).get('subscription_data[trial_end]')).toBe(
       String(Math.floor(usdcEnd / 1000))
     );
+    expect(
+      new URLSearchParams(capturedBody).get(
+        'subscription_data[metadata][payment_switch]'
+      )
+    ).toBe('usdc_to_stripe');
   });
 });
 

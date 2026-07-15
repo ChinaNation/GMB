@@ -44,6 +44,8 @@ impl ElectionMode {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct ElectionMeta<AccountId, OfficeCode> {
     pub mode: ElectionMode,
+    /// 普选固定人口作用域；互选为 None，资格来自机构 admins 快照。
+    pub population_scope: Option<votingengine::PopulationScope>,
     pub organizer_code: InstitutionCode,
     pub organizer: AccountId,
     pub target_code: InstitutionCode,

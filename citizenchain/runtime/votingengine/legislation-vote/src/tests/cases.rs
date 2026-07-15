@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::{
-    rules::{referendum_final_passed, representative_decided, representative_final_passed},
+    rules::{representative_decided, representative_final_passed},
     Error, RepresentativeVoteRule,
 };
 use frame_support::{assert_noop, assert_ok};
@@ -84,9 +84,9 @@ fn representative_decided_early() {
 #[test]
 fn referendum_threshold() {
     // ≥70% 参与 且 ≥70% 赞成。eligible=100。
-    assert!(referendum_final_passed(100, 56, 14)); // 参与70,赞成56/70=80%
-    assert!(!referendum_final_passed(100, 50, 19)); // 参与69<70
-    assert!(!referendum_final_passed(100, 48, 22)); // 参与70,赞成48/70≈68%<70%
+    assert!(primitives::constitution::referendum_passed(100, 56, 14)); // 参与70,赞成56/70=80%
+    assert!(!primitives::constitution::referendum_passed(100, 50, 19)); // 参与69<70
+    assert!(!primitives::constitution::referendum_passed(100, 48, 22)); // 参与70,赞成48/70≈68%<70%
 }
 
 // ───────────────── 单院投票 ─────────────────
@@ -411,6 +411,32 @@ fn special_case_advances_to_referendum_then_passes() {
     });
 }
 
+#[test]
+fn legislation_referendum_rejects_votes_beyond_population_snapshot_denominator() {
+    new_test_ext().execute_with(|| {
+        prepare_snapshot(member(1), 100);
+        let pid = create(member(1), single_house(), RepresentativeVoteRule::Special);
+        for i in 1u8..=8 {
+            assert_ok!(cast(member(i), pid, true));
+        }
+        for i in 9u8..=10 {
+            assert_ok!(cast(member(i), pid, false));
+        }
+        crate::pallet::LegReferendumTally::<Test>::insert(
+            pid,
+            votingengine::VoteCountU64 { yes: 70, no: 30 },
+        );
+
+        assert_noop!(
+            Lib::do_cast_referendum_vote(member(100), pid, true),
+            Error::<Test>::ReferendumSnapshotExhausted
+        );
+        assert!(
+            !crate::pallet::LegReferendumVotesByAccount::<Test>::contains_key(pid, member(100))
+        );
+    });
+}
+
 /// 公投投一票:新链路按投票账户去重,资格由 CitizenIdentityReader 判断。
 fn cast_referendum(pid: u64, seed: u64, approve: bool) {
     frame_support::storage::with_transaction(
@@ -436,6 +462,7 @@ fn finalize_referendum(pid: u64) {
         },
     )
     .expect("finalize ok");
+    process_current_block();
 }
 
 // ───────────────── 护宪大法官终审(仅修宪,宪法第21条)─────────────────

@@ -158,6 +158,15 @@ pub struct ExecutionRetryState<BlockNumber> {
     pub last_attempt_at: Option<BlockNumber>,
 }
 
+/// 已通过提案等待异步业务回调的状态。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub struct PendingExecutionState<BlockNumber> {
+    /// 回调返回 DispatchError 的自动失败次数。
+    pub attempts: u8,
+    /// 下一次允许执行的区块。
+    pub next_attempt_at: BlockNumber,
+}
+
 /// 事项模块接入联合投票时，统一由投票引擎创建提案。
 /// 人口快照、联合签名、投票资格和计票数据只允许在 votingengine/joint-vote 内处理。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
@@ -221,29 +230,20 @@ pub struct VoteCountU64 {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum PendingCleanupStage {
     AdminSnapshots,
-    InternalVotes,
-    JointAdminVotes,
-    JointInstitutionVotes,
-    JointInstitutionTallies,
-    /// 联合投票公投阶段投票账本(ReferendumVotesByAccount)分块清理。
-    JointReferendumVotes,
-    /// 立法机关代表表决账本按 proposal_id 分块清理。
-    LegislationRepresentativeVotes,
-    /// 立法投票公投账本(LegReferendumVotesByAccount)分块清理。
-    LegislationReferendumVotes,
-    /// 选举投票投票账本(ElectionVotesByVoter)分块清理。
-    ElectionVotes,
-    /// 选举投票选民快照(ElectionVoters)分块清理。
-    ElectionVoters,
-    /// 选举投票候选人票数(ElectionCandidateTallies)分块清理。
-    ElectionTallies,
-    /// 选举投票元数据/候选人/结果等小存储清理。
-    ElectionCandidates,
+    /// 仅派发到提案所属 Track，禁止跨模式空扫所有 sub-pallet。
+    TrackData,
     /// 清理大对象存储（ProposalObject + ProposalObjectMeta）。
     ProposalObject,
     /// 清理业务数据（ProposalData + ProposalMeta）和核心数据（Proposals + Tallies）。
     /// 这是清理流程的最后一步，单次完成。
     FinalCleanup,
+}
+
+/// 延迟清理 FIFO 中的单个任务。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub struct ScheduledCleanup<BlockNumber> {
+    pub cleanup_at: BlockNumber,
+    pub proposal_id: u64,
 }
 
 /// 提案辅助元数据（由投票引擎统一存储，替代各业务模块的 ProposalCreatedAt / ProposalPassedAt）。

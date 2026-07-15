@@ -42,12 +42,3 @@ pub fn representative_decided(
     };
     impossible.then_some(false)
 }
-
-/// 特别案公民投票：至少 70% 有资格公民参与，且参与者中至少 70% 赞成。
-pub fn referendum_final_passed(eligible: u64, yes: u64, no: u64) -> bool {
-    let casted = yes.saturating_add(no);
-    eligible > 0
-        && casted > 0
-        && casted.saturating_mul(100) >= eligible.saturating_mul(70)
-        && yes.saturating_mul(100) >= casted.saturating_mul(70)
-}

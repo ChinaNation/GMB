@@ -5,7 +5,7 @@ extern crate alloc;
 use super::*;
 use frame_support::{
     derive_impl,
-    traits::{ConstU128, ConstU32},
+    traits::{ConstU128, ConstU32, Hooks},
     BoundedVec,
 };
 use frame_system as system;
@@ -205,6 +205,9 @@ impl votingengine::Config for Test {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
@@ -227,21 +230,13 @@ impl votingengine::Config for Test {
     type MaxManualExecutionAttempts = ConstU32<3>;
     type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
-    type MaxCleanupQueueBucketLimit = ConstU32<50>;
-    type MaxCleanupScheduleOffset = ConstU32<100>;
+    type MaxCleanupActivationsPerBlock = ConstU32<50>;
     type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
-    type InternalFinalizer = InternalVote;
-    type InternalCleanup = InternalVote;
-    type JointFinalizer = ();
-    type JointCleanup = ();
+    type TrackHandlers = (InternalVote, ());
     type LegislationVoteResultCallback = ();
-    type LegislationFinalizer = ();
-    type LegislationCleanup = ();
     type ElectionVoteResultCallback = ();
-    type ElectionFinalizer = ();
-    type ElectionCleanup = ();
 }
 
 impl internal_vote::Config for Test {
@@ -337,6 +332,12 @@ pub fn cast_yes_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime:
             break;
         }
     }
+    if VotingEngine::proposals(pid)
+        .map(|proposal| proposal.status != STATUS_VOTING)
+        .unwrap_or(false)
+    {
+        <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
+    }
     Ok(())
 }
 
@@ -351,6 +352,12 @@ pub fn cast_no_votes(admins: &[AccountId32], n: usize, pid: u64) -> sp_runtime::
         {
             break;
         }
+    }
+    if VotingEngine::proposals(pid)
+        .map(|proposal| proposal.status != STATUS_VOTING)
+        .unwrap_or(false)
+    {
+        <VotingEngine as Hooks<u64>>::on_initialize(System::block_number());
     }
     Ok(())
 }

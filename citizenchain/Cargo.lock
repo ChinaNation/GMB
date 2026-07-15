@@ -3387,6 +3387,7 @@ dependencies = [
  "parity-scale-codec",
  "primitives",
  "scale-info",
+ "sp-io",
  "sp-runtime",
  "sp-std",
  "votingengine",
@@ -6261,6 +6262,7 @@ name = "legislation-vote"
 version = "1.0.0"
 dependencies = [
  "entity-primitives",
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "internal-vote",

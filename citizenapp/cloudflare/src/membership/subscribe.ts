@@ -290,6 +290,8 @@ async function createStripeCheckoutSession(
   // 切换支付 USDC→卡：试用期到 USDC 到期日，首次扣费顺延到那时，已付 USDC 时长不浪费。
   if (trialEndSeconds) {
     params.set('subscription_data[trial_end]', String(trialEndSeconds));
+    // 中文注释：只有本入口创建的新订阅可越过 webhook 的 USDC 真源守卫；旧卡迟到事件没有此标志。
+    params.set('subscription_data[metadata][payment_switch]', 'usdc_to_stripe');
   }
 
   const startedAt = Date.now();

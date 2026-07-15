@@ -20,6 +20,7 @@ impl<T: Config> Pallet<T> {
         seat_count: u16,
         term_start: u32,
         term_end: u32,
+        population_scope: votingengine::PopulationScope,
         candidates: sp_std::vec::Vec<T::AccountId>,
         voters: sp_std::vec::Vec<T::AccountId>,
     ) -> Result<u64, sp_runtime::DispatchError> {
@@ -35,6 +36,7 @@ impl<T: Config> Pallet<T> {
             seat_count,
             term_start,
             term_end,
+            Some(population_scope),
             candidates,
             voters,
         )

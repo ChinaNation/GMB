@@ -11,11 +11,13 @@ use frame_system as system;
 // 这里追加 votingengine 的 storage 与 trait 名,让测试代码用短名引用。
 use primitives::cid::code::PRS;
 use votingengine::pallet::{
-    CleanupQueue, CurrentProposalYear, ExecutionRetryDeadlines, NextProposalId,
-    PendingExecutionRetryExpirations, PendingExpiryBucket, PendingProposalCleanups,
-    PendingTerminalCleanups, ProposalDisplayId, ProposalExecutionRetryStates, Proposals,
-    ProposalsByCid, ProposalsByCode, ProposalsByExpiry, ProposalsByOwner, ProposalsByYear,
-    YearProposalCounter,
+    AdminSnapshot, AutoFinalizeDeadLetters, AutoFinalizeRetryStates, CurrentProposalYear,
+    ExecutionRetryDeadlines, NextProposalId, PendingCleanupQueue, PendingCleanupQueueHead,
+    PendingCleanupQueueTail, PendingExecutionRetryExpirations, PendingExpiryBucket,
+    PendingProposalCleanups, PendingTerminalCleanups, ProposalDisplayId,
+    ProposalExecutionRetryStates, Proposals, ProposalsByCid, ProposalsByCode, ProposalsByExpiry,
+    ProposalsByOwner, ProposalsByYear, ScheduledCleanupHead, ScheduledCleanupTail,
+    ScheduledCleanups, YearProposalCounter,
 };
 use votingengine::types::{code_bytes, InstitutionCode, NJD, PMUL};
 // 测试用机构码:个人多签 / 公权法人 / 私权法人,均属"注册多签动态账户"。
@@ -83,12 +85,14 @@ impl votingengine::Config for Test {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
     type MaxCleanupStepsPerBlock = ConstU32<3>;
-    type MaxCleanupQueueBucketLimit = ConstU32<50>;
-    type MaxCleanupScheduleOffset = ConstU32<100>;
+    type MaxCleanupActivationsPerBlock = ConstU32<50>;
     type CleanupKeysPerStep = ConstU32<2>;
     type MaxProposalDataLen = ConstU32<4096>;
     type MaxProposalObjectLen = ConstU32<10_240>;
@@ -105,16 +109,9 @@ impl votingengine::Config for Test {
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
-    type InternalFinalizer = InternalVote;
-    type InternalCleanup = InternalVote;
-    type JointFinalizer = JointVote;
-    type JointCleanup = JointVote;
+    type TrackHandlers = (InternalVote, (JointVote, ()));
     type LegislationVoteResultCallback = ();
-    type LegislationFinalizer = ();
-    type LegislationCleanup = ();
     type ElectionVoteResultCallback = ();
-    type ElectionFinalizer = ();
-    type ElectionCleanup = ();
 }
 
 impl crate::Config for Test {
@@ -140,8 +137,8 @@ thread_local! {
     static JOINT_CALLBACK_OVERRIDE_STATUS: RefCell<Option<u8>> = const { RefCell::new(None) };
 }
 // 内部投票终态回调测试桩。
-// INTERNAL_CALLBACK_SHOULD_FAIL = true → on_internal_vote_finalized 返回 Err,
-//   触发 set_status_and_emit 回滚;用于验证事务原子性。
+// INTERNAL_CALLBACK_SHOULD_FAIL = true → 异步执行回调返回 Err，
+//   提案保留 PASSED，等待执行队列按退避策略重试。
 // INTERNAL_CALLBACK_LOG 记录每次被调用的 (proposal_id, approved),
 //   用于验证回调是否触发 / 触发参数是否正确。
 thread_local! {
@@ -212,14 +209,6 @@ fn set_registered_account_threshold(threshold: u32) {
             threshold,
         );
     }
-}
-
-fn set_pending_account_threshold(threshold: u32) {
-    PendingDynamicThresholds::<Test>::insert(
-        PERSONAL_CODE,
-        pending_account_institution(),
-        threshold,
-    );
 }
 
 fn set_registered_admin_list_override(admins: Vec<AccountId32>) {
@@ -401,8 +390,7 @@ impl InternalVoteResultCallback for TestInternalVoteResultCallback {
         proposal_id: u64,
         approved: bool,
     ) -> Result<ProposalExecutionOutcome, DispatchError> {
-        // 先记日志,无论成功/失败都记 — 事务回滚会让日志外的状态回退,但
-        // thread_local 不参与事务,通过对比"日志有/状态没变"即可验证回滚语义。
+        // 先记日志；thread_local 不参与 storage transaction，仅用于确认回调调用次数。
         INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().push((proposal_id, approved)));
         if INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow()) {
             Err(DispatchError::Other("internal callback failed"))
@@ -449,7 +437,6 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
         REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = None);
         set_registered_account_threshold(3);
-        set_pending_account_threshold(2);
         System::set_block_number(1);
     });
     ext
@@ -623,6 +610,8 @@ fn cast_joint_votes_until_finalized(proposal_id: u64, institution: AccountId32, 
             approve
         ));
     }
+    let now = System::block_number();
+    <VotingEngine as Hooks<u64>>::on_initialize(now);
 }
 
 fn submit_joint_vote(
@@ -696,7 +685,7 @@ fn create_pending_account_proposal_via_engine(
         institution.clone(),
         subject_cids_for(institution_code, &institution),
         sp_std::vec![pending_account_admin(0), pending_account_admin(1)],
-        PendingDynamicThresholds::<Test>::get(PERSONAL_CODE, pending_account_institution()).unwrap_or(2),
+        2,
         b"test",
         b"payload".to_vec(),
     )
@@ -741,16 +730,26 @@ fn cast_internal_vote_via_extrinsic(
     proposal_id: u64,
     approve: bool,
 ) -> DispatchResult {
-    // 测试 helper 直调底层 do_internal_vote;extrinsic dispatch 的隐式 transactional
-    // 语义需要手工 with_transaction 还原,否则 callback 返回 Err 时无法整体回滚票数与状态。
-    frame_support::storage::with_transaction(
+    // 测试 helper 直调底层 do_internal_vote；保留 extrinsic dispatch 的事务语义。
+    let result = frame_support::storage::with_transaction(
         || -> frame_support::storage::TransactionOutcome<DispatchResult> {
             match Pallet::<Test>::do_internal_vote(who, proposal_id, approve) {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
                 Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
             }
         },
-    )
+    );
+    if result.is_ok() {
+        let now = System::block_number();
+        <VotingEngine as Hooks<u64>>::on_initialize(now);
+    }
+    result
+}
+
+/// 执行当前区块的维护钩子，让 PASSED 提案进入一次异步业务执行尝试。
+fn process_current_block() {
+    let now = System::block_number();
+    <VotingEngine as Hooks<u64>>::on_initialize(now);
 }
 
 fn insert_joint_referendum_proposal(proposal_id: u64, eligible_total: u64, end: u64) {
@@ -774,18 +773,6 @@ fn insert_joint_referendum_proposal(proposal_id: u64, eligible_total: u64, end: 
     );
 }
 
-fn cleanup_retention_blocks() -> u64 {
-    90u64 * primitives::pow_const::BLOCKS_PER_DAY
-}
-
-fn full_cleanup_bucket(seed: u64) -> BoundedVec<u64, ConstU32<50>> {
-    (0..50u64)
-        .map(|index| 1_000_000 + seed.saturating_mul(50) + index)
-        .collect::<Vec<_>>()
-        .try_into()
-        .expect("test cleanup bucket should fit capacity")
-}
-
 fn full_retry_deadline_bucket(seed: u64) -> BoundedVec<u64, ConstU32<128>> {
     (0..128u64)
         .map(|index| 2_000_000 + seed.saturating_mul(128) + index)
@@ -794,18 +781,12 @@ fn full_retry_deadline_bucket(seed: u64) -> BoundedVec<u64, ConstU32<128>> {
         .expect("test retry deadline bucket should fit capacity")
 }
 
-fn fill_cleanup_schedule_window(current_block: u64) {
-    let base = current_block.saturating_add(cleanup_retention_blocks());
-    for offset in 0..100u64 {
-        CleanupQueue::<Test>::insert(base + offset, full_cleanup_bucket(offset));
-    }
+fn exhaust_cleanup_sequence(_current_block: u64) {
+    ScheduledCleanupTail::<Test>::put(u64::MAX);
 }
 
-fn clear_cleanup_schedule_window(current_block: u64) {
-    let base = current_block.saturating_add(cleanup_retention_blocks());
-    for offset in 0..100u64 {
-        CleanupQueue::<Test>::remove(base + offset);
-    }
+fn reset_cleanup_sequence(_current_block: u64) {
+    ScheduledCleanupTail::<Test>::put(0);
 }
 
 fn fill_retry_deadline_window(from: u64) {

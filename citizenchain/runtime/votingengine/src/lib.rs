@@ -24,7 +24,7 @@
 //! - `InternalVoteResultCallback` / `JointVoteResultCallback`:内部/联合提案
 //!   完成投票判定时,投票引擎按统一状态机调用业务 executor。
 //!   业务模块只返回统一执行结果，不再直接推进投票引擎状态；PASSED 表示执行授权/可重试态。
-//! - 自动超时结算、原子终结 + 回调一致性(回调返回 Err 整体回滚)、
+//! - 自动超时结算、投票判定与业务执行解耦、执行错误指数退避/dead-letter、
 //!   90 天延迟分块清理。
 
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -33,35 +33,34 @@
 mod benchmarks;
 pub mod cleanup;
 pub mod data;
+mod execution;
+mod expiry;
 pub mod id;
 pub mod index;
+mod lifecycle;
 pub mod limit;
+mod maintenance;
 pub mod mutex;
 pub mod snapshot;
+pub mod tracks;
 pub mod traits;
 pub mod types;
 pub mod weights;
 
 pub use citizen_identity::PopulationScope;
 pub use pallet::*;
+pub use tracks::*;
 pub use traits::*;
 pub use types::*;
 
 use frame_support::dispatch::DispatchResult;
-use sp_runtime::DispatchError;
 
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
 
-    use frame_support::{
-        pallet_prelude::*,
-        storage::{with_transaction, TransactionOutcome},
-        Blake2_128Concat,
-    };
+    use frame_support::{pallet_prelude::*, Blake2_128Concat, Twox64Concat};
     use frame_system::pallet_prelude::*;
-    use sp_runtime::traits::{One, Saturating};
-    use sp_std::vec::Vec;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -77,6 +76,15 @@ pub mod pallet {
         /// 每个区块自动处理的“到期提案”上限，避免 on_initialize 无界增长。
         #[pallet::constant]
         type MaxAutoFinalizePerBlock: Get<u32>;
+
+        /// 自动超时终结管线的独立区块权重预算。
+        type MaxAutoFinalizeWeightPerBlock: Get<Weight>;
+
+        /// 已通过提案业务执行管线的独立区块权重预算。
+        type MaxExecutionWeightPerBlock: Get<Weight>;
+
+        /// 延迟激活和分块清理管线共享的独立区块权重预算。
+        type MaxCleanupWeightPerBlock: Get<Weight>;
 
         /// 单个到期区块允许挂载的提案 ID 上限，避免 expiry 桶无界增长。
         #[pallet::constant]
@@ -96,13 +104,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCleanupStepsPerBlock: Get<u32>;
 
-        /// 单个延迟清理到期桶最多挂载多少个 proposal_id。
+        /// 每块最多把多少个已到期任务从延迟 FIFO 激活到就绪 FIFO。
         #[pallet::constant]
-        type MaxCleanupQueueBucketLimit: Get<u32>;
-
-        /// 延迟清理登记时最多向后顺延多少个区块桶。
-        #[pallet::constant]
-        type MaxCleanupScheduleOffset: Get<u32>;
+        type MaxCleanupActivationsPerBlock: Get<u32>;
 
         /// 每个清理步骤最多删除多少条前缀项。
         #[pallet::constant]
@@ -154,50 +158,17 @@ pub mod pallet {
 
         type WeightInfo: crate::weights::WeightInfo;
 
-        /// 内部投票 mode 超时结算回调,由 internal-vote pallet 实现。
-        type InternalFinalizer: crate::traits::InternalProposalFinalizer<
-            BlockNumberFor<Self>,
-            Self::AccountId,
-        >;
-
-        /// 内部投票 mode chunked cleanup 派发,由 internal-vote pallet 实现。
-        type InternalCleanup: crate::traits::InternalCleanupHandler;
-
-        /// 联合投票 mode 超时结算回调,覆盖内部投票阶段(STAGE_JOINT)与联合公投阶段(STAGE_REFERENDUM),
-        /// 由 joint-vote pallet 实现。
-        type JointFinalizer: crate::traits::JointProposalFinalizer<
-            BlockNumberFor<Self>,
-            Self::AccountId,
-        >;
-
-        /// 联合投票 mode chunked cleanup 派发,由 joint-vote pallet 实现。
-        type JointCleanup: crate::traits::JointCleanupHandler;
+        /// 四类投票 Track 的统一生命周期路由。
+        ///
+        /// Runtime 使用递归 tuple 注册 sub-pallet；核心不再维护 mode/stage 分支。
+        type TrackHandlers: crate::tracks::ProposalTracks<BlockNumberFor<Self>, Self::AccountId>;
 
         /// 立法投票终态业务回调(ADR-027),由 legislation-yuan 业务壳实现。
         /// 核心在 PROPOSAL_KIND_LEGISLATION 提案达终态时按 kind 广播。第1步装 `()`。
         type LegislationVoteResultCallback: LegislationVoteResultCallback;
 
-        /// 立法投票 mode 超时结算回调，覆盖代表表决与法律专属阶段。
-        /// 由 legislation-vote pallet 实现。未实装时装 `()`。
-        type LegislationFinalizer: crate::traits::LegislationProposalFinalizer<
-            BlockNumberFor<Self>,
-            Self::AccountId,
-        >;
-
-        /// 立法投票 mode chunked cleanup 派发,由 legislation-vote pallet 实现。未实装时装 `()`。
-        type LegislationCleanup: crate::traits::LegislationCleanupHandler;
-
         /// 选举投票终态业务回调。当前可接 election-vote 自身生成结果快照,后续接 admins 写入器。
         type ElectionVoteResultCallback: ElectionVoteResultCallback;
-
-        /// 选举投票 mode 超时结算回调,覆盖普选/互选阶段,由 election-vote pallet 实现。
-        type ElectionFinalizer: crate::traits::ElectionProposalFinalizer<
-            BlockNumberFor<Self>,
-            Self::AccountId,
-        >;
-
-        /// 选举投票 mode chunked cleanup 派发,由 election-vote pallet 实现。
-        type ElectionCleanup: crate::traits::ElectionCleanupHandler;
     }
 
     use crate::weights::WeightInfo;
@@ -244,7 +215,7 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 回调执行作用域：只在 `set_status_and_emit` 调业务回调期间临时存在。
+    /// 回调执行作用域：只在拒绝回调或异步执行队列调用业务回调期间临时存在。
     ///
     /// 生产业务模块通过回调返回 `ProposalExecutionOutcome`；该作用域保护
     /// 测试和回调执行入口，避免非回调路径绕过最终事件和互斥锁释放逻辑。
@@ -309,6 +280,31 @@ pub mod pallet {
     pub type ProposalExecutionRetryStates<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, ExecutionRetryState<BlockNumberFor<T>>, OptionQuery>;
 
+    /// 通过判定与业务执行解耦后的待执行队列。
+    #[pallet::storage]
+    pub type PendingProposalExecutions<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        crate::types::PendingExecutionState<BlockNumberFor<T>>,
+        OptionQuery,
+    >;
+
+    /// 自动超时终结失败后的有限退避状态。
+    #[pallet::storage]
+    pub type AutoFinalizeRetryStates<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        crate::types::PendingExecutionState<BlockNumberFor<T>>,
+        OptionQuery,
+    >;
+
+    /// 自动超时终结连续失败达到上限或重试桶已满后的 dead-letter 记录。
+    #[pallet::storage]
+    pub type AutoFinalizeDeadLetters<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, u8, OptionQuery>;
+
     /// 执行重试 deadline 重排失败后的待处理队列。
     ///
     /// 只要提案仍处于 PASSED + retry state，就必须保留一个可观测入口；
@@ -354,15 +350,28 @@ pub mod pallet {
     pub type ProposalMeta<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, ProposalMetadata<BlockNumberFor<T>>, OptionQuery>;
 
-    /// 延迟清理队列：按清理到期区块索引待清理的 proposal_id 列表。
+    /// 延迟清理 FIFO：序号 → 清理到期区块与 proposal_id。
+    ///
+    /// 所有任务使用同一固定保留期，因此写入顺序即到期顺序；无需有界区块桶和顺延扫描。
     #[pallet::storage]
-    pub type CleanupQueue<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        BlockNumberFor<T>,
-        BoundedVec<u64, T::MaxCleanupQueueBucketLimit>,
-        ValueQuery,
-    >;
+    pub type ScheduledCleanups<T: Config> =
+        StorageMap<_, Twox64Concat, u64, ScheduledCleanup<BlockNumberFor<T>>, OptionQuery>;
+
+    #[pallet::storage]
+    pub type ScheduledCleanupHead<T> = StorageValue<_, u64, ValueQuery>;
+
+    #[pallet::storage]
+    pub type ScheduledCleanupTail<T> = StorageValue<_, u64, ValueQuery>;
+
+    /// 已到期清理任务的公平 FIFO。每完成一个步骤，未结束任务排回队尾。
+    #[pallet::storage]
+    pub type PendingCleanupQueue<T> = StorageMap<_, Twox64Concat, u64, u64, OptionQuery>;
+
+    #[pallet::storage]
+    pub type PendingCleanupQueueHead<T> = StorageValue<_, u64, ValueQuery>;
+
+    #[pallet::storage]
+    pub type PendingCleanupQueueTail<T> = StorageValue<_, u64, ValueQuery>;
 
     /// 每个主体的活跃提案 ID 列表（全局管控，不区分提案类型，上限由 Runtime 配置）。
     ///
@@ -483,6 +492,24 @@ pub mod pallet {
         ProposalTerminalCleanupCompleted { proposal_id: u64 },
         /// 管理员取消 PASSED 可重试提案，转入执行失败终态。
         ProposalExecutionCancelled { proposal_id: u64 },
+        /// 通过提案已进入异步业务执行队列。
+        ProposalExecutionQueued { proposal_id: u64 },
+        /// 回调错误后已按指数退避登记下一次执行。
+        ProposalExecutionDeferred {
+            proposal_id: u64,
+            attempts: u8,
+            next_attempt_at: BlockNumberFor<T>,
+        },
+        /// 回调连续错误达到上限，已进入执行失败终态。
+        ProposalExecutionDeadLettered { proposal_id: u64, attempts: u8 },
+        /// 自动超时终结失败，已退避到后续区块重试。
+        ProposalAutoFinalizeDeferred {
+            proposal_id: u64,
+            attempts: u8,
+            next_attempt_at: BlockNumberFor<T>,
+        },
+        /// 自动超时终结连续失败或重试桶已满，已进入 dead-letter。
+        ProposalAutoFinalizeDeadLettered { proposal_id: u64, attempts: u8 },
     }
 
     #[pallet::error]
@@ -544,7 +571,7 @@ pub mod pallet {
         /// owner 模块没有明确允许取消该 PASSED 重试提案。
         ProposalCancellationNotAllowed,
         /// 终态提案的延迟清理队列连续多个目标区块已满，必须回滚终态写入。
-        CleanupQueueFull,
+        CleanupQueueSequenceExhausted,
     }
 
     #[pallet::hooks]
@@ -557,27 +584,32 @@ pub mod pallet {
                 let db_weight = T::DbWeight::get();
                 weight = weight.saturating_add(db_weight.reads(1));
                 let mut budget = max_auto_finalize;
+                let mut weight_budget = T::MaxAutoFinalizeWeightPerBlock::get();
                 let pending = PendingExpiryBucket::<T>::get();
+                let mut pending_has_remaining = false;
 
                 if let Some(expiry) = pending {
                     if expiry <= n {
                         let (processed, has_remaining, processed_weight) =
-                            Self::auto_finalize_expiry_bucket(expiry, n, budget);
+                            Self::auto_finalize_expiry_bucket(expiry, n, budget, weight_budget);
                         weight = weight.saturating_add(processed_weight);
                         budget = budget.saturating_sub(processed);
+                        weight_budget = weight_budget.saturating_sub(processed_weight);
+                        pending_has_remaining = has_remaining;
                         if has_remaining {
                             PendingExpiryBucket::<T>::put(expiry);
                             weight = weight.saturating_add(db_weight.writes(1));
-                            return weight.saturating_add(Self::process_pending_cleanup_steps());
                         }
-                        PendingExpiryBucket::<T>::kill();
-                        weight = weight.saturating_add(db_weight.writes(1));
+                        if !has_remaining {
+                            PendingExpiryBucket::<T>::kill();
+                            weight = weight.saturating_add(db_weight.writes(1));
+                        }
                     }
                 }
 
-                if budget > 0 {
+                if budget > 0 && !pending_has_remaining {
                     let (_processed, has_remaining, processed_weight) =
-                        Self::auto_finalize_expiry_bucket(n, n, budget);
+                        Self::auto_finalize_expiry_bucket(n, n, budget, weight_budget);
                     weight = weight.saturating_add(processed_weight);
                     if has_remaining {
                         PendingExpiryBucket::<T>::put(n);
@@ -586,16 +618,21 @@ pub mod pallet {
                 }
             }
 
+            weight = weight.saturating_add(Self::process_pending_proposal_executions(n));
+
             weight = weight.saturating_add(Self::process_pending_execution_retry_expirations(n));
 
             weight = weight.saturating_add(Self::process_execution_retry_deadlines(n));
 
             weight = weight.saturating_add(Self::process_pending_terminal_cleanups());
 
-            weight = weight.saturating_add(Self::process_pending_cleanup_steps());
-
-            // 处理延迟清理队列：清理 90 天前完成的提案的全部数据
-            weight = weight.saturating_add(cleanup::process_cleanup_queue::<T>(n));
+            // 先把 90 天保留期已到的任务激活，再由公平 FIFO 执行有界清理步骤。
+            let cleanup_budget = T::MaxCleanupWeightPerBlock::get();
+            let scheduled_weight = cleanup::process_scheduled_cleanups::<T>(n, cleanup_budget);
+            weight = weight.saturating_add(scheduled_weight);
+            weight = weight.saturating_add(Self::process_pending_cleanup_steps(
+                cleanup_budget.saturating_sub(scheduled_weight),
+            ));
 
             weight
         }
@@ -611,7 +648,11 @@ pub mod pallet {
         // call_index 从 3 起,0/1/2 留空。
 
         #[pallet::call_index(3)]
-        #[pallet::weight(T::WeightInfo::finalize_proposal())]
+        #[pallet::weight(
+            T::WeightInfo::finalize_proposal()
+                .saturating_add(T::DbWeight::get().reads(1))
+                .saturating_add(Pallet::<T>::track_timeout_weight(*proposal_id))
+        )]
         pub fn finalize_proposal(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -619,87 +660,14 @@ pub mod pallet {
             let _who = ensure_signed(origin)?;
             let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
 
-            match proposal.stage {
-                STAGE_INTERNAL => {
-                    <T::InternalFinalizer as crate::traits::InternalProposalFinalizer<
-                        BlockNumberFor<T>,
-                        T::AccountId,
-                    >>::finalize_internal_timeout(&proposal, proposal_id)?;
-                }
-                STAGE_JOINT => {
-                    <T::JointFinalizer as crate::traits::JointProposalFinalizer<
-                        BlockNumberFor<T>,
-                        T::AccountId,
-                    >>::finalize_joint_timeout(&proposal, proposal_id)?;
-                }
-                STAGE_REFERENDUM => {
-                    <T::JointFinalizer as crate::traits::JointProposalFinalizer<
-                        BlockNumberFor<T>,
-                        T::AccountId,
-                    >>::finalize_jointreferendum_timeout(
-                        &proposal, proposal_id
-                    )?;
-                }
-                STAGE_LEG_REPRESENTATIVE => {
-                    <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
-                        BlockNumberFor<T>,
-                        T::AccountId,
-                    >>::finalize_legislation_representative_timeout(
-                        &proposal, proposal_id
-                    )?;
-                }
-                STAGE_LEG_REFERENDUM => {
-                    <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
-                        BlockNumberFor<T>,
-                        T::AccountId,
-                    >>::finalize_legislation_referendum_timeout(
-                        &proposal, proposal_id
-                    )?;
-                }
-                STAGE_LEG_SIGN => {
-                    <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
-                        BlockNumberFor<T>,
-                        T::AccountId,
-                    >>::finalize_legislation_sign_timeout(
-                        &proposal, proposal_id
-                    )?;
-                }
-                STAGE_LEG_OVERRIDE => {
-                    <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
-                        BlockNumberFor<T>,
-                        T::AccountId,
-                    >>::finalize_legislation_override_timeout(
-                        &proposal, proposal_id
-                    )?;
-                }
-                STAGE_LEG_CONSTITUTION_GUARD => {
-                    <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
-                        BlockNumberFor<T>,
-                        T::AccountId,
-                    >>::finalize_legislation_guard_timeout(
-                        &proposal, proposal_id
-                    )?;
-                }
-                STAGE_ELECTION_POPULAR => {
-                    <T::ElectionFinalizer as crate::traits::ElectionProposalFinalizer<
-                        BlockNumberFor<T>,
-                        T::AccountId,
-                    >>::finalize_election_popular_timeout(
-                        &proposal, proposal_id
-                    )?;
-                }
-                STAGE_ELECTION_MUTUAL => {
-                    <T::ElectionFinalizer as crate::traits::ElectionProposalFinalizer<
-                        BlockNumberFor<T>,
-                        T::AccountId,
-                    >>::finalize_election_mutual_timeout(
-                        &proposal, proposal_id
-                    )?;
-                }
-                _ => return Err(Error::<T>::InvalidProposalStage.into()),
-            }
+            let result = <T::TrackHandlers as crate::tracks::ProposalTracks<
+                BlockNumberFor<T>,
+                T::AccountId,
+            >>::finalize_timeout(&proposal, proposal_id)
+            .ok_or(Error::<T>::InvalidProposalStage)?;
+            result?;
 
-            // weight 已在 #[pallet::weight] 中静态指定为 max(三模式),无需返回 actual_weight。
+            // 调用注解已按 proposal_id 叠加所属 Track 权重，无需再返回 actual_weight。
             Ok(().into())
         }
 
@@ -727,1118 +695,6 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             Self::cancel_passed_proposal_inner(&who, proposal_id)
-        }
-    }
-
-    impl<T: Config> Pallet<T> {
-        /// 把业务模块传入的机构 CID 列表转为链上有界主体集合。
-        ///
-        /// CID 是机构类提案归属唯一真源;机构码和账户都不能替代 CID。
-        /// 个人多签没有 CID,调用方应传空列表。
-        pub fn bound_subject_cid_numbers(
-            subject_cid_numbers: Vec<Vec<u8>>,
-        ) -> Result<ProposalSubjectCidNumbers, DispatchError> {
-            let mut out = ProposalSubjectCidNumbers::default();
-            for raw in subject_cid_numbers {
-                ensure!(!raw.is_empty(), Error::<T>::InvalidInstitution);
-                let cid: CidNumber = raw.try_into().map_err(|_| Error::<T>::InvalidInstitution)?;
-                if !out.iter().any(|existing| existing == &cid) {
-                    out.try_push(cid)
-                        .map_err(|_| Error::<T>::InvalidInstitution)?;
-                }
-            }
-            Ok(out)
-        }
-        // sub-pallet 调用的事件 emit helper(do_X 搬到 sub-pallet 后,
-        // 仍需要发 votingengine 自己的 lifecycle event)
-        pub fn emit_proposal_created(
-            proposal_id: u64,
-            kind: u8,
-            stage: u8,
-            end: BlockNumberFor<T>,
-        ) {
-            Self::deposit_event(Event::<T>::ProposalCreated {
-                proposal_id,
-                kind,
-                stage,
-                end,
-            });
-        }
-
-        pub fn emit_proposal_advanced_to_referendum(
-            proposal_id: u64,
-            referendum_end: BlockNumberFor<T>,
-            eligible_total: u64,
-        ) {
-            Self::deposit_event(Event::<T>::ProposalAdvancedToReferendum {
-                proposal_id,
-                referendum_end,
-                eligible_total,
-            });
-        }
-
-        pub fn schedule_proposal_expiry(
-            proposal_id: u64,
-            end: BlockNumberFor<T>,
-        ) -> DispatchResult {
-            // end 表示“最后一个仍可投票区块”，因此超时结算应在 end+1 触发。
-            let expiry = end.saturating_add(One::one());
-            ProposalsByExpiry::<T>::try_mutate(expiry, |ids| {
-                ids.try_push(proposal_id)
-                    .map_err(|_| Error::<T>::TooManyProposalsAtExpiry.into())
-            })
-        }
-
-        fn auto_finalize_expiry_bucket(
-            expiry: BlockNumberFor<T>,
-            now: BlockNumberFor<T>,
-            max_count: usize,
-        ) -> (usize, bool, Weight) {
-            let db_weight = T::DbWeight::get();
-            let mut weight = db_weight.reads_writes(1, 1);
-            let mut proposal_ids = ProposalsByExpiry::<T>::take(expiry);
-            if proposal_ids.is_empty() {
-                return (0, false, weight);
-            }
-
-            let process_count = core::cmp::min(max_count, proposal_ids.len());
-            let mut retry_ids = Vec::new();
-            for proposal_id in proposal_ids.drain(..process_count) {
-                weight = weight.saturating_add(db_weight.reads(1));
-                let Some(proposal) = Proposals::<T>::get(proposal_id) else {
-                    continue;
-                };
-                if proposal.status != STATUS_VOTING || proposal.end >= now {
-                    continue;
-                }
-
-                let finalize_result = match proposal.stage {
-                    STAGE_INTERNAL => {
-                        <T::InternalFinalizer as crate::traits::InternalProposalFinalizer<
-                            BlockNumberFor<T>,
-                            T::AccountId,
-                        >>::finalize_internal_timeout(&proposal, proposal_id)
-                    }
-                    STAGE_JOINT => {
-                        <T::JointFinalizer as crate::traits::JointProposalFinalizer<
-                            BlockNumberFor<T>,
-                            T::AccountId,
-                        >>::finalize_joint_timeout(&proposal, proposal_id)
-                    }
-                    STAGE_REFERENDUM => {
-                        <T::JointFinalizer as crate::traits::JointProposalFinalizer<
-                            BlockNumberFor<T>,
-                            T::AccountId,
-                        >>::finalize_jointreferendum_timeout(
-                            &proposal, proposal_id
-                        )
-                    }
-                    STAGE_LEG_REPRESENTATIVE => {
-                        <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
-                            BlockNumberFor<T>,
-                            T::AccountId,
-                        >>::finalize_legislation_representative_timeout(
-                            &proposal, proposal_id
-                        )
-                    }
-                    STAGE_LEG_REFERENDUM => {
-                        <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
-                            BlockNumberFor<T>,
-                            T::AccountId,
-                        >>::finalize_legislation_referendum_timeout(
-                            &proposal, proposal_id
-                        )
-                    }
-                    STAGE_LEG_SIGN => {
-                        <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
-                            BlockNumberFor<T>,
-                            T::AccountId,
-                        >>::finalize_legislation_sign_timeout(
-                            &proposal, proposal_id
-                        )
-                    }
-                    STAGE_LEG_OVERRIDE => {
-                        <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
-                            BlockNumberFor<T>,
-                            T::AccountId,
-                        >>::finalize_legislation_override_timeout(
-                            &proposal, proposal_id
-                        )
-                    }
-                    STAGE_LEG_CONSTITUTION_GUARD => {
-                        <T::LegislationFinalizer as crate::traits::LegislationProposalFinalizer<
-                            BlockNumberFor<T>,
-                            T::AccountId,
-                        >>::finalize_legislation_guard_timeout(
-                            &proposal, proposal_id
-                        )
-                    }
-                    STAGE_ELECTION_POPULAR => {
-                        <T::ElectionFinalizer as crate::traits::ElectionProposalFinalizer<
-                            BlockNumberFor<T>,
-                            T::AccountId,
-                        >>::finalize_election_popular_timeout(
-                            &proposal, proposal_id
-                        )
-                    }
-                    STAGE_ELECTION_MUTUAL => {
-                        <T::ElectionFinalizer as crate::traits::ElectionProposalFinalizer<
-                            BlockNumberFor<T>,
-                            T::AccountId,
-                        >>::finalize_election_mutual_timeout(
-                            &proposal, proposal_id
-                        )
-                    }
-                    _ => Ok(()),
-                };
-                if finalize_result.is_err() {
-                    // 终结失败时必须保留自动重试索引，
-                    // 避免提案状态仍是 Voting，但后续再也不会被 on_initialize 处理。
-                    retry_ids.push(proposal_id);
-                }
-            }
-            for proposal_id in retry_ids {
-                if proposal_ids.try_push(proposal_id).is_err() {
-                    frame_support::defensive!(
-                        "auto_finalize_expiry_bucket: retry id should fit drained expiry bucket"
-                    );
-                }
-            }
-
-            let has_remaining = !proposal_ids.is_empty();
-            if has_remaining {
-                ProposalsByExpiry::<T>::insert(expiry, proposal_ids);
-                weight = weight.saturating_add(db_weight.writes(1));
-            }
-
-            // mode-specific 权重住在各 sub-pallet,引擎核心用统一 finalize_proposal
-            // 静态权重作保守上界。
-            let finalize_weight =
-                T::WeightInfo::finalize_proposal().saturating_mul(process_count as u64);
-            weight = weight.saturating_add(finalize_weight);
-
-            (process_count, has_remaining, weight)
-        }
-
-        /// 读取提案的公投选民总数(`citizen_eligible_total`);提案不存在返回 `None`。
-        /// 供立法业务壳在写入核心修宪版本时取永久公投凭据(见 legislation-vote `referendum_result`)。
-        /// 读已终结提案亦可(不校验 open 状态),故与 `ensure_open_proposal` 分开。
-        pub fn citizen_eligible_total_of(proposal_id: u64) -> Option<u64> {
-            Proposals::<T>::get(proposal_id).map(|p| p.citizen_eligible_total)
-        }
-
-        pub fn ensure_open_proposal(
-            proposal_id: u64,
-        ) -> Result<Proposal<BlockNumberFor<T>, T::AccountId>, DispatchError> {
-            let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
-
-            ensure!(
-                proposal.status == STATUS_VOTING,
-                Error::<T>::InvalidProposalStatus
-            );
-            ensure!(
-                <frame_system::Pallet<T>>::block_number() <= proposal.end,
-                Error::<T>::VoteClosed
-            );
-
-            Ok(proposal)
-        }
-
-        fn should_release_internal_proposal_mutexes(kind: u8, stage: u8, final_status: u8) -> bool {
-            matches!(
-                final_status,
-                STATUS_REJECTED | STATUS_EXECUTED | STATUS_EXECUTION_FAILED
-            ) || (kind == PROPOSAL_KIND_JOINT
-                && stage == STAGE_JOINT
-                && final_status == STATUS_PASSED)
-        }
-
-        fn ensure_valid_status_transition(old_status: u8, new_status: u8) -> DispatchResult {
-            ensure!(
-                matches!(
-                    (old_status, new_status),
-                    (STATUS_VOTING, STATUS_PASSED)
-                        | (STATUS_VOTING, STATUS_REJECTED)
-                        | (STATUS_PASSED, STATUS_EXECUTED)
-                        | (STATUS_PASSED, STATUS_EXECUTION_FAILED)
-                ),
-                Error::<T>::InvalidProposalStatus
-            );
-            Ok(())
-        }
-
-        fn is_terminal_status(status: u8) -> bool {
-            matches!(
-                status,
-                STATUS_REJECTED | STATUS_EXECUTED | STATUS_EXECUTION_FAILED
-            )
-        }
-
-        pub fn mark_proposal_passed_at(proposal_id: u64, block: BlockNumberFor<T>) {
-            ProposalMeta::<T>::mutate(proposal_id, |meta| {
-                if let Some(m) = meta {
-                    if m.passed_at.is_none() {
-                        m.passed_at = Some(block);
-                    }
-                }
-            });
-        }
-
-        fn set_proposal_status(proposal_id: u64, status: u8) -> DispatchResult {
-            Proposals::<T>::try_mutate(proposal_id, |maybe| {
-                let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
-                Self::ensure_valid_status_transition(proposal.status, status)?;
-                proposal.status = status;
-                Ok(())
-            })
-        }
-
-        fn apply_terminal_side_effects(proposal_id: u64, status: u8) -> DispatchResult {
-            ensure!(
-                Self::is_terminal_status(status),
-                Error::<T>::InvalidProposalStatus
-            );
-            let now = frame_system::Pallet::<T>::block_number();
-            cleanup::schedule_cleanup::<T>(proposal_id, now)?;
-            ProposalExecutionRetryStates::<T>::remove(proposal_id);
-            PendingExecutionRetryExpirations::<T>::remove(proposal_id);
-            PendingTerminalCleanups::<T>::remove(proposal_id);
-            if status == STATUS_EXECUTION_FAILED {
-                if let Some(proposal) = Proposals::<T>::get(proposal_id) {
-                    // 清理登记成功后再通知业务模块释放 pending 锁，
-                    // 避免先产生业务侧副作用、再发现链上清理无法登记。通知失败
-                    // 不再吞掉，而是进入有界重试队列。
-                    Self::notify_execution_failed_terminal_or_queue(proposal_id, proposal.kind);
-                }
-            }
-            if let Some(proposal) = Proposals::<T>::get(proposal_id) {
-                if proposal.kind == PROPOSAL_KIND_INTERNAL {
-                    <T::InternalCleanup as crate::traits::InternalCleanupHandler>::on_internal_proposal_terminal(
-                        proposal_id,
-                        status,
-                    )?;
-                }
-                if Self::should_release_internal_proposal_mutexes(
-                    proposal.kind,
-                    proposal.stage,
-                    status,
-                ) {
-                    Self::release_internal_proposal_mutexes(proposal_id);
-                }
-            }
-            Ok(())
-        }
-
-        fn queue_execution_retry_deadline(
-            proposal_id: u64,
-            target: BlockNumberFor<T>,
-        ) -> DispatchResult {
-            Ok(ExecutionRetryDeadlines::<T>::try_mutate(target, |ids| {
-                ids.try_push(proposal_id)
-                    .map_err(|_| Error::<T>::TooManyExecutionRetryDeadlines)
-            })?)
-        }
-
-        fn reschedule_execution_retry_deadline(
-            proposal_id: u64,
-            from: BlockNumberFor<T>,
-        ) -> DispatchResult {
-            let mut target = from;
-            for _ in 0..100u32 {
-                if Self::queue_execution_retry_deadline(proposal_id, target).is_ok() {
-                    return Ok(());
-                }
-                target = target.saturating_add(BlockNumberFor::<T>::one());
-            }
-            Err(Error::<T>::TooManyExecutionRetryDeadlines.into())
-        }
-
-        fn queue_pending_retry_expiration(proposal_id: u64, retry_deadline: BlockNumberFor<T>) {
-            PendingExecutionRetryExpirations::<T>::insert(proposal_id, retry_deadline);
-            Self::deposit_event(Event::<T>::ProposalExecutionRetryExpirationQueued {
-                proposal_id,
-                retry_deadline,
-            });
-        }
-
-        fn finish_terminal_status(proposal_id: u64, status: u8) -> DispatchResult {
-            Self::apply_terminal_side_effects(proposal_id, status)?;
-            Self::deposit_event(Event::<T>::ProposalFinalized {
-                proposal_id,
-                status,
-            });
-            Ok(())
-        }
-
-        fn ensure_retry_admin(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
-            let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
-            let institution = proposal
-                .account_context
-                .ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                Self::is_admin_in_snapshot(proposal_id, institution, who),
-                Error::<T>::NoPermission
-            );
-            Ok(())
-        }
-
-        fn invoke_execution_callback(
-            proposal_id: u64,
-            kind: u8,
-            approved: bool,
-        ) -> Result<ProposalExecutionOutcome, DispatchError> {
-            match kind {
-                PROPOSAL_KIND_INTERNAL => {
-                    T::InternalVoteResultCallback::on_internal_vote_finalized(proposal_id, approved)
-                }
-                PROPOSAL_KIND_JOINT => {
-                    T::JointVoteResultCallback::on_joint_vote_finalized(proposal_id, approved)
-                }
-                PROPOSAL_KIND_LEGISLATION => {
-                    T::LegislationVoteResultCallback::on_legislation_vote_finalized(
-                        proposal_id,
-                        approved,
-                    )
-                }
-                PROPOSAL_KIND_ELECTION => {
-                    T::ElectionVoteResultCallback::on_election_vote_finalized(proposal_id, approved)
-                }
-                _ => Err(Error::<T>::InvalidProposalKind.into()),
-            }
-        }
-
-        fn can_cancel_passed_proposal_by_owner(proposal_id: u64, kind: u8) -> DispatchResult {
-            let decision = match kind {
-                PROPOSAL_KIND_INTERNAL => {
-                    T::InternalVoteResultCallback::can_cancel_passed_proposal(proposal_id)
-                }
-                PROPOSAL_KIND_JOINT => {
-                    T::JointVoteResultCallback::can_cancel_passed_proposal(proposal_id)
-                }
-                PROPOSAL_KIND_LEGISLATION => {
-                    T::LegislationVoteResultCallback::can_cancel_passed_proposal(proposal_id)
-                }
-                PROPOSAL_KIND_ELECTION => {
-                    T::ElectionVoteResultCallback::can_cancel_passed_proposal(proposal_id)
-                }
-                _ => Err(Error::<T>::InvalidProposalKind.into()),
-            }?;
-            ensure!(
-                decision == ProposalCancelDecision::Allow,
-                Error::<T>::ProposalCancellationNotAllowed
-            );
-            Ok(())
-        }
-
-        fn notify_execution_failed_terminal(proposal_id: u64, kind: u8) -> DispatchResult {
-            match kind {
-                PROPOSAL_KIND_INTERNAL => {
-                    T::InternalVoteResultCallback::on_execution_failed_terminal(proposal_id)
-                }
-                PROPOSAL_KIND_JOINT => {
-                    T::JointVoteResultCallback::on_execution_failed_terminal(proposal_id)
-                }
-                PROPOSAL_KIND_LEGISLATION => {
-                    T::LegislationVoteResultCallback::on_execution_failed_terminal(proposal_id)
-                }
-                PROPOSAL_KIND_ELECTION => {
-                    T::ElectionVoteResultCallback::on_execution_failed_terminal(proposal_id)
-                }
-                _ => Err(Error::<T>::InvalidProposalKind.into()),
-            }
-        }
-
-        fn queue_terminal_cleanup(proposal_id: u64) {
-            let already_pending = PendingTerminalCleanups::<T>::contains_key(proposal_id);
-            PendingTerminalCleanups::<T>::insert(proposal_id, ());
-            if !already_pending {
-                Self::deposit_event(Event::<T>::ProposalTerminalCleanupQueued { proposal_id });
-            }
-        }
-
-        fn notify_execution_failed_terminal_or_queue(proposal_id: u64, kind: u8) {
-            let result = Self::with_callback_execution_scope(proposal_id, || {
-                Self::notify_execution_failed_terminal(proposal_id, kind)
-            });
-            if result.is_ok() {
-                PendingTerminalCleanups::<T>::remove(proposal_id);
-                return;
-            }
-            Self::queue_terminal_cleanup(proposal_id);
-        }
-
-        fn process_pending_terminal_cleanups() -> Weight {
-            let db_weight = T::DbWeight::get();
-            let mut weight = db_weight.reads(1);
-            let max = T::MaxPendingRetryExpirationsPerBlock::get() as usize;
-            if max == 0 {
-                return weight;
-            }
-
-            let pending: Vec<u64> = PendingTerminalCleanups::<T>::iter()
-                .take(max)
-                .map(|(proposal_id, _)| proposal_id)
-                .collect();
-            for proposal_id in pending {
-                weight = weight.saturating_add(db_weight.reads_writes(2, 3));
-                let Some(proposal) = Proposals::<T>::get(proposal_id) else {
-                    PendingTerminalCleanups::<T>::remove(proposal_id);
-                    continue;
-                };
-                if proposal.status != STATUS_EXECUTION_FAILED {
-                    PendingTerminalCleanups::<T>::remove(proposal_id);
-                    continue;
-                }
-                let result = Self::with_callback_execution_scope(proposal_id, || {
-                    Self::notify_execution_failed_terminal(proposal_id, proposal.kind)
-                });
-                if result.is_ok() {
-                    PendingTerminalCleanups::<T>::remove(proposal_id);
-                    Self::deposit_event(Event::<T>::ProposalTerminalCleanupCompleted {
-                        proposal_id,
-                    });
-                }
-            }
-            weight
-        }
-
-        fn schedule_execution_retry(proposal_id: u64) -> DispatchResult {
-            if ProposalExecutionRetryStates::<T>::contains_key(proposal_id) {
-                return Ok(());
-            }
-            let now = frame_system::Pallet::<T>::block_number();
-            let retry_deadline = now.saturating_add(T::ExecutionRetryGraceBlocks::get());
-            let state = ExecutionRetryState {
-                manual_attempts: 0,
-                first_auto_failed_at: now,
-                retry_deadline,
-                last_attempt_at: None,
-            };
-            if Self::reschedule_execution_retry_deadline(proposal_id, retry_deadline).is_err() {
-                Self::queue_pending_retry_expiration(proposal_id, retry_deadline);
-            }
-            ProposalExecutionRetryStates::<T>::insert(proposal_id, state);
-            Self::deposit_event(Event::<T>::ProposalExecutionRetryScheduled {
-                proposal_id,
-                retry_deadline,
-            });
-            Ok(())
-        }
-
-        fn apply_automatic_execution_outcome(
-            proposal_id: u64,
-            kind: u8,
-            outcome: ProposalExecutionOutcome,
-        ) -> DispatchResult {
-            match outcome {
-                ProposalExecutionOutcome::Ignored => Err(Error::<T>::ProposalOwnerMissing.into()),
-                ProposalExecutionOutcome::Executed => {
-                    Self::set_proposal_status(proposal_id, STATUS_EXECUTED)?;
-                    if kind == PROPOSAL_KIND_INTERNAL {
-                        <T::InternalCleanup as crate::traits::InternalCleanupHandler>::on_internal_proposal_executed(
-                            proposal_id,
-                        )?;
-                    }
-                    Ok(())
-                }
-                ProposalExecutionOutcome::RetryableFailed => {
-                    if kind == PROPOSAL_KIND_INTERNAL {
-                        Self::schedule_execution_retry(proposal_id)
-                    } else {
-                        // 当前统一 retry/cancel 管理员权限只支持内部提案；
-                        // joint callback 若误返回 RetryableFailed，立即失败终态，避免 PASSED 卡死。
-                        Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)
-                    }
-                }
-                ProposalExecutionOutcome::FatalFailed => {
-                    Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)
-                }
-            }
-        }
-
-        fn process_execution_retry_deadlines(now: BlockNumberFor<T>) -> Weight {
-            let db_weight = T::DbWeight::get();
-            let mut weight = db_weight.reads_writes(1, 1);
-            let queue = ExecutionRetryDeadlines::<T>::take(now);
-            if queue.is_empty() {
-                return weight;
-            }
-
-            for proposal_id in queue.into_iter() {
-                weight = weight.saturating_add(db_weight.reads_writes(2, 3));
-                let Some(state) = ProposalExecutionRetryStates::<T>::get(proposal_id) else {
-                    continue;
-                };
-                if state.retry_deadline > now {
-                    if Self::reschedule_execution_retry_deadline(proposal_id, state.retry_deadline)
-                        .is_err()
-                    {
-                        Self::queue_pending_retry_expiration(proposal_id, state.retry_deadline);
-                    }
-                    continue;
-                }
-                let Some(proposal) = Proposals::<T>::get(proposal_id) else {
-                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
-                    continue;
-                };
-                if proposal.status != STATUS_PASSED {
-                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
-                    continue;
-                }
-                let result = with_transaction(|| {
-                    let result = (|| -> DispatchResult {
-                        Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
-                        Self::deposit_event(Event::<T>::ProposalExecutionRetryExpired {
-                            proposal_id,
-                        });
-                        Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
-                    })();
-                    match result {
-                        Ok(()) => TransactionOutcome::Commit(Ok(())),
-                        Err(err) => TransactionOutcome::Rollback(Err(err)),
-                    }
-                });
-                if result.is_err() {
-                    let next_block = now.saturating_add(BlockNumberFor::<T>::one());
-                    if Self::reschedule_execution_retry_deadline(proposal_id, next_block).is_err() {
-                        Self::queue_pending_retry_expiration(proposal_id, state.retry_deadline);
-                    }
-                }
-            }
-            weight
-        }
-
-        fn process_pending_execution_retry_expirations(now: BlockNumberFor<T>) -> Weight {
-            let db_weight = T::DbWeight::get();
-            let mut weight = db_weight.reads(1);
-            let max = T::MaxPendingRetryExpirationsPerBlock::get() as usize;
-            if max == 0 {
-                return weight;
-            }
-
-            let pending: sp_std::vec::Vec<_> = PendingExecutionRetryExpirations::<T>::iter()
-                .take(max)
-                .collect();
-            for (proposal_id, retry_deadline) in pending {
-                weight = weight.saturating_add(db_weight.reads_writes(3, 4));
-                let Some(state) = ProposalExecutionRetryStates::<T>::get(proposal_id) else {
-                    PendingExecutionRetryExpirations::<T>::remove(proposal_id);
-                    continue;
-                };
-                if state.retry_deadline > now {
-                    if Self::reschedule_execution_retry_deadline(proposal_id, state.retry_deadline)
-                        .is_ok()
-                    {
-                        PendingExecutionRetryExpirations::<T>::remove(proposal_id);
-                    } else {
-                        PendingExecutionRetryExpirations::<T>::insert(
-                            proposal_id,
-                            state.retry_deadline,
-                        );
-                    }
-                    continue;
-                }
-                let Some(proposal) = Proposals::<T>::get(proposal_id) else {
-                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
-                    PendingExecutionRetryExpirations::<T>::remove(proposal_id);
-                    continue;
-                };
-                if proposal.status != STATUS_PASSED {
-                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
-                    PendingExecutionRetryExpirations::<T>::remove(proposal_id);
-                    continue;
-                }
-
-                let result = with_transaction(|| {
-                    let result = (|| -> DispatchResult {
-                        Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
-                        Self::deposit_event(Event::<T>::ProposalExecutionRetryExpired {
-                            proposal_id,
-                        });
-                        Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
-                    })();
-                    match result {
-                        Ok(()) => TransactionOutcome::Commit(Ok(())),
-                        Err(err) => TransactionOutcome::Rollback(Err(err)),
-                    }
-                });
-                if result.is_ok() {
-                    PendingExecutionRetryExpirations::<T>::remove(proposal_id);
-                } else {
-                    PendingExecutionRetryExpirations::<T>::insert(proposal_id, retry_deadline);
-                }
-            }
-            weight
-        }
-
-        fn retry_passed_proposal_inner(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
-            with_transaction(|| {
-                let result = (|| -> DispatchResult {
-                    Self::ensure_retry_admin(who, proposal_id)?;
-                    let proposal =
-                        Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
-                    ensure!(
-                        proposal.status == STATUS_PASSED,
-                        Error::<T>::ProposalNotRetryable
-                    );
-                    let mut state = ProposalExecutionRetryStates::<T>::get(proposal_id)
-                        .ok_or(Error::<T>::ProposalNotRetryable)?;
-                    let now = frame_system::Pallet::<T>::block_number();
-                    ensure!(
-                        now <= state.retry_deadline,
-                        Error::<T>::ExecutionRetryDeadlinePassed
-                    );
-                    ensure!(
-                        u32::from(state.manual_attempts) < T::MaxManualExecutionAttempts::get(),
-                        Error::<T>::ManualExecutionAttemptsExceeded
-                    );
-
-                    let outcome = Self::with_callback_execution_scope(proposal_id, || {
-                        Self::invoke_execution_callback(proposal_id, proposal.kind, true)
-                    })?;
-                    match outcome {
-                        ProposalExecutionOutcome::Executed => {
-                            Self::set_proposal_status(proposal_id, STATUS_EXECUTED)?;
-                            if proposal.kind == PROPOSAL_KIND_INTERNAL {
-                                <T::InternalCleanup as crate::traits::InternalCleanupHandler>::on_internal_proposal_executed(
-                                    proposal_id,
-                                )?;
-                            }
-                            Self::deposit_event(Event::<T>::ProposalExecutionRetried {
-                                proposal_id,
-                                manual_attempts: state.manual_attempts,
-                                outcome: STATUS_EXECUTED,
-                            });
-                            Self::finish_terminal_status(proposal_id, STATUS_EXECUTED)
-                        }
-                        ProposalExecutionOutcome::RetryableFailed => {
-                            state.manual_attempts = state.manual_attempts.saturating_add(1);
-                            state.last_attempt_at = Some(now);
-                            if u32::from(state.manual_attempts)
-                                >= T::MaxManualExecutionAttempts::get()
-                            {
-                                Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
-                                Self::deposit_event(Event::<T>::ProposalExecutionRetried {
-                                    proposal_id,
-                                    manual_attempts: state.manual_attempts,
-                                    outcome: STATUS_EXECUTION_FAILED,
-                                });
-                                Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
-                            } else {
-                                Self::deposit_event(Event::<T>::ProposalExecutionRetried {
-                                    proposal_id,
-                                    manual_attempts: state.manual_attempts,
-                                    outcome: STATUS_PASSED,
-                                });
-                                ProposalExecutionRetryStates::<T>::insert(proposal_id, state);
-                                Ok(())
-                            }
-                        }
-                        ProposalExecutionOutcome::FatalFailed => {
-                            Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
-                            Self::deposit_event(Event::<T>::ProposalExecutionRetried {
-                                proposal_id,
-                                manual_attempts: state.manual_attempts,
-                                outcome: STATUS_EXECUTION_FAILED,
-                            });
-                            Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
-                        }
-                        ProposalExecutionOutcome::Ignored => {
-                            Err(Error::<T>::ProposalOwnerMissing.into())
-                        }
-                    }
-                })();
-                match result {
-                    Ok(()) => TransactionOutcome::Commit(Ok(())),
-                    Err(err) => TransactionOutcome::Rollback(Err(err)),
-                }
-            })
-        }
-
-        fn cancel_passed_proposal_inner(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
-            with_transaction(|| {
-                let result = (|| -> DispatchResult {
-                    Self::ensure_retry_admin(who, proposal_id)?;
-                    let proposal =
-                        Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
-                    ensure!(
-                        proposal.status == STATUS_PASSED,
-                        Error::<T>::ProposalNotRetryable
-                    );
-                    Self::can_cancel_passed_proposal_by_owner(proposal_id, proposal.kind)?;
-                    Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
-                    Self::deposit_event(Event::<T>::ProposalExecutionCancelled { proposal_id });
-                    Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
-                })();
-                match result {
-                    Ok(()) => TransactionOutcome::Commit(Ok(())),
-                    Err(err) => TransactionOutcome::Rollback(Err(err)),
-                }
-            })
-        }
-
-        /// 查询当前是否处于某个提案的业务回调/终态清理作用域。
-        ///
-        /// 业务 pallet 用它保护敏感生命周期写入，避免普通 runtime 调用绕过投票引擎。
-        pub fn is_callback_execution_scope(proposal_id: u64) -> bool {
-            CallbackExecutionScopes::<T>::contains_key(proposal_id)
-        }
-
-        fn with_callback_execution_scope<F, R>(
-            proposal_id: u64,
-            callback: F,
-        ) -> Result<R, DispatchError>
-        where
-            F: FnOnce() -> Result<R, DispatchError>,
-        {
-            CallbackExecutionScopes::<T>::insert(proposal_id, ());
-            let result = callback();
-            CallbackExecutionScopes::<T>::remove(proposal_id);
-            result
-        }
-
-        /// 更新提案状态，并按统一 executor 结果推进业务执行状态。
-        pub fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
-            with_transaction(|| {
-                let (kind, stage, subjects, should_run_callback) = match Proposals::<T>::try_mutate(
-                    proposal_id,
-                    |maybe| -> Result<
-                        (
-                            u8,
-                            u8,
-                            sp_std::vec::Vec<ProposalSubject<T::AccountId>>,
-                            bool,
-                        ),
-                        DispatchError,
-                    > {
-                        let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
-                        let old_status = proposal.status;
-                        Self::ensure_valid_status_transition(old_status, status)?;
-                        let kind = proposal.kind;
-                        let stage = proposal.stage;
-                        let subjects = proposal.subject_keys();
-                        proposal.status = status;
-                        if old_status == STATUS_VOTING && status == STATUS_PASSED {
-                            let now = frame_system::Pallet::<T>::block_number();
-                            Self::mark_proposal_passed_at(proposal_id, now);
-                        }
-                        Ok((
-                            kind,
-                            stage,
-                            subjects,
-                            old_status == STATUS_VOTING
-                                && matches!(status, STATUS_PASSED | STATUS_REJECTED),
-                        ))
-                    },
-                ) {
-                    Ok(v) => v,
-                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
-                };
-
-                // 提案结束（通过或拒绝），立即释放活跃提案名额
-                if status != STATUS_VOTING {
-                    for subject in subjects {
-                        limit::remove_active_proposal::<T>(subject, proposal_id);
-                    }
-                }
-
-                if should_run_callback {
-                    let outcome = match Self::with_callback_execution_scope(proposal_id, || {
-                        Self::invoke_execution_callback(proposal_id, kind, status == STATUS_PASSED)
-                    }) {
-                        Ok(outcome) => outcome,
-                        Err(err) => return TransactionOutcome::Rollback(Err(err)),
-                    };
-                    if status == STATUS_PASSED {
-                        if let Err(err) =
-                            Self::apply_automatic_execution_outcome(proposal_id, kind, outcome)
-                        {
-                            return TransactionOutcome::Rollback(Err(err));
-                        }
-                    }
-                }
-
-                let final_status = match Proposals::<T>::get(proposal_id) {
-                    Some(proposal) => proposal.status,
-                    None => {
-                        return TransactionOutcome::Rollback(Err(
-                            Error::<T>::ProposalNotFound.into()
-                        ))
-                    }
-                };
-                // PASSED 是执行授权/可重试态，不再视为终态。
-                // 90 天延迟清理只登记 REJECTED / EXECUTED / EXECUTION_FAILED。
-                if Self::is_terminal_status(final_status) {
-                    if let Err(err) = Self::apply_terminal_side_effects(proposal_id, final_status) {
-                        return TransactionOutcome::Rollback(Err(err));
-                    }
-                } else if Self::should_release_internal_proposal_mutexes(kind, stage, final_status)
-                {
-                    Self::release_internal_proposal_mutexes(proposal_id);
-                }
-                Self::deposit_event(Event::<T>::ProposalFinalized {
-                    proposal_id,
-                    status: final_status,
-                });
-
-                TransactionOutcome::Commit(Ok(()))
-            })
-        }
-
-        /// 回调专用执行结果写入。
-        ///
-        /// 仅供单测验证旧回调作用域保护；生产业务回调应直接返回
-        /// `ProposalExecutionOutcome`，由外层 `set_status_and_emit` 统一收口状态、事件和清理。
-        #[cfg(test)]
-        pub fn set_callback_execution_result(proposal_id: u64, final_status: u8) -> DispatchResult {
-            ensure!(
-                CallbackExecutionScopes::<T>::contains_key(proposal_id),
-                Error::<T>::InvalidProposalStatus
-            );
-            ensure!(
-                matches!(final_status, STATUS_EXECUTED | STATUS_EXECUTION_FAILED),
-                Error::<T>::InvalidProposalStatus
-            );
-            Proposals::<T>::try_mutate(proposal_id, |maybe| {
-                let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
-                Self::ensure_valid_status_transition(proposal.status, final_status)?;
-                proposal.status = final_status;
-                Ok(())
-            })
-        }
-
-        fn process_pending_cleanup_steps() -> Weight {
-            let max_steps = T::MaxCleanupStepsPerBlock::get() as usize;
-            if max_steps == 0 {
-                return Weight::zero();
-            }
-
-            let cleanup_limit = T::CleanupKeysPerStep::get().max(1);
-            let db_weight = T::DbWeight::get();
-            let mut weight = Weight::zero();
-            // 每步的最大 weight 上界：cleanup_limit 次读 + cleanup_limit 次写 + 固定开销
-            let max_weight_per_step =
-                db_weight.reads_writes(u64::from(cleanup_limit) + 2, u64::from(cleanup_limit) + 2);
-
-            for _ in 0..max_steps {
-                let Some((proposal_id, stage)) = PendingProposalCleanups::<T>::iter().next() else {
-                    break;
-                };
-                weight = weight.saturating_add(db_weight.reads(1));
-
-                let (next_stage, _actual_weight) =
-                    Self::process_pending_cleanup_step(proposal_id, stage, cleanup_limit);
-                // 使用预估最大值而非实际值，确保 on_initialize 不超出声明的 weight
-                weight = weight.saturating_add(max_weight_per_step);
-
-                match next_stage {
-                    Some(next) if next != stage => {
-                        PendingProposalCleanups::<T>::insert(proposal_id, next);
-                        weight = weight.saturating_add(db_weight.writes(1));
-                    }
-                    Some(_) => {}
-                    None => {
-                        PendingProposalCleanups::<T>::remove(proposal_id);
-                        weight = weight.saturating_add(db_weight.writes(1));
-                    }
-                }
-            }
-
-            weight
-        }
-
-        fn process_pending_cleanup_step(
-            proposal_id: u64,
-            stage: PendingCleanupStage,
-            cleanup_limit: u32,
-        ) -> (Option<PendingCleanupStage>, Weight) {
-            let db_weight = T::DbWeight::get();
-
-            match stage {
-                PendingCleanupStage::AdminSnapshots => {
-                    let result = AdminSnapshot::<T>::clear_prefix(proposal_id, cleanup_limit, None);
-                    let weight =
-                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.unique));
-                    let next = if result.maybe_cursor.is_some() {
-                        Some(PendingCleanupStage::AdminSnapshots)
-                    } else {
-                        Some(PendingCleanupStage::InternalVotes)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::InternalVotes => {
-                    let (removed, has_remaining) =
-                        <T::InternalCleanup as crate::traits::InternalCleanupHandler>::cleanup_internal_votes_chunk(
-                            proposal_id, cleanup_limit,
-                        );
-                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
-                    let next = if has_remaining {
-                        Some(PendingCleanupStage::InternalVotes)
-                    } else {
-                        Some(PendingCleanupStage::JointAdminVotes)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::JointAdminVotes => {
-                    let (removed, has_remaining) =
-                        <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_admin_votes_chunk(
-                            proposal_id, cleanup_limit,
-                        );
-                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
-                    let next = if has_remaining {
-                        Some(PendingCleanupStage::JointAdminVotes)
-                    } else {
-                        Some(PendingCleanupStage::JointInstitutionVotes)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::JointInstitutionVotes => {
-                    let (removed, has_remaining) =
-                        <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_institution_votes_chunk(
-                            proposal_id, cleanup_limit,
-                        );
-                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
-                    let next = if has_remaining {
-                        Some(PendingCleanupStage::JointInstitutionVotes)
-                    } else {
-                        Some(PendingCleanupStage::JointInstitutionTallies)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::JointInstitutionTallies => {
-                    let (removed, has_remaining) =
-                        <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_institution_tallies_chunk(
-                            proposal_id, cleanup_limit,
-                        );
-                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
-                    let next = if has_remaining {
-                        Some(PendingCleanupStage::JointInstitutionTallies)
-                    } else {
-                        Some(PendingCleanupStage::JointReferendumVotes)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::JointReferendumVotes => {
-                    let (removed, has_remaining) =
-                        <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_referendum_votes_chunk(
-                            proposal_id, cleanup_limit,
-                        );
-                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
-                    let next = if has_remaining {
-                        Some(PendingCleanupStage::JointReferendumVotes)
-                    } else {
-                        Some(PendingCleanupStage::LegislationRepresentativeVotes)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::LegislationRepresentativeVotes => {
-                    let (removed, has_remaining) =
-                        <T::LegislationCleanup as crate::traits::LegislationCleanupHandler>::cleanup_legislation_representative_votes_chunk(
-                            proposal_id, cleanup_limit,
-                        );
-                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
-                    let next = if has_remaining {
-                        Some(PendingCleanupStage::LegislationRepresentativeVotes)
-                    } else {
-                        Some(PendingCleanupStage::LegislationReferendumVotes)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::LegislationReferendumVotes => {
-                    let (removed, has_remaining) =
-                        <T::LegislationCleanup as crate::traits::LegislationCleanupHandler>::cleanup_legislation_referendum_votes_chunk(
-                            proposal_id, cleanup_limit,
-                        );
-                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
-                    let next = if has_remaining {
-                        Some(PendingCleanupStage::LegislationReferendumVotes)
-                    } else {
-                        Some(PendingCleanupStage::ElectionVotes)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::ElectionVotes => {
-                    let (removed, has_remaining) =
-                        <T::ElectionCleanup as crate::traits::ElectionCleanupHandler>::cleanup_election_votes_chunk(
-                            proposal_id, cleanup_limit,
-                        );
-                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
-                    let next = if has_remaining {
-                        Some(PendingCleanupStage::ElectionVotes)
-                    } else {
-                        Some(PendingCleanupStage::ElectionVoters)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::ElectionVoters => {
-                    let (removed, has_remaining) =
-                        <T::ElectionCleanup as crate::traits::ElectionCleanupHandler>::cleanup_election_voters_chunk(
-                            proposal_id, cleanup_limit,
-                        );
-                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
-                    let next = if has_remaining {
-                        Some(PendingCleanupStage::ElectionVoters)
-                    } else {
-                        Some(PendingCleanupStage::ElectionTallies)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::ElectionTallies => {
-                    let (removed, has_remaining) =
-                        <T::ElectionCleanup as crate::traits::ElectionCleanupHandler>::cleanup_election_tallies_chunk(
-                            proposal_id, cleanup_limit,
-                        );
-                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
-                    let next = if has_remaining {
-                        Some(PendingCleanupStage::ElectionTallies)
-                    } else {
-                        Some(PendingCleanupStage::ElectionCandidates)
-                    };
-                    (next, weight)
-                }
-                PendingCleanupStage::ElectionCandidates => {
-                    <T::ElectionCleanup as crate::traits::ElectionCleanupHandler>::cleanup_election_terminal(
-                        proposal_id,
-                    );
-                    let weight = db_weight.writes(3);
-                    (Some(PendingCleanupStage::ProposalObject), weight)
-                }
-                PendingCleanupStage::ProposalObject => {
-                    ProposalObject::<T>::remove(proposal_id);
-                    ProposalObjectMeta::<T>::remove(proposal_id);
-                    let weight = db_weight.writes(2);
-                    (Some(PendingCleanupStage::FinalCleanup), weight)
-                }
-                PendingCleanupStage::FinalCleanup => {
-                    // 清理核心数据 + 业务数据（单次完成）。
-                    //
-                    // 双层 ID v1:必须先清反向索引(它们依赖 Proposals/ProposalOwner/
-                    // ProposalDisplayId 反查分类键),再清主表。
-                    Self::release_internal_proposal_mutexes(proposal_id);
-                    Self::cleanup_proposal_indexes(proposal_id);
-                    Proposals::<T>::remove(proposal_id);
-                    // internal / joint mode storage 由 sub-pallet 删
-                    <T::InternalCleanup as crate::traits::InternalCleanupHandler>::cleanup_internal_terminal(
-                        proposal_id,
-                    );
-                    <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_terminal(
-                        proposal_id,
-                    );
-                    <T::LegislationCleanup as crate::traits::LegislationCleanupHandler>::cleanup_legislation_terminal(
-                        proposal_id,
-                    );
-                    <T::ElectionCleanup as crate::traits::ElectionCleanupHandler>::cleanup_election_terminal(
-                        proposal_id,
-                    );
-                    ProposalData::<T>::remove(proposal_id);
-                    ProposalOwner::<T>::remove(proposal_id);
-                    ProposalMeta::<T>::remove(proposal_id);
-                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
-                    // 反向索引 4 张 + ProposalDisplayId 1 张额外 5 次 write
-                    let weight = db_weight.writes(16);
-                    (None, weight) // 全部完成
-                }
-            }
         }
     }
 }

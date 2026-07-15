@@ -59,7 +59,8 @@ pub(crate) type BalanceOf<T> =
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+    // 全新创世直接采用最终布局，不保留历史迁移版本。
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
