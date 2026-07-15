@@ -28,6 +28,21 @@ CREATE TABLE square_request_nonces (
 CREATE INDEX idx_square_request_nonces_expires
   ON square_request_nonces(expires_at);
 
+-- 通讯录只保存端到端密文；联系人账户、名称和关系明文不得进入 Cloudflare。
+CREATE TABLE square_contacts (
+  owner_account TEXT NOT NULL,
+  contact_id TEXT NOT NULL CHECK(
+    length(contact_id) = 64 AND contact_id NOT GLOB '*[^0-9a-f]*'
+  ),
+  ciphertext TEXT NOT NULL,
+  nonce TEXT NOT NULL,
+  mac TEXT NOT NULL,
+  updated_at INTEGER NOT NULL CHECK(updated_at > 0),
+  PRIMARY KEY(owner_account, contact_id)
+);
+CREATE INDEX idx_square_contacts_owner_updated
+  ON square_contacts(owner_account, updated_at DESC, contact_id DESC);
+
 CREATE TABLE square_rate_windows (
   rate_key TEXT PRIMARY KEY,
   request_count INTEGER NOT NULL,
@@ -253,7 +268,7 @@ CREATE INDEX idx_chain_extrinsic_relays_tx_hash
   WHERE tx_hash IS NOT NULL;
 
 -- Chat 云端只保存建立端到端通道所需的最小公开材料。
--- 消息、会话、联系人关系和附件禁止进入 D1、KV、R2 或 Durable Object Storage。
+-- Chat 消息、会话、附件及联系人明文禁止进入 D1、KV、R2 或 Durable Object Storage。
 CREATE TABLE chat_devices (
   owner_account TEXT NOT NULL,
   device_id TEXT NOT NULL,

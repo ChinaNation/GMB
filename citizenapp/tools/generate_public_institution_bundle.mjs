@@ -83,6 +83,25 @@ function readVec(data, offset) {
   return [data.subarray(start, end), end];
 }
 
+// SCALE Option:None=1 字节(0x00);Some=0x01 + 值。readInner(data, o) 返回值结束后的
+// offset。仅用于跳过字段推进 offset(生成包不需要这些法定代表人字段的值)。
+function skipOption(data, offset, readInner) {
+  const tag = data[offset];
+  if (tag === 0) return offset + 1;
+  if (tag === 1) return readInner(data, offset + 1);
+  throw new Error(`非法 SCALE Option tag=${tag}`);
+}
+
+// 机构码真源:从 cid_number 核心段还原,与链上 parse_cid_number_parts 逐字一致,
+// 免疫链上 InstitutionInfo 结构体字段漂移(primitives/cid/number.rs)。
+// 格式 R5(5)-核心段(5)-N9(9)-D4(4);核心段 seg2[3] 为数字→3 字符码,为字母→4 字符码。
+function institutionCodeFromCid(cidNumber) {
+  const seg2 = cidNumber.split('-')[1] ?? '';
+  if (seg2.length !== 5) throw new Error(`cid 核心段格式非法: ${cidNumber}`);
+  const isDigit = seg2[3] >= '0' && seg2[3] <= '9';
+  return isDigit ? seg2.slice(0, 3) : seg2.slice(0, 4);
+}
+
 function decodeInstitutionKey(keyHex) {
   const key = bytes(keyHex);
   const [cid] = readVec(key, 48);
@@ -105,10 +124,16 @@ function decodeInstitution(cidNumber, valueHex) {
   offset = afterShortName;
   const [townCode, afterTownCode] = readVec(value, offset);
   offset = afterTownCode;
+  // 链上 InstitutionInfo 在 town_code 与 institution_code 之间还有三个法定代表人 Option
+  // 字段,必须逐个跳过,否则后续 created_at/status 偏移全错(字段顺序真源见链端
+  // entity-primitives InstitutionInfo)。
+  offset = skipOption(value, offset, (d, o) => readVec(d, o)[1]); // Option<AccountName 姓名>
+  offset = skipOption(value, offset, (d, o) => readVec(d, o)[1]); // Option<CidNumber>
+  offset = skipOption(value, offset, (d, o) => o + 32); // Option<AccountId 32 字节>
   if (offset + 9 > value.length) throw new Error(`机构 ${cidNumber} 链值长度不足`);
-  const institutionCode = value.subarray(offset, offset + 4)
-    .toString('utf8').replace(/\0+$/u, '');
-  offset += 4;
+  // 机构码不从 value blob 切(易随结构漂移),直接从 cid_number 核心段还原(方案B)。
+  const institutionCode = institutionCodeFromCid(cidNumber);
+  offset += 4; // 跳过 blob 里的 [u8;4] institution_code
   const createdAt = value.readUInt32LE(offset);
   offset += 4;
   const statusByte = value[offset];

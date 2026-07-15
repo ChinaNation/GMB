@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:citizenapp/wallet/core/secure_seed_store.dart';
+import 'package:citizenapp/wallet/core/hardware_bound_seed_vault.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 import '../support/fake_secure_seed_store.dart';
@@ -13,6 +14,19 @@ const _mnemonicA =
 const _mnemonicB =
     'abandon abandon abandon abandon abandon abandon abandon abandon '
     'abandon abandon abandon about';
+
+class _MemoryBlobStore implements VaultBlobStore {
+  final Map<String, String> values = <String, String>{};
+
+  @override
+  Future<String?> read(String key) async => values[key];
+
+  @override
+  Future<void> write(String key, String value) async => values[key] = value;
+
+  @override
+  Future<void> delete(String key) async => values.remove(key);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +43,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     fakeStore = FakeSecureSeedStore();
     WalletManager.debugSeedStore = fakeStore;
+    WalletManager.debugContactKeyStore = _MemoryBlobStore();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(localAuthChannel, (call) async {
       switch (call.method) {

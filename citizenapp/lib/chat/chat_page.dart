@@ -6,6 +6,9 @@ import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:file_picker/file_picker.dart';
 
+import 'package:citizenapp/8964/profile/user_profile_page.dart';
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
+import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
 import '../ui/app_theme.dart';
 import 'chat_ui_adapter.dart';
 import 'chat_flow.dart';
@@ -451,8 +454,21 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  void _openPeerProfile() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => UserProfilePage(
+          ownerAccount: widget.peerUserId,
+          isSelf: false,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final peerName = ProfilePresentation.forAccount(widget.peerUserId)
+        .resolveDisplayName(publicName: widget.title);
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
@@ -460,23 +476,40 @@ class _ChatPageState extends State<ChatPage> {
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
         titleSpacing: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-            ),
-            Text(
-              _shortAccount(widget.peerUserId),
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
+        title: InkWell(
+          key: const ValueKey('chat-peer-profile-entry'),
+          borderRadius: BorderRadius.circular(10),
+          onTap: _openPeerProfile,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ProfileAvatar(seed: widget.peerUserId, size: 36),
+              const SizedBox(width: 9),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      peerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      _shortAccount(widget.peerUserId),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           IconButton(
@@ -543,7 +576,7 @@ class _ChatPageState extends State<ChatPage> {
                       final isMe = id == widget.ownerAccount;
                       return User(
                         id: id,
-                        name: isMe ? '我' : widget.title,
+                        name: isMe ? '我' : peerName,
                       );
                     },
                   ),

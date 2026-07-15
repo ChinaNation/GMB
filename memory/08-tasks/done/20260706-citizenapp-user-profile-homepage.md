@@ -133,7 +133,7 @@ lib/8964/profile/
 - 追加：把 `PUT /v1/square/profile` 返回体统一为与 GET 相同的完整 `UserProfileResponse`（抽 `buildProfileResponse` 共用），客户端单一解析；本人视角 is_following=false。
 
 ### 阶段 2（完成，前端数据层）
-- 新增 `citizenapp/lib/8964/profile/models/citizen_profile.dart`：`CitizenProfile`（镜像 `UserProfileResponse`）+ `fromJson/toJson/copyWith` + `resolvedDisplayName`（空展示名回落钱包名→截断地址）。
+- 新增 `citizenapp/lib/8964/profile/models/citizen_profile.dart`：`CitizenProfile`（镜像 `UserProfileResponse`）+ `fromJson/toJson/copyWith` + `resolvedDisplayName`。当前统一规则为钱包名/公开昵称优先，二者缺失时按账户稳定选择本地默认昵称，禁止回落完整或截断账户。
 - 新增 `citizenapp/lib/8964/profile/services/citizen_profile_cache.dart`：`SharedPreferences` 离线缓存（键 `square.profile.cache.<owner>`；只缓存真实资料，兜底默认值不入缓存）。
 - 新增 `citizenapp/lib/8964/profile/services/citizen_profile_api.dart`：门面，聚合 fetchProfile / fetchAuthorPosts / updateProfile，网络细节委托 `SquareApiClient`。
 - 扩展 `citizenapp/lib/8964/services/square_api_client.dart`：新增 `fetchUserProfile` / `fetchAuthorPosts`（返回 `({posts, nextCursor})` 记录）/ `updateProfile` + `_putJson`，复用 `_parsePost`/`_getJson`/`baseUri`，不动既有 feed/发布方法。

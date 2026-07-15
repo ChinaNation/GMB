@@ -60,6 +60,8 @@ class QrActions {
   static const int retryPassedProposal = 0x0904;
   static const int cancelPassedProposal = 0x0905;
   static const int registerVotingIdentity = 0x0a00;
+  static const int occupyCid = 0x0a06;
+  static const int revokeCid = 0x0a08;
   static const int proposeRuntimeUpgrade = 0x0c00;
   static const int developerDirectUpgrade = 0x0c02;
   static const int resolutionDestroy = 0x0d00;
@@ -160,6 +162,8 @@ class QrActions {
         'activate_admin_account' => activateAdmin,
         'decrypt_admin' => decryptAdmin,
         'citizen_identity' => citizenIdentity,
+        'occupy_cid' => occupyCid,
+        'revoke_cid' => revokeCid,
         'onchina_admin_action' => onchinaAdmin,
         _ => 0,
       };

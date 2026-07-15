@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
+import 'package:citizenapp/my/util/amount_format.dart';
 
 class AdminSetEditor extends StatefulWidget {
   const AdminSetEditor({
@@ -39,9 +41,9 @@ class _AdminSetEditorState extends State<AdminSetEditor> {
             for (var i = 0; i < widget.admins.length; i++) ...[
               ListTile(
                 leading: Text('${i + 1}'),
-                title: Text(AdminAccountIdCodec.normalizeHex(widget.admins[i])),
+                title: Text(ss58FromHex(widget.admins[i])),
                 subtitle: Text(
-                    '余额：${widget.balances[AdminAccountIdCodec.normalizeHex(widget.admins[i])]?.toStringAsFixed(2) ?? '-'} 元'),
+                    '余额：${AmountFormat.formatThousands(widget.balances[AdminAccountIdCodec.normalizeHex(widget.admins[i])])} 元'),
                 trailing: IconButton(
                   padding: EdgeInsets.zero,
                   tooltip: '移除',

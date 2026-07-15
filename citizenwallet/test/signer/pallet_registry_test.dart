@@ -72,6 +72,16 @@ void main() {
       expect(PalletRegistry.proposePersonalAdminSetChangeCall, 0);
     });
 
+    test('CitizenIdentity(10) 身份注册 + 注册局占号/吊销 call_index', () {
+      // register_voting_identity=0 / upgrade_to_candidate_identity=1 /
+      // occupy_cid=6 / revoke_cid=8,与 runtime citizen-identity pallet 对齐。
+      expect(PalletRegistry.citizenIdentityPallet, 10);
+      expect(PalletRegistry.registerVotingIdentityCall, 0);
+      expect(PalletRegistry.upgradeToCandidateIdentityCall, 1);
+      expect(PalletRegistry.occupyCidCall, 6);
+      expect(PalletRegistry.revokeCidCall, 8);
+    });
+
     test('VotingEngine 统一手动重试/取消入口', () {
       // 业务 pallet 不承载 execute_xxx / cancel_failed_xxx,
       // 统一收口至 VotingEngine 的 4/5 两个 call_index。

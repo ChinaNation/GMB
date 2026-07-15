@@ -7,10 +7,9 @@ import 'package:citizenapp/wallet/core/wallet_manager.dart';
 
 /// 电子护照页。
 ///
-/// 身份只认**默认用户**(最靠前热钱包);默认用户切换(增删/拖拽排序)后,
-/// 监听 [WalletManager.walletsRevision] 自动重读跟随。按三档渲染同一张卡:
-/// 访客(完全匿名)/ 投票公民 / 竞选公民,字段数递增。卡片宽度适应屏幕
-/// (窄屏填满、宽屏限宽居中),高度随内容多少自适应。
+/// 页面始终展示匿名访客、投票身份、竞选身份三张卡。只有默认用户当前身份对应的
+/// 卡片排在首位、标记“当前身份”并展示真实链上值；非当前公民卡只展示该身份涉及
+/// 的字段名称，不能重复泄露当前用户数据。链读取失败时不静默降级成匿名访客。
 class MyIdPage extends StatefulWidget {
   const MyIdPage({super.key, this.myIdService});
 
@@ -21,16 +20,23 @@ class MyIdPage extends StatefulWidget {
 }
 
 class _MyIdPageState extends State<MyIdPage> {
-  late final MyIdService _myIdService;
+  static const List<MyIdTier> _baseTierOrder = <MyIdTier>[
+    MyIdTier.visitor,
+    MyIdTier.voting,
+    MyIdTier.candidate,
+  ];
 
+  late final MyIdService _myIdService;
   MyIdState _state = const MyIdState(tier: MyIdTier.visitor);
   bool _loading = true;
+
+  bool get _isQueryFailed => _state.status == MyIdStatus.queryFailed;
 
   @override
   void initState() {
     super.initState();
     _myIdService = widget.myIdService ?? MyIdService();
-    // 切换默认用户即跟随(与聊天/广场同一身份版本号)。
+    // 默认用户切换必须让电子护照立即重排，和广场、聊天共用同一身份版本号。
     WalletManager.walletsRevision.addListener(_loadState);
     _loadState();
   }
@@ -42,8 +48,19 @@ class _MyIdPageState extends State<MyIdPage> {
   }
 
   Future<void> _loadState() async {
-    setState(() => _loading = true);
-    final nextState = await _myIdService.getState();
+    if (mounted) setState(() => _loading = true);
+    MyIdState nextState;
+    try {
+      nextState = await _myIdService.getState();
+    } on Exception catch (error) {
+      // Service 正常会把链错误收口为 queryFailed；这里兜住依赖异常，仍不能把
+      // 未知错误误认成匿名访客。
+      nextState = MyIdState(
+        tier: MyIdTier.visitor,
+        status: MyIdStatus.queryFailed,
+        errorMessage: '电子护照读取失败：$error',
+      );
+    }
     if (!mounted) return;
     setState(() {
       _state = nextState;
@@ -51,63 +68,22 @@ class _MyIdPageState extends State<MyIdPage> {
     });
   }
 
-  // ── 分档色/文案 ──
-
-  Color _tierColor() => switch (_state.tier) {
-        MyIdTier.candidate => AppTheme.identityCandidate,
-        MyIdTier.voting => AppTheme.identityVoting,
-        MyIdTier.visitor => AppTheme.identityVisitor,
-      };
-
-  String _tierLabel() => switch (_state.tier) {
-        MyIdTier.candidate => '竞选公民',
-        MyIdTier.voting => '投票公民',
-        MyIdTier.visitor => '访客',
-      };
-
-  bool get _isQueryFailed => _state.status == MyIdStatus.queryFailed;
-
-  ({String text, Color color})? _statusPill() {
-    if (_isQueryFailed) return (text: '读取失败', color: AppTheme.danger);
-    if (!_state.isCitizen) return (text: '访客', color: AppTheme.textTertiary);
-    return switch (_state.status) {
-      MyIdStatus.normal => (text: '正常', color: AppTheme.success),
-      MyIdStatus.notYetValid => (text: '未生效', color: AppTheme.warning),
-      MyIdStatus.expired => (text: '已过期', color: AppTheme.danger),
-      MyIdStatus.revoked => (text: '已吊销', color: AppTheme.danger),
-      _ => null,
-    };
+  List<MyIdTier> _orderedTiers() {
+    if (_isQueryFailed) return _baseTierOrder;
+    return <MyIdTier>[
+      _state.tier,
+      ..._baseTierOrder.where((tier) => tier != _state.tier),
+    ];
   }
 
-  String _validityText() {
-    final from = _formatDate(_state.passportValidFrom);
-    final until = _formatDate(_state.passportValidUntil);
-    if (from == null || until == null) return '—';
-    return '$from 至 $until';
-  }
+  bool _isCurrent(MyIdTier tier) => !_isQueryFailed && tier == _state.tier;
 
-  String _shortAddress(String address) {
-    final value = address.trim();
-    if (value.length <= 16) return value;
-    return '${value.substring(0, 8)}…${value.substring(value.length - 8)}';
-  }
-
-  String? _formatDate(String? raw) {
-    final value = raw?.trim();
-    if (value == null || value.isEmpty) return null;
-    final parts = value.split('-');
-    if (parts.length != 3) return null;
-    final year = int.tryParse(parts[0]);
-    final month = int.tryParse(parts[1]);
-    final day = int.tryParse(parts[2]);
-    if (year == null || month == null || day == null) return null;
-    return '${year.toString().padLeft(4, '0')}年'
-        '${month.toString().padLeft(2, '0')}月'
-        '${day.toString().padLeft(2, '0')}日';
-  }
+  bool _showActualValues(MyIdTier tier) =>
+      _isCurrent(tier) && tier != MyIdTier.visitor;
 
   @override
   Widget build(BuildContext context) {
+    final tiers = _orderedTiers();
     return Scaffold(
       appBar: AppBar(
         title: const Text('电子护照'),
@@ -127,12 +103,36 @@ class _MyIdPageState extends State<MyIdPage> {
             const LinearProgressIndicator(minHeight: 2)
           else
             const SizedBox(height: 2),
+          if (_isQueryFailed) ...[
+            const SizedBox(height: 12),
+            _PassportMessageBanner(
+              message: _state.errorMessage ?? '链上身份读取失败',
+              isError: true,
+              onRetry: _loading ? null : _loadState,
+            ),
+          ] else if ((_state.errorMessage ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _PassportMessageBanner(message: _state.errorMessage!),
+          ],
           const SizedBox(height: 14),
-          // 宽度适应屏幕:窄屏填满,宽屏限宽居中,避免平板上过分拉伸。
           Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
-              child: _buildCard(),
+              child: Column(
+                children: [
+                  for (var index = 0; index < tiers.length; index++) ...[
+                    _PassportIdentityCard(
+                      key: ValueKey<String>(
+                          'passport-card-${tiers[index].name}'),
+                      tier: tiers[index],
+                      current: _isCurrent(tiers[index]),
+                      showActualValues: _showActualValues(tiers[index]),
+                      fields: _fieldsFor(tiers[index]),
+                    ),
+                    if (index != tiers.length - 1) const SizedBox(height: 14),
+                  ],
+                ],
+              ),
             ),
           ),
         ],
@@ -140,302 +140,358 @@ class _MyIdPageState extends State<MyIdPage> {
     );
   }
 
-  Widget _buildCard() {
-    // 高度随内容自适应:Column mainAxisSize.min,访客最矮、竞选最高。
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: AppTheme.cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildHeader(),
-          ..._buildTierContent(),
-        ],
+  List<_PassportField> _fieldsFor(MyIdTier tier) {
+    if (tier == MyIdTier.visitor) return const <_PassportField>[];
+    final showValues = _showActualValues(tier);
+    final fields = <_PassportField>[
+      _PassportField(
+        label: '投票账户',
+        value: showValues ? _shortAddress(_state.votingAccount) : null,
+        mono: true,
       ),
-    );
+      _PassportField(
+        label: '公民身份 CID 号',
+        value: showValues ? _displayValue(_state.cidNumber) : null,
+        mono: true,
+      ),
+      _PassportField(
+        label: '居住选区',
+        value: showValues ? _displayValue(_state.residenceDistrict) : null,
+      ),
+      _PassportField(
+        label: '身份状态',
+        value: showValues ? _statusText(_state.status) : null,
+      ),
+      _PassportField(
+        label: '投票身份有效期',
+        value: showValues ? _validityText() : null,
+      ),
+    ];
+    if (tier == MyIdTier.candidate) {
+      fields.addAll(<_PassportField>[
+        _PassportField(
+          label: '公民姓名',
+          value: showValues ? _displayValue(_state.citizenFullName) : null,
+        ),
+        _PassportField(
+          label: '性别',
+          value: showValues ? _displayValue(_state.citizenSexLabel) : null,
+        ),
+        _PassportField(
+          label: '出生日期',
+          value:
+              showValues ? (_formatDate(_state.citizenBirthDate) ?? '—') : null,
+        ),
+        _PassportField(
+          label: '出生地',
+          value: showValues ? _displayValue(_state.birthDistrict) : null,
+        ),
+      ]);
+    }
+    return fields;
   }
 
-  Widget _buildHeader() {
-    final style = identityBadgeStyle(
-      identityLevel: _state.identityLevel,
+  String _validityText() {
+    final from = _formatDate(_state.passportValidFrom);
+    final until = _formatDate(_state.passportValidUntil);
+    if (from == null || until == null) return '—';
+    return '$from 至 $until';
+  }
+
+  static String _displayValue(String? input) {
+    final value = input?.trim() ?? '';
+    return value.isEmpty ? '—' : value;
+  }
+
+  static String _shortAddress(String? input) {
+    final value = input?.trim() ?? '';
+    if (value.isEmpty) return '—';
+    if (value.length <= 18) return value;
+    return '${value.substring(0, 8)}…${value.substring(value.length - 8)}';
+  }
+
+  static String _statusText(MyIdStatus? status) => switch (status) {
+        MyIdStatus.normal => '正常',
+        MyIdStatus.notYetValid => '未生效',
+        MyIdStatus.expired => '已过期',
+        MyIdStatus.revoked => '已吊销',
+        _ => '—',
+      };
+
+  static String? _formatDate(String? raw) {
+    final value = raw?.trim();
+    if (value == null || value.isEmpty) return null;
+    final parts = value.split('-');
+    if (parts.length != 3) return null;
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) return null;
+    return '${year.toString().padLeft(4, '0')}年'
+        '${month.toString().padLeft(2, '0')}月'
+        '${day.toString().padLeft(2, '0')}日';
+  }
+}
+
+class _PassportIdentityCard extends StatelessWidget {
+  const _PassportIdentityCard({
+    super.key,
+    required this.tier,
+    required this.current,
+    required this.showActualValues,
+    required this.fields,
+  });
+
+  final MyIdTier tier;
+  final bool current;
+  final bool showActualValues;
+  final List<_PassportField> fields;
+
+  String get _title => switch (tier) {
+        MyIdTier.visitor => '匿名访客',
+        MyIdTier.voting => '公民 · 投票身份',
+        MyIdTier.candidate => '公民 · 竞选身份',
+      };
+
+  Color get _color => switch (tier) {
+        MyIdTier.visitor => AppTheme.identityVisitor,
+        MyIdTier.voting => AppTheme.identityVoting,
+        MyIdTier.candidate => AppTheme.identityCandidate,
+      };
+
+  String get _identityLevel => switch (tier) {
+        MyIdTier.visitor => 'visitor',
+        MyIdTier.voting => 'voting',
+        MyIdTier.candidate => 'candidate',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final badgeStyle = identityBadgeStyle(
+      identityLevel: _identityLevel,
       membershipLevel: null,
       membershipActive: false,
     )!;
-    final pill = _statusPill();
-    return Row(
-      children: [
-        IdentityBadge(style: style, size: 44, tooltip: _tierLabel()),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '电子护照',
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              _tierChip(),
-            ],
-          ),
-        ),
-        if (pill != null) _pill(pill.text, pill.color),
-      ],
-    );
-  }
-
-  Widget _tierChip() {
-    final color = _tierColor();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        _tierLabel(),
-        style: TextStyle(
-          fontSize: 12,
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _pill(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withAlpha(25),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 12,
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildTierContent() {
-    if (_isQueryFailed) return _errorContent();
-    return switch (_state.tier) {
-      MyIdTier.visitor => _visitorContent(),
-      MyIdTier.voting => _citizenContent(candidate: false),
-      MyIdTier.candidate => _citizenContent(candidate: true),
-    };
-  }
-
-  List<Widget> _visitorContent() {
-    final hint = _state.errorMessage;
-    return [
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 26),
-        child: Center(
-          child: Column(
-            children: [
-              const Text(
-                '完全匿名',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2,
-                  color: AppTheme.identityVisitor,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '无公民身份',
-                style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
-              ),
-              if (hint != null && hint.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  hint,
-                  style:
-                      const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    ];
-  }
-
-  List<Widget> _citizenContent({required bool candidate}) {
-    return [
-      const SizedBox(height: 16),
-      _FieldBlock(
-        label: '投票账户',
-        value: _shortAddress(_state.votingAccount ?? '—'),
-        mono: true,
-      ),
-      _sectionHeader(Icons.link, '链上身份信息', AppTheme.textSecondary),
-      const SizedBox(height: 12),
-      _FieldBlock(
-        label: '公民身份 CID 号',
-        value: _state.cidNumber ?? '—',
-        mono: true,
-      ),
-      const SizedBox(height: 14),
-      _FieldBlock(
-        label: '居住选区',
-        value: (_state.residenceDistrict?.isNotEmpty ?? false)
-            ? _state.residenceDistrict!
-            : '—',
-      ),
-      const SizedBox(height: 14),
-      _FieldBlock(label: '投票身份有效期', value: _validityText()),
-      if (candidate) ..._candidateExtra(),
-    ];
-  }
-
-  List<Widget> _candidateExtra() {
-    final sex = _state.citizenSexLabel;
-    return [
-      const SizedBox(height: 16),
-      const Divider(height: 1, color: AppTheme.border),
-      const SizedBox(height: 12),
-      _sectionHeader(
-        Icons.how_to_vote_outlined,
-        '竞选公开信息',
-        AppTheme.identityCandidate,
-      ),
-      const SizedBox(height: 12),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: _FieldBlock(
-              label: '姓名',
-              value: (_state.citizenFullName?.isNotEmpty ?? false)
-                  ? _state.citizenFullName!
-                  : '—',
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _FieldBlock(
-              label: '性别',
-              value: (sex?.isNotEmpty ?? false) ? sex! : '—',
-            ),
+        color: Color.alphaBlend(_color.withAlpha(8), AppTheme.surfaceCard),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: _color, width: current ? 2 : 1),
+        boxShadow: [
+          BoxShadow(
+            color: _color.withAlpha(current ? 38 : 13),
+            blurRadius: current ? 18 : 8,
+            offset: Offset(0, current ? 8 : 3),
           ),
         ],
       ),
-      const SizedBox(height: 14),
-      _FieldBlock(
-        label: '出生地',
-        value: (_state.birthDistrict?.isNotEmpty ?? false)
-            ? _state.birthDistrict!
-            : '—',
-      ),
-      const SizedBox(height: 14),
-      _FieldBlock(
-        label: '出生日期',
-        value: (_state.citizenBirthDate?.isNotEmpty ?? false)
-            ? _state.citizenBirthDate!
-            : '—',
-      ),
-    ];
-  }
-
-  List<Widget> _errorContent() {
-    return [
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 22),
-        child: Center(
-          child: Column(
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, color: AppTheme.danger, size: 28),
-              const SizedBox(height: 10),
-              Text(
-                _state.errorMessage ?? '读取失败',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.danger,
-                  fontWeight: FontWeight.w600,
+              Padding(
+                padding: EdgeInsets.only(right: current ? 88 : 0),
+                child: Row(
+                  children: [
+                    IdentityBadge(
+                      style: badgeStyle,
+                      size: 44,
+                      tooltip: _title,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _title,
+                        style: TextStyle(
+                          fontSize: 18,
+                          height: 1.2,
+                          fontWeight: FontWeight.w800,
+                          color: _color,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 14),
-              OutlinedButton.icon(
-                onPressed: _loading ? null : _loadState,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('重试'),
-              ),
+              if (tier == MyIdTier.visitor)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 28),
+                  child: Text(
+                    '没有公民身份信息',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      height: 1.4,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                )
+              else ...[
+                const SizedBox(height: 14),
+                for (var index = 0; index < fields.length; index++) ...[
+                  _PassportFieldRow(
+                    field: fields[index],
+                    color: _color,
+                    showValue: showActualValues,
+                  ),
+                  if (index != fields.length - 1) const SizedBox(height: 6),
+                ],
+              ],
             ],
           ),
-        ),
-      ),
-    ];
-  }
-
-  Widget _sectionHeader(IconData icon, String text, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.w700,
+          if (current)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                key: ValueKey<String>('current-identity-${tier.name}'),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: _color,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: const Text(
+                  '当前身份',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _FieldBlock extends StatelessWidget {
-  const _FieldBlock({
-    required this.label,
-    required this.value,
-    this.mono = false,
-  });
+class _PassportField {
+  const _PassportField({required this.label, this.value, this.mono = false});
 
   final String label;
-  final String value;
+  final String? value;
   final bool mono;
+}
+
+class _PassportFieldRow extends StatelessWidget {
+  const _PassportFieldRow({
+    required this.field,
+    required this.color,
+    required this.showValue,
+  });
+
+  final _PassportField field;
+  final Color color;
+  final bool showValue;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            color: AppTheme.textSecondary,
-            fontWeight: FontWeight.w600,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withAlpha(showValue ? 10 : 7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withAlpha(24)),
+      ),
+      child: showValue
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 126,
+                  child: Text(
+                    field.label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    field.value ?? '—',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: field.mono ? 12 : 13,
+                      height: 1.4,
+                      fontFamily: field.mono ? 'monospace' : null,
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Text(
+              field.label,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+    );
+  }
+}
+
+class _PassportMessageBanner extends StatelessWidget {
+  const _PassportMessageBanner({
+    required this.message,
+    this.isError = false,
+    this.onRetry,
+  });
+
+  final String message;
+  final bool isError;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isError ? AppTheme.danger : AppTheme.warning;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          decoration: AppTheme.bannerDecoration(color),
+          child: Row(
+            children: [
+              Icon(
+                isError ? Icons.error_outline : Icons.info_outline,
+                size: 18,
+                color: color,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (onRetry != null)
+                TextButton(onPressed: onRetry, child: const Text('重试')),
+            ],
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: mono ? 13 : 15,
-            fontFamily: mono ? 'monospace' : null,
-            color: AppTheme.textPrimary,
-            height: 1.4,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

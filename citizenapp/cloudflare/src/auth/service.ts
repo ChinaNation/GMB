@@ -5,7 +5,6 @@ import { nowMs, secondsFromNow } from '../shared/time';
 import { putKvJson } from '../limits/storage';
 import { sha256Hex } from '../shared/hash';
 import { verifyTurnstile } from '../security/turnstile';
-import { assertOnchainWallet } from '../chain/wallet';
 import { verifyWalletSignature } from './wallet_signature';
 import { indexSessionToken } from './session_index';
 import {
@@ -142,10 +141,8 @@ export async function createSession(request: Request, env: Env): Promise<Respons
     throw new HttpError(401, 'invalid_signature', '设备子钥签名校验失败');
   }
 
-  // 链上钱包门禁：签名钱包必须是链上活账户（free ≥ ED 111 分），否则拒发会话——彻底拦住
-  // 无链上钱包的用户使用广场/聊天。仅签发时校验一次（登录态 24h，过期重校验）；fail-closed。
-  await assertOnchainWallet(env, ownerAccount);
-
+  // Session 只证明当前设备控制已登记的钱包子钥。链账户是否存在、余额和公民资格
+  // 必须由具体业务动作自行校验，不能阻塞会员页和端到端加密数据同步。
   const sessionTtlSeconds = parsePositiveInt(env.SESSION_TTL_SECONDS, 86_400);
   const sessionToken = createId('sqs');
   const session: SessionState = {

@@ -273,6 +273,8 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
 
 - seed 不写入 Isar/Postgres/日志
 - **seed 不出 WalletManager**：所有签名操作通过 `signWithWallet()` / `signUtf8WithWallet()` 完成，seed 仅在方法内短暂存在，签名后立即清零
+- 通讯录只从热钱包 seed 派生 `citizenapp.contacts.v1/encryption` 与 `citizenapp.contacts.v1/index` 两把 32 字节 HKDF-SHA256 域隔离密钥；salt 固定为 `SHA256(owner_account)`。业务层只能读取派生后的 `ContactKeyMaterial`，不能接触 seed，也不能用通讯录密钥签名或恢复钱包。
+- 新建/导入热钱包时预派生通讯录密钥并写入系统安全存储；历史热钱包首次进入通讯录时读取一次硬件金库并派生。删除钱包必须同时删除派生密钥及该 `owner_account` 的联系人缓存、待同步操作和同步状态。
 - 助记词不持久化，仅创建时一次性展示
 - 冷钱包不在本机保存任何密钥材料
 - 本机签名在本地完成，私钥材料不出端
@@ -292,6 +294,7 @@ CitizenApp 不承担 OnChina 管理员扫码登录职责。管理员登录由 On
   - `deleteWallet / setActiveWallet`
   - `signWithWallet(walletIndex, payload)` — 热钱包 sr25519 签名（seed 不出类）
   - `signUtf8WithWallet(walletIndex, message)` — 热钱包 UTF-8 签名（返回 `WalletSignResult`）
+  - `ensureContactKeyMaterial(walletIndex, ownerAccount)` — 返回通讯录域隔离加密钥和索引钥，必要时从硬件金库一次性派生
   - ~~`getLatestWalletSecret / getWalletSecretByIndex`~~ — 已弃用
 - `ChainRpc`（`lib/rpc/chain_rpc.dart`）
   - `fetchFinalizedBalance` / `fetchFinalizedBalances` / `fetchFinalizedTotalBalance` — 直连节点查询 finalized 链上余额

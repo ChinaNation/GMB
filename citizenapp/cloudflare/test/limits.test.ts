@@ -17,12 +17,15 @@ describe('Cloudflare 统一资源限制', () => {
     expect(resourceLimit(videoResource('freedom')).max_bytes).toBe(40 * 1024 * 1024);
     expect(resourceLimit(videoResource('candidate')).max_seconds).toBe(3 * 60 * 60);
     expect(resourceLimit('chat_keypackage').max_count).toBe(20);
+    expect(resourceLimit('contact_ciphertext').max_bytes).toBe(16 * 1024);
   });
 
   it('在进入风控和 D1 前拒绝未登记路由', () => {
     expect(() => assertKnownRoute('GET', '/v1/unknown')).toThrowError(HttpError);
     expect(() => assertKnownRoute('POST', '/v1/square/reports')).toThrowError(HttpError);
     expect(assertKnownRoute('PUT', '/v1/square/uploads/media')).toBe('square_image_hd');
+    expect(assertKnownRoute('GET', '/v1/square/contacts')).toBe('api_json_small');
+    expect(assertKnownRoute('PUT', `/v1/square/contacts/${'ab'.repeat(32)}`)).toBe('contact_ciphertext');
   });
 
   it('拒绝没有 Content-Length 或声明超限的写请求', () => {

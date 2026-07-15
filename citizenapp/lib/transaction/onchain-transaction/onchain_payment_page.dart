@@ -18,8 +18,8 @@ import 'package:citizenapp/isar/app_isar.dart';
 import 'package:citizenapp/qr/pages/qr_sign_session_page.dart';
 import 'package:citizenapp/qr/qr_protocols.dart';
 import 'package:citizenapp/signer/qr_signer.dart';
-import 'package:citizenapp/my/user/user.dart' show ContactBookPage;
-import 'package:citizenapp/my/user/user_service.dart' show UserContact;
+import 'package:citizenapp/my/user/contact_book_page.dart';
+import 'package:citizenapp/my/user/contact_service.dart' show UserContact;
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
 import 'package:citizenapp/wallet/pages/wallet_page.dart';
 import 'package:citizenapp/wallet/pages/transaction_history_page.dart';
@@ -285,15 +285,14 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   Future<void> _openContactsPage() async {
     final contact = await Navigator.of(context).push<UserContact>(
       MaterialPageRoute(
-        builder: (_) => ContactBookPage(
-          selfAddress: _currentWallet?.address ?? '',
+        builder: (_) => const ContactBookPage(
           selectForTrade: true,
         ),
       ),
     );
     if (!mounted || contact == null) return;
     setState(() {
-      // 通讯录、二维码和转账输入框统一使用 SS58 地址。
+      // 通讯录始终属于默认用户；这里只接收联系人 SS58 地址，付款钱包保持不变。
       _toController.text = contact.address;
     });
   }

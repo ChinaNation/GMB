@@ -9,6 +9,7 @@ import { createLoginChallenge, createSession, registerDeviceSubkey } from "./aut
 import { chainBootstrapRoute } from "./chain/bootstrap";
 import { constitutionRoute } from "./chain/constitution";
 import { relaySignedExtrinsicRoute } from "./chain/extrinsic_relay";
+import { deleteContactRoute, listContactsRoute, putContactRoute } from "./contacts/service";
 import {
   consumeChatKeyPackage,
   fetchChatKeyPackages,
@@ -133,6 +134,15 @@ export async function routeRequest(
   }
   if (request.method === "POST" && path === "/v1/square/account/delete") {
     return deleteAccountRoute(request, env);
+  }
+  if (request.method === "GET" && path === "/v1/square/contacts") {
+    return listContactsRoute(request, env);
+  }
+  if (request.method === "PUT" && path.startsWith("/v1/square/contacts/")) {
+    return putContactRoute(request, env, path.slice("/v1/square/contacts/".length));
+  }
+  if (request.method === "DELETE" && path.startsWith("/v1/square/contacts/")) {
+    return deleteContactRoute(request, env, path.slice("/v1/square/contacts/".length));
   }
   if (request.method === "POST" && path === "/v1/square/uploads/prepare") {
     return prepareUpload(request, env);

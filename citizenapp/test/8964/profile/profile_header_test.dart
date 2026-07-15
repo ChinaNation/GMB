@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/profile/user_qr_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
@@ -29,6 +30,22 @@ Widget _wrap({
 }
 
 void main() {
+  testWidgets('missing public name uses local nickname and keeps account below',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        isSelf: false,
+        api: FakeProfileApi(sampleProfile(displayName: '')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final fallback = ProfilePresentation.forAccount(kOwner).fallbackName;
+    expect(find.text(fallback), findsWidgets);
+    expect(find.textContaining(kOwner.substring(0, 6)), findsOneWidget);
+    expect(find.text(kOwner), findsNothing);
+  });
+
   testWidgets('self profile hides owner-directed action icons, edit in kebab',
       (tester) async {
     await tester.pumpWidget(

@@ -107,7 +107,7 @@ lib/8964/compose/
   触发防抖存；两 body 加 `snapshot()/restore()`。
 - 旧 `SquarePublishDraft` 失败恢复已随旧页退役（新页不再 restore）；失败内容由持续自动保存进箱，放弃 uploadId
   断点续传（范围外）。
-- 头像现为默认用户昵称首字占位（真头像需 profile.json avatar + session，同 feed 管线，属小增强，非本次）。
+- 头像现统一复用 `ProfileAvatar`：真实 profile 图片优先，缺失或读取失败时按账户稳定选择 `assets/profile_defaults/` 本地照片。
 
 ## 验收标准
 

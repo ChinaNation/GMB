@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 
@@ -69,16 +70,39 @@ void main() {
       expect(profile.posts, 36);
     });
 
-    test('resolvedDisplayName falls back to wallet name then short address',
+    test(
+        'resolvedDisplayName uses wallet truth, public mirror, then local name',
         () {
       final named = CitizenProfile.fromJson(_profileJson(displayName: '张三'));
-      expect(named.resolvedDisplayName('钱包A'), '张三');
+      expect(named.resolvedDisplayName('钱包A'), '钱包A');
+      expect(named.resolvedDisplayName(''), '张三');
 
       final unnamed = CitizenProfile.fromJson(_profileJson(displayName: ''));
       expect(unnamed.resolvedDisplayName('钱包A'), '钱包A');
-      final expectedShort =
+      final fallback = ProfilePresentation.forAccount(_owner).fallbackName;
+      expect(unnamed.resolvedDisplayName(''), fallback);
+      expect(fallback, isNot(contains(_owner.substring(0, 6))));
+    });
+
+    test('local defaults are stable and reject account-derived nicknames', () {
+      final first = ProfilePresentation.forAccount(_owner);
+      final second = ProfilePresentation.forAccount(_owner);
+      final short =
           '${_owner.substring(0, 6)}...${_owner.substring(_owner.length - 6)}';
-      expect(unnamed.resolvedDisplayName(''), expectedShort);
+
+      expect(second.fallbackName, first.fallbackName);
+      expect(second.avatarAsset, first.avatarAsset);
+      expect(second.bannerAsset, first.bannerAsset);
+      expect(first.avatarAsset, isNot(first.bannerAsset));
+      expect(first.resolveDisplayName(publicName: _owner), first.fallbackName);
+      expect(first.resolveDisplayName(publicName: short), first.fallbackName);
+      expect(ProfilePresentation.assets, hasLength(11));
+    });
+
+    test('SquareAuthor never falls back to its wallet account', () {
+      const author = SquareAuthor(ownerAccount: _owner, displayName: '');
+      expect(author.title, ProfilePresentation.forAccount(_owner).fallbackName);
+      expect(author.title, isNot(_owner));
     });
 
     test('survives a json round-trip', () {

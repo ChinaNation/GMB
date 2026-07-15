@@ -181,13 +181,19 @@ class PayloadDecoder {
         }
       }
 
-      // ── CitizenIdentity(10) · 公民链上投票/参选身份注册 ──
+      // ── CitizenIdentity(10) · 公民链上投票/参选身份注册 + 注册局占号/吊销 ──
       if (palletIndex == PalletRegistry.citizenIdentityPallet) {
         if (callIndex == PalletRegistry.registerVotingIdentityCall) {
           return _decodeRegisterVotingIdentity(bytes);
         }
         if (callIndex == PalletRegistry.upgradeToCandidateIdentityCall) {
           return _decodeUpgradeToCandidateIdentity(bytes);
+        }
+        if (callIndex == PalletRegistry.occupyCidCall) {
+          return _decodeOccupyCid(bytes);
+        }
+        if (callIndex == PalletRegistry.revokeCidCall) {
+          return _decodeRevokeCid(bytes);
         }
       }
 
@@ -2006,6 +2012,91 @@ class PayloadDecoder {
       reviewFields: <String, String>{
         'registrar_account': registrarAddress,
         ...payload.reviewFields,
+      },
+    );
+  }
+
+  // CitizenIdentity(10) / occupy_cid(6) · 注册局建档占号(注册局签名)。
+  // SCALE: [10][6][registrar_account:AccountId32][cid_number:Vec<u8>]
+  //        [commitment:[u8;32]][residence_province_code:Vec<u8>]
+  //        [residence_city_code:Vec<u8>]
+  // 逐字节对齐 onchina occupy.rs::encode_occupy_cid_call。
+  static DecodedPayload? _decodeOccupyCid(Uint8List bytes) {
+    if (bytes.length < 2 + 32) return null;
+    var offset = 2;
+    final registrar = bytes.sublist(offset, offset + 32);
+    offset += 32;
+
+    final (cidNumber, afterCid) = _readUtf8Vec(bytes, offset);
+    if (cidNumber == null || cidNumber.isEmpty || cidNumber.length > 32) {
+      return null;
+    }
+    offset = afterCid;
+
+    if (offset + 32 > bytes.length) return null;
+    final commitment = bytes.sublist(offset, offset + 32);
+    offset += 32;
+
+    final (provinceCode, afterProvince) = _readUtf8Vec(bytes, offset);
+    if (provinceCode == null ||
+        provinceCode.isEmpty ||
+        provinceCode.length > 16) {
+      return null;
+    }
+    offset = afterProvince;
+    final (cityCode, afterCity) = _readUtf8Vec(bytes, offset);
+    if (cityCode == null || cityCode.isEmpty || cityCode.length > 16) {
+      return null;
+    }
+    offset = afterCity;
+    if (!_hasCallDataEnd(bytes, offset)) return null;
+
+    final registrarAddress = _bytesToSs58(registrar);
+    return DecodedPayload(
+      action: 'occupy_cid',
+      summary: '注册局占号(登记 CID 号):$cidNumber',
+      fields: <String, String>{
+        'registrar_account': registrarAddress,
+        'cid_number': cidNumber,
+        'commitment': _bytesToLowerHex(commitment),
+        'residence_province_code': provinceCode,
+        'residence_city_code': cityCode,
+      },
+      reviewFields: <String, String>{
+        'registrar_account': registrarAddress,
+        'cid_number': cidNumber,
+        'residence': '$provinceCode / $cityCode',
+      },
+    );
+  }
+
+  // CitizenIdentity(10) / revoke_cid(8) · 注册局吊销 CID 号(注册局签名)。
+  // SCALE: [10][8][registrar_account:AccountId32][cid_number:Vec<u8>]
+  // 逐字节对齐 onchina occupy.rs::encode_revoke_cid_call。
+  static DecodedPayload? _decodeRevokeCid(Uint8List bytes) {
+    if (bytes.length < 2 + 32) return null;
+    var offset = 2;
+    final registrar = bytes.sublist(offset, offset + 32);
+    offset += 32;
+
+    final (cidNumber, afterCid) = _readUtf8Vec(bytes, offset);
+    if (cidNumber == null || cidNumber.isEmpty || cidNumber.length > 32) {
+      return null;
+    }
+    offset = afterCid;
+    if (!_hasCallDataEnd(bytes, offset)) return null;
+
+    final registrarAddress = _bytesToSs58(registrar);
+    return DecodedPayload(
+      action: 'revoke_cid',
+      summary: '注册局吊销 CID 号:$cidNumber',
+      fields: <String, String>{
+        'registrar_account': registrarAddress,
+        'cid_number': cidNumber,
+      },
+      reviewFields: <String, String>{
+        'registrar_account': registrarAddress,
+        'cid_number': cidNumber,
       },
     );
   }

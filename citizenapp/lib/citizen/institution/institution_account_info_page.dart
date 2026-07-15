@@ -36,8 +36,7 @@ class InstitutionAccountPage extends StatefulWidget {
       _InstitutionAccountInfoPageState();
 }
 
-class _InstitutionAccountInfoPageState
-    extends State<InstitutionAccountPage> {
+class _InstitutionAccountInfoPageState extends State<InstitutionAccountPage> {
   final InstitutionChainService _manageService = InstitutionChainService();
   final ChainRpc _rpc = ChainRpc();
 
@@ -547,7 +546,7 @@ class _InstitutionAccountInfoPageState
   Widget _buildBalanceRow() {
     final balanceStr = _balanceYuan == null
         ? '-'
-        : '${AmountFormat.format(_balanceYuan!)} GMB';
+        : '${AmountFormat.formatThousands(_balanceYuan)} GMB';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

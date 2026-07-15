@@ -46,6 +46,14 @@ class PalletRegistry {
   /// `upgrade_to_candidate_identity(registrar_account, payload, citizen_signature)`。
   static const int upgradeToCandidateIdentityCall = 1;
 
+  /// `occupy_cid(registrar_account, cid_number, commitment, province_code, city_code)`
+  /// — 注册局建档「占号」:链上原子验格式+查重+登记 CID 号(注册局签名)。
+  static const int occupyCidCall = 6;
+
+  /// `revoke_cid(registrar_account, cid_number)`
+  /// — 注册局吊销 CID 号(墓碑,永不复用;注册局签名)。
+  static const int revokeCidCall = 8;
+
   // ---- InternalVote sub-pallet (20) · 内部投票管理员一人一票 ----
   static const int internalVotePallet = 20;
 

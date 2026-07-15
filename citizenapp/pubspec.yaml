@@ -60,7 +60,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/avatars/
+    - assets/profile_defaults/
     - assets/badges/
     - assets/chainspec.json
     - assets/light_sync_state.json

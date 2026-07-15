@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
+import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
@@ -16,8 +20,8 @@ enum FollowsType {
   final String workerValue;
 }
 
-/// 关注/粉丝列表页。行显示短地址，点击进入对应用户主页。
-/// 展示名/头像懒加载增强留待后续。
+/// 关注/粉丝列表页。缺少公开资料时仍使用与主页一致的稳定默认昵称和头像，
+/// 钱包账户只显示在副标题，点击进入唯一用户主页。
 class FollowsListPage extends StatefulWidget {
   const FollowsListPage({
     super.key,
@@ -39,6 +43,7 @@ class FollowsListPage extends StatefulWidget {
 class _FollowsListPageState extends State<FollowsListPage> {
   late final CitizenProfileApi _api;
   final List<SquareFollowEntry> _entries = [];
+  final Map<String, CitizenProfile> _profiles = <String, CitizenProfile>{};
   int? _cursor;
   bool _loading = false;
   bool _done = false;
@@ -72,6 +77,7 @@ class _FollowsListPageState extends State<FollowsListPage> {
         _done = page.nextCursor == null;
         _loading = false;
       });
+      unawaited(_loadProfiles(page.accounts));
     } on Exception {
       if (!mounted) return;
       setState(() {
@@ -99,6 +105,7 @@ class _FollowsListPageState extends State<FollowsListPage> {
         _done = page.nextCursor == null;
         _loading = false;
       });
+      unawaited(_loadProfiles(page.accounts));
     } on Exception {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -113,10 +120,32 @@ class _FollowsListPageState extends State<FollowsListPage> {
     return false;
   }
 
+  /// 关注关系接口只返回账户；公开资料按当前分页并行补齐。单个资料失败时保留
+  /// 稳定本地默认展示，不阻塞列表及其他用户。
+  Future<void> _loadProfiles(List<SquareFollowEntry> entries) async {
+    await Future.wait(entries.map((entry) async {
+      if (_profiles.containsKey(entry.ownerAccount)) return;
+      try {
+        final profile = await _api.fetchProfile(
+          entry.ownerAccount,
+          session: widget.session,
+        );
+        _profiles[entry.ownerAccount] = profile;
+      } on Exception {
+        // 公开资料不可用时由 ProfilePresentation 稳定兜底。
+      }
+    }));
+    if (mounted) setState(() {});
+  }
+
   void _openProfile(String account) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => UserProfilePage(ownerAccount: account, isSelf: false),
+        builder: (_) => UserProfilePage(
+          ownerAccount: account,
+          isSelf: false,
+          initialProfile: _profiles[account],
+        ),
       ),
     );
   }
@@ -166,12 +195,30 @@ class _FollowsListPageState extends State<FollowsListPage> {
             );
           }
           final entry = _entries[index];
+          final profile = _profiles[entry.ownerAccount];
+          final presentation =
+              ProfilePresentation.forAccount(entry.ownerAccount);
+          final avatarKey = profile?.avatarObjectKey;
           return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: AppTheme.primary.withAlpha(20),
-              child: const Icon(Icons.person, color: AppTheme.primary),
+            leading: ProfileAvatar(
+              seed: entry.ownerAccount,
+              size: 42,
+              imageUrl: avatarKey == null ? null : _api.mediaUrl(avatarKey),
+              imageHeaders: <String, String>{
+                'authorization': 'Bearer ${widget.session.sessionToken}',
+              },
+              identityLevel: profile?.identityLevel,
+              membershipLevel: profile?.membershipLevel,
+              membershipActive: profile?.membershipActive ?? false,
             ),
             title: Text(
+              presentation.resolveDisplayName(
+                publicName: profile?.displayName,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
               _shorten(entry.ownerAccount),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

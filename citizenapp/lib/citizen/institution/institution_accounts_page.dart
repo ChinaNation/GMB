@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:citizenapp/citizen/institution/institution.dart';
 import 'package:citizenapp/citizen/institution/institution_accounts.dart';
 import 'package:citizenapp/citizen/institution/institution_chain_state.dart';
+import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 
 /// 统一机构「全部账户」页(ADR-028 决策 2)——替代公权/治理两套账户页。
@@ -106,7 +107,7 @@ class _AccountCard extends StatelessWidget {
                     ? '—'
                     : (row.balanceYuan == null
                         ? '未激活'
-                        : '${row.balanceYuan!.toStringAsFixed(2)} 元'),
+                        : '${AmountFormat.formatThousands(row.balanceYuan)} 元'),
                 style: const TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,

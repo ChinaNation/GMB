@@ -37,6 +37,7 @@ SquareMembershipState _state({
   String? membershipLevel,
   int currentPeriodStart = 0,
   String? subscriptionSource,
+  String? identityError,
 }) {
   return SquareMembershipState(
     active: active,
@@ -47,6 +48,7 @@ SquareMembershipState _state({
     frozen: frozen,
     currentPeriodStart: currentPeriodStart,
     subscriptionSource: subscriptionSource,
+    identityError: identityError,
     identityLevel: identityLevel,
     plans: const [],
   );
@@ -109,6 +111,36 @@ void main() {
     expect(find.text('仅本档身份可订阅'), findsNWidgets(2));
   });
 
+  testWidgets('链身份暂不可读时保留卡片、显示降级横幅并禁用资格动作', (tester) async {
+    await _pump(
+      tester,
+      _state(identityLevel: 'visitor', identityError: 'chain_http_failed'),
+    );
+
+    expect(find.text('访客轻节点'), findsOneWidget);
+    expect(find.text('公民轻节点 · 投票'), findsOneWidget);
+    expect(find.text('公民轻节点 · 竞选'), findsOneWidget);
+    expect(find.textContaining('链上身份暂未刷新'), findsOneWidget);
+    expect(find.text('链上身份恢复后可操作'), findsNWidgets(3));
+    expect(find.text('订阅'), findsNothing);
+  });
+
+  testWidgets('链身份暂不可读时仍允许取消已有自动续费订阅', (tester) async {
+    await _pump(
+      tester,
+      _state(
+        identityLevel: 'visitor',
+        identityError: 'chain_http_failed',
+        active: true,
+        subscriptionActive: true,
+        membershipLevel: 'voting',
+      ),
+    );
+
+    expect(find.text('取消订阅'), findsOneWidget);
+    expect(find.text('链上身份恢复后可操作'), findsNWidgets(2));
+  });
+
   testWidgets('shows 取消订阅 on the active tier when auto-renewing',
       (tester) async {
     await _pump(
@@ -126,8 +158,7 @@ void main() {
     expect(find.text('仅本档身份可订阅'), findsNWidgets(2));
   });
 
-  testWidgets('shows 续订会员 when cancelled but not yet expired',
-      (tester) async {
+  testWidgets('shows 续订会员 when cancelled but not yet expired', (tester) async {
     await _pump(
       tester,
       _state(

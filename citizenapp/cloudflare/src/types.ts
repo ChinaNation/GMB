@@ -107,6 +107,16 @@ export interface DeviceSubkeyRow {
   updated_at: number;
 }
 
+/// 端到端加密通讯录行。Worker 只保存不透明密文，绝不接收联系人账户或名称明文。
+export interface ContactCiphertextRow {
+  owner_account: string;
+  contact_id: string;
+  ciphertext: string;
+  nonce: string;
+  mac: string;
+  updated_at: number;
+}
+
 export interface MembershipRow {
   owner_account: string;
   membership_level: string;

@@ -104,7 +104,9 @@ const modules = [
     actions: [
       { id: 'ci', title: '运行 CI', mode: 'ci', production: false },
       { id: 'release', title: '正式 Release', mode: 'release', production: true },
-      { id: 'deploy', title: '部署服务器', mode: 'deploy', production: true },
+      { id: 'deploy-all', title: '部署服务器', mode: 'deploy-all', production: true },
+      // 中文注释：节点卡片单独调用此动作；顶部批量按钮使用 deploy-all，不重复展示。
+      { id: 'deploy', title: '部署该节点', mode: 'deploy', production: true, hidden: true },
     ],
   },
   {
@@ -321,8 +323,7 @@ function finishRun(run, code) {
   emit(run, 'done', { state: run.state, exitCode: code });
 }
 
-function startRun(module, action, options = {}) {
-  if (activeRunId) throw new Error('已有部署任务正在运行');
+function createRun(module, action) {
   const run = {
     id: randomUUID(), moduleId: module.id, actionId: action.id, state: 'starting',
     startedAt: new Date().toISOString(), events: [], listeners: new Set(), exitCode: null,
@@ -330,17 +331,101 @@ function startRun(module, action, options = {}) {
   runs.set(run.id, run);
   activeRunId = run.id;
   emit(run, 'log', `[开始] ${module.title} · ${action.title}`);
+  return run;
+}
 
-  const environment = action.mode === 'production' ? 'production' : 'staging';
-  const secretValues = [];
-  // 中文注释：launchd 的 PATH 很精简，动作脚本必须复用当前控制台的 Node 工具链绝对路径。
-  const childEnv = {
+function baseChildEnv() {
+  return {
     ...process.env,
     PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ''}`,
     GMB_ROOT: rootDir,
     GMB_NODE_BIN: process.execPath,
     GMB_NPX_BIN: join(dirname(process.execPath), 'npx'),
   };
+}
+
+function nodeChildEnv(node, secretValues) {
+  const childEnv = baseChildEnv();
+  const serverIp = keychainGet(node.id, 'SERVER_IP');
+  const bootnodeKey = keychainGet(node.id, 'BOOTNODE_KEY');
+  const validatorKey = keychainGet(node.id, 'VALIDATOR_KEY');
+  const sshKey = keychainGet(node.id, 'SSH_KEY');
+  Object.assign(childEnv, {
+    GMB_NODE_ID: node.id,
+    GMB_NODE_LABEL: node.label,
+    GMB_NODE_IP: serverIp,
+    GMB_NODE_PEER_ID: node.peerId,
+    GMB_NODE_GRANDPA_PUBKEY: node.grandpaPubkeyHex,
+    GMB_NODE_BOOTNODE_KEY: bootnodeKey,
+    GMB_NODE_VALIDATOR_KEY: validatorKey,
+    GMB_NODE_SSH_KEY: sshKey,
+  });
+  secretValues.push(bootnodeKey, validatorKey, sshKey);
+  return childEnv;
+}
+
+function startBatchRun(module, action) {
+  if (activeRunId) throw new Error('已有部署任务正在运行');
+  const run = createRun(module, action);
+  const script = join(deployDir, 'actions', `${module.id}.sh`);
+  const results = [];
+  try {
+    authorizeProduction('批量部署全部配置齐全节点');
+    const readyNodes = chainNodes.filter((node) => nodeSecretNames.every((name) => keychainExists(node.id, name)));
+    const skipped = chainNodes.length - readyNodes.length;
+    if (readyNodes.length === 0) {
+      emit(run, 'log', `[汇总] 成功 0，失败 0，跳过 ${skipped}：没有配置齐全的节点。`);
+      finishRun(run, 0);
+      return run;
+    }
+    emit(run, 'log', `[批量] 已授权，同时部署 ${readyNodes.length} 个配置齐全节点；成功节点不输出过程日志。`);
+    run.state = 'running';
+    const jobs = readyNodes.map((node) => new Promise((resolve) => {
+      const secretValues = [];
+      let output = '';
+      let child;
+      try {
+        child = spawn('bash', [script, 'deploy'], { cwd: rootDir, env: nodeChildEnv(node, secretValues) });
+        child.stdout.on('data', (chunk) => { output += chunk.toString(); });
+        child.stderr.on('data', (chunk) => { output += chunk.toString(); });
+        child.on('error', (error) => {
+          results.push({ node, success: false, output: redact(error.message, secretValues) });
+          resolve();
+        });
+        child.on('close', (code) => {
+          const success = code === 0;
+          results.push({ node, success, output: redact(output, secretValues) });
+          if (!success) emit(run, 'log', `[失败] ${node.label}（${node.id}）\n${redact(output, secretValues).trim()}\n`);
+          resolve();
+        });
+      } catch (error) {
+        results.push({ node, success: false, output: redact(error.message, secretValues) });
+        resolve();
+      }
+    }));
+    Promise.all(jobs).then(() => {
+      const failed = results.filter((item) => !item.success);
+      const succeeded = results.length - failed.length;
+      const failedLabels = failed.map((item) => item.node.label).join('、') || '无';
+      emit(run, 'log', `[汇总] 成功 ${succeeded}，失败 ${failed.length}，跳过 ${skipped}。失败节点：${failedLabels}`);
+      finishRun(run, failed.length === 0 ? 0 : 1);
+    });
+  } catch (error) {
+    emit(run, 'log', redact(error.message));
+    finishRun(run, 1);
+  }
+  return run;
+}
+
+function startRun(module, action, options = {}) {
+  if (activeRunId) throw new Error('已有部署任务正在运行');
+  if (module.id === 'citizenchain' && action.id === 'deploy-all') return startBatchRun(module, action);
+  const run = createRun(module, action);
+
+  const environment = action.mode === 'production' ? 'production' : 'staging';
+  const secretValues = [];
+  // 中文注释：launchd 的 PATH 很精简，动作脚本必须复用当前控制台的 Node 工具链绝对路径。
+  const childEnv = baseChildEnv();
   try {
     if (action.production) {
       emit(run, 'log', '正在请求 Touch ID 指纹授权…');

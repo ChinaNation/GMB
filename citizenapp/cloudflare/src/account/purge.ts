@@ -25,12 +25,13 @@ export async function purgeAccount(
   // 1. 先取会员，拿 stripe_subscription_id（删了就取不到了）。
   const membership = await getMembership(env, ownerAccount);
 
-  // 2. Chat 活动连接先关闭，通信必需元数据立即硬删除；支付故障不能阻塞隐私删除。
+  // 2. Chat 活动连接先关闭；通信元数据和通讯录密文立即硬删除，支付故障不能阻塞隐私删除。
   await closeChatRealtime(env, ownerAccount);
   await env.DB.batch([
     env.DB.prepare(`DELETE FROM chat_keypackages WHERE owner_account = ?`).bind(ownerAccount),
     env.DB.prepare(`DELETE FROM chat_devices WHERE owner_account = ?`).bind(ownerAccount),
     env.DB.prepare(`DELETE FROM chat_device_binding_nonces WHERE owner_account = ?`).bind(ownerAccount),
+    env.DB.prepare(`DELETE FROM square_contacts WHERE owner_account = ?`).bind(ownerAccount),
   ]);
 
   // 3. Stripe 立即退订；Chat 已先删除，失败时账户可用主钥签名再次执行剩余清理。

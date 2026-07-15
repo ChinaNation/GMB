@@ -40,7 +40,8 @@ citizenapp/lib/transaction/shared/
 
 1. `OnchainPaymentPanel` 收集 `toAddress / amount / remark / symbol`；`OnchainPaymentPage` 只是独立链上支付路由包装
 2. 页面校验 SS58 前缀、金额、finalized 余额、ED 和预估手续费
-   - 从通讯录进入时，`ContactBookPage` 返回的联系人 `address` 已经是 SS58，页面直接填入收款栏，不做 AccountId hex 转换
+   - 左侧 `ContactBookPage` 始终读取“我的钱包”默认用户的通讯录；它与右侧当前付款钱包相互独立
+   - 从通讯录返回的联系人 `address` 已经是 SS58，页面只填入收款栏，不做 AccountId hex 转换，也不改变当前付款钱包
 3. 页面根据钱包类型注入签名回调：
    - 热钱包：先调用 `WalletManager.authenticateForSigning()`，再用 `signWithWalletNoAuth()` 签名
    - 冷钱包：构造 `sign_request` 二维码，等待 `sign_response` 响应
@@ -90,6 +91,7 @@ citizenapp/lib/transaction/shared/
 - 展示前继续过滤 `type == transfer` 且 `amountDeltaFen < 0`。
 - 收入记录不进入交易页状态行；完整收支流水只在 `我的 -> 我的钱包 -> 钱包详情` 及完整交易记录页展示。
 - 右上角切换交易钱包后，页面必须先清空旧钱包状态，再按新钱包 `walletPubkeyHex` 重新加载本机转出记录；异步查询返回时还要校验查询发起时的钱包 pubkey，避免旧查询结果覆盖新钱包状态。
+- 右上角钱包只选择本次付款钱包；左上角通讯录不读取 `_currentWallet`，始终由通讯录模块按默认用户加载联系人。付款钱包、通讯录所属用户和联系人收款账户是三个独立语义。
 
 ## 6. 签名边界
 
@@ -115,6 +117,7 @@ fee = max(amount_fen * 0.001, 10 fen)
 ## 8. 边界规则
 
 - `OnchainPaymentPanel.extraEntriesBuilder` 只提供 UI 插槽，供 `lib/transaction/transaction_tab_page.dart` 在链状态提示下方、链上支付表单上方插入扫码支付入口；onchain 模块自身不 import `offchain` 或 `multisig`
+- `OnchainPaymentPage.initialToAddress` 只用于从通讯录等入口预填收款地址，不得触发付款钱包切换、金额填写、签名或自动提交。
 - `lib/transaction/onchain-transaction/` 不放治理提案、投票、多签、链下支付、清算行、钱包密钥管理、二维码协议底座，也不提供“交易/金融”聚合入口
 - 新增普通链上支付 UI / model / service 时才进入 `lib/transaction/onchain-transaction/`
 - 若新增能力需要 pallet index / call index，必须先确认是否仍属于“普通链上支付”；否则放回对应业务模块

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'package:citizenapp/citizen/proposal/admins-change/models/admin_account.dart';
 import 'package:citizenapp/citizen/proposal/admins-change/widgets/admin_account_card.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
+import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/rpc/chain_rpc.dart';
 
 class AdminAccountDetailPage extends StatefulWidget {
@@ -57,9 +59,9 @@ class _AdminAccountDetailPageState extends State<AdminAccountDetailPage> {
           for (var i = 0; i < widget.account.admins.length; i++) ...[
             ListTile(
               leading: Text('${i + 1}'),
-              title: Text(widget.account.admins[i]),
+              title: Text(ss58FromHex(widget.account.admins[i])),
               subtitle: Text(
-                  '余额：${_balanceByAccount[_balanceKey(widget.account.admins[i])]?.toStringAsFixed(2) ?? '-'} 元'),
+                  '余额：${AmountFormat.formatThousands(_balanceByAccount[_balanceKey(widget.account.admins[i])])} 元'),
             ),
             const SizedBox(height: 8),
           ],

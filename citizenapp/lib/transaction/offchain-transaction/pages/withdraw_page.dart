@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/transaction/offchain-transaction/rpc/offchain_clearing_rpc.dart';
 import 'package:citizenapp/transaction/offchain-transaction/rpc/onchain_clearing_bank_rpc.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -114,7 +115,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
       return const Text('正在查询清算行存款余额...', style: TextStyle(color: Colors.grey));
     }
     final yuan = _balanceFen! / 100.0;
-    return Text('当前清算行存款余额:¥${yuan.toStringAsFixed(2)}',
+    return Text('当前清算行存款余额:¥${AmountFormat.formatThousands(yuan)}',
         style: const TextStyle(fontSize: 14));
   }
 

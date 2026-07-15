@@ -143,10 +143,6 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
   if (!detail) return null;
 
   const activatedCount = activatedAdmins.length;
-  const showShortName =
-    detail.cidShortName &&
-    detail.cidShortName !== detail.cidFullName &&
-    detail.orgType !== 0;
 
   return (
     <div className="governance-section">
@@ -156,9 +152,6 @@ export function InstitutionDetailPage({ cidNumber, onBack, onOpenAdminList, onSe
 
       <div className="institution-title-row">
         <h2>{detail.cidFullName}</h2>
-        {showShortName && (
-          <span className="institution-short-name">{detail.cidShortName}</span>
-        )}
         {isAdmin && (
           <span className="admin-badge">管理员</span>
         )}

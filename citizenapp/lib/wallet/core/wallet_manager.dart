@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip39_mnemonic/bip39_mnemonic.dart' as bip39m;
+import 'package:cryptography/cryptography.dart' hide KeyPair;
 import 'package:isar_community/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -66,6 +68,18 @@ class WalletAuthException implements Exception {
   String toString() => 'WalletAuthException: $message';
 }
 
+/// 通讯录专用密钥材料。seed 只在 [WalletManager] 内参与 HKDF，业务层只能拿到
+/// 已域隔离的加密钥和索引钥，不能借此签名、恢复钱包或推导其他业务密钥。
+class ContactKeyMaterial {
+  const ContactKeyMaterial({
+    required this.encryptionKey,
+    required this.indexKey,
+  });
+
+  final Uint8List encryptionKey;
+  final Uint8List indexKey;
+}
+
 /// 钱包创建后注册 P-256 设备子钥的钩子：给定 walletIndex/ownerAccount 与一个对
 /// 绑定消息做 sr25519 主钥签名的闭包（返回 `0x` hex）。由 app 启动注入实现，
 /// 避免 wallet/core 反向依赖 8964 层。
@@ -96,8 +110,16 @@ class WalletManager {
   /// 写入静默）；测试经 [debugSeedStore] 注入内存 fake。
   static SecureSeedStore _store = HardwareBoundSeedVault();
 
+  /// 通讯录专用密钥是从 seed 域隔离派生后的 64 字节材料，静默保存在系统安全
+  /// 存储；它不需要每次查看通讯录都重复触发生物识别。
+  static VaultBlobStore _contactKeyStore = SecureStorageBlobStore();
+
   @visibleForTesting
   static set debugSeedStore(SecureSeedStore store) => _store = store;
+
+  @visibleForTesting
+  static set debugContactKeyStore(VaultBlobStore store) =>
+      _contactKeyStore = store;
 
   /// 钱包创建后注册 P-256 设备子钥的钩子（app 启动注入；为空则跳过，用于测试 /
   /// 未接后端）。「每次动钱动权都验证」现由硬件金库读 seed 时的原子生物识别实现，
@@ -280,6 +302,7 @@ class WalletManager {
     );
     try {
       await _store.putMnemonic(profile.walletIndex, mnemonic);
+      await _persistContactKeys(profile.address, seed);
       await _verifyWalletPersisted(profile);
       // fail-closed：设备子钥注册必须成功，失败连同钱包一起回滚，绝不留"建了没注册"的中间态。
       // 注册成功后才由 runCreateWalletFlow 展示助记词、进入 App。
@@ -314,6 +337,7 @@ class WalletManager {
     );
     try {
       await _store.putMnemonic(profile.walletIndex, trimmed);
+      await _persistContactKeys(profile.address, seed);
       await _verifyWalletPersisted(profile);
       // fail-closed：导入一律注册本设备子钥（幂等 upsert），失败连同钱包回滚——导入页保留
       // 助记词供重试。换设备导入必然是本设备新子钥，注册成功即把账户登录迁到本设备。
@@ -383,6 +407,11 @@ class WalletManager {
       return isar.walletProfileEntitys.where().findAll();
     });
     await WalletIsar.instance.writeTxn((isar) async {
+      for (final wallet in wallets) {
+        for (final key in _contactCacheKeys(wallet.address)) {
+          await isar.appKvEntitys.deleteByKey(key);
+        }
+      }
       await isar.walletProfileEntitys.clear();
       // 钱包被清空时，本机从钱包进入 App 后记录的交易流水也一并清空。
       await isar.localTxEntitys.clear();
@@ -402,6 +431,7 @@ class WalletManager {
       if (row.signMode == 'local') {
         await _store.deleteSeed(row.walletIndex);
         await _store.deleteMnemonic(row.walletIndex);
+        await _deleteContactKeys(row.address);
       }
     }
   }
@@ -424,6 +454,11 @@ class WalletManager {
           .findFirst();
       if (current == null) {
         throw Exception('未找到钱包');
+      }
+      // 删除钱包同时终止该钱包在本机的通讯录生命周期；云端密文仍可在用户
+      // 重新导入同一助记词后恢复，但本机缓存、待同步操作和状态不得残留。
+      for (final key in _contactCacheKeys(current.address)) {
+        await isar.appKvEntitys.deleteByKey(key);
       }
       await isar.walletProfileEntitys.delete(current.id);
       // 用户明确删除钱包后，本机交易记录周期结束；再次导入同一地址
@@ -457,6 +492,7 @@ class WalletManager {
     if (target.signMode == 'local') {
       await _store.deleteSeed(walletIndex);
       await _store.deleteMnemonic(walletIndex);
+      await _deleteContactKeys(target.address);
     }
   }
 
@@ -556,6 +592,104 @@ class WalletManager {
     // 读硬件金库 seed 即触发一次生物识别；成功解锁即视为通过。
     await _loadSigningKey(walletIndex);
   }
+
+  /// 读取当前热钱包的通讯录专用密钥。新建/导入钱包时已经用内存 seed 预派生；
+  /// 老钱包第一次进入通讯录时才读取一次硬件金库 seed（触发生物识别）并持久化。
+  Future<ContactKeyMaterial> ensureContactKeyMaterial({
+    required int walletIndex,
+    required String ownerAccount,
+  }) async {
+    final profile = await _requireHotWalletProfile(walletIndex);
+    if (profile.address != ownerAccount) {
+      throw const WalletAuthException('通讯录账户与当前钱包不一致');
+    }
+    final stored = await _readContactKeys(ownerAccount);
+    if (stored != null) return stored;
+
+    final seedHex = await _readSeedHexWithSelfHeal(walletIndex, profile);
+    final seed = Uint8List.fromList(_hexToBytes(seedHex));
+    try {
+      final derived = await _deriveContactKeys(ownerAccount, seed);
+      await _writeContactKeys(ownerAccount, derived);
+      return derived;
+    } finally {
+      seed.fillRange(0, seed.length, 0);
+    }
+  }
+
+  static String _contactKeyName(String ownerAccount) =>
+      'wallet_contacts_key_v1_$ownerAccount';
+
+  static List<String> _contactCacheKeys(String ownerAccount) => <String>[
+        'contacts:$ownerAccount',
+        'contact_pending_ops:$ownerAccount',
+        'contact_sync_state:$ownerAccount',
+      ];
+
+  static Future<void> _persistContactKeys(
+    String ownerAccount,
+    List<int> seed,
+  ) async {
+    final material = await _deriveContactKeys(ownerAccount, seed);
+    await _writeContactKeys(ownerAccount, material);
+  }
+
+  static Future<ContactKeyMaterial> _deriveContactKeys(
+    String ownerAccount,
+    List<int> seed,
+  ) async {
+    // 先哈希 owner 形成固定 32 字节 salt，严格对应通讯录密码学契约。
+    final salt = (await Sha256().hash(utf8.encode(ownerAccount))).bytes;
+    Future<Uint8List> derive(String info) async {
+      final key = await Hkdf(
+        hmac: Hmac.sha256(),
+        outputLength: 32,
+      ).deriveKey(
+        secretKey: SecretKey(seed),
+        nonce: salt,
+        info: utf8.encode(info),
+      );
+      return Uint8List.fromList(await key.extractBytes());
+    }
+
+    return ContactKeyMaterial(
+      encryptionKey: await derive('citizenapp.contacts.v1/encryption'),
+      indexKey: await derive('citizenapp.contacts.v1/index'),
+    );
+  }
+
+  static Future<ContactKeyMaterial?> _readContactKeys(
+    String ownerAccount,
+  ) async {
+    final raw = await _contactKeyStore.read(_contactKeyName(ownerAccount));
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final bytes = base64Decode(raw);
+      if (bytes.length != 64) return null;
+      return ContactKeyMaterial(
+        encryptionKey: Uint8List.fromList(bytes.sublist(0, 32)),
+        indexKey: Uint8List.fromList(bytes.sublist(32)),
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static Future<void> _writeContactKeys(
+    String ownerAccount,
+    ContactKeyMaterial material,
+  ) {
+    final bytes = Uint8List(64)
+      ..setAll(0, material.encryptionKey)
+      ..setAll(32, material.indexKey);
+    return _contactKeyStore.write(
+      _contactKeyName(ownerAccount),
+      base64Encode(bytes),
+    );
+  }
+
+  static Future<void> _deleteContactKeys(String ownerAccount) =>
+      _contactKeyStore.delete(_contactKeyName(ownerAccount));
 
   /// 读严档 seed（失效自愈）→ 派生并校验 sr25519 密钥对。
   Future<KeyPair> _loadSigningKey(int walletIndex) async {
@@ -852,12 +986,14 @@ class WalletManager {
   }
 
   Future<void> _rollbackWalletCreation(int walletIndex) async {
+    String? ownerAccount;
     await WalletIsar.instance.writeTxn((isar) async {
       final row = await isar.walletProfileEntitys
           .filter()
           .walletIndexEqualTo(walletIndex)
           .findFirst();
       if (row != null) {
+        ownerAccount = row.address;
         await isar.walletProfileEntitys.delete(row.id);
       }
       final settings = await _getSettingsInTxn(isar);
@@ -872,6 +1008,9 @@ class WalletManager {
         await isar.walletSettingsEntitys.put(settings);
       }
     });
+    if (ownerAccount != null) {
+      await _deleteContactKeys(ownerAccount!);
+    }
     await _store.deleteSeed(walletIndex);
     await _store.deleteMnemonic(walletIndex);
   }

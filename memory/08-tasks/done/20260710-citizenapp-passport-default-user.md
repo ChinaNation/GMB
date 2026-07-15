@@ -1,4 +1,6 @@
-# CitizenApp 电子护照重构:纯默认用户 + 三档身份卡片 + 切换即跟随
+# CitizenApp 电子护照重构:纯默认用户 + 三档身份状态 + 切换即跟随
+
+> 页面单卡呈现已由 `20260715-citizenapp-electronic-passport-three-cards` 彻底替代；本卡只保留默认热钱包、链上身份解码和状态模型的历史实施记录。
 
 任务需求:
 把「我的-电子护照」从"扫全钱包认身份"改为**只认默认用户**(`WalletManager.getDefaultWallet()`
@@ -11,9 +13,9 @@
 - 身份钥匙 = 默认用户唯一;放弃扫全钱包/冲突判定(链上一人一 CID 一账户一身份,`AccountByCid`
   一对一 + `CidAlreadyRegisteredToAnotherAccount`/`CidAlreadyOccupied` 保证)。
 - 默认用户切换 → 护照自动跟随(监听 `WalletManager.walletsRevision`,与 Chat/广场同机制)。
-- 三档:访客(完全匿名)/ 投票公民 / 竞选公民,字段数递增。
+- 三档状态:匿名访客 / 投票公民 / 竞选公民。
 - 冷钱包身份不认(默认用户只可能是热钱包)——纯默认用户版固有取舍。
-- 访客卡「完全匿名」= 不显钱包地址(投票账户只在公民档出现)。
+- 匿名访客不显钱包地址，投票账户只在当前公民身份卡出现。
 
 ## 三档链上公开字段(citizen-identity pallet)
 - 投票公民 `VotingIdentityByAccount[account]`:cid_number / residence_省市镇_code / valid_from~until / status。
@@ -38,7 +40,7 @@
 
 验收标准:
 - `flutter test` 相关用例通过;`dart analyze` 无新增告警。
-- 三档正确渲染;切默认用户自动跟随;访客完全匿名;卡片宽高自适应。
+- 三档状态正确渲染;切默认用户自动跟随;匿名访客不显示公民身份信息;卡片宽高自适应。
 - 无旧"扫全钱包/conflict/notOnchain"残留;文档与注释更新。
 
 关联:`project_citizen_identity_strict_auth_vote_gates`(链上身份字段真源)、
@@ -60,4 +62,4 @@
 - 验证:`dart analyze lib test` = 0 error;相关 `flutter test` 全绿(19 例)。
 - 附带行为对齐:wallet_page 身份钱包标记也收敛到默认用户(与护照同一身份口径),非默认钱包持有的
   身份不再标记——与"只用默认用户"锁定一致。
-- 访客卡按定案 = 完全匿名、不显钱包地址(投票账户只在公民档出现)。
+- 访客状态不显钱包地址；页面呈现以 2026-07-15 三身份卡任务的最终方案为准。

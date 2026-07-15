@@ -5,6 +5,7 @@ import 'package:citizenapp/8964/pages/square_article_detail_page.dart';
 import 'package:citizenapp/8964/pages/square_post_detail_page.dart';
 import 'package:citizenapp/8964/profile/follows_list_page.dart';
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/profile_edit_page.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_cache.dart';
@@ -301,15 +302,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  /// 展示名 = 后端 display_name（认证 = 链上真实姓名）→ 钱包名（昵称）
-  /// → 截断地址（最后兜底）。绝不越过钱包名直接显示地址。
+  /// 本人钱包名是昵称真源，后端 display_name 是公开镜像；均缺失时使用
+  /// 按账户稳定选择的本地昵称，账户本身永远不会出现在昵称位置。
   String get _displayName {
-    final resolved = _profile?.resolvedDisplayName(_walletName);
-    if (resolved != null && resolved.isNotEmpty) return resolved;
-    final fallback = _walletName.trim();
-    return fallback.isNotEmpty
-        ? fallback
-        : _shortenAccount(widget.ownerAccount);
+    return ProfilePresentation.forAccount(widget.ownerAccount)
+        .resolveDisplayName(
+      walletName: widget.isSelf ? _walletName : null,
+      publicName: _profile?.displayName,
+    );
   }
 
   String get _title => _displayName;
@@ -323,14 +323,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
           'authorization': 'Bearer ${_session!.sessionToken}',
         };
 
-  Widget? _bannerWidget() {
+  Widget _bannerWidget() {
+    final fallback = Image.asset(
+      ProfilePresentation.forAccount(widget.ownerAccount).bannerAsset,
+      fit: BoxFit.cover,
+    );
     final url = _mediaUrl(_profile?.bannerObjectKey);
-    if (url == null) return null;
+    if (url == null) return fallback;
     return Image.network(
       url,
       headers: _mediaHeaders,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      errorBuilder: (_, __, ___) => fallback,
     );
   }
 
@@ -487,10 +491,4 @@ class _UserProfilePageState extends State<UserProfilePage> {
       ),
     );
   }
-}
-
-String _shortenAccount(String account) {
-  if (account.length <= 12) return account;
-  return '${account.substring(0, 6)}...'
-      '${account.substring(account.length - 6)}';
 }

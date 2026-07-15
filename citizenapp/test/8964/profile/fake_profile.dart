@@ -86,12 +86,14 @@ class FakeProfileApi extends CitizenProfileApi {
     this.authorPosts = const [],
     this.follows = const [],
     this.throwOnFollow = false,
+    this.throwOnProfile = false,
   }) : super();
 
   final CitizenProfile result;
   final List<SquarePost> authorPosts;
   final List<SquareFollowEntry> follows;
   final bool throwOnFollow;
+  final bool throwOnProfile;
   int calls = 0;
   int followCalls = 0;
   int unfollowCalls = 0;
@@ -103,6 +105,9 @@ class FakeProfileApi extends CitizenProfileApi {
     SquareSession? session,
   }) async {
     calls++;
+    if (throwOnProfile) {
+      throw const SquareApiException('profile failed');
+    }
     return result;
   }
 

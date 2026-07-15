@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/citizen/proposal/admins-change/codec/account_id_codec.dart';
+import 'package:citizenapp/citizen/shared/account_derivation.dart';
+import 'package:citizenapp/my/util/amount_format.dart';
 
 class AdminSetDiffCard extends StatelessWidget {
   const AdminSetDiffCard({
@@ -50,9 +52,9 @@ class AdminSetDiffCard extends StatelessWidget {
         for (final account in accounts) ...[
           ListTile(
             dense: true,
-            title: Text(account),
+            title: Text(ss58FromHex(account)),
             subtitle: Text(
-                '余额：${balances[AdminAccountIdCodec.normalizeHex(account)]?.toStringAsFixed(2) ?? '-'} 元'),
+                '余额：${AmountFormat.formatThousands(balances[AdminAccountIdCodec.normalizeHex(account)])} 元'),
           ),
           const SizedBox(height: 6),
         ],

@@ -24,6 +24,7 @@ export type ResourceKey =
   | 'session_cache'
   | 'session_index'
   | 'identity_cache'
+  | 'contact_ciphertext'
   | 'api_json_small'
   | 'api_json';
 
@@ -125,6 +126,8 @@ export const resourceLimits: Readonly<Record<ResourceKey, ResourceLimit>> = {
   session_cache: { max_bytes: 4 * kib, max_count: 1 },
   session_index: { max_bytes: 4 * kib, max_count: 8 },
   identity_cache: { max_bytes: 4 * kib, max_count: 1 },
+  // 单条联系人只包含小型端到端密文；限制整个 JSON 请求，防止借同步接口写入大对象。
+  contact_ciphertext: { max_bytes: 16 * kib, max_items: 100 },
   api_json_small: { max_bytes: 16 * kib },
   api_json: { max_bytes: 128 * kib },
 };
@@ -183,6 +186,9 @@ const routeLimits: readonly RouteLimit[] = [
   route('POST', /^\/v1\/square\/membership\/prepaid\/change(?:\/challenge)?$/),
   route('POST', /^\/v1\/square\/membership\/webhook$/, 'stripe_webhook'),
   route('POST', /^\/v1\/square\/account\/delete(?:\/challenge)?$/),
+  route('GET', /^\/v1\/square\/contacts$/),
+  route('PUT', /^\/v1\/square\/contacts\/[^/]+$/, 'contact_ciphertext'),
+  route('DELETE', /^\/v1\/square\/contacts\/[^/]+$/),
   route('POST', /^\/v1\/square\/uploads\/prepare$/, 'api_json'),
   route('PUT', /^\/v1\/square\/uploads\/manifest$/, 'square_manifest'),
   route('PUT', /^\/v1\/square\/uploads\/media$/, 'square_image_hd'),

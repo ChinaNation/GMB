@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
 import 'package:citizenapp/8964/profile/user_profile_page.dart';
 import 'package:citizenapp/8964/services/square_api_client.dart';
@@ -17,15 +17,10 @@ import 'package:citizenapp/my/myid/myid_service.dart';
 import 'package:citizenapp/rpc/smoldot_client.dart';
 import 'package:citizenapp/security/app_lock_service.dart';
 import 'package:citizenapp/security/pin_input_page.dart';
-import 'package:citizenapp/qr/pages/qr_scan_page.dart';
-import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_page.dart';
-import 'package:citizenapp/qr/qr_protocols.dart';
-import 'package:citizenapp/qr/envelope.dart';
-import 'package:citizenapp/qr/bodies/user_contact_body.dart';
+import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/my/user/user_service.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/ui/identity_badge.dart';
-import 'package:citizenapp/chat/open_direct_chat.dart';
 import 'package:citizenapp/update/app_update.dart';
 import 'package:citizenapp/update/update_badge.dart';
 import 'package:citizenapp/wallet/core/wallet_manager.dart';
@@ -77,9 +72,11 @@ class _ProfilePageState extends State<MyTab> {
   /// 用户身份地址 = 默认用户钱包（列表中最靠前的热钱包）地址。
   String get _communicationAddress => _defaultWallet?.address ?? '';
 
-  /// 用户昵称 = 默认用户钱包名称。
-  String get _nickname =>
-      _defaultWallet?.walletName ?? UserProfileService.defaultNickname;
+  /// 用户昵称 = 默认钱包名称；钱包名称异常缺失时使用与统一主页一致的本地昵称，
+  /// 绝不把钱包账户放进昵称位置。
+  String get _nickname => ProfilePresentation.forAccount(
+        _communicationAddress,
+      ).resolveDisplayName(walletName: _defaultWallet?.walletName);
 
   /// 默认钱包徽章信号：颜色只来自账户级链上身份快照，勾来自会员匹配。
   String? get _defaultWalletMembershipLevel => _membership?.membershipLevel;
@@ -217,9 +214,7 @@ class _ProfilePageState extends State<MyTab> {
   Future<void> _openContacts() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => ContactBookPage(
-          selfAddress: _communicationAddress,
-        ),
+        builder: (_) => const ContactBookPage(),
       ),
     );
     await _loadState();
@@ -381,6 +376,7 @@ class _ProfilePageState extends State<MyTab> {
                     child: _HeaderBackground(
                       path: _userProfile.backgroundPath,
                       height: headerHeight,
+                      seed: _communicationAddress,
                     ),
                   ),
                   Positioned(
@@ -507,334 +503,16 @@ class _ProfilePageState extends State<MyTab> {
   }
 }
 
-class ContactBookPage extends StatefulWidget {
-  const ContactBookPage({
-    super.key,
-    required this.selfAddress,
-    this.selectForTrade = false,
-  });
-
-  final String selfAddress;
-
-  /// 为 true 时，点击联系人直接返回该联系人（而非弹窗修改昵称）。
-  final bool selectForTrade;
-
-  @override
-  State<ContactBookPage> createState() => _ContactBookPageState();
-}
-
-class _ContactBookPageState extends State<ContactBookPage> {
-  final UserContactService _userContactService = UserContactService();
-  late Future<List<UserContact>> _contactsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _contactsFuture = _userContactService.getContacts();
-  }
-
-  void _reload() {
-    setState(() {
-      _contactsFuture = _userContactService.getContacts();
-    });
-  }
-
-  Future<void> _scanContactQr() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => QrScanPage(
-          mode: QrScanMode.contact,
-          selfAddress: widget.selfAddress,
-        ),
-      ),
-    );
-    if (!mounted) return;
-    _reload();
-  }
-
-  Future<void> _openContactDetail(UserContact contact) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => _ContactDetailPage(contact: contact),
-      ),
-    );
-    if (!mounted) return;
-    _reload();
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.primary.withAlpha(15),
-              ),
-              child: const Icon(
-                Icons.perm_contact_calendar_outlined,
-                size: 44,
-                color: AppTheme.primary,
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              '通讯录还是空的',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              '扫描其他用户的二维码后，会把对方的昵称和地址加入通讯录。',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('我的通讯录'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: _scanContactQr,
-            icon: SvgPicture.asset(
-              'assets/icons/scan-line.svg',
-              width: 20,
-              height: 20,
-            ),
-          ),
-        ],
-      ),
-      body: FutureBuilder<List<UserContact>>(
-        future: _contactsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final contacts = snapshot.data ?? const <UserContact>[];
-          if (contacts.isEmpty) {
-            return _buildEmptyState();
-          }
-
-          // 按昵称字母排序
-          final sorted = List<UserContact>.from(contacts)
-            ..sort((a, b) => a.displayNickname
-                .toLowerCase()
-                .compareTo(b.displayNickname.toLowerCase()));
-
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            itemCount: sorted.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final contact = sorted[index];
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: AppTheme.primary.withAlpha(20),
-                  child: Text(
-                    contact.displayNickname.characters.first,
-                    style: const TextStyle(
-                      color: AppTheme.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                title: Text(
-                  contact.displayNickname,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: Text(
-                  contact.address,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.textTertiary,
-                  ),
-                ),
-                trailing: const Icon(Icons.chevron_right, size: 20),
-                onTap: widget.selectForTrade
-                    ? () => Navigator.of(context).pop(contact)
-                    : () => _openContactDetail(contact),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _ContactDetailPage extends StatelessWidget {
-  const _ContactDetailPage({required this.contact});
-
-  final UserContact contact;
-
-  Future<void> _openMessage(BuildContext context) async {
-    await openDirectChat(
-      context,
-      peerAddress: contact.address,
-      title: contact.displayNickname,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final qrData = QrEnvelope<UserContactBody>(
-      kind: QrKind.userContact,
-      id: null,
-      issuedAt: null,
-      expiresAt: null,
-      body: UserContactBody(
-        address: contact.address,
-        contactName: contact.displayNickname,
-      ),
-    ).toRawJson();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('联系人详情'),
-        centerTitle: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // 头像 + 昵称
-          Center(
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 36,
-                  backgroundColor: AppTheme.primary.withAlpha(20),
-                  child: Text(
-                    contact.displayNickname.characters.first,
-                    style: const TextStyle(
-                      fontSize: 28,
-                      color: AppTheme.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  contact.displayNickname,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          // 二维码
-          Center(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: AppTheme.cardDecoration(radius: AppTheme.radiusLg),
-              child: QrImageView(
-                data: qrData,
-                version: QrVersions.auto,
-                size: 240,
-                backgroundColor: Colors.white,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // 地址 + 复制图标
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    contact.address,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppTheme.textTertiary,
-                      height: 1.5,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  constraints: const BoxConstraints(),
-                  padding: EdgeInsets.zero,
-                  iconSize: 18,
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: contact.address));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('地址已复制')),
-                    );
-                  },
-                  icon: SvgPicture.asset(
-                    'assets/icons/copy.svg',
-                    width: 16,
-                    height: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 28),
-          // 消息 + 转账按钮
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _openMessage(context),
-                  icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                  label: const Text('消息'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => OnchainPaymentPage(
-                          initialToAddress: contact.address,
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.send, size: 18),
-                  label: const Text('转账'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _HeaderBackground extends StatelessWidget {
   const _HeaderBackground({
     required this.path,
     required this.height,
+    required this.seed,
   });
 
   final String? path;
   final double height;
+  final String seed;
 
   @override
   Widget build(BuildContext context) {
@@ -842,27 +520,21 @@ class _HeaderBackground extends StatelessWidget {
     final file = hasImage ? File(path!) : null;
     final validImage = file != null && file.existsSync();
 
+    final fallback = ProfilePresentation.forAccount(seed).bannerAsset;
+    final ImageProvider<Object> backgroundImage;
+    if (validImage) {
+      backgroundImage = FileImage(file);
+    } else {
+      backgroundImage = AssetImage(fallback);
+    }
     return Container(
       width: double.infinity,
       height: height,
       decoration: BoxDecoration(
-        gradient: validImage
-            ? null
-            : const LinearGradient(
-                colors: [
-                  AppTheme.primaryDark,
-                  AppTheme.primary,
-                  AppTheme.primaryLight,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-        image: validImage
-            ? DecorationImage(
-                image: FileImage(file),
-                fit: BoxFit.cover,
-              )
-            : null,
+        image: DecorationImage(
+          image: backgroundImage,
+          fit: BoxFit.cover,
+        ),
       ),
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -929,7 +601,12 @@ class _SquareAvatar extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               child: validImage
                   ? Image.file(file, fit: BoxFit.cover)
-                  : _DefaultAvatar(seed: seed, size: size),
+                  : Image.asset(
+                      ProfilePresentation.forAccount(seed).avatarAsset,
+                      width: size,
+                      height: size,
+                      fit: BoxFit.cover,
+                    ),
             ),
           ),
           if (badgeStyle != null)
@@ -946,32 +623,6 @@ class _SquareAvatar extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-/// 未设头像时按账号稳定选一张默认头像（与用户主页 ProfileHeaderCard 同源：
-/// assets/avatars/default_1..6.svg，账号 codeUnits 求和取模，同账号永远同一张）。
-class _DefaultAvatar extends StatelessWidget {
-  const _DefaultAvatar({required this.seed, required this.size});
-
-  static const int _count = 6;
-
-  final String seed;
-  final double size;
-
-  int get _index {
-    final sum = seed.codeUnits.fold<int>(0, (acc, unit) => acc + unit);
-    return sum % _count + 1;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SvgPicture.asset(
-      'assets/avatars/default_$_index.svg',
-      width: size,
-      height: size,
-      fit: BoxFit.cover,
     );
   }
 }

@@ -5,36 +5,6 @@ import type { Env } from '../src/types';
 
 const OWNER = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 
-/// 构造 `System.Account` 值的 SCALE hex：16 字节前导（nonce/consumers/providers/sufficients）
-/// + `data.free`（u128 LE，偏移 16）+ 其余 data 字段（reserved/frozen/flags 置零）。
-function accountInfoHex(free: bigint): string {
-  const buf = new Uint8Array(80);
-  let v = free;
-  for (let i = 0; i < 16; i++) {
-    buf[16 + i] = Number(v & 0xffn);
-    v >>= 8n;
-  }
-  return '0x' + [...buf].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-/// stub 链 RPC：让 `state_getStorage` 返回给定 result（hex 或 null=账户不存在）。
-function stubChainResult(result: string | null): void {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(
-      async () =>
-        new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result }), {
-          headers: { 'content-type': 'application/json' }
-        })
-    )
-  );
-}
-
-/// stub 链 RPC 故障（节点宕机/HTTP 失败）→ 校验 fail-closed。
-function stubChainFailure(): void {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response('upstream down', { status: 502 })));
-}
-
 interface ChallengeRow {
   challenge_id: string;
   owner_account: string;
@@ -121,10 +91,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     const kv = new FakeKv();
     const env = {
       DB: db,
-      SQUARE_CACHE: kv,
-      CHAIN_URL: 'https://chain.test',
-      CHAIN_ID: 'worker-rpc.access',
-      CHAIN_SECRET: 'test-access-secret'
+      SQUARE_CACHE: kv
     } as unknown as Env;
     const keyPair = await crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' },
@@ -150,8 +117,12 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     return toHex(sig);
   }
 
-  it('signs the op_tag login message with the device subkey and mints a session', async () => {
+  it('只验证设备子钥并签发 Session，全程不访问链账户、余额或 RPC', async () => {
     const { env, keyPair } = await setup();
+    const fetchSpy = vi.fn(async () => {
+      throw new Error('Session 不得访问链 RPC');
+    });
+    vi.stubGlobal('fetch', fetchSpy);
 
     const challenge = await jsonBody(
       await createLoginChallenge(req('/v1/square/auth/challenge', { owner_account: OWNER }), env)
@@ -166,8 +137,6 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
       challenge.op_tag as number,
       challenge.signing_payload_hex as string
     );
-    // 链上钱包余额 ≥ ED（111 分）→ 放行。
-    stubChainResult(accountInfoHex(1_000n));
     const session = await jsonBody(
       await createSession(
         req('/v1/square/auth/session', {
@@ -180,52 +149,7 @@ describe('square login (op_tag OP_SIGN_SQUARE_LOGIN)', () => {
     );
     expect(session.ok).toBe(true);
     expect(typeof session.session_token).toBe('string');
-  });
-
-  async function signedSessionRequest(): Promise<{ env: Env; body: unknown }> {
-    const { env, keyPair } = await setup();
-    const challenge = await jsonBody(
-      await createLoginChallenge(req('/v1/square/auth/challenge', { owner_account: OWNER }), env)
-    );
-    const signature = await signChallenge(
-      keyPair,
-      challenge.op_tag as number,
-      challenge.signing_payload_hex as string
-    );
-    return {
-      env,
-      body: {
-        owner_account: OWNER,
-        challenge_id: challenge.challenge_id,
-        signature
-      }
-    };
-  }
-
-  it('rejects a wallet whose on-chain free balance is below the existential deposit', async () => {
-    const { env, body } = await signedSessionRequest();
-    // free = 110 分 < ED 111 → 非链上钱包。
-    stubChainResult(accountInfoHex(110n));
-    await expect(
-      createSession(req('/v1/square/auth/session', body), env)
-    ).rejects.toMatchObject({ code: 'not_onchain_wallet' });
-  });
-
-  it('rejects a wallet that has no on-chain account (reaped or never funded)', async () => {
-    const { env, body } = await signedSessionRequest();
-    // System.Account 不存在 → result null。
-    stubChainResult(null);
-    await expect(
-      createSession(req('/v1/square/auth/session', body), env)
-    ).rejects.toMatchObject({ code: 'not_onchain_wallet' });
-  });
-
-  it('fails closed when the chain node is unreachable during session issuance', async () => {
-    const { env, body } = await signedSessionRequest();
-    stubChainFailure();
-    await expect(
-      createSession(req('/v1/square/auth/session', body), env)
-    ).rejects.toMatchObject({ code: 'chain_rpc_http_failed' });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('rejects a signature over the wrong message', async () => {

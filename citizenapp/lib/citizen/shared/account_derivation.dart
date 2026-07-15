@@ -68,6 +68,18 @@ String hexFromAccountId(Uint8List id) =>
 String ss58FromAccountId(Uint8List id, {int ss58Prefix = kGmbSs58Prefix}) =>
     Keyring().encodeAddress(id, ss58Prefix);
 
+/// hex(小写/大写、带或不带 0x,64 字符)→ SS58(默认 prefix=2027),仅供展示。
+/// 便于把余额接口/存储解出的账户 hex 直接转成展示地址,是 hex→SS58 的唯一便捷入口。
+String ss58FromHex(String hex, {int ss58Prefix = kGmbSs58Prefix}) {
+  final h =
+      hex.startsWith('0x') || hex.startsWith('0X') ? hex.substring(2) : hex;
+  final bytes = Uint8List(h.length ~/ 2);
+  for (var i = 0; i < bytes.length; i++) {
+    bytes[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
+  }
+  return ss58FromAccountId(bytes, ss58Prefix: ss58Prefix);
+}
+
 // ── 机构账户(payload 含 cid_number)──
 
 /// 机构主账户 id(OP_MAIN,payload = cid_number,不含名字)。

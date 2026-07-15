@@ -71,7 +71,6 @@ export function InstitutionAssignmentCard({
           <div className="institution-assignment-item" key={assignment.roleCode}>
             <div className="institution-assignment-role">
               {assignment.roleName}
-              <code>{assignment.roleCode}</code>
             </div>
             <AssignmentField label="任期" value={termText(assignment)} />
             <AssignmentField

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/8964/profile/services/citizen_profile_api.dart';
 import 'package:citizenapp/8964/profile/services/profile_asset_service.dart';
 import 'package:citizenapp/8964/profile/services/square_session_provider.dart';
@@ -289,6 +290,7 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
   Widget build(BuildContext context) {
     final avatarKey = widget.initialProfile?.avatarObjectKey;
     final bannerKey = widget.initialProfile?.bannerObjectKey;
+    final defaults = ProfilePresentation.forAccount(widget.ownerAccount);
     return Scaffold(
       appBar: AppBar(
         title: const Text('编辑资料'),
@@ -317,6 +319,7 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
             preview: _pendingBanner?.bytes,
             networkUrl: bannerKey == null ? null : _api.mediaUrl(bannerKey),
             networkHeaders: _mediaHeaders,
+            fallbackAsset: defaults.bannerAsset,
             onTap: () => _pickImage(false),
           ),
           const SizedBox(height: 16),
@@ -328,6 +331,7 @@ class _CitizenProfileEditPageState extends State<CitizenProfileEditPage> {
             preview: _pendingAvatar?.bytes,
             networkUrl: avatarKey == null ? null : _api.mediaUrl(avatarKey),
             networkHeaders: _mediaHeaders,
+            fallbackAsset: defaults.avatarAsset,
             onTap: () => _pickImage(true),
           ),
           const SizedBox(height: 20),
@@ -364,6 +368,7 @@ class _AssetRow extends StatelessWidget {
     required this.preview,
     required this.networkUrl,
     required this.networkHeaders,
+    required this.fallbackAsset,
     required this.onTap,
   });
 
@@ -374,6 +379,7 @@ class _AssetRow extends StatelessWidget {
   final Uint8List? preview;
   final String? networkUrl;
   final Map<String, String>? networkHeaders;
+  final String fallbackAsset;
   final VoidCallback onTap;
 
   @override
@@ -415,16 +421,13 @@ class _AssetRow extends StatelessWidget {
         url,
         headers: networkHeaders,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _placeholder(),
+        errorBuilder: (_, __, ___) => _fallback(),
       );
     }
-    return _placeholder();
+    return _fallback();
   }
 
-  Widget _placeholder() {
-    return const Center(
-      child: Icon(Icons.add_a_photo_outlined,
-          size: 26, color: AppTheme.textTertiary),
-    );
+  Widget _fallback() {
+    return Image.asset(fallbackAsset, fit: BoxFit.cover);
   }
 }

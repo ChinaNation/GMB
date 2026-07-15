@@ -8,7 +8,8 @@
 - 机构法定代表人任免生效后，必须将 `legal_representative_name`、`legal_representative_cid_number`、`legal_representative_account` 作为公开机构信息上链
 - 创世没有真实法定代表人资料时不得填充假数据，不得把首位管理员默认为法定代表人；依赖法定代表人的业务在任命完成前必须拒绝执行
 - permit 必须短期有效
-- CitizenApp 私密聊天消息、会话、联系人关系和附件只能保存在通信双方设备，禁止写入 Cloudflare D1、R2、KV 或 Durable Object Storage
+- CitizenApp 私密聊天消息、会话和附件只能保存在通信双方设备，禁止写入 Cloudflare D1、R2、KV 或 Durable Object Storage。
+- CitizenApp 通讯录明文只能保存在用户设备；为实现同一钱包跨设备恢复，Cloudflare D1 只允许保存由热钱包 seed 域隔离密钥在端侧生成的单联系人 AES-256-GCM 密文、HMAC 联系人 ID、nonce、MAC 和更新时间。联系人钱包账户、私人联系人名称、公开昵称、关系明文及解密密钥禁止进入 Cloudflare；账户注销必须立即硬删除全部通讯录密文。
 - Chat 推送只能发送固定唤醒类型和发送方钱包账户，禁止携带明文、密文、附件地址、会话摘要或通知预览
 - 用户注销时必须先关闭实时连接、撤销短期凭证，再立即硬删除 Cloudflare 中的设备公钥、推送 Token、一次性 KeyPackage、防重放摘要和其他账户引用；不得软删除、延期删除或保留恢复副本
 
@@ -48,6 +49,7 @@
 
 - CitizenApp production API 唯一入口为 `https://www.crcfrcn.com/api/*`；staging 唯一入口为受 Cloudflare Access 保护的 `https://www.crcfrcn.com/api-staging/*`，禁止恢复 `workers.dev`、Preview URL 或独立 API 子域名。
 - 官网浏览器请求只允许精确 Origin `https://www.crcfrcn.com`；原生 App 无 Origin 时必须使用钱包 Session、P-256 设备逐请求签名、时间窗和一次性 nonce，不能仅凭 User-Agent、IP 或客户端声明授权。
+- Cloudflare 钱包 Session 只验证已登记 P-256 设备子钥及其钱包归属，不得以 `System.Account` 是否存在、钱包余额或存在性存款作为登录门禁；需要链上身份、余额或业务资格的动作必须在各自业务入口独立校验。
 - 首次设备绑定、设备换钥和风险升级必须通过 Turnstile；Stripe 与 Stream webhook 分别使用提供商签名，不叠加设备签名。
 - Worker 必须在解析 JSON 前限制请求体，并按 IP 哈希、钱包账户、接口类别分层限流；staging 还必须由 Cloudflare Access 限定维护账户。
 - Cloudflare WAF 规则 `citizenapp-api-edge-limit` 对 production/staging API 按 IP 执行 60 次/10 秒的边缘阻断，阻断持续 10 秒；Stripe 与 Stream 签名 webhook 必须排除，避免提供商回调被普通客户端限流误伤。

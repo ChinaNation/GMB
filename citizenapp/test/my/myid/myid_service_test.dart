@@ -40,7 +40,7 @@ void main() {
     expect(state.errorMessage, '请先创建钱包');
   });
 
-  test('默认用户账户链上无投票身份时为访客(完全匿名)', () async {
+  test('默认用户账户链上无投票身份时为匿名访客', () async {
     final state = await buildService(voting: null).getState();
     expect(state.tier, MyIdTier.visitor);
     expect(state.votingAccount, isNull);
@@ -113,7 +113,8 @@ void main() {
         );
 
     final notYet =
-        await buildService(voting: voting(status: 0), now: DateTime.utc(2025)).getState();
+        await buildService(voting: voting(status: 0), now: DateTime.utc(2025))
+            .getState();
     expect(notYet.status, MyIdStatus.notYetValid);
 
     final expired = await buildService(
@@ -252,7 +253,8 @@ class _FakeChainRpc extends ChainRpc {
 
 class _FakeDivisionStore implements AdminDivisionStore {
   @override
-  Future<String> divisionName(String level, String scopeKey, String code) async =>
+  Future<String> divisionName(
+          String level, String scopeKey, String code) async =>
       'N($code)';
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();

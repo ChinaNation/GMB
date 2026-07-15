@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:citizenapp/8964/profile/models/citizen_profile.dart';
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
+import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/ui/identity_badge.dart';
 
 /// 推特式资料卡：头图下方白底，圆角方形头像跨压头图下缘 + 认证勾 +
 /// 展示名/地址·CID/签名/计数 + 右上三图标。
@@ -28,9 +28,8 @@ class ProfileHeaderCard extends StatelessWidget {
   final String ownerAccount;
   final CitizenProfile? profile;
 
-  /// 展示名兜底 = 本机钱包名称（即昵称）。竞选公民认证用户由后端把
-  /// `display_name` 置为链上真实姓名故优先；普通用户展示名 = 钱包名 = 昵称，
-  /// 只有钱包名也缺失时才最后回落截断地址。
+  /// 本人钱包名称是昵称真源；他人资料使用公开镜像。两者缺失时由账户稳定
+  /// 选择本地默认昵称，不把账户或公民身份字段当昵称。
   final String fallbackName;
 
   /// 头像图片 URL（object_key 解析后的公开媒体地址）；为空显示占位。
@@ -55,13 +54,11 @@ class ProfileHeaderCard extends StatelessWidget {
   String? get _membershipLevel => profile?.membershipLevel;
   bool get _membershipActive => profile?.membershipActive ?? false;
 
-  /// 展示名 = 后端 display_name（认证用户 = 链上真实姓名）→ 钱包名（昵称）
-  /// → 截断地址（最后兜底）。绝不越过钱包名直接显示地址。
   String get _name {
-    final resolved = profile?.resolvedDisplayName(fallbackName);
-    if (resolved != null && resolved.isNotEmpty) return resolved;
-    final fallback = fallbackName.trim();
-    return fallback.isNotEmpty ? fallback : _shortenAccount(ownerAccount);
+    return ProfilePresentation.forAccount(ownerAccount).resolveDisplayName(
+      walletName: fallbackName,
+      publicName: profile?.displayName,
+    );
   }
 
   @override
@@ -146,114 +143,21 @@ class ProfileHeaderCard extends StatelessWidget {
           Positioned(
             left: 16,
             top: -_avatarOverlap,
-            child: _Avatar(
+            child: ProfileAvatar(
+              size: _avatarSize,
               identityLevel: _identityLevel,
               membershipLevel: _membershipLevel,
               membershipActive: _membershipActive,
               imageUrl: avatarUrl,
               imageHeaders: avatarHeaders,
               seed: ownerAccount,
+              borderColor: AppTheme.surfaceCard,
+              borderWidth: 4,
+              borderRadius: 14,
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  const _Avatar({
-    required this.identityLevel,
-    required this.membershipLevel,
-    required this.membershipActive,
-    required this.seed,
-    this.imageUrl,
-    this.imageHeaders,
-  });
-
-  /// 链上身份档位：颜色来源（访客橙/投票蓝/竞选红/纯访客无）。
-  final String? identityLevel;
-
-  /// 会员信号：决定徽章是否带勾（会员档匹配身份档且有效）。
-  final String? membershipLevel;
-  final bool membershipActive;
-  final String? imageUrl;
-  final Map<String, String>? imageHeaders;
-
-  /// 用于给未设头像的用户稳定选一张默认头像的种子（钱包地址）。
-  final String seed;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = imageUrl;
-    final badgeStyle = identityBadgeStyle(
-      identityLevel: identityLevel,
-      membershipLevel: membershipLevel,
-      membershipActive: membershipActive,
-    );
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: ProfileHeaderCard._avatarSize,
-          height: ProfileHeaderCard._avatarSize,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppTheme.surfaceCard, width: 4),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: url == null
-                ? _DefaultAvatar(seed: seed)
-                : Image.network(
-                    url,
-                    headers: imageHeaders,
-                    fit: BoxFit.cover,
-                    width: ProfileHeaderCard._avatarSize,
-                    height: ProfileHeaderCard._avatarSize,
-                    errorBuilder: (_, __, ___) => _DefaultAvatar(seed: seed),
-                  ),
-          ),
-        ),
-        if (badgeStyle != null)
-          Positioned(
-            right: -2,
-            bottom: -2,
-            child: IdentityBadge(
-              style: badgeStyle,
-              tooltip: identityBadgeLabel(
-                identityLevel: identityLevel,
-                checked: badgeStyle.checked,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// 未设头像时按账号稳定选一张不透明默认头像（不再透出头图/白底）。
-class _DefaultAvatar extends StatelessWidget {
-  const _DefaultAvatar({required this.seed});
-
-  /// 可选默认头像张数，与 assets/avatars/default_1..N.svg 一致。
-  static const int _count = 6;
-
-  final String seed;
-
-  int get _index {
-    // 账号 code unit 求和取模：稳定、确定，同一账号永远同一张默认头像。
-    final sum = seed.codeUnits.fold<int>(0, (acc, unit) => acc + unit);
-    return sum % _count + 1;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SvgPicture.asset(
-      'assets/avatars/default_$_index.svg',
-      width: ProfileHeaderCard._avatarSize,
-      height: ProfileHeaderCard._avatarSize,
-      fit: BoxFit.cover,
     );
   }
 }

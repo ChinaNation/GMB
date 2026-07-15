@@ -318,6 +318,7 @@ describe('purgeAccount', () => {
     expect(joined).toContain('DELETE FROM square_follows WHERE owner_account = ?');
     expect(joined).toContain('DELETE FROM chat_device_binding_nonces WHERE owner_account = ?');
     expect(joined).toContain('DELETE FROM chat_devices WHERE owner_account = ?');
+    expect(joined).toContain('DELETE FROM square_contacts WHERE owner_account = ?');
     expect(joined).toContain('DELETE FROM square_browse_days WHERE owner_account = ?');
 
     // R2：只存在并删除 profile / posts 等当前业务对象，Chat 不使用 R2。
@@ -337,6 +338,7 @@ describe('purgeAccount', () => {
       code: 'stripe_not_configured'
     });
     expect(db.deletes.join('\n')).toContain('DELETE FROM chat_devices WHERE owner_account = ?');
+    expect(db.deletes.join('\n')).toContain('DELETE FROM square_contacts WHERE owner_account = ?');
     expect(r2.deleted).toHaveLength(0);
   });
 });

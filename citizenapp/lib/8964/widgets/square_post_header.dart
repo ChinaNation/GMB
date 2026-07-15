@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:citizenapp/8964/models/square_models.dart';
+import 'package:citizenapp/8964/profile/widgets/profile_avatar.dart';
 import 'package:citizenapp/ui/app_theme.dart';
-import 'package:citizenapp/ui/identity_badge.dart';
 
 /// 广场卡片统一作者头部：方形圆角头像 + 右下角扇贝身份勋章、昵称、
 /// 竞选药丸（仅竞选公民）、竞选岗位/时间、右上角更多按钮。
@@ -26,7 +26,8 @@ class SquarePostHeader extends StatelessWidget {
   /// 右上角更多菜单；为 null 时按钮仍展示但不响应。
   final VoidCallback? onMore;
 
-  /// 作者头像已解析的可读地址（由页面据 avatarObjectKey + session 生成）；null=首字占位。
+  /// 作者头像已解析的可读地址（由页面据 avatarObjectKey + session 生成）；
+  /// 缺失或读取失败时使用统一的本地默认照片。
   final String? avatarUrl;
 
   /// 头像 `Image.network` 的鉴权头（钱包 session Bearer）。
@@ -37,11 +38,6 @@ class SquarePostHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final author = post.author;
-    final badge = identityBadgeStyle(
-      identityLevel: author.identityLevel,
-      membershipLevel: author.membershipLevel,
-      membershipActive: author.membershipActive,
-    );
     return Row(
       // start 对齐让更多按钮贴近卡片上边缘。
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,11 +48,15 @@ class SquarePostHeader extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             child: Row(
               children: [
-                _Avatar(
-                  author: author,
-                  badge: badge,
-                  avatarUrl: avatarUrl,
-                  avatarHeaders: avatarHeaders,
+                ProfileAvatar(
+                  seed: author.ownerAccount,
+                  size: 40,
+                  imageUrl: avatarUrl,
+                  imageHeaders: avatarHeaders,
+                  identityLevel: author.identityLevel,
+                  membershipLevel: author.membershipLevel,
+                  membershipActive: author.membershipActive,
+                  borderRadius: 12,
                 ),
                 const SizedBox(width: 11),
                 Expanded(
@@ -130,96 +130,6 @@ class SquarePostHeader extends StatelessWidget {
     if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
     if (diff.inDays < 1) return '${diff.inHours} 小时前';
     return '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')}';
-  }
-}
-
-/// 方形圆角头像（真头像 / 昵称首字占位）+ 右下角身份勋章，布局与用户主页一致。
-class _Avatar extends StatelessWidget {
-  const _Avatar({
-    required this.author,
-    required this.badge,
-    this.avatarUrl,
-    this.avatarHeaders,
-  });
-
-  final SquareAuthor author;
-  final IdentityBadgeStyle? badge;
-  final String? avatarUrl;
-  final Map<String, String>? avatarHeaders;
-
-  @override
-  Widget build(BuildContext context) {
-    final badgeStyle = badge;
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              width: 40,
-              height: 40,
-              child: (avatarUrl != null && avatarUrl!.isNotEmpty)
-                  ? Image.network(
-                      avatarUrl!,
-                      headers: avatarHeaders,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _placeholder(),
-                    )
-                  : _placeholder(),
-            ),
-          ),
-          if (badgeStyle != null)
-            Positioned(
-              right: -3,
-              bottom: -3,
-              child: IdentityBadge(
-                style: badgeStyle,
-                size: 18,
-                tooltip: identityBadgeLabel(
-                  identityLevel: author.identityLevel,
-                  checked: badgeStyle.checked,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// 无真头像或加载失败时的占位：身份色淡底 + 昵称首字。
-  Widget _placeholder() {
-    return Container(
-      width: 40,
-      height: 40,
-      alignment: Alignment.center,
-      color: _tint(author.identityLevel),
-      child: Text(
-        _initial(author.title),
-        style: const TextStyle(
-          color: AppTheme.textPrimary,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  static String _initial(String title) {
-    final trimmed = title.trim();
-    if (trimmed.isEmpty) return '#';
-    return trimmed.substring(0, 1);
-  }
-
-  static Color _tint(String? identityLevel) {
-    final base = switch (identityLevel) {
-      'candidate' => AppTheme.identityCandidate,
-      'voting' => AppTheme.identityVoting,
-      _ => AppTheme.identityVisitor,
-    };
-    return base.withAlpha(0x22);
   }
 }
 

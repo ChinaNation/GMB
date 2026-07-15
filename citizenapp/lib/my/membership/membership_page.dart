@@ -197,6 +197,7 @@ class _MembershipPageState extends State<MembershipPage>
 
     return Column(
       children: [
+        if (state.identityUnavailable) const _IdentityUnavailableBanner(),
         if (state.frozen) _FrozenMembershipBanner(state: state),
         // 冻结时只显示冻结横幅（权益已停），不再叠加"有效订阅"横幅制造矛盾信息。
         if (state.hasSubscriptionWindow && !state.frozen)
@@ -350,8 +351,12 @@ class _IdentityMembershipCard extends StatelessWidget {
     final selIndex = selectedPlanIndex.clamp(0, tierPlans.length - 1);
     final plan = tierPlans[selIndex];
     final action = _actionFor(state, plan.membershipLevel);
-    // 精确匹配：仅本人身份档可订阅（禁止降档/越级），其余置灰。
-    final canSubscribe = isUserCard;
+    // 新订阅/续订仍依赖本次链身份资格；已有自动续费订阅的取消属于止损动作，
+    // 即使链 RPC 暂不可用也必须允许用户进入官网取消。
+    final canManageCancellation = action == _SubscribeAction.cancel &&
+        state.membershipLevel == plan.membershipLevel;
+    final canOperate =
+        canManageCancellation || (isUserCard && !state.identityUnavailable);
 
     // 徽章：底色恒为该身份档色；只有「你的身份卡」按真实会员态显示勾/小人。
     final badgeStyle = identityBadgeStyle(
@@ -457,7 +462,9 @@ class _IdentityMembershipCard extends StatelessWidget {
                     child: _SubscribeButton(
                       label: _actionLabel(action),
                       color: tierColor,
-                      onTap: canSubscribe
+                      disabledLabel:
+                          state.identityUnavailable ? '链上身份恢复后可操作' : '仅本档身份可订阅',
+                      onTap: canOperate
                           ? () => _openMembershipSite(context)
                           : null,
                     ),
@@ -600,11 +607,13 @@ class _SubscribeButton extends StatelessWidget {
   const _SubscribeButton({
     required this.label,
     required this.color,
+    required this.disabledLabel,
     required this.onTap,
   });
 
   final String label;
   final Color color;
+  final String disabledLabel;
 
   /// null=非本人身份档，按钮置灰不可点（精确匹配，禁止降档/越级）。
   final VoidCallback? onTap;
@@ -615,7 +624,7 @@ class _SubscribeButton extends StatelessWidget {
     return FilledButton.icon(
       onPressed: onTap,
       icon: Icon(enabled ? Icons.open_in_new : Icons.lock_outline, size: 16),
-      label: Text(enabled ? label : '仅本档身份可订阅'),
+      label: Text(enabled ? label : disabledLabel),
       style: FilledButton.styleFrom(
         backgroundColor: color,
         foregroundColor: Colors.white,
@@ -623,6 +632,38 @@ class _SubscribeButton extends StatelessWidget {
         disabledForegroundColor: AppTheme.textTertiary,
         minimumSize: const Size.fromHeight(46),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+/// 链 RPC 暂不可读时的页面级降级提示。会话、D1 会员和套餐都已成功加载，
+/// 因此不把整页误报成“会员状态加载失败”；仅冻结依赖链上身份的资格动作。
+class _IdentityUnavailableBanner extends StatelessWidget {
+  const _IdentityUnavailableBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: AppTheme.bannerDecoration(AppTheme.warning),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.cloud_off_outlined, size: 18, color: AppTheme.warning),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '链上身份暂未刷新。会员状态和套餐仍可查看，身份恢复后即可办理订阅或换档。',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -5,7 +5,7 @@ import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/qr/bodies/user_contact_body.dart';
 import 'package:citizenapp/qr/bodies/user_transfer_body.dart';
 import 'package:citizenapp/qr/qr_router.dart';
-import 'package:citizenapp/my/user/user_service.dart';
+import 'package:citizenapp/my/user/contact_service.dart';
 
 /// 扫码结果：收款码预填数据。
 class QrScanTransferResult {
@@ -256,15 +256,14 @@ class _QrScanPageState extends State<QrScanPage> {
       final contactResult = await _contactService.addContact(
         address: body.address,
         contactName: name,
-        selfAddress: widget.selfAddress,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             contactResult.created
-                ? '已加入通讯录：${contactResult.contact.displayNickname}'
-                : '已更新通讯录：${contactResult.contact.displayNickname}',
+                ? '已加入通讯录：${contactResult.contact.contactName}'
+                : '已更新通讯录：${contactResult.contact.contactName}',
           ),
         ),
       );
@@ -295,15 +294,14 @@ class _QrScanPageState extends State<QrScanPage> {
       final addResult = await _contactService.addContact(
         address: body.address,
         contactName: body.contactName,
-        selfAddress: widget.selfAddress,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             addResult.created
-                ? '已加入通讯录：${addResult.contact.displayNickname}'
-                : '已更新通讯录：${addResult.contact.displayNickname}',
+                ? '已加入通讯录：${addResult.contact.contactName}'
+                : '已更新通讯录：${addResult.contact.contactName}',
           ),
         ),
       );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:citizenapp/isar/app_isar.dart';
+import 'package:citizenapp/my/user/contact_book_page.dart';
 import 'package:citizenapp/ui/app_theme.dart';
 import 'package:citizenapp/transaction/onchain-transaction/onchain_payment_page.dart';
 import 'package:citizenapp/transaction/shared/local_tx_store.dart';
@@ -89,6 +90,16 @@ void main() {
     expect(find.text('多签账户'), findsOneWidget);
     expect(find.text('个人多签'), findsNothing);
     expect(find.text('机构多签'), findsNothing);
+
+    await tester.tap(find.byTooltip('我的通讯录'));
+    await _pumpUntilFound(tester, find.byType(ContactBookPage));
+    final contacts = tester.widget<ContactBookPage>(
+      find.byType(ContactBookPage),
+    );
+    // 交易入口只声明“选择收款人”意图，页面不再接收当前付款钱包账户。
+    expect(contacts.selectForTrade, isTrue);
+    Navigator.of(tester.element(find.byType(ContactBookPage))).pop();
+    await tester.pump(const Duration(milliseconds: 300));
   });
 
   testWidgets('链上交易状态跟随交易钱包切换刷新且只统计转出', (tester) async {
@@ -171,5 +182,38 @@ void main() {
     expect(find.text('已出块 0'), findsOneWidget);
     expect(find.text('已确认 0'), findsOneWidget);
     expect(find.text('失败 0'), findsOneWidget);
+  });
+
+  testWidgets('通讯录转账只预填收款地址且不改变付款钱包', (tester) async {
+    final payer = _wallet(
+      index: 2,
+      name: '付款钱包B',
+      address: 'wallet_b',
+      pubkeyHex: _walletBPubkey,
+    );
+    const recipient = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: OnchainPaymentPanel(
+          title: '交易',
+          initialToAddress: recipient,
+          enableDelayedLocalRecordRefresh: false,
+          currentWalletLoader: () async => payer,
+          localRecordsLoader: (_, {limit = 100}) async => const [],
+        ),
+      ),
+    );
+    await _pumpUntilFound(tester, find.textContaining('钱包可用余额：100'));
+
+    final addressField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '收款地址',
+      ),
+    );
+    expect(addressField.controller?.text, recipient);
+    expect(find.textContaining('钱包可用余额：100'), findsOneWidget);
   });
 }

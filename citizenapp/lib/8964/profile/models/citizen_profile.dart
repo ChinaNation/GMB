@@ -1,3 +1,5 @@
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
+
 /// 用户主页公开资料模型（对应 Worker `UserProfileResponse`）。
 ///
 /// 头像/背景/签名/展示名是链下 R2 资料；计数与认证是 D1/链上派生。
@@ -44,19 +46,13 @@ class CitizenProfile {
   final bool isFollowing;
   final int updatedAt;
 
-  /// 展示名兜底：无 `display_name` 时回落调用方给的钱包名，再回落截断地址。
+  /// 本人钱包名是昵称真源，`display_name` 是公开镜像；均缺失时使用本地
+  /// 稳定默认昵称，绝不把完整或截断账户当昵称。
   String resolvedDisplayName(String fallback) {
-    final name = displayName.trim();
-    if (name.isNotEmpty) return name;
-    final normalizedFallback = fallback.trim();
-    if (normalizedFallback.isNotEmpty) return normalizedFallback;
-    return _shortenAccount(ownerAccount);
-  }
-
-  static String _shortenAccount(String account) {
-    if (account.length <= 12) return account;
-    return '${account.substring(0, 6)}...'
-        '${account.substring(account.length - 6)}';
+    return ProfilePresentation.forAccount(ownerAccount).resolveDisplayName(
+      walletName: fallback,
+      publicName: displayName,
+    );
   }
 
   factory CitizenProfile.fromJson(Map<String, dynamic> json) {

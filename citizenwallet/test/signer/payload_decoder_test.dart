@@ -341,6 +341,90 @@ void main() {
       expect(decoded.reviewFields['birth_date'], '2026-06-30');
     });
 
+    test('decodes occupy_cid raw call data (pallet=10 call=6)', () {
+      // 注册局建档占号,逐字节对齐 onchina encode_occupy_cid_call:
+      // [10][6] registrar[32] cid:Vec commitment[32] province:Vec city:Vec。
+      final registrar = List<int>.filled(32, 7);
+      final commitment = List<int>.filled(32, 0xbb);
+      final callData = [
+        0x0a,
+        0x06,
+        ...registrar,
+        ...compactVec('CTZN-430100-0001'),
+        ...commitment,
+        ...compactVec('43'),
+        ...compactVec('001'),
+      ];
+
+      final decoded = PayloadDecoder.decode(hexOf(callData));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'occupy_cid');
+      expect(decoded.fields['registrar_account'], ss58FromBytes(registrar));
+      expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
+      expect(decoded.fields['commitment'], '0x${hexLower(commitment)}');
+      expect(decoded.reviewFields['residence'], '43 / 001');
+      expect(decoded.summary, contains('CTZN-430100-0001'));
+    });
+
+    test('decodes occupy_cid with signing tail (pallet=10 call=6)', () {
+      final registrar = List<int>.filled(32, 7);
+      final commitment = List<int>.filled(32, 0xbb);
+      final callData = [
+        0x0a,
+        0x06,
+        ...registrar,
+        ...compactVec('CTZN-430100-0001'),
+        ...commitment,
+        ...compactVec('43'),
+        ...compactVec('001'),
+      ];
+
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'occupy_cid');
+      expect(decoded.reviewFields['registrar_account'],
+          ss58FromBytes(registrar));
+      expect(decoded.reviewFields['cid_number'], 'CTZN-430100-0001');
+    });
+
+    test('decodes revoke_cid raw call data (pallet=10 call=8)', () {
+      // 注册局吊销,逐字节对齐 onchina encode_revoke_cid_call:
+      // [10][8] registrar[32] cid:Vec。
+      final registrar = List<int>.filled(32, 9);
+      final callData = [
+        0x0a,
+        0x08,
+        ...registrar,
+        ...compactVec('CTZN-430100-0001'),
+      ];
+
+      final decoded = PayloadDecoder.decode(hexOf(callData));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'revoke_cid');
+      expect(decoded.fields['registrar_account'], ss58FromBytes(registrar));
+      expect(decoded.fields['cid_number'], 'CTZN-430100-0001');
+      expect(decoded.summary, contains('CTZN-430100-0001'));
+    });
+
+    test('decodes revoke_cid with signing tail (pallet=10 call=8)', () {
+      final registrar = List<int>.filled(32, 9);
+      final callData = [
+        0x0a,
+        0x08,
+        ...registrar,
+        ...compactVec('CTZN-430100-0001'),
+      ];
+
+      final decoded = PayloadDecoder.decode(hexOf(withSigningTail(callData)));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'revoke_cid');
+      expect(decoded.reviewFields['cid_number'], 'CTZN-430100-0001');
+    });
+
     test('cast_referendum 缺少 issuer/admins 字段时拒绝解码', () {
       // 当前 SCALE 必须含签发机构、签发管理员和作用域。缺字段字节流长度不足 → null。
       final payload = Uint8List.fromList([

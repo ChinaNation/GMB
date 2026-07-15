@@ -19,7 +19,7 @@ import 'identity_badge_snapshot_store.dart';
 /// 最靠前的热钱包,与聊天/发动态同源)。默认用户切换即跟随;链上一人一 CID 一账户
 /// 一身份,故不再扫全钱包、不再有多身份冲突。
 enum MyIdTier {
-  /// 默认用户账户链上无投票身份 → 完全匿名。
+  /// 默认用户账户链上无投票身份 → 匿名访客，且没有公民身份信息。
   visitor,
 
   /// 有 `CitizenIdentity::VotingIdentityByAccount`。

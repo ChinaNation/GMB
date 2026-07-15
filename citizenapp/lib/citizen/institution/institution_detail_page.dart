@@ -7,6 +7,7 @@ import 'package:citizenapp/citizen/institution/institution_accounts.dart';
 import 'package:citizenapp/citizen/institution/institution_accounts_page.dart';
 import 'package:citizenapp/citizen/institution/institution_chain_state.dart';
 import 'package:citizenapp/citizen/institution/institution_classification.dart';
+import 'package:citizenapp/my/util/amount_format.dart';
 import 'package:citizenapp/citizen/institution/institution_repository.dart';
 import 'package:citizenapp/citizen/public/public_institution_admin_list_page.dart';
 import 'package:citizenapp/citizen/legislation/data/law_models.dart';
@@ -453,7 +454,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     if (_mainBalanceLoading) return '读取中...';
     final yuan = _mainBalanceYuan;
     if (yuan == null) return '未激活';
-    return '${yuan.toStringAsFixed(2)} 元';
+    return '${AmountFormat.formatThousands(yuan)} 元';
   }
 
   // ──── ② 机构账户入口 ────

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
 import 'package:citizenapp/chat/chat_page.dart';
 import 'package:citizenapp/chat/chat_flow.dart';
 import 'package:citizenapp/chat/chat_runtime.dart';
@@ -8,6 +10,35 @@ import 'package:citizenapp/chat/chat_tab.dart';
 import 'package:citizenapp/chat/storage/chat_store.dart';
 
 void main() {
+  testWidgets('聊天标题为账户时改用稳定默认昵称', (tester) async {
+    const peer = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
+    final store = _FakeChatStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChatPage(
+          conversationId: 'dm:alice:$peer',
+          ownerAccount: 'alice',
+          peerUserId: peer,
+          title: peer,
+          store: store,
+          onSync: () async => 0,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    // flutter_chat_ui 的空列表动画会在首次稳定布局后再排一个 50ms timer。
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(
+      find.text(ProfilePresentation.forAccount(peer).fallbackName),
+      findsOneWidget,
+    );
+    expect(find.text(peer), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 100));
+  });
+
   testWidgets('隐藏 Chat Tab 不初始化，进入后 init/resume 只同步一次', (tester) async {
     final selectedTab = ValueNotifier<int>(0);
     final runtime = _FakeRuntime(address: 'alice-wallet');

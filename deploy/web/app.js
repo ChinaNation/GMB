@@ -90,7 +90,7 @@ function openModule(moduleId) {
     : '';
   const chainNodeManager = module.id === 'citizenchain' ? renderChainNodes() : '';
   detail.innerHTML = `<div class="detail-title"><span class="icon">${module.icon}</span><div><h2>${module.title}</h2><p>${module.description}</p></div></div>
-    ${localSite}<h3>可执行操作</h3><div class="actions ${module.id === 'citizenchain' ? 'actions-three' : ''}">${module.actions.map((action) =>
+    ${localSite}<h3>可执行操作</h3><div class="actions ${module.id === 'citizenchain' ? 'actions-three' : ''}">${module.actions.filter((action) => !action.hidden).map((action) =>
       `<button data-action="${action.id}" class="${action.production ? 'production' : 'test'}">${action.title}${action.production ? '<small>需要 Touch ID</small>' : '<small>无需密码</small>'}</button>`).join('')}</div>
     ${chainNodeManager}<h3>密钥状态</h3><ul class="secret-list">${[...keyRows, ...githubRows].join('') || '<li>此操作不需要部署密钥</li>'}</ul>`;
   detail.querySelectorAll('[data-action]').forEach((button) => {

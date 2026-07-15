@@ -1,3 +1,5 @@
+import 'package:citizenapp/8964/profile/models/profile_presentation.dart';
+
 /// 广场前端模型。
 ///
 /// 广场正文和 manifest 进入 Worker/R2，主媒体进入 Cloudflare Images / Stream；链上只记录发布索引、内容哈希和
@@ -76,7 +78,8 @@ class SquareAuthor {
   final String? cidNumber;
   final String? displayName;
 
-  /// 作者头像对象键（profile.json 的 avatar_object_key），feed 直出真头像；null=用首字占位。
+  /// 作者头像对象键（profile.json 的 avatar_object_key）；缺失或读取失败时由
+  /// ProfileAvatar 按账户稳定选择本地默认照片。
   final String? avatarObjectKey;
 
   /// 作者链上身份档（徽章颜色）：visitor/voting/candidate/null。
@@ -95,10 +98,9 @@ class SquareAuthor {
   }
 
   String get title {
-    final name = displayName;
-    if (name != null && name.isNotEmpty) return name;
-    if (ownerAccount.length <= 12) return ownerAccount;
-    return '${ownerAccount.substring(0, 6)}...${ownerAccount.substring(ownerAccount.length - 6)}';
+    return ProfilePresentation.forAccount(ownerAccount).resolveDisplayName(
+      publicName: displayName,
+    );
   }
 }
 

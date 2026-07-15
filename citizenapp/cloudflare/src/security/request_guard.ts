@@ -128,6 +128,12 @@ function requiresDeviceProof(path: string, method: string): boolean {
 
 function routeRate(path: string, method: string): { key: string; limit: number; seconds: number } {
   if (path === '/v1/square/uploads/prepare') return { key: 'upload', limit: 30, seconds: 3600 };
+  if (path === '/v1/square/contacts' && method === 'GET') {
+    return { key: 'contacts_read', limit: 60, seconds: 60 };
+  }
+  if (path.startsWith('/v1/square/contacts/')) {
+    return { key: 'contacts_write', limit: 60, seconds: 60 };
+  }
   if (path === '/v1/chat/ws') return { key: 'chat_ws', limit: 12, seconds: 60 };
   if (path.startsWith('/v1/chat/')) return { key: 'chat', limit: 120, seconds: 60 };
   if (method === 'GET') return { key: 'read', limit: 120, seconds: 60 };

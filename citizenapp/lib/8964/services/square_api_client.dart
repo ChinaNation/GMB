@@ -50,6 +50,7 @@ class SquareMembershipState {
     this.subscriptionSource,
     this.inactiveCode,
     this.inactiveMessage,
+    this.identityError,
     this.identityLevel,
     this.hasVotingIdentity = false,
     this.hasCandidateIdentity = false,
@@ -81,6 +82,10 @@ class SquareMembershipState {
 
   final String? inactiveCode;
   final String? inactiveMessage;
+
+  /// 链上身份只读查询失败原因。会员与套餐仍可展示，但依赖身份资格的动作必须
+  /// fail-closed；该字段为空表示本次身份查询成功。
+  final String? identityError;
   final String? identityLevel;
   final bool hasVotingIdentity;
   final bool hasCandidateIdentity;
@@ -98,6 +103,8 @@ class SquareMembershipState {
       active ? planForLevel(membershipLevel) : null;
 
   bool get isCandidateMembership => active && membershipLevel == 'candidate';
+
+  bool get identityUnavailable => identityError?.trim().isNotEmpty == true;
 
   /// USDC 预付路线（无自动续、到期自然失效）。
   bool get isPrepaid => subscriptionSource == 'usdc_prepaid';
@@ -261,6 +268,34 @@ class SquareBrowseState {
   final int browseCount;
   final int? browseLimit;
   final int? browseLeft;
+}
+
+/// Cloudflare 只可见的单条通讯录密文信封。联系人账户和私人名称只存在于
+/// [ciphertext] 内，Worker 不参与解密。
+class SquareEncryptedContact {
+  const SquareEncryptedContact({
+    required this.contactId,
+    required this.ciphertext,
+    required this.nonce,
+    required this.mac,
+    required this.updatedAt,
+  });
+
+  final String contactId;
+  final String ciphertext;
+  final String nonce;
+  final String mac;
+  final int updatedAt;
+
+  factory SquareEncryptedContact.fromJson(Map<String, dynamic> json) {
+    return SquareEncryptedContact(
+      contactId: json['contact_id']?.toString() ?? '',
+      ciphertext: json['ciphertext']?.toString() ?? '',
+      nonce: json['nonce']?.toString() ?? '',
+      mac: json['mac']?.toString() ?? '',
+      updatedAt: SquareApiClient._asInt(json['updated_at']),
+    );
+  }
 }
 
 abstract class SquareFeedSource {
@@ -508,12 +543,16 @@ class SquareApiClient
     final identity = data['identity'] is Map<String, dynamic>
         ? data['identity'] as Map<String, dynamic>
         : const <String, dynamic>{};
+    final identityError = data['identity_error']?.toString().trim();
     if (membership is! Map<String, dynamic>) {
       return SquareMembershipState(
         active: false,
         expiresAt: 0,
         inactiveCode: data['inactive_code']?.toString(),
         inactiveMessage: data['inactive_message']?.toString(),
+        identityError: identityError == null || identityError.isEmpty
+            ? null
+            : identityError,
         identityLevel: identity['identity_level']?.toString(),
         hasVotingIdentity: identity['has_voting_identity'] == true,
         hasCandidateIdentity: identity['has_candidate_identity'] == true,
@@ -533,10 +572,69 @@ class SquareApiClient
       subscriptionSource: membership['subscription_source']?.toString(),
       inactiveCode: data['inactive_code']?.toString(),
       inactiveMessage: data['inactive_message']?.toString(),
+      identityError:
+          identityError == null || identityError.isEmpty ? null : identityError,
       identityLevel: identity['identity_level']?.toString(),
       hasVotingIdentity: identity['has_voting_identity'] == true,
       hasCandidateIdentity: identity['has_candidate_identity'] == true,
       plans: plans,
+    );
+  }
+
+  /// 分页拉取当前 session 所属账户的通讯录密文。
+  Future<({List<SquareEncryptedContact> items, String? nextCursor})>
+      fetchEncryptedContacts({
+    required SquareSession session,
+    String? cursor,
+    int limit = 100,
+  }) async {
+    final query = <String>['limit=$limit'];
+    if (cursor != null && cursor.isNotEmpty) {
+      query.add('cursor=${Uri.encodeQueryComponent(cursor)}');
+    }
+    final data = await _getJson(
+      '/v1/square/contacts?${query.join('&')}',
+      session: session,
+    );
+    final rawItems = data['items'];
+    if (rawItems is! List) {
+      throw const SquareApiException('通讯录响应缺少密文列表');
+    }
+    final next = data['next_cursor']?.toString().trim();
+    return (
+      items: rawItems
+          .whereType<Map<String, dynamic>>()
+          .map(SquareEncryptedContact.fromJson)
+          .toList(growable: false),
+      nextCursor: next == null || next.isEmpty ? null : next,
+    );
+  }
+
+  /// 幂等写入一条通讯录密文；owner 只能由 Worker 从 session 派生。
+  Future<void> putEncryptedContact({
+    required SquareSession session,
+    required SquareEncryptedContact contact,
+  }) async {
+    await _putJson(
+      '/v1/square/contacts/${Uri.encodeComponent(contact.contactId)}',
+      <String, Object?>{
+        'ciphertext': contact.ciphertext,
+        'nonce': contact.nonce,
+        'mac': contact.mac,
+        'updated_at': contact.updatedAt,
+      },
+      session: session,
+    );
+  }
+
+  /// 删除当前 session 所属账户的一条通讯录密文。
+  Future<void> deleteEncryptedContact({
+    required SquareSession session,
+    required String contactId,
+  }) async {
+    await _deleteJson(
+      '/v1/square/contacts/${Uri.encodeComponent(contactId)}',
+      session: session,
     );
   }
 
@@ -1068,7 +1166,8 @@ class SquareApiClient
       author: SquareAuthor(
         ownerAccount: _requireString(data, 'owner_account'),
         cidNumber: data['cid_number']?.toString(),
-        // 展示名与头像来自作者 profile.json（Worker feed 按去重作者回填）；缺失走地址/首字占位。
+        // 昵称与头像来自作者 profile.json（Worker feed 按去重作者回填）；缺失时
+        // Flutter 按作者账户稳定选择本地默认昵称和照片，绝不把账户当昵称。
         displayName:
             (data['display_name']?.toString().trim().isNotEmpty ?? false)
                 ? data['display_name'].toString().trim()
