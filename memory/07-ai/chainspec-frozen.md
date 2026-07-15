@@ -33,7 +33,8 @@
 ## 单一权威源
 
 - 全节点创世配置唯一真源：`citizenchain/node/chainspecs/citizenchain.plain.json`。
-- 创世状态包唯一来源：`citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>`。
+- 创世状态包唯一来源：`citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>`，
+  并必须提供 `--wasm-ci-run-id <RUN_ID> --wasm-ci-head-sha <HEAD_SHA>`；清单记录可追溯的 WASM CI run 和提交。
 - CitizenApp 轻形态与 checkpoint 唯一来源：同一次 `bake-chainspec.sh` 读取块 0 header 并调用
   `sync_state_genLightSyncState` 后写出。
 - 公权机构唯一真源：链上 `PublicManage::Institutions` /
@@ -46,7 +47,9 @@
 2. 执行：
 
    ```bash
-   citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM>
+   citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM> \
+     --wasm-ci-run-id <RUN_ID> \
+     --wasm-ci-head-sha <HEAD_SHA>
    ```
 
 3. 脚本必须完成：
@@ -62,6 +65,25 @@
    `genesis-state/` 放进 Tauri resources。
 5. 节点首启时优先复制内置创世状态包；没有该包时，只允许开发/排障场景回退到
    GenesisBuilder 本地物化。
+6. `CitizenChain` CI 的 `prepare-genesis-state` job 必须下载当前分支最新成功 WASM CI
+   artifact，逐字节核对冻结 `:code`，重新物化并上传本次 run 唯一的
+   `citizenchain-genesis-state` artifact；各平台安装包只能下载这一份产物，禁止创建空资源目录。
+7. 无头服务器不经过桌面资源安装入口。部署动作必须下载与 Linux 安装包同次成功 CI 的
+   正式创世 artifact，停服务后保留节点身份密钥和 GRANDPA keystore，彻底替换旧链数据库，
+   再以清单中的 block#0/state root 验收。
+
+## 当前唯一冻结锚点（2026-07-14）
+
+- Git commit：`40646f360f01fe362d38ada6085357c586848210`；GitHub `CitizenChain WASM` run：`29388014765`。
+- `genesis_hash`：`0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095`。
+- `state_root`：`0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac`。
+- `runtime_wasm_hash`：`e7c239c78e337fde6a5e107669f77a517de199dfced1f9b96c9ae49a297b1f79`。
+- 全节点 `chainspec_hash`：`471effd6403fcce6bee84ab9bde7ed9aa6e2b3dbb54248a923d4d0d0688c4651`。
+- CitizenApp `chainspec_hash`：`85a4e6276df86bfad1caca83a634ea684f23619df16c09dbfc74bb0e9b05cd3a`。
+- `light_sync_state_hash`：`16b722fb297a358efb61b56c70883e0ff0fc1b9cb4af5c508f5d38d624a35c42`。
+- `public_institution_root`：`b6f3927a831d940cf7037d68fcbc5fc62f9ebb4d2c2a8ce0ef4da15d59fa3855`，43 省共 49,593 个机构。
+
+正式 bake 的创世物化耗时 50 秒；公民宪法 `law_id=0`、v1 生效版和不可变条款校验通过。正式包的隔离副本已使用默认内嵌链规范真实启动，RPC 返回同一 block#0/state root，`isSyncing=false`。`bake-chainspec.sh` 的 RPC 轮询必须让内嵌 Python 正常解析响应；不得抑制解析失败后把已就绪节点误判为超时。
 
 ## 防御措施
 
@@ -71,13 +93,18 @@
 2. `citizenchain/node/src/home/process/mod.rs` 在启动节点前尝试安装内置
    `genesis-state/`，并在 RPC `chain_getBlockHash(0)` 成功前保持首次“初始化中”或普通“启动中”。
 3. `citizenchain/node/src/onchina_proc/mod.rs` 启动 OnChina 前必须确认本机链 RPC 已就绪。
-4. `citizenchain/scripts/prepack.sh` / `prepack.ps1` 负责把正式创世状态包放入安装包资源。
+4. `citizenchain/scripts/prepack.sh` / `prepack.ps1` 只允许复制 `manifest.json` 与
+   `chains/citizenchain/db/**`；任何符号链接、TLS、network、keystore 或其他路径都必须失败关闭。
+   macOS 部署归档必须禁用 AppleDouble，禁止把系统扩展属性展开成 `._*` 成员。
+5. CitizenApp Cloudflare bootstrap 的默认常量及各环境 `CHAIN_GENESIS_HASH` / `CHAIN_STATE_ROOT` 必须与本地冻结资产一致；Worker 只发布链身份和 bootnodes，不得成为远端 checkpoint 真源。
 
 ## 绝对不能做的事
 
 - 在启动脚本里重新 `build-spec --raw` 覆盖主网创世。
 - 把 raw chainspec 重新作为仓库 SSOT 或 App 资产。
 - 把 `lightSyncState` 内嵌回 `chainspec.json`，或让 `light_sync_state.json` 保持空对象。
+- 直接把正式 `genesis-state/` 当作节点 `--base-path` 启动；真实验收必须先复制到仓库外临时目录，
+  否则会把 TLS 私钥、libp2p 身份和 keystore 运行残留写进正式包。
 - 让 OnChina 或 CitizenApp 把链下公权机构目录当成真源。
 - 因 runtime 升级重新烘焙 genesis；runtime 升级只能走链上 `system.setCode`。
 

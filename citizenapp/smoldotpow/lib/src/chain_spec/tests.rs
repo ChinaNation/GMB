@@ -108,9 +108,8 @@ fn relay_chain_para_id_either_both_present_or_absent() {
     )
     .unwrap();
 
-    assert!(
-        ChainSpec::from_json_bytes(
-            r#"{
+    assert!(ChainSpec::from_json_bytes(
+        r#"{
             "name": "Test",
             "id": "test",
             "bootNodes": [],
@@ -123,13 +122,11 @@ fn relay_chain_para_id_either_both_present_or_absent() {
             }
           }
           "#,
-        )
-        .is_err()
-    );
+    )
+    .is_err());
 
-    assert!(
-        ChainSpec::from_json_bytes(
-            r#"{
+    assert!(ChainSpec::from_json_bytes(
+        r#"{
             "name": "Test",
             "id": "test",
             "bootNodes": [],
@@ -142,9 +139,8 @@ fn relay_chain_para_id_either_both_present_or_absent() {
             }
           }
           "#,
-        )
-        .is_err()
-    );
+    )
+    .is_err());
 }
 
 #[test]
@@ -172,10 +168,10 @@ fn pow_state_root_hash_allows_genesis_checkpoint() {
             "bootNodes": [],
             "properties": null,
             "genesis": {
-              "stateRootHash": "0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63"
+              "stateRootHash": "0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac"
             },
             "lightSyncState": {
-              "finalizedBlockHeader": "0x0000000000000000000000000000000000000000000000000000000000000000006a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff6303170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c11131400",
+              "finalizedBlockHeader": "0x000000000000000000000000000000000000000000000000000000000000000000d285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c11131400",
               "grandpaAuthoritySet": "0x043719c39cf92462da2e22a7dfa760f463c801dd86a27a4151d24935e42692e5b50100000000000000000000000000000000000000"
             }
           }"#,

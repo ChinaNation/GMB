@@ -3,9 +3,9 @@ import { jsonResponse, parsePositiveInt } from '../shared/http';
 import { CHAIN_EXTRINSIC_RELAY_PATH, isChainExtrinsicRelayEnabled } from './extrinsic_relay';
 
 const DEFAULT_GENESIS_HASH =
-  '0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971';
+  '0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095';
 const DEFAULT_STATE_ROOT =
-  '0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63';
+  '0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac';
 const DEFAULT_BOOTSTRAP_TTL_SECONDS = 300;
 
 export interface ChainBootstrapResponse {

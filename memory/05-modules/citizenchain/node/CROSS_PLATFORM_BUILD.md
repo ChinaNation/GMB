@@ -19,9 +19,12 @@
   `setup.exe` 文件自身图标；安装后的应用/桌面图标仍由 `bundle.icon` 图标列表控制。
 - `citizenchain/node/tauri.conf.json` `plugins.updater` 段 —— 桌面端打开软件后检查
   GitHub Release 中的 `citizenchain-latest.json`；检查更新不等于安装更新，安装必须由设置页“更新”按钮触发。
-- `.github/workflows/citizenchain.yml` —— push 与手动发布分流：
+- `.github/workflows/citizenchain-ci.yml` —— push 与手动发布分流：
   - `push main`：只构建 4 个用户安装包并上传本次 run artifact，不读取 Tauri updater 签名密钥，不发布 Release，不部署服务器。
-  - `Run workflow`：构建同样 4 个用户安装包和 updater 签名产物，发布 GitHub Release，并部署 Linux amd 服务器。
+  - `Run workflow`：构建同样 4 个用户安装包和 updater 签名产物，并按选择发布 GitHub Release；服务器由本机 Touch ID 门禁后的部署动作逐节点安装。
+  - `prepare-genesis-state`：下载当前分支最新成功 `CitizenChain WASM` artifact，核对其与冻结
+    chainspec 的 `:code` 完全一致，重建并上传本次 run 唯一的 `citizenchain-genesis-state`。
+    四个平台打包 job 必须下载这份正式包，白名单校验后再放入资源；旧同名 artifact 由 CI 删除。
 
 ## 3. 桌面端更新协议
 

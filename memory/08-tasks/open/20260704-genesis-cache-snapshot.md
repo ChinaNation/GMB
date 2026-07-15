@@ -96,11 +96,11 @@
 - `git diff --check`:通过。
 - `git diff --name-only -- citizenchain/runtime`:本轮已按用户二次确认修改 runtime,旧“不修改 runtime”记录不再适用。
 
-## 2026-07-04 #99 WASM 正式冻结
+## 2026-07-04 #99 WASM 冻结记录（历史）
 
 - 已核对 GitHub `CitizenChain WASM` #99 / run `28716997121`,分支 `main`,headSha `42cbcb1c98cb6d69ff2e8172bed8cb2dab7e4442`,与本地 HEAD 一致。
 - 已下载 artifact `citizenchain-wasm`;`citizenchain.compact.compressed.wasm` 文件大小 1,060,546 字节,sha256 `c3cf273ec78acc373020873cf51370f5e3ec867b296842b3f27fc6eb163db1bc`,blake2_256 `0xb97f27adce675a457b08d5e713c17a2bc44c6204d8985d4e7542f71c4aaa8771`。
-- 已执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm citizenchain/target/wasm-ci/citizenchain.compact.compressed.wasm --public-institution-root fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`:通过,创世物化耗时 30s,`genesis_hash=0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971`,`state_root=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`,`chainspec_hash=2c2557a356b99f34d9d5a42ddd10af85a7f8b6c7615550f3c7c5fc8dbaa0de89`。
+- 当时执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm citizenchain/target/wasm-ci/citizenchain.compact.compressed.wasm --public-institution-root fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492` 通过；该 #99 锚点已被 2026-07-14 Git commit `40646f360f01fe362d38ada6085357c586848210` 的正式冻结替代，不得作为当前发布锚点。
 - bake 已同步冻结 SSOT:`citizenchain/node/chainspecs/citizenchain.plain.json` 内嵌 #99 runtime WASM,`citizenapp/assets/chainspec.json` 已同步到 `stateRootHash=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`。
 - `target/chainspec/genesis-state/manifest.json` 已生成,记录 `runtime_wasm_hash=c3cf273ec78acc373020873cf51370f5e3ec867b296842b3f27fc6eb163db1bc`,`public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。
 - 本轮只使用最新成功 `CitizenChain WASM` artifact 作为 bake 输入,未等待 CitizenApp CI;CitizenApp 冻结点来自本地轻形态 `chainspec.json` 的 `stateRootHash` 同步。

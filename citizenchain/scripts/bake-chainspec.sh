@@ -7,7 +7,9 @@
 #
 # 默认模式只生成预览文件到 target/chainspec,不覆盖冻结 SSOT。
 # 正式创世必须在 GitHub WASM CI 成功后执行:
-#   citizenchain/scripts/bake-chainspec.sh --finalize --wasm /path/to/citizenchain.compact.compressed.wasm
+#   citizenchain/scripts/bake-chainspec.sh --finalize \
+#     --wasm /path/to/citizenchain.compact.compressed.wasm \
+#     --wasm-ci-run-id <RUN_ID> --wasm-ci-head-sha <HEAD_SHA>
 #
 # 正式模式会同步:
 #   1. citizenchain/node/chainspecs/citizenchain.plain.json   (节点冻结 SSOT)
@@ -28,20 +30,76 @@ GENESIS_STATE_OUT="$CHAIN_ROOT/target/chainspec/genesis-state"
 FINALIZE=0
 SKIP_CHECK=0
 WASM_FILE_ARG=""
+WASM_CI_RUN_ID=""
+WASM_CI_HEAD_SHA=""
 PUBLIC_INSTITUTION_ROOT=""
 RPC_PORT=19944
+
+validate_genesis_state_package() {
+    local package_root="$1" path relative
+    [[ -f "$package_root/manifest.json" ]] || { echo "错误:创世状态包缺少 manifest.json:$package_root" >&2; return 1; }
+    [[ -d "$package_root/chains/citizenchain/db" ]] || { echo "错误:创世状态包缺少链数据库:$package_root" >&2; return 1; }
+
+    # 正式包不得携带临时节点生成的 TLS、network、keystore 或日志目录；只允许清单和链数据库。
+    while IFS= read -r -d '' path; do
+        relative="${path#"$package_root"/}"
+        if [[ -L "$path" ]]; then
+            echo "错误:创世状态包禁止符号链接:$relative" >&2
+            return 1
+        fi
+        case "$relative" in
+            manifest.json|chains|chains/citizenchain|chains/citizenchain/db|chains/citizenchain/db/*) ;;
+            *)
+                echo "错误:创世状态包包含白名单外残留:$relative" >&2
+                return 1
+                ;;
+        esac
+    done < <(find "$package_root" -mindepth 1 -print0)
+
+    python3 - "$package_root/manifest.json" <<'PYEOF'
+import json
+import sys
+
+manifest_path = sys.argv[1]
+with open(manifest_path, encoding="utf-8") as f:
+    manifest = json.load(f)
+required = (
+    "package_format", "chain_id", "genesis_hash", "state_root", "chainspec_hash",
+    "runtime_wasm_hash", "runtime_wasm_ci_run_id", "runtime_wasm_ci_head_sha",
+    "light_sync_state_hash", "public_institution_root",
+)
+missing = [key for key in required if not manifest.get(key)]
+if missing:
+    raise SystemExit(f"创世状态包 manifest 缺少字段:{','.join(missing)}")
+if manifest["package_format"] != "citizenchain-genesis-state-v1":
+    raise SystemExit("创世状态包 manifest.package_format 无效")
+if manifest["chain_id"] != "citizenchain":
+    raise SystemExit("创世状态包 manifest.chain_id 无效")
+if manifest.get("included_paths") != ["chains/citizenchain/db"]:
+    raise SystemExit("创世状态包 manifest.included_paths 必须精确等于 chains/citizenchain/db")
+if not str(manifest["runtime_wasm_ci_run_id"]).isdigit():
+    raise SystemExit("创世状态包 manifest.runtime_wasm_ci_run_id 无效")
+head_sha = manifest["runtime_wasm_ci_head_sha"]
+if not isinstance(head_sha, str) or len(head_sha) != 40 or any(c not in "0123456789abcdef" for c in head_sha):
+    raise SystemExit("创世状态包 manifest.runtime_wasm_ci_head_sha 无效")
+PYEOF
+}
 
 usage() {
     cat <<'EOF'
 Usage:
   citizenchain/scripts/bake-chainspec.sh [--out FILE] [--skip-check]
-  citizenchain/scripts/bake-chainspec.sh --finalize --wasm FILE [--out FILE]
+  citizenchain/scripts/bake-chainspec.sh --finalize --wasm FILE --wasm-ci-run-id ID --wasm-ci-head-sha SHA [--out FILE]
 
 Options:
   --out FILE       生成 plain chainspec 的输出路径。默认 citizenchain/target/chainspec/citizenchain.plain.json
   --genesis-state-out DIR
                    生成已物化创世链状态包的输出目录。默认 citizenchain/target/chainspec/genesis-state
   --wasm FILE      GitHub WASM CI 产出的 runtime wasm。正式创世必须提供
+  --wasm-ci-run-id ID
+                   该 WASM artifact 所属 GitHub Actions run id
+  --wasm-ci-head-sha SHA
+                   该 WASM artifact 所属提交 SHA
   --public-institution-root HASH
                    CitizenApp 公权机构快照包根哈希,写入创世链状态包 manifest
   --finalize       覆盖冻结 SSOT: node/chainspecs/citizenchain.plain.json 与 citizenapp/assets/chainspec.json
@@ -62,6 +120,14 @@ while (($#)); do
             ;;
         --wasm)
             WASM_FILE_ARG="${2:?--wasm 需要 wasm 文件路径}"
+            shift 2
+            ;;
+        --wasm-ci-run-id)
+            WASM_CI_RUN_ID="${2:?--wasm-ci-run-id 需要 run id}"
+            shift 2
+            ;;
+        --wasm-ci-head-sha)
+            WASM_CI_HEAD_SHA="${2:?--wasm-ci-head-sha 需要提交 SHA}"
             shift 2
             ;;
         --public-institution-root)
@@ -92,13 +158,26 @@ if [[ "$FINALIZE" == "1" && -z "$WASM_FILE_ARG" ]]; then
     echo "错误: --finalize 必须同时提供 --wasm FILE,确保 :code 来自已通过 CI 的 WASM。" >&2
     exit 2
 fi
+if [[ "$FINALIZE" == "1" && ( -z "$WASM_CI_RUN_ID" || -z "$WASM_CI_HEAD_SHA" ) ]]; then
+    echo "错误: --finalize 必须提供 --wasm-ci-run-id 与 --wasm-ci-head-sha,记录 CI artifact 来源。" >&2
+    exit 2
+fi
+if [[ -n "$WASM_CI_RUN_ID" && ! "$WASM_CI_RUN_ID" =~ ^[0-9]+$ ]]; then
+    echo "错误: --wasm-ci-run-id 必须为纯数字。" >&2
+    exit 2
+fi
+if [[ -n "$WASM_CI_HEAD_SHA" && ! "$WASM_CI_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "错误: --wasm-ci-head-sha 必须为 40 位小写十六进制提交 SHA。" >&2
+    exit 2
+fi
 
 if [[ -n "$WASM_FILE_ARG" ]]; then
     if [[ ! -s "$WASM_FILE_ARG" ]]; then
         echo "错误: WASM 文件不存在或为空: $WASM_FILE_ARG" >&2
         exit 2
     fi
-    export WASM_FILE="$(cd "$(dirname "$WASM_FILE_ARG")" && pwd)/$(basename "$WASM_FILE_ARG")"
+    WASM_FILE="$(cd "$(dirname "$WASM_FILE_ARG")" && pwd)/$(basename "$WASM_FILE_ARG")"
+    export WASM_FILE
     unset WASM_BUILD_FROM_SOURCE
     echo "==> 使用指定 WASM_FILE: $WASM_FILE"
 else
@@ -125,15 +204,17 @@ echo "==> 导出 fresh plain chainspec..."
 )
 
 rpc() {
-    curl -s -H 'content-type: application/json' \
+    # RPC 轮询必须有限时；解析错误交给调用点决定是否继续等待或立即失败。
+    curl -fsS --max-time 10 -H 'content-type: application/json' \
         -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\",\"params\":$2}" \
         "http://127.0.0.1:$RPC_PORT" | python3 -c '
 import json
 import sys
 
 data = json.load(sys.stdin)
-if data.get("error"):
-    raise SystemExit(f"RPC error: {data[\"error\"]}")
+error = data.get("error")
+if error:
+    raise SystemExit(f"RPC error: {error}")
 if data.get("result") is None:
     raise SystemExit("RPC result is null")
 print(json.dumps(data["result"], ensure_ascii=False))
@@ -234,14 +315,14 @@ if [[ ! -d "$NODE_TMP_DIR/chains/citizenchain/db" ]]; then
     exit 1
 fi
 cp -a "$NODE_TMP_DIR/chains/citizenchain/db" "$GENESIS_STATE_OUT/chains/citizenchain/db"
-python3 - "$GENESIS_STATE_OUT/manifest.json" "$GENESIS_HASH_STR" "$STATE_ROOT" "$TMP" "${WASM_FILE:-}" "$APP_LIGHT_SYNC_STATE_OUT" "$PUBLIC_INSTITUTION_ROOT" "$GENESIS_SECS" <<'PYEOF'
+python3 - "$GENESIS_STATE_OUT/manifest.json" "$GENESIS_HASH_STR" "$STATE_ROOT" "$TMP" "${WASM_FILE:-}" "$APP_LIGHT_SYNC_STATE_OUT" "$PUBLIC_INSTITUTION_ROOT" "$GENESIS_SECS" "$WASM_CI_RUN_ID" "$WASM_CI_HEAD_SHA" <<'PYEOF'
 import datetime
 import hashlib
 import json
 import os
 import sys
 
-manifest_path, genesis_hash, state_root, chainspec_path, wasm_path, light_sync_state_path, public_institution_root, secs = sys.argv[1:]
+manifest_path, genesis_hash, state_root, chainspec_path, wasm_path, light_sync_state_path, public_institution_root, secs, wasm_ci_run_id, wasm_ci_head_sha = sys.argv[1:]
 
 def sha256_file(path):
     if not path or not os.path.isfile(path):
@@ -261,6 +342,8 @@ manifest = {
     "state_root": state_root,
     "chainspec_hash": sha256_file(chainspec_path),
     "runtime_wasm_hash": sha256_file(wasm_path),
+    "runtime_wasm_ci_run_id": wasm_ci_run_id,
+    "runtime_wasm_ci_head_sha": wasm_ci_head_sha,
     "light_sync_state_hash": sha256_file(light_sync_state_path),
     "public_institution_root": public_institution_root,
     "genesis_materialization_secs": int(secs),
@@ -272,6 +355,9 @@ with open(manifest_path, "w", encoding="utf-8") as f:
     f.write("\n")
 print(f"    {manifest_path}")
 PYEOF
+
+validate_genesis_state_package "$GENESIS_STATE_OUT"
+echo "==> 创世链状态包白名单校验通过:仅包含 manifest.json 与 chains/citizenchain/db"
 
 mv "$TMP" "$OUT"
 trap - EXIT

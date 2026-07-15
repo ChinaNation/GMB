@@ -37,7 +37,7 @@ pub fn fresh_genesis_config() -> Result<ChainSpec, String> {
     properties.insert("tokenDecimals".into(), serde_json::json!(2));
     properties.insert("tokenSymbol".into(), serde_json::json!("GMB"));
 
-    // 从冻结主网 chainspec 复用 44 个 bootnode 地址,
+    // 从冻结主网 chainspec 复用当前 6 个已部署 bootnode 地址,
     // 让所有清链后的节点继续通过同一组 DNS/PeerId 互联组网,避免变成孤岛。
     let frozen: serde_json::Value = serde_json::from_slice(CHAIN_SPEC_PLAIN)
         .map_err(|e| format!("解析冻结 chainspec 失败: {e}"))?;

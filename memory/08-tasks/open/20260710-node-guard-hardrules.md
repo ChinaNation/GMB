@@ -453,8 +453,8 @@
 - 当前 49,593 个创世公权机构的 fresh 链从进程启动到 `chain_getBlockHash(0)` RPC 可用耗时约 47 秒。
 - 本次 fresh 创世哈希为
   `0x3e3a23954fbe4301fe5ccbd9bdb96c2073626c99bfb1acc4218e0a9886fdff82`；临时数据库约 240 MiB。
-- fresh 节点连接冻结主网 bootnode 时，双方明确报告 genesis mismatch：fresh 为 `0x3e3a…ff82`，
-  冻结网络为 `0xb57c…9971`。因此当前源码不能直接加入冻结网络，正式部署基线仍未完成。
+- 当时 fresh 节点连接旧 bootnode 时，双方明确报告 genesis mismatch：fresh 为 `0x3e3a…ff82`，
+  旧冻结网络为 `0xb57c…9971`。该历史部署缺口已由 2026-07-14 单例治理机构任务第 5 步重生唯一冻结基线解决。
 - 节点停止后已删除 `/tmp/gmb-nodeguard-perf.*` 临时目录；仓库没有新增验收文件。
 
 ### 真实三节点最终验收（2026-07-12）

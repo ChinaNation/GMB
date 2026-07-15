@@ -13,6 +13,9 @@
 - 未完成真实字段、格式、远端工作流和服务器路径核对前，不写入或部署节点密钥。
 
 预计修改目录：
+- `.github/workflows/`：让 CitizenChain CI 下载当前分支最新成功 WASM artifact，逐字节核对冻结 `:code` 后重建、校验并上传唯一正式创世状态包；涉及 CI 代码和旧空资源流程清理。
+- `citizenchain/scripts/`：收紧 bake/prepack 创世包白名单，只允许 manifest 与 `chains/citizenchain/db`；涉及脚本代码、中文注释和残留清理。
+- `deploy/actions/`：部署时从同次成功 CI 下载正式创世包，保留节点身份密钥并原子替换旧链数据库；涉及部署代码和失败关闭校验。
 - `deploy/`：扩展本地控制台、节点配置、Keychain 桥接和 CitizenChain 部署动作；源码由Git追踪，密钥和运行数据被精确忽略。
 - `memory/08-tasks/open/`：记录任务范围、决策、进度和验收；会被 Git 跟踪。
 - `memory/01-architecture/citizenchain/`：更新多节点部署架构与边界；会被 Git 跟踪。
@@ -31,6 +34,7 @@
 - [x] 确认 44 个节点清单与本机直连安全传递方案。
 - [x] 实现控制台和安全存储。
 - [ ] 完成真实运行态验收、文档更新和残留清理。
+- [x] 正式创世包只含 manifest 与链数据库；安装包和服务器部署消费同一次 CitizenChain CI 的唯一正式产物。
 
 执行记录：
 - 2026-07-13：确认 `institution-catalog.json` 是44个权威节点的公开身份目录；当前正式 chainspec 只保留已部署的6个 bootnode，原 GitHub deploy job 也只包含6个 IP和一把共享 SSH 密钥。
@@ -46,3 +50,9 @@
 - 2026-07-14：真实浏览器验收节点增量保存：无变更时页面明确显示“未请求Touch ID”；河南节点仅填一项山西GRANDPA私钥时，写入前准确提示“属于山西省权威节点”、清空密钥输入且未请求Touch ID、未写入Keychain。
 - 2026-07-14：经一次Touch ID批量导入下载目录中44组引导节点密钥和44组GRANDPA验证节点密钥。导入前忽略源文件中错位的节点标签，全部按私钥派生的PeerId/GRANDPA公钥与44节点公开目录匹配；88项Keychain写入后逐项回读一致，两份下载目录明文密钥文件随后删除。
 - 2026-07-14：节点列表以IP、引导节点密钥、验证节点密钥、SSH私钥四项齐全作为唯一“可部署”标准；齐全节点显示绿色可操作部署按钮，不齐全节点列出具体缺失项并保持按钮禁用。
+- 2026-07-14：开始修复创世发布链路。已确认现有 CI 只创建空 `resources/genesis-state/`，远端部署只安装 DEB、不替换旧 genesis 数据库；本机正式包还因被直接作为验收 base path 而混入 TLS、network 与 keystore 运行残留，必须重烘焙并按白名单清理。
+- 2026-07-14：bake/prepack 已改为正式创世包严格白名单，并把 WASM CI run id/head SHA 写入 manifest；CitizenChain CI 新增最新成功 WASM 与冻结 `:code` 逐字节核对、正式创世 artifact 上传与旧 artifact 删除，四个平台只消费本次 run 的同一正式包。
+- 2026-07-14：服务器部署脚本改为下载同次成功 CI 的 Linux 安装包和正式创世包，保留节点身份密钥及 GRANDPA keystore，停机后彻底替换旧链数据库并按精确 block#0/state root 验收；本次未触发 CI、GitHub 发布或远端部署。
+- 2026-07-14：用 WASM CI run `29388014765`、提交 `40646f360f01fe362d38ada6085357c586848210` 重新烘焙唯一正式包；已删除旧 PostgreSQL snapshot、旧 `snapshot-node` 及正式包内 TLS/network/keystore 残留。仓库外隔离副本真实启动返回 `genesis_hash=0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095`、`state_root=0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac`、`isSyncing=false`。
+- 2026-07-14：部署归档实测发现 macOS bsdtar 会把系统扩展属性展开为 `._manifest.json` 等 AppleDouble 残留；部署 tar 已设置 `COPYFILE_DISABLE=1`。重新生成的 221 MB 归档成员白名单验收通过。
+- 2026-07-14：隔离启动同时确认当前远端 bootnode 仍是旧创世 `0xb57c…9971`，会与新正式创世 `0xbb99…b095` 明确发生 `Genesis mismatch`；新旧节点不能混网，必须等新 CitizenChain CI 成功后按节点统一替换，当前未触碰远端。

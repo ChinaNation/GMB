@@ -7,7 +7,11 @@ on:
     # chainspecs/)变更时触发。runtime/** 改动只走 citizenchain-wasm.yml;待 wasm CI
     # 产出新 WASM 后用 bake-chainspec.sh 重生 plain SSOT + genesis-state,再推送触发本 CI。
     paths:
+      - ".github/workflows/citizenchain-ci.yml"
       - "citizenchain/node/**"
+      - "citizenchain/scripts/bake-chainspec.sh"
+      - "citizenchain/scripts/prepack.sh"
+      - "citizenchain/scripts/prepack.ps1"
   workflow_dispatch:
     inputs:
       mode:
@@ -20,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: citizenchain-${{ github.ref }}
@@ -32,8 +37,155 @@ env:
   GMB_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'release' }}
 
 jobs:
+  prepare-genesis-state:
+    name: 准备唯一正式创世状态包
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v5
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: citizenchain/node/frontend/package-lock.json
+
+      - name: 安装创世物化依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            llvm \
+            llvm-dev \
+            libclang-dev \
+            protobuf-compiler \
+            libpam0g-dev \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            file \
+            unzip
+          {
+            echo "LLVM_CONFIG_PATH=$(command -v llvm-config)"
+            echo "LIBCLANG_PATH=$(llvm-config --libdir)"
+            echo "PROTOC=$(command -v protoc)"
+          } >> "$GITHUB_ENV"
+
+      - name: 构建节点前端
+        run: |
+          npm --prefix citizenchain/node/frontend ci
+          npm --prefix citizenchain/node/frontend run build
+
+      - name: 下载当前分支最新成功 WASM CI artifact
+        id: wasm
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_json="$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow citizenchain-wasm.yml \
+            --branch "$GITHUB_REF_NAME" \
+            --status success \
+            --limit 20 \
+            --json databaseId,headSha \
+            --jq '.[0]')"
+          run_id="$(jq -r '.databaseId // empty' <<<"$run_json")"
+          head_sha="$(jq -r '.headSha // empty' <<<"$run_json")"
+          [[ "$run_id" =~ ^[0-9]+$ && "$head_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo '::error::当前分支没有可用的成功 CitizenChain WASM CI。'
+            exit 1
+          }
+          artifact_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts" \
+            --jq '.artifacts[] | select(.name == "citizenchain-wasm" and .expired == false) | .id' \
+            | head -1)"
+          [[ "$artifact_id" =~ ^[0-9]+$ ]] || {
+            echo "::error::WASM CI ${run_id} 缺少未过期 citizenchain-wasm artifact。"
+            exit 1
+          }
+          wasm_dir="$RUNNER_TEMP/citizenchain-wasm"
+          mkdir -p "$wasm_dir"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > "$RUNNER_TEMP/citizenchain-wasm.zip"
+          unzip -q "$RUNNER_TEMP/citizenchain-wasm.zip" -d "$wasm_dir"
+          wasm_path="$wasm_dir/citizenchain.compact.compressed.wasm"
+          [[ -s "$wasm_path" ]] || { echo '::error::WASM artifact 缺少 compressed WASM。'; exit 1; }
+          {
+            echo "run_id=$run_id"
+            echo "head_sha=$head_sha"
+            echo "wasm_path=$wasm_path"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 校验 CI WASM 与冻结 chainspec 逐字节一致
+        env:
+          WASM_PATH: ${{ steps.wasm.outputs.wasm_path }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          spec = json.loads(Path("citizenchain/node/chainspecs/citizenchain.plain.json").read_text())
+          raw = spec["genesis"]["runtimeGenesis"]["code"]
+          if not isinstance(raw, str) or not raw.startswith("0x"):
+              raise SystemExit("冻结 chainspec runtimeGenesis.code 无效")
+          frozen_wasm = bytes.fromhex(raw[2:])
+          ci_wasm = Path(os.environ["WASM_PATH"]).read_bytes()
+          if frozen_wasm != ci_wasm:
+              raise SystemExit(
+                  "最新成功 CI WASM 与冻结 chainspec 不一致: "
+                  f"frozen={hashlib.sha256(frozen_wasm).hexdigest()} "
+                  f"ci={hashlib.sha256(ci_wasm).hexdigest()}"
+              )
+          print(f"CI WASM sha256={hashlib.sha256(ci_wasm).hexdigest()}")
+          PY
+
+      - name: 用 CI WASM 重建并核对正式创世状态包
+        env:
+          WASM_PATH: ${{ steps.wasm.outputs.wasm_path }}
+          WASM_CI_RUN_ID: ${{ steps.wasm.outputs.run_id }}
+          WASM_CI_HEAD_SHA: ${{ steps.wasm.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          public_root="$(jq -r '.public_institution_root // empty' citizenapp/assets/public_institutions/manifest.json)"
+          [[ "$public_root" =~ ^[0-9a-f]{64}$ ]] || { echo '::error::公权机构快照根无效。'; exit 1; }
+          citizenchain/scripts/bake-chainspec.sh \
+            --wasm "$WASM_PATH" \
+            --wasm-ci-run-id "$WASM_CI_RUN_ID" \
+            --wasm-ci-head-sha "$WASM_CI_HEAD_SHA" \
+            --public-institution-root "$public_root"
+          cmp citizenchain/target/chainspec/citizenchain.plain.json citizenchain/node/chainspecs/citizenchain.plain.json
+          cmp citizenchain/target/chainspec/chainspec.app.json citizenapp/assets/chainspec.json
+          cmp citizenchain/target/chainspec/light_sync_state.json citizenapp/assets/light_sync_state.json
+          CITIZENAPP_REQUIRE_STATE_ROOT=1 citizenapp/scripts/check-chainspec-frozen.sh
+
+      - name: 上传唯一正式创世状态包
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenchain-genesis-state
+          path: citizenchain/target/chainspec/genesis-state
+          retention-days: 30
+
+      - name: 删除旧正式创世状态 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=citizenchain-genesis-state&per_page=100" \
+            --jq ".artifacts[] | select(.workflow_run.id != ${GITHUB_RUN_ID}) | .id" \
+          | while read -r artifact_id; do
+              [[ -z "$artifact_id" ]] || gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}"
+            done
+
   build-desktop:
     name: 打包公民链桌面端 (${{ matrix.name }})
+    needs: prepare-genesis-state
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -202,9 +354,11 @@ jobs:
       - name: 配置 Linux libclang 环境变量
         if: matrix.platform == 'linux'
         run: |
-          echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
-          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
-          echo "PROTOC=$(command -v protoc)" >> "$GITHUB_ENV"
+          {
+            echo "LLVM_CONFIG_PATH=$(command -v llvm-config)"
+            echo "LIBCLANG_PATH=$(llvm-config --libdir)"
+            echo "PROTOC=$(command -v protoc)"
+          } >> "$GITHUB_ENV"
 
       - name: 安装 macOS 构建依赖
         if: matrix.platform == 'macos'
@@ -221,7 +375,7 @@ jobs:
         run: |
           choco install protoc -y
           choco install llvm -y
-          echo "LIBCLANG_PATH=C:\Program Files\LLVM\lib" >> $env:GITHUB_ENV
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\lib" >> "$env:GITHUB_ENV"
 
       - name: 缓存 Rust 依赖
         uses: Swatinem/rust-cache@v2
@@ -234,11 +388,35 @@ jobs:
           npm --prefix citizenchain/node/frontend ci
           npm --prefix citizenchain/node/frontend run build
 
-      - name: 准备创世状态资源目录
+      - name: 清空旧创世状态资源目录
+        shell: bash
         run: |
-          # push 检查不生成正式创世状态包;正式安装包由 prepack 从
-          # target/chainspec/genesis-state/ 复制真实 manifest + db。
+          rm -rf citizenchain/node/resources/genesis-state
           mkdir -p citizenchain/node/resources/genesis-state
+
+      - name: 下载本次 CI 唯一正式创世状态包
+        uses: actions/download-artifact@v4
+        with:
+          name: citizenchain-genesis-state
+          path: citizenchain/node/resources/genesis-state
+
+      - name: 校验安装包创世资源白名单
+        shell: bash
+        run: |
+          set -euo pipefail
+          root='citizenchain/node/resources/genesis-state'
+          [[ -f "$root/manifest.json" && -d "$root/chains/citizenchain/db" ]] || {
+            echo '::error::安装包缺少正式创世状态 manifest 或数据库。'
+            exit 1
+          }
+          while IFS= read -r -d '' path; do
+            relative="${path#"$root"/}"
+            [[ ! -L "$path" ]] || { echo "::error::创世资源禁止符号链接:$relative"; exit 1; }
+            case "$relative" in
+              manifest.json|chains|chains/citizenchain|chains/citizenchain/db|chains/citizenchain/db/*) ;;
+              *) echo "::error::创世资源包含白名单外残留:$relative"; exit 1 ;;
+            esac
+          done < <(find "$root" -mindepth 1 -print0)
 
       - name: 安装 Tauri CLI
         run: cargo install tauri-cli --locked

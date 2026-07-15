@@ -105,26 +105,24 @@
 主网创世后,chainspec 与创世链状态包都必须永久冻结。公权机构唯一真源是链上
 `genesis + 后续交易状态`;节点本地数据库只是链状态副本。
 
-- 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、44 个权威节点 bootnode、token 属性和协议 ID。
-- 创世链状态包：`citizenchain/scripts/bake-chainspec.sh` 在临时节点完成创世物化后导出 `target/chainspec/genesis-state/`,包含 `chains/citizenchain/db` 与 `manifest.json`。正式安装包把该目录作为 `genesis-state/` 资源内置。2026-07-04 起源码创世口径为国家/省/市 49,593 个公权机构；同日已用 GitHub `CitizenChain WASM` #99 / run `28716997121` 的同提交 CI WASM 完成正式 bake。
-- 当前冻结锚点（49,593 源码口径,Git commit `42cbcb1c98cb6d69ff2e8172bed8cb2dab7e4442`,CI run `28716997121`）：`genesis_hash=0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971`、`state_root=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`、`runtime_wasm_hash=c3cf273ec78acc373020873cf51370f5e3ec867b296842b3f27fc6eb163db1bc`、`chainspec_hash=2c2557a356b99f34d9d5a42ddd10af85a7f8b6c7615550f3c7c5fc8dbaa0de89`、`public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。
-- 2026-07-10 节点守卫真实启动复核：当前源码通过 `citizenchain-fresh` 物化的新创世可启动，创世哈希为 `0xdc396b367c86adbffb29bd930ec25d2656f1fdf7fee2cf2ef5f04a4d4283dfd2`；上述冻结锚点仍使用旧 `AdminAccount` SCALE 字段模型，节点守卫在 NRC 创世记录上按 fail-closed 报 `AdminAccountDecodeFailed` 并拒绝启动。该状态沿用固定治理骨架任务已登记的部署风险，正式部署前必须按预上线重新创世流程重新烘焙 chainspec 与创世状态包；不得放宽节点守卫兼容旧字段模型。
-- 2026-07-14 国家级单例与组成策略第 4 步验收：当前源码 WASM 的隔离 fresh block#0 为 `0xb9688b1d8904a75319c6e715544c00678e4a94df7306cfec071a07a93dd03025`，`isSyncing=false` 且未触发 NodeGuard 拒绝；验收进程已正常退出，未触碰用户既有数据库。该 fresh 结果是开发验收，不替代第 5 步重生的正式冻结 chainspec 锚点。
-- 上一轮冻结锚点（49,593 旧发布锚点，仅作历史对照）：`genesis_hash=0x48275a91dfb46317ebf494ac03a92af97fff78276533f7609660f0298f2a2005`、`state_root=0x93e98c251678ab2b2ac756464787e9123df5965219c2f034b874b5d0be12b3f3`、`runtime_wasm_hash=467a031f7021f46fd18a38963d826a32e085e44503b6b1abe66535b95554fca1`、`chainspec_hash=57e8e641ba0fa371262a6cfcf5ba53a0607a6caca940d16d77729ae45b0cf3de`、`public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`。
-- 上一轮冻结锚点（49,581 旧口径，仅作历史对照，不能作为当前发布锚点）：`genesis_hash=0xc4f78c4fdec0a52bff5af160514cf447ed476a9f02eb24ba4c0df665a66cd1b7`、`state_root=0xb4a27c4c2ff18a17f1b561296cf51f72c00775f781aa826c70e1777daac32eb0`、`runtime_wasm_hash=70e6d1fd01b763628e8b595399487bdfe19191a44a4cfadd5255be0577b9310a`、`chainspec_hash=650c1ed8462a326e43394576eaa99f7533f9ee427cf1d80c58cd2922a82d7558`、`public_institution_root=4923744ae6150717a2ea84be189f7842081197fe94ff7a3956cfac5a576d2318`。
+- 冻结 chainspec：[citizenchain/node/chainspecs/citizenchain.plain.json](../../../../citizenchain/node/chainspecs/citizenchain.plain.json),plain 形态只保存 runtime WASM、genesis patch、当前 6 个已部署 bootnode、token 属性和协议 ID；44 个权威节点是规划身份目录，不得把未部署节点写入当前联网基线。
+- 创世链状态包：`citizenchain/scripts/bake-chainspec.sh` 在临时节点完成创世物化后导出 `target/chainspec/genesis-state/`,只允许包含 `chains/citizenchain/db/**` 与 `manifest.json`。清单同时记录 WASM CI run id 与 head SHA；TLS、network、keystore、符号链接及其他运行残留一律拒绝。正式安装包把该目录作为 `genesis-state/` 资源内置。当前源码创世口径为国家/省/市 49,593 个公权机构。
+- 当前唯一冻结锚点（2026-07-14，Git commit `40646f360f01fe362d38ada6085357c586848210`，GitHub `CitizenChain WASM` run `29388014765`）：`genesis_hash=0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095`、`state_root=0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac`、`runtime_wasm_hash=e7c239c78e337fde6a5e107669f77a517de199dfced1f9b96c9ae49a297b1f79`、`chainspec_hash=471effd6403fcce6bee84ab9bde7ed9aa6e2b3dbb54248a923d4d0d0688c4651`、`light_sync_state_hash=16b722fb297a358efb61b56c70883e0ff0fc1b9cb4af5c508f5d38d624a35c42`、`public_institution_root=b6f3927a831d940cf7037d68fcbc5fc62f9ebb4d2c2a8ce0ef4da15d59fa3855`。
+- 同一次正式 bake 已通过公民宪法创世校验并在 50 秒完成物化；正式包的仓库外隔离副本使用默认内嵌链规范真实启动后，RPC 返回上述 block#0/state root、`isSyncing=false`，进程正常退出。正式包目录禁止直接作为 `--base-path`，避免写入节点密钥和网络运行状态。旧管理员 storage 布局及旧创世锚点不再作为当前发布基线。
 - 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 加载冻结 plain JSON;[process/mod.rs](../../../../citizenchain/node/src/home/process/mod.rs) 首次启动时优先把内置 `genesis-state/chains/citizenchain/db` 复制到本机数据目录,没有内置包才回退到 runtime `GenesisBuilder` 本地物化。
 - 当前限制：即使已复制 `genesis-state` RocksDB,Substrate 启动仍会根据 plain spec 调 `GenesisBlockBuilder` 校验链初始块;这不是重新生成并写入链数据库,但会产生分钟级 CPU 成本。首次本地数据准备显示“初始化中”，已有数据库显示“启动中”，均需等待 `chain_getBlockHash(0)` 成功后才进入“运行中”。
-- 全网一致性保证：plain JSON、CI WASM、创世链状态包 manifest 中的 `genesis_hash/state_root/runtime_wasm_hash/chainspec_hash/public_institution_root` 必须一致;后续 runtime 升级一律走链上 `setCode`,不重写创世包。
+- 全网一致性保证：plain JSON、CI WASM、创世链状态包 manifest 中的 `genesis_hash/state_root/runtime_wasm_hash/chainspec_hash/public_institution_root` 必须一致，manifest 还必须绑定 `runtime_wasm_ci_run_id/runtime_wasm_ci_head_sha`;后续 runtime 升级一律走链上 `setCode`,不重写创世包。
+- 发布与服务器安装：`citizenchain-ci.yml` 先生成并上传本次 run 唯一正式创世 artifact，再由四个平台打包 job 下载；无头服务器部署不经过桌面资源安装逻辑，`deploy/actions/citizenchain.sh` 必须下载同次成功 CI 的 Linux 包和正式创世包，保留节点身份材料后原子替换旧链数据库，并校验精确 block#0/state root。
 - 运行态可用标准：进程内节点线程存活不等于节点可用。首页状态和链上中国启动前置检查都必须等待 `chain_getBlockHash(0)` 成功；RPC ready 前按本地数据是否首次准备分别显示“初始化中”或“启动中”，不得标记“运行中”。桌面启动路径固定使用 `SingleState` 交易池；必要后台任务退出时必须立即保存并展示真实原因，禁止继续等待 RPC 超时。
 
 正式创世冻结流程(只做一次,**永不重做**):
 
 1. GitHub `CitizenChain WASM` CI 成功后,下载同一提交的 `citizenchain-wasm` artifact。
 2. 取 `citizenchain.compact.compressed.wasm` 作为创世 `:code` 字节源。
-3. 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM> --public-institution-root <CitizenApp 公权快照根>`。
+3. 执行 `citizenchain/scripts/bake-chainspec.sh --finalize --wasm <CI_WASM> --wasm-ci-run-id <RUN_ID> --wasm-ci-head-sha <HEAD_SHA> --public-institution-root <CitizenApp 公权快照根>`。
 4. 脚本必须通过 `check-constitution-genesis.py --expect-code-file <CI_WASM>` 校验,确认 `:code` 字节等于 CI WASM,公民宪法 `law_id=0`、v1 直接生效且无待生效版。
 5. 脚本生成四份发布输入:`citizenchain/node/chainspecs/citizenchain.plain.json`、`citizenapp/assets/chainspec.json`、`citizenapp/assets/light_sync_state.json`、`target/chainspec/genesis-state/`。
-6. 正式打包前必须把 `target/chainspec/genesis-state/` 放入 Tauri 资源 `genesis-state/`,或在验收时用 `CITIZENCHAIN_GENESIS_STATE_DIR` 指向该目录。
+6. 正式打包前由 prepack 白名单复制 `target/chainspec/genesis-state/` 到 Tauri 资源 `genesis-state/`;验收必须使用仓库外隔离副本，不得让节点直接写入正式包。
 
 后续 runtime 升级一律走链上 `setCode`(governance/runtime-upgrade),**绝不**重新烘焙或覆盖这份 JSON。
 
@@ -133,7 +131,7 @@
 - [clean-run.sh](../../../../citizenchain/scripts/clean-run.sh) 只用于本机清开发链后按当前源码现造 fresh genesis；runtime WASM 来自当前源码构建，不下载 CI artifact。
 - clean-run 不再执行 `seed-federal-admins`；FRG 在 `PublicAdmins::AdminAccounts` 中只有一个 215 人管理员集合，43 个省专员岗位及每岗 5 人任职由 genesis 写入 entity 真源。
 - 正式创世前需要真正替换仓库 SSOT 时,唯一入口是 [bake-chainspec.sh](../../../../citizenchain/scripts/bake-chainspec.sh)。
-- `bake-chainspec.sh` 用 `citizenchain-fresh` 入口生成新的 plain chainspec,并保留当前 SSOT 中的 44 个权威节点 bootNodes。
+- `bake-chainspec.sh` 用 `citizenchain-fresh` 入口生成新的 plain chainspec,并保留当前 SSOT 中的 6 个已部署 bootNodes。
 - fresh plain chainspec 的 genesis `:code` 必须与下载的 CI WASM 字节一致。
 - 脚本同时写回 `citizenchain/node/chainspecs/citizenchain.plain.json` 与 `citizenapp/assets/chainspec.json`,并导出 `target/chainspec/genesis-state/`,保证全节点和轻节点使用同一创世锚点。
 

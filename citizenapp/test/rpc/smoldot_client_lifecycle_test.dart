@@ -154,7 +154,7 @@ void main() {
 
   group('smoldot finalized database 缓存', () {
     const genesisHash =
-        '0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971';
+        '0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095';
 
     setUp(() {
       SharedPreferences.setMockInitialValues({});

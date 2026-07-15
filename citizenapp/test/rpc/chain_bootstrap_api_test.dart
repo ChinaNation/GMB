@@ -21,7 +21,7 @@ const _bootnodeSds =
 const _bootnodeSxs =
     '/dns4/prcsxs.crcfrcn.com/tcp/30333/wss/p2p/12D3KooWQY3DEaJy9wEBE2bQ9gG1B8XByfVaz839jf1ov75kRmD9';
 const _stateRoot =
-    '0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63';
+    '0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac';
 
 void main() {
   test('安装包 chainspec 只登记当前六个已部署 bootnode', () async {
@@ -189,7 +189,7 @@ Map<String, dynamic> _manifest() => {
         'chain_type': 'Live',
         'protocol_id': 'citizenchain',
         'genesis_hash':
-            '0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971',
+            '0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095',
         'state_root': _stateRoot,
         'ss58_format': 2027,
         'token_symbol': 'GMB',

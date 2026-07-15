@@ -94,9 +94,9 @@
 - bake 已同步冻结 SSOT:`citizenchain/node/chainspecs/citizenchain.plain.json` 与 `citizenapp/assets/chainspec.json`;大小写 `CitizenApp/assets/chainspec.json` 与 `citizenapp/assets/chainspec.json` 为同一 inode,已同步到新 `stateRootHash`。
 - `target/chainspec/genesis-state/manifest.json` 已生成;后续已启动冻结链、同步 OnChina 投影并由 CitizenApp 快照生成器重生 49,593 快照根,上一轮 `public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2`,未沿用上一轮 49,581 根。本轮 NSN/NRP 常量化与 FDA 全称修正后,正式发布前必须重新 bake 并重跑链上投影;当前端上快照名称残留已先清理到 `public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。
 
-## 2026-07-04 #99 WASM 冻结记录
+## 2026-07-04 #99 WASM 冻结记录（历史）
 
-- 已使用 GitHub `CitizenChain WASM` #99 / run `28716997121` 正式重新 bake,当前冻结锚点为 `genesis_hash=0xb57c61a97f2b1fd7fa78756060a0c3e9a0ed6b1048bb8424b034a8f5f99a9971`,`state_root=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`,`runtime_wasm_hash=c3cf273ec78acc373020873cf51370f5e3ec867b296842b3f27fc6eb163db1bc`,`chainspec_hash=2c2557a356b99f34d9d5a42ddd10af85a7f8b6c7615550f3c7c5fc8dbaa0de89`,`public_institution_root=fae09caa31e07cf03953b1a774be72e2614735dce2859a4e2f91fee248955492`。上一轮 `public_institution_root=9e1a8d96737e0668175867ed04ea94e8694c4538b5cdbb4bf435040f360a51c2` 与 49,581 根均仅作历史对照。
+- GitHub `CitizenChain WASM` #99 / run `28716997121` 的锚点仅保留为历史记录；当前唯一冻结基线已由 2026-07-14 Git commit `40646f360f01fe362d38ada6085357c586848210` 的正式 bake 替代，不得继续引用 #99 作为当前发布锚点。
 - CitizenApp 轻形态 `citizenapp/assets/chainspec.json` 已同步到 #99 `stateRootHash=0x6a380e96686b152d1eaff8aafc526c23da43058cac2b98be8e98ea1f9e5eff63`;本轮冻结只取最新成功 `CitizenChain WASM` artifact,不等待也不引用 CitizenApp CI。
 
 ## 上一轮 CitizenApp 快照生成记录（历史）
