@@ -97,7 +97,9 @@ void main() {
         ...compactVec('0100'),
         ...compactVec('002'),
         ...compactVec('测试公民'),
-        1,
+        1, // CitizenSex::Female
+        // CandidateIdentityPayload 的末字段为 u32 LE YYYYMMDD。
+        ...u32Le(20260630),
       ];
 
   List<int> bytesFromHex(String hex) {
@@ -267,6 +269,8 @@ void main() {
       expect(decoded.reviewFields['birth_place'], '43 / 0100 / 002');
       expect(decoded.reviewFields['citizen_full_name'], '测试公民');
       expect(decoded.reviewFields['citizen_sex'], '女');
+      expect(decoded.fields['birth_date'], '20260630');
+      expect(decoded.reviewFields['birth_date'], '2026-06-30');
     });
 
     test('decodes register_voting_identity raw call data', () {
@@ -333,6 +337,8 @@ void main() {
       expect(decoded.fields['wallet_account'], ss58FromBytes(wallet));
       expect(decoded.reviewFields['identity_level'], '参选身份');
       expect(decoded.reviewFields['citizen_full_name'], '测试公民');
+      expect(decoded.fields['birth_date'], '20260630');
+      expect(decoded.reviewFields['birth_date'], '2026-06-30');
     });
 
     test('cast_referendum 缺少 issuer/admins 字段时拒绝解码', () {
