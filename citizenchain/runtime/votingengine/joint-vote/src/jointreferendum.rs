@@ -8,11 +8,9 @@
 //!
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 
-use votingengine::{CitizenIdentityReader, Proposal, PROPOSAL_KIND_JOINT, STATUS_PASSED};
+use votingengine::{Proposal, PROPOSAL_KIND_JOINT, STATUS_PASSED};
 
-use super::pallet::{
-    Config, Error, Event, Pallet, ReferendumScopes, ReferendumTallies, ReferendumVotesByAccount,
-};
+use super::pallet::{Config, Error, Event, Pallet, ReferendumTallies, ReferendumVotesByAccount};
 use super::{is_jointreferendum_vote_passed, is_jointreferendum_vote_rejected};
 
 impl<T: Config> Pallet<T> {
@@ -36,10 +34,8 @@ impl<T: Config> Pallet<T> {
             proposal.citizen_eligible_total > 0,
             Error::<T>::CitizenEligibleTotalNotSet
         );
-        let scope =
-            ReferendumScopes::<T>::get(proposal_id).ok_or(Error::<T>::PopulationScopeMissing)?;
         ensure!(
-            <T as votingengine::Config>::CitizenIdentityReader::can_vote(&who, &scope),
+            <votingengine::Pallet<T>>::can_vote_at_population_snapshot(proposal_id, &who),
             Error::<T>::CitizenNotEligible
         );
 

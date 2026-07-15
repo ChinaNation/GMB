@@ -1,8 +1,8 @@
-// 挖矿页内嵌的网络统计面板：2×2 卡片网格。
+// 挖矿页内嵌的网络统计面板：治理节点、在线节点两张并排卡片。
 // 位置：由 MiningDashboardSection 注入在收益看板与出块记录之间。
 // 设计决策：
-//   - 行 1：治理节点（国家储委会 ｜ 省储委会 ｜ 省储行 单卡合并展示）｜ 在线节点
-//   - 行 2：全节点 ｜ 轻节点
+//   - 治理节点：国家储委会 ｜ 省储委会 ｜ 省储行
+//   - 在线节点：在线节点 ｜ 全节点 ｜ 轻节点
 // 数据轮询：独立 5 秒间隔，与 MiningDashboardSection 的 10 秒收益轮询解耦，
 // 因为网络拓扑变化频率高于收益刷新频率。
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -59,11 +59,16 @@ export function NetworkInlineSection() {
     };
   }, [loadNetwork]);
 
-  // 治理节点 3 列子网格：每列一个数字 + 其名称，数字和名称上下对齐。
+  // 两张卡片共用三列结构：每列一个数字和对应节点类型。
   const governanceCols: Array<{ name: string; value: number }> = [
     { name: '国家储委会', value: network.nrcNodes },
     { name: '省储委会', value: network.prcNodes },
     { name: '省储行', value: network.prbNodes },
+  ];
+  const onlineCols: Array<{ name: string; value: number }> = [
+    { name: '在线节点', value: network.onlineNodes },
+    { name: '全节点', value: network.fullNodes },
+    { name: '轻节点', value: network.lightNodes },
   ];
 
   return (
@@ -72,28 +77,29 @@ export function NetworkInlineSection() {
       <div className="network-inline-grid">
         <div className="metric-card">
           <div className="metric-label">治理节点</div>
-          <div className="governance-node-grid">
+          <div className="network-node-grid">
             {governanceCols.map((col) => (
-              <div key={col.name} className="governance-node-col">
-                <div className="governance-node-value">
+              <div key={col.name} className="network-node-col">
+                <div className="network-node-value">
                   {loading ? '—' : col.value}
                 </div>
-                <div className="governance-node-name">{col.name}</div>
+                <div className="network-node-name">{col.name}</div>
               </div>
             ))}
           </div>
         </div>
         <div className="metric-card">
           <div className="metric-label">在线节点</div>
-          <div className="metric-value">{loading ? '加载中...' : network.onlineNodes}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">全节点</div>
-          <div className="metric-value">{loading ? '加载中...' : network.fullNodes}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">轻节点</div>
-          <div className="metric-value">{loading ? '加载中...' : network.lightNodes}</div>
+          <div className="network-node-grid">
+            {onlineCols.map((col) => (
+              <div key={col.name} className="network-node-col">
+                <div className="network-node-value">
+                  {loading ? '—' : col.value}
+                </div>
+                <div className="network-node-name">{col.name}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       {network.warning ? <pre className="warning">{network.warning}</pre> : null}

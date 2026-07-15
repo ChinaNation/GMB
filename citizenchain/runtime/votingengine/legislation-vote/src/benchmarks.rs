@@ -106,13 +106,17 @@ mod benchmarks {
         let voter: T::AccountId = account("citizen", 0, 0);
         let scope = votingengine::PopulationScope::Country;
         <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&voter, &scope);
+        let (snapshot_id, _) =
+            <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
+                .expect("benchmark population snapshot should be created");
+        votingengine::Pallet::<T>::bind_population_snapshot(proposal_id, snapshot_id)
+            .expect("benchmark proposal should bind population snapshot");
         LegislationMetas::<T>::insert(
             proposal_id,
             LegislationMeta {
                 executive: national_legislature::<T>(0, primitives::cid::code::NLG),
                 legislature: None,
                 needs_guard: false,
-                referendum_scope: Some(scope),
             },
         );
 
@@ -138,7 +142,6 @@ mod benchmarks {
                 executive,
                 legislature: None,
                 needs_guard: false,
-                referendum_scope: None,
             },
         );
 
@@ -179,7 +182,6 @@ mod benchmarks {
                 ),
                 legislature: Some(legislature.clone()),
                 needs_guard: false,
-                referendum_scope: None,
             },
         );
         let who: T::AccountId = account("override-signer", 0, 0);

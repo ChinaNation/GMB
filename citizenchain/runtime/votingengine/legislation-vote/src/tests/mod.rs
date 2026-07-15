@@ -109,6 +109,10 @@ pub fn leg_rep() -> AccountId32 {
 pub struct TestCitizenIdentityReader;
 pub struct TestInternalAdminProvider;
 
+thread_local! {
+    static TEST_POPULATION_SNAPSHOT_ID: RefCell<u64> = const { RefCell::new(0) };
+}
+
 impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
     fn can_vote(_who: &AccountId32, _scope: &votingengine::PopulationScope) -> bool {
         true
@@ -120,6 +124,22 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
 
     fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
         100
+    }
+
+    fn create_population_snapshot(
+        _scope: &votingengine::PopulationScope,
+    ) -> Result<(u64, u64), sp_runtime::DispatchError> {
+        let snapshot_id = TEST_POPULATION_SNAPSHOT_ID.with(|next| {
+            let mut next = next.borrow_mut();
+            let snapshot_id = *next;
+            *next = (*next).saturating_add(1);
+            snapshot_id
+        });
+        Ok((snapshot_id, 100))
+    }
+
+    fn can_vote_at(_who: &AccountId32, _snapshot_id: u64) -> bool {
+        true
     }
 }
 
@@ -220,9 +240,9 @@ impl votingengine::Config for Test {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
-    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
-    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
-    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
@@ -262,6 +282,7 @@ impl crate::pallet::Config for Test {
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
     set_guard_member_ids(&DEFAULT_GUARD_MEMBER_IDS);
+    TEST_POPULATION_SNAPSHOT_ID.with(|next| *next.borrow_mut() = 0);
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("test storage should build");
@@ -324,7 +345,6 @@ fn create_inner(
             executive: (EXEC_CODE, exec_body()),
             legislature,
             needs_guard,
-            referendum_scope: None,
         }),
     )
     .expect("proposal created");

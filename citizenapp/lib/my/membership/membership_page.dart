@@ -753,7 +753,7 @@ class _IdentityFieldRow extends StatelessWidget {
 }
 
 /// 各档链上公开身份字段清单（通用模板）：访客=没有链上身份；投票=CID/居住选区/
-/// 有效期；竞选=在投票基础上再公开姓名/性别/出生地。全为字段名，不读个人数据。
+/// 有效期；竞选=在投票基础上再公开姓名/性别/出生地/出生日期。全为字段名，不读个人数据。
 List<Widget> _buildIdentityRows(String tier, Color color) {
   if (tier == 'visitor') {
     return const [_AnonymousBlock()];
@@ -766,6 +766,7 @@ List<Widget> _buildIdentityRows(String tier, Color color) {
         (Icons.person_outline, '真实姓名'),
         (Icons.wc_outlined, '性别'),
         (Icons.location_city_outlined, '出生地'),
+        (Icons.cake_outlined, '出生日期'),
       ],
     _ => const [
         (Icons.badge_outlined, '公民身份 CID 号'),

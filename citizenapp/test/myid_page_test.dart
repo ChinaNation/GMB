@@ -50,7 +50,7 @@ void main() {
     expect(find.text('完全匿名'), findsNothing);
   });
 
-  testWidgets('竞选公民档多展示姓名/性别/出生地', (tester) async {
+  testWidgets('竞选公民档多展示姓名/性别/出生地/出生日期', (tester) async {
     await pumpPage(
       tester,
       const MyIdState(
@@ -64,6 +64,7 @@ void main() {
         citizenFullName: '陈明',
         citizenSexLabel: '男',
         birthDistrict: '广东 · 广州 · 天河',
+        citizenBirthDate: '2000-01-31',
       ),
     );
 
@@ -75,6 +76,8 @@ void main() {
     expect(find.text('男'), findsOneWidget);
     expect(find.text('出生地'), findsOneWidget);
     expect(find.text('广东 · 广州 · 天河'), findsOneWidget);
+    expect(find.text('出生日期'), findsOneWidget);
+    expect(find.text('2000-01-31'), findsOneWidget);
   });
 
   testWidgets('链读失败档显示读取失败与重试', (tester) async {

@@ -126,7 +126,15 @@ const tierIdentityName: Record<IdentityLevel, string> = {
 const tierIdentityFields: Record<IdentityLevel, string[]> = {
   visitor: [],
   voting: ['公民身份 CID 号', '居住选区', '投票身份有效期'],
-  candidate: ['公民身份 CID 号', '居住选区', '身份有效期', '真实姓名', '性别', '出生地'],
+  candidate: [
+    '公民身份 CID 号',
+    '居住选区',
+    '身份有效期',
+    '真实姓名',
+    '性别',
+    '出生地',
+    '出生日期',
+  ],
 }
 
 // 仓库扇贝勋章徽章（与 App identity_badge 一致）：档色底 + 中心白色小人（官网无

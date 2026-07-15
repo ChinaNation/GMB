@@ -46,8 +46,7 @@ echo "==> 使用 benchmark runtime WASM: $RUNTIME_WASM"
 # 本清单只包含 benchmark 覆盖当前 WeightInfo 的 pallet。
 # 以下模块当前不得自动覆盖:
 # - public_manage/private_manage: benchmarks.rs 只覆盖 1 个方法,weights.rs 有 4 个方法。
-# - personal_manage / offchain_transaction / votingengine / internal_vote / joint_vote:
-#   benchmark 文件为空或未挂载到 runtime/src/benchmarks.rs。
+# - personal_manage / offchain_transaction:benchmark 文件为空或未挂载到 runtime registry。
 # - onchain_issuance:业务仍是 stub,正式权重必须等业务实装后生成。
 # - genesis_pallet:无 extrinsic,WeightInfo 为空实现。
 PALLETS=(
@@ -60,6 +59,11 @@ PALLETS=(
     "resolution_destroy:runtime/governance/resolution-destroy/src/weights.rs"
     "grandpakey_change:runtime/governance/grandpakey-change/src/weights.rs"
     "multisig:runtime/transaction/multisig/src/weights.rs"
+    "internal_vote:runtime/votingengine/internal-vote/src/weights.rs"
+    "joint_vote:runtime/votingengine/joint-vote/src/weights.rs"
+    "votingengine:runtime/votingengine/src/weights.rs"
+    "legislation_vote:runtime/votingengine/legislation-vote/src/weights.rs"
+    "election_vote:runtime/votingengine/election-vote/src/weights.rs"
     "runtime_upgrade:runtime/governance/runtime-upgrade/src/weights.rs"
 )
 

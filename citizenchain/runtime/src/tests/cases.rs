@@ -689,6 +689,7 @@ fn runtime_citizen_identity_reader_reads_voting_and_candidate_identity() {
                 .try_into()
                 .expect("citizen name fits"),
             citizen_sex: citizen_identity::CitizenSex::Male,
+            birth_date: 20000101,
         };
         let signature = sign_citizen_identity_payload(&wallet_pair, &candidate);
 

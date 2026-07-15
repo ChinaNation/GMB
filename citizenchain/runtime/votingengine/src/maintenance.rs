@@ -128,9 +128,11 @@ impl<T: Config> Pallet<T> {
             PendingCleanupStage::FinalCleanup => {
                 let Some(proposal) = Proposals::<T>::get(proposal_id) else {
                     PendingProposalExecutions::<T>::remove(proposal_id);
+                    PendingTerminalFinalizations::<T>::remove(proposal_id);
+                    TerminalFinalizationDeadLetters::<T>::remove(proposal_id);
                     AutoFinalizeRetryStates::<T>::remove(proposal_id);
                     AutoFinalizeDeadLetters::<T>::remove(proposal_id);
-                    return (None, db.reads_writes(1, 3));
+                    return (None, db.reads_writes(1, 5));
                 };
                 if !<T::TrackHandlers as crate::tracks::ProposalTracks<
                     BlockNumberFor<T>,
@@ -151,11 +153,16 @@ impl<T: Config> Pallet<T> {
                 ProposalData::<T>::remove(proposal_id);
                 ProposalOwner::<T>::remove(proposal_id);
                 ProposalMeta::<T>::remove(proposal_id);
+                if let Some(snapshot_id) = ProposalPopulationSnapshotIds::<T>::take(proposal_id) {
+                    T::CitizenIdentityReader::release_population_snapshot(snapshot_id);
+                }
                 ProposalExecutionRetryStates::<T>::remove(proposal_id);
                 PendingProposalExecutions::<T>::remove(proposal_id);
+                PendingTerminalFinalizations::<T>::remove(proposal_id);
+                TerminalFinalizationDeadLetters::<T>::remove(proposal_id);
                 AutoFinalizeRetryStates::<T>::remove(proposal_id);
                 AutoFinalizeDeadLetters::<T>::remove(proposal_id);
-                (None, track_weight.saturating_add(db.reads_writes(1, 15)))
+                (None, track_weight.saturating_add(db.reads_writes(2, 18)))
             }
         }
     }

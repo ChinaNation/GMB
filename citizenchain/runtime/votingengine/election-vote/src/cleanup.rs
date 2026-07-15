@@ -5,7 +5,7 @@
 
 use crate::pallet::{
     ElectionCandidateTallies, ElectionCandidates, ElectionMetaStore, ElectionResults,
-    ElectionTallyStore, ElectionVoters, ElectionVotesByVoter,
+    ElectionTallyStore, ElectionVotesByVoter, MutualVoters,
 };
 use crate::weights::WeightInfo;
 use frame_support::{traits::Get, weights::Weight};
@@ -23,7 +23,7 @@ impl<T: crate::pallet::Config> votingengine::ElectionCleanupHandler for crate::p
         proposal_id: u64,
         limit: u32,
     ) -> votingengine::CleanupChunkResult {
-        let result = ElectionVoters::<T>::clear_prefix(proposal_id, limit, None);
+        let result = MutualVoters::<T>::clear_prefix(proposal_id, limit, None);
         (result.unique, result.maybe_cursor.is_some())
     }
 

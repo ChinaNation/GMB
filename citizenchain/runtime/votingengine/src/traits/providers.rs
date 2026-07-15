@@ -1,6 +1,7 @@
 //! 公民身份与机构管理员资格的只读提供者。
 
 use crate::types::InstitutionCode;
+use sp_runtime::DispatchError;
 
 /// 公民身份只读接口。投票引擎只能读链上公民身份模块的资格和人口数，
 /// 不再接收注册局链下签发的人口快照或投票凭证。
@@ -8,6 +9,23 @@ pub trait CitizenIdentityReader<AccountId> {
     fn can_vote(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool;
     fn can_be_candidate(who: &AccountId, scope: &citizen_identity::PopulationScope) -> bool;
     fn population_count(scope: &citizen_identity::PopulationScope) -> u64;
+
+    /// 由 citizen-identity 创建同时冻结分母与成员资格的治理快照。
+    fn create_population_snapshot(
+        _scope: &citizen_identity::PopulationScope,
+    ) -> Result<(u64, u64), DispatchError> {
+        Err(DispatchError::Other(
+            "citizen identity snapshot provider unavailable",
+        ))
+    }
+
+    /// 验证账户在指定治理快照创建时是否具备投票资格。
+    fn can_vote_at(_who: &AccountId, _snapshot_id: u64) -> bool {
+        false
+    }
+
+    /// 提案历史清理完成后释放 citizen-identity 快照元数据。
+    fn release_population_snapshot(_snapshot_id: u64) {}
 
     /// FRAME benchmark 专用：写入一个同时具备投票和参选资格的账户，
     /// 并同步人口分母。生产调用路径不会调用此函数。

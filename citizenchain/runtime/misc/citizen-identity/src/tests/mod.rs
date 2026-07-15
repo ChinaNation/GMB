@@ -220,6 +220,8 @@ fn candidate_payload(wallet_account: u64, cid_number: &[u8]) -> CandidateIdentit
         birth_town_code: code(b"4301001"),
         citizen_full_name: name(b"Citizen One"),
         citizen_sex: CitizenSex::Female,
+        // 固定时间 20260702 下年龄 26 周岁,满足最小年龄。
+        birth_date: 20000131,
     }
 }
 
@@ -377,7 +379,51 @@ fn population_snapshot_reads_current_scope_count() {
 
         let snapshot = PopulationSnapshots::<Test>::get(0).expect("snapshot should exist");
         assert_eq!(snapshot.eligible_total, 1);
+        assert_eq!(snapshot.eligibility_revision, 1);
+        assert_eq!(snapshot.snapshot_date, 20260702);
+        assert!(CitizenIdentity::can_vote_at_snapshot(&1, 0));
         assert_eq!(NextSnapshotId::<Test>::get(), 1);
+    });
+}
+
+#[test]
+fn population_snapshot_freezes_membership_before_identity_update() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("SNAPSHOT-OLD");
+        occupy_tag("SNAPSHOT-NEW");
+        assert_ok!(CitizenIdentity::register_voting_identity(
+            RuntimeOrigin::signed(100),
+            200,
+            voting_payload(1, &citizen_cid_number("SNAPSHOT-OLD")),
+            valid_signature(),
+        ));
+
+        let (old_snapshot_id, old_total) =
+            CitizenIdentity::create_governance_population_snapshot(&town_scope())
+                .expect("old snapshot should be created");
+        assert_eq!(old_total, 1);
+        assert!(CitizenIdentity::can_vote_at_snapshot(&1, old_snapshot_id));
+
+        // 同一账户迁往另一乡镇后，旧提案仍按创建时身份判断；新提案使用新身份。
+        let mut moved = voting_payload(1, &citizen_cid_number("SNAPSHOT-NEW"));
+        moved.residence_town_code = code(b"4301002");
+        assert_ok!(CitizenIdentity::update_voting_identity(
+            RuntimeOrigin::signed(100),
+            200,
+            moved,
+            valid_signature(),
+        ));
+
+        assert!(CitizenIdentity::can_vote_at_snapshot(&1, old_snapshot_id));
+        let (new_snapshot_id, new_total) =
+            CitizenIdentity::create_governance_population_snapshot(&town_scope())
+                .expect("new snapshot should be created");
+        assert_eq!(new_total, 0);
+        assert!(!CitizenIdentity::can_vote_at_snapshot(&1, new_snapshot_id));
+
+        CitizenIdentity::release_governance_population_snapshot(old_snapshot_id);
+        assert!(!PopulationSnapshots::<Test>::contains_key(old_snapshot_id));
+        assert!(!CitizenIdentity::can_vote_at_snapshot(&1, old_snapshot_id));
     });
 }
 
@@ -458,6 +504,9 @@ fn candidate_identity_stores_sex_and_public_profile() {
         let stored = CandidateIdentityByAccount::<Test>::get(1).expect("candidate stored");
         assert_eq!(stored.citizen_sex, CitizenSex::Female);
         assert_eq!(stored.citizen_full_name, name(b"Citizen One"));
+        assert_eq!(stored.birth_date, 20000131);
+        // 固定链上日 20260702 − 出生 20000131 → 26 周岁。
+        assert_eq!(CitizenIdentity::candidate_age(&1), Some(26));
     });
 }
 
@@ -466,6 +515,81 @@ fn current_date_int_matches_fixed_time() {
     new_test_ext().execute_with(|| {
         // FixedTime = 2026-07-02 00:00 UTC → UTC+8 折算 20260702。
         assert_eq!(CitizenIdentity::current_date_int(), 20260702);
+    });
+}
+
+#[test]
+fn age_from_birth_date_handles_birthday_boundary() {
+    new_test_ext().execute_with(|| {
+        // 固定链上日 20260702。
+        assert_eq!(CitizenIdentity::age_from_birth_date(20000701), Some(26)); // 生日已过
+        assert_eq!(CitizenIdentity::age_from_birth_date(20000702), Some(26)); // 今日生日
+        assert_eq!(CitizenIdentity::age_from_birth_date(20000703), Some(25)); // 生日未到
+        assert_eq!(CitizenIdentity::age_from_birth_date(0), None); // 空
+        assert_eq!(CitizenIdentity::age_from_birth_date(20300101), None); // 未来出生
+    });
+}
+
+#[test]
+fn candidate_birth_date_is_immutable_on_update() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("IMMUT");
+        let cid = citizen_cid_number("IMMUT");
+        assert_ok!(CitizenIdentity::upgrade_to_candidate_identity(
+            RuntimeOrigin::signed(100),
+            200,
+            candidate_payload(1, &cid),
+            valid_signature(),
+        ));
+
+        // 更新竞选身份时试图改出生日期 → 拒绝。
+        let mut tampered = candidate_payload(1, &cid);
+        tampered.birth_date = 19990101;
+        assert_noop!(
+            CitizenIdentity::update_candidate_identity(
+                RuntimeOrigin::signed(100),
+                200,
+                tampered,
+                valid_signature(),
+            ),
+            Error::<Test>::BirthDateImmutable
+        );
+    });
+}
+
+#[test]
+fn candidate_illegal_birth_date_rejected() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("BADDOB");
+        let mut payload = candidate_payload(1, &citizen_cid_number("BADDOB"));
+        payload.birth_date = 20261340; // 非法月/日
+        assert_noop!(
+            CitizenIdentity::upgrade_to_candidate_identity(
+                RuntimeOrigin::signed(100),
+                200,
+                payload,
+                valid_signature(),
+            ),
+            Error::<Test>::InvalidBirthDate
+        );
+    });
+}
+
+#[test]
+fn candidate_future_birth_date_rejected() {
+    new_test_ext().execute_with(|| {
+        occupy_tag("FUTDOB");
+        let mut payload = candidate_payload(1, &citizen_cid_number("FUTDOB"));
+        payload.birth_date = 20990101; // 未来出生 → 算不出年龄
+        assert_noop!(
+            CitizenIdentity::upgrade_to_candidate_identity(
+                RuntimeOrigin::signed(100),
+                200,
+                payload,
+                valid_signature(),
+            ),
+            Error::<Test>::InvalidBirthDate
+        );
     });
 }
 

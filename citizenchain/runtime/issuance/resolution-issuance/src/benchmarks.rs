@@ -4,20 +4,20 @@
 
 use codec::Decode;
 use frame_benchmarking::v2::*;
-use frame_support::{traits::Get, BoundedVec};
+use frame_support::{
+    traits::{EnsureOrigin, Get},
+    BoundedVec,
+};
 use frame_system::RawOrigin;
 use primitives::cid::china::china_cb::CHINA_CB;
-use sp_runtime::traits::{CheckedAdd, Hash, SaturatedConversion, Saturating, Zero};
+use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Saturating, Zero};
 use sp_std::{vec, vec::Vec};
+use votingengine::CitizenIdentityReader;
 
 use crate::{pallet, AllowedRecipients, Call, Config, Pallet, VotingProposalCount};
 
 fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
-}
-
-fn nrc_admin<T: pallet::Config>() -> T::AccountId {
-    decode_account::<T>(CHINA_CB[0].admins[0])
 }
 
 fn prc_recipients<T: pallet::Config>() -> BoundedVec<T::AccountId, T::MaxAllocations> {
@@ -64,13 +64,19 @@ fn prepare_population_snapshot<T>(who: &T::AccountId)
 where
     T: pallet::Config + joint_vote::Config,
 {
+    let scope = votingengine::PopulationScope::Country;
+    let citizen: T::AccountId = account("resolution-issuance-citizen", 0, 0);
+    <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&citizen, &scope);
+    let (snapshot_id, eligible_total) =
+        <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
+            .expect("benchmark population snapshot should be created");
     let now = frame_system::Pallet::<T>::block_number();
     let prepared_at = now.saturating_add(1u32.saturated_into());
     joint_vote::PendingPopulationSnapshots::<T>::insert(
         who,
         joint_vote::PreparedPopulationSnapshot {
-            eligible_total: 10u64,
-            scope: votingengine::PopulationScope::Country,
+            snapshot_id,
+            eligible_total,
             prepared_at,
         },
     );
@@ -93,7 +99,10 @@ mod benchmarks {
 
     #[benchmark]
     fn propose_issuance() {
-        let proposer = nrc_admin::<T>();
+        let origin = T::ProposeOrigin::try_successful_origin()
+            .expect("benchmark proposer origin must be available");
+        let proposer = T::ProposeOrigin::ensure_origin(origin.clone())
+            .expect("benchmark proposer origin must return an account");
         let recipients = prc_recipients::<T>();
         AllowedRecipients::<T>::put(recipients);
         VotingProposalCount::<T>::put(0u32);
@@ -104,13 +113,8 @@ mod benchmarks {
 
         #[block]
         {
-            Pallet::<T>::propose_issuance(
-                RawOrigin::Signed(proposer).into(),
-                reason,
-                total_amount,
-                allocations,
-            )
-            .expect("benchmark resolution issuance proposal should succeed");
+            Pallet::<T>::propose_issuance(origin, reason, total_amount, allocations)
+                .expect("benchmark resolution issuance proposal should succeed");
         }
 
         assert_eq!(VotingProposalCount::<T>::get(), 1u32);

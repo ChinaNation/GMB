@@ -10,8 +10,7 @@ use sp_runtime::traits::SaturatedConversion;
 use votingengine::CitizenIdentityReader;
 
 use crate::pallet::{
-    Config, JointInstitutionTallies, JointVotesByInstitution, Pallet, ReferendumScopes,
-    ReferendumVotesByAccount,
+    Config, JointInstitutionTallies, JointVotesByInstitution, Pallet, ReferendumVotesByAccount,
 };
 use crate::Call;
 
@@ -41,7 +40,6 @@ fn setup_proposal<T: Config>(
         citizen_eligible_total: 100,
     };
     votingengine::pallet::Proposals::<T>::insert(proposal_id, proposal.clone());
-    ReferendumScopes::<T>::insert(proposal_id, votingengine::PopulationScope::Country);
     (proposal_id, proposal)
 }
 
@@ -52,10 +50,14 @@ mod benchmarks {
     #[benchmark]
     fn prepare_joint_population_snapshot() {
         let who: T::AccountId = account("snapshot-proposer", 0, 0);
+        let citizen: T::AccountId = account("snapshot-citizen", 0, 0);
         let scope = votingengine::PopulationScope::Country;
-        <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&who, &scope);
-        let eligible_total =
-            <T as votingengine::Config>::CitizenIdentityReader::population_count(&scope);
+        <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(
+            &citizen, &scope,
+        );
+        let (snapshot_id, eligible_total) =
+            <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
+                .expect("benchmark population snapshot should be created");
         let now = frame_system::Pallet::<T>::block_number();
 
         #[block]
@@ -63,8 +65,8 @@ mod benchmarks {
             crate::pallet::PendingPopulationSnapshots::<T>::insert(
                 &who,
                 crate::pallet::PreparedPopulationSnapshot {
+                    snapshot_id,
                     eligible_total,
-                    scope,
                     prepared_at: now,
                 },
             );
@@ -118,6 +120,11 @@ mod benchmarks {
         let voter: T::AccountId = account("citizen", 0, 0);
         let scope = votingengine::PopulationScope::Country;
         <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&voter, &scope);
+        let (snapshot_id, _) =
+            <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
+                .expect("benchmark population snapshot should be created");
+        votingengine::Pallet::<T>::bind_population_snapshot(proposal_id, snapshot_id)
+            .expect("benchmark proposal should bind population snapshot");
 
         #[extrinsic_call]
         _(RawOrigin::Signed(voter.clone()), proposal_id, true);

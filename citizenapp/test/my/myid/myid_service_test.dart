@@ -98,6 +98,7 @@ void main() {
     expect(state.citizenFullName, '陈明');
     expect(state.citizenSexLabel, '男');
     expect(state.birthDistrict, contains('N(0020)'));
+    expect(state.citizenBirthDate, '2000-01-31');
   });
 
   test('护照未生效/已过期/已吊销状态派生正确', () async {
@@ -195,6 +196,7 @@ Uint8List _encodeCandidate({
   required String town,
   required String fullName,
   required int sex,
+  int birthDate = 20000131,
   int updatedAt = 1,
 }) {
   return Uint8List.fromList([
@@ -203,6 +205,7 @@ Uint8List _encodeCandidate({
     ..._vec(town),
     ..._vec(fullName),
     sex,
+    ..._u32(birthDate),
     ..._u32(updatedAt),
   ]);
 }

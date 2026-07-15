@@ -26,14 +26,13 @@ use votingengine::{
     types::{
         fixed_governance_pass_threshold, InstitutionCode, ProposalSubjectCidNumbers, NRC, PRB, PRC,
     },
-    CitizenIdentityReader, InternalAdminProvider, InternalProposalMutexKind, PopulationScope,
-    Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
+    InternalAdminProvider, InternalProposalMutexKind, PopulationScope, Proposal,
+    PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
 use super::pallet::{
     Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
     JointVotesByInstitution, Pallet, PendingPopulationSnapshots, PreparedPopulationSnapshot,
-    ReferendumScopes,
 };
 use super::{decode_account, institution_info, is_joint_unanimous, nrc_account};
 
@@ -160,16 +159,22 @@ impl<T: Config> Pallet<T> {
     ) -> DispatchResult {
         let _proposer_institution = resolve_proposer_institution::<T>(&who)
             .ok_or(votingengine::Error::<T>::NoPermission)?;
-        let eligible_total =
-            <T as votingengine::Config>::CitizenIdentityReader::population_count(&scope);
-        ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
+        let (snapshot_id, eligible_total) =
+            <votingengine::Pallet<T>>::create_population_snapshot(&scope)?;
+        if eligible_total == 0 {
+            <votingengine::Pallet<T>>::release_population_snapshot(snapshot_id);
+            return Err(Error::<T>::CitizenEligibleTotalNotSet.into());
+        }
 
         let now = <frame_system::Pallet<T>>::block_number();
+        if let Some(previous) = PendingPopulationSnapshots::<T>::take(&who) {
+            <votingengine::Pallet<T>>::release_population_snapshot(previous.snapshot_id);
+        }
         PendingPopulationSnapshots::<T>::insert(
             &who,
             PreparedPopulationSnapshot {
+                snapshot_id,
                 eligible_total,
-                scope: scope.clone(),
                 prepared_at: now,
             },
         );
@@ -191,10 +196,11 @@ impl<T: Config> Pallet<T> {
         let now = <frame_system::Pallet<T>>::block_number();
         if prepared.prepared_at != now {
             PendingPopulationSnapshots::<T>::remove(&who);
+            <votingengine::Pallet<T>>::release_population_snapshot(prepared.snapshot_id);
             return Err(Error::<T>::PopulationSnapshotNotCurrent.into());
         }
+        let snapshot_id = prepared.snapshot_id;
         let eligible_total = prepared.eligible_total;
-        let referendum_scope = prepared.scope;
         let end = now.saturating_add(Self::joint_stage_duration());
         let subject_cid_numbers = joint_subject_cid_numbers::<T>()?;
 
@@ -270,7 +276,9 @@ impl<T: Config> Pallet<T> {
 
             PendingPopulationSnapshots::<T>::remove(&who);
             Proposals::<T>::insert(id, proposal);
-            ReferendumScopes::<T>::insert(id, referendum_scope);
+            if let Err(err) = <votingengine::Pallet<T>>::bind_population_snapshot(id, snapshot_id) {
+                return TransactionOutcome::Rollback(Err(err));
+            }
             if let Err(err) = <votingengine::Pallet<T>>::schedule_proposal_expiry(id, end) {
                 return TransactionOutcome::Rollback(Err(err));
             }

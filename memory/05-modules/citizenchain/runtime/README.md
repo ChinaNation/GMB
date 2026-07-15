@@ -9,7 +9,7 @@ runtime/
   entity/
   governance/
   issuance/
-  otherpallet/
+  misc/
   transaction/
   primitives/
 ```

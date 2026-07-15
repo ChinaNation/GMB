@@ -206,6 +206,9 @@ pub struct CandidateIdentityPayload<AccountId> {
     pub birth_town_code: AreaCodeBound,
     pub citizen_full_name: CitizenNameBound,
     pub citizen_sex: CitizenSex,
+    /// 出生日期(YYYYMMDD 整数)。仅竞选身份携带,写入后不可修改;
+    /// 链上凭此实时计算竞选公民年龄(见 `candidate_age`)。
+    pub birth_date: u32,
 }
 
 #[derive(
@@ -247,6 +250,8 @@ pub struct CandidateIdentity<BlockNumber> {
     pub birth_town_code: AreaCodeBound,
     pub citizen_full_name: CitizenNameBound,
     pub citizen_sex: CitizenSex,
+    /// 出生日期(YYYYMMDD 整数),写一次即锁定,后续更新不得变更。
+    pub birth_date: u32,
     pub updated_at: BlockNumber,
 }
 
@@ -283,6 +288,31 @@ pub struct PopulationSnapshot<BlockNumber> {
     pub scope: PopulationScope,
     pub eligible_total: u64,
     pub created_at: BlockNumber,
+    /// 快照创建时已经提交的最后一个身份资格版本。
+    pub eligibility_revision: u64,
+    /// 快照创建时的 UTC+8 日期，护照有效期按该日期冻结判定。
+    pub snapshot_date: u32,
+}
+
+/// 单个账户的一段不可变投票资格历史。
+///
+/// 全局 revision 区分同一区块内的多次身份写入；`valid_until_revision` 为开区间上界。
+/// 公投按 snapshot revision 二分定位版本，不依赖投票时的当前身份。
+#[derive(
+    Clone,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Eq,
+    PartialEq,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub struct VotingEligibilityVersion<BlockNumber> {
+    pub identity: VotingIdentity<BlockNumber>,
+    pub valid_from_revision: u64,
+    pub valid_until_revision: Option<u64>,
 }
 
 pub trait CitizenIdentityAuthority<AccountId, Signature> {
@@ -339,6 +369,11 @@ pub trait CitizenIdentityProvider<AccountId> {
     fn can_vote(who: &AccountId, scope: &PopulationScope) -> bool;
     fn can_be_candidate(who: &AccountId, scope: &PopulationScope) -> bool;
     fn population_count(scope: &PopulationScope) -> u64;
+    fn create_population_snapshot(
+        scope: &PopulationScope,
+    ) -> Result<(u64, u64), sp_runtime::DispatchError>;
+    fn can_vote_at(who: &AccountId, snapshot_id: u64) -> bool;
+    fn release_population_snapshot(snapshot_id: u64);
 }
 
 impl<AccountId> CitizenIdentityProvider<AccountId> for () {
@@ -353,6 +388,20 @@ impl<AccountId> CitizenIdentityProvider<AccountId> for () {
     fn population_count(_scope: &PopulationScope) -> u64 {
         0
     }
+
+    fn create_population_snapshot(
+        _scope: &PopulationScope,
+    ) -> Result<(u64, u64), sp_runtime::DispatchError> {
+        Err(sp_runtime::DispatchError::Other(
+            "citizen identity snapshot provider unavailable",
+        ))
+    }
+
+    fn can_vote_at(_who: &AccountId, _snapshot_id: u64) -> bool {
+        false
+    }
+
+    fn release_population_snapshot(_snapshot_id: u64) {}
 }
 
 #[frame_support::pallet]
@@ -361,6 +410,9 @@ pub mod pallet {
     use crate::weights::WeightInfo;
     use frame_support::{pallet_prelude::*, Blake2_128Concat};
     use frame_system::pallet_prelude::*;
+
+    /// 创世链直接采用当前存储结构，不保留历史迁移或兼容分支。
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     pub type SignatureOf<T> = BoundedVec<u8, <T as Config>::MaxCitizenSignatureLength>;
 
@@ -384,6 +436,7 @@ pub mod pallet {
     }
 
     #[pallet::pallet]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
@@ -445,6 +498,27 @@ pub mod pallet {
     pub type PopulationSnapshots<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, PopulationSnapshot<BlockNumberFor<T>>, OptionQuery>;
 
+    /// 全局身份资格修订号。每次投票身份写入严格递增，用于冻结同区块交易顺序。
+    #[pallet::storage]
+    pub type NextEligibilityRevision<T> = StorageValue<_, u64, ValueQuery>;
+
+    /// 单账户历史版本数量；版本索引为 0..count，支持按 revision 有界二分。
+    #[pallet::storage]
+    pub type VotingEligibilityVersionCount<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, u64, ValueQuery>;
+
+    /// 单账户不可变投票资格历史：(账户, 版本序号) → 资格区间。
+    #[pallet::storage]
+    pub type VotingEligibilityVersions<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        Blake2_128Concat,
+        u64,
+        VotingEligibilityVersion<BlockNumberFor<T>>,
+        OptionQuery,
+    >;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -473,6 +547,10 @@ pub mod pallet {
             scope: PopulationScope,
             eligible_total: u64,
         },
+        /// 投票引擎完成历史保留后释放人口快照。
+        PopulationSnapshotReleased {
+            snapshot_id: u64,
+        },
         CidOccupied {
             cid_number: CidNumberBound,
             registrar_account: T::AccountId,
@@ -488,6 +566,10 @@ pub mod pallet {
         EmptyResidenceScope,
         EmptyBirthScope,
         EmptyCitizenName,
+        /// 出生日期非法(非 YYYYMMDD 或无法计算年龄)。
+        InvalidBirthDate,
+        /// 出生日期写入后不可修改,更新竞选身份时不得变更。
+        BirthDateImmutable,
         InvalidDateRange,
         InvalidCitizenCode,
         UnauthorizedRegistrar,
@@ -499,6 +581,12 @@ pub mod pallet {
         CidAlreadyOccupied,
         CidNotOccupied,
         CidAlreadyRevoked,
+        /// 人口快照 ID 达到 u64 上限。
+        PopulationSnapshotIdOverflow,
+        /// 身份资格修订号达到 u64 上限。
+        EligibilityRevisionOverflow,
+        /// 单账户身份历史版本数达到 u64 上限。
+        EligibilityVersionOverflow,
     }
 
     #[pallet::call]
@@ -533,7 +621,7 @@ pub mod pallet {
             let old = VotingIdentityByAccount::<T>::get(&payload.wallet_account);
             let first_identity = old.is_none();
             let identity = Self::identity_from_payload(&payload);
-            Self::replace_voting_identity(payload.wallet_account.clone(), identity, old);
+            Self::replace_voting_identity(payload.wallet_account.clone(), identity, old)?;
             AccountByCid::<T>::insert(&payload.cid_number, &payload.wallet_account);
 
             if first_identity {
@@ -578,9 +666,11 @@ pub mod pallet {
             Self::ensure_cid_available(&payload.voting.cid_number, &payload.voting.wallet_account)?;
             Self::ensure_cid_occupied_active(&payload.voting.cid_number)?;
 
+            Self::ensure_birth_date_immutable(&payload.voting.wallet_account, payload.birth_date)?;
+
             let old = VotingIdentityByAccount::<T>::get(&payload.voting.wallet_account);
             let identity = Self::identity_from_payload(&payload.voting);
-            Self::replace_voting_identity(payload.voting.wallet_account.clone(), identity, old);
+            Self::replace_voting_identity(payload.voting.wallet_account.clone(), identity, old)?;
             AccountByCid::<T>::insert(&payload.voting.cid_number, &payload.voting.wallet_account);
             CandidateIdentityByAccount::<T>::insert(
                 &payload.voting.wallet_account,
@@ -590,6 +680,7 @@ pub mod pallet {
                     birth_town_code: payload.birth_town_code,
                     citizen_full_name: payload.citizen_full_name,
                     citizen_sex: payload.citizen_sex,
+                    birth_date: payload.birth_date,
                     updated_at: frame_system::Pallet::<T>::block_number(),
                 },
             );
@@ -627,7 +718,7 @@ pub mod pallet {
             let old = VotingIdentityByAccount::<T>::get(&payload.wallet_account)
                 .ok_or(Error::<T>::VotingIdentityNotFound)?;
             let identity = Self::identity_from_payload(&payload);
-            Self::replace_voting_identity(payload.wallet_account.clone(), identity, Some(old));
+            Self::replace_voting_identity(payload.wallet_account.clone(), identity, Some(old))?;
             AccountByCid::<T>::insert(&payload.cid_number, &payload.wallet_account);
             Self::deposit_event(Event::<T>::VotingIdentityUpdated {
                 wallet_account: payload.wallet_account,
@@ -660,6 +751,8 @@ pub mod pallet {
             Self::ensure_cid_available(&payload.voting.cid_number, &payload.voting.wallet_account)?;
             Self::ensure_cid_occupied_active(&payload.voting.cid_number)?;
 
+            Self::ensure_birth_date_immutable(&payload.voting.wallet_account, payload.birth_date)?;
+
             let old = VotingIdentityByAccount::<T>::get(&payload.voting.wallet_account)
                 .ok_or(Error::<T>::VotingIdentityNotFound)?;
             let identity = Self::identity_from_payload(&payload.voting);
@@ -667,7 +760,7 @@ pub mod pallet {
                 payload.voting.wallet_account.clone(),
                 identity,
                 Some(old),
-            );
+            )?;
             CandidateIdentityByAccount::<T>::insert(
                 &payload.voting.wallet_account,
                 CandidateIdentity {
@@ -676,6 +769,7 @@ pub mod pallet {
                     birth_town_code: payload.birth_town_code,
                     citizen_full_name: payload.citizen_full_name,
                     citizen_sex: payload.citizen_sex,
+                    birth_date: payload.birth_date,
                     updated_at: frame_system::Pallet::<T>::block_number(),
                 },
             );
@@ -719,7 +813,7 @@ pub mod pallet {
             let mut revoked = old.clone();
             revoked.citizen_status = CitizenStatus::Revoked;
             revoked.updated_at = frame_system::Pallet::<T>::block_number();
-            Self::replace_voting_identity(account.clone(), revoked, Some(old));
+            Self::replace_voting_identity(account.clone(), revoked, Some(old))?;
             CandidateIdentityByAccount::<T>::remove(&account);
             // 身份吊销联动登记表墓碑,保证发号真源与身份状态一致。
             Self::tombstone_cid_record(&cid_number);
@@ -737,20 +831,7 @@ pub mod pallet {
             scope: PopulationScope,
         ) -> DispatchResult {
             let _who = ensure_signed(origin)?;
-            let snapshot_id = NextSnapshotId::<T>::get();
-            let eligible_total = Self::population_count_for_scope(&scope);
-            let snapshot = PopulationSnapshot {
-                scope: scope.clone(),
-                eligible_total,
-                created_at: frame_system::Pallet::<T>::block_number(),
-            };
-            PopulationSnapshots::<T>::insert(snapshot_id, snapshot);
-            NextSnapshotId::<T>::put(snapshot_id.saturating_add(1));
-            Self::deposit_event(Event::<T>::PopulationSnapshotCreated {
-                snapshot_id,
-                scope,
-                eligible_total,
-            });
+            Self::create_governance_population_snapshot(&scope)?;
             Ok(())
         }
 
@@ -856,7 +937,7 @@ pub mod pallet {
             );
             Self::tombstone_cid_record(&cid_number);
             if let Some(account) = AccountByCid::<T>::get(&cid_number) {
-                Self::revoke_bound_identity(&account);
+                Self::revoke_bound_identity(&account)?;
             }
             Self::deposit_event(Event::<T>::CidRevoked { cid_number });
             Ok(())
@@ -941,16 +1022,17 @@ pub mod pallet {
         }
 
         /// 吊销已绑定的链上身份:状态置 Revoked、退出人口分母、移除参选档案。
-        fn revoke_bound_identity(account: &T::AccountId) {
+        fn revoke_bound_identity(account: &T::AccountId) -> DispatchResult {
             if let Some(old) = VotingIdentityByAccount::<T>::get(account) {
                 if old.citizen_status != CitizenStatus::Revoked {
                     let mut revoked = old.clone();
                     revoked.citizen_status = CitizenStatus::Revoked;
                     revoked.updated_at = frame_system::Pallet::<T>::block_number();
-                    Self::replace_voting_identity(account.clone(), revoked, Some(old));
+                    Self::replace_voting_identity(account.clone(), revoked, Some(old))?;
                     CandidateIdentityByAccount::<T>::remove(account);
                 }
             }
+            Ok(())
         }
 
         fn ensure_valid_voting_payload(
@@ -987,6 +1069,17 @@ pub mod pallet {
             ensure!(
                 !payload.citizen_full_name.is_empty(),
                 Error::<T>::EmptyCitizenName
+            );
+            ensure!(
+                Self::is_plausible_yyyymmdd(payload.birth_date),
+                Error::<T>::InvalidBirthDate
+            );
+            // 出生日期决定竞选公民年龄:必须能算出年龄且不低于法定最小年龄。
+            let age = Self::age_from_birth_date(payload.birth_date)
+                .ok_or(Error::<T>::InvalidBirthDate)?;
+            ensure!(
+                age >= MIN_ONCHAIN_CITIZEN_AGE_YEARS as u32,
+                Error::<T>::UnderVotingAge
             );
             Ok(())
         }
@@ -1075,18 +1168,70 @@ pub mod pallet {
             (year as u32) * 10_000 + month * 100 + day
         }
 
+        /// 校验 YYYYMMDD 整数的基本合法性(年 1900–9999、月 1–12、日 1–31)。
+        /// 只做粗校验(不判每月天数),精确到期由业务与前端展示层负责。
+        pub fn is_plausible_yyyymmdd(date: u32) -> bool {
+            let year = date / 10_000;
+            let month = (date / 100) % 100;
+            let day = date % 100;
+            (1900..=9999).contains(&year) && (1..=12).contains(&month) && (1..=31).contains(&day)
+        }
+
+        /// 由出生日期(YYYYMMDD)与链上当前日期(UTC+8)计算周岁。
+        /// 整数除法自动判断今年生日是否已过;当前日期未初始化(时间戳=0)、
+        /// 出生日期为 0 或落在未来一律返回 `None`(fail-closed)。
+        pub fn age_from_birth_date(birth_date: u32) -> Option<u32> {
+            let today = Self::current_date_int();
+            if today == 0 || birth_date == 0 || birth_date > today {
+                return None;
+            }
+            Some((today - birth_date) / 10_000)
+        }
+
+        /// 读取某账户竞选身份的出生日期并计算当前周岁;无竞选身份返回 `None`。
+        /// 出生日期是链上公开信息,任何调用方可据此实时计算竞选公民年龄。
+        pub fn candidate_age(account: &T::AccountId) -> Option<u32> {
+            let identity = CandidateIdentityByAccount::<T>::get(account)?;
+            Self::age_from_birth_date(identity.birth_date)
+        }
+
+        /// 出生日期写一次即锁定:已存在竞选身份时,入参出生日期必须与链上一致,
+        /// 否则拒绝(防止升级/更新竞选身份时篡改出生日期)。
+        fn ensure_birth_date_immutable(account: &T::AccountId, incoming: u32) -> DispatchResult {
+            if let Some(existing) = CandidateIdentityByAccount::<T>::get(account) {
+                ensure!(
+                    existing.birth_date == incoming,
+                    Error::<T>::BirthDateImmutable
+                );
+            }
+            Ok(())
+        }
+
         /// 护照有效期窗口校验:valid_from ≤ 今日 ≤ valid_until。
         /// 过期或未生效的护照不能投票;时间戳缺失时按不可投票处理。
         fn passport_window_valid(identity: &VotingIdentity<BlockNumberFor<T>>) -> bool {
             let today = Self::current_date_int();
-            identity.passport_valid_from <= today && today <= identity.passport_valid_until
+            Self::passport_window_valid_on(identity, today)
+        }
+
+        fn passport_window_valid_on(
+            identity: &VotingIdentity<BlockNumberFor<T>>,
+            date: u32,
+        ) -> bool {
+            date != 0
+                && identity.passport_valid_from <= date
+                && date <= identity.passport_valid_until
         }
 
         fn replace_voting_identity(
             account: T::AccountId,
             next: VotingIdentity<BlockNumberFor<T>>,
             old: Option<VotingIdentity<BlockNumberFor<T>>>,
-        ) {
+        ) -> DispatchResult {
+            let revision = NextEligibilityRevision::<T>::get()
+                .checked_add(1)
+                .ok_or(Error::<T>::EligibilityRevisionOverflow)?;
+            let version_count = VotingEligibilityVersionCount::<T>::get(&account);
             if let Some(old_identity) = old {
                 if Self::identity_counts_as_voter(&old_identity) {
                     Self::decrement_scope_counts(&old_identity);
@@ -1096,11 +1241,37 @@ pub mod pallet {
                     // 换号 = 旧号退役:登记表墓碑,永不复用。
                     Self::tombstone_cid_record(&old_identity.cid_number);
                 }
+                if version_count > 0 {
+                    VotingEligibilityVersions::<T>::mutate(
+                        &account,
+                        version_count.saturating_sub(1),
+                        |version| {
+                            if let Some(version) = version {
+                                version.valid_until_revision = Some(revision);
+                            }
+                        },
+                    );
+                }
             }
             if Self::identity_counts_as_voter(&next) {
                 Self::increment_scope_counts(&next);
             }
+            let next_version_count = version_count
+                .checked_add(1)
+                .ok_or(Error::<T>::EligibilityVersionOverflow)?;
+            VotingEligibilityVersions::<T>::insert(
+                &account,
+                version_count,
+                VotingEligibilityVersion {
+                    identity: next.clone(),
+                    valid_from_revision: revision,
+                    valid_until_revision: None,
+                },
+            );
+            VotingEligibilityVersionCount::<T>::insert(&account, next_version_count);
+            NextEligibilityRevision::<T>::put(revision);
             VotingIdentityByAccount::<T>::insert(account, next);
+            Ok(())
         }
 
         fn increment_scope_counts(identity: &VotingIdentity<BlockNumberFor<T>>) {
@@ -1175,6 +1346,90 @@ pub mod pallet {
                 }
             }
         }
+
+        /// 创建供治理投票使用的不可变人口快照。
+        ///
+        /// snapshot 同时冻结分母、身份资格 revision 和护照判定日期；消费模块只能
+        /// 保存 snapshot_id，不能重新拼接一份链下选民名单。
+        pub fn create_governance_population_snapshot(
+            scope: &PopulationScope,
+        ) -> Result<(u64, u64), sp_runtime::DispatchError> {
+            let snapshot_id = NextSnapshotId::<T>::get();
+            let next_snapshot_id = snapshot_id
+                .checked_add(1)
+                .ok_or(Error::<T>::PopulationSnapshotIdOverflow)?;
+            let eligible_total = Self::population_count_for_scope(scope);
+            let snapshot = PopulationSnapshot {
+                scope: scope.clone(),
+                eligible_total,
+                created_at: frame_system::Pallet::<T>::block_number(),
+                eligibility_revision: NextEligibilityRevision::<T>::get(),
+                snapshot_date: Self::current_date_int(),
+            };
+            PopulationSnapshots::<T>::insert(snapshot_id, snapshot);
+            NextSnapshotId::<T>::put(next_snapshot_id);
+            Self::deposit_event(Event::<T>::PopulationSnapshotCreated {
+                snapshot_id,
+                scope: scope.clone(),
+                eligible_total,
+            });
+            Ok((snapshot_id, eligible_total))
+        }
+
+        /// 按快照 revision 二分定位账户当时的身份版本。
+        fn identity_at_revision(
+            who: &T::AccountId,
+            revision: u64,
+        ) -> Option<VotingIdentity<BlockNumberFor<T>>> {
+            let count = VotingEligibilityVersionCount::<T>::get(who);
+            if count == 0 {
+                return None;
+            }
+            let mut low = 0u64;
+            let mut high = count;
+            while low < high {
+                let mid = low.saturating_add(high.saturating_sub(low) / 2);
+                let version = VotingEligibilityVersions::<T>::get(who, mid)?;
+                if version.valid_from_revision <= revision {
+                    low = mid.saturating_add(1);
+                } else {
+                    high = mid;
+                }
+            }
+            if low == 0 {
+                return None;
+            }
+            let version = VotingEligibilityVersions::<T>::get(who, low.saturating_sub(1))?;
+            if version
+                .valid_until_revision
+                .map(|until| revision >= until)
+                .unwrap_or(false)
+            {
+                return None;
+            }
+            Some(version.identity)
+        }
+
+        /// 使用 citizen-identity 自有历史验证账户在 snapshot 创建时是否具备资格。
+        pub fn can_vote_at_snapshot(who: &T::AccountId, snapshot_id: u64) -> bool {
+            let Some(snapshot) = PopulationSnapshots::<T>::get(snapshot_id) else {
+                return false;
+            };
+            let Some(identity) = Self::identity_at_revision(who, snapshot.eligibility_revision)
+            else {
+                return false;
+            };
+            Self::identity_counts_as_voter(&identity)
+                && Self::passport_window_valid_on(&identity, snapshot.snapshot_date)
+                && Self::scope_matches(&identity, &snapshot.scope)
+        }
+
+        /// 提案历史清理完成后释放快照元数据；身份版本仍作为链上身份审计历史保留。
+        pub fn release_governance_population_snapshot(snapshot_id: u64) {
+            if PopulationSnapshots::<T>::take(snapshot_id).is_some() {
+                Self::deposit_event(Event::<T>::PopulationSnapshotReleased { snapshot_id });
+            }
+        }
     }
 
     impl<T: Config> crate::CitizenIdentityProvider<T::AccountId> for Pallet<T> {
@@ -1199,6 +1454,20 @@ pub mod pallet {
 
         fn population_count(scope: &PopulationScope) -> u64 {
             Self::population_count_for_scope(scope)
+        }
+
+        fn create_population_snapshot(
+            scope: &PopulationScope,
+        ) -> Result<(u64, u64), sp_runtime::DispatchError> {
+            Self::create_governance_population_snapshot(scope)
+        }
+
+        fn can_vote_at(who: &T::AccountId, snapshot_id: u64) -> bool {
+            Self::can_vote_at_snapshot(who, snapshot_id)
+        }
+
+        fn release_population_snapshot(snapshot_id: u64) {
+            Self::release_governance_population_snapshot(snapshot_id)
         }
     }
 }

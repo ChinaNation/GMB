@@ -17,6 +17,39 @@ use sp_runtime::{
 use sp_std::vec::Vec;
 
 impl<T: Config> Pallet<T> {
+    /// 创建 citizen-identity 治理人口快照。
+    pub fn create_population_snapshot(
+        scope: &PopulationScope,
+    ) -> Result<(u64, u64), DispatchError> {
+        T::CitizenIdentityReader::create_population_snapshot(scope)
+    }
+
+    /// 将唯一人口快照绑定到提案。
+    pub fn bind_population_snapshot(proposal_id: u64, snapshot_id: u64) -> DispatchResult {
+        ensure!(
+            Proposals::<T>::contains_key(proposal_id),
+            Error::<T>::ProposalNotFound
+        );
+        ensure!(
+            !ProposalPopulationSnapshotIds::<T>::contains_key(proposal_id),
+            Error::<T>::InvalidProposalStatus
+        );
+        ProposalPopulationSnapshotIds::<T>::insert(proposal_id, snapshot_id);
+        Ok(())
+    }
+
+    /// 释放尚未绑定提案或已被替换的快照。
+    pub fn release_population_snapshot(snapshot_id: u64) {
+        T::CitizenIdentityReader::release_population_snapshot(snapshot_id);
+    }
+
+    /// 按提案绑定的 snapshot_id 校验创建时公民资格。
+    pub fn can_vote_at_population_snapshot(proposal_id: u64, who: &T::AccountId) -> bool {
+        ProposalPopulationSnapshotIds::<T>::get(proposal_id)
+            .map(|snapshot_id| T::CitizenIdentityReader::can_vote_at(who, snapshot_id))
+            .unwrap_or(false)
+    }
+
     /// 读取提案的公投选民总数(`citizen_eligible_total`);提案不存在返回 `None`。
     /// 供立法业务壳在写入核心修宪版本时取永久公投凭据(见 legislation-vote `referendum_result`)。
     /// 读已终结提案亦可(不校验 open 状态),故与 `ensure_open_proposal` 分开。

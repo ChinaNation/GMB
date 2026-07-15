@@ -53,7 +53,21 @@ pub use tracks::*;
 pub use traits::*;
 pub use types::*;
 
-use frame_support::dispatch::DispatchResult;
+use core::marker::PhantomData;
+use frame_support::{dispatch::DispatchResult, traits::Get, weights::Weight};
+
+/// 从 Runtime 最大区块权重派生独立维护管线预算。
+///
+/// 该配置类型不属于 benchmark 生成物，避免重生 `weights.rs` 时被覆盖。
+pub struct BlockWeightFraction<T, const DIVISOR: u64>(PhantomData<T>);
+
+impl<T: frame_system::Config, const DIVISOR: u64> Get<Weight> for BlockWeightFraction<T, DIVISOR> {
+    fn get() -> Weight {
+        let divisor = DIVISOR.max(1);
+        let max = <T as frame_system::Config>::BlockWeights::get().max_block;
+        Weight::from_parts(max.ref_time() / divisor, max.proof_size() / divisor)
+    }
+}
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -274,6 +288,14 @@ pub mod pallet {
     pub type ProposalOwner<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, BoundedVec<u8, T::MaxModuleTagLen>, OptionQuery>;
 
+    /// 提案使用的 citizen-identity 人口资格快照。
+    ///
+    /// 分母仍缓存于 Proposal，成员资格唯一通过该 snapshot_id 回到身份模块校验。
+    #[pallet::storage]
+    #[pallet::getter(fn proposal_population_snapshot_id)]
+    pub type ProposalPopulationSnapshotIds<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, u64, OptionQuery>;
+
     /// 自动执行失败后的可重试状态。
     #[pallet::storage]
     #[pallet::getter(fn proposal_execution_retry_state)]
@@ -289,6 +311,24 @@ pub mod pallet {
         crate::types::PendingExecutionState<BlockNumberFor<T>>,
         OptionQuery,
     >;
+
+    /// 自动业务执行达到失败上限后，等待补齐终态副作用的独立队列。
+    ///
+    /// 提案已经进入 EXECUTION_FAILED，后续只能登记延迟清理、释放业务侧 pending
+    /// 状态和执行 Track 终态钩子，绝不能再次调用通过提案的业务执行回调。
+    #[pallet::storage]
+    pub type PendingTerminalFinalizations<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        crate::types::PendingExecutionState<BlockNumberFor<T>>,
+        OptionQuery,
+    >;
+
+    /// 终态副作用连续失败达到上限后的 dead-letter 记录，供治理人工检查。
+    #[pallet::storage]
+    pub type TerminalFinalizationDeadLetters<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, u8, OptionQuery>;
 
     /// 自动超时终结失败后的有限退避状态。
     #[pallet::storage]
@@ -502,6 +542,14 @@ pub mod pallet {
         },
         /// 回调连续错误达到上限，已进入执行失败终态。
         ProposalExecutionDeadLettered { proposal_id: u64, attempts: u8 },
+        /// EXECUTION_FAILED 的终态副作用失败，已按指数退避。
+        ProposalTerminalFinalizationDeferred {
+            proposal_id: u64,
+            attempts: u8,
+            next_attempt_at: BlockNumberFor<T>,
+        },
+        /// EXECUTION_FAILED 的终态副作用连续失败，已进入独立 dead-letter。
+        ProposalTerminalFinalizationDeadLettered { proposal_id: u64, attempts: u8 },
         /// 自动超时终结失败，已退避到后续区块重试。
         ProposalAutoFinalizeDeferred {
             proposal_id: u64,
@@ -619,6 +667,8 @@ pub mod pallet {
             }
 
             weight = weight.saturating_add(Self::process_pending_proposal_executions(n));
+
+            weight = weight.saturating_add(Self::process_pending_terminal_finalizations(n));
 
             weight = weight.saturating_add(Self::process_pending_execution_retry_expirations(n));
 

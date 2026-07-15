@@ -2146,6 +2146,12 @@ class PayloadDecoder {
     };
     if (sexLabel == null) return null;
 
+    // birth_date: u32 YYYYMMDD(LE),CandidateIdentityPayload 末字段。
+    if (offset + 4 > bytes.length) return null;
+    final birthDate = _readU32Le(bytes, offset);
+    offset += 4;
+    if (!_isValidDateInt(birthDate)) return null;
+
     final birthPlace = '$birthProvinceCode / $birthCityCode / $birthTownCode';
     return (
       cidNumber: voting.cidNumber,
@@ -2158,6 +2164,7 @@ class PayloadDecoder {
         'birth_town_code': birthTownCode,
         'citizen_full_name': citizenFullName,
         'citizen_sex': sex.toString(),
+        'birth_date': birthDate.toString(),
       },
       reviewFields: <String, String>{
         'identity_level': '参选身份',
@@ -2165,6 +2172,7 @@ class PayloadDecoder {
         'birth_place': birthPlace,
         'citizen_full_name': citizenFullName,
         'citizen_sex': sexLabel,
+        'birth_date': _formatDateInt(birthDate),
       },
     );
   }

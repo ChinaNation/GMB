@@ -59,7 +59,7 @@ pub mod pallet {
 
     pub type MaxElectionOfficeCodeOf<T> = <T as Config>::MaxElectionOfficeCodeLen;
     pub type MaxElectionCandidatesOf<T> = <T as Config>::MaxElectionCandidates;
-    pub type MaxElectionVotersOf<T> = <T as Config>::MaxElectionVoters;
+    pub type MaxMutualVotersOf<T> = <T as Config>::MaxMutualVoters;
     pub type ElectionOfficeCodeOf<T> = BoundedVec<u8, MaxElectionOfficeCodeOf<T>>;
     pub type ElectionMetaOf<T> =
         ElectionMeta<<T as frame_system::Config>::AccountId, ElectionOfficeCodeOf<T>>;
@@ -78,11 +78,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxElectionCandidates: Get<u32>;
 
-        /// 当前框架可直接固化的最大选民快照人数。
-        ///
-        /// 大规模普选后续应接 CID 凭证/人口快照,不把几万人名单直接塞链上。
+        /// 单场互选可固化的最大机构管理员人数；Popular 不保存完整选民列表。
         #[pallet::constant]
-        type MaxElectionVoters: Get<u32>;
+        type MaxMutualVoters: Get<u32>;
 
         /// 机构账户 → CID 查询入口。选举提案用 CID 记录组织机构和目标机构。
         type InstitutionQuery: InstitutionMultisigQuery<Self::AccountId>;
@@ -113,9 +111,9 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 选民快照。普选/互选均只认创建时写入的快照。
+    /// 互选管理员快照。Popular 资格只认 citizen-identity snapshot_id。
     #[pallet::storage]
-    pub type ElectionVoters<T: Config> =
+    pub type MutualVoters<T: Config> =
         StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, T::AccountId, (), OptionQuery>;
 
     /// 投票记录:proposal_id + voter → candidate。
@@ -178,11 +176,11 @@ pub mod pallet {
         EmptyOfficeCode,
         /// 候选人快照为空。
         EmptyCandidateSnapshot,
-        /// 选民快照为空。
+        /// 互选管理员快照为空。
         EmptyVoterSnapshot,
         /// 候选人数量超过上限。
         TooManyCandidates,
-        /// 选民数量超过上限。
+        /// 互选管理员数量超过上限。
         TooManyVoters,
         /// 候选人/选民快照内有重复账户。
         DuplicateAccount,
@@ -308,18 +306,9 @@ pub mod pallet {
                 usize::from(seat_count) <= bounded_candidates.len(),
                 Error::<T>::InvalidSeatCount
             );
-            let bounded_voters = Self::bounded_voters(voters)?;
-
-            match (mode, population_scope.as_ref()) {
+            let mut population_snapshot_id = None;
+            let (eligible_total, mutual_voters) = match (mode, population_scope.as_ref()) {
                 (ElectionMode::Popular, Some(scope)) => {
-                    ensure!(
-                        bounded_voters.iter().all(|voter| {
-                            <T as votingengine::Config>::CitizenIdentityReader::can_vote(
-                                voter, scope,
-                            )
-                        }),
-                        Error::<T>::VoterNotEligible
-                    );
                     ensure!(
                         bounded_candidates.iter().all(|candidate| {
                             <T as votingengine::Config>::CitizenIdentityReader::can_be_candidate(
@@ -328,13 +317,17 @@ pub mod pallet {
                         }),
                         Error::<T>::CandidateNotEligible
                     );
-                    ensure!(
-                        <T as votingengine::Config>::CitizenIdentityReader::population_count(scope)
-                            == bounded_voters.len() as u64,
-                        Error::<T>::ElectionSnapshotMismatch
-                    );
+                    let (snapshot_id, eligible_total) =
+                        votingengine::Pallet::<T>::create_population_snapshot(scope)?;
+                    if eligible_total == 0 {
+                        votingengine::Pallet::<T>::release_population_snapshot(snapshot_id);
+                        return Err(Error::<T>::EmptyVoterSnapshot.into());
+                    }
+                    population_snapshot_id = Some(snapshot_id);
+                    (eligible_total, None)
                 }
                 (ElectionMode::Mutual, None) => {
+                    let bounded_voters = Self::bounded_mutual_voters(voters)?;
                     let admins =
                         <T as votingengine::Config>::InternalAdminProvider::get_admin_list(
                             target_code,
@@ -357,9 +350,10 @@ pub mod pallet {
                             .all(|candidate| admins.iter().any(|admin| admin == candidate)),
                         Error::<T>::CandidateNotEligible
                     );
+                    (bounded_voters.len() as u64, Some(bounded_voters))
                 }
                 _ => return Err(Error::<T>::ElectionScopeMissing.into()),
-            }
+            };
 
             let now = frame_system::Pallet::<T>::block_number();
             let end = now.saturating_add(Self::stage_duration());
@@ -374,7 +368,7 @@ pub mod pallet {
                 subject_cid_numbers,
                 start: now,
                 end,
-                citizen_eligible_total: bounded_voters.len() as u64,
+                citizen_eligible_total: eligible_total,
             };
             let meta = ElectionMeta {
                 mode,
@@ -390,7 +384,7 @@ pub mod pallet {
                 term_end,
             };
 
-            with_transaction(|| {
+            let result = with_transaction(|| {
                 let id = match votingengine::Pallet::<T>::allocate_proposal_id() {
                     Ok(id) => id,
                     Err(err) => return TransactionOutcome::Rollback(Err(err)),
@@ -404,7 +398,16 @@ pub mod pallet {
                 ElectionMetaStore::<T>::insert(id, meta);
                 ElectionCandidates::<T>::insert(id, bounded_candidates.clone());
                 ElectionTallyStore::<T>::insert(id, crate::types::ElectionTally::default());
-                Self::write_voter_snapshot(id, &bounded_voters);
+                if let Some(voters) = mutual_voters.as_ref() {
+                    Self::write_mutual_voter_snapshot(id, voters);
+                }
+                if let Some(snapshot_id) = population_snapshot_id {
+                    if let Err(err) =
+                        votingengine::Pallet::<T>::bind_population_snapshot(id, snapshot_id)
+                    {
+                        return TransactionOutcome::Rollback(Err(err));
+                    }
+                }
                 if let Err(err) = votingengine::Pallet::<T>::register_proposal_data(
                     id,
                     MODULE_TAG,
@@ -429,7 +432,13 @@ pub mod pallet {
                     seat_count,
                 });
                 TransactionOutcome::Commit(Ok(id))
-            })
+            });
+            if result.is_err() {
+                if let Some(snapshot_id) = population_snapshot_id {
+                    votingengine::Pallet::<T>::release_population_snapshot(snapshot_id);
+                }
+            }
+            result
         }
 
         pub(crate) fn do_cast_election_vote(
@@ -451,10 +460,17 @@ pub mod pallet {
                 !ElectionVotesByVoter::<T>::contains_key(proposal_id, &who),
                 votingengine::Error::<T>::AlreadyVoted
             );
-            ensure!(
-                Self::voter_exists(proposal_id, &who),
-                Error::<T>::VoterNotInSnapshot
-            );
+            if expected_stage == votingengine::STAGE_ELECTION_POPULAR {
+                ensure!(
+                    votingengine::Pallet::<T>::can_vote_at_population_snapshot(proposal_id, &who),
+                    Error::<T>::VoterNotEligible
+                );
+            } else {
+                ensure!(
+                    Self::mutual_voter_exists(proposal_id, &who),
+                    Error::<T>::VoterNotInSnapshot
+                );
+            }
             ensure!(
                 Self::candidate_exists(proposal_id, &candidate),
                 Error::<T>::CandidateNotInSnapshot
@@ -474,7 +490,7 @@ pub mod pallet {
                 candidate,
             });
 
-            if tally.casted >= proposal.citizen_eligible_total as u32 {
+            if u64::from(tally.casted) >= proposal.citizen_eligible_total {
                 Self::finalize_election_result(proposal_id)?;
             }
             Ok(())

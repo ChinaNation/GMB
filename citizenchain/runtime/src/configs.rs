@@ -2075,9 +2075,9 @@ impl votingengine::Config for Runtime {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<2_048>;
-    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Runtime, 4>;
-    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Runtime, 4>;
-    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Runtime, 8>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::BlockWeightFraction<Runtime, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::BlockWeightFraction<Runtime, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::BlockWeightFraction<Runtime, 8>;
     type MaxProposalsPerExpiry = ConstU32<2_048>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
@@ -2144,7 +2144,8 @@ impl election_vote::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxElectionOfficeCodeLen = ConstU32<64>;
     type MaxElectionCandidates = ConstU32<256>;
-    type MaxElectionVoters = ConstU32<4096>;
+    // 互选选民就是目标机构完整 admins 快照，边界必须与管理员真源一致。
+    type MaxMutualVoters = MaxAdminsPerInstitution;
     type InstitutionQuery = RuntimeInstitutionQuery;
     type WeightInfo = election_vote::weights::SubstrateWeight<Runtime>;
 }
@@ -2270,11 +2271,32 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
         >>::population_count(scope)
     }
 
+    fn create_population_snapshot(
+        scope: &citizen_identity::PopulationScope,
+    ) -> Result<(u64, u64), sp_runtime::DispatchError> {
+        <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
+            AccountId,
+        >>::create_population_snapshot(scope)
+    }
+
+    fn can_vote_at(who: &AccountId, snapshot_id: u64) -> bool {
+        <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
+            AccountId,
+        >>::can_vote_at(who, snapshot_id)
+    }
+
+    fn release_population_snapshot(snapshot_id: u64) {
+        <citizen_identity::Pallet<Runtime> as citizen_identity::CitizenIdentityProvider<
+            AccountId,
+        >>::release_population_snapshot(snapshot_id)
+    }
+
     #[cfg(feature = "runtime-benchmarks")]
     fn benchmark_seed_identity(who: &AccountId, scope: &citizen_identity::PopulationScope) {
         use citizen_identity::{
             CandidateIdentity, CandidateIdentityByAccount, CitizenStatus, CountryVotingCount,
-            VotingIdentity, VotingIdentityByAccount,
+            NextEligibilityRevision, VotingEligibilityVersion, VotingEligibilityVersionCount,
+            VotingEligibilityVersions, VotingIdentity, VotingIdentityByAccount,
         };
 
         // citizen-identity 按 timestamp 校验护照窗口；benchmark externalities 的
@@ -2294,6 +2316,30 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
             residence_town_code: Default::default(),
             updated_at: now,
         };
+        let revision = NextEligibilityRevision::<Runtime>::get().saturating_add(1);
+        let version_index = VotingEligibilityVersionCount::<Runtime>::get(who);
+        if version_index > 0 {
+            VotingEligibilityVersions::<Runtime>::mutate(
+                who,
+                version_index.saturating_sub(1),
+                |version| {
+                    if let Some(version) = version {
+                        version.valid_until_revision = Some(revision);
+                    }
+                },
+            );
+        }
+        VotingEligibilityVersions::<Runtime>::insert(
+            who,
+            version_index,
+            VotingEligibilityVersion {
+                identity: identity.clone(),
+                valid_from_revision: revision,
+                valid_until_revision: None,
+            },
+        );
+        VotingEligibilityVersionCount::<Runtime>::insert(who, version_index.saturating_add(1));
+        NextEligibilityRevision::<Runtime>::put(revision);
         VotingIdentityByAccount::<Runtime>::insert(who, identity);
         CandidateIdentityByAccount::<Runtime>::insert(
             who,
@@ -2303,6 +2349,7 @@ impl votingengine::CitizenIdentityReader<AccountId> for RuntimeCitizenIdentityRe
                 birth_town_code: Default::default(),
                 citizen_full_name: b"benchmark".to_vec().try_into().expect("bounded name"),
                 citizen_sex: citizen_identity::CitizenSex::Male,
+                birth_date: 20000101,
                 updated_at: now,
             },
         );

@@ -27,7 +27,12 @@ impl<T: Config> Pallet<T> {
         let execution_budget = T::MaxExecutionWeightPerBlock::get();
         let scan_weight = db.reads(1);
         let item_weight = T::WeightInfo::process_pending_execution()
-            .saturating_add(T::WeightInfo::finalize_proposal());
+            .saturating_add(T::WeightInfo::finalize_proposal())
+            // 业务回调可以执行 runtime set_code；基准只测队列框架，最重业务动作
+            // 必须在消费预算处显式叠加，且不能写进会被重生的 weights.rs。
+            .saturating_add(
+                <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code(),
+            );
         let mut weight = db.reads(1);
         let mut pending = sp_std::vec::Vec::new();
         for (proposal_id, state) in PendingProposalExecutions::<T>::iter() {
@@ -76,30 +81,7 @@ impl<T: Config> Pallet<T> {
                             }
                             Ok(())
                         }
-                        Err(_) => {
-                            state.attempts = state.attempts.saturating_add(1);
-                            if u32::from(state.attempts) >= T::MaxManualExecutionAttempts::get() {
-                                PendingProposalExecutions::<T>::remove(proposal_id);
-                                Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
-                                Self::deposit_event(Event::<T>::ProposalExecutionDeadLettered {
-                                    proposal_id,
-                                    attempts: state.attempts,
-                                });
-                                Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
-                                Ok(())
-                            } else {
-                                let shift = core::cmp::min(u32::from(state.attempts), 6);
-                                let delay: BlockNumberFor<T> = (1u64 << shift).saturated_into();
-                                state.next_attempt_at = now.saturating_add(delay);
-                                PendingProposalExecutions::<T>::insert(proposal_id, state);
-                                Self::deposit_event(Event::<T>::ProposalExecutionDeferred {
-                                    proposal_id,
-                                    attempts: state.attempts,
-                                    next_attempt_at: state.next_attempt_at,
-                                });
-                                Ok(())
-                            }
-                        }
+                        Err(err) => Err(err),
                     }
                 })();
                 match result {
@@ -108,9 +90,130 @@ impl<T: Config> Pallet<T> {
                 }
             });
             if result.is_err() {
-                state.next_attempt_at = now.saturating_add(BlockNumberFor::<T>::one());
-                PendingProposalExecutions::<T>::insert(proposal_id, state);
+                Self::handle_automatic_execution_failure(proposal_id, &mut state, now);
             }
+        }
+        weight
+    }
+
+    /// 统一处理异步业务执行的所有错误。
+    ///
+    /// 回调 Err、Ignored、结果应用错误和 Track 后处理错误都必须走同一计数与退避，
+    /// 禁止事务回滚后把原始 attempts 原样塞回下一块。
+    fn handle_automatic_execution_failure(
+        proposal_id: u64,
+        state: &mut PendingExecutionState<BlockNumberFor<T>>,
+        now: BlockNumberFor<T>,
+    ) {
+        let Some(proposal) = Proposals::<T>::get(proposal_id) else {
+            // 孤儿队列没有可恢复对象，继续重试只会永久消耗执行预算。
+            PendingProposalExecutions::<T>::remove(proposal_id);
+            return;
+        };
+        if proposal.status != STATUS_PASSED {
+            PendingProposalExecutions::<T>::remove(proposal_id);
+            return;
+        }
+
+        state.attempts = state.attempts.saturating_add(1);
+        if u32::from(state.attempts) >= T::MaxManualExecutionAttempts::get() {
+            // 执行业务回调的重试在这里永久停止。终态副作用使用独立队列，
+            // 即使 Track 终态钩子自身损坏，也不能重新执行业务动作。
+            let terminalized = with_transaction(|| {
+                let result = (|| -> DispatchResult {
+                    Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
+                    PendingProposalExecutions::<T>::remove(proposal_id);
+                    PendingTerminalFinalizations::<T>::insert(
+                        proposal_id,
+                        PendingExecutionState {
+                            attempts: 0,
+                            next_attempt_at: now,
+                        },
+                    );
+                    Self::deposit_event(Event::<T>::ProposalExecutionDeadLettered {
+                        proposal_id,
+                        attempts: state.attempts,
+                    });
+                    Ok(())
+                })();
+                match result {
+                    Ok(()) => TransactionOutcome::Commit(Ok(())),
+                    Err(err) => TransactionOutcome::Rollback(Err(err)),
+                }
+            });
+            if terminalized.is_ok() {
+                return;
+            }
+        }
+
+        let shift = core::cmp::min(u32::from(state.attempts), 6);
+        let delay: BlockNumberFor<T> = (1u64 << shift).saturated_into();
+        state.next_attempt_at = now.saturating_add(delay);
+        PendingProposalExecutions::<T>::insert(proposal_id, *state);
+        Self::deposit_event(Event::<T>::ProposalExecutionDeferred {
+            proposal_id,
+            attempts: state.attempts,
+            next_attempt_at: state.next_attempt_at,
+        });
+    }
+
+    /// 为已经进入 EXECUTION_FAILED 的提案补齐终态副作用。
+    ///
+    /// 该队列绝不调用业务执行回调；连续失败后独立 dead-letter，避免重新污染
+    /// PendingProposalExecutions 或形成每块热循环。
+    pub(crate) fn process_pending_terminal_finalizations(now: BlockNumberFor<T>) -> Weight {
+        let db = T::DbWeight::get();
+        let max = T::MaxPendingRetryExpirationsPerBlock::get() as usize;
+        let mut weight = db.reads(1);
+        if max == 0 {
+            return weight;
+        }
+        let pending: sp_std::vec::Vec<_> = PendingTerminalFinalizations::<T>::iter()
+            .filter(|(_, state)| state.next_attempt_at <= now)
+            .take(max)
+            .collect();
+        for (proposal_id, mut state) in pending {
+            weight = weight.saturating_add(db.reads_writes(2, 3));
+            let Some(proposal) = Proposals::<T>::get(proposal_id) else {
+                PendingTerminalFinalizations::<T>::remove(proposal_id);
+                continue;
+            };
+            if proposal.status != STATUS_EXECUTION_FAILED {
+                PendingTerminalFinalizations::<T>::remove(proposal_id);
+                continue;
+            }
+            let result = with_transaction(|| {
+                let result = Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED);
+                match result {
+                    Ok(()) => TransactionOutcome::Commit(Ok(())),
+                    Err(err) => TransactionOutcome::Rollback(Err(err)),
+                }
+            });
+            if result.is_ok() {
+                PendingTerminalFinalizations::<T>::remove(proposal_id);
+                TerminalFinalizationDeadLetters::<T>::remove(proposal_id);
+                continue;
+            }
+
+            state.attempts = state.attempts.saturating_add(1);
+            if u32::from(state.attempts) >= T::MaxManualExecutionAttempts::get() {
+                PendingTerminalFinalizations::<T>::remove(proposal_id);
+                TerminalFinalizationDeadLetters::<T>::insert(proposal_id, state.attempts);
+                Self::deposit_event(Event::<T>::ProposalTerminalFinalizationDeadLettered {
+                    proposal_id,
+                    attempts: state.attempts,
+                });
+                continue;
+            }
+            let shift = core::cmp::min(u32::from(state.attempts), 6);
+            let delay: BlockNumberFor<T> = (1u64 << shift).saturated_into();
+            state.next_attempt_at = now.saturating_add(delay);
+            PendingTerminalFinalizations::<T>::insert(proposal_id, state);
+            Self::deposit_event(Event::<T>::ProposalTerminalFinalizationDeferred {
+                proposal_id,
+                attempts: state.attempts,
+                next_attempt_at: state.next_attempt_at,
+            });
         }
         weight
     }

@@ -8,11 +8,12 @@
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
+use votingengine::CitizenIdentityReader;
 
 use crate::{
     pallet::{
         Config, ElectionCandidates, ElectionMetaStore, ElectionResults, ElectionTallyStore,
-        ElectionVoters, Pallet,
+        MutualVoters, Pallet,
     },
     types::{ElectionMeta, ElectionMode, ElectionTally},
     Call,
@@ -66,7 +67,16 @@ fn setup_election<T: Config>(c: u32, mode: ElectionMode) -> (u64, T::AccountId, 
         },
     );
     ElectionCandidates::<T>::insert(proposal_id, bounded);
-    ElectionVoters::<T>::insert(proposal_id, &voter, ());
+    if mode == ElectionMode::Popular {
+        let scope = votingengine::PopulationScope::Country;
+        <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&voter, &scope);
+        let (snapshot_id, _) = votingengine::Pallet::<T>::create_population_snapshot(&scope)
+            .expect("benchmark identity snapshot");
+        votingengine::Pallet::<T>::bind_population_snapshot(proposal_id, snapshot_id)
+            .expect("benchmark proposal snapshot binding");
+    } else {
+        MutualVoters::<T>::insert(proposal_id, &voter, ());
+    }
     ElectionTallyStore::<T>::insert(proposal_id, ElectionTally::default());
     (proposal_id, voter, selected)
 }

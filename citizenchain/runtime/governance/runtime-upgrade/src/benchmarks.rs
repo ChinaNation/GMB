@@ -8,6 +8,7 @@ use sp_runtime::{
     sp_std::vec,
     traits::{SaturatedConversion, Saturating},
 };
+use votingengine::CitizenIdentityReader;
 
 use crate::pallet::{CodeOf, Config, ReasonOf};
 use crate::Pallet;
@@ -41,13 +42,19 @@ fn prepare_population_snapshot<T>(who: &T::AccountId)
 where
     T: Config + joint_vote::Config,
 {
+    let scope = votingengine::PopulationScope::Country;
+    let citizen: T::AccountId = account("runtime-upgrade-citizen", 0, 0);
+    <T as votingengine::Config>::CitizenIdentityReader::benchmark_seed_identity(&citizen, &scope);
+    let (snapshot_id, eligible_total) =
+        <T as votingengine::Config>::CitizenIdentityReader::create_population_snapshot(&scope)
+            .expect("benchmark population snapshot should be created");
     let now = frame_system::Pallet::<T>::block_number();
     let prepared_at = now.saturating_add(1u32.saturated_into());
     joint_vote::PendingPopulationSnapshots::<T>::insert(
         who,
         joint_vote::PreparedPopulationSnapshot {
-            eligible_total: 10u64,
-            scope: votingengine::PopulationScope::Country,
+            snapshot_id,
+            eligible_total,
             prepared_at,
         },
     );

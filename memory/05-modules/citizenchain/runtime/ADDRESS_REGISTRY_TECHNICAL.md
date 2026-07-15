@@ -2,14 +2,14 @@
 
 ## 1. 功能定位
 
-`address-registry` 是 CitizenChain runtime 的地址变更上链模块，路径为 `citizenchain/runtime/otherpallet/address-registry/`。
+`address-registry` 是 CitizenChain runtime 的地址变更上链模块，路径为 `citizenchain/runtime/misc/address-registry/`。
 
 本模块只保存地址库版本、单条地址当前哈希和链上事件，不保存完整地址库，不保存旧地址历史，不保存墓碑。
 
 ## 2. 链上模块
 
 ```text
-citizenchain/runtime/otherpallet/address-registry/
+citizenchain/runtime/misc/address-registry/
 ├── Cargo.toml              # pallet 依赖与 feature
 └── src/lib.rs              # storage、事件、权限抽象和 extrinsic
 ```

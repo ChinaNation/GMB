@@ -2048,6 +2048,75 @@ fn asynchronous_callback_errors_dead_letter_after_bounded_retries() {
 }
 
 #[test]
+fn ignored_callback_outcome_dead_letters_after_bounded_retries() {
+    new_test_ext().execute_with(|| {
+        reset_internal_callback_state();
+        // 未识别状态映射为 Ignored，复现结果应用阶段返回 Err 的确定性失败。
+        set_internal_callback_override_status(Some(0xff));
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), NRC, nrc_pid());
+
+        assert_ok!(VotingEngine::set_status_and_emit(
+            proposal_id,
+            STATUS_PASSED
+        ));
+        process_current_block();
+        let second_attempt_at =
+            votingengine::pallet::PendingProposalExecutions::<Test>::get(proposal_id)
+                .expect("Ignored first failure should defer")
+                .next_attempt_at;
+
+        System::set_block_number(second_attempt_at);
+        process_current_block();
+        let third_attempt_at =
+            votingengine::pallet::PendingProposalExecutions::<Test>::get(proposal_id)
+                .expect("Ignored second failure should defer")
+                .next_attempt_at;
+
+        System::set_block_number(third_attempt_at);
+        process_current_block();
+
+        assert!(
+            votingengine::pallet::PendingProposalExecutions::<Test>::get(proposal_id).is_none(),
+            "业务执行达到上限后必须永久停止"
+        );
+        assert_eq!(
+            VotingEngine::proposals(proposal_id)
+                .expect("proposal should remain until retention cleanup")
+                .status,
+            STATUS_EXECUTION_FAILED
+        );
+        assert!(System::events().into_iter().any(|record| matches!(
+            record.event,
+            RuntimeEvent::VotingEngine(votingengine::Event::ProposalExecutionDeadLettered {
+                proposal_id: event_id,
+                attempts: 3,
+            }) if event_id == proposal_id
+        )));
+    });
+}
+
+#[test]
+fn orphan_pending_execution_is_removed_instead_of_retried() {
+    new_test_ext().execute_with(|| {
+        let proposal_id = 9_999;
+        votingengine::pallet::PendingProposalExecutions::<Test>::insert(
+            proposal_id,
+            votingengine::PendingExecutionState {
+                attempts: 0,
+                next_attempt_at: System::block_number(),
+            },
+        );
+
+        process_current_block();
+
+        assert!(
+            votingengine::pallet::PendingProposalExecutions::<Test>::get(proposal_id).is_none(),
+            "不存在提案的孤儿队列项不得永久消耗执行预算"
+        );
+    });
+}
+
+#[test]
 fn manual_retry_third_failure_marks_execution_failed() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();

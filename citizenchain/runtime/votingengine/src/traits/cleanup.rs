@@ -44,8 +44,8 @@ impl InternalCleanupHandler for () {
 
 /// joint mode 的 chunked cleanup 入口。
 ///
-/// joint storage(JointVotesByAdmin / JointInstitutionTallies / JointVotesByInstitution
-/// / JointTallies / ReferendumVotesByAccount / ReferendumTallies / ReferendumScopes)
+/// joint storage(JointVotesByAdmin / JointInstitutionTallies / JointVotesByInstitution /
+/// JointTallies / ReferendumVotesByAccount / ReferendumTallies)
 /// 住在 joint-vote pallet,votingengine 主 crate 通过本 trait 派发清理。
 pub trait JointCleanupHandler {
     fn cleanup_joint_admin_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;

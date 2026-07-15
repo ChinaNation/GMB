@@ -45,6 +45,7 @@ class MyIdState {
     this.citizenFullName,
     this.citizenSexLabel,
     this.birthDistrict,
+    this.citizenBirthDate,
     this.errorMessage,
   });
 
@@ -70,6 +71,9 @@ class MyIdState {
   /// 男/女。
   final String? citizenSexLabel;
   final String? birthDistrict;
+
+  /// 出生日期 YYYY-MM-DD,来自链上竞选身份 birth_date(YYYYMMDD 整数)。
+  final String? citizenBirthDate;
 
   final String? errorMessage;
 
@@ -212,6 +216,8 @@ class MyIdService {
       citizenSexLabel:
           candidate == null ? null : (candidate.sex == 1 ? '女' : '男'),
       birthDistrict: birth,
+      citizenBirthDate:
+          candidate == null ? null : _formatDateInt(candidate.birthDate),
     );
   }
 
@@ -265,7 +271,7 @@ class MyIdService {
   }
 
   /// 解码链上 `VotingIdentity<BlockNumber>`,字段序与
-  /// `citizenchain/runtime/otherpallet/citizen-identity/src/lib.rs` 逐字节一致:
+  /// `citizenchain/runtime/misc/citizen-identity/src/lib.rs` 逐字节一致:
   /// cid_number + valid_from(u32) + valid_until(u32) + status(u8)
   /// + residence_省/市/镇码 + updated_at(u32)。
   _VotingIdentity? _decodeVotingIdentity(Uint8List data) {
@@ -312,7 +318,8 @@ class MyIdService {
   }
 
   /// 解码链上 `CandidateIdentity<BlockNumber>`(增量存储,不含 voting 基础字段):
-  /// birth_省/市/镇码 + citizen_full_name + citizen_sex(u8,0男1女) + updated_at(u32)。
+  /// birth_省/市/镇码 + citizen_full_name + citizen_sex(u8,0男1女)
+  /// + birth_date(u32 YYYYMMDD) + updated_at(u32)。
   _CandidateIdentity? _decodeCandidateIdentity(Uint8List data) {
     try {
       var offset = 0;
@@ -328,6 +335,11 @@ class MyIdService {
       final sex = data[offset];
       offset += 1;
       if (sex != 0 && sex != 1) return null;
+      // birth_date(u32 YYYYMMDD) + 尾部 updated_at(u32)。
+      if (offset + 4 > data.length) return null;
+      final birthDate = _readU32Le(data, offset);
+      offset += 4;
+      if (!_isValidDateInt(birthDate)) return null;
       if (offset + 4 > data.length) return null;
       return _CandidateIdentity(
         birthProvince: prov.value,
@@ -335,6 +347,7 @@ class MyIdService {
         birthTown: town.value,
         fullName: name.value,
         sex: sex,
+        birthDate: birthDate,
       );
     } catch (_) {
       return null;
@@ -493,6 +506,7 @@ class _CandidateIdentity {
     required this.birthTown,
     required this.fullName,
     required this.sex,
+    required this.birthDate,
   });
 
   final String birthProvince;
@@ -500,6 +514,9 @@ class _CandidateIdentity {
   final String birthTown;
   final String fullName;
   final int sex;
+
+  /// 出生日期(YYYYMMDD 整数),竞选身份专属。
+  final int birthDate;
 }
 
 enum _CitizenStatus { normal, revoked }

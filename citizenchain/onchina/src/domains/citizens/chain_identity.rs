@@ -582,6 +582,16 @@ fn build_citizen_identity_payload(
         }
     };
     payload.payload_bytes.push(sex);
+    // birth_date: u32 YYYYMMDD(LE),CandidateIdentityPayload 末字段。
+    // 出生日期是注册局新增公民时必填、写入后不可修改的档案字段(citizen_birth_date),
+    // 链端凭此实时计算竞选公民年龄。SCALE 布局须与链端结构体逐字节一致。
+    let birth_date = NaiveDate::parse_from_str(record.citizen_birth_date.as_str(), "%Y-%m-%d")
+        .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "公民出生日期格式错误"))?;
+    let birth_date_u32 =
+        birth_date.year() as u32 * 10_000 + birth_date.month() * 100 + birth_date.day();
+    payload
+        .payload_bytes
+        .extend(birth_date_u32.to_le_bytes());
     payload.identity_level = CitizenOnchainIdentityLevel::Candidate;
     Ok(payload)
 }

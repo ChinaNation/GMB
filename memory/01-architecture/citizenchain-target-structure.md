@@ -18,7 +18,7 @@ citizenchain/
   runtime/
     governance/
     issuance/
-    otherpallet/
+    misc/
     transaction/
     primitives/
   packaging/
@@ -46,7 +46,7 @@ citizenchain/
 runtime/
   governance/
   issuance/
-  otherpallet/
+  misc/
   transaction/
   primitives/
 ```
@@ -55,7 +55,7 @@ runtime/
 
 - `governance/`：治理相关 pallet
 - `issuance/`：发行相关 pallet
-- `otherpallet/`：其他链上功能模块
+- `misc/`：其他链上功能模块
 - `transaction/`：交易相关 pallet
 - `primitives/`：runtime 内部常量、基础类型、运行时组织层
 

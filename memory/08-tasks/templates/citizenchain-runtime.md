@@ -3,7 +3,7 @@
 - `citizenchain/runtime`
 - `citizenchain/governance`
 - `citizenchain/issuance`
-- `citizenchain/otherpallet`
+- `citizenchain/misc`
 - `citizenchain/transaction`
 - 必要时联动 `primitives`
 

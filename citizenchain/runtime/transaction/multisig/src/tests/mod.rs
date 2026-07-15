@@ -527,9 +527,9 @@ impl votingengine::Config for Test {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
-    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
-    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
-    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;

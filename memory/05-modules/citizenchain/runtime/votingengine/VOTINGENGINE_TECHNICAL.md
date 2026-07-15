@@ -28,6 +28,9 @@
 - `can_vote(who, scope)`：判断账户在作用域内是否有投票资格。
 - `can_be_candidate(who, scope)`：判断账户在作用域内是否有参选资格。
 - `population_count(scope)`：读取链上人口分母。
+- `create_population_snapshot(scope)`：由身份真源同时冻结人口分母、资格 revision 和护照判定日期。
+- `can_vote_at(who, snapshot_id)`：按账户创建时的身份历史校验资格，不读取投票时的当前身份。
+- `release_population_snapshot(snapshot_id)`：提案 90 天历史清理完成后释放快照元数据。
 
 OnChina 本地数据库只能用于注册局录入和界面提示，不能作为链上投票资格真源。
 
@@ -40,15 +43,15 @@ OnChina 本地数据库只能用于注册局录入和界面提示，不能作为
 - `City(province_code, city_code)`
 - `Town(province_code, city_code, town_code)`
 
-联合公投和立法特别案在创建提案前先调用对应的 `prepare_*_population_snapshot(scope)`，runtime 在当前区块从 `citizen-identity` 读取人口分母并缓存到发起账户。
+联合公投和立法特别案在创建提案前先调用对应的 `prepare_*_population_snapshot(scope)`。runtime 在当前区块要求 `citizen-identity` 创建不可变快照，消费端只缓存 `snapshot_id + eligible_total + prepared_at`，不得复制作用域或选民名单作为第二真源。
 
 ## 联合投票
 
 - 内部阶段：`JointVote::cast_admin(proposal_id, institution, approve)`。
 - 联合公投阶段：`JointVote::cast_referendum(proposal_id, approve)`。
 - 联合公投按 `proposal_id + who` 去重。
-- 联合公投资格由 `CitizenIdentityReader::can_vote(who, scope)` 判定。
-- 公投分母固定为提案创建区块从 `citizen-identity` 取得的人口快照；累计票数达到该分母后拒绝继续写票，参与率不得超过 100%。
+- 联合公投资格由 `CitizenIdentityReader::can_vote_at(who, snapshot_id)` 判定；提案创建后新增、迁居或被撤销的当前身份均不能改变已有提案的成员集合。
+- 公投分母与成员资格来自同一个 `citizen-identity` 快照；累计票数达到该分母后拒绝继续写票，参与率不得超过 100%。
 - 联合业务回调必须同时绑定 `ProposalOwner`、联合 proposal kind、`STAGE_JOINT/STAGE_REFERENDUM`、业务摘要和对象摘要；联合阶段直接通过与转入公投后通过都必须执行同一项已绑定业务。
 
 ## 判定与业务执行
@@ -56,6 +59,8 @@ OnChina 本地数据库只能用于注册局录入和界面提示，不能作为
 - 投票门槛一旦命中，只提交 `STATUS_PASSED`、释放相应活跃名额并写入 `PendingProposalExecutions`；最后一票不再同步执行转账、销毁或 `set_code` 等业务。
 - `on_initialize` 按 `MaxExecutionWeightPerBlock` 与 `MaxAutoFinalizePerBlock` 双重上限消费执行队列，每项按包含 `SystemWeightInfo::set_code()` 的最重成本预留。
 - 业务回调返回 `DispatchError` 时只回滚本次执行尝试，不撤销已成立的投票结果；失败按指数退避重试，达到上限转 `STATUS_EXECUTION_FAILED` 并发出 dead-letter 事件。
+- 回调 `Err`、`Ignored`、结果应用错误和 Track 后处理错误统一进入同一失败处理器；每次递增 attempts，孤儿或状态不匹配的队列项立即删除。
+- 达到自动执行上限后，业务执行队列永久停止；`PendingTerminalFinalizations` 只补终态副作用并拥有独立退避/dead-letter，绝不重新调用业务执行回调。
 - `ProposalExecutionOutcome::RetryableFailed` 继续进入既有管理员手动重试宽限期；执行成功或失败终态仍统一触发互斥释放、业务终态通知和 90 天延迟清理。
 - 自动超时 finalizer 自身返回错误时使用独立有限退避状态；达到上限或重试桶已满后写入 `AutoFinalizeDeadLetters`，不会反复阻塞同一区块的其余维护管线，公开 `finalize_proposal` 仍可在修复数据后人工恢复。
 
@@ -98,10 +103,10 @@ legislation-vote/
 
 ### 资格真源与快照边界
 
-- 普选必须使用 `citizen-identity` 的 `PopulationScope`、`can_vote`、`can_be_candidate` 和 `population_count` 校验；选民分母必须与创建时验证的选民快照一致。
+- 普选必须使用 `citizen-identity` 的 `PopulationScope`、`can_be_candidate`、`create_population_snapshot` 和 `can_vote_at`；只保存 snapshot_id，不接收、不枚举、不保存全国/省/市/镇完整选民列表。
 - 互选属于机构内部互选，必须由对应 admins provider 的 `get_admin_list` 提供机构管理员快照；调用方提交的选民集合必须与完整 admins 快照等长且逐成员一致，不得删减或夹带账户。
 - `election-vote` 创建入口按 `ElectionMode` 强制检查资格来源：Popular 必须有人口作用域，Mutual 必须取得目标机构 admins 快照。
-- 普选人口作用域写入 `ElectionMeta`；互选不写公民作用域，按机构管理员集合校验候选人和选民。
+- 普选人口作用域写入 `ElectionMeta`，资格引用写入核心 `ProposalPopulationSnapshotIds`；互选不写公民作用域，选民存于 `MutualVoters` 并按机构管理员集合校验候选人和选民。
 - 多席位计票允许完整落入剩余席位的并列组共同当选；并列组跨越席位边界时拒绝结果。
 
 ## 清理
@@ -137,7 +142,7 @@ legislation-vote/
 - `on_initialize` 在到期桶尚未排空时不再提前返回，执行重试、终态清理和 90 天清理管线每块都能继续获得有界处理机会。
 - 投票判定与业务执行已通过 `PendingProposalExecutions` 解耦；队列按 weight 预算执行，错误指数退避并在三次失败后 dead-letter，既有手动重试和终态清理契约已完成适配。
 - `finalize_proposal` 只承担投票判定与执行入队，不再叠加 `set_code`；`set_code` 最重成本只归入 `process_pending_execution` 异步执行预算。五个投票 crate 的正式 benchmark 已生成并写入生产权重。
-- `joint-vote` 本 crate 增加 105 票全票边界、联合公投严格多数和零人口 fail-closed 测试；完整跨 pallet 状态机继续由 `internal-vote` 集成测试覆盖。
+- `joint-vote` 本 crate 现有 10 项直属测试，除纯函数边界外直接覆盖 `cast_admin`、`cast_referendum`、105 票全票、机构否决和超时转公投；`internal-vote` 继续提供跨 pallet 回归覆盖。
 - `legislation-vote` 的 signing、guard、referendum、result、cleanup 文件已承载实际规则或清理辅助，不再是纯注释残桩。
 - 正式链重新创世采用最终布局：五个投票 pallet 以及本次触达的 `public-admins`、`public-manage`、`private-manage` 的 `StorageVersion` 全部为 1；开发期 storage alias、升级翻译、迁移类型和迁移测试已删除，runtime 全仓不存在高于 1 的 storage version。
 
@@ -148,13 +153,22 @@ legislation-vote/
 - 延迟 FIFO 与就绪 FIFO 均以单调 `u64` 序号键控，不存在单区块桶容量、顺延窗口或严格头部反复处理。
 - 新增公平轮转测试和 Track 隔离清理测试：大任务存在时小任务仍推进，内部提案清理不会删除联合投票账本。
 
+## 2026-07-14 资格快照与执行重试加固
+
+- `citizen-identity` 以全局 `eligibility_revision` 和每账户不可变版本历史冻结创建时资格；同一区块多次身份写入也能确定顺序，账户查询按版本数二分定位。
+- 联合公投、立法公投和 Popular 选举统一绑定 `ProposalPopulationSnapshotIds`；旧的 `ReferendumScopes`、`LegislationMeta.referendum_scope`、Popular 全量选民表及 `MaxElectionVoters` 已删除。
+- Popular 不再受完整选区人数的 `BoundedVec` 限制；Mutual 的 `MaxMutualVoters` 与 Runtime `MaxAdminsPerInstitution` 使用同一上限。
+- `joint-vote` crate 直属测试由 3 个纯函数测试扩展到 10 项，直接覆盖 `cast_admin`、`cast_referendum`、105 票全票执行、机构否决转公投、超时转公投和创建后新增选民拒绝。
+- 自动执行结果应用阶段的确定性错误不再每块无限重排；R2 回归用例覆盖 `Ignored` 三次退避后 dead-letter，以及孤儿执行队列立即删除。
+
 ## 2026-07-14 生产 Benchmark 与动态权重
 
 - 目标环境：Apple M5 Pro / arm64、Rust 1.94.0、FRAME Benchmark CLI 53.0.0；WASM compiled，`steps=50`，`repeat=20`。
 - Runtime registry 共注册 19 条：核心 4、内部 2、联合 5、立法 6、选举 2。
 - 核心权重为 35/24/10/22 ms，其中公开终结 35 ms 是保守调度包络并另叠加实际 Track 权重；`process_pending_execution` 另显式叠加 `SystemWeightInfo::set_code()`，runtime 升级不再被普通回调静态权重掩盖。
-- 内部权重为 29/32 ms；联合为 12/25/22/13/20 ms；立法为 12/31/22/38/45/35 ms。涉及 provider 的准备、签署、会签和护宪路径在实测 storage body 上增加生产 provider 读写包络。
-- 选举最后一票按候选人数 `c` 线性计费：普选 `38,212,644 + 1,524,772*c` ps，互选 `36,834,244 + 1,534,883*c` ps；proof 为 `11,996 + 2,551*c`，读为 `7+c`，写为 9。
+- 内部权重沿用既有实测；联合和立法已按资格历史存储重新生成，公民公投写票均真实计入 snapshot 绑定、快照元数据和账户资格版本读取。
+- 选举最后一票按候选人数 `c` 线性计费：Popular 基础约 `47.6m ps`、Mutual 基础约 `38.7m ps`，两者每候选人约增加 `1.56m ps`；Popular 读为 `10+c`，Mutual 读为 `7+c`，写均为 9。
+- joint 人口准备和立法签署类 benchmark 无法在通用基准创世态完整构造生产 provider 权限，调用注解使用“实测主体与生产 provider 保守上界取 max”，重生生成文件不会移除安全上界。
 - `ProposalTrackHandler` 同时返回 stage timeout、Track chunk cleanup、Track terminal cleanup 权重；手动终结、自动终结和清理维护均按具体 Track 实际值计账。
 - 三条维护预算维持最大区块权重的 `1/4`、`1/4`、`1/8`，合计 62.5%；在 60 秒最大计算区块下，每条管线均可容纳至少一个最重任务。
 
@@ -162,7 +176,7 @@ legislation-vote/
 
 - 原生 LLVM coverage 排除测试、benchmark、weights 和纯声明 `traits/types/data` 后，可执行业务代码共 4,324 行，命中 3,537 行，行覆盖率 81.80%。
 - 若把纯接口与类型声明也计入，五个投票 crate 全源码为 71.60%。文档同时保留两项，80% 门禁只使用可执行业务代码口径。
-- election-vote 现有测试文件内建立完整 mock runtime，覆盖普选/互选创建、人口/管理员快照、资格拒绝、写票、超时、结果回调与分块清理；该 crate 测试由 3 项增至 13 项。
+- election-vote 现有测试文件内建立完整 mock runtime，覆盖普选/互选创建、人口/管理员快照、资格拒绝、写票、超时、结果回调与分块清理；当前为 13 项。
 
 ## 验收
 
@@ -174,6 +188,8 @@ legislation-vote/
 - `cargo test -p citizenchain`
 - `cargo check -p citizenchain --features runtime-benchmarks`
 - `cargo check -p citizenchain --features try-runtime`
+
+2026-07-14 执行重试与资格快照最终验收：`citizen-identity` 23、`internal-vote` 96、`joint-vote` 10、`legislation-vote` 33、`election-vote` 13、runtime 40 项专项测试及 `cargo test --workspace` 全部通过；六个相关 crate 的 `no_std`、runtime benchmark/try-runtime 编译和最终 release WASM 构建通过。当前源码以 `citizenchain-fresh --tmp` 真实启动成功，genesis hash 为 `0xd81962210c603a4a0f078b2cc022bac3daab344cd7dce8c6fc3501973d1552ab`，`isSyncing=false`，metadata RPC 响应 418,806 字节，runtime `specVersion/systemVersion/stateVersion` 均为 1；验收节点已停止。
 
 2026-07-14 第 3 步最终运行态：`WASM_BUILD_FROM_SOURCE=1` release 构建通过；当前源码 WASM 以全新 base path 启动隔离 `citizenchain-fresh` 节点，NodeGuard 与创世装载通过。block#0/genesis hash 为 `0x8d3fc4c4567796d8056e61a8dbf431f04230126a1023a49ffecde7b5bff25390`，state root 为 `0x51ef488b720c9f049c501367f31e3779dd7a3711c295ce8cc79ddbe7688413ca`，runtime `specVersion=1`，`system_health.isSyncing=false`，metadata RPC 响应 415,442 字节；验收节点已停止。fresh 链无交易且无同 genesis peer 时按“空块不提交 + 离线不挖矿”规则保持 block 0。
 

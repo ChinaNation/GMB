@@ -11,15 +11,21 @@ impl<T: Config> Pallet<T> {
         who: T::AccountId,
         scope: PopulationScope,
     ) -> DispatchResult {
-        let eligible_total =
-            <T as votingengine::Config>::CitizenIdentityReader::population_count(&scope);
-        ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
+        let (snapshot_id, eligible_total) =
+            <votingengine::Pallet<T>>::create_population_snapshot(&scope)?;
+        if eligible_total == 0 {
+            <votingengine::Pallet<T>>::release_population_snapshot(snapshot_id);
+            return Err(Error::<T>::CitizenEligibleTotalNotSet.into());
+        }
         let now = <frame_system::Pallet<T>>::block_number();
+        if let Some(previous) = pallet::PendingPopulationSnapshots::<T>::take(&who) {
+            <votingengine::Pallet<T>>::release_population_snapshot(previous.snapshot_id);
+        }
         pallet::PendingPopulationSnapshots::<T>::insert(
             &who,
             pallet::PreparedSnapshot {
+                snapshot_id,
                 eligible_total,
-                scope: scope.clone(),
                 prepared_at: now,
             },
         );
@@ -99,13 +105,8 @@ impl<T: Config> Pallet<T> {
             proposal.citizen_eligible_total > 0,
             Error::<T>::CitizenEligibleTotalNotSet
         );
-        let meta = pallet::LegislationMetas::<T>::get(proposal_id)
-            .ok_or(Error::<T>::ProposalMetaMissing)?;
-        let scope = meta
-            .referendum_scope
-            .ok_or(Error::<T>::PopulationScopeMissing)?;
         ensure!(
-            <T as votingengine::Config>::CitizenIdentityReader::can_vote(&who, &scope),
+            <votingengine::Pallet<T>>::can_vote_at_population_snapshot(proposal_id, &who),
             Error::<T>::CitizenNotEligible
         );
         ensure!(

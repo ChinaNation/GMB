@@ -23,7 +23,7 @@ use votingengine::{
 use crate::{
     pallet::{
         ElectionCandidateTallies, ElectionCandidates, ElectionMetaStore, ElectionResults,
-        ElectionTallyStore, ElectionVoters, ElectionVotesByVoter, Error,
+        ElectionTallyStore, ElectionVotesByVoter, Error, MutualVoters,
     },
     types::ElectionMode,
 };
@@ -89,6 +89,8 @@ fn target_admins() -> Vec<AccountId32> {
 
 thread_local! {
     static POPULATION_COUNT: RefCell<u64> = const { RefCell::new(3) };
+    static NEXT_SNAPSHOT_ID: RefCell<u64> = const { RefCell::new(0) };
+    static POPULATION_SNAPSHOTS: RefCell<Vec<(u64, Vec<AccountId32>)>> = const { RefCell::new(Vec::new()) };
 }
 
 pub struct TestCitizenIdentityReader;
@@ -106,6 +108,42 @@ impl CitizenIdentityReader<AccountId32> for TestCitizenIdentityReader {
 
     fn population_count(_scope: &PopulationScope) -> u64 {
         POPULATION_COUNT.with(|count| *count.borrow())
+    }
+
+    fn create_population_snapshot(
+        _scope: &PopulationScope,
+    ) -> Result<(u64, u64), sp_runtime::DispatchError> {
+        let eligible_total = POPULATION_COUNT.with(|count| *count.borrow());
+        let snapshot_id = NEXT_SNAPSHOT_ID.with(|next| {
+            let mut next = next.borrow_mut();
+            let id = *next;
+            *next = id.saturating_add(1);
+            id
+        });
+        let voters = (0..eligible_total)
+            .map(|offset| account(21u8.saturating_add(offset as u8)))
+            .collect();
+        POPULATION_SNAPSHOTS.with(|snapshots| {
+            snapshots.borrow_mut().push((snapshot_id, voters));
+        });
+        Ok((snapshot_id, eligible_total))
+    }
+
+    fn can_vote_at(who: &AccountId32, snapshot_id: u64) -> bool {
+        POPULATION_SNAPSHOTS.with(|snapshots| {
+            snapshots
+                .borrow()
+                .iter()
+                .find(|(id, _)| *id == snapshot_id)
+                .map(|(_, voters)| voters.contains(who))
+                .unwrap_or(false)
+        })
+    }
+
+    fn release_population_snapshot(snapshot_id: u64) {
+        POPULATION_SNAPSHOTS.with(|snapshots| {
+            snapshots.borrow_mut().retain(|(id, _)| *id != snapshot_id);
+        });
     }
 }
 
@@ -162,9 +200,9 @@ impl votingengine::Config for Test {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
-    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
-    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
-    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
@@ -195,13 +233,15 @@ impl crate::pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxElectionOfficeCodeLen = ConstU32<32>;
     type MaxElectionCandidates = ConstU32<8>;
-    type MaxElectionVoters = ConstU32<8>;
+    type MaxMutualVoters = ConstU32<8>;
     type InstitutionQuery = TestInstitutionQuery;
     type WeightInfo = ();
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
     POPULATION_COUNT.with(|count| *count.borrow_mut() = 3);
+    NEXT_SNAPSHOT_ID.with(|next| *next.borrow_mut() = 0);
+    POPULATION_SNAPSHOTS.with(|snapshots| snapshots.borrow_mut().clear());
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("test storage should build");
@@ -214,7 +254,7 @@ fn office_code() -> crate::pallet::ElectionOfficeCodeOf<Test> {
     b"speaker".to_vec().try_into().expect("bounded office code")
 }
 
-fn create_popular(candidates: Vec<AccountId32>, voters: Vec<AccountId32>) -> u64 {
+fn create_popular(candidates: Vec<AccountId32>) -> u64 {
     ElectionVote::do_create_popular_election(
         organizer_admin(),
         ORGANIZER_CODE,
@@ -228,7 +268,6 @@ fn create_popular(candidates: Vec<AccountId32>, voters: Vec<AccountId32>) -> u64
         20,
         PopulationScope::Country,
         candidates,
-        voters,
     )
     .expect("popular election should be created")
 }
@@ -257,7 +296,21 @@ fn popular_election_uses_population_snapshot_and_generates_result() {
     new_test_ext().execute_with(|| {
         let candidates = vec![account(11), account(12)];
         let voters = vec![account(21), account(22), account(23)];
-        let proposal_id = create_popular(candidates.clone(), voters.clone());
+        let proposal_id = create_popular(candidates.clone());
+        assert!(MutualVoters::<Test>::iter_prefix(proposal_id)
+            .next()
+            .is_none());
+
+        // 创建后人口增长不能把新账户塞进既有普选；Popular 不保存全量选民表。
+        POPULATION_COUNT.with(|count| *count.borrow_mut() = 4);
+        assert_noop!(
+            ElectionVote::cast_popular_vote(
+                RuntimeOrigin::signed(account(24)),
+                proposal_id,
+                candidates[0].clone()
+            ),
+            Error::<Test>::VoterNotEligible
+        );
 
         assert_ok!(ElectionVote::cast_popular_vote(
             RuntimeOrigin::signed(voters[0].clone()),
@@ -315,28 +368,6 @@ fn mutual_election_uses_complete_admin_snapshot() {
 #[test]
 fn creation_rejects_untrusted_or_incomplete_snapshots() {
     new_test_ext().execute_with(|| {
-        let candidates = vec![account(11), account(12)];
-        let voters = vec![account(21), account(22), account(23)];
-        POPULATION_COUNT.with(|count| *count.borrow_mut() = 4);
-        assert_noop!(
-            ElectionVote::do_create_popular_election(
-                organizer_admin(),
-                ORGANIZER_CODE,
-                organizer(),
-                TARGET_CODE,
-                target(),
-                office_code(),
-                7,
-                1,
-                10,
-                20,
-                PopulationScope::Country,
-                candidates.clone(),
-                voters,
-            ),
-            Error::<Test>::ElectionSnapshotMismatch
-        );
-
         let admins = target_admins();
         assert_noop!(
             ElectionVote::do_create_mutual_election(
@@ -374,26 +405,7 @@ fn popular_creation_rejects_ineligible_accounts_and_bad_shape() {
                 10,
                 20,
                 PopulationScope::Country,
-                vec![account(11), account(12)],
-                vec![account(21), account(22), account(250)]
-            ),
-            Error::<Test>::VoterNotEligible
-        );
-        assert_noop!(
-            ElectionVote::do_create_popular_election(
-                organizer_admin(),
-                ORGANIZER_CODE,
-                organizer(),
-                TARGET_CODE,
-                target(),
-                office_code(),
-                7,
-                1,
-                10,
-                20,
-                PopulationScope::Country,
-                vec![account(11), account(251)],
-                vec![account(21), account(22), account(23)]
+                vec![account(11), account(251)]
             ),
             Error::<Test>::CandidateNotEligible
         );
@@ -410,8 +422,7 @@ fn popular_creation_rejects_ineligible_accounts_and_bad_shape() {
                 10,
                 20,
                 PopulationScope::Country,
-                vec![account(11), account(12)],
-                vec![account(21), account(22), account(23)]
+                vec![account(11), account(12)]
             ),
             Error::<Test>::NotOrganizerAdmin
         );
@@ -423,14 +434,14 @@ fn cast_rejects_wrong_voter_candidate_stage_and_duplicate_vote() {
     new_test_ext().execute_with(|| {
         let candidates = vec![account(11), account(12)];
         let voters = vec![account(21), account(22), account(23)];
-        let proposal_id = create_popular(candidates.clone(), voters.clone());
+        let proposal_id = create_popular(candidates.clone());
         assert_noop!(
             ElectionVote::cast_popular_vote(
                 RuntimeOrigin::signed(account(99)),
                 proposal_id,
                 candidates[0].clone()
             ),
-            Error::<Test>::VoterNotInSnapshot
+            Error::<Test>::VoterNotEligible
         );
         assert_noop!(
             ElectionVote::cast_popular_vote(
@@ -467,10 +478,7 @@ fn cast_rejects_wrong_voter_candidate_stage_and_duplicate_vote() {
 #[test]
 fn timeout_is_rejected_before_expiry_then_finalizes_no_vote_election() {
     new_test_ext().execute_with(|| {
-        let proposal_id = create_popular(
-            vec![account(11), account(12)],
-            vec![account(21), account(22), account(23)],
-        );
+        let proposal_id = create_popular(vec![account(11), account(12)]);
         let proposal = votingengine::pallet::Proposals::<Test>::get(proposal_id).unwrap();
         assert_noop!(
             ElectionVote::finalize_election_popular_timeout(&proposal, proposal_id),
@@ -495,7 +503,7 @@ fn election_cleanup_removes_all_track_storage() {
     new_test_ext().execute_with(|| {
         let candidates = vec![account(11), account(12)];
         let voters = vec![account(21), account(22), account(23)];
-        let proposal_id = create_popular(candidates.clone(), voters.clone());
+        let proposal_id = create_popular(candidates.clone());
         assert_ok!(ElectionVote::cast_popular_vote(
             RuntimeOrigin::signed(voters[0].clone()),
             proposal_id,
@@ -529,7 +537,7 @@ fn election_cleanup_removes_all_track_storage() {
         assert!(ElectionVotesByVoter::<Test>::iter_prefix(proposal_id)
             .next()
             .is_none());
-        assert!(ElectionVoters::<Test>::iter_prefix(proposal_id)
+        assert!(MutualVoters::<Test>::iter_prefix(proposal_id)
             .next()
             .is_none());
         assert!(ElectionCandidateTallies::<Test>::iter_prefix(proposal_id)
@@ -546,10 +554,7 @@ fn result_callback_fails_closed_for_incomplete_or_foreign_result() {
             ElectionVote::on_election_vote_finalized(999, true),
             Ok(ProposalExecutionOutcome::Ignored)
         );
-        let proposal_id = create_popular(
-            vec![account(11), account(12)],
-            vec![account(21), account(22), account(23)],
-        );
+        let proposal_id = create_popular(vec![account(11), account(12)]);
         assert_eq!(
             ElectionVote::on_election_vote_finalized(proposal_id, true),
             Ok(ProposalExecutionOutcome::FatalFailed)

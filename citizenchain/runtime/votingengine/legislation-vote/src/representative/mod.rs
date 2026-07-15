@@ -74,7 +74,7 @@ impl<T: Config> Pallet<T> {
         rule: RepresentativeVoteRule,
         procedure: VoteProcedure,
         additional_subjects: ProposalSubjectCidNumbers,
-        mut legislation_meta: Option<pallet::LegislationMeta<T>>,
+        legislation_meta: Option<pallet::LegislationMeta<T>>,
     ) -> Result<u64, DispatchError> {
         let (first_code, first_account) = Self::validate_representative_route(&route)?;
         ensure!(
@@ -102,23 +102,17 @@ impl<T: Config> Pallet<T> {
 
         let now = <frame_system::Pallet<T>>::block_number();
         // 特别案消费同一区块准备的人口快照；普通和重要案不得残留公投作用域。
-        let eligible_total = if rule == RepresentativeVoteRule::Special {
+        let (eligible_total, population_snapshot_id) = if rule == RepresentativeVoteRule::Special {
             let prepared = pallet::PendingPopulationSnapshots::<T>::get(&who)
                 .ok_or(Error::<T>::PopulationSnapshotNotPrepared)?;
             if prepared.prepared_at != now {
                 pallet::PendingPopulationSnapshots::<T>::remove(&who);
+                <votingengine::Pallet<T>>::release_population_snapshot(prepared.snapshot_id);
                 return Err(Error::<T>::PopulationSnapshotNotCurrent.into());
             }
-            let meta = legislation_meta
-                .as_mut()
-                .ok_or(Error::<T>::ProposalMetaMissing)?;
-            meta.referendum_scope = Some(prepared.scope);
-            prepared.eligible_total
+            (prepared.eligible_total, Some(prepared.snapshot_id))
         } else {
-            if let Some(meta) = legislation_meta.as_mut() {
-                meta.referendum_scope = None;
-            }
-            0
+            (0, None)
         };
 
         let end = now.saturating_add(Self::stage_duration());
@@ -178,6 +172,13 @@ impl<T: Config> Pallet<T> {
                 pallet::LegislationMetas::<T>::insert(id, meta);
             }
             Proposals::<T>::insert(id, proposal);
+            if let Some(snapshot_id) = population_snapshot_id {
+                if let Err(err) =
+                    <votingengine::Pallet<T>>::bind_population_snapshot(id, snapshot_id)
+                {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
+            }
             if let Err(err) = <votingengine::Pallet<T>>::schedule_proposal_expiry(id, end) {
                 return TransactionOutcome::Rollback(Err(err));
             }

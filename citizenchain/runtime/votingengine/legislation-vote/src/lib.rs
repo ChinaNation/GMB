@@ -51,8 +51,8 @@ use primitives::count_const::VOTING_DURATION_BLOCKS;
 use votingengine::{
     pallet::{Proposals, ProposalsByExpiry},
     types::{InstitutionCode, ProposalSubjectCidNumbers},
-    CitizenIdentityReader, InternalAdminProvider, InternalProposalMutexKind, PopulationScope,
-    Proposal, PROPOSAL_KIND_LEGISLATION, STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_OVERRIDE,
+    InternalAdminProvider, InternalProposalMutexKind, PopulationScope, Proposal,
+    PROPOSAL_KIND_LEGISLATION, STAGE_LEG_CONSTITUTION_GUARD, STAGE_LEG_OVERRIDE,
     STAGE_LEG_REFERENDUM, STAGE_LEG_REPRESENTATIVE, STAGE_LEG_SIGN, STATUS_PASSED, STATUS_REJECTED,
     STATUS_VOTING,
 };
@@ -124,8 +124,6 @@ pub mod pallet {
         pub legislature: Option<(InstitutionCode, T::AccountId)>,
         /// 是否修宪(tier=宪法):为真时,现有流程通过后最后进护宪大法官终审(宪法第21条)。
         pub needs_guard: bool,
-        /// 特别案公投作用域；常规案和重要案为 None。
-        pub referendum_scope: Option<PopulationScope>,
     }
 
     /// 已准备的人口快照(特别案公投分母),对标 joint-vote。
@@ -141,8 +139,8 @@ pub mod pallet {
         MaxEncodedLen,
     )]
     pub struct PreparedSnapshot<BlockNumber> {
+        pub snapshot_id: u64,
         pub eligible_total: u64,
-        pub scope: PopulationScope,
         pub prepared_at: BlockNumber,
     }
 
@@ -323,8 +321,6 @@ pub mod pallet {
         CitizenEligibleTotalNotSet,
         /// 公民身份无公投资格
         CitizenNotEligible,
-        /// 公投作用域缺失
-        PopulationScopeMissing,
         /// 已投票人数达到创建时人口快照分母，拒绝分子超过 100%。
         ReferendumSnapshotExhausted,
         /// 提案不在该阶段(签署/会签 stage 校验)
@@ -383,7 +379,12 @@ pub mod pallet {
         /// 行政首长(机构法定代表人:市长/省长/总统)对终审通过的非特别案签署或否决。
         /// 批准=生效;否决:市行政区=否决,省行政区/国家=退回三人会签。
         #[pallet::call_index(3)]
-        #[pallet::weight(<T as Config>::WeightInfo::executive_sign())]
+        #[pallet::weight(
+            <T as Config>::WeightInfo::executive_sign().max(
+                Weight::from_parts(38_000_000, 67_187)
+                    .saturating_add(T::DbWeight::get().reads_writes(7, 5))
+            )
+        )]
         pub fn executive_sign(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -396,7 +397,12 @@ pub mod pallet {
         /// 三人会签(省行政区/国家:立法院院长 + 参议长 + 众议长)签署或否决。
         /// 三人全批准=生效;任一否决=否决。
         #[pallet::call_index(4)]
-        #[pallet::weight(<T as Config>::WeightInfo::override_sign())]
+        #[pallet::weight(
+            <T as Config>::WeightInfo::override_sign().max(
+                Weight::from_parts(45_000_000, 67_187)
+                    .saturating_add(T::DbWeight::get().reads_writes(10, 2))
+            )
+        )]
         pub fn override_sign(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -408,7 +414,12 @@ pub mod pallet {
 
         /// 护宪大法官对修宪提案终审表决(宪法第21条):一人一票,4名及以上赞成→生效。
         #[pallet::call_index(5)]
-        #[pallet::weight(<T as Config>::WeightInfo::guard_vote())]
+        #[pallet::weight(
+            <T as Config>::WeightInfo::guard_vote().max(
+                Weight::from_parts(35_000_000, 30_000)
+                    .saturating_add(T::DbWeight::get().reads_writes(5, 1))
+            )
+        )]
         pub fn guard_vote(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
             let who = ensure_signed(origin)?;
             Self::do_guard_vote(who, proposal_id, approve)
@@ -477,7 +488,6 @@ impl<T: Config> crate::LegislationVoteEngine<T::AccountId> for Pallet<T> {
                     executive: procedure.executive,
                     legislature: procedure.legislature,
                     needs_guard: procedure.needs_guard,
-                    referendum_scope: None,
                 }),
             ) {
                 Ok(id) => id,

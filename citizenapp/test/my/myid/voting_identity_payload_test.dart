@@ -61,6 +61,14 @@ Uint8List buildCandidatePayload() {
   pushVec('002');
   pushVec('测试公民');
   out.add(1);
+  // birth_date: u32 YYYYMMDD(LE),20000131。
+  const birthDate = 20000131;
+  out.addAll([
+    birthDate & 0xff,
+    (birthDate >> 8) & 0xff,
+    (birthDate >> 16) & 0xff,
+    (birthDate >> 24) & 0xff,
+  ]);
   return Uint8List.fromList(out);
 }
 
@@ -107,12 +115,14 @@ void main() {
       expect(decoded.birthTownCode, '002');
       expect(decoded.citizenFullName, '测试公民');
       expect(decoded.citizenSexLabel, '女');
+      expect(decoded.birthDate, 20000131);
 
       final entries = Map.fromEntries(
         decoded.reviewEntries.map((e) => MapEntry(e.$1, e.$2)),
       );
       expect(entries['身份类型'], '参选身份');
       expect(entries['出生地'], '11 / 01 / 002');
+      expect(entries['出生日期'], '2000-01-31');
       expect(entries['公民姓名'], '测试公民');
       expect(entries['公民性别'], '女');
     });

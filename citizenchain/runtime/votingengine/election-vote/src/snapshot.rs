@@ -7,8 +7,8 @@ use frame_support::{ensure, pallet_prelude::*};
 use sp_runtime::DispatchError;
 
 use crate::pallet::{
-    Config, ElectionCandidates, ElectionVoters, Error, MaxElectionCandidatesOf,
-    MaxElectionVotersOf, Pallet,
+    Config, ElectionCandidates, Error, MaxElectionCandidatesOf, MaxMutualVotersOf, MutualVoters,
+    Pallet,
 };
 
 impl<T: Config> Pallet<T> {
@@ -31,9 +31,9 @@ impl<T: Config> Pallet<T> {
             .map_err(|_| Error::<T>::TooManyCandidates.into())
     }
 
-    pub(crate) fn bounded_voters(
+    pub(crate) fn bounded_mutual_voters(
         voters: sp_std::vec::Vec<T::AccountId>,
-    ) -> Result<BoundedVec<T::AccountId, MaxElectionVotersOf<T>>, DispatchError> {
+    ) -> Result<BoundedVec<T::AccountId, MaxMutualVotersOf<T>>, DispatchError> {
         ensure!(!voters.is_empty(), Error::<T>::EmptyVoterSnapshot);
         Self::ensure_unique_accounts(&voters)?;
         voters
@@ -41,12 +41,12 @@ impl<T: Config> Pallet<T> {
             .map_err(|_| Error::<T>::TooManyVoters.into())
     }
 
-    pub(crate) fn write_voter_snapshot(
+    pub(crate) fn write_mutual_voter_snapshot(
         proposal_id: u64,
-        voters: &BoundedVec<T::AccountId, MaxElectionVotersOf<T>>,
+        voters: &BoundedVec<T::AccountId, MaxMutualVotersOf<T>>,
     ) {
         for voter in voters.iter() {
-            ElectionVoters::<T>::insert(proposal_id, voter, ());
+            MutualVoters::<T>::insert(proposal_id, voter, ());
         }
     }
 
@@ -56,7 +56,7 @@ impl<T: Config> Pallet<T> {
             .unwrap_or(false)
     }
 
-    pub(crate) fn voter_exists(proposal_id: u64, voter: &T::AccountId) -> bool {
-        ElectionVoters::<T>::contains_key(proposal_id, voter)
+    pub(crate) fn mutual_voter_exists(proposal_id: u64, voter: &T::AccountId) -> bool {
+        MutualVoters::<T>::contains_key(proposal_id, voter)
     }
 }

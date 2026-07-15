@@ -22,7 +22,6 @@ impl<T: Config> Pallet<T> {
         term_end: u32,
         population_scope: votingengine::PopulationScope,
         candidates: sp_std::vec::Vec<T::AccountId>,
-        voters: sp_std::vec::Vec<T::AccountId>,
     ) -> Result<u64, sp_runtime::DispatchError> {
         Self::do_create_election(
             who,
@@ -38,7 +37,7 @@ impl<T: Config> Pallet<T> {
             term_end,
             Some(population_scope),
             candidates,
-            voters,
+            sp_std::vec::Vec::new(),
         )
     }
 

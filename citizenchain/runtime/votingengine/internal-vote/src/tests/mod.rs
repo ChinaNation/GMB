@@ -85,9 +85,9 @@ impl votingengine::Config for Test {
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<64>;
-    type MaxAutoFinalizeWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
-    type MaxExecutionWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 4>;
-    type MaxCleanupWeightPerBlock = votingengine::weights::BlockWeightFraction<Test, 8>;
+    type MaxAutoFinalizeWeightPerBlock = votingengine::BlockWeightFraction<Test, 4>;
+    type MaxExecutionWeightPerBlock = votingengine::BlockWeightFraction<Test, 4>;
+    type MaxCleanupWeightPerBlock = votingengine::BlockWeightFraction<Test, 8>;
     type MaxProposalsPerExpiry = ConstU32<128>;
     type MaxInternalProposalMutexBindings = ConstU32<256>;
     type MaxActiveProposals = ConstU32<10>;
@@ -126,6 +126,7 @@ impl joint_vote::Config for Test {
 
 thread_local! {
     static TEST_POPULATION_COUNT: RefCell<u64> = const { RefCell::new(100) };
+    static TEST_POPULATION_SNAPSHOT_ID: RefCell<u64> = const { RefCell::new(0) };
 }
 thread_local! {
     static TEST_NOW_SECS: RefCell<u64> = const { RefCell::new(DEFAULT_TEST_NOW_SECS) };
@@ -357,6 +358,23 @@ impl votingengine::CitizenIdentityReader<AccountId32> for TestCitizenIdentityRea
     fn population_count(_scope: &votingengine::PopulationScope) -> u64 {
         TEST_POPULATION_COUNT.with(|count| *count.borrow())
     }
+
+    fn create_population_snapshot(
+        _scope: &votingengine::PopulationScope,
+    ) -> Result<(u64, u64), DispatchError> {
+        let eligible_total = TEST_POPULATION_COUNT.with(|count| *count.borrow());
+        let snapshot_id = TEST_POPULATION_SNAPSHOT_ID.with(|next| {
+            let mut next = next.borrow_mut();
+            let snapshot_id = *next;
+            *next = (*next).saturating_add(1);
+            snapshot_id
+        });
+        Ok((snapshot_id, eligible_total))
+    }
+
+    fn can_vote_at(who: &AccountId32, _snapshot_id: u64) -> bool {
+        who == &nrc_admin(0)
+    }
 }
 
 impl JointVoteResultCallback for TestJointVoteResultCallback {
@@ -427,6 +445,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
         TEST_POPULATION_COUNT.with(|count| *count.borrow_mut() = 100);
+        TEST_POPULATION_SNAPSHOT_ID.with(|next| *next.borrow_mut() = 0);
         TEST_NOW_SECS.with(|secs| *secs.borrow_mut() = DEFAULT_TEST_NOW_SECS);
         JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
         JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
@@ -767,10 +786,7 @@ fn insert_joint_referendum_proposal(proposal_id: u64, eligible_total: u64, end: 
             citizen_eligible_total: eligible_total,
         },
     );
-    joint_vote::ReferendumScopes::<Test>::insert(
-        proposal_id,
-        votingengine::PopulationScope::Country,
-    );
+    votingengine::ProposalPopulationSnapshotIds::<Test>::insert(proposal_id, proposal_id);
 }
 
 fn full_retry_deadline_bucket(seed: u64) -> BoundedVec<u64, ConstU32<128>> {

@@ -2,10 +2,12 @@
 //
 // 两色识别模型:签名前必须能从 payload 字节独立解码出全部字段并展示给公民,
 // 解不开一律拒签。SCALE 布局与链端结构体逐字节一致,字段变更三处必须同步:
-//   citizenchain/runtime/otherpallet/citizen-identity/src/lib.rs
+//   citizenchain/runtime/misc/citizen-identity/src/lib.rs
 //     (VotingIdentityPayload / CandidateIdentityPayload)
-//   citizenwallet/lib/signer/payload_decoder.dart(_readVotingIdentityPayload)
+//   citizenwallet/lib/signer/payload_decoder.dart(_readCandidateIdentityPayload)
 //   本文件
+// 注:链上「已存储」的 CandidateIdentity(含 birth_date)另由
+//   citizenapp/lib/my/myid/myid_service.dart(_decodeCandidateIdentity)解码。
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -37,6 +39,7 @@ class VotingIdentityConsentPayload {
     this.birthTownCode,
     this.citizenFullName,
     this.citizenSexLabel,
+    this.birthDate,
   });
 
   final CitizenIdentityConsentLevel identityLevel;
@@ -66,6 +69,9 @@ class VotingIdentityConsentPayload {
   final String? citizenFullName;
   final String? citizenSexLabel;
 
+  /// 出生日期(YYYYMMDD 整数),仅竞选身份携带。
+  final int? birthDate;
+
   bool get isCandidate =>
       identityLevel == CitizenIdentityConsentLevel.candidate;
 
@@ -94,6 +100,7 @@ class VotingIdentityConsentPayload {
             '出生地',
             '$birthProvinceCode / $birthCityCode / $birthTownCode',
           ),
+          ('出生日期', birthDate == null ? '' : _formatDateInt(birthDate!)),
           ('公民姓名', citizenFullName ?? ''),
           ('公民性别', citizenSexLabel ?? ''),
         ],
@@ -134,7 +141,13 @@ class VotingIdentityConsentPayload {
       1 => '女',
       _ => null,
     };
-    if (sexLabel == null || offset != bytes.length) return null;
+    if (sexLabel == null) return null;
+
+    // birth_date: u32 YYYYMMDD(LE),CandidateIdentityPayload 末字段。
+    if (offset + 4 > bytes.length) return null;
+    final birthDate = _readU32Le(bytes, offset);
+    offset += 4;
+    if (!_isValidDateInt(birthDate) || offset != bytes.length) return null;
 
     final base = voting.payload;
     return VotingIdentityConsentPayload(
@@ -154,6 +167,7 @@ class VotingIdentityConsentPayload {
       birthTownCode: birthTownCode,
       citizenFullName: citizenFullName,
       citizenSexLabel: sexLabel,
+      birthDate: birthDate,
     );
   }
 

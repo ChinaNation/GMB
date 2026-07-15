@@ -93,29 +93,7 @@ pub fn is_jointreferendum_vote_rejected(no_votes: u64, eligible_total: u64) -> b
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn joint_internal_requires_all_105_weight() {
-        assert!(!is_joint_unanimous(JOINT_VOTE_PASS_THRESHOLD - 1));
-        assert!(is_joint_unanimous(JOINT_VOTE_PASS_THRESHOLD));
-    }
-
-    #[test]
-    fn joint_referendum_uses_strict_majority() {
-        assert!(!is_jointreferendum_vote_passed(50, 100));
-        assert!(is_jointreferendum_vote_passed(51, 100));
-        assert!(is_jointreferendum_vote_rejected(50, 100));
-        assert!(!is_jointreferendum_vote_rejected(49, 100));
-    }
-
-    #[test]
-    fn joint_referendum_fails_closed_without_population() {
-        assert!(!is_jointreferendum_vote_passed(1, 0));
-        assert!(!is_jointreferendum_vote_rejected(1, 0));
-    }
-}
+mod tests;
 // pallet block(Config / storage / event / error / extrinsic)
 #[frame_support::pallet]
 pub mod pallet {
@@ -208,10 +186,10 @@ pub mod pallet {
         Eq,
     )]
     pub struct PreparedPopulationSnapshot<BlockNumber> {
+        /// citizen-identity 创建的不可变资格快照 ID。
+        pub snapshot_id: u64,
         /// 联合公投阶段可投票总人数，由投票引擎从链上公民身份模块读取后缓存。
         pub eligible_total: u64,
-        /// 人口统计作用域，后续联合公投资格按同一作用域读取。
-        pub scope: PopulationScope,
         /// 准备快照所在区块。
         pub prepared_at: BlockNumber,
     }
@@ -226,11 +204,6 @@ pub mod pallet {
         PreparedPopulationSnapshot<BlockNumberFor<T>>,
         OptionQuery,
     >;
-
-    /// 联合公投提案的人口作用域：proposal_id → scope。
-    #[pallet::storage]
-    pub type ReferendumScopes<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, PopulationScope, OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -274,8 +247,6 @@ pub mod pallet {
         PopulationSnapshotNotCurrent,
         /// 公民身份投票资格校验未通过。
         CitizenNotEligible,
-        /// 公投作用域缺失。
-        PopulationScopeMissing,
         /// 已投票人数达到创建时人口快照分母，拒绝分子超过 100%。
         ReferendumSnapshotExhausted,
     }
@@ -316,7 +287,14 @@ pub mod pallet {
         /// 人口快照由投票引擎从 citizen-identity 链上状态直接读取。
         /// 业务模块只能在随后创建提案时消费已准备快照，不能再透传这些字段。
         #[pallet::call_index(2)]
-        #[pallet::weight(<T as Config>::WeightInfo::prepare_joint_population_snapshot())]
+        #[pallet::weight(
+            <T as Config>::WeightInfo::prepare_joint_population_snapshot().max(
+                // benchmark 创世态不能构造生产管理员权限，只实测 pending 写入主体；
+                // 这里永久补足管理员解析、citizen-identity snapshot 和替换释放上界。
+                Weight::from_parts(30_000_000, 105_893)
+                    .saturating_add(T::DbWeight::get().reads_writes(8, 5))
+            )
+        )]
         pub fn prepare_joint_population_snapshot(
             origin: OriginFor<T>,
             scope: PopulationScope,
@@ -442,7 +420,6 @@ impl<T: Config> votingengine::traits::JointCleanupHandler for Pallet<T> {
     fn cleanup_joint_terminal(proposal_id: u64) {
         JointTallies::<T>::remove(proposal_id);
         ReferendumTallies::<T>::remove(proposal_id);
-        ReferendumScopes::<T>::remove(proposal_id);
     }
 }
 

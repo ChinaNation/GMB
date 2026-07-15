@@ -339,6 +339,13 @@ class _MyIdPageState extends State<MyIdPage> {
             ? _state.birthDistrict!
             : '—',
       ),
+      const SizedBox(height: 14),
+      _FieldBlock(
+        label: '出生日期',
+        value: (_state.citizenBirthDate?.isNotEmpty ?? false)
+            ? _state.citizenBirthDate!
+            : '—',
+      ),
     ];
   }
 

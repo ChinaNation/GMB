@@ -82,6 +82,7 @@ String fieldLabelText(String key) {
     'citizen_status' => '身份状态',
     'residence' => '居住地',
     'birth_place' => '出生地',
+    'birth_date' => '出生日期',
     'citizen_full_name' => '公民姓名',
     'citizen_sex' => '公民性别',
     _ => '未知字段',
