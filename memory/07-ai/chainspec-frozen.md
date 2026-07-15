@@ -9,9 +9,8 @@
 
 1. **全节点 plain SSOT**：`citizenchain/node/chainspecs/citizenchain.plain.json`。
    它只保存 runtime WASM、genesis patch、bootNodes、properties 和 protocolId。
-2. **创世链状态包**：`genesis-state/` 安装包资源，来源于
-   `citizenchain/scripts/bake-chainspec.sh` 临时节点物化块 0 后导出的
-   `target/chainspec/genesis-state/`。
+2. **节点创世初始化**：安装包不携带物化创世数据库；节点依据同一份 plain chainspec
+   本地初始化空数据库并通过 bootNodes 同步网络。烘焙产生的状态只用于验收。
 3. **CitizenApp 轻形态 chainspec**：`citizenapp/assets/chainspec.json`。
    它只保存轻节点联网所需字段和 `genesis.stateRootHash`，不得携带 GB 级 raw state。
 4. **CitizenApp light sync checkpoint**：`citizenapp/assets/light_sync_state.json`。
@@ -26,8 +25,7 @@
 1. genesis hash 决定 Substrate / libp2p 通知协议名。
 2. 创世状态必须由同一份 CI WASM 和同一份 plain spec 冻结；raw chainspec 不作为仓库和
    App 资产。
-3. 节点安装包内置已物化的 RocksDB 创世状态，可以避免每台用户电脑首启都跑一次全量
-   GenesisBuilder。
+3. 每台节点都从同一份 chainspec 初始化，确保 genesis hash 一致后通过网络同步。
 4. CitizenApp 只需要轻节点创世头校验信息，公权机构目录另走“内置快照 + 链上投影增量”。
 
 ## 单一权威源
@@ -65,12 +63,9 @@
    `genesis-state/` 放进 Tauri resources。
 5. 节点首启时优先复制内置创世状态包；没有该包时，只允许开发/排障场景回退到
    GenesisBuilder 本地物化。
-6. `CitizenChain` CI 的 `prepare-genesis-state` job 必须下载当前分支最新成功 WASM CI
-   artifact，逐字节核对冻结 `:code`，重新物化并上传本次 run 唯一的
-   `citizenchain-genesis-state` artifact；各平台安装包只能下载这一份产物，禁止创建空资源目录。
-7. 无头服务器不经过桌面资源安装入口。部署动作必须下载与 Linux 安装包同次成功 CI 的
-   正式创世 artifact，停服务后保留节点身份密钥和 GRANDPA keystore，彻底替换旧链数据库，
-   再以清单中的 block#0/state root 验收。
+6. `CitizenChain` CI 只构建四个平台软件 artifact；不得上传或注入物化创世数据库。
+7. 无头服务器只下载 Linux amd 软件，停服务安装后保留节点身份密钥和 GRANDPA keystore，
+   再由节点按 plain chainspec 初始化并联网同步。
 
 ## 当前唯一冻结锚点（2026-07-14）
 

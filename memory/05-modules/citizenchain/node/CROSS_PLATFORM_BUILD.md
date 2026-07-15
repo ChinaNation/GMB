@@ -22,9 +22,8 @@
 - `.github/workflows/citizenchain-ci.yml` —— push 与手动发布分流：
   - `push main`：只构建 4 个用户安装包并上传本次 run artifact，不读取 Tauri updater 签名密钥，不发布 Release，不部署服务器。
   - `Run workflow`：构建同样 4 个用户安装包和 updater 签名产物，并按选择发布 GitHub Release；服务器由本机 Touch ID 门禁后的部署动作逐节点安装。
-  - `prepare-genesis-state`：下载当前分支最新成功 `CitizenChain WASM` artifact，核对其与冻结
-    chainspec 的 `:code` 完全一致，重建并上传本次 run 唯一的 `citizenchain-genesis-state`。
-    四个平台打包 job 必须下载这份正式包，白名单校验后再放入资源；旧同名 artifact 由 CI 删除。
+  - push CI 只生成四个平台节点软件 artifact；安装包不内置创世数据库。节点首次启动按冻结
+    chainspec 本地初始化并通过 bootNodes 同步网络。
 
 ## 3. 桌面端更新协议
 

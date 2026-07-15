@@ -56,3 +56,4 @@
 - 2026-07-14：用 WASM CI run `29388014765`、提交 `40646f360f01fe362d38ada6085357c586848210` 重新烘焙唯一正式包；已删除旧 PostgreSQL snapshot、旧 `snapshot-node` 及正式包内 TLS/network/keystore 残留。仓库外隔离副本真实启动返回 `genesis_hash=0xbb993e8fb7aa6c06e44b96f4ba35179ef8644ade17c37529c1742e1fb261b095`、`state_root=0xd285f98522ca3bce15decd52e61a6d9e444a069a4544a8141eec0017d6e324ac`、`isSyncing=false`。
 - 2026-07-14：部署归档实测发现 macOS bsdtar 会把系统扩展属性展开为 `._manifest.json` 等 AppleDouble 残留；部署 tar 已设置 `COPYFILE_DISABLE=1`。重新生成的 221 MB 归档成员白名单验收通过。
 - 2026-07-14：隔离启动同时确认当前远端 bootnode 仍是旧创世 `0xb57c…9971`，会与新正式创世 `0xbb99…b095` 明确发生 `Genesis mismatch`；新旧节点不能混网，必须等新 CitizenChain CI 成功后按节点统一替换，当前未触碰远端。
+- 2026-07-15：部署控制台“部署服务器”改为并发启动所有配置齐全节点；成功节点不输出过程日志，失败节点实时输出完整失败日志，任务结束输出成功/失败/跳过汇总；节点卡片“部署该节点”继续保留单节点完整日志。
